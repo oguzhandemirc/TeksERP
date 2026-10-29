@@ -15,6 +15,7 @@ import { firmNameSimilarity, productNameSimilarity } from "../utils/string-simil
 import { foldColorNameForCompare, foldNameForCompare } from "./helpers/name-normalize.helper";
 import { loadKursunGramajOptions } from "./helpers/kursun-bypass-gramaj.helper";
 import { matchGramajOption, type GramajOption } from "../lib/gelen-belge/gramaj-oneri";
+import { resolveEffectiveDefaultItem, type EffectiveDefaultItem } from "./gelen-belge-varsayilan.service";
 
 export const MATCH_SUGGEST_THRESHOLD = 0.9;
 export const MATCH_LIST_THRESHOLD = 0.8;
@@ -38,22 +39,30 @@ export interface MatchSuggestion {
 
 const EMPTY: MatchSuggestion = { rawText: null, suggested: null, source: "NONE", list: [] };
 
-/** Alias anahtarı: `scope`a göre katlama (renk ayraç/sıra bağımsız). */
-export function aliasKey(scope: DeliveryNoteAliasScope, raw: string): string {
+/** Sözlükte saklanan anahtarın tavanı (`DeliveryNoteAlias.rawKey` VarChar(160)). */
+export const ALIAS_KEY_MAX = 160;
+
+/** Kapsama göre katlama (renk ayraç/sıra bağımsız) — benzerlik sıralaması için, tavansız. */
+function foldForScope(scope: DeliveryNoteAliasScope, raw: string): string {
   return scope === "COLOR" ? foldColorNameForCompare(raw) : foldNameForCompare(raw);
 }
 
-/** Sözlükte saklanan anahtarın tavanı: onayda öğrenme (`learnAliases`) aynı tavanla keser → uzun metin yine bulunur. */
-export const ALIAS_KEY_MAX = 160;
+/**
+ * Sözlük anahtarı — TEK kaynak: onay öğrenmesi (`learnAliases`) ve öneri okuması (`aliasTarget`) bunu çağırır.
+ * İki taraf ayrı katlarsa öğrenilen anahtar okunamaz (E4: renk "LACİVERT 1234" düz katlamayla öğrenilip renk katlamasıyla aranıyordu).
+ */
+export function aliasKey(scope: DeliveryNoteAliasScope, raw: string): string {
+  return foldForScope(scope, raw).slice(0, ALIAS_KEY_MAX);
+}
 
 export type Named = { id: string; code: string | null; name: string };
 
 function rank(raw: string, rows: Named[], scope: DeliveryNoteAliasScope): MatchCandidate[] {
-  const key = aliasKey(scope, raw);
+  const key = foldForScope(scope, raw);
   if (!key || key.length < 2) return [];
   const out: MatchCandidate[] = [];
   for (const r of rows) {
-    const k = aliasKey(scope, r.name);
+    const k = foldForScope(scope, r.name);
     if (!k) continue;
     const score = k === key ? 1 : scope === "SENDER" ? firmNameSimilarity(key, k, FUZZY_NOISE_WORDS) : productNameSimilarity(key, k);
     if (score >= MATCH_LIST_THRESHOLD) out.push({ id: r.id, code: r.code, name: r.name, score: Math.round(score * 10000) / 10000 });
@@ -62,7 +71,7 @@ function rank(raw: string, rows: Named[], scope: DeliveryNoteAliasScope): MatchC
 }
 
 async function aliasTarget(scope: DeliveryNoteAliasScope, senderCustomerId: string | null, raw: string): Promise<string | null> {
-  const rawKey = aliasKey(scope, raw).slice(0, ALIAS_KEY_MAX);
+  const rawKey = aliasKey(scope, raw);
   if (!rawKey) return null;
   const rows = await prisma.deliveryNoteAlias.findMany({
     where: { scope, rawKey, OR: [{ senderCustomerId: null }, ...(senderCustomerId ? [{ senderCustomerId }] : [])] },
@@ -162,13 +171,15 @@ export interface NoteMatchSuggestions {
   readonly processOptions: ReadonlyArray<GramajOption>;
   /** `process`: satırın işlem metni; satırda metin yoksa başlığınki (satır kendi metnini taşırsa o kazanır). */
   readonly lines: ReadonlyArray<{ lineId: string; lineNo: number; item: MatchSuggestion; color: MatchSuggestion; process: ProcessSuggestion }>;
+  /** Sahibin ETKİN varsayılan ürünü (E4: müşteri > fabrika) — ürünsüz satır onayda bununla doğar; panel ipucu/ön kontrol bunu okur. */
+  readonly defaultItem: EffectiveDefaultItem;
 }
 
 /** Taslağın başlık + satır metinleri için öneriler (salt okunur; panel D5 bunu gösterir, operatör seçer). */
 export async function suggestForNote(noteId: string): Promise<NoteMatchSuggestions> {
   const note = await prisma.customerDeliveryNote.findUnique({
     where: { id: noteId },
-    select: { id: true, senderCustomerId: true, senderText: true, ownerText: true, processText: true, template: { select: { isActive: true, senderCustomerId: true, defaultOwnerCustomerId: true } }, lines: { select: { id: true, lineNo: true, itemText: true, colorText: true, processText: true }, orderBy: { lineNo: "asc" } } },
+    select: { id: true, ownerCustomerId: true, senderCustomerId: true, senderText: true, ownerText: true, processText: true, template: { select: { isActive: true, senderCustomerId: true, defaultOwnerCustomerId: true } }, lines: { select: { id: true, lineNo: true, itemText: true, colorText: true, processText: true }, orderBy: { lineNo: "asc" } } },
   });
   if (!note) throw AppError.notFound("İrsaliye bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
   const customers = await loadCustomers();
@@ -203,5 +214,5 @@ export async function suggestForNote(noteId: string): Promise<NoteMatchSuggestio
     const lineProcess = l.processText?.trim() ? await processFor(l.processText) : process;
     lines.push({ lineId: l.id, lineNo: l.lineNo, item: itemCache.get(it)!, color: colorCache.get(co)!, process: lineProcess });
   }
-  return { noteId, sender, owner, process, processOptions: gramajOptions, lines };
+  return { noteId, sender, owner, process, processOptions: gramajOptions, lines, defaultItem: await resolveEffectiveDefaultItem(note.ownerCustomerId) };
 }
