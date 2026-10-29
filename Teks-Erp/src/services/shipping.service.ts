@@ -4097,7 +4097,10 @@ export class ShippingService {
         eIrsaliye,
         serviceBilledDocNos,
       });
-      if (block) throw AppError.conflict(block, serviceBilledDocNos.length > 0 ? { code: "SERVICE_ALREADY_BILLED", docNos: serviceBilledDocNos } : undefined);
+      // Kod yalnız engeli hizmet dalı doğurduysa: bağsız yeniden ölçüm aynı mesajı veriyorsa neden daha önceki daldır.
+      const serviceCaused = block !== null && serviceBilledDocNos.length > 0
+        && block !== this.resolveUndoBlockReason({ status: sh.status, invoiceNo: sh.invoiceNo, dispatchedAt: sh.dispatchedAt, activeReturnCount, sameDayOnly, eIrsaliye, serviceBilledDocNos: [] });
+      if (block) throw AppError.conflict(block, serviceCaused ? { code: "SERVICE_ALREADY_BILLED", docNos: serviceBilledDocNos } : undefined);
 
       // ⚠️ `dispatchedAt`/`dispatchedById` NULL'LANMAZ (2026-09-11, defter
       // doktrini): "sevk edildi" olmuş bir gerçektir, geri alma onu silmez.

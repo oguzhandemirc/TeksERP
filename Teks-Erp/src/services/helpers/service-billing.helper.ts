@@ -9,7 +9,8 @@
 // Ters yol: DRAFT silme → Cascade; iptal → AYNI tx'te damga (iş yeniden faturalanır).
 // İade bağı ÇÖZMEZ (storno ≠ iade).
 // =============================================================================
-import { Currency, Prisma, ServiceMeterBasis } from "@prisma/client";
+import { Currency, Prisma, ServiceMeterBasis, ShipmentStatus } from "@prisma/client";
+import { lockShipmentScopeTx } from "./shipment-locks.helper";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { alreadyBilled, findActiveBillingTx } from "./service-billing-gate.helper";
@@ -108,6 +109,36 @@ export async function collectServiceBillingDraft(params: {
   return { lines, links, warnings: res.warnings };
 }
 
+/**
+ * Bağ ↔ fatura satırı tutarlılığı (bağ = "bu iş BU faturada"): hizmet kalemi başına Σ satır qty = Σ bağ metresi.
+ * Kalemin satırı hiç yoksa bağları düşer (iş faturasız kalır, sonra yeniden toplanır); miktar tutmuyorsa 409 —
+ * aksi hâlde iş ya faturada olmadan "faturalandı" sayılır ya da iki kez kesilir.
+ */
+export function reconcileServiceLinksWithLines<T extends { serviceItemId: string; billedMeters: Prisma.Decimal }>(
+  lines: Array<{ itemId?: string | null; qty: Prisma.Decimal.Value; description?: string }>,
+  links: T[],
+): { keep: T[]; droppedItemIds: string[] } {
+  const byItem = new Map<string, { sum: Prisma.Decimal; n: number }>();
+  for (const l of links) {
+    const g = byItem.get(l.serviceItemId) ?? { sum: new Prisma.Decimal(0), n: 0 };
+    byItem.set(l.serviceItemId, { sum: g.sum.plus(l.billedMeters), n: g.n + 1 });
+  }
+  const dropped: string[] = [];
+  for (const [itemId, g] of byItem) {
+    const itemLines = lines.filter((l) => l.itemId === itemId);
+    if (itemLines.length === 0) { dropped.push(itemId); continue; }
+    const qty = itemLines.reduce((acc, l) => acc.plus(new Prisma.Decimal(l.qty)), new Prisma.Decimal(0));
+    // Bağ metresi iş başına 3 haneye yuvarlı, satır toplamı yuvarlanmadan toplanır → iş başına 0,001 pay.
+    if (qty.minus(g.sum).abs().gt(new Prisma.Decimal(0.001).mul(g.n))) {
+      throw AppError.conflict(
+        `"${itemLines[0].description ?? "Hizmet"}" satırının miktarı (${qty.toFixed(3)} m) faturalanmamış işlerle (${g.sum.toFixed(3)} m) tutmuyor — satırı önizlemedeki miktarla bırakın ya da tamamen çıkarın.`,
+        { code: "SERVICE_LINES_MISMATCH", serviceItemId: itemId },
+      );
+    }
+  }
+  return { keep: links.filter((l) => !dropped.includes(l.serviceItemId)), droppedItemIds: dropped };
+}
+
 /** Kilit sırası ①: bağın dayandığı okumalar — `createDraftFromGoodsReceipts` emsali (kilit → insert → pivot). */
 export async function lockServiceReadingsTx(tx: Tx, links: ServiceBillingLinkInput[]): Promise<void> {
   const ids = [...new Set(links.map((l) => l.readingId).filter((v): v is string => v !== null))].sort();
@@ -152,13 +183,47 @@ export async function insertServiceLinksTx(tx: Tx, invoiceId: string, links: Ser
   }
 }
 
-/** Ters yol: fatura iptalinde AYNI tx'te damga — iş yeniden faturalanabilir. Dönen: damgalanan bağ sayısı. */
-export async function revokeServiceLinksTx(tx: Tx, invoiceId: string, userId: string | null, reason: string): Promise<number> {
+/**
+ * Ters yol: fatura iptalinde AYNI tx'te damga — iş yeniden faturalanabilir. `serviceItemIds` verilirse yalnız o
+ * kalemlerin bağları (taslaktan hizmet satırı çıkarıldı). Dönen: damgalanan bağ sayısı.
+ */
+export async function revokeServiceLinksTx(
+  tx: Tx,
+  invoiceId: string,
+  by: { userId: string | null; reason: string },
+  serviceItemIds?: string[],
+): Promise<number> {
+  if (serviceItemIds && serviceItemIds.length === 0) return 0;
+  const { userId, reason } = by;
   const res = await tx.serviceBillingLink.updateMany({
-    where: { invoiceId, revokedAt: null },
+    where: { invoiceId, revokedAt: null, ...(serviceItemIds ? { serviceItemId: { in: serviceItemIds } } : {}) },
     data: { revokedAt: new Date(), revokedById: userId, revokeReason: reason.slice(0, 300) },
   });
   return res.count;
+}
+
+/** Taslak satırları değişti: çıkarılan hizmet satırının bağı damgalanır, miktar değişimi 409 (bkz. reconcile). */
+export async function syncServiceLinksToLinesTx(
+  tx: Tx,
+  invoiceId: string,
+  lines: Array<{ itemId?: string | null; qty: Prisma.Decimal.Value; description?: string }>,
+  userId: string | null,
+): Promise<number> {
+  const active = await tx.serviceBillingLink.findMany({ where: { invoiceId, revokedAt: null }, select: { serviceItemId: true, billedMeters: true } });
+  const { droppedItemIds } = reconcileServiceLinksWithLines(lines, active);
+  return revokeServiceLinksTx(tx, invoiceId, { userId, reason: "Hizmet satırı taslaktan çıkarıldı" }, droppedItemIds);
+}
+
+/**
+ * Bağlı taslak sevk geri almayla serileşir: 8023 sevkiyat kilidi (tx'in İLK ifadesi olarak çağrılır) + taze durum.
+ * `undoDispatch` aynı kilit altında bağları sayar — kilitsiz taslak phantom bağ doğururdu.
+ */
+export async function lockBillableShipmentTx(tx: Tx, shipmentId: string): Promise<void> {
+  await lockShipmentScopeTx(tx, shipmentId);
+  const sh = await tx.shipment.findUnique({ where: { id: shipmentId }, select: { status: true } });
+  if (sh?.status !== ShipmentStatus.DISPATCHED) {
+    throw AppError.conflict("Sevkiyat artık sevk edilmiş durumda değil — hizmet işleri faturalanamaz. Ekranı yenileyin.", { code: "SHIPMENT_NOT_DISPATCHED" });
+  }
 }
 
 /**

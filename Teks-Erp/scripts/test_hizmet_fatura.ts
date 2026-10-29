@@ -280,6 +280,38 @@ async function main(): Promise<void> {
   check("DECLARED_WITH_WARNING: bağ beyan metresiyle (60), SIMULATED okumaya işaret etmez + uyarı",
     l2.length === 1 && l2[0]!.readingId === null && l2[0]!.meterBasis === "DECLARED" && Number(l2[0]!.billedMeters) === 60 && (invC2[0]?.notes ?? "").includes("sayaç okuması yok"), JSON.stringify(l2));
 
+  // ── §12 Panel yolu: bağ ↔ satır tutarlılığı + sevk geri alma serileşmesi ─
+  section("§12 panel taslağı: bağ yalnız faturada satırı olan işe");
+  const pr = [await mkWorkedRoll(50, "49.5"), await mkWorkedRoll(51, "50.25")];
+  const shP = await ship(pr);
+  const hookDraft = (await invoicesOf(shP.id)).find((i) => i.status === InvoiceStatus.DRAFT)!;
+  const svcQty = new Prisma.Decimal(hookDraft.lines.find((l) => l.itemId === K2)!.qty);
+  await invoiceService.deleteDraft(hookDraft.id, actor);
+  const panelInput = (lines: Array<{ itemId: string | null; qty: Prisma.Decimal.Value }>) => ({
+    type: "SALES" as const, customerId: cust.id, shipmentId: shP.id, currency: Currency.TRY, clientToken: randomUUID(),
+    lines: lines.map((l) => ({ itemId: l.itemId, description: l.itemId ? "Kurşun hizmeti" : "Elle satır", qty: l.qty, unit: "m", unitPrice: 8 })),
+  });
+  const noSvc = await invoiceService.createDraft(panelInput([{ itemId: null, qty: 1 }]), actor);
+  check("§12a hizmet satırı silinmiş panel taslağı ⇒ 0 bağ (iş faturasız kalır)", (await prisma.serviceBillingLink.count({ where: { invoiceId: noSvc.data!.id } })) === 0);
+  await invoiceService.deleteDraft(noSvc.data!.id, actor);
+  const mism = await errOf(() => invoiceService.createDraft(panelInput([{ itemId: K2, qty: svcQty.plus(5) }]), actor));
+  check("§12b miktarı değiştirilmiş hizmet satırı ⇒ 409 SERVICE_LINES_MISMATCH", mism.status === 409 && mism.code === "SERVICE_LINES_MISMATCH", JSON.stringify(mism));
+  const okP = await invoiceService.createDraft(panelInput([{ itemId: K2, qty: svcQty }]), actor);
+  const pid = okP.data!.id;
+  check("§12c önizlemedeki miktarla ⇒ 2 bağ", (await activeLinks(pid)).length === 2);
+  const upMism = await errOf(() => invoiceService.updateDraft(pid, { lines: [{ itemId: K2, description: "x", qty: svcQty.minus(1), unit: "m", unitPrice: 8 }] }, actor));
+  check("§12d düzenlemede miktar değişimi ⇒ 409, bağlar yerinde", upMism.status === 409 && upMism.code === "SERVICE_LINES_MISMATCH" && (await activeLinks(pid)).length === 2, JSON.stringify(upMism));
+  await invoiceService.updateDraft(pid, { lines: [{ itemId: null, description: "Elle satır", qty: 1, unit: "m", unitPrice: 8 }] }, actor);
+  const revokedP = await prisma.serviceBillingLink.count({ where: { invoiceId: pid, revokedAt: { not: null }, revokeReason: "Hizmet satırı taslaktan çıkarıldı" } });
+  check("§12e düzenlemede hizmet satırı çıkarıldı ⇒ 2 bağ damgalı, 0 aktif", revokedP === 2 && (await activeLinks(pid)).length === 0, String(revokedP));
+  await invoiceService.deleteDraft(pid, actor);
+  section("§12f sevk geri alındıktan sonra bağlı taslak 409 (kilit + taze durum)");
+  const undoP = await errOf(() => shippingService.undoDispatch(shP.id, "test geri alma", actor));
+  check("bağsız sevk geri alınır", undoP.status === 200, JSON.stringify(undoP));
+  const fakeLinks = pr.map((rollId) => ({ rollId, workOrderStepId: S1, serviceItemId: K2, readingId: null, billedMeters: new Prisma.Decimal(10), meterBasis: "DECLARED" as const, unitPrice: new Prisma.Decimal(8), currency: Currency.TRY, serviceAt: new Date() }));
+  const afterUndo = await errOf(() => invoiceService.createDraft({ ...panelInput([{ itemId: K2, qty: 20 }]), serviceLinks: fakeLinks }, actor));
+  check("geri alınmış sevke bağlı taslak ⇒ 409 SHIPMENT_NOT_DISPATCHED, 0 bağ", afterUndo.status === 409 && afterUndo.code === "SHIPMENT_NOT_DISPATCHED" && (await prisma.serviceBillingLink.count({ where: { rollId: { in: pr }, revokedAt: null } })) === 0, JSON.stringify(afterUndo));
+
   // ── §11 Kapalı ───────────────────────────────────────────────────────────
   section("§11 kapalıyken bugünkü davranış");
   await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_ENABLED, false);
