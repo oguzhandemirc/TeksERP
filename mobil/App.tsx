@@ -28,7 +28,7 @@ import {
 import { registerStationMutationDefaults } from './src/offline/mutations';
 import { registerNotificationMutationDefaults } from './src/offline/bildirimMutations';
 import { installGlobalErrorReporting } from './src/lib/errorReport';
-import { isPersistedQueryKey, shouldPersistMutation } from './src/offline/persistPolicy';
+import { PERSIST_DEHYDRATE_OPTIONS } from './src/offline/persistPolicy';
 import { FLAGS_KEY } from './src/hooks/useFeatureFlags';
 import { colors } from './src/theme/tokens';
 import { recordActivity } from './src/store/lockStore';
@@ -140,11 +140,7 @@ export default function App() {
             // app restart'ta "dünkü haliyle" görünmez (hayalet veri biter).
             // Mutation tarafı GENİŞLETİLDİ: paused ∪ pending-istasyon — aktif
             // retry'daki kayıt app kill'de kaybolmaz (istasyon uçları idempotent).
-            dehydrateOptions: {
-              shouldDehydrateQuery: (q) =>
-                q.state.status === 'success' && isPersistedQueryKey(q.queryKey),
-              shouldDehydrateMutation: (m) => shouldPersistMutation(m),
-            },
+            dehydrateOptions: PERSIST_DEHYDRATE_OPTIONS,
           }}
           onSuccess={() => {
             // Restore sonrası kuyruk dürtülür; token henüz yoksa mutations.ts

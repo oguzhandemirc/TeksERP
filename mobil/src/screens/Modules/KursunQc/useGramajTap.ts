@@ -14,6 +14,7 @@ import { showScreenError } from '../../../lib/screenToast';
 import type { CompleteQc2Request } from '../../../services/kursunQc.service';
 import type { KursunStepSummary } from '../../../types/models';
 import type { TapValueConfig } from './stationPanels';
+import type { MeterCaptureState, MeterRoll } from './useMeterCapture';
 import {
   buildTapSelections,
   canSkipFlag,
@@ -29,10 +30,12 @@ type MutateOpts = { onSuccess?: () => void; onSettled?: () => void };
 export interface GramajTapInput {
   cfg: TapValueConfig | null;
   summary: KursunStepSummary | null;
-  roll: { rollId: string; barcode: string | null } | null;
+  roll: (MeterRoll & { barcode: string | null }) | null;
   operator: string;
   complete: (vars: CompleteQc2Request, opts: MutateOpts) => void;
   refresh: () => void;
+  /** H3 sayaç akışı; yoksa ya da `outOn=false` ise gövde bugünküyle bayt-aynı. */
+  meter?: Pick<MeterCaptureState, 'outOn' | 'captureOut'> | null;
 }
 
 // Paused (çevrimdışı) mutasyon settle olmaz → kilit kısa süre sonra kendiliğinden açılır.
@@ -64,6 +67,32 @@ function useTapLock() {
   return { locked, take, release };
 }
 
+/**
+ * Dokunuşu yollar. Sayaç açıksa önce okunur (elle giriş/sebep modalı kapanınca kuyruğa girer,
+ * vazgeçte hiç girmez); kapalıysa gövde bugünküyle bayt-aynı.
+ */
+function dispatchTap(
+  input: GramajTapInput,
+  vars: CompleteQc2Request,
+  opts: MutateOpts,
+  ctl: { online: boolean; abort: () => void },
+): void {
+  if (input.meter?.outOn && input.roll) {
+    input.meter.captureOut(
+      input.roll,
+      vars.stepId,
+      (meterOut) => {
+        input.complete({ ...vars, meterOut }, opts);
+        if (!onlineManager.isOnline()) setTimeout(opts.onSettled ?? (() => undefined), OFFLINE_UNLOCK_MS);
+      },
+      ctl.abort,
+    );
+    return;
+  }
+  input.complete(vars, opts);
+  if (!ctl.online) setTimeout(opts.onSettled ?? (() => undefined), OFFLINE_UNLOCK_MS);
+}
+
 export function useGramajTap(input: GramajTapInput) {
   const { cfg, summary, roll, operator } = input;
   const { title, values, target } = useTapValues(cfg, summary);
@@ -89,16 +118,20 @@ export function useGramajTap(input: GramajTapInput) {
 
   const send = (value: GramajValue | null) => {
     if (!cfg || !roll || !stepId || !lock.take()) return;
+    const prevLast = last;
     const at = new Date();
     const online = onlineManager.isOnline();
     setLast({ rollId: roll.rollId, stepId, barcode: roll.barcode, value, operator, at, queued: !online });
     if (value && target && value.code !== target.code) setFlashCode(value.code);
     const properties = value ? buildTapSelections(cfg, value.code) : [];
-    input.complete(
-      { rollId: roll.rollId, stepId, properties },
-      { onSuccess: () => markSent(at), onSettled: lock.release },
-    );
-    if (!online) setTimeout(lock.release, OFFLINE_UNLOCK_MS);
+    const opts = { onSuccess: () => markSent(at), onSettled: lock.release };
+    dispatchTap(input, { rollId: roll.rollId, stepId, properties }, opts, {
+      online,
+      abort: () => {
+        setLast(prevLast);
+        lock.release();
+      },
+    });
   };
 
   const correct = (value: GramajValue) => {

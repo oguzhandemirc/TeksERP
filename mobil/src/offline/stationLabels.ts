@@ -17,6 +17,7 @@ export const STATION_MUT_LABELS: Record<string, string> = {
   'qc2-report-error': 'QC2 hata bildirimi',
   'qc2-delete-error': 'QC2 hata silme',
   'qc2-finish-step': 'QC2 adım kapatma',
+  'kursun-meter-reading': 'Kurşun giriş metresi',
   'kursun-finish': 'Kurşun bitirme',
   'tambur-finalize-open-fabric': 'Tambur finalize',
   'kk1-create-entry': 'Ham Giriş',
