@@ -251,6 +251,14 @@ WHERE r.status = 'TAMBUR_CONSUMED' AND r."preTamburCloseQty" IS NULL AND r."stat
     bekci: [{ dosya: "test_kursun_metre.ts", bolum: "6", ne: "okuma satırı politika kopyasını taşır" }],
   },
   {
+    model: "RollMeterReading",
+    alan: "stockMode",
+    sinif: "DONMUS_ILERI",
+    yazan: [SVC + "helpers/kursun-meter.helper.ts"],
+    neden: "H1b stok kipi okuma anında satıra kopyalanır; APPLY'ın uygulanıp terslenmesi bu kopyadan okunur, ayar sonradan değişse de okuma kendi kipinde kalır",
+    bekci: [{ dosya: "test_kursun_metre_stok.ts", bolum: "10c", ne: "okuma kopyası ayar değişiminden etkilenmez" }],
+  },
+  {
     model: "ServiceBillingLink",
     alan: "unitPrice",
     sinif: "DONMUS_ILERI",
@@ -279,11 +287,12 @@ WHERE r.status = 'TAMBUR_CONSUMED' AND r."preTamburCloseQty" IS NULL AND r."stat
     alan: "initialQty",
     sinif: "DONMUS_ILERI",
     adayDegil: "şerhi 'Initial measurement' — imza taşımıyor; kural top-duzeltme.md metraj satırında yaşar",
-    yazan: [SVC + "inventory.service.ts", SVC + "subcontractor.service.ts", SVC + "tambur-undo.service.ts", SVC + "tambur.service.ts"],
-    neden: "üretim anı giriş metrajı; yalnız AŞIM yönünde ve sapma defteri satırı eşliğinde büyür (tambur-undo restoreBumpTx tek kaynak)",
+    yazan: [SVC + "helpers/kursun-meter-stock.helper.ts", SVC + "inventory.service.ts", SVC + "subcontractor.service.ts", SVC + "tambur-undo.service.ts", SVC + "tambur.service.ts"],
+    neden: "üretim anı giriş metrajı; yalnız AŞIM yönünde ve sapma defteri satırı eşliğinde büyür (tambur-undo restoreBumpTx; H1b kurşun APPLY artı yönü `initialQtyRaise` taşıyan OVERAGE ile, ters yolda geri iner)",
     bekci: [
       { dosya: "test_consistency.ts", bolum: "33", ne: "initialQty = giriş metrajı + Σ canlı TAMBUR aşımı" },
       { dosya: "test_stock_ledger_tambur_undo.ts", bolum: "12", ne: "depo kesimi geri alınınca initialQty 100→100, aşımda bump + OVERAGE" },
+      { dosya: "test_kursun_metre_stok.ts", bolum: "4", ne: "APPLY 100→101 ⇒ initialQty 101 + initialQtyRaise 1; reopen geri indirir" },
     ],
   },
   {

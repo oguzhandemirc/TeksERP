@@ -25,6 +25,7 @@ import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import {
   MeterPhase,
+  MeterStockMode,
   Prisma,
   RollError,
   RollErrorOrigin,
@@ -80,6 +81,7 @@ import {
   type MeterReadingInput,
   type WriteMeterReadingResult,
 } from "./helpers/kursun-meter.helper";
+import { applyExitMeterToStockTx, applyPendingExitMetersTx, auditExitMeterStock } from "./helpers/kursun-meter-stock.helper";
 import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { finalizeRollsAtLastStep } from "./helpers/roll-finalize.helper";
 import { reverseLatestScopedStockMove } from "./helpers/warehouse-ledger-reverse.helper";
@@ -642,6 +644,7 @@ export class KursunQcService {
     });
     const op = result.qc2Op;
     if (result.meterWrite) await auditMeterReadingWrite(userId, result.meterWrite, "COMPLETE_QC2");
+    if (result.meterWrite) await auditExitMeterStock(userId, result.meterWrite.reading.id, result.meterWrite.stock ?? null);
     if (result.meterWrite?.ack) await auditMeterAck(userId, result.meterWrite.ack);
     const meter = await this.meterSummary(result.meterWrite?.reading ?? null, data.rollId, data.stepId, meterOut != null);
 
@@ -718,10 +721,19 @@ export class KursunQcService {
   ): Promise<ApiResponse<RollMeterAck>> {
     if (!userId) throw AppError.unauthorized();
     const approvedById = data.mode === "SUPERVISOR_PIN" ? (await resolveSupervisorByPin(data.pin ?? "")).id : userId;
-    const ack = await prisma.$transaction((tx) =>
-      ackMeterReadingTx(tx, { readingId: data.readingId, mode: data.mode, approvedById, reason: data.reason ?? null }),
-    );
+    const target = await prisma.rollMeterReading.findUnique({ where: { id: data.readingId }, select: { workOrderStepId: true } });
+    if (!target) throw AppError.notFound("Metre okuması bulunamadı");
+    const targetStep = await prisma.workOrderStep.findUniqueOrThrow({ where: { id: target.workOrderStepId }, select: { workOrderId: true } });
+    const { ack, stock } = await prisma.$transaction(async (tx) => {
+      // H1b kilit sırası: WO kilidi İLK ifade (elle taşıma / yeniden açma / kapanışla aynı sıra: WO → okuma → top).
+      await touchWorkOrderTx(tx, targetStep.workOrderId);
+      const signed = await ackMeterReadingTx(tx, { readingId: data.readingId, mode: data.mode, approvedById, reason: data.reason ?? null });
+      // H1b: imzayla okuma etkin olur — APPLY kopyalıysa stoğa şimdi uygulanır (okuma satırı imzada kilitli).
+      const reading = await tx.rollMeterReading.findUniqueOrThrow({ where: { id: signed.readingId } });
+      return { ack: signed, stock: await applyExitMeterToStockTx(tx, reading, approvedById) };
+    });
     await auditMeterAck(userId, ack);
+    await auditExitMeterStock(userId, ack.readingId, stock);
     return { success: true, data: ack, message: "Metre sapması onaylandı" };
   }
 
@@ -1030,6 +1042,9 @@ export class KursunQcService {
         });
       }
 
+      // 0d) H1b: imza beklentisi sonradan kalkan (IN düzeltmesi vb.) APPLY okuması hiç uygulanmadıysa şimdi uygulanır.
+      const pendingStock = await applyPendingExitMetersTx(tx, { stepId: step.id, rollIds, userId: userId ?? null });
+
       // 1) Açık movement'leri ATOMİK kapat (qty/weight per-row eşitlik) + RETURNING
       //    ile fiilen BİZİM kapattığımız rolleri al. `exitedAt IS NULL` guard'ı:
       //    movement seti tx DIŞINDA okunduğundan (satır ~577) bu guard olmasa iki
@@ -1067,17 +1082,25 @@ export class KursunQcService {
       // Eşzamanlı çağrı zaten kapatmışsa hiç satır dönmez → sonraki adım movement'i
       // AÇMA (idempotent). Sıralı retry zaten yukarıda (openMovements.length===0) yakalanır.
       if (closed.length === 0) {
-        return { moved: 0 };
+        return { moved: 0, pendingStock };
       }
       const closedRollIds = closed.map((m) => m.rollId);
 
       if (nextStep) {
+        // H1b: APPLY okumalı topun sonraki girişi TAZE metrajdır (okuma değil — uygulanmamışsa ikisi ayrışır);
+        // bu adımın `qtyOut = qtyIn` kalır. RECORD okuması stoğu değiştirmediği için giriş aynen taşınır.
+        const appliedOut = await tx.rollMeterReading.findMany({
+          where: { workOrderStepId: step.id, rollId: { in: closedRollIds }, phase: MeterPhase.OUT, revokedAt: null, stockMode: MeterStockMode.APPLY },
+          select: { rollId: true },
+        });
+        const fresh = appliedOut.length === 0 ? [] : await tx.roll.findMany({ where: { id: { in: appliedOut.map((r) => r.rollId) } }, select: { id: true, currentQty: true } });
+        const outByRoll = new Map(fresh.map((r) => [r.id, r.currentQty]));
         // 2a) Sonraki step için movement'leri toplu oluştur (yalnız biz kapatanlar).
         await tx.rollMovement.createMany({
           data: closed.map((m) => ({
             rollId: m.rollId,
             workOrderStepId: nextStep.id,
-            qtyIn: m.qtyIn,
+            qtyIn: outByRoll.get(m.rollId) ?? m.qtyIn,
             weightIn: m.weightIn ?? null,
             operatorId: userId ?? null,
             notes: null,
@@ -1107,9 +1130,10 @@ export class KursunQcService {
         await completeWorkOrderIfStepsDone(tx, step.workOrderId, { trigger: "KURSUN_QC_FINISH" });
       }
 
-      return { moved: closed.length };
+      return { moved: closed.length, pendingStock };
     });
 
+    for (const p of result.pendingStock) await auditExitMeterStock(userId, p.readingId, p.result);
     await AuditService.log({
       userId,
       action: "UPDATE",
@@ -1427,6 +1451,7 @@ export class KursunQcService {
       return { reading: written.reading, written };
     });
     if (out.written) await auditMeterReadingWrite(userId, out.written, "CORRECTION");
+    if (out.written) await auditExitMeterStock(userId, out.written.reading.id, out.written.stock ?? null);
     return {
       success: true,
       data: out.reading,

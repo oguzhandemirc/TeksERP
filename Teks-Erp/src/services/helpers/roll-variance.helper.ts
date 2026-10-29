@@ -41,6 +41,8 @@ export interface RecordVarianceInput extends VarianceReasonInput {
    * (hüküm ② 2026-09-13); `sourceRefId` belgeyi söyler, bu kolon topu.
    */
   sourceRollId?: string | null;
+  /** H1b: bu satırın `Roll.initialQty`'yi yükselttiği miktar (yalnız OVERAGE; tersinde geri indirilir). */
+  initialQtyRaise?: Prisma.Decimal | null;
   userId?: string | null;
 }
 
@@ -77,6 +79,7 @@ export async function recordVarianceTx(
       source: input.source,
       sourceRefId: input.sourceRefId ?? null,
       sourceRollId: input.sourceRollId ?? null,
+      initialQtyRaise: input.initialQtyRaise ?? null,
       createdById: input.userId ?? null,
     },
     select: { id: true },
@@ -118,6 +121,7 @@ export async function recordVariancesTx(
         source: input.source,
         sourceRefId: input.sourceRefId ?? null,
         sourceRollId: input.sourceRollId ?? null,
+        initialQtyRaise: input.initialQtyRaise ?? null,
         createdById: input.userId ?? null,
       };
     })

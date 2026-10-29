@@ -5927,6 +5927,13 @@ enum MeterApprovalMode {
   OFFICE
 }
 
+/// Çıkış metresinin stok kipi (H1b; okuma satırına KOPYALANIR). RECORD = okuma stoğu değiştirmez (bugün);
+/// APPLY = etkin OUT okuması topun metrajını `RollVariance` (KURSUN_EXIT_MEASURE) ile düzeltir.
+enum MeterStockMode {
+  RECORD
+  APPLY
+}
+
 /// KURŞUN METRE DEFTERİ (H1) — topun bir adımdaki giriş/çıkış ölçümü. DEFTER: silinirse
 /// faturalanan metre değişir. Düzeltme satırı DEĞİŞTİRMEZ: eski satır damgalanır, yenisi yazılır.
 /// Stok etkisi YOK (RECORD); `qtyOut = qtyIn` kapanışı korunur. Politika alanları okuma anındaki
@@ -5951,6 +5958,8 @@ model RollMeterReading {
   thresholdPct  Decimal?           @db.Decimal(6, 3)
   basis         MeterVarianceBasis
   approvalMode  MeterApprovalMode
+  /// H1b: okuma anındaki stok kipi — APPLY'ın uygulanıp uygulanmayacağı bu kopyadan okunur.
+  stockMode     MeterStockMode     @default(RECORD)
 
   clientToken String  @unique @db.Uuid
   createdById String? @db.Uuid
@@ -6175,6 +6184,9 @@ model RollVariance {
   /// söyler. `Restrict`: keşfin kaynağı olan top silinemez (defter satırı ona bakıyor).
   sourceRollId    String?          @db.Uuid
   createdById     String?          @db.Uuid
+  /// H1b: bu satır `Roll.initialQty`'yi ne kadar YÜKSELTTİ (OVERAGE, kayıtlı girişi aşan ölçüm).
+  /// Tersinde aynı miktar geri indirilir; NULL = yükseltmedi (ya da eski yazıcı kaydetmiyor).
+  initialQtyRaise Decimal?         @db.Decimal(12, 3)
 
   /// TERSLENDİ (2026-08-09) — satır SİLİNMEZ, işaretlenir (append-only defter).
   ///
