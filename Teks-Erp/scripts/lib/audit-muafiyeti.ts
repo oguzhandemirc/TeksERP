@@ -52,6 +52,8 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
     gerekce: "oturum kaydı; giriş/çıkış/iptal audit'in AUTH kategorisinde zaten yazılır, satırın kendi CUD'u ikinci bir iz üretmez" },
   { model: "DeviceBindingEvent", sinif: "EBEVEYN_EYLEMDE",
     gerekce: "cihaz bağlama DEFTERİ — tek yazar `helpers/device-identity.helper.ts#writeBindingEventTx`; audit'i çağıran eylem basar (announce doğuşu · yeniden bağlama · talep · red · revoke · kalıcı silme, `device.service`/`device-rebind.service`)" },
+  { model: "ServiceBillingLink", sinif: "EBEVEYN_EYLEMDE",
+    gerekce: "H7 hizmet işi ↔ fatura bağını `helpers/service-billing.helper` yazar/damgalar (fatura tx'i içinde); audit fatura eyleminde (`invoice.service` CREATE `serviceLinkCount` · iptal `serviceLinksRevoked`; fiyat yükte yok)" },
   { model: "ShipmentEvent", sinif: "EBEVEYN_EYLEMDE",
     gerekce: "sevkiyat olay defteri satırını `helpers/shipment-event.helper` yazar; audit sevk eyleminde (`shipping.service`)" },
   { model: "EIrsaliyeEvent", sinif: "EBEVEYN_EYLEMDE",

@@ -15,6 +15,9 @@ import { TERIM } from "../../constants/terim";
 import { resolveItemPricesFor } from "../item-price.service";
 import { listKursunApplications, readKursunTarget, type KursunApplication } from "./process-summary.helper";
 
+/** `kursun-qc.service` reopenStep damga sebebi — yeniden açılan adım yeni hizmettir. */
+const KURSUN_REOPEN_REASON = "KURSUN_REOPEN";
+
 export type ServiceMeterBasis = "OUT" | "IN" | "DECLARED";
 export type ServiceGramajSource = "APPLIED" | "WO_TARGET" | "NONE";
 
@@ -67,18 +70,62 @@ async function loadValueServiceMap(valueIds: string[]): Promise<Map<string, stri
 /** Aktif, SIMULATED olmayan okumalar: `${rollId}:${stepId}:${phase}` → okuma. */
 async function loadReadings(works: Array<{ rollId: string; workOrderStepId: string }>) {
   const out = new Map<string, { id: string; meters: Prisma.Decimal; createdAt: Date }>();
-  if (works.length === 0) return out;
+  /** H7 hizmet anı: `${rollId}:${stepId}` → adımın İLK OUT okuması (düzeltme kaydırmaz; son REOPEN'dan sonrası). */
+  const firstOut = new Map<string, Date>();
+  if (works.length === 0) return { out, firstOut };
   const rows = await prisma.rollMeterReading.findMany({
     where: {
-      revokedAt: null,
       source: { not: MachineDataSource.SIMULATED },
       rollId: { in: [...new Set(works.map((w) => w.rollId))] },
       workOrderStepId: { in: [...new Set(works.map((w) => w.workOrderStepId))] },
     },
-    select: { id: true, rollId: true, workOrderStepId: true, phase: true, meters: true, createdAt: true },
+    select: { id: true, rollId: true, workOrderStepId: true, phase: true, meters: true, createdAt: true, revokedAt: true, revokeReason: true },
+    orderBy: { createdAt: "asc" },
   });
-  for (const r of rows) out.set(`${r.rollId}:${r.workOrderStepId}:${r.phase}`, { id: r.id, meters: r.meters, createdAt: r.createdAt });
-  return out;
+  const reopenedAt = new Map<string, Date>();
+  for (const r of rows) {
+    const k = `${r.rollId}:${r.workOrderStepId}`;
+    if (r.revokeReason === KURSUN_REOPEN_REASON && r.revokedAt && r.revokedAt > (reopenedAt.get(k) ?? new Date(0))) reopenedAt.set(k, r.revokedAt);
+  }
+  for (const r of rows) {
+    const k = `${r.rollId}:${r.workOrderStepId}`;
+    if (r.revokedAt === null) out.set(`${k}:${r.phase}`, { id: r.id, meters: r.meters, createdAt: r.createdAt });
+    if (r.phase !== MeterPhase.OUT || firstOut.has(k)) continue;
+    // Yeniden açılan adım yeni hizmettir: REOPEN damgasından önceki okumalar hizmet anı sayılmaz.
+    const cut = reopenedAt.get(k);
+    if (!cut || r.createdAt > cut) firstOut.set(k, r.createdAt);
+  }
+  return { out, firstOut };
+}
+
+/** H7 seçenekleri — verilmezse H6 davranışı (OUT → IN → DECLARED, uyarısız, hizmet anına fiyat). */
+export interface ServiceResolveOptions {
+  /** Faturalanan metre tabanı: OUT zinciri OUT → IN → DECLARED; IN zinciri IN → DECLARED; DECLARED yalnız beyan. */
+  meterBasis?: "OUT" | "IN" | "DECLARED";
+  /** Seçilen okuma yoksa: beyanla yaz + uyar ya da işi taslaktan çıkar (uyarıyla). */
+  missingMeter?: "DECLARED_WITH_WARNING" | "BLOCK_LINE";
+  /** Verilirse bütün fiyatlar bu ana çözülür (priceDate = DISPATCH_DAY). */
+  priceAsOf?: Date;
+  /** Zaten faturalanmış iş — `${rollId}:${serviceItemId}:${workOrderStepId}`; satıra ve bağa girmez. */
+  billedKeys?: Set<string>;
+}
+
+/** Bağ anahtarı — kısmi unique (rollId, serviceItemId, workOrderStepId) ile aynı üçlü. */
+export function serviceWorkKey(w: { rollId: string; serviceItemId: string | null; workOrderStepId: string | null }): string {
+  return `${w.rollId}:${w.serviceItemId ?? "-"}:${w.workOrderStepId ?? "-"}`;
+}
+
+/** H7: faturalanmış iş düşer; ölçümsüz iş ayara göre uyarıyla yazılır ya da taslaktan çıkar. */
+function filterBillableWorks(all: ServiceRollWork[], opt: ServiceResolveOptions, basis: string, warnings: string[]): ServiceRollWork[] {
+  const works = all.filter((w) => !(opt.billedKeys && w.serviceItemId && opt.billedKeys.has(serviceWorkKey(w))));
+  if (!opt.missingMeter || basis === "DECLARED") return works;
+  const unmeasured = works.filter((w) => w.serviceItemId && w.meterBasis === "DECLARED");
+  if (unmeasured.length === 0) return works;
+  const block = opt.missingMeter === "BLOCK_LINE";
+  warnings.push(block
+    ? `${unmeasured.length} işin sayaç okuması yok — faturaya alınmadı (okuma girilince faturalanır).`
+    : `${unmeasured.length} işin sayaç okuması yok — bildirilen metreyle faturalandı, kontrol edin.`);
+  return block ? works.filter((w) => !unmeasured.includes(w)) : works;
 }
 
 /**
@@ -89,7 +136,9 @@ export async function resolveServiceItemsForRolls(params: {
   rollIds: string[];
   customerId: string | null;
   currency: Currency;
+  options?: ServiceResolveOptions;
 }): Promise<ServiceResolution> {
+  const opt = params.options ?? {};
   const rollIds = [...new Set(params.rollIds)].filter(Boolean);
   const warnings: string[] = [];
   if (rollIds.length === 0) return { lines: [], works: [], warnings };
@@ -106,11 +155,12 @@ export async function resolveServiceItemsForRolls(params: {
     return { a, valueId, valueName: a.valueId ? a.valueName : target?.valueName ?? a.valueName, gramajFrom };
   });
   const valueMap = await loadValueServiceMap([...new Set(draft.map((d) => d.valueId).filter((v): v is string => v !== null))]);
-  const readings = await loadReadings(apps);
+  const { out: readings, firstOut } = await loadReadings(apps);
+  const basis = opt.meterBasis ?? "OUT";
 
-  const works: ServiceRollWork[] = draft.map(({ a, valueId, valueName, gramajFrom }) => {
-    const out = readings.get(`${a.rollId}:${a.workOrderStepId}:${MeterPhase.OUT}`);
-    const inn = readings.get(`${a.rollId}:${a.workOrderStepId}:${MeterPhase.IN}`);
+  const allWorks: ServiceRollWork[] = draft.map(({ a, valueId, valueName, gramajFrom }) => {
+    const out = basis === "OUT" ? readings.get(`${a.rollId}:${a.workOrderStepId}:${MeterPhase.OUT}`) : undefined;
+    const inn = basis !== "DECLARED" ? readings.get(`${a.rollId}:${a.workOrderStepId}:${MeterPhase.IN}`) : undefined;
     const picked = out ? { basis: "OUT" as const, r: out } : inn ? { basis: "IN" as const, r: inn } : null;
     return {
       rollId: a.rollId, workOrderStepId: a.workOrderStepId, source: a.source, valueId, valueName, gramajFrom,
@@ -118,14 +168,16 @@ export async function resolveServiceItemsForRolls(params: {
       meters: picked ? picked.r.meters : a.meters,
       meterBasis: picked ? picked.basis : "DECLARED",
       readingId: picked ? picked.r.id : null,
-      serviceAt: out ? out.createdAt : a.at,
+      serviceAt: firstOut.get(`${a.rollId}:${a.workOrderStepId}`) ?? a.at,
       unitPrice: null,
     };
   });
+  const works = filterBillableWorks(allWorks, opt, basis, warnings);
 
   // Fiyat hizmet anına çözülür (geç taslak eski fiyatı korur); aynı an tek sorgu.
   const byAt = new Map<number, ServiceRollWork[]>();
-  for (const w of works) if (w.serviceItemId) byAt.set(w.serviceAt.getTime(), [...(byAt.get(w.serviceAt.getTime()) ?? []), w]);
+  const priceAt = (w: ServiceRollWork) => (opt.priceAsOf ?? w.serviceAt).getTime();
+  for (const w of works) if (w.serviceItemId) byAt.set(priceAt(w), [...(byAt.get(priceAt(w)) ?? []), w]);
   for (const [at, group] of byAt) {
     const prices = await resolveItemPricesFor({
       itemIds: group.map((w) => w.serviceItemId!), kind: PriceKind.SALE, currency: params.currency,
