@@ -15,10 +15,16 @@
 //      modül kapalı 403 MODULE_DISABLED; yetkili → terimler hesaba yazılır (POST + PATCH), yanıt `cariAccountId`;
 //      GET `finance:read` OPT-IN: yetkisiz DTO'da alan YOK, yetkili `finance{...}` + `cariAccountId`; Zod bilinmeyen alan 400
 //   §6 `POST /finance/cari` → 400 CARI_ACCOUNT_BORN_WITH_CARD (elle hesap açma yolu kapandı)
+//   §7 KART FORMU hizmet faturası tetiği (H8b, K2b): `finance.serviceBillingTrigger` Finans → Cari diyaloğuyla AYNI yol
+//      (`cariService.update`): yazılan tetik sevk/dönem çözücüsünde etkin; GET kart + `by-customer` aynı değeri gösterir;
+//      geçersiz değer 400 SERVICE_BILLING_TRIGGER_INVALID Türkçe, yazmaz; audit CARI_ACCOUNT satırı; null = fabrika ayarı;
+//      fason hesabında 400 SERVICE_BILLING_TRIGGER_NOT_CUSTOMER korunur
 //
 // ⭐ NEGATİF SONDA (ölçüldü 2026-09-18): ① `bornCariAccountTx` sabit null → §1a/§1b/§1c ❌ (sonrası zincirleme çöker — kırmızı yine kırmızı) · ② `takeFinanceSub` izin kapısı
 //    kaldırıldı → §5a ❌ · ③ `resolveCariAccountByCustomerTx` fason bacağı (`subcontractor: { customerId }`) düşürüldü → §4c ❌
 //    · ④ backfill `yazmaEngeli` `_test` kapısı kaldırıldı → §2e ❌.
+//    · ⑥ (2026-10-29 K2b bitirici) `resolveCariAccountByCustomerTx` orderBy `nulls: "last"` kaldırıldı → §4c2 ❌.
+//    · ⑤ (2026-10-29 K2b) `financeSubSchema`dan `serviceBillingTrigger` satırı silindi → §7a–§7e ❌ (strict şema 400).
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. `finance.enabled` fotoğrafa döner; temizlik yalnız `temizle`.
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -34,7 +40,8 @@ import { AuthService } from "../src/services/auth.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { customerService } from "../src/routes/customer.routes";
 import { cariService } from "../src/services/cari.service";
-import { resolveCariAccountByCustomerTx } from "../src/services/helpers/finance.helper";
+import { ensureCariAccountTx, resolveCariAccountByCustomerTx } from "../src/services/helpers/finance.helper";
+import { resolveCustomerServiceBillingTrigger } from "../src/services/helpers/service-billing.helper";
 import { backfillOlc, backfillUygula } from "./migrate_cari_accounts_backfill";
 import { AppError } from "../src/utils/app-error";
 
@@ -165,6 +172,9 @@ async function main(): Promise<void> {
     ids.subs.push(sub5.id);
     const legacy = await prisma.cariAccount.create({ data: { kind: "SUBCONTRACTOR", subcontractorId: sub5.id }, select: { id: true } });
     check("§4c ⭐ eski fason bacağına bağlı hesap KARTTAN çözülür (profil.customerId üstünden)", (await resolveCariAccountByCustomerTx(prisma, k5.data.id))?.id === legacy.id && (await cariService.findByCustomer(k5.data.id)).data.id === legacy.id);
+    // İki hesap birlikte (eski fason bacağı + yeni CUSTOMER): okuma, yazımın gittiği CUSTOMER hesabını seçer (NULLS LAST).
+    const cust5 = await prisma.cariAccount.create({ data: { kind: "CUSTOMER", customerId: k5.data.id }, select: { id: true } });
+    check("§4c2 ⭐ iki hesap birlikte → CUSTOMER hesabı (customerId dolu) çözülür, eski fason hesabı değil", (await resolveCariAccountByCustomerTx(prisma, k5.data.id))?.id === cust5.id);
     await setFin(false);
     const k6 = await kartAc();
     ids.customers.push(k6.data.id);
@@ -204,6 +214,38 @@ async function main(): Promise<void> {
     console.log("\n── §6 Elle hesap açma kapandı ──");
     const r6 = await call("POST", "/api/finance/cari", adminTok, { customerId: k6.data.id });
     check("§6a POST /finance/cari → 400 CARI_ACCOUNT_BORN_WITH_CARD; hesap doğmadı", r6.status === 400 && r6.body.details?.code === "CARI_ACCOUNT_BORN_WITH_CARD" && (await hesap(k6.data.id)).length === 0, `${r6.status}`);
+
+    console.log("\n── §7 Kart formu hizmet faturası tetiği ──");
+    const r7a = await call("PATCH", `/api/customers/${k1.data.id}`, adminTok, { finance: { serviceBillingTrigger: "PER_SHIPMENT" } });
+    const eff7a = await resolveCustomerServiceBillingTrigger(k1.data.id, { trigger: "PERIOD_END" });
+    check("§7a ⭐ kart formundan yazılan tetik hesaba yazıldı ve çözücüde etkin (fabrika PERIOD_END'i ezer, kaynak CUSTOMER)",
+      r7a.status === 200 && eff7a.trigger === "PER_SHIPMENT" && eff7a.source === "CUSTOMER", `${r7a.status} ${JSON.stringify(eff7a)}`);
+    const g7b = await call("GET", `/api/customers/${k1.data.id}`, adminTok);
+    const by7b = await call("GET", `/api/finance/cari/by-customer/${k1.data.id}`, adminTok);
+    check("§7b iki yüzey aynı değeri gösterir: kart GET `finance.serviceBillingTrigger` = Finans → Cari `by-customer`",
+      (g7b.body.data?.finance as { serviceBillingTrigger?: string } | undefined)?.serviceBillingTrigger === "PER_SHIPMENT" && by7b.body.data?.serviceBillingTrigger === "PER_SHIPMENT",
+      `${JSON.stringify(g7b.body.data?.finance)} · ${by7b.body.data?.serviceBillingTrigger}`);
+    const r7c = await call("PATCH", `/api/customers/${k1.data.id}`, adminTok, { finance: { serviceBillingTrigger: "HER_GUN" } });
+    const h7c = await prisma.cariAccount.findUniqueOrThrow({ where: { id: acc1.id }, select: { serviceBillingTrigger: true } });
+    check("§7c ⭐ geçersiz değer → 400 SERVICE_BILLING_TRIGGER_INVALID, Türkçe mesaj; hesap DEĞİŞMEDİ",
+      r7c.status === 400 && r7c.body.details?.code === "SERVICE_BILLING_TRIGGER_INVALID" && /Hizmet faturası tetiği geçersiz/.test(r7c.body.message ?? "") && h7c.serviceBillingTrigger === "PER_SHIPMENT",
+      `${r7c.status} ${JSON.stringify(r7c.body.details)} ${r7c.body.message}`);
+    // Audit tx dışında best-effort (void) yazılır — kısa yoklama.
+    let log7d: Array<{ newData: Prisma.JsonValue }> = [];
+    for (let i = 0; i < 20 && log7d.length === 0; i++) {
+      log7d = (await prisma.systemLog.findMany({ where: { tableName: "CARI_ACCOUNT", recordId: acc1.id, action: "UPDATE" }, select: { newData: true } }))
+        .filter((l) => (l.newData as { serviceBillingTrigger?: string } | null)?.serviceBillingTrigger === "PER_SHIPMENT");
+      if (log7d.length === 0) await new Promise((r) => setTimeout(r, 100));
+    }
+    check("§7d kart formu yazımı audit'li (CARI_ACCOUNT UPDATE, yükte serviceBillingTrigger)", log7d.length >= 1, `${log7d.length}`);
+    const r7e = await call("PATCH", `/api/customers/${k1.data.id}`, adminTok, { finance: { serviceBillingTrigger: null } });
+    const eff7e = await resolveCustomerServiceBillingTrigger(k1.data.id, { trigger: "PERIOD_END" });
+    check("§7e null → fabrika ayarı (kaynak FACTORY)", r7e.status === 200 && eff7e.trigger === "PERIOD_END" && eff7e.source === "FACTORY", JSON.stringify(eff7e));
+    const sub7 = await prisma.subcontractor.create({ data: { code: `${TAG}-SUB7`, name: `${TAG} fason` }, select: { id: true } });
+    ids.subs.push(sub7.id);
+    const subAcc = await prisma.$transaction((tx) => ensureCariAccountTx(tx, { customerId: null, subcontractorId: sub7.id }));
+    const e7f = await beklenenHata(() => cariService.update(subAcc.id, { serviceBillingTrigger: "PER_SHIPMENT" }, admin.id));
+    check("§7f fason (müşteri olmayan) hesap → 400 SERVICE_BILLING_TRIGGER_NOT_CUSTOMER korunur", e7f?.statusCode === 400 && kod(e7f) === "SERVICE_BILLING_TRIGGER_NOT_CUSTOMER", kod(e7f));
   } finally {
     server.close();
     await temizle(ids, foto);

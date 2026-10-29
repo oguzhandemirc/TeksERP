@@ -13,6 +13,7 @@ import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { ItemPickerModal } from "@/components/forms/ItemPickerModal";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { formatFactory } from "@/lib/factory-time";
+import { cn } from "@/lib/utils";
 import { INCOMING_DOCUMENT_QUERY_KEY, listCustomerDefaults, removeCustomerDefault, setCustomerDefault } from "./service";
 import type { CustomerDefaultView } from "./types";
 
@@ -21,7 +22,12 @@ const QUERY_KEY = [INCOMING_DOCUMENT_QUERY_KEY, "varsayilan-urunler"] as const;
 
 function DefaultCard({ row, busy, onChange, onRemove }: { row: CustomerDefaultView; busy: boolean; onChange: () => void; onRemove: () => void }) {
   return (
-    <div className="rounded-lg border bg-card p-4" data-testid={`customer-default-${row.customerId}`}>
+    // Sorunlu satır kartın kendisinden seçilir: uzun listede yalnız alttaki metin gözden kaçıyordu.
+    <div
+      className={cn("rounded-lg border bg-card p-4", row.problem && "border-destructive/60 bg-destructive/5")}
+      data-testid={`customer-default-${row.customerId}`}
+      data-problem={row.problem ? "true" : undefined}
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="break-words font-medium">

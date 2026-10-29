@@ -526,6 +526,7 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   // E4b: müşteri varsayılan ürünleri — statik segment `:id`den önce; karo ile AYNI izin.
+  // Yol yazısı `GelenBelgeler/paths.ts` CUSTOMER_DEFAULTS_PATH ile eşit kalır (bekçi `__tests__/paths.test.ts`).
   {
     path: "operations/gelen-belgeler/varsayilan-urunler",
     element: (

@@ -58,9 +58,10 @@ export function PropertyValuesField({ value, onChange, existingCodes, service }:
         const isSaved = saved.has(row.code.trim().toUpperCase());
         return (
           <div key={i} className="space-y-1">
-            <div className="flex items-center gap-2">
+            {/* Dar ekranda (390 px) kod kutusu sabit genişlikte kalır; Aktif/sil alt satıra iner. */}
+            <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
               <Input
-                className="w-36 font-mono uppercase"
+                className="w-28 shrink-0 font-mono uppercase sm:w-36"
                 placeholder="6-KAT"
                 value={row.code}
                 // Kod KİMLİK: her zaman büyük harf saklanır ki "6-kat" ile "6-KAT"
@@ -74,12 +75,12 @@ export function PropertyValuesField({ value, onChange, existingCodes, service }:
                 }
               />
               <Input
-                className="flex-1"
+                className="min-w-[6rem] flex-1"
                 placeholder="6 Kat"
                 value={row.name}
                 onChange={(e) => patch(i, { name: e.target.value })}
               />
-              <label className="flex w-20 shrink-0 items-center gap-1 text-xs">
+              <label className="flex shrink-0 items-center gap-1 text-xs sm:w-20">
                 <input
                   type="checkbox"
                   checked={row.isActive}

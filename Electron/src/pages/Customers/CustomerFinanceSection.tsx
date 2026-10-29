@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { getCariByCustomer, money, type Currency } from "@/pages/Finance/service";
+import { CariServiceBillingTriggerField, type ServiceBillingTriggerChoice } from "@/pages/Finance/CariServiceBillingTriggerField";
 import { FINANCE_CURRENCIES, financeFieldsFromView, riskLimitError, termDaysError, type FinanceFormFields } from "./customerFinance";
 
 /** Üç kapı tek yerde: modül · okuma · yazma — dialog ve iki sayfa (payload) aynı cevabı okur. */
@@ -36,7 +37,20 @@ export function CustomerFinanceSection({ form, customerId, canWrite }: Props) {
     if (!acc.isSuccess || !acc.data) return;
     const f = financeFieldsFromView({ paymentTermDays: acc.data.paymentTermDays ?? null, defaultCurrency: acc.data.defaultCurrency as Currency, taxOffice: acc.data.taxOffice ?? null, riskLimit: acc.data.riskLimit == null ? null : String(acc.data.riskLimit), isActive: acc.data.isActive });
     for (const [k, v] of Object.entries(f)) if (!form.getValues(k as keyof FinanceFormFields)) form.setValue(k as keyof FinanceFormFields, v as never, { shouldDirty: false });
+    // H8b: tetik Finans → Cari diyaloğuyla aynı kural — yalnız müşteri hesabında ve backend alanı taşıyorsa.
+    if (acc.data.kind === "CUSTOMER" && acc.data.serviceBillingTrigger !== undefined && !form.getValues("financeServiceBillingTrigger")) {
+      const seed = acc.data.serviceBillingTrigger ?? "FACTORY";
+      form.setValue("financeServiceBillingTriggerSeed", seed, { shouldDirty: false });
+      form.setValue("financeServiceBillingTrigger", seed, { shouldDirty: false });
+    }
   }, [acc.isSuccess, acc.data, form]);
+  // Yeni kart: hesap kayıtla müşteri hesabı olarak doğar; varsayılan fabrika ayarıdır (değişmedikçe gövdeye girmez).
+  useEffect(() => {
+    if (customerId || form.getValues("financeServiceBillingTrigger")) return;
+    form.setValue("financeServiceBillingTriggerSeed", "FACTORY", { shouldDirty: false });
+    form.setValue("financeServiceBillingTrigger", "FACTORY", { shouldDirty: false });
+  }, [customerId, form]);
+  const trigger = (form.watch("financeServiceBillingTrigger") as string | undefined) || null;
   const term = form.watch("financePaymentTermDays") as string;
   const risk = form.watch("financeRiskLimit") as string;
   const ro = !canWrite;
@@ -60,6 +74,11 @@ export function CustomerFinanceSection({ form, customerId, canWrite }: Props) {
         <FormField label="Risk limiti" error={riskLimitError(risk ?? "") ? { message: riskLimitError(risk ?? "") as string } : undefined}>
           <Input inputMode="decimal" readOnly={ro} aria-label="Risk limiti" {...form.register("financeRiskLimit")} />
         </FormField>
+        <CariServiceBillingTriggerField
+          value={trigger as ServiceBillingTriggerChoice | null}
+          disabled={ro}
+          onChange={(v) => form.setValue("financeServiceBillingTrigger", v, { shouldDirty: true })}
+        />
       </div>
       <p className="mt-2 text-xs text-muted-foreground" data-testid="customer-finance-balance">
         {!customerId ? "Cari hesap kart kaydedilince kendiliğinden açılır." : acc.isLoading ? "Hesap okunuyor…" : acc.isError ? "Hesap okunamadı — bu, hesap yok demek DEĞİLDİR." : !acc.data ? "Bu kartın cari hesabı henüz yok — kurulum göçü tamamlanınca ya da ilk finans kaydında doğar." : `Açık bakiye: ${acc.data.balances.filter((b) => Number(b.balance) !== 0).map((b) => money(b.balance, b.currency)).join(" · ") || "0"}`}

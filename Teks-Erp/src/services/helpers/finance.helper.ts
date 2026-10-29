@@ -284,10 +284,10 @@ export async function findCariAccountIdByCustomer(customerId: string): Promise<s
  * Fatura/ödeme formu hesabı kod aramasıyla (`kind === party`) DEĞİL bu yolla bulur.
  */
 /** Kartın hesap terimleri (Z-A opt-in DTO) — okuma tek yerden; hesap yoksa null. */
-export async function readCariTermsByCustomer(customerId: string): Promise<{ id: string; paymentTermDays: number | null; defaultCurrency: Currency; taxOffice: string | null; riskLimit: Prisma.Decimal | null; isActive: boolean } | null> {
+export async function readCariTermsByCustomer(customerId: string): Promise<{ id: string; paymentTermDays: number | null; defaultCurrency: Currency; taxOffice: string | null; riskLimit: Prisma.Decimal | null; isActive: boolean; serviceBillingTrigger: string | null } | null> {
   const ref = await resolveCariAccountByCustomerTx(prisma, customerId);
   if (!ref) return null;
-  return prisma.cariAccount.findUniqueOrThrow({ where: { id: ref.id }, select: { id: true, paymentTermDays: true, defaultCurrency: true, taxOffice: true, riskLimit: true, isActive: true } });
+  return prisma.cariAccount.findUniqueOrThrow({ where: { id: ref.id }, select: { id: true, paymentTermDays: true, defaultCurrency: true, taxOffice: true, riskLimit: true, isActive: true, serviceBillingTrigger: true } });
 }
 
 export async function resolveCariAccountByCustomerTx(
@@ -296,7 +296,8 @@ export async function resolveCariAccountByCustomerTx(
 ): Promise<{ id: string; isActive: boolean } | null> {
   const row = await db.cariAccount.findFirst({
     where: { OR: [{ customerId }, { subcontractor: { customerId } }] },
-    orderBy: { customerId: "desc" },
+    // PG'de DESC varsayılanı NULLS FIRST: iki hesap varsa yazımın gittiği CUSTOMER hesabı (customerId dolu) önce gelmeli.
+    orderBy: { customerId: { sort: "desc", nulls: "last" } },
     select: { id: true, isActive: true },
   });
   return row ?? null;
