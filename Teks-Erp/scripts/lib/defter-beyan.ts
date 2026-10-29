@@ -310,6 +310,8 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [
       { dosya: "src/services/stock-count-reversal.service.ts", sembol: "reverseTx" },
       { dosya: "src/services/tambur-undo.service.ts", sembol: "applyFull" },
+      // H1b: KURSUN_EXIT_MEASURE satırı okuma damgalanınca (düzeltme · yeniden açma · geri taşıma) terslenir.
+      { dosya: "src/services/helpers/kursun-meter-stock.helper.ts", sembol: "reverseExitMeterStockTx" },
     ],
     ["src/services/helpers/roll-variance.helper.ts"]),
 
@@ -837,6 +839,11 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   // emsali: geri alma ucu yok, ters yönde ikinci düzeltme yeni olgudur ⇒ karşı olay KENDİSİ.
   ENTRY_CORRECTION: { tur: "KARSI_OLAY", kod: "ENTRY_CORRECTION", gerekce: "giriş ölçümü düzeltmesinin tersi ters yönde ikinci bir düzeltmedir — aynı kod, ters işaret, rollVarianceId ile sapma defterine bağlı; geri alma ucu yok (operatör kararı, damga değil olgu)",
     tersYazan: [{ dosya: "src/services/inventory.service.ts", sembol: "applyManualProperties" }] },
+  // KURSUN_METER_ADJUST — H1b (2026-10-29): APPLY kipinde etkin kurşun çıkış okuması depo stoğundaki topun metrajını
+  // düzeltirken ADJUST (`rollVarianceId` KURSUN_EXIT_MEASURE sapmasına bağlı). Okuma damgalanınca aynı helper ters
+  // yönde aynı kodla ikinci satırı yazar (üretimdeki top satır almaz; giriş son adım kapanışında güncel metrajla).
+  KURSUN_METER_ADJUST: { tur: "KARSI_OLAY", kod: "KURSUN_METER_ADJUST", gerekce: "kurşun çıkış metresi uygulamasının tersi, okuma damgalanınca aynı helper'ın yazdığı ters yönlü aynı kodlu satırdır — rollVarianceId ile sapma defterine bağlı",
+    tersYazan: [{ dosya: "src/services/helpers/kursun-meter-stock.helper.ts", sembol: "reverseExitMeterStockTx" }] },
 };
 
 // =============================================================================

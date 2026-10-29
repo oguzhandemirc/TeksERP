@@ -149,6 +149,11 @@ export const STOCK_MOVE_REASON = {
    * Tersi ters yönde ikinci düzeltmedir (karşı olay kendisi, MANUAL_ADJUST emsali).
    */
   ENTRY_CORRECTION: "ENTRY_CORRECTION",
+  /**
+   * KURŞUN ÇIKIŞ METRESİ stoğa uygulandı (H1b APPLY) — yalnız top depo stoğundayken yazılır, `rollVarianceId`
+   * `KURSUN_EXIT_MEASURE` sapmasına bağlı. Tersi ters yönde aynı kodlu ikinci satırdır (okuma damgalanınca).
+   */
+  KURSUN_METER_ADJUST: "KURSUN_METER_ADJUST",
   /** Kesme anı açılış fotoğrafı. */
   OPENING: "OPENING",
 } as const;

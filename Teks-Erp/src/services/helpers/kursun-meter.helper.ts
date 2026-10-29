@@ -3,19 +3,19 @@
 // =============================================================================
 // `RollMeterReading` DEFTERDİR (silinirse faturalanan metre değişir): satır değiştirilmez,
 // düzeltme = eski aktif satırın damgası + yeni satır; adım yeniden açılınca damgalanır.
-// Stok etkisi YOK (RECORD, karar belgesi §3-5). Politika alanları okuma anındaki ayarın
+// Stok etkisi RECORD'da YOK (karar belgesi §3-5); APPLY (H1b) `kursun-meter-stock.helper.ts`te. Politika alanları okuma anındaki ayarın
 // KOPYASIDIR — ayar sonradan değişse de bu okumanın sapma işareti aynı kalır (§12-5).
 //
 // Tx sırası (§3-4, §12-1) çağıranındır: 8036 token kilidi (İLK ifade) → `touchWorkOrderTx`
 // → `assertKursunTabletMayWrite` → burada aktif okuma `FOR UPDATE` → yazım.
 // =============================================================================
 import { assertWorkNotBilledTx } from "./service-billing-gate.helper";
-import { MachineDataSource, MeterApprovalMode, MeterPhase, MeterVarianceBasis, Prisma, type RollMeterAck, type RollMeterReading } from "@prisma/client";
+import { MachineDataSource, MeterApprovalMode, MeterPhase, MeterStockMode, MeterVarianceBasis, Prisma, type RollMeterAck, type RollMeterReading } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import {
-  readKursunMeterVarianceApproval,
+  readKursunMeterStockMode, readKursunMeterVarianceApproval,
   readKursunMeterVarianceBasis,
   readKursunMeterVarianceThresholdM,
   readKursunMeterVarianceThresholdPct,
@@ -26,6 +26,7 @@ import {
 import { tokenReplay } from "./token-replay.helper";
 import { resolveMeterVariance, type MeterVarianceResult } from "../../lib/kursun-meter-variance";
 import { readingPendingAckSql } from "./kursun-meter-variance-sql.helper";
+import { applyExitMeterToStockTx, reverseExitMeterStockTx, type ExitMeterApplyResult } from "./kursun-meter-stock.helper";
 import { digestQuickPin, digestsEqual } from "../../lib/short-credential/digest";
 import { getShortCredentialKeyRing } from "../../lib/short-credential/keyring";
 import { matchesPermission } from "../../middlewares/rbac.middleware";
@@ -149,8 +150,8 @@ export interface WriteMeterReadingResult {
   revokedId: string | null;
   /** OUT okumasının sapma kararı (kopyadan); IN için null. */
   variance: MeterVarianceResult | null;
-  /** Aynı tx'te yazılan OPERATOR_REASON imzası. */
-  ack: RollMeterAck | null;
+  /** Aynı tx'te yazılan OPERATOR_REASON imzası · H1b APPLY stok sonucu (RECORD / imza bekliyor ⇒ null). */
+  ack: RollMeterAck | null; stock?: ExitMeterApplyResult | null;
 }
 
 /**
@@ -186,11 +187,13 @@ export async function writeMeterReadingTx(tx: Tx, args: WriteMeterReadingArgs): 
       thresholdPct: policy.thresholdPct == null ? null : new Prisma.Decimal(policy.thresholdPct),
       basis: policy.basis,
       approvalMode: policy.approvalMode,
+      // H1b: stok kipi de okuma anında kopyalanır (tablet adım özetindeki `policy` sözleşmesine girmez).
+      stockMode: MeterStockMode[await readKursunMeterStockMode(tx)],
       clientToken: args.input.clientToken,
       createdById: args.userId,
     },
   });
-  if (args.phase !== MeterPhase.OUT) return { reading, revokedId, variance: null, ack: null };
+  if (args.phase !== MeterPhase.OUT) return { reading, revokedId, variance: null, ack: null, stock: null };
 
   // H2 §3-6: sapma kopyadan; OPERATOR_REASON'da sebep yoksa fail-closed 409 (tablet kuyruğa koymadan sorar).
   const variance = await evaluateReadingVarianceTx(tx, reading);
@@ -209,7 +212,9 @@ export async function writeMeterReadingTx(tx: Tx, args: WriteMeterReadingArgs): 
       data: { readingId: reading.id, mode: MeterApprovalMode.OPERATOR_REASON, ...reason, approvedById: args.userId },
     });
   }
-  return { reading, revokedId, variance, ack };
+  // H1b: okuma ETKİNSE (imza gerekmiyor ya da aynı tx'te imzalandı) APPLY kipinde stoğa uygulanır;
+  // PIN/OFFICE imzası bekleyen okuma stoğa dokunmaz — uygulama imza anında (`ackMeterReadingTx`).
+  return { reading, revokedId, variance, ack, stock: !variance.needsAck || ack ? await applyExitMeterToStockTx(tx, reading, args.userId) : null };
 }
 
 /** Sebep kodu/metni kırpılır; ikisi de boşsa null. */
@@ -330,6 +335,8 @@ async function revokeReadingsTx(tx: Tx, args: { ids: string[]; userId: string | 
   const stamp = { revokedAt: new Date(), revokedById: args.userId, revokeReason: args.reason.slice(0, 300) };
   const res = await tx.rollMeterReading.updateMany({ where: { id: { in: args.ids }, revokedAt: null }, data: stamp });
   await tx.rollMeterAck.updateMany({ where: { readingId: { in: args.ids }, revokedAt: null }, data: stamp });
+  // H1b: APPLY etkisi okumayla birlikte terslenir (bağlı sapma satırı damgalanır, metraj geri döner).
+  await reverseExitMeterStockTx(tx, args.ids, args.userId);
   return res.count;
 }
 
