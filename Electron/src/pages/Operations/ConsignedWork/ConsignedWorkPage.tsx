@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatNumber } from "@/lib/format";
+import { TERIM } from "@/lib/terim";
 import { CONSIGNED_WORK_QUERY_KEY, getConsignedWork, type ConsignedBucket, type ConsignedOwnerRow, type ConsignedWorkSummary } from "./service";
 import { primaryBucket, rollsLinkFor, type ConsignedBucketKey } from "./consigned-links";
 
@@ -34,7 +35,7 @@ function TotalsStrip({ totals }: { totals: ConsignedWorkSummary["totals"] }) {
   const cells: Array<[string, ConsignedBucket, string?]> = [
     ["İçeride (toplam)", totals.total],
     ["Bekliyor", totals.waiting, "Rotaya girmemiş ham emanet (Ham Stok / Yarı Mamul)"],
-    ["İşlemde", totals.inProcess, "Bir iş emri adımında (Üretimde)"],
+    ["İşlemde", totals.inProcess, `Bir ${TERIM.terbiyeIsEmri.tekilKucuk} adımında (Üretimde)`],
     ["Sevke hazır", totals.ready, "Depoda — Bitmiş Depo"],
   ];
   return (

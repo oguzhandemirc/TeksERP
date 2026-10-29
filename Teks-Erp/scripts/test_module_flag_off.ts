@@ -404,6 +404,8 @@ const SONDA_IZINLERI = [
   "gelen-belge:read",
   // Maliyet sondası (`/api/cost/parameter-sets`) — aynı gerekçe (MAL-1).
   "cost:read",
+  // İçerideki İşler sondası (`/api/consigned-work`) — aynı gerekçe (P1a; ölçüldü: izinsiz AÇIK tur 403).
+  "roll:read",
 ];
 
 const TEST_USERNAME = `bekci.modul.${process.pid}`;
