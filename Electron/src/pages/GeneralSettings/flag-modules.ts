@@ -146,10 +146,15 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   kursunMeterVarianceThresholdPct: "productionEnabled",
   kursunMeterVarianceBasis: "productionEnabled",
   kursunMeterVarianceApproval: "productionEnabled",
+  kursunMeterStockMode: "productionEnabled",
   tamburOverQuantityEnabled: "productionEnabled",
   tamburUndoFullSameDayOnly: "productionEnabled",
   tamburShortCutA1Enabled: "productionEnabled",
   tamburShortCutA1ThresholdM: "productionEnabled",
+  tamburPlanGateWidthToleranceCm: "productionEnabled",
+  tamburPlanGateWidthCheck: "productionEnabled",
+  tamburListByStationEnabled: "productionEnabled",
+  machineStopTrackingEnabled: "productionEnabled",
   [SETTING_KEYS.WORKORDER_DEFAULT_PLAN_DURATION_DAYS]: "productionEnabled",
 
   // --- ÖN MUHASEBE (cari · fatura · kasa · çek) ------------------------------

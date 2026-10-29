@@ -12,6 +12,8 @@
 // =============================================================================
 import { Currency, MachineDataSource, MeterPhase, Prisma, PriceKind } from "@prisma/client";
 import prisma from "../../lib/prisma";
+
+type Db = Prisma.TransactionClient | typeof prisma;
 import { TERIM } from "../../constants/terim";
 import { resolveItemPricesFor } from "../item-price.service";
 import { listKursunApplications, readKursunTarget, type KursunApplication } from "./process-summary.helper";
@@ -60,10 +62,10 @@ export interface ServiceResolution {
 }
 
 /** Gramaj değerinden hizmet kalemi: önce değer, sonra özellik, sonra ana bayrak. */
-async function loadValueServiceMap(valueIds: string[]): Promise<Map<string, string | null>> {
+async function loadValueServiceMap(valueIds: string[], db: Db): Promise<Map<string, string | null>> {
   const out = new Map<string, string | null>();
   if (valueIds.length === 0) return out;
-  const rows = await prisma.fabricPropertyValue.findMany({
+  const rows = await db.fabricPropertyValue.findMany({
     where: { id: { in: valueIds } },
     select: { id: true, serviceItemId: true, property: { select: { serviceItemId: true, variantOf: { select: { serviceItemId: true } } } } },
   });
@@ -72,12 +74,12 @@ async function loadValueServiceMap(valueIds: string[]): Promise<Map<string, stri
 }
 
 /** Aktif, SIMULATED olmayan okumalar: `${rollId}:${stepId}:${phase}` → okuma. */
-async function loadReadings(works: Array<{ rollId: string; workOrderStepId: string }>) {
+async function loadReadings(works: Array<{ rollId: string; workOrderStepId: string }>, db: Db) {
   const out = new Map<string, { id: string; meters: Prisma.Decimal; createdAt: Date }>();
   /** H7 hizmet anı: `${rollId}:${stepId}` → adımın İLK OUT okuması (düzeltme kaydırmaz; son REOPEN'dan sonrası). */
   const firstOut = new Map<string, Date>();
   if (works.length === 0) return { out, firstOut };
-  const rows = await prisma.rollMeterReading.findMany({
+  const rows = await db.rollMeterReading.findMany({
     where: {
       source: { not: MachineDataSource.SIMULATED },
       rollId: { in: [...new Set(works.map((w) => w.rollId))] },
@@ -114,6 +116,8 @@ export interface ServiceResolveOptions {
   priceAsOfByRoll?: Map<string, Date>;
   /** Zaten faturalanmış iş — `${rollId}:${serviceItemId}:${workOrderStepId}`; satıra ve bağa girmez. */
   billedKeys?: Set<string>;
+  /** F1: kümede çocuğu olsa da KENDİSİ sevk edilen toplar — bayrak işinde kalan parçasını kendisi taşır. */
+  shippedRollIds?: Set<string>;
 }
 
 /** Bağ anahtarı — kısmi unique (rollId, serviceItemId, workOrderStepId) ile aynı üçlü. */
@@ -143,16 +147,19 @@ export async function resolveServiceItemsForRolls(params: {
   customerId: string | null;
   currency: Currency;
   options?: ServiceResolveOptions;
+  /** K3b: fatura tx'i — kapı okuması tx'in kendi bağlantısında (havuzda ikinci bağlantı beklemez). */
+  db?: Db;
 }): Promise<ServiceResolution> {
+  const db = params.db ?? prisma;
   const opt = params.options ?? {};
   const rollIds = [...new Set(params.rollIds)].filter(Boolean);
   const warnings: string[] = [];
   if (rollIds.length === 0) return { lines: [], works: [], warnings };
 
-  const apps = await listKursunApplications({ rollIds });
+  const apps = await listKursunApplications({ rollIds }, db);
   // Gramajı bilinmeyen (kâğıt) iş → iş emri hedefi, uyarıyla.
   const targetByWo = new Map<string, Awaited<ReturnType<typeof readKursunTarget>>>();
-  for (const wo of new Set(apps.filter((a) => a.valueId === null).map((a) => a.workOrderId))) targetByWo.set(wo, await readKursunTarget(wo));
+  for (const wo of new Set(apps.filter((a) => a.valueId === null).map((a) => a.workOrderId))) targetByWo.set(wo, await readKursunTarget(wo, db));
 
   const draft = apps.map((a) => {
     const target = a.valueId === null ? targetByWo.get(a.workOrderId) ?? null : null;
@@ -160,8 +167,8 @@ export async function resolveServiceItemsForRolls(params: {
     const gramajFrom: ServiceGramajSource = a.valueId ? "APPLIED" : target ? "WO_TARGET" : "NONE";
     return { a, valueId, valueName: a.valueId ? a.valueName : target?.valueName ?? a.valueName, gramajFrom };
   });
-  const valueMap = await loadValueServiceMap([...new Set(draft.map((d) => d.valueId).filter((v): v is string => v !== null))]);
-  const { out: readings, firstOut } = await loadReadings(apps);
+  const valueMap = await loadValueServiceMap([...new Set(draft.map((d) => d.valueId).filter((v): v is string => v !== null))], db);
+  const { out: readings, firstOut } = await loadReadings(apps, db);
   const basis = opt.meterBasis ?? "OUT";
 
   const allWorks: ServiceRollWork[] = draft.map(({ a, valueId, valueName, gramajFrom }) => {
@@ -178,7 +185,7 @@ export async function resolveServiceItemsForRolls(params: {
       unitPrice: null,
     };
   });
-  const flagWorks: ServiceRollWork[] = (await listFlagServiceWorks(rollIds, basis)).map((f) => ({
+  const flagWorks: ServiceRollWork[] = (await listFlagServiceWorks(rollIds, basis, { shippedRollIds: opt.shippedRollIds, db })).map((f) => ({
     rollId: f.rollId, workOrderStepId: f.workOrderStepId, source: "PROPERTY", valueId: null, valueName: f.propertyName, gramajFrom: "NONE",
     serviceItemId: f.serviceItemId, meters: f.meters, meterBasis: f.meterBasis, readingId: f.readingId, serviceAt: f.serviceAt, unitPrice: null,
   }));
@@ -191,12 +198,12 @@ export async function resolveServiceItemsForRolls(params: {
   for (const [at, group] of byAt) {
     const prices = await resolveItemPricesFor({
       itemIds: group.map((w) => w.serviceItemId!), kind: PriceKind.SALE, currency: params.currency,
-      customerId: params.customerId, asOf: new Date(at),
+      customerId: params.customerId, asOf: new Date(at), db,
     });
     for (const w of group) w.unitPrice = prices.get(w.serviceItemId!)?.price ?? null;
   }
 
-  const items = await prisma.item.findMany({
+  const items = await db.item.findMany({
     where: { id: { in: [...new Set(works.map((w) => w.serviceItemId).filter((v): v is string => v !== null))] } },
     select: { id: true, code: true, name: true },
   });

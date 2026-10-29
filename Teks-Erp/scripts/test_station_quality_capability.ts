@@ -96,6 +96,12 @@ const KIND_MUAF: Record<string, { sayi: number; gerekce: string }> = {
     sayi: 1,
     gerekce: "İçe aktarım SEÇENEK listesi (kullanıcıya gösterilen enum etiketi).",
   },
+  "services/helpers/machine-stop-regime.helper.ts": {
+    sayi: 1,
+    gerekce:
+      "D4-A1 dokumasız duruş rejiminin desteklenen makine türleri (kurşun/brode = PROCESS_QC, tambur) — soru " +
+      "'kalite yürütür mü' DEĞİL, 'bu istasyon türünün makinesine duruş açılır mı'.",
+  },
 };
 
 /**

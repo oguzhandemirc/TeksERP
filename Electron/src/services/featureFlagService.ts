@@ -543,6 +543,14 @@ export interface FeatureFlags {
   /** Kısa kesim eşiği (metre). null = girilmemiş → bayrak açık olsa da kural
    *  ateşlemez (panel bunu uyarı satırıyla söyler). */
   tamburShortCutA1ThresholdM: number | null;
+  /** Tambur plan kapısı en eşiği (cm), default 10; 0 = her farkta sorar (D4-E1). */
+  tamburPlanGateWidthToleranceCm: number;
+  /** Tambur plan kapısı en kontrolü (default ENFORCE); OFF yalnız en kolunu atlar, renk kapısı aynı. */
+  tamburPlanGateWidthCheck: "ENFORCE" | "OFF";
+  /** Tablet Tambur açık kart listesi oturum istasyonuyla süzülsün mü (false=default; ister 2.8). */
+  tamburListByStationEnabled: boolean;
+  /** Dokuma kapalıyken de kurşun/tambur/brode makinesi duruşu kaydedilsin mi (false=default; D4-A1). */
+  machineStopTrackingEnabled: boolean;
   /** Fason kabulünde çekme (giden↔dönen metraj farkı) uyarısı çıksın mı (true=default).
    *  Boyahanede kumaş çeker — 250 m giden mal 220 m döner. Kapalıyken ekran farkı
    *  yalnız bilgi olarak yazar, uyarı/onay çıkarmaz. Sapma defterine yazım bu
@@ -578,6 +586,8 @@ export interface FeatureFlags {
   /** H2: sapma tabanı ve onay kipi — backend aynası. */
   kursunMeterVarianceBasis: "DECLARED_IN" | "MEASURED_IN";
   kursunMeterVarianceApproval: "NONE" | "OPERATOR_REASON" | "SUPERVISOR_PIN" | "OFFICE";
+  /** H1b: çıkış metresi stok kipi — backend `KursunMeterStockMode` aynası (varsayılan RECORD). */
+  kursunMeterStockMode: "RECORD" | "APPLY";
   /** Parti no KISA ve DÖNEN mi (P01…P99, 99'dan sonra P01)? Default TRUE/AÇIK.
    *  Backend ENFORCE eder (`generateBatchNumberTx`). Kapalıyken eski
    *  `P + GGAAYY + günlük sıra` kalıbına düşülür.

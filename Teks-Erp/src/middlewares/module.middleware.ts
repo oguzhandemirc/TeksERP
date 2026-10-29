@@ -72,6 +72,7 @@ import {
   readTicaretEnabled,
 } from "../services/system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
+import { machineStopRegime } from "../services/helpers/machine-stop-regime.helper";
 import { AppError } from "../utils/app-error";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
@@ -243,6 +244,28 @@ export async function requireDokumaEnabled(
 }
 
 /**
+ * Makine duruşu rejimi (D4-A1): `dokuma ∨ (üretim ∧ uretim.makineDurusTakibi)` — yüklem TEK yerde
+ * (`machine-stop-regime.helper`). Genel rejim kapalıyken karar `requireDokumaEnabled`e DEVREDİLİR:
+ * ayar kapalı kurulumda 403 gövdesi (lisans/ön koşul mesajı dahil) bugünküyle bayt-aynı kalır.
+ */
+export async function requireMachineStopRegime(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const regime = await machineStopRegime();
+    if (regime.general) {
+      next();
+      return;
+    }
+    await requireDokumaEnabled(req, res, next);
+  } catch (e) {
+    next(e);
+  }
+}
+
+/**
  * Maliyet & Teklif modülü: ürün maliyeti · standart maliyet · satış teklifi · fiyat listesi ·
  * iplik ihtiyaç planı (MALIYET-TEKLIF-PLAN; uçlar MAL-1… dilimlerinde bu kapıya takılır).
  *
@@ -297,6 +320,26 @@ export async function requireGelenBelgeEnabled(
     const enabled = await readGelenBelgeEnabled();
     if (!enabled) {
       throw licenseModuleError(SETTING_KEYS.GELEN_BELGE_ENABLED, "Gelen belge taslağı") ?? modulKapali("gelenBelge", "Gelen belge taslağı");
+    }
+    next();
+  } catch (e) {
+    next(e);
+  }
+}
+
+/**
+ * Emanet modülü: İçerideki İşler (sahip başına emanet özeti, ister 3.2). Yazma kapısı ayrıca gövdede
+ * (`assertEmanetWritableTx`); bu kapı yalnız modülün KENDİ ekranının uçlarını korur.
+ */
+export async function requireEmanetEnabled(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const enabled = await readEmanetEnabled();
+    if (!enabled) {
+      throw licenseModuleError(SETTING_KEYS.EMANET_ENABLED, "Emanet / konsinye mülkiyet") ?? modulKapali("emanet", "Emanet / konsinye mülkiyet");
     }
     next();
   } catch (e) {

@@ -151,6 +151,7 @@ import {
   WarehouseEventType,
 } from "@prisma/client";
 import { resolveReasonCode } from "./reason-preset.service";
+import { READY_STATUSES } from "./roll-owner.service";
 import { assertCancelReasonTx } from "./helpers/cancel-reason.helper";
 // Fire sebebi metin SAKLAMAYAN bir kind'tır → sapma kataloğunun senkron kapısı.
 import { validateVarianceReason } from "../constants/variance-reasons";
@@ -506,6 +507,8 @@ const ROLL_LIST_INCLUDE = {
   // "alan var sanıldı, o yanıtta yoktu"). Liste ve DETAY aynı şekli döner —
   // ayrışırsa satır ile panel aynı top için farklı şey söyler.
   warehouse: { select: { id: true, code: true, name: true } },
+  // EMANET sahibi — "Sahibi" sütunu (ister 3.2); to-one, sayfa başına tek ek sorgu.
+  ownerCustomer: { select: { id: true, name: true } },
   properties: {
     where: ACTIVE_ROLL_PROPERTY,
     select: {
@@ -605,7 +608,7 @@ const ROLL_LIST_INCLUDE = {
 //
 // DIŞARIDA BIRAKILANLAR ve gerekçesi (hepsi detay panelinde `detail?.` ile
 // okunur, liste satırından DEĞİL → görünen davranış değişmez):
-//   operations · createdBy · createdMachine · entryStation · warehouse
+//   operations · createdBy · createdMachine · entryStation · warehouse · ownerCustomer (P1a "Sahibi" sütunu)
 // `currentStep` id'ye daraltıldı: panelin "Bulunduğu İstasyon" satırı `detail`den
 // gelir, ama panel `canAdjustRollQty` kararını `roll.currentStep == null` ile
 // verir — ilişkiyi tümden atmak `undefined == null` üzerinden butonu YANLIŞ
@@ -1558,6 +1561,14 @@ export class InventoryService {
       where.warehouseId = warehouseIdFilter;
     }
 
+    // SAHİP (emanet, ister 3.2) — çoklu seçim. Modülden BAĞIMSIZ uygulanır (depo süzgeci emsali):
+    // kapalı modülde süzgeç yok sayılmaz, veri neyse onu süzer; panel çipi modül kapalıyken çizmez.
+    const ownerCustomerIdFilter = readIdCondition(f["ownerCustomerId"]);
+    delete where.ownerCustomerId;
+    if (ownerCustomerIdFilter) {
+      where.ownerCustomerId = ownerCustomerIdFilter;
+    }
+
     const processingStatus = f["processingStatus"] as string | undefined;
     delete where.processingStatus;
     // M-29: istemci explicit status verdiyse processingStatus/rollScope onu
@@ -1777,7 +1788,7 @@ export class InventoryService {
       ];
     } else if (rollScope === "FINISHED_STOCK") {
       applyStatusScope({
-        in: [RollStatus.WAREHOUSE, RollStatus.A1_STOCK],
+        in: [...READY_STATUSES],
       });
     } else if (rollScope === "IN_SACK") {
       // "Çuvalda" sekmesi: fiziksel olarak bir çuvalda (sackId dolu) ve henüz

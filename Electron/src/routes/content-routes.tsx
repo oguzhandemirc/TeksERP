@@ -49,6 +49,7 @@ import { ReturnReasonsPage } from "@/pages/ReturnReasons/ReturnReasonsPage";
 import { WarehousesPage } from "@/pages/Warehouses/WarehousesPage";
 import { GoodsReceiptsPage } from "@/pages/Operations/GoodsReceipts/GoodsReceiptsPage";
 import { IncomingDocumentsPage } from "@/pages/Operations/GelenBelgeler/GelenBelgelerPage";
+import { ConsignedWorkPage } from "@/pages/Operations/ConsignedWork/ConsignedWorkPage";
 import { IncomingDocumentDetailPage } from "@/pages/Operations/GelenBelgeler/GelenBelgeDetailPage";
 import { SenderTemplatesPage } from "@/pages/Operations/GelenBelgeler/GonderenSablonlariPage";
 import { CustomerDefaultsPage } from "@/pages/Operations/GelenBelgeler/MusteriVarsayilanUrunleriPage";
@@ -508,6 +509,15 @@ export const contentRoutes: RouteObject[] = [
       </ProtectedRoute>
     ),
   },
+  // İçerideki İşler (P1a) — modül kapısı `ROUTE_MODULE` (`emanetEnabled`); karo ile AYNI izin.
+  {
+    path: "operations/icerideki-isler",
+    element: (
+      <ProtectedRoute requirePermission="roll:read">
+        <ConsignedWorkPage />
+      </ProtectedRoute>
+    ),
+  },
   // Gelen belge (Gülkesim OCR D5) — modül kapısı `ROUTE_MODULE` (`gelenBelgeEnabled`); karo ile AYNI izin.
   {
     path: "operations/gelen-belgeler",
@@ -527,6 +537,7 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   // E4b: müşteri varsayılan ürünleri — statik segment `:id`den önce; karo ile AYNI izin.
+  // Yol yazısı `GelenBelgeler/paths.ts` CUSTOMER_DEFAULTS_PATH ile eşit kalır (bekçi `__tests__/paths.test.ts`).
   {
     path: "operations/gelen-belgeler/varsayilan-urunler",
     element: (

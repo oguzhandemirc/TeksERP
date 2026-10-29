@@ -4,6 +4,8 @@
 // Saf fonksiyonlar (DB yok). Sıra çağıranda: önce `DeliveryNoteAlias` PROCESS, yoksa bu kalıp.
 // İlke: yanlış öneri verilmez — metinde birden çok gramaj, aralık ("25-30 GR") ya da birimsiz
 // sayı varsa BOŞ; kalıbın sayısına birden çok çeşit uyuyorsa BOŞ. Katlama tek kaynak `foldSearchText`.
+// Kurşun dışı çeşitler (brode deseni vb., D4-D1): değer adı/kodu metinde TAM SÖZCÜK dizisi olarak geçerse aday;
+// özellik içinde TEK aday yoksa BOŞ (sessiz seçim yok).
 // =============================================================================
 import { foldSearchText } from "../../utils/search-fold";
 
@@ -56,5 +58,38 @@ export function matchGramajOption<T extends GramajOption>(text: string | null | 
   const grams = extractGramValues(text);
   if (grams.length !== 1) return null;
   const hits = options.filter((o) => optionGramValue(o.name) === grams[0]);
+  return hits.length === 1 ? hits[0]! : null;
+}
+
+export interface ChoiceOption {
+  readonly id: string;
+  readonly name: string;
+  readonly code: string;
+}
+
+const tokens = (s: string): string[] => foldSearchText(s).split(/[^a-z0-9]+/).filter(Boolean);
+
+/**
+ * `needle` sözcük dizisi `hay` içinde bitişik geçiyor mu (alt-dize değil: "d1" ⊄ "d12"). Harfsiz iğne ("25") eşleşmez:
+ * işlem metnindeki gramaj/metre/top sayısı sayısal kodlu desene yanlış öneri doğurmasın.
+ */
+function containsTokens(hay: readonly string[], needle: readonly string[]): boolean {
+  const joined = needle.join("");
+  if (joined.length < 2 || !/[a-z]/.test(joined)) return false;
+  outer: for (let i = 0; i + needle.length <= hay.length; i++) {
+    for (let j = 0; j < needle.length; j++) if (hay[i + j] !== needle[j]) continue outer;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * İşlem metni → bir CHOICE özelliğinin değeri (kalıp). Değerin adı ya da kodu metinde tam sözcük olarak geçmeli;
+ * özellik içinde TEK değer uyuyorsa döner, iki değere uyuyorsa (birleşmiyor) ya da hiçbirine uymuyorsa null.
+ */
+export function matchChoiceOption<T extends ChoiceOption>(text: string | null | undefined, options: readonly T[]): T | null {
+  const hay = tokens(text ?? "");
+  if (hay.length === 0) return null;
+  const hits = options.filter((o) => containsTokens(hay, tokens(o.name)) || containsTokens(hay, tokens(o.code)));
   return hits.length === 1 ? hits[0]! : null;
 }

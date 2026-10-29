@@ -14,9 +14,18 @@
 //      Kumaş farkı HER ZAMAN 400; zaten uyumlu satır 400 (yanlış kapı);
 //      IN_PRODUCTION top yetkisiz permissions ile rollsFailed'a düşer ama bağ
 //      yine kurulur (kısmi başarı bilinçli).
+//   E) EN EŞİĞİ FABRİKA AYARI (D4-E1, 2026-10-29): `tambur.planGate.widthToleranceCm`
+//      (varsayılan 10) + `tambur.planGate.widthCheck` (ENFORCE | OFF). Ayar yokken
+//      409 seti bayt-aynı; eşik 0 her farkta sorar; OFF yalnız en kolunu atlar;
+//      bilinmeyen değer 400; AST: sabit `src/`de yalnız ayar okuyucusunda okunur.
+//      Negatif sonda (B1, commit mesajında): helper'da çözücü atlanıp sabit doğrudan
+//      okununca E7 (AST) + E2 (eşik 0) kırmızı — 56 geçti / 3 başarısız (E3'te HATA).
+// Ayar YAZAR: ilk iş `hedefDbEngeli()`; iki ayar satırı başta silinir (A-C bölümleri
+// "ayar yazılmamış" hâlini ölçer) ve `finally`de BİREBİR geri yüklenir.
 // Fixture TEST- prefix'li, kendi ürettiğini siler; kaliteye yalnız ROL üzerinden
 // bağlanır (kod fabrikaya aittir, rol her kurulumda aynı).
 import { randomUUID } from "node:crypto";
+import { readdirSync, readFileSync, type Dirent } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Prisma, RollStatus, StationKind } from "@prisma/client";
@@ -29,6 +38,16 @@ import {
   TAMBUR_PLAN_WIDTH_TOLERANCE_CM,
 } from "../src/constants/tambur-plan-gate";
 import { AppError } from "../src/utils/app-error";
+import ts from "typescript";
+import {
+  SETTING_KEYS,
+  readTamburPlanGateWidthCheck,
+  readTamburPlanGateWidthToleranceCm,
+  effectiveTamburPlanWidthGate,
+  systemSettingService,
+} from "../src/services/system-setting.service";
+import { updateSchema } from "../src/routes/feature-flag.routes";
+import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0, fail = 0;
 const ok = (c: boolean, m: string, d = "") => {
@@ -54,26 +73,87 @@ const orderIds: string[] = [];
 const customerIds: string[] = [];
 const batchIds: string[] = [];
 
+const GATE_KEYS = [
+  SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_TOLERANCE_CM,
+  SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_CHECK,
+] as const;
+async function writeGateSetting(key: string, value: Prisma.InputJsonValue | null): Promise<void> {
+  if (value === null) {
+    await prisma.systemSetting.deleteMany({ where: { key } });
+    return;
+  }
+  await prisma.systemSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
+}
+
+/** `src/` altında `name` tanımlayıcısının geçtiği yerler: dosya → kapsayan fonksiyon adları. */
+function identifierRefs(name: string): { scanned: number; refs: Map<string, string[]> } {
+  const srcDir = path.join(__dirname, "..", "src");
+  const refs = new Map<string, string[]>();
+  let scanned = 0;
+  const walk = (dir: string) => {
+    for (const ent of readdirSync(dir, { withFileTypes: true }) as Dirent[]) {
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) walk(full);
+      else if (/\.tsx?$/.test(ent.name) && !ent.name.endsWith(".d.ts")) {
+        scanned++;
+        const text = readFileSync(full, "utf8");
+        if (!text.includes(name)) continue;
+        const sf = ts.createSourceFile(full, text, ts.ScriptTarget.Latest, true);
+        const visit = (node: ts.Node) => {
+          if (ts.isIdentifier(node) && node.text === name) {
+            let owner = "(modül)";
+            for (let p: ts.Node | undefined = node.parent; p; p = p.parent) {
+              if (ts.isImportDeclaration(p)) { owner = "(import)"; break; }
+              if ((ts.isFunctionDeclaration(p) || ts.isMethodDeclaration(p)) && p.name) {
+                owner = p.name.getText(sf);
+                break;
+              }
+            }
+            const rel = path.relative(srcDir, full);
+            refs.set(rel, [...(refs.get(rel) ?? []), owner]);
+          }
+          ts.forEachChild(node, visit);
+        };
+        visit(sf);
+      }
+    }
+  };
+  walk(srcDir);
+  return { scanned, refs };
+}
+
 (async () => {
+  const engel = hedefDbEngeli();
+  if (engel) {
+    console.error(`✗ ${engel}`);
+    process.exitCode = 1;
+    return;
+  }
   const svc = new TamburService();
-  const ts = `${process.pid}${String(Math.floor(Math.random() * 1e6)).padStart(6, "0")}`;
+  // Ayar satırlarının ilk hâli — `finally`de birebir geri yüklenir.
+  const savedGate = await prisma.systemSetting.findMany({
+    where: { key: { in: [...GATE_KEYS] } },
+    select: { key: true, value: true },
+  });
+  for (const k of GATE_KEYS) await writeGateSetting(k, null);
+  const runTag = `${process.pid}${String(Math.floor(Math.random() * 1e6)).padStart(6, "0")}`;
   try {
     const station = await prisma.station.findFirstOrThrow({
       where: { kind: StationKind.TAMBUR },
       select: { id: true },
     });
     const [mavi, gri] = await Promise.all([
-      prisma.color.create({ data: { code: `TEST-PG-MAVI-${ts}`, name: `TEST PG MAVI ${ts}` }, select: { id: true } }),
-      prisma.color.create({ data: { code: `TEST-PG-GRI-${ts}`, name: `TEST PG GRI ${ts}` }, select: { id: true } }),
+      prisma.color.create({ data: { code: `TEST-PG-MAVI-${runTag}`, name: `TEST PG MAVI ${runTag}` }, select: { id: true } }),
+      prisma.color.create({ data: { code: `TEST-PG-GRI-${runTag}`, name: `TEST PG GRI ${runTag}` }, select: { id: true } }),
     ]);
     colorIds.push(mavi.id, gri.id);
     const [item, item2] = await Promise.all([
       prisma.item.create({
-        data: { code: `TEST-PG-ITM-${ts}`, name: `TEST PG PATOS ${ts}`, itemType: "FABRIC", unit: "MT" },
+        data: { code: `TEST-PG-ITM-${runTag}`, name: `TEST PG PATOS ${runTag}`, itemType: "FABRIC", unit: "MT" },
         select: { id: true },
       }),
       prisma.item.create({
-        data: { code: `TEST-PG-ITM2-${ts}`, name: `TEST PG TERGAL ${ts}`, itemType: "FABRIC", unit: "MT" },
+        data: { code: `TEST-PG-ITM2-${runTag}`, name: `TEST PG TERGAL ${runTag}`, itemType: "FABRIC", unit: "MT" },
         select: { id: true },
       }),
     ]);
@@ -90,7 +170,7 @@ const batchIds: string[] = [];
     }) => {
       const wo = await prisma.workOrder.create({
         data: {
-          workOrderNumber: `TEST-PG-IE-${ts}-${woIds.length}`,
+          workOrderNumber: `TEST-PG-IE-${runTag}-${woIds.length}`,
           status: "IN_PROGRESS",
           targetItemId: item.id,
           targetColorId: opts.targetColorId ?? null,
@@ -105,7 +185,7 @@ const batchIds: string[] = [];
       });
       const roll = await prisma.roll.create({
         data: {
-          barcode: `TEST-PG-R-${ts}-${rollIds.length}`,
+          barcode: `TEST-PG-R-${runTag}-${rollIds.length}`,
           itemId: item.id,
           colorId: opts.rollColorId ?? null,
           width: opts.rollWidth ?? null,
@@ -373,13 +453,13 @@ const batchIds: string[] = [];
     // ── B. Override zinciri ──
     console.log("B) Uyumsuz sipariş override zinciri");
     const customer = await prisma.customer.create({
-      data: { code: `TEST-PG-CUS-${ts}`, name: `TEST PG MUSTERI ${ts}` },
+      data: { code: `TEST-PG-CUS-${runTag}`, name: `TEST PG MUSTERI ${runTag}` },
       select: { id: true },
     });
     customerIds.push(customer.id);
     const order = await prisma.order.create({
       data: {
-        orderNumber: `TEST-PG-ORD-${ts}`,
+        orderNumber: `TEST-PG-ORD-${runTag}`,
         customerId: customer.id,
         lines: {
           create: [
@@ -400,13 +480,13 @@ const batchIds: string[] = [];
     // + 1 IN_PRODUCTION top (roll:manual-adjust ister).
     const b = await makeWoWithRoll({ targetColorId: gri.id, woWidth: 330, rollColorId: gri.id, rollWidth: 330 });
     const batch = await prisma.batch.create({
-      data: { batchNumber: `TEST-PG-BT-${ts}`, workOrderId: b.woId },
+      data: { batchNumber: `TEST-PG-BT-${runTag}`, workOrderId: b.woId },
       select: { id: true },
     });
     batchIds.push(batch.id);
     const stockRoll = await prisma.roll.create({
       data: {
-        barcode: `TEST-PG-RS-${ts}`,
+        barcode: `TEST-PG-RS-${runTag}`,
         itemId: item.id,
         colorId: gri.id,
         width: 330,
@@ -487,10 +567,157 @@ const batchIds: string[] = [];
       ["roll:manual-adjust"],
     );
     ok(resB5.data.updated === 1 && resB5.data.failed.length === 0, "B5 roll:manual-adjust ile IN_PRODUCTION top düzeldi");
+
+    // ── E. EN EŞİĞİ FABRİKA AYARI (D4-E1) ──
+    console.log("E) En eşiği/kontrolü fabrika ayarı");
+    // E7 (statik, davranış bölümlerinden ÖNCE — kırmızısı onlara bağlı kalmasın): AST — sabit `src/`de yalnız tanımında ve ayar okuyucusunda okunur.
+    const { scanned, refs } = identifierRefs("TAMBUR_PLAN_WIDTH_TOLERANCE_CM");
+    ok(scanned > 300, "E7 körlük zemini: src/ taraması > 300 dosya", `n=${scanned}`);
+    const allowed: Record<string, Set<string>> = {
+      [path.join("constants", "tambur-plan-gate.ts")]: new Set(["(modül)"]),
+      [path.join("services", "system-setting.service.ts")]: new Set([
+        "(import)",
+        "readTamburPlanGateWidthToleranceCm",
+        "setFeatureFlags",
+      ]),
+    };
+    const stray = [...refs].flatMap(([file, owners]) =>
+      owners.filter((o) => !allowed[file]?.has(o)).map((o) => `${file}:${o}`),
+    );
+    ok(stray.length === 0, "E7 sabit çözücü dışında doğrudan OKUNMUYOR", stray.join(", "));
+    const deadAllow = Object.keys(allowed).filter((f) => !refs.has(f));
+    ok(deadAllow.length === 0, "E7 izinli dosyalar gerçekten sabiti taşıyor (ölü muaf yok)", deadAllow.join(", "));
+    const helperSrc = readFileSync(
+      path.join(__dirname, "..", "src", "services", "helpers", "tambur-plan-gate.helper.ts"),
+      "utf8",
+    );
+    ok(
+      (helperSrc.match(/effectiveTamburPlanWidthGate\(\)/g) ?? []).length >= 2,
+      "E7 kapı eşiği çözücüden okuyor (helper'da effectiveTamburPlanWidthGate çağrısı)",
+    );
+    const gate0 = await effectiveTamburPlanWidthGate();
+    ok(gate0.check === "ENFORCE" && gate0.toleranceCm === 10, "E1 ayar yokken çözücü ENFORCE + 10", JSON.stringify(gate0));
+    // E1: ayar yokken 409 gövdesi BAYT-AYNI (2026-08-19 sabitli kapının çıktısı).
+    const fE1 = await makeWoWithRoll({ targetColorId: gri.id, woWidth: 330, rollColorId: gri.id, rollWidth: 345 });
+    const eE1 = await expectAppError(() => svc.finalize(finalizeArgs(fE1.rollId)));
+    const wantE1Details = {
+      code: PLAN_MISMATCH_CODE,
+      mismatches: [
+        { field: "width", message: "Top 345 cm, terbiye iş emri 330 cm istiyor (eşik ±10 cm)", rollValue: 345, planValue: 330 },
+      ],
+      toleranceCm: 10,
+    };
+    ok(
+      eE1?.statusCode === 409 && JSON.stringify(eE1.details) === JSON.stringify(wantE1Details),
+      "E1 ayar yokken en sapması 409 gövdesi bayt-aynı",
+      JSON.stringify(eE1?.details),
+    );
+    ok(
+      eE1?.message ===
+        "Plan ile top uyuşmuyor: Top 345 cm, terbiye iş emri 330 cm istiyor (eşik ±10 cm). Yine de devam etmek için onaylayın.",
+      "E1 409 mesajı bayt-aynı",
+      eE1?.message ?? "hata yok!",
+    );
+    ok(e3?.details?.toleranceCm === 10, "E1 yalnız renk sapmasında da toleranceCm=10 taşınır", String(e3?.details?.toleranceCm));
+
+    // E2: eşik 0 → her farkta sorar; eşit en geçer.
+    await writeGateSetting(SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_TOLERANCE_CM, 0);
+    const fE2 = await makeWoWithRoll({ targetColorId: gri.id, woWidth: 330, rollColorId: gri.id, rollWidth: 331 });
+    const eE2 = await expectAppError(() => svc.finalize(finalizeArgs(fE2.rollId)));
+    const mmE2 = (eE2?.details?.mismatches ?? []) as { field: string; message: string }[];
+    ok(
+      eE2?.details?.code === PLAN_MISMATCH_CODE && eE2.details.toleranceCm === 0 &&
+        mmE2.length === 1 && mmE2[0]!.field === "width" && mmE2[0]!.message.includes("±0 cm"),
+      "E2 eşik 0 → 1 cm fark da 409",
+      JSON.stringify(eE2?.details),
+    );
+    const fE2b = await makeWoWithRoll({ targetColorId: gri.id, woWidth: 330, rollColorId: gri.id, rollWidth: 330 });
+    const resE2b = await svc.finalize(finalizeArgs(fE2b.rollId));
+    resE2b.data.splitRolls.forEach((c) => rollIds.push(c.id));
+    ok(resE2b.success === true, "E2 eşik 0 → eşit en geçer");
+
+    // E3: eşik 20 → 15 cm fark geçer (ayar sabiti gerçekten ezer).
+    await writeGateSetting(SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_TOLERANCE_CM, 20);
+    const fE3 = await makeWoWithRoll({ targetColorId: gri.id, woWidth: 330, rollColorId: gri.id, rollWidth: 345 });
+    const resE3 = await svc.finalize(finalizeArgs(fE3.rollId));
+    resE3.data.splitRolls.forEach((c) => rollIds.push(c.id));
+    ok(resE3.success === true, "E3 eşik 20 → 15 cm fark kapıya çarpmaz");
+    await writeGateSetting(SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_TOLERANCE_CM, null);
+
+    // E4: OFF → en kolu atlanır, renk kapısı aynı kalır.
+    await writeGateSetting(SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_CHECK, "OFF");
+    const fE4 = await makeWoWithRoll({ targetColorId: gri.id, woWidth: 330, rollColorId: gri.id, rollWidth: 400 });
+    const resE4 = await svc.finalize(finalizeArgs(fE4.rollId));
+    resE4.data.splitRolls.forEach((c) => rollIds.push(c.id));
+    ok(resE4.success === true, "E4 OFF → 70 cm en farkı sorulmaz");
+    const fE4b = await makeWoWithRoll({ targetColorId: gri.id, woWidth: 330, rollColorId: mavi.id, rollWidth: 400 });
+    const eE4b = await expectAppError(() => svc.finalize(finalizeArgs(fE4b.rollId)));
+    const mmE4b = (eE4b?.details?.mismatches ?? []) as { field: string }[];
+    ok(
+      eE4b?.details?.code === PLAN_MISMATCH_CODE && mmE4b.length === 1 && mmE4b[0]!.field === "color",
+      "E4 OFF → renk kapısı aynı (yalnız color satırı)",
+      JSON.stringify(mmE4b),
+    );
+    const resE4c = await svc.finalize(finalizeArgs(fE4b.rollId, true));
+    resE4c.data.splitRolls.forEach((c) => rollIds.push(c.id));
+    const devE4 = await prisma.rollPlanDeviation.findMany({ where: { rollId: fE4b.rollId }, select: { field: true } });
+    ok(devE4.length === 1 && devE4[0]!.field === "color", "E4 OFF onaylı geçiş defterde yalnız color", devE4.map((d) => d.field).join(","));
+    await writeGateSetting(SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_CHECK, null);
+
+    // E5: bilinmeyen değer 400 (Zod + servis sanitize, Türkçe).
+    const zBad = [
+      updateSchema.safeParse({ tamburPlanGateWidthCheck: "WARN" }),
+      updateSchema.safeParse({ tamburPlanGateWidthToleranceCm: -1 }),
+      updateSchema.safeParse({ tamburPlanGateWidthToleranceCm: 101 }),
+      updateSchema.safeParse({ tamburPlanGateWidthToleranceCm: "10" }),
+    ];
+    ok(
+      zBad.every((r) => !r.success && r.error.issues.every((i) => i.message.includes("Tambur en"))),
+      "E5 Zod bilinmeyen değeri Türkçe mesajla reddeder",
+      zBad.map((r) => (r.success ? "GEÇTİ!" : r.error.issues[0]?.message)).join(" | "),
+    );
+    const zGood = [
+      updateSchema.safeParse({ tamburPlanGateWidthCheck: "ENFORCE" }),
+      updateSchema.safeParse({ tamburPlanGateWidthCheck: "OFF" }),
+      updateSchema.safeParse({ tamburPlanGateWidthToleranceCm: 0 }),
+      updateSchema.safeParse({ tamburPlanGateWidthToleranceCm: null }),
+    ];
+    ok(zGood.every((r) => r.success), "E5 Zod geçerli değerleri (ENFORCE/OFF/0/null) kabul eder");
+    const svcBad = [
+      await expectAppError(() =>
+        systemSettingService.setFeatureFlags({ tamburPlanGateWidthCheck: "WARN" as never }, "bekci"),
+      ),
+      await expectAppError(() =>
+        systemSettingService.setFeatureFlags({ tamburPlanGateWidthToleranceCm: -1 }, "bekci"),
+      ),
+    ];
+    ok(
+      svcBad.every((e) => e?.statusCode === 400 && e.message.includes("Tambur en")),
+      "E5 servis sanitize bilinmeyen değeri 400 ile reddeder",
+      svcBad.map((e) => `${e?.statusCode} ${e?.message}`).join(" | "),
+    );
+
+    // E6: DB'de çöp değer → okuyucu varsayılana düşer (kod sigortası).
+    await writeGateSetting(SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_CHECK, "WARN");
+    await writeGateSetting(SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_TOLERANCE_CM, -3);
+    const junkCheck = await readTamburPlanGateWidthCheck();
+    const junkTol = await readTamburPlanGateWidthToleranceCm();
+    ok(junkCheck === "ENFORCE" && junkTol === 10, "E6 çöp ayar değeri varsayılana düşer", `${junkCheck}/${junkTol}`);
+    for (const k of GATE_KEYS) await writeGateSetting(k, null);
+
   } catch (e) {
     fail++;
     console.error("HATA:", e instanceof Error ? e.message : e);
   } finally {
+    try {
+      for (const k of GATE_KEYS) {
+        const orig = savedGate.find((r) => r.key === k);
+        await writeGateSetting(k, orig ? (orig.value as Prisma.InputJsonValue) : null);
+      }
+    } catch (e) {
+      fail++;
+      console.error("ayar geri yükleme hatası:", e instanceof Error ? e.message : e);
+    }
     try {
       // Söküm: variance → op → movement → property → log → roll → link → batch → step → WO → order → master.
       await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...woIds] } } }).catch(() => undefined);

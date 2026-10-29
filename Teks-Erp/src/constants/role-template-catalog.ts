@@ -767,6 +767,8 @@ export const ROLE_COVERAGE_EXEMPT: Readonly<Record<string, string>> = {
     "Ekran değil, KK1-içi yetenek: inline yeni desen açma. Yalnız seçili ham giriş operatörlerine verilir (permission-catalog.ts).",
   "mobile:dokuma-geri-al":
     "Ekran değil, Tezgah-içi yetenek (2026-09-14): top indirmeyi geri alır — defterden satır düşürür (`loom:doff-revoke` tablet eşi, `shipping:undo-dispatch` sınıfı). Varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.",
+  "mobile:makine-durus":
+    "Ayarla açılan yüzey (D4-A1, `uretim.makineDurusTakibi`; DALGA4 §2.7 'atama panelde'): tablet çipi D4-A2 ile doğar; o güne dek hazır şablonlara girmez, fabrika panelden kurşun/tambur operatörüne verir.",
   "mobile:is-emri-duzelt":
     "Ekran değil, Hızlı Terbiye İş Emri içi yetenek (hareket defteri D5): açılmış terbiye iş emrinin rengini/enini/sipariş bağını değiştirir ve kartı yeniden basar. Terbiye iş emri açmaktan ayrı sorumluluk → varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.",
   "mobile:kk1-yari-mamul":

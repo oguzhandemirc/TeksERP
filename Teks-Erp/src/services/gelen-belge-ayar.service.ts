@@ -111,6 +111,6 @@ export const readFactoryDefaultItemId = readIncomingDocDefaultItemId;
 
 /** Onay anı FAIL-CLOSED hatası — kaynak (`CUSTOMER` sahibin varsayılanı · `FACTORY` fabrika ayarı) details'te. */
 export function defaultItemUnusable(source: "CUSTOMER" | "FACTORY", itemId: string, problem: string | null): AppError {
-  const fix = source === "CUSTOMER" ? "gelen belge müşteri varsayılanları ekranından sahibin varsayılan ürününü düzeltin" : `${settingScreenPath("gelen-belge")} ekranından varsayılan ürünü düzeltin`;
+  const fix = source === "CUSTOMER" ? "Müşteri Varsayılan Ürünleri ekranından sahibin varsayılan ürününü düzeltin" : `${settingScreenPath("gelen-belge")} ekranından varsayılan ürünü düzeltin`;
   return AppError.conflict(`Gelen belge varsayılan ürünü kullanılamıyor: ${problem ?? "Ürün bulunamadı."} Satırlarda ürün seçin ya da ${fix}.`, { code: "GELEN_BELGE_DEFAULT_ITEM_UNUSABLE", itemId, source });
 }

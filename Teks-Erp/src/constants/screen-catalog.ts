@@ -224,6 +224,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "operations/work-orders", app: "desktop", modul: "productionEnabled", title: TERIM.terbiyeIsEmri.cogul, requires: ["workorder:read"], capabilities: ["order:write", "property:write", "roll:manual-adjust", "workorder:write"] },
   { key: "operations/work-order-events", app: "desktop", modul: "productionEnabled", title: `${TERIM.terbiyeIsEmri.tekil} Hareketleri`, requires: ["workorder:read"], capabilities: [] },
   { key: "operations/rolls", app: "desktop", modul: "cekirdek:stok-giris", title: "Kumaş Stoğu", requires: ["roll:read"], capabilities: ["kartela:write", "label:print", "label:read", "roll:history", "roll:manual-adjust", "roll:write"] },
+  // İçerideki İşler (ister 3.2): emanet modülünün KENDİ ekranı — sahip başına içerideki emanet top/metre.
+  { key: "operations/icerideki-isler", app: "desktop", modul: "emanetEnabled", title: "İçerideki İşler", requires: ["roll:read"], capabilities: [] },
   { key: "operations/kursun-sapmalar", app: "desktop", modul: "productionEnabled", title: "Metre Sapmaları", requires: ["kursun:meter-approve"], capabilities: [] },
   { key: "operations/kursun-dagitim", app: "desktop", modul: "productionEnabled", title: TERIM_AD.kursunPlanlama, requires: ["quality:write", "workorder:distribute"], capabilities: [] },
   { key: "operations/product-balance", app: "desktop", modul: "productionEnabled", title: "Kumaş Dengesi", requires: ["workorder:read"], capabilities: ["workorder:write"] },
@@ -432,12 +434,6 @@ export const EKRANSIZ_MODULLER: ReadonlyArray<{ modul: ModulKey; reason: string 
       "Kumaş teknik kartı = Ürünler ekranının İÇİNDEKİ alanlar (en · gramaj · " +
       "kompozisyon); ayrı bir ekranı yok. Yüzey Dilim 3'te doğacak.",
   },
-  {
-    modul: "emanetEnabled",
-    reason:
-      "Emanet (konsinye mülkiyet) ekransız modül: yazma kapısı + veri niteliği — " +
-      "sahip alanı KK1/levent/lot formlarının İÇİNDE yaşar, ayrı ekranı/karosu yok (G3).",
-  },
 ];
 
 /** Katalog dışında kalan izinler — API-içi/altyapı yetkileri (bekçi muafı). */
@@ -456,6 +452,9 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // çağırır; `loom:*` web kodları panelsiz kalır — panel doff yüzeyi yok, kod API/entegrasyon için.
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
+  // D4-A1 (2026-10-29): uç backend'de doğdu; tablet "Duruş" çipi (Kurşun + Tambur ekranı) D4-A2 dilimiyle
+  // gelir — o gün bu satır ölü muaf olur ve çip ekranının yeteneğine taşınır.
+  { code: "mobile:makine-durus", reason: "Tablet duruş çipi D4-A2 dilimiyle doğar; uç (`/api/machine-stops`) bugünden hazır." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
 ];
 

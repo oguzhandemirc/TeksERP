@@ -29,6 +29,14 @@ import { AppError } from "../utils/app-error";
 //   decisions[]: defect lifecycle marker (NO_CUT veya CUT). Defect'ler
 //   `cuts[].relatedErrorIds`'da geçtiyse CUT işaretlenir; geçmediyse
 //   operatör defect'i bilerek bırakmış (NO_CUT, top içinde defect kalır).
+// İster 2.8: tek istasyon (Tambur-1 / Tambur-2); çoklu/CSV değer sessizce düşmesin diye 400.
+const stationFilterQuerySchema = z.object({
+  stationId: z
+    .string({ message: "stationId tek bir istasyon kimliği olmalı" })
+    .uuid("Geçersiz istasyon ID")
+    .optional(),
+});
+
 const finalizeSchema = z.object({
   rollId: z.string().uuid("Geçersiz top ID"),
   cuts: z
@@ -475,9 +483,10 @@ export class TamburController {
   }
 
   /** GET /api/tambur/open-cards */
-  async listOpenCards(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  async listOpenCards(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await this.service.listOpenCards();
+      const { stationId } = stationFilterQuerySchema.parse(req.query);
+      const result = await this.service.listOpenCards(stationId ?? null);
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -489,7 +498,8 @@ export class TamburController {
    */
   async getPendingRolls(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await this.service.getPendingRolls();
+      const { stationId } = stationFilterQuerySchema.parse(req.query);
+      const result = await this.service.getPendingRolls(stationId ?? null);
       res.status(200).json(result);
     } catch (error) {
       next(error);

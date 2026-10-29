@@ -90,6 +90,11 @@ export const VARIANCE_SOURCES = {
    * Tek kovaya atmak, "sayımda kaç top kayboldu" sorusunu cevapsız bırakırdı.
    */
   STOCK_COUNT: "STOCK_COUNT",
+  /**
+   * KURŞUN ÇIKIŞ METRESİ stoğa uygulandı (H1b, `kursun.meterStockMode = APPLY`) — `sourceRefId` =
+   * `RollMeterReading.id`. Okuma damgalanınca (düzeltme · yeniden açma · geri taşıma) satır terslenir.
+   */
+  KURSUN_EXIT_MEASURE: "KURSUN_EXIT_MEASURE",
 } as const;
 
 export type VarianceSource = (typeof VARIANCE_SOURCES)[keyof typeof VARIANCE_SOURCES];

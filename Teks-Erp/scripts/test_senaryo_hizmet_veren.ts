@@ -13,7 +13,8 @@
 //   1 Müşteri + gramaj hizmet fiyatı (müşteriye özel) + gramaj/Tambur → hizmet kalemi eşlemesi
 //   2 Gelen belge: elle 3 satır (biri "KURŞUN 50 GR"), ürünsüz satır müşteri varsayılanıyla → 3 emanet top
 //   3 Kurşun: İE + H9b önerisi → hedef gramaj; OUT elle; eşik dışı sapma OFFICE onayıyla
-//   4 Tambur: bir top bölünür → çocuklar sahibi korur; TAMBUR satırı KK2 OUT okumasıyla (CUT: BİLİNEN)
+//   4 Tambur: bir top bölünür → çocuklar sahibi korur; istasyonun AUTO bayrağı çocuğa yazılır,
+//     TAMBUR satırı kesilen metreyle (CUT, her çocuk kendi parçası — T1)
 //   5 Sevk + hizmet faturası (PER_SHIPMENT): bağ sayısı, billedMeters = OUT, birim fiyat, toplam
 //   6 Dönem sonu (PERIOD_END): önizleme + oluşturma; ikinci kez faturalanmaz
 //   7 Ters yol: faturalı sevk geri alma 409 SERVICE_ALREADY_BILLED; taslak iptali sonrası 200
@@ -123,7 +124,7 @@ async function scenario(): Promise<void> {
   check("hizmet profili uygulandı: fark 0, en yakın profil 'hizmet'", (prof2.diffs.hizmet ?? []).length === 0 && prof2.current.closest === "hizmet", `${Object.keys(patch).length} anahtar yazıldı; closest=${prof2.current.closest}`);
 
   // Ayar paketi KODDAN (`paketPlani`, betiğin kuru koşusuyla aynı plan): kodda olmayan anahtar
-  // (ANAHTAR_YOK, ör. H1b) atlanır. Senaryo sapma onayını OFFICE'e çevirir (paket NONE der — onay
+  // (ANAHTAR_YOK) atlanır; H1b'den beri `kursun.meterStockMode` de uygulanır (Gülkesim RECORD). Senaryo sapma onayını OFFICE'e çevirir (paket NONE der — onay
   // yolunu ölçmek için) ve PER_SHIPMENT'in önkoşulu otomatik taslağı açar (betik bunu yalnız uyarır).
   const ff0 = must<Record<string, unknown>>(await api("GET", "/api/feature-flags"), "bayrak oku");
   const plan = paketPlani(ff0, new Set<string>(Object.values(SETTING_KEYS)));
@@ -177,10 +178,10 @@ async function scenario(): Promise<void> {
     must(await api("PUT", `/api/station-capabilities/${s.id}`, { properties: props }), `istasyon yeteneği ${suffix}`);
     return s.id;
   };
-  // Tambur işinin izi topun bayrağıdır: KK2'de operatör işaretler (OPTIONAL). Tambur istasyonunun
-  // kendi AUTO özelliği finalize'da çocuğa YAZILMAZ (bulgu, adım 4'te BİLİNEN olarak görünür).
-  const ST_K = await mkStation("K", "PROCESS_QC", [{ propertyId: kursun.id, mode: "AUTO" }, { propertyId: variant.id, mode: "REQUIRED" }, { propertyId: tbFlag.id, mode: "OPTIONAL" }]);
-  const ST_T = await mkStation("T", "TAMBUR", []);
+  // Tambur işinin izi topun bayrağıdır: Tambur istasyonunun AUTO özelliği kesimle doğan
+  // çocuğa yazılır (T1) — kurşun istasyonu bu bayrağı vermez, yani tek kaynak Tambur kesimi.
+  const ST_K = await mkStation("K", "PROCESS_QC", [{ propertyId: kursun.id, mode: "AUTO" }, { propertyId: variant.id, mode: "REQUIRED" }]);
+  const ST_T = await mkStation("T", "TAMBUR", [{ propertyId: tbFlag.id, mode: "AUTO" }]);
   const mapped = await prisma.fabricPropertyValue.count({ where: { propertyId: variant.id, serviceItemId: { not: null } } });
   check("H6: 2 gramaj kademesi + Tambur bayrağı hizmet kalemine eşli", mapped === 2, String(mapped));
 
@@ -231,7 +232,7 @@ async function scenario(): Promise<void> {
   const OUT = new Map<string, number>([[RA, 99.5], [RB, 119.2], [RC, 140]]); // RC: 10 m / %6,7 sapma
   for (const id of rollIds) {
     const r = await api("POST", "/api/kursun-qc/complete-qc2", {
-      rollId: id, stepId: SK, properties: [{ propertyId: variant.id, valueCode: V50.code }, { propertyId: tbFlag.id }],
+      rollId: id, stepId: SK, properties: [{ propertyId: variant.id, valueCode: V50.code }],
       meterOut: { meters: OUT.get(id), source: "OPERATOR", clientToken: randomUUID() },
     });
     check(`KK2 + OUT ${OUT.get(id)} m (beyan ${byId.get(id)!.initialQty.toString()})`, r.status === 201, short(r));
@@ -266,8 +267,8 @@ async function scenario(): Promise<void> {
   check("H10: 4 çocuğun hepsi müşterinin emaneti (ownerCustomerId kalıttı)", kids.length === 4 && kids.every((k) => k.ownerCustomerId === cust.id), JSON.stringify(kids.map((k) => k.ownerCustomerId === cust.id)));
   check("çocuklar depoda (WAREHOUSE)", kids.every((k) => k.status === "WAREHOUSE"), kids.map((k) => k.status).join(","));
   const tbOnKids = await prisma.rollProperty.count({ where: { rollId: { in: kids.map((k) => k.id) }, propertyId: tbFlag.id, revokedAt: null } });
-  check("Tambur bayrağı (KK2'de işaretli, hizmet eşlemeli) 4 çocuğa kalıttı", tbOnKids === 4, String(tbOnKids));
-  bilinen("Tambur kesim metresi (CUT) yolu HTTP akışında kurulamıyor", "Tambur istasyonunun AUTO özelliği finalize'da çocuğa yazılmıyor (yalnız inheritRollPropertiesTx); bayrak KK2'de işaretlenince H10 kuralıyla adımın OUT okumasından faturalanır — CUT tabanı test_hizmet_brode_tambur §2'de servisle ölçülür");
+  const tbOnParents = await prisma.rollProperty.count({ where: { rollId: { in: rollIds }, propertyId: tbFlag.id, revokedAt: null } });
+  check("T1: Tambur istasyonunun AUTO bayrağı 4 çocuğa yazıldı; atalarda yok (iş çocukta)", tbOnKids === 4 && tbOnParents === 0, `çocuk ${tbOnKids}, ata ${tbOnParents}`);
 
   // ── 5 SEVK + HİZMET FATURASI (PER_SHIPMENT) ───────────────────────────────
   adim("5 Sevk (brüt) → hizmet fatura taslağı: RA'nın iki çocuğu + RB'nin çocuğu");
@@ -278,17 +279,17 @@ async function scenario(): Promise<void> {
   check("sevk DISPATCHED (onay kapalı)", sh1Row.status === "DISPATCHED", sh1Row.status);
   const inv1 = await prisma.invoice.findFirst({ where: { shipmentId: sh1.id }, select: { id: true, status: true, grandTotal: true, lines: { select: { itemId: true, qty: true, unitPrice: true, lineTotal: true } } } });
   check("tek hizmet fatura taslağı (DRAFT)", inv1?.status === "DRAFT", inv1?.status ?? "yok");
-  const links1 = inv1 ? await prisma.serviceBillingLink.findMany({ where: { invoiceId: inv1.id, revokedAt: null }, select: { rollId: true, serviceItemId: true, billedMeters: true, meterBasis: true, unitPrice: true } }) : [];
+  const links1 = inv1 ? await prisma.serviceBillingLink.findMany({ where: { invoiceId: inv1.id, revokedAt: null }, select: { rollId: true, serviceItemId: true, billedMeters: true, meterBasis: true, unitPrice: true, workOrderStepId: true } }) : [];
   const kL = links1.filter((l) => l.serviceItemId === K50);
   const tL = links1.filter((l) => l.serviceItemId === KTB);
-  check("kurşun bağı 2 + Tambur bağı 2 (RA, RB atası; çocuk sayısından bağımsız tek kez)", kL.length === 2 && tL.length === 2, `kurşun ${kL.length}, tambur ${tL.length}`);
+  check("kurşun bağı 2 (RA, RB atası; çocuk sayısından bağımsız tek kez) + Tambur bağı 3 (her çocuk kendi parçası)", kL.length === 2 && tL.length === 3, `kurşun ${kL.length}, tambur ${tL.length}`);
   check("kurşun billedMeters = OUT okuması (99,5 + 119,2), taban OUT", eq(kL.reduce((a, l) => a.plus(l.billedMeters), D(0)), 99.5 + 119.2) && kL.every((l) => l.meterBasis === "OUT"), JSON.stringify(kL.map((l) => [l.billedMeters.toString(), l.meterBasis])));
   check("kurşun unitPrice = müşterinin 50 gr fiyatı 7,5", kL.every((l) => eq(l.unitPrice, 7.5)), kL.map((l) => l.unitPrice.toString()).join(","));
-  check("Tambur bağı = KK2 adımının OUT okuması (99,5 + 119,2), taban OUT", eq(tL.reduce((a, l) => a.plus(l.billedMeters), D(0)), 99.5 + 119.2) && tL.every((l) => l.meterBasis === "OUT"), JSON.stringify(tL.map((l) => [l.billedMeters.toString(), l.meterBasis])));
+  check("Tambur bağı = kesilen metre (60 + 40 + 120), taban CUT, adım = Tambur adımı", eq(tL.reduce((a, l) => a.plus(l.billedMeters), D(0)), 220) && tL.every((l) => l.meterBasis === "CUT" && l.workOrderStepId === STB), JSON.stringify(tL.map((l) => [l.billedMeters.toString(), l.meterBasis])));
   const lk = inv1?.lines.find((l) => l.itemId === K50);
   const lt = inv1?.lines.find((l) => l.itemId === KTB);
   check("kurşun satırı: miktar 218,7 × 7,5 = 1640,25", !!lk && eq(lk.qty, 218.7) && eq(lk.unitPrice, 7.5) && eq(D(lk.qty).times(lk.unitPrice), 1640.25), JSON.stringify(lk));
-  check("Tambur satırı: 218,7 × 2 = 437,4; emanet kumaş satırı yok; toplam 2 satır", !!lt && eq(lt.qty, 218.7) && eq(lt.unitPrice, 2) && eq(lt.lineTotal, 437.4) && inv1!.lines.length === 2 && inv1!.lines.every((l) => l.itemId !== FABRIC), JSON.stringify(inv1?.lines));
+  check("Tambur satırı: 220 × 2 = 440; emanet kumaş satırı yok; toplam 2 satır", !!lt && eq(lt.qty, 220) && eq(lt.unitPrice, 2) && eq(lt.lineTotal, 440) && inv1!.lines.length === 2 && inv1!.lines.every((l) => l.itemId !== FABRIC), JSON.stringify(inv1?.lines));
 
   // ── 6 DÖNEM SONU (H8) ─────────────────────────────────────────────────────
   adim("6 Dönem sonu: PERIOD_END'de RC'nin çocuğu sevk → önizleme + oluşturma, çift faturalama yok");
@@ -309,10 +310,10 @@ async function scenario(): Promise<void> {
   const pInvId = (c1.body.data as { id?: string } | undefined)?.id;
   check("dönem taslağı oluştu (201)", c1.status === 201 && !!pInvId, short(c1));
   const pLinks = pInvId ? await prisma.serviceBillingLink.findMany({ where: { invoiceId: pInvId, revokedAt: null }, select: { serviceItemId: true, billedMeters: true } }) : [];
-  check("dönem taslağı: 1 kurşun (140) + 1 Tambur (140) bağı — RC'nin OUT okuması", pLinks.length === 2 && pLinks.some((l) => l.serviceItemId === K50 && eq(l.billedMeters, 140)) && pLinks.some((l) => l.serviceItemId === KTB && eq(l.billedMeters, 140)), JSON.stringify(pLinks));
+  check("dönem taslağı: 1 kurşun (RC OUT 140) + 1 Tambur (RC çocuğu CUT 150) bağı", pLinks.length === 2 && pLinks.some((l) => l.serviceItemId === K50 && eq(l.billedMeters, 140)) && pLinks.some((l) => l.serviceItemId === KTB && eq(l.billedMeters, 150)), JSON.stringify(pLinks));
   const c2 = await api("POST", "/api/finance/invoices/service-period-draft", { cariId: cari?.id, period, clientToken: randomUUID() });
   const allRollLinks = await prisma.serviceBillingLink.count({ where: { rollId: { in: [...rollIds, ...kids.map((k) => k.id)] }, revokedAt: null } });
-  check("ikinci dönem taslağı 409 SERVICE_ALREADY_BILLED, aktif bağ toplamı 6 kalır (çift bağ yok)", c2.status === 409 && codeOf(c2) === "SERVICE_ALREADY_BILLED" && allRollLinks === 6, `${short(c2)}; bağ ${allRollLinks}`);
+  check("ikinci dönem taslağı 409 SERVICE_ALREADY_BILLED, aktif bağ toplamı 7 kalır (çift bağ yok)", c2.status === 409 && codeOf(c2) === "SERVICE_ALREADY_BILLED" && allRollLinks === 7, `${short(c2)}; bağ ${allRollLinks}`);
   must(await api("PATCH", "/api/feature-flags", { financeServiceBillingTrigger: "PER_SHIPMENT" }), "tetik geri");
 
   // ── 7 TERS YOL ────────────────────────────────────────────────────────────
@@ -323,7 +324,7 @@ async function scenario(): Promise<void> {
   check("önizleme: geri alınamaz + faturayı listeler", upv.canUndo === false && (upv.serviceBilledInvoices ?? []).length === 1, JSON.stringify(upv.serviceBilledInvoices));
   if (inv1) {
     const cn = await api("POST", `/api/finance/invoices/${inv1.id}/cancel`, { reason: "senaryo: sevk geri alınacak" });
-    check("taslak iptal 200; 4 bağ damgalı (silinmez)", cn.status === 200 && (await prisma.serviceBillingLink.count({ where: { invoiceId: inv1.id, revokedAt: { not: null } } })) === 4, short(cn));
+    check("taslak iptal 200; 5 bağ damgalı (silinmez)", cn.status === 200 && (await prisma.serviceBillingLink.count({ where: { invoiceId: inv1.id, revokedAt: { not: null } } })) === 5, short(cn));
   }
   const u2 = await api("POST", `/api/shipping/shipments/${sh1.id}/undo-dispatch`, { reason: "senaryo ters yol denemesi" });
   const backRows = await prisma.roll.findMany({ where: { id: { in: shipKids.map((k) => k.id) } }, select: { status: true, shipmentId: true } });

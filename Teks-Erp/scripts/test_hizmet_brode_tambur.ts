@@ -19,14 +19,21 @@
 //      toplanmaz; karışık sahipli kabul 409 OWNER_MISMATCH
 //   §6b H10b: 2 aynı sahipli kaynak ⇒ doğan top aynı sahip + RECEIVED = initialQty tek satır; doğan topun başka
 //      müşteriye sevki 409; sahipli + sahipsiz kaynak 409 (makbuz/doğan top yok); emanet kapalıda sahipsiz doğar
+//   §6c Açık kumaş (createOpenFabric): iki müşteri ya da sahipli + sahipsiz kaynaklı makbuz ⇒ 409 OWNER_MISMATCH, top YOK;
+//      sahipsiz kaynaklar ⇒ sahipsiz doğar
 //   §7 Gelir ItemPrice'tan, maliyet (FinishingRate) karışmaz; KURSUN kodu dışındaki çeşitli bayrak bu yoldan bir kez
 //   §8 Ölçümsüz bayrak işi: BLOCK_LINE ⇒ taslağa girmez + uyarı; DECLARED_WITH_WARNING ⇒ mevcut metre
 //   §9 Kurşun DIŞI çeşitli bayrak (brode deseni) kendi kalemiyle faturalanır (uyarısız düşmez)
 //   §10 Kardeşi parça parça (CUT) faturalanmış atanın sonradan girilen okuması ikinci çocukta atayı
 //       bütünüyle yeniden kesmez (CUT kalır) · faturalı bayrak geri alınamaz (409 SERVICE_ALREADY_BILLED)
+//   §11 F1 makbuzdan KENDİSİ dönen top (doğan top yok, eski model) ⇒ BRODE RECEIVED = kalemin alınan metresi (190)
+//   §12 F1 ata + çocuk aynı sevkte ⇒ çocuk CUT + atanın kalan parçası DECLARED (Σ = ata metresi; eskiden ata düşüyordu)
+//   §14 K3b fasondan DOĞRUDAN sevk (DSK) edilen emanet topun Tambur işi dönem taslağına girer (tam 120 + kısmi çocuk CUT 40); tekrar toplanmaz; elle fatura izli DSK önizlemede uyarır
+//   §13 K3b kendi dönen topta aynı adımın İKİ NULL receivedQty makbuz kalemi ⇒ RECEIVED = topun metresi bir kez (175, 350 değil)
 // Negatif sondalar (2026-10-29): bayrak çözüm dalı (`listFlagServiceWorks` çağrısı) kaldırılınca §2/§4/§5/§6
 // kırmızı · RECEIVED (makbuz) dalı kaldırılınca §6 kırmızı (geri alındı). Bitirici sondaları (2026-10-29):
 // doğan topa sahip kalıtımı kaldırılınca §6 kırmızı · kardeş-faturalı ata süzgeci kaldırılınca §10 kırmızı.
+// K2a sondası (2026-10-29): `resolveOwnerFromReceiptTx`te `strict` kaldırılınca §6b + §6c sahipli+sahipsiz kırmızı.
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { Currency, FinishingBasis, ItemType, MachineDataSource, MeterApprovalMode, MeterPhase, MeterVarianceBasis, PriceKind, Prisma, RollStatus } from "@prisma/client";
@@ -42,6 +49,9 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { applyRollFlagSetTx } from "../src/services/helpers/property-revoke.helper";
 import { testActorId } from "./fixture-test-user";
+import { createServicePeriodDraft, previewServicePeriodDraft } from "../src/services/service-period-invoice.service";
+import { ensureCariAccountTx } from "../src/services/helpers/finance.helper";
+import { factoryYmd } from "../src/constants/time";
 
 let pass = 0;
 let fail = 0;
@@ -57,7 +67,7 @@ const tambur = new TamburService();
 const fx = {
   itemIds: [] as string[], propIds: [] as string[], woIds: [] as string[], rollIds: [] as string[], childIds: [] as string[],
   stationIds: [] as string[], shipmentIds: [] as string[], receiptIds: [] as string[], rateIds: [] as string[], customerId: null as string | null,
-  customer2Id: null as string | null,
+  customer2Id: null as string | null, invoiceIds: [] as string[],
 };
 const KEYS = [
   SETTING_KEYS.FINANCE_ENABLED, SETTING_KEYS.FINANCE_AUTO_DRAFT_FROM_SHIPMENT_ENABLED, SETTING_KEYS.SHIPMENT_CONFIRMATION_ENABLED,
@@ -336,6 +346,38 @@ async function main(): Promise<void> {
   const born5 = await bornOf((r5.data as { id: string }).id);
   check("emanet kapalı, sahipsiz kaynaklar: makbuz yazıldı, 2 doğan top sahipsiz, metreler aynen", born5.length === 2 && born5.every((r) => r.ownerCustomerId === null) && born5.map((r) => Number(r.initialQty)).sort((a, b) => a - b).join(",") === "38,60", JSON.stringify(born5));
 
+  // ── §6c ──────────────────────────────────────────────────────────────────
+  section("§6c açık kumaş (createOpenFabric) makbuzdan doğar: karışık sahipli kaynak 409, top YOK");
+  // Makbuz doğrudan yazılır (kabul yolu karışımı zaten reddeder) — bu, emanet kapatılmış kurulumdaki KALINTI
+  // sahipli kaynağı ve eski makbuzu temsil eder; açık kumaş yolu kendi kalıtım kapısıyla düşmeli (H10b katı).
+  const stOf = await mkStation("OFQ", "INTERNAL", "PROCESS_QC", []);
+  const ofWo = await prisma.workOrder.create({
+    data: { workOrderNumber: `${P}-WOOF`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", targetItemId: fabric, steps: { create: [{ stationId: stFason, stepSequence: 1, status: "COMPLETED" as const }, { stationId: stOf, stepSequence: 2, status: "ACTIVE" as const }] } },
+    select: { id: true, steps: { select: { id: true, stepSequence: true } } },
+  });
+  fx.woIds.push(ofWo.id);
+  const ofStep = (n: number) => ofWo.steps.find((x) => x.stepSequence === n)!.id;
+  const openFabricFrom = async (tag: string, owners: Array<string | null>) => {
+    const rc = await prisma.subcontractorReceipt.create({ data: { receiptNo: `${P}-OF${tag}`.slice(0, 40), subcontractorId: sub.id, workOrderId: ofWo.id, stepId: ofStep(1) }, select: { id: true } });
+    fx.receiptIds.push(rc.id);
+    for (const owner of owners) {
+      const src = await mkParent(10, []);
+      await prisma.roll.update({ where: { id: src }, data: { ownerCustomerId: owner } });
+      await prisma.subcontractorReceiptItem.create({ data: { receiptId: rc.id, newRollId: src, receivedQty: 10 } });
+    }
+    const code = await inventory.createOpenFabric({ receiptId: rc.id, stepId: ofStep(2), clientToken: randomUUID() })
+      .then(() => "geçti", (e: { details?: { code?: string } }) => e.details?.code ?? String(e));
+    const born = await prisma.roll.findMany({ where: { parentReceiptId: rc.id }, select: { id: true, ownerCustomerId: true } });
+    fx.childIds.push(...born.map((r) => r.id));
+    return { code, born };
+  };
+  const of1 = await openFabricFrom("A", [cust.id, cust2.id]);
+  check("iki müşterinin kaynağı: 409 OWNER_MISMATCH, açık kumaş topu YOK", of1.code === "OWNER_MISMATCH" && of1.born.length === 0, `${of1.code} ${of1.born.length}`);
+  const of2 = await openFabricFrom("B", [cust.id, null]);
+  check("sahipli + sahipsiz kaynak (katı kalıtım): 409 OWNER_MISMATCH, açık kumaş topu YOK", of2.code === "OWNER_MISMATCH" && of2.born.length === 0, `${of2.code} ${of2.born.length}`);
+  const of3 = await openFabricFrom("C", [null, null]);
+  check("kontrol: sahipsiz kaynaklar ⇒ açık kumaş sahipsiz doğar (yol kapı dışında açık)", of3.code === "geçti" && of3.born.length === 1 && of3.born[0]!.ownerCustomerId === null, `${of3.code} ${JSON.stringify(of3.born)}`);
+
   // ── §7 ───────────────────────────────────────────────────────────────────
   section("§7 gelir ItemPrice, maliyet karışmaz; kurşun dışı çeşitli bayrak bir kez");
   const bLine = d4.lines.find((l) => l.itemId === BRODE);
@@ -387,6 +429,97 @@ async function main(): Promise<void> {
   const free = await prisma.$transaction((tx) => applyRollFlagSetTx(tx, { rollId: C12, desired: [], reason: "test", userId: actor }))
     .then((r) => `revoked=${r.revoked}`, (e: { details?: { code?: string } }) => e.details?.code ?? String(e));
   check("faturasız topta bayrak geri alma serbest", free === "revoked=1", free);
+
+  // ── §11 F1 ───────────────────────────────────────────────────────────────
+  section("§11 F1: makbuzdan KENDİSİ dönen top (doğan top yok) ⇒ BRODE RECEIVED = alınan metre");
+  // Eski "yerinde dönüş" modeli bugün yazılamaz (kabul topu tüketir) — kalıt veri doğrudan kurulur.
+  const F11 = await mkFasonWo("WOF11");
+  const P11 = await mkParent(175, [BR]);
+  const r11 = await prisma.subcontractorReceipt.create({
+    data: { receiptNo: `${P}-SR11`.slice(0, 64), workOrderId: F11.woId, stepId: F11.stepId, subcontractorId: sub.id, items: { create: [{ newRollId: P11, receivedQty: "190.000" }] } },
+    select: { id: true },
+  });
+  fx.receiptIds.push(r11.id);
+  const sh11 = await ship([P11]);
+  const inv11 = await invoiceOf(sh11.id);
+  const br11 = (inv11 ? await linksOf(inv11.id) : []).filter((l) => l.serviceItemId === BRODE);
+  check("BRODE tek bağ: RECEIVED 190 (mevcut metre 175 değil), fason adımında",
+    br11.length === 1 && br11[0]!.rollId === P11 && br11[0]!.meterBasis === "RECEIVED" && eq(br11[0]!.billedMeters, 190) && br11[0]!.workOrderStepId === F11.stepId, JSON.stringify(br11));
+
+  // ── §12 F1 ───────────────────────────────────────────────────────────────
+  section("§12 F1: ata + çocuk aynı sevkte ⇒ atanın kalan parçası da faturalanır (Σ = ata metresi)");
+  const P12 = await mkParent(100, [TB, ET]);
+  const C12b = await cut(P12, 40);
+  const left12 = await prisma.roll.findUniqueOrThrow({ where: { id: P12 }, select: { currentQty: true, status: true } });
+  const sh12 = await ship([P12, C12b]);
+  const inv12 = await invoiceOf(sh12.id);
+  const l12 = inv12 ? await linksOf(inv12.id) : [];
+  const tb12 = l12.filter((l) => l.serviceItemId === TAMBUR);
+  const sum12 = tb12.reduce((a, l) => a.plus(l.billedMeters), new Prisma.Decimal(0));
+  check("TAMBUR: çocuk CUT 40 + ata kalan (DECLARED 60) = 100",
+    tb12.length === 2 && tb12.some((l) => l.rollId === C12b && l.meterBasis === "CUT" && eq(l.billedMeters, 40))
+    && tb12.some((l) => l.rollId === P12 && l.meterBasis === "DECLARED" && eq(l.billedMeters, Number(left12.currentQty))) && eq(sum12, 100),
+    JSON.stringify({ tb12, left: left12 }));
+  check("ETEK de aynı (2 bağ, Σ 100)", l12.filter((l) => l.serviceItemId === ETEK).reduce((a, l) => a.plus(l.billedMeters), new Prisma.Decimal(0)).minus(100).abs().lte(0.001), JSON.stringify(l12));
+  // Ata kendisi kesimle doğmuşsa (TAMBUR_SPLIT) ③ kesilen metresi çocuklarını da içerir — kalanla (④) faturalanır.
+  const A12 = await cut(await mkParent(100, [TB]), 80);
+  const C12c = await cut(A12, 30);
+  const sh12b = await ship([A12, C12c]);
+  const inv12b = await invoiceOf(sh12b.id);
+  const tb12b = (inv12b ? await linksOf(inv12b.id) : []).filter((l) => l.serviceItemId === TAMBUR);
+  check("kesimle doğmuş ata + çocuğu: CUT 30 + kalan 50 = 80 (ata CUT 80 ile fazla kesilmez)",
+    tb12b.length === 2 && tb12b.some((l) => l.rollId === C12c && eq(l.billedMeters, 30)) && tb12b.some((l) => l.rollId === A12 && l.meterBasis === "DECLARED" && eq(l.billedMeters, 50)), JSON.stringify(tb12b));
+
+  // ── §13 K3b ──────────────────────────────────────────────────────────────
+  section("§13 K3b: kendi dönen topta iki NULL receivedQty kalemi ⇒ RECEIVED topu bir kez sayar");
+  // 2026-08-19 öncesi kalıt veri: aynı fason adımında iki makbuz, ikisi de "tamamı kabul" (receivedQty NULL).
+  const F13 = await mkFasonWo("WOF13");
+  const P13 = await mkParent(175, [BR]);
+  for (const n of ["SR13A", "SR13B"]) {
+    const r = await prisma.subcontractorReceipt.create({
+      data: { receiptNo: `${P}-${n}`.slice(0, 64), workOrderId: F13.woId, stepId: F13.stepId, subcontractorId: sub.id, items: { create: [{ newRollId: P13, receivedQty: null }] } },
+      select: { id: true },
+    });
+    fx.receiptIds.push(r.id);
+  }
+  const sh13 = await ship([P13]);
+  const inv13 = await invoiceOf(sh13.id);
+  const br13 = (inv13 ? await linksOf(inv13.id) : []).filter((l) => l.serviceItemId === BRODE);
+  check("BRODE tek bağ: RECEIVED 175 (iki NULL kalem 350 saymaz)",
+    br13.length === 1 && br13[0]!.rollId === P13 && br13[0]!.meterBasis === "RECEIVED" && eq(br13[0]!.billedMeters, 175) && br13[0]!.workOrderStepId === F13.stepId, JSON.stringify(br13));
+
+  // ── §14 K3b ──────────────────────────────────────────────────────────────
+  section("§14 K3b: fasondan müşteriye DOĞRUDAN sevk edilen emanet topun işi dönem toplayıcısına girer");
+  // Fabrikada Tambur işi görmüş emanet top fasona gider, fason doğrudan müşteriye sevk eder (DSK; çuval sevki yok).
+  const F14 = await mkFasonWo("WOF14");
+  const P14 = await mkParent(120, [TB]);
+  const P14b = await mkParent(100, [TB]);
+  await toStock([P14, P14b]);
+  const d14 = await subSvc.dispatch({ workOrderId: F14.woId, stepId: F14.stepId, subcontractorId: sub.id, rollIds: [P14, P14b] }, actor);
+  const disp14 = (d14.data as { id: string }).id;
+  await subSvc.executeDirectShip({ dispatchId: disp14, reason: "fason doğrudan müşteriye", customerId: cust.id, rollIds: [P14, P14b], rollShipQtys: { [P14b]: 40 }, orderless: true }, actor);
+  const kid14 = await prisma.roll.findFirst({ where: { parentRollId: P14b, directShipmentId: { not: null } }, select: { id: true } });
+  if (kid14) fx.childIds.push(kid14.id);
+  const ds14 = await prisma.roll.findUniqueOrThrow({ where: { id: P14 }, select: { directShipmentId: true, shipmentId: true } });
+  check("ölçüm: tam sevk edilen top DSK'ya bağlı, çuval sevkiyatı yok; kısmi sevkte 40 m çocuk doğdu", ds14.directShipmentId !== null && ds14.shipmentId === null && kid14 !== null, JSON.stringify({ ds14, kid14 }));
+  const cari14 = await prisma.$transaction((tx) => ensureCariAccountTx(tx, { customerId: cust.id, subcontractorId: null }));
+  const period14 = factoryYmd().slice(0, 7);
+  const pv14 = await previewServicePeriodDraft({ cariId: cari14.id, period: period14 });
+  const dskNo = (await prisma.directShipment.findUniqueOrThrow({ where: { id: ds14.directShipmentId! }, select: { shipmentNo: true } })).shipmentNo;
+  check("önizleme DSK numarasını sayar", pv14.shipmentNos.includes(dskNo), JSON.stringify(pv14.shipmentNos));
+  const pd14 = await createServicePeriodDraft({ cariId: cari14.id, period: period14, clientToken: randomUUID() }, actor);
+  fx.invoiceIds.push(pd14.data!.id);
+  const tb14 = (await linksOf(pd14.data!.id)).filter((l) => l.serviceItemId === TAMBUR && (l.rollId === P14 || l.rollId === kid14?.id));
+  check("dönem taslağı: TAMBUR tam sevk 120 (DECLARED) + kısmi sevk çocuğu 40 (CUT), atanın fasonda kalan parçası yok",
+    tb14.length === 2 && tb14.some((l) => l.rollId === P14 && eq(l.billedMeters, 120)) && tb14.some((l) => l.rollId === kid14?.id && l.meterBasis === "CUT" && eq(l.billedMeters, 40)), JSON.stringify(tb14));
+  const again14 = await previewServicePeriodDraft({ cariId: cari14.id, period: period14 });
+  check("ikinci önizleme: aynı iş yeniden toplanmaz (alreadyBilled ≥ 2)", again14.alreadyBilledWorkCount >= 2 && !(await linksOf(pd14.data!.id)).some((l) => l.rollId === P14b), JSON.stringify({ w: again14.workCount, b: again14.alreadyBilledWorkCount }));
+  // K3b inceleme: DSK'nın elle fatura izi varsa önizleme çift faturaya karşı uyarır (izsizken uyarmaz).
+  check("fatura izi yokken DSK uyarısı yok", !pv14.warnings.some((w) => w.includes(dskNo)), JSON.stringify(pv14.warnings));
+  await prisma.directShipment.update({ where: { id: ds14.directShipmentId! }, data: { invoiceNo: "K3B-ELLE-1" } });
+  const inv14 = await previewServicePeriodDraft({ cariId: cari14.id, period: period14 });
+  await prisma.directShipment.update({ where: { id: ds14.directShipmentId! }, data: { invoiceNo: null } });
+  check("elle fatura izli DSK önizlemede uyarı verir", inv14.warnings.some((w) => w.includes(dskNo) && w.includes("K3B-ELLE-1")), JSON.stringify(inv14.warnings));
 }
 
 async function cleanup(): Promise<void> {
@@ -399,7 +532,7 @@ async function cleanup(): Promise<void> {
       : prisma.systemSetting.deleteMany({ where: { key } }));
   }
   const ids = [...fx.childIds, ...fx.rollIds];
-  const invIds = (await prisma.invoice.findMany({ where: { shipmentId: { in: fx.shipmentIds } }, select: { id: true } })).map((i) => i.id);
+  const invIds = [...fx.invoiceIds, ...(await prisma.invoice.findMany({ where: { shipmentId: { in: fx.shipmentIds } }, select: { id: true } })).map((i) => i.id)];
   await del("link", () => prisma.serviceBillingLink.deleteMany({ where: { OR: [{ invoiceId: { in: invIds } }, { rollId: { in: ids } }] } }));
   await del("cariTx", () => prisma.cariTransaction.deleteMany({ where: { invoiceId: { in: invIds } } }));
   await del("invoiceLine", () => prisma.invoiceLine.deleteMany({ where: { invoiceId: { in: invIds } } }));
@@ -424,6 +557,8 @@ async function cleanup(): Promise<void> {
   await del("receiptItem", () => prisma.subcontractorReceiptItem.deleteMany({ where: { receiptId: { in: recIds } } }));
   await del("receiptProperty", () => prisma.subcontractorReceiptProperty.deleteMany({ where: { receiptId: { in: recIds } } }));
   await del("dispatchItem", () => prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: dispIds } } }));
+  await del("dsk unlink", () => prisma.roll.updateMany({ where: { id: { in: ids } }, data: { directShipmentId: null } }));
+  await del("directShipment", () => prisma.directShipment.deleteMany({ where: { dispatchId: { in: dispIds } } }));
   await del("child roll", () => prisma.roll.deleteMany({ where: { id: { in: fx.childIds } } }));
   await del("roll", () => prisma.roll.deleteMany({ where: { id: { in: fx.rollIds } } }));
   await del("receipt", () => prisma.subcontractorReceipt.deleteMany({ where: { id: { in: recIds } } }));

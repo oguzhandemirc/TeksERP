@@ -439,7 +439,7 @@ export function FeatureFlagSection({
   for (const f of shownFlags) grubaKoy(f.group, { kind: "flag", def: f });
   for (const f of shownEnumFlags) grubaKoy(f.group, { kind: "enum", def: f });
   for (const f of shownTextFlags) grubaKoy(f.group, { kind: "text", def: f });
-  for (const f of shownNumberFlags) grubaKoy(undefined, { kind: "number", def: f });
+  for (const f of shownNumberFlags) grubaKoy(f.group, { kind: "number", def: f });
   for (const f of shownSettingFields) grubaKoy(undefined, { kind: "field", def: f });
 
   /** Salt-okunur satırın altına yazılacak SEBEP — bant ile aynı sırayla. */

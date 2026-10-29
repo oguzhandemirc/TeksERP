@@ -243,6 +243,8 @@ export interface NumberFlagDef {
   step?: number;
   /** Bu ayarın işini değiştirdiği kişi(ler). En az bir kayıt. */
   audience: SettingAudience[];
+  /** Kart grubu (`FlagDef.group` ile aynı); yoksa "Genel". */
+  group?: string;
 }
 
 /** `systemSettingService.SETTING_KEYS` değerlerinin birleşimi (ham `system_settings.key`). */
@@ -1439,6 +1441,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         },
       },
       {
+        key: "tamburListByStationEnabled",
+        group: "Tambur",
+        title: "Tablet iş listesi yalnız kendi tamburunu göstersin",
+        summary: "Birden fazla tamburu olan fabrikada her tablet yalnız kendi tamburuna sıradaki işleri listeler.",
+        defaultOn: false,
+        audience: ["Operatör"],
+        desc: "Açıkken Tambur tabletindeki iş listesi yalnız tabletin oturum açtığı tambur istasyonuna sıradaki topları gösterir (örn. brode işleri Tambur-2'de). Kapalıyken (varsayılan) liste bütün tambur işlerini gösterir. Kart okutması her iki durumda da çalışır.",
+      },
+      {
         key: "tamburUndoFullSameDayOnly",
         group: "Tambur",
         title: "Tümden geri alma yalnız aynı gün yapılabilsin",
@@ -1446,6 +1457,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
         desc: "Açıkken bir Tambur kapanışı yalnız aynı gün tümden geri alınabilir; dünkü kapanış geri alınamaz. Tek parça iptali etkilenmez. Tümden geri alma zaten ayrı yetki ve sebep ister.",
+      },
+      {
+        key: "machineStopTrackingEnabled",
+        group: "Makine duruşu",
+        title: "Dokuma olmadan da makine duruşu kaydedilsin",
+        summary: "Kurşun, tambur ve brode makinelerinin duruşu (başlangıç, bitiş, sebep) kaydedilir.",
+        defaultOn: false,
+        audience: ["Operatör", "Yönetim"],
+        desc: "Açıkken dokuma modülü kapalı olsa da kurşun, tambur ve brode makinelerine duruş açılıp kapatılabilir ve sebep girilebilir. Kapalıyken (varsayılan) duruş yalnız dokuma modülü açık fabrikada kaydedilir. Dokuma açık fabrikada bu ayar hiçbir şeyi değiştirmez.",
       },
       {
         key: "productionCancelReasonRequired",
@@ -1513,8 +1533,49 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "OFFICE", label: "Ofis onayı", hint: "Okuma yazılır, makine durmaz; ofis Operasyon › Metre Sapmaları ekranında onaylar. Onaylanmadan adım kapanmaz." },
         ],
       },
+      {
+        // H1b (2026-10-29): `defaultValue` backend `DEFAULT_KURSUN_METER_STOCK_MODE` ile birebir.
+        enumKey: "kursunMeterStockMode",
+        title: "Çıkış metresi stoğu",
+        summary: "Kurşun çıkışında okunan metre topun stok metresini değiştirsin mi.",
+        desc: "Yalnız kaydet (varsayılan): okuma ölçüm defterine yazılır, topun metresi değişmez; Tambur kendi ölçümünü bugünkü gibi yapar. Stoğa uygula: geçerli çıkış okuması topun metresini düzeltir ve fark sapma kaydına yazılır (eksikse kayıt düzeltmesi, fazlaysa fazlalık; fazlada giriş metresi de yükselir). Onay bekleyen okuma stoğa dokunmaz; okuma düzeltilir ya da adım yeniden açılırsa uygulama geri alınır. Seçim okuma anında kayda donar.",
+        defaultValue: "RECORD",
+        display: "radio",
+        audience: ["Yönetim"],
+        options: [
+          { value: "RECORD", label: "Yalnız kaydet (bugünkü)", hint: "Okuma stoğu değiştirmez." },
+          { value: "APPLY", label: "Stoğa uygula", hint: "Geçerli çıkış okuması topun metresi olur; fark sapma kaydına yazılır." },
+        ],
+      },
+      {
+        // D4-E1 (2026-10-29): `defaultValue` backend `DEFAULT_TAMBUR_PLAN_WIDTH_CHECK` ile birebir.
+        enumKey: "tamburPlanGateWidthCheck",
+        group: "Tambur",
+        title: `Tambur'da top eni ${TERIM.terbiyeIsEmri.cekimKucuk.vasita} karşılaştırılsın`,
+        summary: `Topun eni ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma}ki enden eşikten fazla farklıysa Tambur operatöre onay sorsun mu.`,
+        desc: `Açıkken (varsayılan) topun eni ile ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} eni arasındaki fark aşağıdaki eşiği AŞARSA Tambur kesimden önce onay ister. Kapalıyken en hiç sorulmaz; renk karşılaştırması her iki durumda da aynen çalışır.`,
+        defaultValue: "ENFORCE",
+        display: "radio",
+        audience: ["Operatör", "Planlamacı"],
+        options: [
+          { value: "ENFORCE", label: "Karşılaştır, farkta sor (bugünkü)", hint: "Fark eşiği aşarsa operatör onaylamadan top depoya inmez." },
+          { value: "OFF", label: "En karşılaştırılmasın", hint: "Yalnız en kontrolü kapanır; renk farkı yine sorulur." },
+        ],
+      },
     ],
     numberFlags: [
+      {
+        key: "tamburPlanGateWidthToleranceCm",
+        group: "Tambur",
+        title: "Tambur en eşiği (cm)",
+        desc: `Topun eni ile ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} eni arasındaki fark bu değeri AŞARSA Tambur onay sorar; eşit fark sorulmaz. Varsayılan 10 cm. 0 girilirse en küçük farkta bile sorulur. En karşılaştırması kapalıysa bu değer kullanılmaz.`,
+        min: 0,
+        max: 100,
+        fallback: 10,
+        unit: "cm",
+        step: 1,
+        audience: ["Operatör", "Planlamacı"],
+      },
       {
         key: "kursunMeterVarianceThresholdM",
         title: "Metre farkı eşiği (metre)",

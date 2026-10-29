@@ -31,9 +31,9 @@ import { AuditService } from "../audit.service";
 import {
   FASON_RECEIPT_DEVIATION_SOURCE,
   PLAN_MISMATCH_CODE,
-  TAMBUR_PLAN_WIDTH_TOLERANCE_CM,
   type PlanMismatchItem,
 } from "../../constants/tambur-plan-gate";
+import { effectiveTamburPlanWidthGate } from "../system-setting.service";
 
 interface GateRoll {
   id: string;
@@ -46,6 +46,34 @@ interface GatePlan {
   workOrderId: string | null;
   targetColorId: string | null;
   width: unknown;
+}
+
+type WidthGate = Awaited<ReturnType<typeof effectiveTamburPlanWidthGate>>;
+
+/**
+ * EN kolu (D4-E1): eşik/kontrol fabrika ayarından. Ayar yalnız iki en de doluyken
+ * okunur (iki sorgu); en eksikse ayar sorgusu atılmaz. Eşit fark sapma DEĞİL.
+ */
+async function evaluateWidthGate(
+  rollWidthRaw: unknown,
+  planWidthRaw: unknown,
+): Promise<{ gate: WidthGate | null; mismatch: PlanMismatchItem | null }> {
+  const rollWidth = rollWidthRaw == null ? null : Number(rollWidthRaw);
+  const planWidth = planWidthRaw == null ? null : Number(planWidthRaw);
+  if (rollWidth == null || planWidth == null) return { gate: null, mismatch: null };
+  const gate = await effectiveTamburPlanWidthGate();
+  if (gate.check !== "ENFORCE" || Math.abs(rollWidth - planWidth) <= gate.toleranceCm) {
+    return { gate, mismatch: null };
+  }
+  return {
+    gate,
+    mismatch: {
+      field: "width",
+      message: `Top ${rollWidth} cm, terbiye iş emri ${planWidth} cm istiyor (eşik ±${gate.toleranceCm} cm)`,
+      rollValue: rollWidth,
+      planValue: planWidth,
+    },
+  };
 }
 
 /**
@@ -109,29 +137,18 @@ export async function assertRollMatchesPlan(
       });
     }
   }
-  const rollWidth = roll.width == null ? null : Number(roll.width);
-  const planWidth = plan.width == null ? null : Number(plan.width);
-  if (
-    rollWidth != null &&
-    planWidth != null &&
-    Math.abs(rollWidth - planWidth) > TAMBUR_PLAN_WIDTH_TOLERANCE_CM
-  ) {
-    mismatches.push({
-      field: "width",
-      message: `Top ${rollWidth} cm, terbiye iş emri ${planWidth} cm istiyor (eşik ±${TAMBUR_PLAN_WIDTH_TOLERANCE_CM} cm)`,
-      rollValue: rollWidth,
-      planValue: planWidth,
-    });
-  }
+  const { gate: widthGate, mismatch: widthMismatch } = await evaluateWidthGate(roll.width, plan.width);
+  if (widthMismatch) mismatches.push(widthMismatch);
   if (mismatches.length === 0) return [];
 
   if (!confirmMismatch) {
+    const toleranceCm = (widthGate ?? (await effectiveTamburPlanWidthGate())).toleranceCm;
     throw AppError.conflict(
       `Plan ile top uyuşmuyor: ${mismatches.map((m) => m.message).join(" · ")}. Yine de devam etmek için onaylayın.`,
       {
         code: PLAN_MISMATCH_CODE,
         mismatches,
-        toleranceCm: TAMBUR_PLAN_WIDTH_TOLERANCE_CM,
+        toleranceCm,
       },
     );
   }

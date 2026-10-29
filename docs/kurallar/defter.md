@@ -108,6 +108,7 @@ Durum tabloları **"şu an ne"**yi tutar; defterler **"ne oldu"**yu tutar ve "ne
 
 - **[ÇEKİRDEK]** Yeni defter açarken sekiz soru: ① hangi olaylar (enum) · ② her ilerinin tersi var mı · ③ append-only mi (`updatedAt` YOK) · ④ aktör kolonu (`createdById`) · ⑤ kaynak belge FK'ları · ⑥ miktar `Decimal` + ölçek kataloğu ([DB-33]) · ⑦ index: `(varlıkId, createdAt)` + olay+tarih · ⑧ mutabakat bekçisi (Σ hareket ↔ canlı durum). <sub>(arşiv:2026-09-10)</sub>
 - **[ÇEKİRDEK]** Var olan deftere yeni ileri olay eklerken enum'a ters değeri AYNI commit'te ekle ve geri alma yolunu yaz; "sonra ekleriz" ters yolu olmayan olay üretir. <sub>(arşiv:2026-09-10)</sub>
+- **[ÇEKİRDEK]** Sapma satırı `Roll.initialQty`'yi yükseltiyorsa miktarı satıra yaz (`RollVariance.initialQtyRaise`) ve tersinde aynı miktarı indir; durumdan geri hesaplanan yükseltme ilk girişi bilemez. <sub>(arşiv:2026-10-29 H1b)</sub>
 
 ## Alınmış kararlar — henüz UYGULANMADI (2026-09-11)
 

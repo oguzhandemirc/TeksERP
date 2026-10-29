@@ -177,6 +177,9 @@ interface ModulTanimi {
   modulKodu: string;
   /** Kapı satırının ölçüleceği route dosyaları (`src/` göreli). */
   routeDosyalari: string[];
+  /** Kapıyı DEVRALAN rejim kapısı taşıyan dosyalar (dosya → kapı adı). D4-A1: `requireMachineStopRegime`
+   *  genel rejim kapalıyken kararı bu satırın kapısına devreder (`test_dokuma_regime_gate` §6i ölçer). */
+  devralanKapi?: Readonly<Record<string, string>>;
   /** HTTP sondaları — bayrak kapalıyken 403, açıkken 2xx beklenir; tek kaynak `lib/profil-kapi-haritasi.ts`. */
   sondalar: string[];
   /**
@@ -249,6 +252,7 @@ const MODULLER: ModulTanimi[] = [
       // MAL-1 (S2 çekirdeği): atkı kartı — dokuma ürün yapısı.
       "routes/weft-spec.routes.ts",
     ],
+    devralanKapi: { "routes/machine-stop.routes.ts": "requireMachineStopRegime" },
     sondalar: modulUclari("dokumaEnabled"),
     onKosul: { alan: "productionEnabled", beklenenModulKodu: "production" },
   },
@@ -262,6 +266,16 @@ const MODULLER: ModulTanimi[] = [
     routeDosyalari: ["routes/cost.routes.ts"],
     sondalar: modulUclari("maliyetEnabled"),
     onKosul: { alan: "productionEnabled", beklenenModulKodu: "production" },
+  },
+  {
+    // EMANET (P1a, 2026-10-29): ilk kendi ekranı İçerideki İşler (`/api/consigned-work`); yazma kapısı ayrıca gövdede.
+    alan: "emanetEnabled",
+    dbAnahtari: "emanet.enabled",
+    middleware: "requireEmanetEnabled",
+    okuyucu: "readEmanetEnabled",
+    modulKodu: "emanet",
+    routeDosyalari: ["routes/consigned-work.routes.ts"],
+    sondalar: modulUclari("emanetEnabled"),
   },
   {
     // GELEN BELGE (D2, 2026-10-29): emanete bağımlı (onay `Roll.ownerCustomerId` yazar); ön koşul kapıda ÖNCE ölçülür.
@@ -394,6 +408,8 @@ const SONDA_IZINLERI = [
   "gelen-belge:read",
   // Maliyet sondası (`/api/cost/parameter-sets`) — aynı gerekçe (MAL-1).
   "cost:read",
+  // İçerideki İşler sondası (`/api/consigned-work`) — aynı gerekçe (P1a; ölçüldü: izinsiz AÇIK tur 403).
+  "roll:read",
 ];
 
 const TEST_USERNAME = `bekci.modul.${process.pid}`;
@@ -766,9 +782,10 @@ async function main(): Promise<void> {
   // ── §2 KAPI SIRASI (statik) ──────────────────────────────────────────────
   for (const m of MODULLER) {
     for (const rel of m.routeDosyalari) {
-      const o = routerKapiOlcumu(join(SRC, rel), m.middleware);
+      const kapi = m.devralanKapi?.[rel] ?? m.middleware;
+      const o = routerKapiOlcumu(join(SRC, rel), kapi);
       check(
-        `§2a ${rel} → \`use(verifyToken, ${m.middleware})\` (kimliksiz istek 401 alır, 403 değil)`,
+        `§2a ${rel} → \`use(verifyToken, ${kapi})\` (kimliksiz istek 401 alır, 403 değil)`,
         o.kapiVar,
         o.kapiVar ? `router=${o.routerAdi}` : "kapı satırı YOK ya da verifyToken'sız",
       );

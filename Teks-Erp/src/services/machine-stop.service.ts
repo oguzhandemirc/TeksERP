@@ -33,6 +33,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { p2002Mentions } from "../utils/p2002";
 import { factoryDayKeyUtcMidnight } from "../constants/time";
+import { assertMachineStopKindAllowed, assertStopWritableTx, machineStopRegime } from "./helpers/machine-stop-regime.helper";
 import {
   MACHINE_STOP_SELECT,
   type MachineStopDto,
@@ -98,9 +99,10 @@ export async function openStopCore(input: OpenStopCoreInput, opts: OpenManualSto
       // ① Replay — yaratmadan ÖNCE ve AYNI bağlantıda (ayrı havuz alımı istemesin).
       const existing = await findStopReplayTx(tx, input.machineId, stopKey, input.fingerprint);
       if (existing) return { replay: true as const, row: existing };
-      const machine = await tx.machine.findUnique({ where: { id: input.machineId }, select: { id: true, isActive: true, warpBeamSlots: true } });
+      const machine = await tx.machine.findUnique({ where: { id: input.machineId }, select: { id: true, isActive: true, warpBeamSlots: true, station: { select: { kind: true } } } });
       if (!machine) throw AppError.notFound("Makine bulunamadı", { machineId: input.machineId });
       if (!machine.isActive) throw AppError.badRequest("Pasif makineye duruş girilemez.", { code: "MACHINE_INACTIVE" });
+      assertMachineStopKindAllowed(await machineStopRegime(tx), machine.station.kind, opts); // D4-A1: dokumasız rejimde yalnız kurşun/brode/tambur
       assertBeamSlotValid(machine, input.beamSlot);
       const preset = input.reasonCode ? await resolveStopPreset(tx, input.reasonCode) : null;
       const shiftInstanceId = await resolveShiftInstanceId(tx, started.value);
@@ -203,7 +205,7 @@ export async function closeStopCore(stopId: string, ended: StampResolution, clos
   const out = await prisma.$transaction(async (tx) => {
     const cur = await tx.machineStopEvent.findUnique({ where: { id: stopId }, select: { shiftInstanceId: true, machineId: true } });
     if (!cur) throw AppError.notFound("Duruş bulunamadı", { stopId });
-    await assertStopShiftWritableTx(tx, cur);
+    await assertStopWritableTx(tx, cur, closer.endSource === MachineStopEndSource.OPERATOR); // D4-A1 tür kapısı: sinyal/watchdog muaf
     // Süre startedAt'ten; claim WHERE'i başlangıcı da pinler (bitiş < başlangıç 400'e düşer).
     // Uygulama saati parametreyle (kök yasak: ham SQL'de çıplak `now()`; sunucu saati tek kaynak `new Date()`).
     const simdi = new Date();
@@ -254,7 +256,7 @@ export async function classifyStop(stopId: string, input: ClassifyStopInput, use
       select: { shiftInstanceId: true, machineId: true, escalationGraceMinutes: true, machine: { select: { warpBeamSlots: true } } },
     });
     if (!cur) throw AppError.notFound("Duruş bulunamadı", { stopId });
-    await assertStopShiftWritableTx(tx, cur);
+    await assertStopWritableTx(tx, cur, source !== MachineDataSource.MACHINE); // D4-A1 tür kapısı: makine sınıflaması muaf
     assertBeamSlotValid(cur.machine, input.beamSlot);
     const preset = await resolveStopPreset(tx, input.reasonCode);
     const escalation = await freezeStopEscalation(tx, preset, cur.escalationGraceMinutes);
@@ -305,7 +307,7 @@ export async function reclassifyStop(stopId: string, input: ReclassifyStopInput,
   const reclassed = await prisma.$transaction(async (tx) => {
     const cur = await tx.machineStopEvent.findUnique({ where: { id: stopId }, select: { shiftInstanceId: true, machineId: true, lossClass: true, reasonNote: true, targetMinutes: true, escalationGraceMinutes: true } });
     if (!cur) throw AppError.notFound("Duruş bulunamadı", { stopId });
-    await assertStopShiftWritableTx(tx, cur);
+    await assertStopWritableTx(tx, cur); // mühür/iptal vardiya + D4-A1 tür kapısı
     const to = await resolveStopPreset(tx, input.toReasonCode);
     const escalation = await freezeStopEscalation(tx, to, cur.escalationGraceMinutes);
     const yeniNot = input.reasonNote === undefined ? undefined : normalizeNote(input.reasonNote);
@@ -369,7 +371,7 @@ export async function revokeStop(stopId: string, reason: string, userId?: string
   const revoked = await prisma.$transaction(async (tx) => {
     const cur = await tx.machineStopEvent.findUnique({ where: { id: stopId }, select: { shiftInstanceId: true, machineId: true } });
     if (!cur) throw AppError.notFound("Duruş bulunamadı", { stopId });
-    await assertStopShiftWritableTx(tx, cur);
+    await assertStopWritableTx(tx, cur); // mühür/iptal vardiya + D4-A1 tür kapısı
     const claim = await tx.machineStopEvent.updateMany({
       where: { id: stopId, revokedAt: null },
       data: { revokedAt: new Date(), revokedById: userId ?? null, revokeReason: trimmed.slice(0, 300) },

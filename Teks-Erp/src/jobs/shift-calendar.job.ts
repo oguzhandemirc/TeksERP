@@ -20,7 +20,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
-import { readDokumaEnabled } from "../services/system-setting.service";
+import { machineStopRegime, machineStopRegimeOpen } from "../services/helpers/machine-stop-regime.helper";
 import {
   planShiftCalendar,
   SHIFT_CALENDAR_CANCEL_REASON,
@@ -86,7 +86,8 @@ export async function loadShiftCalendarInputs(
 
 /** Tek koşum — zamanlayıcı, tanım yazımı ve bekçi aynı fonksiyonu çağırır. */
 export async function runShiftCalendarOnce(opts: ShiftCalendarRunOptions = {}): Promise<ShiftCalendarOutcome> {
-  if (!(await readDokumaEnabled())) return "disabled";
+  // D4-A1: takvim duruş rejimiyle koşar (dokuma ∨ üretim ∧ makine duruşu takibi); ayar kapalıyken bugünkü.
+  if (!machineStopRegimeOpen(await machineStopRegime())) return "disabled";
 
   const now = opts.now ?? new Date();
   const sum: ShiftCalendarSummary = { created: 0, rewritten: 0, sealedSkipped: 0, unchanged: 0, startedSkipped: 0, retired: 0 };
