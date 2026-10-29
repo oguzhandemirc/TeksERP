@@ -24,7 +24,7 @@ export function scanFailCode(s: Pick<DocumentScanInfo, "mimeType" | "attempts">)
 export const SCAN_FAIL_TEXT: Record<ScanFailCode, string> = {
   PDF: PDF_NOT_READ_TEXT,
   RETRIES_EXHAUSTED: "Okuma servisi üç denemede yanıt veremedi (servis kapalı ya da hata verdi). Servis düzelince yeniden okutun.",
-  UNREADABLE: "Okuma servisi görüntüyü okuyamadı (bulanık, eksik ya da bozuk fotoğraf). Yeniden okutun ya da satırları elle girin.",
+  UNREADABLE: "Okuma servisi bu görüntüyü reddetti. Yeniden okutun ya da satırları elle girin.",
 };
 
 interface Props {

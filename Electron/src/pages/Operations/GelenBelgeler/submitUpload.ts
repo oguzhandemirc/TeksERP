@@ -83,6 +83,15 @@ export async function submitUpload(
 }
 
 /** "Sayfa ekle": sıradaki sayfa numarası (mevcut en büyük + 1; tarama yoksa 1). */
+/** Sunucu `ScanBody.pageNo` tavanı (`.max(99)`) ikizi. */
+export const MAX_PAGE_NO = 99;
+
+/** Gönderilecek son sayfa numarası tavanı aşıyorsa Türkçe uyarı; aşmıyorsa null. */
+export function pageLimitError(firstPageNo: number, count: number): string | null {
+  const last = firstPageNo + count - 1;
+  return last > MAX_PAGE_NO ? `Bir belgeye en çok ${MAX_PAGE_NO} sayfa eklenebilir (son sayfa ${last} olurdu). Sayfa sayısını azaltın.` : null;
+}
+
 export function nextPageNo(scans: ReadonlyArray<{ pageNo: number }>): number {
   return scans.reduce((m, s) => Math.max(m, s.pageNo), 0) + 1;
 }

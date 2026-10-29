@@ -42,7 +42,7 @@ export function NoteListFilters({ filter, onChange, summary }: Props) {
         <div className="w-full sm:w-56">
           <CustomerPickerField value={filter.senderCustomerId} onChange={(id) => set({ senderCustomerId: id })} placeholder="Gönderen (tümü)" clearable />
         </div>
-        <DateRangeInput from={filter.from} to={filter.to} onFrom={(v) => set({ from: v })} onTo={(v) => set({ to: v })} fromLabel="Geliş başlangıç" toLabel="Geliş bitiş" inputClassName="h-9" />
+        <DateRangeInput from={filter.from} to={filter.to} onFrom={(v) => set({ from: v })} onTo={(v) => set({ to: v })} fromLabel="Kayıt başlangıç" toLabel="Kayıt bitiş" inputClassName="h-9" />
       </div>
     </div>
   );

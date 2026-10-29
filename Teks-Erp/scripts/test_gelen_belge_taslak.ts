@@ -216,6 +216,9 @@ async function main(): Promise<void> {
     const dBad = await rq("from=2026-02-31");
     const dFmt = await rq("from=10.03.2026");
     check("§6b-4 bozuk gün → 400 (var olmayan tarih ve yanlış biçim)", dBad.status === 400 && dFmt.status === 400, `${dBad.status}/${dFmt.status}`);
+    const dRev = await rq("from=2026-03-11&to=2026-03-10");
+    const dSame = await rq("from=2026-03-10&to=2026-03-10");
+    check("§6b-5 ters aralık (from > to) → 400 · aynı gün → 200", dRev.status === 400 && dSame.status === 200, `${dRev.status}/${dSame.status}`);
 
     // §7 DRAFT dışı
     console.log("§7 DRAFT dışı");

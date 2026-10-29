@@ -5,7 +5,7 @@ import { apiErrorText } from "@/lib/api-error";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { createUploadNote, uploadScan } from "./service";
 import { addPickedFiles, type UploadPage } from "./uploadPrep";
-import { EMPTY_UPLOAD_PROGRESS, submitUpload, UploadError, type UploadProgress } from "./submitUpload";
+import { EMPTY_UPLOAD_PROGRESS, pageLimitError, submitUpload, UploadError, type UploadProgress } from "./submitUpload";
 
 export type UploadTarget = { kind: "new" } | { kind: "pages"; noteId: string; noteNo: string; firstPageNo: number };
 
@@ -49,6 +49,11 @@ export function useUploadForm(target: UploadTarget, onSent: (note: { id: string;
   };
   const send = async () => {
     if (busy || !pages.length) return;
+    const limitError = pageLimitError(target.kind === "pages" ? target.firstPageNo : 1, pages.length);
+    if (limitError) {
+      setError(limitError);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {

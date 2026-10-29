@@ -7,7 +7,7 @@ import userEvent from "@testing-library/user-event";
 import { AxiosError, type AxiosResponse } from "axios";
 import { renderWithProviders } from "@/test/render";
 import { fitLongEdge, mergePages, prepareFile, readBytes, sha256Hex, type ImageCodec, type UploadPage } from "../uploadPrep";
-import { submitUpload, nextPageNo, UploadError } from "../submitUpload";
+import { submitUpload, nextPageNo, pageLimitError, UploadError } from "../submitUpload";
 import { ScanReadBanner, scanFailCode } from "../ScanReadBanner";
 import { UploadDialog } from "../UploadDialog";
 import { IncomingDocumentsPage } from "../GelenBelgelerPage";
@@ -135,6 +135,10 @@ describe("gönderim", () => {
     await submitUpload(api, { pages: [page("c")], ownerCustomerId: null, senderDocNo: null, firstPageNo: nextPageNo([{ pageNo: 1 }, { pageNo: 2 }]) }, attempt(), { note: { id: "n9", noteNo: "GB-9" }, uploaded: new Set() });
     expect(api.createDraftNote).not.toHaveBeenCalled();
     expect(api.uploadScan).toHaveBeenCalledWith(expect.objectContaining({ noteId: "n9", pageNo: 3 }));
+  });
+  it("sayfa tavanı: son sayfa 99'u aşarsa uyarı (sunucu .max(99) ikizi)", () => {
+    expect(pageLimitError(98, 2)).toBeNull();
+    expect(pageLimitError(98, 3)).toMatch(/en çok 99 sayfa/);
   });
 });
 

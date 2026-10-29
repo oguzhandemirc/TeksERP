@@ -115,7 +115,7 @@ const ListQuery = z.object({
   to: RangeDay.optional(),
   cursor: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
-});
+}).refine((q) => !q.from || !q.to || q.from <= q.to, { message: "Başlangıç tarihi bitişten sonra olamaz", path: ["from"] });
 
 /**
  * @openapi
