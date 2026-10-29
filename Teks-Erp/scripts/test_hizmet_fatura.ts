@@ -9,7 +9,7 @@
 // sonradan düzeltilirse fatura dayanaksız kalır.
 //
 // ÖLÇÜLENLER:
-//   §1 Ayarlar: PERIOD_END 400 · tanınmayan değer 400 · varsayılanlar = bugün
+//   §1 Ayarlar: PERIOD_END seçilebilir (H8) · tanınmayan değer 400 · varsayılanlar = bugün
 //   §2 10 emanet top ⇒ 1 taslak, 10 bağ, Σ billedMeters = Σ aktif OUT ±0,001; emanet ürün satırı yok; not brütü söyler
 //   §3 Düzeltilmiş okuma: serviceAt = adımın İLK OUT anı (düzeltme kaydırmaz)
 //   §4 Replay (kanca ikinci kez) ⇒ 1 taslak, 10 bağ
@@ -89,7 +89,8 @@ async function main(): Promise<void> {
     ff.enabled === false && ff.meterBasis === "OUT" && ff.missingMeter === "DECLARED_WITH_WARNING"
     && ff.trigger === "PER_SHIPMENT" && ff.priceDate === "SERVICE_DAY", JSON.stringify(ff));
   const pe = await errOf(() => systemSettingService.setFeatureFlags({ financeServiceBillingTrigger: "PERIOD_END" } as never, actor));
-  check("PERIOD_END H8'e dek 400", pe.status === 400 && pe.code === "SERVICE_BILLING_PERIOD_END_UNAVAILABLE", JSON.stringify(pe));
+  check("PERIOD_END seçilebilir (H8 dönem sonu ucu var)", pe.status === 200 && (await loadServiceBillingSettings()).trigger === "PERIOD_END", JSON.stringify(pe));
+  await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER } });
   const junk = await errOf(() => systemSettingService.setFeatureFlags({ financeServiceBillingMeterBasis: "WEIGHT" } as never, actor));
   check("tanınmayan metre tabanı 400", junk.status === 400, JSON.stringify(junk));
 
