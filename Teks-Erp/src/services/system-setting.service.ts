@@ -626,7 +626,7 @@ export const SETTING_KEYS = {
   SHIPPING_ALLOW_OVER_ALLOCATION: "shipping.allowOverAllocation",
   /**
    * SEVKE HAZIR İŞLER (D4-J1, 1e kararları K25–K26): hazırlık TÜRETİLİR, saklanmaz. Kural
-   * (ALL_DONE | METER_THRESHOLD) + tolerans yalnız `effectiveShipReadyRule` (ship-readiness.helper)
+   * (ALL_DONE | METER_THRESHOLD) + tolerans yalnız `effectiveShipReadyPolicy` (ship-readiness.helper)
    * üzerinden okunur. `notifyUnits` + `scanMinutes` KOSUL bildiriminin (D4-J2) ayarlarıdır; bu dilimde
    * yalnız kayıtlıdır (okuyan iş yok).
    */
@@ -6352,7 +6352,7 @@ export async function readShippingAllocWidthToleranceCm(
   return Math.min(parsed, SHIPPING_ALLOC_WIDTH_TOLERANCE_MAX_CM);
 }
 
-/** Sevke hazırlık kuralı. Kayıt yok/çöp → ALL_DONE. Tüketici doğrudan çağırmaz: `effectiveShipReadyRule`. */
+/** Sevke hazırlık kuralı. Kayıt yok/çöp → ALL_DONE. Tüketici doğrudan çağırmaz: `effectiveShipReadyPolicy`. */
 export async function readShippingReadyRule(tx?: Pick<typeof prisma, "systemSetting">): Promise<ShipReadyRule> {
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.SHIPPING_READY_RULE }, select: { value: true } });
   const v = setting?.value;

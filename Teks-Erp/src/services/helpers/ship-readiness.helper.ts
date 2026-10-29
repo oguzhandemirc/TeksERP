@@ -79,6 +79,8 @@ export interface ReadinessTotals {
   scrapMeters: Prisma.Decimal;
   /** İE `targetQuantity` ya da belge Σ satır metresi; yoksa null (METER_THRESHOLD → ALL_DONE'a düşer). */
   targetMeters: Prisma.Decimal | null;
+  /** Hedefin bütün topları doğmuş mu (belge/parti: hedef = top doğuran satırlar). İE'de false: toplar sonradan doğar. */
+  targetFullyBorn: boolean;
 }
 
 export interface ReadinessVerdict {
@@ -92,15 +94,15 @@ export interface ReadinessVerdict {
 /**
  * Birimin sevke hazırlığı.
  *  · ALL_DONE: İŞLEMDE = 0 ∧ HAZIR > 0 → READY; HAZIR > 0 → PARTIAL; HAZIR = 0 → NONE.
- *  · METER_THRESHOLD: (HAZIR m + GİTTİ m) ≥ (hedef − FİRE m) × (1 − tol/100) ∧ HAZIR > 0 → READY; ayrıca ALL_DONE
- *    koşulu da READY verir (işlemde top kalmadıysa beklenecek metre yok). Hedef yok/0 → ALL_DONE.
+ *  · METER_THRESHOLD: (HAZIR m + GİTTİ m) ≥ (hedef − FİRE m) × (1 − tol/100) ∧ HAZIR > 0 → READY; işlemde top
+ *    kalmadıysa yalnız hedefin bütün topları doğmuşsa (belge/parti) READY — İE'de doğmamış metre beklenir. Hedef yok/0 → ALL_DONE.
  */
 export function classifyShipReadiness(t: ReadinessTotals, policy: ShipReadyPolicy): ReadinessVerdict {
   const visible = t.readyCount + t.inProcessCount > 0;
   const hasTarget = t.targetMeters !== null && t.targetMeters.gt(0);
   const appliedRule: ShipReadyRule = policy.rule === "METER_THRESHOLD" && hasTarget ? "METER_THRESHOLD" : "ALL_DONE";
   if (t.readyCount === 0) return { state: "NONE", appliedRule, visible };
-  if (t.inProcessCount === 0) return { state: "READY", appliedRule, visible };
+  if (t.inProcessCount === 0 && (appliedRule === "ALL_DONE" || t.targetFullyBorn)) return { state: "READY", appliedRule, visible };
   if (appliedRule === "METER_THRESHOLD") {
     const base = Prisma.Decimal.max(t.targetMeters!.minus(t.scrapMeters), 0);
     const threshold = base.times(new Prisma.Decimal(100).minus(policy.tolerancePct)).div(100);

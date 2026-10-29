@@ -263,6 +263,19 @@ async function main(): Promise<void> {
     await prisma.roll.update({ where: { id: ids.rolls[ids.rolls.length - 3]! }, data: { currentQty: 145 } });
     const wo2 = find((await list("workOrder", onlyA)).items, ids.wo);
     check("§3e İE hazır 445 ≥ 441 → READY", wo2?.state === "READY", `${wo2?.state} ${wo2?.readyMeters}`);
+    // §3f İE'de işlemde top kalmasa da METER doğmamış metreyi bekler (inceleme bulgusu: kısayol yalnız belge/parti)
+    const woLow = ids.rolls[ids.rolls.length - 3]!;
+    await prisma.roll.update({ where: { id: woLow }, data: { currentQty: 20 } });
+    await prisma.roll.update({ where: { id: woOpen }, data: { status: RollStatus.WAREHOUSE } });
+    const wo3 = find((await list("workOrder", onlyA)).items, ids.wo);
+    check("§3f İE METER: işlemde top yok ama hazır+gitti < eşik → PARTIAL (inProcess=0 kısayolu İE'de yok)",
+      wo3?.state === "PARTIAL" && wo3.inProcessCount === 0 && wo3.appliedRule === "METER_THRESHOLD", `${wo3?.state} ip=${wo3?.inProcessCount} r=${wo3?.readyMeters}`);
+    await setSetting(SETTING_KEYS.SHIPPING_READY_RULE, "ALL_DONE");
+    const wo4 = find((await list("workOrder", onlyA)).items, ids.wo);
+    check("§3g aynı İE ALL_DONE'da → READY", wo4?.state === "READY", wo4?.state);
+    await setSetting(SETTING_KEYS.SHIPPING_READY_RULE, "METER_THRESHOLD");
+    await prisma.roll.update({ where: { id: woOpen }, data: { status: RollStatus.IN_PRODUCTION } });
+    await prisma.roll.update({ where: { id: woLow }, data: { currentQty: 145 } });
 
     // §4 hedef yok → ALL_DONE'a düşer (METER seçiliyken)
     const custRow = find((await list("customer", onlyA)).items, ids.custA);
@@ -307,6 +320,16 @@ async function main(): Promise<void> {
     const onlyPartial = await list("deliveryNote", { ...onlyA, state: "PARTIAL" });
     check("§7b state süzgeci özete de uygulanır", onlyPartial.summary.units === onlyPartial.items.length && onlyPartial.items.every((r) => r.state === "PARTIAL") && onlyPartial.summary.ready === 0,
       `units=${onlyPartial.summary.units}`);
+
+    // §7c bozuk / eski v1 imleç → 400 (500 değil)
+    const v1 = Buffer.from("x__" + ids.custA, "utf8").toString("base64url");
+    const eCur = await catchErr(() => list("customer", { cursor: v1 }));
+    check("§7c eski v1 / bozuk imleç 400", eCur?.statusCode === 400, `${eCur?.statusCode}`);
+    // §9e top ucu kimliği büyük harf UUID + boşluklu parti → kanonik biçimle aynı sonuç
+    const upper = `${batchId.slice(0, 36).toUpperCase()}: ${batchId.slice(37)} `;
+    const upRolls = (await listReadyWorkRolls("customerBatch", upper, {})).data.items;
+    const canonRolls = (await listReadyWorkRolls("customerBatch", batchId, {})).data.items;
+    check("§9e büyük harf UUID / boşluklu parti kimliği normalize edilir", upRolls.length === canonRolls.length && canonRolls.length > 0, `${upRolls.length}/${canonRolls.length}`);
 
     // §8 modül kapısı
     await setSetting(SETTING_KEYS.GELEN_BELGE_ENABLED, false);

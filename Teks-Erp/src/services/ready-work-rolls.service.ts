@@ -30,11 +30,13 @@ export async function listReadyWorkRolls(
   q: { rollClass?: unknown; cursor?: unknown; limit?: unknown },
 ): Promise<{ success: true; data: { items: ReadyWorkRollRow[]; nextCursor: string | null } }> {
   const unit = parseReadyWorkUnit(unitRaw);
-  const id = typeof idRaw === "string" ? idRaw : "";
+  const rawId = typeof idRaw === "string" ? idRaw : "";
   const idOk = unit === "customerBatch"
-    ? UUID_RE.test(id.slice(0, 36)) && id[36] === ":" && id.slice(37).trim() !== ""
-    : UUID_RE.test(id);
+    ? UUID_RE.test(rawId.slice(0, 36)) && rawId[36] === ":" && rawId.slice(37).trim() !== ""
+    : UUID_RE.test(rawId);
   if (!idOk) throw AppError.badRequest("Birim kimliği geçersiz");
+  // Kanonik biçim (liste ucunun ürettiği): UUID küçük harf, parti no kırpılmış — aksi metin eşitliği sessizce boş döner.
+  const id = unit === "customerBatch" ? `${rawId.slice(0, 36).toLowerCase()}:${rawId.slice(37).trim()}` : rawId.toLowerCase();
   const classes = readQueryList(q.rollClass);
   const allowed: ReadinessClass[] = ["READY", "IN_PROCESS", "GONE", "SCRAP"];
   if (classes.some((c) => !allowed.includes(c as ReadinessClass))) throw AppError.badRequest(`Top sınıfı yalnız ${allowed.join(", ")} olabilir`);

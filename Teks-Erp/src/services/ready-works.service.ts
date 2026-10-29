@@ -268,6 +268,7 @@ export async function computeReadyWorks(unit: ReadyWorkUnit, policy: ShipReadyPo
       shippedMeters: dec(a.shipped_m),
       scrapMeters: dec(a.scrap_m),
       targetMeters: m?.target ?? null,
+      targetFullyBorn: unit !== "workOrder",
     };
     const verdict = classifyShipReadiness(totals, policy);
     if (!verdict.visible) continue;
@@ -292,6 +293,18 @@ export async function computeReadyWorks(unit: ReadyWorkUnit, policy: ShipReadyPo
   return rows;
 }
 
+/** Sayfa imleci → sıralama anahtarı; eski v1 / bozuk imleç 400 (fail-closed; JSON hatası 500'e düşmesin). */
+function parseReadyWorksCursor(raw: unknown): SortKey | null {
+  if (typeof raw !== "string" || !raw) return null;
+  const c = decodeDynamicCursor(raw);
+  let parsed: unknown = null;
+  try { parsed = c?.v ? (JSON.parse(c.v) as unknown) : null; } catch { /* aşağıda 400 */ }
+  if (!c || !Array.isArray(parsed) || typeof parsed[0] !== "number" || typeof parsed[1] !== "string") {
+    throw AppError.badRequest("Geçersiz sayfa imleci");
+  }
+  return [parsed[0], parsed[1], c.id];
+}
+
 export async function listReadyWorks(q: ReadyWorkQuery): Promise<{ success: true; data: ReadyWorkList }> {
   const unit = parseReadyWorkUnit(q.groupBy);
   const states = readQueryList(q.state);
@@ -300,15 +313,7 @@ export async function listReadyWorks(q: ReadyWorkQuery): Promise<{ success: true
   const customerIds = readQueryList(q.customerId);
   if (customerIds.some((c) => !UUID_RE.test(c))) throw AppError.badRequest("Müşteri kimliği geçersiz");
   const limit = parseLimit(q.limit, DEFAULT_LIMIT, MAX_LIMIT);
-  let after: SortKey | null = null;
-  if (typeof q.cursor === "string" && q.cursor) {
-    const c = decodeDynamicCursor(q.cursor);
-    const parsed = c?.v ? (JSON.parse(c.v) as unknown) : null;
-    if (!c || !Array.isArray(parsed) || typeof parsed[0] !== "number" || typeof parsed[1] !== "string") {
-      throw AppError.badRequest("Geçersiz sayfa imleci");
-    }
-    after = [parsed[0], parsed[1], c.id];
-  }
+  const after = parseReadyWorksCursor(q.cursor);
 
   const policy = await effectiveShipReadyPolicy();
   const all = await computeReadyWorks(unit, policy);
