@@ -43,7 +43,7 @@ import {
   SETTING_KEYS,
   readTamburPlanGateWidthCheck,
   readTamburPlanGateWidthToleranceCm,
-  resolveTamburPlanWidthGate,
+  effectiveTamburPlanWidthGate,
   systemSettingService,
 } from "../src/services/system-setting.service";
 import { updateSchema } from "../src/routes/feature-flag.routes";
@@ -592,10 +592,10 @@ function identifierRefs(name: string): { scanned: number; refs: Map<string, stri
       "utf8",
     );
     ok(
-      (helperSrc.match(/resolveTamburPlanWidthGate\(\)/g) ?? []).length >= 2,
-      "E7 kapı eşiği çözücüden okuyor (helper'da resolveTamburPlanWidthGate çağrısı)",
+      (helperSrc.match(/effectiveTamburPlanWidthGate\(\)/g) ?? []).length >= 2,
+      "E7 kapı eşiği çözücüden okuyor (helper'da effectiveTamburPlanWidthGate çağrısı)",
     );
-    const gate0 = await resolveTamburPlanWidthGate();
+    const gate0 = await effectiveTamburPlanWidthGate();
     ok(gate0.check === "ENFORCE" && gate0.toleranceCm === 10, "E1 ayar yokken çözücü ENFORCE + 10", JSON.stringify(gate0));
     // E1: ayar yokken 409 gövdesi BAYT-AYNI (2026-08-19 sabitli kapının çıktısı).
     const fE1 = await makeWoWithRoll({ targetColorId: gri.id, woWidth: 330, rollColorId: gri.id, rollWidth: 345 });

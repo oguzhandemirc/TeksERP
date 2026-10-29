@@ -681,7 +681,7 @@ export const SETTING_KEYS = {
   /**
    * Tambur plan-sapma kapısının EN kolu (D4-E1, 1e kararı K9 2026-10-29): eşik (cm)
    * ve kontrol (ENFORCE | OFF). Eskiden `TAMBUR_PLAN_WIDTH_TOLERANCE_CM` kod sabitiydi;
-   * okuma YALNIZ `resolveTamburPlanWidthGate` üzerinden (AST bekçisi). `0` GEÇERLİ —
+   * okuma YALNIZ `effectiveTamburPlanWidthGate` üzerinden (AST bekçisi). `0` GEÇERLİ —
    * "her farkta sor"; null yazımı varsayılana (10) döner. OFF yalnız en kolunu atlar.
    */
   TAMBUR_PLAN_GATE_WIDTH_TOLERANCE_CM: "tambur.planGate.widthToleranceCm",
@@ -4268,7 +4268,7 @@ export class SystemSettingService {
       await this.set(
         SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_TOLERANCE_CM,
         v === null ? TAMBUR_PLAN_WIDTH_TOLERANCE_CM : v,
-        "Tambur plan kapısı en eşiği (cm) — top ile iş emri eni farkı bunu AŞARSA onay sorulur",
+        "Tambur plan kapısı en eşiği (cm) — top eni ile plan eni farkı bunu AŞARSA onay sorulur",
         userId
       );
     }
@@ -7002,7 +7002,7 @@ export async function readTamburPlanGateWidthCheck(
  * eşiği yalnız buradan okur; sabiti doğrudan okumak `test_tambur_plan_gate` AST
  * bölümünde kırmızıdır.
  */
-export async function resolveTamburPlanWidthGate(
+export async function effectiveTamburPlanWidthGate(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<{ check: TamburPlanWidthCheck; toleranceCm: number }> {
   return {

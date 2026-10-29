@@ -33,7 +33,7 @@ export const PLAN_MISMATCH_CODE = "PLAN_MISMATCH" as const;
  *
  * D4-E1 (2026-10-29): eşik artık fabrika ayarıdır (`tambur.planGate.widthToleranceCm`
  * + `tambur.planGate.widthCheck`). Bu sabiti YALNIZ ayar okuyucusu varsayılan
- * olarak okur; kapı `resolveTamburPlanWidthGate`ten geçer (AST bekçisi).
+ * olarak okur; kapı `effectiveTamburPlanWidthGate`ten geçer (AST bekçisi).
  */
 export const TAMBUR_PLAN_WIDTH_TOLERANCE_CM = 10;
 

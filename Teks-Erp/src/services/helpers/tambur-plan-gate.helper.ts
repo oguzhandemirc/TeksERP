@@ -33,7 +33,7 @@ import {
   PLAN_MISMATCH_CODE,
   type PlanMismatchItem,
 } from "../../constants/tambur-plan-gate";
-import { resolveTamburPlanWidthGate } from "../system-setting.service";
+import { effectiveTamburPlanWidthGate } from "../system-setting.service";
 
 interface GateRoll {
   id: string;
@@ -48,7 +48,7 @@ interface GatePlan {
   width: unknown;
 }
 
-type WidthGate = Awaited<ReturnType<typeof resolveTamburPlanWidthGate>>;
+type WidthGate = Awaited<ReturnType<typeof effectiveTamburPlanWidthGate>>;
 
 /**
  * EN kolu (D4-E1): eşik/kontrol fabrika ayarından. Ayar yalnız iki en de doluyken
@@ -61,7 +61,7 @@ async function evaluateWidthGate(
   const rollWidth = rollWidthRaw == null ? null : Number(rollWidthRaw);
   const planWidth = planWidthRaw == null ? null : Number(planWidthRaw);
   if (rollWidth == null || planWidth == null) return { gate: null, mismatch: null };
-  const gate = await resolveTamburPlanWidthGate();
+  const gate = await effectiveTamburPlanWidthGate();
   if (gate.check !== "ENFORCE" || Math.abs(rollWidth - planWidth) <= gate.toleranceCm) {
     return { gate, mismatch: null };
   }
@@ -142,7 +142,7 @@ export async function assertRollMatchesPlan(
   if (mismatches.length === 0) return [];
 
   if (!confirmMismatch) {
-    const toleranceCm = (widthGate ?? (await resolveTamburPlanWidthGate())).toleranceCm;
+    const toleranceCm = (widthGate ?? (await effectiveTamburPlanWidthGate())).toleranceCm;
     throw AppError.conflict(
       `Plan ile top uyuşmuyor: ${mismatches.map((m) => m.message).join(" · ")}. Yine de devam etmek için onaylayın.`,
       {

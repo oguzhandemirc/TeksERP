@@ -517,10 +517,12 @@ function main(): void {
   // `getFeatureFlags` HAM değeri döndürmeye DEVAM etmeli (P1/K4): panel kendi
   // yazdığını geri okur. Etkin değer dönseydi, modülü kapalı bir kurulumda
   // kullanıcı bayrağı açar ve toggle kapalı görünmeye devam ederdi.
-  const ffGovde = servisKodu.slice(
-    servisKodu.indexOf("async getFeatureFlags("),
-    servisKodu.indexOf("async getFeatureFlags(") + 12000,
-  );
+  // Gövde bir sonraki sınıf üyesine kadar — sabit karakter penceresi (12000) gövde
+  // uzadıkça son okuyucuları dışarıda bırakıp yanlış kırmızı veriyordu (D4-E1).
+  const ffBas = servisKodu.indexOf("async getFeatureFlags(");
+  const ffSon = servisKodu.indexOf("\n  async ", ffBas + 1);
+  const ffGovde = servisKodu.slice(ffBas, ffSon > ffBas ? ffSon : undefined);
+  check("§8b körlük zemini: getFeatureFlags gövdesi bulundu", ffBas >= 0 && ffGovde.includes("cacheClient"));
   for (const [hamOkuyucu, { resolver }] of Object.entries(RESOLVER_ALTI)) {
     check(
       `§8b ⭐ getFeatureFlags HAM değeri döndürüyor: ${hamOkuyucu}`,
