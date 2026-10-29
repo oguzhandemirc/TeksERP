@@ -1670,7 +1670,7 @@ router.put(
       }
       if (INCOMING_DOC_DEDICATED_SETTING_KEYS.has(key)) {
         throw AppError.badRequest(
-          "Gelen belge ayarları yalnız kendi ekranından (Genel Ayarlar → Gelen Belge) değiştirilir",
+          `Gelen belge ayarları yalnız kendi ekranından (${settingScreenPath("gelen-belge")}) değiştirilir`,
           { code: "SETTING_KEY_RESERVED", key },
         );
       }

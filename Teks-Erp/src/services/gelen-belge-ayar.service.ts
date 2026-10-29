@@ -11,6 +11,7 @@
 import { ItemType } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
+import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { assertItemUsable } from "./helpers/item-usage.helper";
 import {
   DEFAULT_UNREVIEWED_APPROVAL,
@@ -111,7 +112,7 @@ export async function resolveDefaultItemForApproval(): Promise<{ id: string; nam
   if (!id) return null;
   const { row, problem } = await itemProblem(id);
   if (problem || !row) {
-    throw AppError.conflict(`Gelen belge varsayılan ürünü kullanılamıyor: ${problem ?? "Ürün bulunamadı."} Satırlarda ürün seçin ya da Genel Ayarlar → Gelen Belge'den varsayılan ürünü düzeltin.`, { code: "GELEN_BELGE_DEFAULT_ITEM_UNUSABLE", itemId: id });
+    throw AppError.conflict(`Gelen belge varsayılan ürünü kullanılamıyor: ${problem ?? "Ürün bulunamadı."} Satırlarda ürün seçin ya da ${settingScreenPath("gelen-belge")} ekranından varsayılan ürünü düzeltin.`, { code: "GELEN_BELGE_DEFAULT_ITEM_UNUSABLE", itemId: id });
   }
   return { id, name: row.name };
 }

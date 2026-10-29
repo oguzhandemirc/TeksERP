@@ -560,12 +560,12 @@ async function main() {
     },
     GELEN_BELGE_DEFAULT_ITEM_ID: {
       why: "Ürün kimliği (UUID) — flag yüküne konmaz; tek yazar doğrulamalı `PUT /api/gelen-belge/ayarlar` (ham ayar ucu reddeder); panel Genel Ayarlar → Gelen Belge",
-      file: "Electron/src/pages/GeneralSettings/IncomingDocumentSettingsSection.tsx",
+      file: "Electron/src/pages/GeneralSettings/GelenBelgeSettingsSection.tsx",
       needle: "updateIncomingDocumentSettings",
     },
     GELEN_BELGE_UNREVIEWED_APPROVAL: {
       why: "Gelen belge inceleme kapısı (WARN/BLOCK) — varsayılan ürünle aynı uç ve aynı panel kartı",
-      file: "Electron/src/pages/GeneralSettings/IncomingDocumentSettingsSection.tsx",
+      file: "Electron/src/pages/GeneralSettings/GelenBelgeSettingsSection.tsx",
       needle: "UNREVIEWED_APPROVAL_OPTIONS",
     },
     SYSTEM_INSTALLATION_ID: {
