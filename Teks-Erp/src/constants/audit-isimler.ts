@@ -104,6 +104,7 @@ export const AUDIT_ISIMLERI: Readonly<Record<string, TermCases>> = {
   // ── Kurşun metre defteri (H1, 2026-10-29)
   ROLL_METER_READING: onEkli("kurşun metre", sIyelik("okuma", "ı", "a")),
   ROLL_METER_ACK: onEkli("metre sapma", iyelik("onay", "ı", "a", "ı")),
+  ROLL_METER_STOCK_APPLY: onEkli("kurşun metre stok", sIyelik("uygulama", "ı", "a")),
   DELIVERY_NOTE_ALIAS: onEkli("gelen belge", sIyelik("eşleme", "i", "e")),
   SENDER_TEMPLATE: onEkli("gönderen", iyelik("şablon", "u", "a", "u")),
   DELIVERY_NOTE_CUSTOMER_DEFAULT: onEkli("gelen belge", iyelik("varsayılan ürün", "ü", "e", "ü")),

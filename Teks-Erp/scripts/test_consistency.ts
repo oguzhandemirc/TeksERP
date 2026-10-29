@@ -1203,7 +1203,8 @@ WHERE v."reversedAt" IS NOT NULL
     // KAPSAM: canlı TAMBUR_* OVERAGE sapması olan, stok defterinde terslenmemiş bir GİRİŞ
     // ucu (ENTRY ya da TRANSFORM IN) olan ve canlı çocuğu OLMAYAN toplar — giriş metrajı
     // defterden okunur, ufuk öncesi toplar kapsam dışı (girişi yok). Kapsam 0 ⇒ ⏭ (sayı
-    // basılır), ✅ değil. Levent fikstürü gibi bir fikstürle DOLDURULMAZ: `noise` süzgeci
+    // basılır), ✅ değil. H1b (2026-10-29): kurşun APPLY artı yönü de initialQty'yi yükseltir;
+    // terimi `initialQtyRaise` (yalnız o yazıcı doldurur) — topta tambur aşımı da varsa toplanır. Levent fikstürü gibi bir fikstürle DOLDURULMAZ: `noise` süzgeci
     // fikstür topunu driftten eler, kapsam dolu görünür ama ölçülen yine 0 top olurdu.
     title: "initialQty ≠ giriş metrajı + Σ canlı TAMBUR aşımı (sessiz şişme ya da çift sayım) — canlı çocuğu olmayan ebeveynde",
     kapsam: {
@@ -1254,7 +1255,9 @@ WHERE EXISTS (
           AND NOT EXISTS (SELECT 1 FROM warehouse_movements rv WHERE rv."reversesMovementId" = d.id))
     + (SELECT COALESCE(SUM(v.qty), 0) FROM roll_variances v
         WHERE v."rollId" = r.id AND v.kind = 'OVERAGE' AND v."reversedAt" IS NULL
-          AND v.source IN ('TAMBUR_OVERCUT','TAMBUR_UNDO_RESTORE','TAMBUR_UNDO_FULL'))`,
+          AND v.source IN ('TAMBUR_OVERCUT','TAMBUR_UNDO_RESTORE','TAMBUR_UNDO_FULL'))
+    + (SELECT COALESCE(SUM(v."initialQtyRaise"), 0) FROM roll_variances v
+        WHERE v."rollId" = r.id AND v."reversedAt" IS NULL AND v."initialQtyRaise" IS NOT NULL)`,
   },
 ];
 

@@ -386,6 +386,9 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   // MeterVarianceBasis
   DECLARED_IN: "Beyan edilen giriş metresi",
   MEASURED_IN: "Ölçülen giriş metresi",
+  // MeterStockMode (H1b, 2026-10-29)
+  RECORD: "Yalnız kaydet",
+  APPLY: "Stoğa uygula",
   // ServiceMeterBasis (H7, 2026-10-29) — OUT/IN ortak; CUT/RECEIVED SERVICE_BILLING_LINK.meterBasis override'ı ile ayrılır
   DECLARED: "Beyan edilen metre",
   // MeterApprovalMode — NONE ortak
