@@ -19,15 +19,13 @@ export function usePermissions() {
     // Backend `*`i zaten kabul ettiği için istemcide daraltmak yalnız sessiz
     // tutarsızlık üretirdi. Saf JS → OTA ile gider, APK gerekmez.
     const hasGlobalWildcard = set.has('*');
-    const hasMobileWildcard = set.has('mobile:*');
-    const hasAdminWildcard = set.has('admin:*');
 
+    // Alan jokeri (`mobile:*`, `admin:*`, `gelen-belge:*` …) backend `matchesPermission` ikizidir.
     const has = (code: string): boolean => {
       if (hasGlobalWildcard) return true;
       if (set.has(code)) return true;
-      if (code.startsWith('mobile:') && hasMobileWildcard) return true;
-      if (code.startsWith('admin:') && hasAdminWildcard) return true;
-      return false;
+      const colon = code.indexOf(':');
+      return colon > 0 && set.has(`${code.slice(0, colon)}:*`);
     };
 
     const allowedScreens: MobileScreenMeta[] = MOBILE_SCREENS.filter((s) =>
