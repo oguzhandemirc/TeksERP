@@ -620,9 +620,11 @@ async function main(): Promise<void> {
   const n4 = await previewed(["34.000", "35.000"]);
   const race4 = await Promise.allSettled([invoiceService.createDraft(n4.body(), actor), invoiceService.createDraft(n4.body(), actor)]);
   const won4 = race4.filter((r) => r.status === "fulfilled").length;
-  const lost4 = race4.filter((r) => r.status === "rejected" && (r.reason as { statusCode?: number }).statusCode === 409);
+  // Kaybedenin kodu F1 kapısından gelmeli; eski kısmi unique seddi (SERVICE_ALREADY_BILLED) yeşil saymaz.
+  const lost4 = race4.filter((r) => r.status === "rejected" && (r.reason as { statusCode?: number }).statusCode === 409
+    && (r.reason as { details?: { code?: string } }).details?.code === "SERVICE_PREVIEW_STALE");
   const w4 = await n4.writes();
-  check("§22e eşzamanlı iki oluşturma ⇒ 1 fatura + 1×409, bağ 2",
+  check("§22e eşzamanlı iki oluşturma ⇒ 1 fatura + 1×409 SERVICE_PREVIEW_STALE, bağ 2",
     won4 === 1 && lost4.length === 1 && w4.inv === 1 && w4.links === 2,
     JSON.stringify({ won4, lost: lost4.map((r) => (r as PromiseRejectedResult).reason?.details?.code), w4 }));
 

@@ -62,7 +62,7 @@ export async function resolveShipmentServiceLinksTx(
     if (own.length === 0) throw servicePreviewStale("işler başka bir faturaya bağlandı", itemId);
     const sum = own.reduce((a, l) => a.plus(l.billedMeters), new Prisma.Decimal(0));
     const drift = sumLineQty(p.lines, itemId).minus(sum).abs().gt(new Prisma.Decimal(0.001).mul(own.length));
-    if (drift && state.billed.some((b) => b.serviceItemId === itemId)) throw servicePreviewStale("işlerin bir kısmı başka bir faturaya bağlandı", itemId);
+    if (drift && state.billed.some((b) => b.serviceItemId === itemId)) throw servicePreviewStale("işlerin bir kısmı önizlemeden sonra değişti ya da başka bir faturaya bağlandı", itemId);
   }
   return reconcileServiceLinksWithLines(p.lines, fresh).keep;
 }
