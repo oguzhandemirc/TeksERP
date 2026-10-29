@@ -1,0 +1,5 @@
+.venv/
+__pycache__/
+.pytest_cache/
+# Model dosyaları repoya girmez; betikler/modelleri-getir.py manifestten (SHA-256) çeker.
+modeller/*.onnx

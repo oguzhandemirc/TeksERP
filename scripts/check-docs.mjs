@@ -66,7 +66,8 @@ const MD_LINK_RE = /\[[^\]]*\]\(([^)\s]+)\)/g;
 /** Dış bağlantı · çapa · mutlak yol — kapının konusu değil. */
 const LINK_SKIP_RE = /^(?:[a-z][a-z0-9+.-]*:|#|\/)/i;
 
-const SKIP_DIRS = new Set(["node_modules", ".git", ".expo", "dist", "build", ".next"]);
+// `.venv`: okuma/ Python sanal ortamı (git dışı); içindeki paket md dosyaları dış atıf taşır.
+const SKIP_DIRS = new Set(["node_modules", ".git", ".expo", "dist", "build", ".next", ".venv"]);
 const SKIP_PATHS = ["docs/history/", "docs/akademik/"];
 const SKIP_FILES = new Set(["GEREKSIZ-ADAYLAR.md"]); // geçici karar-aidi (bilerek bayat-sembol tartışır)
 
