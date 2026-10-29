@@ -91,3 +91,13 @@ export function showServiceMapping(
   if (!initial) return false;
   return Boolean(initial.serviceItemId) || (initial.values ?? []).some((v) => Boolean(v.serviceItemId));
 }
+
+/**
+ * Özellik düzeyi eşleme ipucu — backend kapsamının aynası (H10): kurşun gramajı çeşit değerinden,
+ * öteki bayrak işlemleri (Tambur, etek kesim, brode) özelliğin kendi kaleminden faturalanır.
+ */
+export function propertyServiceHint(valueType: string | null | undefined): string {
+  if (valueType === "CHOICE")
+    return "Kurşun gramajı gibi çeşitlerde: kendi kalemi seçilmemiş değerler bu kalemle, bu da boşsa ana bayrağın kalemiyle faturalanır.";
+  return "Bu işlem (Tambur, etek kesim, brode vb.) yapılan müşteri (emanet) topunda bu kalemle faturalanır: metre önce adımın sayaç okumasından, yoksa fason dönüş metresinden, yoksa Tambur'da kesilen metreden alınır. Kurşunda bu kalem yalnız kendi kalemi olmayan gramajlara düşer.";
+}

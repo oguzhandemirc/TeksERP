@@ -5,7 +5,7 @@ import { loadAllForPicker } from "@/lib/picker-loader";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { itemService } from "@/pages/Items/service";
 import { ServiceItemPickerField } from "./ServiceItemPickerField";
-import { SERVICE_ITEM_PICKER_FILTERS, showServiceMapping, type ServiceItemOption } from "./serviceMapping";
+import { SERVICE_ITEM_PICKER_FILTERS, propertyServiceHint, showServiceMapping, type ServiceItemOption } from "./serviceMapping";
 import type { ValueServiceContext } from "./PropertyValuesField";
 import type { FabricPropertyFormValues } from "./schema";
 import type { FabricProperty } from "./types";
@@ -54,10 +54,7 @@ export function PropertyServiceItemField({
   form: PropertyForm;
   items: readonly ServiceItemOption[];
 }) {
-  const hint =
-    form.watch("valueType") === "CHOICE"
-      ? "Şimdilik yalnız kurşun gramajı faturalanır: kendi kalemi seçilmemiş gramajlar bu kalemle, bu da boşsa ana bayrağın kalemiyle faturalanır."
-      : "Şimdilik yalnız kurşun faturalanır: bu kalem, kendi kalemi olmayan gramajlara (çeşit değerlerine) düşer. Öteki işlemler henüz faturaya kalem olarak düşmez.";
+  const hint = propertyServiceHint(form.watch("valueType"));
   return (
     <FormField label="Hizmet kalemi (faturalama)" hint={hint}>
       <Controller
