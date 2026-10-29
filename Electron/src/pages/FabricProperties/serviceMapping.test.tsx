@@ -120,13 +120,13 @@ describe("H6b hizmet kalemi seçicisi + gövde", () => {
     expect(resolveServiceHint(null, null, parent)).toMatchObject({ source: "PARENT_FLAG", serviceItemId: "s1" });
     expect(resolveServiceHint(null, null, { name: "X", serviceItemId: null }).source).toBe("NONE");
     expect(serviceHintText(resolveServiceHint(null, null, parent), items)).toBe(
-      'Bu gramaj KURSUN-K1 — Kurşun ≤30 g/m olarak faturalanır (ana bayrak "Kurşunlu" eşlemesi).',
+      'Kurşunda bu gramaj KURSUN-K1 — Kurşun ≤30 g/m olarak faturalanır (ana bayrak "Kurşunlu" eşlemesi).',
     );
     renderForm(GRAMAJ);
     await screen.findByRole("button", { name: "G25 hizmet kalemi" });
     await waitFor(() => expect(screen.getAllByTestId("service-hint").map((h) => h.textContent)).toEqual([
-      'Bu gramaj KURSUN-K1 — Kurşun ≤30 g/m olarak faturalanır (ana bayrak "Kurşunlu" eşlemesi).',
-      "Bu gramaj KURSUN-K2 — Kurşun 30–60 olarak faturalanır (kendi eşlemesi).",
+      'Kurşunda bu gramaj KURSUN-K1 — Kurşun ≤30 g/m olarak faturalanır (ana bayrak "Kurşunlu" eşlemesi).',
+      "Kurşunda bu gramaj KURSUN-K2 — Kurşun 30–60 olarak faturalanır (kendi eşlemesi).",
     ]));
   });
 

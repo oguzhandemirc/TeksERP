@@ -65,13 +65,13 @@ export function resolveServiceHint(
 
 export const serviceItemLabel = (id: string, items: readonly ServiceItemOption[]): string => {
   const it = items.find((i) => i.id === id);
-  return it ? `${it.code} — ${it.name}` : "Pasif ya da silinmiş hizmet kalemi";
+  return it ? `${it.code} — ${it.name}` : "Listede yok (pasif/silinmiş ya da görme izniniz yok)";
 };
 
 /** Değer satırının altındaki tek cümle. */
 export function serviceHintText(hint: ServiceHint, items: readonly ServiceItemOption[]): string {
   if (hint.source === "NONE" || !hint.serviceItemId)
-    return "Hizmet kalemi eşlenmemiş — bu gramaj faturaya kalem olarak düşmez.";
+    return "Hizmet kalemi eşlenmemiş — kurşunda bu gramaj faturaya kalem olarak düşmez.";
   const label = serviceItemLabel(hint.serviceItemId, items);
   const from =
     hint.source === "VALUE"
@@ -79,7 +79,7 @@ export function serviceHintText(hint: ServiceHint, items: readonly ServiceItemOp
       : hint.source === "PROPERTY"
         ? "özelliğin eşlemesi"
         : `ana bayrak "${hint.parentName ?? ""}" eşlemesi`;
-  return `Bu gramaj ${label} olarak faturalanır (${from}).`;
+  return `Kurşunda bu gramaj ${label} olarak faturalanır (${from}).`;
 }
 
 /** Bölüm görünürlüğü: hiç hizmet kalemi yoksa ve eşleme de yoksa form bugünkü gibi kalır. */

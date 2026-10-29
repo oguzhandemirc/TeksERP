@@ -56,8 +56,8 @@ export function PropertyServiceItemField({
 }) {
   const hint =
     form.watch("valueType") === "CHOICE"
-      ? "Kendi kalemi seçilmemiş değerler bu kalemle faturalanır; bu da boşsa ana bayrağın kalemi kullanılır."
-      : "Bu işlem uygulanan toplar faturada bu hizmet kalemiyle kesilir (ör. KURŞUN). Boş = eşleme yok.";
+      ? "Şimdilik yalnız kurşun gramajı faturalanır: kendi kalemi seçilmemiş gramajlar bu kalemle, bu da boşsa ana bayrağın kalemiyle faturalanır."
+      : "Şimdilik yalnız kurşun faturalanır: bu kalem, kendi kalemi olmayan gramajlara (çeşit değerlerine) düşer. Öteki işlemler henüz faturaya kalem olarak düşmez.";
   return (
     <FormField label="Hizmet kalemi (faturalama)" hint={hint}>
       <Controller
