@@ -1468,6 +1468,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Açıkken bir Tambur kapanışı yalnız aynı gün tümden geri alınabilir; dünkü kapanış geri alınamaz. Tek parça iptali etkilenmez. Tümden geri alma zaten ayrı yetki ve sebep ister.",
       },
       {
+        key: "machineStopTrackingEnabled",
+        group: "Makine duruşu",
+        title: "Dokuma olmadan da makine duruşu kaydedilsin",
+        summary: "Kurşun, tambur ve brode makinelerinin duruşu (başlangıç, bitiş, sebep) kaydedilir.",
+        defaultOn: false,
+        audience: ["Operatör", "Yönetim"],
+        desc: "Açıkken dokuma modülü kapalı olsa da kurşun, tambur ve brode makinelerine duruş açılıp kapatılabilir ve sebep girilebilir. Kapalıyken (varsayılan) duruş yalnız dokuma modülü açık fabrikada kaydedilir. Dokuma açık fabrikada bu ayar hiçbir şeyi değiştirmez.",
+      },
+      {
         key: "productionCancelReasonRequired",
         group: "Top iptali",
         title: "Top iptalinde sebep zorunlu olsun",
