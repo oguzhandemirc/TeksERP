@@ -100,6 +100,11 @@ export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValu
     // Açık hata notu (KQ-D8) — hatasız topta boş → satır basılmaz.
     case "openDefects":
       return str(payload.openDefects);
+    // Müşteri belgesindeki kumaş/renk metni (E3) — gelen belgesiz topta boş → satır basılmaz.
+    case "deliveryNoteItemText":
+      return str(payload.deliveryNoteItemText);
+    case "deliveryNoteColorText":
+      return str(payload.deliveryNoteColorText);
 
     // ── SACK (çuval) alanları — roll/swatch payload'unda undefined → present:false ──
     // sackNo: barkodun okunur karşılığı, etiketin kimliği → headline.

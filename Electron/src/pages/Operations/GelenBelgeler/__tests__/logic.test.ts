@@ -5,7 +5,7 @@ import { AxiosError, type AxiosResponse } from "axios";
 import { blockTotals, hasMismatch } from "../totals";
 import { buildReviewQueue, cellPatch, fieldRect, lineRect, parseTrNumber } from "../review-queue";
 import { parseLineRows, MAX_IMPORT_LINES } from "../lineImport";
-import { errorCode, needsVarianceReason, summarizeApprove } from "../approveFlow";
+import { approveErrorText, approvePrecheck, errorCode, needsVarianceReason, summarizeApprove } from "../approveFlow";
 import { EMPTY_FILTER, toQuery } from "../useNoteList";
 import { isIncomingDocumentVisible } from "../gelenBelge-regime";
 import type { ApproveResult, DeliveryNoteLine } from "../types";
@@ -160,5 +160,39 @@ describe("liste sorgusu ve rejim", () => {
   it("modül kapalı → görünmez", () => {
     expect(isIncomingDocumentVisible({ gelenBelgeEnabled: false })).toBe(false);
     expect(isIncomingDocumentVisible({ gelenBelgeEnabled: true })).toBe(true);
+  });
+});
+
+describe("onay ön kontrolü (E3) — backend precheck aynası", () => {
+  type P = Parameters<typeof approvePrecheck>[0][number];
+  const pl = (o: Partial<P>): P => ({ status: "PENDING", rollId: null, itemId: null, needsReview: false, ...o });
+  const set = (name: string | null, mode: "WARN" | "BLOCK" = "WARN", problem: string | null = null) => ({
+    defaultItem: name ? { id: "i", code: "K", name, problem } : null, unreviewedApproval: mode, defaultUnreviewedApproval: "WARN" as const,
+  });
+  it("yalnız açık satır sayılır (topsuz PENDING/FAILED/ENTERING); SKIPPED ve topu doğmuş sayılmaz", () => {
+    const r = approvePrecheck([pl({}), pl({ status: "FAILED" }), pl({ status: "SKIPPED" }), pl({ status: "ENTERED", rollId: "r" }), pl({ itemId: "x" })], set("Ham"));
+    expect([r.unresolved, r.blocked]).toEqual([2, false]);
+    expect(r.messages).toEqual([{ tone: "info", text: "2 satır varsayılan ürünle girecek: Ham" }]);
+  });
+  it("ayar boş + ürünsüz satır → engel (bugünkü 400'ün aynası)", () => {
+    expect(approvePrecheck([pl({})], set(null)).blocked).toBe(true);
+  });
+  it("varsayılan ürün kullanılamaz → engel, sebep metinde", () => {
+    const r = approvePrecheck([pl({})], set("Ham", "WARN", "Ürün pasif."));
+    expect(r.blocked).toBe(true);
+    expect(r.messages[0]!.text).toContain("Ürün pasif.");
+  });
+  it("BLOCK'ta gözden geçirilmemiş → engel; WARN'da uyarı", () => {
+    expect(approvePrecheck([pl({ itemId: "x", needsReview: true })], set(null, "BLOCK")).messages).toEqual([{ tone: "block", text: "1 satır gözden geçirilmeli — onay engellenir." }]);
+    expect(approvePrecheck([pl({ itemId: "x", needsReview: true })], set(null, "WARN")).blocked).toBe(false);
+  });
+  it("ayar okunamadı (undefined) → sayar ama hüküm vermez", () => {
+    const r = approvePrecheck([pl({ needsReview: true })], undefined);
+    expect([r.unresolved, r.unreviewed, r.blocked, r.messages.length]).toEqual([1, 1, false, 0]);
+  });
+  it("E3 hata kodlarında Türkçe yönlendirme + backend metni; diğerlerinde yalnız backend metni", () => {
+    const e = (code: string) => new AxiosError("409", "ERR", undefined, undefined, { status: 409, data: { details: { code } } } as AxiosResponse);
+    expect(approveErrorText(e("DELIVERY_NOTE_REVIEW_PENDING"), "B")).toMatch(/^Gözden geçirilmemiş satır var.*\(B\)$/);
+    expect(approveErrorText(e("CONFLICT"), "B")).toBe("B");
   });
 });

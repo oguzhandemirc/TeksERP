@@ -17,6 +17,8 @@ interface Props {
   fixable: boolean;
   selected: boolean;
   ownerCustomerId: string | null;
+  /** Ürünsüz satırın onayda gireceği varsayılan ürün (E3 ayarı); null = ayar boş/kullanılamaz. */
+  defaultItemName?: string | null;
   onSelect: () => void;
   onPatch: (p: LinePatch) => void;
   onDelete: () => void;
@@ -69,6 +71,9 @@ export function LineRow(p: Props) {
           <PackageSearch className="mr-1 h-3.5 w-3.5 shrink-0" />
           {line.item?.name ?? "Kumaş seç"}
         </Button>
+        {!line.itemId && !line.rollId && line.status !== "SKIPPED" && p.defaultItemName && (
+          <div className="mt-0.5 text-[10px] text-sky-700 dark:text-sky-400" data-testid="default-item-hint">Varsayılan ürünle girecek: {p.defaultItemName}</div>
+        )}
         {line.itemText && <div className="mt-0.5 text-[10px] text-muted-foreground">Belgede: {line.itemText}</div>}
         {editable && <SuggestionChips suggestion={p.suggestion?.item} currentId={line.itemId} onPick={(c) => p.onPatch({ itemId: c.id })} />}
       </td>

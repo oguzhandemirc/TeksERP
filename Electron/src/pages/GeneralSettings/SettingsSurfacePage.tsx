@@ -32,6 +32,7 @@ import { CompanySettingsSection } from "./CompanySettingsSection";
 import { EIrsaliyeSettingsSection } from "./EIrsaliyeSettingsSection";
 import { EIrsaliyeReadinessPanel } from "@/pages/Operations/Shipments/eirsaliye/EIrsaliyeReadinessPanel";
 import { SessionSettingsSection } from "./SessionSettingsSection";
+import { IncomingDocumentSettingsSection } from "./GelenBelgeSettingsSection";
 import { LabelSettingsSection } from "./LabelSettingsSection";
 import { LabelPrinterDeviceSettings } from "./LabelPrinterDeviceSettings";
 import { DocumentPrinterDeviceSettings } from "./DocumentPrinterDeviceSettings";
@@ -317,6 +318,7 @@ export function SettingsSurfacePage({
                 )}
                 {cat.kind === "session" && <SessionSettingsSection writePermissions={cat.permissionAny} />}
                 {cat.kind === "label" && <LabelSettingsSection writePermissions={cat.permissionAny} />}
+                {cat.kind === "gelenBelge" && <IncomingDocumentSettingsSection writePermissions={cat.permissionAny} />}
               </TabsContent>
             );
           })}

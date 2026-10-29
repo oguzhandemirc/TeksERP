@@ -13,6 +13,7 @@ import { IncomingDocumentsPage } from "../GelenBelgelerPage";
 import { TotalsStrip } from "../TotalsStrip";
 import { SuggestionChips } from "../SuggestionChips";
 import { ApproveDialog } from "../ApproveDialog";
+import { LineRow } from "../LineRow";
 import type { DeliveryNoteHeader, DeliveryNoteLine } from "../types";
 
 vi.mock("@/components/layout/PageHeader", () => ({
@@ -29,12 +30,17 @@ vi.mock("@/components/forms/CustomerPickerField", () => ({
   CustomerPickerField: ({ placeholder }: { placeholder?: string }) => <button type="button">{placeholder}</button>,
 }));
 
+vi.mock("@/components/forms/color-picker/ColorPickerModal", () => ({ ColorPickerModal: () => <button type="button">Renk seç</button> }));
+
 const listDeliveryNotes = vi.fn();
 const approveNote = vi.fn();
+const getIncomingDocumentSettings = vi.fn();
 vi.mock("../service", () => ({
   INCOMING_DOCUMENT_QUERY_KEY: "gelen-belge",
   listDeliveryNotes: (...a: unknown[]) => listDeliveryNotes(...a),
   approveNote: (...a: unknown[]) => approveNote(...a),
+  INCOMING_DOCUMENT_SETTINGS_QUERY_KEY: ["gelen-belge", "ayarlar"],
+  getIncomingDocumentSettings: () => getIncomingDocumentSettings(),
   createManualNote: vi.fn(),
   createUploadNote: vi.fn(),
   uploadScan: vi.fn(),
@@ -51,6 +57,7 @@ const header = (o: Partial<DeliveryNoteHeader>): DeliveryNoteHeader => ({
 const summary = { DRAFT: 1, APPROVING: 0, APPROVED: 0, PARTIAL: 0, CANCELLED: 0, total: 1 };
 
 beforeEach(() => {
+  getIncomingDocumentSettings.mockResolvedValue({ defaultItem: null, unreviewedApproval: "WARN", defaultUnreviewedApproval: "WARN" });
   listDeliveryNotes.mockResolvedValue({ items: [header({})], nextCursor: null, summary });
 });
 
@@ -127,7 +134,7 @@ describe("onay", () => {
       },
     });
     const onDone = vi.fn();
-    renderWithProviders(<ApproveDialog noteId="n1" open onOpenChange={() => {}} onDone={onDone} />);
+    renderWithProviders(<ApproveDialog noteId="n1" lines={[]} open onOpenChange={() => {}} onDone={onDone} />);
     await userEvent.click(screen.getByRole("button", { name: "Onayla" }));
     const reason = await screen.findByLabelText("Fark gerekçesi");
     expect(approveNote).toHaveBeenLastCalledWith("n1", null);
@@ -141,7 +148,7 @@ describe("onay", () => {
   });
   it("gerekçe istemeyen 409 (claim çakışması) gerekçe alanı açmaz", async () => {
     approveNote.mockRejectedValueOnce(conflict("CONFLICT"));
-    renderWithProviders(<ApproveDialog noteId="n1" open onOpenChange={() => {}} onDone={() => {}} />);
+    renderWithProviders(<ApproveDialog noteId="n1" lines={[]} open onOpenChange={() => {}} onDone={() => {}} />);
     await userEvent.click(screen.getByRole("button", { name: "Onayla" }));
     expect(await screen.findByTestId("approve-error")).toBeInTheDocument();
     expect(screen.queryByLabelText("Fark gerekçesi")).toBeNull();
@@ -162,5 +169,62 @@ describe("rejim — modül kapalı → karo ve palet girişi gizli", () => {
     expect(entry!.visibleWhen!(ctx(false))).toBe(false);
     expect(tile!.visibleWhen!(ctx(true))).toBe(true);
     expect(entry!.visibleWhen!(ctx(true))).toBe(true);
+  });
+});
+
+const dLine = (o: Partial<DeliveryNoteLine>): DeliveryNoteLine => ({
+  id: "l1", noteId: "n1", lineNo: 1, blockNo: 1, lineKind: "TOP", senderRollNo: null, meters: "100", weightKg: null, widthCm: null,
+  itemText: "SÜPREM", itemId: null, colorText: null, colorId: null, processText: null, confidence: null, needsReview: false,
+  sourceRects: null, status: "PENDING", failReason: null, rollId: null, item: null, color: null, ...o,
+});
+const settingsOf = (o: { name?: string | null; problem?: string | null; mode?: "WARN" | "BLOCK" }) => ({
+  defaultItem: o.name ? { id: "i9", code: "K9", name: o.name, problem: o.problem ?? null } : null,
+  unreviewedApproval: o.mode ?? "WARN",
+  defaultUnreviewedApproval: "WARN",
+});
+
+describe("hizmet ekseni (E3) — satır ipucu + onay ön kontrolü", () => {
+  const row = (line: DeliveryNoteLine, defaultItemName: string | null) =>
+    renderWithProviders(
+      <table><tbody>
+        <LineRow line={line} suggestion={undefined} editable fixable={false} selected={false} ownerCustomerId="c1" defaultItemName={defaultItemName}
+          onSelect={() => {}} onPatch={() => {}} onDelete={() => {}} onPickItem={() => {}} />
+      </tbody></table>,
+    );
+  it("ürünsüz satır: ayar doluysa varsayılan ürün ipucu, boşsa bugünkü 'Kumaş seç' tek başına", () => {
+    const { unmount } = row(dLine({}), "Ham Kumaş");
+    expect(screen.getByTestId("default-item-hint").textContent).toBe("Varsayılan ürünle girecek: Ham Kumaş");
+    expect(screen.getByRole("button", { name: /Kumaş seç/ })).toBeInTheDocument();
+    unmount();
+    row(dLine({}), null);
+    expect(screen.queryByTestId("default-item-hint")).toBeNull();
+    expect(screen.getByRole("button", { name: /Kumaş seç/ })).toBeInTheDocument();
+  });
+  it("ürünü seçili satırda ipucu yok", () => {
+    row(dLine({ itemId: "i1", item: { id: "i1", code: "K1", name: "Süprem" } as DeliveryNoteLine["item"] }), "Ham Kumaş");
+    expect(screen.queryByTestId("default-item-hint")).toBeNull();
+  });
+  it("WARN: sayaç varsayılan ürünü ve gözden geçirilmemişi söyler, onay açık", async () => {
+    getIncomingDocumentSettings.mockResolvedValue(settingsOf({ name: "Ham Kumaş" }));
+    renderWithProviders(<ApproveDialog noteId="n1" lines={[dLine({}), dLine({ id: "l2", needsReview: true })]} open onOpenChange={() => {}} onDone={() => {}} />);
+    await waitFor(() => expect(screen.getByTestId("approve-precheck")).toBeInTheDocument());
+    const box = screen.getByTestId("approve-precheck");
+    expect(box.dataset.blocked).toBe("0");
+    expect(within(box).getByText("2 satır varsayılan ürünle girecek: Ham Kumaş")).toBeInTheDocument();
+    expect(within(box).getByText("1 satır gözden geçirilmedi — onay uyarıyla geçer.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Onayla" })).toBeEnabled();
+  });
+  it("BLOCK + gözden geçirilmemiş satır → engellenir, buton kapalı", async () => {
+    getIncomingDocumentSettings.mockResolvedValue(settingsOf({ name: "Ham Kumaş", mode: "BLOCK" }));
+    renderWithProviders(<ApproveDialog noteId="n1" lines={[dLine({ itemId: "i1", needsReview: true }), dLine({ id: "l3", itemId: "i1", needsReview: true, rollId: "r1", status: "ENTERED" })]} open onOpenChange={() => {}} onDone={() => {}} />);
+    await waitFor(() => expect(screen.getByText("1 satır gözden geçirilmeli — onay engellenir.")).toBeInTheDocument());
+    expect(screen.getByTestId("approve-precheck").dataset.blocked).toBe("1");
+    expect(screen.getByRole("button", { name: "Onayla" })).toBeDisabled();
+  });
+  it("DELIVERY_NOTE_REVIEW_PENDING / GELEN_BELGE_DEFAULT_ITEM_UNUSABLE → Türkçe yönlendirme", async () => {
+    approveNote.mockRejectedValueOnce(conflict("GELEN_BELGE_DEFAULT_ITEM_UNUSABLE"));
+    renderWithProviders(<ApproveDialog noteId="n1" lines={[]} open onOpenChange={() => {}} onDone={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: "Onayla" }));
+    expect((await screen.findByTestId("approve-error")).textContent).toContain("varsayılan ürün artık kullanılamıyor; hiç top girilmedi");
   });
 });

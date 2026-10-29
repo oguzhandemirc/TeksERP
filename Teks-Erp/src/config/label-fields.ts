@@ -54,6 +54,10 @@ export const ROLL_RAW_FIELDS: readonly FieldDef[] = [
   { key: "weightKg",        defaultLabel: "Ağırlık (kg)",      type: "number" },
   // KAT — katalog KODU basılır ("6-KAT"/"TUP"), ad değil (bkz. LabelPayload.foldType).
   { key: "foldType",        defaultLabel: "Kat",               type: "text" },
+  // Müşterinin GELEN BELGESİNDEKİ kumaş adı/rengi (hizmet ekseni E3) — ham metin, Tambur çocuğunda ata topun
+  // satırından. OPT-IN: şablonda açılmadıkça basılmaz (müşteri metni bizim ürün adımızın yerine geçmez).
+  { key: "deliveryNoteItemText",  defaultLabel: "Kumaş (müşteri belgesindeki)", type: "text", defaultVisible: false },
+  { key: "deliveryNoteColorText", defaultLabel: "Renk (müşteri belgesindeki)",  type: "text", defaultVisible: false },
   { key: "printedAt",       defaultLabel: "Baskı Tarihi",      type: "date" },
 ] as const;
 
@@ -89,6 +93,10 @@ export const ROLL_FINISHED_FIELDS: readonly FieldDef[] = [
   { key: "kartelaMark",      defaultLabel: "Kartelalık",             type: "text" },
   // Açık (kararsız) hatalar — tambursuz rotada bilgi (KQ-D8). OPT-IN: şablonda açılmadıkça basılmaz.
   { key: "openDefects",      defaultLabel: "Hata Notu",              type: "text", defaultVisible: false },
+  // Müşterinin GELEN BELGESİNDEKİ kumaş adı/rengi (hizmet ekseni E3) — ham metin, Tambur çocuğunda ata topun
+  // satırından. OPT-IN: şablonda açılmadıkça basılmaz (müşteri metni bizim ürün adımızın yerine geçmez).
+  { key: "deliveryNoteItemText",  defaultLabel: "Kumaş (müşteri belgesindeki)", type: "text", defaultVisible: false },
+  { key: "deliveryNoteColorText", defaultLabel: "Renk (müşteri belgesindeki)",  type: "text", defaultVisible: false },
   { key: "printedAt",        defaultLabel: "Baskı Tarihi",           type: "date" },
 ] as const;
 

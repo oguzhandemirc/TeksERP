@@ -112,6 +112,9 @@ export function buildLandscapeRollLabelHtml({
   if (vis("orderNumber") && orderNumber) rows.push(row("orderNumber", "Sipariş", orderNumber));
   const openDefects = payload.openDefects ? escapeHtml(payload.openDefects) : "";
   if (isVisibleOptIn(fields, "openDefects") && openDefects) rows.push(row("openDefects", "Hata Notu", openDefects));
+  // Müşteri belgesindeki kumaş/renk (E3) — OPT-IN, gelen belgesiz topta boş.
+  if (isVisibleOptIn(fields, "deliveryNoteItemText") && payload.deliveryNoteItemText) rows.push(row("deliveryNoteItemText", "Müşteri kumaşı", escapeHtml(payload.deliveryNoteItemText)));
+  if (isVisibleOptIn(fields, "deliveryNoteColorText") && payload.deliveryNoteColorText) rows.push(row("deliveryNoteColorText", "Müşteri rengi", escapeHtml(payload.deliveryNoteColorText)));
   if (isSwatch && vis("cardNumber") && cardNumber) rows.push(row("cardNumber", "Kart No", cardNumber));
   if (isSwatch && vis("parentRollBarcode") && parentRollBarcode)
     rows.push(row("parentRollBarcode", "Ana Top", parentRollBarcode));

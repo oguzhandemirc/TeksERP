@@ -544,6 +544,9 @@ export interface PickListRow {
     width: number | null;
     qty: number;
     rollCount: number;
+    /** Müşteri belgesindeki kumaş/renk (gelen belge, hizmet ekseni E3) — YALNIZ doluyken gelir; eski backend hiç göndermez. */
+    deliveryNoteItemText?: string;
+    deliveryNoteColorText?: string;
   }[];
 }
 

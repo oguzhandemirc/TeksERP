@@ -23,6 +23,7 @@ export const PANEL_SETTING_SCREEN = {
   company: "Sistem → Şirket & Güvenlik → Şirket Bilgileri",
   "e-irsaliye": "Sistem → Şirket & Güvenlik → e-İrsaliye",
   belgeler: "Sistem → Baskı & Cihazlar → Belgeler",
+  "gelen-belge": "Sistem → Özellik Anahtarları → Gelen Belge",
 } as const;
 
 export type PanelSettingScreen = keyof typeof PANEL_SETTING_SCREEN;

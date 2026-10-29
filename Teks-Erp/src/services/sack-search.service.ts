@@ -33,6 +33,7 @@ import { readPackingLotSettings } from "./helpers/packing-group.helper";
 import { readPackingGroupsEnabled } from "./system-setting.service";
 import { recordSackPickList, type PickListPrint } from "./helpers/manifest-number.helper";
 import { tokenReplay } from "./helpers/token-replay.helper";
+import { resolveDeliveryNoteLinesForRolls, type RollDeliveryNoteLine } from "./helpers/roll-delivery-note-line.helper";
 import { fromAttachment, recordPrintJob, type PrintJobReportOpt } from "./print-job.service";
 
 const PLANNED_STATUSES: ShipmentStatus[] = [ShipmentStatus.PLANNED];
@@ -51,6 +52,49 @@ export const SACK_DATE_FIELDS = ["createdAt", "weighedAt"] as const;
 
 /** Çuval-seçimli salt-okunur dökümlerde (çeki listesi, içerik dökümü) üst sınır. */
 const MAX_SELECTED_SACKS = 200;
+
+/** Çeki listesi içerik grubu; müşteri belgesi alanları YALNIZ doluyken bulunur (içerik anahtarı kararlılığı). */
+interface PickListContentGroup {
+  itemName: string;
+  colorName: string | null;
+  width: number | null;
+  qty: number;
+  rollCount: number;
+  deliveryNoteItemText?: string;
+  deliveryNoteColorText?: string;
+}
+
+/** Ürün·renk·en bazında özet (irsaliye döküm diliyle aynı). Belge metni YALNIZ doluyken grup anahtarına ve
+ *  satıra girer: gelen belgesiz içerikte satır şekli (ve `pickListContentKey`) bugünküyle bayt-aynı kalır. */
+function summarizePickListContents(
+  rolls: ReadonlyArray<{ id: string; currentQty: Prisma.Decimal; width: Prisma.Decimal | null; item: { name: string }; color: { name: string } | null }>,
+  deliveryNoteLines: ReadonlyMap<string, RollDeliveryNoteLine>,
+): { contents: PickListContentGroup[]; totalQty: number } {
+  const groups = new Map<string, PickListContentGroup>();
+  let totalQty = 0;
+  for (const r of rolls) {
+    const widthNum = r.width === null ? null : Number(r.width);
+    const dn = deliveryNoteLines.get(r.id);
+    const dnItem = dn?.itemText?.trim() || null;
+    const dnColor = dn?.colorText?.trim() || null;
+    const dnKey = dnItem || dnColor ? `|${dnItem ?? ""}|${dnColor ?? ""}` : "";
+    const key = `${r.item.name}|${r.color?.name ?? ""}|${widthNum ?? ""}${dnKey}`;
+    const g = groups.get(key) ?? {
+      itemName: r.item.name,
+      colorName: r.color?.name ?? null,
+      width: widthNum,
+      qty: 0,
+      rollCount: 0,
+      ...(dnItem ? { deliveryNoteItemText: dnItem } : {}),
+      ...(dnColor ? { deliveryNoteColorText: dnColor } : {}),
+    };
+    g.qty += Number(r.currentQty);
+    g.rollCount += 1;
+    groups.set(key, g);
+    totalQty += Number(r.currentQty);
+  }
+  return { contents: [...groups.values()], totalQty };
+}
 
 /** Tek değer / dizi → temiz ID dizisi (filtre semantiği: aynı alan içinde VEYA). */
 function toIdList(v: string | string[] | undefined): string[] {
@@ -1151,6 +1195,7 @@ export class SackSearchService {
           // Aynı küme etiket + liste + irsaliyede de kullanılır (tek kaynak).
           where: { status: { notIn: SACK_ABSENT_STATUSES } },
           select: {
+            id: true,
             currentQty: true,
             width: true,
             item: { select: { name: true } },
@@ -1161,25 +1206,10 @@ export class SackSearchService {
       },
     });
 
+    // Müşteri belgesindeki kumaş/renk (gelen belge E3) — top ya da Tambur atası üzerinden tek çözücü.
+    const deliveryNoteLines = await resolveDeliveryNoteLinesForRolls(sacks.flatMap((s) => s.rolls.map((r) => r.id)));
     const data = sacks.map((s) => {
-      // Ürün·renk·en bazında özet (irsaliye döküm diliyle aynı).
-      const groups = new Map<string, { itemName: string; colorName: string | null; width: number | null; qty: number; rollCount: number }>();
-      let totalQty = 0;
-      for (const r of s.rolls) {
-        const widthNum = r.width === null ? null : Number(r.width);
-        const key = `${r.item.name}|${r.color?.name ?? ""}|${widthNum ?? ""}`;
-        const g = groups.get(key) ?? {
-          itemName: r.item.name,
-          colorName: r.color?.name ?? null,
-          width: widthNum,
-          qty: 0,
-          rollCount: 0,
-        };
-        g.qty += Number(r.currentQty);
-        g.rollCount += 1;
-        groups.set(key, g);
-        totalQty += Number(r.currentQty);
-      }
+      const { contents, totalQty } = summarizePickListContents(s.rolls, deliveryNoteLines);
       return {
         id: s.id,
         sackNo: s.sackNo,
@@ -1194,7 +1224,7 @@ export class SackSearchService {
         rollCount: s.rolls.length,
         swatchCount: s.swatches.length,
         totalQty,
-        contents: [...groups.values()],
+        contents,
       };
     });
 

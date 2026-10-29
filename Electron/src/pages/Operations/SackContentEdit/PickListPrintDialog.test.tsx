@@ -122,3 +122,42 @@ describe("PickListPrintDialog — çeki listesi no", () => {
     expect(printPickList.mock.calls[0]?.[2]).toMatchObject({ transport: "SISTEM_PENCERESI" });
   });
 });
+
+// MÜŞTERİ BELGESİNDEKİ AD (gelen belge E3): seçenek varsayılan KAPALI; yalnız metni olan çuval varken görünür.
+describe("PickListPrintDialog — müşteri belgesindeki ad", () => {
+  const withContents = (contents: PickListRow["contents"]): PickListRow => ({ ...row("s1", "C-ONIZLEME", 10), contents });
+  beforeEach(() => pickList.mockReset());
+  it("⭐ müşteri belgesi adı: kutu varsayılan KAPALI, işaretlenince içerik altında basılır", async () => {
+    pickList.mockResolvedValue({ success: true, data: [withContents([
+      { itemName: "Süprem", colorName: null, width: 150, qty: 10, rollCount: 1, deliveryNoteItemText: "Müşteri Süprem", deliveryNoteColorText: "Lacivert" },
+    ])] });
+    ciz();
+    await screen.findByText("C-ONIZLEME");
+    const kutu = screen.getByRole("checkbox", { name: /Müşteri belgesindeki adı bas/ });
+    expect(kutu).not.toBeChecked();
+    expect(screen.queryByTestId("ceki-musteri-adi")).toBeNull();
+    fireEvent.click(kutu);
+    expect(screen.getByTestId("ceki-musteri-adi").textContent).toBe("Müşteri belgesi: Müşteri Süprem · Lacivert");
+  });
+
+  it("müşteri belgesi metni olmayan dökümde kutu HİÇ çizilmez", async () => {
+    pickList.mockResolvedValue({ success: true, data: [withContents([{ itemName: "Süprem", colorName: null, width: 150, qty: 10, rollCount: 1 }])] });
+    ciz();
+    await screen.findByText("C-ONIZLEME");
+    expect(screen.queryByRole("checkbox", { name: /Müşteri belgesindeki adı bas/ })).toBeNull();
+  });
+
+  it("⭐ kutu kapalıyken aynı ürünlü farklı müşteri metinleri TEK satırda birleşir, açılınca ayrışır", async () => {
+    pickList.mockResolvedValue({ success: true, data: [withContents([
+      { itemName: "Müşteri kumaşı", colorName: null, width: null, qty: 100, rollCount: 1, deliveryNoteItemText: "A Süprem" },
+      { itemName: "Müşteri kumaşı", colorName: null, width: null, qty: 100, rollCount: 1, deliveryNoteItemText: "B Ribana" },
+      { itemName: "Müşteri kumaşı", colorName: null, width: null, qty: 100, rollCount: 1, deliveryNoteItemText: "C Kaşe" },
+    ])] });
+    ciz();
+    await screen.findByText("C-ONIZLEME");
+    expect(screen.getAllByText(/Müşteri kumaşı — 300 m \(3\)/)).toHaveLength(1);
+    expect(screen.queryByText(/— 100 m \(1\)/)).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Müşteri belgesindeki adı bas/ }));
+    expect(screen.getAllByTestId("ceki-musteri-adi")).toHaveLength(3);
+  });
+});

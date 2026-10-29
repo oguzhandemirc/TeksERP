@@ -37,6 +37,9 @@ import {
 import { buildLandscapeRollLabelHtml } from "./label-html-landscape.helper";
 import { DEFAULT_COMPANY_NAME } from "../../constants/company";
 
+/** Şablonda AÇIKÇA işaretlenmedikçe basılmayan serbest satırlar. */
+const OPT_IN_ROW_KEYS: ReadonlySet<string> = new Set(["openDefects", "deliveryNoteItemText", "deliveryNoteColorText"]);
+
 // Resolver (label-format.resolver) bunları buradan import ediyor → re-export.
 export { DEFAULT_LABEL_FORMAT };
 export type { LabelFormatGeometry };
@@ -119,9 +122,11 @@ function buildPortraitRollLabelHtml(
     { key: "customerName", value: customerName, def: "Müşteri" },
     { key: "orderNumber", value: orderNumber, def: "Sipariş" },
     { key: "openDefects", value: payload.openDefects ? escapeHtml(payload.openDefects) : "", def: "Hata Notu" },
+    { key: "deliveryNoteItemText", value: payload.deliveryNoteItemText ? escapeHtml(payload.deliveryNoteItemText) : "", def: "Müşteri kumaşı" },
+    { key: "deliveryNoteColorText", value: payload.deliveryNoteColorText ? escapeHtml(payload.deliveryNoteColorText) : "", def: "Müşteri rengi" },
   ]
-    // `openDefects` OPT-IN (KQ-D8): şablonsuz düzende de basılmaz.
-    .filter((r) => r.value && (r.key === "openDefects" ? isVisibleOptIn(fields, r.key) : vis(r.key)))
+    // `openDefects` (KQ-D8) ve müşteri belge metni (E3) OPT-IN: şablonsuz düzende de basılmaz.
+    .filter((r) => r.value && (OPT_IN_ROW_KEYS.has(r.key) ? isVisibleOptIn(fields, r.key) : vis(r.key)))
     .sort((a, b) => orderOf(a.key) - orderOf(b.key))
     .map((r) => `<div class="meta-row" style="${sty(r.key)}"><span class="k">${lbl(r.key, r.def)}</span><span>${r.value}</span></div>`)
     .join("\n    ");
