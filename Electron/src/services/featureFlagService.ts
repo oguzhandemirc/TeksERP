@@ -547,6 +547,8 @@ export interface FeatureFlags {
   tamburPlanGateWidthCheck: "ENFORCE" | "OFF";
   /** Tablet Tambur açık kart listesi oturum istasyonuyla süzülsün mü (false=default; ister 2.8). */
   tamburListByStationEnabled: boolean;
+  /** Dokuma kapalıyken de kurşun/tambur/brode makinesi duruşu kaydedilsin mi (false=default; D4-A1). */
+  machineStopTrackingEnabled: boolean;
   /** Fason kabulünde çekme (giden↔dönen metraj farkı) uyarısı çıksın mı (true=default).
    *  Boyahanede kumaş çeker — 250 m giden mal 220 m döner. Kapalıyken ekran farkı
    *  yalnız bilgi olarak yazar, uyarı/onay çıkarmaz. Sapma defterine yazım bu

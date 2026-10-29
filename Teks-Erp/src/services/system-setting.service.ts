@@ -678,6 +678,9 @@ export const SETTING_KEYS = {
   /** Tablet Tambur açık kart listesi yalnız oturum istasyonunun işlerini göstersin mi
    *  (ister 2.8; iki tamburlu fabrika). Default FALSE = bugünkü tüm-tambur listesi. */
   TAMBUR_LIST_BY_STATION_ENABLED: "tambur.listByStationEnabled",
+  /** Dokumasız (hizmet) fabrikada kurşun/tambur/brode makinesi duruş takibi (D4-A1, ister 5.5).
+   *  Default FALSE = bugünkü (duruş yalnız dokumada). Okuma YALNIZ `machineStopRegime` (AST bekçisi). */
+  MACHINE_STOP_TRACKING_ENABLED: "uretim.makineDurusTakibi",
   /**
    * Tambur plan-sapma kapısının EN kolu (D4-E1, 1e kararı K9 2026-10-29): eşik (cm)
    * ve kontrol (ENFORCE | OFF). Eskiden `TAMBUR_PLAN_WIDTH_TOLERANCE_CM` kod sabitiydi;
@@ -2075,6 +2078,9 @@ export interface FeatureFlags {
   tamburPlanGateWidthCheck: TamburPlanWidthCheck;
   /** Tablet Tambur listesi oturum istasyonuyla süzülsün mü (default FALSE; istemcide uygulanır). */
   tamburListByStationEnabled: boolean;
+  /** Dokuma kapalıyken de makine duruşu kaydedilsin mi (D4-A1; default FALSE = bugünkü). HAM değer;
+   *  rejim `dokuma ∨ (üretim ∧ bu)` yalnız `machineStopRegime`de çözülür. */
+  machineStopTrackingEnabled: boolean;
   /** Fason kabulünde çekme (giden↔dönen farkı) uyarısı çıksın mı (default TRUE). */
   fasonShrinkWarnEnabled: boolean;
   /** Çekme toleransı — YÜZDE. Default 10. `0` = tolerans yok (her fark uyarır). */
@@ -2568,6 +2574,7 @@ export class SystemSettingService {
       tamburPlanGateWidthToleranceCm: await readTamburPlanGateWidthToleranceCm(cacheClient),
       tamburPlanGateWidthCheck: await readTamburPlanGateWidthCheck(cacheClient),
       tamburListByStationEnabled: await readTamburListByStationEnabled(cacheClient),
+      machineStopTrackingEnabled: await readMachineStopTrackingEnabled(cacheClient),
       fasonShrinkWarnEnabled: await readFasonShrinkWarnEnabled(cacheClient),
       fasonShrinkTolerancePct: await readFasonShrinkTolerancePct(cacheClient),
       demoModeEnabled: await readDemoModeEnabled(cacheClient),
@@ -4209,6 +4216,18 @@ export class SystemSettingService {
         SETTING_KEYS.TAMBUR_LIST_BY_STATION_ENABLED,
         input.tamburListByStationEnabled,
         "Tambur: tablet açık kart listesi yalnız oturum istasyonunun işlerini göstersin",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "machineStopTrackingEnabled")) {
+      if (typeof input.machineStopTrackingEnabled !== "boolean") {
+        throw AppError.badRequest("machineStopTrackingEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.MACHINE_STOP_TRACKING_ENABLED,
+        input.machineStopTrackingEnabled,
+        "Üretim: dokuma kapalıyken de kurşun/tambur/brode makinesi duruşu kaydedilsin",
         userId
       );
     }
@@ -6905,6 +6924,22 @@ export async function readTamburListByStationEnabled(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.TAMBUR_LIST_BY_STATION_ENABLED },
+    select: { value: true },
+  });
+  if (!setting) return false;
+  return asBoolean(setting.value);
+}
+
+/**
+ * Makine duruşu takibi (D4-A1). Kayıt yoksa **false** — bugünkü davranış (duruş yalnız dokumada).
+ * Enforcement bu okuyucuyu DOĞRUDAN çağırmaz: rejim `services/helpers/machine-stop-regime.helper.ts`.
+ */
+export async function readMachineStopTrackingEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.MACHINE_STOP_TRACKING_ENABLED },
     select: { value: true },
   });
   if (!setting) return false;

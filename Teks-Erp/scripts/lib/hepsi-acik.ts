@@ -88,6 +88,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   tamburPlanGateWidthToleranceCm: A(5),
   tamburPlanGateWidthCheck: A("ENFORCE"),
   tamburListByStationEnabled: A(true),
+  machineStopTrackingEnabled: A(true),
   qualityGradeRequiredEnabled: A(true),
   batchShortNumberEnabled: A(true),
   batchLastNumberHintEnabled: A(true),
