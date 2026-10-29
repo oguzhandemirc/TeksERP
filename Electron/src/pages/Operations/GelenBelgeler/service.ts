@@ -3,6 +3,7 @@ import apiClient from "@/services/apiClient";
 import { withSettingsPassword } from "@/lib/settings-password";
 import type { ApiResponse } from "@/types/api";
 import type {
+  ProcessChoice,
   ApproveResult, DeliveryNoteDetail, DeliveryNoteLine, DeliveryNoteListQuery, DeliveryNoteListResponse,
   HeaderPatch, IncomingDocumentSettings, LineInput, LinePatch, NoteMatchSuggestions, ReaderStatus, SenderTemplatePatch,
   SenderTemplateView, UnreviewedApproval,
@@ -72,10 +73,11 @@ export async function getSuggestions(noteId: string): Promise<NoteMatchSuggestio
  * Onay. 409 `TOTAL_MISMATCH`/`DELIVERY_NOTE_PAGES_MISSING` diyalogda gerekçe ister — toast'u
  * diyalog yazar, apiClient'ınki bastırılır (tek hata yüzeyi).
  */
-export async function approveNote(id: string, varianceReason: string | null): Promise<{ result: ApproveResult; warnings: string[] }> {
+export async function approveNote(id: string, varianceReason: string | null, processChoices: readonly ProcessChoice[] = []): Promise<{ result: ApproveResult; warnings: string[] }> {
+  // Boş seçimde alan gönderilmez: gövde eski backend'in katı şemasıyla da (strictObject) aynı kalır.
   const r = await apiClient.post<ApiResponse<ApproveResult>>(
     `${BASE}/irsaliyeler/${id}/onay`,
-    varianceReason ? { varianceReason } : {},
+    { ...(varianceReason ? { varianceReason } : {}), ...(processChoices.length ? { processChoices } : {}) },
     { suppressErrorToast: true },
   );
   return { result: r.data.data, warnings: r.data.warnings ?? [] };

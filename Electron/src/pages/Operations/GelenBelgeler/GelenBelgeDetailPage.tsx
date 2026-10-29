@@ -21,6 +21,8 @@ import { AddPagesAction } from "./AddPagesAction";
 import { buildReviewQueue, lineRect } from "./review-queue";
 import { isApprovable, isEditable, NOTE_STATUS_LABEL, NOTE_STATUS_VARIANT, SOURCE_LABEL } from "./noteStatus";
 import { useNoteDetail } from "./useNoteDetail";
+import { ProcessGramajPanel } from "./ProcessGramajPanel";
+import { useProcessGramaj } from "./processChoices";
 
 const LIST_PATH = "/operations/gelen-belgeler";
 
@@ -63,6 +65,7 @@ export function IncomingDocumentDetailPage() {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const n = note.data;
+  const gramaj = useProcessGramaj(n, suggestions.data, !!n && isApprovable(n.status) && hasPermission("gelen-belge:approve"));
   if (!n) {
     return (
       <PageShell>
@@ -102,6 +105,7 @@ export function IncomingDocumentDetailPage() {
               <NoteHeaderForm note={n} suggestions={suggestions.data} editable={editable} onPatch={(p) => header.mutate(p)} />
               <TotalsStrip note={n} />
               {n.varianceReason && <p className="text-xs text-muted-foreground">Fark gerekçesi: {n.varianceReason}</p>}
+              <ProcessGramajPanel groups={gramaj.groups} picks={gramaj.picks} onPick={gramaj.onPick} />
             </div>
           </div>
           <LinesTable
@@ -130,7 +134,7 @@ export function IncomingDocumentDetailPage() {
         scanId={n.scans.length === 1 ? (n.scans[0]?.id ?? null) : null}
         onSave={(item, patch) => line.mutateAsync({ lineId: item.lineId, patch })}
       />
-      <ApproveDialog noteId={n.id} lines={n.lines} open={approveOpen} onOpenChange={setApproveOpen} onDone={() => void invalidate()} />
+      <ApproveDialog noteId={n.id} lines={n.lines} processChoices={gramaj.choices} open={approveOpen} onOpenChange={setApproveOpen} onDone={() => void invalidate()} />
     </PageShell>
   );
 }

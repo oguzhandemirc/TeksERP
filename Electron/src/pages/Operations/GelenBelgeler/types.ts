@@ -126,11 +126,24 @@ export interface MatchSuggestion {
   source: "TEMPLATE" | "ALIAS" | "SIMILARITY" | "NONE";
   list: MatchCandidate[];
 }
+/** İşlem metni → kurşun gramaj çeşidi önerisi (H9). ALIAS: öğrenilmiş · PATTERN: "25 GR" kalıbı · NONE: emin değil. */
+export interface ProcessSuggestion {
+  rawText: string | null;
+  suggested: { id: string; name: string } | null;
+  source: "ALIAS" | "PATTERN" | "NONE";
+}
 export interface NoteMatchSuggestions {
   noteId: string;
   sender: MatchSuggestion;
   owner: MatchSuggestion;
-  lines: Array<{ lineId: string; lineNo: number; item: MatchSuggestion; color: MatchSuggestion }>;
+  /** Eski backend göndermez → opsiyonel. */
+  process?: ProcessSuggestion;
+  lines: Array<{ lineId: string; lineNo: number; item: MatchSuggestion; color: MatchSuggestion; process?: ProcessSuggestion }>;
+}
+/** Onayda PROCESS sözlüğüne öğretilecek gramaj seçimi; `lineId` null = başlığın işlem metni. */
+export interface ProcessChoice {
+  lineId: string | null;
+  valueId: string;
 }
 
 export interface ApproveResult {

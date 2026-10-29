@@ -7,12 +7,14 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { apiErrorText } from "@/lib/api-error";
 import { approveNote, getIncomingDocumentSettings, INCOMING_DOCUMENT_SETTINGS_QUERY_KEY } from "./service";
 import { approveErrorText, approvePrecheck, needsVarianceReason, summarizeApprove, type ApproveOutcome } from "./approveFlow";
-import type { DeliveryNoteLine } from "./types";
+import type { DeliveryNoteLine, ProcessChoice } from "./types";
 
 interface Props {
   noteId: string;
   /** Ön kontrol sayacı için (ürünsüz / gözden geçirilmemiş açık satır). */
   lines: readonly DeliveryNoteLine[];
+  /** Operatörün seçtiği gramajlar (H9) — onayda PROCESS sözlüğüne öğretilir. */
+  processChoices?: readonly ProcessChoice[];
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onDone: () => void;
@@ -24,7 +26,12 @@ const TONE_CLASS = {
   block: "bg-destructive/10 text-destructive",
 } as const;
 
-export function ApproveDialog({ noteId, lines, open, onOpenChange, onDone }: Props) {
+function ProcessChoicesNote({ count }: { count: number }) {
+  if (count === 0) return null;
+  return <p className="text-xs text-muted-foreground" data-testid="approve-process-choices">Seçilen {count} kurşun gramajı bu işlem metinleri için hatırlanacak (topa değer yazılmaz).</p>;
+}
+
+export function ApproveDialog({ noteId, lines, processChoices = [], open, onOpenChange, onDone }: Props) {
   const [reason, setReason] = useState("");
   const [askReason, setAskReason] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +40,7 @@ export function ApproveDialog({ noteId, lines, open, onOpenChange, onDone }: Pro
   const settings = useQuery({ queryKey: INCOMING_DOCUMENT_SETTINGS_QUERY_KEY, queryFn: getIncomingDocumentSettings, enabled: open, refetchOnMount: "always", staleTime: 0 });
   const pre = approvePrecheck(lines, settings.data);
   const run = useMutation({
-    mutationFn: () => approveNote(noteId, askReason ? reason.trim() : null),
+    mutationFn: () => approveNote(noteId, askReason ? reason.trim() : null, processChoices),
     onSuccess: ({ result, warnings }) => {
       setOutcome({ o: summarizeApprove(result), warnings });
       setError(null);
@@ -84,6 +91,7 @@ export function ApproveDialog({ noteId, lines, open, onOpenChange, onDone }: Pro
                 ))}
               </ul>
             )}
+            <ProcessChoicesNote count={processChoices.length} />
             {error && <p className="rounded bg-destructive/10 px-2 py-1 text-sm text-destructive" data-testid="approve-error">{error}</p>}
             {askReason && (
               <Textarea aria-label="Fark gerekçesi" placeholder="Fark gerekçesi (ör. belgedeki toplam yanlış yazılmış)" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />
