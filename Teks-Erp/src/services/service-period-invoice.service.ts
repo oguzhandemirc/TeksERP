@@ -11,7 +11,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
 import { factoryDayEndOfKey, factoryDayStartOfKey, factoryYmd } from "../constants/time";
-import { collectPeriodServiceBilling } from "./helpers/service-billing.helper";
+import { collectPeriodServiceBilling, resolveCustomerServiceBillingTrigger } from "./helpers/service-billing.helper";
 import { alreadyBilled } from "./helpers/service-billing-gate.helper";
 import { tokenReplay } from "./helpers/token-replay.helper";
 import { formatDayKeyTr, periodDayKey } from "./helpers/period-guard.helper";
@@ -90,6 +90,12 @@ async function buildPeriodDraft(input: ServicePeriodInput) {
     throw AppError.conflict(`Hizmet faturası kapalı — ${settingScreenPath("finance")} ekranından açın.`, { code: "SERVICE_BILLING_DISABLED" });
   }
   const cari = await loadCustomerCari(input.cariId);
+  // H8b: carisinde "Her sevkte" SEÇİLMİŞ müşterinin işi sevk faturasındadır — dönem taslağı onu toplamaz. Seçimsiz
+  // müşteride (fabrika ayarı) dönem ucu bugünkü gibi açık kalır: faturasız kalmış işi toplayabilir.
+  const effective = await resolveCustomerServiceBillingTrigger(cari.customerId, settings);
+  if (effective.source === "CUSTOMER" && effective.trigger === "PER_SHIPMENT") {
+    throw AppError.conflict(`${cari.name} carisinde hizmet faturası "Her sevkte" seçili — işleri sevk faturasında kesilir, dönem sonu taslağına girmez.`, { code: "SERVICE_PERIOD_CUSTOMER_PER_SHIPMENT" });
+  }
   const bounds = resolvePeriodBounds(input.period);
   const draft = await collectPeriodServiceBilling({ customerId: cari.customerId, currency: cari.currency, settings, ...bounds });
   const vatRate = await readFinanceDefaultVatRate();

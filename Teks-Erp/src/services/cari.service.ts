@@ -23,6 +23,21 @@ import { collectAgingRows } from "./reports/finance-aging.report";
 import { buildTurkishSearch } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";
 import { factoryDateTr } from "../constants/time";
+import { SERVICE_BILLING_TRIGGERS, type ServiceBillingTrigger } from "./system-setting.service";
+
+/**
+ * H8b: müşteri tetiği yalnız fabrika ayarının değerleri ya da null (fabrika ayarı); yalnız MÜŞTERİ carisinde
+ * (fason/tedarikçi hesabına hizmet faturası kesilmez). Servis 400'ü ilk hat, DB CHECK son hat.
+ */
+function assertServiceBillingTriggerInput(value: string | null | undefined, kind: CariKind): void {
+  if (value === undefined || value === null) return;
+  if (!(SERVICE_BILLING_TRIGGERS as string[]).includes(value)) {
+    throw AppError.badRequest("Hizmet faturası tetiği geçersiz — \"Her sevkte\", \"Dönem sonunda\" ya da fabrika ayarı seçin.", { code: "SERVICE_BILLING_TRIGGER_INVALID", value });
+  }
+  if (kind !== CariKind.CUSTOMER) {
+    throw AppError.badRequest("Hizmet faturası tetiği yalnız müşteri carisinde seçilir.", { code: "SERVICE_BILLING_TRIGGER_NOT_CUSTOMER" });
+  }
+}
 
 export interface CariListRow {
   id: string;
@@ -39,6 +54,8 @@ export interface CariListRow {
    *  notu kullanıcı görmeden ezerdi — yazma-tek-yönlü alan yüzey almaz. */
   notes: string | null;
   isActive: boolean;
+  /** H8b: müşterinin hizmet faturası tetiği; null = fabrika ayarı. */
+  serviceBillingTrigger: ServiceBillingTrigger | null;
   /** Kartın rolleri (rol modeli) — kartsız eski fason hesabında null; panel rozeti buradan yazar. */
   roles: { isCustomerRole: boolean; isSupplierRole: boolean; isSubcontractorRole: boolean } | null;
   balances: Array<{ currency: Currency; balance: Prisma.Decimal }>;
@@ -181,6 +198,7 @@ export class CariService {
           riskLimit: r.riskLimit,
           notes: r.notes,
           isActive: r.isActive,
+          serviceBillingTrigger: r.serviceBillingTrigger as ServiceBillingTrigger | null,
           // Sıfır bakiyeli para birimi satırları gürültüdür; ekranda yer kaplar.
           balances: r.balances.filter((b) => !D(b.balance).isZero()),
           // Alan yalnız İSTENDİĞİNDE var — bayraksız yanıt bugünküyle birebir.
@@ -232,6 +250,7 @@ export class CariService {
       riskLimit: row.riskLimit,
       notes: row.notes,
       isActive: row.isActive,
+      serviceBillingTrigger: row.serviceBillingTrigger as ServiceBillingTrigger | null,
       balances: row.balances,
     };
   }
@@ -311,14 +330,16 @@ export class CariService {
       riskLimit?: Prisma.Decimal.Value | null;
       notes?: string | null;
       isActive?: boolean;
+      serviceBillingTrigger?: string | null;
     },
     userId?: string,
   ): Promise<ApiResponse<{ id: string }>> {
     const existing = await prisma.cariAccount.findUnique({
       where: { id },
-      select: { id: true, taxOffice: true, defaultCurrency: true, paymentTermDays: true, isActive: true },
+      select: { id: true, kind: true, taxOffice: true, defaultCurrency: true, paymentTermDays: true, isActive: true, serviceBillingTrigger: true },
     });
     if (!existing) throw AppError.notFound("Cari hesap bulunamadı.");
+    assertServiceBillingTriggerInput(input.serviceBillingTrigger, existing.kind);
 
     // ⚠️ Bakiyesi olan cari PASİFLEŞTİRİLEMEZ: pasif cari listelerden düşer ve
     // açık bakiye görünmez olur — muhasebede "kapatılmamış hesabı gizlemek"
@@ -344,6 +365,7 @@ export class CariService {
         ...(input.riskLimit !== undefined ? { riskLimit: input.riskLimit == null ? null : D(input.riskLimit) } : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+        ...(input.serviceBillingTrigger !== undefined ? { serviceBillingTrigger: input.serviceBillingTrigger } : {}),
       },
       select: { id: true },
     });
