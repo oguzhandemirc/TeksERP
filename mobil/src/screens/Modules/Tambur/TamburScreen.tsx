@@ -43,6 +43,7 @@ import { usePermissions } from '../../../hooks/usePermission';
 import { useOnlineStatus } from '../../../hooks/useOnlineStatus';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { useSessionStore } from '../../../store/sessionStore';
+import { resolveTamburListStationId } from './tamburStationFilter';
 import { useMachinePeripherals, meterPeripheralFor } from '../../../hooks/useMachinePeripherals';
 import { readMeter } from '../../../hooks/usePeripheralIO';
 import RefreshButton from '../../../components/RefreshButton';
@@ -912,9 +913,11 @@ export default function TamburScreen() {
     [manualColorsQuery.data],
   );
 
+  // İster 2.8: iki tamburlu fabrikada yalnız bu tabletin tamburuna sıradaki işler.
+  const listStationId = resolveTamburListStationId(activeSession);
   const openCardsQuery = useQuery({
-    queryKey: ['tambur', 'open-cards'],
-    queryFn: () => tamburService.listOpenCards(),
+    queryKey: ['tambur', 'open-cards', listStationId],
+    queryFn: () => tamburService.listOpenCards(listStationId),
     enabled: listModalOpen,
     staleTime: 30 * 1000,
   });
