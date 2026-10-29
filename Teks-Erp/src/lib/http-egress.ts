@@ -105,9 +105,32 @@ function currentAgent(): https.Agent {
   return agent;
 }
 
+/**
+ * BEYANLI TEK İSTİSNA (D3b, 2026-10-29): Linux compose'ta okuma sidecar'ı `http://okuma:8765` gibi NOKTASIZ
+ * compose servis adıyla konuşur (aynı docker ağı; hat makine dışına çıkmaz). Kayıt yalnız `gelen-belge/url.ts`ten
+ * yapılır (bekçi `test_gelen_belge_okuma` çağıranı sayar); noktalı/IP adres asla kaydedilmez.
+ */
+const PLAIN_HTTP_SERVICE_HOSTS = new Set<string>();
+const COMPOSE_SERVICE_NAME = /^[a-z][a-z0-9-]{0,62}$/;
+
+/** Noktasız compose servis adını düz HTTP'ye açar; uymayan ad sessizce reddedilir (false). */
+export function allowPlainHttpServiceHost(host: string): boolean {
+  const h = host.toLowerCase();
+  if (!COMPOSE_SERVICE_NAME.test(h) || LOOPBACK_HOSTS.has(h)) return false;
+  PLAIN_HTTP_SERVICE_HOSTS.add(h);
+  return true;
+}
+
+/** Test-only: istisna kümesini boşaltır. */
+export function __clearPlainHttpServiceHostsForTests(): void {
+  PLAIN_HTTP_SERVICE_HOSTS.clear();
+}
+
 /** Dışarı gidilebilecek adres: HTTPS; düz HTTP yalnız aynı makinedeki (geliştirme) sunucuya — hat dinlenemez. */
 export function isEgressTargetAllowed(u: URL): boolean {
-  return u.protocol === "https:" || (u.protocol === "http:" && LOOPBACK_HOSTS.has(u.hostname));
+  if (u.protocol === "https:") return true;
+  if (u.protocol !== "http:") return false;
+  return LOOPBACK_HOSTS.has(u.hostname) || PLAIN_HTTP_SERVICE_HOSTS.has(u.hostname.toLowerCase());
 }
 
 function resolveTarget(url: string): { u: URL; secure: boolean } {
@@ -117,7 +140,7 @@ function resolveTarget(url: string): { u: URL; secure: boolean } {
   } catch {
     throw new EgressError("EGRESS_URL", "Dış adres çözülemedi");
   }
-  if (!isEgressTargetAllowed(u)) throw new EgressError("EGRESS_URL", "Dış istek yalnız HTTPS olabilir");
+  if (!isEgressTargetAllowed(u)) throw new EgressError("EGRESS_URL", "Dış istek yalnız HTTPS olabilir (düz HTTP yalnız döngü adresi ya da beyanlı compose servisi)");
   return { u, secure: u.protocol === "https:" };
 }
 
