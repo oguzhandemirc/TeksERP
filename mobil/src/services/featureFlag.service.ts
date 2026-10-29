@@ -57,8 +57,8 @@ export interface FeatureFlags {
   /** Maliyet & Teklif modülü (`maliyet.enabled`, HAM) — tablette ekranı YOK; alan yalnız backend
    *  sözleşmesinin tip aynası. Eski sunucu göndermez → kapalı. */
   maliyetEnabled?: boolean;
-  /** Gelen belge taslağı modülü (`gelenBelge.enabled`, HAM, D1) — tablet yüzeyi D7'de ("Belge Tara"); alan
-   *  şimdilik backend sözleşmesinin tip aynası. Eski sunucu göndermez → kapalı. */
+  /** Gelen belge taslağı modülü (`gelenBelge.enabled`, HAM, D1) — tablet "Belge Tara" ekranının
+   *  kapısı (`screenModules.ts`, D7). Eski sunucu göndermez → kapalı. */
   gelenBelgeEnabled?: boolean;
   /** Devere Faz 3: levent tezgah bağı defteri (`devere.mountTracking`) — default FALSE (satır-yok değeri).
    *  Tezgah ekranı "Levent" paneli ve Levent Sarım "Tezgahta" sekmesi yalnız AÇIKKEN çizilir. */

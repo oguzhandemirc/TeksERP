@@ -97,11 +97,13 @@ export type MobileScreenKey =
   | 'Devere'
   | 'FasonDokuma'
   | 'Uyarilar'
-  | 'Muayene';
+  | 'Muayene'
+  | 'GelenBelge';
 
 export interface MobileScreenMeta {
   key: MobileScreenKey;
-  permission: Exclude<MobilePermission, 'mobile:*'>;
+  // Belge Tara (D7) web iznini taşır (`gelen-belge:write`; yeni mobil kod açılmadı — karar belgesi §6).
+  permission: Exclude<MobilePermission, 'mobile:*'> | 'gelen-belge:write';
   label: string;
   icon: string;
   description: string;
@@ -270,6 +272,15 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     label: 'Muayene',
     icon: 'clipboard-check-outline',
     description: 'Top okut, 4 puan hata kaydı gir, muayeneyi kaydet',
+  },
+  {
+    // Gülkesim D7: müşteri irsaliyesini fotoğrafla + barkod → DRAFT taslak. OTURUMSUZ; onay panelde (SoD).
+    // Gelen belge modülü kapalıyken görünmez (`screenModules.ts`).
+    key: 'GelenBelge',
+    permission: 'gelen-belge:write',
+    label: 'Belge Tara',
+    icon: 'file-document-outline',
+    description: 'Müşteri irsaliyesini fotoğrafla, taslak oluştur (onay panelde)',
   },
 ];
 
