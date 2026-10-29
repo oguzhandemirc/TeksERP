@@ -10,7 +10,7 @@ import type { SuzgecEcho } from "./reports/_filters";
 import { reasonOptions, type SebepSecenek } from "./reports/_secenekler";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
-import { ensureCariAccountTx, resolveCariAccountByCustomerTx } from "./helpers/finance.helper";
+import { ensureCariAccountTx, findCariAccountForCardTx, resolveCariAccountByCustomerTx } from "./helpers/finance.helper";
 import { AuditService } from "./audit.service";
 import { D0, D, applyCariBalanceTx, CARI_STATEMENT_ORDER, CARI_TXN_LATEST_FIRST } from "./helpers/finance.helper";
 import { resolvePartyToCardTx } from "./helpers/party-card.helper";
@@ -228,7 +228,7 @@ export class CariService {
     return this.findById(ref.id);
   }
 
-  /** Z-A ⑤: kartın hesabına terim yaz (hesap yoksa doğar — `ensureCariAccountTx`); doğrulama + audit `update` yolunda. */
+  /** Z-A ⑤: kartın hesabına terim yaz — kartın MEVCUT hesabı (eski fason bacağı dahil, K3a) ya da yoksa doğar; doğrulama + audit `update` yolunda. */
   async writeTermsForCustomer(customerId: string, input: Parameters<CariService["update"]>[1], userId?: string): Promise<string> {
     const accId = await prisma.$transaction(async (tx) => (await ensureCariAccountTx(tx, { customerId })).id);
     await this.update(accId, input, userId);
@@ -288,28 +288,22 @@ export class CariService {
       if (!s) throw AppError.badRequest("Fason firma bulunamadı.");
       if (!s.isActive) throw AppError.badRequest("Fason firma pasif durumda.");
     }
-    // Hesabın tek adresi kart: bağlı fason profili kartına çözülür (lazy yolla aynı çözücü).
+    // Hesabın tek adresi kart: bağlı fason profili kartına çözülür; satır TEK FABRİKADAN (`ensureCariAccountTx`) —
+    // kartın kimliğine bağlı hesap hangi bacakta olursa olsun "zaten açık" (K3a).
     const { customerId, subcontractorId } = await resolvePartyToCardTx(prisma, input);
-
-    const dup = await prisma.cariAccount.findFirst({
-      where: customerId ? { customerId } : { subcontractorId: subcontractorId as string },
-      select: { id: true },
-    });
+    const dup = await findCariAccountForCardTx(prisma, { customerId, subcontractorId }, { id: true });
     if (dup) throw AppError.conflict("Bu taraf için cari hesap zaten açık.");
 
-    const created = await prisma.cariAccount.create({
-      data: {
-        kind: customerId ? CariKind.CUSTOMER : CariKind.SUBCONTRACTOR,
-        customerId,
-        subcontractorId,
+    const created = await prisma.$transaction((tx) =>
+      ensureCariAccountTx(tx, { customerId, subcontractorId }, {
         taxOffice: input.taxOffice ?? null,
         defaultCurrency: input.defaultCurrency ?? Currency.TRY,
         paymentTermDays: input.paymentTermDays ?? null,
         riskLimit: input.riskLimit == null ? null : D(input.riskLimit),
         notes: input.notes ?? null,
-      },
-      select: { id: true },
-    });
+      }),
+    );
+    if (!created.created) throw AppError.conflict("Bu taraf için cari hesap zaten açık.");
 
     void AuditService.log({
       userId,

@@ -260,90 +260,93 @@ export async function resolveExchangeRateTx(
  * açmak, cari listesini "hiç işlem görmemiş 190 satır" ile doldurup gerçek
  * bakiyeleri görünmez yapardı.
  *
- * ⚠️ Yarış: iki eşzamanlı fatura aynı müşteri için cari açmaya çalışabilir.
- * `customerId` üzerindeki partial unique bunu yapısal olarak engeller; burada
- * P2002'yi yakalayıp MEVCUDU okuruz (upsert kullanılmıyor çünkü `kind` ve
- * taraf kolonunun tutarlılığını CHECK constraint zaten garanti ediyor ve
- * upsert'in update dalı burada anlamsız — cari alanları bu yoldan güncellenmez).
+ * ⚠️ Yarış: iki eşzamanlı ilk yazım aynı kart için hesap açmaya çalışabilir. `customerId`/`subcontractorId`
+ * `@unique` seddine `INSERT … ON CONFLICT DO NOTHING` (createMany skipDuplicates) ile çarpar: kaybeden tx
+ * ABORT olmaz (P2002 yakalamak PG'de tx'i zehirlerdi), kazananın satırını yeniden okur — tek hesap.
  */
 export type CariAccountParty = { customerId?: string | null; subcontractorId?: string | null };
 
-/** Cari hesabın TEK ADRESİ karttır: fason bacağı `resolvePartyToCardTx` ile bağlı kartına çözülür (kopya yok). */
+/** Bir kartın (ya da bağsız fason profilinin) hesap sorgusu — okuma ve yazma AYNI where'den (K3a). */
+type CardRef = { customerId: string | null; subcontractorId: string | null };
+function cariAccountWhereForCard(card: CardRef): Prisma.CariAccountWhereInput {
+  // Kart hesabı YA DA kartın fason profiline eski bacaktan bağlı hesap: ikisi de AYNI kimliğin hesabıdır.
+  if (card.customerId) return { OR: [{ customerId: card.customerId }, { subcontractor: { customerId: card.customerId } }] };
+  return { subcontractorId: card.subcontractorId as string };
+}
+// Onarım öncesi çift varsa: aktif önce, sonra kart hesabı (PG DESC varsayılanı NULLS FIRST — `nulls: "last"` şart), eşitlikte id.
+const CARD_ACCOUNT_ORDER = [{ isActive: "desc" }, { customerId: { sort: "desc", nulls: "last" } }, { id: "asc" }] satisfies Prisma.CariAccountOrderByWithRelationInput[];
+
+/**
+ * KART → HESAP TEK ÇÖZÜCÜ (K3a): kartın kimliğine bağlı MEVCUT hesap, hangi bacaktan olursa olsun. Yaratmaz.
+ * `ensureCariAccountTx` (yazma), `resolveCariAccountByCustomerTx` (okuma) ve alan okuyucuları buradan geçer.
+ */
+export async function findCariAccountForCardTx<S extends Prisma.CariAccountSelect>(
+  db: Pick<typeof prisma, "cariAccount">,
+  card: CardRef,
+  select: S,
+): Promise<Prisma.CariAccountGetPayload<{ select: S }> | null> {
+  const row = await db.cariAccount.findFirst({ where: cariAccountWhereForCard(card), orderBy: CARD_ACCOUNT_ORDER, select });
+  return (row as Prisma.CariAccountGetPayload<{ select: S }> | null) ?? null;
+}
+
 /**
  * Müşteri kartından cari hesabın kimliği — SALT OKUNUR (yaratmaz). Okuma uçları (açık fatura listesi) hesap açmasın:
- * hesap ilk fatura/ödemeyle doğar (`ensureCariAccountTx`); yoksa "açık fatura yok" doğru cevaptır. Aynı `where`.
+ * hesap ilk fatura/ödemeyle doğar (`ensureCariAccountTx`); yoksa "açık fatura yok" doğru cevaptır. Aynı çözücü.
  */
 export async function findCariAccountIdByCustomer(customerId: string): Promise<string | null> {
-  const row = await prisma.cariAccount.findFirst({ where: { customerId }, select: { id: true } });
+  const row = await findCariAccountForCardTx(prisma, { customerId, subcontractorId: null }, { id: true });
   return row?.id ?? null;
 }
 
-/**
- * KART → HESAP tek çözücü (cari kart ↔ hesap birleşimi Z-A): kartın kendi hesabı YA DA kartın fason
- * profiline eski bacaktan bağlı hesap (göç öncesi kayıt). Yaratmaz — okuma yolu; doğuş `ensureCariAccountTx`.
- * Fatura/ödeme formu hesabı kod aramasıyla (`kind === party`) DEĞİL bu yolla bulur.
- */
 /** Kartın hesap terimleri (Z-A opt-in DTO) — okuma tek yerden; hesap yoksa null. */
 export async function readCariTermsByCustomer(customerId: string): Promise<{ id: string; paymentTermDays: number | null; defaultCurrency: Currency; taxOffice: string | null; riskLimit: Prisma.Decimal | null; isActive: boolean; serviceBillingTrigger: string | null } | null> {
-  const ref = await resolveCariAccountByCustomerTx(prisma, customerId);
-  if (!ref) return null;
-  return prisma.cariAccount.findUniqueOrThrow({ where: { id: ref.id }, select: { id: true, paymentTermDays: true, defaultCurrency: true, taxOffice: true, riskLimit: true, isActive: true, serviceBillingTrigger: true } });
+  return findCariAccountForCardTx(prisma, { customerId, subcontractorId: null }, { id: true, paymentTermDays: true, defaultCurrency: true, taxOffice: true, riskLimit: true, isActive: true, serviceBillingTrigger: true });
 }
 
+/**
+ * KART → HESAP (cari kart ↔ hesap birleşimi Z-A): kartın kendi hesabı YA DA kartın fason profiline eski bacaktan
+ * bağlı hesap (göç öncesi kayıt). Yaratmaz — okuma yolu; doğuş `ensureCariAccountTx`. Fatura/ödeme formu hesabı
+ * kod aramasıyla (`kind === party`) DEĞİL bu yolla bulur.
+ */
 export async function resolveCariAccountByCustomerTx(
   db: Pick<typeof prisma, "cariAccount">,
   customerId: string,
 ): Promise<{ id: string; isActive: boolean } | null> {
-  const row = await db.cariAccount.findFirst({
-    where: { OR: [{ customerId }, { subcontractor: { customerId } }] },
-    // PG'de DESC varsayılanı NULLS FIRST: iki hesap varsa yazımın gittiği CUSTOMER hesabı (customerId dolu) önce gelmeli.
-    orderBy: { customerId: { sort: "desc", nulls: "last" } },
-    select: { id: true, isActive: true },
-  });
-  return row ?? null;
+  return findCariAccountForCardTx(db, { customerId, subcontractorId: null }, { id: true, isActive: true });
 }
 
+/** Hesap ilk açılırken yazılabilen terimler (açık `cariService.create`); lazy yol boş açar. */
+export type CariAccountInitialTerms = Pick<Prisma.CariAccountCreateManyInput, "taxOffice" | "defaultCurrency" | "paymentTermDays" | "riskLimit" | "notes">;
+
+/**
+ * Kartın hesabını döndürür, yoksa açar — `cariAccount` satırının TEK FABRİKASI (bekçi: `test_cari_kart_hesap §8f`).
+ * Kartın kimliğine bağlı hesap HANGİ bacakta olursa olsun (kart hesabı ya da eski fason bacağı) onu kullanır;
+ * ikinci hesap AÇILMAZ (K3a — cari tek kimlik). `created` yalnız bu çağrı satırı yazdıysa true.
+ */
 export async function ensureCariAccountTx(
   tx: Prisma.TransactionClient,
   party: CariAccountParty,
-): Promise<{ id: string; defaultCurrency: Currency }> {
+  initial?: CariAccountInitialTerms,
+): Promise<{ id: string; defaultCurrency: Currency; created: boolean }> {
   if ((party.customerId == null) === (party.subcontractorId == null)) {
     throw AppError.badRequest("Cari hesap için müşteri VEYA fason firma verilmeli (ikisi birden değil).");
   }
-  const { customerId, subcontractorId } = await resolvePartyToCardTx(tx, party);
-
-  const where = customerId ? { customerId } : { subcontractorId: subcontractorId as string };
-  const existing = await tx.cariAccount.findFirst({
-    where,
-    select: { id: true, defaultCurrency: true, isActive: true },
-  });
+  const card = await resolvePartyToCardTx(tx, party);
+  const select = { id: true, defaultCurrency: true, isActive: true } as const;
+  const existing = await findCariAccountForCardTx(tx, card, select);
   if (existing) {
     if (!existing.isActive) {
       throw AppError.conflict("Bu carinin hesabı pasif durumda — önce Cari Hesaplar ekranından aktifleştirin.");
     }
-    return { id: existing.id, defaultCurrency: existing.defaultCurrency };
+    return { id: existing.id, defaultCurrency: existing.defaultCurrency, created: false };
   }
-
-  try {
-    const created = await tx.cariAccount.create({
-      data: {
-        kind: customerId ? CariKind.CUSTOMER : CariKind.SUBCONTRACTOR,
-        customerId,
-        subcontractorId,
-      },
-      select: { id: true, defaultCurrency: true },
-    });
-    return created;
-  } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      const again = await tx.cariAccount.findFirstOrThrow({
-        where,
-        select: { id: true, defaultCurrency: true },
-      });
-      return again;
-    }
-    throw e;
-  }
+  const ins = await tx.cariAccount.createMany({
+    data: [{ ...initial, kind: card.customerId ? CariKind.CUSTOMER : CariKind.SUBCONTRACTOR, customerId: card.customerId, subcontractorId: card.subcontractorId }],
+    skipDuplicates: true,
+  });
+  const row = await findCariAccountForCardTx(tx, card, select);
+  if (!row) throw AppError.conflict("Cari hesap açılamadı — tekrar deneyin.");
+  return { id: row.id, defaultCurrency: row.defaultCurrency, created: ins.count === 1 };
 }
 
 /**

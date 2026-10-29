@@ -49,6 +49,7 @@ import {
   ensureCariAccountTx,
   applyCariBalanceTx,
   deriveInvoiceDueDate,
+  findCariAccountForCardTx,
 } from "./helpers/finance.helper";
 import { resolvePartyToCardTx } from "./helpers/party-card.helper";
 import {
@@ -809,10 +810,7 @@ export class InvoiceService {
     const party = await resolvePartyToCardTx(prisma, { customerId: receipt.supplierId, subcontractorId: receipt.subcontractorId });
     const supplierCari =
       party.customerId || party.subcontractorId
-        ? await prisma.cariAccount.findFirst({
-            where: party.customerId ? { customerId: party.customerId } : { subcontractorId: party.subcontractorId! },
-            select: { paymentTermDays: true },
-          })
+        ? await findCariAccountForCardTx(prisma, party, { paymentTermDays: true })
         : null;
     const dueDate = deriveInvoiceDueDate(receipt.createdAt, supplierCari?.paymentTermDays);
 
