@@ -35,6 +35,7 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   { anahtar: "kursun.meterVarianceBasis", alan: "kursunMeterVarianceBasis", hedef: "DECLARED_IN", dilim: "H2" },
   { anahtar: "kursun.meterVarianceApproval", alan: "kursunMeterVarianceApproval", hedef: "NONE", dilim: "H2" },
   { anahtar: "kursun.simulatedMeterEnabled", alan: "kursunSimulatedMeterEnabled", hedef: false, dilim: "H1" },
+  { anahtar: "tambur.listByStationEnabled", alan: "tamburListByStationEnabled", hedef: true, dilim: "T2" },
   { anahtar: "finance.serviceBilling.enabled", alan: "financeServiceBillingEnabled", hedef: true, dilim: "H7" },
   { anahtar: "finance.serviceBilling.meterBasis", alan: "financeServiceBillingMeterBasis", hedef: "OUT", dilim: "H7" },
   {
