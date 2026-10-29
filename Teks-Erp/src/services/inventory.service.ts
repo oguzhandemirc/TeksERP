@@ -18,6 +18,7 @@ import { reserveDoffCode } from "./helpers/machine-doff-open.helper";
 import { readDbNow } from "./helpers/machine-run-open.helper";
 import { postRescueEntryTx } from "./helpers/production-entry-ledger.helper";
 import { postEntryCorrectionTx } from "./helpers/entry-correction-ledger.helper";
+import { ambiguousCustomerCodeError, matchExtras, resolveRollByScanCode } from "./helpers/roll-scan-resolve.helper";
 import { normalizeScanCode } from "../utils/code-format";
 import { AuditService } from "./audit.service";
 import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type";
@@ -2801,8 +2802,9 @@ export class InventoryService {
    * Get a roll by its barcode.
    */
   async findRollByBarcode(barcode: string): Promise<ApiResponse<Roll | null>> {
-    const roll = await prisma.roll.findUnique({
-      where: { barcode: normalizeScanCode(barcode) },
+    // D4-F1: tek okutma boğazı — iç barkod önce, ayar açıksa aktif müşteri kodu (belirsizlik 409).
+    const resolved = await resolveRollByScanCode(barcode, { load: (where) => prisma.roll.findUnique({
+      where,
       include: {
         item: true,
         color: true,
@@ -2830,17 +2832,18 @@ export class InventoryService {
           },
         },
       },
-    });
-
-    if (!roll) {
+    }) });
+    if (resolved.kind === "AMBIGUOUS") throw ambiguousCustomerCodeError(resolved);
+    if (resolved.kind === "NONE") {
       return { success: false, data: null, message: "Barkod bulunamadı" };
     }
+    const roll = resolved.roll;
 
     // İptal edilmiş topta "neden + geri alınabilir mi" teşhisi. Okutan yüzey
     // artık "stokta değil" deyip susmak zorunda değil.
     const cancelDiag = await this.buildCancelDiagnostics(roll);
 
-    return { success: true, data: { ...roll, ...(cancelDiag ?? {}) } as unknown as Roll };
+    return { success: true, data: { ...roll, ...(cancelDiag ?? {}), ...matchExtras(resolved) } as unknown as Roll };
   }
 
   /**

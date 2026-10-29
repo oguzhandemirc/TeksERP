@@ -642,6 +642,8 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   // ── DURUM ──────────────────────────────────────────────────────────────────
   { model: "DocumentScan", sinif: "DURUM", yari: true,
     gerekce: "gelen belge fotoğrafı + OCR okuma durumu (PENDING→READING→READ/READ_FAILED); taslak kaynağıdır, defter değil — tek defter satırı onaydaki depo ENTRY'si (D4). Baytlar v1'de süresiz belge izi; raporlanan hiçbir sayı bu tabloya bağlı değil" },
+  { model: "RollCustomerCode", sinif: "DURUM", yari: true,
+    gerekce: "müşteriye tanımlı top barkodu eşlemesi (D4-F1): kimlik/okutma anahtarı, defter değil — silinse raporlanan hiçbir sayı değişmez. Yine de hard delete yok: değiştirme = eski satıra `revokedAt` damgası + yeni satır (kısmi unique `revokedAt IS NULL`), yazar `services/roll-customer-code.service.ts`" },
   { model: "UserRecoveryCode", sinif: "DURUM", gerekce: "tek kullanımlık kurtarma kodu; tüketimi `usedAt` ile işaretlenir, defter değil" },
   { model: "SupportTicketReply", sinif: "DURUM",
     gerekce: "satıcı destek yanıtının YEREL ÖNBELLEK kopyası (3d-2): \"ne oldu\"nun sahibi satıcının `destek_olayi` defteridir (tetikleyiciyle değişmez), talep satıcıda kapanır; yerelde iş kararı ve raporlanan sayı yok, satır `vendorReplyId` ile tekil, yalnız yoklama eşitlemesi ekler (`services/support-sync.service.ts`)" },

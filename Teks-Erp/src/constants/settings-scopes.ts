@@ -40,6 +40,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
     permission: "settings:shipping",
     flagKeys: [
       "shipmentConfirmationEnabled",
+      "scanCustomerCodeLookupEnabled",
       "shipmentManualSackCountEnabled",
       "shipmentUndoSameDayOnly",
       "returnGradingEnabled",

@@ -41,6 +41,28 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "Roll", table: "rolls", column: "labelCustomerId", label: "Top (etiket müşterisi)" },
     // 2026-09-15 (G3 emanet) — mülkiyet bağı üç modelde: referans bağ, tekillik yok; birleştirme kimliği değiştirir, sahipliği değil.
     { kind: "MOVE", model: "Roll", table: "rolls", column: "ownerCustomerId", label: "Top (emanet sahibi)" },
+    // D4-F1: müşteri barkodu topun emanet sahibiyle birlikte taşınır; aktif kod müşteride tekil (partial unique).
+    {
+      kind: "CONFLICT",
+      model: "RollCustomerCode",
+      table: "roll_customer_codes",
+      column: "customerId",
+      label: "Müşteri barkodu",
+      uniqueOn: ["customerId", "code"],
+      policy: "BLOCK",
+      activeWhenNull: ["revokedAt"],
+      why: "İki kartta aynı aktif müşteri barkodu var — birleşince okutma iki topa çözülürdü. Hangi topun kodu kalacağını operatör seçer (birini kaldırın); kaldırılmış kodlar serbestçe taşınır.",
+    },
+    {
+      kind: "CONFLICT",
+      model: "CustomerBarcodeSeries",
+      table: "customer_barcode_series",
+      column: "customerId",
+      label: "Müşteri barkod serisi",
+      uniqueOn: ["customerId"],
+      policy: "BLOCK",
+      why: "İki kartın da barkod serisi var — müşteri başına tek biçim; hangisinin geçerli kalacağı müşteriyle konuşulacak karardır.",
+    },
     { kind: "MOVE", model: "WarpBeam", table: "warp_beams", column: "ownerCustomerId", label: "Levent (emanet sahibi)" },
     { kind: "MOVE", model: "YarnLot", table: "yarn_lots", column: "ownerCustomerId", label: "İplik lotu (emanet sahibi)" },
     { kind: "MOVE", model: "Route", table: "routes", column: "customerId", label: "Rota şablonu" },

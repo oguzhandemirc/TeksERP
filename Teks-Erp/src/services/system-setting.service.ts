@@ -755,6 +755,8 @@ export const SETTING_KEYS = {
   KURSUN_METER_VARIANCE_APPROVAL: "kursun.meterVarianceApproval",
   /** H1b: çıkış metresi stoğa uygulansın mı — `RECORD` (bugün; okuma stoğu değiştirmez) · `APPLY`. */
   KURSUN_METER_STOCK_MODE: "kursun.meterStockMode",
+  /** D4-F1: okutmada iç barkod bulunamazsa topun aktif MÜŞTERİ KODUNA da bakılsın mı (varsayılan KAPALI = bugün). */
+  SCAN_CUSTOMER_CODE_LOOKUP: "scan.customerCodeLookup",
   /** Parti no KISA ve DÖNEN mi olsun (P01…P99, 99'dan sonra P01)? Default TRUE/AÇIK.
    *  Backend ENFORCE eder (`batch.service.generateBatchNumberTx`). Kapalıyken eski
    *  `P + GGAAYY + sıra` günlük kalıbına düşülür — birebir eski davranış.
@@ -2115,6 +2117,8 @@ export interface FeatureFlags {
   kursunMeterVarianceApproval: KursunMeterVarianceApproval;
   /** H1b: çıkış metresi stok kipi (varsayılan `RECORD` = bugün). */
   kursunMeterStockMode: KursunMeterStockMode;
+  /** D4-F1: okutma müşteri koduna düşsün mü (varsayılan `false` = bugün; iç barkod her zaman önce). */
+  scanCustomerCodeLookupEnabled: boolean;
   /** Parti no kısa ve dönen mi (P01…P99)? Default TRUE/açık. Backend ENFORCE eder.
    *  Kapalıyken eski `P + GGAAYY + sıra` kalıbı. Açıkken parti no benzersiz DEĞİLDİR. */
   batchShortNumberEnabled: boolean;
@@ -2596,6 +2600,7 @@ export class SystemSettingService {
       kursunMeterVarianceBasis: await readKursunMeterVarianceBasis(cacheClient),
       kursunMeterVarianceApproval: await readKursunMeterVarianceApproval(cacheClient),
       kursunMeterStockMode: await readKursunMeterStockMode(cacheClient),
+      scanCustomerCodeLookupEnabled: await readScanCustomerCodeLookupEnabled(cacheClient),
       batchShortNumberEnabled: await readBatchShortNumberEnabled(cacheClient),
       batchLastNumberHintEnabled: await readBatchLastNumberHintEnabled(cacheClient),
       qualityGradeRequiredEnabled: await readQualityGradeRequiredEnabled(cacheClient),
@@ -4071,6 +4076,17 @@ export class SystemSettingService {
         throw AppError.badRequest(`kursunMeterStockMode şunlardan biri olmalı: ${KURSUN_METER_STOCK_MODES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.KURSUN_METER_STOCK_MODE, v, "Kurşun çıkış metresi stoğu — yalnız kaydet · stoğa uygula", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "scanCustomerCodeLookupEnabled")) {
+      if (typeof input.scanCustomerCodeLookupEnabled !== "boolean") {
+        throw AppError.badRequest("scanCustomerCodeLookupEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.SCAN_CUSTOMER_CODE_LOOKUP,
+        input.scanCustomerCodeLookupEnabled,
+        "Okutmada müşteri barkodu — iç barkod bulunamazsa topun aktif müşteri koduna bakılır",
+        userId,
+      );
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "batchShortNumberEnabled")) {
@@ -6621,6 +6637,13 @@ export async function readKursunMeterStockMode(tx?: Pick<typeof prisma, "systemS
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.KURSUN_METER_STOCK_MODE }, select: { value: true } });
   const v = setting?.value;
   return typeof v === "string" && KURSUN_METER_STOCK_MODES.includes(v as KursunMeterStockMode) ? (v as KursunMeterStockMode) : DEFAULT_KURSUN_METER_STOCK_MODE;
+}
+
+/** D4-F1: okutmada müşteri kodu araması — kayıt yoksa KAPALI (bugünkü davranış: yalnız iç barkod). */
+export async function readScanCustomerCodeLookupEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.SCAN_CUSTOMER_CODE_LOOKUP }, select: { value: true } });
+  if (!setting) return false;
+  return asBoolean(setting.value);
 }
 
 export async function readKursunBypassEnabled(

@@ -389,6 +389,10 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   // MeterStockMode (H1b, 2026-10-29)
   RECORD: "Yalnız kaydet",
   APPLY: "Stoğa uygula",
+  // CustomerCodeSource (D4-F1, 2026-10-30)
+  BOUND_LABEL: "Müşteri etiketi bağlandı",
+  CUSTOMER_SERIES: "Müşteri serisinden üretildi",
+  DELIVERY_NOTE: "İrsaliye top no",
   // ServiceMeterBasis (H7, 2026-10-29) — OUT/IN ortak; CUT/RECEIVED SERVICE_BILLING_LINK.meterBasis override'ı ile ayrılır
   DECLARED: "Beyan edilen metre",
   // MeterApprovalMode — NONE ortak
