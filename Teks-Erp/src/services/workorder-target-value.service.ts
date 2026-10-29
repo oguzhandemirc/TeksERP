@@ -1,7 +1,7 @@
 // =============================================================================
 // İŞ EMRİ HEDEF ÇEŞİT DEĞERİ ve GRAMAJ ÖZETİ uçları (KQ-D6, 2026-10-24)
 // =============================================================================
-// PUT hedef kümesi FARK bazlıdır (eski satır damgalanır, aynısı no-op); audit tx
+// PUT hedefi ÖZELLİK KAPSAMLI ve fark bazlıdır (eski satır damgalanır, aynısı no-op); audit tx
 // DIŞINDA ve yalnız gerçek değişimde yazılır. Özetler `process-summary.helper.ts`ten.
 // =============================================================================
 import prisma from "../lib/prisma";
@@ -12,13 +12,13 @@ import {
   assertTargetValueItems,
   readActiveTargetValues,
   setWorkOrderTargetValuesTx,
-  type TargetValueItem,
+  type TargetValueUpdateItem,
 } from "./helpers/workorder-target-value.helper";
 import { summarizeKursunApplications, type KursunSummary } from "./helpers/process-summary.helper";
 import { resolveIncomingDocsEnabled } from "./system-setting.service";
 import { suggestWorkOrderGramaj, type WorkOrderGramajSuggestion } from "./workorder-gramaj-suggestion.service";
 
-export async function replaceWorkOrderTargetValues(workOrderId: string, items: TargetValueItem[], userId?: string) {
+export async function replaceWorkOrderTargetValues(workOrderId: string, items: TargetValueUpdateItem[], userId?: string) {
   await assertTargetValueItems(prisma, items);
   const change = await prisma.$transaction(async (tx) => {
     // İE satır kilidi tx'in İLK ifadesi: aynı İE'ye eşzamanlı iki hedef yazımı serileşir.
