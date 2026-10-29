@@ -369,6 +369,8 @@ const mobile: ScreenEntry[] = [
   { key: "FasonDokuma", app: "mobile", modul: "dokumaEnabled", title: "Fason Dokuma Kabul", requires: ["mobile:fason-kabul"], capabilities: [] },
   // K4P-EKRAN (2026-10-25): istasyondan bağımsız Muayene — top okut, 4 puan muayene yaz (oturumsuz).
   { key: "Muayene", app: "mobile", modul: "kaliteGuvenceEnabled", title: "Muayene", requires: ["mobile:muayene"], capabilities: [] },
+  // Gülkesim D7 (2026-10-29): tablet "Belge Tara" — foto + barkod + sahip → DRAFT; onay panelde (SoD). Mevcut web izni, yeni kod yok.
+  { key: "GelenBelge", app: "mobile", modul: "gelenBelgeEnabled", title: "Belge Tara", requires: ["gelen-belge:write"], capabilities: [] },
 ];
 
 /** Tüm ekranlar — masaüstü yetenek kodları etiketlenmiş hâlde. */

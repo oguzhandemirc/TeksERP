@@ -23,7 +23,7 @@ import type { MobileScreenKey } from '../types/permissions';
 import { DEFAULT_FEATURE_FLAGS, type FeatureFlags } from '../services/featureFlag.service';
 
 /** Tablette ekranı olan modül anahtarları (`FeatureFlags` alan adıyla). */
-export type MobileModuleFlag = 'productionEnabled' | 'dokumaEnabled' | 'devereEnabled' | 'tezgahEnabled' | 'kaliteGuvenceEnabled';
+export type MobileModuleFlag = 'productionEnabled' | 'dokumaEnabled' | 'devereEnabled' | 'tezgahEnabled' | 'kaliteGuvenceEnabled' | 'gelenBelgeEnabled';
 
 /** Ekran → modül. Satırı olmayan ekran koşulsuzdur (yalnız izin). */
 export const SCREEN_MODULE: Partial<Record<MobileScreenKey, MobileModuleFlag>> = {
@@ -42,6 +42,8 @@ export const SCREEN_MODULE: Partial<Record<MobileScreenKey, MobileModuleFlag>> =
   Uyarilar: 'tezgahEnabled',
   // Bağımsız Muayene (K4P-EKRAN) — kalite güvence modülü; backend kalite uçlarının modül kapısıyla aynı anahtar.
   Muayene: 'kaliteGuvenceEnabled',
+  // Belge Tara (Gülkesim D7) — gelen belge modülü; backend `requireGelenBelgeEnabled` (emanet bağımlılığı sunucuda çözülür).
+  GelenBelge: 'gelenBelgeEnabled',
 };
 
 export type MobileModuleState = Record<MobileModuleFlag, boolean>;
@@ -61,6 +63,8 @@ export function resolveMobileModuleState(
     tezgahEnabled: productionEnabled && (flags?.tezgahEnabled ?? DEFAULT_FEATURE_FLAGS.tezgahEnabled ?? false),
     // Kalite güvence HAM bayrak (KK1 içi muayene kapısı `useKaliteGuvenceEnabled` ile aynı okuma); varsayılan kapalı.
     kaliteGuvenceEnabled: flags?.kaliteGuvenceEnabled ?? DEFAULT_FEATURE_FLAGS.kaliteGuvenceEnabled ?? false,
+    // Gelen belge HAM bayrak, satır-yok KAPALI (fail-closed; yeni modül).
+    gelenBelgeEnabled: flags?.gelenBelgeEnabled ?? DEFAULT_FEATURE_FLAGS.gelenBelgeEnabled ?? false,
   };
 }
 

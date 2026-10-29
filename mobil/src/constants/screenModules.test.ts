@@ -10,7 +10,7 @@ import { MOBILE_SCREENS } from '../types/permissions';
 describe('screenModules — ekran → modül aynası', () => {
   it('üretim modülünün beş ekranı tabloda; çekirdek/planlanan ekranlar tabloda DEĞİL', () => {
     expect(Object.keys(SCREEN_MODULE).sort()).toEqual(
-      ['Devere', 'Dokuma', 'FasonDokuma', 'HizliIsEmri', 'KK1', 'KursunDagitim', 'KursunQc', 'Muayene', 'Tambur', 'Uyarilar'].sort()
+      ['Devere', 'Dokuma', 'FasonDokuma', 'HizliIsEmri', 'KK1', 'KursunDagitim', 'KursunQc', 'Muayene', 'Tambur', 'Uyarilar', 'GelenBelge'].sort()
     );
     expect(SCREEN_MODULE.Dokuma).toBe('dokumaEnabled');
     expect(SCREEN_MODULE.Devere).toBe('devereEnabled');
@@ -39,7 +39,7 @@ describe('screenModules — ekran → modül aynası', () => {
   });
 
   it('⭐ modül AÇIK → hiçbir ekran false değil (bugünkü liste birebir)', () => {
-    const c = conditionalScreens({ productionEnabled: true, dokumaEnabled: true, devereEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: true });
+    const c = conditionalScreens({ productionEnabled: true, dokumaEnabled: true, devereEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: true, gelenBelgeEnabled: true });
     expect(Object.values(c).every((v) => v === true)).toBe(true);
   });
 
@@ -49,6 +49,14 @@ describe('screenModules — ekran → modül aynası', () => {
     expect(conditionalScreens({ kaliteGuvenceEnabled: true }).Muayene).toBe(true);
     expect(conditionalScreens({ productionEnabled: false, kaliteGuvenceEnabled: true }).Muayene).toBe(true);
     expect(conditionalScreens({ productionEnabled: true, kaliteGuvenceEnabled: false }).Muayene).toBe(false);
+  });
+
+  it('⭐ gelen belge (D7 Belge Tara): satır-yok KAPALI, HAM bayrak (üretimden bağımsız)', () => {
+    expect(DEFAULT_FEATURE_FLAGS.gelenBelgeEnabled).toBe(false);
+    expect(conditionalScreens(undefined).GelenBelge).toBe(false);
+    expect(conditionalScreens({ gelenBelgeEnabled: true }).GelenBelge).toBe(true);
+    expect(conditionalScreens({ productionEnabled: false, gelenBelgeEnabled: true }).GelenBelge).toBe(true);
+    expect(conditionalScreens({ gelenBelgeEnabled: false }).GelenBelge).toBe(false);
   });
 
   it('⭐ tezgah izleme: satır-yok KAPALI (fail-closed) ve ÜRETİME bağlı', () => {

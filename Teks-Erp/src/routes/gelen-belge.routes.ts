@@ -20,6 +20,7 @@ import {
   getDeliveryNote, listDeliveryNotes, updateDeliveryNote, updateDeliveryNoteLine,
 } from "../services/gelen-belge-note.service";
 import { approveDeliveryNote } from "../services/gelen-belge-onay.service";
+import { getRollTabletContext } from "../services/roll-tablet.service";
 import { getDocumentScan, readDocumentScanContent, uploadDocumentScan } from "../services/gelen-belge-scan.service";
 import { suggestForNote } from "../services/gelen-belge-eslestirme.service";
 import { readerQueueCounts, requeueScanForReading } from "../services/gelen-belge-okuma.service";
@@ -53,6 +54,8 @@ const ScanBody = z.strictObject({
   pageNo: z.coerce.number().int().min(1).max(99).nullable().optional(),
   regionNo: z.coerce.number().int().min(1).max(9).nullable().optional(),
   barcodeText: optText(120),
+  // D7: tablet özeti kendisi hesaplar; uyuşmazlık 400 DOCUMENT_SCAN_HASH_MISMATCH (eski istemci göndermez).
+  sha256: z.string().regex(/^[0-9a-fA-F]{64}$/, "Özet 64 onaltılık karakter olmalı").nullable().optional(),
 });
 const Header = {
   ownerCustomerId: Id.nullable().optional(),
@@ -256,6 +259,18 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  *     responses:
  *       200: { description: "sender, owner, lines[] önerileri (salt okunur)" }
  */
+/**
+ * @openapi
+ * /api/gelen-belge/tablet-baglam:
+ *   get:
+ *     tags: [Gelen belge]
+ *     summary: 'Tablet "Belge Tara" bağlamı — sahip adayları (aktif cariler, yalnız id+ad; KK1 bağlamıyla tek kaynak)'
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "customers[] (id, name)" }
+ */
+// D7: tarayan `customer:read` taşımaz; KK1 emanet seçicisinin opt-in allowlist'i (`getRollTabletContext`) yeniden kullanılır.
+router.get("/tablet-baglam", requirePermission("gelen-belge:write"), wrap(async () => ({ status: 200, data: (await getRollTabletContext()).data })));
 // ── D3b okuma durumu / okut / eşleme ──────────────────────────────────────────
 // Servis yok → "yok" (taslak elle sürer; çıkışsız kapı değil). Sağlık yoklaması canlı (5 s), adres maskelenmez (köken; sır yok).
 router.get("/okuma/durum", requirePermission("gelen-belge:read"), wrap(async () => {

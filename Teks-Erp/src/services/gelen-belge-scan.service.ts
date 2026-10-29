@@ -30,6 +30,8 @@ export interface DocumentScanInput {
   pageNo?: number | null;
   regionNo?: number | null;
   barcodeText?: string | null;
+  /** İstemcinin hesapladığı özet (D7 tablet). Verilirse sunucu özetiyle eşleşmeli — yolda bozulan bayt kayda girmez. */
+  sha256?: string | null;
 }
 
 function tooLarge(): AppError {
@@ -95,6 +97,9 @@ export async function uploadDocumentScan(input: DocumentScanInput, userId: strin
     throw AppError.badRequest("Yalnız JPEG, PNG ya da PDF belge yüklenebilir (dosya içeriği tanınmadı).", { code: "DOCUMENT_SCAN_TYPE" });
   }
   const sha256 = createHash("sha256").update(content).digest("hex");
+  if (input.sha256 && input.sha256.toLowerCase() !== sha256) {
+    throw AppError.badRequest("Fotoğraf yolda bozuldu (özet tutmuyor); yeniden gönderin.", { code: "DOCUMENT_SCAN_HASH_MISMATCH" });
+  }
   const existing = await prisma.documentScan.findUnique({ where: { sha256 }, select: SCAN_SELECT });
   if (existing) return reuseExisting(existing, input.noteId, userId);
   const data = {
