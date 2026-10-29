@@ -85,6 +85,8 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   kursunMeterVarianceApproval: V("onay kipi; OFFICE panel ekranı (H4) gelene dek seçilemez, NONE işareti üretir"),
   tamburOverQuantityEnabled: A(true),
   tamburUndoFullSameDayOnly: A(true),
+  tamburSimulatedMeterEnabled: A(true),
+  tamburMeasureSourceRequired: V("çıkışsız kapı: measure göndermeyen istemci 400 alır; kural test_tambur_olcum_kaynagi'nde sınanır"),
   tamburShortCutA1Enabled: A(true),
   tamburShortCutA1ThresholdM: A(5),
   tamburPlanGateWidthToleranceCm: A(5),

@@ -12,6 +12,7 @@
 
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
+import { meterSourceSchema } from "../services/helpers/meter-reading.helper";
 import { TamburManualService } from "../services/tambur-manual.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { foldTypeSchema } from "../services/helpers/fold-type";
@@ -66,7 +67,8 @@ const sendToDyeSchema = z
 // Manuel top: metraj + sebep + idempotency anahtarı ZORUNLU; gerisi opsiyonel.
 // `colorId: null` AÇIKÇA "renksiz" demektir (iş emri hedef rengi miras alınmaz);
 // alan hiç gönderilmezse iş emrinin hedef rengi uygulanır.
-const manualRollSchema = z.object({
+// export: `test_tambur_olcum_kaynagi` `measure` alanını GERÇEK parse ile sınar.
+export const manualRollSchema = z.object({
   targetStepId: z.string().uuid("Geçersiz adım ID"),
   initialQty: z
     .number()
@@ -101,6 +103,8 @@ const manualRollSchema = z.object({
     .positive("Ağırlık pozitif olmalı")
     .max(999_999, "Ağırlık gerçekçi değil")
     .optional(),
+  // D4-B1: metrajın ölçüm kaynağı (eski APK göndermez; `tambur.olcumKaynagiZorunlu` açıkken zorunlu).
+  measure: meterSourceSchema.nullish(),
 }).strict();
 
 // KARTSIZ BİTMİŞ ÜRÜN ("Manuel Mod") — `manualRollSchema`in PARENT-SIZ hâli.
@@ -120,7 +124,8 @@ const manualRollSchema = z.object({
 // hangi ucu kullanacağını anlar. Mobil yükü şemanın ALT KÜMESİ (ölçüldü:
 // `mobil/src/services/tambur.service.ts`), Electron bu ucu hiç çağırmıyor →
 // katılaştırma sahadaki hiçbir istemciyi kırmaz.
-const produceSchema = z.object({
+// export: `test_tambur_olcum_kaynagi` `measure` alanını GERÇEK parse ile sınar.
+export const produceSchema = z.object({
   itemId: z.string().uuid("Geçersiz ürün ID"),
   colorId: z.string().uuid("Geçersiz renk ID").optional().nullable(),
   initialQty: z.number().positive("Metraj pozitif olmalı").max(999_999, "Metraj gerçekçi değil"),
@@ -156,6 +161,8 @@ const produceSchema = z.object({
   // Sebebin KATALOG KODU — `manualRollSchema` ile aynı sözleşme (Zod strip tuzağı).
   reasonCode: z.string().trim().max(64, "Sebep kodu çok uzun").optional().nullable(),
   clientToken: z.string().uuid("Geçersiz istemci anahtarı"),
+  // D4-B1: metrajın ölçüm kaynağı (manualRollSchema ile aynı sözleşme).
+  measure: meterSourceSchema.nullish(),
   // ⚠️ Bkz. yukarıdaki `.strict()` gerekçesi — asıl korunan uç BURASI:
   // `targetStepId` gönderen çağrı artık 400 alır, sessizce bağımsız top üretmez.
 }).strict();

@@ -116,6 +116,8 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "tamburListByStationEnabled",
       "machineStopTrackingEnabled",
       "tamburUndoFullSameDayOnly",
+      "tamburSimulatedMeterEnabled",
+      "tamburMeasureSourceRequired",
       "productionCancelReasonRequired",
     ],
   },

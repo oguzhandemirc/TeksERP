@@ -36,6 +36,10 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   { anahtar: "kursun.meterVarianceApproval", alan: "kursunMeterVarianceApproval", hedef: "NONE", dilim: "H2" },
   { anahtar: "kursun.simulatedMeterEnabled", alan: "kursunSimulatedMeterEnabled", hedef: false, dilim: "H1" },
   { anahtar: "tambur.listByStationEnabled", alan: "tamburListByStationEnabled", hedef: true, dilim: "T2" },
+  // DALGA4 §3.6 (K4/K5): Gülkesim simüle kesim metresini reddeder; ölçüm kaynağı zorunluluğu
+  // tablet OTA'sı (D4-B3 sürümü) tüm cihazlara inince açılır — önce açılırsa eski APK çıkışsız 400 alır.
+  { anahtar: "tambur.simulatedMeterEnabled", alan: "tamburSimulatedMeterEnabled", hedef: false, dilim: "D4-B1a" },
+  { anahtar: "tambur.olcumKaynagiZorunlu", alan: "tamburMeasureSourceRequired", hedef: false, dilim: "D4-B1a" },
   { anahtar: "finance.serviceBilling.enabled", alan: "financeServiceBillingEnabled", hedef: true, dilim: "H7" },
   { anahtar: "finance.serviceBilling.meterBasis", alan: "financeServiceBillingMeterBasis", hedef: "OUT", dilim: "H7" },
   {

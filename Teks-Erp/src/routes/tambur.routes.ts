@@ -298,6 +298,7 @@ router.post(
  *                     length: { type: number, description: Kesim uzunluğu (m), pozitif }
  *                     qualityGrade: { type: string, description: Kesilen parçanın kalite kodu }
  *                     relatedErrorIds: { type: array, items: { type: string, format: uuid } }
+ *                     measure: { $ref: '#/components/schemas/TamburMeasureBody' }
  *               decisions:
  *                 type: array
  *                 items:
@@ -627,6 +628,7 @@ router.post(
  *               initialQty:   { type: number, description: "Metraj (m) — zorunlu" }
  *               reason:       { type: string, minLength: 3, maxLength: 500 }
  *               clientToken:  { type: string, format: uuid, description: "İdempotency anahtarı — MANTIKSAL deneme başına bir kez üretilir" }
+ *               measure:      { $ref: '#/components/schemas/TamburMeasureBody' }
  *               itemId:       { type: string, format: uuid, description: "Verilmezse iş emrinin hedef ürünü" }
  *               colorId:      { type: string, format: uuid, nullable: true, description: "Verilmezse iş emrinin hedef rengi; null = renksiz" }
  *               width:        { type: number, nullable: true }
@@ -703,6 +705,7 @@ router.post(
  *               markedForKartela:  { type: boolean }
  *               reason:            { type: string, minLength: 3, maxLength: 500 }
  *               clientToken:       { type: string, format: uuid, description: "İdempotency anahtarı — MANTIKSAL deneme başına bir kez üretilir" }
+ *               measure:           { $ref: '#/components/schemas/TamburMeasureBody' }
  *     responses:
  *       201: { description: "Bitmiş top Bitmiş Depo'ya eklendi (rollId/barcode/status/idempotentReplay)" }
  *       400: { description: "Geçersiz gövde / sebep-metraj-ürün eksik / müşteri pasif / ağırlık girişi kapalı" }
@@ -745,6 +748,7 @@ router.post(
  *             required: [lengthMeters, status]
  *             properties:
  *               lengthMeters: { type: number, example: 100 }
+ *               measure: { $ref: '#/components/schemas/TamburMeasureBody' }
  *               status:
  *                 type: string
  *                 enum: [WAREHOUSE, SCRAP, A1_STOCK]
@@ -810,6 +814,26 @@ router.post(
 
 /**
  * @swagger
+ * components:
+ *   schemas:
+ *     TamburMeasureBody:
+ *       type: object
+ *       nullable: true
+ *       additionalProperties: false
+ *       description: |
+ *         D4-B1 kesim metresinin ölçüm kaynağı (kurşun okuma gövdesiyle ortak alanlar). Eski istemci göndermez
+ *         (sapma kaynağı NULL). 400 kodları SIMULATED_METER_DISABLED · MEASURE_SOURCE_REQUIRED (tambur.olcumKaynagiZorunlu)
+ *         · CARD_SAMPLE_UNSUPPORTED · METER_PERIPHERAL_NOT_FOUND.
+ *       required: [source]
+ *       properties:
+ *         source: { type: string, enum: [MACHINE, OPERATOR, SUPERVISOR, SIMULATED] }
+ *         peripheralId: { type: string, format: uuid, nullable: true }
+ *         rawCounter: { type: number, nullable: true }
+ *         cardSampleId: { type: string, format: uuid, nullable: true, description: "Model gelene dek 400 CARD_SAMPLE_UNSUPPORTED" }
+ */
+
+/**
+ * @swagger
  * /api/tambur/{id}/cut-warehouse:
  *   post:
  *     tags: [Tambur]
@@ -824,6 +848,16 @@ router.post(
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [cutLength]
+ *             properties:
+ *               cutLength: { type: number }
+ *               clientToken: { type: string, format: uuid }
+ *               measure: { $ref: '#/components/schemas/TamburMeasureBody' }
  *     responses:
  *       201: { description: Kesim başarılı, child barkodlu top oluştu }
  *       400: { description: Parent açık kumaş / status WAREHOUSE değil / metre yetmiyor }

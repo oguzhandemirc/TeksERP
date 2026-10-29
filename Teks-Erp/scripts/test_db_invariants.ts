@@ -883,6 +883,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // H1 kurşun metre defteri (migration 20261029005529): metre >= 0, damga ⇔ sebep. Bekçi `test_kursun_metre` §8.
   { table: "roll_meter_readings", name: "roll_meter_readings_meters_ck" },
   { table: "roll_meter_readings", name: "roll_meter_readings_revoke_ck" },
+  // D4-B1a (migration 20261030020000): IN/OUT satırında basis+approvalMode dolu; CUT NULL. Bekçi `test_tambur_olcum_kaynagi` §3.
+  { table: "roll_meter_readings", name: "roll_meter_readings_policy_by_phase" },
   { table: "roll_meter_acks", name: "roll_meter_acks_revoke_ck" },
   { table: "roll_customer_codes", name: "roll_customer_codes_code_ck" },
   { table: "roll_customer_codes", name: "roll_customer_codes_revoke_ck" },

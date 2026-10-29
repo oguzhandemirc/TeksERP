@@ -5914,6 +5914,8 @@ model LabTestResult {
 enum MeterPhase {
   IN
   OUT
+  /// D4-B1 (2026-10-30): Tambur kesim metresi (çocuk topun doğuş ölçümü). Politika kolonları NULL.
+  CUT
 }
 
 /// Sayaç sayma davranışı (cihaz verisi): RESETTING her işte sıfırlanır; CUMULATIVE birikir.
@@ -5965,8 +5967,9 @@ model RollMeterReading {
   // Politika kopyası (§4) — okuma anındaki ayar.
   thresholdM    Decimal?           @db.Decimal(12, 3)
   thresholdPct  Decimal?           @db.Decimal(6, 3)
-  basis         MeterVarianceBasis
-  approvalMode  MeterApprovalMode
+  /// IN/OUT'ta ZORUNLU (DB CHECK `roll_meter_readings_policy_by_phase`); CUT'ta NULL (sapma politikası yok).
+  basis         MeterVarianceBasis?
+  approvalMode  MeterApprovalMode?
   /// H1b: okuma anındaki stok kipi — APPLY'ın uygulanıp uygulanmayacağı bu kopyadan okunur.
   stockMode     MeterStockMode     @default(RECORD)
 
@@ -6273,6 +6276,9 @@ model RollVariance {
   /// H1b: bu satır `Roll.initialQty`'yi ne kadar YÜKSELTTİ (OVERAGE, kayıtlı girişi aşan ölçüm).
   /// Tersinde aynı miktar geri indirilir; NULL = yükseltmedi (ya da eski yazıcı kaydetmiyor).
   initialQtyRaise Decimal?         @db.Decimal(12, 3)
+  /// D4-B1: sapmayı doğuran ölçümlerin ZAYIF HALKASI (`weakestMeasureSource`). NULL = bilinmiyor
+  /// (eski istemci / ölçüm beyansız yol). Doğuş kolonu: sonradan DEĞİŞMEZ, backfill YOK.
+  measureSource   MachineDataSource?
 
   /// TERSLENDİ (2026-08-09) — satır SİLİNMEZ, işaretlenir (append-only defter).
   ///

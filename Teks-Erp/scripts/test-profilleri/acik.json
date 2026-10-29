@@ -44,6 +44,7 @@
     "scanCustomerCodeLookupEnabled": true,
     "tamburOverQuantityEnabled": true,
     "tamburUndoFullSameDayOnly": true,
+    "tamburSimulatedMeterEnabled": true,
     "tamburShortCutA1Enabled": true,
     "tamburShortCutA1ThresholdM": 5,
     "tamburPlanGateWidthToleranceCm": 5,
