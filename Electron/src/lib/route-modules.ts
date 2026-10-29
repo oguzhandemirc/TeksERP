@@ -36,6 +36,7 @@ export type RouteModuleFlag = Extract<
   | "kaliteGuvenceEnabled"
   | "maliyetEnabled"
   | "gelenBelgeEnabled"
+  | "emanetEnabled"
 >;
 
 /** Ekran anahtarı (route yolunun ilk iki segmenti; hub tek segment) → modül. */
@@ -104,6 +105,8 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
   "reports/maliyet": "maliyetEnabled",
   // ── GELEN BELGE (Gülkesim OCR D5; etkin = emanet && gelenBelge) ─────────
   "operations/gelen-belgeler": "gelenBelgeEnabled",
+  // ── EMANET (P1a, ister 3.2) ───────────────────────────────────────────────
+  "operations/icerideki-isler": "emanetEnabled",
 };
 
 /** `:id` · `new` · `edit` segmentleri ebeveyne katlanır (manifesto EKRAN seviyesinde). */

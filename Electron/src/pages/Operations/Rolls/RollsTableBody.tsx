@@ -24,9 +24,9 @@ import { RollQtyAdjustDialog } from "./RollQtyAdjustDialog";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import type { RollStatusTabKey } from "./service";
 import { stationService } from "@/pages/Stations/service";
-import { entryStationLookupService, entryUserLookupService, warehouseLookupService } from "./entryLookupServices";
+import { entryStationLookupService, entryUserLookupService, ownerCustomerLookupService, warehouseLookupService } from "./entryLookupServices";
 import { useFoldValues } from "@/hooks/useFoldValues";
-import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { useEmanetEnabled, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { useMultiWarehouse } from "@/hooks/useWarehouses";
 import type { Roll } from "./types";
 
@@ -148,6 +148,15 @@ const FILTERS: FilterDef[] = [
   // EKLEYEN (2026-08-12): "hangi personel girdi". Kolon 2026-08-05'ten beri
   // vardı, filtre yoktu — 50 bin satırda gözle aranıyordu. Seçenekler yalnız
   // top girmiş kullanıcılar (/rolls/entry-users) — admin:users GEREKMEZ.
+  // SAHİBİ (emanet, ister 3.2): müşterinin işlenmek üzere bıraktığı mal. Yalnız emanet modülü açıkken listeye
+  // girer (depo emsali); backend süzgeci modülden bağımsız uygular — sessiz düşme yok.
+  {
+    kind: "multi-lookup",
+    key: "ownerCustomerId",
+    label: "Sahibi",
+    service: ownerCustomerLookupService,
+    queryKey: "roll-owner-customers",
+  },
   {
     kind: "multi-lookup",
     key: "createdById",
@@ -260,6 +269,7 @@ export function buildRollFilterDefs(
   tab: RollStatusTabKey,
   foldOptions: { value: string; label: string }[] = [],
   multiWarehouse = false,
+  emanetEnabled = false,
 ): FilterDef[] {
   // `kind` ile daralt: FilterDef bir union ve `dateRange` varyantında `key` YOK
   // (düz `f.key` derlenmez).
@@ -272,6 +282,7 @@ export function buildRollFilterDefs(
         // (kat filtresinin boş katalogda düşürülmesiyle aynı gerekçe).
         return multiWarehouse ? [f] : [];
       }
+      if (f.kind === "multi-lookup" && f.key === "ownerCustomerId") return emanetEnabled ? [f] : [];
       if (f.kind !== "multi-select" || f.key !== "foldType") return [f];
       return foldOptions.length > 0 ? [{ ...f, options: foldOptions }] : [];
     }),
@@ -336,14 +347,16 @@ export function RollsTableBody({
   const { values: foldValues } = useFoldValues();
   // Depo filtresi yalnız ÇOK DEPOLU kurulumda listeye girer (tek kaynak hook).
   const { multiWarehouse } = useMultiWarehouse();
+  const emanetEnabled = useEmanetEnabled();
   const filters = useMemo(
     () =>
       buildRollFilterDefs(
         tab,
         foldValues.map((v) => ({ value: v.code, label: v.name })),
         multiWarehouse,
+        emanetEnabled,
       ),
-    [tab, foldValues, multiWarehouse],
+    [tab, foldValues, multiWarehouse, emanetEnabled],
   );
 
   // Toplu iptal — Ham Stok + Bitmiş Depo'da sunulur (STOCK/WAREHOUSE→CANCELLED,

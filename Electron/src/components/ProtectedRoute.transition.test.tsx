@@ -23,7 +23,7 @@ vi.mock("@/hooks/useRoleAccess", () => ({
 }));
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
   useOperationsVisibilityContext: (): OperationsVisibilityContext => ({
-    shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: false, dokumaEnabled: false, tezgahEnabled: false, kaliteGuvenceEnabled: false, maliyetEnabled: false, gelenBelgeEnabled: false,
+    shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: false, dokumaEnabled: false, tezgahEnabled: false, kaliteGuvenceEnabled: false, maliyetEnabled: false, gelenBelgeEnabled: false, emanetEnabled: false,
     reportsClosedKeys: [], isReportOpen: () => true, flagsReady: true, flagsFailed: false,
     financeEnabled: false, productionEnabled: true, ticaretEnabled: false, iplikEnabled: false,
   }),

@@ -76,3 +76,16 @@ export const warehouseLookupService = {
     return asPage(r.data.data ?? []);
   },
 };
+
+/**
+ * EMANET SAHİBİ seçenekleri — "Sahibi" çipi (ister 3.2). Müşteri kataloğu değil, en az bir topun sahibi olmuş
+ * müşteriler (`/rolls/owner-customers`, `roll:read`) — `customer:read` istemez, koşulsuz 403 atmaz.
+ */
+export const ownerCustomerLookupService = {
+  getAll: async (): Promise<PaginatedResponse<LookupRow>> => {
+    const r = await apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; code: string | null }> }>(
+      "/api/rolls/owner-customers",
+    );
+    return asPage(r.data.data ?? []);
+  },
+};
