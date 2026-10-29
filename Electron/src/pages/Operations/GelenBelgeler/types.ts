@@ -122,7 +122,8 @@ export interface MatchCandidate extends NamedRef {
 export interface MatchSuggestion {
   rawText: string | null;
   suggested: MatchCandidate | null;
-  source: "ALIAS" | "SIMILARITY" | "NONE";
+  /** TEMPLATE: gönderen şablonunun bağlı carisi (E2) — en yüksek öncelik. */
+  source: "TEMPLATE" | "ALIAS" | "SIMILARITY" | "NONE";
   list: MatchCandidate[];
 }
 export interface NoteMatchSuggestions {
@@ -171,4 +172,30 @@ export interface HeaderPatch {
   processText?: string | null;
   pageCount?: number | null;
   declaredTopCount?: number | null;
+}
+
+/** Gönderen şablonu (E2): dosyadaki motor şablonu + fabrikaya özgü bağ (`GET /sablonlar`). */
+export interface SenderTemplateCustomer {
+  id: string;
+  code: string | null;
+  name: string;
+  isActive: boolean;
+}
+export interface SenderTemplateView {
+  code: string;
+  name: string;
+  version: number;
+  rowVersion: number | null;
+  inEngine: boolean;
+  id: string | null;
+  isActive: boolean;
+  hitCount: number;
+  senderCustomer: SenderTemplateCustomer | null;
+  defaultOwnerCustomer: SenderTemplateCustomer | null;
+  updatedAt: string | null;
+}
+export interface SenderTemplatePatch {
+  isActive?: boolean;
+  senderCustomerId?: string | null;
+  defaultOwnerCustomerId?: string | null;
 }
