@@ -13,6 +13,8 @@
 //   §7 eşleme: "GÜLEÇSOY TEKSTİL" ↔ "Güleçsoy Tekstil San." ≥ 0,90 öneri · ilgisiz → boş · alias önce (ALIAS) · /eslestirme ucu
 //   §6d bayat READING (10 dk+) yeniden alınır · §7f /eslestirme yok id → 404
 //   §8 bağlı taslak: operatörün yazdığı başlık/satır EZİLMEZ, yalnız boş alanlar dolar; taslak DRAFT değilse tarama yine READ'e kapanır
+//   §10 K6 PDF: yükleme READ_FAILED (deneme 0) doğar · eski PENDING PDF bile claim EDİLMEZ · sidecar'a 0 PDF isteği ·
+//       okut → 400 DOCUMENT_SCAN_PDF_NOT_READABLE (servis yokken de 503'ten önce) · kuyruk sayaçlarına girmez
 //   §9 İSTEĞE BAĞLI (OKUMA_GERCEK_URL=http://127.0.0.1:8765): GERÇEK okuma servisi (okuma/, D6) — sağlık + sentetik PNG → READ +
 //      Zod geçer + taslak · bozuk JPEG → servis 400 → KALICI READ_FAILED. Değişken yoksa atlanır (varsayılan sahte sunucu).
 // Emsal: scripts/test_gelen_belge_taslak.ts (app.listen(0) + ensureTestAdmin + ayar()).
@@ -58,7 +60,7 @@ async function ayar(key: string, v: boolean): Promise<void> {
 }
 
 // ── Sahte sidecar: JSON {imageBase64} içindeki "FIX:NNNN" damgasına göre altın fikstürü döner ─────────────────
-const fake = { mode: "ok" as "ok" | "500" | "400" | "invalid", hits: 0, delayMs: 0 };
+const fake = { mode: "ok" as "ok" | "500" | "400" | "invalid", hits: 0, delayMs: 0, pdfHits: 0 };
 function startFakeSidecar(): Promise<{ server: Server; url: string }> {
   const server = http.createServer((req, res) => {
     if (req.method === "GET" && req.url === "/health") {
@@ -71,6 +73,10 @@ function startFakeSidecar(): Promise<{ server: Server; url: string }> {
     req.on("data", (c: Buffer) => chunks.push(c));
     req.on("end", () => {
       fake.hits++;
+      try {
+        const sent = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { imageBase64?: string };
+        if (Buffer.from(sent.imageBase64 ?? "", "base64").subarray(0, 4).toString("latin1") === "%PDF") fake.pdfHits++;
+      } catch { /* gövde JSON değil — sayılmaz */ }
       setTimeout(() => {
         if (fake.mode === "500") { res.writeHead(500, { "content-type": "application/json" }); res.end(JSON.stringify({ detail: "OCR hatası (sahte)" })); return; }
         if (fake.mode === "400") { res.writeHead(400, { "content-type": "application/json" }); res.end(JSON.stringify({ detail: "bozuk görüntü (sahte)" })); return; }
@@ -300,6 +306,38 @@ async function main(): Promise<void> {
       n8c.lines.length === 22 && new Set(n8c.lines.map((l) => l.lineNo)).size === 22 && new Set(n8c.lines.map((l) => l.blockNo)).size === 3
         && w8c.some((w) => w.startsWith("DECLARED_TOP_COUNT_DIFF")) && w8c.some((w) => w.startsWith("MULTI_REGION")) && tb8c.includes(1) && tb8c.includes(2) && new Set(tb8c).size === tb8c.length,
       JSON.stringify({ l: n8c.lines.length, b: [...new Set(n8c.lines.map((l) => l.blockNo))], w: w8c, tb: tb8c }));
+
+    // ── §10 K6 PDF: arşiv — kuyruğa girmez, sidecar'a gitmez, okut 400 ───────
+    fake.mode = "ok";
+    for (let i = 0; i < 6 && (await runReaderOnce()).outcome !== "BOS"; i++) { /* önceki §'lerin kuyruğu boşalsın */ }
+    const q10a = await call("GET", "/api/gelen-belge/okuma/durum");
+    const pdfDoc = (salt: string) => Buffer.from(`%PDF-1.4\n% ${TAG} ${salt}\n%%EOF\n`, "latin1");
+    const up10 = await call("POST", "/api/gelen-belge/taramalar", { contentBase64: pdfDoc("yeni").toString("base64") });
+    const pdfNew = (up10.data?.scan as { id: string } | undefined)?.id ?? "";
+    if (pdfNew) made.scans.push(pdfNew);
+    const p10 = pdfNew ? await scan(pdfNew) : null;
+    check("§10a PDF yükleme → 201, READ_FAILED, deneme 0 (kuyruğa girmez)", up10.status === 201 && p10?.status === "READ_FAILED" && p10.attempts === 0, `${up10.status} ${p10?.status}/${p10?.attempts}`);
+    // D2 döneminde yüklenmiş (PENDING kalmış) PDF'i taklit et: savunma claim WHERE'inde ölçülür.
+    const legacy = await call("POST", "/api/gelen-belge/taramalar", { contentBase64: pdfDoc("eski").toString("base64") });
+    const pdfOld = (legacy.data?.scan as { id: string } | undefined)?.id ?? "";
+    if (pdfOld) made.scans.push(pdfOld);
+    await prisma.documentScan.update({ where: { id: pdfOld }, data: { status: "PENDING" } });
+    const pdfHits0 = fake.pdfHits;
+    const r10 = await runReaderOnce();
+    const c10 = await claimNextScan();
+    const o10 = await scan(pdfOld);
+    check("§10b eski PENDING PDF claim EDİLMEZ (tur BOS, claimNextScan NONE, PENDING/deneme 0)", r10.outcome === "BOS" && c10.kind === "NONE" && o10.status === "PENDING" && o10.attempts === 0, `${r10.outcome} ${c10.kind} ${o10.status}/${o10.attempts}`);
+    check("§10c sidecar'a 0 PDF isteği", fake.pdfHits === pdfHits0 && fake.pdfHits === 0, String(fake.pdfHits));
+    const ok10a = await call("POST", `/api/gelen-belge/taramalar/${pdfNew}/oku`);
+    const ok10b = await call("POST", `/api/gelen-belge/taramalar/${pdfOld}/oku`);
+    check("§10d PDF okut → 400 DOCUMENT_SCAN_PDF_NOT_READABLE (READ_FAILED ve PENDING), durum değişmez", ok10a.status === 400 && ok10a.code === "DOCUMENT_SCAN_PDF_NOT_READABLE" && ok10b.status === 400 && ok10b.code === "DOCUMENT_SCAN_PDF_NOT_READABLE" && (await scan(pdfNew)).status === "READ_FAILED", `${ok10a.status} ${ok10a.code} · ${ok10b.status} ${ok10b.code}`);
+    setReaderUrlForTests(null);
+    const ok10c = await call("POST", `/api/gelen-belge/taramalar/${pdfNew}/oku`);
+    setReaderUrlForTests(sidecar.url);
+    check("§10e servis yokken de PDF okut → 400 (503'ten önce)", ok10c.status === 400 && ok10c.code === "DOCUMENT_SCAN_PDF_NOT_READABLE", `${ok10c.status} ${ok10c.code}`);
+    const q10b = await call("GET", "/api/gelen-belge/okuma/durum");
+    const qc = (d: Resp) => JSON.stringify([d.data?.pending, d.data?.reading, d.data?.failed]);
+    check("§10f PDF kuyruk sayaçlarına girmez (pending/reading/failed aynı)", qc(q10a) === qc(q10b), `${qc(q10a)} → ${qc(q10b)}`);
 
     // ── §9 İSTEĞE BAĞLI: gerçek okuma servisi (okuma/) ─────────────────────
     const gercek = process.env.OKUMA_GERCEK_URL?.trim();

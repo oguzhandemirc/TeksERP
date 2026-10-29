@@ -1,4 +1,4 @@
-// Liste sorgusu: süzme SUNUCUDA (durum/sahip/gönderen/arama), cursor ile sonsuz kaydırma; özet şeridi aynı where'den.
+// Liste sorgusu: süzme SUNUCUDA (durum/sahip/gönderen/arama/tarih), cursor ile sonsuz kaydırma; özet şeridi aynı where'den.
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { listDeliveryNotes, INCOMING_DOCUMENT_QUERY_KEY } from "./service";
 import type { DeliveryNoteListQuery, NoteStatus } from "./types";
@@ -8,9 +8,12 @@ export interface NoteListFilter {
   ownerCustomerId: string | null;
   senderCustomerId: string | null;
   q: string;
+  /** createdAt aralığı (`YYYY-MM-DD`); boş = sınırsız. */
+  from: string;
+  to: string;
 }
 
-export const EMPTY_FILTER: NoteListFilter = { status: null, ownerCustomerId: null, senderCustomerId: null, q: "" };
+export const EMPTY_FILTER: NoteListFilter = { status: null, ownerCustomerId: null, senderCustomerId: null, q: "", from: "", to: "" };
 
 export function toQuery(f: NoteListFilter): DeliveryNoteListQuery {
   return {
@@ -18,6 +21,8 @@ export function toQuery(f: NoteListFilter): DeliveryNoteListQuery {
     ownerCustomerId: f.ownerCustomerId ?? undefined,
     senderCustomerId: f.senderCustomerId ?? undefined,
     q: f.q.trim() || undefined,
+    from: f.from || undefined,
+    to: f.to || undefined,
     limit: 50,
   };
 }
