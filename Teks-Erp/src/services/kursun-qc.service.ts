@@ -60,7 +60,7 @@ import {
 } from "./helpers/station-capability-transfer.helper";
 import { applyKursunOperationTx } from "./helpers/kursun-operation.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
-import { awaitsMeterSignature } from "./helpers/kursun-meter-variance-sql.helper";
+import { awaitsMeterSignature, loadRollMeterBases, type RollMeterBase } from "./helpers/kursun-meter-variance-sql.helper";
 import { listMeterDeviations, type MeterDeviationFilter } from "./helpers/kursun-meter-deviation-list.helper";
 import {
   ackMeterReadingTx,
@@ -69,6 +69,8 @@ import {
   auditMeterReadingWrite,
   evaluateReadingVarianceTx,
   pendingMeterAcksTx,
+  resolveKursunMeterPolicy,
+  type MeterPolicyCopy,
   resolveSupervisorByPin,
   type MeterAckReason,
   meterReadingReplay,
@@ -86,7 +88,7 @@ import {
   assertKursunTabletMayWrite,
   resolveStepBypassEligibility,
 } from "./helpers/kursun-bypass-eligibility.helper";
-import { resolveKursunBypassEnabled, resolveKursunMeterCapture } from "./system-setting.service";
+import { resolveKursunBypassEnabled, resolveKursunMeterCapture, type KursunMeterCapture } from "./system-setting.service";
 import { uyari } from "../lib/logger";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
 import { processMeterNumber, requireProcessMeter } from "./helpers/roll-error-meter.helper";
@@ -136,6 +138,8 @@ interface RollSummary {
   /// KQ-D7: topun BAŞKA adımda açılmış AÇIK hataları (gri, salt-okunur, künyeli). Eski APK yok sayar.
   priorDefects: PriorDefectSummary[];
   priorOpenErrorCount: number;
+  /// H3b: sapma tabanı — YALNIZ `kursun.meterCapture` OUT/IN_OUT iken eklenir (OFF'ta anahtar yok, yanıt bayt-aynı).
+  meter?: RollMeterBase;
 }
 
 interface PriorDefectSummary {
@@ -220,6 +224,9 @@ interface StepSummary {
   /// Adımda açık top yoksa NEDEN boş + topların şu anki istasyonu (KQ-D3, D2 kararı):
   /// tablet bunu hata değil bilgi olarak gösterir. Açık top varsa ya da adım bittiyse null.
   emptyStep: EmptyStepInfo | null;
+  /// H3b: sayaç kipi + sapma politikası (tablet `KursunStepSummary.meter`). OFF'ta anahtar YOK — eski
+  /// istemci ve OFF fabrikanın yanıtı bayt-aynı; tablet alan yoksa OFF davranır.
+  meter?: { capture: Exclude<KursunMeterCapture, "OFF">; policy: MeterPolicyCopy };
   rolls: RollSummary[];
 }
 
@@ -1754,6 +1761,11 @@ export class KursunQcService {
     // barkodsuz açık kumaş topları listede ad + renkle görünsün.
     const itemName = step.workOrder.targetItem?.name ?? null;
     const colorName = step.workOrder.targetColor?.name ?? null;
+    // H3b: sayaç kipi kapalıyken (varsayılan) yalnız kip okunur; taban/politika okunmaz, anahtar eklenmez.
+    const capture = await resolveKursunMeterCapture();
+    const meterOn = capture !== "OFF";
+    const meterPolicy = meterOn ? await resolveKursunMeterPolicy(prisma) : null;
+    const meterBases = meterOn ? await loadRollMeterBases(prisma, stepId, rollIds) : null;
     const rolls: RollSummary[] = openMovements.map((m) => {
       const defects = defectsByRoll.get(m.roll.id) ?? [];
       return {
@@ -1767,6 +1779,7 @@ export class KursunQcService {
         colorName,
         priorDefects: priorByRoll.get(m.roll.id) ?? [],
         priorOpenErrorCount: priorByRoll.get(m.roll.id)?.length ?? 0,
+        ...(meterBases ? { meter: meterBases.get(m.roll.id) ?? { declaredIn: null, measuredIn: null } } : {}),
       };
     });
 
@@ -1814,6 +1827,7 @@ export class KursunQcService {
           rolls.length === 0 && step.status !== StepStatus.COMPLETED
             ? await this.describeEmptyStep(step.workOrderId, step.stepSequence)
             : null,
+        ...(meterOn && meterPolicy ? { meter: { capture, policy: meterPolicy } } : {}),
         rolls,
       },
     };
