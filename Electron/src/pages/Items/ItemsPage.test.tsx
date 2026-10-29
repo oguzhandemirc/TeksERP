@@ -18,6 +18,7 @@ import { MemoryRouter } from "react-router-dom";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { ItemsPage } from "./ItemsPage";
+import { itemTypeFilterOptions } from "@/components/forms/itemPicker";
 import { ITEM_URL_FILTERS, itemCatalogFilterDefs, itemStatusFilters, itemTypeChangeParams, parseItemStatus } from "./itemsFilters";
 import { labeledSelectText } from "@/components/forms/LabeledSelect";
 import { ITEM_CATALOG_HINT } from "@/components/forms/itemPicker";
@@ -74,7 +75,7 @@ describe("itemsFilters (saf)", () => {
 
   it("Tür ve Birim URL süzgeçleri BACKEND kolon adıyla (itemType · unit); 'Tümü' = ALL başta; Tür listesi ürün seçiciyle ORTAK", () => {
     const byKey = (k: string) => ITEM_URL_FILTERS.find((d) => d.key === k)!;
-    expect(byKey("itemType").options.map((o) => o.value)).toEqual(["ALL", "YARN", "FABRIC", "CONSUMABLE"]);
+    expect(byKey("itemType").options.map((o) => o.value)).toEqual(["ALL", "YARN", "FABRIC", "CONSUMABLE", "SERVICE"]);
     expect(byKey("unit").options.map((o) => o.value)).toEqual(["ALL", "MT", "KG", "ADET"]);
   });
 
@@ -98,6 +99,14 @@ describe("itemsFilters (saf)", () => {
     const tur = byKeyOptions("itemType");
     expect(labeledSelectText("Tür", "ALL", tur)).toBe("Tür: Tümü");
     expect(labeledSelectText("Tür", "YARN", tur)).toBe("Tür: İplik");
+    expect(labeledSelectText("Tür", "SERVICE", tur)).toBe("Tür: Hizmet");
+  });
+
+  it("⭐ H6b 'Hizmet' yalnız Ürünler süzgecinde: stok seçicisinin varsayılan tür listesine sızmaz; renk/özellik ekseni kapanır", () => {
+    expect(itemTypeFilterOptions().map((o) => o.value)).not.toContain("SERVICE");
+    const sp = new URLSearchParams("filter[allowedColorId]=c1");
+    expect(itemTypeChangeParams(sp, "SERVICE").has("filter[allowedColorId]")).toBe(false);
+    expect(itemTypeChangeParams(sp, "SERVICE").get("filter[itemType]")).toBe("SERVICE");
   });
 });
 
