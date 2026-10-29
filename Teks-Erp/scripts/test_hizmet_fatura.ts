@@ -255,7 +255,11 @@ async function main(): Promise<void> {
   check("§9a ikinci NULL adımlı aktif bağ DB seddine çarpar (P2002)", dup.prisma === "P2002", JSON.stringify(dup));
   const viaHelper = await errOf(() => prisma.$transaction((tx) => insertServiceLinksTx(tx, live.id, [nullLink])));
   check("§9b insertServiceLinksTx 409 SERVICE_ALREADY_BILLED", viaHelper.status === 409 && viaHelper.code === "SERVICE_ALREADY_BILLED", JSON.stringify(viaHelper));
-  await prisma.serviceBillingLink.deleteMany({ where: { invoiceId: live.id, workOrderStepId: null } });
+  // Sonda bağı SİLİNMEZ, damgalanır (defter ters yolu; fiziksel silme yalnız cleanup'ta).
+  await prisma.serviceBillingLink.updateMany({
+    where: { invoiceId: live.id, workOrderStepId: null, revokedAt: null },
+    data: { revokedAt: new Date(), revokeReason: "test §9 sonda bağı" },
+  });
 
   // ── §10 SIMULATED ────────────────────────────────────────────────────────
   section("§10 SIMULATED okuma faturaya girmez");

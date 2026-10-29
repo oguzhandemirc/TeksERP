@@ -300,6 +300,11 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   D("RollMeterAck", "metre sapma onayı (H2 yazar) — okuma damgalanınca aynı tx'te damgalanır — ters = DAMGA", { tur: "DAMGA", kolon: "revokedAt" },
     [{ dosya: "src/services/helpers/kursun-meter.helper.ts", sembol: "revokeStepMeterReadingsTx" }],
     ["src/services/helpers/kursun-meter.helper.ts"] /* H2: writeMeterReadingTx (OPERATOR_REASON) + ackMeterReadingTx (PIN/OFFICE) */),
+  // H7 (2026-10-29): hizmet işi ↔ fatura bağı — silinirse aynı iş yeniden faturalanır (çift fatura). updatedAt yalnız
+  // iptal damgası için (yarı). DRAFT fatura silmesi Cascade'dir (deftere yazmamış taslak, hard delete sınıfı).
+  D("ServiceBillingLink", "hizmet fatura bağı — iş başına tek aktif bağ, fiyat donar; fatura iptali damgalar — ters = DAMGA", { tur: "DAMGA", kolon: "revokedAt" },
+    [{ dosya: "src/services/helpers/service-billing.helper.ts", sembol: "revokeServiceLinksTx" }],
+    ["src/services/helpers/service-billing.helper.ts"], { yari: true }),
 
   D("RollVariance", "fire · düzeltme · aşım defteri", { tur: "DAMGA", kolon: "reversedAt" },
     [

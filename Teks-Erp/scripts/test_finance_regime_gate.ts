@@ -98,6 +98,8 @@ const TICARET_MODELLERI = new Set([
   "reconciliationLetter",
   "chequeDeliveryNote",
   "chequeDeliveryNoteItem",
+  // H7 (2026-10-29): hizmet işi ↔ fatura bağı — fatura tx'inin ikizi, yazarı yalnız fatura yolu.
+  "serviceBillingLink",
   // ⚠️ 2026-09-02 — YEDİ MODEL BU SETTEN ÇIKTI, SİLİNMEDİ: `stockCount`,
   // `stockCountLine`, `itemPrice`, `purchaseOrder`, `purchaseOrderLine` artık
   // TİCARET modülünün (`ticaret.enabled` / `requireTicaretEnabled`), `yarnStock`
@@ -123,6 +125,15 @@ const TICARET_MODELLERI = new Set([
 // sorusunu doğuracak bir borçtu.
 
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
+  {
+    dosya: "routes/shipping.routes.ts",
+    neden:
+      "SEVKİYAT fabrikanın ana akışıdır → rejim kapısı KONULAMAZ. `serviceBillingLink` izi tek daldan gelir (H7, 2026-10-29): " +
+      "`shipping.service` → `helpers/service-billing-gate.helper` (`listShipmentServiceBilledDocNos`) sevk geri alma önizlemesinde " +
+      "ve kapısında 'bu sevkin hizmet işi faturalı mı' sorusunu SALT-OKUMA sorar. Bağ yazan tek yol fatura tx'idir " +
+      "(`service-billing.helper`, kanca `await import` ile yüklenir, kapılı fatura yolu); ön muhasebe kapalı kurulumda tablo boştur, " +
+      "sorgu 0 satır döner, davranış bayt-bayt aynı. Yazma yüzeyi sıfır (`return.routes` emsali).",
+  },
   {
     dosya: "routes/customer.routes.ts",
     neden:
