@@ -22,6 +22,10 @@
 //   §11 Kapalıyken: emanet ürün satırı + bugünkü uyarı, 0 bağ; not TAM eşit, toplayıcı anahtarları
 //       H7 öncesiyle aynı (kanca bayt-aynı). Sevk kancasının KAPALI PARİTE ailesi test_auto_draft_shipment
 //       §1/§4'tedir; hizmet bayrağının paritesi kurşun fixture'ı istediği için burada ölçülür (atıf orada).
+//   §13 H8 PERIOD_END: sevk kancası + panel sevk önizlemesi hizmet satırı/bağı 0 (neden uyarısıyla)
+//   §14 2 sevk ⇒ 1 dönem taslağı (shipmentId yok) · §15 token replay ⇒ aynı taslak
+//   §16 aynı iş iki yoldan 409 · faturalı iş dönemden düşer · PER_SHIPMENT bugünkü gibi
+//   §17 2 paralel ⇒ 1 kazanan · §18 kapanmış dönem 409, bozuk/ileri dönem 400
 // Negatif sondalar (2026-10-29, BEKCI-HARITASI sonda sütunu): kısmi unique düşürülünce §9a kırmızı ·
 // iptal damgası kaldırılınca §8 kırmızı · düzeltme 409 kapısı kaldırılınca §5 kırmızı · kapalı yola
 // shipmentGross sızdırılınca §11/§11b/§11c kırmızı (27/3; geri alındı).
@@ -34,7 +38,12 @@ import { invoiceService } from "../src/services/invoice.service";
 import { InventoryService } from "../src/services/inventory.service";
 import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
 import { SETTING_KEYS, loadServiceBillingSettings, systemSettingService } from "../src/services/system-setting.service";
-import { autoDraftInvoiceAfterDispatch, collectShipmentInvoiceDraftLines } from "../src/services/helpers/shipment-auto-draft.helper";
+import { PERIOD_END_SERVICE_WARNING, autoDraftInvoiceAfterDispatch, collectShipmentInvoiceDraftLines } from "../src/services/helpers/shipment-auto-draft.helper";
+import { createServicePeriodDraft, previewServicePeriodDraft } from "../src/services/service-period-invoice.service";
+import { ensureCariAccountTx } from "../src/services/helpers/finance.helper";
+import { periodDayKey } from "../src/services/helpers/period-guard.helper";
+import { bypassReplayQueue } from "../src/services/helpers/token-replay.helper";
+import { factoryYmd } from "../src/constants/time";
 import { applyKursunOperationTx } from "../src/services/helpers/kursun-operation.helper";
 import { writeMeterReadingTx, revokeStepMeterReadingsTx } from "../src/services/helpers/kursun-meter.helper";
 import { insertServiceLinksTx } from "../src/services/helpers/service-billing.helper";
@@ -60,6 +69,7 @@ const inventory = new InventoryService();
 const fx = {
   itemIds: [] as string[], propIds: [] as string[], valueIds: [] as string[], woIds: [] as string[], rollIds: [] as string[],
   stationIds: [] as string[], machineIds: [] as string[], shipmentIds: [] as string[], customerId: null as string | null, kursunCreated: null as string | null,
+  customer2Id: null as string | null,
 };
 const KEYS = [
   SETTING_KEYS.FINANCE_ENABLED, SETTING_KEYS.FINANCE_AUTO_DRAFT_FROM_SHIPMENT_ENABLED, SETTING_KEYS.SHIPMENT_CONFIRMATION_ENABLED,
@@ -145,18 +155,18 @@ async function main(): Promise<void> {
     select: { id: true, createdAt: true, meters: true },
   });
   /** Emanet top: depoda doğar, kurşun işi (K2) + hareket metresi + (istenirse) OUT okuması. */
-  const mkWorkedRoll = async (qty: number, outMeters: string | null, source?: MachineDataSource): Promise<string> => {
+  const mkWorkedRoll = async (qty: number, outMeters: string | null, source?: MachineDataSource, owner: string = cust.id): Promise<string> => {
     const res = await inventory.createInitialEntry({ itemId: fabric, initialQty: qty }, undefined, undefined, false, { forcedStatus: RollStatus.WAREHOUSE, warehouseId: wh.id });
     const id = (res.data as { id: string }).id;
     fx.rollIds.push(id);
-    await prisma.roll.update({ where: { id }, data: { ownerCustomerId: cust.id } });
+    await prisma.roll.update({ where: { id }, data: { ownerCustomerId: owner } });
     await prisma.rollMovement.create({ data: { rollId: id, workOrderStepId: S1, qtyIn: qty, qtyOut: qty, exitedAt: new Date() } });
     await prisma.$transaction((tx) => applyKursunOperationTx(tx, { rollId: id, stepId: S1, valueId: V2, userId: actor, machineId: m.id }));
     if (outMeters !== null) await reading(id, outMeters, source);
     return id;
   };
-  const ship = async (rollIds: string[]) => {
-    const res = (await shippingService.createShipmentFromRolls({ rollIds, customerId: cust.id, clientToken: randomUUID() })) as { data: { id: string; dispatched: boolean } };
+  const ship = async (rollIds: string[], customerId: string = cust.id) => {
+    const res = (await shippingService.createShipmentFromRolls({ rollIds, customerId, clientToken: randomUUID() })) as { data: { id: string; dispatched: boolean } };
     fx.shipmentIds.push(res.data.id);
     return res.data;
   };
@@ -313,6 +323,102 @@ async function main(): Promise<void> {
   const afterUndo = await errOf(() => invoiceService.createDraft({ ...panelInput([{ itemId: K2, qty: 20 }]), serviceLinks: fakeLinks }, actor));
   check("geri alınmış sevke bağlı taslak ⇒ 409 SHIPMENT_NOT_DISPATCHED, 0 bağ", afterUndo.status === 409 && afterUndo.code === "SHIPMENT_NOT_DISPATCHED" && (await prisma.serviceBillingLink.count({ where: { rollId: { in: pr }, revokedAt: null } })) === 0, JSON.stringify(afterUndo));
 
+
+  // ── §13–§18 H8 dönem sonu ────────────────────────────────────────────────
+  section("§13 PERIOD_END: sevk kancası hizmet satırı/bağı 0");
+  const cust2 = await prisma.customer.create({ data: { code: `${P}-D`.slice(0, 32), name: `TEST HZFT dönem ${STAMP}` }, select: { id: true } });
+  fx.customer2Id = cust2.id;
+  const cari2 = await prisma.$transaction((tx) => ensureCariAccountTx(tx, { customerId: cust2.id, subcontractorId: null }));
+  const period = factoryYmd().slice(0, 7);
+  const linksOn = (rollIds: string[]) => prisma.serviceBillingLink.findMany({ where: { rollId: { in: rollIds }, revokedAt: null }, select: { invoiceId: true, rollId: true } });
+  await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, "PERIOD_END");
+  const pa = await mkWorkedRoll(50, "49.500", undefined, cust2.id);
+  const pb = await mkWorkedRoll(60, "59.250", undefined, cust2.id);
+  const s1 = await ship([pa], cust2.id);
+  const s2 = await ship([pb], cust2.id);
+  const hookInv = [...(await invoicesOf(s1.id)), ...(await invoicesOf(s2.id))];
+  check("PERIOD_END: sevk kancası hizmet satırı 0, bağ 0", hookInv.every((i) => i.lines.every((l) => l.itemId !== K2)) && (await linksOn([pa, pb])).length === 0, `${hookInv.length} taslak`);
+  const peLines = await collectShipmentInvoiceDraftLines(s1.id, cust2.id, Currency.TRY);
+  check("PERIOD_END: panel sevk önizlemesi hizmet satırı 0 + neden uyarısı", (peLines.serviceLinks ?? []).length === 0 && peLines.lines.length === 0 && peLines.warnings.includes(PERIOD_END_SERVICE_WARNING), JSON.stringify(peLines.warnings));
+
+  section("§14 2 sevk ⇒ 1 dönem taslağı (shipmentId yok)");
+  const dpv = await previewServicePeriodDraft({ cariId: cari2.id, period });
+  check("önizleme: 2 sevk, 2 iş, 108,750 m, 870,00", dpv.shipmentCount === 2 && dpv.workCount === 2 && dpv.totalMeters === "108.750" && dpv.subtotal === "870.00" && dpv.periodClosed === null, JSON.stringify({ s: dpv.shipmentCount, w: dpv.workCount, m: dpv.totalMeters, t: dpv.subtotal }));
+  const tok1 = randomUUID();
+  const d1 = await createServicePeriodDraft({ cariId: cari2.id, period, clientToken: tok1 }, actor);
+  const pInv = await prisma.invoice.findUniqueOrThrow({ where: { id: d1.data!.id }, select: { shipmentId: true, status: true, lines: { select: { itemId: true, qty: true } } } });
+  const pl = await linksOn([pa, pb]);
+  check("1 taslak, 2 bağ aynı faturada, tek K2 satırı 108,75 m, shipmentId boş",
+    pInv.shipmentId === null && pInv.status === InvoiceStatus.DRAFT && pl.length === 2 && pl.every((l) => l.invoiceId === d1.data!.id)
+    && pInv.lines.length === 1 && pInv.lines[0]!.itemId === K2 && Number(pInv.lines[0]!.qty) === 108.75, JSON.stringify(pInv.lines));
+
+  section("§15 token replay ⇒ aynı taslak");
+  const cariInvCount = () => prisma.invoice.count({ where: { cariId: cari2.id } });
+  const before15 = await cariInvCount();
+  const d1b = await createServicePeriodDraft({ cariId: cari2.id, period, clientToken: tok1 }, actor);
+  check("aynı token ⇒ aynı id, yeni fatura yok, bağ 2", d1b.data!.id === d1.data!.id && (await cariInvCount()) === before15 && (await linksOn([pa, pb])).length === 2);
+  const otherPeriod = await errOf(() => createServicePeriodDraft({ cariId: cari2.id, period: "2020-01", clientToken: tok1 }, actor));
+  check("aynı token başka dönem ⇒ 409 CLIENT_TOKEN_COLLISION", otherPeriod.status === 409 && otherPeriod.code === "CLIENT_TOKEN_COLLISION", JSON.stringify(otherPeriod));
+
+  section("§16 aynı iş iki yoldan ⇒ 409; faturalı iş dönemden düşer");
+  const again = await errOf(() => createServicePeriodDraft({ cariId: cari2.id, period, clientToken: randomUUID() }, actor));
+  check("dönemin bütün işleri faturalı ⇒ 409 SERVICE_ALREADY_BILLED", again.status === 409 && again.code === "SERVICE_ALREADY_BILLED", JSON.stringify(again));
+  await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, "PER_SHIPMENT");
+  const pc = await mkWorkedRoll(40, "39.000", undefined, cust2.id);
+  const s3 = await ship([pc], cust2.id);
+  const s3Inv = await invoicesOf(s3.id);
+  check("PER_SHIPMENT: sevk kancası bugünkü gibi hizmet bağı kurar", s3Inv.length === 1 && (await linksOn([pc])).every((l) => l.invoiceId === s3Inv[0]!.id) && (await linksOn([pc])).length === 1);
+  await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, "PERIOD_END");
+  const pd = await mkWorkedRoll(30, "29.000", undefined, cust2.id);
+  const s4 = await ship([pd], cust2.id);
+  await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, "PER_SHIPMENT");
+  const stale = await collectShipmentInvoiceDraftLines(s4.id, cust2.id, Currency.TRY);
+  await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, "PERIOD_END");
+  // Çift yol §: aktif bağı olan iş toplayıcıdan düşmezse bu çağrı 409'a çarpar (negatif sonda burada kırmızı).
+  const d2 = await createServicePeriodDraft({ cariId: cari2.id, period, clientToken: randomUUID() }, actor)
+    .catch((e: { message?: string; details?: { code?: string } }) => `${e.details?.code}: ${e.message}`);
+  const d2Links = typeof d2 === "string" ? [] : await prisma.serviceBillingLink.findMany({ where: { invoiceId: d2.data!.id, revokedAt: null }, select: { rollId: true } });
+  check("dönem taslağı yalnız faturasız işi alır (sevk taslağındaki ve önceki dönem taslağındaki iş düşer)",
+    d2Links.length === 1 && d2Links[0]!.rollId === pd, typeof d2 === "string" ? d2 : JSON.stringify(d2Links));
+  const twoWay = await errOf(() => invoiceService.createDraft({
+    type: "SALES", customerId: cust2.id, shipmentId: s4.id, currency: Currency.TRY,
+    lines: stale.lines.map((l) => ({ ...l, qty: l.qty, unitPrice: l.unitPrice })), serviceLinks: stale.serviceLinks ?? [],
+  } as never, actor));
+  check("dönemde faturalı iş sevk taslağından ⇒ 409 SERVICE_ALREADY_BILLED, bağ 1",
+    twoWay.status === 409 && twoWay.code === "SERVICE_ALREADY_BILLED" && (await linksOn([pd])).length === 1 && (stale.serviceLinks ?? []).length === 1, JSON.stringify(twoWay));
+
+  section("§17 2 paralel ⇒ 1 kazanan");
+  const pRace = await mkWorkedRoll(20, "19.000", undefined, cust2.id);
+  await ship([pRace], cust2.id);
+  const race = await Promise.allSettled([
+    createServicePeriodDraft({ cariId: cari2.id, period, clientToken: randomUUID() }, actor),
+    createServicePeriodDraft({ cariId: cari2.id, period, clientToken: randomUUID() }, actor),
+  ]);
+  const won = race.filter((r) => r.status === "fulfilled").length;
+  const lost = race.filter((r) => r.status === "rejected" && (r.reason as { details?: { code?: string } }).details?.code === "SERVICE_ALREADY_BILLED").length;
+  check("farklı token ×2 ⇒ 1 kazanan + 1×409, bağ 1", won === 1 && lost === 1 && (await linksOn([pRace])).length === 1, `${won}/${lost}`);
+  const pf = await mkWorkedRoll(20, "18.500", undefined, cust2.id);
+  await ship([pf], cust2.id);
+  const tokSame = randomUUID();
+  const same = await Promise.all([
+    bypassReplayQueue(() => createServicePeriodDraft({ cariId: cari2.id, period, clientToken: tokSame }, actor)),
+    bypassReplayQueue(() => createServicePeriodDraft({ cariId: cari2.id, period, clientToken: tokSame }, actor)),
+  ].map((p) => p.then((r) => r.data!.id, (e: { details?: { code?: string } }) => `ERR:${e.details?.code}`)));
+  check("aynı token ×2 paralel ⇒ tek taslak", same[0] === same[1] && !same[0]!.startsWith("ERR") && (await prisma.invoice.count({ where: { clientToken: tokSame } })) === 1, JSON.stringify(same));
+
+  section("§18 kapanmış dönem ⇒ 409; bozuk/ileri dönem ⇒ 400");
+  const pg = await mkWorkedRoll(15, "14.000", undefined, cust2.id);
+  await ship([pg], cust2.id);
+  const close = await prisma.cariPeriodClose.create({ data: { cariId: cari2.id, currency: Currency.TRY, periodEnd: periodDayKey(new Date()), closingBalance: 0, txnCount: 0 }, select: { id: true } });
+  const closedErr = await errOf(() => createServicePeriodDraft({ cariId: cari2.id, period, clientToken: randomUUID() }, actor));
+  const closedPv = await previewServicePeriodDraft({ cariId: cari2.id, period });
+  check("kapalı dönem ⇒ 409 SERVICE_PERIOD_CLOSED, bağ 0, önizleme söyler", closedErr.status === 409 && closedErr.code === "SERVICE_PERIOD_CLOSED" && (await linksOn([pg])).length === 0 && closedPv.periodClosed !== null, JSON.stringify(closedErr));
+  await prisma.cariPeriodClose.delete({ where: { id: close.id } });
+  const bad = await errOf(() => previewServicePeriodDraft({ cariId: cari2.id, period: "2026-13" }));
+  const fut = await errOf(() => previewServicePeriodDraft({ cariId: cari2.id, period: `${Number(period.slice(0, 4)) + 1}-01` }));
+  check("bozuk dönem 400 SERVICE_PERIOD_INVALID · ileri dönem 400 SERVICE_PERIOD_FUTURE", bad.code === "SERVICE_PERIOD_INVALID" && fut.code === "SERVICE_PERIOD_FUTURE", JSON.stringify([bad, fut]));
+  await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, "PER_SHIPMENT");
+
   // ── §11 Kapalı ───────────────────────────────────────────────────────────
   section("§11 kapalıyken bugünkü davranış");
   await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_ENABLED, false);
@@ -342,15 +448,16 @@ async function cleanup(): Promise<void> {
       : prisma.systemSetting.deleteMany({ where: { key } }));
   }
   const ids = fx.rollIds;
-  const invIds = (await prisma.invoice.findMany({ where: { shipmentId: { in: fx.shipmentIds } }, select: { id: true } })).map((i) => i.id);
+  const custIds = [fx.customerId, fx.customer2Id].filter((v): v is string => v !== null);
+  const invIds = (await prisma.invoice.findMany({ where: { OR: [{ shipmentId: { in: fx.shipmentIds } }, { cari: { customerId: { in: custIds } } }] }, select: { id: true } })).map((i) => i.id);
   await del("link", () => prisma.serviceBillingLink.deleteMany({ where: { OR: [{ invoiceId: { in: invIds } }, { rollId: { in: ids } }] } }));
   await del("cariTx", () => prisma.cariTransaction.deleteMany({ where: { invoiceId: { in: invIds } } }));
   await del("invoiceLine", () => prisma.invoiceLine.deleteMany({ where: { invoiceId: { in: invIds } } }));
   await del("printedDoc", () => prisma.printedDocument.deleteMany({ where: { sourceId: { in: [...invIds, ...fx.shipmentIds] } } }));
   await del("invoice", () => prisma.invoice.deleteMany({ where: { id: { in: invIds } } }));
-  if (fx.customerId) {
-    const cid = fx.customerId;
-    const cari = (await prisma.cariAccount.findMany({ where: { customerId: cid }, select: { id: true } })).map((c) => c.id);
+  if (custIds.length > 0) {
+    const cari = (await prisma.cariAccount.findMany({ where: { customerId: { in: custIds } }, select: { id: true } })).map((c) => c.id);
+    await del("cariPeriodClose", () => prisma.cariPeriodClose.deleteMany({ where: { cariId: { in: cari } } }));
     await del("cariBalance", () => prisma.cariBalance.deleteMany({ where: { cariId: { in: cari } } }));
     await del("cariTx2", () => prisma.cariTransaction.deleteMany({ where: { cariId: { in: cari } } }));
     await del("cari", () => prisma.cariAccount.deleteMany({ where: { id: { in: cari } } }));
@@ -367,7 +474,7 @@ async function cleanup(): Promise<void> {
   await del("roll", () => prisma.roll.deleteMany({ where: { id: { in: ids } } }));
   await del("shipmentEvent", () => prisma.shipmentEvent.deleteMany({ where: { shipmentId: { in: fx.shipmentIds } } }));
   await del("shipment", () => prisma.shipment.deleteMany({ where: { id: { in: fx.shipmentIds } } }));
-  if (fx.customerId) { const cid = fx.customerId; await del("sack", () => prisma.sack.deleteMany({ where: { customerId: cid } })); }
+  await del("sack", () => prisma.sack.deleteMany({ where: { customerId: { in: custIds } } }));
   await del("step", () => prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: fx.woIds } } }));
   await del("workOrder", () => prisma.workOrder.deleteMany({ where: { id: { in: fx.woIds } } }));
   await del("machine", () => prisma.machine.deleteMany({ where: { id: { in: fx.machineIds } } }));
@@ -378,7 +485,7 @@ async function cleanup(): Promise<void> {
   if (fx.kursunCreated) { const k = fx.kursunCreated; await del("KURSUN", () => prisma.fabricProperty.deleteMany({ where: { id: k } })); }
   await del("itemPrice", () => prisma.itemPrice.deleteMany({ where: { itemId: { in: fx.itemIds } } }));
   await del("item", () => prisma.item.deleteMany({ where: { id: { in: fx.itemIds } } }));
-  if (fx.customerId) { const cid = fx.customerId; await del("customer", () => prisma.customer.deleteMany({ where: { id: cid } })); }
+  await del("customer", () => prisma.customer.deleteMany({ where: { id: { in: custIds } } }));
   await del("systemLog", () => prisma.systemLog.deleteMany({ where: { recordId: { in: [...fx.shipmentIds, ...invIds] } } }));
   const left = await prisma.roll.count({ where: { id: { in: ids } } });
   check("temizlik: TEST-HZFT top kalıntısı yok", left === 0, String(left));
