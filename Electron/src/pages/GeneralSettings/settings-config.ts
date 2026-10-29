@@ -1522,6 +1522,20 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "OFFICE", label: "Ofis onayı", hint: "Okuma yazılır, makine durmaz; ofis Operasyon › Metre Sapmaları ekranında onaylar. Onaylanmadan adım kapanmaz." },
         ],
       },
+      {
+        // H1b (2026-10-29): `defaultValue` backend `DEFAULT_KURSUN_METER_STOCK_MODE` ile birebir.
+        enumKey: "kursunMeterStockMode",
+        title: "Çıkış metresi stoğu",
+        summary: "Kurşun çıkışında okunan metre topun stok metresini değiştirsin mi.",
+        desc: "Yalnız kaydet (varsayılan): okuma ölçüm defterine yazılır, topun metresi değişmez; Tambur kendi ölçümünü bugünkü gibi yapar. Stoğa uygula: geçerli çıkış okuması topun metresini düzeltir ve fark sapma kaydına yazılır (eksikse kayıt düzeltmesi, fazlaysa fazlalık; fazlada giriş metresi de yükselir). Onay bekleyen okuma stoğa dokunmaz; okuma düzeltilir ya da adım yeniden açılırsa uygulama geri alınır. Seçim okuma anında kayda donar.",
+        defaultValue: "RECORD",
+        display: "radio",
+        audience: ["Yönetim"],
+        options: [
+          { value: "RECORD", label: "Yalnız kaydet (bugünkü)", hint: "Okuma stoğu değiştirmez." },
+          { value: "APPLY", label: "Stoğa uygula", hint: "Geçerli çıkış okuması topun metresi olur; fark sapma kaydına yazılır." },
+        ],
+      },
     ],
     numberFlags: [
       {

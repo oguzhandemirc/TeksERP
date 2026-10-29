@@ -741,6 +741,8 @@ export const SETTING_KEYS = {
   KURSUN_METER_VARIANCE_BASIS: "kursun.meterVarianceBasis",
   /** H2: sapma onayı — `NONE` (bugün; işaret kalır) · `OPERATOR_REASON` · `SUPERVISOR_PIN` · `OFFICE`. */
   KURSUN_METER_VARIANCE_APPROVAL: "kursun.meterVarianceApproval",
+  /** H1b: çıkış metresi stoğa uygulansın mı — `RECORD` (bugün; okuma stoğu değiştirmez) · `APPLY`. */
+  KURSUN_METER_STOCK_MODE: "kursun.meterStockMode",
   /** Parti no KISA ve DÖNEN mi olsun (P01…P99, 99'dan sonra P01)? Default TRUE/AÇIK.
    *  Backend ENFORCE eder (`batch.service.generateBatchNumberTx`). Kapalıyken eski
    *  `P + GGAAYY + sıra` günlük kalıbına düşülür — birebir eski davranış.
@@ -979,6 +981,10 @@ export const DEFAULT_KURSUN_METER_VARIANCE_BASIS: KursunMeterVarianceBasis = "DE
 export type KursunMeterVarianceApproval = "NONE" | "OPERATOR_REASON" | "SUPERVISOR_PIN" | "OFFICE";
 export const KURSUN_METER_VARIANCE_APPROVALS: KursunMeterVarianceApproval[] = ["NONE", "OPERATOR_REASON", "SUPERVISOR_PIN", "OFFICE"];
 export const DEFAULT_KURSUN_METER_VARIANCE_APPROVAL: KursunMeterVarianceApproval = "NONE";
+/** H1b: çıkış metresi stok kipi — Prisma `MeterStockMode` ile birebir; `RECORD` = bugünkü davranış. */
+export type KursunMeterStockMode = "RECORD" | "APPLY";
+export const KURSUN_METER_STOCK_MODES: KursunMeterStockMode[] = ["RECORD", "APPLY"];
+export const DEFAULT_KURSUN_METER_STOCK_MODE: KursunMeterStockMode = "RECORD";
 /** OFFICE'in çıkış yüzeyi panel "Metre Sapmaları" ekranıdır (H4, 2026-10-29) — artık seçilebilir. */
 export const KURSUN_METER_OFFICE_APPROVAL_SELECTABLE: boolean = true;
 
@@ -2080,6 +2086,8 @@ export interface FeatureFlags {
   kursunMeterVarianceBasis: KursunMeterVarianceBasis;
   /** H2: sapma onay kipi (varsayılan `NONE` = bugün). */
   kursunMeterVarianceApproval: KursunMeterVarianceApproval;
+  /** H1b: çıkış metresi stok kipi (varsayılan `RECORD` = bugün). */
+  kursunMeterStockMode: KursunMeterStockMode;
   /** Parti no kısa ve dönen mi (P01…P99)? Default TRUE/açık. Backend ENFORCE eder.
    *  Kapalıyken eski `P + GGAAYY + sıra` kalıbı. Açıkken parti no benzersiz DEĞİLDİR. */
   batchShortNumberEnabled: boolean;
@@ -2557,6 +2565,7 @@ export class SystemSettingService {
       kursunMeterVarianceThresholdPct: (await readKursunMeterVarianceThresholdPct(cacheClient)) ?? 0,
       kursunMeterVarianceBasis: await readKursunMeterVarianceBasis(cacheClient),
       kursunMeterVarianceApproval: await readKursunMeterVarianceApproval(cacheClient),
+      kursunMeterStockMode: await readKursunMeterStockMode(cacheClient),
       batchShortNumberEnabled: await readBatchShortNumberEnabled(cacheClient),
       batchLastNumberHintEnabled: await readBatchLastNumberHintEnabled(cacheClient),
       qualityGradeRequiredEnabled: await readQualityGradeRequiredEnabled(cacheClient),
@@ -4023,6 +4032,13 @@ export class SystemSettingService {
         });
       }
       await this.set(SETTING_KEYS.KURSUN_METER_VARIANCE_APPROVAL, v, "Kurşun metre sapma onayı — yok · operatör sebebi · süpervizör PIN · ofis", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "kursunMeterStockMode")) {
+      const v = input.kursunMeterStockMode;
+      if (typeof v !== "string" || !KURSUN_METER_STOCK_MODES.includes(v as KursunMeterStockMode)) {
+        throw AppError.badRequest(`kursunMeterStockMode şunlardan biri olmalı: ${KURSUN_METER_STOCK_MODES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.KURSUN_METER_STOCK_MODE, v, "Kurşun çıkış metresi stoğu — yalnız kaydet · stoğa uygula", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "batchShortNumberEnabled")) {
@@ -6525,6 +6541,13 @@ export async function readKursunMeterVarianceApproval(tx?: Pick<typeof prisma, "
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.KURSUN_METER_VARIANCE_APPROVAL }, select: { value: true } });
   const v = setting?.value;
   return typeof v === "string" && KURSUN_METER_VARIANCE_APPROVALS.includes(v as KursunMeterVarianceApproval) ? (v as KursunMeterVarianceApproval) : DEFAULT_KURSUN_METER_VARIANCE_APPROVAL;
+}
+
+/** H1b: çıkış metresi stok kipi — tanınmayan değer varsayılana (`RECORD` = bugün) düşer. */
+export async function readKursunMeterStockMode(tx?: Pick<typeof prisma, "systemSetting">): Promise<KursunMeterStockMode> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.KURSUN_METER_STOCK_MODE }, select: { value: true } });
+  const v = setting?.value;
+  return typeof v === "string" && KURSUN_METER_STOCK_MODES.includes(v as KursunMeterStockMode) ? (v as KursunMeterStockMode) : DEFAULT_KURSUN_METER_STOCK_MODE;
 }
 
 export async function readKursunBypassEnabled(
