@@ -127,13 +127,17 @@ async function activateDueLines(): Promise<string[]> {
       retiredPrefixes: true, formatChangedAt: true,
     },
   });
+  // Seri başına findFirst (N+1) DEĞİL tek okuma: tazeleme arka planda her 60 sn koşar ve 58 serilik katalogda
+  // 58 tur, onu tetikleyen isteğin (ör. production-flow) sorgu bütçesine dalgalı biçimde taşıyordu (K2a ölçümü).
+  const dueLines = await prisma.numberSeriesLine.findMany({
+    where: { effectiveFrom: { lte: simdi } }, orderBy: [{ seriesKey: "asc" }, { effectiveFrom: "desc" }],
+    select: { seriesKey: true, prefix: true, dateSegment: true, digits: true, separator: true, separator2: true, effectiveFrom: true },
+  });
+  const latestByKey = new Map<string, (typeof dueLines)[number]>();
+  for (const l of dueLines) if (!latestByKey.has(l.seriesKey)) latestByKey.set(l.seriesKey, l);
   const aktive: string[] = [];
   for (const s of seriler) {
-    const line = await prisma.numberSeriesLine.findFirst({
-      where: { seriesKey: s.key, effectiveFrom: { lte: simdi } },
-      orderBy: { effectiveFrom: "desc" },
-      select: { prefix: true, dateSegment: true, digits: true, separator: true, separator2: true, effectiveFrom: true },
-    });
+    const line = latestByKey.get(s.key);
     if (!line) continue;
     // ⚠️ ÖLÇÜT "kolonlar satırdan FARKLI" DEĞİL, "DAHA YENİ bir satır VADESİ
     // GELDİ": aktivasyon bir OLAYDIR, bir eşitleme değil. Fark ölçütüyle
@@ -547,7 +551,7 @@ export async function nextSeriesSeq(
 /**
  * BEKLEYEN (henüz yürürlüğe girmemiş) BİÇİM DEĞİŞİKLİĞİ — panel bunu gösterir.
  *
- * ⚠️ En YAKIN vadeli satır döner: ekranda "şu tarihte şu biçime geçecek" tek bir
+ * ⚠️ En YAKIN dueLines satır döner: ekranda "şu tarihte şu biçime geçecek" tek bir
  * cümle vardır; birden çok bekleyen satır varsa sıradaki odur. Panel bunu kendi
  * hesaplamaz (önbellek sunucuda).
  */
