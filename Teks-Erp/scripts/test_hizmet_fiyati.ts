@@ -10,6 +10,7 @@
 //
 // ÖLÇÜLENLER:
 //   §1 Eşleme: SERVICE olmayan kaleme eşleme 400 SERVICE_ITEM_INVALID; SERVICE kabul
+//   §1b ⭐ Pasif hizmet kalemine YENİ eşleme 409 ITEM_INACTIVE (K1); taşınan eski eşleme düzenlemeyi kilitlemez
 //   §2 2×K2 + 1×K1 ⇒ 2 kalem, miktar ±0,001; istisna genelden önce
 //   §3 Damga sonrası: eski iş eski fiyat, yeni iş yeni fiyat
 //   §4 Kâğıt: gramajlı kâğıt top doğru kalem; gramajsız → İE hedefi + uyarı
@@ -127,6 +128,20 @@ async function main(): Promise<void> {
   const okVal = await errOf(() => fabricPropertyService.update(variant!.id, { values: allVals }, actor));
   const k1After = await prisma.fabricPropertyValue.findUniqueOrThrow({ where: { id: V.k1 }, select: { serviceItemId: true } });
   check("serviceItemId'siz values replace'i eşlemeyi KORUR", okVal.status === 200 && k1After.serviceItemId === K1, JSON.stringify(okVal));
+
+  // §1b (K1): pasif (ARCHIVED) hizmet kalemine YENİ eşleme yazılamaz (item-usage DEFINITION → 409 ITEM_INACTIVE);
+  // kaydın zaten taşıdığı eşleme (kalem sonradan pasife alınmış) başka alanı düzenlemeyi kilitlemez.
+  const pas = await mkItem("PAS", ItemType.SERVICE);
+  await prisma.item.update({ where: { id: pas }, data: { lifecycleStatus: "ARCHIVED", isActive: false } });
+  const pasProp = await errOf(() => fabricPropertyService.update(variant!.id, { serviceItemId: pas }, actor));
+  check("⭐ §1b özellik → PASİF hizmet kalemi eşlemesi 409 ITEM_INACTIVE", pasProp.status === 409 && pasProp.code === "ITEM_INACTIVE", JSON.stringify(pasProp));
+  const v3row = await prisma.fabricPropertyValue.findUniqueOrThrow({ where: { id: V.k3 }, select: { code: true, name: true } });
+  const pasVal = await errOf(() => fabricPropertyService.update(variant!.id, { values: [...allVals.filter((v) => v.code !== v3row.code), { ...v3row, serviceItemId: pas }] }, actor));
+  check("⭐ §1b değer → PASİF hizmet kalemi eşlemesi 409 ITEM_INACTIVE", pasVal.status === 409 && pasVal.code === "ITEM_INACTIVE", JSON.stringify(pasVal));
+  await prisma.fabricProperty.update({ where: { id: variant.id }, data: { serviceItemId: pas } });
+  const keepOk = await errOf(() => fabricPropertyService.update(variant!.id, { serviceItemId: pas }, actor));
+  check("§1b kaydın ZATEN taşıdığı (sonradan pasifleşen) eşlemeyle düzenleme 200", keepOk.status === 200, JSON.stringify(keepOk));
+  await prisma.fabricProperty.update({ where: { id: variant.id }, data: { serviceItemId: null } });
 
   // Fiyatlar: genel K1=5, K2=8; müşteri istisnası K2=7.
   await itemPriceService.upsert({ itemId: K1, kind: PriceKind.SALE, currency: "TRY", price: 5 });
