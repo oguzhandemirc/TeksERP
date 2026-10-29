@@ -1,11 +1,11 @@
 // =============================================================================
-// TEZGAH DURUŞLARI — Faz 1b web yüzeyi (vardiya amiri)
+// TEZGAH / MAKİNE DURUŞLARI — Faz 1b web yüzeyi (vardiya amiri); D4-A3 dokumasız rejim
 // =============================================================================
 // Sınıflandırma kuyruğu (`requiresReason ∧ reasonCode null`), sebep atama /
 // yeniden sınıflandırma (web-only; reclass DEFTERİ görünür), elle duruş girişi /
-// kapatma / geri alma; watchdog'un geçici kapattığı duruşlar ayrı kapsam. Süzme SUNUCUDA: gün · tezgah · vardiya · kuyruk.
-// ⚠️ REJİM: karo `isMachineStopsVisible` (`stop-regime.ts`); asıl sed backend
-// `requireDokumaEnabled`. Ekranı `loom:manual-entry` | `loom:classify` açar,
+// kapatma / geri alma; watchdog'un geçici kapattığı duruşlar ayrı kapsam. Süzme SUNUCUDA: gün · makine · istasyon türü ·
+// vardiya · kuyruk. ⚠️ REJİM: karo `isMachineStopsVisible` (`stop-regime.ts`); asıl sed backend
+// `requireMachineStopRegime`. Başlık dokuma açıkken bugünkü, dokumasız rejimde "Makine Duruşları". Ekranı `loom:manual-entry` | `loom:classify` açar,
 // eylemler ekran içinde izinle (`StopRowMenu`).
 // ⚠️ "HATA" ile "KAYIT YOK" ayrı ekranlardır (`DataTable.isError`).
 // =============================================================================
@@ -29,6 +29,8 @@ import { MACHINE_STOPS_QUERY_KEY, useMachineStopMutations } from "./useMachineSt
 import { useStopReasonPresets } from "./useStopReasonPresets";
 import { useMinuteTick, useStopActions, useStopFilters, useStopListParams, type DialogState } from "./useStopsPageState";
 import { todayKey } from "./types";
+import { machineNoun, machineStopsTitle } from "./stop-regime";
+import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
 
 export function MachineStopsPage() {
@@ -38,7 +40,9 @@ export function MachineStopsPage() {
   const { params, dayFree } = useStopListParams(day);
   const query = useQuery({ queryKey: [MACHINE_STOPS_QUERY_KEY, params], queryFn: () => machineStopService.list(params) });
   const rows = useMemo(() => query.data?.data ?? [], [query.data]);
-  const filters = useStopFilters(rows);
+  const { dokumaEnabled } = useOperationsVisibilityContext();
+  const filters = useStopFilters(rows, dokumaEnabled);
+  const noun = machineNoun({ dokumaEnabled });
   const actions = useStopActions(setDialog);
   const { active, labelOf } = useStopReasonPresets();
   const { open, close, classify, reclassify, revoke, stampError, clearStampError } = useMachineStopMutations(() => setDialog(null));
@@ -50,7 +54,7 @@ export function MachineStopsPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Tezgah Duruşları"
+        title={machineStopsTitle({ dokumaEnabled })}
         description="Sebep bekleyen duruşlar (kuyruk), sebep atama ve yeniden sınıflandırma, elle duruş girişi. Kayıp sınıfı sebepten gelir; değişim deftere yazılır."
         actions={
           <div className="flex items-center gap-2">
@@ -71,9 +75,9 @@ export function MachineStopsPage() {
         </div>
         <FilterBar filters={filters} />
       </div>
-      <StopsTable rows={rows} isLoading={query.isLoading} isError={query.isError} onRetry={() => void query.refetch()} labelOf={labelOf} nowMs={nowMs} actions={actions} />
+      <StopsTable rows={rows} isLoading={query.isLoading} isError={query.isError} onRetry={() => void query.refetch()} labelOf={labelOf} nowMs={nowMs} actions={actions} noun={noun} />
       {/* Diyaloglar KOŞULLU mount: her açılış taze bileşen ve taze `clientToken`. */}
-      {dialog?.kind === "entry" && <StopEntryDialog presets={active} isPending={open.isPending} onClose={closeDialog} onConfirm={(b) => open.mutateAsync(b)} stampError={stampError} />}
+      {dialog?.kind === "entry" && <StopEntryDialog presets={active} isPending={open.isPending} onClose={closeDialog} onConfirm={(b) => open.mutateAsync(b)} stampError={stampError} noun={noun} />}
       {(dialog?.kind === "classify" || dialog?.kind === "reclassify") && (
         <StopReasonDialog
           target={dialog.target}

@@ -9,6 +9,8 @@ interface Deps {
   labelOf: (code: string | null) => string;
   nowMs: number;
   actions: (row: MachineStop) => ReactNode;
+  /** Makine sütun başlığı: "Tezgah" (dokuma) | "Makine" (dokumasız rejim). */
+  noun?: string;
 }
 
 /** Süre + watchdog notu (D4): geçici kapanış tahmindir, satırda öyle söylenir. */
@@ -43,11 +45,11 @@ function SourceCell({ r }: { r: MachineStop }) {
 }
 
 /** Sıralama başlığı YOK: uç en yeni önce sıralar; süzme sunucuda. */
-export function stopColumns({ labelOf, nowMs, actions }: Deps): ColumnDef<MachineStop>[] {
+export function stopColumns({ labelOf, nowMs, actions, noun = "Tezgah" }: Deps): ColumnDef<MachineStop>[] {
   return [
     {
       id: "machine",
-      header: "Tezgah",
+      header: noun,
       cell: ({ row }) => (
         <span className="flex flex-col">
           <span>{row.original.machine.name}</span>

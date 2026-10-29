@@ -72,6 +72,7 @@ export const commandSections: CommandSection[] = [
         permissionAny: tile.permissionAny,
         // Karo ile AYNI yüklem nesnesi — palet hub'dan ayrışamaz.
         visibleWhen: tile.visibleWhen,
+        labelWhen: tile.titleWhen,
       })),
       {
         // Karosu yok (hub'da "İş Emirleri"nin içinden açılır) ama en sık

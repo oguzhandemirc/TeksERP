@@ -295,6 +295,23 @@ function karolariOku(): { karolar: Map<string, KaroBilgisi>; navMiras: Array<{ o
 // =============================================================================
 // §9 MUAF LİSTELERİ — hepsi GEREKÇELİ ve ÖLÜ MUAF KIRMIZI
 // =============================================================================
+/**
+ * Karo modülün KAPSAYANI olan bir rejim alanına bağlı (D4-A3): ekran manifestoda modülünde kalır, ama karo · palet ·
+ * route rejimle açılır. Eşleşme TAM (ekran + alan); karo modüle geri dönerse satır ölür → §9f kırmızı.
+ */
+const KARO_REJIM: ReadonlyArray<{ key: string; alan: string; reason: string }> = [
+  {
+    key: "operations/machine-stops",
+    alan: "machineStopEnabled",
+    reason: "Duruş rejimi = dokuma ∨ (üretim ∧ uretim.makineDurusTakibi) — dokumayı KAPSAR; backend `requireMachineStopRegime`.",
+  },
+  {
+    key: "definitions/shift-definitions",
+    alan: "machineStopEnabled",
+    reason: "Vardiya takvimi ve tanım uçları duruş rejimiyle açılır (`shift-definition.routes` `requireMachineStopRegime`).",
+  },
+];
+
 /** Karosu modül alanına bağlı ama ekranın modülü ÇEKİRDEK — rejim VARYANTI. */
 const KARO_VARYANT: ReadonlyArray<{ key: string; reason: string }> = [
   {
@@ -641,6 +658,7 @@ function main(): void {
   );
 
   const varyantMuaf = new Map(KARO_VARYANT.map((e) => [e.key, e.reason]));
+  const rejimAlani = new Map(KARO_REJIM.map((e) => [e.key, e.alan]));
   const bekleyenMuaf = new Map(KARO_BEKLEYEN.map((e) => [e.key, e.reason]));
   const raporMuaf = new Map(RAPOR_KARMA.map((e) => [e.key, e.reason]));
   const karoYokMuaf = new Map(KARO_YOK.map((e) => [e.key, e.reason]));
@@ -660,6 +678,10 @@ function main(): void {
       continue;
     }
     if (karo.alan === scr.modul && !karo.negatif) continue;
+    if (!karo.negatif && karo.alan !== null && rejimAlani.get(scr.key) === karo.alan) {
+      kullanilanMuaf.add(scr.key);
+      continue;
+    }
     if (muafliMi(scr.key)) {
       kullanilanMuaf.add(scr.key);
       continue;
@@ -705,6 +727,7 @@ function main(): void {
 
   const tumMuaflar = [
     ...KARO_VARYANT.map((e) => ({ ...e, liste: "KARO_VARYANT" })),
+    ...KARO_REJIM.map((e) => ({ key: e.key, reason: e.reason, liste: "KARO_REJIM" })),
     ...KARO_BEKLEYEN.map((e) => ({ ...e, liste: "KARO_BEKLEYEN" })),
     ...RAPOR_KARMA.map((e) => ({ ...e, liste: "RAPOR_KARMA" })),
     ...KARO_YOK.map((e) => ({ ...e, liste: "KARO_YOK" })),

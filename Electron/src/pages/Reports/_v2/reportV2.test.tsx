@@ -28,6 +28,7 @@ const ctx = (): OperationsVisibilityContext => ({
   depoMultiEnabled: false,
   devereEnabled: true,
   dokumaEnabled: true,
+  machineStopEnabled: true,
   tezgahEnabled: true, kaliteGuvenceEnabled: false, maliyetEnabled: true, gelenBelgeEnabled: false, emanetEnabled: false,
   financeEnabled: true,
   productionEnabled: true,

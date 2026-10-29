@@ -105,8 +105,8 @@ const KAPILI: ReadonlyArray<{ dosya: string; mount: string; kimlik?: string; kap
   { dosya: "routes/reports/dokuma.report.routes.ts", mount: "/api/reports/dokuma" },
   // B3 (01, 2026-09-14): künye + gölge mod — tasarımın `requireTezgahEnabled`i ekransız doğamaz (§10b), dokuma kapısında.
   { dosya: "routes/machine-spec.routes.ts", mount: "/api/machine-specs" },
-  // Vardiya tanımı yazma yüzeyi (2026-10-10): takvimi doğuran katalog — aynı kapı.
-  { dosya: "routes/shift-definition.routes.ts", mount: "/api/shift-definitions" },
+  // Vardiya tanımı yazma yüzeyi (2026-10-10): takvimi doğuran katalog. D4-A3: takvimle aynı rejim kapısı.
+  { dosya: "routes/shift-definition.routes.ts", mount: "/api/shift-definitions", kapi: "requireMachineStopRegime" },
   // Makine kartı duruş uçları (D3b): kimlik oturum değil kart imzası; kapı imzadan SONRA.
   { dosya: "routes/machine-signal.routes.ts", mount: "/api/machine-signals", kimlik: "verifyCollectorSignature" },  // Atkı spesifikasyonu (MAL-1): dokuma ürün yapısı kataloğu — aynı kapı.
   { dosya: "routes/weft-spec.routes.ts", mount: "/api/weft-specs" },
@@ -134,14 +134,16 @@ const DOKUMA_UC_METINLERI = ["/api/weaving-orders", "/api/machine-runs", "/api/m
 // Uç yolunu ÇAĞIRMADAN, VERİ olarak taşıyan sabitler (R0 rapor kataloğu aynası): §7b onları çağıran saymaz,
 // §7b3 her satırın gerçekten uç metni taşıdığını ölçer (ölü muaf kırmızı).
 const UC_METNI_TASIYAN_SABITLER: readonly string[] = ["Electron/src/lib/report-catalog.ts"];
-const IZINLI_ISTEMCI_DOSYALARI: ReadonlyArray<{ dosya: string; ekranKey: string; izinler: readonly string[]; karo: "operations" | "reports" | "definitions" }> = [
+// `rejimAlani`: karo dokuma yerine bağlamın REJİM alanını okur (D4-A3: `machineStopEnabled` = dokuma ∨ üretim ∧ ayar;
+// çözümü `MachineStops/stop-regime.ts`, Electron vitest dokumanın onu açtığını ölçer). Manifesto yine `dokumaEnabled`.
+const IZINLI_ISTEMCI_DOSYALARI: ReadonlyArray<{ dosya: string; ekranKey: string; izinler: readonly string[]; karo: "operations" | "reports" | "definitions"; rejimAlani?: string }> = [
   { dosya: "Electron/src/pages/Operations/WeavingOrders/service.ts", ekranKey: "operations/weaving-orders", izinler: ["weavingorder:read"], karo: "operations" },
   // Fason dokuma (G2p, 2026-09-14): aynı ekranın "Fason" bölümü — dokuma işi detayı, ayrı karo/route yok.
   { dosya: "Electron/src/pages/Operations/WeavingOrders/fason/service.ts", ekranKey: "operations/weaving-orders", izinler: ["weavingorder:read"], karo: "operations" },
   // Tezgah Duruşları (2026-09-14): iki izinden BİRİ açar — route `requireAnyPermission`, manifesto `requires` ikisini de anar.
-  { dosya: "Electron/src/pages/Operations/MachineStops/service.ts", ekranKey: "operations/machine-stops", izinler: ["loom:manual-entry", "loom:classify"], karo: "operations" },
+  { dosya: "Electron/src/pages/Operations/MachineStops/service.ts", ekranKey: "operations/machine-stops", izinler: ["loom:manual-entry", "loom:classify"], karo: "operations", rejimAlani: "machineStopEnabled" },
   // Vardiya tanımları (2026-10-10): Tanımlar hub'ı karosu; yazma/okuma `loom:spec-manage`.
-  { dosya: "Electron/src/pages/ShiftDefinitions/service.ts", ekranKey: "definitions/shift-definitions", izinler: ["loom:spec-manage"], karo: "definitions" },
+  { dosya: "Electron/src/pages/ShiftDefinitions/service.ts", ekranKey: "definitions/shift-definitions", izinler: ["loom:spec-manage"], karo: "definitions", rejimAlani: "machineStopEnabled" },
   // Dokuma raporları (Dilim 5, 2026-09-14): Raporlar hub'ı karosu; okuma `report:production` (1e hükmü ③).
   { dosya: "Electron/src/pages/Reports/Dokuma/service.ts", ekranKey: "reports/dokuma", izinler: ["report:production"], karo: "reports" },
   // Üretim Zinciri hub'ı (Z3, 2026-09-18): aynı Dokuma Raporları karosu; tek okuma ucu `/api/reports/dokuma/zincir`, izin `report:production`.
@@ -423,7 +425,7 @@ async function main(): Promise<void> {
     definitions: yorumlariSok(hubKaroMetni(ELECTRON_SRC, "Definitions")),
   };
   const contentRoutes = fs.readFileSync(path.join(ELECTRON_SRC, "routes/content-routes.tsx"), "utf8");
-  for (const { ekranKey, izinler, karo } of IZINLI_ISTEMCI_DOSYALARI) {
+  for (const { ekranKey, izinler, karo, rejimAlani } of IZINLI_ISTEMCI_DOSYALARI) {
     const tileConfig = tileConfigs[karo];
     const manifesto = SCREEN_CATALOG.find((s) => s.key === ekranKey);
     check(
@@ -438,8 +440,8 @@ async function main(): Promise<void> {
     if (karo === "operations" || karo === "definitions") {
       const yuklem = /visibleWhen:\s*([A-Za-z_][A-Za-z0-9_]*)\s*,?/.exec(blok)?.[1] ?? null;
       check(
-        `§7d ⭐ ${ekranKey} karosu SAF yüklem taşıyor ve yüklem \`dokumaEnabled\`i okuyor`,
-        yuklem !== null && yuklemDokumayaBagli(tileConfig, yuklem, karo === "definitions" ? "pages/Definitions" : "pages/Operations"),
+        `§7d ⭐ ${ekranKey} karosu SAF yüklem taşıyor ve yüklem \`${rejimAlani ?? "dokumaEnabled"}\`i okuyor`,
+        yuklem !== null && yuklemDokumayaBagli(tileConfig, yuklem, karo === "definitions" ? "pages/Definitions" : "pages/Operations", rejimAlani ?? "dokumaEnabled"),
         yuklem ? `visibleWhen=${yuklem}` : "karo yok ya da yüklem satır içi/eksik",
       );
     } else {
@@ -523,8 +525,8 @@ function routeDosyalariOzyineli(dir: string): string[] {
   return out;
 }
 
-/** `visibleWhen: X` → X'in tanımlandığı dosyada `return <param>.dokumaEnabled;` var mı? */
-function yuklemDokumayaBagli(tileConfigMetni: string, fnAdi: string, hubDizin: string): boolean {
+/** `visibleWhen: X` → X'in tanımlandığı dosyada `return <param>.<alan>;` var mı (alan varsayılanı `dokumaEnabled`)? */
+function yuklemDokumayaBagli(tileConfigMetni: string, fnAdi: string, hubDizin: string, alan = "dokumaEnabled"): boolean {
   const imp = new RegExp(`import\\s*\\{[^}]*\\b${fnAdi}\\b[^}]*\\}\\s*from\\s*"([^"]+)"`).exec(tileConfigMetni);
   if (!imp) return false;
   const yol = imp[1]!;
@@ -537,7 +539,7 @@ function yuklemDokumayaBagli(tileConfigMetni: string, fnAdi: string, hubDizin: s
   const govde = yorumlariSok(fs.readFileSync(hedef, "utf8"));
   const fn = new RegExp(`export function ${fnAdi}\\s*\\(\\s*([A-Za-z0-9_]+)[^)]*\\)[^{]*\\{([\\s\\S]*?)\\n\\}`).exec(govde);
   if (!fn) return false;
-  return new RegExp(`return\\s+${fn[1]!}\\.dokumaEnabled\\s*;`).test(fn[2]!);
+  return new RegExp(`return\\s+${fn[1]!}\\.${alan}\\s*;`).test(fn[2]!);
 }
 
 main().catch((e) => {

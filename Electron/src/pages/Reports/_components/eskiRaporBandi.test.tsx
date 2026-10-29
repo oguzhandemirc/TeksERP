@@ -27,6 +27,7 @@ const ctx = (): OperationsVisibilityContext => ({
   depoMultiEnabled: false,
   devereEnabled: true,
   dokumaEnabled: true,
+  machineStopEnabled: true,
   tezgahEnabled: true,
   financeEnabled: true,
   productionEnabled: true,

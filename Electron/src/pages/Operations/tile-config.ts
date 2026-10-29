@@ -64,6 +64,12 @@ export interface OperationsVisibilityContext {
    */
   tezgahEnabled: boolean;
   /**
+   * MAKİNE DURUŞU rejimi (D4-A3, ister 5.5) — modül değil, ETKİN değer: `dokuma ∨ (production ∧
+   * uretim.makineDurusTakibi)`; tek çözüm `MachineStops/stop-regime.ts#resolveMachineStopEnabled`.
+   * Duruşlar + Vardiya Tanımları ekranları okur; backend kapısı `requireMachineStopRegime`. Belirsizken FALSE.
+   */
+  machineStopEnabled: boolean;
+  /**
    * KALİTE GÜVENCE modülü (`kaliteGuvence.enabled`, K4P) — zincirsiz (KK1 üretim kapalıyken de
    * çalışır). Belirsizken FALSE ("sıfır görünür fark"); backend kapısı `requireKaliteGuvenceEnabled`.
    */
@@ -190,6 +196,8 @@ export interface OperationsTile {
    * modül kapalıyken kullanıcı ekranın varlığını ve nereden açılacağını görür). Palet yine gizler.
    */
   offHint?: string;
+  /** Bağlama göre ekran adı (D4-A3: dokumasız rejimde "Makine Duruşları"); verilmezse `title`. Saf; palet de okur. */
+  titleWhen?: (ctx: OperationsVisibilityContext) => string;
 }
 
 // Karolar grup dosyalarında (`tiles/*.ts`, UX-2 bölünmesi); bekçiler `scripts/lib/panel-karo-dosyalari.ts` ile hepsini okur.
