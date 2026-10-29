@@ -48,6 +48,8 @@ import { ColorsPage } from "@/pages/Colors/ColorsPage";
 import { ReturnReasonsPage } from "@/pages/ReturnReasons/ReturnReasonsPage";
 import { WarehousesPage } from "@/pages/Warehouses/WarehousesPage";
 import { GoodsReceiptsPage } from "@/pages/Operations/GoodsReceipts/GoodsReceiptsPage";
+import { IncomingDocumentsPage } from "@/pages/Operations/GelenBelgeler/GelenBelgelerPage";
+import { IncomingDocumentDetailPage } from "@/pages/Operations/GelenBelgeler/GelenBelgeDetailPage";
 import { CarilerPage } from "@/pages/Definitions/CarilerPage";
 import { FinanceHubPage } from "@/pages/Finance/FinanceHubPage";
 import { CariPage } from "@/pages/Finance/CariPage";
@@ -499,6 +501,23 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="goods-receipt:read">
         <GoodsReceiptsPage />
+      </ProtectedRoute>
+    ),
+  },
+  // Gelen belge (Gülkesim OCR D5) — modül kapısı `ROUTE_MODULE` (`gelenBelgeEnabled`); karo ile AYNI izin.
+  {
+    path: "operations/gelen-belgeler",
+    element: (
+      <ProtectedRoute requirePermission="gelen-belge:read">
+        <IncomingDocumentsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/gelen-belgeler/:id",
+    element: (
+      <ProtectedRoute requirePermission="gelen-belge:read">
+        <IncomingDocumentDetailPage />
       </ProtectedRoute>
     ),
   },

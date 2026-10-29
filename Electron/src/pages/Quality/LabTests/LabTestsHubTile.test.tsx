@@ -10,7 +10,7 @@ const info = vi.fn();
 vi.mock("sonner", () => ({ toast: { info: (...a: unknown[]) => info(...a), success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
   useOperationsVisibilityContext: (): OperationsVisibilityContext => ({
-    shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: false, dokumaEnabled: false, tezgahEnabled: false, kaliteGuvenceEnabled: flagOn, maliyetEnabled: false,
+    shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: false, dokumaEnabled: false, tezgahEnabled: false, kaliteGuvenceEnabled: flagOn, maliyetEnabled: false, gelenBelgeEnabled: false,
     financeEnabled: true, productionEnabled: true, ticaretEnabled: true, iplikEnabled: false, reportsClosedKeys: [], isReportOpen: () => true, flagsReady: true, flagsFailed: false,
   }),
 }));

@@ -74,6 +74,11 @@ export interface OperationsVisibilityContext {
    */
   maliyetEnabled: boolean;
   /**
+   * GELEN BELGE modülü (`gelenBelge.enabled`, Gülkesim OCR) — ETKİN değer (`emanet && gelenBelge`); backend kapısı
+   * `requireGelenBelgeEnabled`. Belirsizken FALSE (fabrikada karo bir an belirip kaybolmasın).
+   */
+  gelenBelgeEnabled: boolean;
+  /**
    * Ön muhasebe modülü açık mı (`finance.enabled`) — fiilen "bu bir TİCARET
    * kurulumu" anahtarı. Tanımlar menüsünün cari rejimi buna bakar: bayrak
    * AÇIKKEN tek "Cariler" karosu, KAPALIYKEN (fabrika) bugünkü Müşteriler +

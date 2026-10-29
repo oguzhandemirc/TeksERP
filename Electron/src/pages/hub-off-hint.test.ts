@@ -6,8 +6,8 @@ import { definitionTiles } from "@/pages/Definitions/tile-config";
 import { qualityTiles } from "@/pages/Quality/tile-config";
 import { documentTiles } from "@/pages/Documents/tile-config";
 
-/** Rejim istisnaları: depoMulti (tek depoda transfer yok) · sevk onayı rejimi · finans cari takası. */
-const REJIM_ISTISNA = ["warehouse-transfers", "sack-store", "cariler", "customers", "subcontractors"];
+/** Rejim istisnaları: depoMulti (tek depoda transfer yok) · sevk onayı rejimi · finans cari takası · gelen belge (fason işlemci olmayan fabrikada gürültü). */
+const REJIM_ISTISNA = ["warehouse-transfers", "sack-store", "cariler", "customers", "subcontractors", "gelen-belgeler"];
 
 const KATALOG = [
   ["Operasyon", operationsTiles],

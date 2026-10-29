@@ -56,7 +56,7 @@ function ctx(
     // Çözgü Kartları karosu çizilmemeli.
     devereEnabled: false,
     // Dokuma işi de ETKİN değer (production && dokuma); fabrikada KAPALI.
-    dokumaEnabled: false, tezgahEnabled: false, kaliteGuvenceEnabled: false, maliyetEnabled: false,
+    dokumaEnabled: false, tezgahEnabled: false, kaliteGuvenceEnabled: false, maliyetEnabled: false, gelenBelgeEnabled: false,
     reportsClosedKeys: [],
     isReportOpen: () => true,
     flagsReady: true,
@@ -188,7 +188,9 @@ describe("karo bağlantıları", () => {
     // 2026-10-25: `inspection-rules` (4 Puan Kuralları, K4P-TANIM) — aynı Kalite Güvence kapısı.
     // 2026-10-25: `inspections` (Muayeneler) — aynı Kalite Güvence kapısı.
     // 2026-10-26 (UX-2 K1): dört Kalite Güvence karosu `/quality` köküne taşındı (Quality/tile-config).
+    // 2026-10-29: `gelen-belgeler` (Gülkesim OCR D5) — emanet && gelenBelge; kapalıyken GİZLİ.
     expect(conditional.sort()).toEqual([
+      "gelen-belgeler",
       "goods-receipts",
       "kursun-dagitim",
       "loom-alarms",
