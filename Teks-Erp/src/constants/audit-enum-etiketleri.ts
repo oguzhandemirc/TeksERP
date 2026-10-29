@@ -83,6 +83,7 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   YARN: "İplik",
   FABRIC: "Kumaş",
   CONSUMABLE: "Sarf",
+  SERVICE: "Hizmet",
   MT: "Metre",
   KG: "Kilogram",
   ADET: "Adet",

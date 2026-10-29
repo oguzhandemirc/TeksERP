@@ -141,6 +141,7 @@ export const LIST_SEARCH: Readonly<Record<string, ListSearchSpec>> = {
         { deger: "FABRIC", etiket: "Kumaş", alan: "tur", esit: "FABRIC" },
         { deger: "YARN", etiket: "İplik", alan: "tur", esit: "YARN" },
         { deger: "CONSUMABLE", etiket: "Sarf", alan: "tur", esit: "CONSUMABLE" },
+        { deger: "SERVICE", etiket: "Hizmet", alan: "tur", esit: "SERVICE" },
       ],
     },
   },

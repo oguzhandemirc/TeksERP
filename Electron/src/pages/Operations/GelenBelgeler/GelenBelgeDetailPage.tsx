@@ -1,5 +1,5 @@
 // GELEN BELGE DETAYI — fotoğraf + satır vurgusu, başlık eşleme, toplam şeridi, satırlar, kılavuzlu hücre girişi, onay.
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { CheckCircle2, ScanSearch } from "lucide-react";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
@@ -16,6 +16,8 @@ import { AddLineForm } from "./AddLineForm";
 import { LineImportButton } from "./LineImportButton";
 import { CellReviewDialog } from "./CellReviewDialog";
 import { ApproveDialog } from "./ApproveDialog";
+import { ScanReadBanner } from "./ScanReadBanner";
+import { AddPagesAction } from "./AddPagesAction";
 import { buildReviewQueue, lineRect } from "./review-queue";
 import { isApprovable, isEditable, NOTE_STATUS_LABEL, NOTE_STATUS_VARIANT, SOURCE_LABEL } from "./noteStatus";
 import { useNoteDetail } from "./useNoteDetail";
@@ -26,13 +28,15 @@ interface DetailActionsProps {
   reviewCount: number;
   approvable: boolean;
   hasLines: boolean;
+  addPages: ReactNode;
   onReview: () => void;
   onApprove: () => void;
 }
 
-function DetailActions({ reviewCount, approvable, hasLines, onReview, onApprove }: DetailActionsProps) {
+function DetailActions({ reviewCount, approvable, hasLines, addPages, onReview, onApprove }: DetailActionsProps) {
   return (
     <div className="flex flex-wrap gap-2">
+      {addPages}
       {reviewCount > 0 && (
         <Button variant="outline" onClick={onReview}>
           <ScanSearch className="mr-1 h-4 w-4" />
@@ -83,6 +87,7 @@ export function IncomingDocumentDetailPage() {
             reviewCount={editable ? reviewCount : 0}
             approvable={isApprovable(n.status)}
             hasLines={n.lines.length > 0}
+            addPages={n.status === "DRAFT" && hasPermission("gelen-belge:write") ? <AddPagesAction note={n} onDone={() => void invalidate()} /> : null}
             onReview={() => setReviewOpen(true)}
             onApprove={() => setApproveOpen(true)}
           />
@@ -90,6 +95,7 @@ export function IncomingDocumentDetailPage() {
       />
       <PageBody className="min-h-0 p-4 sm:p-6">
         <div className="flex flex-col gap-4">
+          <ScanReadBanner scans={n.scans} canRequeue={hasPermission("gelen-belge:write")} onRequeued={() => void invalidate()} />
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <ScanViewer scans={n.scans} highlight={sel ? lineRect(sel) : null} />
             <div className="flex min-w-0 flex-col gap-4">

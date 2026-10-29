@@ -27,6 +27,7 @@
 - **[ÇEKİRDEK]** Fiyat listesi yayını tek tx'tir (aynı müşteri+dövizin yayınlısı ARCHIVED + bu taslak PUBLISHED; seddi `price_lists_published_uq`); yayınlı liste DEĞİŞMEZ, düzeltme revizyondur. · bekçi: `test_fiyat_listesi`
 - **[ÇEKİRDEK]** Teklifi siparişe dönüştürmek İKİ izin ister (rota `quote:convert` + servis `order:write`); sipariş ve teklif claim'i TEK tx'te (8036 token kilidi İLK ifade, sonra sipariş kart kilitleri), bağ teklifte (`convertedOrderId`), aynı `clientToken` aynı siparişi döndürür. · bekçi: `test_teklif_siparis`
 - **[ÇEKİRDEK]** Kâr varsayılanı TEK yoldan çözülür (`cost-calc.service` `resolveMarkup`: gövde ?? aktif parametre seti, yoksa 400); teklif, fiyat listesi ve hesaplayıcı önizlemesi aynı çözücüyü çağırır. · bekçi: `test_teklif_gorunurluk`
+- **[ÇEKİRDEK]** Müşteriye kesilen hizmet ücretini YALNIZ `resolveServiceItemsForRolls` (`helpers/service-pricing.helper.ts`) çözer: gramaj process-summary'den → değer, özellik, ana bayrak eşlemesi → `ItemPrice(SALE)` hizmet anına; `FinishingRate` bizim maliyet tarifemizdir, gelir yolunda okunmaz. · bekçi: `test_hizmet_fiyati`
 - **[ÇEKİRDEK]** İplik ihtiyaç planı (`yarn-need.report.service.ts`) eksik = ihtiyaç − serbest stok − açık alış (KG) − hazır levent kalanı; emanet stok düşülmez ayrı kolondur, kapalı modülün kaynağı 0 değil "bilinmiyor" (`null`) ve o tabloya sorgu yok; ekran/Excel/PDF aynı sunum `tablo`sundan, istemci hesap yapmaz. · bekçi: `test_iplik_ihtiyaci`
 
 ## Panel (`Electron/src/pages/Cost/`)
@@ -46,7 +47,7 @@
 
 Panel (Electron vitest): `src/pages/Cost` (`cost-no-client-math`, `cost-access`, `shared/format`, `YarnNeed/yarn-need`, `shared/errors`, `shared/CostBreakdown`, `shared/useCostPreview`, `shared/fx-missing`, `Items/service`, `Calculator/calculator-body`, `Calculator/CalculatorPage`, `Quotes/*`), `src/pages/Items/ItemCostLink`
 
-Backend: `test_screen_catalog`, `test_bulut_teklif_projeksiyon`, `test_teklif_belgesi`, `test_belge_sozlesme`, `test_teklif_durum`, `test_teklif_numara`, `test_teklif_uc`, `test_teklif_siparis`, `test_teklif_gorunurluk`, `test_fiyat_listesi`, `test_quote_price_single_source`, `test_db_invariants`, `test_maliyet_formul`, `test_maliyet_girdi`, `test_standart_maliyet_surum`, `test_maliyet_girdileri`, `test_maliyet_regime_gate`, `test_finance_regime_gate`, `test_rapor_levent_sonucu`, `test_iplik_ihtiyaci`, `test_iplik_regime_gate`
+Backend: `test_screen_catalog`, `test_bulut_teklif_projeksiyon`, `test_teklif_belgesi`, `test_belge_sozlesme`, `test_teklif_durum`, `test_teklif_numara`, `test_teklif_uc`, `test_teklif_siparis`, `test_teklif_gorunurluk`, `test_fiyat_listesi`, `test_quote_price_single_source`, `test_db_invariants`, `test_maliyet_formul`, `test_maliyet_girdi`, `test_standart_maliyet_surum`, `test_maliyet_girdileri`, `test_maliyet_regime_gate`, `test_finance_regime_gate`, `test_rapor_levent_sonucu`, `test_iplik_ihtiyaci`, `test_iplik_regime_gate`, `test_hizmet_fiyati`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 

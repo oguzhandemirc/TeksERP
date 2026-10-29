@@ -8,6 +8,8 @@
 //   §4 sha256 dedup: aynı fotoğraf ikinci kez → 200 duplicate:true, TEK document_scans satırı
 //   §5 taslak: numara DOĞUŞTA `GB` serisinden · tarama bağlanır · satırlar lineNo sıralı
 //   §6 liste + cursor + özet TEK where'den: iki sayfa ∪ = kayıtlar, summary.total = sayfa toplamı
+//   §6b tarih aralığı (createdAt): liste ∪ cursor ve özet şeridi AYNI sayıyı verir; gün sınırı FABRİKA günü
+//       (gün başından 1 ms önce = önceki gün; UTC gece yarısı DEĞİL) · bozuk gün → 400
 //   §7 DRAFT dışı: status DB'den APPROVED'a çekilince DELETE/PATCH/satır ekle → 409 DELIVERY_NOTE_NOT_DRAFT
 //   §8 audit yükü: DOCUMENT_SCAN ve CUSTOMER_DELIVERY_NOTE satırlarında fotoğraf baytı / "content" yok
 //   §10 yarış: iki PATCH farklı alan → ikisi de korunur (kayıp güncelleme yok) · aynı clientToken iki POST → tek kayıt · aynı parti kimliğiyle iki toplu satır ekleme → satırlar ikilenmez · aynı tarama iki taslak → biri 409 · aynı sha256 + noteId → mevcut kayıt bağlanır / başka taslağa bağlıysa 409
@@ -24,6 +26,7 @@ import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { factoryDayEndOfKey, factoryDayStartOfKey } from "../src/constants/time";
 
 // Hedef DB kapısı fail-closed: engel varsa main HİÇ çağrılmaz (process.exit yok — `test_process_exit_kalibi`).
 const engel = hedefDbEngeli();
@@ -192,6 +195,30 @@ async function main(): Promise<void> {
     check("sourceKind süzgeci sunucuda: 2 IMPORT, özet 2", byKind.data?.items?.length === 2 && byKind.data?.summary?.total === 2);
     const bogus = await call("GET", "/api/gelen-belge/irsaliyeler?status=bogus", tk);
     check("tanınmayan durum süzgeci → 400 (fail-closed)", bogus.status === 400, `${bogus.status}`);
+
+    // §6b tarih aralığı — üç taslak fabrika günü sınırının iki yanına konur
+    console.log("§6b tarih aralığı");
+    const [nx, ny, nz] = [...ids];
+    const dayStart = factoryDayStartOfKey("2026-03-10");
+    await prisma.customerDeliveryNote.update({ where: { id: nx! }, data: { createdAt: new Date(dayStart.getTime() - 1) } });
+    await prisma.customerDeliveryNote.update({ where: { id: ny! }, data: { createdAt: dayStart } });
+    await prisma.customerDeliveryNote.update({ where: { id: nz! }, data: { createdAt: factoryDayEndOfKey("2026-03-10") } });
+    const rq = (qs: string) => call("GET", `/api/gelen-belge/irsaliyeler?ownerCustomerId=${owner}&${qs}`, tk);
+    const d1 = await rq("from=2026-03-10&to=2026-03-10&limit=1");
+    const d2 = await rq(`from=2026-03-10&to=2026-03-10&limit=1&cursor=${encodeURIComponent(d1.data?.nextCursor ?? "")}`);
+    const dIds = new Set([...(d1.data?.items ?? []), ...(d2.data?.items ?? [])].map((i) => i.id));
+    check("§6b-1 10 Mart: liste ∪ cursor = 2 = özet total = özet DRAFT (aynı where)", dIds.size === 2 && dIds.has(ny!) && dIds.has(nz!) && d2.data?.nextCursor === null && d1.data?.summary?.total === 2 && d1.data?.summary?.DRAFT === 2, `∪${dIds.size} özet ${JSON.stringify(d1.data?.summary)}`);
+    const d9 = await rq("from=2026-03-09&to=2026-03-09");
+    check("§6b-2 gün başından 1 ms önce ÖNCEKİ fabrika gününde (9 Mart: 1, özet 1)", d9.data?.items?.length === 1 && d9.data?.items?.[0]?.id === nx && d9.data?.summary?.total === 1, `${d9.data?.items?.length} ${JSON.stringify(d9.data?.summary)}`);
+    const dTo = await rq("to=2026-03-09");
+    const dFrom = await rq("from=2026-03-11");
+    check("§6b-3 tek uçlu: to=9 Mart → 1 · from=11 Mart → 0 (özet de)", dTo.data?.items?.length === 1 && dTo.data?.summary?.total === 1 && dFrom.data?.items?.length === 0 && dFrom.data?.summary?.total === 0, `${dTo.data?.items?.length}/${dFrom.data?.items?.length}`);
+    const dBad = await rq("from=2026-02-31");
+    const dFmt = await rq("from=10.03.2026");
+    check("§6b-4 bozuk gün → 400 (var olmayan tarih ve yanlış biçim)", dBad.status === 400 && dFmt.status === 400, `${dBad.status}/${dFmt.status}`);
+    const dRev = await rq("from=2026-03-11&to=2026-03-10");
+    const dSame = await rq("from=2026-03-10&to=2026-03-10");
+    check("§6b-5 ters aralık (from > to) → 400 · aynı gün → 200", dRev.status === 400 && dSame.status === 200, `${dRev.status}/${dSame.status}`);
 
     // §7 DRAFT dışı
     console.log("§7 DRAFT dışı");

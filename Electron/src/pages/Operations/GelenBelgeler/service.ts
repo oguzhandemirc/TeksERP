@@ -26,6 +26,21 @@ export async function createManualNote(clientToken: string): Promise<DeliveryNot
   return (await apiClient.post<ApiResponse<DeliveryNoteDetail>>(`${BASE}/irsaliyeler`, body)).data.data;
 }
 
+/** Yükleme başlığı: `clientToken` mantıksal deneme başına (çağıran `useAttemptToken`ten verir). */
+export async function createUploadNote(body: { clientToken: string; sourceKind: "MANUAL"; ownerCustomerId: string | null; senderDocNo: string | null }): Promise<DeliveryNoteDetail> {
+  return (await apiClient.post<ApiResponse<DeliveryNoteDetail>>(`${BASE}/irsaliyeler`, body)).data.data;
+}
+
+/** Tarama yükle (base64 + istemci sha256; sunucu tutmazsa 400 DOCUMENT_SCAN_HASH_MISMATCH). Aynı özet → 200 duplicate. */
+export async function uploadScan(body: { contentBase64: string; noteId: string; pageNo: number; sha256: string }): Promise<{ duplicate: boolean }> {
+  return (await apiClient.post<ApiResponse<{ duplicate: boolean }>>(`${BASE}/taramalar`, body)).data.data;
+}
+
+/** Yeniden okut (READ_FAILED → PENDING). PDF 400 DOCUMENT_SCAN_PDF_NOT_READABLE; servis yoksa 503. */
+export async function requeueScan(scanId: string): Promise<unknown> {
+  return (await apiClient.post<ApiResponse<unknown>>(`${BASE}/taramalar/${scanId}/oku`)).data.data;
+}
+
 export async function updateNoteHeader(id: string, patch: HeaderPatch): Promise<unknown> {
   return (await apiClient.patch<ApiResponse<unknown>>(`${BASE}/irsaliyeler/${id}`, patch)).data.data;
 }

@@ -4,19 +4,21 @@ import type { ApiResponse, PaginatedResponse, QueryParams } from '../types/api';
 import type { Item } from '../types/models';
 
 /** Backend `ItemType` enum'unun aynası. Birim BUNDAN türer, ayrıca sorulmaz. */
-export type ItemType = 'FABRIC' | 'YARN' | 'CONSUMABLE';
+export type ItemType = 'FABRIC' | 'YARN' | 'CONSUMABLE' | 'SERVICE';
 
 /** Electron `unitForItemType` ile birebir — kullanıcı düzenleyemez, gösterilir. */
 export const UNIT_FOR_ITEM_TYPE: Record<ItemType, string> = {
   FABRIC: 'MT',
   YARN: 'KG',
   CONSUMABLE: 'ADET',
+  SERVICE: 'MT',
 };
 
 export const ITEM_TYPE_LABEL: Record<ItemType, string> = {
   FABRIC: 'Kumaş',
   YARN: 'İplik',
   CONSUMABLE: 'Sarf Malzeme',
+  SERVICE: 'Hizmet',
 };
 
 export const itemService = {

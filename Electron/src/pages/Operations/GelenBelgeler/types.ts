@@ -109,6 +109,9 @@ export interface DeliveryNoteListQuery {
   ownerCustomerId?: string;
   senderCustomerId?: string;
   q?: string;
+  /** createdAt aralığı, `YYYY-MM-DD` (sunucu fabrika gününe çözer). */
+  from?: string;
+  to?: string;
   cursor?: string;
   limit?: number;
 }

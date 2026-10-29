@@ -166,6 +166,9 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
     // MAL-4: teklif kalemi ürüne referans bağdır (tekillik yok). Fiyat listesi satırı liste içinde ürün+renk başına tektir.
     { kind: "MOVE", model: "SalesQuoteLine", table: "sales_quote_lines", column: "itemId", label: "Teklif kalemi" },
     { kind: "MOVE", model: "CustomerDeliveryNoteLine", table: "customer_delivery_note_lines", column: "itemId", label: "Gelen belge satırı" },
+    // H6: hizmet kalemi eşlemesi referans bağdır (tekillik yok) — birleşen hizmet kalemine taşınır.
+    { kind: "MOVE", model: "FabricProperty", table: "fabric_properties", column: "serviceItemId", label: "Özellik hizmet eşlemesi" },
+    { kind: "MOVE", model: "FabricPropertyValue", table: "fabric_property_values", column: "serviceItemId", label: "Gramaj değeri hizmet eşlemesi" },
     {
       kind: "CONFLICT",
       model: "PriceListLine",

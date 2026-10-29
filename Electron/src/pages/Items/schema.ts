@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ItemType } from "@/types/enums";
 
 const itemTypeEnum = z.enum(
-  [ItemType.FABRIC, ItemType.YARN, ItemType.CONSUMABLE],
+  [ItemType.FABRIC, ItemType.YARN, ItemType.CONSUMABLE, ItemType.SERVICE],
   { message: "Kumaş tipi seçilmeli" },
 );
 

@@ -36,6 +36,8 @@ vi.mock("../service", () => ({
   listDeliveryNotes: (...a: unknown[]) => listDeliveryNotes(...a),
   approveNote: (...a: unknown[]) => approveNote(...a),
   createManualNote: vi.fn(),
+  createUploadNote: vi.fn(),
+  uploadScan: vi.fn(),
   getReaderStatus: vi.fn(() => new Promise(() => {})),
 }));
 

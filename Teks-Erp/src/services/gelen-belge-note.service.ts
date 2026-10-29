@@ -11,6 +11,7 @@
 import { DeliveryNoteSourceKind, DeliveryNoteStatus, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
+import { resolveRangeEnd, resolveRangeStart } from "../constants/time";
 import { p2002TargetsCode, withBarcodeRetry } from "../utils/barcode-retry";
 import { p2002Mentions } from "../utils/p2002";
 import { decodeOffsetCursor, encodeOffsetCursor } from "../utils/cursor";
@@ -55,6 +56,9 @@ export interface DeliveryNoteListQuery {
   ownerCustomerId?: string | string[];
   senderCustomerId?: string | string[];
   q?: string;
+  /** createdAt aralığı (dahil); gün-yalnız değer fabrika gününün başı/sonu. */
+  from?: string;
+  to?: string;
   cursor?: string;
   limit?: number;
 }
@@ -141,6 +145,16 @@ export function buildDeliveryNoteBaseWhere(q: DeliveryNoteListQuery): Prisma.Cus
   const sender = readIdCondition(q.senderCustomerId);
   if (sender) where.senderCustomerId = sender;
   if (q.sourceKind) where.sourceKind = q.sourceKind;
+  // Gün sınırı TEK kaynaktan (fabrika dilimi, dönem tablosu dahil) — `new Date("YYYY-MM-DD")` UTC gece yarısıdır.
+  if (q.from || q.to) {
+    const range: Prisma.DateTimeFilter = {};
+    if (q.from) range.gte = resolveRangeStart(q.from);
+    if (q.to) range.lte = resolveRangeEnd(q.to);
+    if ([range.gte, range.lte].some((d) => d instanceof Date && Number.isNaN(d.getTime()))) {
+      throw AppError.badRequest("Tarih süzgeci geçersiz (YYYY-AA-GG).", { code: "INVALID_DATE_RANGE" });
+    }
+    where.createdAt = range;
+  }
   const term = q.q?.trim();
   if (term) {
     where.OR = [
