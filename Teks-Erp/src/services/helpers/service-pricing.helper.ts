@@ -114,6 +114,8 @@ export interface ServiceResolveOptions {
   priceAsOfByRoll?: Map<string, Date>;
   /** Zaten faturalanmış iş — `${rollId}:${serviceItemId}:${workOrderStepId}`; satıra ve bağa girmez. */
   billedKeys?: Set<string>;
+  /** F1: kümede çocuğu olsa da KENDİSİ sevk edilen toplar — bayrak işinde kalan parçasını kendisi taşır. */
+  shippedRollIds?: Set<string>;
 }
 
 /** Bağ anahtarı — kısmi unique (rollId, serviceItemId, workOrderStepId) ile aynı üçlü. */
@@ -178,7 +180,7 @@ export async function resolveServiceItemsForRolls(params: {
       unitPrice: null,
     };
   });
-  const flagWorks: ServiceRollWork[] = (await listFlagServiceWorks(rollIds, basis)).map((f) => ({
+  const flagWorks: ServiceRollWork[] = (await listFlagServiceWorks(rollIds, basis, { shippedRollIds: opt.shippedRollIds })).map((f) => ({
     rollId: f.rollId, workOrderStepId: f.workOrderStepId, source: "PROPERTY", valueId: null, valueName: f.propertyName, gramajFrom: "NONE",
     serviceItemId: f.serviceItemId, meters: f.meters, meterBasis: f.meterBasis, readingId: f.readingId, serviceAt: f.serviceAt, unitPrice: null,
   }));
