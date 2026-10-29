@@ -27,6 +27,10 @@ export function ServicePeriodDraftDialog({ open, onOpenChange, onCreated }: Prop
   useEffect(() => {
     if (!open) attempt.renew();
   }, [open, attempt]);
+  // Cari ya da dönem değişimi yeni MANTIKSAL denemedir: yapışkan token taşınmaz (CLIENT_TOKEN_COLLISION olmasın).
+  useEffect(() => {
+    attempt.renew();
+  }, [customerId, period, attempt]);
 
   const cariQ = useQuery({
     queryKey: ["finance", "cari-by-customer", customerId],

@@ -26,6 +26,7 @@
 //   §14 2 sevk ⇒ 1 dönem taslağı (shipmentId yok) · §15 token replay ⇒ aynı taslak
 //   §16 aynı iş iki yoldan 409 · faturalı iş dönemden düşer · PER_SHIPMENT bugünkü gibi
 //   §17 2 paralel ⇒ 1 kazanan · §18 kapanmış dönem 409, bozuk/ileri dönem 400
+//   §19 dönem taslağına bağlı sevk geri alma 409 · taslak iptali ⇒ geri alma 200
 // Negatif sondalar (2026-10-29, BEKCI-HARITASI sonda sütunu): kısmi unique düşürülünce §9a kırmızı ·
 // iptal damgası kaldırılınca §8 kırmızı · düzeltme 409 kapısı kaldırılınca §5 kırmızı · kapalı yola
 // shipmentGross sızdırılınca §11/§11b/§11c kırmızı (27/3; geri alındı).
@@ -417,6 +418,20 @@ async function main(): Promise<void> {
   const bad = await errOf(() => previewServicePeriodDraft({ cariId: cari2.id, period: "2026-13" }));
   const fut = await errOf(() => previewServicePeriodDraft({ cariId: cari2.id, period: `${Number(period.slice(0, 4)) + 1}-01` }));
   check("bozuk dönem 400 SERVICE_PERIOD_INVALID · ileri dönem 400 SERVICE_PERIOD_FUTURE", bad.code === "SERVICE_PERIOD_INVALID" && fut.code === "SERVICE_PERIOD_FUTURE", JSON.stringify([bad, fut]));
+
+  section("§19 dönem taslağına bağlı sevk geri alınamaz; taslak iptali ⇒ geri alınır");
+  const pu = await mkWorkedRoll(25, "24.000", undefined, cust2.id);
+  const s5 = await ship([pu], cust2.id);
+  const d5 = await createServicePeriodDraft({ cariId: cari2.id, period, clientToken: randomUUID() }, actor);
+  const d5DocNo = (await prisma.invoice.findUniqueOrThrow({ where: { id: d5.data!.id }, select: { docNo: true } })).docNo;
+  // Dönem taslağı shipmentId taşımaz: kapı topun ata zincirinden bulmazsa geri alma 200 döner (negatif sonda burada kırmızı).
+  const undoPe = await errOf(() => shippingService.undoDispatch(s5.id, "test geri alma", actor));
+  check("dönem taslağına bağlı sevk geri alma ⇒ 409 SERVICE_ALREADY_BILLED", undoPe.status === 409 && undoPe.code === "SERVICE_ALREADY_BILLED", JSON.stringify(undoPe));
+  const pvPe = (await shippingService.getUndoDispatchPreview(s5.id)).data as { canUndo: boolean; serviceBilledInvoices: string[] };
+  check("önizleme dönem taslağını listeler", !pvPe.canUndo && pvPe.serviceBilledInvoices.includes(d5DocNo), JSON.stringify(pvPe.serviceBilledInvoices));
+  await invoiceService.cancel(d5.data!.id, "test iptal", actor);
+  const undoPeOk = await errOf(() => shippingService.undoDispatch(s5.id, "test geri alma", actor));
+  check("dönem taslağı iptal edilince geri alma 200", undoPeOk.status === 200 && (await linksOn([pu])).length === 0, JSON.stringify(undoPeOk));
   await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, "PER_SHIPMENT");
 
   // ── §11 Kapalı ───────────────────────────────────────────────────────────

@@ -8,6 +8,7 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { SACK_ABSENT_STATUSES } from "./sack-invariants.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -37,13 +38,47 @@ export async function assertWorkNotBilledTx(tx: Db, work: { rollIds: string[]; w
   if (prior) throw alreadyBilled(prior.docNo);
 }
 
-/** Sevk geri alma kapısı (salt-okuma): bu sevkiyatın faturasına bağlı aktif hizmet bağlarının fatura numaraları. */
+/** Ata zinciri (kendisi dahil) — Tambur bölmesi `parentRollId` ile; derinlik tavanı döngüye karşı sigorta. */
+export async function collectRollLineage(rollIds: string[], db: Db = prisma): Promise<string[]> {
+  const seen = new Set(rollIds);
+  let frontier = [...seen];
+  for (let depth = 0; depth < 32 && frontier.length > 0; depth++) {
+    const rows = await db.roll.findMany({ where: { id: { in: frontier }, parentRollId: { not: null } }, select: { parentRollId: true } });
+    frontier = rows.map((r) => r.parentRollId!).filter((id) => !seen.has(id));
+    for (const id of frontier) seen.add(id);
+  }
+  return [...seen];
+}
+
+/** Sevkiyatların EMANET topları (canlı + iade edilmiş, BRÜT) — sevk/dönem taslağı ve geri alma kapısının ORTAK kümesi. */
+export async function listShipmentServiceRollIds(shipmentIds: string[], db: Db = prisma): Promise<string[]> {
+  if (shipmentIds.length === 0) return [];
+  const live = await db.roll.findMany({ where: { shipmentId: { in: shipmentIds }, ownerCustomerId: { not: null }, status: { notIn: SACK_ABSENT_STATUSES } }, select: { id: true } });
+  const returned = await db.rollReturn.findMany({
+    where: { fromShipmentId: { in: shipmentIds }, cancelledAt: null, roll: { ownerCustomerId: { not: null } } },
+    select: { rollId: true },
+  });
+  return [...new Set([...live.map((r) => r.id), ...returned.map((r) => r.rollId)])];
+}
+
+/**
+ * Sevk geri alma kapısı (salt-okuma): bu sevkiyatın faturasına bağlı aktif hizmet bağları + DÖNEM taslaklarının
+ * (shipmentId null) bu sevkin emanet toplarına (ata zinciriyle) kurulmuş aktif bağları → fatura numaraları.
+ * Dönem kolu atasını başka sevkle paylaşan topta da kapatır (fail-closed).
+ */
 export async function listShipmentServiceBilledDocNos(db: Db, shipmentId: string): Promise<string[]> {
+  const rollIds = await listShipmentServiceRollIds([shipmentId], db);
+  const lineage = rollIds.length === 0 ? [] : await collectRollLineage(rollIds, db);
   const rows = await db.serviceBillingLink.findMany({
-    where: { revokedAt: null, invoice: { shipmentId } },
+    where: {
+      revokedAt: null,
+      OR: [
+        { invoice: { shipmentId } },
+        ...(lineage.length > 0 ? [{ invoice: { shipmentId: null }, rollId: { in: lineage } }] : []),
+      ],
+    },
     select: { invoice: { select: { docNo: true } } },
     distinct: ["invoiceId"],
   });
   return rows.map((r) => r.invoice.docNo);
 }
-

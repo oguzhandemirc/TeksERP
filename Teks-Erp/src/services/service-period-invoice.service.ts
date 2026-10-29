@@ -12,7 +12,7 @@ import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
 import { factoryDayEndOfKey, factoryDayStartOfKey, factoryYmd } from "../constants/time";
 import { collectPeriodServiceBilling } from "./helpers/service-billing.helper";
-import { alreadyBilled, findActiveBillingTx } from "./helpers/service-billing-gate.helper";
+import { alreadyBilled } from "./helpers/service-billing-gate.helper";
 import { tokenReplay } from "./helpers/token-replay.helper";
 import { formatDayKeyTr, periodDayKey } from "./helpers/period-guard.helper";
 import { loadServiceBillingSettings, readFinanceDefaultVatRate } from "./system-setting.service";
@@ -159,11 +159,8 @@ export async function createServicePeriodDraft(
       );
     }
     if (draft.links.length === 0) {
-      if (draft.billedWorkCount > 0) {
-        // Mesaj için: carinin en az bir aktif hizmet bağının fatura no'su (iş başka yoldan faturalanmış).
-        const prior = await findActiveBillingTx(prisma, { invoice: { cariId: cari.id, status: { not: InvoiceStatus.CANCELLED } } });
-        throw alreadyBilled(prior?.docNo ?? null);
-      }
+      // 409 yalnız "bütün adaylar zaten bağlı"da; çözülemeyen/fiyatsız iş uyarısı varsa neden o uyarıdır (EMPTY).
+      if (draft.billedWorkCount > 0 && draft.warnings.length === 0) throw alreadyBilled(draft.billedDocNo);
       throw AppError.badRequest(
         draft.warnings.length > 0 ? `Faturalanacak iş yok — ${draft.warnings.join(" ")}` : "Bu dönemde faturalanacak hizmet işi yok.",
         { code: "SERVICE_PERIOD_EMPTY" },
