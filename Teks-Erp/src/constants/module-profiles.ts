@@ -28,8 +28,8 @@
 
 import { MODULE_SETTING_KEYS } from "./module-flags";
 
-/** Tasarım §10'un satırları (boyahane BUGÜN SATILMIYOR → profil yok). */
-export type ModuleProfileId = "basit" | "standart" | "perde" | "perde-dokuma" | "dokuma" | "tam";
+/** Tasarım §10'un satırları (boyahane aynası BUGÜN SATILMIYOR → profil yok; hizmet veren satılır). */
+export type ModuleProfileId = "basit" | "standart" | "perde" | "perde-dokuma" | "dokuma" | "hizmet" | "tam";
 
 export interface ModuleProfile {
   /** Panelde görünen ad. */
@@ -198,6 +198,25 @@ export const MODULE_PROFILES: Readonly<Record<ModuleProfileId, ModuleProfile>> =
       "tezgah.enabled",
       "devere.enabled",
       "dokuma.enabled",
+    ),
+    bayraklar: {},
+  },
+  /**
+   * HİZMET VEREN — fason işlemci (2026-10-29, DALGA2-HIZMET-TASARIM §7): müşterinin malını
+   * işleyip geri gönderir. Gelen belge emanete bağlıdır (`MODULE_DEPENDENCIES`), emanet kapalı
+   * olursa onay çıkışsız kapı olur. Ölçüm/faturalama ayarları profile GİRMEZ (ayar paketi betiği).
+   */
+  hizmet: {
+    ad: "Hizmet veren (fason işlemci)",
+    aciklama:
+      "Üretim + ön muhasebe + ticaret (hizmet fiyatı · mal kabul) + emanet (müşterinin malı) + " +
+      "gelen belge taslağı (irsaliye fotoğrafından giriş). Dokuma, tezgah izleme ve iplik kapalı.",
+    moduller: acik(
+      "production.enabled",
+      "finance.enabled",
+      "ticaret.enabled",
+      "emanet.enabled",
+      "gelenBelge.enabled",
     ),
     bayraklar: {},
   },

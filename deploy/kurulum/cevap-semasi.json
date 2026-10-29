@@ -23,7 +23,7 @@
     "guncelleme.sunucu": { "tur": "metin", "varsayilan": "https://indir.etkiliyazilim.com", "desen": "^https://[A-Za-z0-9.-]{1,120}(:[0-9]{1,5})?$" },
     "guncelleme.vekil": { "tur": "metin", "bos": true, "varsayilan": null, "desen": "^http://[A-Za-z0-9.-]{1,120}:[0-9]{1,5}$" },
     "lisans.saticiAdresi": { "tur": "metin", "bos": true, "varsayilan": null, "desen": "^https://[A-Za-z0-9.-]{1,120}(:[0-9]{1,5})?$" },
-    "profil": { "tur": "metin", "bos": true, "varsayilan": null, "secenek": ["basit", "standart", "perde", "perde-dokuma", "dokuma", "tam"] },
+    "profil": { "tur": "metin", "bos": true, "varsayilan": null, "secenek": ["basit", "standart", "perde", "perde-dokuma", "dokuma", "hizmet", "tam"] },
     "yedek.saat": { "tur": "metin", "varsayilan": "03:00", "desen": "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
     "yedek.ikinciHedef": { "tur": "yol", "bos": true, "varsayilan": null },
     "yedek.sifreleme": { "tur": "mantik", "varsayilan": true },
