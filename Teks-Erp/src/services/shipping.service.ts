@@ -107,6 +107,7 @@ import {
 } from "./helpers/shipping-invoice-mode.helper";
 import { factoryDayStart } from "../constants/time";
 import { resolveTargetWarehouseId } from "./helpers/warehouse.helper";
+import { ambiguousCustomerCodeError, matchExtras, resolveRollByScanCode } from "./helpers/roll-scan-resolve.helper";
 import { normalizeScanCode } from "../utils/code-format";
 import { matchesSeries, nextSeriesNo, resolveSeriesFormat } from "./number-series.service";
 import {
@@ -810,14 +811,21 @@ export class ShippingService {
         `${code} bir ÇUVAL kodu, top barkodu değil — çuvala eklemek için TOP barkodunu okutun.`,
       );
     }
-    const roll = await prisma.roll.findUnique({
-      where: { barcode: code },
-      select: { id: true, status: true, shipmentId: true, sackId: true, barcode: true, currentQty: true, sack: { select: { shipmentId: true } } },
+    // D4-F1: tek okutma boğazı — iç barkod (top, sonra kartela) önce; ayar açıksa aktif müşteri kodu.
+    const resolved = await resolveRollByScanCode(code, {
+      load: (where) => prisma.roll.findUnique({
+        where,
+        select: { id: true, status: true, shipmentId: true, sackId: true, barcode: true, currentQty: true, sack: { select: { shipmentId: true } } },
+      }),
+      otherInternalHit: async (c) => (await prisma.swatch.findUnique({ where: { barcode: c }, select: { id: true } })) !== null,
     });
+    if (resolved.kind === "AMBIGUOUS") throw ambiguousCustomerCodeError(resolved);
+    const roll = resolved.kind === "FOUND" ? resolved.roll : null;
+    const extras = resolved.kind === "FOUND" ? matchExtras(resolved) : {};
     if (roll) {
       // Zaten bu çuvalda
       if (roll.sackId === data.sackId) {
-        return { success: true, data: { kind: "ROLL", rollId: roll.id, sackId: data.sackId }, message: "Top zaten bu çuvalda" };
+        return { success: true, data: { kind: "ROLL", rollId: roll.id, sackId: data.sackId, ...extras }, message: "Top zaten bu çuvalda" };
       }
       // Başka depodaki çuvaldaysa TAŞI; sevkiyattaki çuvaldaysa reddet.
       if (roll.sackId) {
@@ -836,7 +844,7 @@ export class ShippingService {
           await this.markSackContentChangedTx(tx, [fromSackId, data.sackId]);
         });
         await AuditService.log({ userId, action: "UPDATE", tableName: "ROLL", recordId: roll.id, newData: { kind: "SACK_MOVE", sackId: data.sackId, fromSackId, barcode: roll.barcode } });
-        return { success: true, data: { kind: "ROLL", rollId: roll.id, sackId: data.sackId, currentQty: roll.currentQty }, message: "Top bu çuvala taşındı" };
+        return { success: true, data: { kind: "ROLL", rollId: roll.id, sackId: data.sackId, currentQty: roll.currentQty, ...extras }, message: "Top bu çuvala taşındı" };
       }
       // Serbest depo topu — çuvala ekle (atomik claim).
       if (roll.shipmentId) throw AppError.conflict("Top bir sevkiyatta");
@@ -855,7 +863,7 @@ export class ShippingService {
         await this.markSackContentChangedTx(tx, [data.sackId]);
       });
       await AuditService.log({ userId, action: "UPDATE", tableName: "ROLL", recordId: roll.id, newData: { kind: "SACK_SCAN", sackId: data.sackId, barcode: roll.barcode } });
-      return { success: true, data: { kind: "ROLL", rollId: roll.id, sackId: data.sackId, currentQty: roll.currentQty }, message: "Top çuvala eklendi" };
+      return { success: true, data: { kind: "ROLL", rollId: roll.id, sackId: data.sackId, currentQty: roll.currentQty, ...extras }, message: "Top çuvala eklendi" };
     }
 
     // Kartela
