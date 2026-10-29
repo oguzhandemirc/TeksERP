@@ -6,7 +6,7 @@ import type {
   ProcessChoice,
   ApproveResult, DeliveryNoteDetail, DeliveryNoteLine, DeliveryNoteListQuery, DeliveryNoteListResponse,
   HeaderPatch, IncomingDocumentSettings, LineInput, LinePatch, NoteMatchSuggestions, ReaderStatus, SenderTemplatePatch,
-  SenderTemplateView, UnreviewedApproval,
+  SenderTemplateView, UnreviewedApproval, CustomerDefaultView,
 } from "./types";
 
 const BASE = "/api/gelen-belge";
@@ -113,4 +113,19 @@ export async function listSenderTemplates(): Promise<SenderTemplateView[]> {
 /** Şablon bağını güncelle; yalnız verilen alanlar yazılır. Pasif cari 400; araya giren yazım 409. */
 export async function updateSenderTemplate(code: string, patch: SenderTemplatePatch): Promise<SenderTemplateView> {
   return (await apiClient.patch<ApiResponse<SenderTemplateView>>(`${BASE}/sablonlar/${encodeURIComponent(code)}`, patch)).data.data;
+}
+
+/** Sahibe özel varsayılan ürünler (E4, `gelen-belge:template`). */
+export async function listCustomerDefaults(): Promise<CustomerDefaultView[]> {
+  return (await apiClient.get<ApiResponse<CustomerDefaultView[]>>(`${BASE}/varsayilan-urunler`)).data.data;
+}
+
+/** Yaz (yoksa doğar). Pasif müşteri / top doğuramayan ürün 400; araya giren yazım 409. */
+export async function setCustomerDefault(customerId: string, defaultItemId: string): Promise<CustomerDefaultView> {
+  return (await apiClient.put<ApiResponse<CustomerDefaultView>>(`${BASE}/varsayilan-urunler/${customerId}`, { defaultItemId })).data.data;
+}
+
+/** Kaldır — sonra fabrika ayarı geçerli. */
+export async function removeCustomerDefault(customerId: string): Promise<{ customerId: string }> {
+  return (await apiClient.delete<ApiResponse<{ customerId: string }>>(`${BASE}/varsayilan-urunler/${customerId}`)).data.data;
 }
