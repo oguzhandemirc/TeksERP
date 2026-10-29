@@ -1,5 +1,5 @@
 // Operasyon › Depo & Paketleme karoları (sıra = hub sırası).
-import { ArrowLeftRight, Boxes, ClipboardCheck, Package, PackageOpen, PackagePlus, ScanText, ShoppingBasket, Tags } from "lucide-react";
+import { ArrowLeftRight, Boxes, ClipboardCheck, FileCog, Package, PackageOpen, PackagePlus, ScanText, ShoppingBasket, Tags } from "lucide-react";
 import { isYarnStockVisible } from "../Yarn/yarn-regime";
 import { isPurchaseOrdersVisible } from "../PurchaseOrders/po-regime";
 import { isStockCountVisible, STOCK_COUNTS_PATH } from "../StockCounts/stockCount-regime";
@@ -63,6 +63,17 @@ export const warehouseTiles: OperationsTile[] = [
     to: "/operations/gelen-belgeler",
     group: "warehouse",
     permission: "gelen-belge:read",
+    visibleWhen: isIncomingDocumentVisible,
+  },
+  {
+    // E2: gönderen şablonu ↔ cari bağı (gönderen önerisinin en öncesi). Modül kapalıyken GİZLİ (üst karo gibi).
+    key: "gelen-belge-sablonlari",
+    title: "Gönderen Şablonları",
+    description: "Okunan belge yerleşimini gönderen cariye ve varsayılan sahibe bağla",
+    icon: FileCog,
+    to: "/operations/gelen-belgeler/sablonlar",
+    group: "warehouse",
+    permission: "gelen-belge:template",
     visibleWhen: isIncomingDocumentVisible,
   },
   // ── Paket D (2026-08-14) — ticaret paketi (İplik Stoğu yukarıda, aynı kural) ─────

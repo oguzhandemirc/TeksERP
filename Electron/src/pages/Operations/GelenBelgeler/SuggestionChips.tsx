@@ -10,6 +10,13 @@ interface Props {
 }
 
 const pct = (s: number) => `%${Math.round(s * 100)}`;
+const SOURCE_TITLE: Record<MatchSuggestion["source"], string> = {
+  TEMPLATE: "Gönderen şablonuna bağlı cari",
+  ALIAS: "Daha önce onaylanan eşleme",
+  SIMILARITY: "Ad benzerliği",
+  NONE: "Ad benzerliği",
+};
+const SOURCE_TAG: Partial<Record<MatchSuggestion["source"], string>> = { TEMPLATE: "(şablon)", ALIAS: "(öğrenilmiş)" };
 
 export function SuggestionChips({ suggestion, currentId, onPick, disabled }: Props) {
   if (!suggestion) return null;
@@ -27,9 +34,9 @@ export function SuggestionChips({ suggestion, currentId, onPick, disabled }: Pro
           className="h-6 px-2 text-xs"
           disabled={disabled}
           onClick={() => onPick(c)}
-          title={suggestion.source === "ALIAS" && i === 0 ? "Daha önce onaylanan eşleme" : "Ad benzerliği"}
+          title={i === 0 && suggestion.suggested ? SOURCE_TITLE[suggestion.source] : "Ad benzerliği"}
         >
-          {c.name} {suggestion.source === "ALIAS" && i === 0 ? "(öğrenilmiş)" : pct(c.score)}
+          {c.name} {i === 0 && suggestion.suggested && SOURCE_TAG[suggestion.source] ? SOURCE_TAG[suggestion.source] : pct(c.score)}
         </Button>
       ))}
     </div>

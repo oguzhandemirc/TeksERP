@@ -15,6 +15,7 @@ import { clip, draftFromExtraction, type DraftLine } from "../lib/gelen-belge/ta
 import { readerOcr, type ReaderResult } from "../lib/gelen-belge/okuma-istemcisi";
 import { AuditService } from "./audit.service";
 import { nextNoteNo, translateUnique } from "./gelen-belge-note.service";
+import { FALLBACK_TEMPLATE_CODE, bumpTemplateHit, ensureSenderTemplate } from "./gelen-belge-sablon.service";
 import { PDF_MIME } from "./gelen-belge-scan.service";
 
 export const READ_MAX_ATTEMPTS = 3;
@@ -85,6 +86,13 @@ function lineRows(lines: DraftLine[], lineBase = 0, blockBase = 0) {
   }));
 }
 
+/** E2: eşleşen motor şablonunun DB satırı (yoksa idempotent doğar) taslağa bağlanır — gönderen önerisi buradan; isabet best-effort. */
+async function bindDraftTemplate(code: string | null, userId: string | undefined) {
+  const template = code ? await ensureSenderTemplate(code, userId) : null;
+  if (template) await bumpTemplateHit(template.id);
+  return { code, template };
+}
+
 /**
  * READING'deki taramayı sidecar'a okutur, motorla çıkarır, DRAFT'a yazar. Tarama bir taslağa bağlıysa
  * yalnız BOŞ alanlar dolar ve satırsız taslağa satırlar eklenir (operatörün yazdığı ezilmez); bağlı değilse yeni taslak.
@@ -99,15 +107,15 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
     return release(id, scan.attempts, `PROGRAM_HATASI:${(err as Error).name}`, { userId: scan.capturedById ?? undefined });
   }
   if (!r.ok) return release(id, scan.attempts, r.code, { permanent: r.kind === "HTTP" || r.kind === "INVALID", userId: scan.capturedById ?? undefined });
-  const doc = extractDocument(r.result, loadTemplates());
-  const draft = draftFromExtraction(doc);
+  const draft = draftFromExtraction(extractDocument(r.result, loadTemplates(), FALLBACK_TEMPLATE_CODE));
+  const { code: firstTemplate, template } = await bindDraftTemplate(draft.header.regions[0]?.templateId ?? null, scan.capturedById ?? undefined);
   const envelope = toJson({ ocr: r.result, regions: draft.header.regions });
   const scanData = { status: "READ" as const, ocrResult: envelope, ocrEngine: clip(r.engine, 32), ocrVersion: clip(r.version, 32), ocrDurationMs: r.durationMs };
   const userId = scan.capturedById ?? undefined;
   const { header } = draft;
   const headerCols = {
     ownerText: header.ownerText, senderDocNo: header.senderDocNo, senderDocDate: header.senderDocDate, customerBatchNo: header.customerBatchNo,
-    processText: header.processText, declaredTopCount: header.declaredTopCount, templateScore: header.templateScore === null ? null : new Prisma.Decimal(header.templateScore),
+    processText: header.processText, declaredTopCount: header.declaredTopCount, senderText: header.senderText, templateId: template?.id ?? null, templateScore: header.templateScore === null ? null : new Prisma.Decimal(header.templateScore),
   };
   const totalsDeclared = toJson(header.totalsDeclared);
   const warnings = toJson(header.warnings);
@@ -122,7 +130,7 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
         if (s0.count === 0) throw new Error("SCAN_LOST");
         return { noteId, lines: 0, filled: false };
       }
-      const note = await tx.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteId }, select: { ownerText: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, processText: true, declaredTopCount: true, totalsDeclared: true, warnings: true } });
+      const note = await tx.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteId }, select: { ownerText: true, senderText: true, templateId: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, processText: true, declaredTopCount: true, totalsDeclared: true, warnings: true } });
       // Çok sayfalı taslak: her sayfanın taraması satırlarını EKLER (blok no kaydırılır, uyarılar birikir);
       // elle girilmiş satır (ocrRaw yok) varsa OCR satır eklemez — panelin elle işi ezilmez/ikizlenmez.
       const manualLines = await tx.customerDeliveryNoteLine.count({ where: { noteId, ocrRaw: { equals: Prisma.DbNull } } });
@@ -132,6 +140,8 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
       const prevWarnings = Array.isArray(note.warnings) ? note.warnings : [];
       const patch: Prisma.CustomerDeliveryNoteUpdateInput = { warnings: toJson([...prevWarnings, ...header.warnings]) };
       if (!note.ownerText) patch.ownerText = headerCols.ownerText;
+      if (!note.senderText) patch.senderText = headerCols.senderText;
+      if (!note.templateId && headerCols.templateId) patch.template = { connect: { id: headerCols.templateId } };
       if (!note.senderDocNo) patch.senderDocNo = headerCols.senderDocNo;
       if (!note.senderDocDate) patch.senderDocDate = headerCols.senderDocDate;
       if (!note.customerBatchNo) patch.customerBatchNo = headerCols.customerBatchNo;
@@ -168,7 +178,7 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
   }, undefined, (err) => p2002TargetsCode(err, "noteNo"), "Gelen belge numarası")
     .catch((err) => (err instanceof Error && err.message === "SCAN_LOST" ? null : translateUnique(err)));
   if (!created) return "LOST";
-  await AuditService.log({ userId, action: "CREATE", tableName: NOTE_TABLE, recordId: created.id, newData: { noteNo: created.noteNo, status: "DRAFT", sourceKind: "OCR", scanId: id, sha256: scan.sha256, lineCount: draft.lines.length, blockCount: header.totalsDeclared.blocks.length, engine: scanData.ocrEngine, warnings: header.warnings.length } });
+  await AuditService.log({ userId, action: "CREATE", tableName: NOTE_TABLE, recordId: created.id, newData: { noteNo: created.noteNo, status: "DRAFT", sourceKind: "OCR", templateCode: firstTemplate, scanId: id, sha256: scan.sha256, lineCount: draft.lines.length, blockCount: header.totalsDeclared.blocks.length, engine: scanData.ocrEngine, warnings: header.warnings.length } });
   await AuditService.log({ userId, action: "UPDATE", tableName: SCAN_TABLE, recordId: id, oldData: { status: "READING" }, newData: { status: "READ", noteId: created.id, engine: scanData.ocrEngine, durationMs: r.durationMs } });
   return "READ";
 }

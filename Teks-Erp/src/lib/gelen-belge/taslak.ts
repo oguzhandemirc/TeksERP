@@ -21,6 +21,8 @@ export interface DraftLine {
 
 export interface DraftHeader {
   ownerText: string | null;
+  /** Şablon gönderen başlığını tanımlıyorsa (`gonderen`/`gonderici`/`gonderenFirma` alanı) okunan ad; yoksa null. */
+  senderText: string | null;
   senderDocNo: string | null;
   senderDocDate: Date | null;
   customerBatchNo: string | null;
@@ -39,6 +41,7 @@ export interface DraftFromOcr {
 }
 
 const OWNER_KEYS = ["firma", "musteri", "musteriAdi", "sayin"];
+const SENDER_KEYS = ["gonderen", "gonderici", "gonderenFirma"];
 const DOC_NO_KEYS = ["fisNo", "irsaliyeNo", "evrakNo", "sevkNo", "belgeNo", "isEmriNo"];
 const DATE_KEYS = ["tarih", "sevkTarihi"];
 const BATCH_KEYS = ["hamPartiNo", "partiNo", "musteriPartiNo"];
@@ -174,6 +177,7 @@ export function draftFromExtraction(doc: DocumentExtraction): DraftFromOcr {
   return {
     header: {
       ownerText: clip(pick(f, OWNER_KEYS), 160),
+      senderText: clip(pick(f, SENDER_KEYS), 160),
       senderDocNo: clip(pick(f, DOC_NO_KEYS), 64),
       senderDocDate: dayOf(pick(f, DATE_KEYS)),
       customerBatchNo: clip(pick(f, BATCH_KEYS), 64),
