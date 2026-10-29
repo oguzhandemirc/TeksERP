@@ -582,6 +582,8 @@ export interface FeatureFlags {
   /** H2: sapma tabanı ve onay kipi — backend aynası. */
   kursunMeterVarianceBasis: "DECLARED_IN" | "MEASURED_IN";
   kursunMeterVarianceApproval: "NONE" | "OPERATOR_REASON" | "SUPERVISOR_PIN" | "OFFICE";
+  /** H1b: çıkış metresi stok kipi — backend `KursunMeterStockMode` aynası (varsayılan RECORD). */
+  kursunMeterStockMode: "RECORD" | "APPLY";
   /** Parti no KISA ve DÖNEN mi (P01…P99, 99'dan sonra P01)? Default TRUE/AÇIK.
    *  Backend ENFORCE eder (`generateBatchNumberTx`). Kapalıyken eski
    *  `P + GGAAYY + günlük sıra` kalıbına düşülür.
