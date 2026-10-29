@@ -40,6 +40,8 @@ const LINE_TOKEN_NS = "6f1c2a0e-5b3d-4c8a-9e21-7d4f0a1b2c3d";
 export const INCOMING_DOC_REASON_CODE = "GELEN_BELGE";
 /** Yarıda kalmış APPROVING (süreç ölümü) bu süreden sonra yeniden claim edilebilir. */
 const STALE_APPROVING_MS = 10 * 60 * 1000;
+/** Uzun koşumda başlığın `updatedAt`'i bu aralıkla tazelenir (kalp atışı): meşru koşum bayat sayılıp devralınmasın. */
+const HEARTBEAT_MS = 60 * 1000;
 /** Beyan edilen kg/m ile satır toplamı arasındaki hoşgörü (OCR ondalık kaybı; adet HOŞGÖRÜSÜZ). */
 const TOTAL_TOLERANCE = 0.005;
 
@@ -53,6 +55,8 @@ export interface ApproveInput {
 export interface ApproveResult {
   note: Awaited<ReturnType<typeof getDeliveryNote>>;
   summary: { entered: number; failed: number; skipped: number; replayed: number; rollIds: string[] };
+  /** Onayı durdurmayan uyuşmazlıklar (başlık top adedi ↔ satır; gerekçeyle aşılan sayfa kapısı) → `ApiResponse.warnings`. */
+  warnings: string[];
 }
 
 type DeclaredBlock = { blockNo?: number; count?: number | null; kg?: number | null; m?: number | null };
@@ -61,23 +65,30 @@ type LineRow = { id: string; lineNo: number; blockNo: number; status: DeliveryNo
 const PRE_SELECT = {
   id: true, noteNo: true, status: true, ownerCustomerId: true, senderCustomerId: true, senderText: true, pageCount: true,
   declaredTopCount: true, totalsDeclared: true, varianceReason: true, updatedAt: true,
-  ownerCustomer: { select: { isActive: true } },
   lines: { select: { id: true, lineNo: true, blockNo: true, status: true, meters: true, weightKg: true, widthCm: true, itemId: true, colorId: true, itemText: true, colorText: true, rollId: true }, orderBy: [{ blockNo: "asc" }, { lineNo: "asc" }] },
   scans: { select: { pageNo: true } },
 } satisfies Prisma.CustomerDeliveryNoteSelect;
 
 const near = (a: number, b: number) => Math.abs(a - b) <= Math.max(0.001, Math.abs(b) * TOTAL_TOLERANCE);
 
+type TotalLine = { blockNo: number; meters: Prisma.Decimal | number; weightKg: Prisma.Decimal | number | null; status: DeliveryNoteLineStatus };
+
 /**
- * Toplam kapısı — Σ satır ↔ beyan (başlık adedi + blok başına adet/kg/m). Uyuşmazlık listesi boşsa geçer.
+ * Başlık top adedi ↔ canlı satır sayısı — UYARI (tasarım §4: `declaredTopCount` yalnız uyarı; motor onu blok 1'den
+ * okur, çok bloklu belgede sert kapı her onayı 409'a düşürürdü). Saf.
+ */
+export function totalWarnings(note: { declaredTopCount: number | null }, lines: ReadonlyArray<TotalLine>): string[] {
+  const live = lines.filter((l) => l.status !== "SKIPPED").length;
+  return note.declaredTopCount != null && note.declaredTopCount !== live ? [`Belgede ${note.declaredTopCount} top yazıyor, satır sayısı ${live}.`] : [];
+}
+
+/**
+ * Toplam kapısı (SERT) — Σ satır ↔ blok başına beyan (T.Adet/kg/m). Uyuşmazlık listesi boşsa geçer.
  * Saf: DB okumaz (bekçi doğrudan sınar).
  */
-export function totalMismatches(note: { declaredTopCount: number | null; totalsDeclared: unknown }, lines: ReadonlyArray<{ blockNo: number; meters: Prisma.Decimal | number; weightKg: Prisma.Decimal | number | null; status: DeliveryNoteLineStatus }>): string[] {
+export function totalMismatches(note: { totalsDeclared: unknown }, lines: ReadonlyArray<TotalLine>): string[] {
   const live = lines.filter((l) => l.status !== "SKIPPED");
   const out: string[] = [];
-  if (note.declaredTopCount != null && note.declaredTopCount !== live.length) {
-    out.push(`Belgede ${note.declaredTopCount} top yazıyor, satır sayısı ${live.length}.`);
-  }
   const blocks = (note.totalsDeclared as { blocks?: DeclaredBlock[] } | null)?.blocks;
   if (!Array.isArray(blocks)) return out;
   for (const b of blocks) {
@@ -91,29 +102,36 @@ export function totalMismatches(note: { declaredTopCount: number | null; totalsD
   return out;
 }
 
-/** Ön kontrol — DB YAZMAZ; claim'den önce koşar, hata operatöre tek seferde listelenir. */
-async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: typeof PRE_SELECT }>, input: ApproveInput): Promise<void> {
+/**
+ * Ön kontrol — DB YAZMAZ; claim'den önce koşar, hata operatöre tek seferde listelenir. Okuduğu anlık görüntü claim
+ * WHERE'indeki `updatedAt` eşitliğiyle bağlanır (arada sahip/satır değişirse claim 409 — TOCTOU kapalı). Uyarıları döner.
+ */
+async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: typeof PRE_SELECT }>, input: ApproveInput): Promise<string[]> {
   if (!note.ownerCustomerId) throw AppError.badRequest("Sahip cari seçilmeden onaylanamaz (emanet top sahipsiz doğamaz).", { code: "DELIVERY_NOTE_OWNER_REQUIRED" });
-  // Emanet kapısı TEK yazıcıdan (lisans sorusu + MODULE_DISABLED aynı helper'da; motor tx içinde yeniden sorar).
+  // Emanet kapısı + sahip aktifliği TEK yazıcıdan (lisans sorusu + MODULE_DISABLED + pasif/bulunamayan sahip
+  // OWNER_CUSTOMER_INVALID aynı helper'da; motor tx içinde yeniden sorar).
   await assertEmanetWritableTx(prisma, note.ownerCustomerId, "gelen belge onayı");
-  if (!note.ownerCustomer?.isActive) throw AppError.badRequest("Sahip cari pasif; önce aktif bir sahip seçin.", { code: "DELIVERY_NOTE_OWNER_INACTIVE" });
   const open = note.lines.filter((l) => l.status === "PENDING" || l.status === "FAILED" || l.status === "ENTERING");
   if (open.length === 0) throw AppError.conflict(`${note.noteNo} için işlenecek satır yok (hepsi girilmiş ya da atlanmış).`, { code: "DELIVERY_NOTE_NO_OPEN_LINES" });
   const unresolved = open.filter((l) => !l.itemId).map((l) => l.lineNo);
   if (unresolved.length) {
     throw AppError.badRequest(`Ürünü çözülmemiş satır var: ${unresolved.join(", ")}. Her satırda ürün eşlenmeden onaylanamaz.`, { code: "DELIVERY_NOTE_LINE_UNRESOLVED", lineNos: unresolved });
   }
-  // Sayfa kapısı: "1/2" beyanı varsa her sayfanın taraması olmalı (yalnız taramalı belgede; elle/Excel'de tarama yok).
+  // Kapılar YALNIZ bu istekteki gerekçeyle açılır: başlıkta kalmış eski gerekçe sonraki onayın yeni uyuşmazlığını örtmez.
+  const reason = input.varianceReason?.trim();
+  const warnings = totalWarnings(note, note.lines);
+  // Sayfa kapısı: "1/2" beyanı varsa her sayfanın taraması olmalı (yalnız taramalı belgede; elle/Excel'de tarama yok). Gerekçeyle aşılır (tasarım §4).
   if (note.pageCount != null && note.scans.length > 0) {
     const have = new Set(note.scans.map((s) => s.pageNo));
     const missing = Array.from({ length: note.pageCount }, (_, i) => i + 1).filter((p) => !have.has(p));
-    if (missing.length) throw AppError.conflict(`Belge ${note.pageCount} sayfa beyan ediyor; eksik sayfa: ${missing.join(", ")}. Eksik sayfa taranmadan onaylanamaz.`, { code: "DELIVERY_NOTE_PAGES_MISSING", missing });
+    if (missing.length && !reason) throw AppError.conflict(`Belge ${note.pageCount} sayfa beyan ediyor; eksik sayfa: ${missing.join(", ")}. Eksik sayfayı tarayın ya da gerekçe (varianceReason) verin.`, { code: "DELIVERY_NOTE_PAGES_MISSING", missing });
+    if (missing.length) warnings.push(`Eksik sayfa gerekçeyle geçildi: ${missing.join(", ")}.`);
   }
   const mismatches = totalMismatches(note, note.lines);
-  const reason = input.varianceReason?.trim() || note.varianceReason;
   if (mismatches.length && !reason) {
     throw AppError.conflict(`Toplam uyuşmuyor: ${mismatches.join(" ")} Geçmek için fark gerekçesi (varianceReason) verin.`, { code: "TOTAL_MISMATCH", mismatches });
   }
+  return warnings;
 }
 
 /** Alias öğrenme — onayda çözülmüş (metin → kimlik) eşlemeler sözlüğe; tekrar görülende `hitCount` artar. Best-effort. */
@@ -143,21 +161,15 @@ async function learnAliases(note: { senderCustomerId: string | null; senderText:
   }
 }
 
-/**
- * ONAY — `POST /api/gelen-belge/irsaliyeler/:id/onay` (`gelen-belge:approve`).
- * Sıra: ön kontrol (yazmaz) → başlık claim DRAFT|PARTIAL → APPROVING → satır claim PENDING|FAILED → ENTERING →
- * satır satır `createInitialEntry` → satır ENTERED/FAILED → başlık APPROVED|PARTIAL → alias öğrenme → audit.
- */
-export async function approveDeliveryNote(id: string, input: ApproveInput, userId: string): Promise<ApproveResult> {
-  const note = await prisma.customerDeliveryNote.findUnique({ where: { id }, select: PRE_SELECT });
-  if (!note) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
-  await precheck(note, input);
-  const varianceReason = input.varianceReason?.trim() || undefined;
-
+/** Başlık claim — ön kontrol görüntüsüne (`snap`) bağlı; count 0 → 409 (CHANGED ya da NOT_APPROVABLE). */
+async function claimHeader(id: string, snap: { status: DeliveryNoteStatus; updatedAt: Date }, userId: string, varianceReason: string | undefined): Promise<void> {
   // ── Başlık claim: DRAFT|PARTIAL (ya da bayat APPROVING — süreç ölümü) → APPROVING. count 0 → 409.
+  // `updatedAt` eşitliği ön kontrolün anlık görüntüsünü bağlar: başlık PATCH'i ya da satır yazımı (claimDraft başlığı
+  // tazeler) arada olduysa claim düşer → sahip/toplam ESKİ görüntüyle top doğurmaz.
   const claim = await prisma.customerDeliveryNote.updateMany({
     where: {
       id,
+      updatedAt: snap.updatedAt,
       OR: [
         { status: { in: [DeliveryNoteStatus.DRAFT, DeliveryNoteStatus.PARTIAL] } },
         { status: DeliveryNoteStatus.APPROVING, updatedAt: { lt: new Date(Date.now() - STALE_APPROVING_MS) } },
@@ -167,8 +179,25 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
   });
   if (claim.count === 0) {
     const cur = await prisma.customerDeliveryNote.findUnique({ where: { id }, select: { status: true, noteNo: true } });
+    if (cur && cur.status === snap.status && cur.status !== DeliveryNoteStatus.APPROVING) {
+      throw AppError.conflict(`${cur.noteNo} ön kontrolden sonra değişti (başlık ya da satır düzenlendi); yeniden deneyin.`, { code: "DELIVERY_NOTE_CHANGED", status: cur.status });
+    }
     throw AppError.conflict(`${cur?.noteNo ?? id} şu an onaylanamaz (${cur?.status ?? "?"}): başka bir onay sürüyor ya da belge kapanmış.`, { code: "DELIVERY_NOTE_NOT_APPROVABLE", status: cur?.status ?? null });
   }
+}
+
+/**
+ * ONAY — `POST /api/gelen-belge/irsaliyeler/:id/onay` (`gelen-belge:approve`).
+ * Sıra: ön kontrol (yazmaz) → başlık claim DRAFT|PARTIAL → APPROVING → satır claim PENDING|FAILED → ENTERING →
+ * satır satır `createInitialEntry` → satır ENTERED/FAILED → başlık APPROVED|PARTIAL → alias öğrenme → audit.
+ */
+export async function approveDeliveryNote(id: string, input: ApproveInput, userId: string): Promise<ApproveResult> {
+  const note = await prisma.customerDeliveryNote.findUnique({ where: { id }, select: PRE_SELECT });
+  if (!note) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
+  const warnings = await precheck(note, input);
+  const varianceReason = input.varianceReason?.trim() || undefined;
+
+  await claimHeader(id, note, userId, varianceReason);
   await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: id, oldData: { status: note.status }, newData: { status: "APPROVING", noteNo: note.noteNo, ...(varianceReason ? { varianceReason } : {}) } });
 
   // ── Satır claim: yalnız topsuz satır (PENDING|FAILED; bayat ENTERING de alınır — token replay korur).
@@ -180,7 +209,13 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
 
   const summary: ApproveResult["summary"] = { entered: 0, failed: 0, skipped: 0, replayed: 0, rollIds: [] };
   const entered: LineRow[] = [];
+  let lastBeat = Date.now();
   for (const line of lines) {
+    if (Date.now() - lastBeat > HEARTBEAT_MS) {
+      // Kalp atışı: `updatedAt` tazelenir → uzun meşru koşum 10 dk bayatlık eşiğinde ikinci onaya devredilmez.
+      await prisma.customerDeliveryNote.updateMany({ where: { id, status: DeliveryNoteStatus.APPROVING }, data: { updatedById: userId } });
+      lastBeat = Date.now();
+    }
     try {
       const res = await inventory.createInitialEntry(
         {
@@ -205,10 +240,15 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
         },
       );
       const rollId = (res.data as { id: string }).id;
-      if (res.idempotent) summary.replayed++;
       const bound = await prisma.customerDeliveryNoteLine.updateMany({ where: { id: line.id, status: DeliveryNoteLineStatus.ENTERING }, data: { status: DeliveryNoteLineStatus.ENTERED, rollId, failReason: null } });
-      if (bound.count === 1) { summary.entered++; summary.rollIds.push(rollId); entered.push(line); }
-      await AuditService.log({ userId, action: "UPDATE", tableName: LINE_TABLE, recordId: line.id, oldData: { status: line.status }, newData: { status: "ENTERED", rollId, lineNo: line.lineNo, noteNo: note.noteNo } });
+      // Bağlamayı başka koşum yaptıysa (bayat devralma yarışı) ayak izi ikinci kez yazılmaz.
+      if (bound.count === 1) {
+        if (res.idempotent) summary.replayed++;
+        else summary.entered++;
+        summary.rollIds.push(rollId);
+        entered.push(line);
+        await AuditService.log({ userId, action: "UPDATE", tableName: LINE_TABLE, recordId: line.id, oldData: { status: line.status }, newData: { status: "ENTERED", rollId, lineNo: line.lineNo, noteNo: note.noteNo, ...(res.idempotent ? { replayed: true } : {}) } });
+      }
     } catch (err) {
       const failReason = (err instanceof Error ? err.message : "Bilinmeyen hata").slice(0, 500);
       await prisma.customerDeliveryNoteLine.updateMany({ where: { id: line.id, status: DeliveryNoteLineStatus.ENTERING }, data: { status: DeliveryNoteLineStatus.FAILED, failReason } });
@@ -229,7 +269,7 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
   // Alias öğrenme tx DIŞINDA ve best-effort: sözlük istatistiktir, top doğumunu geciktirmez/geri sarmaz.
   if (entered.length) await learnAliases(note, entered, userId).catch(() => undefined);
 
-  return { note: await getDeliveryNote(id), summary };
+  return { note: await getDeliveryNote(id), summary, warnings };
 }
 
 /** Bekçi/okuyucu için: satırın top token'ı (belirlenimli). */

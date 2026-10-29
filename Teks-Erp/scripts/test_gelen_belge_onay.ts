@@ -4,16 +4,21 @@
 // Karar belgesi TASARIM-KARARI-2026-10-28 §3 adım 6 + §6 D4 satırı. Sınanan:
 //   §1 16 satırlı DRAFT onay → 16 Roll (STOCK · SEMI_FINISHED · ownerCustomerId dolu · entryReasonCode GELEN_BELGE)
 //      + 16 WarehouseMovement ENTRY; başlık APPROVED; satırlar ENTERED + rollId; renkli satır da STOCK (forcedStatus)
-//   §2 iki ayrı 200 m satır → iki top (duplicateGuard GEÇİLMEZ — `kk1.duplicateGuardEnabled` AÇIKKEN bile)
+//   §2 iki ayrı 200 m satır → iki top (onay `opts.duplicateGuard` GEÇMEZ; motor bayrağı yalnız o verilirse okur —
+//      `kk1.duplicateGuardEnabled` açık tutulur ki geçilirse kırmızıya dönsün)
 //   §3 replay: satır token'ı (uuidv5) ile ikinci giriş idempotent → ikinci top YOK; onaylıyı yeniden onay → 409 NO_OPEN_LINES
 //   §4 eşzamanlı iki onay → biri 200, biri 409 DELIVERY_NOTE_NOT_APPROVABLE; top sayısı = satır sayısı
 //   §5 emanet kapalı → 403 MODULE_DISABLED ve SIFIR top; taslak DRAFT kalır
-//   §6 toplam uyuşmazlığı → 409 TOTAL_MISMATCH; varianceReason ile ikinci deneme 200 + gerekçe başlıkta; saf `totalMismatches`
-//   §7 bir satır bilinçli bozuk (iplik kalemi) → o satır FAILED + Türkçe sebep, başlık PARTIAL; düzeltip yeniden onay YALNIZ onu işler → APPROVED
-//   §8 sayfa kapısı: pageCount 2, yalnız sayfa 1 taranmış → 409 DELIVERY_NOTE_PAGES_MISSING
+//   §6 blok toplamı uyuşmazlığı → 409 TOTAL_MISMATCH; varianceReason ile ikinci deneme 200 + gerekçe başlıkta;
+//      başlık top adedi farkı YALNIZ uyarı (200 + warnings); saf `totalMismatches` / `totalWarnings`
+//   §7 bir satır bilinçli bozuk (iplik kalemi) → o satır FAILED + Türkçe sebep, başlık PARTIAL; API'den (PATCH) düzeltip
+//      yeniden onay YALNIZ onu işler → APPROVED; ENTERED satır PATCH'i 409; FAILED satırı skip → SKIPPED + başlık APPROVED
+//   §8 sayfa kapısı: pageCount 2, yalnız sayfa 1 taranmış → 409 DELIVERY_NOTE_PAGES_MISSING; gerekçeyle 200 + uyarı
 //   §9 ürünü çözülmemiş satır → 400 DELIVERY_NOTE_LINE_UNRESOLVED, sıfır top
 //   §10 alias öğrenme: ITEM/COLOR/SENDER sözlüğe; ikinci onayda hitCount artar
 //   §11 audit: satır/başlık audit yükünde ocrRaw/sourceRects/content yok
+//   §12 TOCTOU: ön kontrolden sonra, claim'den önce sahip PATCH'i → 409 DELIVERY_NOTE_CHANGED, sıfır top
+//   §13 yarıda kalan onay: ENTERING satır + doğmuş top + 11 dk bayat APPROVING → onay 200, replayed 1, ek top YOK
 // Emsal: scripts/test_gelen_belge_taslak.ts (app.listen(0) + ensureTestAdmin + ayar()).
 // =============================================================================
 import type { AddressInfo } from "net";
@@ -24,7 +29,7 @@ import app from "../src/app";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
 import { InventoryService } from "../src/services/inventory.service";
-import { lineRollToken, totalMismatches } from "../src/services/gelen-belge-onay.service";
+import { lineRollToken, totalMismatches, totalWarnings } from "../src/services/gelen-belge-onay.service";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
@@ -46,7 +51,7 @@ const made = { customers: [] as string[], users: [] as string[], notes: [] as st
 
 type Line = { id: string; lineNo: number; status: string; rollId: string | null; failReason: string | null };
 type NoteData = { id: string; noteNo: string; status: string; varianceReason: string | null; lines: Line[] };
-type Resp = { status: number; code?: string; details?: Record<string, unknown>; data?: Record<string, unknown> & { note?: NoteData; summary?: { entered: number; failed: number; replayed: number; rollIds: string[] }; lines?: Line[] } };
+type Resp = { status: number; code?: string; warnings?: string[]; details?: Record<string, unknown>; data?: Record<string, unknown> & { note?: NoteData; summary?: { entered: number; failed: number; replayed: number; rollIds: string[] }; lines?: Line[] } };
 
 async function ayar(key: string, v: boolean): Promise<void> {
   await prisma.systemSetting.upsert({ where: { key }, create: { key, value: v }, update: { value: v } });
@@ -75,8 +80,8 @@ async function main(): Promise<void> {
     };
     const call = async (method: string, path: string, token: string, body?: unknown): Promise<Resp> => {
       const r = await fetch(`${url}${path}`, { method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: body === undefined ? undefined : JSON.stringify(body) });
-      const j = (await r.json().catch(() => ({}))) as { data?: Resp["data"]; details?: { code?: string } & Record<string, unknown> };
-      return { status: r.status, code: j.details?.code, details: j.details, data: j.data };
+      const j = (await r.json().catch(() => ({}))) as { data?: Resp["data"]; warnings?: string[]; details?: { code?: string } & Record<string, unknown> };
+      return { status: r.status, code: j.details?.code, details: j.details, data: j.data, warnings: j.warnings };
     };
     const tk = await login(admin.username, admin.password);
     check("admin login", tk.length > 0);
@@ -130,7 +135,7 @@ async function main(): Promise<void> {
     check("satırlar ENTERED + rollId", ls1.every((l) => l.status === "ENTERED" && l.rollId), "");
     check("satır token'ı = uuidv5(lineId)", ls1.every((l) => rolls1.find((r) => r.id === l.rollId)?.clientToken === lineRollToken(l.id)));
     const twoHundred = ls1.filter((l) => Number(l.meters) === 200);
-    check("§2 iki ayrı 200 m satır → iki ayrı top (duplicateGuard AÇIKKEN bile düşürmedi)", twoHundred.length === 2 && twoHundred[0]!.rollId !== twoHundred[1]!.rollId && twoHundred.every((l) => l.rollId));
+    check("§2 iki ayrı 200 m satır → iki ayrı top (onay duplicateGuard geçmez; bayrak açık)", twoHundred.length === 2 && twoHundred[0]!.rollId !== twoHundred[1]!.rollId && twoHundred.every((l) => l.rollId));
 
     // §3 replay
     console.log("§3 replay");
@@ -169,11 +174,16 @@ async function main(): Promise<void> {
     check("sıfır top", (await rollsOf(n6.id)).length === 0);
     const t6b = await onay(n6.id, { varianceReason: "Belgede 5 yazıyor, 3 top geldi (eksik teslim)" });
     check("varianceReason ile ikinci deneme 200 + gerekçe başlıkta", t6b.status === 200 && t6b.data?.note?.varianceReason?.includes("eksik teslim") === true, `${t6b.status} ${t6b.code ?? ""}`);
-    const pure = totalMismatches({ declaredTopCount: 2, totalsDeclared: { blocks: [{ blockNo: 1, count: 2, m: 300.5, kg: 50 }] } }, [
+    const pure = totalMismatches({ totalsDeclared: { blocks: [{ blockNo: 1, count: 2, m: 300.5, kg: 50 }] } }, [
       { blockNo: 1, meters: 150, weightKg: 25, status: "PENDING" }, { blockNo: 1, meters: 150.5, weightKg: 25, status: "PENDING" }, { blockNo: 1, meters: 999, weightKg: 1, status: "SKIPPED" },
     ]);
     check("saf totalMismatches: tutan beyan (SKIPPED sayılmaz, %0,5 hoşgörü) → boş", pure.length === 0, pure.join(" "));
-    check("saf totalMismatches: adet hoşgörüsüz", totalMismatches({ declaredTopCount: 3, totalsDeclared: null }, [{ blockNo: 1, meters: 1, weightKg: null, status: "PENDING" }]).length === 1);
+    check("saf totalMismatches: blok adedi hoşgörüsüz", totalMismatches({ totalsDeclared: { blocks: [{ blockNo: 1, count: 3 }] } }, [{ blockNo: 1, meters: 1, weightKg: null, status: "PENDING" }]).length === 1);
+    check("saf: başlık top adedi farkı SERT DEĞİL (totalMismatches boş, totalWarnings 1)", totalMismatches({ totalsDeclared: null }, [{ blockNo: 1, meters: 1, weightKg: null, status: "PENDING" }]).length === 0 && totalWarnings({ declaredTopCount: 3 }, [{ blockNo: 1, meters: 1, weightKg: null, status: "PENDING" }]).length === 1);
+    check("blok farkı geçildiğinde başlık adedi farkı uyarı olarak döner", (t6b.warnings ?? []).some((w) => w.includes("5 top")), JSON.stringify(t6b.warnings));
+    const n6w = await mkNote([L(43), L(44)], { declaredTopCount: 3 });
+    const t6w = await onay(n6w.id);
+    check("yalnız başlık adedi farkı → gerekçesiz 200 + warnings (tasarım §4: declaredTopCount yalnız uyarı)", t6w.status === 200 && (t6w.warnings ?? []).some((w) => w.includes("3 top")), `${t6w.status} ${t6w.code ?? ""} ${JSON.stringify(t6w.warnings)}`);
 
     // §7 bozuk satır → PARTIAL → yeniden onay yalnız onu işler
     console.log("§7 kısmi onay");
@@ -183,12 +193,26 @@ async function main(): Promise<void> {
     check("bozuk satır FAILED + Türkçe sebep", p7.status === 200 && bad?.status === "FAILED" && /iplik/i.test(bad.failReason ?? ""), `${bad?.status} ${bad?.failReason}`);
     check("başlık PARTIAL, 2 top", p7.data?.note?.status === "PARTIAL" && p7.data?.summary?.entered === 2 && p7.data?.summary?.failed === 1, JSON.stringify(p7.data?.summary));
     const before7 = await rollsOf(n7.id);
-    // Düzeltme: PARTIAL belgede satır PATCH'i D2 kuralıyla kapalı (yalnız DRAFT) — D5 panel yolu açılana dek DB'den düzeltilir.
-    await prisma.customerDeliveryNoteLine.update({ where: { id: bad!.id }, data: { itemId: fabric.id } });
+    const good = p7.data?.note?.lines.find((l) => l.lineNo === 1);
+    const e7 = await call("PATCH", `/api/gelen-belge/irsaliyeler/${n7.id}/satirlar/${good!.id}`, writer, { meters: 1 });
+    check("PARTIAL'da ENTERED satır PATCH'i → 409 (yalnız topsuz FAILED açılır)", e7.status === 409, `${e7.status} ${e7.code}`);
+    const fix7 = await call("PATCH", `/api/gelen-belge/irsaliyeler/${n7.id}/satirlar/${bad!.id}`, writer, { itemId: fabric.id });
+    check("PARTIAL'da FAILED satır API'den düzeltildi (PATCH 200)", fix7.status === 200, `${fix7.status} ${fix7.code ?? ""}`);
     const p7b = await onay(n7.id);
     check("yeniden onay YALNIZ bozuk satırı işler → entered 1, APPROVED", p7b.status === 200 && p7b.data?.summary?.entered === 1 && p7b.data?.note?.status === "APPROVED", JSON.stringify(p7b.data?.summary));
     const after7 = await rollsOf(n7.id);
     check("önceki iki top aynı kaldı, toplam 3", before7.every((r) => after7.includes(r)) && after7.length === 3);
+
+    const n7s = await mkNote([L(53), L(54, { itemId: yarn.id, itemText: "İplik" })]);
+    const p7s = await onay(n7s.id);
+    const bad7s = p7s.data?.note?.lines.find((l) => l.lineNo === 2);
+    check("ikinci kısmi belge PARTIAL", p7s.data?.note?.status === "PARTIAL" && bad7s?.status === "FAILED", p7s.data?.note?.status);
+    const skip7 = await call("PATCH", `/api/gelen-belge/irsaliyeler/${n7s.id}/satirlar/${bad7s!.id}`, writer, { skip: true });
+    const st7s = await prisma.customerDeliveryNote.findUnique({ where: { id: n7s.id }, select: { status: true } });
+    check("FAILED satır skip → SKIPPED; açık satır kalmadı → başlık APPROVED, top 1", skip7.status === 200 && (skip7.data as { status?: string })?.status === "SKIPPED" && st7s?.status === "APPROVED" && (await rollsOf(n7s.id)).length === 1, `${skip7.status} ${skip7.code ?? ""} ${st7s?.status}`);
+    const n7d = await mkNote([L(55)]);
+    const d7 = await call("PATCH", `/api/gelen-belge/irsaliyeler/${n7d.id}/satirlar/${(await prisma.customerDeliveryNoteLine.findFirst({ where: { noteId: n7d.id }, select: { id: true } }))!.id}`, writer, { skip: true });
+    check("taslakta skip → 400 DELIVERY_NOTE_LINE_SKIP_DRAFT", d7.status === 400 && d7.code === "DELIVERY_NOTE_LINE_SKIP_DRAFT", `${d7.status} ${d7.code}`);
 
     // §8 sayfa kapısı
     console.log("§8 sayfa kapısı");
@@ -200,6 +224,9 @@ async function main(): Promise<void> {
     const g8 = await onay(n8.id);
     check("1/2 eksik → 409 DELIVERY_NOTE_PAGES_MISSING, sıfır top", g8.status === 409 && g8.code === "DELIVERY_NOTE_PAGES_MISSING" && (await rollsOf(n8.id)).length === 0, `${g8.status} ${g8.code}`);
 
+    const g8b = await onay(n8.id, { varianceReason: "Sayfa 2 boş arka yüz" });
+    check("gerekçeyle eksik sayfa geçilir → 200 + uyarı", g8b.status === 200 && (g8b.warnings ?? []).some((w) => w.includes("Eksik sayfa")), `${g8b.status} ${g8b.code ?? ""}`);
+
     // §9 çözülmemiş ürün
     console.log("§9 çözülmemiş ürün");
     const n9 = await mkNote([L(70), L(71, { itemId: null })]);
@@ -209,17 +236,55 @@ async function main(): Promise<void> {
     // §10 alias öğrenme
     console.log("§10 alias");
     const aliases = await prisma.deliveryNoteAlias.findMany({ where: { OR: [{ targetId: fabric.id }, { targetId: color.id }, { targetId: sender }] }, select: { scope: true, senderCustomerId: true, rawKey: true, targetId: true, hitCount: true } });
-    const itemAlias = aliases.find((a) => a.scope === "ITEM" && a.targetId === fabric.id);
+    // Fabric'e iki ITEM anahtarı öğrenilir ("Pamuklu 30/1" ve §7'de düzeltilen "İplik"); pamuklu olanı en çok vurulandır.
+    const itemAlias = aliases.filter((a) => a.scope === "ITEM" && a.targetId === fabric.id).sort((x, y) => y.hitCount - x.hitCount)[0];
     check("ITEM alias (gönderene bağlı) + COLOR + SENDER öğrenildi", !!itemAlias && itemAlias.senderCustomerId === sender && aliases.some((a) => a.scope === "COLOR") && aliases.some((a) => a.scope === "SENDER" && a.senderCustomerId === null), JSON.stringify(aliases.map((a) => [a.scope, a.rawKey, a.hitCount])));
     // n7'nin ikinci onayı yalnız "İplik" metinli satırı girdi → pamuklu alias'ı o turda öğrenilmez (yalnız GİREN satır öğretir).
     const senderAlias = aliases.find((a) => a.scope === "SENDER");
-    check("hitCount giren onay sayısı kadar arttı (ITEM 4 · SENDER 5)", itemAlias?.hitCount === 4 && senderAlias?.hitCount === 5, `${itemAlias?.hitCount} ${senderAlias?.hitCount}`);
+    // Pamuklu giren onaylar: n1 n4 n6 n6w n7 n7s n8 = 7; gönderen her giren onayda: + n7 ikinci tur = 8.
+    check("hitCount giren onay sayısı kadar arttı (ITEM 7 · SENDER 8)", itemAlias?.hitCount === 7 && senderAlias?.hitCount === 8, `${itemAlias?.hitCount} ${senderAlias?.hitCount}`);
 
     // §11 audit yükü
     console.log("§11 audit");
     const logs = await prisma.systemLog.findMany({ where: { tableName: { in: ["CUSTOMER_DELIVERY_NOTE", "CUSTOMER_DELIVERY_NOTE_LINE", "DELIVERY_NOTE_ALIAS"] }, recordId: { in: [...made.notes, ...ls1.map((l) => l.id)] } }, select: { newData: true, oldData: true } });
     const dump = JSON.stringify(logs);
     check("onay audit'i var ve yükte ocrRaw/sourceRects/content yok", logs.length > 0 && !/ocrRaw|sourceRects|"content"/.test(dump), String(logs.length));
+
+    // §12 TOCTOU — ön kontrolün okuması döndükten SONRA (claim'den önce) sahip değişir; claim updatedAt eşitliğiyle düşmeli.
+    console.log("§12 ön kontrol ↔ claim yarışı");
+    const owner2 = await mkCustomer("OWN2");
+    const n12 = await mkNote([L(80), L(81)]);
+    const delegate = prisma.customerDeliveryNote as unknown as { findUnique: (a: { where: { id: string }; select?: Record<string, unknown> }) => Promise<unknown> };
+    const origFind = delegate.findUnique;
+    let armed = true;
+    delegate.findUnique = async (a) => {
+      const r = await origFind.call(prisma.customerDeliveryNote, a);
+      if (armed && a.where.id === n12.id && a.select && "scans" in a.select) {
+        armed = false;
+        await call("PATCH", `/api/gelen-belge/irsaliyeler/${n12.id}`, tk, { ownerCustomerId: owner2 });
+      }
+      return r;
+    };
+    let r12: Resp;
+    try { r12 = await onay(n12.id); } finally { delegate.findUnique = origFind; }
+    check("kanca tetiklendi (sahip PATCH'i ön kontrolle claim arasına girdi)", !armed);
+    check("ön kontrolden sonra sahip değişti → 409 DELIVERY_NOTE_CHANGED, sıfır top", r12.status === 409 && r12.code === "DELIVERY_NOTE_CHANGED" && (await rollsOf(n12.id)).length === 0, `${r12.status} ${r12.code}`);
+    const r12b = await onay(n12.id);
+    const own12 = await prisma.roll.findMany({ where: { id: { in: await rollsOf(n12.id) } }, select: { ownerCustomerId: true } });
+    check("yeniden deneme 200 ve toplar YENİ sahiple doğdu", r12b.status === 200 && own12.length === 2 && own12.every((x) => x.ownerCustomerId === owner2), `${r12b.status} ${JSON.stringify(own12)}`);
+
+    // §13 yarıda kalan onay — süreç ölmüş: satır ENTERING, top doğmuş ama bağlanmamış, başlık 11 dk bayat APPROVING.
+    console.log("§13 bayat APPROVING devralma");
+    const n13 = await mkNote([L(90), L(91)]);
+    const l13 = await prisma.customerDeliveryNoteLine.findMany({ where: { noteId: n13.id }, select: { id: true, meters: true }, orderBy: { lineNo: "asc" } });
+    await prisma.customerDeliveryNoteLine.update({ where: { id: l13[0]!.id }, data: { status: "ENTERING" } });
+    const born = await inv.createInitialEntry({ itemId: fabric.id, colorId: null, initialQty: Number(l13[0]!.meters), clientToken: lineRollToken(l13[0]!.id) }, admin.id, null, false, { forcedEntrySource: "SEMI_FINISHED", forcedStatus: "STOCK", ownerCustomerId: owner, skipKk1WeightPolicy: true });
+    const bornId = (born.data as { id: string }).id;
+    await prisma.customerDeliveryNote.update({ where: { id: n13.id }, data: { status: "APPROVING", updatedAt: new Date(Date.now() - 11 * 60 * 1000) } });
+    const r13 = await onay(n13.id);
+    const rl13 = await rollsOf(n13.id);
+    check("bayat APPROVING devralındı → 200, replayed 1 · entered 1, APPROVED", r13.status === 200 && r13.data?.summary?.replayed === 1 && r13.data?.summary?.entered === 1 && r13.data?.note?.status === "APPROVED", `${r13.status} ${r13.code ?? ""} ${JSON.stringify(r13.data?.summary)}`);
+    check("yarıda doğan top bağlandı, ek top YOK (2 satır = 2 top)", rl13.length === 2 && rl13.includes(bornId) && (await prisma.roll.count({ where: { clientToken: lineRollToken(l13[0]!.id) } })) === 1, JSON.stringify(rl13));
   } finally {
     stopNotificationJobs();
     await new Promise<void>((r) => server.close(() => r()));
