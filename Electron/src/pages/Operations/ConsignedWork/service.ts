@@ -10,7 +10,10 @@ export interface ConsignedBucket {
 export interface ConsignedOwnerRow {
   ownerCustomerId: string;
   ownerName: string;
+  /** Adımsız ham emanet — Ham Stok sekmesi. */
   waiting: ConsignedBucket;
+  /** Adımsız yarı mamul emanet (gelen belge onayı böyle doğurur) — Yarı Mamul sekmesi. */
+  waitingSemi: ConsignedBucket;
   inProcess: ConsignedBucket;
   ready: ConsignedBucket;
   other: ConsignedBucket;

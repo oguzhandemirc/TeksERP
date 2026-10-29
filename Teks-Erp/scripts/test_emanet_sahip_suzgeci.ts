@@ -13,10 +13,16 @@
 //      İçerideki İşler ucu (`/api/consigned-work`) 403 MODULE_DISABLED
 //   §5 İçerideki İşler — ölü (K18) · SHIPPED · SCRAP dışlanır; kovalar (waiting/inProcess/ready/other);
 //      metre = currentQty (initialQty DEĞİL); toplam, aynı sahip + canlı statü süzgeçli `/rolls/stats` ile birebir
-//   §6 sahip lookup'ı — yalnız top sahibi müşteriler (A, B), satır {id,name,code}
+//   §6 sahip lookup'ı — yalnız top sahibi müşteriler (A, B), satır {id,name,code}; emanet KAPALI → boş
+//   §7 KOVA ↔ SEKME — her bağlantılı kova (waiting/waitingSemi/inProcess/ready) sayı+metre olarak, panelin
+//      bağlandığı sekmenin rollScope'u + sahip + includeFire `/rolls/stats`ıyla birebir. Eşleme panelden OKUNUR
+//      (Electron consigned-links.ts BUCKET_TAB + Rolls/service.ts sekme→rollScope). Fikstür gerçek Gülkesim
+//      girişini (SEMI_FINISHED, gelen belge onayı) ve fire kaliteli canlı topu içerir.
 //
 // NEGATİF SONDA (kırmızı görülerek, 2026-10-29): `buildRollWhere`de `where.ownerCustomerId = …` ataması
 //   düşürülünce §1a/§1b/§1d/§3/§4a/§5f ❌ (süzgeç sessizce düşer); `requireEmanetEnabled` bayrak kontrolü düşürülünce §4b ❌.
+//   (2026-10-29 bitirici) BUCKET_TAB'da waitingSemi → "RAW_STOCK" yapılınca §7 waitingSemi ❌ (eski hata: Bekliyor
+//   hücresi boş Ham Stok listesi açıyordu); lookup'taki emanet kapısı düşürülünce §6b ❌.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım.
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -69,7 +75,7 @@ async function main(): Promise<void> {
 
   const foto = await prisma.systemSetting.findMany({ where: { key: SETTING_KEYS.EMANET_ENABLED }, select: { key: true, value: true } });
   const setFlag = (v: boolean) => prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.EMANET_ENABLED }, create: { key: SETTING_KEYS.EMANET_ENABLED, value: String(v) }, update: { value: String(v) } });
-  const ids = { item: "", custA: "", custB: "", st: "", wo: "", rolls: [] as string[] };
+  const ids = { item: "", custA: "", custB: "", st: "", wo: "", grade: "", rolls: [] as string[] };
 
   try {
     const item = await prisma.item.create({ data: { code: `${TAG}-I`, name: `${TAG} Kumaş`, itemType: "FABRIC" }, select: { id: true } });
@@ -88,6 +94,8 @@ async function main(): Promise<void> {
     const stepId = wo.steps[0]!.id;
 
     let seq = 0;
+    const fireGrade = await prisma.qualityGrade.create({ data: { code: `${TAG}-F`.slice(0, 32), name: `${TAG} Fire`, targetStatus: RollStatus.SCRAP }, select: { id: true, code: true } });
+    ids.grade = fireGrade.id;
     const mk = async (owner: string | null, status: RollStatus, current: number, extra: Partial<Prisma.RollUncheckedCreateInput> = {}) => {
       const r = await prisma.roll.create({
         data: { barcode: `${TAG}-R${++seq}`, itemId: item.id, status, initialQty: current + 20, currentQty: current, entrySource: "SUPPLIER_RECEIPT", ownerCustomerId: owner, ...extra },
@@ -105,30 +113,33 @@ async function main(): Promise<void> {
     await mk(custA.id, RollStatus.CANCELLED, 20);
     await mk(custA.id, RollStatus.TAMBUR_CONSUMED, 40);
     await mk(custA.id, RollStatus.SCRAP, 5);
+    // A: gelen belge onayının doğurduğu YARI MAMUL emanet (waitingSemi 40) · fire KALİTELİ canlı depo topu (ready +15)
+    await mk(custA.id, RollStatus.STOCK, 40, { entrySource: "SEMI_FINISHED" });
+    await mk(custA.id, RollStatus.WAREHOUSE, 15, { qualityGrade: fireGrade.code });
     // B: ready 25 (A1_STOCK) · inProcess 60
     await mk(custB.id, RollStatus.A1_STOCK, 25);
     await mk(custB.id, RollStatus.IN_PRODUCTION, 60, { currentStepId: stepId });
     // sahipsiz
     await mk(null, RollStatus.STOCK, 80);
 
-    const base = { "filter[status]": "ALL", "filter[itemId]": item.id, pageSize: "100" };
+    const base = { "filter[status]": "ALL", "filter[itemId]": item.id, "filter[includeFire]": "true", pageSize: "100" };
     const list = async (q: Record<string, string>) => ((await inventory.findAllRolls(fakeReq({ ...base, ...q }))) as unknown as { data: RollRow[] }).data;
     const stats = async (q: Record<string, string>) => (await inventory.getRollStats(fakeReq({ ...base, ...q }))).data!;
 
     // §1 liste
     await setFlag(true);
     const onlyA = await list({ "filter[ownerCustomerId]": custA.id });
-    check("§1a sahip A süzgeci yalnız A'nın 8 topu", onlyA.length === 8 && onlyA.every((r) => r.ownerCustomerId === custA.id), `n=${onlyA.length}`);
+    check("§1a sahip A süzgeci yalnız A'nın 10 topu", onlyA.length === 10 && onlyA.every((r) => r.ownerCustomerId === custA.id), `n=${onlyA.length}`);
     const ab = await list({ "filter[ownerCustomerId]": `${custA.id},${custB.id}` });
-    check("§1b çoklu süzgeç A,B → 10 top, sahipsiz yok", ab.length === 10 && ab.every((r) => r.ownerCustomerId === custA.id || r.ownerCustomerId === custB.id), `n=${ab.length}`);
+    check("§1b çoklu süzgeç A,B → 12 top, sahipsiz yok", ab.length === 12 && ab.every((r) => r.ownerCustomerId === custA.id || r.ownerCustomerId === custB.id), `n=${ab.length}`);
     const all = await list({});
-    check("§1c süzgeçsiz 11 top (sahipsiz dahil)", all.length === 11, `n=${all.length}`);
+    check("§1c süzgeçsiz 13 top (sahipsiz dahil)", all.length === 13, `n=${all.length}`);
     check("§1d liste satırı \"Sahibi\" adını taşır (ownerCustomer {id,name})", onlyA.every((r) => r.ownerCustomer?.id === custA.id && r.ownerCustomer.name === `${TAG} Sahip A`));
 
     // §2 özet şeridi
     const sA = await stats({ "filter[ownerCustomerId]": custA.id });
     const sAB = await stats({ "filter[ownerCustomerId]": `${custA.id},${custB.id}` });
-    check("§2 /stats aynı where: A=8, A+B=10 (listeyle birebir)", sA.totalCount === onlyA.length && sAB.totalCount === ab.length, `A=${sA.totalCount} AB=${sAB.totalCount}`);
+    check("§2 /stats aynı where: A=10, A+B=12 (listeyle birebir)", sA.totalCount === onlyA.length && sAB.totalCount === ab.length, `A=${sA.totalCount} AB=${sAB.totalCount}`);
 
     // §3 cursor
     const seen: RollRow[] = [];
@@ -142,8 +153,8 @@ async function main(): Promise<void> {
       cursor = res.pagination.nextCursor;
       pages++;
     } while (cursor && pages < 10);
-    check("§3 cursor sayfalamada süzgeç korunur: 10 top, ≥4 sayfa, mükerrer yok, hepsi A/B",
-      seen.length === 10 && pages >= 4 && new Set(seen.map((r) => r.id)).size === 10 && seen.every((r) => r.ownerCustomerId === custA.id || r.ownerCustomerId === custB.id),
+    check("§3 cursor sayfalamada süzgeç korunur: 12 top, ≥4 sayfa, mükerrer yok, hepsi A/B",
+      seen.length === 12 && pages >= 4 && new Set(seen.map((r) => r.id)).size === 12 && seen.every((r) => r.ownerCustomerId === custA.id || r.ownerCustomerId === custB.id),
       `n=${seen.length} sayfa=${pages}`);
 
     // §5 İçerideki İşler (modül açık)
@@ -151,9 +162,9 @@ async function main(): Promise<void> {
     const sum = (await getConsignedWorkSummary()).data!;
     const rA = sum.rows.find((r) => r.ownerCustomerId === custA.id);
     const rB = sum.rows.find((r) => r.ownerCustomerId === custB.id);
-    check("§5b A: ölü/sevkli/fire DIŞLANIR → 4 top · 190 m (currentQty; initialQty olsaydı 270)", rA?.total.count === 4 && rA.total.qty === 190, JSON.stringify(rA?.total));
-    check("§5c A kovaları: waiting 1/100 · inProcess 1/30 · ready 1/50 · other 1/10",
-      rA?.waiting.count === 1 && rA.waiting.qty === 100 && rA.inProcess.count === 1 && rA.inProcess.qty === 30 && rA.ready.count === 1 && rA.ready.qty === 50 && rA.other.count === 1 && rA.other.qty === 10,
+    check("§5b A: ölü/sevkli/hurda DIŞLANIR, fire kaliteli canlı top SAYILIR → 6 top · 245 m (currentQty; initialQty olsaydı 365)", rA?.total.count === 6 && rA.total.qty === 245, JSON.stringify(rA?.total));
+    check("§5c A kovaları: waiting 1/100 · waitingSemi 1/40 · inProcess 1/30 · ready 2/65 · other 1/10",
+      rA?.waiting.count === 1 && rA.waiting.qty === 100 && rA.waitingSemi.count === 1 && rA.waitingSemi.qty === 40 && rA.inProcess.count === 1 && rA.inProcess.qty === 30 && rA.ready.count === 2 && rA.ready.qty === 65 && rA.other.count === 1 && rA.other.qty === 10,
       JSON.stringify(rA));
     check("§5d B: ready 1/25 (A1_STOCK) · inProcess 1/60 · toplam 2/85 · ad", rB?.ready.count === 1 && rB.ready.qty === 25 && rB.inProcess.qty === 60 && rB.total.count === 2 && rB.total.qty === 85 && rB.ownerName === `${TAG} Sahip B`);
     check("§5e sahipsiz top hiçbir satırda yok", sum.rows.every((r) => r.ownerCustomerId === custA.id || r.ownerCustomerId === custB.id || !r.ownerName.startsWith(TAG)));
@@ -166,16 +177,35 @@ async function main(): Promise<void> {
     const oA = owners.find((o) => o.id === custA.id);
     check("§6 sahip lookup'ı A ve B'yi içerir; satır {code,id,name}", !!oA && owners.some((o) => o.id === custB.id) && Object.keys(oA).sort().join(",") === "code,id,name");
 
+    // §7 kova ↔ sekme birebirliği (eşleme panelden okunur — ayrışırsa hücre boş/eksik liste açar)
+    const links = readFileSync(path.join(ROOT, "../Electron/src/pages/Operations/ConsignedWork/consigned-links.ts"), "utf8");
+    const rollsSvc = readFileSync(path.join(ROOT, "../Electron/src/pages/Operations/Rolls/service.ts"), "utf8");
+    const tabBlock = /BUCKET_TAB[^=]*=\s*\{([^}]*)\}/.exec(links)?.[1] ?? "";
+    const bucketTab = new Map([...tabBlock.matchAll(/(\w+):\s*"(\w+)"/g)].map((m) => [m[1]!, m[2]!]));
+    const tabScope = new Map([...rollsSvc.matchAll(/if \(tab === "(\w+)"\) return \{ rollScope: "(\w+)"/g)].map((m) => [m[1]!, m[2]!]));
+    const linked = ["waiting", "waitingSemi", "inProcess", "ready"] as const;
+    check("§7a panel eşlemesi okunur: dört bağlantılı kovanın hepsi bir sekmeye, her sekme bir rollScope'a bağlı",
+      linked.every((k) => bucketTab.has(k) && tabScope.has(bucketTab.get(k)!)), JSON.stringify([...bucketTab]));
+    for (const k of linked) {
+      const scope = tabScope.get(bucketTab.get(k) ?? "") ?? "?";
+      const sc = scope === "?" ? null : await stats({ "filter[ownerCustomerId]": custA.id, "filter[rollScope]": scope });
+      check(`§7 ${k} → ${bucketTab.get(k)} (${scope}): sekme listesi = kova (sayı + metre)`,
+        !!sc && sc.totalCount === rA?.[k].count && sc.totalQty === rA[k].qty, `kova=${JSON.stringify(rA?.[k])} sekme=${sc?.totalCount}/${sc?.totalQty}`);
+    }
+
     // §4 emanet KAPALI
     await setFlag(false);
     const offA = await list({ "filter[ownerCustomerId]": custA.id });
-    check("§4a KAPALI: liste süzgeci YİNE uygulanır (sessiz düşme yok) — 8 top", offA.length === 8 && offA.every((r) => r.ownerCustomerId === custA.id), `n=${offA.length}`);
+    check("§4a KAPALI: liste süzgeci YİNE uygulanır (sessiz düşme yok) — 10 top", offA.length === 10 && offA.every((r) => r.ownerCustomerId === custA.id), `n=${offA.length}`);
     const err = await middlewareError();
     check("§4b KAPALI: İçerideki İşler 403 MODULE_DISABLED (modul emanet)", err?.statusCode === 403 && err.details?.code === "MODULE_DISABLED", `${err?.statusCode} ${String(err?.details?.code)}`);
+    const offOwners = (await listRollOwnerCustomers()).data!;
+    check("§6b KAPALI: sahip lookup'ı boş (cari adı sızmaz)", offOwners.length === 0, `n=${offOwners.length}`);
   } finally {
     await prisma.roll.deleteMany({ where: { id: { in: ids.rolls } } });
     if (ids.wo) { await prisma.workOrderStep.deleteMany({ where: { workOrderId: ids.wo } }); await prisma.workOrder.deleteMany({ where: { id: ids.wo } }); }
     if (ids.st) await prisma.station.deleteMany({ where: { id: ids.st } });
+    if (ids.grade) await prisma.qualityGrade.deleteMany({ where: { id: ids.grade } });
     if (ids.item) await prisma.item.deleteMany({ where: { id: ids.item } });
     await prisma.customer.deleteMany({ where: { id: { in: [ids.custA, ids.custB].filter(Boolean) } } });
     const f = foto[0];

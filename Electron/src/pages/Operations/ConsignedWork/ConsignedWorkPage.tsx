@@ -34,7 +34,11 @@ function BucketCell({ bucket, ownerId, kind }: { bucket: ConsignedBucket; ownerI
 function TotalsStrip({ totals }: { totals: ConsignedWorkSummary["totals"] }) {
   const cells: Array<[string, ConsignedBucket, string?]> = [
     ["İçeride (toplam)", totals.total],
-    ["Bekliyor", totals.waiting, "Rotaya girmemiş ham emanet (Ham Stok / Yarı Mamul)"],
+    [
+      "Bekliyor",
+      { count: totals.waiting.count + totals.waitingSemi.count, qty: totals.waiting.qty + totals.waitingSemi.qty },
+      "Rotaya girmemiş emanet (Ham Stok + Yarı Mamul)",
+    ],
     ["İşlemde", totals.inProcess, `Bir ${TERIM.terbiyeIsEmri.tekilKucuk} adımında (Üretimde)`],
     ["Sevke hazır", totals.ready, "Depoda — Bitmiş Depo"],
   ];
@@ -51,23 +55,68 @@ function TotalsStrip({ totals }: { totals: ConsignedWorkSummary["totals"] }) {
   );
 }
 
+function OwnersTable({ rows, totals, onOpen }: { rows: ConsignedOwnerRow[]; totals: ConsignedWorkSummary["totals"]; onOpen: (r: ConsignedOwnerRow) => void }) {
+  // İki "bekliyor" sütunu ayrı sekmeye bağlanır (ham ↔ Ham Stok, yarı mamul ↔ Yarı Mamul); boş olan gizlenir,
+  // ikisi de boşsa ham sütunu kalır. Gelen belge onayıyla doğan emanet yarı mamuldür.
+  const showSemi = totals.waitingSemi.count > 0;
+  const showRaw = totals.waiting.count > 0 || !showSemi;
+  const onKey = (e: KeyboardEvent, row: ConsignedOwnerRow) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onOpen(row);
+    }
+  };
+  return (
+    <div className="overflow-x-auto rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Müşteri</TableHead>
+            {showRaw && <TableHead className="whitespace-nowrap text-right" title="Rotaya girmemiş ham emanet — Ham Stok">Bekliyor{showSemi ? " (ham)" : ""}</TableHead>}
+            {showSemi && <TableHead className="whitespace-nowrap text-right" title="Rotaya girmemiş yarı mamul emanet — Yarı Mamul">Bekliyor{showRaw ? " (yarı mamul)" : ""}</TableHead>}
+            <TableHead className="text-right">İşlemde</TableHead>
+            <TableHead className="whitespace-nowrap text-right">Sevke hazır</TableHead>
+            <TableHead className="text-right" title="İçeride ama üç durumun dışında (ör. adımsız fason/kartela)">Diğer</TableHead>
+            <TableHead className="text-right">Toplam</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r) => (
+            <TableRow
+              key={r.ownerCustomerId}
+              role="link"
+              tabIndex={0}
+              className="cursor-pointer"
+              onClick={() => onOpen(r)}
+              onKeyDown={(e) => onKey(e, r)}
+              aria-label={`${r.ownerName} toplarını aç`}
+            >
+              <TableCell className="min-w-[9rem] font-medium">{r.ownerName}</TableCell>
+              {showRaw && <TableCell className="text-right"><BucketCell bucket={r.waiting} ownerId={r.ownerCustomerId} kind="waiting" /></TableCell>}
+              {showSemi && <TableCell className="text-right"><BucketCell bucket={r.waitingSemi} ownerId={r.ownerCustomerId} kind="waitingSemi" /></TableCell>}
+              <TableCell className="text-right"><BucketCell bucket={r.inProcess} ownerId={r.ownerCustomerId} kind="inProcess" /></TableCell>
+              <TableCell className="text-right"><BucketCell bucket={r.ready} ownerId={r.ownerCustomerId} kind="ready" /></TableCell>
+              <TableCell className="text-right"><BucketCell bucket={r.other} ownerId={r.ownerCustomerId} kind={null} /></TableCell>
+              <TableCell className="text-right"><BucketCell bucket={r.total} ownerId={r.ownerCustomerId} kind={null} /></TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
 export function ConsignedWorkPage() {
   const navigate = useNavigate();
   const q = useQuery({ queryKey: [CONSIGNED_WORK_QUERY_KEY], queryFn: getConsignedWork });
   const rows = q.data?.rows ?? [];
   const open = (row: ConsignedOwnerRow) => navigate(rollsLinkFor(row.ownerCustomerId, primaryBucket(row)));
-  const onKey = (e: KeyboardEvent, row: ConsignedOwnerRow) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      open(row);
-    }
-  };
 
   return (
     <PageShell>
       <PageHeader
         title="İçerideki İşler"
-        description="Müşterilerin işlenmek üzere bıraktığı (emanet) mal — müşteri başına top ve metre. Sevk edilen, fire ve iptal toplar sayılmaz. Satıra tıklayınca toplar o müşterinin süzgeciyle açılır."
+        description="Müşterilerin işlenmek üzere bıraktığı (emanet) mal — müşteri başına top ve metre. Sevk edilen, hurdaya ayrılan ve iptal/tüketilmiş toplar sayılmaz; fasondaki ve karteladaki emanet içeride sayılır (Diğer). Satıra tıklayınca toplar o müşterinin süzgeciyle açılır."
         actions={<RefreshButton queryKey={CONSIGNED_WORK_QUERY_KEY} />}
       />
       <PageBody className="min-h-0 space-y-3 p-4 sm:p-6">
@@ -89,40 +138,7 @@ export function ConsignedWorkPage() {
                 İçeride emanet mal yok. Emanet top, girişte “Sahibi” seçilerek ya da gelen belge onayıyla doğar.
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Müşteri</TableHead>
-                      <TableHead className="text-right">Bekliyor</TableHead>
-                      <TableHead className="text-right">İşlemde</TableHead>
-                      <TableHead className="whitespace-nowrap text-right">Sevke hazır</TableHead>
-                      <TableHead className="text-right" title="İçeride ama üç durumun dışında (ör. adımsız fason/kartela)">Diğer</TableHead>
-                      <TableHead className="text-right">Toplam</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows.map((r) => (
-                      <TableRow
-                        key={r.ownerCustomerId}
-                        role="link"
-                        tabIndex={0}
-                        className="cursor-pointer"
-                        onClick={() => open(r)}
-                        onKeyDown={(e) => onKey(e, r)}
-                        aria-label={`${r.ownerName} toplarını aç`}
-                      >
-                        <TableCell className="min-w-[9rem] font-medium">{r.ownerName}</TableCell>
-                        <TableCell className="text-right"><BucketCell bucket={r.waiting} ownerId={r.ownerCustomerId} kind="waiting" /></TableCell>
-                        <TableCell className="text-right"><BucketCell bucket={r.inProcess} ownerId={r.ownerCustomerId} kind="inProcess" /></TableCell>
-                        <TableCell className="text-right"><BucketCell bucket={r.ready} ownerId={r.ownerCustomerId} kind="ready" /></TableCell>
-                        <TableCell className="text-right"><BucketCell bucket={r.other} ownerId={r.ownerCustomerId} kind={null} /></TableCell>
-                        <TableCell className="text-right"><BucketCell bucket={r.total} ownerId={r.ownerCustomerId} kind={null} /></TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              q.data && <OwnersTable rows={rows} totals={q.data.totals} onOpen={open} />
             )}
           </>
         )}

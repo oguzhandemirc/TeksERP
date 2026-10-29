@@ -7,23 +7,22 @@
 //   · `getConsignedWorkSummary` — İçerideki İşler: müşteri başına içerideki emanet top/metre,
 //     durum kırılımıyla; TEK toplama sorgusu.
 // =============================================================================
-import { Prisma, RollStatus } from "@prisma/client";
+import { Prisma, RollEntrySource, RollStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { ApiResponse } from "../types/api.types";
-import { K18_DEAD_STATUSES } from "./batch.service";
+import { NO_LIVE_MATERIAL_STATUSES } from "./batch.service";
+import { readEmanetEnabled } from "./system-setting.service";
 
 /**
- * "İÇERİDE DEĞİL" kümesi — ölü top (K18) + fabrikadan çıkmış (SHIPPED) + fire (SCRAP) + fason dönüşünde
- * kapanmış eski barkod (RETURNED_FROM_SUBCONTRACTOR). Geri kalan her statü içeridedir.
+ * "İÇERİDE DEĞİL" kümesi — canlı malzemesi kalmamış top (K18 + SHIPPED + SCRAP; batch.service tek kaynağı) +
+ * fason dönüşünde kapanmış eski barkod (RETURNED_FROM_SUBCONTRACTOR). Geri kalan her statü içeridedir.
  */
 export const NOT_INSIDE_STATUSES: readonly RollStatus[] = [
-  ...K18_DEAD_STATUSES,
-  RollStatus.SHIPPED,
-  RollStatus.SCRAP,
+  ...NO_LIVE_MATERIAL_STATUSES,
   RollStatus.RETURNED_FROM_SUBCONTRACTOR,
 ];
 
-/** Sevke hazır kovası — Envanter "Bitmiş Depo" sekmesinin kapsamı (`rollScope=FINISHED_STOCK`). */
+/** Sevke hazır kovası — Envanter "Bitmiş Depo" sekmesinin kapsamı; `rollScope=FINISHED_STOCK` da BUNU kullanır (tek kaynak). */
 export const READY_STATUSES: readonly RollStatus[] = [RollStatus.WAREHOUSE, RollStatus.A1_STOCK];
 
 export interface ConsignedBucket {
@@ -35,8 +34,10 @@ export interface ConsignedBucket {
 export interface ConsignedOwnerRow {
   ownerCustomerId: string;
   ownerName: string;
-  /** Rotaya girmemiş ham emanet (`currentStepId` yok, STOCK) — Ham Stok / Yarı Mamul sekmeleri. */
+  /** Rotaya girmemiş ham emanet (`currentStepId` yok, STOCK, entrySource ≠ SEMI_FINISHED) — Ham Stok (`RAW_STOCK_PURE`). */
   waiting: ConsignedBucket;
+  /** Rotaya girmemiş YARI MAMUL emanet (gelen belge onayının doğurduğu top) — Yarı Mamul sekmesi (`SEMI_FINISHED`). */
+  waitingSemi: ConsignedBucket;
   /** Bir iş emri adımında (`currentStepId` dolu) — Üretimde sekmesi. */
   inProcess: ConsignedBucket;
   /** Depoda, sevke hazır (WAREHOUSE · A1_STOCK) — Bitmiş Depo sekmesi. */
@@ -51,12 +52,14 @@ export interface ConsignedWorkSummary {
   totals: Omit<ConsignedOwnerRow, "ownerCustomerId" | "ownerName">;
 }
 
-const BUCKET_KEYS = ["waiting", "inProcess", "ready", "other"] as const;
+const BUCKET_KEYS = ["waiting", "waitingSemi", "inProcess", "ready", "other"] as const;
 type BucketKey = (typeof BUCKET_KEYS)[number];
 
 const emptyBucket = (): ConsignedBucket => ({ count: 0, qty: 0 });
 
 export async function listRollOwnerCustomers(): Promise<ApiResponse<{ id: string; name: string; code: string | null }[]>> {
+  // Emanet kapalıyken cari adları bu uçtan sızmasın (roll-tablet emsali); panel çipi zaten çizilmez.
+  if (!(await readEmanetEnabled())) return { success: true, data: [] };
   const groups = await prisma.roll.groupBy({ by: ["ownerCustomerId"], where: { ownerCustomerId: { not: null } } });
   const ids = groups.map((g) => g.ownerCustomerId).filter((v): v is string => !!v);
   if (ids.length === 0) return { success: true, data: [] };
@@ -70,7 +73,8 @@ export async function listRollOwnerCustomers(): Promise<ApiResponse<{ id: string
 
 export async function getConsignedWorkSummary(): Promise<ApiResponse<ConsignedWorkSummary>> {
   // Kova ayrımı Envanter sekme kapsamlarının aynası: ready = FINISHED_STOCK, inProcess = PRODUCTION_ACTIVE
-  // (adımda), waiting = RAW_STOCK (adımsız STOCK). Satır tıklaması o sekmeye sahip süzgeciyle gider.
+  // (adımda; SHIPPED/KARTELA_CONSUMED adımlı top sekmede görünür ama içeride sayılmaz — bilinçli fark),
+  // waiting = RAW_STOCK_PURE, waitingSemi = SEMI_FINISHED. Hücre o sekmeyi sahip süzgeciyle açar.
   const rows = await prisma.$queryRaw<
     Array<{ ownerCustomerId: string; ownerName: string; bucket: BucketKey; cnt: bigint; qty: Prisma.Decimal | null }>
   >(Prisma.sql`
@@ -80,6 +84,8 @@ export async function getConsignedWorkSummary(): Promise<ApiResponse<ConsignedWo
       CASE
         WHEN r.status::text IN (${Prisma.join(READY_STATUSES)}) THEN 'ready'
         WHEN r."currentStepId" IS NOT NULL                       THEN 'inProcess'
+        WHEN r.status::text = ${RollStatus.STOCK}
+         AND r."entrySource"::text = ${RollEntrySource.SEMI_FINISHED} THEN 'waitingSemi'
         WHEN r.status::text = ${RollStatus.STOCK}                THEN 'waiting'
         ELSE 'other'
       END                 AS "bucket",
@@ -93,7 +99,7 @@ export async function getConsignedWorkSummary(): Promise<ApiResponse<ConsignedWo
   `);
 
   const byOwner = new Map<string, ConsignedOwnerRow>();
-  const totals = { waiting: emptyBucket(), inProcess: emptyBucket(), ready: emptyBucket(), other: emptyBucket(), total: emptyBucket() };
+  const totals = { waiting: emptyBucket(), waitingSemi: emptyBucket(), inProcess: emptyBucket(), ready: emptyBucket(), other: emptyBucket(), total: emptyBucket() };
   // Decimal biriktirme: metre toplamı float sürüklenmesin (Decimal kuralı).
   const qtyAcc = new Map<string, Prisma.Decimal>();
   const addQty = (key: string, v: Prisma.Decimal | null): number => {
@@ -108,6 +114,7 @@ export async function getConsignedWorkSummary(): Promise<ApiResponse<ConsignedWo
         ownerCustomerId: r.ownerCustomerId,
         ownerName: r.ownerName,
         waiting: emptyBucket(),
+        waitingSemi: emptyBucket(),
         inProcess: emptyBucket(),
         ready: emptyBucket(),
         other: emptyBucket(),

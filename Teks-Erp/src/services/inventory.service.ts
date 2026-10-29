@@ -151,6 +151,7 @@ import {
   WarehouseEventType,
 } from "@prisma/client";
 import { resolveReasonCode } from "./reason-preset.service";
+import { READY_STATUSES } from "./roll-owner.service";
 import { assertCancelReasonTx } from "./helpers/cancel-reason.helper";
 // Fire sebebi metin SAKLAMAYAN bir kind'tır → sapma kataloğunun senkron kapısı.
 import { validateVarianceReason } from "../constants/variance-reasons";
@@ -1787,7 +1788,7 @@ export class InventoryService {
       ];
     } else if (rollScope === "FINISHED_STOCK") {
       applyStatusScope({
-        in: [RollStatus.WAREHOUSE, RollStatus.A1_STOCK],
+        in: [...READY_STATUSES],
       });
     } else if (rollScope === "IN_SACK") {
       // "Çuvalda" sekmesi: fiziksel olarak bir çuvalda (sackId dolu) ve henüz

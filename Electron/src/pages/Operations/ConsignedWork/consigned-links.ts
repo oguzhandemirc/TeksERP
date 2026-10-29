@@ -1,11 +1,13 @@
 // İçerideki İşler → Kumaş Stoğu derin bağlantısı (saf). Kova ↔ Envanter sekmesi eşlemesi backend kova tanımının
-// aynasıdır (waiting = adımsız STOCK, inProcess = adımda, ready = WAREHOUSE/A1_STOCK); "other"ın sekmesi yok.
+// aynasıdır (waiting = adımsız ham STOCK, waitingSemi = adımsız yarı mamul STOCK, inProcess = adımda,
+// ready = WAREHOUSE/A1_STOCK); "other"ın sekmesi yok. Backend bekçisi (test_emanet_sahip_suzgeci §7) bu eşlemeyi okur.
 import type { ConsignedOwnerRow } from "./service";
 
-export type ConsignedBucketKey = "waiting" | "inProcess" | "ready";
+export type ConsignedBucketKey = "waiting" | "waitingSemi" | "inProcess" | "ready";
 
-export const BUCKET_TAB: Record<ConsignedBucketKey, "RAW_STOCK" | "PRODUCTION" | "FINISHED_STOCK"> = {
+export const BUCKET_TAB: Record<ConsignedBucketKey, "RAW_STOCK" | "SEMI_FINISHED" | "PRODUCTION" | "FINISHED_STOCK"> = {
   waiting: "RAW_STOCK",
+  waitingSemi: "SEMI_FINISHED",
   inProcess: "PRODUCTION",
   ready: "FINISHED_STOCK",
 };
@@ -21,6 +23,6 @@ export function rollsLinkFor(ownerCustomerId: string, bucket: ConsignedBucketKey
 
 /** Satır tıklaması: en çok topu olan kovanın sekmesi (eşitlikte iş akışı sırası: işlemde → bekliyor → hazır). */
 export function primaryBucket(row: ConsignedOwnerRow): ConsignedBucketKey {
-  const order: ConsignedBucketKey[] = ["inProcess", "waiting", "ready"];
+  const order: ConsignedBucketKey[] = ["inProcess", "waitingSemi", "waiting", "ready"];
   return order.reduce((best, k) => (row[k].count > row[best].count ? k : best), order[0]!);
 }

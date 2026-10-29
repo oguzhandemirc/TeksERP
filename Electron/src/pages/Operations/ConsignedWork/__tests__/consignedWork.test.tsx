@@ -31,11 +31,11 @@ vi.mock("../service", async (orig) => ({
 const b = (count: number, qty: number) => ({ count, qty });
 const rowA: ConsignedOwnerRow = {
   ownerCustomerId: "cA", ownerName: "Gül Perde",
-  waiting: b(2, 300), inProcess: b(5, 750), ready: b(1, 120), other: b(0, 0), total: b(8, 1170),
+  waiting: b(2, 300), waitingSemi: b(0, 0), inProcess: b(5, 750), ready: b(1, 120), other: b(0, 0), total: b(8, 1170),
 };
 const summary: ConsignedWorkSummary = {
   rows: [rowA],
-  totals: { waiting: b(2, 300), inProcess: b(5, 750), ready: b(1, 120), other: b(0, 0), total: b(8, 1170) },
+  totals: { waiting: b(2, 300), waitingSemi: b(0, 0), inProcess: b(5, 750), ready: b(1, 120), other: b(0, 0), total: b(8, 1170) },
 };
 
 beforeEach(() => {
@@ -57,6 +57,18 @@ describe("İçerideki İşler", () => {
     await screen.findByText("Gül Perde");
     const links = screen.getAllByRole("link").map((a) => a.getAttribute("href") ?? "");
     expect(links.some((h) => h.includes("tab=FINISHED_STOCK") && h.includes("filter%5BownerCustomerId%5D=cA"))).toBe(true);
+  });
+
+  it("yarı mamul emanet (gelen belge onayı) ayrı sütunda, Yarı Mamul sekmesine bağlanır; ham sütunu boşsa gizlenir", async () => {
+    const semi = { ...rowA, waiting: b(0, 0), waitingSemi: b(3, 150) };
+    get.mockResolvedValueOnce({ rows: [semi], totals: { ...summary.totals, waiting: b(0, 0), waitingSemi: b(3, 150) } });
+    renderWithProviders(<ConsignedWorkPage />);
+    await screen.findByText("Gül Perde");
+    const links = screen.getAllByRole("link").map((a) => a.getAttribute("href") ?? "");
+    expect(links.some((h) => h.includes("tab=SEMI_FINISHED") && h.includes("filter%5BownerCustomerId%5D=cA"))).toBe(true);
+    expect(links.some((h) => h.includes("tab=RAW_STOCK"))).toBe(false);
+    expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toContain("Bekliyor");
+    expect(primaryBucket({ ...semi, inProcess: b(1, 10) })).toBe("waitingSemi");
   });
 
   it("boş özet 'içeride emanet mal yok' der; hata 'yüklenemedi' der (boş sanılmaz)", async () => {
