@@ -33,6 +33,7 @@ import {
   openDemandLineWhere,
 } from "./live-ref-where.helper";
 import { AuditService } from "../audit.service";
+import { ACTIVE_ITEM_PRICE } from "./item-price-validity.helper";
 
 export { ITEM_LIFECYCLE_LABEL, itemLifecycleWriteData } from "./item-lifecycle-data.helper";
 
@@ -106,7 +107,7 @@ function liveRefWhere(itemId: string, db: Db): LiveRefWhere {
     SERVICE_PROPERTY_MAP: { serviceItemId: itemId },
     SERVICE_VALUE_MAP: { serviceItemId: itemId },
     // Yalnız HİZMET kaleminin müşteri fiyatı: ürün fiyat istisnası tanımdır, canlı referans değildir (K1 emsali).
-    SERVICE_CUSTOMER_PRICE: { itemId, customerId: { not: null }, revokedAt: null, item: { itemType: ItemType.SERVICE } },
+    SERVICE_CUSTOMER_PRICE: { itemId, customerId: { not: null }, ...ACTIVE_ITEM_PRICE, item: { itemType: ItemType.SERVICE } },
   };
 }
 
@@ -128,7 +129,7 @@ export async function countItemLiveRefs(db: Db, itemId: string): Promise<ItemLiv
     SWATCH: await db.swatch.count({ where: w.SWATCH }),
     SERVICE_PROPERTY_MAP: await db.fabricProperty.count({ where: w.SERVICE_PROPERTY_MAP }),
     SERVICE_VALUE_MAP: await db.fabricPropertyValue.count({ where: w.SERVICE_VALUE_MAP }),
-    SERVICE_CUSTOMER_PRICE: await db.itemPrice.count({ where: w.SERVICE_CUSTOMER_PRICE }),
+    SERVICE_CUSTOMER_PRICE: await db.itemPrice.count({ where: { ...w.SERVICE_CUSTOMER_PRICE, ...ACTIVE_ITEM_PRICE } }),
   };
   return ITEM_LIVE_REF_KINDS.map(({ kind, label }) => ({ kind, label, count: counts[kind] }));
 }
@@ -199,7 +200,7 @@ export async function listItemLiveRefs(
     })).map((x) => ({ id: x.id, title: `${x.property.name} · ${x.name}`, detail: `${x.code}${x.isActive ? "" : " · pasif"} — eşlemeyi kaldırın` })),
     // Fiyat tutarı listeye girmez (müşteri ve kur yeter; tutar fiyat ekranında).
     SERVICE_CUSTOMER_PRICE: (await db.itemPrice.findMany({
-      where: w.SERVICE_CUSTOMER_PRICE, take, orderBy: { createdAt: "asc" },
+      where: { ...w.SERVICE_CUSTOMER_PRICE, ...ACTIVE_ITEM_PRICE }, take, orderBy: { createdAt: "asc" },
       select: { id: true, currency: true, customer: { select: { name: true } } },
     })).map((x) => ({ id: x.id, title: x.customer?.name ?? "—", detail: `${x.currency} — müşteri fiyatını kaldırın` })),
   };
