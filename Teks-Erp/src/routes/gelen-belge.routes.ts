@@ -274,7 +274,7 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
- *       200: { description: "sender, owner, process (başlık işlem metni → kurşun gramaj çeşidi; ALIAS|PATTERN|NONE, H9), lines[] (item, color, process) önerileri (salt okunur; öneri değer yazmaz)" }
+ *       200: { description: "sender, owner, process (başlık işlem metni → kurşun gramaj çeşidi; ALIAS|PATTERN|NONE, H9), processOptions (aktif gramaj çeşitleri; işlem metni yoksa boş), lines[] (item, color, process) önerileri (salt okunur; öneri değer yazmaz)" }
  */
 /**
  * @openapi

@@ -30,6 +30,7 @@ import { auditLine } from "./gelen-belge-line.service";
 import { resolveDefaultItemForApproval } from "./gelen-belge-ayar.service";
 import { readUnreviewedApprovalMode } from "./system-setting.service";
 import { assertKursunGramajValue } from "./helpers/kursun-bypass-gramaj.helper";
+import { ALIAS_KEY_MAX } from "./gelen-belge-eslestirme.service";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const LINE_TABLE = "CUSTOMER_DELIVERY_NOTE_LINE";
@@ -168,12 +169,20 @@ type ProcessChoice = { text: string; valueId: string };
  */
 async function resolveProcessChoices(note: { processText: string | null; lines: ReadonlyArray<{ id: string; processText: string | null }> }, choices: ApproveInput["processChoices"]): Promise<ProcessChoice[]> {
   const out: ProcessChoice[] = [];
+  const byKey = new Map<string, string>();
+  const checked = new Set<string>();
   for (const c of choices ?? []) {
     const line = c.lineId === null ? null : note.lines.find((l) => l.id === c.lineId);
     if (c.lineId !== null && !line) throw AppError.badRequest("Gramaj seçimi bu belgenin satırına ait değil.", { code: "PROCESS_CHOICE_LINE_INVALID" });
     const text = (line?.processText?.trim() || note.processText?.trim()) ?? "";
     if (!text) throw AppError.badRequest("İşlem metni boş satıra gramaj seçimi öğretilemez.", { code: "PROCESS_CHOICE_TEXT_EMPTY" });
-    await assertKursunGramajValue(prisma, c.valueId);
+    // Aynı (katlanmış) metne çelişkili iki seçim: sessizce "son gelen kazanır" yerine 400.
+    const key = foldNameForCompare(text).slice(0, ALIAS_KEY_MAX);
+    const prev = byKey.get(key);
+    if (prev && prev !== c.valueId) throw AppError.badRequest("Aynı işlem metnine iki farklı gramaj seçilmiş.", { code: "PROCESS_CHOICE_CONFLICT" });
+    byKey.set(key, c.valueId);
+    if (!checked.has(c.valueId)) await assertKursunGramajValue(prisma, c.valueId);
+    checked.add(c.valueId);
     out.push({ text, valueId: c.valueId });
   }
   return out;
@@ -183,7 +192,7 @@ async function resolveProcessChoices(note: { processText: string | null; lines: 
 async function learnAliases(note: { senderCustomerId: string | null; senderText: string | null }, lines: LineRow[], userId: string, processChoices: readonly ProcessChoice[] = []): Promise<void> {
   const seen = new Map<string, { scope: DeliveryNoteAliasScope; senderCustomerId: string | null; rawKey: string; targetId: string }>();
   const add = (scope: DeliveryNoteAliasScope, senderCustomerId: string | null, text: string | null, targetId: string | null) => {
-    const rawKey = text ? foldNameForCompare(text).slice(0, 160) : "";
+    const rawKey = text ? foldNameForCompare(text).slice(0, ALIAS_KEY_MAX) : "";
     if (!rawKey || !targetId) return;
     seen.set(`${scope}|${senderCustomerId ?? ""}|${rawKey}`, { scope, senderCustomerId, rawKey, targetId });
   };

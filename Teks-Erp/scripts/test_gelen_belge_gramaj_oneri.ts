@@ -1,13 +1,14 @@
 // =============================================================================
 // TEST (gelen belge H9 / OCR F1.2): işlem metni → kurşun gramaj çeşidi ÖNERİSİ
 // =============================================================================
-//   §1 saf kalıp: 14 gerçekçi işlem metni (motor fikstürleri 0245 "KDK APRE"/"YUMUŞAK APRE" + tasarım §3 "25 GR")
+//   §1 saf kalıp: 27 işlem metni (13'ü belirsiz liste/çarpan + serbest irsaliye biçimi); önceki 14 gerçekçi işlem metni (motor fikstürleri 0245 "KDK APRE"/"YUMUŞAK APRE" + tasarım §3 "25 GR")
 //      → yanlış öneri 0 (ya doğru ya boş); aralık / iki gramaj / birimsiz sayı / pasif çeşit → boş
 //   §2 birden çok aday → boş (aynı gramaja iki aktif çeşit uyuyorsa öneri YOK)
 //   §3 DB: /eslestirme yanıtında başlık + satır `process` önerisi (PATTERN); satırda metin yoksa başlığınki
 //   §4 onay: kabul edilen/düzeltilen öneri PROCESS sözlüğüne yazılır (hitCount 1 → 2); sözlük kalıptan ÖNCE gelir;
 //      geçersiz çeşit 400 KURSUN_GRAMAJ_INVALID ve top doğmaz; öneri hiçbir topa/İE'ye değer YAZMAZ
-// Negatif sonda: gramaj-oneri.ts'te `hits.length === 1 ?` → `hits.length >= 1 ?` yapılınca §2 kırmızı.
+// Negatif sonda: gramaj-oneri.ts'te `hits.length === 1 ?` → `hits.length >= 1 ?` yapılınca §2 kırmızı;
+// BARE_NUMBER_RE satırı kaldırılınca §1 belirsiz biçimler kırmızı.
 // Çalıştır: npx tsx scripts/test_gelen_belge_gramaj_oneri.ts
 // =============================================================================
 import prisma from "../src/lib/prisma";
@@ -35,7 +36,8 @@ function check(label: string, ok: boolean, extra = ""): void {
   else { fail++; console.log(`  ❌ ${label}${extra ? ` — ${extra}` : ""}`); }
 }
 
-const TAG = `TST-GO${Date.now().toString(36).toUpperCase()}`;
+// Sabit harf sonu: base36 "…5G" ile biterse başlıktaki TAG ikinci bir gramaj ("5g") gibi okunurdu (flaky).
+const TAG = `TST-GO${Date.now().toString(36).toUpperCase()}Z`;
 const SETTINGS = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL];
 const made = { notes: [] as string[], items: [] as string[], customers: [] as string[], props: [] as string[], kursunCreated: null as string | null };
 
@@ -46,7 +48,7 @@ const OPTIONS: GramajOption[] = [
   { id: "v100", name: "100gr" },
   { id: "v125", name: "12,5 gr" },
 ];
-// 14 işlem metni: beklenen çeşit ya da null (emin değil → boş). Gerçek firma adı YOK.
+// 27 işlem metni: beklenen çeşit ya da null (emin değil → boş). Gerçek firma adı YOK.
 const CASES: Array<[string, string | null]> = [
   ["KDK APRE", null], // 0245 blok 1
   ["YUMUŞAK APRE", null], // 0245 blok 2
@@ -62,6 +64,21 @@ const CASES: Array<[string, string | null]> = [
   ["KURŞUN 75 GR", null], // pasif çeşit — katalogda yok
   ["KURŞUN 40", null], // birimsiz
   ["BRODE 2 KG", null], // kg gramaj değil
+  // Belirsiz liste/çarpan biçimleri (H9 inceleme): gramaj dışı çıplak sayı → boş.
+  ["25 VE 50 GR", null],
+  ["25 VEYA 50 GR", null],
+  ["25, 50 GR", null],
+  ["25 ile 50 gr", null],
+  ["25X50 GR", null],
+  ["2x50 GR", null],
+  ["KURŞUN 50 GR 2 KAT", null],
+  ["1/2 50 GR", null],
+  // Fabrika irsaliyesine benzer serbest metinler.
+  ["30/1 PENYE SÜPREM KURŞUN 25 GR", null], // iplik numarası çıplak sayı
+  ["KURŞUN 25 GR 180 CM EN", null], // en ölçüsü çıplak sayı
+  ["KURŞUN 25 GR - 3 TOP", null],
+  ["TEK YÜZ KURŞUN 25GR/M2", "v25"], // "m2" birim ekidir, çıplak sayı değil
+  ["KURŞUN APRE (50 GR)", "v50"],
 ];
 
 function section1(): void {
@@ -132,12 +149,14 @@ async function sections3and4(): Promise<void> {
   const s1 = await suggestForNote(n1.id);
   check("§3 ⭐ başlık '…37 GR…' → 37 gr (PATTERN)", s1.process.suggested?.id === v37 && s1.process.source === "PATTERN", JSON.stringify(s1.process));
   check("§3 metinsiz satır başlığın önerisini taşır", s1.lines[0]?.process.suggested?.id === v37);
+  check("§3 ⭐ processOptions: aktif gramaj çeşitleri yanıtta (panel property:read'siz okur)", s1.processOptions.some((o) => o.id === v37) && s1.processOptions.some((o) => o.id === v63), String(s1.processOptions.length));
   check("§3 gramajsız satır metni → boş (NONE)", s1.lines[1]?.process.suggested === null && s1.lines[1]?.process.source === "NONE", JSON.stringify(s1.lines[1]?.process));
 
   console.log("§4 Onay — PROCESS sözlüğü öğrenmesi");
   const rollsBefore = await prisma.customerDeliveryNoteLine.count({ where: { noteId: n1.id, rollId: { not: null } } });
   check("§4 geçersiz çeşit (gramaj olmayan kimlik) → 400 KURSUN_GRAMAJ_INVALID", await expect400(() => approveDeliveryNote(n1.id, { processChoices: [{ lineId: null, valueId: fabric.id }] }, actor), "KURSUN_GRAMAJ_INVALID"));
   check("§4 başka belgenin satırı → 400 PROCESS_CHOICE_LINE_INVALID", await expect400(() => approveDeliveryNote(n1.id, { processChoices: [{ lineId: owner.id, valueId: v37 }] }, actor), "PROCESS_CHOICE_LINE_INVALID"));
+  check("§4 aynı metne çelişkili iki seçim → 400 PROCESS_CHOICE_CONFLICT", await expect400(() => approveDeliveryNote(n1.id, { processChoices: [{ lineId: null, valueId: v37 }, { lineId: n1.plainLine, valueId: v63 }] }, actor), "PROCESS_CHOICE_CONFLICT"));
   check("§4 reddedilen onay top doğurmadı", rollsBefore === 0 && (await prisma.customerDeliveryNoteLine.count({ where: { noteId: n1.id, rollId: { not: null } } })) === 0);
   // Operatör: başlık önerisini kabul (37), satır metnine elle 63 seçti (düzeltme).
   const a1 = await approveDeliveryNote(n1.id, { processChoices: [{ lineId: null, valueId: v37 }, { lineId: n1.textLine, valueId: v63 }] }, actor);

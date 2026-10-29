@@ -16,13 +16,17 @@ export interface GramajOption {
 const GRAM_RE = /(?<![\d.,/-])(\d{1,4}(?:[.,]\d{1,2})?) ?(?:gr|grm|gram|g)(?: ?\/ ?(?:m|mt|m2|mtul))?(?![a-z0-9])/g;
 // "25-30 gr", "25/30gr", "25~30 gr": aralık ya da oran — tek değere indirilemez.
 const RANGE_RE = /\d ?[-~/–] ?\d{1,4}(?:[.,]\d{1,2})? ?(?:gr|grm|gram|g)(?![a-z0-9])/;
+// Gramaj eşleşmeleri çıkarıldıktan sonra kalan çıplak sayı ("25 VE 50 GR", "25X50", "50 GR 2 KAT", "30/1"):
+// sayı harfe yapışık değilse (kod/etiket parçası "M2", "TST3A" sayılmaz) metin belirsizdir → boş.
+const BARE_NUMBER_RE = /(?<![a-z\d])\d/;
 
 const toNumber = (s: string): number => Number(s.replace(",", "."));
 
-/** Metindeki gramaj sayıları (tekilleştirilmiş). Aralık varsa boş. */
+/** Metindeki gramaj sayıları (tekilleştirilmiş). Aralık ya da gramaj dışı çıplak sayı varsa boş. */
 export function extractGramValues(text: string | null | undefined): number[] {
   const folded = foldSearchText(text ?? "");
   if (!folded || RANGE_RE.test(folded)) return [];
+  if (BARE_NUMBER_RE.test(folded.replace(GRAM_RE, " "))) return [];
   const out = new Set<number>();
   for (const m of folded.matchAll(GRAM_RE)) {
     const n = toNumber(m[1]!);

@@ -43,6 +43,9 @@ export function aliasKey(scope: DeliveryNoteAliasScope, raw: string): string {
   return scope === "COLOR" ? foldColorNameForCompare(raw) : foldNameForCompare(raw);
 }
 
+/** Sözlükte saklanan anahtarın tavanı: onayda öğrenme (`learnAliases`) aynı tavanla keser → uzun metin yine bulunur. */
+export const ALIAS_KEY_MAX = 160;
+
 export type Named = { id: string; code: string | null; name: string };
 
 function rank(raw: string, rows: Named[], scope: DeliveryNoteAliasScope): MatchCandidate[] {
@@ -59,7 +62,7 @@ function rank(raw: string, rows: Named[], scope: DeliveryNoteAliasScope): MatchC
 }
 
 async function aliasTarget(scope: DeliveryNoteAliasScope, senderCustomerId: string | null, raw: string): Promise<string | null> {
-  const rawKey = aliasKey(scope, raw);
+  const rawKey = aliasKey(scope, raw).slice(0, ALIAS_KEY_MAX);
   if (!rawKey) return null;
   const rows = await prisma.deliveryNoteAlias.findMany({
     where: { scope, rawKey, OR: [{ senderCustomerId: null }, ...(senderCustomerId ? [{ senderCustomerId }] : [])] },
@@ -155,6 +158,8 @@ export interface NoteMatchSuggestions {
   readonly owner: MatchSuggestion;
   /** Başlığın işlem metni için gramaj önerisi (H9). */
   readonly process: ProcessSuggestion;
+  /** Seçilebilir aktif kurşun gramaj çeşitleri (işlem metni yoksa boş): panel kataloğu `gelen-belge:read` kapsamından okur, `property:read` istemez. */
+  readonly processOptions: ReadonlyArray<GramajOption>;
   /** `process`: satırın işlem metni; satırda metin yoksa başlığınki (satır kendi metnini taşırsa o kazanır). */
   readonly lines: ReadonlyArray<{ lineId: string; lineNo: number; item: MatchSuggestion; color: MatchSuggestion; process: ProcessSuggestion }>;
 }
@@ -198,5 +203,5 @@ export async function suggestForNote(noteId: string): Promise<NoteMatchSuggestio
     const lineProcess = l.processText?.trim() ? await processFor(l.processText) : process;
     lines.push({ lineId: l.id, lineNo: l.lineNo, item: itemCache.get(it)!, color: colorCache.get(co)!, process: lineProcess });
   }
-  return { noteId, sender, owner, process, lines };
+  return { noteId, sender, owner, process, processOptions: gramajOptions, lines };
 }
