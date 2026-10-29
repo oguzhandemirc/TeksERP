@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Bookmark, Loader2, MessageSquareText, Printer } from "lucide-react";
+import { Bookmark, FileText, Loader2, MessageSquareText, Printer } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +44,9 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
   // ⚠️ `withNotes` ile TEK bayrağa BİNDİRİLMEZ: not ile iz farklı hassasiyette
   // veridir ve "notu bas" diyen operatör sessizce izi de bastırmış olmamalı.
   const [withTags, setWithTags] = useState(false);
+  // MÜŞTERİ BELGESİNDEKİ AD (gelen belge E3) — ayrı anahtar, varsayılan KAPALI: kâğıt bugünkü gibi
+  // basılır, operatör isterse içerik satırının altına müşterinin kumaş/renk adını ekler.
+  const [withDeliveryNote, setWithDeliveryNote] = useState(false);
 
   const fetchMut = useMutation({
     mutationFn: (ids: string[]) => sackHubService.pickList(ids),
@@ -103,6 +106,7 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
   // İzi OLAN çuval yoksa kutucuk hiç çizilmez (boş seçenek kafa karıştırır) —
   // not kutucuğuyla aynı kural. Eski backend `tags` DÖNMEZ → sayı 0, kutu yok.
   const taggedCount = rows.filter((r) => (r.tags?.length ?? 0) > 0).length;
+  const deliveryNoteCount = rows.filter((r) => r.contents.some((c) => c.deliveryNoteItemText || c.deliveryNoteColorText)).length;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -167,6 +171,11 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
                           {c.itemName}
                           {c.colorName ? ` · ${c.colorName}` : ""}
                           {c.width ? ` · ${c.width} cm` : ""} — {fmtM(c.qty)} m ({c.rollCount})
+                          {withDeliveryNote && (c.deliveryNoteItemText || c.deliveryNoteColorText) && (
+                            <div className="pl-3 text-xs italic" data-testid="ceki-musteri-adi">
+                              Müşteri belgesi: {[c.deliveryNoteItemText, c.deliveryNoteColorText].filter(Boolean).join(" · ")}
+                            </div>
+                          )}
                         </div>
                       ))}
                       {r.swatchCount > 0 && <div className="text-muted-foreground">{r.swatchCount} kartela</div>}
@@ -269,6 +278,33 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
               <span className="mt-0.5 block text-xs text-muted-foreground">
                 {taggedCount} çuvalda iz var — işaretlerseniz her çuvalın altına “İz: …”
                 satırı olarak basılır. Notlardan ayrı bir seçenektir.
+              </span>
+            </span>
+          </label>
+        )}
+
+        {deliveryNoteCount > 0 && rows.length > 0 && (
+          <label
+            className={`flex cursor-pointer items-start gap-2.5 rounded-md border p-3 transition-colors ${
+              withDeliveryNote
+                ? "border-emerald-400 bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-950/30"
+                : "border-input bg-muted/40 hover:bg-muted/60"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={withDeliveryNote}
+              onChange={(e) => setWithDeliveryNote(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-1.5 text-sm font-medium">
+                <FileText className="h-4 w-4 shrink-0" />
+                Müşteri belgesindeki adı bas
+              </span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {deliveryNoteCount} çuvalda gelen belgeden kumaş/renk adı var — işaretlerseniz içerik satırının altına
+                “Müşteri belgesi: …” olarak basılır.
               </span>
             </span>
           </label>
