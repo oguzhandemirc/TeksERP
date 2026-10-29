@@ -61,7 +61,7 @@ const made = { customers: [] as string[], users: [] as string[], notes: [] as st
 
 type Line = { id: string; lineNo: number; status: string; rollId: string | null; failReason: string | null; color?: { source: string; suggested: { id: string } | null } };
 type NoteData = { id: string; noteNo: string; status: string; varianceReason: string | null; lines: Line[] };
-type Resp = { status: number; code?: string; warnings?: string[]; details?: Record<string, unknown>; data?: Record<string, unknown> & { note?: NoteData; summary?: { entered: number; failed: number; replayed: number; rollIds: string[] }; lines?: Line[] } };
+type Resp = { status: number; code?: string; message?: string; warnings?: string[]; details?: Record<string, unknown>; data?: Record<string, unknown> & { note?: NoteData; summary?: { entered: number; failed: number; replayed: number; rollIds: string[] }; lines?: Line[] } };
 
 async function ayar(key: string, v: boolean): Promise<void> {
   await prisma.systemSetting.upsert({ where: { key }, create: { key, value: v }, update: { value: v } });
@@ -92,8 +92,8 @@ async function main(): Promise<void> {
     };
     const call = async (method: string, path: string, token: string, body?: unknown): Promise<Resp> => {
       const r = await fetch(`${url}${path}`, { method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: body === undefined ? undefined : JSON.stringify(body) });
-      const j = (await r.json().catch(() => ({}))) as { data?: Resp["data"]; warnings?: string[]; details?: { code?: string } & Record<string, unknown> };
-      return { status: r.status, code: j.details?.code, details: j.details, data: j.data, warnings: j.warnings };
+      const j = (await r.json().catch(() => ({}))) as { data?: Resp["data"]; message?: string; warnings?: string[]; details?: { code?: string } & Record<string, unknown> };
+      return { status: r.status, code: j.details?.code, message: j.message, details: j.details, data: j.data, warnings: j.warnings };
     };
     const tk = await login(admin.username, admin.password);
     check("admin login", tk.length > 0);
@@ -443,6 +443,8 @@ async function main(): Promise<void> {
     check("⭐ §17g onay anında pasifleşmiş müşteri varsayılanı → 409 GELEN_BELGE_DEFAULT_ITEM_UNUSABLE (source CUSTOMER), SIFIR top, fabrikaya DÜŞMEZ",
       e17p?.source === "CUSTOMER" && e17p.usable === false && a17p.status === 409 && a17p.code === "GELEN_BELGE_DEFAULT_ITEM_UNUSABLE" && a17p.details?.source === "CUSTOMER" && (await rollsOf(n17p.id)).length === 0,
       `${JSON.stringify(e17p)} ${a17p.status} ${a17p.code} ${String(a17p.details?.source)}`);
+    // Metin panel ekran başlığını BİREBİR anar (E4b karosu/sayfası "Müşteri Varsayılan Ürünleri") — kullanıcı ekranı adıyla bulur.
+    check("§17g2 409 metni düzeltme ekranını panel başlığıyla anar (\"Müşteri Varsayılan Ürünleri\")", (a17p.message ?? "").includes("Müşteri Varsayılan Ürünleri ekranından"), String(a17p.message));
     const del17 = await call("DELETE", `/api/gelen-belge/varsayilan-urunler/${owner3}`, tplUser);
     check("§17h kaldırma 200 (sert silme) + audit; sonra aynı belge fabrika ürünüyle girer", del17.status === 200 && (await prisma.deliveryNoteCustomerDefault.count({ where: { customerId: owner3 } })) === 0
       && (await prisma.systemLog.count({ where: { tableName: "DELIVERY_NOTE_CUSTOMER_DEFAULT", action: "DELETE" } })) > 0 && (await onay(n17p.id)).status === 200, `${del17.status}`);

@@ -19,6 +19,8 @@
 //      toplanmaz; karışık sahipli kabul 409 OWNER_MISMATCH
 //   §6b H10b: 2 aynı sahipli kaynak ⇒ doğan top aynı sahip + RECEIVED = initialQty tek satır; doğan topun başka
 //      müşteriye sevki 409; sahipli + sahipsiz kaynak 409 (makbuz/doğan top yok); emanet kapalıda sahipsiz doğar
+//   §6c Açık kumaş (createOpenFabric): iki müşteri ya da sahipli + sahipsiz kaynaklı makbuz ⇒ 409 OWNER_MISMATCH, top YOK;
+//      sahipsiz kaynaklar ⇒ sahipsiz doğar
 //   §7 Gelir ItemPrice'tan, maliyet (FinishingRate) karışmaz; KURSUN kodu dışındaki çeşitli bayrak bu yoldan bir kez
 //   §8 Ölçümsüz bayrak işi: BLOCK_LINE ⇒ taslağa girmez + uyarı; DECLARED_WITH_WARNING ⇒ mevcut metre
 //   §9 Kurşun DIŞI çeşitli bayrak (brode deseni) kendi kalemiyle faturalanır (uyarısız düşmez)
@@ -27,6 +29,7 @@
 // Negatif sondalar (2026-10-29): bayrak çözüm dalı (`listFlagServiceWorks` çağrısı) kaldırılınca §2/§4/§5/§6
 // kırmızı · RECEIVED (makbuz) dalı kaldırılınca §6 kırmızı (geri alındı). Bitirici sondaları (2026-10-29):
 // doğan topa sahip kalıtımı kaldırılınca §6 kırmızı · kardeş-faturalı ata süzgeci kaldırılınca §10 kırmızı.
+// K2a sondası (2026-10-29): `resolveOwnerFromReceiptTx`te `strict` kaldırılınca §6b + §6c sahipli+sahipsiz kırmızı.
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { Currency, FinishingBasis, ItemType, MachineDataSource, MeterApprovalMode, MeterPhase, MeterVarianceBasis, PriceKind, Prisma, RollStatus } from "@prisma/client";
@@ -335,6 +338,38 @@ async function main(): Promise<void> {
   const r5 = await subSvc.receive({ workOrderId: F5.woId, stepId: F5.stepId, subcontractorId: sub.id, clientToken: randomUUID(), returns: [{ rollId: Pg }, { rollId: Ph }], newRolls: [{ qty: 60 }, { qty: 38 }] }, actor);
   const born5 = await bornOf((r5.data as { id: string }).id);
   check("emanet kapalı, sahipsiz kaynaklar: makbuz yazıldı, 2 doğan top sahipsiz, metreler aynen", born5.length === 2 && born5.every((r) => r.ownerCustomerId === null) && born5.map((r) => Number(r.initialQty)).sort((a, b) => a - b).join(",") === "38,60", JSON.stringify(born5));
+
+  // ── §6c ──────────────────────────────────────────────────────────────────
+  section("§6c açık kumaş (createOpenFabric) makbuzdan doğar: karışık sahipli kaynak 409, top YOK");
+  // Makbuz doğrudan yazılır (kabul yolu karışımı zaten reddeder) — bu, emanet kapatılmış kurulumdaki KALINTI
+  // sahipli kaynağı ve eski makbuzu temsil eder; açık kumaş yolu kendi kalıtım kapısıyla düşmeli (H10b katı).
+  const stOf = await mkStation("OFQ", "INTERNAL", "PROCESS_QC", []);
+  const ofWo = await prisma.workOrder.create({
+    data: { workOrderNumber: `${P}-WOOF`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", targetItemId: fabric, steps: { create: [{ stationId: stFason, stepSequence: 1, status: "COMPLETED" as const }, { stationId: stOf, stepSequence: 2, status: "ACTIVE" as const }] } },
+    select: { id: true, steps: { select: { id: true, stepSequence: true } } },
+  });
+  fx.woIds.push(ofWo.id);
+  const ofStep = (n: number) => ofWo.steps.find((x) => x.stepSequence === n)!.id;
+  const openFabricFrom = async (tag: string, owners: Array<string | null>) => {
+    const rc = await prisma.subcontractorReceipt.create({ data: { receiptNo: `${P}-OF${tag}`.slice(0, 40), subcontractorId: sub.id, workOrderId: ofWo.id, stepId: ofStep(1) }, select: { id: true } });
+    fx.receiptIds.push(rc.id);
+    for (const owner of owners) {
+      const src = await mkParent(10, []);
+      await prisma.roll.update({ where: { id: src }, data: { ownerCustomerId: owner } });
+      await prisma.subcontractorReceiptItem.create({ data: { receiptId: rc.id, newRollId: src, receivedQty: 10 } });
+    }
+    const code = await inventory.createOpenFabric({ receiptId: rc.id, stepId: ofStep(2), clientToken: randomUUID() })
+      .then(() => "geçti", (e: { details?: { code?: string } }) => e.details?.code ?? String(e));
+    const born = await prisma.roll.findMany({ where: { parentReceiptId: rc.id }, select: { id: true, ownerCustomerId: true } });
+    fx.childIds.push(...born.map((r) => r.id));
+    return { code, born };
+  };
+  const of1 = await openFabricFrom("A", [cust.id, cust2.id]);
+  check("iki müşterinin kaynağı: 409 OWNER_MISMATCH, açık kumaş topu YOK", of1.code === "OWNER_MISMATCH" && of1.born.length === 0, `${of1.code} ${of1.born.length}`);
+  const of2 = await openFabricFrom("B", [cust.id, null]);
+  check("sahipli + sahipsiz kaynak (katı kalıtım): 409 OWNER_MISMATCH, açık kumaş topu YOK", of2.code === "OWNER_MISMATCH" && of2.born.length === 0, `${of2.code} ${of2.born.length}`);
+  const of3 = await openFabricFrom("C", [null, null]);
+  check("kontrol: sahipsiz kaynaklar ⇒ açık kumaş sahipsiz doğar (yol kapı dışında açık)", of3.code === "geçti" && of3.born.length === 1 && of3.born[0]!.ownerCustomerId === null, `${of3.code} ${JSON.stringify(of3.born)}`);
 
   // ── §7 ───────────────────────────────────────────────────────────────────
   section("§7 gelir ItemPrice, maliyet karışmaz; kurşun dışı çeşitli bayrak bir kez");

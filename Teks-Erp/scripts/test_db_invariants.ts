@@ -2066,6 +2066,10 @@ async function main(): Promise<void> {
   const NULLS_NOT_DISTINCT_UNIQUES: Array<{ table: string; index: string; why: string }> = [
     // E4 (migration 20261029160000): gönderensiz (SENDER kapsamı) öğrenme de tekil; `INSERT … ON CONFLICT` hedefi.
     { table: "delivery_note_aliases", index: "delivery_note_aliases_scope_senderCustomerId_rawKey_key", why: "sözlük anahtarı NULL gönderende de tek satır (bekçi test_gelen_belge_onay §16)" },
+    // Kısmi (WHERE) canlı-tekillik indeksleri: NULL kolonlu anahtar (adımsız iş · tezgahsız eşleme · kişisiz/izinsiz kural) da tek canlı satır.
+    { table: "service_billing_links", index: "service_billing_links_active_uq", why: "adımsız (workOrderStepId NULL) iş başına tek aktif hizmet bağı (H7, 20261029140000)" },
+    { table: "loom_alarm_tier_rules", index: "loom_alarm_tier_rules_live_uq", why: "userId/permissionCode NULL kuralda da tek canlı satır (20261011200000)" },
+    { table: "machine_stop_code_maps", index: "machine_stop_code_maps_live_uq", why: "tezgahsız (machineId NULL) kart tipi geneli eşleme de tekil (20261012140000)" },
   ];
   const nnd = await prisma.$queryRaw<Array<{ index_name: string; is_unique: boolean; nnd: boolean }>>`
     SELECT c.relname AS index_name, i.indisunique AS is_unique, i.indnullsnotdistinct AS nnd
