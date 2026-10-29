@@ -33,7 +33,9 @@ import { __clearPlainHttpServiceHostsForTests, allowPlainHttpServiceHost, isEgre
 import { resolveReaderUrl, setReaderUrlForTests } from "../src/lib/gelen-belge/url";
 import { __resetDocumentReaderForTests, runReaderOnce } from "../src/jobs/gelen-belge-okuma.job";
 import { claimNextScan } from "../src/services/gelen-belge-okuma.service";
-import { aliasKey, suggestCustomer } from "../src/services/gelen-belge-eslestirme.service";
+import { aliasKey, suggestCustomer, suggestForNote } from "../src/services/gelen-belge-eslestirme.service";
+import { FALLBACK_TEMPLATE_CODE, ensureSenderTemplate } from "../src/services/gelen-belge-sablon.service";
+import bcrypt from "bcryptjs";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -118,6 +120,9 @@ async function main(): Promise<void> {
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const sidecar = await startFakeSidecar();
   const rollsBefore = await prisma.roll.count();
+  // E2: şablon satırları koşum boyunca değişir → önceki hâl birebir geri yüklenir, bu koşumun doğurduğu satır silinir.
+  const tplPrior = await prisma.senderTemplate.findMany();
+  const tplRestore: typeof tplPrior = [];
   try {
     await ayar(SETTING_KEYS.EMANET_ENABLED, true);
     await ayar(SETTING_KEYS.GELEN_BELGE_ENABLED, true);
@@ -132,6 +137,21 @@ async function main(): Promise<void> {
     };
     const tk = await login(admin.username, admin.password);
     check("admin login", tk.length > 0);
+    const callAs = async (token: string, method: string, path: string, body?: unknown): Promise<Resp> => {
+      const r = await fetch(`${url}${path}`, { method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: body === undefined ? undefined : JSON.stringify(body) });
+      const j = (await r.json().catch(() => ({}))) as { data?: Resp["data"]; details?: { code?: string } };
+      return { status: r.status, code: j.details?.code, data: j.data };
+    };
+    const parola = kosumaOzguParola();
+    const mkUser = async (suffix: string, perms: string[]): Promise<string> => {
+      const ps = await prisma.permission.findMany({ where: { code: { in: perms } }, select: { id: true } });
+      const u = await prisma.user.create({
+        data: { username: `${TAG}-${suffix}`.toLowerCase(), passwordHash: await bcrypt.hash(parola, 10), fullName: `${TAG} ${suffix}`, isActive: true, permissions: { create: ps.map((p) => ({ permissionId: p.id, grantedById: admin.id })) } },
+        select: { id: true, username: true },
+      });
+      made.users.push(u.id);
+      return login(u.username, parola);
+    };
     const up = async (no: string, extra: Record<string, unknown> = {}, salt = ""): Promise<string> => {
       const r = await call("POST", "/api/gelen-belge/taramalar", { contentBase64: jpeg(no, salt).toString("base64"), ...extra });
       const id = (r.data?.scan as { id: string } | undefined)?.id ?? "";
@@ -339,6 +359,80 @@ async function main(): Promise<void> {
     const qc = (d: Resp) => JSON.stringify([d.data?.pending, d.data?.reading, d.data?.failed]);
     check("§10f PDF kuyruk sayaçlarına girmez (pending/reading/failed aynı)", qc(q10a) === qc(q10b), `${qc(q10a)} → ${qc(q10b)}`);
 
+    // ── §11 şablon bağı (E2): taslak → SenderTemplate (code) ───────────────
+    const n45t = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: all[0]!.noteId! }, select: { templateId: true, template: { select: { code: true, hitCount: true } } } });
+    check("§11a 0245 → note.templateId dolu, şablon kodu ceki-listesi-a", !!n45t.templateId && n45t.template?.code === "ceki-listesi-a", JSON.stringify(n45t));
+    const n43t = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: all[3]!.noteId! }, select: { template: { select: { code: true } } } });
+    check("§11b 0243 → kesim-takip-formu (her belge kendi şablonuna)", n43t.template?.code === "kesim-takip-formu", JSON.stringify(n43t));
+    const s11 = await up("0245", {}, "ikinci-okuma");
+    await runReaderOnce();
+    const p11 = await scan(s11);
+    if (p11.noteId) made.notes.push(p11.noteId);
+    const n11 = p11.noteId ? await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: p11.noteId }, select: { templateId: true } }) : null;
+    const hit11 = await prisma.senderTemplate.findUniqueOrThrow({ where: { code: "ceki-listesi-a" }, select: { hitCount: true } });
+    check("§11c aynı şablonla ikinci okuma AYNI SenderTemplate satırı + isabet sayacı arttı", n11?.templateId === n45t.templateId && hit11.hitCount > (n45t.template?.hitCount ?? 0) && (await prisma.senderTemplate.count({ where: { code: "ceki-listesi-a" } })) === 1, `${n11?.templateId} hit ${n45t.template?.hitCount}→${hit11.hitCount}`);
+    check("§11d GENEL yedek sözlük bağlanmaz (ensure → null, satır yok)", (await ensureSenderTemplate(FALLBACK_TEMPLATE_CODE)) === null && (await prisma.senderTemplate.count({ where: { code: FALLBACK_TEMPLATE_CODE } })) === 0);
+    // §11e paralel: satırı olmayan kod için eşzamanlı dört ensure → TEK satır (P2002 → yeniden oku)
+    const PAR = "urun-sevk-fisi";
+    const parPrior = await prisma.senderTemplate.findUnique({ where: { code: PAR } });
+    const parRefs = parPrior ? await prisma.customerDeliveryNote.count({ where: { templateId: parPrior.id } }) : 0;
+    if (parPrior && parRefs > 0) {
+      console.log(`⏭️  §11e atlandı — '${PAR}' satırı başka taslaklarca kullanılıyor (${parRefs}); ortam verisi silinmez`);
+    } else {
+      if (parPrior) { tplRestore.push(parPrior); await prisma.senderTemplate.delete({ where: { id: parPrior.id } }); }
+      const par = await Promise.allSettled([1, 2, 3, 4].map(() => ensureSenderTemplate(PAR)));
+      const ids = new Set(par.map((p) => (p.status === "fulfilled" ? p.value?.id : `HATA:${(p.reason as Error).message.slice(0, 60)}`)));
+      check("§11e eşzamanlı 4 ensure → hepsi başarılı, TEK satır, aynı id", par.every((p) => p.status === "fulfilled") && ids.size === 1 && (await prisma.senderTemplate.count({ where: { code: PAR } })) === 1, JSON.stringify([...ids]));
+    }
+
+    // ── §12 eşleme: şablon önceliği ───────────────────────────────────────
+    const mavi = (await prisma.customer.findFirstOrThrow({ where: { id: { in: made.customers }, name: "Mavi Boya Apre Ltd." }, select: { id: true } })).id;
+    const pasifC = await mkC("Pasif Gönderen Örme");
+    await prisma.customer.update({ where: { id: pasifC }, data: { isActive: false } });
+    const n45id = all[0]!.noteId!;
+    const t1 = await call("PATCH", "/api/gelen-belge/sablonlar/ceki-listesi-a", { senderCustomerId: gul, isActive: true });
+    const g1 = await suggestForNote(n45id);
+    check("§12a şablonun gönderen carisi → gönderen önerisi o cari, kaynak TEMPLATE", t1.status === 200 && g1.sender.suggested?.id === gul && g1.sender.source === "TEMPLATE", `${t1.status} ${t1.code} ${JSON.stringify(g1.sender)}`);
+    await call("PATCH", "/api/gelen-belge/sablonlar/ceki-listesi-a", { defaultOwnerCustomerId: mavi });
+    const g2 = await suggestForNote(n45id);
+    check("§12b sahip metni eşleşiyorsa ('ÖRNEK TEKSTİL A') o kazanır, varsayılan sahip DEĞİL", g2.owner.suggested?.id === ornek && g2.owner.source !== "TEMPLATE", JSON.stringify(g2.owner.suggested));
+    await prisma.customerDeliveryNote.update({ where: { id: n45id }, data: { ownerText: "ZZQX OKUNAMAYAN" } });
+    const g3 = await suggestForNote(n45id);
+    check("§12c sahip metni eşleşmeyince şablonun varsayılan sahibi önerilir (TEMPLATE)", g3.owner.suggested?.id === mavi && g3.owner.source === "TEMPLATE", JSON.stringify(g3.owner));
+    await call("PATCH", "/api/gelen-belge/sablonlar/ceki-listesi-a", { isActive: false });
+    const g4 = await suggestForNote(n45id);
+    check("§12d PASİF şablon öneri vermez (gönderen de sahip de)", g4.sender.source !== "TEMPLATE" && g4.owner.source !== "TEMPLATE" && g4.sender.suggested?.id !== gul && g4.owner.suggested === null, JSON.stringify([g4.sender.source, g4.owner.source]));
+    await prisma.customerDeliveryNote.update({ where: { id: n45id }, data: { ownerText: "ÖRNEK TEKSTİL A" } });
+
+    // ── §13 yönetim uçları ────────────────────────────────────────────────
+    const l13 = await call("GET", "/api/gelen-belge/sablonlar");
+    const rows13 = (l13.data as unknown as Array<{ code: string; id: string | null; isActive: boolean; hitCount: number }>) ?? [];
+    check("§13a liste: 5 motor şablonu (GENEL yok), DB'li satır isActive/hitCount taşır", l13.status === 200 && rows13.filter((r) => r.code !== FALLBACK_TEMPLATE_CODE).length >= 5 && !rows13.some((r) => r.code === FALLBACK_TEMPLATE_CODE) && rows13.some((r) => r.code === "ceki-listesi-a" && r.id && r.isActive === false && r.hitCount >= 2), JSON.stringify(rows13.map((r) => [r.code, !!r.id, r.isActive])));
+    const tplId = (await prisma.senderTemplate.findUniqueOrThrow({ where: { code: "ceki-listesi-a" }, select: { id: true } })).id;
+    const au0 = await prisma.systemLog.count({ where: { tableName: "SENDER_TEMPLATE", recordId: tplId, action: "UPDATE" } });
+    const p13 = await call("PATCH", "/api/gelen-belge/sablonlar/ceki-listesi-a", { isActive: true });
+    const au1 = await prisma.systemLog.count({ where: { tableName: "SENDER_TEMPLATE", recordId: tplId, action: "UPDATE" } });
+    check("§13b güncelleme 200 + audit TAM 1 satır", p13.status === 200 && au1 - au0 === 1, `${p13.status} audit +${au1 - au0}`);
+    const p13c = await call("PATCH", "/api/gelen-belge/sablonlar/ceki-listesi-a", { senderCustomerId: pasifC });
+    check("§13c pasif cari → 400 SENDER_TEMPLATE_CUSTOMER_INACTIVE", p13c.status === 400 && p13c.code === "SENDER_TEMPLATE_CUSTOMER_INACTIVE", `${p13c.status} ${p13c.code}`);
+    const p13d = await call("PATCH", `/api/gelen-belge/sablonlar/${FALLBACK_TEMPLATE_CODE}`, { isActive: false });
+    const p13d2 = await call("PATCH", "/api/gelen-belge/sablonlar/yok-boyle-sablon", { isActive: false });
+    check("§13d GENEL / bilinmeyen kod → 404 SENDER_TEMPLATE_NOT_FOUND", p13d.status === 404 && p13d.code === "SENDER_TEMPLATE_NOT_FOUND" && p13d2.status === 404, `${p13d.status} ${p13d2.status}`);
+    const p13e = await call("PATCH", "/api/gelen-belge/sablonlar/ceki-listesi-a", {});
+    check("§13e boş gövde → 400", p13e.status === 400, String(p13e.status));
+    const readerTk = await mkUser("okur", ["gelen-belge:read", "gelen-belge:write"]);
+    const f1 = await callAs(readerTk, "GET", "/api/gelen-belge/sablonlar");
+    const f2 = await callAs(readerTk, "PATCH", "/api/gelen-belge/sablonlar/ceki-listesi-a", { isActive: false });
+    check("§13f gelen-belge:template izni yok → liste 403, güncelleme 403", f1.status === 403 && f2.status === 403, `${f1.status} ${f2.status}`);
+    await ayar(SETTING_KEYS.GELEN_BELGE_ENABLED, false);
+    const m1 = await call("GET", "/api/gelen-belge/sablonlar");
+    const m2 = await call("PATCH", "/api/gelen-belge/sablonlar/ceki-listesi-a", { isActive: false });
+    await ayar(SETTING_KEYS.GELEN_BELGE_ENABLED, true);
+    check("§13g modül kapalı → 403 MODULE_DISABLED (liste + güncelleme)", m1.status === 403 && m1.code === "MODULE_DISABLED" && m2.status === 403 && m2.code === "MODULE_DISABLED", `${m1.status} ${m1.code} ${m2.status}`);
+    const before13h = await prisma.senderTemplate.count();
+    const l13h = await call("GET", "/api/gelen-belge/sablonlar");
+    check("§13h GET gizli yazım yapmaz (satır sayısı değişmedi)", l13h.status === 200 && (await prisma.senderTemplate.count()) === before13h);
+
     // ── §9 İSTEĞE BAĞLI: gerçek okuma servisi (okuma/) ─────────────────────
     const gercek = process.env.OKUMA_GERCEK_URL?.trim();
     if (!gercek) {
@@ -379,7 +473,21 @@ async function main(): Promise<void> {
     await prisma.documentScan.updateMany({ where: { id: { in: made.scans } }, data: { noteId: null } });
     await prisma.customerDeliveryNote.deleteMany({ where: { id: { in: made.notes } } });
     await prisma.documentScan.deleteMany({ where: { id: { in: made.scans } } });
+    const priorCodes = new Set(tplPrior.map((t) => t.code));
+    for (const t of tplPrior) {
+      const data = { isActive: t.isActive, senderCustomerId: t.senderCustomerId, defaultOwnerCustomerId: t.defaultOwnerCustomerId, hitCount: t.hitCount };
+      await prisma.senderTemplate.updateMany({ where: { id: t.id }, data });
+    }
+    const born = await prisma.senderTemplate.findMany({ where: { code: { notIn: [...priorCodes, "__yok__"] } }, select: { id: true } });
+    for (const b of born) await prisma.senderTemplate.delete({ where: { id: b.id } }).catch(() => undefined);
+    for (const t of tplRestore) {
+      await prisma.senderTemplate.deleteMany({ where: { code: t.code, id: { not: t.id } } }).catch(() => undefined);
+      await prisma.senderTemplate.create({ data: { id: t.id, code: t.code, version: t.version, template: t.template as object, isActive: t.isActive, senderCustomerId: t.senderCustomerId, defaultOwnerCustomerId: t.defaultOwnerCustomerId, hitCount: t.hitCount } }).catch(() => undefined);
+    }
     await prisma.customer.deleteMany({ where: { id: { in: made.customers } } });
+    await prisma.userPermission.deleteMany({ where: { userId: { in: made.users } } });
+    await prisma.session.deleteMany({ where: { userId: { in: made.users } } }).catch(() => undefined);
+    await prisma.user.deleteMany({ where: { id: { in: made.users } } }).catch(() => undefined);
   }
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   if (fail > 0) process.exitCode = 1;
