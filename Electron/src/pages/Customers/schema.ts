@@ -128,6 +128,9 @@ export const customerFormSchema = z.object({
   financeDefaultCurrency: z.string().default(""),
   financeTaxOffice: z.string().max(100, "Vergi dairesi en fazla 100 karakter").default(""),
   financeRiskLimit: z.string().default("").refine((s) => riskLimitError(s) === null, { message: RISK_LIMIT_ERROR }),
+  // H8b tetiği + tohumu: şemada OLMALI — zod bilinmeyen anahtarı siler, yoksa tetik gövdeye hiç ulaşmaz.
+  financeServiceBillingTrigger: z.string().optional(),
+  financeServiceBillingTriggerSeed: z.string().optional(),
 }).refine((v) => v.isCustomerRole || v.isSupplierRole || v.isSubcontractorRole, {
   message: NO_ROLE_MESSAGE,
   path: ["isCustomerRole"],

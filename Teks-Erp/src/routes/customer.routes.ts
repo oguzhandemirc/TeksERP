@@ -55,6 +55,8 @@ const financeSubSchema = z
     defaultCurrency: z.enum(["TRY", "USD", "EUR", "GBP", "RUB"]).optional(),
     taxOffice: z.string().max(100).nullable().optional(),
     riskLimit: z.union([z.number(), z.string()]).nullable().optional(),
+    // H8b (K2b): Finans → Cari diyaloğuyla aynı alan; değer kümesi + müşteri carisi şartı `cariService.update`te.
+    serviceBillingTrigger: z.string().max(20).nullable().optional(),
   })
   .strict();
 
@@ -65,7 +67,7 @@ async function takeFinanceSub(req: { body?: unknown; user?: { permissions: strin
   delete body.finance;
   if (finance === null) return null;
   if (!matchesPermission(req.user?.permissions ?? [], "finance:write")) {
-    throw AppError.forbidden("Cari terimleri (vade, para birimi, vergi dairesi, risk limiti) için 'finance:write' yetkisi gerekli.", { code: "PERMISSION_DENIED", required: "finance:write" });
+    throw AppError.forbidden("Cari terimleri (vade, para birimi, vergi dairesi, risk limiti, hizmet faturası tetiği) için 'finance:write' yetkisi gerekli.", { code: "PERMISSION_DENIED", required: "finance:write" });
   }
   if (!(await readFinanceEnabled())) {
     throw licenseModuleError(SETTING_KEYS.FINANCE_ENABLED, "Ön muhasebe") ?? AppError.forbidden(`Ön muhasebe modülü bu kurulumda kapalı — cari terimleri yazılamaz. ${settingScreenPath("modules")} ekranından açılabilir.`, { code: "MODULE_DISABLED", modul: "finance" });
