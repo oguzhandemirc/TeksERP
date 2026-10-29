@@ -100,7 +100,7 @@ export function IncomingDocumentDetailPage() {
         <div className="flex flex-col gap-4">
           <ScanReadBanner scans={n.scans} canRequeue={hasPermission("gelen-belge:write")} onRequeued={() => void invalidate()} />
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <ScanViewer scans={n.scans} highlight={sel ? lineRect(sel) : null} />
+            <ScanViewer scans={n.scans} highlight={sel ? lineRect(sel) : null} highlightScanId={sel?.scanId ?? null} selectionKey={sel?.id ?? null} />
             <div className="flex min-w-0 flex-col gap-4">
               <NoteHeaderForm note={n} suggestions={suggestions.data} editable={editable} onPatch={(p) => header.mutate(p)} />
               <TotalsStrip note={n} />
@@ -130,8 +130,8 @@ export function IncomingDocumentDetailPage() {
         open={reviewOpen}
         onOpenChange={setReviewOpen}
         lines={n.lines}
-        // Satır kaynak taramasını taşımaz: çok sayfada kırpık yanlış sayfadan gelebilir → gösterilmez.
-        scanId={n.scans.length === 1 ? (n.scans[0]?.id ?? null) : null}
+        // Kırpık satırın kendi sayfasından (E4 scanId); taşımayan satırda yalnız tek taramalı belgede.
+        scans={n.scans}
         onSave={(item, patch) => line.mutateAsync({ lineId: item.lineId, patch })}
       />
       <ApproveDialog noteId={n.id} lines={n.lines} processChoices={gramaj.choices} open={approveOpen} onOpenChange={setApproveOpen} onDone={() => void invalidate()} />

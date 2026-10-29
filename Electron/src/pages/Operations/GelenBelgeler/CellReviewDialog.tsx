@@ -6,21 +6,22 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CellCrop } from "./CellCrop";
 import { NumericKeypad } from "./NumericKeypad";
-import { buildReviewQueue, cellPatch, fieldRect, parseTrNumber, type CellPatch, type ReviewItem } from "./review-queue";
+import { buildReviewQueue, cellPatch, fieldRect, lineScanId, parseTrNumber, type CellPatch, type ReviewItem } from "./review-queue";
 import type { DeliveryNoteLine } from "./types";
 
 interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   lines: DeliveryNoteLine[];
-  scanId: string | null;
+  /** Belgenin taramaları — her hücrenin kırpığı kendi satırının sayfasından (`lineScanId`). */
+  scans: ReadonlyArray<{ id: string }>;
   onSave: (item: ReviewItem, patch: CellPatch) => Promise<unknown>;
 }
 
 const FIELD_LABEL = { meters: "Metre", weightKg: "Kilo" } as const;
 const toTr = (v: string | null) => (v ? String(Number(v)).replace(".", ",") : "");
 
-export function CellReviewDialog({ open, onOpenChange, lines, scanId, onSave }: Props) {
+export function CellReviewDialog({ open, onOpenChange, lines, scans, onSave }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- kuyruk açılışta donar (bilinçli)
   const queue = useMemo(() => (open ? buildReviewQueue(lines) : []), [open]);
   const [pos, setPos] = useState(0);
@@ -60,7 +61,7 @@ export function CellReviewDialog({ open, onOpenChange, lines, scanId, onSave }: 
         </DialogHeader>
         {item && line && (
           <div className="flex flex-col gap-3">
-            <CellCrop scanId={scanId} rect={fieldRect(line, item.field)} />
+            <CellCrop scanId={lineScanId(line, scans)} rect={fieldRect(line, item.field)} />
             <Input
               autoFocus
               inputMode="decimal"

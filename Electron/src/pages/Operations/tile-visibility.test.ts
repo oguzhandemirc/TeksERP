@@ -191,8 +191,10 @@ describe("karo bağlantıları", () => {
     // 2026-10-29: `gelen-belgeler` (Gülkesim OCR D5) — emanet && gelenBelge; kapalıyken GİZLİ.
     // 2026-10-29: `kursun-sapmalar` (Metre Sapmaları, H4) — kurşun planlamayla AYNI üretim kapısı.
     // 2026-10-29: `gelen-belge-sablonlari` (E2) — aynı kapı.
+    // 2026-10-29: `gelen-belge-varsayilan-urunler` (E4b) — aynı kapı.
     expect(conditional.sort()).toEqual([
       "gelen-belge-sablonlari",
+      "gelen-belge-varsayilan-urunler",
       "gelen-belgeler",
       "goods-receipts",
       "kursun-dagitim",
