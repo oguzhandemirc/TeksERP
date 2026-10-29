@@ -1323,6 +1323,9 @@ export class KursunQcService {
       if (prior) return { reading: prior, written: null };
       await touchWorkOrderTx(tx, step.workOrderId);
       await assertKursunTabletMayWrite(tx, data.stepId, "metre okuması");
+      // WO kilidi altında yeniden: tx dışı kontrol ile kilit arasında top adımdan çıkmış olabilir.
+      const stillHere = await tx.roll.findFirst({ where: { id: data.rollId, currentStepId: data.stepId }, select: { id: true } });
+      if (!stillHere) throw AppError.conflict("Top bu adımdan çıkmış — okuma kaydedilmedi", { code: "ROLL_NOT_IN_STEP" });
       const written = await writeMeterReadingTx(tx, {
         rollId: data.rollId,
         stepId: data.stepId,
