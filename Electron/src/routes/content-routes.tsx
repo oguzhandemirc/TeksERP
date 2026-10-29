@@ -51,6 +51,7 @@ import { GoodsReceiptsPage } from "@/pages/Operations/GoodsReceipts/GoodsReceipt
 import { IncomingDocumentsPage } from "@/pages/Operations/GelenBelgeler/GelenBelgelerPage";
 import { IncomingDocumentDetailPage } from "@/pages/Operations/GelenBelgeler/GelenBelgeDetailPage";
 import { SenderTemplatesPage } from "@/pages/Operations/GelenBelgeler/GonderenSablonlariPage";
+import { CustomerDefaultsPage } from "@/pages/Operations/GelenBelgeler/MusteriVarsayilanUrunleriPage";
 import { CarilerPage } from "@/pages/Definitions/CarilerPage";
 import { FinanceHubPage } from "@/pages/Finance/FinanceHubPage";
 import { CariPage } from "@/pages/Finance/CariPage";
@@ -521,6 +522,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="gelen-belge:template">
         <SenderTemplatesPage />
+      </ProtectedRoute>
+    ),
+  },
+  // E4b: müşteri varsayılan ürünleri — statik segment `:id`den önce; karo ile AYNI izin.
+  {
+    path: "operations/gelen-belgeler/varsayilan-urunler",
+    element: (
+      <ProtectedRoute requirePermission="gelen-belge:template">
+        <CustomerDefaultsPage />
       </ProtectedRoute>
     ),
   },

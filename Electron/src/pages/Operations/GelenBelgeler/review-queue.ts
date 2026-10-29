@@ -35,6 +35,15 @@ export function lineRect(line: RectLine): OcrRect | null {
   return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
 }
 
+/**
+ * Kırpığın/vurgunun alınacağı tarama (E4): satır kendi sayfasının taramasını taşır (`scanId`) → o; taşımıyorsa (elle
+ * satır, eski backend) bugünkü davranış — tek taramalı belgede o tarama, çok sayfada null (yanlış sayfadan kırpık yok).
+ */
+export function lineScanId(line: Pick<DeliveryNoteLine, "scanId">, scans: ReadonlyArray<{ id: string }>): string | null {
+  if (line.scanId) return scans.some((s) => s.id === line.scanId) ? line.scanId : null;
+  return scans.length === 1 ? (scans[0]?.id ?? null) : null;
+}
+
 type QueueLine = Pick<DeliveryNoteLine, "id" | "lineNo" | "blockNo" | "needsReview" | "status" | "rollId" | "sourceRects">;
 
 /** Kuyruk: açık (topsuz, atlanmamış) ve `needsReview` satırlar; metre her zaman, kg yalnız kutusu varsa. Sıra blok → satır. */
