@@ -10,6 +10,7 @@ import prisma from "../lib/prisma";
 import { K18_DEAD_STATUSES } from "./batch.service";
 import { suggestProcess, type ProcessSuggestion } from "./gelen-belge-eslestirme.service";
 import { loadKursunGramajOptions } from "./helpers/kursun-bypass-gramaj.helper";
+import { loadProcessChoiceGroups } from "./helpers/process-choice-catalog.helper";
 import { resolveDeliveryNoteLinesForRolls } from "./helpers/roll-delivery-note-line.helper";
 import { whereRollsOfWorkOrder } from "./helpers/workorder-rolls.helper";
 
@@ -29,6 +30,15 @@ export interface WorkOrderGramajSuggestion {
   readonly rollCount: number;
   /** Gelen belge satırı (kendisinde ya da atasında) olan top sayısı. */
   readonly coveredRollCount: number;
+  readonly entries: ReadonlyArray<GramajSuggestionEntry>;
+  /** Kurşun dışı çeşit özellikleri (brode deseni vb., D4-D1), özellik başına aynı birleştirme. Böyle özellik yoksa anahtar YOK. */
+  readonly variants?: ReadonlyArray<WorkOrderVariantSuggestion>;
+}
+
+export interface WorkOrderVariantSuggestion {
+  readonly propertyId: string;
+  readonly propertyName: string;
+  readonly suggested: { readonly valueId: string; readonly valueName: string } | null;
   readonly entries: ReadonlyArray<GramajSuggestionEntry>;
 }
 
@@ -62,13 +72,25 @@ export async function suggestWorkOrderGramaj(workOrderId: string): Promise<WorkO
   const lines = await resolveDeliveryNoteLinesForRolls(rolls.map((r) => r.id));
   if (lines.size === 0) return null;
   const options = await loadKursunGramajOptions();
+  const groups = await loadProcessChoiceGroups();
   // Aynı (gönderen, metin) çifti bir kez çözülür: sözlük sorgusu top başına değil, ayrık metin başına.
   const cache = new Map<string, ProcessSuggestion>();
   const perRoll: Array<{ processText: string | null; suggestion: ProcessSuggestion }> = [];
   for (const line of lines.values()) {
     const key = `${line.senderCustomerId ?? ""}\u0000${line.processText ?? ""}`;
-    if (!cache.has(key)) cache.set(key, await suggestProcess(line.processText, line.senderCustomerId, options));
+    if (!cache.has(key)) cache.set(key, await suggestProcess(line.processText, line.senderCustomerId, options, groups));
     perRoll.push({ processText: line.processText, suggestion: cache.get(key)! });
   }
-  return mergeGramajSuggestions(rolls.length, perRoll);
+  const merged = mergeGramajSuggestions(rolls.length, perRoll);
+  if (!merged || groups.length === 0) return merged;
+  // Özellik başına aynı ilke: kapsanan toplar o özellikte TEK değerde birleşmezse öneri yok.
+  const variants = groups.map((g): WorkOrderVariantSuggestion => {
+    const per = perRoll.map((r) => {
+      const v = r.suggestion.variants?.find((x) => x.propertyId === g.propertyId);
+      return { processText: r.processText, suggestion: { rawText: r.suggestion.rawText, suggested: v?.suggested ?? null, source: v?.source ?? "NONE" } as ProcessSuggestion };
+    });
+    const m = mergeGramajSuggestions(rolls.length, per)!;
+    return { propertyId: g.propertyId, propertyName: g.propertyName, suggested: m.suggested, entries: m.entries };
+  });
+  return { ...merged, variants };
 }
