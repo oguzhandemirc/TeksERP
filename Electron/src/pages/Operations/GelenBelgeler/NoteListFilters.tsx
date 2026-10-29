@@ -1,7 +1,8 @@
-// Süzgeç şeridi: durum düğmeleri (sayılar sunucu özetinden) + sahip/gönderen seçici (doğrudan modal) + arama.
+// Süzgeç şeridi: durum düğmeleri (sayılar sunucu özetinden) + sahip/gönderen seçici (doğrudan modal) + arama + geliş tarihi.
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
+import { DateRangeInput } from "@/components/forms/DateRangeInput";
 import { NOTE_STATUS_LABEL } from "./noteStatus";
 import { NOTE_STATUSES, type DeliveryNoteListResponse } from "./types";
 import type { NoteListFilter } from "./useNoteList";
@@ -41,6 +42,7 @@ export function NoteListFilters({ filter, onChange, summary }: Props) {
         <div className="w-full sm:w-56">
           <CustomerPickerField value={filter.senderCustomerId} onChange={(id) => set({ senderCustomerId: id })} placeholder="Gönderen (tümü)" clearable />
         </div>
+        <DateRangeInput from={filter.from} to={filter.to} onFrom={(v) => set({ from: v })} onTo={(v) => set({ to: v })} fromLabel="Geliş başlangıç" toLabel="Geliş bitiş" inputClassName="h-9 w-[9.5rem]" />
       </div>
     </div>
   );
