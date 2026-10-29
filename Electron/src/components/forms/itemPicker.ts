@@ -6,7 +6,7 @@
 // olarak bağlı değil: izinli liste (`ItemAllowedColor`), BOŞ = her renk serbest — sunucu `filter[allowedColorId]`
 // bunu "bu rengi alabileceğim ürünler" diye çözer (`none OR some`), o yüzden listesi boş ürün her renkte görünür.
 // =============================================================================
-import { itemTypeLabels, type ItemType } from "@/types/enums";
+import { ItemType, itemTypeLabels } from "@/types/enums";
 import type { Item } from "@/pages/Items/types";
 import { itemLifecycleOf, type ItemLifecycleStatus } from "@/lib/item-lifecycle";
 
@@ -35,6 +35,8 @@ export const ITEM_CATALOG_HINT = "Listesi boş ürünler her seçenekte görün�
 /** Çağıranın izin verdiği türler (mal kabul: iplik + kumaş — fiş sarf almaz; alış siparişi: üçü). Boş/verilmemiş = üçü. */
 export type AllowedItemTypes = readonly ItemType[];
 const ALL_TYPES: AllowedItemTypes = ["YARN", "FABRIC", "CONSUMABLE"];
+/** Enum'un tamamı — stok türleri bunu kapsamıyorsa (SERVICE, H6) "Tümü" de CSV gönderir; hizmet kalemi stok seçicisine sızmaz. */
+const EVERY_TYPE_COUNT = Object.keys(ItemType).length;
 export const normalizeAllowedTypes = (t?: AllowedItemTypes): AllowedItemTypes => (t && t.length ? t : ALL_TYPES);
 /** Tek türe kilitli kapsam (ör. satış siparişi yalnız kumaş): Tür seçicisi çizilmez, başlık türü söyler. */
 export const lockedItemType = (allowed?: AllowedItemTypes): ItemType | null => {
@@ -51,7 +53,7 @@ export const itemTypeFilterOptions = (allowed?: AllowedItemTypes) => {
  *  `lifecycle` = formun seçebileceği durumlar (`pickableLifecycle`); verilmezse kullanımdaki her kart. */
 export function itemPickerFilters(f: ItemPickerFilterState, allowed?: AllowedItemTypes, lifecycle?: string): Record<string, string> {
   const types = normalizeAllowedTypes(allowed);
-  const all: Record<string, string> = types.length === ALL_TYPES.length ? {} : { itemType: types.join(",") };
+  const all: Record<string, string> = types.length === EVERY_TYPE_COUNT ? {} : { itemType: types.join(",") };
   return {
     isActive: "true",
     ...(lifecycle ? { lifecycleStatus: lifecycle } : {}),

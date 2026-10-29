@@ -80,6 +80,8 @@ enum ItemType {
   YARN
   FABRIC
   CONSUMABLE
+  /// Müşteriye kesilen hizmet kalemi (kurşun kademesi, brode, tambur — H6); top/stok doğurmaz.
+  SERVICE
 }
 
 /// Top'un sisteme nasıl girdiğini ifade eder — raporlama ayrımı için kritik.
@@ -3394,6 +3396,8 @@ model Item {
   standardCostLinesAsYarn        StandardCostLine[]          @relation("StandardCostLineYarn")
   salesQuoteLines                SalesQuoteLine[]            @relation("SalesQuoteLineItem")
   priceListLines                 PriceListLine[]             @relation("PriceListLineItem")
+  serviceForProperties           FabricProperty[]            @relation("FabricPropertyServiceItem")
+  serviceForPropertyValues       FabricPropertyValue[]       @relation("FabricPropertyValueServiceItem")
   /// G1: fasona giden iplik kalemleri (kind=YARN).
   subcontractorDispatchYarnItems SubcontractorDispatchItem[] @relation("DispatchItemYarnItem")
 
@@ -8861,6 +8865,9 @@ model FabricProperty {
   routeStepTargets      RouteStepProperty[]
   /// SEÇİM tipli özelliğin izin verilen değerleri (BAYRAK tipte boş).
   values                FabricPropertyValue[]
+  /// İşlem (FLAG) → müşteriye kesilen hizmet kalemi (H6); değer eşlemesi önce gelir.
+  serviceItemId         String?                        @db.Uuid
+  serviceItem           Item?                          @relation("FabricPropertyServiceItem", fields: [serviceItemId], references: [id], onDelete: Restrict)
   /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
   /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
   /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
@@ -8910,6 +8917,7 @@ model FabricProperty {
   // ayrı @@index migration 20260905172000 ile DÜŞÜRÜLDÜ (EXPLAIN ile doğrulandı).
   @@index([descriptionFold])
   @@index([categoryFold])
+  @@index([serviceItemId])
   @@map("fabric_properties")
 }
 
@@ -8949,11 +8957,15 @@ model FabricPropertyValue {
   /// İş emri hedefleri (KQ-D6) ve kâğıt dağıtım gramajı — FK RESTRICT.
   workOrderTargetValues   WorkOrderTargetValue[]
   kursunBypassAssignments KursunBypassAssignment[]
+  /// Gramaj kademesi → hizmet kalemi (H6, "KURŞUN-K2"); yoksa özelliğin eşlemesi.
+  serviceItemId           String?                  @db.Uuid
+  serviceItem             Item?                    @relation("FabricPropertyValueServiceItem", fields: [serviceItemId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@unique([propertyId, code])
+  @@index([serviceItemId])
   @@index([propertyId, sortOrder])
   @@map("fabric_property_values")
 }
