@@ -184,6 +184,32 @@ async function main(): Promise<void> {
     );
   }
 
+  // E4: gelen belge müşteri varsayılanı (customerId @unique) — ikisinde de varsa hedefinki KALIR (SKIP), kaynağınki atılır;
+  // yalnız kaynakta varsa hedefe taşınır. Ürün birleştirmesinde varsayılan ürün birleşen ürüne taşınır (MOVE).
+  {
+    const s = await mkCustomer("GBV-S");
+    const k = await mkCustomer("GBV-K");
+    const k2 = await mkCustomer("GBV-K2");
+    const iS = await mkItem("GBV-S");
+    const iK = await mkItem("GBV-K");
+    await prisma.deliveryNoteCustomerDefault.create({ data: { customerId: s, defaultItemId: iS } });
+    await prisma.deliveryNoteCustomerDefault.create({ data: { customerId: k, defaultItemId: iK } });
+    const pv = await MasterDataMergeService.preview("customer", s, [k]);
+    const conflict = pv.conflicts.find((c) => c.label === "Gelen belge varsayılan ürünü");
+    check("E4 önizleme: iki müşteride de varsayılan → çakışma görünür (SKIP)", !!conflict && conflict.count === 1, JSON.stringify(conflict ?? null).slice(0, 200));
+    await MasterDataMergeService.merge("customer", { survivorId: s, sourceIds: [k], reason: "gb varsayilan sondasi", acknowledgedConflicts: pv.conflicts.reduce((n, c) => n + c.count, 0) });
+    const rows = await prisma.deliveryNoteCustomerDefault.findMany({ where: { customerId: { in: [s, k] } }, select: { customerId: true, defaultItemId: true } });
+    check("E4 birleştirme: hedefin varsayılanı kaldı, kaynağınki atıldı (tek satır)", rows.length === 1 && rows[0]!.customerId === s && rows[0]!.defaultItemId === iS, JSON.stringify(rows));
+    await prisma.deliveryNoteCustomerDefault.create({ data: { customerId: k2, defaultItemId: iK } });
+    const s2 = await mkCustomer("GBV-S2");
+    await MasterDataMergeService.merge("customer", { survivorId: s2, sourceIds: [k2], reason: "gb varsayilan tasima sondasi", acknowledgedConflicts: 0 });
+    const moved = await prisma.deliveryNoteCustomerDefault.findUnique({ where: { customerId: s2 }, select: { defaultItemId: true } });
+    check("E4 birleştirme: yalnız kaynakta varsa hedefe taşınır", moved?.defaultItemId === iK, JSON.stringify(moved));
+    await MasterDataMergeService.merge("item", { survivorId: iS, sourceIds: [iK], reason: "gb varsayilan urun sondasi", acknowledgedConflicts: 0 });
+    const itemMoved = await prisma.deliveryNoteCustomerDefault.findUnique({ where: { customerId: s2 }, select: { defaultItemId: true } });
+    check("E4 ürün birleştirmesi: varsayılan ürün birleşen ürüne taşındı", itemMoved?.defaultItemId === iS, JSON.stringify(itemMoved));
+  }
+
   // ── ③ Renk NULL bütünlüğü ────────────────────────────────────────────────
   console.log("\n── ③ Renk birleştirmesi topların colorId'sini NULL'lamıyor ──");
   {
@@ -610,6 +636,7 @@ main()
     await prisma.itemAllowedColor.deleteMany({ where: { itemId: { in: trash.items } } }).catch(() => undefined);
     await prisma.itemAllowedColor.deleteMany({ where: { colorId: { in: trash.colors } } }).catch(() => undefined);
     await prisma.customerColorAlias.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
+    await prisma.deliveryNoteCustomerDefault.deleteMany({ where: { OR: [{ customerId: { in: trash.customers } }, { defaultItemId: { in: trash.items } }] } }).catch(() => undefined);
     await prisma.customerItemColorAlias.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
     await prisma.customerItemAlias.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
     const ops = await prisma.mergeOperation
