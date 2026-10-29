@@ -54,7 +54,7 @@
 - **[ÇEKİRDEK]** `Order.branchId` opsiyoneldir (eski kayıtlar null; Zod `.optional().nullable()`), zorunlu varsayan sorgu/tip yazma; bir sipariş TEK şubeye gider. <sub>(CLAUDE.md:135)</sub>
 - **[ÇEKİRDEK]** WO kapaması YALNIZ terminal-guard'lı `completeWorkOrderIfStepsDone` ile (CANCELLED/SUPERSEDED asla COMPLETED'a dirilmez — `notIn`). Üretim çıktısı kümesi TEK KAYNAK `producedOutputWhere`: liste ÇIKAN metriği ile detay `producedRolls` aynı kümeden, elle kopyalanmaz. <sub>(CLAUDE.md:180)</sub>
 - **[ÇEKİRDEK]** Ölü stok TEK tanım: eşikten ESKİ **ve** spec'i SİPARİŞSİZ (kesişim). Top→sipariş bağı olmadığı için siparişsizlik SPEC düzeyinde ölçülür (talebi aşan metraj), fiziksel top eşlenmez; iptal edilmiş sipariş kalemi talep SAYILMAZ → spec siparişsize düşer. <sub>(CLAUDE.md:69)</sub>
-- **[PROFİL]** İE detayı Kurşun Gramajı kartının gelen belge gramaj önerisi `process-summary` yanıtının isteğe bağlı `deliveryNoteGramaj` alanından okunur (ayrı uç ve ayrı izin YOK; workorder:read); kural ve birleştirme `kurallar/gelen-belge.md`. · bekçi: `test_is_emri_gramaj_onerisi` <sub>(arşiv:2026-10-29 H9b)</sub>
+- **[PROFİL]** İE detayı Kurşun Gramajı kartının gelen belge gramaj önerisi `process-summary` yanıtının isteğe bağlı `deliveryNoteGramaj` alanından okunur (ayrı uç ve ayrı izin YOK; workorder:read — ham işlem metni `entries[].processText` de bu izinle görünür, fiyat/sır taşımaz); kural ve birleştirme `kurallar/gelen-belge.md`. · bekçi: `test_is_emri_gramaj_onerisi` <sub>(arşiv:2026-10-29 H9b)</sub>
 
 ### Tuzaklar
 

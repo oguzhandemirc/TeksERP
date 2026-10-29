@@ -134,10 +134,12 @@ async function main(): Promise<void> {
 
   console.log("§4 Tambur çocuğu + kısmi kapsama");
   const [parent] = await noteRolls(`KURŞUN 41 GR ${TAG}`, [null]);
-  const woChild = await mkWorkOrder([await mkRoll("C1", parent!), await mkRoll("C2", parent!), await mkRoll("P1", null)]);
+  // Fikstür: ata Tambur'da bölündü (ölü statü) ve İE partisine bağlı — K18 dışlaması çift saymayı önlemeli.
+  await prisma.roll.updateMany({ where: { id: parent! }, data: { status: RollStatus.TAMBUR_CONSUMED } });
+  const woChild = await mkWorkOrder([parent!, await mkRoll("C1", parent!), await mkRoll("C2", parent!), await mkRoll("P1", null)]);
   const s4 = (await read(woChild)).deliveryNoteGramaj;
   check("§4 ⭐ çocuk toplar atanın satırını (başlık metni) taşır → 41 gr", s4?.suggested?.valueId === v41, JSON.stringify(s4));
-  check("§4 kısmi kapsama 2/3 (gelen belgesiz top kapsam dışı)", s4?.coveredRollCount === 2 && s4.rollCount === 3, `${s4?.coveredRollCount}/${s4?.rollCount}`);
+  check("§4 ⭐ kısmi kapsama 2/3 (gelen belgesiz top kapsam dışı; TAMBUR_CONSUMED ata sayılmaz)", s4?.coveredRollCount === 2 && s4.rollCount === 3, `${s4?.coveredRollCount}/${s4?.rollCount}`);
 
   console.log("§5 Sözlük kalıptan önce");
   const ALIAS_TEXT = `ÖZEL APRE ${TAG}`;
