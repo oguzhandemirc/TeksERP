@@ -32,13 +32,13 @@ function check(label: string, ok: boolean, extra = ""): void {
 }
 
 /** Hata yakala: { status, code } — `details.code` sözleşmesi. */
-async function hata(p: Promise<unknown>): Promise<{ status: number | null; code: unknown }> {
+async function hata(p: Promise<unknown>): Promise<{ status: number | null; code: unknown; msg: string }> {
   try {
     await p;
-    return { status: null, code: null };
+    return { status: null, code: null, msg: "" };
   } catch (e) {
-    const err = e as { statusCode?: number; details?: { code?: unknown } };
-    return { status: err.statusCode ?? -1, code: err.details?.code ?? null };
+    const err = e as { statusCode?: number; details?: { code?: unknown }; meta?: unknown; message?: string };
+    return { status: err.statusCode ?? -1, code: err.details?.code ?? null, msg: `${err.message ?? ""} ${JSON.stringify(err.meta ?? null)}` };
   }
 }
 
@@ -176,6 +176,15 @@ async function main(): Promise<void> {
       check("§4g aynı yük replay ⇒ aynı okuma, yeni satır yok", replay.data?.id === aktif[0]?.id && (await okumalar(a3.rollId, a3.stepId)).length === 2);
       const h3 = await hata(svc.recordMeterReading({ rollId: a3.rollId, stepId: a3.stepId, phase: MeterPhase.IN, input: meter(100) }, admin.id));
       check("§4h OUT kipinde giriş okuması 400", h3.status === 400 && h3.code === "METER_CAPTURE_DISABLED", JSON.stringify(h3));
+      // 3'ten fazla ondalıklı metre (kayan nokta artığı / hassas sayaç) — kolon 3 ondalık; replay 409 DEĞİL aynı okuma.
+      const fpTok = randomUUID();
+      const fpMetre = 98.5555;
+      const fp1 = await svc.recordMeterReading(
+        { rollId: a3.rollId, stepId: a3.stepId, phase: MeterPhase.OUT, input: meter(fpMetre, MachineDataSource.OPERATOR, fpTok) }, admin.id);
+      const fp2 = await hata(svc.recordMeterReading(
+        { rollId: a3.rollId, stepId: a3.stepId, phase: MeterPhase.OUT, input: meter(fpMetre, MachineDataSource.OPERATOR, fpTok) }, admin.id));
+      check("§4i ⭐ >3 ondalıklı metre replay ⇒ 409 değil, aynı okuma", fp1.success === true && fp2.status === null, JSON.stringify(fp2));
+      check("§4j okuma 3 ondalığa sabit (98.556)", Number(fp1.data?.meters) === 98.556, String(fp1.data?.meters));
     }
 
     // §8 DB seddi — kısmi unique (adım × evre başına TEK aktif) ve CHECK meters >= 0
@@ -184,9 +193,9 @@ async function main(): Promise<void> {
         data: { rollId: a3.rollId, workOrderStepId: a3.stepId, phase: MeterPhase.OUT, meters: 96, source: MachineDataSource.OPERATOR,
           basis: "DECLARED_IN", approvalMode: "NONE", clientToken: randomUUID() },
       }));
-      check("§8a ⭐ ikinci AKTİF okuma DB'de reddedilir (kısmi unique)", ikinci.status !== null);
+      check("§8a ⭐ ikinci AKTİF okuma DB'de reddedilir (kısmi unique)", ikinci.status !== null && /roll_meter_readings_active_uq|rollId.*workOrderStepId.*phase/.test(ikinci.msg), ikinci.msg);
       const eksi = await hata(prisma.$executeRaw`UPDATE roll_meter_readings SET meters = -1 WHERE "rollId" = ${a3.rollId}::uuid AND "revokedAt" IS NULL`);
-      check("§8b CHECK meters >= 0", eksi.status !== null);
+      check("§8b CHECK meters >= 0", eksi.status !== null && eksi.msg.includes("roll_meter_readings_meters_ck"), eksi.msg);
     }
 
     // §5 bypass'lı adım

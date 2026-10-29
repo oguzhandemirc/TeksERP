@@ -52,6 +52,12 @@ export function phaseAllowed(capture: KursunMeterCapture, phase: MeterPhase): bo
  * 400 `SIMULATED_METER_DISABLED`. Tx içinde aynı soru yeniden sorulmaz — ayar penceresi kabul edilir
  * (ayar yazımı nadirdir ve satır kopyası okuma anını zaten taşır).
  */
+/** Metre kolonu Decimal(12,3): yazım ve replay kimliği AYNI 3-ondalık değeri görür
+ *  (kayan nokta artığı — ör. sayaç farkı 98.49999999999989 — meşru replay'i 409'a düşürmesin). */
+export function canonicalMeters(v: number): string {
+  return new Prisma.Decimal(v).toDecimalPlaces(3).toFixed(3);
+}
+
 export async function assertMeterInputAllowed(phase: MeterPhase, input: MeterReadingInput): Promise<void> {
   const capture = await resolveKursunMeterCapture();
   if (!phaseAllowed(capture, phase)) {
@@ -68,7 +74,7 @@ export async function assertMeterInputAllowed(phase: MeterPhase, input: MeterRea
     });
   }
   if (input.peripheralId) {
-    const p = await prisma.peripheralDevice.findUnique({ where: { id: input.peripheralId }, select: { id: true } });
+    const p = await prisma.peripheralDevice.findFirst({ where: { id: input.peripheralId, deletedAt: null }, select: { id: true } });
     if (!p) throw AppError.badRequest("Sayaç cihazı bulunamadı", { code: "METER_PERIPHERAL_NOT_FOUND" });
   }
 }
@@ -89,7 +95,7 @@ export function meterReadingReplay(expect: { rollId: string; stepId: string; pha
       { ad: "rollId", mevcut: prior.rollId, gelen: expect.rollId },
       { ad: "workOrderStepId", mevcut: prior.workOrderStepId, gelen: expect.stepId },
       { ad: "phase", mevcut: prior.phase, gelen: expect.phase },
-      { ad: "meters", mevcut: Number(prior.meters), gelen: expect.meters },
+      { ad: "meters", mevcut: new Prisma.Decimal(prior.meters).toFixed(3), gelen: canonicalMeters(expect.meters) },
     ],
     collision: "Bu okuma kimliği başka bir top/adım/metre için kullanılmış — yeni okuma yapın",
     respond: (prior) => prior,
@@ -134,7 +140,7 @@ export async function writeMeterReadingTx(tx: Tx, args: WriteMeterReadingArgs): 
       rollId: args.rollId,
       workOrderStepId: args.stepId,
       phase: args.phase,
-      meters: new Prisma.Decimal(args.input.meters),
+      meters: new Prisma.Decimal(canonicalMeters(args.input.meters)),
       rawCounter: args.input.rawCounter == null ? null : new Prisma.Decimal(args.input.rawCounter),
       source: args.input.source,
       machineId: args.machineId,

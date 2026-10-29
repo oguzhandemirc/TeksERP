@@ -13,10 +13,10 @@ import "../types/express-augment";
 // yoktu" vakasının ikizi) test kırmızı versin diye dışa açık.
 /** Sayaç okuması gövdesi — tablet `meterOut` ile düzeltme ucu ortak. */
 const meterReadingBodySchema = z.object({
-  meters: z.number().min(0, "Metre 0 veya daha büyük olmalı").max(1_000_000_000, "Metre çok büyük"),
+  meters: z.number().min(0, "Metre 0 veya daha büyük olmalı").lt(1e9, "Metre çok büyük"),
   source: z.enum(["MACHINE", "OPERATOR", "SUPERVISOR", "SIMULATED"]),
   peripheralId: z.string().uuid("Geçersiz cihaz ID").nullish(),
-  rawCounter: z.number().min(0).max(1e11).nullish(),
+  rawCounter: z.number().min(0).lt(1e11, "Sayaç değeri çok büyük").nullish(),
   cardSampleId: z.string().uuid("Geçersiz örnek ID").nullish(),
   clientToken: z.string().uuid("Geçersiz okuma kimliği"),
 });
