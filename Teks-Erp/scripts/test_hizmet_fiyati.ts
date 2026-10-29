@@ -241,6 +241,8 @@ const SERVICE_ITEM_ID_FILES = new Set([
   "routes/fabric-property.routes.ts",
   // H7: fatura bağı tek yazarı (çözücünün çıktısını bağa çevirir; ikinci çözücü değil).
   "services/helpers/service-billing.helper.ts",
+  // H10: kurşun dışı bayrak işleri (Tambur/etek/brode) — çözücünün parçası, kalem `property.serviceItemId`ten.
+  "services/helpers/service-flag-work.helper.ts",
 ]);
 function astChecks(): void {
   section("§8 AST: çözücü tek, eşleme okuyucuları beyanlı, FinishingRate okunmaz");
