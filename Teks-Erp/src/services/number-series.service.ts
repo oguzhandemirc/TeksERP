@@ -551,7 +551,7 @@ export async function nextSeriesSeq(
 /**
  * BEKLEYEN (henüz yürürlüğe girmemiş) BİÇİM DEĞİŞİKLİĞİ — panel bunu gösterir.
  *
- * ⚠️ En YAKIN dueLines satır döner: ekranda "şu tarihte şu biçime geçecek" tek bir
+ * ⚠️ En YAKIN vadeli satır döner: ekranda "şu tarihte şu biçime geçecek" tek bir
  * cümle vardır; birden çok bekleyen satır varsa sıradaki odur. Panel bunu kendi
  * hesaplamaz (önbellek sunucuda).
  */
