@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -19,7 +20,7 @@ import { useCustomerBranchesEnabled } from "@/hooks/usePricingEnabled";
 import { customerFormDefaults, customerFormSchema, SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE, type CustomerFormValues } from "./schema";
 import { CustomerBranchesDraftField } from "./CustomerBranchesDraftField";
 import { CustomerFinanceSection, useCustomerFinanceAccess } from "./CustomerFinanceSection";
-import { financeFormDefaults } from "./customerFinance";
+import { financeFormDefaults, financeValuesAfterSave } from "./customerFinance";
 import { CustomerBranchesPanel } from "./CustomerBranchesPanel";
 import { exportCodeVisible } from "./branch-schema";
 import { CustomerItemAliasesPanel } from "./CustomerItemAliasesPanel";
@@ -98,6 +99,7 @@ export function CustomerFormDialog({
     defaultValues: defaults,
   });
 
+  const qc = useQueryClient();
   const [confirmClose, setConfirmClose] = useState(false);
   const [activeTab, setActiveTab] = useState("info");
   // Yeni kartta "Fason iş yapar" — gövdeye `subcontractorRole` gider (CustomersPage.buildCustomerPayload).
@@ -125,8 +127,11 @@ export function CustomerFormDialog({
 
   const submit = form.handleSubmit(async (v) => {
     await onSubmit(v);
-    // Başarılı kayıt sonrası formu "temiz" say (guard yanlış tetiklenmesin).
-    form.reset(v);
+    // Başarılı kayıt sonrası formu "temiz" say (guard yanlış tetiklenmesin); tetik tohumu kaydedilen değere eşitlenir.
+    form.reset(financeValuesAfterSave(v));
+    // Kart terimleri `by-customer` önbelleğinden tohumlanır; yeniden açılışta eski terim/tetik görünmesin.
+    void qc.invalidateQueries({ queryKey: ["finance", "cari"] });
+    void qc.invalidateQueries({ queryKey: ["finance", "cari-by-customer"] });
   });
 
   const infoFields = (

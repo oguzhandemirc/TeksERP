@@ -67,6 +67,15 @@ export interface FinanceSubBody {
 }
 
 /**
+ * Başarılı kayıttan sonra formun yeni "temiz" hâli: tohum = gönderilen tetik. Yoksa açık diyalogda eski değere dönüş
+ * "tohumdan farksız" sayılır ve gövdeye girmez (sunucu yeni değerde kalır, ekran eskiyi gösterir).
+ */
+export function financeValuesAfterSave<T extends FinanceFormFields>(v: T): T {
+  const trigger = v.financeServiceBillingTrigger ?? "";
+  return trigger === "" ? v : { ...v, financeServiceBillingTriggerSeed: trigger };
+}
+
+/**
  * Gövdeye girecek `finance` alt nesnesi. `canWrite=false` ya da modül kapalı → `{}` (alt nesne HİÇ yok). Boş vade/risk/vergi
  * dairesi → null (temizler); para birimi boşsa anahtar konmaz (sunucu varsayılanı korur).
  */
