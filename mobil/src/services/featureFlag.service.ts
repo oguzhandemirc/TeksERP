@@ -132,6 +132,9 @@ export interface FeatureFlags {
   /** Kısa kesim eşiği (metre); null = girilmemiş → bayrak açık olsa da kural
    *  ateşlemez. Sayısal ayarın mobil sözleşmede emsali `mobileIdleLockMinutes`. */
   tamburShortCutA1ThresholdM: number | null;
+  /** Tambur açık kart listesi oturum istasyonuyla süzülsün mü (default FALSE; ister 2.8).
+   *  Eski backend alanı göndermez → false = bugünkü tüm-tambur listesi. */
+  tamburListByStationEnabled?: boolean;
   /** FASON KABULÜ — çekme uyarısı (default TRUE/açık). Boyahanede kumaş çeker;
    *  giden ile dönen metraj farkı normaldir. Açıkken ekran farkı gösterir ve
    *  yalnız toleransın ÜSTÜNDE uyarı/onay ister. Kural İSTEMCİDE koşar — backend
@@ -246,6 +249,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   // değiştiren bir otomasyon "belki açıktır" varsayımıyla çalışmaz.
   tamburShortCutA1Enabled: false,
   tamburShortCutA1ThresholdM: null,
+  // Yüklenemezse bugünkü davranış: süzgeçsiz liste (kart okutması zaten her durumda açık).
+  tamburListByStationEnabled: false,
   // Default AÇIK + %10 (backend ile aynı). Fail-safe yön BURADA "göster"dir:
   // bayrak yüklenemediyse operatörün 30 metrelik farkı görmemesi, gereksiz bir
   // uyarı görmesinden kötüdür (uyarı bilgi verir, sessizlik veri kaybettirir).
