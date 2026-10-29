@@ -174,6 +174,15 @@ export interface HeaderPatch {
   declaredTopCount?: number | null;
 }
 
+/** E3 hizmet ekseni ayarları — backend `gelen-belge-ayar.service.ts` `IncomingDocSettings` aynası. */
+export type UnreviewedApproval = "WARN" | "BLOCK";
+export interface IncomingDocumentSettings {
+  /** Ürünü seçilmemiş satırın onayda doğacağı ürün; null = ayar boş (bugünkü: satır ürün ister). */
+  defaultItem: { id: string; code: string; name: string; problem: string | null } | null;
+  unreviewedApproval: UnreviewedApproval;
+  defaultUnreviewedApproval: UnreviewedApproval;
+}
+
 /** Gönderen şablonu (E2): dosyadaki motor şablonu + fabrikaya özgü bağ (`GET /sablonlar`). */
 export interface SenderTemplateCustomer {
   id: string;

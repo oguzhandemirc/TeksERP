@@ -78,6 +78,9 @@ export interface LabelPayload {
   foldType?: string | null;
   /** Açık hata notu "12,5 m Leke · 40 m Delik" (KQ-D8); yalnız mamul topta, hatasız "". */
   openDefects?: string | null;
+  /** Gelen belge satırındaki müşteri kumaş adı / rengi (E3; ata topa yürünür). Satırı olmayan topta ALAN YOK (payload bayt-aynı). */
+  deliveryNoteItemText?: string | null;
+  deliveryNoteColorText?: string | null;
 
   // --- SWATCH (kartela) için opsiyonel alanlar — roll payload'unda undefined.
   //     Builder'lar yalnız `kind === SWATCH` iken basar; roll çağrıları dokunmaz. ---

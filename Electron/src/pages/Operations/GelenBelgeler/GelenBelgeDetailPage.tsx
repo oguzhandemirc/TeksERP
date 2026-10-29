@@ -130,7 +130,7 @@ export function IncomingDocumentDetailPage() {
         scanId={n.scans.length === 1 ? (n.scans[0]?.id ?? null) : null}
         onSave={(item, patch) => line.mutateAsync({ lineId: item.lineId, patch })}
       />
-      <ApproveDialog noteId={n.id} open={approveOpen} onOpenChange={setApproveOpen} onDone={() => void invalidate()} />
+      <ApproveDialog noteId={n.id} lines={n.lines} open={approveOpen} onOpenChange={setApproveOpen} onDone={() => void invalidate()} />
     </PageShell>
   );
 }

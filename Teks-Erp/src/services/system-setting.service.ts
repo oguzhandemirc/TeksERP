@@ -325,6 +325,11 @@ export const SETTING_KEYS = {
    *  top girişi. EMANETE BAĞIMLI (`MODULE_DEPENDENCIES`); kapı `requireGelenBelgeEnabled`.
    *  Varsayılan KAPALI = bugünkü davranış (modül yoktu). */
   GELEN_BELGE_ENABLED: "gelenBelge.enabled",
+  /** Gelen belge onayında ürünü seçilmemiş satırın doğacağı ürün (Item.id; hizmet ekseni, E3). Boş = bugünkü davranış
+   *  (ürünsüz satır 400 DELIVERY_NOTE_LINE_UNRESOLVED). Feature-flag yükünde DÖNMEZ; tek yazar `PUT /api/gelen-belge/ayarlar`. */
+  GELEN_BELGE_DEFAULT_ITEM_ID: "gelenBelge.defaultItemId",
+  /** Gözden geçirilmemiş (needsReview) satır varken onay: WARN (varsayılan = bugünkü, geçer) | BLOCK (409). Tek yazar aynı uç. */
+  GELEN_BELGE_UNREVIEWED_APPROVAL: "gelenBelge.unreviewedApproval",
   /** Z1 ÜRETİM BELGE ZİNCİRİ (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bugünkü davranış (bağ opsiyonel). */
   DEVERE_BEAM_WEAVING_LINK_REQUIRED: "devere.beamWeavingLinkRequired",
   DOKUMA_RUN_WEAVING_ORDER_REQUIRED: "dokuma.runWeavingOrderRequired",
@@ -5324,6 +5329,37 @@ export async function readGelenBelgeEnabledRaw(
     select: { value: true },
   });
   return asBoolean(setting?.value);
+}
+
+/** Gelen belge varsayılan ürünü (E3). Kayıt yok / boş / UUID değil → null (bugünkü davranış: ürünsüz satır reddedilir). */
+export async function readIncomingDocDefaultItemId(tx?: Pick<typeof prisma, "systemSetting">): Promise<string | null> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID },
+    select: { value: true },
+  });
+  const v = typeof setting?.value === "string" ? setting.value.trim() : "";
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v) ? v : null;
+}
+
+export type UnreviewedApprovalMode = "WARN" | "BLOCK";
+export const UNREVIEWED_APPROVAL_VALUES: readonly UnreviewedApprovalMode[] = ["WARN", "BLOCK"];
+/** Varsayılan WARN = bugünkü davranış (needsReview satır onayı durdurmaz). */
+export const DEFAULT_UNREVIEWED_APPROVAL: UnreviewedApprovalMode = "WARN";
+
+/** Gözden geçirilmemiş hücre varken onay kipi; çöp değer varsayılana düşer (`includes` sigortası). */
+export async function readUnreviewedApprovalMode(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<UnreviewedApprovalMode> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  return typeof v === "string" && (UNREVIEWED_APPROVAL_VALUES as readonly string[]).includes(v)
+    ? (v as UnreviewedApprovalMode)
+    : DEFAULT_UNREVIEWED_APPROVAL;
 }
 
 /** Enforcement okuyucusu: ham değer ∧ lisans modül tavanı. `readGelenBelgeEnabledRaw` yalnız panel geri-okuması ve

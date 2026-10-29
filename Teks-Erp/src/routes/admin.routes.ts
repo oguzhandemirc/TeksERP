@@ -2,6 +2,7 @@
 // TeksERP - Admin Routes (Permission Management + Maintenance)
 // =============================================================================
 
+import { INCOMING_DOC_DEDICATED_SETTING_KEYS } from "../services/gelen-belge-ayar.service";
 import { Router, Request, Response, NextFunction } from "express";
 import { SCREEN_CATALOG, permissionsWithoutScreen } from "../constants/screen-catalog";
 import { verifyToken } from "../middlewares/auth.middleware";
@@ -1664,6 +1665,12 @@ router.put(
       if (key === ERROR_REPORT_CONSENT_SETTING_KEY) {
         throw AppError.badRequest(
           "Hata raporu onayı yalnız Hata raporları kartından (ayar şifresiyle) değiştirilir",
+          { code: "SETTING_KEY_RESERVED", key },
+        );
+      }
+      if (INCOMING_DOC_DEDICATED_SETTING_KEYS.has(key)) {
+        throw AppError.badRequest(
+          `Gelen belge ayarları yalnız kendi ekranından (${settingScreenPath("gelen-belge")}) değiştirilir`,
           { code: "SETTING_KEY_RESERVED", key },
         );
       }
