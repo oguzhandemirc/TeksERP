@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Check, Ban, Trash2, Printer, Eye, Pencil } from "lucide-react";
+import { Plus, Check, Ban, Trash2, Printer, Eye, Pencil, CalendarRange } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
@@ -29,6 +31,7 @@ import {
 import { fromKurus } from "./Allocations/allocationMath";
 import { InvoiceFormDialog } from "./InvoiceFormDialog";
 import { InvoiceDetailDialog } from "./InvoiceDetailDialog";
+import { ServicePeriodDraftDialog } from "./ServicePeriodDraftDialog";
 import { draftBadgeText, trimNotice } from "./invoicesList";
 // Kaynak belgeye TIKLA-GİT — hedef yüzeyler sahiplerinin bileşenleridir; burada
 // yalnız MOUNT edilirler. (Fatura detayı onları import ETMEZ: mal kabul sheet'i
@@ -49,6 +52,10 @@ export function InvoicesPage() {
   const [status, setStatus] = useState("");
   const [type, setType] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+  // H8: palet derin bağlantısı `?donemSonu=1` diyaloğu doğrudan açar.
+  const [searchParams] = useSearchParams();
+  const [servicePeriodOpen, setServicePeriodOpen] = useState(searchParams.get("donemSonu") === "1");
+  const serviceBillingOn = useFeatureFlags().data?.data?.financeServiceBillingEnabled === true;
   // Düzenlenen TASLAK — aynı diyalog, `editInvoiceId` ile PATCH yolunda açılır.
   const [editId, setEditId] = useState<string | null>(null);
   const [printTarget, setPrintTarget] = useState<{ id: string; docNo: string } | null>(null);
@@ -156,6 +163,12 @@ export function InvoicesPage() {
               </button>
             )}
             <PermissionGate permission="finance:write">
+              {serviceBillingOn && (
+                <Button variant="outline" onClick={() => setServicePeriodOpen(true)} title="Ayın emanet işlerini tek hizmet faturası taslağında topla">
+                  <CalendarRange className="mr-1 h-4 w-4" />
+                  Dönem sonu hizmet faturası
+                </Button>
+              )}
               <Button onClick={() => setFormOpen(true)}>
                 <Plus className="mr-1 h-4 w-4" />
                 Yeni Fatura
@@ -383,6 +396,7 @@ export function InvoicesPage() {
         )}
       </PageBody>
 
+      <ServicePeriodDraftDialog open={servicePeriodOpen} onOpenChange={setServicePeriodOpen} onCreated={(id) => { invalidate(); setDetailId(id); }} />
       <InvoiceFormDialog open={formOpen} onOpenChange={setFormOpen} onCreated={invalidate} onDraftCreated={(id) => { setFormOpen(false); setEditId(id); }} />
 
       {/* TASLAK DÜZENLEME — aynı form, PATCH yolunda. Koşullu mount: her açılış

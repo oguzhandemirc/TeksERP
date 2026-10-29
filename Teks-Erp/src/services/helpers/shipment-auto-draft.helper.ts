@@ -169,6 +169,9 @@ async function collectReturnedRollsGross(shipmentId: string, liveIds: Set<string
     }));
 }
 
+/** H8: sevk taslağında hizmet satırı yokken kullanıcıya söylenen neden (iş kaybolmadı, dönem sonunu bekliyor). */
+export const PERIOD_END_SERVICE_WARNING = `Hizmet işleri dönem sonu hizmet faturasına bırakıldı (${ekranYolu("faturalar")} → "Dönem sonu hizmet faturası").`;
+
 /**
  * EXPORT (C1): panelin "Sevkiyattan Fatura Taslağı" diyaloğu da AYNI satır
  * kurucusunu kullanabilsin diye dışa açıldı (`finance.routes` önizleme ucu) —
@@ -184,6 +187,10 @@ export async function collectShipmentInvoiceDraftLines(
   if (!(await resolveServiceBillingEnabled())) return collectProductDraftLines(shipmentId, customerId, currency, false);
   const service = await loadServiceBillingSettings();
   const product = await collectProductDraftLines(shipmentId, customerId, currency, true);
+  // H8: PERIOD_END'de emanet işi dönem sonu taslağını bekler — sevk taslağına hizmet satırı/bağı GİRMEZ.
+  if (service.trigger === "PERIOD_END") {
+    return { ...product, warnings: [...product.warnings, PERIOD_END_SERVICE_WARNING], serviceLinks: [] };
+  }
   const sh = await prisma.shipment.findUnique({ where: { id: shipmentId }, select: { dispatchedAt: true } });
   const svc = await collectShipmentServiceBilling({ shipmentId, customerId, currency, settings: service, dispatchedAt: sh?.dispatchedAt ?? null });
   const vatRate = await readFinanceDefaultVatRate();
