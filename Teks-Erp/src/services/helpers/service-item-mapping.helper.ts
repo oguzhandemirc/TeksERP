@@ -8,7 +8,7 @@
 import { ItemType } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
-import { assertItemUsable } from "./item-usage.helper";
+import { assertItemUsable, assertItemUsableTx } from "./item-usage.helper";
 
 /** Bir eşleme alanı: `kept` = bu KAYIT bugün zaten bu kalemi taşıyor (muafiyet kayıt başınadır). */
 interface ServiceItemRef {
@@ -22,7 +22,7 @@ interface ServiceItemRef {
  * `DEFINITION`, fiyat/reçete gibi). Muafiyet KAYIT BAŞINA: yalnız kaydın kendi taşıdığı eşleme
  * yeniden doğrulanmaz; kardeş değerin pasif kalemi başka kayda yeni eşleme olarak yazılamaz.
  */
-async function assertServiceItemRefs(refs: ServiceItemRef[]): Promise<void> {
+async function assertServiceItemRefs(refs: ServiceItemRef[]): Promise<string[]> {
   const fresh = new Set<string>();
   const all = new Set<string>();
   for (const r of refs) {
@@ -31,7 +31,7 @@ async function assertServiceItemRefs(refs: ServiceItemRef[]): Promise<void> {
     if (!r.kept) fresh.add(r.id);
   }
   const want = [...all];
-  if (want.length === 0) return;
+  if (want.length === 0) return [];
   const rows = await prisma.item.findMany({ where: { id: { in: want } }, select: { id: true, itemType: true, name: true } });
   const byId = new Map(rows.map((r) => [r.id, r]));
   for (const id of want) {
@@ -42,6 +42,7 @@ async function assertServiceItemRefs(refs: ServiceItemRef[]): Promise<void> {
     }
     if (fresh.has(id)) await assertItemUsable(prisma, id, "DEFINITION");
   }
+  return [...fresh];
 }
 
 /** Özelliğin ve değerlerinin (kod → kalem) bugün taşıdığı hizmet kalemi eşlemeleri. */
@@ -62,17 +63,45 @@ export function readServiceItemIdField(raw: unknown, label: string): string | nu
   return raw;
 }
 
-/** Özellik gövdesi + değer satırlarının eşlemesi (yazımdan önce; gövdeyi normalize eder). */
+/**
+ * Özellik gövdesi + değer satırlarının eşlemesi (yazımdan önce; gövdeyi normalize eder).
+ * Döner: YENİ eşlenen kalemler — yazım `withServiceItemLocks` içinde yapılır.
+ */
 export async function assertServiceMapping(
   data: Record<string, unknown>,
   valueRefs: Array<{ code: string; serviceItemId?: string | null }> = [],
   propertyId?: string,
-): Promise<void> {
+): Promise<string[]> {
   if ("serviceItemId" in data) data.serviceItemId = readServiceItemIdField(data.serviceItemId, "Özelliğin");
   const linked = propertyId ? await readLinkedServiceItems(propertyId) : { own: null, byCode: new Map<string, string>() };
   const own = data.serviceItemId as string | null | undefined;
-  await assertServiceItemRefs([
+  return assertServiceItemRefs([
     { id: own, kept: own != null && own === linked.own },
     ...valueRefs.map((v) => ({ id: v.serviceItemId, kept: v.serviceItemId != null && linked.byCode.get(v.code) === v.serviceItemId })),
   ]);
+}
+
+/**
+ * Yeni eşleme D1 canlı referansıdır (K3c): yazım, kalemleri FOR SHARE (8030 SHARED sonrası) tutan
+ * bir tx AÇIKKEN koşar ve o tx'ten önce commit olur — eşzamanlı pasife alma ya bekleyip yeni bağı
+ * sayar (409 ITEM_HAS_LIVE_REFERENCES) ya da önce biter ve buradaki taze okuma 409 verir.
+ * Yazım BaseService'ten geçtiği için kilit tutucu ayrı bağlantıdır; yeni eşleme yoksa tx açılmaz.
+ */
+export async function withServiceItemLocks<T>(itemIds: string[], write: () => Promise<T>): Promise<T> {
+  if (itemIds.length === 0) return write();
+  const sorted = [...new Set(itemIds)].sort();
+  return prisma.$transaction(async (tx) => {
+    for (const id of sorted) await assertItemUsableTx(tx, id, "DEFINITION");
+    return write();
+  });
+}
+
+/** Eşleme doğrulaması + yazım tek çağrıda: yeni eşlenen kalemler kilit altında yazılır. */
+export async function withServiceMapping<T>(
+  data: Record<string, unknown>,
+  valueRefs: Array<{ code: string; serviceItemId?: string | null }> | undefined,
+  propertyId: string | undefined,
+  write: () => Promise<T>,
+): Promise<T> {
+  return withServiceItemLocks(await assertServiceMapping(data, valueRefs, propertyId), write);
 }
