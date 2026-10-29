@@ -109,6 +109,8 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "tamburOverQuantityEnabled",
       "tamburShortCutA1Enabled",
       "tamburShortCutA1ThresholdM",
+      "tamburPlanGateWidthToleranceCm",
+      "tamburPlanGateWidthCheck",
       "tamburListByStationEnabled",
       "tamburUndoFullSameDayOnly",
       "productionCancelReasonRequired",
