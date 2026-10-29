@@ -24,6 +24,10 @@
 //       (itemId = ayar ürünü, satır itemId boş + itemText yerinde, alias öğrenilmez) + ürünü seçili satır kendi ürünüyle;
 //       onay anında ayar ürünü pasifleşmişse 409 GELEN_BELGE_DEFAULT_ITEM_UNUSABLE ve SIFIR top
 //   §15 inceleme kapısı: needsReview satır — ayar kaydı yokken ve WARN'da 200 + uyarı; BLOCK 409 DELIVERY_NOTE_REVIEW_PENDING, SIFIR top
+//   §16 E4 sözlük: NULL gönderenli aynı anahtar iki onayda TEK satır + hitCount 2; EŞZAMANLI iki onay da tek satır + 2;
+//       renk sözlüğü ikinci belgede öneri verir (öğrenme ↔ okuma tek anahtar); audit yükünde rawKey yok (uzunluk + özet)
+//   §17 E4 müşteri varsayılanı: izin/doğrulama/audit; müşteri > fabrika > 400 UNRESOLVED; /eslestirme etkin varsayılan + kaynak;
+//       pasifleşmiş müşteri varsayılanı 409 (source CUSTOMER) + SIFIR top, fabrikaya düşmez; kaldırma → fabrika
 // Emsal: scripts/test_gelen_belge_taslak.ts (app.listen(0) + ensureTestAdmin + ayar()).
 // =============================================================================
 import type { AddressInfo } from "net";
@@ -34,7 +38,8 @@ import app from "../src/app";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
 import { InventoryService } from "../src/services/inventory.service";
-import { lineRollToken, totalMismatches, totalWarnings } from "../src/services/gelen-belge-onay.service";
+import { learnAlias, lineRollToken, totalMismatches, totalWarnings } from "../src/services/gelen-belge-onay.service";
+import { aliasKey } from "../src/services/gelen-belge-eslestirme.service";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
@@ -54,7 +59,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 const TAG = `GBO${Date.now().toString(36).toUpperCase()}`;
 const made = { customers: [] as string[], users: [] as string[], notes: [] as string[], items: [] as string[], colors: [] as string[], scans: [] as string[] };
 
-type Line = { id: string; lineNo: number; status: string; rollId: string | null; failReason: string | null };
+type Line = { id: string; lineNo: number; status: string; rollId: string | null; failReason: string | null; color?: { source: string; suggested: { id: string } | null } };
 type NoteData = { id: string; noteNo: string; status: string; varianceReason: string | null; lines: Line[] };
 type Resp = { status: number; code?: string; warnings?: string[]; details?: Record<string, unknown>; data?: Record<string, unknown> & { note?: NoteData; summary?: { entered: number; failed: number; replayed: number; rollIds: string[] }; lines?: Line[] } };
 
@@ -363,6 +368,90 @@ async function main(): Promise<void> {
     await call("PUT", "/api/gelen-belge/ayarlar", tk, { unreviewedApproval: "WARN" });
     const w15 = await onay(n15.id);
     check("WARN (varsayılan) → onay geçer, 2 top + uyarı", w15.status === 200 && (await rollsOf(n15.id)).length === 2 && (w15.warnings ?? []).some((w) => w.includes("Gözden geçirilmemiş")), `${w15.status} ${w15.code ?? ""} ${JSON.stringify(w15.warnings)}`);
+
+    // §16 sözlük: NULL-güvenli tekillik + atomik öğrenme + renk tek anahtar
+    console.log("§16 sözlük atomik öğrenme");
+    const senderRows = (text: string) => prisma.deliveryNoteAlias.findMany({ where: { scope: "SENDER", senderCustomerId: null, rawKey: aliasKey("SENDER", text) }, select: { hitCount: true, targetId: true } });
+    const seqText = `${TAG} SIRALI GÖNDEREN`;
+    for (const n of [120, 121]) check(`§16a sıralı onay ${n} → 200`, (await onay((await mkNote([L(n)], { senderText: seqText })).id)).status === 200);
+    const seq = await senderRows(seqText);
+    // NND güvencesi (indeks bayrağı) test_db_invariants §11'de; burası sıralı öğrenmenin tek satır + sayımını ölçer.
+    check("⭐ §16a sıralı öğrenme: NULL gönderenli (SENDER) aynı anahtar iki onayda TEK satır, hitCount 2", seq.length === 1 && seq[0]!.hitCount === 2, JSON.stringify(seq));
+    const parText = `${TAG} ESZAMANLI GÖNDEREN`;
+    const pa = await mkNote([L(122)], { senderText: parText });
+    const pb = await mkNote([L(123)], { senderText: parText });
+    const [ra, rb] = await Promise.all([onay(pa.id), onay(pb.id)]);
+    const par = await senderRows(parText);
+    check("⭐ §16b EŞZAMANLI iki onay (iki istek) → ikisi 200, TEK satır, hitCount 2 (sayım kaybı yok)", ra.status === 200 && rb.status === 200 && par.length === 1 && par[0]!.hitCount === 2, `${ra.status}/${rb.status} ${JSON.stringify(par)}`);
+    // Belirlenimli yarış: aynı (gönderensiz) anahtara N paralel öğrenme — findFirst→update/create gerilemesi
+    // ilk turda çift satır (ya da sayım kaybı) verir; tek ifade upsert'te tam N.
+    const raceKey = aliasKey("SENDER", `${TAG} YARIS GÖNDEREN`);
+    const RACE_N = 12;
+    const settled = await Promise.allSettled(Array.from({ length: RACE_N }, () => learnAlias({ scope: "SENDER", senderCustomerId: null, rawKey: raceKey, targetId: owner }, admin.id)));
+    const rejected = settled.filter((r) => r.status === "rejected").length;
+    const race = await prisma.deliveryNoteAlias.findMany({ where: { scope: "SENDER", senderCustomerId: null, rawKey: raceKey }, select: { hitCount: true } });
+    check(`⭐ §16b ${RACE_N} paralel öğrenme (aynı NULL gönderenli anahtar) → hata yok, TEK satır, hitCount ${RACE_N}`, rejected === 0 && race.length === 1 && race[0]!.hitCount === RACE_N, `reddedilen ${rejected} ${JSON.stringify(race)}`);
+    const colorText = `LACİVERT ${TAG} 1234`;
+    check("§16c renk metni iki katlamada farklı (sonda geçerli)", aliasKey("COLOR", colorText) !== aliasKey("ITEM", colorText));
+    check("§16c renk öğreten onay → 200", (await onay((await mkNote([L(124, { colorText, colorId: color.id })])).id)).status === 200);
+    const n16c = await mkNote([L(125, { colorText, colorId: null })]);
+    const es16 = await call("GET", `/api/gelen-belge/irsaliyeler/${n16c.id}/eslestirme`, tk);
+    const c16 = es16.data?.lines?.[0]?.color;
+    check("⭐ §16c renk sözlüğü ikinci belgede öneri verir (kaynak ALIAS, öğretilen renk)", es16.status === 200 && c16?.source === "ALIAS" && c16.suggested?.id === color.id, JSON.stringify(c16));
+    const aliasLogs = await prisma.systemLog.findMany({ where: { tableName: "DELIVERY_NOTE_ALIAS", createdAt: { gte: new Date(Date.now() - 10 * 60 * 1000) } }, select: { newData: true } });
+    check("§16d sözlük audit yükünde rawKey YOK, uzunluk + özet var", aliasLogs.length > 0 && aliasLogs.every((l) => { const d = l.newData as Record<string, unknown>; return !("rawKey" in d) && typeof d.rawKeyDigest === "string" && typeof d.rawKeyLength === "number"; }), String(aliasLogs.length));
+
+    // §17 müşteri bazlı varsayılan ürün (E4)
+    console.log("§17 müşteri varsayılanı");
+    const tplUser = await mk("T", ["gelen-belge:read", "gelen-belge:template"]);
+    const owner3 = await mkCustomer("OWN3");
+    const custItem = await prisma.item.create({ data: { code: `${TAG}-MUS`, name: `${TAG} müşteri kumaşı`, itemType: "FABRIC", unit: "MT" }, select: { id: true } });
+    made.items.push(custItem.id);
+    const putDef = (cid: string, itemId: string, token = tplUser) => call("PUT", `/api/gelen-belge/varsayilan-urunler/${cid}`, token, { defaultItemId: itemId });
+    check("§17a izinsiz (gelen-belge:template yok) yazma → 403", (await putDef(owner3, custItem.id, writer)).status === 403);
+    const y17 = await putDef(owner3, yarn.id);
+    check("§17b iplik ürünü yazılamaz → 400 GELEN_BELGE_DEFAULT_ITEM_INVALID", y17.status === 400 && y17.code === "GELEN_BELGE_DEFAULT_ITEM_INVALID", `${y17.status} ${y17.code}`);
+    const p17 = await putDef(owner3, passive.id);
+    check("§17b pasif ürün yazılamaz → 400 GELEN_BELGE_DEFAULT_ITEM_INVALID", p17.status === 400 && p17.code === "GELEN_BELGE_DEFAULT_ITEM_INVALID", `${p17.status} ${p17.code}`);
+    const pasCust = await prisma.customer.create({ data: { code: `${TAG}-PC`, name: `${TAG} pasif müşteri`, isActive: false }, select: { id: true } });
+    made.customers.push(pasCust.id);
+    const pc17 = await putDef(pasCust.id, custItem.id);
+    check("§17b pasif müşteriye yazılamaz → 400 GELEN_BELGE_CUSTOMER_INVALID", pc17.status === 400 && pc17.code === "GELEN_BELGE_CUSTOMER_INVALID", `${pc17.status} ${pc17.code}`);
+    const ok17 = await putDef(owner3, custItem.id);
+    check("§17c yazma 200 + audit'li", ok17.status === 200 && (ok17.data as { item?: { id?: string } })?.item?.id === custItem.id && (await prisma.systemLog.count({ where: { tableName: "DELIVERY_NOTE_CUSTOMER_DEFAULT", action: "CREATE", newData: { path: ["customerId"], equals: owner3 } } })) === 1, `${ok17.status} ${ok17.code ?? ""}`);
+    const list17 = await call("GET", "/api/gelen-belge/varsayilan-urunler", tplUser);
+    check("§17c liste müşteriyi + ürünü döner, problem null", list17.status === 200 && (list17.data as unknown as Array<{ customerId: string; problem: unknown }>).some((r) => r.customerId === owner3 && r.problem === null));
+    await call("PUT", "/api/gelen-belge/ayarlar", tk, { defaultItemId: fabric.id });
+    type Eff = { itemId: string | null; source: string | null; usable: boolean };
+    const effOf = async (noteId: string) => ((await call("GET", `/api/gelen-belge/irsaliyeler/${noteId}/eslestirme`, tk)).data as unknown as { defaultItem: Eff }).defaultItem;
+    const n17 = await mkNote([L(130, { itemId: null, itemText: "Müşteri kumaşı E" })], { ownerCustomerId: owner3 });
+    const e17 = await effOf(n17.id);
+    check("§17d /eslestirme etkin varsayılan: müşteri varsayılanı (source CUSTOMER, usable)", e17?.itemId === custItem.id && e17.source === "CUSTOMER" && e17.usable === true, JSON.stringify(e17));
+    const a17 = await onay(n17.id);
+    const r17 = await prisma.customerDeliveryNoteLine.findFirst({ where: { noteId: n17.id }, select: { id: true, roll: { select: { itemId: true } } } });
+    check("⭐ §17e müşteri varsayılanı fabrika varsayılanını EZER → top müşteri ürününden", a17.status === 200 && r17?.roll?.itemId === custItem.id, `${a17.status} ${a17.code ?? ""} ${r17?.roll?.itemId}`);
+    const la17 = await prisma.systemLog.findFirst({ where: { tableName: "CUSTOMER_DELIVERY_NOTE_LINE", recordId: r17?.id ?? "", newData: { path: ["status"], equals: "ENTERED" } }, select: { newData: true } });
+    check("§17e onay audit'inde defaultItemSource CUSTOMER", (la17?.newData as { defaultItemSource?: string } | null)?.defaultItemSource === "CUSTOMER", JSON.stringify(la17?.newData));
+    const n17f = await mkNote([L(131, { itemId: null, itemText: "Müşteri kumaşı F" })]);
+    const e17f = await effOf(n17f.id);
+    const a17f = await onay(n17f.id);
+    check("§17f müşteri varsayılanı YOKSA fabrika (source FACTORY) → top fabrika ürününden", e17f?.source === "FACTORY" && e17f.itemId === fabric.id && a17f.status === 200 && (await prisma.customerDeliveryNoteLine.findFirst({ where: { noteId: n17f.id }, select: { roll: { select: { itemId: true } } } }))?.roll?.itemId === fabric.id, `${JSON.stringify(e17f)} ${a17f.status}`);
+    await prisma.item.update({ where: { id: custItem.id }, data: { isActive: false, lifecycleStatus: "ARCHIVED" } });
+    const n17p = await mkNote([L(132, { itemId: null, itemText: "Müşteri kumaşı G" })], { ownerCustomerId: owner3 });
+    const e17p = await effOf(n17p.id);
+    const a17p = await onay(n17p.id);
+    check("⭐ §17g onay anında pasifleşmiş müşteri varsayılanı → 409 GELEN_BELGE_DEFAULT_ITEM_UNUSABLE (source CUSTOMER), SIFIR top, fabrikaya DÜŞMEZ",
+      e17p?.source === "CUSTOMER" && e17p.usable === false && a17p.status === 409 && a17p.code === "GELEN_BELGE_DEFAULT_ITEM_UNUSABLE" && a17p.details?.source === "CUSTOMER" && (await rollsOf(n17p.id)).length === 0,
+      `${JSON.stringify(e17p)} ${a17p.status} ${a17p.code} ${String(a17p.details?.source)}`);
+    const del17 = await call("DELETE", `/api/gelen-belge/varsayilan-urunler/${owner3}`, tplUser);
+    check("§17h kaldırma 200 (sert silme) + audit; sonra aynı belge fabrika ürünüyle girer", del17.status === 200 && (await prisma.deliveryNoteCustomerDefault.count({ where: { customerId: owner3 } })) === 0
+      && (await prisma.systemLog.count({ where: { tableName: "DELIVERY_NOTE_CUSTOMER_DEFAULT", action: "DELETE" } })) > 0 && (await onay(n17p.id)).status === 200, `${del17.status}`);
+    check("§17h olmayanı kaldırma → 404 GELEN_BELGE_CUSTOMER_DEFAULT_NOT_FOUND", (await call("DELETE", `/api/gelen-belge/varsayilan-urunler/${owner3}`, tplUser)).code === "GELEN_BELGE_CUSTOMER_DEFAULT_NOT_FOUND");
+    await call("PUT", "/api/gelen-belge/ayarlar", tk, { defaultItemId: null });
+    const n17n = await mkNote([L(133, { itemId: null, itemText: "Müşteri kumaşı H" })], { ownerCustomerId: owner3 });
+    const e17n = await effOf(n17n.id);
+    const u17 = await onay(n17n.id);
+    check("§17i ikisi de yoksa etkin varsayılan boş (source null) + 400 DELIVERY_NOTE_LINE_UNRESOLVED (bugünkü)", e17n?.source === null && e17n.itemId === null && u17.status === 400 && u17.code === "DELIVERY_NOTE_LINE_UNRESOLVED", `${JSON.stringify(e17n)} ${u17.status} ${u17.code}`);
   } finally {
     stopNotificationJobs();
     await new Promise<void>((r) => server.close(() => r()));
@@ -389,6 +478,7 @@ async function cleanup(): Promise<void> {
   await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: rollIds } } });
   await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
   await prisma.deliveryNoteAlias.deleteMany({ where: { OR: [{ targetId: { in: [...made.items, ...made.colors, ...made.customers] } }] } });
+  await prisma.deliveryNoteCustomerDefault.deleteMany({ where: { OR: [{ customerId: { in: made.customers } }, { defaultItemId: { in: made.items } }] } });
   await prisma.item.deleteMany({ where: { id: { in: made.items } } });
   await prisma.color.deleteMany({ where: { id: { in: made.colors } } });
   await prisma.customer.deleteMany({ where: { id: { in: made.customers } } });

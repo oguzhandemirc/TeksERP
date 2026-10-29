@@ -46,8 +46,11 @@ export interface IncomingDocSettings {
   defaultUnreviewedApproval: UnreviewedApprovalMode;
 }
 
-/** Ürün top doğurabilir mi — null = evet, metin = Türkçe sebep. Bulunamayan ürün de sebeptir. */
-async function itemProblem(itemId: string): Promise<{ row: { code: string; name: string } | null; problem: string | null }> {
+/**
+ * Ürün top doğurabilir mi — null = evet, metin = Türkçe sebep. Bulunamayan ürün de sebeptir. Fabrika ve müşteri
+ * varsayılanının (E4) TEK kapısı: yazımda 400, onay anında 409.
+ */
+export async function itemProblem(itemId: string): Promise<{ row: { code: string; name: string } | null; problem: string | null }> {
   const row = await prisma.item.findUnique({ where: { id: itemId }, select: { code: true, name: true, itemType: true } });
   if (!row) return { row: null, problem: "Ürün bulunamadı." };
   if (!ROLL_BEARING_ITEM_TYPES.includes(row.itemType)) {
@@ -103,16 +106,11 @@ export async function updateIncomingDocSettings(input: IncomingDocSettingsInput,
   return getIncomingDocSettings();
 }
 
-/**
- * Onay ön kontrolü için: ayar boşsa null. Doluysa ürün o AN top doğurabilmeli — pasifleşmiş/birleşmiş/silinmiş
- * ürün sessizce atlanmaz, 409 `GELEN_BELGE_DEFAULT_ITEM_UNUSABLE` (FAIL-CLOSED; operatör ya ürün seçer ya ayarı düzeltir).
- */
-export async function resolveDefaultItemForApproval(): Promise<{ id: string; name: string } | null> {
-  const id = await readIncomingDocDefaultItemId();
-  if (!id) return null;
-  const { row, problem } = await itemProblem(id);
-  if (problem || !row) {
-    throw AppError.conflict(`Gelen belge varsayılan ürünü kullanılamıyor: ${problem ?? "Ürün bulunamadı."} Satırlarda ürün seçin ya da ${settingScreenPath("gelen-belge")} ekranından varsayılan ürünü düzeltin.`, { code: "GELEN_BELGE_DEFAULT_ITEM_UNUSABLE", itemId: id });
-  }
-  return { id, name: row.name };
+/** Ürünü kaynağıyla etkin varsayılan sayan çözücü (E4) için: fabrika ayarındaki ürün kimliği, boşsa null. */
+export const readFactoryDefaultItemId = readIncomingDocDefaultItemId;
+
+/** Onay anı FAIL-CLOSED hatası — kaynak (`CUSTOMER` sahibin varsayılanı · `FACTORY` fabrika ayarı) details'te. */
+export function defaultItemUnusable(source: "CUSTOMER" | "FACTORY", itemId: string, problem: string | null): AppError {
+  const fix = source === "CUSTOMER" ? "gelen belge müşteri varsayılanları ekranından sahibin varsayılan ürününü düzeltin" : `${settingScreenPath("gelen-belge")} ekranından varsayılan ürünü düzeltin`;
+  return AppError.conflict(`Gelen belge varsayılan ürünü kullanılamıyor: ${problem ?? "Ürün bulunamadı."} Satırlarda ürün seçin ya da ${fix}.`, { code: "GELEN_BELGE_DEFAULT_ITEM_UNUSABLE", itemId, source });
 }

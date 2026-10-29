@@ -204,6 +204,17 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "CustomerDeliveryNote", table: "customer_delivery_notes", column: "senderCustomerId", label: "Gelen belge (gönderen)" },
     { kind: "MOVE", model: "SenderTemplate", table: "sender_templates", column: "senderCustomerId", label: "Gönderen şablonu" },
     { kind: "MOVE", model: "SenderTemplate", table: "sender_templates", column: "defaultOwnerCustomerId", label: "Gönderen şablonu (varsayılan sahip)" },
+    // E4: sahibe özel varsayılan ürün — müşteri başına TEK satır (`customerId @unique`). İkisinde de varsa hedefinki kalır.
+    {
+      kind: "CONFLICT",
+      model: "DeliveryNoteCustomerDefault",
+      table: "delivery_note_customer_defaults",
+      column: "customerId",
+      label: "Gelen belge varsayılan ürünü",
+      uniqueOn: ["customerId"],
+      policy: "SKIP",
+      why: "Saf yapılandırma: hedef müşterinin kendi varsayılanı kalır, kaynağınki atılır (önizlemede görünür, geri almada döner); hedefte yoksa taşınır.",
+    },
     {
       kind: "CONFLICT",
       model: "DeliveryNoteAlias",
