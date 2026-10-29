@@ -23,6 +23,7 @@ import { approveDeliveryNote } from "../services/gelen-belge-onay.service";
 import { getRollTabletContext } from "../services/roll-tablet.service";
 import { getDocumentScan, readDocumentScanContent, uploadDocumentScan } from "../services/gelen-belge-scan.service";
 import { suggestForNote } from "../services/gelen-belge-eslestirme.service";
+import { listSenderTemplates, updateSenderTemplate } from "../services/gelen-belge-sablon.service";
 import { assertScanReadable, readerQueueCounts, requeueScanForReading } from "../services/gelen-belge-okuma.service";
 import { readerJobStatus, requestImmediateReaderRun } from "../jobs/gelen-belge-okuma.job";
 import { getReaderUrl } from "../lib/gelen-belge/url";
@@ -336,6 +337,41 @@ router.delete("/irsaliyeler/:id/satirlar/:lineId", requirePermission("gelen-belg
  */
 router.post("/irsaliyeler/:id/onay", requirePermission("gelen-belge:approve"), wrap(async (req) => ({
   ...(await approveDeliveryNote(Id.parse(req.params.id), ApproveBody.parse(req.body ?? {}), req.user!.userId).then(({ warnings, ...data }) => ({ status: 200, data, warnings }))),
+})));
+
+// ── E2 gönderen şablonları (`gelen-belge:template`) ───────────────────────────
+const TemplateCode = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/, "Geçersiz şablon kodu");
+const TemplatePatch = z.strictObject({
+  isActive: z.boolean("Aktiflik evet/hayır olmalı").optional(),
+  senderCustomerId: Id.nullable().optional(),
+  defaultOwnerCustomerId: Id.nullable().optional(),
+}).refine((v) => Object.keys(v).length > 0, "Değiştirilecek alan yok");
+/**
+ * @openapi
+ * /api/gelen-belge/sablonlar:
+ *   get:
+ *     tags: [Gelen belge]
+ *     summary: Gönderen şablonları — dosyadaki motor şablonları + DB bağı (kod, sürüm, aktif, gönderen, varsayılan sahip, isabet); salt okunur
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "SenderTemplateView[] (satırı olmayan şablon id null)" }
+ *       403: { description: "MODULE_DISABLED ya da izin yok" }
+ * /api/gelen-belge/sablonlar/{code}:
+ *   patch:
+ *     tags: [Gelen belge]
+ *     summary: Şablon bağını güncelle (isActive, senderCustomerId, defaultOwnerCustomerId); satır yoksa doğar
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: code, required: true, schema: { type: string } }
+ *     responses:
+ *       200: { description: "SenderTemplateView" }
+ *       400: { description: "SENDER_TEMPLATE_CUSTOMER_INACTIVE · SENDER_TEMPLATE_CUSTOMER_NOT_FOUND · doğrulama" }
+ *       404: { description: "SENDER_TEMPLATE_NOT_FOUND (yedek sözlük dahil)" }
+ *       409: { description: "SENDER_TEMPLATE_CHANGED (araya başka yazım girdi)" }
+ */
+router.get("/sablonlar", requirePermission("gelen-belge:template"), wrap(async () => ({ status: 200, data: await listSenderTemplates() })));
+router.patch("/sablonlar/:code", requirePermission("gelen-belge:template"), wrap(async (req) => ({
+  status: 200, data: await updateSenderTemplate(TemplateCode.parse(req.params.code), TemplatePatch.parse(req.body), req.user!.userId),
 })));
 
 export default router;

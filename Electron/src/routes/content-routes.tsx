@@ -50,6 +50,7 @@ import { WarehousesPage } from "@/pages/Warehouses/WarehousesPage";
 import { GoodsReceiptsPage } from "@/pages/Operations/GoodsReceipts/GoodsReceiptsPage";
 import { IncomingDocumentsPage } from "@/pages/Operations/GelenBelgeler/GelenBelgelerPage";
 import { IncomingDocumentDetailPage } from "@/pages/Operations/GelenBelgeler/GelenBelgeDetailPage";
+import { SenderTemplatesPage } from "@/pages/Operations/GelenBelgeler/GonderenSablonlariPage";
 import { CarilerPage } from "@/pages/Definitions/CarilerPage";
 import { FinanceHubPage } from "@/pages/Finance/FinanceHubPage";
 import { CariPage } from "@/pages/Finance/CariPage";
@@ -510,6 +511,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="gelen-belge:read">
         <IncomingDocumentsPage />
+      </ProtectedRoute>
+    ),
+  },
+  // E2: gönderen şablonları — statik segment `:id`den önce eşleşir; karo ile AYNI izin.
+  {
+    path: "operations/gelen-belgeler/sablonlar",
+    element: (
+      <ProtectedRoute requirePermission="gelen-belge:template">
+        <SenderTemplatesPage />
       </ProtectedRoute>
     ),
   },

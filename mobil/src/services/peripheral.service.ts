@@ -28,6 +28,10 @@ export interface DevicePeripheral {
   timeoutMs: number | null;
   role: string | null;
   simulate: boolean;
+  /** H1 sayaç davranışı (for-session tüm kolonları döndürür); eski sunucuda yok. */
+  counterMode?: 'RESETTING' | 'CUMULATIVE' | null;
+  /** Sayaç sıfırlama komutu (escape destekli); boş → sıfırlanmaz, fark alınır. */
+  resetCommand?: string | null;
 }
 
 export const peripheralService = {

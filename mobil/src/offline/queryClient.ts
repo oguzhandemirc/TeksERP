@@ -82,9 +82,12 @@ export const queryClient = new QueryClient({
   },
 });
 
+/** Persist edilen istemci önbelleğinin AsyncStorage anahtarı (anında yazım da bunu kullanır). */
+export const PERSIST_STORAGE_KEY = 'TEKSERP_RQ_CACHE_V1';
+
 export const asyncStoragePersister = createAsyncStoragePersister({
   storage: AsyncStorage,
-  key: 'TEKSERP_RQ_CACHE_V1',
+  key: PERSIST_STORAGE_KEY,
   throttleTime: 1000,
   // ZOMBİ ÖNLEME: pending persist edilen istasyon kaydı restore'da paused'a
   // çevrilir — aksi hâlde hiçbir resume yolu onu tetiklemez ve kayıt sessizce

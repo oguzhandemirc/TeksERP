@@ -14,7 +14,10 @@
 // retry politikası bu hatayı süresiz, 15sn arayla yeniden dener (sunucuya yük
 // sıfır). Giriş yapılınca ilk denemede akar (sessionSwitch.nudgeOutbox hızlandırır).
 
-import { queryClient } from './queryClient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { dehydrate } from '@tanstack/react-query';
+import { queryClient, PERSIST_BUSTER, PERSIST_STORAGE_KEY } from './queryClient';
+import { PERSIST_DEHYDRATE_OPTIONS, shouldPersistMutation } from './persistPolicy';
 import { jitteredBackoff } from './backoff';
 import { resolveAuthToken } from '../services/api';
 import { isLicenseBlocked } from '../lib/license';
@@ -25,6 +28,7 @@ import {
   type ReportErrorRequest,
   type DeleteErrorRequest,
   type FinishStepRequest,
+  type MeterReadingRequest,
 } from '../services/kursunQc.service';
 import { rollService, type InitialEntryRequest } from '../services/roll.service';
 import { tamburService } from '../services/tambur.service';
@@ -47,6 +51,7 @@ export const STATION_MUT = {
   QC2_REPORT_ERROR: ['station', 'qc2-report-error'] as const,
   QC2_DELETE_ERROR: ['station', 'qc2-delete-error'] as const,
   QC2_FINISH_STEP: ['station', 'qc2-finish-step'] as const,
+  KURSUN_METER_READING: ['station', 'kursun-meter-reading'] as const,
   KURSUN_FINISH: ['station', 'kursun-finish'] as const,
   TAMBUR_FINALIZE_OPEN_FABRIC: ['station', 'tambur-finalize-open-fabric'] as const,
   KK1_CREATE_ENTRY: ['station', 'kk1-create-entry'] as const,
@@ -187,6 +192,11 @@ export function registerStationMutationDefaults(): void {
     mutationFn: withAuthGuard((vars: FinishStepRequest) => kursunQcService.finishStep(vars)),
     ...OFFLINE_AWARE,
   });
+  // H3 kurşun giriş (IN) sayaç okuması — clientToken'lı; sunucu token replay'iyle idempotent.
+  queryClient.setMutationDefaults(STATION_MUT.KURSUN_METER_READING, {
+    mutationFn: withAuthGuard((vars: MeterReadingRequest) => kursunQcService.recordMeterReading(vars)),
+    ...OFFLINE_AWARE,
+  });
   // Açık kumaş bitirme (fason dönüşü) — barkodlu QC2 ile aynı offline pattern.
   // Backend idempotent: priorFinish check + skipDuplicates RollOperation.
   queryClient.setMutationDefaults(STATION_MUT.KURSUN_FINISH, {
@@ -285,4 +295,26 @@ export function registerStationMutationDefaults(): void {
     mutationFn: withAuthGuard((vars: KartelaReceiveRequest) => kartelaService.receive(vars)),
     ...OFFLINE_AWARE,
   });
+}
+
+/**
+ * Kuyruğu ŞİMDİ diske yazar (persister'ın 1 sn kısıtını beklemeden) — `match`'e uyan kayıt
+ * kuyrukta değilse false. Kurşun sayacı ancak true'dan SONRA sıfırlanır (okuma kaybolmasın).
+ */
+export async function persistStationQueueNow(match: (variables: unknown) => boolean): Promise<boolean> {
+  const queued = queryClient
+    .getMutationCache()
+    .getAll()
+    .some((m) => shouldPersistMutation(m) && match(m.state.variables));
+  if (!queued) return false;
+  try {
+    const clientState = dehydrate(queryClient, PERSIST_DEHYDRATE_OPTIONS);
+    await AsyncStorage.setItem(
+      PERSIST_STORAGE_KEY,
+      JSON.stringify({ buster: PERSIST_BUSTER, timestamp: Date.now(), clientState }),
+    );
+    return true;
+  } catch {
+    return false;
+  }
 }
