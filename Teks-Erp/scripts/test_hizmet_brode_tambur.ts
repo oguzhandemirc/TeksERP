@@ -26,6 +26,8 @@
 //   §9 Kurşun DIŞI çeşitli bayrak (brode deseni) kendi kalemiyle faturalanır (uyarısız düşmez)
 //   §10 Kardeşi parça parça (CUT) faturalanmış atanın sonradan girilen okuması ikinci çocukta atayı
 //       bütünüyle yeniden kesmez (CUT kalır) · faturalı bayrak geri alınamaz (409 SERVICE_ALREADY_BILLED)
+//   §11 F1 makbuzdan KENDİSİ dönen top (doğan top yok, eski model) ⇒ BRODE RECEIVED = kalemin alınan metresi (190)
+//   §12 F1 ata + çocuk aynı sevkte ⇒ çocuk CUT + atanın kalan parçası DECLARED (Σ = ata metresi; eskiden ata düşüyordu)
 // Negatif sondalar (2026-10-29): bayrak çözüm dalı (`listFlagServiceWorks` çağrısı) kaldırılınca §2/§4/§5/§6
 // kırmızı · RECEIVED (makbuz) dalı kaldırılınca §6 kırmızı (geri alındı). Bitirici sondaları (2026-10-29):
 // doğan topa sahip kalıtımı kaldırılınca §6 kırmızı · kardeş-faturalı ata süzgeci kaldırılınca §10 kırmızı.
@@ -422,6 +424,46 @@ async function main(): Promise<void> {
   const free = await prisma.$transaction((tx) => applyRollFlagSetTx(tx, { rollId: C12, desired: [], reason: "test", userId: actor }))
     .then((r) => `revoked=${r.revoked}`, (e: { details?: { code?: string } }) => e.details?.code ?? String(e));
   check("faturasız topta bayrak geri alma serbest", free === "revoked=1", free);
+
+  // ── §11 F1 ───────────────────────────────────────────────────────────────
+  section("§11 F1: makbuzdan KENDİSİ dönen top (doğan top yok) ⇒ BRODE RECEIVED = alınan metre");
+  // Eski "yerinde dönüş" modeli bugün yazılamaz (kabul topu tüketir) — kalıt veri doğrudan kurulur.
+  const F11 = await mkFasonWo("WOF11");
+  const P11 = await mkParent(175, [BR]);
+  const r11 = await prisma.subcontractorReceipt.create({
+    data: { receiptNo: `${P}-SR11`.slice(0, 64), workOrderId: F11.woId, stepId: F11.stepId, subcontractorId: sub.id, items: { create: [{ newRollId: P11, receivedQty: "190.000" }] } },
+    select: { id: true },
+  });
+  fx.receiptIds.push(r11.id);
+  const sh11 = await ship([P11]);
+  const inv11 = await invoiceOf(sh11.id);
+  const br11 = (inv11 ? await linksOf(inv11.id) : []).filter((l) => l.serviceItemId === BRODE);
+  check("BRODE tek bağ: RECEIVED 190 (mevcut metre 175 değil), fason adımında",
+    br11.length === 1 && br11[0]!.rollId === P11 && br11[0]!.meterBasis === "RECEIVED" && eq(br11[0]!.billedMeters, 190) && br11[0]!.workOrderStepId === F11.stepId, JSON.stringify(br11));
+
+  // ── §12 F1 ───────────────────────────────────────────────────────────────
+  section("§12 F1: ata + çocuk aynı sevkte ⇒ atanın kalan parçası da faturalanır (Σ = ata metresi)");
+  const P12 = await mkParent(100, [TB, ET]);
+  const C12b = await cut(P12, 40);
+  const left12 = await prisma.roll.findUniqueOrThrow({ where: { id: P12 }, select: { currentQty: true, status: true } });
+  const sh12 = await ship([P12, C12b]);
+  const inv12 = await invoiceOf(sh12.id);
+  const l12 = inv12 ? await linksOf(inv12.id) : [];
+  const tb12 = l12.filter((l) => l.serviceItemId === TAMBUR);
+  const sum12 = tb12.reduce((a, l) => a.plus(l.billedMeters), new Prisma.Decimal(0));
+  check("TAMBUR: çocuk CUT 40 + ata kalan (DECLARED 60) = 100",
+    tb12.length === 2 && tb12.some((l) => l.rollId === C12b && l.meterBasis === "CUT" && eq(l.billedMeters, 40))
+    && tb12.some((l) => l.rollId === P12 && l.meterBasis === "DECLARED" && eq(l.billedMeters, Number(left12.currentQty))) && eq(sum12, 100),
+    JSON.stringify({ tb12, left: left12 }));
+  check("ETEK de aynı (2 bağ, Σ 100)", l12.filter((l) => l.serviceItemId === ETEK).reduce((a, l) => a.plus(l.billedMeters), new Prisma.Decimal(0)).minus(100).abs().lte(0.001), JSON.stringify(l12));
+  // Ata kendisi kesimle doğmuşsa (TAMBUR_SPLIT) ③ kesilen metresi çocuklarını da içerir — kalanla (④) faturalanır.
+  const A12 = await cut(await mkParent(100, [TB]), 80);
+  const C12c = await cut(A12, 30);
+  const sh12b = await ship([A12, C12c]);
+  const inv12b = await invoiceOf(sh12b.id);
+  const tb12b = (inv12b ? await linksOf(inv12b.id) : []).filter((l) => l.serviceItemId === TAMBUR);
+  check("kesimle doğmuş ata + çocuğu: CUT 30 + kalan 50 = 80 (ata CUT 80 ile fazla kesilmez)",
+    tb12b.length === 2 && tb12b.some((l) => l.rollId === C12c && eq(l.billedMeters, 30)) && tb12b.some((l) => l.rollId === A12 && l.meterBasis === "DECLARED" && eq(l.billedMeters, 50)), JSON.stringify(tb12b));
 }
 
 async function cleanup(): Promise<void> {

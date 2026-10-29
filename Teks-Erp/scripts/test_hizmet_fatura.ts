@@ -30,6 +30,9 @@
 //   §20 H8b müşteri tetiği: fabrika PER_SHIPMENT + müşteri PERIOD_END ⇒ sevkte bağ yok, dönem toplar · fabrika
 //       PERIOD_END + müşteri PER_SHIPMENT ⇒ sevkte bağ var, dönem açık + uyarı, yalnız faturasız kalan işi toplar · NULL ⇒
 //       fabrika ayarı · geçersiz 400 · fason cari 400 NOT_CUSTOMER · audit
+//   §22 F1 önizleme/oluşturma yarışı: tetik (müşteri · fabrika) değişti ya da iş başka faturaya bağlandı ⇒ 409
+//       SERVICE_PREVIEW_STALE + sıfır yazım · normal yol bağları önizlemeyle bayt-aynı · eşzamanlı iki oluşturma ⇒ 1 + 409 ·
+//       düzenlemede bağsız emanet hizmet satırı ⇒ 409 SERVICE_LINE_UNLINKED
 //   §21 H8b DISPATCH_DAY dönem taslağı: her iş KENDİ sevk anının fiyatıyla (son sevk günü herkese uygulanmaz); ata
 //       işi en erken sevk edilen çocuğun anına (yayılım döngüsü kapatılınca 40 m @7 ⇒ kırmızı, 68/1; geri alındı)
 // Negatif sondalar (2026-10-29, BEKCI-HARITASI sonda sütunu): kısmi unique düşürülünce §9a kırmızı ·
@@ -562,6 +565,78 @@ async function main(): Promise<void> {
     JSON.stringify(anPrices) === JSON.stringify(["40.000@5.0000"]), JSON.stringify(anPrices));
   await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_PRICE_DATE, "SERVICE_DAY");
   await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, "PER_SHIPMENT");
+
+  // ── §22 F1 önizleme/oluşturma yarışı ──────────────────────────────────
+  section("§22 F1: önizleme → (tetik/bağ değişir) → oluştur ⇒ 409 SERVICE_PREVIEW_STALE, sıfır yazım");
+  const cust5 = await prisma.customer.create({ data: { code: `${P}-G`.slice(0, 32), name: `TEST HZFT önizleme ${STAMP}` }, select: { id: true } });
+  fx.extraCustomerIds.push(cust5.id);
+  const cari5 = await prisma.$transaction((tx) => ensureCariAccountTx(tx, { customerId: cust5.id, subcontractorId: null }));
+  /** Sevk + kancanın taslağı silinir; panelin önizlemesi döner (panel gövdesi = önizleme satırları, bağ taşımaz). */
+  const previewed = async (metres: string[]) => {
+    const rs: string[] = [];
+    for (const m of metres) rs.push(await mkWorkedRoll(Math.ceil(Number(m)) + 1, m, undefined, cust5.id));
+    const sh = await ship(rs, cust5.id);
+    for (const i of await invoicesOf(sh.id)) await invoiceService.deleteDraft(i.id, actor);
+    const pv = await collectShipmentInvoiceDraftLines(sh.id, cust5.id, Currency.TRY);
+    const body = () => ({ type: "SALES" as const, customerId: cust5.id, shipmentId: sh.id, currency: Currency.TRY, clientToken: randomUUID(),
+      lines: pv.lines.map((l) => ({ itemId: l.itemId, description: l.description, qty: l.qty, unit: l.unit, unitPrice: l.unitPrice, vatRate: l.vatRate })) });
+    const writes = async () => ({ inv: (await invoicesOf(sh.id)).filter((i) => i.status !== InvoiceStatus.CANCELLED).length, links: (await linksOn(rs)).length });
+    return { rs, sh, pv, body, writes };
+  };
+  const linkShape = (l: { rollId: string; workOrderStepId: string | null; serviceItemId: string; readingId: string | null; billedMeters: Prisma.Decimal.Value; meterBasis: string; unitPrice: Prisma.Decimal.Value }) =>
+    `${l.rollId}|${l.workOrderStepId}|${l.serviceItemId}|${l.readingId}|${new Prisma.Decimal(l.billedMeters).toFixed(3)}|${l.meterBasis}|${new Prisma.Decimal(l.unitPrice).toFixed(4)}`;
+
+  const n0 = await previewed(["21.000", "22.500"]);
+  const ok0 = await invoiceService.createDraft(n0.body(), actor);
+  const ok0Links = await prisma.serviceBillingLink.findMany({ where: { invoiceId: ok0.data!.id, revokedAt: null }, select: { rollId: true, workOrderStepId: true, serviceItemId: true, readingId: true, billedMeters: true, meterBasis: true, unitPrice: true } });
+  check("§22a normal yol: bağlar önizlemenin bağlarıyla bayt-aynı (2 bağ)",
+    ok0Links.length === 2 && JSON.stringify(ok0Links.map(linkShape).sort()) === JSON.stringify((n0.pv.serviceLinks ?? []).map(linkShape).sort()), JSON.stringify(ok0Links.map(linkShape)));
+
+  const n1 = await previewed(["31.000"]);
+  await cariService.update(cari5.id, { serviceBillingTrigger: "PERIOD_END" }, actor);
+  const st1 = await errOf(() => invoiceService.createDraft(n1.body(), actor));
+  const w1 = await n1.writes();
+  check("§22b müşteri tetiği PERIOD_END'e döndü ⇒ 409 SERVICE_PREVIEW_STALE, fatura 0, bağ 0",
+    st1.status === 409 && st1.code === "SERVICE_PREVIEW_STALE" && w1.inv === 0 && w1.links === 0, JSON.stringify({ st1, w1 }));
+  await cariService.update(cari5.id, { serviceBillingTrigger: null }, actor);
+
+  const n2 = await previewed(["32.000"]);
+  await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, "PERIOD_END");
+  const st2 = await errOf(() => invoiceService.createDraft(n2.body(), actor));
+  const w2 = await n2.writes();
+  check("§22c fabrika tetiği PERIOD_END'e döndü ⇒ 409 SERVICE_PREVIEW_STALE, fatura 0, bağ 0",
+    st2.status === 409 && st2.code === "SERVICE_PREVIEW_STALE" && w2.inv === 0 && w2.links === 0, JSON.stringify({ st2, w2 }));
+  await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, "PER_SHIPMENT");
+
+  const n3 = await previewed(["33.000"]);
+  const pd3 = await createServicePeriodDraft({ cariId: cari5.id, period, clientToken: randomUUID() }, actor);
+  const st3 = await errOf(() => invoiceService.createDraft(n3.body(), actor));
+  const w3 = await n3.writes();
+  const l3 = await linksOn(n3.rs);
+  check("§22d iş arada başka faturaya (dönem taslağı) bağlandı ⇒ 409 SERVICE_PREVIEW_STALE, sevk faturası 0, bağ yalnız dönem taslağında",
+    st3.status === 409 && st3.code === "SERVICE_PREVIEW_STALE" && w3.inv === 0 && l3.length === 1 && l3[0]!.invoiceId === pd3.data!.id, JSON.stringify({ st3, w3 }));
+  await invoiceService.cancel(pd3.data!.id, "test iptal", actor);
+
+  const n4 = await previewed(["34.000", "35.000"]);
+  const race4 = await Promise.allSettled([invoiceService.createDraft(n4.body(), actor), invoiceService.createDraft(n4.body(), actor)]);
+  const won4 = race4.filter((r) => r.status === "fulfilled").length;
+  // Kaybedenin kodu F1 kapısından gelmeli; eski kısmi unique seddi (SERVICE_ALREADY_BILLED) yeşil saymaz.
+  const lost4 = race4.filter((r) => r.status === "rejected" && (r.reason as { statusCode?: number }).statusCode === 409
+    && (r.reason as { details?: { code?: string } }).details?.code === "SERVICE_PREVIEW_STALE");
+  const w4 = await n4.writes();
+  check("§22e eşzamanlı iki oluşturma ⇒ 1 fatura + 1×409 SERVICE_PREVIEW_STALE, bağ 2",
+    won4 === 1 && lost4.length === 1 && w4.inv === 1 && w4.links === 2,
+    JSON.stringify({ won4, lost: lost4.map((r) => (r as PromiseRejectedResult).reason?.details?.code), w4 }));
+
+  const n5 = await previewed(["36.000"]);
+  const noSvc5 = await invoiceService.createDraft({ ...n5.body(), lines: [{ itemId: null, description: "Elle satır", qty: 1, unit: "m", unitPrice: 8 }] }, actor);
+  const svc5 = n5.pv.lines.find((l) => l.itemId === K2)!;
+  const up5 = await errOf(() => invoiceService.updateDraft(noSvc5.data!.id, { lines: [{ itemId: K2, description: svc5.description, qty: svc5.qty, unit: "m", unitPrice: 8 }] }, actor));
+  const lines5 = await prisma.invoiceLine.findMany({ where: { invoiceId: noSvc5.data!.id }, select: { itemId: true } });
+  check("§22f düzenlemede bağsız emanet hizmet satırı ⇒ 409 SERVICE_LINE_UNLINKED, satır/bağ değişmez",
+    up5.status === 409 && up5.code === "SERVICE_LINE_UNLINKED" && lines5.length === 1 && lines5[0]!.itemId === null && (await linksOn(n5.rs)).length === 0, JSON.stringify(up5));
+  const ok5 = await errOf(() => invoiceService.updateDraft(noSvc5.data!.id, { lines: [{ itemId: null, description: "Elle satır 2", qty: 2, unit: "m", unitPrice: 8 }] }, actor));
+  check("§22g hizmetsiz düzenleme bugünkü gibi 200", ok5.status === 200, JSON.stringify(ok5));
 
   // ── §11 Kapalı ───────────────────────────────────────────────────────────
   section("§11 kapalıyken bugünkü davranış");

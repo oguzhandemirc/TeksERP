@@ -26,17 +26,16 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import {
-  collectShipmentServiceBilling,
-  resolveCustomerServiceBillingTrigger,
+  assertShipmentsDispatchedTx,
   insertServiceLinksTx,
   lockBillableShipmentsTx,
   lockServiceReadingsTx,
   reconcileServiceLinksWithLines,
   revokeServiceLinksTx,
-  syncServiceLinksToLinesTx,
   type ServiceBillingLinkInput,
 } from "./helpers/service-billing.helper";
-import { loadServiceBillingSettings, resolveServiceBillingEnabled } from "./system-setting.service";
+import { resolveShipmentServiceLinksTx, syncDraftServiceLinksTx } from "./helpers/service-preview-gate.helper";
+import { resolveServiceBillingEnabled } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
 import {
@@ -370,22 +369,32 @@ export class InvoiceService {
   }
 
   /**
-   * H7: taslağın hizmet bağları. Açık verilmişse (otomatik sevk kancası) aynen; verilmemiş SALES sevk
-   * taslağında (panel "Sevkiyattan Fatura Taslağı") sevkin faturalanmamış işleri — aynı toplayıcı.
-   * Hizmet faturası kapalıyken boş küme: yol bayt-aynı.
+   * H7/F1: verilmemiş bağlar + SALES sevk taslağı (panel "Sevkiyattan Fatura Taslağı") + hizmet faturası açık → bağlar
+   * fatura tx'inde sevk kilidi altında yeniden çözülür (`resolveShipmentServiceLinksTx`). Kapalıyken yol bayt-aynı.
    */
-  private async resolveServiceLinks(input: CreateInvoiceInput, currency: Currency): Promise<ServiceBillingLinkInput[]> {
-    if (input.serviceLinks) return input.serviceLinks;
-    if (input.type !== InvoiceType.SALES || !input.shipmentId || !input.customerId) return [];
-    if (!(await resolveServiceBillingEnabled())) return [];
-    const settings = await loadServiceBillingSettings();
-    // H8: PERIOD_END'de iş dönem sonu taslağını bekler — sevk taslağı hizmet bağı kurmaz (H8b: müşteriye göre).
-    if ((await resolveCustomerServiceBillingTrigger(input.customerId, settings)).trigger === "PERIOD_END") return [];
-    const sh = await prisma.shipment.findUnique({ where: { id: input.shipmentId }, select: { dispatchedAt: true } });
-    const draft = await collectShipmentServiceBilling({
-      shipmentId: input.shipmentId, customerId: input.customerId, currency, settings, dispatchedAt: sh?.dispatchedAt ?? null,
-    });
-    return draft.links;
+  private async isPanelShipmentServiceDraft(input: CreateInvoiceInput): Promise<boolean> {
+    if (input.serviceLinks || input.type !== InvoiceType.SALES || !input.shipmentId || !input.customerId) return false;
+    return resolveServiceBillingEnabled();
+  }
+
+  /**
+   * Kilit sırası ⓪ (tx'in İLK ifadesi): H7 bağlı taslak sevk geri almayla serileşir (8023); H8 dönem taslağı n sevkiyatı
+   * sıralı kilitler. F1 panel yolu: bağlar kilit ALTINDA yeniden çözülür — önizlemeden beri tetik/bağ durumu değiştiyse
+   * 409 SERVICE_PREVIEW_STALE (hiçbir şey yazılmaz).
+   */
+  private async lockAndResolveServiceLinksTx(
+    tx: Prisma.TransactionClient,
+    input: CreateInvoiceInput,
+    { currency, panelService, givenLinks }: { currency: Currency; panelService: boolean; givenLinks: ServiceBillingLinkInput[] },
+  ): Promise<ServiceBillingLinkInput[]> {
+    if (!panelService) {
+      if (givenLinks.length > 0) await lockBillableShipmentsTx(tx, input.shipmentId ? [input.shipmentId] : input.serviceShipmentIds ?? []);
+      return givenLinks;
+    }
+    await lockBillableShipmentsTx(tx, [input.shipmentId!], { assertDispatched: false });
+    const links = await resolveShipmentServiceLinksTx(tx, { shipmentId: input.shipmentId!, customerId: input.customerId!, currency, lines: input.lines });
+    if (links.length > 0) await assertShipmentsDispatchedTx(tx, [input.shipmentId!]);
+    return links;
   }
 
   private async createDraftFresh(input: CreateInvoiceInput, userId?: string): Promise<ApiResponse<{ id: string; docNo: string }>> {
@@ -410,7 +419,8 @@ export class InvoiceService {
     // dönmemeli — o istek yeni belge yaratmıyor.
     await assertNotFutureDatedTx(undefined, { date: issueDate, label: "Fatura tarihi" });
     // Bağ yalnız faturada SATIRI olan iş için: panelde silinen/değişen hizmet satırı sessiz "faturalandı" doğurmaz.
-    const serviceLinks = reconcileServiceLinksWithLines(input.lines, await this.resolveServiceLinks(input, currency)).keep;
+    const panelService = await this.isPanelShipmentServiceDraft(input);
+    const givenLinks = reconcileServiceLinksWithLines(input.lines, input.serviceLinks ?? []).keep;
     const receiptIds = normalizeInvoiceReceiptIds(input) ?? [];
 
     // ⚠️ ÖN KONTROL TEK BAŞINA YETMEZ (check-then-act): aynı token'la İKİ
@@ -420,9 +430,7 @@ export class InvoiceService {
     // 409'u); aşağıdaki catch onu cached yanıta çevirir (purchase-order emsali).
     return await withBarcodeRetry(async () => {
     const result = await prisma.$transaction(async (tx) => {
-      // H7: bağlı taslak sevk geri almayla serileşir (8023 tx'in İLK ifadesi).
-      // H8: dönem taslağı n sevkiyatı sıralı kilitler (aynı uzay, deterministik sıra).
-      if (serviceLinks.length > 0) await lockBillableShipmentsTx(tx, input.shipmentId ? [input.shipmentId] : input.serviceShipmentIds ?? []);
+      const serviceLinks = await this.lockAndResolveServiceLinksTx(tx, input, { currency, panelService, givenLinks });
       const cari = await ensureCariAccountTx(tx, {
         customerId: input.customerId ?? null,
         subcontractorId: input.subcontractorId ?? null,
@@ -498,7 +506,7 @@ export class InvoiceService {
         select: { id: true, docNo: true },
       });
       if (receiptIds.length > 0) await writeInvoiceReceiptsTx(tx, invoice.id, receiptIds);
-      return insertServiceLinksTx(tx, invoice.id, serviceLinks).then(() => invoice);
+      return insertServiceLinksTx(tx, invoice.id, serviceLinks).then((linkCount) => ({ ...invoice, linkCount }));
     });
 
     void AuditService.log({
@@ -506,9 +514,9 @@ export class InvoiceService {
       action: "CREATE",
       tableName: "INVOICE",
       recordId: result.id,
-      newData: { docNo: result.docNo, type: input.type, ...(serviceLinks.length > 0 ? { serviceLinkCount: serviceLinks.length } : {}) },
+      newData: { docNo: result.docNo, type: input.type, ...(result.linkCount > 0 ? { serviceLinkCount: result.linkCount } : {}) },
     });
-    return { success: true, data: result, message: `${result.docNo} taslağı oluşturuldu.` };
+    return { success: true, data: { id: result.id, docNo: result.docNo }, message: `${result.docNo} taslağı oluşturuldu.` };
     },
     undefined,
     // Belge numarası yarışı (P2002 `docNo`) RETRY EDİLİR; `clientToken`
@@ -923,7 +931,7 @@ export class InvoiceService {
         );
       }
       // Claim SONRASI içerik tx İÇİNDE taze yüklenir (`confirm` ile aynı desen).
-      const existingSelect = { exchangeRate: true, type: true, currency: true, cari: { select: { customerId: true, subcontractorId: true } } } as const;
+      const existingSelect = { exchangeRate: true, type: true, currency: true, shipmentId: true, cari: { select: { customerId: true, subcontractorId: true } } } as const;
       const existing = await tx.invoice.findUniqueOrThrow({ where: { id }, select: existingSelect });
 
       const rate = input.exchangeRate != null ? D(input.exchangeRate) : D(existing.exchangeRate);
@@ -937,7 +945,8 @@ export class InvoiceService {
       }
 
       // H7: bağ ↔ satır (çıkarılan hizmet satırının bağı damgalanır, miktar değişimi 409); satırsız düzenlemede 0.
-      const revoked = input.lines ? await syncServiceLinksToLinesTx(tx, id, input.lines, userId ?? null) : 0;
+      // F1: sevk taslağına emanet işinin bağsız hizmet satırı düzenlemeyle de eklenemez (kapalıyken no-op).
+      const revoked = input.lines ? await syncDraftServiceLinksTx(tx, { invoiceId: id, ...existing, lines: input.lines, userId: userId ?? null }) : 0;
       if (input.lines) {
         if (input.lines.length === 0) throw AppError.badRequest("Fatura en az bir satır içermeli.");
         await tx.invoiceLine.deleteMany({ where: { invoiceId: id } });
