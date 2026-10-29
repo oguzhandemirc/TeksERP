@@ -20,7 +20,7 @@
 //   §9 NULL adımlı çift bağ ⇒ kısmi unique seddi (P2002) · insertServiceLinksTx 409
 //   §10 SIMULATED okuma: BLOCK_LINE ⇒ 0 bağ + uyarı; okuma SIMULATED ise bağ readingId'si ona işaret etmez
 //   §11 Kapalıyken: emanet ürün satırı + bugünkü uyarı, 0 bağ (kanca bayt-aynı)
-// Negatif sondalar (2026-10-29, PR #258 gövdesinde): kısmi unique düşürülünce §9a kırmızı ·
+// Negatif sondalar (2026-10-29, BEKCI-HARITASI sonda sütunu): kısmi unique düşürülünce §9a kırmızı ·
 // iptal damgası kaldırılınca §8 kırmızı · düzeltme 409 kapısı kaldırılınca §5 kırmızı.
 // =============================================================================
 import { randomUUID } from "node:crypto";
