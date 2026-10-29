@@ -36,7 +36,8 @@ const MOBILE_DOKUMA_GERI_AL = ["mobile:dokuma-geri-al"] as const;
  */
 function kindScopeFor(req: Request): { generalKindsOnly: boolean } {
   const perms = req.user?.permissions ?? [];
-  const weavingAccess = ["loom:manual-entry", "loom:classify", "mobile:dokuma"].some((p) => matchesPermission(perms, p));
+  const weavingAccess =
+    matchesPermission(perms, "loom:manual-entry") || matchesPermission(perms, "loom:classify") || matchesPermission(perms, "mobile:dokuma");
   return { generalKindsOnly: !weavingAccess };
 }
 
