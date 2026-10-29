@@ -29,6 +29,12 @@ router.use(verifyToken, requireProductionEnabled);
  *     tags: [Tambur]
  *     summary: Tambur'da bekleyen toplar
  *     description: İşlenmemiş hataları olan, IN_PRODUCTION durumundaki topları listeler.
+ *     parameters:
+ *       - in: query
+ *         name: stationId
+ *         required: false
+ *         schema: { type: string, format: uuid }
+ *         description: Verilirse yalnız bu TAMBUR istasyonundaki işler (çok tamburlu fabrika). Bilinmeyen 404; pasif/TAMBUR olmayan 400.
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -137,6 +143,12 @@ router.get(
  *   get:
  *     tags: [Tambur]
  *     summary: Tambur adımlarında açık top bekleyen aktif kartlar (kamera modal)
+ *     parameters:
+ *       - in: query
+ *         name: stationId
+ *         required: false
+ *         schema: { type: string, format: uuid }
+ *         description: Verilirse yalnız bu TAMBUR istasyonundaki işler (çok tamburlu fabrika). Bilinmeyen 404; pasif/TAMBUR olmayan 400.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Açık kart listesi }
