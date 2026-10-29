@@ -2068,6 +2068,20 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "DISPATCH_DAY", label: "Sevk günü", hint: "Fiyat sevk anına çözülür." },
         ],
       },
+      {
+        // D4-H1: `defaultValue` backend `DEFAULT_EXPENSE_CATEGORY_SUGGESTIONS` ile birebir (bekçi §16).
+        enumKey: "financeExpenseCategorySuggestions",
+        title: "Masraf girerken kategori önerilsin",
+        summary: "Kasa masraf formunda daha önce yazılmış kategoriler tıklanabilir öneri olarak çıksın mı.",
+        desc: "Açık: formda son kullanılan 20 kategori öneri olarak görünür; tıklayınca kutuya yazılır, istenirse yeni kategori yine elle yazılır. Kapalı: öneri çıkmaz. Kategori listesi kurulmaz; öneri yalnız yazım birliğine yardım eder (\"Elektrik\" ile \"elektrik \" ayrı satır olmasın). Kategoriye kişi adı yazmayın.",
+        defaultValue: "ON",
+        display: "radio",
+        audience: ["Muhasebeci"],
+        options: [
+          { value: "ON", label: "Önerilsin (varsayılan)", hint: "Son kullanılan kategoriler formda görünür." },
+          { value: "OFF", label: "Önerilmesin", hint: "Kategori kutusu boş açılır." },
+        ],
+      },
     ],
   },
   {

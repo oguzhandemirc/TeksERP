@@ -39,6 +39,10 @@ import { getVatSummaryReport, VAT_YONLERI } from "../../services/reports/finance
 import { getFxDiffReport } from "../../services/reports/finance-fx-diff.report";
 import { buildCashBookNarrative, buildFxDiffNarrative, buildVatNarrative } from "../../services/reports/temel/expert-narrative";
 import { cariService } from "../../services/cari.service";
+import { getExpenseSummary } from "../../services/helpers/expense-summary.helper";
+import { buildExpenseSummarySunumu, EXPENSE_SUMMARY_KEY } from "../../services/reports/expense-summary.sunum";
+import { coreDayRangeQuerySchema, resolveCoreDayRange } from "../../services/reports/temel/_day-range";
+import { REPORT_BY_KEY } from "../../constants/report-catalog";
 import { AppError } from "../../utils/app-error";
 
 const router = Router();
@@ -187,6 +191,45 @@ router.get("/cash-book", requireReportOpen("finance/cash-book"), guard, async (r
     const { suzgec, secenekler, ...govde } = data;
     // `anlati` EK alan ("Ne görüyoruz?"); mevcut alanlar aynen.
     res.status(200).json(reportEnvelope({ ...govde, anlati: buildCashBookNarrative(govde) }, range, null, { suzgec, secenekler }));
+  } catch (e) {
+    next(e);
+  }
+});
+
+// -----------------------------------------------------------------------------
+// MASRAF ÖZETİ (D4-H1) — kategori × fabrika ayı, v2 sunum zarfı
+// -----------------------------------------------------------------------------
+
+/** Gün aralığı + kıyas (rapor v2 gün sözleşmesi); tanınmayan anahtar 400. */
+export const expenseSummaryQuerySchema = coreDayRangeQuerySchema.extend({}).strict();
+
+/**
+ * @openapi
+ * /api/reports/finance/masraf-ozeti:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Masraf özeti — kategori × fabrika ayı TL (RaporSunumu)
+ *     description: >
+ *       Tek kaynak `expense-summary.helper` — kasa defterinin EXPENSE satırlarıyla aynı evren (TL karşılığı).
+ *       İptal edilen masraf İPTAL AYINDA eksi yazılır (geçmiş ay değişmez). Sıra: TL azalan, eşitlikte kategori anahtarı.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: from, schema: { type: string, format: date } }
+ *       - { in: query, name: to, schema: { type: string, format: date } }
+ *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] } }
+ *     responses:
+ *       200: { description: "RaporSunumu (data) + data.detay (months · categories[key, label, totalTry, cells[]] · monthTotals · totalTry)" }
+ *       400: { description: Tanınmayan ya da geçersiz parametre }
+ *       403: { description: Ön muhasebe kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
+ */
+router.get("/masraf-ozeti", requireReportOpen("finance/masraf-ozeti"), guard, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = expenseSummaryQuerySchema.parse(req.query);
+    const window = resolveCoreDayRange(input, REPORT_BY_KEY.get(EXPENSE_SUMMARY_KEY)?.varsayilanGun ?? 90);
+    const detay = await getExpenseSummary({ range: window.range });
+    const previous = window.compareRange ? await getExpenseSummary({ range: window.compareRange }) : null;
+    const sunum = buildExpenseSummarySunumu(detay, window, previous);
+    res.status(200).json(reportEnvelope({ ...sunum, detay }, window.range, window.compareRange, { warnings: sunum.uyarilar }));
   } catch (e) {
     next(e);
   }

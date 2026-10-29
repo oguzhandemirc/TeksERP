@@ -281,6 +281,8 @@ export interface FeatureFlags {
   financeServiceBillingMissingMeter: "DECLARED_WITH_WARNING" | "BLOCK_LINE";
   financeServiceBillingTrigger: "PER_SHIPMENT" | "PERIOD_END";
   financeServiceBillingPriceDate: "SERVICE_DAY" | "DISPATCH_DAY";
+  /** D4-H1: kasa masraf formunda kategori önerisi (varsayılan ON). */
+  financeExpenseCategorySuggestions: "ON" | "OFF";
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; tahsis elle silinebilir. */
   financeAutoAllocateOnPaymentEnabled: boolean;

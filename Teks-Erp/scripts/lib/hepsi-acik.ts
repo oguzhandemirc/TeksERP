@@ -61,6 +61,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   financeServiceBillingMeterBasis: V("metre tabanı; üç değer de geçerli, varsayılan OUT okuma yolunu işletir"),
   financeServiceBillingMissingMeter: V("eksik ölçüm davranışı; varsayılan satırı uyarıyla yazar (yolu işletir)"),
   financeServiceBillingTrigger: V("tetik; PER_SHIPMENT sevk taslağı yolunu işletir, PERIOD_END dönem sonu ucunu bekletir (iki yol da geçerli)"),
+  financeExpenseCategorySuggestions: A("ON"), // öneri ucu sorgu yolunu işletir
   financeServiceBillingPriceDate: V("fiyat tarihi; iki değer de geçerli, varsayılan hizmet anı"),
   financeAutoAllocateOnPaymentEnabled: A(true),
   financeAllowZeroPriceLineEnabled: A(true),
