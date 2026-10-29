@@ -28,7 +28,7 @@ export function NoteListTable({ rows, onOpen }: Props) {
         <tbody>
           {rows.map((r) => (
             <tr key={r.id} className="cursor-pointer border-t hover:bg-muted/40" onClick={() => onOpen(r.id)} data-testid="note-row">
-              <td className="p-3 font-mono text-xs">{r.noteNo}</td>
+              <td className="p-3 whitespace-nowrap font-mono text-xs">{r.noteNo}</td>
               <td className="p-3 whitespace-nowrap">{formatFactory(r.createdAt, "dd MMM yyyy HH:mm")}</td>
               <td className="p-3">{r.ownerCustomer?.name ?? <span className="text-amber-700 dark:text-amber-400">Sahip seçilmedi</span>}</td>
               <td className="p-3">{r.senderCustomer?.name ?? r.senderText ?? "—"}</td>
