@@ -1,10 +1,8 @@
 // Satır tablosu — dar ekranda kendi içinde yatay kayar; kumaş seçici tablo başına TEK modal.
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { ItemPickerModal } from "@/components/forms/ItemPickerModal";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { LineRow } from "./LineRow";
-import { getIncomingDocumentSettings, INCOMING_DOCUMENT_SETTINGS_QUERY_KEY } from "./service";
 import type { DeliveryNoteDetail, LinePatch, NoteMatchSuggestions } from "./types";
 
 interface Props {
@@ -23,10 +21,8 @@ export function LinesTable({ note, suggestions, editable, canWrite, selectedId, 
   const [pickFor, setPickFor] = useState<string | null>(null);
   // Sil ve atla geri alınamaz → kısa onay; atlanan son açık satırsa belge kapanır.
   const [confirm, setConfirm] = useState<{ kind: "delete" | "skip"; lineId: string } | null>(null);
-  // Ürünsüz satır ipucu için varsayılan ürün (E3 ayarı); okunamazsa bugünkü "Kumaş seç" kalır.
-  const settings = useQuery({ queryKey: INCOMING_DOCUMENT_SETTINGS_QUERY_KEY, queryFn: getIncomingDocumentSettings, enabled: editable || canWrite });
-  const d = settings.data?.defaultItem;
-  const defaultItemName = d && !d.problem ? d.name : null;
+  // Ürünsüz satır ipucu: sahibin ETKİN varsayılanı eşleşme yanıtından (E4; müşteri > fabrika); yoksa bugünkü "Kumaş seç".
+  const defaultItem = suggestions?.defaultItem;
   const partial = note.status === "PARTIAL";
   const openLines = note.lines.filter((x) => !x.rollId && x.status !== "SKIPPED").length;
   return (
@@ -62,7 +58,7 @@ export function LinesTable({ note, suggestions, editable, canWrite, selectedId, 
               fixable={canWrite && partial && l.status === "FAILED" && !l.rollId}
               selected={selectedId === l.id}
               ownerCustomerId={note.ownerCustomerId}
-              defaultItemName={defaultItemName}
+              defaultItem={defaultItem}
               onSelect={() => onSelect(l.id)}
               onPatch={(p) => (p.skip ? setConfirm({ kind: "skip", lineId: l.id }) : onPatch(l.id, p))}
               onDelete={() => setConfirm({ kind: "delete", lineId: l.id })}

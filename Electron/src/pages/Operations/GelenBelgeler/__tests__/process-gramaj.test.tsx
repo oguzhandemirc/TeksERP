@@ -12,6 +12,8 @@ const OPTIONS = [{ id: "v25", name: "25 gr" }, { id: "v50", name: "50 gr" }];
 const approveNote = vi.fn();
 vi.mock("../service", () => ({
   approveNote: (...a: unknown[]) => approveNote(...a),
+  INCOMING_DOCUMENT_QUERY_KEY: "gelen-belge",
+  getSuggestions: () => Promise.resolve({ noteId: "n1", lines: [] }),
   INCOMING_DOCUMENT_SETTINGS_QUERY_KEY: ["gelen-belge", "ayarlar"],
   getIncomingDocumentSettings: () => Promise.resolve({ defaultItem: null, unreviewedApproval: "WARN" }),
 }));

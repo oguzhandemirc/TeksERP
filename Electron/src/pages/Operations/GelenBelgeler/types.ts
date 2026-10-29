@@ -75,6 +75,8 @@ export interface DeliveryNoteLine {
   confidence: number | null;
   needsReview: boolean;
   sourceRects: Record<string, OcrRect> | null;
+  /** Satırın okunduğu sayfanın taraması (E4); elle/Excel satırında null, eski backend göndermez → undefined. */
+  scanId?: string | null;
   status: LineStatus;
   failReason: string | null;
   rollId: string | null;
@@ -141,6 +143,19 @@ export interface NoteMatchSuggestions {
   /** Aktif kurşun gramaj çeşitleri (gelen-belge:read kapsamında; property:read gerekmez). Eski backend göndermez → panel çizilmez. */
   processOptions?: Array<{ id: string; name: string }>;
   lines: Array<{ lineId: string; lineNo: number; item: MatchSuggestion; color: MatchSuggestion; process?: ProcessSuggestion }>;
+  /** Sahibin ETKİN varsayılan ürünü (E4); eski backend göndermez → undefined (panel hüküm vermez). */
+  defaultItem?: EffectiveDefaultItem;
+}
+/** Kaynak: CUSTOMER sahibin varsayılanı · FACTORY fabrika ayarı — backend `gelen-belge-varsayilan.service.ts` aynası. */
+export type DefaultItemSource = "CUSTOMER" | "FACTORY";
+export interface EffectiveDefaultItem {
+  itemId: string | null;
+  name: string | null;
+  /** null: ne müşteri ne fabrika varsayılanı var (ürünsüz satır onayda 400). */
+  source: DefaultItemSource | null;
+  /** false + itemId dolu → onay 409 GELEN_BELGE_DEFAULT_ITEM_UNUSABLE (fabrikaya düşmez). */
+  usable: boolean;
+  problem: string | null;
 }
 /** Onayda PROCESS sözlüğüne öğretilecek gramaj seçimi; `lineId` null = başlığın işlem metni. */
 export interface ProcessChoice {
@@ -222,4 +237,14 @@ export interface SenderTemplatePatch {
   isActive?: boolean;
   senderCustomerId?: string | null;
   defaultOwnerCustomerId?: string | null;
+}
+
+/** Sahibe özel varsayılan ürün (E4, `gelen-belge:template`) — backend `CustomerDefaultView` aynası. */
+export interface CustomerDefaultView {
+  customerId: string;
+  customer: { id: string; code: string; name: string; isActive: boolean };
+  item: { id: string; code: string; name: string };
+  /** null = top doğurabilir; dolu = onayda 409 verecek sebep. */
+  problem: string | null;
+  updatedAt: string;
 }

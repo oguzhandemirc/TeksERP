@@ -35,7 +35,9 @@ vi.mock("@/components/forms/color-picker/ColorPickerModal", () => ({ ColorPicker
 const listDeliveryNotes = vi.fn();
 const approveNote = vi.fn();
 const getIncomingDocumentSettings = vi.fn();
+const getSuggestions = vi.fn();
 vi.mock("../service", () => ({
+  getSuggestions: (...a: unknown[]) => getSuggestions(...a),
   INCOMING_DOCUMENT_QUERY_KEY: "gelen-belge",
   listDeliveryNotes: (...a: unknown[]) => listDeliveryNotes(...a),
   approveNote: (...a: unknown[]) => approveNote(...a),
@@ -58,6 +60,7 @@ const summary = { DRAFT: 1, APPROVING: 0, APPROVED: 0, PARTIAL: 0, CANCELLED: 0,
 
 beforeEach(() => {
   getIncomingDocumentSettings.mockResolvedValue({ defaultItem: null, unreviewedApproval: "WARN", defaultUnreviewedApproval: "WARN" });
+  getSuggestions.mockResolvedValue({ noteId: "n1", lines: [], defaultItem: effOf(null) });
   listDeliveryNotes.mockResolvedValue({ items: [header({})], nextCursor: null, summary });
 });
 
@@ -177,45 +180,70 @@ const dLine = (o: Partial<DeliveryNoteLine>): DeliveryNoteLine => ({
   itemText: "SÜPREM", itemId: null, colorText: null, colorId: null, processText: null, confidence: null, needsReview: false,
   sourceRects: null, status: "PENDING", failReason: null, rollId: null, item: null, color: null, ...o,
 });
-const settingsOf = (o: { name?: string | null; problem?: string | null; mode?: "WARN" | "BLOCK" }) => ({
-  defaultItem: o.name ? { id: "i9", code: "K9", name: o.name, problem: o.problem ?? null } : null,
-  unreviewedApproval: o.mode ?? "WARN",
-  defaultUnreviewedApproval: "WARN",
-});
+const settingsOf = (o: { mode?: "WARN" | "BLOCK" }) => ({ defaultItem: null, unreviewedApproval: o.mode ?? "WARN", defaultUnreviewedApproval: "WARN" });
+function effOf(source: "CUSTOMER" | "FACTORY" | null, name = "Ham Kumaş", problem: string | null = null) {
+  return { itemId: source ? "i9" : null, name: source ? name : null, source, usable: source ? !problem : false, problem };
+}
 
-describe("hizmet ekseni (E3) — satır ipucu + onay ön kontrolü", () => {
-  const row = (line: DeliveryNoteLine, defaultItemName: string | null) =>
+describe("hizmet ekseni (E3/E4) — kaynaklı satır ipucu + onay ön kontrolü", () => {
+  const row = (line: DeliveryNoteLine, defaultItem: ReturnType<typeof effOf> | undefined) =>
     renderWithProviders(
       <table><tbody>
-        <LineRow line={line} suggestion={undefined} editable fixable={false} selected={false} ownerCustomerId="c1" defaultItemName={defaultItemName}
+        <LineRow line={line} suggestion={undefined} editable fixable={false} selected={false} ownerCustomerId="c1" defaultItem={defaultItem}
           onSelect={() => {}} onPatch={() => {}} onDelete={() => {}} onPickItem={() => {}} />
       </tbody></table>,
     );
-  it("ürünsüz satır: ayar doluysa varsayılan ürün ipucu, boşsa bugünkü 'Kumaş seç' tek başına", () => {
-    const { unmount } = row(dLine({}), "Ham Kumaş");
-    expect(screen.getByTestId("default-item-hint").textContent).toBe("Varsayılan ürünle girecek: Ham Kumaş");
-    expect(screen.getByRole("button", { name: /Kumaş seç/ })).toBeInTheDocument();
-    unmount();
-    row(dLine({}), null);
+  it("ürünsüz satır: kaynağa göre ipucu (müşteri/fabrika); yoksa bugünkü 'Kumaş seç' tek başına", () => {
+    const a = row(dLine({}), effOf("CUSTOMER", "Gül Ham"));
+    expect(screen.getByTestId("default-item-hint").textContent).toBe("Müşteri varsayılanıyla girecek: Gül Ham");
+    expect(screen.getByTestId("default-item-hint").dataset.source).toBe("CUSTOMER");
+    a.unmount();
+    const b = row(dLine({}), effOf("FACTORY"));
+    expect(screen.getByTestId("default-item-hint").textContent).toBe("Fabrika varsayılanıyla girecek: Ham Kumaş");
+    b.unmount();
+    const c = row(dLine({}), effOf(null));
     expect(screen.queryByTestId("default-item-hint")).toBeNull();
     expect(screen.getByRole("button", { name: /Kumaş seç/ })).toBeInTheDocument();
+    c.unmount();
+    row(dLine({}), undefined);
+    expect(screen.queryByTestId("default-item-hint")).toBeNull();
+  });
+  it("kullanılamaz varsayılan satırda engel olarak görünür", () => {
+    row(dLine({}), effOf("CUSTOMER", "Ham", "Ürün pasif."));
+    const h = screen.getByTestId("default-item-hint");
+    expect(h.dataset.tone).toBe("block");
+    expect(h.textContent).toBe("Varsayılan ürün kullanılamıyor (müşteri varsayılanı): Ürün pasif.");
   });
   it("ürünü seçili satırda ipucu yok", () => {
-    row(dLine({ itemId: "i1", item: { id: "i1", code: "K1", name: "Süprem" } as DeliveryNoteLine["item"] }), "Ham Kumaş");
+    row(dLine({ itemId: "i1", item: { id: "i1", code: "K1", name: "Süprem" } as DeliveryNoteLine["item"] }), effOf("FACTORY"));
     expect(screen.queryByTestId("default-item-hint")).toBeNull();
   });
-  it("WARN: sayaç varsayılan ürünü ve gözden geçirilmemişi söyler, onay açık", async () => {
-    getIncomingDocumentSettings.mockResolvedValue(settingsOf({ name: "Ham Kumaş" }));
+  it("WARN: sayaç müşteri varsayılanını ve gözden geçirilmemişi söyler, onay açık", async () => {
+    getSuggestions.mockResolvedValue({ noteId: "n1", lines: [], defaultItem: effOf("CUSTOMER", "Gül Ham") });
     renderWithProviders(<ApproveDialog noteId="n1" lines={[dLine({}), dLine({ id: "l2", needsReview: true })]} open onOpenChange={() => {}} onDone={() => {}} />);
-    await waitFor(() => expect(screen.getByTestId("approve-precheck")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("2 satır müşteri varsayılanıyla girecek: Gül Ham")).toBeInTheDocument());
     const box = screen.getByTestId("approve-precheck");
     expect(box.dataset.blocked).toBe("0");
-    expect(within(box).getByText("2 satır varsayılan ürünle girecek: Ham Kumaş")).toBeInTheDocument();
     expect(within(box).getByText("1 satır gözden geçirilmedi — onay uyarıyla geçer.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Onayla" })).toBeEnabled();
+    expect(getSuggestions).toHaveBeenCalledWith("n1");
+  });
+  it("kullanılamaz fabrika varsayılanı → engel, buton kapalı", async () => {
+    getSuggestions.mockResolvedValue({ noteId: "n1", lines: [], defaultItem: effOf("FACTORY", "Ham", "Ürün pasif.") });
+    renderWithProviders(<ApproveDialog noteId="n1" lines={[dLine({})]} open onOpenChange={() => {}} onDone={() => {}} />);
+    await waitFor(() => expect(screen.getByTestId("approve-precheck").dataset.blocked).toBe("1"));
+    expect(screen.getByText(/fabrika varsayılanı kullanılamıyor: Ürün pasif\./)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Onayla" })).toBeDisabled();
+  });
+  it("eşleme okunamazsa yalnız sayar, engel kararı vermez", async () => {
+    getSuggestions.mockRejectedValue(new Error("ağ"));
+    renderWithProviders(<ApproveDialog noteId="n1" lines={[dLine({})]} open onOpenChange={() => {}} onDone={() => {}} />);
+    await waitFor(() => expect(screen.getByText(/1 satırın ürünü seçilmemiş — varsayılan ürün onayda denetlenecek/)).toBeInTheDocument());
+    expect(screen.getByTestId("approve-precheck").dataset.blocked).toBe("0");
     expect(screen.getByRole("button", { name: "Onayla" })).toBeEnabled();
   });
   it("BLOCK + gözden geçirilmemiş satır → engellenir, buton kapalı", async () => {
-    getIncomingDocumentSettings.mockResolvedValue(settingsOf({ name: "Ham Kumaş", mode: "BLOCK" }));
+    getIncomingDocumentSettings.mockResolvedValue(settingsOf({ mode: "BLOCK" }));
     renderWithProviders(<ApproveDialog noteId="n1" lines={[dLine({ itemId: "i1", needsReview: true }), dLine({ id: "l3", itemId: "i1", needsReview: true, rollId: "r1", status: "ENTERED" })]} open onOpenChange={() => {}} onDone={() => {}} />);
     await waitFor(() => expect(screen.getByText("1 satır gözden geçirilmeli — onay engellenir.")).toBeInTheDocument());
     expect(screen.getByTestId("approve-precheck").dataset.blocked).toBe("1");
@@ -226,5 +254,7 @@ describe("hizmet ekseni (E3) — satır ipucu + onay ön kontrolü", () => {
     renderWithProviders(<ApproveDialog noteId="n1" lines={[]} open onOpenChange={() => {}} onDone={() => {}} />);
     await userEvent.click(screen.getByRole("button", { name: "Onayla" }));
     expect((await screen.findByTestId("approve-error")).textContent).toContain("varsayılan ürün artık kullanılamıyor; hiç top girilmedi");
+    // Kaynaksız (eski backend) hata: müşteri varsayılanı bağlantısı çıkmaz.
+    expect(screen.queryByTestId("approve-error-fix-link")).toBeNull();
   });
 });
