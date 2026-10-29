@@ -4,7 +4,8 @@ import { withSettingsPassword } from "@/lib/settings-password";
 import type { ApiResponse } from "@/types/api";
 import type {
   ApproveResult, DeliveryNoteDetail, DeliveryNoteLine, DeliveryNoteListQuery, DeliveryNoteListResponse,
-  HeaderPatch, IncomingDocumentSettings, LineInput, LinePatch, NoteMatchSuggestions, ReaderStatus, UnreviewedApproval,
+  HeaderPatch, IncomingDocumentSettings, LineInput, LinePatch, NoteMatchSuggestions, ReaderStatus, SenderTemplatePatch,
+  SenderTemplateView, UnreviewedApproval,
 } from "./types";
 
 const BASE = "/api/gelen-belge";
@@ -25,6 +26,21 @@ export async function getDeliveryNote(id: string): Promise<DeliveryNoteDetail> {
 export async function createManualNote(clientToken: string): Promise<DeliveryNoteDetail> {
   const body = { clientToken, sourceKind: "MANUAL" as const };
   return (await apiClient.post<ApiResponse<DeliveryNoteDetail>>(`${BASE}/irsaliyeler`, body)).data.data;
+}
+
+/** Yükleme başlığı: `clientToken` mantıksal deneme başına (çağıran `useAttemptToken`ten verir). */
+export async function createUploadNote(body: { clientToken: string; sourceKind: "MANUAL"; ownerCustomerId: string | null; senderDocNo: string | null }): Promise<DeliveryNoteDetail> {
+  return (await apiClient.post<ApiResponse<DeliveryNoteDetail>>(`${BASE}/irsaliyeler`, body)).data.data;
+}
+
+/** Tarama yükle (base64 + istemci sha256; sunucu tutmazsa 400 DOCUMENT_SCAN_HASH_MISMATCH). Aynı özet → 200 duplicate. */
+export async function uploadScan(body: { contentBase64: string; noteId: string; pageNo: number; sha256: string }): Promise<{ duplicate: boolean }> {
+  return (await apiClient.post<ApiResponse<{ duplicate: boolean }>>(`${BASE}/taramalar`, body)).data.data;
+}
+
+/** Yeniden okut (READ_FAILED → PENDING). PDF 400 DOCUMENT_SCAN_PDF_NOT_READABLE; servis yoksa 503. */
+export async function requeueScan(scanId: string): Promise<unknown> {
+  return (await apiClient.post<ApiResponse<unknown>>(`${BASE}/taramalar/${scanId}/oku`)).data.data;
 }
 
 export async function updateNoteHeader(id: string, patch: HeaderPatch): Promise<unknown> {
@@ -85,4 +101,14 @@ export function updateIncomingDocumentSettings(body: { defaultItemId?: string | 
   return withSettingsPassword((headers) =>
     apiClient.put<ApiResponse<IncomingDocumentSettings>>(`${BASE}/ayarlar`, body, { headers }).then((r) => r.data.data),
   );
+}
+
+/** Gönderen şablonları (E2, `gelen-belge:template`): motor şablonları + DB bağı; satırı olmayan şablon `id: null`. */
+export async function listSenderTemplates(): Promise<SenderTemplateView[]> {
+  return (await apiClient.get<ApiResponse<SenderTemplateView[]>>(`${BASE}/sablonlar`)).data.data;
+}
+
+/** Şablon bağını güncelle; yalnız verilen alanlar yazılır. Pasif cari 400; araya giren yazım 409. */
+export async function updateSenderTemplate(code: string, patch: SenderTemplatePatch): Promise<SenderTemplateView> {
+  return (await apiClient.patch<ApiResponse<SenderTemplateView>>(`${BASE}/sablonlar/${encodeURIComponent(code)}`, patch)).data.data;
 }

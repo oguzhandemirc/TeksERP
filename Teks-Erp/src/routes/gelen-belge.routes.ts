@@ -25,7 +25,8 @@ import { requireSettingsPassword } from "../middlewares/settings-password.middle
 import { getRollTabletContext } from "../services/roll-tablet.service";
 import { getDocumentScan, readDocumentScanContent, uploadDocumentScan } from "../services/gelen-belge-scan.service";
 import { suggestForNote } from "../services/gelen-belge-eslestirme.service";
-import { readerQueueCounts, requeueScanForReading } from "../services/gelen-belge-okuma.service";
+import { listSenderTemplates, updateSenderTemplate } from "../services/gelen-belge-sablon.service";
+import { assertScanReadable, readerQueueCounts, requeueScanForReading } from "../services/gelen-belge-okuma.service";
 import { readerJobStatus, requestImmediateReaderRun } from "../jobs/gelen-belge-okuma.job";
 import { getReaderUrl } from "../lib/gelen-belge/url";
 import { readerHealth } from "../lib/gelen-belge/okuma-istemcisi";
@@ -48,6 +49,11 @@ const wrap = (fn: Handler) => async (req: Request, res: Response, next: NextFunc
 const Id = z.uuid("Geçersiz kimlik");
 const optText = (max: number) => z.string().trim().max(max, `En çok ${max} karakter`).nullable().optional();
 const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Tarih YYYY-AA-GG olmalı");
+// Süzgeç günü takvimde VAR olmalı (2026-02-31 sessizce 3 Mart'a kaymaz → 400).
+const RangeDay = Day.refine((v) => {
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}, "Tarih takvimde yok");
 const Money = (label: string) => z.coerce.number().positive(`${label} sıfırdan büyük olmalı`).max(999_999, `${label} çok büyük`);
 
 const ScanBody = z.strictObject({
@@ -107,16 +113,19 @@ const ListQuery = z.object({
   ownerCustomerId: z.union([z.string(), z.array(z.string())]).optional(),
   senderCustomerId: z.union([z.string(), z.array(z.string())]).optional(),
   q: z.string().max(64).optional(),
+  // createdAt aralığı; gün-yalnız değer FABRİKA gününün başı/sonu (`resolveRangeStart/End`, src/constants/time.ts).
+  from: RangeDay.optional(),
+  to: RangeDay.optional(),
   cursor: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
-});
+}).refine((q) => !q.from || !q.to || q.from <= q.to, { message: "Başlangıç tarihi bitişten sonra olamaz", path: ["from"] });
 
 /**
  * @openapi
  * /api/gelen-belge/taramalar:
  *   post:
  *     tags: [Gelen belge]
- *     summary: Belge fotoğrafı/PDF yükle (base64; tür sihirli bayttan; aynı sha256 = aynı kayıt, 200)
+ *     summary: Belge fotoğrafı/PDF yükle (base64; tür sihirli bayttan; aynı sha256 = aynı kayıt, 200; PDF arşivdir — READ_FAILED doğar, okunmaz)
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       201: { description: "scan künyesi (bayt yok)" }
@@ -144,7 +153,8 @@ const ListQuery = z.object({
 router.post("/taramalar", requirePermission("gelen-belge:write"), wrap(async (req) => {
   const r = await uploadDocumentScan(ScanBody.parse(req.body), req.user!.userId);
   // Yeni fotoğraf → okuma işini dürt (servis/modül yoksa iş kendi ön koşulunda durur; burada 503 YOK — yükleme elle taslak için de geçerli).
-  if (!r.duplicate) requestImmediateReaderRun();
+  // PDF kuyruğa girmez (K6): dürtülecek iş yok.
+  if (!r.duplicate && r.scan.status === "PENDING") requestImmediateReaderRun();
   return { status: r.duplicate ? 200 : 201, data: r };
 }));
 router.get("/taramalar/:id", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await getDocumentScan(Id.parse(req.params.id)) })));
@@ -165,7 +175,7 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  * /api/gelen-belge/irsaliyeler:
  *   get:
  *     tags: [Gelen belge]
- *     summary: Taslaklar — liste + cursor + özet şeridi (durum/kaynak/sahip/gönderen/q süzgeci; tek where)
+ *     summary: Taslaklar — liste + cursor + özet şeridi (durum/kaynak/sahip/gönderen/q/from–to süzgeci; tek where)
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: "items, nextCursor, summary" }
@@ -249,6 +259,7 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
  *       202: { description: "Tarama künyesi (status, attempts)" }
+ *       400: { description: "DOCUMENT_SCAN_PDF_NOT_READABLE (PDF otomatik okunmaz — K6)" }
  *       409: { description: "DOCUMENT_SCAN_ALREADY_READ · DOCUMENT_SCAN_STATE_CHANGED" }
  *       503: { description: "OCR_SERVICE_UNAVAILABLE (okuma servisi bu kurulumda yok)" }
  * /api/gelen-belge/irsaliyeler/{id}/eslestirme:
@@ -285,6 +296,8 @@ router.get("/okuma/durum", requirePermission("gelen-belge:read"), wrap(async () 
 }));
 // Okut: PENDING ise dürtme; READ_FAILED ise yeniden kuyruğa (attempts sıfır). Servis yoksa 503 — fotoğraf durur, taslak elle.
 router.post("/taramalar/:id/oku", requirePermission("gelen-belge:write"), wrap(async (req) => {
+  // PDF (K6) servis olsa da okunmaz → 400, servis yokluğunun 503'ünden ÖNCE (cevap kuruluma göre değişmesin).
+  await assertScanReadable(Id.parse(req.params.id));
   if (!getReaderUrl().url) throw new AppError("Okuma servisi bu kurulumda yok; taslağı elle ya da Excel'den doldurun.", 503, true, { code: "OCR_SERVICE_UNAVAILABLE" });
   const scan = await requeueScanForReading(Id.parse(req.params.id), req.user!.userId);
   requestImmediateReaderRun();
@@ -359,6 +372,41 @@ router.delete("/irsaliyeler/:id/satirlar/:lineId", requirePermission("gelen-belg
  */
 router.post("/irsaliyeler/:id/onay", requirePermission("gelen-belge:approve"), wrap(async (req) => ({
   ...(await approveDeliveryNote(Id.parse(req.params.id), ApproveBody.parse(req.body ?? {}), req.user!.userId).then(({ warnings, ...data }) => ({ status: 200, data, warnings }))),
+})));
+
+// ── E2 gönderen şablonları (`gelen-belge:template`) ───────────────────────────
+const TemplateCode = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/, "Geçersiz şablon kodu");
+const TemplatePatch = z.strictObject({
+  isActive: z.boolean("Aktiflik evet/hayır olmalı").optional(),
+  senderCustomerId: Id.nullable().optional(),
+  defaultOwnerCustomerId: Id.nullable().optional(),
+}).refine((v) => Object.keys(v).length > 0, "Değiştirilecek alan yok");
+/**
+ * @openapi
+ * /api/gelen-belge/sablonlar:
+ *   get:
+ *     tags: [Gelen belge]
+ *     summary: Gönderen şablonları — dosyadaki motor şablonları + DB bağı (kod, sürüm, aktif, gönderen, varsayılan sahip, isabet); salt okunur
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "SenderTemplateView[] (satırı olmayan şablon id null)" }
+ *       403: { description: "MODULE_DISABLED ya da izin yok" }
+ * /api/gelen-belge/sablonlar/{code}:
+ *   patch:
+ *     tags: [Gelen belge]
+ *     summary: Şablon bağını güncelle (isActive, senderCustomerId, defaultOwnerCustomerId); satır yoksa doğar
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: code, required: true, schema: { type: string } }
+ *     responses:
+ *       200: { description: "SenderTemplateView" }
+ *       400: { description: "SENDER_TEMPLATE_CUSTOMER_INACTIVE · SENDER_TEMPLATE_CUSTOMER_NOT_FOUND · doğrulama" }
+ *       404: { description: "SENDER_TEMPLATE_NOT_FOUND (yedek sözlük dahil)" }
+ *       409: { description: "SENDER_TEMPLATE_CHANGED (araya başka yazım girdi)" }
+ */
+router.get("/sablonlar", requirePermission("gelen-belge:template"), wrap(async () => ({ status: 200, data: await listSenderTemplates() })));
+router.patch("/sablonlar/:code", requirePermission("gelen-belge:template"), wrap(async (req) => ({
+  status: 200, data: await updateSenderTemplate(TemplateCode.parse(req.params.code), TemplatePatch.parse(req.body), req.user!.userId),
 })));
 
 export default router;

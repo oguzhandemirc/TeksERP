@@ -72,6 +72,10 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   kursunBypassEnabled: A(true),
   kursunMeterCapture: A("IN_OUT"), // giriş + çıkış: iki okuma yolunu da işletir
   kursunSimulatedMeterEnabled: A(true),
+  kursunMeterVarianceThresholdM: A(2), // sapma yolunu işletir (eşik 2 m)
+  kursunMeterVarianceThresholdPct: A(1),
+  kursunMeterVarianceBasis: V("taban seçimi; ikisi de geçerli, sapma hesabı her ikisinde koşar"),
+  kursunMeterVarianceApproval: V("onay kipi; OFFICE panel ekranı (H4) gelene dek seçilemez, NONE işareti üretir"),
   tamburOverQuantityEnabled: A(true),
   tamburUndoFullSameDayOnly: A(true),
   tamburShortCutA1Enabled: A(true),

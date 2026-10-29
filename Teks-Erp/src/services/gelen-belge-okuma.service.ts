@@ -15,6 +15,8 @@ import { clip, draftFromExtraction, type DraftLine } from "../lib/gelen-belge/ta
 import { readerOcr, type ReaderResult } from "../lib/gelen-belge/okuma-istemcisi";
 import { AuditService } from "./audit.service";
 import { nextNoteNo, translateUnique } from "./gelen-belge-note.service";
+import { FALLBACK_TEMPLATE_CODE, bumpTemplateHit, ensureSenderTemplate } from "./gelen-belge-sablon.service";
+import { PDF_MIME } from "./gelen-belge-scan.service";
 
 export const READ_MAX_ATTEMPTS = 3;
 /** READING'de bu kadar kalan tarama (süreç düşmüş) yeniden PENDING sayılır. */
@@ -35,13 +37,14 @@ export async function claimNextScan(now: Date = new Date(), skipIds: readonly st
   const stale = new Date(now.getTime() - READING_STALE_MS);
   const cand = await prisma.documentScan.findFirst({
     // Aynı turda denenmiş tarama yeniden alınmaz (`skipIds`): 5xx'te üç deneme üç AYRI tura yayılır. (`notIn: []` yasak → koşullu.)
-    where: { OR: [{ status: "PENDING" }, { status: "READING", updatedAt: { lt: stale } }], ...(skipIds.length ? { id: { notIn: [...skipIds] } } : {}) },
+    // K6: PDF ASLA claim edilmez (yükleme READ_FAILED doğurur; D2 döneminden PENDING kalmış PDF'e karşı savunma).
+    where: { OR: [{ status: "PENDING" }, { status: "READING", updatedAt: { lt: stale } }], mimeType: { not: PDF_MIME }, ...(skipIds.length ? { id: { notIn: [...skipIds] } } : {}) },
     orderBy: { createdAt: "asc" },
     select: { id: true, status: true, updatedAt: true },
   });
   if (!cand) return { kind: "NONE" };
   const c = await prisma.documentScan.updateMany({
-    where: { id: cand.id, status: cand.status, updatedAt: cand.updatedAt },
+    where: { id: cand.id, status: cand.status, updatedAt: cand.updatedAt, mimeType: { not: PDF_MIME } },
     data: { status: "READING", attempts: { increment: 1 } },
   });
   return c.count === 1 ? { kind: "CLAIMED", id: cand.id } : { kind: "RACED" };
@@ -83,6 +86,13 @@ function lineRows(lines: DraftLine[], lineBase = 0, blockBase = 0) {
   }));
 }
 
+/** E2: eşleşen motor şablonunun DB satırı (yoksa idempotent doğar) taslağa bağlanır — gönderen önerisi buradan; isabet best-effort. */
+async function bindDraftTemplate(code: string | null, userId: string | undefined) {
+  const template = code ? await ensureSenderTemplate(code, userId) : null;
+  if (template) await bumpTemplateHit(template.id);
+  return { code, template };
+}
+
 /**
  * READING'deki taramayı sidecar'a okutur, motorla çıkarır, DRAFT'a yazar. Tarama bir taslağa bağlıysa
  * yalnız BOŞ alanlar dolar ve satırsız taslağa satırlar eklenir (operatörün yazdığı ezilmez); bağlı değilse yeni taslak.
@@ -97,15 +107,15 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
     return release(id, scan.attempts, `PROGRAM_HATASI:${(err as Error).name}`, { userId: scan.capturedById ?? undefined });
   }
   if (!r.ok) return release(id, scan.attempts, r.code, { permanent: r.kind === "HTTP" || r.kind === "INVALID", userId: scan.capturedById ?? undefined });
-  const doc = extractDocument(r.result, loadTemplates());
-  const draft = draftFromExtraction(doc);
+  const draft = draftFromExtraction(extractDocument(r.result, loadTemplates(), FALLBACK_TEMPLATE_CODE));
+  const { code: firstTemplate, template } = await bindDraftTemplate(draft.header.regions[0]?.templateId ?? null, scan.capturedById ?? undefined);
   const envelope = toJson({ ocr: r.result, regions: draft.header.regions });
   const scanData = { status: "READ" as const, ocrResult: envelope, ocrEngine: clip(r.engine, 32), ocrVersion: clip(r.version, 32), ocrDurationMs: r.durationMs };
   const userId = scan.capturedById ?? undefined;
   const { header } = draft;
   const headerCols = {
     ownerText: header.ownerText, senderDocNo: header.senderDocNo, senderDocDate: header.senderDocDate, customerBatchNo: header.customerBatchNo,
-    processText: header.processText, declaredTopCount: header.declaredTopCount, templateScore: header.templateScore === null ? null : new Prisma.Decimal(header.templateScore),
+    processText: header.processText, declaredTopCount: header.declaredTopCount, senderText: header.senderText, templateId: template?.id ?? null, templateScore: header.templateScore === null ? null : new Prisma.Decimal(header.templateScore),
   };
   const totalsDeclared = toJson(header.totalsDeclared);
   const warnings = toJson(header.warnings);
@@ -120,7 +130,7 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
         if (s0.count === 0) throw new Error("SCAN_LOST");
         return { noteId, lines: 0, filled: false };
       }
-      const note = await tx.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteId }, select: { ownerText: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, processText: true, declaredTopCount: true, totalsDeclared: true, warnings: true } });
+      const note = await tx.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteId }, select: { ownerText: true, senderText: true, templateId: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, processText: true, declaredTopCount: true, totalsDeclared: true, warnings: true } });
       // Çok sayfalı taslak: her sayfanın taraması satırlarını EKLER (blok no kaydırılır, uyarılar birikir);
       // elle girilmiş satır (ocrRaw yok) varsa OCR satır eklemez — panelin elle işi ezilmez/ikizlenmez.
       const manualLines = await tx.customerDeliveryNoteLine.count({ where: { noteId, ocrRaw: { equals: Prisma.DbNull } } });
@@ -130,6 +140,8 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
       const prevWarnings = Array.isArray(note.warnings) ? note.warnings : [];
       const patch: Prisma.CustomerDeliveryNoteUpdateInput = { warnings: toJson([...prevWarnings, ...header.warnings]) };
       if (!note.ownerText) patch.ownerText = headerCols.ownerText;
+      if (!note.senderText) patch.senderText = headerCols.senderText;
+      if (!note.templateId && headerCols.templateId) patch.template = { connect: { id: headerCols.templateId } };
       if (!note.senderDocNo) patch.senderDocNo = headerCols.senderDocNo;
       if (!note.senderDocDate) patch.senderDocDate = headerCols.senderDocDate;
       if (!note.customerBatchNo) patch.customerBatchNo = headerCols.customerBatchNo;
@@ -166,25 +178,34 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
   }, undefined, (err) => p2002TargetsCode(err, "noteNo"), "Gelen belge numarası")
     .catch((err) => (err instanceof Error && err.message === "SCAN_LOST" ? null : translateUnique(err)));
   if (!created) return "LOST";
-  await AuditService.log({ userId, action: "CREATE", tableName: NOTE_TABLE, recordId: created.id, newData: { noteNo: created.noteNo, status: "DRAFT", sourceKind: "OCR", scanId: id, sha256: scan.sha256, lineCount: draft.lines.length, blockCount: header.totalsDeclared.blocks.length, engine: scanData.ocrEngine, warnings: header.warnings.length } });
+  await AuditService.log({ userId, action: "CREATE", tableName: NOTE_TABLE, recordId: created.id, newData: { noteNo: created.noteNo, status: "DRAFT", sourceKind: "OCR", templateCode: firstTemplate, scanId: id, sha256: scan.sha256, lineCount: draft.lines.length, blockCount: header.totalsDeclared.blocks.length, engine: scanData.ocrEngine, warnings: header.warnings.length } });
   await AuditService.log({ userId, action: "UPDATE", tableName: SCAN_TABLE, recordId: id, oldData: { status: "READING" }, newData: { status: "READ", noteId: created.id, engine: scanData.ocrEngine, durationMs: r.durationMs } });
   return "READ";
 }
 
-/** Okuma durum özeti (durum ucu): kuyruk sayıları. */
+/** Okuma durum özeti (durum ucu): kuyruk sayıları — PDF okuma işine ait değildir, hiçbir sayaca girmez (K6). */
 export async function readerQueueCounts(): Promise<{ pending: number; reading: number; failed: number }> {
-  const rows = await prisma.documentScan.groupBy({ by: ["status"], _count: { _all: true }, where: { status: { in: ["PENDING", "READING", "READ_FAILED"] } } });
+  const rows = await prisma.documentScan.groupBy({ by: ["status"], _count: { _all: true }, where: { status: { in: ["PENDING", "READING", "READ_FAILED"] }, mimeType: { not: PDF_MIME } } });
   const n = (s: string) => rows.find((r) => r.status === s)?._count._all ?? 0;
   return { pending: n("PENDING"), reading: n("READING"), failed: n("READ_FAILED") };
 }
 
-/** Okut ucu: READ_FAILED → PENDING (deneme sayacı sıfır; atomik claim); PENDING/READING ise dokunmaz; READ ise 409. */
-export async function requeueScanForReading(id: string, userId: string) {
-  const scan = await prisma.documentScan.findUnique({ where: { id }, select: { id: true, status: true, noteId: true } });
+/** Okutulabilir mi: yok → 404; PDF → 400 (K6: otomatik okunmaz, satırlar elle/Excel). */
+export async function assertScanReadable(id: string): Promise<{ id: string; status: string; noteId: string | null }> {
+  const scan = await prisma.documentScan.findUnique({ where: { id }, select: { id: true, status: true, noteId: true, mimeType: true } });
   if (!scan) throw AppError.notFound("Tarama bulunamadı.", { code: "DOCUMENT_SCAN_NOT_FOUND" });
+  if (scan.mimeType === PDF_MIME) {
+    throw AppError.badRequest("PDF belge otomatik okunmaz; satırları elle ya da Excel'le girin.", { code: "DOCUMENT_SCAN_PDF_NOT_READABLE" });
+  }
+  return scan;
+}
+
+/** Okut ucu: READ_FAILED → PENDING (deneme sayacı sıfır; atomik claim); PENDING/READING ise dokunmaz; READ ise 409; PDF 400. */
+export async function requeueScanForReading(id: string, userId: string) {
+  const scan = await assertScanReadable(id);
   if (scan.status === "READ") throw AppError.conflict("Tarama zaten okunmuş; taslağı düzenleyin.", { code: "DOCUMENT_SCAN_ALREADY_READ" });
   if (scan.status === "READ_FAILED") {
-    const c = await prisma.documentScan.updateMany({ where: { id, status: "READ_FAILED" }, data: { status: "PENDING", attempts: 0 } });
+    const c = await prisma.documentScan.updateMany({ where: { id, status: "READ_FAILED", mimeType: { not: PDF_MIME } }, data: { status: "PENDING", attempts: 0 } });
     if (c.count === 0) throw AppError.conflict("Tarama bu arada başka durumda; yenileyin.", { code: "DOCUMENT_SCAN_STATE_CHANGED" });
     await AuditService.log({ userId, action: "UPDATE", tableName: SCAN_TABLE, recordId: id, oldData: { status: "READ_FAILED" }, newData: { status: "PENDING", attempts: 0 } });
   }

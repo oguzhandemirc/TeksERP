@@ -23,7 +23,9 @@ export type KursunSource = "TABLET" | "KAGIT";
 export type KursunScope =
   | { workOrderId: string }
   | { batchId: string }
-  | { from: Date; to: Date; workOrderId?: string };
+  | { from: Date; to: Date; workOrderId?: string }
+  /** Hizmet fiyatı çözücüsü (H6): sevkteki/faturalanacak topların uygulamaları. */
+  | { rollIds: string[] };
 
 export const UNKNOWN_GRAMAJ_LABEL = "Gramaj bilinmiyor";
 
@@ -67,6 +69,7 @@ const VALUE_SELECT = { select: { name: true, sortOrder: true, propertyId: true }
 function opWhere(scope: KursunScope): Prisma.RollOperationWhereInput {
   const base = { operationType: RollOperationType.KURSUN_APPLIED, ...ACTIVE_OPERATION, ...OWN_OPERATION };
   if ("batchId" in scope) return { ...base, roll: { batchId: scope.batchId } };
+  if ("rollIds" in scope) return { ...base, rollId: { in: scope.rollIds } };
   if ("from" in scope) {
     return { ...base, createdAt: { gte: scope.from, lte: scope.to }, ...(scope.workOrderId ? { step: { workOrderId: scope.workOrderId } } : {}) };
   }
@@ -78,6 +81,14 @@ async function assignmentWhere(scope: KursunScope): Promise<Prisma.KursunBypassA
   if ("batchId" in scope) {
     const b = await prisma.batch.findUnique({ where: { id: scope.batchId }, select: { workOrderId: true } });
     return { ...base, workOrderId: b?.workOrderId ?? "00000000-0000-0000-0000-000000000000" };
+  }
+  if ("rollIds" in scope) {
+    // Kâğıt satırı adım düzeyindedir: topların bypass işaretli hareketlerinin adımları.
+    const steps = scope.rollIds.length === 0 ? [] : await prisma.rollMovement.findMany({
+      where: { ...ACTIVE_MOVEMENT, rollId: { in: scope.rollIds }, notes: { startsWith: KURSUN_BYPASS_MARKER_PREFIX } },
+      select: { workOrderStepId: true }, distinct: ["workOrderStepId"],
+    });
+    return { ...base, workOrderStepId: { in: steps.map((m) => m.workOrderStepId) } };
   }
   if ("from" in scope) {
     return { ...base, completedAt: { gte: scope.from, lte: scope.to }, ...(scope.workOrderId ? { workOrderId: scope.workOrderId } : {}) };
@@ -139,6 +150,7 @@ async function listKagit(scope: KursunScope) {
       workOrderStepId: { in: assignments.map((a) => a.workOrderStepId) },
       notes: { startsWith: KURSUN_BYPASS_MARKER_PREFIX },
       ...("batchId" in scope ? { roll: { batchId: scope.batchId } } : {}),
+      ...("rollIds" in scope ? { rollId: { in: scope.rollIds } } : {}),
     },
     select: { rollId: true, workOrderStepId: true, exitedAt: true, roll: ROLL_SELECT },
     orderBy: { enteredAt: "asc" },

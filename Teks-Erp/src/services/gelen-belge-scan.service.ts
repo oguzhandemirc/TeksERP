@@ -15,6 +15,8 @@ import { AuditService } from "./audit.service";
 import { detectCertificateMime } from "./certificate-file.service";
 
 export const DOCUMENT_SCAN_MAX_BYTES = 5 * 1024 * 1024;
+/** PDF arşivdir (K6): okuma kuyruğuna girmez, sidecar'a gitmez — claim süzgeci ve okut ucu bunu okur. */
+export const PDF_MIME = "application/pdf";
 const AUDIT_TABLE = "DOCUMENT_SCAN";
 
 /** Künye — `content` ASLA bu seçimde değildir (liste/ayrıntı/audit hepsi buradan okur). */
@@ -111,6 +113,8 @@ export async function uploadDocumentScan(input: DocumentScanInput, userId: strin
     sizeBytes: content.length,
     sha256,
     capturedById: userId,
+    // K6: PDF doğrudan READ_FAILED (deneme 0) — PENDING'de kalsa "kuyrukta" sayılır ve hiç bitmezdi; enum değişmez.
+    ...(kind.mime === PDF_MIME ? { status: "READ_FAILED" as const } : {}),
   };
   let scan;
   try {

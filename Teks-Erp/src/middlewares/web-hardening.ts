@@ -314,6 +314,8 @@ const LOGIN_PATHS = new Set([
   "/api/auth/login-card",
   "/api/auth/login-quick-pin",
 ]);
+/** Kısa kimlik doğrulayan yazma uçları — giriş kovasında (PIN tahmini hız sınırına takılır). H2 süpervizör PIN'i. */
+const CREDENTIAL_WRITE_PATTERNS: readonly RegExp[] = [/^\/api\/kursun-qc\/meter-readings\/[^/]+\/pin-ack$/];
 /** Kimliksiz tek kullanımlık belirteç tüketimi (TOTP kurulumu) — yalnız yazma metodu giriş kovasında. */
 const CREDENTIAL_WRITE_PATHS = new Set(["/api/auth/totp/enroll"]);
 /** Lisans yazma uçları (etkinleştir/yokla/yanıt…): dışarı konuşan ya da sır taşıyan işlemler — giriş kovasında. */
@@ -345,6 +347,7 @@ export function classifyRateLimitRequest(method: string, originalUrl: string): R
   if (LOGIN_PATHS.has(path)) return "login";
   if (READ_METHODS.has(method.toUpperCase())) return null;
   if (CREDENTIAL_WRITE_PATHS.has(path) || path.startsWith(LICENSE_WRITE_PREFIX)) return "login";
+  if (CREDENTIAL_WRITE_PATTERNS.some((re) => re.test(path))) return "login";
   return path === "/api" || path.startsWith("/api/") ? "write" : null;
 }
 

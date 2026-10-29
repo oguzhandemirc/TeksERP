@@ -4,6 +4,7 @@
 // Mükerrer motoruyla TEK kaynak: katlama `foldNameForCompare`/`foldColorNameForCompare`, benzerlik
 // `firmNameSimilarity`/`productNameSimilarity` (`utils/string-similarity.ts`). Önce `DeliveryNoteAlias`
 // (gönderene özel satır genel satırı ezer). Eşikler: ≥ 0,90 ÖNERİ · 0,80–0,90 LİSTE · altı boş.
+// Şablon (E2): aktif şablonun gönderen carisi gönderen önerisinde EN ÖNCE; varsayılan sahibi yalnız sahip metni öneriye varmazsa.
 // Burası YAZMAZ: alias yalnız D4 onayında (`gelen-belge:approve`) doğar; "sahip = gönderen" varsayımı YOK.
 // =============================================================================
 import type { DeliveryNoteAliasScope } from "@prisma/client";
@@ -28,7 +29,7 @@ export interface MatchSuggestion {
   readonly rawText: string | null;
   /** Alias isabeti ya da ≥ 0,90 tek aday; yoksa null. */
   readonly suggested: MatchCandidate | null;
-  readonly source: "ALIAS" | "SIMILARITY" | "NONE";
+  readonly source: "TEMPLATE" | "ALIAS" | "SIMILARITY" | "NONE";
   /** 0,80–0,90 (ve önerinin altındaki ≥0,80) adaylar, puana göre azalan. */
   readonly list: readonly MatchCandidate[];
 }
@@ -114,6 +115,17 @@ export async function suggestColor(raw: string | null | undefined, senderCustome
   return build(text, rank(text, rows, "COLOR"), alias ? { ...alias, score: 1 } : null);
 }
 
+/**
+ * Şablon önerisi (E2): taslağın şablonu AKTİF ve alanı doluysa o cari EN YÜKSEK öncelikle önerilir (kaynak TEMPLATE);
+ * pasif şablon ya da pasif cari öneri vermez. Benzerlik listesi korunur (önerilen hariç).
+ */
+function withTemplate(base: MatchSuggestion, customerId: string | null, rows: Named[]): MatchSuggestion {
+  const hit = customerId ? rows.find((r) => r.id === customerId) : undefined;
+  if (!hit) return base;
+  const list = [...(base.suggested ? [base.suggested] : []), ...base.list].filter((c) => c.id !== hit.id);
+  return { rawText: base.rawText, suggested: { ...hit, score: 1 }, source: "TEMPLATE", list };
+}
+
 export interface NoteMatchSuggestions {
   readonly noteId: string;
   readonly sender: MatchSuggestion;
@@ -125,13 +137,16 @@ export interface NoteMatchSuggestions {
 export async function suggestForNote(noteId: string): Promise<NoteMatchSuggestions> {
   const note = await prisma.customerDeliveryNote.findUnique({
     where: { id: noteId },
-    select: { id: true, senderCustomerId: true, senderText: true, ownerText: true, lines: { select: { id: true, lineNo: true, itemText: true, colorText: true }, orderBy: { lineNo: "asc" } } },
+    select: { id: true, senderCustomerId: true, senderText: true, ownerText: true, template: { select: { isActive: true, senderCustomerId: true, defaultOwnerCustomerId: true } }, lines: { select: { id: true, lineNo: true, itemText: true, colorText: true }, orderBy: { lineNo: "asc" } } },
   });
   if (!note) throw AppError.notFound("İrsaliye bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
   const customers = await loadCustomers();
-  const sender = await suggestCustomer(note.senderText, null, customers);
+  const tpl = note.template?.isActive ? note.template : null;
+  const sender = withTemplate(await suggestCustomer(note.senderText, null, customers), tpl?.senderCustomerId ?? null, customers);
   const senderId = note.senderCustomerId ?? sender.suggested?.id ?? null;
-  const owner = await suggestCustomer(note.ownerText, senderId, customers);
+  const ownerByText = await suggestCustomer(note.ownerText, senderId, customers);
+  // Şablonun varsayılan sahibi YALNIZ belgedeki sahip metni bir öneriye varmadığında devreye girer ("sahip = gönderen" varsayımı yok).
+  const owner = ownerByText.suggested ? ownerByText : withTemplate(ownerByText, tpl?.defaultOwnerCustomerId ?? null, customers);
   const hasItem = note.lines.some((l) => l.itemText?.trim());
   const hasColor = note.lines.some((l) => l.colorText?.trim());
   const items = hasItem ? await loadItems() : [];

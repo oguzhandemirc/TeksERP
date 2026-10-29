@@ -13,6 +13,8 @@
 //   §7 eşleme: "GÜLEÇSOY TEKSTİL" ↔ "Güleçsoy Tekstil San." ≥ 0,90 öneri · ilgisiz → boş · alias önce (ALIAS) · /eslestirme ucu
 //   §6d bayat READING (10 dk+) yeniden alınır · §7f /eslestirme yok id → 404
 //   §8 bağlı taslak: operatörün yazdığı başlık/satır EZİLMEZ, yalnız boş alanlar dolar; taslak DRAFT değilse tarama yine READ'e kapanır
+//   §10 K6 PDF: yükleme READ_FAILED (deneme 0) doğar · eski PENDING PDF bile claim EDİLMEZ · sidecar'a 0 PDF isteği ·
+//       okut → 400 DOCUMENT_SCAN_PDF_NOT_READABLE (servis yokken de 503'ten önce) · kuyruk sayaçlarına girmez
 //   §9 İSTEĞE BAĞLI (OKUMA_GERCEK_URL=http://127.0.0.1:8765): GERÇEK okuma servisi (okuma/, D6) — sağlık + sentetik PNG → READ +
 //      Zod geçer + taslak · bozuk JPEG → servis 400 → KALICI READ_FAILED. Değişken yoksa atlanır (varsayılan sahte sunucu).
 // Emsal: scripts/test_gelen_belge_taslak.ts (app.listen(0) + ensureTestAdmin + ayar()).
@@ -31,7 +33,9 @@ import { __clearPlainHttpServiceHostsForTests, allowPlainHttpServiceHost, isEgre
 import { resolveReaderUrl, setReaderUrlForTests } from "../src/lib/gelen-belge/url";
 import { __resetDocumentReaderForTests, runReaderOnce } from "../src/jobs/gelen-belge-okuma.job";
 import { claimNextScan } from "../src/services/gelen-belge-okuma.service";
-import { aliasKey, suggestCustomer } from "../src/services/gelen-belge-eslestirme.service";
+import { aliasKey, suggestCustomer, suggestForNote } from "../src/services/gelen-belge-eslestirme.service";
+import { FALLBACK_TEMPLATE_CODE, ensureSenderTemplate } from "../src/services/gelen-belge-sablon.service";
+import bcrypt from "bcryptjs";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -58,7 +62,7 @@ async function ayar(key: string, v: boolean): Promise<void> {
 }
 
 // ── Sahte sidecar: JSON {imageBase64} içindeki "FIX:NNNN" damgasına göre altın fikstürü döner ─────────────────
-const fake = { mode: "ok" as "ok" | "500" | "400" | "invalid", hits: 0, delayMs: 0 };
+const fake = { mode: "ok" as "ok" | "500" | "400" | "invalid", hits: 0, delayMs: 0, pdfHits: 0 };
 function startFakeSidecar(): Promise<{ server: Server; url: string }> {
   const server = http.createServer((req, res) => {
     if (req.method === "GET" && req.url === "/health") {
@@ -71,6 +75,10 @@ function startFakeSidecar(): Promise<{ server: Server; url: string }> {
     req.on("data", (c: Buffer) => chunks.push(c));
     req.on("end", () => {
       fake.hits++;
+      try {
+        const sent = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { imageBase64?: string };
+        if (Buffer.from(sent.imageBase64 ?? "", "base64").subarray(0, 4).toString("latin1") === "%PDF") fake.pdfHits++;
+      } catch { /* gövde JSON değil — sayılmaz */ }
       setTimeout(() => {
         if (fake.mode === "500") { res.writeHead(500, { "content-type": "application/json" }); res.end(JSON.stringify({ detail: "OCR hatası (sahte)" })); return; }
         if (fake.mode === "400") { res.writeHead(400, { "content-type": "application/json" }); res.end(JSON.stringify({ detail: "bozuk görüntü (sahte)" })); return; }
@@ -112,6 +120,9 @@ async function main(): Promise<void> {
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const sidecar = await startFakeSidecar();
   const rollsBefore = await prisma.roll.count();
+  // E2: şablon satırları koşum boyunca değişir → önceki hâl birebir geri yüklenir, bu koşumun doğurduğu satır silinir.
+  const tplPrior = await prisma.senderTemplate.findMany();
+  const tplRestore: typeof tplPrior = [];
   try {
     await ayar(SETTING_KEYS.EMANET_ENABLED, true);
     await ayar(SETTING_KEYS.GELEN_BELGE_ENABLED, true);
@@ -126,6 +137,21 @@ async function main(): Promise<void> {
     };
     const tk = await login(admin.username, admin.password);
     check("admin login", tk.length > 0);
+    const callAs = async (token: string, method: string, path: string, body?: unknown): Promise<Resp> => {
+      const r = await fetch(`${url}${path}`, { method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: body === undefined ? undefined : JSON.stringify(body) });
+      const j = (await r.json().catch(() => ({}))) as { data?: Resp["data"]; details?: { code?: string } };
+      return { status: r.status, code: j.details?.code, data: j.data };
+    };
+    const parola = kosumaOzguParola();
+    const mkUser = async (suffix: string, perms: string[]): Promise<string> => {
+      const ps = await prisma.permission.findMany({ where: { code: { in: perms } }, select: { id: true } });
+      const u = await prisma.user.create({
+        data: { username: `${TAG}-${suffix}`.toLowerCase(), passwordHash: await bcrypt.hash(parola, 10), fullName: `${TAG} ${suffix}`, isActive: true, permissions: { create: ps.map((p) => ({ permissionId: p.id, grantedById: admin.id })) } },
+        select: { id: true, username: true },
+      });
+      made.users.push(u.id);
+      return login(u.username, parola);
+    };
     const up = async (no: string, extra: Record<string, unknown> = {}, salt = ""): Promise<string> => {
       const r = await call("POST", "/api/gelen-belge/taramalar", { contentBase64: jpeg(no, salt).toString("base64"), ...extra });
       const id = (r.data?.scan as { id: string } | undefined)?.id ?? "";
@@ -301,6 +327,112 @@ async function main(): Promise<void> {
         && w8c.some((w) => w.startsWith("DECLARED_TOP_COUNT_DIFF")) && w8c.some((w) => w.startsWith("MULTI_REGION")) && tb8c.includes(1) && tb8c.includes(2) && new Set(tb8c).size === tb8c.length,
       JSON.stringify({ l: n8c.lines.length, b: [...new Set(n8c.lines.map((l) => l.blockNo))], w: w8c, tb: tb8c }));
 
+    // ── §10 K6 PDF: arşiv — kuyruğa girmez, sidecar'a gitmez, okut 400 ───────
+    fake.mode = "ok";
+    for (let i = 0; i < 6 && (await runReaderOnce()).outcome !== "BOS"; i++) { /* önceki §'lerin kuyruğu boşalsın */ }
+    const q10a = await call("GET", "/api/gelen-belge/okuma/durum");
+    const pdfDoc = (salt: string) => Buffer.from(`%PDF-1.4\n% ${TAG} ${salt}\n%%EOF\n`, "latin1");
+    const up10 = await call("POST", "/api/gelen-belge/taramalar", { contentBase64: pdfDoc("yeni").toString("base64") });
+    const pdfNew = (up10.data?.scan as { id: string } | undefined)?.id ?? "";
+    if (pdfNew) made.scans.push(pdfNew);
+    const p10 = pdfNew ? await scan(pdfNew) : null;
+    check("§10a PDF yükleme → 201, READ_FAILED, deneme 0 (kuyruğa girmez)", up10.status === 201 && p10?.status === "READ_FAILED" && p10.attempts === 0, `${up10.status} ${p10?.status}/${p10?.attempts}`);
+    // D2 döneminde yüklenmiş (PENDING kalmış) PDF'i taklit et: savunma claim WHERE'inde ölçülür.
+    const legacy = await call("POST", "/api/gelen-belge/taramalar", { contentBase64: pdfDoc("eski").toString("base64") });
+    const pdfOld = (legacy.data?.scan as { id: string } | undefined)?.id ?? "";
+    if (pdfOld) made.scans.push(pdfOld);
+    await prisma.documentScan.update({ where: { id: pdfOld }, data: { status: "PENDING" } });
+    const pdfHits0 = fake.pdfHits;
+    const r10 = await runReaderOnce();
+    const c10 = await claimNextScan();
+    const o10 = await scan(pdfOld);
+    check("§10b eski PENDING PDF claim EDİLMEZ (tur BOS, claimNextScan NONE, PENDING/deneme 0)", r10.outcome === "BOS" && c10.kind === "NONE" && o10.status === "PENDING" && o10.attempts === 0, `${r10.outcome} ${c10.kind} ${o10.status}/${o10.attempts}`);
+    check("§10c sidecar'a 0 PDF isteği", fake.pdfHits === pdfHits0 && fake.pdfHits === 0, String(fake.pdfHits));
+    const ok10a = await call("POST", `/api/gelen-belge/taramalar/${pdfNew}/oku`);
+    const ok10b = await call("POST", `/api/gelen-belge/taramalar/${pdfOld}/oku`);
+    check("§10d PDF okut → 400 DOCUMENT_SCAN_PDF_NOT_READABLE (READ_FAILED ve PENDING), durum değişmez", ok10a.status === 400 && ok10a.code === "DOCUMENT_SCAN_PDF_NOT_READABLE" && ok10b.status === 400 && ok10b.code === "DOCUMENT_SCAN_PDF_NOT_READABLE" && (await scan(pdfNew)).status === "READ_FAILED", `${ok10a.status} ${ok10a.code} · ${ok10b.status} ${ok10b.code}`);
+    setReaderUrlForTests(null);
+    const ok10c = await call("POST", `/api/gelen-belge/taramalar/${pdfNew}/oku`);
+    setReaderUrlForTests(sidecar.url);
+    check("§10e servis yokken de PDF okut → 400 (503'ten önce)", ok10c.status === 400 && ok10c.code === "DOCUMENT_SCAN_PDF_NOT_READABLE", `${ok10c.status} ${ok10c.code}`);
+    const q10b = await call("GET", "/api/gelen-belge/okuma/durum");
+    const qc = (d: Resp) => JSON.stringify([d.data?.pending, d.data?.reading, d.data?.failed]);
+    check("§10f PDF kuyruk sayaçlarına girmez (pending/reading/failed aynı)", qc(q10a) === qc(q10b), `${qc(q10a)} → ${qc(q10b)}`);
+
+    // ── §11 şablon bağı (E2): taslak → SenderTemplate (code) ───────────────
+    const n45t = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: all[0]!.noteId! }, select: { templateId: true, template: { select: { code: true, hitCount: true } } } });
+    check("§11a 0245 → note.templateId dolu, şablon kodu ceki-listesi-a", !!n45t.templateId && n45t.template?.code === "ceki-listesi-a", JSON.stringify(n45t));
+    const n43t = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: all[3]!.noteId! }, select: { template: { select: { code: true } } } });
+    check("§11b 0243 → kesim-takip-formu (her belge kendi şablonuna)", n43t.template?.code === "kesim-takip-formu", JSON.stringify(n43t));
+    const s11 = await up("0245", {}, "ikinci-okuma");
+    await runReaderOnce();
+    const p11 = await scan(s11);
+    if (p11.noteId) made.notes.push(p11.noteId);
+    const n11 = p11.noteId ? await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: p11.noteId }, select: { templateId: true } }) : null;
+    const hit11 = await prisma.senderTemplate.findUniqueOrThrow({ where: { code: "ceki-listesi-a" }, select: { hitCount: true } });
+    check("§11c aynı şablonla ikinci okuma AYNI SenderTemplate satırı + isabet sayacı arttı", n11?.templateId === n45t.templateId && hit11.hitCount > (n45t.template?.hitCount ?? 0) && (await prisma.senderTemplate.count({ where: { code: "ceki-listesi-a" } })) === 1, `${n11?.templateId} hit ${n45t.template?.hitCount}→${hit11.hitCount}`);
+    check("§11d GENEL yedek sözlük bağlanmaz (ensure → null, satır yok)", (await ensureSenderTemplate(FALLBACK_TEMPLATE_CODE)) === null && (await prisma.senderTemplate.count({ where: { code: FALLBACK_TEMPLATE_CODE } })) === 0);
+    // §11e paralel: satırı olmayan kod için eşzamanlı dört ensure → TEK satır (P2002 → yeniden oku)
+    const PAR = "urun-sevk-fisi";
+    const parPrior = await prisma.senderTemplate.findUnique({ where: { code: PAR } });
+    const parRefs = parPrior ? await prisma.customerDeliveryNote.count({ where: { templateId: parPrior.id } }) : 0;
+    if (parPrior && parRefs > 0) {
+      console.log(`⏭️  §11e atlandı — '${PAR}' satırı başka taslaklarca kullanılıyor (${parRefs}); ortam verisi silinmez`);
+    } else {
+      if (parPrior) { tplRestore.push(parPrior); await prisma.senderTemplate.delete({ where: { id: parPrior.id } }); }
+      const par = await Promise.allSettled([1, 2, 3, 4].map(() => ensureSenderTemplate(PAR)));
+      const ids = new Set(par.map((p) => (p.status === "fulfilled" ? p.value?.id : `HATA:${(p.reason as Error).message.slice(0, 60)}`)));
+      check("§11e eşzamanlı 4 ensure → hepsi başarılı, TEK satır, aynı id", par.every((p) => p.status === "fulfilled") && ids.size === 1 && (await prisma.senderTemplate.count({ where: { code: PAR } })) === 1, JSON.stringify([...ids]));
+    }
+
+    // ── §12 eşleme: şablon önceliği ───────────────────────────────────────
+    const mavi = (await prisma.customer.findFirstOrThrow({ where: { id: { in: made.customers }, name: "Mavi Boya Apre Ltd." }, select: { id: true } })).id;
+    const pasifC = await mkC("Pasif Gönderen Örme");
+    await prisma.customer.update({ where: { id: pasifC }, data: { isActive: false } });
+    const n45id = all[0]!.noteId!;
+    const t1 = await call("PATCH", "/api/gelen-belge/sablonlar/ceki-listesi-a", { senderCustomerId: gul, isActive: true });
+    const g1 = await suggestForNote(n45id);
+    check("§12a şablonun gönderen carisi → gönderen önerisi o cari, kaynak TEMPLATE", t1.status === 200 && g1.sender.suggested?.id === gul && g1.sender.source === "TEMPLATE", `${t1.status} ${t1.code} ${JSON.stringify(g1.sender)}`);
+    await call("PATCH", "/api/gelen-belge/sablonlar/ceki-listesi-a", { defaultOwnerCustomerId: mavi });
+    const g2 = await suggestForNote(n45id);
+    check("§12b sahip metni eşleşiyorsa ('ÖRNEK TEKSTİL A') o kazanır, varsayılan sahip DEĞİL", g2.owner.suggested?.id === ornek && g2.owner.source !== "TEMPLATE", JSON.stringify(g2.owner.suggested));
+    await prisma.customerDeliveryNote.update({ where: { id: n45id }, data: { ownerText: "ZZQX OKUNAMAYAN" } });
+    const g3 = await suggestForNote(n45id);
+    check("§12c sahip metni eşleşmeyince şablonun varsayılan sahibi önerilir (TEMPLATE)", g3.owner.suggested?.id === mavi && g3.owner.source === "TEMPLATE", JSON.stringify(g3.owner));
+    await call("PATCH", "/api/gelen-belge/sablonlar/ceki-listesi-a", { isActive: false });
+    const g4 = await suggestForNote(n45id);
+    check("§12d PASİF şablon öneri vermez (gönderen de sahip de)", g4.sender.source !== "TEMPLATE" && g4.owner.source !== "TEMPLATE" && g4.sender.suggested?.id !== gul && g4.owner.suggested === null, JSON.stringify([g4.sender.source, g4.owner.source]));
+    await prisma.customerDeliveryNote.update({ where: { id: n45id }, data: { ownerText: "ÖRNEK TEKSTİL A" } });
+
+    // ── §13 yönetim uçları ────────────────────────────────────────────────
+    const l13 = await call("GET", "/api/gelen-belge/sablonlar");
+    const rows13 = (l13.data as unknown as Array<{ code: string; id: string | null; isActive: boolean; hitCount: number }>) ?? [];
+    check("§13a liste: 5 motor şablonu (GENEL yok), DB'li satır isActive/hitCount taşır", l13.status === 200 && rows13.filter((r) => r.code !== FALLBACK_TEMPLATE_CODE).length >= 5 && !rows13.some((r) => r.code === FALLBACK_TEMPLATE_CODE) && rows13.some((r) => r.code === "ceki-listesi-a" && r.id && r.isActive === false && r.hitCount >= 2), JSON.stringify(rows13.map((r) => [r.code, !!r.id, r.isActive])));
+    const tplId = (await prisma.senderTemplate.findUniqueOrThrow({ where: { code: "ceki-listesi-a" }, select: { id: true } })).id;
+    const au0 = await prisma.systemLog.count({ where: { tableName: "SENDER_TEMPLATE", recordId: tplId, action: "UPDATE" } });
+    const p13 = await call("PATCH", "/api/gelen-belge/sablonlar/ceki-listesi-a", { isActive: true });
+    const au1 = await prisma.systemLog.count({ where: { tableName: "SENDER_TEMPLATE", recordId: tplId, action: "UPDATE" } });
+    check("§13b güncelleme 200 + audit TAM 1 satır", p13.status === 200 && au1 - au0 === 1, `${p13.status} audit +${au1 - au0}`);
+    const p13c = await call("PATCH", "/api/gelen-belge/sablonlar/ceki-listesi-a", { senderCustomerId: pasifC });
+    check("§13c pasif cari → 400 SENDER_TEMPLATE_CUSTOMER_INACTIVE", p13c.status === 400 && p13c.code === "SENDER_TEMPLATE_CUSTOMER_INACTIVE", `${p13c.status} ${p13c.code}`);
+    const p13d = await call("PATCH", `/api/gelen-belge/sablonlar/${FALLBACK_TEMPLATE_CODE}`, { isActive: false });
+    const p13d2 = await call("PATCH", "/api/gelen-belge/sablonlar/yok-boyle-sablon", { isActive: false });
+    check("§13d GENEL / bilinmeyen kod → 404 SENDER_TEMPLATE_NOT_FOUND", p13d.status === 404 && p13d.code === "SENDER_TEMPLATE_NOT_FOUND" && p13d2.status === 404, `${p13d.status} ${p13d2.status}`);
+    const p13e = await call("PATCH", "/api/gelen-belge/sablonlar/ceki-listesi-a", {});
+    check("§13e boş gövde → 400", p13e.status === 400, String(p13e.status));
+    const readerTk = await mkUser("okur", ["gelen-belge:read", "gelen-belge:write"]);
+    const f1 = await callAs(readerTk, "GET", "/api/gelen-belge/sablonlar");
+    const f2 = await callAs(readerTk, "PATCH", "/api/gelen-belge/sablonlar/ceki-listesi-a", { isActive: false });
+    check("§13f gelen-belge:template izni yok → liste 403, güncelleme 403", f1.status === 403 && f2.status === 403, `${f1.status} ${f2.status}`);
+    await ayar(SETTING_KEYS.GELEN_BELGE_ENABLED, false);
+    const m1 = await call("GET", "/api/gelen-belge/sablonlar");
+    const m2 = await call("PATCH", "/api/gelen-belge/sablonlar/ceki-listesi-a", { isActive: false });
+    await ayar(SETTING_KEYS.GELEN_BELGE_ENABLED, true);
+    check("§13g modül kapalı → 403 MODULE_DISABLED (liste + güncelleme)", m1.status === 403 && m1.code === "MODULE_DISABLED" && m2.status === 403 && m2.code === "MODULE_DISABLED", `${m1.status} ${m1.code} ${m2.status}`);
+    const before13h = await prisma.senderTemplate.count();
+    const l13h = await call("GET", "/api/gelen-belge/sablonlar");
+    check("§13h GET gizli yazım yapmaz (satır sayısı değişmedi)", l13h.status === 200 && (await prisma.senderTemplate.count()) === before13h);
+
     // ── §9 İSTEĞE BAĞLI: gerçek okuma servisi (okuma/) ─────────────────────
     const gercek = process.env.OKUMA_GERCEK_URL?.trim();
     if (!gercek) {
@@ -341,7 +473,21 @@ async function main(): Promise<void> {
     await prisma.documentScan.updateMany({ where: { id: { in: made.scans } }, data: { noteId: null } });
     await prisma.customerDeliveryNote.deleteMany({ where: { id: { in: made.notes } } });
     await prisma.documentScan.deleteMany({ where: { id: { in: made.scans } } });
+    const priorCodes = new Set(tplPrior.map((t) => t.code));
+    for (const t of tplPrior) {
+      const data = { isActive: t.isActive, senderCustomerId: t.senderCustomerId, defaultOwnerCustomerId: t.defaultOwnerCustomerId, hitCount: t.hitCount };
+      await prisma.senderTemplate.updateMany({ where: { id: t.id }, data });
+    }
+    const born = await prisma.senderTemplate.findMany({ where: { code: { notIn: [...priorCodes, "__yok__"] } }, select: { id: true } });
+    for (const b of born) await prisma.senderTemplate.delete({ where: { id: b.id } }).catch(() => undefined);
+    for (const t of tplRestore) {
+      await prisma.senderTemplate.deleteMany({ where: { code: t.code, id: { not: t.id } } }).catch(() => undefined);
+      await prisma.senderTemplate.create({ data: { id: t.id, code: t.code, version: t.version, template: t.template as object, isActive: t.isActive, senderCustomerId: t.senderCustomerId, defaultOwnerCustomerId: t.defaultOwnerCustomerId, hitCount: t.hitCount } }).catch(() => undefined);
+    }
     await prisma.customer.deleteMany({ where: { id: { in: made.customers } } });
+    await prisma.userPermission.deleteMany({ where: { userId: { in: made.users } } });
+    await prisma.session.deleteMany({ where: { userId: { in: made.users } } }).catch(() => undefined);
+    await prisma.user.deleteMany({ where: { id: { in: made.users } } }).catch(() => undefined);
   }
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   if (fail > 0) process.exitCode = 1;

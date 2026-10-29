@@ -1,9 +1,9 @@
 // GELEN BELGELER (Gülkesim OCR D5) — müşteri irsaliyesi taslakları: liste + süzgeç + yeni elle taslak.
-// Fotoğraf tabletten gelir (okuma işi DRAFT yazar); panel gözden geçirir ve onaylar (SoD: `gelen-belge:approve`).
+// Fotoğraf tabletten ya da panelden (Belge yükle) gelir (okuma işi DRAFT yazar); panel gözden geçirir ve onaylar (SoD: `gelen-belge:approve`).
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { FileCog, Plus, Upload } from "lucide-react";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,8 @@ import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { AutoLoadMore } from "@/components/data-table/AutoLoadMore";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { createManualNote } from "./service";
+import { SENDER_TEMPLATES_PATH } from "./GonderenSablonlariPage";
+import { UploadDialog } from "./UploadDialog";
 import { ReaderStatusBadge } from "./ReaderStatusBadge";
 import { NoteListFilters } from "./NoteListFilters";
 import { NoteListTable } from "./NoteListTable";
@@ -30,6 +32,7 @@ export function IncomingDocumentsPage() {
     isLoading: list.isFetchingNextPage,
     onLoadMore: () => void list.fetchNextPage(),
   });
+  const [uploadOpen, setUploadOpen] = useState(false);
   const attempt = useAttemptToken();
   const create = useMutation({
     mutationFn: () => createManualNote(attempt.token()),
@@ -47,12 +50,28 @@ export function IncomingDocumentsPage() {
         titleExtra={<ReaderStatusBadge />}
         description="Müşteri irsaliyesi — fotoğraftan okunan ya da elle girilen taslak; onayda emanet topu doğar."
         actions={
-          <PermissionGate permission="gelen-belge:write">
-            <Button onClick={() => create.mutate()} disabled={create.isPending}>
-              <Plus className="mr-1 h-4 w-4" />
-              Elle taslak
-            </Button>
-          </PermissionGate>
+          <div className="flex flex-wrap gap-2">
+            <PermissionGate permission="gelen-belge:template">
+              <Button variant="ghost" asChild>
+                <Link to={SENDER_TEMPLATES_PATH}>
+                  <FileCog className="mr-1 h-4 w-4" />
+                  Gönderen şablonları
+                </Link>
+              </Button>
+            </PermissionGate>
+            <PermissionGate permission="gelen-belge:write">
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => setUploadOpen(true)}>
+                  <Upload className="mr-1 h-4 w-4" />
+                  Belge yükle
+                </Button>
+                <Button variant="outline" onClick={() => create.mutate()} disabled={create.isPending}>
+                  <Plus className="mr-1 h-4 w-4" />
+                  Elle taslak
+                </Button>
+              </div>
+            </PermissionGate>
+          </div>
         }
       />
       <NoteListFilters filter={filter} onChange={setFilter} summary={summary} />
@@ -69,7 +88,7 @@ export function IncomingDocumentsPage() {
           </div>
         ) : items.length === 0 ? (
           <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-            Bu süzgece uyan gelen belge yok. Tabletten irsaliye fotoğrafı çekin ya da “Elle taslak” açın.
+            Bu süzgece uyan gelen belge yok. Tabletten irsaliye fotoğrafı çekin, “Belge yükle” ile dosya seçin ya da “Elle taslak” açın.
           </div>
         ) : (
           <>
@@ -78,6 +97,9 @@ export function IncomingDocumentsPage() {
           </>
         )}
       </PageBody>
+      {uploadOpen && (
+        <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} target={{ kind: "new" }} onDone={(note) => void navigate(`${INCOMING_DOCUMENTS_PATH}/${note.id}`)} />
+      )}
     </PageShell>
   );
 }

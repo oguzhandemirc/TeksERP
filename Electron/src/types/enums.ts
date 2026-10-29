@@ -4,6 +4,8 @@ export const ItemType = {
   FABRIC: "FABRIC",
   YARN: "YARN",
   CONSUMABLE: "CONSUMABLE",
+  /** Müşteriye kesilen hizmet kalemi (H6) — top/stok seçicilerine girmez (`STOCK_ITEM_TYPES`). */
+  SERVICE: "SERVICE",
 } as const;
 export type ItemType = (typeof ItemType)[keyof typeof ItemType];
 
@@ -11,6 +13,7 @@ export const itemTypeLabels: Record<ItemType, string> = {
   FABRIC: "Kumaş",
   YARN: "İplik",
   CONSUMABLE: "Sarf Malzeme",
+  SERVICE: "Hizmet",
 };
 
 /** Her kumaş tipi için kullanılan birim — kullanıcı düzenleyemez. */
@@ -18,6 +21,7 @@ export const unitForItemType: Record<ItemType, string> = {
   FABRIC: "MT",
   YARN: "KG",
   CONSUMABLE: "ADET",
+  SERVICE: "MT",
 };
 
 /** TÜRETİLMİŞ cari tipi (rol modeli): sunucu rollerden yazar, panel OKUMAZ — etiket/süzgeç kaynağı `lib/partnerRoles`. */

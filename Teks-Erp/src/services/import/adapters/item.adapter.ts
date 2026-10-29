@@ -38,6 +38,7 @@ const COLUMNS: ImportColumn[] = [
       { value: "FABRIC", label: "Kumaş" },
       { value: "YARN", label: "İplik" },
       { value: "CONSUMABLE", label: "Sarf" },
+      { value: "SERVICE", label: "Hizmet" },
     ],
     help: "Mevcut kayıtta DEĞİŞTİRİLEMEZ.",
     example: "Kumaş",
