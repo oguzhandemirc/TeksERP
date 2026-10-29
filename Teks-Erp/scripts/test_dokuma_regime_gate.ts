@@ -90,13 +90,15 @@ const MOBIL_SRC = path.join(KOK, "mobil/src");
 const UC_KAPILI: ReadonlyArray<{ dosya: string; yollar: string[] }> = [
   { dosya: "routes/reports/temel-dokuma-finans.routes.ts", yollar: ["/dokuma/tezgah-randimani", "/dokuma/duruslar", "/dokuma/levent-dengesi"] },
 ];
-const KAPILI: ReadonlyArray<{ dosya: string; mount: string; kimlik?: string }> = [
+// `kapi`: dokuma kapısını DEVRALAN rejim kapısı (D4-A1 `requireMachineStopRegime`: ayar kapalıyken kararı
+// `requireDokumaEnabled`e devreder — §6i ölçer).
+const KAPILI: ReadonlyArray<{ dosya: string; mount: string; kimlik?: string; kapi?: string }> = [
   { dosya: "routes/weaving-order.routes.ts", mount: "/api/weaving-orders" },
   { dosya: "routes/machine-run.routes.ts", mount: "/api/machine-runs" },
   { dosya: "routes/machine-doff.routes.ts", mount: "/api/machine-doffs" },
   { dosya: "routes/subcontractor-weaving.routes.ts", mount: "/api/subcontractor-weaving" }, // G2 fason dokuma
   // Faz 1b (6e, 2026-09-14): elle duruş girişi — koşumla aynı kapı (`requireDokumaEnabled`).
-  { dosya: "routes/machine-stop.routes.ts", mount: "/api/machine-stops" },
+  { dosya: "routes/machine-stop.routes.ts", mount: "/api/machine-stops", kapi: "requireMachineStopRegime" },
   // Dokuma raporları Dilim 2 (01, 2026-09-14): vardiya karnesi okuma (M1) — aynı kapı.
   { dosya: "routes/machine-shift-stat.routes.ts", mount: "/api/machine-shift-stats" },
   // Dilim 4 (01, 2026-09-14): üç rapor ucu — `reports.routes` kökünden mount, kapı kendi dosyasında.
@@ -302,11 +304,11 @@ async function main(): Promise<void> {
 
   // ── §6 ⭐ KAPI VAR · KİMLİKTEN SONRA · TÜM UÇLARDAN ÖNCE · KAPSAM TAM ─────
   for (const k of KAPILI) {
-    const o = routerKapiOlcumu(path.join(SRC, k.dosya), KAPI, k.kimlik);
+    const o = routerKapiOlcumu(path.join(SRC, k.dosya), k.kapi ?? KAPI, k.kimlik);
     check(
       `§6a ⭐ ${k.mount} → kapı router seviyesinde ve kimlikten (${k.kimlik ?? "verifyToken"}) SONRA`,
       o.kapiVar,
-      o.kapiVar ? `router=${o.routerAdi}` : `\`router.use(${k.kimlik ?? "verifyToken"}, …, ${KAPI})\` satırı YOK`,
+      o.kapiVar ? `router=${o.routerAdi}` : `\`router.use(${k.kimlik ?? "verifyToken"}, …, ${k.kapi ?? KAPI})\` satırı YOK`,
     );
     check(`§6b ${k.mount} → körlük zemini: uçlar sayıldı`, o.ucSayisi >= 1, `uç=${o.ucSayisi}`);
     check(
@@ -358,7 +360,8 @@ async function main(): Promise<void> {
       DOKUMA_SERVISLERI.some((s) => metin.includes(s));
     if (!dokunuyor) continue;
     dokunanlar.push(rel);
-    if (!metin.includes(KAPI)) kapisizlar.push(rel);
+    const devralan = KAPILI.find((x) => x.dosya === rel)?.kapi;
+    if (!metin.includes(KAPI) && !(devralan && metin.includes(devralan))) kapisizlar.push(rel);
   }
   check(
     "§6f Körlük zemini: dokuma yüzeyi BULUNDU (yoksa §6g vakumen yeşil kalırdı)",
@@ -371,6 +374,12 @@ async function main(): Promise<void> {
     kapisizlar.length ? `KAPISIZ: ${kapisizlar.join(", ")}` : `${dokunanlar.length} router kapılı`,
   );
   check("§6h Kapı ölü değil: middleware dışa aktarılmış", new RegExp(`export async function ${KAPI}`).test(kod));
+  // §6i (D4-A1): devralan kapı genel rejim kapalıyken kararı dokuma kapısına BIRAKIR (403 gövdesi bayt-aynı).
+  for (const devralan of new Set(KAPILI.flatMap((x) => (x.kapi ? [x.kapi] : [])))) {
+    const b = kod.indexOf(`export async function ${devralan}`);
+    const g = b >= 0 ? kod.slice(b, kod.indexOf("\n}\n", b)) : "";
+    check(`§6i ⭐ ${devralan} genel rejim dışında \`${KAPI}\`e devreder`, new RegExp(`await ${KAPI}\\(req, res, next\\)`).test(g), g ? "" : "gövde yok");
+  }
 
   // ── §7 ⭐ BAYRAK KAPALIYKEN SIFIR GÖRÜNÜR FARK ────────────────────────────
   const istemciDosyalari = [...kaynakDosyalari(ELECTRON_SRC), ...kaynakDosyalari(MOBIL_SRC)];

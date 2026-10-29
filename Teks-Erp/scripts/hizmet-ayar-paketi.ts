@@ -52,6 +52,8 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   // DALGA4 §12.1 / K26: ister "tüm metraj aşağı yukarı tamamlandığında" sevke hazır = metre eşiği, %2 tolerans.
   { anahtar: "shipping.ready.rule", alan: "shippingReadyRule", hedef: "METER_THRESHOLD", dilim: "D4-J1" },
   { anahtar: "shipping.ready.tolerancePct", alan: "shippingReadyTolerancePct", hedef: 2, dilim: "D4-J1" },
+  // DALGA4 §12.1: dokumasız fabrikada kurşun/tambur/brode makinesi duruşu (ister 5.5).
+  { anahtar: "uretim.makineDurusTakibi", alan: "machineStopTrackingEnabled", hedef: true, dilim: "D4-A1" },
 ];
 
 export type PlanDurumu = "DEGISECEK" | "AYNI" | "ANAHTAR_YOK" | "ALAN_YOK";

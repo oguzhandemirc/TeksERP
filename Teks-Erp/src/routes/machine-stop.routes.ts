@@ -1,29 +1,45 @@
 // =============================================================================
 // TeksERP — Tezgah DURUŞU (MachineStopEvent) uçları · ELLE GİRİŞ (Faz 1b)
 // =============================================================================
-// ⚠️ ÜÇ KAPI SIRAYLA (machine-run emsali): `verifyToken` → `requireDokumaEnabled`
-// → izin. İki izin ailesi: `loom:manual-entry` (aç · kapa · geri al — vardiya amiri
+// ⚠️ ÜÇ KAPI SIRAYLA (machine-run emsali): `verifyToken` → `requireMachineStopRegime`
+// (D4-A1: dokuma ∨ üretim ∧ `uretim.makineDurusTakibi`; ayar kapalıyken dokuma kapısının aynısı) → izin. İki izin ailesi: `loom:manual-entry` (aç · kapa · geri al — vardiya amiri
 // elle girişi) ve `loom:classify` (sınıfla · yeniden sınıfla — sebep KARARI).
 // Tablet dilimi (2026-09-14): aç/kapa/sebep `requireAnyPermission(<web>, ...MOBILE_DOKUMA)`, geri alma
 // `mobile:dokuma-geri-al`; YENİDEN sınıflandırma web-only. `source` izinden türetilir (`stopSourceFor`).
 // Panel/tablet YÜZEYİ ayrı dilimdir; izinler SCREENLESS gerekçeli.
 // =============================================================================
 import { Router, type Request } from "express";
+import { StationKind } from "@prisma/client";
+import { AppError } from "../utils/app-error";
+import { readFilterList } from "../utils/query-parser";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { matchesPermission, requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
-import { requireDokumaEnabled } from "../middlewares/module.middleware";
+import { requireMachineStopRegime } from "../middlewares/module.middleware";
+import { assertStopInPermissionScope } from "../services/helpers/machine-stop-regime.helper";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { classifyStop, closeManualStop, openManualStop, reclassifyStop, revokeStop } from "../services/machine-stop.service";
 import { listMachineStops, listStopReclasses } from "../services/loom-list.service";
 import { BULK_STOP_MAX, classifyBulkStops, closeBulkStops, openBulkStops, previewBulkStops, revokeBulkStops } from "../services/machine-stop-bulk.service";
 
 const router = Router();
-router.use(verifyToken, requireDokumaEnabled);
+router.use(verifyToken, requireMachineStopRegime);
 
 // Tablet: aç/kapa/sebep ekran izniyle (ayrı kod açılmadı — doff/koşum emsali), geri alma yetenek izniyle.
-const MOBILE_DOKUMA = ["mobile:dokuma"] as const;
+// D4-A1: kurşun/tambur/brode tableti `mobile:makine-durus` ile aç/kapa/sebep (geri alma ve yeniden sınıflama yok).
+const MOBILE_DOKUMA = ["mobile:dokuma", "mobile:makine-durus"] as const;
 const MOBILE_DOKUMA_GERI_AL = ["mobile:dokuma-geri-al"] as const;
+
+/**
+ * Yalnız `mobile:makine-durus` ile gelen istek (dokuma/tezgah izni yok) kurşun/brode/tambur makinelerine daralır:
+ * izin kataloğundaki kapsam koda bağlanır (liste süzülür, yazma 403 `STOP_STATION_KIND_FORBIDDEN`).
+ */
+function kindScopeFor(req: Request): { generalKindsOnly: boolean } {
+  const perms = req.user?.permissions ?? [];
+  const weavingAccess =
+    matchesPermission(perms, "loom:manual-entry") || matchesPermission(perms, "loom:classify") || matchesPermission(perms, "mobile:dokuma");
+  return { generalKindsOnly: !weavingAccess };
+}
 
 /** Kim giriyor: web `loom:manual-entry` taşıyan VARDİYA AMİRİ, değilse tablet OPERATÖRÜ (1e hükmü 2026-09-14). */
 function stopSourceFor(req: Request): "OPERATOR" | "SUPERVISOR" {
@@ -39,8 +55,17 @@ const listSchema = z
     factoryDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Geçersiz gün (YYYY-MM-DD)").optional(),
     shiftInstanceId: z.string().uuid("Geçersiz vardiya").optional(),
     limit: z.coerce.number().int().min(1).max(500).optional(),
+    // İstasyon türü süzgeci (CSV / tekrarlı anahtar — `readFilterList`); yoksa bugünkü küme.
+    stationKind: z.union([z.string(), z.array(z.string())]).optional(),
   })
   .strict();
+
+function parseStationKinds(raw: string | string[] | undefined): StationKind[] {
+  const list = readFilterList(raw);
+  const bad = list.filter((k) => !(Object.values(StationKind) as string[]).includes(k));
+  if (bad.length) throw AppError.badRequest(`Geçersiz istasyon türü: ${bad.join(", ")}`, { code: "INVALID_STATION_KIND" });
+  return list as StationKind[];
+}
 
 /**
  * @openapi
@@ -65,6 +90,8 @@ router.get("/", requireAnyPermission("loom:manual-entry", "loom:classify", ...MO
         factoryDay: q.factoryDay,
         shiftInstanceId: q.shiftInstanceId,
         limit: q.limit,
+        stationKinds: parseStationKinds(q.stationKind),
+        ...kindScopeFor(req),
       }),
     );
   } catch (e) {
@@ -279,7 +306,7 @@ const openSchema = z
 router.post("/", requireAnyPermission("loom:manual-entry", ...MOBILE_DOKUMA), async (req, res, next) => {
   try {
     const b = openSchema.parse(req.body ?? {});
-    res.status(201).json(await openManualStop({ ...b, source: stopSourceFor(req) }, req.user?.userId));
+    res.status(201).json(await openManualStop({ ...b, source: stopSourceFor(req) }, req.user?.userId, kindScopeFor(req)));
   } catch (e) {
     next(e);
   }
@@ -303,6 +330,7 @@ router.post("/:id/close", requireAnyPermission("loom:manual-entry", ...MOBILE_DO
   try {
     const id = assertValidUuid(req.params.id, "id");
     const b = closeSchema.parse(req.body ?? {});
+    await assertStopInPermissionScope(id, kindScopeFor(req));
     res.json(await closeManualStop(id, b.endedAt, req.user?.userId, stopSourceFor(req)));
   } catch (e) {
     next(e);
@@ -333,6 +361,7 @@ router.post("/:id/classify", requireAnyPermission("loom:classify", ...MOBILE_DOK
   try {
     const id = assertValidUuid(req.params.id, "id");
     const b = classifySchema.parse(req.body ?? {});
+    await assertStopInPermissionScope(id, kindScopeFor(req));
     res.json(await classifyStop(id, b, req.user?.userId, stopSourceFor(req)));
   } catch (e) {
     next(e);

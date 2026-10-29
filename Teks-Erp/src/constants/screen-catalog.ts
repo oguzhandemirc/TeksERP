@@ -452,6 +452,9 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // çağırır; `loom:*` web kodları panelsiz kalır — panel doff yüzeyi yok, kod API/entegrasyon için.
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
+  // D4-A1 (2026-10-29): uç backend'de doğdu; tablet "Duruş" çipi (Kurşun + Tambur ekranı) D4-A2 dilimiyle
+  // gelir — o gün bu satır ölü muaf olur ve çip ekranının yeteneğine taşınır.
+  { code: "mobile:makine-durus", reason: "Tablet duruş çipi D4-A2 dilimiyle doğar; uç (`/api/machine-stops`) bugünden hazır." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
 ];
 

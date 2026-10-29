@@ -39,6 +39,8 @@ export interface ReclassifyStopInput {
 export interface OpenManualStopOptions {
   /** Geçmiş saatle açılışta kapanmış duruşla örtüşmeyi tx içinde reddet (toplu açılış; tekli uç bugünkü davranışta). */
   rejectOverlap?: boolean;
+  /** Yalnız `mobile:makine-durus` taşıyan istek: kurşun/brode/tambur dışı makine 403 (D4-A1). */
+  generalKindsOnly?: boolean;
 }
 
 /** Makine kaynaklı alanlar — yalnız sinyal yolu (`machine-stop-signal.service`) doldurur; insan yolu HİÇ yazmaz. */
