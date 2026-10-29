@@ -63,7 +63,8 @@ async function main(): Promise<void> {
 
   // ── §0 statik ─────────────────────────────────────────────────────────────
   const routeSrc = readFileSync(join(__dirname, "../src/routes/shift-definition.routes.ts"), "utf8");
-  check("§0a router toplu kapı: verifyToken → requireDokumaEnabled", /router\.use\(verifyToken,\s*requireDokumaEnabled\)/.test(routeSrc));
+  // D4-A3: katalog takvimle aynı rejim kapısında (dokuma ∨ üretim ∧ ayar); davranışı test_makine_durus_rejimi §9 ölçer.
+  check("§0a router toplu kapı: verifyToken → requireMachineStopRegime", /router\.use\(verifyToken,\s*requireMachineStopRegime\)/.test(routeSrc));
   check("§0b yazma uçları `loom:spec-manage`", /const manage = requirePermission\("loom:spec-manage"\)/.test(routeSrc)
     && (routeSrc.match(/router\.(post|patch)\("[^"]*",\s*manage,/g) ?? []).length === 5);
   check("§0c gövde şemaları `.strict()` (tanınmayan alan 400)", (routeSrc.match(/\.strict\(\)/g) ?? []).length >= 3);
