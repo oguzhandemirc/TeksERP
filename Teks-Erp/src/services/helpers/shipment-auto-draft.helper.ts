@@ -58,7 +58,7 @@ import { SACK_ABSENT_STATUSES } from "./sack-invariants.helper";
 import { LEDGER_UNIT, unitLabel } from "../../constants/item-unit";
 import { uyari } from "../../lib/logger";
 import { ekranYolu } from "../../constants/panel-ekran-yolu";
-import { collectShipmentServiceBilling, type ServiceBillingLinkInput } from "./service-billing.helper";
+import { collectShipmentServiceBilling, resolveCustomerServiceBillingTrigger, type ServiceBillingLinkInput } from "./service-billing.helper";
 import { loadServiceBillingSettings, resolveServiceBillingEnabled } from "./../system-setting.service";
 
 /**
@@ -188,7 +188,8 @@ export async function collectShipmentInvoiceDraftLines(
   const service = await loadServiceBillingSettings();
   const product = await collectProductDraftLines(shipmentId, customerId, currency, true);
   // H8: PERIOD_END'de emanet işi dönem sonu taslağını bekler — sevk taslağına hizmet satırı/bağı GİRMEZ.
-  if (service.trigger === "PERIOD_END") {
+  // H8b: tetik müşteriye göre (carinin seçimi, yoksa fabrika ayarı).
+  if ((await resolveCustomerServiceBillingTrigger(customerId, service)).trigger === "PERIOD_END") {
     return { ...product, warnings: [...product.warnings, PERIOD_END_SERVICE_WARNING], serviceLinks: [] };
   }
   const sh = await prisma.shipment.findUnique({ where: { id: shipmentId }, select: { dispatchedAt: true } });

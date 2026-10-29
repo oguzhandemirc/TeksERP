@@ -110,6 +110,8 @@ export interface ServiceResolveOptions {
   missingMeter?: "DECLARED_WITH_WARNING" | "BLOCK_LINE";
   /** Verilirse bütün fiyatlar bu ana çözülür (priceDate = DISPATCH_DAY). */
   priceAsOf?: Date;
+  /** H8b dönem taslağı (DISPATCH_DAY): işin topu → kendi sevk anı; `priceAsOf`tan önce gelir. */
+  priceAsOfByRoll?: Map<string, Date>;
   /** Zaten faturalanmış iş — `${rollId}:${serviceItemId}:${workOrderStepId}`; satıra ve bağa girmez. */
   billedKeys?: Set<string>;
 }
@@ -184,7 +186,7 @@ export async function resolveServiceItemsForRolls(params: {
 
   // Fiyat hizmet anına çözülür (geç taslak eski fiyatı korur); aynı an tek sorgu.
   const byAt = new Map<number, ServiceRollWork[]>();
-  const priceAt = (w: ServiceRollWork) => (opt.priceAsOf ?? w.serviceAt).getTime();
+  const priceAt = (w: ServiceRollWork) => (opt.priceAsOfByRoll?.get(w.rollId) ?? opt.priceAsOf ?? w.serviceAt).getTime();
   for (const w of works) if (w.serviceItemId) byAt.set(priceAt(w), [...(byAt.get(priceAt(w)) ?? []), w]);
   for (const [at, group] of byAt) {
     const prices = await resolveItemPricesFor({

@@ -27,6 +27,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import {
   collectShipmentServiceBilling,
+  resolveCustomerServiceBillingTrigger,
   insertServiceLinksTx,
   lockBillableShipmentsTx,
   lockServiceReadingsTx,
@@ -378,8 +379,8 @@ export class InvoiceService {
     if (input.type !== InvoiceType.SALES || !input.shipmentId || !input.customerId) return [];
     if (!(await resolveServiceBillingEnabled())) return [];
     const settings = await loadServiceBillingSettings();
-    // H8: PERIOD_END'de iş dönem sonu taslağını bekler — sevk taslağı hizmet bağı kurmaz.
-    if (settings.trigger === "PERIOD_END") return [];
+    // H8: PERIOD_END'de iş dönem sonu taslağını bekler — sevk taslağı hizmet bağı kurmaz (H8b: müşteriye göre).
+    if ((await resolveCustomerServiceBillingTrigger(input.customerId, settings)).trigger === "PERIOD_END") return [];
     const sh = await prisma.shipment.findUnique({ where: { id: input.shipmentId }, select: { dispatchedAt: true } });
     const draft = await collectShipmentServiceBilling({
       shipmentId: input.shipmentId, customerId: input.customerId, currency, settings, dispatchedAt: sh?.dispatchedAt ?? null,
