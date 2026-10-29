@@ -733,6 +733,9 @@ model User {
   deliveryNotesApproved     CustomerDeliveryNote[] @relation("CustomerDeliveryNoteApprovedBy")
   deliveryNotesCancelled    CustomerDeliveryNote[] @relation("CustomerDeliveryNoteCancelledBy")
   documentScansCaptured     DocumentScan[]         @relation("DocumentScanCapturedBy")
+  // E4 (2026-10-29): sahibe özel varsayılan ürün künyesi.
+  deliveryNoteDefaultsCreated DeliveryNoteCustomerDefault[] @relation("DeliveryNoteCustomerDefaultCreatedBy")
+  deliveryNoteDefaultsUpdated DeliveryNoteCustomerDefault[] @relation("DeliveryNoteCustomerDefaultUpdatedBy")
   // MAL-1 (2026-10-25): atkı kartı + maliyet girdileri künyesi.
   weftSpecsCreated          WeftSpec[]         @relation("WeftSpecCreatedBy")
   weftSpecsUpdated          WeftSpec[]         @relation("WeftSpecUpdatedBy")
@@ -3474,6 +3477,8 @@ model Item {
   labTests           LabTest[]
   customerLabSpecs   CustomerLabSpec[]
   deliveryNoteLines  CustomerDeliveryNoteLine[]
+  // E4: bu ürünü varsayılan seçen sahipler (gelen belge).
+  deliveryNoteCustomerDefaults DeliveryNoteCustomerDefault[]
 
   @@unique([nameFold])
   @@index([itemType])
@@ -4230,6 +4235,8 @@ model Customer {
   senderTemplates        SenderTemplate[]       @relation("SenderTemplateSender")
   senderTemplateDefaults SenderTemplate[]       @relation("SenderTemplateDefaultOwner")
   deliveryNoteAliases    DeliveryNoteAlias[]
+  // E4: sahibe özel gelen belge varsayılan ürünü (saf yapılandırma; Customer kolonu DEĞİL — kimlik/rol ayrımı).
+  deliveryNoteDefault    DeliveryNoteCustomerDefault?
   labTests          LabTest[]
 
   // MAL-4: teklif / fiyat listesi geri ilişkileri (kolon değil)
@@ -10489,6 +10496,10 @@ model CariAccount {
   notes    String? @db.VarChar(500)
   isActive Boolean @default(true)
 
+  /// H8b: müşterinin hizmet faturası tetiği — NULL = fabrika ayarı `finance.serviceBilling.trigger`;
+  /// `PER_SHIPMENT` | `PERIOD_END` (DB CHECK). Tek çözücü `resolveCustomerServiceBillingTrigger`.
+  serviceBillingTrigger String? @db.VarChar(20)
+
   customer      Customer?      @relation(fields: [customerId], references: [id], onDelete: Restrict)
   subcontractor Subcontractor? @relation(fields: [subcontractorId], references: [id], onDelete: Restrict)
 
@@ -13814,6 +13825,9 @@ model CustomerDeliveryNoteLine {
   /// Toplu satır ekleme denemesinin istemci kimliği (parti başına aynı; replay = aynı parti satırları). Tekillik DB'de değil,
   /// başlık satırı kilidinin ardındaki okumadadır (`lineBatchReplay`, K′).
   clientToken  String?                @db.Uuid
+  /// E4: satırı doğuran tarama (OCR satırı; elle/Excel satırında null). Sayfa no taramanın `pageNo`'sundan okunur (tek kaynak).
+  /// Restrict: taramalar silinmez (taslak silmesi bağı çözer); satır not silinince Cascade ile gider.
+  scanId       String?                @db.Uuid
   createdAt    DateTime               @default(now()) @db.Timestamptz
   updatedAt    DateTime               @updatedAt @db.Timestamptz
 
@@ -13821,8 +13835,10 @@ model CustomerDeliveryNoteLine {
   item  Item?                @relation(fields: [itemId], references: [id], onDelete: Restrict)
   color Color?               @relation(fields: [colorId], references: [id], onDelete: Restrict)
   roll  Roll?                @relation(fields: [rollId], references: [id], onDelete: Restrict)
+  scan  DocumentScan?        @relation(fields: [scanId], references: [id], onDelete: Restrict)
 
   @@unique([noteId, lineNo])
+  @@index([scanId])
   @@index([itemId])
   @@index([colorId])
   @@index([clientToken])
@@ -13855,6 +13871,7 @@ model DocumentScan {
 
   note       CustomerDeliveryNote? @relation(fields: [noteId], references: [id], onDelete: Restrict)
   capturedBy User?                 @relation("DocumentScanCapturedBy", fields: [capturedById], references: [id], onDelete: Restrict)
+  lines      CustomerDeliveryNoteLine[]
 
   @@index([noteId])
   @@index([status, createdAt])
@@ -13900,9 +13917,33 @@ model DeliveryNoteAlias {
 
   senderCustomer Customer? @relation(fields: [senderCustomerId], references: [id], onDelete: Restrict)
 
+  // E4: DB'de NULLS NOT DISTINCT (gönderensiz anahtar da tekil; öğrenme tek ifade `INSERT … ON CONFLICT`).
   @@unique([scope, senderCustomerId, rawKey])
   @@index([targetId])
   @@map("delivery_note_aliases")
+}
+
+/// E4 (2026-10-29) — sahibe özel gelen belge varsayılan ürünü: ürünü seçilmemiş satır onayda önce bundan, yoksa fabrika
+/// ayarından (`gelenBelge.defaultItemId`) doğar. SAF YAPILANDIRMA PİVOTU (defter değil): kaldırma sert silmedir.
+/// Tek yazar `gelen-belge-varsayilan.service.ts` (koşullu atomik yazım + audit).
+model DeliveryNoteCustomerDefault {
+  id            String   @id @default(uuid()) @db.Uuid
+  customerId    String   @unique @db.Uuid
+  defaultItemId String   @db.Uuid
+  createdAt     DateTime @default(now()) @db.Timestamptz
+  updatedAt     DateTime @updatedAt @db.Timestamptz
+
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  defaultItem Item     @relation(fields: [defaultItemId], references: [id], onDelete: Restrict)
+
+  // ── KAYIT KÜNYESİ — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("DeliveryNoteCustomerDefaultCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("DeliveryNoteCustomerDefaultUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@index([defaultItemId])
+  @@map("delivery_note_customer_defaults")
 }
 
 /// H7 (Hizmet veren, 2026-10-29) — faturalanan metrenin tabanı. `OUT`/`IN` okuma, `DECLARED` hareket

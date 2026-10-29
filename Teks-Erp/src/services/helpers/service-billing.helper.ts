@@ -13,9 +13,9 @@ import { Currency, Prisma, ServiceMeterBasis, ShipmentStatus } from "@prisma/cli
 import { lockShipmentScopeTx } from "./shipment-locks.helper";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
-import { alreadyBilled, collectRollLineage, findActiveBillingTx, listShipmentServiceRollIds } from "./service-billing-gate.helper";
+import { alreadyBilled, collectRollLineage, findActiveBillingTx, listShipmentServiceRollIds, listShipmentServiceRollShipments } from "./service-billing-gate.helper";
 import { resolveServiceItemsForRolls, serviceWorkKey } from "./service-pricing.helper";
-import type { loadServiceBillingSettings } from "../system-setting.service";
+import { SERVICE_BILLING_TRIGGERS, type ServiceBillingTrigger, type loadServiceBillingSettings } from "../system-setting.service";
 
 type Tx = Prisma.TransactionClient;
 type Db = Tx | typeof prisma;
@@ -40,6 +40,24 @@ export interface ServiceBillingDraft {
   warnings: string[];
 }
 
+/** H8b: etkin tetik + kaynağı (müşteri carisinin kendi seçimi mi, fabrika ayarı mı). */
+export interface EffectiveServiceBillingTrigger {
+  trigger: ServiceBillingTrigger;
+  source: "CUSTOMER" | "FACTORY";
+}
+
+/**
+ * H8b TEK ÇÖZÜCÜ: müşterinin etkin hizmet faturası tetiği. Carinin `serviceBillingTrigger`ı doluysa o, NULL ya da
+ * cari yoksa fabrika ayarı (`settings.trigger`). Sevk kancası, panel sevk önizlemesi, sevk taslağının bağ yolu ve
+ * dönem sonu toplayıcı AYNI cevabı buradan okur.
+ */
+export async function resolveCustomerServiceBillingTrigger(customerId: string, settings: Pick<ServiceBillingSettings, "trigger">, db: Db = prisma): Promise<EffectiveServiceBillingTrigger> {
+  const cari = await db.cariAccount.findUnique({ where: { customerId }, select: { serviceBillingTrigger: true } });
+  const own = cari?.serviceBillingTrigger;
+  if (own && (SERVICE_BILLING_TRIGGERS as string[]).includes(own)) return { trigger: own as ServiceBillingTrigger, source: "CUSTOMER" };
+  return { trigger: settings.trigger, source: "FACTORY" };
+}
+
 /** Toplara (ve atalarına) bağlı AKTİF bağ anahtarları. */
 async function loadBilledKeys(rollIds: string[]): Promise<Set<string>> {
   const rows = rollIds.length === 0 ? [] : await prisma.serviceBillingLink.findMany({
@@ -59,8 +77,11 @@ export async function collectServiceBillingDraft(params: {
   currency: Currency;
   settings: ServiceBillingSettings;
   dispatchedAt: Date | null;
+  /** H8b: DISPATCH_DAY'de iş başına sevk anı (dönem taslağı); yoksa herkese `dispatchedAt`. */
+  dispatchedAtByRoll?: Map<string, Date>;
 }): Promise<ServiceBillingDraft> {
   if (params.rollIds.length === 0) return { lines: [], links: [], warnings: [] };
+  const dispatchDay = params.settings.priceDate === "DISPATCH_DAY";
   const lineage = await collectRollLineage(params.rollIds);
   const res = await resolveServiceItemsForRolls({
     rollIds: lineage,
@@ -69,7 +90,8 @@ export async function collectServiceBillingDraft(params: {
     options: {
       meterBasis: params.settings.meterBasis,
       missingMeter: params.settings.missingMeter,
-      priceAsOf: params.settings.priceDate === "DISPATCH_DAY" ? params.dispatchedAt ?? new Date() : undefined,
+      priceAsOf: dispatchDay ? params.dispatchedAt ?? new Date() : undefined,
+      priceAsOfByRoll: dispatchDay ? params.dispatchedAtByRoll : undefined,
       billedKeys: await loadBilledKeys(lineage),
     },
   });
@@ -237,11 +259,34 @@ export async function collectShipmentServiceBilling(params: {
   return collectServiceBillingDraft({ ...params, rollIds: await listShipmentServiceRollIds([params.shipmentId]) });
 }
 
+/** H8b: top → sevk anı; ata zincirine en erken çocuğun anı yayılır (iş atada kayıtlıysa da kendi sevk gününe çözülür). */
+async function mapLineageDispatchedAt(
+  pairs: Array<{ rollId: string; shipmentId: string }>,
+  shipments: Array<{ id: string; dispatchedAt: Date | null }>,
+  db: Db = prisma,
+): Promise<Map<string, Date>> {
+  const at = new Map(shipments.filter((s) => s.dispatchedAt).map((s) => [s.id, s.dispatchedAt!]));
+  const out = new Map<string, Date>();
+  const put = (rollId: string, d: Date): boolean => {
+    const cur = out.get(rollId);
+    if (cur && cur.getTime() <= d.getTime()) return false;
+    out.set(rollId, d);
+    return true;
+  };
+  for (const p of pairs) { const d = at.get(p.shipmentId); if (d) put(p.rollId, d); }
+  let frontier = [...out.keys()];
+  for (let depth = 0; depth < 32 && frontier.length > 0; depth++) {
+    const rows = await db.roll.findMany({ where: { id: { in: frontier }, parentRollId: { not: null } }, select: { id: true, parentRollId: true } });
+    frontier = [...new Set(rows.filter((r) => put(r.parentRollId!, out.get(r.id)!)).map((r) => r.parentRollId!))];
+  }
+  return out;
+}
+
 /**
  * H8 DÖNEM SONU: cari müşterisinin dönemde (fabrika günü sınırları çağırandan) sevk edilmiş sevkiyatlarının emanet
  * topları → TEK toplayıcı (`collectServiceBillingDraft`); aktif bağı olan iş düşer (sevk taslağıyla çift yol yok).
- * Tüm toplar TEK çağrıda: aynı atanın iki çocuğu iki sevkte olsa da iş bir kez sayılır. `DISPATCH_DAY` fiyatı
- * dönemin son sevk anına çözülür (dönem faturası tek tarihlidir).
+ * Tüm toplar TEK çağrıda: aynı atanın iki çocuğu iki sevkte olsa da iş bir kez sayılır. H8b: `DISPATCH_DAY`
+ * fiyatı her işin KENDİ sevk anına çözülür (ata işi en erken sevk edilen çocuğunun anına).
  */
 export async function collectPeriodServiceBilling(params: {
   customerId: string;
@@ -255,10 +300,12 @@ export async function collectPeriodServiceBilling(params: {
     select: { id: true, shipmentNo: true, dispatchedAt: true },
     orderBy: [{ dispatchedAt: "asc" }, { id: "asc" }],
   });
-  const rollIds = await listShipmentServiceRollIds(shipments.map((s) => s.id));
+  const pairs = await listShipmentServiceRollShipments(shipments.map((s) => s.id));
+  const rollIds = [...new Set(pairs.map((p) => p.rollId))];
   const draft = await collectServiceBillingDraft({
     rollIds, customerId: params.customerId, currency: params.currency, settings: params.settings,
     dispatchedAt: shipments.at(-1)?.dispatchedAt ?? null,
+    dispatchedAtByRoll: params.settings.priceDate === "DISPATCH_DAY" ? await mapLineageDispatchedAt(pairs, shipments) : undefined,
   });
   const billedWhere = rollIds.length === 0 ? null : { rollId: { in: await collectRollLineage(rollIds) }, revokedAt: null };
   const billedWorkCount = billedWhere ? await prisma.serviceBillingLink.count({ where: billedWhere }) : 0;

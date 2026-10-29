@@ -884,6 +884,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "roll_meter_acks", name: "roll_meter_acks_revoke_ck" },
   { table: "service_billing_links", name: "service_billing_links_meters_ck" },
   { table: "service_billing_links", name: "service_billing_links_revoke_ck" },
+  // H8b (migration 20261029180000): müşteri hizmet faturası tetiği yalnız fabrika ayarının değerleri. Bekçi `test_hizmet_fatura` §20.
+  { table: "cari_accounts", name: "cari_accounts_service_billing_trigger_ck" },
   { table: "fabric_properties", name: "fabric_properties_variant_not_self_ck" },
   // 2026-08-29 denetimi (K1) — migration 20260829140000_denetim_sema_kisitlari.
   // "Topun kalan metrajı giriş metrajını aşamaz." Depo kesimi `initialQty`ye
@@ -2057,6 +2059,25 @@ async function main(): Promise<void> {
   const nv = await readUnvalidatedConstraints();
   check("validate edilmemiş (NOT VALID) kısıt YOK", nv.length === 0,
     nv.length ? `NOT VALID: ${nv.join(", ")} — ihlalli eski satır var; kuru döküm: scripts/kartela_durum_anomali.ts (swatches_status_shape)` : "0");
+
+  console.log("\n── 11) NULLS NOT DISTINCT tekillikler (Prisma `@@unique` adı, bayrak ham SQL'de) ──");
+  // Prisma `@@unique`i NULLS NOT DISTINCT bayrağını İFADE EDEMEZ ve drift'te GÖRMEZ: indeksi yeniden kuran bir
+  // migration bayrağı sessizce düşürür → NULL kolonlu anahtar yeniden çiftlenir. Burada bayrak ölçülür.
+  const NULLS_NOT_DISTINCT_UNIQUES: Array<{ table: string; index: string; why: string }> = [
+    // E4 (migration 20261029160000): gönderensiz (SENDER kapsamı) öğrenme de tekil; `INSERT … ON CONFLICT` hedefi.
+    { table: "delivery_note_aliases", index: "delivery_note_aliases_scope_senderCustomerId_rawKey_key", why: "sözlük anahtarı NULL gönderende de tek satır (bekçi test_gelen_belge_onay §16)" },
+  ];
+  const nnd = await prisma.$queryRaw<Array<{ index_name: string; is_unique: boolean; nnd: boolean }>>`
+    SELECT c.relname AS index_name, i.indisunique AS is_unique, i.indnullsnotdistinct AS nnd
+    FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+  `;
+  const nndByName = new Map(nnd.map((r) => [r.index_name, r]));
+  for (const exp of NULLS_NOT_DISTINCT_UNIQUES) {
+    const live = nndByName.get(exp.index);
+    check(exp.index, !!live && live.is_unique && live.nnd,
+      !live ? `index HİÇ YOK (${exp.table})` : !live.is_unique ? "UNIQUE değil — SED KAYBOLDU" : !live.nnd ? "NULLS NOT DISTINCT DÜŞMÜŞ — NULL kolonlu anahtar çiftlenebilir" : exp.why);
+  }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   if (fail > 0) {

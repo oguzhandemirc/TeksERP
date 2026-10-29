@@ -45,6 +45,8 @@ export interface CariRow {
   /** Serbest not — backend 2026-08-14'ten beri list/findById yanıtında taşır. */
   notes: string | null;
   isActive: boolean;
+  /** H8b: müşterinin hizmet faturası tetiği; null = fabrika ayarı. Eski backend göndermez (undefined). */
+  serviceBillingTrigger?: ServiceBillingTrigger | null;
   balances: Array<{ currency: Currency; balance: number }>;
   /** Vadesi geçmiş AÇIK tutar, para birimi bazında (H2). YALNIZ `withOverdue`
    *  ile istenince gelir; eski backend'de hiç gelmez → alan OPSİYONEL okunur.
@@ -426,7 +428,12 @@ export interface CariUpdateInput {
   /** `null` → notu temizle. */
   notes?: string | null;
   isActive?: boolean;
+  /** H8b: `null` → fabrika ayarı. Yalnız müşteri carisinde ve backend alanı okuyorsa gönderilir. */
+  serviceBillingTrigger?: ServiceBillingTrigger | null;
 }
+
+/** H8b: hizmet faturası tetiği — fabrika ayarı `finance.serviceBilling.trigger` ile aynı değer kümesi. */
+export type ServiceBillingTrigger = "PER_SHIPMENT" | "PERIOD_END";
 
 export async function updateCari(id: string, body: CariUpdateInput) {
   const res = await apiClient.patch(`/api/finance/cari/${id}`, body);
