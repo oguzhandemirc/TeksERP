@@ -68,8 +68,10 @@ async function release(id: string, attempts: number, code: string, opts: { perma
   return failed ? "READ_FAILED" : "RETRY";
 }
 
-function lineRows(lines: DraftLine[], lineBase = 0, blockBase = 0) {
+/** `scanId`: satırı doğuran tarama (E4) — çok sayfalı taslakta her sayfanın satırı KENDİ taramasını taşır. */
+function lineRows(lines: DraftLine[], scanId: string, lineBase = 0, blockBase = 0) {
   return lines.map((l, i) => ({
+    scanId,
     lineNo: lineBase + i + 1,
     blockNo: blockBase + l.blockNo,
     lineKind: l.lineKind,
@@ -152,7 +154,7 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
       if (note.totalsDeclared === null || !Array.isArray(prevBlocks)) patch.totalsDeclared = totalsDeclared;
       else if (addLines && blockBase > 0) patch.totalsDeclared = toJson({ blocks: [...prevBlocks, ...header.totalsDeclared.blocks.map((b) => ({ ...b, blockNo: blockBase + b.blockNo }))] });
       patch.templateScore = headerCols.templateScore;
-      if (addLines) patch.lines = { create: lineRows(draft.lines, lineBase, blockBase) };
+      if (addLines) patch.lines = { create: lineRows(draft.lines, id, lineBase, blockBase) };
       await tx.customerDeliveryNote.update({ where: { id: noteId }, data: patch });
       const s = await tx.documentScan.updateMany({ where: { id, status: "READING" }, data: scanData });
       if (s.count === 0) throw new Error("SCAN_LOST");
@@ -168,7 +170,7 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
     const noteNo = await nextNoteNo();
     return prisma.$transaction(async (tx) => {
       const row = await tx.customerDeliveryNote.create({
-        data: { ...headerCols, noteNo, sourceKind: "OCR", status: "DRAFT", totalsDeclared, warnings, createdById: scan.capturedById, updatedById: scan.capturedById, lines: draft.lines.length ? { create: lineRows(draft.lines) } : undefined },
+        data: { ...headerCols, noteNo, sourceKind: "OCR", status: "DRAFT", totalsDeclared, warnings, createdById: scan.capturedById, updatedById: scan.capturedById, lines: draft.lines.length ? { create: lineRows(draft.lines, id) } : undefined },
         select: { id: true, noteNo: true },
       });
       const s = await tx.documentScan.updateMany({ where: { id, status: "READING", noteId: null }, data: { ...scanData, noteId: row.id } });

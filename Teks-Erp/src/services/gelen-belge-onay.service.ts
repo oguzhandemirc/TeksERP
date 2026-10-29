@@ -18,19 +18,19 @@
 // gelen renkli kumaşı bitmiş depoya düşürürdü; emanet mal İŞLENMEK üzere gelir → ham stok.
 // =============================================================================
 import { DeliveryNoteAliasScope, DeliveryNoteLineStatus, DeliveryNoteStatus, Prisma, RollEntrySource, RollStatus } from "@prisma/client";
+import { createHash } from "node:crypto";
 import { v5 as uuidv5 } from "uuid";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
-import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import { InventoryService } from "./inventory.service";
 import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";
 import { getDeliveryNote } from "./gelen-belge-note.service";
 import { auditLine } from "./gelen-belge-line.service";
-import { resolveDefaultItemForApproval } from "./gelen-belge-ayar.service";
+import { resolveDefaultItemForApproval, type DefaultItemSource } from "./gelen-belge-varsayilan.service";
 import { readUnreviewedApprovalMode } from "./system-setting.service";
 import { assertKursunGramajValue } from "./helpers/kursun-bypass-gramaj.helper";
-import { ALIAS_KEY_MAX } from "./gelen-belge-eslestirme.service";
+import { aliasKey } from "./gelen-belge-eslestirme.service";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const LINE_TABLE = "CUSTOMER_DELIVERY_NOTE_LINE";
@@ -118,8 +118,8 @@ export function totalMismatches(note: { totalsDeclared: unknown }, lines: Readon
  */
 interface PrecheckResult {
   warnings: string[];
-  /** Ürünü seçilmemiş açık satır varsa ve ayar doluysa onların doğacağı ürün (hizmet ekseni E3); yoksa null. */
-  defaultItem: { id: string; name: string } | null;
+  /** Ürünü seçilmemiş açık satır varsa onların doğacağı ürün: sahibin varsayılanı (E4) ya da fabrika ayarı (E3); yoksa null. */
+  defaultItem: { id: string; name: string; source: DefaultItemSource } | null;
 }
 
 async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: typeof PRE_SELECT }>, input: ApproveInput): Promise<PrecheckResult> {
@@ -130,9 +130,9 @@ async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: ty
   const open = note.lines.filter((l) => l.status === "PENDING" || l.status === "FAILED" || l.status === "ENTERING");
   if (open.length === 0) throw AppError.conflict(`${note.noteNo} için işlenecek satır yok (hepsi girilmiş ya da atlanmış).`, { code: "DELIVERY_NOTE_NO_OPEN_LINES" });
   const unresolved = open.filter((l) => !l.itemId).map((l) => l.lineNo);
-  // Hizmet ekseni (E3): ayar doluysa ürünsüz satır varsayılan ürünle girer; ayar boşsa bugünkü 400. Ayar dolu ama ürün
-  // top doğuramıyorsa (pasif/birleşmiş/silinmiş) sessizce düşmez → 409 GELEN_BELGE_DEFAULT_ITEM_UNUSABLE.
-  const defaultItem = unresolved.length ? await resolveDefaultItemForApproval() : null;
+  // Hizmet ekseni (E3/E4): ürünsüz satır sahibin varsayılanıyla, yoksa fabrika ayarıyla girer; ikisi de boşsa bugünkü 400.
+  // Varsayılan top doğuramıyorsa (pasif/birleşmiş/silinmiş) sessizce düşmez → 409 GELEN_BELGE_DEFAULT_ITEM_UNUSABLE.
+  const defaultItem = unresolved.length ? await resolveDefaultItemForApproval(note.ownerCustomerId) : null;
   if (unresolved.length && !defaultItem) {
     throw AppError.badRequest(`Ürünü çözülmemiş satır var: ${unresolved.join(", ")}. Her satırda ürün eşlenmeden onaylanamaz.`, { code: "DELIVERY_NOTE_LINE_UNRESOLVED", lineNos: unresolved });
   }
@@ -146,7 +146,7 @@ async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: ty
   const reason = input.varianceReason?.trim();
   const warnings = totalWarnings(note, note.lines);
   if (unreviewed.length) warnings.push(`Gözden geçirilmemiş satırla onaylandı: ${unreviewed.join(", ")}.`);
-  if (defaultItem) warnings.push(`Ürünü seçilmemiş ${unresolved.length} satır varsayılan ürünle (${defaultItem.name}) girildi.`);
+  if (defaultItem) warnings.push(`Ürünü seçilmemiş ${unresolved.length} satır varsayılan ürünle (${defaultItem.name}; ${defaultItem.source === "CUSTOMER" ? "müşteri varsayılanı" : "fabrika varsayılanı"}) girildi.`);
   // Sayfa kapısı: "1/2" beyanı varsa her sayfanın taraması olmalı (yalnız taramalı belgede; elle/Excel'de tarama yok). Gerekçeyle aşılır (tasarım §4).
   if (note.pageCount != null && note.scans.length > 0) {
     const have = new Set(note.scans.map((s) => s.pageNo));
@@ -177,7 +177,7 @@ async function resolveProcessChoices(note: { processText: string | null; lines: 
     const text = (line?.processText?.trim() || note.processText?.trim()) ?? "";
     if (!text) throw AppError.badRequest("İşlem metni boş satıra gramaj seçimi öğretilemez.", { code: "PROCESS_CHOICE_TEXT_EMPTY" });
     // Aynı (katlanmış) metne çelişkili iki seçim: sessizce "son gelen kazanır" yerine 400.
-    const key = foldNameForCompare(text).slice(0, ALIAS_KEY_MAX);
+    const key = aliasKey("PROCESS", text);
     const prev = byKey.get(key);
     if (prev && prev !== c.valueId) throw AppError.badRequest("Aynı işlem metnine iki farklı gramaj seçilmiş.", { code: "PROCESS_CHOICE_CONFLICT" });
     byKey.set(key, c.valueId);
@@ -188,11 +188,21 @@ async function resolveProcessChoices(note: { processText: string | null; lines: 
   return out;
 }
 
+/**
+ * Sözlük audit yükü: katlanmış OCR metni (rawKey) audit'e GİRMEZ (ham OCR metni kuralı) — uzunluk + sha256 ilk 12.
+ * Aynı anahtarın kayıtları özetten eşlenir; metnin kendisi yalnız tabloda.
+ */
+export function aliasKeyAudit(rawKey: string): { rawKeyLength: number; rawKeyDigest: string } {
+  return { rawKeyLength: rawKey.length, rawKeyDigest: createHash("sha256").update(rawKey).digest("hex").slice(0, 12) };
+}
+
+type AliasUpsertRow = { id: string; hitCount: number; inserted: boolean; prevTargetId: string | null };
+
 /** Alias öğrenme — onayda çözülmüş (metin → kimlik) eşlemeler sözlüğe; tekrar görülende `hitCount` artar. Best-effort. */
 async function learnAliases(note: { senderCustomerId: string | null; senderText: string | null }, lines: LineRow[], userId: string, processChoices: readonly ProcessChoice[] = []): Promise<void> {
   const seen = new Map<string, { scope: DeliveryNoteAliasScope; senderCustomerId: string | null; rawKey: string; targetId: string }>();
   const add = (scope: DeliveryNoteAliasScope, senderCustomerId: string | null, text: string | null, targetId: string | null) => {
-    const rawKey = text ? foldNameForCompare(text).slice(0, ALIAS_KEY_MAX) : "";
+    const rawKey = text ? aliasKey(scope, text) : "";
     if (!rawKey || !targetId) return;
     seen.set(`${scope}|${senderCustomerId ?? ""}|${rawKey}`, { scope, senderCustomerId, rawKey, targetId });
   };
@@ -205,14 +215,25 @@ async function learnAliases(note: { senderCustomerId: string | null; senderText:
   // İşlem metni → gramaj çeşidi (H9): yalnız operatörün kabul ettiği/düzelttiği öneri öğrenilir; kalıp kendisi yazmaz.
   for (const c of processChoices) add("PROCESS", note.senderCustomerId, c.text, c.valueId);
   for (const a of seen.values()) {
-    // Polimorfik hedef: aynı anahtar başka hedefe öğretilirse SON onay kazanır (operatör kararı tazedir).
-    const prior = await prisma.deliveryNoteAlias.findFirst({ where: { scope: a.scope, senderCustomerId: a.senderCustomerId, rawKey: a.rawKey }, select: { id: true, targetId: true, hitCount: true } });
-    if (prior) {
-      await prisma.deliveryNoteAlias.update({ where: { id: prior.id }, data: { targetId: a.targetId, hitCount: { increment: 1 } } });
-      await AuditService.log({ userId, action: "UPDATE", tableName: ALIAS_TABLE, recordId: prior.id, oldData: { targetId: prior.targetId, hitCount: prior.hitCount }, newData: { scope: a.scope, rawKey: a.rawKey, targetId: a.targetId, hitCount: prior.hitCount + 1 } });
+    // TEK İFADE (E4): eşzamanlı iki onay aynı anahtarı yazarsa ikisi de sayılır, çift satır doğmaz — tekil indeks
+    // NULLS NOT DISTINCT (gönderensiz anahtar da tekil). Polimorfik hedef: SON onay kazanır (operatör kararı tazedir).
+    // `prevTargetId` yalnız audit içindir (ifadenin anlık görüntüsü).
+    const [row] = await prisma.$queryRaw<AliasUpsertRow[]>(Prisma.sql`
+      WITH prev AS (
+        SELECT "targetId" FROM "delivery_note_aliases"
+        WHERE "scope" = ${a.scope}::"DeliveryNoteAliasScope" AND "senderCustomerId" IS NOT DISTINCT FROM ${a.senderCustomerId}::uuid AND "rawKey" = ${a.rawKey}
+      )
+      INSERT INTO "delivery_note_aliases" ("id", "scope", "senderCustomerId", "rawKey", "targetId", "hitCount", "createdAt", "updatedAt")
+      VALUES (gen_random_uuid(), ${a.scope}::"DeliveryNoteAliasScope", ${a.senderCustomerId}::uuid, ${a.rawKey}, ${a.targetId}::uuid, 1, now(), now()) -- tz-ok: kolonlar timestamptz; ham INSERT Prisma'nın @default/@updatedAt kancasını atlar
+      ON CONFLICT ("scope", "senderCustomerId", "rawKey") DO UPDATE
+        SET "targetId" = EXCLUDED."targetId", "hitCount" = "delivery_note_aliases"."hitCount" + 1, "updatedAt" = now() -- tz-ok: kolon timestamptz; ham UPDATE @updatedAt kancasını atlar
+      RETURNING "id", "hitCount", (xmax = 0) AS "inserted", (SELECT "targetId" FROM prev) AS "prevTargetId"`);
+    if (!row) continue;
+    const key = aliasKeyAudit(a.rawKey);
+    if (row.inserted) {
+      await AuditService.log({ userId, action: "CREATE", tableName: ALIAS_TABLE, recordId: row.id, newData: { scope: a.scope, senderCustomerId: a.senderCustomerId, ...key, targetId: a.targetId, hitCount: row.hitCount } });
     } else {
-      const row = await prisma.deliveryNoteAlias.create({ data: { ...a, hitCount: 1 }, select: { id: true } }).catch(() => null);
-      if (row) await AuditService.log({ userId, action: "CREATE", tableName: ALIAS_TABLE, recordId: row.id, newData: { scope: a.scope, senderCustomerId: a.senderCustomerId, rawKey: a.rawKey, targetId: a.targetId, hitCount: 1 } });
+      await AuditService.log({ userId, action: "UPDATE", tableName: ALIAS_TABLE, recordId: row.id, oldData: { targetId: row.prevTargetId, hitCount: row.hitCount - 1 }, newData: { scope: a.scope, ...key, targetId: a.targetId, hitCount: row.hitCount } });
     }
   }
 }
@@ -306,7 +327,7 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
         else summary.entered++;
         summary.rollIds.push(rollId);
         entered.push(line);
-        await AuditService.log({ userId, action: "UPDATE", tableName: LINE_TABLE, recordId: line.id, oldData: { status: line.status }, newData: { status: "ENTERED", rollId, lineNo: line.lineNo, noteNo: note.noteNo, ...(res.idempotent ? { replayed: true } : {}), ...(!line.itemId && defaultItem ? { defaultItemId: defaultItem.id } : {}) } });
+        await AuditService.log({ userId, action: "UPDATE", tableName: LINE_TABLE, recordId: line.id, oldData: { status: line.status }, newData: { status: "ENTERED", rollId, lineNo: line.lineNo, noteNo: note.noteNo, ...(res.idempotent ? { replayed: true } : {}), ...(!line.itemId && defaultItem ? { defaultItemId: defaultItem.id, defaultItemSource: defaultItem.source } : {}) } });
       }
     } catch (err) {
       const failReason = (err instanceof Error ? err.message : "Bilinmeyen hata").slice(0, 500);
@@ -324,7 +345,7 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
     where: { id, status: DeliveryNoteStatus.APPROVING },
     data: { status: finalStatus, updatedById: userId, ...(finalStatus === "APPROVED" ? { approvedAt: new Date(), approvedById: userId } : {}) },
   });
-  await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: id, oldData: { status: "APPROVING" }, newData: { status: finalStatus, noteNo: note.noteNo, entered: summary.entered, failed: summary.failed, replayed: summary.replayed } });
+  await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: id, oldData: { status: "APPROVING" }, newData: { status: finalStatus, noteNo: note.noteNo, entered: summary.entered, failed: summary.failed, replayed: summary.replayed, ...(defaultItem ? { defaultItemId: defaultItem.id, defaultItemSource: defaultItem.source } : {}) } });
   // Alias öğrenme tx DIŞINDA ve best-effort: sözlük istatistiktir, top doğumunu geciktirmez/geri sarmaz.
   if (entered.length) await learnAliases(note, entered, userId, processChoices).catch(() => undefined);
 

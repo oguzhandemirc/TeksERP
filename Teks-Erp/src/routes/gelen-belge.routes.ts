@@ -26,6 +26,7 @@ import { getRollTabletContext } from "../services/roll-tablet.service";
 import { getDocumentScan, readDocumentScanContent, uploadDocumentScan } from "../services/gelen-belge-scan.service";
 import { suggestForNote } from "../services/gelen-belge-eslestirme.service";
 import { listSenderTemplates, updateSenderTemplate } from "../services/gelen-belge-sablon.service";
+import { listCustomerDefaults, removeCustomerDefault, setCustomerDefault } from "../services/gelen-belge-varsayilan.service";
 import { assertScanReadable, readerQueueCounts, requeueScanForReading } from "../services/gelen-belge-okuma.service";
 import { readerJobStatus, requestImmediateReaderRun } from "../jobs/gelen-belge-okuma.job";
 import { getReaderUrl } from "../lib/gelen-belge/url";
@@ -419,6 +420,52 @@ const TemplatePatch = z.strictObject({
 router.get("/sablonlar", requirePermission("gelen-belge:template"), wrap(async () => ({ status: 200, data: await listSenderTemplates() })));
 router.patch("/sablonlar/:code", requirePermission("gelen-belge:template"), wrap(async (req) => ({
   status: 200, data: await updateSenderTemplate(TemplateCode.parse(req.params.code), TemplatePatch.parse(req.body), req.user!.userId),
+})));
+
+// ── E4 sahibe özel varsayılan ürün (`gelen-belge:template` — şablon yönetimiyle aynı kişi; SystemSetting değil, ayar şifresi yok)
+const CustomerDefaultBody = z.strictObject({ defaultItemId: Id });
+/**
+ * @openapi
+ * /api/gelen-belge/varsayilan-urunler:
+ *   get:
+ *     tags: [Gelen belge]
+ *     summary: Sahibe özel varsayılan ürünler (müşteri → ürün; problem dolu = onayda 409 verecek)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "CustomerDefaultView[] { customerId, customer, item, problem, updatedAt }" }
+ *       403: { description: "MODULE_DISABLED ya da izin yok" }
+ * /api/gelen-belge/varsayilan-urunler/{customerId}:
+ *   put:
+ *     tags: [Gelen belge]
+ *     summary: Müşterinin varsayılan ürününü yaz (yoksa doğar); ürünsüz satır onayda bu üründen doğar (fabrika ayarını ezer)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: customerId, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema: { type: object, required: [defaultItemId], properties: { defaultItemId: { type: string, format: uuid } } }
+ *     responses:
+ *       200: { description: "CustomerDefaultView" }
+ *       400: { description: "GELEN_BELGE_CUSTOMER_INVALID (yok/pasif) · GELEN_BELGE_DEFAULT_ITEM_INVALID (iplik/pasif/bulunamadı) · doğrulama" }
+ *       409: { description: "GELEN_BELGE_CUSTOMER_DEFAULT_CHANGED (araya başka yazım girdi)" }
+ *   delete:
+ *     tags: [Gelen belge]
+ *     summary: Müşterinin varsayılan ürününü kaldır (saf yapılandırma — sert silme); sonra fabrika ayarı geçerli
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: customerId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{ customerId }" }
+ *       404: { description: "GELEN_BELGE_CUSTOMER_DEFAULT_NOT_FOUND" }
+ *       409: { description: "GELEN_BELGE_CUSTOMER_DEFAULT_CHANGED" }
+ */
+router.get("/varsayilan-urunler", requirePermission("gelen-belge:template"), wrap(async () => ({ status: 200, data: await listCustomerDefaults() })));
+router.put("/varsayilan-urunler/:customerId", requirePermission("gelen-belge:template"), wrap(async (req) => ({
+  status: 200, data: await setCustomerDefault(Id.parse(req.params.customerId), CustomerDefaultBody.parse(req.body).defaultItemId, req.user!.userId),
+})));
+router.delete("/varsayilan-urunler/:customerId", requirePermission("gelen-belge:template"), wrap(async (req) => ({
+  status: 200, data: await removeCustomerDefault(Id.parse(req.params.customerId), req.user!.userId),
 })));
 
 export default router;

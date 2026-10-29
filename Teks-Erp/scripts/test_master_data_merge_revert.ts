@@ -304,6 +304,52 @@ async function main(): Promise<void> {
 
   console.log("\n§13 Kardeş alias tabloları (GENERATED aliasFold): birleştir → geri al");
   await kardesAliasGeriAlma();
+
+  console.log("\n§14 Gelen belge müşteri varsayılanı (SKIP): birleştir → geri al");
+  await customerDefaultRevertCase();
+}
+
+/**
+ * §14 — E4: `delivery_note_customer_defaults` müşteri başına tek satır (CONFLICT/SKIP).
+ * İki müşteride de varsayılan varken birleştirme kaynağınkini atar; geri alma onu DÖNDÜRÜR,
+ * hedefinkine dokunmaz. Yalnız kaynakta olan varsayılan taşınır ve geri almada kaynağına döner.
+ */
+async function customerDefaultRevertCase(): Promise<void> {
+  const custS = await makeCustomer("VD-H", `${TAG} Varsayılan Hedef`);
+  const custK = await makeCustomer("VD-K", `${TAG} Varsayılan Kaynak`);
+  const custK2 = await makeCustomer("VD-K2", `${TAG} Varsayılan Tek Kaynak`);
+  const custS2 = await makeCustomer("VD-H2", `${TAG} Varsayılansız Hedef`);
+  const iS = await makeItem("VD-IS");
+  const iK = await makeItem("VD-IK");
+  await prisma.deliveryNoteCustomerDefault.createMany({
+    data: [
+      { customerId: custS, defaultItemId: iS },
+      { customerId: custK, defaultItemId: iK },
+      { customerId: custK2, defaultItemId: iK },
+    ],
+  });
+  const defOf = (customerId: string) =>
+    prisma.deliveryNoteCustomerDefault.findUnique({ where: { customerId }, select: { id: true, defaultItemId: true } });
+  const idK = (await defOf(custK))?.id;
+  const op = await mergeEntity("customer", custS, [custK], 1, "varsayılanlı iki müşteri birleştiriliyor (E4 sondası)");
+  check("§14a Zemin: kaynağın varsayılanı SKIP ile atıldı", (await defOf(custK)) === null && (await defOf(custS))?.defaultItemId === iS);
+  const err = await tryRevert(op, "varsayılanlı birleştirme geri alınıyor");
+  check("§14b Geri alma başarılı", err === null, err ?? "");
+  const backK = await defOf(custK);
+  const backS = await defOf(custS);
+  check(
+    "§14c ⭐ SKIP ile atılan kaynak varsayılanı AYNI kimlikle döndü, hedefinki değişmedi",
+    backK?.id === idK && backK?.defaultItemId === iK && backS?.defaultItemId === iS,
+    JSON.stringify({ backK, backS }),
+  );
+  const op2 = await mergeEntity("customer", custS2, [custK2], 0, "tek taraflı varsayılan taşınıyor (E4 sondası)");
+  check("§14d Zemin: yalnız kaynakta olan varsayılan hedefe taşındı", (await defOf(custS2))?.defaultItemId === iK && (await defOf(custK2)) === null);
+  const err2 = await tryRevert(op2, "tek taraflı varsayılan geri alınıyor");
+  check(
+    "§14e ⭐ Taşınan varsayılan geri almada kaynağına döndü",
+    err2 === null && (await defOf(custK2))?.defaultItemId === iK && (await defOf(custS2)) === null,
+    err2 ?? "",
+  );
 }
 
 /**
@@ -621,6 +667,7 @@ async function cleanup(): Promise<void> {
       await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
     }
     if (customerIds.length) {
+      await prisma.deliveryNoteCustomerDefault.deleteMany({ where: { customerId: { in: customerIds } } });
       await prisma.customerItemColorAlias.deleteMany({ where: { customerId: { in: customerIds } } });
       await prisma.customerItemAlias.deleteMany({ where: { customerId: { in: customerIds } } });
       await prisma.customerColorAlias.deleteMany({ where: { customerId: { in: customerIds } } });
