@@ -28,7 +28,7 @@ import { AuditService } from "./audit.service";
 import {
   collectShipmentServiceBilling,
   insertServiceLinksTx,
-  lockBillableShipmentTx,
+  lockBillableShipmentsTx,
   lockServiceReadingsTx,
   reconcileServiceLinksWithLines,
   revokeServiceLinksTx,
@@ -144,6 +144,8 @@ export interface CreateInvoiceInput {
    * sevkiyata bağlıysa (hizmet faturası açıkken) sunucu sevkin faturalanmamış işlerini kendisi bağlar.
    */
   serviceLinks?: ServiceBillingLinkInput[];
+  /** H8 dönem taslağı — bağların dayandığı sevkiyatlar (YALNIZ sunucu içi); tx başında 8023 kilitleri sıralı alınır. */
+  serviceShipmentIds?: string[];
 }
 
 /** Bir fatura yolunun iplik defterine yaptığı etki (çıkış ya da ters kayıt). */
@@ -376,6 +378,8 @@ export class InvoiceService {
     if (input.type !== InvoiceType.SALES || !input.shipmentId || !input.customerId) return [];
     if (!(await resolveServiceBillingEnabled())) return [];
     const settings = await loadServiceBillingSettings();
+    // H8: PERIOD_END'de iş dönem sonu taslağını bekler — sevk taslağı hizmet bağı kurmaz.
+    if (settings.trigger === "PERIOD_END") return [];
     const sh = await prisma.shipment.findUnique({ where: { id: input.shipmentId }, select: { dispatchedAt: true } });
     const draft = await collectShipmentServiceBilling({
       shipmentId: input.shipmentId, customerId: input.customerId, currency, settings, dispatchedAt: sh?.dispatchedAt ?? null,
@@ -416,7 +420,8 @@ export class InvoiceService {
     return await withBarcodeRetry(async () => {
     const result = await prisma.$transaction(async (tx) => {
       // H7: bağlı taslak sevk geri almayla serileşir (8023 tx'in İLK ifadesi).
-      if (serviceLinks.length > 0 && input.shipmentId) await lockBillableShipmentTx(tx, input.shipmentId);
+      // H8: dönem taslağı n sevkiyatı sıralı kilitler (aynı uzay, deterministik sıra).
+      if (serviceLinks.length > 0) await lockBillableShipmentsTx(tx, input.shipmentId ? [input.shipmentId] : input.serviceShipmentIds ?? []);
       const cari = await ensureCariAccountTx(tx, {
         customerId: input.customerId ?? null,
         subcontractorId: input.subcontractorId ?? null,

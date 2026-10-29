@@ -118,7 +118,7 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}workorder-batch-add.service.ts::addBatchToWorkOrderTx`]: { giris: { [`${S}workorder-batch-add.service.ts::addBatch`]: "K′" } },
   [`${S}packing-group.service.ts::createGroupFresh`]: { giris: { [`${S}packing-group.service.ts::createWithSacks`]: "R", [`${S}packing-group.service.ts::createGroupFresh`]: "K′" } },
   [`${S}warehouse-transfer.service.ts::createFresh`]: { giris: { [`${S}warehouse-transfer.service.ts::create`]: "R" } },
-  [`${S}invoice.service.ts::createDraftFresh`]: { giris: { [`${S}invoice.service.ts::createDraft`]: "R" } },
+  [`${S}invoice.service.ts::createDraftFresh`]: { giris: { [`${S}invoice.service.ts::createDraft`]: "R", [`${S}service-period-invoice.service.ts::createServicePeriodDraft`]: "R" } },
 
   // ── Boğazda: D5a (finans) — ön-okuma iş kurallarından ÖNCE; taraf karta çözülmüş hâliyle ────────────────
   [`${S}payment.service.ts::createFresh`]: { giris: { [`${S}payment.service.ts::create`]: "R" } },
@@ -212,6 +212,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}inventory.service.ts::initialEntryReplay`]: ["itemId", "colorId", "initialQty"],
   [`${S}inventory.service.ts::openFabricReplay`]: ["parentReceiptId", "producedInStepId"],
   [`${S}invoice.service.ts::invoiceReplay`]: ["type", "taraf", "currency", "satırlar"],
+  [`${S}service-period-invoice.service.ts::servicePeriodReplay`]: ["type", "cariId", "period"],
   [`${S}machine-collector.service.ts::collectorReplay`]: ["name", "collectorType", "machineIds"],
   [`${S}machine-doff.service.ts::doffReplay`]: ["machineId", "productionLineNo", "pieceCount"],
   [`${S}machine-run.service.ts::runReplay`]: ["machineId", "productionLineNo", "weavingOrderId"],

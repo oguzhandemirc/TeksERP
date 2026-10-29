@@ -1,4 +1,4 @@
-import { Cog, Copy, KeyRound, ServerCog, Settings2, Link2, FileText } from "lucide-react";
+import { Cog, Copy, KeyRound, ServerCog, Settings2, Link2, FileText, CalendarRange } from "lucide-react";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
 import { ROLL_TABS } from "@/pages/Operations/Rolls/tabs-config";
 import { ETIKET_TABS } from "@/pages/Labels/tabs-config";
@@ -197,6 +197,17 @@ const orphanPageEntries: CommandEntry[] = [
     keywords: "muayene raporu 4 puan kalite sevk pdf excel yazdır müşteri",
     deep: true,
     visibleWhen: (ctx) => ctx.kaliteGuvenceEnabled,
+  },
+  {
+    // H8: Faturalar ekranındaki dönem sonu hizmet faturası diyaloğu doğrudan açılır (`?donemSonu=1`).
+    key: "finance:service-period-draft",
+    label: "Faturalar · Dönem sonu hizmet faturası",
+    description: "Ayın emanet işlerini (kurşun vb.) önizle, tek hizmet faturası taslağında topla",
+    icon: CalendarRange,
+    to: "/finance/invoices?donemSonu=1",
+    permission: "finance:write",
+    keywords: "dönem sonu ay sonu hizmet fatura taslak emanet kurşun işçilik toplu aylık",
+    deep: true,
   },
 ];
 
