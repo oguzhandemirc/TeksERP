@@ -33,6 +33,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { p2002Mentions } from "../utils/p2002";
 import { factoryDayKeyUtcMidnight } from "../constants/time";
+import { assertMachineStopKindAllowed, machineStopRegime } from "./helpers/machine-stop-regime.helper";
 import {
   MACHINE_STOP_SELECT,
   type MachineStopDto,
@@ -98,9 +99,10 @@ export async function openStopCore(input: OpenStopCoreInput, opts: OpenManualSto
       // ① Replay — yaratmadan ÖNCE ve AYNI bağlantıda (ayrı havuz alımı istemesin).
       const existing = await findStopReplayTx(tx, input.machineId, stopKey, input.fingerprint);
       if (existing) return { replay: true as const, row: existing };
-      const machine = await tx.machine.findUnique({ where: { id: input.machineId }, select: { id: true, isActive: true, warpBeamSlots: true } });
+      const machine = await tx.machine.findUnique({ where: { id: input.machineId }, select: { id: true, isActive: true, warpBeamSlots: true, station: { select: { kind: true } } } });
       if (!machine) throw AppError.notFound("Makine bulunamadı", { machineId: input.machineId });
       if (!machine.isActive) throw AppError.badRequest("Pasif makineye duruş girilemez.", { code: "MACHINE_INACTIVE" });
+      assertMachineStopKindAllowed(await machineStopRegime(tx), machine.station.kind); // D4-A1: dokumasız rejimde yalnız kurşun/brode/tambur
       assertBeamSlotValid(machine, input.beamSlot);
       const preset = input.reasonCode ? await resolveStopPreset(tx, input.reasonCode) : null;
       const shiftInstanceId = await resolveShiftInstanceId(tx, started.value);

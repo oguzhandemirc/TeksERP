@@ -72,6 +72,7 @@ import {
   readTicaretEnabled,
 } from "../services/system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
+import { machineStopRegime } from "../services/helpers/machine-stop-regime.helper";
 import { AppError } from "../utils/app-error";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
@@ -237,6 +238,28 @@ export async function requireDokumaEnabled(
       throw licenseModuleError(SETTING_KEYS.DOKUMA_ENABLED, "Dokuma iş emri") ?? modulKapali("dokuma", "Dokuma iş emri");
     }
     next();
+  } catch (e) {
+    next(e);
+  }
+}
+
+/**
+ * Makine duruşu rejimi (D4-A1): `dokuma ∨ (üretim ∧ uretim.makineDurusTakibi)` — yüklem TEK yerde
+ * (`machine-stop-regime.helper`). Genel rejim kapalıyken karar `requireDokumaEnabled`e DEVREDİLİR:
+ * ayar kapalı kurulumda 403 gövdesi (lisans/ön koşul mesajı dahil) bugünküyle bayt-aynı kalır.
+ */
+export async function requireMachineStopRegime(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const regime = await machineStopRegime();
+    if (regime.general) {
+      next();
+      return;
+    }
+    await requireDokumaEnabled(req, res, next);
   } catch (e) {
     next(e);
   }
