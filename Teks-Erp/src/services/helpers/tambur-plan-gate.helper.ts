@@ -52,7 +52,7 @@ type WidthGate = Awaited<ReturnType<typeof effectiveTamburPlanWidthGate>>;
 
 /**
  * EN kolu (D4-E1): eşik/kontrol fabrika ayarından. Ayar yalnız iki en de doluyken
- * okunur — renk sapması yoksa sıcak yol ayar sorgusu atmaz. Eşit fark sapma DEĞİL.
+ * okunur (iki sorgu); en eksikse ayar sorgusu atılmaz. Eşit fark sapma DEĞİL.
  */
 async function evaluateWidthGate(
   rollWidthRaw: unknown,

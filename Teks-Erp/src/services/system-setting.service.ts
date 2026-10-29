@@ -6954,16 +6954,6 @@ export async function readFasonShrinkWarnEnabled(
 /** Fabrika varsayılanı — boyahane çekmesi tipik olarak %8-12 bandındadır. */
 export const DEFAULT_FASON_SHRINK_TOLERANCE_PCT = 10;
 
-/**
- * Çekme toleransı (yüzde). Kayıt YOKSA varsayılan (%10); kayıt VARSA `0` dahil
- * ne yazıldıysa o.
- *
- * ⚠️ `readTamburShortCutA1ThresholdM`'in `<= 0 → null` kalıbı BURADA YANLIŞ
- * OLURDU: orada 0 "eşik girilmemiş" demek, burada 0 "hiç tolerans yok" demek
- * ve ikisi zıt davranışlar üretir (kural inert ↔ kural her farkta ateşler).
- * Bozuk/negatif değer varsayılana düşer (fail-safe: uyarı susmasın diye değil,
- * bilinmeyen bir sayıyla operatörü şaşırtmamak için).
- */
 /** Tambur plan kapısı en eşiği (cm). Kayıt yok/çöp → 10 (bugünkü sabit). */
 export async function readTamburPlanGateWidthToleranceCm(
   tx?: Pick<typeof prisma, "systemSetting">,
@@ -7011,6 +7001,16 @@ export async function effectiveTamburPlanWidthGate(
   };
 }
 
+/**
+ * Çekme toleransı (yüzde). Kayıt YOKSA varsayılan (%10); kayıt VARSA `0` dahil
+ * ne yazıldıysa o.
+ *
+ * ⚠️ `readTamburShortCutA1ThresholdM`'in `<= 0 → null` kalıbı BURADA YANLIŞ
+ * OLURDU: orada 0 "eşik girilmemiş" demek, burada 0 "hiç tolerans yok" demek
+ * ve ikisi zıt davranışlar üretir (kural inert ↔ kural her farkta ateşler).
+ * Bozuk/negatif değer varsayılana düşer (fail-safe: uyarı susmasın diye değil,
+ * bilinmeyen bir sayıyla operatörü şaşırtmamak için).
+ */
 export async function readFasonShrinkTolerancePct(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<number> {

@@ -136,24 +136,24 @@ function identifierRefs(name: string): { scanned: number; refs: Map<string, stri
     select: { key: true, value: true },
   });
   for (const k of GATE_KEYS) await writeGateSetting(k, null);
-  const ts = `${process.pid}${String(Math.floor(Math.random() * 1e6)).padStart(6, "0")}`;
+  const runTag = `${process.pid}${String(Math.floor(Math.random() * 1e6)).padStart(6, "0")}`;
   try {
     const station = await prisma.station.findFirstOrThrow({
       where: { kind: StationKind.TAMBUR },
       select: { id: true },
     });
     const [mavi, gri] = await Promise.all([
-      prisma.color.create({ data: { code: `TEST-PG-MAVI-${ts}`, name: `TEST PG MAVI ${ts}` }, select: { id: true } }),
-      prisma.color.create({ data: { code: `TEST-PG-GRI-${ts}`, name: `TEST PG GRI ${ts}` }, select: { id: true } }),
+      prisma.color.create({ data: { code: `TEST-PG-MAVI-${runTag}`, name: `TEST PG MAVI ${runTag}` }, select: { id: true } }),
+      prisma.color.create({ data: { code: `TEST-PG-GRI-${runTag}`, name: `TEST PG GRI ${runTag}` }, select: { id: true } }),
     ]);
     colorIds.push(mavi.id, gri.id);
     const [item, item2] = await Promise.all([
       prisma.item.create({
-        data: { code: `TEST-PG-ITM-${ts}`, name: `TEST PG PATOS ${ts}`, itemType: "FABRIC", unit: "MT" },
+        data: { code: `TEST-PG-ITM-${runTag}`, name: `TEST PG PATOS ${runTag}`, itemType: "FABRIC", unit: "MT" },
         select: { id: true },
       }),
       prisma.item.create({
-        data: { code: `TEST-PG-ITM2-${ts}`, name: `TEST PG TERGAL ${ts}`, itemType: "FABRIC", unit: "MT" },
+        data: { code: `TEST-PG-ITM2-${runTag}`, name: `TEST PG TERGAL ${runTag}`, itemType: "FABRIC", unit: "MT" },
         select: { id: true },
       }),
     ]);
@@ -170,7 +170,7 @@ function identifierRefs(name: string): { scanned: number; refs: Map<string, stri
     }) => {
       const wo = await prisma.workOrder.create({
         data: {
-          workOrderNumber: `TEST-PG-IE-${ts}-${woIds.length}`,
+          workOrderNumber: `TEST-PG-IE-${runTag}-${woIds.length}`,
           status: "IN_PROGRESS",
           targetItemId: item.id,
           targetColorId: opts.targetColorId ?? null,
@@ -185,7 +185,7 @@ function identifierRefs(name: string): { scanned: number; refs: Map<string, stri
       });
       const roll = await prisma.roll.create({
         data: {
-          barcode: `TEST-PG-R-${ts}-${rollIds.length}`,
+          barcode: `TEST-PG-R-${runTag}-${rollIds.length}`,
           itemId: item.id,
           colorId: opts.rollColorId ?? null,
           width: opts.rollWidth ?? null,
@@ -453,13 +453,13 @@ function identifierRefs(name: string): { scanned: number; refs: Map<string, stri
     // ── B. Override zinciri ──
     console.log("B) Uyumsuz sipariş override zinciri");
     const customer = await prisma.customer.create({
-      data: { code: `TEST-PG-CUS-${ts}`, name: `TEST PG MUSTERI ${ts}` },
+      data: { code: `TEST-PG-CUS-${runTag}`, name: `TEST PG MUSTERI ${runTag}` },
       select: { id: true },
     });
     customerIds.push(customer.id);
     const order = await prisma.order.create({
       data: {
-        orderNumber: `TEST-PG-ORD-${ts}`,
+        orderNumber: `TEST-PG-ORD-${runTag}`,
         customerId: customer.id,
         lines: {
           create: [
@@ -480,13 +480,13 @@ function identifierRefs(name: string): { scanned: number; refs: Map<string, stri
     // + 1 IN_PRODUCTION top (roll:manual-adjust ister).
     const b = await makeWoWithRoll({ targetColorId: gri.id, woWidth: 330, rollColorId: gri.id, rollWidth: 330 });
     const batch = await prisma.batch.create({
-      data: { batchNumber: `TEST-PG-BT-${ts}`, workOrderId: b.woId },
+      data: { batchNumber: `TEST-PG-BT-${runTag}`, workOrderId: b.woId },
       select: { id: true },
     });
     batchIds.push(batch.id);
     const stockRoll = await prisma.roll.create({
       data: {
-        barcode: `TEST-PG-RS-${ts}`,
+        barcode: `TEST-PG-RS-${runTag}`,
         itemId: item.id,
         colorId: gri.id,
         width: 330,
