@@ -75,6 +75,12 @@ import {
 } from './stationPanels';
 import GramajTapPanel from './GramajTapPanel';
 import { useGramajTap } from './useGramajTap';
+import MeterStrip from './MeterStrip';
+import MeterModals from './MeterModals';
+import { useMeterAcks } from './useMeterAcks';
+import { useMeterCapture } from './useMeterCapture';
+import { meterSettingsOf, pendingAcksFromError } from './meterCapture';
+import { primaryMeterFor, useMachinePeripherals } from '../../../hooks/useMachinePeripherals';
 import { findTarget } from './gramajTap';
 import { useAuthStore } from '../../../store/authStore';
 import { palette } from '../../../theme/tokens';
@@ -282,6 +288,16 @@ export default function KursunQcScreen() {
       ) ?? null
     );
   }, [activeJob]);
+
+  // H3 sayaç: kip/politika adım özetinden; OFF iken akış ve gövde bugünküyle aynı.
+  // Sayaç cihazı yalnız kip açıkken sorulur (OFF'ta ek istek yok).
+  const meterPeripherals = useMachinePeripherals('METER', meterSettingsOf(activeJob?.stepSummary).capture !== 'OFF');
+  const meterAcks = useMeterAcks();
+  const meter = useMeterCapture({
+    summary: activeJob?.stepSummary ?? null,
+    peripheral: primaryMeterFor(meterPeripherals),
+    acks: meterAcks,
+  });
 
   // ── İSTASYON ÖZELLİKLERİ (mod sözleşmesi, 2026-08-10) ─────────────────────
   // AUTO → salt bilgi (backend her topa yazar) · OPSİYONEL/ZORUNLU → tuş.
@@ -605,7 +621,8 @@ export default function KursunQcScreen() {
 
       return { cardId, prevRolls, prevSelectedRollId };
     },
-    onSuccess: () => {
+    onSuccess: (data, vars) => {
+      meter.onCompleteSuccess(data, vars);
       // Server confirm geldi — backend'den fresh state çek (open jobs listesi
       // de değişmiş olabilir: step kapanma, başka kart silinmesi vb.).
       // BEKLENMEZ (KQ-D5): mutasyon HTTP yanıtında settle olur; tek dokunuş
@@ -614,6 +631,7 @@ export default function KursunQcScreen() {
       void qc.invalidateQueries({ queryKey: ['kursun-qc', 'open-cards'] });
     },
     onError: (err, vars, context) => {
+      meter.onCompleteError(vars);
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       // 4xx (örn. WO iptal) veya net 5xx — optimistic update'i geri al.
       if (context) {
@@ -942,6 +960,12 @@ export default function KursunQcScreen() {
         setActiveCardId(context.prevActiveCardId);
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      // H3: onay bekleyen metre sapmaları Türkçe liste olarak gösterilir.
+      const unacked = pendingAcksFromError(err);
+      if (unacked) {
+        meterAcks.onUnacked(unacked);
+        return;
+      }
       showScreenError(err, 'Adım kapatılamadı');
     },
   });
@@ -992,6 +1016,7 @@ export default function KursunQcScreen() {
     operator: operatorLabel,
     complete: (vars, opts) => completeQc2Mutation.mutate(vars, opts),
     refresh: () => void refetchActiveJob().catch(() => undefined),
+    meter,
   });
   const tapLayout = panels.completion === 'TAP_VALUE';
 
@@ -1347,6 +1372,9 @@ export default function KursunQcScreen() {
               <Text style={styles.emptyHint} testID="kursun-empty-roll-hint">
                 {emptyRollHint(compact)}
               </Text>
+              {tapLayout && meter.outOn && (
+                <MeterStrip meter={meter} acks={meterAcks} roll={null} stepId={null} />
+              )}
               {tapLayout && <GramajTapPanel state={gramajTap} hasRoll={false} />}
             </View>
           ) : (
@@ -1358,7 +1386,12 @@ export default function KursunQcScreen() {
                   (yalnız kurşun) çizilmez; işlem paneli aynı sütunda kalır. */}
               {(() => {
                 const processCard = tapLayout && selectedRoll.barcode ? (
-                  <GramajTapPanel state={gramajTap} hasRoll={!selectedRoll.qc2Completed} />
+                  <>
+                    {meter.outOn && (
+                      <MeterStrip meter={meter} acks={meterAcks} roll={selectedRoll} stepId={activeJob.stepSummary.workOrderStepId} />
+                    )}
+                    <GramajTapPanel state={gramajTap} hasRoll={!selectedRoll.qc2Completed} />
+                  </>
                 ) : (
                   <>
                 {/* ── İSTASYON ÖZELLİKLERİ (mod güdümlü, 2026-08-10) ──
@@ -1625,6 +1658,8 @@ export default function KursunQcScreen() {
         note={activeJob?.stepSummary.stepNote ?? null}
         onDismiss={() => setNoteModalOpen(false)}
       />
+
+      <MeterModals meter={meter} acks={meterAcks} rolls={activeJob?.stepSummary.rolls ?? []} />
 
       {/* Kapalı kart okutulunca: reopen onay modalı (toplar Tambur'dan geri çekilir) */}
       <ReopenConfirmModal
