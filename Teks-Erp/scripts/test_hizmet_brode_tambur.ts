@@ -28,7 +28,7 @@
 //       bütünüyle yeniden kesmez (CUT kalır) · faturalı bayrak geri alınamaz (409 SERVICE_ALREADY_BILLED)
 //   §11 F1 makbuzdan KENDİSİ dönen top (doğan top yok, eski model) ⇒ BRODE RECEIVED = kalemin alınan metresi (190)
 //   §12 F1 ata + çocuk aynı sevkte ⇒ çocuk CUT + atanın kalan parçası DECLARED (Σ = ata metresi; eskiden ata düşüyordu)
-//   §14 K3b fasondan DOĞRUDAN sevk (DSK) edilen emanet topun Tambur işi dönem taslağına girer (tam 120 + kısmi çocuk CUT 40); tekrar toplanmaz
+//   §14 K3b fasondan DOĞRUDAN sevk (DSK) edilen emanet topun Tambur işi dönem taslağına girer (tam 120 + kısmi çocuk CUT 40); tekrar toplanmaz; elle fatura izli DSK önizlemede uyarır
 //   §13 K3b kendi dönen topta aynı adımın İKİ NULL receivedQty makbuz kalemi ⇒ RECEIVED = topun metresi bir kez (175, 350 değil)
 // Negatif sondalar (2026-10-29): bayrak çözüm dalı (`listFlagServiceWorks` çağrısı) kaldırılınca §2/§4/§5/§6
 // kırmızı · RECEIVED (makbuz) dalı kaldırılınca §6 kırmızı (geri alındı). Bitirici sondaları (2026-10-29):
@@ -514,6 +514,12 @@ async function main(): Promise<void> {
     tb14.length === 2 && tb14.some((l) => l.rollId === P14 && eq(l.billedMeters, 120)) && tb14.some((l) => l.rollId === kid14?.id && l.meterBasis === "CUT" && eq(l.billedMeters, 40)), JSON.stringify(tb14));
   const again14 = await previewServicePeriodDraft({ cariId: cari14.id, period: period14 });
   check("ikinci önizleme: aynı iş yeniden toplanmaz (alreadyBilled ≥ 2)", again14.alreadyBilledWorkCount >= 2 && !(await linksOf(pd14.data!.id)).some((l) => l.rollId === P14b), JSON.stringify({ w: again14.workCount, b: again14.alreadyBilledWorkCount }));
+  // K3b inceleme: DSK'nın elle fatura izi varsa önizleme çift faturaya karşı uyarır (izsizken uyarmaz).
+  check("fatura izi yokken DSK uyarısı yok", !pv14.warnings.some((w) => w.includes(dskNo)), JSON.stringify(pv14.warnings));
+  await prisma.directShipment.update({ where: { id: ds14.directShipmentId! }, data: { invoiceNo: "K3B-ELLE-1" } });
+  const inv14 = await previewServicePeriodDraft({ cariId: cari14.id, period: period14 });
+  await prisma.directShipment.update({ where: { id: ds14.directShipmentId! }, data: { invoiceNo: null } });
+  check("elle fatura izli DSK önizlemede uyarı verir", inv14.warnings.some((w) => w.includes(dskNo) && w.includes("K3B-ELLE-1")), JSON.stringify(inv14.warnings));
 }
 
 async function cleanup(): Promise<void> {

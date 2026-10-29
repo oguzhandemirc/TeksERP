@@ -309,7 +309,7 @@ export async function collectPeriodServiceBilling(params: {
 }): Promise<ServiceBillingDraft & {
   shipments: Array<{ id: string; shipmentNo: string; dispatchedAt: Date | null }>;
   /** K3b: fasondan doğrudan sevkler (DSK) — kilit/durum kapısına girmez (geri alma yolu yok), yalnız listelenir. */
-  directShipments: Array<{ id: string; shipmentNo: string; dispatchedAt: Date | null }>;
+  directShipments: Array<{ id: string; shipmentNo: string; dispatchedAt: Date | null; invoiceNo: string | null }>;
   billedWorkCount: number;
   billedDocNo: string | null;
 }> {
@@ -321,9 +321,9 @@ export async function collectPeriodServiceBilling(params: {
   // K3b: fasondan müşteriye doğrudan sevk de "sevk"tir — emanet topa yapılan iş aynı toplayıcıdan faturalanır.
   const directShipments = (await prisma.directShipment.findMany({
     where: { customerId: params.customerId, shippedAt: { gte: params.from, lte: params.to } },
-    select: { id: true, shipmentNo: true, shippedAt: true },
+    select: { id: true, shipmentNo: true, shippedAt: true, invoiceNo: true },
     orderBy: [{ shippedAt: "asc" }, { id: "asc" }],
-  })).map((d) => ({ id: d.id, shipmentNo: d.shipmentNo, dispatchedAt: d.shippedAt as Date | null }));
+  })).map((d) => ({ id: d.id, shipmentNo: d.shipmentNo, dispatchedAt: d.shippedAt as Date | null, invoiceNo: d.invoiceNo }));
   const pairs = [
     ...(await listShipmentServiceRollShipments(shipments.map((s) => s.id))),
     ...(await listDirectShipmentServiceRollShipments(directShipments.map((d) => d.id))),

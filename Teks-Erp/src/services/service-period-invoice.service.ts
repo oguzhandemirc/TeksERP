@@ -118,6 +118,10 @@ export async function previewServicePeriodDraft(input: ServicePeriodInput): Prom
   if (effective.source === "CUSTOMER" && effective.trigger === "PER_SHIPMENT") warnings.push(CUSTOMER_PER_SHIPMENT_PERIOD_WARNING);
   if (closedAt) warnings.push(`Dönem ${formatDayKeyTr(closedAt)} kapanışıyla KAPALI — taslak oluşturulamaz.`);
   if (draft.links.length === 0 && draft.billedWorkCount > 0) warnings.push("Dönemin bütün işleri zaten faturalanmış.");
+  // K3b: DSK'nın elle fatura izi varsa o faturada hizmet satırı yazılmış olabilir — çift faturaya karşı uyar (yalnız önizleme).
+  for (const d of draft.directShipments) {
+    if (d.invoiceNo) warnings.push(`Doğrudan sevk ${d.shipmentNo} için elle işaretlenmiş fatura var (${d.invoiceNo}) — hizmet satırını kontrol edin.`);
+  }
   return {
     cariId: cari.id, cariName: cari.name, period: input.period,
     periodStart: bounds.from.toISOString(), periodEnd: bounds.to.toISOString(), issueDate: bounds.issueDate.toISOString(),
