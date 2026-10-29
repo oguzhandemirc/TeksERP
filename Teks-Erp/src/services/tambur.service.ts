@@ -157,7 +157,7 @@ interface CutInput {
  * KALITIMDAN SONRA yazılır (kalıtılmış aynı bayrak no-op; değer seçimi bu yolda yok).
  * Tek boğaz `copyStationCapabilitiesToRoll`; yetenek yoksa sorgusuz döner.
  */
-async function applyTamburCapabilitiesTx(
+export async function applyTamburCapabilitiesTx(
   tx: Prisma.TransactionClient,
   args: { caps: StationPropertyCap[]; stationId: string | null | undefined; rollId: string; userId?: string | null },
 ): Promise<void> {

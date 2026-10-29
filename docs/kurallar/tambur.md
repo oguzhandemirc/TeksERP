@@ -57,6 +57,7 @@
 ### Değişmezler
 
 - **[ÇEKİRDEK]** Tambur'un her kesim/bölme yolu istasyonun AUTO yeteneğini çocuğa kalıtımdan SONRA `copyStationCapabilitiesToRoll` ile yazar; ataya yazmaz; Top Kesme'de oturum istasyonu yalnız `kind = TAMBUR` ise sayılır. · bekçi: `test_tambur_istasyon_yetenegi` (arşiv 2026-10-29 Gülkesim T1)
+- **[ÇEKİRDEK]** Tambur'da elle doğan top (`createManualRoll`, `produceFinishedRoll`) oturum istasyonu `kind = TAMBUR` ise o istasyonun AUTO yeteneğini `applyTamburCapabilitiesTx` ile alır (adıma bağlı yolda bağlama tx'inde, kartsız yolda faz 1'den sonra ayrı tx'te; replay yeniden dener). · bekçi: `test_tambur_istasyon_yetenegi` §9 (arşiv 2026-10-29 K3c)
 - **[ÇEKİRDEK]** `SINGLE_RESTORE` ('İş Emrine Geri Al') tek topun metrajıyla dirilme: çocuk iptal, kaynak adıma dirilir, kapalı WO+kart yeniden açılır; KARDEŞLERE dokunulmaz; kapanış sapmaları TERSLENMEZ; `RollError` yeniden açılmaz; ek izin/sebep istemez; arşivli kaynakta ön seçim yok. · bekçi: `scripts/test_tambur_undo.ts` <sub>(CLAUDE.md:58)</sub>
 
 ### Yasaklar
