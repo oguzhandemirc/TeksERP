@@ -14,6 +14,7 @@
 //   §5  Hedef 50, uygulanan 25 → deviatesFromTarget=true (50 → false)
 //   §6  Fabrika günü sınırı (gece yarısı fabrika diliminde; UTC günü aynı olan iki kayıt iki güne düşer)
 //   §7  Hedef değişimi eskiyi damgalar · aynısı no-op · çeşit olmayan özellik 400 · tablet özeti hedefi taşır
+//   §7b ⭐ Özellik kapsamı (K1): bir özelliğin PUT'u ötekini iptal etmez · valueId null açık kaldırma · [] eski sözleşme
 //   §8  Kâğıt gramajı: tamamlanmış atamada PATCH 409 · yanlış değer 400 · eşzamanlı yazımlar tutarlı
 //
 // FİKSTÜR KENDİ KENDİNE (TEST-PSU- damgası). KURSUN bayrağının çeşidi zaten varsa
@@ -139,6 +140,11 @@ async function mkRoll(itemId: string, batchId: string | null, stepId: string, qt
 
 async function press(rollId: string, stepId: string, valueId: string | null, actor: string, machineId: string): Promise<void> {
   await prisma.$transaction((tx) => applyKursunOperationTx(tx, { rollId, stepId, valueId, userId: actor, machineId }));
+}
+
+async function readActiveTargets(workOrderId: string): Promise<string[]> {
+  const rows = await prisma.workOrderTargetValue.findMany({ where: { workOrderId, revokedAt: null }, select: { propertyId: true, valueId: true } });
+  return rows.map((r) => `${r.propertyId}:${r.valueId}`);
 }
 
 async function main(): Promise<void> {
@@ -303,8 +309,32 @@ async function main(): Promise<void> {
     () => replaceWorkOrderTargetValues(W.id, [{ propertyId: other.id, valueId: other.values[0]!.id }], actor));
   await expectAppError("başka özelliğin değeri → 400 TARGET_VALUE_INVALID", 400, "TARGET_VALUE_INVALID",
     () => replaceWorkOrderTargetValues(W.id, [{ propertyId: g.propId, valueId: other.values[0]!.id }], actor));
+  // §7b (K1): ÖZELLİK KAPSAMI — ikinci bir çeşit özelliği; birinin hedefini değiştiren PUT ötekini iptal ETMEZ.
+  const flag2 = await prisma.fabricProperty.create({ data: { code: `${P}-F2`.slice(0, 32), name: `TEST PSU bayrak2 ${STAMP}`, valueType: "FLAG" }, select: { id: true } });
+  fx.propIds.push(flag2.id);
+  const var2 = await prisma.fabricProperty.create({
+    data: { code: `${P}-V2`.slice(0, 32), name: `TEST PSU çeşit2 ${STAMP}`, valueType: "CHOICE", variantOfPropertyId: flag2.id },
+    select: { id: true },
+  });
+  fx.propIds.push(var2.id);
+  const v2 = await prisma.fabricPropertyValue.create({ data: { propertyId: var2.id, code: `PSUV2-${STAMP}`.slice(0, 32), name: "çeşit2 A", sortOrder: 10 }, select: { id: true } });
+  fx.valueIds.push(v2.id);
+  await replaceWorkOrderTargetValues(W.id, [{ propertyId: var2.id, valueId: v2.id }], actor);
+  const both = await readActiveTargets(W.id);
+  check("⭐ §7b yalnız ikinci özelliği yazan PUT kurşun hedefini İPTAL ETMEZ", both.length === 2 && both.includes(`${g.propId}:${g.v["25"]}`) && both.includes(`${var2.id}:${v2.id}`), JSON.stringify(both));
+  await replaceWorkOrderTargetValues(W.id, [{ propertyId: g.propId, valueId: g.v["100"] }], actor);
+  const both2 = await readActiveTargets(W.id);
+  check("⭐ §7b kurşun hedefini değiştiren PUT ikinci özelliğe dokunmaz", both2.length === 2 && both2.includes(`${g.propId}:${g.v["100"]}`) && both2.includes(`${var2.id}:${v2.id}`), JSON.stringify(both2));
+  const removed = await replaceWorkOrderTargetValues(W.id, [{ propertyId: g.propId, valueId: null }], actor);
+  const after7b = await readActiveTargets(W.id);
+  check("⭐ §7b açık kaldırma (valueId null) yalnız o özelliği damgalar", removed.data.changed && after7b.length === 1 && after7b[0] === `${var2.id}:${v2.id}`, JSON.stringify(after7b));
+  const noop = await replaceWorkOrderTargetValues(W.id, [{ propertyId: g.propId, valueId: null }], actor);
+  check("§7b hedefi olmayan özelliği kaldırmak no-op", noop.data.changed === false);
+  await expectAppError("§7b aynı özellik iki kez (biri kaldırma) → 400 TARGET_VALUE_DUPLICATE", 400, "TARGET_VALUE_DUPLICATE",
+    () => replaceWorkOrderTargetValues(W.id, [{ propertyId: var2.id, valueId: null }, { propertyId: var2.id, valueId: v2.id }], actor));
+  await replaceWorkOrderTargetValues(W.id, [{ propertyId: g.propId, valueId: g.v["25"] }], actor);
   const cleared = await replaceWorkOrderTargetValues(W.id, [], actor);
-  check("boş liste → aktif hedef kalmaz", cleared.data.targetValues.length === 0);
+  check("boş liste (eski istemci sözleşmesi) → İKİ özelliğin de aktif hedefi kalmaz", cleared.data.targetValues.length === 0);
 
   // ── §8 ──────────────────────────────────────────────────────────────────
   section("§8 kâğıt gramajı yazımı");

@@ -237,7 +237,7 @@ export class FabricPropertyService extends BaseService {
       );
     }
     await assertStationsCanApplyProperty(stationIds);
-    await assertServiceMapping(data, values?.map((v) => v.serviceItemId));
+    await assertServiceMapping(data, values);
 
     const valueType = typeof data.valueType === "string" ? data.valueType : "FLAG";
     if (valueType === "FLAG" && values && values.length > 0) {
@@ -299,7 +299,7 @@ export class FabricPropertyService extends BaseService {
   ): Promise<ApiResponse<unknown>> {
     const stationIds = extractStationIds(data);
     const values = extractValues(data);
-    await assertServiceMapping(data, values?.map((v) => v.serviceItemId));
+    await assertServiceMapping(data, values, id);
     // ⚠️ ERKEN DÖNÜŞ `data.valueType` VARKEN KULLANILAMAZ (denetim F5). Eski
     // hâli yalnız stationIds/values yokluğuna bakıyordu; `PATCH {valueType:
     // "FLAG"}` o dala girip TÜM tip-geçiş guard'larını atlıyordu — KAT bayrağa

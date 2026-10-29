@@ -133,7 +133,7 @@ function TargetEditDialog({
   const qc = useQueryClient();
   const [value, setValue] = useState<string | null>(current);
   const mut = useMutation({
-    mutationFn: () => putWorkOrderTargetValues(workOrderId, value ? [{ propertyId, valueId: value }] : []),
+    mutationFn: () => putWorkOrderTargetValues(workOrderId, [{ propertyId, valueId: value }]),
     onSuccess: (r) => {
       toast.success(r.changed ? "Hedef gramaj güncellendi" : "Hedef zaten aynı");
       void qc.invalidateQueries({ queryKey: ["process-summary"] });

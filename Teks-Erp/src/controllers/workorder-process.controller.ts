@@ -11,8 +11,12 @@ import {
   replaceWorkOrderTargetValues,
 } from "../services/workorder-target-value.service";
 
-/** Boş liste = bütün hedefleri damgala. Tanınmayan anahtar 400 (fail-closed). */
-export const targetValuesBodySchema = z.object({ items: z.array(targetValueItemSchema).max(20) }).strict();
+/** Yalnız gövdedeki özellikler değişir; `valueId: null` = o özelliğin hedefini kaldır.
+ *  Boş liste = eski istemci "hepsini kaldır" sözleşmesi. Tanınmayan anahtar 400 (fail-closed). */
+const targetValueUpdateItemSchema = targetValueItemSchema.extend({
+  valueId: z.string().uuid("Geçersiz değer ID").nullable(),
+});
+export const targetValuesBodySchema = z.object({ items: z.array(targetValueUpdateItemSchema).max(20) }).strict();
 
 /** PUT /api/work-orders/:id/target-values */
 export async function putTargetValues(req: Request, res: Response, next: NextFunction): Promise<void> {
