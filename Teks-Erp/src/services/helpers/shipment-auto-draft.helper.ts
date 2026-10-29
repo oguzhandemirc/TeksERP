@@ -170,7 +170,7 @@ async function collectReturnedRollsGross(shipmentId: string, liveIds: Set<string
 }
 
 /** H8: sevk taslağında hizmet satırı yokken kullanıcıya söylenen neden (iş kaybolmadı, dönem sonunu bekliyor). */
-export const PERIOD_END_SERVICE_WARNING = "Hizmet işleri dönem sonu hizmet faturasına bırakıldı (Faturalar → Dönem sonu hizmet faturası).";
+export const PERIOD_END_SERVICE_WARNING = `Hizmet işleri dönem sonu hizmet faturasına bırakıldı (${ekranYolu("faturalar")} → "Dönem sonu hizmet faturası").`;
 
 /**
  * EXPORT (C1): panelin "Sevkiyattan Fatura Taslağı" diyaloğu da AYNI satır

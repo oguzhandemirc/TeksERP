@@ -17,6 +17,7 @@ import { tokenReplay } from "./helpers/token-replay.helper";
 import { formatDayKeyTr, periodDayKey } from "./helpers/period-guard.helper";
 import { loadServiceBillingSettings, readFinanceDefaultVatRate } from "./system-setting.service";
 import { invoiceService } from "./invoice.service";
+import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
 export const SERVICE_PERIOD_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -86,7 +87,7 @@ async function findClosedPeriod(cariId: string, currency: Currency, issueDate: D
 async function buildPeriodDraft(input: ServicePeriodInput) {
   const settings = await loadServiceBillingSettings();
   if (!settings.enabled) {
-    throw AppError.conflict("Hizmet faturası kapalı — Ayarlar → Finans'tan açın.", { code: "SERVICE_BILLING_DISABLED" });
+    throw AppError.conflict(`Hizmet faturası kapalı — ${settingScreenPath("finance")} ekranından açın.`, { code: "SERVICE_BILLING_DISABLED" });
   }
   const cari = await loadCustomerCari(input.cariId);
   const bounds = resolvePeriodBounds(input.period);
