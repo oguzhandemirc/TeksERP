@@ -15,6 +15,8 @@ import {
   type TargetValueItem,
 } from "./helpers/workorder-target-value.helper";
 import { summarizeKursunApplications, type KursunSummary } from "./helpers/process-summary.helper";
+import { readEmanetEnabled, readGelenBelgeEnabled } from "./system-setting.service";
+import { suggestWorkOrderGramaj, type WorkOrderGramajSuggestion } from "./workorder-gramaj-suggestion.service";
 
 export async function replaceWorkOrderTargetValues(workOrderId: string, items: TargetValueItem[], userId?: string) {
   await assertTargetValueItems(prisma, items);
@@ -46,10 +48,20 @@ export async function replaceWorkOrderTargetValues(workOrderId: string, items: T
   };
 }
 
-export async function getWorkOrderProcessSummary(workOrderId: string): Promise<{ success: true; data: { kursun: KursunSummary } }> {
+/** Gelen belge modülü etkin mi (ön koşul emanet + lisans tavanı) — `requireGelenBelgeEnabled` ile aynı iki okuma. */
+async function incomingDocsActive(): Promise<boolean> {
+  return (await readEmanetEnabled()) && (await readGelenBelgeEnabled());
+}
+
+export async function getWorkOrderProcessSummary(
+  workOrderId: string,
+): Promise<{ success: true; data: { kursun: KursunSummary; deliveryNoteGramaj?: WorkOrderGramajSuggestion | null } }> {
   const wo = await prisma.workOrder.findUnique({ where: { id: workOrderId }, select: { id: true } });
   if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
-  return { success: true, data: { kursun: await summarizeKursunApplications({ workOrderId }) } };
+  const kursun = await summarizeKursunApplications({ workOrderId });
+  // H9b: modül kapalıyken anahtar HİÇ yok (yanıt bayt-aynı); açıkken gelen belgesiz İE'de null.
+  if (!(await incomingDocsActive())) return { success: true, data: { kursun } };
+  return { success: true, data: { kursun, deliveryNoteGramaj: await suggestWorkOrderGramaj(workOrderId) } };
 }
 
 export async function getBatchProcessSummary(batchId: string): Promise<{ success: true; data: { kursun: KursunSummary } }> {

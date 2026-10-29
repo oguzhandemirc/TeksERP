@@ -78,9 +78,24 @@ export function processSummaryKey(scope: ProcessSummaryScope) {
   return ["process-summary", "workOrderId" in scope ? `wo:${scope.workOrderId}` : `batch:${scope.batchId}`] as const;
 }
 
-export async function fetchProcessSummary(scope: ProcessSummaryScope): Promise<KursunSummary> {
-  const res = await apiClient.get<{ success: true; data: { kursun: KursunSummary } }>(processSummaryUrl(scope));
-  return res.data.data.kursun;
+/** Gelen belgeden türeyen hedef gramaj önerisi (H9b) — yalnız İE kapsamında ve gelen belge modülü açıkken gelir. */
+export interface DeliveryNoteGramajSuggestion {
+  /** Kapsanan bütün toplar tek çeşitte birleştiyse; aksi halde null (liste gösterilir). */
+  suggested: { valueId: string; valueName: string } | null;
+  rollCount: number;
+  coveredRollCount: number;
+  entries: Array<{ valueId: string | null; valueName: string | null; processText: string | null; rollCount: number }>;
+}
+
+export interface ProcessSummaryData {
+  kursun: KursunSummary;
+  /** Anahtar yok = modül kapalı ya da parti kapsamı; null = toplarda gelen belge satırı yok. */
+  deliveryNoteGramaj?: DeliveryNoteGramajSuggestion | null;
+}
+
+export async function fetchProcessSummary(scope: ProcessSummaryScope): Promise<ProcessSummaryData> {
+  const res = await apiClient.get<{ success: true; data: ProcessSummaryData }>(processSummaryUrl(scope));
+  return res.data.data;
 }
 
 /** Boş liste = hedefi kaldır (sunucu eski satırı damgalar). */

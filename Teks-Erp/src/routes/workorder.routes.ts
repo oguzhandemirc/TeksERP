@@ -593,7 +593,7 @@ router.put("/:id/target-values", verifyToken, requirePermission("workorder:write
  *         required: true
  *         schema: { type: string, format: uuid }
  *     responses:
- *       200: { description: "{ kursun: { target, rows, totals } }" }
+ *       200: { description: "{ kursun: { target, rows, totals }, deliveryNoteGramaj? } — deliveryNoteGramaj yalnız gelen belge modülü açıkken (H9b; gelen belgesiz İE'de null)" }
  */
 router.get("/:id/process-summary", verifyToken, requirePermission("workorder:read"), getWorkOrderSummary);
 

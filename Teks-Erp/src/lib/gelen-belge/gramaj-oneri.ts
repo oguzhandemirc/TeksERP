@@ -22,6 +22,11 @@ const BARE_NUMBER_RE = /(?<![a-z\d])\d/;
 
 const toNumber = (s: string): number => Number(s.replace(",", "."));
 
+/** Satırın geçerli işlem metni: satır kendi metnini taşırsa o, yoksa belge başlığınınki (boşluk = yok). */
+export function effectiveProcessText(lineText: string | null | undefined, noteText: string | null | undefined): string | null {
+  return lineText?.trim() || noteText?.trim() || null;
+}
+
 /** Metindeki gramaj sayıları (tekilleştirilmiş). Aralık ya da gramaj dışı çıplak sayı varsa boş. */
 export function extractGramValues(text: string | null | undefined): number[] {
   const folded = foldSearchText(text ?? "");

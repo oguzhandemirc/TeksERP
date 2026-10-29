@@ -16,6 +16,7 @@ import {
   type ProcessSummaryScope,
 } from "@/lib/kursun-gramaj";
 import { cn } from "@/lib/utils";
+import { DeliveryNoteGramajHint } from "./DeliveryNoteGramajHint";
 
 interface Props {
   scope: ProcessSummaryScope;
@@ -40,7 +41,8 @@ export function ProcessSummaryCard({ scope, editableTarget = false }: Props) {
   if (q.isError || !q.data) {
     return <p className="text-sm text-muted-foreground">Gramaj özeti yüklenemedi.</p>;
   }
-  const s = q.data;
+  const s = q.data.kursun;
+  const noteSuggestion = q.data.deliveryNoteGramaj ?? null;
   const canEdit = editableTarget && "workOrderId" in scope && catalog.propertyId !== null;
 
   return (
@@ -62,6 +64,15 @@ export function ProcessSummaryCard({ scope, editableTarget = false }: Props) {
           </PermissionGate>
         )}
       </div>
+
+      {noteSuggestion && "workOrderId" in scope && (
+        <DeliveryNoteGramajHint
+          suggestion={noteSuggestion}
+          workOrderId={scope.workOrderId}
+          propertyId={canEdit ? (catalog.propertyId as string) : null}
+          currentValueId={s.target?.valueId ?? null}
+        />
+      )}
 
       {s.rows.length === 0 ? (
         <p className="mt-3 text-muted-foreground">Henüz kurşun basılmadı.</p>
