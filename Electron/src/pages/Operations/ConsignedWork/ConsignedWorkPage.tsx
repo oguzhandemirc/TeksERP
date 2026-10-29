@@ -17,7 +17,7 @@ const fmtQty = (q: number) => `${formatNumber(q, 1)} m`;
 function BucketCell({ bucket, ownerId, kind }: { bucket: ConsignedBucket; ownerId: string; kind: ConsignedBucketKey | null }) {
   if (bucket.count === 0) return <span className="text-muted-foreground">—</span>;
   const body = (
-    <span className="flex flex-col items-end leading-tight">
+    <span className="flex flex-col items-end whitespace-nowrap leading-tight">
       <span className="font-medium tabular-nums">{bucket.count} top</span>
       <span className="text-xs text-muted-foreground tabular-nums">{fmtQty(bucket.qty)}</span>
     </span>
@@ -95,7 +95,7 @@ export function ConsignedWorkPage() {
                       <TableHead>Müşteri</TableHead>
                       <TableHead className="text-right">Bekliyor</TableHead>
                       <TableHead className="text-right">İşlemde</TableHead>
-                      <TableHead className="text-right">Sevke hazır</TableHead>
+                      <TableHead className="whitespace-nowrap text-right">Sevke hazır</TableHead>
                       <TableHead className="text-right" title="İçeride ama üç durumun dışında (ör. adımsız fason/kartela)">Diğer</TableHead>
                       <TableHead className="text-right">Toplam</TableHead>
                     </TableRow>
@@ -111,7 +111,7 @@ export function ConsignedWorkPage() {
                         onKeyDown={(e) => onKey(e, r)}
                         aria-label={`${r.ownerName} toplarını aç`}
                       >
-                        <TableCell className="font-medium">{r.ownerName}</TableCell>
+                        <TableCell className="min-w-[9rem] font-medium">{r.ownerName}</TableCell>
                         <TableCell className="text-right"><BucketCell bucket={r.waiting} ownerId={r.ownerCustomerId} kind="waiting" /></TableCell>
                         <TableCell className="text-right"><BucketCell bucket={r.inProcess} ownerId={r.ownerCustomerId} kind="inProcess" /></TableCell>
                         <TableCell className="text-right"><BucketCell bucket={r.ready} ownerId={r.ownerCustomerId} kind="ready" /></TableCell>
