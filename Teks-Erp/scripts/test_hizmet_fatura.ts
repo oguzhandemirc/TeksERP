@@ -19,9 +19,12 @@
 //   §8 DRAFT iptal ⇒ damga; yeniden faturalanır · CONFIRMED iptal ⇒ damga; yeniden faturalanır
 //   §9 NULL adımlı çift bağ ⇒ kısmi unique seddi (P2002) · insertServiceLinksTx 409
 //   §10 SIMULATED okuma: BLOCK_LINE ⇒ 0 bağ + uyarı; okuma SIMULATED ise bağ readingId'si ona işaret etmez
-//   §11 Kapalıyken: emanet ürün satırı + bugünkü uyarı, 0 bağ (kanca bayt-aynı)
+//   §11 Kapalıyken: emanet ürün satırı + bugünkü uyarı, 0 bağ; not TAM eşit, toplayıcı anahtarları
+//       H7 öncesiyle aynı (kanca bayt-aynı). Sevk kancasının KAPALI PARİTE ailesi test_auto_draft_shipment
+//       §1/§4'tedir; hizmet bayrağının paritesi kurşun fixture'ı istediği için burada ölçülür (atıf orada).
 // Negatif sondalar (2026-10-29, BEKCI-HARITASI sonda sütunu): kısmi unique düşürülünce §9a kırmızı ·
-// iptal damgası kaldırılınca §8 kırmızı · düzeltme 409 kapısı kaldırılınca §5 kırmızı.
+// iptal damgası kaldırılınca §8 kırmızı · düzeltme 409 kapısı kaldırılınca §5 kırmızı · kapalı yola
+// shipmentGross sızdırılınca §11/§11b/§11c kırmızı (27/3; geri alındı).
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { Currency, InvoiceStatus, ItemType, MachineDataSource, MeterApprovalMode, MeterPhase, MeterVarianceBasis, PriceKind, Prisma, RollStatus } from "@prisma/client";
@@ -31,7 +34,7 @@ import { invoiceService } from "../src/services/invoice.service";
 import { InventoryService } from "../src/services/inventory.service";
 import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
 import { SETTING_KEYS, loadServiceBillingSettings, systemSettingService } from "../src/services/system-setting.service";
-import { autoDraftInvoiceAfterDispatch } from "../src/services/helpers/shipment-auto-draft.helper";
+import { autoDraftInvoiceAfterDispatch, collectShipmentInvoiceDraftLines } from "../src/services/helpers/shipment-auto-draft.helper";
 import { applyKursunOperationTx } from "../src/services/helpers/kursun-operation.helper";
 import { writeMeterReadingTx, revokeStepMeterReadingsTx } from "../src/services/helpers/kursun-meter.helper";
 import { insertServiceLinksTx } from "../src/services/helpers/service-billing.helper";
@@ -286,6 +289,14 @@ async function main(): Promise<void> {
   check("kapalı: emanet ürün satırı + bugünkü uyarı, 0 bağ",
     invD.length === 1 && invD[0]!.lines.length === 1 && invD[0]!.lines[0]!.itemId === fabric && (invD[0]!.notes ?? "").includes("EMANET malı") && !(invD[0]!.notes ?? "").includes("Sevk brütü")
     && (await prisma.serviceBillingLink.count({ where: { rollId: off } })) === 0, invD[0]?.notes ?? "");
+  // Bayt-aynı: not H7 öncesi kalıbın TAM eşiti (includes değil) ve toplayıcı yanıtında H7 alanı YOK.
+  const offRoll = await prisma.roll.findUniqueOrThrow({ where: { id: off }, select: { barcode: true } });
+  const offShip = await prisma.shipment.findUniqueOrThrow({ where: { id: shD.id }, select: { shipmentNo: true } });
+  const expectedNotes = `${offShip.shipmentNo} sevkiyatından üretildi. ⚠ 1 top müşterinin EMANET malı (${offRoll.barcode}) — mal satışı değil işçilik faturalanır; taslak satırlarını elle düzeltin.`;
+  check("§11b kapalı: taslak notu H7 öncesi metnin TAM eşiti", invD[0]?.notes === expectedNotes, `${invD[0]?.notes} ≠ ${expectedNotes}`);
+  const offLines = await collectShipmentInvoiceDraftLines(shD.id, cust.id, Currency.TRY);
+  check("§11c kapalı: toplayıcı yanıtının anahtarları H7 öncesiyle aynı (serviceLinks/shipmentGross yok)",
+    JSON.stringify(Object.keys(offLines).sort()) === JSON.stringify(["lines", "orderConflicts", "orderPriced", "warnings"]), JSON.stringify(Object.keys(offLines)));
 }
 
 async function cleanup(): Promise<void> {
