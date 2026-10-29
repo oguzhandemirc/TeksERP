@@ -456,6 +456,8 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // Gelen belge (D5, 2026-10-29): read/write/approve "Gelen Belgeler" ekranına taşındı. `template` ekransız kalır:
   // gönderen şablonu uçları (liste + aktif/pasif) backend'de henüz YOK; uç + panel sekmesi doğunca muaf silinir.
   { code: "gelen-belge:template", reason: "Gönderen şablonu yönetim uçları henüz yok (D5 panel ekranı bekliyor); uç doğunca ekran yeteneği olur." },
+  // H2 (2026-10-29): ofis onay ucu + bekleyen sapma listesi backend'de; panel ekranı H4 dilimi — doğunca muaf silinir.
+  { code: "kursun:meter-approve", reason: "Sapma onay ekranı H4'te (panel); bugün ofis ucu API'de, tablet PIN'inin sahibi bu izni taşır." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
 ];
 

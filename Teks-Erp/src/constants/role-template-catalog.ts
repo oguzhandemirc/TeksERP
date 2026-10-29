@@ -365,6 +365,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "roll:write",
       "roll:history",
       "roll:manual-adjust",
+      // Kurşun metre sapma onayı (H2): faturalanan metreyi imzalar — süpervizör işi.
+      "kursun:meter-approve",
       "shipping:read",
       "shipping:undo-dispatch",
       // e-İrsaliye gönderim/yanıt kaydını geri alma storno kapısının anahtarıdır — aynı rolde.

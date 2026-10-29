@@ -55,6 +55,8 @@ export const PERMISSION_CATALOG = [
   { code: "roll:read", module: "PRODUCTION", category: "web", description: "Top (rulo) listesi/detay görüntüleme" },
   { code: "roll:write", module: "PRODUCTION", category: "web", description: "Top oluşturma/durum güncelleme" },
   { code: "roll:manual-adjust", module: "PRODUCTION", category: "web", description: "Süpervizör — manuel top düzeltme/kurtarma (üretime geri al, nitelik/durum düzeltme)" },
+  // H2 (2026-10-29): kurşun metre sapma onayı — ofis ucu + süpervizör PIN'inin sahibi bu izni taşımalı.
+  { code: "kursun:meter-approve", module: "PRODUCTION", category: "web", description: "Kurşun metre sapmasını onaylama (ofis onayı · süpervizör PIN'i)" },
   // 2026-08-05: topun TAM YAŞAM DÖNGÜSÜ zaman çizelgesi (kim ekledi, hangi
   // istasyonda ne zaman durdu, fasona gitti/döndü, kesildi, depoya indi).
   // `roll:read`ten AYRI bir izin olması ürün kararıdır: liste/detay herkesin

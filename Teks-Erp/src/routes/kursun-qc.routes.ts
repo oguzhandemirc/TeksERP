@@ -201,6 +201,88 @@ router.post(
   controller.recordMeterReading
 );
 
+/**
+ * @openapi
+ * /api/kursun-qc/meter-readings/{id}/pin-ack:
+ *   post:
+ *     tags: [KursunQc]
+ *     summary: Metre sapmasını süpervizör PIN'iyle onayla (H2, yalnız çevrimiçi)
+ *     description: |
+ *       Okumanın kopyalanmış kipi SUPERVISOR_PIN olmalı. PIN `kursun:meter-approve` iznine sahip aktif
+ *       kullanıcıya çözülür; PIN kuyruğa, log'a, audit'e girmez. Giriş hız sınırı kovasındadır.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [pin]
+ *             properties:
+ *               pin: { type: string, pattern: '^[0-9]{6}$' }
+ *               reasonCode: { type: string, nullable: true }
+ *               reasonText: { type: string, nullable: true }
+ *     responses:
+ *       201: { description: Onay yazıldı }
+ *       403: { description: PIN tanınmadı (METER_PIN_INVALID) ya da yetkisiz (METER_PIN_NOT_PERMITTED) }
+ *       409: { description: Zaten onaylı · kip uyuşmuyor · sapma yok · okuma geri alınmış }
+ */
+router.post(
+  "/meter-readings/:id/pin-ack",
+  verifyToken,
+  requireAnyPermission("quality:write", "mobile:kk2-kursun"),
+  controller.pinAckMeterReading
+);
+
+/**
+ * @openapi
+ * /api/kursun-qc/meter-readings/{id}/office-ack:
+ *   post:
+ *     tags: [KursunQc]
+ *     summary: Metre sapmasını ofisten onayla (H2; panel ekranı H4)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reasonCode: { type: string, nullable: true }
+ *               reasonText: { type: string, nullable: true }
+ *     responses:
+ *       201: { description: Onay yazıldı }
+ *       409: { description: Zaten onaylı (METER_ALREADY_ACKED) · kip uyuşmuyor · sapma yok · okuma geri alınmış }
+ */
+router.post(
+  "/meter-readings/:id/office-ack",
+  verifyToken,
+  requirePermission("kursun:meter-approve"),
+  controller.officeAckMeterReading
+);
+
+/**
+ * @openapi
+ * /api/kursun-qc/meter-deviations:
+ *   get:
+ *     tags: [KursunQc]
+ *     summary: İmza bekleyen metre sapmaları (H2; SUPERVISOR_PIN/OFFICE kipleri)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: stepId, required: false, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Bekleyen okumalar (en eski önce, en çok 500) }
+ */
+router.get(
+  "/meter-deviations",
+  verifyToken,
+  requirePermission("kursun:meter-approve"),
+  controller.listPendingMeterAcks
+);
+
 // K6 (2026-06-12): POST /undo-qc2 kaldırıldı — UI butonu 2026-06-07'de bilinçli
 // silinmişti (yarım geri alma: KURSUN op + RollProperty topta kalıyordu), endpoint
 // çağrısız duruyordu. Kurtarma yolu: kapalı kartı tekrar okut (reopen-preview → reopen).

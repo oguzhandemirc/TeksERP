@@ -564,6 +564,12 @@ export interface FeatureFlags {
   kursunMeterCapture: KursunMeterCapture;
   /** H1: SIMULATED metre okuması (varsayılan kapalı). */
   kursunSimulatedMeterEnabled: boolean;
+  /** H2: sapma eşiği metre / yüzde (0 = eşik yok). */
+  kursunMeterVarianceThresholdM: number;
+  kursunMeterVarianceThresholdPct: number;
+  /** H2: sapma tabanı ve onay kipi — backend aynası. */
+  kursunMeterVarianceBasis: "DECLARED_IN" | "MEASURED_IN";
+  kursunMeterVarianceApproval: "NONE" | "OPERATOR_REASON" | "SUPERVISOR_PIN" | "OFFICE";
   /** Parti no KISA ve DÖNEN mi (P01…P99, 99'dan sonra P01)? Default TRUE/AÇIK.
    *  Backend ENFORCE eder (`generateBatchNumberTx`). Kapalıyken eski
    *  `P + GGAAYY + günlük sıra` kalıbına düşülür.

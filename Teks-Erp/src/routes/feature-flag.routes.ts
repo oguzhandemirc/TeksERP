@@ -512,6 +512,12 @@ export const updateSchema = z.strictObject({
   kursunMeterCapture: z.enum(["OFF", "OUT", "IN_OUT"]).optional(),
   /** H1: SIMULATED metre okuması (varsayılan kapalı). */
   kursunSimulatedMeterEnabled: z.boolean().optional(),
+  /** H2: sapma eşiği (metre / yüzde) — 0 = eşik yok. */
+  kursunMeterVarianceThresholdM: z.number().min(0).max(10_000).optional(),
+  kursunMeterVarianceThresholdPct: z.number().min(0).max(100).optional(),
+  /** H2: sapma tabanı ve onay kipi (enum; servis kümeleriyle birebir; OFFICE servis tarafında H4'e dek 400). */
+  kursunMeterVarianceBasis: z.enum(["DECLARED_IN", "MEASURED_IN"]).optional(),
+  kursunMeterVarianceApproval: z.enum(["NONE", "OPERATOR_REASON", "SUPERVISOR_PIN", "OFFICE"]).optional(),
   // batch.shortNumberEnabled — parti no kısa ve DÖNEN (P01…P99) mi (default TRUE/AÇIK).
   // Backend ENFORCE eder (generateBatchNumberTx). Kapalıyken eski P+GGAAYY+sıra kalıbı.
   // ⚠️ Bu satır ACİL KAPATMA anahtarıdır — kısa numara sahada sorun çıkarırsa tek

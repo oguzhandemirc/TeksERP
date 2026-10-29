@@ -9,12 +9,26 @@
 // Tx sırası (§3-4, §12-1) çağıranındır: 8036 token kilidi (İLK ifade) → `touchWorkOrderTx`
 // → `assertKursunTabletMayWrite` → burada aktif okuma `FOR UPDATE` → yazım.
 // =============================================================================
-import { MachineDataSource, MeterApprovalMode, MeterPhase, MeterVarianceBasis, Prisma, type RollMeterReading } from "@prisma/client";
+import { MachineDataSource, MeterApprovalMode, MeterPhase, MeterVarianceBasis, Prisma, type RollMeterAck, type RollMeterReading } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
-import { readKursunSimulatedMeterEnabled, resolveKursunMeterCapture, type KursunMeterCapture } from "../system-setting.service";
+import {
+  readKursunMeterVarianceApproval,
+  readKursunMeterVarianceBasis,
+  readKursunMeterVarianceThresholdM,
+  readKursunMeterVarianceThresholdPct,
+  readKursunSimulatedMeterEnabled,
+  resolveKursunMeterCapture,
+  type KursunMeterCapture,
+} from "../system-setting.service";
 import { tokenReplay } from "./token-replay.helper";
+import { resolveMeterVariance, type MeterVarianceResult } from "../../lib/kursun-meter-variance";
+import { readingPendingAckSql } from "./kursun-meter-variance-sql.helper";
+import { digestQuickPin, digestsEqual } from "../../lib/short-credential/digest";
+import { getShortCredentialKeyRing } from "../../lib/short-credential/keyring";
+import { matchesPermission } from "../../middlewares/rbac.middleware";
+import { AuthService } from "../auth.service";
 
 type Tx = Prisma.TransactionClient;
 
@@ -26,7 +40,17 @@ export interface MeterReadingInput {
   rawCounter?: number | null;
   cardSampleId?: string | null;
   clientToken: string;
+  /** H2 OPERATOR_REASON imzası — sebep kodu ya da metni. PIN BURADA TAŞINMAZ (kuyruğa girmez, §12-4). */
+  ack?: MeterAckReason | null;
 }
+
+export interface MeterAckReason {
+  reasonCode?: string | null;
+  reasonText?: string | null;
+}
+
+/** Sapma onay izni (katalog: `permission-catalog.ts`). Ofis ucu ve süpervizör PIN'i bunu ister. */
+export const METER_APPROVE_PERMISSION = "kursun:meter-approve";
 
 /** Okuma anındaki sapma politikası — satıra kopyalanır. H2 ayarları gelene dek bugünkü davranış: eşik yok, onay yok. */
 export interface MeterPolicyCopy {
@@ -36,9 +60,14 @@ export interface MeterPolicyCopy {
   approvalMode: MeterApprovalMode;
 }
 
-/** Politika çözücüsü — H2 eşik/taban/onay ayarlarını buradan okur; tek kaynak. */
-export async function resolveKursunMeterPolicy(_db: Pick<typeof prisma, "systemSetting">): Promise<MeterPolicyCopy> {
-  return { thresholdM: null, thresholdPct: null, basis: MeterVarianceBasis.DECLARED_IN, approvalMode: MeterApprovalMode.NONE };
+/** Politika çözücüsü — H2 eşik/taban/onay ayarları; TEK kaynak. Sonuç okuma satırına kopyalanır (§12-5). */
+export async function resolveKursunMeterPolicy(db: Pick<typeof prisma, "systemSetting">): Promise<MeterPolicyCopy> {
+  return {
+    thresholdM: await readKursunMeterVarianceThresholdM(db),
+    thresholdPct: await readKursunMeterVarianceThresholdPct(db),
+    basis: MeterVarianceBasis[await readKursunMeterVarianceBasis(db)],
+    approvalMode: MeterApprovalMode[await readKursunMeterVarianceApproval(db)],
+  };
 }
 
 /** Evre bu kipte yazılabilir mi? OFF'ta hiçbir okuma yazılmaz; IN yalnız IN_OUT'ta. */
@@ -117,6 +146,10 @@ export interface WriteMeterReadingResult {
   reading: RollMeterReading;
   /** Damgalanan önceki aktif okuma (düzeltme), yoksa null. */
   revokedId: string | null;
+  /** OUT okumasının sapma kararı (kopyadan); IN için null. */
+  variance: MeterVarianceResult | null;
+  /** Aynı tx'te yazılan OPERATOR_REASON imzası. */
+  ack: RollMeterAck | null;
 }
 
 /**
@@ -154,7 +187,138 @@ export async function writeMeterReadingTx(tx: Tx, args: WriteMeterReadingArgs): 
       createdById: args.userId,
     },
   });
-  return { reading, revokedId };
+  if (args.phase !== MeterPhase.OUT) return { reading, revokedId, variance: null, ack: null };
+
+  // H2 §3-6: sapma kopyadan; OPERATOR_REASON'da sebep yoksa fail-closed 409 (tablet kuyruğa koymadan sorar).
+  const variance = await evaluateReadingVarianceTx(tx, reading);
+  let ack: RollMeterAck | null = null;
+  if (variance.needsAck && reading.approvalMode === MeterApprovalMode.OPERATOR_REASON) {
+    const reason = normalizeAckReason(args.input.ack);
+    if (!reason) {
+      throw AppError.conflict("Metre farkı eşiği aştı — sebep seçmeden kaydedilemez", {
+        code: "KURSUN_METER_MISMATCH",
+        diffMeters: variance.diffMeters,
+        allowedMeters: variance.allowedMeters,
+        baseMeters: variance.baseMeters,
+      });
+    }
+    ack = await tx.rollMeterAck.create({
+      data: { readingId: reading.id, mode: MeterApprovalMode.OPERATOR_REASON, ...reason, approvedById: args.userId },
+    });
+  }
+  return { reading, revokedId, variance, ack };
+}
+
+/** Sebep kodu/metni kırpılır; ikisi de boşsa null. */
+export function normalizeAckReason(r: MeterAckReason | null | undefined): { reasonCode: string | null; reasonText: string | null } | null {
+  const reasonCode = r?.reasonCode?.trim() || null;
+  const reasonText = r?.reasonText?.trim() || null;
+  if (!reasonCode && !reasonText) return null;
+  return { reasonCode: reasonCode ? reasonCode.slice(0, 64) : null, reasonText: reasonText ? reasonText.slice(0, 300) : null };
+}
+
+/**
+ * Okumanın sapma girdileri — SQL ikizinin (`declaredInSql`/`measuredInSql`) TS karşılığı: bildirilen giriş =
+ * gelen belge satırı metresi, yoksa top `initialQty`; ölçülen giriş = aynı adımın aktif IN okuması.
+ */
+export async function evaluateReadingVarianceTx(
+  db: Tx | typeof prisma,
+  reading: Pick<RollMeterReading, "rollId" | "workOrderStepId" | "meters" | "thresholdM" | "thresholdPct" | "basis" | "approvalMode">,
+): Promise<MeterVarianceResult> {
+  const line = await db.customerDeliveryNoteLine.findUnique({ where: { rollId: reading.rollId }, select: { meters: true } });
+  const roll = line ? null : await db.roll.findUnique({ where: { id: reading.rollId }, select: { initialQty: true } });
+  const measured = await db.rollMeterReading.findFirst({
+    where: { rollId: reading.rollId, workOrderStepId: reading.workOrderStepId, phase: MeterPhase.IN, revokedAt: null },
+    select: { meters: true },
+  });
+  const num = (d: Prisma.Decimal | null | undefined): number | null => (d == null ? null : Number(d));
+  return resolveMeterVariance(
+    { declaredIn: num(line?.meters ?? roll?.initialQty), measuredIn: num(measured?.meters), out: Number(reading.meters) },
+    { thresholdM: num(reading.thresholdM), thresholdPct: num(reading.thresholdPct), basis: reading.basis, approvalMode: reading.approvalMode },
+  );
+}
+
+/** İmza bekleyen aktif OUT okumaları (SQL ikizi) — `finishStep` kapısı ve ofis listesi aynı yüklemi kullanır. */
+export async function pendingMeterAcksTx(
+  db: Tx | typeof prisma,
+  scope: { stepId?: string; rollIds?: string[]; limit?: number },
+): Promise<Array<{ readingId: string; rollId: string; stepId: string; meters: Prisma.Decimal; approvalMode: MeterApprovalMode; createdAt: Date }>> {
+  if (scope.rollIds && scope.rollIds.length === 0) return [];
+  const conds: Prisma.Sql[] = [readingPendingAckSql("r")];
+  if (scope.stepId) conds.push(Prisma.sql`r."workOrderStepId" = ${scope.stepId}::uuid`);
+  if (scope.rollIds) conds.push(Prisma.sql`r."rollId" = ANY(${scope.rollIds}::uuid[])`);
+  return db.$queryRaw`
+    SELECT r.id AS "readingId", r."rollId", r."workOrderStepId" AS "stepId", r.meters, r."approvalMode", r."createdAt"
+    FROM roll_meter_readings r
+    WHERE ${Prisma.join(conds, " AND ")}
+    ORDER BY r."createdAt" ASC, r.id ASC
+    LIMIT ${scope.limit ?? 500}`;
+}
+
+/**
+ * Süpervizör PIN'ini kullanıcıya çözer (yalnız HMAC özetiyle; düz PIN hiçbir yere yazılmaz).
+ * Bulunamazsa / iznin yoksa 403 — iki durumun mesajı ayrı ama PIN'i yankılamaz.
+ */
+export async function resolveSupervisorByPin(pin: string): Promise<{ id: string }> {
+  const normalized = (pin ?? "").trim();
+  const invalid = () => AppError.forbidden("Süpervizör PIN'i tanınmadı", { code: "METER_PIN_INVALID" });
+  if (!/^\d{6}$/.test(normalized)) throw invalid();
+  const ring = getShortCredentialKeyRing();
+  const candidates = ring.ok ? ring.ring.keys.map((k) => digestQuickPin(k, normalized)) : [];
+  if (candidates.length === 0) throw invalid();
+  const hit = await prisma.user.findFirst({
+    where: { quickPinDigest: { in: candidates }, quickPin: null, isActive: true, deletedAt: null },
+    select: { id: true, quickPinDigest: true },
+  });
+  if (!hit || !candidates.some((c) => digestsEqual(c, hit.quickPinDigest ?? ""))) throw invalid();
+  const perms = await AuthService.getEffectivePermissions(hit.id);
+  if (!matchesPermission(perms, "kursun:meter-approve")) {
+    throw AppError.forbidden("Bu PIN'in sahibinin metre sapması onaylama yetkisi yok", { code: "METER_PIN_NOT_PERMITTED" });
+  }
+  return { id: hit.id };
+}
+
+/**
+ * SUPERVISOR_PIN / OFFICE imzası. Okuma satırı `FOR UPDATE` (adım yeniden açılışının damgasıyla serileşir);
+ * kip, aktiflik ve sapma yeniden doğrulanır; ikinci imza kısmi unique'te 409'a döner.
+ */
+export async function ackMeterReadingTx(
+  tx: Tx,
+  args: { readingId: string; mode: "SUPERVISOR_PIN" | "OFFICE"; approvedById: string; reason: MeterAckReason | null },
+): Promise<RollMeterAck> {
+  const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM roll_meter_readings WHERE id = ${args.readingId}::uuid FOR UPDATE`;
+  if (locked.length === 0) throw AppError.notFound("Metre okuması bulunamadı");
+  const reading = await tx.rollMeterReading.findUniqueOrThrow({ where: { id: args.readingId } });
+  if (reading.revokedAt) {
+    throw AppError.conflict("Bu metre okuması düzeltildi ya da geri alındı — güncel okumayı onaylayın", { code: "METER_READING_REVOKED" });
+  }
+  if (reading.phase !== MeterPhase.OUT || reading.approvalMode !== args.mode) {
+    throw AppError.conflict("Bu okuma bu yolla onaylanmaz", { code: "METER_ACK_MODE_MISMATCH", approvalMode: reading.approvalMode });
+  }
+  const variance = await evaluateReadingVarianceTx(tx, reading);
+  if (!variance.needsAck) throw AppError.conflict("Bu okumada onay bekleyen sapma yok", { code: "METER_NOT_DEVIATED" });
+  const reason = normalizeAckReason(args.reason);
+  try {
+    return await tx.rollMeterAck.create({
+      data: { readingId: reading.id, mode: args.mode, reasonCode: reason?.reasonCode ?? null, reasonText: reason?.reasonText ?? null, approvedById: args.approvedById },
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      throw AppError.conflict("Bu sapma zaten onaylanmış", { code: "METER_ALREADY_ACKED" });
+    }
+    throw e;
+  }
+}
+
+/** Onay ayak izi (tx DIŞI). PIN, fiyat, metin yükte YOK — yalnız kip, onaylayan, sebep kodu. */
+export async function auditMeterAck(userId: string | undefined, ack: RollMeterAck): Promise<void> {
+  await AuditService.log({
+    userId,
+    action: "CREATE",
+    tableName: "ROLL_METER_ACK",
+    recordId: ack.id,
+    newData: { readingId: ack.readingId, mode: ack.mode, approvedById: ack.approvedById, reasonCode: ack.reasonCode, hasReasonText: ack.reasonText != null },
+  });
 }
 
 /** Okumaları ve bağlı aktif onayları AYNI tx'te damgalar (silmez). Dönen: damgalanan okuma sayısı. */

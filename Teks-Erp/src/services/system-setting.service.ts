@@ -714,6 +714,14 @@ export const SETTING_KEYS = {
   KURSUN_METER_CAPTURE: "kursun.meterCapture",
   /** H1: SIMULATED kaynaklı metre okuması kabul edilsin mi — varsayılan KAPALI (400). */
   KURSUN_SIMULATED_METER_ENABLED: "kursun.simulatedMeterEnabled",
+  /** H2: sapma eşiği (metre) — boş/0 = eşik yok. Eşik = max(M, %P × taban); ikisi de boşsa sapma YOK (bugün). */
+  KURSUN_METER_VARIANCE_THRESHOLD_M: "kursun.meterVarianceThresholdM",
+  /** H2: sapma eşiği (yüzde) — boş/0 = eşik yok. */
+  KURSUN_METER_VARIANCE_THRESHOLD_PCT: "kursun.meterVarianceThresholdPct",
+  /** H2: sapma tabanı — `DECLARED_IN` (bugün) · `MEASURED_IN`. */
+  KURSUN_METER_VARIANCE_BASIS: "kursun.meterVarianceBasis",
+  /** H2: sapma onayı — `NONE` (bugün; işaret kalır) · `OPERATOR_REASON` · `SUPERVISOR_PIN` · `OFFICE`. */
+  KURSUN_METER_VARIANCE_APPROVAL: "kursun.meterVarianceApproval",
   /** Parti no KISA ve DÖNEN mi olsun (P01…P99, 99'dan sonra P01)? Default TRUE/AÇIK.
    *  Backend ENFORCE eder (`batch.service.generateBatchNumberTx`). Kapalıyken eski
    *  `P + GGAAYY + sıra` günlük kalıbına düşülür — birebir eski davranış.
@@ -944,6 +952,16 @@ export const DEFAULT_DOKUMA_ROLL_BIRTH: DokumaRollBirth = "TABLET_DOFF";
 export type KursunMeterCapture = "OFF" | "OUT" | "IN_OUT";
 export const KURSUN_METER_CAPTURE_MODES: KursunMeterCapture[] = ["OFF", "OUT", "IN_OUT"];
 export const DEFAULT_KURSUN_METER_CAPTURE: KursunMeterCapture = "OFF";
+
+/** H2: sapma tabanı ve onay kipi — Prisma `MeterVarianceBasis` / `MeterApprovalMode` ile birebir. */
+export type KursunMeterVarianceBasis = "DECLARED_IN" | "MEASURED_IN";
+export const KURSUN_METER_VARIANCE_BASES: KursunMeterVarianceBasis[] = ["DECLARED_IN", "MEASURED_IN"];
+export const DEFAULT_KURSUN_METER_VARIANCE_BASIS: KursunMeterVarianceBasis = "DECLARED_IN";
+export type KursunMeterVarianceApproval = "NONE" | "OPERATOR_REASON" | "SUPERVISOR_PIN" | "OFFICE";
+export const KURSUN_METER_VARIANCE_APPROVALS: KursunMeterVarianceApproval[] = ["NONE", "OPERATOR_REASON", "SUPERVISOR_PIN", "OFFICE"];
+export const DEFAULT_KURSUN_METER_VARIANCE_APPROVAL: KursunMeterVarianceApproval = "NONE";
+/** OFFICE'in çıkış yüzeyi (panel ofis onay ekranı) H4'te doğar; o güne dek panelden seçilemez (çıkışsız kapı). */
+export const KURSUN_METER_OFFICE_APPROVAL_SELECTABLE = false;
 
 /** Etiket adedi kaynağı (bkz. `SETTING_KEYS.LABEL_COPIES_SOURCE`). */
 export type LabelCopiesSource = "GLOBAL" | "STATION";
@@ -2009,6 +2027,14 @@ export interface FeatureFlags {
   kursunMeterCapture: KursunMeterCapture;
   /** H1: SIMULATED metre okuması kabul edilsin mi (varsayılan KAPALI → 400). */
   kursunSimulatedMeterEnabled: boolean;
+  /** H2: sapma eşiği metre (0 = eşik yok). */
+  kursunMeterVarianceThresholdM: number;
+  /** H2: sapma eşiği yüzde (0 = eşik yok). */
+  kursunMeterVarianceThresholdPct: number;
+  /** H2: sapma tabanı (varsayılan `DECLARED_IN`). */
+  kursunMeterVarianceBasis: KursunMeterVarianceBasis;
+  /** H2: sapma onay kipi (varsayılan `NONE` = bugün). */
+  kursunMeterVarianceApproval: KursunMeterVarianceApproval;
   /** Parti no kısa ve dönen mi (P01…P99)? Default TRUE/açık. Backend ENFORCE eder.
    *  Kapalıyken eski `P + GGAAYY + sıra` kalıbı. Açıkken parti no benzersiz DEĞİLDİR. */
   batchShortNumberEnabled: boolean;
@@ -2476,6 +2502,10 @@ export class SystemSettingService {
       kursunBypassEnabled: await readKursunBypassEnabled(cacheClient),
       kursunMeterCapture: await readKursunMeterCapture(cacheClient),
       kursunSimulatedMeterEnabled: await readKursunSimulatedMeterEnabled(cacheClient),
+      kursunMeterVarianceThresholdM: (await readKursunMeterVarianceThresholdM(cacheClient)) ?? 0,
+      kursunMeterVarianceThresholdPct: (await readKursunMeterVarianceThresholdPct(cacheClient)) ?? 0,
+      kursunMeterVarianceBasis: await readKursunMeterVarianceBasis(cacheClient),
+      kursunMeterVarianceApproval: await readKursunMeterVarianceApproval(cacheClient),
       batchShortNumberEnabled: await readBatchShortNumberEnabled(cacheClient),
       batchLastNumberHintEnabled: await readBatchLastNumberHintEnabled(cacheClient),
       qualityGradeRequiredEnabled: await readQualityGradeRequiredEnabled(cacheClient),
@@ -3871,6 +3901,41 @@ export class SystemSettingService {
         "Kurşun: simüle sayaç okuması kabul edilsin mi (kapalıyken SIMULATED okuma 400)",
         userId
       );
+    }
+
+    // H2 sapma politikası — 0 = eşik yok (okuyucu ≤0 → null; tambur kısa kesim emsali).
+    if (Object.prototype.hasOwnProperty.call(input, "kursunMeterVarianceThresholdM")) {
+      const v = input.kursunMeterVarianceThresholdM;
+      if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 10_000) {
+        throw AppError.badRequest("Kurşun metre sapma eşiği (metre) 0 ile 10.000 arasında olmalı (0 = eşik yok)");
+      }
+      await this.set(SETTING_KEYS.KURSUN_METER_VARIANCE_THRESHOLD_M, v, "Kurşun metre sapma eşiği (metre) — 0 = eşik yok", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "kursunMeterVarianceThresholdPct")) {
+      const v = input.kursunMeterVarianceThresholdPct;
+      if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 100) {
+        throw AppError.badRequest("Kurşun metre sapma eşiği (yüzde) 0 ile 100 arasında olmalı (0 = eşik yok)");
+      }
+      await this.set(SETTING_KEYS.KURSUN_METER_VARIANCE_THRESHOLD_PCT, v, "Kurşun metre sapma eşiği (yüzde) — 0 = eşik yok", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "kursunMeterVarianceBasis")) {
+      const v = input.kursunMeterVarianceBasis;
+      if (typeof v !== "string" || !KURSUN_METER_VARIANCE_BASES.includes(v as KursunMeterVarianceBasis)) {
+        throw AppError.badRequest(`kursunMeterVarianceBasis şunlardan biri olmalı: ${KURSUN_METER_VARIANCE_BASES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.KURSUN_METER_VARIANCE_BASIS, v, "Kurşun metre sapma tabanı — bildirilen · ölçülen giriş", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "kursunMeterVarianceApproval")) {
+      const v = input.kursunMeterVarianceApproval;
+      if (typeof v !== "string" || !KURSUN_METER_VARIANCE_APPROVALS.includes(v as KursunMeterVarianceApproval)) {
+        throw AppError.badRequest(`kursunMeterVarianceApproval şunlardan biri olmalı: ${KURSUN_METER_VARIANCE_APPROVALS.join(", ")}`);
+      }
+      if (v === "OFFICE" && !KURSUN_METER_OFFICE_APPROVAL_SELECTABLE) {
+        throw AppError.badRequest("Ofis onayı henüz seçilemez — panelde sapma onay ekranı geldiğinde açılır", {
+          code: "METER_APPROVAL_OFFICE_UNAVAILABLE",
+        });
+      }
+      await this.set(SETTING_KEYS.KURSUN_METER_VARIANCE_APPROVAL, v, "Kurşun metre sapma onayı — yok · operatör sebebi · süpervizör PIN · ofis", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "batchShortNumberEnabled")) {
@@ -6238,6 +6303,35 @@ export async function readKursunMeterCapture(tx?: Pick<typeof prisma, "systemSet
 export async function readKursunSimulatedMeterEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.KURSUN_SIMULATED_METER_ENABLED }, select: { value: true } });
   return asBoolean(setting?.value);
+}
+
+/** H2: sapma eşiği okuyucusu — kayıt yok / ≤0 / sayı değil → null (eşik yok). */
+async function readPositiveOrNull(key: string, tx?: Pick<typeof prisma, "systemSetting">): Promise<number | null> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key }, select: { value: true } });
+  const parsed = setting ? asNumber(setting.value) : null;
+  return parsed === null || !Number.isFinite(parsed) || parsed <= 0 ? null : parsed;
+}
+
+export async function readKursunMeterVarianceThresholdM(tx?: Pick<typeof prisma, "systemSetting">): Promise<number | null> {
+  return readPositiveOrNull(SETTING_KEYS.KURSUN_METER_VARIANCE_THRESHOLD_M, tx);
+}
+
+export async function readKursunMeterVarianceThresholdPct(tx?: Pick<typeof prisma, "systemSetting">): Promise<number | null> {
+  return readPositiveOrNull(SETTING_KEYS.KURSUN_METER_VARIANCE_THRESHOLD_PCT, tx);
+}
+
+/** H2: sapma tabanı — tanınmayan değer varsayılana (`DECLARED_IN`) düşer. */
+export async function readKursunMeterVarianceBasis(tx?: Pick<typeof prisma, "systemSetting">): Promise<KursunMeterVarianceBasis> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.KURSUN_METER_VARIANCE_BASIS }, select: { value: true } });
+  const v = setting?.value;
+  return typeof v === "string" && KURSUN_METER_VARIANCE_BASES.includes(v as KursunMeterVarianceBasis) ? (v as KursunMeterVarianceBasis) : DEFAULT_KURSUN_METER_VARIANCE_BASIS;
+}
+
+/** H2: sapma onay kipi — tanınmayan değer varsayılana (`NONE` = bugün) düşer. */
+export async function readKursunMeterVarianceApproval(tx?: Pick<typeof prisma, "systemSetting">): Promise<KursunMeterVarianceApproval> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.KURSUN_METER_VARIANCE_APPROVAL }, select: { value: true } });
+  const v = setting?.value;
+  return typeof v === "string" && KURSUN_METER_VARIANCE_APPROVALS.includes(v as KursunMeterVarianceApproval) ? (v as KursunMeterVarianceApproval) : DEFAULT_KURSUN_METER_VARIANCE_APPROVAL;
 }
 
 export async function readKursunBypassEnabled(
