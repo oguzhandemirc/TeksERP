@@ -138,6 +138,16 @@ async function main(): Promise<void> {
   const v3row = await prisma.fabricPropertyValue.findUniqueOrThrow({ where: { id: V.k3 }, select: { code: true, name: true } });
   const pasVal = await errOf(() => fabricPropertyService.update(variant!.id, { values: [...allVals.filter((v) => v.code !== v3row.code), { ...v3row, serviceItemId: pas }] }, actor));
   check("⭐ §1b değer → PASİF hizmet kalemi eşlemesi 409 ITEM_INACTIVE", pasVal.status === 409 && pasVal.code === "ITEM_INACTIVE", JSON.stringify(pasVal));
+  // Muafiyet KAYIT BAŞINA: kardeş değerin taşıdığı pasif kalem özelliğe ya da başka değere YENİ eşleme olamaz.
+  await prisma.fabricPropertyValue.update({ where: { id: V.k3 }, data: { serviceItemId: pas } });
+  const sibProp = await errOf(() => fabricPropertyService.update(variant!.id, { serviceItemId: pas }, actor));
+  check("⭐ §1b kardeş değerin pasif kalemi ÖZELLİĞE yeni eşleme olamaz (409)", sibProp.status === 409 && sibProp.code === "ITEM_INACTIVE", JSON.stringify(sibProp));
+  const v1row = await prisma.fabricPropertyValue.findUniqueOrThrow({ where: { id: V.k1 }, select: { code: true, name: true } });
+  const sibVal = await errOf(() => fabricPropertyService.update(variant!.id, { values: [...allVals.filter((v) => v.code !== v1row.code && v.code !== v3row.code), { ...v3row, serviceItemId: pas }, { ...v1row, serviceItemId: pas }] }, actor));
+  check("⭐ §1b kardeş değerin pasif kalemi BAŞKA DEĞERE yeni eşleme olamaz (409)", sibVal.status === 409 && sibVal.code === "ITEM_INACTIVE", JSON.stringify(sibVal));
+  const ownVal = await errOf(() => fabricPropertyService.update(variant!.id, { values: [...allVals.filter((v) => v.code !== v3row.code), { ...v3row, serviceItemId: pas }] }, actor));
+  check("§1b değerin KENDİ taşıdığı pasif eşlemeyle values replace'i 200", ownVal.status === 200, JSON.stringify(ownVal));
+  await prisma.fabricPropertyValue.update({ where: { id: V.k3 }, data: { serviceItemId: null } });
   await prisma.fabricProperty.update({ where: { id: variant.id }, data: { serviceItemId: pas } });
   const keepOk = await errOf(() => fabricPropertyService.update(variant!.id, { serviceItemId: pas }, actor));
   check("§1b kaydın ZATEN taşıdığı (sonradan pasifleşen) eşlemeyle düzenleme 200", keepOk.status === 200, JSON.stringify(keepOk));
