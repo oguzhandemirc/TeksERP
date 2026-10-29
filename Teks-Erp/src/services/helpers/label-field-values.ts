@@ -105,6 +105,9 @@ export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValu
       return str(payload.deliveryNoteItemText);
     case "deliveryNoteColorText":
       return str(payload.deliveryNoteColorText);
+    // Müşteri top no (H9) — gelen belgesiz topta boş → satır basılmaz.
+    case "deliveryNoteRollNo":
+      return str(payload.deliveryNoteRollNo);
 
     // ── SACK (çuval) alanları — roll/swatch payload'unda undefined → present:false ──
     // sackNo: barkodun okunur karşılığı, etiketin kimliği → headline.

@@ -58,6 +58,7 @@ export const ROLL_RAW_FIELDS: readonly FieldDef[] = [
   // satırından. OPT-IN: şablonda açılmadıkça basılmaz (müşteri metni bizim ürün adımızın yerine geçmez).
   { key: "deliveryNoteItemText",  defaultLabel: "Kumaş (müşteri belgesindeki)", type: "text", defaultVisible: false },
   { key: "deliveryNoteColorText", defaultLabel: "Renk (müşteri belgesindeki)",  type: "text", defaultVisible: false },
+  { key: "deliveryNoteRollNo",    defaultLabel: "Müşteri top no",               type: "text", defaultVisible: false },
   { key: "printedAt",       defaultLabel: "Baskı Tarihi",      type: "date" },
 ] as const;
 
@@ -97,6 +98,7 @@ export const ROLL_FINISHED_FIELDS: readonly FieldDef[] = [
   // satırından. OPT-IN: şablonda açılmadıkça basılmaz (müşteri metni bizim ürün adımızın yerine geçmez).
   { key: "deliveryNoteItemText",  defaultLabel: "Kumaş (müşteri belgesindeki)", type: "text", defaultVisible: false },
   { key: "deliveryNoteColorText", defaultLabel: "Renk (müşteri belgesindeki)",  type: "text", defaultVisible: false },
+  { key: "deliveryNoteRollNo",    defaultLabel: "Müşteri top no",               type: "text", defaultVisible: false },
   { key: "printedAt",        defaultLabel: "Baskı Tarihi",           type: "date" },
 ] as const;
 
