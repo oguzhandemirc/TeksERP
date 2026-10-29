@@ -15,7 +15,7 @@ import {
   type TargetValueUpdateItem,
 } from "./helpers/workorder-target-value.helper";
 import { summarizeKursunApplications, type KursunSummary } from "./helpers/process-summary.helper";
-import { resolveIncomingDocsEnabled } from "./system-setting.service";
+import { effectiveIncomingDocsEnabled } from "./system-setting.service";
 import { suggestWorkOrderGramaj, type WorkOrderGramajSuggestion } from "./workorder-gramaj-suggestion.service";
 
 export async function replaceWorkOrderTargetValues(workOrderId: string, items: TargetValueUpdateItem[], userId?: string) {
@@ -55,7 +55,7 @@ export async function getWorkOrderProcessSummary(
   if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
   const kursun = await summarizeKursunApplications({ workOrderId });
   // H9b: modül kapalıyken anahtar HİÇ yok (yanıt bayt-aynı); açıkken gelen belgesiz İE'de null.
-  if (!(await resolveIncomingDocsEnabled())) return { success: true, data: { kursun } };
+  if (!(await effectiveIncomingDocsEnabled())) return { success: true, data: { kursun } };
   return { success: true, data: { kursun, deliveryNoteGramaj: await suggestWorkOrderGramaj(workOrderId) } };
 }
 

@@ -9,7 +9,7 @@
 import { reportJobFailure } from "./job-failure";
 import { bilgi, uyari } from "../lib/logger";
 import { getReaderUrl } from "../lib/gelen-belge/url";
-import { resolveIncomingDocsEnabled } from "../services/system-setting.service";
+import { effectiveIncomingDocsEnabled } from "../services/system-setting.service";
 import { claimNextScan, processClaimedScan, type ProcessOutcome } from "../services/gelen-belge-okuma.service";
 
 const STARTUP_DELAY_MS = 30 * 1000;
@@ -37,7 +37,7 @@ let lastRunAt = 0;
 let lastResult: ReaderRunResult | null = null;
 
 export async function readerPreconditions(): Promise<{ ok: true; url: string } | { ok: false; outcome: "KAPALI" | "ADRES_YOK" }> {
-  if (!(await resolveIncomingDocsEnabled())) return { ok: false, outcome: "KAPALI" };
+  if (!(await effectiveIncomingDocsEnabled())) return { ok: false, outcome: "KAPALI" };
   const url = getReaderUrl().url;
   if (!url) return { ok: false, outcome: "ADRES_YOK" };
   return { ok: true, url };
