@@ -206,7 +206,7 @@ import { outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.hel
 import { assertWorkOrderBound } from "./helpers/dispatch-header.helper";
 import { uyari } from "../lib/logger";
 import { upperTr } from "../utils/tr-case";
-import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";
+import { assertEmanetWritableTx, resolveOwnerFromReceiptTx } from "./helpers/emanet-owner.helper";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
 
@@ -5141,6 +5141,8 @@ export class InventoryService {
       // depolu fabrikada zaten tek doğru cevap var; çok depolu ticaret kurulumu
       // bu yolu (fason dönüşü açık kumaş) hiç kullanmıyor.
       const openFabricWarehouseId = await resolveTargetWarehouseId(tx);
+      // EMANET: makbuzdan doğan top kaynak topların tek sahibini alır (fason kabulüyle aynı kalıtım, H10).
+      const openFabricOwnerId = await resolveOwnerFromReceiptTx(tx, receipt.id);
       const created = await tx.roll.create({
         data: {
           barcode: null,
@@ -5163,6 +5165,7 @@ export class InventoryService {
           currentStepId: step.id,
           producedInStepId: step.id,
           parentReceiptId: receipt.id,
+          ownerCustomerId: openFabricOwnerId,
         },
       });
 

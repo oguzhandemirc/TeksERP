@@ -4,7 +4,8 @@
 // Soru: "bu toplara yapılan iş müşteriye hangi hizmet kalemiyle, kaça kesilir?"
 // Zincir: gramaj `listKursunApplications` (process-summary; TABLET + KAĞIT) → yoksa
 // iş emri hedefi (uyarıyla) → `value.serviceItemId` → `property.serviceItemId` →
-// ana bayrağın (variantOf) eşlemesi. Fiyat `resolveItemPricesFor(SALE)`, hizmet
+// ana bayrağın (variantOf) eşlemesi. Kurşun DIŞI bayrak işleri (Tambur, etek, brode — H10)
+// `listFlagServiceWorks`ten, kalem `property.serviceItemId`ten gelir. Fiyat `resolveItemPricesFor(SALE)`, hizmet
 // anına (as-of) çözülür: istisna genelden önce, damgalı eski sürüm eski işe.
 // ⚠️ `FinishingRate` BURADA OKUNMAZ: o bizim ödediğimiz terbiye/fason MALİYETİDİR,
 // gelir değildir — `test_hizmet_fiyati` AST taraması ikinci kopyayı ve okumayı yasaklar.
@@ -14,18 +15,21 @@ import prisma from "../../lib/prisma";
 import { TERIM } from "../../constants/terim";
 import { resolveItemPricesFor } from "../item-price.service";
 import { listKursunApplications, readKursunTarget, type KursunApplication } from "./process-summary.helper";
+import { listFlagServiceWorks } from "./service-flag-work.helper";
 
 /** `kursun-qc.service` reopenStep damga sebebi — yeniden açılan adım yeni hizmettir. */
 const KURSUN_REOPEN_REASON = "KURSUN_REOPEN";
 
-export type ServiceMeterBasis = "OUT" | "IN" | "DECLARED";
+export type ServiceMeterBasis = "OUT" | "IN" | "DECLARED" | "CUT" | "RECEIVED";
 export type ServiceGramajSource = "APPLIED" | "WO_TARGET" | "NONE";
 
 /** Tek iş (top × adım) — fatura bağı (H7) bu satırdan doğar. */
 export interface ServiceRollWork {
   rollId: string;
-  workOrderStepId: string;
-  source: KursunApplication["source"];
+  /** Bayrak işinde adım bilinmeyebilir (kesim depoda, ölçümsüz iş) — bağ anahtarı NULLS NOT DISTINCT. */
+  workOrderStepId: string | null;
+  /** PROPERTY = kurşun dışı bayrak işi (H10). */
+  source: KursunApplication["source"] | "PROPERTY";
   valueId: string | null;
   valueName: string;
   gramajFrom: ServiceGramajSource;
@@ -129,7 +133,7 @@ function filterBillableWorks(all: ServiceRollWork[], opt: ServiceResolveOptions,
 }
 
 /**
- * Toplara yapılan kurşun işini hizmet kalemine ve müşteri fiyatına çözer.
+ * Toplara yapılan kurşun ve bayrak tipi (H10) işleri hizmet kalemine ve müşteri fiyatına çözer.
  * Yazmaz; eşleşmeyen top ve fiyatsız kalem `warnings`te görünür (sessiz düşmez).
  */
 export async function resolveServiceItemsForRolls(params: {
@@ -172,7 +176,11 @@ export async function resolveServiceItemsForRolls(params: {
       unitPrice: null,
     };
   });
-  const works = filterBillableWorks(allWorks, opt, basis, warnings);
+  const flagWorks: ServiceRollWork[] = (await listFlagServiceWorks(rollIds, basis)).map((f) => ({
+    rollId: f.rollId, workOrderStepId: f.workOrderStepId, source: "PROPERTY", valueId: null, valueName: f.propertyName, gramajFrom: "NONE",
+    serviceItemId: f.serviceItemId, meters: f.meters, meterBasis: f.meterBasis, readingId: f.readingId, serviceAt: f.serviceAt, unitPrice: null,
+  }));
+  const works = filterBillableWorks([...allWorks, ...flagWorks], opt, basis, warnings);
 
   // Fiyat hizmet anına çözülür (geç taslak eski fiyatı korur); aynı an tek sorgu.
   const byAt = new Map<number, ServiceRollWork[]>();
