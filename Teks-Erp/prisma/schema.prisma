@@ -523,6 +523,8 @@ model User {
   cancelledKartelaReceipts      KartelaReceipt[]         @relation("KartelaReceiptCancelledBy")
   swatchesCreated               Swatch[]                 @relation("SwatchCreatedBy")
   rollOperations                RollOperation[]
+  rollMeterReadings             RollMeterReading[]
+  rollMeterAcks                 RollMeterAck[]
   rollVariances                 RollVariance[]
   reversedRollVariances         RollVariance[]           @relation("RollVarianceReversedBy")
   planDeviationsConfirmed       RollPlanDeviation[]      @relation("RollPlanDeviationConfirmedBy")
@@ -1181,6 +1183,7 @@ model Machine {
   devices        Device[]
   peripherals    PeripheralDevice[] // birleşik cihaz kaydı (yazıcı/kantar/metre/sinyal — makineye sabit)
   rollOperations RollOperation[]
+  meterReadings  RollMeterReading[]
   rollMovements  RollMovement[]
   workSessions   WorkSession[]
   rollsCreated   Roll[]                   @relation("RollCreatedMachine") // KK1 girişi makine atfı
@@ -1380,6 +1383,10 @@ model PeripheralDevice {
   timeoutMs   Int? // Okuma zaman aşımı ms (boş → 2500)
   role        String?            @db.VarChar(24) // Makine içi ayraç: "2-KAT" / "4-KAT" / "PRIMARY"
   simulate    Boolean            @default(false) // Per-cihaz simülasyon (gerçek I/O yerine sahte değer)
+  /// Sayaç sıfırlama komutu (pollCommand ikizi, escape destekli); boş → sıfırlanmaz, metre = okuma − başlangıç.
+  resetCommand String?          @db.VarChar(64)
+  /// Sayaç davranışı — RESETTING her işte sıfırlanır, CUMULATIVE birikir (fark alınır). Boş → cihaz verisi yok.
+  counterMode  MeterCounterMode?
 
   // Sahiplik — tam biri (serviste enforce edilir).
   machineId String?  @db.Uuid
@@ -1418,6 +1425,7 @@ model PeripheralDevice {
   templateRoutes PeripheralTemplateRoute[]
   deviceLinks    DevicePeripheral[] // YENİ: bu donanımı kullanan cihaz(lar) (çok-çok)
   printJobs      PrintJob[]                @relation("PrintJobPeripheral")
+  meterReadings  RollMeterReading[]
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
@@ -3920,6 +3928,7 @@ model Roll {
   errors               RollError[]
   movements            RollMovement[]
   operations           RollOperation[]
+  meterReadings        RollMeterReading[]
   variances            RollVariance[]
   /// Bu topun KEŞFİ olan (ebeveyne yazılmış) sapma satırları — `sourceRollId` ters ilişkisi.
   sourceOfVariances    RollVariance[]              @relation("RollVarianceSourceRoll")
@@ -4895,6 +4904,7 @@ model WorkOrderStep {
   dispatches           SubcontractorDispatch[]
   receipts             SubcontractorReceipt[]
   operations           RollOperation[]
+  meterReadings        RollMeterReading[]
   variances            RollVariance[]
   planDeviations       RollPlanDeviation[]
   warehouseMovements   WarehouseMovement[]
@@ -5875,6 +5885,110 @@ model LabTestResult {
   @@unique([labTestId, testTypeId])
   @@index([testTypeId])
   @@map("lab_test_results")
+}
+
+/// H1 (Hizmet veren, 2026-10-29): kurşun giriş/çıkış metresinin evresi.
+enum MeterPhase {
+  IN
+  OUT
+}
+
+/// Sayaç sayma davranışı (cihaz verisi): RESETTING her işte sıfırlanır; CUMULATIVE birikir.
+enum MeterCounterMode {
+  RESETTING
+  CUMULATIVE
+}
+
+/// Sapma tabanı — beyan edilen (irsaliye/initialQty) ya da ölçülen giriş metresi.
+enum MeterVarianceBasis {
+  DECLARED_IN
+  MEASURED_IN
+}
+
+/// Sapma onay kipi (okuma satırına KOPYALANIR; ayar değişimi geçmişi değiştirmez).
+enum MeterApprovalMode {
+  NONE
+  OPERATOR_REASON
+  SUPERVISOR_PIN
+  OFFICE
+}
+
+/// KURŞUN METRE DEFTERİ (H1) — topun bir adımdaki giriş/çıkış ölçümü. DEFTER: silinirse
+/// faturalanan metre değişir. Düzeltme satırı DEĞİŞTİRMEZ: eski satır damgalanır, yenisi yazılır.
+/// Stok etkisi YOK (RECORD); `qtyOut = qtyIn` kapanışı korunur. Politika alanları okuma anındaki
+/// ayarın KOPYASIDIR — sonradan ayar değişse de bu okumanın sapma işareti aynı kalır.
+model RollMeterReading {
+  id              String            @id @default(uuid()) @db.Uuid
+  rollId          String            @db.Uuid
+  workOrderStepId String            @db.Uuid
+  phase           MeterPhase
+  meters          Decimal           @db.Decimal(12, 3)
+  /// Cihazın ham sayaç değeri (CUMULATIVE farkı ve denetim için) — metre değil.
+  rawCounter      Decimal?          @db.Decimal(14, 3)
+  /// `@default` YOK: kaynak her yazımda açıkça beyan edilir (SIMULATED ayar kapalıyken 400).
+  source          MachineDataSource
+  machineId       String?           @db.Uuid
+  peripheralId    String?           @db.Uuid
+  /// H11 kart sayaç örneği kimliği (model H11'de doğar; şimdilik bağsız).
+  cardSampleId    String?           @db.Uuid
+
+  // Politika kopyası (§4) — okuma anındaki ayar.
+  thresholdM    Decimal?           @db.Decimal(12, 3)
+  thresholdPct  Decimal?           @db.Decimal(6, 3)
+  basis         MeterVarianceBasis
+  approvalMode  MeterApprovalMode
+
+  clientToken String  @unique @db.Uuid
+  createdById String? @db.Uuid
+
+  /// GERİ ALMA — satır silinmez, damgalanır (düzeltme · adımın yeniden açılması).
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  revokeReason String?   @db.VarChar(300)
+
+  /// Append-only defter → `updatedAt` YOK (RollOperation emsali); tek güncelleme damgadır.
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  roll       Roll              @relation(fields: [rollId], references: [id])
+  step       WorkOrderStep     @relation(fields: [workOrderStepId], references: [id])
+  machine    Machine?          @relation(fields: [machineId], references: [id])
+  peripheral PeripheralDevice? @relation(fields: [peripheralId], references: [id])
+  createdBy  User?             @relation(fields: [createdById], references: [id])
+  acks       RollMeterAck[]
+
+  // DB'de PARTIAL (`WHERE "revokedAt" IS NULL`) — adım × evre başına TEK aktif okuma.
+  // CHECK `meters >= 0` migration SQL'inde.
+  @@unique([rollId, workOrderStepId, phase], map: "roll_meter_readings_active_uq")
+  @@index([rollId, revokedAt], map: "roll_meter_readings_roll_revoked_idx")
+  @@index([workOrderStepId, createdAt])
+  @@index([machineId])
+  @@index([peripheralId])
+  @@index([createdById])
+  @@map("roll_meter_readings")
+}
+
+/// Sapma onayı (H2 yazar) — okuma damgalanınca AYNI tx'te damgalanır. DEFTER.
+model RollMeterAck {
+  id           String            @id @default(uuid()) @db.Uuid
+  readingId    String            @db.Uuid
+  mode         MeterApprovalMode
+  reasonCode   String?           @db.VarChar(64)
+  reasonText   String?           @db.VarChar(300)
+  approvedById String?           @db.Uuid
+
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  revokeReason String?   @db.VarChar(300)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  reading    RollMeterReading @relation(fields: [readingId], references: [id])
+  approvedBy User?            @relation(fields: [approvedById], references: [id])
+
+  // DB'de PARTIAL (`WHERE "revokedAt" IS NULL`) — okuma başına TEK aktif onay.
+  @@unique([readingId], map: "roll_meter_acks_active_uq")
+  @@index([approvedById])
+  @@map("roll_meter_acks")
 }
 
 /// Top üzerinde yapılan somut işlem log'u (Kurşun geçildi, QC2 bitti, Tambur kararı, paketleme vb.).
