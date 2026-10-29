@@ -316,8 +316,8 @@ async function main(): Promise<void> {
     const cr3 = await call("POST", "/api/gelen-belge/irsaliyeler", { sourceKind: "MANUAL", senderDocNo: `${TAG}-COKSAYFA` });
     const multiId = cr3.data?.id as string;
     made.notes.push(multiId);
-    await up("0245", { noteId: multiId, pageNo: 1 }, "sayfa1");
-    await up("0246", { noteId: multiId, pageNo: 2 }, "sayfa2");
+    const page1 = await up("0245", { noteId: multiId, pageNo: 1 }, "sayfa1");
+    const page2 = await up("0246", { noteId: multiId, pageNo: 2 }, "sayfa2");
     await runReaderOnce();
     const n8c = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: multiId }, select: { warnings: true, totalsDeclared: true, lines: { select: { lineNo: true, blockNo: true } } } });
     const w8c = n8c.warnings as string[];
@@ -326,6 +326,15 @@ async function main(): Promise<void> {
       n8c.lines.length === 22 && new Set(n8c.lines.map((l) => l.lineNo)).size === 22 && new Set(n8c.lines.map((l) => l.blockNo)).size === 3
         && w8c.some((w) => w.startsWith("DECLARED_TOP_COUNT_DIFF")) && w8c.some((w) => w.startsWith("MULTI_REGION")) && tb8c.includes(1) && tb8c.includes(2) && new Set(tb8c).size === tb8c.length,
       JSON.stringify({ l: n8c.lines.length, b: [...new Set(n8c.lines.map((l) => l.blockNo))], w: w8c, tb: tb8c }));
+    // §8d E4 satır kaynağı: her satır KENDİ sayfasının taramasını taşır (sayfa no taramadan okunur), elle satır null; detay yanıtı döner.
+    const det8d = await call("GET", `/api/gelen-belge/irsaliyeler/${multiId}`);
+    const l8d = ((det8d.data?.lines ?? []) as Array<{ lineNo: number; scanId: string | null }>).slice().sort((a, b) => a.lineNo - b.lineNo);
+    const man8d = await call("GET", `/api/gelen-belge/irsaliyeler/${manualId}`);
+    const manLines = (man8d.data?.lines ?? []) as Array<{ scanId?: string | null }>;
+    check("§8d E4 satır scanId: 2 sayfalı belgede sayfa 1'in 21 satırı → sayfa 1 taraması, sayfa 2'nin satırı → sayfa 2 taraması; elle satır null (detay yanıtında)",
+      det8d.status === 200 && l8d.length === 22 && l8d.slice(0, 21).every((l) => l.scanId === page1) && l8d[21]?.scanId === page2 && page1 !== page2
+        && manLines.length === 1 && manLines[0]!.scanId === null,
+      JSON.stringify({ p1: page1, p2: page2, ids: [...new Set(l8d.map((l) => l.scanId))], man: manLines.map((l) => l.scanId) }));
 
     // ── §10 K6 PDF: arşiv — kuyruğa girmez, sidecar'a gitmez, okut 400 ───────
     fake.mode = "ok";

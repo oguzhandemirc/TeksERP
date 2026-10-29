@@ -33,6 +33,8 @@ export const LINE_SELECT = {
   id: true, noteId: true, lineNo: true, blockNo: true, lineKind: true, senderRollNo: true, meters: true, weightKg: true,
   widthCm: true, itemText: true, itemId: true, colorText: true, colorId: true, processText: true, confidence: true,
   needsReview: true, sourceRects: true, status: true, failReason: true, rollId: true, createdAt: true, updatedAt: true,
+  // E4: satırı doğuran tarama (OCR satırı; elle/Excel null) — panel kırpığı doğru sayfadan alır.
+  scanId: true,
   item: { select: { id: true, code: true, name: true } },
   color: { select: { id: true, code: true, name: true } },
 } as const;
