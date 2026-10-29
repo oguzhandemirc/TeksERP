@@ -263,6 +263,7 @@ export async function collectShipmentServiceBilling(params: {
 async function mapLineageDispatchedAt(
   pairs: Array<{ rollId: string; shipmentId: string }>,
   shipments: Array<{ id: string; dispatchedAt: Date | null }>,
+  db: Db = prisma,
 ): Promise<Map<string, Date>> {
   const at = new Map(shipments.filter((s) => s.dispatchedAt).map((s) => [s.id, s.dispatchedAt!]));
   const out = new Map<string, Date>();
@@ -275,7 +276,7 @@ async function mapLineageDispatchedAt(
   for (const p of pairs) { const d = at.get(p.shipmentId); if (d) put(p.rollId, d); }
   let frontier = [...out.keys()];
   for (let depth = 0; depth < 32 && frontier.length > 0; depth++) {
-    const rows = await prisma.roll.findMany({ where: { id: { in: frontier }, parentRollId: { not: null } }, select: { id: true, parentRollId: true } });
+    const rows = await db.roll.findMany({ where: { id: { in: frontier }, parentRollId: { not: null } }, select: { id: true, parentRollId: true } });
     frontier = [...new Set(rows.filter((r) => put(r.parentRollId!, out.get(r.id)!)).map((r) => r.parentRollId!))];
   }
   return out;

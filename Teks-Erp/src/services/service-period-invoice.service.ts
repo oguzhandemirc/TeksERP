@@ -84,28 +84,29 @@ async function findClosedPeriod(cariId: string, currency: Currency, issueDate: D
   return closed?.periodEnd ?? null;
 }
 
+/** "Her sevkte" seçili müşteride dönem önizlemesinin uyarısı (bekçi metni buradan okur). */
+export const CUSTOMER_PER_SHIPMENT_PERIOD_WARNING =
+  'Bu carinin hizmet faturası "Her sevkte" seçili — taslak yalnız sevk faturasına girmemiş (faturasız kalmış) işleri toplar.';
+
 async function buildPeriodDraft(input: ServicePeriodInput) {
   const settings = await loadServiceBillingSettings();
   if (!settings.enabled) {
     throw AppError.conflict(`Hizmet faturası kapalı — ${settingScreenPath("finance")} ekranından açın.`, { code: "SERVICE_BILLING_DISABLED" });
   }
   const cari = await loadCustomerCari(input.cariId);
-  // H8b: carisinde "Her sevkte" SEÇİLMİŞ müşterinin işi sevk faturasındadır — dönem taslağı onu toplamaz. Seçimsiz
-  // müşteride (fabrika ayarı) dönem ucu bugünkü gibi açık kalır: faturasız kalmış işi toplayabilir.
+  // H8b: "Her sevkte" seçili müşteride de dönem ucu açık — tetik sonradan değiştiyse faturasız kalan işi toplayan tek yol
+  // budur; sevkte faturalanmış iş billedKeys + kısmi unique ile zaten düşer (çift fatura yok). Önizleme yalnız uyarır.
   const effective = await resolveCustomerServiceBillingTrigger(cari.customerId, settings);
-  if (effective.source === "CUSTOMER" && effective.trigger === "PER_SHIPMENT") {
-    throw AppError.conflict(`${cari.name} carisinde hizmet faturası "Her sevkte" seçili — işleri sevk faturasında kesilir, dönem sonu taslağına girmez.`, { code: "SERVICE_PERIOD_CUSTOMER_PER_SHIPMENT" });
-  }
   const bounds = resolvePeriodBounds(input.period);
   const draft = await collectPeriodServiceBilling({ customerId: cari.customerId, currency: cari.currency, settings, ...bounds });
   const vatRate = await readFinanceDefaultVatRate();
   const closedAt = await findClosedPeriod(cari.id, cari.currency, bounds.issueDate);
-  return { settings, cari, bounds, draft, vatRate, closedAt };
+  return { settings, cari, bounds, draft, vatRate, closedAt, effective };
 }
 
 /** Önizleme: iş sayısı, metre, tutar, uyarılar — yazmaz. */
 export async function previewServicePeriodDraft(input: ServicePeriodInput): Promise<ServicePeriodPreview> {
-  const { cari, bounds, draft, closedAt } = await buildPeriodDraft(input);
+  const { cari, bounds, draft, closedAt, effective } = await buildPeriodDraft(input);
   const lines = draft.lines.map((l) => ({
     itemId: l.itemId, description: l.description, qty: l.qty.toFixed(3), unit: l.unit, unitPrice: l.unitPrice.toFixed(4),
     amount: l.qty.mul(l.unitPrice).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP).toFixed(2),
@@ -113,6 +114,7 @@ export async function previewServicePeriodDraft(input: ServicePeriodInput): Prom
   const meters = draft.links.reduce((a, l) => a.plus(l.billedMeters), new Prisma.Decimal(0));
   const subtotal = lines.reduce((a, l) => a.plus(l.amount), new Prisma.Decimal(0));
   const warnings = [...draft.warnings];
+  if (effective.source === "CUSTOMER" && effective.trigger === "PER_SHIPMENT") warnings.push(CUSTOMER_PER_SHIPMENT_PERIOD_WARNING);
   if (closedAt) warnings.push(`Dönem ${formatDayKeyTr(closedAt)} kapanışıyla KAPALI — taslak oluşturulamaz.`);
   if (draft.links.length === 0 && draft.billedWorkCount > 0) warnings.push("Dönemin bütün işleri zaten faturalanmış.");
   return {
