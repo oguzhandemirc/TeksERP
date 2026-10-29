@@ -1439,6 +1439,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         },
       },
       {
+        key: "tamburListByStationEnabled",
+        group: "Tambur",
+        title: "Tablet iş listesi yalnız kendi tamburunu göstersin",
+        summary: "Birden fazla tamburu olan fabrikada her tablet yalnız kendi tamburuna sıradaki işleri listeler.",
+        defaultOn: false,
+        audience: ["Operatör"],
+        desc: "Açıkken Tambur tabletindeki iş listesi yalnız tabletin oturum açtığı tambur istasyonuna sıradaki topları gösterir (örn. brode işleri Tambur-2'de). Kapalıyken (varsayılan) liste bütün tambur işlerini gösterir. Kart okutması her iki durumda da çalışır.",
+      },
+      {
         key: "tamburUndoFullSameDayOnly",
         group: "Tambur",
         title: "Tümden geri alma yalnız aynı gün yapılabilsin",

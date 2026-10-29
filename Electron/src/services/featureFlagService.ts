@@ -541,6 +541,8 @@ export interface FeatureFlags {
   /** Kısa kesim eşiği (metre). null = girilmemiş → bayrak açık olsa da kural
    *  ateşlemez (panel bunu uyarı satırıyla söyler). */
   tamburShortCutA1ThresholdM: number | null;
+  /** Tablet Tambur açık kart listesi oturum istasyonuyla süzülsün mü (false=default; ister 2.8). */
+  tamburListByStationEnabled: boolean;
   /** Fason kabulünde çekme (giden↔dönen metraj farkı) uyarısı çıksın mı (true=default).
    *  Boyahanede kumaş çeker — 250 m giden mal 220 m döner. Kapalıyken ekran farkı
    *  yalnız bilgi olarak yazar, uyarı/onay çıkarmaz. Sapma defterine yazım bu

@@ -295,6 +295,22 @@ function cutReplay<R>(parentId: string, length: number, respond: (child: Roll, p
   });
 }
 
+/**
+ * Tambur listesi istasyon süzgecinin kapısı (fail-closed): bilinmeyen 404, pasif ya da
+ * TAMBUR olmayan istasyon 400 — sessizce boş liste dönmek "bekleyen top yok" yalanıdır.
+ */
+async function assertTamburStation(stationId: string): Promise<void> {
+  const station = await prisma.station.findUnique({
+    where: { id: stationId },
+    select: { kind: true, isActive: true },
+  });
+  if (!station) throw AppError.notFound("İstasyon bulunamadı.", { code: "STATION_NOT_FOUND" });
+  if (!station.isActive) throw AppError.badRequest("İstasyon pasif.", { code: "STATION_INACTIVE" });
+  if (station.kind !== StationKind.TAMBUR) {
+    throw AppError.badRequest("İstasyon bir Tambur istasyonu değil.", { code: "STATION_NOT_TAMBUR" });
+  }
+}
+
 export class TamburService {
   /** Kurşun Dağıtım (bypass) okuma yolu — yalnız `getTamburContext` kullanır. */
   private readonly bypassService = new KursunBypassService();
@@ -311,11 +327,15 @@ export class TamburService {
    * length model ile child Roll'ları yaratır). UI hatalı/hatasız ayrımı
    * için `errors.length` üzerinden filtreleme yapabilir.
    */
-  async getPendingRolls(): Promise<ApiResponse<Roll[]>> {
+  async getPendingRolls(stationId: string | null = null): Promise<ApiResponse<Roll[]>> {
+    // İster 2.8: çok tamburlu fabrikada tablet yalnız KENDİ istasyonundaki sıradaki
+    // adımı görür; parametresiz çağrı bugünkü listeyle bayt-aynı kalır.
+    if (stationId) await assertTamburStation(stationId);
     const rolls = await prisma.roll.findMany({
       where: {
         status: RollStatus.IN_PRODUCTION,
         currentStep: {
+          ...(stationId ? { stationId } : {}),
           station: { kind: StationKind.TAMBUR },
         },
       },
@@ -1999,7 +2019,7 @@ export class TamburService {
    * Tambur adımlarında açık top bekleyen aktif refakat kartları.
    * Mobil "kamera simülasyonu" modal'ı için.
    */
-  async listOpenCards(): Promise<
+  async listOpenCards(stationId: string | null = null): Promise<
     ApiResponse<
       Array<{
         cardId: string;
@@ -2022,8 +2042,11 @@ export class TamburService {
       }>
     >
   > {
+    // İster 2.8: istasyon verilirse yalnız o tamburun adımları (getPendingRolls ile aynı kapı).
+    if (stationId) await assertTamburStation(stationId);
     const steps = await prisma.workOrderStep.findMany({
       where: {
+        ...(stationId ? { stationId } : {}),
         station: { kind: StationKind.TAMBUR },
         status: { not: "COMPLETED" },
         currentRolls: { some: {} },
