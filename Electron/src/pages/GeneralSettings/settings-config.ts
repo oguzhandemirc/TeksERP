@@ -1506,8 +1506,8 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Operatör", "Yönetim"],
         options: [
           { value: "NONE", label: "Onaysız, işaretle (bugünkü)", hint: "Fark yalnız işaretlenir; akış durmaz." },
-          { value: "OPERATOR_REASON", label: "Operatör sebep seçsin", hint: "Sebep seçilmeden çıkış kaydedilmez." },
-          { value: "SUPERVISOR_PIN", label: "Süpervizör PIN'i", hint: "Onaylanmadan adım kapanmaz; makine durmaz." },
+          { value: "OPERATOR_REASON", label: "Operatör sebep seçsin", hint: "Sebep seçilmeden çıkış kaydedilmez. Tablette sebep seçici gerekir — tablet güncellemesi gelmeden açmayın." },
+          { value: "SUPERVISOR_PIN", label: "Süpervizör PIN'i", hint: "Onaylanmadan adım kapanmaz; makine durmaz. Tablette PIN penceresi gerekir — tablet güncellemesi gelmeden açmayın." },
         ],
       },
     ],
