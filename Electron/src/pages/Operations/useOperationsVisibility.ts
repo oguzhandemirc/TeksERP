@@ -89,6 +89,7 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
     kaliteGuvenceEnabled,
     maliyetEnabled,
     gelenBelgeEnabled: incomingDocumentEnabled,
+    emanetEnabled: flagsQuery.data?.data?.emanetEnabled ?? false,
     reportsClosedKeys,
     isReportOpen,
     reportsV2Enabled,

@@ -1,10 +1,11 @@
 // Operasyon › Depo & Paketleme karoları (sıra = hub sırası).
-import { ArrowLeftRight, Boxes, ClipboardCheck, FileCog, Package, PackageOpen, PackagePlus, ScanText, ShoppingBasket, Tags } from "lucide-react";
+import { ArrowLeftRight, Boxes, ClipboardCheck, FileCog, Inbox, Package, PackageOpen, PackagePlus, ScanText, ShoppingBasket, Tags } from "lucide-react";
 import { isYarnStockVisible } from "../Yarn/yarn-regime";
 import { isPurchaseOrdersVisible } from "../PurchaseOrders/po-regime";
 import { isStockCountVisible, STOCK_COUNTS_PATH } from "../StockCounts/stockCount-regime";
 import { isGoodsReceiptVisible } from "../GoodsReceipts/goodsReceipt-regime";
 import { isIncomingDocumentVisible } from "../GelenBelgeler/gelenBelge-regime";
+import { isConsignedWorkVisible } from "../ConsignedWork/consignedWork-regime";
 import { flagOffHint } from "@/lib/flag-setting-path";
 import type { OperationsTile } from "../tile-config";
 
@@ -52,6 +53,17 @@ export const warehouseTiles: OperationsTile[] = [
     permission: "goods-receipt:read",
     visibleWhen: isGoodsReceiptVisible,
     offHint: flagOffHint("ticaretEnabled"),
+  },
+  {
+    // İçerideki İşler (P1a, ister 3.2): müşteri başına içerideki emanet mal. Emanet KAPALIYKEN gizli (Gelen Belgeler emsali).
+    key: "icerideki-isler",
+    title: "İçerideki İşler",
+    description: "Müşterilerin bıraktığı emanet mal — müşteri başına top/metre, durum kırılımı",
+    icon: Inbox,
+    to: "/operations/icerideki-isler",
+    group: "warehouse",
+    permission: "roll:read",
+    visibleWhen: isConsignedWorkVisible,
   },
   {
     // Gülkesim OCR D5: müşteri irsaliyesi (fotoğraf/Excel/elle) → gözden geçirme → onayda emanet topu.

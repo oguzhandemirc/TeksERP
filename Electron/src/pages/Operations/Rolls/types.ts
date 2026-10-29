@@ -149,6 +149,8 @@ export interface Roll {
   weavingOrder?: { id: string; weavingOrderNumber: string } | null;
   /** Topun bulunduğu FİZİKSEL depo (2026-08-13). Liste + detay aynı şekli döner. */
   warehouse?: { id: string; code: string; name: string } | null;
+  /** Emanet sahibi (liste include `ownerCustomer`) — "Sahibi" sütunu; eski sunucu göndermez → opsiyonel. */
+  ownerCustomer?: { id: string; name: string } | null;
   warehouseId?: string | null;
   parentRollId: string | null;
   /** Açık kumaş Roll'lar için fason kabul referansı. */
