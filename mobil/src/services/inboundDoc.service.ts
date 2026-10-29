@@ -19,7 +19,7 @@ export interface CreateDraftNoteBody {
   sourceKind: 'MANUAL';
   ownerCustomerId: string | null;
   senderDocNo: string | null;
-  pageCount: number;
+  // pageCount GÖNDERİLMEZ: kâğıttaki "1/2" damgasıdır (sayfa kapısı ona bakar), çekilen foto sayısı değil.
 }
 
 export interface DraftNote {

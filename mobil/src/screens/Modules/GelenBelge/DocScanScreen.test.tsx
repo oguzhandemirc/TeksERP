@@ -64,7 +64,8 @@ describe('DocScanScreen', () => {
     fireEvent.press(r.getByTestId('belge-tara-gonder'));
     await waitFor(() => expect(r.getByTestId('belge-tara-sonuc')).toHaveTextContent(/GB-0001/));
     expect(mockCreate).toHaveBeenCalledTimes(1);
-    expect(mockCreate.mock.calls[0][0]).toMatchObject({ sourceKind: 'MANUAL', senderDocNo: 'IRS-77', pageCount: 1, ownerCustomerId: null });
+    expect(mockCreate.mock.calls[0][0]).toMatchObject({ sourceKind: 'MANUAL', senderDocNo: 'IRS-77', ownerCustomerId: null });
+    expect(mockCreate.mock.calls[0][0]).not.toHaveProperty('pageCount');
     expect(mockUpload).toHaveBeenCalledTimes(1);
     expect(mockUpload.mock.calls[0][0]).toMatchObject({ noteId: 'n1', pageNo: 1, barcodeText: '  IRS-77 ', contentBase64: mockB64 });
     expect(mockUpload.mock.calls[0][0].sha256).toMatch(/^[0-9a-f]{64}$/);

@@ -116,7 +116,9 @@ describe('Belge Tara — gönderim (sahte API)', () => {
     const r = await submitDocScan(f.api, { pages, ownerCustomerId: 'c1', senderDocNo: 'IRS-1', barcodeText: 'IRS-1' }, attempt);
     expect(r).toEqual({ note: { id: 'note-1', noteNo: 'GB-1' }, uploaded: 2, duplicates: 0 });
     expect(f.createCalls).toHaveLength(1);
-    expect(f.createCalls[0]).toMatchObject({ sourceKind: 'MANUAL', ownerCustomerId: 'c1', senderDocNo: 'IRS-1', pageCount: 2 });
+    expect(f.createCalls[0]).toMatchObject({ sourceKind: 'MANUAL', ownerCustomerId: 'c1', senderDocNo: 'IRS-1' });
+    // pageCount kâğıttaki sayfa damgasıdır; foto sayısı (2) beyan yerine geçmez.
+    expect(f.createCalls[0]).not.toHaveProperty('pageCount');
     expect(f.uploadCalls.map((u) => [u.noteId, u.pageNo, u.barcodeText])).toEqual([
       ['note-1', 1, 'IRS-1'],
       ['note-1', 2, 'IRS-1'],

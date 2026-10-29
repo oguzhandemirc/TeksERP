@@ -157,7 +157,6 @@ export async function submitDocScan(
         sourceKind: 'MANUAL',
         ownerCustomerId: input.ownerCustomerId,
         senderDocNo: input.senderDocNo,
-        pageCount: input.pages.length,
       });
       note = { id: created.id, noteNo: created.noteNo };
     } catch (e) {

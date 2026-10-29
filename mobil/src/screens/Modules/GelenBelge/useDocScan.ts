@@ -24,6 +24,16 @@ export function useDocScan() {
     attempt.renew();
   };
 
+  // Başlık girdisi değişince deneme de yenidir (kk1): yapışık token farklı yükle gidip 409 + sayfasız taslak bırakmaz.
+  const changeOwner = (o: Owner | null) => {
+    if (o?.id !== owner?.id) attempt.renew();
+    setOwner(o);
+  };
+  const changeBarcode = (b: string | null) => {
+    if (b !== barcode) attempt.renew();
+    setBarcode(b);
+  };
+
   const capture = (page: ScanPage) => {
     const r = addPage(pages, page);
     setPages(r.pages);
@@ -56,7 +66,7 @@ export function useDocScan() {
   };
 
   return {
-    pages, setPages, owner, setOwner, setBarcode, senderDocNo, sending, progress, done, reset, capture, send,
+    pages, setPages, owner, setOwner: changeOwner, setBarcode: changeBarcode, senderDocNo, sending, progress, done, reset, capture, send,
     // Taslak doğduktan sonra başlık kilitlenir (yeniden deneme aynı taslağa sayfa yükler).
     headerLocked: progress.note !== null,
     remaining: pages.filter((p) => !progress.uploaded.has(p.sha256)).length,
