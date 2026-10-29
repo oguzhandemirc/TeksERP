@@ -379,4 +379,15 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   READ_FAILED: "Okunamadı",
   // DeliveryNoteAliasScope — ITEM/COLOR/PROCESS ortak
   SENDER: "Gönderen firma",
+  // ── Kurşun metre defteri (H1, 2026-10-29)
+  // MeterCounterMode
+  RESETTING: "Her işte sıfırlanır",
+  CUMULATIVE: "Birikimli (fark alınır)",
+  // MeterVarianceBasis
+  DECLARED_IN: "Beyan edilen giriş metresi",
+  MEASURED_IN: "Ölçülen giriş metresi",
+  // MeterApprovalMode — NONE ortak
+  OPERATOR_REASON: "Operatör sebep yazar",
+  SUPERVISOR_PIN: "Süpervizör PIN onayı",
+  OFFICE: "Ofis onayı",
 };

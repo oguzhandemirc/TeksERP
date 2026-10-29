@@ -411,6 +411,7 @@ function main(): void {
       ebeveyn: "ticaret",
     },
     readKursunBypassEnabled: { resolver: "resolveKursunBypassEnabled", ebeveyn: "üretim" },
+    readKursunMeterCapture: { resolver: "resolveKursunMeterCapture", ebeveyn: "üretim" },
     readTamburOverQuantityEnabled: {
       resolver: "resolveTamburOverQuantityEnabled",
       ebeveyn: "üretim",
