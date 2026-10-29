@@ -96,6 +96,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}helpers/warp-beam-wind-write.helper.ts::writeWoundTx`]: { helper: "sarım satırı yazarı (raşel kardeşleri token'sız)" },
   [`${S}shipping.service.ts::createShipmentCoreTx`]: { helper: "sevkiyat çekirdek yazarı" },
   [`${S}batch.service.ts::createBatchTx`]: { helper: "parti yazarı" },
+  // H1: kurşun metre okuması yazarı; replay kararı çağıranın (completeQc2 · recordMeterReading, K kipi `meterReadingReplay.inTx`).
+  [`${S}helpers/kursun-meter.helper.ts::writeMeterReadingTx`]: { helper: "kurşun metre okuması yazarı" },
 
   // ── Boğazda: D3 (plan §4 — kalan (a) yolları) ───────────────────────────────
   [`${S}shipping.service.ts::createShipmentInner`]: { giris: { [`${S}shipping.service.ts::createShipment`]: "R" } },
@@ -199,6 +201,7 @@ export const TOKENSIZ_UCLAR: Record<string, TokensizUc> = {
  * kural): alanı hem koddan hem beyandan silen değişiklik kapıdan geçer, gözden geçirmede görünür olmalıdır.
  */
 export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
+  [`${S}helpers/kursun-meter.helper.ts::meterReadingReplay`]: ["rollId", "workOrderStepId", "phase", "meters"],
   [`${S}quality-inspection.service.ts::createReplay`]: ["rollId", "phase"],
   [`${S}quality-inspection.service.ts::reviseReplay`]: ["supersedesId"],
   [`${S}cash-transaction.service.ts::cashTxnReplay`]: ["kind", "amount", "cashBoxId", "bankAccountId"],

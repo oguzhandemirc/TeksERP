@@ -209,6 +209,7 @@ const EXPECTED: Record<string, string> = {
   "Machine <- Roll.createdMachine : SetNull": "guarded (rollCreatedCount) — KK1 giriş atfı",
   "Machine <- RollMovement.machine : SetNull": "guarded (rollMovementCount) — revokedAt süzülmez, geri alınmış hareket de üretim kanıtı",
   "Machine <- RollOperation.machine : SetNull": "guarded (rollOperationCount) — kurşun/QC2 damgası",
+  "Machine <- RollMeterReading.machine : SetNull": "guarded (rollMeterReadingCount) — kurşun metre defteri, damgalılar dahil",
   // Dokuma P4 (2026-09-13). Cascade BİLİNÇLİ: künye makinesiz anlamsızdır.
   // ⚠️ Bu satır guard'ın YOKLUĞUNU beyan eder, VARLIĞINI değil — ve bugün doğru:
   // künyenin yazma yüzeyi yok, yani `baselineRunHours` (ERP öncesi çalışma saati

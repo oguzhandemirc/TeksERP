@@ -246,6 +246,9 @@ const PARTIAL_INDEXES: Array<{
   { table: "customer_lab_specs", index: "customer_lab_specs_customer_item_uq", uniq: true, predicate: `(("isActive" = true) AND ("itemId" IS NOT NULL))`, why: "(müşteri, ürün, test türü) başına tek aktif lab spesifikasyonu (K4P-SERT)" },
   // customer_delivery_notes — aynı sahibe aynı gönderen belge numarası iptal dışı TEK belge (D2, migration 20261029001000).
   { table: "customer_delivery_notes", index: "customer_delivery_notes_owner_sender_doc_uq", uniq: true, predicate: `(("ownerCustomerId" IS NOT NULL) AND ("senderDocNo" IS NOT NULL) AND (status <> 'CANCELLED'::"DeliveryNoteStatus"))`, why: "mükerrer irsaliye seddi; iptal edilen belge numarayı serbest bırakır, sahipsiz/numarasız taslak yüklem dışı" },
+  // H1 kurşun metre defteri (migration 20261029005529) — top × adım × evre ve okuma başına TEK aktif satır; damgalı geçmiş serbest.
+  { table: "roll_meter_readings", index: "roll_meter_readings_active_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "düzeltme = damga + yeni satır; ikinci aktif okuma/onay seddi (bekçi test_kursun_metre §8)" },
+  { table: "roll_meter_acks", index: "roll_meter_acks_active_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "okuma başına tek aktif sapma onayı (H2)" },
   // roll_returns — çok kalemli iade grubu (migration 20260805100000)
   { table: "roll_returns", index: "roll_returns_returnGroupId_idx", uniq: false, predicate: `("returnGroupId" IS NOT NULL)`, why: "null-yoğun: tekil iadelerde NULL" },
   // roll_returns — iade belge no KOLONA alındı (migration 20260922210000).
@@ -873,6 +876,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "document_scans", name: "document_scans_mime_ck" },
   { table: "customer_delivery_note_lines", name: "customer_delivery_note_lines_meters_ck" },
   { table: "customer_delivery_notes", name: "customer_delivery_notes_stamps_ck" },
+  // H1 kurşun metre defteri (migration 20261029005529): metre >= 0, damga ⇔ sebep. Bekçi `test_kursun_metre` §8.
+  { table: "roll_meter_readings", name: "roll_meter_readings_meters_ck" },
+  { table: "roll_meter_readings", name: "roll_meter_readings_revoke_ck" },
+  { table: "roll_meter_acks", name: "roll_meter_acks_revoke_ck" },
   { table: "fabric_properties", name: "fabric_properties_variant_not_self_ck" },
   // 2026-08-29 denetimi (K1) — migration 20260829140000_denetim_sema_kisitlari.
   // "Topun kalan metrajı giriş metrajını aşamaz." Depo kesimi `initialQty`ye

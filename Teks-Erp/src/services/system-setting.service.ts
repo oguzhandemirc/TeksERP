@@ -710,6 +710,10 @@ export const SETTING_KEYS = {
    *  ayarda değil; bayrağı kapatmak sahada yarım kalmış işi kilitleyemez (topların kurşun
    *  adımı fiziksel olarak yapılmış ama dijital karşılığı açık kalırdı). */
   KURSUN_BYPASS_ENABLED: "production.kursunBypassEnabled",
+  /** H1 (Hizmet veren, 2026-10-29): kurşun metre ölçümü — `OFF` (bugün) · `OUT` · `IN_OUT`. Enum; kalıp `KURSUN_METER_CAPTURE_MODES`. */
+  KURSUN_METER_CAPTURE: "kursun.meterCapture",
+  /** H1: SIMULATED kaynaklı metre okuması kabul edilsin mi — varsayılan KAPALI (400). */
+  KURSUN_SIMULATED_METER_ENABLED: "kursun.simulatedMeterEnabled",
   /** Parti no KISA ve DÖNEN mi olsun (P01…P99, 99'dan sonra P01)? Default TRUE/AÇIK.
    *  Backend ENFORCE eder (`batch.service.generateBatchNumberTx`). Kapalıyken eski
    *  `P + GGAAYY + sıra` günlük kalıbına düşülür — birebir eski davranış.
@@ -935,6 +939,11 @@ export type DokumaRollBirth = "TABLET_DOFF" | "KK1_LABEL_OR_ORDER" | "KK1_LABEL_
 export const DOKUMA_ROLL_BIRTH_MODES: DokumaRollBirth[] = ["TABLET_DOFF", "KK1_LABEL_OR_ORDER", "KK1_LABEL_ONLY"];
 /** Varsayılan `TABLET_DOFF` — BUGÜNKÜ davranış (KK1 gövdesinde yeni alan reddedilir, tablet İNDİR yolu aynen). */
 export const DEFAULT_DOKUMA_ROLL_BIRTH: DokumaRollBirth = "TABLET_DOFF";
+
+/** H1: kurşun metre ölçümü — `OFF` bugünkü davranış (okuma yazılmaz, `meterOut` yok sayılır); `OUT` çıkış; `IN_OUT` giriş + çıkış. */
+export type KursunMeterCapture = "OFF" | "OUT" | "IN_OUT";
+export const KURSUN_METER_CAPTURE_MODES: KursunMeterCapture[] = ["OFF", "OUT", "IN_OUT"];
+export const DEFAULT_KURSUN_METER_CAPTURE: KursunMeterCapture = "OFF";
 
 /** Etiket adedi kaynağı (bkz. `SETTING_KEYS.LABEL_COPIES_SOURCE`). */
 export type LabelCopiesSource = "GLOBAL" | "STATION";
@@ -1996,6 +2005,10 @@ export interface FeatureFlags {
    *  yeni atama oluşturmayı kapılar; dağıtılmış iş emirleri bayrak kapansa da bypass
    *  rejiminde biter (rejim atama satırında kalıcıdır). */
   kursunBypassEnabled: boolean;
+  /** H1: kurşun metre ölçümü (varsayılan `OFF` = bugün). HAM; etkin `resolveKursunMeterCapture` (üretim kapalı → OFF). */
+  kursunMeterCapture: KursunMeterCapture;
+  /** H1: SIMULATED metre okuması kabul edilsin mi (varsayılan KAPALI → 400). */
+  kursunSimulatedMeterEnabled: boolean;
   /** Parti no kısa ve dönen mi (P01…P99)? Default TRUE/açık. Backend ENFORCE eder.
    *  Kapalıyken eski `P + GGAAYY + sıra` kalıbı. Açıkken parti no benzersiz DEĞİLDİR. */
   batchShortNumberEnabled: boolean;
@@ -2461,6 +2474,8 @@ export class SystemSettingService {
       duplicatesFuzzyEnabled: await readDuplicatesFuzzyEnabled(cacheClient),
       duplicatesFuzzyThresholdPct: await readDuplicatesFuzzyThresholdPct(cacheClient),
       kursunBypassEnabled: await readKursunBypassEnabled(cacheClient),
+      kursunMeterCapture: await readKursunMeterCapture(cacheClient),
+      kursunSimulatedMeterEnabled: await readKursunSimulatedMeterEnabled(cacheClient),
       batchShortNumberEnabled: await readBatchShortNumberEnabled(cacheClient),
       batchLastNumberHintEnabled: await readBatchLastNumberHintEnabled(cacheClient),
       qualityGradeRequiredEnabled: await readQualityGradeRequiredEnabled(cacheClient),
@@ -3834,6 +3849,26 @@ export class SystemSettingService {
         SETTING_KEYS.KURSUN_BYPASS_ENABLED,
         input.kursunBypassEnabled,
         "Kurşun bypass — kurşun istasyonuna tablet konulmayan düzen (yalnız YENİ dağıtım oluşturmayı kapılar; dağıtılmış işler bypass ile biter)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "kursunMeterCapture")) {
+      const v = input.kursunMeterCapture;
+      if (typeof v !== "string" || !KURSUN_METER_CAPTURE_MODES.includes(v as KursunMeterCapture)) {
+        throw AppError.badRequest(`kursunMeterCapture şunlardan biri olmalı: ${KURSUN_METER_CAPTURE_MODES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.KURSUN_METER_CAPTURE, v, "Kurşun metre ölçümü — kapalı · yalnız çıkış · giriş + çıkış", userId);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "kursunSimulatedMeterEnabled")) {
+      if (typeof input.kursunSimulatedMeterEnabled !== "boolean") {
+        throw AppError.badRequest("kursunSimulatedMeterEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.KURSUN_SIMULATED_METER_ENABLED,
+        input.kursunSimulatedMeterEnabled,
+        "Kurşun: simüle sayaç okuması kabul edilsin mi (kapalıyken SIMULATED okuma 400)",
         userId
       );
     }
@@ -6192,6 +6227,19 @@ export async function readPackingPoolPackageNo(tx?: Pick<typeof prisma, "systemS
   return typeof v === "string" && PACKING_POOL_PACKAGE_NO_MODES.includes(v as PackingPoolPackageNo) ? (v as PackingPoolPackageNo) : DEFAULT_PACKING_POOL_PACKAGE_NO;
 }
 
+/** H1: kurşun metre ölçümü — HAM okuyucu; tanınmayan değer varsayılana (`OFF`) düşer. */
+export async function readKursunMeterCapture(tx?: Pick<typeof prisma, "systemSetting">): Promise<KursunMeterCapture> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.KURSUN_METER_CAPTURE }, select: { value: true } });
+  const v = setting?.value;
+  return typeof v === "string" && KURSUN_METER_CAPTURE_MODES.includes(v as KursunMeterCapture) ? (v as KursunMeterCapture) : DEFAULT_KURSUN_METER_CAPTURE;
+}
+
+/** H1: SIMULATED metre okuması — HAM okuyucu; kayıt yok → KAPALI. */
+export async function readKursunSimulatedMeterEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.KURSUN_SIMULATED_METER_ENABLED }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+
 export async function readKursunBypassEnabled(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
@@ -6412,6 +6460,12 @@ export async function resolveOrderLineLinkRequired(tx?: Pick<typeof prisma, "sys
 export async function resolveDokumaRollBirth(tx?: Pick<typeof prisma, "systemSetting">): Promise<DokumaRollBirth> {
   if (!(await readProductionEnabled(tx)) || !(await readDokumaEnabled(tx))) return DEFAULT_DOKUMA_ROLL_BIRTH;
   return readDokumaRollBirth(tx);
+}
+
+/** H1 — kurşun metre ölçümü — ETKİN değer: üretim kapalıyken daima `OFF` (bugünkü davranış). */
+export async function resolveKursunMeterCapture(tx?: Pick<typeof prisma, "systemSetting">): Promise<KursunMeterCapture> {
+  if (!(await readProductionEnabled(tx))) return DEFAULT_KURSUN_METER_CAPTURE;
+  return readKursunMeterCapture(tx);
 }
 
 export async function resolveKursunBypassEnabled(

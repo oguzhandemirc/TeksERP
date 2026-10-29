@@ -1455,6 +1455,32 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Operatör", "Depocu", "Yönetim"],
         desc: "Açıkken top iptali (panel ve tablet) sebep seçilmeden/yazılmadan kaydedilmez. Kapalıyken (varsayılan) sebep isteğe bağlıdır.",
       },
+      {
+        key: "kursunSimulatedMeterEnabled",
+        group: "Kurşun",
+        title: "Kurşun metre ölçümünde simüle sayaç kabul edilsin",
+        summary: "Gerçek sayaç bağlı değilken deneme için uydurulmuş metre okuması kaydedilebilir.",
+        defaultOn: false,
+        audience: ["Yönetim"],
+        desc: "Açıkken simüle sayaçtan gelen metre okuması kaydedilir ve SİMÜLASYON olarak işaretlenir; böyle bir okuma faturaya asla girmez. Kapalıyken (varsayılan) simüle okuma reddedilir.",
+      },
+    ],
+    enumFlags: [
+      {
+        // H1 (2026-10-29): `defaultValue` backend `DEFAULT_KURSUN_METER_CAPTURE` ile birebir (bekçi §16).
+        enumKey: "kursunMeterCapture",
+        title: "Kurşun makinesinde metre ölçülsün",
+        summary: "Kurşun/KK2 adımında topun makine sayacından okunan metresi kaydedilsin mi; yalnız çıkışta mı, giriş ve çıkışta mı.",
+        desc: "Kapalıyken (varsayılan) metre ölçülmez, akış bugünkü gibidir. Açıkken okunan metre ayrı bir ölçüm defterine yazılır; topun stok metresi değişmez, Tambur kendi ölçümünü bugünkü gibi yapar.",
+        defaultValue: "OFF",
+        display: "radio",
+        audience: ["Operatör", "Yönetim"],
+        options: [
+          { value: "OFF", label: "Ölçülmesin (bugünkü)", hint: "Kurşun adımında metre kaydı tutulmaz." },
+          { value: "OUT", label: "Çıkışta ölç", hint: "Gramaj düğmesine basılınca sayaç okunur ve çıkış metresi kaydedilir." },
+          { value: "IN_OUT", label: "Giriş ve çıkışta ölç", hint: "Top makineye girerken de sayaç okunur; giriş ile çıkış karşılaştırılabilir." },
+        ],
+      },
     ],
   },
   {

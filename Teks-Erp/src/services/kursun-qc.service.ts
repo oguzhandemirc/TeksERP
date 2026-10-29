@@ -24,9 +24,11 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import {
+  MeterPhase,
   Prisma,
   RollError,
   RollErrorOrigin,
+  RollMeterReading,
   RollOperation,
   RollOperationType,
   RollStatus,
@@ -57,6 +59,16 @@ import {
 } from "./helpers/station-capability-transfer.helper";
 import { applyKursunOperationTx } from "./helpers/kursun-operation.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import {
+  assertMeterInputAllowed,
+  auditMeterReadingWrite,
+  meterReadingReplay,
+  phaseAllowed,
+  revokeStepMeterReadingsTx,
+  writeMeterReadingTx,
+  type MeterReadingInput,
+  type WriteMeterReadingResult,
+} from "./helpers/kursun-meter.helper";
 import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { finalizeRollsAtLastStep } from "./helpers/roll-finalize.helper";
 import { reverseLatestScopedStockMove } from "./helpers/warehouse-ledger-reverse.helper";
@@ -65,7 +77,7 @@ import {
   assertKursunTabletMayWrite,
   resolveStepBypassEligibility,
 } from "./helpers/kursun-bypass-eligibility.helper";
-import { resolveKursunBypassEnabled } from "./system-setting.service";
+import { resolveKursunBypassEnabled, resolveKursunMeterCapture } from "./system-setting.service";
 import { uyari } from "../lib/logger";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
 import { processMeterNumber, requireProcessMeter } from "./helpers/roll-error-meter.helper";
@@ -483,6 +495,8 @@ export class KursunQcService {
        *  yazılır; eski APK bu alanı hiç göndermez → yalnız AUTO uygulanır.
        *  SEÇİM tipli özellikte `valueCode` ZORUNLUDUR. */
       properties?: PropertySelection[] | null;
+      /** H1 çıkış metresi; `kursun.meterCapture` OFF iken yok sayılır (bugünkü davranış). */
+      meterOut?: MeterReadingInput | null;
     },
     userId?: string,
     machineId?: string | null
@@ -491,9 +505,17 @@ export class KursunQcService {
 
     const step = await prisma.workOrderStep.findUnique({
       where: { id: data.stepId },
-      select: { stationId: true },
+      select: { stationId: true, workOrderId: true },
     });
     if (!step) throw AppError.notFound("Adım bulunamadı");
+
+    // H1: okuma yalnız kip açıkken yazılır; açıkken SIMULATED/cihaz kapısı fail-closed (§4).
+    const meterOut =
+      data.meterOut && phaseAllowed(await resolveKursunMeterCapture(), MeterPhase.OUT) ? data.meterOut : null;
+    if (meterOut) await assertMeterInputAllowed(MeterPhase.OUT, meterOut);
+    const meterReplay = meterOut
+      ? meterReadingReplay({ rollId: data.rollId, stepId: data.stepId, phase: MeterPhase.OUT, meters: meterOut.meters })
+      : null;
 
     const caps = await loadStationPropertyCaps(prisma, step.stationId);
     assertPropertySelectionsValid(caps, data.properties);
@@ -519,6 +541,11 @@ export class KursunQcService {
     });
 
     const result = await prisma.$transaction(async (tx) => {
+      // H1 tx sırası (§3-4, §12-1): 8036 token kilidi İLK ifade → WO kilidi (finishStep ile
+      // serileşir) → tablet kapısı. Metresiz çağrı bugünkü sırada kalır.
+      const meterPrior = meterOut && meterReplay ? await meterReplay.inTx(tx, meterOut.clientToken) : null;
+      if (meterOut) await touchWorkOrderTx(tx, step.workOrderId);
+
       // Kurşun bypass: adım fiziksel bir kurşun MAKİNESİNE dağıtılmışsa iş
       // KÂĞITTA yürüyor — tablet KK2 kaydı yazamaz. Guard tx İÇİNDE ve ilk
       // sırada: `existedBefore` / yetenek okumaları tx DIŞINDA yapıldığı
@@ -569,9 +596,24 @@ export class KursunQcService {
         userId: userId ?? null,
       });
 
-      return { qc2Op, kursunOutcome, propertiesChanged: copied.changed };
+      // Okuma KURSUN_APPLIED'dan sonra; replay'de (aynı token) yeni satır yazılmaz.
+      const meterWrite: WriteMeterReadingResult | null =
+        meterOut && !meterPrior
+          ? await writeMeterReadingTx(tx, {
+              rollId: data.rollId,
+              stepId: data.stepId,
+              phase: MeterPhase.OUT,
+              input: meterOut,
+              userId: userId ?? null,
+              machineId: machineId ?? null,
+              reason: "KURSUN_METER_REPRESS",
+            })
+          : null;
+
+      return { qc2Op, kursunOutcome, propertiesChanged: copied.changed, meterWrite };
     });
     const op = result.qc2Op;
+    if (result.meterWrite) await auditMeterReadingWrite(userId, result.meterWrite, "COMPLETE_QC2");
 
     // F283: yalnız gerçekten yeni oluşturulduysa audit yaz (replay'de mükerrer önlenir).
     if (!existedBefore) {
@@ -1125,6 +1167,7 @@ export class KursunQcService {
 
     /** Defter özeti — audit yüküne yazılır (yeni kayıt AÇILMAZ, alan eklenir). */
     let ledgerSummary: { reversed: number; statusuzAtlanan: number; bulunamayan: string[] } | null = null;
+    let meterRevoked = 0;
 
     await prisma.$transaction(async (tx) => {
       // F159: O-2 write-skew guard (finishStep paritesi) — son-adım WO/kart geri
@@ -1219,6 +1262,14 @@ export class KursunQcService {
         userId: userId ?? null,
       });
 
+      // H1 §3-7: metre okumaları (ve bağlı onaylar) damgalanır — yeniden kapanışta yeniden okunur.
+      meterRevoked = await revokeStepMeterReadingsTx(tx, {
+        rollIds,
+        stepId: step.id,
+        userId: userId ?? null,
+        reason: "KURSUN_REOPEN",
+      });
+
       // QC2_COMPLETED / KURSUN_APPLIED işaretleri ve RollProperty kayıtları
       // korunur — operatör eski veriyi görsün, üzerinde oynayabilsin.
       // Sıfırlamak isterse kartı yeniden okutup reopen akışını kullanır.
@@ -1241,6 +1292,7 @@ export class KursunQcService {
         // giriş yok" (bulunamayan) ve "ucu kurulamayan eski satır" (statüsüz)
         // sayıları burada görünür.
         ...(ledgerSummary ? { defter: ledgerSummary } : {}),
+        ...(meterRevoked > 0 ? { meterReadingsRevoked: meterRevoked } : {}),
       },
     });
 
@@ -1248,6 +1300,48 @@ export class KursunQcService {
       success: true,
       data: { reopenedRollCount: rollIds.length },
       message: `Adım yeniden açıldı — ${rollIds.length} top geri çekildi`,
+    };
+  }
+
+  /**
+   * H1 metre okuması — giriş (IN_OUT kipinde) ya da çıkış düzeltmesi (§3-4). Tablet yazma
+   * kapısının altıncı yolu; tx sırası completeQc2 ile aynı. Aktif okuma damgalanır, yenisi yazılır.
+   */
+  async recordMeterReading(
+    data: { rollId: string; stepId: string; phase: MeterPhase; input: MeterReadingInput },
+    userId?: string,
+    machineId?: string | null,
+  ): Promise<ApiResponse<RollMeterReading>> {
+    await this.assertRollInFlowStep(data.rollId, data.stepId);
+    await assertMeterInputAllowed(data.phase, data.input);
+    const step = await prisma.workOrderStep.findUnique({ where: { id: data.stepId }, select: { workOrderId: true } });
+    if (!step) throw AppError.notFound("Adım bulunamadı");
+    const replay = meterReadingReplay({ rollId: data.rollId, stepId: data.stepId, phase: data.phase, meters: data.input.meters });
+
+    const out = await prisma.$transaction(async (tx) => {
+      const prior = await replay.inTx(tx, data.input.clientToken);
+      if (prior) return { reading: prior, written: null };
+      await touchWorkOrderTx(tx, step.workOrderId);
+      await assertKursunTabletMayWrite(tx, data.stepId, "metre okuması");
+      // WO kilidi altında yeniden: tx dışı kontrol ile kilit arasında top adımdan çıkmış olabilir.
+      const stillHere = await tx.roll.findFirst({ where: { id: data.rollId, currentStepId: data.stepId }, select: { id: true } });
+      if (!stillHere) throw AppError.conflict("Top bu adımdan çıkmış — okuma kaydedilmedi", { code: "ROLL_NOT_IN_STEP" });
+      const written = await writeMeterReadingTx(tx, {
+        rollId: data.rollId,
+        stepId: data.stepId,
+        phase: data.phase,
+        input: data.input,
+        userId: userId ?? null,
+        machineId: machineId ?? null,
+        reason: "KURSUN_METER_CORRECTION",
+      });
+      return { reading: written.reading, written };
+    });
+    if (out.written) await auditMeterReadingWrite(userId, out.written, "CORRECTION");
+    return {
+      success: true,
+      data: out.reading,
+      message: out.written ? (out.written.revokedId ? "Metre okuması düzeltildi" : "Metre okuması kaydedildi") : "Metre okuması zaten kayıtlı",
     };
   }
 
