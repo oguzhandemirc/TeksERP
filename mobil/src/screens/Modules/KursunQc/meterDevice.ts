@@ -12,6 +12,7 @@ import type { DevicePeripheral } from '../../../services/peripheral.service';
 import { counterFallbackText, counterStrategy, metersFromCounter, type MeterSource } from './meterCapture';
 
 const BASELINE_KEY = 'TEKSERP_KURSUN_COUNTER_BASE_V1';
+const UNRESET_KEY = 'TEKSERP_KURSUN_COUNTER_UNRESET_V1';
 
 /** Biriken sayacın son değeri (cihaz başına) — kalıcı yerel depo; yalnız sayaç sayısı tutar. */
 export const counterBaselineStore = {
@@ -36,6 +37,32 @@ export const counterBaselineStore = {
   },
 };
 
+/**
+ * Sıfırlanması beklenen sayaçlar (cihaz başına, kalıcı). İşaret, sıfırlama gerektiren okuma kuyruğa
+ * girince konur, sıfırlama doğrulanınca kalkar; işaret varken birikmiş değer metre sayılmaz (elle yol).
+ */
+export const unresetCounterStore = {
+  async has(peripheralId: string): Promise<boolean> {
+    try {
+      const raw = await AsyncStorage.getItem(UNRESET_KEY);
+      return raw ? (JSON.parse(raw) as string[]).includes(peripheralId) : false;
+    } catch {
+      return true; // okunamayan işaret = sıfırlandığı kanıtlanamadı (fail-closed: elle yol)
+    }
+  },
+  async mark(peripheralId: string, on: boolean): Promise<void> {
+    try {
+      const raw = await AsyncStorage.getItem(UNRESET_KEY);
+      const ids = new Set(raw ? (JSON.parse(raw) as string[]) : []);
+      if (on) ids.add(peripheralId);
+      else ids.delete(peripheralId);
+      await AsyncStorage.setItem(UNRESET_KEY, JSON.stringify([...ids]));
+    } catch {
+      // Yazılamadıysa: işaret yoksa bir sonraki okuma sapma kapısına kalır (toast zaten gösterildi).
+    }
+  },
+};
+
 export type CounterRead =
   | {
       kind: 'VALUE';
@@ -45,8 +72,19 @@ export type CounterRead =
       peripheralId: string | null;
       /** Bu okumadan sonra sıfırlama gerekir mi (yalnız RESETTING + komut, gerçek cihaz). */
       needsReset: boolean;
+      /** DIFF: kayıt kuyruğa girince ilerletilecek başlangıç değeri (vazgeçte ilerlemez). */
+      baseline?: number;
     }
-  | { kind: 'MANUAL'; hint: string; warn: boolean };
+  | {
+      kind: 'MANUAL';
+      hint: string;
+      warn: boolean;
+      /** Okunan ama metre sayılmayan ham sayaç değeri — elle girilen okumaya iz olarak taşınır. */
+      rawCounter?: number | null;
+      peripheralId?: string | null;
+      /** Elle girilen okuma kuyruğa girince sayaç yine sıfırlanır (sıfırlanmamış sayaç kurtarması). */
+      needsReset?: boolean;
+    };
 
 /** Simüle sayaç: topun kayıtlı metresi (cihaz yok; kaynak SIMULATED beyanıyla gider). */
 function simulatedRead(p: DevicePeripheral, currentQty: number): CounterRead {
@@ -68,22 +106,30 @@ export async function readCounter(p: DevicePeripheral | null, currentQty: number
   }
   if (counterStrategy(p) === 'RESET') {
     if (r.value <= 0) return { kind: 'MANUAL', hint: 'Sayaç 0 okudu — metreyi elle girin', warn: true };
+    // Önceki sıfırlama kanıtlanamadıysa değer önceki topu da içerebilir → metre sayılmaz.
+    if (await unresetCounterStore.has(p.id)) {
+      const hint = 'Sayaç önceki toptan sonra sıfırlanamadı — bu topun metresini elle girin';
+      return { kind: 'MANUAL', hint, warn: true, rawCounter: r.value, peripheralId: p.id, needsReset: true };
+    }
     return { kind: 'VALUE', meters: r.value, source: 'MACHINE', rawCounter: r.value, peripheralId: p.id, needsReset: true };
   }
   const base = await counterBaselineStore.get(p.id);
   const out = metersFromCounter(r.value, base);
-  // Tekrar eden değerde başlangıç korunur; diğer her durumda yeni değer başlangıç olur.
-  if (out.kind !== 'REPEAT') await counterBaselineStore.set(p.id, r.value);
-  if (out.kind !== 'OK') return { kind: 'MANUAL', hint: counterFallbackText(out.kind), warn: true };
-  return { kind: 'VALUE', meters: out.meters, source: 'MACHINE', rawCounter: r.value, peripheralId: p.id, needsReset: false };
+  if (out.kind !== 'OK') {
+    // Başlangıçsız/geri giden sayaçta yeni değer başlangıç olur (tekrarda korunur); bu top elle girilir.
+    if (out.kind !== 'REPEAT') await counterBaselineStore.set(p.id, r.value);
+    return { kind: 'MANUAL', hint: counterFallbackText(out.kind), warn: true, rawCounter: r.value, peripheralId: p.id };
+  }
+  // OK: başlangıç ancak kayıt kuyruğa girince ilerler (vazgeç/4xx sonrası yeniden dokunuş aynı farkı görür).
+  return { kind: 'VALUE', meters: out.meters, source: 'MACHINE', rawCounter: r.value, peripheralId: p.id, needsReset: false, baseline: r.value };
 }
 
 export type ResetOutcome = 'RESET' | 'NOT_DURABLE' | 'VERIFY_FAILED' | 'WRITE_FAILED';
 
 /**
  * Sayacı sıfırlar — YALNIZ `ensureDurable()` true dönerse (kayıt diskte ya da sunucuda).
- * Ardından doğrulama okuması: 0 değilse VERIFY_FAILED (operatör uyarılır, sonraki okuma elle yola düşmez
- * ama değer büyük çıkar → sapma kapısı yakalar).
+ * Ardından doğrulama okuması: 0 değilse VERIFY_FAILED (operatör uyarılır; "sıfırlanmadı" işareti
+ * kalkmaz → sonraki okuma elle yola düşer).
  */
 export async function resetCounterAfterDurable(p: DevicePeripheral, ensureDurable: () => Promise<boolean>): Promise<ResetOutcome> {
   if (!(await ensureDurable())) return 'NOT_DURABLE';

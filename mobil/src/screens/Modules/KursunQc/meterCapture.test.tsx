@@ -11,21 +11,19 @@ import { dehydrate, onlineManager, useMutation, useQueryClient } from '@tanstack
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
 import { renderWithPaper } from '../../../test/render';
-import { STATION_MUT, persistStationQueueNow } from '../../../offline/mutations';
+import { STATION_MUT } from '../../../offline/mutations';
 import { PERSIST_DEHYDRATE_OPTIONS } from '../../../offline/persistPolicy';
-import { buildIoFromPeripheral, readMeter } from '../../../hooks/usePeripheralIO';
 import { kursunQcService, type CompleteQc2Request } from '../../../services/kursunQc.service';
-import type { DevicePeripheral } from '../../../services/peripheral.service';
-import type { KursunStepSummary } from '../../../types/models';
 import GramajTapPanel from './GramajTapPanel';
 import MeterModals from './MeterModals';
 import MeterStrip from './MeterStrip';
 import { composeStationPanels } from './stationPanels';
 import { metersFromCounter, counterStrategy } from './meterCapture';
 import { counterBaselineStore } from './meterDevice';
+import { type Capture, ROLL, device, mockPersist, mockRead, order, resetMeterMocks, setup, summary, write } from './meterTestHarness';
 import { useGramajTap } from './useGramajTap';
 import { useMeterAcks } from './useMeterAcks';
-import { useMeterCapture } from './useMeterCapture';
+import { meterTokenOf, useMeterCapture } from './useMeterCapture';
 
 jest.mock('react-native-toast-message', () => ({ __esModule: true, default: { show: jest.fn() } }));
 jest.mock('../../../hooks/usePeripheralIO', () => ({
@@ -40,91 +38,7 @@ jest.mock('../../../services/kursunQc.service', () => ({
   kursunQcService: { pinAckMeterReading: jest.fn(), recordMeterReading: jest.fn(), completeQc2: jest.fn() },
 }));
 
-const mockRead = readMeter as jest.Mock;
-const mockIo = buildIoFromPeripheral as jest.Mock;
-const mockPersist = persistStationQueueNow as jest.Mock;
-const order: string[] = [];
-const write = jest.fn(async () => {
-  order.push('write');
-});
-
-type Capture = 'OFF' | 'OUT' | 'IN_OUT';
-type Approval = 'NONE' | 'OPERATOR_REASON' | 'SUPERVISOR_PIN' | 'OFFICE';
-
-function summary(capture: Capture | null, approval: Approval = 'NONE', thresholdM: number | null = null): KursunStepSummary {
-  return {
-    workOrderStepId: 'step-1',
-    inspectionEnabled: false,
-    properties: [
-      { propertyId: 'kursun', code: 'KURSUN', name: 'Kurşunlu', mode: 'REQUIRED', valueType: 'FLAG', values: [] },
-      { propertyId: 'gramaj', code: 'GRAMAJ', name: 'Gramaj', mode: 'OPTIONAL', valueType: 'CHOICE', values: [{ code: '50GR', name: '50 gr' }], variantOfPropertyId: 'kursun' },
-    ],
-    targetValues: [],
-    ...(capture ? { meter: { capture, policy: { thresholdM, thresholdPct: null, basis: 'DECLARED_IN', approvalMode: approval } } } : {}),
-    rolls: [],
-  } as unknown as KursunStepSummary;
-}
-
-const ROLL = { rollId: 'roll-1', barcode: 'T000123456', currentQty: 100, meter: { declaredIn: 100, measuredIn: null } };
-
-function device(over: Partial<DevicePeripheral> = {}): DevicePeripheral {
-  return {
-    id: 'per-1', code: 'S1', name: 'Sayaç', kind: 'METER', connectionType: 'BLUETOOTH_SPP', address: 'AA',
-    port: null, readMode: 'POLL', pollCommand: null, terminator: null, identifyPattern: null, decimals: 1, scale: 1,
-    timeoutMs: null, role: null, simulate: false, counterMode: 'RESETTING', resetCommand: 'R\\r', ...over,
-  };
-}
-
-function Harness(p: { s: KursunStepSummary; peripheral: DevicePeripheral | null; complete: jest.Mock }) {
-  const acks = useMeterAcks();
-  const meter = useMeterCapture({ summary: p.s, peripheral: p.peripheral, acks });
-  const panels = composeStationPanels({ inspectionEnabled: false, properties: p.s.properties ?? [] });
-  const state = useGramajTap({
-    cfg: panels.tap,
-    summary: p.s,
-    roll: ROLL,
-    operator: 'Ayşe',
-    complete: (vars, opts) => {
-      p.complete(vars);
-      opts.onSuccess?.();
-      opts.onSettled?.();
-    },
-    refresh: jest.fn(),
-    meter,
-  });
-  return (
-    <>
-      {meter.outOn && <MeterStrip meter={meter} acks={acks} roll={ROLL} stepId="step-1" />}
-      <GramajTapPanel state={state} hasRoll />
-      <MeterModals meter={meter} acks={acks} rolls={[ROLL]} />
-    </>
-  );
-}
-
-function setup(s: KursunStepSummary, peripheral: DevicePeripheral | null) {
-  const complete = jest.fn();
-  let presses = 0;
-  const r = renderWithPaper(<Harness s={s} peripheral={peripheral} complete={complete} />);
-  const press = async (id: string) => {
-    presses += 1;
-    await act(async () => {
-      fireEvent.press(r.getByTestId(id));
-    });
-  };
-  return { ...r, complete, press, presses: () => presses };
-}
-
-beforeEach(async () => {
-  jest.clearAllMocks();
-  order.length = 0;
-  await AsyncStorage.clear();
-  mockIo.mockReturnValue({ transport: { write, read: jest.fn(), test: jest.fn() }, codec: {}, supported: true });
-  mockPersist.mockImplementation(async () => {
-    order.push('persist');
-    return true;
-  });
-  onlineManager.setOnline(true);
-});
+beforeEach(resetMeterMocks);
 
 describe('sayaç aritmetiği', () => {
   it('CUMULATIVE 1500 − 1402 = 98; tekrar ve negatif elle yola düşer', () => {
@@ -138,6 +52,15 @@ describe('sayaç aritmetiği', () => {
     expect(counterStrategy({ counterMode: 'RESETTING', resetCommand: ' ' })).toBe('DIFF');
     expect(counterStrategy({ counterMode: 'CUMULATIVE', resetCommand: 'R' })).toBe('DIFF');
     expect(counterStrategy({ counterMode: null, resetCommand: null })).toBe('DIFF');
+  });
+});
+
+describe('meterTokenOf (sıfırlama kalıcılık yüklemi)', () => {
+  it('çıkışta meterOut.clientToken, girişte phase+clientToken; diğer gövdeler null', () => {
+    expect(meterTokenOf({ rollId: 'r', meterOut: { clientToken: 'a' } })).toBe('a');
+    expect(meterTokenOf({ rollId: 'r', phase: 'IN', clientToken: 'b' })).toBe('b');
+    expect(meterTokenOf({ rollId: 'r', clientToken: 'c' })).toBeNull();
+    expect(meterTokenOf(null)).toBeNull();
   });
 });
 
@@ -231,6 +154,7 @@ describe('sapma onayı', () => {
     await waitFor(() => expect(write).toHaveBeenCalledTimes(1));
   });
 });
+
 
 function PinHarness() {
   const qc = useQueryClient();

@@ -67,6 +67,7 @@ import {
   NO_AUTH_RETRY_MS,
   LICENSE_RETRY_MS,
   stationOpLabel,
+  persistStationQueueNow,
 } from "./mutations";
 import {
   queryClient,
@@ -473,6 +474,38 @@ describe("AsyncStorage persist (app restart'ta paused kuyruk kalır)", () => {
     expect(raw).toBeTruthy();
     const restored = await asyncStoragePersister.restoreClient();
     expect(restored?.buster).toBe(PERSIST_BUSTER);
+  });
+
+  it("persistStationQueueNow: kuyrukta eşleşen kayıt yoksa false; paused istasyon kaydı diske yazılır ve PAUSED geri okunur (H3 sıfırlama kapısı)", async () => {
+    await AsyncStorage.clear();
+    const token = "tok-meter-1";
+    const match = (v: unknown) => (v as { meterOut?: { clientToken?: string } } | null)?.meterOut?.clientToken === token;
+    expect(await persistStationQueueNow(match)).toBe(false);
+    expect(await AsyncStorage.getItem("TEKSERP_RQ_CACHE_V1")).toBeNull();
+
+    onlineManager.setOnline(false);
+    const obs = new MutationObserver<unknown, Error, unknown>(queryClient, {
+      mutationKey: STATION_MUT.QC2_COMPLETE as unknown as unknown[],
+      mutationFn: async () => ({ ok: true }),
+      networkMode: "online",
+      retry: false,
+    });
+    const unsub = obs.subscribe(() => {});
+    void obs.mutate({ rollId: "r-m", meterOut: { meters: 42.5, source: "MACHINE", clientToken: token } });
+    await Promise.resolve();
+    try {
+      expect(await persistStationQueueNow((v) => (v as { meterOut?: { clientToken?: string } }).meterOut?.clientToken === "baska")).toBe(false);
+      expect(await persistStationQueueNow(match)).toBe(true);
+      const restored = await asyncStoragePersister.restoreClient();
+      expect(restored?.buster).toBe(PERSIST_BUSTER);
+      const m = restored?.clientState.mutations.find((x) => match(x.state.variables));
+      expect(m?.state.isPaused).toBe(true);
+      expect(m?.mutationKey).toEqual([...STATION_MUT.QC2_COMPLETE]);
+    } finally {
+      unsub();
+      queryClient.getMutationCache().clear();
+      onlineManager.setOnline(true);
+    }
   });
 
   it("ZOMBİ ÖNLEME entegrasyonu: pending-istasyon kaydı restoreClient'tan PAUSED döner", async () => {

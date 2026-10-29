@@ -631,7 +631,8 @@ export default function KursunQcScreen() {
       void qc.invalidateQueries({ queryKey: ['kursun-qc', 'open-cards'] });
     },
     onError: (err, vars, context) => {
-      meter.onCompleteError(vars);
+      // true: sunucu sayaç değerini reddetti, aynı dokunuş elle/sebep modalıyla sürüyor.
+      const meterRecovering = meter.onCompleteError(vars, err);
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       // 4xx (örn. WO iptal) veya net 5xx — optimistic update'i geri al.
       if (context) {
@@ -648,7 +649,7 @@ export default function KursunQcScreen() {
         );
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showScreenError(err, 'KK2 başarısız');
+      if (!meterRecovering) showScreenError(err, 'KK2 başarısız');
     },
   });
 
