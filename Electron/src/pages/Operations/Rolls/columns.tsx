@@ -425,6 +425,18 @@ const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
       return <span className="truncate text-xs">{w.name}</span>;
     },
   },
+  {
+    // SAHİBİ (emanet, ister 3.2): topun sahibi müşteri. Emanet kapalı kurulumda gizli (RollsPage `initialVisibility`).
+    id: "ownerCustomer",
+    header: "Sahibi",
+    meta: { label: "Sahibi", exportValue: (r) => r.ownerCustomer?.name ?? "" },
+    enableSorting: false,
+    cell: ({ row }) => {
+      const o = row.original.ownerCustomer;
+      if (!o) return <span className="text-muted-foreground">—</span>;
+      return <span className="truncate text-xs">{o.name}</span>;
+    },
+  },
   // Kalite kolonu KATALOGLA parametreli — `makeRollColumns` bunu
   // `qualityColumn(grades)` ile DEĞİŞTİRİR. Buradaki satır yalnız SIRAYI
   // tutar; kataloğu olmayan bir çağıran yine bugünkü rozetsiz görünümü alır.

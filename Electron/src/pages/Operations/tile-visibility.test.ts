@@ -56,7 +56,7 @@ function ctx(
     // Çözgü Kartları karosu çizilmemeli.
     devereEnabled: false,
     // Dokuma işi de ETKİN değer (production && dokuma); fabrikada KAPALI.
-    dokumaEnabled: false, tezgahEnabled: false, kaliteGuvenceEnabled: false, maliyetEnabled: false, gelenBelgeEnabled: false,
+    dokumaEnabled: false, tezgahEnabled: false, kaliteGuvenceEnabled: false, maliyetEnabled: false, gelenBelgeEnabled: false, emanetEnabled: false,
     reportsClosedKeys: [],
     isReportOpen: () => true,
     flagsReady: true,
@@ -192,11 +192,13 @@ describe("karo bağlantıları", () => {
     // 2026-10-29: `kursun-sapmalar` (Metre Sapmaları, H4) — kurşun planlamayla AYNI üretim kapısı.
     // 2026-10-29: `gelen-belge-sablonlari` (E2) — aynı kapı.
     // 2026-10-29: `gelen-belge-varsayilan-urunler` (E4b) — aynı kapı.
+    // 2026-10-29: `icerideki-isler` (P1a, ister 3.2) — emanet kapalıyken GİZLİ.
     expect(conditional.sort()).toEqual([
       "gelen-belge-sablonlari",
       "gelen-belge-varsayilan-urunler",
       "gelen-belgeler",
       "goods-receipts",
+      "icerideki-isler",
       "kursun-dagitim",
       "kursun-sapmalar",
       "loom-alarms",

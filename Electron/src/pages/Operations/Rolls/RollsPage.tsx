@@ -15,6 +15,7 @@ import { classifyBarcode, matchesFullFormat } from "@/lib/scanner/barcode-kind";
 import { useTabOrder } from "@/hooks/useTabOrder";
 import { useDataTable } from "@/hooks/useDataTable";
 import { useMultiWarehouse } from "@/hooks/useWarehouses";
+import { useEmanetEnabled } from "@/hooks/usePricingEnabled";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { ExportMenu } from "@/components/data-table/ExportMenu";
 import { useTableExportAll } from "@/hooks/useTableExportAll";
@@ -81,6 +82,7 @@ export function RollsPage() {
   const { ordered, reorder } = useTabOrder("rolls", REORDERABLE_KEYS);
   // Depo kolonu + filtresi yalnız ÇOK DEPOLU kurulumda çizilir (tek kaynak hook).
   const { multiWarehouse } = useMultiWarehouse();
+  const emanetEnabled = useEmanetEnabled();
 
   // "Kumaş Stoğu Özeti" — her kategori için backend sayımı (top + metre) tek Excel'e.
   // Tablo-dışı KANBAN hariç tüm sekmeler; ekrandaki 100 değil GERÇEK toplamlar.
@@ -199,6 +201,8 @@ export function RollsPage() {
       // kolon yalnız gürültü olur ("fabrikada sıfır görünür fark"). İkinci depo
       // açıldığı gün kendiliğinden görünür.
       warehouse: multiWarehouse,
+      // SAHİBİ kolonu yalnız emanet açık kurulumda (depo kolonu emsali).
+      ownerCustomer: emanetEnabled,
     },
     enabled: isTableTab,
   });
