@@ -2043,16 +2043,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         ],
       },
       {
-        // H7: PERIOD_END seçeneği dönem sonu taslağı (H8) gelince eklenir — backend o güne dek 400 verir.
         enumKey: "financeServiceBillingTrigger",
         title: "Hizmet ne zaman faturalansın",
         summary: "Yapılan işin faturası hangi anda doğsun.",
-        desc: "Her sevkte: sevk taslağına eklenir. Dönem sonu seçeneği sonraki sürümde gelecek.",
+        desc: "Her sevkte: sevk taslağına eklenir. Dönem sonu: sevk taslağına hizmet satırı girmez; ay bitince Faturalar → \"Dönem sonu hizmet faturası\" ile carinin o ayki bütün işleri tek taslakta toplanır.",
         defaultValue: "PER_SHIPMENT",
         display: "radio",
         audience: ["Muhasebeci"],
         options: [
           { value: "PER_SHIPMENT", label: "Her sevkte (bugünkü)", hint: "Sevk taslağına hizmet satırı eklenir." },
+          { value: "PERIOD_END", label: "Dönem sonunda", hint: "İşler ay sonu tek taslakta toplanır (Faturalar ekranı)." },
         ],
       },
       {

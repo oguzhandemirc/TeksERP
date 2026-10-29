@@ -172,7 +172,7 @@ export const SETTING_KEYS = {
   FINANCE_SERVICE_BILLING_METER_BASIS: "finance.serviceBilling.meterBasis",
   /** H7: ölçüm yoksa — `DECLARED_WITH_WARNING` (bugün) · `BLOCK_LINE`. */
   FINANCE_SERVICE_BILLING_MISSING_METER: "finance.serviceBilling.missingMeter",
-  /** H7: tetik — `PER_SHIPMENT` (bugün); `PERIOD_END` H8'de seçilebilir olur. */
+  /** H7/H8: tetik — `PER_SHIPMENT` (bugün); `PERIOD_END` sevk taslağı hizmet satırı üretmez, iş dönem sonu taslağına kalır. */
   FINANCE_SERVICE_BILLING_TRIGGER: "finance.serviceBilling.trigger",
   /** H7: fiyat tarihi — `SERVICE_DAY` (hizmet anı; bugün) · `DISPATCH_DAY` (sevk anı). */
   FINANCE_SERVICE_BILLING_PRICE_DATE: "finance.serviceBilling.priceDate",
@@ -989,8 +989,6 @@ export const DEFAULT_SERVICE_BILLING_MISSING_METER: ServiceBillingMissingMeter =
 export type ServiceBillingTrigger = "PER_SHIPMENT" | "PERIOD_END";
 export const SERVICE_BILLING_TRIGGERS: ServiceBillingTrigger[] = ["PER_SHIPMENT", "PERIOD_END"];
 export const DEFAULT_SERVICE_BILLING_TRIGGER: ServiceBillingTrigger = "PER_SHIPMENT";
-/** PERIOD_END'in çıkış yüzeyi (dönem sonu ucu) H8'de doğar; o güne dek seçilemez (çıkışsız kapı). */
-export const SERVICE_BILLING_PERIOD_END_SELECTABLE = false;
 export type ServiceBillingPriceDate = "SERVICE_DAY" | "DISPATCH_DAY";
 export const SERVICE_BILLING_PRICE_DATES: ServiceBillingPriceDate[] = ["SERVICE_DAY", "DISPATCH_DAY"];
 export const DEFAULT_SERVICE_BILLING_PRICE_DATE: ServiceBillingPriceDate = "SERVICE_DAY";
@@ -1797,7 +1795,7 @@ export interface FeatureFlags {
   financeServiceBillingMeterBasis: ServiceBillingMeterBasis;
   /** H7: ölçüm yoksa (default `DECLARED_WITH_WARNING`). */
   financeServiceBillingMissingMeter: ServiceBillingMissingMeter;
-  /** H7: tetik (default `PER_SHIPMENT`; `PERIOD_END` H8). */
+  /** H7/H8: tetik (default `PER_SHIPMENT`; `PERIOD_END` → dönem sonu taslağı). */
   financeServiceBillingTrigger: ServiceBillingTrigger;
   /** H7: fiyat tarihi (default `SERVICE_DAY`). */
   financeServiceBillingPriceDate: ServiceBillingPriceDate;
@@ -2917,11 +2915,6 @@ export class SystemSettingService {
       const v = input.financeServiceBillingTrigger;
       if (typeof v !== "string" || !SERVICE_BILLING_TRIGGERS.includes(v as ServiceBillingTrigger)) {
         throw AppError.badRequest(`financeServiceBillingTrigger şunlardan biri olmalı: ${SERVICE_BILLING_TRIGGERS.join(", ")}`);
-      }
-      if (v === "PERIOD_END" && !SERVICE_BILLING_PERIOD_END_SELECTABLE) {
-        throw AppError.badRequest("Dönem sonu faturalaması henüz seçilemez — dönem sonu taslağı geldiğinde açılır", {
-          code: "SERVICE_BILLING_PERIOD_END_UNAVAILABLE",
-        });
       }
       await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, v, "Hizmet faturası tetiği — her sevkte · dönem sonu", userId);
     }

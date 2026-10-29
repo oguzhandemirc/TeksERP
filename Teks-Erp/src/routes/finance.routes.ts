@@ -23,6 +23,7 @@ import { parseQueryParams, readFilterList, readIdCondition } from "../utils/quer
 import type { Prisma } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { invoiceService } from "../services/invoice.service";
+import { SERVICE_PERIOD_PATTERN, createServicePeriodDraft, previewServicePeriodDraft } from "../services/service-period-invoice.service";
 import { paymentService } from "../services/payment.service";
 import { cashTransactionService } from "../services/cash-transaction.service";
 import allocationRoutes from "./finance-allocation.routes";
@@ -551,6 +552,66 @@ router.post("/invoices/draft-from-goods-receipts", requirePermission("finance:wr
   try {
     const b = z.object({ goodsReceiptIds: z.array(z.string().uuid()).min(1).max(100) }).strict().parse(req.body);
     res.status(201).json(await invoiceService.createDraftFromGoodsReceipts(b.goodsReceiptIds, req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/finance/invoices/service-period-draft/preview:
+ *   get:
+ *     tags: [Finance]
+ *     summary: Dönem sonu hizmet faturası önizlemesi (H8)
+ *     description: >
+ *       Carinin dönemde (YYYY-AA, fabrika günü sınırları) sevk edilmiş emanet toplarına yapılan, aktif bağı olmayan
+ *       hizmet işleri — iş sayısı, metre, satırlar, tutar, uyarılar. Yazmaz.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: cariId, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: period, required: true, schema: { type: string, example: "2026-10" } }
+ *     responses:
+ *       200: { description: Önizleme }
+ *       400: { description: "SERVICE_PERIOD_INVALID · SERVICE_PERIOD_FUTURE · SERVICE_PERIOD_NOT_CUSTOMER" }
+ *       409: { description: SERVICE_BILLING_DISABLED }
+ */
+router.get("/invoices/service-period-draft/preview", requirePermission("finance:read"), async (req, res, next) => {
+  try {
+    const q = z.object({ cariId: z.string().uuid("Geçersiz cari"), period: z.string().regex(SERVICE_PERIOD_PATTERN, "Dönem YYYY-AA olmalı") }).parse(req.query);
+    const data = await previewServicePeriodDraft(q);
+    res.json({ success: true, data, ...(data.warnings.length > 0 ? { warnings: data.warnings } : {}) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/finance/invoices/service-period-draft:
+ *   post:
+ *     tags: [Finance]
+ *     summary: Dönem sonu hizmet faturası taslağı (H8)
+ *     description: >
+ *       Dönemin faturalanmamış hizmet işleri TEK taslakta (shipmentId taşımaz). Aynı clientToken → aynı taslak.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { type: object, required: [cariId, period, clientToken], properties: { cariId: { type: string, format: uuid }, period: { type: string }, clientToken: { type: string, format: uuid } } }
+ *     responses:
+ *       201: { description: Taslak oluşturuldu (ya da token replay) }
+ *       400: { description: "SERVICE_PERIOD_INVALID · SERVICE_PERIOD_FUTURE · SERVICE_PERIOD_EMPTY" }
+ *       409: { description: "SERVICE_PERIOD_CLOSED · SERVICE_ALREADY_BILLED · SERVICE_BILLING_DISABLED · SHIPMENT_NOT_DISPATCHED" }
+ */
+router.post("/invoices/service-period-draft", requirePermission("finance:write"), async (req, res, next) => {
+  try {
+    const b = z.object({
+      cariId: z.string().uuid("Geçersiz cari"),
+      period: z.string().regex(SERVICE_PERIOD_PATTERN, "Dönem YYYY-AA olmalı"),
+      clientToken: z.string().uuid(),
+    }).strict().parse(req.body);
+    res.status(201).json(await createServicePeriodDraft(b, req.user?.userId));
   } catch (e) {
     next(e);
   }

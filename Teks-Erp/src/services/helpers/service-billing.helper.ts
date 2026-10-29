@@ -13,9 +13,8 @@ import { Currency, Prisma, ServiceMeterBasis, ShipmentStatus } from "@prisma/cli
 import { lockShipmentScopeTx } from "./shipment-locks.helper";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
-import { alreadyBilled, findActiveBillingTx } from "./service-billing-gate.helper";
+import { alreadyBilled, collectRollLineage, findActiveBillingTx, listShipmentServiceRollIds } from "./service-billing-gate.helper";
 import { resolveServiceItemsForRolls, serviceWorkKey } from "./service-pricing.helper";
-import { SACK_ABSENT_STATUSES } from "./sack-invariants.helper";
 import type { loadServiceBillingSettings } from "../system-setting.service";
 
 type Tx = Prisma.TransactionClient;
@@ -39,18 +38,6 @@ export interface ServiceBillingDraft {
   lines: Array<{ itemId: string; description: string; qty: Prisma.Decimal; unit: string; unitPrice: Prisma.Decimal }>;
   links: ServiceBillingLinkInput[];
   warnings: string[];
-}
-
-/** Ata zinciri (kendisi dahil) — Tambur bölmesi `parentRollId` ile; derinlik tavanı döngüye karşı sigorta. */
-export async function collectRollLineage(rollIds: string[], db: Db = prisma): Promise<string[]> {
-  const seen = new Set(rollIds);
-  let frontier = [...seen];
-  for (let depth = 0; depth < 32 && frontier.length > 0; depth++) {
-    const rows = await db.roll.findMany({ where: { id: { in: frontier }, parentRollId: { not: null } }, select: { parentRollId: true } });
-    frontier = rows.map((r) => r.parentRollId!).filter((id) => !seen.has(id));
-    for (const id of frontier) seen.add(id);
-  }
-  return [...seen];
 }
 
 /** Toplara (ve atalarına) bağlı AKTİF bağ anahtarları. */
@@ -219,9 +206,19 @@ export async function syncServiceLinksToLinesTx(
  * `undoDispatch` aynı kilit altında bağları sayar — kilitsiz taslak phantom bağ doğururdu.
  */
 export async function lockBillableShipmentTx(tx: Tx, shipmentId: string): Promise<void> {
-  await lockShipmentScopeTx(tx, shipmentId);
-  const sh = await tx.shipment.findUnique({ where: { id: shipmentId }, select: { status: true } });
-  if (sh?.status !== ShipmentStatus.DISPATCHED) {
+  await lockBillableShipmentsTx(tx, [shipmentId]);
+}
+
+/**
+ * H8 dönem taslağı: n sevkiyat → 8023 kilitleri id sırasıyla (deterministik; çok kilit deadlock'suz), ÖNCE hepsi
+ * kilitlenir, sonra taze durum okunur. Sıralanmış tek kilit = `lockBillableShipmentTx`.
+ */
+export async function lockBillableShipmentsTx(tx: Tx, shipmentIds: string[]): Promise<void> {
+  const ids = [...new Set(shipmentIds)].sort();
+  for (const id of ids) await lockShipmentScopeTx(tx, id);
+  if (ids.length === 0) return;
+  const live = await tx.shipment.count({ where: { id: { in: ids }, status: ShipmentStatus.DISPATCHED } });
+  if (live !== ids.length) {
     throw AppError.conflict("Sevkiyat artık sevk edilmiş durumda değil — hizmet işleri faturalanamaz. Ekranı yenileyin.", { code: "SHIPMENT_NOT_DISPATCHED" });
   }
 }
@@ -237,11 +234,35 @@ export async function collectShipmentServiceBilling(params: {
   settings: ServiceBillingSettings;
   dispatchedAt: Date | null;
 }): Promise<ServiceBillingDraft> {
-  const live = await prisma.roll.findMany({ where: { shipmentId: params.shipmentId, ownerCustomerId: { not: null }, status: { notIn: SACK_ABSENT_STATUSES } }, select: { id: true } });
-  const returned = await prisma.rollReturn.findMany({
-    where: { fromShipmentId: params.shipmentId, cancelledAt: null, roll: { ownerCustomerId: { not: null } } },
-    select: { rollId: true },
+  return collectServiceBillingDraft({ ...params, rollIds: await listShipmentServiceRollIds([params.shipmentId]) });
+}
+
+/**
+ * H8 DÖNEM SONU: cari müşterisinin dönemde (fabrika günü sınırları çağırandan) sevk edilmiş sevkiyatlarının emanet
+ * topları → TEK toplayıcı (`collectServiceBillingDraft`); aktif bağı olan iş düşer (sevk taslağıyla çift yol yok).
+ * Tüm toplar TEK çağrıda: aynı atanın iki çocuğu iki sevkte olsa da iş bir kez sayılır. `DISPATCH_DAY` fiyatı
+ * dönemin son sevk anına çözülür (dönem faturası tek tarihlidir).
+ */
+export async function collectPeriodServiceBilling(params: {
+  customerId: string;
+  currency: Currency;
+  settings: ServiceBillingSettings;
+  from: Date;
+  to: Date;
+}): Promise<ServiceBillingDraft & { shipments: Array<{ id: string; shipmentNo: string; dispatchedAt: Date | null }>; billedWorkCount: number; billedDocNo: string | null }> {
+  const shipments = await prisma.shipment.findMany({
+    where: { customerId: params.customerId, status: ShipmentStatus.DISPATCHED, dispatchedAt: { gte: params.from, lte: params.to } },
+    select: { id: true, shipmentNo: true, dispatchedAt: true },
+    orderBy: [{ dispatchedAt: "asc" }, { id: "asc" }],
   });
-  const rollIds = [...new Set([...live.map((r) => r.id), ...returned.map((r) => r.rollId)])];
-  return collectServiceBillingDraft({ ...params, rollIds });
+  const rollIds = await listShipmentServiceRollIds(shipments.map((s) => s.id));
+  const draft = await collectServiceBillingDraft({
+    rollIds, customerId: params.customerId, currency: params.currency, settings: params.settings,
+    dispatchedAt: shipments.at(-1)?.dispatchedAt ?? null,
+  });
+  const billedWhere = rollIds.length === 0 ? null : { rollId: { in: await collectRollLineage(rollIds) }, revokedAt: null };
+  const billedWorkCount = billedWhere ? await prisma.serviceBillingLink.count({ where: billedWhere }) : 0;
+  // 409 mesajındaki fatura no dönemin KENDİ toplarının bağından (carinin rastgele bağından değil).
+  const billedDocNo = billedWhere && billedWorkCount > 0 ? (await findActiveBillingTx(prisma, billedWhere))?.docNo ?? null : null;
+  return { ...draft, shipments, billedWorkCount, billedDocNo };
 }
