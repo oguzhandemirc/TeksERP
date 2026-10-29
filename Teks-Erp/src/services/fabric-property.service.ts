@@ -21,6 +21,7 @@
 import { BaseService } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import prisma from "../lib/prisma";
+import { assertServiceMapping, readServiceItemIdField } from "./helpers/service-pricing.helper";
 import { AppError } from "../utils/app-error";
 import { nextSeriesNo } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -57,6 +58,8 @@ export interface PropertyValueInput {
   name: string;
   sortOrder?: number;
   isActive?: boolean;
+  /** Gramaj kademesi → hizmet kalemi (H6). `undefined` = dokunma, `null` = eşlemeyi kaldır. */
+  serviceItemId?: string | null;
 }
 
 /**
@@ -91,12 +94,10 @@ function extractValues(data: Record<string, unknown>): PropertyValueInput[] | un
           `harflerle yazılmalı (örn. TUP); Türkçe yazım GÖRÜNEN AD alanına yazılır (Tüp).`,
       );
     }
-    return {
-      code,
-      name,
-      sortOrder: typeof row.sortOrder === "number" ? row.sortOrder : (i + 1) * 10,
-      isActive: row.isActive === undefined ? true : Boolean(row.isActive),
-    };
+    const sid = readServiceItemIdField(row.serviceItemId, `'${code}' değerinin`);
+    const sortOrder = typeof row.sortOrder === "number" ? row.sortOrder : (i + 1) * 10;
+    const isActive = row.isActive === undefined ? true : Boolean(row.isActive);
+    return { code, name, sortOrder, isActive, ...(sid === undefined ? {} : { serviceItemId: sid }) };
   });
 }
 
@@ -198,6 +199,7 @@ async function replaceValuesTx(
     data: { isActive: false },
   });
   for (const v of values) {
+    const svc = v.serviceItemId !== undefined ? { serviceItemId: v.serviceItemId } : {};
     await tx.fabricPropertyValue.upsert({
       where: { propertyId_code: { propertyId, code: v.code } },
       create: {
@@ -206,8 +208,9 @@ async function replaceValuesTx(
         name: v.name,
         sortOrder: v.sortOrder ?? 0,
         isActive: v.isActive ?? true,
+        ...svc,
       },
-      update: { name: v.name, sortOrder: v.sortOrder ?? 0, isActive: v.isActive ?? true },
+      update: { name: v.name, sortOrder: v.sortOrder ?? 0, isActive: v.isActive ?? true, ...svc },
     });
   }
 }
@@ -234,6 +237,7 @@ export class FabricPropertyService extends BaseService {
       );
     }
     await assertStationsCanApplyProperty(stationIds);
+    await assertServiceMapping(data, values?.map((v) => v.serviceItemId));
 
     const valueType = typeof data.valueType === "string" ? data.valueType : "FLAG";
     if (valueType === "FLAG" && values && values.length > 0) {
@@ -252,12 +256,7 @@ export class FabricPropertyService extends BaseService {
     // durumda doğmasın.
     data.stationCapabilities = stationIds.map((stationId) => ({ stationId }));
     if (values && values.length > 0) {
-      data.values = values.map((v) => ({
-        code: v.code,
-        name: v.name,
-        sortOrder: v.sortOrder ?? 0,
-        isActive: v.isActive ?? true,
-      }));
+      data.values = values.map(({ sortOrder, isActive, ...v }) => ({ ...v, sortOrder: sortOrder ?? 0, isActive: isActive ?? true }));
     }
 
     return withBarcodeRetry(async () => {
@@ -300,6 +299,7 @@ export class FabricPropertyService extends BaseService {
   ): Promise<ApiResponse<unknown>> {
     const stationIds = extractStationIds(data);
     const values = extractValues(data);
+    await assertServiceMapping(data, values?.map((v) => v.serviceItemId));
     // ⚠️ ERKEN DÖNÜŞ `data.valueType` VARKEN KULLANILAMAZ (denetim F5). Eski
     // hâli yalnız stationIds/values yokluğuna bakıyordu; `PATCH {valueType:
     // "FLAG"}` o dala girip TÜM tip-geçiş guard'larını atlıyordu — KAT bayrağa
