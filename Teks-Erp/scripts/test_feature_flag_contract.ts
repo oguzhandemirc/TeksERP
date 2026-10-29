@@ -80,6 +80,9 @@ import {
   DEFAULT_SAME_TYPE_SESSION_POLICY,
   DEFAULT_SHIPMENT_ORDER_REQUIREMENT,
   DEFAULT_SHIPPING_INVOICE_MODE,
+  DEFAULT_TAMBUR_PLAN_WIDTH_CHECK,
+  TAMBUR_PLAN_WIDTH_CHECKS,
+  readTamburPlanGateWidthCheck,
   DEFAULT_SHIPPING_DOC_ITEM_NAME_MODE,
 } from "../src/services/system-setting.service";
 import prisma from "../src/lib/prisma";
@@ -1526,6 +1529,7 @@ async function main() {
     ["sameTypeSessionPolicy", await readSameTypeSessionPolicy(junkClient), DEFAULT_SAME_TYPE_SESSION_POLICY],
     ["shippingOrderRequirement", await readShippingOrderRequirement(junkClient), DEFAULT_SHIPMENT_ORDER_REQUIREMENT],
     ["shippingInvoiceMode", await readShippingInvoiceMode(junkClient), DEFAULT_SHIPPING_INVOICE_MODE],
+    ["tamburPlanGateWidthCheck", await readTamburPlanGateWidthCheck(junkClient), DEFAULT_TAMBUR_PLAN_WIDTH_CHECK],
     [
       "shippingDocItemNameMode",
       await readShippingDocItemNameMode(junkClient),
@@ -1548,6 +1552,7 @@ async function main() {
     "shippingInvoiceMode",
     "shippingDocItemNameMode",
     "labelCopiesSource",
+    "tamburPlanGateWidthCheck",
   ] as const;
   const enumGaps = ENUM_FLAGS.flatMap((k) => {
     const missing = [
@@ -1572,6 +1577,7 @@ async function main() {
     ["sameTypeSessionPolicy", SAME_TYPE_SESSION_POLICIES],
     ["shippingOrderRequirement", SHIPMENT_ORDER_REQUIREMENTS],
     ["shippingInvoiceMode", SHIPPING_INVOICE_MODES],
+    ["tamburPlanGateWidthCheck", TAMBUR_PLAN_WIDTH_CHECKS],
     ["shippingDocItemNameMode", SHIPPING_DOC_ITEM_NAME_MODES],
   ];
   const valueSetGaps = VALUE_SETS.flatMap(([k, values]) =>
