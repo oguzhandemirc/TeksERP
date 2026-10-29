@@ -153,9 +153,9 @@ describe("onay akışı", () => {
 
 describe("liste sorgusu ve rejim", () => {
   it("süzgeçler sunucuya gider; boş süzgeç alan göndermez", () => {
-    expect(toQuery(EMPTY_FILTER)).toEqual({ status: undefined, ownerCustomerId: undefined, senderCustomerId: undefined, q: undefined, limit: 50 });
-    expect(toQuery({ status: "DRAFT", ownerCustomerId: "o", senderCustomerId: "s", q: "  İRS-1 " }))
-      .toEqual({ status: "DRAFT", ownerCustomerId: "o", senderCustomerId: "s", q: "İRS-1", limit: 50 });
+    expect(toQuery(EMPTY_FILTER)).toEqual({ status: undefined, ownerCustomerId: undefined, senderCustomerId: undefined, q: undefined, from: undefined, to: undefined, limit: 50 });
+    expect(toQuery({ status: "DRAFT", ownerCustomerId: "o", senderCustomerId: "s", q: "  İRS-1 ", from: "2026-10-01", to: "2026-10-29" }))
+      .toEqual({ status: "DRAFT", ownerCustomerId: "o", senderCustomerId: "s", q: "İRS-1", from: "2026-10-01", to: "2026-10-29", limit: 50 });
   });
   it("modül kapalı → görünmez", () => {
     expect(isIncomingDocumentVisible({ gelenBelgeEnabled: false })).toBe(false);
