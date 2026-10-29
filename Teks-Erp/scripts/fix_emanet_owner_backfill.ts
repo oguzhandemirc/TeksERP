@@ -24,6 +24,7 @@ import { AppError } from "../src/utils/app-error";
 import prisma, { pool } from "../src/lib/prisma";
 import { AuditService } from "../src/services/audit.service";
 import { singleOwner } from "../src/services/helpers/emanet-owner.helper";
+import { hedefDbAdi } from "./lib/hedef-db-kapisi";
 
 const SOURCE = "scripts/fix_emanet_owner_backfill.ts";
 const EVENT = "EMANET_OWNER_BACKFILL";
@@ -178,6 +179,8 @@ function arg(name: string): string | undefined {
 
 async function main(): Promise<void> {
   const apply = process.argv.includes("--apply");
+  // Yazan yol hangi veritabanını vurduğunu çıktıda söyler (test_script_guards §11).
+  console.log(`🎯 Hedef veritabanı: ${hedefDbAdi()}`);
   const { proposals, conflicts } = await diagnose();
   const custIds = [...new Set(proposals.map((p) => p.ownerCustomerId))];
   const names = new Map((await prisma.customer.findMany({ where: { id: { in: custIds } }, select: { id: true, name: true } })).map((c) => [c.id, c.name]));
