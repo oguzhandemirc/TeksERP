@@ -26,7 +26,7 @@ vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
     shipmentConfirmationEnabled: false,
     depoMultiEnabled: false,
     devereEnabled: false,
-    dokumaEnabled: false, tezgahEnabled: false, kaliteGuvenceEnabled: false, maliyetEnabled: false, gelenBelgeEnabled: false,
+    dokumaEnabled: false, tezgahEnabled: false, kaliteGuvenceEnabled: false, maliyetEnabled: false, gelenBelgeEnabled: false, emanetEnabled: false,
     reportsClosedKeys: [],
     isReportOpen: () => true,
     flagsReady: true,

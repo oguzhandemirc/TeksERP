@@ -124,7 +124,7 @@ async function scenario(): Promise<void> {
   check("hizmet profili uygulandı: fark 0, en yakın profil 'hizmet'", (prof2.diffs.hizmet ?? []).length === 0 && prof2.current.closest === "hizmet", `${Object.keys(patch).length} anahtar yazıldı; closest=${prof2.current.closest}`);
 
   // Ayar paketi KODDAN (`paketPlani`, betiğin kuru koşusuyla aynı plan): kodda olmayan anahtar
-  // (ANAHTAR_YOK, ör. H1b) atlanır. Senaryo sapma onayını OFFICE'e çevirir (paket NONE der — onay
+  // (ANAHTAR_YOK) atlanır; H1b'den beri `kursun.meterStockMode` de uygulanır (Gülkesim RECORD). Senaryo sapma onayını OFFICE'e çevirir (paket NONE der — onay
   // yolunu ölçmek için) ve PER_SHIPMENT'in önkoşulu otomatik taslağı açar (betik bunu yalnız uyarır).
   const ff0 = must<Record<string, unknown>>(await api("GET", "/api/feature-flags"), "bayrak oku");
   const plan = paketPlani(ff0, new Set<string>(Object.values(SETTING_KEYS)));

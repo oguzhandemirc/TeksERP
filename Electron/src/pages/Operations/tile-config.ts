@@ -79,6 +79,11 @@ export interface OperationsVisibilityContext {
    */
   gelenBelgeEnabled: boolean;
   /**
+   * EMANET modülü (`emanet.enabled`) — zincirsiz; kendi ekranı İçerideki İşler (backend `requireEmanetEnabled`,
+   * `/api/consigned-work`). Belirsizken FALSE (fabrikada karo bir an belirip kaybolmasın).
+   */
+  emanetEnabled: boolean;
+  /**
    * Ön muhasebe modülü açık mı (`finance.enabled`) — fiilen "bu bir TİCARET
    * kurulumu" anahtarı. Tanımlar menüsünün cari rejimi buna bakar: bayrak
    * AÇIKKEN tek "Cariler" karosu, KAPALIYKEN (fabrika) bugünkü Müşteriler +
