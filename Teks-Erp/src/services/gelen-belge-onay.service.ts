@@ -27,6 +27,8 @@ import { InventoryService } from "./inventory.service";
 import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";
 import { getDeliveryNote } from "./gelen-belge-note.service";
 import { auditLine } from "./gelen-belge-line.service";
+import { resolveDefaultItemForApproval } from "./gelen-belge-ayar.service";
+import { readUnreviewedApprovalMode } from "./system-setting.service";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const LINE_TABLE = "CUSTOMER_DELIVERY_NOTE_LINE";
@@ -61,12 +63,12 @@ export interface ApproveResult {
 
 // OCR beyanı sayıları METİN yazar (motor DeclaredTotals: string); elle girilen sayı olabilir — karşılaştırma Number() ile.
 type DeclaredBlock = { blockNo?: number; count?: number | string | null; kg?: number | string | null; m?: number | string | null };
-type LineRow = { id: string; lineNo: number; blockNo: number; status: DeliveryNoteLineStatus; meters: Prisma.Decimal; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; itemId: string | null; colorId: string | null; itemText: string | null; colorText: string | null; rollId: string | null };
+type LineRow = { id: string; lineNo: number; blockNo: number; status: DeliveryNoteLineStatus; meters: Prisma.Decimal; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; itemId: string | null; colorId: string | null; itemText: string | null; colorText: string | null; rollId: string | null; needsReview: boolean };
 
 const PRE_SELECT = {
   id: true, noteNo: true, status: true, ownerCustomerId: true, senderCustomerId: true, senderText: true, pageCount: true,
   declaredTopCount: true, totalsDeclared: true, varianceReason: true, updatedAt: true,
-  lines: { select: { id: true, lineNo: true, blockNo: true, status: true, meters: true, weightKg: true, widthCm: true, itemId: true, colorId: true, itemText: true, colorText: true, rollId: true }, orderBy: [{ blockNo: "asc" }, { lineNo: "asc" }] },
+  lines: { select: { id: true, lineNo: true, blockNo: true, status: true, meters: true, weightKg: true, widthCm: true, itemId: true, colorId: true, itemText: true, colorText: true, rollId: true, needsReview: true }, orderBy: [{ blockNo: "asc" }, { lineNo: "asc" }] },
   scans: { select: { pageNo: true } },
 } satisfies Prisma.CustomerDeliveryNoteSelect;
 
@@ -107,7 +109,13 @@ export function totalMismatches(note: { totalsDeclared: unknown }, lines: Readon
  * Ön kontrol — DB YAZMAZ; claim'den önce koşar, hata operatöre tek seferde listelenir. Okuduğu anlık görüntü claim
  * WHERE'indeki `updatedAt` eşitliğiyle bağlanır (arada sahip/satır değişirse claim 409 — TOCTOU kapalı). Uyarıları döner.
  */
-async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: typeof PRE_SELECT }>, input: ApproveInput): Promise<string[]> {
+interface PrecheckResult {
+  warnings: string[];
+  /** Ürünü seçilmemiş açık satır varsa ve ayar doluysa onların doğacağı ürün (hizmet ekseni E3); yoksa null. */
+  defaultItem: { id: string; name: string } | null;
+}
+
+async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: typeof PRE_SELECT }>, input: ApproveInput): Promise<PrecheckResult> {
   if (!note.ownerCustomerId) throw AppError.badRequest("Sahip cari seçilmeden onaylanamaz (emanet top sahipsiz doğamaz).", { code: "DELIVERY_NOTE_OWNER_REQUIRED" });
   // Emanet kapısı + sahip aktifliği TEK yazıcıdan (lisans sorusu + MODULE_DISABLED + pasif/bulunamayan sahip
   // OWNER_CUSTOMER_INVALID aynı helper'da; motor tx içinde yeniden sorar).
@@ -115,12 +123,23 @@ async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: ty
   const open = note.lines.filter((l) => l.status === "PENDING" || l.status === "FAILED" || l.status === "ENTERING");
   if (open.length === 0) throw AppError.conflict(`${note.noteNo} için işlenecek satır yok (hepsi girilmiş ya da atlanmış).`, { code: "DELIVERY_NOTE_NO_OPEN_LINES" });
   const unresolved = open.filter((l) => !l.itemId).map((l) => l.lineNo);
-  if (unresolved.length) {
+  // Hizmet ekseni (E3): ayar doluysa ürünsüz satır varsayılan ürünle girer; ayar boşsa bugünkü 400. Ayar dolu ama ürün
+  // top doğuramıyorsa (pasif/birleşmiş/silinmiş) sessizce düşmez → 409 GELEN_BELGE_DEFAULT_ITEM_UNUSABLE.
+  const defaultItem = unresolved.length ? await resolveDefaultItemForApproval() : null;
+  if (unresolved.length && !defaultItem) {
     throw AppError.badRequest(`Ürünü çözülmemiş satır var: ${unresolved.join(", ")}. Her satırda ürün eşlenmeden onaylanamaz.`, { code: "DELIVERY_NOTE_LINE_UNRESOLVED", lineNos: unresolved });
+  }
+  // İnceleme kapısı (E3, D5'ten kalan karar): needsReview açık satır — BLOCK'ta 409, WARN'da (varsayılan) uyarıyla geçer.
+  const unreviewed = open.filter((l) => l.needsReview).map((l) => l.lineNo);
+  const reviewMode = unreviewed.length ? await readUnreviewedApprovalMode() : "WARN";
+  if (unreviewed.length && reviewMode === "BLOCK") {
+    throw AppError.conflict(`Gözden geçirilmemiş satır var: ${unreviewed.join(", ")}. Hücreleri gözden geçirip onaylayın (fabrika ayarı: gözden geçirilmemiş hücreyle onay engelli).`, { code: "DELIVERY_NOTE_REVIEW_PENDING", lineNos: unreviewed });
   }
   // Kapılar YALNIZ bu istekteki gerekçeyle açılır: başlıkta kalmış eski gerekçe sonraki onayın yeni uyuşmazlığını örtmez.
   const reason = input.varianceReason?.trim();
   const warnings = totalWarnings(note, note.lines);
+  if (unreviewed.length) warnings.push(`Gözden geçirilmemiş satırla onaylandı: ${unreviewed.join(", ")}.`);
+  if (defaultItem) warnings.push(`Ürünü seçilmemiş ${unresolved.length} satır varsayılan ürünle (${defaultItem.name}) girildi.`);
   // Sayfa kapısı: "1/2" beyanı varsa her sayfanın taraması olmalı (yalnız taramalı belgede; elle/Excel'de tarama yok). Gerekçeyle aşılır (tasarım §4).
   if (note.pageCount != null && note.scans.length > 0) {
     const have = new Set(note.scans.map((s) => s.pageNo));
@@ -132,7 +151,7 @@ async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: ty
   if (mismatches.length && !reason) {
     throw AppError.conflict(`Toplam uyuşmuyor: ${mismatches.join(" ")} Geçmek için fark gerekçesi (varianceReason) verin.`, { code: "TOTAL_MISMATCH", mismatches });
   }
-  return warnings;
+  return { warnings, defaultItem };
 }
 
 /** Alias öğrenme — onayda çözülmüş (metin → kimlik) eşlemeler sözlüğe; tekrar görülende `hitCount` artar. Best-effort. */
@@ -195,7 +214,7 @@ async function claimHeader(id: string, snap: { status: DeliveryNoteStatus; updat
 export async function approveDeliveryNote(id: string, input: ApproveInput, userId: string): Promise<ApproveResult> {
   const note = await prisma.customerDeliveryNote.findUnique({ where: { id }, select: PRE_SELECT });
   if (!note) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
-  const warnings = await precheck(note, input);
+  const { warnings, defaultItem } = await precheck(note, input);
   const varianceReason = input.varianceReason?.trim() || undefined;
 
   await claimHeader(id, note, userId, varianceReason);
@@ -220,7 +239,9 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
     try {
       const res = await inventory.createInitialEntry(
         {
-          itemId: line.itemId!,
+          // Satırın kendi ürünü önce; yoksa ön kontrolün çözdüğü varsayılan (ürünsüz top DOĞMAZ — ikisi de yoksa ön kontrol 400 verdi).
+          // Satırın itemId'si BOŞ kalır: operatör ürün seçmedi; alias da öğrenilmez (learnAliases itemId null'u atlar).
+          itemId: (line.itemId ?? defaultItem?.id)!,
           colorId: line.colorId,
           initialQty: Number(line.meters),
           weightKg: line.weightKg == null ? undefined : Number(line.weightKg),
@@ -248,7 +269,7 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
         else summary.entered++;
         summary.rollIds.push(rollId);
         entered.push(line);
-        await AuditService.log({ userId, action: "UPDATE", tableName: LINE_TABLE, recordId: line.id, oldData: { status: line.status }, newData: { status: "ENTERED", rollId, lineNo: line.lineNo, noteNo: note.noteNo, ...(res.idempotent ? { replayed: true } : {}) } });
+        await AuditService.log({ userId, action: "UPDATE", tableName: LINE_TABLE, recordId: line.id, oldData: { status: line.status }, newData: { status: "ENTERED", rollId, lineNo: line.lineNo, noteNo: note.noteNo, ...(res.idempotent ? { replayed: true } : {}), ...(!line.itemId && defaultItem ? { defaultItemId: defaultItem.id } : {}) } });
       }
     } catch (err) {
       const failReason = (err instanceof Error ? err.message : "Bilinmeyen hata").slice(0, 500);

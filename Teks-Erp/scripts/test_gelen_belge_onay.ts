@@ -19,6 +19,11 @@
 //   §11 audit: satır/başlık audit yükünde ocrRaw/sourceRects/content yok
 //   §12 TOCTOU: ön kontrolden sonra, claim'den önce sahip PATCH'i → 409 DELIVERY_NOTE_CHANGED, sıfır top
 //   §13 yarıda kalan onay: ENTERING satır + doğmuş top + 11 dk bayat APPROVING → onay 200, replayed 1, ek top YOK
+//   §14 HİZMET EKSENİ (E3) varsayılan ürün: ayar boş → §9 aynen; iplik/pasif ürün ayara yazılamaz (400
+//       GELEN_BELGE_DEFAULT_ITEM_INVALID), ham ayar ucu 400 SETTING_KEY_RESERVED; ayar dolu → ürünsüz 3 satır 3 top
+//       (itemId = ayar ürünü, satır itemId boş + itemText yerinde, alias öğrenilmez) + ürünü seçili satır kendi ürünüyle;
+//       onay anında ayar ürünü pasifleşmişse 409 GELEN_BELGE_DEFAULT_ITEM_UNUSABLE ve SIFIR top
+//   §15 inceleme kapısı: needsReview satır — WARN (varsayılan) 200 + uyarı; BLOCK 409 DELIVERY_NOTE_REVIEW_PENDING, SIFIR top
 // Emsal: scripts/test_gelen_belge_taslak.ts (app.listen(0) + ensureTestAdmin + ayar()).
 // =============================================================================
 import type { AddressInfo } from "net";
@@ -65,7 +70,7 @@ const rollsOf = (noteId: string) => prisma.customerDeliveryNoteLine.findMany({ w
 
 async function main(): Promise<void> {
   console.log("=== Gelen belge D4 onay bekçisi ===\n");
-  const keys = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.KK1_DUPLICATE_GUARD_ENABLED];
+  const keys = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.KK1_DUPLICATE_GUARD_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL];
   const prior = await prisma.systemSetting.findMany({ where: { key: { in: keys } }, select: { key: true, value: true } });
   const admin = await ensureTestAdmin({ password: kosumaOzguParola() });
   const server = await new Promise<Server>((resolve) => { const s = app.listen(0, "127.0.0.1", () => resolve(s)); });
@@ -74,6 +79,8 @@ async function main(): Promise<void> {
     await ayar(SETTING_KEYS.EMANET_ENABLED, true);
     await ayar(SETTING_KEYS.GELEN_BELGE_ENABLED, true);
     await ayar(SETTING_KEYS.KK1_DUPLICATE_GUARD_ENABLED, true);
+    // E3 ayarları BUGÜNKÜ davranışta başlar (kayıt yok) — §1–§13 varsayılanı ölçer.
+    await prisma.systemSetting.deleteMany({ where: { key: { in: [SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL] } } });
     const login = async (username: string, password: string) => {
       const r = await fetch(`${url}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password, clientType: "electron" }) });
       return ((await r.json()) as { data?: { token?: string } }).data?.token ?? "";
@@ -290,6 +297,67 @@ async function main(): Promise<void> {
     const rl13 = await rollsOf(n13.id);
     check("bayat APPROVING devralındı → 200, replayed 1 · entered 1, APPROVED", r13.status === 200 && r13.data?.summary?.replayed === 1 && r13.data?.summary?.entered === 1 && r13.data?.note?.status === "APPROVED", `${r13.status} ${r13.code ?? ""} ${JSON.stringify(r13.data?.summary)}`);
     check("yarıda doğan top bağlandı, ek top YOK (2 satır = 2 top)", rl13.length === 2 && rl13.includes(bornId) && (await prisma.roll.count({ where: { clientToken: lineRollToken(l13[0]!.id) } })) === 1, JSON.stringify(rl13));
+
+    // §14 hizmet ekseni — varsayılan ürün
+    console.log("§14 varsayılan ürün (hizmet ekseni)");
+    const g14 = await call("GET", "/api/gelen-belge/ayarlar", writer);
+    check("ayar okuma (gelen-belge:read) 200; varsayılan boş, kip WARN", g14.status === 200 && (g14.data as { defaultItem?: unknown })?.defaultItem === null && (g14.data as { unreviewedApproval?: string })?.unreviewedApproval === "WARN", `${g14.status} ${JSON.stringify(g14.data)}`);
+    check("ayar yazma admin:settings ister (yazıcı → 403)", (await call("PUT", "/api/gelen-belge/ayarlar", writer, { defaultItemId: fabric.id })).status === 403);
+    const yarnSet = await call("PUT", "/api/gelen-belge/ayarlar", tk, { defaultItemId: yarn.id });
+    check("iplik ürünü ayara yazılamaz → 400 GELEN_BELGE_DEFAULT_ITEM_INVALID", yarnSet.status === 400 && yarnSet.code === "GELEN_BELGE_DEFAULT_ITEM_INVALID", `${yarnSet.status} ${yarnSet.code}`);
+    const passive = await prisma.item.create({ data: { code: `${TAG}-PAS`, name: `${TAG} pasif kumaş`, itemType: "FABRIC", unit: "MT", isActive: false, lifecycleStatus: "ARCHIVED" }, select: { id: true } });
+    made.items.push(passive.id);
+    const pasSet = await call("PUT", "/api/gelen-belge/ayarlar", tk, { defaultItemId: passive.id });
+    check("pasif ürün ayara yazılamaz → 400 GELEN_BELGE_DEFAULT_ITEM_INVALID", pasSet.status === 400 && pasSet.code === "GELEN_BELGE_DEFAULT_ITEM_INVALID", `${pasSet.status} ${pasSet.code}`);
+    const rawSet = await call("PUT", `/api/admin/settings/${SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID}`, tk, { value: passive.id });
+    check("ham ayar ucu bu anahtarı yazamaz → 400 SETTING_KEY_RESERVED", rawSet.status === 400 && rawSet.code === "SETTING_KEY_RESERVED", `${rawSet.status} ${rawSet.code}`);
+    const n14a = await mkNote([L(100, { itemId: null, itemText: "Müşteri kumaşı A" })]);
+    const u14 = await onay(n14a.id);
+    check("ayar BOŞ → ürünsüz satır 400 DELIVERY_NOTE_LINE_UNRESOLVED (bugünkü davranış), sıfır top", u14.status === 400 && u14.code === "DELIVERY_NOTE_LINE_UNRESOLVED" && (await rollsOf(n14a.id)).length === 0, `${u14.status} ${u14.code}`);
+    const service = await prisma.item.create({ data: { code: `${TAG}-HZM`, name: `${TAG} fason emanet kumaş`, itemType: "FABRIC", unit: "MT" }, select: { id: true } });
+    made.items.push(service.id);
+    const okSet = await call("PUT", "/api/gelen-belge/ayarlar", tk, { defaultItemId: service.id });
+    check("aktif kumaş ayara yazıldı → 200, GET adıyla döner", okSet.status === 200 && (okSet.data as { defaultItem?: { id?: string; problem?: unknown } })?.defaultItem?.id === service.id && (okSet.data as { defaultItem?: { problem?: unknown } })?.defaultItem?.problem === null, `${okSet.status} ${okSet.code ?? ""}`);
+    const auditSet = await prisma.systemLog.count({ where: { tableName: "SYSTEM_SETTING", recordId: SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID } });
+    check("ayar yazımı audit'li", auditSet > 0, String(auditSet));
+    const n14 = await mkNote([
+      L(101, { itemId: null, itemText: "Müşteri kumaşı A" }),
+      L(102, { itemId: null, itemText: "Müşteri kumaşı B", colorText: "Lacivert" }),
+      L(103, { itemId: null, itemText: "Müşteri kumaşı C" }),
+      L(104),
+    ]);
+    const a14 = await onay(n14.id);
+    check("ayar DOLU → onay 200, 4 top", a14.status === 200 && a14.data?.summary?.entered === 4, `${a14.status} ${a14.code ?? ""} ${JSON.stringify(a14.data?.summary)}`);
+    check("uyarıda varsayılan ürünle giren satır sayısı", (a14.warnings ?? []).some((w) => w.includes("3 satır varsayılan ürünle")), JSON.stringify(a14.warnings));
+    const l14 = await prisma.customerDeliveryNoteLine.findMany({ where: { noteId: n14.id }, select: { lineNo: true, itemId: true, itemText: true, roll: { select: { itemId: true } } }, orderBy: { lineNo: "asc" } });
+    const def14 = l14.filter((l) => l.lineNo <= 3);
+    check("⭐ ürünsüz 3 satır → 3 top, Roll.itemId = ayar ürünü", def14.length === 3 && def14.every((l) => l.roll?.itemId === service.id), JSON.stringify(def14.map((l) => l.roll?.itemId)));
+    check("satırın itemId'si boş kaldı, itemText yerinde", def14.every((l) => l.itemId === null) && def14.map((l) => l.itemText).join("|") === "Müşteri kumaşı A|Müşteri kumaşı B|Müşteri kumaşı C");
+    check("ürünü seçilmiş satır kendi ürünüyle doğdu", l14[3]?.roll?.itemId === fabric.id, l14[3]?.roll?.itemId ?? "yok");
+    const learned = await prisma.deliveryNoteAlias.count({ where: { scope: "ITEM", targetId: service.id } });
+    check("varsayılanla giren satır alias öğretmez (sözlük zehirlenmez)", learned === 0, String(learned));
+    // Onay ANINDA ayar ürünü pasifleşti (ayar yazıldıktan sonra) → fail-closed.
+    await prisma.item.update({ where: { id: service.id }, data: { isActive: false, lifecycleStatus: "ARCHIVED" } });
+    const n14p = await mkNote([L(105, { itemId: null, itemText: "Müşteri kumaşı D" })]);
+    const p14 = await onay(n14p.id);
+    check("ayar ürünü pasifleşmiş → 409 GELEN_BELGE_DEFAULT_ITEM_UNUSABLE, SIFIR top, taslak DRAFT", p14.status === 409 && p14.code === "GELEN_BELGE_DEFAULT_ITEM_UNUSABLE" && (await rollsOf(n14p.id)).length === 0 && (await prisma.customerDeliveryNote.findUnique({ where: { id: n14p.id }, select: { status: true } }))?.status === "DRAFT", `${p14.status} ${p14.code}`);
+    const g14p = await call("GET", "/api/gelen-belge/ayarlar", writer);
+    check("GET pasif ürünün sorununu söyler (problem dolu)", typeof (g14p.data as { defaultItem?: { problem?: unknown } })?.defaultItem?.problem === "string");
+    const clr = await call("PUT", "/api/gelen-belge/ayarlar", tk, { defaultItemId: null });
+    check("ayar temizlenir (null) → bugünkü davranış", clr.status === 200 && (clr.data as { defaultItem?: unknown })?.defaultItem === null && (await onay(n14p.id)).code === "DELIVERY_NOTE_LINE_UNRESOLVED", `${clr.status}`);
+
+    // §15 inceleme kapısı
+    console.log("§15 gözden geçirilmemiş hücre kapısı");
+    const n15 = await mkNote([L(110), L(111, { needsReview: true })]);
+    const blk = await call("PUT", "/api/gelen-belge/ayarlar", tk, { unreviewedApproval: "BLOCK" });
+    check("kip BLOCK yazıldı", blk.status === 200 && (blk.data as { unreviewedApproval?: string })?.unreviewedApproval === "BLOCK", `${blk.status} ${blk.code ?? ""}`);
+    const b15 = await onay(n15.id);
+    check("⭐ BLOCK + needsReview satır → 409 DELIVERY_NOTE_REVIEW_PENDING (lineNos [2]), SIFIR top", b15.status === 409 && b15.code === "DELIVERY_NOTE_REVIEW_PENDING" && JSON.stringify(b15.details?.lineNos) === "[2]" && (await rollsOf(n15.id)).length === 0, `${b15.status} ${b15.code}`);
+    const bad15 = await call("PUT", "/api/gelen-belge/ayarlar", tk, { unreviewedApproval: "SESSIZ" });
+    check("tanınmayan kip → 400", bad15.status === 400, `${bad15.status}`);
+    await call("PUT", "/api/gelen-belge/ayarlar", tk, { unreviewedApproval: "WARN" });
+    const w15 = await onay(n15.id);
+    check("WARN (varsayılan) → onay geçer, 2 top + uyarı", w15.status === 200 && (await rollsOf(n15.id)).length === 2 && (w15.warnings ?? []).some((w) => w.includes("Gözden geçirilmemiş")), `${w15.status} ${w15.code ?? ""} ${JSON.stringify(w15.warnings)}`);
   } finally {
     stopNotificationJobs();
     await new Promise<void>((r) => server.close(() => r()));

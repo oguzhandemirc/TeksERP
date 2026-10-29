@@ -90,6 +90,7 @@ describe("§1 üç yüzeyin dağılımı", () => {
       "devere",
       "dokuma",
       "finance",
+      "gelen-belge",
       "kartela",
       "orders",
       "production",

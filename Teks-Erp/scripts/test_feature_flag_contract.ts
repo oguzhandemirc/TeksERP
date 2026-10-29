@@ -558,6 +558,16 @@ async function main() {
       file: "Teks-Erp/src/jobs/number-series-catalog.job.ts",
       needle: "workorder.partyCodeAuto",
     },
+    GELEN_BELGE_DEFAULT_ITEM_ID: {
+      why: "Ürün kimliği (UUID) — flag yüküne konmaz; tek yazar doğrulamalı `PUT /api/gelen-belge/ayarlar` (ham ayar ucu reddeder); panel Genel Ayarlar → Gelen Belge",
+      file: "Electron/src/pages/GeneralSettings/IncomingDocumentSettingsSection.tsx",
+      needle: "updateIncomingDocumentSettings",
+    },
+    GELEN_BELGE_UNREVIEWED_APPROVAL: {
+      why: "Gelen belge inceleme kapısı (WARN/BLOCK) — varsayılan ürünle aynı uç ve aynı panel kartı",
+      file: "Electron/src/pages/GeneralSettings/IncomingDocumentSettingsSection.tsx",
+      needle: "UNREVIEWED_APPROVAL_OPTIONS",
+    },
     SYSTEM_INSTALLATION_ID: {
       why: "Feature flag değil, kurulum kimliği — panel yüzeyi YOK (bilinçli); boot işi üretir, /api/discovery/identity okur",
       file: "Teks-Erp/src/jobs/installation-identity.job.ts",

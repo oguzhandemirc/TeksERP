@@ -1,9 +1,10 @@
 // Gelen belge servisi — yollar TAM (`/api/...`; apiClient baseURL `/api` içermez).
 import apiClient from "@/services/apiClient";
+import { withSettingsPassword } from "@/lib/settings-password";
 import type { ApiResponse } from "@/types/api";
 import type {
   ApproveResult, DeliveryNoteDetail, DeliveryNoteLine, DeliveryNoteListQuery, DeliveryNoteListResponse,
-  HeaderPatch, LineInput, LinePatch, NoteMatchSuggestions, ReaderStatus,
+  HeaderPatch, IncomingDocumentSettings, LineInput, LinePatch, NoteMatchSuggestions, ReaderStatus, UnreviewedApproval,
 } from "./types";
 
 const BASE = "/api/gelen-belge";
@@ -71,4 +72,17 @@ export async function getReaderStatus(): Promise<ReaderStatus> {
 /** Tarama görüntüsü (yetkili istek; `<img src>` token taşıyamaz). */
 export async function fetchScanBlob(scanId: string): Promise<Blob> {
   return (await apiClient.get<Blob>(`${BASE}/taramalar/${scanId}/icerik`, { responseType: "blob" })).data;
+}
+
+export const INCOMING_DOCUMENT_SETTINGS_QUERY_KEY = ["gelen-belge", "ayarlar"] as const;
+
+export async function getIncomingDocumentSettings(): Promise<IncomingDocumentSettings> {
+  return (await apiClient.get<ApiResponse<IncomingDocumentSettings>>(`${BASE}/ayarlar`)).data.data;
+}
+
+/** Yazım `admin:settings` + ayar şifresi (tanımlıysa diyalog `withSettingsPassword`ten). */
+export function updateIncomingDocumentSettings(body: { defaultItemId?: string | null; unreviewedApproval?: UnreviewedApproval }): Promise<IncomingDocumentSettings> {
+  return withSettingsPassword((headers) =>
+    apiClient.put<ApiResponse<IncomingDocumentSettings>>(`${BASE}/ayarlar`, body, { headers }).then((r) => r.data.data),
+  );
 }

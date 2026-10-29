@@ -20,6 +20,8 @@ import {
   getDeliveryNote, listDeliveryNotes, updateDeliveryNote, updateDeliveryNoteLine,
 } from "../services/gelen-belge-note.service";
 import { approveDeliveryNote } from "../services/gelen-belge-onay.service";
+import { getIncomingDocSettings, updateIncomingDocSettings } from "../services/gelen-belge-ayar.service";
+import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
 import { getRollTabletContext } from "../services/roll-tablet.service";
 import { getDocumentScan, readDocumentScanContent, uploadDocumentScan } from "../services/gelen-belge-scan.service";
 import { suggestForNote } from "../services/gelen-belge-eslestirme.service";
@@ -288,6 +290,39 @@ router.post("/taramalar/:id/oku", requirePermission("gelen-belge:write"), wrap(a
   requestImmediateReaderRun();
   return { status: 202, data: scan };
 }));
+// ── E3 hizmet ekseni ayarları (varsayılan ürün + inceleme kapısı) ────────────────────────────────────────────
+const SettingsBody = z.strictObject({
+  defaultItemId: Id.nullable().optional(),
+  unreviewedApproval: z.enum(["WARN", "BLOCK"], "Seçenek WARN ya da BLOCK olmalı").optional(),
+});
+/**
+ * @openapi
+ * /api/gelen-belge/ayarlar:
+ *   get:
+ *     tags: [GelenBelge]
+ *     summary: Gelen belge ayarları — varsayılan ürün (ad + kullanılabilirlik) ve gözden geçirilmemiş hücreyle onay kipi
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "defaultItem (id, code, name, problem) | null · unreviewedApproval WARN|BLOCK" }
+ *   put:
+ *     tags: [GelenBelge]
+ *     summary: Gelen belge ayarlarını yaz (yalnız admin:settings + ayar şifresi); pasif/top doğuramayan ürün 400 GELEN_BELGE_DEFAULT_ITEM_INVALID
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               defaultItemId: { type: string, format: uuid, nullable: true }
+ *               unreviewedApproval: { type: string, enum: [WARN, BLOCK] }
+ *     responses:
+ *       200: { description: Güncel ayarlar }
+ */
+// Okuma `gelen-belge:read`: gözden geçirme ekranı "varsayılan ürünle girecek: <ad>" ipucunu buradan basar.
+router.get("/ayarlar", requirePermission("gelen-belge:read"), wrap(async () => ({ status: 200, data: await getIncomingDocSettings() })));
+// Yazma yalnız `admin:settings` (Genel Ayarlar → Gelen Belge kategorisi ADMIN_ONLY); ayar şifresi kapısı izinden SONRA.
+router.put("/ayarlar", requirePermission("admin:settings"), requireSettingsPassword, wrap(async (req) => ({ status: 200, data: await updateIncomingDocSettings(SettingsBody.parse(req.body), req.user!.userId) })));
 router.get("/irsaliyeler/:id/eslestirme", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await suggestForNote(Id.parse(req.params.id)) })));
 
 router.get("/irsaliyeler", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await listDeliveryNotes(ListQuery.parse(req.query)) })));
