@@ -131,6 +131,9 @@ export async function updateDeliveryNoteLine(noteId: string, lineId: string, pat
   const full = lineColumns({ ...patch, meters: patch.meters ?? Number(before.meters) });
   const { confidence: _c, ...allCols } = full;
   const cols = Object.fromEntries(Object.entries(allCols).filter(([k]) => patch[k as keyof DeliveryNoteLineInput] !== undefined)) as Partial<typeof allCols>;
+  // Gözden geçirme işareti yalnız değer (metre/kg) düzeltilince düşer; kumaş/renk/en eşlemesi el yazısı hücresini görmüş sayılmaz.
+  const review = patch.needsReview ?? (patch.meters !== undefined || patch.weightKg !== undefined ? false : undefined);
+  const reviewData = review === undefined ? {} : { needsReview: review };
   let closedNoteNo: string | null = null;
   const after = await prisma.$transaction(async (tx) => {
     // PARTIAL yolu yalnız topsuz FAILED satır için açılır; başlık claim'i (updatedAt'i tazeler) eşzamanlı onayı 409'a düşürür.
@@ -140,12 +143,11 @@ export async function updateDeliveryNoteLine(noteId: string, lineId: string, pat
     if (!partial) {
       await claimDraft(tx, noteId, userId);
       if (patch.skip) throw AppError.badRequest("Taslakta satır atlanmaz; girilmeyecek satırı silin.", { code: "DELIVERY_NOTE_LINE_SKIP_DRAFT" });
-      // Elle düzeltilen satır gözden geçirildi sayılır (operatör değeri gördü ve yazdı).
-      return tx.customerDeliveryNoteLine.update({ where: { id: lineId }, data: { ...cols, needsReview: patch.needsReview ?? false }, select: LINE_SELECT });
+      return tx.customerDeliveryNoteLine.update({ where: { id: lineId }, data: { ...cols, ...reviewData }, select: LINE_SELECT });
     }
     const c = await tx.customerDeliveryNoteLine.updateMany({
       where: { id: lineId, noteId, status: "FAILED", rollId: null },
-      data: { ...cols, needsReview: patch.needsReview ?? false, ...(patch.skip ? { status: "SKIPPED" as const } : {}) },
+      data: { ...cols, ...reviewData, ...(patch.skip ? { status: "SKIPPED" as const } : {}) },
     });
     if (c.count === 0) throw AppError.conflict("Satır artık düzeltilemez (girilmiş ya da değişmiş); belgeyi yenileyin.", { code: "DELIVERY_NOTE_LINE_NOT_EDITABLE" });
     // Atlamayla topsuz canlı satır kalmadıysa belge kapanır (yeniden onaya "açık satır yok" ile takılmasın).

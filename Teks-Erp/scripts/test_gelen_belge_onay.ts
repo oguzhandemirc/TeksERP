@@ -178,6 +178,11 @@ async function main(): Promise<void> {
       { blockNo: 1, meters: 150, weightKg: 25, status: "PENDING" }, { blockNo: 1, meters: 150.5, weightKg: 25, status: "PENDING" }, { blockNo: 1, meters: 999, weightKg: 1, status: "SKIPPED" },
     ]);
     check("saf totalMismatches: tutan beyan (SKIPPED sayılmaz, %0,5 hoşgörü) → boş", pure.length === 0, pure.join(" "));
+    // OCR beyanı sayıları METİN yazar; "2" ile 2 satır tutar (panel şeridiyle aynı ölçüt).
+    const ocrText = totalMismatches({ totalsDeclared: { blocks: [{ blockNo: 1, count: "2", m: "300.5" }] } }, [
+      { blockNo: 1, meters: 150, weightKg: null, status: "PENDING" }, { blockNo: 1, meters: 150.5, weightKg: null, status: "PENDING" },
+    ]);
+    check("saf totalMismatches: OCR metin count (\"2\") tutan beyan → boş", ocrText.length === 0, ocrText.join(" "));
     check("saf totalMismatches: blok adedi hoşgörüsüz", totalMismatches({ totalsDeclared: { blocks: [{ blockNo: 1, count: 3 }] } }, [{ blockNo: 1, meters: 1, weightKg: null, status: "PENDING" }]).length === 1);
     check("saf: başlık top adedi farkı SERT DEĞİL (totalMismatches boş, totalWarnings 1)", totalMismatches({ totalsDeclared: null }, [{ blockNo: 1, meters: 1, weightKg: null, status: "PENDING" }]).length === 0 && totalWarnings({ declaredTopCount: 3 }, [{ blockNo: 1, meters: 1, weightKg: null, status: "PENDING" }]).length === 1);
     check("blok farkı geçildiğinde başlık adedi farkı uyarı olarak döner", (t6b.warnings ?? []).some((w) => w.includes("5 top")), JSON.stringify(t6b.warnings));
