@@ -2060,6 +2060,25 @@ async function main(): Promise<void> {
   check("validate edilmemiş (NOT VALID) kısıt YOK", nv.length === 0,
     nv.length ? `NOT VALID: ${nv.join(", ")} — ihlalli eski satır var; kuru döküm: scripts/kartela_durum_anomali.ts (swatches_status_shape)` : "0");
 
+  console.log("\n── 11) NULLS NOT DISTINCT tekillikler (Prisma `@@unique` adı, bayrak ham SQL'de) ──");
+  // Prisma `@@unique`i NULLS NOT DISTINCT bayrağını İFADE EDEMEZ ve drift'te GÖRMEZ: indeksi yeniden kuran bir
+  // migration bayrağı sessizce düşürür → NULL kolonlu anahtar yeniden çiftlenir. Burada bayrak ölçülür.
+  const NULLS_NOT_DISTINCT_UNIQUES: Array<{ table: string; index: string; why: string }> = [
+    // E4 (migration 20261029160000): gönderensiz (SENDER kapsamı) öğrenme de tekil; `INSERT … ON CONFLICT` hedefi.
+    { table: "delivery_note_aliases", index: "delivery_note_aliases_scope_senderCustomerId_rawKey_key", why: "sözlük anahtarı NULL gönderende de tek satır (bekçi test_gelen_belge_onay §16)" },
+  ];
+  const nnd = await prisma.$queryRaw<Array<{ index_name: string; is_unique: boolean; nnd: boolean }>>`
+    SELECT c.relname AS index_name, i.indisunique AS is_unique, i.indnullsnotdistinct AS nnd
+    FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+  `;
+  const nndByName = new Map(nnd.map((r) => [r.index_name, r]));
+  for (const exp of NULLS_NOT_DISTINCT_UNIQUES) {
+    const live = nndByName.get(exp.index);
+    check(exp.index, !!live && live.is_unique && live.nnd,
+      !live ? `index HİÇ YOK (${exp.table})` : !live.is_unique ? "UNIQUE değil — SED KAYBOLDU" : !live.nnd ? "NULLS NOT DISTINCT DÜŞMÜŞ — NULL kolonlu anahtar çiftlenebilir" : exp.why);
+  }
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   if (fail > 0) {
     console.log(
