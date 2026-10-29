@@ -1,0 +1,41 @@
+# Okuma servisi çalışma bağımlılıkları — KULLANICI ONAYI 2026-10-29: onnxruntime, rapidocr, opencv-python-headless,
+# numpy, fastapi, uvicorn. Diğer satırlar bunların ZORUNLU geçişli bağımlılıklarıdır (pip freeze ile ölçüldü).
+# Üretim: python betikler/hash-uret.py betikler/requirements.in > requirements.txt
+onnxruntime==1.31.0
+rapidocr==3.10.0
+opencv-python-headless==5.0.0.93
+numpy==2.3.5
+fastapi==0.159.1
+uvicorn==0.54.0
+# geçişli — onnxruntime
+flatbuffers==25.12.19
+packaging==26.3
+protobuf==7.36.2
+# geçişli — rapidocr
+pyclipper==1.4.0
+six==1.17.0
+shapely==2.2.0
+PyYAML==6.0.3
+pillow==13.0.0
+tqdm==4.70.1
+omegaconf==2.4.0
+requests==2.34.2
+colorlog==6.12.0
+certifi==2026.10.23
+charset-normalizer==3.5.2
+idna==3.20
+urllib3==2.8.0
+# geçişli — fastapi / uvicorn
+starlette==1.10.0
+pydantic==2.14.1
+pydantic_core==2.50.1
+annotated-types==0.8.0
+annotated-doc==0.0.5
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+anyio==4.15.1
+opentelemetry-api==1.45.1
+click==8.5.0
+# geçişli — yalnız Windows (click/tqdm/pytest); --require-hashes her platformda tam liste ister
+colorama==0.4.6
+h11==0.16.0

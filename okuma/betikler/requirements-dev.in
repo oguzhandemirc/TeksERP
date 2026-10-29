@@ -1,0 +1,5 @@
+# Yalnız test (pytest) — servis çalışma anında yüklenmez. CI: pip install --require-hashes -r requirements-dev.txt
+pytest==9.2.0
+iniconfig==2.3.1
+pluggy==1.7.0
+Pygments==2.21.0
