@@ -161,3 +161,26 @@ describe("buildPeripheralPayload (form → API)", () => {
     expect(e.simulate).toBe(false);
   });
 });
+
+describe("metre sayacı alanları (H4)", () => {
+  const meter = { ...peripheralFormDefaults, code: "MT-1", name: "Metre", kind: "METER" as const, connectionType: "SERIAL_COM" as const };
+  it("geçerli kip + 64 karakter ASCII komut → geçerli; yük METER'de taşır", () => {
+    const r = peripheralFormSchema.safeParse({ ...meter, counterMode: "CUMULATIVE", resetCommand: "R".repeat(64) });
+    expect(r.success).toBe(true);
+    const p = buildPeripheralPayload(r.success ? r.data : meter);
+    expect(p.counterMode).toBe("CUMULATIVE");
+    expect(p.resetCommand).toBe("R".repeat(64));
+  });
+  it("65 karakter ya da Türkçe harf → geçersiz", () => {
+    expect(peripheralFormSchema.safeParse({ ...meter, resetCommand: "R".repeat(65) }).success).toBe(false);
+    expect(peripheralFormSchema.safeParse({ ...meter, resetCommand: "SIFIRLAŞ" }).success).toBe(false);
+  });
+  it("bilinmeyen kip → geçersiz", () => {
+    expect(peripheralFormSchema.safeParse({ ...meter, counterMode: "BOGUS" }).success).toBe(false);
+  });
+  it("METER olmayan cihazda sayaç alanları null gider", () => {
+    const p = buildPeripheralPayload({ ...meter, kind: "SCALE", counterMode: "RESETTING", resetCommand: "X" });
+    expect(p.counterMode).toBeNull();
+    expect(p.resetCommand).toBeNull();
+  });
+});

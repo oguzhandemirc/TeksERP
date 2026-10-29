@@ -18,6 +18,7 @@
 // =============================================================================
 
 import { loadOpenDefectNotes } from "./helpers/open-defect-note.helper";
+import { resolveDeliveryNoteLinesForRolls, type RollDeliveryNoteLine } from "./helpers/roll-delivery-note-line.helper";
 import { createSliceYielder, renderCode128Svg, renderQrSvg } from "./helpers/barcode-svg.helper";
 import { resolveFlowLabelCopies } from "./helpers/label-copies.helper";
 import {
@@ -224,6 +225,8 @@ interface BulkLabelContext {
   copies: number;
   /** Açık hata notları (KQ-D8) — toplu basımda TEK sorgu; hatasız top haritada yok. */
   openDefectNotes?: Map<string, string>;
+  /** Top → (ata zinciriyle) gelen belge satırı (E3); toplu yolda bir kez yüklenir. */
+  deliveryNoteLines?: Map<string, RollDeliveryNoteLine>;
   /** Cihaz raster modu (finishedRouting'den) — bulk raster; false → bugünkü komut. */
   rasterMode: boolean;
 }
@@ -467,6 +470,11 @@ export class LabelService {
       openDefects: (preloaded?.openDefectNotes ?? (await loadOpenDefectNotes([roll.id]))).get(roll.id) ?? "",
       printedAt: new Date().toISOString(),
     };
+    // Müşteri belgesindeki kumaş/renk (E3): yalnız gelen belge satırı (kendisi ya da atası) olan topta alan EKLENİR —
+    // diğer toplarda payload ve basım bayt-aynı kalır.
+    const dnl = (preloaded?.deliveryNoteLines ?? (await resolveDeliveryNoteLinesForRolls([roll.id]))).get(roll.id);
+    if (dnl?.itemText) payload.deliveryNoteItemText = dnl.itemText;
+    if (dnl?.colorText) payload.deliveryNoteColorText = dnl.colorText;
 
     return { success: true, data: payload };
   }
@@ -655,6 +663,8 @@ export class LabelService {
       // boş bir kutu görüp "çalışmıyor" sanmasın (kartelaMark emsali).
       foldType: "4-KAT",
       openDefects: "12,5 m Leke · 40 m Delik",
+      deliveryNoteItemText: "Süprem 30/1 (müşteri adı)",
+      deliveryNoteColorText: "Lacivert",
       printedAt: new Date().toISOString(),
       // SWATCH önizlemesinde kartela alanları görünsün (roll düzeninde yok sayılır).
       kind: input.kind,
@@ -725,6 +735,8 @@ export class LabelService {
       // boş bir kutu görüp "çalışmıyor" sanmasın (kartelaMark emsali).
       foldType: "4-KAT",
       openDefects: "12,5 m Leke · 40 m Delik",
+      deliveryNoteItemText: "Süprem 30/1 (müşteri adı)",
+      deliveryNoteColorText: "Lacivert",
       printedAt: new Date().toISOString(),
       kind: input.kind,
       cardNumber: "KRT1207260001",
@@ -1128,6 +1140,8 @@ export class LabelService {
       // boş bir kutu görüp "çalışmıyor" sanmasın (kartelaMark emsali).
       foldType: "4-KAT",
       openDefects: "12,5 m Leke · 40 m Delik",
+      deliveryNoteItemText: "Süprem 30/1 (müşteri adı)",
+      deliveryNoteColorText: "Lacivert",
       printedAt: new Date().toISOString(),
     };
     const template = await findContextDefaultTemplate(LabelKind.ROLL_FINISHED);
@@ -1407,7 +1421,8 @@ export class LabelService {
     }
 
     const openDefectNotes = await loadOpenDefectNotes(ids);
-    return { rollById, orderLineById, customerById, aliases, format, templateByKind, variantByKind, customerTemplateByKey, copies, openDefectNotes, rasterMode: finishedRouting.rasterMode };
+    const deliveryNoteLines = await resolveDeliveryNoteLinesForRolls(ids);
+    return { rollById, orderLineById, customerById, aliases, format, templateByKind, variantByKind, customerTemplateByKey, copies, openDefectNotes, deliveryNoteLines, rasterMode: finishedRouting.rasterMode };
   }
 
   /**

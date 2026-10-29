@@ -18,6 +18,9 @@
 //   ⑦ dönen snapshot = DB snapshot (kâğıt kayıttan çizilir)
 //   ⑧ gövde sözleşmesi: token'sız 400
 //   ⑨ yarış yüklemi pg adaptörünün GERÇEK P2002 biçimiyle (zamandan bağımsız)
+//   ⑩ müşteri belgesindeki kumaş/renk (gelen belge E3): gelen belgesiz topun grubu bugünkü BEŞ alanla
+//      (anahtar değişmez → aynı CL yeniden basılır); satırlı topun ve Tambur çocuğunun grubu metni taşır,
+//      ayrı gruptur; metin yalnız doluyken anahtar olur
 //
 // NEGATİF SONDA (2026-09-23, ölçüldü): `recordSackPickList` içindeki contentKey araması
 //    kaldırılınca ② ve ⑥ KIRMIZI (aynı içerik yeni numara aldı); geri alınınca yeşil.
@@ -35,6 +38,10 @@ import { cleanupTestCustomers } from "./fixture-customer-cleanup";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { Prisma } from "@prisma/client";
 import { p2002TargetsCode } from "../src/utils/barcode-retry";
+import { createDeliveryNote } from "../src/services/gelen-belge-note.service";
+import { roleGrade } from "./fixture-quality-grade";
+import { fixtureWarehouseId } from "./fixture-warehouse";
+import { testActorId } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -47,6 +54,9 @@ const MARK = `TEST-CKL${Date.now().toString(36).slice(-5).toUpperCase()}`;
 const olusanCariler: string[] = [];
 const olusanCuvallar: string[] = [];
 const olusanListeler: string[] = [];
+const olusanToplar: string[] = [];
+const olusanUrunler: string[] = [];
+const olusanBelgeler: string[] = [];
 
 type Baski = { id: string; manifestNo: string; snapshot: unknown; reused: boolean };
 
@@ -138,6 +148,42 @@ async function main() {
     check("⑨ token çakışması (adaptör biçimi) numara retry'ına GİRMEZ", p2002TargetsCode(adapterHatasi("clientToken", "manifests_clientToken_key"), "manifestNo") === false);
     check("⑨ numara çakışması (adaptör biçimi) retry EDİLİR", p2002TargetsCode(adapterHatasi("manifestNo", "manifests_manifestNo_key"), "manifestNo") === true);
 
+    // ⑩ müşteri belgesindeki kumaş/renk (E3) — gelen belgesiz içerikte satır şekli bugünkü gibi kalır
+    const urun = await prisma.item.create({ data: { code: `${MARK}-KUM`, name: `${MARK} süprem`, itemType: "FABRIC", unit: "MT" }, select: { id: true } });
+    olusanUrunler.push(urun.id);
+    const grade = await roleGrade("FIRST");
+    const wh = await fixtureWarehouseId();
+    const actor = await testActorId();
+    const top = async (sackId: string, suffix: string, parentRollId: string | null = null) => {
+      // Fikstür: çuvaldaki top (paketleme yazımı servis boğazında; burada yalnız içerik okunur).
+      const r = await prisma.roll.create({ data: { barcode: `${MARK}-${suffix}`, itemId: urun.id, initialQty: 50, currentQty: 50, status: "STOCK", warehouseId: wh, qualityGrade: grade.code, qualityGradeId: grade.id, width: 150, createdById: actor, sackId, parentRollId }, select: { id: true } });
+      olusanToplar.push(r.id);
+      return r.id;
+    };
+    const c = await cuval();
+    await top(c, "T1");
+    const dokum = async (ids: string[]) => ((await call("POST", "/api/shipping/sack-search/pick-list", { sackIds: ids })).body.data ?? []) as unknown as Array<{ id: string; contents: Array<Record<string, unknown>> }>;
+    const once = await dokum([c]);
+    const BES = ["itemName", "colorName", "width", "qty", "rollCount"];
+    check("⑩ gelen belgesiz top: grup bugünkü BEŞ alan (anahtar değişmez)", once[0]?.contents.length === 1 && JSON.stringify(Object.keys(once[0].contents[0])) === JSON.stringify(BES), JSON.stringify(once[0]?.contents));
+    const c1 = await bas([c]);
+    const c2 = await bas([c]);
+    check("⑩ gelen belgesiz içerik yeniden basımda AYNI CL", c1.status === 201 && c2.d?.reused === true && c2.d?.manifestNo === c1.d?.manifestNo, `${c1.d?.manifestNo} / ${c2.d?.manifestNo}`);
+    // Satırlı top: gelen belge satırının rollId'si fikstür topuna bağlanır (onay yolu test_gelen_belge_onay / test_label_gelen_belge'de).
+    const belge = await createDeliveryNote({ sourceKind: "MANUAL", ownerCustomerId: cariId, senderText: `${MARK} GÖNDEREN`, lines: [{ senderRollNo: `${MARK}-R1`, meters: 50, itemText: "Süprem MÜŞTERİ", colorText: "Lacivert" }] }, actor);
+    olusanBelgeler.push(belge.id);
+    const ata = await top(c, "T2");
+    await prisma.customerDeliveryNoteLine.updateMany({ where: { noteId: belge.id }, data: { rollId: ata } });
+    await top(c, "T3", ata);
+    const sonra = await dokum([c]);
+    const gruplar = sonra[0]?.contents ?? [];
+    const belgeli = gruplar.find((g) => g.deliveryNoteItemText === "Süprem MÜŞTERİ");
+    const belgesiz = gruplar.find((g) => !("deliveryNoteItemText" in g));
+    check("⑩ satırlı top + Tambur çocuğu AYRI grupta, metin + renk dolu, 2 top", gruplar.length === 2 && belgeli?.deliveryNoteColorText === "Lacivert" && belgeli?.rollCount === 2, JSON.stringify(gruplar));
+    check("⑩ aynı çuvaldaki belgesiz topun grubu hâlâ BEŞ alan", belgesiz !== undefined && JSON.stringify(Object.keys(belgesiz)) === JSON.stringify(BES) && belgesiz.rollCount === 1, JSON.stringify(belgesiz));
+    const c3 = await bas([c]);
+    check("⑩ içerik metin kazandı → YENİ CL", c3.status === 201 && c3.d?.manifestNo !== c1.d?.manifestNo, `${c3.d?.manifestNo}`);
+
     // ⑧ sözleşme
     const tokensiz = await call("POST", "/api/shipping/sack-search/pick-list/print", { sackIds: [a] });
     check("⑧ token'sız 400", tokensiz.status === 400, `status=${tokensiz.status}`);
@@ -150,6 +196,10 @@ async function main() {
 /** Teardown: bu koşumun listeleri, çuvalları, carisi. */
 async function temizlik(): Promise<void> {
   await prisma.manifest.deleteMany({ where: { id: { in: olusanListeler } } }).catch(() => undefined);
+  await prisma.customerDeliveryNote.deleteMany({ where: { id: { in: olusanBelgeler } } }).catch(() => undefined);
+  await prisma.roll.updateMany({ where: { id: { in: olusanToplar } }, data: { parentRollId: null } }).catch(() => undefined);
+  await prisma.roll.deleteMany({ where: { id: { in: olusanToplar } } }).catch(() => undefined);
+  await prisma.item.deleteMany({ where: { id: { in: olusanUrunler } } }).catch(() => undefined);
   await prisma.sack.deleteMany({ where: { id: { in: olusanCuvallar.filter(Boolean) } } }).catch(() => undefined);
   await cleanupTestCustomers(olusanCariler.filter(Boolean)).catch(() => undefined);
 }

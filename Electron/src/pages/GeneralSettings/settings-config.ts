@@ -24,6 +24,7 @@ import {
   Cloud,
   BarChart3,
   Bell,
+  FileScan,
   type LucideIcon,
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
@@ -300,7 +301,8 @@ export type CategoryKind =
   | "company"
   | "eIrsaliye"
   | "session"
-  | "label";
+  | "label"
+  | "gelenBelge";
 
 /**
  * Genel Ayarlar'ın varsayılan kapısı — sistem GENELİNİ değiştiren her kategori
@@ -1496,11 +1498,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         ],
       },
       {
-        // H2: OFFICE seçeneği panelde sapma onay ekranı (H4) gelince eklenir — backend o güne dek 400 verir.
+        // H4: OFFICE seçeneği — çıkış yüzeyi Operasyon › Metre Sapmaları ekranı.
         enumKey: "kursunMeterVarianceApproval",
         title: "Metre farkı eşiği aşınca kim onaylasın",
         summary: "Çıkış metresi girişten eşikten fazla saparsa ne olsun.",
-        desc: "Onaysız (varsayılan): kayıt yapılır, fark işaretli kalır. Operatör sebebi: operatör sebep seçmeden kayıt olmaz. Süpervizör PIN'i: süpervizör tablete PIN girer (yalnız bağlıyken); onaylanmadan adım kapanmaz.",
+        desc: "Onaysız (varsayılan): kayıt yapılır, fark işaretli kalır. Operatör sebebi: operatör sebep seçmeden kayıt olmaz. Süpervizör PIN'i: süpervizör tablete PIN girer (yalnız bağlıyken); onaylanmadan adım kapanmaz. Ofis onayı: sapma Metre Sapmaları ekranında onaylanır; onaylanmadan adım kapanmaz.",
         defaultValue: "NONE",
         display: "radio",
         audience: ["Operatör", "Yönetim"],
@@ -1508,6 +1510,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "NONE", label: "Onaysız, işaretle (bugünkü)", hint: "Fark yalnız işaretlenir; akış durmaz." },
           { value: "OPERATOR_REASON", label: "Operatör sebep seçsin", hint: "Sebep seçilmeden çıkış kaydedilmez. Tablette sebep seçici gerekir — tablet güncellemesi gelmeden açmayın." },
           { value: "SUPERVISOR_PIN", label: "Süpervizör PIN'i", hint: "Onaylanmadan adım kapanmaz; makine durmaz. Tablette PIN penceresi gerekir — tablet güncellemesi gelmeden açmayın." },
+          { value: "OFFICE", label: "Ofis onayı", hint: "Okuma yazılır, makine durmaz; ofis Operasyon › Metre Sapmaları ekranında onaylar. Onaylanmadan adım kapanmaz." },
         ],
       },
     ],
@@ -2295,6 +2298,19 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     ],
   },
   {
+    // gelen-belge: KAPSAMSIZ kategori (ADMIN_ONLY) — iki ham ayar kendi doğrulamalı ucundan yazılır
+    // (`PUT /api/gelen-belge/ayarlar`: varsayılan ürün allowlist + yaşam döngüsü kapısı); hizmet ekseni E3.
+    id: "gelen-belge",
+    label: "Gelen Belge",
+    icon: FileScan,
+    description: "Gelen müşteri irsaliyesi onayı: kumaşı seçilmemiş satırın varsayılan ürünü ve gözden geçirilmemiş hücre kuralı.",
+    keywords:
+      "gelen belge irsaliye ocr müşteri emanet fason varsayılan ürün kumaş hizmet metre gözden geçir inceleme onay engelle uyar el yazısı",
+    kind: "gelenBelge",
+    section: "trade",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION],
+  },
+  {
     // bildirim: KAPSAMSIZ kategori — anahtar `settings-scopes`ta yok, yalnız `admin:settings`
     // yazar (plan Karar Y1); `ADMIN_ONLY_CATEGORY_IDS` beyanı iki panel bekçisini muaf tutar.
     id: "bildirim",
@@ -2352,7 +2368,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
 
 // bildirim: dar izin TAŞIMAYAN (yalnız `admin:settings`) fabrika kategorileri — beyan iki
 // yönlü ölçülür (settings-surface §6 + settings-scope-mirror): anahtarları kapsam tablosunda olamaz.
-export const ADMIN_ONLY_CATEGORY_IDS: ReadonlySet<string> = new Set(["bildirim", "belgeler"]);
+export const ADMIN_ONLY_CATEGORY_IDS: ReadonlySet<string> = new Set(["bildirim", "belgeler", "gelen-belge"]);
 
 /** Kategorinin çizildiği ekran — BÖLÜMÜNDEN türetilir (tek yazar). */
 export function categorySurface(cat: SettingsCategory): SettingsSurface {
