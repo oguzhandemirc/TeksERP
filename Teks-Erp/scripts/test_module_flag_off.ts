@@ -264,6 +264,16 @@ const MODULLER: ModulTanimi[] = [
     onKosul: { alan: "productionEnabled", beklenenModulKodu: "production" },
   },
   {
+    // EMANET (P1a, 2026-10-29): ilk kendi ekranı İçerideki İşler (`/api/consigned-work`); yazma kapısı ayrıca gövdede.
+    alan: "emanetEnabled",
+    dbAnahtari: "emanet.enabled",
+    middleware: "requireEmanetEnabled",
+    okuyucu: "readEmanetEnabled",
+    modulKodu: "emanet",
+    routeDosyalari: ["routes/consigned-work.routes.ts"],
+    sondalar: modulUclari("emanetEnabled"),
+  },
+  {
     // GELEN BELGE (D2, 2026-10-29): emanete bağımlı (onay `Roll.ownerCustomerId` yazar); ön koşul kapıda ÖNCE ölçülür.
     // Ön koşul emanet TABLODA DEĞİL (yüzeysiz modül, `KAPSAM_DISI` gerekçesi) — `YONETILEN`e yer tutucu olarak girer.
     alan: "gelenBelgeEnabled",

@@ -305,6 +305,26 @@ export async function requireGelenBelgeEnabled(
 }
 
 /**
+ * Emanet modülü: İçerideki İşler (sahip başına emanet özeti, ister 3.2). Yazma kapısı ayrıca gövdede
+ * (`assertEmanetWritableTx`); bu kapı yalnız modülün KENDİ ekranının uçlarını korur.
+ */
+export async function requireEmanetEnabled(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const enabled = await readEmanetEnabled();
+    if (!enabled) {
+      throw licenseModuleError(SETTING_KEYS.EMANET_ENABLED, "Emanet / konsinye mülkiyet") ?? modulKapali("emanet", "Emanet / konsinye mülkiyet");
+    }
+    next();
+  } catch (e) {
+    next(e);
+  }
+}
+
+/**
  * Tezgah izleme modülü: Tezgah Salonu canlı ekranı (`/api/loom-floor`).
  *
  * ⚠️ ÖN KOŞUL ÖNCE ÖLÇÜLÜR (`MODULE_DEPENDENCIES.tezgahEnabled = productionEnabled`);

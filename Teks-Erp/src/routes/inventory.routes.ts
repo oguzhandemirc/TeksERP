@@ -8,6 +8,7 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { requireProductionEnabled } from "../middlewares/module.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { getRollTabletContext } from "../services/roll-tablet.service";
+import { listRollOwnerCustomers } from "../services/roll-owner.service";
 
 // Mobil ekran yetkileri web yetkilerine alternatif olarak kabul edilir:
 // `mobile:depo` operatörü `roll:read` web yetkisi olmadan da depo ekranını
@@ -321,6 +322,25 @@ router.get("/entry-users", verifyToken, requireAnyPermission("roll:read", ...MOB
  *     security: [{ bearerAuth: [] }]
  */
 router.get("/entry-stations", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL_READ), controller.listEntryStations);
+
+/**
+ * @openapi
+ * /api/rolls/owner-customers:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Emanet sahipleri — "Sahibi" filtre lookup'ı
+ *     description: Müşteri kataloğu DEĞİL; yalnız en az bir topun sahibi olmuş müşteriler (id + ad + kod). `customer:read` istemez.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Sahip listesi }
+ */
+router.get("/owner-customers", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL_READ), async (_req, res, next) => {
+  try {
+    res.json(await listRollOwnerCustomers());
+  } catch (e) {
+    next(e);
+  }
+});
 
 /**
  * @openapi

@@ -506,6 +506,8 @@ const ROLL_LIST_INCLUDE = {
   // "alan var sanıldı, o yanıtta yoktu"). Liste ve DETAY aynı şekli döner —
   // ayrışırsa satır ile panel aynı top için farklı şey söyler.
   warehouse: { select: { id: true, code: true, name: true } },
+  // EMANET sahibi — "Sahibi" sütunu (ister 3.2); to-one, sayfa başına tek ek sorgu.
+  ownerCustomer: { select: { id: true, name: true } },
   properties: {
     where: ACTIVE_ROLL_PROPERTY,
     select: {
@@ -1556,6 +1558,14 @@ export class InventoryService {
     delete where.warehouseId;
     if (warehouseIdFilter) {
       where.warehouseId = warehouseIdFilter;
+    }
+
+    // SAHİP (emanet, ister 3.2) — çoklu seçim. Modülden BAĞIMSIZ uygulanır (depo süzgeci emsali):
+    // kapalı modülde süzgeç yok sayılmaz, veri neyse onu süzer; panel çipi modül kapalıyken çizmez.
+    const ownerCustomerIdFilter = readIdCondition(f["ownerCustomerId"]);
+    delete where.ownerCustomerId;
+    if (ownerCustomerIdFilter) {
+      where.ownerCustomerId = ownerCustomerIdFilter;
     }
 
     const processingStatus = f["processingStatus"] as string | undefined;
