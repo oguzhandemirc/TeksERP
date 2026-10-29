@@ -1,16 +1,17 @@
 name: Okuma servisi
 
-# Yerel okuma servisi (okuma/, Python + RapidOCR) — yalnız okuma/ ya da bu dosya değişince koşar.
+# Yerel okuma servisi (okuma/, Python + RapidOCR) — okuma/, bu dosya ya da sözleşme testinin okuduğu
+# Teks-Erp dosyaları (okuma-istemcisi.ts Zod şeması, motor fikstürleri) değişince koşar.
 # CPU-only ubuntu; sistem Python 3.12 (ubuntu-24.04), bağımlılıklar --require-hashes ile.
 # Modeller manifestten (SHA-256) çekilir ve önbelleğe alınır; testler ağ engelliyken açılışı AYRICA ölçer.
 
 on:
   push:
     branches: [main]
-    paths: ["okuma/**", ".github/workflows/okuma.yml"]
+    paths: ["okuma/**", ".github/workflows/okuma.yml", "Teks-Erp/src/lib/gelen-belge/okuma-istemcisi.ts", "Teks-Erp/src/lib/gelen-belge/motor/__tests__/fikstur/**"]
   pull_request:
     branches: [main]
-    paths: ["okuma/**", ".github/workflows/okuma.yml"]
+    paths: ["okuma/**", ".github/workflows/okuma.yml", "Teks-Erp/src/lib/gelen-belge/okuma-istemcisi.ts", "Teks-Erp/src/lib/gelen-belge/motor/__tests__/fikstur/**"]
   workflow_dispatch:
 
 permissions:
