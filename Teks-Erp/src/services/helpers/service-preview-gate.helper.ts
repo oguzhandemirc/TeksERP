@@ -27,8 +27,9 @@ export function servicePreviewStale(reason: string, serviceItemId: string): AppE
 /** Sevkin emanet işlerinin taze durumu: faturalanmamış bağ girdileri + işlerin (faturalı dahil) hizmet kalemleri. */
 async function loadShipmentServiceWorkState(tx: Tx, p: { shipmentId: string; customerId: string; currency: Currency; settings: ServiceBillingSettings }) {
   const sh = await tx.shipment.findUnique({ where: { id: p.shipmentId }, select: { dispatchedAt: true } });
-  // Toplayıcı commit'li durumu okur; çağıran 8023 sevk kilidini tutar (bağ yazarları serileşti) → okuma tazedir.
-  const draft = await collectShipmentServiceBilling({ shipmentId: p.shipmentId, customerId: p.customerId, currency: p.currency, settings: p.settings, dispatchedAt: sh?.dispatchedAt ?? null });
+  // Toplayıcı fatura tx'inin KENDİ istemcisiyle okur (K3b): çağıran 8023 sevk kilidini tutar; tx dışı okuma havuzda
+  // ikinci bağlantı bekler ve tx'in kendi yazımını görmezdi.
+  const draft = await collectShipmentServiceBilling({ shipmentId: p.shipmentId, customerId: p.customerId, currency: p.currency, settings: p.settings, dispatchedAt: sh?.dispatchedAt ?? null, db: tx });
   const rollIds = await listShipmentServiceRollIds([p.shipmentId], tx);
   const billed = rollIds.length === 0 ? [] : await tx.serviceBillingLink.findMany({
     where: { rollId: { in: await collectRollLineage(rollIds, tx) }, revokedAt: null },

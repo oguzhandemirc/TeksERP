@@ -59,8 +59,8 @@ export async function resolveCustomerServiceBillingTrigger(customerId: string, s
 }
 
 /** Toplara (ve atalarına) bağlı AKTİF bağ anahtarları. */
-async function loadBilledKeys(rollIds: string[]): Promise<Set<string>> {
-  const rows = rollIds.length === 0 ? [] : await prisma.serviceBillingLink.findMany({
+async function loadBilledKeys(rollIds: string[], db: Db): Promise<Set<string>> {
+  const rows = rollIds.length === 0 ? [] : await db.serviceBillingLink.findMany({
     where: { rollId: { in: rollIds }, revokedAt: null },
     select: { rollId: true, serviceItemId: true, workOrderStepId: true },
   });
@@ -79,20 +79,24 @@ export async function collectServiceBillingDraft(params: {
   dispatchedAt: Date | null;
   /** H8b: DISPATCH_DAY'de iş başına sevk anı (dönem taslağı); yoksa herkese `dispatchedAt`. */
   dispatchedAtByRoll?: Map<string, Date>;
+  /** K3b: verilirse BÜTÜN okumalar bu istemciden (önizleme kapısı fatura tx'inde, sevk kilidi altında okur). */
+  db?: Db;
 }): Promise<ServiceBillingDraft> {
   if (params.rollIds.length === 0) return { lines: [], links: [], warnings: [] };
+  const db = params.db ?? prisma;
   const dispatchDay = params.settings.priceDate === "DISPATCH_DAY";
-  const lineage = await collectRollLineage(params.rollIds);
+  const lineage = await collectRollLineage(params.rollIds, db);
   const res = await resolveServiceItemsForRolls({
     rollIds: lineage,
     customerId: params.customerId,
     currency: params.currency,
+    db,
     options: {
       meterBasis: params.settings.meterBasis,
       missingMeter: params.settings.missingMeter,
       priceAsOf: dispatchDay ? params.dispatchedAt ?? new Date() : undefined,
       priceAsOfByRoll: dispatchDay ? params.dispatchedAtByRoll : undefined,
-      billedKeys: await loadBilledKeys(lineage),
+      billedKeys: await loadBilledKeys(lineage, db),
       shippedRollIds: new Set(params.rollIds),
     },
   });
@@ -262,8 +266,9 @@ export async function collectShipmentServiceBilling(params: {
   currency: Currency;
   settings: ServiceBillingSettings;
   dispatchedAt: Date | null;
+  db?: Db;
 }): Promise<ServiceBillingDraft> {
-  return collectServiceBillingDraft({ ...params, rollIds: await listShipmentServiceRollIds([params.shipmentId]) });
+  return collectServiceBillingDraft({ ...params, rollIds: await listShipmentServiceRollIds([params.shipmentId], params.db) });
 }
 
 /** H8b: top → sevk anı; ata zincirine en erken çocuğun anı yayılır (iş atada kayıtlıysa da kendi sevk gününe çözülür). */

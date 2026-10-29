@@ -20,6 +20,8 @@
 // =============================================================================
 import { MachineDataSource, MeterPhase, Prisma, RollEntrySource, ServiceMeterBasis } from "@prisma/client";
 import prisma from "../../lib/prisma";
+
+type Db = Prisma.TransactionClient | typeof prisma;
 import { ACTIVE_ROLL_PROPERTY } from "./property-revoke.helper";
 import { KURSUN_PROPERTY_CODE } from "./quality-station.helper";
 
@@ -52,17 +54,17 @@ type RollRow = {
  * ② TEK çözücü (RECEIVED) kurucusu: doğan top (`parentReceiptId`) → kabul metresi; makbuzdan KENDİSİ dönen top (makbuz
  * kalemi topun kendisi, makbuzdan doğan top yok — eski "yerinde dönüş" modeli) → aynı adımın kalemlerinde alınan metre.
  */
-async function loadReceivedResolver(byId: Map<string, RollRow>, allStations: string[]) {
+async function loadReceivedResolver(byId: Map<string, RollRow>, allStations: string[], db: Db) {
   const rolls = [...byId.values()];
   const chainIds = [...byId.keys()];
   const receiptIds = [...new Set(rolls.map((r) => r.parentReceiptId).filter((v): v is string => v !== null))];
-  const receipts = allStations.length === 0 || receiptIds.length === 0 ? [] : await prisma.subcontractorReceipt.findMany({
+  const receipts = allStations.length === 0 || receiptIds.length === 0 ? [] : await db.subcontractorReceipt.findMany({
     where: { id: { in: receiptIds }, cancelledAt: null, step: { stationId: { in: allStations } } },
     select: { id: true, stepId: true, receivedAt: true, step: { select: { stationId: true } } },
   });
   const receiptById = new Map(receipts.map((r) => [r.id, r]));
   // Makbuzdan KENDİSİ dönen top: makbuz kalemi topun kendisi, makbuzdan doğan top yok (eski "yerinde dönüş" modeli).
-  const selfReturns = allStations.length === 0 ? [] : await prisma.subcontractorReceiptItem.findMany({
+  const selfReturns = allStations.length === 0 ? [] : await db.subcontractorReceiptItem.findMany({
     where: { newRollId: { in: chainIds }, receipt: { cancelledAt: null, step: { stationId: { in: allStations } }, bornRolls: { none: {} } } },
     select: { newRollId: true, receivedQty: true, receipt: { select: { stepId: true, receivedAt: true, step: { select: { stationId: true } } } } },
     orderBy: [{ receipt: { receivedAt: "asc" } }, { id: "asc" }],
@@ -93,10 +95,11 @@ async function loadReceivedResolver(byId: Map<string, RollRow>, allStations: str
 export async function listFlagServiceWorks(
   rollIds: string[],
   meterBasis: "OUT" | "IN" | "DECLARED",
-  opts: { shippedRollIds?: Set<string> } = {},
+  opts: { shippedRollIds?: Set<string>; db?: Db } = {},
 ): Promise<FlagWork[]> {
+  const db = opts.db ?? prisma;
   if (rollIds.length === 0) return [];
-  const rolls: RollRow[] = await prisma.roll.findMany({
+  const rolls: RollRow[] = await db.roll.findMany({
     where: { id: { in: rollIds } },
     select: { id: true, parentRollId: true, parentReceiptId: true, entrySource: true, initialQty: true, currentQty: true, producedInStepId: true, createdAt: true },
   });
@@ -105,7 +108,7 @@ export async function listFlagServiceWorks(
   const leaves = rolls.filter((r) => !parents.has(r.id) || opts.shippedRollIds?.has(r.id));
   if (leaves.length === 0) return [];
 
-  const props = await prisma.rollProperty.findMany({
+  const props = await db.rollProperty.findMany({
     where: {
       rollId: { in: leaves.map((r) => r.id) },
       ...ACTIVE_ROLL_PROPERTY,
@@ -117,21 +120,21 @@ export async function listFlagServiceWorks(
   if (props.length === 0) return [];
 
   const propertyIds = [...new Set(props.map((p) => p.propertyId))];
-  const stationRows = await prisma.stationProperty.findMany({ where: { propertyId: { in: propertyIds } }, select: { stationId: true, propertyId: true } });
+  const stationRows = await db.stationProperty.findMany({ where: { propertyId: { in: propertyIds } }, select: { stationId: true, propertyId: true } });
   const stationsOf = new Map<string, Set<string>>();
   for (const s of stationRows) stationsOf.set(s.propertyId, (stationsOf.get(s.propertyId) ?? new Set()).add(s.stationId));
   const allStations = [...new Set(stationRows.map((s) => s.stationId))];
   const chainIds = [...byId.keys()];
 
   const phases = meterBasis === "OUT" ? [MeterPhase.OUT, MeterPhase.IN] : meterBasis === "IN" ? [MeterPhase.IN] : [];
-  const readings = phases.length === 0 || allStations.length === 0 ? [] : await prisma.rollMeterReading.findMany({
+  const readings = phases.length === 0 || allStations.length === 0 ? [] : await db.rollMeterReading.findMany({
     where: { rollId: { in: chainIds }, revokedAt: null, source: { not: MachineDataSource.SIMULATED }, phase: { in: phases }, step: { stationId: { in: allStations } } },
     select: { id: true, rollId: true, workOrderStepId: true, phase: true, meters: true, createdAt: true, step: { select: { stationId: true } } },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
-  const receivedOf = await loadReceivedResolver(byId, allStations);
+  const receivedOf = await loadReceivedResolver(byId, allStations, db);
   // Kardeşi aynı kalemle parça parça faturalanmış atalar: `${ataId}:${kalem}`.
-  const pieceBilled = new Set((await prisma.serviceBillingLink.findMany({
+  const pieceBilled = new Set((await db.serviceBillingLink.findMany({
     where: { revokedAt: null, meterBasis: { in: [ServiceMeterBasis.CUT, ServiceMeterBasis.DECLARED] }, roll: { parentRollId: { in: chainIds } } },
     select: { serviceItemId: true, roll: { select: { parentRollId: true } } },
   })).map((l) => `${l.roll.parentRollId}:${l.serviceItemId}`));
