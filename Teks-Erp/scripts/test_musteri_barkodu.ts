@@ -68,17 +68,63 @@ function walk(dir: string): string[] {
   return out;
 }
 
+function propName(p: ts.ObjectLiteralElementLike): string | null {
+  return p.name && (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) ? p.name.text : null;
+}
+
+/** where nesnesinde `code` anahtarı: üst seviye + AND/OR/NOT içinde; spread ya da dinamik değer ölçülemez → ihlal. */
+function whereObjHasCode(w: ts.Expression): boolean {
+  if (ts.isArrayLiteralExpression(w)) return w.elements.some((e) => whereObjHasCode(e as ts.Expression));
+  if (!ts.isObjectLiteralExpression(w)) return true;
+  for (const q of w.properties) {
+    if (ts.isSpreadAssignment(q)) return true;
+    const name = propName(q);
+    if (name === "code") return true;
+    if ((name === "AND" || name === "OR" || name === "NOT") && ts.isPropertyAssignment(q) && whereObjHasCode(q.initializer)) return true;
+  }
+  return false;
+}
+
 function whereHasCode(arg: ts.Expression | undefined): boolean {
   if (!arg || !ts.isObjectLiteralExpression(arg)) return arg !== undefined; // dinamik argüman: ölçülemez → ihlal say
   for (const p of arg.properties) {
-    const name = p.name && (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) ? p.name.text : null;
-    if (name !== "where") continue;
+    if (ts.isSpreadAssignment(p)) return true;
+    if (propName(p) !== "where") continue;
     if (!ts.isPropertyAssignment(p)) return true;
-    const w = p.initializer;
-    if (!ts.isObjectLiteralExpression(w)) return true;
-    return w.properties.some((q) => q.name && (ts.isIdentifier(q.name) || ts.isStringLiteral(q.name)) && q.name.text === "code");
+    return whereObjHasCode(p.initializer);
   }
   return false;
+}
+
+// RollCustomerCode'a giden ilişki adları (Roll.customerCodes · Customer.rollCustomerCodes · CustomerBarcodeSeries.codes).
+const CODE_RELATIONS = new Set(["customerCodes", "rollCustomerCodes", "codes"]);
+
+/** Başka bir modelin sorgusunda ilişki süzgeci ile koda göre okuma: `{ customerCodes: { some: { code } } }`. */
+function subtreeHasCodeKey(n: ts.Node): boolean {
+  let hit = false;
+  const v = (x: ts.Node): void => {
+    if (hit) return;
+    if (ts.isSpreadAssignment(x)) { hit = true; return; }
+    if ((ts.isPropertyAssignment(x) || ts.isShorthandPropertyAssignment(x)) && propName(x) === "code") { hit = true; return; }
+    ts.forEachChild(x, v);
+  };
+  v(n);
+  return hit;
+}
+
+function relationFilterByCode(arg: ts.Expression | undefined): boolean {
+  if (!arg) return false;
+  let hit = false;
+  const v = (x: ts.Node): void => {
+    if (hit) return;
+    if (ts.isPropertyAssignment(x)) {
+      const name = propName(x);
+      if (name && CODE_RELATIONS.has(name) && ts.isObjectLiteralExpression(x.initializer) && subtreeHasCodeKey(x.initializer)) { hit = true; return; }
+    }
+    ts.forEachChild(x, v);
+  };
+  v(arg);
+  return hit;
 }
 
 function astSection(): void {
@@ -87,7 +133,7 @@ function astSection(): void {
     const rel = relative(SRC, file).split("\\").join("/");
     if (rel === HELPER) continue;
     const text = readFileSync(file, "utf8");
-    if (!text.includes("rollCustomerCode") && !text.includes("roll_customer_codes")) continue;
+    if (!/rollCustomerCode|roll_customer_codes|customerCodes|rollCustomerCodes|\bcodes\s*:/.test(text)) continue;
     const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
     const visit = (node: ts.Node): void => {
       if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
@@ -95,9 +141,14 @@ function astSection(): void {
         const target = node.expression.expression;
         if (READ_METHODS.has(method) && ts.isPropertyAccessExpression(target) && target.name.text === "rollCustomerCode" && whereHasCode(node.arguments[0])) {
           violations.push(`${rel}:${sf.getLineAndCharacterOfPosition(node.getStart()).line + 1} rollCustomerCode.${method}({ where: { code } })`);
+        } else if (READ_METHODS.has(method) && relationFilterByCode(node.arguments[0])) {
+          violations.push(`${rel}:${sf.getLineAndCharacterOfPosition(node.getStart()).line + 1} ${method}({ … customerCodes: { some: { code } } })`);
         }
       }
-      if ((ts.isTemplateExpression(node) || ts.isNoSubstitutionTemplateLiteral(node)) && node.getText().includes("roll_customer_codes")) {
+      // Ham SQL: şablon metni her zaman; düz string yalnız sorgu biçimindeyse (merge-map tablo adı değil).
+      const rawSql = ((ts.isTemplateExpression(node) || ts.isNoSubstitutionTemplateLiteral(node)) && node.getText().includes("roll_customer_codes"))
+        || (ts.isStringLiteral(node) && /\b(from|join|update|into)\s+\\?"?roll_customer_codes/i.test(node.getText()));
+      if (rawSql) {
         violations.push(`${rel}:${sf.getLineAndCharacterOfPosition(node.getStart()).line + 1} ham SQL roll_customer_codes`);
       }
       ts.forEachChild(node, visit);
@@ -137,6 +188,14 @@ function astSection(): void {
     if (rel === "services/inventory.service.ts" && !header.includes("inventory.service.ts:")) missing.push(rel);
   }
   check("§AST kalan okutma çağrıları helper başlığında etiketli", missing.length === 0, missing.join(", "));
+
+  // Bağla/kaldır uçları yalnız emanet topta çalışır → emanet modülü kapalıyken 403 MODULE_DISABLED.
+  const routes = readFileSync(join(SRC, "routes/inventory.routes.ts"), "utf8").split("\n");
+  const gated = ["\"/:id/customer-code\"", "\"/:id/customer-code/revoke\""].map((path) => {
+    const line = routes.find((l) => l.startsWith("router.post(") && l.includes(path + ","));
+    return !!line && /verifyToken,\s*requireEmanetEnabled,/.test(line);
+  });
+  check("§AST bağla/kaldır uçlarında emanet modül kapısı (requireEmanetEnabled)", gated.every(Boolean), JSON.stringify(gated));
 }
 
 // ── DB bölümleri ────────────────────────────────────────────────────────────

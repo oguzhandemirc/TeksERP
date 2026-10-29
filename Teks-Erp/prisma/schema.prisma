@@ -6038,6 +6038,7 @@ model RollCustomerCode {
 
   // DB'de PARTIAL (`WHERE "revokedAt" IS NULL`): müşteride aktif kod tekil · topta tek aktif kod.
   // CHECK'ler (kod boş değil · damga üçlüsü) migration SQL'inde.
+  // UYARI: findUnique({ rollId }) / customerId_code KULLANMA — damgalı geçmiş satır döner; aktif satır = findFirst + revokedAt: null.
   @@unique([customerId, code], map: "roll_customer_codes_customer_code_active_uq")
   @@unique([rollId], map: "roll_customer_codes_roll_active_uq")
   @@index([code], map: "roll_customer_codes_code_idx")

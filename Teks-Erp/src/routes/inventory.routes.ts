@@ -5,7 +5,7 @@
 import { Router } from "express";
 import { InventoryController } from "../controllers/inventory.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requireProductionEnabled } from "../middlewares/module.middleware";
+import { requireEmanetEnabled, requireProductionEnabled } from "../middlewares/module.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { getRollTabletContext } from "../services/roll-tablet.service";
 import { listRollOwnerCustomers } from "../services/roll-owner.service";
@@ -1124,7 +1124,8 @@ router.post(
 
 /**
  * D4-F1: müşteri barkodu bağlama/kaldırma — Tambur operatörü (müşterinin önbasılı etiketi).
- * Yeni izin AÇILMADI: top yazma izni (`roll:write`) + Tambur tablet izni.
+ * Yeni izin AÇILMADI: top yazma izni (`roll:write`) + Tambur tablet izni. Kod yalnız emanet topa
+ * bağlanır → emanet modülü kapalıyken 403 MODULE_DISABLED.
  */
 const ROLL_CUSTOMER_CODE_WRITE = ["mobile:tambur"] as const;
 
@@ -1152,10 +1153,11 @@ const ROLL_CUSTOMER_CODE_WRITE = ["mobile:tambur"] as const;
  *     responses:
  *       200: { description: Bağlandı (ya da aynı token replay) }
  *       400: { description: Validasyon · ROLL_NOT_EMANET (sahipsiz top) · ROLL_CANCELLED }
+ *       403: { description: MODULE_DISABLED (emanet modülü kapalı) }
  *       404: { description: Top bulunamadı }
  *       409: { description: CUSTOMER_CODE_COLLIDES · CUSTOMER_CODE_TAKEN · ROLL_CUSTOMER_CODE_EXISTS · CUSTOMER_CODE_REVOKED · CLIENT_TOKEN_COLLISION }
  */
-router.post("/:id/customer-code", verifyToken, requireAnyPermission("roll:write", ...ROLL_CUSTOMER_CODE_WRITE), async (req, res, next) => {
+router.post("/:id/customer-code", verifyToken, requireEmanetEnabled, requireAnyPermission("roll:write", ...ROLL_CUSTOMER_CODE_WRITE), async (req, res, next) => {
   try {
     res.json(await RollCustomerCodeService.bind(req.params.id as string, req.body, req.user?.userId));
   } catch (e) {
@@ -1184,9 +1186,10 @@ router.post("/:id/customer-code", verifyToken, requireAnyPermission("roll:write"
  *     responses:
  *       200: { description: Kaldırıldı }
  *       400: { description: Validasyon }
+ *       403: { description: MODULE_DISABLED (emanet modülü kapalı) }
  *       409: { description: CUSTOMER_CODE_NOT_ACTIVE }
  */
-router.post("/:id/customer-code/revoke", verifyToken, requireAnyPermission("roll:write", ...ROLL_CUSTOMER_CODE_WRITE), async (req, res, next) => {
+router.post("/:id/customer-code/revoke", verifyToken, requireEmanetEnabled, requireAnyPermission("roll:write", ...ROLL_CUSTOMER_CODE_WRITE), async (req, res, next) => {
   try {
     res.json(await RollCustomerCodeService.revoke(req.params.id as string, req.body, req.user?.userId));
   } catch (e) {
