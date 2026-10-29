@@ -98,10 +98,10 @@ export async function fetchProcessSummary(scope: ProcessSummaryScope): Promise<P
   return res.data.data;
 }
 
-/** Boş liste = hedefi kaldır (sunucu eski satırı damgalar). */
+/** Yalnız gövdedeki özelliklerin hedefi değişir; `valueId: null` = o özelliğin hedefini kaldır (sunucu damgalar). */
 export async function putWorkOrderTargetValues(
   workOrderId: string,
-  items: Array<{ propertyId: string; valueId: string }>,
+  items: Array<{ propertyId: string; valueId: string | null }>,
 ): Promise<{ changed: boolean }> {
   const res = await apiClient.put<{ success: true; data: { changed: boolean } }>(
     `/api/work-orders/${workOrderId}/target-values`,

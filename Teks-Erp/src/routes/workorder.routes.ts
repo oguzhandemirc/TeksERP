@@ -553,7 +553,7 @@ router.patch("/:id/lock", verifyToken, requirePermission("workorder:write"), con
  * /api/work-orders/{id}/target-values:
  *   put:
  *     tags: [WorkOrders]
- *     summary: Hedef çeşit değerleri (hedef kurşun gramajı) — fark bazlı; boş liste hepsini damgalar
+ *     summary: Hedef çeşit değerleri (hedef kurşun gramajı) — yalnız gövdedeki özellikler değişir; valueId null = kaldır; boş liste (eski istemci) hepsini damgalar
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
@@ -573,7 +573,7 @@ router.patch("/:id/lock", verifyToken, requirePermission("workorder:write"), con
  *                   type: object
  *                   properties:
  *                     propertyId: { type: string, format: uuid }
- *                     valueId: { type: string, format: uuid }
+ *                     valueId: { type: string, format: uuid, nullable: true }
  *     responses:
  *       200: { description: Hedef güncellendi (ya da aynıydı) }
  *       400: { description: Özellik çeşit değil / değer o özelliğe ait değil }
