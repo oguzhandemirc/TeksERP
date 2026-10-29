@@ -1,25 +1,37 @@
 // "Onayla" → sonuç. Toplam/sayfa kapısı 409'unda gerekçe istenir (tek hata yüzeyi: diyalog; apiClient toast'u bastırılır).
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { apiErrorText } from "@/lib/api-error";
-import { approveNote } from "./service";
-import { needsVarianceReason, summarizeApprove, type ApproveOutcome } from "./approveFlow";
+import { approveNote, getIncomingDocumentSettings, INCOMING_DOCUMENT_SETTINGS_QUERY_KEY } from "./service";
+import { approveErrorText, approvePrecheck, needsVarianceReason, summarizeApprove, type ApproveOutcome } from "./approveFlow";
+import type { DeliveryNoteLine } from "./types";
 
 interface Props {
   noteId: string;
+  /** Ön kontrol sayacı için (ürünsüz / gözden geçirilmemiş açık satır). */
+  lines: readonly DeliveryNoteLine[];
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onDone: () => void;
 }
 
-export function ApproveDialog({ noteId, open, onOpenChange, onDone }: Props) {
+const TONE_CLASS = {
+  info: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200",
+  warn: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
+  block: "bg-destructive/10 text-destructive",
+} as const;
+
+export function ApproveDialog({ noteId, lines, open, onOpenChange, onDone }: Props) {
   const [reason, setReason] = useState("");
   const [askReason, setAskReason] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<{ o: ApproveOutcome; warnings: string[] } | null>(null);
+  // Diyalog her açılışta ayarı tazeler: sayaç onay anındaki kipe/ürüne göre konuşur; hüküm yine backend'de.
+  const settings = useQuery({ queryKey: INCOMING_DOCUMENT_SETTINGS_QUERY_KEY, queryFn: getIncomingDocumentSettings, enabled: open, refetchOnMount: "always", staleTime: 0 });
+  const pre = approvePrecheck(lines, settings.data);
   const run = useMutation({
     mutationFn: () => approveNote(noteId, askReason ? reason.trim() : null),
     onSuccess: ({ result, warnings }) => {
@@ -28,7 +40,7 @@ export function ApproveDialog({ noteId, open, onOpenChange, onDone }: Props) {
       onDone();
     },
     onError: (e) => {
-      setError(apiErrorText(e, "Onay tamamlanamadı."));
+      setError(approveErrorText(e, apiErrorText(e, "Onay tamamlanamadı.")));
       if (needsVarianceReason(e)) setAskReason(true);
     },
   });
@@ -65,6 +77,13 @@ export function ApproveDialog({ noteId, open, onOpenChange, onDone }: Props) {
           </div>
         ) : (
           <div className="flex flex-col gap-2">
+            {pre.messages.length > 0 && (
+              <ul className="flex flex-col gap-1" data-testid="approve-precheck" data-blocked={pre.blocked ? "1" : "0"}>
+                {pre.messages.map((m) => (
+                  <li key={m.text} className={`rounded px-2 py-1 text-xs ${TONE_CLASS[m.tone]}`} data-tone={m.tone}>{m.text}</li>
+                ))}
+              </ul>
+            )}
             {error && <p className="rounded bg-destructive/10 px-2 py-1 text-sm text-destructive" data-testid="approve-error">{error}</p>}
             {askReason && (
               <Textarea aria-label="Fark gerekçesi" placeholder="Fark gerekçesi (ör. belgedeki toplam yanlış yazılmış)" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />
@@ -75,7 +94,7 @@ export function ApproveDialog({ noteId, open, onOpenChange, onDone }: Props) {
           {outcome ? (
             <Button onClick={() => close(false)}>Kapat</Button>
           ) : (
-            <Button onClick={() => run.mutate()} disabled={run.isPending || (askReason && reason.trim().length < 3)}>
+            <Button onClick={() => run.mutate()} disabled={run.isPending || pre.blocked || (askReason && reason.trim().length < 3)}>
               {askReason ? "Gerekçeyle onayla" : "Onayla"}
             </Button>
           )}
