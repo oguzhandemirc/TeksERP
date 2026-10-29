@@ -137,11 +137,11 @@ describe("onay", () => {
     renderWithProviders(<ApproveDialog noteId="n1" lines={[]} open onOpenChange={() => {}} onDone={onDone} />);
     await userEvent.click(screen.getByRole("button", { name: "Onayla" }));
     const reason = await screen.findByLabelText("Fark gerekçesi");
-    expect(approveNote).toHaveBeenLastCalledWith("n1", null);
+    expect(approveNote).toHaveBeenLastCalledWith("n1", null, []);
     await userEvent.type(reason, "Belgede toplam yanlış");
     await userEvent.click(screen.getByRole("button", { name: "Gerekçeyle onayla" }));
     const res = await screen.findByTestId("approve-result");
-    expect(approveNote).toHaveBeenLastCalledWith("n1", "Belgede toplam yanlış");
+    expect(approveNote).toHaveBeenLastCalledWith("n1", "Belgede toplam yanlış", []);
     expect(res.dataset.status).toBe("PARTIAL");
     expect(within(res).getByText("Blok 2, satır 4: Ürün çözülemedi")).toBeInTheDocument();
     expect(onDone).toHaveBeenCalledTimes(1);

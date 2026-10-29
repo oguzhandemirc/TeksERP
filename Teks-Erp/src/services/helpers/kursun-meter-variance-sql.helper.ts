@@ -4,7 +4,7 @@
 // Aynı eşitsizlik NUMERIC'te: |out − taban|·100 > max(M·100, P·taban); eşikler boş ya da
 // taban yoksa false. Bekçi `test_kursun_sapma` 20 fikstürde TS kararıyla eşitliği ölçer.
 // Bildirilen giriş: gelen belge satırı metresi (`customer_delivery_note_lines.rollId @unique`),
-// yoksa topun `initialQty`si — TS tarafı `loadMeterVarianceInputs` aynı sırayla okur.
+// yoksa topun `initialQty`si — TS tarafı `evaluateReadingVarianceTx` (kursun-meter.helper.ts) aynı sırayla okur.
 // =============================================================================
 import { Prisma } from "@prisma/client";
 
@@ -90,4 +90,27 @@ export function readingPendingAckSql(readingAlias: string): Prisma.Sql {
     AND ${r}."approvalMode" IN (${modes})
     AND NOT EXISTS (SELECT 1 FROM roll_meter_acks ak WHERE ak."readingId" = ${r}.id AND ak."revokedAt" IS NULL)
     AND ${readingDeviatedSql(readingAlias)}`;
+}
+
+/** Tablet adım özetindeki top tabanı (H3b): bildirilen giriş + aktif IN okuması. */
+export interface RollMeterBase {
+  declaredIn: number | null;
+  measuredIn: number | null;
+}
+
+/**
+ * Adımdaki toplar için sapma tabanları TEK sorguda (N+1 yok). Kaynak SQL ikizinin kendisidir
+ * (`declaredInSql`/`measuredInSql`): türetilmiş satır okuma satırının (`rollId`, `workOrderStepId`) yerini tutar.
+ */
+export async function loadRollMeterBases(
+  db: Pick<Prisma.TransactionClient, "$queryRaw">,
+  stepId: string,
+  rollIds: string[],
+): Promise<Map<string, RollMeterBase>> {
+  if (rollIds.length === 0) return new Map();
+  const rows = await db.$queryRaw<Array<{ rollId: string; declaredIn: Prisma.Decimal | null; measuredIn: Prisma.Decimal | null }>>`
+    SELECT x."rollId", ${declaredInSql("x")} AS "declaredIn", ${measuredInSql("x")} AS "measuredIn"
+    FROM (SELECT DISTINCT unnest(${rollIds}::uuid[]) AS "rollId", ${stepId}::uuid AS "workOrderStepId") x`;
+  const num = (d: Prisma.Decimal | null): number | null => (d == null ? null : Number(d));
+  return new Map(rows.map((r) => [r.rollId, { declaredIn: num(r.declaredIn), measuredIn: num(r.measuredIn) }]));
 }
