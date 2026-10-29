@@ -1549,10 +1549,12 @@ export class TamburManualService {
       throw err;
     }
     const roll = created.data;
-    // İstasyon yeteneği (T1): faz 1 kendi tx'ini açtığı için ayrı tx; replay'de de koşar (kendini onarır, no-op güvenli).
-    const tamburCaps = await loadSessionTamburCaps(ctx.stationId);
-    if (tamburCaps.length > 0) {
-      await prisma.$transaction((tx) => applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: ctx.stationId, rollId: roll.id, userId: ctx.userId }));
+    // İstasyon yeteneği (T1): faz 1 kendi tx'ini açtığı için ayrı tx. Buraya replay yalnız eşzamanlı yarışın
+    // kaybedeni olarak gelir; kaynak topun DOĞDUĞU istasyondur — başka oturum yabancı yetenek eklemesin.
+    const capStationId = created.idempotent === true ? roll.entryStationId : ctx.stationId;
+    const tamburCaps = await loadSessionTamburCaps(capStationId);
+    if (capStationId && tamburCaps.length > 0) {
+      await prisma.$transaction((tx) => applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: capStationId, rollId: roll.id, userId: ctx.userId }));
     }
     // Yarışın kaybedeni de replay'dir: faz 1'in boğazı `idempotent: true` döndü → ikinci CREATE audit yazılmaz.
     const idempotentReplay = created.idempotent === true;

@@ -385,8 +385,8 @@ export class ItemPriceService {
     let outcome: Outcome;
     try {
       outcome = await prisma.$transaction(async (tx): Promise<Outcome> => {
-        // Müşterili hizmet fiyatı D1 canlı referansıdır: kart FOR SHARE altında yeniden doğrulanır,
-        // eşzamanlı pasife alma ya bu satırı sayar ya da bu yazım 409 alır (K3c).
+        // Her fiyat tanımı kart FOR SHARE altında yeniden doğrulanır (D1 sayımına giren müşterili hizmet
+        // fiyatıdır): eşzamanlı pasife alma ya bu satırı sayar ya da bu yazım 409 alır (K3c).
         await assertItemUsableTx(tx, input.itemId, "DEFINITION");
         const current = await tx.itemPrice.findFirst({
           where: { itemId: input.itemId, kind: input.kind, currency: input.currency, customerId, ...ACTIVE_ITEM_PRICE },

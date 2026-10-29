@@ -233,6 +233,12 @@ async function main(): Promise<void> {
   check("produceFinishedRoll: oturumsuz yetenek yazılmaz", p10n.length === 0, JSON.stringify(p10n));
   const p10t0 = await propsOf(await produce(ST_T0));
   check("produceFinishedRoll (AUTO özelliksiz Tambur): özellik yok (bugünkü davranış)", p10t0.length === 0, JSON.stringify(p10t0));
+  // Başka Tambur oturumundan aynı token: yabancı istasyonun AUTO yeteneği topa eklenmez.
+  const tok11 = randomUUID();
+  const r11 = await produce(ST_T0, tok11);
+  await produce(ST_T, tok11);
+  const p11 = await propsOf(r11);
+  check("produceFinishedRoll replay (başka Tambur oturumu): yabancı AUTO yetenek eklenmez", !p11.includes(FA), JSON.stringify(p11));
 }
 
 async function allRollIds(): Promise<string[]> {

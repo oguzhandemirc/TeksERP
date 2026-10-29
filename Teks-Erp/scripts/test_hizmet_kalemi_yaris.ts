@@ -12,10 +12,11 @@
 //   §1 müşterili hizmet fiyatı (`itemPriceService.upsert`)
 //   §2 özelliğin kendi eşlemesi (`fabricPropertyService.update {serviceItemId}`)
 //   §3 değer eşlemesi (`fabricPropertyService.update {values[].serviceItemId}`)
+//   §4 eşlemeli YENİ özellik (`fabricPropertyService.create {serviceItemId}`)
 //   her yolda: Pasif + canlı referans HİÇ oluşmaz · 5xx/kilitlenme yok · her tur tam bir kazanan ·
 //   iki kazanan türü de görüldü (pencere gerçekten denendi)
 // Negatif sonda (2026-10-29): fiyat tx'inden `assertItemUsableTx` kaldırılınca §1 ihlal > 0;
-// `withServiceItemLocks` kilitsiz `write()`a indirilince §2/§3 ihlal > 0.
+// `withServiceItemLocks` kilitsiz `write()`a indirilince §2/§3/§4 ihlal > 0.
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { Currency, ItemLifecycleStatus, ItemType, PriceKind } from "@prisma/client";
@@ -41,7 +42,7 @@ const STAMP = randomUUID().slice(0, 8);
 const P = `TST-HKY-${STAMP}`;
 const TURLAR = 24;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const fx = { itemIds: [] as string[], propIds: [] as string[], customerIds: [] as string[] };
+const fx = { itemIds: [] as string[], propIds: [] as string[], customerIds: [] as string[], stationIds: [] as string[] };
 
 type Write = (itemId: string) => Promise<unknown>;
 
@@ -99,15 +100,25 @@ async function main(): Promise<void> {
   await race("§2 özellik eşlemesi", "O", (itemId) => fabricPropertyService.update(flag.id, { serviceItemId: itemId }, admin.id), admin.id);
   console.log("\n── §3 değerin hizmet eşlemesi ──");
   await race("§3 değer eşlemesi", "D", (itemId) => fabricPropertyService.update(choice.id, { values: [{ code: val.code, name: val.name, serviceItemId: itemId }] }, admin.id), admin.id);
+  console.log("\n── §4 eşlemeli yeni özellik (create) ──");
+  const st = await prisma.station.create({ data: { code: `${P}-ST`.slice(0, 32), name: `TEST HKY istasyon ${STAMP}`, type: "INTERNAL", kind: "TAMBUR", appliesProperty: true }, select: { id: true } });
+  fx.stationIds.push(st.id);
+  await race("§4 özellik create eşlemesi", "Y", async (itemId) => {
+    const r = await fabricPropertyService.create({ name: `TEST HKY yeni ${itemId.slice(0, 8)}`, valueType: "FLAG", stationIds: [st.id], serviceItemId: itemId }, admin.id);
+    fx.propIds.push((r.data as { id: string }).id);
+    return r;
+  }, admin.id);
 }
 
 async function cleanup(): Promise<void> {
   await prisma.fabricPropertyValue.deleteMany({ where: { propertyId: { in: fx.propIds } } });
+  await prisma.stationProperty.deleteMany({ where: { OR: [{ propertyId: { in: fx.propIds } }, { stationId: { in: fx.stationIds } }] } });
   await prisma.fabricProperty.deleteMany({ where: { id: { in: fx.propIds } } });
   await prisma.itemPrice.deleteMany({ where: { itemId: { in: fx.itemIds } } });
   await prisma.customer.deleteMany({ where: { id: { in: fx.customerIds } } });
   await prisma.systemLog.deleteMany({ where: { recordId: { in: [...fx.itemIds, ...fx.propIds, ...fx.customerIds] } } });
   await prisma.item.deleteMany({ where: { id: { in: fx.itemIds } } });
+  await prisma.station.deleteMany({ where: { id: { in: fx.stationIds } } });
 }
 
 main()
