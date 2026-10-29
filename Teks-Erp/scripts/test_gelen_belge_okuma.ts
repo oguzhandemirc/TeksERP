@@ -13,6 +13,8 @@
 //   §7 eşleme: "GÜLEÇSOY TEKSTİL" ↔ "Güleçsoy Tekstil San." ≥ 0,90 öneri · ilgisiz → boş · alias önce (ALIAS) · /eslestirme ucu
 //   §6d bayat READING (10 dk+) yeniden alınır · §7f /eslestirme yok id → 404
 //   §8 bağlı taslak: operatörün yazdığı başlık/satır EZİLMEZ, yalnız boş alanlar dolar; taslak DRAFT değilse tarama yine READ'e kapanır
+//   §9 İSTEĞE BAĞLI (OKUMA_GERCEK_URL=http://127.0.0.1:8765): GERÇEK okuma servisi (okuma/, D6) — sağlık + sentetik PNG → READ +
+//      Zod geçer + taslak · bozuk JPEG → servis 400 → KALICI READ_FAILED. Değişken yoksa atlanır (varsayılan sahte sunucu).
 // Emsal: scripts/test_gelen_belge_taslak.ts (app.listen(0) + ensureTestAdmin + ayar()).
 // =============================================================================
 import type { AddressInfo } from "net";
@@ -284,6 +286,32 @@ async function main(): Promise<void> {
     const n8b = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: lockedId }, select: { ownerText: true, _count: { select: { lines: true } } } });
     const p8b = await scan(s8b);
     check("§8b bağlı taslak DRAFT değil → taslak değişmez, tarama READ (ocrResult zarfta), yeniden kuyruğa girmez", r8b.outcomes[0] === "READ" && p8b.status === "READ" && p8b.noteId === lockedId && n8b.ownerText === null && n8b._count.lines === 0 && (await runReaderOnce()).outcome === "BOS", `${r8b.outcomes[0]} ${p8b.status} ${JSON.stringify(n8b)}`);
+
+    // ── §9 İSTEĞE BAĞLI: gerçek okuma servisi (okuma/) ─────────────────────
+    const gercek = process.env.OKUMA_GERCEK_URL?.trim();
+    if (!gercek) {
+      console.log("⏭️  §9 atlandı — OKUMA_GERCEK_URL yok (gerçek servis koşumu isteğe bağlı)");
+    } else {
+      setReaderUrlForTests(gercek);
+      __resetDocumentReaderForTests();
+      const d9 = await call("GET", "/api/gelen-belge/okuma/durum");
+      check("§9a gerçek servis sağlığı → 'var' + motor rapidocr-onnx", d9.data?.service === "var" && d9.data?.engine === "rapidocr-onnx", JSON.stringify(d9.data));
+      // Sentetik (anonim) PNG; IEND sonrası etiket baytı sha256'yı koşuma özgü yapar (çözücü yok sayar).
+      const png = Buffer.concat([readFileSync(join(__dirname, "..", "..", "okuma", "tests", "fikstur", "sentetik.png")), Buffer.from(TAG)]);
+      const r9 = await call("POST", "/api/gelen-belge/taramalar", { contentBase64: png.toString("base64") });
+      const s9 = (r9.data?.scan as { id: string } | undefined)?.id ?? "";
+      if (s9) made.scans.push(s9);
+      const o9 = await runReaderOnce();
+      const p9 = await scan(s9);
+      if (p9.noteId) made.notes.push(p9.noteId);
+      check("§9b sentetik PNG → READ (Zod geçti), motor rapidocr-onnx, taslak doğdu", o9.outcomes[0] === "READ" && p9.status === "READ" && p9.ocrEngine === "rapidocr-onnx" && !!p9.noteId, `${o9.outcomes[0]} ${p9.status} ${p9.ocrEngine}`);
+      check("§9c okunan metin taramada (4711-2026)", JSON.stringify(p9.ocrResult ?? "").includes("4711-2026"));
+      const b9 = await up("0245", {}, "gercek-bozuk");
+      const q9 = await runReaderOnce();
+      const pb9 = await scan(b9);
+      check("§9d bozuk JPEG → gerçek servis 400 → KALICI READ_FAILED", q9.outcomes[0] === "READ_FAILED" && pb9.status === "READ_FAILED" && pb9.attempts === 1, `${q9.outcomes[0]} ${pb9.status}`);
+      check("§9e roll sayısı değişmedi (OCR deftere yazmaz)", (await prisma.roll.count()) === rollsBefore);
+    }
   } finally {
     stopNotificationJobs();
     __resetDocumentReaderForTests();
