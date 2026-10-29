@@ -105,7 +105,7 @@ export function IncomingDocumentDetailPage() {
               <NoteHeaderForm note={n} suggestions={suggestions.data} editable={editable} onPatch={(p) => header.mutate(p)} />
               <TotalsStrip note={n} />
               {n.varianceReason && <p className="text-xs text-muted-foreground">Fark gerekçesi: {n.varianceReason}</p>}
-              <ProcessGramajPanel groups={gramaj.groups} picks={gramaj.picks} onPick={gramaj.onPick} />
+              <ProcessGramajPanel groups={gramaj.groups} options={suggestions.data?.processOptions ?? []} picks={gramaj.picks} onPick={gramaj.onPick} />
             </div>
           </div>
           <LinesTable

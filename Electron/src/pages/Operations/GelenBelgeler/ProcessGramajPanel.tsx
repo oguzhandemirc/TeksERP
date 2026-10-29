@@ -1,20 +1,20 @@
 // Gramaj önerisi (H9): işlem metni → kurşun gramaj çeşidi. Öneri DEĞER YAZMAZ; operatörün kabul ettiği/düzelttiği
 // seçim yalnız onayda PROCESS sözlüğüne öğretilir (bir sonraki belgede "öğrenilmiş" öneri olur).
 import { GramajChoiceButtons } from "@/components/kursun/GramajChoiceButtons";
-import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
 import type { ProcessGroup } from "./processChoices";
 
 interface Props {
   groups: readonly ProcessGroup[];
+  /** Eşleme yanıtındaki `processOptions`: katalog `fabric-properties` ucundan OKUNMAZ (property:read'siz rolde 403 olurdu). */
+  options: ReadonlyArray<{ id: string; name: string }>;
   picks: Readonly<Record<string, string | null>>;
   onPick: (key: string, valueId: string | null) => void;
 }
 
 const SOURCE_TAG = { ALIAS: "öğrenilmiş öneri", PATTERN: "öneri", NONE: "" } as const;
 
-export function ProcessGramajPanel({ groups, picks, onPick }: Props) {
-  const { catalog } = useKursunGramajCatalog();
-  if (groups.length === 0 || catalog.options.length === 0) return null;
+export function ProcessGramajPanel({ groups, options: catalogOptions, picks, onPick }: Props) {
+  if (groups.length === 0 || catalogOptions.length === 0) return null;
   return (
     <section className="flex flex-col gap-2 rounded-md border p-3" data-testid="process-gramaj">
       <div>
@@ -24,7 +24,7 @@ export function ProcessGramajPanel({ groups, picks, onPick }: Props) {
       {groups.map((g) => {
         const s = g.suggestion?.suggested ?? null;
         const tag = g.suggestion ? SOURCE_TAG[g.suggestion.source] : "";
-        const options = catalog.options.map((o) => (s && o.id === s.id && tag ? { ...o, name: `${o.name} (${tag})` } : o));
+        const options = catalogOptions.map((o) => (s && o.id === s.id && tag ? { ...o, name: `${o.name} (${tag})` } : o));
         return (
           <div key={g.key} className="flex flex-col gap-1" data-testid="process-group" data-suggested={s?.id ?? ""}>
             <p className="text-xs">

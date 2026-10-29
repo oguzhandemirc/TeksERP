@@ -8,9 +8,7 @@ import { ProcessGramajPanel } from "../ProcessGramajPanel";
 import { ApproveDialog } from "../ApproveDialog";
 import type { NoteMatchSuggestions } from "../types";
 
-vi.mock("@/lib/kursun-gramaj", () => ({
-  useKursunGramajCatalog: () => ({ catalog: { propertyId: "p", options: [{ id: "v25", name: "25 gr" }, { id: "v50", name: "50 gr" }] }, isLoading: false }),
-}));
+const OPTIONS = [{ id: "v25", name: "25 gr" }, { id: "v50", name: "50 gr" }];
 const approveNote = vi.fn();
 vi.mock("../service", () => ({
   approveNote: (...a: unknown[]) => approveNote(...a),
@@ -55,7 +53,7 @@ describe("ProcessGramajPanel", () => {
   it("öneri çipi etiketli, seçili değil; tık seçimi bildirir", async () => {
     const onPick = vi.fn();
     const g = buildProcessGroups({ processText: "KURŞUN 25 GR", lines: [ln("b", "ÖZEL")] }, sugg);
-    renderWithProviders(<ProcessGramajPanel groups={g} picks={{}} onPick={onPick} />);
+    renderWithProviders(<ProcessGramajPanel groups={g} options={OPTIONS} picks={{}} onPick={onPick} />);
     const [head, line] = screen.getAllByTestId("process-group");
     expect(head!.dataset.suggested).toBe("v25");
     const chip = within(head!).getByRole("radio", { name: "25 gr (öneri)" });
@@ -65,7 +63,12 @@ describe("ProcessGramajPanel", () => {
     expect(onPick).toHaveBeenCalledWith("header", "v25");
   });
   it("grup yoksa hiç çizilmez", () => {
-    renderWithProviders(<ProcessGramajPanel groups={[]} picks={{}} onPick={() => {}} />);
+    renderWithProviders(<ProcessGramajPanel groups={[]} options={OPTIONS} picks={{}} onPick={() => {}} />);
+    expect(screen.queryByTestId("process-gramaj")).toBeNull();
+  });
+  it("seçenek yoksa (eski backend processOptions göndermez) hiç çizilmez", () => {
+    const g = buildProcessGroups({ processText: "KURŞUN 25 GR", lines: [] }, sugg);
+    renderWithProviders(<ProcessGramajPanel groups={g} options={[]} picks={{}} onPick={() => {}} />);
     expect(screen.queryByTestId("process-gramaj")).toBeNull();
   });
 });
