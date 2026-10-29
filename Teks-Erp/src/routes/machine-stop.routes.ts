@@ -16,6 +16,7 @@ import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { matchesPermission, requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { requireMachineStopRegime } from "../middlewares/module.middleware";
+import { assertStopInPermissionScope } from "../services/helpers/machine-stop-regime.helper";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { classifyStop, closeManualStop, openManualStop, reclassifyStop, revokeStop } from "../services/machine-stop.service";
 import { listMachineStops, listStopReclasses } from "../services/loom-list.service";
@@ -28,6 +29,16 @@ router.use(verifyToken, requireMachineStopRegime);
 // D4-A1: kurşun/tambur/brode tableti `mobile:makine-durus` ile aç/kapa/sebep (geri alma ve yeniden sınıflama yok).
 const MOBILE_DOKUMA = ["mobile:dokuma", "mobile:makine-durus"] as const;
 const MOBILE_DOKUMA_GERI_AL = ["mobile:dokuma-geri-al"] as const;
+
+/**
+ * Yalnız `mobile:makine-durus` ile gelen istek (dokuma/tezgah izni yok) kurşun/brode/tambur makinelerine daralır:
+ * izin kataloğundaki kapsam koda bağlanır (liste süzülür, yazma 403 `STOP_STATION_KIND_FORBIDDEN`).
+ */
+function kindScopeFor(req: Request): { generalKindsOnly: boolean } {
+  const perms = req.user?.permissions ?? [];
+  const weavingAccess = ["loom:manual-entry", "loom:classify", "mobile:dokuma"].some((p) => matchesPermission(perms, p));
+  return { generalKindsOnly: !weavingAccess };
+}
 
 /** Kim giriyor: web `loom:manual-entry` taşıyan VARDİYA AMİRİ, değilse tablet OPERATÖRÜ (1e hükmü 2026-09-14). */
 function stopSourceFor(req: Request): "OPERATOR" | "SUPERVISOR" {
@@ -79,6 +90,7 @@ router.get("/", requireAnyPermission("loom:manual-entry", "loom:classify", ...MO
         shiftInstanceId: q.shiftInstanceId,
         limit: q.limit,
         stationKinds: parseStationKinds(q.stationKind),
+        ...kindScopeFor(req),
       }),
     );
   } catch (e) {
@@ -293,7 +305,7 @@ const openSchema = z
 router.post("/", requireAnyPermission("loom:manual-entry", ...MOBILE_DOKUMA), async (req, res, next) => {
   try {
     const b = openSchema.parse(req.body ?? {});
-    res.status(201).json(await openManualStop({ ...b, source: stopSourceFor(req) }, req.user?.userId));
+    res.status(201).json(await openManualStop({ ...b, source: stopSourceFor(req) }, req.user?.userId, kindScopeFor(req)));
   } catch (e) {
     next(e);
   }
@@ -317,6 +329,7 @@ router.post("/:id/close", requireAnyPermission("loom:manual-entry", ...MOBILE_DO
   try {
     const id = assertValidUuid(req.params.id, "id");
     const b = closeSchema.parse(req.body ?? {});
+    await assertStopInPermissionScope(id, kindScopeFor(req));
     res.json(await closeManualStop(id, b.endedAt, req.user?.userId, stopSourceFor(req)));
   } catch (e) {
     next(e);
@@ -347,6 +360,7 @@ router.post("/:id/classify", requireAnyPermission("loom:classify", ...MOBILE_DOK
   try {
     const id = assertValidUuid(req.params.id, "id");
     const b = classifySchema.parse(req.body ?? {});
+    await assertStopInPermissionScope(id, kindScopeFor(req));
     res.json(await classifyStop(id, b, req.user?.userId, stopSourceFor(req)));
   } catch (e) {
     next(e);

@@ -9,10 +9,15 @@
 //   ④ üretim kapalıyken ayar açık olsa da 403 (ön koşul),
 //   ⑤ vardiya takvimi rejimle koşar (ayar kapalı + dokuma kapalı → "disabled"),
 //   ⑥ AST: ayar okuyucusu YALNIZ `machineStopRegime` + panel geri-okumasında (ikinci rejim yüklemi yok);
-//      rota/servis/liste tek helper'ı çağırır.
+//      rota/servis/liste tek helper'ı çağırır; `machineStopTrackingEnabled` alanı da başka yerde okunmaz,
+//   ⑦ dokumasız rejimde dokuma döneminden kalmış tezgah duruşu kapa/sınıfla/geri al → 403 (yalnız açma değil),
+//   ⑧ yalnız `mobile:makine-durus` taşıyan kullanıcı dokuma AÇIKKEN de tezgah duruşuna dokunamaz/göremez.
 // NEGATİF SONDALAR (2026-10-29, D4-A1):
 //   S1 `machineStopRegime`den ayar kolu silindi (`general = false`) → §3 kırmızı.
 //   S2 `loom-list.service.ts`e ikinci rejim yüklemi (readMachineStopTrackingEnabled çağrısı) → §6a kırmızı.
+// NEGATİF SONDALAR (2026-10-30, D4-A1 bitirici):
+//   S3 `assertStopMachineWritableTx` gövdesi `return;` ile devre dışı → §7a–d + §8c kırmızı (28/5).
+//   S4 `kindScopeFor` hep `generalKindsOnly:false` → §8a, §8c, §8d kırmızı.
 // Global durum yazar (SystemSetting): `hedefDbEngeli()` ilk adım; üç ayar satırı birebir geri yüklenir.
 // =============================================================================
 import type { Server } from "http";
@@ -28,7 +33,9 @@ import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { listMachineStops } from "../src/services/loom-list.service";
 import { closeManualStop, openManualStop } from "../src/services/machine-stop.service";
 import { runShiftCalendarOnce } from "../src/jobs/shift-calendar.job";
-import { ensureTestAdmin, testActorId } from "./fixture-test-user";
+import * as bcrypt from "bcryptjs";
+import { PASSWORD_BCRYPT_COST } from "../src/constants/password-policy";
+import { ensureTestAdmin, kosumaOzguParola, testActorId } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0;
@@ -43,7 +50,7 @@ const SRC = join(__dirname, "..", "src");
 const ek = `${Date.now().toString(36).slice(-5)}${Math.random().toString(36).slice(2, 5)}`.toUpperCase();
 const KEYS = [SETTING_KEYS.DOKUMA_ENABLED, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.MACHINE_STOP_TRACKING_ENABLED] as const;
 const saved = new Map<string, { value: Prisma.JsonValue; description: string | null } | null>();
-const ids = { stations: [] as string[], machines: [] as string[] };
+const ids = { stations: [] as string[], machines: [] as string[], users: [] as string[] };
 
 async function setSetting(key: string, value: boolean): Promise<void> {
   await prisma.systemSetting.upsert({ where: { key }, create: { key, value, description: "TEST makine duruşu rejimi" }, update: { value } });
@@ -133,8 +140,36 @@ async function main(): Promise<void> {
     const httpOn = [(await call("GET", "/api/machine-stops?limit=500")).raw, (await call("GET", `/api/machine-stops?open=true&machineId=${raw}`)).raw];
     check("§1b ⭐ servis listesi (4 varyant) ayar OFF/ON bayt-aynı", svcOff === svcOn && svcOff.includes(loomStop.data.id) && svcOff.includes(rawStop.data.id), `${svcOff.length} bayt`);
     check("§1c ⭐ HTTP GET /api/machine-stops ayar OFF/ON bayt-aynı", httpOff.join("|") === httpOn.join("|") && httpOff[0].includes(loomStop.data.id), `${httpOff[0].length} bayt`);
-    await closeManualStop(loomStop.data.id, null, actor, "SUPERVISOR");
+
+    // ── §8 yalnız `mobile:makine-durus`: dokuma AÇIKKEN de kapsam kurşun/brode/tambur ──
+    const perm = await prisma.permission.findUniqueOrThrow({ where: { code: "mobile:makine-durus" }, select: { id: true } });
+    const parola = kosumaOzguParola();
+    const opUser = await prisma.user.create({
+      data: { username: `test-mdr-op-${ek}`.toLowerCase(), passwordHash: await bcrypt.hash(parola, PASSWORD_BCRYPT_COST), fullName: "TEST MDR operatör", isActive: true, permissions: { create: [{ permissionId: perm.id }] } },
+      select: { id: true, username: true },
+    });
+    ids.users.push(opUser.id);
+    const adminToken = token;
+    const opLogin = await call("POST", "/api/auth/login", { username: opUser.username, password: parola });
+    token = String((opLogin.body.data as { token?: string } | undefined)?.token ?? "");
+    const m1 = await call("POST", "/api/machine-stops", { machineId: loom, clientToken: randomUUID() });
+    check("§8a ⭐ yalnız mobile:makine-durus: tezgah duruşu AÇ → 403 STOP_STATION_KIND_FORBIDDEN", m1.status === 403 && m1.body.details?.code === "STOP_STATION_KIND_FORBIDDEN", `status=${m1.status} code=${m1.body.details?.code}`);
+    const m2 = await call("POST", "/api/machine-stops", { machineId: qc, clientToken: randomUUID() });
+    const opQcId = String((m2.body.data as { id?: string } | undefined)?.id ?? "");
+    check("§8b yalnız mobile:makine-durus: PROCESS_QC aç 201", m2.status === 201 && opQcId.length > 0, `status=${m2.status}`);
+    const m3 = await call("POST", `/api/machine-stops/${loomStop.data.id}/close`, {});
+    check("§8c ⭐ yalnız mobile:makine-durus: tezgah duruşunu KAPA → 403", m3.status === 403 && m3.body.details?.code === "STOP_STATION_KIND_FORBIDDEN", `status=${m3.status} code=${m3.body.details?.code}`);
+    const m4 = await call("GET", "/api/machine-stops?limit=500");
+    const opIds = new Set(((m4.body.data ?? []) as Array<{ id: string }>).map((r) => r.id));
+    check("§8d ⭐ yalnız mobile:makine-durus: liste tezgah/RAW_QC duruşunu göstermez", m4.status === 200 && opIds.has(opQcId) && !opIds.has(loomStop.data.id) && !opIds.has(rawStop.data.id), `status=${m4.status} n=${opIds.size}`);
+    const m5 = opQcId ? await call("POST", `/api/machine-stops/${opQcId}/close`, {}) : { status: 0 };
+    check("§8e yalnız mobile:makine-durus: PROCESS_QC kapa 200", m5.status === 200, `status=${m5.status}`);
+    token = adminToken;
+
+    await closeManualStop(loomStop.data.id, null, actor, "SUPERVISOR").catch(() => undefined); // §8c sızarsa zaten kapalı
     await closeManualStop(rawStop.data.id, null, actor, "SUPERVISOR");
+    // Dokuma döneminden AÇIK kalan tezgah duruşu (§7 — dokuma kapanınca yazma yolları 403 almalı).
+    const orphan = await openManualStop({ machineId: loom, startedAt: new Date(Date.now() - 1800_000), clientToken: randomUUID(), source: "SUPERVISOR" }, actor);
 
     // ── §2 dokuma KAPALI + ayar KAPALI → bugünkü 403 ──
     await setSetting(SETTING_KEYS.DOKUMA_ENABLED, false);
@@ -170,6 +205,15 @@ async function main(): Promise<void> {
     const bad = await call("GET", "/api/machine-stops?stationKind=XYZ");
     check("§3h bilinmeyen stationKind → 400", bad.status === 400, `status=${bad.status}`);
     if (tbStopId) await call("POST", `/api/machine-stops/${tbStopId}/close`, {});
+    const w1 = await call("POST", `/api/machine-stops/${orphan.data.id}/close`, {});
+    check("§7a ⭐ dokumasız rejim: dokuma döneminden kalan tezgah duruşunu KAPA → 403 MODULE_DISABLED", w1.status === 403 && w1.body.details?.code === "MODULE_DISABLED", `status=${w1.status} code=${w1.body.details?.code}`);
+    const w2 = await call("POST", `/api/machine-stops/${orphan.data.id}/classify`, { reasonCode: "XYZ-YOK" });
+    check("§7b ⭐ dokumasız rejim: tezgah duruşunu SINIFLA → 403 MODULE_DISABLED", w2.status === 403 && w2.body.details?.code === "MODULE_DISABLED", `status=${w2.status} code=${w2.body.details?.code}`);
+    const w3 = await call("POST", `/api/machine-stops/${orphan.data.id}/revoke`, { reason: "test geri alma" });
+    check("§7c ⭐ dokumasız rejim: tezgah duruşunu GERİ AL → 403 MODULE_DISABLED", w3.status === 403 && w3.body.details?.code === "MODULE_DISABLED", `status=${w3.status} code=${w3.body.details?.code}`);
+    const w4 = await call("POST", "/api/machine-stops/bulk/close", { endedAt: new Date().toISOString(), rows: [{ stopId: orphan.data.id }] });
+    const still = await prisma.machineStopEvent.findUniqueOrThrow({ where: { id: orphan.data.id }, select: { endedAt: true, revokedAt: true } });
+    check("§7d toplu kapa da tezgah duruşuna yazamaz (satır açık kalır)", still.endedAt === null && still.revokedAt === null, `bulk status=${w4.status}`);
 
     // ── §4 üretim KAPALI → ayar açık olsa da 403 (ön koşul) ──
     await setSetting(SETTING_KEYS.PRODUCTION_ENABLED, false);
@@ -191,6 +235,11 @@ async function main(): Promise<void> {
   check("§6c rota kapısı requireMachineStopRegime (requireDokumaEnabled değil) + tablet izni", /router\.use\(verifyToken, requireMachineStopRegime\)/.test(route) && !/requireDokumaEnabled/.test(route) && /MOBILE_DOKUMA = \["mobile:dokuma", "mobile:makine-durus"\]/.test(route));
   check("§6d servis/liste/takvim tek helper'ı çağırır", callSites("assertMachineStopKindAllowed").includes("services/machine-stop.service.ts#openStopCore") &&
     callSites("machineStopScopeWhere").includes("services/loom-list.service.ts#listMachineStops") && callSites("machineStopRegime").includes("jobs/shift-calendar.job.ts#runShiftCalendarOnce"));
+  const fieldSites = callSites("machineStopTrackingEnabled");
+  check("§6e ayar alanı (`machineStopTrackingEnabled`) yalnız ayar servisi + Zod şemasında — bayrak nesnesinden ikinci yüklem yok",
+    fieldSites.length > 0 && fieldSites.every((s) => s.startsWith("services/system-setting.service.ts#") || s.startsWith("routes/feature-flag.routes.ts#")), fieldSites.join(" | "));
+  check("§6f yazma yolları tür kapısını çağırır (kapa · sınıfla · yeniden sınıfla · geri al)",
+    ["closeStopCore", "classifyStop", "reclassifyStop", "revokeStop"].every((f) => callSites("assertStopWritableTx").includes(`services/machine-stop.service.ts#${f}`)));
 }
 
 async function cleanup(): Promise<void> {
@@ -202,6 +251,11 @@ async function cleanup(): Promise<void> {
     await prisma.machineStopEvent.deleteMany({ where: { id: { in: sid } } });
     await prisma.machine.deleteMany({ where: { id: { in: ids.machines } } });
     await prisma.station.deleteMany({ where: { id: { in: ids.stations } } });
+    if (ids.users.length) {
+      await prisma.session.deleteMany({ where: { userId: { in: ids.users } } });
+      await prisma.userPermission.deleteMany({ where: { userId: { in: ids.users } } });
+      await prisma.user.deleteMany({ where: { id: { in: ids.users } } }).catch(() => prisma.user.updateMany({ where: { id: { in: ids.users } }, data: { isActive: false } }));
+    }
   } catch (e) {
     fail++;
     console.error("❌ temizlik hatası:", (e as Error).message);

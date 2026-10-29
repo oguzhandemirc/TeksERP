@@ -122,6 +122,8 @@ export interface MachineStopListParams {
   limit?: number;
   /** İstasyon türü süzgeci (D4-A1); boş = rejimin varsayılan kümesi. */
   stationKinds?: StationKind[];
+  /** Yalnız `mobile:makine-durus` izniyle gelen istek: kurşun/brode/tambur dışı duruşlar kapsam dışı. */
+  generalKindsOnly?: boolean;
 }
 
 /** `YYYY-MM-DD` → @db.Date kolonunun sakladığı UTC gece yarısı (yerel gece yarısı 1 gün geri etiketlerdi). */
@@ -140,7 +142,7 @@ export async function listMachineStops(params: MachineStopListParams): Promise<A
     ...(params.factoryDay ? { factoryDay: factoryDayKeyFromYmd(params.factoryDay) } : {}),
     ...(params.shiftInstanceId ? { shiftInstanceId: params.shiftInstanceId } : {}),
     // Rejim kapsamı TEK helper'dan: dokuma açık + süzgeçsiz → `{}` (bugünkü where, bayt-aynı).
-    ...machineStopScopeWhere(await machineStopRegime(), params.stationKinds ?? []),
+    ...machineStopScopeWhere(await machineStopRegime(), params.stationKinds ?? [], { generalKindsOnly: params.generalKindsOnly }),
   };
   const rows = await prisma.machineStopEvent.findMany({
     where,
