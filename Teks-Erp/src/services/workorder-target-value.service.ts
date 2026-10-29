@@ -15,7 +15,7 @@ import {
   type TargetValueItem,
 } from "./helpers/workorder-target-value.helper";
 import { summarizeKursunApplications, type KursunSummary } from "./helpers/process-summary.helper";
-import { readEmanetEnabled, readGelenBelgeEnabled } from "./system-setting.service";
+import { resolveIncomingDocsEnabled } from "./system-setting.service";
 import { suggestWorkOrderGramaj, type WorkOrderGramajSuggestion } from "./workorder-gramaj-suggestion.service";
 
 export async function replaceWorkOrderTargetValues(workOrderId: string, items: TargetValueItem[], userId?: string) {
@@ -48,11 +48,6 @@ export async function replaceWorkOrderTargetValues(workOrderId: string, items: T
   };
 }
 
-/** Gelen belge modülü etkin mi (ön koşul emanet + lisans tavanı) — `requireGelenBelgeEnabled` ile aynı iki okuma. */
-async function incomingDocsActive(): Promise<boolean> {
-  return (await readEmanetEnabled()) && (await readGelenBelgeEnabled());
-}
-
 export async function getWorkOrderProcessSummary(
   workOrderId: string,
 ): Promise<{ success: true; data: { kursun: KursunSummary; deliveryNoteGramaj?: WorkOrderGramajSuggestion | null } }> {
@@ -60,7 +55,7 @@ export async function getWorkOrderProcessSummary(
   if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
   const kursun = await summarizeKursunApplications({ workOrderId });
   // H9b: modül kapalıyken anahtar HİÇ yok (yanıt bayt-aynı); açıkken gelen belgesiz İE'de null.
-  if (!(await incomingDocsActive())) return { success: true, data: { kursun } };
+  if (!(await resolveIncomingDocsEnabled())) return { success: true, data: { kursun } };
   return { success: true, data: { kursun, deliveryNoteGramaj: await suggestWorkOrderGramaj(workOrderId) } };
 }
 

@@ -5506,6 +5506,13 @@ export async function readGelenBelgeEnabled(tx?: Pick<typeof prisma, "systemSett
   return applyModuleCeiling(SETTING_KEYS.GELEN_BELGE_ENABLED, await readGelenBelgeEnabledRaw(tx));
 }
 
+/** Gelen belge modülü ETKİN mi — ön koşul emanet ∧ kendi bayrağı, ikisi de lisans tavanlı (§3.6 tek resolver).
+ *  Kapı dışı her tüketici (okuma işi, İE gramaj önerisi) bunu çağırır; `requireGelenBelgeEnabled` aynı iki okumayı
+ *  aynı sırayla kendisi yapar (403 eksik olanı söylemeli; `test_module_flag_off` §1c). Bekçi: `test_gelen_belge_etkin`. */
+export async function resolveIncomingDocsEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  return (await readEmanetEnabled(tx)) && (await readGelenBelgeEnabled(tx));
+}
+
 /**
  * KÖPRÜ BAYRAĞI — "satış faturası onayında iplik stoktan düşülsün mü" sorusunun
  * TEK karar noktası: `finance && ticaret && iplik && altBayrak`.

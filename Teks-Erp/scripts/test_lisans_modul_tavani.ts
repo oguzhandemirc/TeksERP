@@ -122,6 +122,19 @@ function statikAyak(): void {
     const lisans = [...new Set(g.lisansSabitleri)].sort();
     check(`§2f ${fonk}: okunan her modülün LICENSE_MODULE eşi var`, okunan.length > 0 && okunan.join() === lisans.join(), `okunan=${okunan.join()} lisans=${lisans.join()}`);
   }
+
+  // §2g (K1, 2026-10-29): "gelen belge etkin mi" = emanet ∧ gelenBelge — TEK resolver `resolveIncomingDocsEnabled`.
+  // Tavanlı `readGelenBelgeEnabled` yalnız beyanlı yerlerde; başka yerde yeniden yazılan ikili ön koşulu unutabilir.
+  const gbIzinli: Record<string, string> = {
+    "services/system-setting.service.ts#resolveIncomingDocsEnabled": "tek resolver",
+    "middlewares/module.middleware.ts#requireGelenBelgeEnabled": "kapı 403'te EKSİK olanı söyler (test_module_flag_off §1c/§1e ikiliyi ölçer)",
+    "services/helpers/notification-visibility.helper.ts#gelenBelgeEnabled": "modül→okuyucu haritası (her modül kendi okuyucusu)",
+  };
+  const gbCagri = hepsi.filter((a) => a.ad === "readGelenBelgeEnabled");
+  const gbYabanci = gbCagri.filter((a) => !(yer(a) in gbIzinli));
+  check("§2g ⭐ readGelenBelgeEnabled yalnız resolver/kapı/bildirim haritasında (başkası resolveIncomingDocsEnabled çağırır)", gbYabanci.length === 0, gbYabanci.map(yer).join(" | "));
+  const gbOlu = Object.keys(gbIzinli).filter((b) => !gbCagri.some((a) => yer(a) === b));
+  check("§2g2 §2g beyanlarında ölü satır yok", gbOlu.length === 0, gbOlu.join(" | "));
 }
 
 /** `licenseModuleError`in `SETTING_KEYS.X` dışı argümanla MEŞRU çağrıldığı yer — gerekçeli; ölü beyan kırmızı. */
