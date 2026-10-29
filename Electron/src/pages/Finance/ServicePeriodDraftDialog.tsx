@@ -119,15 +119,15 @@ function PreviewBody({ preview }: { preview: ServicePeriodPreview }) {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="text-muted-foreground">
-              <tr><th className="py-1 pr-2">Hizmet</th><th className="py-1 pr-2 text-right">Miktar</th><th className="py-1 pr-2 text-right">Birim fiyat</th><th className="py-1 text-right">Tutar</th></tr>
+              <tr><th className="py-1 pr-2">Hizmet</th><th className="py-1 pr-2 text-right">Miktar</th><th className="py-1 pr-2 text-right whitespace-nowrap">Birim fiyat</th><th className="py-1 text-right">Tutar</th></tr>
             </thead>
             <tbody>
               {preview.lines.map((l) => (
                 <tr key={`${l.itemId}:${l.unitPrice}`} className="border-t">
                   <td className="py-1 pr-2">{l.description}</td>
-                  <td className="py-1 pr-2 text-right tabular-nums">{Number(l.qty).toLocaleString("tr-TR", { maximumFractionDigits: 3 })} {l.unit}</td>
-                  <td className="py-1 pr-2 text-right tabular-nums">{money(l.unitPrice, preview.currency)}</td>
-                  <td className="py-1 text-right tabular-nums">{money(l.amount, preview.currency)}</td>
+                  <td className="py-1 pr-2 text-right tabular-nums whitespace-nowrap">{Number(l.qty).toLocaleString("tr-TR", { maximumFractionDigits: 3 })} {l.unit}</td>
+                  <td className="py-1 pr-2 text-right tabular-nums whitespace-nowrap">{money(l.unitPrice, preview.currency)}</td>
+                  <td className="py-1 text-right tabular-nums whitespace-nowrap">{money(l.amount, preview.currency)}</td>
                 </tr>
               ))}
             </tbody>
