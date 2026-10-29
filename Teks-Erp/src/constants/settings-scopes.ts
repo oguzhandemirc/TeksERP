@@ -100,6 +100,8 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "fasonShrinkTolerancePct",
       "fasonNoteMobileEntry",
       "kursunBypassEnabled",
+      "kursunMeterCapture",
+      "kursunSimulatedMeterEnabled",
       "tamburOverQuantityEnabled",
       "tamburShortCutA1Enabled",
       "tamburShortCutA1ThresholdM",

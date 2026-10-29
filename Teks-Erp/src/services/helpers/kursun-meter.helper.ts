@@ -1,0 +1,199 @@
+// =============================================================================
+// KURŞUN METRE DEFTERİ (H1) — okuma yazımı, düzeltme ve geri alma TEK yerde
+// =============================================================================
+// `RollMeterReading` DEFTERDİR (silinirse faturalanan metre değişir): satır değiştirilmez,
+// düzeltme = eski aktif satırın damgası + yeni satır; adım yeniden açılınca damgalanır.
+// Stok etkisi YOK (RECORD, karar belgesi §3-5). Politika alanları okuma anındaki ayarın
+// KOPYASIDIR — ayar sonradan değişse de bu okumanın sapma işareti aynı kalır (§12-5).
+//
+// Tx sırası (§3-4, §12-1) çağıranındır: 8036 token kilidi (İLK ifade) → `touchWorkOrderTx`
+// → `assertKursunTabletMayWrite` → burada aktif okuma `FOR UPDATE` → yazım.
+// =============================================================================
+import { MachineDataSource, MeterApprovalMode, MeterPhase, MeterVarianceBasis, Prisma, type RollMeterReading } from "@prisma/client";
+import prisma from "../../lib/prisma";
+import { AppError } from "../../utils/app-error";
+import { AuditService } from "../audit.service";
+import { readKursunSimulatedMeterEnabled, resolveKursunMeterCapture, type KursunMeterCapture } from "../system-setting.service";
+import { tokenReplay } from "./token-replay.helper";
+
+type Tx = Prisma.TransactionClient;
+
+/** İstemcinin gönderdiği okuma (tablet `meterOut` ya da düzeltme ucu gövdesi). */
+export interface MeterReadingInput {
+  meters: number;
+  source: MachineDataSource;
+  peripheralId?: string | null;
+  rawCounter?: number | null;
+  cardSampleId?: string | null;
+  clientToken: string;
+}
+
+/** Okuma anındaki sapma politikası — satıra kopyalanır. H2 ayarları gelene dek bugünkü davranış: eşik yok, onay yok. */
+export interface MeterPolicyCopy {
+  thresholdM: number | null;
+  thresholdPct: number | null;
+  basis: MeterVarianceBasis;
+  approvalMode: MeterApprovalMode;
+}
+
+/** Politika çözücüsü — H2 eşik/taban/onay ayarlarını buradan okur; tek kaynak. */
+export async function resolveKursunMeterPolicy(_db: Pick<typeof prisma, "systemSetting">): Promise<MeterPolicyCopy> {
+  return { thresholdM: null, thresholdPct: null, basis: MeterVarianceBasis.DECLARED_IN, approvalMode: MeterApprovalMode.NONE };
+}
+
+/** Evre bu kipte yazılabilir mi? OFF'ta hiçbir okuma yazılmaz; IN yalnız IN_OUT'ta. */
+export function phaseAllowed(capture: KursunMeterCapture, phase: MeterPhase): boolean {
+  if (capture === "OFF") return false;
+  return phase === MeterPhase.OUT || capture === "IN_OUT";
+}
+
+/**
+ * Tx DIŞI ön kapı (fail-closed): kip kapalıysa 400 `METER_CAPTURE_DISABLED`; SIMULATED ayarı kapalıyken
+ * 400 `SIMULATED_METER_DISABLED`. Tx içinde aynı soru yeniden sorulmaz — ayar penceresi kabul edilir
+ * (ayar yazımı nadirdir ve satır kopyası okuma anını zaten taşır).
+ */
+export async function assertMeterInputAllowed(phase: MeterPhase, input: MeterReadingInput): Promise<void> {
+  const capture = await resolveKursunMeterCapture();
+  if (!phaseAllowed(capture, phase)) {
+    throw AppError.badRequest(
+      capture === "OFF"
+        ? "Kurşun metre ölçümü kapalı — ayarlardan açılmadan metre okuması kaydedilmez"
+        : "Giriş metresi yalnız 'Giriş ve çıkışta ölç' ayarında kaydedilir",
+      { code: "METER_CAPTURE_DISABLED", capture, phase },
+    );
+  }
+  if (input.source === MachineDataSource.SIMULATED && !(await readKursunSimulatedMeterEnabled())) {
+    throw AppError.badRequest("Simüle sayaç okuması kabul edilmiyor — gerçek sayaçtan okuyun ya da metreyi elle girin", {
+      code: "SIMULATED_METER_DISABLED",
+    });
+  }
+  if (input.peripheralId) {
+    const p = await prisma.peripheralDevice.findUnique({ where: { id: input.peripheralId }, select: { id: true } });
+    if (!p) throw AppError.badRequest("Sayaç cihazı bulunamadı", { code: "METER_PERIPHERAL_NOT_FOUND" });
+  }
+}
+
+/** Token replay boğazı (K kipi): 8036 kilidi + taze okuma; geri alınmış okumanın token'ı 409 (4. durum). */
+export function meterReadingReplay(expect: { rollId: string; stepId: string; phase: MeterPhase; meters: number }) {
+  return tokenReplay<RollMeterReading, RollMeterReading>({
+    find: (db, clientToken) => db.rollMeterReading.findUnique({ where: { clientToken } }),
+    alive: (prior) => {
+      if (prior.revokedAt) {
+        throw AppError.conflict("Bu metre okuması sonradan düzeltildi ya da geri alındı — yeni okuma yapın", {
+          code: "METER_READING_REVOKED",
+          readingId: prior.id,
+        });
+      }
+    },
+    identity: (prior) => [
+      { ad: "rollId", mevcut: prior.rollId, gelen: expect.rollId },
+      { ad: "workOrderStepId", mevcut: prior.workOrderStepId, gelen: expect.stepId },
+      { ad: "phase", mevcut: prior.phase, gelen: expect.phase },
+      { ad: "meters", mevcut: Number(prior.meters), gelen: expect.meters },
+    ],
+    collision: "Bu okuma kimliği başka bir top/adım/metre için kullanılmış — yeni okuma yapın",
+    respond: (prior) => prior,
+  });
+}
+
+export interface WriteMeterReadingArgs {
+  rollId: string;
+  stepId: string;
+  phase: MeterPhase;
+  input: MeterReadingInput;
+  userId: string | null;
+  machineId: string | null;
+  /** Düzeltme sebebi — eski aktif satırın `revokeReason`ı. */
+  reason: string;
+}
+
+export interface WriteMeterReadingResult {
+  reading: RollMeterReading;
+  /** Damgalanan önceki aktif okuma (düzeltme), yoksa null. */
+  revokedId: string | null;
+}
+
+/**
+ * Aktif okumayı `FOR UPDATE` kilitler; varsa damgalar (bağlı aktif onayla birlikte), yeni satırı yazar.
+ * Token replay'i ÇAĞIRAN önce sorar (`meterReadingReplay(...).inTx`); burada token yeni sayılır.
+ */
+export async function writeMeterReadingTx(tx: Tx, args: WriteMeterReadingArgs): Promise<WriteMeterReadingResult> {
+  const active = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM roll_meter_readings
+    WHERE "rollId" = ${args.rollId}::uuid AND "workOrderStepId" = ${args.stepId}::uuid
+      AND phase = ${args.phase}::"MeterPhase" AND "revokedAt" IS NULL
+    FOR UPDATE`;
+  let revokedId: string | null = null;
+  if (active.length > 0) {
+    revokedId = active[0].id;
+    await revokeReadingsTx(tx, { ids: [revokedId], userId: args.userId, reason: args.reason });
+  }
+  const policy = await resolveKursunMeterPolicy(tx);
+  const reading = await tx.rollMeterReading.create({
+    data: {
+      rollId: args.rollId,
+      workOrderStepId: args.stepId,
+      phase: args.phase,
+      meters: new Prisma.Decimal(args.input.meters),
+      rawCounter: args.input.rawCounter == null ? null : new Prisma.Decimal(args.input.rawCounter),
+      source: args.input.source,
+      machineId: args.machineId,
+      peripheralId: args.input.peripheralId ?? null,
+      cardSampleId: args.input.cardSampleId ?? null,
+      thresholdM: policy.thresholdM == null ? null : new Prisma.Decimal(policy.thresholdM),
+      thresholdPct: policy.thresholdPct == null ? null : new Prisma.Decimal(policy.thresholdPct),
+      basis: policy.basis,
+      approvalMode: policy.approvalMode,
+      clientToken: args.input.clientToken,
+      createdById: args.userId,
+    },
+  });
+  return { reading, revokedId };
+}
+
+/** Okumaları ve bağlı aktif onayları AYNI tx'te damgalar (silmez). Dönen: damgalanan okuma sayısı. */
+async function revokeReadingsTx(tx: Tx, args: { ids: string[]; userId: string | null; reason: string }): Promise<number> {
+  if (args.ids.length === 0) return 0;
+  const stamp = { revokedAt: new Date(), revokedById: args.userId, revokeReason: args.reason.slice(0, 300) };
+  const res = await tx.rollMeterReading.updateMany({ where: { id: { in: args.ids }, revokedAt: null }, data: stamp });
+  await tx.rollMeterAck.updateMany({ where: { readingId: { in: args.ids }, revokedAt: null }, data: stamp });
+  return res.count;
+}
+
+/** Adım yeniden açılınca o turun toplarının bu adımdaki aktif okumalarını damgalar (§3-7). */
+export async function revokeStepMeterReadingsTx(
+  tx: Tx,
+  args: { rollIds: string[]; stepId: string; userId: string | null; reason: string },
+): Promise<number> {
+  if (args.rollIds.length === 0) return 0;
+  const rows = await tx.rollMeterReading.findMany({
+    where: { rollId: { in: args.rollIds }, workOrderStepId: args.stepId, revokedAt: null },
+    select: { id: true },
+  });
+  return revokeReadingsTx(tx, { ids: rows.map((r) => r.id), userId: args.userId, reason: args.reason });
+}
+
+/** Ayak izi (tx DIŞI, best-effort). Yükte fiyat yok; metre ve kaynak var. */
+export async function auditMeterReadingWrite(
+  userId: string | undefined,
+  result: WriteMeterReadingResult,
+  via: "COMPLETE_QC2" | "CORRECTION",
+): Promise<void> {
+  const r = result.reading;
+  await AuditService.log({
+    userId,
+    action: "CREATE",
+    tableName: "ROLL_METER_READING",
+    recordId: r.id,
+    newData: {
+      rollId: r.rollId,
+      stepId: r.workOrderStepId,
+      phase: r.phase,
+      meters: Number(r.meters),
+      source: r.source,
+      peripheralId: r.peripheralId,
+      via,
+      replacesReadingId: result.revokedId,
+    },
+  });
+}

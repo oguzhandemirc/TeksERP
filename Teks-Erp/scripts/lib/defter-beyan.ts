@@ -293,6 +293,14 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     ["src/services/helpers/kursun-operation.helper.ts", "src/services/inventory.service.ts",
      "src/services/kursun-qc.service.ts", "src/services/subcontractor.service.ts", "src/services/tambur.service.ts"]),
 
+  // H1 (Hizmet veren, 2026-10-29): faturalanan metrenin kaynağı; düzeltme = damga + yeni satır, reopen damgalar.
+  D("RollMeterReading", "kurşun giriş/çıkış metre defteri — silinirse faturalanan metre değişir; politika kopyası okuma anını dondurur — ters = DAMGA", { tur: "DAMGA", kolon: "revokedAt" },
+    [{ dosya: "src/services/helpers/kursun-meter.helper.ts", sembol: "revokeStepMeterReadingsTx" }],
+    ["src/services/helpers/kursun-meter.helper.ts"]),
+  D("RollMeterAck", "metre sapma onayı (H2 yazar) — okuma damgalanınca aynı tx'te damgalanır — ters = DAMGA", { tur: "DAMGA", kolon: "revokedAt" },
+    [{ dosya: "src/services/helpers/kursun-meter.helper.ts", sembol: "revokeStepMeterReadingsTx" }],
+    [] /* ileri yazar H2'de doğar (sapma onayı) */),
+
   D("RollVariance", "fire · düzeltme · aşım defteri", { tur: "DAMGA", kolon: "reversedAt" },
     [
       { dosya: "src/services/stock-count-reversal.service.ts", sembol: "reverseTx" },

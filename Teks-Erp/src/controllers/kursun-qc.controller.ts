@@ -11,6 +11,16 @@ import "../types/express-augment";
 // Export: Zod katmanı bekçisi (`test_property_value_selection` §Zod) — şema
 // `properties`/`valueCode`yi sessizce ELERSE (2026-08-05 "kat iki uçta Zod'da
 // yoktu" vakasının ikizi) test kırmızı versin diye dışa açık.
+/** Sayaç okuması gövdesi — tablet `meterOut` ile düzeltme ucu ortak. */
+const meterReadingBodySchema = z.object({
+  meters: z.number().min(0, "Metre 0 veya daha büyük olmalı").max(1_000_000_000, "Metre çok büyük"),
+  source: z.enum(["MACHINE", "OPERATOR", "SUPERVISOR", "SIMULATED"]),
+  peripheralId: z.string().uuid("Geçersiz cihaz ID").nullish(),
+  rawCounter: z.number().min(0).max(1e11).nullish(),
+  cardSampleId: z.string().uuid("Geçersiz örnek ID").nullish(),
+  clientToken: z.string().uuid("Geçersiz okuma kimliği"),
+});
+
 export const completeQc2Schema = z.object({
   rollId: z.string().uuid("Geçersiz top ID"),
   stepId: z.string().uuid("Geçersiz adım ID"),
@@ -30,6 +40,16 @@ export const completeQc2Schema = z.object({
     )
     .max(50)
     .nullish(),
+  // H1 (karar belgesi §3-4): çıkış metresi. `kursun.meterCapture` OFF iken yok sayılır
+  // (bugünkü davranış); eski APK göndermez.
+  meterOut: meterReadingBodySchema.nullish(),
+});
+
+/** POST /kursun-qc/meter-readings — düzeltme / giriş okuması (H1). */
+export const meterReadingSchema = meterReadingBodySchema.extend({
+  rollId: z.string().uuid("Geçersiz top ID"),
+  stepId: z.string().uuid("Geçersiz adım ID"),
+  phase: z.enum(["IN", "OUT"]),
 });
 
 // Hata sadece NOKTA olarak girilir (startMeter); endMeter artık tutulmuyor.
@@ -83,6 +103,7 @@ export class KursunQcController {
     this.deleteError = this.deleteError.bind(this);
     this.finishStep = this.finishStep.bind(this);
     this.reopenStep = this.reopenStep.bind(this);
+    this.recordMeterReading = this.recordMeterReading.bind(this);
     this.reopenPreview = this.reopenPreview.bind(this);
     this.listQueue = this.listQueue.bind(this);
     this.reorderQueue = this.reorderQueue.bind(this);
@@ -146,6 +167,7 @@ export class KursunQcController {
           stepId: body.stepId,
           notes: body.notes ?? null,
           properties: body.properties ?? null,
+          meterOut: body.meterOut ?? null,
         },
         req.user?.userId,
         stamp?.machineId ?? req.device?.machineId ?? null
@@ -211,6 +233,23 @@ export class KursunQcController {
       const body = reopenStepSchema.parse(req.body);
       const result = await this.service.reopenStep(body, req.user?.userId);
       res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/kursun-qc/meter-readings — H1 metre okuması (giriş ya da çıkış düzeltmesi). */
+  async recordMeterReading(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = meterReadingSchema.parse(req.body);
+      const stamp = await getStampContext(req, { enforceForMobile: true });
+      const { rollId, stepId, phase, ...input } = body;
+      const result = await this.service.recordMeterReading(
+        { rollId, stepId, phase, input },
+        req.user?.userId,
+        stamp?.machineId ?? req.device?.machineId ?? null,
+      );
+      res.status(201).json(result);
     } catch (err) {
       next(err);
     }
