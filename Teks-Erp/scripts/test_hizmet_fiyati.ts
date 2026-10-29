@@ -15,7 +15,7 @@
 //   §4 Kâğıt: gramajlı kâğıt top doğru kalem; gramajsız → İE hedefi + uyarı
 //   §5 Metre: aktif OUT okuması (SIMULATED hariç) DECLARED'dan önce
 //   §6 Eşlemesiz gramaj: satır yok + uyarı (sessiz düşmez)
-//   §7 SERVICE stoğa sızmaz: top doğumu 400 + 0 top; mal kabul ön kontrolü red
+//   §7 SERVICE stoğa sızmaz: top doğumu 400 + 0 top; KUMAŞ↔SERVICE birleştirme bloklu; mal kabul ön kontrolü red
 //   §8 AST: çözücü tek; `serviceItemId` okuyan dosya kümesi beyanlı (iki yönlü);
 //      beyanlı dosyalarda `finishingRate` okuması ve finishing-rate importu YOK
 // Negatif sonda (2026-10-29): çözücüye `prisma.finishingRate.findMany` eklenince §8 kırmızı;
@@ -30,6 +30,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { fabricPropertyService } from "../src/routes/fabric-property.routes";
 import { itemPriceService } from "../src/services/item-price.service";
 import { InventoryService } from "../src/services/inventory.service";
+import { MasterDataMergeService } from "../src/services/master-data-merge.service";
 import { collectReceiptLineIssues } from "../src/services/helpers/goods-receipt-preflight.helper";
 import { resolveServiceItemsForRolls } from "../src/services/helpers/service-pricing.helper";
 import { replaceWorkOrderTargetValues } from "../src/services/workorder-target-value.service";
@@ -113,6 +114,12 @@ async function main(): Promise<void> {
   const v1 = await prisma.fabricPropertyValue.findUniqueOrThrow({ where: { id: V.k1 }, select: { code: true, name: true } });
   const badVal = await errOf(() => fabricPropertyService.update(variant!.id, { values: [{ code: v1.code, name: v1.name, serviceItemId: fabric }] }, actor));
   check("değer → KUMAŞ kalemi eşlemesi 400 SERVICE_ITEM_INVALID", badVal.status === 400 && badVal.code === "SERVICE_ITEM_INVALID", JSON.stringify(badVal));
+  const okProp = await errOf(() => fabricPropertyService.update(variant!.id, { serviceItemId: K1 }, actor));
+  const propK1 = await prisma.fabricProperty.findUniqueOrThrow({ where: { id: variant.id }, select: { serviceItemId: true } });
+  check("özellik → SERVICE kalemi eşlemesi 200 + kalıcı", okProp.status === 200 && propK1.serviceItemId === K1, JSON.stringify(okProp));
+  const clrProp = await errOf(() => fabricPropertyService.update(variant!.id, { serviceItemId: null }, actor));
+  const propNull = await prisma.fabricProperty.findUniqueOrThrow({ where: { id: variant.id }, select: { serviceItemId: true } });
+  check("özellik eşlemesi null ile kaldırılır", clrProp.status === 200 && propNull.serviceItemId === null, JSON.stringify(clrProp));
   // Değer eşlemesi doğrudan: özellik güncellemesi `values` replace'i ister (tüm liste); bekçi diğer değerlere dokunmaz.
   await prisma.fabricPropertyValue.update({ where: { id: V.k1 }, data: { serviceItemId: K1 } });
   await prisma.fabricPropertyValue.update({ where: { id: V.k2 }, data: { serviceItemId: K2 } });
@@ -215,6 +222,10 @@ async function main(): Promise<void> {
   const birth = await errOf(() => new InventoryService().createInitialEntry({ itemId: K1, initialQty: 10 }, actor));
   check("SERVICE kalemiyle top doğumu 400 + 0 top", birth.status === 400 && (await prisma.roll.count({ where: { itemId: K1 } })) === before, JSON.stringify(birth));
   const issues = await collectReceiptLineIssues([{ itemId: K1, initialQty: 10 }]);
+  const mpv = await MasterDataMergeService.preview("item", K1, [fabric]);
+  check("SERVICE ← KUMAŞ birleştirme önizlemesi IDENTITY_ITEMTYPE ile bloklu", !mpv.canMerge && mpv.blockers.some((b) => b.key === "IDENTITY_ITEMTYPE"), mpv.blockers.map((b) => b.key).join(","));
+  const mpv2 = await MasterDataMergeService.preview("item", fabric, [K1]);
+  check("KUMAŞ ← SERVICE birleştirme önizlemesi IDENTITY_ITEMTYPE ile bloklu", !mpv2.canMerge && mpv2.blockers.some((b) => b.key === "IDENTITY_ITEMTYPE"), mpv2.blockers.map((b) => b.key).join(","));
   check("mal kabul ön kontrolü SERVICE → ITEM_TYPE_NOT_ALLOWED", issues.some((i) => i.code === "ITEM_TYPE_NOT_ALLOWED"), JSON.stringify(issues.map((i) => i.code)));
 
   astChecks();
