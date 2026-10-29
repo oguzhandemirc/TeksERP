@@ -34,6 +34,13 @@ describe("usePermissions.has (mobil RBAC)", () => {
     expect(result.current.has("mobile:kk1")).toBe(false);
   });
 
+  it("alan jokeri (gelen-belge:*) backend ikizi gibi o alanı açar", () => {
+    setPerms(["gelen-belge:*"]);
+    const { result } = renderHook(() => usePermissions());
+    expect(result.current.has("gelen-belge:write")).toBe(true);
+    expect(result.current.has("mobile:kk1")).toBe(false);
+  });
+
   // ⚠️ SATICI (SÜPERADMİN) HESABI — backend ona tek eleman olarak `["*"]`
   // döner. Global joker dalı olmadan `has()` HER kod için false döner,
   // `allowedScreens` BOŞ kalır ve RootNavigator "yetkin yok" ekranına düşer:

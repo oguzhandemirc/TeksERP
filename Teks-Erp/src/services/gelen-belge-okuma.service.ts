@@ -65,10 +65,10 @@ async function release(id: string, attempts: number, code: string, opts: { perma
   return failed ? "READ_FAILED" : "RETRY";
 }
 
-function lineRows(lines: DraftLine[]) {
+function lineRows(lines: DraftLine[], lineBase = 0, blockBase = 0) {
   return lines.map((l, i) => ({
-    lineNo: i + 1,
-    blockNo: l.blockNo,
+    lineNo: lineBase + i + 1,
+    blockNo: blockBase + l.blockNo,
     lineKind: l.lineKind,
     senderRollNo: l.senderRollNo,
     meters: new Prisma.Decimal(l.meters),
@@ -120,18 +120,27 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
         if (s0.count === 0) throw new Error("SCAN_LOST");
         return { noteId, lines: 0, filled: false };
       }
-      const note = await tx.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteId }, select: { ownerText: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, processText: true, declaredTopCount: true, totalsDeclared: true, _count: { select: { lines: true } } } });
-      const patch: Prisma.CustomerDeliveryNoteUpdateInput = { warnings };
+      const note = await tx.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteId }, select: { ownerText: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, processText: true, declaredTopCount: true, totalsDeclared: true, warnings: true } });
+      // Çok sayfalı taslak: her sayfanın taraması satırlarını EKLER (blok no kaydırılır, uyarılar birikir);
+      // elle girilmiş satır (ocrRaw yok) varsa OCR satır eklemez — panelin elle işi ezilmez/ikizlenmez.
+      const manualLines = await tx.customerDeliveryNoteLine.count({ where: { noteId, ocrRaw: { equals: Prisma.DbNull } } });
+      const agg = await tx.customerDeliveryNoteLine.aggregate({ where: { noteId }, _max: { lineNo: true, blockNo: true } });
+      const lineBase = agg._max.lineNo ?? 0;
+      const blockBase = agg._max.blockNo ?? 0;
+      const prevWarnings = Array.isArray(note.warnings) ? note.warnings : [];
+      const patch: Prisma.CustomerDeliveryNoteUpdateInput = { warnings: toJson([...prevWarnings, ...header.warnings]) };
       if (!note.ownerText) patch.ownerText = headerCols.ownerText;
       if (!note.senderDocNo) patch.senderDocNo = headerCols.senderDocNo;
       if (!note.senderDocDate) patch.senderDocDate = headerCols.senderDocDate;
       if (!note.customerBatchNo) patch.customerBatchNo = headerCols.customerBatchNo;
       if (!note.processText) patch.processText = headerCols.processText;
       if (note.declaredTopCount === null) patch.declaredTopCount = headerCols.declaredTopCount;
-      if (note.totalsDeclared === null) patch.totalsDeclared = totalsDeclared;
+      const addLines = manualLines === 0 && draft.lines.length > 0;
+      const prevBlocks = (note.totalsDeclared as { blocks?: unknown[] } | null)?.blocks;
+      if (note.totalsDeclared === null || !Array.isArray(prevBlocks)) patch.totalsDeclared = totalsDeclared;
+      else if (addLines && blockBase > 0) patch.totalsDeclared = toJson({ blocks: [...prevBlocks, ...header.totalsDeclared.blocks.map((b) => ({ ...b, blockNo: blockBase + b.blockNo }))] });
       patch.templateScore = headerCols.templateScore;
-      const addLines = note._count.lines === 0 && draft.lines.length > 0;
-      if (addLines) patch.lines = { create: lineRows(draft.lines) };
+      if (addLines) patch.lines = { create: lineRows(draft.lines, lineBase, blockBase) };
       await tx.customerDeliveryNote.update({ where: { id: noteId }, data: patch });
       const s = await tx.documentScan.updateMany({ where: { id, status: "READING" }, data: scanData });
       if (s.count === 0) throw new Error("SCAN_LOST");

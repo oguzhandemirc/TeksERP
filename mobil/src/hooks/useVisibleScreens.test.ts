@@ -7,7 +7,7 @@ import { SCREEN_MODULE } from "../constants/screenModules";
 
 // Bayrak hook'u MOCK: gerçek hook React Query ister; burada ölçülen şey koşul
 // elemesinin bayrağa NASIL bağlandığıdır, sorgunun kendisi değil.
-let mockFlagsData: { productionEnabled?: boolean; dokumaEnabled?: boolean; devereEnabled?: boolean; tezgahEnabled?: boolean; kaliteGuvenceEnabled?: boolean } | undefined;
+let mockFlagsData: { productionEnabled?: boolean; dokumaEnabled?: boolean; devereEnabled?: boolean; tezgahEnabled?: boolean; kaliteGuvenceEnabled?: boolean; gelenBelgeEnabled?: boolean } | undefined;
 jest.mock("./useFeatureFlags", () => ({
   useFeatureFlags: () => ({ data: mockFlagsData }),
 }));
@@ -18,7 +18,8 @@ function setPerms(permissions: string[]) {
 }
 const keys = () =>
   renderHook(() => useVisibleScreens()).result.current.visibleScreens.map((s) => s.key);
-const ALL = MOBILE_SCREENS.map((s) => s.key);
+// `mobile:*` yalnız mobil kodları kapsar; Belge Tara web izni (`gelen-belge:write`) taşır.
+const ALL = MOBILE_SCREENS.filter((s) => s.permission.startsWith('mobile:')).map((s) => s.key);
 const PRODUCTION = Object.entries(SCREEN_MODULE).filter(([, m]) => m === 'productionEnabled').map(([k]) => k);
 const DOKUMA = Object.entries(SCREEN_MODULE).filter(([, m]) => m === 'dokumaEnabled').map(([k]) => k);
 const DEVERE = Object.entries(SCREEN_MODULE).filter(([, m]) => m === 'devereEnabled').map(([k]) => k);
@@ -39,7 +40,7 @@ const KALITE = Object.entries(SCREEN_MODULE).filter(([, m]) => m === "kaliteGuve
 // =============================================================================
 describe("useVisibleScreens (izin ∖ modülü kapalı ekranlar)", () => {
   beforeEach(() => {
-    mockFlagsData = { productionEnabled: true, dokumaEnabled: true, devereEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: true };
+    mockFlagsData = { productionEnabled: true, dokumaEnabled: true, devereEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: true, gelenBelgeEnabled: true };
   });
   afterEach(() => {
     act(() => useAuthStore.setState({ user: null }));
@@ -52,7 +53,7 @@ describe("useVisibleScreens (izin ∖ modülü kapalı ekranlar)", () => {
 
   it("⭐ KAPALI: üretim modülünün beş ekranı elenir, çekirdek ekranlar kalır", () => {
     setPerms(["mobile:*"]);
-    mockFlagsData = { productionEnabled: false, dokumaEnabled: true, devereEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: true };
+    mockFlagsData = { productionEnabled: false, dokumaEnabled: true, devereEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: true, gelenBelgeEnabled: true };
     const visible = keys();
     for (const k of PRODUCTION) expect(visible).not.toContain(k);
     // Dokuma üretime BAĞLI: üretim kapalıyken o da elenir (zincir tek yerde).
@@ -127,5 +128,25 @@ describe("useVisibleScreens (izin ∖ modülü kapalı ekranlar)", () => {
     expect(result.current.visibleScreens).toHaveLength(0);
     expect(result.current.hasAnyVisibleScreen).toBe(false);
     expect(result.current.hasMultipleVisibleScreens).toBe(false);
+  });
+});
+
+// Belge Tara (Gülkesim D7) ayrı blokta: ana describe fonksiyon-boyu tavanını aşmasın.
+describe("useVisibleScreens — Belge Tara (gelen belge modülü)", () => {
+  afterEach(() => {
+    act(() => useAuthStore.setState({ user: null }));
+  });
+
+  it("⭐ Belge Tara (D7): `gelen-belge:write` + modül AÇIK → görünür; modül KAPALI/okunamadı → gizli; `mobile:*` vermez", () => {
+    setPerms(["gelen-belge:write"]);
+    mockFlagsData = { gelenBelgeEnabled: true };
+    expect(keys()).toEqual(["GelenBelge"]);
+    mockFlagsData = { gelenBelgeEnabled: false };
+    expect(keys()).toEqual([]);
+    mockFlagsData = undefined;
+    expect(keys()).toEqual([]);
+    setPerms(["mobile:*"]);
+    mockFlagsData = { gelenBelgeEnabled: true };
+    expect(keys()).not.toContain("GelenBelge");
   });
 });

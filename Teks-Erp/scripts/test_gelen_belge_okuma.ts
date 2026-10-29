@@ -286,6 +286,20 @@ async function main(): Promise<void> {
     const n8b = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: lockedId }, select: { ownerText: true, _count: { select: { lines: true } } } });
     const p8b = await scan(s8b);
     check("§8b bağlı taslak DRAFT değil → taslak değişmez, tarama READ (ocrResult zarfta), yeniden kuyruğa girmez", r8b.outcomes[0] === "READ" && p8b.status === "READ" && p8b.noteId === lockedId && n8b.ownerText === null && n8b._count.lines === 0 && (await runReaderOnce()).outcome === "BOS", `${r8b.outcomes[0]} ${p8b.status} ${JSON.stringify(n8b)}`);
+    // §8c çok sayfalı tablet taslağı (D7): her sayfanın satırları EKLENİR (blok kaydırılır), uyarılar birikir
+    const cr3 = await call("POST", "/api/gelen-belge/irsaliyeler", { sourceKind: "MANUAL", senderDocNo: `${TAG}-COKSAYFA` });
+    const multiId = cr3.data?.id as string;
+    made.notes.push(multiId);
+    await up("0245", { noteId: multiId, pageNo: 1 }, "sayfa1");
+    await up("0246", { noteId: multiId, pageNo: 2 }, "sayfa2");
+    await runReaderOnce();
+    const n8c = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: multiId }, select: { warnings: true, totalsDeclared: true, lines: { select: { lineNo: true, blockNo: true } } } });
+    const w8c = n8c.warnings as string[];
+    const tb8c = ((n8c.totalsDeclared as { blocks?: { blockNo: number }[] } | null)?.blocks ?? []).map((b) => b.blockNo);
+    check("§8c çok sayfalı taslak: 2 sayfanın satırları birlikte (21+1), satır no tekil, blok no çakışmaz, iki sayfanın uyarıları ve blok beyanları korunur",
+      n8c.lines.length === 22 && new Set(n8c.lines.map((l) => l.lineNo)).size === 22 && new Set(n8c.lines.map((l) => l.blockNo)).size === 3
+        && w8c.some((w) => w.startsWith("DECLARED_TOP_COUNT_DIFF")) && w8c.some((w) => w.startsWith("MULTI_REGION")) && tb8c.includes(1) && tb8c.includes(2) && new Set(tb8c).size === tb8c.length,
+      JSON.stringify({ l: n8c.lines.length, b: [...new Set(n8c.lines.map((l) => l.blockNo))], w: w8c, tb: tb8c }));
 
     // ── §9 İSTEĞE BAĞLI: gerçek okuma servisi (okuma/) ─────────────────────
     const gercek = process.env.OKUMA_GERCEK_URL?.trim();
