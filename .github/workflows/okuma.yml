@@ -1,0 +1,42 @@
+name: Okuma servisi
+
+# Yerel okuma servisi (okuma/, Python + RapidOCR) — yalnız okuma/ ya da bu dosya değişince koşar.
+# CPU-only ubuntu; sistem Python 3.12 (ubuntu-24.04), bağımlılıklar --require-hashes ile.
+# Modeller manifestten (SHA-256) çekilir ve önbelleğe alınır; testler ağ engelliyken açılışı AYRICA ölçer.
+
+on:
+  push:
+    branches: [main]
+    paths: ["okuma/**", ".github/workflows/okuma.yml"]
+  pull_request:
+    branches: [main]
+    paths: ["okuma/**", ".github/workflows/okuma.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: Okuma servisi (pytest)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: okuma
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: okuma/modeller/*.onnx
+          key: okuma-modeller-${{ hashFiles('okuma/modeller/manifest.json') }}
+      - name: Sanal ortam + hash'li bağımlılıklar
+        run: |
+          python3 --version
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --require-hashes --no-deps -r requirements-dev.txt
+          .venv/bin/python -m pip check
+      - name: Modeller (manifest + SHA-256)
+        run: .venv/bin/python betikler/modelleri-getir.py
+      - name: pytest
+        run: .venv/bin/python -m pytest -q

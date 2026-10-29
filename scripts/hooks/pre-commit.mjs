@@ -325,6 +325,11 @@ if (staged.some((f) => PLAY_TETIK.includes(f) || f.startsWith("scripts/lib/") ||
   adimlar.push({ ad: "Play yayıncısı", cwd: ".", cmd: ["node", ["scripts/test_play_yayinla.mjs"]], gitEnvSil: true });
 }
 
+// OKUMA SERVİSİ (okuma/, Python): en hafif adım — sözdizimi derlemesi (pytest + model CI'da: .github/workflows/okuma.yml).
+if (staged.some((f) => f.startsWith("okuma/") && f.endsWith(".py"))) {
+  adimlar.push({ ad: "okuma servisi sözdizimi", cwd: ".", cmd: ["python3", ["-m", "compileall", "-q", "okuma/app", "okuma/tests", "okuma/betikler"]] });
+}
+
 // DENEME VERİSİ: anonimleştirme/doldurma çekirdeği (bekçi bu iki tetik dizesinin burada geçtiğini ölçer).
 if (staged.some((f) => f.startsWith("scripts/deneme-veri/") || f === "scripts/test_deneme_veri.mjs")) {
   adimlar.push({ ad: "deneme verisi", cwd: ".", cmd: ["node", ["scripts/test_deneme_veri.mjs"]] });
