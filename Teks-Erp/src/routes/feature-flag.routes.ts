@@ -495,6 +495,17 @@ export const updateSchema = z.strictObject({
   tamburShortCutA1Enabled: z.boolean().optional(),
   // `null` = eşiği temizle (kural inert kalır) — bilinçli olarak geçerli değer.
   tamburShortCutA1ThresholdM: z.number().positive().max(10_000).nullable().optional(),
+  // Tambur plan kapısı en kolu (D4-E1). `min(0)` — 0 GEÇERLİ ("her farkta sor");
+  // null = varsayılana (10) dön. Üst sınır servisteki TAMBUR_PLAN_WIDTH_TOLERANCE_MAX_CM.
+  tamburPlanGateWidthToleranceCm: z
+    .number({ message: "Tambur en eşiği sayı olmalı" })
+    .min(0, { message: "Tambur en eşiği 0 ile 100 cm arasında olmalı" })
+    .max(100, { message: "Tambur en eşiği 0 ile 100 cm arasında olmalı" })
+    .nullable()
+    .optional(),
+  tamburPlanGateWidthCheck: z
+    .enum(["ENFORCE", "OFF"], { message: "Tambur en kontrolü ENFORCE ya da OFF olmalı" })
+    .optional(),
   // Fason kabulünde çekme uyarısı (2026-08-21). Bayrak = uyarı görünürlüğü,
   // yüzde = eşik. ⚠️ `min(0)` — 0 GEÇERLİ ("tolerans yok, her fark uyarır");
   // `positive()` yazılsaydı panelden sıfır tolerans seçilemezdi.

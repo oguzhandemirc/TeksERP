@@ -28,12 +28,12 @@
 export const PLAN_MISMATCH_CODE = "PLAN_MISMATCH" as const;
 
 /**
- * En sapması eşiği (cm). |top.width − wo.width| bu değeri AŞARSA sapma sayılır
- * (eşit fark sapma DEĞİL — "±10 cm'e kadar normal" okunur).
+ * En sapması eşiğinin FABRİKA VARSAYILANI (cm). |top.width − wo.width| eşiği
+ * AŞARSA sapma sayılır (eşit fark sapma DEĞİL — "±10 cm'e kadar normal").
  *
- * Şimdilik sabit; panelden ayarlanabilir yapılacaksa SystemSetting'in DÖRT
- * KAPI kuralı uygulanır (tip + sanitize + controller Zod + Electron aynası) —
- * o maliyete ihtiyaç doğunca girilir, varsayılan buradan taşınır.
+ * D4-E1 (2026-10-29): eşik artık fabrika ayarıdır (`tambur.planGate.widthToleranceCm`
+ * + `tambur.planGate.widthCheck`). Bu sabiti YALNIZ ayar okuyucusu varsayılan
+ * olarak okur; kapı `resolveTamburPlanWidthGate`ten geçer (AST bekçisi).
  */
 export const TAMBUR_PLAN_WIDTH_TOLERANCE_CM = 10;
 
