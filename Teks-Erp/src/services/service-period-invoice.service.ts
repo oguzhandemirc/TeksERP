@@ -4,7 +4,8 @@
 // Soru: "bu cariye bu ay sevk ettiğimiz emanet toplara yaptığımız, henüz faturalanmamış işler" → TEK taslak.
 // Toplayıcı ve kilit sırası H7'nindir (`collectPeriodServiceBilling` → `collectServiceBillingDraft`;
 // fatura tx'i `invoiceService.createDraft`): aktif bağı olan iş düşer, yarışı kısmi unique + 8023 kilitleri
-// kapatır (aynı iş iki yoldan → 409 SERVICE_ALREADY_BILLED). Taslak `shipmentId` taşımaz.
+// kapatır (aynı iş iki yoldan → 409 SERVICE_ALREADY_BILLED). Taslak `shipmentId` taşımaz. K3b: fasondan doğrudan
+// sevkler (DSK) de dönemin sevkleridir.
 // =============================================================================
 import { Currency, InvoiceStatus, InvoiceType, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
@@ -121,7 +122,8 @@ export async function previewServicePeriodDraft(input: ServicePeriodInput): Prom
     cariId: cari.id, cariName: cari.name, period: input.period,
     periodStart: bounds.from.toISOString(), periodEnd: bounds.to.toISOString(), issueDate: bounds.issueDate.toISOString(),
     currency: cari.currency,
-    shipmentCount: draft.shipments.length, shipmentNos: draft.shipments.map((s) => s.shipmentNo),
+    shipmentCount: draft.shipments.length + draft.directShipments.length,
+    shipmentNos: [...draft.shipments, ...draft.directShipments].map((s) => s.shipmentNo),
     workCount: draft.links.length, alreadyBilledWorkCount: draft.billedWorkCount,
     totalMeters: meters.toFixed(3), lines, subtotal: subtotal.toFixed(2),
     periodClosed: closedAt ? closedAt.toISOString().slice(0, 10) : null,
@@ -174,7 +176,7 @@ export async function createServicePeriodDraft(
         { code: "SERVICE_PERIOD_EMPTY" },
       );
     }
-    const shipmentNos = draft.shipments.map((s) => s.shipmentNo);
+    const shipmentNos = [...draft.shipments, ...draft.directShipments].map((s) => s.shipmentNo);
     const shown = shipmentNos.slice(0, 12).join(", ") + (shipmentNos.length > 12 ? ` +${shipmentNos.length - 12}` : "");
     const notes = `${input.period} dönem sonu hizmet faturası — ${shipmentNos.length} sevkiyat (${shown}).${draft.warnings.length > 0 ? ` ⚠ ${draft.warnings.join(" ")}` : ""}`;
     return invoiceService.createDraft(

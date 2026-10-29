@@ -28,6 +28,7 @@
 //       bütünüyle yeniden kesmez (CUT kalır) · faturalı bayrak geri alınamaz (409 SERVICE_ALREADY_BILLED)
 //   §11 F1 makbuzdan KENDİSİ dönen top (doğan top yok, eski model) ⇒ BRODE RECEIVED = kalemin alınan metresi (190)
 //   §12 F1 ata + çocuk aynı sevkte ⇒ çocuk CUT + atanın kalan parçası DECLARED (Σ = ata metresi; eskiden ata düşüyordu)
+//   §14 K3b fasondan DOĞRUDAN sevk (DSK) edilen emanet topun Tambur işi dönem taslağına girer (tam 120 + kısmi çocuk CUT 40); tekrar toplanmaz
 //   §13 K3b kendi dönen topta aynı adımın İKİ NULL receivedQty makbuz kalemi ⇒ RECEIVED = topun metresi bir kez (175, 350 değil)
 // Negatif sondalar (2026-10-29): bayrak çözüm dalı (`listFlagServiceWorks` çağrısı) kaldırılınca §2/§4/§5/§6
 // kırmızı · RECEIVED (makbuz) dalı kaldırılınca §6 kırmızı (geri alındı). Bitirici sondaları (2026-10-29):
@@ -48,6 +49,9 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { applyRollFlagSetTx } from "../src/services/helpers/property-revoke.helper";
 import { testActorId } from "./fixture-test-user";
+import { createServicePeriodDraft, previewServicePeriodDraft } from "../src/services/service-period-invoice.service";
+import { ensureCariAccountTx } from "../src/services/helpers/finance.helper";
+import { factoryYmd } from "../src/constants/time";
 
 let pass = 0;
 let fail = 0;
@@ -63,7 +67,7 @@ const tambur = new TamburService();
 const fx = {
   itemIds: [] as string[], propIds: [] as string[], woIds: [] as string[], rollIds: [] as string[], childIds: [] as string[],
   stationIds: [] as string[], shipmentIds: [] as string[], receiptIds: [] as string[], rateIds: [] as string[], customerId: null as string | null,
-  customer2Id: null as string | null,
+  customer2Id: null as string | null, invoiceIds: [] as string[],
 };
 const KEYS = [
   SETTING_KEYS.FINANCE_ENABLED, SETTING_KEYS.FINANCE_AUTO_DRAFT_FROM_SHIPMENT_ENABLED, SETTING_KEYS.SHIPMENT_CONFIRMATION_ENABLED,
@@ -483,6 +487,33 @@ async function main(): Promise<void> {
   const br13 = (inv13 ? await linksOf(inv13.id) : []).filter((l) => l.serviceItemId === BRODE);
   check("BRODE tek bağ: RECEIVED 175 (iki NULL kalem 350 saymaz)",
     br13.length === 1 && br13[0]!.rollId === P13 && br13[0]!.meterBasis === "RECEIVED" && eq(br13[0]!.billedMeters, 175) && br13[0]!.workOrderStepId === F13.stepId, JSON.stringify(br13));
+
+  // ── §14 K3b ──────────────────────────────────────────────────────────────
+  section("§14 K3b: fasondan müşteriye DOĞRUDAN sevk edilen emanet topun işi dönem toplayıcısına girer");
+  // Fabrikada Tambur işi görmüş emanet top fasona gider, fason doğrudan müşteriye sevk eder (DSK; çuval sevki yok).
+  const F14 = await mkFasonWo("WOF14");
+  const P14 = await mkParent(120, [TB]);
+  const P14b = await mkParent(100, [TB]);
+  await toStock([P14, P14b]);
+  const d14 = await subSvc.dispatch({ workOrderId: F14.woId, stepId: F14.stepId, subcontractorId: sub.id, rollIds: [P14, P14b] }, actor);
+  const disp14 = (d14.data as { id: string }).id;
+  await subSvc.executeDirectShip({ dispatchId: disp14, reason: "fason doğrudan müşteriye", customerId: cust.id, rollIds: [P14, P14b], rollShipQtys: { [P14b]: 40 }, orderless: true }, actor);
+  const kid14 = await prisma.roll.findFirst({ where: { parentRollId: P14b, directShipmentId: { not: null } }, select: { id: true } });
+  if (kid14) fx.childIds.push(kid14.id);
+  const ds14 = await prisma.roll.findUniqueOrThrow({ where: { id: P14 }, select: { directShipmentId: true, shipmentId: true } });
+  check("ölçüm: tam sevk edilen top DSK'ya bağlı, çuval sevkiyatı yok; kısmi sevkte 40 m çocuk doğdu", ds14.directShipmentId !== null && ds14.shipmentId === null && kid14 !== null, JSON.stringify({ ds14, kid14 }));
+  const cari14 = await prisma.$transaction((tx) => ensureCariAccountTx(tx, { customerId: cust.id, subcontractorId: null }));
+  const period14 = factoryYmd().slice(0, 7);
+  const pv14 = await previewServicePeriodDraft({ cariId: cari14.id, period: period14 });
+  const dskNo = (await prisma.directShipment.findUniqueOrThrow({ where: { id: ds14.directShipmentId! }, select: { shipmentNo: true } })).shipmentNo;
+  check("önizleme DSK numarasını sayar", pv14.shipmentNos.includes(dskNo), JSON.stringify(pv14.shipmentNos));
+  const pd14 = await createServicePeriodDraft({ cariId: cari14.id, period: period14, clientToken: randomUUID() }, actor);
+  fx.invoiceIds.push(pd14.data!.id);
+  const tb14 = (await linksOf(pd14.data!.id)).filter((l) => l.serviceItemId === TAMBUR && (l.rollId === P14 || l.rollId === kid14?.id));
+  check("dönem taslağı: TAMBUR tam sevk 120 (DECLARED) + kısmi sevk çocuğu 40 (CUT), atanın fasonda kalan parçası yok",
+    tb14.length === 2 && tb14.some((l) => l.rollId === P14 && eq(l.billedMeters, 120)) && tb14.some((l) => l.rollId === kid14?.id && l.meterBasis === "CUT" && eq(l.billedMeters, 40)), JSON.stringify(tb14));
+  const again14 = await previewServicePeriodDraft({ cariId: cari14.id, period: period14 });
+  check("ikinci önizleme: aynı iş yeniden toplanmaz (alreadyBilled ≥ 2)", again14.alreadyBilledWorkCount >= 2 && !(await linksOf(pd14.data!.id)).some((l) => l.rollId === P14b), JSON.stringify({ w: again14.workCount, b: again14.alreadyBilledWorkCount }));
 }
 
 async function cleanup(): Promise<void> {
@@ -495,7 +526,7 @@ async function cleanup(): Promise<void> {
       : prisma.systemSetting.deleteMany({ where: { key } }));
   }
   const ids = [...fx.childIds, ...fx.rollIds];
-  const invIds = (await prisma.invoice.findMany({ where: { shipmentId: { in: fx.shipmentIds } }, select: { id: true } })).map((i) => i.id);
+  const invIds = [...fx.invoiceIds, ...(await prisma.invoice.findMany({ where: { shipmentId: { in: fx.shipmentIds } }, select: { id: true } })).map((i) => i.id)];
   await del("link", () => prisma.serviceBillingLink.deleteMany({ where: { OR: [{ invoiceId: { in: invIds } }, { rollId: { in: ids } }] } }));
   await del("cariTx", () => prisma.cariTransaction.deleteMany({ where: { invoiceId: { in: invIds } } }));
   await del("invoiceLine", () => prisma.invoiceLine.deleteMany({ where: { invoiceId: { in: invIds } } }));
@@ -520,6 +551,8 @@ async function cleanup(): Promise<void> {
   await del("receiptItem", () => prisma.subcontractorReceiptItem.deleteMany({ where: { receiptId: { in: recIds } } }));
   await del("receiptProperty", () => prisma.subcontractorReceiptProperty.deleteMany({ where: { receiptId: { in: recIds } } }));
   await del("dispatchItem", () => prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: dispIds } } }));
+  await del("dsk unlink", () => prisma.roll.updateMany({ where: { id: { in: ids } }, data: { directShipmentId: null } }));
+  await del("directShipment", () => prisma.directShipment.deleteMany({ where: { dispatchId: { in: dispIds } } }));
   await del("child roll", () => prisma.roll.deleteMany({ where: { id: { in: fx.childIds } } }));
   await del("roll", () => prisma.roll.deleteMany({ where: { id: { in: fx.rollIds } } }));
   await del("receipt", () => prisma.subcontractorReceipt.deleteMany({ where: { id: { in: recIds } } }));

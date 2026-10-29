@@ -13,7 +13,7 @@ import { Currency, Prisma, ServiceMeterBasis, ShipmentStatus } from "@prisma/cli
 import { lockShipmentScopeTx } from "./shipment-locks.helper";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
-import { alreadyBilled, collectRollLineage, findActiveBillingTx, listShipmentServiceRollIds, listShipmentServiceRollShipments } from "./service-billing-gate.helper";
+import { alreadyBilled, collectRollLineage, findActiveBillingTx, listDirectShipmentServiceRollShipments, listShipmentServiceRollIds, listShipmentServiceRollShipments } from "./service-billing-gate.helper";
 import { resolveServiceItemsForRolls, serviceWorkKey } from "./service-pricing.helper";
 import { SERVICE_BILLING_TRIGGERS, type ServiceBillingTrigger, type loadServiceBillingSettings } from "../system-setting.service";
 
@@ -306,22 +306,39 @@ export async function collectPeriodServiceBilling(params: {
   settings: ServiceBillingSettings;
   from: Date;
   to: Date;
-}): Promise<ServiceBillingDraft & { shipments: Array<{ id: string; shipmentNo: string; dispatchedAt: Date | null }>; billedWorkCount: number; billedDocNo: string | null }> {
+}): Promise<ServiceBillingDraft & {
+  shipments: Array<{ id: string; shipmentNo: string; dispatchedAt: Date | null }>;
+  /** K3b: fasondan doğrudan sevkler (DSK) — kilit/durum kapısına girmez (geri alma yolu yok), yalnız listelenir. */
+  directShipments: Array<{ id: string; shipmentNo: string; dispatchedAt: Date | null }>;
+  billedWorkCount: number;
+  billedDocNo: string | null;
+}> {
   const shipments = await prisma.shipment.findMany({
     where: { customerId: params.customerId, status: ShipmentStatus.DISPATCHED, dispatchedAt: { gte: params.from, lte: params.to } },
     select: { id: true, shipmentNo: true, dispatchedAt: true },
     orderBy: [{ dispatchedAt: "asc" }, { id: "asc" }],
   });
-  const pairs = await listShipmentServiceRollShipments(shipments.map((s) => s.id));
+  // K3b: fasondan müşteriye doğrudan sevk de "sevk"tir — emanet topa yapılan iş aynı toplayıcıdan faturalanır.
+  const directShipments = (await prisma.directShipment.findMany({
+    where: { customerId: params.customerId, shippedAt: { gte: params.from, lte: params.to } },
+    select: { id: true, shipmentNo: true, shippedAt: true },
+    orderBy: [{ shippedAt: "asc" }, { id: "asc" }],
+  })).map((d) => ({ id: d.id, shipmentNo: d.shipmentNo, dispatchedAt: d.shippedAt as Date | null }));
+  const pairs = [
+    ...(await listShipmentServiceRollShipments(shipments.map((s) => s.id))),
+    ...(await listDirectShipmentServiceRollShipments(directShipments.map((d) => d.id))),
+  ];
   const rollIds = [...new Set(pairs.map((p) => p.rollId))];
+  const allShipments = [...shipments, ...directShipments];
+  const lastAt = allShipments.reduce<Date | null>((a, s) => (s.dispatchedAt && (!a || s.dispatchedAt > a) ? s.dispatchedAt : a), null);
   const draft = await collectServiceBillingDraft({
     rollIds, customerId: params.customerId, currency: params.currency, settings: params.settings,
-    dispatchedAt: shipments.at(-1)?.dispatchedAt ?? null,
-    dispatchedAtByRoll: params.settings.priceDate === "DISPATCH_DAY" ? await mapLineageDispatchedAt(pairs, shipments) : undefined,
+    dispatchedAt: lastAt,
+    dispatchedAtByRoll: params.settings.priceDate === "DISPATCH_DAY" ? await mapLineageDispatchedAt(pairs, allShipments) : undefined,
   });
   const billedWhere = rollIds.length === 0 ? null : { rollId: { in: await collectRollLineage(rollIds) }, revokedAt: null };
   const billedWorkCount = billedWhere ? await prisma.serviceBillingLink.count({ where: billedWhere }) : 0;
   // 409 mesajındaki fatura no dönemin KENDİ toplarının bağından (carinin rastgele bağından değil).
   const billedDocNo = billedWhere && billedWorkCount > 0 ? (await findActiveBillingTx(prisma, billedWhere))?.docNo ?? null : null;
-  return { ...draft, shipments, billedWorkCount, billedDocNo };
+  return { ...draft, shipments, directShipments, billedWorkCount, billedDocNo };
 }
