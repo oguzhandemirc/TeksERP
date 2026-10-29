@@ -6,17 +6,24 @@
 //   §2 birden çok aday → boş (aynı gramaja iki aktif çeşit uyuyorsa öneri YOK)
 //   §3 DB: /eslestirme yanıtında başlık + satır `process` önerisi (PATTERN); satırda metin yoksa başlığınki
 //   §4 onay: kabul edilen/düzeltilen öneri PROCESS sözlüğüne yazılır (hitCount 1 → 2); sözlük kalıptan ÖNCE gelir;
-//      geçersiz çeşit 400 KURSUN_GRAMAJ_INVALID ve top doğmaz; öneri hiçbir topa/İE'ye değer YAZMAZ
+//      geçersiz değer 400 PROCESS_VALUE_INVALID ve top doğmaz; öneri hiçbir topa/İE'ye değer YAZMAZ
+//   §5 D4-D1 bayt-aynılık: yalnız-kurşun katalogda suggestProcess / suggestForNote yanıtı H9 biçimiyle bayt-aynı
+//      (variants / processGroups anahtarı YOK)
+//   §6 D4-D1 brode deseni (kurşun dışı CHOICE çeşidi): saf sözcük kalıbı; özellik gruplu yanıt; iki değerde
+//      birleşmeyen metin → öneri yok; gönderene özel PROCESS sözlüğü kalıptan ÖNCE (başka gönderende kalıp)
 // Negatif sonda: gramaj-oneri.ts'te `hits.length === 1 ?` → `hits.length >= 1 ?` yapılınca §2 kırmızı;
-// BARE_NUMBER_RE satırı kaldırılınca §1 belirsiz biçimler kırmızı.
+// BARE_NUMBER_RE satırı kaldırılınca §1 belirsiz biçimler kırmızı. D4-D1: suggestProcess'te çeşit grubunda kalıp
+// sözlükten önce denenince (alias önceliği ters) §6 ⭐ ALIAS maddeleri kırmızı; `matchChoiceOption`ta `hits.length === 1`
+// → `>= 1` yapılınca §6 "iki değer" maddeleri kırmızı.
 // Çalıştır: npx tsx scripts/test_gelen_belge_gramaj_oneri.ts
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { AppError } from "../src/utils/app-error";
-import { extractGramValues, matchGramajOption, type GramajOption } from "../src/lib/gelen-belge/gramaj-oneri";
-import { suggestForNote, suggestProcess } from "../src/services/gelen-belge-eslestirme.service";
+import { extractGramValues, matchChoiceOption, matchGramajOption, type GramajOption } from "../src/lib/gelen-belge/gramaj-oneri";
+import { loadProcessChoiceGroups } from "../src/services/helpers/process-choice-catalog.helper";
+import { aliasKey, suggestForNote, suggestProcess } from "../src/services/gelen-belge-eslestirme.service";
 import { createDeliveryNote } from "../src/services/gelen-belge-note.service";
-import { approveDeliveryNote } from "../src/services/gelen-belge-onay.service";
+import { approveDeliveryNote, learnAlias } from "../src/services/gelen-belge-onay.service";
 import { loadKursunGramajOptions } from "../src/services/helpers/kursun-bypass-gramaj.helper";
 import { KURSUN_PROPERTY_CODE } from "../src/services/helpers/quality-station.helper";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
@@ -39,7 +46,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 // Sabit harf sonu: base36 "…5G" ile biterse başlıktaki TAG ikinci bir gramaj ("5g") gibi okunurdu (flaky).
 const TAG = `TST-GO${Date.now().toString(36).toUpperCase()}Z`;
 const SETTINGS = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL];
-const made = { notes: [] as string[], items: [] as string[], customers: [] as string[], props: [] as string[], kursunCreated: null as string | null };
+const made = { notes: [] as string[], items: [] as string[], customers: [] as string[], props: [] as string[], flags: [] as string[], kursunCreated: null as string | null };
 
 // Kurşun çeşit kataloğu (aktif) — "75 gr" pasif olduğu için seçici kaynağında YOK.
 const OPTIONS: GramajOption[] = [
@@ -150,11 +157,24 @@ async function sections3and4(): Promise<void> {
   check("§3 ⭐ başlık '…37 GR…' → 37 gr (PATTERN)", s1.process.suggested?.id === v37 && s1.process.source === "PATTERN", JSON.stringify(s1.process));
   check("§3 metinsiz satır başlığın önerisini taşır", s1.lines[0]?.process.suggested?.id === v37);
   check("§3 ⭐ processOptions: aktif gramaj çeşitleri yanıtta (panel property:read'siz okur)", s1.processOptions.some((o) => o.id === v37) && s1.processOptions.some((o) => o.id === v63), String(s1.processOptions.length));
+  console.log("§5 Yalnız-kurşun katalog — H9 yanıtı bayt-aynı (D4-D1)");
+  check("§5 zemin: kurşun dışı çeşit özelliği yok", (await loadProcessChoiceGroups()).length === 0);
+  const H9_KEYS = ["noteId", "sender", "owner", "process", "processOptions", "lines", "defaultItem"];
+  check("§5 ⭐ suggestForNote anahtarları H9 ile aynı (processGroups YOK)", JSON.stringify(Object.keys(s1)) === JSON.stringify(H9_KEYS), Object.keys(s1).join(","));
+  check("§5 ⭐ başlık + satır process'te variants anahtarı YOK", [s1.process, ...s1.lines.map((l) => l.process)].every((p) => !("variants" in p)));
+  let same = 0;
+  for (const [text] of CASES) {
+    const legacyHit = matchGramajOption(text, OPTIONS);
+    const legacy = JSON.stringify(legacyHit ? { rawText: text, suggested: legacyHit, source: "PATTERN" } : { rawText: text, suggested: null, source: "NONE" });
+    if (JSON.stringify(await suggestProcess(text, null, OPTIONS)) === legacy && JSON.stringify(await suggestProcess(text, null, OPTIONS, [])) === legacy) same++;
+  }
+  check("§5 ⭐ 27 işlem metninde suggestProcess yanıtı H9 biçimiyle bayt-aynı", same === CASES.length, `${same}/${CASES.length}`);
+  check("§5 boş metin / boş katalog bayt-aynı", JSON.stringify(await suggestProcess("  ", null, OPTIONS)) === JSON.stringify({ rawText: null, suggested: null, source: "NONE" }) && JSON.stringify(await suggestProcess("X", null, [])) === JSON.stringify({ rawText: "X", suggested: null, source: "NONE" }));
   check("§3 gramajsız satır metni → boş (NONE)", s1.lines[1]?.process.suggested === null && s1.lines[1]?.process.source === "NONE", JSON.stringify(s1.lines[1]?.process));
 
   console.log("§4 Onay — PROCESS sözlüğü öğrenmesi");
   const rollsBefore = await prisma.customerDeliveryNoteLine.count({ where: { noteId: n1.id, rollId: { not: null } } });
-  check("§4 geçersiz çeşit (gramaj olmayan kimlik) → 400 KURSUN_GRAMAJ_INVALID", await expect400(() => approveDeliveryNote(n1.id, { processChoices: [{ lineId: null, valueId: fabric.id }] }, actor), "KURSUN_GRAMAJ_INVALID"));
+  check("§4 geçersiz değer (çeşit değeri olmayan kimlik) → 400 PROCESS_VALUE_INVALID", await expect400(() => approveDeliveryNote(n1.id, { processChoices: [{ lineId: null, valueId: fabric.id }] }, actor), "PROCESS_VALUE_INVALID"));
   check("§4 başka belgenin satırı → 400 PROCESS_CHOICE_LINE_INVALID", await expect400(() => approveDeliveryNote(n1.id, { processChoices: [{ lineId: owner.id, valueId: v37 }] }, actor), "PROCESS_CHOICE_LINE_INVALID"));
   check("§4 aynı metne çelişkili iki seçim → 400 PROCESS_CHOICE_CONFLICT", await expect400(() => approveDeliveryNote(n1.id, { processChoices: [{ lineId: null, valueId: v37 }, { lineId: n1.plainLine, valueId: v63 }] }, actor), "PROCESS_CHOICE_CONFLICT"));
   check("§4 reddedilen onay top doğurmadı", rollsBefore === 0 && (await prisma.customerDeliveryNoteLine.count({ where: { noteId: n1.id, rollId: { not: null } } })) === 0);
@@ -180,6 +200,107 @@ async function sections3and4(): Promise<void> {
   check("§4 ⭐ sözlük kalıptan ÖNCE: '…37 GR…' düzeltildi → 63 gr (ALIAS)", s3.suggested?.id === v63 && s3.source === "ALIAS", JSON.stringify(s3));
 }
 
+const BRODE_OPTS = [
+  { id: "d12", code: "D12", name: "Desen D12" },
+  { id: "d1", code: "D1", name: "Desen D1" },
+  { id: "lale", code: "LL-7", name: "Lale" },
+];
+// Brode deseni saf kalıbı: tam sözcük ("d1" ⊄ "d12"); iki değere uyan metin boş.
+const BRODE_CASES: Array<[string, string | null]> = [
+  ["BRODE DESEN D12", "d12"],
+  ["brode d1 iç", "d1"],
+  ["BRODE desen-d12 ÇİFT YÜZ", "d12"],
+  ["BRODE LALE", "lale"],
+  ["BRODE LL 7", "lale"], // kod ayraçtan bağımsız
+  ["BRODE D12 + D1", null], // iki değer → birleşmiyor
+  ["BRODE LALE D12", null], // iki değer
+  ["BRODE D123", null], // alt-dize değil
+  ["BRODE", null],
+  ["KURŞUN 25 GR", null],
+];
+// Harfsiz (yalnız rakam) kod/ad iğnesi tek başına eşleşmez: gramaj/top sayısı sayısal kodlu desene öneri doğurmaz.
+const NUMERIC_OPTS = [{ id: "n25", code: "25", name: "Papatya" }, { id: "n50", code: "50", name: "50" }];
+const NUMERIC_CASES: Array<[string, string | null]> = [
+  ["KURŞUN 25 GR", null],
+  ["KURŞUN 50 GR 25 TOP", null],
+  ["BRODE 50", null],
+  ["BRODE PAPATYA", "n25"],
+];
+
+async function section6(): Promise<void> {
+  console.log("§6 Brode deseni (kurşun dışı CHOICE çeşidi) — D4-D1");
+  for (const [text, expected] of BRODE_CASES) {
+    const got = matchChoiceOption(text, BRODE_OPTS)?.id ?? null;
+    check(`§6 "${text}" → ${expected ?? "boş"}`, got === expected, String(got));
+  }
+  for (const [text, expected] of NUMERIC_CASES) {
+    const got = matchChoiceOption(text, NUMERIC_OPTS)?.id ?? null;
+    check(`§6 sayısal kod: "${text}" → ${expected ?? "boş"}`, got === expected, String(got));
+  }
+  const actor = await testActorId();
+  const flag = await prisma.fabricProperty.create({ data: { code: `${TAG}-BR`.slice(0, 32), name: `TEST Brode ${TAG}`, valueType: "FLAG" }, select: { id: true } });
+  made.flags.push(flag.id);
+  const desen = await prisma.fabricProperty.create({
+    data: { code: `${TAG}-BD`.slice(0, 32), name: "Brode deseni", valueType: "CHOICE", variantOfPropertyId: flag.id, values: { create: [{ code: "D12", name: "Desen D12", sortOrder: 1 }, { code: "D15", name: "Desen D15", sortOrder: 2 }, { code: "D99", name: "Desen D99", sortOrder: 3, isActive: false }] } },
+    select: { id: true, values: { select: { id: true, code: true } } },
+  });
+  made.props.push(desen.id);
+  const d12 = desen.values.find((v) => v.code === "D12")!.id;
+  const d15 = desen.values.find((v) => v.code === "D15")!.id;
+  const groups = await loadProcessChoiceGroups();
+  const g = groups.find((x) => x.propertyId === desen.id);
+  check("§6 katalog: brode deseni grubu, pasif değer yok, kurşun grubu YOK", !!g && g.options.length === 2 && !g.options.some((o) => o.code === "D99") && groups.length === 1, JSON.stringify(groups.map((x) => x.propertyName)));
+
+  const [senderA, senderB, owner] = await Promise.all(["SA", "SB", "OW"].map((k) => prisma.customer.create({ data: { code: `${TAG}-${k}`, name: `${TAG} ${k}` }, select: { id: true } })));
+  made.customers.push(senderA!.id, senderB!.id, owner!.id);
+  const fabric = await prisma.item.create({ data: { code: `${TAG}-BKUM`, name: `${TAG} brode kumaş`, itemType: "FABRIC", unit: "MT" }, select: { id: true } });
+  made.items.push(fabric.id);
+  const TEXT = `BRODE DESEN D12 ${TAG}`;
+  const TWO = `BRODE D12 VE D15 ${TAG}`;
+  const n = await createDeliveryNote({
+    sourceKind: "MANUAL", ownerCustomerId: owner!.id, senderCustomerId: senderA!.id, senderText: `${TAG} A`, processText: TEXT,
+    lines: [{ senderRollNo: `${TAG}-B1`, meters: 50, itemId: fabric.id }, { senderRollNo: `${TAG}-B2`, meters: 40, itemId: fabric.id, processText: TWO }],
+  }, actor);
+  made.notes.push(n.id);
+  const s = await suggestForNote(n.id);
+  const brodeOf = (p: { variants?: ReadonlyArray<{ propertyId: string; suggested: { id: string } | null; source: string }> } | undefined) => p?.variants?.find((v) => v.propertyId === desen.id);
+  check("§6 ⭐ yanıt özellik gruplu: processGroups brode kataloğunu taşır", s.processGroups?.some((x) => x.propertyId === desen.id && x.options.length === 2) === true, JSON.stringify(s.processGroups?.map((x) => x.propertyName)));
+  check("§6 ⭐ başlık 'BRODE DESEN D12' → D12 (PATTERN), kurşun grubu boş", brodeOf(s.process)?.suggested?.id === d12 && brodeOf(s.process)?.source === "PATTERN" && s.process.suggested === null, JSON.stringify(s.process));
+  check("§6 metinsiz satır başlığın brode önerisini taşır", brodeOf(s.lines[0]?.process)?.suggested?.id === d12);
+  check("§6 ⭐ iki değerde birleşmeyen metin ('D12 VE D15') → öneri YOK (NONE)", brodeOf(s.lines[1]?.process)?.suggested === null && brodeOf(s.lines[1]?.process)?.source === "NONE", JSON.stringify(s.lines[1]?.process));
+
+  // Operatör başlıkta kalıbın D12'sini D15'e düzeltir → gönderen A'ya özel PROCESS sözlüğü.
+  await approveDeliveryNote(n.id, { processChoices: [{ lineId: null, valueId: d15 }] }, actor);
+  const alias = await prisma.deliveryNoteAlias.findMany({ where: { scope: "PROCESS", targetId: d15 }, select: { senderCustomerId: true } });
+  check("§6 onay brode seçimini gönderen A'ya özel öğrendi", alias.length === 1 && alias[0]!.senderCustomerId === senderA!.id, JSON.stringify(alias));
+  const kursunOpts = await loadKursunGramajOptions();
+  const fresh = await loadProcessChoiceGroups();
+  const a = await suggestProcess(TEXT, senderA!.id, kursunOpts, fresh);
+  check("§6 ⭐ gönderen A: sözlük kalıptan ÖNCE → D15 (ALIAS)", brodeOf(a)?.suggested?.id === d15 && brodeOf(a)?.source === "ALIAS", JSON.stringify(a));
+  check("§6 sözlük hedefi brode değeri: kurşun grubu kalıba düşer (boş)", a.suggested === null && a.source === "NONE");
+  const b = await suggestProcess(TEXT, senderB!.id, kursunOpts, fresh);
+  check("§6 ⭐ gönderen B (sözlüğü yok): kalıp → D12 (PATTERN)", brodeOf(b)?.suggested?.id === d12 && brodeOf(b)?.source === "PATTERN", JSON.stringify(b));
+  // PROCESS sözlüğü metin başına tek hedef: başka özelliğin öğrenmesi (düzeltilmiş kurşun) brode seçimiyle EZİLMEZ.
+  const k1 = kursunOpts[0]!.id;
+  const k2 = kursunOpts[1]!.id;
+  const MIX = aliasKey("PROCESS", `KURŞUN BRODE D12 ${TAG}`);
+  const aliasOf = async () => (await prisma.deliveryNoteAlias.findFirst({ where: { scope: "PROCESS", senderCustomerId: senderA!.id, rawKey: MIX }, select: { targetId: true } }))?.targetId;
+  await learnAlias({ scope: "PROCESS", senderCustomerId: senderA!.id, rawKey: MIX, targetId: k1 }, actor);
+  await learnAlias({ scope: "PROCESS", senderCustomerId: senderA!.id, rawKey: MIX, targetId: d12 }, actor);
+  check("§6 ⭐ kurşun öğrenmesi brode seçimiyle EZİLMEZ (başka özellik)", (await aliasOf()) === k1, String(await aliasOf()));
+  await learnAlias({ scope: "PROCESS", senderCustomerId: senderA!.id, rawKey: MIX, targetId: k2 }, actor);
+  check("§6 aynı özellik içinde son onay kazanır (kurşun → kurşun)", (await aliasOf()) === k2, String(await aliasOf()));
+  // Pasif değere giden sözlük yok sayılır (kalıba düşer).
+  await prisma.fabricPropertyValue.update({ where: { id: d15 }, data: { isActive: false } });
+  const c = await suggestProcess(TEXT, senderA!.id, kursunOpts, await loadProcessChoiceGroups());
+  check("§6 sözlük hedefi pasifse kalıba düşer → D12 (PATTERN)", brodeOf(c)?.suggested?.id === d12 && brodeOf(c)?.source === "PATTERN", JSON.stringify(c));
+  check("§6 pasif değer onayda öğretilemez → 400 PROCESS_VALUE_INVALID", await expect400(async () => {
+    const n2 = await createDeliveryNote({ sourceKind: "MANUAL", ownerCustomerId: owner!.id, senderCustomerId: senderA!.id, senderText: `${TAG} A`, processText: TEXT, lines: [{ senderRollNo: `${TAG}-B3`, meters: 10, itemId: fabric.id }] }, actor);
+    made.notes.push(n2.id);
+    return approveDeliveryNote(n2.id, { processChoices: [{ lineId: null, valueId: d15 }] }, actor);
+  }, "PROCESS_VALUE_INVALID"));
+}
+
 async function cleanup(): Promise<void> {
   const rollIds = (await prisma.customerDeliveryNoteLine.findMany({ where: { noteId: { in: made.notes }, rollId: { not: null } }, select: { rollId: true } })).map((r) => r.rollId!);
   await prisma.customerDeliveryNote.deleteMany({ where: { id: { in: made.notes } } });
@@ -192,6 +313,7 @@ async function cleanup(): Promise<void> {
   await prisma.deliveryNoteAlias.deleteMany({ where: { targetId: { in: [...made.items, ...made.customers, ...valueIds] } } });
   await prisma.fabricPropertyValue.deleteMany({ where: { propertyId: { in: made.props } } });
   await prisma.fabricProperty.deleteMany({ where: { id: { in: made.props } } });
+  await prisma.fabricProperty.deleteMany({ where: { id: { in: made.flags } } });
   if (made.kursunCreated) await prisma.fabricProperty.deleteMany({ where: { id: made.kursunCreated } });
   await prisma.item.deleteMany({ where: { id: { in: made.items } } });
   await prisma.customer.deleteMany({ where: { id: { in: made.customers } } });
@@ -203,6 +325,7 @@ async function run(): Promise<void> {
     section1();
     section2();
     await sections3and4();
+    await section6();
   } catch (e) {
     fail++;
     console.error("HATA:", e);

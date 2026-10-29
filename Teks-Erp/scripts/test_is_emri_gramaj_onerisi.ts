@@ -9,6 +9,7 @@
 //   §3 ⭐ iki topun işlem metni farklı gramaj → öneri YOK, liste iki kalem
 //   §4 ⭐ Tambur çocuğu atanın satırını taşır (başlık metni yedeği) + kısmi kapsama aynı değer → öneri, 2/3
 //   §5 PROCESS sözlüğü kalıptan önce (gramajsız metin onayda öğrenilmiş çeşide çözülür)
+//   §5b ⭐ D4-D1 özellik gruplu: kurşun + brode deseni ayrı gruplarda (`variants`); iki desende birleşmeyen toplar → brode önerisi yok
 //   §6 ⭐ gelen belgesiz İE → alan null
 //   §7 ⭐ modül kapalı → anahtar YOK, yanıt bayt-aynı (açık yanıttan anahtar çıkarılmış hâli)
 //   §8 ⭐ öneri okuması hiçbir tabloya yazmaz (İE hedefi, sözlük, audit sayımları değişmez)
@@ -45,7 +46,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 }
 
 const TAG = `TSTIGO${Date.now().toString(36).toUpperCase()}`;
-const made = { notes: [] as string[], items: [] as string[], customers: [] as string[], props: [] as string[], fixtureRolls: [] as string[], wos: [] as string[], kursunCreated: null as string | null };
+const made = { notes: [] as string[], items: [] as string[], customers: [] as string[], props: [] as string[], flags: [] as string[], fixtureRolls: [] as string[], wos: [] as string[], kursunCreated: null as string | null };
 const SETTINGS = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL];
 
 function section1(): void {
@@ -126,6 +127,7 @@ async function main(): Promise<void> {
   const woSame = await mkWorkOrder(await noteRolls(null, [`KURŞUN 41 GR ${TAG}`, `KURŞUN 41 GR ${TAG}`, `KURŞUN 41GR ${TAG}`]));
   const s2 = (await read(woSame)).deliveryNoteGramaj;
   check("§2 ⭐ öneri 41 gr, kapsama 3/3", s2?.suggested?.valueId === v41 && s2.coveredRollCount === 3 && s2.rollCount === 3, JSON.stringify(s2));
+  check("§2 yalnız-kurşun katalog: `variants` anahtarı YOK (H9b yanıtı bayt-aynı, D4-D1)", !!s2 && !("variants" in s2), Object.keys(s2 ?? {}).join(","));
 
   console.log("§3 Çelişen gramaj");
   const woClash = await mkWorkOrder(await noteRolls(null, [`KURŞUN 41 GR ${TAG}`, `KURŞUN 79 GR ${TAG}`]));
@@ -147,6 +149,25 @@ async function main(): Promise<void> {
   const woAlias = await mkWorkOrder(learned);
   const s5 = (await read(woAlias)).deliveryNoteGramaj;
   check("§5 gramajsız metin onayda öğrenilen sözlükle 79 gr", s5?.suggested?.valueId === v79, JSON.stringify(s5));
+
+  console.log("§5b Özellik gruplu öneri — brode deseni (D4-D1)");
+  const brFlag = await prisma.fabricProperty.create({ data: { code: `${TAG}-BR`.slice(0, 32), name: `TEST Brode ${TAG}`, valueType: "FLAG" }, select: { id: true } });
+  made.flags.push(brFlag.id);
+  const desen = await prisma.fabricProperty.create({
+    data: { code: `${TAG}-BD`.slice(0, 32), name: "Brode deseni", valueType: "CHOICE", variantOfPropertyId: brFlag.id, values: { create: [{ code: "D12", name: "Desen D12" }, { code: "D15", name: "Desen D15" }] } },
+    select: { id: true, values: { select: { id: true, code: true } } },
+  });
+  made.props.push(desen.id);
+  const d12 = desen.values.find((v) => v.code === "D12")!.id;
+  const woBrode = await mkWorkOrder(await noteRolls(null, [`KURŞUN 41 GR BRODE D12 ${TAG}`, `BRODE DESEN D12 KURŞUN 41GR ${TAG}`]));
+  const s5b = (await read(woBrode)).deliveryNoteGramaj;
+  const br = s5b?.variants?.find((v) => v.propertyId === desen.id);
+  check("§5b ⭐ kurşun 41 gr + brode D12 ayrı gruplarda önerilir", s5b?.suggested?.valueId === v41 && br?.suggested?.valueId === d12 && br.propertyName === "Brode deseni", JSON.stringify(s5b));
+  const woBrodeClash = await mkWorkOrder(await noteRolls(null, [`BRODE D12 ${TAG}`, `BRODE D15 ${TAG}`]));
+  const s5c = (await read(woBrodeClash)).deliveryNoteGramaj?.variants?.find((v) => v.propertyId === desen.id);
+  check("§5b ⭐ toplar iki desende birleşmiyor → brode önerisi YOK + liste", s5c?.suggested === null && s5c.entries.length === 2, JSON.stringify(s5c));
+  // Sonraki bölümler yalnız-kurşun kataloğu ölçer: brode özelliği pasife (katalogdan düşer).
+  await prisma.fabricProperty.update({ where: { id: desen.id }, data: { isActive: false } });
 
   console.log("§6 Gelen belgesiz İE");
   const woPlain = await mkWorkOrder([await mkRoll("P2", null), await mkRoll("P3", null)]);
@@ -192,6 +213,7 @@ async function cleanup(): Promise<void> {
   await prisma.deliveryNoteAlias.deleteMany({ where: { targetId: { in: [...made.items, ...made.customers, ...valueIds] } } });
   await prisma.fabricPropertyValue.deleteMany({ where: { propertyId: { in: made.props } } });
   await prisma.fabricProperty.deleteMany({ where: { id: { in: made.props } } });
+  await prisma.fabricProperty.deleteMany({ where: { id: { in: made.flags } } });
   if (made.kursunCreated) await prisma.fabricProperty.deleteMany({ where: { id: made.kursunCreated } });
   await prisma.item.deleteMany({ where: { id: { in: made.items } } });
   await prisma.customer.deleteMany({ where: { id: { in: made.customers } } });

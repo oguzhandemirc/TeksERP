@@ -64,6 +64,7 @@ import { alarmEnableBlocked } from "./helpers/loom-floor.helper";
 import { isShiftDefined } from "./helpers/loom-alarm-shift.helper";
 import { resetNotificationBaselines } from "./helpers/notification-baseline.helper";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
+import { TAMBUR_PLAN_WIDTH_TOLERANCE_CM } from "../constants/tambur-plan-gate";
 import {
   DEFAULT_PHASE_OUT_LINE_QTY,
   DEFAULT_PHASE_OUT_NEW_ORDER,
@@ -678,6 +679,14 @@ export const SETTING_KEYS = {
    *  (ister 2.8; iki tamburlu fabrika). Default FALSE = bugünkü tüm-tambur listesi. */
   TAMBUR_LIST_BY_STATION_ENABLED: "tambur.listByStationEnabled",
   /**
+   * Tambur plan-sapma kapısının EN kolu (D4-E1, 1e kararı K9 2026-10-29): eşik (cm)
+   * ve kontrol (ENFORCE | OFF). Eskiden `TAMBUR_PLAN_WIDTH_TOLERANCE_CM` kod sabitiydi;
+   * okuma YALNIZ `effectiveTamburPlanWidthGate` üzerinden (AST bekçisi). `0` GEÇERLİ —
+   * "her farkta sor"; null yazımı varsayılana (10) döner. OFF yalnız en kolunu atlar.
+   */
+  TAMBUR_PLAN_GATE_WIDTH_TOLERANCE_CM: "tambur.planGate.widthToleranceCm",
+  TAMBUR_PLAN_GATE_WIDTH_CHECK: "tambur.planGate.widthCheck",
+  /**
    * FASON KABULÜ — ÇEKME UYARISI (2026-08-21).
    * Boyahanede kumaş çeker: 250 m giden mal 220 m döner. Eski ekran bu farkı
    * "EKSİK DÖNEN / giden-gelen uyuşmuyor" diye KIRMIZI bir onay modalıyla
@@ -1001,6 +1010,14 @@ export const DEFAULT_SERVICE_BILLING_TRIGGER: ServiceBillingTrigger = "PER_SHIPM
 export type ServiceBillingPriceDate = "SERVICE_DAY" | "DISPATCH_DAY";
 export const SERVICE_BILLING_PRICE_DATES: ServiceBillingPriceDate[] = ["SERVICE_DAY", "DISPATCH_DAY"];
 export const DEFAULT_SERVICE_BILLING_PRICE_DATE: ServiceBillingPriceDate = "SERVICE_DAY";
+
+/** Tambur plan kapısı EN kolu (bkz. `SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_CHECK`). */
+export type TamburPlanWidthCheck = "ENFORCE" | "OFF";
+export const TAMBUR_PLAN_WIDTH_CHECKS: TamburPlanWidthCheck[] = ["ENFORCE", "OFF"];
+/** Varsayılan `ENFORCE` — BUGÜNKÜ davranış (en kolu 2026-08-19'dan beri koşulsuz). */
+export const DEFAULT_TAMBUR_PLAN_WIDTH_CHECK: TamburPlanWidthCheck = "ENFORCE";
+/** Eşik üst sınırı (cm) — panel/Zod/okuyucu aynı sınırı kullanır. */
+export const TAMBUR_PLAN_WIDTH_TOLERANCE_MAX_CM = 100;
 
 /** Etiket adedi kaynağı (bkz. `SETTING_KEYS.LABEL_COPIES_SOURCE`). */
 export type LabelCopiesSource = "GLOBAL" | "STATION";
@@ -2058,6 +2075,10 @@ export interface FeatureFlags {
   tamburShortCutA1Enabled: boolean;
   /** Kısa kesim eşiği (metre); NULL = girilmemiş → kural ateşlemez. */
   tamburShortCutA1ThresholdM: number | null;
+  /** Tambur plan kapısı en eşiği (cm), default 10; `0` = her farkta sorar. */
+  tamburPlanGateWidthToleranceCm: number;
+  /** Tambur plan kapısı en kontrolü (default ENFORCE); OFF yalnız en kolunu atlar. */
+  tamburPlanGateWidthCheck: TamburPlanWidthCheck;
   /** Tablet Tambur listesi oturum istasyonuyla süzülsün mü (default FALSE; istemcide uygulanır). */
   tamburListByStationEnabled: boolean;
   /** Fason kabulünde çekme (giden↔dönen farkı) uyarısı çıksın mı (default TRUE). */
@@ -2552,6 +2573,8 @@ export class SystemSettingService {
       tamburUndoFullSameDayOnly: await readTamburUndoFullSameDayOnly(cacheClient),
       tamburShortCutA1Enabled: await readTamburShortCutA1Enabled(cacheClient),
       tamburShortCutA1ThresholdM: await readTamburShortCutA1ThresholdM(cacheClient),
+      tamburPlanGateWidthToleranceCm: await readTamburPlanGateWidthToleranceCm(cacheClient),
+      tamburPlanGateWidthCheck: await readTamburPlanGateWidthCheck(cacheClient),
       tamburListByStationEnabled: await readTamburListByStationEnabled(cacheClient),
       fasonShrinkWarnEnabled: await readFasonShrinkWarnEnabled(cacheClient),
       fasonShrinkTolerancePct: await readFasonShrinkTolerancePct(cacheClient),
@@ -2760,7 +2783,7 @@ export class SystemSettingService {
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
+      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
     > & {
       /** null = fabrika varsayılanına dön (1). */
       shippingSackSeqStart?: number | null;
@@ -2778,6 +2801,8 @@ export class SystemSettingService {
       shippingAllocWidthToleranceCm?: number | null;
       fasonShrinkTolerancePct?: number | null;
       duplicatesFuzzyThresholdPct?: number | null;
+      /** null = fabrika varsayılanına dön (10 cm); `0` geçerli. */
+      tamburPlanGateWidthToleranceCm?: number | null;
     },
     userId: string | undefined
   ): Promise<ApiResponse<FeatureFlags>> {
@@ -4243,6 +4268,35 @@ export class SystemSettingService {
         SETTING_KEYS.FASON_SHRINK_WARN_ENABLED,
         input.fasonShrinkWarnEnabled,
         "Fason kabulünde çekme (giden↔dönen metraj farkı) uyarısı göster",
+        userId
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "tamburPlanGateWidthToleranceCm")) {
+      const v = input.tamburPlanGateWidthToleranceCm;
+      // null = varsayılana dön (fasonShrinkTolerancePct emsali); 0 GEÇERLİ ("her farkta sor").
+      if (v !== null) {
+        if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > TAMBUR_PLAN_WIDTH_TOLERANCE_MAX_CM) {
+          throw AppError.badRequest(
+            `Tambur en eşiği 0 ile ${TAMBUR_PLAN_WIDTH_TOLERANCE_MAX_CM} cm arasında olmalı`,
+          );
+        }
+      }
+      await this.set(
+        SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_TOLERANCE_CM,
+        v === null ? TAMBUR_PLAN_WIDTH_TOLERANCE_CM : v,
+        "Tambur plan kapısı en eşiği (cm) — top eni ile plan eni farkı bunu AŞARSA onay sorulur",
+        userId
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "tamburPlanGateWidthCheck")) {
+      const v = input.tamburPlanGateWidthCheck;
+      if (typeof v !== "string" || !TAMBUR_PLAN_WIDTH_CHECKS.includes(v as TamburPlanWidthCheck)) {
+        throw AppError.badRequest("Tambur en kontrolü ENFORCE ya da OFF olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_CHECK,
+        v,
+        "Tambur plan kapısı en kontrolü: ENFORCE (sor) | OFF (en kolunu atla; renk kapısı aynı kalır)",
         userId
       );
     }
@@ -6922,6 +6976,53 @@ export async function readFasonShrinkWarnEnabled(
 
 /** Fabrika varsayılanı — boyahane çekmesi tipik olarak %8-12 bandındadır. */
 export const DEFAULT_FASON_SHRINK_TOLERANCE_PCT = 10;
+
+/** Tambur plan kapısı en eşiği (cm). Kayıt yok/çöp → 10 (bugünkü sabit). */
+export async function readTamburPlanGateWidthToleranceCm(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_TOLERANCE_CM },
+    select: { value: true },
+  });
+  if (!setting) return TAMBUR_PLAN_WIDTH_TOLERANCE_CM;
+  const parsed = asNumber(setting.value);
+  if (parsed === null || !Number.isFinite(parsed) || parsed < 0 || parsed > TAMBUR_PLAN_WIDTH_TOLERANCE_MAX_CM) {
+    return TAMBUR_PLAN_WIDTH_TOLERANCE_CM;
+  }
+  return parsed;
+}
+
+/** Tambur plan kapısı en kontrolü. Kayıt yok/çöp → ENFORCE (bugünkü davranış). */
+export async function readTamburPlanGateWidthCheck(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<TamburPlanWidthCheck> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_CHECK },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (typeof v === "string" && TAMBUR_PLAN_WIDTH_CHECKS.includes(v as TamburPlanWidthCheck)) {
+    return v as TamburPlanWidthCheck;
+  }
+  return DEFAULT_TAMBUR_PLAN_WIDTH_CHECK;
+}
+
+/**
+ * Tambur plan kapısı EN kolunun TEK çözücüsü (D4-E1). Kapı (`assertRollMatchesPlan`)
+ * eşiği yalnız buradan okur; sabiti doğrudan okumak `test_tambur_plan_gate` AST
+ * bölümünde kırmızıdır.
+ */
+export async function effectiveTamburPlanWidthGate(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<{ check: TamburPlanWidthCheck; toleranceCm: number }> {
+  return {
+    check: await readTamburPlanGateWidthCheck(tx),
+    toleranceCm: await readTamburPlanGateWidthToleranceCm(tx),
+  };
+}
 
 /**
  * Çekme toleransı (yüzde). Kayıt YOKSA varsayılan (%10); kayıt VARSA `0` dahil
