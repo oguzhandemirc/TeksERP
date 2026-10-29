@@ -17,7 +17,8 @@
 //   §6 Oturum istasyonu Tambur DEĞİLSE ya da yoksa Top Kesme çocuğu o istasyonun yeteneğini almaz
 //   §7 AUTO özelliksiz Tambur'da çocuk özellik kümesi = atanınki (bugünkü davranış, bayt-aynı)
 //   §8 Geri alma: tek parça (Top Kesme) ve TÜMDEN (finalize) — çocuk CANCELLED, ata bayraksız
-//      geri döner, ataya H10 Tambur işi doğmaz
+//      geri döner, ataya H10 Tambur işi doğmaz; özelliksiz atada istasyon satırı donöre girmez
+//      (doğum anı + 1 ms damgası)
 // Negatif sonda (2026-10-29): `applyTamburCapabilitiesTx` gövdesi boşaltılınca §1–§5 + S1 kırmızı.
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -86,7 +87,7 @@ async function main(): Promise<void> {
   };
   let seq = 0;
   /** Tambur adımında bekleyen top (açık hareketle) ya da depoda barkodlu top; atanın bayrağı FP. */
-  const mkRoll = async (qty: number, at: { stepId: string } | "WAREHOUSE"): Promise<string> => {
+  const mkRoll = async (qty: number, at: { stepId: string } | "WAREHOUSE", withParentFlag = true): Promise<string> => {
     const r = await prisma.roll.create({
       data: {
         barcode: `${P}-R${seq++}`, itemId: fabric, initialQty: qty, currentQty: qty, qualityGrade: grade, entrySource: "SUPPLIER_RECEIPT",
@@ -96,7 +97,7 @@ async function main(): Promise<void> {
     });
     fx.rollIds.push(r.id);
     if (at !== "WAREHOUSE") await prisma.rollMovement.create({ data: { rollId: r.id, workOrderStepId: at.stepId, qtyIn: qty } });
-    await prisma.rollProperty.create({ data: { rollId: r.id, propertyId: FP } });
+    if (withParentFlag) await prisma.rollProperty.create({ data: { rollId: r.id, propertyId: FP } });
     return r.id;
   };
   const propsOf = async (rollId: string) =>
@@ -182,6 +183,16 @@ async function main(): Promise<void> {
   check("TÜMDEN geri alma: çocuklar CANCELLED, ata IN_PRODUCTION ve AUTO bayraksız", r1After.status === RollStatus.IN_PRODUCTION && kids1.every((k) => k.status === RollStatus.CANCELLED) && !r1Props.includes(FA), `${r1After.status} ${kids1.map((k) => k.status).join(",")} ${JSON.stringify(r1Props)}`);
   const w8 = await listFlagServiceWorks([R1], "OUT");
   check("geri alınan atada Tambur hizmet işi yok", w8.every((w) => w.serviceItemId !== SVC), JSON.stringify(w8));
+  // Özelliksiz ata: geri kurulum donörü (doğum-anı satırları) devrede; istasyon satırı donöre girmemeli.
+  const R8 = await mkRoll(40, "WAREHOUSE", false);
+  const c8 = await tambur.cutWarehouseRoll(R8, { cutLength: 15, rawDestination: "WAREHOUSE", qualityGrade: grade, clientToken: randomUUID() }, actor, ST_T, null);
+  const k8 = c8.data.childRoll.id;
+  const k8Born = await prisma.roll.findUniqueOrThrow({ where: { id: k8 }, select: { createdAt: true } });
+  const k8Rows = await prisma.rollProperty.findMany({ where: { rollId: k8, propertyId: FA }, select: { createdAt: true } });
+  check("özelliksiz ata: istasyon satırı çocuğun doğum anından SONRA damgalı", k8Rows.length === 1 && k8Rows[0]!.createdAt.getTime() > k8Born.createdAt.getTime(), JSON.stringify(k8Rows));
+  await undo.applyUndo(k8, actor, { permissions: [UNDO_FULL_PERMISSION] });
+  const r8Props = await propsOf(R8);
+  check("özelliksiz ata geri alındı: ata özelliksiz döner (AUTO dirilmez)", r8Props.length === 0, JSON.stringify(r8Props));
 }
 
 async function allRollIds(): Promise<string[]> {

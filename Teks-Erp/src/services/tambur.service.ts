@@ -163,7 +163,16 @@ async function applyTamburCapabilitiesTx(
 ): Promise<void> {
   const { caps, stationId, rollId, userId } = args;
   if (caps.length === 0 || !stationId) return;
+  const child = await tx.roll.findUniqueOrThrow({ where: { id: rollId }, select: { createdAt: true } });
+  const before = await tx.rollProperty.findMany({ where: { rollId, ...ACTIVE_ROLL_PROPERTY }, select: { propertyId: true } });
   await copyStationCapabilitiesToRoll(tx, { stationId, rollId, caps, userId: userId ?? null });
+  // Geri kurulum donörü (tambur-undo birthPropertiesOf) `createdAt <= çocuk.createdAt` satırını
+  // atadan kalıtılmış sayar; istasyon satırı aynı ms'ye düşerse ataya dirilirdi → +1 ms ayrıştır.
+  const inherited = before.map((r) => r.propertyId);
+  await tx.rollProperty.updateMany({
+    where: { rollId, ...ACTIVE_ROLL_PROPERTY, createdAt: { lte: child.createdAt }, ...(inherited.length > 0 ? { propertyId: { notIn: inherited } } : {}) },
+    data: { createdAt: new Date(child.createdAt.getTime() + 1) },
+  });
 }
 
 /**
