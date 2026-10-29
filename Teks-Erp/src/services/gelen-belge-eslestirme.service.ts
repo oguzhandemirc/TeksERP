@@ -13,6 +13,8 @@ import { AppError } from "../utils/app-error";
 import { FUZZY_NOISE_WORDS } from "../constants/duplicate-rules";
 import { firmNameSimilarity, productNameSimilarity } from "../utils/string-similarity";
 import { foldColorNameForCompare, foldNameForCompare } from "./helpers/name-normalize.helper";
+import { loadKursunGramajOptions } from "./helpers/kursun-bypass-gramaj.helper";
+import { matchGramajOption, type GramajOption } from "../lib/gelen-belge/gramaj-oneri";
 
 export const MATCH_SUGGEST_THRESHOLD = 0.9;
 export const MATCH_LIST_THRESHOLD = 0.8;
@@ -41,6 +43,9 @@ export function aliasKey(scope: DeliveryNoteAliasScope, raw: string): string {
   return scope === "COLOR" ? foldColorNameForCompare(raw) : foldNameForCompare(raw);
 }
 
+/** Sözlükte saklanan anahtarın tavanı: onayda öğrenme (`learnAliases`) aynı tavanla keser → uzun metin yine bulunur. */
+export const ALIAS_KEY_MAX = 160;
+
 export type Named = { id: string; code: string | null; name: string };
 
 function rank(raw: string, rows: Named[], scope: DeliveryNoteAliasScope): MatchCandidate[] {
@@ -57,7 +62,7 @@ function rank(raw: string, rows: Named[], scope: DeliveryNoteAliasScope): MatchC
 }
 
 async function aliasTarget(scope: DeliveryNoteAliasScope, senderCustomerId: string | null, raw: string): Promise<string | null> {
-  const rawKey = aliasKey(scope, raw);
+  const rawKey = aliasKey(scope, raw).slice(0, ALIAS_KEY_MAX);
   if (!rawKey) return null;
   const rows = await prisma.deliveryNoteAlias.findMany({
     where: { scope, rawKey, OR: [{ senderCustomerId: null }, ...(senderCustomerId ? [{ senderCustomerId }] : [])] },
@@ -126,18 +131,44 @@ function withTemplate(base: MatchSuggestion, customerId: string | null, rows: Na
   return { rawText: base.rawText, suggested: { ...hit, score: 1 }, source: "TEMPLATE", list };
 }
 
+/** İşlem metni → kurşun gramaj çeşidi önerisi (H9). Yalnız ÖNERİ: hiçbir yere değer yazmaz, seçim operatörde. */
+export interface ProcessSuggestion {
+  readonly rawText: string | null;
+  readonly suggested: GramajOption | null;
+  /** ALIAS: onayda öğrenilmiş PROCESS sözlüğü · PATTERN: "25 GR" kalıbı · NONE: emin değil → boş. */
+  readonly source: "ALIAS" | "PATTERN" | "NONE";
+}
+
+const EMPTY_PROCESS: ProcessSuggestion = { rawText: null, suggested: null, source: "NONE" };
+
+/** Sözlük kalıptan ÖNCE; sözlük hedefi artık aktif gramaj çeşidi değilse yok sayılır (kalıba düşer). */
+export async function suggestProcess(raw: string | null | undefined, senderCustomerId: string | null, options: readonly GramajOption[]): Promise<ProcessSuggestion> {
+  const text = raw?.trim();
+  if (!text || options.length === 0) return text ? { ...EMPTY_PROCESS, rawText: text } : EMPTY_PROCESS;
+  const target = await aliasTarget("PROCESS", senderCustomerId, text);
+  const alias = target ? options.find((o) => o.id === target) : undefined;
+  if (alias) return { rawText: text, suggested: alias, source: "ALIAS" };
+  const hit = matchGramajOption(text, options);
+  return hit ? { rawText: text, suggested: hit, source: "PATTERN" } : { rawText: text, suggested: null, source: "NONE" };
+}
+
 export interface NoteMatchSuggestions {
   readonly noteId: string;
   readonly sender: MatchSuggestion;
   readonly owner: MatchSuggestion;
-  readonly lines: ReadonlyArray<{ lineId: string; lineNo: number; item: MatchSuggestion; color: MatchSuggestion }>;
+  /** Başlığın işlem metni için gramaj önerisi (H9). */
+  readonly process: ProcessSuggestion;
+  /** Seçilebilir aktif kurşun gramaj çeşitleri (işlem metni yoksa boş): panel kataloğu `gelen-belge:read` kapsamından okur, `property:read` istemez. */
+  readonly processOptions: ReadonlyArray<GramajOption>;
+  /** `process`: satırın işlem metni; satırda metin yoksa başlığınki (satır kendi metnini taşırsa o kazanır). */
+  readonly lines: ReadonlyArray<{ lineId: string; lineNo: number; item: MatchSuggestion; color: MatchSuggestion; process: ProcessSuggestion }>;
 }
 
 /** Taslağın başlık + satır metinleri için öneriler (salt okunur; panel D5 bunu gösterir, operatör seçer). */
 export async function suggestForNote(noteId: string): Promise<NoteMatchSuggestions> {
   const note = await prisma.customerDeliveryNote.findUnique({
     where: { id: noteId },
-    select: { id: true, senderCustomerId: true, senderText: true, ownerText: true, template: { select: { isActive: true, senderCustomerId: true, defaultOwnerCustomerId: true } }, lines: { select: { id: true, lineNo: true, itemText: true, colorText: true }, orderBy: { lineNo: "asc" } } },
+    select: { id: true, senderCustomerId: true, senderText: true, ownerText: true, processText: true, template: { select: { isActive: true, senderCustomerId: true, defaultOwnerCustomerId: true } }, lines: { select: { id: true, lineNo: true, itemText: true, colorText: true, processText: true }, orderBy: { lineNo: "asc" } } },
   });
   if (!note) throw AppError.notFound("İrsaliye bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
   const customers = await loadCustomers();
@@ -154,13 +185,23 @@ export async function suggestForNote(noteId: string): Promise<NoteMatchSuggestio
   // Aynı metin satırlarda tekrar eder (0245: tek ürün 21 satır) → metin başına bir hesap.
   const itemCache = new Map<string, MatchSuggestion>();
   const colorCache = new Map<string, MatchSuggestion>();
+  const hasProcess = !!note.processText?.trim() || note.lines.some((l) => l.processText?.trim());
+  const gramajOptions = hasProcess ? await loadKursunGramajOptions() : [];
+  const processCache = new Map<string, ProcessSuggestion>();
+  const processFor = async (raw: string | null): Promise<ProcessSuggestion> => {
+    const key = raw?.trim() ?? "";
+    if (!processCache.has(key)) processCache.set(key, await suggestProcess(key, senderId, gramajOptions));
+    return processCache.get(key)!;
+  };
+  const process = await processFor(note.processText);
   const lines = [];
   for (const l of note.lines) {
     const it = l.itemText ?? "";
     const co = l.colorText ?? "";
     if (!itemCache.has(it)) itemCache.set(it, await suggestItem(it, senderId, items));
     if (!colorCache.has(co)) colorCache.set(co, await suggestColor(co, senderId, colors));
-    lines.push({ lineId: l.id, lineNo: l.lineNo, item: itemCache.get(it)!, color: colorCache.get(co)! });
+    const lineProcess = l.processText?.trim() ? await processFor(l.processText) : process;
+    lines.push({ lineId: l.id, lineNo: l.lineNo, item: itemCache.get(it)!, color: colorCache.get(co)!, process: lineProcess });
   }
-  return { noteId, sender, owner, lines };
+  return { noteId, sender, owner, process, processOptions: gramajOptions, lines };
 }

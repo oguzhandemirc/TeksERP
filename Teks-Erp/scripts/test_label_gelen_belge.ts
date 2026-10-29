@@ -1,6 +1,8 @@
 // =============================================================================
-// TEST (hizmet ekseni E3): top etiketinde "müşteri belgesindeki kumaş/renk" — opt-in alan
+// TEST (hizmet ekseni E3 + H9): top etiketinde "müşteri belgesindeki kumaş/renk/top no" — opt-in alan
 // =============================================================================
+//   H9: deliveryNoteRollNo (tasarımdaki `musteriTopNo`) = kök topun gelen belge satırındaki senderRollNo;
+//   §6 0245 gerçek fikstürü motor → taslak → onay: 21 topun her birinde = satırın senderRollNo'su.
 //   §1 katalog: ROLL_RAW + ROLL_FINISHED'da deliveryNoteItemText/ColorText var, varsayılan şablonda KAPALI doğar
 //   §2 GERÇEK onay yolu (createDeliveryNote → approveDeliveryNote): doğan topun etiket yükünde
 //      deliveryNoteItemText = satırın itemText'i, deliveryNoteColorText = colorText
@@ -8,7 +10,8 @@
 //   §4 gelen belge satırı olmayan topta iki anahtar yükte YOK (payload bayt-aynı)
 //   §5 alan şablonda KAPALIYKEN çıktı BAYT-AYNI: akış HTML (şablonsuz + varsayılan alanlar) · native akış
 //      PPLA/PPLB/ZPL · kanvas (native + HTML); alan AÇIKKEN metin çıktıda (pozitif kontrol)
-// Negatif sonda: roll-delivery-note-line.helper'da ata yürüyüşü (parentRollId adımı) kaldırılınca §3 kırmızı.
+// Negatif sonda: roll-delivery-note-line.helper'da ata yürüyüşü (parentRollId adımı) kaldırılınca §3 kırmızı
+// (H9 2026-10-29: §3 top no maddeleri dahil).
 // Çalıştır: npx tsx scripts/test_label_gelen_belge.ts
 // =============================================================================
 import prisma from "../src/lib/prisma";
@@ -29,6 +32,10 @@ import { roleGrade } from "./fixture-quality-grade";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 import { testActorId } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { extractDocument, loadTemplates, type OcrResult } from "../src/lib/gelen-belge/motor";
+import { draftFromExtraction } from "../src/lib/gelen-belge/taslak";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -43,7 +50,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 }
 
 const TAG = `TLGB${Date.now().toString(36).toUpperCase()}`;
-const KEYS = ["deliveryNoteItemText", "deliveryNoteColorText"] as const;
+const KEYS = ["deliveryNoteItemText", "deliveryNoteColorText", "deliveryNoteRollNo"] as const;
 const ITEM_TEXT = "Süprem 30/1 MÜŞTERİ ADI";
 const COLOR_TEXT = "Lacivert Özel";
 const made = { notes: [] as string[], items: [] as string[], customers: [] as string[], fixtureRolls: [] as string[] };
@@ -93,6 +100,7 @@ async function main(): Promise<void> {
   check("§2 ⭐ deliveryNoteItemText = satırın itemText'i", pColored.deliveryNoteItemText === ITEM_TEXT, String(pColored.deliveryNoteItemText));
   check("§2 ⭐ deliveryNoteColorText = satırın colorText'i", pColored.deliveryNoteColorText === COLOR_TEXT, String(pColored.deliveryNoteColorText));
   const pNoColor = (await svc.getRollLabel(rollNoColor)).data;
+  check("§2 ⭐ deliveryNoteRollNo = satırın senderRollNo'su (H9)", pColored.deliveryNoteRollNo === `${TAG}-R1`, String(pColored.deliveryNoteRollNo));
   check("§2 rengi yazılmamış satır: kumaş adı var, renk anahtarı YOK", pNoColor.deliveryNoteItemText === ITEM_TEXT && !("deliveryNoteColorText" in pNoColor), JSON.stringify(Object.keys(pNoColor).filter((k) => k.startsWith("deliveryNote"))));
 
   console.log("§3 Tambur çocuğu (parentRollId zinciri)");
@@ -109,7 +117,9 @@ async function main(): Promise<void> {
   const plain = await mkRoll("P", null);
   const pChild = (await svc.getRollLabel(child)).data;
   check("§3 ⭐ çocuk top atanın kumaş/renk metnini taşır", pChild.deliveryNoteItemText === ITEM_TEXT && pChild.deliveryNoteColorText === COLOR_TEXT, `${pChild.deliveryNoteItemText} / ${pChild.deliveryNoteColorText}`);
+  check("§3 ⭐ Tambur çocuğu atanın müşteri top no'sunu taşır (H9)", pChild.deliveryNoteRollNo === `${TAG}-R1`, String(pChild.deliveryNoteRollNo));
   const pGrand = (await svc.getRollLabel(grandChild)).data;
+  check("§3 ⭐ torun top atanın müşteri top no'sunu taşır (H9)", pGrand.deliveryNoteRollNo === `${TAG}-R1`, String(pGrand.deliveryNoteRollNo));
   check("§3 ⭐ torun top (iki kat) atanın metnini taşır", pGrand.deliveryNoteItemText === ITEM_TEXT && pGrand.deliveryNoteColorText === COLOR_TEXT, `${pGrand.deliveryNoteItemText} / ${pGrand.deliveryNoteColorText}`);
   const bulk = await resolveDeliveryNoteLinesForRolls([rollColored, child, grandChild, plain]);
   check("§3 toplu çözücü: üç top çözülür, satırsız top haritada YOK", bulk.size === 3 && !bulk.has(plain), String(bulk.size));
@@ -117,7 +127,7 @@ async function main(): Promise<void> {
 
   console.log("§4 Gelen belgesiz top");
   const pPlain = (await svc.getRollLabel(plain)).data;
-  check("§4 ⭐ satırsız topta iki anahtar yükte YOK", KEYS.every((k) => !(k in pPlain)), JSON.stringify(Object.keys(pPlain).filter((k) => k.startsWith("deliveryNote"))));
+  check("§4 ⭐ satırsız topta üç anahtar yükte YOK", KEYS.every((k) => !(k in pPlain)), JSON.stringify(Object.keys(pPlain).filter((k) => k.startsWith("deliveryNote"))));
 
   console.log("§5 Alan şablonda kapalıyken çıktı bayt-aynı");
   const stripped = withoutDeliveryNoteKeys(pColored);
@@ -133,7 +143,7 @@ async function main(): Promise<void> {
       buildRollLabelHtml({ payload: { ...payload, kind } as LabelPayload, template: fields ? flowTemplate(fields) : null, barcodeSvg: "", qrSvg: "", format });
     check(`§5 [${kind}] akış HTML şablonsuz: bayt-aynı`, html(pColored, null) === html(stripped, null));
     check(`§5 [${kind}] akış HTML varsayılan alanlar (kapalı): bayt-aynı`, html(pColored, fieldsOff) === html(stripped, fieldsOff));
-    check(`§5 [${kind}] akış HTML alan açık: metin basılır (pozitif)`, html(pColored, fieldsOn).includes("Süprem 30/1") && html(pColored, fieldsOn).includes("Lacivert"));
+    check(`§5 [${kind}] akış HTML alan açık: metin basılır (pozitif)`, html(pColored, fieldsOn).includes("Süprem 30/1") && html(pColored, fieldsOn).includes("Lacivert") && html(pColored, fieldsOn).includes(`${TAG}-R1`));
 
     const canvasOf = (fields: TemplateField[]) => {
       const layout = flowTemplateToCanvas({ kind, fields, lineStepMm: null, qrScale: null, lengthBanner: null }, format);
@@ -155,7 +165,33 @@ async function main(): Promise<void> {
       }
       check(`§5 [${kind}] kanvas ${lang} alan açık: çıktı değişir`, (await render(pColored, fieldsOnly, true)) !== (await render(stripped, fieldsOnly, true)));
     }
+    // Top no tek başına açık: yalnız o alanın etkisi (kumaş/renk kapalı) — çıktı değişir.
+    const rollNoOnly = fieldsOff.map((f) => ({ ...f, isVisible: f.key === "deliveryNoteRollNo" }));
+    const onlyRollNo = { ...stripped, deliveryNoteRollNo: pColored.deliveryNoteRollNo } as LabelPayload;
+    check(`§5 [${kind}] yalnız top no açık: akış HTML'de basılır, yoksa basılmaz`, html(onlyRollNo, rollNoOnly).includes(`${TAG}-R1`) && !html(stripped, rollNoOnly).includes(`${TAG}-R1`));
   }
+
+  console.log("§6 0245 gerçek fikstürü → taslak → onay: 21 top, her birinde müşteri top no");
+  const ocr = JSON.parse(readFileSync(join(__dirname, "..", "src", "lib", "gelen-belge", "motor", "__tests__", "fikstur", "gercek", "0245-ceki-listesi-a.json"), "utf8")) as OcrResult;
+  const draft = draftFromExtraction(extractDocument(ocr, loadTemplates()));
+  check("§6 motor taslağı 21 satır, hepsinde senderRollNo dolu ve tekil", draft.lines.length === 21 && new Set(draft.lines.map((l) => l.senderRollNo)).size === 21 && draft.lines.every((l) => !!l.senderRollNo), String(draft.lines.length));
+  const n45 = await createDeliveryNote({
+    sourceKind: "MANUAL", ownerCustomerId: owner.id, senderText: `${TAG} 0245`, processText: draft.header.processText,
+    lines: draft.lines.map((l) => ({ blockNo: l.blockNo, senderRollNo: l.senderRollNo, meters: Number(l.meters), weightKg: l.weightKg === null ? null : Number(l.weightKg), itemText: l.itemText, itemId: fabric.id, colorText: l.colorText })),
+  }, actor);
+  made.notes.push(n45.id);
+  // Toplam beyanı başlığa kopyalanmadı (MANUAL) → onay toplam kapısına takılmaz; amaç top no yolu.
+  const a45 = await approveDeliveryNote(n45.id, {}, actor);
+  check("§6 onay 21 top doğurdu", a45.summary.entered === 21, JSON.stringify(a45.summary));
+  const l45 = await prisma.customerDeliveryNoteLine.findMany({ where: { noteId: n45.id }, select: { rollId: true, senderRollNo: true } });
+  let ok45 = 0;
+  const bad45: string[] = [];
+  for (const l of l45) {
+    const p = (await svc.getRollLabel(l.rollId!)).data;
+    if (p.deliveryNoteRollNo === l.senderRollNo) ok45++;
+    else bad45.push(`${l.senderRollNo}→${p.deliveryNoteRollNo}`);
+  }
+  check("§6 ⭐ 21/21 topta deliveryNoteRollNo = satırın senderRollNo'su", ok45 === 21 && l45.length === 21, bad45.join(", ") || `${ok45}/21`);
 }
 
 async function cleanup(): Promise<void> {

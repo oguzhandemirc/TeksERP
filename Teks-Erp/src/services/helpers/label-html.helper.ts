@@ -38,7 +38,7 @@ import { buildLandscapeRollLabelHtml } from "./label-html-landscape.helper";
 import { DEFAULT_COMPANY_NAME } from "../../constants/company";
 
 /** Şablonda AÇIKÇA işaretlenmedikçe basılmayan serbest satırlar. */
-const OPT_IN_ROW_KEYS: ReadonlySet<string> = new Set(["openDefects", "deliveryNoteItemText", "deliveryNoteColorText"]);
+const OPT_IN_ROW_KEYS: ReadonlySet<string> = new Set(["openDefects", "deliveryNoteItemText", "deliveryNoteColorText", "deliveryNoteRollNo"]);
 
 // Resolver (label-format.resolver) bunları buradan import ediyor → re-export.
 export { DEFAULT_LABEL_FORMAT };
@@ -124,6 +124,7 @@ function buildPortraitRollLabelHtml(
     { key: "openDefects", value: payload.openDefects ? escapeHtml(payload.openDefects) : "", def: "Hata Notu" },
     { key: "deliveryNoteItemText", value: payload.deliveryNoteItemText ? escapeHtml(payload.deliveryNoteItemText) : "", def: "Müşteri kumaşı" },
     { key: "deliveryNoteColorText", value: payload.deliveryNoteColorText ? escapeHtml(payload.deliveryNoteColorText) : "", def: "Müşteri rengi" },
+    { key: "deliveryNoteRollNo", value: payload.deliveryNoteRollNo ? escapeHtml(payload.deliveryNoteRollNo) : "", def: "Müşteri top no" },
   ]
     // `openDefects` (KQ-D8) ve müşteri belge metni (E3) OPT-IN: şablonsuz düzende de basılmaz.
     .filter((r) => r.value && (OPT_IN_ROW_KEYS.has(r.key) ? isVisibleOptIn(fields, r.key) : vis(r.key)))

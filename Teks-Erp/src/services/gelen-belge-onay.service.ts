@@ -29,6 +29,8 @@ import { getDeliveryNote } from "./gelen-belge-note.service";
 import { auditLine } from "./gelen-belge-line.service";
 import { resolveDefaultItemForApproval } from "./gelen-belge-ayar.service";
 import { readUnreviewedApprovalMode } from "./system-setting.service";
+import { assertKursunGramajValue } from "./helpers/kursun-bypass-gramaj.helper";
+import { ALIAS_KEY_MAX } from "./gelen-belge-eslestirme.service";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const LINE_TABLE = "CUSTOMER_DELIVERY_NOTE_LINE";
@@ -52,6 +54,11 @@ const inventory = new InventoryService();
 export interface ApproveInput {
   /** Toplam uyuşmazlığını BİLEREK geçme gerekçesi (başlığa yazılır). */
   varianceReason?: string | null;
+  /**
+   * Operatörün kabul ettiği/düzelttiği gramaj önerileri (H9): `lineId` null = başlığın işlem metni. Yalnız PROCESS
+   * sözlüğüne öğretilir; topa, iş emrine ya da deftere DEĞER YAZILMAZ.
+   */
+  processChoices?: ReadonlyArray<{ lineId: string | null; valueId: string }> | null;
 }
 
 export interface ApproveResult {
@@ -63,12 +70,12 @@ export interface ApproveResult {
 
 // OCR beyanı sayıları METİN yazar (motor DeclaredTotals: string); elle girilen sayı olabilir — karşılaştırma Number() ile.
 type DeclaredBlock = { blockNo?: number; count?: number | string | null; kg?: number | string | null; m?: number | string | null };
-type LineRow = { id: string; lineNo: number; blockNo: number; status: DeliveryNoteLineStatus; meters: Prisma.Decimal; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; itemId: string | null; colorId: string | null; itemText: string | null; colorText: string | null; rollId: string | null; needsReview: boolean };
+type LineRow = { id: string; lineNo: number; blockNo: number; status: DeliveryNoteLineStatus; meters: Prisma.Decimal; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; itemId: string | null; colorId: string | null; itemText: string | null; colorText: string | null; processText: string | null; rollId: string | null; needsReview: boolean };
 
 const PRE_SELECT = {
-  id: true, noteNo: true, status: true, ownerCustomerId: true, senderCustomerId: true, senderText: true, pageCount: true,
+  id: true, noteNo: true, status: true, ownerCustomerId: true, senderCustomerId: true, senderText: true, processText: true, pageCount: true,
   declaredTopCount: true, totalsDeclared: true, varianceReason: true, updatedAt: true,
-  lines: { select: { id: true, lineNo: true, blockNo: true, status: true, meters: true, weightKg: true, widthCm: true, itemId: true, colorId: true, itemText: true, colorText: true, rollId: true, needsReview: true }, orderBy: [{ blockNo: "asc" }, { lineNo: "asc" }] },
+  lines: { select: { id: true, lineNo: true, blockNo: true, status: true, meters: true, weightKg: true, widthCm: true, itemId: true, colorId: true, itemText: true, colorText: true, processText: true, rollId: true, needsReview: true }, orderBy: [{ blockNo: "asc" }, { lineNo: "asc" }] },
   scans: { select: { pageNo: true } },
 } satisfies Prisma.CustomerDeliveryNoteSelect;
 
@@ -154,11 +161,38 @@ async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: ty
   return { warnings, defaultItem };
 }
 
+type ProcessChoice = { text: string; valueId: string };
+
+/**
+ * Gramaj seçimlerini claim'den ÖNCE doğrular (fail-closed 400): değer aktif kurşun gramaj çeşidi, satır bu belgenin,
+ * işlem metni dolu (satırda yoksa başlığınki). Dönen metin sunucudaki metindir — istemci metni sözlüğe girmez.
+ */
+async function resolveProcessChoices(note: { processText: string | null; lines: ReadonlyArray<{ id: string; processText: string | null }> }, choices: ApproveInput["processChoices"]): Promise<ProcessChoice[]> {
+  const out: ProcessChoice[] = [];
+  const byKey = new Map<string, string>();
+  const checked = new Set<string>();
+  for (const c of choices ?? []) {
+    const line = c.lineId === null ? null : note.lines.find((l) => l.id === c.lineId);
+    if (c.lineId !== null && !line) throw AppError.badRequest("Gramaj seçimi bu belgenin satırına ait değil.", { code: "PROCESS_CHOICE_LINE_INVALID" });
+    const text = (line?.processText?.trim() || note.processText?.trim()) ?? "";
+    if (!text) throw AppError.badRequest("İşlem metni boş satıra gramaj seçimi öğretilemez.", { code: "PROCESS_CHOICE_TEXT_EMPTY" });
+    // Aynı (katlanmış) metne çelişkili iki seçim: sessizce "son gelen kazanır" yerine 400.
+    const key = foldNameForCompare(text).slice(0, ALIAS_KEY_MAX);
+    const prev = byKey.get(key);
+    if (prev && prev !== c.valueId) throw AppError.badRequest("Aynı işlem metnine iki farklı gramaj seçilmiş.", { code: "PROCESS_CHOICE_CONFLICT" });
+    byKey.set(key, c.valueId);
+    if (!checked.has(c.valueId)) await assertKursunGramajValue(prisma, c.valueId);
+    checked.add(c.valueId);
+    out.push({ text, valueId: c.valueId });
+  }
+  return out;
+}
+
 /** Alias öğrenme — onayda çözülmüş (metin → kimlik) eşlemeler sözlüğe; tekrar görülende `hitCount` artar. Best-effort. */
-async function learnAliases(note: { senderCustomerId: string | null; senderText: string | null }, lines: LineRow[], userId: string): Promise<void> {
+async function learnAliases(note: { senderCustomerId: string | null; senderText: string | null }, lines: LineRow[], userId: string, processChoices: readonly ProcessChoice[] = []): Promise<void> {
   const seen = new Map<string, { scope: DeliveryNoteAliasScope; senderCustomerId: string | null; rawKey: string; targetId: string }>();
   const add = (scope: DeliveryNoteAliasScope, senderCustomerId: string | null, text: string | null, targetId: string | null) => {
-    const rawKey = text ? foldNameForCompare(text).slice(0, 160) : "";
+    const rawKey = text ? foldNameForCompare(text).slice(0, ALIAS_KEY_MAX) : "";
     if (!rawKey || !targetId) return;
     seen.set(`${scope}|${senderCustomerId ?? ""}|${rawKey}`, { scope, senderCustomerId, rawKey, targetId });
   };
@@ -168,6 +202,8 @@ async function learnAliases(note: { senderCustomerId: string | null; senderText:
     add("ITEM", note.senderCustomerId, l.itemText, l.itemId);
     add("COLOR", note.senderCustomerId, l.colorText, l.colorId);
   }
+  // İşlem metni → gramaj çeşidi (H9): yalnız operatörün kabul ettiği/düzelttiği öneri öğrenilir; kalıp kendisi yazmaz.
+  for (const c of processChoices) add("PROCESS", note.senderCustomerId, c.text, c.valueId);
   for (const a of seen.values()) {
     // Polimorfik hedef: aynı anahtar başka hedefe öğretilirse SON onay kazanır (operatör kararı tazedir).
     const prior = await prisma.deliveryNoteAlias.findFirst({ where: { scope: a.scope, senderCustomerId: a.senderCustomerId, rawKey: a.rawKey }, select: { id: true, targetId: true, hitCount: true } });
@@ -215,6 +251,7 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
   const note = await prisma.customerDeliveryNote.findUnique({ where: { id }, select: PRE_SELECT });
   if (!note) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
   const { warnings, defaultItem } = await precheck(note, input);
+  const processChoices = await resolveProcessChoices(note, input.processChoices);
   const varianceReason = input.varianceReason?.trim() || undefined;
 
   await claimHeader(id, note, userId, varianceReason);
@@ -289,7 +326,7 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
   });
   await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: id, oldData: { status: "APPROVING" }, newData: { status: finalStatus, noteNo: note.noteNo, entered: summary.entered, failed: summary.failed, replayed: summary.replayed } });
   // Alias öğrenme tx DIŞINDA ve best-effort: sözlük istatistiktir, top doğumunu geciktirmez/geri sarmaz.
-  if (entered.length) await learnAliases(note, entered, userId).catch(() => undefined);
+  if (entered.length) await learnAliases(note, entered, userId, processChoices).catch(() => undefined);
 
   return { note: await getDeliveryNote(id), summary, warnings };
 }
