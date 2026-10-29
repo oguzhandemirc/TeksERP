@@ -214,27 +214,34 @@ async function learnAliases(note: { senderCustomerId: string | null; senderText:
   }
   // İşlem metni → gramaj çeşidi (H9): yalnız operatörün kabul ettiği/düzelttiği öneri öğrenilir; kalıp kendisi yazmaz.
   for (const c of processChoices) add("PROCESS", note.senderCustomerId, c.text, c.valueId);
-  for (const a of seen.values()) {
-    // TEK İFADE (E4): eşzamanlı iki onay aynı anahtarı yazarsa ikisi de sayılır, çift satır doğmaz — tekil indeks
-    // NULLS NOT DISTINCT (gönderensiz anahtar da tekil). Polimorfik hedef: SON onay kazanır (operatör kararı tazedir).
-    // `prevTargetId` yalnız audit içindir (ifadenin anlık görüntüsü).
-    const [row] = await prisma.$queryRaw<AliasUpsertRow[]>(Prisma.sql`
-      WITH prev AS (
-        SELECT "targetId" FROM "delivery_note_aliases"
-        WHERE "scope" = ${a.scope}::"DeliveryNoteAliasScope" AND "senderCustomerId" IS NOT DISTINCT FROM ${a.senderCustomerId}::uuid AND "rawKey" = ${a.rawKey}
-      )
-      INSERT INTO "delivery_note_aliases" ("id", "scope", "senderCustomerId", "rawKey", "targetId", "hitCount", "createdAt", "updatedAt")
-      VALUES (gen_random_uuid(), ${a.scope}::"DeliveryNoteAliasScope", ${a.senderCustomerId}::uuid, ${a.rawKey}, ${a.targetId}::uuid, 1, now(), now()) -- tz-ok: kolonlar timestamptz; ham INSERT Prisma'nın @default/@updatedAt kancasını atlar
-      ON CONFLICT ("scope", "senderCustomerId", "rawKey") DO UPDATE
-        SET "targetId" = EXCLUDED."targetId", "hitCount" = "delivery_note_aliases"."hitCount" + 1, "updatedAt" = now() -- tz-ok: kolon timestamptz; ham UPDATE @updatedAt kancasını atlar
-      RETURNING "id", "hitCount", (xmax = 0) AS "inserted", (SELECT "targetId" FROM prev) AS "prevTargetId"`);
-    if (!row) continue;
-    const key = aliasKeyAudit(a.rawKey);
-    if (row.inserted) {
-      await AuditService.log({ userId, action: "CREATE", tableName: ALIAS_TABLE, recordId: row.id, newData: { scope: a.scope, senderCustomerId: a.senderCustomerId, ...key, targetId: a.targetId, hitCount: row.hitCount } });
-    } else {
-      await AuditService.log({ userId, action: "UPDATE", tableName: ALIAS_TABLE, recordId: row.id, oldData: { targetId: row.prevTargetId, hitCount: row.hitCount - 1 }, newData: { scope: a.scope, ...key, targetId: a.targetId, hitCount: row.hitCount } });
-    }
+  for (const a of seen.values()) await learnAlias(a, userId);
+}
+
+export type AliasLearnInput = { scope: DeliveryNoteAliasScope; senderCustomerId: string | null; rawKey: string; targetId: string };
+
+/**
+ * Tek anahtar öğrenme — TEK İFADE (E4): eşzamanlı yazarlar aynı anahtarı yazarsa hepsi sayılır, çift satır doğmaz
+ * (tekil indeks NULLS NOT DISTINCT; gönderensiz anahtar da tekil). Polimorfik hedef: SON onay kazanır.
+ * Dışa açık: test_gelen_belge_onay §16b yarışı belirlenimli ölçer. `rawKey` çağıranca katlanmış olmalı (aliasKey).
+ */
+export async function learnAlias(a: AliasLearnInput, userId: string): Promise<void> {
+  // `prevTargetId` yalnız audit içindir (ifadenin anlık görüntüsü; eşzamanlı çakışmada null olabilir — ayak izi, karar değil).
+  const [row] = await prisma.$queryRaw<AliasUpsertRow[]>(Prisma.sql`
+    WITH prev AS (
+      SELECT "targetId" FROM "delivery_note_aliases"
+      WHERE "scope" = ${a.scope}::"DeliveryNoteAliasScope" AND "senderCustomerId" IS NOT DISTINCT FROM ${a.senderCustomerId}::uuid AND "rawKey" = ${a.rawKey}
+    )
+    INSERT INTO "delivery_note_aliases" ("id", "scope", "senderCustomerId", "rawKey", "targetId", "hitCount", "createdAt", "updatedAt")
+    VALUES (gen_random_uuid(), ${a.scope}::"DeliveryNoteAliasScope", ${a.senderCustomerId}::uuid, ${a.rawKey}, ${a.targetId}::uuid, 1, now(), now()) -- tz-ok: kolonlar timestamptz; ham INSERT Prisma'nın @default/@updatedAt kancasını atlar
+    ON CONFLICT ("scope", "senderCustomerId", "rawKey") DO UPDATE
+      SET "targetId" = EXCLUDED."targetId", "hitCount" = "delivery_note_aliases"."hitCount" + 1, "updatedAt" = now() -- tz-ok: kolon timestamptz; ham UPDATE @updatedAt kancasını atlar
+    RETURNING "id", "hitCount", (xmax = 0) AS "inserted", (SELECT "targetId" FROM prev) AS "prevTargetId"`);
+  if (!row) return;
+  const key = aliasKeyAudit(a.rawKey);
+  if (row.inserted) {
+    await AuditService.log({ userId, action: "CREATE", tableName: ALIAS_TABLE, recordId: row.id, newData: { scope: a.scope, senderCustomerId: a.senderCustomerId, ...key, targetId: a.targetId, hitCount: row.hitCount } });
+  } else {
+    await AuditService.log({ userId, action: "UPDATE", tableName: ALIAS_TABLE, recordId: row.id, oldData: { targetId: row.prevTargetId, hitCount: row.hitCount - 1 }, newData: { scope: a.scope, ...key, targetId: a.targetId, hitCount: row.hitCount } });
   }
 }
 

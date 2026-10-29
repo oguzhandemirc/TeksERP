@@ -38,7 +38,7 @@ import app from "../src/app";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
 import { InventoryService } from "../src/services/inventory.service";
-import { lineRollToken, totalMismatches, totalWarnings } from "../src/services/gelen-belge-onay.service";
+import { learnAlias, lineRollToken, totalMismatches, totalWarnings } from "../src/services/gelen-belge-onay.service";
 import { aliasKey } from "../src/services/gelen-belge-eslestirme.service";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
@@ -375,13 +375,22 @@ async function main(): Promise<void> {
     const seqText = `${TAG} SIRALI GÖNDEREN`;
     for (const n of [120, 121]) check(`§16a sıralı onay ${n} → 200`, (await onay((await mkNote([L(n)], { senderText: seqText })).id)).status === 200);
     const seq = await senderRows(seqText);
-    check("⭐ §16a NULL gönderenli (SENDER) aynı anahtar iki onayda TEK satır, hitCount 2", seq.length === 1 && seq[0]!.hitCount === 2, JSON.stringify(seq));
+    // NND güvencesi (indeks bayrağı) test_db_invariants §11'de; burası sıralı öğrenmenin tek satır + sayımını ölçer.
+    check("⭐ §16a sıralı öğrenme: NULL gönderenli (SENDER) aynı anahtar iki onayda TEK satır, hitCount 2", seq.length === 1 && seq[0]!.hitCount === 2, JSON.stringify(seq));
     const parText = `${TAG} ESZAMANLI GÖNDEREN`;
     const pa = await mkNote([L(122)], { senderText: parText });
     const pb = await mkNote([L(123)], { senderText: parText });
     const [ra, rb] = await Promise.all([onay(pa.id), onay(pb.id)]);
     const par = await senderRows(parText);
     check("⭐ §16b EŞZAMANLI iki onay (iki istek) → ikisi 200, TEK satır, hitCount 2 (sayım kaybı yok)", ra.status === 200 && rb.status === 200 && par.length === 1 && par[0]!.hitCount === 2, `${ra.status}/${rb.status} ${JSON.stringify(par)}`);
+    // Belirlenimli yarış: aynı (gönderensiz) anahtara N paralel öğrenme — findFirst→update/create gerilemesi
+    // ilk turda çift satır (ya da sayım kaybı) verir; tek ifade upsert'te tam N.
+    const raceKey = aliasKey("SENDER", `${TAG} YARIS GÖNDEREN`);
+    const RACE_N = 12;
+    const settled = await Promise.allSettled(Array.from({ length: RACE_N }, () => learnAlias({ scope: "SENDER", senderCustomerId: null, rawKey: raceKey, targetId: owner }, admin.id)));
+    const rejected = settled.filter((r) => r.status === "rejected").length;
+    const race = await prisma.deliveryNoteAlias.findMany({ where: { scope: "SENDER", senderCustomerId: null, rawKey: raceKey }, select: { hitCount: true } });
+    check(`⭐ §16b ${RACE_N} paralel öğrenme (aynı NULL gönderenli anahtar) → hata yok, TEK satır, hitCount ${RACE_N}`, rejected === 0 && race.length === 1 && race[0]!.hitCount === RACE_N, `reddedilen ${rejected} ${JSON.stringify(race)}`);
     const colorText = `LACİVERT ${TAG} 1234`;
     check("§16c renk metni iki katlamada farklı (sonda geçerli)", aliasKey("COLOR", colorText) !== aliasKey("ITEM", colorText));
     check("§16c renk öğreten onay → 200", (await onay((await mkNote([L(124, { colorText, colorId: color.id })])).id)).status === 200);
