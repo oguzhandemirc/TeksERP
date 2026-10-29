@@ -93,6 +93,7 @@ export async function collectServiceBillingDraft(params: {
       priceAsOf: dispatchDay ? params.dispatchedAt ?? new Date() : undefined,
       priceAsOfByRoll: dispatchDay ? params.dispatchedAtByRoll : undefined,
       billedKeys: await loadBilledKeys(lineage),
+      shippedRollIds: new Set(params.rollIds),
     },
   });
   const lines = res.lines.map((l) => ({
