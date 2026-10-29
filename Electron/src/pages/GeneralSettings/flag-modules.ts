@@ -150,6 +150,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   tamburUndoFullSameDayOnly: "productionEnabled",
   tamburShortCutA1Enabled: "productionEnabled",
   tamburShortCutA1ThresholdM: "productionEnabled",
+  tamburListByStationEnabled: "productionEnabled",
   [SETTING_KEYS.WORKORDER_DEFAULT_PLAN_DURATION_DAYS]: "productionEnabled",
 
   // --- ÖN MUHASEBE (cari · fatura · kasa · çek) ------------------------------

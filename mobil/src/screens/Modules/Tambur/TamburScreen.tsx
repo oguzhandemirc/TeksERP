@@ -61,6 +61,7 @@ import { useDeviceType } from '../../../hooks/useDeviceType';
 import {
   useTamburOverQuantityEnabled,
   useTamburShortCutA1,
+  useTamburListByStationEnabled,
   useScrapGradeLabelEnabled,
 } from '../../../hooks/useFeatureFlags';
 import { NumpadHost } from '../../../components/NumpadProvider';
@@ -913,8 +914,9 @@ export default function TamburScreen() {
     [manualColorsQuery.data],
   );
 
-  // İster 2.8: iki tamburlu fabrikada yalnız bu tabletin tamburuna sıradaki işler.
-  const listStationId = resolveTamburListStationId(activeSession);
+  // İster 2.8: ayar açıksa iki tamburlu fabrikada yalnız bu tabletin tamburuna sıradaki işler.
+  const listByStation = useTamburListByStationEnabled();
+  const listStationId = resolveTamburListStationId(activeSession, listByStation);
   const openCardsQuery = useQuery({
     queryKey: ['tambur', 'open-cards', listStationId],
     queryFn: () => tamburService.listOpenCards(listStationId),

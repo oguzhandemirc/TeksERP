@@ -15,14 +15,17 @@ const station = (kind: string) => ({ id: 'st-2', code: 'TAMBUR-2', name: 'Tambur
 
 describe('resolveTamburListStationId', () => {
   it('TAMBUR oturumunda istasyon kimliği döner', () => {
-    expect(resolveTamburListStationId({ stationId: 'st-2', station: station('TAMBUR') })).toBe('st-2');
+    expect(resolveTamburListStationId({ stationId: 'st-2', station: station('TAMBUR') }, true)).toBe('st-2');
   });
   it('oturum yoksa null (parametresiz liste)', () => {
-    expect(resolveTamburListStationId(null)).toBeNull();
-    expect(resolveTamburListStationId(undefined)).toBeNull();
+    expect(resolveTamburListStationId(null, true)).toBeNull();
+    expect(resolveTamburListStationId(undefined, true)).toBeNull();
   });
   it('TAMBUR olmayan oturum istasyonunda null (backend 400 vermesin)', () => {
-    expect(resolveTamburListStationId({ stationId: 'st-k', station: station('PROCESS_QC') })).toBeNull();
+    expect(resolveTamburListStationId({ stationId: 'st-k', station: station('PROCESS_QC') }, true)).toBeNull();
+  });
+  it('fabrika ayarı kapalıyken (varsayılan) TAMBUR oturumunda da null — bugünkü tüm liste', () => {
+    expect(resolveTamburListStationId({ stationId: 'st-2', station: station('TAMBUR') }, false)).toBeNull();
   });
 });
 
