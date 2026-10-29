@@ -455,8 +455,8 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // çağırır; `loom:*` web kodları panelsiz kalır — panel doff yüzeyi yok, kod API/entegrasyon için.
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
-  // Gelen belge (D5, 2026-10-29): read/write/approve "Gelen Belgeler" ekranına taşındı. `template` ekransız kalır:
-  // gönderen şablonu uçları (liste + aktif/pasif) backend'de henüz YOK; uç + panel sekmesi doğunca muaf silinir.
+  // H2 (2026-10-29): ofis onay ucu + bekleyen sapma listesi backend'de; panel ekranı H4 dilimi — doğunca muaf silinir.
+  { code: "kursun:meter-approve", reason: "Sapma onay ekranı H4'te (panel); bugün ofis ucu API'de, tablet PIN'inin sahibi bu izni taşır." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
 ];
 

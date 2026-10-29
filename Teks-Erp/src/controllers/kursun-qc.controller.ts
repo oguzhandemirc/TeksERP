@@ -19,6 +19,26 @@ const meterReadingBodySchema = z.object({
   rawCounter: z.number().min(0).lt(1e11, "Sayaç değeri çok büyük").nullish(),
   cardSampleId: z.string().uuid("Geçersiz örnek ID").nullish(),
   clientToken: z.string().uuid("Geçersiz okuma kimliği"),
+  /** H2 OPERATOR_REASON imzası. Katı: PIN ya da başka alan bu gövdeye (çevrimdışı kuyruğa) giremez. */
+  ack: z
+    .strictObject({
+      reasonCode: z.string().trim().max(64, "Sebep kodu en fazla 64 karakter").nullish(),
+      reasonText: z.string().trim().max(300, "Sebep en fazla 300 karakter").nullish(),
+    })
+    .nullish(),
+});
+
+/** POST /kursun-qc/meter-readings/:id/pin-ack — süpervizör PIN'i (yalnız çevrimiçi; gövde log'a yazılmaz). */
+export const meterPinAckSchema = z.strictObject({
+  pin: z.string().regex(/^\d{6}$/, "PIN 6 haneli olmalı"),
+  reasonCode: z.string().trim().max(64).nullish(),
+  reasonText: z.string().trim().max(300).nullish(),
+});
+
+/** POST /kursun-qc/meter-readings/:id/office-ack — ofis onayı (H4 ekranı). */
+export const meterOfficeAckSchema = z.strictObject({
+  reasonCode: z.string().trim().max(64).nullish(),
+  reasonText: z.string().trim().max(300).nullish(),
 });
 
 export const completeQc2Schema = z.object({
@@ -104,6 +124,9 @@ export class KursunQcController {
     this.finishStep = this.finishStep.bind(this);
     this.reopenStep = this.reopenStep.bind(this);
     this.recordMeterReading = this.recordMeterReading.bind(this);
+    this.pinAckMeterReading = this.pinAckMeterReading.bind(this);
+    this.officeAckMeterReading = this.officeAckMeterReading.bind(this);
+    this.listPendingMeterAcks = this.listPendingMeterAcks.bind(this);
     this.reopenPreview = this.reopenPreview.bind(this);
     this.listQueue = this.listQueue.bind(this);
     this.reorderQueue = this.reorderQueue.bind(this);
@@ -250,6 +273,46 @@ export class KursunQcController {
         stamp?.machineId ?? req.device?.machineId ?? null,
       );
       res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/kursun-qc/meter-readings/:id/pin-ack — H2 süpervizör PIN'i (PIN yalnız burada; hata mesajı yankılamaz). */
+  async pinAckMeterReading(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const readingId = z.string().uuid("Geçersiz okuma ID").parse(req.params.id);
+      const body = meterPinAckSchema.parse(req.body);
+      const result = await this.service.ackMeterReading(
+        { readingId, mode: "SUPERVISOR_PIN", pin: body.pin, reason: { reasonCode: body.reasonCode, reasonText: body.reasonText } },
+        req.user?.userId,
+      );
+      res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/kursun-qc/meter-readings/:id/office-ack — H2 ofis onayı. */
+  async officeAckMeterReading(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const readingId = z.string().uuid("Geçersiz okuma ID").parse(req.params.id);
+      const body = meterOfficeAckSchema.parse(req.body ?? {});
+      const result = await this.service.ackMeterReading(
+        { readingId, mode: "OFFICE", reason: { reasonCode: body.reasonCode, reasonText: body.reasonText } },
+        req.user?.userId,
+      );
+      res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/kursun-qc/meter-deviations — imza bekleyen sapmalar (ofis listesi). */
+  async listPendingMeterAcks(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const stepId = z.string().uuid("Geçersiz adım ID").optional().parse(req.query.stepId);
+      res.status(200).json(await this.service.listPendingMeterAcks({ stepId }));
     } catch (err) {
       next(err);
     }

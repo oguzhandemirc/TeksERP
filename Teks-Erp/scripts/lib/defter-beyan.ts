@@ -299,7 +299,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     ["src/services/helpers/kursun-meter.helper.ts"]),
   D("RollMeterAck", "metre sapma onayı (H2 yazar) — okuma damgalanınca aynı tx'te damgalanır — ters = DAMGA", { tur: "DAMGA", kolon: "revokedAt" },
     [{ dosya: "src/services/helpers/kursun-meter.helper.ts", sembol: "revokeStepMeterReadingsTx" }],
-    [] /* ileri yazar H2'de doğar (sapma onayı) */),
+    ["src/services/helpers/kursun-meter.helper.ts"] /* H2: writeMeterReadingTx (OPERATOR_REASON) + ackMeterReadingTx (PIN/OFFICE) */),
 
   D("RollVariance", "fire · düzeltme · aşım defteri", { tur: "DAMGA", kolon: "reversedAt" },
     [
