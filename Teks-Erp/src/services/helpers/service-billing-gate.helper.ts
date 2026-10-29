@@ -52,13 +52,21 @@ export async function collectRollLineage(rollIds: string[], db: Db = prisma): Pr
 
 /** Sevkiyatların EMANET topları (canlı + iade edilmiş, BRÜT) — sevk/dönem taslağı ve geri alma kapısının ORTAK kümesi. */
 export async function listShipmentServiceRollIds(shipmentIds: string[], db: Db = prisma): Promise<string[]> {
+  return [...new Set((await listShipmentServiceRollShipments(shipmentIds, db)).map((r) => r.rollId))];
+}
+
+/** Aynı küme, top → hangi sevkiyattan (H8b: dönem taslağında iş başına sevk günü). İade edilen top ilk sevkinden gelir. */
+export async function listShipmentServiceRollShipments(shipmentIds: string[], db: Db = prisma): Promise<Array<{ rollId: string; shipmentId: string }>> {
   if (shipmentIds.length === 0) return [];
-  const live = await db.roll.findMany({ where: { shipmentId: { in: shipmentIds }, ownerCustomerId: { not: null }, status: { notIn: SACK_ABSENT_STATUSES } }, select: { id: true } });
+  const live = await db.roll.findMany({ where: { shipmentId: { in: shipmentIds }, ownerCustomerId: { not: null }, status: { notIn: SACK_ABSENT_STATUSES } }, select: { id: true, shipmentId: true } });
   const returned = await db.rollReturn.findMany({
     where: { fromShipmentId: { in: shipmentIds }, cancelledAt: null, roll: { ownerCustomerId: { not: null } } },
-    select: { rollId: true },
+    select: { rollId: true, fromShipmentId: true },
   });
-  return [...new Set([...live.map((r) => r.id), ...returned.map((r) => r.rollId)])];
+  return [
+    ...live.map((r) => ({ rollId: r.id, shipmentId: r.shipmentId! })),
+    ...returned.map((r) => ({ rollId: r.rollId, shipmentId: r.fromShipmentId! })),
+  ];
 }
 
 /**

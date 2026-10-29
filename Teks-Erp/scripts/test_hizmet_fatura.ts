@@ -27,6 +27,11 @@
 //   §16 aynı iş iki yoldan 409 · faturalı iş dönemden düşer · PER_SHIPMENT bugünkü gibi
 //   §17 2 paralel ⇒ 1 kazanan · §18 kapanmış dönem 409, bozuk/ileri dönem 400
 //   §19 dönem taslağına bağlı sevk geri alma 409 · taslak iptali ⇒ geri alma 200
+//   §20 H8b müşteri tetiği: fabrika PER_SHIPMENT + müşteri PERIOD_END ⇒ sevkte bağ yok, dönem toplar · fabrika
+//       PERIOD_END + müşteri PER_SHIPMENT ⇒ sevkte bağ var, dönem açık + uyarı, yalnız faturasız kalan işi toplar · NULL ⇒
+//       fabrika ayarı · geçersiz 400 · fason cari 400 NOT_CUSTOMER · audit
+//   §21 H8b DISPATCH_DAY dönem taslağı: her iş KENDİ sevk anının fiyatıyla (son sevk günü herkese uygulanmaz); ata
+//       işi en erken sevk edilen çocuğun anına (yayılım döngüsü kapatılınca 40 m @7 ⇒ kırmızı, 68/1; geri alındı)
 // Negatif sondalar (2026-10-29, BEKCI-HARITASI sonda sütunu): kısmi unique düşürülünce §9a kırmızı ·
 // iptal damgası kaldırılınca §8 kırmızı · düzeltme 409 kapısı kaldırılınca §5 kırmızı · kapalı yola
 // shipmentGross sızdırılınca §11/§11b/§11c kırmızı (27/3; geri alındı).
@@ -40,7 +45,7 @@ import { InventoryService } from "../src/services/inventory.service";
 import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
 import { SETTING_KEYS, loadServiceBillingSettings, systemSettingService } from "../src/services/system-setting.service";
 import { PERIOD_END_SERVICE_WARNING, autoDraftInvoiceAfterDispatch, collectShipmentInvoiceDraftLines } from "../src/services/helpers/shipment-auto-draft.helper";
-import { createServicePeriodDraft, previewServicePeriodDraft } from "../src/services/service-period-invoice.service";
+import { CUSTOMER_PER_SHIPMENT_PERIOD_WARNING, createServicePeriodDraft, previewServicePeriodDraft } from "../src/services/service-period-invoice.service";
 import { ensureCariAccountTx } from "../src/services/helpers/finance.helper";
 import { periodDayKey } from "../src/services/helpers/period-guard.helper";
 import { bypassReplayQueue } from "../src/services/helpers/token-replay.helper";
@@ -50,6 +55,9 @@ import { writeMeterReadingTx, revokeStepMeterReadingsTx } from "../src/services/
 import { insertServiceLinksTx } from "../src/services/helpers/service-billing.helper";
 import { KURSUN_PROPERTY_CODE } from "../src/services/helpers/quality-station.helper";
 import { testActorId } from "./fixture-test-user";
+import { cariService } from "../src/services/cari.service";
+import { TamburService } from "../src/services/tambur.service";
+import { resolveCustomerServiceBillingTrigger } from "../src/services/helpers/service-billing.helper";
 
 let pass = 0;
 let fail = 0;
@@ -70,7 +78,7 @@ const inventory = new InventoryService();
 const fx = {
   itemIds: [] as string[], propIds: [] as string[], valueIds: [] as string[], woIds: [] as string[], rollIds: [] as string[],
   stationIds: [] as string[], machineIds: [] as string[], shipmentIds: [] as string[], customerId: null as string | null, kursunCreated: null as string | null,
-  customer2Id: null as string | null,
+  customer2Id: null as string | null, extraCustomerIds: [] as string[], subcontractorIds: [] as string[],
 };
 const KEYS = [
   SETTING_KEYS.FINANCE_ENABLED, SETTING_KEYS.FINANCE_AUTO_DRAFT_FROM_SHIPMENT_ENABLED, SETTING_KEYS.SHIPMENT_CONFIRMATION_ENABLED,
@@ -434,6 +442,127 @@ async function main(): Promise<void> {
   check("dönem taslağı iptal edilince geri alma 200", undoPeOk.status === 200 && (await linksOn([pu])).length === 0, JSON.stringify(undoPeOk));
   await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, "PER_SHIPMENT");
 
+  // ── §20 H8b müşteri tetiği ─────────────────────────────────────────────
+  section("§20 müşteri tetiği: fabrika ayarını iki yönde ezer; NULL = fabrika");
+  const cust3 = await prisma.customer.create({ data: { code: `${P}-E`.slice(0, 32), name: `TEST HZFT tetik ${STAMP}` }, select: { id: true } });
+  fx.extraCustomerIds.push(cust3.id);
+  const cari3 = await prisma.$transaction((tx) => ensureCariAccountTx(tx, { customerId: cust3.id, subcontractorId: null }));
+  const badTrig = await errOf(() => cariService.update(cari3.id, { serviceBillingTrigger: "WEEKLY" }, actor));
+  const badMsg = await cariService.update(cari3.id, { serviceBillingTrigger: "WEEKLY" }, actor).catch((e: Error) => e.message);
+  check("geçersiz tetik ⇒ 400 SERVICE_BILLING_TRIGGER_INVALID (Türkçe), kolon NULL kalır",
+    badTrig.status === 400 && badTrig.code === "SERVICE_BILLING_TRIGGER_INVALID" && String(badMsg).includes("geçersiz")
+    && (await prisma.cariAccount.findUniqueOrThrow({ where: { id: cari3.id }, select: { serviceBillingTrigger: true } })).serviceBillingTrigger === null, JSON.stringify(badTrig));
+  const dbSeal = await errOf(() => prisma.cariAccount.update({ where: { id: cari3.id }, data: { serviceBillingTrigger: "WEEKLY" } }));
+  check("DB CHECK seddi: servisi atlayan yazım reddedilir", dbSeal.status !== 200, JSON.stringify(dbSeal));
+  await cariService.update(cari3.id, { serviceBillingTrigger: "PERIOD_END" }, actor);
+  let trigLog = null as null | { newData: unknown; oldData: unknown };
+  for (let i = 0; i < 20 && !trigLog; i++) {
+    trigLog = await prisma.systemLog.findFirst({ where: { tableName: "CARI_ACCOUNT", recordId: cari3.id, action: "UPDATE" }, orderBy: { createdAt: "desc" }, select: { newData: true, oldData: true } });
+    if (!trigLog) await new Promise((r) => setTimeout(r, 100));
+  }
+  check("yazım audit'li: yeni değer + eski NULL", (trigLog?.newData as { serviceBillingTrigger?: string } | null)?.serviceBillingTrigger === "PERIOD_END"
+    && (trigLog?.oldData as { serviceBillingTrigger?: string | null } | null)?.serviceBillingTrigger === null, JSON.stringify(trigLog));
+  const row3 = (await cariService.findById(cari3.id)).data!;
+  check("cari okuması tetiği taşır (panel formu ezmesin)", row3.serviceBillingTrigger === "PERIOD_END", String(row3.serviceBillingTrigger));
+
+  // (a) fabrika PER_SHIPMENT + müşteri PERIOD_END
+  await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, "PER_SHIPMENT");
+  const qa = await mkWorkedRoll(30, "29.500", undefined, cust3.id);
+  const sqa = await ship([qa], cust3.id);
+  const qaInv = await invoicesOf(sqa.id);
+  const qaLines = await collectShipmentInvoiceDraftLines(sqa.id, cust3.id, Currency.TRY);
+  check("fabrika PER_SHIPMENT + müşteri PERIOD_END ⇒ sevkte hizmet satırı/bağı 0 + neden uyarısı",
+    qaInv.every((i) => i.lines.every((l) => l.itemId !== K2)) && (await linksOn([qa])).length === 0
+    && (qaLines.serviceLinks ?? []).length === 0 && qaLines.warnings.includes(PERIOD_END_SERVICE_WARNING), `${qaInv.length} taslak`);
+  const qaPv = await previewServicePeriodDraft({ cariId: cari3.id, period });
+  const qaD = await createServicePeriodDraft({ cariId: cari3.id, period, clientToken: randomUUID() }, actor);
+  check("… dönem taslağı onu toplar (1 iş, bağ dönem taslağında)", qaPv.workCount === 1 && (await linksOn([qa])).every((l) => l.invoiceId === qaD.data!.id) && (await linksOn([qa])).length === 1, JSON.stringify({ w: qaPv.workCount }));
+
+  // (b) fabrika PERIOD_END + müşteri PER_SHIPMENT — müşteri PERIOD_END iken sevk edilmiş (faturasız) iş önce hazırlanır
+  const qx = await mkWorkedRoll(12, "11.500", undefined, cust3.id);
+  await ship([qx], cust3.id);
+  await cariService.update(cari3.id, { serviceBillingTrigger: "PER_SHIPMENT" }, actor);
+  await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, "PERIOD_END");
+  const qb = await mkWorkedRoll(20, "19.500", undefined, cust3.id);
+  const sqb = await ship([qb], cust3.id);
+  const qbInv = await invoicesOf(sqb.id);
+  check("fabrika PERIOD_END + müşteri PER_SHIPMENT ⇒ sevk kancası hizmet bağı kurar",
+    qbInv.length === 1 && (await linksOn([qb])).length === 1 && (await linksOn([qb])).every((l) => l.invoiceId === qbInv[0]!.id), `${qbInv.length} taslak`);
+  // Dönem ucu "Her sevkte" müşteride de açık: tetik sonradan değiştiyse faturasız kalan işi toplayan tek yol; sevkte faturalanan düşer.
+  const qbPv = await previewServicePeriodDraft({ cariId: cari3.id, period });
+  check("… dönem önizlemesi açık + uyarır: yalnız faturasız kalmış iş (qx) toplanır, sevkte faturalanan (qb) düşer",
+    qbPv.workCount === 1 && qbPv.warnings.includes(CUSTOMER_PER_SHIPMENT_PERIOD_WARNING), JSON.stringify({ w: qbPv.workCount, warn: qbPv.warnings }));
+  const qbD = await createServicePeriodDraft({ cariId: cari3.id, period, clientToken: randomUUID() }, actor);
+  check("… dönem taslağı qx'i bağlar, qb bağı sevk taslağında kalır (çift fatura yok)",
+    (await linksOn([qx])).length === 1 && (await linksOn([qx])).every((l) => l.invoiceId === qbD.data!.id)
+    && (await linksOn([qb])).length === 1 && (await linksOn([qb])).every((l) => l.invoiceId === qbInv[0]!.id), qbD.data!.id);
+  const sub = await prisma.subcontractor.create({ data: { code: `${P}-SB`.slice(0, 32), name: `TEST HZFT fasoncu ${STAMP}` }, select: { id: true } });
+  fx.subcontractorIds.push(sub.id);
+  const subCari = await prisma.$transaction((tx) => ensureCariAccountTx(tx, { customerId: null, subcontractorId: sub.id }));
+  const nc = await errOf(() => cariService.update(subCari.id, { serviceBillingTrigger: "PER_SHIPMENT" }, actor));
+  check("müşteri dışı (fason) cari ⇒ 400 SERVICE_BILLING_TRIGGER_NOT_CUSTOMER", nc.status === 400 && nc.code === "SERVICE_BILLING_TRIGGER_NOT_CUSTOMER", JSON.stringify(nc));
+
+  // (c) NULL ⇒ fabrika ayarı
+  await cariService.update(cari3.id, { serviceBillingTrigger: null }, actor);
+  const eff = await resolveCustomerServiceBillingTrigger(cust3.id, await loadServiceBillingSettings());
+  const qc = await mkWorkedRoll(10, "9.500", undefined, cust3.id);
+  await ship([qc], cust3.id);
+  check("NULL ⇒ fabrika ayarı (PERIOD_END): kaynak FACTORY, sevkte bağ 0", eff.trigger === "PERIOD_END" && eff.source === "FACTORY" && (await linksOn([qc])).length === 0, JSON.stringify(eff));
+  const effNo = await resolveCustomerServiceBillingTrigger(randomUUID(), { trigger: "PER_SHIPMENT" });
+  check("carisiz müşteri ⇒ fabrika ayarı", effNo.trigger === "PER_SHIPMENT" && effNo.source === "FACTORY", JSON.stringify(effNo));
+
+  // ── §21 H8b DISPATCH_DAY ──────────────────────────────────────────────
+  section("§21 DISPATCH_DAY: dönem taslağında her iş kendi sevk anının fiyatıyla");
+  const cust4 = await prisma.customer.create({ data: { code: `${P}-F`.slice(0, 32), name: `TEST HZFT sevk günü ${STAMP}` }, select: { id: true } });
+  fx.extraCustomerIds.push(cust4.id);
+  const cari4 = await prisma.$transaction((tx) => ensureCariAccountTx(tx, { customerId: cust4.id, subcontractorId: null }));
+  await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, "PERIOD_END");
+  await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_PRICE_DATE, "DISPATCH_DAY");
+  const ra = await mkWorkedRoll(30, "30.000", undefined, cust4.id);
+  const rb = await mkWorkedRoll(20, "20.000", undefined, cust4.id);
+  const sa = await ship([ra], cust4.id);
+  const sb = await ship([rb], cust4.id);
+  // Fiyat değişimi iki sevk arasında: A eski (5), B yeni (7) fiyat döneminde sevk edildi (aynı dönem içinde).
+  const nowMs = Date.now();
+  const tA = new Date(nowMs - 20 * 60_000), tSwitch = new Date(nowMs - 15 * 60_000), tB = new Date(nowMs - 10 * 60_000);
+  await prisma.shipment.update({ where: { id: sa.id }, data: { dispatchedAt: tA } });
+  await prisma.shipment.update({ where: { id: sb.id }, data: { dispatchedAt: tB } });
+  await prisma.itemPrice.create({ data: { itemId: K2, customerId: cust4.id, kind: PriceKind.SALE, currency: Currency.TRY, price: "5.0000", createdAt: new Date(nowMs - 60 * 60_000), revokedAt: tSwitch, revokeReason: "test fiyat değişimi" } });
+  await prisma.itemPrice.create({ data: { itemId: K2, customerId: cust4.id, kind: PriceKind.SALE, currency: Currency.TRY, price: "7.0000", createdAt: tSwitch } });
+  const dd = await previewServicePeriodDraft({ cariId: cari4.id, period });
+  const ddPrices = dd.lines.map((l) => `${l.qty}@${l.unitPrice}`).sort();
+  // Negatif sonda: dönemin son sevk anı herkese uygulanınca iki satır 50 m @7 olur ⇒ burada kırmızı.
+  check("2 sevk, 2 iş: 30 m @5 (A'nın sevk anı) + 20 m @7 (B'nin sevk anı), ara toplam 290,00",
+    JSON.stringify(ddPrices) === JSON.stringify(["20.000@7.0000", "30.000@5.0000"]) && dd.subtotal === "290.00", JSON.stringify({ ddPrices, t: dd.subtotal }));
+  const ddD = await createServicePeriodDraft({ cariId: cari4.id, period, clientToken: randomUUID() }, actor);
+  const ddLinks = await prisma.serviceBillingLink.findMany({ where: { invoiceId: ddD.data!.id, revokedAt: null }, select: { rollId: true, unitPrice: true } });
+  check("bağların birim fiyatı iş başına donar (A 5, B 7)",
+    ddLinks.length === 2 && Number(ddLinks.find((l) => l.rollId === ra)?.unitPrice) === 5 && Number(ddLinks.find((l) => l.rollId === rb)?.unitPrice) === 7, JSON.stringify(ddLinks));
+  // Ata işi: iş atada (kurşun + OUT okuması), ata tamburda iki çocuğa bölünür, çocuklar iki ayrı fiyat gününde sevk edilir.
+  // Ata işi en ERKEN sevk edilen çocuğun anına çözülür (5); yayılım bozulursa dönemin son sevki (7) uygulanır ⇒ kırmızı.
+  const grade = await prisma.qualityGrade.findFirst({ where: { role: "FIRST", isActive: true }, select: { code: true } });
+  if (!grade) throw new Error("FIRST rollü kalite yok — seed'siz DB");
+  const anc = await mkWorkedRoll(40, "40.000", undefined, cust4.id);
+  const cutChild = async (len: number): Promise<string> => {
+    const r = await new TamburService().cutWarehouseRoll(anc, { cutLength: len, rawDestination: "WAREHOUSE", qualityGrade: grade.code });
+    const id = (r.data as { childRoll?: { id: string } }).childRoll?.id;
+    if (!id) throw new Error("kesim çocuk dönmedi");
+    fx.rollIds.unshift(id);
+    return id;
+  };
+  const ch1 = await cutChild(15);
+  const ch2 = await cutChild(10);
+  const sc2 = await ship([ch2], cust4.id);
+  const sc1 = await ship([ch1], cust4.id);
+  await prisma.shipment.update({ where: { id: sc1.id }, data: { dispatchedAt: new Date(nowMs - 19 * 60_000) } });
+  await prisma.shipment.update({ where: { id: sc2.id }, data: { dispatchedAt: new Date(nowMs - 9 * 60_000) } });
+  const anPv = await previewServicePeriodDraft({ cariId: cari4.id, period });
+  const anPrices = anPv.lines.map((l) => `${l.qty}@${l.unitPrice}`).sort();
+  check("ata işi (40 m) en erken sevk edilen çocuğun anının fiyatıyla: 40 m @5",
+    JSON.stringify(anPrices) === JSON.stringify(["40.000@5.0000"]), JSON.stringify(anPrices));
+  await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_PRICE_DATE, "SERVICE_DAY");
+  await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, "PER_SHIPMENT");
+
   // ── §11 Kapalı ───────────────────────────────────────────────────────────
   section("§11 kapalıyken bugünkü davranış");
   await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_ENABLED, false);
@@ -463,7 +592,7 @@ async function cleanup(): Promise<void> {
       : prisma.systemSetting.deleteMany({ where: { key } }));
   }
   const ids = fx.rollIds;
-  const custIds = [fx.customerId, fx.customer2Id].filter((v): v is string => v !== null);
+  const custIds = [fx.customerId, fx.customer2Id, ...fx.extraCustomerIds].filter((v): v is string => v !== null);
   const invIds = (await prisma.invoice.findMany({ where: { OR: [{ shipmentId: { in: fx.shipmentIds } }, { cari: { customerId: { in: custIds } } }] }, select: { id: true } })).map((i) => i.id);
   await del("link", () => prisma.serviceBillingLink.deleteMany({ where: { OR: [{ invoiceId: { in: invIds } }, { rollId: { in: ids } }] } }));
   await del("cariTx", () => prisma.cariTransaction.deleteMany({ where: { invoiceId: { in: invIds } } }));
@@ -475,7 +604,14 @@ async function cleanup(): Promise<void> {
     await del("cariPeriodClose", () => prisma.cariPeriodClose.deleteMany({ where: { cariId: { in: cari } } }));
     await del("cariBalance", () => prisma.cariBalance.deleteMany({ where: { cariId: { in: cari } } }));
     await del("cariTx2", () => prisma.cariTransaction.deleteMany({ where: { cariId: { in: cari } } }));
+    await del("cariLog", () => prisma.systemLog.deleteMany({ where: { recordId: { in: cari } } }));
     await del("cari", () => prisma.cariAccount.deleteMany({ where: { id: { in: cari } } }));
+  }
+  if (fx.subcontractorIds.length > 0) {
+    const subCari = (await prisma.cariAccount.findMany({ where: { subcontractorId: { in: fx.subcontractorIds } }, select: { id: true } })).map((c) => c.id);
+    await del("subCariLog", () => prisma.systemLog.deleteMany({ where: { recordId: { in: subCari } } }));
+    await del("subCari", () => prisma.cariAccount.deleteMany({ where: { id: { in: subCari } } }));
+    await del("subcontractor", () => prisma.subcontractor.deleteMany({ where: { id: { in: fx.subcontractorIds } } }));
   }
   await del("sackAlloc", () => prisma.sackAllocation.deleteMany({ where: { sack: { shipmentId: { in: fx.shipmentIds } } } }));
   await del("meterAck", () => prisma.rollMeterAck.deleteMany({ where: { reading: { rollId: { in: ids } } } }));

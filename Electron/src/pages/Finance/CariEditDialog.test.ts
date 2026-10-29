@@ -41,6 +41,7 @@ const baseForm: CariEditForm = {
   riskLimit: "",
   notes: "",
   isActive: true,
+  serviceBillingTrigger: null,
 };
 
 const form = (p: Partial<CariEditForm> = {}): CariEditForm => ({ ...baseForm, ...p });
@@ -217,5 +218,31 @@ describe("formFromCari — ön-dolum", () => {
 
   it("ondalıklı risk limiti tur atmada bozulmaz", () => {
     expect(okBody(formFromCari(row({ riskLimit: 50000.5 }))).riskLimit).toBe("50000.5");
+  });
+});
+
+describe("H8b hizmet faturası tetiği", () => {
+  const cust = (p: Partial<CariRow> = {}): CariRow => ({
+    id: "c1", kind: "CUSTOMER", code: "M1", name: "Müşteri", taxNumber: null, taxOffice: null, defaultCurrency: "TRY",
+    paymentTermDays: null, riskLimit: null, notes: null, isActive: true, balances: [], ...p,
+  });
+
+  it("null (fabrika ayarı) → FACTORY seçili; gövdede null", () => {
+    const f = formFromCari(cust({ serviceBillingTrigger: null }));
+    expect(f.serviceBillingTrigger).toBe("FACTORY");
+    const body = okBody(f);
+    expect("serviceBillingTrigger" in body).toBe(true);
+    expect(body.serviceBillingTrigger).toBeNull();
+  });
+
+  it("seçili değer tur atmada korunur (Her sevkte / Dönem sonunda)", () => {
+    expect(okBody(formFromCari(cust({ serviceBillingTrigger: "PERIOD_END" }))).serviceBillingTrigger).toBe("PERIOD_END");
+    expect(okBody(formFromCari(cust({ serviceBillingTrigger: "PER_SHIPMENT" }))).serviceBillingTrigger).toBe("PER_SHIPMENT");
+    expect(okBody({ ...formFromCari(cust({ serviceBillingTrigger: "PERIOD_END" })), serviceBillingTrigger: "FACTORY" }).serviceBillingTrigger).toBeNull();
+  });
+
+  it("alanı göndermeyen eski backend ve fason hesabı → gövdeye anahtar GİRMEZ (.strict() 400'ü)", () => {
+    expect("serviceBillingTrigger" in okBody(formFromCari(cust()))).toBe(false);
+    expect("serviceBillingTrigger" in okBody(formFromCari(cust({ kind: "SUBCONTRACTOR", serviceBillingTrigger: null })))).toBe(false);
   });
 });

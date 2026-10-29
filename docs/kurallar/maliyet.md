@@ -47,7 +47,7 @@
 
 Panel (Electron vitest): `src/pages/Cost` (`cost-no-client-math`, `cost-access`, `shared/format`, `YarnNeed/yarn-need`, `shared/errors`, `shared/CostBreakdown`, `shared/useCostPreview`, `shared/fx-missing`, `Items/service`, `Calculator/calculator-body`, `Calculator/CalculatorPage`, `Quotes/*`), `src/pages/Items/ItemCostLink`
 
-Backend: `test_hizmet_brode_tambur`, `test_screen_catalog`, `test_bulut_teklif_projeksiyon`, `test_teklif_belgesi`, `test_belge_sozlesme`, `test_teklif_durum`, `test_teklif_numara`, `test_teklif_uc`, `test_teklif_siparis`, `test_teklif_gorunurluk`, `test_fiyat_listesi`, `test_quote_price_single_source`, `test_db_invariants`, `test_maliyet_formul`, `test_maliyet_girdi`, `test_standart_maliyet_surum`, `test_maliyet_girdileri`, `test_maliyet_regime_gate`, `test_finance_regime_gate`, `test_rapor_levent_sonucu`, `test_iplik_ihtiyaci`, `test_iplik_regime_gate`, `test_hizmet_fiyati`, `test_hizmet_fatura`, `test_auto_draft_shipment`
+Backend: `test_hizmet_brode_tambur`, `test_senaryo_hizmet_veren`, `test_screen_catalog`, `test_bulut_teklif_projeksiyon`, `test_teklif_belgesi`, `test_belge_sozlesme`, `test_teklif_durum`, `test_teklif_numara`, `test_teklif_uc`, `test_teklif_siparis`, `test_teklif_gorunurluk`, `test_fiyat_listesi`, `test_quote_price_single_source`, `test_db_invariants`, `test_maliyet_formul`, `test_maliyet_girdi`, `test_standart_maliyet_surum`, `test_maliyet_girdileri`, `test_maliyet_regime_gate`, `test_finance_regime_gate`, `test_rapor_levent_sonucu`, `test_iplik_ihtiyaci`, `test_iplik_regime_gate`, `test_hizmet_fiyati`, `test_hizmet_fatura`, `test_auto_draft_shipment`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 

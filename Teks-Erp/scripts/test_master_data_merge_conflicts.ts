@@ -25,6 +25,8 @@
 //  ⑧ KAYNAKLAR ARASI — politika başına ikinci kesit (D1 denetimi, ⑦ ile paralel yazıldı):
 //     MERGE_FIELDS (atama OR iki kaynaktan) · EMPTY_MEANS_ALL (survivor dolu, iki kaynakta
 //     aynı renk → mükerrersiz) · BLOCK (önizleme ENGEL + işlem 409, P2002/500 değil).
+//  ⑨ NULLSAFE HEDEF TARAFI (K1) — `crossSourceOn.nullSafe` kolonu survivor yükleminde de
+//     `IS NOT DISTINCT FROM`: NULL anahtarlı iki satır önizlemede ENGEL, işlem 409.
 
 import prisma, { pool } from "../src/lib/prisma";
 import { MasterDataMergeService } from "../src/services/master-data-merge.service";
@@ -323,6 +325,16 @@ async function main(): Promise<void> {
   }
 
   await crossSourceCases();
+  await nullSafeSurvivorSide();
+}
+
+async function hataOf(fn: () => Promise<unknown>): Promise<string> {
+  try {
+    await fn();
+    return "";
+  } catch (e) {
+    return `${(e as { statusCode?: number }).statusCode ?? (e as Error).name}: ${(e as Error).message.slice(0, 200)}`;
+  }
 }
 
 async function tryMerge(
@@ -531,14 +543,6 @@ async function crossSourceCases(): Promise<void> {
  */
 async function kaynaklarArasi(red: string, blue: string): Promise<void> {
   console.log("\n── ⑧ Kaynaklar arası çakışma: MERGE_FIELDS · EMPTY_MEANS_ALL · BLOCK ──");
-  const hataOf = async (fn: () => Promise<unknown>): Promise<string> => {
-    try {
-      await fn();
-      return "";
-    } catch (e) {
-      return `${(e as { statusCode?: number }).statusCode ?? (e as Error).name}: ${(e as Error).message.slice(0, 200)}`;
-    }
-  };
   {
     const s = await mkCustomer("KA-S");
     const k2 = await mkCustomer("KA-K2");
@@ -627,6 +631,34 @@ async function kumasaOzelRenkAdi(red: string): Promise<void> {
   check("⑥ ÇOK KAYNAK: gölgeleme yalnız TAŞINACAK satırı listeler (atılacak K3-X basılacak ad değil)", golge2 === "K2-X", golge2);
 }
 
+/**
+ * ⑨ NULL-GÜVENLİ ANAHTAR HEDEF TARAFTA (K1, 2026-10-29) — `crossSourceOn.nullSafe` beyanlı haritada
+ * (4 puan kural seti: partial UNIQUE `customer_uq` itemId NULL) survivor yüklemi `=` ile eşlerse NULL
+ * anahtarlı iki satır çakışmaz görünür: önizleme temiz der, işlem ham 23505/500'e düşer.
+ */
+async function nullSafeSurvivorSide(): Promise<void> {
+  console.log("\n── ⑨ nullSafe anahtar hedef tarafında (4 puan müşteri seti, itemId NULL) ──");
+  const s = await mkCustomer("NS-S");
+  const k = await mkCustomer("NS-K");
+  await prisma.fourPointRuleSet.create({ data: { name: `${TAG} S`, scope: "CUSTOMER", customerId: s } });
+  await prisma.fourPointRuleSet.create({ data: { name: `${TAG} K`, scope: "CUSTOMER", customerId: k } });
+  const pv = await MasterDataMergeService.preview("customer", s, [k]);
+  check("⑨ ⭐ iki müşteri düzeyi set (itemId NULL) önizlemede ENGEL", !pv.canMerge && pv.blockers.some((b) => b.key === "CONFLICT_FOUR_POINT_RULE_SETS"),
+    pv.blockers.map((b) => b.key).join(",") || "engel yok");
+  const hata = await hataOf(() =>
+    MasterDataMergeService.merge("customer", { survivorId: s, sourceIds: [k], reason: "nullsafe hedef tarafi", acknowledgedConflicts: pv.conflicts.length }),
+  );
+  check("⑨ ⭐ işlem BLOCK 409 (ham 23505/500 DEĞİL)", hata.startsWith("409"), hata);
+  const s2 = await mkCustomer("NS-S2");
+  const k2 = await mkCustomer("NS-K2");
+  const item = await mkItem("NS-I");
+  await prisma.fourPointRuleSet.create({ data: { name: `${TAG} S2`, scope: "CUSTOMER", customerId: s2 } });
+  await prisma.fourPointRuleSet.create({ data: { name: `${TAG} K2`, scope: "CUSTOMER", customerId: k2, itemId: item } });
+  const pv2 = await MasterDataMergeService.preview("customer", s2, [k2]);
+  check("⑨ körlük zemini: müşteri seti (NULL) ↔ kumaş seti (dolu) ÇAKIŞMAZ", !pv2.blockers.some((b) => b.key === "CONFLICT_FOUR_POINT_RULE_SETS"),
+    pv2.blockers.map((b) => b.key).join(","));
+}
+
 main()
   .catch((e) => {
     fail++;
@@ -648,6 +680,7 @@ main()
     await prisma.mergeOperation.deleteMany({ where: { id: { in: opIds } } }).catch(() => undefined);
     await prisma.itemPrice.deleteMany({ where: { itemId: { in: trash.items } } }).catch(() => undefined);
     await prisma.customerBranch.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
+    await prisma.fourPointRuleSet.deleteMany({ where: { name: { startsWith: TAG } } }).catch(() => undefined);
     await prisma.systemLog.deleteMany({
       where: { recordId: { in: [...trash.items, ...trash.colors, ...trash.customers] } },
     }).catch(() => undefined);

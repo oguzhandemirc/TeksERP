@@ -23,6 +23,12 @@ export interface TargetValueItem {
   valueId: string;
 }
 
+/** PUT gövde kalemi: `valueId: null` = o özelliğin hedefini AÇIKÇA kaldır (K1, 2026-10-29). */
+export interface TargetValueUpdateItem {
+  propertyId: string;
+  valueId: string | null;
+}
+
 export interface TargetValueChange {
   revoked: Array<{ id: string; propertyId: string; valueId: string }>;
   created: Array<{ id: string; propertyId: string; valueId: string }>;
@@ -32,14 +38,17 @@ export interface TargetValueChange {
  * Gövde doğrulaması (fail-closed): özellik bir ÇEŞİT özelliği olmalı
  * (`variantOfPropertyId` dolu), değer o özelliğe ait ve aktif olmalı; aynı özellik iki kez gelemez.
  */
-export async function assertTargetValueItems(db: Reader, items: TargetValueItem[]): Promise<void> {
-  if (items.length === 0) return;
-  const propertyIds = items.map((i) => i.propertyId);
+export async function assertTargetValueItems(db: Reader, all: TargetValueUpdateItem[]): Promise<void> {
+  if (all.length === 0) return;
+  const propertyIds = all.map((i) => i.propertyId);
   if (new Set(propertyIds).size !== propertyIds.length) {
     throw AppError.badRequest("Aynı özellik için birden fazla hedef verilemez", { code: "TARGET_VALUE_DUPLICATE" });
   }
+  // Kaldırma kalemi (`valueId: null`) doğrulanmaz: aktif hedefi yoksa no-op, pasif özelliğin hedefi de kaldırılabilir.
+  const items = all.filter((i): i is TargetValueItem => i.valueId !== null);
+  if (items.length === 0) return;
   const props = await db.fabricProperty.findMany({
-    where: { id: { in: propertyIds } },
+    where: { id: { in: items.map((i) => i.propertyId) } },
     select: { id: true, name: true, isActive: true, variantOfPropertyId: true },
   });
   for (const item of items) {
@@ -89,29 +98,35 @@ export async function revokeTargetValueTx(tx: Tx, id: string, userId: string | n
 }
 
 /**
- * İE'nin hedef kümesini `items`a getirir (FARK bazlı): kümede olmayan ya da değeri
- * değişen aktif satır damgalanır, yeni/değişen yazılır; aynısı no-op. Çağıran tx'in
- * İLK ifadesi İE satır kilidi olmalıdır (`touchWorkOrderTx`).
+ * İE hedeflerini ÖZELLİK KAPSAMLI günceller (K1, 2026-10-29): yalnız `items`taki özelliklerin
+ * aktif hedefi değişir (`valueId: null` = kaldır), gövdede olmayan özelliğe dokunulmaz — tek
+ * tıkla başka özelliğin hedefi sessizce düşmesin. Boş liste = ESKİ İSTEMCİ sözleşmesi "hepsini
+ * kaldır" (panel ≤ K1 hedefi kaldırmayı `[]` ile yapıyordu). Aynısı no-op. Çağıran tx'in İLK
+ * ifadesi İE satır kilidi olmalıdır (`touchWorkOrderTx`).
  */
 export async function setWorkOrderTargetValuesTx(
   tx: Tx,
-  args: { workOrderId: string; items: TargetValueItem[]; userId: string | null },
+  args: { workOrderId: string; items: TargetValueUpdateItem[]; userId: string | null },
 ): Promise<TargetValueChange> {
   const active = await tx.workOrderTargetValue.findMany({
     where: { workOrderId: args.workOrderId, ...ACTIVE_TARGET_VALUE },
     select: { id: true, propertyId: true, valueId: true },
   });
+  const legacyClearAll = args.items.length === 0;
   const change: TargetValueChange = { revoked: [], created: [] };
   for (const row of active) {
     const wanted = args.items.find((i) => i.propertyId === row.propertyId);
+    if (!wanted && !legacyClearAll) continue;
     if (wanted && wanted.valueId === row.valueId) continue;
     await revokeTargetValueTx(tx, row.id, args.userId);
     change.revoked.push(row);
   }
   for (const item of args.items) {
-    if (active.some((r) => r.propertyId === item.propertyId && r.valueId === item.valueId)) continue;
+    const valueId = item.valueId;
+    if (valueId === null) continue;
+    if (active.some((r) => r.propertyId === item.propertyId && r.valueId === valueId)) continue;
     const created = await tx.workOrderTargetValue.create({
-      data: { workOrderId: args.workOrderId, propertyId: item.propertyId, valueId: item.valueId, createdById: args.userId },
+      data: { workOrderId: args.workOrderId, propertyId: item.propertyId, valueId, createdById: args.userId },
       select: { id: true, propertyId: true, valueId: true },
     });
     change.created.push(created);
