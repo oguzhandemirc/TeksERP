@@ -12,6 +12,8 @@
 // §7 ⭐ son adım: depo girişi uygulanmış metrajla, stok defteri Σ = durum; yeniden açma ⇒ Σ 0, metraj 100.
 // §8 ⭐ elle geri taşıma (Konumu Düzelt) okumayı damgalar ve APPLY'ı tersler; hedef hareketi 100 ile açılır.
 // §9 DB seddi: initialQtyRaise OVERAGE dışı satırda reddedilir.
+// §11 ⭐ imza bekleyen okuma, top elle İLERİ taşındıktan sonra imzalanırsa 409 (metraj başka adımda değişmez).
+// §12 ⭐ IN düzeltmesiyle imza beklentisi kalkan okuma adım kapanışında uygulanır; sonraki qtyIn = taze metraj.
 // §10 ayar: geçersiz değer 400 (Türkçe), APPLY/RECORD yazılır; okuma kopyası ayar değişiminden etkilenmez.
 // Negatif sondalar (elle, PR gövdesinde): initialQty yükseltmesi kaldırılınca §4 ❌ · ters çağrısı
 // (`reverseExitMeterStockTx`) kaldırılınca §3/§5/§7/§8 ❌ (defter ≠ durum).
@@ -268,6 +270,46 @@ async function main(): Promise<void> {
       check("§8 ⭐ elle geri taşıma: okuma damgalı + APPLY terslendi (metraj 100) + hedef hareketi 100 ile açıldı",
         e.status === null && out == null && v.length === 1 && v[0]!.reversedAt != null && n(r.currentQty) === 100 && n(tgt?.qtyIn) === 100,
         `hata=${e.msg.slice(0, 160)} qty=${n(r.currentQty)} hedef.qtyIn=${n(tgt?.qtyIn)}`);
+    }
+
+    // ── §11 imza bekleyen okuma + top elle ileri taşındı (P1) ──────────────────
+    {
+      await setFlag(SETTING_KEYS.KURSUN_METER_VARIANCE_THRESHOLD_M, 1);
+      await setFlag(SETTING_KEYS.KURSUN_METER_VARIANCE_APPROVAL, "OFFICE");
+      const a = await mkActive("three");
+      await qc2(a.rollId, a.stepId, 95);
+      const moveErr = await hata(moveSvc.manualMove(a.woId, { rollIds: [a.rollId], targetStepId: a.nextStepId!, reason: "TEST ileri taşıma" }, admin.id));
+      const out = await activeOut(a.rollId, a.stepId);
+      const ackErr = await hata(svc.ackMeterReading({ readingId: out!.id, mode: "OFFICE", reason: { reasonText: "TEST geç imza" } }, admin.id));
+      const r = await rollOf(a.rollId);
+      const v = await variances(a.rollId);
+      const nextMv = await prisma.rollMovement.findFirst({ where: { rollId: a.rollId, workOrderStepId: a.nextStepId!, revokedAt: null } });
+      check("§11 ⭐ imza bekleyen APPLY okuması, top adımdan ayrıldıktan sonra imzalanınca stoğa uygulanmaz (409, metraj = sonraki hareket girişi)",
+        moveErr.status === null && ackErr.status === 409 && ackErr.code === "METER_STOCK_ROLL_LEFT_STEP" && n(r.currentQty) === 100 && v.length === 0 && n(nextMv?.qtyIn) === n(r.currentQty),
+        `taşıma=${moveErr.msg.slice(0, 80)} imza=${ackErr.status}/${String(ackErr.code)} qty=${n(r.currentQty)} sapma=${v.length} sonraki.qtyIn=${n(nextMv?.qtyIn)}`);
+      await prisma.systemSetting.deleteMany({ where: { key: { in: [SETTING_KEYS.KURSUN_METER_VARIANCE_THRESHOLD_M, SETTING_KEYS.KURSUN_METER_VARIANCE_APPROVAL] } } });
+    }
+
+    // ── §12 imza beklentisi IN düzeltmesiyle kalkar; kapanış uygular (P2) ──────
+    {
+      await setFlag(SETTING_KEYS.KURSUN_METER_CAPTURE, "IN_OUT");
+      await setFlag(SETTING_KEYS.KURSUN_METER_VARIANCE_BASIS, "MEASURED_IN");
+      await setFlag(SETTING_KEYS.KURSUN_METER_VARIANCE_THRESHOLD_M, 1);
+      await setFlag(SETTING_KEYS.KURSUN_METER_VARIANCE_APPROVAL, "OFFICE");
+      const a = await mkActive("next");
+      await svc.recordMeterReading({ rollId: a.rollId, stepId: a.stepId, phase: MeterPhase.IN, input: meter(100) }, admin.id);
+      await qc2(a.rollId, a.stepId, 95);
+      const pending = await rollOf(a.rollId);
+      await svc.recordMeterReading({ rollId: a.rollId, stepId: a.stepId, phase: MeterPhase.IN, input: meter(95) }, admin.id);
+      const finErr = await hata(svc.finishStep({ stepId: a.stepId }, admin.id, null));
+      const r = await rollOf(a.rollId);
+      const v = (await variances(a.rollId)).filter((x) => x.reversedAt == null);
+      const nextMv = await prisma.rollMovement.findFirst({ where: { rollId: a.rollId, workOrderStepId: a.nextStepId!, revokedAt: null } });
+      check("§12 ⭐ imza beklentisi kalkan APPLY okuması kapanışta uygulanır: metraj 95 + sapma 1, sonraki qtyIn = metraj",
+        n(pending.currentQty) === 100 && finErr.status === null && n(r.currentQty) === 95 && v.length === 1 && n(nextMv?.qtyIn) === 95,
+        `bekleyen=${n(pending.currentQty)} kapanış=${finErr.msg.slice(0, 80)} qty=${n(r.currentQty)} sapma=${v.length} sonraki.qtyIn=${n(nextMv?.qtyIn)}`);
+      await setFlag(SETTING_KEYS.KURSUN_METER_CAPTURE, "OUT");
+      await prisma.systemSetting.deleteMany({ where: { key: { in: [SETTING_KEYS.KURSUN_METER_VARIANCE_BASIS, SETTING_KEYS.KURSUN_METER_VARIANCE_THRESHOLD_M, SETTING_KEYS.KURSUN_METER_VARIANCE_APPROVAL] } } });
     }
 
     // ── §9 DB seddi ───────────────────────────────────────────────────────────

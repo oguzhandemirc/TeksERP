@@ -10,7 +10,7 @@
 // `rollVarianceId` bağlı ADJUST yazılır (adjustRollQty emsali; üretimdeki top satır almaz — giriş
 // satırı son adım kapanışında güncel metrajla yazılır, defter = durum korunur).
 // =============================================================================
-import { MeterPhase, MeterStockMode, Prisma, RollVarianceKind, WarehouseEventType, type RollMeterReading } from "@prisma/client";
+import { MeterPhase, MeterStockMode, Prisma, RollStatus, RollVarianceKind, WarehouseEventType, type RollMeterReading } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import { VARIANCE_SOURCES } from "../../constants/variance-reasons";
@@ -18,6 +18,7 @@ import { STOCK_MOVE_REASON } from "../../constants/stock-move-reasons";
 import { recordVarianceTx } from "./roll-variance.helper";
 import { postStockMove, qtyYazilabilir } from "./warehouse-ledger.helper";
 import { isWarehouseStock } from "./warehouse-stock.helper";
+import { assertWorkNotBilledTx } from "./service-billing-gate.helper";
 
 type Tx = Prisma.TransactionClient;
 
@@ -40,14 +41,26 @@ export async function applyExitMeterToStockTx(
   userId: string | null,
 ): Promise<ExitMeterApplyResult | null> {
   if (reading.phase !== MeterPhase.OUT || reading.stockMode !== MeterStockMode.APPLY) return null;
-  const roll = await tx.roll.findUnique({
+  // Top okumanın adımından ayrıldıysa (elle ileri taşıma, kesim, depo, sevk) geç imza metrajı başka bir
+  // yerdeki topa yazardı — satır kilidi altında konum doğrulanır, tutmuyorsa 409.
+  const pos = await tx.$queryRaw<{ currentStepId: string | null; status: RollStatus }[]>`
+    SELECT "currentStepId", status FROM rolls WHERE id = ${reading.rollId}::uuid FOR UPDATE`;
+  if (pos.length === 0) throw AppError.notFound("Top bulunamadı");
+  if (pos[0]!.currentStepId !== reading.workOrderStepId || pos[0]!.status !== RollStatus.IN_PRODUCTION) {
+    throw AppError.conflict("Top bu ölçümün adımından ayrılmış — ölçüm stoğa uygulanamaz; topu adıma geri alıp yeniden ölçün", {
+      code: "METER_STOCK_ROLL_LEFT_STEP",
+      rollId: reading.rollId,
+    });
+  }
+  const roll = await tx.roll.findUniqueOrThrow({
     where: { id: reading.rollId },
     select: { currentQty: true, initialQty: true, status: true, warehouseId: true },
   });
-  if (!roll) throw AppError.notFound("Top bulunamadı");
   const meters = new Prisma.Decimal(reading.meters);
   const diff = meters.minus(roll.currentQty);
   if (diff.isZero()) return { varianceId: null, kind: null, diff: 0 };
+  // Faturalı işin metrajı değişmez (imza yolu da bu kapıdan geçer).
+  await assertWorkNotBilledTx(tx, { rollIds: [reading.rollId], workOrderStepId: reading.workOrderStepId });
 
   const isShort = diff.isNegative();
   const qty = diff.abs();
@@ -90,6 +103,36 @@ export async function applyExitMeterToStockTx(
 }
 
 /**
+ * Adım kapanışında henüz uygulanmamış ETKİN APPLY okumalarını uygular: imza beklentisi sonradan kalkan
+ * (IN düzeltmesi / belge satırı tabanı değiştirdi) okuma imzasız etkin olur ama hiçbir yazım anı
+ * uygulamamıştır. Kapanış kapısı imza bekleyeni zaten reddettiği için burada kalan her okuma etkindir.
+ */
+export async function applyPendingExitMetersTx(
+  tx: Tx,
+  args: { stepId: string; rollIds: string[]; userId: string | null },
+): Promise<Array<{ readingId: string; result: ExitMeterApplyResult | null }>> {
+  if (args.rollIds.length === 0) return [];
+  const readings = await tx.rollMeterReading.findMany({
+    where: { workOrderStepId: args.stepId, rollId: { in: args.rollIds }, phase: MeterPhase.OUT, revokedAt: null, stockMode: MeterStockMode.APPLY,
+      // Yalnız hâlâ bu adımda olan top (eşzamanlı kapanış onu ilerletmişse bu tur ona dokunmaz).
+      roll: { currentStepId: args.stepId, status: RollStatus.IN_PRODUCTION } },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  if (readings.length === 0) return [];
+  const appliedRows = await tx.rollVariance.findMany({
+    where: { source: VARIANCE_SOURCES.KURSUN_EXIT_MEASURE, sourceRefId: { in: readings.map((r) => r.id) }, reversedAt: null },
+    select: { sourceRefId: true },
+  });
+  const applied = new Set(appliedRows.map((r) => r.sourceRefId));
+  const out: Array<{ readingId: string; result: ExitMeterApplyResult | null }> = [];
+  for (const r of readings) {
+    if (applied.has(r.id)) continue;
+    out.push({ readingId: r.id, result: await applyExitMeterToStockTx(tx, r, args.userId) });
+  }
+  return out;
+}
+
+/**
  * Damgalanan okumaların APPLY etkisini terslemek: bağlı aktif sapma satırı `reversedAt` alır, metraj
  * (ve yükseltildiyse giriş metrajı) aynı miktarla geri döner. Okuma damgası ile AYNI tx'te çağrılır.
  * Dönen: terslenen satır sayısı.
@@ -98,7 +141,7 @@ export async function reverseExitMeterStockTx(tx: Tx, readingIds: string[], user
   if (readingIds.length === 0) return 0;
   const rows = await tx.rollVariance.findMany({
     where: { source: VARIANCE_SOURCES.KURSUN_EXIT_MEASURE, sourceRefId: { in: readingIds }, reversedAt: null },
-    select: { id: true, rollId: true, kind: true, qty: true, initialQtyRaise: true, workOrderStepId: true },
+    select: { id: true, rollId: true, kind: true, qty: true, initialQtyRaise: true, workOrderStepId: true, sourceRefId: true },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
   for (const v of rows) {
@@ -109,14 +152,15 @@ export async function reverseExitMeterStockTx(tx: Tx, readingIds: string[], user
     if (stamped.count === 0) continue;
     const isShort = v.kind === RollVarianceKind.RECORD_CORRECTION;
     const raise = v.initialQtyRaise ?? new Prisma.Decimal(0);
-    // CAS geri dönüş: eksi yön giriş metrajını aşamaz, artı yön metrajı eksiye düşüremez — tutmuyorsa top
-    // bu arada başka bir yolla değişmiştir; sessiz yanlış yerine 409.
+    // Metraj hâlâ uygulanan ölçümdeyse geri döner; uygulamadan sonra başka bir yolla (kesim vb.) değiştiyse
+    // fark artık o metraja ait değildir — sessiz yanlış yerine 409. Sınır denetimi ek sigortadır.
     const cur = await tx.roll.findUnique({ where: { id: v.rollId }, select: { currentQty: true, initialQty: true } });
     if (!cur) throw AppError.notFound("Top bulunamadı");
+    const applied = await tx.rollMeterReading.findUnique({ where: { id: v.sourceRefId! }, select: { meters: true } });
     const nextQty = isShort ? cur.currentQty.plus(v.qty) : cur.currentQty.minus(v.qty);
     const nextInitial = cur.initialQty.minus(raise);
     const reverted =
-      nextQty.isNegative() || nextQty.greaterThan(nextInitial)
+      !applied || !cur.currentQty.equals(applied.meters) || nextQty.isNegative() || nextQty.greaterThan(nextInitial)
         ? 0
         : (
             await tx.roll.updateMany({
