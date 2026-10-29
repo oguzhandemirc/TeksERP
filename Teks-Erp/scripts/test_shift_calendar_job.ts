@@ -78,7 +78,8 @@ async function main(): Promise<void> {
 
   // ── §0 statik ─────────────────────────────────────────────────────────────
   const jobSrc = readFileSync(join(__dirname, "../src/jobs/shift-calendar.job.ts"), "utf8");
-  const gate = jobSrc.indexOf("readDokumaEnabled()");
+  // D4-A1: kapı duruş rejimi yüklemidir (dokuma ∨ üretim ∧ makine duruşu takibi; tek helper).
+  const gate = jobSrc.indexOf("machineStopRegime()");
   const firstPrisma = jobSrc.indexOf("prisma.", jobSrc.indexOf("export async function runShiftCalendarOnce"));
   check("§0a bayrak okuması job'un İLK ifadesi (prisma'ya dokunmadan)", gate > 0 && gate < firstPrisma);
   const serverSrc = readFileSync(join(__dirname, "../src/server.ts"), "utf8");
