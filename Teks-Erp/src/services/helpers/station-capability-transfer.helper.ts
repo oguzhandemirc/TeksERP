@@ -34,7 +34,7 @@
 // Çeşit bağı olmayan kurulumda karar bugünküyle birebir aynıdır.
 // =============================================================================
 
-import { FabricPropertyValueType, StationPropertyMode } from "@prisma/client";
+import { FabricPropertyValueType, StationKind, StationPropertyMode } from "@prisma/client";
 import type { TxClient } from "./roll-step.helper";
 import { AppError } from "../../utils/app-error";
 import { setRollPropertyValueTx } from "./property-revoke.helper";
@@ -75,13 +75,18 @@ export interface PropertySelection {
   valueCode?: string | null;
 }
 
-/** İstasyonun özellik yetenekleri + modları + değerleri (ekran + doğrulama). */
+/**
+ * İstasyonun özellik yetenekleri + modları + değerleri (ekran + doğrulama).
+ * `kind` verilirse istasyon o türde değilse boş döner (oturumdan gelen istasyon
+ * Tambur olmayabilir — Top Kesme; T1). Ek sorgu yok, aynı where.
+ */
 export async function loadStationPropertyCaps(
   tx: TxClient,
   stationId: string,
+  opts?: { kind?: StationKind },
 ): Promise<StationPropertyCap[]> {
   const rows = await tx.stationProperty.findMany({
-    where: { stationId, property: { isActive: true } },
+    where: { stationId, property: { isActive: true }, ...(opts?.kind ? { station: { kind: opts.kind } } : {}) },
     select: {
       propertyId: true,
       mode: true,

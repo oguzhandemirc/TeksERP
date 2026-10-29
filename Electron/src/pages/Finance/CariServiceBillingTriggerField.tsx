@@ -16,9 +16,11 @@ interface Props {
   /** `null` = alan bu caride yok (fason hesabı / eski backend) → çizilmez. */
   value: ServiceBillingTriggerChoice | null;
   onChange: (v: ServiceBillingTriggerChoice) => void;
+  /** Salt-okunur (kart formunda `finance:write` yok). */
+  disabled?: boolean;
 }
 
-export function CariServiceBillingTriggerField({ value, onChange }: Props) {
+export function CariServiceBillingTriggerField({ value, onChange, disabled = false }: Props) {
   const flags = useFeatureFlags().data?.data;
   if (value === null) return null;
   if (flags?.financeServiceBillingEnabled !== true && value === "FACTORY") return null;
@@ -34,6 +36,7 @@ export function CariServiceBillingTriggerField({ value, onChange }: Props) {
               name="cari-service-billing-trigger"
               value={c.value}
               checked={value === c.value}
+              disabled={disabled}
               onChange={() => onChange(c.value)}
             />
             <span className="min-w-0 break-words">{c.value === "FACTORY" ? `${c.label} (${factory})` : c.label}</span>

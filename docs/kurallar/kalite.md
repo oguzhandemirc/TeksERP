@@ -75,6 +75,7 @@
 
 - **[ÇEKİRDEK]** Final statü kaliteden çözülür: `resolveFinalStatus(code, statusByCode)` → `QualityGrade.targetStatus`; kod yok ya da katalogda yoksa WAREHOUSE. ⚠️ Kolon default'u `targetStatus @default(SCRAP)` (yıkıcı, bilinçli) — create ucunda ZORUNLU olduğu için (F212) hiç uygulanmaz; 'varsayılan WAREHOUSE' finalize kuralıdır, kolon default'u değil. · bekçi: `test_finalize_last_step (kalite-null→WAREHOUSE ölçümü — bölüm BELİRSİZ)` <sub>(CLAUDE.md:17)</sub>
 - **[ÇEKİRDEK]** `StationProperty.mode` AUTO|OPTIONAL|REQUIRED çalışma-zamanı davranışıdır (varsayılan OPTIONAL); kurşun bypass ataması AUTO arar — satırın varlığı yetmez; TAMBUR kat modu OPTIONAL (REQUIRED yalancı beyandı — Tambur akışı capability kapısını çağırmaz). · bekçi: `test_property_targetable / test_property_value_selection (bölüm BELİRSİZ)` <sub>(CLAUDE.md:68)</sub>
+- **[ÇEKİRDEK]** İstasyon yeteneği kesimle doğan topa da uygulanır (Tambur): AUTO yazılır, seçimsiz yolda OPTIONAL/REQUIRED yazılmaz, kalıtılan değer korunur. · bekçi: `test_tambur_istasyon_yetenegi` (arşiv 2026-10-29 Gülkesim T1)
 
 ### Yasaklar
 

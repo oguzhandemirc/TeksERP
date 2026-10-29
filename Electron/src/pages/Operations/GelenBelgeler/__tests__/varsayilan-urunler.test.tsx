@@ -93,6 +93,11 @@ describe("müşteri varsayılan ürünleri sayfası", () => {
     expect(within(c1).getByText(/Süprem Ham/)).toBeInTheDocument();
     expect(within(c1).getByText(/Son güncelleme: 29\.10\.2026/)).toBeInTheDocument();
     expect(within(screen.getByTestId("customer-default-c2")).getByTestId("customer-default-problem").textContent).toContain("Ürün pasif.");
+    // Sorunlu kart vurgulanır, sağlam kart vurgulanmaz.
+    expect(screen.getByTestId("customer-default-c2")).toHaveAttribute("data-problem", "true");
+    expect(screen.getByTestId("customer-default-c2").className).toContain("border-destructive");
+    expect(c1).not.toHaveAttribute("data-problem");
+    expect(c1.className).not.toContain("border-destructive");
   });
 
   it("ekle: müşteri seçici + ürün seçici (yalnız aktif kumaş) → PUT", async () => {
