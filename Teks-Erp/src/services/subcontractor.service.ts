@@ -579,6 +579,8 @@ async function createFasonShipChild(
     batchId: string | null;
     /** Çocuğun mirasla alacağı depo (kısmi sevk topu BÖLER, taşımaz). */
     warehouseId: string | null;
+    /** EMANET sahipliği doğum niteliği — müşterinin kumaşından bölünen parça da onundur (H10). */
+    ownerCustomerId: string | null;
   },
   shipQty: number,
   stepId: string,
@@ -612,6 +614,7 @@ async function createFasonShipChild(
       qualityGrade: parent.qualityGrade,
       qualityGradeId: parent.qualityGradeId,
       parentRollId: parent.id,
+      ownerCustomerId: parent.ownerCustomerId,
       batchId: parent.batchId,
       entrySource: RollEntrySource.TAMBUR_SPLIT,
       createdById: userId ?? null,
@@ -697,6 +700,7 @@ async function applyDirectShipSplits(
       qualityGradeId: true,
       batchId: true,
       currentQty: true,
+      ownerCustomerId: true,
       // Çocuk depoyu ebeveynden miras alır — select'ten düşerse derleme kırılır
       // (createFasonShipChild parametre tipi bunu ZORUNLU tutar).
       warehouseId: true,
