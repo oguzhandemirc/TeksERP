@@ -371,6 +371,9 @@ export const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   // DeliveryNoteAliasScope.PROCESS (gelen belge D4, 2026-10-29) — belgedeki İŞLEM metninin eşlemesi;
   // global `PROCESS` RollErrorOrigin dilinde ("Süreç hatası"). Ortak Türkçe YETMEZ.
   "DELIVERY_NOTE_ALIAS.scope": { PROCESS: "İşlem" },
+  // ServiceMeterBasis (H7, 2026-10-29) — global `CUT` ("Kesildi", RollErrorAction) ve `RECEIVED`
+  // ("Aldığımız", ChequeKind) fatura metre esasında yanlış. Ortak Türkçe YETMEZ.
+  "SERVICE_BILLING_LINK.meterBasis": { CUT: "Kesim metresi", RECEIVED: "Teslim alınan metre" },
   // PackingGroupStatus (sevk partisi, 2026-09-21) — `OPEN`/`CLOSED` PurchaseOrderStatus
   // ile ÇAKIŞIR; global cevap alış siparişi dilinde ("mal bekleniyor" / "tamamlandı").
   // Partide CLOSED "sevk edildi"dir: son çuvalı sevk edilince sunucu yazar, elle

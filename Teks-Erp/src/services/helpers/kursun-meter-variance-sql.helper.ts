@@ -4,7 +4,7 @@
 // Aynı eşitsizlik NUMERIC'te: |out − taban|·100 > max(M·100, P·taban); eşikler boş ya da
 // taban yoksa false. Bekçi `test_kursun_sapma` 20 fikstürde TS kararıyla eşitliği ölçer.
 // Bildirilen giriş: gelen belge satırı metresi (`customer_delivery_note_lines.rollId @unique`),
-// yoksa topun `initialQty`si — TS tarafı `loadMeterVarianceInputs` aynı sırayla okur.
+// yoksa topun `initialQty`si — TS tarafı `evaluateReadingVarianceTx` (kursun-meter.helper.ts) aynı sırayla okur.
 // =============================================================================
 import { Prisma } from "@prisma/client";
 

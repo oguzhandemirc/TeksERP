@@ -111,7 +111,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_audit_followups`, `test_consistency_derived`, `test_e2e_full_flow`, `test_kursun_bulk`, `test_kursun_bypass`, `test_kursun_bypass_repoint`, `test_kursun_gramaj`, `test_kursun_metre`, `test_kursun_sapma`, `test_kursun_adim_sayac`, `test_process_summary`, `test_kursun_machine_order`, `test_kursun_regime_lock`, `test_kursun_unassigned_close`, `test_manual_move_field_continuity`, `test_manual_move_qc_reversal`, `test_p2_kk2reopen`, `test_property_value_selection`, `test_qc2_idempotency`⚠️, `test_station_property_mode`, `test_wo_target_color_guard`
+Backend: `test_audit_followups`, `test_consistency_derived`, `test_e2e_full_flow`, `test_kursun_bulk`, `test_kursun_bypass`, `test_kursun_bypass_repoint`, `test_kursun_gramaj`, `test_kursun_metre`, `test_kursun_sapma`, `test_kursun_adim_sayac`, `test_process_summary`, `test_kursun_machine_order`, `test_kursun_regime_lock`, `test_kursun_unassigned_close`, `test_manual_move_field_continuity`, `test_manual_move_qc_reversal`, `test_p2_kk2reopen`, `test_property_value_selection`, `test_qc2_idempotency`⚠️, `test_station_property_mode`, `test_wo_target_color_guard`, `test_hizmet_fatura`
 
 İstemci: `machine-tabs.test.ts`, `queue-reorder.test.ts`, `selection.test.ts`, `production-regime.test.ts`, `tile-visibility.test.ts`
 

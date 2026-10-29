@@ -1761,7 +1761,7 @@ export class KursunQcService {
     // barkodsuz açık kumaş topları listede ad + renkle görünsün.
     const itemName = step.workOrder.targetItem?.name ?? null;
     const colorName = step.workOrder.targetColor?.name ?? null;
-    // H3b: sayaç kipi kapalıyken (varsayılan) hiçbir ek okuma yapılmaz ve anahtar eklenmez.
+    // H3b: sayaç kipi kapalıyken (varsayılan) yalnız kip okunur; taban/politika okunmaz, anahtar eklenmez.
     const capture = await resolveKursunMeterCapture();
     const meterOn = capture !== "OFF";
     const meterPolicy = meterOn ? await resolveKursunMeterPolicy(prisma) : null;

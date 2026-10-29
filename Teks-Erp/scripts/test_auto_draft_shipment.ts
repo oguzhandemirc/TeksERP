@@ -27,6 +27,9 @@
 //   §4 MODÜL ŞALTERİ — `finance.enabled` kapalıyken bayrak açık olsa da no-op
 //   §5 ONAY AÇIK REJİMİ — PLANNED sevkiyatta taslak YOK; `dispatchShipment`
 //      ile onaylanınca DOĞAR (kancanın üç çağrı yolundan ikisi ölçülmüş olur)
+//   (H7) `finance.serviceBilling.enabled` KAPALI → sevk kancası BAYT-AYNI: test_hizmet_fatura §11
+//      ölçer (not tam eşitliği + toplayıcı anahtarları). Orada, çünkü kurşun işi/okuma/hizmet kalemi
+//      fixture'ı orada; buraya kopyası çift bakım + çift ölçüm olurdu.
 //   §6 KÖRLÜK ZEMİNİ — fixture gerçekten kuruldu mu (yeşil ≠ "hiç bakılmadı")
 //   §8 ⭐ VADE ÖN-DOLUMU — `dueDate = issueDate + CariAccount.paymentTermDays`;
 //      cari vade taşımıyorsa dueDate NULL (uydurma vade YAZILMAZ)

@@ -441,6 +441,8 @@ function main(): void {
     // n irsaliye → 1 fatura (2026-09-18): onay toleransı muhasebe modülünün davranış bayrağı.
     readFinanceInvoiceMatchTolerance: { resolver: "resolveInvoiceMatchToleranceEnabled", ebeveyn: "finans" },
     readFinanceChequeNoteMovementEnabled: { resolver: "resolveChequeNoteMovementEnabled", ebeveyn: "finans" },
+    // H7 hizmet faturası (2026-10-29): sevk kancası + düzeltme kapıları yalnız resolver okur.
+    readFinanceServiceBillingEnabled: { resolver: "resolveServiceBillingEnabled", ebeveyn: "finans" },
     // İplik lotu kalite bekletme (2026-09-18): doğuş + çıkış kapısı yalnız resolver okur.
     readGoodsReceiptYarnQualityHoldEnabled: { resolver: "resolveYarnQualityHoldEnabled", ebeveyn: "ticaret+iplik" },
     // İptalde sebep zorunlu (2026-09-18): top iptal kapısı + önizleme yalnız resolver okur.

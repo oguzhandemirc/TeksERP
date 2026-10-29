@@ -121,8 +121,8 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   DISPATCHED: "sevkiyat ve sevkiyat olayı — ikisi de 'Sevk Edildi'",
   PARTIAL: "içe aktarım ve alış siparişi — ikisi de 'Kısmi'",
   DRAFT: "fatura ve sayım — ikisi de 'Taslak'",
-  IN: "ödeme yönü ve iplik hareketi — ikisi de 'Giriş'",
-  OUT: "ödeme yönü ve iplik hareketi — ikisi de 'Çıkış'",
+  IN: "ödeme yönü, iplik hareketi ve hizmet metre esası (ServiceMeterBasis) — hepsinde 'Giriş'",
+  OUT: "ödeme yönü, iplik hareketi ve hizmet metre esası (ServiceMeterBasis) — hepsinde 'Çıkış'",
   ISSUED: "ChequeKind ve ChequeStatus — global 'Verdiğimiz (kendi çekimiz)' ikisinde de doğru; durum alanı ayrıca CHEQUE.status override'ı taşır",
   DELETED:
     "MergeRefKind(birleştirmede çakışan satır silindi) ve SyncMarkKind(eşitleme işareti: kök satır silindi, 2026-09-29) — " +
@@ -137,6 +137,12 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   PRICE_LIST: "QuotePriceSource(fiyat listeden geldi) ve PrintedDocType(fiyat listesi belgesi) — ikisi de 'Fiyat listesi'; ortak Türkçe doğru",
 
   // ── Ortak Türkçe YETMEYEN — FIELD_ENUM_OVERRIDES ile ayrılmış ──────────────
+  CUT:
+    "RollErrorAction('Kesildi') ve ServiceMeterBasis(fatura metre esası: kesim metresi) — ortak cevap esas için YANLIŞ; " +
+    "SERVICE_BILLING_LINK.meterBasis override'ı ile ayrıldı (H7, 2026-10-29)",
+  RECEIVED:
+    "ChequeKind('Aldığımız') ve ServiceMeterBasis(fatura metre esası: teslim alınan metre) — ortak cevap esas için YANLIŞ; " +
+    "SERVICE_BILLING_LINK.meterBasis override'ı ile ayrıldı (H7, 2026-10-29)",
   ARCHIVED:
     "ItemLifecycleStatus('Pasif') ve PriceListStatus(yayından kalktı) — ortak cevap fiyat listesi için YANLIŞ; " +
     "PRICE_LIST.status override'ı ile ayrıldı (MAL-4, 2026-10-25)",

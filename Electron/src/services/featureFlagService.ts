@@ -275,6 +275,12 @@ export interface FeatureFlags {
   /** Sevk onayında otomatik satış faturası TASLAĞI üret (default false). Onay
    *  her zaman elle kalır; ön muhasebe kapalıyken kanca no-op'tur. */
   financeAutoDraftFromShipmentEnabled: boolean;
+  /** H7: hizmet faturası — ana anahtar + alt ayarlar (backend aynası; default false / OUT / DECLARED_WITH_WARNING / PER_SHIPMENT / SERVICE_DAY). */
+  financeServiceBillingEnabled: boolean;
+  financeServiceBillingMeterBasis: "OUT" | "IN" | "DECLARED";
+  financeServiceBillingMissingMeter: "DECLARED_WITH_WARNING" | "BLOCK_LINE";
+  financeServiceBillingTrigger: "PER_SHIPMENT" | "PERIOD_END";
+  financeServiceBillingPriceDate: "SERVICE_DAY" | "DISPATCH_DAY";
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; tahsis elle silinebilir. */
   financeAutoAllocateOnPaymentEnabled: boolean;

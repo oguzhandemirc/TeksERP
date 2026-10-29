@@ -10,6 +10,7 @@
 // yazılır — partial unique `roll_operations_active_triple_uq` (`WHERE revokedAt
 // IS NULL`) buna izin verir. Aynı değer ya da değersiz tekrar = no-op (replay).
 // =============================================================================
+import { assertWorkNotBilledTx } from "./service-billing-gate.helper";
 import { Prisma, RollOperationType } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { ACTIVE_OPERATION } from "./roll-operation.helper";
@@ -87,6 +88,8 @@ export async function applyKursunOperationTx(tx: Tx, a: ApplyKursunArgs): Promis
     throw CONFLICT();
   }
   if (a.valueId === null || active.propertyValueId === a.valueId) return "noop";
+  // H7: faturalı işin gramajı (= hizmet kalemi) düzeltilemez — 409 SERVICE_ALREADY_BILLED (fatura no ile).
+  await assertWorkNotBilledTx(tx, { rollIds: [a.rollId], workOrderStepId: a.stepId });
 
   const claimed = await tx.rollOperation.updateMany({
     where: { id: active.id, ...ACTIVE_OPERATION, propertyValueId: active.propertyValueId },
