@@ -26,6 +26,10 @@
 //              servis metninden ayrıştırıldı ("İplik")
 //   SONDA-B5 → çıkış 1 · 4 ❌ · §5c + §7b + §7c + §9c — `createMany({skipDuplicates})`
 //              → `upsert.update` döngüsü (satır varken EZER)
+//   SONDA-B6 → çıkış 1 · 2 ❌ · §4a + §4b — `hizmet` profilinden `emanet.enabled` silindi
+//              (gelen belge ön koşulu kapalı; 2026-10-29 H5)
+//   SONDA-B7 → çıkış 1 · 1 ❌ · §11b — sihirbazdan `ProfilSayfasi.Add('hizmet')` silindi
+//   SONDA-B8 → çıkış 1 · 1 ❌ · §11c — `ProfilDegeri` case numaraları bir kaydırıldı (0..6)
 // ⚠️ SONDA-B5 CANLI VERİYİ DE BOZAR: bozuk job yedi satırın DEĞERİNİ ezer ve bu
 //    bekçinin `finally`si yalnız kendi dokunduğu iki satırı geri yazar. Bu sondayı
 //    koşan kişi ÖNCE yedi satırı (değer + createdAt/updatedAt) SQL ile yedeklemeli;
@@ -87,6 +91,9 @@ const MIGRASYON = path.join(
   "prisma/migrations/20260902230000_modul_anahtarlari_grandfathering/migration.sql",
 );
 const BASE = process.env.TEST_API_URL ?? "http://localhost:4122";
+// Satıcı/bayinin profil seçtiği iki yüzey: sessiz kip şeması + sihirbaz (pakete girmez, repo kökünde).
+const CEVAP_SEMASI = path.resolve(KOK, "../deploy/kurulum/cevap-semasi.json");
+const SIHIRBAZ_ISS = path.resolve(KOK, "../deploy/kurulum/tekserp-kurulum.iss");
 
 /** `this.set(SETTING_KEYS.X, input.Y, "AÇIKLAMA", …)` → { camelCase: açıklama }. */
 function servisAciklamalari(): Map<string, string> {
@@ -131,6 +138,8 @@ const TASARIM_S10: Record<string, string[]> = {
     "devere.enabled",
     "dokuma.enabled",
   ],
+  // 2026-10-29 — H5: hizmet veren (fason işlemci) satılır; gelen belge emanete bağlı (DALGA2-HIZMET §7).
+  hizmet: ["production.enabled", "finance.enabled", "ticaret.enabled", "emanet.enabled", "gelenBelge.enabled"],
   // 2026-10-24 — MAL-0: maliyet "Tam"a girer (patron kararı, MALIYET-TEKLIF-PLAN §8-3).
   tam: [...MODULE_SETTING_KEYS],
 };
@@ -377,6 +386,40 @@ async function main(): Promise<void> {
       rotaGovde.includes("PROFILE_STAMP_SETTING_KEY") &&
       !/systemSettingService\.list\(/.test(rotaGovde),
     "`list()` çağrılsaydı tüm ayar satırları bu uçtan da dökülürdü",
+  );
+
+  // ── §11 ⭐ SATICI KATALOĞU: kurulum yüzeyleri profil kümesiyle BİREBİR ────
+  // Profil sabitte olup sihirbazda yoksa satılamaz; sihirbazda olup sabitte yoksa
+  // job `invalid` der ve kurulum profilsiz doğar (2026-10-29 H5).
+  const semaJson = JSON.parse(fs.readFileSync(CEVAP_SEMASI, "utf8")) as {
+    alanlar?: Record<string, { secenek?: string[] }>;
+  };
+  const semaProfil = semaJson.alanlar?.profil?.secenek ?? [];
+  const issKod = fs.readFileSync(SIHIRBAZ_ISS, "utf8");
+  // İlk satır "Paketin varsayılanı" (boş değer) — profil değil.
+  const issEkle = [...issKod.matchAll(/ProfilSayfasi\.Add\('([^']+)'\);/g)].map((m) => m[1]!).slice(1);
+  const pdBas = issKod.indexOf("function ProfilDegeri");
+  const pdGovde = pdBas >= 0 ? issKod.slice(pdBas, issKod.indexOf("\nend;", pdBas)) : "";
+  const issCaseSirali = [...pdGovde.matchAll(/^\s+(\d+): Result := '([^']+)';/gm)].sort(
+    (a, b) => Number(a[1]) - Number(b[1]),
+  );
+  // Ad sırası + NUMARA: case N ↔ sayfadaki N. satır (0 = varsayılan); kaydırma yanlış profil yazar.
+  const issCase = issCaseSirali.map((m) => `${m[1]}:${m[2]}`);
+  const profilKume = [...MODULE_PROFILE_IDS];
+  check(
+    "§11a ⭐ `cevap-semasi.json` profil seçenekleri = MODULE_PROFILE_IDS (sıra dahil)",
+    JSON.stringify(semaProfil) === JSON.stringify(profilKume),
+    `şema=${semaProfil.join(",")} · sabit=${profilKume.join(",")}`,
+  );
+  check(
+    "§11b ⭐ Sihirbaz profil sayfası = MODULE_PROFILE_IDS (sıra dahil)",
+    JSON.stringify(issEkle) === JSON.stringify(profilKume),
+    `iss=${issEkle.join(",")}`,
+  );
+  check(
+    "§11c ⭐ Sihirbaz `ProfilDegeri` dizinleri sayfayla hizalı (yanlış profil yazılmaz)",
+    JSON.stringify(issCase) === JSON.stringify(profilKume.map((id, i) => `${i + 1}:${id}`)),
+    `case=${issCase.join(",")}`,
   );
 
   // ── §7 + §9 CANLI ÖLÇÜM ───────────────────────────────────────────────────
@@ -646,7 +689,7 @@ async function httpTuru(): Promise<void> {
   };
   check("§10f ⭐ HTTP 200 + üç bölüm", r.status === 200 && Boolean(govde.data?.profiles?.length), `status=${r.status}`);
   check(
-    "§10g Yanıt beş profili de taşıyor",
+    "§10g Yanıt bütün profilleri taşıyor",
     (govde.data?.profiles ?? []).length === MODULE_PROFILE_IDS.length,
     `${govde.data?.profiles?.length ?? 0} profil`,
   );

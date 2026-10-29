@@ -1,0 +1,17 @@
+{
+  "aciklama": "Okuma servisi model dosyaları — çalışma anında İNDİRİLMEZ. Geliştirici/CI `betikler/modelleri-getir.py` ile bir kez çeker (SHA-256 doğrulamalı); servis yalnız bu dizinden, özet tutarsa yükler. Kaynak: RapidOCR 3.10.0 default_models.yaml.",
+  "modeller": {
+    "det": {
+      "dosya": "ch_PP-OCRv5_det_mobile.onnx",
+      "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv5/det/ch_PP-OCRv5_det_mobile.onnx",
+      "sha256": "4d97c44a20d30a81aad087d6a396b08f786c4635742afc391f6621f5c6ae78ae",
+      "boyut": 4819576
+    },
+    "rec": {
+      "dosya": "latin_PP-OCRv5_rec_mobile.onnx",
+      "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv5/rec/latin_PP-OCRv5_rec_mobile.onnx",
+      "sha256": "b20bd37c168a570f583afbc8cd7925603890efbcdc000a59e22c269d160b5f5a",
+      "boyut": 7904513
+    }
+  }
+}
