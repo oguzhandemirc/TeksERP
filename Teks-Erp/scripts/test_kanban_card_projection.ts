@@ -24,7 +24,7 @@
 import prisma, { pool } from "../src/lib/prisma";
 import { InventoryService } from "../src/services/inventory.service";
 import { WorkOrderService } from "../src/services/workorder.service";
-import { refreshNumberSeriesCache } from "../src/services/number-series.service";
+import { refreshNumberSeriesCache, settleNumberSeriesRefresh } from "../src/services/number-series.service";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = ""): void {
@@ -72,7 +72,9 @@ async function main(): Promise<void> {
   // ── 1) Sorgu bütçesi + düşürülen ilişkilerin SIFIR turu ────────────────────
   await inv.getProductionFlow({ includeQueues: true, includeSevk: true }); // ısıtma
   // Isıtma numara serisi önbelleğinin ARKA PLAN tazelemesini tetikler; beklenmezse turları ölçüm penceresine
-  // dalgalı sızar (K2a 2026-10-29: CI ölçülen=92, yerelde 71–79). Tazeleme bitsin, TTL (60 sn) pencereyi örtsün.
+  // dalgalı sızar (K2a 2026-10-29: CI ölçülen=92, yerelde 71–79). Süren arka plan tazelemesi BEKLENİR (K3c:
+  // yalnız elle tazeleme onunla yarışıyordu), sonra elle tazeleme TTL'yi (60 sn) pencereye taşır.
+  await settleNumberSeriesRefresh();
   await refreshNumberSeriesCache();
   byTable.clear(); total = 0;
   capture = true;

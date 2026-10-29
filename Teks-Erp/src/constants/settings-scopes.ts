@@ -110,6 +110,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "kursunMeterVarianceThresholdPct",
       "kursunMeterVarianceBasis",
       "kursunMeterVarianceApproval",
+      "kursunMeterStockMode",
       "tamburOverQuantityEnabled",
       "tamburShortCutA1Enabled",
       "tamburShortCutA1ThresholdM",

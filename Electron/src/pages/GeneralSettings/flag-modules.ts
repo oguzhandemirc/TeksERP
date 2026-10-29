@@ -146,6 +146,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   kursunMeterVarianceThresholdPct: "productionEnabled",
   kursunMeterVarianceBasis: "productionEnabled",
   kursunMeterVarianceApproval: "productionEnabled",
+  kursunMeterStockMode: "productionEnabled",
   tamburOverQuantityEnabled: "productionEnabled",
   tamburUndoFullSameDayOnly: "productionEnabled",
   tamburShortCutA1Enabled: "productionEnabled",

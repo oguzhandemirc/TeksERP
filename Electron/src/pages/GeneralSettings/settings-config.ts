@@ -1554,6 +1554,20 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         ],
       },
       {
+        // H1b (2026-10-29): `defaultValue` backend `DEFAULT_KURSUN_METER_STOCK_MODE` ile birebir.
+        enumKey: "kursunMeterStockMode",
+        title: "Çıkış metresi stoğu",
+        summary: "Kurşun çıkışında okunan metre topun stok metresini değiştirsin mi.",
+        desc: "Yalnız kaydet (varsayılan): okuma ölçüm defterine yazılır, topun metresi değişmez; Tambur kendi ölçümünü bugünkü gibi yapar. Stoğa uygula: geçerli çıkış okuması topun metresini düzeltir ve fark sapma kaydına yazılır (eksikse kayıt düzeltmesi, fazlaysa fazlalık; fazlada giriş metresi de yükselir). Onay bekleyen okuma stoğa dokunmaz; okuma düzeltilir ya da adım yeniden açılırsa uygulama geri alınır. Seçim okuma anında kayda donar.",
+        defaultValue: "RECORD",
+        display: "radio",
+        audience: ["Yönetim"],
+        options: [
+          { value: "RECORD", label: "Yalnız kaydet (bugünkü)", hint: "Okuma stoğu değiştirmez." },
+          { value: "APPLY", label: "Stoğa uygula", hint: "Geçerli çıkış okuması topun metresi olur; fark sapma kaydına yazılır." },
+        ],
+      },
+      {
         // D4-E1 (2026-10-29): `defaultValue` backend `DEFAULT_TAMBUR_PLAN_WIDTH_CHECK` ile birebir.
         enumKey: "tamburPlanGateWidthCheck",
         group: "Tambur",

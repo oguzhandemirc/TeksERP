@@ -22,6 +22,7 @@ import { completedNoAddError, WO_COMPLETED_NO_ADD_MESSAGE } from "./workorder-ba
 import { ROLL_DISPLAY_ORDER } from "../constants/roll-order";
 import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT, revokeRollMovements } from "./helpers/roll-movement.helper";
+import { revokeStepMeterReadingsTx } from "./helpers/kursun-meter.helper";
 import prisma from "../lib/prisma";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { Prisma, RollStatus, WorkOrderStatus, RollOperationType, StepStatus } from "@prisma/client";
@@ -698,6 +699,24 @@ export class WorkOrderManualMoveService {
         // o yüzden ham SQL. Zaman JS'ten BAĞLI PARAMETRE olarak geçer — `NOW()`
         // yazmak `test_raw_sql_hygiene` gerekçe işareti gerektirirdi ve burada
         // kazandıracağı bir şey yok.
+        // H1/H1b: geri taşımada hedef-sonrası adımların metre okumaları damgalanır (KK2 izi gibi geri alınır);
+        // APPLY kipinde uygulanmış metraj aynı tx'te geri döner — hedefteki hareket TAZE metrajla açılır.
+        let qtyByRoll = new Map(ctx.selected.map((r) => [r.id, r.currentQty]));
+        if (laterStepIds.length > 0) {
+          let meterRevoked = 0;
+          for (const laterStepId of laterStepIds) {
+            meterRevoked += await revokeStepMeterReadingsTx(tx, {
+              rollIds: selectedIds,
+              stepId: laterStepId,
+              userId: userId ?? null,
+              reason: "MANUAL_MOVE",
+            });
+          }
+          if (meterRevoked > 0) {
+            const fresh = await tx.roll.findMany({ where: { id: { in: selectedIds } }, select: { id: true, currentQty: true } });
+            qtyByRoll = new Map(fresh.map((r) => [r.id, r.currentQty]));
+          }
+        }
         const cikisAni = new Date();
         await tx.$executeRaw`
           UPDATE "roll_movements"
@@ -712,7 +731,7 @@ export class WorkOrderManualMoveService {
           data: ctx.selected.map((r) => ({
             rollId: r.id,
             workOrderStepId: t.id,
-            qtyIn: r.currentQty,
+            qtyIn: qtyByRoll.get(r.id) ?? r.currentQty,
             weightIn: r.weightKg ?? null,
             operatorId: userId ?? null,
             notes: "MANUAL_MOVE_IN",

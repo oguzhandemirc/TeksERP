@@ -557,6 +557,8 @@ export const updateSchema = z.strictObject({
   /** H2: sapma tabanı ve onay kipi (enum; servis kümeleriyle birebir; OFFICE servis tarafında H4'e dek 400). */
   kursunMeterVarianceBasis: z.enum(["DECLARED_IN", "MEASURED_IN"]).optional(),
   kursunMeterVarianceApproval: z.enum(["NONE", "OPERATOR_REASON", "SUPERVISOR_PIN", "OFFICE"]).optional(),
+  /** H1b: çıkış metresi stok kipi (enum; `KURSUN_METER_STOCK_MODES` ile birebir; varsayılan RECORD). */
+  kursunMeterStockMode: z.enum(["RECORD", "APPLY"]).optional(),
   // batch.shortNumberEnabled — parti no kısa ve DÖNEN (P01…P99) mi (default TRUE/AÇIK).
   // Backend ENFORCE eder (generateBatchNumberTx). Kapalıyken eski P+GGAAYY+sıra kalıbı.
   // ⚠️ Bu satır ACİL KAPATMA anahtarıdır — kısa numara sahada sorun çıkarırsa tek

@@ -21,7 +21,7 @@
 import { BaseService } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import prisma from "../lib/prisma";
-import { assertServiceMapping, readServiceItemIdField } from "./helpers/service-item-mapping.helper";
+import { readServiceItemIdField, withServiceMapping } from "./helpers/service-item-mapping.helper";
 import { AppError } from "../utils/app-error";
 import { nextSeriesNo } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -215,6 +215,8 @@ async function replaceValuesTx(
   }
 }
 
+type ParsedFields = { stationIds: ReturnType<typeof extractStationIds>; values: ReturnType<typeof extractValues>; userId?: string };
+
 export class FabricPropertyService extends BaseService {
   /**
    * Özellik kodu backend-authoritative: her zaman `OZL+GGAAYY+NNNN` günlük sıralı
@@ -237,7 +239,6 @@ export class FabricPropertyService extends BaseService {
       );
     }
     await assertStationsCanApplyProperty(stationIds);
-    await assertServiceMapping(data, values);
 
     const valueType = typeof data.valueType === "string" ? data.valueType : "FLAG";
     if (valueType === "FLAG" && values && values.length > 0) {
@@ -259,10 +260,11 @@ export class FabricPropertyService extends BaseService {
       data.values = values.map(({ sortOrder, isActive, ...v }) => ({ ...v, sortOrder: sortOrder ?? 0, isActive: isActive ?? true }));
     }
 
-    return withBarcodeRetry(async () => {
+    // Eşleme doğrulaması + yeni eşlenen kalemlerin kilidi (K3c); yazım kilit altında.
+    return withServiceMapping(data, values, undefined, () => withBarcodeRetry(async () => {
       data.code = await nextPropertyCode();
       return super.create(data, userId);
-    });
+    }));
   }
 
   /**
@@ -299,7 +301,11 @@ export class FabricPropertyService extends BaseService {
   ): Promise<ApiResponse<unknown>> {
     const stationIds = extractStationIds(data);
     const values = extractValues(data);
-    await assertServiceMapping(data, values, id);
+    return withServiceMapping(data, values, id, () => this.writeFields(id, data, { stationIds, values, userId }));
+  }
+
+  private async writeFields(id: string, data: Record<string, unknown>, parsed: ParsedFields): Promise<ApiResponse<unknown>> {
+    const { stationIds, values, userId } = parsed;
     // ⚠️ ERKEN DÖNÜŞ `data.valueType` VARKEN KULLANILAMAZ (denetim F5). Eski
     // hâli yalnız stationIds/values yokluğuna bakıyordu; `PATCH {valueType:
     // "FLAG"}` o dala girip TÜM tip-geçiş guard'larını atlıyordu — KAT bayrağa
