@@ -46,7 +46,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { buildWhereClause, buildTurkishSearch, isEnumMember, readIdCondition } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";
-import { assertItemUsable } from "./helpers/item-usage.helper";
+import { assertItemUsable, assertItemUsableTx } from "./helpers/item-usage.helper";
 import { ACTIVE_ITEM_PRICE, ITEM_PRICE_REVOKE_REASON, itemPriceValidAt } from "./helpers/item-price-validity.helper";
 
 
@@ -385,6 +385,9 @@ export class ItemPriceService {
     let outcome: Outcome;
     try {
       outcome = await prisma.$transaction(async (tx): Promise<Outcome> => {
+        // Her fiyat tanımı kart FOR SHARE altında yeniden doğrulanır (D1 sayımına giren müşterili hizmet
+        // fiyatıdır): eşzamanlı pasife alma ya bu satırı sayar ya da bu yazım 409 alır (K3c).
+        await assertItemUsableTx(tx, input.itemId, "DEFINITION");
         const current = await tx.itemPrice.findFirst({
           where: { itemId: input.itemId, kind: input.kind, currency: input.currency, customerId, ...ACTIVE_ITEM_PRICE },
           select: { id: true, price: true },

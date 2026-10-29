@@ -15,8 +15,8 @@
 //
 // KALAN OKUTMA ÇAĞRILARI — envanter (2026-10-30, `normalizeScanCode(` gerçek çağrıları; bu dilimde
 // DEĞİŞTİRİLMEDİ). Etiket: [İÇ] = iç kod zorunlu · [AÇILMALI] = müşteri koduna açılmalı (sonraki dilim).
-//   inventory.service.ts:1512   buildRollWhere (liste araması)            [AÇILMALI] — top listesi süzgeci
-//   inventory.service.ts:2865   getRelabelContext (yeniden etiket)        [AÇILMALI] — müşteri etiketiyle gelen top
+//   inventory.service.ts:1513   buildRollWhere (liste araması)            [AÇILMALI] — top listesi süzgeci
+//   inventory.service.ts:2868   getRelabelContext (yeniden etiket)        [AÇILMALI] — müşteri etiketiyle gelen top
 //   workorder-timeline.service.ts:276  lookup (iz sür)                    [AÇILMALI] — izlenebilirlik araması
 //   kartela-timeline.service.ts:71     kartelaEventsWhere                 [İÇ] — kartela, müşteri kodu taşımaz
 //   tambur.service.ts:589       getByCardBarcode (Tambur girişi)          [İÇ] — kod Tambur çıkışında doğar (K13)
@@ -33,7 +33,7 @@
 //   return.service.ts:129         lookupForReturn (iade okutma)           [AÇILMALI] — müşteri kendi barkoduyla iade eder
 //   return.service.ts:254         lookupSackForReturn (çuval)             [İÇ] — çuval kodu
 //   kursun-qc.service.ts:321      getByCardBarcode (kurşun)               [İÇ] — Tambur öncesi; kod yok
-//   tambur-manual.service.ts:301  resolveRoll (elle Tambur girişi)        [İÇ] — kod Tambur çıkışında doğar
+//   tambur-manual.service.ts:308  resolveRoll (elle Tambur girişi)        [İÇ] — kod Tambur çıkışında doğar
 //   helpers/return-scope.helper.ts:114 lookupShipmentForReturn            [İÇ] — sevk belge no
 //   reports/batch-trace.report.service.ts:108 searchBatches               [AÇILMALI] — parti izi araması
 //   helpers/series-classifier.helper.ts:99 classifyScannedCode            — sınıflandırıcının kendisi

@@ -19,6 +19,11 @@
 //   §8 Geri alma: tek parça (Top Kesme) ve TÜMDEN (finalize) — çocuk CANCELLED, ata bayraksız
 //      geri döner, ataya H10 Tambur işi doğmaz; özelliksiz atada istasyon satırı donöre girmez
 //      (doğum anı + 1 ms damgası)
+//   §9 Elle top (K3c): `createManualRoll` (adıma bağlı) ve `produceFinishedRoll` (kartsız) Tambur
+//      oturumunda AUTO bayrağı yazar, OPTIONAL yazmaz; kartsız üretimde oturum Tambur değilse ya da
+//      yoksa yazılmaz; replay (aynı token) ikinci satır doğurmaz
+// Negatif sonda (2026-10-29, K3c): tambur-manual'daki iki `applyTamburCapabilitiesTx` çağrısı
+// kaldırılınca §9 kırmızı.
 // Negatif sonda (2026-10-29): `applyTamburCapabilitiesTx` gövdesi boşaltılınca §1–§5 + S1 kırmızı.
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -26,6 +31,7 @@ import { ItemType, Prisma, RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { TamburService } from "../src/services/tambur.service";
 import { TamburUndoService, UNDO_FULL_PERMISSION } from "../src/services/tambur-undo.service";
+import { TamburManualService } from "../src/services/tambur-manual.service";
 import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
 import { listFlagServiceWorks } from "../src/services/helpers/service-flag-work.helper";
 import { roleGrade } from "./fixture-quality-grade";
@@ -42,6 +48,7 @@ const STAMP = randomUUID().slice(0, 8);
 const P = `TEST-TBIY-${STAMP}`;
 const tambur = new TamburService();
 const undo = new TamburUndoService();
+const manual = new TamburManualService();
 const fx = { itemIds: [] as string[], propIds: [] as string[], stationIds: [] as string[], woIds: [] as string[], rollIds: [] as string[] };
 const eq = (a: Prisma.Decimal.Value | null | undefined, b: number) => a != null && new Prisma.Decimal(a).minus(b).abs().lte(0.001);
 
@@ -193,6 +200,45 @@ async function main(): Promise<void> {
   await undo.applyUndo(k8, actor, { permissions: [UNDO_FULL_PERMISSION] });
   const r8Props = await propsOf(R8);
   check("özelliksiz ata geri alındı: ata özelliksiz döner (AUTO dirilmez)", r8Props.length === 0, JSON.stringify(r8Props));
+
+  // ── §9 elle top (K3c) ─────────────────────────────────────────────────────
+  section("§9 elle top: Tambur oturumunda AUTO yetenek yazılır");
+  const reason = "test — K3c elle top yeteneği";
+  const S9 = await mkStep(ST_T);
+  const tok9 = randomUUID();
+  const m9 = await manual.createManualRoll({ targetStepId: S9, initialQty: 30, reason, clientToken: tok9 }, { userId: actor, stationId: ST_T });
+  const r9 = (m9.data as { rollId: string }).rollId;
+  fx.rollIds.push(r9);
+  const p9 = await propsOf(r9);
+  check("createManualRoll (Tambur oturumu): top AUTO bayrağı taşır, OPTIONAL yok", p9.includes(FA) && !p9.includes(FO), JSON.stringify(p9));
+  await manual.createManualRoll({ targetStepId: S9, initialQty: 30, reason, clientToken: tok9 }, { userId: actor, stationId: ST_T });
+  const n9 = await prisma.rollProperty.count({ where: { rollId: r9, propertyId: FA } });
+  check("createManualRoll replay: AUTO satırı tek", n9 === 1, String(n9));
+  const produce = async (stationId: string | null, token = randomUUID()) => {
+    const r = await manual.produceFinishedRoll({ itemId: fabric, initialQty: 25, reason, clientToken: token }, { userId: actor, stationId });
+    const id = (r.data as { rollId: string }).rollId;
+    if (!fx.rollIds.includes(id)) fx.rollIds.push(id);
+    return id;
+  };
+  const tok10 = randomUUID();
+  const r10 = await produce(ST_T, tok10);
+  const p10 = await propsOf(r10);
+  check("produceFinishedRoll (Tambur oturumu): top AUTO bayrağı taşır, OPTIONAL yok", p10.includes(FA) && !p10.includes(FO), JSON.stringify(p10));
+  await produce(ST_T, tok10);
+  const n10 = await prisma.rollProperty.count({ where: { rollId: r10, propertyId: FA } });
+  check("produceFinishedRoll replay: AUTO satırı tek", n10 === 1, String(n10));
+  const p10q = await propsOf(await produce(ST_Q));
+  const p10n = await propsOf(await produce(null));
+  check("produceFinishedRoll: kalite istasyonu oturumunda yetenek yazılmaz", p10q.length === 0, JSON.stringify(p10q));
+  check("produceFinishedRoll: oturumsuz yetenek yazılmaz", p10n.length === 0, JSON.stringify(p10n));
+  const p10t0 = await propsOf(await produce(ST_T0));
+  check("produceFinishedRoll (AUTO özelliksiz Tambur): özellik yok (bugünkü davranış)", p10t0.length === 0, JSON.stringify(p10t0));
+  // Başka Tambur oturumundan aynı token: yabancı istasyonun AUTO yeteneği topa eklenmez.
+  const tok11 = randomUUID();
+  const r11 = await produce(ST_T0, tok11);
+  await produce(ST_T, tok11);
+  const p11 = await propsOf(r11);
+  check("produceFinishedRoll replay (başka Tambur oturumu): yabancı AUTO yetenek eklenmez", !p11.includes(FA), JSON.stringify(p11));
 }
 
 async function allRollIds(): Promise<string[]> {
