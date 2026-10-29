@@ -55,6 +55,8 @@ pool.on("connect", (client: unknown) => {
 const RELATION_KEYS = [
   "item", "color", "operations", "createdBy", "createdMachine", "entryStation",
   "warehouse", "properties", "shipment", "sack", "currentStep", "dispatchItems",
+  // P1a: emanet sahibi — listenin "Sahibi" sütunu; kart taşımaz (sorgu bütçesi, panel detaydan okur).
+  "ownerCustomer",
 ];
 const scalarKeys = (o: object): string[] =>
   Object.keys(o).filter((k) => !RELATION_KEYS.includes(k)).sort();

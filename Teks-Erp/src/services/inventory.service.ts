@@ -607,7 +607,7 @@ const ROLL_LIST_INCLUDE = {
 //
 // DIŞARIDA BIRAKILANLAR ve gerekçesi (hepsi detay panelinde `detail?.` ile
 // okunur, liste satırından DEĞİL → görünen davranış değişmez):
-//   operations · createdBy · createdMachine · entryStation · warehouse
+//   operations · createdBy · createdMachine · entryStation · warehouse · ownerCustomer (P1a "Sahibi" sütunu)
 // `currentStep` id'ye daraltıldı: panelin "Bulunduğu İstasyon" satırı `detail`den
 // gelir, ama panel `canAdjustRollQty` kararını `roll.currentStep == null` ile
 // verir — ilişkiyi tümden atmak `undefined == null` üzerinden butonu YANLIŞ
