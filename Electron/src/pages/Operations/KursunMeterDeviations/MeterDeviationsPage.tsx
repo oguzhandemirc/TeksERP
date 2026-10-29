@@ -68,7 +68,7 @@ export function MeterDeviationsPage() {
           </div>
         ) : items.length === 0 ? (
           <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-            Bu süzgece uyan metre sapması yok. Eşik ve onay kipi Genel Ayarlar’da (kurşun metre ayarları) seçilir.
+            Bu süzgece uyan metre sapması yok. Eşik ve onay kipi Sistem › Özellik Anahtarları › Üretim — Saha bölümünde seçilir.
           </div>
         ) : (
           <>

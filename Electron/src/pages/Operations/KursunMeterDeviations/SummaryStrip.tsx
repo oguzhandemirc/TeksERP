@@ -16,7 +16,7 @@ export function SummaryStrip({ summary }: { summary: MeterDeviationSummary | nul
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Sapma özeti">
       <Cell label="Sapma sayısı" value={s ? String(s.total) : "—"} />
-      <Cell label="İmzasız sapma" value={s ? String(s.unsigned) : "—"} hint="Onay imzası olmayan sapmalar (bekleyenler dahil)." />
+      <Cell label="Onaysız (toplam)" value={s ? String(s.unsigned) : "—"} hint="Onay imzası olmayan tüm sapmalar: imzasız + imza bekleyen." />
       <Cell label="İmza bekleyen" value={s ? String(s.pending) : "—"} hint="Onaylanmadan adımı kapatmayan sapmalar." />
       <Cell label="Ortalama fark" value={s ? fmtDiff(s.avgDiffMeters) : "—"} hint={s?.avgAbsDiffMeters != null ? `Mutlak ortalama ${fmtDiff(s.avgAbsDiffMeters)}` : undefined} />
     </div>

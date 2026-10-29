@@ -70,7 +70,8 @@ describe("Metre Sapmaları sayfası", () => {
     const strip = screen.getByLabelText("Sapma özeti");
     expect(within(strip).getByText("3")).toBeInTheDocument();
     expect(within(strip).getByText("+2,5 m")).toBeInTheDocument();
-    expect(screen.getAllByText("İmzasız sapma").length).toBeGreaterThanOrEqual(2);
+    expect(within(strip).getByText("Onaysız (toplam)")).toBeInTheDocument();
+    expect(screen.getAllByText("İmzasız sapma").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Simüle")).toBeInTheDocument();
     await userEvent.click(within(screen.getByRole("group", { name: "Durum süzgeci" })).getByText("İmza bekliyor"));
     await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ status: "PENDING" }), null));
