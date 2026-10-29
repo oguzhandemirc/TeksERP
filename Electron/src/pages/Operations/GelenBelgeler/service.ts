@@ -3,7 +3,7 @@ import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
 import type {
   ApproveResult, DeliveryNoteDetail, DeliveryNoteLine, DeliveryNoteListQuery, DeliveryNoteListResponse,
-  HeaderPatch, LineInput, LinePatch, NoteMatchSuggestions, ReaderStatus,
+  HeaderPatch, LineInput, LinePatch, NoteMatchSuggestions, ReaderStatus, SenderTemplatePatch, SenderTemplateView,
 } from "./types";
 
 const BASE = "/api/gelen-belge";
@@ -86,4 +86,14 @@ export async function getReaderStatus(): Promise<ReaderStatus> {
 /** Tarama görüntüsü (yetkili istek; `<img src>` token taşıyamaz). */
 export async function fetchScanBlob(scanId: string): Promise<Blob> {
   return (await apiClient.get<Blob>(`${BASE}/taramalar/${scanId}/icerik`, { responseType: "blob" })).data;
+}
+
+/** Gönderen şablonları (E2, `gelen-belge:template`): motor şablonları + DB bağı; satırı olmayan şablon `id: null`. */
+export async function listSenderTemplates(): Promise<SenderTemplateView[]> {
+  return (await apiClient.get<ApiResponse<SenderTemplateView[]>>(`${BASE}/sablonlar`)).data.data;
+}
+
+/** Şablon bağını güncelle; yalnız verilen alanlar yazılır. Pasif cari 400; araya giren yazım 409. */
+export async function updateSenderTemplate(code: string, patch: SenderTemplatePatch): Promise<SenderTemplateView> {
+  return (await apiClient.patch<ApiResponse<SenderTemplateView>>(`${BASE}/sablonlar/${encodeURIComponent(code)}`, patch)).data.data;
 }

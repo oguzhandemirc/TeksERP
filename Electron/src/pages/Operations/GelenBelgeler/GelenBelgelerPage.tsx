@@ -1,9 +1,9 @@
 // GELEN BELGELER (Gülkesim OCR D5) — müşteri irsaliyesi taslakları: liste + süzgeç + yeni elle taslak.
 // Fotoğraf tabletten ya da panelden (Belge yükle) gelir (okuma işi DRAFT yazar); panel gözden geçirir ve onaylar (SoD: `gelen-belge:approve`).
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { Plus, Upload } from "lucide-react";
+import { FileCog, Plus, Upload } from "lucide-react";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { AutoLoadMore } from "@/components/data-table/AutoLoadMore";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { createManualNote } from "./service";
+import { SENDER_TEMPLATES_PATH } from "./GonderenSablonlariPage";
 import { UploadDialog } from "./UploadDialog";
 import { ReaderStatusBadge } from "./ReaderStatusBadge";
 import { NoteListFilters } from "./NoteListFilters";
@@ -49,18 +50,28 @@ export function IncomingDocumentsPage() {
         titleExtra={<ReaderStatusBadge />}
         description="Müşteri irsaliyesi — fotoğraftan okunan ya da elle girilen taslak; onayda emanet topu doğar."
         actions={
-          <PermissionGate permission="gelen-belge:write">
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={() => setUploadOpen(true)}>
-                <Upload className="mr-1 h-4 w-4" />
-                Belge yükle
+          <div className="flex flex-wrap gap-2">
+            <PermissionGate permission="gelen-belge:template">
+              <Button variant="ghost" asChild>
+                <Link to={SENDER_TEMPLATES_PATH}>
+                  <FileCog className="mr-1 h-4 w-4" />
+                  Gönderen şablonları
+                </Link>
               </Button>
-              <Button variant="outline" onClick={() => create.mutate()} disabled={create.isPending}>
-                <Plus className="mr-1 h-4 w-4" />
-                Elle taslak
-              </Button>
-            </div>
-          </PermissionGate>
+            </PermissionGate>
+            <PermissionGate permission="gelen-belge:write">
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => setUploadOpen(true)}>
+                  <Upload className="mr-1 h-4 w-4" />
+                  Belge yükle
+                </Button>
+                <Button variant="outline" onClick={() => create.mutate()} disabled={create.isPending}>
+                  <Plus className="mr-1 h-4 w-4" />
+                  Elle taslak
+                </Button>
+              </div>
+            </PermissionGate>
+          </div>
         }
       />
       <NoteListFilters filter={filter} onChange={setFilter} summary={summary} />

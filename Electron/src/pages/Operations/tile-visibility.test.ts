@@ -189,7 +189,9 @@ describe("karo bağlantıları", () => {
     // 2026-10-25: `inspections` (Muayeneler) — aynı Kalite Güvence kapısı.
     // 2026-10-26 (UX-2 K1): dört Kalite Güvence karosu `/quality` köküne taşındı (Quality/tile-config).
     // 2026-10-29: `gelen-belgeler` (Gülkesim OCR D5) — emanet && gelenBelge; kapalıyken GİZLİ.
+    // 2026-10-29: `gelen-belge-sablonlari` (E2) — aynı kapı.
     expect(conditional.sort()).toEqual([
+      "gelen-belge-sablonlari",
       "gelen-belgeler",
       "goods-receipts",
       "kursun-dagitim",
