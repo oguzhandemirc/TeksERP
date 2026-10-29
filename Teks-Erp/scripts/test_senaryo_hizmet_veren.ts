@@ -13,7 +13,7 @@
 //   1 Müşteri + gramaj hizmet fiyatı (müşteriye özel) + gramaj/Tambur → hizmet kalemi eşlemesi
 //   2 Gelen belge: elle 3 satır (biri "KURŞUN 50 GR"), ürünsüz satır müşteri varsayılanıyla → 3 emanet top
 //   3 Kurşun: İE + H9b önerisi → hedef gramaj; OUT elle; eşik dışı sapma OFFICE onayıyla
-//   4 Tambur: bir top bölünür → çocuklar sahibi korur; TAMBUR satırı CUT metresiyle
+//   4 Tambur: bir top bölünür → çocuklar sahibi korur; TAMBUR satırı KK2 OUT okumasıyla (CUT: BİLİNEN)
 //   5 Sevk + hizmet faturası (PER_SHIPMENT): bağ sayısı, billedMeters = OUT, birim fiyat, toplam
 //   6 Dönem sonu (PERIOD_END): önizleme + oluşturma; ikinci kez faturalanmaz
 //   7 Ters yol: faturalı sevk geri alma 409 SERVICE_ALREADY_BILLED; taslak iptali sonrası 200
@@ -32,7 +32,7 @@ import { ensureTestAdmin } from "./fixture-test-user";
 import { roleGrade } from "./fixture-quality-grade";
 import { SETTING_KEYS, systemSettingService } from "../src/services/system-setting.service";
 import { testActorId } from "./fixture-test-user";
-import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { fixtureHedefEngeli, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0;
 let fail = 0;
@@ -61,6 +61,8 @@ const fx = {
 };
 /** Ayar anlık görüntüsü: bütün tablo; finally'de aynen geri yazılır (profil + paket + sapma kipi). */
 const priorSettings = new Map<string, unknown>();
+// Kapı engel verirse anlık görüntü alınmaz; o zaman geri yükleme/temizlik HİÇ koşmaz (boş Map = her anahtarı silmek).
+let snapshotTaken = false;
 
 type Res = { status: number; body: { success?: boolean; data?: unknown; message?: string; error?: { details?: { code?: string } }; details?: { code?: string }; warnings?: string[] } };
 let base = "";
@@ -84,9 +86,10 @@ function must<T>(r: Res, label: string, okStatus = [200, 201]): T {
 
 async function main(): Promise<void> {
   console.log("=== Senaryo: hizmet veren uçtan uca (gelen belge → kurşun → tambur → sevk → hizmet faturası → dönem sonu) ===");
-  const engel = hedefDbEngeli();
+  const engel = hedefDbEngeli() ?? fixtureHedefEngeli();
   if (engel) { check("hedef DB test DB'si", false, engel); return; }
   for (const s of await prisma.systemSetting.findMany({ select: { key: true, value: true } })) priorSettings.set(s.key, s.value);
+  snapshotTaken = true;
   const server = app.listen(0);
   await new Promise<void>((res) => server.once("listening", () => res()));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -399,8 +402,10 @@ async function restoreSettings(): Promise<void> {
 main()
   .catch((e) => { fail++; console.error(e); })
   .finally(async () => {
-    await restoreSettings().catch((e) => { fail++; console.error("❌ ayar geri alma:", e); });
-    await cleanup().catch((e) => { fail++; console.error(e); });
+    if (snapshotTaken) {
+      await restoreSettings().catch((e) => { fail++; console.error("❌ ayar geri alma:", e); });
+      await cleanup().catch((e) => { fail++; console.error(e); });
+    }
     if (pass + fail === 0) { fail++; console.log("❌ hiçbir kontrol koşmadı"); }
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız, ${known} bilinen — süre ${((Date.now() - T0) / 1000).toFixed(1)} sn ===`);
     process.exitCode = fail > 0 ? 1 : 0;
