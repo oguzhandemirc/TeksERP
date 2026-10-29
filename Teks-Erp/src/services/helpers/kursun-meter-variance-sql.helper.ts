@@ -4,7 +4,7 @@
 // Aynı eşitsizlik NUMERIC'te: |out − taban|·100 > max(M·100, P·taban); eşikler boş ya da
 // taban yoksa false. Bekçi `test_kursun_sapma` 20 fikstürde TS kararıyla eşitliği ölçer.
 // Bildirilen giriş: gelen belge satırı metresi (`customer_delivery_note_lines.rollId @unique`),
-// yoksa topun `initialQty`si — TS tarafı `evaluateReadingVarianceTx` (kursun-meter.helper.ts) aynı sırayla okur.
+// yoksa topun doğuş metresi — TS tarafı `evaluateReadingVarianceTx` aynı ifadeyi (`loadDeclaredInTx`) okur.
 // =============================================================================
 import { Prisma } from "@prisma/client";
 
@@ -53,12 +53,29 @@ export function readingBaseSql(readingAlias: string): Prisma.Sql {
   return meterBaseSql({ basis: Prisma.sql`${r}.basis`, measuredIn: measuredInSql(readingAlias), declaredIn: declaredInSql(readingAlias) });
 }
 
-/** Okuma satırı (`alias`) için bildirilen giriş: gelen belge satırı metresi, yoksa top `initialQty`. */
+/**
+ * Bildirilen giriş (TEK KAYNAK; TS yükleyici `loadDeclaredInTx` de bunu okur): gelen belge satırı metresi,
+ * yoksa topun DOĞUŞ metresi = `initialQty` − Σ aktif `initialQtyRaise` (H1b APPLY artı yönü `initialQty`yi
+ * yükseltir; taban "ne oldu"dan okunur, kaymaz). `rollIdExpr` top kimliği veren SQL ifadesidir.
+ */
+export function rollDeclaredInSql(rollIdExpr: Prisma.Sql): Prisma.Sql {
+  return Prisma.sql`COALESCE(
+    (SELECT l.meters FROM customer_delivery_note_lines l WHERE l."rollId" = ${rollIdExpr}),
+    (SELECT ro."initialQty" - COALESCE((SELECT sum(v."initialQtyRaise") FROM roll_variances v
+        WHERE v."rollId" = ro.id AND v."reversedAt" IS NULL AND v."initialQtyRaise" IS NOT NULL), 0)
+      FROM rolls ro WHERE ro.id = ${rollIdExpr}))`;
+}
+
+/** Okuma satırı (`alias`) için bildirilen giriş — `rollDeclaredInSql`. */
 export function declaredInSql(readingAlias: string): Prisma.Sql {
   const r = Prisma.raw(readingAlias);
-  return Prisma.sql`COALESCE(
-    (SELECT l.meters FROM customer_delivery_note_lines l WHERE l."rollId" = ${r}."rollId"),
-    (SELECT ro."initialQty" FROM rolls ro WHERE ro.id = ${r}."rollId"))`;
+  return rollDeclaredInSql(Prisma.sql`${r}."rollId"`);
+}
+
+/** Tek top için bildirilen giriş (bellek-içi karar yükleyicisi; SQL ikiziyle aynı ifade). */
+export async function loadDeclaredInTx(db: Pick<Prisma.TransactionClient, "$queryRaw">, rollId: string): Promise<Prisma.Decimal | null> {
+  const rows = await db.$queryRaw<Array<{ d: Prisma.Decimal | null }>>`SELECT ${rollDeclaredInSql(Prisma.sql`${rollId}::uuid`)} AS d`;
+  return rows[0]?.d ?? null;
 }
 
 /** Okuma satırı (`alias`) için aynı adımdaki aktif giriş (IN) okuması. */

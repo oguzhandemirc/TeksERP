@@ -25,7 +25,7 @@ import {
 } from "../system-setting.service";
 import { tokenReplay } from "./token-replay.helper";
 import { resolveMeterVariance, type MeterVarianceResult } from "../../lib/kursun-meter-variance";
-import { readingPendingAckSql } from "./kursun-meter-variance-sql.helper";
+import { loadDeclaredInTx, readingPendingAckSql } from "./kursun-meter-variance-sql.helper";
 import { applyExitMeterToStockTx, reverseExitMeterStockTx, type ExitMeterApplyResult } from "./kursun-meter-stock.helper";
 import { digestQuickPin, digestsEqual } from "../../lib/short-credential/digest";
 import { getShortCredentialKeyRing } from "../../lib/short-credential/keyring";
@@ -227,21 +227,20 @@ export function normalizeAckReason(r: MeterAckReason | null | undefined): { reas
 
 /**
  * Okumanın sapma girdileri — SQL ikizinin (`declaredInSql`/`measuredInSql`) TS karşılığı: bildirilen giriş =
- * gelen belge satırı metresi, yoksa top `initialQty`; ölçülen giriş = aynı adımın aktif IN okuması.
+ * gelen belge satırı metresi, yoksa doğuş metresi (`loadDeclaredInTx`); ölçülen giriş = aynı adımın aktif IN okuması.
  */
 export async function evaluateReadingVarianceTx(
   db: Tx | typeof prisma,
   reading: Pick<RollMeterReading, "rollId" | "workOrderStepId" | "meters" | "thresholdM" | "thresholdPct" | "basis" | "approvalMode">,
 ): Promise<MeterVarianceResult> {
-  const line = await db.customerDeliveryNoteLine.findUnique({ where: { rollId: reading.rollId }, select: { meters: true } });
-  const roll = line ? null : await db.roll.findUnique({ where: { id: reading.rollId }, select: { initialQty: true } });
+  const declaredIn = await loadDeclaredInTx(db, reading.rollId);
   const measured = await db.rollMeterReading.findFirst({
     where: { rollId: reading.rollId, workOrderStepId: reading.workOrderStepId, phase: MeterPhase.IN, revokedAt: null },
     select: { meters: true },
   });
   const num = (d: Prisma.Decimal | null | undefined): number | null => (d == null ? null : Number(d));
   return resolveMeterVariance(
-    { declaredIn: num(line?.meters ?? roll?.initialQty), measuredIn: num(measured?.meters), out: Number(reading.meters) },
+    { declaredIn: num(declaredIn), measuredIn: num(measured?.meters), out: Number(reading.meters) },
     { thresholdM: num(reading.thresholdM), thresholdPct: num(reading.thresholdPct), basis: reading.basis, approvalMode: reading.approvalMode },
   );
 }

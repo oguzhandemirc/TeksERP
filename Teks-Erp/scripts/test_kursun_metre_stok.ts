@@ -6,6 +6,7 @@
 // §2 ⭐ APPLY 100→98,5 ⇒ currentQty 98,5 + RECORD_CORRECTION 1,5 (sourceRefId = okuma).
 // §3 ⭐ düzeltme okuması (99) önceki APPLY'ı tersler (reversedAt) ve yenisini uygular ⇒ 99.
 // §4 ⭐ APPLY 100→101 ⇒ OVERAGE 1 + initialQty 101 + initialQtyRaise 1; §13 (currentQty > initialQty) 0 satır.
+// §4b ⭐ DECLARED_IN tabanı doğuş metresidir (initialQty − Σ aktif initialQtyRaise); initialQty'den okunursa ❌.
 // §5 ⭐ sonraki adım qtyIn = aktif OUT; reopenStep ⇒ reversedAt + currentQty 100 (+ initialQty geri).
 // §6 ⭐ OFFICE onayı bekleyen okuma stoğa dokunmaz; imza anında uygulanır.
 // §7 ⭐ son adım: depo girişi uygulanmış metrajla, stok defteri Σ = durum; yeniden açma ⇒ Σ 0, metraj 100.
@@ -22,6 +23,7 @@ import { KursunQcService } from "../src/services/kursun-qc.service";
 import { WorkOrderManualMoveService } from "../src/services/workorder-manual-move.service";
 import { SETTING_KEYS, systemSettingService } from "../src/services/system-setting.service";
 import { VARIANCE_SOURCES } from "../src/constants/variance-reasons";
+import { loadDeclaredInTx, loadRollMeterBases } from "../src/services/helpers/kursun-meter-variance-sql.helper";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { testActorId } from "./fixture-test-user";
 
@@ -189,6 +191,10 @@ async function main(): Promise<void> {
       check("§4 ⭐ APPLY 100→101 ⇒ OVERAGE 1 + initialQty 101 + initialQtyRaise 1; §13 (currentQty > initialQty) 0 satır",
         e.status === null && n(r.currentQty) === 101 && n(r.initialQty) === 101 && v.length === 1 && v[0]!.kind === RollVarianceKind.OVERAGE && n(v[0]!.qty) === 1 && n(v[0]!.initialQtyRaise) === 1 && s13 === 0n,
         `hata=${e.msg.slice(0, 120)} qty=${n(r.currentQty)}/${n(r.initialQty)} §13=${s13}`);
+      const declTs = await loadDeclaredInTx(prisma, a.rollId);
+      const declList = (await loadRollMeterBases(prisma, a.stepId, [a.rollId])).get(a.rollId)?.declaredIn ?? null;
+      check("§4b ⭐ DECLARED_IN tabanı doğuş metresinden (belge satırı yok): initialQty 101 iken taban 100 (TS + SQL ikizi)",
+        n(declTs) === 100 && declList === 100, `ts=${n(declTs)} sql=${declList}`);
     }
 
     // ── §5 sonraki adım qtyIn + reopen ────────────────────────────────────────
