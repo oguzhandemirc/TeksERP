@@ -240,13 +240,15 @@ export async function refreshNumberSeriesCache(): Promise<void> {
 function scheduleBackgroundRefresh(): void {
   if (backgroundRefresh || Date.now() < refreshBlockedUntil) return;
   backgroundRefresh = refreshNumberSeriesCache()
-    .catch(() => {
-      refreshBlockedUntil = Date.now() + REFRESH_RETRY_MS;
-    })
-    .finally(() => {
-      backgroundRefresh = null;
-    });
+    .catch(() => { refreshBlockedUntil = Date.now() + REFRESH_RETRY_MS; })
+    .finally(() => { backgroundRefresh = null; });
 }
+
+/**
+ * Test kancası — süren arka plan tazelemesi (varsa) bitene dek bekler. Sorgu bütçesi ölçen bekçi
+ * pencereyi bundan SONRA açar; aksi hâlde tazeleme turları pencereye dalgalı sızar (K3c).
+ */
+export async function settleNumberSeriesRefresh(): Promise<void> { while (backgroundRefresh) await backgroundRefresh; }
 
 /** Test/araç kaçışı — bir sonraki okuma DB'ye gider. */
 export function invalidateNumberSeriesCache(): void {
