@@ -5,14 +5,19 @@
 //   ① SAF — plan yüklemi dört durumu doğru ayırıyor mu, paket tekil mi?
 //   ② CANLI — kuru koşu `system_settings` ve `system_logs`ta 0 yazım mı?
 //   ③ KULLANIM — `--apply` kullanıcısız ve bilinmeyen argüman çıkış 2, yazım 0 mı?
+//   ④ UYGULAMA — bilinen bir anahtarla yazım yolu: değer tuttu mu, audit yazıldı mı,
+//      yeniden okuma doğrulaması boş mu? (test DB'de; sonunda eski değer geri yazılır)
 // Koşum: DATABASE_URL=<test DB> npx tsx scripts/test_hizmet_ayar_paketi.ts
 // NEGATİF SONDA — 2026-10-29: kuru koşu dalına `systemSetting.updateMany({where:{}, data:{updatedAt}})`
 // eklendi → çıkış 1 · 2 ❌ · §2c + §3c (taban 10/0); cp ile geri alındı.
+// NEGATİF SONDA — 2026-10-29 (§4): `paketiYazVeDogrula` içindeki `setFeatureFlags` çağrısı
+// kaldırıldı → 11/3, §4b + §4c + §4d kırmızı (taban 14/0); cp ile geri alındı.
 // =============================================================================
 import { spawnSync } from "node:child_process";
 import * as path from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
-import { HIZMET_AYAR_PAKETI, paketPlani, type PaketSatiri } from "./hizmet-ayar-paketi";
+import { HIZMET_AYAR_PAKETI, paketiYazVeDogrula, paketPlani, type PaketSatiri } from "./hizmet-ayar-paketi";
+import { testActorId } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0,
@@ -88,6 +93,34 @@ async function main(): Promise<void> {
   const yanlis = kos(["--uygula"]);
   check("§3b bilinmeyen argüman → çıkış 2", yanlis.kod === 2, `kod=${yanlis.kod}`);
   check("§3c kullanım hatalarından sonra parmak izi AYNI", (await izAl()) === once);
+
+  // ── §4 UYGULAMA yolu (paket satırları henüz ANAHTAR_YOK — bugün var olan bir anahtarla ölçülür) ──
+  const { systemSettingService, SETTING_KEYS } = await import("../src/services/system-setting.service");
+  const kullanici = { id: await testActorId() };
+  const deneme = [
+    satir({ anahtar: SETTING_KEYS.FINANCE_AUTO_DRAFT_FROM_SHIPMENT_ENABLED, alan: "financeAutoDraftFromShipmentEnabled", hedef: true }),
+  ];
+  const bilinen = new Set<string>(Object.values(SETTING_KEYS));
+  const eski = ((await systemSettingService.getFeatureFlags()).data as unknown as Record<string, unknown>)
+    .financeAutoDraftFromShipmentEnabled;
+  deneme[0].hedef = eski !== true;
+  const planU = paketPlani(
+    (await systemSettingService.getFeatureFlags()).data as unknown as Record<string, unknown>,
+    bilinen,
+    deneme,
+  );
+  check("§4a deneme satırı DEGISECEK", planU[0]?.durum === "DEGISECEK", planU[0]?.durum);
+  const logOnce = await prisma.systemLog.count();
+  try {
+    const kalan = await paketiYazVeDogrula(planU, kullanici.id, deneme);
+    check("§4b yeniden okuma doğrulaması boş (yazım tuttu)", kalan.length === 0, kalan.map((p) => p.durum).join(","));
+    const okunan = ((await systemSettingService.getFeatureFlags()).data as unknown as Record<string, unknown>)
+      .financeAutoDraftFromShipmentEnabled;
+    check("§4c değer hedefe geçti", okunan === deneme[0].hedef, `${String(eski)} → ${String(okunan)}`);
+    check("§4d audit satırı yazıldı", (await prisma.systemLog.count()) > logOnce);
+  } finally {
+    await systemSettingService.setFeatureFlags({ financeAutoDraftFromShipmentEnabled: eski === true }, kullanici.id);
+  }
 }
 
 main()

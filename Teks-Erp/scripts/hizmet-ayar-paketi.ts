@@ -71,6 +71,28 @@ export function paketPlani(
   });
 }
 
+/**
+ * Yazar, sonra YENİDEN OKUYUP planı tekrar kurar: `setFeatureFlags` yalnız tanıdığı
+ * alanları yazar; yazma dalı unutulmuş alan sessizce yok sayılmasın diye kalan
+ * DEGISECEK satırları döndürülür (boş = hepsi tuttu).
+ */
+export async function paketiYazVeDogrula(
+  degisecek: readonly PlanSatiri[],
+  userId: string,
+  paket: readonly PaketSatiri[] = HIZMET_AYAR_PAKETI,
+): Promise<PlanSatiri[]> {
+  const { systemSettingService, SETTING_KEYS } = await import("../src/services/system-setting.service");
+  type Girdi = Parameters<typeof systemSettingService.setFeatureFlags>[0];
+  const girdi: Record<string, unknown> = Object.fromEntries(degisecek.map((p) => [p.alan, p.hedef]));
+  await systemSettingService.setFeatureFlags(girdi as Girdi, userId);
+  const sonra = await systemSettingService.getFeatureFlags();
+  const flags = (sonra.data ?? {}) as unknown as Record<string, unknown>;
+  const yazilan = new Set(degisecek.map((p) => p.anahtar));
+  return paketPlani(flags, new Set<string>(Object.values(SETTING_KEYS)), paket).filter(
+    (p) => yazilan.has(p.anahtar) && p.durum !== "AYNI",
+  );
+}
+
 function goster(v: unknown): string {
   return v === undefined ? "—" : JSON.stringify(v);
 }
@@ -106,6 +128,11 @@ async function main(): Promise<number> {
       return 1;
     }
     const degisecek = plan.filter((p) => p.durum === "DEGISECEK");
+    // §4: PER_SHIPMENT mevcut çift kapının altında çalışır; o bayrak pakete bilerek alınmadı.
+    const tetik = HIZMET_AYAR_PAKETI.find((p) => p.alan === "financeServiceBillingTrigger");
+    if (tetik?.hedef === "PER_SHIPMENT" && flags.financeAutoDraftFromShipmentEnabled !== true) {
+      console.log("⚠️  PER_SHIPMENT için otomatik taslak bayrağı (finance.autoDraftFromShipmentEnabled) kapalı — sevkte taslak doğmaz; gerekiyorsa ayarlardan ayrıca açın.");
+    }
     if (!uygula) {
       console.log(`KURU KOŞU — ${degisecek.length} ayar değişecekti; yazılan 0. Uygulamak için --apply --kullanici=<ad>.`);
       return 0;
@@ -119,9 +146,12 @@ async function main(): Promise<number> {
       console.error(`❌ kullanıcı bulunamadı: ${kullanici}`);
       return 1;
     }
-    const girdi = Object.fromEntries(degisecek.map((p) => [p.alan, p.hedef]));
-    await systemSettingService.setFeatureFlags(girdi as never, user.id);
-    console.log(`✅ ${degisecek.length} ayar yazıldı.`);
+    const kalan = await paketiYazVeDogrula(degisecek, user.id);
+    if (kalan.length > 0) {
+      console.error(`❌ yazım tutmadı (yeniden okumada farklı): ${kalan.map((p) => p.anahtar).join(", ")}`);
+      return 1;
+    }
+    console.log(`✅ ${degisecek.length} ayar yazıldı ve yeniden okumayla doğrulandı.`);
     return 0;
   } finally {
     await prisma.$disconnect();

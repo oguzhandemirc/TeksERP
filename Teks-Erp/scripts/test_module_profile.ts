@@ -29,6 +29,7 @@
 //   SONDA-B6 → çıkış 1 · 2 ❌ · §4a + §4b — `hizmet` profilinden `emanet.enabled` silindi
 //              (gelen belge ön koşulu kapalı; 2026-10-29 H5)
 //   SONDA-B7 → çıkış 1 · 1 ❌ · §11b — sihirbazdan `ProfilSayfasi.Add('hizmet')` silindi
+//   SONDA-B8 → çıkış 1 · 1 ❌ · §11c — `ProfilDegeri` case numaraları bir kaydırıldı (0..6)
 // ⚠️ SONDA-B5 CANLI VERİYİ DE BOZAR: bozuk job yedi satırın DEĞERİNİ ezer ve bu
 //    bekçinin `finally`si yalnız kendi dokunduğu iki satırı geri yazar. Bu sondayı
 //    koşan kişi ÖNCE yedi satırı (değer + createdAt/updatedAt) SQL ile yedeklemeli;
@@ -399,9 +400,11 @@ async function main(): Promise<void> {
   const issEkle = [...issKod.matchAll(/ProfilSayfasi\.Add\('([^']+)'\);/g)].map((m) => m[1]!).slice(1);
   const pdBas = issKod.indexOf("function ProfilDegeri");
   const pdGovde = pdBas >= 0 ? issKod.slice(pdBas, issKod.indexOf("\nend;", pdBas)) : "";
-  const issCase = [...pdGovde.matchAll(/^\s+(\d+): Result := '([^']+)';/gm)]
-    .sort((a, b) => Number(a[1]) - Number(b[1]))
-    .map((m) => m[2]!);
+  const issCaseSirali = [...pdGovde.matchAll(/^\s+(\d+): Result := '([^']+)';/gm)].sort(
+    (a, b) => Number(a[1]) - Number(b[1]),
+  );
+  // Ad sırası + NUMARA: case N ↔ sayfadaki N. satır (0 = varsayılan); kaydırma yanlış profil yazar.
+  const issCase = issCaseSirali.map((m) => `${m[1]}:${m[2]}`);
   const profilKume = [...MODULE_PROFILE_IDS];
   check(
     "§11a ⭐ `cevap-semasi.json` profil seçenekleri = MODULE_PROFILE_IDS (sıra dahil)",
@@ -415,7 +418,7 @@ async function main(): Promise<void> {
   );
   check(
     "§11c ⭐ Sihirbaz `ProfilDegeri` dizinleri sayfayla hizalı (yanlış profil yazılmaz)",
-    JSON.stringify(issCase) === JSON.stringify(profilKume),
+    JSON.stringify(issCase) === JSON.stringify(profilKume.map((id, i) => `${i + 1}:${id}`)),
     `case=${issCase.join(",")}`,
   );
 
