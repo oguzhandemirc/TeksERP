@@ -194,13 +194,14 @@ export function SettingsSurfacePage({
         value={active}
         onValueChange={handleTabChange}
         orientation="vertical"
-        className="flex min-h-0 flex-1"
+        // Dar ekranda ray üstte, içerik tam genişlikte (yan yana 390 px'te içerik ~100 px'e düşüyordu).
+        className="flex min-h-0 flex-1 flex-col md:flex-row"
       >
         {/* Tek kategori kalıyorsa sol ray HİÇ çizilmez — tek satırlık bir menü,
             seçilecek başka bir şey varmış izlenimi verir. (Radix'te TabsContent
             listeye bağımlı değil, `value` eşleşmesiyle çalışır.) */}
         {!soleCategory && (
-          <div className="flex h-full w-60 shrink-0 flex-col border-r bg-muted/30">
+          <div className="flex max-h-56 w-full shrink-0 flex-col border-b bg-muted/30 md:h-full md:max-h-none md:w-60 md:border-b-0 md:border-r">
             <div className="relative p-3 pb-2">
               <Search className="pointer-events-none absolute left-5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -259,7 +260,7 @@ export function SettingsSurfacePage({
           </div>
         )}
 
-        <div className="min-w-0 flex-1 overflow-auto p-6">
+        <div className="min-w-0 flex-1 overflow-auto p-3 md:p-6">
           {categories.map((cat) => {
             const Icon = cat.icon;
             // ⚠️ SÜZÜLMÜŞ DİZİLER GEÇİLİR, bileşende ikinci bir süzgeç YOK:
