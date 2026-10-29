@@ -5,8 +5,8 @@ import { fabricPropertyColumns } from "./columns";
 import { fabricPropertyService } from "./service";
 import { FabricPropertyFormDialog } from "./FabricPropertyFormDialog";
 import type { FabricProperty } from "./types";
-import type { FabricPropertyFormValues } from "./schema";
 import { loadAllForPicker } from "@/lib/picker-loader";
+import { buildFabricPropertyPayload } from "./payload";
 
 export function FabricPropertiesPage() {
   const allQ = useQuery({
@@ -20,41 +20,6 @@ export function FabricPropertiesPage() {
     staleTime: 60_000,
   });
   const nextOrder = nextSortOrder(allQ.data?.data ?? []);
-
-  const buildPayload = (
-    v: FabricPropertyFormValues,
-    initial: FabricProperty | null,
-  ): Partial<FabricProperty> => ({
-    // Kod backend'de üretilir (OZL+GGAAYY+NNNN); create'te gönderilmez, edit'te korunur.
-    ...(initial ? { code: initial.code } : {}),
-    name: v.name,
-    category: v.category?.trim() || null,
-    description: v.description?.trim() || null,
-    color: v.color?.trim() || null,
-    sortOrder: initial?.sortOrder ?? nextOrder,
-    // Backend `stationIds`'i StationProperty bağlarına çevirir (create'te zorunlu,
-    // update'te replace). `Partial<FabricProperty>` şeklinde bir alan değil —
-    // bilinçli olarak payload'a ek olarak taşınıyor.
-    stationIds: v.stationIds,
-    valueType: v.valueType,
-    // `values` de `stationIds` gibi DÜZ bir liste olarak gider; backend onu
-    // FabricPropertyValue satırlarına çevirir (ham nested write YASAK — F209).
-    // BAYRAK tipte HİÇ GÖNDERİLMEZ: boş dizi göndermek, tipi Seçim'den Bayrak'a
-    // çeviren bir düzenlemede mevcut değerleri sessizce pasifleştirirdi.
-    ...(v.valueType === "CHOICE"
-      ? {
-          values: v.values.map((x, i) => ({
-            code: x.code.trim().toUpperCase(),
-            name: x.name.trim(),
-            sortOrder: (i + 1) * 10,
-            isActive: x.isActive,
-          })),
-        }
-      : {}),
-    // Çeşit bağı yalnız SEÇİM'de anlamlı; BAYRAK'a geçişte bağ açıkça kaldırılır.
-    variantOfPropertyId: v.valueType === "CHOICE" ? v.variantOfPropertyId : null,
-    isActive: v.isActive,
-  } as Partial<FabricProperty> & { stationIds: string[] });
 
   return (
     <CrudPage<FabricProperty>
@@ -74,7 +39,7 @@ export function FabricPropertiesPage() {
           initial={initial}
           isSubmitting={isSubmitting}
           allProperties={allQ.data?.data ?? []}
-          onSubmit={(values) => onSubmit(buildPayload(values, initial))}
+          onSubmit={(values) => onSubmit(buildFabricPropertyPayload(values, initial, nextOrder))}
         />
       )}
     />

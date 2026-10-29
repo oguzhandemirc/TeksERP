@@ -10,6 +10,7 @@
 // =============================================================================
 import { ITEM_TYPE_FILTER_OPTIONS, colorAxisApplies, type ItemTypeFilter } from "@/components/forms/itemPicker";
 import type { CatalogOption } from "@/components/forms/useItemPickerData";
+import { itemTypeLabels } from "@/types/enums";
 import { ITEM_UNIT_CODES, ITEM_UNIT_LABEL } from "@/lib/item-unit";
 
 export type ItemStatusFilter = "active" | "phaseOut" | "inactive" | "pending" | "all";
@@ -60,7 +61,8 @@ export interface ItemUrlFilterDef {
 }
 
 export const ITEM_URL_FILTERS: readonly ItemUrlFilterDef[] = [
-  { key: "itemType", label: "Tür", options: ITEM_TYPE_FILTER_OPTIONS },
+  // "Hizmet" (H6) YALNIZ bu listede: ortak seçenek listesi stok seçicileriyle paylaşılır, oraya sızmaz.
+  { key: "itemType", label: "Tür", options: [...ITEM_TYPE_FILTER_OPTIONS, { value: "SERVICE", label: itemTypeLabels.SERVICE }] },
   { key: "unit", label: "Birim", options: [{ value: ITEM_FILTER_ALL, label: "Tümü" }, ...ITEM_UNIT_CODES.map((u) => ({ value: u, label: ITEM_UNIT_LABEL[u] }))] },
 ];
 
