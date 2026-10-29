@@ -1513,8 +1513,34 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "OFFICE", label: "Ofis onayı", hint: "Okuma yazılır, makine durmaz; ofis Operasyon › Metre Sapmaları ekranında onaylar. Onaylanmadan adım kapanmaz." },
         ],
       },
+      {
+        // D4-E1 (2026-10-29): `defaultValue` backend `DEFAULT_TAMBUR_PLAN_WIDTH_CHECK` ile birebir.
+        enumKey: "tamburPlanGateWidthCheck",
+        group: "Tambur",
+        title: "Tambur'da top eni iş emriyle karşılaştırılsın",
+        summary: "Topun eni iş emrindeki enden eşikten fazla farklıysa Tambur operatöre onay sorsun mu.",
+        desc: "Açıkken (varsayılan) topun eni ile terbiye iş emrinin eni arasındaki fark aşağıdaki eşiği AŞARSA Tambur kesimden önce onay ister. Kapalıyken en hiç sorulmaz; renk karşılaştırması her iki durumda da aynen çalışır.",
+        defaultValue: "ENFORCE",
+        display: "radio",
+        audience: ["Operatör", "Planlamacı"],
+        options: [
+          { value: "ENFORCE", label: "Karşılaştır, farkta sor (bugünkü)", hint: "Fark eşiği aşarsa operatör onaylamadan top depoya inmez." },
+          { value: "OFF", label: "En karşılaştırılmasın", hint: "Yalnız en kontrolü kapanır; renk farkı yine sorulur." },
+        ],
+      },
     ],
     numberFlags: [
+      {
+        key: "tamburPlanGateWidthToleranceCm",
+        title: "Tambur en eşiği (cm)",
+        desc: "Topun eni ile iş emrinin eni arasındaki fark bu değeri AŞARSA Tambur onay sorar; eşit fark sorulmaz. Varsayılan 10 cm. 0 girilirse en küçük farkta bile sorulur. En karşılaştırması kapalıysa bu değer kullanılmaz.",
+        min: 0,
+        max: 100,
+        fallback: 10,
+        unit: "cm",
+        step: 1,
+        audience: ["Operatör", "Planlamacı"],
+      },
       {
         key: "kursunMeterVarianceThresholdM",
         title: "Metre farkı eşiği (metre)",
