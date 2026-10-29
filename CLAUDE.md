@@ -63,7 +63,7 @@ Tam liste `docs/KOD-KURALLARI.md` § Yasaklar (mekanik olanlar `Teks-Erp/eslint.
 
 ## Alan dizini — dokunmadan önce `docs/kurallar/<alan>.md`
 
-defter · sevkiyat · fason · tambur · top-duzeltme · kk1 · kursun · is-emri · rota-renk · kalite · dokuma · parti · yari-mamul · refakat-karti · belge-etiket · bildirim · mukerrer · numaralandirma · sebep-katalogu · kesif-cihaz · surum-yayin · deploy-kurulum · modul-bayrak · superadmin · yetki-izin · filtre-liste · raporlar · finans · maliyet · patron-bulutu · lisans · genel. Özetler `docs/kurallar/README.md`; belge haritası `docs/README.md`.
+defter · sevkiyat · fason · tambur · top-duzeltme · kk1 · kursun · is-emri · rota-renk · kalite · dokuma · parti · yari-mamul · refakat-karti · belge-etiket · gelen-belge · bildirim · mukerrer · numaralandirma · sebep-katalogu · kesif-cihaz · surum-yayin · deploy-kurulum · modul-bayrak · superadmin · yetki-izin · filtre-liste · raporlar · finans · maliyet · patron-bulutu · lisans · genel. Özetler `docs/kurallar/README.md`; belge haritası `docs/README.md`.
 
 ## Çalışma düzeni
 
