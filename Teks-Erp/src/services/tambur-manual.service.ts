@@ -98,6 +98,13 @@ import { resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { STEP_CAPABILITY_SELECT, stepCanApplyColor } from "./helpers/step-capability.helper";
 import { lengthWarning } from "./helpers/measurement-threshold.helper";
 import { buildIntentSnapshot } from "./label.service";
+import { applyTamburCapabilitiesTx } from "./tambur.service";
+import { loadStationPropertyCaps } from "./helpers/station-capability-transfer.helper";
+
+/** T1 kalanı (K3c): elle doğan topa yalnız Tambur TÜRÜNDEKİ oturum istasyonunun AUTO yeteneği yazılır. */
+async function loadSessionTamburCaps(stationId: string | null | undefined) {
+  return stationId ? loadStationPropertyCaps(prisma, stationId, { kind: StationKind.TAMBUR }) : [];
+}
 
 /**
  * Elle eklenen topun giriş hareketine yazılan marker ÖN EKİ (tam değer
@@ -1116,6 +1123,7 @@ export class TamburManualService {
       },
     );
     const roll = created.data;
+    const tamburCaps = await loadSessionTamburCaps(ctx.stationId);
 
     // FAZ 2 — Tambur adımına bağla. İLK iş iş emri satır kilidi + taze durum (parti numarası
     // kilidi 8022 bundan SONRA — Parti Ekle boğazı ve diğer parti doğuranlarla aynı sıra).
@@ -1219,6 +1227,8 @@ export class TamburManualService {
         },
       });
 
+      // İstasyon yeteneği (T1) bağlamayla AYNI tx'te: FAZ 2 düşerse replay yeniden yazar (no-op güvenli).
+      await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: ctx.stationId, rollId: roll.id, userId: ctx.userId });
       // Adım/WO durumu: yeni açık hareket adımı ACTIVE'e çeker; PLANNED WO üretime girer.
       await recomputeStepStatus(tx, step.id);
       await ensureWorkOrderInProgress(tx, step.workOrderId);
@@ -1539,6 +1549,13 @@ export class TamburManualService {
       throw err;
     }
     const roll = created.data;
+    // İstasyon yeteneği (T1): faz 1 kendi tx'ini açtığı için ayrı tx. Buraya replay yalnız eşzamanlı yarışın
+    // kaybedeni olarak gelir; kaynak topun DOĞDUĞU istasyondur — başka oturum yabancı yetenek eklemesin.
+    const capStationId = created.idempotent === true ? roll.entryStationId : ctx.stationId;
+    const tamburCaps = await loadSessionTamburCaps(capStationId);
+    if (capStationId && tamburCaps.length > 0) {
+      await prisma.$transaction((tx) => applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: capStationId, rollId: roll.id, userId: ctx.userId }));
+    }
     // Yarışın kaybedeni de replay'dir: faz 1'in boğazı `idempotent: true` döndü → ikinci CREATE audit yazılmaz.
     const idempotentReplay = created.idempotent === true;
 
