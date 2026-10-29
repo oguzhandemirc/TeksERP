@@ -55,6 +55,26 @@ export function DeliveryNoteGramajHint({ suggestion, workOrderId, propertyId, cu
         )}
         {s && s.valueId === currentValueId && <span className="ml-auto text-xs opacity-80">Hedefle aynı</span>}
       </div>
+      {(suggestion.variants ?? []).length > 0 && (
+        // Kurşun dışı çeşitler (D4-D1) yalnız bilgi: hedefe uygulama gelen belgeden iş emri akışının işi (D4-D2).
+        <ul className="mt-2 space-y-1 text-xs" data-testid="delivery-note-variants">
+          {suggestion.variants!.map((v) => (
+            <li key={v.propertyId} className="flex flex-wrap gap-x-2" data-property={v.propertyId}>
+              <span className="opacity-80">{v.propertyName}:</span>
+              {v.suggested ? (
+                <span className="font-semibold">{v.suggested.valueName}</span>
+              ) : (
+                <span>
+                  öneri yok
+                  {v.entries.some((e) => e.valueId) && (
+                    <span className="opacity-80"> ({v.entries.filter((e) => e.valueId).map((e) => `${e.valueName} · ${e.rollCount} top`).join(", ")})</span>
+                  )}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
       {!s && (
         <ul className="mt-2 space-y-1 text-xs">
           {suggestion.entries.map((e) => (

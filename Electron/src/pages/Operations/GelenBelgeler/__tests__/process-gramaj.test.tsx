@@ -75,6 +75,52 @@ describe("ProcessGramajPanel", () => {
   });
 });
 
+describe("ProcessGramajPanel — özellik gruplu (D4-D1)", () => {
+  const brode = { propertyId: "pB", propertyCode: "BRODE-DESEN", propertyName: "Brode deseni", options: [{ id: "d12", code: "D12", name: "Desen D12" }, { id: "d15", code: "D15", name: "Desen D15" }] };
+  const grouped: NoteMatchSuggestions = {
+    ...sugg,
+    process: { rawText: "BRODE D12", suggested: null, source: "NONE", variants: [{ propertyId: "pB", suggested: { id: "d12", name: "Desen D12" }, source: "ALIAS" }] },
+    processGroups: [brode],
+  };
+  it("kurşun ve brode ayrı satırlarda; brode önerisi etiketli; tık metnin TEK seçimini bildirir", async () => {
+    const onPick = vi.fn();
+    const g = buildProcessGroups({ processText: "BRODE D12", lines: [] }, grouped);
+    renderWithProviders(<ProcessGramajPanel groups={g} options={OPTIONS} choiceGroups={[brode]} picks={{}} onPick={onPick} />);
+    expect(screen.getByText("İşlem çeşidi (işlem metninden)")).toBeInTheDocument();
+    const head = screen.getByTestId("process-group");
+    expect(within(head).queryByText(/öneri yok/)).toBeNull();
+    const v = within(head).getByTestId("process-variant");
+    expect(v.dataset.suggested).toBe("d12");
+    expect(within(v).getByText("Brode deseni")).toBeInTheDocument();
+    await userEvent.click(within(v).getByRole("radio", { name: "Desen D12 (öğrenilmiş öneri)" }));
+    expect(onPick).toHaveBeenCalledWith("header", "d12");
+  });
+  it("kurşun seçiliyken brode satırı işaretsiz; brode satırının 'Seçme'si kurşun seçimini silmez", async () => {
+    const onPick = vi.fn();
+    const g = buildProcessGroups({ processText: "BRODE D12", lines: [] }, grouped);
+    renderWithProviders(<ProcessGramajPanel groups={g} options={OPTIONS} choiceGroups={[brode]} picks={{ header: "v25" }} onPick={onPick} />);
+    const [kursunRow, brodeRow] = screen.getAllByTestId("process-row");
+    expect(within(kursunRow!).getByRole("radio", { name: "25 gr" })).toHaveAttribute("aria-checked", "true");
+    expect(within(brodeRow!).getByRole("radio", { name: "Seçme" })).toHaveAttribute("aria-checked", "true");
+    await userEvent.click(within(brodeRow!).getByRole("radio", { name: "Seçme" }));
+    expect(onPick).not.toHaveBeenCalled();
+  });
+  it("büyük desen kataloğunda yalnız önerilen değer gösterilir", () => {
+    const big = { ...brode, options: Array.from({ length: 20 }, (_, i) => ({ id: i === 7 ? "d12" : `x${i}`, code: `X${i}`, name: i === 7 ? "Desen D12" : `Desen X${i}` })) };
+    const g = buildProcessGroups({ processText: "BRODE D12", lines: [] }, grouped);
+    renderWithProviders(<ProcessGramajPanel groups={g} options={[]} choiceGroups={[big]} picks={{}} onPick={() => {}} />);
+    const v = screen.getByTestId("process-variant");
+    expect(within(v).getAllByRole("radio").map((r) => r.textContent)).toEqual(["Seçme", "Desen D12 (öğrenilmiş öneri)"]);
+    expect(within(v).getByText(/yalnız öneri gösteriliyor/)).toBeInTheDocument();
+  });
+  it("çeşit kataloğu yoksa H9 görünümü (başlık 'Kurşun gramajı', satır etiketi yok)", () => {
+    const g = buildProcessGroups({ processText: "KURŞUN 25 GR", lines: [] }, sugg);
+    renderWithProviders(<ProcessGramajPanel groups={g} options={OPTIONS} picks={{}} onPick={() => {}} />);
+    expect(screen.getByText("Kurşun gramajı (işlem metninden)")).toBeInTheDocument();
+    expect(screen.queryByTestId("process-row")).toBeNull();
+  });
+});
+
 describe("ApproveDialog gramaj seçimi", () => {
   beforeEach(() => approveNote.mockReset());
   it("seçimler onay çağrısına iletilir ve diyalogda sayılır", async () => {
@@ -85,5 +131,9 @@ describe("ApproveDialog gramaj seçimi", () => {
     await userEvent.click(screen.getByRole("button", { name: "Onayla" }));
     await screen.findByTestId("approve-result");
     expect(approveNote).toHaveBeenLastCalledWith("n1", null, choices);
+  });
+  it("çeşit grupları varsa sayaç 'işlem seçimi' der (D4-D1)", () => {
+    renderWithProviders(<ApproveDialog noteId="n1" lines={[]} processChoices={[{ lineId: null, valueId: "d12" }]} choiceNoun="işlem seçimi" open onOpenChange={() => {}} onDone={() => {}} />);
+    expect(screen.getByTestId("approve-process-choices")).toHaveTextContent("1 işlem seçimi");
   });
 });
