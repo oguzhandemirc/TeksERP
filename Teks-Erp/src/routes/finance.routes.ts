@@ -63,6 +63,8 @@ const cariCreateSchema = z
     paymentTermDays: z.number().int().min(0).max(3650).nullable().optional(),
     riskLimit: decimalString.nullable().optional(),
     notes: z.string().max(500).nullable().optional(),
+    // H8b: null = fabrika ayarı; değer kümesi servis + DB CHECK ile aynı (servis Türkçe 400 verir).
+    serviceBillingTrigger: z.string().max(20).nullable().optional(),
   })
   .strict();
 

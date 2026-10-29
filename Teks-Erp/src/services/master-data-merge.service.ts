@@ -1020,11 +1020,13 @@ function activeSql(rule: ConflictRule, alias: "s" | "t" | "p"): string {
 
 /**
  * Survivor'da aynı anahtar var mı. Kısıt KOLONUN KENDİSİNDE ise (`CariAccount.customerId
- * @unique`) "diğer anahtar" yoktur: survivor'ın satırı olması yeter.
+ * @unique`) "diğer anahtar" yoktur: survivor'ın satırı olması yeter. `crossSourceOn.nullSafe`
+ * kolonu burada da `IS NOT DISTINCT FROM` (partial UNIQUE'in NULL ikizi; `=` iki NULL'ı kaçırırdı).
  */
 function survivorSideSql(rule: ConflictRule): string {
   const other = rule.uniqueOn.filter((c) => c !== rule.column);
-  const match = other.map((c) => ` AND t."${c}" = s."${c}"`).join("");
+  const nullSafe = new Set(rule.crossSourceOn?.nullSafe ?? []);
+  const match = other.map((c) => ` AND t."${c}" ${nullSafe.has(c) ? "IS NOT DISTINCT FROM" : "="} s."${c}"`).join("");
   return `EXISTS (SELECT 1 FROM "${rule.table}" t WHERE t."${rule.column}" = $2::uuid${match}${activeSql(rule, "t")})`;
 }
 
