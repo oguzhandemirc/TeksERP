@@ -817,7 +817,7 @@ export class ShippingService {
         where,
         select: { id: true, status: true, shipmentId: true, sackId: true, barcode: true, currentQty: true, sack: { select: { shipmentId: true } } },
       }),
-      otherInternalHit: async (c) => (await prisma.swatch.findUnique({ where: { barcode: c }, select: { id: true } })) !== null,
+      otherInternalHit: async (c) => (await prisma.swatch.findUnique({ where: { barcode: normalizeScanCode(c) }, select: { id: true } })) !== null,
     });
     if (resolved.kind === "AMBIGUOUS") throw ambiguousCustomerCodeError(resolved);
     const roll = resolved.kind === "FOUND" ? resolved.roll : null;

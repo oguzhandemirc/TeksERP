@@ -42,6 +42,8 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   // ── Top
   "POST /api/rolls/initial-entry": e("top girişi yaptı", "top girişi yapmaya çalıştı"),
   "POST /api/rolls/:id/scrap": e("topu hurdaya ayırdı", "topu hurdaya ayırmaya çalıştı"),
+  "POST /api/rolls/:id/customer-code": e("topa müşteri barkodu bağladı", "topa müşteri barkodu bağlamaya çalıştı"),
+  "POST /api/rolls/:id/customer-code/revoke": e("topun müşteri barkodunu kaldırdı", "topun müşteri barkodunu kaldırmaya çalıştı"),
   "DELETE /api/rolls/:id": e("topu sildi", "topu silmeye çalıştı"),
   // ── Çuval / paketleme
   "POST /api/shipping/sacks": e("çuval açtı", "çuval açmaya çalıştı"),

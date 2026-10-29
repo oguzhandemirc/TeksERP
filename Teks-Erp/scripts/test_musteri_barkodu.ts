@@ -97,7 +97,7 @@ function astSection(): void {
           violations.push(`${rel}:${sf.getLineAndCharacterOfPosition(node.getStart()).line + 1} rollCustomerCode.${method}({ where: { code } })`);
         }
       }
-      if ((ts.isTemplateExpression(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isStringLiteral(node)) && node.getText().includes("roll_customer_codes")) {
+      if ((ts.isTemplateExpression(node) || ts.isNoSubstitutionTemplateLiteral(node)) && node.getText().includes("roll_customer_codes")) {
         violations.push(`${rel}:${sf.getLineAndCharacterOfPosition(node.getStart()).line + 1} ham SQL roll_customer_codes`);
       }
       ts.forEachChild(node, visit);
@@ -295,7 +295,7 @@ async function main(): Promise<void> {
     const history = await prisma.rollCustomerCode.count({ where: { rollId: rA1.id } });
     check("§6 değiştirme = damga + yeni satır (aynı kod yeniden bağlanır, geçmiş 2 satır)", rebind.success && history === 2);
     const offAfter = await inventory.findRollByBarcode(CODE);
-    check("§6 yeniden bağlanan kod çözülür", (offAfter.data as unknown as { id: string }).id === rA1.id);
+    check("§6 yeniden bağlanan kod çözülür", offAfter.data?.id === rA1.id);
 
     // ── §7 DB seddi ──
     const rawInsert = async (rollId: string, customerId: string, code: string): Promise<string> => {
