@@ -8,10 +8,15 @@
 // §3 OPERATOR_REASON: sebep yok ⇒ 409 KURSUN_METER_MISMATCH + okuma/KK2 0; sebep var ⇒ 200 + 1 imza.
 // §4 SUPERVISOR_PIN: finishStep 409; yanlış PIN 403 + 0 imza; izinsiz PIN 403; doğru PIN 1 imza;
 //    PIN audit'te/hatada 0; tablet gövdesi (kuyruk) PIN taşıyamaz; PIN ucu giriş hız kovasında.
-// §5 OFFICE: panelden seçilemez (400); finishStep 409 → ofis onayı → 200; ikinci onay 409.
+// §5 OFFICE: panelden seçilir (H4: 200); finishStep 409 → listede PENDING → ofis onayı → ACKED → 200; ikinci onay 409.
 // §6 ⭐ eşik değişince eski okumanın işareti aynı (kopya); kip uyuşmazlığı / sapmasız okuma 409.
+// §7 ⭐ H4 liste işareti: NONE ⇒ UNSIGNED; OPERATOR_REASON + sonradan IN düzeltmesi ⇒ UNSIGNED, bekleyen 0,
+//    finishStep 200 (imza yolu olmayan kip kapı tutmaz); özet şeridi listeyle aynı where.
+// §8 ⭐ MEASURED_IN tabanında yükleyici ikizi: `evaluateReadingVarianceTx` ↔ `readingDeviatedSql`/`readingBaseSql`
+//    gerçek okuma satırlarında eşit (IN var · IN yok ⇒ bildirilene düşer · DECLARED_IN).
 // Negatif sondalar (2026-10-29, elle; PR gövdesinde): ayna bozulunca §0 ❌ · SQL ikizinde `>`→`>=`
 // §1 ❌ · politika kopyası yerine canlı ayar okununca §6a ❌ · finishStep kapısı kaldırılınca §4b/§5b ❌.
+// H4 sondası: bekleyen yükleminden OPERATOR_REASON dışlaması kaldırılınca (`<> 'NONE'`) §7d/§7e ❌.
 // =============================================================================
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -19,8 +24,8 @@ import path from "node:path";
 import { MachineDataSource, MeterPhase, Prisma, RollStatus, StepStatus, WorkOrderStatus } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { resolveMeterVariance, type MeterVarianceBasisCode } from "../src/lib/kursun-meter-variance";
-import { meterDeviatedSql } from "../src/services/helpers/kursun-meter-variance-sql.helper";
-import { evaluateReadingVarianceTx } from "../src/services/helpers/kursun-meter.helper";
+import { meterDeviatedSql, readingBaseSql, readingDeviatedSql } from "../src/services/helpers/kursun-meter-variance-sql.helper";
+import { evaluateReadingVarianceTx, pendingMeterAcksTx } from "../src/services/helpers/kursun-meter.helper";
 import { KursunQcService } from "../src/services/kursun-qc.service";
 import { SETTING_KEYS, SystemSettingService } from "../src/services/system-setting.service";
 import { completeQc2Schema, meterPinAckSchema } from "../src/controllers/kursun-qc.controller";
@@ -205,9 +210,11 @@ async function main(): Promise<void> {
 
     // §2 NONE (varsayılan kip)
     let noneRollId = "";
+    let noneStepId = "";
     {
       const a = await mkActive();
       noneRollId = a.rollId;
+      noneStepId = a.stepId;
       const res = await svc.completeQc2({ rollId: a.rollId, stepId: a.stepId, meterOut: meter(103) }, admin.id, null);
       check("§2a ⭐ NONE: 200 + işaret (deviated, imza beklemiyor)", res.success && res.data.meter?.deviated === true && res.data.meter?.pendingAck === false,
         JSON.stringify(res.data.meter));
@@ -273,17 +280,21 @@ async function main(): Promise<void> {
     // §5 OFFICE
     {
       const panel = await hata(new SystemSettingService().setFeatureFlags({ kursunMeterVarianceApproval: "OFFICE" }, admin.id));
-      check("§5a OFFICE panelden seçilemez (H4'e dek) ⇒ 400 METER_APPROVAL_OFFICE_UNAVAILABLE", panel.status === 400 && panel.code === "METER_APPROVAL_OFFICE_UNAVAILABLE", JSON.stringify(panel));
+      check("§5a ⭐ OFFICE panelden seçilir (H4: ofis ekranı var) ⇒ 200", panel.status === null, JSON.stringify(panel));
       await setFlag(SETTING_KEYS.KURSUN_METER_VARIANCE_APPROVAL, "OFFICE");
       const a = await mkActive();
       await svc.completeQc2({ rollId: a.rollId, stepId: a.stepId, meterOut: meter(103) }, admin.id, null);
       const f = await hata(svc.finishStep({ stepId: a.stepId }, admin.id));
       check("§5b ⭐ OFFICE: finishStep 409 METER_DEVIATION_UNACKED", f.status === 409 && f.code === "METER_DEVIATION_UNACKED", JSON.stringify(f));
-      const list = await svc.listPendingMeterAcks({ stepId: a.stepId });
+      const list = await svc.listMeterDeviations({ stepId: a.stepId }, { limit: 50 });
       const readingId = (await readingOf(a.rollId)).id;
-      check("§5c OFFICE: bekleyen listede (SQL ikizi)", list.data.length === 1 && list.data[0].readingId === readingId);
+      check("§5c OFFICE: listede PENDING (SQL ikizi) + özet bekleyen 1", list.data.length === 1 && list.data[0].readingId === readingId && list.data[0].status === "PENDING" && list.summary.pending === 1,
+        JSON.stringify({ n: list.data.length, st: list.data[0]?.status, sum: list.summary }));
       const ok = await svc.ackMeterReading({ readingId, mode: "OFFICE" }, admin.id);
       check("§5d OFFICE: ofis onayı ⇒ 1 imza", ok.success && (await acksOf(a.rollId)).length === 1);
+      const after = await svc.listMeterDeviations({ stepId: a.stepId }, { limit: 50 });
+      check("§5d2 OFFICE: onaydan sonra ACKED, özet imzasız 0", after.data[0]?.status === "ACKED" && after.data[0]?.ack?.mode === "OFFICE" && after.summary.unsigned === 0,
+        JSON.stringify({ st: after.data[0]?.status, sum: after.summary }));
       const iki = await hata(svc.ackMeterReading({ readingId, mode: "OFFICE" }, admin.id));
       check("§5e ⭐ ikinci onay ⇒ 409 METER_ALREADY_ACKED + imza hâlâ 1", iki.status === 409 && iki.code === "METER_ALREADY_ACKED" && (await acksOf(a.rollId)).length === 1, JSON.stringify(iki));
       const f2 = await hata(svc.finishStep({ stepId: a.stepId }, admin.id));
@@ -310,6 +321,59 @@ async function main(): Promise<void> {
       const nd = await hata(svc.ackMeterReading({ readingId: (await readingOf(b.rollId)).id, mode: "OFFICE" }, admin.id));
       check("§6c sapmasız okumaya onay ⇒ 409 METER_NOT_DEVIATED", nd.status === 409 && nd.code === "METER_NOT_DEVIATED", JSON.stringify(nd));
       await svc.reopenStep({ stepId: a.stepId }, admin.id).catch(() => null);
+    }
+
+    // §7 H4 liste işareti + OPERATOR_REASON kapı tutmaz
+    {
+      const none = await svc.listMeterDeviations({ stepId: noneStepId }, { limit: 50 });
+      check("§7a ⭐ NONE sapması listede UNSIGNED (işaret), özet imzasız 1", none.data.length === 1 && none.data[0].status === "UNSIGNED" && none.summary.unsigned === 1 && none.summary.pending === 0,
+        JSON.stringify({ n: none.data.length, st: none.data[0]?.status, sum: none.summary }));
+      await setFlag(SETTING_KEYS.KURSUN_METER_CAPTURE, "IN_OUT");
+      await setFlag(SETTING_KEYS.KURSUN_METER_VARIANCE_BASIS, "MEASURED_IN");
+      await setFlag(SETTING_KEYS.KURSUN_METER_VARIANCE_APPROVAL, "OPERATOR_REASON");
+      const a = await mkActive();
+      await svc.recordMeterReading({ rollId: a.rollId, stepId: a.stepId, phase: MeterPhase.IN, input: meter(100) }, admin.id);
+      const res = await svc.completeQc2({ rollId: a.rollId, stepId: a.stepId, meterOut: meter(101) }, admin.id, null);
+      check("§7b REASON: eşik içinde (101 ↔ IN 100) sebepsiz 200, imza 0", res.success && res.data.meter?.deviated === false && (await acksOf(a.rollId)).length === 0, JSON.stringify(res.data.meter));
+      await svc.recordMeterReading({ rollId: a.rollId, stepId: a.stepId, phase: MeterPhase.IN, input: meter(95) }, admin.id);
+      const list = await svc.listMeterDeviations({ stepId: a.stepId }, { limit: 50 });
+      check("§7c IN 100→95 düzeltmesi OUT'u sapmaya kaydırdı ⇒ listede UNSIGNED (imzasız sapma)", list.data.length === 1 && list.data[0].status === "UNSIGNED" && list.data[0].diffMeters === 6,
+        JSON.stringify({ n: list.data.length, st: list.data[0]?.status, diff: list.data[0]?.diffMeters }));
+      const pend = await pendingMeterAcksTx(prisma, { stepId: a.stepId });
+      check("§7d ⭐ REASON: bekleyen yüklemi 0 (imza yolu yok ⇒ kapı değil)", pend.length === 0 && list.summary.pending === 0, `bekleyen=${pend.length}`);
+      const f = await hata(svc.finishStep({ stepId: a.stepId }, admin.id));
+      check("§7e ⭐ REASON + sonradan IN düzeltmesi ⇒ finishStep 200", f.status === null, JSON.stringify(f));
+      const all = await svc.listMeterDeviations({ fromDay: undefined }, { limit: 1 });
+      const sayim = await prisma.$queryRaw<{ n: bigint }[]>`SELECT count(*) AS n FROM roll_meter_readings r
+        WHERE r.phase = 'OUT'::"MeterPhase" AND r."revokedAt" IS NULL AND ${readingDeviatedSql("r")}`;
+      check("§7f özet toplamı = sapmalı aktif OUT sayısı (aynı where); sayfa 1 + imleç", all.summary.total === Number(sayim[0].n) && all.data.length === 1 && (all.summary.total > 1 ? all.pagination.nextCursor !== null : true),
+        `özet=${all.summary.total} sayım=${String(sayim[0].n)}`);
+      if (all.pagination.nextCursor) {
+        const p2 = await svc.listMeterDeviations({}, { cursor: all.pagination.nextCursor, limit: 1 });
+        check("§7g imleç sonraki satırı verir (tekrar yok)", p2.data.length === 1 && p2.data[0].readingId !== all.data[0].readingId);
+      }
+    }
+
+    // §8 MEASURED_IN yükleyici ikizi — gerçek satırlarda TS ↔ SQL
+    {
+      const rows = await prisma.rollMeterReading.findMany({ where: { rollId: { in: rollIds }, phase: MeterPhase.OUT, revokedAt: null } });
+      let esit = 0;
+      let olculenli = 0;
+      const farklar: string[] = [];
+      for (const r of rows) {
+        const ts = await evaluateReadingVarianceTx(prisma, r);
+        const q = await prisma.$queryRaw<{ d: boolean; b: Prisma.Decimal | null; m: boolean }[]>`
+          SELECT ${readingDeviatedSql("r")} AS d, ${readingBaseSql("r")} AS b,
+            EXISTS (SELECT 1 FROM roll_meter_readings mi WHERE mi."rollId" = r."rollId" AND mi."workOrderStepId" = r."workOrderStepId" AND mi.phase = 'IN'::"MeterPhase" AND mi."revokedAt" IS NULL) AS m
+          FROM roll_meter_readings r WHERE r.id = ${r.id}::uuid`;
+        const sqlBase = q[0]?.b == null ? null : Number(q[0].b);
+        const tsBase = r.thresholdM == null && r.thresholdPct == null ? sqlBase : ts.baseMeters;
+        if (q[0]?.d === ts.deviated && tsBase === sqlBase) esit++;
+        else farklar.push(`${r.id.slice(0, 8)} ts=${ts.deviated}/${ts.baseMeters} sql=${q[0]?.d}/${sqlBase}`);
+        if (r.basis === "MEASURED_IN" && q[0]?.m) olculenli++;
+      }
+      check("§8a körlük zemini: MEASURED_IN + aktif IN'li okuma var", olculenli >= 1 && rows.length >= 5, `ölçülenli=${olculenli} satır=${rows.length}`);
+      check("§8b ⭐ yükleyici ikizi: TS ↔ SQL sapma + taban her satırda eşit", esit === rows.length, farklar.join(" · "));
     }
   } finally {
     await prisma.rollMeterAck.deleteMany({ where: { reading: { rollId: { in: rollIds } } } }).catch(() => {});

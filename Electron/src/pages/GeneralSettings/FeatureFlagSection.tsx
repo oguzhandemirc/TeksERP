@@ -567,7 +567,11 @@ export function FeatureFlagSection({
     const defaultLabel =
       f.options.find((o) => o.value === f.defaultValue)?.label ?? f.defaultValue;
     return (
-      <div key={f.enumKey} className="flex items-center justify-between gap-4">
+      <div
+        key={f.enumKey}
+        // Dar pencerede (<640px) radyo listesi başlığın ALTINA iner: yan yana iken w-72 liste başlığı ezer.
+        className={f.display === "radio" && canEdit ? "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4" : "flex items-center justify-between gap-4"}
+      >
         {/* Uzun açıklama + künye (i) balonunda (2026-09-07 / 2026-09-22): satırda yalnız
             başlık + tek cümle; seçim sağda, iOS anahtarla aynı hizada. */}
         <div className="min-w-0 space-y-0.5 text-sm">

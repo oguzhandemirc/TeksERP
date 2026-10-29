@@ -197,6 +197,7 @@ import { WorkOrderDetailPage } from "@/pages/Operations/WorkOrders/WorkOrderDeta
 import { WorkOrderFormPage } from "@/pages/Operations/WorkOrders/WorkOrderFormPage";
 import { RollsPage } from "@/pages/Operations/Rolls/RollsPage";
 import { KursunDagitimPage } from "@/pages/Operations/KursunDagitim/KursunDagitimPage";
+import { MeterDeviationsPage } from "@/pages/Operations/KursunMeterDeviations/MeterDeviationsPage";
 import { ProductBalancePage } from "@/pages/Operations/ProductBalance/ProductBalancePage";
 import { ShipmentsPage } from "@/pages/Operations/Shipments/ShipmentsPage";
 import { ShipmentDetailPage } from "@/pages/Operations/Shipments/detail/ShipmentDetailPage";
@@ -1325,6 +1326,15 @@ export const contentRoutes: RouteObject[] = [
       // kontrollerini açar/kapatır.
       <ProtectedRoute requireAnyPermission={["quality:write", "workorder:distribute"]}>
         <KursunDagitimPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // H4: metre sapmaları — karo ile aynı izin (okuma + ofis onayı).
+    path: "operations/kursun-sapmalar",
+    element: (
+      <ProtectedRoute requirePermission="kursun:meter-approve">
+        <MeterDeviationsPage />
       </ProtectedRoute>
     ),
   },

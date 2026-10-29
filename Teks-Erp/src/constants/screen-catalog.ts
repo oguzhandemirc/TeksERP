@@ -224,6 +224,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "operations/work-orders", app: "desktop", modul: "productionEnabled", title: TERIM.terbiyeIsEmri.cogul, requires: ["workorder:read"], capabilities: ["order:write", "property:write", "roll:manual-adjust", "workorder:write"] },
   { key: "operations/work-order-events", app: "desktop", modul: "productionEnabled", title: `${TERIM.terbiyeIsEmri.tekil} Hareketleri`, requires: ["workorder:read"], capabilities: [] },
   { key: "operations/rolls", app: "desktop", modul: "cekirdek:stok-giris", title: "Kumaş Stoğu", requires: ["roll:read"], capabilities: ["kartela:write", "label:print", "label:read", "roll:history", "roll:manual-adjust", "roll:write"] },
+  { key: "operations/kursun-sapmalar", app: "desktop", modul: "productionEnabled", title: "Metre Sapmaları", requires: ["kursun:meter-approve"], capabilities: [] },
   { key: "operations/kursun-dagitim", app: "desktop", modul: "productionEnabled", title: TERIM_AD.kursunPlanlama, requires: ["quality:write", "workorder:distribute"], capabilities: [] },
   { key: "operations/product-balance", app: "desktop", modul: "productionEnabled", title: "Kumaş Dengesi", requires: ["workorder:read"], capabilities: ["workorder:write"] },
   { key: "operations/shipments", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Sevkiyatlar", requires: ["shipping:read"], capabilities: ["eirsaliye:read", "eirsaliye:undo", "eirsaliye:write", "return:write", "shipping:invoice", "shipping:undo-dispatch", "shipping:write"] },
@@ -455,8 +456,6 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // çağırır; `loom:*` web kodları panelsiz kalır — panel doff yüzeyi yok, kod API/entegrasyon için.
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
-  // H2 (2026-10-29): ofis onay ucu + bekleyen sapma listesi backend'de; panel ekranı H4 dilimi — doğunca muaf silinir.
-  { code: "kursun:meter-approve", reason: "Sapma onay ekranı H4'te (panel); bugün ofis ucu API'de, tablet PIN'inin sahibi bu izni taşır." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
 ];
 

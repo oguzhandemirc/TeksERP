@@ -13,6 +13,7 @@ import { deviceService } from "@/pages/Devices/service";
 import { peripheralService } from "./service";
 import { useFoldValues } from "@/hooks/useFoldValues";
 import { PrinterSettingsFields } from "./PrinterSettingsFields";
+import { MeterCounterFields } from "./MeterCounterFields";
 import {
   peripheralFormDefaults,
   peripheralFormSchema,
@@ -126,6 +127,8 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
         timeoutMs: initial.timeoutMs != null ? String(initial.timeoutMs) : "",
         role: initial.role ?? "",
         simulate: initial.simulate ?? false,
+        counterMode: initial.counterMode ?? "",
+        resetCommand: initial.resetCommand ?? "",
         owner: initial.machineId
           ? "machine"
           : initial.stationId
@@ -408,6 +411,7 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                 doğrudan cihazda, şablonlar tek havuzdan seçilir + varyant
                 uyumsuzluk hint'i (PrinterSettingsFields). */}
             {isPrinter && <PrinterSettingsFields form={form} />}
+            {kind === "METER" && <MeterCounterFields form={form} />}
 
             {/* Aktiflik formdan YÖNETİLMEZ — yalnız listedeki Pasife Al / Aktifleştir /
                 Kalıcı Sil aksiyonlarından (users kalıbı). */}

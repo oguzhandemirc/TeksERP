@@ -48,6 +48,7 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
   "operations/work-orders": "productionEnabled",
   "operations/work-order-events": "productionEnabled",
   "operations/kursun-dagitim": "productionEnabled",
+  "operations/kursun-sapmalar": "productionEnabled",
   "operations/product-balance": "productionEnabled",
   "reports/production": "productionEnabled",
   "reports/quality": "productionEnabled",
