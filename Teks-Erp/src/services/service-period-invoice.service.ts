@@ -4,7 +4,8 @@
 // Soru: "bu cariye bu ay sevk ettiğimiz emanet toplara yaptığımız, henüz faturalanmamış işler" → TEK taslak.
 // Toplayıcı ve kilit sırası H7'nindir (`collectPeriodServiceBilling` → `collectServiceBillingDraft`;
 // fatura tx'i `invoiceService.createDraft`): aktif bağı olan iş düşer, yarışı kısmi unique + 8023 kilitleri
-// kapatır (aynı iş iki yoldan → 409 SERVICE_ALREADY_BILLED). Taslak `shipmentId` taşımaz.
+// kapatır (aynı iş iki yoldan → 409 SERVICE_ALREADY_BILLED). Taslak `shipmentId` taşımaz. K3b: fasondan doğrudan
+// sevkler (DSK) de dönemin sevkleridir.
 // =============================================================================
 import { Currency, InvoiceStatus, InvoiceType, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
@@ -117,11 +118,16 @@ export async function previewServicePeriodDraft(input: ServicePeriodInput): Prom
   if (effective.source === "CUSTOMER" && effective.trigger === "PER_SHIPMENT") warnings.push(CUSTOMER_PER_SHIPMENT_PERIOD_WARNING);
   if (closedAt) warnings.push(`Dönem ${formatDayKeyTr(closedAt)} kapanışıyla KAPALI — taslak oluşturulamaz.`);
   if (draft.links.length === 0 && draft.billedWorkCount > 0) warnings.push("Dönemin bütün işleri zaten faturalanmış.");
+  // K3b: DSK'nın elle fatura izi varsa o faturada hizmet satırı yazılmış olabilir — çift faturaya karşı uyar (yalnız önizleme).
+  for (const d of draft.directShipments) {
+    if (d.invoiceNo) warnings.push(`Doğrudan sevk ${d.shipmentNo} için elle işaretlenmiş fatura var (${d.invoiceNo}) — hizmet satırını kontrol edin.`);
+  }
   return {
     cariId: cari.id, cariName: cari.name, period: input.period,
     periodStart: bounds.from.toISOString(), periodEnd: bounds.to.toISOString(), issueDate: bounds.issueDate.toISOString(),
     currency: cari.currency,
-    shipmentCount: draft.shipments.length, shipmentNos: draft.shipments.map((s) => s.shipmentNo),
+    shipmentCount: draft.shipments.length + draft.directShipments.length,
+    shipmentNos: [...draft.shipments, ...draft.directShipments].map((s) => s.shipmentNo),
     workCount: draft.links.length, alreadyBilledWorkCount: draft.billedWorkCount,
     totalMeters: meters.toFixed(3), lines, subtotal: subtotal.toFixed(2),
     periodClosed: closedAt ? closedAt.toISOString().slice(0, 10) : null,
@@ -174,7 +180,7 @@ export async function createServicePeriodDraft(
         { code: "SERVICE_PERIOD_EMPTY" },
       );
     }
-    const shipmentNos = draft.shipments.map((s) => s.shipmentNo);
+    const shipmentNos = [...draft.shipments, ...draft.directShipments].map((s) => s.shipmentNo);
     const shown = shipmentNos.slice(0, 12).join(", ") + (shipmentNos.length > 12 ? ` +${shipmentNos.length - 12}` : "");
     const notes = `${input.period} dönem sonu hizmet faturası — ${shipmentNos.length} sevkiyat (${shown}).${draft.warnings.length > 0 ? ` ⚠ ${draft.warnings.join(" ")}` : ""}`;
     return invoiceService.createDraft(

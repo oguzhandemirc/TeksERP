@@ -70,6 +70,16 @@ export async function listShipmentServiceRollShipments(shipmentIds: string[], db
 }
 
 /**
+ * K3b: fasondan müşteriye DOĞRUDAN sevk edilen (DSK) emanet toplar → hangi DSK'dan. Kısmi sevkte kesilen çocuk top
+ * DSK'ya bağlıdır; fasonda kalan ata bağlı değildir (iş, ata zinciriyle çocuğa çözülür). DSK geri alınamaz (yol yok).
+ */
+export async function listDirectShipmentServiceRollShipments(directShipmentIds: string[], db: Db = prisma): Promise<Array<{ rollId: string; shipmentId: string }>> {
+  if (directShipmentIds.length === 0) return [];
+  const rows = await db.roll.findMany({ where: { directShipmentId: { in: directShipmentIds }, ownerCustomerId: { not: null } }, select: { id: true, directShipmentId: true } });
+  return rows.map((r) => ({ rollId: r.id, shipmentId: r.directShipmentId! }));
+}
+
+/**
  * Sevk geri alma kapısı (salt-okuma): bu sevkiyatın faturasına bağlı aktif hizmet bağları + DÖNEM taslaklarının
  * (shipmentId null) bu sevkin emanet toplarına (ata zinciriyle) kurulmuş aktif bağları → fatura numaraları.
  * Dönem kolu atasını başka sevkle paylaşan topta da kapatır (fail-closed).

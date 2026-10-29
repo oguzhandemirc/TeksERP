@@ -541,6 +541,10 @@ export interface FeatureFlags {
   /** Kısa kesim eşiği (metre). null = girilmemiş → bayrak açık olsa da kural
    *  ateşlemez (panel bunu uyarı satırıyla söyler). */
   tamburShortCutA1ThresholdM: number | null;
+  /** Tambur plan kapısı en eşiği (cm), default 10; 0 = her farkta sorar (D4-E1). */
+  tamburPlanGateWidthToleranceCm: number;
+  /** Tambur plan kapısı en kontrolü (default ENFORCE); OFF yalnız en kolunu atlar, renk kapısı aynı. */
+  tamburPlanGateWidthCheck: "ENFORCE" | "OFF";
   /** Tablet Tambur açık kart listesi oturum istasyonuyla süzülsün mü (false=default; ister 2.8). */
   tamburListByStationEnabled: boolean;
   /** Fason kabulünde çekme (giden↔dönen metraj farkı) uyarısı çıksın mı (true=default).
