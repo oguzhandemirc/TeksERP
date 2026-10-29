@@ -11,16 +11,20 @@ interface Props {
   highlight: OcrRect | null;
   /** Vurgunun ait olduğu tarama; null = bilinmiyor (seçili sayfaya çizilir). */
   highlightScanId?: string | null;
+  /** Seçili satırın kimliği: aynı sayfadaki başka satır seçilince de (elle sayfa değişmişse) o sayfaya dönülür. */
+  selectionKey?: string | null;
 }
 
-export function ScanViewer({ scans, highlight, highlightScanId = null }: Props) {
+export function ScanViewer({ scans, highlight, highlightScanId = null, selectionKey = null }: Props) {
   const [idx, setIdx] = useState(0);
+  // Belgede olmayan tarama kimliği bilinmiyor sayılır (vurgu kaybolmaz, seçili sayfaya çizilir).
+  const ownScanId = highlightScanId && scans.some((s) => s.id === highlightScanId) ? highlightScanId : null;
   // Seçim (ya da sayfa kümesi) değişince satırın sayfasına geç; yoklama tazelemesi elle seçilen sayfayı ezmez.
   const scanKey = scans.map((s) => s.id).join(",");
   useEffect(() => {
-    const i = highlightScanId ? scanKey.split(",").indexOf(highlightScanId) : -1;
+    const i = ownScanId ? scanKey.split(",").indexOf(ownScanId) : -1;
     if (i >= 0) setIdx(i);
-  }, [highlightScanId, scanKey]);
+  }, [ownScanId, selectionKey, scanKey]);
   const scan = scans[Math.min(idx, scans.length - 1)] ?? null;
   const img = useScanImage(scan?.id ?? null);
   const [nat, setNat] = useState<{ w: number; h: number } | null>(null);
@@ -48,7 +52,7 @@ export function ScanViewer({ scans, highlight, highlightScanId = null }: Props) 
       {img.url && !img.isPdf && (
         <div className="relative w-full overflow-hidden rounded border" data-testid="scan-viewer">
           <img src={img.url} alt={`Belge sayfa ${scan.pageNo}`} className="block h-auto w-full" onLoad={(e) => setNat({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} />
-          {highlight && nat && (!highlightScanId || highlightScanId === scan.id) && <div className="pointer-events-none absolute rounded-sm border-2 border-amber-500 bg-amber-400/20" style={pct(highlight)} data-testid="scan-highlight" />}
+          {highlight && nat && (!ownScanId || ownScanId === scan.id) && <div className="pointer-events-none absolute rounded-sm border-2 border-amber-500 bg-amber-400/20" style={pct(highlight)} data-testid="scan-highlight" />}
         </div>
       )}
     </div>

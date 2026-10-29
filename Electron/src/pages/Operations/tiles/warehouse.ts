@@ -5,6 +5,7 @@ import { isPurchaseOrdersVisible } from "../PurchaseOrders/po-regime";
 import { isStockCountVisible, STOCK_COUNTS_PATH } from "../StockCounts/stockCount-regime";
 import { isGoodsReceiptVisible } from "../GoodsReceipts/goodsReceipt-regime";
 import { isIncomingDocumentVisible } from "../GelenBelgeler/gelenBelge-regime";
+import { CUSTOMER_DEFAULTS_PATH } from "../GelenBelgeler/paths";
 import { flagOffHint } from "@/lib/flag-setting-path";
 import type { OperationsTile } from "../tile-config";
 
@@ -82,7 +83,7 @@ export const warehouseTiles: OperationsTile[] = [
     title: "Müşteri Varsayılan Ürünleri",
     description: "Gelen belgede ürünü seçilmemiş satırın müşteriye göre gireceği kumaş",
     icon: PackageCheck,
-    to: "/operations/gelen-belgeler/varsayilan-urunler",
+    to: CUSTOMER_DEFAULTS_PATH,
     group: "warehouse",
     permission: "gelen-belge:template",
     visibleWhen: isIncomingDocumentVisible,

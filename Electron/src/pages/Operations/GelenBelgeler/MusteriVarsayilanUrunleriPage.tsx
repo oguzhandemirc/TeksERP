@@ -120,7 +120,11 @@ export function CustomerDefaultsPage() {
   const [changeFor, setChangeFor] = useState<string | null>(null);
   const [removing, setRemoving] = useState<CustomerDefaultView | null>(null);
   // Hata toast'u apiClient'ta; liste her durumda sunucudan tazelenir (409 sonrası güncel hâl görünsün).
-  const refresh = () => void qc.invalidateQueries({ queryKey: QUERY_KEY });
+  // Açık belgelerin eşleşme yanıtı (etkin varsayılan + kaynak ipucu) da tazelenir.
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: QUERY_KEY });
+    void qc.invalidateQueries({ queryKey: [INCOMING_DOCUMENT_QUERY_KEY, "eslestirme"] });
+  };
   const save = useMutation({ mutationFn: (v: { customerId: string; itemId: string }) => setCustomerDefault(v.customerId, v.itemId), onSettled: refresh });
   const remove = useMutation({ mutationFn: (id: string) => removeCustomerDefault(id), onSettled: refresh });
   const rows = list.data ?? [];
