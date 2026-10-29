@@ -385,6 +385,9 @@ export const PERMISSION_CATALOG = [
   { code: "mobile:dokuma", module: "MOBILE", category: "mobile", description: "Mobil — Tezgah (dokuma) ekranı: koşum · duruş · indirme; WEAVING istasyonunda oturum" },
   // Geri alma AYRI yetenek (2026-09-14, §3.9 J.3): indirmeyi geri almak defterden satır düşürür
   // (`loom:doff-revoke` tablet eşi; `mobile:tambur-duzelt` · `shipping:undo-dispatch` emsali).
+  // D4-A1 (2026-10-29, ister 5.5): dokumasız fabrikada kurşun/tambur/brode tabletinden duruş aç/kapa/sebep.
+  // Geri alma ve yeniden sınıflama YOK (panel işi). Tablet çipi D4-A2 ile doğar; o güne dek SCREENLESS.
+  { code: "mobile:makine-durus", module: "MOBILE", category: "mobile", description: "Mobil — makine duruşu (kurşun/tambur/brode): duruş aç · kapat · sebep gir" },
   { code: "mobile:dokuma-geri-al", module: "MOBILE", category: "mobile", description: "Tezgah ekranı — top indirmeyi, koşumu ve duruşu geri alabilir (ayrı yetenek; üçü de defterden satır düşürür)" },
   // Devere tablet ekranı (2026-09-14, DEVERE-LEVENT-TARAMASI §11): plan · sar · taslak sil.
   // Oturumsuz ekran — devere bir StationKind değil, `Station.producesWarpBeam` yeteneği.

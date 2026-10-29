@@ -16,10 +16,11 @@
 // kırpılır, SAYI kırpılmaz): `take` tavanı aşılırsa `truncated: true` + `total`.
 // Yazma YOK — bu dosya deftere dokunmaz.
 // =============================================================================
-import { Prisma } from "@prisma/client";
+import { Prisma, type StationKind } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { MACHINE_STOP_SELECT, type MachineStopDto } from "./helpers/machine-stop-context.helper";
 import { WATCHDOG_PENDING_END_WHERE } from "./helpers/machine-stop-watchdog.helper";
+import { machineStopRegime, machineStopScopeWhere } from "./helpers/machine-stop-regime.helper";
 import { AppError } from "../utils/app-error";
 import { factoryDayEnd, factoryDayStart, resolveRangeEnd, resolveRangeStart } from "../constants/time";
 import { MACHINE_RUN_SELECT, type MachineRunDto } from "./machine-run.service";
@@ -119,6 +120,10 @@ export interface MachineStopListParams {
   factoryDay?: string;
   shiftInstanceId?: string;
   limit?: number;
+  /** İstasyon türü süzgeci (D4-A1); boş = rejimin varsayılan kümesi. */
+  stationKinds?: StationKind[];
+  /** Yalnız `mobile:makine-durus` izniyle gelen istek: kurşun/brode/tambur dışı duruşlar kapsam dışı. */
+  generalKindsOnly?: boolean;
 }
 
 /** `YYYY-MM-DD` → @db.Date kolonunun sakladığı UTC gece yarısı (yerel gece yarısı 1 gün geri etiketlerdi). */
@@ -136,6 +141,8 @@ export async function listMachineStops(params: MachineStopListParams): Promise<A
     ...(params.pendingEndOnly ? WATCHDOG_PENDING_END_WHERE : {}),
     ...(params.factoryDay ? { factoryDay: factoryDayKeyFromYmd(params.factoryDay) } : {}),
     ...(params.shiftInstanceId ? { shiftInstanceId: params.shiftInstanceId } : {}),
+    // Rejim kapsamı TEK helper'dan: dokuma açık + süzgeçsiz → `{}` (bugünkü where, bayt-aynı).
+    ...machineStopScopeWhere(await machineStopRegime(), params.stationKinds ?? [], { generalKindsOnly: params.generalKindsOnly }),
   };
   const rows = await prisma.machineStopEvent.findMany({
     where,
