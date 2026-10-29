@@ -9,9 +9,9 @@
 // ⚠️ `FinishingRate` BURADA OKUNMAZ: o bizim ödediğimiz terbiye/fason MALİYETİDİR,
 // gelir değildir — `test_hizmet_fiyati` AST taraması ikinci kopyayı ve okumayı yasaklar.
 // =============================================================================
-import { Currency, ItemType, MachineDataSource, MeterPhase, Prisma, PriceKind } from "@prisma/client";
+import { Currency, MachineDataSource, MeterPhase, Prisma, PriceKind } from "@prisma/client";
 import prisma from "../../lib/prisma";
-import { AppError } from "../../utils/app-error";
+import { TERIM } from "../../constants/terim";
 import { resolveItemPricesFor } from "../item-price.service";
 import { listKursunApplications, readKursunTarget, type KursunApplication } from "./process-summary.helper";
 
@@ -50,35 +50,6 @@ export interface ServiceResolution {
   lines: ServiceLine[];
   works: ServiceRollWork[];
   warnings: string[];
-}
-
-/** Eşleme yazımı: verilen kimlikler var ve SERVICE türünde olmalı (fail-closed 400). */
-export async function assertServiceItemRefs(ids: Array<string | null | undefined>): Promise<void> {
-  const want = [...new Set(ids.filter((v): v is string => typeof v === "string" && v.length > 0))];
-  if (want.length === 0) return;
-  const rows = await prisma.item.findMany({ where: { id: { in: want } }, select: { id: true, itemType: true, name: true } });
-  const byId = new Map(rows.map((r) => [r.id, r]));
-  for (const id of want) {
-    const r = byId.get(id);
-    if (!r) throw AppError.badRequest("Eşlenen hizmet kalemi bulunamadı", { code: "SERVICE_ITEM_INVALID", itemId: id });
-    if (r.itemType !== ItemType.SERVICE) {
-      throw AppError.badRequest(`"${r.name}" bir hizmet kalemi değil — eşleme yalnız Hizmet türü kaleme yapılır`, { code: "SERVICE_ITEM_INVALID", itemId: id });
-    }
-  }
-}
-
-/** Gövdedeki `serviceItemId`: undefined = dokunma, ""/null = eşlemeyi kaldır; başka tip 400. */
-export function readServiceItemIdField(raw: unknown, label: string): string | null | undefined {
-  if (raw === undefined) return undefined;
-  if (raw === null || raw === "") return null;
-  if (typeof raw !== "string") throw AppError.badRequest(`${label} hizmet kalemi geçersiz`, { code: "SERVICE_ITEM_INVALID" });
-  return raw;
-}
-
-/** Özellik gövdesi + değer satırlarının eşlemesi (yazımdan önce; gövdeyi normalize eder). */
-export async function assertServiceMapping(data: Record<string, unknown>, valueRefs: Array<string | null | undefined> = []): Promise<void> {
-  if ("serviceItemId" in data) data.serviceItemId = readServiceItemIdField(data.serviceItemId, "Özelliğin");
-  await assertServiceItemRefs([data.serviceItemId as string | null | undefined, ...valueRefs]);
 }
 
 /** Gramaj değerinden hizmet kalemi: önce değer, sonra özellik, sonra ana bayrak. */
@@ -170,7 +141,7 @@ export async function resolveServiceItemsForRolls(params: {
   const itemById = new Map(items.map((i) => [i.id, i]));
   const groups = new Map<string, ServiceLine & { sum: Prisma.Decimal }>();
   for (const w of works) {
-    if (w.gramajFrom === "WO_TARGET") warnings.push(`Gramajı bilinmeyen iş iş emri hedefinden (${w.valueName}) fiyatlandı — topu kontrol edin.`);
+    if (w.gramajFrom === "WO_TARGET") warnings.push(`Gramajı bilinmeyen iş ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedefinden (${w.valueName}) fiyatlandı — topu kontrol edin.`);
     if (!w.serviceItemId) { warnings.push(`"${w.valueName}" için hizmet kalemi eşlenmemiş — top fiyatlanmadı.`); continue; }
     const item = itemById.get(w.serviceItemId)!;
     if (w.unitPrice === null) warnings.push(`"${item.name}" için ${params.currency} satış fiyatı yok — satır fiyatsız.`);

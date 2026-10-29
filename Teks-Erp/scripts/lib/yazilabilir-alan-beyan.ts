@@ -8,7 +8,7 @@ export const YAZILABILIR_ALAN_BEYANI: Readonly<Record<string, readonly string[]>
   customerBranch: ["address", "city", "code", "contactName", "contactPhone", "createdById", "customerId", "defaultDestination", "district", "isActive", "name", "notes", "updatedById"],
   defectType: ["code", "createdById", "defectGroup", "description", "fixedPoints", "isActive", "isDefault", "name", "severity", "sortOrder", "updatedById"],
   exchangeRate: ["createdById", "currency", "rate", "rateDate", "source"],
-  fabricProperty: ["category", "code", "color", "createdById", "description", "isActive", "name", "sortOrder", "updatedById", "valueType", "variantOfPropertyId"],
+  fabricProperty: ["category", "code", "color", "createdById", "description", "isActive", "name", "sortOrder", "serviceItemId", "updatedById", "valueType", "variantOfPropertyId"],
   item: ["code", "composition", "createdById", "finishedGsm", "isActive", "itemType", "lifecycleChangedAt", "lifecycleChangedById", "lifecycleReason", "lifecycleStatus", "linearDensityDen", "mergedAt", "mergedById", "mergedIntoId", "name", "pendingReview", "rawGsm", "rawWidthCm", "unit", "updatedById", "warpSpecId", "weftSpecId", "widthCm"],
   machine: ["code", "createdById", "isActive", "name", "productionLineCount", "stationId", "updatedById", "warpBeamSlots"],
   machineStopCodeMap: ["collectorType", "isActive", "machineId", "rawStopCode", "stopReasonId"],

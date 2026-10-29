@@ -21,7 +21,7 @@
 import { BaseService } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import prisma from "../lib/prisma";
-import { assertServiceMapping, readServiceItemIdField } from "./helpers/service-pricing.helper";
+import { assertServiceMapping, readServiceItemIdField } from "./helpers/service-item-mapping.helper";
 import { AppError } from "../utils/app-error";
 import { nextSeriesNo } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";

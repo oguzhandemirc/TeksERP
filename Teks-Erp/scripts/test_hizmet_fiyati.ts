@@ -22,7 +22,7 @@
 // değer eşlemesi okunmayınca (özellik önce) §2 kırmızı — PR #253 gövdesinde.
 // =============================================================================
 import { randomUUID } from "node:crypto";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
 import { ItemType, KursunBypassCompletionSource, MachineDataSource, MeterApprovalMode, MeterPhase, MeterVarianceBasis, PriceKind } from "@prisma/client";
@@ -37,6 +37,7 @@ import { applyKursunOperationTx } from "../src/services/helpers/kursun-operation
 import { KURSUN_PROPERTY_CODE } from "../src/services/helpers/quality-station.helper";
 import { KURSUN_BYPASS_MARKER_PREFIX } from "../src/services/helpers/kursun-bypass-guard.helper";
 import { testActorId } from "./fixture-test-user";
+import { walkTs } from "./lib/ts-tarama";
 
 let pass = 0;
 let fail = 0;
@@ -180,7 +181,7 @@ async function main(): Promise<void> {
     data: { workOrderId: wo.id, workOrderStepId: S3, machineId: m.id, assignedById: actor, completedAt: new Date(), completedById: actor, completedVia: KursunBypassCompletionSource.DISTRIBUTION_LAST_STEP },
   });
   const un = await resolveServiceItemsForRolls({ rollIds: [rU], customerId: null, currency: "TRY" });
-  check("gramajsız kâğıt → İE hedefi K2 + uyarı", un.works[0]?.gramajFrom === "WO_TARGET" && un.works[0]?.serviceItemId === K2 && un.warnings.some((w) => w.includes("iş emri hedefinden")), JSON.stringify(un.warnings));
+  check("gramajsız kâğıt → İE hedefi K2 + uyarı", un.works[0]?.gramajFrom === "WO_TARGET" && un.works[0]?.serviceItemId === K2 && un.warnings.some((w) => w.includes("hedefinden (")), JSON.stringify(un.warnings));
 
   // ── §5 Metre tabanı ─────────────────────────────────────────────────────
   section("§5 aktif OUT okuması DECLARED'dan önce; SIMULATED sayılmaz");
@@ -224,17 +225,10 @@ const SRC = join(__dirname, "..", "src");
 /** `serviceItemId` okuyan/yazan dosyalar — yeni yüzey buraya beyanla eklenir (H7 fatura taslağı). */
 const SERVICE_ITEM_ID_FILES = new Set([
   "services/helpers/service-pricing.helper.ts",
+  "services/helpers/service-item-mapping.helper.ts",
   "services/fabric-property.service.ts",
   "routes/fabric-property.routes.ts",
 ]);
-function walkTs(dir: string, out: string[] = []): string[] {
-  for (const n of readdirSync(dir)) {
-    const p = join(dir, n);
-    if (statSync(p).isDirectory()) walkTs(p, out);
-    else if (p.endsWith(".ts")) out.push(p);
-  }
-  return out;
-}
 function astChecks(): void {
   section("§8 AST: çözücü tek, eşleme okuyucuları beyanlı, FinishingRate okunmaz");
   const files = walkTs(SRC);
@@ -256,6 +250,7 @@ function astChecks(): void {
     visit(sf);
   }
   for (const rel of SERVICE_ITEM_ID_FILES) {
+    if (!existsSync(join(SRC, rel))) continue; // bayat girdi aşağıda iki yönlü kontrolde kırmızı
     const text = readFileSync(join(SRC, rel), "utf8");
     const sf = ts.createSourceFile(rel, text, ts.ScriptTarget.Latest, true);
     const visit = (n: ts.Node): void => {
