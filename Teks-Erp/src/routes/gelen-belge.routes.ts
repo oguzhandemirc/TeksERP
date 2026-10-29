@@ -23,7 +23,7 @@ import { approveDeliveryNote } from "../services/gelen-belge-onay.service";
 import { getRollTabletContext } from "../services/roll-tablet.service";
 import { getDocumentScan, readDocumentScanContent, uploadDocumentScan } from "../services/gelen-belge-scan.service";
 import { suggestForNote } from "../services/gelen-belge-eslestirme.service";
-import { readerQueueCounts, requeueScanForReading } from "../services/gelen-belge-okuma.service";
+import { assertScanReadable, readerQueueCounts, requeueScanForReading } from "../services/gelen-belge-okuma.service";
 import { readerJobStatus, requestImmediateReaderRun } from "../jobs/gelen-belge-okuma.job";
 import { getReaderUrl } from "../lib/gelen-belge/url";
 import { readerHealth } from "../lib/gelen-belge/okuma-istemcisi";
@@ -46,6 +46,11 @@ const wrap = (fn: Handler) => async (req: Request, res: Response, next: NextFunc
 const Id = z.uuid("Geçersiz kimlik");
 const optText = (max: number) => z.string().trim().max(max, `En çok ${max} karakter`).nullable().optional();
 const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Tarih YYYY-AA-GG olmalı");
+// Süzgeç günü takvimde VAR olmalı (2026-02-31 sessizce 3 Mart'a kaymaz → 400).
+const RangeDay = Day.refine((v) => {
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}, "Tarih takvimde yok");
 const Money = (label: string) => z.coerce.number().positive(`${label} sıfırdan büyük olmalı`).max(999_999, `${label} çok büyük`);
 
 const ScanBody = z.strictObject({
@@ -105,6 +110,9 @@ const ListQuery = z.object({
   ownerCustomerId: z.union([z.string(), z.array(z.string())]).optional(),
   senderCustomerId: z.union([z.string(), z.array(z.string())]).optional(),
   q: z.string().max(64).optional(),
+  // createdAt aralığı; gün-yalnız değer FABRİKA gününün başı/sonu (`resolveRangeStart/End`, src/constants/time.ts).
+  from: RangeDay.optional(),
+  to: RangeDay.optional(),
   cursor: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
 });
@@ -114,7 +122,7 @@ const ListQuery = z.object({
  * /api/gelen-belge/taramalar:
  *   post:
  *     tags: [Gelen belge]
- *     summary: Belge fotoğrafı/PDF yükle (base64; tür sihirli bayttan; aynı sha256 = aynı kayıt, 200)
+ *     summary: Belge fotoğrafı/PDF yükle (base64; tür sihirli bayttan; aynı sha256 = aynı kayıt, 200; PDF arşivdir — READ_FAILED doğar, okunmaz)
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       201: { description: "scan künyesi (bayt yok)" }
@@ -142,7 +150,8 @@ const ListQuery = z.object({
 router.post("/taramalar", requirePermission("gelen-belge:write"), wrap(async (req) => {
   const r = await uploadDocumentScan(ScanBody.parse(req.body), req.user!.userId);
   // Yeni fotoğraf → okuma işini dürt (servis/modül yoksa iş kendi ön koşulunda durur; burada 503 YOK — yükleme elle taslak için de geçerli).
-  if (!r.duplicate) requestImmediateReaderRun();
+  // PDF kuyruğa girmez (K6): dürtülecek iş yok.
+  if (!r.duplicate && r.scan.status === "PENDING") requestImmediateReaderRun();
   return { status: r.duplicate ? 200 : 201, data: r };
 }));
 router.get("/taramalar/:id", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await getDocumentScan(Id.parse(req.params.id)) })));
@@ -163,7 +172,7 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  * /api/gelen-belge/irsaliyeler:
  *   get:
  *     tags: [Gelen belge]
- *     summary: Taslaklar — liste + cursor + özet şeridi (durum/kaynak/sahip/gönderen/q süzgeci; tek where)
+ *     summary: Taslaklar — liste + cursor + özet şeridi (durum/kaynak/sahip/gönderen/q/from–to süzgeci; tek where)
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: "items, nextCursor, summary" }
@@ -247,6 +256,7 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
  *       202: { description: "Tarama künyesi (status, attempts)" }
+ *       400: { description: "DOCUMENT_SCAN_PDF_NOT_READABLE (PDF otomatik okunmaz — K6)" }
  *       409: { description: "DOCUMENT_SCAN_ALREADY_READ · DOCUMENT_SCAN_STATE_CHANGED" }
  *       503: { description: "OCR_SERVICE_UNAVAILABLE (okuma servisi bu kurulumda yok)" }
  * /api/gelen-belge/irsaliyeler/{id}/eslestirme:
@@ -283,6 +293,8 @@ router.get("/okuma/durum", requirePermission("gelen-belge:read"), wrap(async () 
 }));
 // Okut: PENDING ise dürtme; READ_FAILED ise yeniden kuyruğa (attempts sıfır). Servis yoksa 503 — fotoğraf durur, taslak elle.
 router.post("/taramalar/:id/oku", requirePermission("gelen-belge:write"), wrap(async (req) => {
+  // PDF (K6) servis olsa da okunmaz → 400, servis yokluğunun 503'ünden ÖNCE (cevap kuruluma göre değişmesin).
+  await assertScanReadable(Id.parse(req.params.id));
   if (!getReaderUrl().url) throw new AppError("Okuma servisi bu kurulumda yok; taslağı elle ya da Excel'den doldurun.", 503, true, { code: "OCR_SERVICE_UNAVAILABLE" });
   const scan = await requeueScanForReading(Id.parse(req.params.id), req.user!.userId);
   requestImmediateReaderRun();
