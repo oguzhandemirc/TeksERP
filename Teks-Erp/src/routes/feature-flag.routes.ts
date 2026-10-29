@@ -506,6 +506,8 @@ export const updateSchema = z.strictObject({
   tamburPlanGateWidthCheck: z
     .enum(["ENFORCE", "OFF"], { message: "Tambur en kontrolü ENFORCE ya da OFF olmalı" })
     .optional(),
+  // Tablet Tambur listesi istasyon süzgeci (ister 2.8).
+  tamburListByStationEnabled: z.boolean().optional(),
   // Fason kabulünde çekme uyarısı (2026-08-21). Bayrak = uyarı görünürlüğü,
   // yüzde = eşik. ⚠️ `min(0)` — 0 GEÇERLİ ("tolerans yok, her fark uyarır");
   // `positive()` yazılsaydı panelden sıfır tolerans seçilemezdi.
