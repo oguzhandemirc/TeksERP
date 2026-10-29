@@ -12,6 +12,14 @@ describe("customerFinance", () => {
   it("boş alanlar null (temizler); para birimi boşsa anahtar konmaz (sunucu varsayılanı korur)", () => {
     expect(financeSubBody(financeFormDefaults, { canWrite: true, enabled: true })).toEqual({ finance: { paymentTermDays: null, taxOffice: null, riskLimit: null } });
   });
+  it("H8b tetik: yalnız tohumdan farklıysa gövdeye girer; FACTORY → null; alan yoksa ('') hiç girmez", () => {
+    const base = { ...financeFormDefaults, financePaymentTermDays: "30" };
+    const body = (t: string, seed: string) => financeSubBody({ ...base, financeServiceBillingTrigger: t, financeServiceBillingTriggerSeed: seed }, { canWrite: true, enabled: true }).finance;
+    expect(body("PER_SHIPMENT", "FACTORY")?.serviceBillingTrigger).toBe("PER_SHIPMENT");
+    expect(body("FACTORY", "PERIOD_END")).toHaveProperty("serviceBillingTrigger", null);
+    expect(body("PERIOD_END", "PERIOD_END")).not.toHaveProperty("serviceBillingTrigger");
+    expect(body("", "")).not.toHaveProperty("serviceBillingTrigger");
+  });
   it("DTO → form alanları; hesap yoksa varsayılanlar; riskLimit string Decimal", () => {
     expect(financeFieldsFromView({ paymentTermDays: 45, defaultCurrency: "EUR", taxOffice: null, riskLimit: "2500.00", isActive: true })).toEqual({ financePaymentTermDays: "45", financeDefaultCurrency: "EUR", financeTaxOffice: "", financeRiskLimit: "2500" });
     expect(financeFieldsFromView(null)).toEqual(financeFormDefaults);

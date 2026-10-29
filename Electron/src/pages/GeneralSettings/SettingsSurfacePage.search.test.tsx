@@ -120,6 +120,13 @@ describe("Özellik Anahtarları — arama süzer, gezinmez", () => {
     return toggle;
   };
 
+  it("dar ekran (390 px): ray üstte tam genişlik, içerik sütunu ray yanında sıkışmaz (md'de yan yana)", () => {
+    renderWithProviders(<FeatureFlagsPage />);
+    const rail = screen.getByPlaceholderText("Ayar ara…").closest("div.flex-col") as HTMLElement;
+    expect(rail.className).toMatch(/\bw-full\b/);
+    expect(rail.className).toMatch(/md:w-60/);
+    expect(rail.parentElement?.className).toMatch(/flex-col md:flex-row/);
+  });
   it("⭐ arama yazmak kaydedilmemiş taslağı SİLMEZ (sekme yerinde kalır)", () => {
     makeDirty();
 

@@ -293,10 +293,15 @@ export const tamburService = {
       .get<ApiResponse<TamburStepSummary>>(`/tambur/step/${stepId}`)
       .then((r) => r.data),
 
-  // PROCESS_QC değil; TAMBUR adımlarındaki açık kartlar — kamera modal'ı için
-  listOpenCards: (): Promise<ApiResponse<TamburOpenCard[]>> =>
+  // PROCESS_QC değil; TAMBUR adımlarındaki açık kartlar — kamera modal'ı için.
+  // stationId (ister 2.8): çok tamburlu fabrikada yalnız bu tamburun işleri; yoksa
+  // parametre HİÇ gönderilmez (bugünkü liste; eski backend parametreyi yok sayar).
+  listOpenCards: (stationId?: string | null): Promise<ApiResponse<TamburOpenCard[]>> =>
     apiClient
-      .get<ApiResponse<TamburOpenCard[]>>('/tambur/open-cards')
+      .get<ApiResponse<TamburOpenCard[]>>(
+        '/tambur/open-cards',
+        stationId ? { params: { stationId } } : undefined,
+      )
       .then((r) => r.data),
 
   // Hata kararı + roll-split + finalize → top WAREHOUSE'a, parçalar yeni Roll

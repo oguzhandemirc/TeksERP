@@ -3,9 +3,9 @@
 import { describe, expect, it } from "vitest";
 import { AxiosError, type AxiosResponse } from "axios";
 import { blockTotals, hasMismatch } from "../totals";
-import { buildReviewQueue, cellPatch, fieldRect, lineRect, parseTrNumber } from "../review-queue";
+import { buildReviewQueue, cellPatch, fieldRect, lineRect, lineScanId, parseTrNumber } from "../review-queue";
 import { parseLineRows, MAX_IMPORT_LINES } from "../lineImport";
-import { approveErrorText, approvePrecheck, errorCode, needsVarianceReason, summarizeApprove } from "../approveFlow";
+import { approveErrorText, approvePrecheck, defaultItemHint, errorCode, needsVarianceReason, summarizeApprove, unusableDefaultSource } from "../approveFlow";
 import { EMPTY_FILTER, toQuery } from "../useNoteList";
 import { isIncomingDocumentVisible } from "../gelenBelge-regime";
 import type { ApproveResult, DeliveryNoteLine } from "../types";
@@ -163,36 +163,74 @@ describe("liste sorgusu ve rejim", () => {
   });
 });
 
-describe("onay ön kontrolü (E3) — backend precheck aynası", () => {
+describe("onay ön kontrolü (E3/E4) — backend precheck aynası, etkin varsayılan kaynağıyla", () => {
   type P = Parameters<typeof approvePrecheck>[0][number];
   const pl = (o: Partial<P>): P => ({ status: "PENDING", rollId: null, itemId: null, needsReview: false, ...o });
-  const set = (name: string | null, mode: "WARN" | "BLOCK" = "WARN", problem: string | null = null) => ({
-    defaultItem: name ? { id: "i", code: "K", name, problem } : null, unreviewedApproval: mode, defaultUnreviewedApproval: "WARN" as const,
-  });
+  const set = (mode: "WARN" | "BLOCK" = "WARN") => ({ defaultItem: null, unreviewedApproval: mode, defaultUnreviewedApproval: "WARN" as const });
+  const eff = (source: "CUSTOMER" | "FACTORY" | null, name = "Ham", problem: string | null = null) =>
+    ({ itemId: source ? "i" : null, name: source ? name : null, source, usable: source ? !problem : false, problem });
   it("yalnız açık satır sayılır (topsuz PENDING/FAILED/ENTERING); SKIPPED ve topu doğmuş sayılmaz", () => {
-    const r = approvePrecheck([pl({}), pl({ status: "FAILED" }), pl({ status: "SKIPPED" }), pl({ status: "ENTERED", rollId: "r" }), pl({ itemId: "x" })], set("Ham"));
+    const r = approvePrecheck([pl({}), pl({ status: "FAILED" }), pl({ status: "SKIPPED" }), pl({ status: "ENTERED", rollId: "r" }), pl({ itemId: "x" })], set(), eff("FACTORY"));
     expect([r.unresolved, r.blocked]).toEqual([2, false]);
-    expect(r.messages).toEqual([{ tone: "info", text: "2 satır varsayılan ürünle girecek: Ham" }]);
+    expect(r.messages).toEqual([{ tone: "info", text: "2 satır fabrika varsayılanıyla girecek: Ham" }]);
   });
-  it("ayar boş + ürünsüz satır → engel (bugünkü 400'ün aynası)", () => {
-    expect(approvePrecheck([pl({})], set(null)).blocked).toBe(true);
+  it("CUSTOMER kaynağı: müşteri varsayılanıyla girecek", () => {
+    expect(approvePrecheck([pl({})], set(), eff("CUSTOMER", "Gül Ham")).messages).toEqual([{ tone: "info", text: "1 satır müşteri varsayılanıyla girecek: Gül Ham" }]);
   });
-  it("varsayılan ürün kullanılamaz → engel, sebep metinde", () => {
-    const r = approvePrecheck([pl({})], set("Ham", "WARN", "Ürün pasif."));
+  it("etkin varsayılan yok + ürünsüz satır → engel (bugünkü 400'ün aynası)", () => {
+    const r = approvePrecheck([pl({})], set(), eff(null));
     expect(r.blocked).toBe(true);
-    expect(r.messages[0]!.text).toContain("Ürün pasif.");
+    expect(r.messages[0]!.text).toContain("ne müşteri ne fabrika");
+  });
+  it("kullanılamaz varsayılan → engel; kaynak ve sebep metinde (müşteri bozuksa fabrikaya düşmez)", () => {
+    const c = approvePrecheck([pl({})], set(), eff("CUSTOMER", "Ham", "Ürün pasif."));
+    expect([c.blocked, c.messages[0]!.tone]).toEqual([true, "block"]);
+    expect(c.messages[0]!.text).toContain("müşteri varsayılanı kullanılamıyor: Ürün pasif.");
+    expect(approvePrecheck([pl({})], set(), eff("FACTORY", "Ham", "Ürün pasif.")).messages[0]!.text).toContain("fabrika varsayılanı kullanılamıyor");
   });
   it("BLOCK'ta gözden geçirilmemiş → engel; WARN'da uyarı", () => {
-    expect(approvePrecheck([pl({ itemId: "x", needsReview: true })], set(null, "BLOCK")).messages).toEqual([{ tone: "block", text: "1 satır gözden geçirilmeli — onay engellenir." }]);
-    expect(approvePrecheck([pl({ itemId: "x", needsReview: true })], set(null, "WARN")).blocked).toBe(false);
+    expect(approvePrecheck([pl({ itemId: "x", needsReview: true })], set("BLOCK"), eff(null)).messages).toEqual([{ tone: "block", text: "1 satır gözden geçirilmeli — onay engellenir." }]);
+    expect(approvePrecheck([pl({ itemId: "x", needsReview: true })], set("WARN"), eff(null)).blocked).toBe(false);
   });
-  it("ayar okunamadı (undefined) → sayar ama hüküm vermez", () => {
-    const r = approvePrecheck([pl({ needsReview: true })], undefined);
-    expect([r.unresolved, r.unreviewed, r.blocked, r.messages.length]).toEqual([1, 1, false, 0]);
+  it("ayar ve etkin varsayılan okunamadı (undefined) → sayar ama hüküm vermez", () => {
+    const r = approvePrecheck([pl({ needsReview: true })], undefined, undefined);
+    expect([r.unresolved, r.unreviewed, r.blocked]).toEqual([1, 1, false]);
+    expect(r.messages.every((m) => m.tone === "info")).toBe(true);
+  });
+  it("satır ipucu: kaynak/yok/kullanılamaz", () => {
+    expect(defaultItemHint(eff("CUSTOMER", "Gül Ham"))).toEqual({ tone: "info", source: "CUSTOMER", text: "Müşteri varsayılanıyla girecek: Gül Ham" });
+    expect(defaultItemHint(eff("FACTORY", "Ham"))!.text).toBe("Fabrika varsayılanıyla girecek: Ham");
+    expect(defaultItemHint(eff(null))).toBeNull();
+    expect(defaultItemHint(undefined)).toBeNull();
+    expect(defaultItemHint(eff("FACTORY", "Ham", "Ürün pasif."))).toMatchObject({ tone: "block", text: "Varsayılan ürün kullanılamıyor (fabrika varsayılanı): Ürün pasif." });
+  });
+  it("409 UNUSABLE kaynağa göre yönlendirir; kaynaksız (eski backend) genel metin", () => {
+    const e = (source?: string) => new AxiosError("409", "ERR", undefined, undefined, { status: 409, data: { details: { code: "GELEN_BELGE_DEFAULT_ITEM_UNUSABLE", ...(source ? { source } : {}) } } } as AxiosResponse);
+    expect(unusableDefaultSource(e("CUSTOMER"))).toBe("CUSTOMER");
+    expect(approveErrorText(e("CUSTOMER"), "B")).toMatch(/müşterinin varsayılan ürününü düzeltin\. \(B\)$/);
+    expect(approveErrorText(e("FACTORY"), "B")).toMatch(/fabrika ayarındaki varsayılan ürünü düzeltin\. \(B\)$/);
+    expect(unusableDefaultSource(e())).toBeNull();
+    expect(approveErrorText(e(), "B")).toMatch(/^Ürünü seçilmemiş satırların gireceği varsayılan ürün/);
   });
   it("E3 hata kodlarında Türkçe yönlendirme + backend metni; diğerlerinde yalnız backend metni", () => {
     const e = (code: string) => new AxiosError("409", "ERR", undefined, undefined, { status: 409, data: { details: { code } } } as AxiosResponse);
     expect(approveErrorText(e("DELIVERY_NOTE_REVIEW_PENDING"), "B")).toMatch(/^Gözden geçirilmemiş satır var.*\(B\)$/);
     expect(approveErrorText(e("CONFLICT"), "B")).toBe("B");
+  });
+});
+
+describe("kırpık doğru sayfadan (E4 scanId)", () => {
+  const scans = [{ id: "s1" }, { id: "s2" }];
+  it("çok sayfada satır kendi taramasını kullanır: 2. sayfanın satırı 2. sayfadan", () => {
+    expect(lineScanId({ scanId: "s2" }, scans)).toBe("s2");
+    expect(lineScanId({ scanId: "s1" }, scans)).toBe("s1");
+  });
+  it("scanId null/undefined → bugünkü davranış: tek taramada o, çok sayfada kırpık yok", () => {
+    expect(lineScanId({ scanId: null }, [{ id: "s1" }])).toBe("s1");
+    expect(lineScanId({}, [{ id: "s1" }])).toBe("s1");
+    expect(lineScanId({ scanId: null }, scans)).toBeNull();
+  });
+  it("belgede olmayan tarama → kırpık yok (yanlış görüntü gösterilmez)", () => {
+    expect(lineScanId({ scanId: "yok" }, scans)).toBeNull();
   });
 });

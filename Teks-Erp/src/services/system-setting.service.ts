@@ -674,6 +674,9 @@ export const SETTING_KEYS = {
   TAMBUR_SHORT_CUT_A1_ENABLED: "tambur.shortCutA1Enabled",
   /** Eşik (metre). NULL/0 = eşik girilmemiş → bayrak açık olsa da kural ateşlemez. */
   TAMBUR_SHORT_CUT_A1_THRESHOLD_M: "tambur.shortCutA1ThresholdM",
+  /** Tablet Tambur açık kart listesi yalnız oturum istasyonunun işlerini göstersin mi
+   *  (ister 2.8; iki tamburlu fabrika). Default FALSE = bugünkü tüm-tambur listesi. */
+  TAMBUR_LIST_BY_STATION_ENABLED: "tambur.listByStationEnabled",
   /**
    * FASON KABULÜ — ÇEKME UYARISI (2026-08-21).
    * Boyahanede kumaş çeker: 250 m giden mal 220 m döner. Eski ekran bu farkı
@@ -2049,6 +2052,8 @@ export interface FeatureFlags {
   tamburShortCutA1Enabled: boolean;
   /** Kısa kesim eşiği (metre); NULL = girilmemiş → kural ateşlemez. */
   tamburShortCutA1ThresholdM: number | null;
+  /** Tablet Tambur listesi oturum istasyonuyla süzülsün mü (default FALSE; istemcide uygulanır). */
+  tamburListByStationEnabled: boolean;
   /** Fason kabulünde çekme (giden↔dönen farkı) uyarısı çıksın mı (default TRUE). */
   fasonShrinkWarnEnabled: boolean;
   /** Çekme toleransı — YÜZDE. Default 10. `0` = tolerans yok (her fark uyarır). */
@@ -2539,6 +2544,7 @@ export class SystemSettingService {
       tamburUndoFullSameDayOnly: await readTamburUndoFullSameDayOnly(cacheClient),
       tamburShortCutA1Enabled: await readTamburShortCutA1Enabled(cacheClient),
       tamburShortCutA1ThresholdM: await readTamburShortCutA1ThresholdM(cacheClient),
+      tamburListByStationEnabled: await readTamburListByStationEnabled(cacheClient),
       fasonShrinkWarnEnabled: await readFasonShrinkWarnEnabled(cacheClient),
       fasonShrinkTolerancePct: await readFasonShrinkTolerancePct(cacheClient),
       demoModeEnabled: await readDemoModeEnabled(cacheClient),
@@ -4166,6 +4172,18 @@ export class SystemSettingService {
         SETTING_KEYS.DOCUMENTS_CONFIG,
         sanitizeDocumentsConfig(c) as unknown as Prisma.InputJsonValue,
         "Yazdırılan belge içerik ayarı (bölüm görünürlükleri + başlık/imza/footer)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "tamburListByStationEnabled")) {
+      if (typeof input.tamburListByStationEnabled !== "boolean") {
+        throw AppError.badRequest("tamburListByStationEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.TAMBUR_LIST_BY_STATION_ENABLED,
+        input.tamburListByStationEnabled,
+        "Tambur: tablet açık kart listesi yalnız oturum istasyonunun işlerini göstersin",
         userId
       );
     }
@@ -6816,6 +6834,23 @@ export async function readTamburShortCutA1Enabled(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.TAMBUR_SHORT_CUT_A1_ENABLED },
+    select: { value: true },
+  });
+  if (!setting) return false;
+  return asBoolean(setting.value);
+}
+
+/**
+ * Tambur listesi istasyon süzgeci (ister 2.8). Kayıt yoksa **false** — bugünkü
+ * davranış (tablet tüm TAMBUR adımlarını listeler). Süzgeci tablet uygular
+ * (`stationId` parametresi); backend parametresiz çağrıyı hep tam liste döndürür.
+ */
+export async function readTamburListByStationEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.TAMBUR_LIST_BY_STATION_ENABLED },
     select: { value: true },
   });
   if (!setting) return false;
