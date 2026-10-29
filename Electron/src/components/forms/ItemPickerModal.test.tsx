@@ -30,6 +30,8 @@ const ITEMS = [
   { id: "i2", code: "KUM2", name: "Saten", itemType: "FABRIC", unit: "MT", isActive: true, allowedColors: [], allowedProperties: [] },
   { id: "i3", code: "IPL1", name: "Pamuk İplik", itemType: "YARN", unit: "KG", isActive: true, allowedColors: [{ colorId: "c-blue", color: BLUE }], allowedProperties: [] },
   { id: "i4", code: "SRF1", name: "Etiket Rulosu", itemType: "CONSUMABLE", unit: "ADET", isActive: true, allowedColors: [], allowedProperties: [] },
+  // H6: hizmet kalemi stok seçicisine sızmaz — "Tümü" stok türlerini CSV gönderir, sahte sunucu SERVICE'i süzer.
+  { id: "i5", code: "HZM1", name: "Kurşun K1", itemType: "SERVICE", unit: "MT", isActive: true, allowedColors: [], allowedProperties: [] },
 ];
 const cursorPage = (data: unknown[], nextCursor: string | null = null) => Promise.resolve({ success: true, data, pagination: { nextCursor, hasMore: nextCursor !== null, limit: 50 } });
 const page = (data: unknown[]) => Promise.resolve({ success: true, data, pagination: { page: 1, pageSize: 500, total: data.length, totalPages: 1 } });
@@ -70,7 +72,7 @@ describe("ItemPickerModal — liste ve süzgeçler", () => {
     const dialog = await openModal();
     for (const h of ["Kod", "Ad", "Tür", "Birim", "Renkler", "Özellikler"]) expect(within(dialog).getByText(h)).toBeInTheDocument();
     expect(names(dialog)).toEqual(["Poplin", "Saten", "Pamuk İplik", "Etiket Rulosu"]);
-    expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ limit: 50, sortBy: "name", filters: { isActive: "true" } }));
+    expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ limit: 50, sortBy: "name", filters: { isActive: "true", itemType: "YARN,FABRIC,CONSUMABLE" } }));
     const poplin = within(dialog).getByText("Poplin").closest("tr") as HTMLElement;
     expect(within(poplin).getByText("Kırmızı")).toBeInTheDocument();
     expect(within(poplin).getByText("Yanmazlık")).toBeInTheDocument();
@@ -111,7 +113,7 @@ describe("ItemPickerModal — liste ve süzgeçler", () => {
     listCursor.mockClear();
     await userEvent.click(trigger(dialog, "Renk"));
     await userEvent.click(await screen.findByRole("option", { name: "Kırmızı" }));
-    await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", allowedColorId: "c-red" } })));
+    await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", itemType: "YARN,FABRIC,CONSUMABLE", allowedColorId: "c-red" } })));
     await waitFor(() => expect(names(dialog)).toEqual(["Poplin", "Saten", "Etiket Rulosu"]));
     expect(trigger(dialog, "Renk")).toHaveAttribute("title", expect.stringContaining("Listesi boş"));
     expect(trigger(dialog, "Renk")).toHaveTextContent("Renk: Kırmızı");
@@ -212,7 +214,7 @@ describe("ItemPickerModal — seçim, katalog, kaynak", () => {
     await waitFor(() => expect(trigger(dialog, "Renk")).toBeInTheDocument());
     await userEvent.click(trigger(dialog, "Renk"));
     await userEvent.click(await screen.findByRole("option", { name: "Kırmızı" }));
-    await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", allowedColorId: "c-red" } })));
+    await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", itemType: "YARN,FABRIC,CONSUMABLE", allowedColorId: "c-red" } })));
     listCursor.mockClear();
     await userEvent.click(trigger(dialog, "Tür"));
     await userEvent.click(await screen.findByRole("option", { name: "İplik" }));

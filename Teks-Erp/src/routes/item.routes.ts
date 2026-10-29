@@ -106,7 +106,7 @@ const quickCreateBody = z
  *         description: Kod veya isimde arama
  *       - in: query
  *         name: filter[itemType]
- *         schema: { type: string, enum: [YARN, FABRIC, CONSUMABLE] }
+ *         schema: { type: string, enum: [YARN, FABRIC, CONSUMABLE, SERVICE] }
  *       - in: query
  *         name: filter[isActive]
  *         schema: { type: string, enum: [true, false] }
@@ -213,7 +213,7 @@ router.get("/:id", verifyToken, requireAnyPermission("item:read", "mobile:kk1"),
  *             properties:
  *               code: { type: string, example: "STK-000123", description: "Opsiyonel — boş bırakılırsa STK-NNNNNN otomatik üretilir" }
  *               name: { type: string, example: "Boyalı Saten Kumaş" }
- *               itemType: { type: string, enum: [YARN, FABRIC, CONSUMABLE] }
+ *               itemType: { type: string, enum: [YARN, FABRIC, CONSUMABLE, SERVICE] }
  *               unit: { type: string, enum: [MT, KG, ADET], default: "MT" }
  *     responses:
  *       201:

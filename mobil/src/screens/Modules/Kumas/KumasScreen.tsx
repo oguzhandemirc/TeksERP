@@ -41,6 +41,7 @@ import { colors, spacing, radius } from '../../../theme';
 // Ekran master-data'dır — oturum/yer onayı İSTEMEZ (stationScreens'e girmez).
 // =============================================================================
 
+// SERVICE (hizmet kalemi, H6) bilinçli yok: fiyatlı ana veri, panelden açılır.
 const ITEM_TYPES: ItemType[] = ['FABRIC', 'YARN', 'CONSUMABLE'];
 
 /** Backend `validateCode` + DB VarChar(32) ile hizalı (Electron şemasının aynısı). */
