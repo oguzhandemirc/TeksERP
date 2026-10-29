@@ -106,6 +106,7 @@ export const AUDIT_ISIMLERI: Readonly<Record<string, TermCases>> = {
   ROLL_METER_ACK: onEkli("metre sapma", iyelik("onay", "ı", "a", "ı")),
   DELIVERY_NOTE_ALIAS: onEkli("gelen belge", sIyelik("eşleme", "i", "e")),
   SENDER_TEMPLATE: onEkli("gönderen", iyelik("şablon", "u", "a", "u")),
+  DELIVERY_NOTE_CUSTOMER_DEFAULT: onEkli("gelen belge", iyelik("varsayılan ürün", "ü", "e", "ü")),
   REPORT_CATEGORY: onEkli("rapor", sIyelik("kategori", "i", "e")),
   REPORT_DEFINITION: onEkli("özel", iyelik("rapor", "u", "a", "u")),
   REPORT_DEFINITION_VERSION: onEkli("özel rapor", iyelik("sürüm", "ü", "e", "ü")),
