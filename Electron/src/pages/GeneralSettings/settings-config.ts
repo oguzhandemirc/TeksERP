@@ -1213,7 +1213,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         enumKey: "shippingReadyRule",
         group: "Sevke hazır işler",
         title: "İş ne zaman sevke hazır sayılsın",
-        summary: "İş emri, gelen belge, müşteri partisi ya da müşterinin topları hangi durumda “sevke hazır” görünsün.",
+        summary: `${TERIM.terbiyeIsEmri.tekil}, gelen belge, müşteri partisi ya da müşterinin topları hangi durumda “sevke hazır” görünsün.`,
         desc: "“Hepsi bitince” (varsayılan): işlemde hiç top kalmayınca ve en az bir top depodaysa hazır. “Metre eşiği”: depodaki (ve sevk edilmiş) metre, gelen metrenin ya da hedef metrajın tolerans kadar altına inmeden ulaşınca hazır; hedefi olmayan iş “hepsi bitince” kuralına düşer. Hazırlık saklanmaz, her bakışta toplardan yeniden hesaplanır — top geri açılırsa hazırlık da düşer.",
         defaultValue: "ALL_DONE",
         display: "radio",

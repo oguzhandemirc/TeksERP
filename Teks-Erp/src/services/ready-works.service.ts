@@ -10,6 +10,7 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
+import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
 import { decodeDynamicCursor, encodeDynamicCursor } from "../utils/cursor";
 import { readFilterList } from "../utils/query-parser";
 import {
@@ -191,7 +192,7 @@ async function loadUnitMeta(unit: ReadyWorkUnit, ids: string[]): Promise<Map<str
         workOrderNumber: true,
         targetQuantity: true,
         orderLinks: {
-          where: { unlinkedAt: null },
+          where: ACTIVE_ORDER_LINK,
           orderBy: { createdAt: "asc" },
           select: { orderLine: { select: { order: { select: { customer: { select: { id: true, name: true } } } } } } },
         },
