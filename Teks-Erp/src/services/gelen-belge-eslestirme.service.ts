@@ -14,7 +14,8 @@ import { FUZZY_NOISE_WORDS } from "../constants/duplicate-rules";
 import { firmNameSimilarity, productNameSimilarity } from "../utils/string-similarity";
 import { foldColorNameForCompare, foldNameForCompare } from "./helpers/name-normalize.helper";
 import { loadKursunGramajOptions } from "./helpers/kursun-bypass-gramaj.helper";
-import { matchGramajOption, type GramajOption } from "../lib/gelen-belge/gramaj-oneri";
+import { loadProcessChoiceGroups, type ProcessChoiceGroup } from "./helpers/process-choice-catalog.helper";
+import { matchChoiceOption, matchGramajOption, type GramajOption } from "../lib/gelen-belge/gramaj-oneri";
 import { resolveEffectiveDefaultItem, type EffectiveDefaultItem } from "./gelen-belge-varsayilan.service";
 
 export const MATCH_SUGGEST_THRESHOLD = 0.9;
@@ -146,19 +147,48 @@ export interface ProcessSuggestion {
   readonly suggested: GramajOption | null;
   /** ALIAS: onayda öğrenilmiş PROCESS sözlüğü · PATTERN: "25 GR" kalıbı · NONE: emin değil → boş. */
   readonly source: "ALIAS" | "PATTERN" | "NONE";
+  /**
+   * Kurşun DIŞI çeşit özellikleri (brode deseni vb., D4-D1): özellik başına öneri. Katalogda böyle özellik yoksa
+   * anahtar HİÇ yazılmaz — yalnız-kurşun kurulumda yanıt H9 ile bayt-aynı.
+   */
+  readonly variants?: ReadonlyArray<VariantSuggestion>;
+}
+
+export interface VariantSuggestion {
+  readonly propertyId: string;
+  readonly suggested: GramajOption | null;
+  readonly source: "ALIAS" | "PATTERN" | "NONE";
 }
 
 const EMPTY_PROCESS: ProcessSuggestion = { rawText: null, suggested: null, source: "NONE" };
 
-/** Sözlük kalıptan ÖNCE; sözlük hedefi artık aktif gramaj çeşidi değilse yok sayılır (kalıba düşer). */
-export async function suggestProcess(raw: string | null | undefined, senderCustomerId: string | null, options: readonly GramajOption[]): Promise<ProcessSuggestion> {
+/**
+ * Sözlük kalıptan ÖNCE (gönderene özel satır genel satırı ezer); sözlük hedefi artık aktif çeşit değeri değilse yok
+ * sayılır (kalıba düşer). Sözlük metin başına TEK değer tutar: hedef hangi özelliğin değeriyse o grup ALIAS olur,
+ * öteki gruplar kalıpla çözülür. Grup içinde iki değere uyan metin → öneri YOK.
+ */
+export async function suggestProcess(
+  raw: string | null | undefined,
+  senderCustomerId: string | null,
+  options: readonly GramajOption[],
+  groups: readonly ProcessChoiceGroup[] = [],
+): Promise<ProcessSuggestion> {
   const text = raw?.trim();
-  if (!text || options.length === 0) return text ? { ...EMPTY_PROCESS, rawText: text } : EMPTY_PROCESS;
+  const withVariants = (base: ProcessSuggestion, variants: VariantSuggestion[]): ProcessSuggestion => (groups.length > 0 ? { ...base, variants } : base);
+  const none = (): VariantSuggestion[] => groups.map((g) => ({ propertyId: g.propertyId, suggested: null, source: "NONE" }));
+  if (!text || (options.length === 0 && groups.length === 0)) return withVariants(text ? { ...EMPTY_PROCESS, rawText: text } : EMPTY_PROCESS, none());
   const target = await aliasTarget("PROCESS", senderCustomerId, text);
+  const variants: VariantSuggestion[] = groups.map((g) => {
+    const alias = target ? g.options.find((o) => o.id === target) : undefined;
+    if (alias) return { propertyId: g.propertyId, suggested: { id: alias.id, name: alias.name }, source: "ALIAS" };
+    const hit = matchChoiceOption(text, g.options);
+    return hit ? { propertyId: g.propertyId, suggested: { id: hit.id, name: hit.name }, source: "PATTERN" } : { propertyId: g.propertyId, suggested: null, source: "NONE" };
+  });
+  if (options.length === 0) return withVariants({ ...EMPTY_PROCESS, rawText: text }, variants);
   const alias = target ? options.find((o) => o.id === target) : undefined;
-  if (alias) return { rawText: text, suggested: alias, source: "ALIAS" };
+  if (alias) return withVariants({ rawText: text, suggested: alias, source: "ALIAS" }, variants);
   const hit = matchGramajOption(text, options);
-  return hit ? { rawText: text, suggested: hit, source: "PATTERN" } : { rawText: text, suggested: null, source: "NONE" };
+  return withVariants(hit ? { rawText: text, suggested: hit, source: "PATTERN" } : { rawText: text, suggested: null, source: "NONE" }, variants);
 }
 
 export interface NoteMatchSuggestions {
@@ -169,6 +199,8 @@ export interface NoteMatchSuggestions {
   readonly process: ProcessSuggestion;
   /** Seçilebilir aktif kurşun gramaj çeşitleri (işlem metni yoksa boş): panel kataloğu `gelen-belge:read` kapsamından okur, `property:read` istemez. */
   readonly processOptions: ReadonlyArray<GramajOption>;
+  /** Kurşun dışı çeşit katalogları (D4-D1; işlem metni yoksa ya da böyle özellik yoksa anahtar YOK — eski yanıt bayt-aynı). */
+  readonly processGroups?: ReadonlyArray<ProcessChoiceGroup>;
   /** `process`: satırın işlem metni; satırda metin yoksa başlığınki (satır kendi metnini taşırsa o kazanır). */
   readonly lines: ReadonlyArray<{ lineId: string; lineNo: number; item: MatchSuggestion; color: MatchSuggestion; process: ProcessSuggestion }>;
   /** Sahibin ETKİN varsayılan ürünü (E4: müşteri > fabrika) — ürünsüz satır onayda bununla doğar; panel ipucu/ön kontrol bunu okur. */
@@ -198,10 +230,11 @@ export async function suggestForNote(noteId: string): Promise<NoteMatchSuggestio
   const colorCache = new Map<string, MatchSuggestion>();
   const hasProcess = !!note.processText?.trim() || note.lines.some((l) => l.processText?.trim());
   const gramajOptions = hasProcess ? await loadKursunGramajOptions() : [];
+  const choiceGroups = hasProcess ? await loadProcessChoiceGroups() : [];
   const processCache = new Map<string, ProcessSuggestion>();
   const processFor = async (raw: string | null): Promise<ProcessSuggestion> => {
     const key = raw?.trim() ?? "";
-    if (!processCache.has(key)) processCache.set(key, await suggestProcess(key, senderId, gramajOptions));
+    if (!processCache.has(key)) processCache.set(key, await suggestProcess(key, senderId, gramajOptions, choiceGroups));
     return processCache.get(key)!;
   };
   const process = await processFor(note.processText);
@@ -214,5 +247,9 @@ export async function suggestForNote(noteId: string): Promise<NoteMatchSuggestio
     const lineProcess = l.processText?.trim() ? await processFor(l.processText) : process;
     lines.push({ lineId: l.id, lineNo: l.lineNo, item: itemCache.get(it)!, color: colorCache.get(co)!, process: lineProcess });
   }
-  return { noteId, sender, owner, process, processOptions: gramajOptions, lines, defaultItem: await resolveEffectiveDefaultItem(note.ownerCustomerId) };
+  const defaultItem = await resolveEffectiveDefaultItem(note.ownerCustomerId);
+  // Anahtar sırası H9 yanıtıyla aynı; kurşun dışı katalog yalnız varsa eklenir.
+  return choiceGroups.length > 0
+    ? { noteId, sender, owner, process, processOptions: gramajOptions, processGroups: choiceGroups, lines, defaultItem }
+    : { noteId, sender, owner, process, processOptions: gramajOptions, lines, defaultItem };
 }

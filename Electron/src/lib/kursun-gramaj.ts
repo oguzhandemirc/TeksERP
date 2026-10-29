@@ -85,6 +85,13 @@ export interface DeliveryNoteGramajSuggestion {
   rollCount: number;
   coveredRollCount: number;
   entries: Array<{ valueId: string | null; valueName: string | null; processText: string | null; rollCount: number }>;
+  /** Kurşun dışı çeşit özellikleri (brode deseni vb., D4-D1), özellik başına aynı birleştirme; yoksa / eski backend → yok. */
+  variants?: Array<{
+    propertyId: string;
+    propertyName: string;
+    suggested: { valueId: string; valueName: string } | null;
+    entries: Array<{ valueId: string | null; valueName: string | null; processText: string | null; rollCount: number }>;
+  }>;
 }
 
 export interface ProcessSummaryData {

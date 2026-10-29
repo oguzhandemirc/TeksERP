@@ -18,6 +18,8 @@ interface Props {
   lines: readonly DeliveryNoteLine[];
   /** Operatörün seçtiği gramajlar (H9) — onayda PROCESS sözlüğüne öğretilir. */
   processChoices?: readonly ProcessChoice[];
+  /** Seçim sayacının adı: yalnız kurşun katalogda "kurşun gramajı", çeşit grupları varsa "işlem seçimi" (D4-D1). */
+  choiceNoun?: string;
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onDone: () => void;
@@ -29,9 +31,9 @@ const TONE_CLASS = {
   block: "bg-destructive/10 text-destructive",
 } as const;
 
-function ProcessChoicesNote({ count }: { count: number }) {
+function ProcessChoicesNote({ count, noun }: { count: number; noun: string }) {
   if (count === 0) return null;
-  return <p className="text-xs text-muted-foreground" data-testid="approve-process-choices">Seçilen {count} kurşun gramajı bu işlem metinleri için hatırlanacak (topa değer yazılmaz).</p>;
+  return <p className="text-xs text-muted-foreground" data-testid="approve-process-choices">Seçilen {count} {noun} bu işlem metinleri için hatırlanacak (topa değer yazılmaz).</p>;
 }
 
 /**
@@ -60,7 +62,7 @@ function ApproveError({ text, source }: { text: string | null; source: "CUSTOMER
   );
 }
 
-export function ApproveDialog({ noteId, lines, processChoices = [], open, onOpenChange, onDone }: Props) {
+export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun = "kurşun gramajı", open, onOpenChange, onDone }: Props) {
   const [reason, setReason] = useState("");
   const [askReason, setAskReason] = useState(false);
   // Hata metni + kullanılamaz varsayılanın kaynağı (E4; müşteri ise yönetim ekranı bağlantısı çıkar).
@@ -119,7 +121,7 @@ export function ApproveDialog({ noteId, lines, processChoices = [], open, onOpen
                 ))}
               </ul>
             )}
-            <ProcessChoicesNote count={processChoices.length} />
+            <ProcessChoicesNote count={processChoices.length} noun={choiceNoun} />
             <ApproveError text={error?.text ?? null} source={error?.source ?? null} />
             {askReason && (
               <Textarea aria-label="Fark gerekçesi" placeholder="Fark gerekçesi (ör. belgedeki toplam yanlış yazılmış)" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />

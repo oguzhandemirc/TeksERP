@@ -18,10 +18,13 @@
 //   A) rollColumn include'u ROLL_LIST_INCLUDE'a geri alındı → 7 ❌
 //   B) ROLL_CARD_INCLUDE'dan `properties` düşürüldü          → 4 ❌
 //   C) WO rollup'ında adım→istasyon haritası bozuldu         → 2 ❌
+//   D) (K2a 2026-10-29) numara serisi tazelemesi eski N+1'e + ısıtma sonrası bekleme kaldırıldı → pencerede
+//      seri turu 7–9, 1 ❌ (bütçe dalgası CI'da 92'ye çıkmıştı; düzeltme sonrası 5/5 koşum ölçülen=64)
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { InventoryService } from "../src/services/inventory.service";
 import { WorkOrderService } from "../src/services/workorder.service";
+import { refreshNumberSeriesCache } from "../src/services/number-series.service";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = ""): void {
@@ -66,6 +69,9 @@ async function main(): Promise<void> {
 
   // ── 1) Sorgu bütçesi + düşürülen ilişkilerin SIFIR turu ────────────────────
   await inv.getProductionFlow({ includeQueues: true, includeSevk: true }); // ısıtma
+  // Isıtma numara serisi önbelleğinin ARKA PLAN tazelemesini tetikler; beklenmezse turları ölçüm penceresine
+  // dalgalı sızar (K2a 2026-10-29: CI ölçülen=92, yerelde 71–79). Tazeleme bitsin, TTL (60 sn) pencereyi örtsün.
+  await refreshNumberSeriesCache();
   byTable.clear(); total = 0;
   capture = true;
   const flow = await inv.getProductionFlow({ includeQueues: true, includeSevk: true });
@@ -82,6 +88,9 @@ async function main(): Promise<void> {
   // nested select'ler kolon başına ~5 tur ekler → 90 üst sınır hem bugünü hem
   // dolu kuyruğu kapsar, hem de liste include'una geri dönüşü (115+) YAKALAR.
   check("production-flow sorgu bütçesi ≤ 90", total <= 90, `ölçülen=${total}`);
+  // Ölçüm yalnız isteğin kendi turlarını saymalı: önbellek tazelemesi pencereye girmez (girerse bütçe dalgalanır).
+  const seriesReads = (byTable.get("number_series") ?? 0) + (byTable.get("number_series_lines") ?? 0);
+  check("production-flow ölçüm penceresinde numara serisi tazelemesi YOK (belirlenimli bütçe)", seriesReads === 0, `sayı=${seriesReads}`);
 
   // ── 2) Kart ile liste AYNI skaler kümeyi döndürüyor ────────────────────────
   // ⚠️ FIXTURE GARANTİ EDİLİR (2026-09-06): karşılaştırma ortamda EN AZ BİR TOP

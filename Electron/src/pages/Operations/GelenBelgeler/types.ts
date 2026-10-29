@@ -133,6 +133,15 @@ export interface ProcessSuggestion {
   rawText: string | null;
   suggested: { id: string; name: string } | null;
   source: "ALIAS" | "PATTERN" | "NONE";
+  /** Kurşun dışı çeşit özellikleri (brode deseni vb., D4-D1): özellik başına öneri. Böyle özellik yoksa / eski backend → yok. */
+  variants?: Array<{ propertyId: string; suggested: { id: string; name: string } | null; source: "ALIAS" | "PATTERN" | "NONE" }>;
+}
+/** Kurşun dışı çeşit kataloğu (D4-D1) — backend `helpers/process-choice-catalog.helper.ts` aynası. */
+export interface ProcessChoiceGroup {
+  propertyId: string;
+  propertyCode: string;
+  propertyName: string;
+  options: Array<{ id: string; code: string; name: string }>;
 }
 export interface NoteMatchSuggestions {
   noteId: string;
@@ -142,6 +151,8 @@ export interface NoteMatchSuggestions {
   process?: ProcessSuggestion;
   /** Aktif kurşun gramaj çeşitleri (gelen-belge:read kapsamında; property:read gerekmez). Eski backend göndermez → panel çizilmez. */
   processOptions?: Array<{ id: string; name: string }>;
+  /** Kurşun dışı çeşit katalogları (D4-D1); böyle özellik yoksa ya da eski backend → yok (panel yalnız kurşunu çizer). */
+  processGroups?: ProcessChoiceGroup[];
   lines: Array<{ lineId: string; lineNo: number; item: MatchSuggestion; color: MatchSuggestion; process?: ProcessSuggestion }>;
   /** Sahibin ETKİN varsayılan ürünü (E4); eski backend göndermez → undefined (panel hüküm vermez). */
   defaultItem?: EffectiveDefaultItem;
