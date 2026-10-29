@@ -30,7 +30,7 @@ function toJson(v: unknown): Prisma.InputJsonValue {
  * Şablon koduna bağlı satırı döner; yoksa oluşturur. Paralel iki çağrıda biri P2002 alır ve kazananın
  * satırını YENİDEN OKUR (tek satır). Bilinmeyen/yedek kod null (bağ kurulmaz).
  */
-export async function ensureSenderTemplate(code: string, userId?: string): Promise<{ id: string; isActive: boolean } | null> {
+export async function ensureSenderTemplate(code: string, userId?: string, source: "OCR" | "PANEL" = "OCR"): Promise<{ id: string; isActive: boolean } | null> {
   const tpl = bindableTemplates().find((t) => t.id === code);
   if (!tpl) return null;
   const select = { id: true, isActive: true } as const;
@@ -38,7 +38,7 @@ export async function ensureSenderTemplate(code: string, userId?: string): Promi
   if (found) return found;
   try {
     const row = await prisma.senderTemplate.create({ data: { code, version: tpl.version, template: toJson(tpl) }, select });
-    await AuditService.log({ userId, action: "CREATE", tableName: TABLE, recordId: row.id, newData: { code, version: tpl.version, source: "OCR" } });
+    await AuditService.log({ userId, action: "CREATE", tableName: TABLE, recordId: row.id, newData: { code, version: tpl.version, source } });
     return row;
   } catch (err) {
     if (p2002OnField(err, "code")) return prisma.senderTemplate.findUniqueOrThrow({ where: { code }, select });
@@ -118,7 +118,8 @@ const auditOf = (r: { isActive: boolean; senderCustomerId: string | null; defaul
 
 /**
  * Güncelleme: yalnız patch'te TANIMLI alanlar yazılır. Satır yoksa idempotent doğar (motor şablonu olmalı).
- * Yazım `updateMany WHERE {id, updatedAt}` ile atomik (araya giren yazım → 409, kayıp güncelleme yok).
+ * Yazım `updateMany WHERE {id, yazılabilir alanların eski değerleri}` ile atomik (araya giren yazım → 409);
+ * kilit updatedAt'e kurulmaz: okuma işinin hitCount artışı PATCH'e haksız 409 verdirmesin.
  */
 export async function updateSenderTemplate(code: string, patch: SenderTemplatePatch, userId: string): Promise<SenderTemplateView> {
   const inEngine = bindableTemplates().some((t) => t.id === code);
@@ -128,13 +129,16 @@ export async function updateSenderTemplate(code: string, patch: SenderTemplatePa
   }
   if (patch.senderCustomerId) await assertActiveCustomer(patch.senderCustomerId, "gönderen");
   if (patch.defaultOwnerCustomerId) await assertActiveCustomer(patch.defaultOwnerCustomerId, "varsayılan sahip");
-  const id = existing?.id ?? (await ensureSenderTemplate(code, userId))!.id;
-  const before = await prisma.senderTemplate.findUniqueOrThrow({ where: { id }, select: { isActive: true, senderCustomerId: true, defaultOwnerCustomerId: true, updatedAt: true } });
+  const id = existing?.id ?? (await ensureSenderTemplate(code, userId, "PANEL"))!.id;
+  const before = await prisma.senderTemplate.findUniqueOrThrow({ where: { id }, select: { isActive: true, senderCustomerId: true, defaultOwnerCustomerId: true } });
   const data: Prisma.SenderTemplateUncheckedUpdateManyInput = {};
   if (patch.isActive !== undefined) data.isActive = patch.isActive;
   if (patch.senderCustomerId !== undefined) data.senderCustomerId = patch.senderCustomerId;
   if (patch.defaultOwnerCustomerId !== undefined) data.defaultOwnerCustomerId = patch.defaultOwnerCustomerId;
-  const c = await prisma.senderTemplate.updateMany({ where: { id, updatedAt: before.updatedAt }, data });
+  const c = await prisma.senderTemplate.updateMany({
+    where: { id, isActive: before.isActive, senderCustomerId: before.senderCustomerId, defaultOwnerCustomerId: before.defaultOwnerCustomerId },
+    data,
+  });
   if (c.count === 0) throw AppError.conflict("Şablon bu arada değişti; yenileyip tekrar deneyin.", { code: "SENDER_TEMPLATE_CHANGED" });
   const row = await prisma.senderTemplate.findUniqueOrThrow({ where: { id }, select: ROW_SELECT });
   await AuditService.log({ userId, action: "UPDATE", tableName: TABLE, recordId: id, oldData: { code, ...auditOf(before) }, newData: { code, ...auditOf(row) } });
