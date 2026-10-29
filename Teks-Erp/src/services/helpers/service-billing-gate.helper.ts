@@ -47,3 +47,21 @@ export async function listShipmentServiceBilledDocNos(db: Db, shipmentId: string
   return rows.map((r) => r.invoice.docNo);
 }
 
+
+/**
+ * Bayrak geri alma kapısı (salt-okuma, H10): faturalı bayrak işinin kanıtı (topun aktif özelliği) geri
+ * alınamaz — top ya da ataları o kalemle aktif bağ taşıyorsa 409 `SERVICE_ALREADY_BILLED`.
+ */
+export async function assertFlagWorkNotBilledTx(tx: Db, input: { rollId: string; propertyIds: string[] }): Promise<void> {
+  if (input.propertyIds.length === 0) return;
+  const props = await tx.fabricProperty.findMany({ where: { id: { in: input.propertyIds }, serviceItemId: { not: null } }, select: { serviceItemId: true } });
+  if (props.length === 0) return;
+  const lineage = [input.rollId];
+  for (let cur: string | null = input.rollId, d = 0; cur && d < 32; d++) {
+    const row: { parentRollId: string | null } | null = await tx.roll.findUnique({ where: { id: cur }, select: { parentRollId: true } });
+    cur = row?.parentRollId ?? null;
+    if (cur) lineage.push(cur);
+  }
+  const prior = await findActiveBillingTx(tx, { rollId: { in: lineage }, serviceItemId: { in: props.map((p) => p.serviceItemId!) } });
+  if (prior) throw alreadyBilled(prior.docNo);
+}
