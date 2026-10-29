@@ -270,6 +270,10 @@ const SERVICE_ITEM_ID_FILES = new Set([
   "services/helpers/service-flag-work.helper.ts",
   // H10: bayrak geri alma kapısı — eşlenmiş kalemi yalnız faturalı bağ aramak için okur (çözücü değil).
   "services/helpers/service-billing-gate.helper.ts",
+  // F1: önizleme kapısı — taze bağların kalemini fatura satırıyla karşılaştırır (çözücü değil; toplayıcıyı çağırır).
+  "services/helpers/service-preview-gate.helper.ts",
+  // K2a: ürün kartı canlı referans kataloğu — eşlenmiş kalemi pasife alma kapısı için sayar (çözücü değil).
+  "services/helpers/item-lifecycle.helper.ts",
 ]);
 function astChecks(): void {
   section("§8 AST: çözücü tek, eşleme okuyucuları beyanlı, FinishingRate okunmaz");
