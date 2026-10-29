@@ -91,7 +91,36 @@ export async function assertNoUnlinkedShipmentServiceLinesTx(
   }
 }
 
-/** Taslak düzenlemesinin hizmet ayağı: bağ ↔ satır eşitlemesi (H7) + sevk taslağında bağsız emanet satırı kapısı (F1). */
+/**
+ * K3b dönem taslağı düzenleme kapısı: dönem taslağına (shipmentId yok, hizmet bağı kurulmuş) BU faturada aktif bağı
+ * olmayan eşlenmiş hizmet kalemiyle (özellik/değer → hizmet kalemi) satır eklenemez → 409. Bağ yalnız dönem ucunda kurulur.
+ */
+export async function assertNoUnlinkedPeriodServiceLinesTx(
+  tx: Tx,
+  p: { invoiceId: string; lines: Array<{ itemId?: string | null }> },
+): Promise<void> {
+  const lineItems = [...new Set(p.lines.map((l) => l.itemId).filter((v): v is string => !!v))];
+  if (lineItems.length === 0) return;
+  // Dönem taslağı = bağ kurulmuş (damgalı dahil) sevksiz satış taslağı; elle açılmış serbest fatura bu kapıya girmez.
+  if ((await tx.serviceBillingLink.count({ where: { invoiceId: p.invoiceId } })) === 0) return;
+  const linked = new Set((await tx.serviceBillingLink.findMany({
+    where: { invoiceId: p.invoiceId, revokedAt: null, serviceItemId: { in: lineItems } }, select: { serviceItemId: true }, distinct: ["serviceItemId"],
+  })).map((l) => l.serviceItemId));
+  const rest = lineItems.filter((id) => !linked.has(id));
+  if (rest.length === 0) return;
+  const mapped = new Set([
+    ...(await tx.fabricProperty.findMany({ where: { serviceItemId: { in: rest } }, select: { serviceItemId: true } })).map((r) => r.serviceItemId),
+    ...(await tx.fabricPropertyValue.findMany({ where: { serviceItemId: { in: rest } }, select: { serviceItemId: true } })).map((r) => r.serviceItemId),
+  ]);
+  const hit = rest.find((id) => mapped.has(id));
+  if (!hit) return;
+  throw AppError.conflict(
+    "Dönem faturasına emanet hizmet satırı elle eklenemez — işler bu taslağa bağlı değil. Dönem sonu hizmet faturası ucunu yeniden çalıştırın.",
+    { code: "SERVICE_LINE_UNLINKED", serviceItemId: hit },
+  );
+}
+
+/** Taslak düzenlemesinin hizmet ayağı: bağ ↔ satır eşitlemesi (H7) + sevk (F1) / dönem (K3b) taslağında bağsız emanet satırı kapısı. */
 export async function syncDraftServiceLinksTx(
   tx: Tx,
   p: { invoiceId: string; type: string; shipmentId: string | null; currency: Currency; cari: { customerId: string | null }; lines: Array<{ itemId?: string | null; qty: Prisma.Decimal.Value; description?: string }>; userId: string | null },
@@ -99,6 +128,8 @@ export async function syncDraftServiceLinksTx(
   const revoked = await syncServiceLinksToLinesTx(tx, p.invoiceId, p.lines, p.userId);
   if (p.type === "SALES" && p.shipmentId && p.cari.customerId) {
     await assertNoUnlinkedShipmentServiceLinesTx(tx, { invoiceId: p.invoiceId, shipmentId: p.shipmentId, customerId: p.cari.customerId, currency: p.currency, lines: p.lines });
+  } else if (p.type === "SALES" && !p.shipmentId) {
+    await assertNoUnlinkedPeriodServiceLinesTx(tx, { invoiceId: p.invoiceId, lines: p.lines });
   }
   return revoked;
 }

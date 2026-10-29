@@ -33,6 +33,7 @@
 //   §22 F1 önizleme/oluşturma yarışı: tetik (müşteri · fabrika) değişti ya da iş başka faturaya bağlandı ⇒ 409
 //       SERVICE_PREVIEW_STALE + sıfır yazım · normal yol bağları önizlemeyle bayt-aynı · eşzamanlı iki oluşturma ⇒ 1 + 409 ·
 //       düzenlemede bağsız emanet hizmet satırı ⇒ 409 SERVICE_LINE_UNLINKED
+//   §24 K3b dönem taslağına (shipmentId yok) elle eşlenmiş hizmet kalemi satırı ⇒ 409 SERVICE_LINE_UNLINKED, satır 0
 //   §23 K3b önizleme kapısı toplayıcıyı fatura tx'inin istemcisiyle okur (tx'in commit'siz damgasını görür)
 //   §21 H8b DISPATCH_DAY dönem taslağı: her iş KENDİ sevk anının fiyatıyla (son sevk günü herkese uygulanmaz); ata
 //       işi en erken sevk edilen çocuğun anına (yayılım döngüsü kapatılınca 40 m @7 ⇒ kırmızı, 68/1; geri alındı)
@@ -657,6 +658,22 @@ async function main(): Promise<void> {
   }).catch((e) => { if (e !== ROLLBACK) throw e; });
   check("§23a kapı tx'in commit'siz damgasını görür ⇒ 1 bağ girdisi (global okuma STALE verirdi)", seen6 === "links=1", seen6);
   check("§23b tx geri sarıldı ⇒ bağ hâlâ aktif", (await linksOn(n6.rs)).length === 1);
+
+  section("§24 K3b: dönem taslağına elle emanet hizmet satırı eklenemez");
+  const pd7 = await createServicePeriodDraft({ cariId: cari5.id, period, clientToken: randomUUID() }, actor);
+  const pdLines = async () => prisma.invoiceLine.findMany({ where: { invoiceId: pd7.data!.id }, select: { itemId: true, description: true, qty: true, unit: true, unitPrice: true }, orderBy: { lineNo: "asc" } });
+  const base7 = (await pdLines()).map((l) => ({ itemId: l.itemId, description: l.description, qty: Number(l.qty), unit: l.unit, unitPrice: Number(l.unitPrice) }));
+  const links7 = await prisma.serviceBillingLink.count({ where: { invoiceId: pd7.data!.id, revokedAt: null } });
+  const add7 = await errOf(() => invoiceService.updateDraft(pd7.data!.id, { lines: [...base7, { itemId: K3, description: "Elle K3", qty: 10, unit: "m", unitPrice: 11 }] }, actor));
+  const after7 = await pdLines();
+  check("§24a yeni emanet hizmet kalemi satırı ⇒ 409 SERVICE_LINE_UNLINKED (Türkçe), satır/bağ değişmez",
+    add7.status === 409 && add7.code === "SERVICE_LINE_UNLINKED" && after7.length === base7.length && !after7.some((l) => l.itemId === K3)
+    && (await prisma.serviceBillingLink.count({ where: { invoiceId: pd7.data!.id, revokedAt: null } })) === links7 && links7 > 0, JSON.stringify({ add7, n: after7.length, links7 }));
+  const msg7 = await invoiceService.updateDraft(pd7.data!.id, { lines: [...base7, { itemId: K3, description: "Elle K3", qty: 10, unit: "m", unitPrice: 11 }] }, actor).then(() => "", (e: Error) => e.message);
+  check("§24b mesaj: dönem ucunu yeniden çalıştırın", msg7.includes("Dönem faturasına emanet hizmet satırı elle eklenemez") && msg7.includes("yeniden çalıştırın"), msg7);
+  const free7 = await errOf(() => invoiceService.updateDraft(pd7.data!.id, { lines: [...base7, { itemId: null, description: "Nakliye", qty: 1, unit: "m", unitPrice: 5 }] }, actor));
+  check("§24c hizmetsiz serbest satır eklemek bugünkü gibi 200", free7.status === 200, JSON.stringify(free7));
+  await invoiceService.cancel(pd7.data!.id, "test iptal", actor);
 
   // ── §11 Kapalı ───────────────────────────────────────────────────────────
   section("§11 kapalıyken bugünkü davranış");
