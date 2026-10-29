@@ -168,9 +168,9 @@ function main(): void {
   // 37 → 38 (2026-10-25, izlenebilirlik D4): `helpers/device-identity.helper.ts` — cihaz birleşme bağının
   // TEK yazarı (`claimMergeSourceTx` · `claimMergeTargetTx` · `claimUnmergeTx`, atomik claim, tx İÇİNDE; §9 AST
   // `mergedIntoId`i bu dosyaya kilitler). Audit'i çağıran eylem basar (`device-merge.service`) — EBEVEYN_EYLEMDE.
-  // 38 → 39 (2026-10-29, H7): `helpers/service-billing.helper.ts` — hizmet fatura bağının TEK yazarı (fatura tx'i
-  // İÇİNDE insert + iptal damgası); audit'i çağıran fatura eylemi basar (`invoice.service`) — EBEVEYN_EYLEMDE.
-  const AUDITSIZ_YAZICI_TABAN = 39;
+  // (H7, 2026-10-29: `helpers/service-billing.helper.ts` SAYILMAZ — ServiceBillingLink model düzeyinde
+  // AUDIT_EXEMPT_MODELS'te EBEVEYN_EYLEMDE beyanlı; taban artmadı.)
+  const AUDITSIZ_YAZICI_TABAN = 38;
   const auditsizYazici: string[] = [];
   for (const [rel, s] of metin) {
     if (auditDosya.has(rel) || /tableName:\s*"/.test(s)) continue;

@@ -130,7 +130,21 @@ export async function insertServiceLinksTx(tx: Tx, invoiceId: string, links: Ser
     if (prior) throw alreadyBilled(prior.docNo);
   }
   try {
-    const res = await tx.serviceBillingLink.createMany({ data: links.map((l) => ({ ...l, invoiceId })) });
+    // Alanlar AÇIK yazılır: `test_snapshot_kolonlari` unitPrice yazıcısını AST ile ölçer (spread görünmez).
+    const res = await tx.serviceBillingLink.createMany({
+      data: links.map((l) => ({
+        invoiceId,
+        rollId: l.rollId,
+        workOrderStepId: l.workOrderStepId,
+        serviceItemId: l.serviceItemId,
+        readingId: l.readingId,
+        billedMeters: l.billedMeters,
+        meterBasis: l.meterBasis,
+        unitPrice: l.unitPrice,
+        currency: l.currency,
+        serviceAt: l.serviceAt,
+      })),
+    });
     return res.count;
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") throw alreadyBilled(null);

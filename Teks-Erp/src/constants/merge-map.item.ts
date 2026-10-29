@@ -171,6 +171,22 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "FabricPropertyValue", table: "fabric_property_values", column: "serviceItemId", label: "Gramaj değeri hizmet eşlemesi" },
     {
       kind: "CONFLICT",
+      model: "ServiceBillingLink",
+      table: "service_billing_links",
+      column: "serviceItemId",
+      label: "Hizmet fatura bağı",
+      // Partial UNIQUE `service_billing_links_active_uq` (rollId, serviceItemId, workOrderStepId) NULLS NOT DISTINCT,
+      // yalnız aktif. Anahtar BİLEREK geniş (adımı dışarıda): survivor yüklemi `=` ile eşler, adımsız (NULL) bağ
+      // kaçardı — geniş anahtar fail-closed; iptal damgalı bağ serbestçe taşınır.
+      uniqueOn: ["rollId", "serviceItemId"],
+      activeWhenNull: ["revokedAt"],
+      policy: "BLOCK",
+      why:
+        "Aynı top işi iki hizmet kalemiyle AYRI faturalanmışsa birleşmiş kalemde çift fatura olur; hangi " +
+        "faturanın iptal edileceği muhasebe kararıdır (H7). Çakışmasız bağ taşınır (fatura kalemi emsali).",
+    },
+    {
+      kind: "CONFLICT",
       model: "PriceListLine",
       table: "price_list_lines",
       column: "itemId",
