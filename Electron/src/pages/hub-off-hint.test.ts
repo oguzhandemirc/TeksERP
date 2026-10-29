@@ -7,7 +7,7 @@ import { qualityTiles } from "@/pages/Quality/tile-config";
 import { documentTiles } from "@/pages/Documents/tile-config";
 
 /** Rejim istisnaları: depoMulti (tek depoda transfer yok) · sevk onayı rejimi · finans cari takası · gelen belge (fason işlemci olmayan fabrikada gürültü). */
-const REJIM_ISTISNA = ["warehouse-transfers", "sack-store", "cariler", "customers", "subcontractors", "gelen-belgeler", "gelen-belge-sablonlari"];
+const REJIM_ISTISNA = ["warehouse-transfers", "sack-store", "cariler", "customers", "subcontractors", "gelen-belgeler", "gelen-belge-sablonlari", "gelen-belge-varsayilan-urunler"];
 
 const KATALOG = [
   ["Operasyon", operationsTiles],

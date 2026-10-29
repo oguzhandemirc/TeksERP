@@ -1,5 +1,5 @@
 // Operasyon › Depo & Paketleme karoları (sıra = hub sırası).
-import { ArrowLeftRight, Boxes, ClipboardCheck, FileCog, Package, PackageOpen, PackagePlus, ScanText, ShoppingBasket, Tags } from "lucide-react";
+import { ArrowLeftRight, Boxes, ClipboardCheck, FileCog, PackageCheck, Package, PackageOpen, PackagePlus, ScanText, ShoppingBasket, Tags } from "lucide-react";
 import { isYarnStockVisible } from "../Yarn/yarn-regime";
 import { isPurchaseOrdersVisible } from "../PurchaseOrders/po-regime";
 import { isStockCountVisible, STOCK_COUNTS_PATH } from "../StockCounts/stockCount-regime";
@@ -72,6 +72,17 @@ export const warehouseTiles: OperationsTile[] = [
     description: "Okunan belge yerleşimini gönderen cariye ve varsayılan sahibe bağla",
     icon: FileCog,
     to: "/operations/gelen-belgeler/sablonlar",
+    group: "warehouse",
+    permission: "gelen-belge:template",
+    visibleWhen: isIncomingDocumentVisible,
+  },
+  {
+    // E4b: sahibe özel varsayılan ürün (ürünsüz satır onayda bununla girer; fabrika ayarını ezer). Aynı kapı.
+    key: "gelen-belge-varsayilan-urunler",
+    title: "Müşteri Varsayılan Ürünleri",
+    description: "Gelen belgede ürünü seçilmemiş satırın müşteriye göre gireceği kumaş",
+    icon: PackageCheck,
+    to: "/operations/gelen-belgeler/varsayilan-urunler",
     group: "warehouse",
     permission: "gelen-belge:template",
     visibleWhen: isIncomingDocumentVisible,

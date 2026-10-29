@@ -1,12 +1,15 @@
 // "Onayla" → sonuç. Toplam/sayfa kapısı 409'unda gerekçe istenir (tek hata yüzeyi: diyalog; apiClient toast'u bastırılır).
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { apiErrorText } from "@/lib/api-error";
-import { approveNote, getIncomingDocumentSettings, INCOMING_DOCUMENT_SETTINGS_QUERY_KEY } from "./service";
-import { approveErrorText, approvePrecheck, needsVarianceReason, summarizeApprove, type ApproveOutcome } from "./approveFlow";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { approveNote, getIncomingDocumentSettings, getSuggestions, INCOMING_DOCUMENT_QUERY_KEY, INCOMING_DOCUMENT_SETTINGS_QUERY_KEY } from "./service";
+import { approveErrorText, approvePrecheck, needsVarianceReason, summarizeApprove, unusableDefaultSource, type ApproveOutcome } from "./approveFlow";
+import { CUSTOMER_DEFAULTS_PATH } from "./paths";
 import type { DeliveryNoteLine, ProcessChoice } from "./types";
 
 interface Props {
@@ -31,14 +34,39 @@ function ProcessChoicesNote({ count }: { count: number }) {
   return <p className="text-xs text-muted-foreground" data-testid="approve-process-choices">Seçilen {count} kurşun gramajı bu işlem metinleri için hatırlanacak (topa değer yazılmaz).</p>;
 }
 
+/**
+ * Diyalog her açılışta ayarı ve etkin varsayılanı (E4: eşleşme yanıtı, müşteri > fabrika) tazeler: sayaç onay anındaki
+ * kipe/ürüne göre konuşur; hüküm yine backend'de. Aynı anahtar → detay sayfasının önbelleği de tazelenir.
+ */
+function useApprovePrecheck(noteId: string, lines: readonly DeliveryNoteLine[], open: boolean) {
+  const settings = useQuery({ queryKey: INCOMING_DOCUMENT_SETTINGS_QUERY_KEY, queryFn: getIncomingDocumentSettings, enabled: open, refetchOnMount: "always", staleTime: 0 });
+  const match = useQuery({ queryKey: [INCOMING_DOCUMENT_QUERY_KEY, "eslestirme", noteId], queryFn: () => getSuggestions(noteId), enabled: open, refetchOnMount: "always", staleTime: 0 });
+  return approvePrecheck(lines, settings.data, match.data?.defaultItem);
+}
+
+/** Hata metni; kullanılamaz MÜŞTERİ varsayılanında (E4) yetkiliye yönetim ekranı bağlantısı (fabrika yolu backend mesajında). */
+function ApproveError({ text, source }: { text: string | null; source: "CUSTOMER" | "FACTORY" | null }) {
+  const { hasPermission } = useRoleAccess();
+  if (!text) return null;
+  return (
+    <>
+      <p className="rounded bg-destructive/10 px-2 py-1 text-sm text-destructive" data-testid="approve-error">{text}</p>
+      {source === "CUSTOMER" && hasPermission("gelen-belge:template") && (
+        <Button variant="outline" size="sm" asChild className="self-start">
+          <Link to={CUSTOMER_DEFAULTS_PATH} data-testid="approve-error-fix-link">Müşteri varsayılan ürünlerini aç</Link>
+        </Button>
+      )}
+    </>
+  );
+}
+
 export function ApproveDialog({ noteId, lines, processChoices = [], open, onOpenChange, onDone }: Props) {
   const [reason, setReason] = useState("");
   const [askReason, setAskReason] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Hata metni + kullanılamaz varsayılanın kaynağı (E4; müşteri ise yönetim ekranı bağlantısı çıkar).
+  const [error, setError] = useState<{ text: string; source: "CUSTOMER" | "FACTORY" | null } | null>(null);
   const [outcome, setOutcome] = useState<{ o: ApproveOutcome; warnings: string[] } | null>(null);
-  // Diyalog her açılışta ayarı tazeler: sayaç onay anındaki kipe/ürüne göre konuşur; hüküm yine backend'de.
-  const settings = useQuery({ queryKey: INCOMING_DOCUMENT_SETTINGS_QUERY_KEY, queryFn: getIncomingDocumentSettings, enabled: open, refetchOnMount: "always", staleTime: 0 });
-  const pre = approvePrecheck(lines, settings.data);
+  const pre = useApprovePrecheck(noteId, lines, open);
   const run = useMutation({
     mutationFn: () => approveNote(noteId, askReason ? reason.trim() : null, processChoices),
     onSuccess: ({ result, warnings }) => {
@@ -47,7 +75,7 @@ export function ApproveDialog({ noteId, lines, processChoices = [], open, onOpen
       onDone();
     },
     onError: (e) => {
-      setError(approveErrorText(e, apiErrorText(e, "Onay tamamlanamadı.")));
+      setError({ text: approveErrorText(e, apiErrorText(e, "Onay tamamlanamadı.")), source: unusableDefaultSource(e) });
       if (needsVarianceReason(e)) setAskReason(true);
     },
   });
@@ -92,7 +120,7 @@ export function ApproveDialog({ noteId, lines, processChoices = [], open, onOpen
               </ul>
             )}
             <ProcessChoicesNote count={processChoices.length} />
-            {error && <p className="rounded bg-destructive/10 px-2 py-1 text-sm text-destructive" data-testid="approve-error">{error}</p>}
+            <ApproveError text={error?.text ?? null} source={error?.source ?? null} />
             {askReason && (
               <Textarea aria-label="Fark gerekçesi" placeholder="Fark gerekçesi (ör. belgedeki toplam yanlış yazılmış)" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />
             )}

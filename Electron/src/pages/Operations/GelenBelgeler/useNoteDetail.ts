@@ -16,7 +16,8 @@ export function useNoteDetail(id: string) {
   const suggestions = useQuery({
     queryKey: [INCOMING_DOCUMENT_QUERY_KEY, "eslestirme", id],
     queryFn: () => getSuggestions(id),
-    enabled: note.data?.status === "DRAFT",
+    // PARTIAL da: düşen satırın düzeltmesi/yeniden onayı etkin varsayılan ipucunu (E4) bu yanıttan okur.
+    enabled: note.data?.status === "DRAFT" || note.data?.status === "PARTIAL",
     staleTime: 60_000,
   });
   const invalidate = () => qc.invalidateQueries({ queryKey: [INCOMING_DOCUMENT_QUERY_KEY] });

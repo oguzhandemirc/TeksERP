@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { FileCog, Plus, Upload } from "lucide-react";
+import { FileCog, PackageCheck, Plus, Upload } from "lucide-react";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { AutoLoadMore } from "@/components/data-table/AutoLoadMore";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { createManualNote } from "./service";
 import { SENDER_TEMPLATES_PATH } from "./GonderenSablonlariPage";
+import { CUSTOMER_DEFAULTS_PATH } from "./paths";
 import { UploadDialog } from "./UploadDialog";
 import { ReaderStatusBadge } from "./ReaderStatusBadge";
 import { NoteListFilters } from "./NoteListFilters";
@@ -21,6 +22,26 @@ import { NoteListTable } from "./NoteListTable";
 import { EMPTY_FILTER, useNoteList, type NoteListFilter } from "./useNoteList";
 
 export const INCOMING_DOCUMENTS_PATH = "/operations/gelen-belgeler";
+
+/** Şablon yönetimi yüzeyleri (`gelen-belge:template`): gönderen şablonları + müşteri varsayılan ürünleri (E4b). */
+function TemplateLinks() {
+  return (
+    <PermissionGate permission="gelen-belge:template">
+      <Button variant="ghost" asChild>
+        <Link to={SENDER_TEMPLATES_PATH}>
+          <FileCog className="mr-1 h-4 w-4" />
+          Gönderen şablonları
+        </Link>
+      </Button>
+      <Button variant="ghost" asChild>
+        <Link to={CUSTOMER_DEFAULTS_PATH}>
+          <PackageCheck className="mr-1 h-4 w-4" />
+          Müşteri varsayılanları
+        </Link>
+      </Button>
+    </PermissionGate>
+  );
+}
 
 export function IncomingDocumentsPage() {
   const navigate = useNavigate();
@@ -51,14 +72,7 @@ export function IncomingDocumentsPage() {
         description="Müşteri irsaliyesi — fotoğraftan okunan ya da elle girilen taslak; onayda emanet topu doğar."
         actions={
           <div className="flex flex-wrap gap-2">
-            <PermissionGate permission="gelen-belge:template">
-              <Button variant="ghost" asChild>
-                <Link to={SENDER_TEMPLATES_PATH}>
-                  <FileCog className="mr-1 h-4 w-4" />
-                  Gönderen şablonları
-                </Link>
-              </Button>
-            </PermissionGate>
+            <TemplateLinks />
             <PermissionGate permission="gelen-belge:write">
               <div className="flex flex-wrap gap-2">
                 <Button onClick={() => setUploadOpen(true)}>
