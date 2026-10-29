@@ -29,7 +29,7 @@ import { getDeliveryNote } from "./gelen-belge-note.service";
 import { auditLine } from "./gelen-belge-line.service";
 import { resolveDefaultItemForApproval, type DefaultItemSource } from "./gelen-belge-varsayilan.service";
 import { readUnreviewedApprovalMode } from "./system-setting.service";
-import { assertKursunGramajValue } from "./helpers/kursun-bypass-gramaj.helper";
+import { assertProcessChoiceValue } from "./helpers/process-choice-catalog.helper";
 import { aliasKey } from "./gelen-belge-eslestirme.service";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
@@ -55,7 +55,7 @@ export interface ApproveInput {
   /** Toplam uyuşmazlığını BİLEREK geçme gerekçesi (başlığa yazılır). */
   varianceReason?: string | null;
   /**
-   * Operatörün kabul ettiği/düzelttiği gramaj önerileri (H9): `lineId` null = başlığın işlem metni. Yalnız PROCESS
+   * Operatörün kabul ettiği/düzelttiği işlem önerileri (H9 gramaj; D4-D1 her çeşit değeri): `lineId` null = başlığın işlem metni. Yalnız PROCESS
    * sözlüğüne öğretilir; topa, iş emrine ya da deftere DEĞER YAZILMAZ.
    */
   processChoices?: ReadonlyArray<{ lineId: string | null; valueId: string }> | null;
@@ -164,7 +164,7 @@ async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: ty
 type ProcessChoice = { text: string; valueId: string };
 
 /**
- * Gramaj seçimlerini claim'den ÖNCE doğrular (fail-closed 400): değer aktif kurşun gramaj çeşidi, satır bu belgenin,
+ * İşlem seçimlerini claim'den ÖNCE doğrular (fail-closed 400): değer aktif çeşit değeri (kurşun gramajı, brode deseni…), satır bu belgenin,
  * işlem metni dolu (satırda yoksa başlığınki). Dönen metin sunucudaki metindir — istemci metni sözlüğe girmez.
  */
 async function resolveProcessChoices(note: { processText: string | null; lines: ReadonlyArray<{ id: string; processText: string | null }> }, choices: ApproveInput["processChoices"]): Promise<ProcessChoice[]> {
@@ -173,15 +173,15 @@ async function resolveProcessChoices(note: { processText: string | null; lines: 
   const checked = new Set<string>();
   for (const c of choices ?? []) {
     const line = c.lineId === null ? null : note.lines.find((l) => l.id === c.lineId);
-    if (c.lineId !== null && !line) throw AppError.badRequest("Gramaj seçimi bu belgenin satırına ait değil.", { code: "PROCESS_CHOICE_LINE_INVALID" });
+    if (c.lineId !== null && !line) throw AppError.badRequest("İşlem seçimi bu belgenin satırına ait değil.", { code: "PROCESS_CHOICE_LINE_INVALID" });
     const text = (line?.processText?.trim() || note.processText?.trim()) ?? "";
-    if (!text) throw AppError.badRequest("İşlem metni boş satıra gramaj seçimi öğretilemez.", { code: "PROCESS_CHOICE_TEXT_EMPTY" });
+    if (!text) throw AppError.badRequest("İşlem metni boş satıra işlem seçimi öğretilemez.", { code: "PROCESS_CHOICE_TEXT_EMPTY" });
     // Aynı (katlanmış) metne çelişkili iki seçim: sessizce "son gelen kazanır" yerine 400.
     const key = aliasKey("PROCESS", text);
     const prev = byKey.get(key);
-    if (prev && prev !== c.valueId) throw AppError.badRequest("Aynı işlem metnine iki farklı gramaj seçilmiş.", { code: "PROCESS_CHOICE_CONFLICT" });
+    if (prev && prev !== c.valueId) throw AppError.badRequest("Aynı işlem metnine iki farklı değer seçilmiş (metin başına tek seçim hatırlanır).", { code: "PROCESS_CHOICE_CONFLICT" });
     byKey.set(key, c.valueId);
-    if (!checked.has(c.valueId)) await assertKursunGramajValue(prisma, c.valueId);
+    if (!checked.has(c.valueId)) await assertProcessChoiceValue(prisma, c.valueId);
     checked.add(c.valueId);
     out.push({ text, valueId: c.valueId });
   }
@@ -221,7 +221,7 @@ export type AliasLearnInput = { scope: DeliveryNoteAliasScope; senderCustomerId:
 
 /**
  * Tek anahtar öğrenme — TEK İFADE (E4): eşzamanlı yazarlar aynı anahtarı yazarsa hepsi sayılır, çift satır doğmaz
- * (tekil indeks NULLS NOT DISTINCT; gönderensiz anahtar da tekil). Polimorfik hedef: SON onay kazanır.
+ * (tekil indeks NULLS NOT DISTINCT; gönderensiz anahtar da tekil). Polimorfik hedef: SON onay kazanır (PROCESS: yalnız aynı özellik içinde).
  * Dışa açık: test_gelen_belge_onay §16b yarışı belirlenimli ölçer. `rawKey` çağıranca katlanmış olmalı (aliasKey).
  */
 export async function learnAlias(a: AliasLearnInput, userId: string): Promise<void> {
@@ -235,8 +235,13 @@ export async function learnAlias(a: AliasLearnInput, userId: string): Promise<vo
     VALUES (gen_random_uuid(), ${a.scope}::"DeliveryNoteAliasScope", ${a.senderCustomerId}::uuid, ${a.rawKey}, ${a.targetId}::uuid, 1, now(), now()) -- tz-ok: kolonlar timestamptz; ham INSERT Prisma'nın @default/@updatedAt kancasını atlar
     ON CONFLICT ("scope", "senderCustomerId", "rawKey") DO UPDATE
       SET "targetId" = EXCLUDED."targetId", "hitCount" = "delivery_note_aliases"."hitCount" + 1, "updatedAt" = now() -- tz-ok: kolon timestamptz; ham UPDATE @updatedAt kancasını atlar
+      -- PROCESS sözlüğü metin başına tek hedef: başka ÖZELLİĞİN öğrenmesini (ör. düzeltilmiş kurşun gramajı) ezmez, korur.
+      WHERE "delivery_note_aliases"."scope" <> 'PROCESS'::"DeliveryNoteAliasScope"
+         OR NOT EXISTS (SELECT 1 FROM "fabric_property_values" o WHERE o."id" = "delivery_note_aliases"."targetId")
+         OR (SELECT o."propertyId" FROM "fabric_property_values" o WHERE o."id" = "delivery_note_aliases"."targetId")
+            = (SELECT n."propertyId" FROM "fabric_property_values" n WHERE n."id" = EXCLUDED."targetId")
     RETURNING "id", "hitCount", (xmax = 0) AS "inserted", (SELECT "targetId" FROM prev) AS "prevTargetId"`);
-  if (!row) return;
+  if (!row) return; // PROCESS: mevcut öğrenme başka özelliğin → korundu, yazım yok
   const key = aliasKeyAudit(a.rawKey);
   if (row.inserted) {
     await AuditService.log({ userId, action: "CREATE", tableName: ALIAS_TABLE, recordId: row.id, newData: { scope: a.scope, senderCustomerId: a.senderCustomerId, ...key, targetId: a.targetId, hitCount: row.hitCount } });

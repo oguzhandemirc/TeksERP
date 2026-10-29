@@ -63,6 +63,19 @@ describe("DeliveryNoteGramajHint (ProcessSummaryCard içinde)", () => {
     expect(screen.getByText(/öneri verilmedi/)).toBeInTheDocument();
     expect(screen.getByText("Gramaj okunamadı")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Uygula" })).toBeNull();
+    expect(screen.queryByTestId("delivery-note-variants")).toBeNull();
+  });
+
+  it("D4-D1: kurşun dışı çeşitler özellik başına bilgi satırı (Uygula yalnız kurşun); variants yoksa satır yok", async () => {
+    respond({ suggested: { valueId: "v50", valueName: "50 gr" }, rollCount: 2, coveredRollCount: 2, entries: [{ valueId: "v50", valueName: "50 gr", processText: "X", rollCount: 2 }], variants: [
+      { propertyId: "pB", propertyName: "Brode deseni", suggested: { valueId: "d12", valueName: "Desen D12" }, entries: [] },
+      { propertyId: "pE", propertyName: "Etek tipi", suggested: null, entries: [{ valueId: "e1", valueName: "Düz", processText: "A", rollCount: 1 }, { valueId: "e2", valueName: "Dalgalı", processText: "B", rollCount: 1 }] },
+    ] });
+    renderWithProviders(<ProcessSummaryCard scope={{ workOrderId: "wo1" }} editableTarget />);
+    const list = await screen.findByTestId("delivery-note-variants");
+    expect(list).toHaveTextContent("Brode deseni:Desen D12");
+    expect(list).toHaveTextContent("Etek tipi:öneri yok (Düz · 1 top, Dalgalı · 1 top)");
+    expect(screen.getAllByRole("button", { name: "Uygula" })).toHaveLength(1);
   });
 
   it("izinsiz kullanıcı: öneri görünür, Uygula yok, process-summary dışında istek yok", async () => {
