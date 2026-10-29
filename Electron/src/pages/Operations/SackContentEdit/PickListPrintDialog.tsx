@@ -18,6 +18,7 @@ import { isAmbiguousFailure } from "@/lib/attemptToken";
 import { sackHubService } from "./service";
 import { shipmentStatusLabels, type PickListPrint, type PickListRow } from "./types";
 import { factoryLocaleString } from "@/lib/factory-time";
+import { visibleContents } from "./pickListContents";
 
 const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 const locLabel = (r: PickListRow) => (r.shipment ? shipmentStatusLabels[r.shipment.status] : "Depoda");
@@ -166,7 +167,7 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
                       {r.shipment ? ` · ${r.shipment.shipmentNo}` : ""}
                     </td>
                     <td className="py-1.5 pr-2">
-                      {r.contents.map((c, i) => (
+                      {visibleContents(r.contents, withDeliveryNote).map((c, i) => (
                         <div key={i}>
                           {c.itemName}
                           {c.colorName ? ` · ${c.colorName}` : ""}

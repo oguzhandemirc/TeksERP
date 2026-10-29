@@ -20,7 +20,7 @@ export function needsVarianceReason(error: unknown): boolean {
 /** E3 kapıları için diyalog dili — backend mesajı satır no listesi taşır, bu cümle operatöre ne yapacağını söyler. */
 export const APPROVE_ERROR_TEXT: Record<string, string> = {
   DELIVERY_NOTE_REVIEW_PENDING: "Gözden geçirilmemiş satır var ve fabrika ayarı bu durumda onayı engelliyor. Sarı işaretli hücreleri gözden geçirip yeniden onaylayın.",
-  GELEN_BELGE_DEFAULT_ITEM_UNUSABLE: "Ürünü seçilmemiş satırların gireceği varsayılan ürün artık kullanılamıyor; hiç top girilmedi. Satırlara ürün seçin ya da Genel Ayarlar'daki varsayılan ürünü değiştirin.",
+  GELEN_BELGE_DEFAULT_ITEM_UNUSABLE: "Ürünü seçilmemiş satırların gireceği varsayılan ürün artık kullanılamıyor; hiç top girilmedi. Satırlara ürün seçin ya da varsayılan ürünü düzeltin.",
 };
 
 /** Diyalogdaki hata metni: E3 kodunda Türkçe yönlendirme + backend'in satır listesi; diğerlerinde verilen yedek. */

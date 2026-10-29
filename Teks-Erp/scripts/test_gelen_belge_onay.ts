@@ -23,7 +23,7 @@
 //       GELEN_BELGE_DEFAULT_ITEM_INVALID), ham ayar ucu 400 SETTING_KEY_RESERVED; ayar dolu → ürünsüz 3 satır 3 top
 //       (itemId = ayar ürünü, satır itemId boş + itemText yerinde, alias öğrenilmez) + ürünü seçili satır kendi ürünüyle;
 //       onay anında ayar ürünü pasifleşmişse 409 GELEN_BELGE_DEFAULT_ITEM_UNUSABLE ve SIFIR top
-//   §15 inceleme kapısı: needsReview satır — WARN (varsayılan) 200 + uyarı; BLOCK 409 DELIVERY_NOTE_REVIEW_PENDING, SIFIR top
+//   §15 inceleme kapısı: needsReview satır — ayar kaydı yokken ve WARN'da 200 + uyarı; BLOCK 409 DELIVERY_NOTE_REVIEW_PENDING, SIFIR top
 // Emsal: scripts/test_gelen_belge_taslak.ts (app.listen(0) + ensureTestAdmin + ayar()).
 // =============================================================================
 import type { AddressInfo } from "net";
@@ -348,6 +348,11 @@ async function main(): Promise<void> {
 
     // §15 inceleme kapısı
     console.log("§15 gözden geçirilmemiş hücre kapısı");
+    // Kabuldeki "UYAR varsayılan" iddiası: ayar SATIRI HİÇ YOKKEN needsReview satır geçer (kip açıkça yazılmadan).
+    await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL } });
+    const n15d = await mkNote([L(112, { needsReview: true })]);
+    const d15 = await onay(n15d.id);
+    check("⭐ ayar kaydı YOK + needsReview satır → 200 + uyarı (varsayılan WARN), 1 top", d15.status === 200 && (await rollsOf(n15d.id)).length === 1 && (d15.warnings ?? []).some((w) => w.includes("Gözden geçirilmemiş")), `${d15.status} ${d15.code ?? ""} ${JSON.stringify(d15.warnings)}`);
     const n15 = await mkNote([L(110), L(111, { needsReview: true })]);
     const blk = await call("PUT", "/api/gelen-belge/ayarlar", tk, { unreviewedApproval: "BLOCK" });
     check("kip BLOCK yazıldı", blk.status === 200 && (blk.data as { unreviewedApproval?: string })?.unreviewedApproval === "BLOCK", `${blk.status} ${blk.code ?? ""}`);
