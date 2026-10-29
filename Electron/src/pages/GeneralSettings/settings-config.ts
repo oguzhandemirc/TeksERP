@@ -243,6 +243,8 @@ export interface NumberFlagDef {
   step?: number;
   /** Bu ayarın işini değiştirdiği kişi(ler). En az bir kayıt. */
   audience: SettingAudience[];
+  /** Kart grubu (`FlagDef.group` ile aynı); yoksa "Genel". */
+  group?: string;
 }
 
 /** `systemSettingService.SETTING_KEYS` değerlerinin birleşimi (ham `system_settings.key`). */
@@ -1532,6 +1534,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     numberFlags: [
       {
         key: "tamburPlanGateWidthToleranceCm",
+        group: "Tambur",
         title: "Tambur en eşiği (cm)",
         desc: "Topun eni ile iş emrinin eni arasındaki fark bu değeri AŞARSA Tambur onay sorar; eşit fark sorulmaz. Varsayılan 10 cm. 0 girilirse en küçük farkta bile sorulur. En karşılaştırması kapalıysa bu değer kullanılmaz.",
         min: 0,

@@ -35,6 +35,7 @@ describe("Tambur en kapısı ayar satırları", () => {
     expect(row?.max).toBe(100);
     expect(row?.fallback).toBe(10);
     expect(row?.unit).toBe("cm");
+    expect(row?.group).toBe("Tambur");
   });
 
   it("iki satır da üretim modülüne ait", () => {
