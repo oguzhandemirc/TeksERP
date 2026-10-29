@@ -1,7 +1,7 @@
 // =============================================================================
 // ONARIM — Sahipsiz doğmuş EMANET çocuk / makbuzdan doğan toplar (H10 · H10b geri doldurma)
 // Çalıştır: npx tsx scripts/fix_emanet_owner_backfill.ts                       (TEŞHİS — hiçbir şey yazmaz)
-//           npx tsx scripts/fix_emanet_owner_backfill.ts --apply --onay=<N> [--sec=<barkod|id>,...]
+//           npx tsx scripts/fix_emanet_owner_backfill.ts --apply --onay=<N> [--sevkli-dahil] [--sec=<barkod|id>,...]
 // =============================================================================
 // Hata: H10 (#265) öncesi Tambur/depo bölmesi ve fason doğrudan sevk çocuğu, H10/H10b öncesi fason
 // makbuzundan DOĞAN top (`parentReceiptId`) kaynağın `ownerCustomerId`sini kalıtmıyordu. Sahipsiz emanet
@@ -17,9 +17,14 @@
 // YAZIM — tek tx; sahip başına `updateMany WHERE id IN (listelenen) AND ownerCustomerId IS NULL`, sayı
 // eşleşmezse tx geri alınır (veri değişti). Defter satırı yazılmaz (sahiplik ayrı defter tutmaz, G3);
 // iz audit'e (`event: EMANET_OWNER_BACKFILL`), tx DIŞINDA.
+// SEVK EDİLMİŞ ADAY (para kararı, kullanıcıya sorulur): sahip yazılan top hizmet faturası kümesine
+// (`listShipmentServiceRollIds`) GERİYE DÖNÜK girer. Bu yüzden canlı ya da iade edilmiş sevki olan aday
+// varsayılan YAZILMAZ: sevk müşterisi ≠ önerilen sahip → SEVK-UYUŞMAZ (hiç yazılmaz, elle karar);
+// sevk müşterisi = sahip → SEVKLİ (yalnız `--sevkli-dahil` ile). CANCELLED top listelenmez, yazılmaz.
 // KİMDE KOŞULUR: `emanet.enabled` açık ve H10'dan önce emanet topu bölünmüş / fasona gidip dönmüş
 // kurulum. Emanet kapalı kurulumda sahipli top yoktur → teşhis boş döner.
 // =============================================================================
+import { RollStatus } from "@prisma/client";
 import { AppError } from "../src/utils/app-error";
 import prisma, { pool } from "../src/lib/prisma";
 import { AuditService } from "../src/services/audit.service";
@@ -37,6 +42,8 @@ export interface OwnerProposal {
   ownerCustomerId: string;
   /** Atanın id'si (CHILD) ya da makbuz id'si (BORN). */
   fromId: string;
+  /** Topun canlı + iade edilmiş (iptalsiz) sevklerinin müşterileri; boş = hiç sevk edilmemiş. */
+  shippedToCustomerIds: string[];
 }
 export interface OwnerConflict {
   receiptId: string;
@@ -45,8 +52,15 @@ export interface OwnerConflict {
   owners: Array<string | null>;
 }
 export interface Diagnosis {
+  /** Varsayılan yazılabilir: sevksiz, iptal edilmemiş. */
   proposals: OwnerProposal[];
+  /** Sevk müşterisi = önerilen sahip; yalnız `--sevkli-dahil` ile yazılır (para kararı). */
+  shipped: OwnerProposal[];
+  /** Sevk müşterisi ≠ önerilen sahip; hiç yazılmaz. */
+  shippedMismatch: OwnerProposal[];
   conflicts: OwnerConflict[];
+  /** Önerilip CANCELLED olduğu için atlanan top sayısı. */
+  cancelledSkipped: number;
 }
 
 function chunks<T>(xs: T[]): T[][] {
@@ -58,7 +72,7 @@ function chunks<T>(xs: T[]): T[][] {
 /** Yalnız okur. Önerilen sahip + belirsiz (karışık kaynaklı) makbuzlar. */
 export async function diagnose(): Promise<Diagnosis> {
   const anyOwned = await prisma.roll.count({ where: { ownerCustomerId: { not: null } } });
-  if (anyOwned === 0) return { proposals: [], conflicts: [] };
+  if (anyOwned === 0) return { proposals: [], shipped: [], shippedMismatch: [], conflicts: [], cancelledSkipped: 0 };
 
   const proposed = new Map<string, OwnerProposal>();
   const ownerOf = (id: string, dbOwner: string | null): string | null => dbOwner ?? proposed.get(id)?.ownerCustomerId ?? null;
@@ -84,7 +98,7 @@ export async function diagnose(): Promise<Diagnosis> {
           if (proposed.has(r.id)) continue;
           const owner = ownerOf(r.parentRollId!, r.parent?.ownerCustomerId ?? null);
           if (!owner) continue;
-          proposed.set(r.id, { rollId: r.id, barcode: r.barcode, kind: "CHILD", ownerCustomerId: owner, fromId: r.parentRollId! });
+          proposed.set(r.id, { rollId: r.id, barcode: r.barcode, kind: "CHILD", ownerCustomerId: owner, fromId: r.parentRollId!, shippedToCustomerIds: [] });
           next.push(r.id);
           added.push(r.id);
         }
@@ -133,7 +147,7 @@ export async function diagnose(): Promise<Diagnosis> {
         }
         if (!owner) continue;
         for (const b of born) {
-          proposed.set(b.id, { rollId: b.id, barcode: b.barcode, kind: "BORN", ownerCustomerId: owner, fromId: rc.id });
+          proposed.set(b.id, { rollId: b.id, barcode: b.barcode, kind: "BORN", ownerCustomerId: owner, fromId: rc.id, shippedToCustomerIds: [] });
           added.push(b.id);
         }
       }
@@ -145,8 +159,29 @@ export async function diagnose(): Promise<Diagnosis> {
   // Çocuklar → doğanlar → doğanların çocukları …; yeni öneri çıkmayınca biter (çatışma listesi son turunki).
   await walkChildren(null);
   for (let born = await walkReceipts(); born.length > 0; born = await walkReceipts()) await walkChildren(born);
-  const proposals = [...proposed.values()].sort((a, b) => a.rollId.localeCompare(b.rollId));
-  return { proposals, conflicts: [...conflicts.values()] };
+  // Zincir bütün önerilerle yürüdü; sınıflama sonda (iptal / sevk edilmiş çocuğun çocuğu yine aday kalır).
+  const all = [...proposed.values()].sort((a, b) => a.rollId.localeCompare(b.rollId));
+  const cancelled = new Set<string>();
+  const shippedTo = new Map<string, Set<string>>();
+  const addShip = (rollId: string, customerId: string) => shippedTo.set(rollId, (shippedTo.get(rollId) ?? new Set<string>()).add(customerId));
+  for (const ids of chunks(all.map((p) => p.rollId))) {
+    const rolls = await prisma.roll.findMany({ where: { id: { in: ids } }, select: { id: true, status: true, shipment: { select: { customerId: true } } } });
+    for (const r of rolls) {
+      if (r.status === RollStatus.CANCELLED) cancelled.add(r.id);
+      if (r.shipment) addShip(r.id, r.shipment.customerId);
+    }
+    const returns = await prisma.rollReturn.findMany({ where: { rollId: { in: ids }, cancelledAt: null, fromShipmentId: { not: null } }, select: { rollId: true, fromShipment: { select: { customerId: true } } } });
+    for (const rr of returns) if (rr.fromShipment) addShip(rr.rollId, rr.fromShipment.customerId);
+  }
+  const out: Diagnosis = { proposals: [], shipped: [], shippedMismatch: [], conflicts: [...conflicts.values()], cancelledSkipped: cancelled.size };
+  for (const p of all) {
+    if (cancelled.has(p.rollId)) continue;
+    p.shippedToCustomerIds = [...(shippedTo.get(p.rollId) ?? [])].sort();
+    if (p.shippedToCustomerIds.length === 0) out.proposals.push(p);
+    else if (p.shippedToCustomerIds.every((c) => c === p.ownerCustomerId)) out.shipped.push(p);
+    else out.shippedMismatch.push(p);
+  }
+  return out;
 }
 
 /** Tek tx; yalnız listelenen id'ler ve hâlâ sahipsiz olanlar. Sayı tutmazsa hiçbir şey yazılmaz. */
@@ -181,12 +216,21 @@ async function main(): Promise<void> {
   const apply = process.argv.includes("--apply");
   // Yazan yol hangi veritabanını vurduğunu çıktıda söyler (test_script_guards §11).
   console.log(`🎯 Hedef veritabanı: ${hedefDbAdi()}`);
-  const { proposals, conflicts } = await diagnose();
-  const custIds = [...new Set(proposals.map((p) => p.ownerCustomerId))];
+  const d = await diagnose();
+  const { conflicts } = d;
+  const includeShipped = process.argv.includes("--sevkli-dahil");
+  const proposals = includeShipped ? [...d.proposals, ...d.shipped].sort((a, b) => a.rollId.localeCompare(b.rollId)) : d.proposals;
+  const custIds = [...new Set([...d.proposals, ...d.shipped, ...d.shippedMismatch].flatMap((p) => [p.ownerCustomerId, ...p.shippedToCustomerIds]))];
   const names = new Map((await prisma.customer.findMany({ where: { id: { in: custIds } }, select: { id: true, name: true } })).map((c) => [c.id, c.name]));
-  console.log(`=== Emanet sahiplik geri doldurma — ${proposals.length} aday, ${conflicts.length} belirsiz makbuz ===`);
-  for (const p of proposals) console.log(`  ${p.kind === "CHILD" ? "ÇOCUK" : "DOĞAN"}  ${p.barcode ?? "(barkodsuz)"}  ${p.rollId}  → ${names.get(p.ownerCustomerId) ?? p.ownerCustomerId}  (kaynak ${p.fromId})`);
-  for (const c of conflicts) console.log(`  BELİRSİZ makbuz ${c.receiptNo}: kaynak sahipleri karışık — ${c.rollIds.length} doğan top YAZILMAZ, elle karar`);
+  const nm = (id: string) => names.get(id) ?? id;
+  const line = (tag: string, p: OwnerProposal) => console.log(`  ${tag}  ${p.kind === "CHILD" ? "ÇOCUK" : "DOĞAN"}  ${p.barcode ?? "(barkodsuz)"}  ${p.rollId}  → ${nm(p.ownerCustomerId)}  (kaynak ${p.fromId})${p.shippedToCustomerIds.length ? `  sevk: ${p.shippedToCustomerIds.map(nm).join(", ")}` : ""}`);
+  console.log(`=== Emanet sahiplik geri doldurma — ${d.proposals.length} aday, ${d.shipped.length} sevkli, ${d.shippedMismatch.length} sevk-uyuşmaz, ${conflicts.length} belirsiz makbuz, ${d.cancelledSkipped} iptal atlandı ===`);
+  for (const p of d.proposals) line("ADAY        ", p);
+  for (const p of d.shipped) line(includeShipped ? "SEVKLİ+     " : "SEVKLİ      ", p);
+  for (const p of d.shippedMismatch) line("SEVK-UYUŞMAZ", p);
+  if (d.shipped.length && !includeShipped) console.log(`  → ${d.shipped.length} SEVKLİ top varsayılan YAZILMAZ: sahip yazılırsa geçmiş sevk hizmet faturası kümesine girer (para kararı); istenirse --sevkli-dahil`);
+  if (d.shippedMismatch.length) console.log(`  → SEVK-UYUŞMAZ toplar başka müşteriye sevk edilmiş — YAZILMAZ, elle karar`);
+  for (const c of conflicts) console.log(`  BELİRSİZ makbuz ${c.receiptNo}: kaynak sahipleri karışık — ${c.rollIds.length} doğan top YAZILMAZ, elle karar (açıksa makbuzu iptal edip kaynakları ayrı kabul edin)`);
   const sec = arg("sec")?.split(",").map((s) => s.trim()).filter(Boolean);
   let target = proposals;
   if (sec) {
@@ -195,7 +239,7 @@ async function main(): Promise<void> {
     target = proposals.filter((p) => sec.includes(p.rollId) || (p.barcode !== null && sec.includes(p.barcode)));
   }
   if (!apply) {
-    if (target.length) console.log(`\n  → Yazmak için: npx tsx ${SOURCE} --apply --onay=${target.length}${sec ? ` --sec=${sec.join(",")}` : ""}`);
+    if (target.length) console.log(`\n  → Yazmak için: npx tsx ${SOURCE} --apply --onay=${target.length}${includeShipped ? " --sevkli-dahil" : ""}${sec ? ` --sec=${sec.join(",")}` : ""}`);
     return;
   }
   if (Number(arg("onay")) !== target.length) {

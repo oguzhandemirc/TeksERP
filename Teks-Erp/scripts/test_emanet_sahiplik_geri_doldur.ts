@@ -7,7 +7,10 @@
 //      sahipsiz atanın çocuğu aday DEĞİL; zaten sahipli çocuk aday değil
 //   §4 Uygulama: yalnız listelenen id'ler yazılır + audit `EMANET_OWNER_BACKFILL`; ikinci teşhis boş;
 //      sayı tutmazsa (veri değişti) tx geri alınır
+//   §5 Sevk edilmiş aday: sevk müşterisi = sahip → SEVKLİ (varsayılan yazılmaz); ≠ sahip → SEVK-UYUŞMAZ;
+//      CANCELLED aday listelenmez (inceleme bulgusu, para kararı kullanıcıda)
 // Negatif sonda (2026-10-29): betikte `{ strict: true }` kaldırılınca §3 "belirsiz makbuz" kırmızı (geri alındı).
+// Negatif sonda (2026-10-29, §5): sevk sınıflaması kaldırılınca (hepsi aday) §3/§4/§5 5 kırmızı (geri alındı).
 // =============================================================================
 import { ItemType } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -22,7 +25,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 }
 const STAMP = Date.now().toString(36);
 const P = `TEST-EBF-${STAMP}`;
-const fx = { itemId: null as string | null, customerIds: [] as string[], rollIds: [] as string[], receiptIds: [] as string[], stationId: null as string | null, woId: null as string | null };
+const fx = { shipmentIds: [] as string[], itemId: null as string | null, customerIds: [] as string[], rollIds: [] as string[], receiptIds: [] as string[], stationId: null as string | null, woId: null as string | null };
 
 async function main(): Promise<void> {
   console.log("=== Emanet sahiplik geri doldurma betiği (H10b) ===");
@@ -35,7 +38,7 @@ async function main(): Promise<void> {
   };
   const A = await mkCust("A");
   const B = await mkCust("B");
-  const mkRoll = async (owner: string | null, extra: { parentRollId?: string; parentReceiptId?: string } = {}) => {
+  const mkRoll = async (owner: string | null, extra: { parentRollId?: string; parentReceiptId?: string; shipmentId?: string; status?: "CANCELLED" } = {}) => {
     const r = await prisma.roll.create({ data: { itemId: item.id, initialQty: 10, currentQty: 10, ownerCustomerId: owner, ...extra }, select: { id: true } });
     fx.rollIds.push(r.id);
     return r.id;
@@ -77,6 +80,19 @@ async function main(): Promise<void> {
   const R4 = await mkReceipt("R4", [C1]);
   const B4 = await mkRoll(null, { parentReceiptId: R4 });
 
+  // Sevk edilmiş sahipsiz çocuklar (sahipli atadan).
+  const mkShipment = async (tag: string, customerId: string) => {
+    const sh = await prisma.shipment.create({ data: { shipmentNo: `${P}-SH${tag}`, customerId }, select: { id: true } });
+    fx.shipmentIds.push(sh.id);
+    return sh.id;
+  };
+  const SH_A = await mkShipment("A", A);
+  const SH_B = await mkShipment("B", B);
+  const P3 = await mkRoll(A);
+  const CS_A = await mkRoll(null, { parentRollId: P3, shipmentId: SH_A });
+  const CS_B = await mkRoll(null, { parentRollId: P3, shipmentId: SH_B });
+  const CX = await mkRoll(null, { parentRollId: P3, status: "CANCELLED" });
+
   const ours = new Set(fx.rollIds);
   const d1 = await diagnose();
   const mine = d1.proposals.filter((p) => ours.has(p.rollId));
@@ -98,6 +114,13 @@ async function main(): Promise<void> {
   check("sahipsiz atanın çocuğu ve zaten sahipli çocuk aday değil", !of(C3) && !of(C2));
   check("aday kümesi tam olarak beklenen 5 top", mine.length === 5, mine.map((p) => p.rollId).join(","));
 
+  console.log("\n── §5 sevk edilmiş / iptal aday ──");
+  const shippedMine = d1.shipped.filter((p) => ours.has(p.rollId));
+  const mismatchMine = d1.shippedMismatch.filter((p) => ours.has(p.rollId));
+  check("aynı müşteriye sevkli çocuk SEVKLİ (varsayılan aday değil)", shippedMine.length === 1 && shippedMine[0]!.rollId === CS_A && shippedMine[0]!.shippedToCustomerIds.join() === A && !of(CS_A), JSON.stringify(shippedMine));
+  check("başka müşteriye sevkli çocuk SEVK-UYUŞMAZ (yazılmaz)", mismatchMine.length === 1 && mismatchMine[0]!.rollId === CS_B && mismatchMine[0]!.shippedToCustomerIds.join() === B && !of(CS_B), JSON.stringify(mismatchMine));
+  check("CANCELLED çocuk hiçbir listede yok", ![...d1.proposals, ...d1.shipped, ...d1.shippedMismatch].some((p) => p.rollId === CX) && d1.cancelledSkipped >= 1);
+
   console.log("\n── §4 uygulama ──");
   // Veri değişti: listelenen topa araya sahip yazıldıysa hiçbir şey yazılmaz.
   await prisma.roll.update({ where: { id: G1 }, data: { ownerCustomerId: B } });
@@ -115,12 +138,15 @@ async function main(): Promise<void> {
   const d2 = await diagnose();
   check("ikinci teşhis: bu bekçinin toplarında aday yok", d2.proposals.every((p) => !ours.has(p.rollId)), JSON.stringify(d2.proposals.filter((p) => ours.has(p.rollId))));
   check("belirsiz makbuz ikinci teşhiste de listelenir", d2.conflicts.some((c) => c.receiptId === R2));
+  const sevkAfter = await prisma.roll.findMany({ where: { id: { in: [CS_A, CS_B, CX] } }, select: { ownerCustomerId: true } });
+  check("sevkli / sevk-uyuşmaz / iptal toplara dokunulmadı", sevkAfter.length === 3 && sevkAfter.every((r) => r.ownerCustomerId === null));
 }
 
 async function cleanup(): Promise<void> {
   const del = async (label: string, fn: () => Promise<unknown>) => { try { await fn(); } catch (e) { fail++; console.log(`❌ temizlik ${label}: ${String(e).slice(0, 200)}`); } };
   await del("systemLog", () => prisma.systemLog.deleteMany({ where: { recordId: { in: fx.rollIds } } }));
-  await del("roll bağları", () => prisma.roll.updateMany({ where: { id: { in: fx.rollIds } }, data: { parentRollId: null, parentReceiptId: null } }));
+  await del("roll bağları", () => prisma.roll.updateMany({ where: { id: { in: fx.rollIds } }, data: { parentRollId: null, parentReceiptId: null, shipmentId: null } }));
+  await del("shipment", () => prisma.shipment.deleteMany({ where: { id: { in: fx.shipmentIds } } }));
   await del("receiptItem", () => prisma.subcontractorReceiptItem.deleteMany({ where: { receiptId: { in: fx.receiptIds } } }));
   await del("receipt", () => prisma.subcontractorReceipt.deleteMany({ where: { id: { in: fx.receiptIds } } }));
   await del("roll", () => prisma.roll.deleteMany({ where: { id: { in: fx.rollIds } } }));
