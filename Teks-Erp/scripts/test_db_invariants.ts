@@ -884,6 +884,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "roll_meter_acks", name: "roll_meter_acks_revoke_ck" },
   { table: "service_billing_links", name: "service_billing_links_meters_ck" },
   { table: "service_billing_links", name: "service_billing_links_revoke_ck" },
+  // H8b (migration 20261029180000): müşteri hizmet faturası tetiği yalnız fabrika ayarının değerleri. Bekçi `test_hizmet_fatura` §20.
+  { table: "cari_accounts", name: "cari_accounts_service_billing_trigger_ck" },
   { table: "fabric_properties", name: "fabric_properties_variant_not_self_ck" },
   // 2026-08-29 denetimi (K1) — migration 20260829140000_denetim_sema_kisitlari.
   // "Topun kalan metrajı giriş metrajını aşamaz." Depo kesimi `initialQty`ye
