@@ -584,6 +584,8 @@ export interface FeatureFlags {
   kursunMeterVarianceApproval: "NONE" | "OPERATOR_REASON" | "SUPERVISOR_PIN" | "OFFICE";
   /** H1b: çıkış metresi stok kipi — backend `KursunMeterStockMode` aynası (varsayılan RECORD). */
   kursunMeterStockMode: "RECORD" | "APPLY";
+  /** D4-F1: okutmada müşteri barkodu araması — backend aynası (varsayılan false). */
+  scanCustomerCodeLookupEnabled: boolean;
   /** Parti no KISA ve DÖNEN mi (P01…P99, 99'dan sonra P01)? Default TRUE/AÇIK.
    *  Backend ENFORCE eder (`generateBatchNumberTx`). Kapalıyken eski
    *  `P + GGAAYY + günlük sıra` kalıbına düşülür.

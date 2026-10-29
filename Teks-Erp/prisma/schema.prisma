@@ -528,6 +528,9 @@ model User {
   rollMeterReadings             RollMeterReading[]
   rollMeterAcks                 RollMeterAck[]
   rollVariances                 RollVariance[]
+  rollCustomerCodesCreated      RollCustomerCode[]       @relation("RollCustomerCodeCreatedBy")
+  rollCustomerCodesRevoked      RollCustomerCode[]       @relation("RollCustomerCodeRevokedBy")
+  barcodeSeriesCreated          CustomerBarcodeSeries[]  @relation("CustomerBarcodeSeriesCreatedBy")
   reversedRollVariances         RollVariance[]           @relation("RollVarianceReversedBy")
   planDeviationsConfirmed       RollPlanDeviation[]      @relation("RollPlanDeviationConfirmedBy")
   detectedRollErrors            RollError[]              @relation("RollErrorDetectedBy")
@@ -3987,6 +3990,8 @@ model Roll {
   /// Doğum niteliği: KK1 elle giriş seçicisi ya da fason dokuma makbuzunda leventlerden kalıtım; PATCH'ten yazılamaz.
   /// Sevk kapısı: dolu ise yalnız o müşteriye çıkar (`assertOwnerMatchesTx`, 409 OWNER_MISMATCH).
   ownerCustomer        Customer?                   @relation("RollOwner", fields: [ownerCustomerId], references: [id], onDelete: Restrict)
+  /// D4-F1: müşteriye tanımlı barkod eşlemeleri (aktif en çok bir; geçmiş damgalı satırlar).
+  customerCodes        RollCustomerCode[]
   properties           RollProperty[]
   shipment             Shipment?                   @relation(fields: [shipmentId], references: [id])
   sack                 Sack?                       @relation(fields: [sackId], references: [id])
@@ -4242,6 +4247,10 @@ model Customer {
   // MAL-4: teklif / fiyat listesi geri ilişkileri (kolon değil)
   salesQuotes SalesQuote[] @relation("SalesQuoteCustomer")
   priceLists  PriceList[]  @relation("PriceListCustomer")
+
+  // D4-F1: müşteriye tanımlı barkodlar (top eşlemesi + biçim serisi)
+  rollCustomerCodes RollCustomerCode[]
+  barcodeSeries     CustomerBarcodeSeries?
 
   @@unique([nameFold])
   @@index([type])
@@ -5989,6 +5998,82 @@ model RollMeterReading {
   @@index([peripheralId])
   @@index([createdById])
   @@map("roll_meter_readings")
+}
+
+/// D4-F1: müşteri barkodunun kaynağı — (A) önbasılı etiket bağlama · (B) müşteri biçiminde bizim ürettiğimiz kod · (C) irsaliye top no.
+enum CustomerCodeSource {
+  BOUND_LABEL
+  CUSTOMER_SERIES
+  DELIVERY_NOTE
+}
+
+/// D4-F1: topun MÜŞTERİYE TANIMLI barkodu — `Roll.barcode` (iç kod) DEĞİL ve `number_series`e girmez (K11).
+/// Sınıf: DURUM/kimlik eşlemesi, DEFTER DEĞİL. Yine de hard delete yok: değiştirme = eski satıra damga + yeni satır.
+/// Kalıtım yok (K13): Tambur çocuğu / fason dönüşü kodu devralmaz.
+model RollCustomerCode {
+  id         String             @id @default(uuid()) @db.Uuid
+  rollId     String             @db.Uuid
+  /// Bağlandığı andaki top sahibi (`Roll.ownerCustomerId`) — kod müşteri içinde tekildir.
+  customerId String             @db.Uuid
+  code       String             @db.VarChar(64)
+  source     CustomerCodeSource
+  /// CUSTOMER_SERIES kaynağında kodu üreten seri (D4-F2).
+  seriesId   String?            @db.Uuid
+
+  clientToken String  @unique @db.Uuid
+  createdById String? @db.Uuid
+
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  revokeReason String?   @db.VarChar(300)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  roll      Roll                   @relation(fields: [rollId], references: [id])
+  customer  Customer               @relation(fields: [customerId], references: [id])
+  series    CustomerBarcodeSeries? @relation(fields: [seriesId], references: [id])
+  createdBy User?                  @relation("RollCustomerCodeCreatedBy", fields: [createdById], references: [id])
+  revokedBy User?                  @relation("RollCustomerCodeRevokedBy", fields: [revokedById], references: [id])
+
+  // DB'de PARTIAL (`WHERE "revokedAt" IS NULL`): müşteride aktif kod tekil · topta tek aktif kod.
+  // CHECK'ler (kod boş değil · damga üçlüsü) migration SQL'inde.
+  @@unique([customerId, code], map: "roll_customer_codes_customer_code_active_uq")
+  @@unique([rollId], map: "roll_customer_codes_roll_active_uq")
+  @@index([code], map: "roll_customer_codes_code_idx")
+  @@index([rollId, createdAt])
+  @@index([seriesId])
+  @@index([createdById])
+  @@index([revokedById])
+  @@map("roll_customer_codes")
+}
+
+/// D4-F1 (yalnız MODEL; CRUD/önizleme/doğuş D4-F2): müşterinin barkod biçimi. `number_series` DEĞİL —
+/// `NumberSeries.key` fabrika-tek; sayaç `NumberSeriesCounter`dan (scopeKey = `customerId|biçim parmak izi`).
+/// Biçim değişimi `updateMany WHERE {id, formatChangedAt}` ile; yalnız yeni kodu etkiler.
+model CustomerBarcodeSeries {
+  id              String                  @id @default(uuid()) @db.Uuid
+  customerId      String                  @unique @db.Uuid
+  prefix          String                  @db.VarChar(16)
+  dateSegment     NumberSeriesDateSegment @default(NONE)
+  digits          Int                     @default(4)
+  separator       String                  @default("") @db.VarChar(2)
+  startValue      Int?
+  maxValue        Int?
+  formatChangedAt DateTime                @default(now()) @db.Timestamptz
+  isActive        Boolean                 @default(true)
+  clientToken     String                  @unique @db.Uuid
+  createdById     String?                 @db.Uuid
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  customer  Customer           @relation(fields: [customerId], references: [id])
+  createdBy User?              @relation("CustomerBarcodeSeriesCreatedBy", fields: [createdById], references: [id])
+  codes     RollCustomerCode[]
+
+  @@index([createdById])
+  @@map("customer_barcode_series")
 }
 
 /// Sapma onayı (H2 yazar) — okuma damgalanınca AYNI tx'te damgalanır. DEFTER.
