@@ -24,9 +24,13 @@ export interface FinanceFormFields {
   financeDefaultCurrency: string;
   financeTaxOffice: string;
   financeRiskLimit: string;
+  /** H8b hizmet faturası tetiği: "" = alan bu kartta yok (fason hesabı / eski backend), "FACTORY" = fabrika ayarı. */
+  financeServiceBillingTrigger?: string;
+  /** Hesaptan tohumlanan tetik; gövdeye yalnız değer bundan farklıysa girer (eski backend strict şemasına dokunmaz). */
+  financeServiceBillingTriggerSeed?: string;
 }
 
-export const financeFormDefaults: FinanceFormFields = { financePaymentTermDays: "", financeDefaultCurrency: "", financeTaxOffice: "", financeRiskLimit: "" };
+export const financeFormDefaults: FinanceFormFields = { financePaymentTermDays: "", financeDefaultCurrency: "", financeTaxOffice: "", financeRiskLimit: "", financeServiceBillingTrigger: "", financeServiceBillingTriggerSeed: "" };
 
 /** DTO → form alanları (düzenleme açılışı). */
 export function financeFieldsFromView(v: CustomerFinanceView | null | undefined): FinanceFormFields {
@@ -58,6 +62,17 @@ export interface FinanceSubBody {
   defaultCurrency?: Currency;
   taxOffice?: string | null;
   riskLimit?: string | null;
+  /** null = fabrika ayarı; doğrulama Finans → Cari diyaloğuyla aynı sunucu yolunda. */
+  serviceBillingTrigger?: string | null;
+}
+
+/**
+ * Başarılı kayıttan sonra formun yeni "temiz" hâli: tohum = gönderilen tetik. Yoksa açık diyalogda eski değere dönüş
+ * "tohumdan farksız" sayılır ve gövdeye girmez (sunucu yeni değerde kalır, ekran eskiyi gösterir).
+ */
+export function financeValuesAfterSave<T extends FinanceFormFields>(v: T): T {
+  const trigger = v.financeServiceBillingTrigger ?? "";
+  return trigger === "" ? v : { ...v, financeServiceBillingTriggerSeed: trigger };
 }
 
 /**
@@ -68,12 +83,15 @@ export function financeSubBody(v: FinanceFormFields, opts: { canWrite: boolean; 
   if (!opts.canWrite || !opts.enabled) return {};
   const term = v.financePaymentTermDays.trim();
   const risk = v.financeRiskLimit.trim().replace(",", ".");
+  const trigger = v.financeServiceBillingTrigger ?? "";
+  const triggerChanged = trigger !== "" && trigger !== (v.financeServiceBillingTriggerSeed ?? "");
   return {
     finance: {
       paymentTermDays: term === "" ? null : Number(term),
       ...(v.financeDefaultCurrency ? { defaultCurrency: v.financeDefaultCurrency as Currency } : {}),
       taxOffice: v.financeTaxOffice.trim() || null,
       riskLimit: risk === "" ? null : String(Number(risk)),
+      ...(triggerChanged ? { serviceBillingTrigger: trigger === "FACTORY" ? null : trigger } : {}),
     },
   };
 }

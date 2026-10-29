@@ -20,6 +20,8 @@ export interface CustomerFinanceInput {
   defaultCurrency?: Currency;
   taxOffice?: string | null;
   riskLimit?: Prisma.Decimal.Value | null;
+  /** H8b: null = fabrika ayarı; doğrulama + audit `cariService.update`te (Finans → Cari ile tek yol). */
+  serviceBillingTrigger?: string | null;
 }
 
 export interface CustomerFinanceView {
@@ -29,6 +31,7 @@ export interface CustomerFinanceView {
   taxOffice: string | null;
   riskLimit: string | null;
   isActive: boolean;
+  serviceBillingTrigger: string | null;
 }
 
 /** Kart yaratma TX'i içinde: finans açıksa hesap doğar, kapalıysa hiçbir şey yazılmaz (null). */
@@ -51,5 +54,5 @@ export async function readCustomerFinance(customerId: string): Promise<CustomerF
   const { readCariTermsByCustomer } = await import("./finance.helper");
   const acc = await readCariTermsByCustomer(customerId);
   if (!acc) return null;
-  return { cariAccountId: acc.id, paymentTermDays: acc.paymentTermDays, defaultCurrency: acc.defaultCurrency, taxOffice: acc.taxOffice, riskLimit: acc.riskLimit == null ? null : acc.riskLimit.toString(), isActive: acc.isActive };
+  return { cariAccountId: acc.id, paymentTermDays: acc.paymentTermDays, defaultCurrency: acc.defaultCurrency, taxOffice: acc.taxOffice, riskLimit: acc.riskLimit == null ? null : acc.riskLimit.toString(), isActive: acc.isActive, serviceBillingTrigger: acc.serviceBillingTrigger };
 }

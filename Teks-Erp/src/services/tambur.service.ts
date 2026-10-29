@@ -16,6 +16,11 @@
 
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, inheritRollPropertiesTx } from "./helpers/property-revoke.helper";
+import {
+  copyStationCapabilitiesToRoll,
+  loadStationPropertyCaps,
+  type StationPropertyCap,
+} from "./helpers/station-capability-transfer.helper";
 import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { postStockMove, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
@@ -148,6 +153,29 @@ interface CutInput {
 }
 
 /**
+ * Tambur istasyon yeteneği (T1): kesimle doğan çocuğa istasyonun AUTO özellikleri,
+ * KALITIMDAN SONRA yazılır (kalıtılmış aynı bayrak no-op; değer seçimi bu yolda yok).
+ * Tek boğaz `copyStationCapabilitiesToRoll`; yetenek yoksa sorgusuz döner.
+ */
+async function applyTamburCapabilitiesTx(
+  tx: Prisma.TransactionClient,
+  args: { caps: StationPropertyCap[]; stationId: string | null | undefined; rollId: string; userId?: string | null },
+): Promise<void> {
+  const { caps, stationId, rollId, userId } = args;
+  if (caps.length === 0 || !stationId) return;
+  const child = await tx.roll.findUniqueOrThrow({ where: { id: rollId }, select: { createdAt: true } });
+  const before = await tx.rollProperty.findMany({ where: { rollId, ...ACTIVE_ROLL_PROPERTY }, select: { propertyId: true } });
+  await copyStationCapabilitiesToRoll(tx, { stationId, rollId, caps, userId: userId ?? null });
+  // Geri kurulum donörü (tambur-undo birthPropertiesOf) `createdAt <= çocuk.createdAt` satırını
+  // atadan kalıtılmış sayar; istasyon satırı aynı ms'ye düşerse ataya dirilirdi → +1 ms ayrıştır.
+  const inherited = before.map((r) => r.propertyId);
+  await tx.rollProperty.updateMany({
+    where: { rollId, ...ACTIVE_ROLL_PROPERTY, createdAt: { lte: child.createdAt }, ...(inherited.length > 0 ? { propertyId: { notIn: inherited } } : {}) },
+    data: { createdAt: new Date(child.createdAt.getTime() + 1) },
+  });
+}
+
+/**
  * qualityGrade kodu → RollStatus eşlemesi.
  * Yeni kurguda kalite (qualityGrade) ile durum (status) ayrıdır: tüm yeni
  * üretim rulolar varsayılan olarak WAREHOUSE'a iner; kalite farkı yalnız
@@ -267,6 +295,22 @@ function cutReplay<R>(parentId: string, length: number, respond: (child: Roll, p
   });
 }
 
+/**
+ * Tambur listesi istasyon süzgecinin kapısı (fail-closed): bilinmeyen 404, pasif ya da
+ * TAMBUR olmayan istasyon 400 — sessizce boş liste dönmek "bekleyen top yok" yalanıdır.
+ */
+async function assertTamburStation(stationId: string): Promise<void> {
+  const station = await prisma.station.findUnique({
+    where: { id: stationId },
+    select: { kind: true, isActive: true },
+  });
+  if (!station) throw AppError.notFound("İstasyon bulunamadı.", { code: "STATION_NOT_FOUND" });
+  if (!station.isActive) throw AppError.badRequest("İstasyon pasif.", { code: "STATION_INACTIVE" });
+  if (station.kind !== StationKind.TAMBUR) {
+    throw AppError.badRequest("İstasyon bir Tambur istasyonu değil.", { code: "STATION_NOT_TAMBUR" });
+  }
+}
+
 export class TamburService {
   /** Kurşun Dağıtım (bypass) okuma yolu — yalnız `getTamburContext` kullanır. */
   private readonly bypassService = new KursunBypassService();
@@ -283,11 +327,15 @@ export class TamburService {
    * length model ile child Roll'ları yaratır). UI hatalı/hatasız ayrımı
    * için `errors.length` üzerinden filtreleme yapabilir.
    */
-  async getPendingRolls(): Promise<ApiResponse<Roll[]>> {
+  async getPendingRolls(stationId: string | null = null): Promise<ApiResponse<Roll[]>> {
+    // İster 2.8: çok tamburlu fabrikada tablet yalnız KENDİ istasyonundaki sıradaki
+    // adımı görür; parametresiz çağrı bugünkü listeyle bayt-aynı kalır.
+    if (stationId) await assertTamburStation(stationId);
     const rolls = await prisma.roll.findMany({
       where: {
         status: RollStatus.IN_PRODUCTION,
         currentStep: {
+          ...(stationId ? { stationId } : {}),
           station: { kind: StationKind.TAMBUR },
         },
       },
@@ -751,6 +799,9 @@ export class TamburService {
       );
     }
 
+    // İstasyon yeteneği (T1) — tx DIŞINDA bir kez (salt okuma, yapılandırma).
+    const tamburCaps = await loadStationPropertyCaps(prisma, roll.currentStep.stationId);
+
     const totalQty = Number(roll.currentQty);
     const wo = roll.currentStep.workOrder;
     const plannedFoldType = wo?.foldType ?? null;
@@ -1203,6 +1254,9 @@ export class TamburService {
         if (seg.inheritProperties && parentProperties.length > 0) {
           // Doğum-anı damgalı miras (geri kurulum donörü bunu sayar).
           await inheritRollPropertiesTx(tx, { childId: splitRoll.id, rows: parentProperties });
+        }
+        if (seg.inheritProperties) {
+          await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: roll.currentStep!.stationId, rollId: splitRoll.id, userId });
         }
 
         // Kurşun/KK2 yaşam döngüsü kalıtımı: parent'taki op'ları yeni rollId
@@ -1965,7 +2019,7 @@ export class TamburService {
    * Tambur adımlarında açık top bekleyen aktif refakat kartları.
    * Mobil "kamera simülasyonu" modal'ı için.
    */
-  async listOpenCards(): Promise<
+  async listOpenCards(stationId: string | null = null): Promise<
     ApiResponse<
       Array<{
         cardId: string;
@@ -1988,8 +2042,11 @@ export class TamburService {
       }>
     >
   > {
+    // İster 2.8: istasyon verilirse yalnız o tamburun adımları (getPendingRolls ile aynı kapı).
+    if (stationId) await assertTamburStation(stationId);
     const steps = await prisma.workOrderStep.findMany({
       where: {
+        ...(stationId ? { stationId } : {}),
         station: { kind: StationKind.TAMBUR },
         status: { not: "COMPLETED" },
         currentRolls: { some: {} },
@@ -2238,6 +2295,12 @@ export class TamburService {
       propertyId: p.propertyId,
       valueId: p.valueId ?? null,
     }));
+    // İstasyon yeteneği (T1) — oturum istasyonu YALNIZ Tambur türündeyse (Top Kesme başka
+    // istasyonun oturumundan da yapılabilir; o istasyonun yeteneği kesim çocuğuna yazılmaz).
+    const tamburStationId = sessionStationId ?? null;
+    const tamburCaps = tamburStationId
+      ? await loadStationPropertyCaps(prisma, tamburStationId, { kind: StationKind.TAMBUR })
+      : [];
     // Barkod SUNUCU'da sıralı atanır (atomik sayaç). WAREHOUSE child → "F", raw→STOCK → "H".
     const childBarcode = await generateRollBarcodeTx(prisma, childStatus === RollStatus.WAREHOUSE ? "F" : "H");
     // Etiket niyeti (pre-tx çözüm) — yalnız WAREHOUSE child anlamlı; raw→STOCK
@@ -2326,6 +2389,7 @@ export class TamburService {
     if (propertySnapshot.length > 0) {
       await inheritRollPropertiesTx(tx, { childId: child.id, rows: propertySnapshot });
     }
+    await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: tamburStationId, rollId: child.id, userId });
 
     // KURSUN_APPLIED + QC2_COMPLETED kalıtım — parent topta yapılmış operasyonlar
     // child'a `inheritedFromParentRollId=parent.id` ile kopyalanır. Aksi halde
@@ -2693,6 +2757,12 @@ export class TamburService {
       propertyId: p.propertyId,
       valueId: p.valueId ?? null,
     }));
+    // İstasyon yeteneği (T1) — oturum istasyonu YALNIZ Tambur türündeyse (Top Kesme başka
+    // istasyonun oturumundan da yapılabilir; o istasyonun yeteneği kesim çocuğuna yazılmaz).
+    const tamburStationId = sessionStationId ?? null;
+    const tamburCaps = tamburStationId
+      ? await loadStationPropertyCaps(prisma, tamburStationId, { kind: StationKind.TAMBUR })
+      : [];
 
     // Koşulsuz resolve: wantChild kararı artık tx İÇİNDE taze metrajla veriliyor.
     // childQualityGrade nullable (ham parent + keep → parent.qualityGrade null olabilir).
@@ -2797,6 +2867,7 @@ export class TamburService {
         if (propertySnapshot.length > 0) {
           await inheritRollPropertiesTx(tx, { childId: child.id, rows: propertySnapshot });
         }
+        await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: tamburStationId, rollId: child.id, userId });
         // Kalan child'a da KURSUN/QC2 kalıtımı uygula. Filter YOK — zincirleme
         // inherit (depo topundaki op'lar zaten inherit'li).
         const inheritedOps = await tx.rollOperation.findMany({
@@ -3113,6 +3184,9 @@ export class TamburService {
       propertyId: p.propertyId,
       valueId: p.valueId ?? null,
     }));
+    // İstasyon yeteneği (T1) — tx DIŞINDA bir kez (salt okuma, yapılandırma).
+    const tamburStationId = parent.currentStep.stationId;
+    const tamburCaps = await loadStationPropertyCaps(prisma, tamburStationId);
     // Açık kumaş child her zaman WAREHOUSE → "F" (final). Barkod sunucudan (atomik sayaç).
     const childBarcode = await generateRollBarcodeTx(prisma, "F");
     // Etiket niyeti (pre-tx çözüm) — açık kumaş child her zaman WAREHOUSE.
@@ -3216,6 +3290,7 @@ export class TamburService {
     if (propertySnapshot.length > 0) {
       await inheritRollPropertiesTx(tx, { childId: child.id, rows: propertySnapshot });
     }
+    await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: tamburStationId, rollId: child.id, userId });
 
     // KURSUN_APPLIED + QC2_COMPLETED kalıtım — parent açık kumaşta yapılan
     // işlemler child top'a `inheritedFromParentRollId=parent.id` ile kopyalanır.
@@ -3519,6 +3594,9 @@ export class TamburService {
       propertyId: p.propertyId,
       valueId: p.valueId ?? null,
     }));
+    // İstasyon yeteneği (T1) — tx DIŞINDA bir kez (salt okuma, yapılandırma).
+    const tamburStationId = parent.currentStep.stationId;
+    const tamburCaps = await loadStationPropertyCaps(prisma, tamburStationId);
 
     // Planlanan foldType WO'dan — operatör override etmemişse bu kullanılır.
     // Override + planlanan ikisini de metadata'ya yaz ki sapma izlenebilsin.
@@ -3631,6 +3709,7 @@ export class TamburService {
         if (propertySnapshot.length > 0) {
           await inheritRollPropertiesTx(tx, { childId: child.id, rows: propertySnapshot });
         }
+        await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: tamburStationId, rollId: child.id, userId });
         remainingChildId = child.id;
         // STOK DEFTERİ — kalan parça da depoda doğar: `cutOpenFabric` çocuğuyla AYNI
         // giriş (2026-09-14'e kadar satırsızdı; tipli `rollData` yüzünden K

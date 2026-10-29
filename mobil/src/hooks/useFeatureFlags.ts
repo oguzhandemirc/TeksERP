@@ -170,6 +170,11 @@ export function useTamburShortCutA1(): { enabled: boolean; thresholdM: number | 
   };
 }
 
+/** Tambur listesi istasyon süzgeci (ister 2.8) — default false = tüm tambur işleri. */
+export function useTamburListByStationEnabled(): boolean {
+  return useFeatureFlags().data?.tamburListByStationEnabled ?? false;
+}
+
 /**
  * FASON KABULÜ — çekme uyarısı ayarı (bayrak + tolerans birlikte).
  *

@@ -7,7 +7,8 @@ import { ColorPickerModal } from "@/components/forms/color-picker/ColorPickerMod
 import { SuggestionChips } from "./SuggestionChips";
 import { LINE_STATUS_LABEL } from "./noteStatus";
 import { parseTrNumber } from "./review-queue";
-import type { DeliveryNoteLine, LinePatch, NoteMatchSuggestions } from "./types";
+import { defaultItemHint } from "./approveFlow";
+import type { DeliveryNoteLine, EffectiveDefaultItem, LinePatch, NoteMatchSuggestions } from "./types";
 
 interface Props {
   line: DeliveryNoteLine;
@@ -17,8 +18,8 @@ interface Props {
   fixable: boolean;
   selected: boolean;
   ownerCustomerId: string | null;
-  /** Ürünsüz satırın onayda gireceği varsayılan ürün (E3 ayarı); null = ayar boş/kullanılamaz. */
-  defaultItemName?: string | null;
+  /** Sahibin etkin varsayılanı (E4: müşteri > fabrika); undefined = okunamadı → ipucu yok. */
+  defaultItem?: EffectiveDefaultItem | null;
   onSelect: () => void;
   onPatch: (p: LinePatch) => void;
   onDelete: () => void;
@@ -49,6 +50,7 @@ function NumCell({ value, onCommit, disabled, label }: { value: string | null; o
 export function LineRow(p: Props) {
   const { line, editable } = p;
   const canEdit = editable || p.fixable;
+  const hint = defaultItemHint(p.defaultItem);
   return (
     <tr className={`border-t align-top ${p.selected ? "bg-amber-50 dark:bg-amber-950/30" : ""} ${line.needsReview ? "border-l-4 border-l-amber-500" : ""}`} onClick={p.onSelect} data-testid="line-row">
       <td className="p-2 text-xs tabular-nums">
@@ -71,8 +73,8 @@ export function LineRow(p: Props) {
           <PackageSearch className="mr-1 h-3.5 w-3.5 shrink-0" />
           {line.item?.name ?? "Kumaş seç"}
         </Button>
-        {!line.itemId && !line.rollId && line.status !== "SKIPPED" && p.defaultItemName && (
-          <div className="mt-0.5 text-[10px] text-sky-700 dark:text-sky-400" data-testid="default-item-hint">Varsayılan ürünle girecek: {p.defaultItemName}</div>
+        {!line.itemId && !line.rollId && line.status !== "SKIPPED" && hint && (
+          <div className={`mt-0.5 text-[10px] ${hint.tone === "block" ? "text-destructive" : "text-sky-700 dark:text-sky-400"}`} data-testid="default-item-hint" data-source={hint.source} data-tone={hint.tone}>{hint.text}</div>
         )}
         {line.itemText && <div className="mt-0.5 text-[10px] text-muted-foreground">Belgede: {line.itemText}</div>}
         {editable && <SuggestionChips suggestion={p.suggestion?.item} currentId={line.itemId} onPick={(c) => p.onPatch({ itemId: c.id })} />}

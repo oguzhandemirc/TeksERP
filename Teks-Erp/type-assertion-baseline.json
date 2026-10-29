@@ -26,7 +26,6 @@
     "scripts/test_merge_field_picks.ts::Prisma": 1,
     "scripts/test_middleware_order.ts::app": 1,
     "scripts/test_observability_contract.ts::app": 1,
-    "scripts/test_route_auth_coverage.ts::app": 1,
     "scripts/test_search_field_config.ts::Prisma": 1,
     "scripts/test_semi_finished_entry.ts::svc": 1,
     "scripts/test_settings_password.ts::h": 1,

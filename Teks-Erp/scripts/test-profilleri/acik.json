@@ -45,6 +45,7 @@
     "tamburUndoFullSameDayOnly": true,
     "tamburShortCutA1Enabled": true,
     "tamburShortCutA1ThresholdM": 5,
+    "tamburListByStationEnabled": true,
     "qualityGradeRequiredEnabled": true,
     "batchShortNumberEnabled": true,
     "batchLastNumberHintEnabled": true,
