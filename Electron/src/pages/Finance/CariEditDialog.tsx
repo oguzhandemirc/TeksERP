@@ -31,6 +31,11 @@
 // 1000× sapma yerine görünür bir hata mesajı tercih edildi. Kabul edilen tek
 // yazım: rakamlar + en fazla bir ondalık ayraç (`,` ya da `.`) + en fazla 2 hane
 // — `Decimal(14,2)` kolonunun aynısı.
+//
+// ── HİZMET FATURASI TETİĞİ (H8b) ─────────────────────────────────────────────
+// Müşteri carisinde: fabrika ayarı (null) · her sevkte · dönem sonunda. Alan yalnız
+// backend onu okuyorsa (satırda anahtar var) ve cari müşteriyse gövdeye girer —
+// eski backend'in `.strict()` şeması fazla anahtarı 400 ile düşürürdü.
 // =============================================================================
 
 import { useState } from "react";
@@ -51,6 +56,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cariRoleLabel, updateCari, type CariRow, type CariUpdateInput, type Currency } from "./service";
+import { CariServiceBillingTriggerField, type ServiceBillingTriggerChoice } from "./CariServiceBillingTriggerField";
 
 export const CURRENCIES: Currency[] = ["TRY", "USD", "EUR", "GBP", "RUB"];
 
@@ -67,6 +73,8 @@ export interface CariEditForm {
   /** Serbest not — "" kaydedilirse `null` gider (notu temizler). */
   notes: string;
   isActive: boolean;
+  /** H8b: `null` = alan bu caride yok (fason hesabı ya da alanı göndermeyen eski backend) → gövdeye girmez. */
+  serviceBillingTrigger: ServiceBillingTriggerChoice | null;
 }
 
 export interface CariEditErrors {
@@ -123,6 +131,7 @@ export function formFromCari(c: CariRow): CariEditForm {
     riskLimit: c.riskLimit == null ? "" : String(c.riskLimit),
     notes: c.notes ?? "",
     isActive: c.isActive,
+    serviceBillingTrigger: c.kind === "CUSTOMER" && c.serviceBillingTrigger !== undefined ? (c.serviceBillingTrigger ?? "FACTORY") : null,
   };
 }
 
@@ -158,6 +167,9 @@ export function buildCariUpdatePayload(
       riskLimit: risk as string | null,
       notes: notes === "" ? null : notes,
       isActive: form.isActive,
+      ...(form.serviceBillingTrigger !== null
+        ? { serviceBillingTrigger: form.serviceBillingTrigger === "FACTORY" ? null : form.serviceBillingTrigger }
+        : {}),
     },
   };
 }
@@ -338,6 +350,8 @@ export function CariEditDialog({ cari, open, onOpenChange }: Props) {
               onChange={(e) => patch({ notes: e.target.value })}
             />
           </div>
+
+          <CariServiceBillingTriggerField value={form.serviceBillingTrigger} onChange={(v) => patch({ serviceBillingTrigger: v })} />
 
           <div className="col-span-2 flex items-start gap-2 rounded-md border p-3">
             <Checkbox
