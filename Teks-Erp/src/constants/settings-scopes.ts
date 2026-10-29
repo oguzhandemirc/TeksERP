@@ -47,6 +47,10 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "shippingAllowOverAllocation",
       "shippingAllocWidthToleranceEnabled",
       "shippingAllocWidthToleranceCm",
+      "shippingReadyRule",
+      "shippingReadyTolerancePct",
+      // shippingReadyNotifyUnits / shippingReadyScanMinutes: panel satırı D4-J2 ile (bildirim) gelir; o güne
+      // kadar yalnız ayar-yöneticisi yazar (kapsam tablosu satırsız anahtarı taşıyamaz — settings-scope-mirror).
       "shippingDocProductColorSplit",
       "packingGroupsEnabled",
       "packageNoStartsAtZero",

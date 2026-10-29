@@ -27,6 +27,7 @@ export const PROFIL_DISI_ANAHTARLAR: Readonly<Record<string, string>> = {
   companyLegalIdentity: "nesne değerli; firma KİMLİĞİ (VKN/unvan), profil kimliği değil (E-IRS P1)",
   eIrsaliyeConfig: "nesne değerli; yapılandırma kapısı VERİDİR, bayrak değil (E-IRS P1/K-C) — açmak künye + seri ister",
   reportsClosedKeys: "liste değerli; ticari kapsam kararı, O13b'de ayrıca ele alınır",
+  shippingReadyNotifyUnits: "liste değerli; sevke hazır bildirim birimleri (D4-J2 KOSUL'u okur), boş = kapalı",
 };
 
 const V = (neden: string): AcikGirdisi => ({ varsayilan: neden });
@@ -151,6 +152,9 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   shippingSackSeqShowTotal: A(true),
   shippingAllocWidthToleranceEnabled: A(true),
   shippingAllocWidthToleranceCm: A(2),
+  shippingReadyRule: A("METER_THRESHOLD"),
+  shippingReadyTolerancePct: A(2),
+  shippingReadyScanMinutes: A(5),
   shippingAllowOverAllocation: A(true),
   customerBranchesEnabled: A(true),
   packingGroupsEnabled: A(true),
