@@ -917,6 +917,7 @@ begin
   ProfilSayfasi.Add('perde');
   ProfilSayfasi.Add('perde-dokuma');
   ProfilSayfasi.Add('dokuma');
+  ProfilSayfasi.Add('hizmet');
   ProfilSayfasi.Add('tam');
   ProfilSayfasi.SelectedValueIndex := 0;
   SonucSayfasi := CreateOutputMsgMemoPage(wpInfoAfter, 'Kurulum sonucu', 'TeksERP sunucusu', '', '');
@@ -938,7 +939,8 @@ begin
     3: Result := 'perde';
     4: Result := 'perde-dokuma';
     5: Result := 'dokuma';
-    6: Result := 'tam';
+    6: Result := 'hizmet';
+    7: Result := 'tam';
   else
     Result := '';
   end;

@@ -135,6 +135,8 @@ router.get(
  *                       maxLength: 32
  *                       nullable: true
  *                       description: SEÇİM tipli özellikte katalog değer kodu (zorunlu); BAYRAK'ta gönderilmez.
+ *               meterOut:
+ *                 $ref: '#/components/schemas/KursunMeterReadingBody'
  *     responses:
  *       201: { description: İşlem kaydedildi }
  *       400: { description: Top bu adımda değil }
@@ -146,6 +148,57 @@ router.post(
   verifyToken,
   requireAnyPermission("quality:write", "mobile:kk2-kursun"),
   controller.completeQc2
+);
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     KursunMeterReadingBody:
+ *       type: object
+ *       nullable: true
+ *       description: H1 sayaç okuması — `kursun.meterCapture` OFF iken complete-qc2'de yok sayılır.
+ *       required: [meters, source, clientToken]
+ *       properties:
+ *         meters: { type: number, minimum: 0 }
+ *         source: { type: string, enum: [MACHINE, OPERATOR, SUPERVISOR, SIMULATED] }
+ *         peripheralId: { type: string, format: uuid, nullable: true }
+ *         rawCounter: { type: number, nullable: true }
+ *         cardSampleId: { type: string, format: uuid, nullable: true }
+ *         clientToken: { type: string, format: uuid }
+ * /api/kursun-qc/meter-readings:
+ *   post:
+ *     tags: [KursunQc]
+ *     summary: Kurşun metre okuması kaydet ya da düzelt (H1)
+ *     description: |
+ *       Giriş (`IN`, yalnız IN_OUT kipinde) ya da çıkış (`OUT`) metresi. Aynı top × adım × evrede
+ *       aktif okuma varsa damgalanır, yenisi yazılır (defter: satır değişmez). Dağıtılmış (bypass)
+ *       adımda 409; kip kapalıyken 400 `METER_CAPTURE_DISABLED`; SIMULATED ayar kapalıyken 400.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             allOf:
+ *               - $ref: '#/components/schemas/KursunMeterReadingBody'
+ *               - type: object
+ *                 required: [rollId, stepId, phase]
+ *                 properties:
+ *                   rollId: { type: string, format: uuid }
+ *                   stepId: { type: string, format: uuid }
+ *                   phase: { type: string, enum: [IN, OUT] }
+ *     responses:
+ *       201: { description: Okuma kaydedildi (replay'de aynı okuma) }
+ *       400: { description: Kip kapalı / simüle kapalı / top bu adımda değil }
+ *       401: { description: Yetkisiz }
+ *       409: { description: Dağıtılmış adım · token çakışması · geri alınmış okumanın token'ı }
+ */
+router.post(
+  "/meter-readings",
+  verifyToken,
+  requireAnyPermission("quality:write", "mobile:kk2-kursun"),
+  controller.recordMeterReading
 );
 
 // K6 (2026-06-12): POST /undo-qc2 kaldırıldı — UI butonu 2026-06-07'de bilinçli

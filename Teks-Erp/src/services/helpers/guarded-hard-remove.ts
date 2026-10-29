@@ -254,6 +254,12 @@ const MACHINE_DELETE_GUARDS: DependencyGuard[] = [
     message: (n) => `Bu makinede ${n} bağlı levent var — önce leventleri sökün.`,
   },
   {
+    key: "rollMeterReadingCount",
+    // H1: kurşun metre defteri — damgalı (düzeltilmiş) okumalar DAHİL sayılır (ölçüm yapıldı).
+    count: (id) => prisma.rollMeterReading.count({ where: { machineId: id } }),
+    message: (n) => `Bu makineye damgalı ${n} metre okuması var — kalıcı silinemez. Pasife alın.`,
+  },
+  {
     key: "rollOperationCount",
     // ⚠️ `revokedAt` SÜZÜLMEZ — yukarıdaki istasyon guard'ıyla aynı gerekçe.
     count: (id) => prisma.rollOperation.count({ where: { machineId: id } }),

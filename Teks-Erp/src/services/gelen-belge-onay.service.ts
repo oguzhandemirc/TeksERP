@@ -59,7 +59,8 @@ export interface ApproveResult {
   warnings: string[];
 }
 
-type DeclaredBlock = { blockNo?: number; count?: number | null; kg?: number | null; m?: number | null };
+// OCR beyanı sayıları METİN yazar (motor DeclaredTotals: string); elle girilen sayı olabilir — karşılaştırma Number() ile.
+type DeclaredBlock = { blockNo?: number; count?: number | string | null; kg?: number | string | null; m?: number | string | null };
 type LineRow = { id: string; lineNo: number; blockNo: number; status: DeliveryNoteLineStatus; meters: Prisma.Decimal; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; itemId: string | null; colorId: string | null; itemText: string | null; colorText: string | null; rollId: string | null };
 
 const PRE_SELECT = {
@@ -95,7 +96,7 @@ export function totalMismatches(note: { totalsDeclared: unknown }, lines: Readon
     const bl = live.filter((l) => l.blockNo === (b.blockNo ?? 1));
     const m = bl.reduce((s, l) => s + Number(l.meters), 0);
     const kg = bl.reduce((s, l) => s + Number(l.weightKg ?? 0), 0);
-    if (b.count != null && b.count !== bl.length) out.push(`Blok ${b.blockNo ?? 1}: beyan ${b.count} top, satır ${bl.length}.`);
+    if (b.count != null && b.count !== "" && Number(b.count) !== bl.length) out.push(`Blok ${b.blockNo ?? 1}: beyan ${b.count} top, satır ${bl.length}.`);
     if (b.m != null && !near(m, Number(b.m))) out.push(`Blok ${b.blockNo ?? 1}: beyan ${b.m} m, satır toplamı ${m.toFixed(3)} m.`);
     if (b.kg != null && !near(kg, Number(b.kg))) out.push(`Blok ${b.blockNo ?? 1}: beyan ${b.kg} kg, satır toplamı ${kg.toFixed(3)} kg.`);
   }

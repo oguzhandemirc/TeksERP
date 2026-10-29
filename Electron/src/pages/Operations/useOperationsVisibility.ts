@@ -58,6 +58,8 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   const kaliteGuvenceEnabled = flagsQuery.data?.data?.kaliteGuvenceEnabled ?? false;
   // Maliyet ETKİN değer (production && maliyet) — `useMaliyetEnabled` ile aynı yüklem; belirsizken FALSE.
   const maliyetEnabled = productionEnabled && (flagsQuery.data?.data?.maliyetEnabled ?? false);
+  // Gelen belge ETKİN değer (emanet && gelenBelge) — `useGelenBelgeEnabled` ile aynı yüklem; belirsizken FALSE.
+  const incomingDocumentEnabled = (flagsQuery.data?.data?.emanetEnabled ?? false) && (flagsQuery.data?.data?.gelenBelgeEnabled ?? false);
   // Rapor listesi: alan yoksa/yüklenmediyse de `null` — "boş liste = hepsi açık" yalnız
   // backend'in gerçekten boş dizi söylediği durumdur (fail-closed, K5).
   const reportsClosedKeys: readonly string[] | null = flagsQuery.data?.data?.reportsClosedKeys ?? null;
@@ -86,6 +88,7 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
     tezgahEnabled,
     kaliteGuvenceEnabled,
     maliyetEnabled,
+    gelenBelgeEnabled: incomingDocumentEnabled,
     reportsClosedKeys,
     isReportOpen,
     reportsV2Enabled,

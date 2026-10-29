@@ -15,7 +15,7 @@ const leventSonucu = vi.fn();
 const leventBitisTahmini = vi.fn();
 vi.mock("./service", async (orig) => ({ ...(await orig<typeof import("./service")>()), dokumaReportsApi: { leventSonucu: (...a: unknown[]) => leventSonucu(...a), leventBitisTahmini: (...a: unknown[]) => leventBitisTahmini(...a) } }));
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
-  useOperationsVisibilityContext: (): OperationsVisibilityContext => ({ shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: true, dokumaEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: false, maliyetEnabled: false, financeEnabled: false, productionEnabled: true, ticaretEnabled: false, iplikEnabled: false, reportsClosedKeys: [], isReportOpen: () => true, flagsReady: true, flagsFailed: false }),
+  useOperationsVisibilityContext: (): OperationsVisibilityContext => ({ shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: true, dokumaEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: false, maliyetEnabled: false, gelenBelgeEnabled: false, financeEnabled: false, productionEnabled: true, ticaretEnabled: false, iplikEnabled: false, reportsClosedKeys: [], isReportOpen: () => true, flagsReady: true, flagsFailed: false }),
 }));
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ isAdmin: true, hasPermission: () => true }) }));
 vi.mock("@/hooks/useFavorites", () => ({ useFavorites: () => ({ favorites: [], isFavorite: () => false, toggleFavorite: vi.fn(), reorderFavorites: vi.fn() }) }));

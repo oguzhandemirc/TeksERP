@@ -140,6 +140,8 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   kk1HistoryAllEntriesEnabled: "productionEnabled",
   qualityGradeRequiredEnabled: "productionEnabled",
   kursunBypassEnabled: "productionEnabled",
+  kursunMeterCapture: "productionEnabled",
+  kursunSimulatedMeterEnabled: "productionEnabled",
   tamburOverQuantityEnabled: "productionEnabled",
   tamburUndoFullSameDayOnly: "productionEnabled",
   tamburShortCutA1Enabled: "productionEnabled",

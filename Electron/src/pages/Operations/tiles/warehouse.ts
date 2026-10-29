@@ -1,9 +1,10 @@
 // Operasyon › Depo & Paketleme karoları (sıra = hub sırası).
-import { ArrowLeftRight, Boxes, ClipboardCheck, Package, PackageOpen, PackagePlus, ShoppingBasket, Tags } from "lucide-react";
+import { ArrowLeftRight, Boxes, ClipboardCheck, Package, PackageOpen, PackagePlus, ScanText, ShoppingBasket, Tags } from "lucide-react";
 import { isYarnStockVisible } from "../Yarn/yarn-regime";
 import { isPurchaseOrdersVisible } from "../PurchaseOrders/po-regime";
 import { isStockCountVisible, STOCK_COUNTS_PATH } from "../StockCounts/stockCount-regime";
 import { isGoodsReceiptVisible } from "../GoodsReceipts/goodsReceipt-regime";
+import { isIncomingDocumentVisible } from "../GelenBelgeler/gelenBelge-regime";
 import { flagOffHint } from "@/lib/flag-setting-path";
 import type { OperationsTile } from "../tile-config";
 
@@ -51,6 +52,18 @@ export const warehouseTiles: OperationsTile[] = [
     permission: "goods-receipt:read",
     visibleWhen: isGoodsReceiptVisible,
     offHint: flagOffHint("ticaretEnabled"),
+  },
+  {
+    // Gülkesim OCR D5: müşteri irsaliyesi (fotoğraf/Excel/elle) → gözden geçirme → onayda emanet topu.
+    // Modül KAPALIYKEN karo GİZLİ (offHint yok): fason işlemci olmayan fabrikada ekranın varlığı gürültüdür.
+    key: "gelen-belgeler",
+    title: "Gelen Belgeler",
+    description: "Müşteri irsaliyesi — fotoğraf okuma, gözden geçirme, onayda emanet topu",
+    icon: ScanText,
+    to: "/operations/gelen-belgeler",
+    group: "warehouse",
+    permission: "gelen-belge:read",
+    visibleWhen: isIncomingDocumentVisible,
   },
   // ── Paket D (2026-08-14) — ticaret paketi (İplik Stoğu yukarıda, aynı kural) ─────
   // `visibleWhen` ile REJİM bayrağına bağlı: fabrikada `finance.enabled` KAPALI ve

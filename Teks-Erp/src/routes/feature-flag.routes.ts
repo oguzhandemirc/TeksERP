@@ -508,6 +508,10 @@ export const updateSchema = z.strictObject({
   // ENFORCE edilir ama yalnız YENİ dağıtım oluşturmayı kapılar; dağıtılmış iş emirleri
   // bayrak kapansa da bypass rejiminde biter.
   kursunBypassEnabled: z.boolean().optional(),
+  /** H1: kurşun metre ölçümü (enum; `KURSUN_METER_CAPTURE_MODES` ile birebir). */
+  kursunMeterCapture: z.enum(["OFF", "OUT", "IN_OUT"]).optional(),
+  /** H1: SIMULATED metre okuması (varsayılan kapalı). */
+  kursunSimulatedMeterEnabled: z.boolean().optional(),
   // batch.shortNumberEnabled — parti no kısa ve DÖNEN (P01…P99) mi (default TRUE/AÇIK).
   // Backend ENFORCE eder (generateBatchNumberTx). Kapalıyken eski P+GGAAYY+sıra kalıbı.
   // ⚠️ Bu satır ACİL KAPATMA anahtarıdır — kısa numara sahada sorun çıkarırsa tek

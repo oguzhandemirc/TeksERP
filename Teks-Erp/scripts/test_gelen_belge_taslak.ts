@@ -228,6 +228,14 @@ async function main(): Promise<void> {
     ]);
     const ln = await prisma.customerDeliveryNoteLine.findUnique({ where: { id: l1?.id ?? "" }, select: { colorText: true, widthCm: true, meters: true, senderRollNo: true } });
     check("⭐ eşzamanlı iki satır PATCH'i (farklı alan) → ikisi de korunur, metraj/rulo no dokunulmadı", lA.status === 200 && lB.status === 200 && ln?.colorText === "Lacivert" && Number(ln?.widthCm) === 150 && Number(ln?.meters) === 101 && ln?.senderRollNo === `${TAG}-R1`, JSON.stringify(ln));
+    // Gözden geçirme işareti yalnız metre/kg düzeltmesiyle düşer; kumaş/renk/en eşlemesi el yazısı hücresini görmüş sayılmaz.
+    await prisma.customerDeliveryNoteLine.update({ where: { id: l1?.id ?? "" }, data: { needsReview: true } });
+    const rv1 = await call("PATCH", `/api/gelen-belge/irsaliyeler/${noteId}/satirlar/${l1?.id}`, tk, { colorText: "Siyah", widthCm: 155 });
+    const rvA = await prisma.customerDeliveryNoteLine.findUnique({ where: { id: l1?.id ?? "" }, select: { needsReview: true } });
+    check("⭐ needsReview satırında renk/en PATCH'i → işaret KORUNUR", rv1.status === 200 && rvA?.needsReview === true, JSON.stringify(rvA));
+    const rv2 = await call("PATCH", `/api/gelen-belge/irsaliyeler/${noteId}/satirlar/${l1?.id}`, tk, { meters: 101 });
+    const rvB = await prisma.customerDeliveryNoteLine.findUnique({ where: { id: l1?.id ?? "" }, select: { needsReview: true } });
+    check("needsReview satırında metre PATCH'i → işaret düşer", rv2.status === 200 && rvB?.needsReview === false, JSON.stringify(rvB));
     const token = crypto.randomUUID();
     const twin = { clientToken: token, sourceKind: "MANUAL", ownerCustomerId: owner, senderDocNo: `${TAG}-TOKEN` };
     const [cA, cB] = await Promise.all([call("POST", "/api/gelen-belge/irsaliyeler", tk, twin), call("POST", "/api/gelen-belge/irsaliyeler", tk, twin)]);

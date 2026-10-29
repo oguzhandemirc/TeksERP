@@ -212,6 +212,9 @@ const KAYNAK_KOLONLARI_BEKLENEN = [
   "doff_events.counterSource",
   "machine_stop_events.reasonSource",
   "machine_stop_events.source",
+  // H1 (2026-10-29): kurşun metre OKUMASININ kökeni — (b) OLAY kolonu; `@default` YOK, SIMULATED burada beyan
+  // edilir. Rapor taşıyıcısı H4 sapma raporunda doğarsa çıktı bekçisi orada yazılır.
+  "roll_meter_readings.source",
   // (a) sınıfı — RAPORUN SATIRINDA yaşayan TAŞIYICI (2026-09-14, 01 Dilim 1): karnenin
   // kaynak kırılımı bu kolondan basılır; `SIMULATED` `OPERATOR`a katılmaz, `INFERRED`
   // boş tezgah beyanıdır. `@default` YOK — her yazım `resolveShiftSource` ile beyan eder.

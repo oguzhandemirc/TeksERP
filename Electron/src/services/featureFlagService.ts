@@ -560,6 +560,10 @@ export interface FeatureFlags {
    *  oluşturmayı kapılar — dağıtılmış iş emirleri bayrak kapansa da bypass ile
    *  bitirilir (rejim atama satırında kalıcıdır). */
   kursunBypassEnabled: boolean;
+  /** H1: kurşun metre ölçümü — backend `KursunMeterCapture` aynası. */
+  kursunMeterCapture: KursunMeterCapture;
+  /** H1: SIMULATED metre okuması (varsayılan kapalı). */
+  kursunSimulatedMeterEnabled: boolean;
   /** Parti no KISA ve DÖNEN mi (P01…P99, 99'dan sonra P01)? Default TRUE/AÇIK.
    *  Backend ENFORCE eder (`generateBatchNumberTx`). Kapalıyken eski
    *  `P + GGAAYY + günlük sıra` kalıbına düşülür.
@@ -764,6 +768,9 @@ export type FeatureFlagsView = FeatureFlags & {
 };
 
 export type TezgahAlarmNoShiftMode = "WARN" | "ALWAYS" | "REQUIRE_SHIFT";
+/** H1: kurşun metre ölçümü — backend `KursunMeterCapture` aynası. */
+export type KursunMeterCapture = "OFF" | "OUT" | "IN_OUT";
+
 /** S1: top doğuş yolu — backend `DokumaRollBirth` aynası. */
 export type DokumaRollBirth = "TABLET_DOFF" | "KK1_LABEL_OR_ORDER" | "KK1_LABEL_ONLY";
 export type AlarmShiftNotice = "NO_SHIFT_DEFINED" | "NO_SHIFT_NOW";

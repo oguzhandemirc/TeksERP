@@ -36,6 +36,8 @@
     "targetQuantityEnabled": true,
     "rawWidthEnabled": true,
     "kursunBypassEnabled": true,
+    "kursunMeterCapture": "IN_OUT",
+    "kursunSimulatedMeterEnabled": true,
     "tamburOverQuantityEnabled": true,
     "tamburUndoFullSameDayOnly": true,
     "tamburShortCutA1Enabled": true,

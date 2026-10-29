@@ -70,6 +70,8 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   targetQuantityEnabled: A(true),
   rawWidthEnabled: A(true),
   kursunBypassEnabled: A(true),
+  kursunMeterCapture: A("IN_OUT"), // giriş + çıkış: iki okuma yolunu da işletir
+  kursunSimulatedMeterEnabled: A(true),
   tamburOverQuantityEnabled: A(true),
   tamburUndoFullSameDayOnly: A(true),
   tamburShortCutA1Enabled: A(true),
