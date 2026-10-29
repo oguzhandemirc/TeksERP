@@ -138,3 +138,16 @@ describe("H6b hizmet kalemi seçicisi + gövde", () => {
     expect(screen.queryByTestId("service-hint")).toBeNull();
   });
 });
+
+// H10: ipucu backend kapsamını söyler — "yalnız kurşun faturalanır" artık YANLIŞ olurdu.
+describe("propertyServiceHint (H10 kapsamı)", () => {
+  it("bayrak işlemi için Tambur/etek/brode ve metre sırasını söyler, 'yalnız kurşun' demez", async () => {
+    const { propertyServiceHint } = await import("./serviceMapping");
+    const flag = propertyServiceHint("FLAG");
+    expect(flag).toMatch(/Tambur/);
+    expect(flag).toMatch(/brode/);
+    expect(flag).toMatch(/emanet/);
+    expect(flag).not.toMatch(/yalnız kurşun faturalanır/);
+    expect(propertyServiceHint("CHOICE")).toMatch(/ana bayrağın kalemiyle/);
+  });
+});

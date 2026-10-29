@@ -1169,6 +1169,8 @@ export class TamburService {
             // doğduğu adıma aittir.
             producedInStepId: roll.currentStep!.id,
             parentRollId: roll.id,
+            // EMANET sahipliği doğum niteliğidir: müşterinin kumaşından kesilen parça da onundur (H10).
+            ownerCustomerId: roll.ownerCustomerId ?? null,
             // Parti (batch) kimliğini parent'tan kalıt → bölünen toplar depoya
             // gitse bile hangi partiden geldiği lane'de izlenir.
             batchId: roll.batchId,
@@ -2295,6 +2297,8 @@ export class TamburService {
         qualityGrade: resolvedQualityGrade,
         qualityGradeId: resolvedQualityGradeId,
         parentRollId: parent.id,
+        // EMANET sahipliği doğum niteliğidir: müşterinin kumaşından kesilen parça da onundur (H10).
+        ownerCustomerId: parent.ownerCustomerId ?? null,
         // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
         batchId: parent.batchId,
         // DEPO parent'tan MİRAS ALINIR (giriş istasyonunun TERSİNE): kesmek malı
@@ -2773,6 +2777,8 @@ export class TamburService {
             qualityGrade: childQualityGrade,
             qualityGradeId: childQualityGradeId,
             parentRollId: parent.id,
+            // EMANET sahipliği doğum niteliğidir: müşterinin kumaşından kesilen parça da onundur (H10).
+            ownerCustomerId: parent.ownerCustomerId ?? null,
             // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
             batchId: parent.batchId,
             // DEPO parent'tan MİRAS ALINIR — kesmek malı taşımaz (bkz. kesim çocuğu).
@@ -3180,6 +3186,8 @@ export class TamburService {
         qualityGradeId: resolvedQualityGradeId,
         producedInStepId: tamburStepId,
         parentRollId: parent.id,
+        // EMANET sahipliği doğum niteliğidir: müşterinin kumaşından kesilen parça da onundur (H10).
+        ownerCustomerId: parent.ownerCustomerId ?? null,
         // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
         batchId: parent.batchId,
         // DEPO parent'tan MİRAS ALINIR — kesmek malı taşımaz (bkz. kesim çocuğu).
@@ -3603,6 +3611,8 @@ export class TamburService {
             qualityGradeId: childQualityGradeId,
             producedInStepId: tamburStepId,
             parentRollId: parent.id,
+            // EMANET sahipliği doğum niteliğidir: müşterinin kumaşından kesilen parça da onundur (H10).
+            ownerCustomerId: parent.ownerCustomerId ?? null,
             // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
             batchId: parent.batchId,
             // DEPO parent'tan MİRAS ALINIR — kesmek malı taşımaz (bkz. kesim çocuğu).
