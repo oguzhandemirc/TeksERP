@@ -58,6 +58,11 @@ export function isProductBalanceVisible(ctx: ProductionVisibilityContext): boole
   return ctx.productionEnabled;
 }
 
+/** Metre Sapmaları karosu / palet girişi çizilsin mi? (H4; backend kurşun uçları üretim modülünde) */
+export function isMeterDeviationsVisible(ctx: ProductionVisibilityContext): boolean {
+  return ctx.productionEnabled;
+}
+
 /** Kurşun Planlama karosu / palet girişi çizilsin mi? */
 export function isKursunPlanningVisible(ctx: ProductionVisibilityContext): boolean {
   return ctx.productionEnabled;

@@ -1496,11 +1496,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         ],
       },
       {
-        // H2: OFFICE seçeneği panelde sapma onay ekranı (H4) gelince eklenir — backend o güne dek 400 verir.
+        // H4: OFFICE seçeneği — çıkış yüzeyi Operasyon › Metre Sapmaları ekranı.
         enumKey: "kursunMeterVarianceApproval",
         title: "Metre farkı eşiği aşınca kim onaylasın",
         summary: "Çıkış metresi girişten eşikten fazla saparsa ne olsun.",
-        desc: "Onaysız (varsayılan): kayıt yapılır, fark işaretli kalır. Operatör sebebi: operatör sebep seçmeden kayıt olmaz. Süpervizör PIN'i: süpervizör tablete PIN girer (yalnız bağlıyken); onaylanmadan adım kapanmaz.",
+        desc: "Onaysız (varsayılan): kayıt yapılır, fark işaretli kalır. Operatör sebebi: operatör sebep seçmeden kayıt olmaz. Süpervizör PIN'i: süpervizör tablete PIN girer (yalnız bağlıyken); onaylanmadan adım kapanmaz. Ofis onayı: sapma Metre Sapmaları ekranında onaylanır; onaylanmadan adım kapanmaz.",
         defaultValue: "NONE",
         display: "radio",
         audience: ["Operatör", "Yönetim"],
@@ -1508,6 +1508,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "NONE", label: "Onaysız, işaretle (bugünkü)", hint: "Fark yalnız işaretlenir; akış durmaz." },
           { value: "OPERATOR_REASON", label: "Operatör sebep seçsin", hint: "Sebep seçilmeden çıkış kaydedilmez. Tablette sebep seçici gerekir — tablet güncellemesi gelmeden açmayın." },
           { value: "SUPERVISOR_PIN", label: "Süpervizör PIN'i", hint: "Onaylanmadan adım kapanmaz; makine durmaz. Tablette PIN penceresi gerekir — tablet güncellemesi gelmeden açmayın." },
+          { value: "OFFICE", label: "Ofis onayı", hint: "Okuma yazılır, makine durmaz; ofis Operasyon › Metre Sapmaları ekranında onaylar. Onaylanmadan adım kapanmaz." },
         ],
       },
     ],

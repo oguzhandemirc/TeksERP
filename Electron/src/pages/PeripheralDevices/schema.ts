@@ -18,6 +18,14 @@ export const peripheralFormSchema = z.object({
   timeoutMs: z.string().trim().optional().default(""),
   role: z.string().trim().max(24).optional().default(""),
   simulate: z.boolean().optional().default(false),
+  // Metre sayacı (H4) — yalnız METER; backend aynı kuralı doğrular.
+  counterMode: z.enum(["", "RESETTING", "CUMULATIVE"]).optional().default(""),
+  resetCommand: z
+    .string()
+    .max(64, "En çok 64 karakter")
+    .regex(/^[\x20-\x7E]*$/, "Yalnız yazdırılabilir ASCII (Türkçe harf ve satır sonu yazılmaz; \\r gibi düz yazın)")
+    .optional()
+    .default(""),
   // "device" (tablete bağlı) YENİ seçimlerde sunulmaz — yalnız eski kayıtların
   // round-trip'i için parse edilir (çalışma oturumu modeli: donanım YERE bağlanır).
   owner: z.enum(["none", "machine", "station", "device"]),
@@ -97,6 +105,9 @@ export function buildPeripheralPayload(v: PeripheralFormValues) {
     timeoutMs: v.timeoutMs.trim() ? Number(v.timeoutMs) : null,
     role: nn(v.role),
     simulate: v.simulate,
+    // Sayaç alanları yalnız METER'de; diğer türde temizlenir (backend dolu değeri 400'ler).
+    counterMode: v.kind === "METER" && v.counterMode ? v.counterMode : null,
+    resetCommand: v.kind === "METER" ? nn(v.resetCommand) : null,
     machineId: v.owner === "machine" ? nn(v.machineId) : null,
     // Yalnız MAKİNESİZ istasyon (backend enforce eder — SHIPPING kantarı gibi).
     stationId: v.owner === "station" ? nn(v.stationId) : null,
@@ -138,6 +149,8 @@ export const peripheralFormDefaults: PeripheralFormValues = {
   timeoutMs: "",
   role: "",
   simulate: false,
+  counterMode: "",
+  resetCommand: "",
   owner: "none",
   machineId: "",
   stationId: "",
