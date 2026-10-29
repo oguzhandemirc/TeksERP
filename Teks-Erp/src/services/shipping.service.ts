@@ -16,6 +16,7 @@
 // ürün-bazlı döküm. Tahsis "hangi top" değil "ne kadar metraj" (SackAllocation defteri).
 // =============================================================================
 
+import { listShipmentServiceBilledDocNos } from "./helpers/service-billing-gate.helper";
 import { ROLL_DISPLAY_ORDER } from "../constants/roll-order";
 import {
   Prisma,
@@ -3845,6 +3846,8 @@ export class ShippingService {
     activeReturnCount: number;
     sameDayOnly: boolean;
     eIrsaliye: ShipmentEIrsaliye | null;
+    /** H7: bu sevkin faturasına bağlı aktif hizmet bağlarının fatura numaraları. */
+    serviceBilledDocNos: string[];
   }): string | null {
     if (input.status === ShipmentStatus.CANCELLED) return "İptal edilmiş sevkiyat geri alınamaz.";
     if (input.status !== ShipmentStatus.DISPATCHED) {
@@ -3854,6 +3857,10 @@ export class ShippingService {
     // faturayı dayanaksız bırakır. Doğru yol iade + iade faturasıdır.
     if (input.invoiceNo) {
       return `Bu sevkiyat faturalanmış (${input.invoiceNo}) — geri alınamaz. Fatura işaretini kaldırın ya da iade akışını kullanın.`;
+    }
+    // H7: toplara yapılan iş bir faturaya (taslak dahil) bağlı — önce o fatura silinir/iptal edilir.
+    if (input.serviceBilledDocNos.length > 0) {
+      return `Bu sevkiyatın hizmet işleri ${input.serviceBilledDocNos.join(", ")} faturasına bağlı — geri alınamaz. Önce faturayı silin ya da iptal edin.`;
     }
     // e-İrsaliye: faturanın ikizi (GİB'deki resmî çıkış belgesi); iadeden ÖNCE, çünkü iade
     // ancak çıkmış maldan doğar — kök engel GİB belgesidir ve çıkış yolu ona göre söylenir.
@@ -3909,6 +3916,7 @@ export class ShippingService {
       else looseRolls.push(row);
     }
 
+    const serviceBilledDocNos = await listShipmentServiceBilledDocNos(prisma, shipmentId);
     const [activeReturnCount, sameDayOnly, confirmationEnabled, sentEIrs, liveEIrs] = await Promise.all([
       prisma.rollReturn.count({ where: { fromShipmentId: shipmentId, cancelledAt: null } }),
       readShipmentUndoSameDayOnly(),
@@ -3927,6 +3935,7 @@ export class ShippingService {
       activeReturnCount,
       sameDayOnly,
       eIrsaliye: sentEIrs,
+      serviceBilledDocNos,
     });
 
     // Topların döneceği raflar — 2. kalite topu WAREHOUSE'a yazmadığımız burada da görünür.
@@ -3948,7 +3957,7 @@ export class ShippingService {
         plateNumber: shipment.plateNumber,
         driverName: shipment.driverName,
         canUndo: blockReason === null,
-        blockReason,
+        blockReason, serviceBilledInvoices: serviceBilledDocNos, // H7: taslak dahil bağlı faturalar
         sackCount: shipment._count.sacks,
         rollCount: shipment._count.rolls,
         swatchCount: shipment._count.swatches,
@@ -4077,6 +4086,8 @@ export class ShippingService {
       });
       // e-İrsaliye kilitten SONRA okunur: gönderim işareti aynı kilitle serileşir.
       const eIrsaliye = await readSentEIrsaliyeForShipmentTx(tx, shipmentId);
+      // H7: hizmet bağı kilitten SONRA, taze (önizleme ile onay arasında taslak doğmuş olabilir).
+      const serviceBilledDocNos = await listShipmentServiceBilledDocNos(tx, shipmentId);
       const block = this.resolveUndoBlockReason({
         status: sh.status,
         invoiceNo: sh.invoiceNo,
@@ -4084,8 +4095,12 @@ export class ShippingService {
         activeReturnCount,
         sameDayOnly,
         eIrsaliye,
+        serviceBilledDocNos,
       });
-      if (block) throw AppError.conflict(block);
+      // Kod yalnız engeli hizmet dalı doğurduysa: bağsız yeniden ölçüm aynı mesajı veriyorsa neden daha önceki daldır.
+      const serviceCaused = block !== null && serviceBilledDocNos.length > 0
+        && block !== this.resolveUndoBlockReason({ status: sh.status, invoiceNo: sh.invoiceNo, dispatchedAt: sh.dispatchedAt, activeReturnCount, sameDayOnly, eIrsaliye, serviceBilledDocNos: [] });
+      if (block) throw AppError.conflict(block, serviceCaused ? { code: "SERVICE_ALREADY_BILLED", docNos: serviceBilledDocNos } : undefined);
 
       // ⚠️ `dispatchedAt`/`dispatchedById` NULL'LANMAZ (2026-09-11, defter
       // doktrini): "sevk edildi" olmuş bir gerçektir, geri alma onu silmez.

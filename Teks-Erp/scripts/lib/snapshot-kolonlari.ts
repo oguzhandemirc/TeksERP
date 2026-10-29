@@ -251,6 +251,17 @@ WHERE r.status = 'TAMBUR_CONSUMED' AND r."preTamburCloseQty" IS NULL AND r."stat
     bekci: [{ dosya: "test_kursun_metre.ts", bolum: "6", ne: "okuma satırı politika kopyasını taşır" }],
   },
   {
+    model: "ServiceBillingLink",
+    alan: "unitPrice",
+    sinif: "DONMUS_ILERI",
+    yazan: [SVC + "helpers/service-billing.helper.ts"],
+    neden:
+      "H7 hizmet fatura bağı kurulurken fiyat çözücüsünün birim fiyatı satıra kopyalanır; fiyat kartı sonradan " +
+      "değişse de kesilmiş faturanın bağı değişmez. Tek yazar `insertServiceLinksTx` (yalnız create); iptal yalnız " +
+      "damgalar (`revokeServiceLinksTx`), fiyatı güncellemez — yeniden faturalama yeni bağ satırıdır",
+    bekci: [{ dosya: "test_hizmet_fatura.ts", bolum: "7", ne: "DRAFT silinip yeniden kurulunca tutar aynı" }],
+  },
+  {
     model: "Shipment",
     alan: "sackSeqPrefix",
     sinif: "DONMUS_ILERI",

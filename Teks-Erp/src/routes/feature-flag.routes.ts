@@ -284,6 +284,12 @@ export const updateSchema = z.strictObject({
   // finance.autoDraftFromShipmentEnabled — sevk onayında otomatik fatura TASLAĞI.
   // Onay her zaman elle; `financeEnabled` kapalıyken kanca no-op.
   financeAutoDraftFromShipmentEnabled: z.boolean().optional(),
+  /** H7: hizmet faturası — ana anahtar + enum alt ayarlar (servis kümeleriyle birebir; PERIOD_END servis tarafında H8'e dek 400). */
+  financeServiceBillingEnabled: z.boolean().optional(),
+  financeServiceBillingMeterBasis: z.enum(["OUT", "IN", "DECLARED"]).optional(),
+  financeServiceBillingMissingMeter: z.enum(["DECLARED_WITH_WARNING", "BLOCK_LINE"]).optional(),
+  financeServiceBillingTrigger: z.enum(["PER_SHIPMENT", "PERIOD_END"]).optional(),
+  financeServiceBillingPriceDate: z.enum(["SERVICE_DAY", "DISPATCH_DAY"]).optional(),
   // finance.autoAllocateOnPaymentEnabled — tahsilat/ödemede FIFO otomatik kapama.
   // Artan tutar avansta kalır; otomatik tahsis elle silinebilir.
   financeAutoAllocateOnPaymentEnabled: z.boolean().optional(),

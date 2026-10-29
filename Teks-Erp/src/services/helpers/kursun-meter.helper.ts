@@ -9,6 +9,7 @@
 // Tx sırası (§3-4, §12-1) çağıranındır: 8036 token kilidi (İLK ifade) → `touchWorkOrderTx`
 // → `assertKursunTabletMayWrite` → burada aktif okuma `FOR UPDATE` → yazım.
 // =============================================================================
+import { assertWorkNotBilledTx } from "./service-billing-gate.helper";
 import { MachineDataSource, MeterApprovalMode, MeterPhase, MeterVarianceBasis, Prisma, type RollMeterAck, type RollMeterReading } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
@@ -162,6 +163,8 @@ export async function writeMeterReadingTx(tx: Tx, args: WriteMeterReadingArgs): 
     WHERE "rollId" = ${args.rollId}::uuid AND "workOrderStepId" = ${args.stepId}::uuid
       AND phase = ${args.phase}::"MeterPhase" AND "revokedAt" IS NULL
     FOR UPDATE`;
+  // H7 §5 kilit sırası: okuma kilidinden SONRA bağ kontrolü — faturalı işin metresi değişmez (409, fatura no ile).
+  await assertWorkNotBilledTx(tx, { rollIds: [args.rollId], workOrderStepId: args.stepId });
   let revokedId: string | null = null;
   if (active.length > 0) {
     revokedId = active[0].id;
@@ -336,6 +339,8 @@ export async function revokeStepMeterReadingsTx(
   args: { rollIds: string[]; stepId: string; userId: string | null; reason: string },
 ): Promise<number> {
   if (args.rollIds.length === 0) return 0;
+  // H7: faturalı işin adımı yeniden açılamaz (okuma damgası faturanın metresini dayanaksız bırakırdı).
+  await assertWorkNotBilledTx(tx, { rollIds: args.rollIds, workOrderStepId: args.stepId });
   const rows = await tx.rollMeterReading.findMany({
     where: { rollId: { in: args.rollIds }, workOrderStepId: args.stepId, revokedAt: null },
     select: { id: true },

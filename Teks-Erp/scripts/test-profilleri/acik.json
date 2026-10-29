@@ -24,6 +24,7 @@
     "financeChequeNoteMovementEnabled": true,
     "financeRiskLimitBlockEnabled": true,
     "financeAutoDraftFromShipmentEnabled": true,
+    "financeServiceBillingEnabled": true,
     "financeAutoAllocateOnPaymentEnabled": true,
     "financeAllowZeroPriceLineEnabled": true,
     "financeFutureDatedDocumentBlockEnabled": true,

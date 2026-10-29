@@ -58,6 +58,8 @@ import { SACK_ABSENT_STATUSES } from "./sack-invariants.helper";
 import { LEDGER_UNIT, unitLabel } from "../../constants/item-unit";
 import { uyari } from "../../lib/logger";
 import { ekranYolu } from "../../constants/panel-ekran-yolu";
+import { collectShipmentServiceBilling, type ServiceBillingLinkInput } from "./service-billing.helper";
+import { loadServiceBillingSettings, resolveServiceBillingEnabled } from "./../system-setting.service";
 
 /**
  * Sevk edilmiş bir sevkiyattan SATIŞ faturası taslağı satırları.
@@ -114,6 +116,10 @@ export interface ShipmentDraftLinesResult {
    * birimi değil. Muhasebeci satırı elle düzeltir; sessiz "kg" basılmaz.
    */
   warnings: string[];
+  /** H7 hizmet faturası açıkken: taslağa bağlanacak işler (kapalıyken alan YOK — yanıt bayt-aynı). */
+  serviceLinks?: ServiceBillingLinkInput[];
+  /** H7: sevk brütü (top · metre) — taslak notunda hizmet satırlarının yanında görünür. */
+  shipmentGross?: { rollCount: number; meters: string };
 }
 
 type DraftRollRow = {
@@ -174,6 +180,27 @@ export async function collectShipmentInvoiceDraftLines(
   customerId: string,
   currency: Currency,
 ): Promise<ShipmentDraftLinesResult> {
+  // H7: hizmet faturası kapalıyken (varsayılan) aşağıdaki ürün yolu bayt-aynı koşar.
+  if (!(await resolveServiceBillingEnabled())) return collectProductDraftLines(shipmentId, customerId, currency, false);
+  const service = await loadServiceBillingSettings();
+  const product = await collectProductDraftLines(shipmentId, customerId, currency, true);
+  const sh = await prisma.shipment.findUnique({ where: { id: shipmentId }, select: { dispatchedAt: true } });
+  const svc = await collectShipmentServiceBilling({ shipmentId, customerId, currency, settings: service, dispatchedAt: sh?.dispatchedAt ?? null });
+  const vatRate = await readFinanceDefaultVatRate();
+  return {
+    ...product,
+    lines: [...product.lines, ...svc.lines.map((l) => ({ ...l, vatRate }))],
+    warnings: [...product.warnings, ...svc.warnings],
+    serviceLinks: svc.links,
+  };
+}
+
+async function collectProductDraftLines(
+  shipmentId: string,
+  customerId: string,
+  currency: Currency,
+  serviceBilling: boolean,
+): Promise<ShipmentDraftLinesResult> {
   // Hayalet toplar DIŞARIDA — resmi belgenin (`collectShipmentDocContent`)
   // kullandığı kümenin AYNISI. `SHIPPED` bu kümede YOK, yani sevk edilmiş
   // toplar sayılır (sack-invariants.helper başlığı).
@@ -191,8 +218,13 @@ export async function collectShipmentInvoiceDraftLines(
       barcode: true,
     },
   });
-  const rolls = [...liveRolls, ...(await collectReturnedRollsGross(shipmentId, new Set(liveRolls.map((r) => r.id))))];
-  if (rolls.length === 0) return { lines: [], orderPriced: 0, orderConflicts: 0, warnings: [] };
+  const grossRolls = [...liveRolls, ...(await collectReturnedRollsGross(shipmentId, new Set(liveRolls.map((r) => r.id))))];
+  // H7: hizmet faturası açıkken emanet top ürün satırı OLMAZ (işçiliği hizmet satırı taşır).
+  const rolls = serviceBilling ? grossRolls.filter((r) => r.ownerCustomerId === null) : grossRolls;
+  const shipmentGross = serviceBilling
+    ? { rollCount: grossRolls.length, meters: grossRolls.reduce((a, r) => a.plus(r.currentQty), D0()).toFixed(2) }
+    : undefined;
+  if (rolls.length === 0) return { lines: [], orderPriced: 0, orderConflicts: 0, warnings: [], ...(shipmentGross ? { shipmentGross } : {}) };
   const warnings = await collectUnmeasuredAllocationWarnings(shipmentId);
   // G3 emanet (E4b): müşterinin kendi malı satılmaz — satır YİNE yazılır (fatura muhasebe kararı), uyarı basılır.
   const emanet = rolls.filter((r) => r.ownerCustomerId !== null);
@@ -300,7 +332,7 @@ export async function collectShipmentInvoiceDraftLines(
       vatRate,
     };
   });
-  return { lines, orderPriced, orderConflicts, warnings };
+  return { lines, orderPriced, orderConflicts, warnings, ...(shipmentGross ? { shipmentGross } : {}) };
 }
 
 /** Bu sevkiyatın tahsis aldığı MT-dışı sipariş satırları → taslak uyarısı (satır başına bir). */
@@ -417,8 +449,10 @@ export async function autoDraftInvoiceAfterDispatch(
     });
     const currency = cari?.defaultCurrency ?? Currency.TRY;
 
-    const { lines, orderConflicts, warnings } = await collectShipmentInvoiceDraftLines(sh.id, sh.customerId, currency);
+    const { lines, orderConflicts, warnings, serviceLinks, shipmentGross } = await collectShipmentInvoiceDraftLines(sh.id, sh.customerId, currency);
     if (lines.length === 0) return null;
+    // H7: taslak notu sevk BRÜTÜNÜ de söyler (hizmet satırları metreyi işin metresinden yazar).
+    const grossNote = shipmentGross ? ` Sevk brütü: ${shipmentGross.rollCount} top, ${shipmentGross.meters} m.` : "";
 
     // Tahakkuk tarihi = malın çıktığı an. `new Date()` yazmak, gece yarısını
     // geçen bir sevkte faturayı ertesi güne atardı.
@@ -436,9 +470,11 @@ export async function autoDraftInvoiceAfterDispatch(
         dueDate: deriveInvoiceDueDate(issueDate, cari?.paymentTermDays),
         // MT-dışı satır uyarısı taslağın notuna yazılır: muhasebeci taslağı
         // açtığında görür; sessiz kalırsa kg satırına metre fiyatı çarpılırdı.
-        notes: `${sh.shipmentNo} sevkiyatından üretildi.${warnings.length > 0 ? ` ⚠ ${warnings.join(" ")}` : ""}`,
+        notes: `${sh.shipmentNo} sevkiyatından üretildi.${grossNote}${warnings.length > 0 ? ` ⚠ ${warnings.join(" ")}` : ""}`,
         shipmentId: sh.id,
         lines,
+        // H7: kapalıyken alan YOK (`undefined`) — createDraft bağ yazmaz, yol bayt-aynı.
+        ...(serviceLinks ? { serviceLinks } : {}),
       },
       userId,
     );

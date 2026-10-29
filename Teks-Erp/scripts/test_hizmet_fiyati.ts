@@ -239,6 +239,8 @@ const SERVICE_ITEM_ID_FILES = new Set([
   "services/helpers/service-item-mapping.helper.ts",
   "services/fabric-property.service.ts",
   "routes/fabric-property.routes.ts",
+  // H7: fatura bağı tek yazarı (çözücünün çıktısını bağa çevirir; ikinci çözücü değil).
+  "services/helpers/service-billing.helper.ts",
 ]);
 function astChecks(): void {
   section("§8 AST: çözücü tek, eşleme okuyucuları beyanlı, FinishingRate okunmaz");
