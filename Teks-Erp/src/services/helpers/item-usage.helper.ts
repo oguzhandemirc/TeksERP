@@ -82,7 +82,7 @@ export interface ItemUsageResult {
   warnings: string[];
 }
 
-const TYPE_NOUN: Record<ItemType, string> = { FABRIC: "kumaşı", YARN: "ipliği", CONSUMABLE: "sarf kalemi" };
+const TYPE_NOUN: Record<ItemType, string> = { FABRIC: "kumaşı", YARN: "ipliği", CONSUMABLE: "sarf kalemi", SERVICE: "hizmet kalemi" };
 
 const PHASE_OUT_REASON: Record<Exclude<ItemUsage, "DOC_COMPLETION" | "EXISTING_GOODS">, string> = {
   NEW_ORDER: "yeni sipariş açılamaz; mevcut topları okutarak hızlı sipariş açabilir ya da stoktan sevk edebilirsiniz",

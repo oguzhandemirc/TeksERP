@@ -207,8 +207,12 @@ const META: Record<MergeEntity, EntityMeta> = {
     label: "kumaş",
     // ⚠️ EN SİNSİ VERİ BOZMA YOLU: MT ölçülen kumaşı KG ölçülen kumaşa
     // birleştirmek, tüm metraj/ağırlık toplamlarını sessizce anlamsızlaştırır.
-    // Tek satırlık guard kapatıyor.
-    identityFields: [{ field: "unit", label: "birim" }],
+    // Tek satırlık guard kapatıyor. Tür de kimliktir: SERVICE (hizmet) birimi MT olabilir;
+    // KUMAŞ↔SERVICE birleşimi stoğu hizmete, hizmet eşlemesini kumaşa taşırdı.
+    identityFields: [
+      { field: "unit", label: "birim" },
+      { field: "itemType", label: "tür" },
+    ],
   },
   color: {
     delegate: () => prisma.color as never,

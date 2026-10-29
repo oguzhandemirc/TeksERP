@@ -72,7 +72,7 @@ export default function OrderLineFilterSheet({
   });
   const itemsQuery = useQuery({
     queryKey: ['items', 'order-filter'],
-    queryFn: () => itemService.getAll({ page: 1, pageSize: 300, sortBy: 'name', sortOrder: 'asc' }),
+    queryFn: () => itemService.getAll({ page: 1, pageSize: 300, sortBy: 'name', sortOrder: 'asc', filters: { itemType: 'FABRIC' } }),
     enabled: visible && !itemLocked,
     staleTime: 10 * 60 * 1000,
   });

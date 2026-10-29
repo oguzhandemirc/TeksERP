@@ -44,7 +44,7 @@ export const fabricPropertyService = new FabricPropertyService({
       },
     },
     values: {
-      select: { id: true, code: true, name: true, sortOrder: true, isActive: true },
+      select: { id: true, code: true, name: true, sortOrder: true, isActive: true, serviceItemId: true },
       orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
     },
   },

@@ -140,7 +140,11 @@ export async function collectReceiptLineIssues(lines: PreflightLine[], ctx: Pref
     if (!it) return issues.push({ lineNo, code: "ITEM_NOT_FOUND", message: "Ürün bulunamadı." });
     const usage = usageIssue.get(l.itemId);
     if (usage) return issues.push({ lineNo, ...usage });
-    if (it.itemType === ItemType.CONSUMABLE) return issues.push({ lineNo, code: "ITEM_TYPE_NOT_ALLOWED", message: `"${it.name}" sarf malzeme — mal kabul fişi yalnız kumaş ve iplik alır.` });
+    // Fail-closed: yalnız kumaş ve iplik geçer — SERVICE (H6) gibi yeni tür sessizce stok doğurmasın.
+    if (it.itemType !== ItemType.FABRIC && it.itemType !== ItemType.YARN) {
+      const noun = it.itemType === ItemType.CONSUMABLE ? "sarf malzeme" : "hizmet kalemi";
+      return issues.push({ lineNo, code: "ITEM_TYPE_NOT_ALLOWED", message: `"${it.name}" ${noun} — mal kabul fişi yalnız kumaş ve iplik alır.` });
+    }
     if (!(Number(l.initialQty) > 0)) return issues.push({ lineNo, code: "QTY_INVALID", message: "Miktar sıfırdan büyük olmalı." });
     if (it.itemType === ItemType.YARN) {
       if (lotRequired && !normalizeLotNo(l.lotNo)) return issues.push({ lineNo, code: "YARN_LOT_REQUIRED", message: YARN_LOT_REQUIRED_MESSAGE });
