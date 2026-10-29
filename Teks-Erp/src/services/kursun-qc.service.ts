@@ -28,6 +28,7 @@ import {
   Prisma,
   RollError,
   RollErrorOrigin,
+  RollMeterAck,
   RollMeterReading,
   RollOperation,
   RollOperationType,
@@ -60,8 +61,14 @@ import {
 import { applyKursunOperationTx } from "./helpers/kursun-operation.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import {
+  ackMeterReadingTx,
   assertMeterInputAllowed,
+  auditMeterAck,
   auditMeterReadingWrite,
+  evaluateReadingVarianceTx,
+  pendingMeterAcksTx,
+  resolveSupervisorByPin,
+  type MeterAckReason,
   meterReadingReplay,
   phaseAllowed,
   revokeStepMeterReadingsTx,
@@ -272,6 +279,18 @@ export interface KursunQueueItem {
    * olarak işe yarardı ve bu ekranda gruplama yok.
    */
   bypassMachineName: string | null;
+}
+
+/** H2: completeQc2 cevabında metre okuması + sapma işareti (tablet bekleyen imzayı buradan bilir). */
+export interface KursunMeterSummary {
+  readingId: string;
+  meters: number;
+  approvalMode: string;
+  deviated: boolean;
+  baseMeters: number | null;
+  diffMeters: number | null;
+  allowedMeters: number | null;
+  pendingAck: boolean;
 }
 
 export class KursunQcService {
@@ -500,7 +519,7 @@ export class KursunQcService {
     },
     userId?: string,
     machineId?: string | null
-  ): Promise<ApiResponse<RollOperation>> {
+  ): Promise<ApiResponse<RollOperation & { meter?: KursunMeterSummary }>> {
     await this.assertRollInFlowStep(data.rollId, data.stepId);
 
     const step = await prisma.workOrderStep.findUnique({
@@ -614,6 +633,8 @@ export class KursunQcService {
     });
     const op = result.qc2Op;
     if (result.meterWrite) await auditMeterReadingWrite(userId, result.meterWrite, "COMPLETE_QC2");
+    if (result.meterWrite?.ack) await auditMeterAck(userId, result.meterWrite.ack);
+    const meter = await this.meterSummary(result.meterWrite?.reading ?? null, data.rollId, data.stepId, meterOut != null);
 
     // F283: yalnız gerçekten yeni oluşturulduysa audit yaz (replay'de mükerrer önlenir).
     if (!existedBefore) {
@@ -654,7 +675,51 @@ export class KursunQcService {
       });
     }
 
-    return { success: true, data: op, message: "Kalite Kontrol 2 tamamlandı" };
+    return { success: true, data: meter ? { ...op, meter } : op, message: "Kalite Kontrol 2 tamamlandı" };
+  }
+
+  /** completeQc2 cevabındaki metre özeti (H2 işareti) — replay'de aynı token'ın aktif okumasından. */
+  private async meterSummary(written: RollMeterReading | null, rollId: string, stepId: string, sent: boolean): Promise<KursunMeterSummary | null> {
+    if (!sent) return null;
+    const reading =
+      written ??
+      (await prisma.rollMeterReading.findFirst({ where: { rollId, workOrderStepId: stepId, phase: MeterPhase.OUT, revokedAt: null } }));
+    if (!reading) return null;
+    const v = await evaluateReadingVarianceTx(prisma, reading);
+    const acked = (await prisma.rollMeterAck.count({ where: { readingId: reading.id, revokedAt: null } })) > 0;
+    return {
+      readingId: reading.id,
+      meters: Number(reading.meters),
+      approvalMode: reading.approvalMode,
+      deviated: v.deviated,
+      baseMeters: v.baseMeters,
+      diffMeters: v.diffMeters,
+      allowedMeters: v.allowedMeters,
+      pendingAck: v.needsAck && !acked,
+    };
+  }
+
+  /**
+   * H2 sapma imzası — SUPERVISOR_PIN (tablet, yalnız çevrimiçi) ya da OFFICE (panel). PIN yalnız burada
+   * çözülür; kuyruğa, log'a, audit'e girmez. İkinci imza 409 `METER_ALREADY_ACKED`.
+   */
+  async ackMeterReading(
+    data: { readingId: string; mode: "SUPERVISOR_PIN" | "OFFICE"; pin?: string | null; reason?: MeterAckReason | null },
+    userId?: string,
+  ): Promise<ApiResponse<RollMeterAck>> {
+    if (!userId) throw AppError.unauthorized();
+    const approvedById = data.mode === "SUPERVISOR_PIN" ? (await resolveSupervisorByPin(data.pin ?? "")).id : userId;
+    const ack = await prisma.$transaction((tx) =>
+      ackMeterReadingTx(tx, { readingId: data.readingId, mode: data.mode, approvedById, reason: data.reason ?? null }),
+    );
+    await auditMeterAck(userId, ack);
+    return { success: true, data: ack, message: "Metre sapması onaylandı" };
+  }
+
+  /** Ofis listesi: imza bekleyen sapmalı okumalar (SQL ikizi; `finishStep` kapısıyla aynı yüklem). */
+  async listPendingMeterAcks(filter: { stepId?: string }) {
+    const rows = await pendingMeterAcksTx(prisma, { stepId: filter.stepId, limit: 500 });
+    return { success: true, data: rows.map((r) => ({ ...r, meters: Number(r.meters) })) };
   }
 
   // K6 (2026-06-12): undoQc2 kaldırıldı — yarım geri alıyordu (KURSUN op +
@@ -940,6 +1005,16 @@ export class KursunQcService {
       //         mükerrer isteğine gereksiz 409 üretirdi. Erken dönüş sessizce
       //         "zaten kapalı" der ve tablet kuyruğu temizler.
       await assertKursunTabletMayWrite(tx, step.id, "tablet adım kapatma");
+
+      // 0c) H2 §3-6: imza bekleyen metre sapması (SUPERVISOR_PIN/OFFICE) WO kilidi ALTINDA sayılır —
+      //     tx dışı KK2 sayımı ack/okuma yazımıyla yarışırdı. Makine durmaz; adım kapanışı bekler.
+      const pendingAcks = await pendingMeterAcksTx(tx, { stepId: step.id, rollIds, limit: 50 });
+      if (pendingAcks.length > 0) {
+        throw AppError.conflict(`Onay bekleyen ${pendingAcks.length} metre sapması var — onaylanmadan adım kapatılamaz`, {
+          code: "METER_DEVIATION_UNACKED",
+          pending: pendingAcks.map((p) => ({ readingId: p.readingId, rollId: p.rollId, approvalMode: p.approvalMode })),
+        });
+      }
 
       // 1) Açık movement'leri ATOMİK kapat (qty/weight per-row eşitlik) + RETURNING
       //    ile fiilen BİZİM kapattığımız rolleri al. `exitedAt IS NULL` guard'ı:

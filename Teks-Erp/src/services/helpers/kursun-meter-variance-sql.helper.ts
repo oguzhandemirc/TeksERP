@@ -1,0 +1,69 @@
+// =============================================================================
+// KURŞUN METRE SAPMASI — SQL İKİZİ (`lib/kursun-meter-variance.ts` ile boğaz-ikiz)
+// =============================================================================
+// Aynı eşitsizlik NUMERIC'te: |out − taban|·100 > max(M·100, P·taban); eşikler boş ya da
+// taban yoksa false. Bekçi `test_kursun_sapma` 20 fikstürde TS kararıyla eşitliği ölçer.
+// Bildirilen giriş: gelen belge satırı metresi (`customer_delivery_note_lines.rollId @unique`),
+// yoksa topun `initialQty`si — TS tarafı `loadMeterVarianceInputs` aynı sırayla okur.
+// =============================================================================
+import { Prisma } from "@prisma/client";
+
+export interface MeterVarianceSqlArgs {
+  out: Prisma.Sql;
+  declaredIn: Prisma.Sql;
+  measuredIn: Prisma.Sql;
+  thresholdM: Prisma.Sql;
+  thresholdPct: Prisma.Sql;
+  basis: Prisma.Sql;
+}
+
+/** Boolean SQL ifadesi: okuma sapmalı mı. Girdiler sütun ya da parametre ifadesidir. */
+export function meterDeviatedSql(a: MeterVarianceSqlArgs): Prisma.Sql {
+  const base = Prisma.sql`round((CASE WHEN (${a.basis})::text = 'MEASURED_IN' AND (${a.measuredIn}) IS NOT NULL
+    THEN (${a.measuredIn})::numeric ELSE (${a.declaredIn})::numeric END), 3)`;
+  return Prisma.sql`(CASE
+    WHEN (${a.thresholdM}) IS NULL AND (${a.thresholdPct}) IS NULL THEN false
+    WHEN ${base} IS NULL THEN false
+    ELSE abs(round((${a.out})::numeric, 3) - ${base}) * 100
+         > GREATEST(COALESCE(round((${a.thresholdM})::numeric, 3), 0) * 100,
+                    COALESCE(round((${a.thresholdPct})::numeric, 3), 0) * ${base})
+  END)`;
+}
+
+/** Okuma satırı (`alias`) için bildirilen giriş: gelen belge satırı metresi, yoksa top `initialQty`. */
+export function declaredInSql(readingAlias: string): Prisma.Sql {
+  const r = Prisma.raw(readingAlias);
+  return Prisma.sql`COALESCE(
+    (SELECT l.meters FROM customer_delivery_note_lines l WHERE l."rollId" = ${r}."rollId"),
+    (SELECT ro."initialQty" FROM rolls ro WHERE ro.id = ${r}."rollId"))`;
+}
+
+/** Okuma satırı (`alias`) için aynı adımdaki aktif giriş (IN) okuması. */
+export function measuredInSql(readingAlias: string): Prisma.Sql {
+  const r = Prisma.raw(readingAlias);
+  return Prisma.sql`(SELECT mi.meters FROM roll_meter_readings mi
+    WHERE mi."rollId" = ${r}."rollId" AND mi."workOrderStepId" = ${r}."workOrderStepId"
+      AND mi.phase = 'IN'::"MeterPhase" AND mi."revokedAt" IS NULL)`;
+}
+
+/** Okuma satırı (`alias`) için tam sapma yüklemi — kopya kolonlarından. */
+export function readingDeviatedSql(readingAlias: string): Prisma.Sql {
+  const r = Prisma.raw(readingAlias);
+  return meterDeviatedSql({
+    out: Prisma.sql`${r}.meters`,
+    declaredIn: declaredInSql(readingAlias),
+    measuredIn: measuredInSql(readingAlias),
+    thresholdM: Prisma.sql`${r}."thresholdM"`,
+    thresholdPct: Prisma.sql`${r}."thresholdPct"`,
+    basis: Prisma.sql`${r}.basis`,
+  });
+}
+
+/** İmza bekleyen OUT okumaları: aktif, kip NONE değil, aktif onay yok, sapmalı. `alias` FROM'da tanımlı olmalı. */
+export function readingPendingAckSql(readingAlias: string): Prisma.Sql {
+  const r = Prisma.raw(readingAlias);
+  return Prisma.sql`${r}.phase = 'OUT'::"MeterPhase" AND ${r}."revokedAt" IS NULL
+    AND ${r}."approvalMode" <> 'NONE'::"MeterApprovalMode"
+    AND NOT EXISTS (SELECT 1 FROM roll_meter_acks ak WHERE ak."readingId" = ${r}.id AND ak."revokedAt" IS NULL)
+    AND ${readingDeviatedSql(readingAlias)}`;
+}
