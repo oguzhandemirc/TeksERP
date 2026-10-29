@@ -102,6 +102,13 @@ const ADLA_BEKLENEN_KAPILI: ReadonlyArray<{ dosya: string; neden: string }> = [
 // Geçişli dokunuş (InventoryService) orada da burada da AYNI olgudur.
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
+    dosya: "routes/gelen-belge.routes.ts",
+    neden:
+      "GELEN BELGE (Gülkesim D4, 2026-10-29). Kendi modül kapısını taşır (`requireGelenBelgeEnabled`, emanete bağlı); " +
+      "ticaret dokunuşu GEÇİŞLİ ve YANILTICIDIR: onay ucu `createInitialEntry` (inventory zinciri) üzerinden emanet topu doğurur. " +
+      "Bu yüzey alış siparişine/faturaya (purchaseOrder) YAZMAZ; route kapısı KONULAMAZ: fason emanet girişi ticaret modülü olmadan meşrudur.",
+  },
+  {
     dosya: "routes/customer.routes.ts",
     neden:
       "CARİ KART (çekirdek, her kurulumda). Ticaret dokunuşu SALT-OKUMADIR: cari kart arşiv kapısı (URUN-YASAM-DONGUSU.md §6) açık alış siparişini canlı referans olarak SAYAR. Ticaret kapalı kurulumda `purchase_orders` boştur, sayı 0 döner; router satır yazmaz. Kapı takılsaydı müşteri kartı ticaretsiz fabrikada yönetilemezdi.",

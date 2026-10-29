@@ -367,6 +367,9 @@ export const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   // MachineSealState.OPEN (2026-09-14) — karne MÜHÜRSÜZ; global `OPEN` alış siparişi
   // dilinde ("Açık (mal bekleniyor)"). Ortak Türkçe YETMEZ.
   "MACHINE_SHIFT_STAT.sealState": { OPEN: "Açık (mühürsüz)" },
+  // DeliveryNoteAliasScope.PROCESS (gelen belge D4, 2026-10-29) — belgedeki İŞLEM metninin eşlemesi;
+  // global `PROCESS` RollErrorOrigin dilinde ("Süreç hatası"). Ortak Türkçe YETMEZ.
+  "DELIVERY_NOTE_ALIAS.scope": { PROCESS: "İşlem" },
   // PackingGroupStatus (sevk partisi, 2026-09-21) — `OPEN`/`CLOSED` PurchaseOrderStatus
   // ile ÇAKIŞIR; global cevap alış siparişi dilinde ("mal bekleniyor" / "tamamlandı").
   // Partide CLOSED "sevk edildi"dir: son çuvalı sevk edilince sunucu yazar, elle

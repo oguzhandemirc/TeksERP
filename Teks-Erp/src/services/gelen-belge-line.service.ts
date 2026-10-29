@@ -4,7 +4,8 @@
 // Her satır yolu önce başlığı `updateMany WHERE {id, status: DRAFT}` ile ATOMİK CLAIM eder (count 0
 // → 404/409); satır kilidi = başlık satırıdır. Taslak defter değildir; satır silme ④ sınıfı
 // (`docs/kurallar/defter.md`). Başlık CRUD'u `gelen-belge-note.service.ts`te (bu dosya oradan import
-// EDİLİR; ters yön yok — döngü yok).
+// EDİLİR; ters yön yok — döngü yok). TEK istisna `updateDeliveryNoteLine`: PARTIAL belgede yalnız topsuz FAILED
+// satır düzeltilir/atlanır (D4 kısmi onayın çıkışı; claim WHERE {id, PARTIAL} + satır WHERE {FAILED, rollId null}).
 // =============================================================================
 import { DeliveryNoteLineKind, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
@@ -122,7 +123,7 @@ export async function addDeliveryNoteLines(noteId: string, inputs: DeliveryNoteL
   return created;
 }
 
-export async function updateDeliveryNoteLine(noteId: string, lineId: string, patch: Partial<DeliveryNoteLineInput>, userId: string) {
+export async function updateDeliveryNoteLine(noteId: string, lineId: string, patch: Partial<DeliveryNoteLineInput> & { skip?: true }, userId: string) {
   const before = await prisma.customerDeliveryNoteLine.findUnique({ where: { id: lineId }, select: LINE_SELECT });
   if (!before || before.noteId !== noteId) throw AppError.notFound("Satır bulunamadı.", { code: "DELIVERY_NOTE_LINE_NOT_FOUND" });
   // Yalnız patch'te TANIMLI anahtarlar yazılır: iki yazar farklı alanı düzeltirse ikisi de korunur (kayıp güncelleme yok).
@@ -130,12 +131,32 @@ export async function updateDeliveryNoteLine(noteId: string, lineId: string, pat
   const full = lineColumns({ ...patch, meters: patch.meters ?? Number(before.meters) });
   const { confidence: _c, ...allCols } = full;
   const cols = Object.fromEntries(Object.entries(allCols).filter(([k]) => patch[k as keyof DeliveryNoteLineInput] !== undefined)) as Partial<typeof allCols>;
+  let closedNoteNo: string | null = null;
   const after = await prisma.$transaction(async (tx) => {
-    await claimDraft(tx, noteId, userId);
-    // Elle düzeltilen satır gözden geçirildi sayılır (operatör değeri gördü ve yazdı).
-    return tx.customerDeliveryNoteLine.update({ where: { id: lineId }, data: { ...cols, needsReview: patch.needsReview ?? false }, select: LINE_SELECT });
+    // PARTIAL yolu yalnız topsuz FAILED satır için açılır; başlık claim'i (updatedAt'i tazeler) eşzamanlı onayı 409'a düşürür.
+    const partial = before.status === "FAILED" && before.rollId == null
+      ? (await tx.customerDeliveryNote.updateMany({ where: { id: noteId, status: "PARTIAL" }, data: { updatedById: userId } })).count === 1
+      : false;
+    if (!partial) {
+      await claimDraft(tx, noteId, userId);
+      if (patch.skip) throw AppError.badRequest("Taslakta satır atlanmaz; girilmeyecek satırı silin.", { code: "DELIVERY_NOTE_LINE_SKIP_DRAFT" });
+      // Elle düzeltilen satır gözden geçirildi sayılır (operatör değeri gördü ve yazdı).
+      return tx.customerDeliveryNoteLine.update({ where: { id: lineId }, data: { ...cols, needsReview: patch.needsReview ?? false }, select: LINE_SELECT });
+    }
+    const c = await tx.customerDeliveryNoteLine.updateMany({
+      where: { id: lineId, noteId, status: "FAILED", rollId: null },
+      data: { ...cols, needsReview: patch.needsReview ?? false, ...(patch.skip ? { status: "SKIPPED" as const } : {}) },
+    });
+    if (c.count === 0) throw AppError.conflict("Satır artık düzeltilemez (girilmiş ya da değişmiş); belgeyi yenileyin.", { code: "DELIVERY_NOTE_LINE_NOT_EDITABLE" });
+    // Atlamayla topsuz canlı satır kalmadıysa belge kapanır (yeniden onaya "açık satır yok" ile takılmasın).
+    if (patch.skip && (await tx.customerDeliveryNoteLine.count({ where: { noteId, rollId: null, status: { not: "SKIPPED" } } })) === 0) {
+      const closed = await tx.customerDeliveryNote.updateMany({ where: { id: noteId, status: "PARTIAL" }, data: { status: "APPROVED", approvedAt: new Date(), approvedById: userId, updatedById: userId } });
+      if (closed.count === 1) closedNoteNo = (await tx.customerDeliveryNote.findUnique({ where: { id: noteId }, select: { noteNo: true } }))?.noteNo ?? noteId;
+    }
+    return tx.customerDeliveryNoteLine.findUniqueOrThrow({ where: { id: lineId }, select: LINE_SELECT });
   });
   await AuditService.log({ userId, action: "UPDATE", tableName: LINE_TABLE, recordId: lineId, oldData: auditLine(before), newData: auditLine(after) });
+  if (closedNoteNo) await AuditService.log({ userId, action: "UPDATE", tableName: "CUSTOMER_DELIVERY_NOTE", recordId: noteId, oldData: { status: "PARTIAL" }, newData: { status: "APPROVED", noteNo: closedNoteNo } });
   return after;
 }
 
