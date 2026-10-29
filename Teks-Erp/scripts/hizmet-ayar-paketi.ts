@@ -14,6 +14,7 @@
 // etiket müşteri top no (şablon), sayaç sıfırlama (cihaz kaydı), brode yeri (rota).
 // Çıkış: 0 tamam · 1 uygulanamadı · 2 kullanım.
 // =============================================================================
+import { hedefDbAdi } from "./lib/hedef-db-kapisi";
 
 export interface PaketSatiri {
   /** DB anahtarı (`SETTING_KEYS` değeri). */
@@ -94,6 +95,7 @@ async function main(): Promise<number> {
     const flags = (okunan.data ?? {}) as unknown as Record<string, unknown>;
     const plan = paketPlani(flags, new Set<string>(Object.values(SETTING_KEYS)));
     console.log(`=== Hizmet veren ayar paketi — ${uygula ? "UYGULAMA" : "KURU KOŞU"} ===`);
+    console.log(`🎯 Hedef veritabanı: ${hedefDbAdi()}`);
     for (const p of plan) {
       const ek = p.durum === "ANAHTAR_YOK" ? ` (anahtar ${p.dilim} ile gelir)` : "";
       console.log(`  ${p.durum.padEnd(11)} ${p.anahtar}: ${goster(p.mevcut)} → ${goster(p.hedef)}${ek}`);
