@@ -61,6 +61,13 @@ export async function resolveOwnerFromBeamsTx(tx: Pick<Tx, "subcontractorDispatc
   return singleOwner(items.map((i) => i.warpBeam?.ownerCustomerId ?? null), "Fason dokuma makbuzu");
 }
 
+/** ② Fason (terbiye) kabulü: makbuz kalemlerindeki kaynak topların owner'ı → makbuzdan doğan topların owner'ı.
+ *  Doğan topun `parentRollId`si yoktur (N kaynak, tek çıktı) — kalıtım makbuz üzerinden kurulur (H10). */
+export async function resolveOwnerFromReceiptTx(tx: Pick<Tx, "subcontractorReceiptItem">, receiptId: string): Promise<string | null> {
+  const items = await tx.subcontractorReceiptItem.findMany({ where: { receiptId }, select: { newRoll: { select: { ownerCustomerId: true } } } });
+  return singleOwner(items.map((i) => i.newRoll.ownerCustomerId), "Fason kabulü");
+}
+
 export interface OwnerMismatchRow {
   barcode: string | null;
   owner: string | null;

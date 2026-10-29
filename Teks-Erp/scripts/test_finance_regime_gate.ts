@@ -126,6 +126,15 @@ const TICARET_MODELLERI = new Set([
 
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
+    dosya: "routes/demo.routes.ts",
+    neden:
+      "DEMO verisi (yalnız demo kipinde) — finans dokunuşu SALT-OKUMADIR ve geçişlidir (H10, 2026-10-29): " +
+      "`demo.service` → `helpers/property-revoke.helper` (`applyRollFlagSetTx`) → `helpers/service-billing-gate.helper` " +
+      "(`assertFlagWorkNotBilledTx`: faturalı bayrak işinin özelliği geri alınamaz, 409 SERVICE_ALREADY_BILLED). " +
+      "Kapı yalnız `serviceBillingLink.findFirst` okur, hiçbir finans tablosuna yazmaz; ön muhasebe kapalı kurulumda " +
+      "tablo boştur ve sorgu 0 satır döner. Router'a `requireFinanceEnabled` koymak demo kurulumunu finansa bağlardı.",
+  },
+  {
     dosya: "routes/shipping.routes.ts",
     neden:
       "SEVKİYAT fabrikanın ana akışıdır → rejim kapısı KONULAMAZ. `serviceBillingLink` izi tek daldan gelir (H7, 2026-10-29): " +

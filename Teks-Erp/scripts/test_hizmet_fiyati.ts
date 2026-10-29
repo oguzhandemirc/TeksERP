@@ -243,6 +243,8 @@ const SERVICE_ITEM_ID_FILES = new Set([
   "services/helpers/service-billing.helper.ts",
   // H10: kurşun dışı bayrak işleri (Tambur/etek/brode) — çözücünün parçası, kalem `property.serviceItemId`ten.
   "services/helpers/service-flag-work.helper.ts",
+  // H10: bayrak geri alma kapısı — eşlenmiş kalemi yalnız faturalı bağ aramak için okur (çözücü değil).
+  "services/helpers/service-billing-gate.helper.ts",
 ]);
 function astChecks(): void {
   section("§8 AST: çözücü tek, eşleme okuyucuları beyanlı, FinishingRate okunmaz");

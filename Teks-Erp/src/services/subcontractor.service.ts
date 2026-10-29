@@ -70,7 +70,7 @@ import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { resolveDispatchCancelBlockReason } from "./helpers/subcontractor-cancel.helper";
 import { cancelWarpBeamItemsTx, countReturnedBeamItems, dispatchWarpBeamItemsTx } from "./subcontractor-beam.service";
 import { cancelYarnItemsTx, countReturnedYarnItems, dispatchYarnItemsTx, listYarnItems, type YarnDispatchLineInput } from "./subcontractor-yarn.service";
-import { assertOwnerMatchesTx } from "./helpers/emanet-owner.helper";
+import { assertOwnerMatchesTx, resolveOwnerFromReceiptTx } from "./helpers/emanet-owner.helper";
 import { renderFasonDirectShipHtml, renderFasonDirectShipTables } from "./document-render/fason-direct-ship.html";
 import { renderFasonReceiptHtml, type FasonReceiptDoc } from "./document-render/fason-receipt.html";
 import { buildPagination, buildTextSearch } from "../utils/query-parser";
@@ -3430,6 +3430,9 @@ export class SubcontractorService {
         // fason gerçek bir ihtiyaç olursa doğru çözüm sevkin çıktığı depoyu
         // `SubcontractorDispatch` üzerinde damgalamaktır.
         const bornWarehouseId = await resolveTargetWarehouseId(tx);
+        // EMANET: doğan top kaynak topların (makbuz kalemleri, yukarıda yazıldı) tek sahibini alır;
+        // karışık sahip 409 OWNER_MISMATCH. Sahipsiz doğsa hizmet faturası ve sevk kapısı onu görmez (H10).
+        const bornOwnerCustomerId = await resolveOwnerFromReceiptTx(tx, receipt.id);
 
         await tx.roll.createMany({
           data: bornRollInputs.map(({ id, nr }, i) => ({
@@ -3448,6 +3451,7 @@ export class SubcontractorService {
             qualityGradeId: null,
             entrySource: "SUBCONTRACTOR_RETURN",
             parentReceiptId: receipt.id,
+            ownerCustomerId: bornOwnerCustomerId,
             batchId: bornBatchId,
             // GİRİŞ İSTASYONU — makbuzun ADIMI (fason istasyonu). Top burada
             // doğdu: orijinal rulolar emekliye ayrıldı, bunlar makbuzdan doğdu.

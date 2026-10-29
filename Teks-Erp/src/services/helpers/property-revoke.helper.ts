@@ -19,6 +19,7 @@
 
 import type { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
+import { assertFlagWorkNotBilledTx } from "./service-billing-gate.helper";
 
 type Tx = Prisma.TransactionClient;
 
@@ -167,6 +168,8 @@ export async function applyRollFlagSetTx(
   const entering = [...desired].filter((pid) => !activeIds.has(pid));
   let revoked = 0;
   if (leaving.length > 0) {
+    // Faturalı bayrak işinin kanıtı geri alınamaz (önce hizmet faturası iptal edilir).
+    await assertFlagWorkNotBilledTx(tx, { rollId: args.rollId, propertyIds: leaving.map((r) => r.propertyId) });
     revoked = await revokeRollProperties(tx, {
       rollIds: [args.rollId],
       ids: leaving.map((r) => r.id),
