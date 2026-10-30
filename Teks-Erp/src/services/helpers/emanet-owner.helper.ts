@@ -127,3 +127,14 @@ export async function assertOwnerMatchesTx(tx: Pick<Tx, "roll">, input: { rollId
   if (clash.length === 0) return;
   throw AppError.conflict(ownerMismatchText(clash, input.belge), { code: "OWNER_MISMATCH", rolls: clash });
 }
+
+/**
+ * K22 (cari kilidi, D4-I1): kümedeki TÜM toplar `customerId`nin emaneti mi? Boş küme → false (fail-closed: muafiyet
+ * yalnız ölçülen emanet malına). Owner'sız (fabrikanın) ya da başkasının topu varsa false.
+ */
+export async function rollsAllOwnedByTx(tx: Pick<Tx, "roll">, where: Prisma.RollWhereInput, customerId: string): Promise<boolean> {
+  const total = await tx.roll.count({ where });
+  if (total === 0) return false;
+  const own = await tx.roll.count({ where: { AND: [where, { ownerCustomerId: customerId }] } });
+  return own === total;
+}

@@ -9,6 +9,7 @@
 // Bu üçlü, `CariTransaction`'ın append-only olmasının da sebebidir: geçmişi
 // değiştirilebilen bir defter denetimde hiçbir şey kanıtlamaz.
 // =============================================================================
+import { assertCariNotHeldTx } from "./helpers/cari-hold.helper";
 import {
   Prisma,
   InvoiceStatus,
@@ -1197,6 +1198,13 @@ export class InvoiceService {
         currency: inv.currency,
         amount: totals.grandTotal,
       });
+
+      // CARİ KİLİDİ (D4-I1, INVOICE) — risk guard yanı, yalnız SATIŞ; taslak/iade/storno/tahsilat yolları bu
+      // boğaza girmez. Kilit hesabın KARTINDAN sorulur (K3a: eski fason bacağındaki kilit de görünür).
+      if (inv.type === InvoiceType.SALES) {
+        const card = await tx.cariAccount.findUniqueOrThrow({ where: { id: inv.cariId }, select: { customerId: true, subcontractorId: true } });
+        await assertCariNotHeldTx(tx, card, "INVOICE");
+      }
 
       // DEFTER SATIRI — yön tek kaynaktan (`invoiceLedgerSide`).
       const side = invoiceLedgerSide(inv.type);

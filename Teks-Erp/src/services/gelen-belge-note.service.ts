@@ -8,6 +8,7 @@
 // `noteNo` DOĞUŞTA `GB` serisinden materyalize edilir (`numaralandirma.md`); replay dört durumlu
 // `tokenReplay` boğazından. Liste + cursor + özet şeridi TEK where'den türer (`filtre-liste.md`).
 // =============================================================================
+import { cariHoldNotice } from "./helpers/cari-hold.helper";
 import { DeliveryNoteSourceKind, DeliveryNoteStatus, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
@@ -134,7 +135,9 @@ export function translateUnique(err: unknown): never {
 export async function getDeliveryNote(id: string) {
   const note = await prisma.customerDeliveryNote.findUnique({ where: { id }, select: DETAIL_SELECT });
   if (!note) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
-  return note;
+  // Cari kilidi önizlemesi (D4-I1, INTAKE): onay kapısıyla aynı helper; kilit yoksa null. Eski istemci alanı yok sayar.
+  const cariHold = note.ownerCustomerId ? await cariHoldNotice(prisma, note.ownerCustomerId, "INTAKE") : null;
+  return { ...note, cariHold };
 }
 
 /** Liste where'i — özet şeridi de BUNDAN türer (durum süzgeci hariç; şerit duruma göre sayar). */
