@@ -30,6 +30,7 @@
 //              (gelen belge ön koşulu kapalı; 2026-10-29 H5)
 //   SONDA-B7 → çıkış 1 · 1 ❌ · §11b — sihirbazdan `ProfilSayfasi.Add('hizmet')` silindi
 //   SONDA-B8 → çıkış 1 · 1 ❌ · §11c — `ProfilDegeri` case numaraları bir kaydırıldı (0..6)
+//   SONDA-B9 → çıkış 1 · 1 ❌ · §4b — `hizmet` profilinden `maliyet.enabled` silindi (2026-10-31 D4-S2)
 // ⚠️ SONDA-B5 CANLI VERİYİ DE BOZAR: bozuk job yedi satırın DEĞERİNİ ezer ve bu
 //    bekçinin `finally`si yalnız kendi dokunduğu iki satırı geri yazar. Bu sondayı
 //    koşan kişi ÖNCE yedi satırı (değer + createdAt/updatedAt) SQL ile yedeklemeli;
@@ -139,7 +140,8 @@ const TASARIM_S10: Record<string, string[]> = {
     "dokuma.enabled",
   ],
   // 2026-10-29 — H5: hizmet veren (fason işlemci) satılır; gelen belge emanete bağlı (DALGA2-HIZMET §7).
-  hizmet: ["production.enabled", "finance.enabled", "ticaret.enabled", "emanet.enabled", "gelenBelge.enabled"],
+  // 2026-10-31 — D4-S2: maliyet eklendi (kullanıcı kararı S2: kârlılık Maliyet modülünde).
+  hizmet: ["production.enabled", "finance.enabled", "ticaret.enabled", "emanet.enabled", "gelenBelge.enabled", "maliyet.enabled"],
   // 2026-10-24 — MAL-0: maliyet "Tam"a girer (patron kararı, MALIYET-TEKLIF-PLAN §8-3).
   tam: [...MODULE_SETTING_KEYS],
 };
