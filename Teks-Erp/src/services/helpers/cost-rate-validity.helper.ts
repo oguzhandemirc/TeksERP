@@ -40,6 +40,18 @@ export async function consumableNormsValidAt(db: Reader, serviceItemId: string, 
   });
 }
 
+/**
+ * Kârlılık toplu okuması (D4-G2a): hizmet kalemlerinin TÜM norm sürümleri (damgalılar dahil); `at` seçimi çağıranda
+ * `isCostRateValidAt` ile — iş başına sorgu atılmasın diye. Sıra belirlenimli.
+ */
+export async function consumableNormHistory(db: Reader, serviceItemIds: string[]): Promise<ServiceConsumableNorm[]> {
+  if (serviceItemIds.length === 0) return [];
+  return db.serviceConsumableNorm.findMany({
+    where: { serviceItemId: { in: serviceItemIds } },
+    orderBy: [{ serviceItemId: "asc" }, { consumableItemId: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+  });
+}
+
 /** Pencerenin bellek-içi ikizi (başı dahil, sonu hariç) — bekçi aynı satırlarda ikisini karşılaştırır. */
 export function isCostRateValidAt(row: { createdAt: Date; revokedAt: Date | null }, at: Date): boolean {
   return row.createdAt.getTime() <= at.getTime() && (row.revokedAt === null || row.revokedAt.getTime() > at.getTime());
