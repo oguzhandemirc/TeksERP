@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatNumber } from "@/lib/format";
 import type { ChoiceProperty, PlanGroup, PlanTarget } from "./types";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   group: PlanGroup;
@@ -62,10 +63,10 @@ export function WorkOrderPlanGroupCard({ group, targets, properties, checked, di
       </div>
       {blocked.length > 0 && (
         <p className="text-xs text-amber-700 dark:text-amber-400">
-          {blocked.length} top bağlanamaz (stokta değil{liveNumbers.length ? `; iş emrinde: ${liveNumbers.join(", ")}` : ""}) — yalnız {group.attachableCount} top gönderilir.
+          {blocked.length} top bağlanamaz (stokta değil{liveNumbers.length ? `; ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma}: ${liveNumbers.join(", ")}` : ""}) — yalnız {group.attachableCount} top gönderilir.
         </p>
       )}
-      {doneNumber && <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">İş emri açıldı: {doneNumber}</p>}
+      {doneNumber && <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">{TERIM.terbiyeIsEmri.tekil} açıldı: {doneNumber}</p>}
     </div>
   );
 }

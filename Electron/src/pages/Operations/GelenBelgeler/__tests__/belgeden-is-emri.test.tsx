@@ -112,7 +112,7 @@ describe("WorkOrderFromNoteDialog", () => {
     expect(cards.map((c) => c.getAttribute("data-patternless"))).toEqual(["0", "0", "1"]);
     expect(screen.getByTestId("plan-customer-batch").textContent).toContain("P-77");
     await waitFor(() => expect((screen.getByLabelText("Rota şablonu") as HTMLSelectElement).value).toBe("r1"));
-    fireEvent.click(screen.getByRole("button", { name: /2 iş emri aç/ }));
+    fireEvent.click(screen.getByRole("button", { name: /2 terbiye iş emri aç/ }));
     await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(2));
     const bodies = apiPost.mock.calls.map((c) => c[1] as { clientToken: string; rollBarcodes: string[]; targetValues: unknown[] });
     expect(new Set(bodies.map((b) => b.clientToken)).size).toBe(2);
@@ -127,9 +127,9 @@ describe("WorkOrderFromNoteDialog", () => {
     apiPost.mockImplementationOnce(() => Promise.reject(new Error("Network Error")));
     renderWithProviders(<WorkOrderFromNoteDialog noteId="n1" open onOpenChange={() => {}} />);
     await waitFor(() => expect((screen.getByLabelText("Rota şablonu") as HTMLSelectElement).value).toBe("r1"));
-    fireEvent.click(screen.getByRole("button", { name: /2 iş emri aç/ }));
+    fireEvent.click(screen.getByRole("button", { name: /2 terbiye iş emri aç/ }));
     await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(2));
-    fireEvent.click(await screen.findByRole("button", { name: /1 iş emri aç/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /1 terbiye iş emri aç/ }));
     await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(3));
     const tokens = apiPost.mock.calls.map((c) => (c[1] as { clientToken: string; rollBarcodes: string[] }));
     expect(tokens[2]?.rollBarcodes).toEqual(["B4", "B5"]);

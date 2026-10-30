@@ -25,6 +25,7 @@ import { ProcessGramajPanel } from "./ProcessGramajPanel";
 import { useProcessGramaj } from "./processChoices";
 import { WorkOrderFromNoteDialog } from "./WorkOrderFromNoteDialog";
 import type { DeliveryNoteDetail } from "./types";
+import { TERIM } from "@/lib/terim";
 
 const LIST_PATH = "/operations/gelen-belgeler";
 
@@ -60,7 +61,7 @@ function DetailActions({ note, reviewCount, addPages, onReview, onApprove }: Det
         <PermissionGate permission="workorder:write">
           <Button variant="outline" onClick={() => setWorkOrderOpen(true)} data-testid="note-open-work-order">
             <Factory className="mr-1 h-4 w-4" />
-            İş emri aç
+            {TERIM.terbiyeIsEmri.tekil} aç
           </Button>
           {workOrderOpen && <WorkOrderFromNoteDialog noteId={note.id} open onOpenChange={setWorkOrderOpen} />}
         </PermissionGate>

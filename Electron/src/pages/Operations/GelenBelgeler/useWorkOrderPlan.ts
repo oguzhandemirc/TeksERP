@@ -9,6 +9,7 @@ import { routeService } from "@/pages/Routes/service";
 import { workOrderService } from "@/pages/Operations/WorkOrders/service";
 import { getWorkOrderPlan, INCOMING_DOCUMENT_QUERY_KEY } from "./service";
 import type { ChoiceProperty, PlanTarget } from "./types";
+import { TERIM } from "@/lib/terim";
 import { decisiveFailure, startGroupWorkOrders } from "./workOrderFromNote";
 
 export function useWorkOrderPlan(noteId: string, open: boolean) {
@@ -68,8 +69,8 @@ export function useWorkOrderPlan(noteId: string, open: boolean) {
       if (failure) attempt.onFailure(failure.error);
       else attempt.onSuccess();
       setDone((d) => ({ ...d, ...Object.fromEntries(ok.map((o) => [o.key, o.workOrderNumber ?? "?"])) }));
-      const warnings = [...new Set(ok.flatMap((o) => o.warnings ?? []))];
-      if (ok.length > 0) toast.success(`${ok.length} iş emri açıldı: ${ok.map((o) => o.workOrderNumber).join(", ")}`, { description: warnings.join(" ") || undefined, duration: 10_000 });
+      if (ok.length > 0) toast.success(`${ok.length} ${TERIM.terbiyeIsEmri.tekilKucuk} açıldı: ${ok.map((o) => o.workOrderNumber).join(", ")}`, { duration: 10_000 });
+      // Rota kapsamı uyarıları (ApiResponse.warnings) ortak interceptor tostuyla grup başına gösterilir; burada ikinci basım yok.
       if (ok.length < outcomes.length) toast.error(`${outcomes.length - ok.length} grup açılamadı — hatayı düzeltip yeniden deneyin (açılanlar tekrar gönderilmez).`);
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
       void qc.invalidateQueries({ queryKey: [INCOMING_DOCUMENT_QUERY_KEY, "is-emri-plani", noteId] });

@@ -17,7 +17,6 @@ export interface GroupStartOutcome {
   ok: boolean;
   workOrderNumber?: string;
   attached?: number;
-  warnings?: string[];
   error?: unknown;
 }
 
@@ -51,7 +50,7 @@ export async function startGroupWorkOrders(
     const key = input.group.key;
     try {
       const res = await deps.quickStart(buildGroupPayload(input, deps.routeTemplateId, deps.tokenFor(key), deps.foldType));
-      out.push({ key, ok: true, workOrderNumber: res.data?.workOrder.workOrderNumber, attached: res.data?.attached, warnings: res.warnings });
+      out.push({ key, ok: true, workOrderNumber: res.data?.workOrder.workOrderNumber, attached: res.data?.attached });
     } catch (error) {
       out.push({ key, ok: false, error });
     }

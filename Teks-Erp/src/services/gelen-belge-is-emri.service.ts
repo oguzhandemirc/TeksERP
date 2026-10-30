@@ -15,6 +15,7 @@ import { loadKursunGramajOptions } from "./helpers/kursun-bypass-gramaj.helper";
 import { loadProcessChoiceGroups, PROCESS_CHOICE_VALUE_WHERE } from "./helpers/process-choice-catalog.helper";
 import { customerBatchKeyOf } from "./helpers/ship-readiness.helper";
 import { ATTACHABLE_ROLL_STATUSES } from "./workorder-batch-add.service";
+import { TERIM } from "../constants/terim";
 
 /** İş emri planı yalnız top doğurmuş belgede anlamlıdır. */
 export const WORK_ORDER_PLAN_STATUSES: readonly DeliveryNoteStatus[] = [DeliveryNoteStatus.APPROVED, DeliveryNoteStatus.PARTIAL];
@@ -121,7 +122,7 @@ export async function buildWorkOrderPlan(noteId: string): Promise<WorkOrderPlan>
   });
   if (!note) throw AppError.notFound("Gelen belge bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
   if (!WORK_ORDER_PLAN_STATUSES.includes(note.status)) {
-    throw AppError.conflict("İş emri yalnız onaylanmış (top doğmuş) belgeden açılır.", { code: "DELIVERY_NOTE_NOT_APPROVED" });
+    throw AppError.conflict(`${TERIM.terbiyeIsEmri.tekil} yalnız onaylanmış (top doğmuş) belgeden açılır.`, { code: "DELIVERY_NOTE_NOT_APPROVED" });
   }
   const gramajOptions = await loadKursunGramajOptions();
   const choiceGroups = await loadProcessChoiceGroups();

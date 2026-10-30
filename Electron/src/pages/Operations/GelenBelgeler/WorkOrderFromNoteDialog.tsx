@@ -8,6 +8,7 @@ import { ProcessValueSearchDialog } from "./ProcessValueSearchDialog";
 import { WorkOrderPlanGroupCard } from "./WorkOrderPlanGroupCard";
 import { useWorkOrderPlan } from "./useWorkOrderPlan";
 import type { ChoiceProperty } from "./types";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   noteId: string;
@@ -26,9 +27,9 @@ export function WorkOrderFromNoteDialog({ noteId, open, onOpenChange }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto" data-testid="wo-from-note">
         <DialogHeader>
-          <DialogTitle>Belgeden iş emri aç{p ? ` — ${p.noteNo}` : ""}</DialogTitle>
+          <DialogTitle>Belgeden {TERIM.terbiyeIsEmri.tekilKucuk} aç{p ? ` — ${p.noteNo}` : ""}</DialogTitle>
           <DialogDescription>
-            Toplar desene göre gruplandı; her seçili grup için ayrı iş emri açılır ve desen iş emrinin hedefi olur.
+            Toplar desene göre gruplandı; her seçili grup için ayrı {TERIM.terbiyeIsEmri.tekilKucuk} açılır ve desen {TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedefi olur.
           </DialogDescription>
         </DialogHeader>
         {s.plan.isLoading && <p className="text-sm text-muted-foreground">Yükleniyor…</p>}
@@ -71,14 +72,14 @@ export function WorkOrderFromNoteDialog({ noteId, open, onOpenChange }: Props) {
           {blocking && p && <span className="text-xs text-muted-foreground sm:mr-auto">{blocking}</span>}
           {!blocking && (
             <span className="text-xs text-muted-foreground sm:mr-auto" data-testid="plan-summary">
-              {s.selected.length} iş emri · {formatNumber(meters, 1)} m
+              {s.selected.length} {TERIM.terbiyeIsEmri.tekilKucuk} · {formatNumber(meters, 1)} m
             </span>
           )}
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
             Kapat
           </Button>
           <Button onClick={() => s.start.mutate()} disabled={!!blocking || busy || !p}>
-            {busy ? "Açılıyor…" : `${s.selected.length} iş emri aç`}
+            {busy ? "Açılıyor…" : `${s.selected.length} ${TERIM.terbiyeIsEmri.tekilKucuk} aç`}
           </Button>
         </DialogFooter>
       </DialogContent>
