@@ -327,7 +327,8 @@ async function main(): Promise<void> {
     console.log("\n── §8 Audit ──");
     await new Promise((r) => setTimeout(r, 300));
     const loglar = await prisma.systemLog.findMany({ where: { recordId: { in: [a.id, b.id, n1.row.id] } }, select: { tableName: true, action: true, newData: true, oldData: true } });
-    const yuk = JSON.stringify(loglar.map((l) => [l.newData, l.oldData]));
+    // UUID'ler sayıyı rastgele içerebilir (ör. "…175…") — değer araması kimliklerden arındırılmış yükte.
+    const yuk = JSON.stringify(loglar.map((l) => [l.newData, l.oldData])).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, "<id>");
     check("§8a CREATE + UPDATE satırları var (ücret + norm)", loglar.some((l) => l.tableName === "MACHINE_COST_RATE" && l.action === "UPDATE") && loglar.some((l) => l.tableName === "MACHINE_COST_RATE" && l.action === "CREATE") && loglar.some((l) => l.tableName === "SERVICE_CONSUMABLE_NORM"), `${loglar.length} satır`);
     check("§8b ⭐ audit yükünde ücret/norm DEĞERİ yok", !/150\.5|175|0\.0125|0\.015/.test(yuk), yuk.slice(0, 160));
   } finally {

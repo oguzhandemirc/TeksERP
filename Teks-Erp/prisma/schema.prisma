@@ -13504,7 +13504,7 @@ model MachineCostRate {
   normMPerHour Decimal?  @db.Decimal(10, 2)
   note         String?   @db.VarChar(300)
   clientToken  String    @unique @db.Uuid
-  createdById  String    @db.Uuid
+  createdById  String?   @db.Uuid
   /// Damga açanı taşır (CHECK `machine_cost_rates_revoke_actor_chk`).
   revokedAt    DateTime? @db.Timestamptz
   revokedById  String?   @db.Uuid
@@ -13533,7 +13533,7 @@ model ServiceConsumableNorm {
   unit             String    @db.VarChar(16)
   note             String?   @db.VarChar(300)
   clientToken      String    @unique @db.Uuid
-  createdById      String    @db.Uuid
+  createdById      String?   @db.Uuid
   revokedAt        DateTime? @db.Timestamptz
   revokedById      String?   @db.Uuid
   revokeReason     String?   @db.VarChar(300)

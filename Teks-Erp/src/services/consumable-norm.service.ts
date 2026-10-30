@@ -12,6 +12,7 @@ import { AppError } from "../utils/app-error";
 import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
 import { AuditService } from "./audit.service";
 import { tokenReplay } from "./helpers/token-replay.helper";
+import { runItemUsageChecks } from "./helpers/item-usage.helper";
 import { ACTIVE_COST_RATE, COST_RATE_REVOKE_REASON } from "./helpers/cost-rate-validity.helper";
 import { parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
 
@@ -82,12 +83,12 @@ const normReplay = (serviceItemId: string, consumableItemId: string, values: Par
     }),
   });
 
-/** Tür + aktiflik kapısı; sarf kaleminin birimini döner (norm doğuşta onu dondurur). */
+/** Tür + kullanım kapısı; sarf kaleminin birimini döner (norm doğuşta onu dondurur). */
 async function assertItemsWritable(serviceItemId: string, consumableItemId: string): Promise<string> {
   if (serviceItemId === consumableItemId) throw AppError.badRequest("Hizmet kalemi ile sarf kalemi aynı olamaz.", { code: "CONSUMABLE_NORM_SAME_ITEM" });
   const items = await prisma.item.findMany({
     where: { id: { in: [serviceItemId, consumableItemId] } },
-    select: { id: true, name: true, itemType: true, isActive: true, unit: true },
+    select: { id: true, name: true, itemType: true, unit: true },
   });
   const service = items.find((i) => i.id === serviceItemId);
   const consumable = items.find((i) => i.id === consumableItemId);
@@ -99,9 +100,11 @@ async function assertItemsWritable(serviceItemId: string, consumableItemId: stri
   if (consumable.itemType !== ItemType.CONSUMABLE) {
     throw AppError.badRequest(`"${consumable.name}" bir sarf malzemesi değil — normun sarf kalemi Sarf türünde olmalı.`, { code: "CONSUMABLE_ITEM_INVALID", itemId: consumableItemId });
   }
-  for (const it of [service, consumable]) {
-    if (!it.isActive) throw conflict(`"${it.name}" pasif — sarf normu yazılamaz.`, "ITEM_INACTIVE", { itemId: it.id });
-  }
+  // Norm karta yeni TANIM ekler — pasif/'Tükenene kadar' kararı tek kaynaktan (item-usage).
+  await runItemUsageChecks(prisma, [
+    { itemId: serviceItemId, usage: "DEFINITION" },
+    { itemId: consumableItemId, usage: "DEFINITION" },
+  ]);
   return consumable.unit;
 }
 

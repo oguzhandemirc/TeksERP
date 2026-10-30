@@ -260,6 +260,12 @@ const MACHINE_DELETE_GUARDS: DependencyGuard[] = [
     message: (n) => `Bu makinede ${n} metre okuması (kurşun/Tambur) var — kalıcı silinemez. Pasife alın.`,
   },
   {
+    key: "machineCostRateCount",
+    // D4-G1a: saat ücreti damgalı sürüm geçmişidir (FK Restrict) — damgalı sürümler DAHİL sayılır.
+    count: (id) => prisma.machineCostRate.count({ where: { machineId: id } }),
+    message: (n) => `Bu makinede ${n} saat ücreti kaydı var — kalıcı silinemez. Pasife alın.`,
+  },
+  {
     key: "rollOperationCount",
     // ⚠️ `revokedAt` SÜZÜLMEZ — yukarıdaki istasyon guard'ıyla aynı gerekçe.
     count: (id) => prisma.rollOperation.count({ where: { machineId: id } }),
