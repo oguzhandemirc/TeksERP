@@ -1,7 +1,10 @@
 // İşlem önerisi (H9 gramaj; D4-D1 her çeşit): işlem metni → kurşun gramajı ve kurşun dışı çeşit değerleri (brode deseni…).
 // Öneri DEĞER YAZMAZ; operatörün kabul ettiği/düzelttiği seçim yalnız onayda PROCESS sözlüğüne öğretilir.
 // Sözlük metin başına TEK değer tutar: bir metin grubunda bütün özellik satırları aynı seçimi paylaşır.
+import { useState } from "react";
 import { GramajChoiceButtons } from "@/components/kursun/GramajChoiceButtons";
+import { Button } from "@/components/ui/button";
+import { ProcessValueSearchDialog } from "./ProcessValueSearchDialog";
 import type { ProcessGroup } from "./processChoices";
 import type { ProcessChoiceGroup, ProcessSuggestion } from "./types";
 
@@ -39,6 +42,8 @@ function ChoiceRow({ label, options, pick, onPick }: { label: string | null; opt
 }
 
 export function ProcessGramajPanel({ groups, options: catalogOptions, choiceGroups = [], picks, onPick }: Props) {
+  // Büyük katalogda tam liste sunucu aramalı modalda (D4-D2c); hangi metin grubu + özellik için açık.
+  const [searching, setSearching] = useState<{ key: string; group: ProcessChoiceGroup } | null>(null);
   if (groups.length === 0 || (catalogOptions.length === 0 && choiceGroups.length === 0)) return null;
   const grouped = choiceGroups.length > 0;
   return (
@@ -75,6 +80,11 @@ export function ProcessGramajPanel({ groups, options: catalogOptions, choiceGrou
                   return (
                     <div key={cg.propertyId} data-testid="process-variant" data-property={cg.propertyId} data-suggested={vs?.suggested?.id ?? ""}>
                       <ChoiceRow label={big ? `${cg.propertyName} (yalnız öneri gösteriliyor)` : cg.propertyName} options={tagged(shown, vs)} pick={pick} onPick={(v) => onPick(g.key, v)} />
+                      {big && (
+                        <Button type="button" size="sm" variant="outline" className="mt-1" data-testid="process-variant-search" onClick={() => setSearching({ key: g.key, group: cg })}>
+                          Ara…
+                        </Button>
+                      )}
                     </div>
                   );
                 })}
@@ -83,6 +93,16 @@ export function ProcessGramajPanel({ groups, options: catalogOptions, choiceGrou
           </div>
         );
       })}
+      {searching && (
+        <ProcessValueSearchDialog
+          open
+          onOpenChange={(o) => !o && setSearching(null)}
+          propertyId={searching.group.propertyId}
+          propertyName={searching.group.propertyName}
+          selectedId={picks[searching.key] ?? null}
+          onSelect={(v) => onPick(searching.key, v.id)}
+        />
+      )}
     </section>
   );
 }

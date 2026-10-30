@@ -92,12 +92,32 @@ export interface DeliveryNoteGramajSuggestion {
     suggested: { valueId: string; valueName: string } | null;
     entries: Array<{ valueId: string | null; valueName: string | null; processText: string | null; rollCount: number }>;
   }>;
+  /** Partili gelen belge yoksa / eski backend → anahtar yok (D4-D2). */
+  customerBatches?: WorkOrderCustomerBatch[];
+}
+
+/** Kurşun DIŞI aktif hedef (brode deseni vb., D4-D2); İE'de böyle hedef yoksa / eski backend → anahtar yok. */
+export interface VariantTarget {
+  propertyId: string;
+  propertyName: string;
+  valueId: string;
+  valueName: string;
+}
+
+/** Topların türetilmiş müşteri partisi (D4-D2; gelen belge partisi). */
+export interface WorkOrderCustomerBatch {
+  key: string;
+  ownerCustomerId: string;
+  ownerName: string;
+  batchNo: string;
+  rollCount: number;
 }
 
 export interface ProcessSummaryData {
   kursun: KursunSummary;
   /** Anahtar yok = modül kapalı ya da parti kapsamı; null = toplarda gelen belge satırı yok. */
   deliveryNoteGramaj?: DeliveryNoteGramajSuggestion | null;
+  variantTargets?: VariantTarget[];
 }
 
 export async function fetchProcessSummary(scope: ProcessSummaryScope): Promise<ProcessSummaryData> {
