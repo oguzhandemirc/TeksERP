@@ -14,6 +14,8 @@
 //
 // NEGATİF SONDA — 2026-10-25 koşuldu (cp + shasum ile birebir geri alındı):
 //   cost.routes.ts'ten `requireMaliyetEnabled` kapısı sökülünce → §2 + §4 ❌
+// 2026-10-30 (D4-G1a): item-lifecycle.helper'a cost-rate-validity importu eklenince muafa rağmen
+//   §2 ❌ (item.routes zincirinde machineCostRate) — model-kapsamlı muaf başka modeli örtmez.
 // =============================================================================
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -49,6 +51,19 @@ const MALIYET_MODELLERI = new Set([
   "serviceConsumableNorm",
 ]);
 
+/**
+ * MODEL-KAPSAMLI MUAF — router YALNIZ adı geçen modele dokunduğu için muaf; aynı router'ın
+ * zincirinde BAŞKA bir maliyet modeli bulunursa muaf düşer (§2 o modeli muafsız taramayla ölçer).
+ * İki yönlü: dokunuş kalkarsa ya da router kapı taşırsa §2b "gereksiz muaf" der.
+ */
+const MODEL_MUAF: ReadonlyArray<{ dosya: string; model: string; neden: string }> = [
+  {
+    dosya: "routes/item.routes.ts",
+    model: "serviceConsumableNorm",
+    neden: "Kart yaşam döngüsü (item-lifecycle) aktif sarf normunu canlı referans olarak yalnız SAYAR — pasife almayı reddetmek için; maliyet kapalıyken norm doğamaz, sayım 0'dır (D4-G1a).",
+  },
+];
+
 const ADLA_BEKLENEN_KAPILI: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
     dosya: "routes/cost.routes.ts",
@@ -70,12 +85,23 @@ function main(): void {
     `bulunan=${ilgili.length} → ${ilgili.map((x) => path.basename(x.f)).join(", ")}`,
   );
 
-  const kapisiz = ilgili.filter((x) => !tarama.kapiliMi(x.f));
+  // Muaf model(ler) çıkarılmış ikinci tarama: muaf router'ın zincirinde KALAN maliyet dokunuşunu ölçer.
+  const muafModeller = new Set(MODEL_MUAF.map((m) => m.model));
+  const muafsizTarama = rejimTaramasiKur({ src: SRC, modeller: new Set([...MALIYET_MODELLERI].filter((m) => !muafModeller.has(m))), kapiAdlari: [KAPI] });
+  const muafDosyalar = new Set(MODEL_MUAF.map((m) => path.join(SRC, m.dosya)));
+  const kapisiz = ilgili.filter((x) => !tarama.kapiliMi(x.f) && !(muafDosyalar.has(x.f) && muafsizTarama.modelDokunusu(x.f) === null));
   check(
     "§2 ⭐ Maliyet modellerine dokunan HER router rejim kapısı taşıyor",
     kapisiz.length === 0,
     kapisiz.length === 0 ? `${ilgili.length} router kapılı` : `KAPISIZ: ${kapisiz.map((x) => path.relative(SRC, x.f)).join(", ")}`,
   );
+
+  const gereksizMuaf = MODEL_MUAF.filter((m) => {
+    const f = path.join(SRC, m.dosya);
+    return !fs.existsSync(f) || tarama.kapiliMi(f) || tarama.modelDokunusu(f) === null || m.neden.trim().length < 20;
+  });
+  check("§2b Model-kapsamlı muaf listesi bayat değil (dosya var, kapısız, dokunuş sürüyor, gerekçeli)", gereksizMuaf.length === 0, gereksizMuaf.map((m) => m.dosya).join(", "));
+  for (const m of MODEL_MUAF) console.log(`   ℹ️  muaf: ${m.dosya} [${m.model}] — ${m.neden}`);
 
   for (const b of ADLA_BEKLENEN_KAPILI) {
     const f = path.join(SRC, b.dosya);

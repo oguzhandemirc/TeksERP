@@ -34,7 +34,6 @@ import {
 } from "./live-ref-where.helper";
 import { AuditService } from "../audit.service";
 import { ACTIVE_ITEM_PRICE } from "./item-price-validity.helper";
-import { ACTIVE_COST_RATE } from "./cost-rate-validity.helper";
 
 export { ITEM_LIFECYCLE_LABEL, itemLifecycleWriteData } from "./item-lifecycle-data.helper";
 
@@ -112,7 +111,8 @@ function liveRefWhere(itemId: string, db: Db): LiveRefWhere {
     SERVICE_VALUE_MAP: { serviceItemId: itemId },
     // Yalnız HİZMET kaleminin müşteri fiyatı: ürün fiyat istisnası tanımdır, canlı referans değildir (K1 emsali).
     SERVICE_CUSTOMER_PRICE: { itemId, customerId: { not: null }, ...ACTIVE_ITEM_PRICE, item: { itemType: ItemType.SERVICE } },
-    CONSUMABLE_NORM: { OR: [{ serviceItemId: itemId }, { consumableItemId: itemId }], ...ACTIVE_COST_RATE },
+    // `ACTIVE_COST_RATE` ile aynı yüklem; helper import edilmez (makine ücreti okuyucusunu kart router'ına bağlardı — maliyet rejim bekçisi).
+    CONSUMABLE_NORM: { OR: [{ serviceItemId: itemId }, { consumableItemId: itemId }], revokedAt: null },
   };
 }
 
