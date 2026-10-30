@@ -7,12 +7,14 @@
 //      geri alınan hariç, açık "sürüyor"; gün kırılımı sınırda bölünmüş; zarf (ana sayı · tablo · uyarı) aynı sayıyı basar,
 //   ③ HTTP: 200 + zarf; bilinmeyen tür 400; rejim kapalı (dokuma ∧ ayar kapalı) 403 MODULE_DISABLED,
 //   ④ bulut: katalogda yalnız `üretim ∧ ayar` iken; `dokuma/duruslar` kaydı ayardan bağımsız (weavingOpen dokunulmaz),
-//   ⑤ dokuma fabrikasında mevcut duruş raporu (`dokuma/duruslar`) ayar KAPALI/AÇIK bayt-aynı (snapshot),
+//   ⑤ dokuma fabrikasında mevcut duruş raporu (`dokuma/duruslar`) ayardan bağımsız: ayar KAPALI/AÇIK bayt-aynı
+//      (PR öncesi davranışla snapshot DEĞİL; PR dokuma rapor servisine dokunmaz),
 //   ⑥ AST: rapor kapsamı `machineStopScopeWhere` + `machineStopRegime`den; kopya istasyon-türü where'i, ayar
 //      okuyucusu, çıplak gün kesimi yok; bulut kapısı rejim helper'ından.
 // NEGATİF SONDALAR (2026-10-30, D4-A4):
 //   S1 `getMachineStopReport` kapsamı helper yerine `{ machine: { station: { kind: { not: StationKind.WEAVING } } } }` → §6a + §6b kırmızı (28/2).
 //   S2 `splitByFactoryDay` tek parça döndürdü (gün bölme kaldırıldı) → §1b + §2d kırmızı (28/2).
+//   S3 çıkış metresi fazı yeniden yalnız OUT'a daraltıldı → §2f2 kırmızı (tambur CUT 30 m → 0).
 // Global durum yazar (SystemSetting): `hedefDbEngeli()` ilk adım; üç ayar satırı birebir geri yüklenir.
 // =============================================================================
 import type { Server } from "http";
@@ -20,7 +22,7 @@ import type { AddressInfo } from "net";
 import { randomUUID } from "crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Prisma, StationKind } from "@prisma/client";
+import { ItemType, MachineDataSource, MeterApprovalMode, MeterPhase, MeterVarianceBasis, Prisma, StationKind } from "@prisma/client";
 import app from "../src/app";
 import prisma, { pool } from "../src/lib/prisma";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
@@ -47,7 +49,7 @@ const DAY = 86_400_000;
 const ek = `${Date.now().toString(36).slice(-5)}${Math.random().toString(36).slice(2, 5)}`.toUpperCase();
 const KEYS = [SETTING_KEYS.DOKUMA_ENABLED, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.MACHINE_STOP_TRACKING_ENABLED] as const;
 const saved = new Map<string, { value: Prisma.JsonValue; description: string | null } | null>();
-const ids = { stations: [] as string[], machines: [] as string[] };
+const ids = { stations: [] as string[], machines: [] as string[], items: [] as string[], rolls: [] as string[], workOrders: [] as string[] };
 
 async function setSetting(key: string, value: boolean): Promise<void> {
   await prisma.systemSetting.upsert({ where: { key }, create: { key, value, description: "TEST makine duruşu raporu" }, update: { value } });
@@ -124,6 +126,7 @@ async function main(): Promise<void> {
     await stop(qc, new Date(midnight + 2 * 3600_000), new Date(midnight + 3 * 3600_000), { revokedAt: now, revokeReason: "TEST geri alma" }); // 60 dk, HARİÇ
     await stop(tb, new Date(midnight + 5 * MIN), new Date(midnight + 15 * MIN)); // 10 dk
     await stop(tb, new Date(now.getTime() - 20 * MIN), null); // açık: 20 dk "sürüyor"
+    await stop(qc, new Date(midnight + 4 * 3600_000), new Date(midnight + 4 * 3600_000)); // süresi 0: sayılmaz (tanımlarda yazılı)
     const window = resolveCoreDayRange({ from: d0, to: factoryYmd(now) }, 7, now);
     const filters = { machineId: [qc, tb] };
     const r = await getMachineStopReport({ range: window.range, filters, now });
@@ -136,6 +139,30 @@ async function main(): Promise<void> {
     check("§2e gün parçalarının toplamı = toplam", r.days.reduce((s, d) => s + d.ms, 0) === r.ms);
     check("§2f makine başına: kurşun 75 dk, tambur 30 dk; çıkış metresi okuma yokken 0",
       r.machines.find((m) => m.key === qc)?.ms === 75 * MIN && r.machines.find((m) => m.key === tb)?.ms === 30 * MIN && r.machines.every((m) => m.outMeters === 0));
+    // Çıkış metresi: kurşun OUT, tambur CUT yazar (D4-B1b) → ikisi de sayılır; geri alınan okuma girmez.
+    const item = await prisma.item.create({ data: { code: `TEST-MDRP-I-${ek}`.slice(0, 32), name: `TEST MDRP kumaş ${ek}`, itemType: ItemType.FABRIC, unit: "MT" }, select: { id: true } });
+    ids.items.push(item.id);
+    const roll = await prisma.roll.create({ data: { itemId: item.id, initialQty: "100", currentQty: "100" }, select: { id: true } });
+    ids.rolls.push(roll.id);
+    const stationOf = async (machineId: string) => (await prisma.machine.findUniqueOrThrow({ where: { id: machineId }, select: { stationId: true } })).stationId;
+    const wo = await prisma.workOrder.create({
+      data: { workOrderNumber: `TEST-MDRP-WO-${ek}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", targetItemId: item.id,
+        steps: { create: [{ stationId: await stationOf(qc), stepSequence: 1, status: "ACTIVE" as const }, { stationId: await stationOf(tb), stepSequence: 2, status: "PENDING" as const }] } },
+      select: { id: true, steps: { select: { id: true, stepSequence: true } } },
+    });
+    ids.workOrders.push(wo.id);
+    const stepOf = (n: number) => wo.steps.find((x) => x.stepSequence === n)!.id;
+    const reading = (machineId: string, step: string, phase: MeterPhase, meters: string, extra: Partial<Prisma.RollMeterReadingUncheckedCreateInput> = {}) =>
+      prisma.rollMeterReading.create({
+        data: { rollId: roll.id, workOrderStepId: step, phase, meters, source: MachineDataSource.OPERATOR, machineId, clientToken: randomUUID(),
+          ...(phase === MeterPhase.CUT ? {} : { basis: MeterVarianceBasis.DECLARED_IN, approvalMode: MeterApprovalMode.NONE }), ...extra },
+      });
+    await reading(qc, stepOf(1), MeterPhase.OUT, "40.500");
+    await reading(tb, stepOf(2), MeterPhase.CUT, "30.000");
+    await reading(tb, stepOf(2), MeterPhase.CUT, "99.000", { revokedAt: now, revokeReason: "TEST geri alma" });
+    const withMeters = await getMachineStopReport({ range: window.range, filters, now });
+    const metersOf = (k: string) => withMeters.machines.find((m) => m.key === k)?.outMeters;
+    check("§2f2 çıkış metresi: kurşun OUT 40,5 m · tambur CUT 30 m (geri alınan 99 m HARİÇ)", metersOf(qc) === 40.5 && metersOf(tb) === 30, `qc=${metersOf(qc)} tb=${metersOf(tb)}`);
     const narrowed = await getMachineStopReport({ range: { from: new Date(midnight), to: new Date(midnight + 10 * MIN - 1) }, filters, now });
     check("§2g pencereye kırpma: sınır sonrası 10 dk'lık pencerede 10 + 5 dk", narrowed.ms === 15 * MIN && narrowed.stopCount === 2, `ms=${narrowed.ms}`);
 
@@ -202,6 +229,12 @@ async function main(): Promise<void> {
 async function cleanup(): Promise<void> {
   try {
     await prisma.machineStopEvent.deleteMany({ where: { machineId: { in: ids.machines } } });
+    await prisma.rollMeterReading.deleteMany({ where: { rollId: { in: ids.rolls } } });
+    await prisma.rollOperation.deleteMany({ where: { rollId: { in: ids.rolls } } });
+    await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: ids.workOrders } } });
+    await prisma.workOrder.deleteMany({ where: { id: { in: ids.workOrders } } });
+    await prisma.roll.deleteMany({ where: { id: { in: ids.rolls } } });
+    await prisma.item.deleteMany({ where: { id: { in: ids.items } } });
     await prisma.machine.deleteMany({ where: { id: { in: ids.machines } } });
     await prisma.station.deleteMany({ where: { id: { in: ids.stations } } });
   } catch (e) {

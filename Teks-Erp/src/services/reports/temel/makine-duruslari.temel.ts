@@ -126,10 +126,10 @@ export async function buildMachineStopsReport(input: MachineStopsInput): Promise
       grafik: machineStopsChart(report, range),
       tablo: capped.tablo,
       tanimlar: [
-        { ad: "Toplam duruş", aciklama: "Makinelerin bu dönemde durduğu süre, dakika. Geri alınan duruş girmez; süren duruş şu ana kadar sayılır." },
+        { ad: "Toplam duruş", aciklama: "Makinelerin bu dönemde durduğu süre, dakika. Geri alınan duruş girmez; süren duruş şu ana kadar sayılır. Başladığı anda biten (süresi 0) kayıt sayılmaz." },
         { ad: "Gün", aciklama: "Gece yarısını aşan duruş iki güne bölünür; her gün kendi payını alır." },
         { ad: "Vardiya", aciklama: "Duruş başladığı vardiyaya yazılır. Vardiya tanımı yoksa kırılım güne göredir." },
-        { ad: "Aynı dönemde çıkan", aciklama: "O makineden bu dönemde sayaçla ölçülüp çıkan kumaş, metre (geri alınan okuma girmez)." },
+        { ad: "Aynı dönemde çıkan", aciklama: "O makineden bu dönemde ölçülüp çıkan kumaş, metre: kurşunda çıkış okuması, tamburda kesilen metre (geri alınan okuma girmez)." },
       ],
       parametreler: [...dayRangeParameters(days, mode), ...filterParameters(report, filters)],
       uyarilar: [...capped.uyarilar, ...machineStopsWarnings(report)],

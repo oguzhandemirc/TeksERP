@@ -186,12 +186,15 @@ export async function getMachineStopReport(input: { range: DateRange; filters?: 
   };
 }
 
-/** Σ aktif OUT metresi makine başına (tek groupBy; `machineId` indeksli). Okuma anı `createdAt` dönem içinde. */
+/**
+ * Σ aktif çıkış metresi makine başına (tek groupBy; `machineId` indeksli). Okuma anı `createdAt` dönem içinde.
+ * Kurşun çıkışı OUT, tambur kesimi CUT yazar (D4-B1b); bir makine iki fazı birden yazmaz → çift sayım yok.
+ */
 async function outMetersOf(machineIds: string[], from: Date, endExcl: Date): Promise<Map<string, number>> {
   if (machineIds.length === 0) return new Map();
   const grouped = await prisma.rollMeterReading.groupBy({
     by: ["machineId"],
-    where: { machineId: { in: machineIds }, phase: MeterPhase.OUT, revokedAt: null, createdAt: { gte: from, lt: endExcl } },
+    where: { machineId: { in: machineIds }, phase: { in: [MeterPhase.OUT, MeterPhase.CUT] }, revokedAt: null, createdAt: { gte: from, lt: endExcl } },
     _sum: { meters: true },
   });
   return new Map(grouped.filter((g) => g.machineId !== null).map((g) => [g.machineId as string, Number(g._sum.meters ?? 0)]));
