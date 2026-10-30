@@ -24,6 +24,7 @@ import { Prisma } from "@prisma/client";
 import { round1 } from "./_breakdown";
 import { normalizeScanCode } from "../../utils/code-format";
 import { escapeLikeTerm } from "../../utils/like-escape";
+import { customerCodeSearchRollIds } from "../helpers/roll-scan-resolve.helper";
 
 export interface BatchCandidate {
   batchId: string;
@@ -82,6 +83,11 @@ export interface BatchTrace {
 export async function searchBatches(q: string, limit = 20): Promise<BatchCandidate[]> {
   const term = q.trim();
   if (!term) return [];
+  // Müşteri koduyla okutulan top (D4-F1b, tek okutma boğazı); ayar kapalıyken parça boş → bugünkü sorgu.
+  const customerCodeRollIds = await customerCodeSearchRollIds(term);
+  const byCustomerCode = customerCodeRollIds.length > 0
+    ? Prisma.sql`OR EXISTS (SELECT 1 FROM rolls r3 WHERE r3."batchId" = b.id AND r3.id = ANY(${customerCodeRollIds}::uuid[]))`
+    : Prisma.empty;
   const rows = await prisma.$queryRaw<
     Array<{
       batchId: string; batchNumber: string; workOrderNumber: string | null;
@@ -106,6 +112,7 @@ export async function searchBatches(q: string, limit = 20): Promise<BatchCandida
        -- eslesmesi icin tek kapidan gecer. Eksiklik 2026-08-19 denetiminde bulundu.
        -- (Bu blok bir JS template literal icindedir: BACKTICK KULLANMA.)
        OR EXISTS (SELECT 1 FROM rolls r2 WHERE r2."batchId" = b.id AND r2.barcode = ${normalizeScanCode(term)})
+       ${byCustomerCode}
     GROUP BY b.id, b."batchNumber", wo."workOrderNumber", b."createdAt", b."mergedIntoId"
     -- ⚠️ batchNumber ile SIRALAMA YAPILMAZ (kök CLAUDE.md): numara sardığı için
     -- sözlüksel/sayısal sıra "yenilik" sırası DEĞİLDİR.
