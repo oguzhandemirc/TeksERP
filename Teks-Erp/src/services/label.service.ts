@@ -30,7 +30,7 @@ import { LabelKind, PrinterLanguage, Prisma, RollStatus, type LabelTemplate, typ
 import { sampleQualityCode, loadCustomerNamePolicy } from "./helpers/quality-role.helper";
 import prisma from "../lib/prisma";
 import { loadActiveCustomerCodes } from "./helpers/roll-customer-code-read.helper";
-import { applyCustomerCodeGate, withWarnings } from "./helpers/label-customer-code-gate.helper";
+import { applyCustomerCodeGate, assertNoCustomerCodeSource, withWarnings } from "./helpers/label-customer-code-gate.helper";
 import { AuditService } from "./audit.service";
 import { fromAttachment, outcomeFromTransport, recordPrintJob, type PrintJobReportOpt } from "./print-job.service";
 import type { PrintSubjectKind } from "../constants/print-subject-catalog";
@@ -903,10 +903,10 @@ export class LabelService {
     kindOverride?: LabelKind,
     opts?: RollLabelRenderOpts,
   ): Promise<ApiResponse<{ ppla: string }>> {
-    const { input } = await this.buildRollRenderInput(rollId, kindOverride, opts);
+    const { input, warnings } = await this.buildRollRenderInput(rollId, kindOverride, opts);
     // İnceleme ucu: HER ZAMAN komut (raster cihazda bile) — dilden-bağımsız PPLA metni.
     const ppla = (await renderLabel(PrinterLanguage.PPLA, { ...input, rasterMode: false })).content;
-    return { success: true, data: { ppla } };
+    return { success: true, data: { ppla }, ...withWarnings(warnings) };
   }
 
   /**
@@ -967,7 +967,7 @@ export class LabelService {
     const input = { ...built.input, copies: 1 };
     const language = input.format.language;
     if (language === PrinterLanguage.RASTER_HTML) {
-      return { success: true, data: { mode: "html", language, content: (await renderLabel(language, input)).content, kind, meta } };
+      return { success: true, data: { mode: "html", language, content: (await renderLabel(language, input)).content, kind, meta }, ...withWarnings(built.warnings) };
     }
     // RASTER cihaz + kanvas varyantı → önizleme AYNI 1bpp bitmap (BMP data-URI) →
     // önizleme=baskı tanım gereği. Envelope patlarsa (PPLA F0 / font eksik) komut
@@ -982,6 +982,7 @@ export class LabelService {
           return {
             success: true,
             data: { mode: "html", language, content: rasterPreviewHtml(bitmap, input.format.widthMm, input.format.heightMm), kind, meta },
+            ...withWarnings(built.warnings),
           };
         } catch { /* raster envelope başarısız → aşağıdaki komut SVG'sine düş */ }
       }
@@ -995,8 +996,8 @@ export class LabelService {
       mmToDots(input.format.widthMm, input.format.dpi),
       mmToDots(input.format.heightMm, input.format.dpi),
     );
-    if (svg) return { success: true, data: { mode: "svg", language, content: svgToPreviewHtml(svg), kind, meta } };
-    return { success: true, data: { mode: "text", language, content: native, kind, meta } };
+    if (svg) return { success: true, data: { mode: "svg", language, content: svgToPreviewHtml(svg), kind, meta }, ...withWarnings(built.warnings) };
+    return { success: true, data: { mode: "text", language, content: native, kind, meta }, ...withWarnings(built.warnings) };
   }
 
   /** HTML dilinde doğrudan gönderim yok (OS sürücü); aksi halde transport'a delege. */
@@ -1765,6 +1766,7 @@ export class LabelService {
     // basılıyor (varyantsız şablon; emitter'da SACK dalı yok) ya da çuval numarası
     // hiç basılmayan yarı boş etiket çıkıyordu. Sessiz çöp yerine Türkçe 400.
     assertContextRenderable(routing.template, LabelKind.SACK);
+    assertNoCustomerCodeSource(routing.variant, "Çuval");
 
     const barcodeSvg = renderCode128Svg(payload.barcode);
     const qrSvg = renderQrSvg(payload.barcode);

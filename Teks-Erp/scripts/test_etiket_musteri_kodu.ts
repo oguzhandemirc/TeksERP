@@ -17,7 +17,7 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { LabelKind, type Prisma } from "@prisma/client";
+import { LabelKind, type LabelTemplateVariant, type Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { CanvasValidationError, validateCanvasLayout } from "../src/config/label-elements";
 import { buildDefaultFields } from "../src/config/label-fields";
@@ -72,6 +72,18 @@ async function dbsiz(): Promise<void> {
   const kodsuz = await renderRaw(cc, PAYLOAD);
   const rollOnly = await renderRaw(layoutWith(), PAYLOAD);
   check("§2 kodsuz payload: barkod/QR elemanı atlanır (ZPL'de ^BC/^BQ yok)", !/\^BC|\^BQ/.test(kodsuz.zpl) && /\^BC/.test(rollOnly.zpl));
+
+  console.log("\n[§2b] top dışı bağlam (çuval) — CUSTOMER_CODE FAIL-CLOSED");
+  const { assertNoCustomerCodeSource, CUSTOMER_CODE_SOURCE_NOT_ROLL } = await import("../src/services/helpers/label-customer-code-gate.helper");
+  const asVariant = (elements: unknown) => ({ elements }) as unknown as LabelTemplateVariant;
+  const sackCode = (() => { try { assertNoCustomerCodeSource(asVariant(cc), "Çuval"); return null; } catch (e) { return (e as { details?: { code?: string } }).details?.code ?? "?"; } })();
+  check("§2b ⭐ çuval şablonunda CUSTOMER_CODE → 400 CUSTOMER_CODE_SOURCE_NOT_ROLL", sackCode === CUSTOMER_CODE_SOURCE_NOT_ROLL, String(sackCode));
+  let rollOk = true;
+  try { assertNoCustomerCodeSource(asVariant(layoutWith()), "Çuval"); assertNoCustomerCodeSource(null, "Çuval"); } catch { rollOk = false; }
+  check("§2b source=ROLL / varyantsız çuval şablonu geçer", rollOk);
+  const svc = readFileSync(join(__dirname, "../src/services/label.service.ts"), "utf8");
+  const sackBody = svc.slice(svc.indexOf("private async buildSackRenderInput("), svc.indexOf("async getSackLabelHtml("));
+  check("§2b buildSackRenderInput kapıyı render girdisinden ÖNCE çağırır", /assertNoCustomerCodeSource\(routing\.variant/.test(sackBody) && sackBody.indexOf("assertNoCustomerCodeSource") < sackBody.indexOf("input: {"));
 }
 
 type Resp = { success: boolean; warnings?: string[]; data: { content?: string; html?: string } };
@@ -146,6 +158,8 @@ async function dbli(): Promise<void> {
     check("§3 ROLL_BARCODE → print_jobs 1", (await jobs(r1.id)) === 1);
     const fbHtml = (await labelService.getRollLabelHtml(r1.id, undefined, { templateId })) as unknown as Resp;
     check("§3 ROLL_BARCODE → HTML iç barkodu basar + uyarı", (fbHtml.data.html ?? "").includes(r1.barcode) && (fbHtml.warnings ?? []).length === 1);
+    const fbPrev = (await labelService.getRollPreview(r1.id, undefined, { templateId })) as unknown as Resp;
+    check("§3 ROLL_BARCODE → önizleme de uyarıyı taşır", (fbPrev.warnings ?? []).length === 1, JSON.stringify(fbPrev.warnings));
 
     await bind(r1.id, CODE);
     const ok = (await labelService.getRollLabelHtml(r1.id, undefined, { templateId })) as unknown as Resp;

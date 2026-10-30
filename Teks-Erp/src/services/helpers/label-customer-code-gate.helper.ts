@@ -13,6 +13,7 @@ import { AppError } from "../../utils/app-error";
 import { readLabelCustomerCodeMissing } from "../system-setting.service";
 
 export const CUSTOMER_CODE_MISSING = "CUSTOMER_CODE_MISSING";
+export const CUSTOMER_CODE_SOURCE_NOT_ROLL = "CUSTOMER_CODE_SOURCE_NOT_ROLL";
 export const CUSTOMER_CODE_FALLBACK_WARNING = "Topa bağlı müşteri barkodu yok — etikete iç top barkodu basıldı.";
 
 export interface CustomerCodeGateResult {
@@ -35,6 +36,18 @@ export async function applyCustomerCodeGate(
   }
   const elements = fallbackCustomerCodeToRoll(layout!);
   return { variant: { ...variant, elements: elements as unknown as LabelTemplateVariant["elements"] }, warnings: [CUSTOMER_CODE_FALLBACK_WARNING] };
+}
+
+/**
+ * Müşteri kodu yalnız TOP payload'ında taşınır; top dışı bağlamda (çuval) CUSTOMER_CODE elemanı
+ * sessizce atlanıp kimlik barkodsuz etiket basılırdı → FAIL-CLOSED 400 (ayar bunu esnetmez).
+ */
+export function assertNoCustomerCodeSource(variant: LabelTemplateVariant | null, contextName: string): void {
+  if (!variant || !layoutUsesCustomerCode(readCanvasLayout(variant.elements))) return;
+  throw AppError.badRequest(
+    `${contextName} etiketinde müşteri barkodu basılamaz (müşteri kodu yalnız topa bağlanır). Şablondaki barkod/QR elemanının kaynağını "Top barkodu" yapın.`,
+    { code: CUSTOMER_CODE_SOURCE_NOT_ROLL },
+  );
 }
 
 /** ApiResponse'a yalnız uyarı varsa `warnings` ekler (tekilleştirilmiş; yoksa yanıt bayt-aynı). */

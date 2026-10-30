@@ -5757,7 +5757,7 @@ async function collectShipmentDocContent(
   // belgede snapshot bayt-aynı kalır; kolon opt-in (`defaultHidden`), sevk rakamına dokunmaz.
   const defectNotes = await loadOpenDefectNotes(sacksGross.flatMap((sk) => sk.rolls.map((r) => r.id)));
   // Müşteri barkodu (D4-F3): yalnız kodlu topun satırına alan girer — snapshot sevkte DONAR, kodsuz belge bayt-aynı.
-  const customerCodes = await loadActiveCustomerCodes(sacksGross.flatMap((sk) => sk.rolls.map((r) => r.id)));
+  const customerCodes = await loadActiveCustomerCodes(sacksGross.flatMap((sk) => sk.rolls.map((r) => r.id)), db);
   const cekiRows = sacksGross.flatMap((sk) =>
     sk.rolls.map((r, idx) => {
       const skips = namePolicy.skips(r.qualityGradeId, r.qualityGrade);
