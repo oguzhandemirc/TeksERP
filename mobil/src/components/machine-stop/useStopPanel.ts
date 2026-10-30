@@ -7,11 +7,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Toast from 'react-native-toast-message';
 import { useQuery } from '@tanstack/react-query';
-import { machineStopService } from '../../../services/machineStop.service';
-import { tokenForDoff, type DoffAttempt } from './doffAttempt';
+import { machineStopService } from '../../services/machineStop.service';
+import { tokenForDoff, type DoffAttempt } from '../../screens/Modules/Dokuma/doffAttempt';
 import { stopsKey, useStopMutations } from './useStopMutations';
 import { EMPTY_REASON, stopFingerprint, validateClassify } from './stopPayload';
-import type { ReasonPresetValue } from '../../../components/reasonPresets/ReasonPresetPicker';
+import type { ReasonPresetValue } from '../reasonPresets/ReasonPresetPicker';
 
 type Modal = { mode: 'open' } | { mode: 'classify'; stopId: string } | null;
 
