@@ -75,18 +75,16 @@ describe('gövde ve kuyruk', () => {
     expect(JSON.stringify(withMeasure(body, undefined))).toBe(JSON.stringify(body));
     expect(withMeasure(body, { source: 'OPERATOR' })).toEqual({ ...body, measure: { source: 'OPERATOR' } });
   });
-  it('kalıcılaştırılan değişkenler (JSON gidiş-dönüş) ve sapma onaylı tekrar deneme kaynağı taşır', () => {
+  it('sapma onaylı tekrar deneme değişkenleri measure alanını korur (kesimler online-only; kuyruk kabulü uygulanamaz)', () => {
     const vars = { rollId: 'r1', ...body, measure: { source: 'SIMULATED' as const, peripheralId: PERIPHERAL_ID, rawCounter: null } };
     const restored = JSON.parse(JSON.stringify(vars)) as typeof vars;
     const retry = { ...restored, confirmMismatch: true };
     expect(withMeasure({ lengthMeters: retry.lengthMeters }, retry.measure).measure).toEqual(vars.measure);
   });
-  it('eski backend alanı eler (non-strict gövde) → kesim sürer, measure istekte gider', async () => {
-    // Eski sunucu: bilinmeyen alanı sessizce atar, kesimi yapar.
-    mockPost.mockImplementation(async (_url: string, data: Record<string, unknown>) => {
-      const { measure: _dropped, ...kept } = data;
-      return { data: { success: true, data: { childRoll: { id: 'c1' }, received: kept } } };
-    });
+  it('measure gövdede /cut ucuna gider', async () => {
+    // Yalnız istemci gövdesini ölçer; eski backend uyumu sunucu şemasının işidir
+    // (manual/roll + manual/produce B1a öncesi strict → yeni APK en az B1a ister).
+    mockPost.mockImplementation(async () => ({ data: { success: true, data: { childRoll: { id: 'c1' } } } }));
     const res = await tamburService.cutOpenFabric('r1', withMeasure(body, { source: 'MACHINE', peripheralId: PERIPHERAL_ID }));
     expect(res.success).toBe(true);
     expect(mockPost).toHaveBeenCalledWith('/tambur/r1/cut', expect.objectContaining({ measure: { source: 'MACHINE', peripheralId: PERIPHERAL_ID } }));
