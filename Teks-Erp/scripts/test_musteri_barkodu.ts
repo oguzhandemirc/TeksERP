@@ -183,7 +183,7 @@ function astSection(): void {
     const text = readFileSync(file, "utf8");
     if (!/normalizeScanCode\(/.test(text)) continue;
     const short = rel.replace(/^services\//, "");
-    const tagged = header.split("\n").some((l) => l.includes(`${short}:`) && /\[(İÇ|AÇILMALI)\]|sınıflandırıcının kendisi/.test(l));
+    const tagged = header.split("\n").some((l) => l.includes(`${short}:`) && /\[(İÇ|AÇILMALI|AÇIK)\]|sınıflandırıcının kendisi/.test(l));
     if (!applied.has(rel) && !tagged) missing.push(rel);
     if (rel === "services/inventory.service.ts" && !header.includes("inventory.service.ts:")) missing.push(rel);
   }

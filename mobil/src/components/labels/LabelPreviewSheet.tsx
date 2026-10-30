@@ -42,6 +42,8 @@ interface Props {
   /** "Müşterisiz (Stok)" — müşteri bilgisi OLMADAN tek dokunuşta bas. Verilirse
    *  "Bas"ın yanında üçüncü buton görünür (parent {stock:true} ile basar). */
   onPrintStock?: () => void;
+  /** D4-F4 "Müşteri etiketini okut" — verilirse (izin + emanet top) düğme çıkar; parent bağla modalını açar. */
+  onBindCustomerCode?: () => void;
 }
 
 /** Renk satırında kademe de söylenir: Tambur önizlemesiyle aynı top aynı rozeti taşısın. */
@@ -55,7 +57,7 @@ export function sourceInfo(
   return { short: 'Standart', label: 'Standart ad' };
 }
 
-export function LabelPreviewSheet({ visible, rollId, onDismiss, onPrint, onNewLabel, onPrintStock }: Props) {
+export function LabelPreviewSheet({ visible, rollId, onDismiss, onPrint, onNewLabel, onPrintStock, onBindCustomerCode }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
   // Telefonda (dar) modal neredeyse tam en; tablette dengeli/orta genişlik.
   const phone = winW < 600;
@@ -208,6 +210,11 @@ export function LabelPreviewSheet({ visible, rollId, onDismiss, onPrint, onNewLa
                   disabled={updateMut.isPending}
                 >
                   Düzenle
+                </Button>
+              )}
+              {onBindCustomerCode && (
+                <Button mode="outlined" icon="barcode-scan" onPress={onBindCustomerCode} testID="customer-code-bind-open">
+                  Müşteri etiketini okut
                 </Button>
               )}
               {canPrint && onNewLabel && (
