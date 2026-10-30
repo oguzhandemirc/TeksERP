@@ -13,6 +13,15 @@
 // §8  cardSampleId → 400 CARD_SAMPLE_UNSUPPORTED
 // §9  ayar varsayılanları (satır yok): simüle AÇIK, zorunlu KAPALI
 // §10 AST: zayıf halka sıralaması yalnız meter-reading.helper'da (ikinci sıralama KIRMIZI)
+// D4-B1b (CUT okuması deftere):
+// §11 finalize N measure'lı kesim → N CUT okuması (kaynak, makine, sunucu token'ı, adım); replay → N kalır;
+//     measure'sız → okuma 0 ve yanıt bayt-aynı
+// §12 geri alma: SINGLE → 1 damga, FULL → 3 damga (TAMBUR_UNDO), satır silinmez
+// §13 cutOpenFabric CUT okuması; finalizeOpenFabric kalan sapması zayıf halka / okumasızda NULL;
+//     depo kesimi okuma yazmaz, finalizeWarehouseCut NULL
+// §14 faz süzgeçsiz okuyucu envanteri (revokeStepMeterReadingsTx): kurşun adımı → CUT dokunulmaz;
+//     Tambur adımı yeniden açılınca CUT damgalanır (BEKLENEN)
+// §15 AST: roll_meter_readings'e yazım (yaratma/damga/ham SQL) yalnız meter-reading.helper'da
 // Ayarları birebir geri yükler; fixture `TEST-OK-` damgalı, finally'de silinir.
 // =============================================================================
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -23,7 +32,10 @@ import { Prisma, RollEntrySource, RollStatus, StationKind, StationType, StepStat
 import prisma from "../src/lib/prisma";
 import { TamburService } from "../src/services/tambur.service";
 import { TamburManualService } from "../src/services/tambur-manual.service";
-import { meterSourceSchema, weakestMeasureSource, MEASURE_SOURCES, type MeasureSource } from "../src/services/helpers/meter-reading.helper";
+import { TamburUndoService, UNDO_FULL_PERMISSION } from "../src/services/tambur-undo.service";
+import { revokeStepMeterReadingsTx } from "../src/services/helpers/kursun-meter.helper";
+import { randomUUID } from "node:crypto";
+import { insertMeterReadingTx, meterSourceSchema, weakestMeasureSource, MEASURE_SOURCES, type MeasureSource } from "../src/services/helpers/meter-reading.helper";
 import { readTamburMeasureSourceRequired, readTamburSimulatedMeterEnabled } from "../src/services/system-setting.service";
 import { completeQc2Schema, meterReadingSchema } from "../src/controllers/kursun-qc.controller";
 import { cutOpenFabricSchema, cutWarehouseRollSchema, finalizeSchema } from "../src/controllers/tambur.controller";
@@ -31,6 +43,7 @@ import { manualRollSchema, produceSchema } from "../src/controllers/tambur-manua
 
 const tambur = new TamburService();
 const manual = new TamburManualService();
+const undo = new TamburUndoService();
 const KEYS = ["tambur.overQuantityEnabled", "tambur.simulatedMeterEnabled", "tambur.olcumKaynagiZorunlu"] as const;
 
 let pass = 0;
@@ -433,6 +446,176 @@ function section10() {
   check("§10 src'de ikinci kaynak sıralaması YOK", hits.length === 0, hits.join(" · "));
 }
 
+// ── D4-B1b ────────────────────────────────────────────────────────────────────
+let createdMachineId: string | null = null;
+async function ensureMachine(stationId: string): Promise<string> {
+  const m = await prisma.machine.create({ data: { stationId, code: `TOK-${Date.now().toString(36)}`, name: `TEST-OK Makine ${rnd()}` }, select: { id: true } });
+  createdMachineId = m.id;
+  return m.id;
+}
+const kidsOf = (parentId: string) => prisma.roll.findMany({ where: { parentRollId: parentId }, select: { id: true, initialQty: true }, orderBy: { initialQty: "asc" } });
+const cutRows = (rollIds: string[]) =>
+  prisma.rollMeterReading.findMany({
+    where: { rollId: { in: rollIds }, phase: "CUT" },
+    select: { rollId: true, workOrderStepId: true, machineId: true, source: true, meters: true, rawCounter: true, clientToken: true, basis: true, approvalMode: true, revokedAt: true, revokeReason: true },
+  });
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** §11 finalize 3 ölçümlü kesim → 3 CUT okuması; replay → 3 kalır; measure'sız → 0, yanıt bayt-aynı. */
+async function section11(fx: { itemId: string; stationId: string }, machineId: string) {
+  console.log("\n§11 finalize CUT okumaları (kaynak · makine · sunucu token'ı · replay · eski APK)");
+  const cuts = (withMeasure: boolean) => [
+    { length: 20, qualityGrade: gradeCode, relatedErrorIds: [], ...(withMeasure ? { measure: { source: "MACHINE" as const, rawCounter: 20.4 } } : {}) },
+    { length: 30, qualityGrade: gradeCode, relatedErrorIds: [], ...(withMeasure ? { measure: { source: "OPERATOR" as const } } : {}) },
+    { length: 40, qualityGrade: gradeCode, relatedErrorIds: [], ...(withMeasure ? { measure: { source: "SIMULATED" as const } } : {}) },
+  ];
+  const a = await tamburRoll(fx, 90);
+  const resA = await tambur.finalize({ rollId: a.rollId, decisions: [], cuts: cuts(true) }, undefined, machineId);
+  await trackChildren(a.rollId);
+  const kids = await kidsOf(a.rollId);
+  const rows = await cutRows(kids.map((k) => k.id));
+  const byRoll = new Map(rows.map((r) => [r.rollId, r]));
+  check("§11 3 çocuk → 3 CUT okuması", kids.length === 3 && rows.length === 3, `çocuk ${kids.length}, okuma ${rows.length}`);
+  const want = ["MACHINE", "OPERATOR", "SIMULATED"];
+  check("§11 her okuma kendi çocuğunda, kaynağı gövdedeki measure, metre = çocuğun metresi",
+    kids.every((k, i) => byRoll.get(k.id)?.source === want[i] && Number(byRoll.get(k.id)?.meters) === Number(k.initialQty)), JSON.stringify(rows.map((r) => [r.source, r.meters.toString()])));
+  check("§11 adım = Tambur adımı, makine = oturum makinesi", rows.every((r) => r.workOrderStepId === a.stepId && r.machineId === machineId));
+  check("§11 token SUNUCU üretir (UUID, üçü ayrı), politika alanları NULL",
+    rows.every((r) => UUID_RE.test(r.clientToken) && r.basis === null && r.approvalMode === null) && new Set(rows.map((r) => r.clientToken)).size === 3);
+  check("§11 rawCounter gövdeden (yalnız verilen kesimde)", Number(byRoll.get(kids[0]!.id)?.rawCounter) === 20.4 && byRoll.get(kids[1]!.id)?.rawCounter === null);
+  const replay = await tambur.finalize({ rollId: a.rollId, decisions: [], cuts: cuts(true) }, undefined, machineId);
+  check("§11 aynı finalize replay → başarılı, okuma sayısı 3 kalır",
+    replay.success && (await prisma.rollMeterReading.count({ where: { rollId: { in: kids.map((k) => k.id) } } })) === 3);
+  const b = await tamburRoll(fx, 90);
+  const resB = await tambur.finalize({ rollId: b.rollId, decisions: [], cuts: cuts(false) }, undefined, machineId);
+  await trackChildren(b.rollId);
+  const kidsB = await kidsOf(b.rollId);
+  check("§11 measure'sız finalize (eski APK) → okuma 0", kidsB.length === 3 && (await prisma.rollMeterReading.count({ where: { rollId: { in: kidsB.map((k) => k.id) } } })) === 0);
+  const shape = (r: typeof resA) => JSON.stringify({ ok: r.success, keys: Object.keys(r.data).sort(), n: r.data.splitRolls.length, p: r.data.processedErrors, msg: r.message, kid: Object.keys(r.data.splitRolls[0] ?? {}).sort() });
+  check("§11 yanıt measure'lı/measure'sız bayt-aynı (şekil + mesaj)", shape(resA) === shape(resB), shape(resA) === shape(resB) ? "" : `${shape(resA)} ≠ ${shape(resB)}`);
+  return { parentId: a.rollId, stepId: a.stepId, kidIds: kids.map((k) => k.id) };
+}
+
+/** §12 geri alma: SINGLE → 1 damga; FULL → kalan damgalar; satır silinmez. */
+async function section12(fx: { itemId: string; stationId: string }, machineId: string, cut: { parentId: string; kidIds: string[] }) {
+  console.log("\n§12 geri alma CUT okumasını DAMGALAR (ters yol)");
+  const [k0, k1, k2] = cut.kidIds as [string, string, string];
+  await undo.applyUndo(k0);
+  const afterSingle = await cutRows(cut.kidIds);
+  const s0 = afterSingle.find((r) => r.rollId === k0);
+  check("§12 SINGLE → iptal parçanın okuması damgalı (sebep TAMBUR_UNDO), diğer ikisi aktif",
+    !!s0?.revokedAt && s0.revokeReason === "TAMBUR_UNDO" && afterSingle.filter((r) => r.revokedAt === null).length === 2, JSON.stringify(afterSingle.map((r) => r.revokeReason)));
+  const t = await tamburRoll(fx, 90);
+  await tambur.finalize({
+    rollId: t.rollId, decisions: [],
+    cuts: [20, 30, 40].map((length) => ({ length, qualityGrade: gradeCode, relatedErrorIds: [], measure: { source: "MACHINE" as const } })),
+  }, undefined, machineId);
+  await trackChildren(t.rollId);
+  const kidsT = (await kidsOf(t.rollId)).map((k) => k.id);
+  await undo.applyUndo(t.rollId, undefined, { mode: "FULL", reason: "bekçi D4-B1b §12", permissions: [UNDO_FULL_PERMISSION] });
+  const afterFull = await cutRows(kidsT);
+  check("§12 FULL → 3 okumanın 3'ü damgalı, satırlar silinmedi",
+    afterFull.length === 3 && afterFull.every((r) => r.revokedAt !== null && r.revokeReason === "TAMBUR_UNDO"), JSON.stringify(afterFull.map((r) => r.revokeReason)));
+  void k1; void k2;
+}
+
+/** §13 cutOpenFabric CUT okuması + açık kumaş / depo kesimi kapanışında kalan sapmasının kaynağı. */
+async function section13(fx: { itemId: string; stationId: string }, machineId: string) {
+  console.log("\n§13 açık kumaş kesimi + kalan sapması kaynağı (zayıf halka); depo kesimi okumasız");
+  await setSetting("tambur.overQuantityEnabled", null);
+  const o = await tamburRoll(fx, 100);
+  const c1 = await tambur.cutOpenFabric(o.rollId, { lengthMeters: 30, status: "WAREHOUSE", measure: { source: "MACHINE" } }, undefined, machineId);
+  const c2 = await tambur.cutOpenFabric(o.rollId, { lengthMeters: 20, status: "WAREHOUSE", measure: { source: "OPERATOR" } }, undefined, machineId);
+  createdRolls.push(c1.data.childRoll.id, c2.data.childRoll.id);
+  const oRows = await cutRows([c1.data.childRoll.id, c2.data.childRoll.id]);
+  check("§13 cutOpenFabric ölçümlü → çocuk başına 1 CUT okuması (Tambur adımı, makine)",
+    oRows.length === 2 && oRows.every((r) => r.workOrderStepId === o.stepId && r.machineId === machineId));
+  await tambur.finalizeOpenFabric(o.rollId, { remainingAction: "scrap" }, undefined, machineId);
+  await trackChildren(o.rollId);
+  const vO = await prisma.rollVariance.findFirst({ where: { rollId: o.rollId, source: "TAMBUR_FINALIZE" }, select: { measureSource: true, qty: true } });
+  check("§13 finalizeOpenFabric kalan (50 m fire) sapması = MACHINE+OPERATOR zayıf halkası → OPERATOR", vO?.measureSource === "OPERATOR" && Number(vO.qty) === 50, JSON.stringify(vO));
+  const p = await tamburRoll(fx, 100);
+  const d1 = await tambur.cutOpenFabric(p.rollId, { lengthMeters: 30, status: "WAREHOUSE", measure: { source: "MACHINE" } }, undefined, machineId);
+  const d2 = await tambur.cutOpenFabric(p.rollId, { lengthMeters: 20, status: "WAREHOUSE" }, undefined, machineId);
+  createdRolls.push(d1.data.childRoll.id, d2.data.childRoll.id);
+  await tambur.finalizeOpenFabric(p.rollId, { remainingAction: "scrap" }, undefined, machineId);
+  await trackChildren(p.rollId);
+  const vP = await prisma.rollVariance.findFirst({ where: { rollId: p.rollId, source: "TAMBUR_FINALIZE" }, select: { measureSource: true } });
+  check("§13 kesimlerden biri okumasız (eski APK) → kalan sapması NULL (uydurulmaz)", vP !== null && vP.measureSource === null, JSON.stringify(vP));
+  const wh = await warehouseRoll(fx, 100);
+  const w1 = await tambur.cutWarehouseRoll(wh, { cutLength: 30, measure: { source: "MACHINE" } }, undefined, null, machineId);
+  createdRolls.push(w1.data.childRoll.id);
+  check("§13 depo kesimi (adımsız) okuma YAZMAZ", (await prisma.rollMeterReading.count({ where: { rollId: w1.data.childRoll.id } })) === 0);
+  await tambur.finalizeWarehouseCut(wh, { remainingAction: "scrap" }, undefined, null, machineId);
+  await trackChildren(wh);
+  const vW = await prisma.rollVariance.findFirst({ where: { rollId: wh, source: "TAMBUR_WAREHOUSE_FINALIZE" }, select: { measureSource: true } });
+  check("§13 finalizeWarehouseCut kalan sapması → NULL (okuma yok)", vW !== null && vW.measureSource === null, JSON.stringify(vW));
+}
+
+/**
+ * §14 FAZ SÜZGEÇSİZ OKUYUCU ENVANTERİ — `revokeStepMeterReadingsTx` (adım yeniden açılınca faza bakmadan damgalar):
+ * kurşun adımı yeniden açılınca CUT varken sonuç bayt-aynı (CUT dokunulmaz); Tambur adımı yeniden açılınca CUT damgalanır (BEKLENEN).
+ * (service-pricing `loadReadings` + service-flag-work: `test_senaryo_hizmet_veren` adım 5 — CUT'lı/CUT'suz çözüm bayt-aynı.)
+ */
+async function section14(fx: { itemId: string; stationId: string }, machineId: string) {
+  console.log("\n§14 faz süzgeçsiz okuyucu envanteri — revokeStepMeterReadingsTx");
+  const t = await tamburRoll(fx, 50);
+  await tambur.finalize({ rollId: t.rollId, decisions: [], cuts: [{ length: 50, qualityGrade: gradeCode, relatedErrorIds: [], measure: { source: "MACHINE" } }] }, undefined, machineId);
+  await trackChildren(t.rollId);
+  const kid = (await kidsOf(t.rollId))[0]!.id;
+  // Aynı topa başka (kurşun benzeri) adımda OUT okuması — ortak boğazdan, politika kopyalı.
+  const k = await tamburRoll(fx, 1);
+  const out = await prisma.$transaction((tx) => insertMeterReadingTx(tx, {
+    rollId: kid, workOrderStepId: k.stepId, phase: "OUT", meters: 49.5, source: "MACHINE", basis: "DECLARED_IN", approvalMode: "NONE", clientToken: randomUUID(),
+  }));
+  createdReadings.push(out.id);
+  const reopenOther = await prisma.$transaction((tx) => revokeStepMeterReadingsTx(tx, { rollIds: [kid], stepId: k.stepId, userId: null, reason: "KURSUN_REOPEN" }));
+  const cutAfter = await cutRows([kid]);
+  check("§14 kurşun adımı yeniden açılınca: damgalanan = yalnız o adımın OUT'u (1) — CUT varken sonuç bayt-aynı",
+    reopenOther === 1 && cutAfter.length === 1 && cutAfter[0]!.revokedAt === null, `damga ${reopenOther}, CUT aktif ${cutAfter[0]?.revokedAt === null}`);
+  const reopenTambur = await prisma.$transaction((tx) => revokeStepMeterReadingsTx(tx, { rollIds: [kid], stepId: t.stepId, userId: null, reason: "MANUAL_MOVE" }));
+  const cutReopened = await cutRows([kid]);
+  check("§14 BEKLENEN: Tambur adımı yeniden açılınca (geri taşıma) CUT okuması damgalanır",
+    reopenTambur === 1 && cutReopened[0]?.revokedAt !== null && cutReopened[0]?.revokeReason === "MANUAL_MOVE", `damga ${reopenTambur}`);
+}
+
+const WRITE_METHODS = new Set(["create", "createMany", "createManyAndReturn", "upsert", "update", "updateMany", "delete", "deleteMany"]);
+/** §15 İkinci yazar: `*.rollMeterReading.<yazım>` çağrısı ya da ham INSERT/UPDATE/DELETE roll_meter_readings — meter-reading.helper DIŞINDA. */
+export function findSecondMeterWriters(root: string): string[] {
+  const files: string[] = [];
+  walk(join(root, "src"), files);
+  const hits: string[] = [];
+  for (const file of files) {
+    const rel = relative(root, file);
+    if (rel === HELPER) continue;
+    const text = readFileSync(file, "utf8");
+    if (!/rollMeterReading|roll_meter_readings/.test(text)) continue;
+    const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+    const line = (n: ts.Node) => sf.getLineAndCharacterOfPosition(n.getStart()).line + 1;
+    const visit = (n: ts.Node) => {
+      if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && WRITE_METHODS.has(n.expression.name.text)) {
+        const recv = n.expression.expression;
+        const recvName = ts.isPropertyAccessExpression(recv) ? recv.name.text : ts.isElementAccessExpression(recv) && ts.isStringLiteral(recv.argumentExpression) ? recv.argumentExpression.text : null;
+        if (recvName === "rollMeterReading") hits.push(`${rel}:${line(n)} rollMeterReading.${n.expression.name.text}`);
+      }
+      if (ts.isNoSubstitutionTemplateLiteral(n) || ts.isTemplateExpression(n) || ts.isStringLiteral(n)) {
+        if (/\b(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+"?roll_meter_readings\b/i.test(n.getText(sf))) hits.push(`${rel}:${line(n)} ham SQL yazımı`);
+      }
+      ts.forEachChild(n, visit);
+    };
+    visit(sf);
+  }
+  return hits;
+}
+function section15() {
+  console.log("\n§15 AST: roll_meter_readings'e yazım yalnız meter-reading.helper'dan");
+  const root = join(__dirname, "..");
+  const helperText = readFileSync(join(root, HELPER), "utf8");
+  check("§15 körlük zemini: boğaz yaratma + damga çağrısını taşıyor", /tx\.rollMeterReading\.create\(/.test(helperText) && /tx\.rollMeterReading\.updateMany\(/.test(helperText));
+  const hits = findSecondMeterWriters(root);
+  check("§15 src'de ikinci okuma yazarı YOK", hits.length === 0, hits.join(" · "));
+}
+
 async function main() {
   console.log("=== D4-B1a Tambur ölçüm kaynağı ===");
   savedSettings = await prisma.systemSetting.findMany({ where: { key: { in: [...KEYS] } }, select: { key: true, value: true, description: true } });
@@ -443,6 +626,15 @@ async function main() {
   await section3(fx);
   await sections4to8(fx);
   await section9();
+  section15();
+  const machineId = await ensureMachine(fx.stationId);
+  await setSetting("tambur.simulatedMeterEnabled", null);
+  await setSetting("tambur.olcumKaynagiZorunlu", null);
+  await setSetting("tambur.overQuantityEnabled", null);
+  const cut = await section11(fx, machineId);
+  await section12(fx, machineId, cut);
+  await section13(fx, machineId);
+  await section14(fx, machineId);
 }
 
 function cleanupError(e: unknown) {
@@ -455,6 +647,11 @@ async function cleanup() {
     await prisma.systemSetting.create({ data: { key: s.key, value: s.value as Prisma.InputJsonValue, description: s.description } }).catch(cleanupError);
   }
   if (createdReadings.length) await prisma.rollMeterReading.deleteMany({ where: { id: { in: createdReadings } } }).catch(cleanupError);
+  if (createdRolls.length) {
+    const cutIds = (await prisma.rollMeterReading.findMany({ where: { rollId: { in: createdRolls } }, select: { id: true } })).map((r) => r.id);
+    await prisma.systemLog.deleteMany({ where: { recordId: { in: cutIds } } }).catch(cleanupError);
+    await prisma.rollMeterReading.deleteMany({ where: { id: { in: cutIds } } }).catch(cleanupError);
+  }
   if (createdRolls.length) {
     await prisma.systemLog.deleteMany({ where: { recordId: { in: createdRolls } } }).catch(cleanupError);
     await prisma.rollProperty.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(cleanupError);
@@ -471,6 +668,7 @@ async function cleanup() {
   }
   if (createdWOs.length) await prisma.workOrder.deleteMany({ where: { id: { in: createdWOs } } }).catch(cleanupError);
   if (createdItemId) await prisma.item.deleteMany({ where: { id: createdItemId } }).catch(cleanupError);
+  if (createdMachineId) await prisma.machine.deleteMany({ where: { id: createdMachineId } }).catch(cleanupError);
   if (createdStationId) await prisma.station.deleteMany({ where: { id: createdStationId } }).catch(cleanupError);
   if (createdGradeId) await prisma.qualityGrade.deleteMany({ where: { id: createdGradeId } }).catch(cleanupError);
 }
