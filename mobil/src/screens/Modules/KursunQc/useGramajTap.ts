@@ -21,6 +21,7 @@ import {
   deviationText,
   findTarget,
   isCorrectionConflict,
+  stopOpenTapWarning,
   type GramajValue,
   type LastTap,
 } from './gramajTap';
@@ -36,6 +37,8 @@ export interface GramajTapInput {
   refresh: () => void;
   /** H3 sayaç akışı; yoksa ya da `outOn=false` ise gövde bugünküyle bayt-aynı. */
   meter?: Pick<MeterCaptureState, 'outOn' | 'captureOut'> | null;
+  /** Makinede açık duruş var mı (D4-A2). Dokunuş UYARIR, gönderim sürer — K2: sunucu kapısı yok. */
+  stopOpen?: boolean;
 }
 
 // Paused (çevrimdışı) mutasyon settle olmaz → kilit kısa süre sonra kendiliğinden açılır.
@@ -77,6 +80,9 @@ function dispatchTap(
   opts: MutateOpts,
   ctl: { online: boolean; abort: () => void },
 ): void {
+  // K2: açık duruş UYARIR, gönderimi kesmez (sunucu kapısı yok).
+  const stopWarning = stopOpenTapWarning(input.stopOpen === true);
+  if (stopWarning) Toast.show({ type: 'info', text1: stopWarning.title, text2: stopWarning.detail, visibilityTime: 5000 });
   if (input.meter?.outOn && input.roll) {
     input.meter.captureOut(
       input.roll,

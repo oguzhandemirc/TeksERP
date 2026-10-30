@@ -75,6 +75,7 @@ import {
 } from './stationPanels';
 import GramajTapPanel from './GramajTapPanel';
 import { useGramajTap } from './useGramajTap';
+import { MachineStopBand, MachineStopChip, useMachineStopControl } from '../../../components/machine-stop/MachineStopChip';
 import MeterStrip from './MeterStrip';
 import MeterModals from './MeterModals';
 import { useMeterAcks } from './useMeterAcks';
@@ -1010,6 +1011,8 @@ export default function KursunQcScreen() {
   // KQ-D5: yalnız kurşunda tek dokunuş (gramaj = top bitti). Konak mutasyonu
   // iyimser sıradaki topa geçer; düzeltme/kilit/şerit hook'ta.
   const operatorLabel = useAuthStore((st) => st.user?.fullName || st.user?.username || '—');
+  // D4-A2: makine duruş çipi + bandı; açık duruşta gramaj dokunuşu uyarır, gönderim sürer (K2).
+  const machineStop = useMachineStopControl();
   const gramajTap = useGramajTap({
     cfg: panels.tap,
     summary: activeJob?.stepSummary ?? null,
@@ -1018,6 +1021,7 @@ export default function KursunQcScreen() {
     complete: (vars, opts) => completeQc2Mutation.mutate(vars, opts),
     refresh: () => void refetchActiveJob().catch(() => undefined),
     meter,
+    stopOpen: machineStop.stopOpen,
   });
   const tapLayout = panels.completion === 'TAP_VALUE';
 
@@ -1297,6 +1301,8 @@ export default function KursunQcScreen() {
       headerExtras={headerExtras}
       secondRow={compact ? phoneSecondRow : undefined}
       secondRowSpread={compact}
+      titleRowExtras={<MachineStopChip control={machineStop} />}
+      topStrip={<MachineStopBand control={machineStop} />}
     >
       <View
         style={[

@@ -1,7 +1,7 @@
 // =============================================================================
 // TEZGAH DURUŞU (MachineStopEvent) API istemcisi — aç · kapat · sebep ata · geri al
 // =============================================================================
-// Backend `/machine-stops` (`requireDokumaEnabled`; aç/kapa/sebep `mobile:dokuma`,
+// Backend `/machine-stops` (`requireMachineStopRegime`; aç/kapa/sebep `mobile:dokuma` ∨ `mobile:makine-durus`,
 // geri alma `mobile:dokuma-geri-al`; YENİDEN sınıflandırma yalnız web `loom:classify`).
 // Kimlik SAAT DEĞİL TOKEN: `clientToken` = `stopKey`, replay aynı satırı döner.
 // Kuyruk YOK (`stopPayload.ts`).
