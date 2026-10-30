@@ -25,6 +25,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { InventoryService } from "./inventory.service";
 import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";
+import { assertCariNotHeldTx } from "./helpers/cari-hold.helper";
 import { getDeliveryNote } from "./gelen-belge-note.service";
 import { auditLine } from "./gelen-belge-line.service";
 import { resolveDefaultItemForApproval, type DefaultItemSource } from "./gelen-belge-varsayilan.service";
@@ -127,6 +128,8 @@ async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: ty
   // Emanet kapısı + sahip aktifliği TEK yazıcıdan (lisans sorusu + MODULE_DISABLED + pasif/bulunamayan sahip
   // OWNER_CUSTOMER_INVALID aynı helper'da; motor tx içinde yeniden sorar).
   await assertEmanetWritableTx(prisma, note.ownerCustomerId, "gelen belge onayı");
+  // Cari kilidi (D4-I1, INTAKE): hızlı ret; satır doğum tx'i yeniden sorar (onay sürerken konan kilit).
+  await assertCariNotHeldTx(prisma, note.ownerCustomerId, "INTAKE");
   const open = note.lines.filter((l) => l.status === "PENDING" || l.status === "FAILED" || l.status === "ENTERING");
   if (open.length === 0) throw AppError.conflict(`${note.noteNo} için işlenecek satır yok (hepsi girilmiş ya da atlanmış).`, { code: "DELIVERY_NOTE_NO_OPEN_LINES" });
   const unresolved = open.filter((l) => !l.itemId).map((l) => l.lineNo);
@@ -329,6 +332,7 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
           entryReason: `${note.noteNo} satır ${line.lineNo}`,
           // Kg belgeden gelir; KK1 istasyon politikası (`kk1.weightEntryEnabled`) burada uygulanmaz (mal kabul emsali A1).
           skipKk1WeightPolicy: true,
+          cariHoldIntakeGate: true,
         },
       );
       const rollId = (res.data as { id: string }).id;
