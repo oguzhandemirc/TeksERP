@@ -421,6 +421,8 @@ export interface Roll {
   id: string;
   /** Açık kumaş (boyahane dönüşü Kurşun/KK2 aşaması) için NULL. */
   barcode: string | null;
+  /** Emanet sahibi (G3; müşteri malı) — müşteri barkodu yalnız emanet topa bağlanır (D4-F4). */
+  ownerCustomerId?: string | null;
   itemId: string;
   colorId?: string | null;
   initialQty: number;
