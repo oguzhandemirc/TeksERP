@@ -37,7 +37,7 @@ function summary(flagMode: 'AUTO' | 'OPTIONAL' | 'REQUIRED', target: string | nu
   } as unknown as KursunStepSummary;
 }
 
-function Harness(p: { s: KursunStepSummary; complete: GramajTapInput['complete']; correctFn: jest.Mock }) {
+function Harness(p: { s: KursunStepSummary; complete: GramajTapInput['complete']; correctFn: jest.Mock; stopOpen?: boolean }) {
   const qc = useQueryClient();
   useState(() => {
     qc.setMutationDefaults(STATION_MUT.QC2_COMPLETE, { mutationFn: p.correctFn, retry: false });
@@ -51,11 +51,12 @@ function Harness(p: { s: KursunStepSummary; complete: GramajTapInput['complete']
     operator: 'Ayşe',
     complete: p.complete,
     refresh: jest.fn(),
+    stopOpen: p.stopOpen,
   });
   return <GramajTapPanel state={state} hasRoll />;
 }
 
-function setup(flagMode: 'AUTO' | 'OPTIONAL' | 'REQUIRED' = 'REQUIRED', target: string | null = '50GR') {
+function setup(flagMode: 'AUTO' | 'OPTIONAL' | 'REQUIRED' = 'REQUIRED', target: string | null = '50GR', stopOpen?: boolean) {
   const settle: (() => void)[] = [];
   const complete = jest.fn((_vars, opts: { onSuccess?: () => void; onSettled?: () => void }) => {
     settle.push(() => {
@@ -64,7 +65,7 @@ function setup(flagMode: 'AUTO' | 'OPTIONAL' | 'REQUIRED' = 'REQUIRED', target: 
     });
   });
   const correctFn = jest.fn().mockResolvedValue({ success: true });
-  const r = renderWithPaper(<Harness s={summary(flagMode, target)} complete={complete} correctFn={correctFn} />);
+  const r = renderWithPaper(<Harness s={summary(flagMode, target)} complete={complete} correctFn={correctFn} stopOpen={stopOpen} />);
   const done = () => act(() => settle.splice(0).forEach((f) => f()));
   return { ...r, complete, correctFn, done };
 }
@@ -149,5 +150,29 @@ describe('GramajTapPanel — tek dokunuş', () => {
     );
     // Yazılmayan düzeltme şeritte görünmez — eski değer geri gelir.
     expect(getByTestId('gramaj-strip')).toHaveTextContent(/25 gr/);
+  });
+});
+
+describe('GramajTapPanel — açık duruş (D4-A2)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  // D4-A2 · K2: açık duruş dokunuşu UYARIR, reddetmez — gövde duruşsuzla aynı, TEK kez gider.
+  it('açık duruşta gramaj dokunuşu UYARIR, gönderim sürer (K2)', () => {
+    const { getByTestId, complete } = setup('REQUIRED', '50GR', true);
+    fireEvent.press(getByTestId('gramaj-tap-50GR'));
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(complete.mock.calls[0][0]).toEqual({
+      rollId: 'roll-1',
+      stepId: 'step-1',
+      properties: [{ propertyId: 'gramaj', valueCode: '50GR' }, { propertyId: 'kursun' }],
+    });
+    expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ type: 'info', text1: 'Makine duruşta görünüyor — kayıt yine gönderildi' }));
+  });
+
+  it('duruş yokken uyarı yok (bugünkü dokunuş)', () => {
+    const { getByTestId, complete } = setup('REQUIRED', '50GR', false);
+    fireEvent.press(getByTestId('gramaj-tap-50GR'));
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(Toast.show).not.toHaveBeenCalled();
   });
 });

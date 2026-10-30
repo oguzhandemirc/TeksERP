@@ -54,9 +54,8 @@ describe('Dokuma StopPanel bayt-aynılık', () => {
   it('çalışırken: "Tezgah çalışıyor" + Duruş Bildir; ağaç özeti sabit', async () => {
     mockListOpen.mockResolvedValue([]);
     const r = renderWithPaper(<StopPanel entry={entry(true)} />);
-    await waitFor(() => expect(mockListOpen).toHaveBeenCalled());
-    await act(async () => {});
-    expect(r.getByText('Duruş Bildir')).toBeTruthy();
+    // Sorgu oturana dek düğme kapalı (yükleniyor) — özet yerleşik durumdan alınır.
+    await waitFor(() => expect(r.getByRole('button', { name: /Duruş Bildir/ }).props.accessibilityState?.disabled).toBe(false));
     expect(r.getByText('Tezgah çalışıyor')).toBeTruthy();
     expect(fnv(JSON.stringify(r.toJSON()))).toBe(RUNNING_HASH);
   });

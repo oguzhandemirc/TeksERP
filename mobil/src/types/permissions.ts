@@ -39,6 +39,8 @@ export type MobilePermission =
   // Dokuma (2026-09-14): TEZGAH ekranı + geri alma yeteneği (ayrı yetki, `mobile:tambur-duzelt` emsali).
   | 'mobile:dokuma'
   | 'mobile:dokuma-geri-al'
+  // Makine duruşu (D4-A1/A2): Kurşun/Tambur başlığındaki "Duruş" çipi — ekran-içi yetenek (ayar açıkken).
+  | 'mobile:makine-durus'
   // Devere (2026-09-14, §11): LEVENT SARIM ekranı + sarım iptali yeteneği (ayrı yetki, iplik defterine ters satır).
   | 'mobile:devere'
   | 'mobile:devere-iptal'

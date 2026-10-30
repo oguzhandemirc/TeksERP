@@ -24,7 +24,22 @@ function useMinuteTick(): number {
   return now;
 }
 
-export function useStopPanel({ machineId, isOnline }: { machineId: string | null; isOnline: boolean }) {
+interface StopPanelOptions {
+  machineId: string | null;
+  isOnline: boolean;
+  /** false: liste sorgusu hiç atılmaz (izin/ayar yok — koşulsuz 403 sorgusu atılmaz). Varsayılan true. */
+  enabled?: boolean;
+  /** true: uç yok/kapalı (404/403) yeniden denenmez, `unavailable` döner → çip gizlenir (eski backend). */
+  hideOnUnavailable?: boolean;
+}
+
+/** Uç bu sunucuda yok (eski backend 404) ya da kapalı/izinsiz (403) — çip gizlenir, ekran çalışır. */
+export function isStopEndpointUnavailable(error: unknown): boolean {
+  const status = (error as { status?: number } | null)?.status;
+  return status === 404 || status === 403;
+}
+
+export function useStopPanel({ machineId, isOnline, enabled = true, hideOnUnavailable = false }: StopPanelOptions) {
   const [modal, setModal] = useState<Modal>(null);
   const [reason, setReason] = useState<ReasonPresetValue>(EMPTY_REASON);
   const [collision, setCollision] = useState<string | null>(null);
@@ -34,8 +49,9 @@ export function useStopPanel({ machineId, isOnline }: { machineId: string | null
   const stopsQuery = useQuery({
     queryKey: stopsKey(machineId ?? ''),
     queryFn: () => machineStopService.listOpen(machineId!),
-    enabled: !!machineId,
+    enabled: !!machineId && enabled,
     staleTime: 15_000,
+    ...(hideOnUnavailable ? { retry: (n: number, e: unknown) => !isStopEndpointUnavailable(e) && n < 2 } : {}),
   });
 
   const closeModal = useCallback(() => {
@@ -66,6 +82,7 @@ export function useStopPanel({ machineId, isOnline }: { machineId: string | null
   return {
     openStop: stopsQuery.data?.[0] ?? null,
     stopsLoading: stopsQuery.isLoading,
+    unavailable: isStopEndpointUnavailable(stopsQuery.error),
     now,
     modal,
     openModal: () => setModal({ mode: 'open' }),
