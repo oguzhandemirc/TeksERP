@@ -2892,16 +2892,16 @@ export class ShippingService {
     };
   }
 
-  /**
-   * Sevkiyat kurulum ÖNİZLEMESİ (salt-okunur): çuval içerik dökümü + seçili siparişlere
-   * hesaplanan tahsis + fazla/eşleşmeyen/mükerrer UYARILARI. DB'ye hiçbir şey yazmaz.
-   */
   /** Cari kilidi önizlemesi (D4-I1) — kapının ikizi, aynı helper; red değil uyarı + `cariHold{}`. */
   private async previewShipmentHold(sackIds: string[], customerId: string | null) {
     if (!customerId) return null;
     return shipmentHoldNotice(prisma, customerId, () => rollsAllOwnedByTx(prisma, { sackId: { in: sackIds } }, customerId));
   }
 
+  /**
+   * Sevkiyat kurulum ÖNİZLEMESİ (salt-okunur): çuval içerik dökümü + seçili siparişlere
+   * hesaplanan tahsis + fazla/eşleşmeyen/mükerrer UYARILARI. DB'ye hiçbir şey yazmaz.
+   */
   async previewCreateShipment(
     data: { sackIds: string[]; customerId?: string | null; branchId?: string | null; orderIds?: string[] }
   ): Promise<ApiResponse<unknown>> {

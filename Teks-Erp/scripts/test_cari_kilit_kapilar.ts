@@ -92,6 +92,7 @@ function statik(): void {
   const inv = oku("services/inventory.service.ts");
   check("§0c inventory doğum tx'i: emanet kapısının yanında INTAKE kapısı (bayrakla)", /assertEmanetWritableTx\(tx, opts\?\.ownerCustomerId \?\? null, "top"\);\s*\n\s*\/\/[^\n]*\n\s*if \(opts\?\.cariHoldIntakeGate && opts\.ownerCustomerId\) await assertCariNotHeldTx\(tx, opts\.ownerCustomerId, "INTAKE"\)/.test(inv));
   check("§0d sipariş: prepareOrderCreate INTAKE kapısı", /assertCariNotHeldTx\(prisma, data\.customerId as string, "INTAKE"\)/.test(govde(oku("services/order.service.ts"), "async prepareOrderCreate(", 3000)));
+  check("§0d' sipariş güncellemesi: müşteri değişiminde INTAKE kapısı", /assertCariNotHeldTx\(prisma, finalCustomerId, "INTAKE"\)/.test(oku("services/order.service.ts")));
   const ship = oku("services/shipping.service.ts");
   const core = govde(ship, "private async createShipmentCoreTx(", 4000);
   check("§0e createShipmentCoreTx: kapı yazımdan (shipment.create) ÖNCE", core.includes("assertShipmentNotHeldTx(tx, p.customerId") && core.indexOf("assertShipmentNotHeldTx(") < core.indexOf("tx.shipment.create("));
@@ -135,7 +136,7 @@ async function main(): Promise<void> {
   const foto = await prisma.systemSetting.findMany({ where: { key: { in: AYARLAR } }, select: { key: true, value: true } });
   const ayar = (key: string, v: boolean) => prisma.systemSetting.upsert({ where: { key }, create: { key, value: v }, update: { value: v } });
   const admin = await ensureTestAdmin();
-  const ids = { customers: [] as string[], items: [] as string[], rolls: [] as string[], sacks: [] as string[], shipments: [] as string[], notes: [] as string[], invoices: [] as string[] };
+  const ids = { customers: [] as string[], items: [] as string[], rolls: [] as string[], sacks: [] as string[], shipments: [] as string[], notes: [] as string[], invoices: [] as string[], orders: [] as string[] };
   const origEntry = InventoryService.prototype.createInitialEntry;
   try {
     await ayar(SETTING_KEYS.FINANCE_ENABLED, true);
@@ -205,7 +206,15 @@ async function main(): Promise<void> {
     await kilitle({ intake: true });
     const s2 = await hata(() => orderService.create({ ...govdeS(), clientToken: randomUUID() }, admin.id));
     check("§2c ⭐ INTAKE kilidi → sipariş 409 CARI_HOLD, sipariş doğmaz", s2 === "CARI_HOLD" && (await prisma.order.count({ where: { customerId: A.customerId } })) === 0, s2);
+    // Yan kapı: kilitsiz B'ye açılan sipariş kilitli A'ya taşınamaz (güncelleme de INTAKE'tir).
+    const B = await kart("B");
+    const ob = (await orderService.create({ customerId: B.customerId, lines: [{ itemId: item.id, quantity: 10 }], clientToken: randomUUID() }, admin.id)) as { data: { id: string } };
+    ids.orders.push(ob.data.id);
+    const s2d = await hata(() => orderService.update(ob.data.id, { customerId: A.customerId }, admin.id));
+    const ob2 = await prisma.order.findUniqueOrThrow({ where: { id: ob.data.id }, select: { customerId: true } });
+    check("§2d ⭐ INTAKE kilidi → siparişi kilitli müşteriye taşıma 409 CARI_HOLD, müşteri değişmez", s2d === "CARI_HOLD" && ob2.customerId === B.customerId, s2d);
     await ac();
+    check("§2e kilit açılınca taşıma geçer", (await hata(() => orderService.update(ob.data.id, { customerId: A.customerId }, admin.id))) === "geçti");
 
     // ── §3 Sevk ──
     console.log("\n── §3 Sevk ──");
@@ -303,12 +312,15 @@ async function main(): Promise<void> {
   process.exitCode = fail > 0 ? 1 : 0;
 }
 
-async function temizle(ids: { customers: string[]; items: string[]; rolls: string[]; sacks: string[]; shipments: string[]; notes: string[]; invoices: string[] }): Promise<void> {
+async function temizle(ids: { customers: string[]; items: string[]; rolls: string[]; sacks: string[]; shipments: string[]; notes: string[]; invoices: string[]; orders: string[] }): Promise<void> {
   const noteRolls = (await prisma.customerDeliveryNoteLine.findMany({ where: { noteId: { in: ids.notes }, rollId: { not: null } }, select: { rollId: true } })).map((r) => r.rollId!);
   const rollIds = [...ids.rolls, ...noteRolls];
   const accIds = (await prisma.cariAccount.findMany({ where: { customerId: { in: ids.customers } }, select: { id: true } })).map((a) => a.id);
   const holdIds = (await prisma.cariHold.findMany({ where: { cariId: { in: accIds } }, select: { id: true } })).map((h) => h.id);
   await prisma.systemLog.deleteMany({ where: { recordId: { in: [...ids.notes, ...rollIds, ...ids.shipments, ...ids.sacks, ...ids.invoices, ...holdIds, ...ids.customers, ...accIds] } } });
+  await prisma.systemLog.deleteMany({ where: { recordId: { in: ids.orders } } });
+  await prisma.orderLine.deleteMany({ where: { orderId: { in: ids.orders } } });
+  await prisma.order.deleteMany({ where: { id: { in: ids.orders } } });
   await prisma.cariTransaction.deleteMany({ where: { cariId: { in: accIds } } });
   await prisma.invoiceLine.deleteMany({ where: { invoiceId: { in: ids.invoices } } });
   await prisma.invoice.deleteMany({ where: { id: { in: ids.invoices } } });

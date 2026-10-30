@@ -2689,6 +2689,10 @@ export class OrderService extends BaseService {
       // (create() ile simetrik — pasif müşteriye sipariş taşınamaz).
       if (customerChanging) {
         await this.validateCustomer(finalCustomerId);
+        // Kilitli cariye taşıma = yeni iş kabulü; yaratma kapısının yan kapısını kapatır.
+        if (finalCustomerId !== current.customerId) {
+          await assertCariNotHeldTx(prisma, finalCustomerId, "INTAKE");
+        }
 
         // Lines payload'ı yoksa MEVCUT satır renkleri yeni müşteriye karşı
         // yeniden doğrulanır — eski müşteriye exclusive atanmış renk, sipariş
