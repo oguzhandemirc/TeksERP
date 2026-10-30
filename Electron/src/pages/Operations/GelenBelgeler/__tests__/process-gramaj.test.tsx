@@ -10,8 +10,10 @@ import type { NoteMatchSuggestions } from "../types";
 
 const OPTIONS = [{ id: "v25", name: "25 gr" }, { id: "v50", name: "50 gr" }];
 const approveNote = vi.fn();
+const searchProcessValues = vi.fn();
 vi.mock("../service", () => ({
   approveNote: (...a: unknown[]) => approveNote(...a),
+  searchProcessValues: (...a: unknown[]) => searchProcessValues(...a),
   INCOMING_DOCUMENT_QUERY_KEY: "gelen-belge",
   getSuggestions: () => Promise.resolve({ noteId: "n1", lines: [] }),
   INCOMING_DOCUMENT_SETTINGS_QUERY_KEY: ["gelen-belge", "ayarlar"],
@@ -112,6 +114,38 @@ describe("ProcessGramajPanel — özellik gruplu (D4-D1)", () => {
     const v = screen.getByTestId("process-variant");
     expect(within(v).getAllByRole("radio").map((r) => r.textContent)).toEqual(["Seçme", "Desen D12 (öğrenilmiş öneri)"]);
     expect(within(v).getByText(/yalnız öneri gösteriliyor/)).toBeInTheDocument();
+  });
+  it("≤12 değerde satır içi seçim bayt-aynı; 'Ara…' yok (D4-D2c)", () => {
+    const g = buildProcessGroups({ processText: "BRODE D12", lines: [] }, grouped);
+    const twelve = { ...brode, options: Array.from({ length: 12 }, (_, i) => ({ id: `x${i}`, code: `X${i}`, name: `Desen X${i}` })) };
+    const { unmount } = renderWithProviders(<ProcessGramajPanel groups={g} options={[]} choiceGroups={[twelve]} picks={{}} onPick={() => {}} />);
+    expect(screen.queryByTestId("process-variant-search")).toBeNull();
+    expect(within(screen.getByTestId("process-variant")).getAllByRole("radio")).toHaveLength(13);
+    unmount();
+    renderWithProviders(<ProcessGramajPanel groups={g} options={[]} choiceGroups={[brode]} picks={{}} onPick={() => {}} />);
+    expect(screen.getByTestId("process-variant").outerHTML).toMatchInlineSnapshot(`"<div data-testid="process-variant" data-property="pB" data-suggested="d12"><div class="flex flex-col gap-1" data-testid="process-row"><span class="text-xs text-muted-foreground">Brode deseni</span><div class="flex flex-wrap gap-2" role="radiogroup"><button class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[color,background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 bg-primary text-primary-foreground shadow hover:bg-primary/90 h-9 px-4 py-2" type="button" role="radio" aria-checked="true">Seçme</button><button class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[color,background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 border border-input bg-secondary shadow-sm hover:bg-secondary/80 h-9 px-4 py-2" type="button" role="radio" aria-checked="false">Desen D12 (öğrenilmiş öneri)</button><button class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[color,background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 border border-input bg-secondary shadow-sm hover:bg-secondary/80 h-9 px-4 py-2" type="button" role="radio" aria-checked="false">Desen D15</button></div></div></div>"`);
+  });
+  it(">12 değerde 'Ara…' sunucu aramalı modalı açar; q isteğe gider, seçim onPick ile döner (D4-D2c)", async () => {
+    searchProcessValues.mockReset();
+    searchProcessValues.mockImplementation(async (a: { q?: string }) =>
+      a.q === "D12"
+        ? { items: [{ id: "d12", code: "D12", name: "Desen D12" }], total: 1, nextCursor: null }
+        : { items: [{ id: "x1", code: "X1", name: "Desen X1" }, { id: "d12", code: "D12", name: "Desen D12" }], total: 20, nextCursor: null },
+    );
+    const onPick = vi.fn();
+    const big = { ...brode, options: Array.from({ length: 20 }, (_, i) => ({ id: i === 7 ? "d12" : `x${i}`, code: `X${i}`, name: i === 7 ? "Desen D12" : `Desen X${i}` })) };
+    const g = buildProcessGroups({ processText: "BRODE D12", lines: [] }, grouped);
+    renderWithProviders(<ProcessGramajPanel groups={g} options={[]} choiceGroups={[big]} picks={{}} onPick={onPick} />);
+    await userEvent.click(screen.getByTestId("process-variant-search"));
+    const dialog = await screen.findByTestId("process-value-search");
+    await within(dialog).findByText("20 sonuç");
+    expect(searchProcessValues).toHaveBeenLastCalledWith(expect.objectContaining({ propertyId: "pB", q: undefined }));
+    await userEvent.type(within(dialog).getByLabelText("Brode deseni ara"), "D12");
+    await within(dialog).findByText("1 sonuç");
+    expect(searchProcessValues).toHaveBeenLastCalledWith(expect.objectContaining({ propertyId: "pB", q: "D12" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: /Desen D12/ }));
+    expect(onPick).toHaveBeenCalledWith("header", "d12");
+    expect(screen.queryByTestId("process-value-search")).toBeNull();
   });
   it("çeşit kataloğu yoksa H9 görünümü (başlık 'Kurşun gramajı', satır etiketi yok)", () => {
     const g = buildProcessGroups({ processText: "KURŞUN 25 GR", lines: [] }, sugg);
