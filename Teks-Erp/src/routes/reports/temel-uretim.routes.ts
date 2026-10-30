@@ -12,17 +12,20 @@ import { z } from "zod";
 import { verifyToken } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/rbac.middleware";
 import { requireReportOpen } from "../../middlewares/report.middleware";
-import { requireProductionEnabled } from "../../middlewares/module.middleware";
+import { requireMachineStopRegime, requireProductionEnabled } from "../../middlewares/module.middleware";
 import type { ReportKey } from "../../constants/report-catalog";
 import { reportEnvelope, resolveDateRange } from "../../services/reports/_shared";
 import { coreRangeQuerySchema, resolveCoreCompare } from "../../services/reports/temel/_common";
-import { fasonEkseni, kalemEkseni } from "../../services/reports/_filters";
+import { fasonEkseni, kalemEkseni, machineStopAxis } from "../../services/reports/_filters";
 import { buildProductionFlowReport, PRODUCTION_FLOW_VIEWS } from "../../services/reports/temel/uretim-akisi.temel";
 import { buildQualityReport, QUALITY_VIEWS } from "../../services/reports/temel/kalite.temel";
 import { buildLossReport } from "../../services/reports/temel/kayip.temel";
 import { buildWarehouseReport } from "../../services/reports/temel/depo.temel";
 import { periodSpecSchema, runCoreWithExtras, variantQueryKeys } from "../../services/reports/temel/_variant";
-import { SUBCONTRACTOR_DIMS, subcontractorRunner } from "../../services/reports/temel/core-runs";
+import { MACHINE_STOP_DIMS, SUBCONTRACTOR_DIMS, dayWindowOf, subcontractorRunner } from "../../services/reports/temel/core-runs";
+import { MACHINE_STOPS_KEY, machineStopsRunner } from "../../services/reports/temel/makine-duruslari.temel";
+import { coreDayRangeQuerySchema, resolveCoreDayRange } from "../../services/reports/temel/_day-range";
+import { REPORT_BY_KEY } from "../../constants/report-catalog";
 
 const router = Router();
 // Kimlik dosya başında (BE-30, R0-RAPA ile aynı kalıp): kimliksiz istek 401, kapalı raporun varlığı sızmaz.
@@ -51,6 +54,8 @@ export const coreQualityQuerySchema = coreRangeQuerySchema
   .strict();
 export const coreLossQuerySchema = coreRangeQuerySchema.extend({ ...variantQueryKeys([]) }).strict();
 export const coreWarehouseQuerySchema = z.object({ ...variantQueryKeys([]) }).strict();
+/** Makine duruşları (D4-A4): fabrika günü aralığı + makine · tür · sebep süzgeci + varyant/dönem. */
+export const coreMachineStopsQuerySchema = coreDayRangeQuerySchema.extend({ ...machineStopAxis, ...variantQueryKeys(MACHINE_STOP_DIMS) }).strict();
 export const coreSubcontractorsQuerySchema = coreRangeQuerySchema.extend({ ...fasonEkseni, ...kalemEkseni, ...variantQueryKeys(SUBCONTRACTOR_DIMS) }).strict();
 
 /**
@@ -225,6 +230,47 @@ router.get("/subcontract/fasoncular", ...reportGate("subcontract/fasoncular"), a
       run: subcontractorRunner({ subcontractorId: input.subcontractorId, itemId: input.itemId, colorId: input.colorId }, mode),
     });
     res.status(200).json(reportEnvelope(sunum, range, compareRange, { suzgec, warnings: sunum.uyarilar }));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/reports/production/makine-duruslari:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Temel rapor — Makineler neden durdu? (RaporSunumu; D4-A4)
+ *     description: |
+ *       Kaynak makine duruşu span defteri (karne değil): geri alınan duruş girmez, süren duruş şu ana kadar sayılır,
+ *       gece yarısını aşan duruş fabrika günlerine bölünür. Kapsam duruş rejiminin tek helper'ından
+ *       (`machineStopScopeWhere`); kapı `dokuma ∨ (üretim ∧ uretim.makineDurusTakibi)`. Tablo makine başına,
+ *       yanında aynı makinenin dönemdeki çıkış sayaç metresi; grafik vardiya (tanım varsa) ya da gün.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: from, schema: { type: string, format: date } }
+ *       - { in: query, name: to, schema: { type: string, format: date } }
+ *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] } }
+ *       - { in: query, name: machineId, schema: { type: string }, description: "Makine (uuid; CSV ya da tekrarlı anahtar)" }
+ *       - { in: query, name: stationKind, schema: { type: string }, description: "İstasyon türü (CSV; bilinmeyen 400)" }
+ *       - { in: query, name: reasonCode, schema: { type: string }, description: "Duruş sebebi kodu (CSV)" }
+ *       - { in: query, name: varyant, schema: { type: string, enum: [makine, istasyon, sebep] } }
+ *       - { in: query, name: donemler, schema: { type: string, example: "gun:7" } }
+ *     responses:
+ *       200: { description: "RaporSunumu (data)" }
+ *       400: { description: Geçersiz parametre ya da aralıkta çok fazla duruş (REPORT_RANGE_TOO_LARGE) }
+ *       403: { description: Duruş takibi kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
+ */
+router.get("/production/makine-duruslari", requireMachineStopRegime, ...reportGate("production/makine-duruslari"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = coreMachineStopsQuerySchema.parse(req.query);
+    const window = resolveCoreDayRange(input, REPORT_BY_KEY.get(MACHINE_STOPS_KEY)?.varsayilanGun ?? 7);
+    const filters = { machineId: input.machineId, stationKind: input.stationKind, reasonCode: input.reasonCode };
+    const { sunum } = await runCoreWithExtras({
+      range: window.range, compareRange: window.compareRange, dims: MACHINE_STOP_DIMS, varyant: input.varyant, donemler: input.donemler,
+      run: machineStopsRunner(filters, window.mode, (r, c, m) => (r === window.range && c === window.compareRange ? window : dayWindowOf(r, c, m))),
+    });
+    res.status(200).json(reportEnvelope(sunum, window.range, window.compareRange, { warnings: sunum.uyarilar }));
   } catch (e) {
     next(e);
   }

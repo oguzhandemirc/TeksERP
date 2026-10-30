@@ -28,6 +28,7 @@ export const REPORT_KEY_PERMISSION: Readonly<Record<string, CloudPermission>> = 
   "dokuma/tezgah-randimani": "bulut:uretim:oku",
   "dokuma/duruslar": "bulut:uretim:oku",
   "dokuma/levent-dengesi": "bulut:uretim:oku",
+  "production/makine-duruslari": "bulut:uretim:oku",
   "finance/alacaklar": "bulut:cari-bakiye:oku",
 };
 

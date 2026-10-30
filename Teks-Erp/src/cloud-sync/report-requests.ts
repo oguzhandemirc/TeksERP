@@ -34,6 +34,8 @@ import { buildLoomEfficiencyReport } from "../services/reports/temel/tezgah-rand
 import { buildLoomStopsReport } from "../services/reports/temel/duruslar.temel";
 import { buildBeamBalanceReport } from "../services/reports/temel/levent-dengesi.temel";
 import { buildReceivablesReport } from "../services/reports/temel/alacaklar.temel";
+import { buildMachineStopsReport } from "../services/reports/temel/makine-duruslari.temel";
+import { machineStopRegime } from "../services/helpers/machine-stop-regime.helper";
 // Parametre şemaları v2 uçlarının KENDİSİNDEN (tek kaynak): buluttan gelen istek panelin ucuyla aynı anahtarları kabul eder.
 import {
   coreDeadlineQuerySchema,
@@ -44,6 +46,7 @@ import {
 } from "../routes/reports/temel-satis.routes";
 import {
   coreLossQuerySchema,
+  coreMachineStopsQuerySchema,
   coreQualityQuerySchema,
   coreSubcontractorsQuerySchema,
   coreWarehouseQuerySchema,
@@ -174,6 +177,8 @@ function panelOnlyRejected<T extends z.ZodTypeAny>(schema: T, allow: readonly st
 
 const dayParams = (range: DateRange): Record<string, unknown> => ({ from: factoryYmd(range.from), to: factoryYmd(range.to) } satisfies Partial<DayWindow>);
 const weavingOpen = (): Promise<boolean> => readDokumaEnabled();
+/** D4-A4 (§2.5 md. 6): bulutta makine duruşu `üretim ∧ uretim.makineDurusTakibi` — rejimin TEK helper'ından; `weavingOpen` dokunulmaz. */
+const machineStopCloudOpen = async (): Promise<boolean> => (await machineStopRegime()).general;
 const beamBalanceOpen = async (): Promise<boolean> => (await readDokumaEnabled()) && (await readDevereEnabled());
 
 /** Sunum kişi adı taşıyor mu (K-KISI) — taşıyorsa sonuç buluta GİTMEZ (statik listeye ek savunma). */
@@ -239,6 +244,11 @@ export const REMOTE_REPORTS: readonly RemoteReport[] = [
     reportRunner: async (p) => (await buildLoomStopsReport({ window: dayWindowOf("dokuma/duruslar", p), shiftDefinitionId: (p as z.infer<typeof coreLoomStopsQuerySchema>).shiftDefinitionId })).sunum },
   { key: "dokuma/levent-dengesi", permission: "bulut:uretim:oku", gate: beamBalanceOpen, params: panelOnlyRejected(coreBeamBalanceQuerySchema), paramNames: ["from", "to", "kiyas"], standard: "DONEMLI", standardParams: dayParams, personalData: "YOK",
     reportRunner: async (p) => (await buildBeamBalanceReport({ window: dayWindowOf("dokuma/levent-dengesi", p) })).sunum },
+  { key: "production/makine-duruslari", permission: "bulut:uretim:oku", module: "production.enabled", gate: machineStopCloudOpen, params: panelOnlyRejected(coreMachineStopsQuerySchema), paramNames: ["from", "to", "kiyas"], standard: "DONEMLI", standardParams: dayParams, personalData: "YOK",
+    reportRunner: async (p) => {
+      const q = p as z.infer<typeof coreMachineStopsQuerySchema>;
+      return (await buildMachineStopsReport({ window: dayWindowOf("production/makine-duruslari", p), filters: { machineId: q.machineId, stationKind: q.stationKind, reasonCode: q.reasonCode } })).sunum;
+    } },
   { key: "finance/alacaklar", permission: "bulut:cari-bakiye:oku", module: "finance.enabled", params: panelOnlyRejected(coreReceivablesQuerySchema), paramNames: ["asOf"], standard: "KESIT", personalData: "YOK",
     reportRunner: async (p) => (await buildReceivablesReport(typeof p.asOf === "string" ? new Date(p.asOf) : new Date())).sunum },
 ];

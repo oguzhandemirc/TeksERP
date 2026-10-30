@@ -24,6 +24,10 @@ export const SUBCONTRACTOR_DIMS: readonly VariantDimension[] = [rankedDimension(
 export const LOOM_STOP_DIMS: readonly VariantDimension[] = [declaredOptionsDimension("vardiya", "shiftDefinitionId")];
 // Masraf özeti koşucusu `expense-summary.run.ts`te: bu dosya satış/üretim router'larınca da yüklenir, finans
 // helper zincirini buraya çekmek onları rejim kapısı bekçisine (`test_finance_regime_gate §2`) takar.
+// D4-A4: makine duruşları — koşucu `makine-duruslari.temel.ts`te (bu dosya bağımlılıksız boyutları taşır).
+export const MACHINE_STOP_DIMS: readonly VariantDimension[] = [
+  rankedDimension("makine", "machineId"), rankedDimension("istasyon", "stationKind"), rankedDimension("sebep", "reasonCode"),
+];
 export const EXPENSE_SUMMARY_DIMS: readonly VariantDimension[] = [rankedDimension("paraBirimi", "currency")];
 
 /** Uç anahtarı → beyanlı boyutlar (bekçi: katalog `varyantBoyutlari`nın alt kümesi olmalı). */
@@ -35,6 +39,7 @@ export const CORE_VARIANT_DIMS = {
   "subcontract/fasoncular": SUBCONTRACTOR_DIMS,
   "dokuma/duruslar": LOOM_STOP_DIMS,
   "finance/masraf-ozeti": EXPENSE_SUMMARY_DIMS,
+  "production/makine-duruslari": MACHINE_STOP_DIMS,
 } as const;
 
 type Cell = Parameters<CoreRunner>[2];
