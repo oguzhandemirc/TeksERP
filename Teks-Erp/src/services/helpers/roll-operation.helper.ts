@@ -16,6 +16,8 @@
 // bir gün unutulur ve geri alınmış iz "yapılmış" sayılır (ayrışan yüzey sınıfı).
 // =============================================================================
 import type { Prisma, RollOperationType } from "@prisma/client";
+import { readWidthTrace, WIDTH_TRACE_OPERATION_TYPES } from "./measured-width.helper";
+import { AppError } from "../../utils/app-error";
 
 type Tx = Prisma.TransactionClient;
 
@@ -57,13 +59,16 @@ export interface RevokeOperationsArgs {
  */
 export async function revokeRollOperations(tx: Tx, args: RevokeOperationsArgs): Promise<number> {
   if (args.rollIds.length === 0) return 0;
+  const where: Prisma.RollOperationWhereInput = {
+    rollId: { in: args.rollIds },
+    ...(args.workOrderStepIds ? { workOrderStepId: { in: args.workOrderStepIds } } : {}),
+    ...(args.operationTypes ? { operationType: { in: args.operationTypes } } : {}),
+    ...ACTIVE_OPERATION,
+  };
+  // D4-E2a ters yol: damgalanan satır ölçülen en izi taşıyorsa `Roll.width` aynı tx'te geri konur.
+  await restoreMeasuredWidthsTx(tx, where);
   const res = await tx.rollOperation.updateMany({
-    where: {
-      rollId: { in: args.rollIds },
-      ...(args.workOrderStepIds ? { workOrderStepId: { in: args.workOrderStepIds } } : {}),
-      ...(args.operationTypes ? { operationType: { in: args.operationTypes } } : {}),
-      ...ACTIVE_OPERATION,
-    },
+    where,
     data: {
       revokedAt: new Date(),
       revokedById: args.userId ?? null,
@@ -71,4 +76,65 @@ export async function revokeRollOperations(tx: Tx, args: RevokeOperationsArgs): 
     },
   });
   return res.count;
+}
+
+/**
+ * Adım yeniden açılırken (D4-E2a) yalnız ÖLÇÜLEN EN izi taşıyan kendi satırları damgalar;
+ * `revokeRollOperations` eni aynı tx'te geri koyar. Dönen: eni geri konan top sayısı.
+ */
+export async function revokeWidthTracedStepOperationsTx(
+  tx: Tx,
+  args: { rollIds: string[]; stepId: string; userId?: string | null },
+): Promise<number> {
+  if (args.rollIds.length === 0) return 0;
+  const ops = await tx.rollOperation.findMany({
+    where: {
+      rollId: { in: args.rollIds },
+      workOrderStepId: args.stepId,
+      operationType: { in: WIDTH_TRACE_OPERATION_TYPES },
+      ...ACTIVE_OPERATION,
+      ...OWN_OPERATION,
+    },
+    select: { rollId: true, metadata: true },
+  });
+  const traced = ops.filter((o) => readWidthTrace(o.metadata) != null).map((o) => o.rollId);
+  if (traced.length === 0) return 0;
+  await revokeRollOperations(tx, {
+    rollIds: traced,
+    workOrderStepIds: [args.stepId],
+    operationTypes: WIDTH_TRACE_OPERATION_TYPES,
+    reason: "WIDTH_REOPEN",
+    userId: args.userId ?? null,
+  });
+  return traced.length;
+}
+
+/**
+ * TERS YOL — damgalanacak satırların en izini geri koyar. Yalnız topun KENDİ satırı
+ * (miras kopya değil); aynı topta birden çok iz varsa en yeniden eskiye. Claim
+ * `WHERE {id, width: widthAfter}`; 0 satır → 409 `ROLL_CHANGED` (Düzelt sessiz ezilmez).
+ */
+export async function restoreMeasuredWidthsTx(tx: Tx, where: Prisma.RollOperationWhereInput): Promise<number> {
+  const ops = await tx.rollOperation.findMany({
+    where: { AND: [where, { ...ACTIVE_OPERATION, ...OWN_OPERATION, operationType: { in: WIDTH_TRACE_OPERATION_TYPES } }] },
+    select: { rollId: true, metadata: true },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+  });
+  let restored = 0;
+  for (const op of ops) {
+    const trace = readWidthTrace(op.metadata);
+    if (!trace) continue;
+    const res = await tx.roll.updateMany({
+      where: { id: op.rollId, width: trace.widthAfter },
+      data: { width: trace.widthBefore },
+    });
+    if (res.count === 0) {
+      throw AppError.conflict(
+        "Topun eni ölçümden sonra değiştirilmiş (Düzelt) — geri alma eni ezmez; önce eni elle kontrol edin",
+        { code: "ROLL_CHANGED", rollId: op.rollId, widthAfter: trace.widthAfter },
+      );
+    }
+    restored++;
+  }
+  return restored;
 }

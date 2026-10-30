@@ -6,6 +6,7 @@
 // are excluded from inventory queries unless explicitly filtered.
 // =============================================================================
 
+import { applyMeasuredWidthTx, assertStationCapturesWidth, type MeasuredWidthTrace } from "./helpers/measured-width.helper";
 import { auditCutReadings, reinstateCancelledCutReadingsTx, revokeCutReadingsTx, ROLL_CANCEL_CUT_REASON } from "./helpers/meter-reading.helper";
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, applyRollFlagSetTx } from "./helpers/property-revoke.helper";
@@ -5529,6 +5530,8 @@ export class InventoryService {
        * özellik kümesi kazanır.
        */
       properties?: PropertySelection[] | null;
+      /** D4-E2a ölçülen en (cm) — completeQc2 ile BİREBİR; yalnız `Station.capturesWidth` istasyonunda. */
+      measuredWidthCm?: number | null;
     },
     userId?: string,
     /** PROCESS_QC makine atfı — aktif çalışma oturumundan (controller çözer).
@@ -5652,10 +5655,13 @@ export class InventoryService {
     assertPropertySelectionsValid(stationCaps, data.properties);
     // KQ-D4: tek karar (`resolveKursunApplication`) — completeQc2 ile AYNI fonksiyon.
     const kursun = resolveKursunApplication(stationCaps, data.properties);
+    const measuredWidthCm = data.measuredWidthCm ?? null;
+    if (measuredWidthCm != null) await assertStationCapturesWidth(prisma, stationId);
 
     // Eşzamanlı çift çağrıda kaybeden tx movement kapatmada 0 satır eşler →
     // tüm tx (mükerrer RollError'lar dahil) geri sarılır, idempotent cevap döner.
     let raceLost = false;
+    let widthTrace: MeasuredWidthTrace | null = null;
     try {
     await prisma.$transaction(async (tx) => {
       // F162: O-2 write-skew guard (finishStep paritesi) — son-adım WO oto-tamamlama
@@ -5671,6 +5677,9 @@ export class InventoryService {
       // QC2_COMPLETED var → `priorFinish` dalı) tx'e hiç girmeden çalışır, yani
       // zaten bitmiş işin retry'ı 409 gürültüsü yapmaz.
       await assertKursunTabletMayWrite(tx, stepId, "kurşun bitirme");
+
+      // D4-E2a: iş emri kilidinden sonra top FOR UPDATE → en atomik yazım; iz QC2 satırına.
+      widthTrace = measuredWidthCm != null ? await applyMeasuredWidthTx(tx, { rollId, measuredWidthCm }) : null;
 
       // 1) Roll metraj güncelle
       await tx.roll.update({
@@ -5705,10 +5714,15 @@ export class InventoryService {
             totalMeters: totalMeters,
             errorCount: rawErrors.length,
             notes: data.notes ?? null,
+            ...(widthTrace ?? {}),
           } as Prisma.InputJsonValue,
         },
       ];
-      await tx.rollOperation.createMany({ data: ops, skipDuplicates: true });
+      const createdOps = await tx.rollOperation.createMany({ data: ops, skipDuplicates: true });
+      // En izi satırla birlikte doğmalı; QC2 satırı zaten varsa iz kaybolurdu → 409 (eni değiştirmek = adımı yeniden açmak).
+      if (widthTrace && createdOps.count === 0) {
+        throw AppError.conflict("Bu topun KK2 kaydı zaten var — eni değiştirmek için adımı yeniden açın", { code: "WIDTH_ALREADY_RECORDED" });
+      }
       // Kurşun satırı (gramaj değeriyle) tek yazardan — düzeltme = damga + yeni satır.
       if (kursun.applied) {
         await applyKursunOperationTx(tx, {
@@ -5825,6 +5839,8 @@ export class InventoryService {
         // KQ-D4: basılan kurşun gramajı (çeşit bağı yoksa / seçilmediyse null).
         kursunApplied: kursun.applied,
         valueCode: kursun.valueCode,
+        // D4-E2a: ölçülen en (iz QC2 satırında da).
+        ...(widthTrace ?? {}),
       },
     });
 
