@@ -40,9 +40,13 @@ const PAGE_SIZE = 100;
 export function CashTransactionsPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  // Bağdan gelen açılış (`?search=KH…`): arama kutusu tohumlanır, sonrası yerel durum (bağ paylaşımı değil, geliş).
+  // Bağdan gelen açılış (`?search=KH…`, `?category=<anahtar>`): arama kutusu tohumlanır, sonrası yerel durum (bağ paylaşımı değil, geliş).
   const [sp] = useSearchParams();
-  const [filters, setFilters] = useState<CashTxnFilterState>(() => ({ ...EMPTY_FILTERS, search: sp.get("search") ?? "" }));
+  const [filters, setFilters] = useState<CashTxnFilterState>(() => ({
+    ...EMPTY_FILTERS,
+    search: sp.get("search") ?? "",
+    category: sp.get("category") ?? "",
+  }));
   const [account, setAccount] = useState<CashAccountOption | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
@@ -59,6 +63,7 @@ export function CashTransactionsPage() {
       filters.search,
       filters.from,
       filters.to,
+      filters.category,
     ],
     queryFn: () => listCashTransactions(filters, 1, PAGE_SIZE),
   });

@@ -30,6 +30,7 @@ import type { ProcessSuggestion } from "../src/services/gelen-belge-eslestirme.s
 import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
 import { roleGrade } from "./fixture-quality-grade";
 import { fixtureWarehouseId } from "./fixture-warehouse";
+import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
 import { testActorId } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
@@ -45,7 +46,9 @@ function check(label: string, ok: boolean, extra = ""): void {
   else { fail++; console.log(`  ❌ ${label}${extra ? ` — ${extra}` : ""}`); }
 }
 
-const TAG = `TSTIGO${Date.now().toString(36).toUpperCase()}`;
+// Etiket YALNIZ harftir: işlem metninin sonuna eklendiği için rakamlı parça
+// ('…648G') gramaj kalıbı gibi okunup öneriyi bozuyordu (CI'da ara sıra suggested=null).
+const TAG = `TSTIGO${[...Date.now().toString(26)].map((c) => String.fromCharCode(65 + parseInt(c, 26))).join("")}`;
 const made = { notes: [] as string[], items: [] as string[], customers: [] as string[], props: [] as string[], flags: [] as string[], fixtureRolls: [] as string[], wos: [] as string[], kursunCreated: null as string | null };
 const SETTINGS = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL];
 
@@ -68,6 +71,8 @@ function section1(): void {
 
 async function main(): Promise<void> {
   section1();
+  // Boot uzlaştırması taze test DB'sinde koşmamış olabilir (emsal test_barcode_free_flow).
+  await ensureDefaultWarehouse();
   const actor = await testActorId();
   const kursun = await prisma.fabricProperty.findUnique({ where: { code: KURSUN_PROPERTY_CODE }, select: { id: true } });
   const kursunId = kursun?.id ?? (await prisma.fabricProperty.create({ data: { code: KURSUN_PROPERTY_CODE, name: `TEST Kurşunlu ${TAG}`, valueType: "FLAG" }, select: { id: true } })).id;
