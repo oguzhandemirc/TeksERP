@@ -55,6 +55,8 @@ export interface CustomerCodeCandidate {
   customerId: string;
   customerName: string;
   code: string;
+  /** Kalan metre (D4-F4): tablet aday modalı topu metresiyle ayırt ettirir. */
+  currentQty: number;
 }
 
 export type RollScanResolution<T> =
@@ -85,7 +87,7 @@ export async function resolveRollByScanCode<T>(rawCode: string, opts: ResolveRol
 
   const holders = await prisma.rollCustomerCode.findMany({
     where: { code, revokedAt: null },
-    select: { rollId: true, customerId: true, code: true, roll: { select: { barcode: true } }, customer: { select: { name: true } } },
+    select: { rollId: true, customerId: true, code: true, roll: { select: { barcode: true, currentQty: true } }, customer: { select: { name: true } } },
     orderBy: { createdAt: "asc" },
     take: MAX_CANDIDATES + 1,
   });
@@ -95,7 +97,7 @@ export async function resolveRollByScanCode<T>(rawCode: string, opts: ResolveRol
       kind: "AMBIGUOUS",
       code,
       candidates: holders.slice(0, MAX_CANDIDATES).map((h) => ({
-        rollId: h.rollId, barcode: h.roll.barcode, customerId: h.customerId, customerName: h.customer.name, code: h.code,
+        rollId: h.rollId, barcode: h.roll.barcode, customerId: h.customerId, customerName: h.customer.name, code: h.code, currentQty: Number(h.roll.currentQty),
       })),
     };
   }

@@ -444,6 +444,9 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   { code: "admin:*", reason: "Wildcard — tek tek ekran beyanı anlamsız." },
   { code: "mobile:*", reason: "Wildcard — tüm mobil ekranları kapsar." },
   { code: "web:access", reason: "Giriş kanalı izni (bulut web paneli) — ekran açmaz, çerezli web girişinin kapısıdır (BULUT-WEB-PANELI.md K4)." },
+  // D4-F4: bağla/kaldır kümesi geri uyum için mobile:tambur'u da taşır; tablet düğmesi yalnız Tambur'da olduğundan
+  // Tambur yeteneği olarak sunulsa etkisiz kutu olurdu. Kod, ileride Tambur dışı okutma noktaları (D4-F1b) içindir.
+  { code: "roll:customer-code", reason: "Bugün tablet bağlama düğmesi yalnız Tambur ekranında; mobile:tambur zaten kapsar — Tambur dışı yüzey doğunca ekrana taşınır." },
   // Dokuma P2b (2026-09-13): koşum yazma yüzeyi backend'de doğdu, ekranı tablet
   // TEZGAH ekranıdır (DOKUMA-IS-EMRI §3.2) ve henüz yok. Ekran doğduğu gün bu iki
   // satır ölü muaf olur ve bekçi kırmızı verir — silinmesi o dilimin işidir.

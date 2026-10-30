@@ -370,6 +370,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "roll:write",
       "roll:history",
       "roll:manual-adjust",
+      // D4-F4: müşteri etiketini topa bağlama/değiştirme (sahada operatör bağlar, süpervizör düzeltir).
+      "roll:customer-code",
       // Kurşun metre sapma onayı (H2): faturalanan metreyi imzalar — süpervizör işi.
       "kursun:meter-approve",
       "shipping:read",
@@ -637,9 +639,9 @@ const MOBILE_ROLES: readonly RoleTemplateEntry[] = [
   {
     code: "MOBILE_TAMBUR",
     name: "Mobil — Tambur Operatörü",
-    description: "Tambur karar / kesim ekranı + etiketteki müşteri adını düzeltme",
+    description: "Tambur karar / kesim ekranı + etiketteki müşteri adını düzeltme + müşteri etiketini topa bağlama",
     mode: "list",
-    codes: ["mobile:tambur", "label:edit", "customer-alias:write"],
+    codes: ["mobile:tambur", "label:edit", "customer-alias:write", "roll:customer-code"],
   },
   { code: "MOBILE_DEPO", name: "Mobil — Depo Operatörü", description: "Depo ekranı (salt-okunur)", mode: "list", codes: ["mobile:depo"] },
   { code: "MOBILE_FASON_SEVK", name: "Mobil — Fason Sevk Operatörü", description: "Fason firmaya sevk ekranı", mode: "list", codes: ["mobile:fason-sevk"] },

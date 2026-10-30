@@ -59,6 +59,7 @@ import { resolvePoolScan } from './resolvePoolScan';
 import { showScreenError } from '../../../lib/screenToast';
 import { formatFactory } from '../../../lib/factory-time';
 import TruncatedText from '../../../components/TruncatedText';
+import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
 
 // =============================================================================
 // Paketleme — ÇUVAL DEPO akış (MÜŞTERİ-BAZLI). Param: { customerId, branchId? }.
@@ -429,6 +430,8 @@ export default function PaketlemeScreen() {
       refreshPool();
     } catch (e) {
       signalScan('reject');
+      // D4-F4: belirsiz müşteri barkodu → aday modalı; seçilen topun İÇ barkodu kuyruğa girer.
+      if (ambiguous.intercept(e)) return;
       showScreenError(e, 'Eklenemedi');
     } finally {
       setTimeout(() => {
@@ -451,6 +454,8 @@ export default function PaketlemeScreen() {
     pendingScansRef.current.push(code);
     void drainScans();
   };
+
+  const ambiguous = useAmbiguousScanPicker(handleScan);
 
   const activeSack = sacks.find((s) => s.id === activeSackId) ?? null;
   const activeLabel = activeSack ? sackCode(activeSack) : null;
@@ -884,6 +889,7 @@ export default function PaketlemeScreen() {
         </>
       )}
 
+      {ambiguous.modal}
       <BarcodeScannerModal
         visible={scanOpen}
         onDismiss={() => setScanOpen(false)}

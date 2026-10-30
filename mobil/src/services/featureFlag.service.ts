@@ -51,6 +51,9 @@ export interface FeatureFlags {
   /** G3 emanet / konsinye mülkiyet modülü (varsayılan kapalı). Tablette yüzeyi KK1 "Sahibi" seçicisi (G3t);
    *  kapalıyken seçici çizilmez ve bağlam ucu çağrılmaz. */
   emanetEnabled: boolean;
+  /** D4-F1 `scan.customerCodeLookup` — tablette yalnız TİPİ okunur: alan varsa sunucu müşteri barkodu uçlarını
+   *  tanır (D4-F4 bağla düğmesi). Eski sunucu göndermez → düğme gizli. */
+  scanCustomerCodeLookupEnabled?: boolean;
   /** Kalite Güvence (K4P, `kaliteGuvence.enabled`) — default FALSE (satır-yok değeri); muayene yüzeyi kapalıyken çizilmez.
    *  Opsiyonel: eski sunucu göndermez → kapalı (fail-closed). */
   kaliteGuvenceEnabled?: boolean;

@@ -1123,11 +1123,10 @@ router.post(
 );
 
 /**
- * D4-F1: müşteri barkodu bağlama/kaldırma — Tambur operatörü (müşterinin önbasılı etiketi).
- * Yeni izin AÇILMADI: top yazma izni (`roll:write`) + Tambur tablet izni. Kod yalnız emanet topa
- * bağlanır → emanet modülü kapalıyken 403 MODULE_DISABLED.
+ * Müşteri barkodu bağlama/kaldırma (D4-F1; dar izin D4-F4 `roll:customer-code`). Geri uyum: D4-F1'de
+ * bağlayabilen `roll:write` ∨ `mobile:tambur` bağlamaya DEVAM eder. Yalnız emanet top → emanet kapalıyken 403.
  */
-const ROLL_CUSTOMER_CODE_WRITE = ["mobile:tambur"] as const;
+const ROLL_CUSTOMER_CODE_WRITE = ["mobile:tambur", "roll:customer-code"] as const;
 
 /**
  * @openapi
@@ -1153,7 +1152,7 @@ const ROLL_CUSTOMER_CODE_WRITE = ["mobile:tambur"] as const;
  *     responses:
  *       200: { description: Bağlandı (ya da aynı token replay) }
  *       400: { description: Validasyon · ROLL_NOT_EMANET (sahipsiz top) · ROLL_CANCELLED }
- *       403: { description: MODULE_DISABLED (emanet modülü kapalı) }
+ *       403: { description: "MODULE_DISABLED (emanet modülü kapalı) · PERMISSION_DENIED (roll:write, mobile:tambur, roll:customer-code yok)" }
  *       404: { description: Top bulunamadı }
  *       409: { description: CUSTOMER_CODE_COLLIDES · CUSTOMER_CODE_TAKEN · ROLL_CUSTOMER_CODE_EXISTS · CUSTOMER_CODE_REVOKED · CLIENT_TOKEN_COLLISION }
  */
@@ -1186,7 +1185,7 @@ router.post("/:id/customer-code", verifyToken, requireEmanetEnabled, requireAnyP
  *     responses:
  *       200: { description: Kaldırıldı }
  *       400: { description: Validasyon }
- *       403: { description: MODULE_DISABLED (emanet modülü kapalı) }
+ *       403: { description: "MODULE_DISABLED (emanet modülü kapalı) · PERMISSION_DENIED (roll:write, mobile:tambur, roll:customer-code yok)" }
  *       409: { description: CUSTOMER_CODE_NOT_ACTIVE }
  */
 router.post("/:id/customer-code/revoke", verifyToken, requireEmanetEnabled, requireAnyPermission("roll:write", ...ROLL_CUSTOMER_CODE_WRITE), async (req, res, next) => {
