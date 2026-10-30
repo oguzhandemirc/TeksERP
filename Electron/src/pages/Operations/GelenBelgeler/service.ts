@@ -6,7 +6,7 @@ import type {
   ProcessChoice,
   ApproveResult, DeliveryNoteDetail, DeliveryNoteLine, DeliveryNoteListQuery, DeliveryNoteListResponse,
   HeaderPatch, IncomingDocumentSettings, LineInput, LinePatch, NoteMatchSuggestions, ReaderStatus, SenderTemplatePatch,
-  SenderTemplateView, UnreviewedApproval, CustomerDefaultView,
+  SenderTemplateView, UnreviewedApproval, CustomerDefaultView, ProcessValuePage, WorkOrderPlan,
 } from "./types";
 
 const BASE = "/api/gelen-belge";
@@ -128,4 +128,15 @@ export async function setCustomerDefault(customerId: string, defaultItemId: stri
 /** Kaldır — sonra fabrika ayarı geçerli. */
 export async function removeCustomerDefault(customerId: string): Promise<{ customerId: string }> {
   return (await apiClient.delete<ApiResponse<{ customerId: string }>>(`${BASE}/varsayilan-urunler/${customerId}`)).data.data;
+}
+
+/** Belgeden iş emri planı (D4-D2; salt okunur, yalnız APPROVED/PARTIAL — aksi 409 DELIVERY_NOTE_NOT_APPROVED). */
+export async function getWorkOrderPlan(noteId: string): Promise<WorkOrderPlan> {
+  return (await apiClient.get<ApiResponse<WorkOrderPlan>>(`${BASE}/irsaliyeler/${noteId}/is-emri-plani`)).data.data;
+}
+
+/** İşlem çeşidi değer araması — süzme SUNUCUDA (yüzlerce desen); `cursor` opak. */
+export async function searchProcessValues(q: { propertyId: string; q?: string; cursor?: string; limit?: number }): Promise<ProcessValuePage> {
+  const params = Object.fromEntries(Object.entries(q).filter(([, v]) => v !== undefined && v !== ""));
+  return (await apiClient.get<ApiResponse<ProcessValuePage>>(`${BASE}/islem-degerleri`, { params })).data.data;
 }
