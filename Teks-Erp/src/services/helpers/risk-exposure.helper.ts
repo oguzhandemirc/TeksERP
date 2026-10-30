@@ -13,7 +13,7 @@
 import { Prisma, type Currency } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { settingRowPath } from "../../constants/panel-ayar-yolu";
-import { resolveFinanceRiskLimitBlock } from "../system-setting.service";
+import { resolveRiskLimitBlockIntake, resolveRiskLimitBlockShipment } from "../system-setting.service";
 import { cariAccountWhereForCard } from "./cari-card-where.helper";
 import { CARI_HOLD_EMANET_SHIPMENT } from "./cari-hold.helper";
 
@@ -66,7 +66,7 @@ export type RiskGateScope = "INTAKE" | "SHIPMENT";
 const SCOPE_LABEL: Record<RiskGateScope, string> = { INTAKE: "yeni iş kabulü", SHIPMENT: "sevk" };
 
 /**
- * KAPI (iş kabulü / sevk): ayar kapalıysa TEK ayar okuması (ön muhasebe kapalıysa da kapı kapalı), başka sorgu yok (bugünkü davranış bayt-aynı). Açıkken
+ * KAPI (iş kabulü / sevk): ön muhasebe ya da ayar kapalıysa yalnız ayar okunur, başka sorgu yok (bugünkü davranış bayt-aynı). Açıkken
  * kartın limitli hesap(lar)ı (K3a where'i) için `riskExposureTx(…, null, 0)`; bir para biriminde aşım → 409
  * `RISK_LIMIT_EXCEEDED`. SHIPMENT'ta K22: `ownEmanetOnly` (tüm toplar sevk müşterisinin emaneti) yalnız aşım
  * VARSA sorulur ve cari kilidinin kod sabitine uyar. Mesaj tutar taşımaz (sevk/kabul ekranı finans ekranı değil).
@@ -77,7 +77,8 @@ export async function assertCustomerRiskLimitTx(
   scope: RiskGateScope,
   ownEmanetOnly?: () => Promise<boolean>,
 ): Promise<void> {
-  if (!(await resolveFinanceRiskLimitBlock(scope, tx))) return;
+  const enabled = scope === "INTAKE" ? await resolveRiskLimitBlockIntake(tx) : await resolveRiskLimitBlockShipment(tx);
+  if (!enabled) return;
   const accounts = await tx.cariAccount.findMany({
     where: { AND: [cariAccountWhereForCard({ customerId, subcontractorId: null }), { riskLimit: { not: null } }] },
     select: { id: true },

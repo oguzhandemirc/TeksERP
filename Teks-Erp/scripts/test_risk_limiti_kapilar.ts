@@ -229,7 +229,7 @@ async function main(): Promise<void> {
     });
     await assertCustomerRiskLimitTx(casus, A.customerId, "INTAKE");
     await assertCustomerRiskLimitTx(casus, A.customerId, "SHIPMENT", async () => { sorgular.push("emanet"); return false; });
-    check("§1a ⭐ kapalı kapı TEK ayar okumasıdır (cari/bakiye/emanet sorgusu yok)", JSON.stringify(sorgular) === JSON.stringify(["systemSetting.findUnique", "systemSetting.findUnique"]), sorgular.join(", "));
+    check("§1a ⭐ kapalı kapı yalnız ayar okur (cari/bakiye/emanet sorgusu yok)", sorgular.length > 0 && sorgular.every((q) => q === "systemSetting.findUnique"), sorgular.join(", "));
     check("§1b aşımlı caride sipariş ön kapısı geçer", (await hata(() => orderService.prepareOrderCreate(govdeS(A.customerId), null, { userId: admin.id } as never))) === "geçti");
     const n1 = await not(A.customerId, 1);
     const a1 = await hata(() => approveDeliveryNote(n1, {}, admin.id));

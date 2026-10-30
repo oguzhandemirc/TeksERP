@@ -5334,11 +5334,16 @@ export async function resolveServiceBillingEnabled(tx?: Pick<typeof prisma, "sys
   return readFinanceServiceBillingEnabled(tx);
 }
 
-/** D4-I2 — risk limiti iş kabulü/sevk kapısı TEK çözücü: ayar ÖNCE (kapalıyken tek okuma), sonra ön muhasebe modülü
- *  (panel satırı modül kapalıyken gizlidir; gizli ayar kapı açmaz — reçete §15). */
-export async function resolveFinanceRiskLimitBlock(scope: "INTAKE" | "SHIPMENT", tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
-  const flag = scope === "INTAKE" ? await readFinanceRiskLimitBlockIntake(tx) : await readFinanceRiskLimitBlockShipment(tx);
-  return flag && (await readFinanceEnabled(tx));
+/** D4-I2 — risk limiti iş kabulü kapısı: ön muhasebe ∧ ayar (panel satırı modül kapalıyken gizli; gizli ayar kapı açmaz — reçete §15). */
+export async function resolveRiskLimitBlockIntake(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  if (!(await readFinanceEnabled(tx))) return false;
+  return readFinanceRiskLimitBlockIntake(tx);
+}
+
+/** D4-I2 — risk limiti sevk kapısı: ön muhasebe ∧ ayar. */
+export async function resolveRiskLimitBlockShipment(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  if (!(await readFinanceEnabled(tx))) return false;
+  return readFinanceRiskLimitBlockShipment(tx);
 }
 
 /** H7 — hizmet faturası ayarları TEK okuma noktası (etkin ana anahtar + alt ayarlar). */
