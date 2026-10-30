@@ -66,7 +66,7 @@ export function OperationsHubPage() {
                   <HubCard
                     key={tile.key}
                     to={tile.to}
-                    title={tile.title}
+                    title={tile.titleWhen?.(visibilityCtx) ?? tile.title}
                     description={tile.description}
                     icon={tile.icon}
                     tone={TILE_TONES[tile.key]}

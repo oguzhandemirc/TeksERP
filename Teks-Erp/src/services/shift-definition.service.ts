@@ -1,5 +1,5 @@
 // =============================================================================
-// TeksERP — VARDİYA TANIMI (ShiftDefinition) yazma yüzeyi · dokuma modülü
+// TeksERP — VARDİYA TANIMI (ShiftDefinition) yazma yüzeyi · makine duruşu rejimi (dokuma ∨ ayar; kapı rotada)
 // =============================================================================
 // Vardiya tanımı bir YAPILANDIRMA ana verisidir ("A vardiyası 08:00'de başlar, 8 saat");
 // takvimi (`ShiftInstance`) tek yazar `jobs/shift-calendar.job` doğurur. Bu servis tanımı

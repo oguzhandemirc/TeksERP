@@ -5,6 +5,7 @@ import { useShipmentConfirmationEnabled } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { sackStoreService } from "./SackStore/service";
+import { resolveMachineStopEnabled } from "./MachineStops/stop-regime";
 import type { OperationsVisibilityContext } from "./tile-config";
 
 /**
@@ -54,6 +55,13 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   // Tezgah izleme de ETKİN değer (production && tezgah) — dokumanın kardeşi, çocuğu değil;
   // backend kapısı `requireTezgahEnabled` aynı sırayı ölçer. Belirsizken FALSE.
   const tezgahEnabled = productionEnabled && (flagsQuery.data?.data?.tezgahEnabled ?? false);
+  // Makine duruşu rejimi (D4-A3): dokuma ∨ (production ∧ `uretim.makineDurusTakibi`) — backend `machineStopRegime`
+  // ile aynı anlam, TEK çözüm `resolveMachineStopEnabled`. Belirsizken FALSE (ayar ve dokuma belirsizken kapalı).
+  const machineStopEnabled = resolveMachineStopEnabled({
+    dokumaEnabled,
+    productionEnabled,
+    machineStopTrackingEnabled: flagsQuery.data?.data?.machineStopTrackingEnabled ?? false,
+  });
   // Kalite Güvence (K4P) zincirsiz: KK1 muayenesi üretim kapalıyken de vardır. Belirsizken FALSE.
   const kaliteGuvenceEnabled = flagsQuery.data?.data?.kaliteGuvenceEnabled ?? false;
   // Maliyet ETKİN değer (production && maliyet) — `useMaliyetEnabled` ile aynı yüklem; belirsizken FALSE.
@@ -86,6 +94,7 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
     devereEnabled,
     dokumaEnabled,
     tezgahEnabled,
+    machineStopEnabled,
     kaliteGuvenceEnabled,
     maliyetEnabled,
     gelenBelgeEnabled: incomingDocumentEnabled,

@@ -18,7 +18,7 @@ import {
   isTravelerCardVisible,
 } from "@/pages/Definitions/production-regime";
 import { isWeavingOrdersVisible } from "./WeavingOrders/weaving-regime";
-import { isMachineStopsVisible } from "./MachineStops/stop-regime";
+import { isMachineStopsVisible, resolveMachineStopEnabled } from "./MachineStops/stop-regime";
 import { isWeavingFloorVisible } from "./WeavingFloor/floor-regime";
 import { isLoomAlarmsVisible } from "./LoomAlarms/alarm-regime";
 import { isWarpBeamsVisible } from "./WarpBeams/warp-beam-regime";
@@ -56,7 +56,7 @@ function ctx(
     // Çözgü Kartları karosu çizilmemeli.
     devereEnabled: false,
     // Dokuma işi de ETKİN değer (production && dokuma); fabrikada KAPALI.
-    dokumaEnabled: false, tezgahEnabled: false, kaliteGuvenceEnabled: false, maliyetEnabled: false, gelenBelgeEnabled: false, emanetEnabled: false,
+    dokumaEnabled: false, machineStopEnabled: false, tezgahEnabled: false, kaliteGuvenceEnabled: false, maliyetEnabled: false, gelenBelgeEnabled: false, emanetEnabled: false,
     reportsClosedKeys: [],
     isReportOpen: () => true,
     flagsReady: true,
@@ -359,15 +359,32 @@ describe("komut paleti — karo yüklemi taşınıyor", () => {
 });
 
 // Ayrı blok: üstteki `describe` callback'i lint tavanına (80 satır) dayalı; yeni karo testi oraya EKLENMEZ.
-describe("Tezgah Duruşları karosu", () => {
+describe("Tezgah / Makine Duruşları karosu", () => {
   const tile = (key: string) => operationsTiles.find((t) => t.key === key);
-  it("⭐ Tezgah Duruşları: karo yalnız DOKUMA modülü açıkken; iki izinden biri (route ile birebir)", () => {
+  // Bağlamı hook'un çözümüyle kur (D4-A3): rejim = dokuma ∨ üretim ∧ uretim.makineDurusTakibi.
+  const regimeCtx = (dokumaEnabled: boolean, machineStopTrackingEnabled: boolean) =>
+    ctx({ dokumaEnabled, machineStopEnabled: resolveMachineStopEnabled({ dokumaEnabled, productionEnabled: true, machineStopTrackingEnabled }) });
+  it("⭐ karo duruş rejimiyle; iki izinden biri (route ile birebir)", () => {
     const t = tile("machine-stops");
     expect(t).toBeDefined();
     expect(t?.visibleWhen).toBe(isMachineStopsVisible);
     expect(t?.permissionAny).toEqual(["loom:manual-entry", "loom:classify"]);
     expect(t?.visibleWhen?.(ctx())).toBe(false);
-    expect(t?.visibleWhen?.(ctx({ dokumaEnabled: true }))).toBe(true);
+    expect(t?.visibleWhen?.(regimeCtx(true, false))).toBe(true);
+  });
+  it("⭐ dokumasız + ayar açık → karo görünür, ad 'Makine Duruşları'; ayar kapalı → görünmez", () => {
+    const t = tile("machine-stops");
+    expect(t?.visibleWhen?.(regimeCtx(false, true))).toBe(true);
+    expect(t?.titleWhen?.(regimeCtx(false, true))).toBe("Makine Duruşları");
+    expect(t?.visibleWhen?.(regimeCtx(false, false))).toBe(false);
+    const shift = definitionTiles.find((d) => d.key === "shift-definitions");
+    expect(shift?.visibleWhen?.(regimeCtx(false, true))).toBe(true);
+    expect(shift?.visibleWhen?.(regimeCtx(false, false))).toBe(false);
+  });
+  it("dokuma açıkken ad bugünkü 'Tezgah Duruşları' (bayt-aynı)", () => {
+    const t = tile("machine-stops");
+    expect(t?.title).toBe("Tezgah Duruşları");
+    expect(t?.titleWhen?.(regimeCtx(true, false))).toBe("Tezgah Duruşları");
   });
 });
 
