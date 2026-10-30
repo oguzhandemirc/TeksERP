@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useScannerStore } from "@/store/scanner";
-import { useTabsStore } from "@/store/tabs";
+import { useOpenTopLevel } from "@/components/layout/tabs/use-tab-target";
 import { resolveScan } from "@/lib/scanner/scan-resolvers";
 import type { BarcodeKind } from "@/lib/scanner/barcode-kind";
 
@@ -32,7 +32,7 @@ const KIND_LABEL: Record<BarcodeKind, string> = {
 export function ScanResultOverlay() {
   const pending = useScannerStore((s) => s.pending);
   const clear = useScannerStore((s) => s.clear);
-  const openTab = useTabsStore((s) => s.openTab);
+  const openTarget = useOpenTopLevel();
 
   const q = useQuery({
     queryKey: ["scan-resolve", pending?.kind, pending?.code, pending?.nonce],
@@ -45,7 +45,7 @@ export function ScanResultOverlay() {
   const res = q.data;
 
   const go = (to: string, state?: unknown) => {
-    openTab(to, state !== undefined ? { state } : undefined);
+    openTarget(to, undefined, state);
     clear();
   };
 

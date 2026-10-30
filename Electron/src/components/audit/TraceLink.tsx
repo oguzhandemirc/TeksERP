@@ -40,8 +40,8 @@ export function TraceLink({ recordNo, title, className }: Props) {
         e.stopPropagation();
         // Sekme deposu tıklamada yüklenir (AuditNarrativeRow ile aynı gerekçe).
         const target = activityTraceTarget(no);
-        void import("@/store/tabs").then(({ useTabsStore }) =>
-          useTabsStore.getState().openTab(target.to, { state: target.state }),
+        void import("@/components/layout/tabs/use-tab-target").then(({ openTargetNow }) =>
+          openTargetNow("topLevel", target.to, undefined, target.state),
         );
       }}
     >

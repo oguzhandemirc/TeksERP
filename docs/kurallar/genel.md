@@ -62,6 +62,9 @@
 
 ## Panel (Electron)
 
+### Değişmezler
+
+- **[ÇEKİRDEK]** Tıklamayla hedef açan her yüzey (menü, hub kartı, komut paleti, sayfa içi bağlantı, İz sür) sekme kararını yalnız `tabs/use-tab-target.ts decideTabOpen`dan alır ve kişisel "Sekme davranışı" tercihine (`prefs.tabs.openMode`, varsayılan `newTab` = 2026-10-30 öncesi davranış) uyar; bilinçli yeni-sekme eylemleri (sekme çubuğu +, "Yeni sekmede aç" maddesi, kısayollar) tercihten etkilenmez. · bekçi: `Electron/src/components/layout/tabs/use-tab-target.test.tsx` <sub>(arşiv 2026-10-30 "Sekme davranışı tercihi")</sub>
 
 ### Tuzaklar
 
@@ -105,3 +108,4 @@ Backend: `test_process_exit_kalibi`, `test_kisa_kimlik_ozet`, `test_terim_eski_a
 - 2026-09-10 · 2026-09-10 — Künyesiz istemci görünmezdi: sürüm UA'dan okunuyor [ÇEKİRDEK] — `arsiv/2026-09.md` §2026-09-10 künyesiz
 - 2026-09-17 · 2026-09-17 — Oturum kaydına istemci sürümü: künye ilk kez kalıcı satıra yazıldı, §1 üç kollu oldu [ÇEKİRDEK] — `arsiv/2026-09.md` §2026-09-17 oturum sürümü
 - 2026-09-28 · 2026-09-28 — Müşteri adı koddan çıktı: firma adı sunucudan, yedek nötr; mevcut kurulumun adı migration ile dondu [ÇEKİRDEK] — `arsiv/2026-09.md` §2026-09-28 firma adı
+- 2026-10-30 · 2026-10-30 — Sekme davranışı kişisel tercihi (Yeni sekmede / Aynı sekmede aç) [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-30 Sekme davranışı
