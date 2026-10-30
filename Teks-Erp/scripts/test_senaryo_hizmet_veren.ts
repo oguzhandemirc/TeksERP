@@ -123,6 +123,11 @@ async function scenario(): Promise<void> {
   if (Object.keys(patch).length > 0) await systemSettingService.setFeatureFlags(patch as never, await testActorId());
   const prof2 = must<{ diffs: Record<string, unknown[]>; current: { closest: string } }>(await api("GET", "/api/admin/module-profile"), "profil yeniden");
   check("hizmet profili uygulandı: fark 0, en yakın profil 'hizmet'", (prof2.diffs.hizmet ?? []).length === 0 && prof2.current.closest === "hizmet", `${Object.keys(patch).length} anahtar yazıldı; closest=${prof2.current.closest}`);
+  // D4-S2 (kullanıcı kararı S2): hizmet profilinde maliyet AÇIK — makine ücreti / sarf normu uçları 403 MODULE_DISABLED değil 200.
+  for (const path of ["/api/cost/machine-rates", "/api/cost/consumable-norms"]) {
+    const r = await api("GET", path);
+    check(`hizmet profili: ${path} → 200 (maliyet modülü açık)`, r.status === 200, short(r));
+  }
 
   // Ayar paketi KODDAN (`paketPlani`, betiğin kuru koşusuyla aynı plan): kodda olmayan anahtar
   // (ANAHTAR_YOK) atlanır; H1b'den beri `kursun.meterStockMode` de uygulanır (Gülkesim RECORD). Senaryo sapma onayını OFFICE'e çevirir (paket NONE der — onay

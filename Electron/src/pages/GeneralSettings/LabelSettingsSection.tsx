@@ -12,6 +12,7 @@ import {
   LabelCopiesFields,
   isValidLabelCopies,
 } from "./LabelCopiesFields";
+import { DEFAULT_LABEL_CUSTOMER_CODE_MISSING, LabelCustomerCodeMissingField } from "./LabelCustomerCodeMissingField";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { useRegisterSettingsDirty } from "./settings-dirty";
 import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
@@ -56,12 +57,15 @@ export function LabelSettingsSection({
   const currentMobileRaster = flagsQ.data?.data?.mobileRasterEnabled ?? false;
   const currentScrapLabel = flagsQ.data?.data?.scrapGradeLabelEnabled ?? false;
   const currentMedia = flagsQ.data?.data?.defaultLabelMedia ?? FALLBACK_MEDIA;
+  const currentCodeMissing = flagsQ.data?.data?.labelCustomerCodeMissing ?? DEFAULT_LABEL_CUSTOMER_CODE_MISSING;
 
   const [copies, setCopies] = useState(String(currentCopies));
   const [source, setSource] = useState(currentSource);
   const [native, setNative] = useState(currentNative);
   const [mobileRaster, setMobileRaster] = useState(currentMobileRaster);
   const [scrapLabel, setScrapLabel] = useState(currentScrapLabel);
+  const [codeMissing, setCodeMissing] = useState(currentCodeMissing);
+  useEffect(() => setCodeMissing(currentCodeMissing), [currentCodeMissing]);
   const [media, setMedia] = useState<Record<keyof DefaultLabelMedia, string>>(() => mediaToStr(currentMedia));
   useEffect(() => setCopies(String(currentCopies)), [currentCopies]);
   useEffect(() => setSource(currentSource), [currentSource]);
@@ -88,7 +92,8 @@ export function LabelSettingsSection({
   const mobileRasterDirty = mobileRaster !== currentMobileRaster;
   const scrapLabelDirty = scrapLabel !== currentScrapLabel;
   const mediaDirty = MEDIA_FIELDS.some((f) => Number(media[f.key]) !== currentMedia[f.key]);
-  const dirty = copiesDirty || sourceDirty || nativeDirty || mobileRasterDirty || scrapLabelDirty || mediaDirty;
+  const codeMissingDirty = codeMissing !== currentCodeMissing;
+  const dirty = copiesDirty || sourceDirty || nativeDirty || mobileRasterDirty || scrapLabelDirty || mediaDirty || codeMissingDirty;
   useRegisterSettingsDirty(dirty);
 
   const mut = useMutation({
@@ -99,6 +104,7 @@ export function LabelSettingsSection({
       if (nativeDirty) patch.nativeSendEnabled = native;
       if (mobileRasterDirty) patch.mobileRasterEnabled = mobileRaster;
       if (scrapLabelDirty) patch.scrapGradeLabelEnabled = scrapLabel;
+      if (codeMissingDirty) patch.labelCustomerCodeMissing = codeMissing;
       if (mediaDirty) {
         patch.defaultLabelMedia = MEDIA_FIELDS.reduce(
           (acc, f) => ({ ...acc, [f.key]: f.int ? Math.floor(Number(media[f.key])) : Number(media[f.key]) }),
@@ -119,6 +125,7 @@ export function LabelSettingsSection({
     setNative(currentNative);
     setMobileRaster(currentMobileRaster);
     setScrapLabel(currentScrapLabel);
+    setCodeMissing(currentCodeMissing);
     setMedia(mediaToStr(currentMedia));
   };
 
@@ -242,6 +249,10 @@ export function LabelSettingsSection({
           disabled={mut.isPending}
           onChange={setScrapLabel}
         />
+      </div>
+
+      <div className="border-t pt-4">
+        <LabelCustomerCodeMissingField value={codeMissing} onChange={setCodeMissing} disabled={mut.isPending} />
       </div>
 
       <SettingsSaveBar

@@ -43,6 +43,7 @@ jest.mock('../services/btPrinter.service', () => ({
   printRaw: jest.fn(async () => undefined),
   printRawBytes: jest.fn(async () => undefined),
 }));
+jest.mock('./customerCode/useCustomerCodeMissingExit', () => ({ useCustomerCodeMissingExit: () => ({ offer: () => false, sheet: null }) }));
 jest.mock('../store/sessionStore', () => ({ useSessionStore: { getState: () => ({ active: { id: 's1' } }) } }));
 
 const roll = { id: '55555555-5555-4555-8555-555555555555', barcode: 'T000123' } as Roll;

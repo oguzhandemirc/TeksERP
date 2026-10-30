@@ -17,6 +17,7 @@ import type { UnifiedCatalogField } from "@/services/labelTemplateService";
 import { achievedTextStyleMm, BC_BASE_MM, FONT_MM } from "./canvas-model";
 import { IconPropsSection } from "./IconPropsSection";
 import { ConditionSection } from "./ConditionSection";
+import { ScanSourceSection } from "./ScanSourceSection";
 
 interface Props {
   element: LabelElement | null;
@@ -228,6 +229,8 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
           </p>
         </>
       )}
+
+      <ScanSourceSection element={el} onChange={onChange} />
 
       {el.type === "qr" && (
         <NumField label="QR ölçeği (2-15 · modül/dot)" value={el.scale ?? 5} min={2} max={15} step={1}
