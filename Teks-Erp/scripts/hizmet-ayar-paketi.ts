@@ -36,6 +36,10 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   { anahtar: "kursun.meterVarianceApproval", alan: "kursunMeterVarianceApproval", hedef: "NONE", dilim: "H2" },
   { anahtar: "kursun.simulatedMeterEnabled", alan: "kursunSimulatedMeterEnabled", hedef: false, dilim: "H1" },
   { anahtar: "tambur.listByStationEnabled", alan: "tamburListByStationEnabled", hedef: true, dilim: "T2" },
+  // DALGA4 §3.6 (K4/K5): Gülkesim simüle kesim metresini reddeder; ölçüm kaynağı zorunluluğu
+  // tablet OTA'sı (D4-B3 sürümü) tüm cihazlara inince açılır — önce açılırsa eski APK çıkışsız 400 alır.
+  { anahtar: "tambur.simulatedMeterEnabled", alan: "tamburSimulatedMeterEnabled", hedef: false, dilim: "D4-B1a" },
+  { anahtar: "tambur.olcumKaynagiZorunlu", alan: "tamburMeasureSourceRequired", hedef: false, dilim: "D4-B1a" },
   { anahtar: "finance.serviceBilling.enabled", alan: "financeServiceBillingEnabled", hedef: true, dilim: "H7" },
   { anahtar: "finance.serviceBilling.meterBasis", alan: "financeServiceBillingMeterBasis", hedef: "OUT", dilim: "H7" },
   {
@@ -46,9 +50,13 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   },
   { anahtar: "finance.serviceBilling.trigger", alan: "financeServiceBillingTrigger", hedef: "PER_SHIPMENT", dilim: "H7" },
   { anahtar: "finance.serviceBilling.priceDate", alan: "financeServiceBillingPriceDate", hedef: "SERVICE_DAY", dilim: "H7" },
+  { anahtar: "finance.masraf.kategoriOnerisi", alan: "financeExpenseCategorySuggestions", hedef: "ON", dilim: "D4-H1" },
   // DALGA4 §12.1: tambur en kapısı — Gülkesim de bugünkü değerde başlar (etek payı gerekirse elle).
   { anahtar: "tambur.planGate.widthToleranceCm", alan: "tamburPlanGateWidthToleranceCm", hedef: 10, dilim: "D4-E1" },
   { anahtar: "tambur.planGate.widthCheck", alan: "tamburPlanGateWidthCheck", hedef: "ENFORCE", dilim: "D4-E1" },
+  // DALGA4 §12.1 / K26: ister "tüm metraj aşağı yukarı tamamlandığında" sevke hazır = metre eşiği, %2 tolerans.
+  { anahtar: "shipping.ready.rule", alan: "shippingReadyRule", hedef: "METER_THRESHOLD", dilim: "D4-J1" },
+  { anahtar: "shipping.ready.tolerancePct", alan: "shippingReadyTolerancePct", hedef: 2, dilim: "D4-J1" },
   { anahtar: "scan.customerCodeLookup", alan: "scanCustomerCodeLookupEnabled", hedef: true, dilim: "D4-F1" },
   // DALGA4 §12.1: dokumasız fabrikada kurşun/tambur/brode makinesi duruşu (ister 5.5).
   { anahtar: "uretim.makineDurusTakibi", alan: "machineStopTrackingEnabled", hedef: true, dilim: "D4-A1" },

@@ -281,6 +281,8 @@ export interface FeatureFlags {
   financeServiceBillingMissingMeter: "DECLARED_WITH_WARNING" | "BLOCK_LINE";
   financeServiceBillingTrigger: "PER_SHIPMENT" | "PERIOD_END";
   financeServiceBillingPriceDate: "SERVICE_DAY" | "DISPATCH_DAY";
+  /** D4-H1: kasa masraf formunda kategori önerisi (varsayılan ON). */
+  financeExpenseCategorySuggestions: "ON" | "OFF";
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; tahsis elle silinebilir. */
   financeAutoAllocateOnPaymentEnabled: boolean;
@@ -520,6 +522,14 @@ export interface FeatureFlags {
   shippingAllocWidthToleranceCm: number;
   /** Tahsis sipariş miktarını aşabilir mi — fazla sevk deftere yazılır (default false). */
   shippingAllowOverAllocation: boolean;
+  /** Sevke hazırlık kuralı (D4-J1): ALL_DONE (default) | METER_THRESHOLD. */
+  shippingReadyRule: "ALL_DONE" | "METER_THRESHOLD";
+  /** METER_THRESHOLD toleransı (%), 0–20, default 2. */
+  shippingReadyTolerancePct: number;
+  /** Sevke hazır bildirim birimleri (default boş = kapalı; bildirim D4-J2). */
+  shippingReadyNotifyUnits: Array<"IE" | "GB" | "PARTI">;
+  /** Sevke hazır tarama periyodu (dk), 1–60, default 5 (bildirim D4-J2). */
+  shippingReadyScanMinutes: number;
   /** Müşteri şubeleri (sevk noktaları) UI'da açık mı (true=default). Kapalıyken müşteri
    *  formundaki Şubeler sekmesi/taslağı ve sipariş formundaki şube seçimi gizlenir.
    *  Salt UI rehberi — mevcut kayıtlardaki branchId verisi korunur. */
@@ -534,6 +544,10 @@ export interface FeatureFlags {
    *  bir süre sınırı dün akşamki hatayı sabah düzeltmeyi imkânsız kılabilir.
    *  TEK PARÇA iptali bu ayardan ETKİLENMEZ. Emsal: shipping.undoDispatchSameDayOnly. */
   tamburUndoFullSameDayOnly: boolean;
+  /** D4-B1: Tambur kesiminde simüle metre kabul (true=default, bugünkü davranış; SIMULATED damgalı). */
+  tamburSimulatedMeterEnabled: boolean;
+  /** D4-B1: Tambur kesiminde ölçüm kaynağı zorunlu (false=default; önce tüm tabletler yeni sürümde olmalı). */
+  tamburMeasureSourceRequired: boolean;
   /** Kısa kesimde otomatik A1 — FABRİKA VARSAYILANI (false=default). Kural mobil
    *  tarafta koşar (`shortCutQuality.ts`); backend ENFORCE ETMEZ. Tablet
    *  yetkilisi cihaz bazında ezebilir (o tercih sunucuya gitmez). */

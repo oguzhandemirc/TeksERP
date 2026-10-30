@@ -24,6 +24,7 @@ import {
   type KursunMeterCapture,
 } from "../system-setting.service";
 import { tokenReplay } from "./token-replay.helper";
+import { readingPolicyOf } from "./meter-reading.helper";
 import { resolveMeterVariance, type MeterVarianceResult } from "../../lib/kursun-meter-variance";
 import { loadDeclaredInTx, readingPendingAckSql } from "./kursun-meter-variance-sql.helper";
 import { applyExitMeterToStockTx, reverseExitMeterStockTx, type ExitMeterApplyResult } from "./kursun-meter-stock.helper";
@@ -241,7 +242,7 @@ export async function evaluateReadingVarianceTx(
   const num = (d: Prisma.Decimal | null | undefined): number | null => (d == null ? null : Number(d));
   return resolveMeterVariance(
     { declaredIn: num(declaredIn), measuredIn: num(measured?.meters), out: Number(reading.meters) },
-    { thresholdM: num(reading.thresholdM), thresholdPct: num(reading.thresholdPct), basis: reading.basis, approvalMode: reading.approvalMode },
+    { thresholdM: num(reading.thresholdM), thresholdPct: num(reading.thresholdPct), ...readingPolicyOf(reading) },
   );
 }
 

@@ -21,7 +21,7 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftRight, BookOpen, Receipt } from "lucide-react";
+import { ArrowLeftRight, BookOpen, PieChart, Receipt } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
@@ -83,6 +83,13 @@ export function CashTransactionsPage() {
               <BookOpen className="mr-1 h-4 w-4" />
               Kasa Defteri
             </Button>
+            {/* Masraf özeti rapor izniyle açılır — izinsize düğme çizilmez (forbidden'a düşmesin). */}
+            <PermissionGate permission="report:finance">
+              <Button variant="ghost" onClick={() => navigate("/reports/finance/masraf-ozeti")}>
+                <PieChart className="mr-1 h-4 w-4" />
+                Masraf Özeti
+              </Button>
+            </PermissionGate>
             <PermissionGate permission="finance:payment">
               <div className="flex gap-2">
                 <Button onClick={() => setFormOpen(true)}>

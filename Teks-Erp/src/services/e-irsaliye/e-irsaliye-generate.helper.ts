@@ -16,6 +16,7 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { p2002TargetsCode, withBarcodeRetry } from "../../utils/barcode-retry";
 import { lockShipmentScopeTx } from "../helpers/shipment-locks.helper";
+import { findCariAccountForCardTx } from "../helpers/finance.helper";
 import { printedDocumentService, type PrintedDocSnapshot } from "../printed-document.service";
 import { readShippingDocItemNameMode } from "../system-setting.service";
 import { resolveAdapter } from "./adapters/registry";
@@ -64,7 +65,7 @@ async function writeXmlVersionTx(
   if (!doc || doc.status !== "ACTIVE") {
     throw AppError.conflict("Sevkiyatın geçerli bir sevk irsaliyesi yok; önce sevk irsaliyesini açın.", { code: "EIRSALIYE_NO_ACTIVE_DISPATCH_DOC" });
   }
-  const cari = await tx.cariAccount.findUnique({ where: { customerId: ship.customerId }, select: { taxOffice: true } });
+  const cari = await findCariAccountForCardTx(tx, { customerId: ship.customerId, subcontractorId: null }, { taxOffice: true });
   const input = mapSnapshotToDespatchInput({
     snapshot: doc.snapshot as unknown as PrintedDocSnapshot,
     supplier: supplierFromLegalIdentity(gate.legalIdentity),

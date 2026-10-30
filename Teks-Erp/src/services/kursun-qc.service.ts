@@ -81,6 +81,7 @@ import {
   type MeterReadingInput,
   type WriteMeterReadingResult,
 } from "./helpers/kursun-meter.helper";
+import { readingPolicyOf } from "./helpers/meter-reading.helper";
 import { applyExitMeterToStockTx, applyPendingExitMetersTx, auditExitMeterStock } from "./helpers/kursun-meter-stock.helper";
 import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { finalizeRollsAtLastStep } from "./helpers/roll-finalize.helper";
@@ -702,12 +703,12 @@ export class KursunQcService {
     return {
       readingId: reading.id,
       meters: Number(reading.meters),
-      approvalMode: reading.approvalMode,
+      approvalMode: readingPolicyOf(reading).approvalMode,
       deviated: v.deviated,
       baseMeters: v.baseMeters,
       diffMeters: v.diffMeters,
       allowedMeters: v.allowedMeters,
-      pendingAck: awaitsMeterSignature(reading.approvalMode, v.needsAck, acked),
+      pendingAck: awaitsMeterSignature(readingPolicyOf(reading).approvalMode, v.needsAck, acked),
     };
   }
 

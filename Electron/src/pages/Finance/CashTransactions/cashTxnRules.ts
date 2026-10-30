@@ -13,6 +13,7 @@
 // veri bozulmaz — kullanıcı ham hata yer.
 // =============================================================================
 
+import { foldedIncludes } from "@/lib/search-fold";
 import { cashAccountParams, type CashAccountKind } from "../PeriodClose/cashService";
 import { dayEndIso, dayStartIso } from "../Cheques/dates";
 import type { CashTxnDirection, CashTxnKind, CashTxnRow, CashTxnStatus } from "./service";
@@ -294,4 +295,18 @@ export function cancelScope(rows: readonly CashTxnRow[], target: CashTxnRow): Ca
     return a.docNo < b.docNo ? -1 : a.docNo > b.docNo ? 1 : 0;
   });
   return { legs: ordered, isTransfer: true, missingLeg: ordered.length < 2 };
+}
+
+/** Öneri çipi tavanı — form kalabalıklaşmasın; liste sunucuda en son kullanılana göre sıralı gelir. */
+export const SUGGESTION_CHIP_LIMIT = 8;
+
+/**
+ * Yazılan metne göre görünür öneriler (D4-H1): boşken ilk 8; yazılınca içerenler (ortak arama
+ * katlaması `foldedIncludes`); kutudaki metnin AYNISI çizilmez (seçilmiş öneri tekrar önerilmez).
+ */
+export function visibleCategorySuggestions(all: readonly string[], typed: string): string[] {
+  const needle = typed.trim();
+  return all
+    .filter((c) => c !== needle && (!needle || foldedIncludes(c, needle)))
+    .slice(0, SUGGESTION_CHIP_LIMIT);
 }

@@ -29,6 +29,8 @@ const TABLE_TAGS = ["<DetailTable", "<AgingBlockTable", "<CashLedgerTable", "<Ka
  * böyle sustu). Sınırını beyan etmeyen yüklem alakasızla eşleşir.
  */
 const METRIC_RE = /<MetricCard[\s/>]/;
+/** v2 zarfını çizen yaprak (D4-H1 Masraf Özeti): özet şeridi `ReportBody` içindeki ana sayı kartıdır (`HeadlineCard`). */
+const V2_BODY_RE = /<ReportBody[\s/>]/;
 
 function dosyaBul(bilesen: string): string | null {
   const m = new RegExp(`import\\s*\\{[^}]*\\b${bilesen}\\b[^}]*\\}\\s*from\\s*"([^"]+)"`).exec(ROUTES);
@@ -52,7 +54,7 @@ describe("rapor özet şeridi kapsamı", () => {
   });
 
   it("⭐ her yaprak rapor sayfası <MetricCard çizer", () => {
-    const eksik = yapraklar.filter((y) => !METRIC_RE.test(y.src)).map((y) => y.yol);
+    const eksik = yapraklar.filter((y) => !METRIC_RE.test(y.src) && !V2_BODY_RE.test(y.src)).map((y) => y.yol);
     expect(eksik).toEqual([]);
   });
 

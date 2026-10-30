@@ -113,6 +113,7 @@ import {
   chequeCashReversalSql,
 } from "../helpers/cheque-cash-events.helper";
 import type { DateRange } from "./_shared";
+import { cashCategoryKey } from "../helpers/expense-summary.helper";
 import { optionList, type WithSecenekler } from "./_secenekler";
 import type { SuzgecEcho } from "./_filters";
 
@@ -389,8 +390,6 @@ function cekDali(): Prisma.Sql {
          AND COALESCE(e."cashBoxId", e."bankAccountId") IS NOT NULL`;
 }
 
-const UNCATEGORIZED_LABEL = "Kategorisiz";
-
 /** Kategori alanı OLMAYAN kaynakların sabit kovaları (dosya başlığı: ayrım ölçütü). */
 const FIXED_BUCKET_LABEL: Record<Exclude<CashCategoryGroup, "CASH_TXN">, string> = {
   PAYMENT: "Tahsilat / Ödeme (carili)",
@@ -416,9 +415,8 @@ function bucketOf(m: MovementRow): { key: string; label: string; group: CashCate
   if (m.kind !== null && TRANSFER_KINDS.has(m.kind)) {
     return { key: "TRANSFER", label: FIXED_BUCKET_LABEL.TRANSFER, group: "TRANSFER" };
   }
-  // Serbest metin AYNEN (yalnız trim) — harf katlama yok, gerekçe dosya başlığında.
-  const text = (m.category ?? "").trim();
-  return { key: text ? `CAT:${text}` : "CAT:", label: text || UNCATEGORIZED_LABEL, group: "CASH_TXN" };
+  // Serbest metin AYNEN (yalnız trim) — anahtar kuralı TEK yerde (`expense-summary.helper`; masraf özeti de okur).
+  return { ...cashCategoryKey(m.category), group: "CASH_TXN" };
 }
 
 export async function getCashBookReport(params: CashBookParams): Promise<CashBookReport> {

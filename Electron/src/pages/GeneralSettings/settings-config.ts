@@ -1217,6 +1217,35 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Sevkiyat", "Depocu"],
         desc: "Çeki listesinin ad rejimi. “Genel ayarı izle” (varsayılan) üstteki irsaliye ayarını uygular; diğer seçenekler yalnız çeki bölümünü çevirir. Çeki listesi tek başına da basılıp ambarda kontrol listesi olarak kullanılır.",
       },
+      {
+        // D4-J1 (2026-10-30): `defaultValue` backend `DEFAULT_SHIP_READY_RULE` ile birebir.
+        enumKey: "shippingReadyRule",
+        group: "Sevke hazır işler",
+        title: "İş ne zaman sevke hazır sayılsın",
+        summary: `${TERIM.terbiyeIsEmri.tekil}, gelen belge, müşteri partisi ya da müşterinin topları hangi durumda “sevke hazır” görünsün.`,
+        desc: "“Hepsi bitince” (varsayılan): işlemde hiç top kalmayınca ve en az bir top depodaysa hazır. “Metre eşiği”: depodaki (ve sevk edilmiş) metre, gelen metrenin ya da hedef metrajın tolerans kadar altına inmeden ulaşınca hazır; hedefi olmayan iş “hepsi bitince” kuralına düşer. Hazırlık saklanmaz, her bakışta toplardan yeniden hesaplanır — top geri açılırsa hazırlık da düşer.",
+        defaultValue: "ALL_DONE",
+        display: "radio",
+        audience: ["Sevkiyat", "Planlamacı"],
+        options: [
+          { value: "ALL_DONE", label: "Hepsi bitince (bugünkü)", hint: "İşlemde tek top kalsa iş kısmi hazır görünür." },
+          { value: "METER_THRESHOLD", label: "Metre eşiğine ulaşınca", hint: "Metraj aşağı yukarı tamamlanınca hazır; tolerans aşağıda." },
+        ],
+      },
+    ],
+    numberFlags: [
+      {
+        key: "shippingReadyTolerancePct",
+        group: "Sevke hazır işler",
+        title: "Sevke hazırlık toleransı (%)",
+        desc: "Yalnız “Metre eşiğine ulaşınca” kuralında okunur: hazır metre, hedef metrenin bu yüzde kadar altında kalsa da iş hazır sayılır. Varsayılan %2; 0 girilirse tam metre beklenir.",
+        min: 0,
+        max: 20,
+        fallback: 2,
+        unit: "%",
+        step: 0.5,
+        audience: ["Sevkiyat", "Planlamacı"],
+      },
     ],
   },
   {
@@ -1466,6 +1495,24 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
         desc: "Açıkken bir Tambur kapanışı yalnız aynı gün tümden geri alınabilir; dünkü kapanış geri alınamaz. Tek parça iptali etkilenmez. Tümden geri alma zaten ayrı yetki ve sebep ister.",
+      },
+      {
+        key: "tamburSimulatedMeterEnabled",
+        group: "Tambur",
+        title: "Tambur kesiminde simüle sayaç metresi kabul edilsin",
+        summary: "Gerçek sayaç bağlı değilken deneme için uydurulmuş kesim metresi kaydedilebilir; SİMÜLASYON olarak işaretlenir.",
+        defaultOn: true,
+        audience: ["Operatör", "Yönetim"],
+        desc: "Açıkken (varsayılan, bugünkü davranış) tabletin simüle sayaçtan verdiği kesim metresi kabul edilir ve sapma kaydında SİMÜLASYON olarak işaretlenir. Kapalıyken ölçüm kaynağını SİMÜLASYON olarak bildiren kesim reddedilir; metre gerçek sayaçtan okunur ya da elle girilir. Not: ölçüm kaynağını bildirmeyen eski tablet sürümlerinin simüle metresi bu ayarla durmaz; tüm tabletler yeni sürüme geçince tam etkili olur.",
+      },
+      {
+        key: "tamburMeasureSourceRequired",
+        group: "Tambur",
+        title: "Tambur kesiminde ölçüm kaynağı zorunlu olsun",
+        summary: "Önce tüm tabletler yeni sürümde olmalı: eski tablet ölçüm kaynağını göndermez ve açıkken kesim yapamaz.",
+        defaultOn: false,
+        audience: ["Operatör", "Yönetim"],
+        desc: "Açıkken her Tambur kesiminde metrenin nereden geldiği (sayaç, elle, simüle) bildirilmek zorundadır; bildirmeyen kesim reddedilir. Kapalıyken (varsayılan) kaynak bildirilmezse kesim yine kaydedilir, kaynak bilinmiyor olarak kalır. ÖNKOŞUL: tüm Tambur tabletleri ölçüm kaynağını gönderen sürüme güncellenmeden açmayın.",
       },
       {
         key: "machineStopTrackingEnabled",
@@ -2136,6 +2183,20 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: [
           { value: "SERVICE_DAY", label: "İşin yapıldığı gün (bugünkü)", hint: "Fiyat hizmet anına çözülür." },
           { value: "DISPATCH_DAY", label: "Sevk günü", hint: "Fiyat sevk anına çözülür." },
+        ],
+      },
+      {
+        // D4-H1: `defaultValue` backend `DEFAULT_EXPENSE_CATEGORY_SUGGESTIONS` ile birebir (bekçi §16).
+        enumKey: "financeExpenseCategorySuggestions",
+        title: "Masraf girerken kategori önerilsin",
+        summary: "Kasa masraf formunda daha önce yazılmış kategoriler tıklanabilir öneri olarak çıksın mı.",
+        desc: "Açık: formda son kullanılan 20 kategori öneri olarak görünür; tıklayınca kutuya yazılır, istenirse yeni kategori yine elle yazılır. Kapalı: öneri çıkmaz. Kategori listesi kurulmaz; öneri yalnız yazım birliğine yardım eder (\"Elektrik\" ile \"elektrik \" ayrı satır olmasın). Kategoriye kişi adı yazmayın.",
+        defaultValue: "ON",
+        display: "radio",
+        audience: ["Muhasebeci"],
+        options: [
+          { value: "ON", label: "Önerilsin (varsayılan)", hint: "Son kullanılan kategoriler formda görünür." },
+          { value: "OFF", label: "Önerilmesin", hint: "Kategori kutusu boş açılır." },
         ],
       },
     ],

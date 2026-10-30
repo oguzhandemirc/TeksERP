@@ -247,10 +247,10 @@ export const commandSections: CommandSection[] = [
       {
         key: "personal:settings",
         label: "Kullanıcı Tercihleri",
-        description: "Tema, vurgu rengi, yoğunluk, favoriler ve kayıtlı görünümler",
+        description: "Tema, vurgu rengi, yoğunluk, sekme davranışı, favoriler ve kayıtlı görünümler",
         icon: SettingsIcon,
         to: "/settings",
-        keywords: "ayar tercih tema koyu açık renk yoğunluk favori kayıtlı görünüm sıfırla kişisel profil",
+        keywords: "ayar tercih tema koyu açık renk yoğunluk favori kayıtlı görünüm sıfırla kişisel profil sekme yeni sekme aynı sekme",
       },
       {
         // UX-2: menü satırı kalktı (zil + Sistem karosu); kişisel gelen kutusu paletten de açılır.

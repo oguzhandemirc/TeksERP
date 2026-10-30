@@ -135,7 +135,16 @@ function main(): void {
   }
   check("§3z körlük zemini: karo taraması dolu", karoYollari.size > 20, `${karoYollari.size} karo`);
   // Karo yalnız v1 hub'ındadır; v2 yaprağına giden karo bayrak kapalıyken /forbidden'a düşerdi (fazla = kırmızı).
-  ikiTarafli("§3 karo `to`", new Set(CIZILEN_V1.filter((r) => r.panelYolu !== "").map((r) => r.panelYolu)), karoYollari);
+  // SONDA (D4-H1): kümede olmayan v2 yaprağına (`reports/sales/siparis-talep`) karo → §3 ❌ KATALOGDA YOK; küme boşaltıldı → §3k ❌.
+  // DAR istisna (D4-H1, 1e kararı): `V2_KEYS_WITH_OWN_PAGE` satırının sayfası bayraktan BAĞIMSIZ çizilir; v2 kapalıyken
+  // Rapor Merkezi yoktur, bulunabilirlik için karo ZORUNLUDUR (iki taraflı). Kümede olmayan v2 satırına karo yine fazla.
+  const kendiSayfali = new Set([...(readFileSync(join(ELECTRON, "src/pages/Reports/_v2/routes.tsx"), "utf8")
+    .match(/V2_KEYS_WITH_OWN_PAGE[^=]*=\s*new Set\(\[([^\]]*)\]\)/)?.[1] ?? "").matchAll(/"([a-z]+\/[a-z0-9-]+)"/g)].map((m) => m[1]!));
+  const kendiSayfaliV2 = CIZILEN_V2.filter((r) => kendiSayfali.has(r.key) && r.panelYolu !== "");
+  check("§3k kendi sayfalı v2 kümesi okundu ve her anahtarı çizilen bir v2 satırı",
+    kendiSayfali.size > 0 && kendiSayfaliV2.length === kendiSayfali.size,
+    `${[...kendiSayfali].join(", ") || "BOŞ (küme okunamadı)"}`);
+  ikiTarafli("§3 karo `to`", new Set([...CIZILEN_V1, ...kendiSayfaliV2].filter((r) => r.panelYolu !== "").map((r) => r.panelYolu)), karoYollari);
   const merkez = readFileSync(join(ELECTRON, "src/pages/Reports/_v2/center-model.ts"), "utf8");
   const merkezKategori = new Set([...(merkez.match(/CENTER_CATEGORIES[^=]*=\s*\[([\s\S]*?)\];/)?.[1] ?? "")
     .matchAll(/key:\s*"([a-z-]+)"/g)].map((m) => m[1]!));

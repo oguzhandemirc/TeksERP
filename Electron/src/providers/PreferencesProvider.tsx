@@ -14,6 +14,7 @@ import { useAuthStore } from "@/store/auth";
 import { useLicenseSuspension } from "@/lib/license/suspension";
 import { fetchPreferences, savePreferences } from "@/services/preferencesService";
 import { DEFAULT_PREFERENCES, type AppPreferences } from "@/types/preferences";
+import { readTabOpenMode, setTabOpenMode } from "@/components/layout/tabs/tab-open-mode";
 
 const SAVE_DEBOUNCE_MS = 600;
 
@@ -73,6 +74,12 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     applyAccent(prefs.accent);
     applyDensity(prefs.density);
   }, [prefs.accent, prefs.density]);
+
+  // Sekme davranışı aynası — tıklama anında okunur, değişiklik bir sonraki tıkta etkili.
+  const tabOpenMode = readTabOpenMode(prefs);
+  useEffect(() => {
+    setTabOpenMode(tabOpenMode);
+  }, [tabOpenMode]);
 
   // Tema senkronu — yalnız oturum açık ve tercih yüklendiğinde.
   useEffect(() => {

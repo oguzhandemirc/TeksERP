@@ -52,6 +52,7 @@ import {
   readQualityGradeRequiredEnabled,
 } from "./system-setting.service";
 import { recordVarianceTx, overageOf } from "./helpers/roll-variance.helper";
+import { assertTamburMeasuresAllowed, toMachineDataSource, weakestMeasureSource, type MeterSourceInput } from "./helpers/meter-reading.helper";
 import {
   VARIANCE_SOURCES,
   varianceKindForRemainingAction,
@@ -150,6 +151,8 @@ interface CutInput {
   length: number;
   qualityGrade: string;
   relatedErrorIds: string[];
+  /** D4-B1: kesim metresinin ölçüm kaynağı; eski APK göndermez (sapma kaynağı NULL kalır). */
+  measure?: MeterSourceInput | null;
 }
 
 /**
@@ -688,6 +691,8 @@ export class TamburService {
       processedErrors: number;
     }>
   > {
+    // D4-B1 ölçüm kapıları tx AÇILMADAN (SIMULATED kapalı · kaynak zorunlu · kart örneği yok).
+    await assertTamburMeasuresAllowed(data.cuts.map((c) => c.measure));
     const roll = await prisma.roll.findUnique({
       where: { id: data.rollId },
       include: {
@@ -1461,6 +1466,8 @@ export class TamburService {
         kind: RollVarianceKind.OVERAGE,
         qty: overageOf(cumulativeLenD, totalQtyD),
         source: VARIANCE_SOURCES.TAMBUR_OVERCUT,
+        // Aşım N kesimin toplamından doğar → kaynak hepsinin zayıf halkası.
+        measureSource: toMachineDataSource(weakestMeasureSource(data.cuts.map((c) => c.measure?.source))),
         userId,
       });
 
@@ -2187,6 +2194,8 @@ export class TamburService {
       /** Offline/ağ-retry idempotency anahtarı (UUID). Barkod sunucuda sıralı atanır;
        *  aynı token'la 2. çağrı child'ı idempotent döner (ikinci kesim/decrement YOK). */
       clientToken?: string;
+      /** D4-B1: kesim metresinin ölçüm kaynağı (eski APK göndermez). */
+      measure?: MeterSourceInput | null;
     },
     userId?: string,
     /**
@@ -2202,6 +2211,7 @@ export class TamburService {
      *  ALMIYORDU → makine süzgeci kesimleri hiç göremiyordu.) */
     sessionMachineId?: string | null,
   ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> {
+    await assertTamburMeasuresAllowed([data.measure]);
     if (!(data.cutLength > 0)) {
       throw AppError.badRequest("Kesim metresi pozitif olmalı");
     }
@@ -2512,6 +2522,7 @@ export class TamburService {
         // KEŞİF EBEVEYNDE, KAYNAĞI ÇOCUK: geri alma bu çocuğun keşfini buradan bulur
         // ve bump'ı yalnız karşılanmayan kısım için yazar (hüküm ②).
         sourceRollId: child.id,
+        measureSource: toMachineDataSource(weakestMeasureSource([data.measure?.source])),
         userId,
       });
     }
@@ -3081,6 +3092,8 @@ export class TamburService {
       clientToken?: string;
       /** Plan-gerçek sapma onayı (renk/en) — 409 PLAN_MISMATCH'i geçer. */
       confirmMismatch?: boolean;
+      /** D4-B1: kesim metresinin ölçüm kaynağı (eski APK göndermez). */
+      measure?: MeterSourceInput | null;
     },
     userId?: string,
     /** Kesimin makinesi — "Bu makine" süzgeci + makine raporları (2026-08-12). */
@@ -3089,6 +3102,7 @@ export class TamburService {
     if (!(data.lengthMeters > 0)) {
       throw AppError.badRequest("Kesim metresi pozitif olmalı");
     }
+    await assertTamburMeasuresAllowed([data.measure]);
     // Kat katalog doğrulaması — `undefined` korunur (parent → WO fallback zinciri).
     const foldType = await resolveFoldTypeForWrite(data.foldType);
 
@@ -3413,6 +3427,7 @@ export class TamburService {
         // KEŞİF EBEVEYNDE, KAYNAĞI ÇOCUK (hüküm ②) — üretim dalında stok satırı yok,
         // geri alma yalnız bump'ı bu keşifle karşılar.
         sourceRollId: child.id,
+        measureSource: toMachineDataSource(weakestMeasureSource([data.measure?.source])),
         userId,
       });
     }
