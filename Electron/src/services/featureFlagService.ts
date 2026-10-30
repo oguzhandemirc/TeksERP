@@ -544,6 +544,10 @@ export interface FeatureFlags {
    *  bir süre sınırı dün akşamki hatayı sabah düzeltmeyi imkânsız kılabilir.
    *  TEK PARÇA iptali bu ayardan ETKİLENMEZ. Emsal: shipping.undoDispatchSameDayOnly. */
   tamburUndoFullSameDayOnly: boolean;
+  /** D4-B1: Tambur kesiminde simüle metre kabul (true=default, bugünkü davranış; SIMULATED damgalı). */
+  tamburSimulatedMeterEnabled: boolean;
+  /** D4-B1: Tambur kesiminde ölçüm kaynağı zorunlu (false=default; önce tüm tabletler yeni sürümde olmalı). */
+  tamburMeasureSourceRequired: boolean;
   /** Kısa kesimde otomatik A1 — FABRİKA VARSAYILANI (false=default). Kural mobil
    *  tarafta koşar (`shortCutQuality.ts`); backend ENFORCE ETMEZ. Tablet
    *  yetkilisi cihaz bazında ezebilir (o tercih sunucuya gitmez). */

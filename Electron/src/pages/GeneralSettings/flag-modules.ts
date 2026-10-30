@@ -150,6 +150,8 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   scanCustomerCodeLookupEnabled: "cekirdek",
   tamburOverQuantityEnabled: "productionEnabled",
   tamburUndoFullSameDayOnly: "productionEnabled",
+  tamburSimulatedMeterEnabled: "productionEnabled",
+  tamburMeasureSourceRequired: "productionEnabled",
   tamburShortCutA1Enabled: "productionEnabled",
   tamburShortCutA1ThresholdM: "productionEnabled",
   tamburPlanGateWidthToleranceCm: "productionEnabled",

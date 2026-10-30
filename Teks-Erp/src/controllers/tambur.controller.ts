@@ -4,6 +4,7 @@
 
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
+import { meterSourceSchema } from "../services/helpers/meter-reading.helper";
 import { TamburService } from "../services/tambur.service";
 import { TamburUndoService } from "../services/tambur-undo.service";
 import { KursunBypassService } from "../services/kursun-bypass.service";
@@ -37,7 +38,8 @@ const stationFilterQuerySchema = z.object({
     .optional(),
 });
 
-const finalizeSchema = z.object({
+// export: `test_tambur_olcum_kaynagi` `measure` alanını GERÇEK parse ile sınar (Zod strip tuzağı).
+export const finalizeSchema = z.object({
   rollId: z.string().uuid("Geçersiz top ID"),
   cuts: z
     .array(
@@ -45,6 +47,8 @@ const finalizeSchema = z.object({
         length: z.number().positive("Kesim uzunluğu pozitif olmalı").max(100_000, "Kesim uzunluğu gerçekçi değil (max 100.000 m)"),
         qualityGrade: z.string().min(1, "Kalite seçilmelidir"),
         relatedErrorIds: z.array(z.string().uuid()).default([]),
+        // D4-B1: bu kesimin ölçüm kaynağı — Zod strip tuzağı: satır yoksa alan sessizce kaybolur.
+        measure: meterSourceSchema.nullish(),
       })
     )
     // Cap: her segment tx içinde ayrı roll.create + rollProperty + rollOperation
@@ -88,7 +92,8 @@ const reportErrorSchema = z.object({
   defectTypeId: z.string().uuid(),
 });
 
-const cutOpenFabricSchema = z.object({
+// export: `test_tambur_olcum_kaynagi` `measure` alanını GERÇEK parse ile sınar (Zod strip tuzağı).
+export const cutOpenFabricSchema = z.object({
   lengthMeters: z.number().positive("Kesim metresi pozitif olmalı").max(100_000, "Kesim metresi gerçekçi değil (max 100.000 m)"),
   status: z.enum(["WAREHOUSE", "SCRAP", "A1_STOCK"], {
     message: "Status WAREHOUSE | SCRAP | A1_STOCK olmalı",
@@ -109,6 +114,8 @@ const cutOpenFabricSchema = z.object({
   foldType: foldTypeSchema,
   // Offline/ağ-retry idempotency anahtarı (UUID) — barkod sunucuda sıralı atanır.
   clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
+  // D4-B1: kesim metresinin ölçüm kaynağı (eski APK göndermez → sapma kaynağı NULL).
+  measure: meterSourceSchema.nullish(),
   // Plan-gerçek sapma onayı — ⚠️ Zod tanımadığı anahtarı SESSİZCE SİLER: bu satır
   // düşerse mobil onayı gönderir, backend hiç görmez ve operatör onayladığı hâlde
   // 409'a çarpar (varianceReason dersinin aynısı).
@@ -148,7 +155,8 @@ export const finalizeOpenFabricSchema = z.object({
   confirmMismatch: z.boolean().optional(),
 });
 
-const cutWarehouseRollSchema = z.object({
+// export: `test_tambur_olcum_kaynagi` `measure` alanını GERÇEK parse ile sınar (Zod strip tuzağı).
+export const cutWarehouseRollSchema = z.object({
   cutLength: z.number().positive("Kesim metresi pozitif olmalı").max(100_000, "Kesim metresi gerçekçi değil (max 100.000 m)"),
   qualityGrade: z.string().max(50).optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
@@ -164,6 +172,8 @@ const cutWarehouseRollSchema = z.object({
   targetCustomerId: z.string().uuid().optional().nullable(),
   // Offline/ağ-retry idempotency anahtarı (UUID) — barkod sunucuda sıralı atanır.
   clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
+  // D4-B1: kesim metresinin ölçüm kaynağı (eski APK göndermez → sapma kaynağı NULL).
+  measure: meterSourceSchema.nullish(),
 });
 
 // Kurşun Dağıtım (bypass) kapanışı — Tambur tabletinde refakat kartı okutulur,

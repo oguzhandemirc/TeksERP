@@ -7,8 +7,8 @@
 // =============================================================================
 import React from 'react';
 import { Button } from 'react-native-paper';
-import ModuleSheet from '../../../components/ModuleSheet';
-import ReasonPresetPicker from '../../../components/reasonPresets/ReasonPresetPicker';
+import ModuleSheet from '../ModuleSheet';
+import ReasonPresetPicker from '../reasonPresets/ReasonPresetPicker';
 import { REASON_NOTE_MAX } from './stopPayload';
 import type { StopPanelState } from './useStopPanel';
 

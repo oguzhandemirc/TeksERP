@@ -547,6 +547,9 @@ export const updateSchema = z.strictObject({
   // `kk1DuplicateGuardEnabled` tam bu boşluktan geçti; bekçi:
   // `scripts/test_feature_flag_contract.ts`.
   tamburUndoFullSameDayOnly: z.boolean().optional(),
+  /** D4-B1: Tambur simüle metre kabulü (varsayılan açık) · ölçüm kaynağı zorunluluğu (varsayılan kapalı). */
+  tamburSimulatedMeterEnabled: z.boolean().optional(),
+  tamburMeasureSourceRequired: z.boolean().optional(),
   // production.kursunBypassEnabled — kurşun istasyonuna tablet konulmayan düzen (default false).
   // ENFORCE edilir ama yalnız YENİ dağıtım oluşturmayı kapılar; dağıtılmış iş emirleri
   // bayrak kapansa da bypass rejiminde biter.

@@ -38,6 +38,7 @@ export interface CustomerFinanceView {
 export async function bornCariAccountTx(tx: Prisma.TransactionClient, customerId: string): Promise<string | null> {
   if (!(await readFinanceEnabled(tx))) return null;
   const { ensureCariAccountTx } = await import("./finance.helper");
+  // Doğan kartın eski fason bacağı olamaz (bağ kartı ister) — `adopted` burada hep null, ayak izi gerekmez.
   const acc = await ensureCariAccountTx(tx, { customerId });
   return acc.id;
 }
