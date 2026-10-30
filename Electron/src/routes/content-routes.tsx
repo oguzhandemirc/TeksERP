@@ -50,6 +50,7 @@ import { WarehousesPage } from "@/pages/Warehouses/WarehousesPage";
 import { GoodsReceiptsPage } from "@/pages/Operations/GoodsReceipts/GoodsReceiptsPage";
 import { IncomingDocumentsPage } from "@/pages/Operations/GelenBelgeler/GelenBelgelerPage";
 import { ConsignedWorkPage } from "@/pages/Operations/ConsignedWork/ConsignedWorkPage";
+import { ReadyWorksPage } from "@/pages/Operations/ReadyWorks/ReadyWorksPage";
 import { IncomingDocumentDetailPage } from "@/pages/Operations/GelenBelgeler/GelenBelgeDetailPage";
 import { SenderTemplatesPage } from "@/pages/Operations/GelenBelgeler/GonderenSablonlariPage";
 import { CustomerDefaultsPage } from "@/pages/Operations/GelenBelgeler/MusteriVarsayilanUrunleriPage";
@@ -506,6 +507,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="goods-receipt:read">
         <GoodsReceiptsPage />
+      </ProtectedRoute>
+    ),
+  },
+  // Sevke Hazır İşler (D4-J3) — çekirdek sevkiyat ekranı (modül kapısı yok); karo ile AYNI izin.
+  {
+    path: "operations/sevke-hazir-isler",
+    element: (
+      <ProtectedRoute requirePermission="shipping:read">
+        <ReadyWorksPage />
       </ProtectedRoute>
     ),
   },

@@ -47,13 +47,15 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   /** Kumaş Stoğu'ndan işaretlenerek gelen toplar (① listeden seçim yolu). */
   initialRolls?: QuickShipRoll[];
+  /** Başlangıç müşterisi (Sevke Hazır İşler: birimin müşterisi) — yalnız ilk değer, kullanıcı değiştirebilir. */
+  initialCustomerId?: string | null;
   /** Sevk sonrası irsaliyeyi açmak için — sevkiyat id'si döner. */
   onShipped?: (shipmentId: string) => void;
 }
 
-export function QuickShipDialog({ open, onOpenChange, initialRolls = [], onShipped }: Props) {
+export function QuickShipDialog({ open, onOpenChange, initialRolls = [], initialCustomerId = null, onShipped }: Props) {
   const qc = useQueryClient();
-  const [customerId, setCustomerIdRaw] = useState<string | null>(null);
+  const [customerId, setCustomerIdRaw] = useState<string | null>(initialCustomerId);
   const [picked, setPicked] = useState<ShipmentDestination | null>(null);
   // İlk seçim cariye aittir — cari değişince sıfırlanır.
   const setCustomerId = (id: string | null) => {
