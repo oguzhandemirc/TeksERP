@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { CashAccountPicker, type CashAccountOption } from "../PeriodClose/CashAccountPicker";
 import { EMPTY_FILTERS, KIND_LABEL, isFilterDirty, type CashTxnFilterState } from "./cashTxnRules";
 import { DateRangeInput } from "@/components/forms/DateRangeInput";
+import { CashCategoryFilter } from "./CashCategoryFilter";
 
 interface Props {
   value: CashTxnFilterState;
@@ -82,6 +83,8 @@ export function CashTxnFilterBar({ value, account, onAccountChange, onChange }: 
         <option value="ACTIVE">Yalnız aktif</option>
         <option value="CANCELLED">Yalnız iptal</option>
       </select>
+
+      <CashCategoryFilter value={value.category} onChange={(v) => set("category", v)} />
 
       <span className="text-xs text-muted-foreground">Tarih</span>
       <DateRangeInput
