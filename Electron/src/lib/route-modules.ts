@@ -117,6 +117,8 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
 export const ROUTE_REGIME: Readonly<Record<string, Extract<keyof OperationsVisibilityContext, "machineStopEnabled">>> = {
   "operations/machine-stops": "machineStopEnabled",
   "definitions/shift-definitions": "machineStopEnabled",
+  // D4-A4: rapor YAPRAĞI (üç segment) — üretim raporları kategorisi açık kalır, yalnız bu rapor rejime bağlı.
+  "reports/production/makine-duruslari": "machineStopEnabled",
 };
 
 /** `:id` · `new` · `edit` segmentleri ebeveyne katlanır (manifesto EKRAN seviyesinde). */
@@ -126,6 +128,13 @@ function screenKeyCandidates(pathname: string): string[] {
     .filter((x) => x && !x.startsWith(":") && x !== "new" && x !== "edit");
   // En uzun eşleşme önce: `finance/cari` → `finance`.
   return [segs.slice(0, 2).join("/"), segs[0] ?? ""].filter(Boolean);
+}
+
+/** Rejim adayları: ekran anahtarlarından ÖNCE rapor yaprağı (`reports/<kategori>/<rapor>`; D4-A4). */
+function regimeKeyCandidates(pathname: string): string[] {
+  const segs = pathname.split("/").filter((x) => x && !x.startsWith(":"));
+  const leaf = segs[0] === "reports" && segs.length >= 3 ? [segs.slice(0, 3).join("/")] : [];
+  return [...leaf, ...screenKeyCandidates(pathname)];
 }
 
 /** Yolun ait olduğu modül; modülsüz (çekirdek/planlanan/bilinmeyen) yol → null. */
@@ -142,7 +151,7 @@ export function routeModuleOf(pathname: string): RouteModuleFlag | null {
  * değere bakar. Karar bayrak yüklenene dek de verilir — yön bağlamın işi.
  */
 export function isRouteModuleOpen(pathname: string, ctx: OperationsVisibilityContext): boolean {
-  for (const key of screenKeyCandidates(pathname)) {
+  for (const key of regimeKeyCandidates(pathname)) {
     const r = ROUTE_REGIME[key];
     if (r) return ctx[r];
   }

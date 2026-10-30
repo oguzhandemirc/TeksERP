@@ -50,6 +50,7 @@ import { WarehousesPage } from "@/pages/Warehouses/WarehousesPage";
 import { GoodsReceiptsPage } from "@/pages/Operations/GoodsReceipts/GoodsReceiptsPage";
 import { IncomingDocumentsPage } from "@/pages/Operations/GelenBelgeler/GelenBelgelerPage";
 import { ConsignedWorkPage } from "@/pages/Operations/ConsignedWork/ConsignedWorkPage";
+import { ReadyWorksPage } from "@/pages/Operations/ReadyWorks/ReadyWorksPage";
 import { IncomingDocumentDetailPage } from "@/pages/Operations/GelenBelgeler/GelenBelgeDetailPage";
 import { SenderTemplatesPage } from "@/pages/Operations/GelenBelgeler/GonderenSablonlariPage";
 import { CustomerDefaultsPage } from "@/pages/Operations/GelenBelgeler/MusteriVarsayilanUrunleriPage";
@@ -61,6 +62,7 @@ import { PaymentsPage } from "@/pages/Finance/PaymentsPage";
 import { AccountsPage } from "@/pages/Finance/AccountsPage";
 import { CashTransactionsPage } from "@/pages/Finance/CashTransactions/CashTransactionsPage";
 import { ExpenseSummaryPage } from "@/pages/Reports/Finance/ExpenseSummaryPage";
+import { MachineStopsReportPage } from "@/pages/Reports/Production/MachineStopsReportPage";
 import { RatesPage } from "@/pages/Finance/RatesPage";
 // Paket C (2026-08-14) — hepsi NAMED export; default import boş ekran verir.
 import { ChequesPage } from "@/pages/Finance/Cheques/ChequesPage";
@@ -506,6 +508,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="goods-receipt:read">
         <GoodsReceiptsPage />
+      </ProtectedRoute>
+    ),
+  },
+  // Sevke Hazır İşler (D4-J3) — çekirdek sevkiyat ekranı (modül kapısı yok); karo ile AYNI izin.
+  {
+    path: "operations/sevke-hazir-isler",
+    element: (
+      <ProtectedRoute requirePermission="shipping:read">
+        <ReadyWorksPage />
       </ProtectedRoute>
     ),
   },
@@ -1470,6 +1481,16 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="report:production">
         <ProductionReportsHubPage />
+      </ProtectedRoute>
+    ),
+  },
+  // Makine Duruşları raporu (D4-A4) — rejim `ROUTE_REGIME` (yaprak: dokuma ∨ üretim ∧ makine duruşu takibi);
+  // izin backend ucuyla aynı (`report:production`); v2 bayrağına bağlı DEĞİL (`V2_KEYS_WITH_OWN_PAGE`).
+  {
+    path: "reports/production/makine-duruslari",
+    element: (
+      <ProtectedRoute requirePermission="report:production">
+        <MachineStopsReportPage />
       </ProtectedRoute>
     ),
   },

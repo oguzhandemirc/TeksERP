@@ -11,6 +11,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
+import { sortLinksByLinkedAt } from "./helpers/work-order-customers.helper";
 import { decodeDynamicCursor, encodeDynamicCursor } from "../utils/cursor";
 import { readFilterList } from "../utils/query-parser";
 import {
@@ -197,7 +198,7 @@ async function loadUnitMeta(unit: ReadyWorkUnit, ids: string[]): Promise<Map<str
         orderLinks: {
           where: ACTIVE_ORDER_LINK,
           orderBy: { createdAt: "asc" },
-          select: { orderLine: { select: { order: { select: { customer: { select: { id: true, name: true } } } } } } },
+          select: { createdAt: true, orderLine: { select: { order: { select: { customer: { select: { id: true, name: true } } } } } } },
         },
       },
     });
@@ -210,7 +211,8 @@ async function loadUnitMeta(unit: ReadyWorkUnit, ids: string[]): Promise<Map<str
       const push = (c: { id: string; name: string } | null | undefined): void => {
         if (c && !customers.some((x) => x.id === c.id)) customers.push({ id: c.id, name: c.name });
       };
-      for (const l of w.orderLinks) push(l.orderLine?.order?.customer);
+      // Birincil müşteri İE listesiyle AYNI sıradan (bağlanma sırası; eşit damgada dizi sırası) — tek kaynak.
+      for (const l of sortLinksByLinkedAt(w.orderLinks)) push(l.orderLine?.order?.customer);
       for (const o of owners) if (o.unit_id === w.id) push(o);
       out.set(w.id, { label: w.workOrderNumber, target: w.targetQuantity, customers });
     }

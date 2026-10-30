@@ -26,6 +26,7 @@ export const REPORT_KEY_PERMISSION: Readonly<Record<string, string>> = {
   "dokuma/tezgah-randimani": "bulut:uretim:oku",
   "dokuma/duruslar": "bulut:uretim:oku",
   "dokuma/levent-dengesi": "bulut:uretim:oku",
+  "production/makine-duruslari": "bulut:uretim:oku",
   "finance/alacaklar": "bulut:cari-bakiye:oku",
 };
 
@@ -48,6 +49,7 @@ export const PRESENTATION_REPORT_KEYS: readonly string[] = [
   "dokuma/tezgah-randimani",
   "dokuma/duruslar",
   "dokuma/levent-dengesi",
+  "production/makine-duruslari",
   "finance/alacaklar",
 ];
 

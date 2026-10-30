@@ -97,12 +97,29 @@ describe("route-modules — yol → modül aynası", () => {
     expect(isRouteModuleOpen("/definitions/shift-definitions", kapali)).toBe(false);
   });
   it("rejim tablosu manifesto aynasını bozmaz: rejimli ekran ROUTE_MODULE'da modülüyle (dokuma) kalır", () => {
-    for (const key of Object.keys(ROUTE_REGIME)) expect(ROUTE_MODULE[key]).toBe("dokumaEnabled");
+    for (const key of Object.keys(ROUTE_REGIME)) {
+      // Rapor yaprağı (D4-A4) manifesto satırı değil; modülü kategorisinden gelir (üretim).
+      if (key.startsWith("reports/")) expect(routeModuleOf(`/${key}`)).toBe("productionEnabled");
+      else expect(ROUTE_MODULE[key]).toBe("dokumaEnabled");
+    }
+  });
+
+  // D4-A4: makine duruşları raporu kategori (üretim) açıkken bile rejim alanına bağlı; kardeş raporlar etkilenmez.
+  // NEGATİF SONDA (2026-10-30, D4-A4): ROUTE_REGIME'deki rapor satırı silindi → bu test kırmızı.
+  it("⭐ makine duruşları raporu yaprağı rejimi okur (kategori açık, rejim kapalı → kapalı)", () => {
+    const kapali = ctx({ dokumaEnabled: false, productionEnabled: true, machineStopEnabled: false });
+    expect(isRouteModuleOpen("/reports/production/makine-duruslari", kapali)).toBe(false);
+    expect(isRouteModuleOpen("/reports/production", kapali)).toBe(true);
+    expect(isRouteModuleOpen("/reports/production/wip", kapali)).toBe(true);
+    const acik = ctx({ dokumaEnabled: false, productionEnabled: true, machineStopEnabled: true });
+    expect(isRouteModuleOpen("/reports/production/makine-duruslari", acik)).toBe(true);
   });
 
   it("referans fabrika (yalnız üretim açık): kapanan yollar tam olarak ticaret/muhasebe/iplik/depo/devere/dokuma/maliyet ekranları", () => {
     const fabrika = ctx({ financeEnabled: false, ticaretEnabled: false, iplikEnabled: false, depoMultiEnabled: false, devereEnabled: false, dokumaEnabled: false, machineStopEnabled: false, kaliteGuvenceEnabled: false, maliyetEnabled: false });
-    const kapanan = new Set(ALL_PATHS.filter((p) => !isRouteModuleOpen(`/${p}`, fabrika)).map((p) => routeModuleOf(`/${p}`)));
+    // Rejim yaprağı (D4-A4 makine duruşları raporu) modülü açıkken de kapanır — ayrıca ölçülür, kümeye sayılmaz.
+    expect(isRouteModuleOpen("/reports/production/makine-duruslari", fabrika)).toBe(false);
+    const kapanan = new Set(ALL_PATHS.filter((p) => !(p in ROUTE_REGIME) && !isRouteModuleOpen(`/${p}`, fabrika)).map((p) => routeModuleOf(`/${p}`)));
     expect([...kapanan].sort()).toEqual(["depoMultiEnabled", "devereEnabled", "dokumaEnabled", "financeEnabled", "iplikEnabled", "kaliteGuvenceEnabled", "maliyetEnabled", "ticaretEnabled"]);
     expect(isRouteModuleOpen("/operations/work-orders", fabrika)).toBe(true);
   });

@@ -191,6 +191,7 @@ Bulutta BAĞIMSIZ (fabrika kullanıcısına bağlanmaz). TEK KİMLİK, ÇOK TES�
 ### Kararlar
 
 - **[PROFİL]** VDS bütçesi (2 çekirdek / 3 GB): patronun uzun ömürlü servislerinin bellek tavanı toplamı ≤ 1 GiB — sunucu 512m (yığın 320 MB) · DB 384m · yedek 128m; CPU 0,75 · 0,5 · 0,25. · bekçi: `deploy/patron/compose-denetle.mjs (③)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Bulut `production/makine-duruslari` kapısını yalnız `machineStopRegime().general` (üretim ∧ `uretim.makineDurusTakibi`) ile kur; `dokuma/duruslar` ve `weavingOpen`a dokunma. · bekçi: `test_makine_durus_raporu §4/§5` <sub>(arşiv 2026-10-30, D4-A4)</sub>
 - **[ÇEKİRDEK]** VDS'e giden patron imajı `main`'de KALICI bir commit'in sha'sını taşır (temiz `origin/main`'den derlenir; yalnız `docs/` değişikliği taşıyan dal commit'inden derlenmez — squash merge o sha'yı yetim bırakır); sürüm belgesi/kayıt commit'i imajdan sonra gelir. (2026-10-26, arşiv "Patron bulutu 0.2.0 (v2) VDS'te")
 - **[ÇEKİRDEK]** Web derlemesinin bulut adresi `koken`dir: uygulama API'ye sayfanın kökeninden gider, kökensiz ortamda (telefon) `koken` null'dur (fail-closed); telefon derlemesi açık `https://` adresi taşır. · bekçi: `client.test.ts` <sub>(arşiv:2026-09-29)</sub>
 
@@ -202,7 +203,7 @@ Bulut sunucusu bekçileri kendi projesinden: `cd patron/sunucu && node ../../scr
 
 **Ne ölçtükleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## patron-bulutu` bölümü.**
 
-Fabrika (Teks-Erp): `test_bulut_filigran`, `test_bulut_silme_damgasi`, `test_bulut_teklif_projeksiyon`, `test_bulut_uzlastirma`, `test_bulut_projeksiyon_allowlist`, `test_bulut_ham_update`, `test_bulut_gelen_kutusu`, `test_bulut_tel_aynasi`, `test_bulut_hesap_kilitle`, `test_bulut_ozet_mutabakat`, `test_bulut_olay_gudumlu`
+Fabrika (Teks-Erp): `test_makine_durus_raporu`, `test_bulut_filigran`, `test_bulut_silme_damgasi`, `test_bulut_teklif_projeksiyon`, `test_bulut_uzlastirma`, `test_bulut_projeksiyon_allowlist`, `test_bulut_ham_update`, `test_bulut_gelen_kutusu`, `test_bulut_tel_aynasi`, `test_bulut_hesap_kilitle`, `test_bulut_ozet_mutabakat`, `test_bulut_olay_gudumlu`
 
 Bulut sunucusu (patron/sunucu): `test_rls_sizinti`, `test_izin_suzmesi`, `test_gelen_kutusu_claim`, `test_esitleme_idempotency`, `test_totp_zorunlu`, `test_rapor_istegi`, `test_saklama`, `test_kurulum_dizini`, `test_cihaz_kaydi`, `test_bildirim_kurallari`, `test_bildirim_gonderim`, `test_patron_kapilari`, `test_uzlastirma_kumesi`, `test_tazele_zili`, `test_web_sunumu`, `test_katalog_ozeti`, `test_liste_arama`, `test_bildirim_makbuz`, `test_hesap_kilitle_fabrika`, `test_hizmet_sonu`, `test_kimlik_silme`, `test_ip_saklama`, `test_destek_rolu`, `test_eposta_tekilligi`, `test_coklu_tesis`, `test_hesap_kendini_silme`, `test_yonetici_kurtarma`, `test_vekil_guveni`, `test_tesis_db_hazirlik`, `test_tesis_db_yalitimi`, `test_tesis_goc`, `test_compose_sirlari`, `test_degisim_sayaci`, `test_tesis_saati`, `test_guvenlik_bildirimi`, `test_kimlik_ozet_yenile`, `test_tesis_rol_hizasi`
 

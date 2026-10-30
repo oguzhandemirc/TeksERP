@@ -1,4 +1,4 @@
-import { Gauge, UserCog, ScanBarcode, GitBranch } from "lucide-react";
+import { Gauge, UserCog, ScanBarcode, GitBranch, TimerOff } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
 
 /**
@@ -58,5 +58,14 @@ export const productionReportTiles: HubTile[] = [
     description: "Operatör başına işlenen top adedi — sıralama/performans ölçüsü DEĞİL",
     icon: UserCog,
     to: "/reports/production/operator-performance",
+  },
+  {
+    // D4-A4: v2 zarflı, kendi sayfası rapor v2 bayrağından bağımsız (`V2_KEYS_WITH_OWN_PAGE`; `test_rapor_katalogu §3`).
+    // Görünürlük rejim alanından (`ROUTE_REGIME` → `machineStopEnabled` = dokuma ∨ üretim ∧ makine duruşu takibi).
+    key: "makine-duruslari",
+    title: "Makine Duruşları",
+    description: "Makineler ne kadar durdu, en çok hangi sebeple ve hangi makinede — süren duruşlar dahil",
+    icon: TimerOff,
+    to: "/reports/production/makine-duruslari",
   },
 ];

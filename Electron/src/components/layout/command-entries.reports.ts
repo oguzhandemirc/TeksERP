@@ -54,7 +54,8 @@ export const reportCommandSections: CommandSection[] = reportTiles.map((cat) => 
     permission: cat.permission,
     visibleWhen: (ctx: OperationsVisibilityContext) => {
       const key = reportKeyOfPath(tile.to);
-      return (cat.featureFlag ? regimePredicate(cat.featureFlag)(ctx) : true) && key !== null && ctx.isReportOpen(key);
+      // Yaprak rejimi (D4-A4 `ROUTE_REGIME`) karo ve route ile aynı yüklemden.
+      return (cat.featureFlag ? regimePredicate(cat.featureFlag)(ctx) : true) && key !== null && ctx.isReportOpen(key) && isRouteModuleOpen(tile.to, ctx);
     },
     keywords: `rapor ${cat.title}`,
   }));
