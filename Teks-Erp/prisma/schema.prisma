@@ -584,82 +584,82 @@ model User {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   // Kayıt künyesi ters ilişkileri (2026-08-19) — createdBy/updatedBy
-  createdColors            Color[]                 @relation("ColorCreatedBy")
-  updatedColors            Color[]                 @relation("ColorUpdatedBy")
-  createdCustomers         Customer[]              @relation("CustomerCreatedBy")
-  updatedCustomers         Customer[]              @relation("CustomerUpdatedBy")
-  createdCustomerBranchs   CustomerBranch[]        @relation("CustomerBranchCreatedBy")
-  updatedCustomerBranchs   CustomerBranch[]        @relation("CustomerBranchUpdatedBy")
-  createdDefectTypes       DefectType[]            @relation("DefectTypeCreatedBy")
-  updatedDefectTypes       DefectType[]            @relation("DefectTypeUpdatedBy")
-  createdFabricPropertys   FabricProperty[]        @relation("FabricPropertyCreatedBy")
-  updatedFabricPropertys   FabricProperty[]        @relation("FabricPropertyUpdatedBy")
-  createdItems             Item[]                  @relation("ItemCreatedBy")
-  updatedItems             Item[]                  @relation("ItemUpdatedBy")
-  lifecycleChangedItems    Item[]                  @relation("ItemLifecycleChangedBy")
-  createdMachines          Machine[]               @relation("MachineCreatedBy")
-  updatedMachines          Machine[]               @relation("MachineUpdatedBy")
-  createdMachineSpecs      MachineSpec[]           @relation("MachineSpecCreatedBy")
-  updatedMachineSpecs      MachineSpec[]           @relation("MachineSpecUpdatedBy")
-  createdShiftDefinitions  ShiftDefinition[]       @relation("ShiftDefinitionCreatedBy")
-  updatedShiftDefinitions  ShiftDefinition[]       @relation("ShiftDefinitionUpdatedBy")
-  createdMachineCollectors MachineCollector[]      @relation("MachineCollectorCreatedBy")
-  updatedMachineCollectors MachineCollector[]      @relation("MachineCollectorUpdatedBy")
-  createdStopCodeMaps      MachineStopCodeMap[]    @relation("MachineStopCodeMapCreatedBy")
-  updatedStopCodeMaps      MachineStopCodeMap[]    @relation("MachineStopCodeMapUpdatedBy")
-  machineStopsClassified   MachineStopEvent[]      @relation("MachineStopClassifiedBy")
-  machineStopsOpened       MachineStopEvent[]      @relation("MachineStopOpenedBy")
-  machineStopsClosed       MachineStopEvent[]      @relation("MachineStopClosedBy")
-  machineStopReclasses     MachineStopReclass[]    @relation("MachineStopReclassBy")
-  loomAlarmsAcked          LoomAlarm[]             @relation("LoomAlarmAckedBy")
-  loomAlarmsSnoozed        LoomAlarm[]             @relation("LoomAlarmSnoozedBy")
-  loomAlarmEvents          LoomAlarmEvent[]        @relation("LoomAlarmEventBy")
+  createdColors            Color[]                     @relation("ColorCreatedBy")
+  updatedColors            Color[]                     @relation("ColorUpdatedBy")
+  createdCustomers         Customer[]                  @relation("CustomerCreatedBy")
+  updatedCustomers         Customer[]                  @relation("CustomerUpdatedBy")
+  createdCustomerBranchs   CustomerBranch[]            @relation("CustomerBranchCreatedBy")
+  updatedCustomerBranchs   CustomerBranch[]            @relation("CustomerBranchUpdatedBy")
+  createdDefectTypes       DefectType[]                @relation("DefectTypeCreatedBy")
+  updatedDefectTypes       DefectType[]                @relation("DefectTypeUpdatedBy")
+  createdFabricPropertys   FabricProperty[]            @relation("FabricPropertyCreatedBy")
+  updatedFabricPropertys   FabricProperty[]            @relation("FabricPropertyUpdatedBy")
+  createdItems             Item[]                      @relation("ItemCreatedBy")
+  updatedItems             Item[]                      @relation("ItemUpdatedBy")
+  lifecycleChangedItems    Item[]                      @relation("ItemLifecycleChangedBy")
+  createdMachines          Machine[]                   @relation("MachineCreatedBy")
+  updatedMachines          Machine[]                   @relation("MachineUpdatedBy")
+  createdMachineSpecs      MachineSpec[]               @relation("MachineSpecCreatedBy")
+  updatedMachineSpecs      MachineSpec[]               @relation("MachineSpecUpdatedBy")
+  createdShiftDefinitions  ShiftDefinition[]           @relation("ShiftDefinitionCreatedBy")
+  updatedShiftDefinitions  ShiftDefinition[]           @relation("ShiftDefinitionUpdatedBy")
+  createdMachineCollectors MachineCollector[]          @relation("MachineCollectorCreatedBy")
+  updatedMachineCollectors MachineCollector[]          @relation("MachineCollectorUpdatedBy")
+  createdStopCodeMaps      MachineStopCodeMap[]        @relation("MachineStopCodeMapCreatedBy")
+  updatedStopCodeMaps      MachineStopCodeMap[]        @relation("MachineStopCodeMapUpdatedBy")
+  machineStopsClassified   MachineStopEvent[]          @relation("MachineStopClassifiedBy")
+  machineStopsOpened       MachineStopEvent[]          @relation("MachineStopOpenedBy")
+  machineStopsClosed       MachineStopEvent[]          @relation("MachineStopClosedBy")
+  machineStopReclasses     MachineStopReclass[]        @relation("MachineStopReclassBy")
+  loomAlarmsAcked          LoomAlarm[]                 @relation("LoomAlarmAckedBy")
+  loomAlarmsSnoozed        LoomAlarm[]                 @relation("LoomAlarmSnoozedBy")
+  loomAlarmEvents          LoomAlarmEvent[]            @relation("LoomAlarmEventBy")
   loomAlarmRecipients      LoomAlarmRecipient[]
-  hallShiftResponsibles    HallShiftResponsible[]  @relation("HallShiftResponsibleUser")
-  hallShiftDutyOverrides   HallShiftDutyOverride[] @relation("HallShiftDutyOverrideUser")
-  loomAlarmTierRules       LoomAlarmTierRule[]     @relation("LoomAlarmTierRuleUser")
-  notificationInbox        NotificationInbox[]     @relation("NotificationInboxUser")
-  notificationPrefs        NotificationPreference[] @relation("NotificationPreferenceUser")
-  notificationSetting      NotificationUserSetting? @relation("NotificationUserSettingUser")
+  hallShiftResponsibles    HallShiftResponsible[]      @relation("HallShiftResponsibleUser")
+  hallShiftDutyOverrides   HallShiftDutyOverride[]     @relation("HallShiftDutyOverrideUser")
+  loomAlarmTierRules       LoomAlarmTierRule[]         @relation("LoomAlarmTierRuleUser")
+  notificationInbox        NotificationInbox[]         @relation("NotificationInboxUser")
+  notificationPrefs        NotificationPreference[]    @relation("NotificationPreferenceUser")
+  notificationSetting      NotificationUserSetting?    @relation("NotificationUserSettingUser")
   notificationProfiles     NotificationProfileMember[] @relation("NotificationProfileMemberUser")
-  recordFollows            RecordFollow[]          @relation("RecordFollowUser")
-  reportCategoriesCreated  ReportCategory[]        @relation("ReportCategoryCreatedBy")
-  reportCategoriesUpdated  ReportCategory[]        @relation("ReportCategoryUpdatedBy")
-  reportDefinitionsOwned   ReportDefinition[]      @relation("ReportDefinitionOwner")
-  reportDefinitionsCreated ReportDefinition[]      @relation("ReportDefinitionCreatedBy")
-  reportDefinitionsUpdated ReportDefinition[]      @relation("ReportDefinitionUpdatedBy")
-  reportVersionsCreated    ReportDefinitionVersion[] @relation("ReportVersionCreatedBy")
-  reportPresetsOwned       ReportPreset[]          @relation("ReportPresetOwner")
-  reportShares             ReportShare[]           @relation("ReportShareUser")
-  reportRuns               ReportRun[]             @relation("ReportRunUser")
-  reportSnapshotsCreated   ReportSnapshot[]        @relation("ReportSnapshotCreatedBy")
-  machineShiftStatsSealed  MachineShiftStat[]      @relation("MachineShiftStatSealedBy")
-  machineShiftSealsActed   MachineShiftStatSeal[]  @relation("MachineShiftSealBy")
-  createdPeripheralDevices PeripheralDevice[]      @relation("PeripheralDeviceCreatedBy")
-  updatedPeripheralDevices PeripheralDevice[]      @relation("PeripheralDeviceUpdatedBy")
-  deviceBindingEventsActed DeviceBindingEvent[]    @relation("DeviceBindingEventActor")
-  deviceRebindsDecided     DeviceRebindRequest[]   @relation("DeviceRebindDecidedBy")
-  createdProductRecipes    ProductRecipe[]         @relation("ProductRecipeCreatedBy")
-  updatedProductRecipes    ProductRecipe[]         @relation("ProductRecipeUpdatedBy")
-  createdWarpSpecs         WarpSpec[]              @relation("WarpSpecCreatedBy")
-  updatedWarpSpecs         WarpSpec[]              @relation("WarpSpecUpdatedBy")
-  createdQualityGrades     QualityGrade[]          @relation("QualityGradeCreatedBy")
-  updatedQualityGrades     QualityGrade[]          @relation("QualityGradeUpdatedBy")
-  createdReturnReasons     ReturnReason[]          @relation("ReturnReasonCreatedBy")
-  updatedReturnReasons     ReturnReason[]          @relation("ReturnReasonUpdatedBy")
-  createdRoutes            Route[]                 @relation("RouteCreatedBy")
-  updatedRoutes            Route[]                 @relation("RouteUpdatedBy")
-  createdStations          Station[]               @relation("StationCreatedBy")
-  updatedStations          Station[]               @relation("StationUpdatedBy")
-  createdSubcontractors    Subcontractor[]         @relation("SubcontractorCreatedBy")
-  updatedSubcontractors    Subcontractor[]         @relation("SubcontractorUpdatedBy")
-  createdLabelTemplates    LabelTemplate[]         @relation("LabelTemplateCreatedBy")
-  updatedLabelTemplates    LabelTemplate[]         @relation("LabelTemplateUpdatedBy")
-  createdOrders            Order[]                 @relation("OrderCreatedBy")
-  updatedOrders            Order[]                 @relation("OrderUpdatedBy")
-  cancelledOrderLines      OrderLine[]             @relation("OrderLineCancelledBy")
-  createdBatchs            Batch[]                 @relation("BatchCreatedBy")
-  updatedBatchs            Batch[]                 @relation("BatchUpdatedBy")
+  recordFollows            RecordFollow[]              @relation("RecordFollowUser")
+  reportCategoriesCreated  ReportCategory[]            @relation("ReportCategoryCreatedBy")
+  reportCategoriesUpdated  ReportCategory[]            @relation("ReportCategoryUpdatedBy")
+  reportDefinitionsOwned   ReportDefinition[]          @relation("ReportDefinitionOwner")
+  reportDefinitionsCreated ReportDefinition[]          @relation("ReportDefinitionCreatedBy")
+  reportDefinitionsUpdated ReportDefinition[]          @relation("ReportDefinitionUpdatedBy")
+  reportVersionsCreated    ReportDefinitionVersion[]   @relation("ReportVersionCreatedBy")
+  reportPresetsOwned       ReportPreset[]              @relation("ReportPresetOwner")
+  reportShares             ReportShare[]               @relation("ReportShareUser")
+  reportRuns               ReportRun[]                 @relation("ReportRunUser")
+  reportSnapshotsCreated   ReportSnapshot[]            @relation("ReportSnapshotCreatedBy")
+  machineShiftStatsSealed  MachineShiftStat[]          @relation("MachineShiftStatSealedBy")
+  machineShiftSealsActed   MachineShiftStatSeal[]      @relation("MachineShiftSealBy")
+  createdPeripheralDevices PeripheralDevice[]          @relation("PeripheralDeviceCreatedBy")
+  updatedPeripheralDevices PeripheralDevice[]          @relation("PeripheralDeviceUpdatedBy")
+  deviceBindingEventsActed DeviceBindingEvent[]        @relation("DeviceBindingEventActor")
+  deviceRebindsDecided     DeviceRebindRequest[]       @relation("DeviceRebindDecidedBy")
+  createdProductRecipes    ProductRecipe[]             @relation("ProductRecipeCreatedBy")
+  updatedProductRecipes    ProductRecipe[]             @relation("ProductRecipeUpdatedBy")
+  createdWarpSpecs         WarpSpec[]                  @relation("WarpSpecCreatedBy")
+  updatedWarpSpecs         WarpSpec[]                  @relation("WarpSpecUpdatedBy")
+  createdQualityGrades     QualityGrade[]              @relation("QualityGradeCreatedBy")
+  updatedQualityGrades     QualityGrade[]              @relation("QualityGradeUpdatedBy")
+  createdReturnReasons     ReturnReason[]              @relation("ReturnReasonCreatedBy")
+  updatedReturnReasons     ReturnReason[]              @relation("ReturnReasonUpdatedBy")
+  createdRoutes            Route[]                     @relation("RouteCreatedBy")
+  updatedRoutes            Route[]                     @relation("RouteUpdatedBy")
+  createdStations          Station[]                   @relation("StationCreatedBy")
+  updatedStations          Station[]                   @relation("StationUpdatedBy")
+  createdSubcontractors    Subcontractor[]             @relation("SubcontractorCreatedBy")
+  updatedSubcontractors    Subcontractor[]             @relation("SubcontractorUpdatedBy")
+  createdLabelTemplates    LabelTemplate[]             @relation("LabelTemplateCreatedBy")
+  updatedLabelTemplates    LabelTemplate[]             @relation("LabelTemplateUpdatedBy")
+  createdOrders            Order[]                     @relation("OrderCreatedBy")
+  updatedOrders            Order[]                     @relation("OrderUpdatedBy")
+  cancelledOrderLines      OrderLine[]                 @relation("OrderLineCancelledBy")
+  createdBatchs            Batch[]                     @relation("BatchCreatedBy")
+  updatedBatchs            Batch[]                     @relation("BatchUpdatedBy")
 
   // ── KAYIT KÜNYESİ (Faz A2, 2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md
   createdById String? @db.Uuid
@@ -713,46 +713,46 @@ model User {
   /// Yazdırma geçmişi künyesi (kim bastı — telemetri, A1).
   printJobs                       PrintJob[]                @relation("PrintJobUser")
 
-  rollInspectionsInspected  RollInspection[]   @relation("RollInspectionInspectedBy")
-  rollInspectionsSuperseded RollInspection[]   @relation("RollInspectionSupersededBy")
-  rollInspectionsVoided     RollInspection[]   @relation("RollInspectionVoidedBy")
-  fourPointRuleSetsCreated  FourPointRuleSet[] @relation("FourPointRuleSetCreatedBy")
-  fourPointRuleSetsUpdated  FourPointRuleSet[] @relation("FourPointRuleSetUpdatedBy")
-  labTestTypesCreated       LabTestType[]      @relation("LabTestTypeCreatedBy")
-  labTestTypesUpdated       LabTestType[]      @relation("LabTestTypeUpdatedBy")
-  labTestsCreated           LabTest[]          @relation("LabTestCreatedBy")
-  labTestsUpdated           LabTest[]          @relation("LabTestUpdatedBy")
-  labTestsApproved          LabTest[]          @relation("LabTestApprovedBy")
-  labTestsVoided            LabTest[]          @relation("LabTestVoidedBy")
-  certificatesCreated       Certificate[]      @relation("CertificateCreatedBy")
-  certificatesUpdated       Certificate[]      @relation("CertificateUpdatedBy")
-  certificatesRevoked       Certificate[]      @relation("CertificateRevokedBy")
-  certificateFilesUploaded  CertificateFile[]  @relation("CertificateFileUploadedBy")
-  customerLabSpecsCreated   CustomerLabSpec[]  @relation("CustomerLabSpecCreatedBy")
-  customerLabSpecsUpdated   CustomerLabSpec[]  @relation("CustomerLabSpecUpdatedBy")
+  rollInspectionsInspected    RollInspection[]              @relation("RollInspectionInspectedBy")
+  rollInspectionsSuperseded   RollInspection[]              @relation("RollInspectionSupersededBy")
+  rollInspectionsVoided       RollInspection[]              @relation("RollInspectionVoidedBy")
+  fourPointRuleSetsCreated    FourPointRuleSet[]            @relation("FourPointRuleSetCreatedBy")
+  fourPointRuleSetsUpdated    FourPointRuleSet[]            @relation("FourPointRuleSetUpdatedBy")
+  labTestTypesCreated         LabTestType[]                 @relation("LabTestTypeCreatedBy")
+  labTestTypesUpdated         LabTestType[]                 @relation("LabTestTypeUpdatedBy")
+  labTestsCreated             LabTest[]                     @relation("LabTestCreatedBy")
+  labTestsUpdated             LabTest[]                     @relation("LabTestUpdatedBy")
+  labTestsApproved            LabTest[]                     @relation("LabTestApprovedBy")
+  labTestsVoided              LabTest[]                     @relation("LabTestVoidedBy")
+  certificatesCreated         Certificate[]                 @relation("CertificateCreatedBy")
+  certificatesUpdated         Certificate[]                 @relation("CertificateUpdatedBy")
+  certificatesRevoked         Certificate[]                 @relation("CertificateRevokedBy")
+  certificateFilesUploaded    CertificateFile[]             @relation("CertificateFileUploadedBy")
+  customerLabSpecsCreated     CustomerLabSpec[]             @relation("CustomerLabSpecCreatedBy")
+  customerLabSpecsUpdated     CustomerLabSpec[]             @relation("CustomerLabSpecUpdatedBy")
   // Gelen belge taslağı (D2, 2026-10-29): irsaliye künyesi + tarama yakalayan.
-  deliveryNotesCreated      CustomerDeliveryNote[] @relation("CustomerDeliveryNoteCreatedBy")
-  deliveryNotesUpdated      CustomerDeliveryNote[] @relation("CustomerDeliveryNoteUpdatedBy")
-  deliveryNotesApproved     CustomerDeliveryNote[] @relation("CustomerDeliveryNoteApprovedBy")
-  deliveryNotesCancelled    CustomerDeliveryNote[] @relation("CustomerDeliveryNoteCancelledBy")
-  documentScansCaptured     DocumentScan[]         @relation("DocumentScanCapturedBy")
+  deliveryNotesCreated        CustomerDeliveryNote[]        @relation("CustomerDeliveryNoteCreatedBy")
+  deliveryNotesUpdated        CustomerDeliveryNote[]        @relation("CustomerDeliveryNoteUpdatedBy")
+  deliveryNotesApproved       CustomerDeliveryNote[]        @relation("CustomerDeliveryNoteApprovedBy")
+  deliveryNotesCancelled      CustomerDeliveryNote[]        @relation("CustomerDeliveryNoteCancelledBy")
+  documentScansCaptured       DocumentScan[]                @relation("DocumentScanCapturedBy")
   // E4 (2026-10-29): sahibe özel varsayılan ürün künyesi.
   deliveryNoteDefaultsCreated DeliveryNoteCustomerDefault[] @relation("DeliveryNoteCustomerDefaultCreatedBy")
   deliveryNoteDefaultsUpdated DeliveryNoteCustomerDefault[] @relation("DeliveryNoteCustomerDefaultUpdatedBy")
   // MAL-1 (2026-10-25): atkı kartı + maliyet girdileri künyesi.
-  weftSpecsCreated          WeftSpec[]         @relation("WeftSpecCreatedBy")
-  weftSpecsUpdated          WeftSpec[]         @relation("WeftSpecUpdatedBy")
-  costParameterSetsCreated  CostParameterSet[] @relation("CostParameterSetCreatedBy")
-  costParameterSetsUpdated  CostParameterSet[] @relation("CostParameterSetUpdatedBy")
-  yarnCostPricesCreated     YarnCostPrice[]    @relation("YarnCostPriceCreatedBy")
-  finishingRatesCreated     FinishingRate[]    @relation("FinishingRateCreatedBy")
-  costStructuresCreated     CostStructure[]    @relation("CostStructureCreatedBy")
-  costStructuresUpdated     CostStructure[]    @relation("CostStructureUpdatedBy")
-  standardCostVersionsCreated StandardCostVersion[] @relation("StandardCostVersionCreatedBy")
-  salesQuotesCreated          SalesQuote[]          @relation("SalesQuoteCreatedBy")
-  salesQuotesUpdated          SalesQuote[]          @relation("SalesQuoteUpdatedBy")
-  priceListsCreated           PriceList[]           @relation("PriceListCreatedBy")
-  priceListsUpdated           PriceList[]           @relation("PriceListUpdatedBy")
+  weftSpecsCreated            WeftSpec[]                    @relation("WeftSpecCreatedBy")
+  weftSpecsUpdated            WeftSpec[]                    @relation("WeftSpecUpdatedBy")
+  costParameterSetsCreated    CostParameterSet[]            @relation("CostParameterSetCreatedBy")
+  costParameterSetsUpdated    CostParameterSet[]            @relation("CostParameterSetUpdatedBy")
+  yarnCostPricesCreated       YarnCostPrice[]               @relation("YarnCostPriceCreatedBy")
+  finishingRatesCreated       FinishingRate[]               @relation("FinishingRateCreatedBy")
+  costStructuresCreated       CostStructure[]               @relation("CostStructureCreatedBy")
+  costStructuresUpdated       CostStructure[]               @relation("CostStructureUpdatedBy")
+  standardCostVersionsCreated StandardCostVersion[]         @relation("StandardCostVersionCreatedBy")
+  salesQuotesCreated          SalesQuote[]                  @relation("SalesQuoteCreatedBy")
+  salesQuotesUpdated          SalesQuote[]                  @relation("SalesQuoteUpdatedBy")
+  priceListsCreated           PriceList[]                   @relation("PriceListCreatedBy")
+  priceListsUpdated           PriceList[]                   @relation("PriceListUpdatedBy")
 
   @@map("users")
 }
@@ -1214,6 +1214,8 @@ model Machine {
   collectorLinks MachineCollectorLink[]
   /// Ham duruş kodu eşlemesinin tezgah üst-yazımı — `Cascade` (yapılandırma, makinesiz konusuz).
   stopCodeMaps   MachineStopCodeMap[]
+  /// Saat ücreti sürümleri (D4-G1a) — `Restrict`: tarifesi olan makine silinmez (pasife alınır).
+  costRates      MachineCostRate[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -1383,16 +1385,16 @@ model PeripheralDevice {
   identifyPattern String? @db.VarChar(255) // SCALE/METER veri çözüm regex'i
 
   // --- Giriş cihazı (SCALE/METER) okuma protokolü — davranış tamamen VERİ ---
-  readMode    PeripheralReadMode @default(POLL) // POLL=sor-cevap (komut yolla), STREAM=sürekli yayın (dinle)
-  pollCommand String?            @db.VarChar(64) // POLL sorgu komutu; escape destekli (\r \n \xNN), TAM gönderilir
-  terminator  String?            @db.VarChar(8) // Yanıt satır sonu (örn "\r\n"); boş → herhangi CR/LF
-  decimals    Int? // Codec yuvarlama hassasiyeti (boş → 1)
-  scale       Decimal?           @db.Decimal(10, 4) // Ham → mühendislik çarpanı (cm→m: 0.01); boş → 1
-  timeoutMs   Int? // Okuma zaman aşımı ms (boş → 2500)
-  role        String?            @db.VarChar(24) // Makine içi ayraç: "2-KAT" / "4-KAT" / "PRIMARY"
-  simulate    Boolean            @default(false) // Per-cihaz simülasyon (gerçek I/O yerine sahte değer)
+  readMode     PeripheralReadMode @default(POLL) // POLL=sor-cevap (komut yolla), STREAM=sürekli yayın (dinle)
+  pollCommand  String?            @db.VarChar(64) // POLL sorgu komutu; escape destekli (\r \n \xNN), TAM gönderilir
+  terminator   String?            @db.VarChar(8) // Yanıt satır sonu (örn "\r\n"); boş → herhangi CR/LF
+  decimals     Int? // Codec yuvarlama hassasiyeti (boş → 1)
+  scale        Decimal?           @db.Decimal(10, 4) // Ham → mühendislik çarpanı (cm→m: 0.01); boş → 1
+  timeoutMs    Int? // Okuma zaman aşımı ms (boş → 2500)
+  role         String?            @db.VarChar(24) // Makine içi ayraç: "2-KAT" / "4-KAT" / "PRIMARY"
+  simulate     Boolean            @default(false) // Per-cihaz simülasyon (gerçek I/O yerine sahte değer)
   /// Sayaç sıfırlama komutu (pollCommand ikizi, escape destekli); boş → sıfırlanmaz, metre = okuma − başlangıç.
-  resetCommand String?          @db.VarChar(64)
+  resetCommand String?            @db.VarChar(64)
   /// Sayaç davranışı — RESETTING her işte sıfırlanır, CUMULATIVE birikir (fark alınır). Boş → cihaz verisi yok.
   counterMode  MeterCounterMode?
 
@@ -1880,13 +1882,13 @@ model WeftSpec {
 /// eski/yeni küme yazılır); parasal sonucu standart maliyet sürümünde DONMUŞTUR (MAL-2).
 /// Pay = `picksInRepeat / Σ picksInRepeat`. İplik YARN ∧ denye dolu (servis 400).
 model WeftSpecYarn {
-  id            String   @id @default(uuid()) @db.Uuid
-  weftSpecId    String   @db.Uuid
-  yarnItemId    String   @db.Uuid
+  id            String @id @default(uuid()) @db.Uuid
+  weftSpecId    String @db.Uuid
+  yarnItemId    String @db.Uuid
   /// Rapordaki atkı adedi — CHECK > 0.
   picksInRepeat Int
   /// Kart içi sıra — CHECK ≥ 0.
-  sortOrder     Int      @db.SmallInt
+  sortOrder     Int    @db.SmallInt
 
   weftSpec WeftSpec @relation(fields: [weftSpecId], references: [id], onDelete: Restrict)
   yarnItem Item     @relation("WeftSpecYarnItem", fields: [yarnItemId], references: [id], onDelete: Restrict)
@@ -3356,15 +3358,15 @@ model Item {
   /// HAM en (cm): tezgahtan çıkan kumaşın eni. Maliyette atkı boyunun YEDEK kaynağı
   /// (`rawWidthCm + weftSelvedgeAllowanceCm`, uyarılı). MAMUL/kart eni için ayrı kolon AÇILMADI:
   /// kartın eni `widthCm` (K4P) — aynı soruya ikinci cevap olmasın. CHECK > 0.
-  rawWidthCm   Decimal? @db.Decimal(6, 2)
+  rawWidthCm  Decimal? @db.Decimal(6, 2)
   /// Ham / mamul gramaj (g/m²) — bilgi; CHECK > 0.
-  rawGsm       Decimal? @db.Decimal(7, 2)
-  finishedGsm  Decimal? @db.Decimal(7, 2)
+  rawGsm      Decimal? @db.Decimal(7, 2)
+  finishedGsm Decimal? @db.Decimal(7, 2)
   /// Kompozisyon metni ("%100 PES") — bilgi.
-  composition  String?  @db.VarChar(200)
+  composition String?  @db.VarChar(200)
   /// KUMAŞ → ATKI KARTI (N:1). Yalnız `ItemType.FABRIC` (servis 400). Atkı ipliği(leri)
   /// kartın `WeftSpecYarn` satırlarındadır; maliyet tel/sıklık kopyası TUTMAZ.
-  weftSpecId   String?  @db.Uuid
+  weftSpecId  String?  @db.Uuid
 
   // Relations
   rolls                          Roll[]
@@ -3404,6 +3406,9 @@ model Item {
   priceListLines                 PriceListLine[]             @relation("PriceListLineItem")
   serviceForProperties           FabricProperty[]            @relation("FabricPropertyServiceItem")
   serviceForPropertyValues       FabricPropertyValue[]       @relation("FabricPropertyValueServiceItem")
+  /// D4-G1a: hizmet kaleminin sarf normları (SERVICE) / sarf kalemi olarak geçtiği normlar (CONSUMABLE).
+  consumableNormsAsService       ServiceConsumableNorm[]     @relation("ServiceConsumableNormService")
+  consumableNormsAsConsumable    ServiceConsumableNorm[]     @relation("ServiceConsumableNormConsumable")
   serviceBillingLinks            ServiceBillingLink[]        @relation("ServiceBillingLinkItem")
   /// G1: fasona giden iplik kalemleri (kind=YARN).
   subcontractorDispatchYarnItems SubcontractorDispatchItem[] @relation("DispatchItemYarnItem")
@@ -3476,10 +3481,10 @@ model Item {
   // ⚠️ YUMUŞAK KAPI (2026-08-22): migration mükerrer varken index'i ATLAR (NOTICE) —
   // prod'da temizlik (Mükerrer Kayıtlar paneli) bitene dek index EKSİK olabilir;
   // `test_db_invariants` orada kırmızı = "enforce bekliyor" (migration dosyasını yeniden koş).
-  fourPointRuleSets  FourPointRuleSet[]
-  labTests           LabTest[]
-  customerLabSpecs   CustomerLabSpec[]
-  deliveryNoteLines  CustomerDeliveryNoteLine[]
+  fourPointRuleSets            FourPointRuleSet[]
+  labTests                     LabTest[]
+  customerLabSpecs             CustomerLabSpec[]
+  deliveryNoteLines            CustomerDeliveryNoteLine[]
   // E4: bu ürünü varsayılan seçen sahipler (gelen belge).
   deliveryNoteCustomerDefaults DeliveryNoteCustomerDefault[]
 
@@ -4003,10 +4008,10 @@ model Roll {
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
-  inspections          RollInspection[]
-  labTests             LabTest[]
+  inspections      RollInspection[]
+  labTests         LabTest[]
   /// Gelen belge satırından doğan top (D4 yazar); satır başına tek top.
-  deliveryNoteLine     CustomerDeliveryNoteLine?
+  deliveryNoteLine CustomerDeliveryNoteLine?
 
   @@index([itemId])
   @@index([parentRollId])
@@ -4231,18 +4236,18 @@ model Customer {
 
   // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE "mergedIntoId" IS NULL) — ad mükerreri
   // DB seddi (D3/B6, 2026-08-21). Gerekçe, ad kuralı ve YUMUŞAK KAPI notu: Item modelindeki aynı not.
-  fourPointRuleSets FourPointRuleSet[]
-  certificates      Certificate[]
-  customerLabSpecs  CustomerLabSpec[]
+  fourPointRuleSets      FourPointRuleSet[]
+  certificates           Certificate[]
+  customerLabSpecs       CustomerLabSpec[]
   // Gelen belge taslağı (D2): sahip (emanet müşterisi) / gönderen (belgeyi basan firma) ayrı bağ.
-  deliveryNotesOwned     CustomerDeliveryNote[] @relation("CustomerDeliveryNoteOwner")
-  deliveryNotesSent      CustomerDeliveryNote[] @relation("CustomerDeliveryNoteSender")
-  senderTemplates        SenderTemplate[]       @relation("SenderTemplateSender")
-  senderTemplateDefaults SenderTemplate[]       @relation("SenderTemplateDefaultOwner")
+  deliveryNotesOwned     CustomerDeliveryNote[]       @relation("CustomerDeliveryNoteOwner")
+  deliveryNotesSent      CustomerDeliveryNote[]       @relation("CustomerDeliveryNoteSender")
+  senderTemplates        SenderTemplate[]             @relation("SenderTemplateSender")
+  senderTemplateDefaults SenderTemplate[]             @relation("SenderTemplateDefaultOwner")
   deliveryNoteAliases    DeliveryNoteAlias[]
   // E4: sahibe özel gelen belge varsayılan ürünü (saf yapılandırma; Customer kolonu DEĞİL — kimlik/rol ayrımı).
   deliveryNoteDefault    DeliveryNoteCustomerDefault?
-  labTests          LabTest[]
+  labTests               LabTest[]
 
   // MAL-4: teklif / fiyat listesi geri ilişkileri (kolon değil)
   salesQuotes SalesQuote[] @relation("SalesQuoteCustomer")
@@ -5450,12 +5455,12 @@ model RollError {
   /// K4P: iki köken. PROCESS = bugünkü KK2/Kurşun/Tambur hatası (Tambur YALNIZ bunu
   /// görür); INSPECTION = 4 puan muayene belgesinin parçası (Tambur'a girmez,
   /// `isProcessed` hep false — CHECK `roll_errors_inspection_ck`).
-  origin       RollErrorOrigin  @default(PROCESS)
+  origin       RollErrorOrigin @default(PROCESS)
   sizeClass    FourPointSize?
   /// 1–4 (CHECK `roll_errors_points_ck`); sabit puanlı türde `DefectType.fixedPoints`.
-  points       Int?             @db.SmallInt
-  inspectionId String?          @db.Uuid
-  inspection   RollInspection?  @relation(fields: [inspectionId], references: [id], onDelete: Restrict)
+  points       Int?            @db.SmallInt
+  inspectionId String?         @db.Uuid
+  inspection   RollInspection? @relation(fields: [inspectionId], references: [id], onDelete: Restrict)
 
   // Lifecycle — tespit (Kurşun/QC2) ve işlem (Tambur) ayrı izlenir.
   detectedAtStepId  String?   @db.Uuid
@@ -5727,7 +5732,7 @@ model LabTestType {
   createdAt  DateTime      @default(now()) @db.Timestamptz
   updatedAt  DateTime      @updatedAt @db.Timestamptz
 
-  results LabTestResult[]
+  results       LabTestResult[]
   customerSpecs CustomerLabSpec[]
 
   // ── KAYIT KÜNYESİ — docs/design/KAYIT-KUNYESI-TASARIM.md
@@ -5834,7 +5839,7 @@ model Certificate {
   scope         String?           @db.VarChar(500)
   /// Takvim günleri (`@db.Date`) — sertifika anı değil günü anlatır.
   issuedOn      DateTime?         @db.Date
-  expiresOn    DateTime          @db.Date
+  expiresOn     DateTime          @db.Date
   /// Belge eki yoksa dosya adı/yeri notu.
   note          String?           @db.VarChar(500)
   renewsId      String?           @unique @db.Uuid
@@ -5965,13 +5970,13 @@ model RollMeterReading {
   cardSampleId    String?           @db.Uuid
 
   // Politika kopyası (§4) — okuma anındaki ayar.
-  thresholdM    Decimal?           @db.Decimal(12, 3)
-  thresholdPct  Decimal?           @db.Decimal(6, 3)
+  thresholdM   Decimal?            @db.Decimal(12, 3)
+  thresholdPct Decimal?            @db.Decimal(6, 3)
   /// IN/OUT'ta ZORUNLU (DB CHECK `roll_meter_readings_policy_by_phase`); CUT'ta NULL (sapma politikası yok).
-  basis         MeterVarianceBasis?
-  approvalMode  MeterApprovalMode?
+  basis        MeterVarianceBasis?
+  approvalMode MeterApprovalMode?
   /// H1b: okuma anındaki stok kipi — APPLY'ın uygulanıp uygulanmayacağı bu kopyadan okunur.
-  stockMode     MeterStockMode     @default(RECORD)
+  stockMode    MeterStockMode      @default(RECORD)
 
   clientToken String  @unique @db.Uuid
   createdById String? @db.Uuid
@@ -5984,12 +5989,12 @@ model RollMeterReading {
   /// Append-only defter → `updatedAt` YOK (RollOperation emsali); tek güncelleme damgadır.
   createdAt DateTime @default(now()) @db.Timestamptz
 
-  roll       Roll              @relation(fields: [rollId], references: [id])
-  step       WorkOrderStep     @relation(fields: [workOrderStepId], references: [id])
-  machine    Machine?          @relation(fields: [machineId], references: [id])
-  peripheral PeripheralDevice? @relation(fields: [peripheralId], references: [id])
-  createdBy  User?             @relation(fields: [createdById], references: [id])
-  acks       RollMeterAck[]
+  roll         Roll                 @relation(fields: [rollId], references: [id])
+  step         WorkOrderStep        @relation(fields: [workOrderStepId], references: [id])
+  machine      Machine?             @relation(fields: [machineId], references: [id])
+  peripheral   PeripheralDevice?    @relation(fields: [peripheralId], references: [id])
+  createdBy    User?                @relation(fields: [createdById], references: [id])
+  acks         RollMeterAck[]
   billingLinks ServiceBillingLink[]
 
   // DB'de PARTIAL (`WHERE "revokedAt" IS NULL`) — adım × evre başına TEK aktif okuma.
@@ -6235,27 +6240,27 @@ model RollStatusEvent {
 }
 
 model RollVariance {
-  id              String           @id @default(uuid()) @db.Uuid
-  rollId          String           @db.Uuid
+  id              String             @id @default(uuid()) @db.Uuid
+  rollId          String             @db.Uuid
   /// Sapmanın doğduğu iş emri adımı. NULL olabilir: depo kesimi (`cutWarehouseRoll`
   /// / `finalizeWarehouseCut`) hiçbir adıma bağlı değildir — depo topu bir iş
   /// emrine girmeden kesilebiliyor.
-  workOrderStepId String?          @db.Uuid
+  workOrderStepId String?            @db.Uuid
   kind            RollVarianceKind
   /// Sapan metraj — HER ZAMAN POZİTİF (bkz. üstteki not).
-  qty             Decimal          @db.Decimal(12, 3)
+  qty             Decimal            @db.Decimal(12, 3)
   /// Hazır katalogdan seçilen sebep kodu (`constants/variance-reasons.ts`).
   /// OVERAGE'da NULL olabilir — aşımı sistem tespit eder, operatör beyan etmez.
-  reasonCode      String?          @db.VarChar(64)
+  reasonCode      String?            @db.VarChar(64)
   /// "Diğer" seçildiğinde operatörün yazdığı serbest metin. Serbest yazım
   /// KALDIRILMADI, katalogun altına alındı: eldivenli operatör vardiya ortasında
   /// "aaa" / "." gibi doldurmalar üretiyordu ve o, boş bırakmaktan DAHA KÖTÜDÜR
   /// (denetimde cevap varmış gibi görünür, hiçbir şey söylemez).
-  reasonText      String?          @db.VarChar(500)
+  reasonText      String?            @db.VarChar(500)
   /// Sapmayı doğuran YOL — `constants/variance-reasons.ts` `VarianceSource`.
   /// Örn. TAMBUR_FINALIZE · TAMBUR_WAREHOUSE_FINALIZE · TAMBUR_OVERCUT ·
   /// TAMBUR_UNDO_SINGLE. Sebep "neden", kaynak "nerede" sorusunu yanıtlar.
-  source          String           @db.VarChar(64)
+  source          String             @db.VarChar(64)
   /// Sapmayı DOĞURAN BELGENİN kimliği (`SUBCONTRACTOR_RETURN`: `SubcontractorReceipt.id`;
   /// `STOCK_COUNT`: `StockCount.id` — 2026-09-13'te ölçüldü, iki yazıcı). TERSLEMENİN
   /// ADRESİDİR ve BELGE kimliği KALIR: top kimliği ayrı kolondadır (`sourceRollId`),
@@ -6266,16 +6271,16 @@ model RollVariance {
   /// (51 m geldi → 3 m çekme · 49 m geldi → 4 m çekme), makbuz iptali ise LIFO
   /// olduğu için yalnız SONUNCUSUNU kaldırır. Adres olmadan iptal, önceki
   /// teslimatın meşru sapmasını da sessizce terslerdi.
-  sourceRefId     String?          @db.Uuid
+  sourceRefId     String?            @db.Uuid
   /// Sapmayı DOĞURAN TOP — sapma satırı EBEVEYNE yazıldığında (kesim keşfi ebeveyne
   /// taşınır: hüküm ② 2026-09-13) hangi çocuktan geldiği. Tersleme ve mutabakat
   /// "bu çocuğun keşfi" sorusunu buradan sorar; `sourceRefId` belgeyi, bu kolon topu
   /// söyler. `Restrict`: keşfin kaynağı olan top silinemez (defter satırı ona bakıyor).
-  sourceRollId    String?          @db.Uuid
-  createdById     String?          @db.Uuid
+  sourceRollId    String?            @db.Uuid
+  createdById     String?            @db.Uuid
   /// H1b: bu satır `Roll.initialQty`'yi ne kadar YÜKSELTTİ (OVERAGE, kayıtlı girişi aşan ölçüm).
   /// Tersinde aynı miktar geri indirilir; NULL = yükseltmedi (ya da eski yazıcı kaydetmiyor).
-  initialQtyRaise Decimal?         @db.Decimal(12, 3)
+  initialQtyRaise Decimal?           @db.Decimal(12, 3)
   /// D4-B1: sapmayı doğuran ölçümlerin ZAYIF HALKASI (`weakestMeasureSource`). NULL = bilinmiyor
   /// (eski istemci / ölçüm beyansız yol). Doğuş kolonu: sonradan DEĞİŞMEZ, backfill YOK.
   measureSource   MachineDataSource?
@@ -6844,9 +6849,9 @@ model NumberSeries {
   ///
   /// ⚠️ `digits` bir DOLGU ayarıdır, KAPASİTE değil (ölçüldü: 4 hane + sıra 10000
   /// → "10000", sarmaz). Sayacı durduran tek şey `maxValue`dur.
-  startValue Int?
-  step       Int?
-  maxValue   Int?
+  startValue     Int?
+  step           Int?
+  maxValue       Int?
   /// BAŞLANGIÇ DEĞERİNİN GEÇERLİ OLDUĞU FABRİKA YILI — NULL = her dönemde (bugünkü
   /// davranış). Yalnız sabit biçimli (`fixedShape`) seri yazar: başka programdan
   /// yıl ortasında geçen fabrika o yılın sırasını sürdürür, ertesi yıl 1'den başlar.
@@ -7568,7 +7573,7 @@ model Subcontractor {
   mergedChildren Subcontractor[] @relation("SubcontractorMergeLineage")
   mergedBy       User?           @relation("SubcontractorMergedBy", fields: [mergedById], references: [id])
 
-  cariAccount CariAccount?
+  cariAccount    CariAccount?
   /// Bu firmanın terbiye/fason tarifeleri (MAL-1; damgalı sürüm).
   finishingRates FinishingRate[] @relation("FinishingRateSubcontractor")
 
@@ -8048,7 +8053,7 @@ model PrintedDocument {
   printedBy     User?            @relation("PrintedDocumentPrintedBy", fields: [printedById], references: [id])
 
   /// Bu sürümden üretilmiş e-İrsaliye kayıtları (geri ilişki).
-  eIrsaliyeler  EIrsaliye[]
+  eIrsaliyeler EIrsaliye[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -8072,8 +8077,8 @@ model DocumentProfile {
   config      Json
   isActive    Boolean @default(true)
 
-  customers      Customer[]      @relation("CustomerDocProfile")
-  subcontractors Subcontractor[] @relation("SubcontractorDocProfile")
+  customers           Customer[]                @relation("CustomerDocProfile")
+  subcontractors      Subcontractor[]           @relation("SubcontractorDocProfile")
   templateAssignments DocumentProfileTemplate[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
@@ -8603,7 +8608,7 @@ model Shipment {
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("ShipmentUpdatedBy", fields: [updatedById], references: [id])
 
-  invoices Invoice[]
+  invoices     Invoice[]
   /// e-İrsaliye kayıtları (geri ilişki; kolon değil). Bağ `EIrsaliye.shipmentId`te.
   eIrsaliyeler EIrsaliye[]
 
@@ -8902,8 +8907,8 @@ model Color {
   mergedBy       User?     @relation("ColorMergedBy", fields: [mergedById], references: [id])
 
   // MAL-4: teklif / fiyat listesi geri ilişkileri (kolon değil)
-  salesQuoteLines SalesQuoteLine[] @relation("SalesQuoteLineColor")
-  priceListLines  PriceListLine[]  @relation("PriceListLineColor")
+  salesQuoteLines   SalesQuoteLine[]           @relation("SalesQuoteLineColor")
+  priceListLines    PriceListLine[]            @relation("PriceListLineColor")
   deliveryNoteLines CustomerDeliveryNoteLine[]
 
   @@index([isActive, sortOrder])
@@ -9731,14 +9736,14 @@ model EIrsaliye {
   sentXmlId    String? @unique @db.Uuid
 
   // Taşıma — kayıtta elle tamamlanır (plan §2).
-  licensePlate     String? @db.VarChar(32)
-  trailerPlate     String? @db.VarChar(32)
-  driverFirstName  String? @db.VarChar(100)
-  driverFamilyName String? @db.VarChar(100)
+  licensePlate        String? @db.VarChar(32)
+  trailerPlate        String? @db.VarChar(32)
+  driverFirstName     String? @db.VarChar(100)
+  driverFamilyName    String? @db.VarChar(100)
   /// Şoför TCKN — XML'e girer; audit yüküne ve log'a GİRMEZ (sır hijyeni).
-  driverNationalId String? @db.VarChar(11)
-  carrierName      String? @db.VarChar(200)
-  carrierTaxId     String? @db.VarChar(11)
+  driverNationalId    String? @db.VarChar(11)
+  carrierName         String? @db.VarChar(200)
+  carrierTaxId        String? @db.VarChar(11)
   /// TCKN'li alıcıda kişi adı/soyadı.
   recipientFirstName  String? @db.VarChar(100)
   recipientFamilyName String? @db.VarChar(100)
@@ -9790,23 +9795,23 @@ model EIrsaliye {
 /// `createdById` FK'SIZ (`RollStatusEvent.actorId` emsali): kullanıcı silinince SET NULL
 /// bir UPDATE olur ve mühürle çarpışırdı.
 model EIrsaliyeXml {
-  id          String @id @default(uuid()) @db.Uuid
+  id          String  @id @default(uuid()) @db.Uuid
   /// `Cascade` BİLİNÇLİ (`ShipmentEvent.shipment` emsali): kayıt canlıda hard delete
   /// edilmez; kaskat yalnız bekçi temizliğinde koşar, doğrudan silme trigger'da RED.
-  eIrsaliyeId String @db.Uuid
+  eIrsaliyeId String  @db.Uuid
   /// Kayıt içinde 1'den artan sürüm (max+1).
   version     Int
-  ettn        String @db.Uuid
-  xml         String @db.Text
-  sha256      String @db.Char(64)
+  ettn        String  @db.Uuid
+  xml         String  @db.Text
+  sha256      String  @db.Char(64)
   /// Yapısal doğrulama raporu (E4 `ValidationResult`).
   validation  Json
   createdById String? @db.Uuid
 
-  eIrsaliye      EIrsaliye        @relation("EIrsaliyeXmlVersions", fields: [eIrsaliyeId], references: [id], onDelete: Cascade)
-  currentOf      EIrsaliye?       @relation("EIrsaliyeCurrentXml")
-  sentOf         EIrsaliye?       @relation("EIrsaliyeSentXml")
-  events         EIrsaliyeEvent[]
+  eIrsaliye EIrsaliye        @relation("EIrsaliyeXmlVersions", fields: [eIrsaliyeId], references: [id], onDelete: Cascade)
+  currentOf EIrsaliye?       @relation("EIrsaliyeCurrentXml")
+  sentOf    EIrsaliye?       @relation("EIrsaliyeSentXml")
+  events    EIrsaliyeEvent[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
 
@@ -13048,24 +13053,24 @@ model RecordFollow {
 /// `publishedVersionId` claim'iyle değişir. ŞEMA-DIŞI: CHECK status (ACTIVE|ARCHIVED), editMode (VISUAL|CODE).
 /// editMode = son kaydedilen sürümün kipi (liste rozeti); sürüm kendi kipini ayrıca taşır.
 model DocumentTemplate {
-  id                 String    @id @default(uuid()) @db.Uuid
+  id                 String                   @id @default(uuid()) @db.Uuid
   /// PrintedDocType adı ya da FREE_DOCUMENT / TRAVELER_CARD / FASON_CEKI_DRAFT.
-  docType            String    @db.VarChar(40)
-  name               String    @db.VarChar(80)
-  description        String?   @db.VarChar(300)
-  status             String    @default("ACTIVE") @db.VarChar(10)
-  editMode           String    @default("VISUAL") @db.VarChar(10)
+  docType            String                   @db.VarChar(40)
+  name               String                   @db.VarChar(80)
+  description        String?                  @db.VarChar(300)
+  status             String                   @default("ACTIVE") @db.VarChar(10)
+  editMode           String                   @default("VISUAL") @db.VarChar(10)
   /// Kaynak etiketi: "system" ya da "template:<id>" — iz, FK değil.
-  copiedFrom         String?   @db.VarChar(80)
-  publishedVersionId String?   @unique @db.Uuid
+  copiedFrom         String?                  @db.VarChar(80)
+  publishedVersionId String?                  @unique @db.Uuid
   publishedVersion   DocumentTemplateVersion? @relation("DocumentTemplatePublished", fields: [publishedVersionId], references: [id], onDelete: Restrict)
   /// Sürüm no sayacı — kayıt claim'i bununla serileşir (baseVersionNo == latestVersionNo).
-  latestVersionNo    Int       @default(0)
-  archivedAt         DateTime? @db.Timestamptz
-  clientToken        String?   @unique @db.Uuid
+  latestVersionNo    Int                      @default(0)
+  archivedAt         DateTime?                @db.Timestamptz
+  clientToken        String?                  @unique @db.Uuid
 
-  versions          DocumentTemplateVersion[] @relation("DocumentTemplateVersions")
-  defaultFor        DocumentTemplateDefault[]
+  versions           DocumentTemplateVersion[] @relation("DocumentTemplateVersions")
+  defaultFor         DocumentTemplateDefault[]
   profileAssignments DocumentProfileTemplate[]
 
   createdAt   DateTime @default(now()) @db.Timestamptz
@@ -13082,14 +13087,14 @@ model DocumentTemplate {
 /// içerik kolonu UPDATE'i ve yayınlanmış sürümün DELETE'i reddedilir; tek istisna publishedAt/publishedById
 /// NULL→değer (bir kez). CHECK editMode (VISUAL|CODE).
 model DocumentTemplateVersion {
-  id              String   @id @default(uuid()) @db.Uuid
-  templateId      String   @db.Uuid
+  id              String           @id @default(uuid()) @db.Uuid
+  templateId      String           @db.Uuid
   template        DocumentTemplate @relation("DocumentTemplateVersions", fields: [templateId], references: [id], onDelete: Restrict)
   versionNo       Int
-  editMode        String   @db.VarChar(10)
-  sourceHtml      String   @db.Text
-  css             String   @db.Text
-  compiledLiquid  String   @db.Text
+  editMode        String           @db.VarChar(10)
+  sourceHtml      String           @db.Text
+  css             String           @db.Text
+  compiledLiquid  String           @db.Text
   projectData     Json?
   pageSettings    Json
   tableBindings   Json
@@ -13097,15 +13102,15 @@ model DocumentTemplateVersion {
   settings        Json
   internalFields  Json
   contractVersion Int
-  engineVersion   String   @db.VarChar(40)
-  contentHash     String   @db.VarChar(64)
-  note            String?  @db.VarChar(300)
+  engineVersion   String           @db.VarChar(40)
+  contentHash     String           @db.VarChar(64)
+  note            String?          @db.VarChar(300)
   removedOnSave   Json
-  clientToken     String?  @unique @db.Uuid
-  createdById     String?  @db.Uuid
-  createdAt       DateTime @default(now()) @db.Timestamptz
-  publishedAt     DateTime? @db.Timestamptz
-  publishedById   String?  @db.Uuid
+  clientToken     String?          @unique @db.Uuid
+  createdById     String?          @db.Uuid
+  createdAt       DateTime         @default(now()) @db.Timestamptz
+  publishedAt     DateTime?        @db.Timestamptz
+  publishedById   String?          @db.Uuid
 
   publishedOf DocumentTemplate? @relation("DocumentTemplatePublished")
 
@@ -13156,13 +13161,13 @@ model DocumentProfileTemplate {
 /// KATALOG — rapor kategorisi/klasörü. `code` dolu = sistem kategorisi (boot uzlaştırması),
 /// null = kullanıcının. ≤2 seviye kuralı serviste (R1-KAYIT); pasife alma yalnız boş kategoride.
 model ReportCategory {
-  id        String  @id @default(uuid()) @db.Uuid
-  code      String? @unique @db.VarChar(48)
-  name      String  @db.VarChar(100)
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String?  @unique @db.VarChar(48)
+  name      String   @db.VarChar(100)
   /// Öz-FK; derinlik (≤2) servis kuralı — DB yalnız varlığı mühürler.
-  parentId  String? @db.Uuid
-  sortOrder Int     @default(0)
-  isActive  Boolean @default(true)
+  parentId  String?  @db.Uuid
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
@@ -13185,24 +13190,24 @@ model ReportCategory {
 /// "sil" = `status` ARSIV geçişi (atomik claim). ŞEMA-DIŞI CHECK: kind/visibility/status kümeleri +
 /// biçim (SISTEM ⇒ key dolu, sahipsiz; OZEL ⇒ sahipli, key boş).
 model ReportDefinition {
-  id              String  @id @default(uuid()) @db.Uuid
+  id              String   @id @default(uuid()) @db.Uuid
   /// SISTEM · OZEL — VarChar + CHECK.
-  kind            String  @db.VarChar(16)
-  key             String? @unique @db.VarChar(64)
-  name            String  @db.VarChar(150)
+  kind            String   @db.VarChar(16)
+  key             String?  @unique @db.VarChar(64)
+  name            String   @db.VarChar(150)
   description     String?
-  categoryId      String  @db.Uuid
-  ownerId         String? @db.Uuid
+  categoryId      String   @db.Uuid
+  ownerId         String?  @db.Uuid
   /// OZEL · PAYLASIMLI · HERKES — VarChar + CHECK.
-  visibility      String  @default("OZEL") @db.VarChar(16)
+  visibility      String   @default("OZEL") @db.VarChar(16)
   /// TASLAK · YAYINDA · ARSIV — VarChar + CHECK; geçiş atomik claim.
-  status          String  @default("TASLAK") @db.VarChar(16)
+  status          String   @default("TASLAK") @db.VarChar(16)
   /// Yürürlükteki sürüm; değişim `updateMany WHERE {id, activeVersionId: beklenen}` → 0 ise 409.
-  activeVersionId String? @unique @db.Uuid
+  activeVersionId String?  @unique @db.Uuid
   /// Tanımın başvurduğu alan/ölçü kataloğdan düştüyse true (çalıştırma fail-closed).
-  isBroken        Boolean @default(false)
+  isBroken        Boolean  @default(false)
   /// İdempotency — yaratan uç (`clientToken @unique` sözleşmesi).
-  clientToken     String? @unique @db.Uuid
+  clientToken     String?  @unique @db.Uuid
   createdAt       DateTime @default(now()) @db.Timestamptz
   updatedAt       DateTime @updatedAt @db.Timestamptz
 
@@ -13211,9 +13216,9 @@ model ReportDefinition {
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("ReportDefinitionUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
 
-  category      ReportCategory           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  owner         User?                    @relation("ReportDefinitionOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  activeVersion ReportDefinitionVersion? @relation("ReportDefinitionActiveVersion", fields: [activeVersionId], references: [id], onDelete: Restrict)
+  category      ReportCategory            @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  owner         User?                     @relation("ReportDefinitionOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  activeVersion ReportDefinitionVersion?  @relation("ReportDefinitionActiveVersion", fields: [activeVersionId], references: [id], onDelete: Restrict)
   versions      ReportDefinitionVersion[] @relation("ReportDefinitionVersions")
   presets       ReportPreset[]
   shares        ReportShare[]
@@ -13295,22 +13300,22 @@ model ReportShare {
 /// başında `pg_backend_pid()`; iptal ucu `pg_cancel_backend` için okur. `status` CALISIYOR · TAMAM ·
 /// ZAMAN_ASIMI · IPTAL · HATA (VarChar + CHECK).
 model ReportRun {
-  id           String    @id @default(uuid()) @db.Uuid
-  definitionId String?   @db.Uuid
+  id           String   @id @default(uuid()) @db.Uuid
+  definitionId String?  @db.Uuid
   /// Sistem rapor anahtarı (tanım satırı olmadan koşan temel rapor için).
-  key          String?   @db.VarChar(64)
-  versionId    String?   @db.Uuid
+  key          String?  @db.VarChar(64)
+  versionId    String?  @db.Uuid
   /// Parametrelerin özeti (önbellek anahtarı parçası) — ham parametre değil.
-  paramsDigest String    @db.VarChar(64)
-  userId       String    @db.Uuid
-  startedAt    DateTime  @default(now()) @db.Timestamptz
+  paramsDigest String   @db.VarChar(64)
+  userId       String   @db.Uuid
+  startedAt    DateTime @default(now()) @db.Timestamptz
   durationMs   Int?
   rowCount     Int?
-  status       String    @default("CALISIYOR") @db.VarChar(16)
-  errorCode    String?   @db.VarChar(64)
+  status       String   @default("CALISIYOR") @db.VarChar(16)
+  errorCode    String?  @db.VarChar(64)
   backendPid   Int?
-  createdAt    DateTime  @default(now()) @db.Timestamptz
-  updatedAt    DateTime  @updatedAt @db.Timestamptz
+  createdAt    DateTime @default(now()) @db.Timestamptz
+  updatedAt    DateTime @updatedAt @db.Timestamptz
 
   definition ReportDefinition?        @relation(fields: [definitionId], references: [id], onDelete: Restrict)
   version    ReportDefinitionVersion? @relation(fields: [versionId], references: [id], onDelete: Restrict)
@@ -13486,6 +13491,64 @@ model FinishingRate {
   @@map("finishing_rates")
 }
 
+/// MAKİNE SAAT ÜCRETİ — ③a ticari pivot, damgalı sürüm (D4-G1a, ister 4.9/5.10 kârlılık zemini).
+/// "Şu andan itibaren": değişim = aynı tx'te eski satırın damgası + yeni satır; geri tarih yok,
+/// satır silinmez. TRY-only. Okuma YALNIZ `cost-rate-validity.helper.ts` (`machineCostRateValidAt`).
+/// Makine başına tek aktif: ŞEMA-DIŞI partial unique `machine_cost_rates_active_machine_uq`.
+model MachineCostRate {
+  id           String    @id @default(uuid()) @db.Uuid
+  machineId    String    @db.Uuid
+  /// TL/saat — CHECK ≥ 0.
+  hourRateTry  Decimal   @db.Decimal(12, 4)
+  /// Beklenen m/saat (bilgi; kârlılık süreyi ölçer, bunu kullanmaz). CHECK > 0.
+  normMPerHour Decimal?  @db.Decimal(10, 2)
+  note         String?   @db.VarChar(300)
+  clientToken  String    @unique @db.Uuid
+  createdById  String    @db.Uuid
+  /// Damga açanı taşır (CHECK `machine_cost_rates_revoke_actor_chk`).
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  revokeReason String?   @db.VarChar(300)
+
+  machine Machine @relation(fields: [machineId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // "Ücret şu tarih itibarıyla" okuması: anahtar + pencere başı.
+  @@index([machineId, createdAt])
+  @@map("machine_cost_rates")
+}
+
+/// HİZMET SARF NORMU — hizmet kaleminin (SERVICE) metresi başına sarf kalemi (CONSUMABLE)
+/// miktarı; ③a damgalı sürüm (D4-G1a). Tür kapısı serviste (items'ta tür tetiği emsali yok).
+/// `unit` sarf kaleminin birimi, doğuşta donar. Okuma YALNIZ `consumableNormsValidAt`.
+/// Çift başına tek aktif: ŞEMA-DIŞI partial unique `service_consumable_norms_active_pair_uq`.
+model ServiceConsumableNorm {
+  id               String    @id @default(uuid()) @db.Uuid
+  serviceItemId    String    @db.Uuid
+  consumableItemId String    @db.Uuid
+  /// Metre başına sarf miktarı — CHECK > 0.
+  qtyPerM          Decimal   @db.Decimal(12, 6)
+  unit             String    @db.VarChar(16)
+  note             String?   @db.VarChar(300)
+  clientToken      String    @unique @db.Uuid
+  createdById      String    @db.Uuid
+  revokedAt        DateTime? @db.Timestamptz
+  revokedById      String?   @db.Uuid
+  revokeReason     String?   @db.VarChar(300)
+
+  serviceItem    Item @relation("ServiceConsumableNormService", fields: [serviceItemId], references: [id], onDelete: Restrict)
+  consumableItem Item @relation("ServiceConsumableNormConsumable", fields: [consumableItemId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([serviceItemId, createdAt])
+  @@index([consumableItemId])
+  @@map("service_consumable_norms")
+}
+
 /// ÜRÜNÜN MALİYETE ÖZGÜ EKLERİ — KATALOG (canlı ayar; parasal sonucu standart maliyet
 /// sürümünde donar). Yalnız kartta OLMAYANLAR; her alan NULL = parametre varsayılanı.
 /// `finishingRateCode` KOD tutar (fiyat değişince yapı değişmez; aktif tarifeye çözülür).
@@ -13569,13 +13632,13 @@ model StandardCostVersion {
   restoredFromId      String?            @db.Uuid
   supersededAt        DateTime?          @db.Timestamptz
 
-  item         Item                  @relation("StandardCostVersionItem", fields: [itemId], references: [id], onDelete: Restrict)
-  parameterSet CostParameterSet      @relation("StandardCostVersionParameterSet", fields: [parameterSetId], references: [id], onDelete: Restrict)
-  restoredFrom StandardCostVersion?  @relation("StandardCostVersionRestore", fields: [restoredFromId], references: [id], onDelete: Restrict)
-  restoredTo   StandardCostVersion[] @relation("StandardCostVersionRestore")
-  lines        StandardCostLine[]
-  quoteLines     SalesQuoteLine[] @relation("SalesQuoteLineCostVersion")
-  priceListLines PriceListLine[]  @relation("PriceListLineCostVersion")
+  item           Item                  @relation("StandardCostVersionItem", fields: [itemId], references: [id], onDelete: Restrict)
+  parameterSet   CostParameterSet      @relation("StandardCostVersionParameterSet", fields: [parameterSetId], references: [id], onDelete: Restrict)
+  restoredFrom   StandardCostVersion?  @relation("StandardCostVersionRestore", fields: [restoredFromId], references: [id], onDelete: Restrict)
+  restoredTo     StandardCostVersion[] @relation("StandardCostVersionRestore")
+  lines          StandardCostLine[]
+  quoteLines     SalesQuoteLine[]      @relation("SalesQuoteLineCostVersion")
+  priceListLines PriceListLine[]       @relation("PriceListLineCostVersion")
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
@@ -13611,6 +13674,7 @@ model StandardCostLine {
   @@index([yarnItemId])
   @@map("standard_cost_lines")
 }
+
 // =============================================================================
 // MAL-4 — SATIŞ TEKLİFİ + FİYAT LİSTESİ (plan §3.2–§3.5)
 // =============================================================================
@@ -13760,25 +13824,25 @@ model SalesQuoteLine {
 }
 
 model PriceList {
-  id            String          @id @default(uuid()) @db.Uuid
+  id             String          @id @default(uuid()) @db.Uuid
   /// Doğuşta `number_series` (`priceList`); revizyon aynı numarayı taşır.
-  listNo        String          @db.VarChar(32)
-  revisionNo    Int             @default(1) @db.SmallInt
-  clientToken   String          @unique @db.Uuid
-  name          String          @db.VarChar(100)
+  listNo         String          @db.VarChar(32)
+  revisionNo     Int             @default(1) @db.SmallInt
+  clientToken    String          @unique @db.Uuid
+  name           String          @db.VarChar(100)
   /// NULL = genel liste.
-  customerId    String?         @db.Uuid
-  currency      Currency
-  status        PriceListStatus @default(DRAFT)
+  customerId     String?         @db.Uuid
+  currency       Currency
+  status         PriceListStatus @default(DRAFT)
   /// BİLGİ — çözümleyici tarih aralığı DEĞERLENDİRMEZ; geçerlilik = yayın durumu.
-  validFromDate DateTime?       @db.Date
-  validUntilDate DateTime?      @db.Date
-  publishedAt   DateTime?       @db.Timestamptz
-  publishedById String?         @db.Uuid
-  archivedAt    DateTime?       @db.Timestamptz
-  archivedById  String?         @db.Uuid
-  revisionOfId  String?         @unique @db.Uuid
-  notes         String?         @db.VarChar(1000)
+  validFromDate  DateTime?       @db.Date
+  validUntilDate DateTime?       @db.Date
+  publishedAt    DateTime?       @db.Timestamptz
+  publishedById  String?         @db.Uuid
+  archivedAt     DateTime?       @db.Timestamptz
+  archivedById   String?         @db.Uuid
+  revisionOfId   String?         @unique @db.Uuid
+  notes          String?         @db.VarChar(1000)
 
   customer   Customer?       @relation("PriceListCustomer", fields: [customerId], references: [id], onDelete: Restrict)
   revisionOf PriceList?      @relation("PriceListRevision", fields: [revisionOfId], references: [id], onDelete: Restrict)
@@ -13918,11 +13982,11 @@ model CustomerDeliveryNote {
   createdAt        DateTime               @default(now()) @db.Timestamptz
   updatedAt        DateTime               @updatedAt @db.Timestamptz
 
-  ownerCustomer  Customer?       @relation("CustomerDeliveryNoteOwner", fields: [ownerCustomerId], references: [id], onDelete: Restrict)
-  senderCustomer Customer?       @relation("CustomerDeliveryNoteSender", fields: [senderCustomerId], references: [id], onDelete: Restrict)
-  template       SenderTemplate? @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  approvedBy     User?           @relation("CustomerDeliveryNoteApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
-  cancelledBy    User?           @relation("CustomerDeliveryNoteCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
+  ownerCustomer  Customer?                  @relation("CustomerDeliveryNoteOwner", fields: [ownerCustomerId], references: [id], onDelete: Restrict)
+  senderCustomer Customer?                  @relation("CustomerDeliveryNoteSender", fields: [senderCustomerId], references: [id], onDelete: Restrict)
+  template       SenderTemplate?            @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  approvedBy     User?                      @relation("CustomerDeliveryNoteApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  cancelledBy    User?                      @relation("CustomerDeliveryNoteCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
   lines          CustomerDeliveryNoteLine[]
   scans          DocumentScan[]
 
@@ -14012,8 +14076,8 @@ model DocumentScan {
   createdAt     DateTime           @default(now()) @db.Timestamptz
   updatedAt     DateTime           @updatedAt @db.Timestamptz
 
-  note       CustomerDeliveryNote? @relation(fields: [noteId], references: [id], onDelete: Restrict)
-  capturedBy User?                 @relation("DocumentScanCapturedBy", fields: [capturedById], references: [id], onDelete: Restrict)
+  note       CustomerDeliveryNote?      @relation(fields: [noteId], references: [id], onDelete: Restrict)
+  capturedBy User?                      @relation("DocumentScanCapturedBy", fields: [capturedById], references: [id], onDelete: Restrict)
   lines      CustomerDeliveryNoteLine[]
 
   @@index([noteId])
@@ -14035,8 +14099,8 @@ model SenderTemplate {
   createdAt              DateTime @default(now()) @db.Timestamptz
   updatedAt              DateTime @updatedAt @db.Timestamptz
 
-  senderCustomer       Customer? @relation("SenderTemplateSender", fields: [senderCustomerId], references: [id], onDelete: Restrict)
-  defaultOwnerCustomer Customer? @relation("SenderTemplateDefaultOwner", fields: [defaultOwnerCustomerId], references: [id], onDelete: Restrict)
+  senderCustomer       Customer?              @relation("SenderTemplateSender", fields: [senderCustomerId], references: [id], onDelete: Restrict)
+  defaultOwnerCustomer Customer?              @relation("SenderTemplateDefaultOwner", fields: [defaultOwnerCustomerId], references: [id], onDelete: Restrict)
   notes                CustomerDeliveryNote[]
 
   @@index([senderCustomerId])
