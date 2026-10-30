@@ -102,8 +102,7 @@ export function parseLimit(raw: unknown, def: number, max: number): number {
 // ---------------------------------------------------------------------------
 // BİRİM ÜYELİĞİ — (unit_id, roll_id) çiftleri; tek SQL parçası, liste ve top ucu aynısını kullanır.
 // ---------------------------------------------------------------------------
-// Müşteri partisi tanımı TEK yerde (`ship-readiness.helper`; belgeden iş emri aynısını okur).
-const noteKeySql = (): Prisma.Sql => customerBatchKeySql("n");
+// Müşteri partisi anahtarı TEK yerde: `customerBatchKeySql` (`ship-readiness.helper`; belgeden iş emri aynısını okur).
 
 export function membershipSql(unit: ReadyWorkUnit, onlyId?: string): Prisma.Sql {
   switch (unit) {
@@ -120,7 +119,7 @@ export function membershipSql(unit: ReadyWorkUnit, onlyId?: string): Prisma.Sql 
         ${onlyId ? Prisma.sql`AND r."ownerCustomerId" = ${onlyId}::uuid` : Prisma.empty}`;
     case "deliveryNote":
     case "customerBatch": {
-      const key = unit === "deliveryNote" ? Prisma.sql`n.id::text` : noteKeySql();
+      const key = unit === "deliveryNote" ? Prisma.sql`n.id::text` : customerBatchKeySql("n");
       const unitFilter = unit === "customerBatch"
         ? Prisma.sql`AND ${customerBatchMemberSql("n")}`
         : Prisma.empty;
@@ -220,7 +219,7 @@ async function loadUnitMeta(unit: ReadyWorkUnit, ids: string[]): Promise<Map<str
     return out;
   }
   // Belge birimleri: hedef = onayla top doğuran satırların Σ metresi (gelmeyen/atlanan satır beklenemez).
-  const key = unit === "deliveryNote" ? Prisma.sql`n.id::text` : noteKeySql();
+  const key = unit === "deliveryNote" ? Prisma.sql`n.id::text` : customerBatchKeySql("n");
   const rows = await prisma.$queryRaw<
     Array<{ unit_id: string; label: string; owner_id: string | null; owner_name: string | null; target: Prisma.Decimal | null }>
   >(Prisma.sql`
