@@ -120,7 +120,7 @@ export function matchExtras(r: { matchedBy: ScanMatchedBy; customerCode: string 
 /**
  * Liste/arama süzgeçleri için müşteri koduyla eşleşen top id'leri (D4-F1b). Aynı boğazdan geçer;
  * iç barkod eşleşmesi ya da ayar kapalıysa [] (çağıranın `barcode` kolu zaten kapsar → bayt-aynı).
- * Belirsizlikte TÜM adaylar döner: liste sessiz seçim yapmaz, hepsini gösterir.
+ * Belirsizlikte en çok MAX_CANDIDATES (10) aday döner: liste sessiz seçim yapmaz; fazlası için top barkodu okutulur.
  */
 export async function customerCodeSearchRollIds(rawSearch: string | null | undefined): Promise<string[]> {
   const search = rawSearch?.trim() ?? "";
