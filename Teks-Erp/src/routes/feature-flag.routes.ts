@@ -289,6 +289,13 @@ export const updateSchema = z.strictObject({
   financeServiceBillingMeterBasis: z.enum(["OUT", "IN", "DECLARED"]).optional(),
   financeServiceBillingMissingMeter: z.enum(["DECLARED_WITH_WARNING", "BLOCK_LINE"]).optional(),
   financeServiceBillingTrigger: z.enum(["PER_SHIPMENT", "PERIOD_END"]).optional(),
+  // D4-I1a: cari kilidi — kapsam ön seçimi (boş olmayan alt küme, sabit sıra) + koyanın kendi kilidini açması.
+  financeCariHoldDefaultScope: z
+    .enum(["INTAKE,SHIPMENT", "INTAKE", "SHIPMENT", "INVOICE", "INTAKE,INVOICE", "SHIPMENT,INVOICE", "INTAKE,SHIPMENT,INVOICE"], {
+      message: "Cari kilidi kapsam ön seçimi tanınmadı",
+    })
+    .optional(),
+  financeCariHoldReleaseBySamePerson: z.enum(["ALLOW", "DENY"], { message: "Cari kilidi açma kuralı ALLOW ya da DENY olmalı" }).optional(),
   financeServiceBillingPriceDate: z.enum(["SERVICE_DAY", "DISPATCH_DAY"]).optional(),
   /** D4-H1: masraf kategorisi önerisi (`EXPENSE_CATEGORY_SUGGESTION_MODES` ile birebir). */
   financeExpenseCategorySuggestions: z.enum(["ON", "OFF"]).optional(),

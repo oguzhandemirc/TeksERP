@@ -179,6 +179,10 @@ export const SETTING_KEYS = {
   FINANCE_SERVICE_BILLING_PRICE_DATE: "finance.serviceBilling.priceDate",
   /** D4-H1: kasa masraf formunda "son kullanılan kategoriler" önerisi — `ON` (varsayılan) · `OFF`; katalog DEĞİL. */
   FINANCE_EXPENSE_CATEGORY_SUGGESTIONS: "finance.masraf.kategoriOnerisi",
+  /** D4-I1a: cari kilidi formunun kapsam ÖN SEÇİMİ (K20) — kapsamı kilit koyan seçer; varsayılan iş kabulü + sevk. */
+  FINANCE_CARI_HOLD_DEFAULT_SCOPE: "finance.cariHold.defaultScope",
+  /** D4-I1a: kilidi koyan kişi kendi kilidini açabilir mi — `ALLOW` (varsayılan, serbest) · `DENY` (başka yetkili açar). */
+  FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON: "finance.cariHold.releaseBySamePerson",
   /** Tahsilat/ödeme kaydında en eski açık faturalara OTOMATİK kapama — FIFO
    *  (default FALSE). Bugün kapama (`PaymentAllocation`) elle seçilir; açıkken
    *  tutar vade/tarih sırasıyla açık bakiyelere dağıtılır ve artan tutar
@@ -1035,6 +1039,21 @@ export const DEFAULT_SERVICE_BILLING_PRICE_DATE: ServiceBillingPriceDate = "SERV
 export type ExpenseCategorySuggestions = "ON" | "OFF";
 export const EXPENSE_CATEGORY_SUGGESTION_MODES: ExpenseCategorySuggestions[] = ["ON", "OFF"];
 export const DEFAULT_EXPENSE_CATEGORY_SUGGESTIONS: ExpenseCategorySuggestions = "ON";
+/** D4-I1a: kilit kapsamı ön seçimi — {INTAKE, SHIPMENT, INVOICE}in boş olmayan alt kümesi, sabit sırayla virgüllü. */
+export const CARI_HOLD_DEFAULT_SCOPES = [
+  "INTAKE,SHIPMENT",
+  "INTAKE",
+  "SHIPMENT",
+  "INVOICE",
+  "INTAKE,INVOICE",
+  "SHIPMENT,INVOICE",
+  "INTAKE,SHIPMENT,INVOICE",
+] as const;
+export type CariHoldDefaultScope = (typeof CARI_HOLD_DEFAULT_SCOPES)[number];
+export const DEFAULT_CARI_HOLD_SCOPE: CariHoldDefaultScope = "INTAKE,SHIPMENT";
+export type CariHoldReleaseBySamePerson = "ALLOW" | "DENY";
+export const CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES: CariHoldReleaseBySamePerson[] = ["ALLOW", "DENY"];
+export const DEFAULT_CARI_HOLD_RELEASE_BY_SAME_PERSON: CariHoldReleaseBySamePerson = "ALLOW";
 
 /** Tambur plan kapısı EN kolu (bkz. `SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_CHECK`). */
 export type TamburPlanWidthCheck = "ENFORCE" | "OFF";
@@ -1867,6 +1886,10 @@ export interface FeatureFlags {
   financeServiceBillingPriceDate: ServiceBillingPriceDate;
   /** D4-H1: kasa masraf formunda kategori önerisi (varsayılan `ON`). */
   financeExpenseCategorySuggestions: ExpenseCategorySuggestions;
+  /** D4-I1a: cari kilidi kapsam ön seçimi (varsayılan `INTAKE,SHIPMENT`). */
+  financeCariHoldDefaultScope: CariHoldDefaultScope;
+  /** D4-I1a: koyan kişi kendi kilidini açabilir mi (varsayılan `ALLOW`). */
+  financeCariHoldReleaseBySamePerson: CariHoldReleaseBySamePerson;
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; otomatik tahsis elle
    *  silinebilir; farklı para birimli fatura atlanır. */
@@ -2517,6 +2540,8 @@ export class SystemSettingService {
       financeServiceBillingTrigger: await readFinanceServiceBillingTrigger(cacheClient),
       financeServiceBillingPriceDate: await readFinanceServiceBillingPriceDate(cacheClient),
       financeExpenseCategorySuggestions: await readFinanceExpenseCategorySuggestions(cacheClient),
+      financeCariHoldDefaultScope: await readFinanceCariHoldDefaultScope(cacheClient),
+      financeCariHoldReleaseBySamePerson: await readFinanceCariHoldReleaseBySamePerson(cacheClient),
       financeAutoAllocateOnPaymentEnabled:
         await readFinanceAutoAllocateOnPaymentEnabled(cacheClient),
       yarnBlockNegativeBalanceEnabled: await readYarnBlockNegativeBalanceEnabled(cacheClient),
@@ -3041,6 +3066,20 @@ export class SystemSettingService {
         throw AppError.badRequest(`financeExpenseCategorySuggestions şunlardan biri olmalı: ${EXPENSE_CATEGORY_SUGGESTION_MODES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.FINANCE_EXPENSE_CATEGORY_SUGGESTIONS, v, "Kasa masraf formunda kategori önerisi — açık · kapalı", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeCariHoldDefaultScope")) {
+      const v = input.financeCariHoldDefaultScope;
+      if (typeof v !== "string" || !CARI_HOLD_DEFAULT_SCOPES.includes(v as CariHoldDefaultScope)) {
+        throw AppError.badRequest(`financeCariHoldDefaultScope şunlardan biri olmalı: ${CARI_HOLD_DEFAULT_SCOPES.join(" · ")}`);
+      }
+      await this.set(SETTING_KEYS.FINANCE_CARI_HOLD_DEFAULT_SCOPE, v, "Cari kilidi formunda ön seçili kapsam", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeCariHoldReleaseBySamePerson")) {
+      const v = input.financeCariHoldReleaseBySamePerson;
+      if (typeof v !== "string" || !CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES.includes(v as CariHoldReleaseBySamePerson)) {
+        throw AppError.badRequest(`financeCariHoldReleaseBySamePerson şunlardan biri olmalı: ${CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON, v, "Cari kilidini koyan kişi kendi kilidini açabilir mi — serbest · başka yetkili", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "financeAutoAllocateOnPaymentEnabled")) {
@@ -5226,6 +5265,16 @@ export function readFinanceServiceBillingPriceDate(tx?: Pick<typeof prisma, "sys
 /** D4-H1: masraf kategorisi önerisi — tanınmayan değer varsayılana (`ON`) düşer. */
 export function readFinanceExpenseCategorySuggestions(tx?: Pick<typeof prisma, "systemSetting">): Promise<ExpenseCategorySuggestions> {
   return readServiceEnum(SETTING_KEYS.FINANCE_EXPENSE_CATEGORY_SUGGESTIONS, EXPENSE_CATEGORY_SUGGESTION_MODES, DEFAULT_EXPENSE_CATEGORY_SUGGESTIONS, tx);
+}
+
+/** D4-I1a: cari kilidi kapsam ön seçimi — tanınmayan değer varsayılana (`INTAKE,SHIPMENT`) düşer. */
+export function readFinanceCariHoldDefaultScope(tx?: Pick<typeof prisma, "systemSetting">): Promise<CariHoldDefaultScope> {
+  return readServiceEnum(SETTING_KEYS.FINANCE_CARI_HOLD_DEFAULT_SCOPE, CARI_HOLD_DEFAULT_SCOPES, DEFAULT_CARI_HOLD_SCOPE, tx);
+}
+
+/** D4-I1a: koyan kişi kendi kilidini açabilir mi — tanınmayan değer varsayılana (`ALLOW`) düşer. */
+export function readFinanceCariHoldReleaseBySamePerson(tx?: Pick<typeof prisma, "systemSetting">): Promise<CariHoldReleaseBySamePerson> {
+  return readServiceEnum(SETTING_KEYS.FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON, CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES, DEFAULT_CARI_HOLD_RELEASE_BY_SAME_PERSON, tx);
 }
 
 /** H7 — hizmet faturası ana anahtarı, ETKİN değer: ön muhasebe kapalıyken daima KAPALI (bugünkü davranış). */

@@ -230,6 +230,9 @@ export const PERMISSION_CATALOG = [
   // `shipping:write` ↔ `shipping:undo-dispatch`. Kapanışı GÖRMEK için bu izin
   // gerekmez (`finance:read` yeter) — kapatılan şey mühürleme/kırma yetkisidir.
   { code: "finance:close", module: "FINANCE", category: "web", description: "Dönem kapanışı: cari dönemi mühürle + yeniden aç" },
+  // D4-I1a (ister 4.7): kilit KOYMAK ile AÇMAK ayrı izin — açmak SoD kümesindedir (riski geri açan karar).
+  { code: "finance:hold", module: "FINANCE", category: "web", description: "Cari kilidi koyma — yeni iş kabulü / sevk / fatura onayını durdurur" },
+  { code: "finance:hold-release", module: "FINANCE", category: "web", description: "Cari kilidini açma (görev ayrılığı: Muhasebe/Süpervizör)" },
   { code: "report:finance", module: "REPORTS", category: "web", description: "Cari bakiye · yaşlandırma · ekstre · kasa-banka raporları" },
   { code: "admin:users", module: "ADMIN", category: "admin", description: "Kullanıcı + yetki yönetimi" },
   { code: "admin:settings", module: "ADMIN", category: "admin", description: "Sistem ayarları + log arşiv" },

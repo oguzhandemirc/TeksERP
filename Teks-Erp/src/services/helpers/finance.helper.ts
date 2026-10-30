@@ -10,6 +10,7 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { resolvePartyToCardTx } from "./party-card.helper";
 import { adoptLegacyLegAccountTx, type AdoptedLegacyLeg } from "./cari-account-adopt.helper";
+import { cariAccountWhereForCard, type CardRef } from "./cari-card-where.helper";
 import { nextSeriesNo } from "../number-series.service";
 
 /** Sıfır Decimal — float aritmetiği YASAK (perf/doğruluk kuralı). */
@@ -267,13 +268,7 @@ export async function resolveExchangeRateTx(
  */
 export type CariAccountParty = { customerId?: string | null; subcontractorId?: string | null };
 
-/** Bir kartın (ya da bağsız fason profilinin) hesap sorgusu — okuma ve yazma AYNI where'den (K3a). */
-type CardRef = { customerId: string | null; subcontractorId: string | null };
-function cariAccountWhereForCard(card: CardRef): Prisma.CariAccountWhereInput {
-  // Kart hesabı YA DA kartın fason profiline eski bacaktan bağlı hesap: ikisi de AYNI kimliğin hesabıdır.
-  if (card.customerId) return { OR: [{ customerId: card.customerId }, { subcontractor: { customerId: card.customerId } }] };
-  return { subcontractorId: card.subcontractorId as string };
-}
+// Kart → hesap where'i `cari-card-where.helper`da (cari kilidi kapısı da aynı parçayı okur).
 // Onarım öncesi çift varsa: kartın KENDİ hesabı önce (pasifse de — pasiflik eski bacağa kaçarak aşılmaz, yazım 409),
 // sonra aktif, eşitlikte id. PG DESC varsayılanı NULLS FIRST — `nulls: "last"` şart.
 const CARD_ACCOUNT_ORDER = [{ customerId: { sort: "desc", nulls: "last" } }, { isActive: "desc" }, { id: "asc" }] satisfies Prisma.CariAccountOrderByWithRelationInput[];
