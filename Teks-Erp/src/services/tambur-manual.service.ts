@@ -65,12 +65,13 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
-import { assertTamburMeasuresAllowed, type MeterSourceInput } from "./helpers/meter-reading.helper";
+import { assertTamburMeasuresAllowed, auditCutReadings, writeCutReadingsTx, type MeterSourceInput } from "./helpers/meter-reading.helper";
 import { normalizeScanCode } from "../utils/code-format";
 import {
   Prisma,
   ReasonPresetKind,
   RollEntrySource,
+  type RollMeterReading,
   RollStatus,
   StationKind,
   WorkOrderStatus,
@@ -1171,7 +1172,7 @@ export class TamburManualService {
             },
           });
         }
-        return { alreadyAttached: true };
+        return { alreadyAttached: true, cutReadings: [] as RollMeterReading[] };
       }
 
       // Atomik claim — createInitialEntry topu renkliyse WAREHOUSE, renksizse
@@ -1236,8 +1237,14 @@ export class TamburManualService {
       // Adım/WO durumu: yeni açık hareket adımı ACTIVE'e çeker; PLANNED WO üretime girer.
       await recomputeStepStatus(tx, step.id);
       await ensureWorkOrderInProgress(tx, step.workOrderId);
-      return { alreadyAttached: false };
+      // D4-B1b: elle üretilen topun metresi Tambur adımına CUT okuması (idempotent dal yukarıda erken döner).
+      const cutReadings = await writeCutReadingsTx(tx, {
+        stepId: step.id, machineId: ctx.machineId ?? null, userId: ctx.userId ?? null,
+        cuts: [{ rollId: roll.id, meters: roll.initialQty, measure: input.measure }],
+      });
+      return { alreadyAttached: false, cutReadings };
     });
+    await auditCutReadings(ctx.userId, attach.cutReadings);
 
     // GERÇEKÇİLİK EŞİĞİ — UYARI, blok DEĞİL (ağırlık tarafıyla aynı gerekçe:
     // metraj elle de cihazdan da girebiliyor, sert tavan meşru yükü reddeder).

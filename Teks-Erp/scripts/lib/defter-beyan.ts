@@ -294,9 +294,14 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
      "src/services/kursun-qc.service.ts", "src/services/subcontractor.service.ts", "src/services/tambur.service.ts"]),
 
   // H1 (Hizmet veren, 2026-10-29): faturalanan metrenin kaynağı; düzeltme = damga + yeni satır, reopen damgalar.
-  D("RollMeterReading", "kurşun giriş/çıkış metre defteri — silinirse faturalanan metre değişir; politika kopyası okuma anını dondurur — ters = DAMGA", { tur: "DAMGA", kolon: "revokedAt" },
-    [{ dosya: "src/services/helpers/kursun-meter.helper.ts", sembol: "revokeStepMeterReadingsTx" }],
-    ["src/services/helpers/kursun-meter.helper.ts"]),
+  // D4-B1b (2026-10-30): Tambur CUT okuması aynı deftere; yazım tek boğazda (meter-reading.helper), geri alma/iptal damgalar.
+  D("RollMeterReading", "kurşun giriş/çıkış + Tambur kesim (CUT) metre defteri — silinirse faturalanan metre değişir; politika kopyası okuma anını dondurur — ters = DAMGA", { tur: "DAMGA", kolon: "revokedAt" },
+    [
+      { dosya: "src/services/helpers/kursun-meter.helper.ts", sembol: "revokeStepMeterReadingsTx" },
+      { dosya: "src/services/tambur-undo.service.ts", sembol: "revokeUndoneCutReadingsTx" },
+      { dosya: "src/services/helpers/meter-reading.helper.ts", sembol: "revokeCutReadingsTx" },
+    ],
+    ["src/services/helpers/meter-reading.helper.ts"]),
   D("RollMeterAck", "metre sapma onayı (H2 yazar) — okuma damgalanınca aynı tx'te damgalanır — ters = DAMGA", { tur: "DAMGA", kolon: "revokedAt" },
     [{ dosya: "src/services/helpers/kursun-meter.helper.ts", sembol: "revokeStepMeterReadingsTx" }],
     ["src/services/helpers/kursun-meter.helper.ts"] /* H2: writeMeterReadingTx (OPERATOR_REASON) + ackMeterReadingTx (PIN/OFFICE) */),
