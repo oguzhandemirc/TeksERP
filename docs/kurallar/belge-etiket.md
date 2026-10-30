@@ -166,6 +166,7 @@
 
 ### Değişmezler
 
+- **[ÇEKİRDEK]** Okutmada 409 `CUSTOMER_CODE_AMBIGUOUS` gelirse DOĞRUDAN `CustomerCodeCandidateModal` aç (tek bileşen, `useAmbiguousScanPicker`; Tambur + Paketleme), aday kendiliğinden seçme, seçilen topun İÇ barkoduyla sür; "Müşteri etiketini okut" düğmesini yalnız izin ∧ emanet ∧ sunucu yeteneği (`scanCustomerCodeLookupEnabled` alanı var) ∧ emanet top iken çiz, uç 404 dönerse oturum boyu gizle. · bekçi: `mobil/src/components/customerCode/customerCode.render.test.tsx` · `mobil/src/components/customerCode/customerCodeLogic.test.ts` <sub>(arşiv: 2026-10-30 D4-F4)</sub>
 - **[ÇEKİRDEK]** Baskı audit izine giden `rollId` mutation DEĞİŞKENİNDEN geçer, kapanıştan OKUNMAZ: `onPrint`/`onPrintStock` parent'ta sheet'i kapatır, `mutate` gövdesi bir SONRAKİ render'ın kapanışıyla koşar ve `rollId!` "null" stringine döner — baskı çalışır, `LABEL_PRINTED` audit'i sessizce kaybolur. (2026-08-13 "kesimde kat düşüyordu" notunun ikizi.) · bekçi: `mobil/src/components/labels/LabelPreviewSheet.test.tsx` <sub>(arşiv:2026-09-10 prod log ②)</sub>
 - **[ÇEKİRDEK]** Mobil etiket yazıcısı OTURUMDAN çözülür: LabelPrinter peripheralService.getForSession('LABEL_PRINTER') (oturum yoksa BOŞ — fail-closed); taşıma BT-Classic/SPP (hal/btClassic.transport; Argox + HC-05/06), yalnız BLUETOOTH_SPP device-direct; manuel yazıcı seçimi/btPrinterStore KALDIRILDI. <sub>(CLAUDE.md:220)</sub>
 

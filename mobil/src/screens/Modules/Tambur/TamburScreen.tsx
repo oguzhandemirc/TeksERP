@@ -165,6 +165,10 @@ import { upperTr } from '../../../utils/trCase';
 import { showScreenError } from '../../../lib/screenToast';
 import { formatFactory } from '../../../lib/factory-time';
 import { TERIM } from '../../../lib/terim';
+import { CustomerCodeBindSheet } from '../../../components/customerCode/CustomerCodeBindSheet';
+import { CustomerCodeBindButton } from '../../../components/customerCode/CustomerCodeBindButton';
+import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
+import { useCustomerCodeBindable } from '../../../components/customerCode/useCustomerCodeBindable';
 
 // =============================================================================
 // Multi-job state — Tambur'da operatör paralel iş yürütebilir (KursunQc paralel).
@@ -2175,6 +2179,8 @@ export default function TamburScreen() {
       if (!validateRecutCandidate(r)) return;
       applyRecutRoll(r);
     } catch (err) {
+      // D4-F4: belirsiz müşteri barkodu → aday modalı; seçim iç barkodla yeniden çözülür.
+      if (recutAmbiguous.intercept(err)) return;
       Toast.show({
         type: 'error',
         text1: 'Top sorgulanamadı',
@@ -2182,6 +2188,8 @@ export default function TamburScreen() {
       });
     }
   };
+
+  const recutAmbiguous = useAmbiguousScanPicker((b) => void handleRecutScanned(b));
 
   /** Top Kesme uzunluk girişi — ana kesim input'uyla AYNI kısa-kesim flip/revert
    *  sözleşmesi (recut ayrı kalite state'i taşıdığı için ayrı sarmalayıcı). */
@@ -4495,6 +4503,7 @@ export default function TamburScreen() {
           onaylatacak bir karar yok, yalnız bilgi toast'ı gösterilir. */}
 
       {/* Etiket basımı modal'ı — finalize/post-split sonrası */}
+      {recutAmbiguous.modal}
       <LabelPrintModal
         grades={qualityGrades}
         rolls={pendingPrintRolls}
@@ -5189,7 +5198,10 @@ function RollLabelCard({
   onPrint,
   onPrintStock,
   onPreview,
+  onBindCustomerCode,
 }: {
+  /** D4-F4: kesim sonrası "Müşteri etiketini okut" (yalnız bağlanabilir emanet topta çizilir). */
+  onBindCustomerCode?: (roll: Roll) => void;
   roll: Roll;
   index: number;
   isPrinting: boolean;
@@ -5262,6 +5274,9 @@ function RollLabelCard({
       ) : (
         body
       )}
+      {onBindCustomerCode && (
+        <CustomerCodeBindButton ownerCustomerId={roll.ownerCustomerId} onPress={() => onBindCustomerCode(roll)} />
+      )}
       {onPrintStock && (
         <IconButton
           icon="account-off-outline"
@@ -5318,6 +5333,7 @@ function LabelPrintModal({
   // 45% kalsın (kalan ekranı bloklamasın).
   const isCompactPortrait = winH > winW;
   const sheetWidth = isCompactPortrait ? winW * 0.92 : winW * 0.45;
+  const [bindRoll, setBindRoll] = useState<Roll | null>(null);
   // NOT: rolls.length === 0 iken `return null` YAPMA — RNModal kapanış
   // animasyonu yarıda kalıyor, backdrop arkada saklı kalıp sonraki ekranın
   // tıklamalarını yutuyor (Top Kesme 2. tur bug'ı). isVisible=false ile bırak,
@@ -5345,10 +5361,12 @@ function LabelPrintModal({
               isPrinting={printingRollId === roll.id}
               onPrint={onPrint}
               onPrintStock={onPrintStock}
+              onBindCustomerCode={setBindRoll}
             />
           ))}
         </ScrollView>
       </View>
+      <CustomerCodeBindSheet roll={bindRoll} onDismiss={() => setBindRoll(null)} />
     </AppModal>
   );
 }
@@ -6343,6 +6361,9 @@ function RecentOutputModal({
   // Satıra dokununca topun "son basılan etiket"ini önizle (LabelPreviewSheet,
   // snapshot/effective cascade). Liste açık kalır; önizleme üstüne (Portal) açılır.
   const [previewRoll, setPreviewRoll] = useState<Roll | null>(null);
+  // D4-F4: önizlenen top bağlanabilirse "Müşteri etiketini okut"; bağla modalı liste üstünde açılır.
+  const previewBindable = useCustomerCodeBindable(previewRoll?.ownerCustomerId);
+  const [bindRoll, setBindRoll] = useState<Roll | null>(null);
 
   // ── TOPLU SEÇİM (2026-08-09) ────────────────────────────────────────────
   // Saha isteği: *"son çıkan etiketleri toplu seçim yapıp etiketleri
@@ -6477,11 +6498,14 @@ function RecentOutputModal({
       setPreviewRoll(roll);
     } catch (e) {
       signalScan('reject');
+      if (ambiguous.intercept(e)) return;
       showScreenError(e, 'Okunamadı');
     } finally {
       setScanResolving(false);
     }
   };
+  // Belirsiz müşteri barkodu → aday modalı; seçilen topun İÇ barkoduyla önizleme sürer.
+  const ambiguous = useAmbiguousScanPicker((b) => void resolveScanned(b));
 
   return (
     <>
@@ -6675,7 +6699,17 @@ function RecentOutputModal({
           setPreviewRoll(null);
           if (r) onPrintStock(r);
         }}
+        onBindCustomerCode={
+          previewBindable
+            ? () => {
+                setBindRoll(previewRoll);
+                setPreviewRoll(null);
+              }
+            : undefined
+        }
       />
+      <CustomerCodeBindSheet roll={bindRoll} onDismiss={() => setBindRoll(null)} onBound={() => void q.refetch()} />
+      {ambiguous.modal}
 
       {/* Geri Al — önizleme onaylı Tambur iptali. Bitince liste tazelenir. */}
       <TamburUndoConfirmModal
