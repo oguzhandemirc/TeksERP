@@ -58,7 +58,10 @@ export function useCustomerCodeBindForm({ roll, onDismiss, onBound }: {
       }
       const d = describeBindError(e);
       if (d.kind === 'replace') setReplace(true);
-      setError(`${d.title} — ${d.body}`);
+      const revokedNote = (e as { previousCodeRevoked?: boolean } | null)?.previousCodeRevoked
+        ? ' (Eski kod kaldırıldı; topta şu an müşteri barkodu yok.)'
+        : '';
+      setError(`${d.title} — ${d.body}${revokedNote}`);
     } finally {
       setBusy(false);
     }

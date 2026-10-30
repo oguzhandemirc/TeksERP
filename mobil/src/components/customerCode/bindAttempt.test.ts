@@ -32,3 +32,15 @@ it('değiştir = sebepli kaldır + bağla; kaldırılmış kod (NOT_ACTIVE) bağ
   expect(revoke).toHaveBeenCalledWith('r1', 'etiket yırtıldı');
   expect(bind).toHaveBeenCalledWith('r1', { code: 'MK9', clientToken: 't1' });
 });
+
+it('değiştir: kaldırma yazıldı, bağlama kesin 4xx ile düştü → hata eski kodun kaldırıldığını taşır', async () => {
+  const bind = jest.fn().mockRejectedValueOnce({ status: 409, details: { code: 'CUSTOMER_CODE_TAKEN' } });
+  const { attempt } = setup(bind);
+  await expect(attempt.submit('r1', 'MK9', 'etiket yırtıldı')).rejects.toMatchObject({ previousCodeRevoked: true });
+});
+
+it('düz bağlama hatası eski kod kaldırıldı demez', async () => {
+  const bind = jest.fn().mockRejectedValueOnce({ status: 409, details: { code: 'CUSTOMER_CODE_TAKEN' } });
+  const { attempt } = setup(bind);
+  await expect(attempt.submit('r1', 'MK9')).rejects.not.toHaveProperty('previousCodeRevoked');
+});

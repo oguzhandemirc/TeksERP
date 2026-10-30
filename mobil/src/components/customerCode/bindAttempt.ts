@@ -44,6 +44,8 @@ export function createBindAttempt(deps: BindDeps) {
         state = onAttemptSucceeded(state, token);
       } catch (e) {
         state = isAmbiguousFailure(e) ? onAttemptFailed(state, token) : IDLE_ATTEMPT;
+        // Değiştir atomik değil: kaldırma yazıldı, bağlama düştü → operatör topun şu an kodsuz olduğunu bilmeli.
+        if (replaceReason && e && typeof e === 'object') (e as { previousCodeRevoked?: boolean }).previousCodeRevoked = true;
         throw e;
       }
     },

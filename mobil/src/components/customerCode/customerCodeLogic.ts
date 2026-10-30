@@ -63,10 +63,12 @@ export function canBindCustomerCode(p: {
   return CUSTOMER_CODE_BIND_PERMISSIONS.some((c) => p.has(c));
 }
 
-/** Rota yok (eski backend) — Express'in genel 404'ü `details.code` taşımaz; "Top bulunamadı" taşır. */
+/** Rota yok (eski backend) — Express'in genel 404'ü `details` taşımaz; servisin "Top bulunamadı"sı `details.rollId` taşır. */
 export function isEndpointMissing(e: unknown): boolean {
   const err = asError(e);
-  return err.status === 404 && !err.details?.code;
+  if (err.status !== 404) return false;
+  if (typeof err.message === 'string' && err.message.startsWith('Endpoint bulunamadı')) return true;
+  return !err.details || Object.keys(err.details).length === 0;
 }
 
 export type BindFailureKind = 'replace' | 'message';

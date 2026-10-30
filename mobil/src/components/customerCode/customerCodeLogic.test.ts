@@ -28,7 +28,9 @@ describe('canBindCustomerCode', () => {
 
 describe('isEndpointMissing', () => {
   it('rota yok (details.code yok) → true', () => expect(isEndpointMissing({ status: 404, message: 'Endpoint bulunamadı' })).toBe(true));
-  it('top bulunamadı (kodlu 404) → false', () => expect(isEndpointMissing({ status: 404, details: { code: 'ROLL_NOT_FOUND' } })).toBe(false));
+  it('top bulunamadı (servis 404, details.rollId) → false', () =>
+    expect(isEndpointMissing({ status: 404, message: 'Top bulunamadı', details: { rollId: 'r-1' } })).toBe(false));
+  it('rota yok (details boş) → true', () => expect(isEndpointMissing({ status: 404, details: {} })).toBe(true));
   it('ağ hatası → false', () => expect(isEndpointMissing(new Error('Network Error'))).toBe(false));
 });
 
