@@ -125,6 +125,11 @@ export function serviceWorkKey(w: { rollId: string; serviceItemId: string | null
   return `${w.rollId}:${w.serviceItemId ?? "-"}:${w.workOrderStepId ?? "-"}`;
 }
 
+/** K4 uyarı metni — bekçi aynı cümleyi arar. */
+export function simulatedCutWarning(count: number): string {
+  return `${count} Tambur kesiminin metresi simüle ölçüm — süpervizör düzeltmesi gerekli; faturaya alınmadı.`;
+}
+
 /** H7: faturalanmış iş düşer; ölçümsüz iş ayara göre uyarıyla yazılır ya da taslaktan çıkar. */
 function filterBillableWorks(all: ServiceRollWork[], opt: ServiceResolveOptions, basis: string, warnings: string[]): ServiceRollWork[] {
   const works = all.filter((w) => !(opt.billedKeys && w.serviceItemId && opt.billedKeys.has(serviceWorkKey(w))));
@@ -136,6 +141,17 @@ function filterBillableWorks(all: ServiceRollWork[], opt: ServiceResolveOptions,
     ? `${unmeasured.length} işin sayaç okuması yok — faturaya alınmadı (okuma girilince faturalanır).`
     : `${unmeasured.length} işin sayaç okuması yok — bildirilen metreyle faturalandı, kontrol edin.`);
   return block ? works.filter((w) => !unmeasured.includes(w)) : works;
+}
+
+/** Kurşun dışı bayrak işleri (H10) iş satırına; K4 (D4-B2): simüle kesim metresi düşer, uyarı taslakta/önizlemede görünür. */
+async function loadFlagWorks(rollIds: string[], basis: "OUT" | "IN" | "DECLARED", ctx: { shippedRollIds?: Set<string>; db: Db; warnings: string[] }): Promise<ServiceRollWork[]> {
+  const { db, warnings } = ctx;
+  const flag = await listFlagServiceWorks(rollIds, basis, { shippedRollIds: ctx.shippedRollIds, db });
+  if (flag.simulatedCutRollIds.length > 0) warnings.push(simulatedCutWarning(flag.simulatedCutRollIds.length));
+  return flag.works.map((f) => ({
+    rollId: f.rollId, workOrderStepId: f.workOrderStepId, source: "PROPERTY", valueId: null, valueName: f.propertyName, gramajFrom: "NONE",
+    serviceItemId: f.serviceItemId, meters: f.meters, meterBasis: f.meterBasis, readingId: f.readingId, serviceAt: f.serviceAt, unitPrice: null,
+  }));
 }
 
 /**
@@ -185,10 +201,7 @@ export async function resolveServiceItemsForRolls(params: {
       unitPrice: null,
     };
   });
-  const flagWorks: ServiceRollWork[] = (await listFlagServiceWorks(rollIds, basis, { shippedRollIds: opt.shippedRollIds, db })).map((f) => ({
-    rollId: f.rollId, workOrderStepId: f.workOrderStepId, source: "PROPERTY", valueId: null, valueName: f.propertyName, gramajFrom: "NONE",
-    serviceItemId: f.serviceItemId, meters: f.meters, meterBasis: f.meterBasis, readingId: f.readingId, serviceAt: f.serviceAt, unitPrice: null,
-  }));
+  const flagWorks = await loadFlagWorks(rollIds, basis, { shippedRollIds: opt.shippedRollIds, db, warnings });
   const works = filterBillableWorks([...allWorks, ...flagWorks], opt, basis, warnings);
 
   // Fiyat hizmet anına çözülür (geç taslak eski fiyatı korur); aynı an tek sorgu.

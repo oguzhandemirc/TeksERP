@@ -10,7 +10,8 @@
 //   ② top o istasyonun (iptal edilmemiş) fason makbuzundan doğduysa (`parentReceiptId`) doğan
 //      topun kabul metresi (dış brode) — RECEIVED; kısmi kabullerde her doğan top kendi metresiyle.
 //      Makbuzdan KENDİSİ dönen top (doğan top yok; eski model): makbuz kaleminin alınan metresi (F1); NULL kalem(ler) topu bir kez sayar
-//   ③ top Tambur bölmesiyle doğduysa kesilen metre (`initialQty`) — CUT, çocuk topta
+//   ③ top Tambur bölmesiyle doğduysa kesilen metre — CUT, çocuk topta: aktif CUT okuması varsa onun metresi + `readingId`
+//      (D4-B2); okuma SIMULATED ise iş listeye GİRMEZ (K4, çekirdek — `simulatedCutRollIds`); okumasız (eski) top `initialQty`
 //   ④ yoksa topun mevcut metresi — DECLARED (uyarı ayarı H7 `missingMeter`)
 // Kümede çocuğu olan top ataysa iş taşımaz; ama kendisi de sevk edilen (çağıranın `shippedRollIds`i) canlı ata
 // kalan parçasını kendisi taşır (F1: ata + çocuk aynı sevkte/dönemde atanın kalanı düşmesin).
@@ -87,18 +88,36 @@ async function loadReceivedResolver(byId: Map<string, RollRow>, allStations: str
   return receivedOf;
 }
 
+/** ③ CUT okuması (D4-B2): H7 metre tabanından BAĞIMSIZ okunur — SIMULATED dışlaması çekirdektir (K4), ayar değil. */
+async function loadActiveCutReadings(leaves: RollRow[], db: Db) {
+  const ids = leaves.filter((r) => r.entrySource === RollEntrySource.TAMBUR_SPLIT && r.parentRollId).map((r) => r.id);
+  const rows = ids.length === 0 ? [] : await db.rollMeterReading.findMany({
+    where: { rollId: { in: ids }, phase: MeterPhase.CUT, revokedAt: null },
+    select: { id: true, rollId: true, meters: true, source: true },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  return new Map(rows.map((r) => [r.rollId, r]));
+}
+
 /**
  * Verilen toplardaki bayrak tipi işler. Kümede çocuğu bulunan top (ata) iş TAŞIMAZ:
  * işi çocuk taşır, atanın ölçümü ancak ①/② ile (tamamı, bir kez) faturalanır.
  * `meterBasis` H7 ayarıdır: DECLARED okuma zincirini kapatır, IN yalnız giriş okumasını sayar.
  */
+export interface FlagWorkList {
+  works: FlagWork[];
+  /** K4: kesim metresi SIMULATED okumalı çocuklar — iş faturaya girmez, çağıran uyarır (süpervizör düzeltmesi). */
+  simulatedCutRollIds: string[];
+}
+
 export async function listFlagServiceWorks(
   rollIds: string[],
   meterBasis: "OUT" | "IN" | "DECLARED",
   opts: { shippedRollIds?: Set<string>; db?: Db } = {},
-): Promise<FlagWork[]> {
+): Promise<FlagWorkList> {
   const db = opts.db ?? prisma;
-  if (rollIds.length === 0) return [];
+  const none: FlagWorkList = { works: [], simulatedCutRollIds: [] };
+  if (rollIds.length === 0) return none;
   const rolls: RollRow[] = await db.roll.findMany({
     where: { id: { in: rollIds } },
     select: { id: true, parentRollId: true, parentReceiptId: true, entrySource: true, initialQty: true, currentQty: true, producedInStepId: true, createdAt: true },
@@ -106,7 +125,7 @@ export async function listFlagServiceWorks(
   const byId = new Map(rolls.map((r) => [r.id, r]));
   const parents = new Set(rolls.map((r) => r.parentRollId).filter((v): v is string => v !== null && byId.has(v)));
   const leaves = rolls.filter((r) => !parents.has(r.id) || opts.shippedRollIds?.has(r.id));
-  if (leaves.length === 0) return [];
+  if (leaves.length === 0) return none;
 
   const props = await db.rollProperty.findMany({
     where: {
@@ -117,7 +136,7 @@ export async function listFlagServiceWorks(
     select: { rollId: true, propertyId: true, createdAt: true, property: { select: { name: true, serviceItemId: true } } },
     orderBy: [{ rollId: "asc" }, { propertyId: "asc" }],
   });
-  if (props.length === 0) return [];
+  if (props.length === 0) return none;
 
   const propertyIds = [...new Set(props.map((p) => p.propertyId))];
   const stationRows = await db.stationProperty.findMany({ where: { propertyId: { in: propertyIds } }, select: { stationId: true, propertyId: true } });
@@ -133,6 +152,8 @@ export async function listFlagServiceWorks(
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
   const receivedOf = await loadReceivedResolver(byId, allStations, db);
+  const cutOf = await loadActiveCutReadings(leaves, db);
+  const simulatedCut = new Set<string>();
   // Kardeşi aynı kalemle parça parça faturalanmış atalar: `${ataId}:${kalem}`.
   const pieceBilled = new Set((await db.serviceBillingLink.findMany({
     where: { revokedAt: null, meterBasis: { in: [ServiceMeterBasis.CUT, ServiceMeterBasis.DECLARED] }, roll: { parentRollId: { in: chainIds } } },
@@ -169,12 +190,14 @@ export async function listFlagServiceWorks(
     }
     // Sevk edilen ata (kümede çocuğu var) ③'e girmez: kesilen metresi çocuklarını da içerir → ④ kalan (mevcut) metre.
     if (!work && leaf.entrySource === RollEntrySource.TAMBUR_SPLIT && leaf.parentRollId && !parents.has(leaf.id)) {
-      // ③ kesim: iş çocuk topta, metre kesilen metre.
-      work = { ...base, rollId: leaf.id, workOrderStepId: leaf.producedInStepId, meters: leaf.initialQty, meterBasis: "CUT", readingId: null, serviceAt: leaf.createdAt };
+      // ③ kesim: iş çocuk topta, metre kesilen metre — okuma varsa okumadan; simüle metre faturalanmaz (④'e de düşmez).
+      const cut = cutOf.get(leaf.id);
+      if (cut?.source === MachineDataSource.SIMULATED) { simulatedCut.add(leaf.id); continue; }
+      work = { ...base, rollId: leaf.id, workOrderStepId: leaf.producedInStepId, meters: cut ? cut.meters : leaf.initialQty, meterBasis: "CUT", readingId: cut?.id ?? null, serviceAt: leaf.createdAt };
     }
     work ??= { ...base, rollId: leaf.id, workOrderStepId: null, meters: leaf.currentQty, meterBasis: "DECLARED", readingId: null, serviceAt: p.createdAt };
     // Aynı ata işine iki çocuktan varılır — tek iş (bağ anahtarıyla aynı üçlü).
     works.set(`${work.rollId}:${work.serviceItemId}:${work.workOrderStepId ?? "-"}`, work);
   }
-  return [...works.values()];
+  return { works: [...works.values()], simulatedCutRollIds: [...simulatedCut] };
 }

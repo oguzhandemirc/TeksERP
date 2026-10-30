@@ -8,6 +8,8 @@ import { TamburManualController } from "../controllers/tambur-manual.controller"
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireProductionEnabled } from "../middlewares/module.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { z } from "zod";
+import { correctCutReading } from "../services/tambur-meter-correct.service";
 
 const controller = new TamburController();
 /** Saha düzeltmesi uçları (`/manual/*`) — ayrı controller, aynı router. */
@@ -901,5 +903,61 @@ router.post(
   controller.finalizeWarehouseCut,
 );
 
-export default router;
+/** D4-B2 düzeltme gövdesi — `clientToken` ZORUNLU: yeni SUPERVISOR okumasının token'ı (ağ zaman aşımında aynı token). */
+const cutCorrectionSchema = z.strictObject({
+  meters: z.number("Metre sayı olmalı").positive("Metre sıfırdan büyük olmalı").lt(1e6, "Metre çok büyük"),
+  clientToken: z.string().uuid("Geçersiz istek kimliği"),
+  reason: z.string().trim().min(3, "Düzeltme sebebi en az 3 karakter olmalı").max(250, "Düzeltme sebebi çok uzun"),
+});
 
+/**
+ * @openapi
+ * /api/tambur/meter-readings/{id}/correct:
+ *   post:
+ *     tags: [Tambur]
+ *     summary: Tambur kesim metresi düzeltmesi (süpervizör; D4-B2)
+ *     description: |
+ *       Yalnız CUT okuması. Eski okuma damgalanır (silinmez), SUPERVISOR kaynaklı yeni CUT okuması yazılır;
+ *       hizmet faturası yeni okumayı okur. `Roll.initialQty` değişmez. Aynı `clientToken` ikinci istek ilk
+ *       yanıtı döner (yeni satır yaratmaz). Faturalı okuma 409 `SERVICE_ALREADY_BILLED`; eşzamanlı ikinci
+ *       düzeltme 409 `METER_READING_ALREADY_CORRECTED`; CUT dışı okuma 400 `METER_READING_NOT_CUT`.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid, description: Düzeltilecek CUT okuması }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [meters, clientToken, reason]
+ *             properties:
+ *               meters: { type: number, example: 98.5 }
+ *               clientToken: { type: string, format: uuid }
+ *               reason: { type: string, example: "Sayaç simülasyondaydı, şerit metreyle ölçüldü" }
+ *     responses:
+ *       200: { description: Düzeltildi (ya da aynı token'ın ilk yanıtı) }
+ *       400: { description: Validasyon / CUT dışı okuma }
+ *       403: { description: İzin yok (kursun:meter-approve) ya da üretim modülü kapalı }
+ *       404: { description: Okuma bulunamadı }
+ *       409: { description: Faturalı okuma ya da eşzamanlı düzeltme }
+ */
+router.post(
+  "/meter-readings/:id/correct",
+  verifyToken,
+  requirePermission("kursun:meter-approve"),
+  async (req, res, next) => {
+    try {
+      const id = z.string().uuid("Geçersiz okuma ID").parse(req.params.id);
+      const body = cutCorrectionSchema.parse(req.body);
+      res.json(await correctCutReading(id, body, req.user?.userId));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+export default router;
