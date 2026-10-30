@@ -32,9 +32,10 @@ export function useWorkOrderPlan(noteId: string, open: boolean) {
     setDone({});
     setRouteId(null);
   }, [open, noteId, attempt]);
+  // Desensiz grup varsayılan SEÇİLMEZ: hedefsiz iş emri ancak kullanıcı bilerek işaretlerse açılır.
   useEffect(() => {
     if (!plan.data) return;
-    setChecked(Object.fromEntries(plan.data.groups.map((g) => [g.key, g.attachableCount > 0])));
+    setChecked(Object.fromEntries(plan.data.groups.map((g) => [g.key, g.attachableCount > 0 && !g.patternless])));
     setRouteId((cur) => cur ?? plan.data.suggestedRouteTemplateId ?? null);
   }, [plan.data]);
 
