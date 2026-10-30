@@ -16,8 +16,13 @@
 //   §5 eşzamanlı iki düzeltme → biri 409 METER_READING_ALREADY_CORRECTED, tek aktif okuma
 //   §6 faturalı okuma → 409 SERVICE_ALREADY_BILLED; CUT dışı okuma → 400 METER_READING_NOT_CUT
 //   §7 uç kapısı: verifyToken + kursun:meter-approve; izinsiz 403, router üretim modülü kapısının altında
+//   §9 çok kuşak: SIMULATED kesimli çocuk kendisi de kesilmiş ata olarak sevk edilirse ④ DECLARED'a düşmez
+//   §8 iptal edilmiş top → 409 ROLL_NOT_CORRECTABLE; iptal tx'i okuma anlık görüntüsünü aldıktan sonra
+//      gelen düzeltme top kilidinde bekler → iptal topta aktif CUT okuması KALMAZ (roll → okuma kilit sırası)
 // Negatif sondalar (2026-10-30): CUT kolundaki SIMULATED dışlaması kaldırılınca §1 kırmızı ·
-// düzeltme claim'inde `revokedAt: null` çıkarılınca §5 kırmızı (geri alındı).
+// düzeltme claim'inde `revokedAt: null` çıkarılınca §5 kırmızı · düzeltmedeki top FOR UPDATE + iptal
+// denetimi çıkarılınca §8 kırmızı (aktif=1) · ③ önündeki SIMULATED denetimi eski yerine alınınca §9
+// kırmızı (ata DECLARED 50 faturada) (geri alındı).
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { Currency, ItemType, MeterPhase, Prisma, PriceKind, RollEntrySource, RollStatus, StationKind, StationType, StepStatus } from "@prisma/client";
@@ -27,6 +32,9 @@ import { InventoryService } from "../src/services/inventory.service";
 import { resolveServiceItemsForRolls, simulatedCutWarning } from "../src/services/helpers/service-pricing.helper";
 import { correctCutReading } from "../src/services/tambur-meter-correct.service";
 import { ensureCariAccountTx } from "../src/services/helpers/finance.helper";
+import { collectServiceBillingDraft } from "../src/services/helpers/service-billing.helper";
+import { stampMeterReadingsTx } from "../src/services/helpers/meter-reading.helper";
+import { loadServiceBillingSettings } from "../src/services/system-setting.service";
 import tamburRouter from "../src/routes/tambur.routes";
 import type { Request, Response } from "express";
 
@@ -137,6 +145,12 @@ async function main() {
   const r1 = await resolve([kSim.id]);
   check("§1 SIMULATED CUT okumalı çocuk → taslakta 0 satır, 0 iş", r1.lines.length === 0 && r1.works.length === 0, JSON.stringify(r1.lines));
   check("§1 'simüle ölçüm — süpervizör düzeltmesi gerekli' uyarısı", r1.warnings.includes(simulatedCutWarning(1)), JSON.stringify(r1.warnings));
+  // Gerçek taslak yolu (sevk/dönem taslağının ortak toplayıcısı): satır/bağ yok, uyarı taslağa taşınır.
+  const d1 = await collectServiceBillingDraft({
+    rollIds: [kSim.id], customerId: fx.customerId!, currency: Currency.TRY, settings: await loadServiceBillingSettings(), dispatchedAt: new Date(),
+  });
+  check("§1 hizmet faturası taslağı (collectServiceBillingDraft): SIMULATED topa bağ yok + uyarı taslakta",
+    !d1.links.some((l) => l.rollId === kSim.id) && d1.warnings.includes(simulatedCutWarning(1)), JSON.stringify({ links: d1.links.length, w: d1.warnings }));
 
   console.log("\n§2 MACHINE okumalı → readingId bağlı; okumasız eski çocuk → initialQty (bayt-aynı)");
   const r2 = await resolve([kMachine.id, kSim.id, kOld.id]);
@@ -233,6 +247,47 @@ async function main() {
   }, select: { id: true } });
   const e6b = await errOf(() => correctCutReading(inRow.id, { meters: 41, clientToken: randomUUID(), reason: "giriş" }, undefined));
   check("§6 CUT dışı okuma → 400 METER_READING_NOT_CUT", e6b?.status === 400 && e6b.code === "METER_READING_NOT_CUT", JSON.stringify(e6b));
+
+  console.log("\n§8 iptal edilmiş top · düzeltme ↔ iptal yarışı");
+  const c = await parentRoll(base.itemId, 100);
+  const kc = (await tambur.cutOpenFabric(c.rollId, { lengthMeters: 15, status: "WAREHOUSE", measure: { source: "MACHINE" } }, undefined, fx.machineId)).data.childRoll.id;
+  const kd = (await tambur.cutOpenFabric(c.rollId, { lengthMeters: 12, status: "WAREHOUSE", measure: { source: "MACHINE" } }, undefined, fx.machineId)).data.childRoll.id;
+  await kids(c.rollId);
+  const rc = await activeCut(kc);
+  await inv.softDelete(kc, undefined, { confirmActive: true, confirmLabelPrinted: true });
+  const damgali = await prisma.rollMeterReading.findFirst({ where: { rollId: kc, phase: MeterPhase.CUT }, orderBy: { createdAt: "desc" }, select: { id: true } });
+  const e8 = await errOf(() => correctCutReading(damgali?.id ?? rc!.id, { meters: 14, clientToken: randomUUID(), reason: "iptal top" }, undefined));
+  check("§8 iptal edilmiş topun okuması → 409 ROLL_NOT_CORRECTABLE", e8?.status === 409 && e8.code === "ROLL_NOT_CORRECTABLE", JSON.stringify(e8));
+  // Yarış: iptal tx'i (roll claim → okuma anlık görüntüsü → damga) ile düzeltme iç içe; düzeltme anlık görüntüden SONRA başlar.
+  const rd8 = await activeCut(kd);
+  let corr: Promise<{ status?: number; code?: string } | null> = Promise.resolve(null);
+  await prisma.$transaction(async (tx) => {
+    await tx.roll.updateMany({ where: { id: kd }, data: { status: RollStatus.CANCELLED, cancelledAt: new Date(), preCancelStatus: RollStatus.WAREHOUSE } });
+    const snap = await tx.rollMeterReading.findMany({ where: { rollId: kd, phase: MeterPhase.CUT, revokedAt: null }, select: { id: true } });
+    corr = errOf(() => correctCutReading(rd8!.id, { meters: 11.5, clientToken: randomUUID(), reason: "yarış iptal" }, undefined));
+    await new Promise((r) => setTimeout(r, 400));
+    for (const r of snap) await stampMeterReadingsTx(tx, { id: r.id }, { revokedAt: new Date(), revokedById: null, revokeReason: "ROLL_CANCEL" });
+  }, { timeout: 15000 });
+  const e8b = await corr;
+  const left = await prisma.rollMeterReading.count({ where: { rollId: kd, phase: MeterPhase.CUT, revokedAt: null } });
+  check("§8 iptal anlık görüntüsünden sonra gelen düzeltme → 409, iptal topta aktif CUT okuması 0",
+    left === 0 && e8b?.status === 409, `aktif=${left} düzeltme=${JSON.stringify(e8b)}`);
+
+  console.log("\n§9 çok kuşak SIMULATED ata");
+  const e = await parentRoll(base.itemId, 100);
+  const ke = (await tambur.cutOpenFabric(e.rollId, { lengthMeters: 50, status: "WAREHOUSE", measure: { source: "SIMULATED" } }, undefined, fx.machineId)).data.childRoll.id;
+  await kids(e.rollId);
+  const keRow = await prisma.roll.findUniqueOrThrow({ where: { id: ke }, select: { producedInStepId: true } });
+  const kf = await prisma.roll.create({ data: {
+    barcode: null, itemId: base.itemId, colorId: null, width: 150, initialQty: 10, currentQty: 10, status: RollStatus.WAREHOUSE, qualityGrade: fx.gradeCode,
+    entrySource: RollEntrySource.TAMBUR_SPLIT, parentRollId: ke, producedInStepId: keRow.producedInStepId, ownerCustomerId: fx.customerId,
+  }, select: { id: true } });
+  fx.rolls.push(kf.id);
+  await kids(ke);
+  const r9 = await resolveServiceItemsForRolls({ rollIds: [ke, kf.id], customerId: fx.customerId, currency: Currency.TRY, options: { shippedRollIds: new Set([ke, kf.id]) } });
+  check("§9 SIMULATED kesimli ata (çocuğuyla birlikte sevk) faturada YOK + uyarı; çocuğun işi duruyor",
+    !r9.works.some((w) => w.rollId === ke) && r9.works.some((w) => w.rollId === kf.id) && r9.warnings.includes(simulatedCutWarning(1)),
+    JSON.stringify({ works: r9.works.map((w) => [w.rollId === ke ? "ata" : "cocuk", w.meterBasis, String(w.meters)]), w: r9.warnings }));
 
   console.log("\n§7 uç kapısı");
   const stack = tamburRouter.stack;

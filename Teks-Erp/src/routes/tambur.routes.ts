@@ -920,7 +920,7 @@ const cutCorrectionSchema = z.strictObject({
  *       Yalnız CUT okuması. Eski okuma damgalanır (silinmez), SUPERVISOR kaynaklı yeni CUT okuması yazılır;
  *       hizmet faturası yeni okumayı okur. `Roll.initialQty` değişmez. Aynı `clientToken` ikinci istek ilk
  *       yanıtı döner (yeni satır yaratmaz). Faturalı okuma 409 `SERVICE_ALREADY_BILLED`; eşzamanlı ikinci
- *       düzeltme 409 `METER_READING_ALREADY_CORRECTED`; CUT dışı okuma 400 `METER_READING_NOT_CUT`.
+ *       düzeltme 409 `METER_READING_ALREADY_CORRECTED`; iptal edilmiş top 409 `ROLL_NOT_CORRECTABLE`; CUT dışı okuma 400 `METER_READING_NOT_CUT`.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path

@@ -6,7 +6,7 @@
 // `Roll.initialQty` DEĞİŞMEZ — stok ayrı defterdir; düzeltme yalnız faturalanan metrenin kaynağıdır.
 // Yazım `meter-reading.helper` boğazından (ikinci yazar yok); replay `token-replay.helper` K kipi.
 // =============================================================================
-import { MachineDataSource, MeterPhase, Prisma, type RollMeterReading } from "@prisma/client";
+import { MachineDataSource, MeterPhase, Prisma, RollStatus, type RollMeterReading } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
@@ -55,7 +55,8 @@ export function cutCorrectionReplay(expect: { rollId: string; stepId: string; me
 }
 
 /**
- * POST /api/tambur/meter-readings/:id/correct — yalnız CUT okuması. Sıra: 8036 (token) → okuma satırı FOR UPDATE
+ * POST /api/tambur/meter-readings/:id/correct — yalnız CUT okuması. Sıra: 8036 (token) → top satırı FOR UPDATE
+ * (iptal edilmişse 409 ROLL_NOT_CORRECTABLE) → okuma satırı FOR UPDATE
  * (fatura tarafı `lockServiceReadingsTx` ile aynı satırı kilitler) → fatura kapısı → atomik damga → yeni okuma.
  */
 export async function correctCutReading(
@@ -77,6 +78,15 @@ export async function correctCutReading(
   const out = await prisma.$transaction(async (tx) => {
     const prior = await replay.inTx(tx, input.clientToken);
     if (prior) return { result: prior, written: false };
+    // Top satırı ÖNCE (iptal/Tambur geri alması da roll claim'i → okuma damgası sırasıyla gider): aksi halde
+    // iptalin okuma anlık görüntüsü yeni SUPERVISOR satırını kaçırır, iptal topta aktif CUT okuması kalır.
+    const [roll] = await tx.$queryRaw<{ status: string }[]>`SELECT status::text AS status FROM rolls WHERE id = ${target.rollId}::uuid FOR UPDATE`;
+    if (!roll || roll.status === RollStatus.CANCELLED) {
+      throw AppError.conflict("Top iptal edilmiş ya da kesimi geri alınmış — kesim metresi düzeltilemez", {
+        code: "ROLL_NOT_CORRECTABLE",
+        rollId: target.rollId,
+      });
+    }
     await tx.$queryRaw`SELECT id FROM roll_meter_readings WHERE id = ${target.id}::uuid FOR UPDATE`;
     // Faturalı kesim metresi değişmez: okumaya bağlı ya da (okuma bağı öncesi) topun CUT bağı aktifse 409.
     const billed = await findActiveBillingTx(tx, { OR: [{ readingId: target.id }, { rollId: target.rollId, meterBasis: "CUT" }] });

@@ -189,10 +189,11 @@ export async function listFlagServiceWorks(
       }
     }
     // Sevk edilen ata (kümede çocuğu var) ③'e girmez: kesilen metresi çocuklarını da içerir → ④ kalan (mevcut) metre.
+    const cut = !work && leaf.entrySource === RollEntrySource.TAMBUR_SPLIT ? cutOf.get(leaf.id) : undefined;
+    // Simüle kesim metresi faturalanmaz (K4) — kendisi de kesilmiş ata olsa bile ④'e (simüleden türeyen kalan) düşmez.
+    if (cut?.source === MachineDataSource.SIMULATED) { simulatedCut.add(leaf.id); continue; }
     if (!work && leaf.entrySource === RollEntrySource.TAMBUR_SPLIT && leaf.parentRollId && !parents.has(leaf.id)) {
-      // ③ kesim: iş çocuk topta, metre kesilen metre — okuma varsa okumadan; simüle metre faturalanmaz (④'e de düşmez).
-      const cut = cutOf.get(leaf.id);
-      if (cut?.source === MachineDataSource.SIMULATED) { simulatedCut.add(leaf.id); continue; }
+      // ③ kesim: iş çocuk topta, metre kesilen metre — okuma varsa okumadan.
       work = { ...base, rollId: leaf.id, workOrderStepId: leaf.producedInStepId, meters: cut ? cut.meters : leaf.initialQty, meterBasis: "CUT", readingId: cut?.id ?? null, serviceAt: leaf.createdAt };
     }
     work ??= { ...base, rollId: leaf.id, workOrderStepId: null, meters: leaf.currentQty, meterBasis: "DECLARED", readingId: null, serviceAt: p.createdAt };
