@@ -12,7 +12,7 @@ import { StyleSheet, View } from 'react-native';
 import { Icon, Text, TouchableRipple } from 'react-native-paper';
 import { useSessionStore } from '../../store/sessionStore';
 import { usePermissions } from '../../hooks/usePermission';
-import { useMachineStopTrackingEnabled } from '../../hooks/useFeatureFlags';
+import { useMachineStopOpenWarningEnabled, useMachineStopTrackingEnabled } from '../../hooks/useFeatureFlags';
 import { useIsOnline } from '../../offline/hooks';
 import { StopPanelBody } from './StopPanel';
 import { formatElapsed } from './stopPayload';
@@ -23,8 +23,10 @@ export const MACHINE_STOP_PERMISSION = 'mobile:makine-durus';
 export interface MachineStopControl {
   /** Çip çizilsin mi (izin ∧ ayar ∧ makine ∧ uç erişilebilir). */
   visible: boolean;
-  /** Açık duruş var mı — gramaj dokunuşu UYARIR, göndermeyi kesmez (K2). */
+  /** Açık duruş var mı. */
   stopOpen: boolean;
+  /** Gramaj/metre girişi uyarsın mı: açık duruş ∧ `uretim.makineDurusAcikUyarisi` (D4-A2b; K2 — gönderim sürer). */
+  entryWarning: boolean;
   state: StopPanelState;
   isOnline: boolean;
 }
@@ -36,8 +38,10 @@ export function useMachineStopControl(): MachineStopControl {
   const isOnline = useIsOnline();
   const enabled = allowed && tracking && machineId !== null;
   const state = useStopPanel({ machineId, isOnline, enabled, hideOnUnavailable: true });
+  const warnOnEntry = useMachineStopOpenWarningEnabled();
   const visible = enabled && !state.unavailable;
-  return { visible, stopOpen: visible && state.openStop !== null, state, isOnline };
+  const stopOpen = visible && state.openStop !== null;
+  return { visible, stopOpen, entryWarning: stopOpen && warnOnEntry, state, isOnline };
 }
 
 /** Başlık çipi: çalışırken "Duruş" → açma modalı; duruştayken süre; sebep borcu varsa sebep modalı. */

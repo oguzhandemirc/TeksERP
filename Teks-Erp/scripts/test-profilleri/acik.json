@@ -53,6 +53,7 @@
     "tamburPlanGateWidthCheck": "ENFORCE",
     "tamburListByStationEnabled": true,
     "machineStopTrackingEnabled": true,
+    "machineStopOpenWarningEnabled": true,
     "qualityGradeRequiredEnabled": true,
     "batchShortNumberEnabled": true,
     "batchLastNumberHintEnabled": true,
