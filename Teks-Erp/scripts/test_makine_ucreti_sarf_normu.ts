@@ -38,6 +38,7 @@ import { changeMachineCostRate, createMachineCostRate, revokeMachineCostRate } f
 import { changeConsumableNorm, createConsumableNorm, revokeConsumableNorm } from "../src/services/consumable-norm.service";
 import { consumableNormsValidAt, isCostRateValidAt, machineCostRateValidAt } from "../src/services/helpers/cost-rate-validity.helper";
 import { AppError } from "../src/utils/app-error";
+import { countItemLiveRefs, transitionItemLifecycle } from "../src/services/helpers/item-lifecycle.helper";
 
 let pass = 0;
 let fail = 0;
@@ -296,6 +297,18 @@ async function main(): Promise<void> {
     check("§6c kaldırma damgadır (satır durur), ikinci kaldırma 409", kod(e6c) === "CONSUMABLE_NORM_STALE" && nKalan === 2, `${kod(e6c)} n=${nKalan}`);
     const e6d = await hata(() => createConsumableNorm(hizmet, sarf, { qtyPerM: "0.0125", clientToken: tn }, uid));
     check("§6d damgalanmış normun token'ı tekrar → 409 CONSUMABLE_NORM_SUPERSEDED", kod(e6d) === "CONSUMABLE_NORM_SUPERSEDED", kod(e6d));
+    // Aktif norm canlı referanstır (MASTER-VERI: canlı referanslı ana veri pasife alınamaz) — iki kalem de.
+    const n6e = await createConsumableNorm(hizmet, sarf, { qtyPerM: "0.02", clientToken: randomUUID() }, uid);
+    const arsivle = (itemId: string) => hata(() => transitionItemLifecycle({ itemId, to: ItemLifecycleStatus.ARCHIVED, userId: uid }));
+    const e6eS = await arsivle(sarf);
+    const e6eH = await arsivle(hizmet);
+    const normRef = (e: AppError | null) => (e?.details as { references?: Array<{ kind: string; count: number }> } | undefined)?.references?.find((x) => x.kind === "CONSUMABLE_NORM")?.count;
+    check("§6e ⭐ aktif normlu sarf + hizmet kalemi pasife alınamaz → 409 ITEM_HAS_LIVE_REFERENCES (CONSUMABLE_NORM=1)",
+      kod(e6eS) === "ITEM_HAS_LIVE_REFERENCES" && normRef(e6eS) === 1 && kod(e6eH) === "ITEM_HAS_LIVE_REFERENCES" && normRef(e6eH) === 1,
+      `${kod(e6eS)}/${normRef(e6eS)} ${kod(e6eH)}/${normRef(e6eH)}`);
+    await revokeConsumableNorm(n6e.row.id, null, uid);
+    const refsSonra = (await countItemLiveRefs(prisma, sarf)).find((x) => x.kind === "CONSUMABLE_NORM")?.count;
+    check("§6f kaldırılmış norm canlı referans sayılmaz", refsSonra === 0, String(refsSonra));
 
     // ── §7 HTTP ──
     console.log("\n── §7 HTTP ──");
@@ -308,8 +321,12 @@ async function main(): Promise<void> {
       await call("POST", "/api/cost/machine-rates", yazar.token, { machineId: m7, hourRateTry: 1, clientToken: randomUUID() }),
       await call("GET", "/api/cost/consumable-norms", yazar.token),
       await call("POST", "/api/cost/consumable-norms", yazar.token, { serviceItemId: hizmet, consumableItemId: sarf, qtyPerM: 1, clientToken: randomUUID() }),
+      await call("POST", `/api/cost/machine-rates/${a.id}/change`, yazar.token, { hourRateTry: 1, clientToken: randomUUID() }),
+      await call("POST", `/api/cost/machine-rates/${a.id}/revoke`, yazar.token, {}),
+      await call("POST", `/api/cost/consumable-norms/${n1.row.id}/change`, yazar.token, { qtyPerM: 1, clientToken: randomUUID() }),
+      await call("POST", `/api/cost/consumable-norms/${n1.row.id}/revoke`, yazar.token, {}),
     ];
-    check("§7a ⭐ maliyet kapalıyken dört uç 403 MODULE_DISABLED", kapali.every((r) => r.status === 403 && r.body.details?.code === "MODULE_DISABLED"), kapali.map((r) => `${r.status}/${String(r.body.details?.code)}`).join(" "));
+    check("§7a ⭐ maliyet kapalıyken sekiz uç 403 MODULE_DISABLED", kapali.every((r) => r.status === 403 && r.body.details?.code === "MODULE_DISABLED"), kapali.map((r) => `${r.status}/${String(r.body.details?.code)}`).join(" "));
     await setSetting(SETTING_KEYS.MALIYET_ENABLED, true);
     const r7b = await call("POST", "/api/cost/machine-rates", okur.token, { machineId: m7, hourRateTry: 1, clientToken: randomUUID() });
     check("§7b cost:read ile yazma → 403", r7b.status === 403, String(r7b.status));

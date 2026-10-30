@@ -12,7 +12,7 @@ import { AppError } from "../utils/app-error";
 import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
 import { AuditService } from "./audit.service";
 import { tokenReplay } from "./helpers/token-replay.helper";
-import { runItemUsageChecks } from "./helpers/item-usage.helper";
+import { runItemUsageChecks, runItemUsageChecksTx, type ItemUsageCheck } from "./helpers/item-usage.helper";
 import { ACTIVE_COST_RATE, COST_RATE_REVOKE_REASON } from "./helpers/cost-rate-validity.helper";
 import { parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
 
@@ -101,11 +101,16 @@ async function assertItemsWritable(serviceItemId: string, consumableItemId: stri
     throw AppError.badRequest(`"${consumable.name}" bir sarf malzemesi değil — normun sarf kalemi Sarf türünde olmalı.`, { code: "CONSUMABLE_ITEM_INVALID", itemId: consumableItemId });
   }
   // Norm karta yeni TANIM ekler — pasif/'Tükenene kadar' kararı tek kaynaktan (item-usage).
-  await runItemUsageChecks(prisma, [
+  await runItemUsageChecks(prisma, usageChecks(serviceItemId, consumableItemId));
+  return consumable.unit;
+}
+
+/** Ön kontrol ile tx tekrarı aynı listeyi okur; tx tarafı kartları FOR SHARE kilitler (pasife alma yarışı). */
+function usageChecks(serviceItemId: string, consumableItemId: string): ItemUsageCheck[] {
+  return [
     { itemId: serviceItemId, usage: "DEFINITION" },
     { itemId: consumableItemId, usage: "DEFINITION" },
-  ]);
-  return consumable.unit;
+  ];
 }
 
 function activeExists(serviceItemId: string, consumableItemId: string): AppError {
@@ -150,9 +155,12 @@ export async function createConsumableNorm(
     if (current) throw activeExists(serviceItemId, consumableItemId);
     let created: { id: string };
     try {
-      created = await prisma.serviceConsumableNorm.create({
-        data: { serviceItemId, consumableItemId, ...values, unit, clientToken: input.clientToken, createdById: userId },
-        select: { id: true },
+      created = await prisma.$transaction(async (tx) => {
+        await runItemUsageChecksTx(tx, usageChecks(serviceItemId, consumableItemId));
+        return tx.serviceConsumableNorm.create({
+          data: { serviceItemId, consumableItemId, ...values, unit, clientToken: input.clientToken, createdById: userId },
+          select: { id: true },
+        });
       });
     } catch (e) {
       if (isClientTokenP2002(e)) throw e;
@@ -176,6 +184,7 @@ export async function changeConsumableNorm(normId: string, input: ConsumableNorm
     let created: { id: string };
     try {
       created = await prisma.$transaction(async (tx) => {
+        await runItemUsageChecksTx(tx, usageChecks(serviceItemId, consumableItemId));
         const claim = await tx.serviceConsumableNorm.updateMany({
           where: { id: normId, revokedAt: null },
           data: { revokedAt: at, revokedById: userId, revokeReason: COST_RATE_REVOKE_REASON.CHANGED },
