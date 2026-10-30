@@ -34,6 +34,7 @@ import { readPackingGroupsEnabled } from "./system-setting.service";
 import { recordSackPickList, type PickListPrint } from "./helpers/manifest-number.helper";
 import { tokenReplay } from "./helpers/token-replay.helper";
 import { resolveDeliveryNoteLinesForRolls, type RollDeliveryNoteLine } from "./helpers/roll-delivery-note-line.helper";
+import { ambiguousCustomerCodeError, matchExtras, resolveRollByScanCode } from "./helpers/roll-scan-resolve.helper";
 import { fromAttachment, recordPrintJob, type PrintJobReportOpt } from "./print-job.service";
 
 const PLANNED_STATUSES: ShipmentStatus[] = [ShipmentStatus.PLANNED];
@@ -1382,8 +1383,9 @@ export class SackSearchService {
       );
     }
 
-    const roll = await prisma.roll.findFirst({
-      where: { barcode: code },
+    // Tek okutma boğazı (D4-F1b): iç barkod önce, ayar açıksa müşteri kodu.
+    const resolved = await resolveRollByScanCode(code, { load: (where) => prisma.roll.findUnique({
+      where,
       select: {
         id: true,
         barcode: true,
@@ -1404,9 +1406,10 @@ export class SackSearchService {
           },
         },
       },
-    });
-    if (!roll) throw AppError.notFound("Bu barkodla top bulunamadı");
-    return { success: true, data: roll };
+    }) });
+    if (resolved.kind === "AMBIGUOUS") throw ambiguousCustomerCodeError(resolved);
+    if (resolved.kind === "NONE") throw AppError.notFound("Bu barkodla top bulunamadı");
+    return { success: true, data: { ...resolved.roll, ...matchExtras(resolved) } };
   }
 }
 

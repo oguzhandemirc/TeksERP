@@ -51,6 +51,7 @@ import {
 import { lockShipmentScopeTx } from "./helpers/shipment-locks.helper";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
 import { DEAD_ROLL_STATUSES } from "./helpers/live-ref-where.helper";
+import { ambiguousCustomerCodeError, matchExtras, resolveRollByScanCode } from "./helpers/roll-scan-resolve.helper";
 
 const D0 = () => new Prisma.Decimal(0);
 
@@ -129,8 +130,9 @@ export class ReturnService {
     const code = normalizeScanCode(barcode);
     if (!code) throw AppError.badRequest("Barkod gerekli");
 
-    const roll = await prisma.roll.findUnique({
-      where: { barcode: code },
+    // Tek okutma boğazı (D4-F1b): müşteri kendi etiketini okutarak iade edebilir (ayar açıksa).
+    const resolved = await resolveRollByScanCode(code, { load: (where) => prisma.roll.findUnique({
+      where,
       select: {
         id: true,
         barcode: true,
@@ -178,8 +180,10 @@ export class ReturnService {
           },
         },
       },
-    });
-    if (!roll) throw AppError.notFound(`Top bulunamadı: ${code}`);
+    }) });
+    if (resolved.kind === "AMBIGUOUS") throw ambiguousCustomerCodeError(resolved);
+    if (resolved.kind === "NONE") throw AppError.notFound(`Top bulunamadı: ${code}`);
+    const roll = resolved.roll;
     if (roll.status !== RollStatus.SHIPPED) {
       throw AppError.badRequest(
         `Bu top sevk edilmemiş (durum: ${roll.status}) — iade alınamaz.`
@@ -224,6 +228,7 @@ export class ReturnService {
           currentQty: roll.currentQty,
           qualityGrade: roll.qualityGrade,
           qualityGradeRef: roll.qualityGradeRef,
+          ...matchExtras(resolved),
         },
         shipment: {
           id: roll.shipment.id,
