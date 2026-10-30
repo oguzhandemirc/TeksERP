@@ -61,6 +61,7 @@ import { PaymentsPage } from "@/pages/Finance/PaymentsPage";
 import { AccountsPage } from "@/pages/Finance/AccountsPage";
 import { CashTransactionsPage } from "@/pages/Finance/CashTransactions/CashTransactionsPage";
 import { ExpenseSummaryPage } from "@/pages/Reports/Finance/ExpenseSummaryPage";
+import { MachineStopsReportPage } from "@/pages/Reports/Production/MachineStopsReportPage";
 import { RatesPage } from "@/pages/Finance/RatesPage";
 // Paket C (2026-08-14) — hepsi NAMED export; default import boş ekran verir.
 import { ChequesPage } from "@/pages/Finance/Cheques/ChequesPage";
@@ -1470,6 +1471,16 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="report:production">
         <ProductionReportsHubPage />
+      </ProtectedRoute>
+    ),
+  },
+  // Makine Duruşları raporu (D4-A4) — rejim `ROUTE_REGIME` (yaprak: dokuma ∨ üretim ∧ makine duruşu takibi);
+  // izin backend ucuyla aynı (`report:production`); v2 bayrağına bağlı DEĞİL (`V2_KEYS_WITH_OWN_PAGE`).
+  {
+    path: "reports/production/makine-duruslari",
+    element: (
+      <ProtectedRoute requirePermission="report:production">
+        <MachineStopsReportPage />
       </ProtectedRoute>
     ),
   },
