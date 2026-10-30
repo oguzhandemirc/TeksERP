@@ -1071,10 +1071,21 @@ export interface TamburErrorDecision {
 export type TamburFoldType = string; // serbest string ("2-KAT" / "4-KAT" / özel)
 
 /** Yeni cumulative-length kesim modeli (backend `cuts[]`). */
+/**
+ * D4-B3 kesim metresinin ölçüm kaynağı — sunucu `meterSourceSchema` (strictObject) aynası.
+ * Eski backend alanı eler (non-strict gövde); `cardSampleId` model gelene dek gönderilmez.
+ */
+export interface TamburMeasureBody {
+  source: 'MACHINE' | 'OPERATOR' | 'SIMULATED';
+  peripheralId?: string | null;
+  rawCounter?: number | null;
+}
+
 export interface TamburCut {
   length: number;
   qualityGrade: string;
   relatedErrorIds?: string[];
+  measure?: TamburMeasureBody;
 }
 
 export interface TamburFinalizeRequest {
@@ -1278,6 +1289,8 @@ export interface TamburCutRequest {
   /** Offline/ağ-retry idempotency anahtarı (UUID). Barkod sunucuda sıralı atanır;
    *  aynı token'la 2. çağrı backend'de idempotent döner (çift kesim/decrement YOK). */
   clientToken?: string;
+  /** D4-B3 ölçüm kaynağı beyanı (makine / elle / simülasyon). */
+  measure?: TamburMeasureBody;
 }
 
 /** `POST /api/tambur/:id/finalize-open-fabric` — açık kumaşı bitir */
