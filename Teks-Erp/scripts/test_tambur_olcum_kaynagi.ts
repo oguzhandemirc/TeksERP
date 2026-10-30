@@ -565,9 +565,9 @@ async function section14(fx: { itemId: string; stationId: string }, machineId: s
   const kid = (await kidsOf(t.rollId))[0]!.id;
   // Aynı topa başka (kurşun benzeri) adımda OUT okuması — ortak boğazdan, politika kopyalı.
   const k = await tamburRoll(fx, 1);
-  const out = await prisma.$transaction((tx) => insertMeterReadingTx(tx, {
+  const out = await prisma.$transaction((tx) => insertMeterReadingTx(tx, { data: {
     rollId: kid, workOrderStepId: k.stepId, phase: "OUT", meters: 49.5, source: "MACHINE", basis: "DECLARED_IN", approvalMode: "NONE", clientToken: randomUUID(),
-  }));
+  } }));
   createdReadings.push(out.id);
   const reopenOther = await prisma.$transaction((tx) => revokeStepMeterReadingsTx(tx, { rollIds: [kid], stepId: k.stepId, userId: null, reason: "KURSUN_REOPEN" }));
   const cutAfter = await cutRows([kid]);

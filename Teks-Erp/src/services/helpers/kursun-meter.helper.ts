@@ -174,7 +174,7 @@ export async function writeMeterReadingTx(tx: Tx, args: WriteMeterReadingArgs): 
   }
   const policy = await resolveKursunMeterPolicy(tx);
   // Ortak yazım boğazı (D4-B1b): satır yaratma yalnız meter-reading.helper'da.
-  const reading = await insertMeterReadingTx(tx, {
+  const reading = await insertMeterReadingTx(tx, { data: {
     rollId: args.rollId,
     workOrderStepId: args.stepId,
     phase: args.phase,
@@ -192,7 +192,7 @@ export async function writeMeterReadingTx(tx: Tx, args: WriteMeterReadingArgs): 
     stockMode: MeterStockMode[await readKursunMeterStockMode(tx)],
     clientToken: args.input.clientToken,
     createdById: args.userId,
-  });
+  } });
   if (args.phase !== MeterPhase.OUT) return { reading, revokedId, variance: null, ack: null, stock: null };
 
   // H2 §3-6: sapma kopyadan; OPERATOR_REASON'da sebep yoksa fail-closed 409 (tablet kuyruğa koymadan sorar).

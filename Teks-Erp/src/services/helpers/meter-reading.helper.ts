@@ -105,8 +105,8 @@ export function readingPolicyOf(
 type Tx = Prisma.TransactionClient;
 
 /** Okuma satırı yaratan TEK çağrı (kurşun `writeMeterReadingTx` + Tambur `writeCutReadingsTx`). */
-export async function insertMeterReadingTx(tx: Tx, data: Prisma.RollMeterReadingUncheckedCreateInput): Promise<RollMeterReading> {
-  return tx.rollMeterReading.create({ data });
+export async function insertMeterReadingTx(tx: Tx, args: { data: Prisma.RollMeterReadingUncheckedCreateInput }): Promise<RollMeterReading> {
+  return tx.rollMeterReading.create(args);
 }
 
 /** Damga — ATOMİK: yalnız hâlâ aktif (`revokedAt: null`) satırlar; dönen sayı gerçekten damgalanandır. */
@@ -137,7 +137,7 @@ export async function writeCutReadingsTx(
   const written: RollMeterReading[] = [];
   for (const c of args.cuts) {
     if (!c.measure) continue;
-    written.push(await insertMeterReadingTx(tx, {
+    written.push(await insertMeterReadingTx(tx, { data: {
       rollId: c.rollId,
       workOrderStepId: args.stepId,
       phase: MeterPhase.CUT,
@@ -148,7 +148,7 @@ export async function writeCutReadingsTx(
       peripheralId: c.measure.peripheralId ?? null,
       clientToken: randomUUID(),
       createdById: args.userId,
-    }));
+    } }));
   }
   return written;
 }
