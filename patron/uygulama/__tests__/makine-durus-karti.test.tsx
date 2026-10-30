@@ -66,6 +66,17 @@ describe("Makineler neden durdu? kartı", () => {
     expect(screen.queryByTestId(`katalog-${KEY}`)).toBeNull();
   });
 
+  it("§2b katalog hata verirse ayrı metin ve 'Tekrar dene' yeniden çeker", async () => {
+    mockSession.permissions = ALLOWED;
+    mockApi.snapshot.mockRejectedValueOnce(new Error("ağ yok"));
+    render(<Card />);
+    expect(await screen.findByTestId("makine-duruslari-katalog-hata")).toBeTruthy();
+    expect(screen.queryByTestId("makine-duruslari-yok")).toBeNull();
+    mockCatalog = [{ anahtar: KEY, baslik: "Makine duruşları", aile: "production", parametreler: [] }];
+    fireEvent.press(screen.getByText("Tekrar dene"));
+    expect(await screen.findByTestId(`katalog-${KEY}`)).toBeTruthy();
+  });
+
   it("§3 requestable false (rapor ya da üretim izni yok) iken kart kapalı ve katalog çekilmez", async () => {
     for (const perms of [["bulut:oturum", "bulut:uretim:oku"], ["bulut:oturum", "bulut:rapor:oku"]]) {
       mockSession.permissions = perms;

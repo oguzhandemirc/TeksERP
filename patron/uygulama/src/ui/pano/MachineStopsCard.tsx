@@ -1,6 +1,6 @@
 // Üretim sekmesi "Makineler neden durdu?" kartı (D4-A4b, ister 5.5): fabrikanın `rapor-katalogu` anlığında
 // `production/makine-duruslari` varsa rapor isteme ekranını açar; yoksa (eski fabrika sürümü ya da duruş takibi
-// kapalı) boş durum. İzin yoksa kart hiç çizilmez ve katalog çekilmez (koşulsuz 403 sorgusu atılmaz).
+// kapalı) nötr boş durum; katalog hatası ayrı metin + "Tekrar dene". İzin yoksa kart hiç çizilmez ve katalog çekilmez (koşulsuz 403 sorgusu atılmaz).
 import { useRouter } from "expo-router";
 import { reportTitle } from "../../lib/labels/finans";
 import { catalogEntries, requestable } from "../../lib/reports";
@@ -35,9 +35,18 @@ export function MachineStopsCard() {
           soru={question}
           onPress={() => router.push({ pathname: "/raporlar/yeni", params: { anahtar: MACHINE_STOPS_REPORT_KEY } } as never)}
         />
-      ) : catalog.data || catalog.error ? (
+      ) : catalog.error && !catalog.data ? (
         <Empty
-          text="Makine duruşları raporu fabrika güncellenince gelir"
+          text="Fabrikadan rapor kataloğu henüz gelmedi"
+          domain="uretim"
+          icon={EMPTY_ICON.bekliyor}
+          actionLabel="Tekrar dene"
+          onAction={catalog.reload}
+          testID="makine-duruslari-katalog-hata"
+        />
+      ) : catalog.data ? (
+        <Empty
+          text="Makine duruşları raporu bu fabrikada açık değil ya da fabrika güncellenince gelir"
           domain="uretim"
           icon={EMPTY_ICON.bekliyor}
           testID="makine-duruslari-yok"
