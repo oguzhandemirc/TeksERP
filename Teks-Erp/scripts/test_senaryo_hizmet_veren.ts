@@ -273,18 +273,24 @@ async function scenario(): Promise<void> {
   check("T1: Tambur istasyonunun AUTO bayrağı 4 çocuğa yazıldı; atalarda yok (iş çocukta)", tbOnKids === 4 && tbOnParents === 0, `çocuk ${tbOnKids}, ata ${tbOnParents}`);
   const cutReads = await prisma.rollMeterReading.findMany({ where: { rollId: { in: kids.map((k) => k.id) }, phase: "CUT", revokedAt: null }, select: { rollId: true, workOrderStepId: true, meters: true } });
   check("D4-B1b: ölçümlü kesimler 2 CUT okuması (RA 60 + RB 120; kalan parça ve RC ölçümsüz), adım = Tambur", cutReads.length === 2 && cutReads.every((r) => r.workOrderStepId === STB) && eq(cutReads.reduce((a, r) => a.plus(r.meters), D(0)), 180), JSON.stringify(cutReads.map((r) => r.meters.toString())));
-  // FAZ SÜZGEÇSİZ OKUYUCU ENVANTERİ (D4-B1b): hizmet çözümü (service-pricing loadReadings + service-flag-work) CUT
-  // satırları varken ve aynı satırlar damgalıyken (geri sarılan tx) BAYT-AYNI — fatura CUT bağı D4-B2'nin işi.
+  // FAZ SÜZGEÇSİZ OKUYUCU ENVANTERİ (D4-B1b) + D4-B2 CUT bağı: CUT satırları varken ve damgalıyken (geri sarılan tx)
+  // satırlar (kalem/metre/fiyat) BAYT-AYNI; tek fark ölçümlü kesim işlerinin `readingId`si (MACHINE/OPERATOR okumaya bağlanır).
   const allRolls = [...rollIds, ...kids.map((k) => k.id)];
   const solve = (db?: Prisma.TransactionClient) => resolveServiceItemsForRolls({ rollIds: allRolls, customerId: cust.id, currency: Currency.TRY, ...(db ? { db } : {}) });
-  const withCut = JSON.stringify(await solve());
-  let withoutCut = "";
+  const cutSolved = await solve();
+  let plainSolved: Awaited<ReturnType<typeof solve>> | null = null;
   await prisma.$transaction(async (tx) => {
     await tx.rollMeterReading.updateMany({ where: { rollId: { in: allRolls }, phase: "CUT" }, data: { revokedAt: new Date(), revokeReason: "TEST_GERI_SAR" } });
-    withoutCut = JSON.stringify(await solve(tx));
+    plainSolved = await solve(tx);
     throw new Error("GERI_SAR");
   }).catch((e: unknown) => { if (!(e instanceof Error && e.message === "GERI_SAR")) throw e; });
-  check("D4-B1b: hizmet çözümü (kurşun + Tambur bayrak işi) CUT varken/yokken bayt-aynı", withCut.length > 20 && withCut === withoutCut, withCut === withoutCut ? "" : `${withCut.slice(0, 200)} ≠ ${withoutCut.slice(0, 200)}`);
+  const sansReading = (r: Awaited<ReturnType<typeof solve>> | null) => JSON.stringify(r && { lines: r.lines, warnings: r.warnings, works: r.works.map((w) => ({ ...w, readingId: null })) });
+  const withCut = sansReading(cutSolved);
+  const withoutCut = sansReading(plainSolved);
+  check("D4-B1b: hizmet çözümü (kurşun + Tambur bayrak işi) CUT varken/yokken satırlar bayt-aynı", withCut.length > 20 && withCut === withoutCut, withCut === withoutCut ? "" : `${withCut.slice(0, 200)} ≠ ${withoutCut.slice(0, 200)}`);
+  const cutIds = new Set((await prisma.rollMeterReading.findMany({ where: { rollId: { in: allRolls }, phase: "CUT", revokedAt: null }, select: { id: true } })).map((r) => r.id));
+  const boundCut = cutSolved.works.filter((w) => w.meterBasis === "CUT" && w.readingId && cutIds.has(w.readingId)).length;
+  check("D4-B2: ölçümlü 2 kesim işi CUT okumasına bağlı (readingId), okumasızlar null", boundCut === 2 && plainSolved !== null && (plainSolved as Awaited<ReturnType<typeof solve>>).works.every((w) => w.meterBasis !== "CUT" || w.readingId === null), `bağlı=${boundCut}`);
 
   // ── 5 SEVK + HİZMET FATURASI (PER_SHIPMENT) ───────────────────────────────
   adim("5 Sevk (brüt) → hizmet fatura taslağı: RA'nın iki çocuğu + RB'nin çocuğu");

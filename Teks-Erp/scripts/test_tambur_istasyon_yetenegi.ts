@@ -127,7 +127,7 @@ async function main(): Promise<void> {
   const h1 = await hasAuto(k1);
   check("finalize: 2 çocuğun ikisi de AUTO + ata bayrağı taşır, OPTIONAL yok", k1.length === 2 && h1.every(Boolean), JSON.stringify(h1));
   check("finalize: ata (TAMBUR_CONSUMED) AUTO bayrağı kazanmadı", !(await propsOf(R1)).includes(FA));
-  const w1 = await listFlagServiceWorks([R1, ...k1], "OUT");
+  const w1 = (await listFlagServiceWorks([R1, ...k1], "OUT")).works;
   const tb1 = w1.filter((w) => w.serviceItemId === SVC);
   check("H10: Tambur işi çocuklarda, taban CUT, metre 40 + 60, adım = Tambur adımı", tb1.length === 2 && tb1.every((w) => w.meterBasis === "CUT" && w.workOrderStepId === S1 && k1.includes(w.rollId)) && eq(tb1.reduce((a, w) => a.plus(w.meters), new Prisma.Decimal(0)), 100), JSON.stringify(tb1.map((w) => [w.meters.toString(), w.meterBasis])));
 
@@ -188,7 +188,7 @@ async function main(): Promise<void> {
   const kids1 = await prisma.roll.findMany({ where: { id: { in: k1 } }, select: { status: true } });
   const r1Props = await propsOf(R1);
   check("TÜMDEN geri alma: çocuklar CANCELLED, ata IN_PRODUCTION ve AUTO bayraksız", r1After.status === RollStatus.IN_PRODUCTION && kids1.every((k) => k.status === RollStatus.CANCELLED) && !r1Props.includes(FA), `${r1After.status} ${kids1.map((k) => k.status).join(",")} ${JSON.stringify(r1Props)}`);
-  const w8 = await listFlagServiceWorks([R1], "OUT");
+  const w8 = (await listFlagServiceWorks([R1], "OUT")).works;
   check("geri alınan atada Tambur hizmet işi yok", w8.every((w) => w.serviceItemId !== SVC), JSON.stringify(w8));
   // Özelliksiz ata: geri kurulum donörü (doğum-anı satırları) devrede; istasyon satırı donöre girmemeli.
   const R8 = await mkRoll(40, "WAREHOUSE", false);
