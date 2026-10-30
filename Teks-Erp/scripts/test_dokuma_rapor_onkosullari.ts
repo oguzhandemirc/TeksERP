@@ -215,6 +215,9 @@ const KAYNAK_KOLONLARI_BEKLENEN = [
   // H1 (2026-10-29): kurşun metre OKUMASININ kökeni — (b) OLAY kolonu; `@default` YOK, SIMULATED burada beyan
   // edilir. Rapor taşıyıcısı H4 sapma raporunda doğarsa çıktı bekçisi orada yazılır.
   "roll_meter_readings.source",
+  // D4-B1a (2026-10-30): tambur sapma satırının ÖLÇÜM kökeni (zayıf halka) — (b) OLAY kolonu; NULL = bilinmiyor
+  // (eski istemci / backfill yok), `@default` YOK, doğuşta yazılır. Rapor taşıyıcısı değil.
+  "roll_variances.measureSource",
   // (a) sınıfı — RAPORUN SATIRINDA yaşayan TAŞIYICI (2026-09-14, 01 Dilim 1): karnenin
   // kaynak kırılımı bu kolondan basılır; `SIMULATED` `OPERATOR`a katılmaz, `INFERRED`
   // boş tezgah beyanıdır. `@default` YOK — her yazım `resolveShiftSource` ile beyan eder.

@@ -2,12 +2,14 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
-import { ROUTE_MODULE, isRouteModuleOpen, routeModuleOf } from "./route-modules";
+import { ROUTE_MODULE, ROUTE_REGIME, isRouteModuleOpen, routeModuleOf } from "./route-modules";
+import { resolveMachineStopEnabled } from "@/pages/Operations/MachineStops/stop-regime";
 
 // =============================================================================
 // Panel route modül kapısının SAF yarısı. Üç sonda (1e, 2026-09-14): modül
 // KAPALI + izin VAR + URL → kapalı · AÇIK → bugünkü route tablosu BİREBİR
 // (hiçbir yol kapanmaz, diff 0) · modülü olmayan yol → dokunulmaz.
+// NEGATİF SONDA (2026-10-30, D4-A3): `ROUTE_REGIME` satırları silindi → "makine duruşu rejimi" testi kırmızı.
 // =============================================================================
 const ROUTES_SRC = readFileSync(resolve(__dirname, "../routes/content-routes.tsx"), "utf8");
 const ALL_PATHS = [...ROUTES_SRC.matchAll(/path:\s*"([^"]+)"/g)].map((m) => m[1]!).filter((p) => p !== "*");
@@ -17,7 +19,7 @@ function ctx(over: Partial<OperationsVisibilityContext> = {}): OperationsVisibil
     shipmentConfirmationEnabled: false,
     depoMultiEnabled: true,
     devereEnabled: true,
-    dokumaEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: true, maliyetEnabled: true, gelenBelgeEnabled: true, emanetEnabled: true,
+    dokumaEnabled: true, machineStopEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: true, maliyetEnabled: true, gelenBelgeEnabled: true, emanetEnabled: true,
     reportsClosedKeys: [],
     isReportOpen: () => true,
     flagsReady: true,
@@ -83,8 +85,23 @@ describe("route-modules — yol → modül aynası", () => {
     expect(isRouteModuleOpen("/operations/work-orders", d)).toBe(true);
   });
 
+  // D4-A3: Duruşlar + Vardiya Tanımları route'u rejim alanını okur (dokuma ∨ üretim ∧ uretim.makineDurusTakibi).
+  it("⭐ makine duruşu rejimi: dokumasız + ayar açık → duruş ve vardiya yolları AÇIK, öbür dokuma yolları kapalı", () => {
+    const flags = { dokumaEnabled: false, productionEnabled: true, machineStopTrackingEnabled: true };
+    const hizmet = ctx({ dokumaEnabled: false, machineStopEnabled: resolveMachineStopEnabled(flags) });
+    expect(isRouteModuleOpen("/operations/machine-stops", hizmet)).toBe(true);
+    expect(isRouteModuleOpen("/definitions/shift-definitions", hizmet)).toBe(true);
+    expect(isRouteModuleOpen("/operations/weaving-orders", hizmet)).toBe(false);
+    const kapali = ctx({ dokumaEnabled: false, machineStopEnabled: resolveMachineStopEnabled({ ...flags, machineStopTrackingEnabled: false }) });
+    expect(isRouteModuleOpen("/operations/machine-stops", kapali)).toBe(false);
+    expect(isRouteModuleOpen("/definitions/shift-definitions", kapali)).toBe(false);
+  });
+  it("rejim tablosu manifesto aynasını bozmaz: rejimli ekran ROUTE_MODULE'da modülüyle (dokuma) kalır", () => {
+    for (const key of Object.keys(ROUTE_REGIME)) expect(ROUTE_MODULE[key]).toBe("dokumaEnabled");
+  });
+
   it("referans fabrika (yalnız üretim açık): kapanan yollar tam olarak ticaret/muhasebe/iplik/depo/devere/dokuma/maliyet ekranları", () => {
-    const fabrika = ctx({ financeEnabled: false, ticaretEnabled: false, iplikEnabled: false, depoMultiEnabled: false, devereEnabled: false, dokumaEnabled: false, kaliteGuvenceEnabled: false, maliyetEnabled: false });
+    const fabrika = ctx({ financeEnabled: false, ticaretEnabled: false, iplikEnabled: false, depoMultiEnabled: false, devereEnabled: false, dokumaEnabled: false, machineStopEnabled: false, kaliteGuvenceEnabled: false, maliyetEnabled: false });
     const kapanan = new Set(ALL_PATHS.filter((p) => !isRouteModuleOpen(`/${p}`, fabrika)).map((p) => routeModuleOf(`/${p}`)));
     expect([...kapanan].sort()).toEqual(["depoMultiEnabled", "devereEnabled", "dokumaEnabled", "financeEnabled", "iplikEnabled", "kaliteGuvenceEnabled", "maliyetEnabled", "ticaretEnabled"]);
     expect(isRouteModuleOpen("/operations/work-orders", fabrika)).toBe(true);

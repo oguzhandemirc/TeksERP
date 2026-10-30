@@ -28,7 +28,7 @@ vi.mock("@/hooks/useRoleAccess", () => ({
 // her `visibleWhen` yüklemi SESSİZCE false döner — yani palet girişi kaybolur
 // ama test "izin/katalog hatası" diye okunur. Dönüş tipini yazmak, bağlama yeni
 // bir alan eklendiği gün bu mock'u DERLEME zamanında düşürür.
-let regime = { productionEnabled: true, financeEnabled: false };
+let regime = { productionEnabled: true, financeEnabled: false, dokumaEnabled: false, machineStopEnabled: false };
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
   useOperationsVisibilityContext: (): OperationsVisibilityContext => ({
     shipmentConfirmationEnabled: false,
@@ -36,7 +36,7 @@ vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
     ticaretEnabled: false,
     iplikEnabled: false,
     devereEnabled: false,
-    dokumaEnabled: false, tezgahEnabled: false, kaliteGuvenceEnabled: false, maliyetEnabled: false, gelenBelgeEnabled: false, emanetEnabled: false,
+    tezgahEnabled: false, kaliteGuvenceEnabled: false, maliyetEnabled: false, gelenBelgeEnabled: false, emanetEnabled: false,
     reportsClosedKeys: [],
     isReportOpen: () => true,
     flagsReady: true,
@@ -74,7 +74,7 @@ const type = (text: string) =>
 describe("CommandPalette", () => {
   beforeEach(() => {
     permissions = ["report:production", "roll:read", "workorder:read", "admin:settings", "admin:users"];
-    regime = { productionEnabled: true, financeEnabled: false };
+    regime = { productionEnabled: true, financeEnabled: false, dokumaEnabled: false, machineStopEnabled: false };
     openTab.mockClear();
   });
 
@@ -83,6 +83,29 @@ describe("CommandPalette", () => {
     open();
     expect(screen.getByText("Üretim")).toBeInTheDocument();
     expect(screen.getByText("Nerede Takıldı (WIP)")).toBeInTheDocument();
+  });
+
+  // D4-A3: dokumasız + ayar açık (rejim alanı) → giriş "Makine Duruşları" adıyla VAR; rejim kapalıyken YOK.
+  it("⭐ makine duruşu rejimi: dokumasız + ayar açık → palette 'Makine Duruşları' + 'Vardiya Tanımları'", () => {
+    permissions = ["loom:classify", "loom:spec-manage"];
+    regime = { productionEnabled: true, financeEnabled: false, dokumaEnabled: false, machineStopEnabled: true };
+    open();
+    expect(screen.getByText("Makine Duruşları")).toBeInTheDocument();
+    expect(screen.queryByText("Tezgah Duruşları")).not.toBeInTheDocument();
+    expect(screen.getByText("Vardiya Tanımları")).toBeInTheDocument();
+  });
+  it("makine duruşu rejimi kapalı (dokumasız, ayar kapalı) → duruş ve vardiya girişi YOK", () => {
+    permissions = ["loom:classify", "loom:spec-manage"];
+    regime = { productionEnabled: true, financeEnabled: false, dokumaEnabled: false, machineStopEnabled: false };
+    open();
+    expect(screen.queryByText("Makine Duruşları")).not.toBeInTheDocument();
+    expect(screen.queryByText("Vardiya Tanımları")).not.toBeInTheDocument();
+  });
+  it("dokuma açıkken ad bugünkü: 'Tezgah Duruşları'", () => {
+    permissions = ["loom:classify"];
+    regime = { productionEnabled: true, financeEnabled: false, dokumaEnabled: true, machineStopEnabled: true };
+    open();
+    expect(screen.getByText("Tezgah Duruşları")).toBeInTheDocument();
   });
 
   it("izin yoksa rapor girişi hiç çizilmez", () => {
@@ -149,7 +172,7 @@ describe("CommandPalette", () => {
   });
 
   it("ticarette (muhasebe açık) aynı ayar girişi paletten bulunur", async () => {
-    regime = { productionEnabled: true, financeEnabled: true };
+    regime = { productionEnabled: true, financeEnabled: true, dokumaEnabled: false, machineStopEnabled: false };
     open();
     type("risk limiti");
     expect(await screen.findByText(/risk limiti aşımında/i)).toBeInTheDocument();

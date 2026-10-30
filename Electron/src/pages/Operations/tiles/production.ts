@@ -2,12 +2,12 @@
 import { Factory, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers } from "lucide-react";
 import { isKursunPlanningVisible, isMeterDeviationsVisible, isWorkOrdersVisible } from "../production-regime";
 import { isWeavingOrdersVisible } from "../WeavingOrders/weaving-regime";
-import { isMachineStopsVisible } from "../MachineStops/stop-regime";
+import { isMachineStopsVisible, machineStopsTitle } from "../MachineStops/stop-regime";
 import { isWeavingFloorVisible } from "../WeavingFloor/floor-regime";
 import { isLoomAlarmsVisible } from "../LoomAlarms/alarm-regime";
 import { isWarpBeamsVisible } from "../WarpBeams/warp-beam-regime";
 import { TERIM, TERIM_AD } from "@/lib/terim";
-import { flagOffHint } from "@/lib/flag-setting-path";
+import { flagOffHint, flagSettingTrail } from "@/lib/flag-setting-path";
 import type { OperationsTile } from "../tile-config";
 
 export const productionTiles: OperationsTile[] = [
@@ -54,18 +54,19 @@ export const productionTiles: OperationsTile[] = [
     offHint: flagOffHint("dokumaEnabled"),
   },
   {
-    // TEZGAH DURUŞLARI (2026-09-14, Faz 1b web yüzeyi): backend `machine-stop.routes`
-    // `requireDokumaEnabled` taşır; karo aynı bayrağa bağlı. İki izinden BİRİ açar
-    // (route `requireAnyPermission` ile birebir); eylemler ekran içinde izinle.
+    // TEZGAH / MAKİNE DURUŞLARI (2026-09-14 Faz 1b; D4-A3 rejim): backend `requireMachineStopRegime`
+    // (dokuma ∨ üretim ∧ `uretim.makineDurusTakibi`); karo aynı rejim alanına bağlı. İki izinden BİRİ açar
+    // (route `requireAnyPermission` ile birebir); eylemler ekran içinde izinle. Dokumasız rejimde ad "Makine Duruşları".
     key: "machine-stops",
     title: "Tezgah Duruşları",
+    titleWhen: machineStopsTitle,
     description: "Sebep bekleyen duruşlar, sebep atama ve yeniden sınıflandırma, elle duruş girişi",
     icon: AlertOctagon,
     to: "/operations/machine-stops",
     group: "production",
     permissionAny: ["loom:manual-entry", "loom:classify"],
     visibleWhen: isMachineStopsVisible,
-    offHint: flagOffHint("dokumaEnabled"),
+    offHint: `${flagOffHint("dokumaEnabled")} · ya da ${flagSettingTrail("machineStopTrackingEnabled")}`,
   },
   {
     // TEZGAH SALONU (canlı ekran): backend `/api/loom-floor` `requireTezgahEnabled` +

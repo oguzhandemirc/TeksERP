@@ -348,8 +348,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
 
 const mobile: ScreenEntry[] = [
   { key: "KK1", app: "mobile", modul: "productionEnabled", title: "Ham Giriş", requires: ["mobile:kk1"], capabilities: [{ code: "mobile:kk1-desen", label: "Yeni desen (kumaş) oluşturabilir" }, { code: "mobile:kk1-yari-mamul", label: "Dışarıdan yarı mamul kabul edebilir" }, { code: "mobile:kumas", label: "Kumaş tanımı ekleyebilir" }] },
-  { key: "KursunQc", app: "mobile", modul: "productionEnabled", title: "Kurşun", requires: ["mobile:kk2-kursun"], capabilities: [] },
-  { key: "Tambur", app: "mobile", modul: "productionEnabled", title: "Tambur", requires: ["mobile:tambur"], capabilities: [{ code: "mobile:tambur-duzelt", label: "Saha düzeltmesi: topu Tambur'a alma / manuel top" }, { code: "label:edit", label: "Etiketteki müşteri adını sipariş kalemi için düzeltebilir" }, { code: "customer-alias:write", label: "Müşterideki adı KALICI değiştirebilir" }, { code: "roll:manual-adjust", label: "Top metraj/kalite düzeltmesi" }] },
+  { key: "KursunQc", app: "mobile", modul: "productionEnabled", title: "Kurşun", requires: ["mobile:kk2-kursun"], capabilities: [{ code: "mobile:makine-durus", label: "Makine duruşu aç / kapat / sebep gir (Duruş çipi; uretim.makineDurusTakibi açıkken)" }] },
+  { key: "Tambur", app: "mobile", modul: "productionEnabled", title: "Tambur", requires: ["mobile:tambur"], capabilities: [{ code: "mobile:makine-durus", label: "Makine duruşu aç / kapat / sebep gir (Duruş çipi; uretim.makineDurusTakibi açıkken)" }, { code: "mobile:tambur-duzelt", label: "Saha düzeltmesi: topu Tambur'a alma / manuel top" }, { code: "label:edit", label: "Etiketteki müşteri adını sipariş kalemi için düzeltebilir" }, { code: "customer-alias:write", label: "Müşterideki adı KALICI değiştirebilir" }, { code: "roll:manual-adjust", label: "Top metraj/kalite düzeltmesi" }] },
   { key: "Depo", app: "mobile", modul: "cekirdek:stok-giris", title: "Depo", requires: ["mobile:depo"], capabilities: [] },
   { key: "TartiPaket", app: "mobile", modul: "cekirdek:sevkiyat-depo", title: TERIM_AD.tartiPaket, requires: ["mobile:tarti-paket"], capabilities: [{ code: "mobile:sevkiyat", label: "Sevk çıkışı adımlarını da görebilir" }] },
   { key: "Sevkiyat", app: "mobile", modul: "cekirdek:sevkiyat-depo", title: "Sevk Çıkışı", requires: ["mobile:sevkiyat"], capabilities: [] },
@@ -452,9 +452,6 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // çağırır; `loom:*` web kodları panelsiz kalır — panel doff yüzeyi yok, kod API/entegrasyon için.
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
-  // D4-A1 (2026-10-29): uç backend'de doğdu; tablet "Duruş" çipi (Kurşun + Tambur ekranı) D4-A2 dilimiyle
-  // gelir — o gün bu satır ölü muaf olur ve çip ekranının yeteneğine taşınır.
-  { code: "mobile:makine-durus", reason: "Tablet duruş çipi D4-A2 dilimiyle doğar; uç (`/api/machine-stops`) bugünden hazır." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
 ];
 

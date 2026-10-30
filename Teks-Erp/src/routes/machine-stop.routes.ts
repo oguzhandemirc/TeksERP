@@ -6,7 +6,7 @@
 // elle girişi) ve `loom:classify` (sınıfla · yeniden sınıfla — sebep KARARI).
 // Tablet dilimi (2026-09-14): aç/kapa/sebep `requireAnyPermission(<web>, ...MOBILE_DOKUMA)`, geri alma
 // `mobile:dokuma-geri-al`; YENİDEN sınıflandırma web-only. `source` izinden türetilir (`stopSourceFor`).
-// Panel/tablet YÜZEYİ ayrı dilimdir; izinler SCREENLESS gerekçeli.
+// Tablet yüzeyi: Dokuma paneli + Kurşun/Tambur duruş çipi (D4-A2, `mobile:makine-durus` ekran yeteneği).
 // =============================================================================
 import { Router, type Request } from "express";
 import { StationKind } from "@prisma/client";

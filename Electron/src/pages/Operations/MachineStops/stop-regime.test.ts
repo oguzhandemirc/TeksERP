@@ -1,20 +1,39 @@
 // =============================================================================
-// TEZGAH DURUŞLARI GÖRÜNÜRLÜĞÜ — BEKÇİ (`weaving-regime.test.ts` kalıbı)
+// MAKİNE / TEZGAH DURUŞLARI GÖRÜNÜRLÜĞÜ — BEKÇİ (`weaving-regime.test.ts` kalıbı)
+// NEGATİF SONDA (2026-10-30, D4-A3): `isMachineStopsVisible` yalnız `dokumaEnabled`e döndü → burada 2, tile-visibility 1,
+// CommandPalette 1 test kırmızı; Teks-Erp `test_screen_catalog §9f` + `test_dokuma_regime_gate §7d` kırmızı. Geri alındı.
 // =============================================================================
 import { describe, expect, it } from "vitest";
-import { isMachineStopsVisible } from "./stop-regime";
+import { isMachineStopsVisible, machineStopsTitle, resolveMachineStopEnabled } from "./stop-regime";
+import { isShiftDefinitionsVisible } from "@/pages/ShiftDefinitions/shift-regime";
 import { LOSS_CLASS_META, formatDuration, localInputToIso } from "./types";
 
+// D4-A3: rejim = dokuma ∨ (üretim ∧ uretim.makineDurusTakibi) — backend `machineStopRegime` ile aynı anlam.
 describe("rejim", () => {
-  it("⭐ fabrikada (dokuma modülü kapalı) GÖRÜNMEZ", () => {
-    expect(isMachineStopsVisible({ dokumaEnabled: false })).toBe(false);
+  const regime = (dokumaEnabled: boolean, productionEnabled: boolean, machineStopTrackingEnabled: boolean) =>
+    resolveMachineStopEnabled({ dokumaEnabled, productionEnabled, machineStopTrackingEnabled });
+  it("⭐ fabrikada (dokuma kapalı, ayar kapalı) GÖRÜNMEZ", () => {
+    expect(isMachineStopsVisible({ machineStopEnabled: regime(false, true, false) })).toBe(false);
   });
-  it("dokuma modülü açıkken görünür", () => {
-    expect(isMachineStopsVisible({ dokumaEnabled: true })).toBe(true);
+  it("dokuma modülü açıkken ayardan bağımsız görünür (bugünkü)", () => {
+    expect(regime(true, true, false)).toBe(true);
+    expect(regime(true, true, true)).toBe(true);
   });
-  it("⭐ yüklem ÜRETİME BAKMAZ — zincir bağlamı kuran hook'ta", () => {
-    const effectiveOnly = { dokumaEnabled: true, productionEnabled: false };
-    expect(isMachineStopsVisible(effectiveOnly)).toBe(true);
+  it("⭐ dokumasız + üretim + ayar açık → görünür", () => {
+    expect(regime(false, true, true)).toBe(true);
+  });
+  it("⭐ üretim kapalıyken ayar açık olsa da görünmez (ön koşul)", () => {
+    expect(regime(false, false, true)).toBe(false);
+  });
+  it("yüklem yalnız bağlamın rejim alanını okur; Vardiya Tanımları aynı alan", () => {
+    for (const machineStopEnabled of [true, false]) {
+      expect(isMachineStopsVisible({ machineStopEnabled })).toBe(machineStopEnabled);
+      expect(isShiftDefinitionsVisible({ machineStopEnabled })).toBe(machineStopEnabled);
+    }
+  });
+  it("⭐ başlık: dokuma açıkken bugünkü 'Tezgah Duruşları', dokumasız 'Makine Duruşları'", () => {
+    expect(machineStopsTitle({ dokumaEnabled: true })).toBe("Tezgah Duruşları");
+    expect(machineStopsTitle({ dokumaEnabled: false })).toBe("Makine Duruşları");
   });
 });
 

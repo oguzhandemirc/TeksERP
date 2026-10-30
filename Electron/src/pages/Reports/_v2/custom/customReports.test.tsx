@@ -22,7 +22,7 @@ const getMock = vi.fn((url: string, cfg?: { params?: { kapsam?: string } }) =>
 );
 vi.mock("@/services/apiClient", () => ({ default: { get: (u: string, c?: never) => getMock(u, c), post: vi.fn(), put: vi.fn(), patch: vi.fn() } }));
 const ctx = (): OperationsVisibilityContext => ({
-  shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: true, dokumaEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: false, maliyetEnabled: false, gelenBelgeEnabled: false, emanetEnabled: false,
+  shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: true, dokumaEnabled: true, machineStopEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: false, maliyetEnabled: false, gelenBelgeEnabled: false, emanetEnabled: false,
   financeEnabled: true, productionEnabled: true, ticaretEnabled: true, iplikEnabled: true,
   reportsClosedKeys: [], isReportOpen: () => true, flagsReady: true, flagsFailed: false,
   ...(v2 === undefined ? {} : { reportsV2Enabled: v2 }),

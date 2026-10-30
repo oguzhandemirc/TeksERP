@@ -1,16 +1,17 @@
 // =============================================================================
 // VARDİYA TANIMLARI — GÖRÜNÜRLÜK REJİMİ (saf katman; `stop-regime.ts` kalıbı)
 // =============================================================================
-// Ekran DOKUMA modülüne aittir (referans fabrikada KAPALI → karo çizilmez). Yetki duvarı
-// DEĞİL: kapı `loom:spec-manage` izni, asıl sed backend `requireDokumaEnabled`.
+// D4-A3: vardiya takvimi ve tanım uçları duruş rejimiyle açılır (dokuma ∨ üretim ∧ makine duruşu
+// takibi) — karo aynı alanı okur, ikinci yüklem yok. Yetki duvarı DEĞİL: kapı `loom:spec-manage`
+// izni, asıl sed backend `requireMachineStopRegime` (`shift-definition.routes`).
 // =============================================================================
 
 export interface ShiftDefinitionsVisibilityContext {
-  /** Dokuma modülü — ETKİN değer (`production && dokuma`). */
-  dokumaEnabled: boolean;
+  /** Duruş rejimi — ETKİN değer (`resolveMachineStopEnabled`). */
+  machineStopEnabled: boolean;
 }
 
 /** Vardiya Tanımları karosu / palet girişi çizilsin mi? */
 export function isShiftDefinitionsVisible(ctx: ShiftDefinitionsVisibilityContext): boolean {
-  return ctx.dokumaEnabled;
+  return ctx.machineStopEnabled;
 }

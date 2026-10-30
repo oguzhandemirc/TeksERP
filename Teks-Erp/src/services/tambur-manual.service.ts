@@ -65,6 +65,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { assertTamburMeasuresAllowed, type MeterSourceInput } from "./helpers/meter-reading.helper";
 import { normalizeScanCode } from "../utils/code-format";
 import {
   Prisma,
@@ -922,6 +923,8 @@ export class TamburManualService {
        * Verilmezse NULL kalır; miras ALINMAZ, operatörün o an seçtiği değerdir.
        */
       foldType?: string | null;
+      /** D4-B1: metrajın ölçüm kaynağı (yalnız kapı; manuel topta sapma satırı doğmaz). */
+      measure?: MeterSourceInput | null;
     },
     ctx: TamburFieldContext = {},
   ): Promise<ApiResponse<unknown>> {
@@ -929,6 +932,7 @@ export class TamburManualService {
     // Bağlanmamışsa (kendini onarma) ya da yoksa bugünkü akış: kapılar → createInitialEntry (boğaz R) → bağlama (idempotent).
     const early = await this.manualRollAttachedReplay(input).replayIfAny(input.clientToken);
     if (early) return early;
+    await assertTamburMeasuresAllowed([input.measure]);
     const reason = input.reason?.trim() ?? "";
     if (reason.length < 3) {
       throw AppError.badRequest("İşlem nedeni zorunlu (en az 3 karakter)", {
@@ -1459,9 +1463,12 @@ export class TamburManualService {
        * Verilmezse NULL kalır; miras ALINMAZ, operatörün o an seçtiği değerdir.
        */
       foldType?: string | null;
+      /** D4-B1: metrajın ölçüm kaynağı (yalnız kapı; manuel topta sapma satırı doğmaz). */
+      measure?: MeterSourceInput | null;
     },
     ctx: TamburFieldContext = {},
   ): Promise<ApiResponse<unknown>> {
+    await assertTamburMeasuresAllowed([input.measure]);
     const reason = input.reason?.trim() ?? "";
     if (reason.length < 3) {
       throw AppError.badRequest("İşlem nedeni zorunlu (en az 3 karakter)", {

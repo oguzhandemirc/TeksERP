@@ -6,7 +6,7 @@ import { isLoomAlarmDutyVisible } from "@/pages/LoomAlarmDuty/duty-regime";
 import { isMachineCollectorsVisible } from "@/pages/MachineCollectors/collector-model";
 import { isMachineStopCodeMapsVisible } from "@/pages/MachineStopCodeMaps/code-map-model";
 import { TERIM, TERIM_AD } from "@/lib/terim";
-import { flagOffHint } from "@/lib/flag-setting-path";
+import { flagOffHint, flagSettingTrail } from "@/lib/flag-setting-path";
 import type { DefinitionTile } from "../tile-config";
 
 export const productionTiles: DefinitionTile[] = [
@@ -49,7 +49,7 @@ export const productionTiles: DefinitionTile[] = [
     group: "production",
     permission: "loom:spec-manage",
     visibleWhen: isShiftDefinitionsVisible,
-    offHint: flagOffHint("dokumaEnabled"),
+    offHint: `${flagOffHint("dokumaEnabled")} · ya da ${flagSettingTrail("machineStopTrackingEnabled")}`,
   },
   {
     key: "loom-alarm-duty",

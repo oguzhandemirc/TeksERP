@@ -150,6 +150,9 @@ export const TERIM_AD = {
   kursunDagitim: "Kurşun Dağıtım",
   tezgahAlarmlari: "Tezgah Alarmları",
   tezgahEkrani: "Tezgah Ekranı",
+  // Duruş ekranı dokuma rejiminde "Tezgah", dokumasız makine duruşu rejiminde (D4-A3) "Makine" adını taşır.
+  tezgahDuruslari: "Tezgah Duruşları",
+  makineDuruslari: "Makine Duruşları",
   etkinlikGunlugu: "Etkinlik Günlüğü",
   etkinlikArsivi: "Etkinlik Arşivi",
   makineVeriToplayicilari: "Makine Veri Toplayıcıları",

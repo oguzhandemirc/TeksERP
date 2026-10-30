@@ -18,5 +18,11 @@
     "tarih": "2026-10-13",
     "tasindigiMigration": "20261013200000_audit_purge_set_config",
     "gerekce": "audit_arsivle ve audit_arsiv_buda tanımında `SET \"teks.audit_purge\" = 'on'` vardı; PG15+'da süper olmayan rol özel parametreyi fonksiyon tanımında yazamaz (42501). Windows'ta migrate deploy'u koşan sahip `tekserp` süper değil: 2.15.7 her Windows kurulumunda FAILED migration ile dururdu; bakım rolüyle panel kopyası da aynı hatayla kırılırdı (CI süper kullanıcıyla koştuğu için görmedi). Dosyayı ESKİ hâline almak çare değil: eski hâli süper olmayan sahipte koşamıyor. Purge kapısı gövdeye `set_config(..., true)` olarak taşındı, sonda önceki değer geri yazılır (davranış birebir). Eski hâli uygulanmış DB'ler (CI, yerel test DB'leri) için sonraki migration iki fonksiyonu aynı gövdeyle CREATE OR REPLACE eder. 2.15.7 yayınlanmamıştı; sahada uygulanmış kopya yok. Bekçi: test_migration_super_olmayan."
+  },
+  {
+    "migration": "20261030020000_tambur_olcum_kaynagi",
+    "sha256": "8b43a65b7691935813c280493e637edaf6d53b7ffeb34f24e098b96e6ed9efba",
+    "tarih": "2026-10-30",
+    "gerekce": "Dosya ALTER TYPE \"MeterPhase\" ADD VALUE 'CUT' satırını IF NOT EXISTS'siz ve kolon/CHECK ifadeleriyle aynı dosyada taşıyordu; test_migration_enum_add_value §2/§3 kırmızı verdi (CI, PR #289). ADD VALUE satırı ÖNCE gelen yeni 20261030010000_meter_phase_cut dosyasına IF NOT EXISTS ile taşındı (yalnız ADD VALUE); bu dosyadan yalnız o satır ve yorumu çıktı, kolon/CHECK ifadeleri birebir aynı. Dosya aynı dalda doğdu, main'e inmedi, hiçbir canlı kuruluma uygulanmadı; eski hâli uygulanmış test DB'lerinde yeni dosya no-op'tur (değer zaten var)."
   }
 ]
