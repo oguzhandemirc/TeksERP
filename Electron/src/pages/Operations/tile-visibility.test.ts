@@ -236,6 +236,8 @@ describe("karo bağlantıları", () => {
       "returns",
       "rolls",
       "sack-content-edit",
+      // 2026-10-30 D4-J3: Sevke Hazır İşler — çekirdek sevkiyat, anahtarı YOK; izin `shipping:read`.
+      "sevke-hazir-isler",
       "shipments",
     ]);
   });

@@ -1,7 +1,7 @@
 // Operasyon › Sevkiyat & İade karoları (sıra = hub sırası).
-import { ClipboardList, ScanBarcode, Truck, Undo2, FileCheck2 } from "lucide-react";
+import { ClipboardList, PackageCheck, ScanBarcode, Truck, Undo2, FileCheck2 } from "lucide-react";
 import type { OperationsTile } from "../tile-config";
-import { TERIM_AD } from "@/lib/terim";
+import { TERIM, TERIM_AD } from "@/lib/terim";
 
 export const shippingTiles: OperationsTile[] = [
   {
@@ -10,6 +10,16 @@ export const shippingTiles: OperationsTile[] = [
     description: "Müşteri sevkiyatları + sevk irsaliyesi",
     icon: Truck,
     to: "/operations/shipments",
+    group: "shipping",
+    permission: "shipping:read",
+  },
+  {
+    // Sevke Hazır İşler (D4-J3, ister 2.4 / 2.10): hazırlık sunucuda türetilir; modül anahtarı yok (çekirdek sevkiyat).
+    key: "sevke-hazir-isler",
+    title: "Sevke Hazır İşler",
+    description: `${TERIM.terbiyeIsEmri.tekil} / gelen belge / parti / müşteri başına hazır toplar — oradan sevke al`,
+    icon: PackageCheck,
+    to: "/operations/sevke-hazir-isler",
     group: "shipping",
     permission: "shipping:read",
   },
