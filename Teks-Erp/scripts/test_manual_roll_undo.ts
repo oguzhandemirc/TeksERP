@@ -86,12 +86,13 @@ async function main(): Promise<void> {
   });
 
   const REASON = "Sayım farkı — fiziksel mal var";
-  const addManual = async (qty: number, token = randomUUID()) => {
+  const addManual = async (qty: number, token = randomUUID(), measure?: { source: "MACHINE" | "OPERATOR" }) => {
     const res = await manual.createManualRoll({
       targetStepId: stepId,
       initialQty: qty,
       reason: REASON,
       clientToken: token,
+      ...(measure ? { measure } : {}),
     });
     const d = res.data as { rollId: string; barcode: string | null };
     created.push(d.rollId);
@@ -258,7 +259,23 @@ async function main(): Promise<void> {
       /yeniden aç/i.test(eReplay.message ?? ""),
       String(eReplay.message),
     );
+
+    // ── [5] D4-B1b: ölçümlü elle top → CUT okuması; geri alma (iptal) okumayı DAMGALAR ──
+    console.log("\n[5] D4-B1b: elle top CUT okuması + geri almada damga (ters yol)");
+    const r5 = await addManual(77, randomUUID(), { source: "OPERATOR" });
+    const cut5 = await prisma.rollMeterReading.findMany({ where: { rollId: r5.rollId }, select: { phase: true, workOrderStepId: true, source: true, meters: true, revokedAt: true } });
+    check("ölçümlü elle top → 1 CUT okuması (Tambur adımı, OPERATOR, 77 m)",
+      cut5.length === 1 && cut5[0]!.phase === "CUT" && cut5[0]!.workOrderStepId === stepId && cut5[0]!.source === "OPERATOR" && Number(cut5[0]!.meters) === 77 && cut5[0]!.revokedAt === null,
+      JSON.stringify(cut5));
+    const replay5 = await addManual(77, r5.token, { source: "OPERATOR" }).catch(() => null);
+    check("aynı token replay → okuma sayısı 1 kalır", (await prisma.rollMeterReading.count({ where: { rollId: r5.rollId } })) === 1, String(replay5?.rollId === r5.rollId));
+    const r6 = await addManual(55);
+    check("measure'sız elle top (eski APK) → okuma 0", (await prisma.rollMeterReading.count({ where: { rollId: r6.rollId } })) === 0);
+    await undo.applyUndo(r5.rollId);
+    const after5 = await prisma.rollMeterReading.findMany({ where: { rollId: r5.rollId }, select: { revokedAt: true, revokeReason: true } });
+    check("geri alma → CUT okuması damgalı (silinmez, sebep ROLL_CANCEL)", after5.length === 1 && after5[0]!.revokedAt !== null && after5[0]!.revokeReason === "ROLL_CANCEL", JSON.stringify(after5));
   } finally {
+    await prisma.rollMeterReading.deleteMany({ where: { rollId: { in: created } } });
     await prisma.rollOperation.deleteMany({ where: { rollId: { in: created } } });
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: created } } });
     // Çocuk önce (parentRollId FK).
