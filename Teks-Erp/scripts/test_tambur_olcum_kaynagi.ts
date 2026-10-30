@@ -212,12 +212,26 @@ function section2() {
 async function section3(fx: { itemId: string; stationId: string }) {
   console.log("\n§3 DB CHECK (faz ↔ politika)");
   const { rollId, stepId } = await tamburRoll(fx, 10);
-  const ins = (phase: string, basis: string | null) =>
+  const insRaw = (phase: string, basis: string | null, approvalMode: string | null) =>
     prisma.$executeRawUnsafe(
       `INSERT INTO roll_meter_readings (id, "rollId", "workOrderStepId", phase, meters, source, basis, "approvalMode", "clientToken")
        VALUES (gen_random_uuid(), $1::uuid, $2::uuid, $3::"MeterPhase", 10, 'MACHINE', $4::"MeterVarianceBasis", $5::"MeterApprovalMode", gen_random_uuid())`,
-      rollId, stepId, phase, basis, basis === null ? null : "NONE",
+      rollId, stepId, phase, basis, approvalMode,
     );
+  const ins = (phase: string, basis: string | null) => insRaw(phase, basis, basis === null ? null : "NONE");
+  // Çapraz durumlar: CHECK iki kolonu da ayrı ayrı korumalı (yalnız basis'e indirgenirse kırmızı).
+  for (const [label, basis, mode] of [
+    ["basis dolu + approvalMode NULL", "DECLARED_IN", null],
+    ["basis NULL + approvalMode dolu", null, "NONE"],
+  ] as const) {
+    let crossRejected = false;
+    try {
+      await insRaw("IN", basis, mode);
+    } catch (e) {
+      crossRejected = String(e).includes("roll_meter_readings_policy_by_phase");
+    }
+    check(`§3 IN satırı ${label} insert REDDEDİLİR`, crossRejected);
+  }
   let rejected = false;
   try {
     await ins("IN", null);

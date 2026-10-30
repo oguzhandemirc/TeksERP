@@ -1503,7 +1503,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Gerçek sayaç bağlı değilken deneme için uydurulmuş kesim metresi kaydedilebilir; SİMÜLASYON olarak işaretlenir.",
         defaultOn: true,
         audience: ["Operatör", "Yönetim"],
-        desc: "Açıkken (varsayılan, bugünkü davranış) tabletin simüle sayaçtan verdiği kesim metresi kabul edilir ve sapma kaydında SİMÜLASYON olarak işaretlenir. Kapalıyken simüle ölçümle gelen kesim reddedilir; metre gerçek sayaçtan okunur ya da elle girilir.",
+        desc: "Açıkken (varsayılan, bugünkü davranış) tabletin simüle sayaçtan verdiği kesim metresi kabul edilir ve sapma kaydında SİMÜLASYON olarak işaretlenir. Kapalıyken ölçüm kaynağını SİMÜLASYON olarak bildiren kesim reddedilir; metre gerçek sayaçtan okunur ya da elle girilir. Not: ölçüm kaynağını bildirmeyen eski tablet sürümlerinin simüle metresi bu ayarla durmaz; tüm tabletler yeni sürüme geçince tam etkili olur.",
       },
       {
         key: "tamburMeasureSourceRequired",
