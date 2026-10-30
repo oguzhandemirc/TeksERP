@@ -19,7 +19,7 @@ vi.mock("@/hooks/useRoleAccess", () => ({
   useRoleAccess: () => ({ isAdmin: false, hasPermission: () => true, hasAnyPermission: () => true }),
 }));
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
-  useOperationsVisibilityContext: () => ({ dokumaEnabled: true }),
+  useOperationsVisibilityContext: () => ({ dokumaEnabled: true, machineStopEnabled: true }),
 }));
 vi.mock("@/services/featureFlagService", async (orig) => {
   const actual = await orig<typeof import("@/services/featureFlagService")>();

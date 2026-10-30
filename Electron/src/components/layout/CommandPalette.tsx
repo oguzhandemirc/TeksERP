@@ -105,6 +105,9 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
     fn();
   };
 
+  /** Görünen ad bağlamdan (karo `titleWhen` aynası); arama değeri de aynı adı taşır. */
+  const labelOf = (entry: CommandEntry) => entry.labelWhen?.(visibilityCtx) ?? entry.label;
+
   /** Kullanıcı bu girişi AÇABİLİR mi (izin + duruma bağlı görünürlük). */
   const isAllowed = (entry: CommandEntry) => {
     // Durum süzgeci İZİNDEN ÖNCE: yüklem "bu ekranın şu an yapacağı iş var mı"
@@ -288,7 +291,7 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
         0,
         ...section.entries.map((e) =>
           scoreCommandValue(
-            [e.label, e.description, e.keywords, section.heading].filter(Boolean).join(" "),
+            [labelOf(e), e.description, e.keywords, section.heading].filter(Boolean).join(" "),
             search,
           ),
         ),
@@ -325,11 +328,11 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
             {favEntries.map((entry) => (
               <CommandItem
                 key={`fav:${entry.to}`}
-                value={`Favori ${entry.label}`}
+                value={`Favori ${labelOf(entry)}`}
                 onSelect={() => go(entry.to)}
               >
                 <Star className="mr-2 h-4 w-4 shrink-0 fill-primary text-primary" />
-                <span className="truncate">{entry.label}</span>
+                <span className="truncate">{labelOf(entry)}</span>
               </CommandItem>
             ))}
           </CommandGroup>
@@ -362,13 +365,13 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
             <CommandGroup key={section.heading} heading={section.heading}>
               {entries.map((entry) => {
                 const Icon = entry.icon;
-                const value = [entry.label, entry.description, entry.keywords, section.heading]
+                const value = [labelOf(entry), entry.description, entry.keywords, section.heading]
                   .filter(Boolean)
                   .join(" ");
                 return (
                   <CommandItem key={entry.key} value={value} onSelect={() => go(entry.to)}>
                     <Icon className="mr-2 h-4 w-4 shrink-0" />
-                    <span className="truncate">{entry.label}</span>
+                    <span className="truncate">{labelOf(entry)}</span>
                     {entry.description && (
                       <span className="ml-2 truncate text-xs text-muted-foreground">
                         {entry.description}

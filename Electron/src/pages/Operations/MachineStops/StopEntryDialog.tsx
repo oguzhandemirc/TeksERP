@@ -24,9 +24,11 @@ interface Props {
   onConfirm: (body: OpenStopPayload) => Promise<unknown>;
   /** Sunucunun aralık dışı damga hatası (alan altında, toast değil). */
   stampError?: string | null;
+  /** "Tezgah" (dokuma) | "Makine" (dokumasız rejim). */
+  noun?: string;
 }
 
-export function StopEntryDialog({ presets, isPending, onClose, onConfirm, stampError }: Props) {
+export function StopEntryDialog({ presets, isPending, onClose, onConfirm, stampError, noun = "Tezgah" }: Props) {
   const attempt = useAttemptToken();
   const [machineId, setMachineId] = useState("");
   const [startedAt, setStartedAt] = useState(nowLocalInput());
@@ -46,10 +48,10 @@ export function StopEntryDialog({ presets, isPending, onClose, onConfirm, stampE
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1">
-            <Label>Tezgah</Label>
+            <Label>{noun}</Label>
             <Select value={machineId} onValueChange={setMachineId}>
               <SelectTrigger>
-                <SelectValue placeholder={machines.isLoading ? "Yükleniyor..." : "Tezgah seç..."} />
+                <SelectValue placeholder={machines.isLoading ? "Yükleniyor..." : `${noun} seç...`} />
               </SelectTrigger>
               <SelectContent>
                 {(machines.data?.data ?? []).map((m) => (
