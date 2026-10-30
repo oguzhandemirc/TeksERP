@@ -6,6 +6,8 @@
 //   §3 eski backend 404 → çip ve bant yok, ekran çalışır (yeniden deneme yok)
 //   §4 eski backend alanı göndermez (`machineStopTrackingEnabled` yok) → çip yok, uca İSTEK ATILMAZ
 //   §5 izin (`mobile:makine-durus`) yoksa → çip yok, uca istek atılmaz
+//   §6 D4-A2b `uretim.makineDurusAcikUyarisi`: kapalı (varsayılan) / alan yok → açık duruşta da giriş uyarısı YOK;
+//      açık → giriş uyarısı VAR; çalışırken ayar açık olsa da yok. Çip/bant ayardan bağımsız.
 // =============================================================================
 import React from 'react';
 import { Text } from 'react-native';
@@ -36,6 +38,7 @@ function Screen() {
   const control = useMachineStopControl();
   return (
     <>
+      <Text testID="entry-warning">{control.entryWarning ? 'UYARI' : 'YOK'}</Text>
       <MachineStopChip control={control} />
       <MachineStopBand control={control} />
       <Text>Kurşun ekranı</Text>
@@ -43,11 +46,12 @@ function Screen() {
   );
 }
 
-function setup(p: { perms?: string[]; tracking?: boolean | undefined; stops?: unknown }) {
+function setup(p: { perms?: string[]; tracking?: boolean | undefined; warn?: boolean; stops?: unknown }) {
   useAuthStore.setState({ token: 't', user: { id: 'u', username: 'op', permissions: p.perms ?? ['mobile:kk2-kursun', 'mobile:makine-durus'] } as never });
   useSessionStore.setState({ active: { machine: { id: 'm1', name: 'K-1' } } as never });
   const flags: Record<string, unknown> = { productionEnabled: true };
   if (p.tracking !== undefined) flags.machineStopTrackingEnabled = p.tracking;
+  if (p.warn !== undefined) flags.machineStopOpenWarningEnabled = p.warn;
   mockFlags.mockResolvedValue(flags);
   if (p.stops instanceof Error) mockListOpen.mockRejectedValue(p.stops);
   else mockListOpen.mockResolvedValue(p.stops ?? []);
@@ -110,5 +114,32 @@ describe('Makine duruş çipi (D4-A2)', () => {
     await settle();
     expect(r.queryByTestId('machine-stop-chip')).toBeNull();
     expect(mockListOpen).not.toHaveBeenCalled();
+  });
+});
+
+describe('Açık duruş giriş uyarısı ayarı (D4-A2b)', () => {
+  it('§6a ⭐ ayar KAPALI (varsayılan): açık duruşta giriş uyarısı YOK, çip/bant yine görünür', async () => {
+    const r = setup({ tracking: true, warn: false, stops: [OPEN_STOP] });
+    await settle(() => expect(r.getByTestId('machine-stop-band')).toBeTruthy());
+    expect(r.getByTestId('machine-stop-chip')).toBeTruthy();
+    expect(r.getByTestId('entry-warning').props.children).toBe('YOK');
+  });
+
+  it('§6b alan yok (eski backend): açık duruşta giriş uyarısı YOK', async () => {
+    const r = setup({ tracking: true, stops: [OPEN_STOP] });
+    await settle(() => expect(r.getByTestId('machine-stop-band')).toBeTruthy());
+    expect(r.getByTestId('entry-warning').props.children).toBe('YOK');
+  });
+
+  it('§6c ⭐ ayar AÇIK + açık duruş → giriş uyarısı VAR', async () => {
+    const r = setup({ tracking: true, warn: true, stops: [OPEN_STOP] });
+    await settle(() => expect(r.getByTestId('machine-stop-band')).toBeTruthy());
+    await waitFor(() => expect(r.getByTestId('entry-warning').props.children).toBe('UYARI'));
+  });
+
+  it('§6d ayar AÇIK ama makine çalışıyor → uyarı yok', async () => {
+    const r = setup({ tracking: true, warn: true, stops: [] });
+    await settle(() => expect(mockListOpen).toHaveBeenCalled());
+    expect(r.getByTestId('entry-warning').props.children).toBe('YOK');
   });
 });

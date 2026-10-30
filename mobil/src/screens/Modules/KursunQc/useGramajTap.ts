@@ -37,7 +37,7 @@ export interface GramajTapInput {
   refresh: () => void;
   /** H3 sayaç akışı; yoksa ya da `outOn=false` ise gövde bugünküyle bayt-aynı. */
   meter?: Pick<MeterCaptureState, 'outOn' | 'captureOut'> | null;
-  /** Makinede açık duruş var mı (D4-A2). Dokunuş UYARIR, gönderim sürer — K2: sunucu kapısı yok. */
+  /** Dokunuşta açık duruş uyarısı verilsin mi (D4-A2b: açık duruş ∧ ayar). UYARIR, gönderim sürer — K2. */
   stopOpen?: boolean;
 }
 

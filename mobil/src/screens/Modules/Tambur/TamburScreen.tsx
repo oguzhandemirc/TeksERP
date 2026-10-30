@@ -36,6 +36,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import { MachineStopBand, MachineStopChip, useMachineStopControl } from '../../../components/machine-stop/MachineStopChip';
+import { showStopOpenEntryWarning } from '../../../components/machine-stop/entryWarning';
 import CutActionBar from './CutActionBar';
 import WorkOrderOutputPanel from './WorkOrderOutputPanel';
 import { LabelNamePreview } from './LabelNamePreview';
@@ -1991,6 +1992,8 @@ export default function TamburScreen() {
       | 'WAREHOUSE'
       | 'SCRAP'
       | 'A1_STOCK';
+    // D4-A2b (K2): açık duruşta metre girişi UYARIR (ayar açıksa), kesim yine gider.
+    showStopOpenEntryWarning(machineStop.entryWarning);
     const runCut = () =>
       cutOpenFabricMutation.mutate({
         rollId: selectedRoll.rollId,
@@ -2278,6 +2281,7 @@ export default function TamburScreen() {
     // Ham (renksiz STOCK) top → operatörün seçtiği parça hedefini gönder.
     const isRawStock =
       recutRollMeta.status === 'STOCK' && recutRollMeta.colorId == null;
+    showStopOpenEntryWarning(machineStop.entryWarning);
     const runCut = () =>
       cutWarehouseRollMutation.mutate({
         rollId: recutResolvedRollId,

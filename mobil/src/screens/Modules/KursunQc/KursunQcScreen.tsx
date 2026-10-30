@@ -1011,7 +1011,7 @@ export default function KursunQcScreen() {
   // KQ-D5: yalnız kurşunda tek dokunuş (gramaj = top bitti). Konak mutasyonu
   // iyimser sıradaki topa geçer; düzeltme/kilit/şerit hook'ta.
   const operatorLabel = useAuthStore((st) => st.user?.fullName || st.user?.username || '—');
-  // D4-A2: makine duruş çipi + bandı; açık duruşta gramaj dokunuşu uyarır, gönderim sürer (K2).
+  // D4-A2: makine duruş çipi + bandı. D4-A2b: açık duruşta gramaj dokunuşu uyarısı ayara bağlı, gönderim sürer (K2).
   const machineStop = useMachineStopControl();
   const gramajTap = useGramajTap({
     cfg: panels.tap,
@@ -1021,7 +1021,7 @@ export default function KursunQcScreen() {
     complete: (vars, opts) => completeQc2Mutation.mutate(vars, opts),
     refresh: () => void refetchActiveJob().catch(() => undefined),
     meter,
-    stopOpen: machineStop.stopOpen,
+    stopOpen: machineStop.entryWarning,
   });
   const tapLayout = panels.completion === 'TAP_VALUE';
 
