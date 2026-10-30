@@ -40,7 +40,8 @@ function check(label: string, ok: boolean, detail = ""): void {
 /** Boolean bayrakta `true` dışı değer yalnız burada beyanlıdır (gerekçe tabloda yazılı). */
 // shortCredentialTotpRequired: adı sır desenine (totp) düşer, profil doğrulayıcısı reddeder.
 // deviceUnpairedPasswordLogin: adı sır desenine (password) düşer; davranışı test_onaysiz_parola_girisi ölçer.
-const BOOLEAN_ISTISNALARI: ReadonlySet<string> = new Set(["demoModeEnabled", "shortCredentialTotpRequired", "deviceUnpairedPasswordLogin"]);
+// tamburMeasureSourceRequired: çıkışsız kapı — measure göndermeyen istemci/bekçi 400 alır; kural test_tambur_olcum_kaynagi §7 (2026-10-30).
+const BOOLEAN_ISTISNALARI: ReadonlySet<string> = new Set(["demoModeEnabled", "shortCredentialTotpRequired", "deviceUnpairedPasswordLogin", "tamburMeasureSourceRequired"]);
 
 async function main(): Promise<void> {
   process.env.JWT_SECRET ??= "profil-tamligi-test-sirri-0123456789abcdef";

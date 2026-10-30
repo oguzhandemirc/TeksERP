@@ -744,6 +744,10 @@ export const SETTING_KEYS = {
    *  kılarak tam da düzeltilmek istenen türden yeni bir çıkmaz üretebilir.
    *  Emsal: `shipping.undoDispatchSameDayOnly`. TEK PARÇA iptali etkilenmez. */
   TAMBUR_UNDO_FULL_SAME_DAY_ONLY: "tambur.undoFullSameDayOnly",
+  /** D4-B1: Tambur kesiminde SIMULATED metre kabul edilsin mi — satır yok = AÇIK (bugünkü davranış; artık SIMULATED damgalı). */
+  TAMBUR_SIMULATED_METER_ENABLED: "tambur.simulatedMeterEnabled",
+  /** D4-B1: Tambur kesim gövdesinde ölçüm kaynağı (`measure`) zorunlu mu — satır yok = KAPALI (eski APK göndermez). */
+  TAMBUR_MEASURE_SOURCE_REQUIRED: "tambur.olcumKaynagiZorunlu",
   /** Kurşun bypass (kurşun istasyonuna tablet KOYULMAYAN fabrika düzeni) açık mı.
    *  Default FALSE (kapalı). Diğer flag'lerin çoğunun aksine backend ENFORCE eder,
    *  ama ENFORCE kapsamı DAR: yalnız YENİ ATAMA OLUŞTURMAYI kapılar (bayrak kapalıyken
@@ -2116,6 +2120,10 @@ export interface FeatureFlags {
   tamburOverQuantityEnabled: boolean;
   /** Tambur "TÜMDEN geri al" yalnız aynı fabrika günü içinde mi (default FALSE). */
   tamburUndoFullSameDayOnly: boolean;
+  /** D4-B1: Tambur kesiminde simüle metre kabul (varsayılan AÇIK = bugün). */
+  tamburSimulatedMeterEnabled: boolean;
+  /** D4-B1: Tambur kesiminde ölçüm kaynağı zorunlu (varsayılan KAPALI; önce tüm tabletler yeni sürümde olmalı). */
+  tamburMeasureSourceRequired: boolean;
   /** Kısa kesimde otomatik A1 — FABRİKA VARSAYILANI (default FALSE/kapalı).
    *  Kural istemcide koşar; tablet yetkilisi cihaz bazında ezebilir. */
   tamburShortCutA1Enabled: boolean;
@@ -2627,6 +2635,8 @@ export class SystemSettingService {
       documentsConfig: await readDocumentsConfig(cacheClient),
       tamburOverQuantityEnabled: await readTamburOverQuantityEnabled(cacheClient),
       tamburUndoFullSameDayOnly: await readTamburUndoFullSameDayOnly(cacheClient),
+      tamburSimulatedMeterEnabled: await readTamburSimulatedMeterEnabled(cacheClient),
+      tamburMeasureSourceRequired: await readTamburMeasureSourceRequired(cacheClient),
       tamburShortCutA1Enabled: await readTamburShortCutA1Enabled(cacheClient),
       tamburShortCutA1ThresholdM: await readTamburShortCutA1ThresholdM(cacheClient),
       tamburPlanGateWidthToleranceCm: await readTamburPlanGateWidthToleranceCm(cacheClient),
@@ -4506,6 +4516,30 @@ export class SystemSettingService {
         SETTING_KEYS.TAMBUR_UNDO_FULL_SAME_DAY_ONLY,
         input.tamburUndoFullSameDayOnly,
         "Tambur 'tümden geri al' yalnız aynı fabrika günü içinde yapılabilsin (tek parça iptali etkilenmez)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "tamburSimulatedMeterEnabled")) {
+      if (typeof input.tamburSimulatedMeterEnabled !== "boolean") {
+        throw AppError.badRequest("tamburSimulatedMeterEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.TAMBUR_SIMULATED_METER_ENABLED,
+        input.tamburSimulatedMeterEnabled,
+        "Tambur: simüle sayaç metresi kabul edilsin mi (kapalıyken SIMULATED kesim 400)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "tamburMeasureSourceRequired")) {
+      if (typeof input.tamburMeasureSourceRequired !== "boolean") {
+        throw AppError.badRequest("tamburMeasureSourceRequired boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.TAMBUR_MEASURE_SOURCE_REQUIRED,
+        input.tamburMeasureSourceRequired,
+        "Tambur: kesim metresinin ölçüm kaynağı zorunlu (önce tüm tabletler yeni sürümde olmalı)",
         userId
       );
     }
@@ -7323,6 +7357,19 @@ export async function readTamburUndoFullSameDayOnly(
   });
   if (!setting) return false;
   return asBoolean(setting.value);
+}
+
+/** D4-B1: Tambur simüle metre — satır yok = AÇIK (bugün tablet simüle değeri sessizce gönderiyor; ölçüldü). */
+export async function readTamburSimulatedMeterEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.TAMBUR_SIMULATED_METER_ENABLED }, select: { value: true } });
+  if (!setting) return true;
+  return asBoolean(setting.value);
+}
+
+/** D4-B1: Tambur ölçüm kaynağı zorunluluğu — satır yok = KAPALI (eski APK `measure` göndermez; çıkışsız kapı olmasın). */
+export async function readTamburMeasureSourceRequired(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.TAMBUR_MEASURE_SOURCE_REQUIRED }, select: { value: true } });
+  return asBoolean(setting?.value);
 }
 
 /**
