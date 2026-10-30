@@ -205,18 +205,22 @@ export const MODULE_PROFILES: Readonly<Record<ModuleProfileId, ModuleProfile>> =
    * HİZMET VEREN — fason işlemci (2026-10-29, DALGA2-HIZMET-TASARIM §7): müşterinin malını
    * işleyip geri gönderir. Gelen belge emanete bağlıdır (`MODULE_DEPENDENCIES`), emanet kapalı
    * olursa onay çıkışsız kapı olur. Ölçüm/faturalama ayarları profile GİRMEZ (ayar paketi betiği).
+   * Maliyet (2026-10-31, kullanıcı kararı S2): makine saat ücreti · sarf normu · kârlılık bu modülde;
+   * bağımlılığı (üretim) profilde açık. Profil yalnız TAZE kurulumda uygulanır — kurulu fabrika değişmez.
    */
   hizmet: {
     ad: "Hizmet veren (fason işlemci)",
     aciklama:
       "Üretim + ön muhasebe + ticaret (hizmet fiyatı · mal kabul) + emanet (müşterinin malı) + " +
-      "gelen belge taslağı (irsaliye fotoğrafından giriş). Dokuma, tezgah izleme ve iplik kapalı.",
+      "gelen belge taslağı (irsaliye fotoğrafından giriş) + maliyet (makine saat ücreti · sarf normu · " +
+      "kârlılık). Dokuma, tezgah izleme ve iplik kapalı.",
     moduller: acik(
       "production.enabled",
       "finance.enabled",
       "ticaret.enabled",
       "emanet.enabled",
       "gelenBelge.enabled",
+      "maliyet.enabled",
     ),
     bayraklar: {},
   },
