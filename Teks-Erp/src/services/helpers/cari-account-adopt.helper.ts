@@ -7,18 +7,28 @@
 import { CariKind, type Prisma } from "@prisma/client";
 import { AuditService } from "../audit.service";
 
+/** Tx içinde yapılan çevirmenin izi — ayak izi COMMIT SONRASI `logLegacyLegAdoption` ile yazılır (ES-11). */
+export interface AdoptedLegacyLeg {
+  accountId: string;
+  customerId: string;
+  subcontractorId: string | null;
+}
+
 /**
  * Kartın TEK hesabı eski fason bacağındaysa (geçiş artığı) yazım anında kartın hesabına ÇEVRİLİR — rol modeli
  * göçüyle aynı TEK UPDATE (`customerId` + `subcontractorId: null` + `kind`; iki CHECK ara adımı reddeder).
- * Kartın kendi (pasif) hesabı varsa çevrilmez (`customerId @unique`); hesap, hareketler ve bakiye aynı kalır.
+ * Kartın kendi hesabı varsa çağrılmaz (çözücü onu önce seçer); hesap, hareketler ve bakiye aynı kalır.
  */
-export async function adoptLegacyLegAccountTx(tx: Prisma.TransactionClient, accountId: string, subcontractorId: string | null, customerId: string): Promise<void> {
-  const own = await tx.cariAccount.findFirst({ where: { customerId }, select: { id: true } });
-  if (own) return;
+export async function adoptLegacyLegAccountTx(tx: Prisma.TransactionClient, accountId: string, subcontractorId: string | null, customerId: string): Promise<AdoptedLegacyLeg | null> {
   const moved = await tx.cariAccount.updateMany({
     where: { id: accountId, customerId: null },
     data: { customerId, subcontractorId: null, kind: CariKind.CUSTOMER },
   });
-  // Ayak izi best-effort (tx sonucu beklenmez — audit karar kaynağı değil).
-  if (moved.count === 1) void AuditService.log({ userId: undefined, action: "UPDATE", tableName: "CARI_ACCOUNT", recordId: accountId, newData: { customerId, subcontractorId: null, kind: "CUSTOMER", eskiSubcontractorId: subcontractorId, kaynak: "kart-hesabina-cevirme" } });
+  return moved.count === 1 ? { accountId, customerId, subcontractorId } : null;
+}
+
+/** Çevirmenin ayak izi — tx DIŞINDA, commit'ten sonra, aktörüyle (geri alınan tx hayalet satır bırakmasın). */
+export function logLegacyLegAdoption(adopted: AdoptedLegacyLeg | null | undefined, userId?: string): void {
+  if (!adopted) return;
+  void AuditService.log({ userId, action: "UPDATE", tableName: "CARI_ACCOUNT", recordId: adopted.accountId, newData: { customerId: adopted.customerId, subcontractorId: null, kind: "CUSTOMER", eskiSubcontractorId: adopted.subcontractorId, kaynak: "kart-hesabina-cevirme" } });
 }

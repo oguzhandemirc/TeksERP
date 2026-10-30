@@ -9,7 +9,7 @@ import { Prisma, CariKind, Currency, InvoiceType } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { resolvePartyToCardTx } from "./party-card.helper";
-import { adoptLegacyLegAccountTx } from "./cari-account-adopt.helper";
+import { adoptLegacyLegAccountTx, type AdoptedLegacyLeg } from "./cari-account-adopt.helper";
 import { nextSeriesNo } from "../number-series.service";
 
 /** Sıfır Decimal — float aritmetiği YASAK (perf/doğruluk kuralı). */
@@ -274,8 +274,9 @@ function cariAccountWhereForCard(card: CardRef): Prisma.CariAccountWhereInput {
   if (card.customerId) return { OR: [{ customerId: card.customerId }, { subcontractor: { customerId: card.customerId } }] };
   return { subcontractorId: card.subcontractorId as string };
 }
-// Onarım öncesi çift varsa: aktif önce, sonra kart hesabı (PG DESC varsayılanı NULLS FIRST — `nulls: "last"` şart), eşitlikte id.
-const CARD_ACCOUNT_ORDER = [{ isActive: "desc" }, { customerId: { sort: "desc", nulls: "last" } }, { id: "asc" }] satisfies Prisma.CariAccountOrderByWithRelationInput[];
+// Onarım öncesi çift varsa: kartın KENDİ hesabı önce (pasifse de — pasiflik eski bacağa kaçarak aşılmaz, yazım 409),
+// sonra aktif, eşitlikte id. PG DESC varsayılanı NULLS FIRST — `nulls: "last"` şart.
+const CARD_ACCOUNT_ORDER = [{ customerId: { sort: "desc", nulls: "last" } }, { isActive: "desc" }, { id: "asc" }] satisfies Prisma.CariAccountOrderByWithRelationInput[];
 
 /**
  * KART → HESAP TEK ÇÖZÜCÜ (K3a): kartın kimliğine bağlı MEVCUT hesap, hangi bacaktan olursa olsun. Yaratmaz.
@@ -322,13 +323,14 @@ export type CariAccountInitialTerms = Pick<Prisma.CariAccountCreateManyInput, "t
 /**
  * Kartın hesabını döndürür, yoksa açar — `cariAccount` satırının TEK FABRİKASI (bekçi: `test_cari_kart_hesap §8f`).
  * Kartın kimliğine bağlı hesap HANGİ bacakta olursa olsun (kart hesabı ya da eski fason bacağı) onu kullanır;
- * ikinci hesap AÇILMAZ (K3a — cari tek kimlik). `created` yalnız bu çağrı satırı yazdıysa true.
+ * ikinci hesap AÇILMAZ (K3a — cari tek kimlik). `created` yalnız bu çağrı satırı yazdıysa true; `adopted` eski bacak
+ * bu çağrıda karta çevrildiyse dolu — çağıran COMMIT SONRASI `logLegacyLegAdoption(adopted, userId)` yazar (ES-11).
  */
 export async function ensureCariAccountTx(
   tx: Prisma.TransactionClient,
   party: CariAccountParty,
   initial?: CariAccountInitialTerms,
-): Promise<{ id: string; defaultCurrency: Currency; created: boolean }> {
+): Promise<{ id: string; defaultCurrency: Currency; created: boolean; adopted: AdoptedLegacyLeg | null }> {
   if ((party.customerId == null) === (party.subcontractorId == null)) {
     throw AppError.badRequest("Cari hesap için müşteri VEYA fason firma verilmeli (ikisi birden değil).");
   }
@@ -339,8 +341,8 @@ export async function ensureCariAccountTx(
     if (!existing.isActive) {
       throw AppError.conflict("Bu carinin hesabı pasif durumda — önce Cari Hesaplar ekranından aktifleştirin.");
     }
-    if (card.customerId && existing.customerId == null) await adoptLegacyLegAccountTx(tx, existing.id, existing.subcontractorId, card.customerId);
-    return { id: existing.id, defaultCurrency: existing.defaultCurrency, created: false };
+    const adopted = card.customerId && existing.customerId == null ? await adoptLegacyLegAccountTx(tx, existing.id, existing.subcontractorId, card.customerId) : null;
+    return { id: existing.id, defaultCurrency: existing.defaultCurrency, created: false, adopted };
   }
   const ins = await tx.cariAccount.createMany({
     data: [{ ...initial, kind: card.customerId ? CariKind.CUSTOMER : CariKind.SUBCONTRACTOR, customerId: card.customerId, subcontractorId: card.subcontractorId }],
@@ -348,7 +350,7 @@ export async function ensureCariAccountTx(
   });
   const row = await findCariAccountForCardTx(tx, card, select);
   if (!row) throw AppError.conflict("Cari hesap açılamadı — tekrar deneyin.");
-  return { id: row.id, defaultCurrency: row.defaultCurrency, created: ins.count === 1 };
+  return { id: row.id, defaultCurrency: row.defaultCurrency, created: ins.count === 1, adopted: null };
 }
 
 /**

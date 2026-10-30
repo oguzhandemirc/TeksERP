@@ -51,6 +51,7 @@ import {
   deriveInvoiceDueDate,
   findCariAccountForCardTx,
 } from "./helpers/finance.helper";
+import { logLegacyLegAdoption } from "./helpers/cari-account-adopt.helper";
 import { resolvePartyToCardTx } from "./helpers/party-card.helper";
 import {
   INVOICE_RECEIPT_SELECT,
@@ -432,10 +433,7 @@ export class InvoiceService {
     return await withBarcodeRetry(async () => {
     const result = await prisma.$transaction(async (tx) => {
       const serviceLinks = await this.lockAndResolveServiceLinksTx(tx, input, { currency, panelService, givenLinks });
-      const cari = await ensureCariAccountTx(tx, {
-        customerId: input.customerId ?? null,
-        subcontractorId: input.subcontractorId ?? null,
-      });
+      const cari = await ensureCariAccountTx(tx, { customerId: input.customerId ?? null, subcontractorId: input.subcontractorId ?? null });
 
       // KUR: açıkça verildiyse o, verilmediyse tablodan çözülür.
       // ⚠️ Çözülemezse 400 — sessizce 1'e düşmek 1000 USD'lik faturayı
@@ -507,7 +505,7 @@ export class InvoiceService {
         select: { id: true, docNo: true },
       });
       if (receiptIds.length > 0) await writeInvoiceReceiptsTx(tx, invoice.id, receiptIds);
-      return insertServiceLinksTx(tx, invoice.id, serviceLinks).then((linkCount) => ({ ...invoice, linkCount }));
+      return insertServiceLinksTx(tx, invoice.id, serviceLinks).then((linkCount) => ({ ...invoice, linkCount, adopted: cari.adopted }));
     });
 
     void AuditService.log({
@@ -517,6 +515,7 @@ export class InvoiceService {
       recordId: result.id,
       newData: { docNo: result.docNo, type: input.type, ...(result.linkCount > 0 ? { serviceLinkCount: result.linkCount } : {}) },
     });
+    logLegacyLegAdoption(result.adopted, userId);
     return { success: true, data: { id: result.id, docNo: result.docNo }, message: `${result.docNo} taslağı oluşturuldu.` };
     },
     undefined,

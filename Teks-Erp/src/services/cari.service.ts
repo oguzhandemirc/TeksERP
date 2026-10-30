@@ -12,6 +12,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { ensureCariAccountTx, findCariAccountForCardTx, resolveCariAccountByCustomerTx } from "./helpers/finance.helper";
 import { AuditService } from "./audit.service";
+import { logLegacyLegAdoption } from "./helpers/cari-account-adopt.helper";
 import { D0, D, applyCariBalanceTx, CARI_STATEMENT_ORDER, CARI_TXN_LATEST_FIRST } from "./helpers/finance.helper";
 import { resolvePartyToCardTx } from "./helpers/party-card.helper";
 import { assertPeriodOpenTx, lockCariPeriodScopeTx } from "./helpers/period-guard.helper";
@@ -230,7 +231,8 @@ export class CariService {
 
   /** Z-A ⑤: kartın hesabına terim yaz — kartın MEVCUT hesabı (eski fason bacağı dahil, K3a) ya da yoksa doğar; doğrulama + audit `update` yolunda. */
   async writeTermsForCustomer(customerId: string, input: Parameters<CariService["update"]>[1], userId?: string): Promise<string> {
-    const accId = await prisma.$transaction(async (tx) => (await ensureCariAccountTx(tx, { customerId })).id);
+    const { id: accId, adopted } = await prisma.$transaction((tx) => ensureCariAccountTx(tx, { customerId }));
+    logLegacyLegAdoption(adopted, userId);
     await this.update(accId, input, userId);
     return accId;
   }
@@ -303,6 +305,7 @@ export class CariService {
         notes: input.notes ?? null,
       }),
     );
+    logLegacyLegAdoption(created.adopted, userId);
     if (!created.created) throw AppError.conflict("Bu taraf için cari hesap zaten açık.");
 
     void AuditService.log({
