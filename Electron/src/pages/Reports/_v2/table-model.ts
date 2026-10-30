@@ -1,14 +1,19 @@
 // Rapor v2 tablosu — ekran hücresi ile PDF/Excel hücresi AYNI biçimden (`REPORT_NUM_FMTS`) basılır.
 import type { ReportColumn, ReportTableSpec } from "@/pages/Reports/_components/reportExport";
 import { reportCellText } from "@/lib/number-format";
-import { BIRIM_METNI, type TabloBlok, type TabloKolonu } from "./sunum";
+import { BIRIM_METNI, PARA_BIRIMLERI, type TabloBlok, type TabloKolonu } from "./sunum";
 
 const isNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-/** Kolonun sayı biçimi: hepsi tam sayıysa ondalıksız, değilse tek hane; sayı yoksa biçimsiz (literal: biçim bekçisi okur). */
+/** Para kolonu ve para kartı (`formatFigure`) TEK biçim: sabit 0 ondalık (sunucu anlatısı `sayi-bicim` ile aynı). */
+export const MONEY_NUM_FMT = "#,##0";
+
+/** Kolonun sayı biçimi: para kolonu sabit `MONEY_NUM_FMT`; diğeri hepsi tam sayıysa ondalıksız, değilse tek hane; sayı yoksa biçimsiz (literal: biçim bekçisi okur). */
 export function columnFormat(table: TabloBlok, column: TabloKolonu): Pick<ReportColumn, "numFmt"> {
   const values = [...table.satirlar, ...(table.toplam ? [table.toplam] : [])].map((r) => r[column.anahtar]).filter(isNumber);
   if (values.length === 0) return {};
+  // Kolon başına ölçülen ondalık aynı tablodaki TL kolonlarını "45.000,0" / "45.000" diye ayırıyordu.
+  if (column.birim && PARA_BIRIMLERI.includes(column.birim)) return { numFmt: MONEY_NUM_FMT };
   return values.every((v) => Number.isInteger(v)) ? { numFmt: "#,##0" } : { numFmt: "#,##0.0" };
 }
 
