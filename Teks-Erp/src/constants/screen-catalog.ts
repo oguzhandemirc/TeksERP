@@ -291,7 +291,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // `requires` değil `capabilities`tir; kart listesiyle (Finance/tile-config)
   // birebir aynı olması gereken şey `requires` tarafıdır.
   { key: "finance", app: "desktop", modul: "financeEnabled", title: TERIM_AD.onMuhasebe, requires: ["finance:read"], capabilities: [] },
-  { key: "finance/cari", app: "desktop", modul: "financeEnabled", title: "Cari Hesaplar", requires: ["finance:read"], capabilities: ["finance:write"] },
+  { key: "finance/cari", app: "desktop", modul: "financeEnabled", title: "Cari Hesaplar", requires: ["finance:read"], capabilities: ["finance:write", "finance:hold", "finance:hold-release"] },
+  // D4-I1a: cari kilidi koy/aç cari kartının yeteneğidir (panel yüzü D4-I3).
   { key: "finance/invoices", app: "desktop", modul: "financeEnabled", title: "Faturalar", requires: ["finance:read"], capabilities: ["finance:invoice"] },
   { key: "finance/payments", app: "desktop", modul: "financeEnabled", title: "Tahsilat ve Ödemeler", requires: ["finance:read"], capabilities: ["finance:payment"] },
   { key: "finance/accounts", app: "desktop", modul: "financeEnabled", title: "Kasa ve Banka Hesapları", requires: ["finance:read"], capabilities: ["finance:write"] },
