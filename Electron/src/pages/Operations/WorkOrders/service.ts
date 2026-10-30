@@ -627,6 +627,10 @@ export interface QuickStartPayload {
   }[];
   /** İlk adım fason + firma çözülüyse: WO ile birlikte sevki de yap (çeki listesi). */
   dispatchFirstStep?: boolean;
+  /** Hedef çeşit değerleri (desen / gramaj; gelen belgeden iş emri, D4-D2) — plan alanı, toplara yayılmaz. */
+  targetValues?: { propertyId: string; valueId: string }[];
+  /** Hedef özellikler (çeşidin bayrağı) — rota kapsaması bunlardan ölçülür. */
+  targetPropertyIds?: string[];
 }
 
 export interface QuickStartResult {
