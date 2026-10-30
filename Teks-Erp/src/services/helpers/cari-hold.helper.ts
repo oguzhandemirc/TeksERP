@@ -71,11 +71,20 @@ export async function activeHoldByCari(db: HoldReader, cariId: string): Promise<
 
 /**
  * Kartın AKTİF kilidi — kart hesabı YA DA eski fason bacağı hesabı (K3a where'i). Onarılmamış çiftte iki
- * hesaptan birinde kilit varsa kart kilitlidir (fail-closed); sıra eşitlik bozucuyla belirlenimli.
+ * hesapta ayrı kilit olabilir: `scope` verilirse o kapsamı kapsayan kilit WHERE'de aranır (fail-closed);
+ * sıra eşitlik bozucuyla belirlenimli.
  */
-export async function activeHoldByCustomer(db: HoldReader, customerId: string): Promise<ActiveCariHold | null> {
+export async function activeHoldByCustomer(
+  db: HoldReader,
+  customerId: string,
+  scope?: CariHoldScope,
+): Promise<ActiveCariHold | null> {
   return db.cariHold.findFirst({
-    where: { releasedAt: null, cari: cariAccountWhereForCard({ customerId, subcontractorId: null }) },
+    where: {
+      releasedAt: null,
+      ...(scope ? { [SCOPE_COLUMN[scope]]: true } : {}),
+      cari: cariAccountWhereForCard({ customerId, subcontractorId: null }),
+    },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: ACTIVE_HOLD_SELECT,
   });
@@ -90,8 +99,8 @@ export async function assertCariNotHeldTx(
   customerId: string,
   scope: CariHoldScope,
 ): Promise<void> {
-  const hold = await activeHoldByCustomer(db, customerId);
-  if (!hold || !hold[SCOPE_COLUMN[scope]]) return;
+  const hold = await activeHoldByCustomer(db, customerId, scope);
+  if (!hold) return;
   const placer = await db.user.findUnique({ where: { id: hold.placedById }, select: { fullName: true, username: true } });
   const placedBy = placer?.fullName || placer?.username || "bilinmeyen kullanıcı";
   const at = factoryDateTimeTr(hold.createdAt);

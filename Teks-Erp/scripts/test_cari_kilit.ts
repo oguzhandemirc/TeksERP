@@ -5,9 +5,10 @@
 //      helper finans servisi / finance.helper import etmez (transitif ölçüm `test_finance_regime_gate` §4)
 //   §1 KOY — aynı clientToken iki istek → tek satır + replay; ikinci aktif kilit 409 CARI_HOLD_EXISTS; aynı token
 //      başka kapsam 409 CLIENT_TOKEN_COLLISION; boş kapsam 400; pasif cari 409 CARI_INACTIVE; DB'de çift aktif
-//      insert 23505 (kısmi unique) · kapsamsız insert 23514 (CHECK)
+//      insert 23505 (kısmi unique) · kapsamsız insert 23514 (CHECK) · eşzamanlı iki koyma → 1 başarı + 1 CARI_HOLD_EXISTS
 //   §2 KAPI — `assertCariNotHeldTx`: kilit yok → geçer; INTAKE kapsamlı kilit → INTAKE 409 CARI_HOLD (holdId, sebep,
-//      koyan, tarih), SHIPMENT/INVOICE geçer
+//      koyan, tarih), SHIPMENT/INVOICE geçer; onarılmamış K3a çiftinde (kart hesabı + eski fason bacağı) eski SHIPMENT
+//      kilidi varken yeni INTAKE kilidi de kapıyı keser (kapsam WHERE'de aranır — fail-closed)
 //   §3 AÇ — DENY'de koyan kişi 409 CARI_HOLD_SAME_PERSON, başka yetkili 200; açılan kilit yeniden açılamaz 409;
 //      eşzamanlı iki açma → biri 200 diğeri 409; açılmış kilidin token replay'i 409 CARI_HOLD_RELEASED; yeniden kilit
 //      yeni satır, liste tarihçeyi + aktifi döner
@@ -18,6 +19,9 @@
 // ⭐ NEGATİF SONDA (ölçüldü 2026-10-30): ① `cari_holds_active_cariId_key` test DB'de düşürüldü → §1f ❌ (çift aktif
 //    insert geçti); index geri kondu → yeşil. ② servis dosyasına `cariHold.findFirst({ where: { releasedAt: null } })`
 //    eklendi → §0a ❌; geri alındı → yeşil. ③ helper'a finans servisi importu → `test_finance_regime_gate` §4 ❌.
+//    ④ `assertCariNotHeldTx` kapsamı WHERE yerine ilk satırın kolonundan okudu → §2e ❌. ⑤ servisteki ön okuma
+//    (`activeHoldByCari`) kaldırıldı → §1c + §1i yine yeşil (P2002 → CARI_HOLD_EXISTS eşlemesi çalışıyor); eşleme
+//    regex'i de bozuldu → §1c ham P2002 ile düştü (exit 1). Hepsi geri alındı → 32/0.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Ayarlar fotoğrafa döner; temizlik yalnız `temizle`.
 // =============================================================================
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -127,7 +131,7 @@ async function main(): Promise<void> {
   const setSetting = (key: string, v: Prisma.InputJsonValue | null) =>
     v === null ? prisma.systemSetting.deleteMany({ where: { key } }) : prisma.systemSetting.upsert({ where: { key }, create: { key, value: v }, update: { value: v } });
   const admin = await ensureTestAdmin();
-  const ids = { customers: [] as string[], users: [] as string[] };
+  const ids = { customers: [] as string[], users: [] as string[], subs: [] as string[] };
   const server = app.listen(0);
   await new Promise<void>((r) => server.once("listening", () => r()));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -211,6 +215,12 @@ async function main(): Promise<void> {
     await prisma.cariAccount.update({ where: { id: kPasif.cariId }, data: { isActive: false } });
     const e1h = await hata(() => cariHoldService.place(kPasif.cariId, girdi(), admin.id));
     check("§1h pasif cari → 409 CARI_INACTIVE ('önce aktif edin')", e1h?.statusCode === 409 && kod(e1h) === "CARI_INACTIVE" && /aktif edin/.test(e1h.message), kod(e1h));
+    const kYaris = await kartAc();
+    const yaris = await Promise.allSettled([cariHoldService.place(kYaris.cariId, girdi(), admin.id), cariHoldService.place(kYaris.cariId, girdi(), admin.id)]);
+    const yOk = yaris.filter((r) => r.status === "fulfilled").length;
+    const yRed = yaris.filter((r) => r.status === "rejected" && r.reason instanceof AppError && r.reason.statusCode === 409 && kod(r.reason) === "CARI_HOLD_EXISTS").length;
+    const yRedDiger = yaris.filter((r) => r.status === "rejected").map((r) => String((r as PromiseRejectedResult).reason?.message ?? "").slice(0, 80));
+    check("§1i ⭐ eşzamanlı iki koyma (farklı token) → 1 başarı + 1 409 CARI_HOLD_EXISTS", yOk === 1 && yRed === 1, `ok=${yOk} red=${yRed} ${yRedDiger.join(" | ")}`);
 
     console.log("\n── §2 Kapı ──");
     const k2 = await kartAc();
@@ -228,6 +238,20 @@ async function main(): Promise<void> {
     const e2d = await hata(() => assertCariNotHeldTx(prisma, k2.customerId, "SHIPMENT"));
     const e2e = await hata(() => assertCariNotHeldTx(prisma, k2.customerId, "INVOICE"));
     check("§2d aynı kilitte SHIPMENT ve INVOICE geçer (kapsam dışı)", e2d === null && e2e === null, `${kod(e2d)} ${kod(e2e)}`);
+    const k2e = await kartAc();
+    const sub2e = await prisma.subcontractor.create({ data: { code: `${TAG}-SUB2E`.slice(0, 32), name: `${TAG} eski fason 2e`, customerId: k2e.customerId }, select: { id: true } });
+    ids.subs.push(sub2e.id);
+    const legacy2e = await prisma.cariAccount.create({ data: { kind: "SUBCONTRACTOR", subcontractorId: sub2e.id }, select: { id: true } });
+    await cariHoldService.place(k2e.cariId, girdi({ blocksIntake: false, blocksShipment: true, blocksInvoice: false }), admin.id);
+    const h2e = await cariHoldService.place(legacy2e.id, girdi({ blocksIntake: true, blocksShipment: false, blocksInvoice: false }), admin.id);
+    const e2e1 = await hata(() => assertCariNotHeldTx(prisma, k2e.customerId, "INTAKE"));
+    const e2e2 = await hata(() => assertCariNotHeldTx(prisma, k2e.customerId, "SHIPMENT"));
+    const e2e3 = await hata(() => assertCariNotHeldTx(prisma, k2e.customerId, "INVOICE"));
+    check(
+      "§2e ⭐ onarılmamış K3a çifti: eski SHIPMENT kilidi + yeni INTAKE kilidi (eski bacakta) → INTAKE 409 (yeni kilidin id'si), SHIPMENT 409, INVOICE geçer",
+      kod(e2e1) === "CARI_HOLD" && det(e2e1).holdId === h2e.data.id && kod(e2e2) === "CARI_HOLD" && e2e3 === null,
+      `${kod(e2e1)} ${kod(e2e2)} ${kod(e2e3)}`,
+    );
 
     console.log("\n── §3 Aç ──");
     const b = await kullanici("muhasebe", ["finance:read", "finance:hold", "finance:hold-release"]);
@@ -293,14 +317,15 @@ async function main(): Promise<void> {
   process.exitCode = fail > 0 ? 1 : 0;
 }
 
-async function temizle(ids: { customers: string[]; users: string[] }, foto: Array<{ key: string; value: Prisma.JsonValue }>): Promise<void> {
-  const accs = await prisma.cariAccount.findMany({ where: { customerId: { in: ids.customers } }, select: { id: true } });
+async function temizle(ids: { customers: string[]; users: string[]; subs: string[] }, foto: Array<{ key: string; value: Prisma.JsonValue }>): Promise<void> {
+  const accs = await prisma.cariAccount.findMany({ where: { OR: [{ customerId: { in: ids.customers } }, { subcontractorId: { in: ids.subs } }] }, select: { id: true } });
   const accIds = accs.map((a) => a.id);
   const holds = await prisma.cariHold.findMany({ where: { cariId: { in: accIds } }, select: { id: true } });
   await prisma.systemLog.deleteMany({ where: { recordId: { in: [...holds.map((h) => h.id), ...ids.customers, ...accIds] } } });
   await prisma.cariHold.deleteMany({ where: { cariId: { in: accIds } } });
   await prisma.cariBalance.deleteMany({ where: { cariId: { in: accIds } } });
   await prisma.cariAccount.deleteMany({ where: { id: { in: accIds } } });
+  await prisma.subcontractor.deleteMany({ where: { id: { in: ids.subs } } });
   await prisma.customer.deleteMany({ where: { id: { in: ids.customers } } });
   for (const u of ids.users) {
     await prisma.userPermission.deleteMany({ where: { userId: u } });
