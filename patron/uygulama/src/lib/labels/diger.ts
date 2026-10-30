@@ -53,6 +53,7 @@ export const NOTIFICATION_KIND: Readonly<Record<NotificationKind, KindLabel>> = 
   "esitleme-gecikti": { ad: "Eşitleme gecikti", domain: "genel", icon: "sync-outline" },
   "yedek-basarisiz": { ad: "Yedek alınamadı", domain: "genel", icon: "server-outline" },
   "cek-vadesi": { ad: "Çek/senet vadesi", domain: "finans", icon: "calendar-outline" },
+  "cari-kilit": { ad: "Cari kilidi", domain: "finans", icon: "lock-closed-outline" },
 };
 
 export function notificationKind(tur: unknown): KindLabel {

@@ -10,6 +10,7 @@ import { withTesis } from "../lib/tenant";
 import type { NotificationKind, NotificationSettings } from "../wire/api";
 import type { CloudContext } from "./context";
 import { loadFacilitySettings, resolveSettings } from "./notification-settings.service";
+import { CARI_LOCK_SOURCE, CARI_NAME_SOURCE, cariLockText, loadCariLocks, type CariLockFact } from "./notification-cari-lock";
 
 export interface Candidate {
   readonly accountId: string;
@@ -28,10 +29,14 @@ export interface FacilityFacts {
   readonly snapshots: ReadonlyMap<string, unknown>;
   readonly lastPackageAt: Date | null;
   readonly inbox: readonly { readonly messageId: string; readonly accountId: string; readonly kind: string; readonly status: string }[];
+  /** `cari-hesap.kilit` dolu satırlar (D4-I6) + koyması doğmuş (hesap|anahtar) kümesi; verilmezse olay yok. */
+  readonly cariLocks?: readonly CariLockFact[];
+  readonly seenLockKeys?: ReadonlySet<string>;
 }
 
-/** Olayların okunduğu anlık projeksiyonlar (katalogdaki `source`lar). */
-export const SNAPSHOT_SOURCES: readonly string[] = [...new Set(Object.values(KIND_RULES).map((r) => r.source).filter((s): s is string => s !== null))];
+/** Olayların okunduğu anlık projeksiyonlar (katalogdaki `source`lar; KAYIT kaynağı `cari-hesap` ayrı okunur). */
+export const SNAPSHOT_SOURCES: readonly string[] = [...new Set(Object.values(KIND_RULES).map((r) => r.source).filter((s): s is string => s !== null && s !== CARI_LOCK_SOURCE))];
+const READ_SOURCES: readonly string[] = [...SNAPSHOT_SOURCES, FACILITY_TIMEZONE_SOURCE, CARI_LOCK_SOURCE, CARI_NAME_SOURCE];
 
 const INBOX_WINDOW_MS = 24 * 3_600_000;
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -78,6 +83,10 @@ export function evaluate(f: FacilityFacts): Candidate[] {
         add("cek-vadesi", `cek-vadesi:${day}`, { title: "Çek/senet vadesi", body: text.slice(0, 480), route: "/finans" });
       }
     }
+    for (const lock of f.cariLocks ?? []) {
+      const text = cariLockText(lock, a.id, f.seenLockKeys ?? new Set());
+      if (text) add("cari-kilit", text.dedupKey, text);
+    }
   }
   for (const m of f.inbox) {
     if (m.status !== "ISLENDI" && m.status !== "REDDEDILDI") continue;
@@ -99,7 +108,7 @@ export function ruleVerdict(settings: NotificationSettings, kind: NotificationKi
 
 /** Tesisin olaylarını üret: yeni doğan satır sayısı (tekrarlar sessizce yok sayılır). */
 export async function generateForFacility(ctx: CloudContext, tesisId: string, nowMs: number): Promise<number> {
-  return withTesis(ctx.app, { tesisId, projections: [...SNAPSHOT_SOURCES, FACILITY_TIMEZONE_SOURCE] }, async (tx) => {
+  return withTesis(ctx.app, { tesisId, projections: [...READ_SOURCES] }, async (tx) => {
     const accounts = await tx.account.findMany({ where: { tesisId, status: "AKTIF" }, select: { id: true, permissions: true }, orderBy: { id: "asc" } });
     if (accounts.length === 0) return 0;
     const cfg = await loadFacilitySettings(tx, tesisId);
@@ -111,6 +120,7 @@ export async function generateForFacility(ctx: CloudContext, tesisId: string, no
       select: { messageId: true, accountId: true, kind: true, status: true },
     });
     const snapshots = new Map(snaps.map((s) => [s.projection, s.data]));
+    const locks = await loadCariLocks(tx, tesisId);
     const candidates = evaluate({
       nowMs,
       timeZone: facilityTimeZoneAt(snapshots.get(FACILITY_TIMEZONE_SOURCE), nowMs),
@@ -118,6 +128,8 @@ export async function generateForFacility(ctx: CloudContext, tesisId: string, no
       snapshots,
       lastPackageAt: state?.lastPackageAt ?? null,
       inbox,
+      cariLocks: locks.facts,
+      seenLockKeys: locks.seen,
     });
     if (candidates.length === 0) return 0;
     const perms = new Map(accounts.map((a) => [a.id, effectivePermissions(a.permissions)]));
