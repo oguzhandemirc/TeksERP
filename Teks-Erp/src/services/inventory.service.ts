@@ -170,6 +170,7 @@ import {
   completeWorkOrderIfStepsDone,
 } from "./helpers/roll-step.helper";
 import { collectRollStepScopeTx } from "./helpers/roll-step-scope.helper";
+import { readRollMeasurements, type RollMeasurements } from "./helpers/roll-measurements.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { hasBypassClosureOnQualityStepTx } from "./helpers/kursun-bypass-guard.helper";
 import { assertKursunTabletMayWrite } from "./helpers/kursun-bypass-eligibility.helper";
@@ -304,6 +305,8 @@ export interface RollHistoryPayload {
     color: { id: string; code: string; name: string; hex: string | null } | null;
   };
   events: RollHistoryEvent[];
+  /** D4-B4 EKLEMELİ: metre okumaları + sapma satırları ölçüm kaynağıyla (eski istemci yok sayar). */
+  measurements: RollMeasurements;
 }
 
 /**
@@ -3304,6 +3307,7 @@ export class InventoryService {
           color: roll.color,
         },
         events,
+        measurements: await readRollMeasurements(id),
       },
     };
   }

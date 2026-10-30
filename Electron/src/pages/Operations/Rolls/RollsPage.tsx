@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Plus, ClipboardList, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { DemoBar } from "@/components/demo/DemoBar";
+import { SimulatedMeterBanner } from "@/components/operations/SimulatedMeterBanner";
 import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
@@ -304,6 +305,7 @@ export function RollsPage() {
           </>
         }
       />
+      <SimulatedMeterBanner />
       <ManualEntryDialog
         open={manualOpen}
         onOpenChange={setManualOpen}

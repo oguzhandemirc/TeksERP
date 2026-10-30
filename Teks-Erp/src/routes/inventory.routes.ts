@@ -479,7 +479,8 @@ router.get("/:id", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL
  *     description: |
  *       Topun oluşumundan itibaren geçtiği tüm olayları kronolojik timeline olarak döner:
  *       istasyon giriş/çıkışları (RollMovement), operasyonlar (RollOperation),
- *       fason sevk/kabul ve sevkiyat (irsaliye).
+ *       fason sevk/kabul ve sevkiyat (irsaliye). D4-B4 EKLEMELİ `measurements`: `readings[]`
+ *       (metre okumaları, damgalılar dahil; `source` ölçüm kaynağı) + `variances[]` (`measureSource`, NULL = bilinmiyor).
  *     security:
  *       - bearerAuth: []
  *     parameters:
