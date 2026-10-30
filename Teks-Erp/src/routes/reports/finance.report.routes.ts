@@ -41,7 +41,8 @@ import { buildCashBookNarrative, buildFxDiffNarrative, buildVatNarrative } from 
 import { cariService } from "../../services/cari.service";
 import type { ExpenseSummary } from "../../services/helpers/expense-summary.helper";
 import { EXPENSE_SUMMARY_KEY } from "../../services/reports/expense-summary.sunum";
-import { EXPENSE_SUMMARY_DIMS, expenseSummaryRunner } from "../../services/reports/temel/core-runs";
+import { EXPENSE_SUMMARY_DIMS } from "../../services/reports/temel/core-runs";
+import { expenseSummaryRunner } from "../../services/reports/expense-summary.run";
 import { runCoreWithExtras, variantQueryKeys } from "../../services/reports/temel/_variant";
 import { coreDayRangeQuerySchema, resolveCoreDayRange } from "../../services/reports/temel/_day-range";
 import { REPORT_BY_KEY } from "../../constants/report-catalog";

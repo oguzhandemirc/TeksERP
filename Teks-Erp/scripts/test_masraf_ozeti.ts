@@ -27,7 +27,8 @@ import {
   UNCATEGORIZED_LABEL,
 } from "../src/services/helpers/expense-summary.helper";
 import { buildExpenseSummarySunumu, expenseSummaryNarrative, monthColumnKey } from "../src/services/reports/expense-summary.sunum";
-import { EXPENSE_SUMMARY_DIMS, expenseSummaryRunner } from "../src/services/reports/temel/core-runs";
+import { EXPENSE_SUMMARY_DIMS } from "../src/services/reports/temel/core-runs";
+import { expenseSummaryRunner } from "../src/services/reports/expense-summary.run";
 import { runCoreWithExtras } from "../src/services/reports/temel/_variant";
 import { expenseSummaryQuerySchema } from "../src/routes/reports/finance.report.routes";
 import { resolveCoreDayRange } from "../src/services/reports/temel/_day-range";
