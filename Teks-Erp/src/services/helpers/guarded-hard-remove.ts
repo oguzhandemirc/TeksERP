@@ -255,9 +255,9 @@ const MACHINE_DELETE_GUARDS: DependencyGuard[] = [
   },
   {
     key: "rollMeterReadingCount",
-    // H1: kurşun metre defteri — damgalı (düzeltilmiş) okumalar DAHİL sayılır (ölçüm yapıldı).
+    // H1 + D4-B1b: metre defteri (kurşun IN/OUT + Tambur CUT) — damgalı (düzeltilmiş) okumalar DAHİL sayılır (ölçüm yapıldı).
     count: (id) => prisma.rollMeterReading.count({ where: { machineId: id } }),
-    message: (n) => `Bu makineye damgalı ${n} metre okuması var — kalıcı silinemez. Pasife alın.`,
+    message: (n) => `Bu makinede ${n} metre okuması (kurşun/Tambur) var — kalıcı silinemez. Pasife alın.`,
   },
   {
     key: "rollOperationCount",

@@ -28,6 +28,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { MODULE_FIELD_BY_SETTING_KEY } from "../src/constants/module-profiles";
 import { KURSUN_PROPERTY_CODE } from "../src/services/helpers/quality-station.helper";
 import { factoryYmd } from "../src/constants/time";
+import { resolveServiceItemsForRolls } from "../src/services/helpers/service-pricing.helper";
 import { paketPlani } from "./hizmet-ayar-paketi";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { roleGrade } from "./fixture-quality-grade";
@@ -256,9 +257,10 @@ async function scenario(): Promise<void> {
   // ── 4 TAMBUR ──────────────────────────────────────────────────────────────
   adim("4 Tambur: RA bölünür (60 + kalan), RB/RC tek parça; çocuklar sahibi korur");
   const grade = await roleGrade("FIRST");
-  const finalize = (rollId: string, cuts: number[]) => api("POST", "/api/tambur/finalize", { rollId, decisions: [], cuts: cuts.map((length) => ({ length, qualityGrade: grade.code, relatedErrorIds: [] })) });
-  const fA = await finalize(RA, [60]);
-  const fB = await finalize(RB, [120]);
+  // D4-B1b: RA/RB yeni APK gibi ölçüm beyanıyla (CUT okuması doğar), RC eski APK gibi beyansız.
+  const finalize = (rollId: string, cuts: number[], source?: "MACHINE" | "OPERATOR") => api("POST", "/api/tambur/finalize", { rollId, decisions: [], cuts: cuts.map((length) => ({ length, qualityGrade: grade.code, relatedErrorIds: [], ...(source ? { measure: { source } } : {}) })) });
+  const fA = await finalize(RA, [60], "MACHINE");
+  const fB = await finalize(RB, [120], "OPERATOR");
   const fC = await finalize(RC, [150]);
   check("3 tambur kararı 200", [fA, fB, fC].every((r) => r.status === 200), [fA, fB, fC].map(short).join(" | "));
   const kids = await prisma.roll.findMany({ where: { parentRollId: { in: rollIds } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, parentRollId: true, ownerCustomerId: true, currentQty: true, status: true } });
@@ -269,6 +271,20 @@ async function scenario(): Promise<void> {
   const tbOnKids = await prisma.rollProperty.count({ where: { rollId: { in: kids.map((k) => k.id) }, propertyId: tbFlag.id, revokedAt: null } });
   const tbOnParents = await prisma.rollProperty.count({ where: { rollId: { in: rollIds }, propertyId: tbFlag.id, revokedAt: null } });
   check("T1: Tambur istasyonunun AUTO bayrağı 4 çocuğa yazıldı; atalarda yok (iş çocukta)", tbOnKids === 4 && tbOnParents === 0, `çocuk ${tbOnKids}, ata ${tbOnParents}`);
+  const cutReads = await prisma.rollMeterReading.findMany({ where: { rollId: { in: kids.map((k) => k.id) }, phase: "CUT", revokedAt: null }, select: { rollId: true, workOrderStepId: true, meters: true } });
+  check("D4-B1b: ölçümlü kesimler 2 CUT okuması (RA 60 + RB 120; kalan parça ve RC ölçümsüz), adım = Tambur", cutReads.length === 2 && cutReads.every((r) => r.workOrderStepId === STB) && eq(cutReads.reduce((a, r) => a.plus(r.meters), D(0)), 180), JSON.stringify(cutReads.map((r) => r.meters.toString())));
+  // FAZ SÜZGEÇSİZ OKUYUCU ENVANTERİ (D4-B1b): hizmet çözümü (service-pricing loadReadings + service-flag-work) CUT
+  // satırları varken ve aynı satırlar damgalıyken (geri sarılan tx) BAYT-AYNI — fatura CUT bağı D4-B2'nin işi.
+  const allRolls = [...rollIds, ...kids.map((k) => k.id)];
+  const solve = (db?: Prisma.TransactionClient) => resolveServiceItemsForRolls({ rollIds: allRolls, customerId: cust.id, currency: Currency.TRY, ...(db ? { db } : {}) });
+  const withCut = JSON.stringify(await solve());
+  let withoutCut = "";
+  await prisma.$transaction(async (tx) => {
+    await tx.rollMeterReading.updateMany({ where: { rollId: { in: allRolls }, phase: "CUT" }, data: { revokedAt: new Date(), revokeReason: "TEST_GERI_SAR" } });
+    withoutCut = JSON.stringify(await solve(tx));
+    throw new Error("GERI_SAR");
+  }).catch((e: unknown) => { if (!(e instanceof Error && e.message === "GERI_SAR")) throw e; });
+  check("D4-B1b: hizmet çözümü (kurşun + Tambur bayrak işi) CUT varken/yokken bayt-aynı", withCut.length > 20 && withCut === withoutCut, withCut === withoutCut ? "" : `${withCut.slice(0, 200)} ≠ ${withoutCut.slice(0, 200)}`);
 
   // ── 5 SEVK + HİZMET FATURASI (PER_SHIPMENT) ───────────────────────────────
   adim("5 Sevk (brüt) → hizmet fatura taslağı: RA'nın iki çocuğu + RB'nin çocuğu");
