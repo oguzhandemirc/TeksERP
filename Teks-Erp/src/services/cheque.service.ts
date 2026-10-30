@@ -55,6 +55,7 @@ import {
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
+import { logLegacyLegAdoption, type AdoptedLegacyLeg } from "./helpers/cari-account-adopt.helper";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { nextSeriesNo } from "./number-series.service";
@@ -420,7 +421,7 @@ async function resolveCariTx(
   tx: Prisma.TransactionClient,
   ref: { cariId?: string | null; customerId?: string | null; subcontractorId?: string | null },
   label: string,
-): Promise<{ id: string }> {
+): Promise<{ id: string; adopted: AdoptedLegacyLeg | null }> {
   if (ref.cariId) {
     const cari = await tx.cariAccount.findUnique({
       where: { id: ref.cariId },
@@ -428,7 +429,7 @@ async function resolveCariTx(
     });
     if (!cari) throw AppError.badRequest(`${label}: cari hesap bulunamadı.`);
     if (!cari.isActive) throw AppError.badRequest(`${label}: cari hesap pasif durumda.`);
-    return { id: cari.id };
+    return { id: cari.id, adopted: null };
   }
   return ensureCariAccountTx(tx, {
     customerId: ref.customerId ?? null,
@@ -919,10 +920,12 @@ export class ChequeService {
     // BUGÜNE işlenir, vadesi gelecektedir — meşru ve olağan.
 
     // Yarışı kaybedenin token P2002'si RETRY EDİLMEZ (aynı token'ı 5 tur boşa yazardı); boğazın `run`ı cevabı token'dan verir.
+    let adopted: AdoptedLegacyLeg | null = null;
     const result = await withBarcodeRetry(
         async () =>
           prisma.$transaction(async (tx) => {
             const cari = await resolveCariTx(tx, input, "Çek/senet");
+            adopted = cari.adopted;
 
         const rate =
           input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRateTx(tx, currency, postingDate);
@@ -1004,6 +1007,7 @@ export class ChequeService {
       recordId: result.id,
       newData: { docNo: result.docNo, kind, docType, amount: amount.toString(), currency },
     });
+    logLegacyLegAdoption(adopted, userId);
     return { success: true, data: result, message: `${result.docNo} kaydedildi.` };
   }
 
@@ -1113,7 +1117,7 @@ export class ChequeService {
     tx: Prisma.TransactionClient,
     id: string,
     target: ForwardTarget,
-  ): Promise<{ row: ChequeTransitionRow; move: ForwardMove }> {
+  ): Promise<{ row: ChequeTransitionRow; move: ForwardMove; adopted?: AdoptedLegacyLeg | null }> {
     if (target.type === ChequeEventType.DEPOSIT) {
       const row = await this.loadForTransition(tx, id, DEPOSIT_FROM, ChequeKind.RECEIVED, "bankaya verme");
       await loadAccountTx(tx, { bankAccountId: target.bankAccountId }, row.currency);
@@ -1127,7 +1131,7 @@ export class ChequeService {
     );
     const drawer = endorseDrawerRejection(row, cari.id);
     if (drawer) throw AppError.badRequest(drawer);
-    return { row, move: { type: ChequeEventType.ENDORSE, toCariId: cari.id } };
+    return { row, move: { type: ChequeEventType.ENDORSE, toCariId: cari.id }, adopted: cari.adopted };
   }
 
   /** Atomik claim — bankaya verme başlığa bankayı, ciro "çek şu an kimde" işaretçisini yazar. */
@@ -1522,8 +1526,11 @@ export class ChequeService {
     };
     if (await resolveChequeNoteMovementEnabled()) return this.viaDeliveryNote(id, target, input, userId);
     const eventDate = input.eventDate ?? new Date();
+    let adopted: AdoptedLegacyLeg | null | undefined = null;
     const result = await prisma.$transaction(async (tx) => {
-      const { row, move } = await this.prepareForwardTx(tx, id, target);
+      const step = await this.prepareForwardTx(tx, id, target);
+      const { row, move } = step;
+      adopted = step.adopted;
       await this.claimForwardTx(tx, row, move);
       await this.writeForwardTx(tx, row, move, { eventDate, notes: input.notes ?? null, deliveryNoteId: null, userId });
       return { id: row.id, docNo: row.docNo };
@@ -1536,6 +1543,7 @@ export class ChequeService {
       recordId: id,
       newData: { event: "ENDORSE", docNo: result.docNo },
     });
+    logLegacyLegAdoption(adopted, userId);
     return { success: true, data: result, message: `${result.docNo} ciro edildi.` };
   }
 

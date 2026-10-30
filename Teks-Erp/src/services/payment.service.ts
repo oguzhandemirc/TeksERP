@@ -38,6 +38,7 @@ import { resolvePartyToCardTx } from "./helpers/party-card.helper";
 import type { ApiResponse } from "../types/api.types";
 import { applyCashTxTx, cancelCashTxTx, moveAccountBalanceTx } from "./helpers/cash-ledger.helper";
 import { settingRowPath } from "../constants/panel-ayar-yolu";
+import { logLegacyLegAdoption, type AdoptedLegacyLeg } from "./helpers/cari-account-adopt.helper";
 
 export interface CreatePaymentInput {
   direction: PaymentDirection;
@@ -195,6 +196,7 @@ export class PaymentService {
     const currency = input.currency ?? Currency.TRY;
 
     // Yarışı kaybedenin token P2002'si RETRY EDİLMEZ (aynı token'ı 5 tur boşa yazardı); boğazın `run`ı cevabı token'dan verir.
+    let adopted: AdoptedLegacyLeg | null = null;
     const result = await withBarcodeRetry(
         async () =>
           prisma.$transaction(async (tx) => {
@@ -202,6 +204,7 @@ export class PaymentService {
           customerId: input.customerId ?? null,
           subcontractorId: input.subcontractorId ?? null,
         });
+        adopted = cari.adopted;
 
         // ⚠️ KASA PARA BİRİMİ ≠ ÖDEME PARA BİRİMİ → RED. Kasa tek para
         // birimlidir; USD'yi TL kasasına yazmak, "kasada ne var" sorusunu
@@ -337,6 +340,7 @@ export class PaymentService {
       recordId: result.id,
       newData: { docNo: result.docNo, direction: input.direction, amount: amount.toString() },
     });
+    logLegacyLegAdoption(adopted, userId);
     // Otomatik FIFO kapama — kaydın DIŞINDA, ayrı adım (yukarıdaki nota bak).
     const autoNote = await autoAllocateNoteAfterPayment(result.id, currency, userId);
     return {

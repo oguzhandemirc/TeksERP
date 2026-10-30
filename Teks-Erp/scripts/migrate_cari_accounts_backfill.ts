@@ -58,7 +58,8 @@ export interface BackfillOzeti {
 export async function backfillOlc(): Promise<Omit<BackfillOzeti, "acilan">> {
   const financeEnabled = await readFinanceEnabled();
   const hesapsiz = await prisma.customer.findMany({
-    where: { cariAccount: null },
+    // Eski fason bacağında hesabı olan kart HESAPSIZ değildir (K3a — tek çözücüyle aynı kimlik); listelenmez.
+    where: { cariAccount: null, NOT: { subcontractor: { cariAccount: { isNot: null } } } },
     select: { id: true, code: true, name: true, isActive: true, isCustomerRole: true, isSupplierRole: true, isSubcontractorRole: true },
     orderBy: { code: "asc" },
   });

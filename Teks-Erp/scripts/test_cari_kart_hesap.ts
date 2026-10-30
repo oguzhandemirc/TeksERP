@@ -19,12 +19,20 @@
 //      (`cariService.update`): yazılan tetik sevk/dönem çözücüsünde etkin; GET kart + `by-customer` aynı değeri gösterir;
 //      geçersiz değer 400 SERVICE_BILLING_TRIGGER_INVALID Türkçe, yazmaz; audit CARI_ACCOUNT satırı; null = fabrika ayarı;
 //      fason hesabında 400 SERVICE_BILLING_TRIGGER_NOT_CUSTOMER korunur
+//   §8 (K3a) CARİ TEK KİMLİK: eski fason bacağı hesabı olan kartta yazım hesap sayısını 1 tutar (hesap kartın hesabına
+//      çevrilir), okuma aynı hesabı döner; hesapsız kartta ilk yazım tek hesap; eşzamanlı ilk yazım tek hesap; tek fabrika
+//      · kart hesabı PASİF + eski bacak aktif → yazım 409 (pasiflik eski bacağa kaçarak aşılmaz) · çevirmenin audit'i
+//      commit SONRASI ve aktörlü; geri alınan tx iz bırakmaz
+//   §9 onarım `fix_cari_cift_hesap`: dry-run listeler, hareketsiz ikinciyi kapatır, hareketli çiftte DURUR; pasif kart
+//      hesabı + aktif eski bacak ayrı kategori (hareketsiz pasif kart hesabı silinir, eski bacak çevrilir)
 //
 // ⭐ NEGATİF SONDA (ölçüldü 2026-09-18): ① `bornCariAccountTx` sabit null → §1a/§1b/§1c ❌ (sonrası zincirleme çöker — kırmızı yine kırmızı) · ② `takeFinanceSub` izin kapısı
 //    kaldırıldı → §5a ❌ · ③ `resolveCariAccountByCustomerTx` fason bacağı (`subcontractor: { customerId }`) düşürüldü → §4c ❌
 //    · ④ backfill `yazmaEngeli` `_test` kapısı kaldırıldı → §2e ❌.
 //    · ⑥ (2026-10-29 K2b bitirici) `resolveCariAccountByCustomerTx` orderBy `nulls: "last"` kaldırıldı → §4c2 ❌.
 //    · ⑤ (2026-10-29 K2b) `financeSubSchema`dan `serviceBillingTrigger` satırı silindi → §7a–§7e ❌ (strict şema 400).
+//    · ⑦ (2026-10-30 K3a) ensure eski `{customerId}` aramasına döndü → §8a–§8c ❌ · ⑧ `skipDuplicates` kapalı → §8e ❌ (1/4)
+//    · ⑨ onarımın hareket kapısı düştü → §9a/§9d/§9e/§9f ❌.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. `finance.enabled` fotoğrafa döner; temizlik yalnız `temizle`.
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -40,9 +48,10 @@ import { AuthService } from "../src/services/auth.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { customerService } from "../src/routes/customer.routes";
 import { cariService } from "../src/services/cari.service";
-import { ensureCariAccountTx, resolveCariAccountByCustomerTx } from "../src/services/helpers/finance.helper";
+import { ensureCariAccountTx, findCariAccountIdByCustomer, resolveCariAccountByCustomerTx } from "../src/services/helpers/finance.helper";
 import { resolveCustomerServiceBillingTrigger } from "../src/services/helpers/service-billing.helper";
 import { backfillOlc, backfillUygula } from "./migrate_cari_accounts_backfill";
+import { ciftOlc } from "./fix_cari_cift_hesap";
 import { AppError } from "../src/utils/app-error";
 
 let pass = 0;
@@ -246,6 +255,159 @@ async function main(): Promise<void> {
     const subAcc = await prisma.$transaction((tx) => ensureCariAccountTx(tx, { customerId: null, subcontractorId: sub7.id }));
     const e7f = await beklenenHata(() => cariService.update(subAcc.id, { serviceBillingTrigger: "PER_SHIPMENT" }, admin.id));
     check("§7f fason (müşteri olmayan) hesap → 400 SERVICE_BILLING_TRIGGER_NOT_CUSTOMER korunur", e7f?.statusCode === 400 && kod(e7f) === "SERVICE_BILLING_TRIGGER_NOT_CUSTOMER", kod(e7f));
+
+    console.log("\n── §8 Cari tek kimlik: eski fason bacağı hesabı (K3a) ──");
+    const tekKimlik = (customerId: string) => prisma.cariAccount.findMany({ where: { OR: [{ customerId }, { subcontractor: { customerId } }] }, select: { id: true, isActive: true, kind: true, customerId: true, subcontractorId: true, paymentTermDays: true, serviceBillingTrigger: true } });
+    const k8 = await kartAc({ isSupplierRole: true });
+    ids.customers.push(k8.data.id);
+    await prisma.cariAccount.deleteMany({ where: { customerId: k8.data.id } });
+    const sub8 = await prisma.subcontractor.create({ data: { code: `${TAG}-SUB8`, name: `${TAG} eski fason 8`, customerId: k8.data.id }, select: { id: true } });
+    ids.subs.push(sub8.id);
+    const legacy8 = await prisma.cariAccount.create({ data: { kind: "SUBCONTRACTOR", subcontractorId: sub8.id }, select: { id: true } });
+    const r8a = await call("PATCH", `/api/customers/${k8.data.id}`, adminTok, { finance: { paymentTermDays: 21, serviceBillingTrigger: "PER_SHIPMENT" } });
+    const h8a = await tekKimlik(k8.data.id);
+    check("§8a ⭐ eski fason bacağı hesabı olan kart → karttan terim/tetik yazımı: kartın hesap sayısı 1 KALIR, yazım o hesaba gider",
+      r8a.status === 200 && r8a.body.data?.cariAccountId === legacy8.id && h8a.length === 1 && h8a[0]!.id === legacy8.id && h8a[0]!.paymentTermDays === 21 && h8a[0]!.serviceBillingTrigger === "PER_SHIPMENT"
+        // Geçiş artığı yazımda kartın hesabına ÇEVRİLİR (TEK UPDATE): aynı id, kind CUSTOMER, fason bacağı boş.
+        && h8a[0]!.kind === "CUSTOMER" && h8a[0]!.customerId === k8.data.id && h8a[0]!.subcontractorId === null,
+      `${r8a.status} ${JSON.stringify(h8a)}`);
+    const eff8 = await resolveCustomerServiceBillingTrigger(k8.data.id, { trigger: "PERIOD_END" });
+    check("§8b okuma AYNI hesabı döner: resolve · by-customer · findCariAccountIdByCustomer · hizmet tetiği çözücüsü",
+      (await resolveCariAccountByCustomerTx(prisma, k8.data.id))?.id === legacy8.id && (await cariService.findByCustomer(k8.data.id)).data.id === legacy8.id && (await findCariAccountIdByCustomer(k8.data.id)) === legacy8.id && eff8.trigger === "PER_SHIPMENT" && eff8.source === "CUSTOMER",
+      JSON.stringify(eff8));
+    const e8c = await prisma.$transaction((tx) => ensureCariAccountTx(tx, { subcontractorId: sub8.id }));
+    const e8c2 = await prisma.$transaction((tx) => ensureCariAccountTx(tx, { customerId: k8.data.id }));
+    const e8c3 = await beklenenHata(() => cariService.create({ customerId: k8.data.id }, admin.id));
+    check("§8c iki bacaktan `ensureCariAccountTx` aynı hesap (created=false); açık `cariService.create` 409; sayı hâlâ 1",
+      e8c.id === legacy8.id && !e8c.created && e8c2.id === legacy8.id && !e8c2.created && e8c3?.statusCode === 409 && (await tekKimlik(k8.data.id)).length === 1);
+    await setFin(false);
+    const k9 = await kartAc();
+    const k10 = await kartAc();
+    ids.customers.push(k9.data.id, k10.data.id);
+    await setFin(true);
+    const acc9 = await cariService.writeTermsForCustomer(k9.data.id, { paymentTermDays: 7 }, admin.id);
+    const h9 = await tekKimlik(k9.data.id);
+    check("§8d hesapsız kartta ilk yazım TEK hesap açar ve terimi yazar", h9.length === 1 && h9[0]!.id === acc9 && h9[0]!.paymentTermDays === 7, JSON.stringify(h9));
+    // Yarış: her tx hesabı açtıktan sonra açık tutulur (pg_sleep) — ikinci INSERT birincinin commit'ini bekler.
+    // Her yarışçı AYRI tx (tek tx'te paralellik değil) — sözler önce kurulur, sonra birlikte beklenir.
+    const yarisci = () => prisma.$transaction(async (tx) => {
+      const r = await ensureCariAccountTx(tx, { customerId: k10.data.id });
+      await tx.$executeRawUnsafe("SELECT pg_sleep(0.4)");
+      return r;
+    }, { timeout: 20_000 });
+    const sozler = [yarisci(), yarisci(), yarisci(), yarisci()];
+    const yaris = await Promise.allSettled(sozler);
+    const ok = yaris.filter((y): y is PromiseFulfilledResult<Awaited<ReturnType<typeof ensureCariAccountTx>>> => y.status === "fulfilled").map((y) => y.value);
+    const h10 = await tekKimlik(k10.data.id);
+    check("§8e ⭐ eşzamanlı 4 ilk yazım → TEK hesap, dördü de başarılı ve aynı id, yalnız biri `created`",
+      ok.length === 4 && new Set(ok.map((o) => o.id)).size === 1 && ok.filter((o) => o.created).length === 1 && h10.length === 1 && h10[0]!.id === ok[0]!.id,
+      `${ok.length}/4 · ${yaris.filter((y) => y.status === "rejected").map((y) => String((y as PromiseRejectedResult).reason).slice(0, 80)).join(" | ")} · hesap ${h10.length}`);
+    // Kart hesabı PASİF + eski bacak AKTİF (K3a çiftini gören kullanıcı boş kart hesabını pasife almış): çözücü kartın
+    // KENDİ hesabını seçer → yazım 409; eski bacak çevrilmez, pasiflik aşılmaz.
+    const k8h = await kartAc({ isSupplierRole: true });
+    ids.customers.push(k8h.data.id);
+    const pasif8h = (await prisma.cariAccount.findUniqueOrThrow({ where: { customerId: k8h.data.id }, select: { id: true } })).id;
+    await prisma.cariAccount.update({ where: { id: pasif8h }, data: { isActive: false } });
+    const sub8h = await prisma.subcontractor.create({ data: { code: `${TAG}-SUB8H`, name: `${TAG} eski fason 8h`, customerId: k8h.data.id }, select: { id: true } });
+    ids.subs.push(sub8h.id);
+    const legacy8h = await prisma.cariAccount.create({ data: { kind: "SUBCONTRACTOR", subcontractorId: sub8h.id }, select: { id: true } });
+    const e8h = await beklenenHata(() => prisma.$transaction((tx) => ensureCariAccountTx(tx, { customerId: k8h.data.id })));
+    const h8h = await prisma.cariAccount.findUniqueOrThrow({ where: { id: legacy8h.id }, select: { kind: true, customerId: true } });
+    check("§8h ⭐ kart hesabı PASİF + eski bacak aktif → yazım 409 'pasif'; eski bacak ÇEVRİLMEDİ; okuma kartın (pasif) hesabını döner",
+      e8h?.statusCode === 409 && /pasif/.test(e8h.message) && h8h.kind === "SUBCONTRACTOR" && h8h.customerId === null && (await resolveCariAccountByCustomerTx(prisma, k8h.data.id))?.id === pasif8h,
+      `${e8h?.statusCode} ${JSON.stringify(h8h)}`);
+    // Çevirmenin ayak izi commit SONRASI ve aktörlü (ES-11): §8a'nın PATCH'i admin adına yazıldı; geri alınan tx iz bırakmaz.
+    const cevirmeLog = (id: string) => prisma.systemLog.findMany({ where: { tableName: "CARI_ACCOUNT", recordId: id, action: "UPDATE" }, select: { userId: true, newData: true } })
+      .then((ls) => ls.filter((l) => (l.newData as { kaynak?: string } | null)?.kaynak === "kart-hesabina-cevirme"));
+    let log8i: Array<{ userId: string | null }> = [];
+    for (let i = 0; i < 20 && log8i.length === 0; i++) {
+      log8i = await cevirmeLog(legacy8.id);
+      if (log8i.length === 0) await new Promise((r) => setTimeout(r, 100));
+    }
+    const k8j = await kartAc({ isSupplierRole: true });
+    ids.customers.push(k8j.data.id);
+    await prisma.cariAccount.deleteMany({ where: { customerId: k8j.data.id } });
+    const sub8j = await prisma.subcontractor.create({ data: { code: `${TAG}-SUB8J`, name: `${TAG} eski fason 8j`, customerId: k8j.data.id }, select: { id: true } });
+    ids.subs.push(sub8j.id);
+    const legacy8j = await prisma.cariAccount.create({ data: { kind: "SUBCONTRACTOR", subcontractorId: sub8j.id }, select: { id: true } });
+    await beklenenHata(() => prisma.$transaction(async (tx) => {
+      await ensureCariAccountTx(tx, { customerId: k8j.data.id });
+      throw AppError.badRequest("bekçi: kapı tx'i geri alır");
+    }));
+    await new Promise((r) => setTimeout(r, 400));
+    const h8j = await prisma.cariAccount.findUniqueOrThrow({ where: { id: legacy8j.id }, select: { kind: true } });
+    check("§8i ⭐ çevirmenin audit'i commit sonrası ve AKTÖRLÜ (§8a: admin); geri alınan tx'te çevirme de audit de YOK",
+      log8i.length === 1 && log8i[0]!.userId === admin.id && h8j.kind === "SUBCONTRACTOR" && (await cevirmeLog(legacy8j.id)).length === 0,
+      `${JSON.stringify(log8i)} · ${h8j.kind}`);
+    const srcFiles = spawnSync("git", ["ls-files", "src"], { cwd: ROOT, encoding: "utf8" }).stdout.trim().split("\n").filter((f) => f.endsWith(".ts"));
+    const yaratanlar: string[] = [];
+    const dogrudanOkuyan: string[] = [];
+    for (const f of srcFiles) {
+      const t = readFileSync(path.join(ROOT, f), "utf8");
+      for (const m of t.matchAll(/\.cariAccount\.(create|createMany|createManyAndReturn|upsert)\(/g)) yaratanlar.push(`${f}@${m.index}`);
+      // Kart hesabına çevirmenin `customerId @unique` yoklaması (tek çağıranı `ensureCariAccountTx`) muaf.
+      // Doğrudan sorgu (findUnique/findFirst/findMany/count, tek/çift tırnak, çok satır) ya da ilişki üzerinden okuma (`cariAccount: {`/`: true`).
+      if (/cariAccount\.(findUnique|findFirst|findMany|count)(OrThrow)?\(\{\s*where:\s*\{\s*["']?(customerId|subcontractorId)\b/.test(t) || /\bcariAccount:\s*(\{|true\b)/.test(t)) dogrudanOkuyan.push(f);
+    }
+    const fh = readFileSync(path.join(ROOT, "src/services/helpers/finance.helper.ts"), "utf8");
+    const ensureGovde = fh.slice(fh.indexOf("export async function ensureCariAccountTx("), fh.indexOf("\n}\n", fh.indexOf("export async function ensureCariAccountTx(")));
+    check("§8f ⭐ `cariAccount` satırı TEK fabrikada: src'de yaratan çağrı yalnız `ensureCariAccountTx` gövdesinde (1 adet)",
+      yaratanlar.length === 1 && yaratanlar[0]!.startsWith("src/services/helpers/finance.helper.ts@") && /\.cariAccount\.createMany\(/.test(ensureGovde), yaratanlar.join(","));
+    check("§8g kart → hesap okuması tek çözücüden: src'de `cariAccount.find*/count({ where: { customerId|subcontractorId` ve ilişki seçimi `cariAccount: {…}` YOK; ensure çözücüyü çağırır",
+      dogrudanOkuyan.length === 0 && /findCariAccountForCardTx\(tx, card,/.test(ensureGovde), dogrudanOkuyan.join(","));
+
+    console.log("\n── §9 Onarım betiği `fix_cari_cift_hesap` ──");
+    const ciftKur = async (n: number): Promise<{ k: string; sub: string; legacy: string; cust: string }> => {
+      const k = await kartAc({ isSupplierRole: true });
+      ids.customers.push(k.data.id);
+      const cust = (await prisma.cariAccount.findUniqueOrThrow({ where: { customerId: k.data.id }, select: { id: true } })).id;
+      const sub = await prisma.subcontractor.create({ data: { code: `${TAG}-SUB${n}`, name: `${TAG} eski fason ${n}`, customerId: k.data.id }, select: { id: true } });
+      ids.subs.push(sub.id);
+      // K3a öncesi çift: eski fason hesabı ÖNCE doğmuş, kart hesabı SONRA (K2b yazımı).
+      const legacy = await prisma.cariAccount.create({ data: { kind: "SUBCONTRACTOR", subcontractorId: sub.id, createdAt: new Date(Date.now() - 86_400_000) }, select: { id: true } });
+      return { k: k.data.id, sub: sub.id, legacy: legacy.id, cust };
+    };
+    const c11 = await ciftKur(11);
+    await prisma.cariAccount.update({ where: { id: c11.cust }, data: { paymentTermDays: 33 } });
+    const c12 = await ciftKur(12);
+    await prisma.cariTransaction.create({ data: { cariId: c12.cust, currency: Currency.TRY, txnDate: new Date(), debit: 5, sourceType: CariTxnSource.ADJUSTMENT, description: `${TAG} hareket 12` } });
+    await prisma.cariBalance.create({ data: { cariId: c12.cust, currency: Currency.TRY, balance: 5 } });
+    // Pasif kart hesabı + aktif eski bacak (hareketsiz): ayrı kategori, kapatılabilir.
+    const c13 = await ciftKur(13);
+    await prisma.cariAccount.update({ where: { id: c13.cust }, data: { isActive: false } });
+    const o9 = await ciftOlc();
+    const p13 = o9.ciftler.find((c) => c.customerId === c13.k);
+    const p11 = o9.ciftler.find((c) => c.customerId === c11.k);
+    const p12 = o9.ciftler.find((c) => c.customerId === c12.k);
+    check("§9a ölçüm iki çifti listeler: ikinci = sonra doğan kart hesabı, hareket/bakiye; hareketsiz çift kapatılabilir + terim taşınır, hareketli çift DURUR",
+      !!p11 && !!p12 && p11.ikinci.id === c11.cust && p11.ilk.id === c11.legacy && p11.engel === null && p11.terimTasi.paymentTermDays === 33
+        && p12.ikinci.id === c12.cust && p12.ikinci.hareket === 1 && p12.ikinci.bakiye.TRY === "5" && /HAREKETLİ/.test(p12.engel ?? ""),
+      JSON.stringify({ p11: p11 && { e: p11.engel, t: p11.terimTasi }, p12: p12 && { e: p12.engel, h: p12.ikinci.hareket, b: p12.ikinci.bakiye } }));
+    const kod11 = (await prisma.customer.findUniqueOrThrow({ where: { id: c11.k }, select: { code: true } })).code;
+    const kod12 = (await prisma.customer.findUniqueOrThrow({ where: { id: c12.k }, select: { code: true } })).code;
+    const fixKos = (args: string[]) => spawnSync(process.execPath, [path.join(ROOT, "node_modules/.bin/tsx"), path.join(ROOT, "scripts/fix_cari_cift_hesap.ts"), ...args], { encoding: "utf8", env: cocukOrtami({}), timeout: 120_000 });
+    const dry = fixKos([]);
+    const aktif = async () => (await prisma.cariAccount.findMany({ where: { id: { in: [c11.legacy, c11.cust, c12.legacy, c12.cust] } }, select: { id: true, isActive: true } })).filter((a) => a.isActive).length;
+    check("§9b dry-run (varsayılan): çıkış 0, iki kartı listeler, 'hiçbir şey yazılmadı', dört hesap aktif kalır",
+      dry.status === 0 && dry.stdout.includes(kod11) && dry.stdout.includes(kod12) && /hiçbir şey yazılmadı/.test(dry.stdout) && (await aktif()) === 4, `${dry.status} ${dry.stderr.slice(0, 200)}`);
+    const sahte9 = spawnSync(process.execPath, [path.join(ROOT, "node_modules/.bin/tsx"), path.join(ROOT, "scripts/fix_cari_cift_hesap.ts"), "--apply"], { encoding: "utf8", env: cocukOrtami({ DATABASE_URL: "postgresql://bekci@127.0.0.1:1/tekserp_sahte_canli?schema=public" }), timeout: 60_000 });
+    check("§9c `_test` dışı hedef + `--apply` `--canli-onay`sız → ⛔ çıkış 2 (DB'ye bağlanmadan)", sahte9.status === 2 && /--canli-onay/.test(sahte9.stdout), `${sahte9.status}`);
+    const app9 = fixKos(["--apply"]);
+    const h11 = await prisma.cariAccount.findMany({ where: { id: { in: [c11.legacy, c11.cust] } }, select: { id: true, isActive: true, kind: true, customerId: true, paymentTermDays: true } });
+    const h12 = await prisma.cariAccount.findMany({ where: { id: { in: [c12.legacy, c12.cust] } }, select: { id: true, isActive: true } });
+    check("§9d ⭐ `--apply`: hareketsiz ikinci KART hesabı kapandı (deftere yazmamış satır silindi), ilk hesap kartın hesabına çevrildi + terim taşındı, okuma onu döner",
+      h11.length === 1 && h11[0]!.id === c11.legacy && h11[0]!.isActive && h11[0]!.kind === "CUSTOMER" && h11[0]!.customerId === c11.k && h11[0]!.paymentTermDays === 33
+        && (await resolveCariAccountByCustomerTx(prisma, c11.k))?.id === c11.legacy,
+      JSON.stringify(h11));
+    check("§9e ⭐ hareketli çiftte DURUR: iki hesap da aktif, listede gerekçe, çıkış 3",
+      h12.every((a) => a.isActive) && app9.status === 3 && /DURDU/.test(app9.stdout) && app9.stdout.includes(kod12), `${app9.status} ${app9.stderr.slice(0, 200)}`);
+    const h13 = await prisma.cariAccount.findMany({ where: { id: { in: [c13.legacy, c13.cust] } }, select: { id: true, isActive: true, kind: true, customerId: true } });
+    check("§9g ⭐ kart hesabı PASİF + eski bacak aktif: ölçümde çift (pasifKart, ikinci = pasif kart hesabı, kapatılabilir); `--apply` pasif kart hesabını siler, eski bacak kartın hesabına çevrilir",
+      !!p13 && p13.pasifKart && p13.ikinci.id === c13.cust && p13.ilk.id === c13.legacy && p13.engel === null
+        && h13.length === 1 && h13[0]!.id === c13.legacy && h13[0]!.isActive && h13[0]!.kind === "CUSTOMER" && h13[0]!.customerId === c13.k,
+      JSON.stringify({ p13: p13 && { pk: p13.pasifKart, e: p13.engel }, h13 }));
+    const o9b = await ciftOlc();
+    check("§9f idempotent: ikinci ölçümde onarılan çift yok, hareketli çift hâlâ listede", !o9b.ciftler.some((c) => c.customerId === c11.k) && o9b.ciftler.some((c) => c.customerId === c12.k));
   } finally {
     server.close();
     await temizle(ids, foto);

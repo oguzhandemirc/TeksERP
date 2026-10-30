@@ -53,7 +53,7 @@ import {
   readFinanceEnabled,
 } from "./../system-setting.service";
 import { D0 } from "./allocation.helper";
-import { deriveInvoiceDueDate } from "./finance.helper";
+import { deriveInvoiceDueDate, findCariAccountForCardTx } from "./finance.helper";
 import { SACK_ABSENT_STATUSES } from "./sack-invariants.helper";
 import { LEDGER_UNIT, unitLabel } from "../../constants/item-unit";
 import { uyari } from "../../lib/logger";
@@ -387,10 +387,7 @@ export async function buildShipmentInvoiceDraftPreview(
     select: { id: true, customerId: true },
   });
   if (!sh?.customerId) throw AppError.notFound("Sevkiyat bulunamadı ya da müşterisi yok.");
-  const cari = await prisma.cariAccount.findUnique({
-    where: { customerId: sh.customerId },
-    select: { defaultCurrency: true },
-  });
+  const cari = await findCariAccountForCardTx(prisma, { customerId: sh.customerId, subcontractorId: null }, { defaultCurrency: true });
   const currency = (cari?.defaultCurrency ?? Currency.TRY) as Currency;
   const result = await collectShipmentInvoiceDraftLines(sh.id, sh.customerId, currency);
   return { ...result, currency };
@@ -449,12 +446,9 @@ export async function autoDraftInvoiceAfterDispatch(
     // biriminde doğururdu; kartı okumak da fiyat çözümünü AYNI para birimine
     // bağlar (farklı para birimindeki `ItemPrice` satırı eşleşmez, fiyat 0
     // kalır ve onay seddi devreye girer — sessiz yanlış değil, görünür eksik).
-    const cari = await prisma.cariAccount.findUnique({
-      where: { customerId: sh.customerId },
-      // ⚠️ `paymentTermDays` AYNI SORGUDAN gelir (ek sorgu yok) — vade
-      // ön-dolumu için; kural `deriveInvoiceDueDate`de (tek kaynak).
-      select: { defaultCurrency: true, paymentTermDays: true },
-    });
+    // ⚠️ `paymentTermDays` AYNI SORGUDAN gelir (ek sorgu yok) — vade ön-dolumu için; kural `deriveInvoiceDueDate`de.
+    // Kartın hesabı TEK çözücüden (K3a: eski fason bacağındaki hesap da kartındır).
+    const cari = await findCariAccountForCardTx(prisma, { customerId: sh.customerId, subcontractorId: null }, { defaultCurrency: true, paymentTermDays: true });
     const currency = cari?.defaultCurrency ?? Currency.TRY;
 
     const { lines, orderConflicts, warnings, serviceLinks, shipmentGross } = await collectShipmentInvoiceDraftLines(sh.id, sh.customerId, currency);
