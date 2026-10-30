@@ -83,6 +83,7 @@ async function main(): Promise<void> {
   const GOC_SONRASI_TURLER = new Set<string>([
     "SWATCH", // S4, 2026-09-26: canlı kartela
     "SERVICE_PROPERTY_MAP", "SERVICE_VALUE_MAP", "SERVICE_CUSTOMER_PRICE", // 1e K2a, 2026-10-29: hizmet kalemi eşleme + müşteri fiyatı
+    "CONSUMABLE_NORM", // D4-G1a, 2026-10-30: aktif sarf normu (hizmet + sarf kalemi)
   ]);
   for (const it of all) {
     const sayim = (await countItemLiveRefs(prisma, it.id)).filter((c) => !GOC_SONRASI_TURLER.has(c.kind));

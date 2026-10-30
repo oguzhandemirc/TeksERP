@@ -275,6 +275,13 @@ const SERVICE_ITEM_ID_FILES = new Set([
   // K2a: ürün kartı canlı referans kataloğu — eşlenmiş kalemi pasife alma kapısı için sayar (çözücü değil).
   "services/helpers/item-lifecycle.helper.ts",
 ]);
+// MALİYET tarafı beyanlı okuyucular (D4-G1a sarf normu): `serviceItemId` normun KENDİ kolonudur, hizmet
+// kalemi çözümü değildir — FinishingRate yasağı (gelir ≠ maliyet) bunlara UYGULANMAZ, beyan yine iki yönlü.
+const COST_SIDE_SERVICE_ITEM_ID_FILES = new Set([
+  "services/consumable-norm.service.ts",
+  "services/helpers/cost-rate-validity.helper.ts",
+  "routes/cost.routes.ts",
+]);
 function astChecks(): void {
   section("§8 AST: çözücü tek, eşleme okuyucuları beyanlı, FinishingRate okunmaz");
   const files = walkTs(SRC);
@@ -308,9 +315,9 @@ function astChecks(): void {
     visit(sf);
   }
   check("resolveServiceItemsForRolls TEK tanım (service-pricing.helper)", resolverDefs.length === 1 && resolverDefs[0] === "services/helpers/service-pricing.helper.ts", JSON.stringify(resolverDefs));
-  const undeclared = [...readers].filter((r) => !SERVICE_ITEM_ID_FILES.has(r));
+  const undeclared = [...readers].filter((r) => !SERVICE_ITEM_ID_FILES.has(r) && !COST_SIDE_SERVICE_ITEM_ID_FILES.has(r));
   check("serviceItemId okuyan beyansız dosya yok (ikinci kopya)", undeclared.length === 0, JSON.stringify(undeclared));
-  const stale = [...SERVICE_ITEM_ID_FILES].filter((r) => !readers.has(r));
+  const stale = [...SERVICE_ITEM_ID_FILES, ...COST_SIDE_SERVICE_ITEM_ID_FILES].filter((r) => !readers.has(r));
   check("beyan listesinde bayat girdi yok (iki yönlü)", stale.length === 0, JSON.stringify(stale));
   check("eşleme/çözücü dosyalarında FinishingRate okuması yok (maliyet ≠ gelir)", finishingHits.length === 0, JSON.stringify(finishingHits));
 }

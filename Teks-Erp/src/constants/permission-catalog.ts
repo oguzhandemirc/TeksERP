@@ -88,7 +88,7 @@ export const PERMISSION_CATALOG = [
   // Okuma TUTAR görmektir (maliyet tabanı ticari sırdır); yazma ürün yapısı + fiyat/tarife;
   // tesis parametreleri ayrı karar (yürürlüğe alma bütün maliyetleri değiştirir).
   { code: "cost:read", module: "COST", category: "web", description: "Maliyet girdilerini ve tutarlarını görüntüleme" },
-  { code: "cost:write", module: "COST", category: "web", description: "Ürün maliyet yapısı, iplik maliyet fiyatı ve terbiye tarifesi yazma" },
+  { code: "cost:write", module: "COST", category: "web", description: "Ürün maliyet yapısı, iplik maliyet fiyatı, terbiye tarifesi, makine saat ücreti ve hizmet sarf normu yazma" },
   { code: "cost:settings", module: "COST", category: "web", description: "Tesis maliyet parametrelerini düzenleme ve yürürlüğe alma" },
   // MAL-4: teklif ve fiyat listesi. Dönüştürme AYRI yetenek (sipariş doğurur; servis ayrıca `order:write` ister);
   // maliyet alanları bu izinlerle DEĞİL `cost:read` ile görünür.
