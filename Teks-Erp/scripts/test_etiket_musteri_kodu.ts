@@ -25,6 +25,7 @@ import { renderShipmentDispatchHtml } from "../src/services/document-render/ship
 import type { PrintedDocSnapshot } from "../src/services/printed-document.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import type { LabelPayload } from "../src/types/label.types";
+import { firstGrade } from "./fixture-quality-grade";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { layoutWith, PAYLOAD, renderFive, renderRaw } from "./lib/etiket-musteri-kodu-fikstur";
 
@@ -104,11 +105,12 @@ async function dbli(): Promise<void> {
       select: { id: true },
     });
     templateId = tpl.id;
+    const grade = await firstGrade();
     const mkRoll = async (suffix: string) => {
       const r = await prisma.roll.create({
         data: {
           barcode: `TEST-F3-${suffix}-${ts}`, itemId: item.id, colorId: null, width: 150,
-          initialQty: 100, currentQty: 100, status: "WAREHOUSE", qualityGrade: "1.KALITE",
+          initialQty: 100, currentQty: 100, status: "WAREHOUSE", qualityGrade: grade.code, qualityGradeId: grade.id,
           entrySource: "SUPPLIER_RECEIPT", ownerCustomerId: customer.id,
         },
         select: { id: true, barcode: true },
