@@ -28,6 +28,7 @@ import { type Roll, shipmentScopeLabels, categoryOfDispatch } from "./types";
 import { TERIM } from "@/lib/terim";
 import { PrintHistoryLink } from "@/components/print/PrintHistoryLink";
 import { RollTraceLink } from "./RollTraceLink";
+import { RollMeasurementsCard } from "./measurements/RollMeasurementsCard";
 
 interface Props {
   roll: Roll | null;
@@ -677,6 +678,11 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 fason sevk/kabul + doğum + kesim soyağacı BİRLEŞTİRİLMİŞ hâli.
                 Bu uç zaten vardı ve mobil Depo ekranı onu kullanıyordu; Electron
                 hiç çağırmıyordu. */}
+            {/* D4-B4: metre okumaları + sapmalar, opt-in "Ölçüm" kolonu; top izinin eklemeli alanı (eski backend: yok). */}
+            {canSeeHistory && historyQuery.data?.data?.measurements && (
+              <RollMeasurementsCard measurements={historyQuery.data.data.measurements} onChanged={() => void historyQuery.refetch()} />
+            )}
+
             {canSeeHistory && (
               <Card>
                 <CardContent className="p-3">

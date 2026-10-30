@@ -1,3 +1,4 @@
+import type { RollMeasurements } from "./measurements/measure-source";
 import apiClient from "@/services/apiClient";
 import { createCrudService } from "@/services/crudService";
 import type {
@@ -176,6 +177,8 @@ export interface RollHistoryEvent {
 export interface RollHistoryPayload {
   roll: { id: string; barcode: string | null; status: string };
   events: RollHistoryEvent[];
+  /** D4-B4 eklemeli: eski backend göndermez (kart çizilmez). */
+  measurements?: RollMeasurements;
 }
 
 export const rollService = {
