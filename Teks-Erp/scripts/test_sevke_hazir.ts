@@ -138,6 +138,10 @@ function astCheck(): void {
   check("§1 AST: hazırlık yüklemi/kural okuyucusu yalnız ship-readiness.helper'da", v.length === 0, v.join(" · "));
   const helper = readFileSync(path.join(ROOT, HELPER), "utf8");
   check("§1b AST körlük zemini: helper sınıflayıcıyı tanımlıyor", /export function classifyShipReadiness\(/.test(helper) && /export function readinessClassSql\(/.test(helper));
+  // §1c (D4-J3): İE birincil müşterisi İE listesiyle aynı sıralayıcıdan — elle dizi sırasına güvenen döngü yok.
+  const svc = readFileSync(path.join(ROOT, "src/services/ready-works.service.ts"), "utf8");
+  check("§1c İE müşteri sırası sortLinksByLinkedAt tek kaynağından",
+    /sortLinksByLinkedAt\(w\.orderLinks\)/.test(svc) && !/for \(const l of w\.orderLinks\)/.test(svc));
 }
 
 // ---------------------------------------------------------------------------
