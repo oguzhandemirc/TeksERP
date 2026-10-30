@@ -81,8 +81,8 @@ function RecordPart({ part }: { part: AnlatiParca }) {
         e.stopPropagation();
         // Sekme deposu tıklamada yüklenir: statik ithal, ⓘ Geçmiş'i kullanan her
         // ekrana rota/sekme ağacını taşıyordu (ölçüldü: ModuleProfilePage testi düştü).
-        void import("@/store/tabs").then(({ useTabsStore }) =>
-          useTabsStore.getState().openTab(target.to, target.state ? { state: target.state } : undefined),
+        void import("@/components/layout/tabs/use-tab-target").then(({ openTargetNow }) =>
+          openTargetNow("topLevel", target.to, undefined, target.state ? target.state : undefined),
         );
       }}
     >

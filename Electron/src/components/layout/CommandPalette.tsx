@@ -25,7 +25,7 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { usePreferences } from "@/providers/PreferencesProvider";
 import { useAuthStore } from "@/store/auth";
 import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
-import { useTabsStore } from "@/store/tabs";
+import { useOpenTopLevel } from "@/components/layout/tabs/use-tab-target";
 import { commandSections, findCommandEntry, type CommandEntry } from "./command-entries";
 import { foldSearchText } from "@/lib/search-fold";
 import { scoreCommandValue } from "./command-score";
@@ -50,7 +50,7 @@ interface Props {
 }
 
 export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
-  const openTab = useTabsStore((s) => s.openTab);
+  const openTarget = useOpenTopLevel();
   const { isAdmin, hasPermission, hasAnyPermission } = useRoleAccess();
   // Operasyon karolarının duruma bağlı görünürlüğü palette de geçerlidir — aksi
   // halde hub'da gizlenen ekran buradan hâlâ açılırdı. "Kurşun Sırası"nda bu
@@ -93,10 +93,11 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
 
   // Komut paleti de ÜST DÜZEY hedef açar (menü ile aynı sözleşme, 2026-08-17):
   // sekmeyi yerinde ezmek yerine varsa odaklar, yoksa yeni sekme açar ve o
-  // sayfanın son görünümünü (filtre/sıralama) geri getirir.
+  // sayfanın son görünümünü (filtre/sıralama) geri getirir. "Aynı sekmede aç"
+  // tercihinde aktif sekmede açar (`decideTabOpen`).
   const go = (to: string) => {
     onOpenChange(false);
-    openTab(to);
+    openTarget(to);
   };
 
   const runAction = (fn: () => void) => {
@@ -183,7 +184,7 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
     if (!target) return;
     const { to, state } = target.to(row);
     onOpenChange(false);
-    openTab(to, state ? { state } : undefined);
+    openTarget(to, undefined, state ? state : undefined);
   };
 
   const exact = serverQuery.data?.exact ?? null;
@@ -260,7 +261,7 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
                   value={`${SERVER_ITEM_PREFIX}more:${g.entity}`}
                   onSelect={() => {
                     onOpenChange(false);
-                    openTab(target.listTo(serverTerm));
+                    openTarget(target.listTo(serverTerm));
                   }}
                 >
                   <Search className="mr-2 h-4 w-4 shrink-0 opacity-60" />

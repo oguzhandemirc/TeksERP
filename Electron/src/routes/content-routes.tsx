@@ -60,6 +60,7 @@ import { InvoicesPage } from "@/pages/Finance/InvoicesPage";
 import { PaymentsPage } from "@/pages/Finance/PaymentsPage";
 import { AccountsPage } from "@/pages/Finance/AccountsPage";
 import { CashTransactionsPage } from "@/pages/Finance/CashTransactions/CashTransactionsPage";
+import { ExpenseSummaryPage } from "@/pages/Reports/Finance/ExpenseSummaryPage";
 import { RatesPage } from "@/pages/Finance/RatesPage";
 // Paket C (2026-08-14) — hepsi NAMED export; default import boş ekran verir.
 import { ChequesPage } from "@/pages/Finance/Cheques/ChequesPage";
@@ -161,7 +162,7 @@ import { DevicesPage } from "@/pages/Devices/DevicesPage";
 import { DeviceDetailPage } from "@/pages/Devices/detail/DeviceDetailPage";
 import { OperationsHubPage } from "@/pages/Operations/OperationsHubPage";
 import { ReportsHubPage } from "@/pages/Reports/ReportsHubPage";
-import { reportV2Routes } from "@/pages/Reports/_v2/routes";
+import { V2_KEYS_WITH_OWN_PAGE, reportV2Routes } from "@/pages/Reports/_v2/routes";
 import { customReportRoutes } from "@/pages/Reports/_v2/custom/routes";
 import { ProductionReportsHubPage } from "@/pages/Reports/Production/ProductionReportsHubPage";
 import { WipScorecardPage } from "@/pages/Reports/Production/WipScorecardPage";
@@ -1634,6 +1635,16 @@ export const contentRoutes: RouteObject[] = [
   // ── Dokuma raporları (Dilim 5, 2026-09-14) — rejim kapısı `ROUTE_MODULE` aynasından
   //    (`reports/dokuma` → dokumaEnabled); üç segmentli adres (ReportSideRail şartı); izin
   //    `report:production` (1e hükmü ③); karne eylemleri ekran içinde PermissionGate.
+  // Masraf Özeti (D4-H1) — rejim `ROUTE_MODULE` (`reports/finance` → financeEnabled); izin backend ucuyla aynı
+  // (`report:finance`). v2 zarfını çizer ama rapor v2 bayrağına bağlı DEĞİL (`V2_KEYS_WITH_OWN_PAGE`).
+  {
+    path: "reports/finance/masraf-ozeti",
+    element: (
+      <ProtectedRoute requirePermission="report:finance">
+        <ExpenseSummaryPage />
+      </ProtectedRoute>
+    ),
+  },
   // Maliyet raporları (MAL-7) — rejim `ROUTE_MODULE` (`reports/maliyet` → maliyetEnabled); izin `report:yarn-need`.
   {
     path: "reports/maliyet",
@@ -1836,7 +1847,7 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   // Raporlar v2 — 14 temel rapor yaprağı katalogdan (izin `izin`, kapı bayrak + `hazir`; `_v2/routes.tsx`).
-  ...reportV2Routes,
+  ...reportV2Routes.filter((r) => !V2_KEYS_WITH_OWN_PAGE.has(String(r.path).replace(/^reports\//, ""))),
   ...customReportRoutes,
   // bildirim: yönetici profilleri + fabrika varsayılanı — karo (`System/tile-config.ts`) ile AYNI erişim listesi.
   {

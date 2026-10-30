@@ -26,6 +26,7 @@ import { invoiceService } from "../services/invoice.service";
 import { SERVICE_PERIOD_PATTERN, createServicePeriodDraft, previewServicePeriodDraft } from "../services/service-period-invoice.service";
 import { paymentService } from "../services/payment.service";
 import { cashTransactionService } from "../services/cash-transaction.service";
+import { expenseCategorySuggestions } from "../services/helpers/expense-summary.helper";
 import allocationRoutes from "./finance-allocation.routes";
 import { fetchTcmbRates } from "../jobs/exchange-rate.job";
 
@@ -313,6 +314,25 @@ router.get("/cash-transactions", requirePermission("finance:read"), async (req, 
       to: q.to ? new Date(q.to) : undefined,
     });
     res.json({ success: true, ...result });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/finance/cash-transactions/category-suggestions:
+ *   get:
+ *     tags: [Finance]
+ *     summary: Masraf formu kategori önerisi — son kullanılan ilk 20 farklı kategori (katalog değil; D4-H1)
+ *     description: "`finance.masraf.kategoriOnerisi` = OFF ise `enabled:false` ve boş liste (sorgu atılmaz)."
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ enabled, categories: string[] }" }
+ */
+router.get("/cash-transactions/category-suggestions", requirePermission("finance:read"), async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: await expenseCategorySuggestions() });
   } catch (e) {
     next(e);
   }

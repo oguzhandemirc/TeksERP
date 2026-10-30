@@ -24,7 +24,7 @@
 // çağırır.
 // =============================================================================
 
-import { ArrowLeftRight, BookOpen, CalendarClock, Hourglass, Percent } from "lucide-react";
+import { ArrowLeftRight, BookOpen, CalendarClock, Hourglass, Percent, Receipt } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
 
 export const financeReportTiles: HubTile[] = [
@@ -62,5 +62,14 @@ export const financeReportTiles: HubTile[] = [
     description: "Dövizli kapamalarda gerçekleşen TL kur farkı — lehte/aleyhte ayrı, cari ve para birimi süzgeçli",
     icon: ArrowLeftRight,
     to: "/reports/finance/fx-diff",
+  },
+  {
+    // v2 zarflı ama kendi sayfası rapor v2 bayrağından bağımsız (`V2_KEYS_WITH_OWN_PAGE`): v2 kapalıyken
+    // menü/palet yolu bu karodur (`test_rapor_katalogu §3`).
+    key: "masraf-ozeti",
+    title: "Masraf Özeti",
+    description: "Hangi kalem için ne kadar harcandı — kategori × ay, iptal edilen masraf iptal ayında düşülür",
+    icon: Receipt,
+    to: "/reports/finance/masraf-ozeti",
   },
 ];
