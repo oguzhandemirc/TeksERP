@@ -54,6 +54,8 @@ export const PERMISSION_CATALOG = [
   { code: "workorder:write", module: "PRODUCTION", category: "web", description: "Terbiye iş emri oluşturma/düzenleme/finalize etme" },
   { code: "roll:read", module: "PRODUCTION", category: "web", description: "Top (rulo) listesi/detay görüntüleme" },
   { code: "roll:write", module: "PRODUCTION", category: "web", description: "Top oluşturma/durum güncelleme" },
+  // D4-F4 (2026-10-30): müşterinin önbasılı etiketini emanet topa bağlama/kaldırma — `roll:write` vermeden.
+  { code: "roll:customer-code", module: "PRODUCTION", category: "web", description: "Müşteri barkodunu (önbasılı etiket) emanet topa bağlama / kaldırma" },
   { code: "roll:manual-adjust", module: "PRODUCTION", category: "web", description: "Süpervizör — manuel top düzeltme/kurtarma (üretime geri al, nitelik/durum düzeltme)" },
   // H2 (2026-10-29): kurşun metre sapma onayı — ofis ucu + süpervizör PIN'inin sahibi bu izni taşımalı.
   { code: "kursun:meter-approve", module: "PRODUCTION", category: "web", description: "Kurşun metre sapmasını onaylama (ofis onayı · süpervizör PIN'i)" },
