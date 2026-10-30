@@ -120,6 +120,7 @@ import { TAMBUR_ENTRY_SOURCES } from "../constants/tambur-entry-sources";
 import { processMeterNumber } from "./helpers/roll-error-meter.helper";
 import { recordRollDefectTx } from "./helpers/roll-defect.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
+import { customerCodeSearchRollIds } from "./helpers/roll-scan-resolve.helper";
 
 
 // Kesim etiket NİYETİ (hedef sipariş kalemi / müşteri var-mı + müşteri isActive;
@@ -1672,6 +1673,8 @@ export class TamburService {
 
     const search = params?.search?.trim();
     if (search) {
+      // Müşteri koduyla eşleşen çıkış topları (D4-F1b; ayar kapalıyken [] → bayt-aynı).
+      const customerCodeIds = await customerCodeSearchRollIds(search);
       // Barkod: TAM eşleşme (unique index seek) — `contains`/ILIKE en_US.UTF-8
       // collation'da barcode indeksini KULLANAMAZ → seq scan (ana rulo listesiyle
       // aynı karar, bkz. inventory.service buildRollWhere). Barkod okutulur/
@@ -1685,6 +1688,7 @@ export class TamburService {
         // listesi 2026-08-19'da düzeltilmişti; bu üç yüzey (Tambur çıktı listesi +
         // kartela liste/istatistik) atlanmıştı.
         { barcode: normalizeScanCode(search) },
+        ...(customerCodeIds.length > 0 ? [{ id: { in: customerCodeIds } }] : []),
         ...buildTextSearch<Prisma.RollWhereInput>(search, {
           text: ["item.name", "color.name", "item.customerAliases.some.alias"],
           code: ["item.code", "producedInStep.workOrder.workOrderNumber"],

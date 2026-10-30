@@ -36,6 +36,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import { MachineStopBand, MachineStopChip, useMachineStopControl } from '../../../components/machine-stop/MachineStopChip';
+import { showStopOpenEntryWarning } from '../../../components/machine-stop/entryWarning';
 import CutActionBar from './CutActionBar';
 import WorkOrderOutputPanel from './WorkOrderOutputPanel';
 import { LabelNamePreview } from './LabelNamePreview';
@@ -78,6 +79,15 @@ import {
 import AppModal from '../../../components/AppModal';
 import TamburOrderLinkSheet from './TamburOrderLinkSheet';
 import { shortCutOverride, shortCutRevert } from './shortCutQuality';
+import {
+  measureErrorMessage,
+  measureTamburCut,
+  resolveMeasure,
+  withMeasure,
+  type MeterCapture,
+  type TamburMeasure,
+} from './measureSource';
+import TamburMeasureStrip, { type LastTamburMeasure } from './TamburMeasureStrip';
 import { findGradeByRole, gradeColor } from '../../../utils/qualityRole';
 import { resolveShortCutConfig } from './resolveShortCutConfig';
 import TamburSendToDyeModal from './TamburSendToDyeModal';
@@ -156,6 +166,10 @@ import { upperTr } from '../../../utils/trCase';
 import { showScreenError } from '../../../lib/screenToast';
 import { formatFactory } from '../../../lib/factory-time';
 import { TERIM } from '../../../lib/terim';
+import { CustomerCodeBindSheet } from '../../../components/customerCode/CustomerCodeBindSheet';
+import { CustomerCodeBindButton } from '../../../components/customerCode/CustomerCodeBindButton';
+import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
+import { useCustomerCodeBindable } from '../../../components/customerCode/useCustomerCodeBindable';
 
 // =============================================================================
 // Multi-job state — Tambur'da operatör paralel iş yürütebilir (KursunQc paralel).
@@ -629,6 +643,8 @@ export default function TamburScreen() {
   const meterPeripherals = useMachinePeripherals('METER');
   // "Kes" (otomatik) → makineden okuma uçuşurken footer'ı kilitle (çift-tık koruması).
   const [measuring, setMeasuring] = useState(false);
+  // D4-B3: son başarılı kesimin metresi + ölçüm kaynağı (şerit/rozet).
+  const [lastMeasure, setLastMeasure] = useState<LastTamburMeasure | null>(null);
   /**
    * Onay bekleyen kesim — onaylanınca onConfirm() çalışır (ilgili mutate).
    *
@@ -1309,8 +1325,10 @@ export default function TamburScreen() {
       clientToken?: string;
       /** Plan-gerçek sapma onayı — 409 PLAN_MISMATCH sonrası true ile tekrar. */
       confirmMismatch?: boolean;
+      /** D4-B3 ölçüm kaynağı beyanı; sapma onayıyla tekrar denemede aynı kalır. */
+      measure?: TamburMeasure;
     }) =>
-      tamburService.cutOpenFabric(data.rollId, {
+      tamburService.cutOpenFabric(data.rollId, withMeasure({
         lengthMeters: data.lengthMeters,
         status: data.status,
         qualityGrade: data.qualityGrade,
@@ -1328,7 +1346,7 @@ export default function TamburScreen() {
         // ⚠️ Elle kurulan gövde = sessiz allowlist (KAT dersi, 2026-08-13):
         // bu satır düşerse operatör onaylar, bayrak isteğe girmez, 409 sürer.
         confirmMismatch: data.confirmMismatch,
-      }),
+      }, data.measure)),
     onSuccess: async (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       // Çıktı alındı → kartelalık anahtarı cihaz tercihine göre kapanır.
@@ -1344,6 +1362,9 @@ export default function TamburScreen() {
       const data = res.data as
         | { childRoll?: Roll; parentRemainingQty?: number }
         | undefined;
+      if (variables.measure) {
+        setLastMeasure({ meters: variables.lengthMeters, source: variables.measure.source, barcode: data?.childRoll?.barcode });
+      }
       if (data?.childRoll?.barcode) {
         // Hedef zaten "Kime" bölümünde seçili → "Kes" doğrudan o hedefe basar,
         // TEKRAR "Etiket kime?" SORMAZ. Hiçbir şey seçili değilse = stok (explicit
@@ -1414,7 +1435,9 @@ export default function TamburScreen() {
         return;
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showScreenError(err, 'Top oluşturulamadı');
+      const measureMsg = measureErrorMessage(err);
+      if (measureMsg) Toast.show({ type: 'error', ...measureMsg, visibilityTime: 7000 });
+      else showScreenError(err, 'Top oluşturulamadı');
     },
   });
 
@@ -1591,6 +1614,7 @@ export default function TamburScreen() {
       markedForKartela,
       rawDestination,
       clientToken,
+      measure,
     }: {
       rollId: string;
       cutLength: number;
@@ -1605,8 +1629,10 @@ export default function TamburScreen() {
       clientToken?: string;
       /** Plan-gerçek sapma onayı — 409 PLAN_MISMATCH sonrası true ile tekrar. */
       confirmMismatch?: boolean;
+      /** D4-B3 ölçüm kaynağı beyanı. */
+      measure?: TamburMeasure;
     }) =>
-      tamburService.cutWarehouseRoll(rollId, {
+      tamburService.cutWarehouseRoll(rollId, withMeasure({
         cutLength,
         qualityGrade,
         targetOrderLineId: targetOrderLineId ?? null,
@@ -1614,7 +1640,7 @@ export default function TamburScreen() {
         markedForKartela: markedForKartela ?? false,
         rawDestination,
         clientToken,
-      }),
+      }, measure)),
     onSuccess: (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       // Çıktı alındı → kartelalık anahtarı cihaz tercihine göre kapanır.
@@ -1628,6 +1654,7 @@ export default function TamburScreen() {
       // GÖREMEYİNCE elle yenilemek zorunda kalıyordu (2026-08-12 saha bulgusu).
       qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
       const data = res.data;
+      if (variables.measure) setLastMeasure({ meters: variables.cutLength, source: variables.measure.source, barcode: data?.childRoll?.barcode });
       // Y11 paritesi (açık kumaş kesimindeki düzeltmenin aynısı): yanıt geldiğinde
       // ekranda BAŞKA top olabilir (istek uçuştayken operatör yeni top okuttu).
       // Ekran-state güncellemeleri yalnız yanıtın ait olduğu top hâlâ aktifken
@@ -1683,7 +1710,9 @@ export default function TamburScreen() {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       recutAttempt.onFailure(err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showScreenError(err, 'Kesim başarısız');
+      const measureMsg = measureErrorMessage(err);
+      if (measureMsg) Toast.show({ type: 'error', ...measureMsg, visibilityTime: 7000 });
+      else showScreenError(err, 'Kesim başarısız');
     },
   });
 
@@ -1780,6 +1809,7 @@ export default function TamburScreen() {
       // GÖREMEYİNCE elle yenilemek zorunda kalıyordu (2026-08-12 saha bulgusu).
       qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
       const d = res.data;
+      if (variables.measure) setLastMeasure({ meters: variables.initialQty, source: variables.measure.source, barcode: d.barcode });
       Toast.show({
         type: d.idempotentReplay ? 'info' : 'success',
         text1: d.idempotentReplay
@@ -1835,7 +1865,9 @@ export default function TamburScreen() {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       manualAttempt.onFailure(err);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showScreenError(err, 'Top eklenemedi');
+      const measureMsg = measureErrorMessage(err);
+      if (measureMsg) Toast.show({ type: 'error', ...measureMsg, visibilityTime: 7000 });
+      else showScreenError(err, 'Top eklenemedi');
     },
   });
 
@@ -1891,7 +1923,7 @@ export default function TamburScreen() {
     };
   }, [selectedRoll]);
 
-  const addVoluntaryCut = (lengthOverride?: number) => {
+  const addVoluntaryCut = (lengthOverride?: number, capture?: MeterCapture) => {
     if (!selectedRoll) return;
     // Barkod-reddi KALDIRILDI (2026-07-16): WO-kart akışındaki seçili top zaten Tambur
     // adımında (IN_PRODUCTION) — barkodlu olsun ya da olmasın kesilir. Backend (cutOpenFabric)
@@ -1960,7 +1992,10 @@ export default function TamburScreen() {
       | 'WAREHOUSE'
       | 'SCRAP'
       | 'A1_STOCK';
-    const runCut = () =>
+    // D4-A2b (K2): açık duruşta metre girişi UYARIR (ayar açıksa), kesim yine gider;
+    // uyarı onay diyaloğundan SONRA, yalnız gerçek gönderimde çıkar.
+    const runCut = () => {
+      showStopOpenEntryWarning(machineStop.entryWarning);
       cutOpenFabricMutation.mutate({
         rollId: selectedRoll.rollId,
         lengthMeters: length,
@@ -1976,7 +2011,10 @@ export default function TamburScreen() {
         clientToken: cutAttempt.keyed(selectedRoll.rollId),
         // Bu topta sapma bir kez onaylandıysa sonraki kesimler bayrağı taşır.
         confirmMismatch: planMismatchConfirmedRef.current.has(selectedRoll.rollId) || undefined,
+        // D4-B3: ölçüm değişmeden gidiyorsa makine/simülasyon; aksi hâlde OPERATOR.
+        measure: resolveMeasure(capture, length),
       });
+    };
     // Aşımda parmak hatası koruması: onay iste (açık kumaşın tamamı tek topa döner).
     if (exceedsRemaining) {
       setOverCutConfirm({
@@ -2010,48 +2048,15 @@ export default function TamburScreen() {
   // KAPALIyken gerçek makineden okunur; donanım yok / cihaz seçilmemiş / okuma hatası →
   // null döner (hata gösterilir, kesim YAPILMAZ; sessiz sahte değer YOK).
   // 2-KAT → 2-kat makinesi, 4-KAT → 4-kat makinesi.
-  const measureFromMachine = async (remaining: number): Promise<number | null> => {
-    // Kat KODU doğrudan yazılır — eskiden `=== '4-KAT' ? '4 Kat' : '2 Kat'` idi ve
-    // katalog büyüyünce 6-KAT'lı bir topta ekranda "2 Kat metresi" yazardı.
-    const katLabel = work.foldType ?? 'Kat';
-    const sim = () => {
-      const lo = Math.min(5, remaining);
-      const hi = Math.min(80, remaining);
-      return Math.round((lo + Math.random() * (hi - lo)) * 10) / 10;
-    };
-    const p = meterPeripheralFor(meterPeripherals, work.foldType);
-    if (!p) {
-      Toast.show({
-        type: 'error',
-        text1: `${katLabel} metresi tanımlı değil`,
-        // ⚠️ Başka kata ait metreye SAPILMAZ (yanlış ölçüm) — elle girişe düşülür.
-        text2: `Metrajı elle girin. Kalıcı çözüm: Admin → Cihaz Kaydı'ndan bu makineye "${katLabel}" rollü METER cihazı ekleyin.`,
-        visibilityTime: 6000,
-      });
-      return null;
-    }
-    // Cihazın simülasyon bayrağı açıksa (admin) sahte değer (test/donanımsız).
-    if (p.simulate) return sim();
-
-    const r = await readMeter(p);
-    if (r.ok) return r.value;
-    if (r.reason === 'UNSUPPORTED') {
-      Toast.show({
-        type: 'error',
-        text1: `${katLabel} metresi okunamıyor`,
-        text2: 'Bu derlemede/bağlantı türünde desteklenmiyor (native build / connectionType).',
-        visibilityTime: 6000,
-      });
-      return null;
-    }
-    Toast.show({
-      type: 'error',
-      text1: `${katLabel} makinesi okunamadı`,
-      text2: r.message,
-      visibilityTime: 6000,
+  const measureFromMachine = (remaining: number): Promise<MeterCapture | null> =>
+    measureTamburCut({
+      // Kat KODU doğrudan yazılır (katalog büyüyünce 6-KAT'lı topta "2 Kat" yazmasın).
+      peripheral: meterPeripheralFor(meterPeripherals, work.foldType),
+      katLabel: work.foldType ?? 'Kat',
+      remaining,
+      read: readMeter,
+      toast: (t) => Toast.show(t),
     });
-    return null;
-  };
 
   // Footer "Kes" — manuel: input'taki uzunluk; otomatik: makineden ölçülen.
   const handleKes = async () => {
@@ -2061,7 +2066,7 @@ export default function TamburScreen() {
       try {
         const measured = await measureFromMachine(selectedRoll.currentQty);
         if (measured == null) return; // okunamadı → hata gösterildi, kesim yapma
-        addVoluntaryCut(measured);
+        addVoluntaryCut(measured.value, measured);
       } finally {
         setMeasuring(false);
       }
@@ -2179,6 +2184,8 @@ export default function TamburScreen() {
       if (!validateRecutCandidate(r)) return;
       applyRecutRoll(r);
     } catch (err) {
+      // D4-F4: belirsiz müşteri barkodu → aday modalı; seçim iç barkodla yeniden çözülür.
+      if (recutAmbiguous.intercept(err)) return;
       Toast.show({
         type: 'error',
         text1: 'Top sorgulanamadı',
@@ -2186,6 +2193,8 @@ export default function TamburScreen() {
       });
     }
   };
+
+  const recutAmbiguous = useAmbiguousScanPicker((b) => void handleRecutScanned(b));
 
   /** Top Kesme uzunluk girişi — ana kesim input'uyla AYNI kısa-kesim flip/revert
    *  sözleşmesi (recut ayrı kalite state'i taşıdığı için ayrı sarmalayıcı). */
@@ -2222,7 +2231,7 @@ export default function TamburScreen() {
     setRecutCutLength(v);
   };
 
-  const handleRecutSubmit = (lengthOverride?: number) => {
+  const handleRecutSubmit = (lengthOverride?: number, capture?: MeterCapture) => {
     if (!recutResolvedRollId || !recutRollMeta) return;
     // Manuel modda input BOŞSA → kalanın tamamı (Kes = "kalanı kes"; tekrar metraj
     // girmeye gerek yok). Otomatik override / dolu input kendi değerini kullanır.
@@ -2274,7 +2283,8 @@ export default function TamburScreen() {
     // Ham (renksiz STOCK) top → operatörün seçtiği parça hedefini gönder.
     const isRawStock =
       recutRollMeta.status === 'STOCK' && recutRollMeta.colorId == null;
-    const runCut = () =>
+    const runCut = () => {
+      showStopOpenEntryWarning(machineStop.entryWarning);
       cutWarehouseRollMutation.mutate({
         rollId: recutResolvedRollId,
         cutLength: cut,
@@ -2285,7 +2295,9 @@ export default function TamburScreen() {
         rawDestination: isRawStock ? recutRawDestination : undefined,
         // Ağ-retry idempotency: deneme başına SABİT token (tekrar basış = aynı token).
         clientToken: recutAttempt.keyed(recutResolvedRollId),
+        measure: resolveMeasure(capture, cut),
       });
+    };
     // Aşımda parmak hatası koruması: onay iste (top tamamen tüketilir).
     if (exceedsRemaining) {
       setOverCutConfirm({
@@ -2321,7 +2333,7 @@ export default function TamburScreen() {
       try {
         const measured = await measureFromMachine(recutRollMeta.currentQty);
         if (measured == null) return; // okunamadı → hata gösterildi, kesim yapma
-        handleRecutSubmit(measured);
+        handleRecutSubmit(measured.value, measured);
       } finally {
         setMeasuring(false);
       }
@@ -2438,7 +2450,7 @@ export default function TamburScreen() {
     return miss;
   }, [manualItemId, cutMode, work.voluntaryEntry, manualWidth, manualFoldType, manualGradeValid, manualReason]);
 
-  const submitManualProduce = (lengthOverride?: number) => {
+  const submitManualProduce = (lengthOverride?: number, capture?: MeterCapture) => {
     if (!manualItemId) {
       Toast.show({ type: 'error', text1: 'Ürün seçin', text2: 'Kart yok — ürün miras alınmaz' });
       return;
@@ -2529,6 +2541,7 @@ export default function TamburScreen() {
         markedForKartela: markAsKartela,
         reason,
         clientToken: manualAttempt.token(),
+        measure: resolveMeasure(capture, qty),
       });
 
     // Renk seçilmediyse SOR — geçerli bir durum ama sessiz geçilmemeli.
@@ -2550,7 +2563,7 @@ export default function TamburScreen() {
         // (yoksa rolsüz cihaz) kullanılır — bkz. meterPeripheralFor.
         const measured = await measureFromMachine(MANUAL_SIM_METER_BOUND);
         if (measured == null) return; // okunamadı → hata gösterildi, kayıt yapma
-        submitManualProduce(measured);
+        submitManualProduce(measured.value, measured);
       } finally {
         setMeasuring(false);
       }
@@ -3658,6 +3671,7 @@ export default function TamburScreen() {
 
               {/* Sticky footer — "Bitir" YOK (tüketilecek parent top yok). */}
               {kartelaStrip}
+              <TamburMeasureStrip last={lastMeasure} />
               <CutActionBar
                 compact={compact}
                 kartelaOn={markAsKartela}
@@ -3945,6 +3959,7 @@ export default function TamburScreen() {
                   varken operatör "Bitir" ile karar modalını (1.KALITE/A1/FIRE)
                   açar — parent arşivlenir, kalan child olarak yaşar. */}
               {kartelaStrip}
+              <TamburMeasureStrip last={lastMeasure} />
               <CutActionBar
                 compact={compact}
                 kartelaOn={markAsKartela}
@@ -4306,6 +4321,7 @@ export default function TamburScreen() {
                   topu sonsuza dek açık bırakırdı. Kalan > 0 iken karar
                   penceresi zorunludur; kalan 0 ise tek dokunuşta biter. */}
               {kartelaStrip}
+              <TamburMeasureStrip last={lastMeasure} />
               <CutActionBar
                 compact={compact}
                 kartelaOn={markAsKartela}
@@ -4494,6 +4510,7 @@ export default function TamburScreen() {
           onaylatacak bir karar yok, yalnız bilgi toast'ı gösterilir. */}
 
       {/* Etiket basımı modal'ı — finalize/post-split sonrası */}
+      {recutAmbiguous.modal}
       <LabelPrintModal
         grades={qualityGrades}
         rolls={pendingPrintRolls}
@@ -5188,7 +5205,10 @@ function RollLabelCard({
   onPrint,
   onPrintStock,
   onPreview,
+  onBindCustomerCode,
 }: {
+  /** D4-F4: kesim sonrası "Müşteri etiketini okut" (yalnız bağlanabilir emanet topta çizilir). */
+  onBindCustomerCode?: (roll: Roll) => void;
   roll: Roll;
   index: number;
   isPrinting: boolean;
@@ -5261,6 +5281,9 @@ function RollLabelCard({
       ) : (
         body
       )}
+      {onBindCustomerCode && (
+        <CustomerCodeBindButton ownerCustomerId={roll.ownerCustomerId} onPress={() => onBindCustomerCode(roll)} />
+      )}
       {onPrintStock && (
         <IconButton
           icon="account-off-outline"
@@ -5317,6 +5340,7 @@ function LabelPrintModal({
   // 45% kalsın (kalan ekranı bloklamasın).
   const isCompactPortrait = winH > winW;
   const sheetWidth = isCompactPortrait ? winW * 0.92 : winW * 0.45;
+  const [bindRoll, setBindRoll] = useState<Roll | null>(null);
   // NOT: rolls.length === 0 iken `return null` YAPMA — RNModal kapanış
   // animasyonu yarıda kalıyor, backdrop arkada saklı kalıp sonraki ekranın
   // tıklamalarını yutuyor (Top Kesme 2. tur bug'ı). isVisible=false ile bırak,
@@ -5344,10 +5368,12 @@ function LabelPrintModal({
               isPrinting={printingRollId === roll.id}
               onPrint={onPrint}
               onPrintStock={onPrintStock}
+              onBindCustomerCode={setBindRoll}
             />
           ))}
         </ScrollView>
       </View>
+      <CustomerCodeBindSheet roll={bindRoll} onDismiss={() => setBindRoll(null)} />
     </AppModal>
   );
 }
@@ -6342,6 +6368,9 @@ function RecentOutputModal({
   // Satıra dokununca topun "son basılan etiket"ini önizle (LabelPreviewSheet,
   // snapshot/effective cascade). Liste açık kalır; önizleme üstüne (Portal) açılır.
   const [previewRoll, setPreviewRoll] = useState<Roll | null>(null);
+  // D4-F4: önizlenen top bağlanabilirse "Müşteri etiketini okut"; bağla modalı liste üstünde açılır.
+  const previewBindable = useCustomerCodeBindable(previewRoll?.ownerCustomerId);
+  const [bindRoll, setBindRoll] = useState<Roll | null>(null);
 
   // ── TOPLU SEÇİM (2026-08-09) ────────────────────────────────────────────
   // Saha isteği: *"son çıkan etiketleri toplu seçim yapıp etiketleri
@@ -6476,11 +6505,14 @@ function RecentOutputModal({
       setPreviewRoll(roll);
     } catch (e) {
       signalScan('reject');
+      if (ambiguous.intercept(e)) return;
       showScreenError(e, 'Okunamadı');
     } finally {
       setScanResolving(false);
     }
   };
+  // Belirsiz müşteri barkodu → aday modalı; seçilen topun İÇ barkoduyla önizleme sürer.
+  const ambiguous = useAmbiguousScanPicker((b) => void resolveScanned(b));
 
   return (
     <>
@@ -6674,7 +6706,17 @@ function RecentOutputModal({
           setPreviewRoll(null);
           if (r) onPrintStock(r);
         }}
+        onBindCustomerCode={
+          previewBindable
+            ? () => {
+                setBindRoll(previewRoll);
+                setPreviewRoll(null);
+              }
+            : undefined
+        }
       />
+      <CustomerCodeBindSheet roll={bindRoll} onDismiss={() => setBindRoll(null)} onBound={() => void q.refetch()} />
+      {ambiguous.modal}
 
       {/* Geri Al — önizleme onaylı Tambur iptali. Bitince liste tazelenir. */}
       <TamburUndoConfirmModal

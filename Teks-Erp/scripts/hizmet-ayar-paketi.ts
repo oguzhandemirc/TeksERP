@@ -65,6 +65,8 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   { anahtar: "label.customerCodeMissing", alan: "labelCustomerCodeMissing", hedef: "BLOCK", dilim: "D4-F3" },
   // DALGA4 §12.1: dokumasız fabrikada kurşun/tambur/brode makinesi duruşu (ister 5.5).
   { anahtar: "uretim.makineDurusTakibi", alan: "machineStopTrackingEnabled", hedef: true, dilim: "D4-A1" },
+  // DALGA4 §2.5/5 (K2): açık duruşta tablet gramaj/metre dokunuşu uyarır (göndermeyi kesmez).
+  { anahtar: "uretim.makineDurusAcikUyarisi", alan: "machineStopOpenWarningEnabled", hedef: true, dilim: "D4-A2b" },
 ];
 
 export type PlanDurumu = "DEGISECEK" | "AYNI" | "ANAHTAR_YOK" | "ALAN_YOK";
