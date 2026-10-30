@@ -38,6 +38,7 @@ import {
 import { randomUUID } from "crypto";
 import prisma from "../lib/prisma";
 import { loadOpenDefectNotes } from "./helpers/open-defect-note.helper";
+import { loadActiveCustomerCodes } from "./helpers/roll-customer-code-read.helper";
 import { postStockMove, postStockMoves, MOVEMENT_ASC } from "./helpers/warehouse-ledger.helper";
 import { reverseLegacyStockMove, reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
@@ -5755,10 +5756,12 @@ async function collectShipmentDocContent(
   // Açık hata notu (KQ-D8): yalnız hatası olan topun satırına alan girer — hatasız
   // belgede snapshot bayt-aynı kalır; kolon opt-in (`defaultHidden`), sevk rakamına dokunmaz.
   const defectNotes = await loadOpenDefectNotes(sacksGross.flatMap((sk) => sk.rolls.map((r) => r.id)));
+  // Müşteri barkodu (D4-F3): yalnız kodlu topun satırına alan girer — snapshot sevkte DONAR, kodsuz belge bayt-aynı.
+  const customerCodes = await loadActiveCustomerCodes(sacksGross.flatMap((sk) => sk.rolls.map((r) => r.id)), db);
   const cekiRows = sacksGross.flatMap((sk) =>
     sk.rolls.map((r, idx) => {
       const skips = namePolicy.skips(r.qualityGradeId, r.qualityGrade);
-      return { rollId: r.id, sackCode: sk.sackNo ?? `#${sk.seq}`, seq: sk.seq ?? null, packageNo: sk.packageNo ?? null, packingGroupName: sk.packingGroup?.name ?? null, packingGroupCode: sk.packingGroup?.code ?? null, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", customerDesen: skips ? null : customerNames.itemName(r.itemId, r.colorId), customerVaryant: skips ? null : customerNames.colorName(r.itemId, r.colorId), width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0, batchNumber: r.batch?.batchNumber ?? null, ...(defectNotes.has(r.id) ? { defectNote: defectNotes.get(r.id) } : {}) };
+      return { rollId: r.id, sackCode: sk.sackNo ?? `#${sk.seq}`, seq: sk.seq ?? null, packageNo: sk.packageNo ?? null, packingGroupName: sk.packingGroup?.name ?? null, packingGroupCode: sk.packingGroup?.code ?? null, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", customerDesen: skips ? null : customerNames.itemName(r.itemId, r.colorId), customerVaryant: skips ? null : customerNames.colorName(r.itemId, r.colorId), width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0, batchNumber: r.batch?.batchNumber ?? null, ...(defectNotes.has(r.id) ? { defectNote: defectNotes.get(r.id) } : {}), ...(customerCodes.has(r.id) ? { customerCode: customerCodes.get(r.id) } : {}) };
     })
   );
 
