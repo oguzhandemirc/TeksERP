@@ -4,6 +4,7 @@ import { Search, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
+import { SimulatedMeterBanner } from "@/components/operations/SimulatedMeterBanner";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -188,6 +189,7 @@ export function SettingsSurfacePage({
           <RefreshButton queryKey={FEATURE_FLAGS_QUERY_KEY} successMessage="Ayarlar yenilendi" />
         }
       />
+      <SimulatedMeterBanner />
 
       <SettingsDirtyProvider value={registerDirty}>
       <Tabs
