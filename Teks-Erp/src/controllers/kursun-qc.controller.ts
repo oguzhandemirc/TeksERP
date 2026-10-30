@@ -6,6 +6,7 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { KursunQcService } from "../services/kursun-qc.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
+import { meterSourceSchema } from "../services/helpers/meter-reading.helper";
 import "../types/express-augment";
 import { assertNoBareFilterParams } from "../utils/query-parser";
 import { METER_DEVIATION_FILTER_NAMES, parseMeterDeviationQuery } from "../services/helpers/kursun-meter-deviation-list.helper";
@@ -17,10 +18,8 @@ import { METER_DEVIATION_FILTER_NAMES, parseMeterDeviationQuery } from "../servi
 /** Sayaç okuması gövdesi — tablet `meterOut` ile düzeltme ucu ortak. */
 const meterReadingBodySchema = z.object({
   meters: z.number().min(0, "Metre 0 veya daha büyük olmalı").lt(1e9, "Metre çok büyük"),
-  source: z.enum(["MACHINE", "OPERATOR", "SUPERVISOR", "SIMULATED"]),
-  peripheralId: z.string().uuid("Geçersiz cihaz ID").nullish(),
-  rawCounter: z.number().min(0).lt(1e11, "Sayaç değeri çok büyük").nullish(),
-  cardSampleId: z.string().uuid("Geçersiz örnek ID").nullish(),
+  // Kaynak alanları ortak şemadan (D4-B1): Tambur `measure` ile aynı küme ve mesajlar.
+  ...meterSourceSchema.shape,
   clientToken: z.string().uuid("Geçersiz okuma kimliği"),
   /** H2 OPERATOR_REASON imzası. Katı: PIN ya da başka alan bu gövdeye (çevrimdışı kuyruğa) giremez. */
   ack: z

@@ -11,7 +11,7 @@
 // şey. (Audit best-effort'tur ve tx DIŞINDA yazılır; bu defter audit DEĞİLDİR.)
 // =============================================================================
 
-import { Prisma, RollVarianceKind } from "@prisma/client";
+import { MachineDataSource, Prisma, RollVarianceKind } from "@prisma/client";
 import {
   validateVarianceReason,
   type VarianceSource,
@@ -43,6 +43,8 @@ export interface RecordVarianceInput extends VarianceReasonInput {
   sourceRollId?: string | null;
   /** H1b: bu satırın `Roll.initialQty`'yi yükselttiği miktar (yalnız OVERAGE; tersinde geri indirilir). */
   initialQtyRaise?: Prisma.Decimal | null;
+  /** D4-B1: sapmayı doğuran ölçümlerin zayıf halkası (`weakestMeasureSource`); verilmezse NULL = bilinmiyor. */
+  measureSource?: MachineDataSource | null;
   userId?: string | null;
 }
 
@@ -80,6 +82,7 @@ export async function recordVarianceTx(
       sourceRefId: input.sourceRefId ?? null,
       sourceRollId: input.sourceRollId ?? null,
       initialQtyRaise: input.initialQtyRaise ?? null,
+      measureSource: input.measureSource ?? null,
       createdById: input.userId ?? null,
     },
     select: { id: true },
@@ -122,6 +125,7 @@ export async function recordVariancesTx(
         sourceRefId: input.sourceRefId ?? null,
         sourceRollId: input.sourceRollId ?? null,
         initialQtyRaise: input.initialQtyRaise ?? null,
+        measureSource: input.measureSource ?? null,
         createdById: input.userId ?? null,
       };
     })
