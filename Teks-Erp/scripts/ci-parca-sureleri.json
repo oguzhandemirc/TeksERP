@@ -71,6 +71,7 @@
   "test_cari_ekstre_sirasi.ts": 3.2,
   "test_cari_hesap_tek_yazar.ts": 2.2,
   "test_cari_kart_hesap.ts": 5.8,
+  "test_cari_kilit.ts": 8,
   "test_cash_negative_guard.ts": 4.6,
   "test_cash_period_close.ts": 4.7,
   "test_cash_single_writer.ts": 5.7,
