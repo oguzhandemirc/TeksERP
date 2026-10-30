@@ -223,6 +223,9 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // kişi olursa, sayım hatası kapanışla birlikte geçmişe gömülür. Görev
       // ayrılığının aynı ailesi: `shipping:write` ↔ `shipping:undo-dispatch`.
       "finance:close",
+      // D4-I1a: cari kilidini koyar VE açar (açmak SoD kümesinde, yalnız Muhasebe/Süpervizör).
+      "finance:hold",
+      "finance:hold-release",
       "report:finance",
       "report:builder",
       // K4P: müşteriye giden sertifikayı görür (fatura/sevk evrakına eklenir); yazma kalite işidir.
@@ -298,6 +301,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "quote:read",
       "quote:write",
       "price-list:read",
+      // D4-I1a: satış sorunlu müşteride yeni iş kabulünü durdurabilir; AÇAMAZ (`finance:hold-release` SoD).
+      "finance:hold",
     ],
   },
   {
@@ -751,7 +756,8 @@ export function resolveRoleTemplateCodes(entry: RoleTemplateEntry): readonly str
  * Muhasebe/Süpervizör". Bekçi `test_role_template_catalog` §2d dağılımı buradan ölçer.
  */
 // `gelen-belge:approve` (D1, 2026-10-29) aynı aileye girdi: onay emanet topunu DOĞURUR (deftere yazar).
-export const SOD_PERMISSION_CODES = ["shipping:invoice", "shipping:undo-dispatch", "roll:manual-adjust", "gelen-belge:approve"] as const;
+// `finance:hold-release` (D4-I1a, 2026-10-30): cari kilidini açmak riski geri açar — kilidi koyandan ayrı yetki.
+export const SOD_PERMISSION_CODES = ["shipping:invoice", "shipping:undo-dispatch", "roll:manual-adjust", "gelen-belge:approve", "finance:hold-release"] as const;
 export const SOD_ALLOWED_TEMPLATES: readonly string[] = ["WEB_ACCOUNTING", "WEB_PRODUCTION_SUPERVISOR", "ADMIN_FULL"];
 
 export const ROLE_COVERAGE_EXEMPT: Readonly<Record<string, string>> = {

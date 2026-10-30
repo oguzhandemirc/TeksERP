@@ -103,9 +103,7 @@ export function parseLimit(raw: unknown, def: number, max: number): number {
 // BİRİM ÜYELİĞİ — (unit_id, roll_id) çiftleri; tek SQL parçası, liste ve top ucu aynısını kullanır.
 // ---------------------------------------------------------------------------
 // Müşteri partisi tanımı TEK yerde (`ship-readiness.helper`; belgeden iş emri aynısını okur).
-function noteKeySql(): Prisma.Sql {
-  return customerBatchKeySql("n");
-}
+const noteKeySql = (): Prisma.Sql => customerBatchKeySql("n");
 
 export function membershipSql(unit: ReadyWorkUnit, onlyId?: string): Prisma.Sql {
   switch (unit) {

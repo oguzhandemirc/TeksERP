@@ -115,6 +115,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}machine-collector.service.ts::createCollectorFresh`]: { giris: { [`${S}machine-collector.service.ts::create`]: "R" } },
   // D4-F1: müşteri barkodu bağlama — token satırı tek insert; replay boğazdan (R).
   [`${S}roll-customer-code.service.ts::bindFresh`]: { giris: { [`${S}roll-customer-code.service.ts::bind`]: "R" } },
+  // D4-I1a: cari kilidi — tek insert; aktif kilit yarışını kısmi unique keser, token yarışını boğaz.
+  [`${S}cari-hold.service.ts::placeFresh`]: { giris: { [`${S}cari-hold.service.ts::place`]: "R" } },
   [`${S}machine-run.service.ts::openMachineRunFresh`]: { giris: { [`${S}machine-run.service.ts::openMachineRun`]: "R" } },
   // #12: quickStart create'i çağırır (iç boğaz) ve kendi boğazıyla sarar; kimlikte top kümesi YOK (kısmi bağlama).
   [`${S}workorder.service.ts::createFresh`]: { giris: { [`${S}workorder.service.ts::create`]: "R" } },
@@ -221,6 +223,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}service-period-invoice.service.ts::servicePeriodReplay`]: ["type", "cariId", "period"],
   [`${S}machine-collector.service.ts::collectorReplay`]: ["name", "collectorType", "machineIds"],
   [`${S}roll-customer-code.service.ts::bindReplay`]: ["rollId", "code"],
+  [`${S}cari-hold.service.ts::placeReplay`]: ["cariId", "kapsam", "reasonCode"],
   [`${S}machine-doff.service.ts::doffReplay`]: ["machineId", "productionLineNo", "pieceCount"],
   [`${S}machine-run.service.ts::runReplay`]: ["machineId", "productionLineNo", "weavingOrderId"],
   [`${S}sales-quote-transitions.service.ts::reviseReplay`]: ["revisionOfId"],

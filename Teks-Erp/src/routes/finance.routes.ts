@@ -28,6 +28,7 @@ import { paymentService } from "../services/payment.service";
 import { cashTransactionService } from "../services/cash-transaction.service";
 import { expenseCategorySuggestions } from "../services/helpers/expense-summary.helper";
 import allocationRoutes from "./finance-allocation.routes";
+import cariHoldRoutes from "./finance-cari-hold.routes";
 import { fetchTcmbRates } from "../jobs/exchange-rate.job";
 
 const router = Router();
@@ -47,6 +48,9 @@ router.use(verifyToken, requireFinanceEnabled);
 // komşu `/invoices`), yani sıra bugün serbest. Yine de üstte duruyor ki ileride
 // eklenecek bir `/:id` deseni onu yutmasın.
 router.use("/allocations", allocationRoutes);
+// Cari kilidi (D4-I1a): `/cari/:id/holds` + `/cari/holds/:holdId/release` — aşağıdaki `/cari/:id` desenlerinden ÖNCE
+// bağlanır; rejim kapısı yukarıdaki `router.use`tan miras.
+router.use("/cari", cariHoldRoutes);
 
 const decimalString = z.union([z.number(), z.string()]);
 const isoDate = z.string().datetime({ offset: true }).or(z.string().date());

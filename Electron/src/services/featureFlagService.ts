@@ -283,6 +283,17 @@ export interface FeatureFlags {
   financeServiceBillingPriceDate: "SERVICE_DAY" | "DISPATCH_DAY";
   /** D4-H1: kasa masraf formunda kategori önerisi (varsayılan ON). */
   financeExpenseCategorySuggestions: "ON" | "OFF";
+  /** D4-I1a: cari kilidi formu kapsam ön seçimi (backend aynası; varsayılan `INTAKE,SHIPMENT`). */
+  financeCariHoldDefaultScope:
+    | "INTAKE,SHIPMENT"
+    | "INTAKE"
+    | "SHIPMENT"
+    | "INVOICE"
+    | "INTAKE,INVOICE"
+    | "SHIPMENT,INVOICE"
+    | "INTAKE,SHIPMENT,INVOICE";
+  /** D4-I1a: kilidi koyan kişi kendi kilidini açabilir mi (varsayılan `ALLOW`). */
+  financeCariHoldReleaseBySamePerson: "ALLOW" | "DENY";
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; tahsis elle silinebilir. */
   financeAutoAllocateOnPaymentEnabled: boolean;
