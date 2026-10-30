@@ -141,6 +141,9 @@ export interface FeatureFlags {
   /** Makine duruşu takibi (`uretim.makineDurusTakibi`, D4-A1) — Kurşun/Tambur başlığındaki "Duruş" çipinin
    *  kapısı (D4-A2). Eski backend göndermez → false = çip yok (bugünkü ekran). */
   machineStopTrackingEnabled?: boolean;
+  /** Açık duruşta Kurşun gramaj / Tambur metre girişinde uyarı (`uretim.makineDurusAcikUyarisi`, D4-A2b; K2 —
+   *  yalnız uyarı, gönderim sürer). Eski backend göndermez → false = uyarı yok (sahadaki davranış). */
+  machineStopOpenWarningEnabled?: boolean;
   /** FASON KABULÜ — çekme uyarısı (default TRUE/açık). Boyahanede kumaş çeker;
    *  giden ile dönen metraj farkı normaldir. Açıkken ekran farkı gösterir ve
    *  yalnız toleransın ÜSTÜNDE uyarı/onay ister. Kural İSTEMCİDE koşar — backend
@@ -258,6 +261,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   // Yüklenemezse bugünkü davranış: süzgeçsiz liste (kart okutması zaten her durumda açık).
   tamburListByStationEnabled: false,
   machineStopTrackingEnabled: false,
+  machineStopOpenWarningEnabled: false,
   // Default AÇIK + %10 (backend ile aynı). Fail-safe yön BURADA "göster"dir:
   // bayrak yüklenemediyse operatörün 30 metrelik farkı görmemesi, gereksiz bir
   // uyarı görmesinden kötüdür (uyarı bilgi verir, sessizlik veri kaybettirir).
