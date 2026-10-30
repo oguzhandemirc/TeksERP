@@ -287,6 +287,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   sameTypeSessionPolicy: "cekirdek",
   labelCopies: "cekirdek",
   labelCopiesSource: "cekirdek",
+  labelCustomerCodeMissing: "cekirdek",
   nativeSendEnabled: "cekirdek",
   mobileRasterEnabled: "cekirdek",
   scrapGradeLabelEnabled: "cekirdek",
