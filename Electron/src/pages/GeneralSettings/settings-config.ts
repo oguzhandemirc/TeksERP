@@ -1524,6 +1524,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Açıkken dokuma modülü kapalı olsa da kurşun, tambur ve brode makinelerine duruş açılıp kapatılabilir ve sebep girilebilir. Kapalıyken (varsayılan) duruş yalnız dokuma modülü açık fabrikada kaydedilir. Dokuma açık fabrikada bu ayar hiçbir şeyi değiştirmez.",
       },
       {
+        key: "machineStopOpenWarningEnabled",
+        group: "Makine duruşu",
+        title: "Makine duruştayken tablette gramaj/metre girişinde uyarı göster",
+        summary: "Duruş açıkken gramaj ya da metre girilirse tablet uyarır; giriş yine kaydedilir.",
+        defaultOn: false,
+        audience: ["Operatör", "Yönetim"],
+        desc: "Açıkken makinede kapatılmamış bir duruş varsa, operatör Kurşun ekranında gramaj ya da Tambur ekranında metre girdiğinde tablet \"Makine duruşta görünüyor\" uyarısı gösterir; giriş engellenmez, kaydedilir. Uyarı, makine çalıştığı hâlde duruşun kapatılmasının unutulduğunu fark ettirmek içindir. Kapalıyken (varsayılan) uyarı gösterilmez. Duruş düğmesi ve duruş bandı bu ayardan bağımsızdır.",
+      },
+      {
         key: "productionCancelReasonRequired",
         group: "Top iptali",
         title: "Top iptalinde sebep zorunlu olsun",

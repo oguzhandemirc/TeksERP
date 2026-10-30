@@ -539,6 +539,8 @@ export const updateSchema = z.strictObject({
   tamburListByStationEnabled: z.boolean().optional(),
   // Dokumasız fabrikada makine duruşu takibi (D4-A1, ister 5.5).
   machineStopTrackingEnabled: z.boolean({ message: "Makine duruşu takibi açık/kapalı olmalı" }).optional(),
+  // Açık duruşta tablet dokunuş uyarısı (D4-A2b; K2 — yalnız uyarı).
+  machineStopOpenWarningEnabled: z.boolean({ message: "Açık duruş uyarısı açık/kapalı olmalı" }).optional(),
   // Fason kabulünde çekme uyarısı (2026-08-21). Bayrak = uyarı görünürlüğü,
   // yüzde = eşik. ⚠️ `min(0)` — 0 GEÇERLİ ("tolerans yok, her fark uyarır");
   // `positive()` yazılsaydı panelden sıfır tolerans seçilemezdi.
