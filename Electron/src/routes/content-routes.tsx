@@ -510,7 +510,6 @@ export const contentRoutes: RouteObject[] = [
       </ProtectedRoute>
     ),
   },
-  // İçerideki İşler (P1a) — modül kapısı `ROUTE_MODULE` (`emanetEnabled`); karo ile AYNI izin.
   // Sevke Hazır İşler (D4-J3) — çekirdek sevkiyat ekranı (modül kapısı yok); karo ile AYNI izin.
   {
     path: "operations/sevke-hazir-isler",
@@ -520,6 +519,7 @@ export const contentRoutes: RouteObject[] = [
       </ProtectedRoute>
     ),
   },
+  // İçerideki İşler (P1a) — modül kapısı `ROUTE_MODULE` (`emanetEnabled`); karo ile AYNI izin.
   {
     path: "operations/icerideki-isler",
     element: (

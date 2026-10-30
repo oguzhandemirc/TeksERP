@@ -49,6 +49,11 @@ export interface ReadyWorkRoll {
   itemName: string | null;
   colorName: string | null;
   ownerCustomerId: string | null;
+  /** Hızlı Sevk çuvaldaki / sevkiyattaki topu reddeder; çekmece bunları seçtirmez. Eski sunucu göndermez → undefined = serbest. */
+  inSack?: boolean;
+  inShipment?: boolean;
+  warehouseId?: string | null;
+  warehouseName?: string | null;
 }
 
 export const READY_WORKS_QUERY_KEY = "ready-works";
@@ -79,13 +84,22 @@ export async function getReadyWorks(p: ReadyWorksParams): Promise<ReadyWorkPage>
 }
 
 /** Birimin topları; `rollClass` boşsa hepsi. customerBatch kimliği `<sahipId>:<parti no>` — URL kodlanır. */
-export async function getReadyWorkRolls(unit: ReadyWorkUnit, id: string, rollClass: ReadinessClass[] = []): Promise<ReadyWorkRoll[]> {
-  const q = new URLSearchParams({ limit: "1000" });
-  if (rollClass.length > 0) q.set("rollClass", rollClass.join(","));
-  const r = await apiClient.get<{ success: boolean; data: { items: ReadyWorkRoll[]; nextCursor: string | null } }>(
-    `/api/shipping/ready-works/${unit}/${encodeURIComponent(id)}/rolls?${q.toString()}`,
-  );
-  return r.data.data.items;
+export async function getReadyWorkRolls(unit: ReadyWorkUnit, id: string, rollClass: ReadinessClass[] = [], maxPages = 10): Promise<ReadyWorkRoll[]> {
+  // İmleç sonuna kadar (sayfa tavanlı): tek sayfada kesilirse çekmece eksik top gösterirdi.
+  const out: ReadyWorkRoll[] = [];
+  let cursor: string | null = null;
+  for (let i = 0; i < maxPages; i++) {
+    const q = new URLSearchParams({ limit: "1000" });
+    if (rollClass.length > 0) q.set("rollClass", rollClass.join(","));
+    if (cursor) q.set("cursor", cursor);
+    const r: { data: { success: boolean; data: { items: ReadyWorkRoll[]; nextCursor: string | null } } } = await apiClient.get(
+      `/api/shipping/ready-works/${unit}/${encodeURIComponent(id)}/rolls?${q.toString()}`,
+    );
+    out.push(...r.data.data.items);
+    cursor = r.data.data.nextCursor;
+    if (!cursor) break;
+  }
+  return out;
 }
 
 /** Birim türünün TÜM satırları (imleç sonuna kadar, sayfa tavanlı) — İçerideki İşler müşteri hazırlık kolonu. */

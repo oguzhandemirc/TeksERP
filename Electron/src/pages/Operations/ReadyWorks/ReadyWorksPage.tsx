@@ -3,6 +3,7 @@
 // çekmecesi; "sevke al" mevcut Hızlı Sevk boğazı. Gelen belge modülü kapalıyken iki sekme yok, istek de yok.
 import { useState } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -62,7 +63,12 @@ export function ReadyWorksPage() {
   const canShip = financeEnabled && hasPermission("shipping:write");
 
   const tabs = readyWorksTabs(incomingDocEnabled);
-  const [picked, setPicked] = useState<ReadyWorkUnit>("workOrder");
+  // `?tab=customer` — İçerideki İşler hazırlık hücresi Müşteri sekmesini açar; tanınmayan değer varsayılana, gizli sekme aşağıdaki görünür-küme düşüşüne düşer.
+  const [searchParams] = useSearchParams();
+  const [picked, setPicked] = useState<ReadyWorkUnit>(() => {
+    const t = searchParams.get("tab");
+    return readyWorksTabs(true).some((x) => x.unit === t) ? (t as ReadyWorkUnit) : "workOrder";
+  });
   // Modül kapanırsa (ya da bayrak geç gelirse) seçili sekme görünür kümeye düşer — gizli birime istek gitmez.
   const unit: ReadyWorkUnit = tabs.some((t) => t.unit === picked) ? picked : "workOrder";
   const [stateFilter, setStateFilter] = useState<ReadyStateFilter>("READY");

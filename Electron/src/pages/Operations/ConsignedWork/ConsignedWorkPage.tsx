@@ -18,10 +18,15 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { getAllReadyWorks, READY_WORKS_PATH, READY_WORKS_QUERY_KEY, type ReadyWorkRow } from "@/pages/Operations/ReadyWorks/service";
 import { STATE_LABEL } from "@/pages/Operations/ReadyWorks/ready-works-view";
 
-function ReadinessCell({ row }: { row: ReadyWorkRow | undefined }) {
+type ReadinessStatus = "loading" | "error" | "ok";
+
+function ReadinessCell({ row, status }: { row: ReadyWorkRow | undefined; status: ReadinessStatus }) {
+  // Yükleniyor / hata, "hazırlık satırı yok" ile aynı görünmemeli (Sevke Hazır İşler'deki ayrımın aynası).
+  if (!row && status === "loading") return <span className="text-muted-foreground" aria-label="Hazırlık yükleniyor">…</span>;
+  if (!row && status === "error") return <span className="text-destructive" title="Hazırlık yüklenemedi">yüklenemedi</span>;
   if (!row) return <span className="text-muted-foreground">—</span>;
   return (
-    <Link to={READY_WORKS_PATH} onClick={(e) => e.stopPropagation()} className="inline-flex flex-col items-end rounded px-1 leading-tight hover:bg-muted">
+    <Link to={`${READY_WORKS_PATH}?tab=customer`} onClick={(e) => e.stopPropagation()} className="inline-flex flex-col items-end rounded px-1 leading-tight hover:bg-muted">
       <Badge variant={row.state === "READY" ? "default" : row.state === "PARTIAL" ? "secondary" : "muted"} className="whitespace-nowrap">
         {STATE_LABEL[row.state]}
       </Badge>
@@ -77,12 +82,14 @@ function OwnersTable({
   totals,
   onOpen,
   readiness,
+  readinessStatus,
 }: {
   rows: ConsignedOwnerRow[];
   totals: ConsignedWorkSummary["totals"];
   onOpen: (r: ConsignedOwnerRow) => void;
   /** null = kolon yok (sevk okuma izni yok); Map = müşteri id → hazırlık satırı. */
   readiness: Map<string, ReadyWorkRow> | null;
+  readinessStatus: ReadinessStatus;
 }) {
   // İki "bekliyor" sütunu ayrı sekmeye bağlanır (ham ↔ Ham Stok, yarı mamul ↔ Yarı Mamul); boş olan gizlenir,
   // ikisi de boşsa ham sütunu kalır. Gelen belge onayıyla doğan emanet yarı mamuldür.
@@ -127,7 +134,7 @@ function OwnersTable({
               <TableCell className="text-right"><BucketCell bucket={r.ready} ownerId={r.ownerCustomerId} kind="ready" /></TableCell>
               <TableCell className="text-right"><BucketCell bucket={r.other} ownerId={r.ownerCustomerId} kind={null} /></TableCell>
               <TableCell className="text-right"><BucketCell bucket={r.total} ownerId={r.ownerCustomerId} kind={null} /></TableCell>
-              {readiness && <TableCell className="text-right"><ReadinessCell row={readiness.get(r.ownerCustomerId)} /></TableCell>}
+              {readiness && <TableCell className="text-right"><ReadinessCell row={readiness.get(r.ownerCustomerId)} status={readinessStatus} /></TableCell>}
             </TableRow>
           ))}
         </TableBody>
@@ -147,7 +154,8 @@ export function ConsignedWorkPage() {
     queryFn: () => getAllReadyWorks("customer"),
     enabled: canReadShipping,
   });
-  // Hazırlık ucu düşerse kolon "—" kalır; ana liste etkilenmez.
+  // Hazırlık ucu düşerse ana liste etkilenmez; hücre "yüklenemedi" der.
+  const readinessStatus: ReadinessStatus = readyQ.isError ? "error" : readyQ.isPending ? "loading" : "ok";
   const readiness = canReadShipping ? new Map((readyQ.data ?? []).map((w) => [w.id, w])) : null;
 
   return (
@@ -176,7 +184,7 @@ export function ConsignedWorkPage() {
                 İçeride emanet mal yok. Emanet top, girişte “Sahibi” seçilerek ya da gelen belge onayıyla doğar.
               </div>
             ) : (
-              q.data && <OwnersTable rows={rows} totals={q.data.totals} onOpen={open} readiness={readiness} />
+              q.data && <OwnersTable rows={rows} totals={q.data.totals} onOpen={open} readiness={readiness} readinessStatus={readinessStatus} />
             )}
           </>
         )}

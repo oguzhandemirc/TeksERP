@@ -144,6 +144,39 @@ describe("Sevke Hazır İşler", () => {
     expect(last.initialCustomerId).toBe("c1");
   });
 
+});
+
+describe("Sevke Hazır İşler — çekmece Hızlı Sevk ön-seçimi", () => {
+  it("çuvaldaki / sevkiyattaki HAZIR top ön-seçili gelmez, seçilemez, rozetle ayrılır (Hızlı Sevk 400'ü önlenir)", async () => {
+    getRolls.mockResolvedValue([roll("r1", "READY"), { ...roll("r2", "READY"), inSack: true }, { ...roll("r3", "READY"), inShipment: true }]);
+    renderWithProviders(<ReadyWorksPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "İE-001 toplarını aç" }));
+    await screen.findByText("B-r3");
+    expect(screen.getByRole("checkbox", { name: "B-r2 seç" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "B-r3 seç" })).toBeDisabled();
+    expect(screen.getByText("Çuvalda")).toBeInTheDocument();
+    expect(screen.getByText("Sevkiyatta")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Hazır topları sevke al \(1 top/ }));
+    const last = quickShipProps.mock.calls.at(-1)?.[0] as { initialRolls: Array<{ id: string }> };
+    expect(last.initialRolls.map((r) => r.id)).toEqual(["r1"]);
+  });
+
+  it("iki depo: varsayılan seçim ana depoda; öteki depodan top eklenince uyarı + düğme kapalı", async () => {
+    const at = (id: string, wh: string) => ({ ...roll(id, "READY"), warehouseId: wh, warehouseName: `Depo ${wh}` });
+    getRolls.mockResolvedValue([at("r1", "A"), at("r2", "A"), at("r3", "B")]);
+    renderWithProviders(<ReadyWorksPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "İE-001 toplarını aç" }));
+    await screen.findByText("B-r3");
+    expect(screen.getByRole("checkbox", { name: "B-r3 seç" })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: /Hazır topları sevke al \(2 top/ })).toBeEnabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "B-r3 seç" }));
+    expect(screen.getByText(/farklı depolarda/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Hazır topları sevke al \(3 top/ })).toBeDisabled();
+  });
+
+});
+
+describe("Sevke Hazır İşler — izin, yaratıcı, bulunabilirlik", () => {
   it("ticaret rejimi kapalı ya da sevk yazma izni yok → 'sevke al' yok", async () => {
     flags.finance = false;
     getRolls.mockResolvedValue([roll("r1", "READY")]);
@@ -185,6 +218,17 @@ describe("İçerideki İşler hazırlık kolonu", () => {
     expect(screen.getByText(/200(,0)? m hazır/)).toBeInTheDocument();
     expect(getAll).toHaveBeenCalledWith("customer");
     expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toContain("Hazırlık");
+  });
+
+  it("hazırlık hücresi Müşteri sekmesine bağlanır; uç hata verirse 'yüklenemedi' ('satır yok' ile karışmaz)", async () => {
+    getConsigned.mockResolvedValue(summary);
+    getAll.mockResolvedValue([row({ unit: "customer", id: "c1", label: "Gül Perde", state: "READY" })]);
+    const first = renderWithProviders(<ConsignedWorkPage />);
+    expect((await screen.findByText("Hazır")).closest("a")?.getAttribute("href")).toContain("?tab=customer");
+    first.unmount();
+    getAll.mockRejectedValue(new Error("500"));
+    renderWithProviders(<ConsignedWorkPage />);
+    expect(await screen.findByText("yüklenemedi")).toBeInTheDocument();
   });
 
   it("shipping:read yoksa kolon yok ve istek atılmaz", async () => {

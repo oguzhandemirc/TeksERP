@@ -54,6 +54,32 @@ export function toQuickShipRoll(r: ReadyWorkRoll): QuickShipRoll {
     width: null,
     itemName: r.itemName ?? "—",
     colorName: r.colorName,
-    warehouseId: null,
+    warehouseId: r.warehouseId ?? null,
   };
+}
+
+/**
+ * Hızlı Sevk boğazının (`SHIPPABLE_ROLL_WHERE` + tek depo) aynası: HAZIR sınıfı çuvaldaki / sevkiyattaki topu da
+ * kapsar ama Hızlı Sevk onları 400 ile reddeder — ön-seçime girerse kullanıcı çıkmaza düşer.
+ */
+export function isQuickShippable(r: ReadyWorkRoll): boolean {
+  return r.readinessClass === "READY" && r.inSack !== true && r.inShipment !== true;
+}
+
+export const warehouseKey = (r: ReadyWorkRoll): string => r.warehouseId ?? "—";
+
+/** Varsayılan seçimin deposu: en çok sevk edilebilir topun durduğu depo (tek sevkiyat tek depodan çıkar). */
+export function primaryWarehouseKey(rolls: ReadyWorkRoll[]): string | null {
+  const count = new Map<string, number>();
+  for (const r of rolls) if (isQuickShippable(r)) count.set(warehouseKey(r), (count.get(warehouseKey(r)) ?? 0) + 1);
+  let best: string | null = null;
+  for (const [k, n] of count) if (best === null || n > (count.get(best) ?? 0)) best = k;
+  return best;
+}
+
+export function rollBlockLabel(r: ReadyWorkRoll): string | null {
+  if (r.readinessClass !== "READY") return null;
+  if (r.inShipment) return "Sevkiyatta";
+  if (r.inSack) return "Çuvalda";
+  return null;
 }
