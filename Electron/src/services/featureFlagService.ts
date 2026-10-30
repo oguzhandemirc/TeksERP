@@ -272,6 +272,10 @@ export interface FeatureFlags {
    *  Bugün limit yalnız uyarıdır; açıkken onay 409 döner. MUAF: alış faturası,
    *  taslak yolları, iptal/storno. */
   financeRiskLimitBlockEnabled: boolean;
+  /** D4-I2: risk limiti aşımında yeni iş kabulü (gelen belge onayı + sipariş) 409 RISK_LIMIT_EXCEEDED (default false). */
+  financeRiskLimitBlockIntake: boolean;
+  /** D4-I2: risk limiti aşımında sevk 409 (default false; tamamı müşteri emaneti sevk muaf). */
+  financeRiskLimitBlockShipment: boolean;
   /** Sevk onayında otomatik satış faturası TASLAĞI üret (default false). Onay
    *  her zaman elle kalır; ön muhasebe kapalıyken kanca no-op'tur. */
   financeAutoDraftFromShipmentEnabled: boolean;

@@ -8,6 +8,7 @@
 // =============================================================================
 
 import { assertCariNotHeldTx } from "./helpers/cari-hold.helper";
+import { assertCustomerRiskLimitTx } from "./helpers/risk-exposure.helper";
 import prisma from "../lib/prisma";
 import { ACTIVE_SACK_ALLOCATION } from "./helpers/sack-allocation.helper";
 import { setWorkOrderTypeTx } from "./helpers/workorder-event.helper";
@@ -2138,6 +2139,8 @@ export class OrderService extends BaseService {
       await this.validateCustomer(data.customerId as string);
       // Cari kilidi (D4-I1, INTAKE): yeni sipariş = yeni iş kabulü; uç + hızlı sipariş + patron gelen kutusu bu boğazdan.
       await assertCariNotHeldTx(prisma, data.customerId as string, "INTAKE");
+      // Risk limiti (D4-I2, finance.riskLimitBlock.intake) — kilit kapısının yanında.
+      await assertCustomerRiskLimitTx(prisma, data.customerId as string, "INTAKE");
     }
 
     if (data.branchId && data.customerId) {
@@ -2692,6 +2695,7 @@ export class OrderService extends BaseService {
         // Kilitli cariye taşıma = yeni iş kabulü; yaratma kapısının yan kapısını kapatır.
         if (finalCustomerId !== current.customerId) {
           await assertCariNotHeldTx(prisma, finalCustomerId, "INTAKE");
+          await assertCustomerRiskLimitTx(prisma, finalCustomerId, "INTAKE");
         }
 
         // Lines payload'ı yoksa MEVCUT satır renkleri yeni müşteriye karşı

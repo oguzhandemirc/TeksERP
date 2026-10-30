@@ -106,6 +106,7 @@ function statik(): void {
     "services/cari-hold.service.ts",
     "services/gelen-belge-note.service.ts",
     "services/gelen-belge-onay.service.ts",
+    "services/helpers/risk-exposure.helper.ts",
     "services/inventory.service.ts",
     "services/invoice.service.ts",
     "services/order.service.ts",

@@ -159,6 +159,12 @@ export const SETTING_KEYS = {
    *  taslak oluşturma/düzenleme ve İPTAL/storno yolları MUAF (limiti aşan bir
    *  faturayı iptal edememek çıkmaz olurdu). */
   FINANCE_RISK_LIMIT_BLOCK_ENABLED: "finance.riskLimitBlockEnabled",
+  /** D4-I2: risk limiti aşılmış caride YENİ İŞ KABULÜ (gelen belge onayı + sipariş yaratma/müşteri değişimi) 409
+   *  `RISK_LIMIT_EXCEEDED` (default FALSE = bugünkü davranış). Bakiye her para biriminde ayrı ölçülür (fatura ilkesi). */
+  FINANCE_RISK_LIMIT_BLOCK_INTAKE: "finance.riskLimitBlock.intake",
+  /** D4-I2: risk limiti aşılmış caride SEVK (kurulum + dispatch) 409 `RISK_LIMIT_EXCEEDED` (default FALSE). K22: tamamı
+   *  sevk müşterisinin emaneti olan sevk takılmaz (cari kilidinin kod sabiti `CARI_HOLD_EMANET_SHIPMENT`). */
+  FINANCE_RISK_LIMIT_BLOCK_SHIPMENT: "finance.riskLimitBlock.shipment",
   /** Sevk onayında otomatik satış faturası TASLAĞI üret (default FALSE).
    *  ⚠️ Üretilen şey TASLAKTIR (`InvoiceStatus.DRAFT`) — onay HER ZAMAN elle
    *  kalır; bayrak "fatura kes" değil "veri girişini bir kez daha yazdırma"
@@ -1873,6 +1879,10 @@ export interface FeatureFlags {
    *  Bugün limit yalnız uyarıdır; açıkken onay 409 döner. MUAF: alış faturası,
    *  taslak yolları ve iptal/storno. */
   financeRiskLimitBlockEnabled: boolean;
+  /** D4-I2: risk limiti aşımında yeni iş kabulünü engelle (default false). */
+  financeRiskLimitBlockIntake: boolean;
+  /** D4-I2: risk limiti aşımında sevki engelle (default false; tamamı emanet sevk muaf). */
+  financeRiskLimitBlockShipment: boolean;
   /** Sevk onayında otomatik satış faturası TASLAĞI üret (default false). Onay
    *  her zaman elle kalır; `financeEnabled` kapalıyken kanca no-op'tur ve
    *  taslak hatası sevki DÜŞÜRMEZ. */
@@ -2537,6 +2547,8 @@ export class SystemSettingService {
       financeInvoicePriceTolerancePct: await readFinanceInvoicePriceTolerancePct(cacheClient),
       financeChequeNoteMovementEnabled: await readFinanceChequeNoteMovementEnabled(cacheClient),
       financeRiskLimitBlockEnabled: await readFinanceRiskLimitBlockEnabled(cacheClient),
+      financeRiskLimitBlockIntake: await readFinanceRiskLimitBlockIntake(cacheClient),
+      financeRiskLimitBlockShipment: await readFinanceRiskLimitBlockShipment(cacheClient),
       financeAutoDraftFromShipmentEnabled:
         await readFinanceAutoDraftFromShipmentEnabled(cacheClient),
       financeServiceBillingEnabled: await readFinanceServiceBillingEnabled(cacheClient),
@@ -3017,6 +3029,15 @@ export class SystemSettingService {
         "Risk limiti aşımında satış faturası onayını engelle (alış · taslak · iptal muaf)",
         userId
       );
+    }
+    // D4-I2: risk limiti iş kabulü / sevk kapıları (bool; tanınmayan değer 400).
+    if (Object.prototype.hasOwnProperty.call(input, "financeRiskLimitBlockIntake")) {
+      if (typeof input.financeRiskLimitBlockIntake !== "boolean") throw AppError.badRequest("financeRiskLimitBlockIntake boolean olmalı");
+      await this.set(SETTING_KEYS.FINANCE_RISK_LIMIT_BLOCK_INTAKE, input.financeRiskLimitBlockIntake, "Risk limiti aşımında yeni iş kabulünü engelle", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeRiskLimitBlockShipment")) {
+      if (typeof input.financeRiskLimitBlockShipment !== "boolean") throw AppError.badRequest("financeRiskLimitBlockShipment boolean olmalı");
+      await this.set(SETTING_KEYS.FINANCE_RISK_LIMIT_BLOCK_SHIPMENT, input.financeRiskLimitBlockShipment, "Risk limiti aşımında sevki engelle (tamamı emanet sevk muaf)", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "financeAutoDraftFromShipmentEnabled")) {
@@ -5236,6 +5257,18 @@ export async function readFinanceRiskLimitBlockEnabled(
   return asBoolean(setting?.value);
 }
 
+/** D4-I2: risk limiti aşımında yeni iş kabulü engellensin mi? Default false (cache'siz, guard tx içinde taze okur). */
+export async function readFinanceRiskLimitBlockIntake(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.FINANCE_RISK_LIMIT_BLOCK_INTAKE }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+
+/** D4-I2: risk limiti aşımında sevk engellensin mi? Default false. */
+export async function readFinanceRiskLimitBlockShipment(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.FINANCE_RISK_LIMIT_BLOCK_SHIPMENT }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+
 /** Sevk onayında otomatik satış faturası TASLAĞI üretilsin mi? Default false. */
 export async function readFinanceAutoDraftFromShipmentEnabled(
   tx?: Pick<typeof prisma, "systemSetting">,
@@ -5299,6 +5332,13 @@ export function readFinanceCariHoldReleaseBySamePerson(tx?: Pick<typeof prisma, 
 export async function resolveServiceBillingEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   if (!(await readFinanceEnabled(tx))) return false;
   return readFinanceServiceBillingEnabled(tx);
+}
+
+/** D4-I2 — risk limiti iş kabulü/sevk kapısı TEK çözücü: ayar ÖNCE (kapalıyken tek okuma), sonra ön muhasebe modülü
+ *  (panel satırı modül kapalıyken gizlidir; gizli ayar kapı açmaz — reçete §15). */
+export async function resolveFinanceRiskLimitBlock(scope: "INTAKE" | "SHIPMENT", tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const flag = scope === "INTAKE" ? await readFinanceRiskLimitBlockIntake(tx) : await readFinanceRiskLimitBlockShipment(tx);
+  return flag && (await readFinanceEnabled(tx));
 }
 
 /** H7 — hizmet faturası ayarları TEK okuma noktası (etkin ana anahtar + alt ayarlar). */

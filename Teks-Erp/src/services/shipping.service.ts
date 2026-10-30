@@ -183,6 +183,7 @@ import {
 import { assertWorkOrderBound } from "./helpers/dispatch-header.helper";
 import { assertOwnerMatchesTx, previewOwnerMismatches, rollsAllOwnedByTx } from "./helpers/emanet-owner.helper";
 import { assertShipmentNotHeldTx, cariHoldWarning, shipmentHoldNotice } from "./helpers/cari-hold.helper";
+import { assertCustomerRiskLimitTx } from "./helpers/risk-exposure.helper";
 import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
 import { assertRollsRevivable, assertSwatchesRevivable } from "./helpers/item-usage.helper";
 import { SWATCH_IN_STOCK_WHERE, transitionSwatchesTx } from "./helpers/swatch-event.helper";
@@ -2448,6 +2449,8 @@ export class ShippingService {
   }> {
     // Cari kilidi (D4-I1, SHIPMENT; K22 emanet muafiyeti) — yazımdan önce, tx içinde.
     await assertShipmentNotHeldTx(tx, p.customerId, () => rollsAllOwnedByTx(tx, { sackId: { in: p.sackIds } }, p.customerId));
+    // Risk limiti (D4-I2, finance.riskLimitBlock.shipment; K22 aynı) — bakiye FOR UPDATE, sıra fatura onayıyla aynı.
+    await assertCustomerRiskLimitTx(tx, p.customerId, "SHIPMENT", () => rollsAllOwnedByTx(tx, { sackId: { in: p.sackIds } }, p.customerId));
     const yon = await this.decideShipmentDestinationTx(tx, {
       customerId: p.customerId,
       branchId: p.branchId,
@@ -3465,7 +3468,11 @@ export class ShippingService {
     // Cari kilidi (D4-I1, SHIPMENT) claim'den ÖNCE: PLANNED kalıp sonra kilitlenen sevkiyat da kesilir. Sevkiyat
     // yoksa kapı geçer, aşağıdaki claim 409 verir (bugünkü davranış).
     const holdHeader = await tx.shipment.findUnique({ where: { id: shipmentId }, select: { customerId: true } });
-    if (holdHeader) await assertShipmentNotHeldTx(tx, holdHeader.customerId, () => rollsAllOwnedByTx(tx, { shipmentId }, holdHeader.customerId));
+    if (holdHeader) {
+      const ownEmanetOnly = () => rollsAllOwnedByTx(tx, { shipmentId }, holdHeader.customerId);
+      await assertShipmentNotHeldTx(tx, holdHeader.customerId, ownEmanetOnly);
+      await assertCustomerRiskLimitTx(tx, holdHeader.customerId, "SHIPMENT", ownEmanetOnly);
+    }
     const claim = await tx.shipment.updateMany({
       where: { id: shipmentId, status: ShipmentStatus.PLANNED },
       data: {
