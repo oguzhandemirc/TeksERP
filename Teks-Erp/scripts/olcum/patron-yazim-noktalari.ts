@@ -13,7 +13,7 @@
 //   ② HAM UPDATE — Prisma'nın `@updatedAt` kancasını atlar; SET listesinde
 //      `updatedAt` yoksa ve bir OPT-IN kolon değişiyorsa değişiklik görünmez.
 //      (Prisma `update`/`updateMany` `@updatedAt`i yazar — ölçüldü, belge §4.2.)
-// Kapsam: katalogdaki kök + bağımlılık tabloları; yalnız `src/`. Tablo adı
+// Kapsam: katalogdaki kök + bağımlılık tabloları; `src/` (+ §5 uyumunda `scripts/fix_*.ts` metin taraması). Tablo adı
 // dinamik (`"${rule.table}"`) olan ham SQL AYRICA basılır — model çözülemez.
 // Tip denetleyicili program kurar (≈ 30–60 sn).
 // =============================================================================
@@ -205,9 +205,16 @@ function main(): void {
     if (!silmeTablolari.has(s.tablo)) silmeTablolari.set(s.tablo, []);
     silmeTablolari.get(s.tablo)!.push(s);
   }
+  // Düzeltme betikleri (`scripts/fix_*.ts`) de silme yoludur (K3a `fix_cari_cift_hesap` hareketsiz çift
+  // cari hesabı siler) — `test_bulut_silme_damgasi §1e` ile AYNI küme ve aynı kalıp.
+  const fixKaynaklari = readdirSync(join(KOK, "scripts")).filter((f) => /^fix_.*\.ts$/.test(f)).map((f) => readFileSync(join(KOK, "scripts", f), "utf8"));
+  const fixSiler = (model: string): boolean => {
+    const delegate = model.charAt(0).toLowerCase() + model.slice(1);
+    return fixKaynaklari.some((t) => new RegExp(`\\b${delegate}\\.(delete|deleteMany)\\(`).test(t));
+  };
   const uyumsuz: string[] = [];
   for (const p of KAYIT_PROJEKSIYONLARI) {
-    const var_ = silmeTablolari.has(p.kok.tablo);
+    const var_ = silmeTablolari.has(p.kok.tablo) || fixSiler(p.kok.model);
     if (var_ && p.silme === "YOK") uyumsuz.push(`${p.ad}: katalog 'YOK' diyor ama ${p.kok.tablo} için ${silmeTablolari.get(p.kok.tablo)!.length} silme yolu var`);
     if (!var_ && p.silme === "DAMGA") uyumsuz.push(`${p.ad}: katalog 'DAMGA' diyor ama ${p.kok.tablo} için uygulama silme yolu YOK (kaskad/dinamik olabilir — şema ölçümü ③)`);
   }

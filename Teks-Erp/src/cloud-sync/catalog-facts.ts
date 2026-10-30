@@ -160,7 +160,7 @@ export const FACTS: readonly RecordProjection[] = [
       col("kur", "exchangeRate", "FINANS"), col("kaynak", "sourceType"), col("faturaId", "invoiceId"), col("tahsilatOdemeId", "paymentId"),
       col("cekId", "chequeId"), col("tersKayitId", "reversesTxnId"), col("aciklama", "description"), col("olusturulma", "createdAt")],
     derived: [], sources: [self("cari_transactions", "createdAt")],
-    deletion: "DAMGA", permission: "bulut:cari-bakiye:oku", module: "finance.enabled",
+    deletion: "YOK", permission: "bulut:cari-bakiye:oku", module: "finance.enabled",
     retention: { wireFields: ["tarih"], sql: 't."txnDate"' }, catalogVersion: 1,
   },
   {
