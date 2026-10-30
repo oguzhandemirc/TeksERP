@@ -45,7 +45,7 @@ export const ITEM_DEAD_ROLL_STATUSES = DEAD_ROLL_STATUSES;
 export type ItemLiveRefKind =
   | "ROLL" | "WORK_ORDER" | "ORDER_LINE" | "PURCHASE_ORDER_LINE"
   | "WEAVING_ORDER" | "MACHINE_RUN" | "FASON_YARN_DISPATCH" | "YARN_STOCK" | "SWATCH"
-  | "SERVICE_PROPERTY_MAP" | "SERVICE_VALUE_MAP" | "SERVICE_CUSTOMER_PRICE";
+  | "SERVICE_PROPERTY_MAP" | "SERVICE_VALUE_MAP" | "SERVICE_CUSTOMER_PRICE" | "CONSUMABLE_NORM";
 
 export const ITEM_LIVE_REF_KINDS: ReadonlyArray<{ kind: ItemLiveRefKind; label: string }> = [
   { kind: "ROLL", label: "Canlı top" },
@@ -64,6 +64,8 @@ export const ITEM_LIVE_REF_KINDS: ReadonlyArray<{ kind: ItemLiveRefKind; label: 
   { kind: "SERVICE_PROPERTY_MAP", label: "Hizmet eşlemesi (özellik)" },
   { kind: "SERVICE_VALUE_MAP", label: "Hizmet eşlemesi (özellik değeri)" },
   { kind: "SERVICE_CUSTOMER_PRICE", label: "Müşteri hizmet fiyatı" },
+  // D4-G1a: aktif sarf normu maliyet okuyucusunun girdisidir — hizmet ya da sarf kalemi pasife alınamaz.
+  { kind: "CONSUMABLE_NORM", label: "Aktif sarf normu" },
 ];
 
 interface LiveRefWhere {
@@ -79,6 +81,7 @@ interface LiveRefWhere {
   SERVICE_PROPERTY_MAP: Prisma.FabricPropertyWhereInput;
   SERVICE_VALUE_MAP: Prisma.FabricPropertyValueWhereInput;
   SERVICE_CUSTOMER_PRICE: Prisma.ItemPriceWhereInput;
+  CONSUMABLE_NORM: Prisma.ServiceConsumableNormWhereInput;
 }
 
 /** Her türün Prisma yüklemi — migration D1 bloğunun birebir ikizi. */
@@ -108,6 +111,8 @@ function liveRefWhere(itemId: string, db: Db): LiveRefWhere {
     SERVICE_VALUE_MAP: { serviceItemId: itemId },
     // Yalnız HİZMET kaleminin müşteri fiyatı: ürün fiyat istisnası tanımdır, canlı referans değildir (K1 emsali).
     SERVICE_CUSTOMER_PRICE: { itemId, customerId: { not: null }, ...ACTIVE_ITEM_PRICE, item: { itemType: ItemType.SERVICE } },
+    // `ACTIVE_COST_RATE` ile aynı yüklem; helper import edilmez (makine ücreti okuyucusunu kart router'ına bağlardı — maliyet rejim bekçisi).
+    CONSUMABLE_NORM: { OR: [{ serviceItemId: itemId }, { consumableItemId: itemId }], revokedAt: null },
   };
 }
 
@@ -130,6 +135,7 @@ export async function countItemLiveRefs(db: Db, itemId: string): Promise<ItemLiv
     SERVICE_PROPERTY_MAP: await db.fabricProperty.count({ where: w.SERVICE_PROPERTY_MAP }),
     SERVICE_VALUE_MAP: await db.fabricPropertyValue.count({ where: w.SERVICE_VALUE_MAP }),
     SERVICE_CUSTOMER_PRICE: await db.itemPrice.count({ where: { ...w.SERVICE_CUSTOMER_PRICE, ...ACTIVE_ITEM_PRICE } }),
+    CONSUMABLE_NORM: await db.serviceConsumableNorm.count({ where: w.CONSUMABLE_NORM }),
   };
   return ITEM_LIVE_REF_KINDS.map(({ kind, label }) => ({ kind, label, count: counts[kind] }));
 }
@@ -203,6 +209,11 @@ export async function listItemLiveRefs(
       where: { ...w.SERVICE_CUSTOMER_PRICE, ...ACTIVE_ITEM_PRICE }, take, orderBy: { createdAt: "asc" },
       select: { id: true, currency: true, customer: { select: { name: true } } },
     })).map((x) => ({ id: x.id, title: x.customer?.name ?? "—", detail: `${x.currency} — müşteri fiyatını kaldırın` })),
+    // Miktar listeye girmez (norm ekranında); çift adı + çıkış yolu yeter.
+    CONSUMABLE_NORM: (await db.serviceConsumableNorm.findMany({
+      where: w.CONSUMABLE_NORM, take, orderBy: { createdAt: "asc" },
+      select: { id: true, serviceItem: { select: { name: true } }, consumableItem: { select: { name: true } } },
+    })).map((x) => ({ id: x.id, title: `${x.serviceItem.name} · ${x.consumableItem.name}`, detail: "sarf normunu kaldırın" })),
   };
   return counts.map((c) => ({ ...c, records: rec[c.kind] }));
 }

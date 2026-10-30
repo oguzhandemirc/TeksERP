@@ -120,6 +120,8 @@ export const AUDIT_ISIMLERI: Readonly<Record<string, TermCases>> = {
   FINISHING_RATE: onEkli("apre", sIyelik("tarife", "i", "e")),
   WEFT_SPEC: onEkli("atkı", iyelik("spesifikasyon", "u", "a", "u")),
   YARN_COST_PRICE: onEkli("iplik maliyet", iyelik("fiyat", "ı", "a", "ı")),
+  MACHINE_COST_RATE: onEkli("makine saat", iyelik("ücret", "i", "e", "i")),
+  SERVICE_CONSUMABLE_NORM: onEkli("hizmet sarf", iyelik("norm", "u", "a", "u")),
   ROLL_INSPECTION: onEkli("top", sIyelik("muayene", "i", "e")),
   FOUR_POINT_RULE_SET: onEkli("4 puan kural", iyelik("set", "i", "e", "i")),
   STANDARD_COST_VERSION: onEkli("standart maliyet", iyelik("sürüm", "ü", "e", "ü")),

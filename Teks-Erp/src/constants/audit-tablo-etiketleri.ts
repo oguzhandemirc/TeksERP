@@ -206,6 +206,8 @@ export const TABLE_LABELS: Record<string, string> = {
   FINISHING_RATE: "Apre Tarifesi",
   WEFT_SPEC: "Atkı Spesifikasyonu",
   YARN_COST_PRICE: "İplik Maliyet Fiyatı",
+  MACHINE_COST_RATE: "Makine Saat Ücreti",
+  SERVICE_CONSUMABLE_NORM: "Hizmet Sarf Normu",
   STOCK_COUNT: "Stok Sayımı",
   STOCK_COUNT_LINE: "Stok Sayım Satırı",
   WAREHOUSE: "Depo",
