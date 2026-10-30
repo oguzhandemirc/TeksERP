@@ -23,8 +23,7 @@
 import { Currency, Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { AuditService } from "../src/services/audit.service";
-import { hedefDbAdi } from "./lib/hedef-db-kapisi";
-import { BILINEN_GUVENLI_DB_ADLARI } from "./lib/bilinen-guvenli-db";
+import { fixtureHedefEngeli, hedefDbAdi } from "./lib/hedef-db-kapisi";
 import { COCUKLAR } from "./lib/cari-cocuk-baglari";
 
 const APPLY = process.argv.includes("--apply");
@@ -52,13 +51,12 @@ export interface CiftSatiri {
   engel: string | null;
 }
 
-/** Kapı: `_test` dışı hedefe yazmak `--canli-onay` ister; dry-run her hedefte serbest (okur). */
+/** Kapı: fixture dışı hedefe (`fixtureHedefEngeli` — `_test` / bilinen güvenli ad, CI `teks_ci`) yazmak `--canli-onay` ister; dry-run her hedefte serbest. */
 function yazmaEngeli(): string | null {
   if (!APPLY) return null;
-  const db = hedefDbAdi();
-  // Fixture hedefi: `_test` son eki ya da bilinen güvenli ad (CI `teks_ci`) — tek kaynak `lib/bilinen-guvenli-db`.
-  if (db.endsWith("_test") || BILINEN_GUVENLI_DB_ADLARI.has(db) || CANLI_ONAY) return null;
-  return `'${db}' bir fixture DB'si değil (_test ile bitmiyor). Canlı/yedek veriye yazmak için --canli-onay ver; önce dry-run çıktısını oku.`;
+  const fixtureDisi = fixtureHedefEngeli();
+  if (!fixtureDisi || CANLI_ONAY) return null;
+  return `${fixtureDisi} Canlı/yedek veriye yazmak için --canli-onay ver; önce dry-run çıktısını oku.`;
 }
 
 const ACC_SELECT = { id: true, kind: true, createdAt: true, isActive: true, defaultCurrency: true, paymentTermDays: true, taxOffice: true, riskLimit: true, serviceBillingTrigger: true, notes: true } as const;
