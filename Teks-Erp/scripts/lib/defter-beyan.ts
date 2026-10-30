@@ -300,6 +300,8 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
       { dosya: "src/services/helpers/kursun-meter.helper.ts", sembol: "revokeStepMeterReadingsTx" },
       { dosya: "src/services/tambur-undo.service.ts", sembol: "revokeUndoneCutReadingsTx" },
       { dosya: "src/services/helpers/meter-reading.helper.ts", sembol: "revokeCutReadingsTx" },
+      // D4-B2: süpervizör düzeltmesi eski CUT okumasını damgalar; yeni SUPERVISOR satırının tersi de aynı damga yollarıdır.
+      { dosya: "src/services/tambur-meter-correct.service.ts", sembol: "correctCutReading" },
     ],
     ["src/services/helpers/meter-reading.helper.ts"]),
   D("RollMeterAck", "metre sapma onayı (H2 yazar) — okuma damgalanınca aynı tx'te damgalanır — ters = DAMGA", { tur: "DAMGA", kolon: "revokedAt" },

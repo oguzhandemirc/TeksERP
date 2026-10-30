@@ -102,6 +102,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}helpers/meter-reading.helper.ts::writeCutReadingsTx`]: { helper: "Tambur CUT okuması yazarı (sunucu token'ı)" },
   // İptali geri al: iptal damgalı CUT okumasının yeni kopyası — token SUNUCU üretir; replay kararı restore claim'inindir (CANCELLED → hedef).
   [`${S}helpers/meter-reading.helper.ts::reinstateCancelledCutReadingsTx`]: { helper: "Tambur CUT okuması yeniden kurucu (sunucu token'ı)" },
+  // D4-B2: süpervizör CUT düzeltmesi — gövdedeki token yeni SUPERVISOR okumasının token'ı; K kipi `cutCorrectionReplay.inTx`.
+  [`${S}tambur-meter-correct.service.ts::correctCutReading`]: { giris: { [`${S}tambur-meter-correct.service.ts::correctCutReading`]: "K" } },
 
   // ── Boğazda: D3 (plan §4 — kalan (a) yolları) ───────────────────────────────
   [`${S}shipping.service.ts::createShipmentInner`]: { giris: { [`${S}shipping.service.ts::createShipment`]: "R" } },
@@ -215,6 +217,7 @@ export const TOKENSIZ_UCLAR: Record<string, TokensizUc> = {
  */
 export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}helpers/kursun-meter.helper.ts::meterReadingReplay`]: ["rollId", "workOrderStepId", "phase", "meters"],
+  [`${S}tambur-meter-correct.service.ts::cutCorrectionReplay`]: ["rollId", "workOrderStepId", "phase", "meters", "source"],
   [`${S}quality-inspection.service.ts::createReplay`]: ["rollId", "phase"],
   [`${S}quality-inspection.service.ts::reviseReplay`]: ["supersedesId"],
   [`${S}cash-transaction.service.ts::cashTxnReplay`]: ["kind", "amount", "cashBoxId", "bankAccountId"],

@@ -70,11 +70,5 @@ export function isCorrectionConflict(err: unknown): boolean {
   return (err as { status?: number } | null)?.status === 409;
 }
 
-/**
- * Açık duruşta gramaj dokunuşu (K2, DALGA4 §2.5/5): UYARI metni döner, ret DEĞİL — duruş ile metre
- * yazımda bağlanmaz; dokunuş her durumda gönderilir. Duruş yoksa null.
- */
-export function stopOpenTapWarning(stopOpen: boolean): { title: string; detail: string } | null {
-  if (!stopOpen) return null;
-  return { title: 'Makine duruşta görünüyor — dokunuş engellenmedi', detail: 'Makine çalışıyorsa üstteki bantta "Çalıştı" ile duruşu kapatın.' };
-}
+/** Açık duruşta gramaj dokunuşu uyarısı (K2) — metin `machine-stop/entryWarning` tek kaynağından. */
+export { stopOpenEntryWarning as stopOpenTapWarning } from '../../../components/machine-stop/entryWarning';

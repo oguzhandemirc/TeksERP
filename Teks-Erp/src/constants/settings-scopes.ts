@@ -119,6 +119,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "tamburPlanGateWidthCheck",
       "tamburListByStationEnabled",
       "machineStopTrackingEnabled",
+      "machineStopOpenWarningEnabled",
       "tamburUndoFullSameDayOnly",
       "tamburSimulatedMeterEnabled",
       "tamburMeasureSourceRequired",

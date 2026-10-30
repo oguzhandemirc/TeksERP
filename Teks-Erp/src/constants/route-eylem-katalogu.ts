@@ -75,6 +75,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/kursun-qc/meter-readings": e("kurşun metre okuması kaydetti", "kurşun metre okuması kaydetmeye çalıştı"),
   "POST /api/kursun-qc/meter-readings/:id/pin-ack": e("metre sapmasını süpervizör PIN'iyle onayladı", "metre sapmasını süpervizör PIN'iyle onaylamaya çalıştı"),
   "POST /api/kursun-qc/meter-readings/:id/office-ack": e("metre sapmasını ofisten onayladı", "metre sapmasını ofisten onaylamaya çalıştı"),
+  "POST /api/tambur/meter-readings/:id/correct": e("Tambur kesim metresini düzeltti", "Tambur kesim metresini düzeltmeye çalıştı"),
   // ── Gelen belge taslağı (D2)
   "POST /api/gelen-belge/taramalar": e("gelen belge fotoğrafı yükledi", "gelen belge fotoğrafı yüklemeye çalıştı"),
   "POST /api/gelen-belge/taramalar/:id/oku": e("gelen belge fotoğrafını okumaya gönderdi", "gelen belge fotoğrafını okumaya göndermeye çalıştı"),

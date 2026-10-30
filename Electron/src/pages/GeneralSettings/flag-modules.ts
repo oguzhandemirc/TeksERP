@@ -158,6 +158,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   tamburPlanGateWidthCheck: "productionEnabled",
   tamburListByStationEnabled: "productionEnabled",
   machineStopTrackingEnabled: "productionEnabled",
+  machineStopOpenWarningEnabled: "productionEnabled",
   [SETTING_KEYS.WORKORDER_DEFAULT_PLAN_DURATION_DAYS]: "productionEnabled",
 
   // --- ÖN MUHASEBE (cari · fatura · kasa · çek) ------------------------------
