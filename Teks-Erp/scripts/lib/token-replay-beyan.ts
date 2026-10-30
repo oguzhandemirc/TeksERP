@@ -98,6 +98,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}batch.service.ts::createBatchTx`]: { helper: "parti yazarı" },
   // H1: kurşun metre okuması yazarı; replay kararı çağıranın (completeQc2 · recordMeterReading, K kipi `meterReadingReplay.inTx`).
   [`${S}helpers/kursun-meter.helper.ts::writeMeterReadingTx`]: { helper: "kurşun metre okuması yazarı" },
+  // D4-B1b: Tambur CUT okuması — token SUNUCU üretir; replay kararı kesim yolunundur (finalize claim · cutReplay · elle top FAZ 2 idempotent dalı).
+  [`${S}helpers/meter-reading.helper.ts::writeCutReadingsTx`]: { helper: "Tambur CUT okuması yazarı (sunucu token'ı)" },
 
   // ── Boğazda: D3 (plan §4 — kalan (a) yolları) ───────────────────────────────
   [`${S}shipping.service.ts::createShipmentInner`]: { giris: { [`${S}shipping.service.ts::createShipment`]: "R" } },

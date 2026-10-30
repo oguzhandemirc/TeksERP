@@ -52,7 +52,10 @@ import {
   readQualityGradeRequiredEnabled,
 } from "./system-setting.service";
 import { recordVarianceTx, overageOf } from "./helpers/roll-variance.helper";
-import { assertTamburMeasuresAllowed, toMachineDataSource, weakestMeasureSource, type MeterSourceInput } from "./helpers/meter-reading.helper";
+import {
+  assertTamburMeasuresAllowed, auditCutReadings, cutChildrenMeasureSourceTx, toMachineDataSource, weakestMeasureSource, writeCutReadingsTx,
+  type CutReadingInput, type MeterSourceInput,
+} from "./helpers/meter-reading.helper";
 import {
   VARIANCE_SOURCES,
   varianceKindForRemainingAction,
@@ -84,6 +87,7 @@ import {
   Prisma,
   SwatchStatus,
   Roll,
+  RollMeterReading,
   RollStatus,
   RollError,
   RollEntrySource,
@@ -153,6 +157,15 @@ interface CutInput {
   relatedErrorIds: string[];
   /** D4-B1: kesim metresinin ölçüm kaynağı; eski APK göndermez (sapma kaynağı NULL kalır). */
   measure?: MeterSourceInput | null;
+}
+
+/** Kapanışta kalan sapmasının kaynağını taşıyan kesimler: ebeveynin yaşayan çocukları, bu kapanışın kalan parçası hariç. */
+async function liveCutChildIdsTx(tx: Prisma.TransactionClient, parentId: string, remainingChildId: string | null): Promise<string[]> {
+  const kids = await tx.roll.findMany({
+    where: { parentRollId: parentId, status: { not: RollStatus.CANCELLED }, ...(remainingChildId ? { id: { not: remainingChildId } } : {}) },
+    select: { id: true },
+  });
+  return kids.map((k) => k.id);
 }
 
 /**
@@ -1015,6 +1028,8 @@ export class TamburService {
       inheritProperties: boolean;
       auditSource: string;
       auditErrorIds: string[];
+      /** D4-B1b: kesimin ölçüm beyanı — CUT okuması bundan doğar; otomatik kalan parça ölçülmedi (null). */
+      measure: MeterSourceInput | null;
     };
 
     // Decimal offset — float drift'le sahte ~0.000m kuyruk top yaratma.
@@ -1034,6 +1049,7 @@ export class TamburService {
         inheritProperties: cutStatus === RollStatus.WAREHOUSE,
         auditSource: "OPERATOR_CUT",
         auditErrorIds: c.relatedErrorIds,
+        measure: c.measure ?? null,
       });
       offsetD = nextOffsetD;
     }
@@ -1053,6 +1069,7 @@ export class TamburService {
         inheritProperties: remainStatus === RollStatus.WAREHOUSE,
         auditSource: "REMAINING_TAIL",
         auditErrorIds: [],
+        measure: null,
       });
     }
 
@@ -1076,6 +1093,7 @@ export class TamburService {
     // commit ettiğinden hayalet kayıt kalırdı. Döngüde topla, tx commit ettikten
     // SONRA emit et.
     const childAudits: Array<{ recordId: string; newData: Record<string, unknown> }> = [];
+    let cutReadings: RollMeterReading[] = [];
     // F140: kapatılan RollError'lar için tx-sonrası per-satır audit (agregat log
     // kapatılan tekil hatayı iz tutmuyordu). tx İÇİNDE toplanır, commit sonrası emit.
     const closedErrorAudits: Array<{ errorId: string; actionTaken: string }> = [];
@@ -1199,6 +1217,7 @@ export class TamburService {
       // (Segmentler ve barkodları tx AÇILMADAN ÖNCE hazırlandı — gerekçe ve
       // ölçüm yukarıdaki blokta; barkodu burada üretmek sayaç kilidini bu tx'in
       // sonuna kadar tutardı.)
+      const cutMeasures: CutReadingInput[] = [];
       for (const [segIndex, seg] of segments.entries()) {
         const splitBarcode = segmentBarcodes[segIndex]!;
         const splitRoll = await tx.roll.create({
@@ -1301,6 +1320,7 @@ export class TamburService {
         }
 
         splitRolls.push(splitRoll);
+        cutMeasures.push({ rollId: splitRoll.id, meters: splitRoll.initialQty, measure: seg.measure });
 
         // Audit tx dışına ertelenir (yukarıdaki childAudits notu).
         childAudits.push({
@@ -1319,6 +1339,8 @@ export class TamburService {
           },
         });
       }
+      // D4-B1b: CUT okumaları çocuklar doğduktan sonra AYNI tx'te (measure'sız kesim okuma yazmaz).
+      cutReadings = await writeCutReadingsTx(tx, { stepId: roll.currentStep!.id, machineId: machineId ?? null, userId: userId ?? null, cuts: cutMeasures });
 
       // Tambur parametrelerini (kat tipi vs.) step.stepData'ya yaz.
       if (foldType !== undefined && roll.currentStepId) {
@@ -1516,6 +1538,7 @@ export class TamburService {
         hadRemainingTail: cumulativeLenD.lessThan(totalQtyD),
       },
     });
+    await auditCutReadings(userId, cutReadings);
 
     // F140: kapatılan RollError'ların per-satır izini emit et (best-effort, tx dışı).
     if (closedErrorAudits.length > 0) {
@@ -2946,6 +2969,8 @@ export class TamburService {
           source: VARIANCE_SOURCES.TAMBUR_WAREHOUSE_FINALIZE,
           reasonCode: data.varianceReasonCode ?? null,
           reasonText: data.varianceReasonText ?? null,
+          // D4-B1b: adımsız depo kesimi CUT okuması yazamaz → kaynak bugün hep NULL (tek kural, aynı türetim).
+          measureSource: await cutChildrenMeasureSourceTx(tx, await liveCutChildIdsTx(tx, parent.id, remainingChild?.id ?? null)),
           userId,
         });
       }
@@ -3216,6 +3241,7 @@ export class TamburService {
       : await resolveQualityGradeId(resolvedQualityGrade);
 
     let result: { child: Roll; newParentQty: number };
+    let openCutReadings: RollMeterReading[] = [];
     result = await prisma.$transaction(async (tx) => {
     // F130: WO satırını kilitle → eşzamanlı WO iptaliyle (softDelete cancelClaim
     // aynı WO satırını kilitler) serileş; iptal-guard'ını kilit ALTINDA TAZE oku
@@ -3431,9 +3457,15 @@ export class TamburService {
         userId,
       });
     }
+    // D4-B1b: CUT okuması çocuk doğduktan sonra AYNI tx'te (measure'sız kesim okuma yazmaz).
+    openCutReadings = await writeCutReadingsTx(tx, {
+      stepId: tamburStepId, machineId: sessionMachineId ?? null, userId: userId ?? null,
+      cuts: [{ rollId: child.id, meters: child.initialQty, measure: data.measure }],
+    });
 
     return { child, newParentQty };
     });
+    await auditCutReadings(userId, openCutReadings);
 
     await AuditService.log({
       userId,
@@ -3846,6 +3878,8 @@ export class TamburService {
           source: VARIANCE_SOURCES.TAMBUR_FINALIZE,
           reasonCode: data.varianceReasonCode ?? null,
           reasonText: data.varianceReasonText ?? null,
+          // D4-B1b: kalan = kayıt − kesimler → kaynağı kesimlerin CUT okumalarının zayıf halkası.
+          measureSource: await cutChildrenMeasureSourceTx(tx, await liveCutChildIdsTx(tx, parent.id, remainingChildId)),
           userId,
         });
       }

@@ -6,6 +6,7 @@
 // are excluded from inventory queries unless explicitly filtered.
 // =============================================================================
 
+import { auditCutReadings, revokeCutReadingsTx } from "./helpers/meter-reading.helper";
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, applyRollFlagSetTx } from "./helpers/property-revoke.helper";
 import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
@@ -3686,6 +3687,9 @@ export class InventoryService {
     // istemcileri sessizce kilitler.
     void opts?.confirmLabelPrinted;
 
+    // D4-B1b TERS YOL: iptal ("hiç yoktu") Tambur CUT okumasını aynı tx'te damgalar (elle eklenen topun geri
+    // alması bu yoldan geçer); SCRAP'ta ölçüm gerçekti, dokunulmaz.
+    let cutReadingsRevoked: string[] = [];
     const updated = await prisma.$transaction(async (tx) => {
       // ── ETKİ ALANI (2026-08-15 düzeltmesi) ───────────────────────────────
       // Eskiden burada küme ELLE kuruluyordu: "AÇIK hareketlerin adımları +
@@ -3793,13 +3797,12 @@ export class InventoryService {
         },
       });
       if (cancelClaim.count === 0) {
-        throw AppError.conflict(
-          "Top bu sırada başka bir işleme girdi (sevk/çuval/fason olabilir) — tekrar deneyin."
-        );
+        throw AppError.conflict("Top bu sırada başka bir işleme girdi (sevk/çuval/fason olabilir) — tekrar deneyin.");
       }
       const r = await tx.roll.findUniqueOrThrow({ where: { id } });
       // LEVENT TÜKETİMİ TERS YOLU (Faz 4): yalnız İPTAL ("hiç yoktu") — SCRAP'ta çözgü gerçekten tüketildi, dokunulmaz.
       if (!isScrap && r.doffEventId) await cancelConsumedForRollTx(tx, id, cancelReasonText ?? "top iptali", userId ?? null);
+      if (!isScrap) cutReadingsRevoked = await revokeCutReadingsTx(tx, { rollIds: [id], userId: userId ?? null, reason: "ROLL_CANCEL" });
 
       // DEPO DEFTERİ — mal depodan DÜŞTÜ (kayıt hatalıydı ya da fire).
       // `warehouseId` BİLEREK temizlenmez: "en son hangi depodaydı" izi kalsın ve
@@ -3877,6 +3880,7 @@ export class InventoryService {
       // (fonksiyon zaten terminal-guard'lı; emsal `rescueStuckRoll`.)
       return { roll: r, stepChanges, ledgerRowWritten };
     });
+    await auditCutReadings(userId, [], { ids: cutReadingsRevoked, reason: "ROLL_CANCEL" });
 
     await AuditService.log({
       userId,

@@ -24,7 +24,7 @@ import {
   type KursunMeterCapture,
 } from "../system-setting.service";
 import { tokenReplay } from "./token-replay.helper";
-import { readingPolicyOf } from "./meter-reading.helper";
+import { insertMeterReadingTx, readingPolicyOf, stampMeterReadingsTx } from "./meter-reading.helper";
 import { resolveMeterVariance, type MeterVarianceResult } from "../../lib/kursun-meter-variance";
 import { loadDeclaredInTx, readingPendingAckSql } from "./kursun-meter-variance-sql.helper";
 import { applyExitMeterToStockTx, reverseExitMeterStockTx, type ExitMeterApplyResult } from "./kursun-meter-stock.helper";
@@ -173,26 +173,25 @@ export async function writeMeterReadingTx(tx: Tx, args: WriteMeterReadingArgs): 
     await revokeReadingsTx(tx, { ids: [revokedId], userId: args.userId, reason: args.reason });
   }
   const policy = await resolveKursunMeterPolicy(tx);
-  const reading = await tx.rollMeterReading.create({
-    data: {
-      rollId: args.rollId,
-      workOrderStepId: args.stepId,
-      phase: args.phase,
-      meters: new Prisma.Decimal(canonicalMeters(args.input.meters)),
-      rawCounter: args.input.rawCounter == null ? null : new Prisma.Decimal(args.input.rawCounter),
-      source: args.input.source,
-      machineId: args.machineId,
-      peripheralId: args.input.peripheralId ?? null,
-      cardSampleId: args.input.cardSampleId ?? null,
-      thresholdM: policy.thresholdM == null ? null : new Prisma.Decimal(policy.thresholdM),
-      thresholdPct: policy.thresholdPct == null ? null : new Prisma.Decimal(policy.thresholdPct),
-      basis: policy.basis,
-      approvalMode: policy.approvalMode,
-      // H1b: stok kipi de okuma anında kopyalanır (tablet adım özetindeki `policy` sözleşmesine girmez).
-      stockMode: MeterStockMode[await readKursunMeterStockMode(tx)],
-      clientToken: args.input.clientToken,
-      createdById: args.userId,
-    },
+  // Ortak yazım boğazı (D4-B1b): satır yaratma yalnız meter-reading.helper'da.
+  const reading = await insertMeterReadingTx(tx, {
+    rollId: args.rollId,
+    workOrderStepId: args.stepId,
+    phase: args.phase,
+    meters: new Prisma.Decimal(canonicalMeters(args.input.meters)),
+    rawCounter: args.input.rawCounter == null ? null : new Prisma.Decimal(args.input.rawCounter),
+    source: args.input.source,
+    machineId: args.machineId,
+    peripheralId: args.input.peripheralId ?? null,
+    cardSampleId: args.input.cardSampleId ?? null,
+    thresholdM: policy.thresholdM == null ? null : new Prisma.Decimal(policy.thresholdM),
+    thresholdPct: policy.thresholdPct == null ? null : new Prisma.Decimal(policy.thresholdPct),
+    basis: policy.basis,
+    approvalMode: policy.approvalMode,
+    // H1b: stok kipi de okuma anında kopyalanır (tablet adım özetindeki `policy` sözleşmesine girmez).
+    stockMode: MeterStockMode[await readKursunMeterStockMode(tx)],
+    clientToken: args.input.clientToken,
+    createdById: args.userId,
   });
   if (args.phase !== MeterPhase.OUT) return { reading, revokedId, variance: null, ack: null, stock: null };
 
@@ -333,11 +332,11 @@ export async function auditMeterAck(userId: string | undefined, ack: RollMeterAc
 async function revokeReadingsTx(tx: Tx, args: { ids: string[]; userId: string | null; reason: string }): Promise<number> {
   if (args.ids.length === 0) return 0;
   const stamp = { revokedAt: new Date(), revokedById: args.userId, revokeReason: args.reason.slice(0, 300) };
-  const res = await tx.rollMeterReading.updateMany({ where: { id: { in: args.ids }, revokedAt: null }, data: stamp });
+  const revoked = await stampMeterReadingsTx(tx, { id: { in: args.ids } }, stamp);
   await tx.rollMeterAck.updateMany({ where: { readingId: { in: args.ids }, revokedAt: null }, data: stamp });
   // H1b: APPLY etkisi okumayla birlikte terslenir (bağlı sapma satırı damgalanır, metraj geri döner).
   await reverseExitMeterStockTx(tx, args.ids, args.userId);
-  return res.count;
+  return revoked;
 }
 
 /** Adım yeniden açılınca o turun toplarının bu adımdaki aktif okumalarını damgalar (§3-7). */

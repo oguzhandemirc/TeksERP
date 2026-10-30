@@ -5,11 +5,15 @@
 // ayrışırsa iki uç iki farklı kaynak kümesi kabul eder). Sapmanın kaynağı "zayıf halka"dır:
 // sıralama YALNIZ `weakestMeasureSource`te yaşar — ikinci sıralamayı `test_tambur_olcum_kaynagi`
 // AST bölümü reddeder.
+// `roll_meter_readings`e YAZIM (satır yaratma + damga) YALNIZ bu dosyadan geçer — kurşun IN/OUT
+// okuması da Tambur CUT okuması da aynı boğazı kullanır (ikinci yazarı `test_tambur_olcum_kaynagi` §14 reddeder).
 // =============================================================================
-import { MachineDataSource, type MeterApprovalMode, type MeterVarianceBasis, type RollMeterReading } from "@prisma/client";
+import { randomUUID } from "node:crypto";
+import { MachineDataSource, MeterPhase, Prisma, type MeterApprovalMode, type MeterVarianceBasis, type RollMeterReading } from "@prisma/client";
 import { z } from "zod";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { AuditService } from "../audit.service";
 import { readTamburMeasureSourceRequired, readTamburSimulatedMeterEnabled } from "../system-setting.service";
 
 /** İstemcinin beyan edebileceği kaynaklar (`INFERRED` sunucu türetimidir, gövdeden gelmez). */
@@ -96,4 +100,107 @@ export function readingPolicyOf(
     throw new Error("Metre okumasında politika kopyası yok (IN/OUT satırı CHECK ihlali)");
   }
   return { basis: reading.basis, approvalMode: reading.approvalMode };
+}
+
+type Tx = Prisma.TransactionClient;
+
+/** Okuma satırı yaratan TEK çağrı (kurşun `writeMeterReadingTx` + Tambur `writeCutReadingsTx`). */
+export async function insertMeterReadingTx(tx: Tx, data: Prisma.RollMeterReadingUncheckedCreateInput): Promise<RollMeterReading> {
+  return tx.rollMeterReading.create({ data });
+}
+
+/** Damga — ATOMİK: yalnız hâlâ aktif (`revokedAt: null`) satırlar; dönen sayı gerçekten damgalanandır. */
+export async function stampMeterReadingsTx(
+  tx: Tx,
+  where: Prisma.RollMeterReadingWhereInput,
+  stamp: { revokedAt: Date; revokedById: string | null; revokeReason: string },
+): Promise<number> {
+  const res = await tx.rollMeterReading.updateMany({ where: { AND: [where, { revokedAt: null }] }, data: stamp });
+  return res.count;
+}
+
+/** Tambur kesiminde doğan çocuk + gövdedeki ölçüm beyanı (eski APK: `measure` yok → okuma yazılmaz). */
+export interface CutReadingInput {
+  rollId: string;
+  meters: Prisma.Decimal | number;
+  measure: MeterSourceInput | null | undefined;
+}
+
+/**
+ * D4-B1b: Tambur CUT okumaları — çocuk doğduktan sonra AYNI tx'te. Token sunucu üretir (kesim
+ * yolunun kendi idempotency'si replay'de tx'i hiç açmaz); politika alanları CUT'ta yok (CHECK izinli).
+ */
+export async function writeCutReadingsTx(
+  tx: Tx,
+  args: { stepId: string; machineId: string | null; userId: string | null; cuts: CutReadingInput[] },
+): Promise<RollMeterReading[]> {
+  const written: RollMeterReading[] = [];
+  for (const c of args.cuts) {
+    if (!c.measure) continue;
+    written.push(await insertMeterReadingTx(tx, {
+      rollId: c.rollId,
+      workOrderStepId: args.stepId,
+      phase: MeterPhase.CUT,
+      meters: new Prisma.Decimal(c.meters).toDecimalPlaces(3),
+      rawCounter: c.measure.rawCounter == null ? null : new Prisma.Decimal(c.measure.rawCounter),
+      source: MachineDataSource[c.measure.source],
+      machineId: args.machineId,
+      peripheralId: c.measure.peripheralId ?? null,
+      clientToken: randomUUID(),
+      createdById: args.userId,
+    }));
+  }
+  return written;
+}
+
+/** Geri alınan/iptal edilen kesim çocuklarının aktif CUT okumalarını damgalar (ters yol). Dönen: damgalanan id'ler. */
+export async function revokeCutReadingsTx(
+  tx: Tx,
+  args: { rollIds: string[]; userId: string | null; reason: string },
+): Promise<string[]> {
+  if (args.rollIds.length === 0) return [];
+  const where = { rollId: { in: args.rollIds }, phase: MeterPhase.CUT, revokedAt: null };
+  const rows = await tx.rollMeterReading.findMany({ where, select: { id: true } });
+  if (rows.length === 0) return [];
+  const ids = rows.map((r) => r.id);
+  await stampMeterReadingsTx(tx, { id: { in: ids } }, { revokedAt: new Date(), revokedById: args.userId, revokeReason: args.reason.slice(0, 300) });
+  return ids;
+}
+
+/**
+ * Kalan sapmasının kaynağı: kesim çocuklarının aktif CUT okumalarının zayıf halkası. Okuması
+ * olmayan tek çocuk (eski APK / adımsız depo kesimi) sonucu NULL yapar — bilinmeyen kaynak uydurulmaz.
+ */
+export async function cutChildrenMeasureSourceTx(tx: Tx, childIds: string[]): Promise<MachineDataSource | null> {
+  if (childIds.length === 0) return null;
+  const rows = await tx.rollMeterReading.findMany({
+    where: { rollId: { in: childIds }, phase: MeterPhase.CUT, revokedAt: null },
+    select: { rollId: true, source: true },
+  });
+  const byRoll = new Map(rows.map((r) => [r.rollId, r.source]));
+  const sources = childIds.map((id) => {
+    const s = byRoll.get(id);
+    return s && (MEASURE_SOURCES as readonly string[]).includes(s) ? (s as MeasureSource) : null;
+  });
+  return toMachineDataSource(weakestMeasureSource(sources));
+}
+
+/** CUT okumalarının ayak izi (tx DIŞI, best-effort). Yükte fiyat yok. */
+export async function auditCutReadings(
+  userId: string | null | undefined,
+  readings: Array<Pick<RollMeterReading, "id" | "rollId" | "workOrderStepId" | "meters" | "source" | "machineId">>,
+  revoked: { ids: string[]; reason: string } | null = null,
+): Promise<void> {
+  for (const r of readings) {
+    await AuditService.log({
+      userId: userId ?? undefined, action: "CREATE", tableName: "ROLL_METER_READING", recordId: r.id,
+      newData: { phase: "CUT", rollId: r.rollId, workOrderStepId: r.workOrderStepId, meters: Number(r.meters), source: r.source, machineId: r.machineId },
+    });
+  }
+  for (const id of revoked?.ids ?? []) {
+    await AuditService.log({
+      userId: userId ?? undefined, action: "UPDATE", tableName: "ROLL_METER_READING", recordId: id,
+      newData: { phase: "CUT", revoked: true, reason: revoked!.reason },
+    });
+  }
 }
