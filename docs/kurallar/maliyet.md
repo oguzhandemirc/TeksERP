@@ -18,6 +18,7 @@
 - **[ÇEKİRDEK]** Maliyet kodu finans/ticaret/iplik/devere modellerine YALNIZ `services/helpers/maliyet-bridge.helper.ts` üzerinden, önce `read<X>Enabled()` okuyup dinamik import ile erişir; modül kapalıyken öneri `null` ve o tablolara sorgu yok. · bekçi: `test_standart_maliyet_surum` (§5), `test_maliyet_regime_gate`, `test_finance_regime_gate`
 - **[ÇEKİRDEK]** Ölçülmüş çözgü firesi yalnız ÖNERİDİR (`oneriler.warpWaste`, kaynak + levent sayısıyla); girdiye kendiliğinden girmez, kullanıcı `overrides.warpWastePct` + `warpWasteMeasured: true` ile uygular (kaynak `OLCULMUS`, uyarı `WARP_WASTE_MEASURED`). · bekçi: `test_maliyet_girdi`
 - **[ÇEKİRDEK]** Önizleme hiçbir şey yazmaz (sürüm de audit de). · bekçi: `test_standart_maliyet_surum` (§6b)
+- **[ÇEKİRDEK]** Makine saat ücreti (`MachineCostRate`) ve hizmet sarf normu (`ServiceConsumableNorm`) "şu andan itibaren" damgalı sürümdür: değişim aynı tx'te `updateMany WHERE {id, revokedAt: null}` (0 → 409 `*_STALE`) + yeni satır, kaldırma damga, hard delete yok; geçmiş ya da şimdiki değeri YALNIZ `helpers/cost-rate-validity.helper.ts` (`machineCostRateValidAt` / `consumableNormsValidAt`) okur; norm yalnız SERVICE hizmet × CONSUMABLE sarf kalemine kurulur. · bekçi: `test_makine_ucreti_sarf_normu`
 
 ## Teklif ve fiyat listesi (MAL-4)
 
@@ -47,7 +48,7 @@
 
 Panel (Electron vitest): `src/pages/Cost` (`cost-no-client-math`, `cost-access`, `shared/format`, `YarnNeed/yarn-need`, `shared/errors`, `shared/CostBreakdown`, `shared/useCostPreview`, `shared/fx-missing`, `Items/service`, `Calculator/calculator-body`, `Calculator/CalculatorPage`, `Quotes/*`), `src/pages/Items/ItemCostLink`
 
-Backend: `test_hizmet_brode_tambur`, `test_hizmet_kalemi_yaris`, `test_senaryo_hizmet_veren`, `test_screen_catalog`, `test_bulut_teklif_projeksiyon`, `test_teklif_belgesi`, `test_belge_sozlesme`, `test_teklif_durum`, `test_teklif_numara`, `test_teklif_uc`, `test_teklif_siparis`, `test_teklif_gorunurluk`, `test_fiyat_listesi`, `test_quote_price_single_source`, `test_db_invariants`, `test_maliyet_formul`, `test_maliyet_girdi`, `test_standart_maliyet_surum`, `test_maliyet_girdileri`, `test_maliyet_regime_gate`, `test_finance_regime_gate`, `test_rapor_levent_sonucu`, `test_iplik_ihtiyaci`, `test_iplik_regime_gate`, `test_hizmet_fiyati`, `test_hizmet_fatura`, `test_auto_draft_shipment`
+Backend: `test_makine_ucreti_sarf_normu`, `test_hizmet_brode_tambur`, `test_hizmet_kalemi_yaris`, `test_senaryo_hizmet_veren`, `test_screen_catalog`, `test_bulut_teklif_projeksiyon`, `test_teklif_belgesi`, `test_belge_sozlesme`, `test_teklif_durum`, `test_teklif_numara`, `test_teklif_uc`, `test_teklif_siparis`, `test_teklif_gorunurluk`, `test_fiyat_listesi`, `test_quote_price_single_source`, `test_db_invariants`, `test_maliyet_formul`, `test_maliyet_girdi`, `test_standart_maliyet_surum`, `test_maliyet_girdileri`, `test_maliyet_regime_gate`, `test_finance_regime_gate`, `test_rapor_levent_sonucu`, `test_iplik_ihtiyaci`, `test_iplik_regime_gate`, `test_hizmet_fiyati`, `test_hizmet_fatura`, `test_auto_draft_shipment`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
