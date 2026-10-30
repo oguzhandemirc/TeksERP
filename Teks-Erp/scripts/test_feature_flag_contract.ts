@@ -83,6 +83,9 @@ import {
   DEFAULT_TAMBUR_PLAN_WIDTH_CHECK,
   TAMBUR_PLAN_WIDTH_CHECKS,
   readTamburPlanGateWidthCheck,
+  DEFAULT_SHIP_READY_RULE,
+  SHIP_READY_RULES,
+  readShippingReadyRule,
   DEFAULT_SHIPPING_DOC_ITEM_NAME_MODE,
 } from "../src/services/system-setting.service";
 import prisma from "../src/lib/prisma";
@@ -353,6 +356,7 @@ async function main() {
   check("zemin: A sayısal ≥ 10 anahtar", aNum.length >= 10, `aNum=${aNum.length}`);
 
   const NUMERIC_PANEL_EXEMPT: Record<string, string> = {
+    shippingReadyScanMinutes: "D4-J1 yalnız kayıt; okuyan KOSUL bildirimi D4-J2 — panel satırı onunla gelir (etkisiz ayar gösterilmez)",
     sessionDurationMinutes: "kind:'session' — Oturum section'ı yönetir",
     sessionDurationHours: "GERİYE-UYUM türetilmiş alan — panel dakika alanını yönetir",
     idleTimeoutMinutes: "kind:'session' — Oturum section'ı yönetir",
@@ -1530,6 +1534,7 @@ async function main() {
     ["shippingOrderRequirement", await readShippingOrderRequirement(junkClient), DEFAULT_SHIPMENT_ORDER_REQUIREMENT],
     ["shippingInvoiceMode", await readShippingInvoiceMode(junkClient), DEFAULT_SHIPPING_INVOICE_MODE],
     ["tamburPlanGateWidthCheck", await readTamburPlanGateWidthCheck(junkClient), DEFAULT_TAMBUR_PLAN_WIDTH_CHECK],
+    ["shippingReadyRule", await readShippingReadyRule(junkClient), DEFAULT_SHIP_READY_RULE],
     [
       "shippingDocItemNameMode",
       await readShippingDocItemNameMode(junkClient),
@@ -1553,6 +1558,7 @@ async function main() {
     "shippingDocItemNameMode",
     "labelCopiesSource",
     "tamburPlanGateWidthCheck",
+    "shippingReadyRule",
   ] as const;
   const enumGaps = ENUM_FLAGS.flatMap((k) => {
     const missing = [
@@ -1578,6 +1584,7 @@ async function main() {
     ["shippingOrderRequirement", SHIPMENT_ORDER_REQUIREMENTS],
     ["shippingInvoiceMode", SHIPPING_INVOICE_MODES],
     ["tamburPlanGateWidthCheck", TAMBUR_PLAN_WIDTH_CHECKS],
+    ["shippingReadyRule", SHIP_READY_RULES],
     ["shippingDocItemNameMode", SHIPPING_DOC_ITEM_NAME_MODES],
   ];
   const valueSetGaps = VALUE_SETS.flatMap(([k, values]) =>

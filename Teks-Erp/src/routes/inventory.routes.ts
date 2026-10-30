@@ -5,10 +5,11 @@
 import { Router } from "express";
 import { InventoryController } from "../controllers/inventory.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requireProductionEnabled } from "../middlewares/module.middleware";
+import { requireEmanetEnabled, requireProductionEnabled } from "../middlewares/module.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { getRollTabletContext } from "../services/roll-tablet.service";
 import { listRollOwnerCustomers } from "../services/roll-owner.service";
+import { RollCustomerCodeService } from "../services/roll-customer-code.service";
 
 // Mobil ekran yetkileri web yetkilerine alternatif olarak kabul edilir:
 // `mobile:depo` operatörü `roll:read` web yetkisi olmadan da depo ekranını
@@ -1120,5 +1121,80 @@ router.post(
   requireAnyPermission("roll:write", ...MOBILE_ROLL_WRITE_KURSUN),
   controller.kursunFinish,
 );
+
+/**
+ * D4-F1: müşteri barkodu bağlama/kaldırma — Tambur operatörü (müşterinin önbasılı etiketi).
+ * Yeni izin AÇILMADI: top yazma izni (`roll:write`) + Tambur tablet izni. Kod yalnız emanet topa
+ * bağlanır → emanet modülü kapalıyken 403 MODULE_DISABLED.
+ */
+const ROLL_CUSTOMER_CODE_WRITE = ["mobile:tambur"] as const;
+
+/**
+ * @openapi
+ * /api/rolls/{id}/customer-code:
+ *   post:
+ *     tags: [Inventory]
+ *     summary: Müşteri barkodunu emanet topa bağla (D4-F1)
+ *     description: |
+ *       Müşterinin önbasılı etiketi (kaynak BOUND_LABEL) topa bağlanır. Kod müşteri içinde tekildir;
+ *       topta tek aktif kod olur. `clientToken` zorunlu — aynı token ikinci istekte kayıtlı satırı döner.
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [code, clientToken]
+ *             properties:
+ *               code: { type: string, maxLength: 64 }
+ *               clientToken: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Bağlandı (ya da aynı token replay) }
+ *       400: { description: Validasyon · ROLL_NOT_EMANET (sahipsiz top) · ROLL_CANCELLED }
+ *       403: { description: MODULE_DISABLED (emanet modülü kapalı) }
+ *       404: { description: Top bulunamadı }
+ *       409: { description: CUSTOMER_CODE_COLLIDES · CUSTOMER_CODE_TAKEN · ROLL_CUSTOMER_CODE_EXISTS · CUSTOMER_CODE_REVOKED · CLIENT_TOKEN_COLLISION }
+ */
+router.post("/:id/customer-code", verifyToken, requireEmanetEnabled, requireAnyPermission("roll:write", ...ROLL_CUSTOMER_CODE_WRITE), async (req, res, next) => {
+  try {
+    res.json(await RollCustomerCodeService.bind(req.params.id as string, req.body, req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/rolls/{id}/customer-code/revoke:
+ *   post:
+ *     tags: [Inventory]
+ *     summary: Topun aktif müşteri barkodunu kaldır (D4-F1)
+ *     description: Satır silinmez, damgalanır (sebep zorunlu). Değiştirme = kaldır + yeniden bağla.
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               reason: { type: string, minLength: 3, maxLength: 300 }
+ *     responses:
+ *       200: { description: Kaldırıldı }
+ *       400: { description: Validasyon }
+ *       403: { description: MODULE_DISABLED (emanet modülü kapalı) }
+ *       409: { description: CUSTOMER_CODE_NOT_ACTIVE }
+ */
+router.post("/:id/customer-code/revoke", verifyToken, requireEmanetEnabled, requireAnyPermission("roll:write", ...ROLL_CUSTOMER_CODE_WRITE), async (req, res, next) => {
+  try {
+    res.json(await RollCustomerCodeService.revoke(req.params.id as string, req.body, req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
 
 export default router;

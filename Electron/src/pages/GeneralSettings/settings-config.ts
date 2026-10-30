@@ -891,6 +891,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:shipping"],
     flags: [
       {
+        // D4-F1 (2026-10-30): `defaultOn` backend `readScanCustomerCodeLookupEnabled` ile birebir (kayıt yoksa kapalı).
+        key: "scanCustomerCodeLookupEnabled",
+        title: "Okutmada müşteri barkodunu da tanı",
+        summary: "Okutulan kod bir top barkodu değilse, topa bağlanmış müşteri barkoduna bakılır.",
+        defaultOn: false,
+        audience: ["Depocu", "Sevkiyat", "Operatör"],
+        desc: "Açıkken top okutmada (top sorgusu, çuvala okutma, genel arama) önce bizim top barkodu aranır; bulunamazsa topa bağlanmış müşteri barkodu aranır. Aynı kod birden çok müşteride varsa sistem seçim yapmaz, adayları gösterip durur. Kapalıyken (varsayılan) yalnız bizim top barkodu tanınır.",
+      },
+      {
         key: "shipmentConfirmationEnabled",
         title: "Sevk onayı adımı",
         summary:
@@ -1207,6 +1216,35 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: SHIPPING_DOC_CEKI_NAME_MODE_OPTIONS,
         audience: ["Sevkiyat", "Depocu"],
         desc: "Çeki listesinin ad rejimi. “Genel ayarı izle” (varsayılan) üstteki irsaliye ayarını uygular; diğer seçenekler yalnız çeki bölümünü çevirir. Çeki listesi tek başına da basılıp ambarda kontrol listesi olarak kullanılır.",
+      },
+      {
+        // D4-J1 (2026-10-30): `defaultValue` backend `DEFAULT_SHIP_READY_RULE` ile birebir.
+        enumKey: "shippingReadyRule",
+        group: "Sevke hazır işler",
+        title: "İş ne zaman sevke hazır sayılsın",
+        summary: `${TERIM.terbiyeIsEmri.tekil}, gelen belge, müşteri partisi ya da müşterinin topları hangi durumda “sevke hazır” görünsün.`,
+        desc: "“Hepsi bitince” (varsayılan): işlemde hiç top kalmayınca ve en az bir top depodaysa hazır. “Metre eşiği”: depodaki (ve sevk edilmiş) metre, gelen metrenin ya da hedef metrajın tolerans kadar altına inmeden ulaşınca hazır; hedefi olmayan iş “hepsi bitince” kuralına düşer. Hazırlık saklanmaz, her bakışta toplardan yeniden hesaplanır — top geri açılırsa hazırlık da düşer.",
+        defaultValue: "ALL_DONE",
+        display: "radio",
+        audience: ["Sevkiyat", "Planlamacı"],
+        options: [
+          { value: "ALL_DONE", label: "Hepsi bitince (bugünkü)", hint: "İşlemde tek top kalsa iş kısmi hazır görünür." },
+          { value: "METER_THRESHOLD", label: "Metre eşiğine ulaşınca", hint: "Metraj aşağı yukarı tamamlanınca hazır; tolerans aşağıda." },
+        ],
+      },
+    ],
+    numberFlags: [
+      {
+        key: "shippingReadyTolerancePct",
+        group: "Sevke hazır işler",
+        title: "Sevke hazırlık toleransı (%)",
+        desc: "Yalnız “Metre eşiğine ulaşınca” kuralında okunur: hazır metre, hedef metrenin bu yüzde kadar altında kalsa da iş hazır sayılır. Varsayılan %2; 0 girilirse tam metre beklenir.",
+        min: 0,
+        max: 20,
+        fallback: 2,
+        unit: "%",
+        step: 0.5,
+        audience: ["Sevkiyat", "Planlamacı"],
       },
     ],
   },

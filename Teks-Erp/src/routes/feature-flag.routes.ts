@@ -488,6 +488,26 @@ export const updateSchema = z.strictObject({
   shippingAllocWidthToleranceCm: z.number().positive().max(10).nullable().optional(),
   // shipping.allowOverAllocation — fazla sevk deftere yazilsin mi (default false).
   shippingAllowOverAllocation: z.boolean().optional(),
+  // Sevke hazır işler (D4-J1). Tolerans null = varsayılana (%2) dön; 0 GEÇERLİ.
+  shippingReadyRule: z
+    .enum(["ALL_DONE", "METER_THRESHOLD"], { message: "Sevke hazırlık kuralı ALL_DONE ya da METER_THRESHOLD olmalı" })
+    .optional(),
+  shippingReadyTolerancePct: z
+    .number({ message: "Sevke hazırlık toleransı sayı olmalı" })
+    .min(0, { message: "Sevke hazırlık toleransı 0 ile 20 arasında olmalı (%)" })
+    .max(20, { message: "Sevke hazırlık toleransı 0 ile 20 arasında olmalı (%)" })
+    .nullable()
+    .optional(),
+  shippingReadyNotifyUnits: z
+    .array(z.enum(["IE", "GB", "PARTI"], { message: "Sevke hazır bildirim birimi IE, GB ya da PARTI olmalı" }))
+    .max(3, { message: "Sevke hazır bildirim birimleri en çok 3 olabilir" })
+    .optional(),
+  shippingReadyScanMinutes: z
+    .number({ message: "Sevke hazır tarama periyodu sayı olmalı" })
+    .int({ message: "Sevke hazır tarama periyodu tam sayı olmalı" })
+    .min(1, { message: "Sevke hazır tarama periyodu 1 ile 60 dakika arasında olmalı" })
+    .max(60, { message: "Sevke hazır tarama periyodu 1 ile 60 dakika arasında olmalı" })
+    .optional(),
   // customers.branchesEnabled — müşteri şubeleri (sevk noktaları) UI'da açık mı (default true, UI rehberi).
   customerBranchesEnabled: z.boolean().optional(),
   // tambur.overQuantityEnabled — çıkan top metresi giriş metresini aşabilsin mi (ENFORCE).
@@ -543,6 +563,8 @@ export const updateSchema = z.strictObject({
   kursunMeterVarianceApproval: z.enum(["NONE", "OPERATOR_REASON", "SUPERVISOR_PIN", "OFFICE"]).optional(),
   /** H1b: çıkış metresi stok kipi (enum; `KURSUN_METER_STOCK_MODES` ile birebir; varsayılan RECORD). */
   kursunMeterStockMode: z.enum(["RECORD", "APPLY"]).optional(),
+  /** D4-F1: okutmada müşteri barkodu araması (varsayılan kapalı = bugün). */
+  scanCustomerCodeLookupEnabled: z.boolean().optional(),
   // batch.shortNumberEnabled — parti no kısa ve DÖNEN (P01…P99) mi (default TRUE/AÇIK).
   // Backend ENFORCE eder (generateBatchNumberTx). Kapalıyken eski P+GGAAYY+sıra kalıbı.
   // ⚠️ Bu satır ACİL KAPATMA anahtarıdır — kısa numara sahada sorun çıkarırsa tek

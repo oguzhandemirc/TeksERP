@@ -249,6 +249,8 @@ const PARTIAL_INDEXES: Array<{
   // H1 kurşun metre defteri (migration 20261029005529) — top × adım × evre ve okuma başına TEK aktif satır; damgalı geçmiş serbest.
   { table: "roll_meter_readings", index: "roll_meter_readings_active_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "düzeltme = damga + yeni satır; ikinci aktif okuma/onay seddi (bekçi test_kursun_metre §8)" },
   { table: "roll_meter_acks", index: "roll_meter_acks_active_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "okuma başına tek aktif sapma onayı (H2)" },
+  { table: "roll_customer_codes", index: "roll_customer_codes_customer_code_active_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "müşteride aktif kod tekil; değiştirme = damga + yeni satır (D4-F1, bekçi test_musteri_barkodu)" },
+  { table: "roll_customer_codes", index: "roll_customer_codes_roll_active_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "topta tek aktif müşteri kodu (D4-F1)" },
   // H7 hizmet faturası bağı (migration 20261029140000) — iş (top × kalem × adım, NULLS NOT DISTINCT) başına TEK aktif bağ.
   { table: "service_billing_links", index: "service_billing_links_active_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "aynı iş iki faturaya bağlanamaz; iptal damgası yeri boşaltır (bekçi test_hizmet_fatura)" },
   // roll_returns — çok kalemli iade grubu (migration 20260805100000)
@@ -882,6 +884,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "roll_meter_readings", name: "roll_meter_readings_meters_ck" },
   { table: "roll_meter_readings", name: "roll_meter_readings_revoke_ck" },
   { table: "roll_meter_acks", name: "roll_meter_acks_revoke_ck" },
+  { table: "roll_customer_codes", name: "roll_customer_codes_code_ck" },
+  { table: "roll_customer_codes", name: "roll_customer_codes_revoke_ck" },
+  { table: "roll_customer_codes", name: "roll_customer_codes_series_ck" },
+  { table: "customer_barcode_series", name: "customer_barcode_series_shape_ck" },
   { table: "service_billing_links", name: "service_billing_links_meters_ck" },
   { table: "service_billing_links", name: "service_billing_links_revoke_ck" },
   // H8b (migration 20261029180000): müşteri hizmet faturası tetiği yalnız fabrika ayarının değerleri. Bekçi `test_hizmet_fatura` §20.

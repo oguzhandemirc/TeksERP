@@ -522,6 +522,14 @@ export interface FeatureFlags {
   shippingAllocWidthToleranceCm: number;
   /** Tahsis sipariş miktarını aşabilir mi — fazla sevk deftere yazılır (default false). */
   shippingAllowOverAllocation: boolean;
+  /** Sevke hazırlık kuralı (D4-J1): ALL_DONE (default) | METER_THRESHOLD. */
+  shippingReadyRule: "ALL_DONE" | "METER_THRESHOLD";
+  /** METER_THRESHOLD toleransı (%), 0–20, default 2. */
+  shippingReadyTolerancePct: number;
+  /** Sevke hazır bildirim birimleri (default boş = kapalı; bildirim D4-J2). */
+  shippingReadyNotifyUnits: Array<"IE" | "GB" | "PARTI">;
+  /** Sevke hazır tarama periyodu (dk), 1–60, default 5 (bildirim D4-J2). */
+  shippingReadyScanMinutes: number;
   /** Müşteri şubeleri (sevk noktaları) UI'da açık mı (true=default). Kapalıyken müşteri
    *  formundaki Şubeler sekmesi/taslağı ve sipariş formundaki şube seçimi gizlenir.
    *  Salt UI rehberi — mevcut kayıtlardaki branchId verisi korunur. */
@@ -588,6 +596,8 @@ export interface FeatureFlags {
   kursunMeterVarianceApproval: "NONE" | "OPERATOR_REASON" | "SUPERVISOR_PIN" | "OFFICE";
   /** H1b: çıkış metresi stok kipi — backend `KursunMeterStockMode` aynası (varsayılan RECORD). */
   kursunMeterStockMode: "RECORD" | "APPLY";
+  /** D4-F1: okutmada müşteri barkodu araması — backend aynası (varsayılan false). */
+  scanCustomerCodeLookupEnabled: boolean;
   /** Parti no KISA ve DÖNEN mi (P01…P99, 99'dan sonra P01)? Default TRUE/AÇIK.
    *  Backend ENFORCE eder (`generateBatchNumberTx`). Kapalıyken eski
    *  `P + GGAAYY + günlük sıra` kalıbına düşülür.
