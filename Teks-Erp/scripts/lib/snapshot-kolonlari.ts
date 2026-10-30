@@ -845,6 +845,7 @@ const YAZAN_METOD = new Set(["create", "createMany", "createManyAndReturn", "upd
  */
 export const SARMALAYICI_DELEGATE: Record<string, { delegate: string; metod: string }> = {
   createWorkOrderTx: { delegate: "workOrder", metod: "create" },
+  insertMeterReadingTx: { delegate: "rollMeterReading", metod: "create" }, // D4-B1b okuma yazım boğazı
 };
 /** Yazım gövdesini taşıyan anahtarlar — bunlardan birinin altındaki `alan:` yazımdır. */
 const YAZIM_ANAHTARI = new Set(["data", "create", "update", "createMany", "connectOrCreate", "upsert"]);

@@ -101,6 +101,7 @@ import {
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { recordVarianceTx } from "./helpers/roll-variance.helper";
+import { auditCutReadings, revokeCutReadingsTx } from "./helpers/meter-reading.helper";
 import { VARIANCE_SOURCES, type VarianceSource } from "../constants/variance-reasons";
 import { resolveTamburUndoFullSameDayOnly } from "./system-setting.service";
 import { factoryDayStart } from "../constants/time";
@@ -246,6 +247,17 @@ export const UNDO_FULL_PERMISSION = "roll:manual-adjust";
 
 /** FULL sebebinin alt sınırı — `manualReasons.MANUAL_MIN_REASON` ile aynı. */
 const UNDO_FULL_MIN_REASON = 3;
+
+/** CUT okuması damga sebebi — geri alma kaynaklı. */
+const TAMBUR_UNDO_CUT_REASON = "TAMBUR_UNDO";
+
+/**
+ * D4-B1b TERS YOL (defter-beyan `RollMeterReading`): geri alınan kesim parçalarının CUT okumaları
+ * iptal claim'iyle AYNI tx'te damgalanır — iptal edilmiş parçanın ölçümü faturaya/rapora yaşamaz.
+ */
+async function revokeUndoneCutReadingsTx(tx: Prisma.TransactionClient, rollIds: string[], userId: string | undefined): Promise<string[]> {
+  return revokeCutReadingsTx(tx, { rollIds, userId: userId ?? null, reason: TAMBUR_UNDO_CUT_REASON });
+}
 
 /**
  * Çocukların DOĞUM-ANI özellik satırları — geri kurulumda donör kümesi (plan §3.1).
@@ -1363,6 +1375,7 @@ export class TamburUndoService {
     /** Kilitlenecek iş emri (null = depo kesimi) — tx'in İLK işi (T1-003). */
     workOrderId: string | null,
   ): Promise<ApiResponse<unknown>> {
+    let cutRevokedIds: string[] = [];
     const result = await prisma.$transaction(async (tx) => {
       // ⚠️ TX'İN İLK İŞİ (2026-08-29 / BULGU-T1-003) — gerekçe helper'da.
       await this.lockAndAssertWorkOrderLive(tx, workOrderId);
@@ -1408,6 +1421,8 @@ export class TamburUndoService {
       if (cancelled.count !== 1) {
         throw AppError.conflict("Parça bu sırada başka bir akışa girdi — geri alınamadı, yenileyin");
       }
+      // D4-B1b TERS YOL: iptal edilen parçanın CUT okuması aynı tx'te damgalanır (defter silinmez).
+      cutRevokedIds = await revokeUndoneCutReadingsTx(tx, [childId], userId);
 
       // DEPO DEFTERİ — çocuğun doğarken yazdığı GİRİŞ satırı terslenir. Yoksa
       // iptal edilen metraj defterde depoda kalır ve her geri alma turu depoya
@@ -1538,6 +1553,7 @@ export class TamburUndoService {
       return { childBarcode: child.barcode, restoredLen: Number(len), restoredTo };
     });
 
+    await auditCutReadings(userId, [], { ids: cutRevokedIds, reason: TAMBUR_UNDO_CUT_REASON });
     await AuditService.log({
       userId, action: "UPDATE", tableName: "ROLL", recordId: parentId,
       newData: {
@@ -1588,6 +1604,7 @@ export class TamburUndoService {
     /** Kilitlenecek iş emri (null = depo kesimi) — tx'in İLK işi (T1-003). */
     workOrderId: string | null,
   ): Promise<ApiResponse<unknown>> {
+    let cutRevokedIds: string[] = [];
     const result = await prisma.$transaction(async (tx) => {
       // ⚠️ TX'İN İLK İŞİ (2026-08-29 / BULGU-T1-003) — gerekçe helper'da.
       await this.lockAndAssertWorkOrderLive(tx, workOrderId);
@@ -1657,6 +1674,8 @@ export class TamburUndoService {
       if (cancelled.count !== 1) {
         throw AppError.conflict("Parça bu sırada başka bir akışa girdi — geri alınamadı, yenileyin");
       }
+      // D4-B1b TERS YOL: iptal edilen parçanın CUT okuması aynı tx'te damgalanır (defter silinmez).
+      cutRevokedIds = await revokeUndoneCutReadingsTx(tx, [childId], userId);
 
       // DEPO DEFTERİ — ÖNCE grup (ebeveyn OUT + çocuk IN), sonra çocuğun kalan
       // ileri satırları. Bu modda metraj ebeveyne DAİMA geri konur (aşağısı),
@@ -1804,6 +1823,7 @@ export class TamburUndoService {
       };
     });
 
+    await auditCutReadings(userId, [], { ids: cutRevokedIds, reason: TAMBUR_UNDO_CUT_REASON });
     await AuditService.log({
       userId, action: "UPDATE", tableName: "ROLL", recordId: parentId,
       newData: {
@@ -1843,6 +1863,7 @@ export class TamburUndoService {
     /** Kilitlenecek iş emri (null = depo kesimi) — tx'in İLK işi (T1-003). */
     workOrderId: string | null,
   ): Promise<ApiResponse<unknown>> {
+    let cutRevokedIds: string[] = [];
     const result = await prisma.$transaction(async (tx) => {
       // ⚠️ TX'İN İLK İŞİ (2026-08-29 / BULGU-T1-003) — gerekçe helper'da.
       await this.lockAndAssertWorkOrderLive(tx, workOrderId);
@@ -1927,6 +1948,8 @@ export class TamburUndoService {
       if (cancelled.count !== ids.length) {
         throw AppError.conflict("Parçalardan biri bu sırada başka akışa girdi — geri alma iptal edildi, yenileyin");
       }
+      // D4-B1b TERS YOL: iptal edilen bütün parçaların CUT okumaları aynı tx'te damgalanır.
+      cutRevokedIds = await revokeUndoneCutReadingsTx(tx, ids, userId);
 
       // DEPO DEFTERİ — TÜM çocukların giriş satırları terslenir. FULL'de öksüz
       // satır sayısı çocuk sayısı kadar olurdu (2026-08-09 vakasında 14 top).
@@ -2187,6 +2210,7 @@ export class TamburUndoService {
       };
     });
 
+    await auditCutReadings(userId, [], { ids: cutRevokedIds, reason: TAMBUR_UNDO_CUT_REASON });
     await AuditService.log({
       userId, action: "UPDATE", tableName: "ROLL", recordId: parentId,
       newData: {
