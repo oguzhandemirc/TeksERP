@@ -27,7 +27,8 @@ export function ConsumableNormsPage() {
         title="Hizmet Sarf Normları"
         description="Bir hizmetin metresi için harcanan sarf (ip, kurşun…). Değişiklik şu andan itibaren geçerli yeni sürümdür; eski norm damgalı kalır."
         actions={
-          <PermissionGate permission="cost:write">
+          // Kalem seçici /api/items ister (item:read); izinsiz rolde düğme 403'e açılmasın diye birlikte kapılı.
+          <PermissionGate allOf={["cost:write", "item:read"]}>
             <Button onClick={() => setEdit({ current: null })}><Plus className="mr-1 h-4 w-4" />Norm gir</Button>
           </PermissionGate>
         }

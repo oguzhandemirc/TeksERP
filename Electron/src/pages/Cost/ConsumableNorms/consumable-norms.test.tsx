@@ -41,13 +41,20 @@ beforeEach(() => {
 
 describe("ConsumableNormsPage", () => {
   it("liste: hizmet × sarf × metre başı miktar; cost:write ile değiştir + norm gir düğmeleri", async () => {
-    perms = ["cost:read", "cost:write"];
+    perms = ["cost:read", "cost:write", "item:read"];
     renderWithProviders(<ConsumableNormsPage />);
     expect(await screen.findByText("HZM-KRS")).toBeInTheDocument();
     expect(screen.getByText("SRF-IP")).toBeInTheDocument();
     expect(screen.getByText("0,0125 kg")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Normu değiştir" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Norm gir" })).toBeInTheDocument();
+  });
+  it("cost:write var item:read yok: kalem seçici 403 vermesin diye 'Norm gir' gizli, değiştir görünür", async () => {
+    perms = ["cost:read", "cost:write"];
+    renderWithProviders(<ConsumableNormsPage />);
+    expect(await screen.findByText("HZM-KRS")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Normu değiştir" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Norm gir" })).toBeNull();
   });
   it("izinsiz (yalnız cost:read): yazma düğmesi yok, geçmiş açılır", async () => {
     perms = ["cost:read"];
