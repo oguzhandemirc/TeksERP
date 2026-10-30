@@ -64,6 +64,12 @@ export function isCorrectableReading(r: RollMeterReadingView): boolean {
   return r.phase === "CUT" && r.revokedAt === null;
 }
 
+/** Damgalı okuma: düzeltme ucunun sebep öneki (`TAMBUR_METER_CORRECTION`) → "Düzeltildi", diğer damga (iptal/geri alma) → "Geri alındı". */
+export function readingStatusLabel(r: RollMeterReadingView): string {
+  if (r.revokedAt === null) return "Geçerli";
+  return (r.revokeReason ?? "").startsWith("TAMBUR_METER_CORRECTION") ? "Düzeltildi" : "Geri alındı";
+}
+
 /** Kolon görünürlük tercihi anahtarı — `prefs.tableVisibility[ROLL_MEASUREMENTS_TABLE_KEY]` (useDataTable emsali). */
 export const ROLL_MEASUREMENTS_TABLE_KEY = "roll-measurements";
 export const MEASURE_SOURCE_COLUMN = "measureSource";

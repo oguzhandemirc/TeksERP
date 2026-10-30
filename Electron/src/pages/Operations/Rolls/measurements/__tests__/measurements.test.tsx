@@ -19,7 +19,7 @@ vi.mock("@/hooks/usePricingEnabled", () => ({ useFeatureFlags: () => ({ data: fl
 
 import { RollMeasurementsCard } from "../RollMeasurementsCard";
 import { MeterCorrectionDialog } from "../MeterCorrectionDialog";
-import { isMeasureColumnVisible, measureSourceLabel, type RollMeasurements, type RollMeterReadingView } from "../measure-source";
+import { isMeasureColumnVisible, measureSourceLabel, readingStatusLabel, type RollMeasurements, type RollMeterReadingView } from "../measure-source";
 import { SimulatedMeterBanner, shouldShowSimulatedMeterBanner } from "@/components/operations/SimulatedMeterBanner";
 
 const wrap = (ui: ReactNode) => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { mutations: { retry: false } } })}>{ui}</QueryClientProvider>);
@@ -61,6 +61,8 @@ describe("Ölçüm kolonu (opt-in)", () => {
     expect(screen.getByText("Ölçüm", { selector: "th" })).toBeTruthy();
     expect(screen.getAllByTestId("measure-source").map((e) => e.textContent)).toEqual(["Makine", "Operatör", "Simülasyon", "Süpervizör", "Bilinmiyor"]);
     expect(measureSourceLabel(null)).toBe("Bilinmiyor");
+    expect(readingStatusLabel(reading({ revokedAt: "x", revokeReason: "TAMBUR_METER_CORRECTION: ölçüldü" }))).toBe("Düzeltildi");
+    expect(readingStatusLabel(reading({ revokedAt: "x", revokeReason: "TAMBUR_UNDO" }))).toBe("Geri alındı");
   });
 
   it("Düzelt yalnız aktif CUT okumasında; izin yoksa düğme yok", () => {

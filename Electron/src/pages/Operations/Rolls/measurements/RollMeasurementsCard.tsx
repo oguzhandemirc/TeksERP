@@ -16,6 +16,7 @@ import {
   ROLL_MEASUREMENTS_TABLE_KEY,
   VARIANCE_KIND_LABEL,
   isCorrectableReading,
+  readingStatusLabel,
   isMeasureColumnVisible,
   measureSourceClass,
   measureSourceLabel,
@@ -86,8 +87,8 @@ function ReadingsTable({ readings, showSource, onCorrect }: ReadingsProps) {
                   <SourceChip source={r.source} />
                 </td>
               )}
-              <td className="py-1 pr-2" title={r.revokeReason ?? undefined}>
-                {r.revokedAt ? "Düzeltildi / geri alındı" : "Geçerli"}
+              <td className="whitespace-nowrap py-1 pr-2" title={r.revokeReason ?? undefined}>
+                {readingStatusLabel(r)}
               </td>
               <td className="py-1 text-right">
                 {isCorrectableReading(r) && (
@@ -110,12 +111,12 @@ function VariancesTable({ variances, showSource }: { variances: RollVarianceView
   return (
     <div className="overflow-x-auto">
       <div className="mb-1 text-[11px] font-medium text-muted-foreground">Sapmalar</div>
-      <table className="w-full text-xs">
+      <table className="text-xs">
         <tbody>
           {variances.map((v) => (
             <tr key={v.id} data-testid="variance-row" className={`border-t ${v.reversedAt ? "text-muted-foreground line-through" : ""}`}>
-              <td className="whitespace-nowrap py-1 pr-2">{formatFactory(v.createdAt, "dd.MM.yyyy HH:mm")}</td>
-              <td className="py-1 pr-2">{VARIANCE_KIND_LABEL[v.kind] ?? v.kind}</td>
+              <td className="whitespace-nowrap py-1 pr-4">{formatFactory(v.createdAt, "dd.MM.yyyy HH:mm")}</td>
+              <td className="py-1 pr-4">{VARIANCE_KIND_LABEL[v.kind] ?? v.kind}</td>
               <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">{fmt(v.qty)}</td>
               {showSource && (
                 <td className="py-1 pr-2">
