@@ -19,7 +19,7 @@ import { reserveDoffCode } from "./helpers/machine-doff-open.helper";
 import { readDbNow } from "./helpers/machine-run-open.helper";
 import { postRescueEntryTx } from "./helpers/production-entry-ledger.helper";
 import { postEntryCorrectionTx } from "./helpers/entry-correction-ledger.helper";
-import { ambiguousCustomerCodeError, matchExtras, resolveRollByScanCode } from "./helpers/roll-scan-resolve.helper";
+import { ambiguousCustomerCodeError, customerCodeSearchRollIds, matchExtras, resolveRollByScanCode } from "./helpers/roll-scan-resolve.helper";
 import { normalizeScanCode } from "../utils/code-format";
 import { AuditService } from "./audit.service";
 import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type";
@@ -370,6 +370,9 @@ export interface RelabelContext {
   specLocked: boolean;
   /** "B" önerileri — topu üreten WO'nun bağlı siparişlerinden distinct müşteriler. */
   candidateCustomers: RelabelCandidateCustomer[];
+  /** Yalnız müşteri koduyla bulunduğunda (D4-F1b); iç barkodda alan yok → yanıt bayt-aynı. */
+  matchedBy?: "CUSTOMER_CODE";
+  customerCode?: string;
 }
 
 /**
@@ -1493,6 +1496,8 @@ export class InventoryService {
   private buildRollWhere(
     params: QueryParams,
     fireCodes: readonly string[],
+    // Aramanın müşteri koduyla eşleştiği toplar (D4-F1b; `customerCodeSearchRollIds`, async → dışarıda çözülür).
+    customerCodeRollIds: readonly string[] = [],
   ): Record<string, unknown> {
     const f = params.filters;
 
@@ -1520,6 +1525,7 @@ export class InventoryService {
         // Diğer bütün tam-barkod yolları (rolls/barcode ucu, tambur, çuval arama,
         // batch-trace) bu kapıdan geçiyordu; liste araması tek istisnaydı.
         { barcode: normalizeScanCode(search) },
+        ...(customerCodeRollIds.length > 0 ? [{ id: { in: [...customerCodeRollIds] } }] : []),
         ...buildTextSearch<Prisma.RollWhereInput>(search, {
           // Müşteri alias'ı: operatör müşterinin kullandığı adı duyar ("BELLE"),
           // bizim adı ("18152") bilmek zorunda kalmasın.
@@ -1968,7 +1974,7 @@ export class InventoryService {
     // sortBy güvenlik süzgeci — bilinmeyen kolon (500) + indekssiz keyfi sort engellenir.
     params.sortBy = resolveSortBy(params.sortBy, ROLL_SORTABLE_FIELDS);
     const { fireCodes } = await loadProducedBuckets(prisma);
-    const where = this.buildRollWhere(params, fireCodes);
+    const where = this.buildRollWhere(params, fireCodes, await customerCodeSearchRollIds(params.search));
 
     // Sevkiyat rezervasyonu: WAREHOUSE top bir çuval/sevkiyata bağlıysa "serbest depo"
     // DEĞİLDİR — listede "Çuvalda" rozeti için sevkiyat no/durum + çuval no döner.
@@ -2327,7 +2333,7 @@ export class InventoryService {
   async getRollStats(req: Request): Promise<ApiResponse<RollStats>> {
     const params = parseQueryParams(req);
     const { fireCodes } = await loadProducedBuckets(prisma);
-    const where = this.buildRollWhere(params, fireCodes) as Prisma.RollWhereInput;
+    const where = this.buildRollWhere(params, fireCodes, await customerCodeSearchRollIds(params.search)) as Prisma.RollWhereInput;
 
     // TEK TARAMA: (status, qualityGrade) bazlı groupBy bir scan'de hem count
     // hem sum'ları döndürür. Eskiden 3 ayrı sorgu vardı (aggregate + groupBy
@@ -2873,8 +2879,8 @@ export class InventoryService {
   async getRelabelContext(
     ref: { barcode: string } | { rollId: string },
   ): Promise<ApiResponse<RelabelContext | null>> {
-    const roll = await prisma.roll.findUnique({
-      where: "barcode" in ref ? { barcode: normalizeScanCode(ref.barcode) } : { id: ref.rollId },
+    const load = (where: Prisma.RollWhereUniqueInput) => prisma.roll.findUnique({
+      where,
       select: {
         id: true,
         barcode: true,
@@ -2936,6 +2942,10 @@ export class InventoryService {
         },
       },
     });
+    // Barkod yolu tek okutma boğazından (D4-F1b): iç barkod önce, ayar açıksa müşteri kodu.
+    const resolved = "barcode" in ref ? await resolveRollByScanCode(ref.barcode, { load }) : null;
+    if (resolved?.kind === "AMBIGUOUS") throw ambiguousCustomerCodeError(resolved);
+    const roll = "barcode" in ref ? (resolved?.kind === "FOUND" ? resolved.roll : null) : await load({ id: ref.rollId });
 
     if (!roll) {
       return { success: false, data: null, message: "Barkod bulunamadı" };
@@ -2990,6 +3000,7 @@ export class InventoryService {
         sack: roll.sack,
         specLocked,
         candidateCustomers: [...candidateMap.values()],
+        ...(resolved?.kind === "FOUND" ? matchExtras(resolved) : {}),
       },
     };
   }
