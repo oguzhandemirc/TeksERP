@@ -56,7 +56,7 @@
 
 - **[ÇEKİRDEK]** Katman sırası Routes → Controllers → Services → Prisma; route/controller'da `lib/prisma` import'u YASAK (ESLint `no-restricted-imports`); ince ayar uçları controller'sız bilinçli istisna, iş mantığı serviste. ⚠️ admin.routes.ts:53/783 bugün ihlal ediyor (bkz. unresolved). · bekçi: `eslint no-restricted-imports (delinmiş)` <sub>(CLAUDE.md:140)</sub>
 - **[ÇEKİRDEK]** Kurulum profilleri TS sabiti `constants/module-profiles.ts` (`deploy/` pakete girmez); profil YALNIZ modül anahtarlarını taşır: davranış bayrakları profile GİRMEZ (seed `upsert.update` ile ezer, iki yazar olmaz); fason/kartela anahtarsız → yazılmaz; yedi anahtar her profilde açıkça yazılır. · bekçi: `test_module_profile (§2 tamlık)` <sub>(CLAUDE.md:101)</sub>
-- **[PROFİL]** Hizmet veren (fason işlemci) `hizmet` profili SATILIR, boyahane aynası satılmaz; profil yalnız modül anahtarı taşır, ölçüm/faturalama ayarları `scripts/hizmet-ayar-paketi.ts` ile (kuru koşu varsayılan) uygulanır. · bekçi: `test_module_profile (§4 bağımlılık)`, `test_hizmet_ayar_paketi (§2 yazım 0)` <sub>(arşiv:2026-10-29)</sub>
+- **[PROFİL]** Hizmet veren (fason işlemci) `hizmet` profili SATILIR, boyahane aynası satılmaz; profil yalnız modül anahtarı taşır (maliyet dahil — kârlılık Maliyet modülünde, S2), ölçüm/faturalama ayarları `scripts/hizmet-ayar-paketi.ts` ile (kuru koşu varsayılan) uygulanır. · bekçi: `test_module_profile (§4 bağımlılık)`, `test_hizmet_ayar_paketi (§2 yazım 0)`, `test_senaryo_hizmet_veren (0 maliyet uçları)` <sub>(arşiv:2026-10-29 · arşiv:2026-10-31 D4-S2)</sub>
 
 ### Reçeteler
 
