@@ -149,7 +149,7 @@ import {
   deleteIfEmptyAndTracelessTx,
   K18_DEAD_STATUSES,
 } from "./batch.service";
-import { addBatchToWorkOrderTx, auditBatchAdd } from "./workorder-batch-add.service";
+import { addBatchToWorkOrderTx, ATTACHABLE_ROLL_STATUSES, auditBatchAdd } from "./workorder-batch-add.service";
 import { WorkOrderSplitService } from "./workorder-split.service";
 import { WorkOrderManualMoveService, type PartyMode } from "./workorder-manual-move.service";
 import { cloneWorkOrderTx, repointRollsTx } from "./helpers/workorder-clone.helper";
@@ -1487,9 +1487,9 @@ export class WorkOrderService {
       throw AppError.badRequest(`Şu barkodlar bulunamadı: ${missing.join(", ")}`);
     }
 
-    // Envanterdeki serbest+satılabilir toplar (ham STOCK + depo WAREHOUSE/A1_STOCK) bağlanabilir.
-    const attachable: RollStatus[] = [RollStatus.STOCK, RollStatus.WAREHOUSE, RollStatus.A1_STOCK];
-    const notAttachable = rolls.filter((r) => !attachable.includes(r.status));
+    // Envanterdeki serbest+satılabilir toplar (ham STOCK + depo WAREHOUSE/A1_STOCK) bağlanabilir — TEK küme
+    // (`ATTACHABLE_ROLL_STATUSES`; belgeden iş emri planı da aynısını okur, D4-D2).
+    const notAttachable = rolls.filter((r) => !ATTACHABLE_ROLL_STATUSES.includes(r.status));
     if (notAttachable.length > 0) {
       throw AppError.badRequest(
         "Yalnız envanterdeki (stok/depo) toplar bağlanabilir. Uygun olmayan: " +

@@ -1,7 +1,7 @@
 // GELEN BELGE DETAYI — fotoğraf + satır vurgusu, başlık eşleme, toplam şeridi, satırlar, kılavuzlu hücre girişi, onay.
 import { useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
-import { CheckCircle2, ScanSearch } from "lucide-react";
+import { CheckCircle2, Factory, ScanSearch } from "lucide-react";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -19,23 +19,26 @@ import { ApproveDialog } from "./ApproveDialog";
 import { ScanReadBanner } from "./ScanReadBanner";
 import { AddPagesAction } from "./AddPagesAction";
 import { buildReviewQueue, lineRect } from "./review-queue";
-import { isApprovable, isEditable, NOTE_STATUS_LABEL, NOTE_STATUS_VARIANT, SOURCE_LABEL } from "./noteStatus";
+import { isApprovable, isEditable, isWorkOrderOpenable, NOTE_STATUS_LABEL, NOTE_STATUS_VARIANT, SOURCE_LABEL } from "./noteStatus";
 import { useNoteDetail } from "./useNoteDetail";
 import { ProcessGramajPanel } from "./ProcessGramajPanel";
 import { useProcessGramaj } from "./processChoices";
+import { WorkOrderFromNoteDialog } from "./WorkOrderFromNoteDialog";
+import type { DeliveryNoteDetail } from "./types";
+import { TERIM } from "@/lib/terim";
 
 const LIST_PATH = "/operations/gelen-belgeler";
 
 interface DetailActionsProps {
+  note: DeliveryNoteDetail;
   reviewCount: number;
-  approvable: boolean;
-  hasLines: boolean;
   addPages: ReactNode;
   onReview: () => void;
   onApprove: () => void;
 }
 
-function DetailActions({ reviewCount, approvable, hasLines, addPages, onReview, onApprove }: DetailActionsProps) {
+function DetailActions({ note, reviewCount, addPages, onReview, onApprove }: DetailActionsProps) {
+  const [workOrderOpen, setWorkOrderOpen] = useState(false);
   return (
     <div className="flex flex-wrap gap-2">
       {addPages}
@@ -45,12 +48,22 @@ function DetailActions({ reviewCount, approvable, hasLines, addPages, onReview, 
           Gözden geçir ({reviewCount})
         </Button>
       )}
-      {approvable && (
+      {isApprovable(note.status) && (
         <PermissionGate permission="gelen-belge:approve">
-          <Button onClick={onApprove} disabled={!hasLines}>
+          <Button onClick={onApprove} disabled={note.lines.length === 0}>
             <CheckCircle2 className="mr-1 h-4 w-4" />
             Onayla
           </Button>
+        </PermissionGate>
+      )}
+      {/* Belgeden iş emri (D4-D2): topları doğmuş belgede; desen grubu başına mevcut quick-start. */}
+      {isWorkOrderOpenable(note.status) && (
+        <PermissionGate permission="workorder:write">
+          <Button variant="outline" onClick={() => setWorkOrderOpen(true)} data-testid="note-open-work-order">
+            <Factory className="mr-1 h-4 w-4" />
+            {TERIM.terbiyeIsEmri.tekil} aç
+          </Button>
+          {workOrderOpen && <WorkOrderFromNoteDialog noteId={note.id} open onOpenChange={setWorkOrderOpen} />}
         </PermissionGate>
       )}
     </div>
@@ -87,9 +100,8 @@ export function IncomingDocumentDetailPage() {
         parent={{ label: "Gelen Belgeler", to: LIST_PATH }}
         actions={
           <DetailActions
+            note={n}
             reviewCount={editable ? reviewCount : 0}
-            approvable={isApprovable(n.status)}
-            hasLines={n.lines.length > 0}
             addPages={n.status === "DRAFT" && hasPermission("gelen-belge:write") ? <AddPagesAction note={n} onDone={() => void invalidate()} /> : null}
             onReview={() => setReviewOpen(true)}
             onApprove={() => setApproveOpen(true)}
