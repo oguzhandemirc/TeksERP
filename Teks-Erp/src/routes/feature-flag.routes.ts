@@ -653,6 +653,8 @@ export const updateSchema = z.strictObject({
   // Saha #6: top etiketi kopya adedi (1–5). (Servis ayrıca doğrular.)
   labelCopies: z.number().int().min(1).max(5).optional(),
   labelCopiesSource: z.enum(["GLOBAL", "STATION"]).optional(),
+  // D4-F3: müşteri barkodu basan şablonda kod yoksa.
+  labelCustomerCodeMissing: z.enum(["BLOCK", "ROLL_BARCODE"], { message: "Müşteri barkodu yoksa davranışı BLOCK ya da ROLL_BARCODE olmalı" }).optional(),
   // label.nativeSendEnabled — Faz-2 doğrudan yazıcıya gönderim (default false).
   nativeSendEnabled: z.boolean().optional(),
   // label.defaultMedia — cihazsız baskı/önizleme için sistem varsayılan etiket medyası.

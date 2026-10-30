@@ -29,6 +29,8 @@ import {
 import { LabelKind, PrinterLanguage, Prisma, RollStatus, type LabelTemplate, type LabelTemplateVariant } from "@prisma/client";
 import { sampleQualityCode, loadCustomerNamePolicy } from "./helpers/quality-role.helper";
 import prisma from "../lib/prisma";
+import { loadActiveCustomerCodes } from "./helpers/roll-customer-code-read.helper";
+import { applyCustomerCodeGate, withWarnings } from "./helpers/label-customer-code-gate.helper";
 import { AuditService } from "./audit.service";
 import { fromAttachment, outcomeFromTransport, recordPrintJob, type PrintJobReportOpt } from "./print-job.service";
 import type { PrintSubjectKind } from "../constants/print-subject-catalog";
@@ -227,6 +229,8 @@ interface BulkLabelContext {
   openDefectNotes?: Map<string, string>;
   /** Top → (ata zinciriyle) gelen belge satırı (E3); toplu yolda bir kez yüklenir. */
   deliveryNoteLines?: Map<string, RollDeliveryNoteLine>;
+  /** D4-F3: rollId → aktif müşteri barkodu (kodsuz top yok). */
+  customerCodes?: Map<string, string>;
   /** Cihaz raster modu (finishedRouting'den) — bulk raster; false → bugünkü komut. */
   rasterMode: boolean;
 }
@@ -477,6 +481,9 @@ export class LabelService {
     if (dnl?.colorText) payload.deliveryNoteColorText = dnl.colorText;
     // Müşteri top no (H9): aynı çözücü — Tambur çocuğu kök topun satırındaki numarayı taşır.
     if (dnl?.senderRollNo) payload.deliveryNoteRollNo = dnl.senderRollNo;
+    // Müşteri barkodu (D4-F3): yalnız kodlu topta alan EKLENİR (kodsuz topta payload bayt-aynı).
+    const customerCode = (preloaded?.customerCodes ?? (await loadActiveCustomerCodes([roll.id]))).get(roll.id);
+    if (customerCode) payload.customerCode = customerCode;
 
     return { success: true, data: payload };
   }
@@ -784,6 +791,8 @@ export class LabelService {
     meta: LabelResolutionMeta;
     // F179: çözülen yönlendirme cihazının native gönderim hedefi (preloaded/bulk'ta null).
     routing: { peripheralId: string | null; address: string | null; port: number | null } | null;
+    /** D4-F3: müşteri barkodu yerine iç barkod basıldıysa uyarı (ApiResponse.warnings). */
+    warnings: string[];
   }> {
     const payloadResp = await this.getRollLabel(rollId, opts, preloaded);
     const payload = payloadResp.data;
@@ -852,6 +861,9 @@ export class LabelService {
         port: routing.peripheralPort,
       };
     }
+    // Müşteri barkodu eksik-kod kapısı (D4-F3) — render'dan ÖNCE: BLOCK'ta kâğıt ve print_job doğmaz.
+    const gate = await applyCustomerCodeGate(payload, variant);
+    variant = gate.variant;
     const barcodeSvg = payload.barcode
       ? renderCode128Svg(payload.barcode)
       : "";
@@ -867,7 +879,7 @@ export class LabelService {
       variantId: variant?.id ?? null,
       variantMatch,
     };
-    return { input: { payload, template, variant, barcodeSvg, qrSvg, copies, format, rasterMode }, kind, meta, routing: routingPeripheral };
+    return { input: { payload, template, variant, barcodeSvg, qrSvg, copies, format, rasterMode }, kind, meta, routing: routingPeripheral, warnings: gate.warnings };
   }
 
   async getRollLabelHtml(
@@ -876,9 +888,9 @@ export class LabelService {
     opts?: RollLabelRenderOpts,
     preloaded?: BulkLabelContext,
   ): Promise<ApiResponse<{ html: string; kind: LabelKind }>> {
-    const { input, kind } = await this.buildRollRenderInput(rollId, kindOverride, opts, preloaded);
+    const { input, kind, warnings } = await this.buildRollRenderInput(rollId, kindOverride, opts, preloaded);
     const html = (await renderLabel(PrinterLanguage.RASTER_HTML, input)).content;
-    return { success: true, data: { html, kind } };
+    return { success: true, data: { html, kind }, ...withWarnings(warnings) };
   }
 
   /**
@@ -907,7 +919,7 @@ export class LabelService {
     kindOverride?: LabelKind,
     opts?: RollLabelRenderOpts,
   ): Promise<ApiResponse<{ content: string; contentB64: string; encoding: "text" | "binary"; language: PrinterLanguage; contentType: string; kind: LabelKind; meta: LabelResolutionMeta }>> {
-    const { input, kind, meta } = await this.buildRollRenderInput(rollId, kindOverride, opts);
+    const { input, kind, meta, warnings } = await this.buildRollRenderInput(rollId, kindOverride, opts);
     // rasterCapable değilse (eski istemci) raster'ı bastır → komut üret (bozulmaz).
     // rasterCapable (b64) → binary-güvenli → ikon GW emit edilir (iconGraphicsOk); değilse
     // ham text yolu → ikon atlanır (UTF-8 GW binary'sini bozardı), komut temiz ASCII kalır.
@@ -926,6 +938,7 @@ export class LabelService {
         kind,
         meta,
       },
+      ...withWarnings(warnings),
     };
   }
 
@@ -1022,7 +1035,7 @@ export class LabelService {
     opts?: RollLabelRenderOpts & { port?: number },
     jobCtx?: PrintJobRequestContext,
   ): Promise<ApiResponse<PrinterTransportResult & { kind: LabelKind }>> {
-    const { input, kind, routing } = await this.buildRollRenderInput(rollId, undefined, opts);
+    const { input, kind, routing, warnings } = await this.buildRollRenderInput(rollId, undefined, opts);
     // RAW TCP (9100) → renderedBytes bayt gönderir (binary-güvenli) → ikon GW emit edilir.
     const rendered = await renderLabel(input.format.language, { ...input, iconGraphicsOk: true });
     const enabled = await readLabelNativeSendEnabled();
@@ -1065,7 +1078,7 @@ export class LabelService {
       bytes: result.bytes,
       ...outcomeFromTransport(result),
     });
-    return { success: true, data: { ...result, kind } };
+    return { success: true, data: { ...result, kind }, ...withWarnings(warnings) };
   }
 
   /**
@@ -1193,8 +1206,10 @@ export class LabelService {
     // Her top senkron barkod + şablon işi taşır: zaman dilimi dolunca event-loop'a dön ki
     // LAN'daki diğer istasyonların bekleyen soketleri servis edilsin.
     const breathe = createSliceYielder();
+    const warnings: string[] = [];
     for (const id of ids) {
       const res = await this.getRollLabelHtml(id, undefined, { customerId: opts?.customerId ?? undefined }, ctx);
+      if (res.warnings) warnings.push(...res.warnings);
       const full = res.data.html;
       if (!head) {
         // İlk belgenin <head> dahil <body ...> açılışına kadarki kısmı.
@@ -1212,7 +1227,7 @@ export class LabelService {
     const html = head
       ? `${head}\n${combinedBody}\n</body></html>`
       : `<!doctype html><html><head><meta charset="utf-8"></head><body>${combinedBody}</body></html>`;
-    return { success: true, data: { html, count: bodies.length } };
+    return { success: true, data: { html, count: bodies.length }, ...withWarnings(warnings) };
   }
 
   /**
@@ -1243,13 +1258,15 @@ export class LabelService {
     let anyBinary = false;
     // getBulkRollLabelsHtml ile aynı zaman dilimli nefes.
     const breathe = createSliceYielder();
+    const warnings: string[] = [];
     for (const id of ids) {
-      const { input } = await this.buildRollRenderInput(
+      const { input, warnings: rollWarnings } = await this.buildRollRenderInput(
         id,
         undefined,
         { customerId: opts?.customerId ?? undefined },
         ctx,
       );
+      warnings.push(...rollWarnings);
       // rasterCapable değilse komut zorla (eski istemci binary alamaz). rasterCapable (b64)
       // → binary-güvenli → ikon GW emit; değilse ham text → ikon atlanır (temiz ASCII).
       const r = await renderLabel(
@@ -1273,6 +1290,7 @@ export class LabelService {
         contentType: anyBinary ? "application/octet-stream" : contentType,
         count: buffers.length,
       },
+      ...withWarnings(warnings),
     };
   }
 
@@ -1427,7 +1445,8 @@ export class LabelService {
 
     const openDefectNotes = await loadOpenDefectNotes(ids);
     const deliveryNoteLines = await resolveDeliveryNoteLinesForRolls(ids);
-    return { rollById, orderLineById, customerById, aliases, format, templateByKind, variantByKind, customerTemplateByKey, copies, openDefectNotes, deliveryNoteLines, rasterMode: finishedRouting.rasterMode };
+    const customerCodes = await loadActiveCustomerCodes(ids);
+    return { rollById, orderLineById, customerById, aliases, format, templateByKind, variantByKind, customerTemplateByKey, copies, openDefectNotes, deliveryNoteLines, customerCodes, rasterMode: finishedRouting.rasterMode };
   }
 
   /**

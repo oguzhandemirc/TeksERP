@@ -108,6 +108,9 @@ export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValu
     // Müşteri top no (H9) — gelen belgesiz topta boş → satır basılmaz.
     case "deliveryNoteRollNo":
       return str(payload.deliveryNoteRollNo);
+    // Müşteri barkodu (D4-F3) — metin olarak opt-in; kodsuz topta boş → satır basılmaz.
+    case "customerCode":
+      return str(payload.customerCode);
 
     // ── SACK (çuval) alanları — roll/swatch payload'unda undefined → present:false ──
     // sackNo: barkodun okunur karşılığı, etiketin kimliği → headline.
@@ -138,6 +141,15 @@ export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValu
     default:
       return loomFieldValue(payload, key);
   }
+}
+
+/**
+ * Barkod/QR elemanının basacağı kod — HTML + PPLA/PPLB/ZPL + raster TEK kaynak (D4-F3).
+ * source yok/ROLL → iç barkod (bugünkü); CUSTOMER_CODE → aktif müşteri kodu (yoksa "" → eleman atlanır;
+ * eksik-kod kararı basımdan önce `label.customerCodeMissing` kapısında verilir).
+ */
+export function scanElementValue(payload: LabelPayload, el: { source?: string }): string {
+  return fieldDisplayValue(payload, el.source === "CUSTOMER_CODE" ? "customerCode" : "barcode").value;
 }
 
 /** Tezgah (MACHINE) ve levent (WARP_BEAM) bağlam alanları; bilinmeyen key → NONE. */
