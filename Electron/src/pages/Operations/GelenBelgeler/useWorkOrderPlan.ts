@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { useFoldValues } from "@/hooks/useFoldValues";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { routeService } from "@/pages/Routes/service";
 import { workOrderService } from "@/pages/Operations/WorkOrders/service";
 import { getWorkOrderPlan, INCOMING_DOCUMENT_QUERY_KEY } from "./service";
@@ -15,7 +16,9 @@ import { decisiveFailure, startGroupWorkOrders } from "./workOrderFromNote";
 export function useWorkOrderPlan(noteId: string, open: boolean) {
   const qc = useQueryClient();
   const plan = useQuery({ queryKey: [INCOMING_DOCUMENT_QUERY_KEY, "is-emri-plani", noteId], queryFn: () => getWorkOrderPlan(noteId), enabled: open });
-  const routes = useQuery({ queryKey: ["routes", "note-wo-picker"], queryFn: () => loadAllForPicker(routeService, { sortBy: "name" }), enabled: open, staleTime: 5 * 60_000 });
+  // GET /api/routes station:read | mobile:hizli-is-emri ister; izin yoksa koşulsuz 403 sorgusu atılmaz.
+  const canReadRoutes = useRoleAccess().hasAnyPermission(["station:read", "mobile:hizli-is-emri"]);
+  const routes = useQuery({ queryKey: ["routes", "note-wo-picker"], queryFn: () => loadAllForPicker(routeService, { sortBy: "name" }), enabled: open && canReadRoutes, staleTime: 5 * 60_000 });
   const routeList = useMemo(() => (routes.data?.data ?? []).filter((r) => r.isActive), [routes.data]);
   const [routeId, setRouteId] = useState<string | null>(null);
   const [foldType, setFoldType] = useState<string | null>(null);

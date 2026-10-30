@@ -14,10 +14,16 @@ const apiPost = vi.fn();
 vi.mock("@/services/apiClient", () => ({
   default: { get: (url: string, cfg?: unknown) => apiGet(url, cfg), post: (url: string, body?: unknown) => apiPost(url, body), put: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }));
+const pickerCalls = vi.fn();
 vi.mock("@/lib/picker-loader", () => ({
-  loadAllForPicker: () => Promise.resolve({ data: [{ id: "r1", name: "Kurşun + Brode", isActive: true, steps: [{ station: { name: "Kurşun", kind: "KURSUN" } }] }] }),
+  loadAllForPicker: () => (pickerCalls(), Promise.resolve({ data: [{ id: "r1", name: "Kurşun + Brode", isActive: true, steps: [{ station: { name: "Kurşun", kind: "KURSUN" } }] }] })),
 }));
 vi.mock("@/hooks/useFoldValues", () => ({ useFoldValues: () => ({ values: [], isLoading: false, isEmpty: true }) }));
+// Rota sorgusu izne bağlı: varsayılan rolde station:read var; izinsiz rolde rota sorgusu hiç atılmaz.
+const perms = { list: ["station:read"] };
+vi.mock("@/hooks/useRoleAccess", () => ({
+  useRoleAccess: () => ({ hasPermission: (p: string) => perms.list.includes(p), hasAnyPermission: (ps: string[]) => ps.some((p) => perms.list.includes(p)) }),
+}));
 
 const roll = (n: number, over: Partial<PlanRoll> = {}): PlanRoll => ({
   rollId: `r${n}`, barcode: `B${n}`, lineNo: n, senderRollNo: null, meters: "100", status: "IN_STOCK", attachable: true, liveWorkOrder: null, ...over,
@@ -102,6 +108,8 @@ describe("WorkOrderFromNoteDialog", () => {
     apiGet.mockReset();
     apiPost.mockReset();
     apiGet.mockResolvedValue({ data: { success: true, data: plan } });
+    pickerCalls.mockReset();
+    perms.list = ["station:read"];
     apiPost.mockImplementation((_u: string, body: { clientToken: string }) => Promise.resolve({ data: { success: true, data: { workOrder: { workOrderNumber: `IE-${body.clientToken.slice(0, 4)}` }, attached: 3 } } }));
   });
 
@@ -120,6 +128,14 @@ describe("WorkOrderFromNoteDialog", () => {
     expect(bodies[1]?.rollBarcodes).toEqual(["B4", "B5"]);
     expect(bodies[0]?.targetValues).toEqual([{ propertyId: "desen", valueId: "d12" }]);
     expect(bodies[1]?.targetValues).toEqual([{ propertyId: "desen", valueId: "d13" }]);
+  });
+
+  it("rota okuma izni yoksa rota sorgusu hiç atılmaz (koşulsuz 403 yok)", async () => {
+    perms.list = [];
+    renderWithProviders(<WorkOrderFromNoteDialog noteId="n1" open onOpenChange={() => {}} />);
+    await waitFor(() => expect(apiGet).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 50));
+    expect(pickerCalls).not.toHaveBeenCalled();
   });
 
   it("belirsiz hatada (ağ) yalnız düşen grup AYNI token'la yeniden gider (replay); açılan grup tekrar gönderilmez", async () => {

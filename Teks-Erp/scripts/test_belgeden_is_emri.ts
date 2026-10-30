@@ -153,7 +153,7 @@ async function run(): Promise<void> {
   // Başka canlı iş emrindeki top: yeni token (yeni deneme) ile A'nın topu → mevcut kod reddeder.
   const stolen = gA!.rolls[0]!.barcode!;
   const steal = await errorOf(() => svc.quickStart({ clientToken: randomUUID(), rollBarcodes: [stolen], routeTemplateId: route.id }, undefined));
-  check("§2 ⭐ başka canlı iş emrindeki top → red (4xx), yeni iş emri yok", !!steal && steal.status >= 400 && steal.status < 500 && (await prisma.workOrder.count()) === woMid, `status=${steal?.status} (mevcut kod)`);
+  check("§2 ⭐ başka canlı iş emrindeki top → red (400, mevcut quickStart ön doğrulaması), yeni iş emri yok", !!steal && steal.status === 400 && (await prisma.workOrder.count()) === woMid, `status=${steal?.status} (mevcut kod)`);
   const after = await buildWorkOrderPlan(noteId);
   const aRoll = after.groups.flatMap((g) => g.rolls).find((r) => r.barcode === stolen);
   check("§2 plan: bağlanmış top artık bağlanamaz + canlı iş emrini gösterir", aRoll?.attachable === false && aRoll.liveWorkOrder?.id === rA.data?.workOrder.id, JSON.stringify(aRoll?.liveWorkOrder));
