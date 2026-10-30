@@ -10623,6 +10623,9 @@ model CariAccount {
   /// Dönem kapanışları (C3) — ekstrenin DEVİR satırının kaynağı.
   periodCloses CariPeriodClose[]
 
+  /// Cari kilidi (D4-I1, ister 4.7) — en çok bir AKTİF satır (kısmi unique); tarihçe satırlarda kalır.
+  holds CariHold[]
+
   /// Resmi ön muhasebe belgeleri (2026-08-15): mutabakat mektubu bu cariye
   /// KESİLİR, çek teslim bordrosu bu cariye TESLİM EDİLMİŞ olabilir (opsiyonel
   /// hedef — bordronun karşı tarafı banka da olabilir, serbest metin de).
@@ -11641,6 +11644,42 @@ model PaymentAllocation {
   @@index([paymentId, revokedAt])
   @@index([chequeId, revokedAt])
   @@map("payment_allocations")
+}
+
+/// CARİ KİLİDİ (D4-I1, ister 4.7) — yeni iş kabulü / sevk / fatura onayını durduran DURUM + tarihçe satırı.
+///
+/// DEFTER DEĞİL: silinse raporlanan hiçbir sayı değişmez (defter-beyana girmez). Yine de hard delete yok:
+/// açmak satıra `releasedAt` damgası, yeniden kilit YENİ satırdır. Kart başına tek hesap (K3a) olduğu için
+/// kilit `CariAccount`a bağlanır. Kilit yüklemi TEK yerde: `services/helpers/cari-hold.helper.ts`.
+model CariHold {
+  id     String @id @default(uuid()) @db.Uuid
+  cariId String @db.Uuid
+
+  /// Kapsam kilit konurken seçilir (K20); en az biri true (DB CHECK).
+  blocksIntake   Boolean @default(false)
+  blocksShipment Boolean @default(false)
+  blocksInvoice  Boolean @default(false)
+
+  /// Sebep kodu: BORC · RISK · ANLASMAZLIK · DIGER (kod kataloğu `CARI_HOLD_REASON_CODES`).
+  reasonCode String  @db.VarChar(40)
+  reasonText String? @db.VarChar(300)
+
+  placedById String @db.Uuid
+
+  releasedAt    DateTime? @db.Timestamptz
+  releasedById  String?   @db.Uuid
+  releaseReason String?   @db.VarChar(300)
+
+  clientToken String @unique @db.Uuid
+
+  cari CariAccount @relation(fields: [cariId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // Kısmi unique `(cariId) WHERE "releasedAt" IS NULL` + iki CHECK migration'da (Prisma ifade edemez).
+  @@index([cariId, createdAt])
+  @@map("cari_holds")
 }
 
 // =============================================================================
