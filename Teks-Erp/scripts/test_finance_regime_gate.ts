@@ -144,6 +144,14 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "sorgu 0 satır döner, davranış bayt-bayt aynı. Yazma yüzeyi sıfır (`return.routes` emsali).",
   },
   {
+    dosya: "routes/tambur.routes.ts",
+    neden:
+      "TAMBUR üretimin ana akışıdır → rejim kapısı KONULAMAZ. `serviceBillingLink` izi tek daldan gelir (D4-B2, 2026-10-30): " +
+      "`tambur-meter-correct.service` → `helpers/service-billing-gate.helper` (`findActiveBillingTx`) kesim metresi düzeltmesinde " +
+      "'bu okuma faturalı mı' sorusunu SALT-OKUMA sorar (faturalıysa 409). Ön muhasebe kapalı kurulumda tablo boştur, sorgu 0 satır " +
+      "döner; router hiçbir ticaret tablosuna yazmaz (`shipping.routes` emsali).",
+  },
+  {
     dosya: "routes/customer.routes.ts",
     neden:
       "CARİ KART (çekirdek, her kurulumda). Finans dokunuşu SALT-OKUMADIR: cari kart arşiv kapısı (URUN-YASAM-DONGUSU.md §6) sıfırdan farklı cari bakiyeyi canlı referans olarak SAYAR (cari.service'teki bakiye kapısının kart ikizi). Ön muhasebe kapalı kurulumda `cari_balances` boştur, sayı 0 döner; router satır yazmaz. Kapı takılsaydı müşteri kartı ön muhasebesiz fabrikada yönetilemezdi.",

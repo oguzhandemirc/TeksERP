@@ -21,7 +21,6 @@
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { Currency, ItemType, MeterPhase, Prisma, PriceKind, RollEntrySource, RollStatus, StationKind, StationType, StepStatus } from "@prisma/client";
-import type { Request, Response } from "express";
 import prisma from "../src/lib/prisma";
 import { TamburService } from "../src/services/tambur.service";
 import { InventoryService } from "../src/services/inventory.service";
@@ -29,6 +28,7 @@ import { resolveServiceItemsForRolls, simulatedCutWarning } from "../src/service
 import { correctCutReading } from "../src/services/tambur-meter-correct.service";
 import { ensureCariAccountTx } from "../src/services/helpers/finance.helper";
 import tamburRouter from "../src/routes/tambur.routes";
+import type { Request, Response } from "express";
 
 const tambur = new TamburService();
 const inv = new InventoryService();
@@ -235,19 +235,18 @@ async function main() {
   check("§6 CUT dışı okuma → 400 METER_READING_NOT_CUT", e6b?.status === 400 && e6b.code === "METER_READING_NOT_CUT", JSON.stringify(e6b));
 
   console.log("\n§7 uç kapısı");
-  type Layer = { route?: { path: string; stack: Array<{ name: string; handle: (req: Request, res: Response, next: (e?: unknown) => void) => void }> }; name: string; handle: { name?: string } };
-  const stack = (tamburRouter as unknown as { stack: Layer[] }).stack;
+  const stack = tamburRouter.stack;
   const layer = stack.find((l) => l.route?.path === "/meter-readings/:id/correct");
   const names = layer?.route?.stack.map((s) => s.name) ?? [];
-  const idx = stack.indexOf(layer!);
-  const gated = stack.slice(0, idx).some((l) => !l.route && l.handle.name === "requireProductionEnabled");
+  const idx = layer ? stack.indexOf(layer) : -1;
+  const gated = stack.slice(0, Math.max(idx, 0)).some((l) => !l.route && l.name === "requireProductionEnabled");
   check("§7 uç var, verifyToken ilk halka; router üretim modülü kapısının altında", !!layer && names[0] === "verifyToken" && gated, `${names.join(",")} gated=${gated}`);
   const permStep = layer!.route!.stack[1]!;
-  const run = (perms: string[]) => new Promise<unknown>((res) => permStep.handle({ user: { permissions: perms } } as unknown as Request, {} as Response, (e) => res(e ?? "next")));
+  const fakeReq = (perms: string[]): Partial<Request> => ({ user: { userId: randomUUID(), username: "tfc", permissions: perms, tokenVersion: 0 } as Request["user"] });
+  const run = (perms: string[]) => new Promise<unknown>((res) => { void permStep.handle(fakeReq(perms) as Request, {} as Response, (e?: unknown) => res(e ?? "next")); });
   const denied = (await run(["mobile:tambur", "quality:write"])) as { statusCode?: number };
   const allowed = await run(["kursun:meter-approve"]);
   check("§7 kursun:meter-approve yoksa 403; varsa geçer", denied?.statusCode === 403 && allowed === "next", `denied=${denied?.statusCode} allowed=${String(allowed)}`);
-  await prisma.rollMeterReading.delete({ where: { id: inRow.id } });
 }
 
 function cleanupError(e: unknown) {
