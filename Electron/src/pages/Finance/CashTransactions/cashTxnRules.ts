@@ -91,6 +91,8 @@ export interface CashTxnFilterState {
   /** `<input type="date">` — "" meşrudur (kullanıcı temizleyebilir). */
   from: string;
   to: string;
+  /** Masraf Özeti kategori anahtarı (sunucu `cashCategoryKey`); "" = tümü. İstemci anahtarı ÜRETMEZ, seçenek ucundan alır. */
+  category: string;
 }
 
 export const EMPTY_FILTERS: CashTxnFilterState = {
@@ -100,10 +102,11 @@ export const EMPTY_FILTERS: CashTxnFilterState = {
   search: "",
   from: "",
   to: "",
+  category: "",
 };
 
 export function isFilterDirty(f: CashTxnFilterState): boolean {
-  return Boolean(f.account || f.kind || f.status || f.search || f.from || f.to);
+  return Boolean(f.account || f.kind || f.status || f.search || f.from || f.to || f.category);
 }
 
 /**
@@ -127,6 +130,7 @@ export function buildListQuery(f: CashTxnFilterState): Record<string, string | u
     search: f.search.trim() || undefined,
     from: dayStartIso(f.from),
     to: dayEndIso(f.to),
+    category: f.category || undefined,
   };
 }
 

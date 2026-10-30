@@ -23,6 +23,8 @@ import {
 import { changeYarnCostPrice, listYarnCostPrices, revokeYarnCostPrice } from "../services/yarn-cost-price.service";
 import { changeFinishingRate, listFinishingRates, revokeFinishingRate } from "../services/finishing-rate.service";
 import { getCostStructure, putCostStructure } from "../services/cost-structure.service";
+import { changeMachineCostRate, createMachineCostRate, listMachineCostRates, revokeMachineCostRate } from "../services/machine-cost-rate.service";
+import { changeConsumableNorm, createConsumableNorm, listConsumableNorms, revokeConsumableNorm } from "../services/consumable-norm.service";
 import { previewCost } from "../services/cost-calc.service";
 import {
   createStandardCostVersion,
@@ -33,7 +35,7 @@ import {
   restoreStandardCostVersion,
   type StructureStatus,
 } from "../services/standard-cost.service";
-import { assertNoBareFilterParams, parseQueryParams, readFilterList } from "../utils/query-parser";
+import { assertNoBareFilterParams, parseQueryParams, readFilterList, readIdCondition } from "../utils/query-parser";
 import { AppError } from "../utils/app-error";
 
 const router = Router();
@@ -292,6 +294,172 @@ router.post("/finishing-rates", requirePermission("cost:write"), wrap(async (req
 router.post("/finishing-rates/:id/revoke", requirePermission("cost:write"), wrap(async (req, res) => {
   const { id } = idParam.parse(req.params);
   res.status(200).json({ success: true, data: await revokeFinishingRate(id, req.user?.userId), message: "Tarife kaldırıldı." });
+}));
+
+// ── MAKİNE SAAT ÜCRETİ + HİZMET SARF NORMU (D4-G1a) ─────────────────────────
+// Damgalı sürüm, "şu andan itibaren"; yaratma/değişim `clientToken` taşır (replay tek boğaz, servis).
+
+const clientTokenField = z.string().uuid("Geçersiz istemci anahtarı (clientToken)");
+const revokeBody = z.object({ reason: z.string().trim().max(300, "Gerekçe en çok 300 karakter").nullable().optional() }).strict();
+const machineRateValues = {
+  hourRateTry: decimalInput,
+  normMPerHour: decimalInput.nullable().optional(),
+  note: z.string().nullable().optional(),
+  clientToken: clientTokenField,
+};
+const machineRateCreateSchema = z.object({ machineId: z.string().uuid("Geçersiz makine ID"), ...machineRateValues }).strict();
+const machineRateChangeSchema = z.object(machineRateValues).strict();
+const normValues = { qtyPerM: decimalInput, note: z.string().nullable().optional(), clientToken: clientTokenField };
+const normCreateSchema = z.object({
+  serviceItemId: z.string().uuid("Geçersiz hizmet kalemi ID"),
+  consumableItemId: z.string().uuid("Geçersiz sarf kalemi ID"),
+  ...normValues,
+}).strict();
+const normChangeSchema = z.object(normValues).strict();
+
+function actorOf(req: Request): string {
+  const userId = req.user?.userId;
+  if (!userId) throw AppError.unauthorized("Oturum bulunamadı.");
+  return userId;
+}
+
+/** `filter[<ad>]` id süzgeci (CSV) — her değer UUID olmalı; çıplak ad 400. */
+function readUuidFilter(req: Request, name: string): string | { in: string[] } | null {
+  const raw = parseQueryParams(req).filters[name];
+  const bad = readFilterList(raw).filter((v) => !z.string().uuid().safeParse(v).success);
+  if (bad.length) throw AppError.badRequest(`Geçersiz ${name} süzgeci: ${bad.join(", ")}`);
+  return readIdCondition(raw);
+}
+const historyQ = (req: Request) => z.object({ includeRevoked: includeRevokedQ }).passthrough().parse(req.query).includeRevoked;
+
+/**
+ * @openapi
+ * /api/cost/machine-rates:
+ *   get:
+ *     tags: [Cost]
+ *     summary: Makine saat ücretleri (varsayılan yalnız aktif; includeRevoked=1 geçmiş; filter[machineId] CSV)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Liste }
+ *   post:
+ *     tags: [Cost]
+ *     summary: Makineye saat ücreti yaz (aktif ücret varsa 409; aynı clientToken → aynı satır)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       201: { description: Yazıldı ya da replay }
+ *       400: { description: Geçersiz değer }
+ *       409: { description: Aktif ücret var / pasif makine / token çakışması }
+ */
+router.get("/machine-rates", requirePermission("cost:read"), wrap(async (req, res) => {
+  assertNoBareFilterParams(req, ["machineId"]);
+  const data = await listMachineCostRates({ machineId: readUuidFilter(req, "machineId"), includeRevoked: historyQ(req) });
+  res.status(200).json({ success: true, data });
+}));
+
+router.post("/machine-rates", requirePermission("cost:write"), wrap(async (req, res) => {
+  const { machineId, ...values } = machineRateCreateSchema.parse(req.body ?? {});
+  const r = await createMachineCostRate(machineId, values, actorOf(req));
+  res.status(201).json({ success: true, data: { ...r.row, previousId: r.previousId }, message: "Saat ücreti kaydedildi." });
+}));
+
+/**
+ * @openapi
+ * /api/cost/machine-rates/{id}/change:
+ *   post:
+ *     tags: [Cost]
+ *     summary: Saat ücretini değiştir (eski satır damgalanır + yeni satır, tek tx; şu andan itibaren)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: Değişti ya da replay }
+ *       409: { description: Satır artık aktif değil (COST_RATE_STALE) }
+ * /api/cost/machine-rates/{id}/revoke:
+ *   post:
+ *     tags: [Cost]
+ *     summary: Saat ücretini kaldır (satır silinmez, damgalanır)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: Kaldırıldı }
+ *       409: { description: Zaten kaldırılmış }
+ */
+router.post("/machine-rates/:id/change", requirePermission("cost:write"), wrap(async (req, res) => {
+  const { id } = idParam.parse(req.params);
+  const r = await changeMachineCostRate(id, machineRateChangeSchema.parse(req.body ?? {}), actorOf(req));
+  res.status(200).json({ success: true, data: { ...r.row, previousId: r.previousId }, message: "Saat ücreti değiştirildi." });
+}));
+
+router.post("/machine-rates/:id/revoke", requirePermission("cost:write"), wrap(async (req, res) => {
+  const { id } = idParam.parse(req.params);
+  const { reason } = revokeBody.parse(req.body ?? {});
+  res.status(200).json({ success: true, data: await revokeMachineCostRate(id, reason ?? null, actorOf(req)), message: "Saat ücreti kaldırıldı." });
+}));
+
+/**
+ * @openapi
+ * /api/cost/consumable-norms:
+ *   get:
+ *     tags: [Cost]
+ *     summary: Hizmet sarf normları (varsayılan yalnız aktif; includeRevoked=1 geçmiş; filter[serviceItemId] / filter[consumableItemId] CSV)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Liste }
+ *   post:
+ *     tags: [Cost]
+ *     summary: Hizmet kalemine sarf normu yaz (SERVICE / CONSUMABLE tür kapısı; aynı clientToken → aynı satır)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       201: { description: Yazıldı ya da replay }
+ *       400: { description: Tür dışı kalem / geçersiz değer }
+ *       409: { description: Aktif norm var / pasif kalem / token çakışması }
+ */
+router.get("/consumable-norms", requirePermission("cost:read"), wrap(async (req, res) => {
+  assertNoBareFilterParams(req, ["serviceItemId", "consumableItemId"]);
+  const data = await listConsumableNorms({
+    serviceItemId: readUuidFilter(req, "serviceItemId"),
+    consumableItemId: readUuidFilter(req, "consumableItemId"),
+    includeRevoked: historyQ(req),
+  });
+  res.status(200).json({ success: true, data });
+}));
+
+router.post("/consumable-norms", requirePermission("cost:write"), wrap(async (req, res) => {
+  const { serviceItemId, consumableItemId, ...values } = normCreateSchema.parse(req.body ?? {});
+  const r = await createConsumableNorm(serviceItemId, consumableItemId, values, actorOf(req));
+  res.status(201).json({ success: true, data: { ...r.row, previousId: r.previousId }, message: "Sarf normu kaydedildi." });
+}));
+
+/**
+ * @openapi
+ * /api/cost/consumable-norms/{id}/change:
+ *   post:
+ *     tags: [Cost]
+ *     summary: Sarf normunu değiştir (eski satır damgalanır + yeni satır, tek tx; şu andan itibaren)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: Değişti ya da replay }
+ *       409: { description: Satır artık aktif değil (CONSUMABLE_NORM_STALE) }
+ * /api/cost/consumable-norms/{id}/revoke:
+ *   post:
+ *     tags: [Cost]
+ *     summary: Sarf normunu kaldır (satır silinmez, damgalanır)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: Kaldırıldı }
+ *       409: { description: Zaten kaldırılmış }
+ */
+router.post("/consumable-norms/:id/change", requirePermission("cost:write"), wrap(async (req, res) => {
+  const { id } = idParam.parse(req.params);
+  const r = await changeConsumableNorm(id, normChangeSchema.parse(req.body ?? {}), actorOf(req));
+  res.status(200).json({ success: true, data: { ...r.row, previousId: r.previousId }, message: "Sarf normu değiştirildi." });
+}));
+
+router.post("/consumable-norms/:id/revoke", requirePermission("cost:write"), wrap(async (req, res) => {
+  const { id } = idParam.parse(req.params);
+  const { reason } = revokeBody.parse(req.body ?? {});
+  res.status(200).json({ success: true, data: await revokeConsumableNorm(id, reason ?? null, actorOf(req)), message: "Sarf normu kaldırıldı." });
 }));
 
 // ── ÜRÜN MALİYET YAPISI ──────────────────────────────────────────────────────

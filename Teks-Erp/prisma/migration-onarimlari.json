@@ -24,5 +24,11 @@
     "sha256": "8b43a65b7691935813c280493e637edaf6d53b7ffeb34f24e098b96e6ed9efba",
     "tarih": "2026-10-30",
     "gerekce": "Dosya ALTER TYPE \"MeterPhase\" ADD VALUE 'CUT' satırını IF NOT EXISTS'siz ve kolon/CHECK ifadeleriyle aynı dosyada taşıyordu; test_migration_enum_add_value §2/§3 kırmızı verdi (CI, PR #289). ADD VALUE satırı ÖNCE gelen yeni 20261030010000_meter_phase_cut dosyasına IF NOT EXISTS ile taşındı (yalnız ADD VALUE); bu dosyadan yalnız o satır ve yorumu çıktı, kolon/CHECK ifadeleri birebir aynı. Dosya aynı dalda doğdu, main'e inmedi, hiçbir canlı kuruluma uygulanmadı; eski hâli uygulanmış test DB'lerinde yeni dosya no-op'tur (değer zaten var)."
+  },
+  {
+    "migration": "20261030100000_makine_ucreti_sarf_normu",
+    "sha256": "1ec266ce5b8f2a2326d693d0af3f9a2489131cbf28e0e642966137b876ea5e99",
+    "tarih": "2026-10-30",
+    "gerekce": "İki tablonun \"createdById\" kolonu NOT NULL doğmuştu; test_record_provenance §3 (künye kolonlarının hepsi NULLABLE) CI'da kırmızı verdi (PR #307). Yalnız bu iki satırdan NOT NULL çıktı; başka ifade değişmedi. Dosya aynı dalda doğdu, main'e inmedi, hiçbir canlı kuruluma uygulanmadı; eski hâli uygulanmış test DB'lerinde yalnız checksum farkı doğar (ALTER COLUMN ... DROP NOT NULL ile elle hizalanır)."
   }
 ]

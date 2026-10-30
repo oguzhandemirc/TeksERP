@@ -1,7 +1,9 @@
 // Rapor v2 sayı kartı metinleri — ekran kartı ile PDF/Excel "Özet" AYNI metni bassın diye tek yerde.
 // Biçim sunucunun anlatı biçimiyle aynı kural (`anlati/sayi-bicim.ts`): oran "%78", para 0 ondalık,
 // diğerleri en çok 1 ondalık. Ölçülemeyen değer "0" YAZILMAZ — "Ölçülemedi" yazılır.
+import { fixedDecimalsOf } from "@/lib/number-format";
 import { BIRIM_METNI, PARA_BIRIMLERI, type AnaSayi, type Birim, type ComparisonTone } from "./sunum";
+import { MONEY_NUM_FMT } from "./table-model";
 
 export const NOT_MEASURED_TEXT = "Ölçülemedi";
 
@@ -13,7 +15,7 @@ function numberText(n: number, maxDecimals: number): string {
 export function formatFigure(value: number | null, unit: Birim): string {
   if (value === null || !Number.isFinite(value)) return NOT_MEASURED_TEXT;
   if (unit === "yuzde") return `%${numberText(value, 1)}`;
-  if (PARA_BIRIMLERI.includes(unit)) return `${numberText(value, 0)} ${BIRIM_METNI[unit]}`;
+  if (PARA_BIRIMLERI.includes(unit)) return `${numberText(value, fixedDecimalsOf(MONEY_NUM_FMT))} ${BIRIM_METNI[unit]}`;
   return `${numberText(value, 1)} ${BIRIM_METNI[unit]}`;
 }
 
