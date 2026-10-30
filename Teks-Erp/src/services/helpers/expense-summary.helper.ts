@@ -16,7 +16,8 @@
 // Asıl satır `txnDate` ayında +, iptal `cancelledAt` ayında − (defter kronolojisi:
 // geçmiş ayın rakamı iptalle DEĞİŞMEZ, ters etki iptal ayına düşer). Tutar `amountTry`
 // (döviz masrafı fişteki kurla TL). `test_masraf_ozeti §1` aynı aralıkta Σ özet =
-// kasa defteri EXPENSE toplamı eşitliğini ölçer.
+// kasa defteri EXPENSE toplamı eşitliğini ölçer — TRY hesaplarda; döviz hesabında defter
+// hesap para birimiyle (`amount`), özet TL karşılığıyla (`amountTry`) toplar, sayılar ayrışır.
 // =============================================================================
 
 import { Prisma, type Currency } from "@prisma/client";
