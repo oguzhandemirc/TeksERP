@@ -211,6 +211,7 @@ import { uyari } from "../lib/logger";
 import { upperTr } from "../utils/tr-case";
 import { assertEmanetWritableTx, resolveOwnerFromReceiptTx } from "./helpers/emanet-owner.helper";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
+import { assertCariNotHeldTx } from "./helpers/cari-hold.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
 
 export interface RollStats {
@@ -969,6 +970,11 @@ export class InventoryService {
        */
       skipKk1WeightPolicy?: boolean;
       /**
+       * D4-I1 cari kilidi (INTAKE): sahibin carisi kilitliyse doğum tx'inde 409 `CARI_HOLD`. Yalnız gelen belge onayı
+       * verir (yeni iş kabulü); KK1/fason/bölme doğumları davranış değiştirmez.
+       */
+      cariHoldIntakeGate?: boolean;
+      /**
        * `lastLabelSnapshot`'a yazılacak minimal etiket NİYETİ
        * (`{orderLineId}` | `{customerId}` | `{stock:true}`). Çözümü ÇAĞIRAN yapar
        * (`helpers/label-intent.helper`) — burada DB okuması yok.
@@ -1315,6 +1321,8 @@ export class InventoryService {
         const targetWarehouseId = await resolveTargetWarehouseId(tx, opts?.warehouseId ?? null);
         // G3 emanet: sahip verildiyse modül açık olmalı (403) — gövde kapısı tek yazıcıda, çağıran bazlı değil.
         await assertEmanetWritableTx(tx, opts?.ownerCustomerId ?? null, "top");
+        // Onay sürerken konan kilit kalan satırları burada keser (precheck tx dışıdır).
+        if (opts?.cariHoldIntakeGate && opts.ownerCustomerId) await assertCariNotHeldTx(tx, opts.ownerCustomerId, "INTAKE");
         const created = await tx.roll.create({
           data: {
             barcode,
