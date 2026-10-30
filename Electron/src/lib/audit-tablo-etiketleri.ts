@@ -173,6 +173,7 @@ export const TABLE_LABELS: Record<string, string> = {
   CHEQUE_DELIVERY_NOTE: "Çek Teslim Bordrosu",
   CARI_ACCOUNT: "Cari Hesap",
   CARI_PERIOD_CLOSE: "Cari Dönem Kapanışı",
+  CARI_HOLD: "Cari Kilidi",
   CASH_TRANSACTION: "Kasa Hareketi",
   CASH_PERIOD_CLOSE: "Kasa Dönem Kapanışı",
   CASH_BOX: "Kasa",

@@ -45,4 +45,7 @@ export const COCUKLAR: ReadonlyArray<{ model: string; alan: string }> = [
   { model: "cariPeriodClose", alan: "cariId" },
   { model: "reconciliationLetter", alan: "cariId" },
   { model: "chequeDeliveryNote", alan: "cariId" },
+  // D4-I1a: cari kilidi (DURUM + tarihçe, defter değil) hesaba bağlıdır — birleştirmede kilit hesabı izler
+  // (iki tarafta da aktif kilit varsa kısmi unique 23505 → tx döner, fail-closed); FK Restrict, hareket sayılır.
+  { model: "cariHold", alan: "cariId" },
 ] as const;

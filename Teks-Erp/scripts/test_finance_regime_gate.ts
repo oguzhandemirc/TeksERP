@@ -246,6 +246,18 @@ async function main(): Promise<void> {
   check("§3c Her muafın GEREKÇESİ yazılı", gerekcesiz.length === 0, gerekcesiz.map((m) => m.dosya).join(", "));
   for (const m of MUAF) console.log(`   ℹ️  muaf: ${m.dosya} — ${m.neden}`);
 
+  // ── §4 ÇEKİRDEK KAPI HELPER'LARI FİNANS GRAFINA BAĞLANMAZ ────────────────────
+  // Cari kilidi kapısı (D4-I1) kapısız çekirdek boğazlardan (gelen belge, sipariş, sevk) çağrılır. Helper ticaret
+  // modeline (transitif) dokunursa o router'ların hepsi §2'de kapısız sayılır ya da muaf yağmuruna döner.
+  // ⭐ NEGATİF SONDA (2026-10-30): helper'a `import "../cari.service"` eklendi → §4 ❌ (→ cariAccount); geri alınınca yeşil.
+  const CEKIRDEK_KAPI_HELPERLARI = ["services/helpers/cari-hold.helper.ts", "services/helpers/cari-card-where.helper.ts"];
+  for (const rel of CEKIRDEK_KAPI_HELPERLARI) {
+    const f = path.join(SRC, rel);
+    const var_ = fs.existsSync(f);
+    const dokunus = var_ ? ticaretDokunuyorTransitif(f) : "dosya yok";
+    check(`§4 ${rel} ticaret modeline (transitif) dokunmuyor`, var_ && dokunus === null, dokunus ? `→ ${dokunus}` : "temiz");
+  }
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   if (fail > 0) {
     console.log(
