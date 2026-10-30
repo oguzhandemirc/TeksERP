@@ -1,5 +1,6 @@
 // İÇERİDEKİ İŞLER (ister 3.2) — müşteri başına içerideki emanet top/metre, durum kırılımıyla. Tek sunucu toplaması
 // (`/api/consigned-work`); satır ya da hücre tıklaması Kumaş Stoğu'nu o sahibin süzgeciyle açar. Modül kapısı `ROUTE_MODULE`.
+// Hazırlık kolonu (D4-J3) İKİNCİ HESAP DEĞİL: `ready-works?groupBy=customer` ucundan; `shipping:read` yoksa istek atılmaz.
 import type { KeyboardEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -12,6 +13,22 @@ import { formatNumber } from "@/lib/format";
 import { TERIM } from "@/lib/terim";
 import { CONSIGNED_WORK_QUERY_KEY, getConsignedWork, type ConsignedBucket, type ConsignedOwnerRow, type ConsignedWorkSummary } from "./service";
 import { primaryBucket, rollsLinkFor, type ConsignedBucketKey } from "./consigned-links";
+import { Badge } from "@/components/ui/badge";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { getAllReadyWorks, READY_WORKS_PATH, READY_WORKS_QUERY_KEY, type ReadyWorkRow } from "@/pages/Operations/ReadyWorks/service";
+import { STATE_LABEL } from "@/pages/Operations/ReadyWorks/ready-works-view";
+
+function ReadinessCell({ row }: { row: ReadyWorkRow | undefined }) {
+  if (!row) return <span className="text-muted-foreground">—</span>;
+  return (
+    <Link to={READY_WORKS_PATH} onClick={(e) => e.stopPropagation()} className="inline-flex flex-col items-end rounded px-1 leading-tight hover:bg-muted">
+      <Badge variant={row.state === "READY" ? "default" : row.state === "PARTIAL" ? "secondary" : "muted"} className="whitespace-nowrap">
+        {STATE_LABEL[row.state]}
+      </Badge>
+      {row.readyMeters > 0 && <span className="text-xs text-muted-foreground tabular-nums">{fmtQty(row.readyMeters)} hazır</span>}
+    </Link>
+  );
+}
 
 const fmtQty = (q: number) => `${formatNumber(q, 1)} m`;
 
@@ -55,7 +72,18 @@ function TotalsStrip({ totals }: { totals: ConsignedWorkSummary["totals"] }) {
   );
 }
 
-function OwnersTable({ rows, totals, onOpen }: { rows: ConsignedOwnerRow[]; totals: ConsignedWorkSummary["totals"]; onOpen: (r: ConsignedOwnerRow) => void }) {
+function OwnersTable({
+  rows,
+  totals,
+  onOpen,
+  readiness,
+}: {
+  rows: ConsignedOwnerRow[];
+  totals: ConsignedWorkSummary["totals"];
+  onOpen: (r: ConsignedOwnerRow) => void;
+  /** null = kolon yok (sevk okuma izni yok); Map = müşteri id → hazırlık satırı. */
+  readiness: Map<string, ReadyWorkRow> | null;
+}) {
   // İki "bekliyor" sütunu ayrı sekmeye bağlanır (ham ↔ Ham Stok, yarı mamul ↔ Yarı Mamul); boş olan gizlenir,
   // ikisi de boşsa ham sütunu kalır. Gelen belge onayıyla doğan emanet yarı mamuldür.
   const showSemi = totals.waitingSemi.count > 0;
@@ -78,6 +106,7 @@ function OwnersTable({ rows, totals, onOpen }: { rows: ConsignedOwnerRow[]; tota
             <TableHead className="whitespace-nowrap text-right">Sevke hazır</TableHead>
             <TableHead className="text-right" title="İçeride ama üç durumun dışında (ör. adımsız fason/kartela)">Diğer</TableHead>
             <TableHead className="text-right">Toplam</TableHead>
+            {readiness && <TableHead className="whitespace-nowrap text-right" title="Sevke hazırlık — Sevke Hazır İşler'in müşteri birimi (fabrika kuralıyla)">Hazırlık</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -98,6 +127,7 @@ function OwnersTable({ rows, totals, onOpen }: { rows: ConsignedOwnerRow[]; tota
               <TableCell className="text-right"><BucketCell bucket={r.ready} ownerId={r.ownerCustomerId} kind="ready" /></TableCell>
               <TableCell className="text-right"><BucketCell bucket={r.other} ownerId={r.ownerCustomerId} kind={null} /></TableCell>
               <TableCell className="text-right"><BucketCell bucket={r.total} ownerId={r.ownerCustomerId} kind={null} /></TableCell>
+              {readiness && <TableCell className="text-right"><ReadinessCell row={readiness.get(r.ownerCustomerId)} /></TableCell>}
             </TableRow>
           ))}
         </TableBody>
@@ -111,6 +141,14 @@ export function ConsignedWorkPage() {
   const q = useQuery({ queryKey: [CONSIGNED_WORK_QUERY_KEY], queryFn: getConsignedWork });
   const rows = q.data?.rows ?? [];
   const open = (row: ConsignedOwnerRow) => navigate(rollsLinkFor(row.ownerCustomerId, primaryBucket(row)));
+  const canReadShipping = useRoleAccess().hasPermission("shipping:read");
+  const readyQ = useQuery({
+    queryKey: [READY_WORKS_QUERY_KEY, "customer-all"],
+    queryFn: () => getAllReadyWorks("customer"),
+    enabled: canReadShipping,
+  });
+  // Hazırlık ucu düşerse kolon "—" kalır; ana liste etkilenmez.
+  const readiness = canReadShipping ? new Map((readyQ.data ?? []).map((w) => [w.id, w])) : null;
 
   return (
     <PageShell>
@@ -138,7 +176,7 @@ export function ConsignedWorkPage() {
                 İçeride emanet mal yok. Emanet top, girişte “Sahibi” seçilerek ya da gelen belge onayıyla doğar.
               </div>
             ) : (
-              q.data && <OwnersTable rows={rows} totals={q.data.totals} onOpen={open} />
+              q.data && <OwnersTable rows={rows} totals={q.data.totals} onOpen={open} readiness={readiness} />
             )}
           </>
         )}
