@@ -203,6 +203,8 @@ export default function TamburManualRollModal({
       reason: reason.trim(),
       clientToken: attempt.token(),
       foldType,
+      // D4-B3: bu modalda metre elle yazılır → elle beyan (ölçüm kaynağı zorunluluğunda 400 yemesin).
+      measure: { source: 'OPERATOR' },
       // Parti YALNIZ operatör seçtiyse gider. Gönderilmezse backend çözer
       // (tek açık parti → sessizce bağla · birden fazla → BATCH_REQUIRED).
       ...(batch ? { batchId: batch.id } : {}),

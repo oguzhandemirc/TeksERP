@@ -8,6 +8,7 @@ import type {
   TamburReportErrorRequest,
   TamburContext,
   TamburCutRequest,
+  TamburMeasureBody,
   TamburFinalizeOpenFabricRequest,
   Roll,
 } from '../types/models';
@@ -216,6 +217,8 @@ export interface TamburManualRollRequest {
    * ve envanterin kat filtresinde hiç görünmez.
    */
   foldType?: string | null;
+  /** D4-B3 ölçüm kaynağı — bu modalda metre elle yazılır (OPERATOR). */
+  measure?: TamburMeasureBody;
 }
 
 /**
@@ -254,6 +257,8 @@ export interface TamburManualProduceRequest {
   reason: string;
   /** İdempotency anahtarı — MANTIKSAL deneme başına BİR kez üretilir. ZORUNLU. */
   clientToken: string;
+  /** D4-B3 ölçüm kaynağı beyanı (makine / elle / simülasyon). */
+  measure?: TamburMeasureBody;
 }
 
 /** `POST /tambur/manual/produce` yanıtı (mobilin TÜKETTİĞİ alanlar). */
@@ -472,7 +477,7 @@ export const tamburService = {
    */
   cutWarehouseRoll: (
     rollId: string,
-    data: { cutLength: number; qualityGrade?: string | null; notes?: string | null; targetOrderLineId?: string | null; targetCustomerId?: string | null; markedForKartela?: boolean; rawDestination?: 'STOCK' | 'WAREHOUSE'; clientToken?: string }
+    data: { cutLength: number; qualityGrade?: string | null; notes?: string | null; targetOrderLineId?: string | null; targetCustomerId?: string | null; markedForKartela?: boolean; rawDestination?: 'STOCK' | 'WAREHOUSE'; clientToken?: string; measure?: TamburMeasureBody }
   ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> =>
     apiClient
       .post<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>>(
