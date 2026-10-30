@@ -8,6 +8,12 @@ import { ReportV2Route } from "./ReportV2Route";
  * elle yazılan liste katalogla ayrışırdı. `hazir:false` satırın route'u da var ama kapı
  * (`ReportV2Route`) onu çizmez; RAP dilimi `hazir:true` yapınca adres kendiliğinden açılır.
  */
+/**
+ * Kendi yaprak sayfası olan v2 anahtarları — adresi `content-routes` kendisi açar (rapor v2 bayrağından
+ * bağımsız görünmesi gereken rapor; D4-H1). Aynı path iki route'ta olmasın diye `content-routes` yayarken atlar.
+ */
+export const V2_KEYS_WITH_OWN_PAGE: ReadonlySet<string> = new Set(["finance/masraf-ozeti"]);
+
 export const reportV2Routes: RouteObject[] = REPORT_CATALOG.filter((e) => e.nesil === "v2").map((e) => ({
   path: e.panelYolu,
   element: (

@@ -25,6 +25,7 @@
     "financeRiskLimitBlockEnabled": true,
     "financeAutoDraftFromShipmentEnabled": true,
     "financeServiceBillingEnabled": true,
+    "financeExpenseCategorySuggestions": "ON",
     "financeAutoAllocateOnPaymentEnabled": true,
     "financeAllowZeroPriceLineEnabled": true,
     "financeFutureDatedDocumentBlockEnabled": true,

@@ -334,6 +334,12 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
     sinif: "basit", izin: "report:finance", modul: "financeEnabled", varsayilanGun: null, tarih: "kesit",
     panelYolu: "reports/finance/alacaklar", uc: "/api/reports/finance/alacaklar", kapiTasiyici: [{ dosya: "src/routes/reports/temel-dokuma-finans.routes.ts", yol: "/finance/alacaklar" }], yuzey: "yaprak",
     nesil: "v2", kategoriV2: "para", persona: ["patron", "muhasebe"], varyantBoyutlari: ["cari", "paraBirimi"], hazir: true },
+  // D4-H1: masraf özeti (kategori × ay); panelde kendi sayfası `/reports/finance/masraf-ozeti` (V2_KEYS_WITH_OWN_PAGE) aynı zarfı çizer.
+  // Uç `paraBirimi` varyantını uygular; kasa/kategori süzgeci ve varyantı sonraki dilim (tasarım §9.5/§9.8 sapması, arşiv notu).
+  { key: "finance/masraf-ozeti", baslik: "Masraf Özeti", soru: "Bu dönemde hangi kalem için ne kadar harcadık ve aydan aya nasıl değişti?",
+    sinif: "basit", izin: "report:finance", modul: "financeEnabled", varsayilanGun: 90, tarih: "aralik-gun",
+    panelYolu: "reports/finance/masraf-ozeti", uc: "/api/reports/finance/masraf-ozeti", kapiTasiyici: [{ dosya: "src/routes/reports/finance.report.routes.ts", yol: "/masraf-ozeti" }], yuzey: "yaprak",
+    nesil: "v2", kategoriV2: "para", persona: ["patron", "muhasebe"], varyantBoyutlari: ["paraBirimi"], hazir: true, yeniRapor: true },
 ];
 
 /** Katalogdan TÜRETİLİR — derleyici bilinmeyen anahtarı reddeder (K4). */

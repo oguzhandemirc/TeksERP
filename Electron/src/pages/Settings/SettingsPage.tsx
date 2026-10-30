@@ -16,6 +16,7 @@ import {
   workstationEntryPath,
 } from "@/pages/GeneralSettings/settings-config";
 import { usePreferences } from "@/providers/PreferencesProvider";
+import { readTabOpenMode } from "@/components/layout/tabs/tab-open-mode";
 import { MasaustuBildirimKarti } from "@/components/bildirim/MasaustuBildirimKarti";
 import { BildirimTercihKarti } from "@/components/bildirim/BildirimTercihKarti";
 
@@ -66,6 +67,41 @@ export function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            <div data-testid="tab-open-mode">
+              <p className="text-sm font-medium">Sekme davranışı</p>
+              <p className="pb-2 text-xs text-muted-foreground">
+                Menüden, kartlardan ve bağlantılardan açtığın ekranlar nerede açılsın?
+              </p>
+              <div className="flex gap-2">
+                {(
+                  [
+                    ["newTab", "Yeni sekmede aç", "Bugünkü davranış — menü yeni sekme açar, sağ tık arka planda sekme açar."],
+                    ["sameTab", "Aynı sekmede aç", "Her tık açık sekmede açar. Yeni sekme için Ctrl/⌘/Shift + tık ya da orta tık."],
+                  ] as const
+                ).map(([val, label, desc]) => {
+                  const active = readTabOpenMode(prefs) === val;
+                  return (
+                    <button
+                      key={val}
+                      type="button"
+                      title={desc}
+                      aria-pressed={active}
+                      onClick={() => setPreference({ tabs: { ...(prefs.tabs ?? {}), openMode: val } })}
+                      className={`flex-1 rounded-md border px-3 py-2 text-xs font-medium ${
+                        active
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "text-muted-foreground hover:bg-muted/70"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="pt-2 text-xs text-muted-foreground">
+                Aynı sekmede açınca önceki ekranın süzgeç ve kaydırma konumu korunmayabilir.
+              </p>
+            </div>
             <div>
               <p className="text-sm font-medium">Terbiye iş emrinde fason firma varsayılanı</p>
               <p className="pb-2 text-xs text-muted-foreground">

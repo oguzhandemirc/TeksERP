@@ -157,6 +157,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "financeServiceBillingMissingMeter",
       "financeServiceBillingTrigger",
       "financeServiceBillingPriceDate",
+      "financeExpenseCategorySuggestions",
       "financeAutoAllocateOnPaymentEnabled",
       "financeYarnOutOnInvoiceEnabled",
       "financeDefaultVatRate",

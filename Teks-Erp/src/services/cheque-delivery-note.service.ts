@@ -40,6 +40,7 @@ import {
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
+import { logLegacyLegAdoption } from "./helpers/cari-account-adopt.helper";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { assertChequeDeliveryNoteReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
@@ -675,7 +676,7 @@ export class ChequeDeliveryNoteService {
     const eventDate = input.eventDate ?? new Date();
     const out = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
-        const { row, move } = await chequeService.prepareForwardTx(tx, id, target);
+        const { row, move, adopted } = await chequeService.prepareForwardTx(tx, id, target);
         await chequeService.claimForwardTx(tx, row, move);
         const note = await tx.chequeDeliveryNote.create({
           data: {
@@ -694,9 +695,10 @@ export class ChequeDeliveryNoteService {
           eventDate, notes: movementEventNotes(note.docNo, input.notes), deliveryNoteId: note.id, userId,
         });
         await printedDocumentService.freezeForSource(tx, PrintedDocType.CHEQUE_DELIVERY_NOTE, note.id, userId);
-        return { cheque: { id: row.id, docNo: row.docNo }, move, note };
+        return { cheque: { id: row.id, docNo: row.docNo }, move, note, adopted };
       }),
     );
+    logLegacyLegAdoption(out.adopted, userId);
 
     void AuditService.log({
       userId,

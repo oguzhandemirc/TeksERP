@@ -177,6 +177,8 @@ export const SETTING_KEYS = {
   FINANCE_SERVICE_BILLING_TRIGGER: "finance.serviceBilling.trigger",
   /** H7: fiyat tarihi — `SERVICE_DAY` (hizmet anı; bugün) · `DISPATCH_DAY` (sevk anı). */
   FINANCE_SERVICE_BILLING_PRICE_DATE: "finance.serviceBilling.priceDate",
+  /** D4-H1: kasa masraf formunda "son kullanılan kategoriler" önerisi — `ON` (varsayılan) · `OFF`; katalog DEĞİL. */
+  FINANCE_EXPENSE_CATEGORY_SUGGESTIONS: "finance.masraf.kategoriOnerisi",
   /** Tahsilat/ödeme kaydında en eski açık faturalara OTOMATİK kapama — FIFO
    *  (default FALSE). Bugün kapama (`PaymentAllocation`) elle seçilir; açıkken
    *  tutar vade/tarih sırasıyla açık bakiyelere dağıtılır ve artan tutar
@@ -1025,6 +1027,10 @@ export const DEFAULT_SERVICE_BILLING_TRIGGER: ServiceBillingTrigger = "PER_SHIPM
 export type ServiceBillingPriceDate = "SERVICE_DAY" | "DISPATCH_DAY";
 export const SERVICE_BILLING_PRICE_DATES: ServiceBillingPriceDate[] = ["SERVICE_DAY", "DISPATCH_DAY"];
 export const DEFAULT_SERVICE_BILLING_PRICE_DATE: ServiceBillingPriceDate = "SERVICE_DAY";
+/** D4-H1: masraf kategorisi önerisi (yalnız öneri listesi; kategori serbest metin kalır). */
+export type ExpenseCategorySuggestions = "ON" | "OFF";
+export const EXPENSE_CATEGORY_SUGGESTION_MODES: ExpenseCategorySuggestions[] = ["ON", "OFF"];
+export const DEFAULT_EXPENSE_CATEGORY_SUGGESTIONS: ExpenseCategorySuggestions = "ON";
 
 /** Tambur plan kapısı EN kolu (bkz. `SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_CHECK`). */
 export type TamburPlanWidthCheck = "ENFORCE" | "OFF";
@@ -1855,6 +1861,8 @@ export interface FeatureFlags {
   financeServiceBillingTrigger: ServiceBillingTrigger;
   /** H7: fiyat tarihi (default `SERVICE_DAY`). */
   financeServiceBillingPriceDate: ServiceBillingPriceDate;
+  /** D4-H1: kasa masraf formunda kategori önerisi (varsayılan `ON`). */
+  financeExpenseCategorySuggestions: ExpenseCategorySuggestions;
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; otomatik tahsis elle
    *  silinebilir; farklı para birimli fatura atlanır. */
@@ -2500,6 +2508,7 @@ export class SystemSettingService {
       financeServiceBillingMissingMeter: await readFinanceServiceBillingMissingMeter(cacheClient),
       financeServiceBillingTrigger: await readFinanceServiceBillingTrigger(cacheClient),
       financeServiceBillingPriceDate: await readFinanceServiceBillingPriceDate(cacheClient),
+      financeExpenseCategorySuggestions: await readFinanceExpenseCategorySuggestions(cacheClient),
       financeAutoAllocateOnPaymentEnabled:
         await readFinanceAutoAllocateOnPaymentEnabled(cacheClient),
       yarnBlockNegativeBalanceEnabled: await readYarnBlockNegativeBalanceEnabled(cacheClient),
@@ -3015,6 +3024,13 @@ export class SystemSettingService {
         throw AppError.badRequest(`financeServiceBillingPriceDate şunlardan biri olmalı: ${SERVICE_BILLING_PRICE_DATES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_PRICE_DATE, v, "Hizmet faturası fiyat tarihi — hizmet günü · sevk günü", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeExpenseCategorySuggestions")) {
+      const v = input.financeExpenseCategorySuggestions;
+      if (typeof v !== "string" || !EXPENSE_CATEGORY_SUGGESTION_MODES.includes(v as ExpenseCategorySuggestions)) {
+        throw AppError.badRequest(`financeExpenseCategorySuggestions şunlardan biri olmalı: ${EXPENSE_CATEGORY_SUGGESTION_MODES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.FINANCE_EXPENSE_CATEGORY_SUGGESTIONS, v, "Kasa masraf formunda kategori önerisi — açık · kapalı", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "financeAutoAllocateOnPaymentEnabled")) {
@@ -5171,6 +5187,11 @@ export function readFinanceServiceBillingTrigger(tx?: Pick<typeof prisma, "syste
 /** H7: fiyat tarihi — tanınmayan değer varsayılana (`SERVICE_DAY`) düşer. */
 export function readFinanceServiceBillingPriceDate(tx?: Pick<typeof prisma, "systemSetting">): Promise<ServiceBillingPriceDate> {
   return readServiceEnum(SETTING_KEYS.FINANCE_SERVICE_BILLING_PRICE_DATE, SERVICE_BILLING_PRICE_DATES, DEFAULT_SERVICE_BILLING_PRICE_DATE, tx);
+}
+
+/** D4-H1: masraf kategorisi önerisi — tanınmayan değer varsayılana (`ON`) düşer. */
+export function readFinanceExpenseCategorySuggestions(tx?: Pick<typeof prisma, "systemSetting">): Promise<ExpenseCategorySuggestions> {
+  return readServiceEnum(SETTING_KEYS.FINANCE_EXPENSE_CATEGORY_SUGGESTIONS, EXPENSE_CATEGORY_SUGGESTION_MODES, DEFAULT_EXPENSE_CATEGORY_SUGGESTIONS, tx);
 }
 
 /** H7 — hizmet faturası ana anahtarı, ETKİN değer: ön muhasebe kapalıyken daima KAPALI (bugünkü davranış). */

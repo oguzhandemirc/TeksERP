@@ -34,6 +34,8 @@ export interface AppPreferences {
   tableVisibility?: Record<string, Record<string, boolean>>;
   /** Sekme sırası — sekme seti anahtarı → sekme key listesi. */
   tabOrder?: Record<string, string[]>;
+  /** Sekme davranışı — `tab-open-mode.ts` okur; yok/bilinmeyen = "newTab" (bugünkü davranış). */
+  tabs?: { openMode?: "newTab" | "sameTab" };
   /** Hub kart sırası — hub anahtarı (örn "operations") → kart key listesi. */
   hubOrder?: Record<string, string[]>;
   /**

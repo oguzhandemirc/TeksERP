@@ -32,6 +32,7 @@ import { colorService } from "@/pages/Colors/service";
 import { branchLookupService } from "@/pages/Operations/Shipments/service";
 import type { BranchLookupItem } from "@/pages/Operations/Shipments/types";
 import { useTabsStore } from "@/store/tabs";
+import { useOpenTopLevel } from "@/components/layout/tabs/use-tab-target";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import type { Order } from "./types";
 import { type OrderFormValues } from "./schema";
@@ -240,6 +241,7 @@ function buildUpdatePayload(
 export function OrdersPage() {
   const qc = useQueryClient();
   const openTab = useTabsStore((s) => s.openTab);
+  const openTarget = useOpenTopLevel();
   // Panel Radix portal'ı (document.body) — pasif sekme `invisible` olsa da portal
   // kaçar. Yalnız Siparişler sekmesi aktifken göster; `selected` korunur, kullanıcı
   // sekmeye dönünce panel yeniden açılır.
@@ -405,7 +407,7 @@ export function OrdersPage() {
                 variant="outline"
                 className="gap-1.5"
                 title="Mal çıkmış ama sipariş defterine işlenmemiş sevkiyatlar"
-                onClick={() => openTab("/operations/allocation-repair")}
+                onClick={() => openTarget("/operations/allocation-repair")}
               >
                 <Wrench className="h-4 w-4" />
                 Yazılamayanlar

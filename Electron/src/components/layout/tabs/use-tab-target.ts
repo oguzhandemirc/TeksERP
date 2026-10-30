@@ -1,5 +1,6 @@
 import type { MouseEvent } from "react";
 import { useTabsStore } from "@/store/tabs";
+import { getTabOpenMode, type TabOpenMode } from "./tab-open-mode";
 
 interface ClickLike {
   button?: number;
@@ -8,30 +9,98 @@ interface ClickLike {
   metaKey?: boolean;
 }
 
-/** Olay yeni sekme mi istiyor? shift / ctrl / cmd / orta tık / sağ tık. */
-function wantsNewTab(e?: ClickLike): boolean {
-  if (!e) return false;
-  return Boolean(e.shiftKey || e.ctrlKey || e.metaKey || e.button === 1 || e.button === 2);
-}
+/** Hedefin türü: üst düzey (menü öğesi, komut paleti, İz sür) ya da sayfa içi adım (satır → detay, hub kartı). */
+export type TabOpenScope = "topLevel" | "inPage";
+
+export type TabOpenAction =
+  | { kind: "focusOrOpen" }
+  | { kind: "inPlace" }
+  | { kind: "newTab"; background: boolean }
+  | { kind: "none" };
 
 /**
- * Bir hedefi açmak için olay-duyarlı fonksiyon:
- *  - sol tık → aktif sekmede yerinde aç
- *  - shift / ctrl / cmd / orta tık / sağ tık → yeni sekme
+ * TIKLAMA → SEKME KARARININ TEK YERİ. Bilinçli yeni-sekme eylemleri (sekme çubuğu +,
+ * "Yeni sekmede aç" menü maddesi, kısayollar) buradan GEÇMEZ; tercihten etkilenmez.
+ *  - newTab (varsayılan, bugünkü): shift/ctrl/cmd/orta/sağ tık → yeni sekme (orta/sağ arka planda);
+ *    sol tık → üst düzeyde odakla-ya-da-yeni-sekme, sayfa içinde yerinde.
+ *  - sameTab: sol tık → her zaman aktif sekmede; shift/ctrl/cmd/orta tık → yeni sekme; sağ tık → hiçbir şey.
  */
-export function useOpenTarget() {
+export function decideTabOpen(
+  scope: TabOpenScope,
+  e?: ClickLike,
+  mode: TabOpenMode = getTabOpenMode(),
+): TabOpenAction {
+  const rightClick = e?.button === 2;
+  const explicit = Boolean(e && (e.shiftKey || e.ctrlKey || e.metaKey || e.button === 1));
+  // Orta/sağ tık odaklanmadan arka planda açar: kullanıcı mevcut ekranda kalır, peş peşe
+  // birden çok sekme açabilir. shift/ctrl/cmd ile sol tık kasıtlı "oraya götür" → ön plan.
+  const background = e?.button === 1 || rightClick;
+  if (mode === "sameTab") {
+    if (rightClick) return { kind: "none" };
+    return explicit ? { kind: "newTab", background } : { kind: "inPlace" };
+  }
+  if (explicit || rightClick) return { kind: "newTab", background };
+  return scope === "topLevel" ? { kind: "focusOrOpen" } : { kind: "inPlace" };
+}
+
+interface TabActions {
+  openTab: ReturnType<typeof useTabsStore.getState>["openTab"];
+  navigateActive: ReturnType<typeof useTabsStore.getState>["navigateActive"];
+}
+
+// `stateArg` boş dizi = çağıran durum vermedi → `openTab(path)`; tek elemanlı = verdi. Çağrı
+// biçimi tercih öncesiyle birebir kalsın diye (çağrı kaydı testleri iki biçimi de ölçer).
+interface OpenRequest {
+  path: string;
+  e?: ClickLike;
+  stateArg: [] | [unknown];
+}
+
+function runTabOpen(actions: TabActions, scope: TabOpenScope, req: OpenRequest): void {
+  const { path, e, stateArg } = req;
+  const state = stateArg[0];
+  const action = decideTabOpen(scope, e);
+  switch (action.kind) {
+    case "focusOrOpen":
+      if (stateArg.length === 0) actions.openTab(path);
+      else actions.openTab(path, state !== undefined ? { state } : undefined);
+      return;
+    case "inPlace":
+      actions.navigateActive(path, { state });
+      return;
+    case "newTab":
+      actions.openTab(path, { forceNew: true, state, background: action.background });
+      return;
+    case "none":
+      return;
+  }
+}
+
+function useTabOpener(scope: TabOpenScope) {
   const openTab = useTabsStore((s) => s.openTab);
   const navigateActive = useTabsStore((s) => s.navigateActive);
+  return (path: string, e?: ClickLike, ...stateArg: [] | [unknown]) =>
+    runTabOpen({ openTab, navigateActive }, scope, { path, e, stateArg });
+}
 
-  return (path: string, e?: ClickLike, state?: unknown) => {
-    if (wantsNewTab(e)) {
-      // Sağ tık (button 2) / orta tık (button 1) → odaklanmadan arka planda aç:
-      // kullanıcı mevcut ekranda kalır, peş peşe birden çok sekme açabilir.
-      // shift/ctrl/cmd ile sol tık ise kasıtlı "oraya götür" → ön plana al.
-      const background = e?.button === 1 || e?.button === 2;
-      openTab(path, { forceNew: true, state, background });
-    } else navigateActive(path, { state });
-  };
+/** React bağlamı dışından (tembel yüklenen bağlantılar) aynı kararla açar. */
+export function openTargetNow(
+  scope: TabOpenScope,
+  path: string,
+  e?: ClickLike,
+  ...stateArg: [] | [unknown]
+): void {
+  runTabOpen(useTabsStore.getState(), scope, { path, e, stateArg });
+}
+
+/** Sayfa içi hedef açıcı — kararı `decideTabOpen("inPage")` verir. */
+export function useOpenTarget() {
+  return useTabOpener("inPage");
+}
+
+/** Üst düzey hedef açıcı (komut paleti vb. olaysız seçimler) — `decideTabOpen("topLevel")`. */
+export function useOpenTopLevel() {
+  return useTabOpener("topLevel");
 }
 
 /**
@@ -47,18 +116,12 @@ export function useOpenTarget() {
  * `openTab` yola göre tekilleştirir → sekme çoğalması menü öğesi sayısıyla
  * sınırlı, sonsuz değil. Sayfa İÇİ geçişler (satır → detay, iş emri → sipariş)
  * eskisi gibi yerinde kalır; onlar bir zincirin adımlarıdır, ayrı bir iş değil.
+ * "Aynı sekmede aç" tercihinde menü de yerinde açar (`decideTabOpen`).
  */
 export function useTabTarget(path: string) {
-  const open = useOpenTarget();
-  const openTab = useTabsStore((s) => s.openTab);
+  const open = useOpenTopLevel();
   return {
-    onClick: (e: MouseEvent) => {
-      if (wantsNewTab(e)) {
-        open(path, e);
-        return;
-      }
-      openTab(path);
-    },
+    onClick: (e: MouseEvent) => open(path, e),
     onAuxClick: (e: MouseEvent) => {
       if (e.button === 1) {
         e.preventDefault();
@@ -88,6 +151,7 @@ export function useTabTarget(path: string) {
  * Sözleşme: sol tık → AKTİF sekmede yerinde · shift/ctrl/cmd + sol tık ve orta
  * tık → yeni sekme (öne/arkaya, `useOpenTarget` kuralı) · SAĞ TIK → arka planda
  * yeni sekme (peş peşe birkaç kart açmak için; kullanıcı hub'da kalır).
+ * "Aynı sekmede aç" tercihinde sağ tık sekme açmaz (`decideTabOpen`).
  */
 export function useDrillTarget(path: string) {
   const open = useOpenTarget();

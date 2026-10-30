@@ -11,6 +11,7 @@
 // =============================================================================
 import { Currency, Prisma, ServiceMeterBasis, ShipmentStatus } from "@prisma/client";
 import { lockShipmentScopeTx } from "./shipment-locks.helper";
+import { findCariAccountForCardTx } from "./finance.helper";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { alreadyBilled, collectRollLineage, findActiveBillingTx, listDirectShipmentServiceRollShipments, listShipmentServiceRollIds, listShipmentServiceRollShipments } from "./service-billing-gate.helper";
@@ -52,7 +53,8 @@ export interface EffectiveServiceBillingTrigger {
  * dönem sonu toplayıcı AYNI cevabı buradan okur.
  */
 export async function resolveCustomerServiceBillingTrigger(customerId: string, settings: Pick<ServiceBillingSettings, "trigger">, db: Db = prisma): Promise<EffectiveServiceBillingTrigger> {
-  const cari = await db.cariAccount.findUnique({ where: { customerId }, select: { serviceBillingTrigger: true } });
+  // Kartın hesabı TEK çözücüden (K3a): eski fason bacağındaki hesap da kartın hesabıdır.
+  const cari = await findCariAccountForCardTx(db, { customerId, subcontractorId: null }, { serviceBillingTrigger: true });
   const own = cari?.serviceBillingTrigger;
   if (own && (SERVICE_BILLING_TRIGGERS as string[]).includes(own)) return { trigger: own as ServiceBillingTrigger, source: "CUSTOMER" };
   return { trigger: settings.trigger, source: "FACTORY" };
