@@ -183,6 +183,8 @@ export const SETTING_KEYS = {
   FINANCE_CARI_HOLD_DEFAULT_SCOPE: "finance.cariHold.defaultScope",
   /** D4-I1a: kilidi koyan kişi kendi kilidini açabilir mi — `ALLOW` (varsayılan, serbest) · `DENY` (başka yetkili açar). */
   FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON: "finance.cariHold.releaseBySamePerson",
+  /** D4-I1c (S11): kilitli caride emanetin sahibine sevki — `EXEMPT` (varsayılan, bugünkü) · `PROCESSED_HELD` · `ALL_HELD`. */
+  FINANCE_CARI_HOLD_EMANET_SHIPMENT: "finance.cariHold.emanetShipment",
   /** Tahsilat/ödeme kaydında en eski açık faturalara OTOMATİK kapama — FIFO
    *  (default FALSE). Bugün kapama (`PaymentAllocation`) elle seçilir; açıkken
    *  tutar vade/tarih sırasıyla açık bakiyelere dağıtılır ve artan tutar
@@ -1057,6 +1059,10 @@ export const DEFAULT_CARI_HOLD_SCOPE: CariHoldDefaultScope = "INTAKE,SHIPMENT";
 export type CariHoldReleaseBySamePerson = "ALLOW" | "DENY";
 export const CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES: CariHoldReleaseBySamePerson[] = ["ALLOW", "DENY"];
 export const DEFAULT_CARI_HOLD_RELEASE_BY_SAME_PERSON: CariHoldReleaseBySamePerson = "ALLOW";
+/** D4-I1c (S11): kilitli caride emanet sevki — hapis hakkı seçimi fabrikanındır (hukuki teyit önerilir). */
+export const CARI_HOLD_EMANET_SHIPMENT_MODES = ["EXEMPT", "PROCESSED_HELD", "ALL_HELD"] as const;
+export type CariHoldEmanetShipment = (typeof CARI_HOLD_EMANET_SHIPMENT_MODES)[number];
+export const DEFAULT_CARI_HOLD_EMANET_SHIPMENT: CariHoldEmanetShipment = "EXEMPT";
 
 /** Tambur plan kapısı EN kolu (bkz. `SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_CHECK`). */
 export type TamburPlanWidthCheck = "ENFORCE" | "OFF";
@@ -1893,6 +1899,8 @@ export interface FeatureFlags {
   financeCariHoldDefaultScope: CariHoldDefaultScope;
   /** D4-I1a: koyan kişi kendi kilidini açabilir mi (varsayılan `ALLOW`). */
   financeCariHoldReleaseBySamePerson: CariHoldReleaseBySamePerson;
+  /** D4-I1c: kilitli caride emanet sevki (varsayılan `EXEMPT`). */
+  financeCariHoldEmanetShipment: CariHoldEmanetShipment;
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; otomatik tahsis elle
    *  silinebilir; farklı para birimli fatura atlanır. */
@@ -2547,6 +2555,7 @@ export class SystemSettingService {
       financeExpenseCategorySuggestions: await readFinanceExpenseCategorySuggestions(cacheClient),
       financeCariHoldDefaultScope: await readFinanceCariHoldDefaultScope(cacheClient),
       financeCariHoldReleaseBySamePerson: await readFinanceCariHoldReleaseBySamePerson(cacheClient),
+      financeCariHoldEmanetShipment: await readFinanceCariHoldEmanetShipment(cacheClient),
       financeAutoAllocateOnPaymentEnabled:
         await readFinanceAutoAllocateOnPaymentEnabled(cacheClient),
       yarnBlockNegativeBalanceEnabled: await readYarnBlockNegativeBalanceEnabled(cacheClient),
@@ -3086,6 +3095,13 @@ export class SystemSettingService {
         throw AppError.badRequest(`financeCariHoldReleaseBySamePerson şunlardan biri olmalı: ${CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON, v, "Cari kilidini koyan kişi kendi kilidini açabilir mi — serbest · başka yetkili", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeCariHoldEmanetShipment")) {
+      const v = input.financeCariHoldEmanetShipment;
+      if (typeof v !== "string" || !CARI_HOLD_EMANET_SHIPMENT_MODES.includes(v as CariHoldEmanetShipment)) {
+        throw AppError.badRequest(`financeCariHoldEmanetShipment şunlardan biri olmalı: ${CARI_HOLD_EMANET_SHIPMENT_MODES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT, v, "Kilitli caride müşterinin emanet malının sevki — serbest · işlenmiş tutulur · hepsi tutulur", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "financeAutoAllocateOnPaymentEnabled")) {
@@ -5293,6 +5309,11 @@ export function readFinanceCariHoldDefaultScope(tx?: Pick<typeof prisma, "system
 /** D4-I1a: koyan kişi kendi kilidini açabilir mi — tanınmayan değer varsayılana (`ALLOW`) düşer. */
 export function readFinanceCariHoldReleaseBySamePerson(tx?: Pick<typeof prisma, "systemSetting">): Promise<CariHoldReleaseBySamePerson> {
   return readServiceEnum(SETTING_KEYS.FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON, CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES, DEFAULT_CARI_HOLD_RELEASE_BY_SAME_PERSON, tx);
+}
+
+/** D4-I1c: kilitli caride emanet sevki — tanınmayan değer varsayılana (`EXEMPT`, bugünkü) düşer. Kapı okuması `emanet-shipment.helper`dedir. */
+export function readFinanceCariHoldEmanetShipment(tx?: Pick<typeof prisma, "systemSetting">): Promise<CariHoldEmanetShipment> {
+  return readServiceEnum(SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT, CARI_HOLD_EMANET_SHIPMENT_MODES, DEFAULT_CARI_HOLD_EMANET_SHIPMENT, tx);
 }
 
 /** H7 — hizmet faturası ana anahtarı, ETKİN değer: ön muhasebe kapalıyken daima KAPALI (bugünkü davranış). */

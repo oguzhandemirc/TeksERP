@@ -27,6 +27,7 @@
     "financeServiceBillingEnabled": true,
     "financeExpenseCategorySuggestions": "ON",
     "financeCariHoldReleaseBySamePerson": "DENY",
+    "financeCariHoldEmanetShipment": "PROCESSED_HELD",
     "financeAutoAllocateOnPaymentEnabled": true,
     "financeAllowZeroPriceLineEnabled": true,
     "financeFutureDatedDocumentBlockEnabled": true,

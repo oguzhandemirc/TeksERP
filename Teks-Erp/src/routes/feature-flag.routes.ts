@@ -296,6 +296,7 @@ export const updateSchema = z.strictObject({
     })
     .optional(),
   financeCariHoldReleaseBySamePerson: z.enum(["ALLOW", "DENY"], { message: "Cari kilidi açma kuralı ALLOW ya da DENY olmalı" }).optional(),
+  financeCariHoldEmanetShipment: z.enum(["EXEMPT", "PROCESSED_HELD", "ALL_HELD"], { message: "Kilitli caride emanet sevki EXEMPT, PROCESSED_HELD ya da ALL_HELD olmalı" }).optional(),
   financeServiceBillingPriceDate: z.enum(["SERVICE_DAY", "DISPATCH_DAY"]).optional(),
   /** D4-H1: masraf kategorisi önerisi (`EXPENSE_CATEGORY_SUGGESTION_MODES` ile birebir). */
   financeExpenseCategorySuggestions: z.enum(["ON", "OFF"]).optional(),

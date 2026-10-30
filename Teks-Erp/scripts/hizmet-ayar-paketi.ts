@@ -54,6 +54,8 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   // DALGA4 §12.1 / K20: cari kilidi — ön seçim iş kabulü + sevk, koyan kişi kendi kilidini açabilir (Gülkesim de aynı).
   { anahtar: "finance.cariHold.defaultScope", alan: "financeCariHoldDefaultScope", hedef: "INTAKE,SHIPMENT", dilim: "D4-I1a" },
   { anahtar: "finance.cariHold.releaseBySamePerson", alan: "financeCariHoldReleaseBySamePerson", hedef: "ALLOW", dilim: "D4-I1a" },
+  // S11: kilitli caride emanet sevki — hapis hakkı seçimi fabrikanın (hukuki teyit); paket bugünkü EXEMPT'i yazar.
+  { anahtar: "finance.cariHold.emanetShipment", alan: "financeCariHoldEmanetShipment", hedef: "EXEMPT", dilim: "D4-I1c" },
   // DALGA4 §12.1: tambur en kapısı — Gülkesim de bugünkü değerde başlar (etek payı gerekirse elle).
   { anahtar: "tambur.planGate.widthToleranceCm", alan: "tamburPlanGateWidthToleranceCm", hedef: 10, dilim: "D4-E1" },
   { anahtar: "tambur.planGate.widthCheck", alan: "tamburPlanGateWidthCheck", hedef: "ENFORCE", dilim: "D4-E1" },
