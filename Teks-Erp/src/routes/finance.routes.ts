@@ -27,6 +27,7 @@ import { SERVICE_PERIOD_PATTERN, createServicePeriodDraft, previewServicePeriodD
 import { paymentService } from "../services/payment.service";
 import { cashTransactionService } from "../services/cash-transaction.service";
 import { expenseCategorySuggestions } from "../services/helpers/expense-summary.helper";
+import { listCashCategoryOptions, readCategoryParam } from "../services/helpers/cash-category-filter.helper";
 import allocationRoutes from "./finance-allocation.routes";
 import cariHoldRoutes from "./finance-cari-hold.routes";
 import { fetchTcmbRates } from "../jobs/exchange-rate.job";
@@ -299,6 +300,7 @@ const accountRefSchema = {
  *   get:
  *     tags: [Finance]
  *     summary: Kasa/banka hareketleri (carisiz)
+ *     description: "`category` = Masraf Özeti kategori anahtarı (`cashCategoryKey`; tek değer, CSV değil); tanınmayan → 400 CASH_CATEGORY_FILTER_INVALID."
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Sayfalanmış hareket listesi }
@@ -314,10 +316,29 @@ router.get("/cash-transactions", requirePermission("finance:read"), async (req, 
       cashBoxId: q.cashBoxId,
       bankAccountId: q.bankAccountId,
       search: q.search,
+      category: readCategoryParam(req.query.category),
       from: q.from ? new Date(q.from) : undefined,
       to: q.to ? new Date(q.to) : undefined,
     });
     res.json({ success: true, ...result });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/finance/cash-transactions/categories:
+ *   get:
+ *     tags: [Finance]
+ *     summary: Kasa hareketleri kategori süzgecinin seçenekleri — anahtar Masraf Özeti ile aynı (D4-KUC e)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ key, label }[]" }
+ */
+router.get("/cash-transactions/categories", requirePermission("finance:read"), async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: await listCashCategoryOptions() });
   } catch (e) {
     next(e);
   }

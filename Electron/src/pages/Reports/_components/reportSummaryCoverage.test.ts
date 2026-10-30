@@ -18,6 +18,8 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { REPORT_CATALOG } from "@/lib/report-catalog";
+import { V2_KEYS_WITH_OWN_PAGE } from "@/pages/Reports/_v2/routes";
 
 const SRC = resolve(__dirname, "../../..");
 const ROUTES = readFileSync(resolve(SRC, "routes/content-routes.tsx"), "utf8");
@@ -31,6 +33,9 @@ const TABLE_TAGS = ["<DetailTable", "<AgingBlockTable", "<CashLedgerTable", "<Ka
 const METRIC_RE = /<MetricCard[\s/>]/;
 /** v2 zarfını çizen yaprak (D4-H1 Masraf Özeti): özet şeridi `ReportBody` içindeki ana sayı kartıdır (`HeadlineCard`). */
 const V2_BODY_RE = /<ReportBody[\s/>]/;
+/** `<ReportBody` istisnası YALNIZ kendi yaprak sayfası beyanlı v2 anahtarlarına (`V2_KEYS_WITH_OWN_PAGE`) açıktır. */
+const OWN_PAGE_PATHS = new Set(REPORT_CATALOG.filter((e) => V2_KEYS_WITH_OWN_PAGE.has(e.key)).map((e) => e.panelYolu));
+const v2BodyExempt = (y: { yol: string; src: string }): boolean => OWN_PAGE_PATHS.has(y.yol) && V2_BODY_RE.test(y.src);
 
 function dosyaBul(bilesen: string): string | null {
   const m = new RegExp(`import\\s*\\{[^}]*\\b${bilesen}\\b[^}]*\\}\\s*from\\s*"([^"]+)"`).exec(ROUTES);
@@ -54,8 +59,15 @@ describe("rapor özet şeridi kapsamı", () => {
   });
 
   it("⭐ her yaprak rapor sayfası <MetricCard çizer", () => {
-    const eksik = yapraklar.filter((y) => !METRIC_RE.test(y.src) && !V2_BODY_RE.test(y.src)).map((y) => y.yol);
+    const eksik = yapraklar.filter((y) => !METRIC_RE.test(y.src) && !v2BodyExempt(y)).map((y) => y.yol);
     expect(eksik).toEqual([]);
+  });
+
+  it("⭐ <ReportBody istisnası yalnız V2_KEYS_WITH_OWN_PAGE anahtarlarında; her anahtarın yaprağı okundu", () => {
+    expect(OWN_PAGE_PATHS.size).toBe(V2_KEYS_WITH_OWN_PAGE.size);
+    expect([...OWN_PAGE_PATHS].filter((p) => !yapraklar.some((y) => y.yol === p && V2_BODY_RE.test(y.src)))).toEqual([]);
+    // Kümede olmayan yaprak <ReportBody çizse de MetricCard'sız geçemez.
+    expect(v2BodyExempt({ yol: "reports/x/kumede-yok", src: "<ReportBody />" })).toBe(false);
   });
 
   it("⭐ özet şeridi TABLODAN ÖNCE gelir (sayfa gövdesinde)", () => {
