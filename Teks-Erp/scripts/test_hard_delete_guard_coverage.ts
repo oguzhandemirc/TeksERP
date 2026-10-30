@@ -297,6 +297,10 @@ function machineGuardTargets(): string[] {
 
 /** Machine'e gelen ama BİLEREK sayılmayan FK kolonları — iki yönlü denetlenir. */
 const MACHINE_GUARD_EXEMPT: Record<string, string> = {
+  // D4-G1a: maliyet tablosu genel silme yolundan SAYILMAZ — sayım makine/istasyon router'larını transitif
+  // maliyet modeline bağlar (test_maliyet_regime_gate §2). FK Restrict: silme P2003 → error middleware temiz 400.
+  "machineCostRate.machineId":
+    "maliyet modülü tablosu: Restrict FK silmeyi P2003 ile durdurur; guard sayımı rejim kapısız router'ı maliyete bağlardı",
   "machineStopCodeMap.machineId":
     "yapılandırma BLOKLAMAZ: tezgah üst-yazımı makineyle Cascade gider; duruş satırı sebebi kopyasıyla taşır (D2)",
   "peripheralDevice.machineId":

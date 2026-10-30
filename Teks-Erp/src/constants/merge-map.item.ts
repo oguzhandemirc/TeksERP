@@ -187,6 +187,29 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
         "Aynı top işi iki hizmet kalemiyle AYRI faturalanmışsa birleşmiş kalemde çift fatura olur; hangi " +
         "faturanın iptal edileceği muhasebe kararıdır (H7). Çakışmasız bağ taşınır (fatura kalemi emsali).",
     },
+    // D4-G1a: sarf normu damgalı sürüm ana verisidir; partial UNIQUE (serviceItemId, consumableItemId) yalnız aktifte.
+    {
+      kind: "CONFLICT",
+      model: "ServiceConsumableNorm",
+      table: "service_consumable_norms",
+      column: "serviceItemId",
+      label: "Sarf normu (hizmet kalemi)",
+      uniqueOn: ["serviceItemId", "consumableItemId"],
+      activeWhenNull: ["revokedAt"],
+      policy: "BLOCK",
+      why: "İki hizmet kaleminin aynı sarf için ayrı aktif normu varsa birleşmiş kalemde hangisinin geçerli olduğunu yalnız maliyet sorumlusu bilir (ItemPrice emsali).",
+    },
+    {
+      kind: "CONFLICT",
+      model: "ServiceConsumableNorm",
+      table: "service_consumable_norms",
+      column: "consumableItemId",
+      label: "Sarf normu (sarf kalemi)",
+      uniqueOn: ["serviceItemId", "consumableItemId"],
+      activeWhenNull: ["revokedAt"],
+      policy: "BLOCK",
+      why: "Aynı hizmette iki sarf kaleminin ayrı aktif normu varsa birleşmiş sarfta hangisinin geçerli olduğunu yalnız maliyet sorumlusu bilir.",
+    },
     {
       kind: "CONFLICT",
       model: "PriceListLine",

@@ -149,7 +149,9 @@ export const FACTS: readonly RecordProjection[] = [
       { table: "cari_balances", watermark: "updatedAt", tieBreaker: [{ column: "cariId", cast: "uuid" }, { column: "currency", cast: '"Currency"' }], root: { kind: "column", column: "cariId" } },
       via("invoices", "cariId"), via("payments", "cariId"), via("cheques", "cariId")],
     crossings: [{ name: "vade", sql: `SELECT DISTINCT i."cariId" AS root_id ${DUE_CROSSING_FROM}` }],
-    deletion: "YOK", permission: "bulut:cari-bakiye:oku", module: "finance.enabled", catalogVersion: 1,
+    // Hard delete yolu ölçüldü: K3a `scripts/fix_cari_cift_hesap.ts` hareketsiz çift hesabı siler;
+    // `cari_accounts_sync_deleted` SILINDI işareti yazar, bulut satırı düşer.
+    deletion: "DAMGA", permission: "bulut:cari-bakiye:oku", module: "finance.enabled", catalogVersion: 1,
   },
   {
     name: "cari-hareket", kind: "KAYIT", role: "OLGU", root: { table: "cari_transactions", model: "CariTransaction" },

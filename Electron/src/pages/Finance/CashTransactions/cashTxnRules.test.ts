@@ -42,6 +42,7 @@ import {
   KIND_LABEL,
   amountHint,
   buildListQuery,
+  isFilterDirty,
   cancelScope,
   entryBlockReason,
   parseAmount,
@@ -92,6 +93,7 @@ const FILTERS = (over: Partial<CashTxnFilterState> = {}): CashTxnFilterState => 
   search: "",
   from: "",
   to: "",
+  category: "",
   ...over,
 });
 
@@ -140,6 +142,13 @@ describe("§1 buildListQuery — süzgeç sözleşmesi", () => {
   it("arama kırpılır, yalnız boşluktan ibaretse gönderilmez", () => {
     expect(buildListQuery(FILTERS({ search: "  kira  " })).search).toBe("kira");
     expect(buildListQuery(FILTERS({ search: "   " })).search).toBeUndefined();
+  });
+
+  it("kategori anahtarı AYNEN gider (kırpılmaz, CSV'ye bölünmez); boşsa gitmez; süzgeç kirli sayılır", () => {
+    const key = "CAT:Yemek, içecek";
+    expect(buildListQuery(FILTERS({ category: key })).category).toBe(key);
+    expect(buildListQuery(FILTERS()).category).toBeUndefined();
+    expect(isFilterDirty(FILTERS({ category: key }))).toBe(true);
   });
 });
 
