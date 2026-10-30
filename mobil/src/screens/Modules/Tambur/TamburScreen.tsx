@@ -35,6 +35,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
+import { MachineStopBand, MachineStopChip, useMachineStopControl } from '../../../components/machine-stop/MachineStopChip';
 import CutActionBar from './CutActionBar';
 import WorkOrderOutputPanel from './WorkOrderOutputPanel';
 import { LabelNamePreview } from './LabelNamePreview';
@@ -388,6 +389,8 @@ export default function TamburScreen() {
   // Bulunulan makine adı — telefonda başlık subtitle'ı olarak gösterilir (Ham
   // Giriş/KK1 ve Kurşun ile aynı desen); tablette PlaceChip başlığın yanında kalır.
   const activeSession = useSessionStore((s) => s.active);
+  // D4-A2: makine duruş çipi (başlık) + açık duruş bandı (içerik üstü).
+  const machineStop = useMachineStopControl();
   const machineName =
     activeSession?.machine?.name ||
     activeSession?.machine?.code ||
@@ -3275,6 +3278,8 @@ export default function TamburScreen() {
       title="Tambur"
       subtitle={compact ? machineName : undefined}
       hidePlaceChip={compact}
+      titleRowExtras={<MachineStopChip control={machineStop} />}
+      topStrip={<MachineStopBand control={machineStop} />}
       headerExtras={
         <View style={styles.headerExtrasRow}>
           <SyncStatusChip />

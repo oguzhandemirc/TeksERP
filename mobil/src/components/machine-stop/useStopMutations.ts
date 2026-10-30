@@ -4,11 +4,11 @@
 import { useCallback, type MutableRefObject } from 'react';
 import Toast from 'react-native-toast-message';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { machineStopService } from '../../../services/machineStop.service';
-import { useInvalidateReasonPresets } from '../../../hooks/useReasonPresets';
-import { onDoffFailed, onDoffSucceeded, type DoffAttempt } from './doffAttempt';
+import { machineStopService } from '../../services/machineStop.service';
+import { useInvalidateReasonPresets } from '../../hooks/useReasonPresets';
+import { onDoffFailed, onDoffSucceeded, type DoffAttempt } from '../../screens/Modules/Dokuma/doffAttempt';
 import { buildClassifyPayload, buildOpenStopPayload, classifyStopFailure } from './stopPayload';
-import type { ReasonPresetValue } from '../../../components/reasonPresets/ReasonPresetPicker';
+import type { ReasonPresetValue } from '../reasonPresets/ReasonPresetPicker';
 
 export const stopsKey = (machineId: string) => ['machine-stops', 'open', machineId] as const;
 

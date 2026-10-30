@@ -175,6 +175,13 @@ export function useTamburListByStationEnabled(): boolean {
   return useFeatureFlags().data?.tamburListByStationEnabled ?? false;
 }
 
+/** Makine duruşu takibi dokumasız rejimde açık mı (üretim ∧ `uretim.makineDurusTakibi`; D4-A2 çip kapısı).
+ *  Alan yok (eski backend) / yüklenmedi → false: çip çizilmez, uca istek atılmaz. */
+export function useMachineStopTrackingEnabled(): boolean {
+  const d = useFeatureFlags().data;
+  return (d?.productionEnabled ?? DEFAULT_FEATURE_FLAGS.productionEnabled) && d?.machineStopTrackingEnabled === true;
+}
+
 /**
  * FASON KABULÜ — çekme uyarısı ayarı (bayrak + tolerans birlikte).
  *

@@ -6,8 +6,8 @@
 // `code` null. `beamSlot` bu dilimde HİÇ gönderilmez — `Machine.warpBeamSlots`
 // kolonu yok, yuva sorulamaz; NULL = "atanmamış" kovası (tahminle yazılmaz).
 // =============================================================================
-import type { ReasonPresetValue } from '../../../components/reasonPresets/ReasonPresetPicker';
-import type { ClassifyStopRequest, OpenStopRequest } from '../../../services/machineStop.service';
+import type { ReasonPresetValue } from '../reasonPresets/ReasonPresetPicker';
+import type { ClassifyStopRequest, OpenStopRequest } from '../../services/machineStop.service';
 
 export const EMPTY_REASON: ReasonPresetValue = { code: null, text: '' };
 export const REASON_NOTE_MAX = 300;
