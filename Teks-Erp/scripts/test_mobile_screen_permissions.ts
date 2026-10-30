@@ -219,6 +219,24 @@ interface Usage {
   call: Call;
 }
 
+/**
+ * Ekranlar arası ORTAK bileşen dizinleri (`src/components/<ad>/`): ekran dosyası bu dizinden import
+ * ediyorsa dizinin dosyaları da o ekranın çağrısı sayılır (D4-A2: duruş paneli Dokuma'dan taşındı,
+ * Kurşun/Tambur da kullanıyor — taranmasaydı üç ekranın duruş uçları bekçinin gözünden düşerdi).
+ */
+const SHARED_COMPONENT_DIRS = ["machine-stop"] as const;
+
+function withSharedComponents(files: string[]): string[] {
+  const extra = new Set<string>();
+  for (const f of files) {
+    const src = read(f);
+    for (const d of SHARED_COMPONENT_DIRS) {
+      if (new RegExp(`from\\s+'[^']*components/${d}/`).test(src)) walk(path.join(MOBILE, "src", "components", d)).forEach((x) => extra.add(x));
+    }
+  }
+  return [...files, ...extra];
+}
+
 function collectUsages(screens: Screen[]): { usages: Usage[]; unresolved: number } {
   const usages: Usage[] = [];
   let unresolved = 0;
@@ -226,7 +244,7 @@ function collectUsages(screens: Screen[]): { usages: Usage[]; unresolved: number
 
   for (const screen of screens) {
     const dir = path.join(MOBILE, "src", "screens", "Modules", screen.key);
-    const files = walk(dir);
+    const files = withSharedComponents(walk(dir));
     if (files.length === 0) continue;
 
     for (const f of files) {
@@ -328,6 +346,16 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
     path: "POST /machine-stops/:p/revoke",
     why: "Duruş kaydını geri alma ayrı bir YETENEK yetkisi (`mobile:dokuma-geri-al`) — defterden satır düşürür; izni olmayanda buton çizilmez.",
   },
+  // D4-A2: Kurşun/Tambur "Duruş" çipi ekran-içi YETENEK (`mobile:makine-durus`, ekran kataloğu capabilities);
+  // çip ve sorgu `has('mobile:makine-durus')` ∧ ayar arkasında — yeteneksiz operatörde uca hiç gidilmez.
+  // Geri alma tablette yok (`canRevoke=false`); servis çağrısı ortak hook'ta durduğu için taranır.
+  ...(["mobile:kk2-kursun", "mobile:tambur"] as const).flatMap((screen) =>
+    ["GET /machine-stops", "POST /machine-stops", "POST /machine-stops/:p/close", "POST /machine-stops/:p/classify", "POST /machine-stops/:p/revoke"].map((p) => ({
+      screen,
+      path: p,
+      why: "Duruş çipi `mobile:makine-durus` yeteneğine bağlı (ayar `uretim.makineDurusTakibi` açıkken); yeteneksizde çip çizilmez, sorgu atılmaz.",
+    }))
+  ),
   // Tezgah ekranında levent takma (#80, 2026-10-21): takma YETENEĞİ `mobile:devere`;
   // iki okuma da `useBeamMount.canMount` (has('mobile:devere')) arkasında, yetkisizde sorgu hiç kalkmaz.
   {
