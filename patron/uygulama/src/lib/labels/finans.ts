@@ -175,6 +175,7 @@ export const REPORT_TITLE: Readonly<Record<string, string>> = {
   "dokuma/tezgah-randimani": "Tezgahlar verimli mi?",
   "dokuma/duruslar": "Tezgahlar neden duruyor?",
   "dokuma/levent-dengesi": "Leventten beklenen kumaş çıktı mı?",
+  "production/makine-duruslari": "Makineler neden durdu?",
   "finance/alacaklar": "Kimden ne alacağız?",
 };
 
@@ -194,6 +195,7 @@ export const REPORT_FAMILY: Readonly<Record<string, { readonly domain: Domain; r
   inventory: { domain: "stok", icon: "cube-outline" },
   finance: { domain: "finans", icon: "wallet-outline" },
   dokuma: { domain: "uretim", icon: "construct-outline" },
+  production: { domain: "uretim", icon: "construct-outline" },
 };
 
 /** Anahtara özel alan (aile içinde ayrışanlar): sevk karnesi sevkiyat renginde. */

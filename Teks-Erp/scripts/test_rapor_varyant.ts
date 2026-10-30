@@ -48,6 +48,7 @@ const SCHEMAS: Record<keyof typeof CORE_VARIANT_DIMS, Shape> = {
   "subcontract/fasoncular": uretim.coreSubcontractorsQuerySchema,
   "dokuma/duruslar": dokuma.coreLoomStopsQuerySchema,
   "finance/masraf-ozeti": finans.expenseSummaryQuerySchema,
+  "production/makine-duruslari": uretim.coreMachineStopsQuerySchema,
 };
 
 const RANGE = { from: new Date("2026-10-01T00:00:00.000Z"), to: new Date("2026-10-25T12:00:00.000Z") };

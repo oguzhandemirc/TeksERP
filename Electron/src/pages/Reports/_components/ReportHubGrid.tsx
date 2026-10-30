@@ -5,6 +5,7 @@ import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { HubSkeleton } from "@/components/hub/HubSkeleton";
 import { REPORT_BY_KEY } from "@/lib/report-catalog";
 import { reportKeyOfPath } from "@/lib/report-gate";
+import { isRouteModuleOpen } from "@/lib/route-modules";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 
 export interface HubTile {
@@ -56,10 +57,12 @@ export function groupBySinif(tiles: HubTile[]): {
 /** Domain alt-rapor hub'ı — tile grid layout, izin filtresi parent'ta yapılır. */
 export function ReportHubGrid({ title, description, tiles }: Props) {
   // Karo süzmesi (Raporlar K5): karonun adresi anahtarıdır; kapalı ya da bilinmeyen rapor çizilmez (fail-closed).
-  const { isReportOpen, flagsReady } = useOperationsVisibilityContext();
+  // Yaprak rejimi de (D4-A4 `ROUTE_REGIME`): route kapısıyla aynı yüklem — karo kapalı route'a götürmez.
+  const visibility = useOperationsVisibilityContext();
+  const { isReportOpen, flagsReady } = visibility;
   const open = tiles.filter((t) => {
     const key = reportKeyOfPath(t.to);
-    return key !== null && isReportOpen(key);
+    return key !== null && isReportOpen(key) && isRouteModuleOpen(t.to, visibility);
   });
   // ⚠️ BÖLÜMLEME KAROYU GİZLEMEZ, SIRALAR: sınıfı katalogda olmayan karo (kategori
   // karoları, `/reports/<kategori>` iki segmentli) "Diğer"e düşmez — bölümsüz

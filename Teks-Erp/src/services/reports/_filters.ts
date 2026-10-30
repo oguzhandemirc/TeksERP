@@ -9,7 +9,7 @@
 // (`_destination.ts`): sipariş kökünde siparişin açılışta DONMUŞ yönü (`Order.destination`), müşteri
 // kökünde carinin yönü; sevk raporları sevkiyatın donmuş yönünü okur.
 // =============================================================================
-import { Prisma, ShipmentDestination } from "@prisma/client";
+import { Prisma, ShipmentDestination, StationKind } from "@prisma/client";
 import { z } from "zod";
 import { readFilterList } from "../../utils/query-parser";
 import { ACTIVE_LINE } from "../helpers/order-line-scope.helper";
@@ -42,6 +42,12 @@ export const fasonEkseni = { subcontractorId: idList };
 export const cariEkseni = { cariId: idList };
 /** Vardiya tanımı (`ShiftDefinition`; ShiftInstance penceresiyle süzülür — dokuma temel raporları). */
 export const vardiyaEkseni = { shiftDefinitionId: idList };
+/** Makine duruşları (D4-A4): makine kimliği · istasyon türü (kapalı küme, bilinmeyen 400) · duruş sebebi kodu. */
+const stationKindList = rawList
+  .refine((l) => l.length <= MAX_LIST, { message: `En fazla ${MAX_LIST} istasyon türü` })
+  .refine((l) => l.every((x) => (Object.values(StationKind) as string[]).includes(x)), { message: "Geçersiz istasyon türü" })
+  .transform((l) => l as StationKind[]);
+export const machineStopAxis = { machineId: idList, stationKind: stationKindList, reasonCode: codeList };
 /** Sipariş iptal sebebi (`ORDER_CANCEL` katalog kodu, `Order.cancelReasonCode`). */
 export const iptalEkseni = { reasonCode: codeList };
 

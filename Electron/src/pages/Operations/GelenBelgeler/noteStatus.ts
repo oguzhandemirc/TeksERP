@@ -30,3 +30,5 @@ export const LINE_STATUS_LABEL: Record<LineStatus, string> = {
 /** Yazılabilir mi: başlık/satır düzenleme yalnız DRAFT (PARTIAL'da yalnız FAILED satır atlanır/düzeltilir). */
 export const isEditable = (s: NoteStatus) => s === "DRAFT";
 export const isApprovable = (s: NoteStatus) => s === "DRAFT" || s === "PARTIAL";
+/** Belgeden iş emri açılabilir mi: yalnız topları doğmuş (APPROVED/PARTIAL) belgede — sunucu aksi halde 409 verir. */
+export const isWorkOrderOpenable = (s: NoteStatus) => s === "APPROVED" || s === "PARTIAL";

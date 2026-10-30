@@ -25,7 +25,7 @@ const DIMENSION_LABELS: Readonly<Record<ReportVaryantBoyutu, string>> = {
   musteri: "Müşteriye göre", urun: "Kumaşa göre", renk: "Renge göre", yon: "Yöne göre", istasyon: "İstasyona göre",
   operator: "Operatöre göre", vardiya: "Vardiyaya göre", tezgah: "Tezgâha göre", levent: "Levente göre",
   cozguKarti: "Çözgü kartına göre", fasoncu: "Fasoncuya göre", kaynak: "Kaynağa göre", sebep: "Sebebe göre",
-  depo: "Depoya göre", cari: "Cariye göre", paraBirimi: "Para birimine göre",
+  depo: "Depoya göre", cari: "Cariye göre", paraBirimi: "Para birimine göre", makine: "Makineye göre",
 };
 
 /** Bir temel ucun desteklediği varyant boyutu: hangi süzgeç anahtarıyla süzülür, aday değerler nereden gelir. */

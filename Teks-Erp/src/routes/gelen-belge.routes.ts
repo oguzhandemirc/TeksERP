@@ -25,6 +25,8 @@ import { requireSettingsPassword } from "../middlewares/settings-password.middle
 import { getRollTabletContext } from "../services/roll-tablet.service";
 import { getDocumentScan, readDocumentScanContent, uploadDocumentScan } from "../services/gelen-belge-scan.service";
 import { suggestForNote } from "../services/gelen-belge-eslestirme.service";
+import { buildWorkOrderPlan } from "../services/gelen-belge-is-emri.service";
+import { searchProcessChoiceValues } from "../services/helpers/process-choice-catalog.helper";
 import { listSenderTemplates, updateSenderTemplate } from "../services/gelen-belge-sablon.service";
 import { listCustomerDefaults, removeCustomerDefault, setCustomerDefault } from "../services/gelen-belge-varsayilan.service";
 import { assertScanReadable, readerQueueCounts, requeueScanForReading } from "../services/gelen-belge-okuma.service";
@@ -342,6 +344,40 @@ router.get("/ayarlar", requirePermission("gelen-belge:read"), wrap(async () => (
 // Yazma yalnız `admin:settings` (Genel Ayarlar → Gelen Belge kategorisi ADMIN_ONLY); ayar şifresi kapısı izinden SONRA.
 router.put("/ayarlar", requirePermission("admin:settings"), requireSettingsPassword, wrap(async (req) => ({ status: 200, data: await updateIncomingDocSettings(SettingsBody.parse(req.body), req.user!.userId) })));
 router.get("/irsaliyeler/:id/eslestirme", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await suggestForNote(Id.parse(req.params.id)) })));
+
+/**
+ * @openapi
+ * /api/gelen-belge/irsaliyeler/{id}/is-emri-plani:
+ *   get:
+ *     tags: [GelenBelge]
+ *     summary: Belgeden iş emri planı (D4-D2) — doğan toplar işlem değeri (desen/gramaj) + ürüne göre gruplu; salt okunur
+ *     description: İş emri panelden grup başına mevcut `POST /api/work-orders/quick-start` ile açılır (grup başına clientToken).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Plan (gruplar, müşteri partisi, rota şablonu önerisi) }
+ *       404: { description: DELIVERY_NOTE_NOT_FOUND }
+ *       409: { description: DELIVERY_NOTE_NOT_APPROVED (yalnız APPROVED/PARTIAL) }
+ */
+router.get("/irsaliyeler/:id/is-emri-plani", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await buildWorkOrderPlan(Id.parse(req.params.id)) })));
+
+const ProcessValueQuery = z.object({
+  propertyId: Id,
+  q: z.string().max(64, "Arama en çok 64 karakter").optional(),
+  cursor: z.string().max(200).optional(),
+  limit: z.coerce.number().int().min(1, "limit en az 1").max(100, "limit en çok 100").default(50),
+});
+/**
+ * @openapi
+ * /api/gelen-belge/islem-degerleri:
+ *   get:
+ *     tags: [GelenBelge]
+ *     summary: İşlem çeşidi değer araması (yüzlerce desen; sunucuda süzülür, liste + toplam + cursor tek where)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ property, items, total, nextCursor }" }
+ *       400: { description: PROCESS_PROPERTY_INVALID }
+ */
+router.get("/islem-degerleri", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await searchProcessChoiceValues(ProcessValueQuery.parse(req.query)) })));
 
 router.get("/irsaliyeler", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await listDeliveryNotes(ListQuery.parse(req.query)) })));
 router.post("/irsaliyeler", requirePermission("gelen-belge:write"), wrap(async (req) => ({ status: 201, data: await createDeliveryNote(CreateBody.parse(req.body), req.user!.userId) })));

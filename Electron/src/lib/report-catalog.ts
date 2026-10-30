@@ -31,7 +31,7 @@ export const RAPOR_PERSONALARI = ["patron", "satis", "sevkiyat", "planlama", "ur
 export type ReportPersona = (typeof RAPOR_PERSONALARI)[number];
 export const RAPOR_VARYANT_BOYUTLARI = [
   "musteri", "urun", "renk", "yon", "istasyon", "operator", "vardiya", "tezgah",
-  "levent", "cozguKarti", "fasoncu", "kaynak", "sebep", "depo", "cari", "paraBirimi",
+  "levent", "cozguKarti", "fasoncu", "kaynak", "sebep", "depo", "cari", "paraBirimi", "makine",
 ] as const;
 export type ReportVaryantBoyutu = (typeof RAPOR_VARYANT_BOYUTLARI)[number];
 /**
@@ -340,6 +340,12 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
     sinif: "basit", izin: "report:finance", modul: "financeEnabled", varsayilanGun: 90, tarih: "aralik-gun",
     panelYolu: "reports/finance/masraf-ozeti", uc: "/api/reports/finance/masraf-ozeti", kapiTasiyici: [{ dosya: "src/routes/reports/finance.report.routes.ts", yol: "/masraf-ozeti" }], yuzey: "yaprak",
     nesil: "v2", kategoriV2: "para", persona: ["patron", "muhasebe"], varyantBoyutlari: ["paraBirimi"], hazir: true, yeniRapor: true },
+  // D4-A4: makine duruşları (span defteri; kurşun/brode/tambur + tezgah). Kapı `dokuma ∨ (üretim ∧ uretim.makineDurusTakibi)`
+  // (`requireMachineStopRegime`); panelde kendi sayfası (V2_KEYS_WITH_OWN_PAGE), buluta `production/makine-duruslari`.
+  { key: "production/makine-duruslari", baslik: "Makineler neden durdu?", soru: "Makineler bu dönemde ne kadar durdu, en çok hangi sebeple ve hangi makinede?",
+    sinif: "basit", izin: "report:production", modul: "productionEnabled", varsayilanGun: 7, tarih: "aralik-gun",
+    panelYolu: "reports/production/makine-duruslari", uc: "/api/reports/production/makine-duruslari", kapiTasiyici: [{ dosya: "src/routes/reports/temel-uretim.routes.ts", yol: "/production/makine-duruslari" }], yuzey: "yaprak",
+    nesil: "v2", kategoriV2: "uretim", persona: ["uretim", "patron"], varyantBoyutlari: ["makine", "istasyon", "sebep"], hazir: true, yeniRapor: true },
 ];
 
 /** Katalogdan TÜRETİLİR — derleyici bilinmeyen anahtarı reddeder (K4). */

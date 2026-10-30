@@ -12,7 +12,7 @@ import { ReportV2Route } from "./ReportV2Route";
  * Kendi yaprak sayfası olan v2 anahtarları — adresi `content-routes` kendisi açar (rapor v2 bayrağından
  * bağımsız görünmesi gereken rapor; D4-H1). Aynı path iki route'ta olmasın diye `content-routes` yayarken atlar.
  */
-export const V2_KEYS_WITH_OWN_PAGE: ReadonlySet<string> = new Set(["finance/masraf-ozeti"]);
+export const V2_KEYS_WITH_OWN_PAGE: ReadonlySet<string> = new Set(["finance/masraf-ozeti", "production/makine-duruslari"]);
 
 export const reportV2Routes: RouteObject[] = REPORT_CATALOG.filter((e) => e.nesil === "v2").map((e) => ({
   path: e.panelYolu,
