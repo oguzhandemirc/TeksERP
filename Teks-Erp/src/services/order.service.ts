@@ -7,6 +7,7 @@
 //                 + iş emri bağlarını güvenli şekilde çözer (R1)
 // =============================================================================
 
+import { assertCariNotHeldTx } from "./helpers/cari-hold.helper";
 import prisma from "../lib/prisma";
 import { ACTIVE_SACK_ALLOCATION } from "./helpers/sack-allocation.helper";
 import { setWorkOrderTypeTx } from "./helpers/workorder-event.helper";
@@ -2135,6 +2136,8 @@ export class OrderService extends BaseService {
 
     if (data.customerId) {
       await this.validateCustomer(data.customerId as string);
+      // Cari kilidi (D4-I1, INTAKE): yeni sipariş = yeni iş kabulü; uç + hızlı sipariş + patron gelen kutusu bu boğazdan.
+      await assertCariNotHeldTx(prisma, data.customerId as string, "INTAKE");
     }
 
     if (data.branchId && data.customerId) {

@@ -181,7 +181,8 @@ import {
   buildNextDynamicCursor,
 } from "../utils/cursor";
 import { assertWorkOrderBound } from "./helpers/dispatch-header.helper";
-import { assertOwnerMatchesTx, previewOwnerMismatches } from "./helpers/emanet-owner.helper";
+import { assertOwnerMatchesTx, previewOwnerMismatches, rollsAllOwnedByTx } from "./helpers/emanet-owner.helper";
+import { assertShipmentNotHeldTx, cariHoldWarning, shipmentHoldNotice } from "./helpers/cari-hold.helper";
 import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
 import { assertRollsRevivable, assertSwatchesRevivable } from "./helpers/item-usage.helper";
 import { SWATCH_IN_STOCK_WHERE, transitionSwatchesTx } from "./helpers/swatch-event.helper";
@@ -2445,6 +2446,8 @@ export class ShippingService {
     kapsamaUyarisi: string | null;
     yon: ShipmentDestinationDecision;
   }> {
+    // Cari kilidi (D4-I1, SHIPMENT; K22 emanet muafiyeti) — yazımdan önce, tx içinde.
+    await assertShipmentNotHeldTx(tx, p.customerId, () => rollsAllOwnedByTx(tx, { sackId: { in: p.sackIds } }, p.customerId));
     const yon = await this.decideShipmentDestinationTx(tx, {
       customerId: p.customerId,
       branchId: p.branchId,
@@ -2893,6 +2896,12 @@ export class ShippingService {
    * Sevkiyat kurulum ÖNİZLEMESİ (salt-okunur): çuval içerik dökümü + seçili siparişlere
    * hesaplanan tahsis + fazla/eşleşmeyen/mükerrer UYARILARI. DB'ye hiçbir şey yazmaz.
    */
+  /** Cari kilidi önizlemesi (D4-I1) — kapının ikizi, aynı helper; red değil uyarı + `cariHold{}`. */
+  private async previewShipmentHold(sackIds: string[], customerId: string | null) {
+    if (!customerId) return null;
+    return shipmentHoldNotice(prisma, customerId, () => rollsAllOwnedByTx(prisma, { sackId: { in: sackIds } }, customerId));
+  }
+
   async previewCreateShipment(
     data: { sackIds: string[]; customerId?: string | null; branchId?: string | null; orderIds?: string[] }
   ): Promise<ApiResponse<unknown>> {
@@ -2917,6 +2926,8 @@ export class ShippingService {
 
     // Sahiplik (G3 emanet): dispatch'teki 409 `OWNER_MISMATCH` kapısının önizleme ikizi — RED DEĞİL uyarı + liste.
     const { ownerMismatches, warnings } = await previewOwnerMismatches(prisma, { sackIds, customerId: data.customerId ?? null });
+    const cariHold = await this.previewShipmentHold(sackIds, data.customerId ?? null);
+    if (cariHold) warnings.push(cariHoldWarning(cariHold));
     let lines: { lineId: string; orderNumber: string; item: string; color: string | null; width: number | null; need: number; allocated: number }[] = [];
     let surplusMeters = Number(totalMeters);
 
@@ -2980,6 +2991,7 @@ export class ShippingService {
         warnings,
         /** Sahiplik uyuşmazlığı (G3): `[{barcode, owner}]`; boş = sorun yok. Eski istemci alanı görmez, `warnings` metnini basar. */
         ownerMismatches,
+        cariHold, // D4-I1: aktif SHIPMENT kilidi (exempt = K22) ya da null; eski istemci yok sayar
         totals: { totalMeters: Number(totalMeters), sackCount: sacks.length, surplusMeters: Math.max(0, surplusMeters) },
       },
     };
@@ -3450,6 +3462,10 @@ export class ShippingService {
     // yazılmalı (proje kuralı) → çağırana taşınır. Örnek alan desen:
     // `createShipment`/`setShipmentOrders` (aynı iz `flushAllocationAudit`e gider).
   ): Promise<{ flipped: number; iz: AllocationAuditTrail | null }> {
+    // Cari kilidi (D4-I1, SHIPMENT) claim'den ÖNCE: PLANNED kalıp sonra kilitlenen sevkiyat da kesilir. Sevkiyat
+    // yoksa kapı geçer, aşağıdaki claim 409 verir (bugünkü davranış).
+    const holdHeader = await tx.shipment.findUnique({ where: { id: shipmentId }, select: { customerId: true } });
+    if (holdHeader) await assertShipmentNotHeldTx(tx, holdHeader.customerId, () => rollsAllOwnedByTx(tx, { shipmentId }, holdHeader.customerId));
     const claim = await tx.shipment.updateMany({
       where: { id: shipmentId, status: ShipmentStatus.PLANNED },
       data: {
