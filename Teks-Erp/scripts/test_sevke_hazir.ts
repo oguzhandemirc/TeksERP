@@ -16,7 +16,7 @@
 //   §6 dört groupBy, tanınmayan/eksik groupBy 400, tanınmayan state 400; tamamı GİTTİ birim listede yok
 //   §7 liste + cursor + özet tek where: limit=1 sayfalama ↔ özet birebir; state/customer süzgeci özete de uyar
 //   §8 gelen belge modülü kapalı → deliveryNote/customerBatch 403 MODULE_DISABLED, workOrder geçer
-//   §9 birim topları ucu: sınıflar, rollClass süzgeci, tanınmayan birim 400
+//   §9 birim topları ucu: sınıflar, rollClass süzgeci, tanınmayan birim 400; §9f inSack/inShipment/depo alanları
 //   §P (SEVKE_HAZIR_PERF=1) 500 belge / 30.000 top: uç süresi (hedef ≤ 300 ms; aşarsa yalnız rapor)
 //
 // NEGATİF SONDA (kırmızı görülerek, 2026-10-30): bkz. BEKCI-HARITASI satırı.
@@ -334,6 +334,24 @@ async function main(): Promise<void> {
     const upRolls = (await listReadyWorkRolls("customerBatch", upper, {})).data.items;
     const canonRolls = (await listReadyWorkRolls("customerBatch", batchId, {})).data.items;
     check("§9e büyük harf UUID / boşluklu parti kimliği normalize edilir", upRolls.length === canonRolls.length && canonRolls.length > 0, `${upRolls.length}/${canonRolls.length}`);
+
+    // §9f Hızlı Sevk ayrımı: çuvaldaki top `inSack`, depo adı top satırında (çekmece ön-seçimi bunlardan; inceleme bulgusu D4-J3)
+    const probe = canonRolls.find((r) => r.readinessClass === "READY")!;
+    const wh = await prisma.warehouse.create({ data: { code: `${TAG}-W`.slice(0, 32), name: `${TAG} Depo` }, select: { id: true } });
+    const sack = await prisma.sack.create({ data: { sackNo: `${TAG}-S`.slice(0, 64) }, select: { id: true } });
+    try {
+      await prisma.roll.update({ where: { id: probe.id }, data: { sackId: sack.id, warehouseId: wh.id } });
+      const f = (await listReadyWorkRolls("customerBatch", batchId, {})).data.items;
+      const hit = f.find((r) => r.id === probe.id);
+      check("§9f çuvaldaki top inSack=true + depo adı; diğerleri inSack=false, inShipment=false",
+        hit?.inSack === true && hit.inShipment === false && hit.warehouseId === wh.id && hit.warehouseName === `${TAG} Depo`
+          && f.filter((r) => r.id !== probe.id).every((r) => !r.inSack && !r.inShipment),
+        JSON.stringify(hit));
+    } finally {
+      await prisma.roll.update({ where: { id: probe.id }, data: { sackId: null, warehouseId: null } });
+      await prisma.sack.deleteMany({ where: { id: sack.id } });
+      await prisma.warehouse.deleteMany({ where: { id: wh.id } });
+    }
 
     // §8 modül kapısı
     await setSetting(SETTING_KEYS.GELEN_BELGE_ENABLED, false);
