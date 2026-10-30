@@ -100,6 +100,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}helpers/kursun-meter.helper.ts::writeMeterReadingTx`]: { helper: "kurşun metre okuması yazarı" },
   // D4-B1b: Tambur CUT okuması — token SUNUCU üretir; replay kararı kesim yolunundur (finalize claim · cutReplay · elle top FAZ 2 idempotent dalı).
   [`${S}helpers/meter-reading.helper.ts::writeCutReadingsTx`]: { helper: "Tambur CUT okuması yazarı (sunucu token'ı)" },
+  // İptali geri al: iptal damgalı CUT okumasının yeni kopyası — token SUNUCU üretir; replay kararı restore claim'inindir (CANCELLED → hedef).
+  [`${S}helpers/meter-reading.helper.ts::reinstateCancelledCutReadingsTx`]: { helper: "Tambur CUT okuması yeniden kurucu (sunucu token'ı)" },
 
   // ── Boğazda: D3 (plan §4 — kalan (a) yolları) ───────────────────────────────
   [`${S}shipping.service.ts::createShipmentInner`]: { giris: { [`${S}shipping.service.ts::createShipment`]: "R" } },

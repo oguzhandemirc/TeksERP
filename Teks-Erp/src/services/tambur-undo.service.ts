@@ -248,13 +248,6 @@ export const UNDO_FULL_PERMISSION = "roll:manual-adjust";
 /** FULL sebebinin alt sınırı — `manualReasons.MANUAL_MIN_REASON` ile aynı. */
 const UNDO_FULL_MIN_REASON = 3;
 
-/**
- * Çocukların DOĞUM-ANI özellik satırları — geri kurulumda donör kümesi (plan §3.1).
- * Postgres'te `now()` tx başlangıcıdır: kesimde kopyalanan miras satırı çocukla aynı
- * damgayı taşır, depoda sonradan eklenen satır kesinlikle daha büyüktür. Sıra
- * deterministik: en erken doğan çocuk önce, sonra `propertyId` — `donor[0]` rastgele
- * olmasın. Kurulum başına tarih sabiti YOK, kapı veri-güdümlü.
- */
 /** CUT okuması damga sebebi — geri alma kaynaklı. */
 const TAMBUR_UNDO_CUT_REASON = "TAMBUR_UNDO";
 
@@ -266,6 +259,13 @@ async function revokeUndoneCutReadingsTx(tx: Prisma.TransactionClient, rollIds: 
   return revokeCutReadingsTx(tx, { rollIds, userId: userId ?? null, reason: TAMBUR_UNDO_CUT_REASON });
 }
 
+/**
+ * Çocukların DOĞUM-ANI özellik satırları — geri kurulumda donör kümesi (plan §3.1).
+ * Postgres'te `now()` tx başlangıcıdır: kesimde kopyalanan miras satırı çocukla aynı
+ * damgayı taşır, depoda sonradan eklenen satır kesinlikle daha büyüktür. Sıra
+ * deterministik: en erken doğan çocuk önce, sonra `propertyId` — `donor[0]` rastgele
+ * olmasın. Kurulum başına tarih sabiti YOK, kapı veri-güdümlü.
+ */
 async function birthPropertiesOf(
   tx: Prisma.TransactionClient,
   childIds: string[],

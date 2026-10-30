@@ -6,7 +6,7 @@
 // sıralama YALNIZ `weakestMeasureSource`te yaşar — ikinci sıralamayı `test_tambur_olcum_kaynagi`
 // AST bölümü reddeder.
 // `roll_meter_readings`e YAZIM (satır yaratma + damga) YALNIZ bu dosyadan geçer — kurşun IN/OUT
-// okuması da Tambur CUT okuması da aynı boğazı kullanır (ikinci yazarı `test_tambur_olcum_kaynagi` §14 reddeder).
+// okuması da Tambur CUT okuması da aynı boğazı kullanır (ikinci yazarı `test_tambur_olcum_kaynagi` §15 reddeder).
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { MachineDataSource, MeterPhase, Prisma, type MeterApprovalMode, type MeterVarianceBasis, type RollMeterReading } from "@prisma/client";
@@ -162,9 +162,56 @@ export async function revokeCutReadingsTx(
   const where = { rollId: { in: args.rollIds }, phase: MeterPhase.CUT, revokedAt: null };
   const rows = await tx.rollMeterReading.findMany({ where, select: { id: true } });
   if (rows.length === 0) return [];
-  const ids = rows.map((r) => r.id);
-  await stampMeterReadingsTx(tx, { id: { in: ids } }, { revokedAt: new Date(), revokedById: args.userId, revokeReason: args.reason.slice(0, 300) });
-  return ids;
+  const stamp = { revokedAt: new Date(), revokedById: args.userId, revokeReason: args.reason.slice(0, 300) };
+  // Damga eşzamanlı bir tx'le yarışabilir: yalnız GERÇEKTEN bu çağrının damgaladığı id'ler döner (audit izi yanıltmasın).
+  const stamped: string[] = [];
+  for (const r of rows) {
+    if ((await stampMeterReadingsTx(tx, { id: r.id }, stamp)) > 0) stamped.push(r.id);
+  }
+  return stamped;
+}
+
+/** Top iptalinin CUT damga sebebi — `restoreCancelledRoll` bu sebeple damgalananları yeniden kurar. */
+export const ROLL_CANCEL_CUT_REASON = "ROLL_CANCEL";
+
+/**
+ * İPTALİ GERİ ALMA = iptal damgasının TERSİ: son iptalde damgalanan CUT okumaları YENİ satır olarak
+ * yeniden yazılır (damgalı satır değişmez — defter silinmez). Dirilen top okumasız kalırsa hizmet
+ * faturası `initialQty` tabanına düşer ve asıl SIMULATED kaynağı kaybolur (K4).
+ */
+export async function reinstateCancelledCutReadingsTx(
+  tx: Tx,
+  args: { rollId: string; userId: string | null },
+): Promise<RollMeterReading[]> {
+  const active = await tx.rollMeterReading.count({ where: { rollId: args.rollId, phase: MeterPhase.CUT, revokedAt: null } });
+  if (active > 0) return [];
+  const last = await tx.rollMeterReading.findFirst({
+    where: { rollId: args.rollId, phase: MeterPhase.CUT, revokeReason: ROLL_CANCEL_CUT_REASON, revokedAt: { not: null } },
+    orderBy: [{ revokedAt: "desc" }, { id: "desc" }],
+    select: { revokedAt: true },
+  });
+  if (!last?.revokedAt) return [];
+  const rows = await tx.rollMeterReading.findMany({
+    where: { rollId: args.rollId, phase: MeterPhase.CUT, revokeReason: ROLL_CANCEL_CUT_REASON, revokedAt: last.revokedAt },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  const written: RollMeterReading[] = [];
+  for (const r of rows) {
+    written.push(await insertMeterReadingTx(tx, { data: {
+      rollId: r.rollId,
+      workOrderStepId: r.workOrderStepId,
+      phase: MeterPhase.CUT,
+      meters: r.meters,
+      rawCounter: r.rawCounter,
+      source: r.source,
+      machineId: r.machineId,
+      peripheralId: r.peripheralId,
+      cardSampleId: r.cardSampleId,
+      clientToken: randomUUID(),
+      createdById: args.userId,
+    } }));
+  }
+  return written;
 }
 
 /**

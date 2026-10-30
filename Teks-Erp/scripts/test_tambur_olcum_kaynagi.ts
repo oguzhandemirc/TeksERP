@@ -22,6 +22,7 @@
 // §14 faz süzgeçsiz okuyucu envanteri (revokeStepMeterReadingsTx): kurşun adımı → CUT dokunulmaz;
 //     Tambur adımı yeniden açılınca CUT damgalanır (BEKLENEN)
 // §15 AST: roll_meter_readings'e yazım (yaratma/damga/ham SQL) yalnız meter-reading.helper'da
+// §16 iptal → CUT damgası (ROLL_CANCEL); iptali geri al → aynı kaynak/metreyle YENİ aktif satır (damgalı satır kalır)
 // Ayarları birebir geri yükler; fixture `TEST-OK-` damgalı, finally'de silinir.
 // =============================================================================
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -31,6 +32,7 @@ import { z } from "zod";
 import { Prisma, RollEntrySource, RollStatus, StationKind, StationType, StepStatus } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { TamburService } from "../src/services/tambur.service";
+import { InventoryService } from "../src/services/inventory.service";
 import { TamburManualService } from "../src/services/tambur-manual.service";
 import { TamburUndoService, UNDO_FULL_PERMISSION } from "../src/services/tambur-undo.service";
 import { revokeStepMeterReadingsTx } from "../src/services/helpers/kursun-meter.helper";
@@ -457,7 +459,7 @@ const kidsOf = (parentId: string) => prisma.roll.findMany({ where: { parentRollI
 const cutRows = (rollIds: string[]) =>
   prisma.rollMeterReading.findMany({
     where: { rollId: { in: rollIds }, phase: "CUT" },
-    select: { rollId: true, workOrderStepId: true, machineId: true, source: true, meters: true, rawCounter: true, clientToken: true, basis: true, approvalMode: true, revokedAt: true, revokeReason: true },
+    select: { id: true, rollId: true, workOrderStepId: true, machineId: true, source: true, meters: true, rawCounter: true, clientToken: true, basis: true, approvalMode: true, revokedAt: true, revokeReason: true },
   });
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -616,6 +618,40 @@ function section15() {
   check("§15 src'de ikinci okuma yazarı YOK", hits.length === 0, hits.join(" · "));
 }
 
+/** §16 iptal ↔ iptali geri al: CUT damgasının tersi yeni satırdır; SIMULATED kaynak dirilen topta kaybolmaz (K4). */
+async function section16(fx: { itemId: string; stationId: string }, machineId: string) {
+  console.log("\n§16 iptal → CUT damgası; iptali geri al → okuma yeniden kurulur");
+  const inv = new InventoryService();
+  const o = await tamburRoll(fx, 100);
+  const c = await tambur.cutOpenFabric(o.rollId, { lengthMeters: 25, status: "WAREHOUSE", measure: { source: "SIMULATED", rawCounter: 25.2 } }, undefined, machineId);
+  const kid = c.data.childRoll.id;
+  createdRolls.push(kid);
+  await inv.softDelete(kid, undefined, { confirmActive: true, confirmLabelPrinted: true });
+  const afterCancel = await cutRows([kid]);
+  check("§16 iptal → CUT okuması damgalı (ROLL_CANCEL), satır silinmedi",
+    afterCancel.length === 1 && afterCancel[0]!.revokedAt !== null && afterCancel[0]!.revokeReason === "ROLL_CANCEL", JSON.stringify(afterCancel.map((r) => r.revokeReason)));
+  await inv.restoreCancelledRoll(kid, undefined, { reason: "bekçi D4-B1b §16" });
+  const afterRestore = await cutRows([kid]);
+  const act = afterRestore.filter((r) => r.revokedAt === null);
+  const orig = afterCancel[0]!;
+  check("§16 iptali geri al → 1 YENİ aktif CUT okuması (kaynak/metre/adım/makine/rawCounter aynı, yeni token), damgalı satır yerinde",
+    afterRestore.length === 2 && act.length === 1 && act[0]!.id !== orig.id && act[0]!.source === "SIMULATED" && Number(act[0]!.meters) === 25 &&
+      act[0]!.workOrderStepId === orig.workOrderStepId && act[0]!.machineId === machineId && Number(act[0]!.rawCounter) === 25.2 && act[0]!.clientToken !== orig.clientToken &&
+      afterRestore.some((r) => r.id === orig.id && r.revokeReason === "ROLL_CANCEL"),
+    JSON.stringify(afterRestore.map((r) => [r.source, r.meters.toString(), r.revokeReason])));
+  await inv.softDelete(kid, undefined, { confirmActive: true, confirmLabelPrinted: true });
+  await inv.restoreCancelledRoll(kid, undefined, {});
+  const second = await cutRows([kid]);
+  check("§16 ikinci iptal/geri al turu → yine TEK aktif okuma (yalnız SON iptalin damgası kurulur)",
+    second.length === 3 && second.filter((r) => r.revokedAt === null).length === 1, `toplam ${second.length}, aktif ${second.filter((r) => r.revokedAt === null).length}`);
+  const c2 = await tambur.cutOpenFabric(o.rollId, { lengthMeters: 20, status: "WAREHOUSE" }, undefined, machineId);
+  const w = c2.data.childRoll.id;
+  createdRolls.push(w);
+  await inv.softDelete(w, undefined, { confirmActive: true, confirmLabelPrinted: true });
+  await inv.restoreCancelledRoll(w, undefined, {});
+  check("§16 okumasız top iptal/geri al → okuma uydurulmaz (0)", (await prisma.rollMeterReading.count({ where: { rollId: w } })) === 0);
+}
+
 async function main() {
   console.log("=== D4-B1a Tambur ölçüm kaynağı ===");
   savedSettings = await prisma.systemSetting.findMany({ where: { key: { in: [...KEYS] } }, select: { key: true, value: true, description: true } });
@@ -635,6 +671,7 @@ async function main() {
   await section12(fx, machineId, cut);
   await section13(fx, machineId);
   await section14(fx, machineId);
+  await section16(fx, machineId);
 }
 
 function cleanupError(e: unknown) {
