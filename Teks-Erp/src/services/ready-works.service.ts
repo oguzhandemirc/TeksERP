@@ -21,9 +21,7 @@ import {
   customerBatchMemberSql,
   effectiveShipReadyPolicy,
   readinessClassSql,
-  type ReadinessClass,
-  type ShipReadyPolicy,
-  type ShipReadyState,
+  type ReadinessClass, type ShipReadyPolicy, type ShipReadyState,
 } from "./helpers/ship-readiness.helper";
 import type { ShipReadyRule } from "./system-setting.service";
 
