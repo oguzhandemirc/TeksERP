@@ -36,6 +36,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import { MachineStopBand, MachineStopChip, useMachineStopControl } from '../../../components/machine-stop/MachineStopChip';
+import { showStopOpenEntryWarning } from '../../../components/machine-stop/entryWarning';
 import CutActionBar from './CutActionBar';
 import WorkOrderOutputPanel from './WorkOrderOutputPanel';
 import { LabelNamePreview } from './LabelNamePreview';
@@ -1991,7 +1992,10 @@ export default function TamburScreen() {
       | 'WAREHOUSE'
       | 'SCRAP'
       | 'A1_STOCK';
-    const runCut = () =>
+    // D4-A2b (K2): açık duruşta metre girişi UYARIR (ayar açıksa), kesim yine gider;
+    // uyarı onay diyaloğundan SONRA, yalnız gerçek gönderimde çıkar.
+    const runCut = () => {
+      showStopOpenEntryWarning(machineStop.entryWarning);
       cutOpenFabricMutation.mutate({
         rollId: selectedRoll.rollId,
         lengthMeters: length,
@@ -2010,6 +2014,7 @@ export default function TamburScreen() {
         // D4-B3: ölçüm değişmeden gidiyorsa makine/simülasyon; aksi hâlde OPERATOR.
         measure: resolveMeasure(capture, length),
       });
+    };
     // Aşımda parmak hatası koruması: onay iste (açık kumaşın tamamı tek topa döner).
     if (exceedsRemaining) {
       setOverCutConfirm({
@@ -2278,7 +2283,8 @@ export default function TamburScreen() {
     // Ham (renksiz STOCK) top → operatörün seçtiği parça hedefini gönder.
     const isRawStock =
       recutRollMeta.status === 'STOCK' && recutRollMeta.colorId == null;
-    const runCut = () =>
+    const runCut = () => {
+      showStopOpenEntryWarning(machineStop.entryWarning);
       cutWarehouseRollMutation.mutate({
         rollId: recutResolvedRollId,
         cutLength: cut,
@@ -2291,6 +2297,7 @@ export default function TamburScreen() {
         clientToken: recutAttempt.keyed(recutResolvedRollId),
         measure: resolveMeasure(capture, cut),
       });
+    };
     // Aşımda parmak hatası koruması: onay iste (top tamamen tüketilir).
     if (exceedsRemaining) {
       setOverCutConfirm({

@@ -182,6 +182,12 @@ export function useMachineStopTrackingEnabled(): boolean {
   return (d?.productionEnabled ?? DEFAULT_FEATURE_FLAGS.productionEnabled) && d?.machineStopTrackingEnabled === true;
 }
 
+/** Açık duruşta gramaj/metre girişi uyarısı (`uretim.makineDurusAcikUyarisi`, D4-A2b). Çip/banttan BAĞIMSIZ;
+ *  alan yok (eski backend) / yüklenmedi → false: uyarı yok. */
+export function useMachineStopOpenWarningEnabled(): boolean {
+  return useFeatureFlags().data?.machineStopOpenWarningEnabled === true;
+}
+
 /**
  * FASON KABULÜ — çekme uyarısı ayarı (bayrak + tolerans birlikte).
  *
