@@ -175,6 +175,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   financeServiceBillingMissingMeter: "financeEnabled",
   financeServiceBillingTrigger: "financeEnabled",
   financeServiceBillingPriceDate: "financeEnabled",
+  financeExpenseCategorySuggestions: "financeEnabled",
   financeAutoAllocateOnPaymentEnabled: "financeEnabled",
   // ⚠️ İPLİK bayrağı DEĞİL: kural FATURA ONAYINDA koşar (`finance/invoices`),
   // iplik defteri yalnız etkilenen taraftır. İplik modülü kapalı bir kurulumda
@@ -247,6 +248,9 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   shippingAllocWidthToleranceEnabled: "cekirdek",
   shippingAllocWidthToleranceCm: "cekirdek",
   shippingAllowOverAllocation: "cekirdek",
+  shippingReadyRule: "cekirdek",
+  shippingReadyTolerancePct: "cekirdek",
+  shippingReadyScanMinutes: "cekirdek",
   shippingSimulatedWeightEnabled: "cekirdek",
   returnGradingEnabled: "cekirdek",
   [SETTING_KEYS.SHIPPING_TOLERANCE_METERS]: "cekirdek",

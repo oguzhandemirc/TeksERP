@@ -28,6 +28,7 @@ import type { RaporSunumu } from "../src/services/reports/sunum/sunum.types";
 import * as satis from "../src/routes/reports/temel-satis.routes";
 import * as uretim from "../src/routes/reports/temel-uretim.routes";
 import * as dokuma from "../src/routes/reports/temel-dokuma-finans.routes";
+import * as finans from "../src/routes/reports/finance.report.routes";
 import { findRemoteReport } from "../src/cloud-sync/report-requests";
 
 let pass = 0;
@@ -46,6 +47,7 @@ const SCHEMAS: Record<keyof typeof CORE_VARIANT_DIMS, Shape> = {
   "sales/acik-siparisler": satis.coreOpenOrderQuerySchema,
   "subcontract/fasoncular": uretim.coreSubcontractorsQuerySchema,
   "dokuma/duruslar": dokuma.coreLoomStopsQuerySchema,
+  "finance/masraf-ozeti": finans.expenseSummaryQuerySchema,
 };
 
 const RANGE = { from: new Date("2026-10-01T00:00:00.000Z"), to: new Date("2026-10-25T12:00:00.000Z") };

@@ -520,6 +520,54 @@ router.get("/sack-search", verifyToken, READ, controller.searchSacks);
  *       400: { description: "Geçersiz sortBy / sortOrder" }
  */
 router.get("/sack-search/customers", verifyToken, READ, controller.listSackCustomers);
+
+// ===========================================================================
+// SEVKE HAZIR İŞLER (D4-J1, ister 2.4 / 2.10) — hazırlık türetilir, saklanmaz
+// ===========================================================================
+/**
+ * @openapi
+ * /api/shipping/ready-works:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Sevke hazır işler — birim başına hazırlık (READY · PARTIAL · NONE)
+ *     description: >
+ *       Birim workOrder (iş emri) · deliveryNote (gelen belge + tambur aşağı soyu) · customerBatch (müşteri
+ *       partisi = sahip + belge parti no) · customer (top sahibi). Kural `shipping.ready.rule` (ALL_DONE |
+ *       METER_THRESHOLD, tolerans `shipping.ready.tolerancePct`); hedefi olmayan birim ALL_DONE'a düşer.
+ *       Tamamı sevk edilmiş (ya da yalnız fire kalmış) birim listede yoktur. Liste, imleç ve özet aynı süzgeçten.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: groupBy, required: true, schema: { type: string, enum: [workOrder, deliveryNote, customerBatch, customer] } }
+ *       - { in: query, name: state, description: "CSV", schema: { type: string, example: "READY,PARTIAL" } }
+ *       - { in: query, name: customerId, description: "CSV uuid", schema: { type: string } }
+ *       - { in: query, name: cursor, schema: { type: string } }
+ *       - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 200 } }
+ *     responses:
+ *       200: { description: "{ items: [{unit,id,label,customerId,customerName,state,appliedRule,readyCount,readyMeters,inProcessCount,inProcessMeters,shippedMeters,scrapMeters,targetMeters}], nextCursor, summary: {units,ready,partial,none,readyMeters,inProcessMeters,shippedMeters}, policy: {rule,tolerancePct} }" }
+ *       400: { description: "Tanınmayan groupBy / state, geçersiz customerId / imleç" }
+ *       403: { description: "deliveryNote/customerBatch birimi gelen belge modülü kapalıyken (details.code MODULE_DISABLED)" }
+ */
+router.get("/ready-works", verifyToken, READ, controller.readyWorksModuleGate, controller.listReadyWorks);
+/**
+ * @openapi
+ * /api/shipping/ready-works/{unit}/{id}/rolls:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Sevke hazır iş biriminin topları (hazırlık sınıfıyla)
+ *     description: customerBatch kimliği `<sahipId>:<parti no>` (URL kodlu).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: unit, required: true, schema: { type: string, enum: [workOrder, deliveryNote, customerBatch, customer] } }
+ *       - { in: path, name: id, required: true, schema: { type: string } }
+ *       - { in: query, name: rollClass, description: "CSV READY,IN_PROCESS,GONE,SCRAP", schema: { type: string } }
+ *       - { in: query, name: cursor, schema: { type: string, format: uuid } }
+ *       - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 1000 } }
+ *     responses:
+ *       200: { description: "{ items: [{id,barcode,status,readinessClass,currentQty,itemName,colorName,ownerCustomerId}], nextCursor }" }
+ *       400: { description: "Tanınmayan birim / sınıf, geçersiz kimlik" }
+ *       403: { description: "Gelen belge birimi, modül kapalı (MODULE_DISABLED)" }
+ */
+router.get("/ready-works/:unit/:id/rolls", verifyToken, READ, controller.readyWorksModuleGate, controller.listReadyWorkRolls);
 router.post("/sack-search/pick-list", verifyToken, READ, controller.getPickList);
 /**
  * @openapi
