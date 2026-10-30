@@ -10,32 +10,34 @@
 // (AST bekçisi `test_musteri_barkodu` §AST). Yeni bir okutma noktası müşteri koduna açılacaksa
 // bu helper'ı çağırır.
 //
-// UYGULAMA YERLERİ (müşteri koduna AÇIK): `inventory.service.ts findRollByBarcode` ·
+// UYGULAMA YERLERİ (müşteri koduna AÇIK; D4-F1): `inventory.service.ts findRollByBarcode` ·
 // `shipping.service.ts scanIntoSack` · `search.service.ts resolveExact`.
 //
-// KALAN OKUTMA ÇAĞRILARI — envanter (2026-10-30, `normalizeScanCode(` gerçek çağrıları; bu dilimde
-// DEĞİŞTİRİLMEDİ). Etiket: [İÇ] = iç kod zorunlu · [AÇILMALI] = müşteri koduna açılmalı (sonraki dilim).
-//   inventory.service.ts:1513   buildRollWhere (liste araması)            [AÇILMALI] — top listesi süzgeci
-//   inventory.service.ts:2868   getRelabelContext (yeniden etiket)        [AÇILMALI] — müşteri etiketiyle gelen top
-//   workorder-timeline.service.ts:276  lookup (iz sür)                    [AÇILMALI] — izlenebilirlik araması
+// OKUTMA ÇAĞRILARI — envanter (2026-10-30, D4-F1b'de origin/main a98413376'ya göre yeniden ölçüldü;
+// `normalizeScanCode(` gerçek çağrıları). Etiket: [İÇ] = iç kod zorunlu (DOKUNULMAZ) ·
+// [AÇIK] = D4-F1b'de bu boğaza bağlandı (tekil okutma `resolveRollByScanCode`; liste/arama süzgeci
+// `customerCodeSearchRollIds` — belirsizlikte tüm adaylar listede, sessiz seçim yok).
+//   inventory.service.ts:1519   buildRollWhere (liste araması)            [AÇIK] — top listesi süzgeci (ids dışarıda çözülür)
+//   inventory.service.ts:2938   getRelabelContext (yeniden etiket)        [AÇIK] — belirsizlikte 409
+//   workorder-timeline.service.ts:280  lookup (iz sür)                    [AÇIK] — iş emri no önce, sonra top
 //   kartela-timeline.service.ts:71     kartelaEventsWhere                 [İÇ] — kartela, müşteri kodu taşımaz
-//   tambur.service.ts:589       getByCardBarcode (Tambur girişi)          [İÇ] — kod Tambur çıkışında doğar (K13)
-//   tambur.service.ts:1657      listRecentOutputRolls (çıkış araması)     [AÇILMALI] — çıkış topları kod taşır
-//   tambur.service.ts:1727      getSwatchByBarcode                        [İÇ] — kartela
-//   tambur.service.ts:1769-1770 listSwatches (barcode · cardNumber)       [İÇ] — kartela
-//   tambur.service.ts:1874-1875 getSwatchStats (barcode · cardNumber)     [İÇ] — kartela
-//   tambur.service.ts:3959      getTamburContext (Tambur girişi)          [İÇ] — kod Tambur çıkışında doğar (K13)
+//   tambur.service.ts:606       getByCardBarcode (Tambur girişi)          [İÇ] — kod Tambur çıkışında doğar (K13)
+//   tambur.service.ts:1690      listRecentOutputRolls (çıkış araması)     [AÇIK] — çıkış topları kod taşır
+//   tambur.service.ts:1761      getSwatchByBarcode                        [İÇ] — kartela
+//   tambur.service.ts:1803-1804 listSwatches (barcode · cardNumber)       [İÇ] — kartela
+//   tambur.service.ts:1908-1909 getSwatchStats (barcode · cardNumber)     [İÇ] — kartela
+//   tambur.service.ts:4012      getTamburContext (Tambur girişi)          [İÇ] — kod Tambur çıkışında doğar (K13)
 //   traveler-card.service.ts:616  scan (refakat kartı)                    [İÇ] — kart kodu = iş emri no
 //   traveler-card.service.ts:742  list (kart araması)                     [İÇ] — kart kodu
 //   traveler-card.service.ts:817  findByBarcode (refakat kartı)           [İÇ] — kart kodu
 //   kursun-bypass.service.ts:1801 completeFromTambur                       [İÇ] — Tambur öncesi; kod yok
-//   sack-search.service.ts:1375   locateRoll (top nerede)                 [AÇILMALI] — sevk öncesi top bulma
-//   return.service.ts:129         lookupForReturn (iade okutma)           [AÇILMALI] — müşteri kendi barkoduyla iade eder
-//   return.service.ts:254         lookupSackForReturn (çuval)             [İÇ] — çuval kodu
-//   kursun-qc.service.ts:321      getByCardBarcode (kurşun)               [İÇ] — Tambur öncesi; kod yok
-//   tambur-manual.service.ts:308  resolveRoll (elle Tambur girişi)        [İÇ] — kod Tambur çıkışında doğar
+//   sack-search.service.ts:1376   locateRoll (top nerede)                 [AÇIK] — çuval kodu kontrolü önce, sonra top
+//   return.service.ts:130         lookupForReturn (iade okutma)           [AÇIK] — müşteri kendi barkoduyla iade eder
+//   return.service.ts:259         lookupSackForReturn (çuval)             [İÇ] — çuval kodu
+//   kursun-qc.service.ts:322      getByCardBarcode (kurşun)               [İÇ] — Tambur öncesi; kod yok
+//   tambur-manual.service.ts:310  resolveRoll (elle Tambur girişi)        [İÇ] — kod Tambur çıkışında doğar
 //   helpers/return-scope.helper.ts:114 lookupShipmentForReturn            [İÇ] — sevk belge no
-//   reports/batch-trace.report.service.ts:108 searchBatches               [AÇILMALI] — parti izi araması
+//   reports/batch-trace.report.service.ts:114 searchBatches               [AÇIK] — parti izi araması
 //   helpers/series-classifier.helper.ts:99 classifyScannedCode            — sınıflandırıcının kendisi
 // =============================================================================
 
@@ -115,4 +117,21 @@ export function ambiguousCustomerCodeError(r: { code: string; candidates: Custom
 /** Yanıta eklenen eşleşme alanları — YALNIZ müşteri kodu eşleşmesinde (yokluğu = iç barkod; bugünkü yanıt bayt-aynı). */
 export function matchExtras(r: { matchedBy: ScanMatchedBy; customerCode: string | null }): { matchedBy?: "CUSTOMER_CODE"; customerCode?: string } {
   return r.matchedBy === "CUSTOMER_CODE" && r.customerCode ? { matchedBy: "CUSTOMER_CODE", customerCode: r.customerCode } : {};
+}
+
+/**
+ * Liste/arama süzgeçleri için müşteri koduyla eşleşen top id'leri (D4-F1b). Aynı boğazdan geçer;
+ * iç barkod eşleşmesi ya da ayar kapalıysa [] (çağıranın `barcode` kolu zaten kapsar → bayt-aynı).
+ * Belirsizlikte en çok MAX_CANDIDATES (10) aday döner: liste sessiz seçim yapmaz; fazlası için top barkodu okutulur.
+ */
+export async function customerCodeSearchRollIds(rawSearch: string | null | undefined): Promise<string[]> {
+  const search = rawSearch?.trim() ?? "";
+  if (search === "") return [];
+  if (!(await readScanCustomerCodeLookupEnabled())) return [];
+  const r = await resolveRollByScanCode(search, {
+    load: (where) => prisma.roll.findUnique({ where, select: { id: true } }),
+    lookupEnabled: true,
+  });
+  if (r.kind === "AMBIGUOUS") return r.candidates.map((c) => c.rollId);
+  return r.kind === "FOUND" && r.matchedBy === "CUSTOMER_CODE" ? [r.roll.id] : [];
 }
