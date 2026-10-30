@@ -166,7 +166,7 @@ describe('GramajTapPanel — açık duruş (D4-A2)', () => {
       stepId: 'step-1',
       properties: [{ propertyId: 'gramaj', valueCode: '50GR' }, { propertyId: 'kursun' }],
     });
-    expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ type: 'info', text1: 'Makine duruşta görünüyor — kayıt yine gönderildi' }));
+    expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ type: 'info', text1: 'Makine duruşta görünüyor — dokunuş engellenmedi' }));
   });
 
   it('duruş yokken uyarı yok (bugünkü dokunuş)', () => {

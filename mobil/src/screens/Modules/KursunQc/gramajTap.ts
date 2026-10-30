@@ -76,5 +76,5 @@ export function isCorrectionConflict(err: unknown): boolean {
  */
 export function stopOpenTapWarning(stopOpen: boolean): { title: string; detail: string } | null {
   if (!stopOpen) return null;
-  return { title: 'Makine duruşta görünüyor — kayıt yine gönderildi', detail: 'Makine çalışıyorsa üstteki bantta "Çalıştı" ile duruşu kapatın.' };
+  return { title: 'Makine duruşta görünüyor — dokunuş engellenmedi', detail: 'Makine çalışıyorsa üstteki bantta "Çalıştı" ile duruşu kapatın.' };
 }

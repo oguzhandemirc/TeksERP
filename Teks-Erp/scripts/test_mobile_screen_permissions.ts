@@ -353,7 +353,9 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
     ["GET /machine-stops", "POST /machine-stops", "POST /machine-stops/:p/close", "POST /machine-stops/:p/classify", "POST /machine-stops/:p/revoke"].map((p) => ({
       screen,
       path: p,
-      why: "Duruş çipi `mobile:makine-durus` yeteneğine bağlı (ayar `uretim.makineDurusTakibi` açıkken); yeteneksizde çip çizilmez, sorgu atılmaz.",
+      why: p.endsWith("/revoke")
+        ? "Ortak hook'ta servis çağrısı var ama Kurşun/Tambur'da `canRevoke=false`, düğme çizilmez; uç ayrıca `mobile:dokuma-geri-al` ister."
+        : "Duruş çipi `mobile:makine-durus` yeteneğine bağlı (ayar `uretim.makineDurusTakibi` açıkken); yeteneksizde çip çizilmez, sorgu atılmaz.",
     }))
   ),
   // Tezgah ekranında levent takma (#80, 2026-10-21): takma YETENEĞİ `mobile:devere`;

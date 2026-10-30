@@ -628,14 +628,13 @@ const MOBILE_ROLES: readonly RoleTemplateEntry[] = [
   // K4P (patron kararı 2026-10-24): operatöre YALNIZ tablet kapsamlı muayene izni — web kodu (`inspection:*`)
   // masaüstü paneline giriş açar (auth kanal kapısı); okuma/düzeltme/kural sorumlu-şef şablonlarında.
   { code: "MOBILE_KK1", name: "Mobil — KK1 Operatörü", description: "Ham kumaş kabul ekranı", mode: "list", codes: ["mobile:kk1", "mobile:muayene"] },
-  // D4-A2: Duruş çipi Kurşun/Tambur ekran yeteneği; ayar (`uretim.makineDurusTakibi`) kapalıyken uç 403 → çip yok.
-  { code: "MOBILE_KK2_KURSUN", name: "Mobil — KK2/Kurşun Operatörü", description: "Kurşun + QC2 ekranı + makine duruşu", mode: "list", codes: ["mobile:kk2-kursun", "mobile:makine-durus"] },
+  { code: "MOBILE_KK2_KURSUN", name: "Mobil — KK2/Kurşun Operatörü", description: "Kurşun + QC2 ekranı", mode: "list", codes: ["mobile:kk2-kursun"] },
   {
     code: "MOBILE_TAMBUR",
     name: "Mobil — Tambur Operatörü",
-    description: "Tambur karar / kesim ekranı + etiketteki müşteri adını düzeltme + makine duruşu",
+    description: "Tambur karar / kesim ekranı + etiketteki müşteri adını düzeltme",
     mode: "list",
-    codes: ["mobile:tambur", "label:edit", "customer-alias:write", "mobile:makine-durus"],
+    codes: ["mobile:tambur", "label:edit", "customer-alias:write"],
   },
   { code: "MOBILE_DEPO", name: "Mobil — Depo Operatörü", description: "Depo ekranı (salt-okunur)", mode: "list", codes: ["mobile:depo"] },
   { code: "MOBILE_FASON_SEVK", name: "Mobil — Fason Sevk Operatörü", description: "Fason firmaya sevk ekranı", mode: "list", codes: ["mobile:fason-sevk"] },
@@ -768,6 +767,8 @@ export const ROLE_COVERAGE_EXEMPT: Readonly<Record<string, string>> = {
     "Ekran değil, KK1-içi yetenek: inline yeni desen açma. Yalnız seçili ham giriş operatörlerine verilir (permission-catalog.ts).",
   "mobile:dokuma-geri-al":
     "Ekran değil, Tezgah-içi yetenek (2026-09-14): top indirmeyi geri alır — defterden satır düşürür (`loom:doff-revoke` tablet eşi, `shipping:undo-dispatch` sınıfı). Varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.",
+  "mobile:makine-durus":
+    "Kurşun/Tambur ekran yeteneği (D4-A2; DALGA4 §2.7 'atama panelde'): şablona girseydi boot uzlaştırması mevcut rollere ekler, dokuma AÇIK fabrikada rejim `dokuma ∨ ayar` geçtiği için kurşun/tambur/brode makinelerinde API duruş yetkisi hemen doğardı → varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.",
   "mobile:is-emri-duzelt":
     "Ekran değil, Hızlı Terbiye İş Emri içi yetenek (hareket defteri D5): açılmış terbiye iş emrinin rengini/enini/sipariş bağını değiştirir ve kartı yeniden basar. Terbiye iş emri açmaktan ayrı sorumluluk → varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.",
   "mobile:kk1-yari-mamul":
