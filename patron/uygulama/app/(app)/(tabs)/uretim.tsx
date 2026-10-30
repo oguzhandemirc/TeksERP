@@ -1,5 +1,5 @@
 // Üretim — "akış nerede tıkanıyor": dönem segmenti (fabrikanın 4 dönemi; fason sayıları aynı anlıktan seçilir,
-// yeniden çekilmez) · 3 KPI · akış şeridi + istasyon dağılımı (`uretim-akisi`) · terbiye iş emirleri.
+// yeniden çekilmez) · 3 KPI · akış şeridi + istasyon dağılımı (`uretim-akisi`) · "Makineler neden durdu?" · terbiye iş emirleri.
 // `ozet.uretim`ten yalnız "bugün tamamlanan" okunur; kolon/istasyon `uretim-akisi`nden (aynı sayılar iki kez basılmaz).
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -17,6 +17,7 @@ import { ListRow } from "../../../src/ui/ListRow";
 import { FlowStrip, StationBars } from "../../../src/ui/pano/production";
 import { obj, period, pct, qty, str } from "../../../src/ui/pano/read";
 import { RecordStatusBadge } from "../../../src/ui/pano/RecordStatusBadge";
+import { MachineStopsCard } from "../../../src/ui/pano/MachineStopsCard";
 import { RemoteList, useRecordPage } from "../../../src/ui/pano/RemoteList";
 import { FactoryStamp, SnapshotGate } from "../../../src/ui/pano/SnapshotGate";
 import { combine, useSnapshot } from "../../../src/ui/pano/useSnapshot";
@@ -98,6 +99,8 @@ export default function Production() {
           </>
         )}
       </SnapshotGate>
+
+      <MachineStopsCard />
 
       <SectionHeader title={TERIM.terbiyeIsEmri.cogul} domain="uretim" testID="bolum-is-emirleri" />
       <RemoteList
