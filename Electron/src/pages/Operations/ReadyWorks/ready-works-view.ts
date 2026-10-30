@@ -1,5 +1,6 @@
 // Sevke Hazır İşler — saf görünüm kuralları (sekme kümesi, durum süzgeci, Hızlı Sevk satırı). Bileşenden ayrı ki
 // tersine çevrilmeleri bir testi kırsın.
+import { TERIM } from "@/lib/terim";
 import type { QuickShipRoll } from "@/pages/Operations/Rolls/quickShipService";
 import type { ReadyWorkRoll, ReadyWorkState, ReadyWorkUnit } from "./service";
 
@@ -9,7 +10,7 @@ export interface ReadyWorksTab {
 }
 
 const ALL_TABS: ReadyWorksTab[] = [
-  { unit: "workOrder", label: "İş emri" },
+  { unit: "workOrder", label: TERIM.terbiyeIsEmri.tekil },
   { unit: "deliveryNote", label: "Gelen belge" },
   { unit: "customerBatch", label: "Parti" },
   { unit: "customer", label: "Müşteri" },

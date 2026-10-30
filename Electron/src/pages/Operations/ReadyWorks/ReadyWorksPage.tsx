@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshButton } from "@/components/RefreshButton";
 import { useFeatureFlags, useGelenBelgeEnabled } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { TERIM } from "@/lib/terim";
 import { QuickShipDialog } from "@/pages/Operations/Rolls/QuickShipDialog";
 import { ShipmentDocDialog } from "@/pages/Operations/Shipments/ShipmentDocDialog";
 import type { QuickShipRoll } from "@/pages/Operations/Rolls/quickShipService";
@@ -82,7 +83,7 @@ export function ReadyWorksPage() {
     <PageShell>
       <PageHeader
         title="Sevke Hazır İşler"
-        description="İş emri, gelen belge, parti ya da müşteri başına sevke hazırlık. Hazır = Bitmiş Depo / 2. kalite stoktaki toplar; kural fabrika ayarından (tümü bitti ya da metre eşiği). Satıra tıklayınca toplar açılır, hazır olanlar oradan sevke alınır."
+        description={`${TERIM.terbiyeIsEmri.tekil}, gelen belge, parti ya da müşteri başına sevke hazırlık. Hazır = Bitmiş Depo / 2. kalite stoktaki toplar; kural fabrika ayarından (tümü bitti ya da metre eşiği). Satıra tıklayınca toplar açılır, hazır olanlar oradan sevke alınır.`}
         actions={<RefreshButton queryKey={READY_WORKS_QUERY_KEY} />}
       />
       <PageBody className="min-h-0 space-y-3 p-4 sm:p-6">
