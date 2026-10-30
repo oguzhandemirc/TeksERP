@@ -27,6 +27,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { fixtureWarehouseId } from "./fixture-warehouse";
+import { firstGrade } from "./fixture-quality-grade";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { customerService } from "../src/routes/customer.routes";
 import { orderService } from "../src/routes/order.routes";
@@ -209,8 +210,9 @@ async function main(): Promise<void> {
     // ── §3 Sevk ──
     console.log("\n── §3 Sevk ──");
     const wh = await fixtureWarehouseId();
+    const grade = await firstGrade();
     const top = async (owner: string | null) => {
-      const r = await prisma.roll.create({ data: { barcode: `${TAG}-T${ids.rolls.length}`, itemId: item.id, initialQty: 50, currentQty: 50, qualityGrade: "1.KALITE", width: 150, status: RollStatus.WAREHOUSE, entrySource: "SUPPLIER_RECEIPT", warehouseId: wh, ownerCustomerId: owner }, select: { id: true } });
+      const r = await prisma.roll.create({ data: { barcode: `${TAG}-T${ids.rolls.length}`, itemId: item.id, initialQty: 50, currentQty: 50, qualityGrade: grade.code, qualityGradeId: grade.id, width: 150, status: RollStatus.WAREHOUSE, entrySource: "SUPPLIER_RECEIPT", warehouseId: wh, ownerCustomerId: owner }, select: { id: true } });
       ids.rolls.push(r.id);
       return r.id;
     };
