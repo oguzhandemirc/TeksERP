@@ -290,6 +290,8 @@ export const updateSchema = z.strictObject({
   financeServiceBillingMissingMeter: z.enum(["DECLARED_WITH_WARNING", "BLOCK_LINE"]).optional(),
   financeServiceBillingTrigger: z.enum(["PER_SHIPMENT", "PERIOD_END"]).optional(),
   financeServiceBillingPriceDate: z.enum(["SERVICE_DAY", "DISPATCH_DAY"]).optional(),
+  /** D4-H1: masraf kategorisi önerisi (`EXPENSE_CATEGORY_SUGGESTION_MODES` ile birebir). */
+  financeExpenseCategorySuggestions: z.enum(["ON", "OFF"]).optional(),
   // finance.autoAllocateOnPaymentEnabled — tahsilat/ödemede FIFO otomatik kapama.
   // Artan tutar avansta kalır; otomatik tahsis elle silinebilir.
   financeAutoAllocateOnPaymentEnabled: z.boolean().optional(),
