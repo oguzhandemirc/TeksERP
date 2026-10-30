@@ -44,6 +44,9 @@ const MALIYET_MODELLERI = new Set([
   "salesQuoteLine",
   "priceList",
   "priceListLine",
+  // D4-G1a: makine saat ücreti + hizmet sarf normu (kârlılık girdisi)
+  "machineCostRate",
+  "serviceConsumableNorm",
 ]);
 
 const ADLA_BEKLENEN_KAPILI: ReadonlyArray<{ dosya: string; neden: string }> = [

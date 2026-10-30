@@ -310,6 +310,21 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   D("ServiceBillingLink", "hizmet fatura bağı — iş başına tek aktif bağ, fiyat donar; fatura iptali damgalar — ters = DAMGA", { tur: "DAMGA", kolon: "revokedAt" },
     [{ dosya: "src/services/helpers/service-billing.helper.ts", sembol: "revokeServiceLinksTx" }],
     ["src/services/helpers/service-billing.helper.ts"], { yari: true }),
+  // D4-G1a (2026-10-30): kârlılığın ücret/norm girdisi — ③a ticari pivot, damgalı sürüm ("şu andan itibaren").
+  // Silinirse geçmiş ayın makine/sarf maliyeti değişir ⇒ sil-yaz YOK; değişim de kaldırma da DAMGA. updatedAt
+  // yalnız damga için (yarı). Okuma tek kaynak `cost-rate-validity.helper` (as-of).
+  D("MachineCostRate", "makine saat ücreti sürümü — değişim = damga + yeni satır (tek tx), kaldırma = damga — ters = DAMGA", { tur: "DAMGA", kolon: "revokedAt" },
+    [
+      { dosya: "src/services/machine-cost-rate.service.ts", sembol: "changeMachineCostRate" },
+      { dosya: "src/services/machine-cost-rate.service.ts", sembol: "revokeMachineCostRate" },
+    ],
+    ["src/services/machine-cost-rate.service.ts"], { sinif: "PIVOT_TICARI", yari: true }),
+  D("ServiceConsumableNorm", "hizmet sarf normu sürümü — değişim = damga + yeni satır (tek tx), kaldırma = damga — ters = DAMGA", { tur: "DAMGA", kolon: "revokedAt" },
+    [
+      { dosya: "src/services/consumable-norm.service.ts", sembol: "changeConsumableNorm" },
+      { dosya: "src/services/consumable-norm.service.ts", sembol: "revokeConsumableNorm" },
+    ],
+    ["src/services/consumable-norm.service.ts"], { sinif: "PIVOT_TICARI", yari: true }),
 
   D("RollVariance", "fire · düzeltme · aşım defteri", { tur: "DAMGA", kolon: "reversedAt" },
     [

@@ -117,6 +117,11 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}roll-customer-code.service.ts::bindFresh`]: { giris: { [`${S}roll-customer-code.service.ts::bind`]: "R" } },
   // D4-I1a: cari kilidi — tek insert; aktif kilit yarışını kısmi unique keser, token yarışını boğaz.
   [`${S}cari-hold.service.ts::placeFresh`]: { giris: { [`${S}cari-hold.service.ts::place`]: "R" } },
+  // D4-G1a: makine saat ücreti / sarf normu yaratma + değişim (damga + yeni satır) panelden clientToken ile; damgalı sürümün token'ı 409.
+  [`${S}machine-cost-rate.service.ts::createMachineCostRate`]: { giris: { [`${S}machine-cost-rate.service.ts::createMachineCostRate`]: "R" } },
+  [`${S}machine-cost-rate.service.ts::changeMachineCostRate`]: { giris: { [`${S}machine-cost-rate.service.ts::changeMachineCostRate`]: "R" } },
+  [`${S}consumable-norm.service.ts::createConsumableNorm`]: { giris: { [`${S}consumable-norm.service.ts::createConsumableNorm`]: "R" } },
+  [`${S}consumable-norm.service.ts::changeConsumableNorm`]: { giris: { [`${S}consumable-norm.service.ts::changeConsumableNorm`]: "R" } },
   [`${S}machine-run.service.ts::openMachineRunFresh`]: { giris: { [`${S}machine-run.service.ts::openMachineRun`]: "R" } },
   // #12: quickStart create'i çağırır (iç boğaz) ve kendi boğazıyla sarar; kimlikte top kümesi YOK (kısmi bağlama).
   [`${S}workorder.service.ts::createFresh`]: { giris: { [`${S}workorder.service.ts::create`]: "R" } },
@@ -224,6 +229,8 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}machine-collector.service.ts::collectorReplay`]: ["name", "collectorType", "machineIds"],
   [`${S}roll-customer-code.service.ts::bindReplay`]: ["rollId", "code"],
   [`${S}cari-hold.service.ts::placeReplay`]: ["cariId", "kapsam", "reasonCode"],
+  [`${S}machine-cost-rate.service.ts::rateReplay`]: ["machineId", "hourRateTry"],
+  [`${S}consumable-norm.service.ts::normReplay`]: ["serviceItemId", "consumableItemId", "qtyPerM"],
   [`${S}machine-doff.service.ts::doffReplay`]: ["machineId", "productionLineNo", "pieceCount"],
   [`${S}machine-run.service.ts::runReplay`]: ["machineId", "productionLineNo", "weavingOrderId"],
   [`${S}sales-quote-transitions.service.ts::reviseReplay`]: ["revisionOfId"],
