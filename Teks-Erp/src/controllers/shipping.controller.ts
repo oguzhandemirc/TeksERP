@@ -13,6 +13,9 @@ import { printJobAttachmentSchema } from "../services/print-job.service";
 import { resolvePrintJobContext } from "../services/helpers/print-job-context.helper";
 import "../types/express-augment";
 import { AppError } from "../utils/app-error";
+import { INCOMING_DOC_UNITS, listReadyWorks, type ReadyWorkUnit } from "../services/ready-works.service";
+import { listReadyWorkRolls } from "../services/ready-work-rolls.service";
+import { requireGelenBelgeEnabled } from "../middlewares/module.middleware";
 
 // ---- Zod şemaları ----------------------------------------------------------
 // Çuval aç — müşteri OPSİYONEL (depoda genel stok da olabilir).
@@ -1050,6 +1053,32 @@ export class ShippingController {
         search: (req.query.search as string | undefined) || undefined,
       });
       res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+  // ===========================================================================
+  // SEVKE HAZIR İŞLER (D4-J1) — salt okuma; hazırlık `ship-readiness.helper`dan türetilir.
+  // ===========================================================================
+  /** Gelen belge verisine dayanan birim (deliveryNote/customerBatch) modül kapalıyken 403 MODULE_DISABLED. */
+  readyWorksModuleGate = (req: Request, res: Response, next: NextFunction): void => {
+    const unit = typeof req.params.unit === "string" ? req.params.unit : req.query.groupBy;
+    if (typeof unit === "string" && INCOMING_DOC_UNITS.includes(unit as ReadyWorkUnit)) {
+      void requireGelenBelgeEnabled(req, res, next);
+      return;
+    }
+    next();
+  };
+
+  listReadyWorks = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { groupBy, state, customerId, cursor, limit } = req.query;
+      res.status(200).json(await listReadyWorks({ groupBy, state, customerId, cursor, limit }));
+    } catch (e) { next(e); }
+  };
+
+  listReadyWorkRolls = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { rollClass, cursor, limit } = req.query;
+      res.status(200).json(await listReadyWorkRolls(req.params.unit, req.params.id, { rollClass, cursor, limit }));
     } catch (e) { next(e); }
   };
 }

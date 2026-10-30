@@ -624,6 +624,16 @@ export const SETTING_KEYS = {
   SHIPPING_ALLOC_WIDTH_TOLERANCE_CM: "shipping.allocWidthToleranceCm",
   /** Tahsis sipariş miktarını AŞABİLİR mi (fazla sevk deftere yazılsın mı). Default false. */
   SHIPPING_ALLOW_OVER_ALLOCATION: "shipping.allowOverAllocation",
+  /**
+   * SEVKE HAZIR İŞLER (D4-J1, 1e kararları K25–K26): hazırlık TÜRETİLİR, saklanmaz. Kural
+   * (ALL_DONE | METER_THRESHOLD) + tolerans yalnız `effectiveShipReadyPolicy` (ship-readiness.helper)
+   * üzerinden okunur. `notifyUnits` + `scanMinutes` KOSUL bildiriminin (D4-J2) ayarlarıdır; bu dilimde
+   * yalnız kayıtlıdır (okuyan iş yok).
+   */
+  SHIPPING_READY_RULE: "shipping.ready.rule",
+  SHIPPING_READY_TOLERANCE_PCT: "shipping.ready.tolerancePct",
+  SHIPPING_READY_NOTIFY_UNITS: "shipping.ready.notifyUnits",
+  SHIPPING_READY_SCAN_MINUTES: "shipping.ready.scanMinutes",
   /** Müşteri şubeleri (sevk noktaları) UI'da gösterilsin mi. Default TRUE (açık —
    *  mevcut davranış). "Her şube = ayrı müşteri" düzenine geçen firma kapatır:
    *  müşteri formundaki Şubeler sekmesi/taslağı + sipariş formundaki şube seçimi
@@ -1273,6 +1283,21 @@ export const DEFAULT_SHIPPING_DOC_PRODUCT_COLOR_SPLIT = false;
 export const DEFAULT_SHIPPING_ALLOC_WIDTH_TOLERANCE_ENABLED = false;
 export const DEFAULT_SHIPPING_ALLOC_WIDTH_TOLERANCE_CM = 1;
 export const SHIPPING_ALLOC_WIDTH_TOLERANCE_MAX_CM = 10;
+
+/** Sevke hazırlık kuralı (bkz. `SETTING_KEYS.SHIPPING_READY_RULE`). */
+export type ShipReadyRule = "ALL_DONE" | "METER_THRESHOLD";
+export const SHIP_READY_RULES: ShipReadyRule[] = ["ALL_DONE", "METER_THRESHOLD"];
+/** Varsayılan ALL_DONE — en temkinli kural (K26); ayar yazılmamış kurulum ekranı ilk kez bununla görür. */
+export const DEFAULT_SHIP_READY_RULE: ShipReadyRule = "ALL_DONE";
+/** METER_THRESHOLD toleransı (%): hedef × (1 − tol/100). Yalnız METER_THRESHOLD'da okunur. */
+export const DEFAULT_SHIP_READY_TOLERANCE_PCT = 2;
+export const SHIP_READY_TOLERANCE_MAX_PCT = 20;
+/** Bildirim birimleri (D4-J2): iş emri · gelen belge · müşteri partisi. Boş = bildirim kapalı. */
+export type ShipReadyNotifyUnit = "IE" | "GB" | "PARTI";
+export const SHIP_READY_NOTIFY_UNITS: ShipReadyNotifyUnit[] = ["IE", "GB", "PARTI"];
+export const DEFAULT_SHIP_READY_SCAN_MINUTES = 5;
+export const SHIP_READY_SCAN_MINUTES_MIN = 1;
+export const SHIP_READY_SCAN_MINUTES_MAX = 60;
 
 /**
  * FAZLA SEVKİN DEFTERE YAZILMASI. Varsayılan KAPALI = bugünkü davranış: tahsis
@@ -2060,6 +2085,14 @@ export interface FeatureFlags {
   shippingAllocWidthToleranceCm: number;
   /** Tahsis sipariş miktarını aşabilir mi (fazla sevk deftere yazılır). Default false. */
   shippingAllowOverAllocation: boolean;
+  /** Sevke hazırlık kuralı (default ALL_DONE; D4-J1). */
+  shippingReadyRule: ShipReadyRule;
+  /** METER_THRESHOLD toleransı (%), 0–20, default 2. */
+  shippingReadyTolerancePct: number;
+  /** Sevke hazır bildirimi birimleri (default boş = kapalı; bildirim D4-J2). */
+  shippingReadyNotifyUnits: ShipReadyNotifyUnit[];
+  /** Sevke hazır tarama periyodu (dk), 1–60, default 5 (bildirim D4-J2). */
+  shippingReadyScanMinutes: number;
   /** Müşteri şubeleri (sevk noktaları) UI'da açık mı (default TRUE). Kapalıyken
    *  müşteri formundaki Şubeler sekmesi/taslağı ve sipariş formundaki şube seçimi
    *  gizlenir. Salt UI rehberi — backend ENFORCE ETMEZ, mevcut branchId verisi korunur. */
@@ -2581,6 +2614,10 @@ export class SystemSettingService {
       shippingAllocWidthToleranceEnabled: await readShippingAllocWidthToleranceEnabled(cacheClient),
       shippingAllocWidthToleranceCm: await readShippingAllocWidthToleranceCm(cacheClient),
       shippingAllowOverAllocation: await readShippingAllowOverAllocation(cacheClient),
+      shippingReadyRule: await readShippingReadyRule(cacheClient),
+      shippingReadyTolerancePct: await readShippingReadyTolerancePct(cacheClient),
+      shippingReadyNotifyUnits: await readShippingReadyNotifyUnits(cacheClient),
+      shippingReadyScanMinutes: await readShippingReadyScanMinutes(cacheClient),
       customerBranchesEnabled: await readCustomerBranchesEnabled(cacheClient),
       travelerCardConfig: await readTravelerCardConfig(cacheClient),
       companyLetterhead: await readCompanyLetterhead(cacheClient),
@@ -2805,7 +2842,7 @@ export class SystemSettingService {
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
+      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
     > & {
       /** null = fabrika varsayılanına dön (1). */
       shippingSackSeqStart?: number | null;
@@ -2821,6 +2858,8 @@ export class SystemSettingService {
       financeInvoicePriceTolerancePct?: number | null;
       /** null = fabrika varsayılanına dön (1 cm). */
       shippingAllocWidthToleranceCm?: number | null;
+      /** null = fabrika varsayılanına dön (%2); `0` geçerli. */
+      shippingReadyTolerancePct?: number | null;
       fasonShrinkTolerancePct?: number | null;
       duplicatesFuzzyThresholdPct?: number | null;
       /** null = fabrika varsayılanına dön (10 cm); `0` geçerli. */
@@ -3764,6 +3803,41 @@ export class SystemSettingService {
         "Tahsiste kabul edilen en farkı (cm)",
         userId
       );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "shippingReadyRule")) {
+      const v = input.shippingReadyRule;
+      if (typeof v !== "string" || !SHIP_READY_RULES.includes(v as ShipReadyRule)) {
+        throw AppError.badRequest("Sevke hazırlık kuralı ALL_DONE ya da METER_THRESHOLD olmalı");
+      }
+      await this.set(SETTING_KEYS.SHIPPING_READY_RULE, v, "Sevke hazır işler — hazırlık kuralı (ALL_DONE | METER_THRESHOLD)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "shippingReadyTolerancePct")) {
+      const v = input.shippingReadyTolerancePct;
+      if (v !== null && (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > SHIP_READY_TOLERANCE_MAX_PCT)) {
+        throw AppError.badRequest(`Sevke hazırlık toleransı 0 ile ${SHIP_READY_TOLERANCE_MAX_PCT} arasında olmalı (%)`);
+      }
+      await this.set(
+        SETTING_KEYS.SHIPPING_READY_TOLERANCE_PCT,
+        v === null ? DEFAULT_SHIP_READY_TOLERANCE_PCT : v,
+        "Sevke hazır işler — metre eşiği toleransı (%)",
+        userId
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "shippingReadyNotifyUnits")) {
+      const v = input.shippingReadyNotifyUnits;
+      if (!Array.isArray(v) || v.some((u) => !SHIP_READY_NOTIFY_UNITS.includes(u as ShipReadyNotifyUnit))) {
+        throw AppError.badRequest("Sevke hazır bildirim birimleri yalnız IE, GB, PARTI olabilir");
+      }
+      // Tekil + kanonik sıra: aynı küme iki farklı JSON olarak yazılmasın.
+      const units = SHIP_READY_NOTIFY_UNITS.filter((u) => v.includes(u));
+      await this.set(SETTING_KEYS.SHIPPING_READY_NOTIFY_UNITS, units, "Sevke hazır işler — bildirim birimleri (boş = kapalı)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "shippingReadyScanMinutes")) {
+      const v = input.shippingReadyScanMinutes;
+      if (typeof v !== "number" || !Number.isInteger(v) || v < SHIP_READY_SCAN_MINUTES_MIN || v > SHIP_READY_SCAN_MINUTES_MAX) {
+        throw AppError.badRequest(`Sevke hazır tarama periyodu ${SHIP_READY_SCAN_MINUTES_MIN} ile ${SHIP_READY_SCAN_MINUTES_MAX} dakika arasında tam sayı olmalı`);
+      }
+      await this.set(SETTING_KEYS.SHIPPING_READY_SCAN_MINUTES, v, "Sevke hazır işler — tarama periyodu (dk)", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "shippingDocProductColorSplit")) {
@@ -6345,6 +6419,38 @@ export async function readShippingAllocWidthToleranceCm(
     return DEFAULT_SHIPPING_ALLOC_WIDTH_TOLERANCE_CM;
   }
   return Math.min(parsed, SHIPPING_ALLOC_WIDTH_TOLERANCE_MAX_CM);
+}
+
+/** Sevke hazırlık kuralı. Kayıt yok/çöp → ALL_DONE. Tüketici doğrudan çağırmaz: `effectiveShipReadyPolicy`. */
+export async function readShippingReadyRule(tx?: Pick<typeof prisma, "systemSetting">): Promise<ShipReadyRule> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.SHIPPING_READY_RULE }, select: { value: true } });
+  const v = setting?.value;
+  return typeof v === "string" && SHIP_READY_RULES.includes(v as ShipReadyRule) ? (v as ShipReadyRule) : DEFAULT_SHIP_READY_RULE;
+}
+
+/** METER_THRESHOLD toleransı (%). Kayıt yok/çöp/aralık dışı → 2; `0` geçerli. */
+export async function readShippingReadyTolerancePct(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.SHIPPING_READY_TOLERANCE_PCT }, select: { value: true } });
+  if (!setting) return DEFAULT_SHIP_READY_TOLERANCE_PCT;
+  const parsed = asNumber(setting.value);
+  if (parsed === null || !Number.isFinite(parsed) || parsed < 0 || parsed > SHIP_READY_TOLERANCE_MAX_PCT) return DEFAULT_SHIP_READY_TOLERANCE_PCT;
+  return parsed;
+}
+
+/** Sevke hazır bildirim birimleri. Kayıt yok/çöp → [] (bildirim kapalı); tanınmayan eleman düşer. */
+export async function readShippingReadyNotifyUnits(tx?: Pick<typeof prisma, "systemSetting">): Promise<ShipReadyNotifyUnit[]> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.SHIPPING_READY_NOTIFY_UNITS }, select: { value: true } });
+  const v = setting?.value;
+  if (!Array.isArray(v)) return [];
+  return SHIP_READY_NOTIFY_UNITS.filter((u) => v.includes(u));
+}
+
+/** Sevke hazır tarama periyodu (dk). Kayıt yok/çöp/aralık dışı → 5. */
+export async function readShippingReadyScanMinutes(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.SHIPPING_READY_SCAN_MINUTES }, select: { value: true } });
+  const parsed = asNumber(setting?.value);
+  if (parsed === null || !Number.isInteger(parsed) || parsed < SHIP_READY_SCAN_MINUTES_MIN || parsed > SHIP_READY_SCAN_MINUTES_MAX) return DEFAULT_SHIP_READY_SCAN_MINUTES;
+  return parsed;
 }
 
 /** Fazla sevk deftere yazılsın mı. Satır yoksa `false` (bugünkü davranış). */
