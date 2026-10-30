@@ -891,6 +891,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:shipping"],
     flags: [
       {
+        // D4-F1 (2026-10-30): `defaultOn` backend `readScanCustomerCodeLookupEnabled` ile birebir (kayıt yoksa kapalı).
+        key: "scanCustomerCodeLookupEnabled",
+        title: "Okutmada müşteri barkodunu da tanı",
+        summary: "Okutulan kod bir top barkodu değilse, topa bağlanmış müşteri barkoduna bakılır.",
+        defaultOn: false,
+        audience: ["Depocu", "Sevkiyat", "Operatör"],
+        desc: "Açıkken top okutmada (top sorgusu, çuvala okutma, genel arama) önce bizim top barkodu aranır; bulunamazsa topa bağlanmış müşteri barkodu aranır. Aynı kod birden çok müşteride varsa sistem seçim yapmaz, adayları gösterip durur. Kapalıyken (varsayılan) yalnız bizim top barkodu tanınır.",
+      },
+      {
         key: "shipmentConfirmationEnabled",
         title: "Sevk onayı adımı",
         summary:

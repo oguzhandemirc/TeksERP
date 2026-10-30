@@ -25,6 +25,8 @@ import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { buildTextSearch } from "../utils/query-parser";
+import { matchExtras, resolveRollByScanCode } from "./helpers/roll-scan-resolve.helper";
+import { readScanCustomerCodeLookupEnabled } from "./system-setting.service";
 import { foldCodeForCompare, normalizeScanCode } from "../utils/code-format";
 import { foldSearchTokens } from "../utils/search-fold";
 import { SEARCH_ENTITIES, type SearchEntity, type SearchEntityKey } from "../constants/search-entities";
@@ -49,7 +51,8 @@ export interface SearchGroup {
 export interface SearchResult {
   term: string;
   /** Tam-format barkod okundu: tek deterministik sonuç, fan-out koşmadı. */
-  exact: { entity: string; row: SearchRow } | null;
+  /** D4-F1: `matchedBy` yalnız müşteri kodu eşleşmesinde (yokluğu = iç barkod). */
+  exact: { entity: string; row: SearchRow; matchedBy?: "CUSTOMER_CODE"; customerCode?: string } | null;
   groups: SearchGroup[];
 }
 
@@ -148,20 +151,27 @@ const delegateOf = (modelName: string): any => (prisma as any)[modelName];
  *
  * ⚠️ KISMİ kodda (ör. "T1207") hızlı yol YOK — o bir okutma değil, arama.
  */
-async function resolveExact(term: string): Promise<{ entity: string; row: SearchRow } | null> {
+async function resolveExact(term: string): Promise<{ entity: string; row: SearchRow; matchedBy?: "CUSTOMER_CODE"; customerCode?: string } | null> {
   const code = normalizeScanCode(term);
   // Tür SUNUCUNUN tek sınıflandırıcısından; tanınmayan kod hızlı yola girmez.
   // ⚠️ Dal kümesi BİLEREK dört: sınıflandırıcı SHIPMENT ve DISPATCH_DOC'u da
   // tanır ama onların hızlı yolu bugün YOK — tanınıp dalı olmayan kod fan-out'a
   // düşer, yani bugünkü davranış bayt bayt korunur.
   const kind = classifyScannedCode(code)?.kind ?? null;
-  if (kind === null) return null;
-  if (kind === "ROLL") {
-    const roll = await prisma.roll.findFirst({
-      where: { barcode: code },
-      select: { id: true, barcode: true, status: true, item: { select: { name: true } } },
+  // D4-F1: tanınmayan kod yalnız müşteri kodu araması AÇIKKEN tek okutma boğazına girer; kapalıyken bugünkü gibi null.
+  const customerLookup = kind === null ? await readScanCustomerCodeLookupEnabled() : false;
+  if (kind === null && !customerLookup) return null;
+  if (kind === "ROLL" || kind === null) {
+    const resolved = await resolveRollByScanCode(code, {
+      lookupEnabled: kind === null ? customerLookup : undefined,
+      load: (where) => prisma.roll.findFirst({
+        where,
+        select: { id: true, barcode: true, status: true, item: { select: { name: true } } },
+      }),
     });
-    if (roll) {
+    // Belirsiz müşteri kodu aramada sessizce seçilmez: hızlı yol yok, fan-out koşar.
+    if (resolved.kind === "FOUND") {
+      const roll = resolved.roll;
       return {
         entity: "roll",
         row: {
@@ -170,6 +180,7 @@ async function resolveExact(term: string): Promise<{ entity: string; row: Search
           subtitle: roll.item?.name ?? null,
           code: roll.barcode,
         },
+        ...matchExtras(resolved),
       };
     }
   }

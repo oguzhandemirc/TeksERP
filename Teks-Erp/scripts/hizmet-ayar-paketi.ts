@@ -49,6 +49,7 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   // DALGA4 §12.1: tambur en kapısı — Gülkesim de bugünkü değerde başlar (etek payı gerekirse elle).
   { anahtar: "tambur.planGate.widthToleranceCm", alan: "tamburPlanGateWidthToleranceCm", hedef: 10, dilim: "D4-E1" },
   { anahtar: "tambur.planGate.widthCheck", alan: "tamburPlanGateWidthCheck", hedef: "ENFORCE", dilim: "D4-E1" },
+  { anahtar: "scan.customerCodeLookup", alan: "scanCustomerCodeLookupEnabled", hedef: true, dilim: "D4-F1" },
   // DALGA4 §12.1: dokumasız fabrikada kurşun/tambur/brode makinesi duruşu (ister 5.5).
   { anahtar: "uretim.makineDurusTakibi", alan: "machineStopTrackingEnabled", hedef: true, dilim: "D4-A1" },
 ];
