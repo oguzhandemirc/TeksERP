@@ -2,6 +2,7 @@
 // KASA HAREKETLERİ KATEGORİ SÜZGECİ bekçisi (D4-KUC e / H1c)
 // =============================================================================
 // §1 ⭐ anahtar Masraf Özeti kovasıyla AYNI: trim birleştirir, harf katlanmaz; liste = toplam (tek where)
+//    §1f sekme/NBSP taşıyan eski metin de özet kovasıyla aynı listeye düşer (PG btrim ≠ JS trim)
 // §2 ⭐ Kategorisiz kova: null + "" + yalnız boşluk; arama ile birlikte (OR ezilmez)
 // §3 virgüllü kategori bölünmez
 // §4 ⭐ eşlik: özet satırının expenseCount'u = o anahtarla süzülü EXPENSE listesinin toplamı
@@ -9,6 +10,7 @@
 // §6 seçenek ucu: fikstür anahtarları tekil (trim'li kova tek seçenek)
 // Eski (trim'siz) kategori metni fikstürde kolona doğrudan yazılır. Fikstür 2016 aylarında, kategoriler `TEST-KKS-<pid>` damgalı.
 // NEGATİF SONDA (2026-10-30): helper'da `btrim(ct.category) = …` → `ct.category = …` yapıldı → §1a/§1d/§1e/§2a/§2b/§4 ❌ (11/6);
+// §1f (inceleme bulgusu): eşleşme SQL `btrim(ct.category) = …` sürümüne döndürüldü → §1f ❌ (özet 3, liste 1); geri alındı;
 // servisteki `where.AND = [...]` satırı silindi → §1–§5 12 ❌ (5/12); ikisi de geri alındı → yeşil.
 // =============================================================================
 import prisma from "../src/lib/prisma";
@@ -85,6 +87,20 @@ async function main(): Promise<void> {
   check("§1d sayfa 1 satır, toplam yine 3", onePage.data.length === 1 && onePage.pagination.total === 3);
   const rentExpense = await list(box.id, { category: rentKey, kind: "EXPENSE" });
   check("§1e diğer süzgeçlerle VE'lenir (EXPENSE → 2)", rentExpense.total === 2, `total=${rentExpense.total}`);
+
+  // Ayrı kasa + Mart + TAG'siz etiket: §4a/§6 kova sayımlarına girmez.
+  const wsBox = await prisma.cashBox.create({ data: { code: `${TAG}-W`, name: `${TAG} kasa W`, currency: "TRY" }, select: { id: true } });
+  boxIds.push(wsBox.id);
+  const POWER = `Elektrik KKSW-${process.pid}`;
+  await cashTransactionService.create({ kind: "OPENING", cashBoxId: wsBox.id, amount: 100000, txnDate: day("2016-03-01") });
+  await expense(wsBox.id, 10, "2016-03-10", POWER);
+  await expense(wsBox.id, 10, "2016-03-11", POWER, `${POWER}\t`);
+  await expense(wsBox.id, 10, "2016-03-12", POWER, `\u00a0${POWER}\n`);
+  const marchRange = resolveCoreDayRange({ from: "2016-03-01", to: "2016-03-31", kiyas: "none" }, 90).range;
+  const powerRow = (await getExpenseSummary({ range: marchRange })).categories.find((c) => c.label === POWER);
+  const power = await list(wsBox.id, { category: cashCategoryKey(POWER).key, kind: "EXPENSE", from: marchRange.from, to: marchRange.to });
+  check("§1f ⭐ sekme/NBSP/satır sonu: özet kovası = süzülü liste (3)",
+    powerRow?.expenseCount === 3 && power.total === 3, `özet=${powerRow?.expenseCount} liste=${power.total}`);
 
   console.log("\n── §2 Kategorisiz ──");
   const unc = await list(box.id, { category: cashCategoryKey(null).key, kind: "EXPENSE" });

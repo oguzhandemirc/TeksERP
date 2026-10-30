@@ -36,4 +36,12 @@ describe("kasa hareketleri — kategori süzgeci", () => {
     await waitFor(() => expect(listMock).toHaveBeenCalled());
     await waitFor(() => expect(screen.queryByRole("button")).toBeNull());
   });
+
+  it("seçenek ucu okunamaz ama URL'den süzgeç etkinse görünür kalır ve kaldırılabilir", async () => {
+    listMock.mockResolvedValue(null);
+    const onChange = vi.fn();
+    renderWithProviders(<CashCategoryFilter value="CAT:Kira" onChange={onChange} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Kategori süzgecini kaldır" }));
+    expect(onChange).toHaveBeenCalledWith("");
+  });
 });

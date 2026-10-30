@@ -29,11 +29,12 @@ export async function cashCategoryWhere(key: string): Promise<Prisma.CashTransac
       code: "CASH_CATEGORY_FILTER_INVALID",
     });
   }
+  // Eşleşme JS'te `cashCategoryKey` ile: PG btrim yalnız boşluğu kırpar, JS trim sekme/NBSP'yi de —
+  // SQL'de kırpmak özet kovası ile süzülü listeyi ayırırdı (test_kasa_kategori_suzgeci §1f).
   const rows = await prisma.$queryRaw<Array<{ category: string }>>(Prisma.sql`
-    SELECT DISTINCT ct.category FROM cash_transactions ct
-     WHERE ct.category IS NOT NULL AND btrim(ct.category) = ${text}
+    SELECT DISTINCT ct.category FROM cash_transactions ct WHERE ct.category IS NOT NULL
   `);
-  const raws = rows.map((r) => r.category);
+  const raws = rows.map((r) => r.category).filter((raw) => cashCategoryKey(raw).key === key);
   return text === "" ? { OR: [{ category: null }, { category: { in: raws } }] } : { category: { in: raws } };
 }
 

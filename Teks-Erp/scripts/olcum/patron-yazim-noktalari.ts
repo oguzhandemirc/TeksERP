@@ -215,7 +215,7 @@ function main(): void {
   const uyumsuz: string[] = [];
   for (const p of KAYIT_PROJEKSIYONLARI) {
     const var_ = silmeTablolari.has(p.kok.tablo) || fixSiler(p.kok.model);
-    if (var_ && p.silme === "YOK") uyumsuz.push(`${p.ad}: katalog 'YOK' diyor ama ${p.kok.tablo} için ${silmeTablolari.get(p.kok.tablo)!.length} silme yolu var`);
+    if (var_ && p.silme === "YOK") uyumsuz.push(`${p.ad}: katalog 'YOK' diyor ama ${p.kok.tablo} için ${silmeTablolari.get(p.kok.tablo)?.length ?? 0} src silme yolu${fixSiler(p.kok.model) ? " + fix_* betiği" : ""} var`);
     if (!var_ && p.silme === "DAMGA") uyumsuz.push(`${p.ad}: katalog 'DAMGA' diyor ama ${p.kok.tablo} için uygulama silme yolu YOK (kaskad/dinamik olabilir — şema ölçümü ③)`);
   }
   const gorunmezGuncelleme = hamlar.filter((h) => !h.dinamik && !h.updatedAtYazar && h.optInDokunan.length > 0);

@@ -21,7 +21,16 @@ export function CashCategoryFilter({ value, onChange }: Props) {
     staleTime: 60_000,
   });
   const options = useMemo(() => (q.data ?? []).map((o) => ({ deger: o.key, etiket: o.label })), [q.data]);
-  if (q.data === null || q.isError) return null;
+  if (q.data === null || q.isError) {
+    // Seçenekler okunamadı ama URL'den gelen süzgeç etkin: gizli süzgeç eksik liste algısı yaratır — görünür + temizlenebilir.
+    if (!value) return null;
+    return (
+      <Button type="button" variant="secondary" size="sm" className="h-9 gap-1.5" onClick={() => onChange("")}>
+        <Tags className="h-4 w-4" />
+        Kategori süzgecini kaldır
+      </Button>
+    );
+  }
   const selectedLabel = options.find((o) => o.deger === value)?.etiket;
 
   return (
