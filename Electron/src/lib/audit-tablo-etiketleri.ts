@@ -192,6 +192,7 @@ export const TABLE_LABELS: Record<string, string> = {
   ROLL_METER_READING: "Kurşun Metre Okuması",
   ROLL_METER_ACK: "Kurşun Metre Sapma Onayı",
   ROLL_METER_STOCK_APPLY: "Kurşun Metre Stok Uygulaması",
+  ROLL_CUSTOMER_CODE: "Müşteri Barkodu",
   DELIVERY_NOTE_ALIAS: "Gelen Belge Eşlemesi",
   SENDER_TEMPLATE: "Gönderen Şablonu",
   DELIVERY_NOTE_CUSTOMER_DEFAULT: "Gelen Belge Müşteri Varsayılan Ürünü",

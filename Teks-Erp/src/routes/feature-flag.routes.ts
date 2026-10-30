@@ -541,6 +541,8 @@ export const updateSchema = z.strictObject({
   kursunMeterVarianceApproval: z.enum(["NONE", "OPERATOR_REASON", "SUPERVISOR_PIN", "OFFICE"]).optional(),
   /** H1b: çıkış metresi stok kipi (enum; `KURSUN_METER_STOCK_MODES` ile birebir; varsayılan RECORD). */
   kursunMeterStockMode: z.enum(["RECORD", "APPLY"]).optional(),
+  /** D4-F1: okutmada müşteri barkodu araması (varsayılan kapalı = bugün). */
+  scanCustomerCodeLookupEnabled: z.boolean().optional(),
   // batch.shortNumberEnabled — parti no kısa ve DÖNEN (P01…P99) mi (default TRUE/AÇIK).
   // Backend ENFORCE eder (generateBatchNumberTx). Kapalıyken eski P+GGAAYY+sıra kalıbı.
   // ⚠️ Bu satır ACİL KAPATMA anahtarıdır — kısa numara sahada sorun çıkarırsa tek
