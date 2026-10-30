@@ -17,7 +17,7 @@ import { FormField } from "@/components/forms/FormField";
 import { userFormSchema } from "@/pages/Access/Users/UserFormDialog";
 import { adminUserService, type FactoryAdminCreated } from "@/services/adminUserService";
 import { isAmbiguousFailure } from "@/lib/attemptToken";
-import { useTabsStore } from "@/store/tabs";
+import { useOpenTopLevel } from "@/components/layout/tabs/use-tab-target";
 
 const schema = userFormSchema.pick({ username: true, fullName: true });
 
@@ -52,7 +52,7 @@ export function FactoryAdminDialog({ open, onClose }: Props) {
   const [created, setCreated] = useState<FactoryAdminCreated | null>(null);
   const [outcome, setOutcome] = useState<Outcome>(null);
   // Pencere kabukta, Router DIŞINDA çizilir: `useNavigate` kabuğu çökertir — gezinme sekme eylemiyle.
-  const openTab = useTabsStore((s) => s.openTab);
+  const openTarget = useOpenTopLevel();
 
   const mutation = useMutation({
     mutationFn: (body: { username: string; fullName: string }) => adminUserService.createFactoryAdmin(body),
@@ -72,7 +72,7 @@ export function FactoryAdminDialog({ open, onClose }: Props) {
 
   const goToUsers = () => {
     close();
-    openTab("/access/users");
+    openTarget("/access/users");
   };
 
   const submit = () => {
