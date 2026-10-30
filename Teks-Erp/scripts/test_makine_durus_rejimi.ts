@@ -11,13 +11,17 @@
 //   ⑥ AST: ayar okuyucusu YALNIZ `machineStopRegime` + panel geri-okumasında (ikinci rejim yüklemi yok);
 //      rota/servis/liste tek helper'ı çağırır; `machineStopTrackingEnabled` alanı da başka yerde okunmaz,
 //   ⑦ dokumasız rejimde dokuma döneminden kalmış tezgah duruşu kapa/sınıfla/geri al → 403 (yalnız açma değil),
-//   ⑧ yalnız `mobile:makine-durus` taşıyan kullanıcı dokuma AÇIKKEN de tezgah duruşuna dokunamaz/göremez.
+//   ⑧ yalnız `mobile:makine-durus` taşıyan kullanıcı dokuma AÇIKKEN de tezgah duruşuna dokunamaz/göremez,
+//   ⑨ (D4-A3) vardiya tanımı uçları aynı rejim kapısında: dokuma açıkken ayar OFF/ON bayt-aynı; dokumasız + ayar
+//      kapalı 403 MODULE_DISABLED (bugünkü gövde); dokumasız + ayar açık liste/önizleme 200.
 // NEGATİF SONDALAR (2026-10-29, D4-A1):
 //   S1 `machineStopRegime`den ayar kolu silindi (`general = false`) → §3 kırmızı.
 //   S2 `loom-list.service.ts`e ikinci rejim yüklemi (readMachineStopTrackingEnabled çağrısı) → §6a kırmızı.
 // NEGATİF SONDALAR (2026-10-30, D4-A1 bitirici):
 //   S3 `assertStopMachineWritableTx` gövdesi `return;` ile devre dışı → §7a–d + §8c kırmızı (28/5).
 //   S4 `kindScopeFor` hep `generalKindsOnly:false` → §8a, §8c, §8d kırmızı.
+// NEGATİF SONDA (2026-10-30, D4-A3): `shift-definition.routes` kapısı `requireDokumaEnabled`e döndü →
+//   §9c + §9d + §9e + §9f kırmızı (35/4).
 // Global durum yazar (SystemSetting): `hedefDbEngeli()` ilk adım; üç ayar satırı birebir geri yüklenir.
 // =============================================================================
 import type { Server } from "http";
@@ -138,6 +142,11 @@ async function main(): Promise<void> {
     await setSetting(SETTING_KEYS.MACHINE_STOP_TRACKING_ENABLED, true);
     const svcOn = JSON.stringify(await Promise.all(snapArgs.map((a) => listMachineStops({ ...a }))));
     const httpOn = [(await call("GET", "/api/machine-stops?limit=500")).raw, (await call("GET", `/api/machine-stops?open=true&machineId=${raw}`)).raw];
+    const shiftOn = (await call("GET", "/api/shift-definitions?includeInactive=1")).raw;
+    await setSetting(SETTING_KEYS.MACHINE_STOP_TRACKING_ENABLED, false);
+    const shiftOff = await call("GET", "/api/shift-definitions?includeInactive=1");
+    await setSetting(SETTING_KEYS.MACHINE_STOP_TRACKING_ENABLED, true);
+    check("§9a vardiya tanımı listesi dokuma açıkken ayar OFF/ON bayt-aynı (200)", shiftOff.status === 200 && shiftOff.raw === shiftOn, `status=${shiftOff.status}`);
     check("§1b ⭐ servis listesi (4 varyant) ayar OFF/ON bayt-aynı", svcOff === svcOn && svcOff.includes(loomStop.data.id) && svcOff.includes(rawStop.data.id), `${svcOff.length} bayt`);
     check("§1c ⭐ HTTP GET /api/machine-stops ayar OFF/ON bayt-aynı", httpOff.join("|") === httpOn.join("|") && httpOff[0].includes(loomStop.data.id), `${httpOff[0].length} bayt`);
 
@@ -180,10 +189,22 @@ async function main(): Promise<void> {
     check("§2b POST (PROCESS_QC) 403 MODULE_DISABLED — ayar kapalıyken kapı bugünkü", p403.status === 403 && p403.body.details?.code === "MODULE_DISABLED", `status=${p403.status}`);
     check("§2c 403 gövdesi dokuma kapısının bugünkü mesajı", /Dokuma iş emri modülü bu kurulumda kapalı/.test(g403.body.message ?? ""), g403.body.message);
     check("§5a vardiya takvimi: dokuma + ayar kapalı → disabled", (await runShiftCalendarOnce({ onlyDefinitionIds: [] })) === "disabled");
+    const s403 = await call("GET", "/api/shift-definitions");
+    const sp403 = await call("POST", "/api/shift-definitions/preview", { startMinute: 480, durationMinutes: 480 });
+    check("§9b ⭐ vardiya tanımı: dokuma + ayar kapalı → GET/önizleme 403 MODULE_DISABLED (bugünkü dokuma gövdesi)",
+      s403.status === 403 && sp403.status === 403 && s403.body.details?.code === "MODULE_DISABLED" && s403.body.details?.modul === "dokuma"
+        && sp403.body.details?.code === "MODULE_DISABLED" && s403.body.message === g403.body.message,
+      `status=${s403.status}/${sp403.status} code=${s403.body.details?.code}`);
 
     // ── §3 dokuma KAPALI + ayar AÇIK → genel rejim ──
     await setSetting(SETTING_KEYS.MACHINE_STOP_TRACKING_ENABLED, true);
     check("§5b vardiya takvimi: ayar açık → koşar (disabled değil)", (await runShiftCalendarOnce({ onlyDefinitionIds: [] })) !== "disabled");
+    const s200 = await call("GET", "/api/shift-definitions");
+    check("§9c ⭐ vardiya tanımı: dokumasız + ayar açık → GET 200", s200.status === 200, `status=${s200.status} ${s200.body.message ?? ""}`);
+    const sp200 = await call("POST", "/api/shift-definitions/preview", { startMinute: 480, durationMinutes: 480 });
+    check("§9d ⭐ vardiya tanımı: dokumasız + ayar açık → önizleme 200", sp200.status === 200, `status=${sp200.status} ${sp200.body.message ?? ""}`);
+    const sBad = await call("POST", "/api/shift-definitions", { code: "x", name: "y", startMinute: 480, durationMinutes: 480, bilinmeyen: 1 });
+    check("§9e vardiya tanımı: dokumasız + ayar açık → yazma ucu kapıdan geçer (strict şema 400, 403 değil)", sBad.status === 400, `status=${sBad.status}`);
     const o1 = await call("POST", "/api/machine-stops", { machineId: qc, clientToken: randomUUID() });
     const qcStopId = String((o1.body.data as { id?: string } | undefined)?.id ?? "");
     check("§3a ⭐ PROCESS_QC makinesi: aç 201", o1.status === 201 && qcStopId.length > 0, `status=${o1.status} ${o1.body.message ?? ""}`);
@@ -238,6 +259,9 @@ async function main(): Promise<void> {
   const fieldSites = callSites("machineStopTrackingEnabled");
   check("§6e ayar alanı (`machineStopTrackingEnabled`) yalnız ayar servisi + Zod şemasında — bayrak nesnesinden ikinci yüklem yok",
     fieldSites.length > 0 && fieldSites.every((s) => s.startsWith("services/system-setting.service.ts#") || s.startsWith("routes/feature-flag.routes.ts#")), fieldSites.join(" | "));
+  const shiftRoute = readFileSync(join(SRC, "routes/shift-definition.routes.ts"), "utf8");
+  check("§9f vardiya tanımı rota kapısı requireMachineStopRegime (requireDokumaEnabled değil)",
+    /router\.use\(verifyToken, requireMachineStopRegime\)/.test(shiftRoute) && !/requireDokumaEnabled\b/.test(shiftRoute.replace(/^\/\/.*$/gm, "")));
   check("§6f yazma yolları tür kapısını çağırır (kapa · sınıfla · yeniden sınıfla · geri al)",
     ["closeStopCore", "classifyStop", "reclassifyStop", "revokeStop"].every((f) => callSites("assertStopWritableTx").includes(`services/machine-stop.service.ts#${f}`)));
 }

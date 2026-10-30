@@ -1,7 +1,9 @@
 // =============================================================================
-// TeksERP — VARDİYA TANIMI (ShiftDefinition) uçları · dokuma modülü
+// TeksERP — VARDİYA TANIMI (ShiftDefinition) uçları · makine duruşu rejimi
 // =============================================================================
-// ⚠️ ÜÇ KAPI SIRAYLA: `verifyToken` → `requireDokumaEnabled` → izin. Yazma `loom:spec-manage`
+// ⚠️ ÜÇ KAPI SIRAYLA: `verifyToken` → `requireMachineStopRegime` → izin. D4-A3: takvim duruş rejimiyle
+// koştuğu için katalog da aynı yüklemle açılır (dokuma ∨ üretim ∧ `uretim.makineDurusTakibi`); ayar
+// kapalıyken kapı kararı `requireDokumaEnabled`e devreder (403 gövdesi bugünküyle bayt-aynı). Yazma `loom:spec-manage`
 // (tasarım §6.4: "vardiya kataloğu"); liste rapor süzgeci için `report:production` ile de okunur.
 // Gövde `.strict()` ALLOWLIST: `code` yalnız doğuşta, `isActive` yalnız arşiv/geri al uçlarından,
 // `nameFold` DB'nin — BaseController yolu bilerek kullanılmaz (yeni skaler = yazılabilir alan tuzağı).
@@ -10,7 +12,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
-import { requireDokumaEnabled } from "../middlewares/module.middleware";
+import { requireMachineStopRegime } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import {
   createShiftDefinition,
@@ -21,7 +23,7 @@ import {
 } from "../services/shift-definition.service";
 
 const router = Router();
-router.use(verifyToken, requireDokumaEnabled);
+router.use(verifyToken, requireMachineStopRegime);
 const manage = requirePermission("loom:spec-manage");
 
 const minute = (label: string, max: number) => z.coerce.number({ message: `${label} sayı olmalı` }).int(`${label} tam sayı olmalı`).min(0).max(max);
@@ -58,11 +60,11 @@ const previewSchema = z
  * /api/shift-definitions:
  *   get:
  *     tags: [ShiftDefinitions]
- *     summary: Vardiya tanımları (dokuma); `?includeInactive=1` arşivdekileri de getirir
+ *     summary: Vardiya tanımları (dokuma ya da makine duruşu takibi); `?includeInactive=1` arşivdekileri de getirir
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Liste }
- *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ *       403: { description: Dokuma kapalı ve makine duruşu takibi kapalı (MODULE_DISABLED) ya da yetki yok }
  *   post:
  *     tags: [ShiftDefinitions]
  *     summary: Vardiya tanımı oluştur; takvim (30 gün ileri) aynı istekte tetiklenir

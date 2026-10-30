@@ -109,6 +109,16 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
   "operations/icerideki-isler": "emanetEnabled",
 };
 
+/**
+ * REJİM GENİŞLETMESİ (D4-A3): ekran manifestoda modülüne bağlı kalır (`ROUTE_MODULE` aynası bayt-aynı), ama
+ * route kapısı modül yerine bağlamın REJİM alanını okur. `machineStopEnabled` = dokuma ∨ (üretim ∧
+ * `uretim.makineDurusTakibi`) — karo yüklemiyle (`isMachineStopsVisible` / `isShiftDefinitionsVisible`) aynı alan.
+ */
+export const ROUTE_REGIME: Readonly<Record<string, Extract<keyof OperationsVisibilityContext, "machineStopEnabled">>> = {
+  "operations/machine-stops": "machineStopEnabled",
+  "definitions/shift-definitions": "machineStopEnabled",
+};
+
 /** `:id` · `new` · `edit` segmentleri ebeveyne katlanır (manifesto EKRAN seviyesinde). */
 function screenKeyCandidates(pathname: string): string[] {
   const segs = pathname
@@ -132,6 +142,10 @@ export function routeModuleOf(pathname: string): RouteModuleFlag | null {
  * değere bakar. Karar bayrak yüklenene dek de verilir — yön bağlamın işi.
  */
 export function isRouteModuleOpen(pathname: string, ctx: OperationsVisibilityContext): boolean {
+  for (const key of screenKeyCandidates(pathname)) {
+    const r = ROUTE_REGIME[key];
+    if (r) return ctx[r];
+  }
   const m = routeModuleOf(pathname);
   return m === null ? true : ctx[m];
 }

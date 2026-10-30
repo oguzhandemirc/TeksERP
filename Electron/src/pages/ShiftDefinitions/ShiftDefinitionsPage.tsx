@@ -1,7 +1,7 @@
 // =============================================================================
 // VARDİYA TANIMLARI — katalog (kod · ad · saat · süre · mola · günler)
 // =============================================================================
-// ⚠️ REJİM: karo `isShiftDefinitionsVisible`; asıl sed backend `requireDokumaEnabled`.
+// ⚠️ REJİM: karo `isShiftDefinitionsVisible`; asıl sed backend `requireMachineStopRegime` (D4-A3).
 // Yazma `loom:spec-manage`; arşiv bir durum geçişidir (silme yok), önce takvim etkisi gösterilir.
 // ⚠️ "HATA" ile "KAYIT YOK" ayrı ekranlardır (`DataTable.isError`).
 // =============================================================================

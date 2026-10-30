@@ -4,8 +4,8 @@
 // ⚠️ YOLLAR TAM YAZILIR ("/api/…") — `apiClient.baseURL` `/api` İÇERMEZ.
 // ⚠️ Bu dosya dokuma uçlarını çağıran ikinci istemci dosyasıdır ve backend
 // bekçisi `test_dokuma_regime_gate §7` onu ADIYLA allowlist'te tutar: çağıran
-// ekranın karosu `dokumaEnabled`e bağlı olmak zorunda.
-// Süzme SUNUCUDA: makine · gün · vardiya · kuyruk (`requiresReason ∧ reasonCode null`).
+// ekranın karosu duruş rejimine (`machineStopEnabled` = dokuma ∨ üretim ∧ ayar) bağlı olmak zorunda.
+// Süzme SUNUCUDA: makine · istasyon türü · gün · vardiya · kuyruk (`requiresReason ∧ reasonCode null`).
 // =============================================================================
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
@@ -21,6 +21,8 @@ export interface StopListParams {
   open?: boolean;
   /** Watchdog'un geçici kapattığı, gerçek bitiş bekleyen duruşlar (eski sunucu bilinmeyen parametreyi 400'ler). */
   pendingEnd?: boolean;
+  /** İstasyon türü (D4-A3; sunucu `stationKind` — `readFilterList`, bilinmeyen tür 400). */
+  stationKind?: string;
 }
 
 export interface OpenStopPayload {
@@ -42,6 +44,7 @@ export const machineStopService = {
     if (p.queue) sp.set("queue", "true");
     if (p.open) sp.set("open", "true");
     if (p.pendingEnd) sp.set("pendingEnd", "true");
+    if (p.stationKind) sp.set("stationKind", p.stationKind);
     return apiClient.get<ApiResponse<MachineStop[]>>(`${BASE}?${sp.toString()}`).then((r) => r.data);
   },
   reclasses: (id: string) => apiClient.get<ApiResponse<StopReclass[]>>(`${BASE}/${id}/reclasses`).then((r) => r.data),

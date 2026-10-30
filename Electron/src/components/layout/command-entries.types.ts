@@ -48,6 +48,8 @@ export interface CommandEntry {
    * (`OperationsTile` dışındaki girişlerde bu alan yoktur → her zaman görünür.)
    */
   visibleWhen?: (ctx: OperationsVisibilityContext) => boolean;
+  /** Bağlama göre ad (`OperationsTile.titleWhen` aynası; D4-A3 "Makine Duruşları"); verilmezse `label`. */
+  labelWhen?: (ctx: OperationsVisibilityContext) => string;
 }
 
 export interface CommandSection {

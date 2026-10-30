@@ -32,8 +32,8 @@ describe("vardiya tanımı biçim yardımcıları", () => {
 });
 
 describe("Vardiya Tanımları görünürlüğü", () => {
-  it("yalnız dokuma ETKİNKEN çizilir (referans fabrikada karo yok)", () => {
-    expect(isShiftDefinitionsVisible({ dokumaEnabled: false })).toBe(false);
-    expect(isShiftDefinitionsVisible({ dokumaEnabled: true })).toBe(true);
+  it("yalnız duruş rejimi ETKİNKEN çizilir (D4-A3: dokuma ∨ üretim ∧ ayar; referans fabrikada karo yok)", () => {
+    expect(isShiftDefinitionsVisible({ machineStopEnabled: false })).toBe(false);
+    expect(isShiftDefinitionsVisible({ machineStopEnabled: true })).toBe(true);
   });
 });
