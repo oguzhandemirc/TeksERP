@@ -7,6 +7,7 @@
 // (dinamik delegate · kaskad · dinamik tablolu birleştirme silmesi; tasarım §4.4, S1).
 //   §1 ⭐ kök tablo listesi (`SYNC_ROOT_TABLES`) ↔ migration tetikleyicileri ↔ DB İKİ YÖNLÜ
 //   §2 ⭐ silinen kök satır AYNI tx'te SILINDI yazar; tx geri alınınca işaret de gider
+//   §1e/§2c silme beyanı YOK olan kökün kodda hard delete yolu yok; cari hesap silmesi damgalanır
 //   §3 ⭐ KASKADLA silinen çocuk da işaretlenir (sipariş → kalemler) + ebeveyn KIRLI
 //   §4 ⭐ ayrılma körlüğü (§4.3a): top çuval/sevkiyat/adım değiştirince ESKİ ebeveyn KIRLI;
 //      FK dışı güncelleme işaret YAZMAZ (sıcak yolda maliyet yok)
@@ -31,7 +32,7 @@ import type { PoolClient } from "pg";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { AuditService } from "../src/services/audit.service";
-import { SYNC_ROOT_TABLES } from "../src/cloud-sync/projections";
+import { RECORD_PROJECTIONS, SYNC_ROOT_TABLES } from "../src/cloud-sync/projections";
 import { runSyncRound } from "../src/cloud-sync/sync-round";
 import { egressCloudTransport } from "../src/cloud-sync/cloud-client";
 import { HORIZON_BASE_MARGIN_MS } from "../src/cloud-sync/horizon";
@@ -106,6 +107,15 @@ async function envanterBolumu(): Promise<void> {
   check("§1c ⭐ DB'de her kök tablonun tetikleyicisi KURULU ve etkin (elle restore kopukluğu)", dbEksik.length === 0, dbEksik.length ? `eksik: ${dbEksik.join(",")}` : `${dbKok.size} etkin`);
   const yardimci = ["rolls_sync_parent_moved", "sacks_sync_parent_moved", "shipment_orders_sync_dirty", "work_order_steps_sync_deleted"];
   check("§1d ayrılma/küme/çocuk tetikleyicileri DB'de", yardimci.every((n) => db.some((r) => r.tgname === n)), yardimci.filter((n) => !db.some((r) => r.tgname === n)).join(",") || "4/4");
+  // §1e: "YOK" beyanı = ölçülmüş hard delete yolu yok. Uygulama + düzeltme betiklerinde
+  // kök modelin `.delete(`/`.deleteMany(` çağrısı varsa beyan DAMGA olmalı (K3a cari hesabı).
+  const kaynaklar = [path.join(__dirname, "..", "src"), __dirname].flatMap((d) =>
+    (fs.readdirSync(d, { recursive: true }) as string[]).filter((f) => f.endsWith(".ts") && (d !== __dirname || /^fix_[^/]*\.ts$/.test(f))).map((f) => fs.readFileSync(path.join(d, f), "utf8")));
+  const yokSilinen = RECORD_PROJECTIONS.filter((p) => p.deletion === "YOK").filter((p) => {
+    const delegate = p.root.model.charAt(0).toLowerCase() + p.root.model.slice(1);
+    return kaynaklar.some((src) => new RegExp(`\\b${delegate}\\.(delete|deleteMany)\\(`).test(src));
+  });
+  check("§1e ⭐ silme beyanı YOK olan kökün kodda hard delete yolu yok", yokSilinen.length === 0, yokSilinen.map((p) => p.name).join(",") || "ölçüldü");
 }
 
 async function txBolumleri(): Promise<void> {
@@ -129,6 +139,10 @@ async function txBolumleri(): Promise<void> {
     await c.query(`INSERT INTO "colors" ("id", "code", "name", "updatedAt") VALUES ($1, $2, $3, now())`, [renk, `${TAG}R`, `${TAG} renk`]);
     await c.query(`DELETE FROM "colors" WHERE "id" = $1`, [renk]);
     check("§2a ⭐ silinen renk AYNI tx'te SILINDI işareti yazdı", var_(await isaretler(c, t0), "colors", renk, "DELETED"));
+    const cari = randomUUID();
+    await c.query(`INSERT INTO "cari_accounts" ("id", "kind", "customerId", "updatedAt") VALUES ($1, 'CUSTOMER', $2, now())`, [cari, musteri]);
+    await c.query(`DELETE FROM "cari_accounts" WHERE "id" = $1`, [cari]);
+    check("§2c ⭐ silinen cari hesap (K3a çift hesap düzeltmesi) SILINDI işareti yazdı", var_(await isaretler(c, t0), "cari_accounts", cari, "DELETED"));
 
     console.log("\n§3 — kaskad silme");
     const siparis = randomUUID();

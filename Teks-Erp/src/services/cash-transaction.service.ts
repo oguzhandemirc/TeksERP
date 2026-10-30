@@ -24,6 +24,7 @@ import { D, resolveExchangeRateTx } from "./helpers/finance.helper";
 import { assertCashPeriodOpenTx, assertCashPeriodsOpenTx } from "./helpers/cash-period-guard.helper";
 import { applyCashTxTx, cancelCashTxTx, KIND_DIRECTION, nextCashNoTx, type AccountRef } from "./helpers/cash-ledger.helper";
 import { buildTurkishSearch } from "../utils/query-parser";
+import { cashCategoryWhere } from "./helpers/cash-category-filter.helper";
 import { tokenReplay } from "./helpers/token-replay.helper";
 import type { ApiResponse } from "../types/api.types";
 import { factoryDateTr } from "../constants/time";
@@ -458,6 +459,8 @@ export class CashTransactionService {
     from?: Date;
     to?: Date;
     search?: string;
+    /** Masraf Özeti kategori anahtarı (`cashCategoryKey`); tanınmayan → 400. */
+    category?: string;
   }) {
     const page = Math.max(1, params.page ?? 1);
     const pageSize = Math.min(200, Math.max(1, params.pageSize ?? 50));
@@ -478,6 +481,8 @@ export class CashTransactionService {
       // 0 satır alıyor ve gideri İKİNCİ KEZ giriyordu.
       where.OR = buildTurkishSearch(params.search, ["docNo", "category", "description", "reference"]);
     }
+    // Arama `OR`unu ezmemek için AND'e girer; liste ve toplam aynı where'i görür.
+    if (params.category !== undefined) where.AND = [await cashCategoryWhere(params.category)];
 
     const [data, total] = await Promise.all([
       prisma.cashTransaction.findMany({
