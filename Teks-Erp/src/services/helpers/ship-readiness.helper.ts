@@ -52,6 +52,26 @@ export function readinessClassOf(status: RollStatus): ReadinessClass | null {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// MÜŞTERİ PARTİSİ — (ownerCustomerId, trim(customerBatchNo)) çifti; ERP `Batch` DEĞİL (DALGA4 §5.3 = §11.5).
+// Tek tanım: sevke hazır birimi (SQL) ve belgeden iş emri / İE detayı (bellek) buradan okur — BOĞAZ-İKİZ.
+// ---------------------------------------------------------------------------
+/** Belgenin müşteri partisi anahtarı; sahipsiz ya da parti nosu boş belge → null (partiye girmez). */
+export function customerBatchKeyOf(ownerCustomerId: string | null, customerBatchNo: string | null): string | null {
+  const no = customerBatchNo?.trim() ?? "";
+  return ownerCustomerId && no ? `${ownerCustomerId}:${no}` : null;
+}
+
+/** `customerBatchKeyOf`un SQL ikizi — `<alias>` gelen belge başlığı; üyelik süzgeci `customerBatchMemberSql`. */
+export function customerBatchKeySql(alias: string): Prisma.Sql {
+  return Prisma.raw(`(${alias}."ownerCustomerId"::text || ':' || btrim(${alias}."customerBatchNo"))`);
+}
+
+/** Belge müşteri partisine girer mi (anahtar null değil) — SQL ikizi. */
+export function customerBatchMemberSql(alias: string): Prisma.Sql {
+  return Prisma.raw(`${alias}."ownerCustomerId" IS NOT NULL AND btrim(COALESCE(${alias}."customerBatchNo", '')) <> ''`);
+}
+
 /** `readinessClassOf`un SQL ikizi — `<alias>.status`tan sınıf metni (canlı küme dışı → NULL). */
 export function readinessClassSql(alias: string): Prisma.Sql {
   const col = Prisma.raw(`${alias}.status::text`);

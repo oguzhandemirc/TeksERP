@@ -16,6 +16,8 @@ import { readFilterList } from "../utils/query-parser";
 import {
   SHIP_READY_STATES,
   classifyShipReadiness,
+  customerBatchKeySql,
+  customerBatchMemberSql,
   effectiveShipReadyPolicy,
   readinessClassSql,
   type ReadinessClass,
@@ -101,8 +103,9 @@ export function parseLimit(raw: unknown, def: number, max: number): number {
 // ---------------------------------------------------------------------------
 // BİRİM ÜYELİĞİ — (unit_id, roll_id) çiftleri; tek SQL parçası, liste ve top ucu aynısını kullanır.
 // ---------------------------------------------------------------------------
+// Müşteri partisi tanımı TEK yerde (`ship-readiness.helper`; belgeden iş emri aynısını okur).
 function noteKeySql(): Prisma.Sql {
-  return Prisma.sql`(n."ownerCustomerId"::text || ':' || btrim(n."customerBatchNo"))`;
+  return customerBatchKeySql("n");
 }
 
 export function membershipSql(unit: ReadyWorkUnit, onlyId?: string): Prisma.Sql {
@@ -122,7 +125,7 @@ export function membershipSql(unit: ReadyWorkUnit, onlyId?: string): Prisma.Sql 
     case "customerBatch": {
       const key = unit === "deliveryNote" ? Prisma.sql`n.id::text` : noteKeySql();
       const unitFilter = unit === "customerBatch"
-        ? Prisma.sql`AND n."ownerCustomerId" IS NOT NULL AND btrim(COALESCE(n."customerBatchNo", '')) <> ''`
+        ? Prisma.sql`AND ${customerBatchMemberSql("n")}`
         : Prisma.empty;
       const idFilter = onlyId ? Prisma.sql`AND ${key} = ${onlyId}` : Prisma.empty;
       // Kök: belgenin onayla doğan topları; aşağı soy `parentRollId` (tambur bölmesi) üzerinden, derinlik tavanlı.

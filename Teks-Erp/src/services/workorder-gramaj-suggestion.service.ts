@@ -11,7 +11,8 @@ import { K18_DEAD_STATUSES } from "./batch.service";
 import { suggestProcess, type ProcessSuggestion } from "./gelen-belge-eslestirme.service";
 import { loadKursunGramajOptions } from "./helpers/kursun-bypass-gramaj.helper";
 import { loadProcessChoiceGroups } from "./helpers/process-choice-catalog.helper";
-import { resolveDeliveryNoteLinesForRolls } from "./helpers/roll-delivery-note-line.helper";
+import { resolveDeliveryNoteLinesForRolls, type RollDeliveryNoteLine } from "./helpers/roll-delivery-note-line.helper";
+import { customerBatchKeyOf } from "./helpers/ship-readiness.helper";
 import { whereRollsOfWorkOrder } from "./helpers/workorder-rolls.helper";
 
 export interface GramajSuggestionEntry {
@@ -33,6 +34,34 @@ export interface WorkOrderGramajSuggestion {
   readonly entries: ReadonlyArray<GramajSuggestionEntry>;
   /** Kurşun dışı çeşit özellikleri (brode deseni vb., D4-D1), özellik başına aynı birleştirme. Böyle özellik yoksa anahtar YOK. */
   readonly variants?: ReadonlyArray<WorkOrderVariantSuggestion>;
+  /** Türetilmiş MÜŞTERİ PARTİSİ (D4-D2; `customerBatchKeyOf`, ata zinciriyle). Partili belge yoksa anahtar YOK. */
+  readonly customerBatches?: ReadonlyArray<WorkOrderCustomerBatch>;
+}
+
+export interface WorkOrderCustomerBatch {
+  readonly key: string;
+  readonly ownerCustomerId: string;
+  readonly ownerName: string;
+  readonly batchNo: string;
+  readonly rollCount: number;
+}
+
+/** Kapsanan topların müşteri partileri (çok top → en kalabalık önce). Ad okuması tek sorgu. */
+async function deriveCustomerBatches(lines: Iterable<RollDeliveryNoteLine>): Promise<WorkOrderCustomerBatch[]> {
+  const byKey = new Map<string, { ownerCustomerId: string; batchNo: string; rollCount: number }>();
+  for (const l of lines) {
+    const key = customerBatchKeyOf(l.ownerCustomerId, l.customerBatchNo);
+    if (!key) continue;
+    const g = byKey.get(key);
+    if (g) g.rollCount++;
+    else byKey.set(key, { ownerCustomerId: l.ownerCustomerId!, batchNo: l.customerBatchNo!.trim(), rollCount: 1 });
+  }
+  if (byKey.size === 0) return [];
+  const owners = await prisma.customer.findMany({ where: { id: { in: [...new Set([...byKey.values()].map((g) => g.ownerCustomerId))] } }, select: { id: true, name: true } });
+  const nameOf = new Map(owners.map((o) => [o.id, o.name]));
+  return [...byKey.entries()]
+    .map(([key, g]) => ({ key, ...g, ownerName: nameOf.get(g.ownerCustomerId) ?? "" }))
+    .sort((a, b) => b.rollCount - a.rollCount || a.batchNo.localeCompare(b.batchNo));
 }
 
 export interface WorkOrderVariantSuggestion {
@@ -81,8 +110,11 @@ export async function suggestWorkOrderGramaj(workOrderId: string): Promise<WorkO
     if (!cache.has(key)) cache.set(key, await suggestProcess(line.processText, line.senderCustomerId, options, groups));
     perRoll.push({ processText: line.processText, suggestion: cache.get(key)! });
   }
-  const merged = mergeGramajSuggestions(rolls.length, perRoll);
-  if (!merged || groups.length === 0) return merged;
+  const base = mergeGramajSuggestions(rolls.length, perRoll);
+  if (!base) return base;
+  const batches = await deriveCustomerBatches(lines.values());
+  const merged = batches.length > 0 ? { ...base, customerBatches: batches } : base;
+  if (groups.length === 0) return merged;
   // Özellik başına aynı ilke: kapsanan toplar o özellikte TEK değerde birleşmezse öneri yok.
   const variants = groups.map((g): WorkOrderVariantSuggestion => {
     const per = perRoll.map((r) => {

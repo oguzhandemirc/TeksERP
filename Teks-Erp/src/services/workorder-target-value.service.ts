@@ -48,15 +48,28 @@ export async function replaceWorkOrderTargetValues(workOrderId: string, items: T
   };
 }
 
-export async function getWorkOrderProcessSummary(
-  workOrderId: string,
-): Promise<{ success: true; data: { kursun: KursunSummary; deliveryNoteGramaj?: WorkOrderGramajSuggestion | null } }> {
+/** Kurşun DIŞI aktif hedef (brode deseni vb., D4-D2) — İE detayında "desen hedefi". */
+export interface VariantTarget {
+  readonly propertyId: string;
+  readonly propertyName: string;
+  readonly valueId: string;
+  readonly valueName: string;
+}
+
+type ProcessSummaryData = { kursun: KursunSummary; deliveryNoteGramaj?: WorkOrderGramajSuggestion | null; variantTargets?: VariantTarget[] };
+
+export async function getWorkOrderProcessSummary(workOrderId: string): Promise<{ success: true; data: ProcessSummaryData }> {
   const wo = await prisma.workOrder.findUnique({ where: { id: workOrderId }, select: { id: true } });
   if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
   const kursun = await summarizeKursunApplications({ workOrderId });
+  // D4-D2: kurşun dışı hedef yalnız VARSA anahtar olarak eklenir (yanıt bugünkü İE'lerde bayt-aynı).
+  const variantTargets: VariantTarget[] = (await readActiveTargetValues(prisma, workOrderId))
+    .filter((t) => t.propertyId !== kursun.target?.propertyId)
+    .map((t) => ({ propertyId: t.propertyId, propertyName: t.property.name, valueId: t.valueId, valueName: t.value.name }));
+  const extra = variantTargets.length > 0 ? { variantTargets } : {};
   // H9b: modül kapalıyken anahtar HİÇ yok (yanıt bayt-aynı); açıkken gelen belgesiz İE'de null.
-  if (!(await effectiveIncomingDocsEnabled())) return { success: true, data: { kursun } };
-  return { success: true, data: { kursun, deliveryNoteGramaj: await suggestWorkOrderGramaj(workOrderId) } };
+  if (!(await effectiveIncomingDocsEnabled())) return { success: true, data: { kursun, ...extra } };
+  return { success: true, data: { kursun, deliveryNoteGramaj: await suggestWorkOrderGramaj(workOrderId), ...extra } };
 }
 
 export async function getBatchProcessSummary(batchId: string): Promise<{ success: true; data: { kursun: KursunSummary } }> {
