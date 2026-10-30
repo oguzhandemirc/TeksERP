@@ -197,13 +197,15 @@ function section2() {
   const r = meterReadingSchema.safeParse({ meters: 1, source: "MACHINE", clientToken: uuid, rollId: uuid, stepId: uuid, phase: "OUT" });
   check("§2 kurşun meter-readings gövdesi kaynak alanlarını taşır", r.success && r.data.source === "MACHINE");
   const m = { source: "MACHINE", peripheralId: uuid };
-  const f = finalizeSchema.parse({ rollId: uuid, cuts: [{ length: 10, qualityGrade: "A", measure: m }] });
+  // Yalnız şema ayrıştırması: not değeri anlamsızdır, katalog kodu değildir.
+  const parseOnlyLabel = "X";
+  const f = finalizeSchema.parse({ rollId: uuid, cuts: [{ length: 10, qualityGrade: parseOnlyLabel, measure: m }] });
   check("§2 finalize cuts[].measure silinmez", f.cuts[0]?.measure?.source === "MACHINE");
   check("§2 cutOpenFabric measure silinmez", cutOpenFabricSchema.parse({ lengthMeters: 5, status: "WAREHOUSE", measure: m }).measure?.source === "MACHINE");
   check("§2 cutWarehouseRoll measure silinmez", cutWarehouseRollSchema.parse({ cutLength: 5, measure: m }).measure?.source === "MACHINE");
   check("§2 manual measure silinmez", manualRollSchema.parse({ targetStepId: uuid, initialQty: 5, reason: "abc", clientToken: uuid, measure: m }).measure?.source === "MACHINE");
   check("§2 produce measure silinmez", produceSchema.parse({ itemId: uuid, initialQty: 5, reason: "abc", clientToken: uuid, measure: m }).measure?.source === "MACHINE");
-  check("§2 finalize measure katı (bilinmeyen anahtar RED)", !finalizeSchema.safeParse({ rollId: uuid, cuts: [{ length: 1, qualityGrade: "A", measure: { source: "MACHINE", x: 1 } }] }).success);
+  check("§2 finalize measure katı (bilinmeyen anahtar RED)", !finalizeSchema.safeParse({ rollId: uuid, cuts: [{ length: 1, qualityGrade: parseOnlyLabel, measure: { source: "MACHINE", x: 1 } }] }).success);
 }
 
 // ── §3 ────────────────────────────────────────────────────────────────────────
