@@ -352,7 +352,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
 const mobile: ScreenEntry[] = [
   { key: "KK1", app: "mobile", modul: "productionEnabled", title: "Ham Giriş", requires: ["mobile:kk1"], capabilities: [{ code: "mobile:kk1-desen", label: "Yeni desen (kumaş) oluşturabilir" }, { code: "mobile:kk1-yari-mamul", label: "Dışarıdan yarı mamul kabul edebilir" }, { code: "mobile:kumas", label: "Kumaş tanımı ekleyebilir" }] },
   { key: "KursunQc", app: "mobile", modul: "productionEnabled", title: "Kurşun", requires: ["mobile:kk2-kursun"], capabilities: [{ code: "mobile:makine-durus", label: "Makine duruşu aç / kapat / sebep gir (Duruş çipi; uretim.makineDurusTakibi açıkken)" }] },
-  { key: "Tambur", app: "mobile", modul: "productionEnabled", title: "Tambur", requires: ["mobile:tambur"], capabilities: [{ code: "mobile:makine-durus", label: "Makine duruşu aç / kapat / sebep gir (Duruş çipi; uretim.makineDurusTakibi açıkken)" }, { code: "mobile:tambur-duzelt", label: "Saha düzeltmesi: topu Tambur'a alma / manuel top" }, { code: "label:edit", label: "Etiketteki müşteri adını sipariş kalemi için düzeltebilir" }, { code: "customer-alias:write", label: "Müşterideki adı KALICI değiştirebilir" }, { code: "roll:manual-adjust", label: "Top metraj/kalite düzeltmesi" }, { code: "roll:customer-code", label: "Müşteri etiketini emanet topa bağla / değiştir (Son Çıkan Toplar)" }] },
+  { key: "Tambur", app: "mobile", modul: "productionEnabled", title: "Tambur", requires: ["mobile:tambur"], capabilities: [{ code: "mobile:makine-durus", label: "Makine duruşu aç / kapat / sebep gir (Duruş çipi; uretim.makineDurusTakibi açıkken)" }, { code: "mobile:tambur-duzelt", label: "Saha düzeltmesi: topu Tambur'a alma / manuel top" }, { code: "label:edit", label: "Etiketteki müşteri adını sipariş kalemi için düzeltebilir" }, { code: "customer-alias:write", label: "Müşterideki adı KALICI değiştirebilir" }, { code: "roll:manual-adjust", label: "Top metraj/kalite düzeltmesi" }] },
   { key: "Depo", app: "mobile", modul: "cekirdek:stok-giris", title: "Depo", requires: ["mobile:depo"], capabilities: [] },
   { key: "TartiPaket", app: "mobile", modul: "cekirdek:sevkiyat-depo", title: TERIM_AD.tartiPaket, requires: ["mobile:tarti-paket"], capabilities: [{ code: "mobile:sevkiyat", label: "Sevk çıkışı adımlarını da görebilir" }] },
   { key: "Sevkiyat", app: "mobile", modul: "cekirdek:sevkiyat-depo", title: "Sevk Çıkışı", requires: ["mobile:sevkiyat"], capabilities: [] },
@@ -444,6 +444,9 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   { code: "admin:*", reason: "Wildcard — tek tek ekran beyanı anlamsız." },
   { code: "mobile:*", reason: "Wildcard — tüm mobil ekranları kapsar." },
   { code: "web:access", reason: "Giriş kanalı izni (bulut web paneli) — ekran açmaz, çerezli web girişinin kapısıdır (BULUT-WEB-PANELI.md K4)." },
+  // D4-F4: bağla/kaldır kümesi geri uyum için mobile:tambur'u da taşır; tablet düğmesi yalnız Tambur'da olduğundan
+  // Tambur yeteneği olarak sunulsa etkisiz kutu olurdu. Kod, ileride Tambur dışı okutma noktaları (D4-F1b) içindir.
+  { code: "roll:customer-code", reason: "Bugün tablet bağlama düğmesi yalnız Tambur ekranında; mobile:tambur zaten kapsar — Tambur dışı yüzey doğunca ekrana taşınır." },
   // Dokuma P2b (2026-09-13): koşum yazma yüzeyi backend'de doğdu, ekranı tablet
   // TEZGAH ekranıdır (DOKUMA-IS-EMRI §3.2) ve henüz yok. Ekran doğduğu gün bu iki
   // satır ölü muaf olur ve bekçi kırmızı verir — silinmesi o dilimin işidir.
