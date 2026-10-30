@@ -1530,7 +1530,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Duruş açıkken gramaj ya da metre girilirse tablet uyarır; giriş yine kaydedilir.",
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
-        desc: "Açıkken makinede kapatılmamış bir duruş varsa, operatör Kurşun ekranında gramaj ya da Tambur ekranında metre girdiğinde tablet \"Makine duruşta görünüyor\" uyarısı gösterir; giriş engellenmez, kaydedilir. Uyarı, makine çalıştığı hâlde duruşun kapatılmasının unutulduğunu fark ettirmek içindir. Kapalıyken (varsayılan) uyarı gösterilmez. Duruş düğmesi ve duruş bandı bu ayardan bağımsızdır.",
+        desc: "Açıkken makinede kapatılmamış bir duruş varsa, operatör Kurşun ekranında gramaj ya da Tambur ekranında kesim metresi girdiğinde tablet \"Makine duruşta görünüyor\" uyarısı gösterir; giriş engellenmez, kaydedilir. Uyarı, makine çalıştığı hâlde duruşun kapatılmasının unutulduğunu fark ettirmek içindir. Kapalıyken (varsayılan) uyarı gösterilmez. Duruş düğmesi ve duruş bandı bu ayardan bağımsızdır.",
       },
       {
         key: "productionCancelReasonRequired",

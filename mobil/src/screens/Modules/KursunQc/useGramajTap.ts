@@ -11,6 +11,7 @@ import { onlineManager, useMutation } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { STATION_MUT } from '../../../offline/mutations';
 import { showScreenError } from '../../../lib/screenToast';
+import { showStopOpenEntryWarning } from '../../../components/machine-stop/entryWarning';
 import type { CompleteQc2Request } from '../../../services/kursunQc.service';
 import type { KursunStepSummary } from '../../../types/models';
 import type { TapValueConfig } from './stationPanels';
@@ -21,7 +22,6 @@ import {
   deviationText,
   findTarget,
   isCorrectionConflict,
-  stopOpenTapWarning,
   type GramajValue,
   type LastTap,
 } from './gramajTap';
@@ -81,8 +81,7 @@ function dispatchTap(
   ctl: { online: boolean; abort: () => void },
 ): void {
   // K2: açık duruş UYARIR, gönderimi kesmez (sunucu kapısı yok).
-  const stopWarning = stopOpenTapWarning(input.stopOpen === true);
-  if (stopWarning) Toast.show({ type: 'info', text1: stopWarning.title, text2: stopWarning.detail, visibilityTime: 5000 });
+  showStopOpenEntryWarning(input.stopOpen === true);
   if (input.meter?.outOn && input.roll) {
     input.meter.captureOut(
       input.roll,
