@@ -87,7 +87,7 @@ export function OrderLinesEditor({ value, onChange, error, lineErrors, customerI
     onChange(value.map((l) => (l.clientId === clientId ? { ...l, ...patch } : l)));
   const removeLine = (clientId: string) => onChange(value.filter((l) => l.clientId !== clientId));
   const addLine = () =>
-    onChange([...value, { clientId: newLineClientId(), itemId: "", colorId: null, quantity: 0, width: null, unitPrice: "", customerItemName: "", customerColorName: "", requiredPropertyIds: [], cutNote: "" }]);
+    onChange([...value, { clientId: newLineClientId(), itemId: "", colorId: null, quantity: 0, width: null, unitPrice: "", customerItemName: "", customerColorName: "", requiredPropertyIds: [], targetValues: [], cutNote: "" }]);
   const closeNote = (clientId: string) => {
     updateLine(clientId, { cutNote: "" });
     setNoteOpenIds((prev) => {

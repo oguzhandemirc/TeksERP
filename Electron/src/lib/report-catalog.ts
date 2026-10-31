@@ -301,6 +301,12 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
     sinif: "basit", izin: "report:yarn-need", modul: "maliyetEnabled", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/maliyet/iplik-ihtiyaci", uc: "/api/reports/maliyet/iplik-ihtiyaci", kapiTasiyici: [{ dosya: "src/routes/reports/maliyet.report.routes.ts", yol: "/iplik-ihtiyaci" }], yuzey: "yaprak",
     nesil: "v2", kategoriV2: "uretim", persona: ["planlama", "patron"], varyantBoyutlari: ["musteri", "urun"], hazir: true, yeniRapor: true },
+  // D4-G3: kârlılık (hizmet işleri; tek kaynak `profitability.helper`); panelde kendi sayfası (V2_KEYS_WITH_OWN_PAGE),
+  // Maliyet & Teklif hub'ında karo. Kapı maliyet ∧ ön muhasebe; izin `cost:read` (+ uçta `report:finance`). Varyant sonraki dilim.
+  { key: "maliyet/karlilik", baslik: "Kârlılık", soru: "Hangi müşteri, hangi işlem ve hangi ay ne kazandırdı; gelirden ipe, makineye ve dışarıya ne gitti?",
+    sinif: "basit", izin: "cost:read", modul: "maliyetEnabled", varsayilanGun: 90, tarih: "aralik-gun",
+    panelYolu: "reports/maliyet/karlilik", uc: "/api/reports/maliyet/karlilik", kapiTasiyici: [{ dosya: "src/routes/reports/maliyet.report.routes.ts", yol: "/karlilik" }], yuzey: "yaprak",
+    nesil: "v2", kategoriV2: "para", persona: ["patron", "muhasebe"], varyantBoyutlari: ["musteri", "makine"], hazir: true, yeniRapor: true },
   { key: "quality/kalite", baslik: "Kalite nasıl gidiyor?", soru: "Bu dönemde kumaşın ne kadarı birinci kalite çıktı ve önceki döneme göre nasıl değişti?",
     sinif: "basit", izin: "report:quality", modul: "productionEnabled", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/quality/kalite", uc: "/api/reports/quality/kalite", kapiTasiyici: [{ dosya: "src/routes/reports/temel-uretim.routes.ts", yol: "/quality/kalite" }], yuzey: "yaprak",
@@ -346,6 +352,12 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
     sinif: "basit", izin: "report:production", modul: "productionEnabled", varsayilanGun: 7, tarih: "aralik-gun",
     panelYolu: "reports/production/makine-duruslari", uc: "/api/reports/production/makine-duruslari", kapiTasiyici: [{ dosya: "src/routes/reports/temel-uretim.routes.ts", yol: "/production/makine-duruslari" }], yuzey: "yaprak",
     nesil: "v2", kategoriV2: "uretim", persona: ["uretim", "patron"], varyantBoyutlari: ["makine", "istasyon", "sebep"], hazir: true, yeniRapor: true },
+  // SY-D3: dokuma işi başına standart ↔ gerçek dokuma /m (`weaving-actual-cost.helper`); kapı maliyet ∧ dokuma + `cost:read`;
+  // panelde kendi sayfası (V2_KEYS_WITH_OWN_PAGE), Maliyet Raporları karosundan açılır.
+  { key: "maliyet/dokuma-verimlilik", baslik: "Dokuma maliyeti standarttan saptı mı?", soru: "Dokuma iş emirlerinin gerçek metre maliyeti standart maliyete göre ne kadar saptı, tezgâh ne kadar verimli çalıştı?",
+    sinif: "basit", izin: "cost:read", modul: "maliyetEnabled", varsayilanGun: 30, tarih: "aralik-gun",
+    panelYolu: "reports/maliyet/dokuma-verimlilik", uc: "/api/reports/maliyet/dokuma-verimlilik", kapiTasiyici: [{ dosya: "src/routes/reports/maliyet.report.routes.ts", yol: "/dokuma-verimlilik" }], yuzey: "yaprak",
+    nesil: "v2", kategoriV2: "dokuma", persona: ["dokuma", "patron"], varyantBoyutlari: ["urun", "tezgah"], hazir: true, yeniRapor: true },
   // SY-F1: kuşak / hedef değer ihtiyacı — açık sipariş kalemi × `OrderLineTargetValue` → beklenen top (sarf stoğu yok, K17).
   { key: "sales/hedef-deger-ihtiyaci", baslik: "Kuşak ve Hedef Değer İhtiyacı", soru: "Açık siparişler için hangi kuşaktan ya da hedef değerden kaç top gerekecek?",
     sinif: "basit", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: null, tarih: "yok",

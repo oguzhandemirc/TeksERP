@@ -57,6 +57,9 @@ export interface NotificationCatalogEntry {
   grup: NotificationGrup;
   /** DNF: iç dizinin TAMAMI, dış dizinin HERHANGİ BİRİ. */
   izinler: readonly (readonly IzinKodu[])[];
+  /** Ekranı (`panelEkran` requires) açamayan ama türü GÖRMESİ gereken tek-izinli konjonksiyonlar (D4-KUC3a); bekçi §3
+   *  bunları ekran şartından muaf tutar, §3d gerekçeyi ve DNF'de tek başına durduğunu ölçer. Derin bağlantı onlara ekran açmaz. */
+  screenlessViewers?: { permissions: readonly IzinKodu[]; reason: string };
   /** SCREEN_CATALOG `panelEkran` satırının modülü (bekçi §2). */
   modul: EkranModul;
   /** Ek görme kapısı (ör. tezgah alarmı çözücüsü); görme süzgeci ad üstünden çözer. */

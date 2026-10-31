@@ -152,6 +152,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   tamburUndoFullSameDayOnly: "productionEnabled",
   tamburSimulatedMeterEnabled: "productionEnabled",
   tamburMeasureSourceRequired: "productionEnabled",
+  tamburCalibrationCheck: "productionEnabled",
   tamburShortCutA1Enabled: "productionEnabled",
   tamburShortCutA1ThresholdM: "productionEnabled",
   tamburPlanGateWidthToleranceCm: "productionEnabled",
@@ -186,6 +187,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   financeCariHoldReleaseBySamePerson: "financeEnabled",
   financeCariHoldEmanetShipment: "financeEnabled",
   costPresentationCurrency: "cekirdek", // SY-J1: `maliyetEnabled` gizlenebilir modül değil (HideableModule dışı)
+  costFinishingKgBasis: "cekirdek", // SY-E1: aynı gerekçe (maliyet gizlenebilir modül değil)
   financeRiskLimitCurrencyMode: "financeEnabled",
   // D4-G2a: kârlılık geliri faturadan okunur (maliyet ∧ finans); maliyet gizlenebilir modül değil → sahibi finans.
   costProfitSubcontractSource: "financeEnabled",

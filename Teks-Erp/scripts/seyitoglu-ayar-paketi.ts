@@ -19,10 +19,9 @@ import { applySetup, planSetupFromDb, type SetupRow } from "./lib/seyitoglu-kuru
 
 /**
  * §15.1 Seyitoğlu sütunu. `maliyet.verimlilik.sureKaynagi` İKİNCİ ayar olarak açılmaz
- * (§15.1 notu): Gülkesim D4-G2b'nin `maliyet.karlilik.makineSuresi` ayarı okunur. KOSUM (MachineRun)
- * = OTURUM (WorkSession) denkliği ÖLÇÜLMEDİ; OTURUM G2b varsayılanı olduğundan pakete satır YAZILMAZ
- * (anahtar hizmet paketinde; §1e iki paketi ayrık tutar) — SY-D2 ölçerek karar verir (G2b kümesine KOSUM
- * eklenir ya da tezgâhta eşlik kabul edilir).
+ * (§15.1 notu): Gülkesim D4-G2b'nin `maliyet.karlilik.makineSuresi` ayarı okunur. SY-D3 kararı: dokuma
+ * gerçek maliyetinde OTURUM (varsayılan) ve VARDIYA tezgâh süresini KOŞUMDAN (MachineRun) okur, NORM metre ÷
+ * norm — Seyitoğlu'nun istediği KOSUM varsayılanda gelir, pakete satır YAZILMAZ.
  */
 export const SEYITOGLU_SETTINGS: readonly PaketSatiri[] = [
   { anahtar: "maliyet.dokumaStandartYontemi", alan: "costWeavingStandardMethod", hedef: "ATKI_UCRETI", dilim: "SY-D2" },
@@ -30,7 +29,7 @@ export const SEYITOGLU_SETTINGS: readonly PaketSatiri[] = [
   { anahtar: "maliyet.terbiyeKgTabani", alan: "costFinishingKgBasis", hedef: "IPLIK_TUKETIMI", dilim: "SY-E1" },
   { anahtar: "maliyet.sunumDovizi", alan: "costPresentationCurrency", hedef: "USD", dilim: "SY-J1" },
   { anahtar: "siparis.uretimOnerisi", alan: "orderProductionProposal", hedef: "ONIZLEME", dilim: "SY-M1" },
-  { anahtar: "siparis.hedefDegerOnerisi", alan: "orderTargetValueSuggestion", hedef: "MUSTERI_SON", dilim: "SY-F1" },
+  { anahtar: "siparis.hedefDegerOnerisi", alan: "orderTargetValueSuggestion", hedef: "MUSTERI_SON", dilim: "SY-F2b" },
 ];
 
 /** TAM profilin Seyitoğlu için şart modülleri; kapalıysa uyarı (profil seçimi kurulumda). */

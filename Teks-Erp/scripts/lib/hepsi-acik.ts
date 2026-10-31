@@ -76,6 +76,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   financeCariHoldReleaseBySamePerson: A("DENY"), // açma ucunun "koyan kişi" dalını işletir
   financeCariHoldEmanetShipment: A("PROCESSED_HELD"), // "işlenmiş" yüklemini işletir; işlenmemiş emanet yine geçer
   costPresentationCurrency: A("USD"), // sunum alanlarını (kur + döviz tutarı) yanıta yazdırır
+  costFinishingKgBasis: V("yalnız KG tabanlı terbiye tarifesinin kg kaynağı; hiçbir kapıyı açıp kapamaz"),
   financeServiceBillingPriceDate: V("fiyat tarihi; iki değer de geçerli, varsayılan hizmet anı"),
   financeAutoAllocateOnPaymentEnabled: A(true),
   financeAllowZeroPriceLineEnabled: A(true),
@@ -101,6 +102,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   tamburOverQuantityEnabled: A(true),
   tamburUndoFullSameDayOnly: A(true),
   tamburSimulatedMeterEnabled: A(true),
+  tamburCalibrationCheck: A("UYAR"), // süresi geçmiş sayaç uyarı yolunu işletir (ölçüm engellenmez)
   tamburMeasureSourceRequired: V("çıkışsız kapı: measure göndermeyen istemci 400 alır; kural test_tambur_olcum_kaynagi'nde sınanır"),
   tamburShortCutA1Enabled: A(true),
   tamburShortCutA1ThresholdM: A(5),

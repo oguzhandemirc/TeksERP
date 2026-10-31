@@ -64,8 +64,10 @@ import { alarmEnableBlocked } from "./helpers/loom-floor.helper";
 import { isShiftDefined } from "./helpers/loom-alarm-shift.helper";
 import { resetNotificationBaseline, resetNotificationBaselines } from "./helpers/notification-baseline.helper";
 import { READY_WORK_KIND } from "../constants/notification-catalog-sevkiyat";
+import { notifyUnitNeedsIncomingDoc } from "../constants/ready-work-units";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { TAMBUR_PLAN_WIDTH_TOLERANCE_CM } from "../constants/tambur-plan-gate";
+import { FINISHING_KG_BASES, type FinishingKgBasis } from "./helpers/fabric-cost-kg.helper";
 import {
   DEFAULT_PHASE_OUT_LINE_QTY,
   DEFAULT_PHASE_OUT_NEW_ORDER,
@@ -194,6 +196,8 @@ export const SETTING_KEYS = {
   FINANCE_CARI_HOLD_EMANET_SHIPMENT: "finance.cariHold.emanetShipment",
   /** SY-J1: maliyet sunum dövizi — `TRY` (varsayılan; yanıt bayt-aynı) · `USD` · `EUR`. Motor TL'de kalır. */
   COST_PRESENTATION_CURRENCY: "maliyet.sunumDovizi",
+  /** SY-E1: KG tabanlı terbiye tarifesinin kg'ı — `NET_HAM` (varsayılan; firesiz ham kumaş) · `IPLIK_TUKETIMI` (Excel uyumu). */
+  COST_FINISHING_KG_BASIS: "maliyet.terbiyeKgTabani",
   /** D4-I2b (S12): risk limiti karşılaştırması — `PER_CURRENCY` (varsayılan, her para birimi ayrı) · `TRY_CONVERTED`
    *  (tüm bakiyeler o güne kadarki en son kurla TL'ye çevrilip toplanır; kur yoksa 409 `RISK_LIMIT_FX_MISSING`). */
   FINANCE_RISK_LIMIT_CURRENCY_MODE: "finance.riskLimit.currencyMode",
@@ -790,6 +794,8 @@ export const SETTING_KEYS = {
   TAMBUR_SIMULATED_METER_ENABLED: "tambur.simulatedMeterEnabled",
   /** D4-B1: Tambur kesim gövdesinde ölçüm kaynağı (`measure`) zorunlu mu — satır yok = KAPALI (eski APK göndermez). */
   TAMBUR_MEASURE_SOURCE_REQUIRED: "tambur.olcumKaynagiZorunlu",
+  /** D4-B5k (B-3): süresi geçmiş kalibrasyonlu sayaçla ölçümde uyarı — satır yok = KAPALI (bugünkü davranış). */
+  TAMBUR_CALIBRATION_CHECK: "tambur.kalibrasyonKontrolu",
   /** Kurşun bypass (kurşun istasyonuna tablet KOYULMAYAN fabrika düzeni) açık mı.
    *  Default FALSE (kapalı). Diğer flag'lerin çoğunun aksine backend ENFORCE eder,
    *  ama ENFORCE kapsamı DAR: yalnız YENİ ATAMA OLUŞTURMAYI kapılar (bayrak kapalıyken
@@ -1101,6 +1107,8 @@ export const DEFAULT_CARI_HOLD_EMANET_SHIPMENT: CariHoldEmanetShipment = "EXEMPT
 export type CostPresentationCurrency = "TRY" | "USD" | "EUR";
 export const COST_PRESENTATION_CURRENCIES: CostPresentationCurrency[] = ["TRY", "USD", "EUR"];
 export const DEFAULT_COST_PRESENTATION_CURRENCY: CostPresentationCurrency = "TRY";
+/** SY-E1: yalnız KG tabanlı tarifede okunur; metre tabanlı tarifeler (bugünkü) etkilenmez. */
+export const DEFAULT_COST_FINISHING_KG_BASIS: FinishingKgBasis = "NET_HAM";
 /** D4-I2b (S12): risk limiti para birimi kipi — her para birimi ayrı (bugünkü) · o güne kadarki en son kurla TL'ye çevrilmiş toplam. */
 export type RiskLimitCurrencyMode = "PER_CURRENCY" | "TRY_CONVERTED";
 export const RISK_LIMIT_CURRENCY_MODES: RiskLimitCurrencyMode[] = ["PER_CURRENCY", "TRY_CONVERTED"];
@@ -1157,6 +1165,11 @@ export type LabelCustomerCodeMissing = "BLOCK" | "ROLL_BARCODE";
 export const LABEL_CUSTOMER_CODE_MISSING_MODES: LabelCustomerCodeMissing[] = ["BLOCK", "ROLL_BARCODE"];
 /** Varsayılan `BLOCK` — bugün CUSTOMER_CODE kaynaklı şablon olmadığından etkisiz (bugünkü davranış değişmez). */
 export const DEFAULT_LABEL_CUSTOMER_CODE_MISSING: LabelCustomerCodeMissing = "BLOCK";
+/** D4-B5k: sayaç kalibrasyon kontrolü — UYAR yalnız uyarır (ölçüm engellenmez, kaynak MACHINE kalır). */
+export type TamburCalibrationCheck = "KAPALI" | "UYAR";
+export const TAMBUR_CALIBRATION_CHECK_MODES: TamburCalibrationCheck[] = ["KAPALI", "UYAR"];
+/** Varsayılan `KAPALI` — kalibrasyon tarihi hiçbir yanıtı değiştirmez (bugünkü davranış). */
+export const DEFAULT_TAMBUR_CALIBRATION_CHECK: TamburCalibrationCheck = "KAPALI";
 
 /** Sevkin fatura izi nereden yazılır. `dis` = bugünkü davranış. */
 export type ShippingInvoiceMode = "dis" | "ic" | "ikisi";
@@ -1987,6 +2000,8 @@ export interface FeatureFlags {
   financeCariHoldEmanetShipment: CariHoldEmanetShipment;
   /** SY-J1: maliyet sunum dövizi (varsayılan `TRY` = bugünkü TL-yalnız yanıt). */
   costPresentationCurrency: CostPresentationCurrency;
+  /** SY-E1: KG tabanlı terbiye tarifesinin kg kaynağı (varsayılan `NET_HAM`). */
+  costFinishingKgBasis: FinishingKgBasis;
   /** D4-I2b: risk limiti para birimi kipi (varsayılan `PER_CURRENCY`). */
   financeRiskLimitCurrencyMode: RiskLimitCurrencyMode;
   /** D4-G2a: kârlılık dış fason kaynağı (varsayılan `FATURA_ONCE`). */
@@ -2258,6 +2273,8 @@ export interface FeatureFlags {
   tamburSimulatedMeterEnabled: boolean;
   /** D4-B1: Tambur kesiminde ölçüm kaynağı zorunlu (varsayılan KAPALI; önce tüm tabletler yeni sürümde olmalı). */
   tamburMeasureSourceRequired: boolean;
+  /** D4-B5k: süresi geçmiş sayaç kalibrasyonunda ölçüm uyarısı (varsayılan KAPALI). */
+  tamburCalibrationCheck: TamburCalibrationCheck;
   /** Kısa kesimde otomatik A1 — FABRİKA VARSAYILANI (default FALSE/kapalı).
    *  Kural istemcide koşar; tablet yetkilisi cihaz bazında ezebilir. */
   tamburShortCutA1Enabled: boolean;
@@ -2665,6 +2682,7 @@ export class SystemSettingService {
       financeCariHoldReleaseBySamePerson: await readFinanceCariHoldReleaseBySamePerson(cacheClient),
       financeCariHoldEmanetShipment: await readFinanceCariHoldEmanetShipment(cacheClient),
       costPresentationCurrency: await readCostPresentationCurrency(cacheClient),
+      costFinishingKgBasis: await readCostFinishingKgBasis(cacheClient),
       financeRiskLimitCurrencyMode: await readFinanceRiskLimitCurrencyMode(cacheClient),
       costProfitSubcontractSource: await readCostProfitSubcontractSource(cacheClient),
       costProfitConsumablePriceSource: await readCostProfitConsumablePriceSource(cacheClient),
@@ -2792,6 +2810,7 @@ export class SystemSettingService {
       tamburUndoFullSameDayOnly: await readTamburUndoFullSameDayOnly(cacheClient),
       tamburSimulatedMeterEnabled: await readTamburSimulatedMeterEnabled(cacheClient),
       tamburMeasureSourceRequired: await readTamburMeasureSourceRequired(cacheClient),
+      tamburCalibrationCheck: await readTamburCalibrationCheck(cacheClient),
       tamburShortCutA1Enabled: await readTamburShortCutA1Enabled(cacheClient),
       tamburShortCutA1ThresholdM: await readTamburShortCutA1ThresholdM(cacheClient),
       tamburPlanGateWidthToleranceCm: await readTamburPlanGateWidthToleranceCm(cacheClient),
@@ -3045,6 +3064,10 @@ export class SystemSettingService {
     this.assertModuleWritesLicensed(input as Record<string, unknown>);
     await this.assertTezgahAlarmShiftRequirement(input as Record<string, unknown>);
     await this.assertTezgahAlarmUnclassifiedRequirement(input as Record<string, unknown>);
+    // D4-KUC3a: gelen belge zinciri (emanet ∧ gelenBelge) yazımdan ÖNCE ölçülür; kapalıdan açığa geçerse aşağıda taban düşer.
+    const incomingDocWasOpen = Object.prototype.hasOwnProperty.call(input, "emanetEnabled") || Object.prototype.hasOwnProperty.call(input, "gelenBelgeEnabled")
+      ? await effectiveIncomingDocsEnabled()
+      : null;
 
     if (Object.prototype.hasOwnProperty.call(input, "pricingEnabled")) {
       if (typeof input.pricingEnabled !== "boolean") {
@@ -3237,6 +3260,13 @@ export class SystemSettingService {
         throw AppError.badRequest(`costPresentationCurrency şunlardan biri olmalı: ${COST_PRESENTATION_CURRENCIES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.COST_PRESENTATION_CURRENCY, v, "Maliyet ekranlarında tutarların gösterildiği döviz (hesap TL'de kalır)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "costFinishingKgBasis")) {
+      const v = input.costFinishingKgBasis;
+      if (typeof v !== "string" || !FINISHING_KG_BASES.includes(v as FinishingKgBasis)) {
+        throw AppError.badRequest(`costFinishingKgBasis şunlardan biri olmalı: ${FINISHING_KG_BASES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.COST_FINISHING_KG_BASIS, v, "Kg bazlı terbiye tarifesinde kilonun kaynağı — firesiz ham kumaş · fireli iplik tüketimi", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "financeRiskLimitCurrencyMode")) {
       const v = input.financeRiskLimitCurrencyMode;
@@ -3594,6 +3624,7 @@ export class SystemSettingService {
         userId
       );
     }
+    if (incomingDocWasOpen === false) await resetReadyBaselineOnIncomingDocOpen();
 
     if (Object.prototype.hasOwnProperty.call(input, "targetQuantityEnabled")) {
       if (typeof input.targetQuantityEnabled !== "boolean") {
@@ -4065,6 +4096,10 @@ export class SystemSettingService {
         userId
       );
     }
+    // Politika değişimi bulutta `is-emri.sevkeHazir`ı bayatlatmasın (D4-MIG6): önceki politika okunur, yazımdan sonra kıyaslanır.
+    const shipReadyTouched = ["shippingReadyRule", "shippingReadyTolerancePct"].some((k) => Object.prototype.hasOwnProperty.call(input, k));
+    const shipReadyDirty = shipReadyTouched ? await import("../cloud-sync/ship-ready-dirty") : null;
+    const shipReadyBefore = shipReadyDirty ? await shipReadyDirty.readReadyPolicySnapshot() : null;
     if (Object.prototype.hasOwnProperty.call(input, "shippingReadyRule")) {
       const v = input.shippingReadyRule;
       if (typeof v !== "string" || !SHIP_READY_RULES.includes(v as ShipReadyRule)) {
@@ -4083,6 +4118,12 @@ export class SystemSettingService {
         "Sevke hazır işler — metre eşiği toleransı (%)",
         userId
       );
+    }
+    // Best-effort: ayar zaten yazıldı; bulut işareti düşerse 5 dk emniyet turu yakalar, istek kesilmez (kalan ayarlar yazılır).
+    if (shipReadyDirty && shipReadyBefore) {
+      await shipReadyDirty.markReadyWorkOrdersDirty(shipReadyBefore).catch((e: unknown) => {
+        uyari("bulut-kirletme", `sevke hazırlık politikası değişimi bulut kirletme işaretine yazılamadı: ${e instanceof Error ? e.message : String(e)}`);
+      });
     }
     if (Object.prototype.hasOwnProperty.call(input, "shippingReadyNotifyUnits")) {
       const v = input.shippingReadyNotifyUnits;
@@ -4827,6 +4868,19 @@ export class SystemSettingService {
       );
     }
 
+    if (Object.prototype.hasOwnProperty.call(input, "tamburCalibrationCheck")) {
+      const v = input.tamburCalibrationCheck;
+      if (typeof v !== "string" || !TAMBUR_CALIBRATION_CHECK_MODES.includes(v as TamburCalibrationCheck)) {
+        throw AppError.badRequest("Sayaç kalibrasyon kontrolü KAPALI ya da UYAR olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.TAMBUR_CALIBRATION_CHECK,
+        v,
+        "Sayaç kalibrasyonu: KAPALI | UYAR (süresi geçmiş sayaçla ölçümde uyarı; ölçüm engellenmez)",
+        userId
+      );
+    }
+
     if (Object.prototype.hasOwnProperty.call(input, "sessionDurationHours")) {
       const v = input.sessionDurationHours;
       if (
@@ -5544,6 +5598,11 @@ export function readFinanceCariHoldDefaultScope(tx?: Pick<typeof prisma, "system
 /** SY-J1: maliyet sunum dövizi — tanınmayan değer varsayılana (`TRY`) düşer. */
 export function readCostPresentationCurrency(tx?: Pick<typeof prisma, "systemSetting">): Promise<CostPresentationCurrency> {
   return readServiceEnum(SETTING_KEYS.COST_PRESENTATION_CURRENCY, COST_PRESENTATION_CURRENCIES, DEFAULT_COST_PRESENTATION_CURRENCY, tx);
+}
+
+/** SY-E1: KG terbiye tabanı — tanınmayan değer varsayılana (`NET_HAM`) düşer. */
+export function readCostFinishingKgBasis(tx?: Pick<typeof prisma, "systemSetting">): Promise<FinishingKgBasis> {
+  return readServiceEnum(SETTING_KEYS.COST_FINISHING_KG_BASIS, FINISHING_KG_BASES, DEFAULT_COST_FINISHING_KG_BASIS, tx);
 }
 
 /** D4-G2a: kârlılık dış fason kaynağı — tanınmayan değer varsayılana (`FATURA_ONCE`) düşer. */
@@ -6860,6 +6919,15 @@ export async function readShippingReadyTolerancePct(tx?: Pick<typeof prisma, "sy
   return parsed;
 }
 
+/** D4-KUC3a: gelen belge modülü kapalıdan açığa geçti ve GB/PARTI bildirimi açıksa sevke-hazır taban damgası düşer →
+ *  sonraki tur SESSİZ taban (kapalıyken biriken hazır partiler toplu ACILDI üretmez; birim ekleme yazımıyla aynı kural). */
+async function resetReadyBaselineOnIncomingDocOpen(): Promise<boolean> {
+  if (!(await effectiveIncomingDocsEnabled())) return false;
+  if (!(await readShippingReadyNotifyUnits()).some(notifyUnitNeedsIncomingDoc)) return false;
+  await resetNotificationBaseline(prisma, READY_WORK_KIND);
+  return true;
+}
+
 /** Sevke hazır bildirim birimleri. Kayıt yok/çöp → [] (bildirim kapalı); tanınmayan eleman düşer. */
 export async function readShippingReadyNotifyUnits(tx?: Pick<typeof prisma, "systemSetting">): Promise<ShipReadyNotifyUnit[]> {
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.SHIPPING_READY_NOTIFY_UNITS }, select: { value: true } });
@@ -7819,6 +7887,11 @@ export async function readTamburSimulatedMeterEnabled(tx?: Pick<typeof prisma, "
 export async function readTamburMeasureSourceRequired(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.TAMBUR_MEASURE_SOURCE_REQUIRED }, select: { value: true } });
   return asBoolean(setting?.value);
+}
+
+/** D4-B5k: sayaç kalibrasyon kontrolü — satır yok / tanınmayan değer = KAPALI (bugünkü davranış). */
+export function readTamburCalibrationCheck(tx?: Pick<typeof prisma, "systemSetting">): Promise<TamburCalibrationCheck> {
+  return readServiceEnum(SETTING_KEYS.TAMBUR_CALIBRATION_CHECK, TAMBUR_CALIBRATION_CHECK_MODES, DEFAULT_TAMBUR_CALIBRATION_CHECK, tx);
 }
 
 /**

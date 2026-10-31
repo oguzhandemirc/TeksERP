@@ -23,7 +23,7 @@ import {
 import { changeYarnCostPrice, listYarnCostPrices, revokeYarnCostPrice } from "../services/yarn-cost-price.service";
 import { changeFinishingRate, listFinishingRates, revokeFinishingRate } from "../services/finishing-rate.service";
 import { getCostStructure, putCostStructure } from "../services/cost-structure.service";
-import { changeMachineCostRate, createMachineCostRate, listMachineCostRates, revokeMachineCostRate } from "../services/machine-cost-rate.service";
+import { changeMachineCostRate, createMachineCostRate, listMachineCostOptions, listMachineCostRates, revokeMachineCostRate } from "../services/machine-cost-rate.service";
 import { changeConsumableNorm, createConsumableNorm, listConsumableNorms, revokeConsumableNorm } from "../services/consumable-norm.service";
 import { previewCost } from "../services/cost-calc.service";
 import { suggestQuoteCurrency } from "../services/quote-currency.service";
@@ -72,7 +72,8 @@ const finishingRateSchema = z.object({
   code: z.string(),
   name: z.string(),
   subcontractorId: z.string().uuid("Geçersiz fason firma ID").nullable().optional(),
-  basis: z.enum(["RAW_M", "FINISHED_M"], { message: "Tarife bazı HAM ya da MAMUL metre olmalı" }),
+  // SY-E1: KG = boyahane kilo ücreti; `pricePerM` kolonu "tabanın birimi başına" okunur (veri sözleşmesi korunur).
+  basis: z.enum(["RAW_M", "FINISHED_M", "KG"], { message: "Tarife bazı HAM metre, MAMUL metre ya da KİLO olmalı" }),
   currency: currencyEnum,
   pricePerM: decimalInput,
   typicalShrinkPct: decimalInput.nullable().optional(),
@@ -357,6 +358,21 @@ router.get("/machine-rates", requirePermission("cost:read"), wrap(async (req, re
   res.status(200).json({ success: true, data });
 }));
 
+/**
+ * @openapi
+ * /api/cost/machine-options:
+ *   get:
+ *     tags: [Cost]
+ *     summary: Ücret ekranı için aktif makine seçenekleri (yalnız id/kod/ad; cost:read — station:read gerektirmez)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Liste }
+ *       403: { description: cost:read yok ya da maliyet modülü kapalı }
+ */
+router.get("/machine-options", requirePermission("cost:read"), wrap(async (_req, res) => {
+  res.status(200).json({ success: true, data: await listMachineCostOptions() });
+}));
+
 router.post("/machine-rates", requirePermission("cost:write"), wrap(async (req, res) => {
   const { machineId, ...values } = machineRateCreateSchema.parse(req.body ?? {});
   const r = await createMachineCostRate(machineId, values, actorOf(req));
@@ -510,6 +526,8 @@ const yarnBody = z
 const previewBody = z
   .object({
     itemId: z.string().uuid("Geçersiz ürün ID").optional(),
+    // SY-E1: varyant (iş emri şablonu) — tarife kodu varyanttaysa ürün yapısınınkini ezer.
+    recipeId: z.string().uuid("Geçersiz varyant ID").optional(),
     adHoc: z
       .object({
         warp: z.object({ endsCount: decimalInput, takeUpPct: decimalInput.optional(), yarn: yarnBody }).strict().nullable().optional(),

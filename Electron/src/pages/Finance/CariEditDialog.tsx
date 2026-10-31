@@ -293,10 +293,6 @@ export function CariEditDialog({ cari, open, onOpenChange }: Props) {
               value={form.riskLimit}
               onChange={(e) => patch({ riskLimit: e.target.value })}
             />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Risk limiti <span className="font-medium text-foreground">UYARIDIR, satışı bloklamaz</span>{" "}
-              — durdurma kararı ticaridir ve yazılım onu vardiya ortasında sessizce veremez.
-            </p>
             <RiskLimitModeHint />
             {errors.riskLimit && (
               <p className="mt-1 text-xs font-medium text-destructive">{errors.riskLimit}</p>

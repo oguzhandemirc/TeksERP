@@ -1668,6 +1668,21 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         ],
       },
       {
+        // D4-B5k (B-3, 2026-10-31): `defaultValue` backend `DEFAULT_TAMBUR_CALIBRATION_CHECK` ile birebir.
+        enumKey: "tamburCalibrationCheck",
+        group: "Tambur",
+        title: "Sayaç kalibrasyon süresi kontrolü",
+        summary: "Kalibrasyon süresi geçmiş metre sayacıyla ölçüm yapılınca tablet ve panel uyarsın mı.",
+        desc: "Kalibrasyon tarihi ve geçerlilik sonu Tanımlar → Donanım'da metre sayacının kartına isteğe bağlı girilir. “Kapalı” (varsayılan) bu tarihlere hiç bakılmaz. “Uyar” seçilince geçerlilik sonu geçmiş sayaçla yapılan ölçümde tablet uyarı gösterir ve Donanım listesinde sayacın yanında “Kalibrasyon süresi geçti” görünür. Ölçüm hiçbir durumda ENGELLENMEZ; sayaç ölçümü olarak kaydedilir. Tarihi girilmemiş sayaç için uyarı çıkmaz.",
+        defaultValue: "KAPALI",
+        display: "radio",
+        audience: ["Operatör", "Yönetim"],
+        options: [
+          { value: "KAPALI", label: "Kapalı (bugünkü)", hint: "Kalibrasyon tarihleri yalnız kayıt olarak durur." },
+          { value: "UYAR", label: "Uyar", hint: "Süresi geçmiş sayaçla ölçümde uyarı; ölçüm yine kaydedilir." },
+        ],
+      },
+      {
         // D4-E3 (2026-10-31): `defaultValue` backend `DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE` ile birebir.
         enumKey: "tamburChildWidthSource",
         group: "Tambur",
@@ -2053,7 +2068,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     label: "Maliyet",
     icon: Calculator,
     description: "Maliyet ve teklif ekranlarının sunum ayarları; hesap her zaman TL'de sunucuda yapılır.",
-    keywords: "maliyet teklif fiyat listesi döviz usd dolar euro kur sunum standart maliyet",
+    keywords: "maliyet teklif fiyat listesi döviz usd dolar euro kur sunum standart maliyet terbiye boyahane kilo kg",
     kind: "flags",
     section: "sales",
     permissionAny: [SETTINGS_ADMIN_PERMISSION],
@@ -2071,6 +2086,20 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "TRY", label: "TL (bugünkü)", hint: "Tutarlar yalnız TL gösterilir." },
           { value: "USD", label: "USD", hint: "Tutarlar dolar olarak da gösterilir; sürümde kayıt günü kuru donar." },
           { value: "EUR", label: "EUR", hint: "Tutarlar avro olarak da gösterilir; sürümde kayıt günü kuru donar." },
+        ],
+      },
+      {
+        // SY-E1: `defaultValue` backend `DEFAULT_COST_FINISHING_KG_BASIS` ile birebir.
+        enumKey: "costFinishingKgBasis",
+        title: "Kilo bazlı terbiye tarifesinde kilo",
+        summary: "Boyahane kilo başına ücret alıyorsa, kumaşın metresi kaç kilo sayılsın.",
+        desc: "Yalnız birimi “Kilo (kg)” olan terbiye/işlem tarifelerinde kullanılır; metre bazlı tarifeler etkilenmez. Ham kumaş (varsayılan): çözgü + atkı ipliği firesiz — boyahanenin tarttığı ham kumaşa en yakın. İplik tüketimi: fire dahil iplik kilosu (eski Excel hesabıyla aynı). Kayıtlı maliyet sürümleri kaydedildikleri seçimle kalır.",
+        defaultValue: "NET_HAM",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "NET_HAM", label: "Ham kumaş kilosu (varsayılan)", hint: "Çözgü + atkı, fire hariç." },
+          { value: "IPLIK_TUKETIMI", label: "İplik tüketimi", hint: "Fire dahil iplik kilosu (Excel uyumu)." },
         ],
       },
     ],

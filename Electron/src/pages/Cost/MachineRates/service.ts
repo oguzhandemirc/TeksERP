@@ -18,7 +18,11 @@ export function buildMachineRateBody(v: MachineRateValues): MachineRateValues {
 
 const BASE = "/api/cost/machine-rates";
 
+export interface MachineOption { id: string; code: string; name: string }
+
 export const machineRateService = {
+  /** `cost:read` kapsamlı makine seçenekleri (D4-KUC3a) — `station:read` taşımayan Muhasebe için. */
+  machineOptions: async () => (await apiClient.get<ApiResponse<MachineOption[]>>("/api/cost/machine-options")).data.data,
   listActive: async () => (await apiClient.get<ApiResponse<MachineCostRate[]>>(BASE)).data.data,
   history: async (machineId: string) =>
     (await apiClient.get<ApiResponse<MachineCostRate[]>>(BASE, { params: { "filter[machineId]": machineId, includeRevoked: "1" } })).data.data,

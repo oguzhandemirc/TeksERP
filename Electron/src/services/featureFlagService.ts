@@ -38,6 +38,8 @@ export type LoginMethod = "list" | "pin" | "card";
 export type LabelCopiesSource = "GLOBAL" | "STATION";
 /** D4-F3: müşteri barkodu basan şablonda top kodsuzsa — backend `LabelCustomerCodeMissing` aynası. */
 export type LabelCustomerCodeMissing = "BLOCK" | "ROLL_BARCODE";
+/** D4-B5k: sayaç kalibrasyon kontrolü — backend `TamburCalibrationCheck` aynası. */
+export type TamburCalibrationCheck = "KAPALI" | "UYAR";
 
 export type TravelerCardPageSize = "A4" | "A5";
 export type TravelerCardFontWeight = "light" | "normal" | "bold";
@@ -304,6 +306,8 @@ export interface FeatureFlags {
   financeCariHoldEmanetShipment: "EXEMPT" | "PROCESSED_HELD" | "ALL_HELD";
   /** SY-J1: maliyet sunum dövizi (varsayılan `TRY`). */
   costPresentationCurrency: "TRY" | "USD" | "EUR";
+  /** SY-E1: kg bazlı terbiye tarifesinin kg kaynağı (backend aynası; varsayılan `NET_HAM`). */
+  costFinishingKgBasis: "NET_HAM" | "IPLIK_TUKETIMI";
   /** D4-I2b (S12): risk limiti para birimi kipi — her para birimi ayrı (varsayılan) · o güne kadarki en son kurla TL toplamı. */
   financeRiskLimitCurrencyMode: "PER_CURRENCY" | "TRY_CONVERTED";
   /** D4-G2a: kârlılıkta dış fason maliyeti kaynağı (backend aynası; varsayılan `FATURA_ONCE`). */
@@ -583,6 +587,8 @@ export interface FeatureFlags {
   tamburSimulatedMeterEnabled: boolean;
   /** D4-B1: Tambur kesiminde ölçüm kaynağı zorunlu (false=default; önce tüm tabletler yeni sürümde olmalı). */
   tamburMeasureSourceRequired: boolean;
+  /** D4-B5k: süresi geçmiş sayaç kalibrasyonunda uyarı (KAPALI=default; ölçüm engellenmez). */
+  tamburCalibrationCheck: TamburCalibrationCheck;
   /** Kısa kesimde otomatik A1 — FABRİKA VARSAYILANI (false=default). Kural mobil
    *  tarafta koşar (`shortCutQuality.ts`); backend ENFORCE ETMEZ. Tablet
    *  yetkilisi cihaz bazında ezebilir (o tercih sunucuya gitmez). */
