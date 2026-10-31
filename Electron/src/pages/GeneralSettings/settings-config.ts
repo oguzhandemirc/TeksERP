@@ -2242,6 +2242,22 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "DENY", label: "Başka bir yetkili açsın", hint: "Koyan kişinin açma isteği reddedilir." },
         ],
       },
+      {
+        // D4-I1c (S11): `defaultValue` backend `DEFAULT_CARI_HOLD_EMANET_SHIPMENT` ile birebir; seçim fabrikanın.
+        enumKey: "financeCariHoldEmanetShipment",
+        group: "Cari kilidi",
+        title: "Sevki kilitli caride müşterinin kendi malı",
+        summary: "Cari sevke kilitliyken müşterinin bize emanet bıraktığı kumaş ona geri gönderilebilsin mi.",
+        desc: "Müşterinin kendi malını (emanet) borç yüzünden tutmak hapis hakkı (Türk Medeni Kanunu md. 950) kapsamındadır; hangi seçeneği kullanacağınıza karar vermeden önce hukuki teyit almanız önerilir. Seçim fabrikanındır. İşlenmiş top: üzerinde kurşun, kalite, tambur, fason ya da makine ölçümü kaydı olan ya da kesimle doğmuş top. Fabrikanın kendi malı ya da başka müşterinin malı karışan sevk her seçenekte kilide takılır.",
+        defaultValue: "EXEMPT",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "EXEMPT", label: "Emanet mal serbest (varsayılan)", hint: "Sevkteki topların hepsi müşterinin kendi malıysa kilit sevki durdurmaz." },
+          { value: "PROCESSED_HELD", label: "İşlenmiş emanet tutulsun", hint: "Üzerinde iş yapılmış emanet top kilit açılana dek sevk edilmez; işlenmemiş mal iade edilebilir." },
+          { value: "ALL_HELD", label: "Bütün emanet tutulsun", hint: "Kilit açılana dek müşterinin hiçbir emanet topu sevk edilmez." },
+        ],
+      },
     ],
   },
   {

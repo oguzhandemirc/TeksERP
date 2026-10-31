@@ -294,6 +294,8 @@ export interface FeatureFlags {
     | "INTAKE,SHIPMENT,INVOICE";
   /** D4-I1a: kilidi koyan kişi kendi kilidini açabilir mi (varsayılan `ALLOW`). */
   financeCariHoldReleaseBySamePerson: "ALLOW" | "DENY";
+  /** D4-I1c: kilitli caride emanet sevki (backend aynası; varsayılan `EXEMPT`). */
+  financeCariHoldEmanetShipment: "EXEMPT" | "PROCESSED_HELD" | "ALL_HELD";
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; tahsis elle silinebilir. */
   financeAutoAllocateOnPaymentEnabled: boolean;
