@@ -5,7 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { fmtCalendarDate, fmtDate, fmtMeters, fmtNum } from "../_components/formatters";
 import { formatPct } from "./dokuma-regime";
 import { gerekce } from "./leventShared";
-import type { BeamResultRow, CapacityRow, FinishForecastRow } from "./leventReportTypes";
+import { warpSpecCellText, type BeamResultRow, type CapacityRow, type FinishForecastRow } from "./leventReportTypes";
 
 const leventHucre = (r: BeamResultRow) => (r.physicalBeamNo ? `${r.beamNo} · ${r.physicalBeamNo}` : r.beamNo);
 /** Beklenen/fire `null` = take-up bilinmiyor ⇒ beyan; sayı uydurulmaz. */
@@ -13,7 +13,7 @@ const olculemezse = (v: number | null, fmt: (n: number) => string) => (v === nul
 
 const ortak: ColumnDef<BeamResultRow>[] = [
   { accessorKey: "beamNo", header: "Levent", cell: ({ row }) => leventHucre(row.original) },
-  { accessorKey: "warpSpec.code", header: "Çözgü kartı", cell: ({ row }) => `${row.original.warpSpec.code} · ${row.original.warpSpec.name}` },
+  { accessorKey: "warpSpec.code", header: "Çözgü kartı", cell: ({ row }) => warpSpecCellText(row.original) },
   { accessorKey: "tezgahlar", header: "Tezgah", cell: ({ row }) => row.original.tezgahlar.join(", ") || "—" },
   { accessorKey: "sarilanM", header: "Sarılan", cell: ({ getValue }) => fmtMeters(getValue() as number) },
   { accessorKey: "gercekKumasM", header: "Gerçek kumaş", cell: ({ getValue }) => fmtMeters(getValue() as number) },
