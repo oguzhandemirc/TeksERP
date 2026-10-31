@@ -14,7 +14,7 @@
 // Tespitte `detectedAtStepId` + `detectedByUserId` + `detectedAt` doldurulur.
 // =============================================================================
 
-import { ACTIVE_OPERATION, OWN_OPERATION, revokeWidthTracedStepOperationsTx } from "./helpers/roll-operation.helper";
+import { ACTIVE_OPERATION, OWN_OPERATION, prepareWidthTracedStepOpTx, revokeWidthTracedStepOperationsTx } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT, reopenClosedMovementsTx, revokeRollMovements } from "./helpers/roll-movement.helper";
 import { readActiveTargetValues } from "./helpers/workorder-target-value.helper";
 import prisma from "../lib/prisma";
@@ -61,7 +61,7 @@ import {
 } from "./helpers/station-capability-transfer.helper";
 import { applyKursunOperationTx } from "./helpers/kursun-operation.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
-import { applyMeasuredWidthTx, assertStationCapturesWidth, readWidthTrace, type MeasuredWidthTrace } from "./helpers/measured-width.helper";
+import { applyMeasuredWidthTx, assertStationCapturesWidth } from "./helpers/measured-width.helper";
 import { awaitsMeterSignature, loadRollMeterBases, type RollMeterBase } from "./helpers/kursun-meter-variance-sql.helper";
 import { listMeterDeviations, type MeterDeviationFilter } from "./helpers/kursun-meter-deviation-list.helper";
 import {
@@ -592,7 +592,13 @@ export class KursunQcService {
 
       // D4-E2a: kilit sırası token → iş emri → top FOR UPDATE → yazım. Satır zaten varsa
       // (replay / yeniden basış) en yeniden yazılmaz: aynı değer no-op, farklı değer 409.
-      const widthTrace = measuredWidthCm != null ? await this.applyWidthOnCompleteTx(tx, data.rollId, data.stepId, measuredWidthCm) : null;
+      // Karar tek boğazda: aynı değer no-op, izsiz satır damgalanıp yeniden yazılır, farklı değer 409.
+      const widthMode = measuredWidthCm != null
+        ? await prepareWidthTracedStepOpTx(tx, { rollId: data.rollId, stepId: data.stepId, measuredWidthCm, userId: userId ?? null })
+        : null;
+      const widthTrace = measuredWidthCm != null && widthMode === "APPLY"
+        ? await applyMeasuredWidthTx(tx, { rollId: data.rollId, measuredWidthCm })
+        : null;
 
       // Upsert yalnız AKTİF satıra bakar: unique partial'dır; geri alınmış iz
       // bulunursa yeniden yapılan KK2 yeni satır yazmaz ve top adımda takılırdı.
@@ -702,29 +708,6 @@ export class KursunQcService {
     }
 
     return { success: true, data: meter ? { ...op, meter } : op, message: "Kalite Kontrol 2 tamamlandı" };
-  }
-
-  /**
-   * D4-E2a: KK2 tamamlamada ölçülen en. Aktif QC2 satırı yoksa en yazılır ve iz döner;
-   * varsa (replay) aynı değer no-op (null), farklı değer 409 — düzeltme adımı yeniden açmaktır.
-   */
-  private async applyWidthOnCompleteTx(
-    tx: Prisma.TransactionClient,
-    rollId: string,
-    stepId: string,
-    measuredWidthCm: number,
-  ): Promise<MeasuredWidthTrace | null> {
-    const existing = await tx.rollOperation.findFirst({
-      where: { rollId, workOrderStepId: stepId, operationType: RollOperationType.QC2_COMPLETED, ...ACTIVE_OPERATION },
-      select: { metadata: true },
-    });
-    if (!existing) return applyMeasuredWidthTx(tx, { rollId, measuredWidthCm });
-    const prior = readWidthTrace(existing.metadata);
-    if (prior && Math.round(measuredWidthCm * 1000) / 1000 === prior.widthAfter) return null;
-    throw AppError.conflict(
-      "Bu topun KK2 kaydı zaten var — eni değiştirmek için adımı yeniden açın",
-      { code: "WIDTH_ALREADY_RECORDED", widthAfter: prior?.widthAfter ?? null },
-    );
   }
 
   /** completeQc2 cevabındaki metre özeti (H2 işareti) — replay'de aynı token'ın aktif okumasından. */

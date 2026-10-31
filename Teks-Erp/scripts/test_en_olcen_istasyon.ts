@@ -9,10 +9,14 @@
 //    değer no-op, farklı değer 409 WIDTH_ALREADY_RECORDED.
 // §5 ⭐ Tambur kapısı yeni enle: 300'lük iş emri + 280 en → eşik 10'da PLAN_MISMATCH, 25'te geçer.
 // §6 ⭐ adım yeniden açma (reopenStep) eni geri koyar, en izli QC2 satırı WIDTH_REOPEN ile damgalanır.
-// §7 ⭐ YARIŞ: ölçümden sonra Düzelt eni değiştirdiyse ters yol ROLL_CHANGED (çakışma) verir, en ezilmez.
+// §7 ⭐ Düzelt sonrası ters yol: ölçümden sonra Düzelt eni değiştirdiyse ters yol ROLL_CHANGED verir, en ezilmez.
 // §8 kursunFinish (açık kumaş) yolu aynı sözleşme: en yazılır + iz QC2 satırında.
+// §9 ⭐ ensiz KK2 → bitir → yeniden aç → enli KK2: izsiz satır WIDTH_REMEASURE ile damgalanır, en yazılır
+//    (çıkışsız 409 döngüsü yok).
+// §10 ⭐ kursunFinish örtüşen çift çağrı aynı enle: ikisi de başarılı, tek izli aktif satır (idempotent).
 // Negatif sonda (2026-10-30, elle; PR gövdesinde): restoreMeasuredWidthsTx WHERE'inden
-// `width: trace.widthAfter` çıkarılınca §7a/§7b ❌.
+// `width: trace.widthAfter` çıkarılınca §7a/§7b ❌. (2026-10-31) izsiz satırda damga yerine 409 → §9a/§9b ❌;
+// kursunFinish SAME dalı kapatılınca §10a ❌ (WIDTH_ALREADY_RECORDED).
 // =============================================================================
 import { Prisma, RollOperationType, RollStatus, StepStatus, WorkOrderStatus } from "@prisma/client";
 import prisma from "../src/lib/prisma";
@@ -183,7 +187,7 @@ async function main(): Promise<void> {
       check("§6c yeniden ölçüm yeni satır doğurur (300 → 285)", after.length === 2 && (await widthOf(m.rollId)) === 285 && meta(after[1].metadata).widthBefore === 300);
     }
 
-    // §7 YARIŞ: Düzelt eni değiştirdikten sonra ters yol
+    // §7 Düzelt sonrası ters yol
     {
       const a = await mkRoll(stCap.id);
       await svc.completeQc2({ rollId: a.rollId, stepId: a.stepId, measuredWidthCm: 280 }, admin.id, null);
@@ -208,6 +212,36 @@ async function main(): Promise<void> {
       const b = await mkRoll(stPlain.id, { barcode: false });
       const e = await errOf(inv.kursunFinish(b.rollId, { measuredWidthCm: 275 }, admin.id, null));
       check("§8b kursunFinish yeteneksiz istasyon → 400 WIDTH_CAPTURE_DISABLED", e?.status === 400 && e.code === "WIDTH_CAPTURE_DISABLED", JSON.stringify(e));
+    }
+
+    // §9 ensiz KK2 → reopen → enli KK2 (çıkışsız döngü olmamalı)
+    {
+      const a = await mkRoll(stCap.id);
+      await svc.completeQc2({ rollId: a.rollId, stepId: a.stepId }, admin.id, null);
+      await svc.finishStep({ stepId: a.stepId }, admin.id, null);
+      await svc.reopenStep({ stepId: a.stepId }, admin.id);
+      const e = await errOf(svc.completeQc2({ rollId: a.rollId, stepId: a.stepId, measuredWidthCm: 280 }, admin.id, null));
+      const ops = await qc2Ops(a.rollId, a.stepId);
+      const active = ops.filter((o) => o.revokedAt == null);
+      check("§9a ⭐ ensiz kapanmış adımda yeniden açınca enli KK2 geçer (409 yok), en 280", e == null && (await widthOf(a.rollId)) === 280, JSON.stringify(e));
+      check(
+        "§9b ⭐ izsiz satır WIDTH_REMEASURE ile damgalandı (silinmedi), tek aktif satır izli",
+        ops.length === 2 && ops[0].revokeReason === "WIDTH_REMEASURE" && active.length === 1 && meta(active[0].metadata).widthAfter === 280,
+        JSON.stringify(ops.map((o) => [o.revokeReason, o.metadata])),
+      );
+    }
+
+    // §10 kursunFinish örtüşen çift çağrı (zaman aşımı sonrası yeniden deneme) aynı enle
+    {
+      const a = await mkRoll(stCap.id, { barcode: false });
+      const both = await Promise.allSettled([
+        inv.kursunFinish(a.rollId, { measuredWidthCm: 275 }, admin.id, null),
+        inv.kursunFinish(a.rollId, { measuredWidthCm: 275 }, admin.id, null),
+      ]);
+      const rejected = both.filter((x) => x.status === "rejected").map((x) => String((x as PromiseRejectedResult).reason?.details?.code ?? (x as PromiseRejectedResult).reason));
+      const active = (await qc2Ops(a.rollId, a.stepId)).filter((o) => o.revokedAt == null);
+      check("§10a ⭐ ikisi de başarılı (ikincisi idempotent, 409 yok)", rejected.length === 0, JSON.stringify(rejected));
+      check("§10b ⭐ tek izli aktif QC2 satırı, en 275", active.length === 1 && meta(active[0].metadata).widthAfter === 275 && (await widthOf(a.rollId)) === 275);
     }
   } finally {
     await prisma.rollPlanDeviation.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});

@@ -8,7 +8,7 @@
 
 import { applyMeasuredWidthTx, assertStationCapturesWidth, type MeasuredWidthTrace } from "./helpers/measured-width.helper";
 import { auditCutReadings, reinstateCancelledCutReadingsTx, revokeCutReadingsTx, ROLL_CANCEL_CUT_REASON } from "./helpers/meter-reading.helper";
-import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
+import { ACTIVE_OPERATION, prepareWidthTracedStepOpTx } from "./helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, applyRollFlagSetTx } from "./helpers/property-revoke.helper";
 import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
@@ -4645,6 +4645,8 @@ export class InventoryService {
           pin.currentQty = roll.currentQty;
           pin.initialQty = roll.initialQty;
         }
+        // D4-E2a: en'in ikinci yazarı ölçülen en — Düzelt en yazıyorsa okunan en pinlenir, ölçüm sessiz ezilmez.
+        if (rollData.width !== undefined) pin.width = roll.width;
         const upd = await tx.roll.updateMany({
           where: pin,
           data: Object.keys(rollData).length > 0 ? rollData : { updatedAt: new Date() },
@@ -5683,7 +5685,15 @@ export class InventoryService {
       await assertKursunTabletMayWrite(tx, stepId, "kurşun bitirme");
 
       // D4-E2a: iş emri kilidinden sonra top FOR UPDATE → en atomik yazım; iz QC2 satırına.
-      widthTrace = measuredWidthCm != null ? await applyMeasuredWidthTx(tx, { rollId, measuredWidthCm }) : null;
+      // Aynı enle örtüşen çift çağrı (zaman aşımı sonrası yeniden deneme) completeQc2 gibi idempotent.
+      if (measuredWidthCm != null) {
+        const mode = await prepareWidthTracedStepOpTx(tx, { rollId, stepId, measuredWidthCm, userId: userId ?? null });
+        if (mode === "SAME") {
+          raceLost = true;
+          throw new Error("KURSUN_FINISH_RACE_LOST");
+        }
+        widthTrace = await applyMeasuredWidthTx(tx, { rollId, measuredWidthCm });
+      }
 
       // 1) Roll metraj güncelle
       await tx.roll.update({
@@ -5723,7 +5733,7 @@ export class InventoryService {
         },
       ];
       const createdOps = await tx.rollOperation.createMany({ data: ops, skipDuplicates: true });
-      // En izi satırla birlikte doğmalı; QC2 satırı zaten varsa iz kaybolurdu → 409 (eni değiştirmek = adımı yeniden açmak).
+      // En izi satırla birlikte doğmalı; prepareWidthTracedStepOpTx aktif satırı ayıkladı — buraya düşmek beklenmez.
       if (widthTrace && createdOps.count === 0) {
         throw AppError.conflict("Bu topun KK2 kaydı zaten var — eni değiştirmek için adımı yeniden açın", { code: "WIDTH_ALREADY_RECORDED" });
       }

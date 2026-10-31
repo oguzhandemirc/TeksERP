@@ -51,6 +51,8 @@ export interface RevokeOperationsArgs {
   /** Neden geri alındı — `TAMBUR_UNDO` / `FASON_CANCEL` / `MANUAL_MOVE` gibi. */
   reason: string;
   userId?: string | null;
+  /** D4-E2a: verilirse eni geri konan top sayısı buraya yazılır (çağıranın audit yükü için). */
+  widthRestored?: { count: number };
 }
 
 /**
@@ -66,7 +68,8 @@ export async function revokeRollOperations(tx: Tx, args: RevokeOperationsArgs): 
     ...ACTIVE_OPERATION,
   };
   // D4-E2a ters yol: damgalanan satır ölçülen en izi taşıyorsa `Roll.width` aynı tx'te geri konur.
-  await restoreMeasuredWidthsTx(tx, where);
+  const restored = await restoreMeasuredWidthsTx(tx, where);
+  if (args.widthRestored) args.widthRestored.count += restored;
   const res = await tx.rollOperation.updateMany({
     where,
     data: {
@@ -107,6 +110,45 @@ export async function revokeWidthTracedStepOperationsTx(
     userId: args.userId ?? null,
   });
   return traced.length;
+}
+
+/**
+ * D4-E2a: en ile adım bitişinden ÖNCE (iş emri kilidi altında) aktif kendi QC2 satırına bakar.
+ * Yok → "APPLY". İzsiz satır (ensiz kapanmış / yeniden açılmış adım) damgalanır → "APPLY" (yeni
+ * izli satır doğar; yoksa reopen izsiz satırı korur ve döngü çıkışsız kalırdı). Aynı en izli →
+ * "SAME" (replay). Farklı en izli → 409 `WIDTH_ALREADY_RECORDED` (çıkış: adımı yeniden açmak).
+ */
+export async function prepareWidthTracedStepOpTx(
+  tx: Tx,
+  args: { rollId: string; stepId: string; measuredWidthCm: number; userId?: string | null },
+): Promise<"APPLY" | "SAME"> {
+  const existing = await tx.rollOperation.findFirst({
+    where: {
+      rollId: args.rollId,
+      workOrderStepId: args.stepId,
+      operationType: { in: WIDTH_TRACE_OPERATION_TYPES },
+      ...ACTIVE_OPERATION,
+      ...OWN_OPERATION,
+    },
+    select: { metadata: true },
+  });
+  if (!existing) return "APPLY";
+  const prior = readWidthTrace(existing.metadata);
+  if (!prior) {
+    await revokeRollOperations(tx, {
+      rollIds: [args.rollId],
+      workOrderStepIds: [args.stepId],
+      operationTypes: WIDTH_TRACE_OPERATION_TYPES,
+      reason: "WIDTH_REMEASURE",
+      userId: args.userId ?? null,
+    });
+    return "APPLY";
+  }
+  if (Math.round(args.measuredWidthCm * 1000) / 1000 === prior.widthAfter) return "SAME";
+  throw AppError.conflict(
+    "Bu topun eni bu adımda zaten ölçüldü — farklı en için adımı yeniden açın",
+    { code: "WIDTH_ALREADY_RECORDED", widthAfter: prior.widthAfter },
+  );
 }
 
 /**
