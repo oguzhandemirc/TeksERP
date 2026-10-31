@@ -7,7 +7,7 @@ import { AxiosError, type AxiosResponse } from "axios";
 import { renderWithProviders } from "@/test/render";
 import type { MachineCostRate } from "./service";
 
-const svc = vi.hoisted(() => ({ listActive: vi.fn(), history: vi.fn(), create: vi.fn(), change: vi.fn(), revoke: vi.fn() }));
+const svc = vi.hoisted(() => ({ machineOptions: vi.fn(), listActive: vi.fn(), history: vi.fn(), create: vi.fn(), change: vi.fn(), revoke: vi.fn() }));
 vi.mock("./service", async (orig) => ({ ...(await orig<typeof import("./service")>()), machineRateService: svc }));
 const loadMachines = vi.fn();
 vi.mock("@/lib/picker-loader", () => ({ loadAllForPicker: (...a: unknown[]) => loadMachines(...a) }));
@@ -44,6 +44,7 @@ beforeEach(() => {
   Object.values(svc).forEach((f) => f.mockReset());
   loadMachines.mockReset();
   svc.listActive.mockResolvedValue([rate]);
+  svc.machineOptions.mockResolvedValue(machines);
   loadMachines.mockResolvedValue({ data: machines });
 });
 
@@ -65,14 +66,32 @@ describe("MachineRatesPage — liste", () => {
 });
 
 describe("MachineRatesPage — izinsiz görünüm", () => {
-  it("cost:write yok → yazma düğmesi yok; station:read yok → makine listesi sorgusu ATILMAZ", async () => {
+  it("cost:write yok → yazma düğmesi yok; station:read yok → istasyon ucu ATILMAZ, makineler cost:read seçenek ucundan", async () => {
     perms = ["cost:read"];
     renderWithProviders(<MachineRatesPage />);
     expect(await screen.findByText("TMB-1")).toBeInTheDocument();
+    expect(await screen.findByText("BRD-1")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Ücreti değiştir" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Ücret gir" })).toBeNull();
     expect(loadMachines).not.toHaveBeenCalled();
-    expect(screen.getByText(/istasyon okuma izni/)).toBeInTheDocument();
+    expect(svc.machineOptions).toHaveBeenCalled();
+  });
+
+  it("Muhasebe (cost:read + cost:write, station:read YOK) ücretsiz makineye satırından ücret girer", async () => {
+    perms = ["cost:read", "cost:write"];
+    svc.create.mockResolvedValue({ success: true, data: rate });
+    const user = userEvent.setup();
+    renderWithProviders(<MachineRatesPage />);
+    await user.click(await screen.findByRole("button", { name: "Ücret gir" }));
+    expect(screen.getByText(/BRD-1 —/)).toBeInTheDocument();
+    expect(loadMachines).not.toHaveBeenCalled();
+  });
+
+  it("station:read varken seçenek ucu çağrılmaz (istasyon ucu kullanılır)", async () => {
+    perms = ["cost:read", "station:read"];
+    renderWithProviders(<MachineRatesPage />);
+    expect(await screen.findByText("BRD-1")).toBeInTheDocument();
+    expect(svc.machineOptions).not.toHaveBeenCalled();
   });
 });
 
