@@ -185,6 +185,7 @@ import { assertWorkOrderBound } from "./helpers/dispatch-header.helper";
 import { assertOwnerMatchesTx, previewOwnerMismatches } from "./helpers/emanet-owner.helper";
 import { emanetShipmentReleaseTx } from "./helpers/emanet-shipment.helper";
 import { assertShipmentNotHeldTx, cariHoldWarning, shipmentHoldNotice } from "./helpers/cari-hold.helper";
+import { boardTotalsWithHold } from "./helpers/sack-store-board.helper";
 import { assertCustomerRiskLimitTx } from "./helpers/risk-exposure.helper";
 import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
 import { assertRollsRevivable, assertSwatchesRevivable } from "./helpers/item-usage.helper";
@@ -5151,19 +5152,11 @@ export class ShippingService {
     const ids = pageRows.map((s) => s.id);
     const nextCursor = hasMore ? buildNextDynamicCursor(pageRows[pageRows.length - 1] as unknown as Record<string, unknown>, "createdAt") : null;
 
-    const [sackAgg, rollAgg] = ids.length
-      ? await Promise.all([
-          prisma.sack.groupBy({ by: ["shipmentId"], where: { shipmentId: { in: ids } }, _count: { _all: true }, _sum: { weightKg: true } }),
-          prisma.roll.groupBy({ by: ["shipmentId"], where: { shipmentId: { in: ids } }, _count: { _all: true }, _sum: { currentQty: true } }),
-        ])
-      : [[], []];
-    const sackByShip = new Map(sackAgg.map((g) => [g.shipmentId, g]));
-    const rollByShip = new Map(rollAgg.map((g) => [g.shipmentId, g]));
-
+    // D4-I4: toplamlar + cari kilidi tek sorguda (`boardTotalsWithHold`; eski iki groupBy ile aynı yüklem).
+    const totals = await boardTotalsWithHold(ids);
     const data = pageRows.map((s) => {
-      const sa = sackByShip.get(s.id);
-      const ra = rollByShip.get(s.id);
-      return { id: s.id, shipmentNo: s.shipmentNo, status: s.status, destination: s.destination, procedureCode: s.procedureCode, createdAt: s.createdAt, customer: s.customer, branch: s.branch, sackCount: sa?._count._all ?? 0, rollCount: ra?._count._all ?? 0, totalKg: Number(sa?._sum.weightKg ?? 0), totalQty: Number(ra?._sum.currentQty ?? 0) };
+      const t = totals.get(s.id);
+      return { id: s.id, shipmentNo: s.shipmentNo, status: s.status, destination: s.destination, procedureCode: s.procedureCode, createdAt: s.createdAt, customer: s.customer, branch: s.branch, sackCount: t?.sackCount ?? 0, rollCount: t?.rollCount ?? 0, totalKg: t?.totalKg ?? 0, totalQty: t?.totalQty ?? 0, held: t?.held ?? false, holdScopes: t?.holdScopes ?? [], holdText: t?.holdText ?? null };
     });
     return { success: true, data, pagination: { nextCursor, hasMore, limit } };
   }

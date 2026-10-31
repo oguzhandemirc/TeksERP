@@ -11,10 +11,14 @@
 //      (variants / processGroups anahtarı YOK)
 //   §6 D4-D1 brode deseni (kurşun dışı CHOICE çeşidi): saf sözcük kalıbı; özellik gruplu yanıt; iki değerde
 //      birleşmeyen metin → öneri yok; gönderene özel PROCESS sözlüğü kalıptan ÖNCE (başka gönderende kalıp)
+//   §7 D4-D2bk özellik kapsamlı sözlük: aynı gönderen + metin kurşunda ve brodede iki satır/iki doğru öneri; aynı
+//      özellikte son onay kazanır; eşzamanlı 6 öğrenme tek satır; NULL kapsamlı eski satır bayt-aynı, kapsamlı yeni satır geçer
 // Negatif sonda: gramaj-oneri.ts'te `hits.length === 1 ?` → `hits.length >= 1 ?` yapılınca §2 kırmızı;
 // BARE_NUMBER_RE satırı kaldırılınca §1 belirsiz biçimler kırmızı. D4-D1: suggestProcess'te çeşit grubunda kalıp
 // sözlükten önce denenince (alias önceliği ters) §6 ⭐ ALIAS maddeleri kırmızı; `matchChoiceOption`ta `hits.length === 1`
 // → `>= 1` yapılınca §6 "iki değer" maddeleri kırmızı.
+// D4-D2bk: `processAliasFor`ta kapsam süzgeci (`inGroup`) kaldırılınca §7 kurşun ALIAS ×2 kırmızı; `learnAlias`ta kapsam
+// hep NULL yazılınca §7 ×6 kırmızı.
 // Çalıştır: npx tsx scripts/test_gelen_belge_gramaj_oneri.ts
 // =============================================================================
 import prisma from "../src/lib/prisma";
@@ -280,16 +284,7 @@ async function section6(): Promise<void> {
   check("§6 sözlük hedefi brode değeri: kurşun grubu kalıba düşer (boş)", a.suggested === null && a.source === "NONE");
   const b = await suggestProcess(TEXT, senderB!.id, kursunOpts, fresh);
   check("§6 ⭐ gönderen B (sözlüğü yok): kalıp → D12 (PATTERN)", brodeOf(b)?.suggested?.id === d12 && brodeOf(b)?.source === "PATTERN", JSON.stringify(b));
-  // PROCESS sözlüğü metin başına tek hedef: başka özelliğin öğrenmesi (düzeltilmiş kurşun) brode seçimiyle EZİLMEZ.
-  const k1 = kursunOpts[0]!.id;
-  const k2 = kursunOpts[1]!.id;
-  const MIX = aliasKey("PROCESS", `KURŞUN BRODE D12 ${TAG}`);
-  const aliasOf = async () => (await prisma.deliveryNoteAlias.findFirst({ where: { scope: "PROCESS", senderCustomerId: senderA!.id, rawKey: MIX }, select: { targetId: true } }))?.targetId;
-  await learnAlias({ scope: "PROCESS", senderCustomerId: senderA!.id, rawKey: MIX, targetId: k1 }, actor);
-  await learnAlias({ scope: "PROCESS", senderCustomerId: senderA!.id, rawKey: MIX, targetId: d12 }, actor);
-  check("§6 ⭐ kurşun öğrenmesi brode seçimiyle EZİLMEZ (başka özellik)", (await aliasOf()) === k1, String(await aliasOf()));
-  await learnAlias({ scope: "PROCESS", senderCustomerId: senderA!.id, rawKey: MIX, targetId: k2 }, actor);
-  check("§6 aynı özellik içinde son onay kazanır (kurşun → kurşun)", (await aliasOf()) === k2, String(await aliasOf()));
+  await section7({ actor, senderA: senderA!.id, senderB: senderB!.id, desenId: desen.id, d12, d15, kursunOpts, groups: fresh });
   // Pasif değere giden sözlük yok sayılır (kalıba düşer).
   await prisma.fabricPropertyValue.update({ where: { id: d15 }, data: { isActive: false } });
   const c = await suggestProcess(TEXT, senderA!.id, kursunOpts, await loadProcessChoiceGroups());
@@ -299,6 +294,69 @@ async function section6(): Promise<void> {
     made.notes.push(n2.id);
     return approveDeliveryNote(n2.id, { processChoices: [{ lineId: null, valueId: d15 }] }, actor);
   }, "PROCESS_VALUE_INVALID"));
+}
+
+type Section7 = { actor: string; senderA: string; senderB: string; desenId: string; d12: string; d15: string; kursunOpts: Array<{ id: string; name: string }>; groups: Awaited<ReturnType<typeof loadProcessChoiceGroups>> };
+
+// D2b (D4-D2bk): PROCESS sözlüğü ÖZELLİK KAPSAMLI — aynı gönderen + aynı metin her özellikte ayrı değere öğrenilir.
+async function section7({ actor, senderA, senderB, desenId, d12, d15, kursunOpts, groups }: Section7): Promise<void> {
+  console.log("§7 Özellik kapsamlı PROCESS sözlüğü — D4-D2bk");
+  const k1 = kursunOpts[0]!.id;
+  const k2 = kursunOpts[1]!.id;
+  const kursunPropertyId = (await prisma.fabricPropertyValue.findUniqueOrThrow({ where: { id: k1 }, select: { propertyId: true } })).propertyId;
+  const brodeOf = (p: { variants?: ReadonlyArray<{ propertyId: string; suggested: { id: string } | null; source: string }> }) => p.variants?.find((v) => v.propertyId === desenId);
+  const MIX_TEXT = `KURŞUN BRODE D12 ${TAG}`;
+  const MIX = aliasKey("PROCESS", MIX_TEXT);
+  const rowsOf = (sender: string, rawKey: string) => prisma.deliveryNoteAlias.findMany({ where: { scope: "PROCESS", senderCustomerId: sender, rawKey }, select: { targetId: true, propertyId: true, hitCount: true }, orderBy: { createdAt: "asc" } });
+  await learnAlias({ scope: "PROCESS", senderCustomerId: senderA, rawKey: MIX, targetId: k1 }, actor);
+  await learnAlias({ scope: "PROCESS", senderCustomerId: senderA, rawKey: MIX, targetId: d15 }, actor);
+  const r1 = await rowsOf(senderA, MIX);
+  check("§7 ⭐ aynı gönderen + aynı metin iki özellikte İKİ satır, kapsam = değerin özelliği", r1.length === 2 && r1.some((r) => r.targetId === k1 && r.propertyId === kursunPropertyId) && r1.some((r) => r.targetId === d15 && r.propertyId === desenId), JSON.stringify(r1));
+  const m1 = await suggestProcess(MIX_TEXT, senderA, kursunOpts, groups);
+  check("§7 ⭐ kurşun grubu kendi öğrenmesini okur → k1 (ALIAS)", m1.suggested?.id === k1 && m1.source === "ALIAS", JSON.stringify(m1));
+  check("§7 ⭐ brode grubu kendi öğrenmesini okur → D15 (ALIAS; kalıp D12 derdi)", brodeOf(m1)?.suggested?.id === d15 && brodeOf(m1)?.source === "ALIAS", JSON.stringify(m1.variants));
+  await learnAlias({ scope: "PROCESS", senderCustomerId: senderA, rawKey: MIX, targetId: k2 }, actor);
+  const r2 = await rowsOf(senderA, MIX);
+  check("§7 aynı özellikte son onay kazanır (k1 → k2, hitCount 2), brode satırı dokunulmaz", r2.length === 2 && r2.some((r) => r.targetId === k2 && r.hitCount === 2) && r2.some((r) => r.targetId === d15 && r.hitCount === 1), JSON.stringify(r2));
+  const m2 = await suggestProcess(MIX_TEXT, senderA, kursunOpts, groups);
+  check("§7 ⭐ düzeltme sonrası kurşun k2, brode D15 (ALIAS)", m2.suggested?.id === k2 && brodeOf(m2)?.suggested?.id === d15 && brodeOf(m2)?.source === "ALIAS", JSON.stringify(m2));
+  const mb = await suggestProcess(MIX_TEXT, senderB, kursunOpts, groups);
+  check("§7 başka gönderen (sözlüğü yok) → kurşun NONE, brode kalıp D12", mb.suggested === null && brodeOf(mb)?.suggested?.id === d12 && brodeOf(mb)?.source === "PATTERN", JSON.stringify(mb));
+
+  // Eşzamanlı öğrenme: aynı kapsamlı anahtara paralel yazarlar → tek satır, sayım kaybı yok.
+  const RACE = aliasKey("PROCESS", `YARIŞ BRODE ${TAG}`);
+  const RACE_N = 6;
+  const results = await Promise.allSettled(Array.from({ length: RACE_N }, () => learnAlias({ scope: "PROCESS", senderCustomerId: senderB, rawKey: RACE, targetId: d15 }, actor)));
+  const race = await rowsOf(senderB, RACE);
+  check(`§7 ⭐ ${RACE_N} eşzamanlı kapsamlı öğrenme → hata yok, TEK satır, hitCount ${RACE_N}`, results.every((r) => r.status === "fulfilled") && race.length === 1 && race[0]!.hitCount === RACE_N && race[0]!.propertyId === desenId, JSON.stringify(race));
+
+  // NULL kapsamlı ESKİ satır (D4-SEMA öncesi öğrenme) — yanıt bugünkü kuralla bayt-aynı.
+  const legacyExpect = (text: string, kursunTarget: string | null, brodeTarget: string | null): string => {
+    const k = kursunTarget ? kursunOpts.find((o) => o.id === kursunTarget) : undefined;
+    const variants = groups.map((g) => {
+      const a = brodeTarget ? g.options.find((o) => o.id === brodeTarget) : undefined;
+      if (a) return { propertyId: g.propertyId, suggested: { id: a.id, name: a.name }, source: "ALIAS" };
+      const hit = matchChoiceOption(text, g.options);
+      return hit ? { propertyId: g.propertyId, suggested: { id: hit.id, name: hit.name }, source: "PATTERN" } : { propertyId: g.propertyId, suggested: null, source: "NONE" };
+    });
+    const pattern = matchGramajOption(text, kursunOpts);
+    const base = k ? { rawText: text, suggested: k, source: "ALIAS" } : pattern ? { rawText: text, suggested: pattern, source: "PATTERN" } : { rawText: text, suggested: null, source: "NONE" };
+    return JSON.stringify({ ...base, variants });
+  };
+  const OLD_K = `ESKİ KURŞUN İŞİ ${TAG}`;
+  const OLD_B = `ESKİ BRODE D12 ${TAG}`;
+  await prisma.deliveryNoteAlias.create({ data: { scope: "PROCESS", senderCustomerId: senderB, rawKey: aliasKey("PROCESS", OLD_K), targetId: k1, hitCount: 3 } });
+  await prisma.deliveryNoteAlias.create({ data: { scope: "PROCESS", senderCustomerId: null, rawKey: aliasKey("PROCESS", OLD_B), targetId: d15, hitCount: 2 } });
+  const ok1 = JSON.stringify(await suggestProcess(OLD_K, senderB, kursunOpts, groups));
+  check("§7 ⭐ NULL kapsamlı eski kurşun satırı → bayt-aynı (kurşun ALIAS, brode kalıp)", ok1 === legacyExpect(OLD_K, k1, null), ok1);
+  const ok2 = JSON.stringify(await suggestProcess(OLD_B, senderA, kursunOpts, groups));
+  check("§7 ⭐ NULL kapsamlı eski GENEL brode satırı → bayt-aynı (brode ALIAS, kurşun boş)", ok2 === legacyExpect(OLD_B, null, d15), ok2);
+  // Eski satırın yanında yeni öğrenme: kapsamlı satır ayrı doğar, eskiyi ezmez; okuma kapsamlıyı önce alır.
+  await learnAlias({ scope: "PROCESS", senderCustomerId: senderB, rawKey: aliasKey("PROCESS", OLD_K), targetId: k2 }, actor);
+  const both = await rowsOf(senderB, aliasKey("PROCESS", OLD_K));
+  check("§7 eski satır korunur (k1, hitCount 3) + kapsamlı yeni satır (k2)", both.length === 2 && both.some((r) => r.propertyId === null && r.targetId === k1 && r.hitCount === 3) && both.some((r) => r.propertyId === kursunPropertyId && r.targetId === k2 && r.hitCount === 1), JSON.stringify(both));
+  const ok3 = await suggestProcess(OLD_K, senderB, kursunOpts, groups);
+  check("§7 ⭐ kapsamlı öğrenme eski satırı geçer → k2 (ALIAS)", ok3.suggested?.id === k2 && ok3.source === "ALIAS", JSON.stringify(ok3));
 }
 
 async function cleanup(): Promise<void> {
