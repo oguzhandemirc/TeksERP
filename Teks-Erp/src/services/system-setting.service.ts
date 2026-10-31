@@ -64,7 +64,7 @@ import { alarmEnableBlocked } from "./helpers/loom-floor.helper";
 import { isShiftDefined } from "./helpers/loom-alarm-shift.helper";
 import { resetNotificationBaseline, resetNotificationBaselines } from "./helpers/notification-baseline.helper";
 import { READY_WORK_KIND } from "../constants/notification-catalog-sevkiyat";
-import { notifyUnitNeedsIncomingDoc } from "./ready-works.service";
+import { notifyUnitNeedsIncomingDoc } from "../constants/ready-work-units";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { TAMBUR_PLAN_WIDTH_TOLERANCE_CM } from "../constants/tambur-plan-gate";
 import {
@@ -6866,7 +6866,6 @@ export async function readShippingReadyTolerancePct(tx?: Pick<typeof prisma, "sy
   return parsed;
 }
 
-/** Sevke hazır bildirim birimleri. Kayıt yok/çöp → [] (bildirim kapalı); tanınmayan eleman düşer. */
 /** D4-KUC3a: gelen belge modülü kapalıdan açığa geçti ve GB/PARTI bildirimi açıksa sevke-hazır taban damgası düşer →
  *  sonraki tur SESSİZ taban (kapalıyken biriken hazır partiler toplu ACILDI üretmez; birim ekleme yazımıyla aynı kural). */
 async function resetReadyBaselineOnIncomingDocOpen(): Promise<boolean> {
@@ -6876,6 +6875,7 @@ async function resetReadyBaselineOnIncomingDocOpen(): Promise<boolean> {
   return true;
 }
 
+/** Sevke hazır bildirim birimleri. Kayıt yok/çöp → [] (bildirim kapalı); tanınmayan eleman düşer. */
 export async function readShippingReadyNotifyUnits(tx?: Pick<typeof prisma, "systemSetting">): Promise<ShipReadyNotifyUnit[]> {
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.SHIPPING_READY_NOTIFY_UNITS }, select: { value: true } });
   const v = setting?.value;

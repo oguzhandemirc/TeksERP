@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { TERIM } from "@/lib/terim";
 
 export function useWipOwnerFilter(): { owner: string | null; filter: ReactNode } {
   const { hasPermission } = useRoleAccess();
@@ -17,7 +18,7 @@ export function useWipOwnerFilter(): { owner: string | null; filter: ReactNode }
       <div className="w-72">
         <CustomerPickerField value={ownerId} onChange={setOwnerId} placeholder="Sahip (tümü)" clearable />
       </div>
-      {owner && <span className="text-xs text-muted-foreground">Hiç başlamamış iş emirleri bu süzgeçten etkilenmez.</span>}
+      {owner && <span className="text-xs text-muted-foreground">Hiç başlamamış {TERIM.terbiyeIsEmri.cogulKucuk} bu süzgeçten etkilenmez.</span>}
     </div>
   ) : null;
   return { owner, filter };

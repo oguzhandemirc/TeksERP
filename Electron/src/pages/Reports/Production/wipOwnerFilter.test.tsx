@@ -56,7 +56,7 @@ describe("WIP emanet sahibi süzgeci", () => {
     await waitFor(() => expect(getReport).toHaveBeenCalledTimes(2));
     expect(getReport.mock.calls[1]![0]).toBe("production/wip");
     expect(getReport.mock.calls[1]![1]).toMatchObject({ ownerCustomerId: "cust-1" });
-    expect(screen.getByText(/Hiç başlamamış iş emirleri bu süzgeçten etkilenmez/)).toBeInTheDocument();
+    expect(screen.getByText(/Hiç başlamamış terbiye iş emirleri bu süzgeçten etkilenmez/)).toBeInTheDocument();
   });
 
   it("customer:read yoksa ya da emanet kapalıysa seçici görünmez", async () => {

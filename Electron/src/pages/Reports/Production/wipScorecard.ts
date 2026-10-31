@@ -67,7 +67,7 @@ export function buildWipExport(opts: { sc: WipScorecard; periodLabel: string; ow
       "BEKLEYEN sütunları ANLIK durumdur — tarih aralığından ETKİLENMEZ.",
       "GEÇEN sütunları seçilen döneme aittir (o aralıkta istasyondan çıkan toplar).",
       "Bekleyen metraj, topun istasyona GİRİŞ metrajıdır. Giriş/çıkış farkı bir kayıp ölçüsü DEĞİLDİR ve bu yüzden basılmaz.",
-      ...(ownerFiltered ? ["Yalnız seçilen müşterinin emanet topları (sahip süzgeci); hiç başlamamış iş emirleri süzgeçten etkilenmez."] : []),
+      ...(ownerFiltered ? [`Yalnız seçilen müşterinin emanet topları (sahip süzgeci); hiç başlamamış ${TERIM.terbiyeIsEmri.cogulKucuk} süzgeçten etkilenmez.`] : []),
     ],
     tables: [
       {
