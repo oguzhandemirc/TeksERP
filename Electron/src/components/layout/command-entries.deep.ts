@@ -1,4 +1,4 @@
-import { Cog, Copy, KeyRound, ServerCog, Settings2, Link2, FileText, CalendarRange } from "lucide-react";
+import { Cog, Copy, KeyRound, ServerCog, Settings2, Link2, FileText, CalendarRange, ListChecks } from "lucide-react";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
 import { ROLL_TABS } from "@/pages/Operations/Rolls/tabs-config";
 import { ETIKET_TABS } from "@/pages/Labels/tabs-config";
@@ -37,6 +37,20 @@ const rollTabEntries: CommandEntry[] = ROLL_TABS.map((t) => ({
   keywords: "envanter top rulo stok sekme",
   deep: true,
 }));
+
+/** Siparişler › Üretim planı sekmesi (SY-K2) — yeni menü yok, sekme derin bağlantıyla açılır. */
+const orderTabEntries: CommandEntry[] = [
+  {
+    key: "orders-tab:plan",
+    label: "Siparişler · Üretim planı",
+    description: "Sipariş satırları renkli plan (iş açılmadı / üretimde / sevke hazır / termin geçti)",
+    icon: ListChecks,
+    to: "/operations/orders?view=plan",
+    permission: "order:read",
+    keywords: "sipariş plan üretim planı renk kuşak varyant termin satır",
+    deep: true,
+  },
+];
 
 /** Etiketler sekmeleri — `/definitions/labels?tab=<key>`. */
 const labelTabEntries: CommandEntry[] = ETIKET_TABS.map((t) => ({
@@ -214,6 +228,7 @@ const orphanPageEntries: CommandEntry[] = [
 export const deepCommandSections: CommandSection[] = [
   { heading: "Sayfa İçi · Kumaş Stoğu", entries: rollTabEntries },
   { heading: "Sayfa İçi · Etiketler", entries: labelTabEntries },
+  { heading: "Sayfa İçi · Siparişler", entries: orderTabEntries },
   { heading: "Ayar Satırları", entries: settingsFlagEntries },
   { heading: "Hub Bölümleri", entries: hubGroupEntries },
   { heading: "Diğer Sayfalar", entries: orphanPageEntries },

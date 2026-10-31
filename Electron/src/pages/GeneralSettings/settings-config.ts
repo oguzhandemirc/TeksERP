@@ -155,7 +155,7 @@ export interface FlagGateProps {
  * ve kendi kartından yönetilir; buraya yalnız kapalı kümeli ayarlar girer.
  */
 type EnumFlagKey = {
-  [K in keyof FeatureFlags]: FeatureFlags[K] extends string ? K : never;
+  [K in keyof FeatureFlags]: FeatureFlags[K] extends string | readonly string[] ? K : never;
 }[keyof FeatureFlags];
 
 /**
@@ -181,8 +181,9 @@ export interface EnumFlagDef {
   options: ReadonlyArray<{ value: string; label: string; hint: string }>;
   audience: SettingAudience[];
   group?: string;
-  /** "radio" = seçenekler alt alta, her birinin altında tek cümle (açılır liste yerine). */
-  display?: "radio";
+  /** "radio" = seçenekler alt alta, her birinin altında tek cümle (açılır liste yerine).
+   *  "checks" = KÜME değerli ayar (sunucuda dizi): onay kutuları; `defaultValue` seçenek sırasında virgüllü ("" = boş küme). */
+  display?: "radio" | "checks";
   /** Satırı saran KAPI (opsiyonel; `FlagDef.gate` ile aynı sözleşme): enum satırında yalnız UYARI çizer, seçimi kilitlemez. */
   gate?: ComponentType<FlagGateProps>;
 }
@@ -886,7 +887,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     icon: Truck,
     description: "Sevk çıkış akışı, çuval kodu üretimi ve iade kabul davranışı.",
     keywords:
-      "sevk onayı adımı çıkış sevkiyat planlı sevk kapısı iade kalite grading depo çuval kodu şablon otomatik isimlendirme numara",
+      "sevk onayı adımı çıkış sevkiyat planlı sevk kapısı iade kalite grading depo çuval kodu şablon otomatik isimlendirme numara sevke hazır bildirim parti bitince tarama periyodu",
     kind: "flags",
     section: "sales",
     permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:shipping"],
@@ -1233,6 +1234,22 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "METER_THRESHOLD", label: "Metre eşiğine ulaşınca", hint: "Metraj aşağı yukarı tamamlanınca hazır; tolerans aşağıda." },
         ],
       },
+      {
+        // D4-J2: küme değerli (backend dizi); `defaultValue` "" = boş küme = bildirim kapalı (bugünkü davranış).
+        enumKey: "shippingReadyNotifyUnits",
+        group: "Sevke hazır işler",
+        title: "Sevke hazır bildirimi",
+        summary: "Seçilen birim sevke hazır olunca sevkiyatçıya gelen kutusu bildirimi gider; hazırlık düşünce “çözüldü” yazılır.",
+        desc: "Hiçbiri seçili değilse (varsayılan) bildirim gitmez. Hazırlık üstteki kurala göre hesaplanır; tarama aşağıdaki periyotta bir yapılır. Gelen belge ve parti seçenekleri gelen belge modülü açıkken çalışır. Bildirimde tutar yoktur: birim, müşteri, hazır top ve metre.",
+        defaultValue: "",
+        display: "checks",
+        audience: ["Sevkiyat"],
+        options: [
+          { value: "IE", label: TERIM.terbiyeIsEmri.tekil, hint: `${TERIM.terbiyeIsEmri.tekil} topları sevke hazır olunca.` },
+          { value: "GB", label: "Gelen belge", hint: "Bir gelen irsaliyenin topları sevke hazır olunca." },
+          { value: "PARTI", label: "Müşteri partisi", hint: "Müşterinin parti numarasındaki bütün toplar hazır olunca (“parti bitince”)." },
+        ],
+      },
     ],
     numberFlags: [
       {
@@ -1246,6 +1263,19 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         unit: "%",
         step: 0.5,
         audience: ["Sevkiyat", "Planlamacı"],
+      },
+      {
+        // D4-J2: backend `SHIP_READY_SCAN_MINUTES_MIN/MAX` (1–60) ve varsayılan 5 ile birebir.
+        key: "shippingReadyScanMinutes",
+        group: "Sevke hazır işler",
+        title: "Sevke hazır tarama periyodu",
+        desc: "Sevke hazır bildirimi için işlerin kaç dakikada bir yeniden tarandığı. Bildirim en geç bu süre kadar gecikir. Varsayılan 5 dakika.",
+        min: 1,
+        max: 60,
+        fallback: 5,
+        unit: "dk",
+        step: 1,
+        audience: ["Sevkiyat"],
       },
     ],
   },

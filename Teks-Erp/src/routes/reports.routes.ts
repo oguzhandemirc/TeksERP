@@ -10,6 +10,7 @@
 import { Router } from "express";
 import productionReportRoutes from "./reports/production.routes";
 import salesReportRoutes from "./reports/sales.routes";
+import targetValueNeedReportRoutes from "./reports/hedef-deger.report.routes";
 import qualityReportRoutes from "./reports/quality.routes";
 import inventoryReportRoutes from "./reports/inventory.routes";
 import subcontractReportRoutes from "./reports/subcontract.routes";
@@ -26,6 +27,8 @@ const router = Router();
 
 router.use("/production", productionReportRoutes);
 router.use("/sales", salesReportRoutes);
+// SY-F1: kuşak / hedef değer ihtiyacı (kendi dosyası; sales.routes boyut tavanında).
+router.use("/sales", targetValueNeedReportRoutes);
 router.use("/quality", qualityReportRoutes);
 router.use("/inventory", inventoryReportRoutes);
 router.use("/subcontract", subcontractReportRoutes);

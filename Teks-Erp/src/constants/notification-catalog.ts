@@ -17,6 +17,7 @@ import { z } from "zod";
 import { TERIM } from "./terim";
 import { NOTIFICATION_DEFAULT_RETENTION, NOTIFICATION_DESKTOP_CHANNELS, type NotificationCatalogEntry } from "./notification-catalog.types";
 import { CARI_NOTIFICATION_ENTRIES } from "./notification-catalog-cari";
+import { READY_WORK_NOTIFICATION_ENTRIES } from "./notification-catalog-sevkiyat";
 
 export { NOTIFICATION_PHASES, NOTIFICATION_GRUPLARI } from "./notification-catalog.types";
 export type {
@@ -285,6 +286,7 @@ export const NOTIFICATION_CATALOG = {
     payloadAlanlari: ["sevkiyatId", "sevkiyatNo", "musteriAd"],
     tahminiHaftalik: 15, saklama: SAKLAMA,
   },
+  ...READY_WORK_NOTIFICATION_ENTRIES, // D4-J2 — ayrı dosyada (dosya boyu)
 
   // ── Finans (D4-I5) — ayrı dosyada (dosya boyu); yük TUTAR taşımaz ──
   ...CARI_NOTIFICATION_ENTRIES,

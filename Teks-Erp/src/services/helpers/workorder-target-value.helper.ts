@@ -86,6 +86,25 @@ export async function readActiveTargetValues(db: Reader, workOrderId: string) {
   });
 }
 
+/** Tablet çipi biçimi ("Kuşak: ZEBRA") — Tambur adım özeti okur (SY-F1, §7.5/3); salt-okunur, ek alan. */
+export interface TargetValueChip {
+  propertyId: string;
+  propertyName: string;
+  valueId: string;
+  valueCode: string;
+  valueName: string;
+}
+
+export async function readTargetValueChips(db: Reader, workOrderId: string): Promise<TargetValueChip[]> {
+  return (await readActiveTargetValues(db, workOrderId)).map((t) => ({
+    propertyId: t.propertyId,
+    propertyName: t.property.name,
+    valueId: t.valueId,
+    valueCode: t.value.code,
+    valueName: t.value.name,
+  }));
+}
+
 /** Eski hedefi damgalar — ters mekanizma (`defter-beyan.ts` beyanı). Claim 0 → 409. */
 export async function revokeTargetValueTx(tx: Tx, id: string, userId: string | null): Promise<void> {
   const claim = await tx.workOrderTargetValue.updateMany({
