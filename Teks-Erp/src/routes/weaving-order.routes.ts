@@ -43,6 +43,10 @@ const createWeavingOrderSchema = z
     itemId: z.string().uuid(),
     colorId: uuidOrNull,
     warpSpecId: uuidOrNull,
+    // SY-A4: atkı/desen kartı verilmezse etkin yapıdan dolar; varyant (ürün şablonu) yalnız seçilirse.
+    weftSpecId: uuidOrNull,
+    weaveDesignId: uuidOrNull,
+    recipeId: uuidOrNull,
     plannedM: z.union([z.number(), z.string()]).nullable().optional(),
     executionKind: z.nativeEnum(WeavingExecutionKind),
     subcontractorId: uuidOrNull,
