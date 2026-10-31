@@ -17,6 +17,7 @@ import { startNotificationConditionScanner, stopNotificationConditionScanner } f
 import { registerSystemConditionSources } from "../services/notification-sources/sistem";
 import { registerWorkConditionSources } from "../services/notification-sources/is";
 import { registerQualityConditionSources } from "../services/notification-sources/kalite";
+import { registerCariConditionSources } from "../services/notification-sources/cari";
 import { registerLoomAlarmRecipientResolver } from "../services/notification-sources/alarm";
 import { createNudgeCoalescer } from "./nudge-coalescer";
 import { reportJobFailure } from "./job-failure";
@@ -178,6 +179,7 @@ export function startNotificationJobs(): void {
   registerSystemConditionSources(); // koşul kaynakları tek noktadan (N1-KOSUL-SIS)
   registerWorkConditionSources(); // iş koşulları (N1-KOSUL-IS)
   registerQualityConditionSources(); // sertifika süresi (K4P-SERT)
+  registerCariConditionSources(); // cari risk limiti (D4-I5)
   registerDeviceConditionSources(); // anahtar halkası kaybı (izlenebilirlik D5)
   registerLoomAlarmRecipientResolver(); // tezgah alarmı donmuş alıcı (N2-ALARM)
   firstTimer = setTimeout(() => void reconcileNotificationJobs(), STARTUP_DELAY_MS);
