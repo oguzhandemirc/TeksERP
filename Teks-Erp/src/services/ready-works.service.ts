@@ -24,6 +24,7 @@ import {
   type ReadinessClass, type ShipReadyPolicy, type ShipReadyState,
 } from "./helpers/ship-readiness.helper";
 import type { ShipReadyRule } from "./system-setting.service";
+import { holdViewsByCustomer, NO_HOLD_VIEW } from "./helpers/cari-hold-badge.helper";
 
 export type ReadyWorkUnit = "workOrder" | "deliveryNote" | "customerBatch" | "customer";
 export const READY_WORK_UNITS: readonly ReadyWorkUnit[] = ["workOrder", "deliveryNote", "customerBatch", "customer"];
@@ -65,7 +66,8 @@ export interface ReadyWorkSummary {
 }
 
 export interface ReadyWorkList {
-  items: ReadyWorkRow[];
+  /** D4-I3: `customerHold` birincil müşterinin kilit rozeti (sunucu metni); eski istemci yok sayar. */
+  items: Array<ReadyWorkRow & { customerHold: typeof NO_HOLD_VIEW }>;
   nextCursor: string | null;
   summary: ReadyWorkSummary;
   policy: ShipReadyPolicy;
@@ -340,6 +342,7 @@ export async function listReadyWorks(q: ReadyWorkQuery): Promise<{ success: true
   const hasMore = start >= 0 && start + limit < filtered.length;
   const last = page[page.length - 1];
   const nextCursor = hasMore && last ? encodeDynamicCursor({ v: JSON.stringify([STATE_RANK[last.state], last.label]), id: last.id, t: "s" }) : null;
-  const items: ReadyWorkRow[] = page.map(({ customerIds: _omit, ...row }) => row);
+  const holds = await holdViewsByCustomer(page.map((r) => r.customerId));
+  const items = page.map(({ customerIds: _omit, ...row }) => ({ ...row, customerHold: (row.customerId && holds.get(row.customerId)) || NO_HOLD_VIEW }));
   return { success: true, data: { items, nextCursor, summary, policy } };
 }

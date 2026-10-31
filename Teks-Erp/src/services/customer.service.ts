@@ -6,6 +6,7 @@
 // =============================================================================
 
 import { BaseService, BaseServiceConfig, withActor } from "./base.service";
+import { withCustomerHolds } from "./helpers/cari-hold-badge.helper";
 import { ApiResponse } from "../types/api.types";
 import { AppError } from "../utils/app-error";
 import { validateName, validateCode } from "../lib/string-validators";
@@ -105,6 +106,9 @@ export class CustomerService extends BaseService {
     const { filters } = parseQueryParams(req);
     return roleListWhere(readFilterList(filters.role));
   }
+
+  /** D4-I3: liste satırına cari kilit rozeti (`cariHold`, sunucu metni) — sayfa başına TEK ek sorgu; eski istemci yok sayar. */
+  override async findAll(req: Request) { return withCustomerHolds(await super.findAll(req)); }
 
   /** Kartın mevcut rolleri (update'te gövdedeki eksik bayrak buradan tamamlanır). */
   private async currentRoles(id: string): Promise<PartnerRoles | null> {

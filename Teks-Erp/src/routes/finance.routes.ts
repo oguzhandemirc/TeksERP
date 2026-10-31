@@ -92,6 +92,7 @@ const cariCreateSchema = z
  *       - { in: query, name: "filter[isCustomerRole]", schema: { type: string, enum: ["true", "false"] } }
  *       - { in: query, name: "filter[isSubcontractorRole]", schema: { type: string, enum: ["true", "false"] } }
  *       - { in: query, name: kind, schema: { type: string, enum: [CUSTOMER, SUBCONTRACTOR] }, description: "Eski istemci" }
+ *       - { in: query, name: "filter[held]", schema: { type: string, enum: ["true"] }, description: "D4-I3 — yalnız aktif kilidi olan hesaplar; satırda `hold` alanı her zaman döner" }
  *     responses:
  *       200: { description: Liste }
  *       400: { description: Tanınmayan rol süzgeci }
@@ -113,6 +114,8 @@ router.get("/cari", requirePermission("finance:read"), async (req, res, next) =>
       // H2 (2026-08-14): "Gecikmiş" kolonu — bayrak verilmeyince servis ek
       // sorgu KOŞMAZ (bugünkü yol bayt-bayt; bekçi kaynak taramasıyla kilitli).
       withOverdue: q.withOverdue === "true",
+      // D4-I3: "Kilitli" süzgeci SUNUCUDA — liste ile `pagination.total` aynı where'den.
+      held: readFilterList(parseQueryParams(req).filters.held)[0] === "true",
     });
     res.json({ success: true, ...result });
   } catch (e) {
