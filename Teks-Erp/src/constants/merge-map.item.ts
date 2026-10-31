@@ -16,7 +16,18 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "Roll", table: "rolls", column: "itemId", label: "Top" },
     { kind: "MOVE", model: "OrderLine", table: "order_lines", column: "itemId", label: "Sipariş kalemi" },
     { kind: "MOVE", model: "WorkOrder", table: "work_orders", column: "targetItemId", label: "Terbiye iş emri (hedef kumaş)" },
-    { kind: "MOVE", model: "ProductRecipe", table: "product_recipes", column: "itemId", label: "Reçete" },
+    {
+      // SEYİTOĞLU MİG-1: `product_recipes_item_variant_uq (itemId, variantCode) WHERE variantCode IS NOT NULL`.
+      // Düz `=` NULL'ı eşlemez → varyantsız reçeteler eskisi gibi taşınır; aynı varyant kodu ham 23505 yerine 409.
+      kind: "CONFLICT",
+      model: "ProductRecipe",
+      table: "product_recipes",
+      column: "itemId",
+      label: "Reçete",
+      uniqueOn: ["itemId", "variantCode"],
+      policy: "BLOCK",
+      why: "İki kumaşta aynı varyant kodlu reçete varsa hangisinin geçerli olduğu ürün sorumlusunun kararıdır.",
+    },
     // ⚠️ SIRA LOAD-BEARING (kilit sırası sınıfı, 2026-09-12): düşüm defteri
     // kartelalardan ÖNCE gelir. Kartela stok düşümü/stornosu da ilk önce düşüm
     // BAŞLIĞINI claim edip sonra kartelaya yazıyor; ters sıra iki tx arasında
@@ -163,6 +174,19 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
       why: "Donmuş maliyet fotoğrafı; iki kumaşın sürüm geçmişi tek kumaşta birleştirilemez — hangisinin yürürlükte kalacağı muhasebe kararıdır (MAL-2).",
     },
     { kind: "MOVE", model: "StandardCostLine", table: "standard_cost_lines", column: "yarnItemId", label: "Standart maliyet kalemi ipliği" },
+    // SEYİTOĞLU MİG-1: varyant atkı ikamesi ipliği referans bağdır (tekillik reçete × sıra'da) → MOVE.
+    { kind: "MOVE", model: "ProductRecipeWeftYarn", table: "product_recipe_weft_yarns", column: "yarnItemId", label: "Varyant atkı ipliği" },
+    {
+      // SEYİTOĞLU MİG-1: katman kümesi kumaşın yapısıdır; iki tarafta da varsa (sıra/kart tekilliği) birleştirilemez.
+      kind: "CONFLICT",
+      model: "ItemWarpLayer",
+      table: "item_warp_layers",
+      column: "itemId",
+      label: "Ek çözgü katmanı",
+      uniqueOn: ["itemId"],
+      policy: "BLOCK",
+      why: "İki kumaşın da ek çözgü katmanı varsa hangi yapının geçerli olduğu ürün sorumlusunun kararıdır (CostStructure emsali).",
+    },
     // MAL-4: teklif kalemi ürüne referans bağdır (tekillik yok). Fiyat listesi satırı liste içinde ürün+renk başına tektir.
     { kind: "MOVE", model: "SalesQuoteLine", table: "sales_quote_lines", column: "itemId", label: "Teklif kalemi" },
     { kind: "MOVE", model: "CustomerDeliveryNoteLine", table: "customer_delivery_note_lines", column: "itemId", label: "Gelen belge satırı" },
