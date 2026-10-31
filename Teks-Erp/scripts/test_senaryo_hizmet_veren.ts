@@ -140,8 +140,8 @@ async function scenario(): Promise<void> {
   const pkg: Record<string, unknown> = Object.fromEntries(live.map((s) => [s.alan, s.hedef]));
   must(await api("PATCH", "/api/feature-flags", { ...pkg, kursunMeterVarianceApproval: "OFFICE", financeAutoDraftFromShipmentEnabled: true, shipmentConfirmationEnabled: false }), "ayar paketi");
   const ff = must<Record<string, unknown>>(await api("GET", "/api/feature-flags"), "bayrak oku");
-  const off = live.filter((s) => s.alan !== "kursunMeterVarianceApproval" && ff[s.alan] !== s.hedef);
-  check(`ayar paketi: ${live.length - 1} satır hedefte + sapma onayı OFFICE`, off.length === 0 && ff.kursunMeterVarianceApproval === "OFFICE", off.map((s) => `${s.alan}=${String(ff[s.alan])}`).join(", "));
+  const off = live.filter((s) => s.alan !== "kursunMeterVarianceApproval" && JSON.stringify(ff[s.alan]) !== JSON.stringify(s.hedef));
+  check(`ayar paketi: ${live.length - 1} satır hedefte + sapma onayı OFFICE`, off.length === 0 && ff.kursunMeterVarianceApproval === "OFFICE", off.map((s) => `${s.alan}=${JSON.stringify(ff[s.alan])}`).join(", "));
 
   // ── 1 MÜŞTERİ + FİYAT + EŞLEME ────────────────────────────────────────────
   adim("1 Müşteri, gramaj hizmet fiyatı, hizmet kalemi eşlemesi");

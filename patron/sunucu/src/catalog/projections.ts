@@ -197,6 +197,7 @@ export const ROOT_PROJECTIONS: readonly RootProjection[] = [
   { name: "ozet.sevkiyat", kind: "ANLIK", permissions: ["bulut:ozet:oku", "bulut:sevkiyat:oku"] },
   { name: "ozet.fason", kind: "ANLIK", permissions: ["bulut:ozet:oku", "bulut:uretim:oku"] },
   { name: "ozet-finans", kind: "ANLIK", permissions: ["bulut:cari-bakiye:oku"] },
+  { name: "ozet-masraf", kind: "ANLIK", permissions: ["bulut:kasa:oku"] },
   { name: "stok-karnesi", kind: "ANLIK", permissions: ["bulut:stok:oku"] },
   { name: "acik-siparis-karsilama", kind: "ANLIK", permissions: ["bulut:siparis:oku"] },
   { name: "rapor-katalogu", kind: "ANLIK", permissions: OTURUM },

@@ -81,7 +81,7 @@ Ajan işi **tek dilim ≤ ~120K tahmini bağlam, tek alan, ≤ 10–15 dosya**; 
 - **DAL/WT**: `git worktree add Teks-Erp-wt/<ad> -b <dal> origin/main`; ana ağaçta git yasak.
 - **DB**: `Test DB'si: node scripts/test-db.mjs ac tekserp_<kısa-ad>_test ile aç; bitince worktree'yi kaldırmadan önce node scripts/test-db.mjs sil tekserp_<kısa-ad>_test.`
 - **KABUL**: yalnız alanın bekçileri (`/bekci-kos <alan>`, hangi dosyalar) + yeni bekçi için NEGATİF SONDA (kırmızı verdiği gösterilir); kırmızı düzeltilince o dosya + bağımlı bekçi yeniden koşulur. **Tam set ajanda KOŞMAZ**, CI koşar: push → `gh run list` yeşil → iniş.
-- **CI süzgeci (2026-10-31):** PR'da `ci.yml` `changes` işi değişen yollara göre etkilenmeyen işleri atlar (backend + doküman işleri hep koşar; `.github/`, kök `scripts/`, `deploy/`, kökteki `.md` dışı dosya → her iş), aynı PR'ın eskiyen koşusu iptal edilir; main push'unda her iş koşar — bağımlılık eklerken süzgeç desenini de güncelle.
+- **CI süzgeci (2026-10-31):** PR'da `ci.yml` `changes` işi değişen yollara göre etkilenmeyen işleri atlar (backend + doküman işleri hep koşar; `.github/`, kök `scripts/`, `deploy/`, kökteki `.md` dışı dosya → her iş), aynı PR'ın eskiyen koşusu iptal edilir; main push'unda her iş koşar, main koşuları tek grupta sıralanır (koşan kesilmez, bekleyen ara koşu yenisi gelince düşer) — satıcı/native/patron/mobil/yük desenleri import kapanışı + metin okumasından dar listedir; bu işlere yeni Teks-Erp dosyası bağlarken süzgeç desenini de güncelle.
 - **MODEL**: Opus/Fable; Sonnet yok (mekanik işte de).
 - **ÇIKTI**: ≤ 1.500 token TEK rapor (ne yapıldı · SHA · koşulan test ve sonucu · kalan); ara bildirim yok, bildirim bir kez; rapor/özet `.md` dosyası yazılmaz.
 

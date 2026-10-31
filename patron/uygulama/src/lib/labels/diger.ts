@@ -108,6 +108,7 @@ export const EXPORT_DATASET_LABEL: Readonly<Record<string, string>> = {
   "ozet.sevkiyat": "Sevkiyat özeti",
   "ozet.fason": "Fason özeti",
   "ozet-finans": "Finans özeti",
+  "ozet-masraf": "Masraf özeti",
   "stok-karnesi": "Stok karnesi",
   "acik-siparis-karsilama": "Açık sipariş karşılama",
   "rapor-katalogu": "Rapor kataloğu",

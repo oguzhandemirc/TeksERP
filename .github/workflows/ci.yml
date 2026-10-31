@@ -23,9 +23,10 @@ permissions:
   contents: read
 
 # Aynı PR'a yeni push gelince eskiyen koşu iptal edilir (kuyruk public repo koşucu sınırında birikiyordu).
-# push/dispatch grubu run_id'dir: grup paylaşılsaydı GitHub bekleyen main koşusunu iptal ederdi.
+# push/dispatch grubu ref başına sabittir (iptal yok): koşan main koşusu kesilmez, ara commit'lerin
+# BEKLEYEN koşusu yenisi gelince düşer — her merge'ün tam koşusu kuyrukta birikiyordu; en yeni main hep koşar.
 concurrency:
-  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('ref-{0}', github.ref) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -34,6 +35,8 @@ jobs:
   # workflow_dispatch'te HER bayrak true (tam güvenlik ağı main'de). Bağımlılıklar
   # ölçüldü 2026-10-31 (göreli import + `"X", "y"` yol birleşimi taraması); şüphede KOŞAR.
   # Backend işleri süzgeçsizdir: bekçiler `git ls-files` ile bütün depoyu tarar.
+  # Satıcı/native/patron/mobil/yük dar listesi import kapanışından gelir: kapanışa yeni Teks-Erp dosyası girince
+  # buradaki desen de genişler (kaçan PR'ı main push'un tam koşusu yakalar).
   # ===========================================================================
   changes:
     name: Değişiklik süzgeci
@@ -82,17 +85,22 @@ jobs:
           }
           # Electron testleri Teks-Erp/src (+ bütün src'yi okuyan ayna), prisma şeması, Teks-Erp/scripts/lib, mobil/src okur.
           karar electron   '^(Electron/|Teks-Erp/(src|prisma|scripts)/|mobil/src/)'
-          # mobil testleri Electron/shared (lan-tls) ve Teks-Erp/src (lisans) okur.
-          karar mobil      '^(mobil/|Electron/shared/|Teks-Erp/src/)'
-          # Satıcı: Teks-Erp npm ci + lisans fikstürü/protokolü + native test vektörleri; tören Teks-Erp'i klonlar,
-          # Electron/electron + mobil + patron/ornek.env okur.
-          karar satici     '^(satici/|Teks-Erp/|Electron/electron/|mobil/|patron/)'
+          # mobil testleri Electron/shared (lan-tls) ve Teks-Erp/src'nin ŞU dosyalarını metin olarak okur (2026-10-31 taraması):
+          # app.ts, discovery route/servis, lib/lan-tls, constants/module-flags + number-series-catalog. Teks-Erp'ten import yok.
+          karar mobil      '^(mobil/|Electron/shared/|Teks-Erp/src/(app\.ts|routes/discovery|services/discovery|lib/lan-tls/|constants/(module-flags|number-series-catalog)))'
+          # Satıcı (+ macOS töreni): Teks-Erp'ten import kapanışı = src/lib (lisans, backup-crypto, hizmet-duzeni, pg-session),
+          # constants/module-*, services/helpers/pg-tool, scripts/lib'in lisans/imza/paket dosyaları + törenin koşturduğu
+          # araç betikleri; native test vektörleri; Electron/electron + mobil + patron. Teks-Erp test_*.ts'leri satıcıyı etkilemez.
+          karar satici     '^(satici/|Teks-Erp/(src/lib/|src/constants/module-|src/services/helpers/pg-tool|scripts/lib/(bilinen-guvenli-db|butunluk-imza|ci-kokeni|cli-girdi|git|guncelleyici-blok|guven-capasi|hedef-db-kapisi|kabul-metni|lisans-|oci-|paket-sertifika|panel-imza|senaryo-lisans|thinkpad-kokeni|varsayilan-superadmin)|scripts/(yedek-sifrele|panel-imza|build-korumali-imza|backend-bildirim|guven-capasi-ekle|senaryo-lisans|build-araclar|kabul-metni-uret)\.|native/|package|tsconfig)|Electron/electron/|mobil/|patron/)'
           karar satici_web '^satici/'
-          # Kâhin: TS protokolü (Teks-Erp/src) ↔ gerçek .node; Teks-Erp npm ci + scripts.
-          karar native     '^Teks-Erp/(native/|src/|scripts/|package)'
-          # Patron: sunucu Teks-Erp/src + satici/sunucu/src + mobil okur; uygulama patron/sunucu/src tel aynası + mobil/assets.
-          karar patron     '^(patron/|Teks-Erp/src/|satici/sunucu/src/|mobil/)'
-          karar load_test  '^Teks-Erp/'
+          # Native: Cargo alanı + kâhinin import kapanışı (src/lib/license, services/helpers/pg-tool, scripts/lib/atlama + lisans-*)
+          # + Rust testlerinin okuduğu docker/korumali; Teks-Erp npm ci → package*.
+          karar native     '^Teks-Erp/(native/|src/lib/license/|src/services/helpers/pg-tool|scripts/lib/(atlama|lisans-)|scripts/test_lisans_native_kahin|docker/korumali/|package|tsconfig)'
+          # Patron: Teks-Erp'ten import yok; bekçiler metin okur: src/cloud-sync, src/lib/license/protocol,
+          # scripts/test_bulut_tel_aynasi; satici/sunucu/src; uygulama mobil/assets okur.
+          karar patron     '^(patron/|Teks-Erp/src/(cloud-sync/|lib/license/protocol/)|Teks-Erp/scripts/test_bulut_tel_aynasi|satici/sunucu/src/|mobil/)'
+          # Yük testi bütün sunucuyu ölçer (src + şema + seed); yalnız doküman/bekçi dosyası değişince atlanır.
+          karar load_test  '^Teks-Erp/(src/|prisma/|prisma\.config|package|tsconfig|scripts/load_test)'
 
   # ===========================================================================
   # DOKÜMAN BEKÇİSİ — docs'un koda karşı bayatlamasını önler (zero-dep, DB'siz, hızlı).
@@ -861,6 +869,21 @@ jobs:
             Teks-Erp/package-lock.json
       - name: Rust araç zinciri (stable + rustfmt + clippy)
         run: rustup toolchain install stable --profile minimal --component rustfmt,clippy && rustup default stable
+      # Yalnız GERİ YÜKLE (kaydetme yok — depo önbelleği 10 GB tavanında): native-linux.yml'in main önbelleği
+      # kayıt + bağımlılık derlemesini taşır; bayat target'ı cargo parmak iziyle yeniden derler.
+      - name: rustc sürümü (önbellek anahtarı)
+        id: rustc
+        run: echo "surum=$(rustc --version | tr ' ' '-')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            Teks-Erp/native/target
+          key: cargo-native-linux-${{ steps.rustc.outputs.surum }}-${{ hashFiles('Teks-Erp/native/Cargo.lock') }}
+          restore-keys: |
+            cargo-native-linux-${{ steps.rustc.outputs.surum }}-
       - name: Teks-Erp bağımlılıkları (kâhin — TS protokolü + tsx)
         run: npm ci
         working-directory: Teks-Erp
