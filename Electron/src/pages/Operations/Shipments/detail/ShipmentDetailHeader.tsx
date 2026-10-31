@@ -11,6 +11,7 @@ import { CancelShipmentDialog } from "../CancelShipmentDialog";
 import { UndoDispatchDialog } from "../UndoDispatchDialog";
 import { DispatchConfirmDialog } from "@/pages/Operations/SackStore/DispatchConfirmDialog";
 import { PrintHistoryLink } from "@/components/print/PrintHistoryLink";
+import { ShipmentRollListButton } from "../ShipmentRollListButton";
 
 /**
  * Tam-sayfa sevkiyat detayının sabit başlığı — kimlik (sevkiyat no + statü + ihracat
@@ -83,6 +84,7 @@ export function ShipmentDetailHeader({
               <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setNoteOpen(true)}>
                 <FileText className="h-3.5 w-3.5" /> Sevk İrsaliyesi
               </Button>
+              <ShipmentRollListButton shipmentId={d.id} />
               {canDispatch && (
                 <PermissionGate permission="shipping:write">
                   <Button

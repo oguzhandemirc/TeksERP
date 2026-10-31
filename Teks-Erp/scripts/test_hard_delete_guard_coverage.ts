@@ -232,6 +232,7 @@ const EXPECTED: Record<string, string> = {
   "Route <- ProductRecipe.route : SetNull": "guarded (recipeCount, F211) — reçete rotasını sessizce kaybetmesin",
   "Route <- WorkOrder.routeTemplate : SetNull": "guarded (woCount) — şablondan üretilmiş WO soy izi korunur",
   "ProductRecipe <- ProductRecipeProperty.recipe : Cascade": "cascade-intended — reçete özellik pivotu; deleteTx ayrıca siler",
+  "ProductRecipe <- ProductRecipeWeftYarn.recipe : Cascade": "cascade-intended — varyant atkı ikamesi pivotu (③b yapılandırma); reçetesiz anlamsız (SEYİTOĞLU MİG-1)",
   "Warehouse <- WarehouseMovement.fromWarehouse : SetNull": "guarded (movementCount — from VEYA to)",
   "Warehouse <- WarehouseMovement.toWarehouse : SetNull": "guarded (movementCount — from VEYA to)",
   "DefectType <- RollError.defectType : SetNull": "guarded (rollErrorCount, F39) — mükerrer-hata partial unique'i devre dışı kalmasın",

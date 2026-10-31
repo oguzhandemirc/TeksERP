@@ -23,6 +23,9 @@ export const COST_COMPONENT_GROUP: Readonly<Record<CostComponent, CostGroup>> = 
   FABRIC_WASTE: "genelGiderTl",
   OVERHEAD: "genelGiderTl",
   EXTRA: "genelGiderTl",
+  // SEYİTOĞLU MİG-2a: atkı ücreti tezgah/işçilik/enerji yerine geçer; proses tarifesi terbiye ailesindedir.
+  WEAVING_PICK: "dokumaTl",
+  PROCESS: "terbiyeTl",
 };
 
 /** Sürüm kalemlerinin grup toplamları (TL/m, 4 hane — kalem `amountPerMTry` hassasiyeti). */

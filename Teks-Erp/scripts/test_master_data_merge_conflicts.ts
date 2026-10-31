@@ -27,6 +27,8 @@
 //     aynı renk → mükerrersiz) · BLOCK (önizleme ENGEL + işlem 409, P2002/500 değil).
 //  ⑨ NULLSAFE HEDEF TARAFI (K1) — `crossSourceOn.nullSafe` kolonu survivor yükleminde de
 //     `IS NOT DISTINCT FROM`: NULL anahtarlı iki satır önizlemede ENGEL, işlem 409.
+//  ⑪ ALIAS KAPSAMI NULL (D2b) — `delivery_note_aliases` anahtarı nullable `propertyId` taşır
+//     (NULLS NOT DISTINCT): aynı ham metni öğrenmiş gönderenler SKIP ile birleşir, 23505 değil.
 
 import prisma, { pool } from "../src/lib/prisma";
 import { MasterDataMergeService } from "../src/services/master-data-merge.service";
@@ -326,6 +328,8 @@ async function main(): Promise<void> {
 
   await crossSourceCases();
   await nullSafeSurvivorSide();
+  await aliasNullScope();
+  await recipeVariantConflict();
 }
 
 async function hataOf(fn: () => Promise<unknown>): Promise<string> {
@@ -659,6 +663,56 @@ async function nullSafeSurvivorSide(): Promise<void> {
     pv2.blockers.map((b) => b.key).join(","));
 }
 
+/** ⑪ D2b: `propertyId` NULL iken `=` çakışmayı kaçırırsa taşıma UPDATE'i yeni tekil indekse çarpar. */
+async function aliasNullScope(): Promise<void> {
+  console.log("\n── ⑪ Gelen belge alias'ı kapsamsız (propertyId NULL) ──");
+  const s = await mkCustomer("DNA-S");
+  const k1 = await mkCustomer("DNA-K1");
+  const k2 = await mkCustomer("DNA-K2");
+  const target = await mkItem("DNA-I");
+  const raw = `${TAG}-ham`.toLowerCase();
+  for (const sender of [s, k1, k2]) {
+    await prisma.deliveryNoteAlias.create({ data: { scope: "ITEM", senderCustomerId: sender, rawKey: raw, targetId: target } });
+  }
+  const only = `${TAG}-yalniz-k2`.toLowerCase();
+  await prisma.deliveryNoteAlias.create({ data: { scope: "ITEM", senderCustomerId: k2, rawKey: only, targetId: target } });
+  const err = await tryMerge("customer", s, [k1, k2], "alias kapsamsiz null sondasi");
+  check("⑪ ⭐ aynı ham metinli üç gönderen birleşir (23505 DEĞİL)", err === null, err ?? "");
+  const rows = await prisma.deliveryNoteAlias.findMany({ where: { rawKey: { in: [raw, only] } }, select: { senderCustomerId: true, rawKey: true } });
+  check("⑪ çakışan anahtar survivor'da TEK satır", rows.filter((r) => r.rawKey === raw && r.senderCustomerId === s).length === 1,
+    JSON.stringify(rows));
+  check("⑪ çakışmayan anahtar survivor'a taşındı", rows.some((r) => r.rawKey === only && r.senderCustomerId === s), JSON.stringify(rows));
+}
+
+/**
+ * ⑩ REÇETE VARYANT KODU (SY-MIG) — `product_recipes_item_variant_uq` kısmi unique. Aynı varyant kodu
+ * iki kumaşta varsa reçete taşıması ham 23505'e düşerdi; harita BLOCK → önizleme ENGEL + işlem 409.
+ */
+async function recipeVariantConflict(): Promise<void> {
+  console.log("\n── ⑩ Reçete varyant kodu çakışması (BLOCK) ──");
+  const mkRecipe = (itemId: string, suffix: string, variantCode: string | null) =>
+    prisma.productRecipe.create({ data: { code: `${TAG}R${suffix}`.slice(0, 32), name: `${TAG} R${suffix}`, itemId, variantCode } });
+  const s = await mkItem("RV-S");
+  const k = await mkItem("RV-K");
+  await mkRecipe(s, "S1", "V01");
+  await mkRecipe(k, "K1", "V01");
+  const pv = await MasterDataMergeService.preview("item", s, [k]);
+  check("⑩ ⭐ iki kumaşta V01 reçetesi önizlemede ENGEL", !pv.canMerge && pv.blockers.some((b) => b.key === "CONFLICT_PRODUCT_RECIPES"),
+    pv.blockers.map((b) => b.key).join(",") || "engel yok");
+  const hata = await hataOf(() =>
+    MasterDataMergeService.merge("item", { survivorId: s, sourceIds: [k], reason: "recete varyant sondasi", acknowledgedConflicts: pv.conflicts.length }),
+  );
+  check("⑩ ⭐ işlem BLOCK 409 (ham 23505/500 DEĞİL)", hata.startsWith("409"), hata);
+  const s2 = await mkItem("RV-S2");
+  const k2 = await mkItem("RV-K2");
+  await mkRecipe(s2, "S2", null);
+  await mkRecipe(k2, "K2", null);
+  await mkRecipe(k2, "K3", "V02");
+  const pv2 = await MasterDataMergeService.preview("item", s2, [k2]);
+  check("⑩ körlük zemini: varyantsız (NULL) + farklı kodlu reçeteler ENGEL üretmez", !pv2.blockers.some((b) => b.key === "CONFLICT_PRODUCT_RECIPES"),
+    pv2.blockers.map((b) => b.key).join(","));
+}
+
 main()
   .catch((e) => {
     fail++;
@@ -671,6 +725,7 @@ main()
     await prisma.deliveryNoteCustomerDefault.deleteMany({ where: { OR: [{ customerId: { in: trash.customers } }, { defaultItemId: { in: trash.items } }] } }).catch(() => undefined);
     await prisma.customerItemColorAlias.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
     await prisma.customerItemAlias.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
+    await prisma.deliveryNoteAlias.deleteMany({ where: { senderCustomerId: { in: trash.customers } } }).catch(() => undefined);
     const ops = await prisma.mergeOperation
       .findMany({ where: { survivorId: { in: [...trash.items, ...trash.colors, ...trash.customers] } }, select: { id: true } })
       .catch(() => [] as Array<{ id: string }>);
@@ -679,6 +734,7 @@ main()
     await prisma.mergeOperationSource.deleteMany({ where: { operationId: { in: opIds } } }).catch(() => undefined);
     await prisma.mergeOperation.deleteMany({ where: { id: { in: opIds } } }).catch(() => undefined);
     await prisma.itemPrice.deleteMany({ where: { itemId: { in: trash.items } } }).catch(() => undefined);
+    await prisma.productRecipe.deleteMany({ where: { itemId: { in: trash.items } } }).catch(() => undefined);
     await prisma.customerBranch.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
     await prisma.fourPointRuleSet.deleteMany({ where: { name: { startsWith: TAG } } }).catch(() => undefined);
     await prisma.systemLog.deleteMany({

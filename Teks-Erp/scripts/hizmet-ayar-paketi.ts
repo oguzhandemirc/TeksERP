@@ -21,7 +21,8 @@ export interface PaketSatiri {
   anahtar: string;
   /** `FeatureFlags` alan adı (okuma + `setFeatureFlags` girdisi). */
   alan: string;
-  hedef: boolean | string | number;
+  /** Harita değerli ayar (ör. kategori → sınıf) JSON eşitliğiyle karşılaştırılır. */
+  hedef: boolean | string | number | Readonly<Record<string, string>>;
   /** Anahtarı getiren dilim (yokken raporda gösterilir). */
   dilim: string;
 }
@@ -53,13 +54,25 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   { anahtar: "finance.masraf.kategoriOnerisi", alan: "financeExpenseCategorySuggestions", hedef: "ON", dilim: "D4-H1" },
   // DALGA4 §12.1 / K20: cari kilidi — ön seçim iş kabulü + sevk, koyan kişi kendi kilidini açabilir (Gülkesim de aynı).
   { anahtar: "finance.cariHold.defaultScope", alan: "financeCariHoldDefaultScope", hedef: "INTAKE,SHIPMENT", dilim: "D4-I1a" },
+  // DALGA4 §12.1: Gülkesim kârlılık kaynakları varsayılanla aynı (açık yazılır ki paket raporunda görünsün).
+  { anahtar: "maliyet.karlilik.disFasonKaynagi", alan: "costProfitSubcontractSource", hedef: "FATURA_ONCE", dilim: "D4-G2a" },
+  { anahtar: "maliyet.karlilik.sarfFiyatKaynagi", alan: "costProfitConsumablePriceSource", hedef: "ALIS_FIYATI", dilim: "D4-G2a" },
+  { anahtar: "maliyet.karlilik.makineSuresi", alan: "costProfitMachineTime", hedef: "OTURUM", dilim: "D4-G2b" },
+  { anahtar: "maliyet.karlilik.genelGiderAnahtari", alan: "costProfitOverheadKey", hedef: "YOK", dilim: "D4-G2b" },
+  // S14 (kullanıcı 2026-10-31): işçilik = toplam 'Maaş' kasa masrafı (kişi adı yok), makine saatine göre dağıtılır.
+  { anahtar: "maliyet.karlilik.kategoriSiniflari", alan: "costProfitCategoryClasses", hedef: { "Maaş": "ISCILIK" }, dilim: "D4-G2b" },
   { anahtar: "finance.cariHold.releaseBySamePerson", alan: "financeCariHoldReleaseBySamePerson", hedef: "ALLOW", dilim: "D4-I1a" },
+  // S11: kilitli caride emanet sevki — hapis hakkı seçimi fabrikanın (hukuki teyit); paket bugünkü EXEMPT'i yazar.
+  { anahtar: "finance.cariHold.emanetShipment", alan: "financeCariHoldEmanetShipment", hedef: "EXEMPT", dilim: "D4-I1c" },
   // DALGA4 §12.1: risk limiti iş kabulü/sevk kapısı — Gülkesim değeri kullanıcı kararı (S12 para), varsayılan bırakıldı.
   { anahtar: "finance.riskLimitBlock.intake", alan: "financeRiskLimitBlockIntake", hedef: false, dilim: "D4-I2" },
   { anahtar: "finance.riskLimitBlock.shipment", alan: "financeRiskLimitBlockShipment", hedef: false, dilim: "D4-I2" },
+  // S12 (kullanıcı kararı 2026-10-31): risk limiti günün kuruyla TL'ye çevrilmiş toplamla ölçülür.
+  { anahtar: "finance.riskLimit.currencyMode", alan: "financeRiskLimitCurrencyMode", hedef: "TRY_CONVERTED", dilim: "D4-I2b" },
   // DALGA4 §12.1: tambur en kapısı — Gülkesim de bugünkü değerde başlar (etek payı gerekirse elle).
   { anahtar: "tambur.planGate.widthToleranceCm", alan: "tamburPlanGateWidthToleranceCm", hedef: 10, dilim: "D4-E1" },
   { anahtar: "tambur.planGate.widthCheck", alan: "tamburPlanGateWidthCheck", hedef: "ENFORCE", dilim: "D4-E1" },
+  { anahtar: "tambur.childWidthSource", alan: "tamburChildWidthSource", hedef: "MEASURED_FIRST", dilim: "D4-E3" },
   // DALGA4 §12.1 / K26: ister "tüm metraj aşağı yukarı tamamlandığında" sevke hazır = metre eşiği, %2 tolerans.
   { anahtar: "shipping.ready.rule", alan: "shippingReadyRule", hedef: "METER_THRESHOLD", dilim: "D4-J1" },
   { anahtar: "shipping.ready.tolerancePct", alan: "shippingReadyTolerancePct", hedef: 2, dilim: "D4-J1" },
@@ -92,7 +105,7 @@ export function paketPlani(
     if (!bilinenAnahtarlar.has(s.anahtar)) return { ...s, durum: "ANAHTAR_YOK", mevcut: undefined };
     if (!Object.prototype.hasOwnProperty.call(flags, s.alan)) return { ...s, durum: "ALAN_YOK", mevcut: undefined };
     const mevcut = flags[s.alan];
-    return { ...s, durum: mevcut === s.hedef ? "AYNI" : "DEGISECEK", mevcut };
+    return { ...s, durum: mevcut === s.hedef || (typeof s.hedef === "object" && JSON.stringify(mevcut) === JSON.stringify(s.hedef)) ? "AYNI" : "DEGISECEK", mevcut };
   });
 }
 

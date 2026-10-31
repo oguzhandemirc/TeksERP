@@ -271,6 +271,7 @@ async function main(): Promise<void> {
     ["Item.itemType: ItemType", "malzeme sınıfı — ham/yarı mamul/mamul aynı anda olunmaz"],
     ["FabricProperty.valueType: FabricPropertyValueType", "değerin BİÇİMİ (metin/sayı/liste), nesnenin rolü değil"],
     ["LabelTemplate.kind: LabelKind", "şablonun bastığı belge türü"],
+    ["WeaveDesign.kind: WeaveDesignKind", "örgü türü (bezayağı/armür/jakar/leno) — bir desen aynı anda iki ağızlık düzeniyle dokunmaz (SEYİTOĞLU MİG-1)"],
     ["Customer.type: CompanyType",
      "⚠️ BU VAKANIN KENDİSİ — artık TÜRETİLMİŞ alandır (üç rol bayrağı tek kaynak, `resolveCompanyType`) ve kaldırma fazında düşecek (IS-ORTAGI-ROL-MODELI.md §7.2)"],
   ]);

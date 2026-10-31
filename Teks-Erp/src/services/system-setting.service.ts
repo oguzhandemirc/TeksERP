@@ -163,7 +163,7 @@ export const SETTING_KEYS = {
    *  `RISK_LIMIT_EXCEEDED` (default FALSE = bugünkü davranış). Bakiye her para biriminde ayrı ölçülür (fatura ilkesi). */
   FINANCE_RISK_LIMIT_BLOCK_INTAKE: "finance.riskLimitBlock.intake",
   /** D4-I2: risk limiti aşılmış caride SEVK (kurulum + dispatch) 409 `RISK_LIMIT_EXCEEDED` (default FALSE). K22: tamamı
-   *  sevk müşterisinin emaneti olan sevk takılmaz (cari kilidinin kod sabiti `CARI_HOLD_EMANET_SHIPMENT`). */
+   *  emanet sevki cari kilidiyle aynı kararı alır (`finance.cariHold.emanetShipment`, `emanetShipmentReleaseTx`). */
   FINANCE_RISK_LIMIT_BLOCK_SHIPMENT: "finance.riskLimitBlock.shipment",
   /** Sevk onayında otomatik satış faturası TASLAĞI üret (default FALSE).
    *  ⚠️ Üretilen şey TASLAKTIR (`InvoiceStatus.DRAFT`) — onay HER ZAMAN elle
@@ -189,6 +189,23 @@ export const SETTING_KEYS = {
   FINANCE_CARI_HOLD_DEFAULT_SCOPE: "finance.cariHold.defaultScope",
   /** D4-I1a: kilidi koyan kişi kendi kilidini açabilir mi — `ALLOW` (varsayılan, serbest) · `DENY` (başka yetkili açar). */
   FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON: "finance.cariHold.releaseBySamePerson",
+  /** D4-I1c (S11): kilitli caride emanetin sahibine sevki — `EXEMPT` (varsayılan, bugünkü) · `PROCESSED_HELD` · `ALL_HELD`. */
+  FINANCE_CARI_HOLD_EMANET_SHIPMENT: "finance.cariHold.emanetShipment",
+  /** SY-J1: maliyet sunum dövizi — `TRY` (varsayılan; yanıt bayt-aynı) · `USD` · `EUR`. Motor TL'de kalır. */
+  COST_PRESENTATION_CURRENCY: "maliyet.sunumDovizi",
+  /** D4-I2b (S12): risk limiti karşılaştırması — `PER_CURRENCY` (varsayılan, her para birimi ayrı) · `TRY_CONVERTED`
+   *  (tüm bakiyeler o güne kadarki en son kurla TL'ye çevrilip toplanır; kur yoksa 409 `RISK_LIMIT_FX_MISSING`). */
+  FINANCE_RISK_LIMIT_CURRENCY_MODE: "finance.riskLimit.currencyMode",
+  /** D4-G2a: kârlılıkta dış fason maliyeti — `FATURA_ONCE` (varsayılan; onaylı fason faturası, yoksa tarife tahmini) · `YALNIZ_FATURA`. */
+  COST_PROFIT_SUBCONTRACT_SOURCE: "maliyet.karlilik.disFasonKaynagi",
+  /** D4-G2a: kârlılıkta sarf birim fiyatı — `ALIS_FIYATI` (varsayılan; kartın alış fiyatı) · `SON_ALIS_FATURASI`. */
+  COST_PROFIT_CONSUMABLE_PRICE_SOURCE: "maliyet.karlilik.sarfFiyatKaynagi",
+  /** D4-G2b: kârlılıkta makine süresi — `OTURUM` (varsayılan; iş oturumu, IDLE `lastActivityAt`ta kesilir) · `VARDIYA` · `NORM`. */
+  COST_PROFIT_MACHINE_TIME: "maliyet.karlilik.makineSuresi",
+  /** D4-G2b: genel gider havuzunun işlere dağıtım anahtarı — `YOK` (varsayılan; dağıtılmaz) · `METRE` · `GELIR` · `MAKINE_SAATI`. */
+  COST_PROFIT_OVERHEAD_KEY: "maliyet.karlilik.genelGiderAnahtari",
+  /** D4-G2b: masraf kategorisi → sınıf (`ISCILIK` / `GENEL_GIDER` / `HARIC`); varsayılan `{}` (her kategori genel gider). */
+  COST_PROFIT_CATEGORY_CLASSES: "maliyet.karlilik.kategoriSiniflari",
   /** Tahsilat/ödeme kaydında en eski açık faturalara OTOMATİK kapama — FIFO
    *  (default FALSE). Bugün kapama (`PaymentAllocation`) elle seçilir; açıkken
    *  tutar vade/tarih sırasıyla açık bakiyelere dağıtılır ve artan tutar
@@ -715,6 +732,12 @@ export const SETTING_KEYS = {
   TAMBUR_PLAN_GATE_WIDTH_TOLERANCE_CM: "tambur.planGate.widthToleranceCm",
   TAMBUR_PLAN_GATE_WIDTH_CHECK: "tambur.planGate.widthCheck",
   /**
+   * Tambur finalize çocuk topun en kaynağı (D4-E3): WO_TARGET_FIRST (bugünkü: iş emri eni,
+   * yoksa ana top) | MEASURED_FIRST (ana topun ÖLÇÜLMÜŞ eni — D4-E2a izi — varsa o).
+   * Okuma YALNIZ `readTamburChildWidthSource` üzerinden.
+   */
+  TAMBUR_CHILD_WIDTH_SOURCE: "tambur.childWidthSource",
+  /**
    * FASON KABULÜ — ÇEKME UYARISI (2026-08-21).
    * Boyahanede kumaş çeker: 250 m giden mal 220 m döner. Eski ekran bu farkı
    * "EKSİK DÖNEN / giden-gelen uyuşmuyor" diye KIRMIZI bir onay modalıyla
@@ -1065,6 +1088,40 @@ export const DEFAULT_CARI_HOLD_SCOPE: CariHoldDefaultScope = "INTAKE,SHIPMENT";
 export type CariHoldReleaseBySamePerson = "ALLOW" | "DENY";
 export const CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES: CariHoldReleaseBySamePerson[] = ["ALLOW", "DENY"];
 export const DEFAULT_CARI_HOLD_RELEASE_BY_SAME_PERSON: CariHoldReleaseBySamePerson = "ALLOW";
+/** D4-I1c (S11): kilitli caride emanet sevki — hapis hakkı seçimi fabrikanındır (hukuki teyit önerilir). */
+export const CARI_HOLD_EMANET_SHIPMENT_MODES = ["EXEMPT", "PROCESSED_HELD", "ALL_HELD"] as const;
+export type CariHoldEmanetShipment = (typeof CARI_HOLD_EMANET_SHIPMENT_MODES)[number];
+export const DEFAULT_CARI_HOLD_EMANET_SHIPMENT: CariHoldEmanetShipment = "EXEMPT";
+export type CostPresentationCurrency = "TRY" | "USD" | "EUR";
+export const COST_PRESENTATION_CURRENCIES: CostPresentationCurrency[] = ["TRY", "USD", "EUR"];
+export const DEFAULT_COST_PRESENTATION_CURRENCY: CostPresentationCurrency = "TRY";
+/** D4-I2b (S12): risk limiti para birimi kipi — her para birimi ayrı (bugünkü) · o güne kadarki en son kurla TL'ye çevrilmiş toplam. */
+export type RiskLimitCurrencyMode = "PER_CURRENCY" | "TRY_CONVERTED";
+export const RISK_LIMIT_CURRENCY_MODES: RiskLimitCurrencyMode[] = ["PER_CURRENCY", "TRY_CONVERTED"];
+export const DEFAULT_RISK_LIMIT_CURRENCY_MODE: RiskLimitCurrencyMode = "PER_CURRENCY";
+/** D4-G2a: kârlılık dış fason kaynağı (rapor okuma anında uygular; sonuç saklanmaz). */
+export const PROFIT_SUBCONTRACT_SOURCES = ["FATURA_ONCE", "YALNIZ_FATURA"] as const;
+export type ProfitSubcontractSource = (typeof PROFIT_SUBCONTRACT_SOURCES)[number];
+export const DEFAULT_PROFIT_SUBCONTRACT_SOURCE: ProfitSubcontractSource = "FATURA_ONCE";
+/** D4-G2a: kârlılık sarf birim fiyatı kaynağı. */
+export const PROFIT_CONSUMABLE_PRICE_SOURCES = ["ALIS_FIYATI", "SON_ALIS_FATURASI"] as const;
+export type ProfitConsumablePriceSource = (typeof PROFIT_CONSUMABLE_PRICE_SOURCES)[number];
+export const DEFAULT_PROFIT_CONSUMABLE_PRICE_SOURCE: ProfitConsumablePriceSource = "ALIS_FIYATI";
+/** D4-G2b: kârlılıkta makine süresinin kaynağı. */
+export const PROFIT_MACHINE_TIME_MODES = ["OTURUM", "VARDIYA", "NORM"] as const;
+export type ProfitMachineTimeMode = (typeof PROFIT_MACHINE_TIME_MODES)[number];
+export const DEFAULT_PROFIT_MACHINE_TIME_MODE: ProfitMachineTimeMode = "OTURUM";
+/** D4-G2b: genel gider havuzunun dağıtım anahtarı (`YOK` = dağıtılmaz; net = katkı). */
+export const PROFIT_OVERHEAD_KEYS = ["YOK", "METRE", "GELIR", "MAKINE_SAATI"] as const;
+export type ProfitOverheadKey = (typeof PROFIT_OVERHEAD_KEYS)[number];
+export const DEFAULT_PROFIT_OVERHEAD_KEY: ProfitOverheadKey = "YOK";
+/** D4-G2b: masraf kategorisi sınıfı; sınıflanmamış kategori `GENEL_GIDER` sayılır (tasarım §8.3 "bağlanmamış EXPENSE havuzu"). */
+export const PROFIT_CATEGORY_CLASSES = ["ISCILIK", "GENEL_GIDER", "HARIC"] as const;
+export type ProfitCategoryClass = (typeof PROFIT_CATEGORY_CLASSES)[number];
+export type ProfitCategoryClassMap = Record<string, ProfitCategoryClass>;
+/** Kategori sınıfı haritası sınırları — panel ve Zod aynı tavanı okur. */
+export const PROFIT_CATEGORY_CLASS_MAX_ENTRIES = 200;
+export const PROFIT_CATEGORY_CLASS_MAX_KEY = 100;
 
 /** Tambur plan kapısı EN kolu (bkz. `SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_CHECK`). */
 export type TamburPlanWidthCheck = "ENFORCE" | "OFF";
@@ -1073,6 +1130,11 @@ export const TAMBUR_PLAN_WIDTH_CHECKS: TamburPlanWidthCheck[] = ["ENFORCE", "OFF
 export const DEFAULT_TAMBUR_PLAN_WIDTH_CHECK: TamburPlanWidthCheck = "ENFORCE";
 /** Eşik üst sınırı (cm) — panel/Zod/okuyucu aynı sınırı kullanır. */
 export const TAMBUR_PLAN_WIDTH_TOLERANCE_MAX_CM = 100;
+/** Tambur finalize çocuk en kaynağı (bkz. `SETTING_KEYS.TAMBUR_CHILD_WIDTH_SOURCE`). */
+export type TamburChildWidthSource = "WO_TARGET_FIRST" | "MEASURED_FIRST";
+export const TAMBUR_CHILD_WIDTH_SOURCES: TamburChildWidthSource[] = ["WO_TARGET_FIRST", "MEASURED_FIRST"];
+/** Varsayılan `WO_TARGET_FIRST` — BUGÜNKÜ davranış (`wo.width ?? roll.width`, ölçüldü 2026-10-31). */
+export const DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE: TamburChildWidthSource = "WO_TARGET_FIRST";
 
 /** Etiket adedi kaynağı (bkz. `SETTING_KEYS.LABEL_COPIES_SOURCE`). */
 export type LabelCopiesSource = "GLOBAL" | "STATION";
@@ -1911,6 +1973,22 @@ export interface FeatureFlags {
   financeCariHoldDefaultScope: CariHoldDefaultScope;
   /** D4-I1a: koyan kişi kendi kilidini açabilir mi (varsayılan `ALLOW`). */
   financeCariHoldReleaseBySamePerson: CariHoldReleaseBySamePerson;
+  /** D4-I1c: kilitli caride emanet sevki (varsayılan `EXEMPT`). */
+  financeCariHoldEmanetShipment: CariHoldEmanetShipment;
+  /** SY-J1: maliyet sunum dövizi (varsayılan `TRY` = bugünkü TL-yalnız yanıt). */
+  costPresentationCurrency: CostPresentationCurrency;
+  /** D4-I2b: risk limiti para birimi kipi (varsayılan `PER_CURRENCY`). */
+  financeRiskLimitCurrencyMode: RiskLimitCurrencyMode;
+  /** D4-G2a: kârlılık dış fason kaynağı (varsayılan `FATURA_ONCE`). */
+  costProfitSubcontractSource: ProfitSubcontractSource;
+  /** D4-G2a: kârlılık sarf birim fiyatı kaynağı (varsayılan `ALIS_FIYATI`). */
+  costProfitConsumablePriceSource: ProfitConsumablePriceSource;
+  /** D4-G2b: kârlılık makine süresi kaynağı (varsayılan `OTURUM`). */
+  costProfitMachineTime: ProfitMachineTimeMode;
+  /** D4-G2b: genel gider dağıtım anahtarı (varsayılan `YOK`). */
+  costProfitOverheadKey: ProfitOverheadKey;
+  /** D4-G2b: masraf kategorisi → sınıf haritası (varsayılan `{}`). */
+  costProfitCategoryClasses: ProfitCategoryClassMap;
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; otomatik tahsis elle
    *  silinebilir; farklı para birimli fatura atlanır. */
@@ -2177,6 +2255,8 @@ export interface FeatureFlags {
   tamburPlanGateWidthToleranceCm: number;
   /** Tambur plan kapısı en kontrolü (default ENFORCE); OFF yalnız en kolunu atlar. */
   tamburPlanGateWidthCheck: TamburPlanWidthCheck;
+  /** Tambur finalize çocuk en kaynağı (default WO_TARGET_FIRST = bugünkü). */
+  tamburChildWidthSource: TamburChildWidthSource;
   /** Tablet Tambur listesi oturum istasyonuyla süzülsün mü (default FALSE; istemcide uygulanır). */
   tamburListByStationEnabled: boolean;
   /** Dokuma kapalıyken de makine duruşu kaydedilsin mi (D4-A1; default FALSE = bugünkü). HAM değer;
@@ -2569,6 +2649,14 @@ export class SystemSettingService {
       financeExpenseCategorySuggestions: await readFinanceExpenseCategorySuggestions(cacheClient),
       financeCariHoldDefaultScope: await readFinanceCariHoldDefaultScope(cacheClient),
       financeCariHoldReleaseBySamePerson: await readFinanceCariHoldReleaseBySamePerson(cacheClient),
+      financeCariHoldEmanetShipment: await readFinanceCariHoldEmanetShipment(cacheClient),
+      costPresentationCurrency: await readCostPresentationCurrency(cacheClient),
+      financeRiskLimitCurrencyMode: await readFinanceRiskLimitCurrencyMode(cacheClient),
+      costProfitSubcontractSource: await readCostProfitSubcontractSource(cacheClient),
+      costProfitConsumablePriceSource: await readCostProfitConsumablePriceSource(cacheClient),
+      costProfitMachineTime: await readCostProfitMachineTime(cacheClient),
+      costProfitOverheadKey: await readCostProfitOverheadKey(cacheClient),
+      costProfitCategoryClasses: await readCostProfitCategoryClasses(cacheClient),
       financeAutoAllocateOnPaymentEnabled:
         await readFinanceAutoAllocateOnPaymentEnabled(cacheClient),
       yarnBlockNegativeBalanceEnabled: await readYarnBlockNegativeBalanceEnabled(cacheClient),
@@ -2693,6 +2781,7 @@ export class SystemSettingService {
       tamburShortCutA1ThresholdM: await readTamburShortCutA1ThresholdM(cacheClient),
       tamburPlanGateWidthToleranceCm: await readTamburPlanGateWidthToleranceCm(cacheClient),
       tamburPlanGateWidthCheck: await readTamburPlanGateWidthCheck(cacheClient),
+      tamburChildWidthSource: await readTamburChildWidthSource(cacheClient),
       tamburListByStationEnabled: await readTamburListByStationEnabled(cacheClient),
       machineStopTrackingEnabled: await readMachineStopTrackingEnabled(cacheClient),
       machineStopOpenWarningEnabled: await readMachineStopOpenWarningEnabled(cacheClient),
@@ -3118,6 +3207,62 @@ export class SystemSettingService {
         throw AppError.badRequest(`financeCariHoldReleaseBySamePerson şunlardan biri olmalı: ${CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON, v, "Cari kilidini koyan kişi kendi kilidini açabilir mi — serbest · başka yetkili", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeCariHoldEmanetShipment")) {
+      const v = input.financeCariHoldEmanetShipment;
+      if (typeof v !== "string" || !CARI_HOLD_EMANET_SHIPMENT_MODES.includes(v as CariHoldEmanetShipment)) {
+        throw AppError.badRequest(`financeCariHoldEmanetShipment şunlardan biri olmalı: ${CARI_HOLD_EMANET_SHIPMENT_MODES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT, v, "Kilitli caride müşterinin emanet malının sevki — serbest · işlenmiş tutulur · hepsi tutulur", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "costPresentationCurrency")) {
+      const v = input.costPresentationCurrency;
+      if (typeof v !== "string" || !COST_PRESENTATION_CURRENCIES.includes(v as CostPresentationCurrency)) {
+        throw AppError.badRequest(`costPresentationCurrency şunlardan biri olmalı: ${COST_PRESENTATION_CURRENCIES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.COST_PRESENTATION_CURRENCY, v, "Maliyet ekranlarında tutarların gösterildiği döviz (hesap TL'de kalır)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeRiskLimitCurrencyMode")) {
+      const v = input.financeRiskLimitCurrencyMode;
+      if (typeof v !== "string" || !RISK_LIMIT_CURRENCY_MODES.includes(v as RiskLimitCurrencyMode)) {
+        throw AppError.badRequest(`financeRiskLimitCurrencyMode şunlardan biri olmalı: ${RISK_LIMIT_CURRENCY_MODES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.FINANCE_RISK_LIMIT_CURRENCY_MODE, v, "Risk limiti para birimi — her para birimi ayrı · TL'ye çevrilmiş toplam", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "costProfitSubcontractSource")) {
+      const v = input.costProfitSubcontractSource;
+      if (typeof v !== "string" || !PROFIT_SUBCONTRACT_SOURCES.includes(v as ProfitSubcontractSource)) {
+        throw AppError.badRequest(`costProfitSubcontractSource şunlardan biri olmalı: ${PROFIT_SUBCONTRACT_SOURCES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.COST_PROFIT_SUBCONTRACT_SOURCE, v, "Kârlılıkta dış fason maliyeti — önce fatura (yoksa tarife tahmini) · yalnız fatura", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "costProfitConsumablePriceSource")) {
+      const v = input.costProfitConsumablePriceSource;
+      if (typeof v !== "string" || !PROFIT_CONSUMABLE_PRICE_SOURCES.includes(v as ProfitConsumablePriceSource)) {
+        throw AppError.badRequest(`costProfitConsumablePriceSource şunlardan biri olmalı: ${PROFIT_CONSUMABLE_PRICE_SOURCES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.COST_PROFIT_CONSUMABLE_PRICE_SOURCE, v, "Kârlılıkta sarf birim fiyatı — kart alış fiyatı · son alış faturası", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "costProfitMachineTime")) {
+      const v = input.costProfitMachineTime;
+      if (typeof v !== "string" || !PROFIT_MACHINE_TIME_MODES.includes(v as ProfitMachineTimeMode)) {
+        throw AppError.badRequest(`costProfitMachineTime şunlardan biri olmalı: ${PROFIT_MACHINE_TIME_MODES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.COST_PROFIT_MACHINE_TIME, v, "Kârlılıkta makine süresi — iş oturumu · vardiya · metre normu", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "costProfitOverheadKey")) {
+      const v = input.costProfitOverheadKey;
+      if (typeof v !== "string" || !PROFIT_OVERHEAD_KEYS.includes(v as ProfitOverheadKey)) {
+        throw AppError.badRequest(`costProfitOverheadKey şunlardan biri olmalı: ${PROFIT_OVERHEAD_KEYS.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.COST_PROFIT_OVERHEAD_KEY, v, "Kârlılıkta genel gider dağıtımı — yok · metre · gelir · makine saati", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "costProfitCategoryClasses")) {
+      const map = sanitizeProfitCategoryClasses(input.costProfitCategoryClasses);
+      if (!map) {
+        throw AppError.badRequest(`costProfitCategoryClasses kategori → sınıf eşlemesi olmalı (sınıf: ${PROFIT_CATEGORY_CLASSES.join(", ")}; en çok ${PROFIT_CATEGORY_CLASS_MAX_ENTRIES} kategori)`);
+      }
+      await this.set(SETTING_KEYS.COST_PROFIT_CATEGORY_CLASSES, map, "Kârlılıkta masraf kategorisi sınıfları — işçilik · genel gider · hariç", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "financeAutoAllocateOnPaymentEnabled")) {
@@ -4524,6 +4669,18 @@ export class SystemSettingService {
         userId
       );
     }
+    if (Object.prototype.hasOwnProperty.call(input, "tamburChildWidthSource")) {
+      const v = input.tamburChildWidthSource;
+      if (typeof v !== "string" || !TAMBUR_CHILD_WIDTH_SOURCES.includes(v as TamburChildWidthSource)) {
+        throw AppError.badRequest("Tambur çocuk top en kaynağı WO_TARGET_FIRST ya da MEASURED_FIRST olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.TAMBUR_CHILD_WIDTH_SOURCE,
+        v,
+        "Tambur finalize çocuk top eni: WO_TARGET_FIRST (hedef en, yoksa ana top) | MEASURED_FIRST (ölçülmüş ana top eni önce)",
+        userId
+      );
+    }
     if (Object.prototype.hasOwnProperty.call(input, "fasonShrinkTolerancePct")) {
       const v = input.fasonShrinkTolerancePct;
       // ⚠️ `null` = "alanı temizledim" → FABRİKA VARSAYILANINA döner (0 DEĞİL).
@@ -5347,9 +5504,68 @@ export function readFinanceCariHoldDefaultScope(tx?: Pick<typeof prisma, "system
   return readServiceEnum(SETTING_KEYS.FINANCE_CARI_HOLD_DEFAULT_SCOPE, CARI_HOLD_DEFAULT_SCOPES, DEFAULT_CARI_HOLD_SCOPE, tx);
 }
 
+/** SY-J1: maliyet sunum dövizi — tanınmayan değer varsayılana (`TRY`) düşer. */
+export function readCostPresentationCurrency(tx?: Pick<typeof prisma, "systemSetting">): Promise<CostPresentationCurrency> {
+  return readServiceEnum(SETTING_KEYS.COST_PRESENTATION_CURRENCY, COST_PRESENTATION_CURRENCIES, DEFAULT_COST_PRESENTATION_CURRENCY, tx);
+}
+
+/** D4-G2a: kârlılık dış fason kaynağı — tanınmayan değer varsayılana (`FATURA_ONCE`) düşer. */
+export function readCostProfitSubcontractSource(tx?: Pick<typeof prisma, "systemSetting">): Promise<ProfitSubcontractSource> {
+  return readServiceEnum(SETTING_KEYS.COST_PROFIT_SUBCONTRACT_SOURCE, PROFIT_SUBCONTRACT_SOURCES, DEFAULT_PROFIT_SUBCONTRACT_SOURCE, tx);
+}
+
+/** D4-G2a: kârlılık sarf fiyatı kaynağı — tanınmayan değer varsayılana (`ALIS_FIYATI`) düşer. */
+export function readCostProfitConsumablePriceSource(tx?: Pick<typeof prisma, "systemSetting">): Promise<ProfitConsumablePriceSource> {
+  return readServiceEnum(SETTING_KEYS.COST_PROFIT_CONSUMABLE_PRICE_SOURCE, PROFIT_CONSUMABLE_PRICE_SOURCES, DEFAULT_PROFIT_CONSUMABLE_PRICE_SOURCE, tx);
+}
+
+/** D4-G2b: kârlılık makine süresi — tanınmayan değer varsayılana (`OTURUM`) düşer. */
+export function readCostProfitMachineTime(tx?: Pick<typeof prisma, "systemSetting">): Promise<ProfitMachineTimeMode> {
+  return readServiceEnum(SETTING_KEYS.COST_PROFIT_MACHINE_TIME, PROFIT_MACHINE_TIME_MODES, DEFAULT_PROFIT_MACHINE_TIME_MODE, tx);
+}
+
+/** D4-G2b: genel gider dağıtım anahtarı — tanınmayan değer varsayılana (`YOK`) düşer. */
+export function readCostProfitOverheadKey(tx?: Pick<typeof prisma, "systemSetting">): Promise<ProfitOverheadKey> {
+  return readServiceEnum(SETTING_KEYS.COST_PROFIT_OVERHEAD_KEY, PROFIT_OVERHEAD_KEYS, DEFAULT_PROFIT_OVERHEAD_KEY, tx);
+}
+
+/**
+ * D4-G2b: kategori → sınıf haritasının TEK süzgeci (yazım ve okuma). Anahtar `trim`lenir (kategori anahtarı
+ * `cashCategoryKey` gibi); boş anahtar, tanınmayan sınıf, tavan aşımı → null (yazımda 400, okumada `{}`).
+ */
+export function sanitizeProfitCategoryClasses(raw: unknown): ProfitCategoryClassMap | null {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+  const entries = Object.entries(raw as Record<string, unknown>);
+  if (entries.length > PROFIT_CATEGORY_CLASS_MAX_ENTRIES) return null;
+  const out: ProfitCategoryClassMap = {};
+  for (const [k, v] of entries) {
+    const key = k.trim();
+    if (!key || key.length > PROFIT_CATEGORY_CLASS_MAX_KEY) return null;
+    if (typeof v !== "string" || !PROFIT_CATEGORY_CLASSES.includes(v as ProfitCategoryClass)) return null;
+    out[key] = v as ProfitCategoryClass;
+  }
+  return Object.fromEntries(Object.keys(out).sort().map((k) => [k, out[k]!]));
+}
+
+/** D4-G2b: kategori sınıfı haritası — bozuk kayıt `{}`e düşer (her kategori genel gider = bugünkü davranış). */
+export async function readCostProfitCategoryClasses(tx?: Pick<typeof prisma, "systemSetting">): Promise<ProfitCategoryClassMap> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.COST_PROFIT_CATEGORY_CLASSES }, select: { value: true } });
+  return sanitizeProfitCategoryClasses(setting?.value ?? {}) ?? {};
+}
+
 /** D4-I1a: koyan kişi kendi kilidini açabilir mi — tanınmayan değer varsayılana (`ALLOW`) düşer. */
 export function readFinanceCariHoldReleaseBySamePerson(tx?: Pick<typeof prisma, "systemSetting">): Promise<CariHoldReleaseBySamePerson> {
   return readServiceEnum(SETTING_KEYS.FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON, CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES, DEFAULT_CARI_HOLD_RELEASE_BY_SAME_PERSON, tx);
+}
+
+/** D4-I1c: kilitli caride emanet sevki — tanınmayan değer varsayılana (`EXEMPT`, bugünkü) düşer. Kapı okuması `emanet-shipment.helper`dedir. */
+export function readFinanceCariHoldEmanetShipment(tx?: Pick<typeof prisma, "systemSetting">): Promise<CariHoldEmanetShipment> {
+  return readServiceEnum(SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT, CARI_HOLD_EMANET_SHIPMENT_MODES, DEFAULT_CARI_HOLD_EMANET_SHIPMENT, tx);
+}
+
+/** D4-I2b: risk limiti para birimi kipi — tanınmayan değer varsayılana (`PER_CURRENCY`) düşer; guard tx içinde taze okur. */
+export function readFinanceRiskLimitCurrencyMode(tx?: Pick<typeof prisma, "systemSetting">): Promise<RiskLimitCurrencyMode> {
+  return readServiceEnum(SETTING_KEYS.FINANCE_RISK_LIMIT_CURRENCY_MODE, RISK_LIMIT_CURRENCY_MODES, DEFAULT_RISK_LIMIT_CURRENCY_MODE, tx);
 }
 
 /** H7 — hizmet faturası ana anahtarı, ETKİN değer: ön muhasebe kapalıyken daima KAPALI (bugünkü davranış). */
@@ -7378,6 +7594,25 @@ export async function readTamburPlanGateWidthCheck(
     return v as TamburPlanWidthCheck;
   }
   return DEFAULT_TAMBUR_PLAN_WIDTH_CHECK;
+}
+
+/**
+ * Tambur finalize çocuk en kaynağının TEK çözücüsü (D4-E3). Kayıt yok/çöp →
+ * WO_TARGET_FIRST (bugünkü davranış). Ad `read*` — `test_feature_flag_contract` okuyucuyu getFeatureFlags gövdesinden çözer.
+ */
+export async function readTamburChildWidthSource(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<TamburChildWidthSource> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.TAMBUR_CHILD_WIDTH_SOURCE },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (typeof v === "string" && TAMBUR_CHILD_WIDTH_SOURCES.includes(v as TamburChildWidthSource)) {
+    return v as TamburChildWidthSource;
+  }
+  return DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE;
 }
 
 /**

@@ -43,3 +43,20 @@ describe("Cari kilidi ayar satırları", () => {
     }
   });
 });
+
+describe("Kilitli caride emanet sevki ayarı (D4-I1c)", () => {
+  const row = finance?.enumFlags?.find((r) => r.enumKey === "financeCariHoldEmanetShipment");
+
+  it("EXEMPT varsayılan (bugünkü), üç seçenek backend Zod sırasıyla, Cari kilidi grubunda", () => {
+    expect(row).toBeDefined();
+    expect(row?.defaultValue).toBe("EXEMPT");
+    expect(row?.options.map((o) => o.value)).toEqual(["EXEMPT", "PROCESSED_HELD", "ALL_HELD"]);
+    expect(row?.group).toBe("Cari kilidi");
+    expect(FLAG_MODULE.financeCariHoldEmanetShipment).toBe("financeEnabled");
+  });
+
+  it("açıklama hukuki teyit notunu taşır", () => {
+    expect(row?.desc).toMatch(/hapis hakkı/);
+    expect(row?.desc).toMatch(/hukuki teyit/);
+  });
+});

@@ -83,6 +83,9 @@ import {
   DEFAULT_TAMBUR_PLAN_WIDTH_CHECK,
   TAMBUR_PLAN_WIDTH_CHECKS,
   readTamburPlanGateWidthCheck,
+  DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE,
+  TAMBUR_CHILD_WIDTH_SOURCES,
+  readTamburChildWidthSource,
   DEFAULT_SHIP_READY_RULE,
   SHIP_READY_RULES,
   readShippingReadyRule,
@@ -1535,6 +1538,7 @@ async function main() {
     ["shippingOrderRequirement", await readShippingOrderRequirement(junkClient), DEFAULT_SHIPMENT_ORDER_REQUIREMENT],
     ["shippingInvoiceMode", await readShippingInvoiceMode(junkClient), DEFAULT_SHIPPING_INVOICE_MODE],
     ["tamburPlanGateWidthCheck", await readTamburPlanGateWidthCheck(junkClient), DEFAULT_TAMBUR_PLAN_WIDTH_CHECK],
+    ["tamburChildWidthSource", await readTamburChildWidthSource(junkClient), DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE],
     ["shippingReadyRule", await readShippingReadyRule(junkClient), DEFAULT_SHIP_READY_RULE],
     [
       "shippingDocItemNameMode",
@@ -1560,6 +1564,7 @@ async function main() {
     "labelCopiesSource",
     "labelCustomerCodeMissing",
     "tamburPlanGateWidthCheck",
+    "tamburChildWidthSource",
     "shippingReadyRule",
   ] as const;
   const enumGaps = ENUM_FLAGS.flatMap((k) => {
@@ -1586,6 +1591,7 @@ async function main() {
     ["shippingOrderRequirement", SHIPMENT_ORDER_REQUIREMENTS],
     ["shippingInvoiceMode", SHIPPING_INVOICE_MODES],
     ["tamburPlanGateWidthCheck", TAMBUR_PLAN_WIDTH_CHECKS],
+    ["tamburChildWidthSource", TAMBUR_CHILD_WIDTH_SOURCES],
     ["shippingReadyRule", SHIP_READY_RULES],
     ["shippingDocItemNameMode", SHIPPING_DOC_ITEM_NAME_MODES],
   ];

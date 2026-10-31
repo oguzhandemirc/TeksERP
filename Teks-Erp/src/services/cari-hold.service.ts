@@ -4,7 +4,7 @@
 // Satır DURUM + tarihçedir, defter değil: açmak `releasedAt` damgasıdır, yeniden kilit YENİ satırdır, hard delete
 // yok. Hesap başına tek aktif kilit DB'de kısmi unique'tir (`cari_holds_active_cariId_key`); uygulamadaki ön
 // okuma yalnız anlaşılır 409 içindir. Kapı yüklemi `helpers/cari-hold.helper.ts`te (bu dosya yazmaz/okutmaz).
-// Bildirim (cari.kilitlendi / cari.kilit-acildi) D4-I5'in işi — burada yazılmaz.
+// Bildirim (cari.kilitlendi / cari.kilit-acildi, D4-I5) satırı yazan/claim'leyen tx'in İÇİNDE; replay yeniden yaymaz.
 // =============================================================================
 import type { CariHold } from "@prisma/client";
 import prisma from "../lib/prisma";
@@ -15,6 +15,8 @@ import { AuditService } from "./audit.service";
 import { tokenReplay } from "./helpers/token-replay.helper";
 import { activeHoldByCari, holdScopes, reasonLabel, type CariHoldReasonCode, type CariHoldScope } from "./helpers/cari-hold.helper";
 import { readFinanceCariHoldReleaseBySamePerson } from "./system-setting.service";
+import { cariHoldNotificationTx } from "./helpers/cari-hold-notify.helper";
+import { emitNotification } from "./helpers/notification-emit.helper";
 
 const TABLE = "CARI_HOLD";
 
@@ -128,17 +130,22 @@ async function placeFresh(cariId: string, input: PlaceCariHoldInput, userId: str
 
   let row: CariHold;
   try {
-    row = await prisma.cariHold.create({
-      data: {
-        cariId,
-        blocksIntake: input.blocksIntake,
-        blocksShipment: input.blocksShipment,
-        blocksInvoice: input.blocksInvoice,
-        reasonCode: input.reasonCode,
-        reasonText: input.reasonText?.trim() || null,
-        placedById: userId,
-        clientToken: input.clientToken,
-      },
+    row = await prisma.$transaction(async (tx) => {
+      const created = await tx.cariHold.create({
+        data: {
+          cariId,
+          blocksIntake: input.blocksIntake,
+          blocksShipment: input.blocksShipment,
+          blocksInvoice: input.blocksInvoice,
+          reasonCode: input.reasonCode,
+          reasonText: input.reasonText?.trim() || null,
+          placedById: userId,
+          clientToken: input.clientToken,
+        },
+      });
+      const n = await cariHoldNotificationTx(tx, created, userId);
+      await emitNotification(tx, "cari.kilitlendi", n.subject, n.payload, { actorUserId: userId });
+      return created;
     });
   } catch (e) {
     if (isClientTokenP2002(e)) throw e;
@@ -177,12 +184,17 @@ export const cariHoldService = {
         { code: "CARI_HOLD_SAME_PERSON", holdId },
       );
     }
-    const claimed = await prisma.cariHold.updateMany({
-      where: { id: holdId, releasedAt: null },
-      data: { releasedAt: new Date(), releasedById: userId, releaseReason: reason.trim() },
+    const row = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.cariHold.updateMany({
+        where: { id: holdId, releasedAt: null },
+        data: { releasedAt: new Date(), releasedById: userId, releaseReason: reason.trim() },
+      });
+      if (claimed.count === 0) throw notActive();
+      const released = await tx.cariHold.findUniqueOrThrow({ where: { id: holdId } });
+      const n = await cariHoldNotificationTx(tx, released, userId);
+      await emitNotification(tx, "cari.kilit-acildi", n.subject, n.payload, { actorUserId: userId });
+      return released;
     });
-    if (claimed.count === 0) throw notActive();
-    const row = await prisma.cariHold.findUniqueOrThrow({ where: { id: holdId } });
     await AuditService.log({
       userId,
       action: "UPDATE",
