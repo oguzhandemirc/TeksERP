@@ -121,6 +121,7 @@ import {
 import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { assertTargetValueItems, targetValuesNestedCreate, type TargetValueItem } from "./helpers/workorder-target-value.helper";
 import { deriveOrderLineTargetValues } from "./helpers/order-line-target-copy.helper";
+import { appendTargetNotesToExternalSteps } from "./helpers/fason-step-target-note.helper";
 import { assertTargetColorChange } from "./helpers/workorder-target-color.helper";
 import { applyFoldTypeForWriteInPlace } from "./helpers/fold-type";
 import {
@@ -1125,6 +1126,10 @@ export class WorkOrderService {
       const copied = await deriveOrderLineTargetValues(prisma, allocations.map((a) => a.orderLineId), targetValues);
       targetValues = copied.items;
       routeWarnings.push(...copied.warnings);
+      // SY-F4 (§7.5/4): satırdan gelen değer, onu uygulayan fason adımın notuna (→ çeki talimatı) doğuşta eklenir.
+      const noted = await appendTargetNotesToExternalSteps(prisma, finalSteps, copied.copied);
+      finalSteps = noted.steps;
+      routeWarnings.push(...noted.warnings);
     }
 
     if (resolvedTargetItemId) {

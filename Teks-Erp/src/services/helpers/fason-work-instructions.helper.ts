@@ -50,6 +50,8 @@ import type { PrintedDocDb } from "../printed-document.service";
  * bir değer yok — kaynakta hiç doğmuyor.
  * Değer bir gün hedef seviyesine taşınırsa kaynağı `FabricPropertyValue.name`
  * (GÖSTERİM) olmalı, `.code` (KİMLİK) DEĞİL — "50GR" okunmaz, "50 gr" okunur.
+ * Seçim değeri (`WorkOrderTargetValue`) çekiye SY-F4 ile ADIM NOTU yoluyla gider
+ * (`fason-step-target-note.helper.ts`); burada ikinci yol açma.
  */
 export interface FasonWorkInstruction {
   name: string;

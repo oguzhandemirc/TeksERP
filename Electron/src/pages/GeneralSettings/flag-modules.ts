@@ -152,6 +152,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   tamburUndoFullSameDayOnly: "productionEnabled",
   tamburSimulatedMeterEnabled: "productionEnabled",
   tamburMeasureSourceRequired: "productionEnabled",
+  tamburCalibrationCheck: "productionEnabled",
   tamburShortCutA1Enabled: "productionEnabled",
   tamburShortCutA1ThresholdM: "productionEnabled",
   tamburPlanGateWidthToleranceCm: "productionEnabled",

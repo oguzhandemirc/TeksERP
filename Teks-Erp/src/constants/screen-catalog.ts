@@ -153,6 +153,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // ÇÖZGÜ KARTLARI (devere Faz 1a) — bir çözgü tanımı N deseni besler; levent
   // bu karta göre sarılır. Modül kapalıyken karo çizilmez, uçlar 403 verir.
   { key: "definitions/warp-specs", app: "desktop", modul: "devereEnabled", title: "Çözgü Kartları", requires: ["warpspec:read"], capabilities: ["warpspec:write"] },
+  // DESEN KARTLARI (Seyitoğlu SY-A3) — armür/örgü kataloğu + atkı sırası + varyant; dokuma modülü.
+  { key: "definitions/weave-designs", app: "desktop", modul: "dokumaEnabled", title: "Desen Kartları", requires: ["warpspec:read"], capabilities: ["warpspec:write"] },
   { key: "definitions/quality-grades", app: "desktop", modul: "cekirdek:ana-veri", title: "Kalite Sınıfları", requires: ["quality:read"], capabilities: [] },
   { key: "definitions/colors", app: "desktop", modul: "cekirdek:ana-veri", title: "Renkler", requires: ["property:read"], capabilities: ["property:write"] },
   { key: "definitions/return-reasons", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "İade Nedenleri", requires: ["return:read"], capabilities: ["return:write"] },
@@ -311,7 +313,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // PermissionGate — `loom:manual-entry` (terim düzelt · mühürle; machine-stops ekranıyla PAYLAŞILIR) ve
   // `loom:shift-unseal` (mühür aç; geçmiş rakamı değiştirir, SCREENLESS'tan düştü).
   { key: "reports/dokuma", app: "desktop", modul: "dokumaEnabled", title: "Dokuma Raporları", requires: ["report:production"], capabilities: ["loom:manual-entry", "loom:shift-unseal"] },
-  { key: "reports/maliyet", app: "desktop", modul: "maliyetEnabled", title: "Maliyet Raporları", requires: ["report:yarn-need"], capabilities: [] },
+  // D4-G3: Kârlılık yaprağı (`reports/maliyet/karlilik`) `cost:read` ister; hub karosu Maliyet & Teklif hub'ında da.
+  { key: "reports/maliyet", app: "desktop", modul: "maliyetEnabled", title: "Maliyet Raporları", requires: ["report:yarn-need", "cost:read"], capabilities: [] },
   // Depo tarafı. ⚠️ `operations/yarn-stock` ve `operations/stock-counts` giriş
   // izni `warehouse:read`tir (backend `yarn.routes`/`stock-count.routes` ile
   // birebir); `yarn:write`/`warehouse:write` ekran İÇİ yetenektir.
