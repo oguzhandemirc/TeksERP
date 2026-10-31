@@ -17,7 +17,7 @@ import { readLabelNativeSendEnabled } from "./system-setting.service";
 import { assertTemplateAssignable } from "./label-template.service";
 import { LabelKind, ConnectionType, PrinterLanguage, PeripheralKind } from "@prisma/client";
 import type { ApiResponse } from "../types/api.types";
-import { assertMeterCounterFields } from "./helpers/peripheral-counter.helper";
+import { assertMeterCalibrationFields, assertMeterCounterFields } from "./helpers/peripheral-counter.helper";
 
 const PERIPHERAL_TABLE = "PERIPHERAL_DEVICE";
 const ROUTE_TABLE = "PERIPHERAL_TEMPLATE_ROUTE";
@@ -166,6 +166,7 @@ export class PeripheralDeviceService extends BaseService {
       throw AppError.badRequest("Yazıcı için dil seçimi zorunlu");
     }
     assertMeterCounterFields(data, typeof data.kind === "string" ? data.kind : null);
+    assertMeterCalibrationFields(data, typeof data.kind === "string" ? data.kind : null);
     await this.validateRefs(data);
     const res = await super.create(data, userId);
     const id = (res.data as { id?: string } | null)?.id;
@@ -180,7 +181,7 @@ export class PeripheralDeviceService extends BaseService {
     const routes = takeRoutes(data);
     const existing = await prisma.peripheralDevice.findUnique({
       where: { id },
-      select: { kind: true, languageOverride: true, deletedAt: true },
+      select: { kind: true, languageOverride: true, deletedAt: true, calibratedAt: true, calibrationDueAt: true },
     });
     // KALICI silinmiş kayıt düzenlenemez/aktifleştirilemez (restore = PATCH isActive:true
     // buraya düşer) — satır yalnız veri bütünlüğü için durur.
@@ -200,6 +201,7 @@ export class PeripheralDeviceService extends BaseService {
       }
     }
     assertMeterCounterFields(data, (touchesKind && data.kind ? String(data.kind) : existing?.kind) ?? null);
+    assertMeterCalibrationFields(data, (touchesKind && data.kind ? String(data.kind) : existing?.kind) ?? null, existing ?? null);
     await this.validateRefs(data, id);
     const res = await super.update(id, data, userId);
     if (routes) await this.applyRoutes(id, routes, userId);
