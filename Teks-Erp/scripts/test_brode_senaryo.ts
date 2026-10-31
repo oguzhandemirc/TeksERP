@@ -43,7 +43,7 @@ import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { testActorId } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
-import { applyBrodeSetup, planBrodeSetup, type BrodeSetupInput, type SetupRecord } from "./brode-kurulum";
+import { applyBrodeSetup, parseBrodeSetupInput, planBrodeSetup, writeBrodeSetup, type BrodeSetupInput, type SetupRecord } from "./brode-kurulum";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -152,6 +152,17 @@ async function run(): Promise<void> {
   const pre = await countAll();
   const res = await applyBrodeSetup(clashInput, actor);
   check("§1 ⭐ çakışan istasyon (OTHER) → CONFLICT listelenir, 0 yazım", res.conflicts.some((r) => r.kind === "STATION" && r.key === code("XX")) && (await countAll()) === pre, res.conflicts.map((r) => r.detail).join(";"));
+  // Plan ile yazım arasında doğan çakışma: yazım tx'i, çakışmadan ÖNCE yazdığı yeni deseni de geri sarar.
+  const midInput: BrodeSetupInput = { ...clashInput, patterns: [...SETUP.patterns, { code: code("DX"), name: `${TAG} dx` }] };
+  const mid = await writeBrodeSetup(midInput, actor);
+  check("§1 ⭐ yazım anında çakışma → tx geri sarılır (önceki yeni desen dahil 0 yazım), çakışma döner",
+    mid.conflicts.some((r) => r.key === code("XX")) && (await countAll()) === pre, `${pre} → ${await countAll()}`);
+  const insp = await prisma.station.findMany({ where: { id: { in: [id(SETUP.internalStation.code), id(SETUP.tamburStation.code)] } }, select: { id: true, inspectionEnabled: true } });
+  const inspOf = (k: string) => insp.find((r) => r.id === id(k))?.inspectionEnabled;
+  check("§1 muayene: iç Brode kapalı (desen düğmesi), Tambur-2 açık (panel varsayılanı)",
+    inspOf(SETUP.internalStation.code) === false && inspOf(SETUP.tamburStation.code) === true, JSON.stringify(insp));
+  const badInput = parseBrodeSetupInput({ patterns: [{ code: "", name: "x" }], bilinmeyen: 1 });
+  check("§1 --girdi fail-closed: boş kod + bilinmeyen alan reddedilir", typeof badInput === "string", String(badInput));
 
   const BR = id(SETUP.flag.code), BRD = id(SETUP.patternProperty.code);
   const HZB = id(SETUP.serviceItem.code), HZA = id(SETUP.patternServiceItems[0]!.code);

@@ -14,11 +14,13 @@
 // farklı olan kayıt ÇAKIŞMA'dır: --apply hiçbir şey yazmadan durur (veri elle incelenir).
 // Dış brode FİRMASINI kategoriye bağlamaz (hangi firma — panel, Fason Firmaları).
 // Fiyat (ItemPrice) KURMAZ — müşteri/desen fiyatı para kararıdır, panelden girilir.
-// Çıkış: 0 tamam · 1 çakışma/uygulanamadı · 2 kullanım.
+// Çıkış: 0 tamam · 1 çakışma/uygulanamadı · 2 kullanım/geçersiz girdi.
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { ItemType, Prisma, StationKind, StationPropertyMode, StationType } from "@prisma/client";
+import { z } from "zod";
 import { hedefDbAdi } from "./lib/hedef-db-kapisi";
+import { inspectionDefaultForKind } from "../src/services/helpers/quality-station.helper";
 
 type Db = Prisma.TransactionClient;
 interface CodeName { code: string; name: string }
@@ -161,7 +163,7 @@ export async function runBrodeSetup(db: Db, input: BrodeSetupInput, write: boole
     push({ kind: "SUBCONTRACTOR_CATEGORY", key: input.externalCategory.code, action: "CREATE", detail: `${input.externalCategory.name} (özellik uygular)`, id: categoryId });
   }
 
-  const ensureStation = async (s: CodeName, type: StationType, kind: StationKind, defaultCategoryId: string | null = null): Promise<string | null> => {
+  const ensureStation = async (s: CodeName, type: StationType, kind: StationKind, defaultCategoryId: string | null = null, inspectionEnabled = inspectionDefaultForKind(kind)): Promise<string | null> => {
     const row = await db.station.findUnique({ where: { code: s.code }, select: { id: true, type: true, kind: true, appliesProperty: true, defaultCategoryId: true } });
     if (row && (row.type !== type || row.kind !== kind)) {
       push({ kind: "STATION", key: s.code, action: "CONFLICT", detail: `istasyon var ama ${row.type}/${row.kind} (beklenen ${type}/${kind})`, id: row.id });
@@ -177,11 +179,12 @@ export async function runBrodeSetup(db: Db, input: BrodeSetupInput, write: boole
       return row.id;
     }
     if (row) { push({ kind: "STATION", key: s.code, action: "SAME", detail: s.name, id: row.id }); return row.id; }
-    const id = write ? (await db.station.create({ data: { code: s.code, name: s.name, type, kind, appliesProperty: true, defaultCategoryId, ...audit }, select: { id: true } })).id : null;
-    push({ kind: "STATION", key: s.code, action: "CREATE", detail: `${s.name} (${type}/${kind})`, id });
+    const id = write ? (await db.station.create({ data: { code: s.code, name: s.name, type, kind, appliesProperty: true, inspectionEnabled, defaultCategoryId, ...audit }, select: { id: true } })).id : null;
+    push({ kind: "STATION", key: s.code, action: "CREATE", detail: `${s.name} (${type}/${kind}; muayene ${inspectionEnabled ? "açık" : "kapalı"})`, id });
     return id;
   };
-  const internalId = await ensureStation(input.internalStation, StationType.INTERNAL, StationKind.PROCESS_QC);
+  // Muayene varsayılanı panel yoluyla aynı (türden); iç brode bilerek KAPALI — desen düğmesi (TAP_VALUE) yalnız muayenesiz istasyonda çıkar.
+  const internalId = await ensureStation(input.internalStation, StationType.INTERNAL, StationKind.PROCESS_QC, null, false);
   const externalId = await ensureStation(input.externalStation, StationType.EXTERNAL, StationKind.SUBCONTRACTOR, categoryId);
   const tamburId = await ensureStation(input.tamburStation, StationType.INTERNAL, StationKind.TAMBUR);
 
@@ -223,20 +226,48 @@ export async function runBrodeSetup(db: Db, input: BrodeSetupInput, write: boole
   return out;
 }
 
-/** Kuru koşu: yalnız okur, tx'i her durumda geri sarar (yazım dalı kapalı olsa da emniyet). */
+/** tx'i bilerek geri sarmak için taşıyıcı: içindeki kayıt listesi dışarıda okunur. */
+class RollbackWithRecords extends Error {
+  constructor(readonly records: SetupRecord[]) { super("brode-kurulum: geri sarıldı"); }
+}
+
+/** Kuru koşu: yalnız okur; tx sonunda bilerek fırlatıp geri sarar (yazım dalı kapalı olsa da emniyet). */
 export async function planBrodeSetup(input: BrodeSetupInput): Promise<SetupRecord[]> {
   const { default: prisma } = await import("../src/lib/prisma");
-  return prisma.$transaction((tx) => runBrodeSetup(tx, input, false, null), { timeout: 60_000 });
+  try {
+    await prisma.$transaction(async (tx) => { throw new RollbackWithRecords(await runBrodeSetup(tx, input, false, null)); }, { timeout: 60_000 });
+  } catch (e) {
+    if (e instanceof RollbackWithRecords) return e.records;
+    throw e;
+  }
+  throw new Error("brode-kurulum: kuru koşu tx'i geri sarılmadı");
+}
+
+/** Yazım TEK tx'te; yazım anında çakışma doğarsa (plan ile arada veri değişti) tx geri sarılır → 0 yazım. */
+export async function writeBrodeSetup(input: BrodeSetupInput, userId: string): Promise<{ records: SetupRecord[]; conflicts: SetupRecord[] }> {
+  const { default: prisma } = await import("../src/lib/prisma");
+  try {
+    const records = await prisma.$transaction(async (tx) => {
+      const rs = await runBrodeSetup(tx, input, true, userId);
+      if (rs.some((r) => r.action === "CONFLICT")) throw new RollbackWithRecords(rs);
+      return rs;
+    }, { timeout: 120_000 });
+    return { records, conflicts: [] };
+  } catch (e) {
+    if (e instanceof RollbackWithRecords) return { records: e.records, conflicts: e.records.filter((r) => r.action === "CONFLICT") };
+    throw e;
+  }
 }
 
 /** Uygulama: önce plan; çakışma varsa 0 yazım. Yazım TEK tx'te; audit tx DIŞINDA (ayak izi). */
 export async function applyBrodeSetup(input: BrodeSetupInput, userId: string): Promise<{ records: SetupRecord[]; conflicts: SetupRecord[] }> {
-  const { default: prisma } = await import("../src/lib/prisma");
   const { AuditService } = await import("../src/services/audit.service");
   const plan = await planBrodeSetup(input);
   const conflicts = plan.filter((r) => r.action === "CONFLICT");
   if (conflicts.length > 0) return { records: plan, conflicts };
-  const records = await prisma.$transaction((tx) => runBrodeSetup(tx, input, true, userId), { timeout: 120_000 });
+  const written = await writeBrodeSetup(input, userId);
+  if (written.conflicts.length > 0) return written;
+  const records = written.records;
   await AuditService.logMany(records.filter((r) => (r.action === "CREATE" || r.action === "UPDATE") && r.auditRecordId).map((r) => ({
     userId, action: r.action === "CREATE" ? "CREATE" as const : "UPDATE" as const, tableName: r.auditTable, recordId: r.auditRecordId!,
     newData: { source: "brode-kurulum", kind: r.kind, key: r.key, detail: r.detail },
@@ -248,10 +279,26 @@ export function formatSetupRecords(records: SetupRecord[]): string[] {
   return records.map((r) => `  ${r.action.padEnd(8)} ${r.kind.padEnd(22)} ${r.key} — ${r.detail}`);
 }
 
-function readInput(path: string | undefined): BrodeSetupInput {
+const codeName = z.object({ code: z.string().trim().min(1).max(32), name: z.string().trim().min(1) }).strict();
+/** Girdi fail-closed: tanınmayan alan / biçimsiz kayıt kurulumdan ÖNCE reddedilir. */
+const inputSchema = z.object({
+  serviceItem: codeName, flag: codeName, patternProperty: codeName, internalStation: codeName, externalStation: codeName,
+  externalCategory: codeName, tamburStation: codeName, internalRoute: codeName, externalRoute: codeName,
+  patternServiceItems: z.array(codeName),
+  patterns: z.array(codeName.extend({ serviceItemCode: z.string().trim().min(1).max(32).nullish() })),
+}).partial().strict();
+
+export function parseBrodeSetupInput(raw: unknown): BrodeSetupInput | string {
+  const r = inputSchema.safeParse(raw);
+  if (!r.success) return r.error.issues.map((i) => `${i.path.join(".") || "(kök)"}: ${i.message}`).join("; ");
+  return { ...GULKESIM_BRODE_DEFAULTS, ...r.data } as BrodeSetupInput;
+}
+
+function readInput(path: string | undefined): BrodeSetupInput | string {
   if (!path) return GULKESIM_BRODE_DEFAULTS;
-  const raw = JSON.parse(readFileSync(path, "utf8")) as Partial<BrodeSetupInput>;
-  return { ...GULKESIM_BRODE_DEFAULTS, ...raw };
+  let raw: unknown;
+  try { raw = JSON.parse(readFileSync(path, "utf8")); } catch (e) { return `girdi okunamadı: ${(e as Error).message}`; }
+  return parseBrodeSetupInput(raw);
 }
 
 async function main(): Promise<number> {
@@ -266,6 +313,7 @@ async function main(): Promise<number> {
   }
   if (!process.env.DATABASE_URL) { console.error("❌ DATABASE_URL ortamda yok."); return 2; }
   const input = readInput(inputPath);
+  if (typeof input === "string") { console.error(`❌ geçersiz --girdi: ${input}`); return 2; }
   const { default: prisma } = await import("../src/lib/prisma");
   try {
     console.log(`=== Brode kurulumu — ${apply ? "UYGULAMA" : "KURU KOŞU"} ===`);
