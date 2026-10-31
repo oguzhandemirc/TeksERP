@@ -16,15 +16,19 @@ import { workOrderStatusLabels, type WorkOrderStatus } from "@/types/enums";
 import { lookupWorkOrdersForEvents, type LookupHit } from "../WorkOrders/events";
 import { WorkOrderEventsPanel } from "../WorkOrders/WorkOrderEventsPanel";
 import { TERIM } from "@/lib/terim";
+import { useCustomerCodeChoice } from "@/components/scanner/useCustomerCodeChoice";
 
 export function WorkOrderEventsPage() {
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<LookupHit | null>(null);
+  // Belirsiz müşteri kodu → aday modalı; seçim topun iç barkoduyla aynı arama, Vazgeç → arama yok (D4-F1c).
+  const choice = useCustomerCodeChoice();
   const search = useMutation({
-    mutationFn: (term: string) => lookupWorkOrdersForEvents(term),
+    mutationFn: (term: string) => choice.resolveScan(term, lookupWorkOrdersForEvents),
     // Tek sonuç doğrudan açılır — okutup beklemek "simple is more" değil.
-    onSuccess: (hits) => setSelected(hits.length === 1 ? hits[0]! : null),
+    onSuccess: (hits) => setSelected(hits && hits.length === 1 ? hits[0]! : null),
   });
+  const cancelled = search.isSuccess && search.data === null;
   const hits = search.data ?? [];
   return (
     <PageShell>
@@ -54,7 +58,7 @@ export function WorkOrderEventsPage() {
         {search.isError && (
           <p className="mt-3 text-sm text-destructive">Arama yapılamadı — bu “bulunamadı” demek değildir, tekrar deneyin.</p>
         )}
-        {search.isSuccess && hits.length === 0 && (
+        {search.isSuccess && !cancelled && hits.length === 0 && (
           <p className="mt-3 text-sm text-muted-foreground">Bu numara ya da barkodla terbiye iş emri bulunamadı.</p>
         )}
         {hits.length > 1 && (
@@ -74,6 +78,7 @@ export function WorkOrderEventsPage() {
           </div>
         )}
       </PageBody>
+      {choice.dialog}
     </PageShell>
   );
 }

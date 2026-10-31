@@ -9,6 +9,7 @@ import { RelabelSpecForm } from "./RelabelSpecForm";
 import { RelabelPrintForCustomer } from "@/components/labels/PrintForCustomerCard";
 import { EmptyState, LastLabelBanner, RollContextHeader } from "./RollContextHeader";
 import type { RelabelContext } from "./types";
+import { useCustomerCodeChoice } from "@/components/scanner/useCustomerCodeChoice";
 
 /**
  * Yeniden-Etiketleme istasyonu — barkod okut → topu getir → spec'i düzelt
@@ -19,10 +20,14 @@ export function RelabelStationPage() {
   const [barcode, setBarcode] = useState("");
   const [ctx, setCtx] = useState<RelabelContext | null>(null);
 
+  // Belirsiz müşteri kodu → aday modalı, seçimle iç barkodla aynı bağlam (D4-F1c); Vazgeç → bugünkü panel kalır.
+  const choice = useCustomerCodeChoice();
   // 404 toast'ı apiClient interceptor'dan gelir; onError sadece paneli temizler.
   const lookup = useMutation({
-    mutationFn: (code: string) => relabelService.getContext(code),
-    onSuccess: (res) => setCtx(res.data ?? null),
+    mutationFn: (code: string) => choice.resolveScan(code, relabelService.getContext),
+    onSuccess: (res) => {
+      if (res) setCtx(res.data ?? null);
+    },
     onError: () => setCtx(null),
   });
 
@@ -76,6 +81,7 @@ export function RelabelStationPage() {
           </div>
         )}
       </PageBody>
+      {choice.dialog}
     </PageShell>
   );
 }
