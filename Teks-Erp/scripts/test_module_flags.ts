@@ -443,6 +443,9 @@ function main(): void {
     readFinanceChequeNoteMovementEnabled: { resolver: "resolveChequeNoteMovementEnabled", ebeveyn: "finans" },
     // H7 hizmet faturası (2026-10-29): sevk kancası + düzeltme kapıları yalnız resolver okur.
     readFinanceServiceBillingEnabled: { resolver: "resolveServiceBillingEnabled", ebeveyn: "finans" },
+    // D4-I2 risk limiti iş kabulü / sevk kapısı (2026-10-30): `helpers/risk-exposure.helper` yalnız resolver okur.
+    readFinanceRiskLimitBlockIntake: { resolver: "resolveRiskLimitBlockIntake", ebeveyn: "finans" },
+    readFinanceRiskLimitBlockShipment: { resolver: "resolveRiskLimitBlockShipment", ebeveyn: "finans" },
     // İplik lotu kalite bekletme (2026-09-18): doğuş + çıkış kapısı yalnız resolver okur.
     readGoodsReceiptYarnQualityHoldEnabled: { resolver: "resolveYarnQualityHoldEnabled", ebeveyn: "ticaret+iplik" },
     // İptalde sebep zorunlu (2026-09-18): top iptal kapısı + önizleme yalnız resolver okur.

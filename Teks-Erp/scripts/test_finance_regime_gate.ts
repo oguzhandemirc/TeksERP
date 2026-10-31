@@ -141,7 +141,8 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "`shipping.service` → `helpers/service-billing-gate.helper` (`listShipmentServiceBilledDocNos`) sevk geri alma önizlemesinde " +
       "ve kapısında 'bu sevkin hizmet işi faturalı mı' sorusunu SALT-OKUMA sorar. Bağ yazan tek yol fatura tx'idir " +
       "(`service-billing.helper`, kanca `await import` ile yüklenir, kapılı fatura yolu); ön muhasebe kapalı kurulumda tablo boştur, " +
-      "sorgu 0 satır döner, davranış bayt-bayt aynı. Yazma yüzeyi sıfır (`return.routes` emsali).",
+      "sorgu 0 satır döner, davranış bayt-bayt aynı. Yazma yüzeyi sıfır (`return.routes` emsali). " +
+      "D4-I2 (2026-10-30): sevk risk kapısı (`helpers/risk-exposure.helper`) `cariAccount` + `cari_balances`ı SALT-OKUMA sorar (`order.routes` emsali).",
   },
   {
     dosya: "routes/tambur.routes.ts",
@@ -150,6 +151,22 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "`tambur-meter-correct.service` → `helpers/service-billing-gate.helper` (`findActiveBillingTx`) kesim metresi düzeltmesinde " +
       "'bu okuma faturalı mı' sorusunu SALT-OKUMA sorar (faturalıysa 409). Ön muhasebe kapalı kurulumda tablo boştur, sorgu 0 satır " +
       "döner; router hiçbir ticaret tablosuna yazmaz (`shipping.routes` emsali).",
+  },
+  {
+    dosya: "routes/order.routes.ts",
+    neden:
+      "SİPARİŞ fabrikanın ana akışıdır → rejim kapısı KONULAMAZ. `cariAccount` izi tek daldan gelir (D4-I2, 2026-10-30): " +
+      "`order.service` → `helpers/risk-exposure.helper` (`assertCustomerRiskLimitTx`) yeni iş kabulünde 'carinin riski limiti aşıyor mu' " +
+      "sorusunu SALT-OKUMA sorar (`finance.riskLimitBlock.intake` varsayılan kapalı → kapalıyken tek ayar okuması). Ön muhasebe " +
+      "kapalı kurulumda `cari_balances` boştur, risk 0 döner, hiçbir sipariş kesilmez; router hiçbir ticaret tablosuna yazmaz.",
+  },
+  {
+    dosya: "routes/gelen-belge.routes.ts",
+    neden:
+      "GELEN BELGE (emanet mal kabulü) hizmet fabrikasının ana akışıdır → rejim kapısı KONULAMAZ. `cariAccount` izi tek daldan gelir " +
+      "(D4-I2, 2026-10-30): `gelen-belge-onay.service` precheck → `helpers/risk-exposure.helper` (`assertCustomerRiskLimitTx`) onayda risk " +
+      "limitini SALT-OKUMA sorar (`finance.riskLimitBlock.intake` varsayılan kapalı). Ön muhasebe kapalı kurulumda `cari_balances` boştur, " +
+      "risk 0 döner; router hiçbir ticaret tablosuna yazmaz (`order.routes` emsali).",
   },
   {
     dosya: "routes/customer.routes.ts",
