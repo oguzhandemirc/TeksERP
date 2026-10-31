@@ -78,7 +78,7 @@ async function assertOverrideYarns(rows: WeftOverrideInput[]): Promise<void> {
 /** Varyantın atkı ipliği değişimleri (REPLACE). Pay/sıklık değişmez; sıra kartta var olmalı. */
 export async function replaceRecipeWeftOverrides(recipeId: string, rows: WeftOverrideInput[], userId?: string): Promise<EffectiveConstruction> {
   const recipe = await prisma.productRecipe.findUnique({ where: { id: recipeId }, select: { id: true, itemId: true, item: { select: { weftSpecId: true } } } });
-  if (!recipe) throw AppError.notFound("Varyant (iş emri şablonu) bulunamadı.");
+  if (!recipe) throw AppError.notFound("Varyant (ürün şablonu) bulunamadı.");
   const weftSpecId = recipe.item.weftSpecId;
   if (rows.length > 0 && !weftSpecId) throw AppError.badRequest("Ürünün atkı kartı bağlı değil — atkı ipliği değişimi yazılamaz.", { code: "RECIPE_ITEM_NO_WEFT_SPEC" });
   if (new Set(rows.map((r) => r.weftSortOrder)).size !== rows.length) throw AppError.badRequest("Aynı atkı sırası iki kez değiştirilemez.");

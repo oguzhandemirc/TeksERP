@@ -121,7 +121,7 @@ export const AUDIT_ISIMLERI: Readonly<Record<string, TermCases>> = {
   WEFT_SPEC: onEkli("atkı", iyelik("spesifikasyon", "u", "a", "u")),
   WEAVE_DESIGN: onEkli("desen", iyelik("kart", "ı", "a", "ı")),
   ITEM: onEkli("stok", iyelik("kalem", "i", "e", "i")),
-  PRODUCT_RECIPE: onEkli("iş emri", iyelik("şablon", "u", "a", "u")),
+  PRODUCT_RECIPE: onEkli(TERIM.terbiyeIsEmri.tekilKucuk, iyelik("şablon", "u", "a", "u")),
   YARN_COST_PRICE: onEkli("iplik maliyet", iyelik("fiyat", "ı", "a", "ı")),
   MACHINE_COST_RATE: onEkli("makine saat", iyelik("ücret", "i", "e", "i")),
   SERVICE_CONSUMABLE_NORM: onEkli("hizmet sarf", iyelik("norm", "u", "a", "u")),

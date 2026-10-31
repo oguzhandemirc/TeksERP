@@ -96,7 +96,7 @@ function constructionWarnings(c: Omit<EffectiveConstruction, "warnings">): Effec
 
 /**
  * Ürünün (varyant verilirse varyant değişimi uygulanmış) etkin yapısı. Varyant başka ürüne aitse 400;
- * ürün/varyant yoksa 404. Maliyet derleyicisi, dokuma iş emri ön dolgusu, üretim önerisi ve tablet
+ * ürün/varyant yoksa 404. Maliyet derleyicisi, Dokuma İş Emri ön dolgusu, üretim önerisi ve tablet
  * iş kartı yapıyı YALNIZ buradan okur.
  */
 export async function resolveEffectiveConstruction(db: Db, itemId: string, recipeId?: string | null): Promise<EffectiveConstruction> {
@@ -109,7 +109,7 @@ export async function resolveEffectiveConstruction(db: Db, itemId: string, recip
       where: { id: recipeId },
       select: { itemId: true, variantCode: true, weftYarnOverrides: { select: { weftSortOrder: true, yarnItem: { select: YARN_SELECT } } } },
     });
-    if (!recipe) throw AppError.notFound("Varyant (iş emri şablonu) bulunamadı.");
+    if (!recipe) throw AppError.notFound("Varyant (ürün şablonu) bulunamadı.");
     if (recipe.itemId !== itemId) throw AppError.badRequest("Varyant bu ürüne ait değil.", { code: "RECIPE_ITEM_MISMATCH" });
     variantCode = recipe.variantCode;
     for (const o of recipe.weftYarnOverrides) overrides.set(o.weftSortOrder, o.yarnItem);
