@@ -22,6 +22,7 @@ import { WEAVING_ORDER_OVERVIEW_QUERY_KEY } from "./useWeavingOrderMutations";
 import { WEAVING_KIND_LABEL, WEAVING_STATUS_META, formatDay, type WeavingExecutionKind, type WeavingOrder, type WeavingOrderStatus } from "./types";
 import { isFasonSectionVisible } from "./fason/fason-summary";
 import { isList, liveEmptyText } from "./overview/overview-model";
+import { WeavingCostSection } from "./overview/WeavingCostSection";
 import { FollowButton } from "@/components/bildirim/FollowButton";
 import { BeamsSection, LiveRunsSection, OrderLinesSection, OverviewKpis, RecentDoffsSection, RecentRunsSection } from "./overview/OverviewSections";
 
@@ -108,6 +109,7 @@ export function WeavingOrderDetailSheet({ order, onClose, onEdit, onCloseOrder, 
                 )
               )}
               {wo.orderLines && <OrderLinesSection lines={wo.orderLines} />}
+              <WeavingCostSection itemId={wo.item.id} />
               {wo.status === "CANCELLED" && wo.cancelReason && (
                 <div className="card emptybox">İptal gerekçesi: {wo.cancelReason}</div>
               )}
