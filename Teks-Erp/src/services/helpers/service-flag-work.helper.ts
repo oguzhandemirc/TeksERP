@@ -24,7 +24,7 @@ import { MachineDataSource, MeterPhase, Prisma, RollEntrySource, ServiceMeterBas
 import prisma from "../../lib/prisma";
 
 type Db = Prisma.TransactionClient | typeof prisma;
-import { ACTIVE_ROLL_PROPERTY } from "./property-revoke.helper";
+import { ACTIVE_ROLL_PROPERTY, loadVariantValueItems } from "./property-revoke.helper";
 import { KURSUN_PROPERTY_CODE } from "./quality-station.helper";
 import { pickServiceItemId } from "./service-item-pick.helper";
 
@@ -109,20 +109,6 @@ const BILLABLE_FLAG_PROPERTY: Prisma.FabricPropertyWhereInput = {
   OR: [{ serviceItemId: { not: null } }, { variant: { is: { values: { some: { serviceItemId: { not: null } } } } } }],
 };
 
-/** D4-D3: topun bayrağa bağlı aktif ÇEŞİT değerinin kalemi — `${rollId}:${bayrakId}` → kalem (eşlenmişse). */
-async function loadVariantValueItems(props: Array<{ rollId: string; propertyId: string }>, db: Db) {
-  const rows = await db.rollProperty.findMany({
-    where: {
-      rollId: { in: [...new Set(props.map((p) => p.rollId))] },
-      ...ACTIVE_ROLL_PROPERTY,
-      property: { variantOfPropertyId: { in: [...new Set(props.map((p) => p.propertyId))] } },
-      value: { is: { serviceItemId: { not: null } } },
-    },
-    select: { rollId: true, property: { select: { variantOfPropertyId: true } }, value: { select: { serviceItemId: true } } },
-  });
-  return new Map(rows.map((r) => [`${r.rollId}:${r.property.variantOfPropertyId}`, r.value?.serviceItemId ?? null]));
-}
-
 /** Yapraklardaki aktif faturalanabilir bayraklar, kalemi çözülmüş; kalemi çözülmeyen (desen eşlemesiz + bayrak kalemsiz) düşer — bugünkü gibi iş yok. */
 async function loadBillableFlagProps(rollIds: string[], db: Db) {
   const rows = await db.rollProperty.findMany({
@@ -131,7 +117,7 @@ async function loadBillableFlagProps(rollIds: string[], db: Db) {
     orderBy: [{ rollId: "asc" }, { propertyId: "asc" }],
   });
   if (rows.length === 0) return [];
-  const valueItemOf = await loadVariantValueItems(rows, db);
+  const valueItemOf = await loadVariantValueItems(db, rows);
   return rows
     .map((p) => ({ ...p, serviceItemId: pickServiceItemId({ value: valueItemOf.get(`${p.rollId}:${p.propertyId}`), property: p.property.serviceItemId }) }))
     .filter((p): p is typeof p & { serviceItemId: string } => p.serviceItemId !== null);

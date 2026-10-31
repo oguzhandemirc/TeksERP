@@ -16,8 +16,11 @@
 //      iptali desen satırını DAMGALAR (silmez)
 //   §5 Ayar dört kapı: bilinmeyen değer servis 400 + Zod reddi; okuma varsayılanı false
 //   §6 AST: kalem zinciri (`.serviceItemId ?? ifade`) yalnız `service-item-pick.helper`de; tek tanım
+//   §7 Geri alma kapısı desen kalemini de görür: desen kalemiyle faturalı topta bayrağı çıkarmak
+//      409 SERVICE_ALREADY_BILLED (bayrak kalemsiz ve kalemli iki yol); faturasız top serbest
 // Negatif sondalar: pickServiceItemId sırası ters çevrilince (bayrak önce) §1/§4 kırmızı · ikinci
-// çözücü (`a.serviceItemId ?? b.serviceItemId`) yazılınca §6 kırmızı.
+// çözücü (`a.serviceItemId ?? b.serviceItemId`) yazılınca §6 kırmızı · kapı yalnız bayrak kalemine
+// bakınca (desen kalemi kümeye girmeyince) §7 kırmızı.
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -35,6 +38,8 @@ import { TravelerCardService } from "../src/services/traveler-card.service";
 import { testActorId } from "./fixture-test-user";
 import { updateSchema } from "../src/routes/feature-flag.routes";
 import { walkTs } from "./lib/ts-tarama";
+import { applyRollFlagSetTx } from "../src/services/helpers/property-revoke.helper";
+import { ensureCariAccountTx } from "../src/services/helpers/finance.helper";
 
 let pass = 0;
 let fail = 0;
@@ -47,7 +52,7 @@ const STAMP = randomUUID().slice(0, 8);
 const P = `TEST-DSN-${STAMP}`;
 const fx = {
   itemIds: [] as string[], propIds: [] as string[], woIds: [] as string[], rollIds: [] as string[],
-  stationIds: [] as string[], customerId: null as string | null,
+  stationIds: [] as string[], customerId: null as string | null, invoiceIds: [] as string[],
 };
 const KEYS = [SETTING_KEYS.FINANCE_SERVICE_BILLING_ENABLED, SETTING_KEYS.FASON_RECEIPT_APPLY_TARGET_VARIANT];
 const prior = new Map<string, { existed: boolean; value: unknown }>();
@@ -188,6 +193,26 @@ async function main(): Promise<void> {
   const flags = (await systemSettingService.getFeatureFlags()).data as unknown as Record<string, unknown>;
   check("feature-flag yükünde alan var", typeof flags.fasonReceiptApplyTargetVariant === "boolean", JSON.stringify(flags.fasonReceiptApplyTargetVariant));
 
+  // ── §7 ───────────────────────────────────────────────────────────────────
+  section("§7 geri alma kapısı: desen kalemiyle faturalı bayrak geri alınamaz");
+  const cari = await prisma.$transaction((tx) => ensureCariAccountTx(tx, { customerId: cust.id, subcontractorId: null }));
+  const inv = await prisma.invoice.create({ data: { docNo: `${P}-F7`, type: "SALES", cariId: cari.id, issueDate: new Date() }, select: { id: true } });
+  fx.invoiceIds.push(inv.id);
+  const billAs = (rollId: string, serviceItemId: string) => prisma.serviceBillingLink.create({ data: {
+    invoiceId: inv.id, rollId, serviceItemId, billedMeters: "40", meterBasis: "RECEIVED", unitPrice: "7", currency: Currency.TRY, serviceAt: new Date(),
+  } });
+  const dropFlags = (rollId: string) => prisma.$transaction((tx) => applyRollFlagSetTx(tx, { rollId, desired: [], reason: "D4-D3 bekçi", userId: actor }))
+    .then((r) => `revoked=${r.revoked}`, (e: { details?: { code?: string } }) => e.details?.code ?? String(e));
+  await billAs(r3, DESEN_A);
+  const g3 = await dropFlags(r3);
+  check("bayrak kalemsiz + desen kalemiyle faturalı ⇒ bayrak geri alma 409 SERVICE_ALREADY_BILLED", g3 === "SERVICE_ALREADY_BILLED", g3);
+  await billAs(r1, DESEN_A);
+  const g1 = await dropFlags(r1);
+  check("bayrak BRODE kalemli, iş DESEN_A ile faturalı ⇒ 409 SERVICE_ALREADY_BILLED", g1 === "SERVICE_ALREADY_BILLED", g1);
+  const rFree = await mkRoll(40, [{ propertyId: BX }, { propertyId: BXD, valueId: xA }]);
+  const gf = await dropFlags(rFree);
+  check("faturasız desenli topta bayrak geri alma serbest", gf === "revoked=1", gf);
+
   astChecks();
 }
 
@@ -242,6 +267,7 @@ async function cleanup(): Promise<void> {
   const dispIds = (await prisma.subcontractorDispatch.findMany({ where: { workOrderId: { in: fx.woIds } }, select: { id: true } })).map((d) => d.id);
   await del("link", () => prisma.serviceBillingLink.deleteMany({ where: { rollId: { in: ids } } }));
   await del("whMove", () => prisma.warehouseMovement.deleteMany({ where: { rollId: { in: ids } } }));
+  await del("invoice", () => prisma.invoice.deleteMany({ where: { id: { in: fx.invoiceIds } } }));
   await del("rollOperation", () => prisma.rollOperation.deleteMany({ where: { rollId: { in: ids } } }));
   await del("rollMovement", () => prisma.rollMovement.deleteMany({ where: { rollId: { in: ids } } }));
   await del("rollVariance", () => prisma.rollVariance.deleteMany({ where: { rollId: { in: ids } } }));
@@ -264,6 +290,7 @@ async function cleanup(): Promise<void> {
   await del("property", () => prisma.fabricProperty.deleteMany({ where: { id: { in: fx.propIds } } }));
   await del("itemPrice", () => prisma.itemPrice.deleteMany({ where: { itemId: { in: fx.itemIds } } }));
   await del("item", () => prisma.item.deleteMany({ where: { id: { in: fx.itemIds } } }));
+  if (fx.customerId) { const cid = fx.customerId; await del("cari", () => prisma.cariAccount.deleteMany({ where: { customerId: cid } })); }
   if (fx.customerId) { const cid = fx.customerId; await del("customer", () => prisma.customer.deleteMany({ where: { id: cid } })); }
   await del("systemLog", () => prisma.systemLog.deleteMany({ where: { recordId: { in: [...ids, ...recIds, ...dispIds, ...fx.woIds] } } }));
   const left = await prisma.roll.count({ where: { id: { in: ids } } });
