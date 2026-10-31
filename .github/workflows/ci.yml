@@ -23,9 +23,10 @@ permissions:
   contents: read
 
 # Aynı PR'a yeni push gelince eskiyen koşu iptal edilir (kuyruk public repo koşucu sınırında birikiyordu).
-# push/dispatch grubu run_id'dir: grup paylaşılsaydı GitHub bekleyen main koşusunu iptal ederdi.
+# push/dispatch grubu ref başına sabittir (iptal yok): koşan main koşusu kesilmez, ara commit'lerin
+# BEKLEYEN koşusu yenisi gelince düşer — her merge'ün tam koşusu kuyrukta birikiyordu; en yeni main hep koşar.
 concurrency:
-  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('ref-{0}', github.ref) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
