@@ -3,7 +3,7 @@
 import prisma from "../../lib/prisma";
 import { computeProfitability, type ProfitabilityResult } from "../helpers/profitability.helper";
 import type { ResolvedDayRange } from "./temel/_day-range";
-import { buildProfitabilitySunumu, monthsOfWindow, type ProfitBreakdown, type ProfitNames } from "./profitability.sunum";
+import { buildProfitabilitySunumu, compareMonthsOf, monthsOfWindow, type ProfitBreakdown, type ProfitNames } from "./profitability.sunum";
 import type { RaporSunumu } from "./sunum/sunum.types";
 
 async function loadNames(results: ProfitabilityResult[]): Promise<ProfitNames> {
@@ -24,7 +24,8 @@ async function loadNames(results: ProfitabilityResult[]): Promise<ProfitNames> {
 export async function profitabilityReport(window: ResolvedDayRange, breakdown: ProfitBreakdown): Promise<RaporSunumu | null> {
   const result = await computeProfitability(monthsOfWindow(window.days));
   if (!result) return null;
-  const previous = window.compareDays ? await computeProfitability(monthsOfWindow(window.compareDays)) : null;
+  const cmpMonths = compareMonthsOf(window);
+  const previous = cmpMonths ? await computeProfitability(cmpMonths) : null;
   const names = await loadNames(previous ? [result, previous] : [result]);
   return buildProfitabilitySunumu({ result, previous, names, window, breakdown });
 }

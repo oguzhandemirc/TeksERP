@@ -8,6 +8,7 @@
 //   §4 tahmini rozet; §5 iş kırılımı tavanı (toplam tam kümeden, `kesildi` beyanlı)
 //   §6 sorgu şeması strict (tanınmayan anahtar / kırılım 400); §7 statik — uç kapı zinciri, sunum saf (prisma yok),
 //      katkı yalnız helper'da hesaplanır; §8 ayar okuma anında: ayar değişince "hesap" özeti değişir
+//   §9 kıyas ayları ana dönemin tam aylarıyla ÖRTÜŞMEZ (örtüşürse kıyas yok + uyarı); tam ay notu bitiş gününe de bakar
 // DB'ye YAZMAZ (saf girdiyle); HTTP ucu bölümü yok (kapı zinciri §7'de kaynaktan ölçülür).
 // Panel tarafı: Electron `pages/Reports/Maliyet/profitability.test.tsx` (Excel/PDF = ekran) +
 // `pages/Cost/cost-no-client-math.test.ts` (istemci hesap bekçisi, Reports/Maliyet dahil).
@@ -18,7 +19,7 @@ import path from "node:path";
 import { Prisma, ServiceMeterBasis } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import type { ProfitabilityResult, ProfitabilityRow } from "../src/services/helpers/profitability.helper";
-import { buildProfitabilitySunumu, PROFIT_BREAKDOWNS, PROFIT_WORK_ROW_LIMIT, profitTable, settingsSummary, type ProfitNames } from "../src/services/reports/profitability.sunum";
+import { buildProfitabilitySunumu, compareMonthsOf, PROFIT_BREAKDOWNS, PROFIT_WORK_ROW_LIMIT, profitTable, settingsSummary, type ProfitNames } from "../src/services/reports/profitability.sunum";
 import { resolveCoreDayRange } from "../src/services/reports/temel/_day-range";
 import { profitabilityQuerySchema } from "../src/routes/reports/maliyet.report.routes";
 import { REPORT_BY_KEY } from "../src/constants/report-catalog";
@@ -130,6 +131,19 @@ async function main(): Promise<void> {
   const s8 = buildProfitabilitySunumu({ result: result(complete, { ...SETTINGS, overheadKey: "METRE", machineTime: "NORM" }), previous: null, names: NAMES, window: WINDOW, breakdown: "ay" });
   const h8 = String(s8.parametreler.find((p) => p.ad === "hesap")?.deger);
   check("§8 ayar değişince hesap özeti değişir", h8.includes("genel gider metreye göre") && h8.includes("normundan") && h8 !== settingsSummary(SETTINGS), h8);
+
+  console.log("── §9 kıyas ayları · tam ay notu ──");
+  const def = resolveCoreDayRange({}, 90, new Date("2026-10-31T12:00:00Z"));
+  const c9 = compareMonthsOf(def);
+  check("§9a ⭐ varsayılan (90 gün, önceki) kıyas ayları ana aylarla örtüşmez", c9?.fromMonth === "2026-05" && c9?.toMonth === "2026-07", JSON.stringify(c9));
+  const py = compareMonthsOf(resolveCoreDayRange({ from: "2023-03-01", to: "2023-04-30", kiyas: "prevYear" }, 90));
+  check("§9b geçen yıl kıyası aynı aylar bir yıl önce", py?.fromMonth === "2022-03" && py?.toMonth === "2022-04", JSON.stringify(py));
+  const longW = resolveCoreDayRange({ from: "2023-01-15", to: "2024-01-14", kiyas: "prevYear" }, 90);
+  const sLong = buildProfitabilitySunumu({ result: result(complete), previous: null, names: NAMES, window: longW, breakdown: "musteri" });
+  check("§9c 13 ayda geçen yıl örtüşür → kıyas yok + uyarı", compareMonthsOf(longW) === null && !sLong.kiyasDonemi && sLong.uyarilar.some((u) => u.includes("örtüştüğü")));
+  const mid = buildProfitabilitySunumu({ result: result(complete), previous: null, names: NAMES, window: resolveCoreDayRange({ from: "2023-03-01", to: "2023-03-15", kiyas: "none" }, 90), breakdown: "musteri" });
+  check("§9d bitiş ay ortasında → tam ay notu çıkar", mid.uyarilar.some((u) => u.startsWith("Kârlılık tam aylarla")));
+  check("§9e ay sınırına oturan dönemde not yok", !s.uyarilar.some((u) => u.startsWith("Kârlılık tam aylarla")));
 }
 
 main()

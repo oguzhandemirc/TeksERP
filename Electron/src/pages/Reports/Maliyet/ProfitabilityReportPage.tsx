@@ -28,9 +28,11 @@ export function settingsSummaryOf(params: readonly ParametreBeyani[]): string | 
  * Uç ön muhasebe + `report:finance` da ister: ikisi yoksa sorgu ATILMAZ (koşulsuz 403 yerine açıklama).
  */
 export function ProfitabilityReportPage() {
-  const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
+  const flags = useFeatureFlags().data?.data;
   const { hasPermission } = useRoleAccess();
-  const blocked = !financeEnabled ? "Kârlılık faturadan okunur: Ön Muhasebe modülü kapalıyken hesaplanamaz." :
+  // Bayraklar yüklenirken "kapalı" denmez — engel yalnız bayrak kesin false iken çizilir.
+  if (!flags) return <PageShell className="overflow-hidden"><PageBody className="p-4"><ReportLoadingState /></PageBody></PageShell>;
+  const blocked = !flags.financeEnabled ? "Kârlılık faturadan okunur: Ön Muhasebe modülü kapalıyken hesaplanamaz." :
     !hasPermission("report:finance") ? "Kârlılık için ön muhasebe raporu izni (report:finance) de gerekir." : null;
   return (
     <PageShell className="overflow-hidden">

@@ -10,6 +10,7 @@ import type { ParametreBeyani, RaporSunumu, TabloBlok, TabloHucresi, TabloKolonu
 import { catalogHeader, metricFigure, periodOf } from "./temel/_common";
 import { dayRangeParameters, type ResolvedDayRange } from "./temel/_day-range";
 import { anlatiUret } from "./anlati/anlati";
+import { resolveRangeEnd, resolveRangeStart } from "../../constants/time";
 import {
   summarizeProfitability, type ProfitabilityResult, type ProfitabilityRow, type ProfitGroupBy, type ProfitMissingCode,
 } from "../helpers/profitability.helper";
@@ -132,9 +133,8 @@ export function profitTable(rows: ProfitabilityRow[], by: ProfitBreakdown, names
   };
 }
 
-function warningsOf(r: ProfitabilityResult, rangeNote: string | null): string[] {
-  const w: string[] = [];
-  if (rangeNote) w.push(rangeNote);
+function warningsOf(r: ProfitabilityResult, rangeNotes: string[]): string[] {
+  const w: string[] = [...rangeNotes];
   const draft = r.draftRows.reduce((a, d) => a.plus(d.revenueTry), D0());
   if (r.draftRows.length > 0) w.push(`Taslak faturalarda ${say(draft)} TL gelir var; kesinleşmediği için kâra girmedi.`);
   const cancelled = r.rows.filter((x) => x.kind === "CANCELLED").length;
@@ -156,6 +156,27 @@ export function monthsOfWindow(days: { from: string; to: string }): { fromMonth:
   return { fromMonth: days.from.slice(0, 7), toMonth: days.to.slice(0, 7) };
 }
 
+type MonthSpan = { fromMonth: string; toMonth: string };
+const shiftMonth = (ym: string, by: number): string => {
+  const d = new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)) - 1 + by, 1));
+  return d.toISOString().slice(0, 7);
+};
+const monthCount = (m: MonthSpan): number =>
+  (Number(m.toMonth.slice(0, 4)) - Number(m.fromMonth.slice(0, 4))) * 12 + Number(m.toMonth.slice(5, 7)) - Number(m.fromMonth.slice(5, 7)) + 1;
+const lastDayOf = (ym: string): string => new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0)).toISOString().slice(0, 10);
+
+/** Kıyas ayları ana dönemin TAM aylarından türer (gün penceresi aya genişleyince örtüşmesin); yine örtüşürse kıyas yok. */
+export function compareMonthsOf(window: ResolvedDayRange): MonthSpan | null {
+  if (!window.compareDays) return null;
+  const main = monthsOfWindow(window.days);
+  const cmp: MonthSpan = window.mode === "prev" ? { fromMonth: shiftMonth(main.fromMonth, -monthCount(main)), toMonth: shiftMonth(main.fromMonth, -1) }
+    : window.mode === "prevYear" ? { fromMonth: shiftMonth(main.fromMonth, -12), toMonth: shiftMonth(main.toMonth, -12) }
+    : monthsOfWindow(window.compareDays);
+  return cmp.toMonth < main.fromMonth || cmp.fromMonth > main.toMonth ? cmp : null;
+}
+
+const monthsRange = (m: MonthSpan) => ({ from: resolveRangeStart(`${m.fromMonth}-01`), to: resolveRangeEnd(lastDayOf(m.toMonth)) });
+
 export function breakdownParameter(selected: ProfitBreakdown): ParametreBeyani {
   return { ad: "kirilim", etiket: "Kırılım", tur: "secim", deger: selected, secenekler: PROFIT_BREAKDOWNS.map((k) => ({ deger: k, etiket: BREAKDOWN_LABEL[k] })) };
 }
@@ -167,13 +188,18 @@ export function buildProfitabilitySunumu(p: {
   const total = totalOf(profitGroups(result.rows, "ay", names));
   const prevTotal = previous ? totalOf(profitGroups(previous.rows, "ay", names)) : null;
   const m = monthsOfWindow(window.days);
-  const note = window.days.from.endsWith("-01") ? null : `Kârlılık tam aylarla hesaplanır: ${monthName(m.fromMonth)} – ${monthName(m.toMonth)}.`;
+  const cmpMonths = compareMonthsOf(window);
+  const aligned = window.days.from.endsWith("-01") && window.days.to === lastDayOf(m.toMonth);
+  const notes = [
+    aligned ? null : `Kârlılık tam aylarla hesaplanır: ${monthName(m.fromMonth)} – ${monthName(m.toMonth)}${cmpMonths ? `; kıyas ${monthName(cmpMonths.fromMonth)} – ${monthName(cmpMonths.toMonth)}` : ""}.`,
+    window.compareDays && !cmpMonths ? "Kıyas dönemi bu dönemin aylarıyla örtüştüğü için kıyas yapılmadı." : null,
+  ].filter((x): x is string => x !== null);
   const missingRows = result.rows.filter((x) => x.missing.length > 0).length;
   const byCustomer = profitGroups(result.rows, "musteri", names);
   return {
     ...catalogHeader(PROFITABILITY_KEY),
     donem: periodOf(window.range),
-    ...(window.compareRange ? { kiyasDonemi: periodOf(window.compareRange) } : {}),
+    ...(cmpMonths && previous ? { kiyasDonemi: periodOf(monthsRange(cmpMonths)) } : {}),
     anaSayi: metricFigure("karlilik.katki", tl(total.contribution), {
       unit: "TRY", previous: prevTotal ? tl(prevTotal.contribution) : undefined,
       unmeasured: `${missingRows} işte eksik girdi var; "Durum" kolonundaki eksikler girilince hesaplanır`,
@@ -201,6 +227,6 @@ export function buildProfitabilitySunumu(p: {
       ...dayRangeParameters(window.days, window.mode), breakdownParameter(breakdown),
       { ad: "hesap", etiket: "hesap", tur: "metin", deger: settingsSummary(result.settings) },
     ],
-    uyarilar: warningsOf(result, note),
+    uyarilar: warningsOf(result, notes),
   };
 }
