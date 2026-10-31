@@ -163,6 +163,19 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
       why: "Donmuş maliyet fotoğrafı; iki kumaşın sürüm geçmişi tek kumaşta birleştirilemez — hangisinin yürürlükte kalacağı muhasebe kararıdır (MAL-2).",
     },
     { kind: "MOVE", model: "StandardCostLine", table: "standard_cost_lines", column: "yarnItemId", label: "Standart maliyet kalemi ipliği" },
+    // SEYİTOĞLU MİG-1: varyant atkı ikamesi ipliği referans bağdır (tekillik reçete × sıra'da) → MOVE.
+    { kind: "MOVE", model: "ProductRecipeWeftYarn", table: "product_recipe_weft_yarns", column: "yarnItemId", label: "Varyant atkı ipliği" },
+    {
+      // SEYİTOĞLU MİG-1: katman kümesi kumaşın yapısıdır; iki tarafta da varsa (sıra/kart tekilliği) birleştirilemez.
+      kind: "CONFLICT",
+      model: "ItemWarpLayer",
+      table: "item_warp_layers",
+      column: "itemId",
+      label: "Ek çözgü katmanı",
+      uniqueOn: ["itemId"],
+      policy: "BLOCK",
+      why: "İki kumaşın da ek çözgü katmanı varsa hangi yapının geçerli olduğu ürün sorumlusunun kararıdır (CostStructure emsali).",
+    },
     // MAL-4: teklif kalemi ürüne referans bağdır (tekillik yok). Fiyat listesi satırı liste içinde ürün+renk başına tektir.
     { kind: "MOVE", model: "SalesQuoteLine", table: "sales_quote_lines", column: "itemId", label: "Teklif kalemi" },
     { kind: "MOVE", model: "CustomerDeliveryNoteLine", table: "customer_delivery_note_lines", column: "itemId", label: "Gelen belge satırı" },

@@ -742,6 +742,8 @@ model User {
   // MAL-1 (2026-10-25): atkı kartı + maliyet girdileri künyesi.
   weftSpecsCreated            WeftSpec[]                    @relation("WeftSpecCreatedBy")
   weftSpecsUpdated            WeftSpec[]                    @relation("WeftSpecUpdatedBy")
+  weaveDesignsCreated         WeaveDesign[]                 @relation("WeaveDesignCreatedBy")
+  weaveDesignsUpdated         WeaveDesign[]                 @relation("WeaveDesignUpdatedBy")
   costParameterSetsCreated    CostParameterSet[]            @relation("CostParameterSetCreatedBy")
   costParameterSetsUpdated    CostParameterSet[]            @relation("CostParameterSetUpdatedBy")
   yarnCostPricesCreated       YarnCostPrice[]               @relation("YarnCostPriceCreatedBy")
@@ -1715,21 +1717,32 @@ model RouteStepProperty {
 /// otomatik dolar (örn "PATOS GRİ-038"). Rota tekrar-kullanılabilir kalır;
 /// reçete rotanın ÜSTÜNDE ayrı bir katmandır — rotayı dönüştürmez.
 model ProductRecipe {
-  id       String   @id @default(uuid()) @db.Uuid
-  code     String   @unique @db.VarChar(32)
-  name     String   @db.VarChar(100)
-  itemId   String   @db.Uuid
-  colorId  String?  @db.Uuid
-  width    Decimal? @db.Decimal(12, 3)
-  foldType String?
-  routeId  String?  @db.Uuid
-  isActive Boolean  @default(true)
+  id                String   @id @default(uuid()) @db.Uuid
+  code              String   @unique @db.VarChar(32)
+  name              String   @db.VarChar(100)
+  itemId            String   @db.Uuid
+  colorId           String?  @db.Uuid
+  width             Decimal? @db.Decimal(12, 3)
+  foldType          String?
+  routeId           String?  @db.Uuid
+  isActive          Boolean  @default(true)
+  /// SEYİTOĞLU MİG-1 — varyant kodu (V01). ŞEMA-DIŞI kısmi unique
+  /// `product_recipes_item_variant_uq (itemId, variantCode) WHERE variantCode IS NOT NULL`.
+  variantCode       String?  @db.VarChar(16)
+  /// Varyantın terbiye tarifesi kodu (`FinishingRate.code`); NULL = ürün yapısının tarifesi.
+  finishingRateCode String?  @db.VarChar(32)
 
   // Relations
-  item       Item                    @relation(fields: [itemId], references: [id])
-  color      Color?                  @relation(fields: [colorId], references: [id])
-  route      Route?                  @relation(fields: [routeId], references: [id])
-  properties ProductRecipeProperty[]
+  item                 Item                    @relation(fields: [itemId], references: [id])
+  color                Color?                  @relation(fields: [colorId], references: [id])
+  route                Route?                  @relation(fields: [routeId], references: [id])
+  properties           ProductRecipeProperty[]
+  weftYarnOverrides    ProductRecipeWeftYarn[]
+  weavingOrders        WeavingOrder[]          @relation("WeavingOrderRecipe")
+  standardCostVersions StandardCostVersion[]   @relation("StandardCostVersionRecipe")
+  orderLines           OrderLine[]             @relation("OrderLineRecipe")
+  salesQuoteLines      SalesQuoteLine[]        @relation("SalesQuoteLineRecipe")
+  priceListLines       PriceListLine[]         @relation("PriceListLineRecipe")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -1817,13 +1830,18 @@ model WarpSpec {
   /// (levent · desen · tezgah) bağlıdır, kartta VARSAYILANDIR; NULL = bilinmiyor → otomatik tüketim
   /// çözgü = kumaş sayar ve UYARIR (ESTIMATED). CHECK `warp_specs_take_up_pct_range` 0 ≤ x < 100.
   takeUpPct    Decimal? @db.Decimal(5, 2)
+  /// SEYİTOĞLU MİG-1 (§4.4) — çözgü çekme fire payı (%). CHECK `warp_specs_waste_pct_range`
+  /// 0 ≤ x < 100; NULL = bugünkü davranış (fire payı yok).
+  wastePct     Decimal? @db.Decimal(5, 2)
   notes        String?  @db.VarChar(500)
   isActive     Boolean  @default(true)
 
-  yarnItem      Item           @relation("WarpSpecYarn", fields: [yarnItemId], references: [id], onDelete: Restrict)
-  fabricItems   Item[]         @relation("ItemWarpSpec")
-  weavingOrders WeavingOrder[] @relation("WeavingOrderWarpSpec")
-  warpBeams     WarpBeam[]     @relation("WarpBeamSpec")
+  yarnItem      Item            @relation("WarpSpecYarn", fields: [yarnItemId], references: [id], onDelete: Restrict)
+  fabricItems   Item[]          @relation("ItemWarpSpec")
+  /// Bu kartın ek çözgü katmanı olarak geçtiği kumaşlar (MİG-1).
+  warpLayers    ItemWarpLayer[] @relation("ItemWarpLayerSpec")
+  weavingOrders WeavingOrder[]  @relation("WeavingOrderWarpSpec")
+  warpBeams     WarpBeam[]      @relation("WarpBeamSpec")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -1849,18 +1867,24 @@ model WarpSpec {
 /// ipliği TEKİL kolon DEĞİL — rapordaki atkı adedi paylı `WeftSpecYarn` satırlarıdır
 /// (çoklu atkı; DOKUMA-MANUEL-PLAN §S2 notu). Katalog; silinmez, pasife alınır.
 model WeftSpec {
-  id           String   @id @default(uuid()) @db.Uuid
-  code         String   @unique @db.VarChar(32)
-  name         String   @db.VarChar(100)
+  id            String   @id @default(uuid()) @db.Uuid
+  code          String   @unique @db.VarChar(32)
+  name          String   @db.VarChar(100)
   /// Toplam atkı sıklığı (atkı/cm) — maliyetin `p` çarpanı. CHECK > 0; NULL = bilinmiyor.
-  picksPerCm   Decimal? @db.Decimal(6, 2)
+  picksPerCm    Decimal? @db.Decimal(6, 2)
   /// Sıra/renk notu ("2 siyah 1 sim") — bilgi; pay hesabı `WeftSpecYarn.picksInRepeat`ten.
-  sequenceNote String?  @db.VarChar(300)
-  notes        String?  @db.VarChar(500)
-  isActive     Boolean  @default(true)
+  sequenceNote  String?  @db.VarChar(300)
+  /// SEYİTOĞLU MİG-1 — atkı dizisi kodu (`A4 B1 A4 C1`: harf = `WeftSpecYarn.sortOrder` sırası,
+  /// sayı = ardışık atkı). Doluysa yazım yolu `picksInRepeat`i ONDAN türetir; boşsa bugünkü elle giriş.
+  sequenceCode  String?  @db.VarChar(120)
+  /// Tezgâh atkı programı numarası ("WEFT NO 6037") — bilgi.
+  weftProgramNo String?  @db.VarChar(16)
+  notes         String?  @db.VarChar(500)
+  isActive      Boolean  @default(true)
 
-  yarns       WeftSpecYarn[]
-  fabricItems Item[]         @relation("ItemWeftSpec")
+  yarns         WeftSpecYarn[]
+  fabricItems   Item[]         @relation("ItemWeftSpec")
+  weavingOrders WeavingOrder[] @relation("WeavingOrderWeftSpec")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -1899,6 +1923,121 @@ model WeftSpecYarn {
   @@unique([weftSpecId, sortOrder])
   @@index([yarnItemId])
   @@map("weft_spec_yarns")
+}
+
+// =============================================================================
+// SEYİTOĞLU MİG-1 — DESEN KARTI + VARYANT + ÇİFT ÇÖZGÜ (2026-10-31)
+// Tasarım: ~/.tekserp/yeni-dokuma-fabrikasi/TASARIM-2026-10-31.md §2.4, §3.4, §4.4.
+// =============================================================================
+
+/// Örgü/desen türü — rapor gruplaması ve leno kapısı (§2.4).
+enum WeaveDesignKind {
+  PLAIN
+  DOBBY
+  JACQUARD
+  LENO
+}
+
+/// Ek çözgü katmanının rolü (§3.4): döner (leno) çözgü ya da ikinci zemin çözgüsü.
+enum WarpLayerRole {
+  LENO
+  SECONDARY
+}
+
+/// Ek çözgü katmanının sarım biçimi (2026-10-31 kullanıcı kararı, ürün başına seçenek).
+/// SEPARATE_BEAM = ayrı levent (bugünkü levent takımı `setKey`) · SHARED_BEAM = zeminle
+/// aynı levent · CREEL = cağlık/bobin (levent yok, tüketim iplik stoğundan).
+enum WarpBeamMode {
+  SEPARATE_BEAM
+  SHARED_BEAM
+  CREEL
+}
+
+/// DESEN KARTI (armür/jakar örgü tanımı) — katalog; silinmez, pasife alınır. Bir desen N
+/// kumaşı besler (`Item.weaveDesignId`). Tezgâh ekranı fotoğrafı (`attachmentId`) v1 dışı:
+/// genel ek altyapısı yok (ölçüldü 2026-10-31).
+model WeaveDesign {
+  id           String          @id @default(uuid()) @db.Uuid
+  code         String          @unique @db.VarChar(32)
+  name         String          @db.VarChar(100)
+  kind         WeaveDesignKind
+  /// Serbest aile etiketi (TERGAL-DÖNER, BALIK, DİMİ…) — rapor gruplaması.
+  familyLabel  String?         @db.VarChar(40)
+  /// Çerçeve sayısı — CHECK 1..32.
+  frameCount   Int?            @db.SmallInt
+  /// Desen raporu boyu (cm) — CHECK > 0.
+  repeatCm     Decimal?        @db.Decimal(8, 2)
+  /// Armür planı (çerçeve × atkı 0/1 ızgarası); katı zod yazım yolunda (≤32 × 512).
+  liftPlan     Json?
+  /// Tezgâh desen dosyası adı (".DOP").
+  loomFileName String?         @db.VarChar(64)
+  /// Leno düzeni ("20'li normal döner") — fabrika teyidine kadar serbest metin.
+  lenoSetup    String?         @db.VarChar(100)
+  notes        String?         @db.VarChar(500)
+  isActive     Boolean         @default(true)
+
+  fabricItems   Item[]         @relation("ItemWeaveDesign")
+  weavingOrders WeavingOrder[] @relation("WeavingOrderWeaveDesign")
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR (`GENERATED ALWAYS AS (public.tr_fold("name")) STORED`).
+  nameFold  String?  @default(dbgenerated())
+
+  // ── KAYIT KÜNYESİ ──
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("WeaveDesignCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("WeaveDesignUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  /// AD SEDDİ (WeftSpec emsali).
+  @@unique([nameFold])
+  @@map("weave_designs")
+}
+
+/// KUMAŞIN EK ÇÖZGÜ KATMANI (zemin = `Item.warpSpecId`; burada döner/ikinci çözgü) — ③b SAF
+/// YAPILANDIRMA PİVOTU: replace + audit eski/yeni küme. Katman kartı zeminle aynı olamaz ve
+/// zemin yokken yazılamaz (servis 400). `beamMode` ürün başına sarım biçimi seçeneğidir.
+model ItemWarpLayer {
+  id         String        @id @default(uuid()) @db.Uuid
+  itemId     String        @db.Uuid
+  warpSpecId String        @db.Uuid
+  role       WarpLayerRole
+  beamMode   WarpBeamMode  @default(SEPARATE_BEAM)
+  /// Katman sırası — CHECK ≥ 0.
+  sortOrder  Int           @db.SmallInt
+
+  item     Item     @relation("ItemWarpLayerItem", fields: [itemId], references: [id], onDelete: Restrict)
+  warpSpec WarpSpec @relation("ItemWarpLayerSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([itemId, warpSpecId])
+  @@unique([itemId, sortOrder])
+  @@index([warpSpecId])
+  @@map("item_warp_layers")
+}
+
+/// VARYANT ATKI İPLİĞİ İKAMESİ — ③b SAF YAPILANDIRMA PİVOTU: "bu varyantta atkı kartının
+/// `weftSortOrder` sıradaki ipliği yerine bu iplik". Pay/sıklık DEĞİŞMEZ. İplik YARN ∧ denye
+/// dolu (servis 400). Kart satırı yok olursa servis 409 `WEFT_OVERRIDE_ORPHAN` (§2.4 sed).
+model ProductRecipeWeftYarn {
+  id            String @id @default(uuid()) @db.Uuid
+  recipeId      String @db.Uuid
+  /// `WeftSpecYarn.sortOrder` karşılığı — CHECK ≥ 0.
+  weftSortOrder Int    @db.SmallInt
+  yarnItemId    String @db.Uuid
+
+  recipe   ProductRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  yarnItem Item          @relation("ProductRecipeWeftYarnItem", fields: [yarnItemId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([recipeId, weftSortOrder])
+  @@index([yarnItemId])
+  @@map("product_recipe_weft_yarns")
 }
 
 // =============================================================================
@@ -2143,11 +2282,16 @@ model WeavingOrder {
   clientToken        String? @unique @db.Uuid
 
   /// Dokunacak kumaş — `ItemType.FABRIC` (servis 400 verir).
-  itemId     String  @db.Uuid
+  itemId        String  @db.Uuid
   /// Ham dokumada NULL MEŞRUDUR — renk sonraki adımlarda gelir.
-  colorId    String? @db.Uuid
+  colorId       String? @db.Uuid
   /// Hangi çözgü kartı besliyor — Faz 1a'da doğan `WarpSpec`in ilk tüketicisi.
-  warpSpecId String? @db.Uuid
+  warpSpecId    String? @db.Uuid
+  /// SEYİTOĞLU MİG-1 — doğuşta etkin yapıdan dolar; kart sonradan değişse de iş emri
+  /// KENDİ seçimini taşır (atkı kartı · desen kartı · varyant).
+  weftSpecId    String? @db.Uuid
+  weaveDesignId String? @db.Uuid
+  recipeId      String? @db.Uuid
 
   /// TALEP ekseni (metre). NULL = açık uçlu iş (levent bitene kadar dokunur).
   /// ⚠️ HEDEFTİR, TETİK DEĞİLDİR: bu sayıya ulaşmak işi KAPATMAZ. Ölçüldüğü
@@ -2177,6 +2321,9 @@ model WeavingOrder {
   item                    Item                      @relation("WeavingOrderItem", fields: [itemId], references: [id], onDelete: Restrict)
   color                   Color?                    @relation("WeavingOrderColor", fields: [colorId], references: [id], onDelete: Restrict)
   warpSpec                WarpSpec?                 @relation("WeavingOrderWarpSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
+  weftSpec                WeftSpec?                 @relation("WeavingOrderWeftSpec", fields: [weftSpecId], references: [id], onDelete: Restrict)
+  weaveDesign             WeaveDesign?              @relation("WeavingOrderWeaveDesign", fields: [weaveDesignId], references: [id], onDelete: Restrict)
+  recipe                  ProductRecipe?            @relation("WeavingOrderRecipe", fields: [recipeId], references: [id], onDelete: Restrict)
   subcontractor           Subcontractor?            @relation("WeavingOrderSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
   /// Bu işi hangi tezgah koşumları icra etti. `SUBCONTRACTED` işte BOŞ kalır —
   /// fasona verilen dokumanın koşumu bizde tutulmaz.
@@ -2203,6 +2350,9 @@ model WeavingOrder {
   @@index([itemId])
   @@index([colorId])
   @@index([warpSpecId])
+  @@index([weftSpecId])
+  @@index([weaveDesignId])
+  @@index([recipeId])
   @@index([subcontractorId])
   @@map("weaving_orders")
 }
@@ -3358,15 +3508,17 @@ model Item {
   /// HAM en (cm): tezgahtan çıkan kumaşın eni. Maliyette atkı boyunun YEDEK kaynağı
   /// (`rawWidthCm + weftSelvedgeAllowanceCm`, uyarılı). MAMUL/kart eni için ayrı kolon AÇILMADI:
   /// kartın eni `widthCm` (K4P) — aynı soruya ikinci cevap olmasın. CHECK > 0.
-  rawWidthCm  Decimal? @db.Decimal(6, 2)
+  rawWidthCm    Decimal? @db.Decimal(6, 2)
   /// Ham / mamul gramaj (g/m²) — bilgi; CHECK > 0.
-  rawGsm      Decimal? @db.Decimal(7, 2)
-  finishedGsm Decimal? @db.Decimal(7, 2)
+  rawGsm        Decimal? @db.Decimal(7, 2)
+  finishedGsm   Decimal? @db.Decimal(7, 2)
   /// Kompozisyon metni ("%100 PES") — bilgi.
-  composition String?  @db.VarChar(200)
+  composition   String?  @db.VarChar(200)
   /// KUMAŞ → ATKI KARTI (N:1). Yalnız `ItemType.FABRIC` (servis 400). Atkı ipliği(leri)
   /// kartın `WeftSpecYarn` satırlarındadır; maliyet tel/sıklık kopyası TUTMAZ.
-  weftSpecId  String?  @db.Uuid
+  weftSpecId    String?  @db.Uuid
+  /// SEYİTOĞLU MİG-1 — KUMAŞ → DESEN KARTI (N:1). Yalnız `ItemType.FABRIC` (servis 400).
+  weaveDesignId String?  @db.Uuid
 
   // Relations
   rolls                          Roll[]
@@ -3394,6 +3546,12 @@ model Item {
   weftSpec                       WeftSpec?                   @relation("ItemWeftSpec", fields: [weftSpecId], references: [id], onDelete: Restrict)
   /// Bu İPLİĞİ atkı olarak kullanan kart satırları (1:N).
   weftSpecYarnsAsYarn            WeftSpecYarn[]              @relation("WeftSpecYarnItem")
+  /// Bu KUMAŞIN desen kartı (N:1) — SEYİTOĞLU MİG-1.
+  weaveDesign                    WeaveDesign?                @relation("ItemWeaveDesign", fields: [weaveDesignId], references: [id], onDelete: Restrict)
+  /// Bu KUMAŞIN ek çözgü katmanları (zemin `warpSpec`) — MİG-1.
+  warpLayers                     ItemWarpLayer[]             @relation("ItemWarpLayerItem")
+  /// Bu İPLİĞİ varyant atkı ikamesi olarak taşıyan satırlar (MİG-1).
+  recipeWeftYarnsAsYarn          ProductRecipeWeftYarn[]     @relation("ProductRecipeWeftYarnItem")
   /// İplik maliyet fiyatı sürümleri (MAL-1; damgalı, `ACTIVE_YARN_COST_PRICE`).
   yarnCostPrices                 YarnCostPrice[]             @relation("YarnCostPriceYarn")
   /// Kumaşın maliyete özgü ekleri (MAL-1; 1:1, katalog).
@@ -3497,6 +3655,7 @@ model Item {
   /// kapısının bağımlılık sayımı bu index'ten okur (devere Faz 1a).
   @@index([warpSpecId])
   @@index([weftSpecId])
+  @@index([weaveDesignId])
   // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
   @@index([updatedAt, id], map: "items_updatedAt_esitleme_idx")
   @@map("items")
@@ -4454,6 +4613,9 @@ model OrderLine {
   /// default akış değil). Item.allowedColors dolu ise bu listeden olmalı.
   colorId    String?  @db.Uuid
   quantity   Decimal  @db.Decimal(12, 3) // Requested quantity (meters)
+  /// SEYİTOĞLU MİG-3 (§12.4) — varyant (ürün reçetesi); NULL = desen geneli (bugünkü).
+  /// Varyant satırın ürününe ait olmalı (servis 400 `RECIPE_ITEM_MISMATCH`).
+  recipeId   String?  @db.Uuid
   /// Denormalize SEVK toplamı (m) — Σ(SackAllocation.qty; çuval DISPATCHED'te). Tek yazma
   /// noktası recomputeOrderFulfillment. recomputeOrderStatus/status bunu okur.
   /// Açık miktar = quantity − shippedQty (rezerv/packedQty YOK — düşüş yalnız sevkte).
@@ -4509,6 +4671,9 @@ model OrderLine {
   workOrderLinks        WorkOrderToOrderLine[]
   weavingOrderLinks     WeavingOrderToOrderLine[]
   requiredProperties    OrderLineRequiredProperty[]
+  /// Satırın hedef özellik değerleri (MİG-3, §7.4; ③b saf yapılandırma pivotu).
+  targetValues          OrderLineTargetValue[]
+  recipe                ProductRecipe?                      @relation("OrderLineRecipe", fields: [recipeId], references: [id], onDelete: Restrict)
   sackAllocations       SackAllocation[]
   directShipAllocations SubcontractorDirectShipAllocation[]
 
@@ -4533,7 +4698,30 @@ model OrderLine {
   @@index([customerItemNameFold(ops: raw("gin_trgm_ops"))], map: "order_lines_customerItemNameFold_trgm_idx", type: Gin)
   // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
   @@index([updatedAt, id], map: "order_lines_updatedAt_esitleme_idx")
+  @@index([recipeId])
   @@map("order_lines")
+}
+
+/// SİPARİŞ SATIRI HEDEF DEĞERİ (SEYİTOĞLU MİG-3, §7.4 — kuşak vb.) — ③b SAF YAPILANDIRMA
+/// PİVOTU: satır düzenlemesinde replace, audit eski/yeni küme. Doğrulayıcı `WorkOrderTargetValue`
+/// yazımıyla AYNI (SEÇİM türü özellik, değer o özelliğe ait ve aktif).
+model OrderLineTargetValue {
+  id          String @id @default(uuid()) @db.Uuid
+  orderLineId String @db.Uuid
+  propertyId  String @db.Uuid
+  valueId     String @db.Uuid
+
+  orderLine OrderLine           @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+  property  FabricProperty      @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  value     FabricPropertyValue @relation(fields: [valueId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([orderLineId, propertyId])
+  @@index([propertyId])
+  @@index([valueId])
+  @@map("order_line_target_values")
 }
 
 /// OrderLine ↔ FabricProperty M:N — müşterinin sipariş satırı için
@@ -8975,6 +9163,7 @@ model FabricProperty {
   itemAllowed           ItemAllowedProperty[]
   workOrderTargets      WorkOrderTargetProperty[]
   workOrderTargetValues WorkOrderTargetValue[]
+  orderLineTargetValues OrderLineTargetValue[]
   rollProperties        RollProperty[]
   orderLineRequired     OrderLineRequiredProperty[]
   stationCapabilities   StationProperty[]
@@ -9076,6 +9265,7 @@ model FabricPropertyValue {
   rollOperations          RollOperation[]
   /// İş emri hedefleri (KQ-D6) ve kâğıt dağıtım gramajı — FK RESTRICT.
   workOrderTargetValues   WorkOrderTargetValue[]
+  orderLineTargetValues   OrderLineTargetValue[]
   kursunBypassAssignments KursunBypassAssignment[]
   /// Gramaj kademesi → hizmet kalemi (H6, "KURŞUN-K2"); yoksa özelliğin eşlemesi.
   serviceItemId           String?                  @db.Uuid
@@ -13383,6 +13573,8 @@ enum YarnCostPriceSource {
 enum FinishingBasis {
   RAW_M
   FINISHED_M
+  /// SEYİTOĞLU MİG-2a (§6) — kg bazlı boyahane tarifesi; `pricePerM` = tabanın birimi başına.
+  KG
 }
 
 /// TESİS MALİYET PARAMETRELERİ — DURUM + DONMUŞ SÜRÜM. ACTIVE satır DEĞİŞMEZ: düzenleme =
@@ -13415,6 +13607,9 @@ model CostParameterSet {
   weftSelvedgeAllowanceCm Decimal         @db.Decimal(6, 2)
   defaultMarkupPct        Decimal         @db.Decimal(6, 2)
   monthlyFinanceRatePct   Decimal?        @db.Decimal(5, 2)
+  /// SEYİTOĞLU MİG-2b (§5.4) — varsayılan atkı ücreti; CHECK `cost_parameter_sets_loom_pick_pair_ck`.
+  defaultLoomPickRate     Decimal?        @db.Decimal(10, 4)
+  defaultLoomPickCurrency Currency?
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
@@ -13553,22 +13748,28 @@ model ServiceConsumableNorm {
 /// sürümünde donar). Yalnız kartta OLMAYANLAR; her alan NULL = parametre varsayılanı.
 /// `finishingRateCode` KOD tutar (fiyat değişince yapı değişmez; aktif tarifeye çözülür).
 model CostStructure {
-  id                String   @id @default(uuid()) @db.Uuid
-  itemId            String   @unique @db.Uuid
+  id                String    @id @default(uuid()) @db.Uuid
+  itemId            String    @unique @db.Uuid
   loomRpm           Int?
-  efficiencyPct     Decimal? @db.Decimal(5, 2)
-  warpWastePct      Decimal? @db.Decimal(5, 2)
-  weftWastePct      Decimal? @db.Decimal(5, 2)
-  fabricWastePct    Decimal? @db.Decimal(5, 2)
-  weftLengthCm      Decimal? @db.Decimal(7, 2)
-  beamLengthM       Decimal? @db.Decimal(10, 2)
-  finishingRateCode String?  @db.VarChar(32)
-  lengthShrinkPct   Decimal? @db.Decimal(5, 2)
-  extraCostPerMTry  Decimal? @db.Decimal(12, 4)
-  extraCostLabel    String?  @db.VarChar(100)
-  notes             String?  @db.VarChar(500)
+  efficiencyPct     Decimal?  @db.Decimal(5, 2)
+  warpWastePct      Decimal?  @db.Decimal(5, 2)
+  weftWastePct      Decimal?  @db.Decimal(5, 2)
+  fabricWastePct    Decimal?  @db.Decimal(5, 2)
+  weftLengthCm      Decimal?  @db.Decimal(7, 2)
+  beamLengthM       Decimal?  @db.Decimal(10, 2)
+  finishingRateCode String?   @db.VarChar(32)
+  lengthShrinkPct   Decimal?  @db.Decimal(5, 2)
+  extraCostPerMTry  Decimal?  @db.Decimal(12, 4)
+  extraCostLabel    String?   @db.VarChar(100)
+  notes             String?   @db.VarChar(500)
+  /// SEYİTOĞLU MİG-2b (§5.4) — atkı ücreti: bir atkı/cm sıklık için metre başına ücret.
+  /// CHECK `cost_structures_loom_pick_pair_ck`: ikisi birlikte dolu ya da boş; ücret ≥ 0.
+  loomPickRate      Decimal?  @db.Decimal(10, 4)
+  loomPickCurrency  Currency?
 
-  item Item @relation("CostStructureItem", fields: [itemId], references: [id], onDelete: Restrict)
+  item      Item                   @relation("CostStructureItem", fields: [itemId], references: [id], onDelete: Restrict)
+  /// Proses tarifesi satırları (§8.4; ③b saf yapılandırma pivotu).
+  processes CostStructureProcess[]
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
@@ -13578,6 +13779,26 @@ model CostStructure {
   updatedBy   User?    @relation("CostStructureUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
 
   @@map("cost_structures")
+}
+
+/// ÜRÜN YAPISI PROSES SATIRI (SEYİTOĞLU MİG-2b, §8.4) — ③b SAF YAPILANDIRMA PİVOTU: replace +
+/// audit eski/yeni küme. `rateCode` `FinishingRate.code` uzayından çözülür; çözülemeyen kod
+/// fail-closed eksik (`FINISHING_RATE_MISSING`), 0 değil.
+model CostStructureProcess {
+  id              String @id @default(uuid()) @db.Uuid
+  costStructureId String @db.Uuid
+  rateCode        String @db.VarChar(32)
+  /// CHECK ≥ 0.
+  sortOrder       Int    @db.SmallInt
+
+  costStructure CostStructure @relation(fields: [costStructureId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([costStructureId, rateCode])
+  @@unique([costStructureId, sortOrder])
+  @@map("cost_structure_processes")
 }
 
 // =============================================================================
@@ -13604,6 +13825,10 @@ enum CostComponent {
   FABRIC_WASTE
   OVERHEAD
   EXTRA
+  /// SEYİTOĞLU MİG-2a (§5) — atkı ücreti yöntemiyle tek dokuma satırı.
+  WEAVING_PICK
+  /// SEYİTOĞLU MİG-2a (§8) — ürün yapısının dış/iç proses tarifesi satırı (`CostStructureProcess`).
+  PROCESS
 }
 
 model StandardCostVersion {
@@ -13617,7 +13842,8 @@ model StandardCostVersion {
   totalCostPerMTry    Decimal            @db.Decimal(14, 4)
   warpKgPerM          Decimal            @db.Decimal(14, 6)
   weftKgPerM          Decimal            @db.Decimal(14, 6)
-  loomMPerHour        Decimal            @db.Decimal(10, 4)
+  /// SEYİTOĞLU MİG-2b — NULLABLE: atkı ücreti yönteminde tezgâh hızı bilinmiyorsa NULL (0 değil).
+  loomMPerHour        Decimal?           @db.Decimal(10, 4)
   /// Katı şema `fxRatesSnapshotSchema`: `{tarih, kaynak, kurlar:{USD?,EUR?,GBP?,RUB?}}`.
   fxRates             Json
   /// Katı şema `costInputSnapshotSchema` (`schemaVersion: 1`): motorun TÜM girdileri.
@@ -13631,7 +13857,11 @@ model StandardCostVersion {
   /// Geri alma ile doğduysa kaynak sürüm (bilgi; eskisi değişmez).
   restoredFromId      String?            @db.Uuid
   supersededAt        DateTime?          @db.Timestamptz
+  /// SEYİTOĞLU MİG-2b — varyant sürümü; NULL = desen geneli (bugünkü). Aktif tekillik ŞEMA-DIŞI
+  /// `standard_cost_versions_active_uq (itemId, COALESCE(recipeId, sıfır-UUID)) WHERE status='ACTIVE'`.
+  recipeId            String?            @db.Uuid
 
+  recipe         ProductRecipe?        @relation("StandardCostVersionRecipe", fields: [recipeId], references: [id], onDelete: Restrict)
   item           Item                  @relation("StandardCostVersionItem", fields: [itemId], references: [id], onDelete: Restrict)
   parameterSet   CostParameterSet      @relation("StandardCostVersionParameterSet", fields: [parameterSetId], references: [id], onDelete: Restrict)
   restoredFrom   StandardCostVersion?  @relation("StandardCostVersionRestore", fields: [restoredFromId], references: [id], onDelete: Restrict)
@@ -13649,6 +13879,7 @@ model StandardCostVersion {
   @@unique([itemId, versionNo])
   @@index([parameterSetId])
   @@index([restoredFromId])
+  @@index([recipeId])
   @@map("standard_cost_versions")
 }
 
@@ -13787,6 +14018,8 @@ model SalesQuoteLine {
   /// Yeni desen teklifinde boş; siparişe dönüştürmeden önce bağlanır.
   itemId                String?          @db.Uuid
   colorId               String?          @db.Uuid
+  /// SEYİTOĞLU MİG-3 (K16) — varyant; NULL = desen geneli. Teklif → sipariş dönüşümünde taşınır.
+  recipeId              String?          @db.Uuid
   description           String           @db.VarChar(200)
   width                 Decimal?         @db.Decimal(12, 3)
   quantity              Decimal          @db.Decimal(12, 3)
@@ -13809,6 +14042,7 @@ model SalesQuoteLine {
   quote               SalesQuote           @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   item                Item?                @relation("SalesQuoteLineItem", fields: [itemId], references: [id], onDelete: Restrict)
   color               Color?               @relation("SalesQuoteLineColor", fields: [colorId], references: [id], onDelete: Restrict)
+  recipe              ProductRecipe?       @relation("SalesQuoteLineRecipe", fields: [recipeId], references: [id], onDelete: Restrict)
   standardCostVersion StandardCostVersion? @relation("SalesQuoteLineCostVersion", fields: [standardCostVersionId], references: [id], onDelete: Restrict)
   priceListLine       PriceListLine?       @relation("SalesQuoteLinePriceListLine", fields: [priceListLineId], references: [id], onDelete: Restrict)
 
@@ -13820,6 +14054,7 @@ model SalesQuoteLine {
   @@index([colorId])
   @@index([standardCostVersionId])
   @@index([priceListLineId])
+  @@index([recipeId])
   @@map("sales_quote_lines")
 }
 
@@ -13870,6 +14105,9 @@ model PriceListLine {
   lineNo                Int
   itemId                String   @db.Uuid
   colorId               String?  @db.Uuid
+  /// SEYİTOĞLU MİG-3 (K16) — varyant; NULL = desen geneli. Tekillik ŞEMA-DIŞI
+  /// `price_list_lines_item_color_uq (priceListId, itemId, COALESCE(colorId), COALESCE(recipeId))`.
+  recipeId              String?  @db.Uuid
   unitPrice             Decimal  @db.Decimal(12, 2)
   minQty                Decimal? @db.Decimal(12, 3)
   standardCostVersionId String?  @db.Uuid
@@ -13880,6 +14118,7 @@ model PriceListLine {
   priceList           PriceList            @relation(fields: [priceListId], references: [id], onDelete: Cascade)
   item                Item                 @relation("PriceListLineItem", fields: [itemId], references: [id], onDelete: Restrict)
   color               Color?               @relation("PriceListLineColor", fields: [colorId], references: [id], onDelete: Restrict)
+  recipe              ProductRecipe?       @relation("PriceListLineRecipe", fields: [recipeId], references: [id], onDelete: Restrict)
   standardCostVersion StandardCostVersion? @relation("PriceListLineCostVersion", fields: [standardCostVersionId], references: [id], onDelete: Restrict)
   quoteLines          SalesQuoteLine[]     @relation("SalesQuoteLinePriceListLine")
 
@@ -13890,6 +14129,7 @@ model PriceListLine {
   @@index([itemId])
   @@index([colorId])
   @@index([standardCostVersionId])
+  @@index([recipeId])
   @@map("price_list_lines")
 }
 

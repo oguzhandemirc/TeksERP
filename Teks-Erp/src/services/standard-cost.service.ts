@@ -46,7 +46,8 @@ function presentVersion(v: VersionRow, lines?: LineRow[]) {
     standartTlM: v.totalCostPerMTry.toFixed(4),
     cozguKgM: v.warpKgPerM.toFixed(6),
     atkiKgM: v.weftKgPerM.toFixed(6),
-    tezgahMSaat: v.loomMPerHour.toFixed(4),
+    // MİG-2b: atkı ücreti yönteminde hız bilinmeyebilir → null (bugünkü tüm satırlar dolu).
+    tezgahMSaat: v.loomMPerHour?.toFixed(4) ?? null,
     kurlar: v.fxRates,
     uyarilar: v.warnings,
     gerekce: v.reason,
