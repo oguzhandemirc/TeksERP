@@ -89,6 +89,11 @@ export function normalizeName(name: string): string {
   return name.replace(/\s+/g, " ").trim().toUpperCase();
 }
 
+/** Etiket karşılaştırması: boşluk sadeleştirme + büyük harf + i/İ/ı/I katlama ("Maliyet" = "MALİYET"). */
+export function foldLabel(text: string): string {
+  return text.replace(/\s+/g, " ").trim().toUpperCase().replace(/İ/g, "I");
+}
+
 export function round(n: number, digits: number): number {
   const p = 10 ** digits;
   return Math.round(n * p) / p;

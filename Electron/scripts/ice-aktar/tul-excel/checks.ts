@@ -11,7 +11,7 @@ export class ReportSink {
 
 const DENIER_DIVISOR = 9000;
 /** ÷1000 tex için meşrudur; adında denye işareti olan iplikte ÷1000 birim hatasıdır. */
-const DENIER_MARK = /\b(DEN|DNY|DENYE|DNYE|DENİER)\b/i;
+export const DENIER_MARK = /\b(DEN|DNY|DENYE|DNYE|DENİER)\b/i;
 
 export function checkTextNumber(
   sink: ReportSink,

@@ -160,6 +160,22 @@ describe("tul-excel dönüştürücü (SY-H1)", () => {
     expect(makarna[10]).toBe(Math.round(((156.5 * 3.15 * 660) / 9000) * 1e4) / 1e4); // ÷9000 + en önerisi
   });
 
+  it("küçük harfli etiket (i/İ katlama) tanınır; meşru ÷1000 (tex) satırı kendi böleniyle, denyesiz yazılır", async () => {
+    const cost = new ExcelJS.Workbook();
+    addCostSheet(cost, "3000 SERİSİ", [{ name: "60/4 PARLAK RENKLİ", picks: 1000, formula: "C*3.3*60/1000" }]);
+    const ws = cost.getWorksheet("3000 SERİSİ")!;
+    ws.getCell(4, 1).value = "İplik maliyeti";
+    ws.getCell(5, 1).value = "Toplam";
+    const design = new ExcelJS.Workbook();
+    addDesignSheet(design, "D2001", { repeatCm: 1.5385, density: 13, cost: 1.98, wefts: CLEAN_WEFTS });
+    const result = run({ design: await roundTrip(design), cost: await roundTrip(cost) });
+    expect(result.report).toEqual([]);
+    expect(result.costSheets[0]?.summary).toMatchObject({ "İPLİK MALİYETİ": 0.7903, TOPLAM: 1.6134 });
+    const line = buildOutputs(result, "desen.xlsx", false).files["maliyet-iplikleri.csv"]!.rows[0]!;
+    expect(line[7]).toBeNull(); // denyeExcel: tex değeri denye diye yazılmaz
+    expect(line[12]).toBe(198); // 1000 × 3,3 × 60 ÷ 1000
+  });
+
   it("formül ve metin sayı ayrıştırıcıları", () => {
     expect(parseGramFormula("(E29*3.15)*77/9000")).toEqual({ width: 3.15, denier: 77, divisor: 9000 });
     expect(parseGramFormula("C17*120/9000*3.3")).toEqual({ width: 3.3, denier: 120, divisor: 9000 });

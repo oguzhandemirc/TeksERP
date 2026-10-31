@@ -1,6 +1,7 @@
 // Normalize CSV'ler + hata raporu. Varsayılan: kullanımdaki bir satırında bulgu olan desen/iplik
 // satırı CSV'ye YAZILMAZ (teyitsiz değer maliyeti yanlış kurar — §9.9); `acceptCorrections` önerileni yazar.
 import { nominalDenier, round } from "./cells.ts";
+import { DENIER_MARK } from "./checks.ts";
 import type { ConversionResult, CostYarnLine, DesignSheet, ReportRow, WeftLine, YarnRow } from "./types.ts";
 
 export type CsvTable = { header: string[]; rows: (string | number | null)[][] };
@@ -39,14 +40,18 @@ function suggestion(ix: Index, y: { file: string; sheet: string }, cell: string,
   return hit ? Number(hit.suggested) : null;
 }
 
-/** Gramaj: miktar × en × denye ÷ 9000; düzeltme kabulünde en ve metredeki atkı önerilenle. */
+/**
+ * Gramaj: miktar × en × denye ÷ 9000; düzeltme kabulünde en ve metredeki atkı önerilenle.
+ * Meşru ÷1000 (adında denye işareti yok → tex) satırında kendi böleni kullanılır, denye sütunları boş kalır.
+ */
 function yarnColumns(ix: Index, y: YarnRow, quantity: number | null, accept: boolean) {
   const f = y.formula;
   const width = accept ? suggestion(ix, y, y.gramCell, "EN_TUTARSIZ") ?? f?.width ?? null : f?.width ?? null;
-  const nominal = nominalDenier(y.yarnName);
+  const tex = f?.divisor === 1000 && !DENIER_MARK.test(y.yarnName);
+  const nominal = tex ? null : nominalDenier(y.yarnName);
   const inflated = f && nominal !== null && f.denier > nominal ? round((1 - nominal / f.denier) * 100, 2) : null;
-  const grams = f && quantity !== null ? round((quantity * (width ?? 1) * f.denier) / 9000, 4) : null;
-  return { width, denier: f?.denier ?? null, nominal, inflated, grams };
+  const grams = f && quantity !== null ? round((quantity * (width ?? 1) * f.denier) / (tex ? 1000 : 9000), 4) : null;
+  return { width, denier: tex ? null : f?.denier ?? null, nominal, inflated, grams };
 }
 
 function weftRow(ix: Index, d: DesignSheet, w: WeftLine, accept: boolean) {

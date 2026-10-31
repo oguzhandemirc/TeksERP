@@ -1,7 +1,7 @@
 // Sayfa taraması: etiket bulma, A/B/C atkı eşlemesi + sırası, armür ızgarası, varyant listesi.
 // Sayfa düzeni serbest (181 farklı yerleşim) → konum değil ETİKET ve desen aranır.
 import type ExcelJS from "exceljs";
-import { cellText } from "./cells.ts";
+import { cellText, foldLabel } from "./cells.ts";
 import type { Variant } from "./types.ts";
 
 type Worksheet = ExcelJS.Worksheet;
@@ -24,8 +24,8 @@ export function scanCells(ws: Worksheet): { row: number; col: number; text: stri
 }
 
 export function findLabel(cells: { row: number; col: number; text: string }[], label: string): CellPos | null {
-  const want = label.toUpperCase();
-  const hit = cells.find((c) => c.text.replace(/\s+/g, " ").toUpperCase() === want);
+  const want = foldLabel(label);
+  const hit = cells.find((c) => foldLabel(c.text) === want);
   return hit ? { row: hit.row, col: hit.col } : null;
 }
 
