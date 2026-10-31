@@ -356,7 +356,6 @@ async function main() {
   check("zemin: A sayısal ≥ 10 anahtar", aNum.length >= 10, `aNum=${aNum.length}`);
 
   const NUMERIC_PANEL_EXEMPT: Record<string, string> = {
-    shippingReadyScanMinutes: "D4-J1 yalnız kayıt; okuyan KOSUL bildirimi D4-J2 — panel satırı onunla gelir (etkisiz ayar gösterilmez)",
     sessionDurationMinutes: "kind:'session' — Oturum section'ı yönetir",
     sessionDurationHours: "GERİYE-UYUM türetilmiş alan — panel dakika alanını yönetir",
     idleTimeoutMinutes: "kind:'session' — Oturum section'ı yönetir",
@@ -1485,7 +1484,7 @@ async function main() {
     // tuzak ölçüldü: `defaultOn` taşımayan bir satır, sonrakinin beyanını
     // sahiplenip sahte kırmızı vermişti).
     for (const m of cfg.matchAll(
-      /enumKey:\s*"([^"]+)"(?:(?!enumKey:\s*")[\s\S])*?defaultValue:\s*"([^"]+)"/g,
+      /enumKey:\s*"([^"]+)"(?:(?!enumKey:\s*")[\s\S])*?defaultValue:\s*"([^"]*)"/g,
     )) {
       if (!declaredEnumDefaults.has(m[1]!)) declaredEnumDefaults.set(m[1]!, m[2]!);
     }
@@ -1507,7 +1506,9 @@ async function main() {
       continue;
     }
     const actual = await (fn as (c: unknown) => Promise<unknown>)(emptyClient2);
-    if (actual !== declared) enumDefaultMismatch.push(`${key}: panel=${declared} ↔ backend=${String(actual)}`);
+    // Küme değerli satır (`display: "checks"`, D4-J2 notifyUnits): beyan seçenek sırasında virgüllü metin.
+    const actualText = Array.isArray(actual) ? actual.join(",") : actual;
+    if (actualText !== declared) enumDefaultMismatch.push(`${key}: panel=${declared} ↔ backend=${String(actual)}`);
   }
   check(
     "⭐ panelin ENUM 'Varsayılan' beyanı backend okuyucusuyla birebir",
