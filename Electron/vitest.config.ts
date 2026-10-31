@@ -7,7 +7,7 @@ import { channelPlugin, sharedIdentity } from "./build-identity";
 // ESM config — __dirname yok; import.meta.url'den türet (no-undef'i de giderir).
 const rootDir = dirname(fileURLToPath(import.meta.url));
 
-// Renderer (React) birim/bileşen testleri için Vitest yapılandırması (CI süzgeci sondası).
+// Renderer (React) birim/bileşen testleri için Vitest yapılandırması.
 // electron.vite.config.ts'ten bağımsız — yalnız renderer src'i hedefler;
 // alias'lar (@ → src, @shared → shared) ile birebir aynı import yolları çalışır.
 
