@@ -68,6 +68,9 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   financeExpenseCategorySuggestions: A("ON"), // öneri ucu sorgu yolunu işletir
   costProfitSubcontractSource: V("yalnız kârlılık okumasının kaynağı; hiçbir kapıyı açıp kapamaz"),
   costProfitConsumablePriceSource: V("yalnız kârlılık okumasının kaynağı; hiçbir kapıyı açıp kapamaz"),
+  costProfitMachineTime: V("yalnız kârlılık okumasının kaynağı; hiçbir kapıyı açıp kapamaz"),
+  costProfitOverheadKey: V("yalnız kârlılık okumasının dağıtım anahtarı; hiçbir kapıyı açıp kapamaz"),
+  costProfitCategoryClasses: V("yalnız kârlılık okumasının masraf sınıfları; hiçbir kapıyı açıp kapamaz"),
   financeCariHoldDefaultScope: V("yalnız form ön seçimi; kapsamı kilit koyan seçer, hiçbir kapıyı açıp kapamaz"),
   financeCariHoldReleaseBySamePerson: A("DENY"), // açma ucunun "koyan kişi" dalını işletir
   costPresentationCurrency: A("USD"), // sunum alanlarını (kur + döviz tutarı) yanıta yazdırır
