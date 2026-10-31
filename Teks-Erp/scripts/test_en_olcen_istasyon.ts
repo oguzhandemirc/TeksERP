@@ -13,8 +13,8 @@
 // §8 kursunFinish (açık kumaş) yolu aynı sözleşme: en yazılır + iz QC2 satırında.
 // §9 ⭐ ensiz KK2 → bitir → yeniden aç → enli KK2: izsiz satır WIDTH_REMEASURE ile damgalanır, en yazılır
 //    (çıkışsız 409 döngüsü yok).
-// §11 ⭐ adım özeti (getStep) capturesWidth yalnız yetenekli istasyonda taşır (tablet alanı buna bağlı).
 // §10 ⭐ kursunFinish örtüşen çift çağrı aynı enle: ikisi de başarılı, tek izli aktif satır (idempotent).
+// §11 ⭐ adım özeti (getStep) capturesWidth yalnız yetenekli istasyonda taşır (tablet alanı buna bağlı).
 // Negatif sonda (2026-10-30, elle; PR gövdesinde): restoreMeasuredWidthsTx WHERE'inden
 // `width: trace.widthAfter` çıkarılınca §7a/§7b ❌. (2026-10-31) izsiz satırda damga yerine 409 → §9a/§9b ❌;
 // kursunFinish SAME dalı kapatılınca §10a ❌ (WIDTH_ALREADY_RECORDED).
