@@ -57,6 +57,9 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   { anahtar: "maliyet.karlilik.disFasonKaynagi", alan: "costProfitSubcontractSource", hedef: "FATURA_ONCE", dilim: "D4-G2a" },
   { anahtar: "maliyet.karlilik.sarfFiyatKaynagi", alan: "costProfitConsumablePriceSource", hedef: "ALIS_FIYATI", dilim: "D4-G2a" },
   { anahtar: "finance.cariHold.releaseBySamePerson", alan: "financeCariHoldReleaseBySamePerson", hedef: "ALLOW", dilim: "D4-I1a" },
+  // DALGA4 §12.1: risk limiti iş kabulü/sevk kapısı — Gülkesim değeri kullanıcı kararı (S12 para), varsayılan bırakıldı.
+  { anahtar: "finance.riskLimitBlock.intake", alan: "financeRiskLimitBlockIntake", hedef: false, dilim: "D4-I2" },
+  { anahtar: "finance.riskLimitBlock.shipment", alan: "financeRiskLimitBlockShipment", hedef: false, dilim: "D4-I2" },
   // DALGA4 §12.1: tambur en kapısı — Gülkesim de bugünkü değerde başlar (etek payı gerekirse elle).
   { anahtar: "tambur.planGate.widthToleranceCm", alan: "tamburPlanGateWidthToleranceCm", hedef: 10, dilim: "D4-E1" },
   { anahtar: "tambur.planGate.widthCheck", alan: "tamburPlanGateWidthCheck", hedef: "ENFORCE", dilim: "D4-E1" },

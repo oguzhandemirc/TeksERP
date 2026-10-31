@@ -30,6 +30,7 @@ const { listCapability } = require("../src/ui/siparis/capabilities") as typeof i
 const { lineRowText, movementRowText } = require("../src/ui/siparis/OrderLines") as typeof import("../src/ui/siparis/OrderLines");
 const { LIST_ID_FILTERS, LIST_SEARCH } = require("../src/api/wire") as typeof import("../src/api/wire");
 const { orderStatus, deadlineBadge, ORDER_STATUS } = require("../src/lib/labels/siparis") as typeof import("../src/lib/labels/siparis");
+const { cariLockView } = require("../src/lib/cari-lock") as typeof import("../src/lib/cari-lock");
 const { orderRowText } = require("../src/ui/siparis/OrderRow") as typeof import("../src/ui/siparis/OrderRow");
 const { openRecord } = require("../src/ui/nav") as typeof import("../src/ui/nav");
 
@@ -341,5 +342,47 @@ describe("§8 P6 cari hareketleri (sunucu `cariHesapId` süzgeci)", () => {
     expect(a.subtitle).toContain("Alacak");
     expect(a.value).toBe("200 $");
     expect(movementRowText(rec("h", { kaynak: "INVOICE", tarih: "2026-10-20T08:00:00.000Z" }) as never).value).toBeUndefined();
+  });
+});
+
+describe("§9 D4-I6 cari kilidi rozeti (fabrika `cari-hesap.kilit`)", () => {
+  const HESAP = "44444444-4444-4444-8444-444444444444";
+  const KILIT = { durum: "AKTIF", kilitId: "k1", kapsam: ["SEVK", "FATURA"], sebepKodu: "BORC", baslangic: "2026-10-30T07:00:00.000Z", acilis: null };
+  const withLock = (kayit: Record<string, unknown>) => (p: string) =>
+    Promise.resolve(p === "cari-hesap" ? page(rec(HESAP, { tur: "CUSTOMER", cariKartId: ID1, ...kayit }, { bakiyeler: [] })) : page());
+
+  beforeEach(() => {
+    mockSession.permissions = [...mockSession.permissions, "bulut:cari-bakiye:oku"];
+    mockParams = { id: ID1 };
+    mockRecord.mockResolvedValue(rec(ID1, { ad: "Deniz Tekstil", kod: "C-1", musteriRolu: true }));
+  });
+
+  it("aktif kilit → Kilitli rozeti + kapsam/sebep/tarih fabrikadan, uygulama hesaplamaz", async () => {
+    mockList.mockImplementation(withLock({ kilit: KILIT }));
+    render(<CustomerDetail />);
+    await settle();
+    await settle();
+    expect(screen.getByTestId(`cari-kilit-${HESAP}`)).toBeTruthy();
+    expect(screen.getByTestId(`cari-kilit-ayrinti-${HESAP}`).props.children).toBe("Durdurulan: sevk · fatura onayı · Sebep: Borç · 30.10.2026 10:00 itibarıyla");
+  });
+
+  it("açılmış kilit ya da null → rozet yok; eski fabrika (alan yok) → 'güncellenince gelir'", async () => {
+    mockList.mockImplementation(withLock({ kilit: { ...KILIT, durum: "ACILDI", acilis: "2026-10-30T09:00:00.000Z" } }));
+    render(<CustomerDetail />);
+    await settle();
+    await settle();
+    expect(screen.queryByTestId(`cari-kilit-${HESAP}`)).toBeNull();
+    expect(screen.queryByTestId(`cari-kilit-bilinmiyor-${HESAP}`)).toBeNull();
+    expect(cariLockView({ kilit: null })).toEqual({ state: "YOK" });
+    expect(cariLockView({})).toEqual({ state: "BILINMIYOR", text: "Kilit bilgisi fabrika güncellenince gelir" });
+  });
+
+  it("eski fabrika satırı ekranda 'fabrika güncellenince gelir' yazar", async () => {
+    mockList.mockImplementation(withLock({}));
+    render(<CustomerDetail />);
+    await settle();
+    await settle();
+    expect(screen.getByTestId(`cari-kilit-bilinmiyor-${HESAP}`)).toBeTruthy();
+    expect(screen.queryByTestId(`cari-kilit-${HESAP}`)).toBeNull();
   });
 });

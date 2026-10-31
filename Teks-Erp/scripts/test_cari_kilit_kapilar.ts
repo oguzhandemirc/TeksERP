@@ -102,10 +102,12 @@ function statik(): void {
   check("§0g confirm: SALES'te INVOICE kapısı risk guard'ının yanında", /assertRiskLimitTx\(tx,[\s\S]{0,700}if \(inv\.type === InvoiceType\.SALES\)[\s\S]{0,300}assertCariNotHeldTx\(tx, card, "INVOICE"\)/.test(conf));
   // Kapı çağıran küme SABİT: taslak/iade/storno/tahsilat yolları (payment, returns, undoDispatch, service-billing…) çağırmaz.
   const BEKLENEN = [
+    "cloud-sync/derived-cari-hold.ts", // D4-I6: yalnız `holdScopes` (bulut görünümü), kapı çağırmaz
     "routes/finance-cari-hold.routes.ts",
     "services/cari-hold.service.ts",
     "services/gelen-belge-note.service.ts",
     "services/gelen-belge-onay.service.ts",
+    "services/helpers/risk-exposure.helper.ts",
     "services/inventory.service.ts",
     "services/invoice.service.ts",
     "services/order.service.ts",

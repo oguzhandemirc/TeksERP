@@ -30,8 +30,8 @@
 //   §5e ⭐ görünen ad (sipariş/sevkiyat `musteriAdi`, kalem `urunAdi`/`renkAdi`) = BOYUT `ad`ı, kök
 //      satırda; cari/ürün/renk değişikliği bağlı kökü kirletir (ad değişimi yeniden gönderilir)
 //
-// ⭐ KALICI SONDALAR ✓K1–K5 (her koşumda, sentetik katalog kopyasıyla): `notes` kolonu ·
-// kök satırda `contactPhone` · `createdById` · kapsanmayan türetilmiş okuma · bilinmeyen izin —
+// ⭐ KALICI SONDALAR ✓K1–K6 (her koşumda, sentetik katalog kopyasıyla): `notes` kolonu ·
+// kök satırda `contactPhone` · `createdById` · kapsanmayan türetilmiş okuma · bilinmeyen izin · cari kilidi `reasonText` —
 // her biri denetçiyi KIRMIZI yapar (denetçiler kör değil).
 // NEGATİF SONDA — dosya DIŞI mutasyon (cp + shasum ile geri alındı; commit mesajında):
 //   A1 `cari-kart.yetkili` İŞLEM sınıfına alındı            → §3 + §5 ❌
@@ -87,6 +87,7 @@ const TAG = `BLTA${Date.now().toString(36).toUpperCase()}`;
 /** Hiçbir projeksiyonda olamayacak kolonlar: serbest not, katlama ikizi, sır, fabrika kullanıcı kimliği. */
 const YASAK_KOLON: ReadonlyArray<[RegExp, string]> = [
   [/^notes?$/i, "serbest not"],
+  [/^reason(Text)?$|Reason(Text)?$/i, "serbest sebep metni (yalnız sebep KODU gider)"],
   [/Fold$/, "arama katlama ikizi"],
   [/password|passcode|pin$|totp|secret|token|salt|hash$/i, "sır"],
   [/ById$|^userId$|^createdBy|^updatedBy|operator/i, "fabrika kullanıcı kimliği"],
@@ -462,6 +463,8 @@ function kaliciSondalar(): void {
   check("§K3 ⭐ kullanıcı kimliği kolonu eklenince kırmızı", sizintiDenetimi(kim).some((x) => x.includes("createdById")));
   const oku = kopya((p) => ({ ...p, derived: [{ wire: "x", helper: "sonda", reads: ["rolls"], timeBound: false, dataClass: "ISLEM" }] }));
   check("§K4 ⭐ değişikliği görülmeyen tabloyu okuyan türetilmiş alan kırmızı", turetilmisKapsamDenetimi(oku).some((x) => x.includes("rolls")));
+  const sebep = RECORD_PROJECTIONS.map((p) => (p.name === "cari-hesap" ? { ...p, columns: [...p.columns, { wire: "kilitSebebi", source: "reasonText", dataClass: "ISLEM" as const }] } : p));
+  check("§K6 ⭐ cari kilidinin serbest `reasonText`i projeksiyona eklenince kırmızı (D4-I6)", sizintiDenetimi(sebep).some((x) => x.includes("reasonText")));
   check("§K5 ⭐ bilinmeyen izin kırmızı", izinDenetimi(new Map([["renk", "bulut:yok"]])).length === 1);
 }
 
