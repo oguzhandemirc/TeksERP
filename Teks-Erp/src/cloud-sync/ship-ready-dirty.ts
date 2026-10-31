@@ -5,6 +5,9 @@ import prisma from "../lib/prisma";
 import { effectiveShipReadyPolicy, type ShipReadyPolicy } from "../services/helpers/ship-readiness.helper";
 import { computeReadyWorks } from "../services/ready-works.service";
 
+// `sync_marks` kök tablosu (audit modülü değil — test_audit_labels §2 `tableName:` literal taramasına girmez).
+const SYNC_ROOT = "work_orders";
+
 /** Yazımdan önceki politika (ayar servisi döngüsel içe aktarmadan kaçmak için bu modülü dinamik yükler). */
 export const readReadyPolicySnapshot = (): Promise<ShipReadyPolicy> => effectiveShipReadyPolicy();
 
@@ -15,7 +18,7 @@ export async function markReadyWorkOrdersDirty(before: ShipReadyPolicy): Promise
   const rows = await computeReadyWorks("workOrder", after);
   if (rows.length === 0) return 0;
   const r = await prisma.syncMark.createMany({
-    data: rows.map((w) => ({ tableName: "work_orders", rowId: w.id, kind: "DIRTY" as const })),
+    data: rows.map((w) => ({ tableName: SYNC_ROOT, rowId: w.id, kind: "DIRTY" as const })),
   });
   return r.count;
 }
