@@ -88,6 +88,7 @@ import {
   type TamburMeasure,
 } from './measureSource';
 import TamburMeasureStrip, { type LastTamburMeasure } from './TamburMeasureStrip';
+import TamburTargetValueChips from './TamburTargetValueChips';
 import { findGradeByRole, gradeColor } from '../../../utils/qualityRole';
 import { resolveShortCutConfig } from './resolveShortCutConfig';
 import TamburSendToDyeModal from './TamburSendToDyeModal';
@@ -3187,6 +3188,8 @@ export default function TamburScreen() {
         </View>
       )}
 
+      {/* SY-F3: iş emrinin hedef değerleri ("Kuşak: ZEBRA") — salt-okunur; boşsa çizilmez. */}
+      {activeJob && <TamburTargetValueChips targetValues={activeJob.stepSummary.targetValues} />}
       {!activeJob ? (
         <View style={styles.paneEmpty}>
           <Icon source="package-variant-closed" size={48} color="#cbd5e1" />

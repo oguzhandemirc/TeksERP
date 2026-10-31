@@ -26,6 +26,11 @@ export function CardSummary({ g }: { g: CostInputSnap }) {
             {g.weft.yarns.map((y) => `${y.name} ${fmtDecFull(y.denier.value)} den (pay ${y.picksInRepeat ?? "—"})`).join(" + ")}
           </p>
         ) : <p className="text-destructive">Atkı kartı bağlı değil.</p>}
+        {g.loomPick && (
+          <p className="text-muted-foreground" data-testid="card-loom-pick">
+            Dokuma atkı ücreti: {g.loomPick.rate ? `${fmtDecFull(g.loomPick.rate.amount, 4)} ${g.loomPick.rate.currency} (${SOURCE_LABEL[g.loomPick.rate.source] ?? g.loomPick.rate.source})` : "yok"}
+          </p>
+        )}
         <Link className="text-xs underline" to="/definitions/items">Ürün kartına git</Link>
       </section>
     </div>

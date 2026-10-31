@@ -5,6 +5,8 @@ import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const ROOT = __dirname;
+// D4-G3: kârlılık raporu sayfası da tarama kümesinde (panel kârlılık hesaplamaz; sayı sunucunun zarfından).
+const ROOTS = [ROOT, join(ROOT, "../Reports/Maliyet")];
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((n) => {
     const p = join(dir, n);
@@ -22,9 +24,10 @@ const FORBIDDEN: Array<{ re: RegExp; why: string }> = [
 ];
 
 describe("maliyet ekranları: istemci hesap yapmaz, kur 1 varsayılmaz", () => {
-  const all = files(ROOT);
+  const all = ROOTS.flatMap(files);
   it("taranan dosya kümesi boş değil (körlük zemini)", () => {
     expect(all.length).toBeGreaterThanOrEqual(10);
+    expect(all.some((p) => p.endsWith("ProfitabilityReportPage.tsx"))).toBe(true);
   });
   for (const f of FORBIDDEN) {
     it(`yasak kalıp yok: ${f.why}`, () => {

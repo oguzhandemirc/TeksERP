@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { allCommandEntries, commandSections, findBreadcrumbParent } from "./command-entries";
+import { leafPermission } from "./command-entries.reports";
 import { navGroups } from "./nav-config";
 import { reportTiles } from "@/pages/Reports/tile-config";
 
@@ -74,7 +75,9 @@ describe("komut paleti kataloğu", () => {
   it("rapor girişleri kategorinin iznini taşır (görünür ama /forbidden olmasın); istisna listesi bayat değil", () => {
     for (const entry of allCommandEntries.filter((e) => e.to.startsWith("/reports/"))) {
       const domain = entry.to.split("/")[2] ?? "";
-      expect(entry.permission, `${entry.to} izinsiz`).toBe(KATEGORI_IZNI_ISTISNASI[domain] ?? `report:${domain}`);
+      // D4-G3: kendi sayfalı v2 yaprağı katalog iznini taşır (route ile aynı); Maliyet & Teklif karosu `permissionAny` ile.
+      const gate = entry.permission ?? (entry.permissionAny?.length === 1 ? entry.permissionAny[0] : undefined);
+      expect(gate, `${entry.to} izinsiz`).toBe(leafPermission(entry.to, KATEGORI_IZNI_ISTISNASI[domain] ?? `report:${domain}`));
     }
     for (const cat of Object.keys(KATEGORI_IZNI_ISTISNASI)) {
       expect(allCommandEntries.some((e) => e.to.startsWith(`/reports/${cat}`)), `${cat} istisnası ölü`).toBe(true);

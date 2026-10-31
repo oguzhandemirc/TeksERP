@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DesktopOnlyAction } from "@/components/ui/DesktopOnlyAction";
 import { testPeripheral } from "./service";
+import { CalibrationBadge } from "./calibration";
 import {
   connectionTypeLabels,
   peripheralKindLabels,
@@ -76,6 +77,7 @@ export const peripheralColumns: ColumnDef<PeripheralDevice>[] = [
     cell: ({ row }) => (
       <div className="min-w-0">
         <Badge variant="muted">{peripheralKindLabels[row.original.kind]}</Badge>
+        <CalibrationBadge device={row.original} />
         {row.original.role ? (
           <div className="mt-0.5 text-[10px] text-muted-foreground">{row.original.role}</div>
         ) : null}

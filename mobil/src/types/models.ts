@@ -1064,6 +1064,17 @@ export interface TamburStepSummary {
   /** KQ-D7: muayene açık mı — "HATA GİR" çekmecesi yalnız true iken çizilir. Eski backend: undefined → çizilmez. */
   inspectionEnabled?: boolean;
   rolls: TamburRollSummary[];
+  /** SY-F1/F3: iş emrinin aktif hedef değerleri ("Kuşak: ZEBRA" çipi). Eski backend: undefined → çip yok. */
+  targetValues?: TamburTargetValueChip[];
+}
+
+/** Backend `TargetValueChip` aynası (workorder-target-value.helper.ts). */
+export interface TamburTargetValueChip {
+  propertyId: string;
+  propertyName: string;
+  valueId: string;
+  valueCode: string;
+  valueName: string;
 }
 
 export type TamburDecision = 'CUT' | 'NO_CUT';
