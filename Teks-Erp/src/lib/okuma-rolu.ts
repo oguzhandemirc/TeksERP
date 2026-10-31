@@ -40,10 +40,10 @@ export const READ_ONLY_NOT_SECRET_COLUMNS: readonly string[] = [
   "collectorKey", "contentHash", "contentKey", "dedupeKey", "defaultPasswordChangedAt", "defaultPasswordIssuedAt", "digest", "digestHour",
   "entryReasonCode", "errorCode", "exportCode", "factoryDayKey", "finishingRateCode", "fromReasonCode", "groupKey", "inputHash", "installationKeyId",
   "key", "keyValue", "lastErrorCode", "mustChangePassword", "pairKey", "paramsDigest", "payloadDigest", "pendingKey",
-  "permissionCode", "planReasonCode", "procedureCode", "quickPinSetAt", "rawCode", "rawKey", "rawStopCode",
+  "permissionCode", "planReasonCode", "procedureCode", "quickPinSetAt", "rateCode", "rawCode", "rawKey", "rawStopCode",
   "reasonCode", "routeKey", "rowKeys", "sampleCode", "scopeKey", "sealGeneration", "sealState", "sealedAt", "sealedById",
-  "secretIssuedAt", "seriesKey", "setKey", "signalStopKey", "stopKey", "subjectKey", "suggestedGradeCode", "textDigest", "toReasonCode",
-  "tokenVersion", "totpEnabledAt", "totpLastStep",
+  "secretIssuedAt", "sequenceCode", "seriesKey", "setKey", "signalStopKey", "stopKey", "subjectKey", "suggestedGradeCode", "textDigest", "toReasonCode",
+  "tokenVersion", "totpEnabledAt", "totpLastStep", "variantCode",
 ];
 
 /** Sır çağrıştıran kolon adı — bekçinin taradığı küme (fail-closed: eşleşen her ad sınıflandırılmalı). */
