@@ -235,11 +235,11 @@ export async function learnAlias(a: AliasLearnInput, userId: string): Promise<vo
   const [row] = await prisma.$queryRaw<AliasUpsertRow[]>(Prisma.sql`
     WITH prev AS (
       SELECT "targetId" FROM "delivery_note_aliases"
-      WHERE "scope" = ${a.scope}::"DeliveryNoteAliasScope" AND "senderCustomerId" IS NOT DISTINCT FROM ${a.senderCustomerId}::uuid AND "rawKey" = ${a.rawKey}
+      WHERE "scope" = ${a.scope}::"DeliveryNoteAliasScope" AND "senderCustomerId" IS NOT DISTINCT FROM ${a.senderCustomerId}::uuid AND "propertyId" IS NULL AND "rawKey" = ${a.rawKey}
     )
     INSERT INTO "delivery_note_aliases" ("id", "scope", "senderCustomerId", "rawKey", "targetId", "hitCount", "createdAt", "updatedAt")
     VALUES (gen_random_uuid(), ${a.scope}::"DeliveryNoteAliasScope", ${a.senderCustomerId}::uuid, ${a.rawKey}, ${a.targetId}::uuid, 1, now(), now()) -- tz-ok: kolonlar timestamptz; ham INSERT Prisma'nın @default/@updatedAt kancasını atlar
-    ON CONFLICT ("scope", "senderCustomerId", "rawKey") DO UPDATE
+    ON CONFLICT ("scope", "senderCustomerId", "propertyId", "rawKey") DO UPDATE -- D2b: kapsam NULL yazılır (bugünkü anahtar)
       SET "targetId" = EXCLUDED."targetId", "hitCount" = "delivery_note_aliases"."hitCount" + 1, "updatedAt" = now() -- tz-ok: kolon timestamptz; ham UPDATE @updatedAt kancasını atlar
       -- PROCESS sözlüğü metin başına tek hedef: başka ÖZELLİĞİN öğrenmesini (ör. düzeltilmiş kurşun gramajı) ezmez, korur.
       WHERE "delivery_note_aliases"."scope" <> 'PROCESS'::"DeliveryNoteAliasScope"
