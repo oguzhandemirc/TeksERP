@@ -14,6 +14,14 @@ import { failureOf, useReportV2 } from "@/pages/Reports/_v2/useReportV2";
 
 export const EXPENSE_SUMMARY_KEY = "finance/masraf-ozeti";
 const ENTRY = REPORT_BY_KEY.get(EXPENSE_SUMMARY_KEY)!;
+/** Sunucu satıra Masraf Özeti kovasının anahtarını koyar (`cashCategoryKey`); istemci anahtar ÜRETMEZ. */
+export const EXPENSE_ROW_KEY_FIELD = "kategoriAnahtari";
+
+/** Satır → o kategoriyle süzülmüş Kasa Hareketleri (`?category=<anahtar>`); anahtarsız satır (Toplam vb.) bağsız. */
+export function expenseRowTarget(row: Record<string, unknown>): string | null {
+  const key = row[EXPENSE_ROW_KEY_FIELD];
+  return typeof key === "string" && key.length > 0 ? `/finance/cash-transactions?category=${encodeURIComponent(key)}` : null;
+}
 
 /**
  * Masraf Özeti (D4-H1) — sunucunun v2 zarfını çizer; rapor v2 bayrağından bağımsız (v2 üreteci bu anahtarı
@@ -52,7 +60,11 @@ export function ExpenseSummaryPage() {
           {failure ? (
             <ReportFailureState failure={failure} error={query.error} onRetry={() => void query.refetch()} />
           ) : data ? (
-            <ReportBody presentation={data} fetchedAt={query.dataUpdatedAt} />
+            <ReportBody
+              presentation={data}
+              fetchedAt={query.dataUpdatedAt}
+              rowLink={{ target: expenseRowTarget, open: (to) => navigate(to), title: "Bu kategorinin kasa hareketlerini aç" }}
+            />
           ) : (
             <ReportLoadingState />
           )}
