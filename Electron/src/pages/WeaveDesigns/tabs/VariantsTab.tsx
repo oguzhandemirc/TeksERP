@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { TERIM } from "@/lib/terim";
 import { listItemVariants } from "../service";
 import type { DesignFabric, DesignVariant } from "../types";
 import { VariantCreateDialog } from "./VariantCreateDialog";
@@ -21,7 +22,7 @@ export function VariantsTab({ fabric }: { fabric: DesignFabric | null }) {
     enabled: !!fabric && canRead,
   });
   if (!fabric) return <p className="text-sm text-muted-foreground">Önce desene bir kumaş bağlayın.</p>;
-  if (!canRead) return <p className="text-sm text-muted-foreground">Varyantları görmek için iş emri şablonu okuma yetkisi gerekir.</p>;
+  if (!canRead) return <p className="text-sm text-muted-foreground">Varyantları görmek için {TERIM.terbiyeIsEmri.tekilKucuk} şablonu okuma yetkisi gerekir.</p>;
   const rows: DesignVariant[] = list.data ?? [];
   return (
     <div className="space-y-3">
