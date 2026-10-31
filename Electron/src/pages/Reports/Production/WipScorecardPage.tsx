@@ -5,6 +5,8 @@ import { Hourglass, Layers, PauseCircle, Timer } from "lucide-react";
 import { DetailTable, MetricCard, ReportExportBar, ReportPageLayout } from "../_components";
 import { fmtInt, fmtNum, fmtDate } from "../_components/formatters";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
+import { useWipOwnerFilter } from "./WipOwnerFilter";
+import { woColumns } from "./wipNeverStartedColumns";
 import { buildWipExport, wipScorecardApi, type WipScorecard, type WipStationRow } from "./wipScorecard";
 
 const ageTone = (d: number | null) => (d === null ? "" : d > 7 ? "text-destructive" : d > 3 ? "text-warning" : "");
@@ -104,32 +106,20 @@ const rollColumns: ColumnDef<WipScorecard["oldestWaiting"][number], unknown>[] =
   },
 ];
 
-const woColumns: ColumnDef<WipScorecard["neverStarted"][number], unknown>[] = [
-  { accessorKey: "workOrderNumber", header: "Terbiye İş Emri" },
-  { accessorKey: "status", header: "Durum" },
-  {
-    accessorKey: "daysOpen",
-    header: () => <div className="text-right">Açık</div>,
-    cell: ({ getValue }) => {
-      const d = getValue() as number;
-      return <div className={`text-right tabular-nums ${ageTone(d)}`}>{fmtNum(d)} gün</div>;
-    },
-  },
-];
-
 export function WipScorecardPage() {
   const { params, dateFrom, dateTo } = useReportDateRange("production/wip");
+  const { owner, filter: ownerFilter } = useWipOwnerFilter();
 
   const query = useQuery({
-    queryKey: ["reports", "production", "wip", params],
-    queryFn: () => wipScorecardApi.get(params),
+    queryKey: ["reports", "production", "wip", params, owner],
+    queryFn: () => wipScorecardApi.get(params, owner),
     enabled: Boolean(params.dateFrom && params.dateTo),
     staleTime: 30_000,
   });
 
   const sc = query.data?.data;
   const periodLabel = `${fmtDate(dateFrom)} – ${fmtDate(dateTo)}`;
-  const spec = useMemo(() => () => (sc ? buildWipExport({ sc, periodLabel }) : null), [sc, periodLabel]);
+  const spec = useMemo(() => () => (sc ? buildWipExport({ sc, periodLabel, ownerFiltered: owner !== null }) : null), [sc, periodLabel, owner]);
 
   return (
     <ReportPageLayout
@@ -138,6 +128,7 @@ export function WipScorecardPage() {
       description="İstasyonlarda bekleyen mal, en uzun bekleyen işler ve hiç başlamamış terbiye iş emirleri."
       actions={<ReportExportBar disabled={!sc} buildSpec={spec} />}
     >
+      {ownerFilter}
       {/* İki bölümün zaman anlayışı farklı — bu satır olmadan kullanıcı bekleyen
           rakamını da seçtiği döneme ait sanır. */}
       <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">

@@ -105,6 +105,12 @@ export async function listMachineCostRates(opts: {
   });
 }
 
+/** Ücret ekranının makine seçenekleri (D4-KUC3a): `station:read` taşımayan Muhasebe de ücretsiz makineye ücret
+ *  girebilsin diye `cost:read` kapsamlı hafif liste — yalnız aktif makinenin id/kod/adı (istasyon ayrıntısı yok). */
+export async function listMachineCostOptions(): Promise<Array<{ id: string; code: string; name: string }>> {
+  return prisma.machine.findMany({ where: { isActive: true }, select: { id: true, code: true, name: true }, orderBy: [{ code: "asc" }, { id: "asc" }] });
+}
+
 /** YARAT — makinenin ilk (ya da kaldırılmış sonrası) ücreti; aktif varsa 409 (değişim ayrı uçtur). */
 export async function createMachineCostRate(machineId: string, input: MachineCostRateValues, userId: string): Promise<MachineCostRateResult> {
   const values = parseValues(input);

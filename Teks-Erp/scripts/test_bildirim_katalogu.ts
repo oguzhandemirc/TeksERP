@@ -9,7 +9,7 @@
 // ve kendi beyanlarına karşı ölçer:
 //   §1 panelEkran/tabletEkran SCREEN_CATALOG'da · §1b panelYol ekranın altında
 //   §2 modul = panel ekranının modülü · §3 her izin konjonksiyonu ekranın `requires`ından
-//   en az birini içerir · §4 kilitli tür varsayılan KAPALI olamaz · §5 yer tutucular ⇄
+//   en az birini içerir (beyanlı ekransız görücü hariç; §3d gerekçe, §3e cari kilidi sevkçiye) · §4 kilitli tür varsayılan KAPALI olamaz · §5 yer tutucular ⇄
 //   payloadAlanlari (iki yönlü) · §6 KOSUL/ALARM `cozuldu` dolu, pencere ≥0 · §7 param
 //   şeması varsayılanla parse olur ve bilinmeyen anahtarı reddeder · §8 payload'da tutar/sır adı yok ·
 //   §9 patron eşlemesi: her tür `NOTIFICATION_PATRON_MAP`te, `patronKind` bulut `KIND_RULES` anahtarı (dosya
@@ -24,6 +24,7 @@
 //   S5 (2026-10-25) eşlemeden `yazici.hata` satırı silindi             ⇒ 1 ❌ (§9)
 //   S6 (2026-10-26) render'da `forText` yok sayıldı (String(v))      ⇒ 1 ❌ (§5d)
 //   S7 (2026-10-31, D4-I5) `cari.risk-limiti-asildi.payloadAlanlari`na `riskLimiti` eklendi ⇒ §8 ❌
+//   S8 (2026-10-31, D4-KUC3a) `cari.kilitlendi` izinlerinden [shipping:write] çıkarıldı ⇒ §3e ❌ (+ §3d: beyan DNF'de yok)
 // =============================================================================
 import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
 import { SCREEN_CATALOG } from "../src/constants/screen-catalog";
@@ -92,8 +93,31 @@ function main(): void {
     girdiler.flatMap(([k, e]) => {
       const req = new Set([...(masaustu.get(e.panelEkran)?.requires ?? []),
         ...(e.tabletEkran ? mobil.get(e.tabletEkran)?.requires ?? [] : [])]);
-      return e.izinler.filter((konj) => !konj.some((c) => req.has(c))).map((konj) => `${k}: [${konj.join(", ")}]`);
+      const ekransiz = new Set<string>(e.screenlessViewers?.permissions ?? []);
+      // Beyanlı ekransız görücü (tek izinli konjonksiyon) ekran şartından muaf — gerekçesi §3d'de ölçülür.
+      return e.izinler.filter((konj) => !konj.some((c) => req.has(c)) && !(konj.length === 1 && ekransiz.has(konj[0]!)))
+        .map((konj) => `${k}: [${konj.join(", ")}]`);
     }), "hepsi");
+  kural("§3d ekransız görücü: gerekçe dolu · DNF'de tek başına konjonksiyon · ekranın requires'ında DEĞİL (gereksiz muafiyet yok)",
+    girdiler.flatMap(([k, e]) => {
+      const sv = e.screenlessViewers;
+      if (!sv) return [];
+      const req = new Set(masaustu.get(e.panelEkran)?.requires ?? []);
+      const out: string[] = [];
+      if (sv.reason.trim().length < 20 || sv.permissions.length === 0) out.push(`${k}: gerekçe/izin boş`);
+      for (const c of sv.permissions) {
+        if (!e.izinler.some((konj) => konj.length === 1 && konj[0] === c)) out.push(`${k}: ${c} DNF'de tek başına yok`);
+        if (req.has(c)) out.push(`${k}: ${c} zaten ekran requires'ında`);
+      }
+      return out;
+    }), "hepsi");
+  // 1e kararı (D4-KUC3a): kilitli caride sevk durur → sevkçi (shipping:write) kilit bildirimini GÖRÜR; risk türü görmez.
+  kural("§3e ⭐ cari kilit türlerinin görme DNF'sinde [shipping:write] var; risk limiti türünde yok",
+    [
+      ...(["cari.kilitlendi", "cari.kilit-acildi"] as const).filter((k) =>
+        !(NOTIFICATION_CATALOG[k] as NotificationCatalogEntry).izinler.some((konj) => konj.length === 1 && konj[0] === "shipping:write")).map((k) => `${k}: shipping:write yok`),
+      ...((NOTIFICATION_CATALOG["cari.risk-limiti-asildi"] as NotificationCatalogEntry).izinler.flat().includes("shipping:write") ? ["cari.risk-limiti-asildi: shipping:write var"] : []),
+    ], "kilit ×2 sevkçiye açık");
   kural("§3b izinler ve varsayılan izin listesi İZİN KATALOĞUNDA",
     girdiler.flatMap(([k, e]) => [...e.izinler.flat(), ...(Array.isArray(e.varsayilan) ? e.varsayilan : [])]
       .filter((c) => !izinKodlari.has(c)).map((c) => `${k}: ${c}`)), "hepsi");
