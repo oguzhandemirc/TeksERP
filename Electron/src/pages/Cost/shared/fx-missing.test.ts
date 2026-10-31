@@ -21,6 +21,8 @@ describe("foreignCurrencies", () => {
     } as unknown as CostInputSnap;
     expect(foreignCurrencies(g)).toEqual(["EUR", "USD"]);
     expect(foreignCurrencies(null)).toEqual([]);
+    const withProc = { finishing: null, processes: [{ price: { currency: "GBP" } }, { price: null }] } as unknown as CostInputSnap;
+    expect(foreignCurrencies(withProc)).toEqual(["GBP"]);
   });
 });
 

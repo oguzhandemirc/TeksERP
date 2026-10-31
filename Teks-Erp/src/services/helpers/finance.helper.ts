@@ -238,7 +238,7 @@ export function deriveInvoiceDueDate(
  * çıkmadan, ve ay sonunda bakiye 30 kat yanlış olurdu.
  */
 export async function resolveExchangeRateTx(
-  tx: Prisma.TransactionClient,
+  tx: Pick<Prisma.TransactionClient, "exchangeRate">,
   currency: Currency,
   onDate: Date,
 ): Promise<Prisma.Decimal | null> {

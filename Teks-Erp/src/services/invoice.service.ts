@@ -1379,10 +1379,11 @@ export class InvoiceService {
     // TEK çekirdek (D4-I2): FOR UPDATE + sıra aynen; limitsiz cari → [] (kontrol yok).
     const [hit] = await riskExposureTx(tx, ref.cariId, ref.currency, ref.amount);
     if (!hit?.exceeded) return;
-    const { name, limit, balance, exposure } = hit;
+    // PER_CURRENCY'de hit.currency = fatura para birimi, hit.extra = fatura tutarı (metin bayt-aynı); TRY_CONVERTED'de TL karşılıkları.
+    const { name, limit, balance, extra, exposure, currency } = hit;
     throw AppError.conflict(
-      `"${name}" risk limiti aşılıyor: limit ${limit.toFixed(2)} ${ref.currency}, ` +
-        `mevcut bakiye ${balance.toFixed(2)}, bu fatura ${ref.amount.toFixed(2)} → toplam ${exposure.toFixed(2)}. ` +
+      `"${name}" risk limiti aşılıyor: limit ${limit.toFixed(2)} ${currency}, ` +
+        `mevcut bakiye ${balance.toFixed(2)}${hit.converted ? " (TL'ye çevrilmiş toplam)" : ""}, bu fatura ${extra.toFixed(2)} → toplam ${exposure.toFixed(2)}. ` +
         `Risk limiti engeli açık — limiti Cari Kartından güncelleyebilir, tahsilat girip tekrar deneyebilir ` +
         `ya da ${settingRowPath("financeRiskLimitBlockEnabled")} ayarını kapatabilirsiniz.`,
       { code: "RISK_LIMIT_EXCEEDED" },
