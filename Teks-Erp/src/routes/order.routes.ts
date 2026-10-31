@@ -11,6 +11,8 @@ import { matchesPermission, requirePermission, requireAnyPermission } from "../m
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import "../types/express-augment";
 import { ACTIVE_ORDER_LINK } from "../services/helpers/order-link.helper";
+import { LINE_RECIPE_SELECT } from "../services/helpers/line-recipe.helper";
+import { LINE_TARGET_VALUES_SELECT } from "../services/helpers/order-line-target-value.helper";
 
 // F157: /available query şeması — ham parse yerine Zod (geçersiz uuid/width net 400).
 const emptyToUndef = (v: unknown) => (v === "" || v == null ? undefined : v);
@@ -58,6 +60,9 @@ export const orderService = new OrderService({
         },
         color: true,
         requiredProperties: { include: { property: true } },
+        // SY-K1k: satırın varyantı + hedef değerleri (NULL/boş = bugünkü satır).
+        recipe: LINE_RECIPE_SELECT,
+        targetValues: LINE_TARGET_VALUES_SELECT,
         // Frontend "Kalemler düzenlenebilir mi?" kararı için: kalem bir WO'ya
         // bağlıysa kilit. CANCELLED WO bağı sayılmaz (frontend status'e bakar).
         // Ayrıca sipariş listesi "İş Emri" rollup rozeti + detay panelindeki

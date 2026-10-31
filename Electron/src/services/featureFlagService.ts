@@ -300,6 +300,8 @@ export interface FeatureFlags {
     | "INTAKE,SHIPMENT,INVOICE";
   /** D4-I1a: kilidi koyan kişi kendi kilidini açabilir mi (varsayılan `ALLOW`). */
   financeCariHoldReleaseBySamePerson: "ALLOW" | "DENY";
+  /** D4-I1c: kilitli caride emanet sevki (backend aynası; varsayılan `EXEMPT`). */
+  financeCariHoldEmanetShipment: "EXEMPT" | "PROCESSED_HELD" | "ALL_HELD";
   /** SY-J1: maliyet sunum dövizi (varsayılan `TRY`). */
   costPresentationCurrency: "TRY" | "USD" | "EUR";
   /** D4-I2b (S12): risk limiti para birimi kipi — her para birimi ayrı (varsayılan) · o güne kadarki en son kurla TL toplamı. */
@@ -590,6 +592,8 @@ export interface FeatureFlags {
   tamburPlanGateWidthToleranceCm: number;
   /** Tambur plan kapısı en kontrolü (default ENFORCE); OFF yalnız en kolunu atlar, renk kapısı aynı. */
   tamburPlanGateWidthCheck: "ENFORCE" | "OFF";
+  /** Tambur finalize çocuk top en kaynağı (default WO_TARGET_FIRST = bugünkü; D4-E3). */
+  tamburChildWidthSource: "WO_TARGET_FIRST" | "MEASURED_FIRST";
   /** Tablet Tambur açık kart listesi oturum istasyonuyla süzülsün mü (false=default; ister 2.8). */
   tamburListByStationEnabled: boolean;
   /** Dokuma kapalıyken de kurşun/tambur/brode makinesi duruşu kaydedilsin mi (false=default; D4-A1). */
@@ -601,6 +605,8 @@ export interface FeatureFlags {
    *  yalnız bilgi olarak yazar, uyarı/onay çıkarmaz. Sapma defterine yazım bu
    *  ayardan BAĞIMSIZDIR (fark her hâlükârda kaydedilir). */
   fasonShrinkWarnEnabled: boolean;
+  /** Fason kabulünde İE hedef çeşit değeri (desen) doğan topa (D4-D3, K8; default false). */
+  fasonReceiptApplyTargetVariant: boolean;
   /** Çekme toleransı — YÜZDE (default 10). Altındaki fark uyarı üretmez.
    *  ⚠️ null DÖNMEZ: alan temizlenirse fabrika varsayılanına döner. */
   fasonShrinkTolerancePct: number;

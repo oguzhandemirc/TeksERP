@@ -299,6 +299,7 @@ export const updateSchema = z.strictObject({
     })
     .optional(),
   financeCariHoldReleaseBySamePerson: z.enum(["ALLOW", "DENY"], { message: "Cari kilidi açma kuralı ALLOW ya da DENY olmalı" }).optional(),
+  financeCariHoldEmanetShipment: z.enum(["EXEMPT", "PROCESSED_HELD", "ALL_HELD"], { message: "Kilitli caride emanet sevki EXEMPT, PROCESSED_HELD ya da ALL_HELD olmalı" }).optional(),
   costPresentationCurrency: z.enum(["TRY", "USD", "EUR"], { message: "Maliyet sunum dövizi TRY, USD ya da EUR olmalı" }).optional(),
   // D4-I2b (S12): risk limiti para birimi kipi — her para birimi ayrı (varsayılan) · TL'ye çevrilmiş toplam.
   financeRiskLimitCurrencyMode: z.enum(["PER_CURRENCY", "TRY_CONVERTED"], { message: "Risk limiti para birimi kipi PER_CURRENCY ya da TRY_CONVERTED olmalı" }).optional(),
@@ -551,6 +552,12 @@ export const updateSchema = z.strictObject({
   tamburPlanGateWidthCheck: z
     .enum(["ENFORCE", "OFF"], { message: "Tambur en kontrolü ENFORCE ya da OFF olmalı" })
     .optional(),
+  // Tambur finalize çocuk top en kaynağı (D4-E3); servisteki TAMBUR_CHILD_WIDTH_SOURCES aynası.
+  tamburChildWidthSource: z
+    .enum(["WO_TARGET_FIRST", "MEASURED_FIRST"], {
+      message: "Tambur çocuk top en kaynağı WO_TARGET_FIRST ya da MEASURED_FIRST olmalı",
+    })
+    .optional(),
   // Tablet Tambur listesi istasyon süzgeci (ister 2.8).
   tamburListByStationEnabled: z.boolean().optional(),
   // Dokumasız fabrikada makine duruşu takibi (D4-A1, ister 5.5).
@@ -561,6 +568,8 @@ export const updateSchema = z.strictObject({
   // yüzde = eşik. ⚠️ `min(0)` — 0 GEÇERLİ ("tolerans yok, her fark uyarır");
   // `positive()` yazılsaydı panelden sıfır tolerans seçilemezdi.
   fasonShrinkWarnEnabled: z.boolean().optional(),
+  // Dış brode kabulünde hedef desen doğan topa (D4-D3, K8).
+  fasonReceiptApplyTargetVariant: z.boolean({ message: "Fason kabulünde hedef desen açık/kapalı olmalı" }).optional(),
   fasonShrinkTolerancePct: z.number().min(0).max(100).nullable().optional(),
   // Mükerrer paneli (2026-08-22): bulanık ad eşleştirme bayrağı + eşik (yüzde).
   // `null` = eşiği temizle → fabrika varsayılanı (90). Alt sınır 50 (gürültü).

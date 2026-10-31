@@ -249,6 +249,45 @@ export interface WorkOrderShipReadiness {
 /** Durum kodu → rozet metni; `YOK` ve bilinmeyen kod rozet çizmez. */
 export const SHIP_READINESS_LABELS: Readonly<Record<string, string>> = { HAZIR: "Sevke hazır", KISMEN: "Kısmen hazır" };
 
+// ---------------------------------------------------------------- masraf özeti (D4-H2)
+
+/** `ozet-masraf` ay hücresi: fabrika ayı `YYYY-MM` + net TL (tel ondalığı). */
+export interface ExpenseMonthCell {
+  readonly ay: string;
+  readonly tutar: string;
+}
+
+/**
+ * `ozet-masraf` kategori satırı (kategori METNİ fabrikadaki gibi; kişi adı yazılmaması panelde istenir). İlk 15 kategori
+ * adıyla, kalanlar tek "Diğer" satırında (`digerMi`, `kategoriSayisi`). Toplam, fark ve pay FABRİKANINDIR — bulut ve
+ * uygulama toplamaz, çıkarmaz; yalnız basar.
+ */
+export interface ExpenseCategoryRow {
+  readonly etiket: string;
+  readonly digerMi: boolean;
+  readonly kategoriSayisi: number;
+  readonly toplam: string;
+  readonly buAy: string;
+  readonly gecenAy: string;
+  readonly fark: string;
+  /** Bu ayki masraf içindeki pay, yüzde (0–100). */
+  readonly buAyPay: number;
+  readonly aylik: readonly ExpenseMonthCell[];
+}
+
+/** `GET /anlik/ozet-masraf` verisi (izin `bulut:kasa:oku`): son 12 fabrika ayı; eski fabrika anlığı GÖNDERMEZ (404). */
+export interface ExpenseSummarySnapshot {
+  readonly aylar: readonly string[];
+  readonly buAy: string;
+  readonly gecenAy: string;
+  readonly toplam: string;
+  readonly buAyToplam: string;
+  readonly gecenAyToplam: string;
+  readonly fark: string;
+  readonly aylikToplam: readonly ExpenseMonthCell[];
+  readonly kategoriler: readonly ExpenseCategoryRow[];
+}
+
 /** `GET /anlik/:projeksiyon`. */
 export interface Snapshot {
   readonly projeksiyon: string;

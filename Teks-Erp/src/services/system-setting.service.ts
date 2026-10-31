@@ -163,7 +163,7 @@ export const SETTING_KEYS = {
    *  `RISK_LIMIT_EXCEEDED` (default FALSE = bugünkü davranış). Bakiye her para biriminde ayrı ölçülür (fatura ilkesi). */
   FINANCE_RISK_LIMIT_BLOCK_INTAKE: "finance.riskLimitBlock.intake",
   /** D4-I2: risk limiti aşılmış caride SEVK (kurulum + dispatch) 409 `RISK_LIMIT_EXCEEDED` (default FALSE). K22: tamamı
-   *  sevk müşterisinin emaneti olan sevk takılmaz (cari kilidinin kod sabiti `CARI_HOLD_EMANET_SHIPMENT`). */
+   *  emanet sevki cari kilidiyle aynı kararı alır (`finance.cariHold.emanetShipment`, `emanetShipmentReleaseTx`). */
   FINANCE_RISK_LIMIT_BLOCK_SHIPMENT: "finance.riskLimitBlock.shipment",
   /** Sevk onayında otomatik satış faturası TASLAĞI üret (default FALSE).
    *  ⚠️ Üretilen şey TASLAKTIR (`InvoiceStatus.DRAFT`) — onay HER ZAMAN elle
@@ -189,6 +189,8 @@ export const SETTING_KEYS = {
   FINANCE_CARI_HOLD_DEFAULT_SCOPE: "finance.cariHold.defaultScope",
   /** D4-I1a: kilidi koyan kişi kendi kilidini açabilir mi — `ALLOW` (varsayılan, serbest) · `DENY` (başka yetkili açar). */
   FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON: "finance.cariHold.releaseBySamePerson",
+  /** D4-I1c (S11): kilitli caride emanetin sahibine sevki — `EXEMPT` (varsayılan, bugünkü) · `PROCESSED_HELD` · `ALL_HELD`. */
+  FINANCE_CARI_HOLD_EMANET_SHIPMENT: "finance.cariHold.emanetShipment",
   /** SY-J1: maliyet sunum dövizi — `TRY` (varsayılan; yanıt bayt-aynı) · `USD` · `EUR`. Motor TL'de kalır. */
   COST_PRESENTATION_CURRENCY: "maliyet.sunumDovizi",
   /** D4-I2b (S12): risk limiti karşılaştırması — `PER_CURRENCY` (varsayılan, her para birimi ayrı) · `TRY_CONVERTED`
@@ -730,6 +732,12 @@ export const SETTING_KEYS = {
   TAMBUR_PLAN_GATE_WIDTH_TOLERANCE_CM: "tambur.planGate.widthToleranceCm",
   TAMBUR_PLAN_GATE_WIDTH_CHECK: "tambur.planGate.widthCheck",
   /**
+   * Tambur finalize çocuk topun en kaynağı (D4-E3): WO_TARGET_FIRST (bugünkü: iş emri eni,
+   * yoksa ana top) | MEASURED_FIRST (ana topun ÖLÇÜLMÜŞ eni — D4-E2a izi — varsa o).
+   * Okuma YALNIZ `readTamburChildWidthSource` üzerinden.
+   */
+  TAMBUR_CHILD_WIDTH_SOURCE: "tambur.childWidthSource",
+  /**
    * FASON KABULÜ — ÇEKME UYARISI (2026-08-21).
    * Boyahanede kumaş çeker: 250 m giden mal 220 m döner. Eski ekran bu farkı
    * "EKSİK DÖNEN / giden-gelen uyuşmuyor" diye KIRMIZI bir onay modalıyla
@@ -740,6 +748,9 @@ export const SETTING_KEYS = {
    * deftere aynen yazılır); ikinci bir kural kurmak çift kaynak olurdu.
    */
   FASON_SHRINK_WARN_ENABLED: "fason.shrinkWarnEnabled",
+  /** Dış brode kabulünde iş emrinin hedef çeşit değeri (desen) doğan topa yazılsın mı (D4-D3, K8).
+   *  Default FALSE = bugünkü davranış (kabul yalnız bayrağı kopyalar). */
+  FASON_RECEIPT_APPLY_TARGET_VARIANT: "fason.receiptApplyTargetVariant",
   /**
    * Tolerans — YÜZDE (giden metrajın yüzdesi). Kayıt yoksa varsayılan %10.
    * `0` GEÇERLİ bir değerdir ve "tolerans yok, her fark uyarır" demektir
@@ -1080,6 +1091,10 @@ export const DEFAULT_CARI_HOLD_SCOPE: CariHoldDefaultScope = "INTAKE,SHIPMENT";
 export type CariHoldReleaseBySamePerson = "ALLOW" | "DENY";
 export const CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES: CariHoldReleaseBySamePerson[] = ["ALLOW", "DENY"];
 export const DEFAULT_CARI_HOLD_RELEASE_BY_SAME_PERSON: CariHoldReleaseBySamePerson = "ALLOW";
+/** D4-I1c (S11): kilitli caride emanet sevki — hapis hakkı seçimi fabrikanındır (hukuki teyit önerilir). */
+export const CARI_HOLD_EMANET_SHIPMENT_MODES = ["EXEMPT", "PROCESSED_HELD", "ALL_HELD"] as const;
+export type CariHoldEmanetShipment = (typeof CARI_HOLD_EMANET_SHIPMENT_MODES)[number];
+export const DEFAULT_CARI_HOLD_EMANET_SHIPMENT: CariHoldEmanetShipment = "EXEMPT";
 export type CostPresentationCurrency = "TRY" | "USD" | "EUR";
 export const COST_PRESENTATION_CURRENCIES: CostPresentationCurrency[] = ["TRY", "USD", "EUR"];
 export const DEFAULT_COST_PRESENTATION_CURRENCY: CostPresentationCurrency = "TRY";
@@ -1118,6 +1133,11 @@ export const TAMBUR_PLAN_WIDTH_CHECKS: TamburPlanWidthCheck[] = ["ENFORCE", "OFF
 export const DEFAULT_TAMBUR_PLAN_WIDTH_CHECK: TamburPlanWidthCheck = "ENFORCE";
 /** Eşik üst sınırı (cm) — panel/Zod/okuyucu aynı sınırı kullanır. */
 export const TAMBUR_PLAN_WIDTH_TOLERANCE_MAX_CM = 100;
+/** Tambur finalize çocuk en kaynağı (bkz. `SETTING_KEYS.TAMBUR_CHILD_WIDTH_SOURCE`). */
+export type TamburChildWidthSource = "WO_TARGET_FIRST" | "MEASURED_FIRST";
+export const TAMBUR_CHILD_WIDTH_SOURCES: TamburChildWidthSource[] = ["WO_TARGET_FIRST", "MEASURED_FIRST"];
+/** Varsayılan `WO_TARGET_FIRST` — BUGÜNKÜ davranış (`wo.width ?? roll.width`, ölçüldü 2026-10-31). */
+export const DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE: TamburChildWidthSource = "WO_TARGET_FIRST";
 
 /** Etiket adedi kaynağı (bkz. `SETTING_KEYS.LABEL_COPIES_SOURCE`). */
 export type LabelCopiesSource = "GLOBAL" | "STATION";
@@ -1956,6 +1976,8 @@ export interface FeatureFlags {
   financeCariHoldDefaultScope: CariHoldDefaultScope;
   /** D4-I1a: koyan kişi kendi kilidini açabilir mi (varsayılan `ALLOW`). */
   financeCariHoldReleaseBySamePerson: CariHoldReleaseBySamePerson;
+  /** D4-I1c: kilitli caride emanet sevki (varsayılan `EXEMPT`). */
+  financeCariHoldEmanetShipment: CariHoldEmanetShipment;
   /** SY-J1: maliyet sunum dövizi (varsayılan `TRY` = bugünkü TL-yalnız yanıt). */
   costPresentationCurrency: CostPresentationCurrency;
   /** D4-I2b: risk limiti para birimi kipi (varsayılan `PER_CURRENCY`). */
@@ -2236,6 +2258,8 @@ export interface FeatureFlags {
   tamburPlanGateWidthToleranceCm: number;
   /** Tambur plan kapısı en kontrolü (default ENFORCE); OFF yalnız en kolunu atlar. */
   tamburPlanGateWidthCheck: TamburPlanWidthCheck;
+  /** Tambur finalize çocuk en kaynağı (default WO_TARGET_FIRST = bugünkü). */
+  tamburChildWidthSource: TamburChildWidthSource;
   /** Tablet Tambur listesi oturum istasyonuyla süzülsün mü (default FALSE; istemcide uygulanır). */
   tamburListByStationEnabled: boolean;
   /** Dokuma kapalıyken de makine duruşu kaydedilsin mi (D4-A1; default FALSE = bugünkü). HAM değer;
@@ -2245,6 +2269,8 @@ export interface FeatureFlags {
   machineStopOpenWarningEnabled: boolean;
   /** Fason kabulünde çekme (giden↔dönen farkı) uyarısı çıksın mı (default TRUE). */
   fasonShrinkWarnEnabled: boolean;
+  /** Fason kabulünde hedef çeşit değeri (desen) doğan topa (D4-D3; default FALSE). */
+  fasonReceiptApplyTargetVariant: boolean;
   /** Çekme toleransı — YÜZDE. Default 10. `0` = tolerans yok (her fark uyarır). */
   fasonShrinkTolerancePct: number;
   /** Demo kurulumu mu (default FALSE) — `/api/demo/*` senaryo üreticilerini açar. */
@@ -2628,6 +2654,7 @@ export class SystemSettingService {
       financeExpenseCategorySuggestions: await readFinanceExpenseCategorySuggestions(cacheClient),
       financeCariHoldDefaultScope: await readFinanceCariHoldDefaultScope(cacheClient),
       financeCariHoldReleaseBySamePerson: await readFinanceCariHoldReleaseBySamePerson(cacheClient),
+      financeCariHoldEmanetShipment: await readFinanceCariHoldEmanetShipment(cacheClient),
       costPresentationCurrency: await readCostPresentationCurrency(cacheClient),
       financeRiskLimitCurrencyMode: await readFinanceRiskLimitCurrencyMode(cacheClient),
       costProfitSubcontractSource: await readCostProfitSubcontractSource(cacheClient),
@@ -2759,10 +2786,12 @@ export class SystemSettingService {
       tamburShortCutA1ThresholdM: await readTamburShortCutA1ThresholdM(cacheClient),
       tamburPlanGateWidthToleranceCm: await readTamburPlanGateWidthToleranceCm(cacheClient),
       tamburPlanGateWidthCheck: await readTamburPlanGateWidthCheck(cacheClient),
+      tamburChildWidthSource: await readTamburChildWidthSource(cacheClient),
       tamburListByStationEnabled: await readTamburListByStationEnabled(cacheClient),
       machineStopTrackingEnabled: await readMachineStopTrackingEnabled(cacheClient),
       machineStopOpenWarningEnabled: await readMachineStopOpenWarningEnabled(cacheClient),
       fasonShrinkWarnEnabled: await readFasonShrinkWarnEnabled(cacheClient),
+      fasonReceiptApplyTargetVariant: await readFasonReceiptApplyTargetVariant(cacheClient),
       fasonShrinkTolerancePct: await readFasonShrinkTolerancePct(cacheClient),
       demoModeEnabled: await readDemoModeEnabled(cacheClient),
       duplicatesFuzzyEnabled: await readDuplicatesFuzzyEnabled(cacheClient),
@@ -3184,6 +3213,13 @@ export class SystemSettingService {
         throw AppError.badRequest(`financeCariHoldReleaseBySamePerson şunlardan biri olmalı: ${CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON, v, "Cari kilidini koyan kişi kendi kilidini açabilir mi — serbest · başka yetkili", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeCariHoldEmanetShipment")) {
+      const v = input.financeCariHoldEmanetShipment;
+      if (typeof v !== "string" || !CARI_HOLD_EMANET_SHIPMENT_MODES.includes(v as CariHoldEmanetShipment)) {
+        throw AppError.badRequest(`financeCariHoldEmanetShipment şunlardan biri olmalı: ${CARI_HOLD_EMANET_SHIPMENT_MODES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT, v, "Kilitli caride müşterinin emanet malının sevki — serbest · işlenmiş tutulur · hepsi tutulur", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "costPresentationCurrency")) {
       const v = input.costPresentationCurrency;
@@ -4610,6 +4646,17 @@ export class SystemSettingService {
         userId
       );
     }
+    if (Object.prototype.hasOwnProperty.call(input, "fasonReceiptApplyTargetVariant")) {
+      if (typeof input.fasonReceiptApplyTargetVariant !== "boolean") {
+        throw AppError.badRequest("fasonReceiptApplyTargetVariant boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.FASON_RECEIPT_APPLY_TARGET_VARIANT,
+        input.fasonReceiptApplyTargetVariant,
+        "Fason kabulünde hedef desen/çeşit değeri doğan topa yazılsın",
+        userId
+      );
+    }
     if (Object.prototype.hasOwnProperty.call(input, "tamburPlanGateWidthToleranceCm")) {
       const v = input.tamburPlanGateWidthToleranceCm;
       // null = varsayılana dön (fasonShrinkTolerancePct emsali); 0 GEÇERLİ ("her farkta sor").
@@ -4636,6 +4683,18 @@ export class SystemSettingService {
         SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_CHECK,
         v,
         "Tambur plan kapısı en kontrolü: ENFORCE (sor) | OFF (en kolunu atla; renk kapısı aynı kalır)",
+        userId
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "tamburChildWidthSource")) {
+      const v = input.tamburChildWidthSource;
+      if (typeof v !== "string" || !TAMBUR_CHILD_WIDTH_SOURCES.includes(v as TamburChildWidthSource)) {
+        throw AppError.badRequest("Tambur çocuk top en kaynağı WO_TARGET_FIRST ya da MEASURED_FIRST olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.TAMBUR_CHILD_WIDTH_SOURCE,
+        v,
+        "Tambur finalize çocuk top eni: WO_TARGET_FIRST (hedef en, yoksa ana top) | MEASURED_FIRST (ölçülmüş ana top eni önce)",
         userId
       );
     }
@@ -5514,6 +5573,11 @@ export async function readCostProfitCategoryClasses(tx?: Pick<typeof prisma, "sy
 /** D4-I1a: koyan kişi kendi kilidini açabilir mi — tanınmayan değer varsayılana (`ALLOW`) düşer. */
 export function readFinanceCariHoldReleaseBySamePerson(tx?: Pick<typeof prisma, "systemSetting">): Promise<CariHoldReleaseBySamePerson> {
   return readServiceEnum(SETTING_KEYS.FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON, CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES, DEFAULT_CARI_HOLD_RELEASE_BY_SAME_PERSON, tx);
+}
+
+/** D4-I1c: kilitli caride emanet sevki — tanınmayan değer varsayılana (`EXEMPT`, bugünkü) düşer. Kapı okuması `emanet-shipment.helper`dedir. */
+export function readFinanceCariHoldEmanetShipment(tx?: Pick<typeof prisma, "systemSetting">): Promise<CariHoldEmanetShipment> {
+  return readServiceEnum(SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT, CARI_HOLD_EMANET_SHIPMENT_MODES, DEFAULT_CARI_HOLD_EMANET_SHIPMENT, tx);
 }
 
 /** D4-I2b: risk limiti para birimi kipi — tanınmayan değer varsayılana (`PER_CURRENCY`) düşer; guard tx içinde taze okur. */
@@ -7513,6 +7577,19 @@ export async function readFasonShrinkWarnEnabled(
   return asBoolean(setting.value);
 }
 
+/** Fason kabulünde hedef çeşit değeri doğan topa (D4-D3, K8). Kayıt yoksa **false** — bugünkü davranış. */
+export async function readFasonReceiptApplyTargetVariant(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.FASON_RECEIPT_APPLY_TARGET_VARIANT },
+    select: { value: true },
+  });
+  if (!setting) return false;
+  return asBoolean(setting.value);
+}
+
 /** Fabrika varsayılanı — boyahane çekmesi tipik olarak %8-12 bandındadır. */
 export const DEFAULT_FASON_SHRINK_TOLERANCE_PCT = 10;
 
@@ -7547,6 +7624,25 @@ export async function readTamburPlanGateWidthCheck(
     return v as TamburPlanWidthCheck;
   }
   return DEFAULT_TAMBUR_PLAN_WIDTH_CHECK;
+}
+
+/**
+ * Tambur finalize çocuk en kaynağının TEK çözücüsü (D4-E3). Kayıt yok/çöp →
+ * WO_TARGET_FIRST (bugünkü davranış). Ad `read*` — `test_feature_flag_contract` okuyucuyu getFeatureFlags gövdesinden çözer.
+ */
+export async function readTamburChildWidthSource(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<TamburChildWidthSource> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.TAMBUR_CHILD_WIDTH_SOURCE },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (typeof v === "string" && TAMBUR_CHILD_WIDTH_SOURCES.includes(v as TamburChildWidthSource)) {
+    return v as TamburChildWidthSource;
+  }
+  return DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE;
 }
 
 /**

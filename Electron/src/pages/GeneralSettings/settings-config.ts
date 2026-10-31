@@ -1436,6 +1436,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         },
       },
       {
+        key: "fasonReceiptApplyTargetVariant",
+        group: "Fason",
+        title: `Fason kabulünde ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedef desenini dönen topa yaz`,
+        summary: `Dış brodeden dönen top, ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} seçilen deseni taşır; fatura desenin hizmet kalemini kullanır.`,
+        defaultOn: false,
+        audience: ["Planlamacı", "Muhasebeci"],
+        desc: `Açıkken fason kabulünde (ör. dışarıda brode) uygulanan bayrağın çeşidi için ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} seçilmiş hedef değer (desen) dönen topa da yazılır; desene hizmet kalemi eşlenmişse hizmet faturası o kalemle kesilir. Kapalıyken (varsayılan) dönen top yalnız bayrağı taşır, desen yazılmaz. Makbuz iptal edilirse topun deseni de geri alınır.`,
+      },
+      {
         key: "fasonNoteMobileEntry",
         group: "Fason",
         title: "Fason Sevk'te fason talimatını sahadaki operatör telefondan girebilsin",
@@ -1626,6 +1635,21 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: [
           { value: "ENFORCE", label: "Karşılaştır, farkta sor (bugünkü)", hint: "Fark eşiği aşarsa operatör onaylamadan top depoya inmez." },
           { value: "OFF", label: "En karşılaştırılmasın", hint: "Yalnız en kontrolü kapanır; renk farkı yine sorulur." },
+        ],
+      },
+      {
+        // D4-E3 (2026-10-31): `defaultValue` backend `DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE` ile birebir.
+        enumKey: "tamburChildWidthSource",
+        group: "Tambur",
+        title: "Tambur'dan çıkan topların eni",
+        summary: "Tambur'da bölünen topların enine hangi değer yazılsın.",
+        desc: `${TERIM.terbiyeIsEmri.cekim.ilgi} eni önce (varsayılan): çıkan toplara ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} eni yazılır, boşsa ana topun eni. Ölçülen en önce: ana topun eni en ölçen bir istasyonda (ör. etek kesim) ölçüldüyse çıkan toplara o ölçülen en yazılır; ölçülmediyse varsayılandaki gibi. Yalnız bundan sonra Tambur'dan çıkan topları etkiler; etiket ve çeki listesi bu eni basar.`,
+        defaultValue: "WO_TARGET_FIRST",
+        display: "radio",
+        audience: ["Planlamacı", "Yönetim"],
+        options: [
+          { value: "WO_TARGET_FIRST", label: `${TERIM.terbiyeIsEmri.cekim.ilgi} eni önce (bugünkü)`, hint: "Hedef en yoksa ana topun eni yazılır." },
+          { value: "MEASURED_FIRST", label: "Ölçülen en önce", hint: "Ana topun ölçülmüş eni varsa o yazılır; yoksa hedef en." },
         ],
       },
     ],
@@ -2290,6 +2314,22 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: [
           { value: "ALLOW", label: "Serbest (varsayılan)", hint: "Koyan kişi de açabilir." },
           { value: "DENY", label: "Başka bir yetkili açsın", hint: "Koyan kişinin açma isteği reddedilir." },
+        ],
+      },
+      {
+        // D4-I1c (S11): `defaultValue` backend `DEFAULT_CARI_HOLD_EMANET_SHIPMENT` ile birebir; seçim fabrikanın.
+        enumKey: "financeCariHoldEmanetShipment",
+        group: "Cari kilidi",
+        title: "Sevki kilitli caride müşterinin kendi malı",
+        summary: "Cari sevke kilitliyken müşterinin bize emanet bıraktığı kumaş ona geri gönderilebilsin mi.",
+        desc: "Müşterinin kendi malını (emanet) borç yüzünden tutmak hapis hakkı (Türk Medeni Kanunu md. 950) kapsamındadır; hangi seçeneği kullanacağınıza karar vermeden önce hukuki teyit almanız önerilir. Seçim fabrikanındır. İşlenmiş top: üzerinde kurşun, kalite, tambur, fason ya da makine ölçümü kaydı olan ya da kesimle doğmuş top. Fabrikanın kendi malı ya da başka müşterinin malı karışan sevk her seçenekte kilide takılır.",
+        defaultValue: "EXEMPT",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "EXEMPT", label: "Emanet mal serbest (varsayılan)", hint: "Sevkteki topların hepsi müşterinin kendi malıysa kilit sevki durdurmaz." },
+          { value: "PROCESSED_HELD", label: "İşlenmiş emanet tutulsun", hint: "Üzerinde iş yapılmış emanet top kilit açılana dek sevk edilmez; işlenmemiş mal iade edilebilir." },
+          { value: "ALL_HELD", label: "Bütün emanet tutulsun", hint: "Kilit açılana dek müşterinin hiçbir emanet topu sevk edilmez." },
         ],
       },
       {

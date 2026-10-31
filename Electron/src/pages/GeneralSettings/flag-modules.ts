@@ -156,6 +156,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   tamburShortCutA1ThresholdM: "productionEnabled",
   tamburPlanGateWidthToleranceCm: "productionEnabled",
   tamburPlanGateWidthCheck: "productionEnabled",
+  tamburChildWidthSource: "productionEnabled",
   tamburListByStationEnabled: "productionEnabled",
   machineStopTrackingEnabled: "productionEnabled",
   machineStopOpenWarningEnabled: "productionEnabled",
@@ -183,6 +184,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   financeExpenseCategorySuggestions: "financeEnabled",
   financeCariHoldDefaultScope: "financeEnabled",
   financeCariHoldReleaseBySamePerson: "financeEnabled",
+  financeCariHoldEmanetShipment: "financeEnabled",
   costPresentationCurrency: "cekirdek", // SY-J1: `maliyetEnabled` gizlenebilir modül değil (HideableModule dışı)
   financeRiskLimitCurrencyMode: "financeEnabled",
   // D4-G2a: kârlılık geliri faturadan okunur (maliyet ∧ finans); maliyet gizlenebilir modül değil → sahibi finans.
@@ -212,6 +214,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   // (`module.middleware.ts` başlığı ve `screen-catalog` aynı kararı taşır).
   // Anahtar doğana kadar bu satırlar HER kurulumda görünür.
   fasonShrinkWarnEnabled: "planlanan:fason",
+  fasonReceiptApplyTargetVariant: "planlanan:fason",
   fasonShrinkTolerancePct: "planlanan:fason",
   fasonNoteMobileEntry: "planlanan:fason",
   kartelaMeasurementEnabled: "planlanan:kartela",

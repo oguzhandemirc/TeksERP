@@ -16,6 +16,7 @@ import { refreshQuoteLineCost, resolveQuoteLineCost, type QuoteLineCost } from "
 import { MARKUP_RULE, parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
 import { parseAdHoc, resolveMarkup } from "./cost-calc.service";
 import { QUOTE_INCLUDE, QUOTE_TABLE, type QuoteRecord } from "./sales-quote-transitions.service";
+import { assertRecipesMatchItems, readRecipeId } from "./helpers/line-recipe.helper";
 
 const QTY_RULE = { label: "Miktar", min: 0, minExclusive: true, scale: 3 } as const;
 const PRICE_RULE = { label: "Birim fiyat", min: 0, scale: 2 } as const;
@@ -34,13 +35,13 @@ function readOptUuid(raw: unknown, label: string): string | null {
   return raw;
 }
 
-interface Pricing { markupPct: Prisma.Decimal; manualPrice: Prisma.Decimal | null; quantity: Prisma.Decimal; colorId: string | null; itemId: string | null }
+interface Pricing { markupPct: Prisma.Decimal; manualPrice: Prisma.Decimal | null; quantity: Prisma.Decimal; colorId: string | null; itemId: string | null; recipeId: string | null }
 
 /** Öneri (tek zincir) + seçilen fiyat + satır toplamı — tx İÇİNDE, DRAFT kilidinin arkasında. */
 async function priceLineTx(tx: Prisma.TransactionClient, quoteId: string, cost: QuoteLineCost, p: Pricing) {
   const q = await tx.salesQuote.findUniqueOrThrow({ where: { id: quoteId } });
   const s = await resolveQuotePriceSuggestionTx(tx, {
-    itemId: p.itemId, colorId: p.colorId, customerId: q.customerId, currency: q.currency, costPerMTry: cost.costPerMTry,
+    itemId: p.itemId, colorId: p.colorId, recipeId: p.recipeId, customerId: q.customerId, currency: q.currency, costPerMTry: cost.costPerMTry,
     markupPct: p.markupPct, fxRate: q.fxRate, freightPerM: q.freightPerM, financeChargePct: q.financeChargePct, commissionPct: q.commissionPct,
   });
   const suggested = s.suggested ?? s.costPlus;
@@ -77,6 +78,9 @@ export async function addQuoteLine(quoteId: string, body: Record<string, unknown
   const quantity = parseDecimalField(body.quantity, QTY_RULE);
   if (!quantity) throw AppError.badRequest("Miktar zorunlu.");
   const colorId = readOptUuid(body.colorId, "Renk");
+  const recipeId = readRecipeId(body.recipeId, "Kalem") ?? null;
+  if (recipeId && !itemId) throw AppError.badRequest("Varyant yalnız ürünlü kaleme verilir.", { code: "RECIPE_ITEM_MISMATCH", recipeId, itemId: null });
+  if (recipeId) await assertRecipesMatchItems(prisma, [{ itemId, recipeId, label: "Kalem", isNew: true }]);
   const width = parseDecimalField(body.width, WIDTH_RULE) ?? null;
   const manualPrice = parseDecimalField(body.unitPrice, PRICE_RULE) ?? null;
   const notes = parseTextField(body.notes, "Kalem notu", 500) ?? null;
@@ -87,10 +91,10 @@ export async function addQuoteLine(quoteId: string, body: Record<string, unknown
   const cost = await resolveQuoteLineCost(itemId ? { itemId } : { adHoc: parseAdHoc(adHoc!) });
   const line = await prisma.$transaction(async (tx) => {
     await claimDraftQuoteTx(tx, quoteId, userId);
-    const priced = await priceLineTx(tx, quoteId, cost, { markupPct, manualPrice, quantity, colorId, itemId });
+    const priced = await priceLineTx(tx, quoteId, cost, { markupPct, manualPrice, quantity, colorId, itemId, recipeId });
     const max = await tx.salesQuoteLine.aggregate({ where: { quoteId }, _max: { lineNo: true } });
     const created = await tx.salesQuoteLine.create({
-      data: { quoteId, lineNo: (max._max.lineNo ?? 0) + 1, itemId, colorId, description, width, quantity, unit, notes, ...priced },
+      data: { quoteId, lineNo: (max._max.lineNo ?? 0) + 1, itemId, colorId, recipeId, description, width, quantity, unit, notes, ...priced },
     });
     await recomputeTotalsTx(tx, quoteId);
     return created;
@@ -113,21 +117,26 @@ export async function updateQuoteLine(quoteId: string, lineId: string, body: Rec
   const notes = parseTextField(body.notes, "Kalem notu", 500);
   const width = parseDecimalField(body.width, WIDTH_RULE);
   const colorId = body.colorId === undefined ? undefined : readOptUuid(body.colorId, "Renk");
+  const recipeId = readRecipeId(body.recipeId, "Kalem");
   await prisma.$transaction(async (tx) => {
     await claimDraftQuoteTx(tx, quoteId, userId);
     const l = await tx.salesQuoteLine.findFirst({ where: { id: lineId, quoteId } });
     if (!l) throw AppError.notFound("Teklif kalemi bulunamadı.");
+    if (recipeId) {
+      if (!l.itemId) throw AppError.badRequest("Varyant yalnız ürünlü kaleme verilir.", { code: "RECIPE_ITEM_MISMATCH", recipeId, itemId: null });
+      await assertRecipesMatchItems(tx, [{ itemId: l.itemId, recipeId, label: "Kalem", isNew: recipeId !== l.recipeId }]);
+    }
     // `unitPrice: null` → öneriye dön; verilmezse önceki seçim (MANUAL ise elle fiyat) korunur.
     const keepManual = manualPrice === undefined && l.priceSource === "MANUAL" ? l.unitPrice : null;
     const cost: QuoteLineCost = { costPerMTry: l.costPerMTry, standardCostVersionId: l.standardCostVersionId, snapshot: l.costSnapshot as never, warnings: [] };
     const priced = await priceLineTx(tx, quoteId, cost, {
       markupPct: markupRaw ?? l.markupPct, manualPrice: manualPrice ?? keepManual, quantity: quantity ?? l.quantity,
-      colorId: colorId === undefined ? l.colorId : colorId, itemId: l.itemId,
+      colorId: colorId === undefined ? l.colorId : colorId, itemId: l.itemId, recipeId: recipeId === undefined ? l.recipeId : recipeId,
     });
     await tx.salesQuoteLine.update({
       where: { id: lineId },
       data: {
-        ...priced, quantity: quantity ?? l.quantity, ...(colorId !== undefined ? { colorId } : {}), ...(description ? { description } : {}),
+        ...priced, quantity: quantity ?? l.quantity, ...(colorId !== undefined ? { colorId } : {}), ...(recipeId !== undefined ? { recipeId } : {}), ...(description ? { description } : {}),
         ...(notes !== undefined ? { notes } : {}), ...(width !== undefined ? { width } : {}),
       },
     });
@@ -156,7 +165,7 @@ export async function refreshQuoteCosts(quoteId: string, userId?: string): Promi
     await claimDraftQuoteTx(tx, quoteId, userId);
     for (const [i, l] of lines.entries()) {
       const priced = await priceLineTx(tx, quoteId, costs[i]!, {
-        markupPct: l.markupPct, manualPrice: l.priceSource === "MANUAL" ? l.unitPrice : null, quantity: l.quantity, colorId: l.colorId, itemId: l.itemId,
+        markupPct: l.markupPct, manualPrice: l.priceSource === "MANUAL" ? l.unitPrice : null, quantity: l.quantity, colorId: l.colorId, itemId: l.itemId, recipeId: l.recipeId,
       });
       const r = await tx.salesQuoteLine.updateMany({ where: { id: l.id, quoteId }, data: priced });
       if (r.count === 0) throw AppError.conflict("Teklif kalemleri aynı anda değişti; sayfayı yenileyin.", { code: "QUOTE_STATUS_CONFLICT" });

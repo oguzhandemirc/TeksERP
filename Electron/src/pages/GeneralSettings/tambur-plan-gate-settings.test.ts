@@ -43,3 +43,17 @@ describe("Tambur en kapısı ayar satırları", () => {
     expect(FLAG_MODULE.tamburPlanGateWidthToleranceCm).toBe("productionEnabled");
   });
 });
+
+// D4-E3 (2026-10-31): `tambur.childWidthSource` (WO_TARGET_FIRST | MEASURED_FIRST,
+// varsayılan WO_TARGET_FIRST = bugünkü). Backend aynası `test_tambur_cocuk_en_kaynagi.ts`.
+describe("Tambur çocuk top en kaynağı ayar satırı", () => {
+  it("enum satırı: WO_TARGET_FIRST varsayılan, iki seçenek, Tambur grubunda, üretim modülünde", () => {
+    const row = production?.enumFlags?.find((r) => r.enumKey === "tamburChildWidthSource");
+    expect(row).toBeDefined();
+    expect(row?.defaultValue).toBe("WO_TARGET_FIRST");
+    expect(row?.options.map((o) => o.value)).toEqual(["WO_TARGET_FIRST", "MEASURED_FIRST"]);
+    expect(row?.group).toBe("Tambur");
+    expect(row?.desc).toMatch(/ölçül/i);
+    expect(FLAG_MODULE.tamburChildWidthSource).toBe("productionEnabled");
+  });
+});
