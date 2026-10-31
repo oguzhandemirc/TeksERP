@@ -77,6 +77,13 @@ export const KIND_RULES: Readonly<Record<NotificationKind, KindRule>> = {
     permissions: ["bulut:cari-bakiye:oku", "bulut:cek:oku"],
     finance: true,
   },
+  "cari-kilit": {
+    label: "Cari kilidi",
+    description: "Fabrikada bir cari kilitlendi ya da kilidi açıldı (her kilit için bir kez)",
+    source: "cari-hesap",
+    permissions: ["bulut:cari-bakiye:oku"],
+    finance: true,
+  },
 };
 
 /** Katalog ölçümü — hata listesi (boşsa tutarlı). Açılışta ve bekçide koşar. */
@@ -130,6 +137,14 @@ export const DEFAULT_SETTINGS: NotificationSettings = {
   sessiz: { acik: true, baslangic: "22:00", bitis: "07:00" },
   esikler: { hamStokAlt: null, bitmisStokAlt: null, gecikenKalemUst: 0, gunlukUretimAlt: null, gunlukUretimSaati: 18, esitlemeGecikmeDk: 60 },
 };
+
+/** Gelen ayar gövdesi: eski uygulama sonradan eklenen türü göndermez → eksik tür varsayılandan (400 değil); tanınmayan tür yine 400. */
+export const IncomingSettingsSchema = z.preprocess((v) => {
+  if (v === null || typeof v !== "object" || Array.isArray(v)) return v;
+  const o = v as Record<string, unknown>;
+  if (!o.turler || typeof o.turler !== "object" || Array.isArray(o.turler)) return v;
+  return { ...o, turler: { ...DEFAULT_SETTINGS.turler, ...(o.turler as Record<string, unknown>) } };
+}, SettingsSchema);
 
 /** Saklı ayar (jsonb) → şemadan geçen ayar; biçimsizse null (fail-closed: bir üst kaynağa düşülür). */
 export function parseStored(value: unknown): NotificationSettings | null {

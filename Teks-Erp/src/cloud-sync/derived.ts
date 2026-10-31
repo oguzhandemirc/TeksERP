@@ -19,6 +19,7 @@ import {
 } from "../services/reports/finance-aging.report";
 import { WorkOrderService, WO_LIST_CUSTOMER_LINKS } from "../services/workorder.service";
 import { COST_DERIVERS, COST_DERIVER_ROW_FIELDS } from "./derived-cost";
+import { cariLockByCari } from "./derived-cari-hold";
 
 type RawRow = Record<string, unknown> & { id: string };
 export type DerivedValues = Map<string, Record<string, unknown>>;
@@ -170,8 +171,9 @@ async function cariAccountDerived(rows: readonly RawRow[], nowMs: number): Promi
     overdueBy.set(a.cariId, [...(overdueBy.get(a.cariId) ?? []), { doviz: a.currency, tutar: a.overdueTotal }]);
   }
   for (const list of overdueBy.values()) list.sort((a, b) => a.doviz.localeCompare(b.doviz));
+  const locks = await cariLockByCari(cariIds);
   const out: DerivedValues = new Map();
-  for (const id of cariIds) out.set(id, { bakiyeler: balanceBy.get(id) ?? [], gecikmis: overdueBy.get(id) ?? [] });
+  for (const id of cariIds) out.set(id, { bakiyeler: balanceBy.get(id) ?? [], gecikmis: overdueBy.get(id) ?? [], kilit: locks.get(id) ?? null });
   return out;
 }
 
