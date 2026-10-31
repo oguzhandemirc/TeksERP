@@ -132,7 +132,7 @@ import { hata, uyari } from "../lib/logger";
 import { hasRoll, isRollItem } from "./helpers/dispatch-item-kind.helper";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
 import { ekranYolu } from "../constants/panel-ekran-yolu";
-import { readReceiptTargetVariantsTx } from "./helpers/fason-receipt-variant.helper";
+import { readReceiptTargetVariantsTx, receiptOperationValueId } from "./helpers/fason-receipt-variant.helper";
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -3294,6 +3294,13 @@ export class SubcontractorService {
         })),
       });
 
+      // D4-D3/MIG6 (K8): ayar açıkken uygulanan bayrağın çeşidindeki İE hedefi (desen) — yalnız top DOĞAN kabulde;
+      // doğan topa RollProperty, dönüş işlemine `propertyValueId` (tek desen; ters yol mevcut revoke damgası).
+      const receiptVariants = data.newRolls && data.newRolls.length > 0
+        ? await readReceiptTargetVariantsTx(tx, { workOrderId: data.workOrderId, appliedFlagIds: resolvedAppliedPropertyIds })
+        : [];
+      const returnedValueId = receiptOperationValueId(receiptVariants);
+
       // 4) RollOperation log — orijinal Roll'a son işlem (SUBCONTRACTOR_RETURNED).
       //    Unique key (rollId, stepId, opType) — re-receive sessiz geçer.
       await tx.rollOperation.createMany({
@@ -3302,6 +3309,7 @@ export class SubcontractorService {
           workOrderStepId: data.stepId,
           operationType: RollOperationType.SUBCONTRACTOR_RETURNED,
           operatorId: userId ?? null,
+          ...(returnedValueId ? { propertyValueId: returnedValueId } : {}),
           metadata: {
             receiptNo,
             manifestNo: manifestNoTrimmed,
@@ -3501,9 +3509,9 @@ export class SubcontractorService {
         // @@unique(rollId,propertyId) çakışması koca tx'i retry'a sokmasın
         // (receiptProperty createMany'siyle aynı savunma).
         if (resolvedAppliedPropertyIds.length > 0) {
-          // D4-D3 (K8): ayar açıkken uygulanan bayrağın çeşidindeki İE hedefi (desen) doğan topa — aynı tx;
-          // çeşit özelliği değersiz satır olarak da gelmişse değerli satır onun yerini alır (aktif çift tekil).
-          const variants = await readReceiptTargetVariantsTx(tx, { workOrderId: data.workOrderId, appliedFlagIds: resolvedAppliedPropertyIds });
+          // D4-D3 (K8): hedef desen doğan topa — aynı tx; çeşit özelliği değersiz satır olarak da gelmişse
+          // değerli satır onun yerini alır (aktif çift tekil). Okuma yukarıda (dönüş işlemiyle aynı küme).
+          const variants = receiptVariants;
           const valued = new Set(variants.map((v) => v.propertyId));
           await tx.rollProperty.createMany({
             data: bornRollInputs.flatMap(({ id }) => [

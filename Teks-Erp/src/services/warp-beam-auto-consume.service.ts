@@ -16,6 +16,8 @@ import { readDevereAutoConsume, readDevereEnabled } from "./system-setting.servi
 import { applyWarpBeamEventTx } from "./helpers/warp-beam-event.helper";
 import { beamsMountedDuring, type BeamMountedDuringRow } from "./helpers/warp-beam-mount.helper";
 import { remainingMTx } from "./helpers/warp-beam-ledger.helper";
+import { readSharedBeamGroupsForRoll } from "./helpers/effective-construction.helper";
+import { fastestGroupTakeUpPct } from "./helpers/warp-layer-beam.helper";
 import { KK1_BEAM_CHANGE_WINDOW_HOURS, KK1_BEAM_CHANGE_WINDOW_MS } from "../constants/dokuma-kk1";
 
 type Tx = Prisma.TransactionClient;
@@ -89,9 +91,12 @@ export async function autoConsumeForRollTx(tx: Tx, input: AutoConsumeInput): Pro
   const lines = Math.max(1, doff.machine.productionLineCount);
   const fabric = D(input.fabricLengthM).div(lines).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP);
   if (lines > 1) warnings.push(`${doff.machine.code} ${lines} hatlı — top metresi hat payı olarak düşüldü (${fabric} m/levent; kardeş hat topları kendi payını düşer).`);
+  // SY-B1 SHARED_BEAM: zemin leventinde ek tel grubu varsa kalan EN HIZLI tükenen gruptan düşer.
+  const shared = await readSharedBeamGroupsForRoll(tx, input.rollId);
   for (const m of mounted) {
-    const beam = await tx.warpBeam.findUniqueOrThrow({ where: { id: m.beamId }, select: { id: true, beamNo: true, status: true, currentMachineId: true, warpSpec: { select: { takeUpPct: true } } } });
-    const takeUp = beam.warpSpec.takeUpPct;
+    const beam = await tx.warpBeam.findUniqueOrThrow({ where: { id: m.beamId }, select: { id: true, beamNo: true, status: true, currentMachineId: true, warpSpecId: true, warpSpec: { select: { takeUpPct: true } } } });
+    const isSharedGround = shared !== null && beam.warpSpecId === shared.groundWarpSpecId;
+    const takeUp = isSharedGround ? fastestGroupTakeUpPct(beam.warpSpec.takeUpPct, shared.layers) : beam.warpSpec.takeUpPct;
     const wanted = warpLengthFromFabric(fabric, takeUp);
     if (takeUp == null) warnings.push(`${beam.beamNo}: çözgü kartında take-up yok — çözgü = kumaş sayıldı (${wanted} m, tahmin).`);
     const remaining = await remainingMTx(tx, beam.id);
@@ -107,7 +112,7 @@ export async function autoConsumeForRollTx(tx: Tx, input: AutoConsumeInput): Pro
       kind: "CONSUMED",
       from: beam.status,
       to: beam.status,
-      data: { rollId: input.rollId, lengthM, lengthSource: "ESTIMATED", fabricLengthM: fabric, machineId: doff.machineId, mountPosition: m.mountPosition, reason: takeUp == null ? "Top doğuşu — take-up bilinmiyor, çözgü = kumaş" : `Top doğuşu — take-up %${takeUp}`, createdById: input.userId ?? null },
+      data: { rollId: input.rollId, lengthM, lengthSource: "ESTIMATED", fabricLengthM: fabric, machineId: doff.machineId, mountPosition: m.mountPosition, reason: takeUp == null ? "Top doğuşu — take-up bilinmiyor, çözgü = kumaş" : `Top doğuşu — ${isSharedGround ? "ortak levent, en hızlı grup " : ""}take-up %${takeUp}`, createdById: input.userId ?? null },
     });
   }
   return warnings;
