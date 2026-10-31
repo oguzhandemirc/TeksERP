@@ -37,6 +37,7 @@ export const PANEL_EKRAN = {
   terbiyeIsEmirleri: { menu: "Operasyon", karo: TERIM.terbiyeIsEmri.cogul },
   faturalar: { menu: "Ön Muhasebe", karo: "Faturalar" },
   kasaHareketleri: { menu: "Ön Muhasebe", karo: "Kasa Hareketleri" },
+  kurlar: { menu: "Ön Muhasebe", karo: "Kurlar" },
   kisaKimlikler: { menu: "Yetkilendirme", karo: "Kullanıcılar", alt: "Kısa Kimlikler" },
   tabletler: { menu: "Yetkilendirme", karo: "Tabletler" },
   raporGorunurlugu: { menu: "Sistem", karo: "Modüller", alt: "Raporlar" },

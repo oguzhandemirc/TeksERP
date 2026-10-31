@@ -41,6 +41,7 @@ export const PANEL_SETTING_ROW = {
   financeRiskLimitBlockEnabled: { ekran: "finance", baslik: "Risk limiti aşımında satış faturası onayını engelle" },
   financeRiskLimitBlockIntake: { ekran: "finance", baslik: "Risk limiti aşımında yeni iş kabulünü engelle" },
   financeRiskLimitBlockShipment: { ekran: "finance", baslik: "Risk limiti aşımında sevki engelle" },
+  financeRiskLimitCurrencyMode: { ekran: "finance", baslik: "Risk limiti para birimi" },
   financeYarnOutOnInvoiceEnabled: { ekran: "finance", baslik: "Satış faturası onayında iplik stoktan düşsün" },
   financeFutureDatedDocumentBlockEnabled: { ekran: "finance", baslik: "İleri tarihli mali belgeyi engelle" },
   financeAutoAllocateOnPaymentEnabled: { ekran: "finance", baslik: "Tahsilat/ödemeyi en eski faturalara otomatik kapat (FIFO)" },

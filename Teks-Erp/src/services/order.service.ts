@@ -68,6 +68,8 @@ export const ORDER_LINE_WRITABLE: ReadonlySet<string> = new Set([
   "cutNote",
   "customerItemName",
   "customerColorName",
+  // Varyant (SY-K1k): `prepareOrderLineRecipes` normalize eder ve ürüne aitliğini sınar.
+  "recipeId",
 ]);
 import { readOrderDefaultDeadlineDays } from "./system-setting.service";
 import { CURRENCIES } from "../config/currencies";
@@ -101,6 +103,13 @@ import { warehouseStampManyTx } from "./helpers/warehouse.helper";
 import { ACTIVE_ORDER_LINK, activeOrderLinkCount, unlinkOrderLinesTx, withActiveOrderLinks } from "./helpers/order-link.helper";
 import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
 import { runItemUsageChecks, runItemUsageChecksTx, type ItemUsageCheck } from "./helpers/item-usage.helper";
+import { prepareOrderLineRecipes } from "./helpers/line-recipe.helper";
+import {
+  lineTargetValuesNestedCreate,
+  preparedTargetValues,
+  prepareLineTargetValues,
+  targetSetChanged,
+} from "./helpers/order-line-target-value.helper";
 
 // ─── Cancel Akışı Karar Matrisi ─────────────────────────────────────────────
 //
@@ -1076,6 +1085,27 @@ export class OrderService extends BaseService {
     const warnings = await runItemUsageChecks(prisma, checks);
     await this.assertLineRefsLive(colorIds, propertyIds);
     return { unitByItem, checks, warnings };
+  }
+
+  /**
+   * Varyant + hedef değer gövde kapıları (SY-K1k). Mevcut özellik doğrulamasından ÖNCE: hedefin BAYRAK ikizi
+   * `requiredPropertyIds`e burada girer ki izinli liste/aktiflik kapıları onu da sınasın.
+   */
+  private async prepareLineVariants(
+    lines: unknown,
+    current: ReadonlyArray<{
+      id: string;
+      itemId: string;
+      recipeId: string | null;
+      targetValues?: ReadonlyArray<{ propertyId: string; valueId: string }>;
+    }> = [],
+  ): Promise<void> {
+    await prepareOrderLineRecipes(prisma, lines, current);
+    await prepareLineTargetValues(
+      prisma,
+      lines,
+      current.map((l) => ({ id: l.id, targetValues: l.targetValues ?? [] })),
+    );
   }
 
   /** Satırın renk/özellik referansları var ve aktif mi (M-23 / denetim Q2). */
@@ -2132,6 +2162,7 @@ export class OrderService extends BaseService {
       throw AppError.badRequest("Sipariş en az bir kalem içermeli.");
     }
     this.validateLines(data.lines);
+    await this.prepareLineVariants(data.lines);
     const lineCheck = await this.validateLineItems(data.lines, { fromScannedRolls: opts?.fromScannedRolls });
     const unitByItem = lineCheck.unitByItem;
 
@@ -2226,6 +2257,7 @@ export class OrderService extends BaseService {
             create: ids.map((propertyId) => ({ propertyId })),
           };
         }
+        Object.assign(line, lineTargetValuesNestedCreate(preparedTargetValues(rawLine)));
         return line;
       });
     }
@@ -2589,7 +2621,9 @@ export class OrderService extends BaseService {
             // seçilmezse `undefined !== null` ile TÜM kalemleri iptal sayar ve
             // hiçbir kalem güncellenemez olurdu (sessiz felç).
             cancelledAt: true,
+            recipeId: true,
             requiredProperties: { select: { propertyId: true } },
+            targetValues: { select: { propertyId: true, valueId: true } },
             workOrderLinks: {
               where: ACTIVE_ORDER_LINK,
               select: {
@@ -2738,6 +2772,7 @@ export class OrderService extends BaseService {
         );
       }
       this.validateLines(incomingLines);
+      await this.prepareLineVariants(incomingLines, current.lines);
       lineCheck = await this.validateLineItems(incomingLines, { current: current.lines });
       unitByItem = lineCheck.unitByItem;
 
@@ -2754,6 +2789,8 @@ export class OrderService extends BaseService {
       }
     }
 
+    // Hedef değer kümesi değişen satırlar — audit'e eski/yeni küme (tx dışında yazılır).
+    const targetChanges: Array<{ lineId: string; eski: unknown; yeni: unknown }> = [];
     // Tek transaction: lines diff + header update + final fetch.
     const updated = await prisma.$transaction(async (tx) => {
       // İLK ifade: satır kartlarının kilidi (8030 SHARED → FOR SHARE, itemId sırasıyla).
@@ -2891,6 +2928,17 @@ export class OrderService extends BaseService {
                 skipDuplicates: true,
               });
             }
+            // Hedef değer kümesi ③b replace: gövdede yoksa dokunulmaz (eski istemci), fark yoksa yazılmaz.
+            const targets = preparedTargetValues(raw);
+            if (targets && targetSetChanged(existingLine.targetValues, targets)) {
+              await tx.orderLineTargetValue.deleteMany({ where: { orderLineId: lineId } });
+              if (targets.length > 0) {
+                await tx.orderLineTargetValue.createMany({
+                  data: targets.map((t) => ({ orderLineId: lineId, propertyId: t.propertyId, valueId: t.valueId })),
+                });
+              }
+              targetChanges.push({ lineId, eski: existingLine.targetValues, yeni: targets });
+            }
           } else {
             await tx.orderLine.create({
               data: {
@@ -2903,6 +2951,7 @@ export class OrderService extends BaseService {
                       },
                     }
                   : {}),
+                ...lineTargetValuesNestedCreate(preparedTargetValues(raw)),
               },
             });
           }
@@ -2960,6 +3009,7 @@ export class OrderService extends BaseService {
       newData: {
         ...cleanData,
         ...(incomingLines ? { linesCount: incomingLines.length } : {}),
+        ...(targetChanges.length > 0 ? { hedefDegerleri: targetChanges } : {}),
       },
       changes,
     });

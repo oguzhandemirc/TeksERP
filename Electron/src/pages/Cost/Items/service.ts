@@ -2,11 +2,11 @@
 // SUNUCUDA (tek where); önizleme YAZMAZ. Gövdeler açık alan listesiyle kurulur.
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
-import type { CostInputSnap, CostPreview, CostVersion, FxRates, StructureStatus } from "../shared/cost-types";
+import type { CostInputSnap, CostPresentationFields, CostPreview, CostVersion, FxRates, StructureStatus } from "../shared/cost-types";
 
 export interface CostItemRow {
   itemId: string; kod: string; ad: string; yapiDurumu: StructureStatus; eksikler: string[]; uyarilar: string[];
-  aktifSurum: { id: string; surumNo: number; standartTlM: string; hesaplananAt: string } | null; girdiDegisti: boolean;
+  aktifSurum: ({ id: string; surumNo: number; standartTlM: string; hesaplananAt: string } & CostPresentationFields) | null; girdiDegisti: boolean;
 }
 export interface CostItemSummary { toplam: number; TAM: number; VARSAYILAN: number; YAPI_EKSIK: number; girdiDegisti: number; surumsuz: number }
 export interface CostItemPage { data: CostItemRow[]; ozet: CostItemSummary; toplamSuzulen: number; nextCursor: string | null }
@@ -17,8 +17,13 @@ export const STRUCTURE_KEYS = [
   "lengthShrinkPct", "extraCostPerMTry",
 ] as const;
 export type StructureKey = (typeof STRUCTURE_KEYS)[number];
-export type CostStructure = Record<StructureKey, string | number | null> & { finishingRateCode: string | null; extraCostLabel: string | null; notes: string | null };
-export type StructureBody = Record<StructureKey, string | null> & { finishingRateCode: string | null; extraCostLabel: string | null; notes: string | null };
+export type CostStructure = Record<StructureKey, string | number | null> & {
+  finishingRateCode: string | null; extraCostLabel: string | null; notes: string | null;
+  /** SY-G1 ek işlemler (sunucu sırasıyla). Eski sunucu göndermez → boş liste sayılır. */
+  processes?: Array<{ rateCode: string; sortOrder: number }>;
+};
+/** `processes` verilmezse sunucu ek işlemlere DOKUNMAZ; verilirse sıralı tam küme. */
+export type StructureBody = Record<StructureKey, string | null> & { finishingRateCode: string | null; extraCostLabel: string | null; notes: string | null; processes?: string[] };
 
 export interface CostItemDetail {
   urun: { id: string; kod: string; ad: string };
@@ -38,6 +43,7 @@ export function buildStructureBody(v: StructureBody): StructureBody {
   out.finishingRateCode = v.finishingRateCode ?? null;
   out.extraCostLabel = v.extraCostLabel ?? null;
   out.notes = v.notes ?? null;
+  if (Array.isArray(v.processes)) out.processes = v.processes.filter((c): c is string => typeof c === "string" && c.length > 0);
   return out;
 }
 

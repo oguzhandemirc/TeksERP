@@ -110,8 +110,24 @@ export interface CariHoldNotice {
   koyan: string;
   tarih: string;
   message: string;
-  /** K22: SHIPMENT kilidi, sevkteki TÜM toplar sevk müşterisinin emanetiyse ısırmaz (önizlemede bilgi). */
+  /** K22: SHIPMENT kilidi, ayara göre emanet sevki aşıyorsa ısırmaz (önizlemede bilgi). */
   exempt?: boolean;
+  /** D4-I1c: emanet sevki ayarı (`finance.cariHold.emanetShipment`) — yalnız SHIPMENT görünümünde. */
+  emanetShipment?: string;
+  /** D4-I1c: ayar yüzünden TUTULAN emanet toplar (barkod + sebep); karışık sevkte boş. */
+  heldRolls?: HeldRollView[];
+}
+
+/** `emanet-shipment.helper` kararının bu dosyanın gördüğü yapısal yüzü (top tablosu okunmaz, import yok). */
+export interface HeldRollView {
+  rollId: string;
+  barcode: string | null;
+  reason: "PROCESSED" | "ALL_HELD";
+}
+export interface EmanetReleaseView {
+  mode: string;
+  exempt: boolean;
+  heldRolls: HeldRollView[];
 }
 
 /** Müşterinin `scope`u kapsayan aktif kilidi varsa görünümü; yoksa null (önizleme bunu uyarıya çevirir). */
@@ -141,7 +157,15 @@ export async function cariHoldNotice(
 }
 
 function holdError(n: CariHoldNotice): AppError {
-  return AppError.conflict(n.message, { code: "CARI_HOLD", holdId: n.holdId, scope: n.scope, sebep: n.sebep, koyan: n.koyan, tarih: n.tarih });
+  return AppError.conflict(n.message, {
+    code: "CARI_HOLD",
+    holdId: n.holdId,
+    scope: n.scope,
+    sebep: n.sebep,
+    koyan: n.koyan,
+    tarih: n.tarih,
+    ...(n.heldRolls && n.heldRolls.length > 0 ? { emanetShipment: n.emanetShipment, heldRolls: n.heldRolls } : {}),
+  });
 }
 
 /**
@@ -157,39 +181,46 @@ export async function assertCariNotHeldTx(
   if (notice) throw holdError(notice);
 }
 
-/**
- * K22: kilit altında emanetin SAHİBİNE sevki — S11 (TBK hapis hakkı) cevabına kadar kod sabiti, ayar DEĞİL (yasal karar).
- * EXEMPT: sevkteki TÜM toplar sevk müşterisinin emanetiyse SHIPMENT kilidi ısırmaz; karışık sevk kesilir.
- */
-export const CARI_HOLD_EMANET_SHIPMENT: "EXEMPT" | "BLOCK" = "EXEMPT";
+/** Tutulan emanet topların cümlesi — kapı mesajı ve önizleme uyarısı aynı metni basar. */
+function heldRollsText(rolls: HeldRollView[]): string {
+  // Toast okunur kalsın: ilk 10 barkod + kalan sayısı; tam liste `details.heldRolls`ta.
+  const shown = rolls.slice(0, 10).map((r) => r.barcode ?? "?").join(", ");
+  const list = rolls.length > 10 ? `${shown} +${rolls.length - 10} top daha` : shown;
+  return rolls[0]?.reason === "ALL_HELD"
+    ? ` Fabrika ayarı gereği müşterinin emanet malı da kilit açılana dek sevk edilmez (${rolls.length} top: ${list}).`
+    : ` Fabrika ayarı gereği işlenmiş emanet top kilit açılana dek sevk edilmez (${rolls.length} işlenmiş top: ${list}); işlenmemiş emanet ayrı sevkle iade edilebilir.`;
+}
 
 /**
- * SEVK KAPISI (SHIPMENT) — `ownEmanetOnly` yalnız kilit VARSA sorulur (kilitsiz yol tek okuma). Emanet verisi
- * çağırandan gelir (`emanet-owner.helper` `rollsAllOwnedByTx`); bu dosya top tablosunu okumaz.
+ * SEVK KAPISI (SHIPMENT) — `emanetRelease` yalnız kilit VARSA sorulur (kilitsiz yol tek okuma). Karar çağırandan gelir
+ * (`emanet-shipment.helper` `emanetShipmentReleaseTx`, ayar + "işlenmiş" yüklemi orada); bu dosya top tablosunu okumaz.
  */
 export async function shipmentHoldNotice(
   db: HoldReader & Pick<Prisma.TransactionClient, "user">,
   customerId: string,
-  ownEmanetOnly: () => Promise<boolean>,
+  emanetRelease: () => Promise<EmanetReleaseView>,
 ): Promise<CariHoldNotice | null> {
   const notice = await cariHoldNotice(db, customerId, "SHIPMENT");
   if (!notice) return null;
-  if (CARI_HOLD_EMANET_SHIPMENT === "EXEMPT" && (await ownEmanetOnly())) return { ...notice, exempt: true };
-  return notice;
+  const release = await emanetRelease();
+  // EXEMPT görünümü D4-I1b ile bayt-aynı kalır; yalnız PROCESSED_HELD muafiyeti modunu söyler.
+  if (release.exempt) return release.mode === "EXEMPT" ? { ...notice, exempt: true } : { ...notice, exempt: true, emanetShipment: release.mode };
+  if (release.heldRolls.length === 0) return notice;
+  return { ...notice, emanetShipment: release.mode, heldRolls: release.heldRolls, message: notice.message + heldRollsText(release.heldRolls) };
 }
 
 export async function assertShipmentNotHeldTx(
   db: HoldReader & Pick<Prisma.TransactionClient, "user">,
   customerId: string,
-  ownEmanetOnly: () => Promise<boolean>,
+  emanetRelease: () => Promise<EmanetReleaseView>,
 ): Promise<void> {
-  const notice = await shipmentHoldNotice(db, customerId, ownEmanetOnly);
+  const notice = await shipmentHoldNotice(db, customerId, emanetRelease);
   if (notice && !notice.exempt) throw holdError(notice);
 }
 
 /** Önizleme uyarı metni (warnings[] satırı) — kapı metniyle aynı kaynak. */
 export function cariHoldWarning(n: CariHoldNotice): string {
-  return n.exempt
-    ? `Bu müşterinin carisi sevke kilitli (${n.sebepEtiketi}), ancak sevkteki tüm toplar müşterinin kendi emaneti olduğu için sevk durdurulmaz.`
-    : n.message;
+  if (!n.exempt) return n.message;
+  const why = n.emanetShipment === "PROCESSED_HELD" ? "müşterinin kendi emaneti ve hiçbiri işlenmemiş" : "müşterinin kendi emaneti";
+  return `Bu müşterinin carisi sevke kilitli (${n.sebepEtiketi}), ancak sevkteki tüm toplar ${why} olduğu için sevk durdurulmaz.`;
 }

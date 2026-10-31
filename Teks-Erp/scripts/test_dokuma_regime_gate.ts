@@ -110,6 +110,8 @@ const KAPILI: ReadonlyArray<{ dosya: string; mount: string; kimlik?: string; kap
   // Makine kartı duruş uçları (D3b): kimlik oturum değil kart imzası; kapı imzadan SONRA.
   { dosya: "routes/machine-signal.routes.ts", mount: "/api/machine-signals", kimlik: "verifyCollectorSignature" },  // Atkı spesifikasyonu (MAL-1): dokuma ürün yapısı kataloğu — aynı kapı.
   { dosya: "routes/weft-spec.routes.ts", mount: "/api/weft-specs" },
+  { dosya: "routes/weave-design.routes.ts", mount: "/api/weave-designs" }, // SY-A2 desen kartı
+  { dosya: "routes/item-construction.routes.ts", mount: "/api/item-construction" }, // SY-A2 etkin yapı
 ];
 
 /** Dokuma-ÖZEL Prisma model erişimcileri ve servisleri — bunlara dokunan router kapılıdır. */

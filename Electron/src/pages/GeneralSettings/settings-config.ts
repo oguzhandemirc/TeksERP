@@ -25,6 +25,7 @@ import {
   BarChart3,
   Bell,
   FileScan,
+  Calculator,
   type LucideIcon,
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
@@ -1465,6 +1466,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         },
       },
       {
+        key: "fasonReceiptApplyTargetVariant",
+        group: "Fason",
+        title: `Fason kabulünde ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedef desenini dönen topa yaz`,
+        summary: `Dış brodeden dönen top, ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} seçilen deseni taşır; fatura desenin hizmet kalemini kullanır.`,
+        defaultOn: false,
+        audience: ["Planlamacı", "Muhasebeci"],
+        desc: `Açıkken fason kabulünde (ör. dışarıda brode) uygulanan bayrağın çeşidi için ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} seçilmiş hedef değer (desen) dönen topa da yazılır; desene hizmet kalemi eşlenmişse hizmet faturası o kalemle kesilir. Kapalıyken (varsayılan) dönen top yalnız bayrağı taşır, desen yazılmaz. Makbuz iptal edilirse topun deseni de geri alınır.`,
+      },
+      {
         key: "fasonNoteMobileEntry",
         group: "Fason",
         title: "Fason Sevk'te fason talimatını sahadaki operatör telefondan girebilsin",
@@ -1655,6 +1665,21 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: [
           { value: "ENFORCE", label: "Karşılaştır, farkta sor (bugünkü)", hint: "Fark eşiği aşarsa operatör onaylamadan top depoya inmez." },
           { value: "OFF", label: "En karşılaştırılmasın", hint: "Yalnız en kontrolü kapanır; renk farkı yine sorulur." },
+        ],
+      },
+      {
+        // D4-E3 (2026-10-31): `defaultValue` backend `DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE` ile birebir.
+        enumKey: "tamburChildWidthSource",
+        group: "Tambur",
+        title: "Tambur'dan çıkan topların eni",
+        summary: "Tambur'da bölünen topların enine hangi değer yazılsın.",
+        desc: `${TERIM.terbiyeIsEmri.cekim.ilgi} eni önce (varsayılan): çıkan toplara ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} eni yazılır, boşsa ana topun eni. Ölçülen en önce: ana topun eni en ölçen bir istasyonda (ör. etek kesim) ölçüldüyse çıkan toplara o ölçülen en yazılır; ölçülmediyse varsayılandaki gibi. Yalnız bundan sonra Tambur'dan çıkan topları etkiler; etiket ve çeki listesi bu eni basar.`,
+        defaultValue: "WO_TARGET_FIRST",
+        display: "radio",
+        audience: ["Planlamacı", "Yönetim"],
+        options: [
+          { value: "WO_TARGET_FIRST", label: `${TERIM.terbiyeIsEmri.cekim.ilgi} eni önce (bugünkü)`, hint: "Hedef en yoksa ana topun eni yazılır." },
+          { value: "MEASURED_FIRST", label: "Ölçülen en önce", hint: "Ana topun ölçülmüş eni varsa o yazılır; yoksa hedef en." },
         ],
       },
     ],
@@ -2022,6 +2047,35 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     ],
   },
   {
+    // SY-J1: Maliyet — KAPSAMSIZ kategori (ADMIN_ONLY): anahtar `settings-scopes`ta yok, yalnız `admin:settings`
+    // yazar; ayar modül kapalıyken de yazılır (etkisi yalnız maliyet yüzeylerinde).
+    id: "maliyet",
+    label: "Maliyet",
+    icon: Calculator,
+    description: "Maliyet ve teklif ekranlarının sunum ayarları; hesap her zaman TL'de sunucuda yapılır.",
+    keywords: "maliyet teklif fiyat listesi döviz usd dolar euro kur sunum standart maliyet",
+    kind: "flags",
+    section: "sales",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION],
+    enumFlags: [
+      {
+        // `defaultValue` backend `DEFAULT_COST_PRESENTATION_CURRENCY` ile birebir (bekçi §16).
+        enumKey: "costPresentationCurrency",
+        title: "Maliyet sunum dövizi",
+        summary: "Maliyet ekranlarında tutarların hangi dövizde gösterileceği; TL tutar her zaman yanında kalır.",
+        desc: "TL (varsayılan): ekranlar bugünkü gibi yalnız TL gösterir. USD ya da EUR seçilirse maliyet dökümü ve standart maliyet bu dövizde de gösterilir: kayıtlı maliyet sürümü kaydedildiği günün kuruyla (kur sonradan değişse de aynı tutar), önizleme günün kuruyla. Kur bulunamazsa döviz tutarı boş kalır, 1 varsayılmaz. Yeni teklifte para birimi müşterinin yayındaki fiyat listesinden, yoksa bu dövizden ön seçilir.",
+        defaultValue: "TRY",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "TRY", label: "TL (bugünkü)", hint: "Tutarlar yalnız TL gösterilir." },
+          { value: "USD", label: "USD", hint: "Tutarlar dolar olarak da gösterilir; sürümde kayıt günü kuru donar." },
+          { value: "EUR", label: "EUR", hint: "Tutarlar avro olarak da gösterilir; sürümde kayıt günü kuru donar." },
+        ],
+      },
+    ],
+  },
+  {
     id: "finance",
     label: "Muhasebe",
     icon: Banknote,
@@ -2031,7 +2085,8 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "eksi bakiye negatif kasa engeli kdv oran varsayılan vergi " +
       "risk limiti aşım onay engel taslak otomatik sevk fifo kapama tahsis avans sıfır fiyat promosyon " +
       "numune bedelsiz ileri tarih çek keşide iplik stok düşme " +
-      "kârlılık karlilik fason sarf alış fiyatı",
+      "kârlılık karlilik fason sarf alış fiyatı " +
+      "makine süresi saat ücreti genel gider dağıtım",
     kind: "flags",
     section: "trade",
     permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:finance"],
@@ -2292,6 +2347,36 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         ],
       },
       {
+        // D4-I1c (S11): `defaultValue` backend `DEFAULT_CARI_HOLD_EMANET_SHIPMENT` ile birebir; seçim fabrikanın.
+        enumKey: "financeCariHoldEmanetShipment",
+        group: "Cari kilidi",
+        title: "Sevki kilitli caride müşterinin kendi malı",
+        summary: "Cari sevke kilitliyken müşterinin bize emanet bıraktığı kumaş ona geri gönderilebilsin mi.",
+        desc: "Müşterinin kendi malını (emanet) borç yüzünden tutmak hapis hakkı (Türk Medeni Kanunu md. 950) kapsamındadır; hangi seçeneği kullanacağınıza karar vermeden önce hukuki teyit almanız önerilir. Seçim fabrikanındır. İşlenmiş top: üzerinde kurşun, kalite, tambur, fason ya da makine ölçümü kaydı olan ya da kesimle doğmuş top. Fabrikanın kendi malı ya da başka müşterinin malı karışan sevk her seçenekte kilide takılır.",
+        defaultValue: "EXEMPT",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "EXEMPT", label: "Emanet mal serbest (varsayılan)", hint: "Sevkteki topların hepsi müşterinin kendi malıysa kilit sevki durdurmaz." },
+          { value: "PROCESSED_HELD", label: "İşlenmiş emanet tutulsun", hint: "Üzerinde iş yapılmış emanet top kilit açılana dek sevk edilmez; işlenmemiş mal iade edilebilir." },
+          { value: "ALL_HELD", label: "Bütün emanet tutulsun", hint: "Kilit açılana dek müşterinin hiçbir emanet topu sevk edilmez." },
+        ],
+      },
+      {
+        enumKey: "financeRiskLimitCurrencyMode",
+        group: "Kasa & Risk",
+        title: "Risk limiti para birimi",
+        summary: "Risk limiti her para biriminde ayrı mı, yoksa TL'ye çevrilmiş toplamla mı ölçülsün.",
+        desc: "Her para birimi ayrı (varsayılan): carinin TL, USD, EUR bakiyelerinin her biri limitle ayrı karşılaştırılır. TL'ye çevrilmiş toplam: limit TL kabul edilir; TL'ye çevrilmiş toplam o güne kadarki en son kurla hesaplanır (Ön Muhasebe → Kurlar). Dövizli bakiyenin güncel kuru yoksa iş kabulü, sevk ve fatura onayı durur — kur 1 varsayılmaz.",
+        defaultValue: "PER_CURRENCY",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "PER_CURRENCY", label: "Her para birimi ayrı (varsayılan)", hint: "1.000 USD bakiye, limitle 1.000 olarak ölçülür." },
+          { value: "TRY_CONVERTED", label: "TL'ye çevrilmiş toplam", hint: "TL'ye çevrilmiş toplam o güne kadarki en son kurla hesaplanır; kur yoksa işlem durur." },
+        ],
+      },
+      {
         // D4-G2a: `defaultValue` backend `DEFAULT_PROFIT_SUBCONTRACT_SOURCE` ile birebir; kârlılık okurken uygulanır, kayıt değişmez.
         enumKey: "costProfitSubcontractSource",
         group: "Kârlılık",
@@ -2319,6 +2404,39 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: [
           { value: "ALIS_FIYATI", label: "Kartın alış fiyatı (varsayılan)", hint: "Fiyat geçmişindeki o günkü değer." },
           { value: "SON_ALIS_FATURASI", label: "Son alış faturası", hint: "O güne kadarki son onaylı alış faturası." },
+        ],
+      },
+      {
+        // D4-G2b: `defaultValue` backend `DEFAULT_PROFIT_MACHINE_TIME_MODE` ile birebir; yalnız kârlılık okumasını etkiler.
+        enumKey: "costProfitMachineTime",
+        group: "Kârlılık",
+        title: "Kârlılıkta makine süresi",
+        summary: "Makine saat ücreti hangi süreyle çarpılsın.",
+        desc: "İş oturumu (varsayılan): makinede açık oturum süresi; hareketsizlikten kapanan oturum son hareket anında kesilir. Vardiya: makinenin çalıştığı vardiyaların tamamı (mola düşülür). Metre normu: yapılan metre ÷ makinenin saatlik metre normu. Süre o günün metresine bölünür; metresiz gün \"boşta makine\" olarak ayrı görünür.",
+        defaultValue: "OTURUM",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "OTURUM", label: "İş oturumu (varsayılan)", hint: "Hareketsiz oturum son harekette kesilir." },
+          { value: "VARDIYA", label: "Vardiya süresi", hint: "Vardiya takvimi gerekir." },
+          { value: "NORM", label: "Metre normu", hint: "Makine ücretinde saatlik metre normu gerekir." },
+        ],
+      },
+      {
+        // D4-G2b: `defaultValue` backend `DEFAULT_PROFIT_OVERHEAD_KEY` ile birebir.
+        enumKey: "costProfitOverheadKey",
+        group: "Kârlılık",
+        title: "Genel giderin işlere dağıtımı",
+        summary: "İşe bağlanmamış masraflar (kira, elektrik…) işlere nasıl paylaştırılsın.",
+        desc: "Dağıtma (varsayılan): genel gider ay toplamı olarak ayrı görünür, işin \"kalan\" tutarı değişmez. Metre / gelir / makine saati: ayın genel gideri o ay faturalanan işlere bu ölçüye göre paylaştırılır. Ayar yalnız kârlılık hesabını etkiler; kasa kayıtları değişmez.",
+        defaultValue: "YOK",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "YOK", label: "Dağıtma (varsayılan)", hint: "Genel gider ay toplamında ayrı satır." },
+          { value: "METRE", label: "Metreye göre", hint: "Çok metre yapan iş çok pay alır." },
+          { value: "GELIR", label: "Gelire göre", hint: "Çok kazandıran iş çok pay alır." },
+          { value: "MAKINE_SAATI", label: "Makine saatine göre", hint: "Makinede uzun kalan iş çok pay alır." },
         ],
       },
     ],
@@ -2621,7 +2739,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
 
 // bildirim: dar izin TAŞIMAYAN (yalnız `admin:settings`) fabrika kategorileri — beyan iki
 // yönlü ölçülür (settings-surface §6 + settings-scope-mirror): anahtarları kapsam tablosunda olamaz.
-export const ADMIN_ONLY_CATEGORY_IDS: ReadonlySet<string> = new Set(["bildirim", "belgeler", "gelen-belge"]);
+export const ADMIN_ONLY_CATEGORY_IDS: ReadonlySet<string> = new Set(["bildirim", "belgeler", "gelen-belge", "maliyet"]);
 
 /** Kategorinin çizildiği ekran — BÖLÜMÜNDEN türetilir (tek yazar). */
 export function categorySurface(cat: SettingsCategory): SettingsSurface {
