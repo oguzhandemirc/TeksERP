@@ -152,6 +152,8 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "financeChequeNoteMovementEnabled",
       "financeBlockNegativeCashEnabled",
       "financeRiskLimitBlockEnabled",
+      "financeRiskLimitBlockIntake",
+      "financeRiskLimitBlockShipment",
       "financeAllowZeroPriceLineEnabled",
       "financeFutureDatedDocumentBlockEnabled",
       "financeAutoDraftFromShipmentEnabled",
