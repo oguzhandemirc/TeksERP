@@ -113,12 +113,14 @@ export async function resolveFx(input: CostInput, given: Partial<Record<Currency
   let finans = false;
   const today = factoryYmd();
   const currencies = costCurrencies(input);
+  const inputCurrencies = new Set(currencies);
   if (presentation && presentation !== "TRY" && !currencies.includes(presentation)) currencies.push(presentation);
   for (const cur of currencies.sort()) {
     let r = given[cur] ?? null;
     if (!r) {
       r = await suggestFxRate(cur, new Date());
-      if (r) finans = true;
+      // Kaynak etiketi girdinin dövizlerinden türer; yalnız sunum kuru FINANS'tan geldiyse etiket değişmez.
+      if (r && inputCurrencies.has(cur)) finans = true;
     }
     if (r && cur !== "TRY") {
       rates[cur] = r;

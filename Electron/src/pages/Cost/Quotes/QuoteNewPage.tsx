@@ -24,7 +24,10 @@ export function QuoteNewPage() {
   const [draft, setH] = useState<QuoteHeaderForm>(EMPTY_HEADER);
   // SY-J1: kullanıcı para birimine dokunmadıkça sunucunun ön seçimi uygulanır (türetilmiş; efekt yok).
   const [currencyTouched, setCurrencyTouched] = useState(false);
-  const suggestion = useQuoteCurrencySuggestion(draft.customerId).data;
+  const suggestionQuery = useQuoteCurrencySuggestion(draft.customerId);
+  const suggestion = suggestionQuery.data;
+  // Öneri yolda iken kayıt beklenir; yoksa teklif ön seçim uygulanmadan TRY ile doğardı.
+  const suggestionPending = !currencyTouched && !!draft.customerId && suggestionQuery.isFetching;
   const h: QuoteHeaderForm = !currencyTouched && suggestion && draft.customerId ? { ...draft, currency: suggestion.doviz } : draft;
   const create = useMutation({
     mutationFn: () => quoteService.create(h, attempt.token()),
@@ -55,7 +58,7 @@ export function QuoteNewPage() {
         />
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => nav("/cost/quotes")}>Vazgeç</Button>
-          <Button disabled={!h.customerId || create.isPending} onClick={() => create.mutate()} data-testid="quote-create">
+          <Button disabled={!h.customerId || create.isPending || suggestionPending} onClick={() => create.mutate()} data-testid="quote-create">
             {create.isPending ? "Kaydediliyor…" : "Taslağı oluştur"}
           </Button>
         </div>
