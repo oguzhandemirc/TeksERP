@@ -9,8 +9,10 @@ import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { applyProductionProposal, previewProductionProposal, type ProposalAccess } from "../services/production-proposal.service";
 import "../types/express-augment";
 
-const router = Router();
-router.use("/:id/production-proposal", verifyToken, requireProductionEnabled, requirePermission("order:read"));
+// `/api/orders/:id/production-proposal` altına bağlı → router seviyesi kapı yalnız bu yolu kapsar.
+const router = Router({ mergeParams: true });
+router.use(verifyToken, requireProductionEnabled);
+router.use(requirePermission("order:read"));
 
 function accessOf(req: Request): ProposalAccess {
   const p = req.user?.permissions ?? [];
@@ -53,7 +55,7 @@ const applySchema = z.strictObject({
  *       403: { description: Ayar/modül kapalı ya da yetki yok }
  *       409: { description: Sipariş onaylı değil (ORDER_NOT_PRODUCIBLE) }
  */
-router.post("/:id/production-proposal/preview", async (req: Request, res: Response, next: NextFunction) => {
+router.post("/preview", async (req: Request, res: Response, next: NextFunction) => {
   try {
     res.json(await previewProductionProposal(assertValidUuid(req.params.id), accessOf(req)));
   } catch (error) {
@@ -93,7 +95,7 @@ router.post("/:id/production-proposal/preview", async (req: Request, res: Respon
  *       200: { description: Aynı token'ın tekrarı (idempotentReplay) }
  *       409: { description: Seçim bayat ya da satır bu arada planlanmış }
  */
-router.post("/:id/production-proposal/apply", async (req: Request, res: Response, next: NextFunction) => {
+router.post("/apply", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = applySchema.parse(req.body);
     const result = await applyProductionProposal(assertValidUuid(req.params.id), body, accessOf(req), req.user?.userId);

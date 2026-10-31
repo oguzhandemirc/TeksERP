@@ -62,6 +62,16 @@ const MODEL_MUAF: ReadonlyArray<{ dosya: string; model: string; neden: string }>
     model: "serviceConsumableNorm",
     neden: "Kart yaşam döngüsü (item-lifecycle) aktif sarf normunu canlı referans olarak yalnız SAYAR — pasife almayı reddetmek için; maliyet kapalıyken norm doğamaz, sayım 0'dır (D4-G1a).",
   },
+  {
+    dosya: "routes/production-proposal.routes.ts",
+    model: "finishingRate",
+    neden: "Üretim önerisi (SY-M1) terbiye tarifesinden yalnız çekme %'sini OKUR (ham ihtiyaç önerisi); tarife yoksa çekme boş, plan = açık metre — maliyet kapalıyken öneri yine çalışır.",
+  },
+  {
+    dosya: "routes/production-proposal.routes.ts",
+    model: "costStructure",
+    neden: "Üretim önerisi (SY-M1) ürün yapısından yalnız tarife KODUNU okur (varyantta yoksa; effectiveFinishingRateCode); fiyat okumaz.",
+  },
 ];
 
 const ADLA_BEKLENEN_KAPILI: ReadonlyArray<{ dosya: string; neden: string }> = [

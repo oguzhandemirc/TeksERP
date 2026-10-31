@@ -24,7 +24,9 @@ import {
 } from "./weaving-order.service";
 import { weavingOrderReplay } from "./helpers/weaving-order-replay.helper";
 import { WorkOrderService, type WorkOrderCreateInput } from "./workorder.service";
-import { readDokumaEnabled, readOrderProductionProposal, readProductionEnabled } from "./system-setting.service";
+import { readDokumaEnabled, readOrderProductionProposal, readProductionEnabled, SETTING_KEYS } from "./system-setting.service";
+import { licenseModuleError } from "../lib/license/module-ceiling";
+import { settingRowPath } from "../constants/panel-ayar-yolu";
 
 /** Route'un izin kataloğundan çözdüğü erişim (anahtar-kapsamlı; servis izin okumaz). */
 export interface ProposalAccess {
@@ -51,10 +53,12 @@ const APPLY_TX_OPTIONS = { timeout: 60_000, maxWait: 10_000 } as const;
 async function resolveScope(access: ProposalAccess): Promise<ProposalScope> {
   const mode = await readOrderProductionProposal();
   if (mode === "KAPALI") {
-    throw AppError.forbidden("Siparişten üretim önerisi bu kurulumda kapalı (Ayarlar → Siparişler).", { code: "PRODUCTION_PROPOSAL_DISABLED" });
+    throw AppError.forbidden(`Siparişten üretim önerisi bu kurulumda kapalı (${settingRowPath("orderProductionProposal")}).`, { code: "PRODUCTION_PROPOSAL_DISABLED" });
   }
-  const production = await readProductionEnabled();
-  if (!production) throw AppError.forbidden("Üretim modülü kapalı; üretim önerisi açılamaz.", { code: "MODULE_DISABLED", modul: "production" });
+  if (!(await readProductionEnabled())) {
+    throw licenseModuleError(SETTING_KEYS.PRODUCTION_ENABLED, "Üretim")
+      ?? AppError.forbidden("Üretim modülü kapalı; üretim önerisi açılamaz.", { code: "MODULE_DISABLED", modul: "production" });
+  }
   const dokuma = await readDokumaEnabled();
   return { weaving: dokuma && access.readWeaving, workOrder: true };
 }
@@ -121,7 +125,7 @@ async function readReplaySetTx(tx: Prisma.TransactionClient, input: ProposalAppl
  * çatışır ama FK'nin FOR KEY SHARE'iyle çatışmaz — form yolunun (8032 → pivot FK) kilit sırasıyla terslik doğmaz.
  */
 async function lockOrderLinesTx(tx: Prisma.TransactionClient, orderId: string): Promise<void> {
-  await tx.$queryRaw`SELECT id FROM order_lines WHERE "orderId" = ${orderId}::uuid ORDER BY id FOR NO KEY UPDATE`;
+  await tx.$queryRaw`SELECT id FROM order_lines WHERE "orderId" = ${orderId}::uuid AND "cancelledAt" IS NULL ORDER BY id FOR NO KEY UPDATE`;
 }
 
 function sameSet(a: string[], b: string[]): boolean {
@@ -160,7 +164,7 @@ async function createSelectedTx(tx: Prisma.TransactionClient, fresh: ProductionP
   for (const sel of input.workOrders) {
     const g = fresh.workOrders.find((x) => x.key === sel.key);
     assertSelectionCurrent(fresh, "WORK_ORDER", sel, g);
-    if (g?.blockedCode) throw AppError.conflict("Bu iş emri grubunun rotası çözülemedi; formdan açın.", { code: g.blockedCode, key: sel.key });
+    if (g?.blockedCode) throw AppError.conflict("Bu terbiye iş emri grubunun rotası çözülemedi; formdan açın.", { code: g.blockedCode, key: sel.key });
     const prep = await workOrderService.prepareCreate(workOrderInput(sel, input.clientToken, g));
     out.workOrders.push({ wo: await workOrderService.insertPreparedTx(tx, prep, userId, tx), prep });
   }
@@ -172,7 +176,7 @@ function assertApplyAllowed(input: ProposalApplyInput, scope: ProposalScope, acc
   const keys = [...input.weavingOrders, ...input.workOrders].map((x) => x.key);
   if (new Set(keys).size !== keys.length) throw AppError.badRequest("Aynı öneri grubu birden fazla kez seçilmiş.", { code: "PROPOSAL_KEY_DUPLICATE" });
   if (input.weavingOrders.length > 0 && !scope.weaving) {
-    throw AppError.forbidden("Dokuma iş emri bu kurulumda ya da yetkinizde yok.", { code: "MODULE_DISABLED", modul: "dokuma" });
+    throw AppError.forbidden("Dokuma iş emirlerini görme yetkiniz yok.", { code: "PERMISSION_DENIED", required: "weavingorder:read" });
   }
   if (input.weavingOrders.length > 0 && !access.writeWeaving) throw AppError.forbidden("Dokuma iş emri oluşturma yetkiniz yok.", { code: "PERMISSION_DENIED", required: "weavingorder:write" });
   if (input.workOrders.length > 0 && !access.writeWorkOrder) throw AppError.forbidden("Terbiye iş emri oluşturma yetkiniz yok.", { code: "PERMISSION_DENIED", required: "workorder:write" });
@@ -182,6 +186,10 @@ export async function applyProductionProposal(
   orderId: string, input: ProposalApplyInput, access: ProposalAccess, userId?: string,
 ): Promise<ApiResponse<ProposalApplyResult> & { idempotentReplay?: boolean }> {
   const scope = await resolveScope(access);
+  if (input.weavingOrders.length > 0 && !(await readDokumaEnabled())) {
+    throw licenseModuleError(SETTING_KEYS.DOKUMA_ENABLED, "Dokuma")
+      ?? AppError.forbidden("Dokuma modülü bu kurulumda kapalı; dokuma iş emri önerisi uygulanamaz.", { code: "MODULE_DISABLED", modul: "dokuma" });
+  }
   assertApplyAllowed(input, scope, access);
   const outcome = await withBarcodeRetry(
     () => prisma.$transaction(async (tx) => {

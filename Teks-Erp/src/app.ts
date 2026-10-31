@@ -571,8 +571,8 @@ app.use("/api/shift-definitions", shiftDefinitionRoutes);
 app.use("/api/machine-doffs", machineDoffRoutes);
 app.use("/api/subcontractor-weaving", subcontractorWeavingRoutes);
 app.use("/api/rolls", inventoryRoutes);
-// SY-M1: üretim önerisi alt yolları (`/:id/production-proposal/*`); eşleşmeyen istek orderRoutes'a düşer.
-app.use("/api/orders", productionProposalRoutes);
+// SY-M1: üretim önerisi (kendi yoluna bağlı; kapısı sipariş uçlarına sızmaz).
+app.use("/api/orders/:id/production-proposal", productionProposalRoutes);
 app.use("/api/orders", orderRoutes);
 // ⚠️ MOUNT — "yazıldı ama mount edilmedi" sınıfı hata için bkz. reboot-kurtarma notu.
 app.use("/api/record-info", recordInfoRoutes);

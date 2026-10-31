@@ -834,8 +834,8 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         // SY-M1: `defaultValue` backend `DEFAULT_ORDER_PRODUCTION_PROPOSAL` ile birebir; KAPALI = bugünkü davranış.
         enumKey: "orderProductionProposal",
         title: "Siparişten üretim önerisi",
-        summary: "Sipariş detayında \"Üretime gönder\" ile dokuma işi ve terbiye iş emri önerisi.",
-        desc: "Kapalı (varsayılan): bugünkü gibi; iş emirleri elle ya da toplu eylemle açılır. Önizleme: sipariş detayında \"Üretime gönder\" düğmesi çıkar; program sipariş satırlarından hangi dokuma işlerinin ve terbiye iş emirlerinin açılacağını listeler, siz işaretleyip tek seferde oluşturursunuz. Onayda taslak: sipariş onaylanınca bu önizleme kendiliğinden açılır; yine siz onaylamadan hiçbir kayıt yaratılmaz.",
+        summary: "Sipariş detayında \"Üretime gönder\" ile dokuma iş emri ve terbiye iş emri önerisi.",
+        desc: "Kapalı (varsayılan): bugünkü gibi; terbiye iş emirleri elle ya da toplu eylemle açılır. Önizleme: sipariş detayında \"Üretime gönder\" düğmesi çıkar; program sipariş satırlarından hangi dokuma iş emirlerinin ve terbiye iş emirlerinin açılacağını listeler, siz işaretleyip tek seferde oluşturursunuz. Onayda taslak: sipariş onaylanınca bu önizleme kendiliğinden açılır; yine siz onaylamadan hiçbir kayıt yaratılmaz.",
         defaultValue: "KAPALI",
         display: "radio",
         audience: ["Planlamacı", "Yönetim"],
