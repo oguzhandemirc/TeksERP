@@ -185,6 +185,9 @@ router.get("/:id", verifyToken, requirePermission("station:read"), stationContro
  *               consumesWarpBeam:
  *                 type: boolean
  *                 description: Devere Faz 3 — bu istasyonun makinelerine LEVENT BAĞLANIR (dokuma/raşel). Varsayılan false.
+ *               capturesWidth:
+ *                 type: boolean
+ *                 description: En ölçer (D4-E2) — adım bitişinde ölçülen en topun enine yazılır (KK2 tamamlama measuredWidthCm). Varsayılan false.
  *     responses:
  *       201:
  *         description: İstasyon oluşturuldu

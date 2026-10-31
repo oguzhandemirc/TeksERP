@@ -2,6 +2,7 @@
 // TeksERP - Kurşun + QC2 Controller
 // =============================================================================
 
+import { measuredWidthCmSchema } from "../services/helpers/measured-width.helper";
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { KursunQcService } from "../services/kursun-qc.service";
@@ -65,6 +66,8 @@ export const completeQc2Schema = z.object({
   // H1 (karar belgesi §3-4): çıkış metresi. `kursun.meterCapture` OFF iken yok sayılır
   // (bugünkü davranış); eski APK göndermez.
   meterOut: meterReadingBodySchema.nullish(),
+  // D4-E2a: en ölçer istasyonda ölçülen en (cm); yeteneksiz istasyonda 400 WIDTH_CAPTURE_DISABLED.
+  measuredWidthCm: measuredWidthCmSchema,
 });
 
 /** POST /kursun-qc/meter-readings — düzeltme / giriş okuması (H1). */
@@ -193,6 +196,7 @@ export class KursunQcController {
           notes: body.notes ?? null,
           properties: body.properties ?? null,
           meterOut: body.meterOut ?? null,
+          measuredWidthCm: body.measuredWidthCm ?? null,
         },
         req.user?.userId,
         stamp?.machineId ?? req.device?.machineId ?? null

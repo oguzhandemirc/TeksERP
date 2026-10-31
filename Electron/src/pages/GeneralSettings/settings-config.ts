@@ -2000,7 +2000,8 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "muhasebe cari fatura tahsilat ödeme kasa banka bakiye ekstre yaşlandırma vade kur döviz finance " +
       "eksi bakiye negatif kasa engeli kdv oran varsayılan vergi " +
       "risk limiti aşım onay engel taslak otomatik sevk fifo kapama tahsis avans sıfır fiyat promosyon " +
-      "numune bedelsiz ileri tarih çek keşide iplik stok düşme",
+      "numune bedelsiz ileri tarih çek keşide iplik stok düşme " +
+      "kârlılık karlilik fason sarf alış fiyatı",
     kind: "flags",
     section: "trade",
     permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:finance"],
@@ -2274,6 +2275,36 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "EXEMPT", label: "Emanet mal serbest (varsayılan)", hint: "Sevkteki topların hepsi müşterinin kendi malıysa kilit sevki durdurmaz." },
           { value: "PROCESSED_HELD", label: "İşlenmiş emanet tutulsun", hint: "Üzerinde iş yapılmış emanet top kilit açılana dek sevk edilmez; işlenmemiş mal iade edilebilir." },
           { value: "ALL_HELD", label: "Bütün emanet tutulsun", hint: "Kilit açılana dek müşterinin hiçbir emanet topu sevk edilmez." },
+        ],
+      },
+      {
+        // D4-G2a: `defaultValue` backend `DEFAULT_PROFIT_SUBCONTRACT_SOURCE` ile birebir; kârlılık okurken uygulanır, kayıt değişmez.
+        enumKey: "costProfitSubcontractSource",
+        group: "Kârlılık",
+        title: "Kârlılıkta dışarıya ödenen (fason) tutar",
+        summary: "Fasona gönderilen işin maliyeti kârlılıkta neyden okunsun.",
+        desc: "Önce fatura (varsayılan): fason firmanın onaylı faturası varsa o tutar, yoksa apre/fason tarifesinden \"tahmini\" tutar yazılır. Yalnız fatura: fatura gelene kadar iş \"eksik\" görünür, tahmin yapılmaz. Ayar yalnız kârlılık hesabını etkiler; fatura ve tarife kayıtları değişmez.",
+        defaultValue: "FATURA_ONCE",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "FATURA_ONCE", label: "Önce fatura, yoksa tarife tahmini (varsayılan)", hint: "Tahmini tutar rozetle gösterilir." },
+          { value: "YALNIZ_FATURA", label: "Yalnız onaylı fason faturası", hint: "Faturasız iş eksik görünür." },
+        ],
+      },
+      {
+        // D4-G2a: `defaultValue` backend `DEFAULT_PROFIT_CONSUMABLE_PRICE_SOURCE` ile birebir.
+        enumKey: "costProfitConsumablePriceSource",
+        group: "Kârlılık",
+        title: "Kârlılıkta sarf (ip/şerit) birim fiyatı",
+        summary: "İşe giden sarf malzemesinin fiyatı nereden alınsın.",
+        desc: "Kart alış fiyatı (varsayılan): sarf kaleminin işin yapıldığı gün geçerli alış fiyatı. Son alış faturası: fatura tarihi işin yapıldığı güne kadar olan son onaylı alış faturasındaki birim fiyat. Fiyat bulunamazsa iş \"eksik\" görünür, sıfır yazılmaz.",
+        defaultValue: "ALIS_FIYATI",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "ALIS_FIYATI", label: "Kartın alış fiyatı (varsayılan)", hint: "Fiyat geçmişindeki o günkü değer." },
+          { value: "SON_ALIS_FATURASI", label: "Son alış faturası", hint: "O güne kadarki son onaylı alış faturası." },
         ],
       },
     ],

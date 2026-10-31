@@ -288,8 +288,12 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
       "src/services/workorder-manual-move.service.ts", "src/services/workorder-split.service.ts",
     ], { yari: true }),
 
-  D("RollOperation", "kurşun/QC2/tambur/fason kanıtı; propertyValueId (kurşun gramajı, KQ-D4) ileri kaydın parçası — ters = DAMGA", { tur: "DAMGA", kolon: "revokedAt" },
-    [{ dosya: "src/services/helpers/roll-operation.helper.ts", sembol: "revokeRollOperations" }],
+  // D4-E2a (2026-10-30): QC2 satırı ölçülen en izini (metadata.widthBefore/After) taşır; damga aynı tx'te
+  // `Roll.width`i simetrik claim'le geri koyar (restoreMeasuredWidthsTx), adım yeniden açma en izli satırı damgalar.
+  D("RollOperation", "kurşun/QC2/tambur/fason kanıtı; propertyValueId (kurşun gramajı, KQ-D4) + ölçülen en izi (D4-E2a) ileri kaydın parçası — ters = DAMGA", { tur: "DAMGA", kolon: "revokedAt" },
+    [{ dosya: "src/services/helpers/roll-operation.helper.ts", sembol: "revokeRollOperations" },
+     { dosya: "src/services/helpers/roll-operation.helper.ts", sembol: "revokeWidthTracedStepOperationsTx" },
+     { dosya: "src/services/helpers/roll-operation.helper.ts", sembol: "restoreMeasuredWidthsTx" }],
     ["src/services/helpers/kursun-operation.helper.ts", "src/services/inventory.service.ts",
      "src/services/kursun-qc.service.ts", "src/services/subcontractor.service.ts", "src/services/tambur.service.ts"]),
 
