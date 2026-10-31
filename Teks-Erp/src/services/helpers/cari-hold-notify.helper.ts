@@ -36,6 +36,7 @@ export async function cariHoldNotificationTx(
     subject: { type: "cari_hold", id: hold.id, key: hold.id },
     payload: {
       kilitId: hold.id,
+      cariId: hold.cariId,
       cariAd: card?.name ?? "Cari",
       cariKodu: card?.code ?? "—",
       kapsam: holdScopeText(hold),

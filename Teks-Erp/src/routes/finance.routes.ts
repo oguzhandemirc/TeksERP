@@ -20,6 +20,7 @@ import { buildShipmentInvoiceDraftPreview } from "../services/helpers/shipment-a
 import { cariService } from "../services/cari.service";
 import { partnerRoleAccountWhere } from "../services/helpers/partner-roles.helper";
 import { parseQueryParams, readFilterList, readIdCondition } from "../utils/query-parser";
+import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import type { Prisma } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { invoiceService } from "../services/invoice.service";
@@ -92,6 +93,7 @@ const cariCreateSchema = z
  *       - { in: query, name: "filter[isCustomerRole]", schema: { type: string, enum: ["true", "false"] } }
  *       - { in: query, name: "filter[isSubcontractorRole]", schema: { type: string, enum: ["true", "false"] } }
  *       - { in: query, name: kind, schema: { type: string, enum: [CUSTOMER, SUBCONTRACTOR] }, description: "Eski istemci" }
+ *       - { in: query, name: "filter[id]", schema: { type: string }, description: "Hesap kimliği (CSV) — bildirim derin bağlantısı ?focus" }
  *     responses:
  *       200: { description: Liste }
  *       400: { description: Tanınmayan rol süzgeci }
@@ -110,6 +112,7 @@ router.get("/cari", requirePermission("finance:read"), async (req, res, next) =>
       // Z-A: kartla doğan boş hesaplar — panel varsayılanı "Hareketli"; sunucu varsayılanı DEĞİŞMEZ (hepsi).
       hasActivity: readFilterList(parseQueryParams(req).filters.hasActivity)[0] === "true",
       customerId: readIdCondition(parseQueryParams(req).filters.customerId) ?? undefined,
+      id: readIdCondition(readFilterList(parseQueryParams(req).filters.id).map((v) => assertValidUuid(v, "id"))) ?? undefined,
       // H2 (2026-08-14): "Gecikmiş" kolonu — bayrak verilmeyince servis ek
       // sorgu KOŞMAZ (bugünkü yol bayt-bayt; bekçi kaynak taramasıyla kilitli).
       withOverdue: q.withOverdue === "true",

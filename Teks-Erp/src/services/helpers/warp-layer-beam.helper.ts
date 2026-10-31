@@ -38,3 +38,33 @@ export function fastestGroupTakeUpPct(
   }
   return out;
 }
+
+/** SY-B2: levent raporunda leventin, bağlı işin ürün yapısındaki yeri (zemin / ek katman). */
+export interface BeamLayerTag {
+  rol: "GROUND" | "LENO" | "SECONDARY";
+  beamMode: WarpBeamModeCode | null;
+  etiket: string;
+}
+const LAYER_ROLE_LABEL: Record<string, string> = { LENO: "Döner çözgü", SECONDARY: "Ek çözgü" };
+const SHARED_GROUP_LABEL: Record<string, string> = { LENO: "döner", SECONDARY: "ek" };
+
+/**
+ * Leventin çözgü kartı bağlı işin zemini mi, ek katmanı mı? Ürünün ek katmanı YOKSA null — rapor
+ * satırına anahtar yazılmaz (tek katmanlıda bayt-aynı). Kart yapıda yoksa da null (uydurulmaz).
+ */
+export function beamLayerTag(
+  beamWarpSpecId: string,
+  groundWarpSpecId: string | null,
+  layers: ReadonlyArray<{ warpSpecId: string; role: string; beamMode: string }>,
+): BeamLayerTag | null {
+  if (!layers.length) return null;
+  if (beamWarpSpecId === groundWarpSpecId) {
+    const shared = layers.filter((l) => isSharedBeamLayer(l.beamMode)).map((l) => SHARED_GROUP_LABEL[l.role] ?? l.role);
+    return { rol: "GROUND", beamMode: null, etiket: shared.length ? `Zemin çözgü + ${shared.join(", ")} tel grubu (aynı levent)` : "Zemin çözgü" };
+  }
+  const own = layers.find((l) => l.warpSpecId === beamWarpSpecId);
+  if (!own) return null;
+  const mode = own.beamMode as WarpBeamModeCode;
+  const base = LAYER_ROLE_LABEL[own.role] ?? own.role;
+  return { rol: own.role === "LENO" ? "LENO" : "SECONDARY", beamMode: mode, etiket: layerHasOwnBeam(mode) ? base : `${base} · ${WARP_BEAM_MODE_LABEL[mode] ?? mode}` };
+}

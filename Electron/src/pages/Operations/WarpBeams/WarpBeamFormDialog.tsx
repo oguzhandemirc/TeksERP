@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { WeavingOrderField } from "./WeavingOrderField";
+import { BeamLayerSuggestions } from "./BeamLayerSuggestions";
 import { warpSpecService } from "@/pages/WarpSpecs/service";
 import type { WarpSpec } from "@/pages/WarpSpecs/types";
 import { subcontractorService } from "@/pages/Subcontractors/service";
@@ -165,6 +166,7 @@ export function WarpBeamFormDialog({ open, onOpenChange, initial, onSubmit, isSu
             <Input type="number" min={1} step="0.001" {...form.register("plannedLengthM")} />
           </FormField>
           <WeavingOrderField control={form.control} error={form.formState.errors.weavingOrderId} required={weavingLinkRequired} onPicked={initial ? undefined : (id) => prefill(form, id)} />
+          {!initial && <BeamLayerSuggestions form={form} />}
           <OriginFields form={form} editing={Boolean(initial)} />
           <FormField label="Metal gövde no" error={form.formState.errors.physicalBeamNo} hint="Numarasız fabrikada boş kalır; aynı gövdede iki canlı çözgü olmaz.">
             <Input {...form.register("physicalBeamNo")} />

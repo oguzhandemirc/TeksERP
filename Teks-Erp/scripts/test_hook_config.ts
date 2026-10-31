@@ -342,7 +342,7 @@ function main(): void {
   const agirSayisi = (preCommit.match(/agir: true/g) ?? []).length;
   check(
     "§7b pre-commit dört ağır adımı (tip · lint · tavan · test) `agir: true` ile işaretliyor ve `sirala(` üzerinden koşuyor",
-    agirSayisi === 4 && /const sirali = sirala\(adimlar\)/.test(preCommit) && /for \(const adim of sirali\)/.test(preCommit),
+    agirSayisi === 4 && /const sirali = sirala\(kalan\)/.test(preCommit) && /for \(const adim of sirali\)/.test(preCommit),
     `agir işareti ${agirSayisi}`,
   );
   check(
@@ -471,6 +471,23 @@ function main(): void {
   check("§11d pre-commit adım süresini sabitten değil `kapiZamanAsimiSn()`ten alıyor + zaman aşımında 1500 ipucu basıyor",
     /const ZAMAN_ASIMI_SN = kapiZamanAsimiSn\(\);/.test(preCommit) && /timeout: ZAMAN_ASIMI_SN \* 1000,/.test(preCommit) &&
       !/timeout: \d[\d_]*,/.test(preCommit) && /ETIMEDOUT/.test(preCommit) && /\$\{KAPI_ZAMAN_ASIMI_ENV\}=1500 ile yeniden dene/.test(preCommit));
+
+  // §12 Ağır adımlar CI'a (`TEKSERP_KAPI_AGIR_CI=1`): paralel ajan yükünde kapı 30–40 dk'ya
+  //    çıkıyordu (2026-11-01); yalnız "1" açar, ağır olmayan adımlar her zaman koşar.
+  const ac = JSON.stringify(join(KOK, "scripts/hooks/lib/agir-ci.mjs"));
+  const acKos = (deger: string | undefined) => spawnSync("node", ["--input-type=module", "-e",
+    `const m = await import(${ac}); const env = ${JSON.stringify(deger === undefined ? {} : { TEKSERP_KAPI_AGIR_CI: deger })};
+     const r = m.agirAdimlariAyikla([{ ad: "a", agir: true }, { ad: "b" }, { ad: "c", agir: true }, { ad: "d" }], env);
+     process.stdout.write(r.kalan.map((x) => x.ad).join("") + "|" + r.atlanan.map((x) => x.ad).join(""));`],
+    { encoding: "utf8", cwd: KOK, timeout: 30_000 });
+  const acYok = acKos(undefined), acBir = acKos("1");
+  const acKapali = ["0", "true", "evet", ""].map((d) => ({ d, r: acKos(d) })).filter(({ r }) => r.stdout !== "abcd|");
+  check("§12a env yokken hiçbir adım ayıklanmaz (bugünkü davranış)", acYok.status === 0 && acYok.stdout === "abcd|", acYok.stdout || acYok.stderr.slice(0, 120));
+  check("§12b `TEKSERP_KAPI_AGIR_CI=1` yalnız `agir` adımları ayıklar, sıra korunur", acBir.status === 0 && acBir.stdout === "bd|ac", acBir.stdout);
+  check("§12c yalnız \"1\" açar (0 · true · evet · boş → ayıklama yok)", acKapali.length === 0, acKapali.map(({ d, r }) => `${d}→${r.stdout}`).join(" ¦ "));
+  check("§12d pre-commit sıralamayı ayıklanmış kümeden yapıyor + atlananı söylüyor ve deftere yazıyor",
+    /const \{ kalan, atlanan \} = agirAdimlariAyikla\(adimlar\);/.test(preCommit) && /const sirali = sirala\(kalan\);/.test(preCommit) &&
+      /ağır adımlar CI'a bırakıldı/.test(preCommit) && /sonuc: "⏭"/.test(preCommit));
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   process.exitCode = fail > 0 ? 1 : 0;

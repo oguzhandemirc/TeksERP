@@ -1,7 +1,8 @@
 // =============================================================================
 // BİLDİRİM KATALOĞU — Finans/cari türleri (D4-I5; tasarım DALGA4 §12.2)
 // =============================================================================
-// `NOTIFICATION_CATALOG`a yayılır (tek katalog; ayrı dosya yalnız boyut içindir). Yük TUTAR taşımaz: ne bakiye
+// `NOTIFICATION_CATALOG`a yayılır (tek katalog; ayrı dosya yalnız boyut içindir). Derin bağlantı `?focus=<hesapId>`
+// cari satırını açar (D4-KUC3a). Yük TUTAR taşımaz: ne bakiye
 // ne limit — gelen kutusu finans ekranı değil (`test_bildirim_katalogu` §8). Kilit türleri OLAY (kilit başına tek,
 // yayma `cari-hold.service`), risk türü KOSUL (`notification-sources/cari.ts`, yüklem `riskExposureTx`).
 // =============================================================================
@@ -11,7 +12,9 @@ export const CARI_NOTIFICATION_ENTRIES = {
   "cari.kilitlendi": {
     kod: "cari.kilitlendi", ad: "Cari kilitlendi",
     sinif: "BILDIRIM", altTur: "OLAY", grup: "Finans",
-    izinler: [["finance:read"]],
+    izinler: [["finance:read"], ["shipping:write"]],
+    // 1e kararı (D4-KUC3a): sevkçi kilidi bilmeli (kilitli caride sevk durur); Cari Hesaplar'ı açamaz, metin yeter.
+    screenlessViewers: { permissions: ["shipping:write"], reason: "Sevkçi kilitli cariye sevk hazırlamasın diye kilidi görür; Cari Hesaplar ekranını açma izni yoktur." },
     modul: "financeEnabled",
     // Konu kilit satırıdır: kilit başına TEK bildirim (replay ikinci satır doğurmaz — emit yeni satırın tx'inde).
     tekilKalibi: "{kilitId}",
@@ -20,14 +23,16 @@ export const CARI_NOTIFICATION_ENTRIES = {
     varsayilanKanallar: ["UYGULAMA"],
     baslik: "Cari kilitlendi: {cariAd}",
     govde: "{cariKodu} · {kapsam} durduruldu · sebep: {sebep} · {kisi}",
-    panelEkran: "finance/cari", panelYol: "/finance/cari",
-    payloadAlanlari: ["kilitId", "cariAd", "cariKodu", "kapsam", "sebep", "kisi"],
+    panelEkran: "finance/cari", panelYol: "/finance/cari?focus={cariId}",
+    payloadAlanlari: ["kilitId", "cariId", "cariAd", "cariKodu", "kapsam", "sebep", "kisi"],
     tahminiHaftalik: 0.5, saklama: SAKLAMA,
   },
   "cari.kilit-acildi": {
     kod: "cari.kilit-acildi", ad: "Cari kilidi açıldı",
     sinif: "BILDIRIM", altTur: "OLAY", grup: "Finans",
-    izinler: [["finance:read"]],
+    izinler: [["finance:read"], ["shipping:write"]],
+    // 1e kararı (D4-KUC3a): sevkçi kilidi bilmeli (kilitli caride sevk durur); Cari Hesaplar'ı açamaz, metin yeter.
+    screenlessViewers: { permissions: ["shipping:write"], reason: "Sevkçi kilitli cariye sevk hazırlamasın diye kilidi görür; Cari Hesaplar ekranını açma izni yoktur." },
     modul: "financeEnabled",
     tekilKalibi: "{kilitId}",
     pencereSn: 0, varsayilan: ["finance:invoice", "shipping:write"], kilit: "YOK",
@@ -35,8 +40,8 @@ export const CARI_NOTIFICATION_ENTRIES = {
     varsayilanKanallar: ["UYGULAMA"],
     baslik: "Cari kilidi açıldı: {cariAd}",
     govde: "{cariKodu} · {kapsam} yeniden açık · kilit sebebi: {sebep} · {kisi}",
-    panelEkran: "finance/cari", panelYol: "/finance/cari",
-    payloadAlanlari: ["kilitId", "cariAd", "cariKodu", "kapsam", "sebep", "kisi"],
+    panelEkran: "finance/cari", panelYol: "/finance/cari?focus={cariId}",
+    payloadAlanlari: ["kilitId", "cariId", "cariAd", "cariKodu", "kapsam", "sebep", "kisi"],
     tahminiHaftalik: 0.5, saklama: SAKLAMA,
   },
   "cari.risk-limiti-asildi": {
@@ -52,7 +57,7 @@ export const CARI_NOTIFICATION_ENTRIES = {
     baslik: "Cari risk limitini aştı: {cariAd}",
     govde: "{cariKodu}: {paraBirimi} bakiyesi risk limitinin üstünde",
     cozuldu: "{cariAd}: {paraBirimi} bakiyesi yeniden risk limitinin içinde",
-    panelEkran: "finance/cari", panelYol: "/finance/cari",
+    panelEkran: "finance/cari", panelYol: "/finance/cari?focus={cariId}",
     payloadAlanlari: ["cariId", "cariAd", "cariKodu", "paraBirimi"],
     tahminiHaftalik: 1, saklama: SAKLAMA,
   },
