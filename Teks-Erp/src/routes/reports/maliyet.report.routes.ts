@@ -86,6 +86,7 @@ export const profitabilityQuerySchema = coreDayRangeQuerySchema.extend({
  *       200: { description: "RaporSunumu (tablo = seçili kırılım; toplam tam kümeden)" }
  *       400: { description: Tanınmayan ya da geçersiz parametre }
  *       403: { description: Maliyet ya da ön muhasebe kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
+ *       409: { description: Modül istek sırasında kapandı (PROFITABILITY_MODULE_CHANGED) }
  */
 router.get("/karlilik", requireFinanceEnabled, requireReportOpen("maliyet/karlilik"), requirePermission("cost:read"), requirePermission("report:finance"),
   async (req: Request, res: Response, next: NextFunction) => {
@@ -93,7 +94,8 @@ router.get("/karlilik", requireFinanceEnabled, requireReportOpen("maliyet/karlil
       const q = profitabilityQuerySchema.parse(req.query);
       const window = resolveCoreDayRange(q, REPORT_BY_KEY.get(PROFITABILITY_KEY)?.varsayilanGun ?? 90);
       const sunum = await profitabilityReport(window, q.kirilim ?? "musteri");
-      if (!sunum) throw AppError.forbidden("Kârlılık için maliyet ve ön muhasebe modülleri açık olmalı", { code: "MODULE_DISABLED", modul: "maliyet" });
+      // Kapılar (lisans tavanlı) yukarıda reddeder; null yalnız istek sırasında modül kapanınca — ikinci MODULE_DISABLED sitesi açılmaz.
+      if (!sunum) throw AppError.conflict("Maliyet ya da ön muhasebe modülü istek sırasında kapandı; sayfayı yenileyin", { code: "PROFITABILITY_MODULE_CHANGED" });
       res.status(200).json(reportEnvelope(sunum, window.range, window.compareRange, { warnings: sunum.uyarilar }));
     } catch (e) {
       next(e);
