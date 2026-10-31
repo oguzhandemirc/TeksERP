@@ -43,6 +43,31 @@ describe("useCustomerCodeChoice", () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 
+  it("K12: modal açılınca odak adayda değil; okuyucunun Enter'ı seçim yapmaz", async () => {
+    const run = vi.fn(ambiguousThen((c) => `OK:${c}`));
+    const { hook, rerender } = setup();
+    act(() => { void hook.result.current.resolveScan(SHARED_CODE, run); });
+    await act(async () => { await Promise.resolve(); });
+    rerender();
+    await screen.findByRole("dialog");
+    const active = document.activeElement as HTMLElement | null;
+    expect(active?.dataset?.testid?.startsWith("customer-code-candidate-") ?? false).toBe(false);
+    fireEvent.keyDown(active ?? document.body, { key: "Enter" });
+    await act(async () => { await Promise.resolve(); });
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it("modal açıkken ekran kalkarsa bekleyen seçim null'la kapanır", async () => {
+    const run = vi.fn(ambiguousThen((c) => `OK:${c}`));
+    const { hook } = setup();
+    let pending!: Promise<string | null>;
+    act(() => { pending = hook.result.current.resolveScan(SHARED_CODE, run); });
+    await act(async () => { await Promise.resolve(); });
+    hook.unmount();
+    await expect(pending).resolves.toBeNull();
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
   it("tekil kod → modal açılmaz, sonuç doğrudan döner; başka hata aynen fırlar", async () => {
     const { hook, rerender } = setup();
     await expect(hook.result.current.resolveScan("T-IC-A", async (c) => `OK:${c}`)).resolves.toBe("OK:T-IC-A");

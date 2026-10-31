@@ -29,7 +29,7 @@ export function CustomerCodeCandidateDialog({ notice, onPick, onCancel }: Props)
         <DialogHeader>
           <DialogTitle>{`"${notice?.scannedCode ?? ""}" birden çok müşteride — hangi top?`}</DialogTitle>
           <DialogDescription>
-            Bu müşteri kodu birden çok topta kayıtlı. İşleme devam etmek için doğru topu seçin ya da topun kendi barkodunu okutun.
+            Bu müşteri kodu birden çok topta kayıtlı. İşleme devam etmek için doğru topu seçin. Topun kendi barkodunu okutmak için Vazgeç'e basıp yeniden okutun.
           </DialogDescription>
         </DialogHeader>
         <ul className="max-h-[60vh] divide-y overflow-y-auto rounded-md border" aria-label="Aday toplar">

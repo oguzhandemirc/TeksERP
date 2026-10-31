@@ -16,7 +16,8 @@ export function useRollLocate(setSearch: (v: string) => void) {
     mutationFn: ({ code, probe }: { code: string; probe: boolean }) =>
       choice.resolveScan(code, (c) => sackHubService.locateRoll(c, probe)),
     onSuccess: (res) => setLocated(res?.data ?? null),
-    onError: () => setLocated(null),
+    // Sessiz sondanın hatası (bulunamadı) ekrandaki kartı silmez; yalnız gerçek top okutması temizler.
+    onError: (_e, vars) => { if (!vars.probe) setLocated(null); },
   });
 
   // Tek giriş: top barkodu → "nerede?" (locate); metin/çuval kodu → aramaya.
@@ -32,5 +33,5 @@ export function useRollLocate(setSearch: (v: string) => void) {
     if (kind === "UNKNOWN" && customerCodeLookup) locate.mutate({ code, probe: true });
   };
 
-  return { located, clearLocated: () => setLocated(null), handleScan, busy: locate.isPending, dialog: choice.dialog };
+  return { located, clearLocated: () => setLocated(null), handleScan, busy: locate.isPending && locate.variables?.probe !== true, dialog: choice.dialog };
 }

@@ -17,6 +17,7 @@ function Probe() {
     <>
       <button onClick={() => l.handleScan(SHARED_CODE)}>OKUT-ORTAK</button>
       <button onClick={() => l.handleScan("T-IC-A")}>OKUT-TEKIL</button>
+      <button onClick={() => l.handleScan("ALFA PERDE")}>ARA-METIN</button>
       {l.located && <p>KONUM:{l.located.barcode}</p>}
       {l.dialog}
     </>
@@ -55,6 +56,17 @@ describe("Top nerede — belirsiz müşteri kodu", () => {
     fireEvent.click(screen.getByText("OKUT-TEKIL"));
     expect(await screen.findByText("KONUM:T-IC-A")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("sessiz sondanın 404'ü ekrandaki konum kartını silmez", async () => {
+    mount();
+    fireEvent.click(screen.getByText("OKUT-TEKIL"));
+    expect(await screen.findByText("KONUM:T-IC-A")).toBeTruthy();
+    locateRoll.mockRejectedValueOnce(Object.assign(new Error("yok"), { response: { status: 404 } }));
+    await act(async () => { fireEvent.click(screen.getByText("ARA-METIN")); });
+    await waitFor(() => expect(locateRoll).toHaveBeenLastCalledWith("ALFA PERDE", true));
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByText("KONUM:T-IC-A")).toBeTruthy();
   });
 
   it("ayar kapalı → serisiz kod yalnız aramaya gider (bugünkü davranış)", async () => {
