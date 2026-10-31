@@ -14,6 +14,7 @@ import { Prisma, RollEntrySource } from "@prisma/client";
 import { ROLL_DISPLAY_ORDER } from "../../constants/roll-order";
 import { readFinanceCariHoldEmanetShipment, type CariHoldEmanetShipment } from "../system-setting.service";
 import { rollsAllOwnedByTx } from "./emanet-owner.helper";
+import { ACTIVE_OPERATION } from "./roll-operation.helper";
 
 type Db = Pick<Prisma.TransactionClient, "roll" | "systemSetting">;
 
@@ -25,7 +26,7 @@ type Db = Pick<Prisma.TransactionClient, "roll" | "systemSetting">;
  */
 export const PROCESSED_ROLL_WHERE: Prisma.RollWhereInput = {
   OR: [
-    { operations: { some: { revokedAt: null } } },
+    { operations: { some: ACTIVE_OPERATION } },
     { meterReadings: { some: { revokedAt: null } } },
     { parentRollId: { not: null } },
     { entrySource: { in: [RollEntrySource.TAMBUR_SPLIT, RollEntrySource.TAMBUR_MANUAL, RollEntrySource.SUBCONTRACTOR_RETURN] } },
