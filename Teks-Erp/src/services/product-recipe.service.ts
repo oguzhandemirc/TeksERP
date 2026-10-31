@@ -14,6 +14,22 @@ import { applyFoldTypeForWriteInPlace } from "./helpers/fold-type";
 import type { ApiResponse } from "../types/api.types";import { assertItemUsable } from "./helpers/item-usage.helper";
 
 
+/** SY-A2 varyant kodu (V01): kullanıcıdan gelir, büyük harf + kırpılır; boş temizler. Tekillik
+ *  `(itemId, variantCode)` kısmi unique'tedir (P2002 → 409). */
+const VARIANT_CODE_RE = /^[A-Z0-9][A-Z0-9._-]{0,15}$/;
+function normalizeVariantCodeInPlace(data: Record<string, unknown>): void {
+  if (!Object.prototype.hasOwnProperty.call(data, "variantCode")) return;
+  const raw = data.variantCode;
+  if (raw === null || raw === undefined || (typeof raw === "string" && raw.trim() === "")) {
+    data.variantCode = null;
+    return;
+  }
+  if (typeof raw !== "string") throw AppError.badRequest("Varyant kodu metin olmalı");
+  const v = raw.trim().toUpperCase();
+  if (!VARIANT_CODE_RE.test(v)) throw AppError.badRequest("Varyant kodu en çok 16 karakter; harf, rakam, nokta, tire, alt çizgi (ör. V01)");
+  data.variantCode = v;
+}
+
 /** properties[] dizisinden BENZERSİZ propertyId'leri çıkar (dedup). */
 function recipePropertyIds(properties: unknown): string[] {
   if (!Array.isArray(properties)) return [];
@@ -123,6 +139,7 @@ export class ProductRecipeService extends BaseService {
     await this.validateRefs(data);
     const next = { ...data };
     await applyFoldTypeForWriteInPlace(next); // D-13 biçim + katalog doğrulaması
+    normalizeVariantCodeInPlace(next);
     // properties dedup → @@unique([recipeId,propertyId]) ihlali (P2002/409) önlenir.
     // BaseService config (nestedCreateFields:["properties"]) deduped diziyi {create:[...]} sarar.
     if (Array.isArray(next.properties)) {
@@ -139,6 +156,7 @@ export class ProductRecipeService extends BaseService {
     await this.validateRefs(data, id);
     const next = { ...data };
     await applyFoldTypeForWriteInPlace(next); // D-13 biçim + katalog doğrulaması
+    normalizeVariantCodeInPlace(next);
     if (Array.isArray(next.properties)) {
       // dedup → @@unique([recipeId,propertyId]) ihlali (P2002/409) önlenir.
       const ids = recipePropertyIds(next.properties);
@@ -164,6 +182,7 @@ export class ProductRecipeService extends BaseService {
     const oldRecord = await this.delegate.findUnique({ where: { id } });
     const updateData: Record<string, unknown> = { ...rest, isActive: true };
     await applyFoldTypeForWriteInPlace(updateData); // D-13 biçim + katalog doğrulaması
+    normalizeVariantCodeInPlace(updateData);
     if (Array.isArray(properties)) {
       const ids = recipePropertyIds(properties);
       updateData.properties = {

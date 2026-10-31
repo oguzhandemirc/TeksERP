@@ -46,7 +46,7 @@ function check(label: string, ok: boolean, detay = ""): void {
 const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 
 /** Kodda şablonsuz kalan (tablo, olay|işlem) çifti sayısı — yalnız DÜŞER (çürüme kolu). */
-const ANLATI_KAPSAMA_TABANI = 154;
+const ANLATI_KAPSAMA_TABANI = 153;
 /** Mutasyon ucu olup ROUTE_EYLEM_KATALOGU'nda cümlesi olmayan uç sayısı (B4, 2026-10-26) — yalnız DÜŞER. */
 const UC_KATALOG_TABANI = 617;
 

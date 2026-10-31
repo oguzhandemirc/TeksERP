@@ -9,10 +9,9 @@ export const BASE_WRITE_CLOSED_FIELDS: Readonly<Record<string, readonly string[]
   peripheralDevice: ["lastSeenAt", "deletedAt"],
   // Künye yalnız oturumdan (`withActor`); gövde ayrıca Zod `.strict()` allowlist'inden geçer.
   machineStopCodeMap: ["createdById", "updatedById"],
-  // SEYİTOĞLU MİG-1 (SY-MIG yalnız şema): kendi doğrulayıcısı (FABRIC/aktif desen · varyant kodu
-  // tekilliği · tarife kodu çözümü · fire aralığı) A2/C1 dilimlerinde doğana dek genel CRUD'a KAPALI.
-  item: ["weaveDesignId"],
-  productRecipe: ["variantCode", "finishingRateCode"],
+  // SEYİTOĞLU MİG-1: kendi doğrulayıcısı (tarife kodu çözümü · fire aralığı) E1/C1 dilimlerinde
+  // doğana dek genel CRUD'a KAPALI. `Item.weaveDesignId` + `ProductRecipe.variantCode` SY-A2'de açıldı.
+  productRecipe: ["finishingRateCode"],
   warpSpec: ["wastePct"],
 };
 
