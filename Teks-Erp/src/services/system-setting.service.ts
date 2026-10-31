@@ -191,6 +191,9 @@ export const SETTING_KEYS = {
   FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON: "finance.cariHold.releaseBySamePerson",
   /** SY-J1: maliyet sunum dövizi — `TRY` (varsayılan; yanıt bayt-aynı) · `USD` · `EUR`. Motor TL'de kalır. */
   COST_PRESENTATION_CURRENCY: "maliyet.sunumDovizi",
+  /** D4-I2b (S12): risk limiti karşılaştırması — `PER_CURRENCY` (varsayılan, her para birimi ayrı) · `TRY_CONVERTED`
+   *  (tüm bakiyeler o güne kadarki en son kurla TL'ye çevrilip toplanır; kur yoksa 409 `RISK_LIMIT_FX_MISSING`). */
+  FINANCE_RISK_LIMIT_CURRENCY_MODE: "finance.riskLimit.currencyMode",
   /** D4-G2a: kârlılıkta dış fason maliyeti — `FATURA_ONCE` (varsayılan; onaylı fason faturası, yoksa tarife tahmini) · `YALNIZ_FATURA`. */
   COST_PROFIT_SUBCONTRACT_SOURCE: "maliyet.karlilik.disFasonKaynagi",
   /** D4-G2a: kârlılıkta sarf birim fiyatı — `ALIS_FIYATI` (varsayılan; kartın alış fiyatı) · `SON_ALIS_FATURASI`. */
@@ -1074,6 +1077,10 @@ export const DEFAULT_CARI_HOLD_RELEASE_BY_SAME_PERSON: CariHoldReleaseBySamePers
 export type CostPresentationCurrency = "TRY" | "USD" | "EUR";
 export const COST_PRESENTATION_CURRENCIES: CostPresentationCurrency[] = ["TRY", "USD", "EUR"];
 export const DEFAULT_COST_PRESENTATION_CURRENCY: CostPresentationCurrency = "TRY";
+/** D4-I2b (S12): risk limiti para birimi kipi — her para birimi ayrı (bugünkü) · o güne kadarki en son kurla TL'ye çevrilmiş toplam. */
+export type RiskLimitCurrencyMode = "PER_CURRENCY" | "TRY_CONVERTED";
+export const RISK_LIMIT_CURRENCY_MODES: RiskLimitCurrencyMode[] = ["PER_CURRENCY", "TRY_CONVERTED"];
+export const DEFAULT_RISK_LIMIT_CURRENCY_MODE: RiskLimitCurrencyMode = "PER_CURRENCY";
 /** D4-G2a: kârlılık dış fason kaynağı (rapor okuma anında uygular; sonuç saklanmaz). */
 export const PROFIT_SUBCONTRACT_SOURCES = ["FATURA_ONCE", "YALNIZ_FATURA"] as const;
 export type ProfitSubcontractSource = (typeof PROFIT_SUBCONTRACT_SOURCES)[number];
@@ -1930,6 +1937,8 @@ export interface FeatureFlags {
   financeCariHoldReleaseBySamePerson: CariHoldReleaseBySamePerson;
   /** SY-J1: maliyet sunum dövizi (varsayılan `TRY` = bugünkü TL-yalnız yanıt). */
   costPresentationCurrency: CostPresentationCurrency;
+  /** D4-I2b: risk limiti para birimi kipi (varsayılan `PER_CURRENCY`). */
+  financeRiskLimitCurrencyMode: RiskLimitCurrencyMode;
   /** D4-G2a: kârlılık dış fason kaynağı (varsayılan `FATURA_ONCE`). */
   costProfitSubcontractSource: ProfitSubcontractSource;
   /** D4-G2a: kârlılık sarf birim fiyatı kaynağı (varsayılan `ALIS_FIYATI`). */
@@ -2593,6 +2602,7 @@ export class SystemSettingService {
       financeCariHoldDefaultScope: await readFinanceCariHoldDefaultScope(cacheClient),
       financeCariHoldReleaseBySamePerson: await readFinanceCariHoldReleaseBySamePerson(cacheClient),
       costPresentationCurrency: await readCostPresentationCurrency(cacheClient),
+      financeRiskLimitCurrencyMode: await readFinanceRiskLimitCurrencyMode(cacheClient),
       costProfitSubcontractSource: await readCostProfitSubcontractSource(cacheClient),
       costProfitConsumablePriceSource: await readCostProfitConsumablePriceSource(cacheClient),
       financeAutoAllocateOnPaymentEnabled:
@@ -3151,6 +3161,13 @@ export class SystemSettingService {
         throw AppError.badRequest(`costPresentationCurrency şunlardan biri olmalı: ${COST_PRESENTATION_CURRENCIES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.COST_PRESENTATION_CURRENCY, v, "Maliyet ekranlarında tutarların gösterildiği döviz (hesap TL'de kalır)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeRiskLimitCurrencyMode")) {
+      const v = input.financeRiskLimitCurrencyMode;
+      if (typeof v !== "string" || !RISK_LIMIT_CURRENCY_MODES.includes(v as RiskLimitCurrencyMode)) {
+        throw AppError.badRequest(`financeRiskLimitCurrencyMode şunlardan biri olmalı: ${RISK_LIMIT_CURRENCY_MODES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.FINANCE_RISK_LIMIT_CURRENCY_MODE, v, "Risk limiti para birimi — her para birimi ayrı · TL'ye çevrilmiş toplam", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "costProfitSubcontractSource")) {
       const v = input.costProfitSubcontractSource;
@@ -5412,6 +5429,11 @@ export function readCostProfitConsumablePriceSource(tx?: Pick<typeof prisma, "sy
 /** D4-I1a: koyan kişi kendi kilidini açabilir mi — tanınmayan değer varsayılana (`ALLOW`) düşer. */
 export function readFinanceCariHoldReleaseBySamePerson(tx?: Pick<typeof prisma, "systemSetting">): Promise<CariHoldReleaseBySamePerson> {
   return readServiceEnum(SETTING_KEYS.FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON, CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES, DEFAULT_CARI_HOLD_RELEASE_BY_SAME_PERSON, tx);
+}
+
+/** D4-I2b: risk limiti para birimi kipi — tanınmayan değer varsayılana (`PER_CURRENCY`) düşer; guard tx içinde taze okur. */
+export function readFinanceRiskLimitCurrencyMode(tx?: Pick<typeof prisma, "systemSetting">): Promise<RiskLimitCurrencyMode> {
+  return readServiceEnum(SETTING_KEYS.FINANCE_RISK_LIMIT_CURRENCY_MODE, RISK_LIMIT_CURRENCY_MODES, DEFAULT_RISK_LIMIT_CURRENCY_MODE, tx);
 }
 
 /** H7 — hizmet faturası ana anahtarı, ETKİN değer: ön muhasebe kapalıyken daima KAPALI (bugünkü davranış). */

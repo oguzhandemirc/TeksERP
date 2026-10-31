@@ -487,7 +487,7 @@ router.get("/structures/:itemId", requirePermission("cost:read"), wrap(async (re
  * /api/cost/structures/{itemId}:
  *   put:
  *     tags: [Cost]
- *     summary: Kumaşın maliyet yapısını yaz (tam küme; boş alan = parametre varsayılanı)
+ *     summary: Kumaşın maliyet yapısını yaz (tam küme; boş alan = parametre varsayılanı; processes verilmezse ek işlemlere dokunulmaz)
  *     security: [{ bearerAuth: [] }]
  *     parameters: [{ in: path, name: itemId, required: true, schema: { type: string, format: uuid } }]
  *     responses:
