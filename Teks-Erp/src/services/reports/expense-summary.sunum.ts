@@ -18,6 +18,8 @@ const UNCATEGORIZED_KEY = cashCategoryKey(null).key;
 
 export const EXPENSE_SUMMARY_KEY = "finance/masraf-ozeti";
 const TOTAL_COLUMN = "toplam";
+/** Satırın Masraf Özeti kova anahtarı (Electron `ExpenseSummaryPage` EXPENSE_ROW_KEY_FIELD aynası). */
+export const EXPENSE_ROW_KEY_FIELD = "kategoriAnahtari";
 const MONTH_NAMES = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
 
 /** `YYYY-MM` → kolon anahtarı (ekran/Excel/PDF aynı anahtarı okur). */
@@ -38,7 +40,9 @@ export function expenseSummaryTable(s: ExpenseSummary): TabloBlok {
     { anahtar: TOTAL_COLUMN, baslik: "Toplam", birim: "TRY", hiza: "sag" },
   ];
   const rows = s.categories.map((c) => {
-    const row: Record<string, string | number | null> = { kategori: c.label };
+    // `kategoriAnahtari` kolon DEĞİL (kolonlarda yok → ekran/Excel/PDF basmaz): panel satırı Kasa Hareketleri'ni
+    // `?category=<anahtar>` ile açar (D4-KUC2 e); istemci anahtar üretmez.
+    const row: Record<string, string | number | null> = { kategori: c.label, [EXPENSE_ROW_KEY_FIELD]: c.key };
     for (const m of s.months) row[monthColumnKey(m)] = 0;
     for (const cell of c.cells) row[monthColumnKey(cell.month)] = tl(cell.amountTry);
     row[TOTAL_COLUMN] = tl(c.totalTry);

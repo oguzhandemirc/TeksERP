@@ -6,16 +6,18 @@ import { HeadlineCard } from "./HeadlineCard";
 import { NarrativeBox } from "./NarrativeBox";
 import { PeriodCompareTable } from "./PeriodCompareTable";
 import { SmallMultiples } from "./SmallMultiples";
-import { ReportTable } from "./ReportTable";
+import { ReportTable, type ReportRowLink } from "./ReportTable";
 
 interface Props {
   presentation: RaporSunumu;
   /** Verinin sunucudan alındığı an (ms). */
   fetchedAt: number;
+  /** Tablo satırından geçiş (yalnız kendi sayfası olan raporlar verir). */
+  rowLink?: ReportRowLink;
 }
 
 /** Şablonun gövdesi (plan §4.1): ana sayı | Ne görüyoruz? → uyarılar → küçük çoklular → dönem kıyası → grafik → tablo → tanımlar + veri satırı. */
-export function ReportBody({ presentation: p, fetchedAt }: Props) {
+export function ReportBody({ presentation: p, fetchedAt, rowLink }: Props) {
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-4 md:grid-cols-5">
@@ -43,7 +45,7 @@ export function ReportBody({ presentation: p, fetchedAt }: Props) {
           <RaporGrafik blok={p.grafik} baslik={p.baslik} />
         </section>
       ) : null}
-      {p.tablo ? <ReportTable table={p.tablo} /> : null}
+      {p.tablo ? <ReportTable table={p.tablo} rowLink={rowLink} /> : null}
       <footer className="flex flex-col gap-2 border-t pt-3 text-xs text-muted-foreground">
         {p.tanimlar.length > 0 ? (
           <details>
