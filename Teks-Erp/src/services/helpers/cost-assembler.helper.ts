@@ -107,6 +107,8 @@ function finishingOf(src: CostSources, code: string | null | undefined): CostInp
   if (!code) return null;
   const r = src.rates.get(code);
   if (!r) return { code, name: code, basis: "RAW_M", price: null };
+  // KG tabanı (MİG-2a) motora SY-E1'de bağlanır; o güne kadar fail-closed EKSİK (0 değil). Yazım yolu KG'yi zaten reddeder.
+  if (r.basis === "KG") return { code, name: r.name, basis: "RAW_M", price: null };
   return { code, name: r.name, basis: r.basis, price: { amount: r.pricePerM, currency: r.currency, source: "KART" } };
 }
 

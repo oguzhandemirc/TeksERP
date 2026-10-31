@@ -8,6 +8,7 @@ export const relabelService = {
     apiClient
       .get<ApiResponse<RelabelContext>>(
         `/api/rolls/barcode/${encodeURIComponent(barcode)}/relabel-context`,
+        { customerCodeChoice: true },
       )
       .then((r) => r.data),
 

@@ -326,6 +326,7 @@ async function main(): Promise<void> {
 
   await crossSourceCases();
   await nullSafeSurvivorSide();
+  await recipeVariantConflict();
 }
 
 async function hataOf(fn: () => Promise<unknown>): Promise<string> {
@@ -659,6 +660,35 @@ async function nullSafeSurvivorSide(): Promise<void> {
     pv2.blockers.map((b) => b.key).join(","));
 }
 
+/**
+ * ⑩ REÇETE VARYANT KODU (SY-MIG) — `product_recipes_item_variant_uq` kısmi unique. Aynı varyant kodu
+ * iki kumaşta varsa reçete taşıması ham 23505'e düşerdi; harita BLOCK → önizleme ENGEL + işlem 409.
+ */
+async function recipeVariantConflict(): Promise<void> {
+  console.log("\n── ⑩ Reçete varyant kodu çakışması (BLOCK) ──");
+  const mkRecipe = (itemId: string, suffix: string, variantCode: string | null) =>
+    prisma.productRecipe.create({ data: { code: `${TAG}R${suffix}`.slice(0, 32), name: `${TAG} R${suffix}`, itemId, variantCode } });
+  const s = await mkItem("RV-S");
+  const k = await mkItem("RV-K");
+  await mkRecipe(s, "S1", "V01");
+  await mkRecipe(k, "K1", "V01");
+  const pv = await MasterDataMergeService.preview("item", s, [k]);
+  check("⑩ ⭐ iki kumaşta V01 reçetesi önizlemede ENGEL", !pv.canMerge && pv.blockers.some((b) => b.key === "CONFLICT_PRODUCT_RECIPES"),
+    pv.blockers.map((b) => b.key).join(",") || "engel yok");
+  const hata = await hataOf(() =>
+    MasterDataMergeService.merge("item", { survivorId: s, sourceIds: [k], reason: "recete varyant sondasi", acknowledgedConflicts: pv.conflicts.length }),
+  );
+  check("⑩ ⭐ işlem BLOCK 409 (ham 23505/500 DEĞİL)", hata.startsWith("409"), hata);
+  const s2 = await mkItem("RV-S2");
+  const k2 = await mkItem("RV-K2");
+  await mkRecipe(s2, "S2", null);
+  await mkRecipe(k2, "K2", null);
+  await mkRecipe(k2, "K3", "V02");
+  const pv2 = await MasterDataMergeService.preview("item", s2, [k2]);
+  check("⑩ körlük zemini: varyantsız (NULL) + farklı kodlu reçeteler ENGEL üretmez", !pv2.blockers.some((b) => b.key === "CONFLICT_PRODUCT_RECIPES"),
+    pv2.blockers.map((b) => b.key).join(","));
+}
+
 main()
   .catch((e) => {
     fail++;
@@ -679,6 +709,7 @@ main()
     await prisma.mergeOperationSource.deleteMany({ where: { operationId: { in: opIds } } }).catch(() => undefined);
     await prisma.mergeOperation.deleteMany({ where: { id: { in: opIds } } }).catch(() => undefined);
     await prisma.itemPrice.deleteMany({ where: { itemId: { in: trash.items } } }).catch(() => undefined);
+    await prisma.productRecipe.deleteMany({ where: { itemId: { in: trash.items } } }).catch(() => undefined);
     await prisma.customerBranch.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
     await prisma.fourPointRuleSet.deleteMany({ where: { name: { startsWith: TAG } } }).catch(() => undefined);
     await prisma.systemLog.deleteMany({

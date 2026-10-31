@@ -399,4 +399,15 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   OPERATOR_REASON: "Operatör sebep yazar",
   SUPERVISOR_PIN: "Süpervizör PIN onayı",
   OFFICE: "Ofis onayı",
+  // WeaveDesignKind (SEYİTOĞLU MİG-1) — LENO ortak (WarpLayerRole)
+  PLAIN: "Bezayağı (düz)",
+  DOBBY: "Armürlü",
+  JACQUARD: "Jakarlı",
+  LENO: "Döner (leno)",
+  // WarpLayerRole (MİG-1) — LENO ortak
+  SECONDARY: "İkinci çözgü",
+  // WarpBeamMode (MİG-1) — ek çözgünün sarım biçimi
+  SEPARATE_BEAM: "Ayrı levent",
+  SHARED_BEAM: "Zeminle aynı levent",
+  CREEL: "Cağlık (bobinden)",
 };

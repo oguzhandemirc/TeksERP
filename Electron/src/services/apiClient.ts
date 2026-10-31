@@ -16,6 +16,7 @@ import { PASSWORD_CHANGE_REQUIRED_CODE } from "@/types/auth";
 import { createRequestHold } from "@/lib/sunucu-kesintisi";
 import { IS_ELECTRON } from "@/lib/runtime-env";
 import { ensureConnectOrigin } from "@/lib/connect-gate";
+import { isChoiceHandledConflict } from "@/lib/customer-code-choice";
 
 /**
  * KURULUM KARARI olan 403'ler yetki sorunu değildir — "yetkiniz yok" kullanıcıyı rolünü
@@ -297,6 +298,7 @@ apiClient.interceptors.response.use(
         return Promise.reject(error);
       }
 
+      if (isChoiceHandledConflict(status, body, error.config?.customerCodeChoice)) return Promise.reject(error);
       if (!suppressToast) {
         // Arşiv kapısının kayıt listeli 409'u diyalogda (kayıtlar tek tek); toast yalnız cümleyi taşırdı.
         if (status === 409 && presentLiveReferences(body)) {
