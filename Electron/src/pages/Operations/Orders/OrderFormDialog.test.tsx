@@ -19,7 +19,7 @@ vi.mock("@/services/featureFlagService", () => ({ currencyService: { list: vi.fn
 // Kalem editörünün kendi bekçisi var (`OrderLinesEditor.test.tsx`); burada tek düğme geçerli bir satır girer.
 vi.mock("./OrderLinesEditor", () => ({
   OrderLinesEditor: ({ onChange }: { onChange: (l: unknown[]) => void }) => (
-    <button type="button" onClick={() => onChange([{ clientId: "l1", itemId: "i1", colorId: null, quantity: 10, width: null, unitPrice: "", customerItemName: "", customerColorName: "", requiredPropertyIds: [], cutNote: "" }])}>stub-satır-gir</button>
+    <button type="button" onClick={() => onChange([{ clientId: "l1", itemId: "i1", colorId: null, quantity: 10, width: null, unitPrice: "", customerItemName: "", customerColorName: "", requiredPropertyIds: [], targetValues: [], cutNote: "" }])}>stub-satır-gir</button>
   ),
 }));
 vi.mock("@/pages/Customers/BranchSelect", () => ({ BranchSelect: () => null }));
