@@ -10,7 +10,7 @@
 // transitif dokunursa o router'lar `test_finance_regime_gate`te kapısız sayılırdı (§4 ölçer).
 // Kart → hesap, hesap tablosuna erişmeden ilişki süzgeciyle çözülür (K3a where'i, tek kaynak).
 // =============================================================================
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { factoryDateTimeTr } from "../../constants/time";
 import { cariAccountWhereForCard, type CardRef } from "./cari-card-where.helper";
@@ -98,6 +98,55 @@ export async function activeHoldByCard(db: HoldReader, card: CardRef, scope?: Ca
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: ACTIVE_HOLD_SELECT,
   });
+}
+
+/**
+ * LİSTE İKİZİ (D4-I4) — `activeHoldByCustomer`ın SQL ikizi: bir liste sorgusuna `LEFT JOIN LATERAL … ON TRUE` olarak
+ * girer, ek sorgu açmaz (sorgu bütçesi `test_sevk_kapisi_cari_kilit` §3). Kart hesabı YA DA eski fason bacağı (K3a);
+ * onarılmamış çiftte iki kilidin kapsamları birleşir. Kolonlar: `hold_intake`/`hold_shipment`/`hold_invoice` (kilit yoksa NULL).
+ */
+export function activeHoldFlagsLateralSql(customerIdCol: Prisma.Sql): Prisma.Sql {
+  return Prisma.sql`LEFT JOIN LATERAL (
+    SELECT bool_or(ch."blocksIntake") AS hold_intake,
+           bool_or(ch."blocksShipment") AS hold_shipment,
+           bool_or(ch."blocksInvoice") AS hold_invoice
+    FROM cari_holds ch
+    JOIN cari_accounts ca ON ca.id = ch."cariId"
+    LEFT JOIN subcontractors sc ON sc.id = ca."subcontractorId"
+    WHERE ch."releasedAt" IS NULL AND (ca."customerId" = ${customerIdCol} OR sc."customerId" = ${customerIdCol})
+  ) hold ON TRUE`;
+}
+
+/** Lateral kolonlarının satır görünümü. */
+export interface HoldFlagRow {
+  hold_intake: boolean | null;
+  hold_shipment: boolean | null;
+  hold_invoice: boolean | null;
+}
+
+/** Liste satırının kilit alanları — eski istemci yok sayar; `holdText` tablet çipinin TEK metin kaynağı. */
+export interface ListHoldView {
+  held: boolean;
+  holdScopes: CariHoldScope[];
+  holdText: string | null;
+}
+
+/**
+ * Lateral satırından liste görünümü. `emanetMode` (`finance.cariHold.emanetShipment`) yalnız SEVK kapsamlı kilitte
+ * metne girer: emanet sevkinin bu kilitte geçip geçmediğini söyler (K22 / D4-I1c).
+ */
+export function listHoldView(row: HoldFlagRow, emanetMode: string): ListHoldView {
+  const flags = { blocksIntake: row.hold_intake === true, blocksShipment: row.hold_shipment === true, blocksInvoice: row.hold_invoice === true };
+  const scopes = holdScopes(flags);
+  if (scopes.length === 0) return { held: false, holdScopes: [], holdText: null };
+  const tail = !flags.blocksShipment
+    ? "sevk serbest"
+    : emanetMode === "ALL_HELD"
+      ? "emanet dahil sevk durur"
+      : emanetMode === "PROCESSED_HELD"
+        ? "yalnız işlenmemiş emanet sevk edilir"
+        : "müşterinin kendi emaneti sevk edilir";
+  return { held: true, holdScopes: scopes, holdText: `Cari kilitli (${holdScopeText(flags)}) — ${tail}` };
 }
 
 /** Kapının ve önizlemenin ORTAK görünümü — 409 `details`ı ve önizleme `cariHold{}`i aynı alanları taşır. */

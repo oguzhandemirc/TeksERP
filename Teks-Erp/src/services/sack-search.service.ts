@@ -30,7 +30,8 @@ import { PRESENT_ROLL_WHERE, loadSackContentTotals } from "./helpers/sack-conten
 import { ACTIVE_TAG_WHERE, ACTIVE_TAG_SELECT, toTagBadges } from "./helpers/sack-tag.helper";
 import { batchLoadAliasesMulti } from "./helpers/customer-name.helper";
 import { readPackingLotSettings } from "./helpers/packing-group.helper";
-import { readPackingGroupsEnabled } from "./system-setting.service";
+import { readPackingGroupsEnabled, cariHoldEmanetShipmentColumnSql } from "./system-setting.service";
+import { activeHoldFlagsLateralSql, listHoldView, type HoldFlagRow, type CariHoldScope } from "./helpers/cari-hold.helper";
 import { recordSackPickList, type PickListPrint } from "./helpers/manifest-number.helper";
 import { tokenReplay } from "./helpers/token-replay.helper";
 import { resolveDeliveryNoteLinesForRolls, type RollDeliveryNoteLine } from "./helpers/roll-delivery-note-line.helper";
@@ -350,6 +351,10 @@ export interface SackCustomerBucket {
   rollCount: number;
   /** Sevk edilmemiş (AÇIK) parti sayısı — yalnız sevk partisi modunda döner. */
   openLotCount?: number;
+  /** D4-I4: aktif cari kilidi var mı + kapsamı + çip metni (müşterisiz kovada yok). Eski istemci yok sayar. */
+  held?: boolean;
+  holdScopes?: CariHoldScope[];
+  holdText?: string | null;
 }
 
 /**
@@ -966,7 +971,8 @@ export class SackSearchService {
     // ── TEK toplulaştırma sorgusu: cari × (çuval · top · açık parti) ─────────
     // Sıralama KAPSAMIN tamamı üstünde (sayfa içi değil); maliyet havuz büyüklüğüne
     // değil cari başına gruba bağlı, sayfa boyutu kadar satır döner.
-    type Row = { id: string; name: string; code: string | null; sackCount: number; rollCount: number; openLotCount: number };
+    // D4-I4: cari kilidi (kapsam) + emanet sevki ayarı AYNI sorguda — kapı listesine ek sorgu açılmaz (bütçe bekçisi).
+    type Row = { id: string; name: string; code: string | null; sackCount: number; rollCount: number; openLotCount: number; emanet_mode: string | null } & HoldFlagRow;
     const rows = await prisma.$queryRaw<Row[]>(Prisma.sql`
       WITH pool AS (
         SELECT s.id, s."customerId"
@@ -991,15 +997,17 @@ export class SackSearchService {
         SELECT c.id, c.name, c.code,
                COALESCE(a.sack_count, 0) AS "sackCount",
                COALESCE(a.roll_count, 0) AS "rollCount",
-               COALESCE(l.open_lot_count, 0) AS "openLotCount"
+               COALESCE(l.open_lot_count, 0) AS "openLotCount",
+               hold.hold_intake, hold.hold_shipment, hold.hold_invoice
         FROM customers c
         LEFT JOIN agg a ON a."customerId" = c.id
         LEFT JOIN lots l ON l."customerId" = c.id
+        ${activeHoldFlagsLateralSql(Prisma.sql`c.id`)}
         WHERE c."isActive" = TRUE
           AND ${search ? cariAramaSql(search) : Prisma.sql`TRUE`}
           AND ${params.withSacksOnly ? Prisma.sql`COALESCE(a.sack_count, 0) > 0` : Prisma.sql`TRUE`}
       )
-      SELECT * FROM base t
+      SELECT t.*, ${cariHoldEmanetShipmentColumnSql()} AS emanet_mode FROM base t
       WHERE ${cursorSql}
       ORDER BY ${col} ${yon}, t.name ASC, t.id ASC
       LIMIT ${limit + 1}
@@ -1014,6 +1022,7 @@ export class SackSearchService {
       rollCount: r.rollCount,
       // Açık parti yalnız sevk partisi modunda anlamlı — grup modunda alan hiç gitmez.
       ...(lotMode ? { openLotCount: r.openLotCount } : {}),
+      ...listHoldView(r, r.emanet_mode ?? ""),
     }));
     const son = sayfa[sayfa.length - 1];
     const nextCursor = hasMore && son
