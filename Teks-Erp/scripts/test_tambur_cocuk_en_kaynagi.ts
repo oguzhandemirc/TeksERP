@@ -5,6 +5,8 @@
 // §1 ⭐ ayar yazılmamış (WO_TARGET_FIRST): ölçülmüş ana topta bile çocuk eni = iş emri
 //    eni (bugünkü `wo.width ?? roll.width`, bayt-aynı).
 // §2 ⭐ MEASURED_FIRST + aktif en izi: çocuklara ana topun ölçülmüş eni geçer.
+// §2b MEASURED_FIRST + izdeki widthAfter ≠ güncel Roll.width (ölçümden sonra elle düzeltme):
+//    kaynak güncel Roll.width'tir (iz yalnız "ölçüldü mü" sorusunu cevaplar).
 // §3 MEASURED_FIRST + iz yok: bugünkü kaynak (iş emri eni).
 // §4 MEASURED_FIRST + iz GERİ ALINMIŞ (revokedAt): bugünkü kaynak.
 // §5 MEASURED_FIRST + iş emri eni yok + iz yok: ana top eni (bugünkü yedek).
@@ -82,6 +84,7 @@ async function expectAppError(fn: () => Promise<unknown>): Promise<AppError | nu
       woWidth: number | null;
       rollWidth: number;
       trace?: "ACTIVE" | "REVOKED";
+      traceWidthAfter?: number;
     }) => {
       const wo = await prisma.workOrder.create({
         data: {
@@ -119,7 +122,7 @@ async function expectAppError(fn: () => Promise<unknown>): Promise<AppError | nu
             rollId: roll.id,
             workOrderStepId: step.id,
             operationType: RollOperationType.QC2_COMPLETED,
-            metadata: { widthBefore: opts.rollWidth + 5, widthAfter: opts.rollWidth },
+            metadata: { widthBefore: opts.rollWidth + 5, widthAfter: opts.traceWidthAfter ?? opts.rollWidth },
             ...(opts.trace === "REVOKED" ? { revokedAt: new Date(), revokeReason: "TEST-CE geri alındı" } : {}),
           },
         });
@@ -146,6 +149,11 @@ async function expectAppError(fn: () => Promise<unknown>): Promise<AppError | nu
     const r2 = await makeRoll({ woWidth: 300, rollWidth: 295, trace: "ACTIVE" });
     const w2 = await finalize(r2);
     check("§2 ⭐ MEASURED_FIRST + en izi → çocuk eni ölçülen en (295)", allEq(w2, 295), JSON.stringify(w2));
+
+    // §2b — iz widthAfter=295, Roll.width=293 → güncel Roll.width (293).
+    const r2b = await makeRoll({ woWidth: 300, rollWidth: 293, trace: "ACTIVE", traceWidthAfter: 295 });
+    const w2b = await finalize(r2b);
+    check("§2b MEASURED_FIRST + iz≠Roll.width → çocuk eni güncel Roll.width (293)", allEq(w2b, 293), JSON.stringify(w2b));
 
     // §3 — MEASURED_FIRST + iz yok → iş emri eni.
     const r3 = await makeRoll({ woWidth: 300, rollWidth: 295 });
