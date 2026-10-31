@@ -14,6 +14,8 @@ import { peripheralService } from "./service";
 import { useFoldValues } from "@/hooks/useFoldValues";
 import { PrinterSettingsFields } from "./PrinterSettingsFields";
 import { MeterCounterFields } from "./MeterCounterFields";
+import { MeterCalibrationFields } from "./MeterCalibrationFields";
+import { factoryDayKey } from "@/lib/factory-time";
 import {
   peripheralFormDefaults,
   peripheralFormSchema,
@@ -129,6 +131,9 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
         simulate: initial.simulate ?? false,
         counterMode: initial.counterMode ?? "",
         resetCommand: initial.resetCommand ?? "",
+        calibratedAt: initial.calibratedAt ? factoryDayKey(initial.calibratedAt) : "",
+        calibrationDueAt: initial.calibrationDueAt ? factoryDayKey(initial.calibrationDueAt) : "",
+        calibrationNote: initial.calibrationNote ?? "",
         owner: initial.machineId
           ? "machine"
           : initial.stationId
@@ -412,6 +417,7 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                 uyumsuzluk hint'i (PrinterSettingsFields). */}
             {isPrinter && <PrinterSettingsFields form={form} />}
             {kind === "METER" && <MeterCounterFields form={form} />}
+            {kind === "METER" && <MeterCalibrationFields form={form} />}
 
             {/* Aktiflik formdan YÖNETİLMEZ — yalnız listedeki Pasife Al / Aktifleştir /
                 Kalıcı Sil aksiyonlarından (users kalıbı). */}

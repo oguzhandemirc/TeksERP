@@ -66,6 +66,7 @@
 - **[ÇEKİRDEK]** Tablet QR'ı sürümlüdür (`teks-erp-tls:1` adressiz · `:2` + https adresleri); biçim yalnız `buildTlsQr`/`parseTlsQr` ikizinde yaşar, adres yalnız ipucudur — tablet izi QR'dakiyle tutmayan adrese bağlanmaz, hiçbiri tutmazsa ağda izle arar; v1 okuyucusu fazla alanı reddettiği için panel adressiz v1 kodunu da açar.
 - **[ÇEKİRDEK]** Katalog ATAMA İÇERMEZ — 'katalog koda, atama script'e/panele'. Unutulan atamayı görünür kılan tek yüzey 'N yetki hiçbir kullanıcıda yok' bandıdır. Yeni ekran görünmüyorsa sırayla bak: (1) satır DB'de mi, (2) kullanıcıya atanmış mı, (3) kullanıcı yeniden giriş yaptı mı (JWT bayat). <sub>(CLAUDE.md:240)</sub>
 - **[ÇEKİRDEK]** Fabrikaya kurulan yan servis (emsal: okuma servisi `okuma/`) GELEN PORT AÇMAZ: yalnız 127.0.0.1 ya da açık izinli compose iç adını dinler, 0.0.0.0 YASAK; çalışma anında dışarı istek (model indirme dahil) atmaz. · bekçi: `okuma/tests/test_baglama.py · okuma/tests/test_agsiz.py` <sub>(arşiv:2026-10-29 D6)</sub>
+- **[ÇEKİRDEK]** + **[PROFİL]** METER cihazının kalibrasyon kaydı (`calibratedAt`/`calibrationDueAt`/`calibrationNote`) İSTEĞE BAĞLIDIR ve ölçümü ASLA engellemez: `tambur.kalibrasyonKontrolu` KAPALI (varsayılan) yanıtı bayt-aynı bırakır, UYAR vadesi geçmiş sayaçla MACHINE ölçümüne `ApiResponse.warnings` notu ekler (kaynak MACHINE kalır); vade karşılaştırması yalnız `isCalibrationExpired`te (vade günü dahil geçerli). · bekçi: `Teks-Erp/scripts/test_sayac_kalibrasyon.ts` <sub>(B-3, 2026-10-31; `arsiv/2026-10.md` §2026-10-31 D4-B5k)</sub>
 
 ### Yasaklar
 
