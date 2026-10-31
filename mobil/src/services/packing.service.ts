@@ -446,6 +446,9 @@ export interface LocatedRoll {
     customer: { id: string; name: string };
     branch: { id: string; name: string } | null;
   } | null;
+  /** D4-F1b: müşteri barkoduyla bulunduysa (iç barkodda alan yok). */
+  matchedBy?: 'CUSTOMER_CODE';
+  customerCode?: string;
 }
 
 /** Kartela stoğu: ürün+renk bazında müsait (sevke girmemiş) kartela adedi. */
