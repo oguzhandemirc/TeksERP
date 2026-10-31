@@ -25,7 +25,7 @@ import { registerConditionSource, type ConditionSubject } from "../../jobs/notif
 import { computeReadyWorks, INCOMING_DOC_UNITS, type ReadyWorkUnit } from "../ready-works.service";
 import { READY_WORK_KIND as READY_WORK_KIND_CODE } from "../../constants/notification-catalog-sevkiyat";
 import { effectiveShipReadyPolicy } from "../helpers/ship-readiness.helper";
-import { readGelenBelgeEnabled, readShippingReadyNotifyUnits, readShippingReadyScanMinutes, type ShipReadyNotifyUnit } from "../system-setting.service";
+import { effectiveIncomingDocsEnabled, readShippingReadyNotifyUnits, readShippingReadyScanMinutes, type ShipReadyNotifyUnit } from "../system-setting.service";
 
 export const WORK_CONDITION_PERIOD_MS = 300_000;
 const DAY_MS = 86_400_000;
@@ -102,7 +102,7 @@ export const WORK_SOURCE_REAL_DEPS: Readonly<WorkSourceDeps> = {
   beamForecast: async () => (await finishForecastReport({})).data.satirlar,
   notifyUnits: () => readShippingReadyNotifyUnits(),
   scanMinutes: () => readShippingReadyScanMinutes(),
-  incomingDocOpen: () => readGelenBelgeEnabled(),
+  incomingDocOpen: () => effectiveIncomingDocsEnabled(),
   readyUnits: async (unit) => computeReadyWorks(unit, await effectiveShipReadyPolicy()),
   params: effectiveNotificationParams,
   now: Date.now,
