@@ -184,7 +184,10 @@ async function writeLinesTx(tx: Prisma.TransactionClient, id: string, lines: Lin
     if (seen.has(k)) throw AppError.badRequest("Aynı ürün, renk ve varyant listede iki kez yer alamaz.", { code: "PRICE_LIST_DUPLICATE_LINE" });
     seen.add(k);
   }
-  const prior = await tx.priceListLine.findMany({ where: { priceListId: id, recipeId: { not: null } }, select: { recipeId: true } });
+  // Varyantsız kümede ek sorgu yok (SIFIR FARK).
+  const prior = lines.some((l) => l.recipeId)
+    ? await tx.priceListLine.findMany({ where: { priceListId: id, recipeId: { not: null } }, select: { recipeId: true } })
+    : [];
   const priorRecipes = new Set(prior.map((p) => p.recipeId));
   await assertRecipesMatchItems(
     tx,

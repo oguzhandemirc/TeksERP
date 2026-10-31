@@ -34,27 +34,41 @@ export function readLineTargetValues(raw: unknown, label: string): TargetValueIt
 /**
  * Satır gövdelerini HAZIRLAR (yerinde): `targetValues` okunup doğrulanır ve normalize edilir; çeşitlerin BAYRAK
  * ikizleri `requiredPropertyIds`e birleşir. Mevcut özellik doğrulamasından ÖNCE çağrılır. Hedefsiz gövdede sorgu yok.
+ * Gövdede `targetValues` yoksa (eski istemci) MEVCUT satırın hedefleri korunur → onların ikizleri de korunmalı (§7.4).
  */
-export async function prepareLineTargetValues(db: Reader, lines: unknown): Promise<void> {
+export async function prepareLineTargetValues(
+  db: Reader,
+  lines: unknown,
+  current: ReadonlyArray<{ id: string; targetValues: ReadonlyArray<TargetValueItem> }> = [],
+): Promise<void> {
   if (!Array.isArray(lines)) return;
+  const currentById = new Map(current.map((l) => [l.id, l.targetValues]));
   for (const [i, raw] of lines.entries()) {
     if (!raw || typeof raw !== "object") continue;
     const line = raw as Record<string, unknown>;
     const items = readLineTargetValues(line.targetValues, `${i + 1}. kalem`);
-    if (items === undefined) continue;
+    if (items === undefined) {
+      const kept = typeof line.id === "string" ? currentById.get(line.id) : undefined;
+      if (kept && kept.length > 0) await mergeFlagTwins(db, line, kept);
+      continue;
+    }
     line.targetValues = items;
     if (items.length === 0) continue;
     await assertTargetValueItems(db, items);
-    const props = await db.fabricProperty.findMany({
-      where: { id: { in: items.map((t) => t.propertyId) } },
-      select: { variantOfPropertyId: true },
-    });
-    const current = Array.isArray(line.requiredPropertyIds)
-      ? (line.requiredPropertyIds as unknown[]).filter((p): p is string => typeof p === "string" && p.length > 0)
-      : [];
-    const flags = props.map((p) => p.variantOfPropertyId).filter((p): p is string => !!p);
-    line.requiredPropertyIds = [...new Set([...current, ...flags])];
+    await mergeFlagTwins(db, line, items);
   }
+}
+
+async function mergeFlagTwins(db: Reader, line: Record<string, unknown>, items: ReadonlyArray<TargetValueItem>): Promise<void> {
+  const props = await db.fabricProperty.findMany({
+    where: { id: { in: items.map((t) => t.propertyId) } },
+    select: { variantOfPropertyId: true },
+  });
+  const current = Array.isArray(line.requiredPropertyIds)
+    ? (line.requiredPropertyIds as unknown[]).filter((p): p is string => typeof p === "string" && p.length > 0)
+    : [];
+  const flags = props.map((p) => p.variantOfPropertyId).filter((p): p is string => !!p);
+  line.requiredPropertyIds = [...new Set([...current, ...flags])];
 }
 
 /** Hazırlanmış gövdenin hedef kümesi (`prepareLineTargetValues` sonrası). */

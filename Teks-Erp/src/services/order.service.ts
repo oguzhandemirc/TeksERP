@@ -1093,10 +1093,19 @@ export class OrderService extends BaseService {
    */
   private async prepareLineVariants(
     lines: unknown,
-    current: ReadonlyArray<{ id: string; itemId: string; recipeId: string | null }> = [],
+    current: ReadonlyArray<{
+      id: string;
+      itemId: string;
+      recipeId: string | null;
+      targetValues?: ReadonlyArray<{ propertyId: string; valueId: string }>;
+    }> = [],
   ): Promise<void> {
     await prepareOrderLineRecipes(prisma, lines, current);
-    await prepareLineTargetValues(prisma, lines);
+    await prepareLineTargetValues(
+      prisma,
+      lines,
+      current.map((l) => ({ id: l.id, targetValues: l.targetValues ?? [] })),
+    );
   }
 
   /** Satırın renk/özellik referansları var ve aktif mi (M-23 / denetim Q2). */

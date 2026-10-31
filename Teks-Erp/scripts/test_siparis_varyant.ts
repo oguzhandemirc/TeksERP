@@ -5,7 +5,7 @@
 //   §2 doğru varyant yazılır; pasif varyant yeni satırda 400 RECIPE_INACTIVE; varyantsız satır bugünkü gibi (NULL, hedef yok)
 //   §3 güncelleme: gövdede recipeId yoksa korunur; ürün değişip eski varyant kalırsa 400 RECIPE_ITEM_MISMATCH
 //   §4 ⭐ hedef değer: çeşit değeri yazılır + BAYRAK ikizi requiredProperties'e KENDİLİĞİNDEN girer;
-//      çeşit olmayan özellik 400; gövdede yoksa küme korunur; boş dizi temizler
+//      çeşit olmayan özellik 400; gövdede yoksa küme korunur (ikizi de, §4e); boş dizi temizler
 //   §5 ⭐ teklif kalemi uyumsuz varyant 400; teklif → sipariş varyantı TAŞIR
 //   §6 ⭐ fiyat listesi: varyantsız tekillik AYNI (aynı ürün+renk iki kez 400 · DB unique P2002); varyantlı satır
 //      desen genelinin yanında durur; uyumsuz varyant 400; teklif önerisi varyant fiyatını önce seçer
@@ -117,6 +117,13 @@ async function main(): Promise<void> {
     check("§4b çeşit olmayan özellik → 400 TARGET_PROPERTY_NOT_VARIANT", e4?.status === 400 && e4.code === "TARGET_PROPERTY_NOT_VARIANT", JSON.stringify(e4));
     await svc.update(o4, { lines: [{ id: l4.id, itemId: m.fabricId, quantity: 100, unitPrice: 10, requiredPropertyIds: [flag.id] }] });
     check("§4c gövdede targetValues yok → küme korunur", (await linesOf(o4))[0]!.targetValues.length === 1);
+    await svc.update(o4, { lines: [{ id: l4.id, itemId: m.fabricId, quantity: 100, unitPrice: 10, requiredPropertyIds: [] }] });
+    const l4e = (await linesOf(o4))[0]!;
+    check(
+      "§4e ⭐ targetValues yok + ikiz listeden çıkarıldı → hedef korunur, BAYRAK ikizi requiredProperties'te KALIR",
+      l4e.targetValues.length === 1 && l4e.requiredProperties.some((p) => p.propertyId === flag.id),
+      JSON.stringify(l4e),
+    );
     await svc.update(o4, { lines: [{ id: l4.id, itemId: m.fabricId, quantity: 100, unitPrice: 10, requiredPropertyIds: [flag.id], targetValues: [] }] });
     check("§4d boş dizi → küme temizlenir", (await linesOf(o4))[0]!.targetValues.length === 0);
 
