@@ -1668,6 +1668,21 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         ],
       },
       {
+        // D4-B5k (B-3, 2026-10-31): `defaultValue` backend `DEFAULT_TAMBUR_CALIBRATION_CHECK` ile birebir.
+        enumKey: "tamburCalibrationCheck",
+        group: "Tambur",
+        title: "Sayaç kalibrasyon süresi kontrolü",
+        summary: "Kalibrasyon süresi geçmiş metre sayacıyla ölçüm yapılınca tablet ve panel uyarsın mı.",
+        desc: "Kalibrasyon tarihi ve geçerlilik sonu Tanımlar → Donanım'da metre sayacının kartına isteğe bağlı girilir. “Kapalı” (varsayılan) bu tarihlere hiç bakılmaz. “Uyar” seçilince geçerlilik sonu geçmiş sayaçla yapılan ölçümde tablet uyarı gösterir ve Donanım listesinde sayacın yanında “Kalibrasyon süresi geçti” görünür. Ölçüm hiçbir durumda ENGELLENMEZ; sayaç ölçümü olarak kaydedilir. Tarihi girilmemiş sayaç için uyarı çıkmaz.",
+        defaultValue: "KAPALI",
+        display: "radio",
+        audience: ["Operatör", "Yönetim"],
+        options: [
+          { value: "KAPALI", label: "Kapalı (bugünkü)", hint: "Kalibrasyon tarihleri yalnız kayıt olarak durur." },
+          { value: "UYAR", label: "Uyar", hint: "Süresi geçmiş sayaçla ölçümde uyarı; ölçüm yine kaydedilir." },
+        ],
+      },
+      {
         // D4-E3 (2026-10-31): `defaultValue` backend `DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE` ile birebir.
         enumKey: "tamburChildWidthSource",
         group: "Tambur",

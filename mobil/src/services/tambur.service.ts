@@ -1,4 +1,5 @@
 import { apiClient } from './api';
+import { showMeterWarnings } from '../lib/meterWarnings';
 import type { ApiResponse } from '../types/api';
 import type { RollCursorPage } from './roll.service';
 import type {
@@ -313,7 +314,7 @@ export const tamburService = {
   finalize: (data: TamburFinalizeRequest): Promise<ApiResponse<unknown>> =>
     apiClient
       .post<ApiResponse<unknown>>('/tambur/finalize', data)
-      .then((r) => r.data),
+      .then((r) => showMeterWarnings(r.data)),
 
   // Tambur'da yeni hata kaydı (Kurşun'da yakalanmamış)
   reportError: (data: TamburReportErrorRequest): Promise<ApiResponse<unknown>> =>
@@ -455,7 +456,7 @@ export const tamburService = {
   ): Promise<ApiResponse<unknown>> =>
     apiClient
       .post<ApiResponse<unknown>>(`/tambur/${rollId}/cut`, data)
-      .then((r) => r.data),
+      .then((r) => showMeterWarnings(r.data)),
 
   /**
    * Açık kumaşı bitir — parent Roll TAMBUR_CONSUMED'a çekilir. scrapRemaining=
@@ -484,7 +485,7 @@ export const tamburService = {
         `/tambur/${rollId}/cut-warehouse`,
         data
       )
-      .then((r) => r.data),
+      .then((r) => showMeterWarnings(r.data)),
 
   /**
    * Top Kesme bitir — parent TAMBUR_CONSUMED'a (arşiv) çekilir; kalan kumaş için
@@ -572,7 +573,7 @@ export const tamburService = {
   ): Promise<ApiResponse<TamburManualRollResult>> =>
     apiClient
       .post<ApiResponse<TamburManualRollResult>>('/tambur/manual/roll', data)
-      .then((r) => r.data),
+      .then((r) => showMeterWarnings(r.data)),
 
   /**
    * "MANUEL EKLE" modu — KARTSIZ bitmiş ürün. Hiçbir iş emrine / adıma / partiye
@@ -587,5 +588,5 @@ export const tamburService = {
   ): Promise<ApiResponse<TamburManualProduceResult>> =>
     apiClient
       .post<ApiResponse<TamburManualProduceResult>>('/tambur/manual/produce', data)
-      .then((r) => r.data),
+      .then((r) => showMeterWarnings(r.data)),
 };

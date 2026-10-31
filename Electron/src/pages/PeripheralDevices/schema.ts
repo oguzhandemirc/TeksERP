@@ -26,6 +26,10 @@ export const peripheralFormSchema = z.object({
     .regex(/^[\x20-\x7E]*$/, "Yalnız yazdırılabilir ASCII (Türkçe harf ve satır sonu yazılmaz; \\r gibi düz yazın)")
     .optional()
     .default(""),
+  // Kalibrasyon kaydı (D4-B5k) — isteğe bağlı, yalnız METER; `yyyy-MM-dd` (backend fabrika günü başına çevirir).
+  calibratedAt: z.string().trim().optional().default(""),
+  calibrationDueAt: z.string().trim().optional().default(""),
+  calibrationNote: z.string().trim().max(200, "En çok 200 karakter").optional().default(""),
   // "device" (tablete bağlı) YENİ seçimlerde sunulmaz — yalnız eski kayıtların
   // round-trip'i için parse edilir (çalışma oturumu modeli: donanım YERE bağlanır).
   owner: z.enum(["none", "machine", "station", "device"]),
@@ -56,6 +60,10 @@ export const peripheralFormSchema = z.object({
   // etkilenir (backend de enforce eder; buradaki kural anlık form hatası için).
   if (v.kind === "LABEL_PRINTER" && !v.languageOverride.trim()) {
     ctx.addIssue({ code: "custom", path: ["languageOverride"], message: "Yazıcı dili seçin" });
+  }
+  // Backend `CALIBRATION_DUE_BEFORE_DATE` ikizi (gün anahtarı sözlük sırası = takvim sırası).
+  if (v.kind === "METER" && v.calibratedAt && v.calibrationDueAt && v.calibrationDueAt < v.calibratedAt) {
+    ctx.addIssue({ code: "custom", path: ["calibrationDueAt"], message: "Geçerlilik sonu kalibrasyon tarihinden önce olamaz" });
   }
   // Yazıcı medyası — opsiyonel (boş → sistem varsayılanı), ama girilmişse sınırlı.
   // Backend peripheral.service.validateRefs aynı aralıkları enforce eder.
@@ -108,6 +116,9 @@ export function buildPeripheralPayload(v: PeripheralFormValues) {
     // Sayaç alanları yalnız METER'de; diğer türde temizlenir (backend dolu değeri 400'ler).
     counterMode: v.kind === "METER" && v.counterMode ? v.counterMode : null,
     resetCommand: v.kind === "METER" ? nn(v.resetCommand) : null,
+    calibratedAt: v.kind === "METER" ? nn(v.calibratedAt) : null,
+    calibrationDueAt: v.kind === "METER" ? nn(v.calibrationDueAt) : null,
+    calibrationNote: v.kind === "METER" ? nn(v.calibrationNote) : null,
     machineId: v.owner === "machine" ? nn(v.machineId) : null,
     // Yalnız MAKİNESİZ istasyon (backend enforce eder — SHIPPING kantarı gibi).
     stationId: v.owner === "station" ? nn(v.stationId) : null,
@@ -151,6 +162,9 @@ export const peripheralFormDefaults: PeripheralFormValues = {
   simulate: false,
   counterMode: "",
   resetCommand: "",
+  calibratedAt: "",
+  calibrationDueAt: "",
+  calibrationNote: "",
   owner: "none",
   machineId: "",
   stationId: "",
