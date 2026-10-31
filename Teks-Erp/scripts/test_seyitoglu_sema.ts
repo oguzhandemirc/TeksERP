@@ -54,6 +54,7 @@ async function main(): Promise<void> {
   const tag = randomUUID().slice(0, 8).toUpperCase();
   const yarn = randomUUID();
   const fabric = randomUUID();
+  const fabric2 = randomUUID();
   const warp = randomUUID();
   const recipe1 = randomUUID();
   const recipe2 = randomUUID();
@@ -66,7 +67,8 @@ async function main(): Promise<void> {
         await tx.$executeRawUnsafe(
           `INSERT INTO items (id, code, name, "itemType", "updatedAt") VALUES
            ('${yarn}', 'TEST-SYY-${tag}', 'TEST SY iplik ${tag}', 'YARN', now()),
-           ('${fabric}', 'TEST-SYF-${tag}', 'TEST SY kumas ${tag}', 'FABRIC', now())`
+           ('${fabric}', 'TEST-SYF-${tag}', 'TEST SY kumas ${tag}', 'FABRIC', now()),
+           ('${fabric2}', 'TEST-SYG-${tag}', 'TEST SY kumas2 ${tag}', 'FABRIC', now())`
         );
         await tx.$executeRawUnsafe(
           `INSERT INTO warp_specs (id, code, name, "yarnItemId", "endsCount", "updatedAt")
@@ -135,30 +137,33 @@ async function main(): Promise<void> {
         await probe(tx, "§3f parametre seti: ücret dolu, döviz boş → CHECK 23514", defPick("0.02", "NULL"), "23514");
         await probe(tx, "§3g parametre seti: ikisi dolu yazılır", defPick("0.02", "'USD'"), null);
 
-        const version = (no: number, recipeId: string | null, loom: string) =>
+        const version = (no: number, recipeId: string | null, loom: string, itemId = fabric) =>
           `INSERT INTO standard_cost_versions (id, "itemId", "versionNo", status, "parameterSetId", "rawCostPerMTry",
              "totalCostPerMTry", "warpKgPerM", "weftKgPerM", "loomMPerHour", "fxRates", "inputSnapshot", "inputHash",
              warnings, "recipeId", "updatedAt")
-           VALUES ('${randomUUID()}', '${fabric}', ${no}, 'ACTIVE', '${params}', 1, 1, 0.1, 0.1, ${loom}, '{}', '{}',
+           VALUES ('${randomUUID()}', '${itemId}', ${no}, 'ACTIVE', '${params}', 1, 1, 0.1, 0.1, ${loom}, '{}', '{}',
              '${ZERO_HASH}', '[]', ${recipeId ? `'${recipeId}'` : "NULL"}, now())`;
         await probe(tx, "§3h desen geneli ACTIVE v1 yazılır", version(1, null, "12.5"), null);
         await probe(tx, "§3i desen geneli İKİNCİ ACTIVE → 23505 (eski tekillik aynen)", version(2, null, "12.5"), "23505");
         await probe(tx, "§3j varyant V01 ACTIVE yazılır (loomMPerHour NULL)", version(3, recipe1, "NULL"), null);
         await probe(tx, "§3k varyant V01 İKİNCİ ACTIVE → 23505", version(4, recipe1, "12.5"), "23505");
         await probe(tx, "§3l varyant V02 ACTIVE yazılır", version(5, recipe2, "12.5"), null);
+        // Körlük zemini: tekillik ürün başınadır — itemId anahtardan düşerse ikinci ürün 23505 alır.
+        await probe(tx, "§3m BAŞKA ürünün desen geneli ACTIVE yazılır", version(6, null, "12.5", fabric2), null);
 
         console.log("\n── §4 MİG-3 fiyat listesi tekilliği (varyant genişlemesi) ──");
         await tx.$executeRawUnsafe(
           `INSERT INTO price_lists (id, "listNo", "clientToken", name, currency, "updatedAt")
            VALUES ('${list}', 'TEST-SYL-${tag}', '${randomUUID()}', 'TEST SY liste ${tag}', 'USD', now())`
         );
-        const line = (no: number, recipeId: string | null) =>
+        const line = (no: number, recipeId: string | null, itemId = fabric) =>
           `INSERT INTO price_list_lines (id, "priceListId", "lineNo", "itemId", "recipeId", "unitPrice", "updatedAt")
-           VALUES ('${randomUUID()}', '${list}', ${no}, '${fabric}', ${recipeId ? `'${recipeId}'` : "NULL"}, 1, now())`;
+           VALUES ('${randomUUID()}', '${list}', ${no}, '${itemId}', ${recipeId ? `'${recipeId}'` : "NULL"}, 1, now())`;
         await probe(tx, "§4a varyantsız satır yazılır", line(1, null), null);
         await probe(tx, "§4b aynı ürün+renk varyantsız İKİNCİ satır → 23505 (eski tekillik aynen)", line(2, null), "23505");
         await probe(tx, "§4c aynı ürün V01 satırı yazılır", line(3, recipe1), null);
         await probe(tx, "§4d aynı ürün V01 İKİNCİ satır → 23505", line(4, recipe1), "23505");
+        await probe(tx, "§4e aynı listede BAŞKA ürünün varyantsız satırı yazılır", line(5, null, fabric2), null);
 
         throw new Rollback();
       },
@@ -169,7 +174,7 @@ async function main(): Promise<void> {
       check("tx beklenmeyen hatayla düştü", false, String((e as Error).message ?? e).slice(0, 300));
     }
   }
-  const leftover = await prisma.item.count({ where: { code: { in: [`TEST-SYY-${tag}`, `TEST-SYF-${tag}`] } } });
+  const leftover = await prisma.item.count({ where: { code: { in: [`TEST-SYY-${tag}`, `TEST-SYF-${tag}`, `TEST-SYG-${tag}`] } } });
   check("§9 geri alındı — kalıntı yok", leftover === 0, `kalan ${leftover}`);
 
   console.log(`\n=== Sonuç: ${passed} geçti, ${failed} başarısız ===`);

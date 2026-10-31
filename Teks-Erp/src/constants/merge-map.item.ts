@@ -16,7 +16,18 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "Roll", table: "rolls", column: "itemId", label: "Top" },
     { kind: "MOVE", model: "OrderLine", table: "order_lines", column: "itemId", label: "Sipariş kalemi" },
     { kind: "MOVE", model: "WorkOrder", table: "work_orders", column: "targetItemId", label: "Terbiye iş emri (hedef kumaş)" },
-    { kind: "MOVE", model: "ProductRecipe", table: "product_recipes", column: "itemId", label: "Reçete" },
+    {
+      // SEYİTOĞLU MİG-1: `product_recipes_item_variant_uq (itemId, variantCode) WHERE variantCode IS NOT NULL`.
+      // Düz `=` NULL'ı eşlemez → varyantsız reçeteler eskisi gibi taşınır; aynı varyant kodu ham 23505 yerine 409.
+      kind: "CONFLICT",
+      model: "ProductRecipe",
+      table: "product_recipes",
+      column: "itemId",
+      label: "Reçete",
+      uniqueOn: ["itemId", "variantCode"],
+      policy: "BLOCK",
+      why: "İki kumaşta aynı varyant kodlu reçete varsa hangisinin geçerli olduğu ürün sorumlusunun kararıdır.",
+    },
     // ⚠️ SIRA LOAD-BEARING (kilit sırası sınıfı, 2026-09-12): düşüm defteri
     // kartelalardan ÖNCE gelir. Kartela stok düşümü/stornosu da ilk önce düşüm
     // BAŞLIĞINI claim edip sonra kartelaya yazıyor; ters sıra iki tx arasında

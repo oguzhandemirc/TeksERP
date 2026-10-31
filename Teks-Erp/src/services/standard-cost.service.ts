@@ -77,7 +77,8 @@ async function writeVersion(p: {
   const now = new Date();
   try {
     return await prisma.$transaction(async (tx) => {
-      const prev = await tx.standardCostVersion.findFirst({ where: { itemId: p.itemId, status: "ACTIVE" }, select: { id: true } });
+      // Aktif tekillik (itemId, recipeId) başına (SY-MIG); bu yol desen geneli sürümü yazar → varyant sürümüne dokunmaz.
+      const prev = await tx.standardCostVersion.findFirst({ where: { itemId: p.itemId, recipeId: null, status: "ACTIVE" }, select: { id: true } });
       if (prev) {
         const claim = await tx.standardCostVersion.updateMany({ where: { id: prev.id, status: "ACTIVE" }, data: { status: "SUPERSEDED", supersededAt: now } });
         if (claim.count === 0) throw AppError.conflict("Maliyet sürümü aynı anda değişti; yeniden deneyin.", { code: "COST_VERSION_CONFLICT" });
@@ -187,7 +188,7 @@ export async function getCostItem(itemId: string) {
   const [item, structure, active] = [
     await prisma.item.findUniqueOrThrow({ where: { id: itemId }, select: { id: true, code: true, name: true } }),
     await prisma.costStructure.findUnique({ where: { itemId } }),
-    await prisma.standardCostVersion.findFirst({ where: { itemId, status: "ACTIVE" }, select: { ...versionSelect, lines: { orderBy: { lineNo: "asc" } } } }),
+    await prisma.standardCostVersion.findFirst({ where: { itemId, recipeId: null, status: "ACTIVE" }, select: { ...versionSelect, lines: { orderBy: { lineNo: "asc" } } } }),
   ];
   const st = structureStatus(input);
   return {
@@ -213,7 +214,7 @@ export async function listCostItems(q: CostItemListQuery) {
   const items = await prisma.item.findMany({ where, orderBy: [{ code: "asc" }, { id: "asc" }], select: { id: true, code: true, name: true } });
   const ids = items.map((i) => i.id);
   const src = await prisma.$transaction((tx) => loadCostSourcesTx(tx, ids));
-  const actives = ids.length ? await prisma.standardCostVersion.findMany({ where: { status: "ACTIVE", itemId: { in: ids } }, select: versionSelect }) : [];
+  const actives = ids.length ? await prisma.standardCostVersion.findMany({ where: { status: "ACTIVE", recipeId: null, itemId: { in: ids } }, select: versionSelect }) : [];
   const byItem = new Map(actives.map((v) => [v.itemId, v]));
   const rows = items.map((it) => {
     const input = buildCostInput(src, { itemId: it.id });
