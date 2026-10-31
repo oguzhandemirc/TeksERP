@@ -112,7 +112,7 @@ type Adim =
   | { tur: "switch"; title: string; key: string }
   | { tur: "gomulu"; parentTitle: string; parentKey: string; label: string; key: string; value: number }
   | { tur: "spin"; title: string; key: string; value: number; ham: boolean }
-  | { tur: "radio" | "combobox"; title: string; key: string; value: string }
+  | { tur: "radio" | "checks" | "combobox"; title: string; key: string; value: string }
   | { tur: "textbox"; title: string; key: string; value: string };
 
 function adimlar(cat: SettingsCategory): Adim[] {
@@ -128,7 +128,7 @@ function adimlar(cat: SettingsCategory): Adim[] {
   for (const f of r.enumFlags) {
     const other = f.options.find((o) => o.value !== f.defaultValue);
     if (!other) continue;
-    out.push({ tur: f.display === "radio" ? "radio" : "combobox", title: f.title, key: f.enumKey, value: other.value });
+    out.push({ tur: f.display === "radio" ? "radio" : f.display === "checks" ? "checks" : "combobox", title: f.title, key: f.enumKey, value: other.value });
   }
   for (const f of r.textFlags) out.push({ tur: "textbox", title: f.title, key: f.textKey, value: textCandidate(f) });
   for (const f of r.settingFields) out.push({ tur: "spin", title: f.title, key: f.key, value: otherNumber(f.min, f.max, f.fallback), ham: true });
@@ -172,8 +172,8 @@ function touch(parca: Adim[]): { patchKeys: string[]; rawKeys: string[] } {
     } else if (s.tur === "spin") {
       fireEvent.change(pick("spinbutton", s.title), { target: { value: String(s.value) } });
       (s.ham ? rawKeys : patchKeys).push(s.key);
-    } else if (s.tur === "radio") {
-      const radio = within(pick("group", s.title)).getAllByRole("radio").find((el) => (el as HTMLInputElement).value === s.value)!;
+    } else if (s.tur === "radio" || s.tur === "checks") {
+      const radio = within(pick("group", s.title)).getAllByRole(s.tur === "radio" ? "radio" : "checkbox").find((el) => (el as HTMLInputElement).value === s.value)!;
       fireEvent.click(radio);
       patchKeys.push(s.key);
     } else if (s.tur === "combobox" || s.tur === "textbox") {
@@ -228,6 +228,9 @@ describe("ayar ekranı — Kaydet gövdesi", () => {
         await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
         const sent = Object.keys(update.mock.calls[0]![0] as object).sort();
         expect(sent, `${cat.id}: gövde`).toEqual([...new Set(patchKeys)].sort());
+        // Küme satırı (D4-J2) gövdeye DİZİ olarak gider — metin giderse backend 400 verir.
+        const body = update.mock.calls[0]![0] as Record<string, unknown>;
+        for (const st of parca) if (st.tur === "checks") expect(body[st.key], `${st.key}: dizi`).toEqual([st.value]);
       } else {
         expect(update).not.toHaveBeenCalled();
       }
