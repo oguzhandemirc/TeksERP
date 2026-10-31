@@ -1,6 +1,7 @@
 // Kart formu "Finans" bölümü (Z-B ①) — yalnız `finance:read` + modül açıkken çizilir; `finance:write` yoksa salt-okunur.
 // Açık bakiye ve mevcut terimler kartın hesabından (`by-customer`); hesap yoksa (404) sakin cümle, uydurma yok.
 import { useEffect } from "react";
+import { RiskLimitModeHint } from "@/pages/Finance/RiskLimitModeHint";
 import { useQuery } from "@tanstack/react-query";
 import type { UseFormReturn } from "react-hook-form";
 import { FormField } from "@/components/forms/FormField";
@@ -73,6 +74,7 @@ export function CustomerFinanceSection({ form, customerId, canWrite }: Props) {
         <FormField label="Vergi dairesi"><Input maxLength={100} readOnly={ro} aria-label="Vergi dairesi" {...form.register("financeTaxOffice")} /></FormField>
         <FormField label="Risk limiti" error={riskLimitError(risk ?? "") ? { message: riskLimitError(risk ?? "") as string } : undefined}>
           <Input inputMode="decimal" readOnly={ro} aria-label="Risk limiti" {...form.register("financeRiskLimit")} />
+          <RiskLimitModeHint />
         </FormField>
         <CariServiceBillingTriggerField
           value={trigger as ServiceBillingTriggerChoice | null}
