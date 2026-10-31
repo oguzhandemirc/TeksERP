@@ -13,6 +13,13 @@ import { requireReportOpen } from "../../middlewares/report.middleware";
 import { requireMaliyetEnabled } from "../../middlewares/module.middleware";
 import { yarnNeedReport } from "../../services/reports/yarn-need.report.service";
 import { buildYarnNeedSunumu } from "../../services/reports/yarn-need.sunum";
+import { requireFinanceEnabled } from "../../middlewares/finance.middleware";
+import { reportEnvelope } from "../../services/reports/_shared";
+import { coreDayRangeQuerySchema, resolveCoreDayRange } from "../../services/reports/temel/_day-range";
+import { PROFIT_BREAKDOWNS, PROFITABILITY_KEY } from "../../services/reports/profitability.sunum";
+import { profitabilityReport } from "../../services/reports/profitability.report";
+import { REPORT_BY_KEY } from "../../constants/report-catalog";
+import { AppError } from "../../utils/app-error";
 
 const router = Router();
 router.use(verifyToken, requireMaliyetEnabled);
@@ -53,5 +60,44 @@ router.get("/iplik-ihtiyaci", requireReportOpen("maliyet/iplik-ihtiyaci"), requi
     next(e);
   }
 });
+
+/** Kârlılık sorgusu — gün aralığı + kıyas + kırılım; tanınmayan anahtar 400. */
+export const profitabilityQuerySchema = coreDayRangeQuerySchema.extend({
+  kirilim: z.enum(PROFIT_BREAKDOWNS, { message: "Tanınmayan kırılım" }).optional(),
+}).strict();
+
+/**
+ * @openapi
+ * /api/reports/maliyet/karlilik:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Kârlılık — hizmet işlerinin kesinleşen geliri, ipe/makineye/dışarıya giden, kalan (katkı) ve net (RaporSunumu)
+ *     description: >
+ *       Tek kaynak `profitability.helper` (sonuç saklanmaz, kârlılık ayarları okuma anında uygulanır; özeti
+ *       `parametreler[hesap]`). Dönem TAM AYLARLA hesaplanır (gün aralığının ayları). Eksik girdili iş 0 yazılmaz,
+ *       boş + "eksik" rozeti. Modül: maliyet ∧ ön muhasebe; izin `cost:read` + `report:finance`.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: from, schema: { type: string, format: date } }
+ *       - { in: query, name: to, schema: { type: string, format: date } }
+ *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] } }
+ *       - { in: query, name: kirilim, schema: { type: string, enum: [musteri, islem, makine, ay, is] } }
+ *     responses:
+ *       200: { description: "RaporSunumu (tablo = seçili kırılım; toplam tam kümeden)" }
+ *       400: { description: Tanınmayan ya da geçersiz parametre }
+ *       403: { description: Maliyet ya da ön muhasebe kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
+ */
+router.get("/karlilik", requireFinanceEnabled, requireReportOpen("maliyet/karlilik"), requirePermission("cost:read"), requirePermission("report:finance"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const q = profitabilityQuerySchema.parse(req.query);
+      const window = resolveCoreDayRange(q, REPORT_BY_KEY.get(PROFITABILITY_KEY)?.varsayilanGun ?? 90);
+      const sunum = await profitabilityReport(window, q.kirilim ?? "musteri");
+      if (!sunum) throw AppError.forbidden("Kârlılık için maliyet ve ön muhasebe modülleri açık olmalı", { code: "MODULE_DISABLED", modul: "maliyet" });
+      res.status(200).json(reportEnvelope(sunum, window.range, window.compareRange, { warnings: sunum.uyarilar }));
+    } catch (e) {
+      next(e);
+    }
+  });
 
 export default router;
