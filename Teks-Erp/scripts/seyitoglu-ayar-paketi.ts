@@ -20,12 +20,12 @@ import { applySetup, planSetupFromDb, type SetupRow } from "./lib/seyitoglu-kuru
 /**
  * §15.1 Seyitoğlu sütunu. `maliyet.verimlilik.sureKaynagi` İKİNCİ ayar olarak açılmaz
  * (§15.1 notu): Gülkesim D4-G2b'nin `maliyet.karlilik.makineSuresi` ayarı okunur. KOSUM (MachineRun)
- * = OTURUM (WorkSession) denkliği ÖLÇÜLMEDİ; OTURUM G2b varsayılanı olduğundan satır bugün etkisiz —
- * SY-D2 ölçerek karar verir (G2b kümesine KOSUM eklenir ya da tezgâhta eşlik kabul edilir).
+ * = OTURUM (WorkSession) denkliği ÖLÇÜLMEDİ; OTURUM G2b varsayılanı olduğundan pakete satır YAZILMAZ
+ * (anahtar hizmet paketinde; §1e iki paketi ayrık tutar) — SY-D2 ölçerek karar verir (G2b kümesine KOSUM
+ * eklenir ya da tezgâhta eşlik kabul edilir).
  */
 export const SEYITOGLU_SETTINGS: readonly PaketSatiri[] = [
   { anahtar: "maliyet.dokumaStandartYontemi", alan: "costWeavingStandardMethod", hedef: "ATKI_UCRETI", dilim: "SY-D2" },
-  { anahtar: "maliyet.karlilik.makineSuresi", alan: "costProfitabilityMachineTime", hedef: "OTURUM", dilim: "D4-G2b" },
   // S5 cevabına kadar Excel uyumu (fabrika "ham tartı" derse NET_HAM'a çekilir).
   { anahtar: "maliyet.terbiyeKgTabani", alan: "costFinishingKgBasis", hedef: "IPLIK_TUKETIMI", dilim: "SY-E1" },
   { anahtar: "maliyet.sunumDovizi", alan: "costPresentationCurrency", hedef: "USD", dilim: "SY-J1" },
