@@ -568,6 +568,7 @@ export const updateSchema = z.strictObject({
   /** D4-B1: Tambur simüle metre kabulü (varsayılan açık) · ölçüm kaynağı zorunluluğu (varsayılan kapalı). */
   tamburSimulatedMeterEnabled: z.boolean().optional(),
   tamburMeasureSourceRequired: z.boolean().optional(),
+  tamburCalibrationCheck: z.enum(["KAPALI", "UYAR"], { message: "Sayaç kalibrasyon kontrolü KAPALI ya da UYAR olmalı" }).optional(),
   // production.kursunBypassEnabled — kurşun istasyonuna tablet konulmayan düzen (default false).
   // ENFORCE edilir ama yalnız YENİ dağıtım oluşturmayı kapılar; dağıtılmış iş emirleri
   // bayrak kapansa da bypass rejiminde biter.

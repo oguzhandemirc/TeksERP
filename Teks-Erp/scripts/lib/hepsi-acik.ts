@@ -96,6 +96,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   tamburOverQuantityEnabled: A(true),
   tamburUndoFullSameDayOnly: A(true),
   tamburSimulatedMeterEnabled: A(true),
+  tamburCalibrationCheck: A("UYAR"), // süresi geçmiş sayaç uyarı yolunu işletir (ölçüm engellenmez)
   tamburMeasureSourceRequired: V("çıkışsız kapı: measure göndermeyen istemci 400 alır; kural test_tambur_olcum_kaynagi'nde sınanır"),
   tamburShortCutA1Enabled: A(true),
   tamburShortCutA1ThresholdM: A(5),

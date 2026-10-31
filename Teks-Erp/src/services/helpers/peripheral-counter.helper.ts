@@ -3,6 +3,7 @@
 // =============================================================================
 import { PeripheralKind } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
+import { factoryDayStartOfKey } from "../../constants/time";
 
 /**
  * H4 sayaç alanları (BaseController'dan yazılabilir — doğrulama burada): `counterMode` RESETTING/CUMULATIVE,
@@ -32,3 +33,56 @@ export function assertMeterCounterFields(data: Record<string, unknown>, kind: st
   }
 }
 
+
+const CALIBRATION_DATE_FIELDS = ["calibratedAt", "calibrationDueAt"] as const;
+
+/** "YYYY-AA-GG" → o FABRİKA gününün başı; ISO anı olduğu gibi; başka biçim 400 (sessiz düşürme yok). */
+function parseCalibrationDate(field: string, v: unknown): Date | null {
+  if (v === null || v === "") return null;
+  if (v instanceof Date && !Number.isNaN(v.getTime())) return v;
+  if (typeof v === "string") {
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(v) ? factoryDayStartOfKey(v) : new Date(v);
+    if (/^\d{4}-\d{2}-\d{2}/.test(v) && !Number.isNaN(d.getTime())) return d;
+  }
+  throw AppError.badRequest(
+    field === "calibratedAt" ? "Kalibrasyon tarihi geçersiz (YYYY-AA-GG)" : "Kalibrasyon geçerlilik sonu geçersiz (YYYY-AA-GG)",
+    { code: "INVALID_CALIBRATION_DATE", field },
+  );
+}
+
+/**
+ * D4-B5k kalibrasyon kaydı (İSTEĞE BAĞLI; BaseController'dan yazılabilir — doğrulama burada). Yalnız METER
+ * cihazında dolu olabilir (başka türde 400); vade < kalibrasyon 400 (DB CHECK'in okunur ikizi; PATCH'te
+ * gönderilmeyen taraf mevcut kayıttan alınır). Tür METER'den çıkarken alanlar temizlenir.
+ */
+export function assertMeterCalibrationFields(
+  data: Record<string, unknown>,
+  kind: string | null,
+  existing: { calibratedAt: Date | null; calibrationDueAt: Date | null } | null = null,
+): void {
+  for (const f of CALIBRATION_DATE_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(data, f)) data[f] = parseCalibrationDate(f, data[f]);
+  }
+  if (Object.prototype.hasOwnProperty.call(data, "calibrationNote")) {
+    const n = data.calibrationNote;
+    if (n !== null && typeof n !== "string") throw AppError.badRequest("Kalibrasyon notu metin olmalı", { code: "INVALID_CALIBRATION_NOTE" });
+    const t = typeof n === "string" ? n.trim() : "";
+    if (t.length > 200) throw AppError.badRequest("Kalibrasyon notu en çok 200 karakter olmalı", { code: "INVALID_CALIBRATION_NOTE" });
+    data.calibrationNote = t === "" ? null : t;
+  }
+  const filled = [...CALIBRATION_DATE_FIELDS, "calibrationNote"].some((f) => data[f] !== undefined && data[f] !== null);
+  if (filled && kind !== PeripheralKind.METER) {
+    throw AppError.badRequest("Kalibrasyon kaydı yalnız metre (METER) cihazında girilir", { code: "CALIBRATION_FIELDS_METER_ONLY" });
+  }
+  if (kind !== PeripheralKind.METER && Object.prototype.hasOwnProperty.call(data, "kind")) {
+    data.calibratedAt = null;
+    data.calibrationDueAt = null;
+    data.calibrationNote = null;
+    return;
+  }
+  const at = (data.calibratedAt !== undefined ? data.calibratedAt : existing?.calibratedAt) as Date | null | undefined;
+  const due = (data.calibrationDueAt !== undefined ? data.calibrationDueAt : existing?.calibrationDueAt) as Date | null | undefined;
+  if (at && due && due.getTime() < at.getTime()) {
+    throw AppError.badRequest("Kalibrasyon geçerlilik sonu kalibrasyon tarihinden önce olamaz", { code: "CALIBRATION_DUE_BEFORE_DATE" });
+  }
+}

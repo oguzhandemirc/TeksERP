@@ -123,6 +123,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "tamburUndoFullSameDayOnly",
       "tamburSimulatedMeterEnabled",
       "tamburMeasureSourceRequired",
+      "tamburCalibrationCheck",
       "productionCancelReasonRequired",
     ],
   },

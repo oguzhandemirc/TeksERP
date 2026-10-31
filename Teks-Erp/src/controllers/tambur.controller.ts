@@ -5,6 +5,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { meterSourceSchema } from "../services/helpers/meter-reading.helper";
+import { meterCalibrationWarnings, withResponseWarnings } from "../services/helpers/meter-calibration.helper";
 import { TamburService } from "../services/tambur.service";
 import { TamburUndoService } from "../services/tambur-undo.service";
 import { KursunBypassService } from "../services/kursun-bypass.service";
@@ -324,7 +325,7 @@ export class TamburController {
         stamp?.stationId ?? null,
         stamp?.machineId ?? req.device?.machineId ?? null,
       );
-      res.status(201).json(result);
+      res.status(201).json(withResponseWarnings(result, await meterCalibrationWarnings([body.measure])));
     } catch (err) {
       next(err);
     }
@@ -364,7 +365,7 @@ export class TamburController {
         req.user?.userId,
         stamp?.machineId ?? req.device?.machineId ?? null,
       );
-      res.status(201).json(result);
+      res.status(201).json(withResponseWarnings(result, await meterCalibrationWarnings([body.measure])));
     } catch (err) {
       next(err);
     }
@@ -558,7 +559,7 @@ export class TamburController {
         req.user?.userId,
         stamp?.machineId ?? req.device?.machineId ?? null,
       );
-      res.status(200).json(result);
+      res.status(200).json(withResponseWarnings(result, await meterCalibrationWarnings(body.cuts.map((c) => c.measure))));
     } catch (error) {
       next(error);
     }
