@@ -208,7 +208,7 @@ export async function fillFromStandardCost(id: string, body: Record<string, unkn
   if (!fxRate) throw AppError.badRequest(`${head.currency} kuru bulunamadı; kuru elle girin.`, { code: "COST_INPUT_MISSING", missing: ["FX_RATE_MISSING"] });
   const itemIds = Array.isArray(body.itemIds) ? body.itemIds.map((x, i) => readUuid(x, `${i + 1}. ürün`)) : null;
   const versions = await prisma.standardCostVersion.findMany({
-    where: { status: "ACTIVE", ...(itemIds ? { itemId: { in: itemIds } } : {}) },
+    where: { status: "ACTIVE", recipeId: null, ...(itemIds ? { itemId: { in: itemIds } } : {}) },
     select: { id: true, itemId: true, totalCostPerMTry: true },
   });
   if (versions.length === 0) throw AppError.badRequest("Seçilen ürünlerin yürürlükte standart maliyeti yok.", { code: "COST_INPUT_MISSING", missing: ["STANDARD_COST_MISSING"] });
