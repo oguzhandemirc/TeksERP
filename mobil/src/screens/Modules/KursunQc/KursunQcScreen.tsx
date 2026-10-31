@@ -80,6 +80,10 @@ import MeterStrip from './MeterStrip';
 import MeterModals from './MeterModals';
 import { useMeterAcks } from './useMeterAcks';
 import { useMeterCapture } from './useMeterCapture';
+import MeasuredWidthField from './MeasuredWidthField';
+import { useMeasuredWidth } from './useMeasuredWidth';
+import { measuredWidthErrorText, widthCaptureEnabled } from './measuredWidth';
+import { kursunFinishRollId, type KursunFinishVars } from '../../../offline/kursunFinishVars';
 import { meterSettingsOf, pendingAcksFromError } from './meterCapture';
 import { primaryMeterFor, useMachinePeripherals } from '../../../hooks/useMachinePeripherals';
 import { findTarget } from './gramajTap';
@@ -362,6 +366,8 @@ export default function KursunQcScreen() {
     inspectionEnabled: activeJob?.stepSummary.inspectionEnabled,
     properties: stationProps,
   });
+  // D4-E2b: en ölçen istasyonda isteğe bağlı "Ölçülen en"; eski backend alanı göndermez → gizli.
+  const measuredWidth = useMeasuredWidth(widthCaptureEnabled(activeJob?.stepSummary), selectedRoll?.rollId ?? null);
   const nextStation = nextStationLabel(activeJob?.stepSummary.nextStepName);
   const nextStationDative = nextStation ? dativeTr(nextStation) : null;
 
@@ -650,7 +656,7 @@ export default function KursunQcScreen() {
         );
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      if (!meterRecovering) showScreenError(err, 'KK2 başarısız');
+      if (!meterRecovering) showScreenError(err, 'KK2 başarısız', measuredWidthErrorText(err) ?? undefined);
     },
   });
 
@@ -823,12 +829,13 @@ export default function KursunQcScreen() {
   const kursunFinishMutation = useMutation<
     Awaited<ReturnType<typeof rollService.kursunFinish>>,
     Error,
-    string,
+    KursunFinishVars,
     { cardId: string; prevRolls: KursunRollSummary[]; prevSelectedRollId: string | null } | undefined
   >({
     mutationKey: STATION_MUT.KURSUN_FINISH,
-    onMutate: (rollId) => {
+    onMutate: (vars) => {
       if (!activeJob) return undefined;
+      const rollId = kursunFinishRollId(vars);
       const cardId = activeJob.cardId;
       const prevRolls = activeJob.stepSummary.rolls;
       const prevSelectedRollId = activeJob.selectedRollId;
@@ -860,7 +867,8 @@ export default function KursunQcScreen() {
 
       return { cardId, prevRolls, prevSelectedRollId };
     },
-    onSuccess: async (_res, finishedRollId) => {
+    onSuccess: async (_res, finishedVars) => {
+      const finishedRollId = kursunFinishRollId(finishedVars);
       // Server confirm — fresh step state çek (kalan rulolar, kart kapatma).
       if (!activeJob) return;
       const res = await kursunQcService.getStep(
@@ -907,7 +915,7 @@ export default function KursunQcScreen() {
         );
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showScreenError(err, 'Kumaş bitirilemedi');
+      showScreenError(err, 'Kumaş bitirilemedi', measuredWidthErrorText(err) ?? undefined);
     },
   });
 
@@ -999,13 +1007,14 @@ export default function KursunQcScreen() {
       });
       return;
     }
-    completeQc2Mutation.mutate({
+    const vars = measuredWidth.attach({
       rollId: selectedRoll.rollId,
       stepId: activeJob.stepSummary.workOrderStepId,
       // AUTO satırlar GÖNDERİLMEZ — backend onları kendisi ekler; buradan da
       // yollamak, iki kaynağın ayrışması demekti.
       properties: propertySelections,
     });
+    if (vars) completeQc2Mutation.mutate(vars);
   };
 
   // KQ-D5: yalnız kurşunda tek dokunuş (gramaj = top bitti). Konak mutasyonu
@@ -1018,7 +1027,11 @@ export default function KursunQcScreen() {
     summary: activeJob?.stepSummary ?? null,
     roll: selectedRoll?.barcode && !selectedRoll.qc2Completed ? selectedRoll : null,
     operator: operatorLabel,
-    complete: (vars, opts) => completeQc2Mutation.mutate(vars, opts),
+    complete: (vars, opts) => {
+      const withWidth = measuredWidth.attach(vars);
+      if (withWidth) completeQc2Mutation.mutate(withWidth, opts);
+      else opts.onSettled?.();
+    },
     refresh: () => void refetchActiveJob().catch(() => undefined),
     meter,
     stopOpen: machineStop.entryWarning,
@@ -1517,12 +1530,14 @@ export default function KursunQcScreen() {
                     maxMeter={selectedRoll.currentQty}
                     compact={compact}
                   >
+                    <MeasuredWidthField state={measuredWidth} hidden={selectedRoll.qc2Completed} />
                     {processCard}
                   </InspectionPanel>
                 ) : (
                   <View style={styles.entryFixed}>
                     {/* Yalnız kurşun: önceki hatalar bilgi amaçlı (KQ-D7). */}
                     <PriorDefectList defects={toInspectionPriorDefects(selectedRoll.priorDefects)} />
+                    <MeasuredWidthField state={measuredWidth} hidden={selectedRoll.qc2Completed} />
                     {processCard}
                   </View>
                 );
@@ -1581,7 +1596,11 @@ export default function KursunQcScreen() {
                     compact={compact}
                     large={!compact}
                     onPress={() =>
-                      footerThrottled(() => kursunFinishMutation.mutate(selectedRoll.rollId))
+                      footerThrottled(() => {
+                        // Ensiz gövde eski kuyruk biçimiyle (düz rollId) aynı kalır.
+                        const v: { rollId: string; measuredWidthCm?: number } | null = measuredWidth.attach({ rollId: selectedRoll.rollId });
+                        if (v) kursunFinishMutation.mutate(v.measuredWidthCm != null ? v : v.rollId);
+                      })
                     }
                   />
                 ) : selectedRoll.qc2Completed ? (

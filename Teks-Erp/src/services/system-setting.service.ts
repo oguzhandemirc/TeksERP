@@ -750,6 +750,9 @@ export const SETTING_KEYS = {
    * deftere aynen yazılır); ikinci bir kural kurmak çift kaynak olurdu.
    */
   FASON_SHRINK_WARN_ENABLED: "fason.shrinkWarnEnabled",
+  /** Dış brode kabulünde iş emrinin hedef çeşit değeri (desen) doğan topa yazılsın mı (D4-D3, K8).
+   *  Default FALSE = bugünkü davranış (kabul yalnız bayrağı kopyalar). */
+  FASON_RECEIPT_APPLY_TARGET_VARIANT: "fason.receiptApplyTargetVariant",
   /**
    * Tolerans — YÜZDE (giden metrajın yüzdesi). Kayıt yoksa varsayılan %10.
    * `0` GEÇERLİ bir değerdir ve "tolerans yok, her fark uyarır" demektir
@@ -2274,6 +2277,8 @@ export interface FeatureFlags {
   machineStopOpenWarningEnabled: boolean;
   /** Fason kabulünde çekme (giden↔dönen farkı) uyarısı çıksın mı (default TRUE). */
   fasonShrinkWarnEnabled: boolean;
+  /** Fason kabulünde hedef çeşit değeri (desen) doğan topa (D4-D3; default FALSE). */
+  fasonReceiptApplyTargetVariant: boolean;
   /** Çekme toleransı — YÜZDE. Default 10. `0` = tolerans yok (her fark uyarır). */
   fasonShrinkTolerancePct: number;
   /** Demo kurulumu mu (default FALSE) — `/api/demo/*` senaryo üreticilerini açar. */
@@ -2795,6 +2800,7 @@ export class SystemSettingService {
       machineStopTrackingEnabled: await readMachineStopTrackingEnabled(cacheClient),
       machineStopOpenWarningEnabled: await readMachineStopOpenWarningEnabled(cacheClient),
       fasonShrinkWarnEnabled: await readFasonShrinkWarnEnabled(cacheClient),
+      fasonReceiptApplyTargetVariant: await readFasonReceiptApplyTargetVariant(cacheClient),
       fasonShrinkTolerancePct: await readFasonShrinkTolerancePct(cacheClient),
       demoModeEnabled: await readDemoModeEnabled(cacheClient),
       duplicatesFuzzyEnabled: await readDuplicatesFuzzyEnabled(cacheClient),
@@ -4656,6 +4662,17 @@ export class SystemSettingService {
         userId
       );
     }
+    if (Object.prototype.hasOwnProperty.call(input, "fasonReceiptApplyTargetVariant")) {
+      if (typeof input.fasonReceiptApplyTargetVariant !== "boolean") {
+        throw AppError.badRequest("fasonReceiptApplyTargetVariant boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.FASON_RECEIPT_APPLY_TARGET_VARIANT,
+        input.fasonReceiptApplyTargetVariant,
+        "Fason kabulünde hedef desen/çeşit değeri doğan topa yazılsın",
+        userId
+      );
+    }
     if (Object.prototype.hasOwnProperty.call(input, "tamburPlanGateWidthToleranceCm")) {
       const v = input.tamburPlanGateWidthToleranceCm;
       // null = varsayılana dön (fasonShrinkTolerancePct emsali); 0 GEÇERLİ ("her farkta sor").
@@ -5582,6 +5599,14 @@ export function readFinanceCariHoldReleaseBySamePerson(tx?: Pick<typeof prisma, 
 /** D4-I1c: kilitli caride emanet sevki — tanınmayan değer varsayılana (`EXEMPT`, bugünkü) düşer. Kapı okuması `emanet-shipment.helper`dedir. */
 export function readFinanceCariHoldEmanetShipment(tx?: Pick<typeof prisma, "systemSetting">): Promise<CariHoldEmanetShipment> {
   return readServiceEnum(SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT, CARI_HOLD_EMANET_SHIPMENT_MODES, DEFAULT_CARI_HOLD_EMANET_SHIPMENT, tx);
+}
+
+/**
+ * D4-I4: aynı ayarın liste sorgusuna gömülen SQL kolonu (ek sorgu açmamak için) — ham metin döner; tanınmayan/eksik
+ * değer okuyucuda olduğu gibi `EXEMPT` sayılır (`cari-hold.helper` `listHoldView`).
+ */
+export function cariHoldEmanetShipmentColumnSql(): Prisma.Sql {
+  return Prisma.sql`(SELECT ss.value #>> '{}' FROM system_settings ss WHERE ss.key = ${SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT})`;
 }
 
 /** D4-I2b: risk limiti para birimi kipi — tanınmayan değer varsayılana (`PER_CURRENCY`) düşer; guard tx içinde taze okur. */
@@ -7578,6 +7603,19 @@ export async function readFasonShrinkWarnEnabled(
     select: { value: true },
   });
   if (!setting) return true;
+  return asBoolean(setting.value);
+}
+
+/** Fason kabulünde hedef çeşit değeri doğan topa (D4-D3, K8). Kayıt yoksa **false** — bugünkü davranış. */
+export async function readFasonReceiptApplyTargetVariant(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.FASON_RECEIPT_APPLY_TARGET_VARIANT },
+    select: { value: true },
+  });
+  if (!setting) return false;
   return asBoolean(setting.value);
 }
 

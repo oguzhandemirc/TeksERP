@@ -1436,6 +1436,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         },
       },
       {
+        key: "fasonReceiptApplyTargetVariant",
+        group: "Fason",
+        title: `Fason kabulünde ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedef desenini dönen topa yaz`,
+        summary: `Dış brodeden dönen top, ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} seçilen deseni taşır; fatura desenin hizmet kalemini kullanır.`,
+        defaultOn: false,
+        audience: ["Planlamacı", "Muhasebeci"],
+        desc: `Açıkken fason kabulünde (ör. dışarıda brode) uygulanan bayrağın çeşidi için ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} seçilmiş hedef değer (desen) dönen topa da yazılır; desene hizmet kalemi eşlenmişse hizmet faturası o kalemle kesilir. Kapalıyken (varsayılan) dönen top yalnız bayrağı taşır, desen yazılmaz. Makbuz iptal edilirse topun deseni de geri alınır.`,
+      },
+      {
         key: "fasonNoteMobileEntry",
         group: "Fason",
         title: "Fason Sevk'te fason talimatını sahadaki operatör telefondan girebilsin",

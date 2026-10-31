@@ -108,9 +108,11 @@ function statik(): void {
     "services/gelen-belge-note.service.ts",
     "services/gelen-belge-onay.service.ts",
     "services/helpers/cari-hold-notify.helper.ts", // D4-I5: yalnız `holdScopeText`/`reasonLabel` (bildirim yükü), kapı çağırmaz
+    "services/helpers/sack-store-board.helper.ts", // D4-I4: yalnız liste lateral'i (`activeHoldFlagsLateralSql`/`listHoldView`), kapı çağırmaz
     "services/inventory.service.ts",
     "services/invoice.service.ts",
     "services/order.service.ts",
+    "services/sack-search.service.ts", // D4-I4: yalnız liste lateral'i (Sevk kapısı müşteri listesi çipi), kapı çağırmaz
     "services/shipping.service.ts",
   ];
   const bul = (dir: string): string[] =>

@@ -102,6 +102,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "kk1HistoryAllEntriesEnabled",
       "kk1LabelScanVerifyEnabled",
       "fasonShrinkWarnEnabled",
+      "fasonReceiptApplyTargetVariant",
       "fasonShrinkTolerancePct",
       "fasonNoteMobileEntry",
       "kursunBypassEnabled",

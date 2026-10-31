@@ -20,6 +20,7 @@ export function capabilityChips(s: Station): string[] {
   if (s.appliesQuality) out.push("Kart akışı");
   if (s.producesWarpBeam) out.push("Levent sarar");
   if (s.consumesWarpBeam) out.push("Levent tüketir");
+  if (s.capturesWidth) out.push("En ölçer");
   return out;
 }
 
