@@ -14,6 +14,7 @@ import { fmtFactoryDateTime } from "@/lib/factory-time";
 import { CostQueryError } from "../shared/CostQueryState";
 import { ParameterCompareTable } from "./ParameterCompareTable";
 import { ParameterConfirms } from "./ParameterConfirms";
+import { PickRateRow } from "./PickRateRow";
 import { PARAM_NOTE_MAX } from "./schema";
 import { useParameterSets } from "./useParameterSets";
 
@@ -73,6 +74,9 @@ export function ParametersPage() {
                 editable={canEdit}
                 onChange={s.setField}
               />
+            )}
+            {s.pickVisible && (active || showForm) && (
+              <PickRateRow active={active} draft={showForm ? s.pick : null} editable={canEdit} onChange={s.setPick} />
             )}
             {showForm && canEdit && (
               <label className="block max-w-xl text-sm">
