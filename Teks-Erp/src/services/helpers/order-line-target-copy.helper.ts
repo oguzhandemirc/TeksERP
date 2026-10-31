@@ -17,9 +17,19 @@ type Reader = Prisma.TransactionClient | PrismaClient;
 export const TARGET_VALUE_CONFLICT = "TARGET_VALUE_CONFLICT";
 export const TARGET_VALUE_INACTIVE = "TARGET_VALUE_INACTIVE";
 
+/** Satırdan kopyalanan (gövdeden gelmeyen) hedef — dış adım notu (SY-F4) yalnız bunları yazar. */
+export interface CopiedLineTarget {
+  propertyId: string;
+  /** Çeşit özelliğinin BAYRAK ikizi (Kuşak markası → Kuşak); istasyon bağı ve not etiketi için. */
+  flagPropertyId: string | null;
+  label: string;
+  valueName: string;
+}
+
 export interface LineTargetCopy {
   items: TargetValueItem[];
   warnings: string[];
+  copied: CopiedLineTarget[];
 }
 
 /** Uyarı metni — tek kaynak (servis yanıtı + bekçi aynı cümleyi görür). */
@@ -43,13 +53,14 @@ export async function deriveOrderLineTargetValues(
       orderLineId: true,
       propertyId: true,
       valueId: true,
-      property: { select: { name: true, isActive: true } },
+      property: { select: { name: true, isActive: true, variantOf: { select: { id: true, name: true } } } },
       value: { select: { name: true, isActive: true } },
     },
     orderBy: [{ propertyId: "asc" }, { valueId: "asc" }],
   });
   const items: TargetValueItem[] = [...explicit];
   const warnings: string[] = [];
+  const copied: CopiedLineTarget[] = [];
   const explicitProps = new Set(explicit.map((t) => t.propertyId));
   const byProperty = new Map<string, typeof rows>();
   for (const r of rows) {
@@ -67,11 +78,13 @@ export async function deriveOrderLineTargetValues(
         continue;
       }
       items.push({ propertyId, valueId: values[0]![0] });
+      const flag = first.property.variantOf;
+      copied.push({ propertyId, flagPropertyId: flag?.id ?? null, label: flag?.name ?? first.property.name, valueName: values[0]![1] });
       continue;
     }
     const names = values.map(([, n]) => n);
     if (!everyLine) names.push("boş");
     warnings.push(targetValueConflictWarning(first.property.name, names));
   }
-  return { items, warnings };
+  return { items, warnings, copied };
 }
