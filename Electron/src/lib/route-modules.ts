@@ -97,6 +97,8 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
   "cost/parameters": "maliyetEnabled",
   "cost/yarn-prices": "maliyetEnabled",
   "cost/finishing-rates": "maliyetEnabled",
+  "cost/machine-rates": "maliyetEnabled",
+  "cost/consumable-norms": "maliyetEnabled",
   "cost/items": "maliyetEnabled",
   "cost/calculator": "maliyetEnabled",
   "cost/quotes": "maliyetEnabled",

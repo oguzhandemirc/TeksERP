@@ -173,7 +173,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
   },
   {
     permission: "settings:label",
-    flagKeys: ["labelCopies", "labelCopiesSource", "nativeSendEnabled", "mobileRasterEnabled", "scrapGradeLabelEnabled", "defaultLabelMedia"],
+    flagKeys: ["labelCopies", "labelCopiesSource", "labelCustomerCodeMissing", "nativeSendEnabled", "mobileRasterEnabled", "scrapGradeLabelEnabled", "defaultLabelMedia"],
   },
   { permission: "settings:devices", flagKeys: ["devicePairingRequired"] },
   // Logo ayrı uçtan yazılır (`PUT /api/feature-flags/documents-logo`) — o uç da bu izni kabul eder.
