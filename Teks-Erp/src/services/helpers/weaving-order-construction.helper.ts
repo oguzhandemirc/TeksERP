@@ -49,9 +49,23 @@ export async function assertConstructionRefs(db: Db, itemId: string, c: WeavingC
   }
 }
 
-/** Düzenleme: gönderilen kartlar + varyant; ürün değişip varyant gövdede yoksa KALAN varyant da yeni ürüne ölçülür. */
-export async function assertConstructionPatch(db: Db, itemId: string, patch: WeavingConstructionInput, keptRecipeId: string | null): Promise<void> {
-  await assertConstructionRefs(db, itemId, { ...patch, recipeId: patch.recipeId !== undefined ? patch.recipeId : keptRecipeId });
+/**
+ * Düzenleme (`retargetFrom` = ürün değiştiyse eski kayıt, yoksa null): gönderilen kartlar + varyant ölçülür; ürün değişip varyant gövdede yoksa KALAN varyant da yeni
+ * ürüne ölçülür. Ürün DEĞİŞİRSE gövdede olmayan atkı/desen kartı yeni ürünün etkin yapısından yeniden dolar
+ * (eski ürünün kartı yeni işte sessizce kalmasın); döner değer claim'e yazılacak yapı parçasıdır.
+ */
+export async function resolveConstructionPatch(
+  db: Db, itemId: string, patch: WeavingConstructionInput, retargetFrom: { recipeId: string | null } | null,
+): Promise<WeavingConstructionInput> {
+  const recipeId = patch.recipeId !== undefined ? patch.recipeId : retargetFrom?.recipeId ?? null;
+  await assertConstructionRefs(db, itemId, { ...patch, recipeId });
+  if (!retargetFrom || (patch.weftSpecId !== undefined && patch.weaveDesignId !== undefined)) return patch;
+  const eff = await resolveEffectiveConstruction(db, itemId, recipeId ?? null);
+  return {
+    ...patch,
+    weftSpecId: patch.weftSpecId !== undefined ? patch.weftSpecId : eff.weft?.weftSpecId ?? null,
+    weaveDesignId: patch.weaveDesignId !== undefined ? patch.weaveDesignId : eff.weaveDesign?.id ?? null,
+  };
 }
 
 /**

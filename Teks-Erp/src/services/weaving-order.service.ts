@@ -37,7 +37,7 @@ import { assertOrderLineLinkGate } from "./helpers/production-chain-gates.helper
 import { assertNoOpenRunsTx, assertRefs, throwClaimFailureTx } from "./helpers/weaving-order-guards.helper";
 import { countRollsOfWeavingOrder } from "./helpers/weaving-order-of-roll.helper";
 import { itemDefaultWarpSpecId } from "./helpers/tablet-prefill.helper";
-import { assertConstructionPatch, normalizeConstructionInput, resolveWeavingConstructionChoice } from "./helpers/weaving-order-construction.helper";
+import { normalizeConstructionInput, resolveConstructionPatch, resolveWeavingConstructionChoice } from "./helpers/weaving-order-construction.helper";
 import {
   OPEN_RUN_WHERE,
   WEAVING_ORDER_SELECT,
@@ -286,14 +286,14 @@ export async function updateWeavingOrder(
   assertWeavingDateOrder(merged.plannedStartDate, merged.plannedEndDate);
   const retarget = merged.itemId !== before.itemId;
   await assertRefs(merged, retarget ? "NEW_PLAN" : null);
-  await assertConstructionPatch(prisma, merged.itemId, normalizeConstructionInput(input), retarget ? before.recipeId : null);
+  const construction = await resolveConstructionPatch(prisma, merged.itemId, normalizeConstructionInput(input), retarget ? before : null);
 
   const updated = await prisma.$transaction(async (tx) => {
     // İLK ifade (dokuma işi satır claim'inden ÖNCE — birleştirme 8030 EXCL tutup o satırı ister).
     if (retarget) await assertItemUsableTx(tx, merged.itemId, "NEW_PLAN");
     const claim = await tx.weavingOrder.updateMany({
       where: { id, status: { in: [...WEAVING_ORDER_OPEN_STATUSES] } },
-      data: { ...patch, updatedById: userId ?? null },
+      data: { ...patch, ...construction, updatedById: userId ?? null },
     });
     if (claim.count === 0) await throwClaimFailureTx(tx, id, "düzenlenemez", "WEAVING_ORDER_NOT_EDITABLE");
     if (orderLines !== null) await replaceOrderLineLinksTx(tx, id, orderLines);

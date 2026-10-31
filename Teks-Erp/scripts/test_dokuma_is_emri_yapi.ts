@@ -3,7 +3,8 @@
 // =============================================================================
 // Kabul (§16.1 SY-A4): yapısız üründe iş emri yanıtı bayt-aynı (yeni anahtar YOK); atkı/desen kartlı
 // üründe gövde vermeyince kartlar ETKİN YAPIDAN dolar; açık null "kartsız"; varyant türetilmez,
-// başka ürünün varyantı 400 RECIPE_ITEM_MISMATCH; pasif desen 400. Fikstür `TEST-SYA4-<ts>`.
+// başka ürünün varyantı 400 RECIPE_ITEM_MISMATCH; pasif desen 400; ürün değişince
+// gövdede olmayan kartlar yeni ürünün etkin yapısından yeniden dolar (§5). Fikstür `TEST-SYA4-<ts>`.
 // =============================================================================
 import { WeavingExecutionKind } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -92,6 +93,15 @@ async function main(): Promise<void> {
   await prisma.item.update({ where: { id: built }, data: { weaveDesignId: null } });
   const bAfter = (await getWeavingOrder(b.id)).data!;
   check("§4b ürün kartı sonradan değişince iş emri DEĞİŞMEZ", bAfter.weaveDesignId === design.id);
+
+  console.log("§5 ürün değişince (varyantsız) gövdede olmayan atkı/desen kartı YENİ ürünün etkin yapısından dolar");
+  const moved = (await updateWeavingOrder(b.id, { itemId: other }, admin.id)).data!;
+  check("§5a yapılı → yapısız ürün: eski ürünün kartları iş emrinde KALMAZ", !("weftSpecId" in moved) && !("weaveDesignId" in moved), JSON.stringify({ w: moved.weftSpecId, d: moved.weaveDesignId }));
+  const e = await mk({ itemId: bare });
+  const toBuilt = (await updateWeavingOrder(e.id, { itemId: built }, admin.id)).data!;
+  check("§5b yapısız → yapılı ürün: atkı kartı yeni ürünün etkin yapısından", toBuilt.weftSpecId === weft.id && !("weaveDesignId" in toBuilt), JSON.stringify({ w: toBuilt.weftSpecId, d: toBuilt.weaveDesignId }));
+  const kept = (await updateWeavingOrder(e.id, { itemId: other, weftSpecId: weft.id }, admin.id)).data!;
+  check("§5c ürün değişirken gövdede verilen kart aynen yazılır", kept.weftSpecId === weft.id && kept.itemId === other);
 }
 
 async function cleanup(): Promise<void> {

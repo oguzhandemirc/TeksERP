@@ -26,7 +26,7 @@ export function ConstructionSummary({ data, loading }: { data: EffectiveConstruc
   const w = data.weft;
   return (
     <div className="space-y-1 rounded-md border bg-muted/30 p-3 text-xs" data-testid="construction-summary">
-      <p className="text-sm font-medium">Etkin yapı{data.variantCode ? ` · ${data.variantCode}` : ""}</p>
+      <p className="text-sm font-medium">Ürünün etkin yapısı{data.variantCode ? ` · ${data.variantCode}` : ""}</p>
       {data.groundWarp && <Row label="Zemin çözgü">{data.groundWarp.code} · {data.groundWarp.name}</Row>}
       {data.warpLayers.map((l) => (
         <Row key={l.sortOrder} label="Ek çözgü">

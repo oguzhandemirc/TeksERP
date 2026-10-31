@@ -22,6 +22,11 @@ describe("SY-A4 — dokuma iş emri yapı seçimi gövdesi", () => {
     expect(constructionPayload(v, null)).toEqual({ weftSpecId: "w1" });
     expect(constructionPayload(v, { weftSpecId: "w0", weaveDesignId: "d0", recipeId: null })).toEqual({ weftSpecId: "w1", weaveDesignId: null });
   });
+  it("§2b düzenlemede ürün değişti: boş atkı/desen anahtarsız (sunucu türetir), eski varyant null", () => {
+    const v = { ...weavingOrderFormDefaults, itemId: "i2", weftSpecId: "", weaveDesignId: "", recipeId: "" };
+    expect(constructionPayload(v, { itemId: "i1", weftSpecId: "w0", weaveDesignId: "d0", recipeId: "r0" })).toEqual({ recipeId: null });
+    expect(constructionPayload({ ...v, itemId: "i1" }, { itemId: "i1", weftSpecId: "w0", weaveDesignId: "d0", recipeId: "r0" })).toEqual({ weftSpecId: null, weaveDesignId: null, recipeId: null });
+  });
 });
 
 describe("SY-A4 — ürün formu atkı/desen gövdesi", () => {

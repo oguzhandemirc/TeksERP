@@ -5,6 +5,7 @@
 // kaynak); panel ürün kartını okuyup kopyalamaz. Varyant (ürün şablonu) yalnız seçilirse taşınır.
 // ⚠️ Uçlar `warpspec:read` (+ varyant için `station:read`) ister: izin yoksa bölüm/seçici hiç çizilmez.
 // =============================================================================
+import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { Grid3x3, Layers, Rows3 } from "lucide-react";
@@ -52,10 +53,27 @@ function RecipePicker({ form, itemId }: { form: Form; itemId: string }) {
   );
 }
 
-export function ConstructionFields({ form }: { form: Form }) {
+/** Ürün değişince önceki ürünün varyantı/kartları formda kalmasın (sunucu yeni ürünün kartını türetir). */
+function useResetOnItemChange(form: Form, itemId: string): void {
+  const prev = useRef(itemId);
+  useEffect(() => {
+    if (prev.current && prev.current !== itemId) {
+      for (const k of ["recipeId", "weftSpecId", "weaveDesignId"] as const) form.setValue(k, "", { shouldDirty: true });
+    }
+    prev.current = itemId;
+  }, [form, itemId]);
+}
+
+/** `initialItemId`: düzenlenen kaydın ürünü (oluştururken null) — boş alanın anlamını belirler. */
+export function ConstructionFields({ form, initialItemId = null }: { form: Form; initialItemId?: string | null }) {
   const { hasPermission } = useRoleAccess();
   const canRead = hasPermission("warpspec:read");
   const itemId = form.watch("itemId");
+  useResetOnItemChange(form, itemId);
+  // Düzenlemede (ürün aynıyken) boş alan açık null = "kartsız"; oluştururken/ürün değişince ürünün kartı.
+  const derives = !initialItemId || initialItemId !== itemId;
+  const weftNone = derives ? "Ürünün atkı kartı" : "Kartsız";
+  const designNone = derives ? "Ürünün desen kartı" : "Kartsız";
   const recipeId = form.watch("recipeId") || null;
   const q = useQuery({
     queryKey: ["item-construction", itemId, recipeId],
@@ -70,7 +88,7 @@ export function ConstructionFields({ form }: { form: Form }) {
       {itemId && hasPermission("station:read") && <RecipePicker form={form} itemId={itemId} />}
       <ConstructionSummary data={q.data} loading={q.isLoading && Boolean(itemId)} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <FormField label="Atkı kartı" error={err.weftSpecId} hint="Boş = ürünün atkı kartı">
+        <FormField label="Atkı kartı" error={err.weftSpecId} hint={derives ? "Boş = ürünün atkı kartı" : "Boş = kartsız"}>
           <Controller
             control={form.control}
             name="weftSpecId"
@@ -84,14 +102,14 @@ export function ConstructionFields({ form }: { form: Form }) {
                 getSubLabel={(w) => w.code}
                 icon={Rows3}
                 nullable
-                noneLabel="Ürünün atkı kartı"
+                noneLabel={weftNone}
                 title="Atkı kartı seç"
-                placeholder="Ürünün atkı kartı"
+                placeholder={weftNone}
               />
             )}
           />
         </FormField>
-        <FormField label="Desen kartı" error={err.weaveDesignId} hint="Boş = ürünün desen kartı">
+        <FormField label="Desen kartı" error={err.weaveDesignId} hint={derives ? "Boş = ürünün desen kartı" : "Boş = kartsız"}>
           <Controller
             control={form.control}
             name="weaveDesignId"
@@ -105,9 +123,9 @@ export function ConstructionFields({ form }: { form: Form }) {
                 getSubLabel={(d) => d.code}
                 icon={Grid3x3}
                 nullable
-                noneLabel="Ürünün desen kartı"
+                noneLabel={designNone}
                 title="Desen kartı seç"
-                placeholder="Ürünün desen kartı"
+                placeholder={designNone}
               />
             )}
           />

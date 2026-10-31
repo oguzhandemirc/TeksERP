@@ -68,7 +68,7 @@ export function WeavingOrderFormDialog({ open, onOpenChange, initial, onSubmit, 
         <>
           {devereEnabled && <BeamPrefillField form={form} onSuggestion={setSuggestion} />}
           <FabricFields form={form} devereEnabled={devereEnabled} />
-          <ConstructionFields form={form} />
+          <ConstructionFields form={form} initialItemId={initial?.itemId ?? null} />
           <WeavingOrderLinesSection form={form} initialLines={initial?.orderLines ?? []} required={orderLineRequired} />
           <PartyFields form={form} />
           <PlanFields form={form} suggestion={suggestion} />
