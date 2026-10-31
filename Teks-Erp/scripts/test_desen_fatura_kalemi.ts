@@ -20,7 +20,7 @@
 // çözücü (`a.serviceItemId ?? b.serviceItemId`) yazılınca §6 kırmızı.
 // =============================================================================
 import { randomUUID } from "node:crypto";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
 import { Currency, ItemType, PriceKind, RollStatus } from "@prisma/client";
@@ -34,6 +34,7 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { testActorId } from "./fixture-test-user";
 import { updateSchema } from "../src/routes/feature-flag.routes";
+import { walkTs } from "./lib/ts-tarama";
 
 let pass = 0;
 let fail = 0;
@@ -193,14 +194,6 @@ async function main(): Promise<void> {
 // ── §6 AST ────────────────────────────────────────────────────────────────
 const SRC = join(__dirname, "..", "src");
 const PICK_FILE = "services/helpers/service-item-pick.helper.ts";
-function walkTs(dir: string, out: string[] = []): string[] {
-  for (const e of readdirSync(dir)) {
-    const p = join(dir, e);
-    if (statSync(p).isDirectory()) walkTs(p, out);
-    else if (p.endsWith(".ts")) out.push(p);
-  }
-  return out;
-}
 const isServiceItemAccess = (n: ts.Node): boolean =>
   ts.isPropertyAccessExpression(n) && n.name.text === "serviceItemId";
 const isLiteralFallback = (n: ts.Node): boolean =>
