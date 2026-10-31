@@ -190,7 +190,7 @@ export const SETTING_KEYS = {
   /** D4-I1a: kilidi koyan kişi kendi kilidini açabilir mi — `ALLOW` (varsayılan, serbest) · `DENY` (başka yetkili açar). */
   FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON: "finance.cariHold.releaseBySamePerson",
   /** D4-I2b (S12): risk limiti karşılaştırması — `PER_CURRENCY` (varsayılan, her para birimi ayrı) · `TRY_CONVERTED`
-   *  (tüm bakiyeler günün kuruyla TL'ye çevrilip toplanır; kur yoksa 409 `RISK_LIMIT_FX_MISSING`). */
+   *  (tüm bakiyeler o güne kadarki en son kurla TL'ye çevrilip toplanır; kur yoksa 409 `RISK_LIMIT_FX_MISSING`). */
   FINANCE_RISK_LIMIT_CURRENCY_MODE: "finance.riskLimit.currencyMode",
   /** Tahsilat/ödeme kaydında en eski açık faturalara OTOMATİK kapama — FIFO
    *  (default FALSE). Bugün kapama (`PaymentAllocation`) elle seçilir; açıkken
@@ -1068,7 +1068,7 @@ export const DEFAULT_CARI_HOLD_SCOPE: CariHoldDefaultScope = "INTAKE,SHIPMENT";
 export type CariHoldReleaseBySamePerson = "ALLOW" | "DENY";
 export const CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES: CariHoldReleaseBySamePerson[] = ["ALLOW", "DENY"];
 export const DEFAULT_CARI_HOLD_RELEASE_BY_SAME_PERSON: CariHoldReleaseBySamePerson = "ALLOW";
-/** D4-I2b (S12): risk limiti para birimi kipi — her para birimi ayrı (bugünkü) · günün kuruyla TL'ye çevrilmiş toplam. */
+/** D4-I2b (S12): risk limiti para birimi kipi — her para birimi ayrı (bugünkü) · o güne kadarki en son kurla TL'ye çevrilmiş toplam. */
 export type RiskLimitCurrencyMode = "PER_CURRENCY" | "TRY_CONVERTED";
 export const RISK_LIMIT_CURRENCY_MODES: RiskLimitCurrencyMode[] = ["PER_CURRENCY", "TRY_CONVERTED"];
 export const DEFAULT_RISK_LIMIT_CURRENCY_MODE: RiskLimitCurrencyMode = "PER_CURRENCY";

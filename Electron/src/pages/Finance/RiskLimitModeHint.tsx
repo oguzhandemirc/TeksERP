@@ -8,7 +8,7 @@ export type RiskLimitCurrencyMode = FeatureFlags["financeRiskLimitCurrencyMode"]
 /** Kip metni; ayar okunamazsa (eski backend) varsayılan kip — bugünkü davranış. */
 export function riskLimitModeHintText(mode: RiskLimitCurrencyMode | undefined): string {
   return mode === "TRY_CONVERTED"
-    ? "Limit TL'dir: carinin tüm bakiyeleri günün kuruyla TL'ye çevrilip toplanır (kur yoksa işlem durur)."
+    ? "Limit TL'dir: carinin tüm bakiyeleri o güne kadarki en son kurla TL'ye çevrilip toplanır (kur yoksa işlem durur)."
     : "Limit her para biriminde ayrı ölçülür (TL, USD, EUR bakiyesi ayrı ayrı).";
 }
 

@@ -46,7 +46,7 @@ async function toTryOrFail(
   const rate = await resolveExchangeRateTx(tx, currency, onDate);
   if (rate) return amount.times(rate);
   throw AppError.conflict(
-    `${currency} için güncel kur yok; Ön Muhasebe → Kurlar ekranından girin. ` +
+    `${currency} için hiç kur yok; Ön Muhasebe → Kurlar ekranından girin. ` +
       `Risk limiti TL'ye çevrilmiş toplamla ölçülüyor (${settingRowPath("financeRiskLimitCurrencyMode")}); kur 1 varsayılmaz.`,
     { code: "RISK_LIMIT_FX_MISSING", cariId, currency },
   );
@@ -103,7 +103,7 @@ const SCOPE_LABEL: Record<RiskGateScope, string> = { INTAKE: "yeni iş kabulü",
  * KAPI (iş kabulü / sevk): ön muhasebe ya da ayar kapalıysa yalnız ayar okunur, başka sorgu yok (bugünkü davranış bayt-aynı). Açıkken
  * kartın limitli hesap(lar)ı (K3a where'i) için `riskExposureTx(…, null, 0)`; bir para biriminde aşım → 409
  * `RISK_LIMIT_EXCEEDED`. SHIPMENT'ta K22: `ownEmanetOnly` (tüm toplar sevk müşterisinin emaneti) yalnız aşım
- * VARSA sorulur ve cari kilidinin kod sabitine uyar. Mesaj tutar taşımaz (sevk/kabul ekranı finans ekranı değil).
+ * VARSA (ya da TL kipinde kur yoksa) sorulur ve cari kilidinin kod sabitine uyar. Mesaj tutar taşımaz (sevk/kabul ekranı finans ekranı değil).
  */
 export async function assertCustomerRiskLimitTx(
   tx: Pick<Tx, "cariAccount" | "$queryRaw" | "systemSetting" | "exchangeRate">,
@@ -118,10 +118,18 @@ export async function assertCustomerRiskLimitTx(
     select: { id: true },
     orderBy: { id: "asc" },
   });
+  const emanetExempt = async () => scope === "SHIPMENT" && CARI_HOLD_EMANET_SHIPMENT === "EXEMPT" && !!ownEmanetOnly && (await ownEmanetOnly());
   for (const acc of accounts) {
-    const hit = (await riskExposureTx(tx, acc.id, null, new Prisma.Decimal(0))).find((e) => e.exceeded);
+    let hit: RiskExposure | undefined;
+    try {
+      hit = (await riskExposureTx(tx, acc.id, null, new Prisma.Decimal(0))).find((e) => e.exceeded);
+    } catch (err) {
+      // K22: TL kipinde kur eksikliği de aşım gibi emanet muafiyetine sorulur (tamamı emanet sevk durmaz).
+      if (err instanceof AppError && err.details?.code === "RISK_LIMIT_FX_MISSING" && (await emanetExempt())) return;
+      throw err;
+    }
     if (!hit) continue;
-    if (scope === "SHIPMENT" && CARI_HOLD_EMANET_SHIPMENT === "EXEMPT" && ownEmanetOnly && (await ownEmanetOnly())) return;
+    if (await emanetExempt()) return;
     throw AppError.conflict(
       `"${hit.name}" risk limitini aştı (${hit.converted ? "TL'ye çevrilmiş toplam bakiye" : `${hit.currency} bakiyesi`} limitin üstünde) — ${SCOPE_LABEL[scope]} durduruldu. ` +
         `Tahsilat girildiğinde ya da limit Cari Kartından güncellendiğinde devam edilebilir; ` +

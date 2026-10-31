@@ -6,7 +6,8 @@
 //   §1 PER_CURRENCY (ayar yazılmamış) — para birimleri AYRI ölçülür, `converted` false
 //   §2 TRY_CONVERTED — limit 100.000 TL, bakiye 60.000 TL + 1.000 USD (kur 34) → 94.000 geçer; +7.000 TL fatura →
 //      409 RISK_LIMIT_EXCEEDED (TL metni); USD eki de TL'ye çevrilir
-//   §3 kur yok (USD kurları geri sarılan tx'te silinir) → 409 RISK_LIMIT_FX_MISSING, Türkçe ekran yolu
+//   §3 kur yok (USD kurları geri sarılan tx'te silinir) → 409 RISK_LIMIT_FX_MISSING, Türkçe ekran yolu; SHIPMENT'ta
+//      tamamı emanet sevk K22 gereği geçer (§3c)
 //   §4 bilinmeyen ayar değeri 400 (servis + Zod)
 //
 // ⭐ NEGATİF SONDA (ölçüldü 2026-10-31): ① `converted` ayar okunmadan `false` sabitine bağlandı → §2a/§2b/§2c/§3a ❌;
@@ -63,6 +64,7 @@ const AYARLAR = [
   SETTING_KEYS.FINANCE_ENABLED,
   SETTING_KEYS.FINANCE_RISK_LIMIT_BLOCK_ENABLED,
   SETTING_KEYS.FINANCE_RISK_LIMIT_BLOCK_INTAKE,
+  SETTING_KEYS.FINANCE_RISK_LIMIT_BLOCK_SHIPMENT,
   SETTING_KEYS.FINANCE_RISK_LIMIT_CURRENCY_MODE,
 ];
 
@@ -100,6 +102,7 @@ async function main(): Promise<void> {
     await ayar(SETTING_KEYS.FINANCE_ENABLED, true);
     await ayar(SETTING_KEYS.FINANCE_RISK_LIMIT_BLOCK_ENABLED, true);
     await ayar(SETTING_KEYS.FINANCE_RISK_LIMIT_BLOCK_INTAKE, true);
+    await ayar(SETTING_KEYS.FINANCE_RISK_LIMIT_BLOCK_SHIPMENT, true);
     await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.FINANCE_RISK_LIMIT_CURRENCY_MODE } });
     await prisma.exchangeRate.upsert({ where: { rateDate_currency: { rateDate: bugun, currency: "USD" } }, create: { rateDate: bugun, currency: "USD", rate: 34 }, update: { rate: 34 } });
 
@@ -153,13 +156,22 @@ async function main(): Promise<void> {
       await tx.exchangeRate.deleteMany({ where: { currency: "USD" } });
       return assertCustomerRiskLimitTx(tx, customerId, "INTAKE");
     });
-    check("§3a ⭐ USD kuru yok → 409 RISK_LIMIT_FX_MISSING, Türkçe ekran yolu", k1.kod === "RISK_LIMIT_FX_MISSING" && k1.mesaj.startsWith("USD için güncel kur yok; Ön Muhasebe → Kurlar ekranından girin."), k1.mesaj);
+    check("§3a ⭐ USD kuru yok → 409 RISK_LIMIT_FX_MISSING, Türkçe ekran yolu", k1.kod === "RISK_LIMIT_FX_MISSING" && k1.mesaj.startsWith("USD için hiç kur yok; Ön Muhasebe → Kurlar ekranından girin."), k1.mesaj);
     const k2 = await geriSarilan(async (tx) => {
       await tx.exchangeRate.deleteMany({ where: { currency: "USD" } });
       await tx.cariBalance.update({ where: { cariId_currency: { cariId, currency: "USD" } }, data: { balance: 0 } });
       return riskExposureTx(tx, cariId, null, D(0));
     });
     check("§3b sıfır USD bakiyesinde kur aranmaz (geçer, 60.000)", k2.kod === "geçti" && k2.deger?.[0]?.balance.eq(60000) === true, k2.mesaj);
+    const kurYokSevk = (emanet: boolean) =>
+      geriSarilan(async (tx) => {
+        await tx.exchangeRate.deleteMany({ where: { currency: "USD" } });
+        return assertCustomerRiskLimitTx(tx, customerId, "SHIPMENT", async () => emanet);
+      });
+    const k3 = await kurYokSevk(true);
+    check("§3c ⭐ K22: kur yok + tamamı emanet sevk → geçer (aşım gibi muafiyete sorulur)", k3.kod === "geçti", `${k3.kod} ${k3.mesaj}`);
+    const k4 = await kurYokSevk(false);
+    check("§3d kur yok + emanet olmayan sevk → 409 RISK_LIMIT_FX_MISSING", k4.kod === "RISK_LIMIT_FX_MISSING", k4.kod);
 
     // ── §4 Ayar doğrulama ──
     console.log("\n── §4 Ayar doğrulama ──");
