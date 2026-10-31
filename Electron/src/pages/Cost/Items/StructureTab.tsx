@@ -11,6 +11,7 @@ import { finishingRateService } from "../FinishingRates/service";
 import type { MeasuredWarpWaste } from "../shared/cost-types";
 import { decToInput, fmtDecFull, toDecimalText } from "../shared/format";
 import { CardSummary } from "./CardSummary";
+import { ProcessesEditor } from "./ProcessesEditor";
 import { STRUCTURE_FIELDS, STRUCTURE_MAX } from "./schema";
 import { costItemService, STRUCTURE_KEYS, type CostItemDetail, type StructureKey } from "./service";
 
@@ -26,6 +27,7 @@ export function StructureTab({ detail, measured, flagged }: { detail: CostItemDe
   const qc = useQueryClient();
   const canWrite = useRoleAccess().hasPermission("cost:write");
   const [f, setF] = useState<Form>(() => formOf(detail));
+  const [procs, setProcs] = useState<string[]>(() => (detail.yapi?.processes ?? []).map((p) => p.rateCode));
   const rates = useQuery({ queryKey: ["cost-finishing-rates", "active"], queryFn: finishingRateService.listActive });
   const set = (k: keyof Form, v: string) => setF((x) => ({ ...x, [k]: v }));
   const save = useMutation({
@@ -35,6 +37,7 @@ export function StructureTab({ detail, measured, flagged }: { detail: CostItemDe
         finishingRateCode: f.finishingRateCode || null,
         extraCostLabel: f.extraCostLabel.trim() || null,
         notes: f.notes.trim() || null,
+        processes: procs.filter((c) => c !== f.finishingRateCode),
       }),
     onSuccess: (r) => {
       toast.success(r.message ?? "Maliyet yapısı kaydedildi.");
@@ -73,6 +76,7 @@ export function StructureTab({ detail, measured, flagged }: { detail: CostItemDe
         <label className="text-sm sm:col-span-2"><span className="text-muted-foreground">Not</span>
           <Input className="mt-1" disabled={!canWrite} maxLength={STRUCTURE_MAX.notes} value={f.notes} onChange={(e) => set("notes", e.target.value)} /></label>
       </div>
+      <ProcessesEditor codes={procs} onChange={setProcs} rates={rates.data ?? []} finishingCode={f.finishingRateCode} disabled={!canWrite} />
       {canWrite && <Button onClick={() => save.mutate()} disabled={save.isPending}>Yapıyı kaydet</Button>}
     </div>
   );
