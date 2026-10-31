@@ -71,6 +71,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   financeCariHoldDefaultScope: V("yalnız form ön seçimi; kapsamı kilit koyan seçer, hiçbir kapıyı açıp kapamaz"),
   financeCariHoldReleaseBySamePerson: A("DENY"), // açma ucunun "koyan kişi" dalını işletir
   financeCariHoldEmanetShipment: A("PROCESSED_HELD"), // "işlenmiş" yüklemini işletir; işlenmemiş emanet yine geçer
+  costPresentationCurrency: A("USD"), // sunum alanlarını (kur + döviz tutarı) yanıta yazdırır
   financeServiceBillingPriceDate: V("fiyat tarihi; iki değer de geçerli, varsayılan hizmet anı"),
   financeAutoAllocateOnPaymentEnabled: A(true),
   financeAllowZeroPriceLineEnabled: A(true),

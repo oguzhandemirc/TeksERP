@@ -18,6 +18,8 @@ export interface HeaderFieldsProps {
   /** Kayıtlı teklifte kur kaynağı rozeti (sunucu alanı). */
   fxSource?: "MANUAL" | "TCMB" | null;
   customerName?: string;
+  /** SY-J1: para birimi ön seçiminin kaynağı (yalnız yeni teklif). */
+  currencyHint?: string;
 }
 
 const Grid = ({ children }: { children: ReactNode }) => <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{children}</div>;
@@ -27,7 +29,7 @@ function fxSourceLabel(currency: string, src: HeaderFieldsProps["fxSource"]): st
   return src === "MANUAL" ? "Elle girildi" : src === "TCMB" ? "TCMB" : "Finans kuru önerisi";
 }
 
-function PartyFields({ value, onChange, mode, fxSource, customerName }: HeaderFieldsProps) {
+function PartyFields({ value, onChange, mode, fxSource, customerName, currencyHint }: HeaderFieldsProps) {
   const src = fxSourceLabel(value.currency, fxSource);
   return (
     <Grid>
@@ -44,7 +46,7 @@ function PartyFields({ value, onChange, mode, fxSource, customerName }: HeaderFi
       <FormField label="Geçerlilik (son gün)" hint={mode === "create" ? "Boş: teklif tarihinden 30 gün" : undefined}>
         <DatePickerInput value={value.validUntilDate} onChange={(v) => onChange({ validUntilDate: v })} aria-label="Geçerlilik tarihi" />
       </FormField>
-      <FormField label="Para birimi" required>
+      <FormField label="Para birimi" required hint={mode === "create" ? currencyHint : undefined}>
         {mode === "create" ? (
           <CurrencySelect value={value.currency} onChange={(currency) => onChange({ currency })} />
         ) : (

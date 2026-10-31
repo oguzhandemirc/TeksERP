@@ -260,6 +260,12 @@ const MACHINE_DELETE_GUARDS: DependencyGuard[] = [
     message: (n) => `Bu makinede ${n} metre okuması (kurşun/Tambur) var — kalıcı silinemez. Pasife alın.`,
   },
   {
+    key: "expenseAllocationCount",
+    // D4-H3: kasa masrafı payı (defter, ters = damga) — damgalı bağlar DAHİL (geçmiş ayın kârlılığı onları okur).
+    count: (id) => prisma.expenseAllocation.count({ where: { machineId: id } }),
+    message: (n) => `Bu makineye bağlanmış ${n} masraf payı var — kalıcı silinemez. Pasife alın.`,
+  },
+  {
     key: "rollOperationCount",
     // ⚠️ `revokedAt` SÜZÜLMEZ — yukarıdaki istasyon guard'ıyla aynı gerekçe.
     count: (id) => prisma.rollOperation.count({ where: { machineId: id } }),

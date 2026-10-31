@@ -25,6 +25,7 @@ import {
   BarChart3,
   Bell,
   FileScan,
+  Calculator,
   type LucideIcon,
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
@@ -1992,6 +1993,35 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     ],
   },
   {
+    // SY-J1: Maliyet — KAPSAMSIZ kategori (ADMIN_ONLY): anahtar `settings-scopes`ta yok, yalnız `admin:settings`
+    // yazar; ayar modül kapalıyken de yazılır (etkisi yalnız maliyet yüzeylerinde).
+    id: "maliyet",
+    label: "Maliyet",
+    icon: Calculator,
+    description: "Maliyet ve teklif ekranlarının sunum ayarları; hesap her zaman TL'de sunucuda yapılır.",
+    keywords: "maliyet teklif fiyat listesi döviz usd dolar euro kur sunum standart maliyet",
+    kind: "flags",
+    section: "sales",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION],
+    enumFlags: [
+      {
+        // `defaultValue` backend `DEFAULT_COST_PRESENTATION_CURRENCY` ile birebir (bekçi §16).
+        enumKey: "costPresentationCurrency",
+        title: "Maliyet sunum dövizi",
+        summary: "Maliyet ekranlarında tutarların hangi dövizde gösterileceği; TL tutar her zaman yanında kalır.",
+        desc: "TL (varsayılan): ekranlar bugünkü gibi yalnız TL gösterir. USD ya da EUR seçilirse maliyet dökümü ve standart maliyet bu dövizde de gösterilir: kayıtlı maliyet sürümü kaydedildiği günün kuruyla (kur sonradan değişse de aynı tutar), önizleme günün kuruyla. Kur bulunamazsa döviz tutarı boş kalır, 1 varsayılmaz. Yeni teklifte para birimi müşterinin yayındaki fiyat listesinden, yoksa bu dövizden ön seçilir.",
+        defaultValue: "TRY",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "TRY", label: "TL (bugünkü)", hint: "Tutarlar yalnız TL gösterilir." },
+          { value: "USD", label: "USD", hint: "Tutarlar dolar olarak da gösterilir; sürümde kayıt günü kuru donar." },
+          { value: "EUR", label: "EUR", hint: "Tutarlar avro olarak da gösterilir; sürümde kayıt günü kuru donar." },
+        ],
+      },
+    ],
+  },
+  {
     id: "finance",
     label: "Muhasebe",
     icon: Banknote,
@@ -2621,7 +2651,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
 
 // bildirim: dar izin TAŞIMAYAN (yalnız `admin:settings`) fabrika kategorileri — beyan iki
 // yönlü ölçülür (settings-surface §6 + settings-scope-mirror): anahtarları kapsam tablosunda olamaz.
-export const ADMIN_ONLY_CATEGORY_IDS: ReadonlySet<string> = new Set(["bildirim", "belgeler", "gelen-belge"]);
+export const ADMIN_ONLY_CATEGORY_IDS: ReadonlySet<string> = new Set(["bildirim", "belgeler", "gelen-belge", "maliyet"]);
 
 /** Kategorinin çizildiği ekran — BÖLÜMÜNDEN türetilir (tek yazar). */
 export function categorySurface(cat: SettingsCategory): SettingsSurface {

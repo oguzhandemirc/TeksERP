@@ -302,6 +302,8 @@ export interface FeatureFlags {
   financeCariHoldReleaseBySamePerson: "ALLOW" | "DENY";
   /** D4-I1c: kilitli caride emanet sevki (backend aynası; varsayılan `EXEMPT`). */
   financeCariHoldEmanetShipment: "EXEMPT" | "PROCESSED_HELD" | "ALL_HELD";
+  /** SY-J1: maliyet sunum dövizi (varsayılan `TRY`). */
+  costPresentationCurrency: "TRY" | "USD" | "EUR";
   /** D4-I2b (S12): risk limiti para birimi kipi — her para birimi ayrı (varsayılan) · o güne kadarki en son kurla TL toplamı. */
   financeRiskLimitCurrencyMode: "PER_CURRENCY" | "TRY_CONVERTED";
   /** D4-G2a: kârlılıkta dış fason maliyeti kaynağı (backend aynası; varsayılan `FATURA_ONCE`). */
