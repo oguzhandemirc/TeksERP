@@ -14,7 +14,7 @@
 // Tespitte `detectedAtStepId` + `detectedByUserId` + `detectedAt` doldurulur.
 // =============================================================================
 
-import { ACTIVE_OPERATION, OWN_OPERATION } from "./helpers/roll-operation.helper";
+import { ACTIVE_OPERATION, OWN_OPERATION, prepareWidthTracedStepOpTx, revokeWidthTracedStepOperationsTx } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT, reopenClosedMovementsTx, revokeRollMovements } from "./helpers/roll-movement.helper";
 import { readActiveTargetValues } from "./helpers/workorder-target-value.helper";
 import prisma from "../lib/prisma";
@@ -61,6 +61,7 @@ import {
 } from "./helpers/station-capability-transfer.helper";
 import { applyKursunOperationTx } from "./helpers/kursun-operation.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { applyMeasuredWidthTx, assertStationCapturesWidth } from "./helpers/measured-width.helper";
 import { awaitsMeterSignature, loadRollMeterBases, type RollMeterBase } from "./helpers/kursun-meter-variance-sql.helper";
 import { listMeterDeviations, type MeterDeviationFilter } from "./helpers/kursun-meter-deviation-list.helper";
 import {
@@ -528,6 +529,8 @@ export class KursunQcService {
       properties?: PropertySelection[] | null;
       /** H1 çıkış metresi; `kursun.meterCapture` OFF iken yok sayılır (bugünkü davranış). */
       meterOut?: MeterReadingInput | null;
+      /** D4-E2a ölçülen en (cm); yalnız `Station.capturesWidth` istasyonunda. Yok = en değişmez. */
+      measuredWidthCm?: number | null;
     },
     userId?: string,
     machineId?: string | null
@@ -539,6 +542,8 @@ export class KursunQcService {
       select: { stationId: true, workOrderId: true },
     });
     if (!step) throw AppError.notFound("Adım bulunamadı");
+    const measuredWidthCm = data.measuredWidthCm ?? null;
+    if (measuredWidthCm != null) await assertStationCapturesWidth(prisma, step.stationId);
 
     // H1: okuma yalnız kip açıkken yazılır; açıkken SIMULATED/cihaz kapısı fail-closed (§4).
     const meterOut =
@@ -575,7 +580,7 @@ export class KursunQcService {
       // H1 tx sırası (§3-4, §12-1): 8036 token kilidi İLK ifade → WO kilidi (finishStep ile
       // serileşir) → tablet kapısı. Metresiz çağrı bugünkü sırada kalır.
       const meterPrior = meterOut && meterReplay ? await meterReplay.inTx(tx, meterOut.clientToken) : null;
-      if (meterOut) await touchWorkOrderTx(tx, step.workOrderId);
+      if (meterOut || measuredWidthCm != null) await touchWorkOrderTx(tx, step.workOrderId);
 
       // Kurşun bypass: adım fiziksel bir kurşun MAKİNESİNE dağıtılmışsa iş
       // KÂĞITTA yürüyor — tablet KK2 kaydı yazamaz. Guard tx İÇİNDE ve ilk
@@ -584,6 +589,16 @@ export class KursunQcService {
       // (Ters yön zaten kapalı: `assign` de adımda fiilen yapılmış QC2 op'u
       // görürse dağıtımı reddediyor — iki yön birbirini eler.)
       await assertKursunTabletMayWrite(tx, data.stepId, "KK2 tamamlama");
+
+      // D4-E2a: kilit sırası token → iş emri → top FOR UPDATE → yazım. Satır zaten varsa
+      // (replay / yeniden basış) en yeniden yazılmaz: aynı değer no-op, farklı değer 409.
+      // Karar tek boğazda: aynı değer no-op, izsiz satır damgalanıp yeniden yazılır, farklı değer 409.
+      const widthMode = measuredWidthCm != null
+        ? await prepareWidthTracedStepOpTx(tx, { rollId: data.rollId, stepId: data.stepId, measuredWidthCm, userId: userId ?? null })
+        : null;
+      const widthTrace = measuredWidthCm != null && widthMode === "APPLY"
+        ? await applyMeasuredWidthTx(tx, { rollId: data.rollId, measuredWidthCm })
+        : null;
 
       // Upsert yalnız AKTİF satıra bakar: unique partial'dır; geri alınmış iz
       // bulunursa yeniden yapılan KK2 yeni satır yazmaz ve top adımda takılırdı.
@@ -602,7 +617,10 @@ export class KursunQcService {
           operationType: RollOperationType.QC2_COMPLETED,
           operatorId: userId ?? null,
           machineId: machineId ?? null,
-          metadata: data.notes ? { notes: data.notes } : undefined,
+          metadata:
+            data.notes || widthTrace
+              ? { ...(data.notes ? { notes: data.notes } : {}), ...(widthTrace ?? {}) }
+              : undefined,
         },
         update: {},
       });
@@ -641,7 +659,7 @@ export class KursunQcService {
             })
           : null;
 
-      return { qc2Op, kursunOutcome, propertiesChanged: copied.changed, meterWrite };
+      return { qc2Op, kursunOutcome, propertiesChanged: copied.changed, meterWrite, widthTrace };
     });
     const op = result.qc2Op;
     if (result.meterWrite) await auditMeterReadingWrite(userId, result.meterWrite, "COMPLETE_QC2");
@@ -665,6 +683,7 @@ export class KursunQcService {
           valueCode: kursun.valueCode,
           // Operatörün elle işaretledikleri — AUTO'lar bu listede olmayabilir.
           selections: data.properties ?? [],
+          ...(result.widthTrace ?? {}),
         },
       });
     } else if (result.kursunOutcome !== "noop" || result.propertiesChanged) {
@@ -1282,6 +1301,7 @@ export class KursunQcService {
     /** Defter özeti — audit yüküne yazılır (yeni kayıt AÇILMAZ, alan eklenir). */
     let ledgerSummary: { reversed: number; statusuzAtlanan: number; bulunamayan: string[] } | null = null;
     let meterRevoked = 0;
+    let widthRestored = 0;
 
     await prisma.$transaction(async (tx) => {
       // F159: O-2 write-skew guard (finishStep paritesi) — son-adım WO/kart geri
@@ -1384,6 +1404,10 @@ export class KursunQcService {
         reason: "KURSUN_REOPEN",
       });
 
+      // D4-E2a: en ölçülmüş topun QC2 satırı damgalanır ve en geri konur (simetrik claim,
+      // araya Düzelt girdiyse 409 ROLL_CHANGED); yeniden kapanışta en yeniden ölçülür.
+      widthRestored = await revokeWidthTracedStepOperationsTx(tx, { rollIds, stepId: step.id, userId: userId ?? null });
+
       // QC2_COMPLETED / KURSUN_APPLIED işaretleri ve RollProperty kayıtları
       // korunur — operatör eski veriyi görsün, üzerinde oynayabilsin.
       // Sıfırlamak isterse kartı yeniden okutup reopen akışını kullanır.
@@ -1407,6 +1431,7 @@ export class KursunQcService {
         // sayıları burada görünür.
         ...(ledgerSummary ? { defter: ledgerSummary } : {}),
         ...(meterRevoked > 0 ? { meterReadingsRevoked: meterRevoked } : {}),
+        ...(widthRestored > 0 ? { widthRestoredRollCount: widthRestored } : {}),
       },
     });
 

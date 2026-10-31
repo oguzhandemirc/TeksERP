@@ -371,7 +371,8 @@ export default [
     // `npx eslint` onu varsayılan yapılandırmayla (node globals YOK) tarardı.
     // `build-identity.ts`: üç derleme yapılandırmasının ortak kimlik çözücüsü — aynı Node bağlamı.
     // `onizleme/*.mjs`: geliştirme önizlemesinin sunucu + ekran görüntüsü aracı (Playwright).
-    files: ["e2e/**/*.{ts,tsx,mjs}", "onizleme/**/*.mjs", "playwright.config.ts", "vitest.config.ts", "build-identity.ts"],
+    // `scripts/**/*.ts`: tek seferlik kurulum betikleri (ör. tül Excel dönüştürücüsü) — Node bağlamı.
+    files: ["e2e/**/*.{ts,tsx,mjs}", "onizleme/**/*.mjs", "scripts/**/*.ts", "playwright.config.ts", "vitest.config.ts", "build-identity.ts"],
     languageOptions: {
       parser: tsParser,
       parserOptions: { ecmaVersion: "latest", sourceType: "module" },

@@ -170,7 +170,10 @@ function main(): void {
   // `mergedIntoId`i bu dosyaya kilitler). Audit'i çağıran eylem basar (`device-merge.service`) — EBEVEYN_EYLEMDE.
   // (H7, 2026-10-29: `helpers/service-billing.helper.ts` SAYILMAZ — ServiceBillingLink model düzeyinde
   // AUDIT_EXEMPT_MODELS'te EBEVEYN_EYLEMDE beyanlı; taban artmadı.)
-  const AUDITSIZ_YAZICI_TABAN = 38;
+  // 38 → 39 (2026-10-30, D4-E2a): `helpers/measured-width.helper.ts` — ölçülen enin `Roll.width`e
+  // TEK ileri yazarı (`applyMeasuredWidthTx`, FOR UPDATE + atomik claim, tx İÇİNDE); iz QC2 satırında,
+  // audit'i çağıran eylem basar (completeQc2 · kursunFinish yükünde widthBefore/widthAfter) — EBEVEYN_EYLEMDE.
+  const AUDITSIZ_YAZICI_TABAN = 39;
   const auditsizYazici: string[] = [];
   for (const [rel, s] of metin) {
     if (auditDosya.has(rel) || /tableName:\s*"/.test(s)) continue;
