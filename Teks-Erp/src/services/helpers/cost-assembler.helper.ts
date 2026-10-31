@@ -13,6 +13,7 @@ import { ACTIVE_FINISHING_RATE, ACTIVE_YARN_COST_PRICE } from "./cost-price-vali
 import type { CostInput, CostPrice, CostRate, CostSource, CostWeftYarn, CostYarn, Sourced } from "./fabric-cost.helper";
 import { resolveDenier } from "../../constants/warp-beam";
 import { readCostWeavingStandardMethod, type WeavingStandardMethod } from "../system-setting.service";
+import { effectiveFinishingRateCode } from "./finishing-rate-code.helper";
 
 
 type Dec = Prisma.Decimal;
@@ -147,7 +148,7 @@ export function buildCostInput(src: CostSources, ref: CostSourceRef, o: CostOver
     : (ah?.weft?.yarns ?? []).map((y) => ({ ...adHocYarn(y), picksInRepeat: y.picksInRepeat ?? 1 }));
   const picks = item?.weftSpec ? item.weftSpec.picksPerCm : ah?.weft ? dec(ah.weft.picksPerCm) : null;
   const hasWeft = !!item?.weftSpec || !!ah?.weft;
-  const code = o.finishingRateCode !== undefined ? o.finishingRateCode : (cs?.finishingRateCode ?? ah?.finishingRateCode ?? null);
+  const code = o.finishingRateCode !== undefined ? o.finishingRateCode : (effectiveFinishingRateCode(null, cs?.finishingRateCode) ?? ah?.finishingRateCode ?? null);
   const finishing = finishingOf(src, code);
   const extraTry = o.extraCostPerMTry ?? cs?.extraCostPerMTry ?? null;
   // Ek işlem (SY-G1) aynı tarife uzayından; çözülemeyen kod motorda FINISHING_RATE_MISSING (0 değil).

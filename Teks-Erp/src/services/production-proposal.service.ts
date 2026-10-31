@@ -2,8 +2,8 @@
 // SİPARİŞTEN ÜRETİM ÖNERİSİ — önizleme + uygula (SY-M1, tasarım §14.5)
 // =============================================================================
 // Ne yaratılacağını YALNIZ `production-proposal.helper` söyler; uygula onu kilitlerin arkasında yeniden
-// koşar. Kilit sırası: 8036 (istek token'ı, tx'in İLK ifadesi) → sipariş satırları id sırasıyla FOR UPDATE
-// → 8032 (dokuma işi numarası, yaratma çekirdeğinin içinde). Yaratma mevcut çekirdeklerle (dokuma işi +
+// koşar. Kilit sırası: 8036 (istek token'ı, tx'in İLK ifadesi) → sipariş satırları id sırasıyla FOR NO KEY
+// UPDATE → 8032 (dokuma işi numarası, yaratma çekirdeğinin içinde). Yaratma mevcut çekirdeklerle (dokuma işi +
 // terbiye iş emri) — ikinci yaratma yolu yazılmaz. Kayıt başına token istek token'ından türer (uuidv5):
 // aynı token'ın tekrarı aynı kayıt setini boğazdan (`tokenReplay.behindLock`) replay eder.
 // =============================================================================
@@ -116,9 +116,12 @@ async function readReplaySetTx(tx: Prisma.TransactionClient, input: ProposalAppl
   throw AppError.conflict("Bu istek anahtarı başka bir seçimle kullanılmış — önizlemeyi yenileyip yeniden deneyin.", { code: "CLIENT_TOKEN_COLLISION" });
 }
 
-/** Satır kilidi: eşzamanlı ikinci uygula, birincinin bağlarını görene kadar burada bekler. */
+/**
+ * Satır kilidi: eşzamanlı ikinci uygula, birincinin bağlarını görene kadar burada bekler. NO KEY UPDATE kendisiyle
+ * çatışır ama FK'nin FOR KEY SHARE'iyle çatışmaz — form yolunun (8032 → pivot FK) kilit sırasıyla terslik doğmaz.
+ */
 async function lockOrderLinesTx(tx: Prisma.TransactionClient, orderId: string): Promise<void> {
-  await tx.$queryRaw`SELECT id FROM order_lines WHERE "orderId" = ${orderId}::uuid ORDER BY id FOR UPDATE`;
+  await tx.$queryRaw`SELECT id FROM order_lines WHERE "orderId" = ${orderId}::uuid ORDER BY id FOR NO KEY UPDATE`;
 }
 
 function sameSet(a: string[], b: string[]): boolean {
@@ -151,6 +154,7 @@ async function createSelectedTx(tx: Prisma.TransactionClient, fresh: ProductionP
     const g = fresh.weavingOrders.find((x) => x.key === sel.key);
     assertSelectionCurrent(fresh, "WEAVING", sel, g);
     const w = weavingInput(sel, input.clientToken, g);
+    // prepare* global istemciyle doğrulama okur (kilit gerektirmez); bilinçli — tx parametresi almaz.
     out.weaving.push(await insertWeavingOrderTx(tx, w, await prepareWeavingOrderCreate(w), userId));
   }
   for (const sel of input.workOrders) {
@@ -165,6 +169,8 @@ async function createSelectedTx(tx: Prisma.TransactionClient, fresh: ProductionP
 
 function assertApplyAllowed(input: ProposalApplyInput, scope: ProposalScope, access: ProposalAccess): void {
   if (input.weavingOrders.length + input.workOrders.length === 0) throw AppError.badRequest("Oluşturulacak en az bir kayıt seçin.");
+  const keys = [...input.weavingOrders, ...input.workOrders].map((x) => x.key);
+  if (new Set(keys).size !== keys.length) throw AppError.badRequest("Aynı öneri grubu birden fazla kez seçilmiş.", { code: "PROPOSAL_KEY_DUPLICATE" });
   if (input.weavingOrders.length > 0 && !scope.weaving) {
     throw AppError.forbidden("Dokuma iş emri bu kurulumda ya da yetkinizde yok.", { code: "MODULE_DISABLED", modul: "dokuma" });
   }

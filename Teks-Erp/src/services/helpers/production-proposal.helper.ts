@@ -4,7 +4,7 @@
 // Önizleme ve uygula AYNI fonksiyonu koşar; uygula onu satır kilitlerinin ARKASINDA yeniden koşar
 // (önizlemeye güvenilmez). Dokuma işi grubu = (ürün, varyant); iş emri grubu = (ürün, renk, en) —
 // toplu "Siparişten İş Emri" eylemiyle aynı kural. Zaten bağlı satır gruptan düşer, uyarıyla listelenir.
-// Ham ihtiyaç = açık metre ÷ (1 − boy çekmesi); çekme varyantın terbiye tarifesinden (öneri, düzenlenebilir).
+// Ham ihtiyaç = açık metre ÷ (1 − boy çekmesi); çekme varyant → ürün yapısı terbiye tarifesinden (öneri, düzenlenebilir).
 // =============================================================================
 
 import { Prisma } from "@prisma/client";
@@ -13,6 +13,7 @@ import { AppError } from "../../utils/app-error";
 import { resolveEffectiveConstruction } from "./effective-construction.helper";
 import { ACTIVE_FINISHING_RATE } from "./cost-price-validity.helper";
 import { ACTIVE_ORDER_LINK } from "./order-link.helper";
+import { effectiveFinishingRateCode } from "./finishing-rate-code.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -69,15 +70,19 @@ export interface ProductionProposal {
   excluded: Array<{ orderLineId: string; kind: "WEAVING" | "WORK_ORDER" | "LINE"; code: string }>;
 }
 
+/** "Satır zaten planlanmış mı" — canlı dokuma işi bağı (iptal dışı her durum). */
+export const LIVE_WEAVING_ORDER_LINK = { weavingOrder: { status: { not: "CANCELLED" } } } satisfies Prisma.WeavingOrderToOrderLineWhereInput;
+/** "Satır zaten planlanmış mı" — canlı iş emri bağı (aktif, iptal/yerine-geçilmiş dışı). */
+export const LIVE_WORK_ORDER_LINK = {
+  ...ACTIVE_ORDER_LINK, workOrder: { isActive: true, status: { notIn: ["CANCELLED", "SUPERSEDED"] } },
+} satisfies Prisma.WorkOrderToOrderLineWhereInput;
+
 const LINE_SELECT = {
   id: true, itemId: true, colorId: true, width: true, quantity: true, shippedQty: true, unit: true, recipeId: true,
-  item: { select: { name: true } },
+  item: { select: { name: true, costStructure: { select: { finishingRateCode: true } } } },
   recipe: { select: { routeId: true, foldType: true, finishingRateCode: true } },
-  weavingOrderLinks: { where: { weavingOrder: { status: { not: "CANCELLED" } } }, select: { id: true }, take: 1 },
-  workOrderLinks: {
-    where: { ...ACTIVE_ORDER_LINK, workOrder: { isActive: true, status: { notIn: ["CANCELLED", "SUPERSEDED"] } } },
-    select: { id: true }, take: 1,
-  },
+  weavingOrderLinks: { where: LIVE_WEAVING_ORDER_LINK, select: { id: true }, take: 1 },
+  workOrderLinks: { where: LIVE_WORK_ORDER_LINK, select: { id: true }, take: 1 },
 } satisfies Prisma.OrderLineSelect;
 type LineRow = Prisma.OrderLineGetPayload<{ select: typeof LINE_SELECT }>;
 
@@ -133,7 +138,7 @@ async function buildWeavingGroups(db: Db, lines: LineRow[], out: ProductionPropo
       g = {
         key, itemId: l.itemId, itemName: l.item.name, recipeId: l.recipeId,
         warpSpecId: c.groundWarp?.id ?? null, weftSpecId: c.weft?.weftSpecId ?? null, weaveDesignId: c.weaveDesign?.id ?? null,
-        shrinkPct: await shrinkPctOf(db, l.recipe?.finishingRateCode, shrinkMemo), plannedM: null, orderLines: [],
+        shrinkPct: await shrinkPctOf(db, effectiveFinishingRateCode(l.recipe?.finishingRateCode, l.item.costStructure?.finishingRateCode), shrinkMemo), plannedM: null, orderLines: [],
       };
       groups.set(key, g);
     }
@@ -149,7 +154,7 @@ async function buildWeavingGroups(db: Db, lines: LineRow[], out: ProductionPropo
 }
 
 function buildWorkOrderGroups(lines: LineRow[], out: ProductionProposal): void {
-  const groups = new Map<string, WorkOrderProposal & { routeIds: Set<string | null> }>();
+  const groups = new Map<string, WorkOrderProposal & { routeIds: Set<string | null>; foldTypes: Set<string | null> }>();
   for (const l of lines) {
     if (l.workOrderLinks.length > 0) {
       out.excluded.push({ orderLineId: l.id, kind: "WORK_ORDER", code: PROPOSAL_CODES.alreadyPlanned });
@@ -161,19 +166,22 @@ function buildWorkOrderGroups(lines: LineRow[], out: ProductionProposal): void {
     if (!g) {
       g = {
         key, itemId: l.itemId, itemName: l.item.name, colorId: l.colorId, width, routeId: null,
-        foldType: l.recipe?.foldType ?? null, targetQuantity: 0, orderLines: [], blockedCode: null, routeIds: new Set(),
+        foldType: null, targetQuantity: 0, orderLines: [], blockedCode: null, routeIds: new Set(), foldTypes: new Set(),
       };
       groups.set(key, g);
     }
     const openM = openMeters(l);
     g.routeIds.add(l.recipe?.routeId ?? null);
+    g.foldTypes.add(l.recipe?.foldType ?? null);
     g.orderLines.push({ orderLineId: l.id, allocatedQty: openM ?? 0 });
     g.targetQuantity = openM == null || g.targetQuantity == null ? null : round3(g.targetQuantity + openM);
   }
-  for (const { routeIds, ...g } of groups.values()) {
+  for (const { routeIds, foldTypes, ...g } of groups.values()) {
     // Rota varyanttan; satırlar tek rotada birleşmiyorsa öneri rota uydurmaz → seçilemez (formdan açılır).
     const only = routeIds.size === 1 ? [...routeIds][0] : null;
-    out.workOrders.push({ ...g, routeId: only ?? null, blockedCode: only ? null : PROPOSAL_CODES.routeMissing, targetQuantity: g.targetQuantity || null });
+    // Kat tipi de uydurulmaz: varyantlar ayrışırsa boş kalır (formda/iş emrinde seçilir).
+    const fold = foldTypes.size === 1 ? [...foldTypes][0] : null;
+    out.workOrders.push({ ...g, foldType: fold ?? null, routeId: only ?? null, blockedCode: only ? null : PROPOSAL_CODES.routeMissing, targetQuantity: g.targetQuantity || null });
   }
 }
 
