@@ -113,6 +113,8 @@ export default function SevkiyatScreen() {
       setDriver('');
       setCarrier('');
       refresh();
+      // Sevk edilen toplar hazır iş çiplerinden düşsün (staleTime beklenmesin).
+      void qc.invalidateQueries({ queryKey: READY_WORKS_KEY });
     },
     // L fix: 409'da (baska operator ayni sevkiyati degistirdi) board tazelensin.
     onError: (e: Error) => {
