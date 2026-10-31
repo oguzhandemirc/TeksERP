@@ -39,6 +39,7 @@
 // =============================================================================
 
 import { useState } from "react";
+import { RiskLimitModeHint } from "./RiskLimitModeHint";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -296,6 +297,7 @@ export function CariEditDialog({ cari, open, onOpenChange }: Props) {
               Risk limiti <span className="font-medium text-foreground">UYARIDIR, satışı bloklamaz</span>{" "}
               — durdurma kararı ticaridir ve yazılım onu vardiya ortasında sessizce veremez.
             </p>
+            <RiskLimitModeHint />
             {errors.riskLimit && (
               <p className="mt-1 text-xs font-medium text-destructive">{errors.riskLimit}</p>
             )}

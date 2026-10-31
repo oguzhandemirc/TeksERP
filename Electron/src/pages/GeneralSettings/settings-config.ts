@@ -2262,6 +2262,20 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         ],
       },
       {
+        enumKey: "financeRiskLimitCurrencyMode",
+        group: "Kasa & Risk",
+        title: "Risk limiti para birimi",
+        summary: "Risk limiti her para biriminde ayrı mı, yoksa TL'ye çevrilmiş toplamla mı ölçülsün.",
+        desc: "Her para birimi ayrı (varsayılan): carinin TL, USD, EUR bakiyelerinin her biri limitle ayrı karşılaştırılır. TL'ye çevrilmiş toplam: limit TL kabul edilir; TL'ye çevrilmiş toplam o güne kadarki en son kurla hesaplanır (Ön Muhasebe → Kurlar). Dövizli bakiyenin güncel kuru yoksa iş kabulü, sevk ve fatura onayı durur — kur 1 varsayılmaz.",
+        defaultValue: "PER_CURRENCY",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "PER_CURRENCY", label: "Her para birimi ayrı (varsayılan)", hint: "1.000 USD bakiye, limitle 1.000 olarak ölçülür." },
+          { value: "TRY_CONVERTED", label: "TL'ye çevrilmiş toplam", hint: "TL'ye çevrilmiş toplam o güne kadarki en son kurla hesaplanır; kur yoksa işlem durur." },
+        ],
+      },
+      {
         // D4-G2a: `defaultValue` backend `DEFAULT_PROFIT_SUBCONTRACT_SOURCE` ile birebir; kârlılık okurken uygulanır, kayıt değişmez.
         enumKey: "costProfitSubcontractSource",
         group: "Kârlılık",

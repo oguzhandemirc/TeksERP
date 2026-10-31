@@ -77,10 +77,10 @@ function paneliOku(kaynak: string): PanelKatalogu {
           if (!ts.isObjectLiteralExpression(el)) continue;
           const flags = new Map<string, string>();
           for (const p of el.properties) {
-            if (ts.isPropertyAssignment(p) && p.name.getText() === "flags" && ts.isArrayLiteralExpression(p.initializer)) {
+            if (ts.isPropertyAssignment(p) && (p.name.getText() === "flags" || p.name.getText() === "enumFlags") && ts.isArrayLiteralExpression(p.initializer)) {
               for (const f of p.initializer.elements) {
                 if (!ts.isObjectLiteralExpression(f)) continue;
-                const key = strProp(f, "key");
+                const key = strProp(f, "key") ?? strProp(f, "enumKey");
                 const title = strProp(f, "title");
                 if (key && title) flags.set(key, title);
               }

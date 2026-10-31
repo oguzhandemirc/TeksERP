@@ -113,6 +113,7 @@ async function oncekiTemizlik(f: MaliyetFikstur): Promise<void> {
 export async function fiksturSil(f: MaliyetFikstur): Promise<void> {
   kapi("temizliği");
   await oncekiTemizlik(f);
+  await prisma.costStructureProcess.deleteMany({ where: { costStructure: { itemId: f.fabricId } } }); // SY-G1 pivotu (RESTRICT FK)
   await prisma.costStructure.deleteMany({ where: { itemId: f.fabricId } });
   await prisma.item.delete({ where: { id: f.fabricId } });
   await prisma.weftSpecYarn.deleteMany({ where: { weftSpecId: f.weftSpecId } });

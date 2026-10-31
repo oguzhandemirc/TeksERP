@@ -15,6 +15,8 @@ export interface CostInputSnap {
   loom: Record<"rpm" | "efficiencyPct" | "machineRateTry" | "laborRateTry" | "loomsPerOperator" | "energyKwhPerHour" | "energyPriceTry", Sourced>;
   beam: { prepCostTry: Sourced; lengthM: Sourced };
   finishing: { code: string; name: string; basis: "RAW_M" | "FINISHED_M"; price: CostPriceSnap | null } | null;
+  /** SY-G1 ek işlemler — yalnız doluyken gelir. */
+  processes?: Array<{ code: string; name: string; basis: "RAW_M" | "FINISHED_M"; price: CostPriceSnap | null }>;
   lengthShrinkPct: Sourced;
   fabricWastePct: Sourced;
   overheadPct: Sourced;
