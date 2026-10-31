@@ -308,6 +308,12 @@ export interface FeatureFlags {
   costProfitSubcontractSource: "FATURA_ONCE" | "YALNIZ_FATURA";
   /** D4-G2a: kârlılıkta sarf birim fiyatı kaynağı (backend aynası; varsayılan `ALIS_FIYATI`). */
   costProfitConsumablePriceSource: "ALIS_FIYATI" | "SON_ALIS_FATURASI";
+  /** D4-G2b: kârlılıkta makine süresi kaynağı (backend aynası; varsayılan `OTURUM`). */
+  costProfitMachineTime: "OTURUM" | "VARDIYA" | "NORM";
+  /** D4-G2b: genel gider dağıtım anahtarı (backend aynası; varsayılan `YOK` = dağıtılmaz). */
+  costProfitOverheadKey: "YOK" | "METRE" | "GELIR" | "MAKINE_SAATI";
+  /** D4-G2b: masraf kategorisi → sınıf (backend aynası; varsayılan `{}` = her kategori genel gider). */
+  costProfitCategoryClasses: Record<string, "ISCILIK" | "GENEL_GIDER" | "HARIC">;
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; tahsis elle silinebilir. */
   financeAutoAllocateOnPaymentEnabled: boolean;
