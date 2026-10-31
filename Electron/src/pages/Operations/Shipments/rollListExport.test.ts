@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildWorkbook } from "@/lib/xlsx-export";
-import { buildRollListSheet, DRAFT_MARK, rollListFileName, type ShipmentRollList } from "./rollListExport";
+import { buildRollListSheet, DRAFT_MARK, rollListFileName, VOID_MARK, type ShipmentRollList } from "./rollListExport";
 
 /** D4-J6 — sevk top listesi Excel'i: satır = sunucunun çeki satırı, toplam = sunucunun toplamı. */
 
@@ -75,5 +75,13 @@ describe("buildRollListSheet", () => {
     const frozen = buildRollListSheet(LIST);
     expect(String(frozen.preamble?.[0]?.[0])).not.toContain(DRAFT_MARK);
     expect(rollListFileName("SVK-42", true)).toBe("Top_Listesi_SVK-42");
+  });
+
+  it("sevki geri alınmış (VOIDED) liste İPTAL işaretli, nihai liste gibi görünmez", () => {
+    const voided = buildRollListSheet({ ...LIST, frozen: false, voided: true });
+    expect(String(voided.preamble?.[0]?.[0])).toContain(VOID_MARK);
+    expect(String(voided.preamble?.[0]?.[0])).not.toContain(DRAFT_MARK);
+    expect(voided.preamble?.[2]?.[0]).toBe("Sevk Tarihi");
+    expect(rollListFileName("SVK-42", false, true)).toBe("Top_Listesi_SVK-42_IPTAL");
   });
 });
