@@ -1,13 +1,22 @@
+import type { KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
-import type { TabloBlok } from "./sunum";
+import type { TabloBlok, TabloHucresi } from "./sunum";
 import { cellText, columnAlign, columnHeader, columnFormat, truncationNote } from "./table-model";
+
+/** Satırdan geçiş (D4-KUC2 e): hedefi olan satır tıklanır/Enter ile açılır; hedefsiz satır düz kalır. */
+export interface ReportRowLink {
+  target: (row: Record<string, TabloHucresi>) => string | null;
+  open: (to: string) => void;
+  title: string;
+}
 
 interface Props {
   table: TabloBlok;
+  rowLink?: ReportRowLink;
 }
 
 /** Sunucunun tablo bloğu; hücre metni PDF/Excel ile aynı biçimden. */
-export function ReportTable({ table }: Props) {
+export function ReportTable({ table, rowLink }: Props) {
   const cols = table.kolonlar.map((c) => ({ c, fmt: columnFormat(table, c), right: columnAlign(table, c) === "right" }));
   const note = truncationNote(table);
   if (table.satirlar.length === 0) {
@@ -27,15 +36,29 @@ export function ReportTable({ table }: Props) {
             </tr>
           </thead>
           <tbody>
-            {table.satirlar.map((row, i) => (
-              <tr key={i} className="border-t">
+            {table.satirlar.map((row, i) => {
+              const to = rowLink?.target(row) ?? null;
+              const linkProps = to
+                ? {
+                    role: "link" as const,
+                    tabIndex: 0,
+                    title: rowLink!.title,
+                    onClick: () => rowLink!.open(to),
+                    onKeyDown: (e: KeyboardEvent) => {
+                      if (e.key === "Enter") rowLink!.open(to);
+                    },
+                  }
+                : {};
+              return (
+              <tr key={i} className={cn("border-t", to && "cursor-pointer hover:bg-muted/40")} {...linkProps}>
                 {cols.map(({ c, fmt, right }) => (
                   <td key={c.anahtar} className={cn("px-3 py-1.5", right && "text-right tabular-nums")}>
                     {cellText(row[c.anahtar], fmt)}
                   </td>
                 ))}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
           {table.toplam ? (
             <tfoot className="border-t-2 bg-muted/30 font-semibold">

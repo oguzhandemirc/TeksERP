@@ -12,6 +12,8 @@
 // eklendi → çıkış 1 · 2 ❌ · §2c + §3c (taban 10/0); cp ile geri alındı.
 // NEGATİF SONDA — 2026-10-29 (§4): `paketiYazVeDogrula` içindeki `setFeatureFlags` çağrısı
 // kaldırıldı → 11/3, §4b + §4c + §4d kırmızı (taban 14/0); cp ile geri alındı.
+// NEGATİF SONDA — 2026-10-31 (D4-KUC2 f, §1d): paket tambur.simulatedMeterEnabled hedef true
+// yapıldı → 17/1, §1d kırmızı (taban 18/0); cp ile geri alındı.
 // =============================================================================
 import { spawnSync } from "node:child_process";
 import * as path from "node:path";
@@ -19,6 +21,9 @@ import prisma, { pool } from "../src/lib/prisma";
 import { HIZMET_AYAR_PAKETI, paketiYazVeDogrula, paketPlani, type PaketSatiri } from "./hizmet-ayar-paketi";
 import { testActorId } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { HEPSI_ACIK, PROFIL_DISI_ANAHTARLAR, hepsiAcikAyarlar } from "./lib/hepsi-acik";
+import acikProfil from "./test-profilleri/acik.json";
+import { readTamburSimulatedMeterEnabled } from "../src/services/system-setting.service";
 
 let pass = 0,
   fail = 0;
@@ -68,6 +73,21 @@ async function main(): Promise<void> {
   check("§1b paket anahtarları tekil", new Set(anahtarlar).size === anahtarlar.length, `${anahtarlar.length} satır`);
   const alanlar = HIZMET_AYAR_PAKETI.map((p) => p.alan);
   check("§1c paket alanları tekil", new Set(alanlar).size === alanlar.length);
+  // D4-KUC2 (f), kullanıcı kararı B-2: Gülkesim gerçek Bluetooth sayaç kullanır → simüle metre paketle KAPALI.
+  const tamburSim = HIZMET_AYAR_PAKETI.find((p) => p.anahtar === "tambur.simulatedMeterEnabled");
+  check("§1d paket tambur.simulatedMeterEnabled = KAPALI", tamburSim?.hedef === false, String(tamburSim?.hedef));
+  const bosTx = { systemSetting: { findUnique: async () => null } } as unknown as Parameters<typeof readTamburSimulatedMeterEnabled>[0];
+  check("§1e varsayılan DEĞİŞMEDİ (satır yok = simüle AÇIK, diğer kurulumlar bugünkü gibi)", (await readTamburSimulatedMeterEnabled(bosTx)) === true);
+  const acikAyarlar = hepsiAcikAyarlar();
+  const profilAyarlar = (acikProfil as { ayarlar: Record<string, unknown> }).ayarlar;
+  const kopuk = HIZMET_AYAR_PAKETI.filter(
+    (p) => !(p.alan in HEPSI_ACIK) && !(p.alan in PROFIL_DISI_ANAHTARLAR),
+  ).map((p) => p.alan);
+  check("§1f paketin her alanı hepsi-acik tablosunda", kopuk.length === 0, kopuk.join(","));
+  const ayrisan = HIZMET_AYAR_PAKETI.filter((p) => p.alan in acikAyarlar && profilAyarlar[p.alan] !== acikAyarlar[p.alan]).map(
+    (p) => p.alan,
+  );
+  check("§1g paket alanlarında acik.json = hepsi-acik (yeniden üretilmiş)", ayrisan.length === 0, ayrisan.join(","));
 
   // ── §2 CANLI kuru koşu ──
   const engel = hedefDbEngeli();
