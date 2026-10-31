@@ -42,7 +42,7 @@ export const MODULES: readonly ModuleDef[] = [
   { key: "sevkiyat", title: "Sevkiyat", hint: "Sevk edilen ve bekleyen", route: "/sevkiyat", anyOf: ["bulut:sevkiyat:oku"] },
   { key: "uretim", title: "Üretim", route: "/uretim", anyOf: ["bulut:uretim:oku"] },
   { key: "stok", title: "Stok", hint: "Ham ve bitmiş stok", route: "/stok", anyOf: ["bulut:stok:oku"] },
-  { key: "finans", title: TERIM_AD.onMuhasebe, navTitle: "Finans", route: "/finans", anyOf: [...FINANCE_READ, "bulut:cari-bakiye:oku"] },
+  { key: "finans", title: TERIM_AD.onMuhasebe, navTitle: "Finans", route: "/finans", anyOf: [...FINANCE_READ, "bulut:cari-bakiye:oku", "bulut:maliyet:oku"] },
   { key: "teklifler", title: "Teklifler", hint: "Müşteriye gönderilen teklifler", route: "/teklifler", anyOf: ["bulut:teklif:oku"] },
   { key: "standart-maliyetler", title: "Standart Maliyetler", hint: "Ürün başına metre maliyeti", route: "/standart-maliyetler", anyOf: ["bulut:teklif:oku"], allOf: ["bulut:maliyet:oku"] },
   { key: "raporlar", title: "Raporlar", hint: "Fabrikadan rapor isteyin", route: "/raporlar", anyOf: ["bulut:rapor:oku"] },

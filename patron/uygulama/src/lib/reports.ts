@@ -28,6 +28,7 @@ export const REPORT_KEY_PERMISSION: Readonly<Record<string, string>> = {
   "dokuma/levent-dengesi": "bulut:uretim:oku",
   "production/makine-duruslari": "bulut:uretim:oku",
   "finance/alacaklar": "bulut:cari-bakiye:oku",
+  "maliyet/karlilik": "bulut:maliyet:oku",
 };
 
 export const REPORTS_NOT_IN_CLOUD: readonly string[] = ["audit/*", "production/operator-performance", "production/uretim-akisi"];
@@ -51,6 +52,7 @@ export const PRESENTATION_REPORT_KEYS: readonly string[] = [
   "dokuma/levent-dengesi",
   "production/makine-duruslari",
   "finance/alacaklar",
+  "maliyet/karlilik",
 ];
 
 export function isPresentationKey(key: string): boolean {
