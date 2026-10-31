@@ -72,6 +72,11 @@ const MODEL_MUAF: ReadonlyArray<{ dosya: string; model: string; neden: string }>
     model: "costStructure",
     neden: "Üretim önerisi (SY-M1) ürün yapısından yalnız tarife KODUNU okur (varyantta yoksa; effectiveFinishingRateCode); fiyat okumaz.",
   },
+  {
+    dosya: "routes/product-recipe.routes.ts",
+    model: "finishingRate",
+    neden: "Varyant tarife kodu (SY-E1) yalnız aktif tarifeye ÇÖZÜLÜYOR MU diye okunur — bilinmeyen kod 400; maliyet kapalıyken tarife doğamaz, kod boş bırakılır (reçete yazımı dokuma/iş emri yüzeyidir).",
+  },
 ];
 
 const ADLA_BEKLENEN_KAPILI: ReadonlyArray<{ dosya: string; neden: string }> = [

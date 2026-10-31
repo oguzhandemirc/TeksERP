@@ -34,6 +34,7 @@ const req = <T>(v: T | null | undefined, label: string): T => {
 
 export interface CostCalcBody {
   itemId?: string;
+  recipeId?: string;
   adHoc?: Record<string, unknown>;
   overrides?: Record<string, unknown>;
   fxRates?: Record<string, unknown>;
@@ -133,7 +134,8 @@ export async function resolveFx(input: CostInput, given: Partial<Record<Currency
 
 export function sourceRefOf(body: CostCalcBody): CostSourceRef {
   if (body.itemId && body.adHoc) throw AppError.badRequest("Ya ürün ya elle yapı gönderilmeli, ikisi birden değil.");
-  if (body.itemId) return { itemId: body.itemId };
+  if (body.recipeId && !body.itemId) throw AppError.badRequest("Varyant yalnız ürünle birlikte gönderilir.");
+  if (body.itemId) return body.recipeId ? { itemId: body.itemId, recipeId: body.recipeId } : { itemId: body.itemId };
   if (body.adHoc) return { adHoc: parseAdHoc(body.adHoc) };
   throw AppError.badRequest("Ürün ya da elle yapı zorunlu.");
 }

@@ -19,6 +19,8 @@ import { OrderLineAtpHint } from "./OrderLineAtpHint";
 import { OrderLinePriceField } from "./OrderLinePriceField";
 import { OrderLineQuantityField } from "./OrderLineQuantityField";
 import { PhaseOutLineNote } from "./PhaseOutLineNote";
+import { LineTargetValuesField } from "./LineTargetValuesField";
+import { pruneTargetValues, useVariantCatalog } from "./lineTargetValues";
 import { OrderLinePlanButton } from "./OrderLinePlanDialog";
 import type { OrderLineFormValues } from "./schema";
 
@@ -70,7 +72,7 @@ export function OrderLineRow(p: OrderLineRowProps) {
               kalır; kumaş değişince renk/özellik/birim sıfırlama davranışı aynen. */}
           <ItemSelect
             value={line.itemId || null}
-            onChange={(v) => onPatch({ itemId: v ?? "", colorId: null, requiredPropertyIds: [], unit: undefined, recipeId: null })}
+            onChange={(v) => onPatch({ itemId: v ?? "", colorId: null, requiredPropertyIds: [], targetValues: [], unit: undefined, recipeId: null })}
             allowedTypes={ORDER_LINE_ITEM_TYPES}
             lifecycle={lifecycle}
             aria-label="Kumaş seç"
@@ -125,6 +127,9 @@ export function OrderLineRow(p: OrderLineRowProps) {
 /** Alt satır: hızlı eylemler + alias + ATP + kesim notu — ana grid'in altında, ikon + kısa metin. */
 function OrderLineExtras(p: OrderLineRowProps) {
   const { line, customerId, onWarnItem, onPatch } = p;
+  const flagIds = line.requiredPropertyIds ?? [];
+  const targets = line.targetValues ?? [];
+  const catalog = useVariantCatalog(flagIds.length > 0);
   return (
       <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-0 lg:pl-10">
         <Button type="button" size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={p.onQuickAddItem}>
@@ -134,7 +139,7 @@ function OrderLineExtras(p: OrderLineRowProps) {
         <LineRequiredPropertiesEditor
           itemId={line.itemId}
           value={line.requiredPropertyIds ?? []}
-          onChange={(ids) => onPatch({ requiredPropertyIds: ids })}
+          onChange={(ids) => onPatch({ requiredPropertyIds: ids, ...(targets.length > 0 ? { targetValues: pruneTargetValues(targets, ids, catalog) } : {}) })}
           onMissingItem={onWarnItem}
           extraAction={
             !p.noteOpen ? (
@@ -144,6 +149,7 @@ function OrderLineExtras(p: OrderLineRowProps) {
             ) : null
           }
         />
+        <LineTargetValuesField flagIds={flagIds} catalog={catalog} value={targets} onChange={(next) => onPatch({ targetValues: next })} />
         <div className="basis-full">
           <OrderLineAliasFields customerId={customerId} itemId={line.itemId} colorId={line.colorId ?? null} itemName={line.customerItemName ?? ""} colorName={line.customerColorName ?? ""} onChange={(patch) => onPatch(patch)} />
         </div>
