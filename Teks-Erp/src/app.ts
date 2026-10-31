@@ -31,6 +31,8 @@ import routeRoutes from "./routes/route.routes";
 import productRecipeRoutes from "./routes/product-recipe.routes";
 import warpSpecRoutes from "./routes/warp-spec.routes";
 import weftSpecRoutes from "./routes/weft-spec.routes";
+import weaveDesignRoutes from "./routes/weave-design.routes";
+import itemConstructionRoutes from "./routes/item-construction.routes";
 import warpBeamRoutes from "./routes/warp-beam.routes";
 import weavingOrderRoutes from "./routes/weaving-order.routes";
 import machineRunRoutes from "./routes/machine-run.routes";
@@ -542,6 +544,8 @@ app.use("/api/product-recipes", productRecipeRoutes);
 app.use("/api/warp-specs", warpSpecRoutes);
 // MAL-1 (S2 çekirdeği): atkı kartı — router kendi kapısını taşır (`requireDokumaEnabled`).
 app.use("/api/weft-specs", weftSpecRoutes);
+app.use("/api/weave-designs", weaveDesignRoutes);
+app.use("/api/item-construction", itemConstructionRoutes);
 app.use("/api/warp-beams", warpBeamRoutes);
 // Dokuma modülü (üç router, tek kapı): verifyToken + requireDokumaEnabled
 // (production → dokuma zinciri kapının içinde) + requirePermission.

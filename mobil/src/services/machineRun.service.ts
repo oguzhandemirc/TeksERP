@@ -27,6 +27,23 @@ export interface MachineRunTabletContext {
   }[];
 }
 
+/** `GET /machine-runs/construction?weavingOrderId=` — iş kartında etkin yapı (SY-M4), SALT-OKUNUR; yapısız iş → null. */
+export interface RunConstruction {
+  weavingOrderId: string;
+  variantCode: string | null;
+  design: { code: string; name: string; loomFileName: string | null; frameCount: number | null; repeatCm: number | null } | null;
+  weft: {
+    code: string;
+    name: string;
+    picksPerCm: number | null;
+    sequenceCode: string | null;
+    weftProgramNo: string | null;
+    picksInRepeatTotal: number;
+    yarns: { letter: string; picksInRepeat: number; yarnCode: string; yarnName: string; swapped: boolean }[];
+  } | null;
+  warpLayers: { role: string; beamMode: string; warpCode: string; warpName: string }[];
+}
+
 export interface OpenRunRequest {
   machineId: string;
   productionLineNo: number;
@@ -49,6 +66,10 @@ export const machineRunService = {
   /** Takılı leventin işi öneri + açık işler (Koşum aç ön-seçimi). Eski sunucu 404 → çağıran boş bağlamla düşer. */
   tabletContext: (machineId: string): Promise<MachineRunTabletContext> =>
     apiClient.get<ApiResponse<MachineRunTabletContext>>('/machine-runs/tablet-context', { params: { machineId } }).then((r) => r.data.data),
+
+  /** Dokuma işinin etkin yapısı (atkı sırası · armür dosyası · sıklık). Eski sunucu 404 → çağıran kartı çizmez. */
+  construction: (weavingOrderId: string): Promise<RunConstruction | null> =>
+    apiClient.get<ApiResponse<RunConstruction | null>>('/machine-runs/construction', { params: { weavingOrderId } }).then((r) => r.data.data ?? null),
 
   /** 201 yeni · 201 replay (aynı token → özgün koşum, `message` "zaten"). */
   open: (body: OpenRunRequest): Promise<ApiResponse<OpenMachineRun>> =>
