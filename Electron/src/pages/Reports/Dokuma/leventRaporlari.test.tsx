@@ -8,7 +8,7 @@ import { renderWithProviders } from "@/test/render";
 import { REPORT_CATALOG } from "@/lib/report-catalog";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 import { dokumaReportTiles, visibleDokumaTiles } from "./tile-config";
-import { enYakinBitis, secenekOptions, type BeamResultReport, type FinishForecastRow } from "./leventReportTypes";
+import { enYakinBitis, secenekOptions, warpSpecCellText, type BeamResultReport, type FinishForecastRow } from "./leventReportTypes";
 import { buildLeventSonucuExport } from "./leventExport";
 
 const leventSonucu = vi.fn();
@@ -56,6 +56,13 @@ describe("karo ↔ katalog", () => {
 describe("saf yardımcılar", () => {
   it("seçenek etiketi 'KOD · Ad'; kodsuzsa ad", () => {
     expect(secenekOptions([{ id: "1", ad: "Tezgah 7", kod: "T-07" }, { id: "2", ad: "Yalın" }])).toEqual([{ id: "1", label: "T-07 · Tezgah 7" }, { id: "2", label: "Yalın" }]);
+  });
+  it("⭐ SY-B2 katman etiketi: katmanlı işte çözgü hücresine eklenir; katmansızda metin bugünkü", () => {
+    expect(warpSpecCellText(row())).toBe("CZ-1 · Siyah");
+    const leno = row({ katman: { rol: "LENO", beamMode: "SEPARATE_BEAM", etiket: "Döner çözgü" } });
+    expect(warpSpecCellText(leno)).toBe("CZ-1 · Siyah — Döner çözgü");
+    const spec = buildLeventSonucuExport({ rapor: { ...rapor, kapananlar: [leno] }, periodLabel: "x" });
+    expect(spec.tables[0]!.rows[0]).toMatchObject({ cozgu: "CZ-1 · Siyah — Döner çözgü" });
   });
   it("en yakın bitiş: null'lar atlanır, hiç yoksa null", () => {
     const r = (g: string | null) => ({ tahminiBitisGun: g }) as FinishForecastRow;
