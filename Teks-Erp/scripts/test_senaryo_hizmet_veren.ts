@@ -289,7 +289,14 @@ async function scenario(): Promise<void> {
     plainSolved = await solve(tx);
     throw new Error("GERI_SAR");
   }).catch((e: unknown) => { if (!(e instanceof Error && e.message === "GERI_SAR")) throw e; });
-  const sansReading = (r: Awaited<ReturnType<typeof solve>> | null) => JSON.stringify(r && { lines: r.lines, warnings: r.warnings, works: r.works.map((w) => ({ ...w, readingId: null })) });
+  // D4-KUC2 c (S6): OPERATOR okuması satırı 'elle ölçüm' diye işaretler — işaret okumaya bağlıdır, karşılaştırmadan ayrı ölçülür.
+  const sansReading = (r: Awaited<ReturnType<typeof solve>> | null) => JSON.stringify(r && {
+    lines: r.lines.map((l) => ({ ...l, manualMeterRollCount: 0 })), warnings: r.warnings.filter((w) => !w.includes("elle ölçüm")),
+    works: r.works.map((w) => ({ ...w, readingId: null })),
+  });
+  const marked = (r: Awaited<ReturnType<typeof solve>> | null) => (r?.lines ?? []).reduce((a, l) => a + l.manualMeterRollCount, 0);
+  check("D4-KUC2 c: OPERATOR Tambur kesimi (RB) okumalıyken satır işareti +1; okuma geri sarılınca işaret düşer",
+    marked(cutSolved) === marked(plainSolved) + 1, `okumalı=${marked(cutSolved)} okumasız=${marked(plainSolved)}`);
   const withCut = sansReading(cutSolved);
   const withoutCut = sansReading(plainSolved);
   check("D4-B1b: hizmet çözümü (kurşun + Tambur bayrak işi) CUT varken/yokken satırlar bayt-aynı", withCut.length > 20 && withCut === withoutCut, withCut === withoutCut ? "" : `${withCut.slice(0, 200)} ≠ ${withoutCut.slice(0, 200)}`);

@@ -53,6 +53,8 @@ export interface ServiceLine {
   quantity: string;
   rollCount: number;
   rollIds: string[];
+  /** S6 (D4-KUC2 c): metresi elle (OPERATOR) okumadan gelen iş sayısı — faturalanır ama satır İŞARETLİ (0 = işaretsiz). */
+  manualMeterRollCount: number;
 }
 
 export interface ServiceResolution {
@@ -128,6 +130,19 @@ export function serviceWorkKey(w: { rollId: string; serviceItemId: string | null
 /** K4 uyarı metni — bekçi aynı cümleyi arar. */
 export function simulatedCutWarning(count: number): string {
   return `${count} Tambur kesiminin metresi simüle ölçüm — süpervizör düzeltmesi gerekli; faturaya alınmadı.`;
+}
+
+/** S6 uyarı metni (B2 simüle uyarısının kanalı: `warnings` → önizleme + taslak notu); bekçi aynı cümleyi arar. */
+export function manualMeterWarning(lineName: string, count: number): string {
+  return `"${lineName}" satırında ${count} işin metresi elle ölçüm (operatör girişi) — faturaya alındı, kontrol edin.`;
+}
+
+/** Elle (OPERATOR) okunmuş metreyle çözülen işlerin okuma kimlikleri — satır işareti için tek sorgu. */
+async function loadManualReadingIds(works: ServiceRollWork[], db: Db): Promise<Set<string>> {
+  const ids = [...new Set(works.map((w) => w.readingId).filter((v): v is string => v !== null))];
+  if (ids.length === 0) return new Set();
+  const rows = await db.rollMeterReading.findMany({ where: { id: { in: ids }, source: MachineDataSource.OPERATOR }, select: { id: true } });
+  return new Set(rows.map((r) => r.id));
 }
 
 /** H7: faturalanmış iş düşer; ölçümsüz iş ayara göre uyarıyla yazılır ya da taslaktan çıkar. */
@@ -221,6 +236,7 @@ export async function resolveServiceItemsForRolls(params: {
     select: { id: true, code: true, name: true },
   });
   const itemById = new Map(items.map((i) => [i.id, i]));
+  const manualReadings = await loadManualReadingIds(works, db);
   const groups = new Map<string, ServiceLine & { sum: Prisma.Decimal }>();
   for (const w of works) {
     if (w.gramajFrom === "WO_TARGET") warnings.push(`Gramajı bilinmeyen iş ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedefinden (${w.valueName}) fiyatlandı — topu kontrol edin.`);
@@ -230,9 +246,10 @@ export async function resolveServiceItemsForRolls(params: {
     const key = `${w.serviceItemId}:${w.unitPrice?.toString() ?? "-"}`;
     const g = groups.get(key) ?? {
       serviceItemId: w.serviceItemId, code: item.code, name: item.name, unitPrice: w.unitPrice?.toString() ?? null,
-      currency: params.currency, quantity: "0", rollCount: 0, rollIds: [], sum: new Prisma.Decimal(0),
+      currency: params.currency, quantity: "0", rollCount: 0, rollIds: [], manualMeterRollCount: 0, sum: new Prisma.Decimal(0),
     };
     g.sum = g.sum.plus(w.meters);
+    if (w.readingId && manualReadings.has(w.readingId)) g.manualMeterRollCount += 1;
     g.rollCount += 1;
     g.rollIds.push(w.rollId);
     groups.set(key, g);
@@ -240,5 +257,6 @@ export async function resolveServiceItemsForRolls(params: {
   const lines = [...groups.values()]
     .map(({ sum, ...l }) => ({ ...l, quantity: sum.toFixed(3) }))
     .sort((x, y) => x.code.localeCompare(y.code, "tr") || (x.unitPrice ?? "").localeCompare(y.unitPrice ?? ""));
+  for (const l of lines) if (l.manualMeterRollCount > 0) warnings.push(manualMeterWarning(l.name, l.manualMeterRollCount));
   return { lines, works, warnings: [...new Set(warnings)] };
 }
