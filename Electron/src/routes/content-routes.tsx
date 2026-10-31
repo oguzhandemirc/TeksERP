@@ -110,6 +110,8 @@ import { QualityHubPage } from "@/pages/Quality/QualityHubPage";
 import { DocumentsHubPage } from "@/pages/Documents/DocumentsHubPage";
 import { ParametersPage as CostParametersPage } from "@/pages/Cost/Parameters/ParametersPage";
 import { YarnPricesPage as CostYarnPricesPage } from "@/pages/Cost/YarnPrices/YarnPricesPage";
+import { MachineRatesPage as CostMachineRatesPage } from "@/pages/Cost/MachineRates/MachineRatesPage";
+import { ConsumableNormsPage as CostConsumableNormsPage } from "@/pages/Cost/ConsumableNorms/ConsumableNormsPage";
 import { FinishingRatesPage as CostFinishingRatesPage } from "@/pages/Cost/FinishingRates/FinishingRatesPage";
 import { CostItemsPage } from "@/pages/Cost/Items/CostItemsPage";
 import { CostItemDetailPage } from "@/pages/Cost/Items/CostItemDetailPage";
@@ -740,6 +742,22 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="cost:read">
         <CostFinishingRatesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/machine-rates",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostMachineRatesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/consumable-norms",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostConsumableNormsPage />
       </ProtectedRoute>
     ),
   },

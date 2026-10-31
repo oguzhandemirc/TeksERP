@@ -144,10 +144,11 @@ export const FACTS: readonly RecordProjection[] = [
       derived("bakiyeler", "cari.service list: cari_balances (sıfır olmayan, para birimi sırasıyla)", ["cari_balances"], { dataClass: "FINANS" }),
       derived("gecikmis", "reports/finance-aging.report collectAgingRows(asOf=şimdi).overdueTotal — cari listesinin withOverdue'su ile AYNI çekirdek",
         ["invoices", "payments", "cheques", "cari_accounts", "payment_allocations"], { timeBound: true, dataClass: "FINANS" }),
+      derived("kilit", "cloud-sync/derived-cari-hold cariLockByCari (aktif ya da son açılan kilit; kapsam + sebep KODU + tarih, serbest metin YOK)", ["cari_holds"]),
     ],
     sources: [self("cari_accounts"),
       { table: "cari_balances", watermark: "updatedAt", tieBreaker: [{ column: "cariId", cast: "uuid" }, { column: "currency", cast: '"Currency"' }], root: { kind: "column", column: "cariId" } },
-      via("invoices", "cariId"), via("payments", "cariId"), via("cheques", "cariId")],
+      via("invoices", "cariId"), via("payments", "cariId"), via("cheques", "cariId"), via("cari_holds", "cariId")],
     crossings: [{ name: "vade", sql: `SELECT DISTINCT i."cariId" AS root_id ${DUE_CROSSING_FROM}` }],
     // Hard delete yolu ölçüldü: K3a `scripts/fix_cari_cift_hesap.ts` hareketsiz çift hesabı siler;
     // `cari_accounts_sync_deleted` SILINDI işareti yazar, bulut satırı düşer.
