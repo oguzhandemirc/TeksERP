@@ -20,6 +20,7 @@ import {
 import { WorkOrderService, WO_LIST_CUSTOMER_LINKS } from "../services/workorder.service";
 import { COST_DERIVERS, COST_DERIVER_ROW_FIELDS } from "./derived-cost";
 import { cariLockByCari } from "./derived-cari-hold";
+import { workOrderReadyWorksWire } from "./derived-ship-ready";
 
 type RawRow = Record<string, unknown> & { id: string };
 export type DerivedValues = Map<string, Record<string, unknown>>;
@@ -137,6 +138,7 @@ async function workOrderDerived(rows: readonly RawRow[]): Promise<DerivedValues>
     },
   });
   const withMeters = await new WorkOrderService().withProductionMeters(wos);
+  const readiness = await workOrderReadyWorksWire(ids(rows));
   const out: DerivedValues = new Map();
   for (const w of withMeters) {
     out.set(w.id, {
@@ -145,6 +147,7 @@ async function workOrderDerived(rows: readonly RawRow[]): Promise<DerivedValues>
       siparisMetre: new Prisma.Decimal(w.orderedMeters),
       cariKartIdleri: w.customers.map((c) => c.id),
       aktifIstasyonId: currentWorkOrderStep(w.steps)?.stationId ?? null,
+      sevkeHazir: readiness.get(w.id) ?? null,
     });
   }
   return out;
