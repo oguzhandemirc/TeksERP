@@ -15,7 +15,7 @@ import { DISPATCH_BATCH_LIMIT, runNotificationDispatchOnce } from "../services/n
 import { NOTIFICATION_NOTIFY_CHANNEL } from "../services/helpers/notification-emit.helper";
 import { startNotificationConditionScanner, stopNotificationConditionScanner } from "./notification-condition.job";
 import { registerSystemConditionSources } from "../services/notification-sources/sistem";
-import { registerWorkConditionSources } from "../services/notification-sources/is";
+import { registerReadyWorkConditionSource, registerWorkConditionSources } from "../services/notification-sources/is";
 import { registerQualityConditionSources } from "../services/notification-sources/kalite";
 import { registerCariConditionSources } from "../services/notification-sources/cari";
 import { registerLoomAlarmRecipientResolver } from "../services/notification-sources/alarm";
@@ -178,6 +178,7 @@ export function startNotificationJobs(): void {
   shuttingDown = false;
   registerSystemConditionSources(); // koşul kaynakları tek noktadan (N1-KOSUL-SIS)
   registerWorkConditionSources(); // iş koşulları (N1-KOSUL-IS)
+  registerReadyWorkConditionSource(); // sevke hazır iş (D4-J2; birimler shipping.ready.notifyUnits)
   registerQualityConditionSources(); // sertifika süresi (K4P-SERT)
   registerCariConditionSources(); // cari risk limiti (D4-I5)
   registerDeviceConditionSources(); // anahtar halkası kaybı (izlenebilirlik D5)

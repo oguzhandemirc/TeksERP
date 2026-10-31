@@ -54,7 +54,10 @@ export async function prepareLineTargetValues(
     }
     line.targetValues = items;
     if (items.length === 0) continue;
-    await assertTargetValueItems(db, items);
+    // Yalnız YENİ çift sınanır (varyant kapısındaki isNew emsali): sonradan pasife alınan mevcut hedef ilgisiz düzenlemeyi kesmez.
+    const keptKeys = new Set((typeof line.id === "string" ? (currentById.get(line.id) ?? []) : []).map((t) => `${t.propertyId}|${t.valueId}`));
+    const fresh = items.filter((t) => !keptKeys.has(`${t.propertyId}|${t.valueId}`));
+    if (fresh.length > 0) await assertTargetValueItems(db, fresh);
     await mergeFlagTwins(db, line, items);
   }
 }

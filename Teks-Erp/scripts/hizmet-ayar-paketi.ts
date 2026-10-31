@@ -21,8 +21,8 @@ export interface PaketSatiri {
   anahtar: string;
   /** `FeatureFlags` alan adı (okuma + `setFeatureFlags` girdisi). */
   alan: string;
-  /** Harita değerli ayar (ör. kategori → sınıf) JSON eşitliğiyle karşılaştırılır. */
-  hedef: boolean | string | number | Readonly<Record<string, string>>;
+  /** Liste (ör. notifyUnits) ya da harita (ör. kategori → sınıf) değerli ayar JSON eşitliğiyle karşılaştırılır. */
+  hedef: boolean | string | number | readonly string[] | Readonly<Record<string, string>>;
   /** Anahtarı getiren dilim (yokken raporda gösterilir). */
   dilim: string;
 }
@@ -41,6 +41,8 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   // tablet OTA'sı (D4-B3 sürümü) tüm cihazlara inince açılır — önce açılırsa eski APK çıkışsız 400 alır.
   { anahtar: "tambur.simulatedMeterEnabled", alan: "tamburSimulatedMeterEnabled", hedef: false, dilim: "D4-B1a" },
   { anahtar: "tambur.olcumKaynagiZorunlu", alan: "tamburMeasureSourceRequired", hedef: false, dilim: "D4-B1a" },
+  // B-3 (kullanıcı kararı 2026-10-31): kalibrasyon kaydı isteğe bağlı, zorunluluk yok — Gülkesim KAPALI (açık beyan).
+  { anahtar: "tambur.kalibrasyonKontrolu", alan: "tamburCalibrationCheck", hedef: "KAPALI", dilim: "D4-B5k" },
   { anahtar: "finance.serviceBilling.enabled", alan: "financeServiceBillingEnabled", hedef: true, dilim: "H7" },
   { anahtar: "finance.serviceBilling.meterBasis", alan: "financeServiceBillingMeterBasis", hedef: "OUT", dilim: "H7" },
   {
@@ -76,6 +78,8 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   // DALGA4 §12.1 / K26: ister "tüm metraj aşağı yukarı tamamlandığında" sevke hazır = metre eşiği, %2 tolerans.
   { anahtar: "shipping.ready.rule", alan: "shippingReadyRule", hedef: "METER_THRESHOLD", dilim: "D4-J1" },
   { anahtar: "shipping.ready.tolerancePct", alan: "shippingReadyTolerancePct", hedef: 2, dilim: "D4-J1" },
+  // DALGA4 §12.1: ister "parti bitince" (ISTER-LISTESI:27) → yalnız müşteri partisi sevke hazır bildirimi.
+  { anahtar: "shipping.ready.notifyUnits", alan: "shippingReadyNotifyUnits", hedef: ["PARTI"], dilim: "D4-J2" },
   { anahtar: "scan.customerCodeLookup", alan: "scanCustomerCodeLookupEnabled", hedef: true, dilim: "D4-F1" },
   // DALGA4 §12.1: müşteri barkodu basan şablonda kodsuz top basılmaz (Gülkesim BLOCK = varsayılan; açık beyan).
   { anahtar: "label.customerCodeMissing", alan: "labelCustomerCodeMissing", hedef: "BLOCK", dilim: "D4-F3" },

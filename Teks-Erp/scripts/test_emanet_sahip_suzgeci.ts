@@ -13,6 +13,7 @@
 //      İçerideki İşler ucu (`/api/consigned-work`) 403 MODULE_DISABLED
 //   §5 İçerideki İşler — ölü (K18) · SHIPPED · SCRAP dışlanır; kovalar (waiting/inProcess/ready/other);
 //      metre = currentQty (initialQty DEĞİL); toplam, aynı sahip + canlı statü süzgeçli `/rolls/stats` ile birebir
+//   §8 "Yalnız sevke hazır" (D4-KUC2 b) — süzme sunucuda; satırlar + totals tek WHERE; onlyReady=false bugünkü liste
 //   §6 sahip lookup'ı — yalnız top sahibi müşteriler (A, B), satır {id,name,code}; emanet KAPALI → boş
 //   §7 KOVA ↔ SEKME — her bağlantılı kova (waiting/waitingSemi/inProcess/ready) sayı+metre olarak, panelin
 //      bağlandığı sekmenin rollScope'u + sahip + includeFire `/rolls/stats`ıyla birebir. Eşleme panelden OKUNUR
@@ -23,6 +24,8 @@
 //   düşürülünce §1a/§1b/§1d/§3/§4a/§5f ❌ (süzgeç sessizce düşer); `requireEmanetEnabled` bayrak kontrolü düşürülünce §4b ❌.
 //   (2026-10-29 bitirici) BUCKET_TAB'da waitingSemi → "RAW_STOCK" yapılınca §7 waitingSemi ❌ (eski hata: Bekliyor
 //   hücresi boş Ham Stok listesi açıyordu); lookup'taki emanet kapısı düşürülünce §6b ❌.
+//   (2026-10-31, D4-KUC2 b) sunucu kapsamı (`consignedOwnerScope`) hep boş → §8a/§8b ❌; süzgeç istemciye taşındı
+//   (ConsignedWorkPage `rows.filter(r => r.ready.count > 0)`) → §0e ❌ (28/1); ikisi de geri alındı.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım.
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -57,6 +60,12 @@ function statik(): void {
   check("§0a buildRollWhere sahibi readIdCondition'dan okur", /readIdCondition\(f\["ownerCustomerId"\]\)/.test(inv));
   const routes = readFileSync(path.join(ROOT, "src/routes/consigned-work.routes.ts"), "utf8");
   check("§0b /api/consigned-work requireEmanetEnabled arkasında", /router\.use\(verifyToken, requireEmanetEnabled\)/.test(routes));
+  check("§0d uç süzgeci sıkı şemayla (tanınmayan parametre 400) okur ve servise geçirir",
+    /onlyReady: z\.enum\(\["true", "false"\]\)\.optional\(\) \}\)\.strict\(\)/.test(routes) && /getConsignedWorkSummary\(\{ onlyReady: parsed\.data\.onlyReady === "true" \}\)/.test(routes));
+  const page = readFileSync(path.join(ROOT, "../Electron/src/pages/Operations/ConsignedWork/ConsignedWorkPage.tsx"), "utf8");
+  const svc = readFileSync(path.join(ROOT, "../Electron/src/pages/Operations/ConsignedWork/service.ts"), "utf8");
+  check("§0e panel süzgeci sunucuya yollar (onlyReady parametresi); sayfada satır süzmesi YOK",
+    /onlyReady/.test(svc) && !/rows\??\.filter\(/.test(page) && !/\.ready\.count\s*>\s*0/.test(page));
   check("§0c K18_DEAD_STATUSES ⊆ NOT_INSIDE_STATUSES (+SHIPPED, SCRAP)",
     K18_DEAD_STATUSES.every((s) => NOT_INSIDE_STATUSES.includes(s)) && NOT_INSIDE_STATUSES.includes(RollStatus.SHIPPED) && NOT_INSIDE_STATUSES.includes(RollStatus.SCRAP));
 }
@@ -117,7 +126,7 @@ async function main(): Promise<void> {
     await mk(custA.id, RollStatus.STOCK, 40, { entrySource: "SEMI_FINISHED" });
     await mk(custA.id, RollStatus.WAREHOUSE, 15, { qualityGrade: fireGrade.code });
     // B: ready 25 (A1_STOCK) · inProcess 60
-    await mk(custB.id, RollStatus.A1_STOCK, 25);
+    const bReadyRoll = await mk(custB.id, RollStatus.A1_STOCK, 25);
     await mk(custB.id, RollStatus.IN_PRODUCTION, 60, { currentStepId: stepId });
     // sahipsiz
     await mk(null, RollStatus.STOCK, 80);
@@ -171,6 +180,19 @@ async function main(): Promise<void> {
     const live = Object.values(RollStatus).filter((s) => !NOT_INSIDE_STATUSES.includes(s)).join(",");
     const sLive = await stats({ "filter[ownerCustomerId]": custA.id, "filter[statusIn]": live });
     check("§5f İçerideki İşler A toplamı = /stats (sahip A + canlı statüler) — sayı ve metre", sLive.totalCount === rA?.total.count && sLive.totalQty === rA.total.qty, `stats=${sLive.totalCount}/${sLive.totalQty}`);
+
+    // §8 "Yalnız sevke hazır" (D4-KUC2 b): süzme SUNUCUDA; satırlar ve özet şeridi (totals) aynı WHERE'den.
+    await prisma.roll.update({ where: { id: bReadyRoll }, data: { status: RollStatus.STOCK } });
+    const ready = (await getConsignedWorkSummary({ onlyReady: true })).data!;
+    const sumOf = (rows: typeof ready.rows) => rows.reduce((a, r) => ({ count: a.count + r.total.count, qty: a.qty + r.total.qty }), { count: 0, qty: 0 });
+    check("§8a onlyReady: hazırı olan A VAR, hazırı kalmayan B YOK", ready.rows.some((r) => r.ownerCustomerId === custA.id) && !ready.rows.some((r) => r.ownerCustomerId === custB.id),
+      ready.rows.filter((r) => r.ownerName.startsWith(TAG)).map((r) => r.ownerName).join(","));
+    const tot = sumOf(ready.rows);
+    check("§8b ⭐ özet şeridi = Σ süzülü satır (tek where; istemcide süzme yok)", ready.totals.total.count === tot.count && Math.abs(ready.totals.total.qty - tot.qty) < 1e-9 && ready.rows.every((r) => r.ready.count > 0),
+      `totals=${ready.totals.total.count}/${ready.totals.total.qty} Σ=${tot.count}/${tot.qty}`);
+    const plain = (await getConsignedWorkSummary({ onlyReady: false })).data!;
+    check("§8c onlyReady=false = süzgeçsiz (bugünkü liste; B görünür)", JSON.stringify(plain) === JSON.stringify((await getConsignedWorkSummary()).data) && plain.rows.some((r) => r.ownerCustomerId === custB.id));
+    await prisma.roll.update({ where: { id: bReadyRoll }, data: { status: RollStatus.A1_STOCK } });
 
     // §6 lookup
     const owners = (await listRollOwnerCustomers()).data!;

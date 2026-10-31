@@ -41,13 +41,13 @@ import { SETTING_KEYS } from "@/services/systemSettingService";
  * daraltmanın tek yolu `SETTINGS_CATEGORIES`ten tip türetmekti ve o dizi
  * `as const` değil (olamaz — `icon`/`hint` bileşen taşır). Geniş küme derleme
  * kapısını korur: yeni bir bayrak PANELE eklenmeden ÖNCE de sahibini beyan eder.
- * Nesne değerli alanlar (`travelerCardConfig`, `documentsConfig`,
+ * Küme değerli enum satırı (`display: "checks"`, D4-J2 `shippingReadyNotifyUnits`) adıyla eklenir. Nesne değerli alanlar (`travelerCardConfig`, `documentsConfig`,
  * `companyLetterhead`, `companyLegalIdentity`, `eIrsaliyeConfig`, `loginMethods`) kendi
  * panellerinde yaşar, satır değildir (künye ve e-İrsaliye ayarı `cekirdek`: modül anahtarı yok).
  */
 type FlagRowKey = {
   [K in keyof FeatureFlags]: FeatureFlags[K] extends boolean | number | string | null ? K : never;
-}[keyof FeatureFlags];
+}[keyof FeatureFlags] | "shippingReadyNotifyUnits";
 
 /** Ham `system_settings` satırları (`SettingFieldDef.key`) — onların da sahibi var. */
 type SystemSettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
@@ -152,6 +152,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   tamburUndoFullSameDayOnly: "productionEnabled",
   tamburSimulatedMeterEnabled: "productionEnabled",
   tamburMeasureSourceRequired: "productionEnabled",
+  tamburCalibrationCheck: "productionEnabled",
   tamburShortCutA1Enabled: "productionEnabled",
   tamburShortCutA1ThresholdM: "productionEnabled",
   tamburPlanGateWidthToleranceCm: "productionEnabled",
@@ -270,6 +271,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   shippingReadyRule: "cekirdek",
   shippingReadyTolerancePct: "cekirdek",
   shippingReadyScanMinutes: "cekirdek",
+  shippingReadyNotifyUnits: "cekirdek",
   shippingSimulatedWeightEnabled: "cekirdek",
   returnGradingEnabled: "cekirdek",
   [SETTING_KEYS.SHIPPING_TOLERANCE_METERS]: "cekirdek",
