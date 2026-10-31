@@ -17,7 +17,7 @@ export const maliyetReportTiles: HubTile[] = [
     // SY-D3: tutar gösterir → `cost:read`; dokuma kapalıysa gizli (uç 403 MODULE_DISABLED verir).
     key: "dokuma-verimlilik",
     title: "Dokuma maliyet verimliliği",
-    description: "Dokuma işi başına standart ve gerçek dokuma maliyeti /m, fark, teorik ve gerçek m/saat, duruş payı",
+    description: "Dokuma iş emri başına standart ve gerçek dokuma maliyeti /m, fark, teorik ve gerçek m/saat, duruş payı",
     icon: Factory,
     to: "/reports/maliyet/dokuma-verimlilik",
     permission: "cost:read",

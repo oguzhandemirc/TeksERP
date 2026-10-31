@@ -348,7 +348,7 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
     nesil: "v2", kategoriV2: "uretim", persona: ["uretim", "patron"], varyantBoyutlari: ["makine", "istasyon", "sebep"], hazir: true, yeniRapor: true },
   // SY-D3: dokuma işi başına standart ↔ gerçek dokuma /m (`weaving-actual-cost.helper`); kapı maliyet ∧ dokuma + `cost:read`;
   // panelde kendi sayfası (V2_KEYS_WITH_OWN_PAGE), Maliyet Raporları karosundan açılır.
-  { key: "maliyet/dokuma-verimlilik", baslik: "Dokuma maliyeti standarttan saptı mı?", soru: "Dokuma işlerinin gerçek metre maliyeti standart maliyete göre ne kadar saptı, tezgâh ne kadar verimli çalıştı?",
+  { key: "maliyet/dokuma-verimlilik", baslik: "Dokuma maliyeti standarttan saptı mı?", soru: "Dokuma iş emirlerinin gerçek metre maliyeti standart maliyete göre ne kadar saptı, tezgâh ne kadar verimli çalıştı?",
     sinif: "basit", izin: "cost:read", modul: "maliyetEnabled", varsayilanGun: 30, tarih: "aralik-gun",
     panelYolu: "reports/maliyet/dokuma-verimlilik", uc: "/api/reports/maliyet/dokuma-verimlilik", kapiTasiyici: [{ dosya: "src/routes/reports/maliyet.report.routes.ts", yol: "/dokuma-verimlilik" }], yuzey: "yaprak",
     nesil: "v2", kategoriV2: "dokuma", persona: ["dokuma", "patron"], varyantBoyutlari: ["urun", "tezgah"], hazir: true, yeniRapor: true },

@@ -19,7 +19,7 @@ type Dec = Prisma.Decimal;
 export const WEAVING_EFFICIENCY_KEY = "maliyet/dokuma-verimlilik";
 export const EKSIK = "eksik";
 const TITLE = "Dokuma maliyeti standarttan saptı mı?";
-const SORU = "Dokuma işlerinin gerçek metre maliyeti standart maliyete göre ne kadar saptı, tezgâh ne kadar verimli çalıştı?";
+const SORU = "Dokuma iş emirlerinin gerçek metre maliyeti standart maliyete göre ne kadar saptı, tezgâh ne kadar verimli çalıştı?";
 
 const MISSING_TEXT: Record<WeavingActualMissing, string> = {
   FASON: "fason dokuma (fatura okuması sonraki dilim)",
@@ -68,7 +68,7 @@ export function weavingEfficiencyTable(r: WeavingEfficiencyReport): TabloBlok {
   const unit = r.currency;
   return {
     kolonlar: [
-      { anahtar: "is", baslik: "Dokuma işi" },
+      { anahtar: "is", baslik: "Dokuma İş Emri" },
       { anahtar: "urun", baslik: "Ürün" },
       { anahtar: "tezgah", baslik: "Tezgâh" },
       { anahtar: "standartM", baslik: "Standart dokuma /m", birim: unit, hiza: "sag" },
@@ -122,7 +122,7 @@ export function buildWeavingEfficiencySunumu(r: WeavingEfficiencyReport, window:
     baslik: TITLE,
     soru: SORU,
     donem: { from: window.range.from.toISOString(), to: window.range.to.toISOString(), etiket: `${window.days.from} – ${window.days.to}` },
-    anaSayi: anaSayiKur({ olcu: "dokuma.maliyetSapmasi", ad: "Gerçek maliyetin standarttan sapması", deger: deviation, birim: "yuzde", iyiYon: "asagi", olculemedi: "Ölçülebilen dokuma işi yok" }),
+    anaSayi: anaSayiKur({ olcu: "dokuma.maliyetSapmasi", ad: "Gerçek maliyetin standarttan sapması", deger: deviation, birim: "yuzde", iyiYon: "asagi", olculemedi: "Ölçülebilen dokuma iş emri yok" }),
     yanSayilar: [
       anaSayiKur({ olcu: "dokuma.olculenMetre", ad: "Maliyeti ölçülen kumaş", deger: measured.reduce((a, w) => a + Number(w.totalMeters), 0), birim: "m", iyiYon: "notr" }),
       anaSayiKur({ olcu: "dokuma.kosumsuzMetre", ad: "Koşumsuz kumaş", deger: Number(r.runlessMeters), birim: "m", iyiYon: "asagi" }),

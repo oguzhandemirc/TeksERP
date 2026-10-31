@@ -58,7 +58,7 @@ router.get("/iplik-ihtiyaci", requireReportOpen("maliyet/iplik-ihtiyaci"), requi
 });
 
 /** SY-D3: gün aralığı (fabrika günü); kıyas kabul edilir ama uygulanmaz (satır = iş, dönem yalnız iş kümesini seçer). */
-export const weavingEfficiencyQuerySchema = coreDayRangeQuerySchema;
+export const weavingEfficiencyQuerySchema = coreDayRangeQuerySchema.strict();
 
 /**
  * @openapi
