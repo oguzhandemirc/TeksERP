@@ -33,7 +33,7 @@ export const SOURCE_LABEL: Record<string, string> = {
 export const COMPONENT_LABEL: Record<string, string> = {
   WARP_YARN: "Çözgü ipliği", WEFT_YARN: "Atkı ipliği", LOOM_MACHINE: "Makine", LOOM_LABOR: "İşçilik", ENERGY: "Enerji",
   BEAM_PREP: "Levent hazırlık", FINISHING: "Terbiye", LENGTH_SHRINK: "Boy çekmesi", FABRIC_WASTE: "Kalite firesi",
-  OVERHEAD: "Genel gider", EXTRA: "Ek kalem", WEAVING_PICK: "Dokuma (atkı ücreti)",
+  OVERHEAD: "Genel gider", EXTRA: "Ek kalem", PROCESS: "Ek işlem", WEAVING_PICK: "Dokuma (atkı ücreti)",
 };
 
 export const STRUCTURE_STATUS_LABEL: Record<string, string> = { TAM: "Güncel yapı", VARSAYILAN: "Varsayılanla", YAPI_EKSIK: "Yapı eksik" };

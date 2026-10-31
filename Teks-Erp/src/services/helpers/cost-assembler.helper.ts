@@ -10,7 +10,7 @@
 import { Prisma, type Currency } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { ACTIVE_FINISHING_RATE, ACTIVE_YARN_COST_PRICE } from "./cost-price-validity.helper";
-import type { CostInput, CostPrice, CostSource, CostWeftYarn, CostYarn, Sourced } from "./fabric-cost.helper";
+import type { CostInput, CostPrice, CostRate, CostSource, CostWeftYarn, CostYarn, Sourced } from "./fabric-cost.helper";
 import { resolveDenier } from "../../constants/warp-beam";
 import { readCostWeavingStandardMethod, type WeavingStandardMethod } from "../system-setting.service";
 
@@ -50,7 +50,7 @@ const itemSelect = {
   id: true, code: true, name: true, itemType: true, isActive: true, rawWidthCm: true,
   warpSpec: { select: { id: true, endsCount: true, takeUpPct: true, reedWidthCm: true, yarnItem: { select: yarnSelect } } },
   weftSpec: { select: { id: true, picksPerCm: true, yarns: { orderBy: { sortOrder: "asc" }, select: { picksInRepeat: true, yarnItem: { select: yarnSelect } } } } },
-  costStructure: true,
+  costStructure: { include: { processes: { orderBy: { sortOrder: "asc" }, select: { rateCode: true } } } },
 } satisfies Prisma.ItemSelect;
 export type CostItemRow = Prisma.ItemGetPayload<{ select: typeof itemSelect }>;
 type ParamRow = Prisma.CostParameterSetGetPayload<object>;
@@ -75,6 +75,7 @@ export async function loadCostSourcesTx(tx: Db, itemIds: string[], extraRateCode
     if (r.warpSpec) yarnIds.add(r.warpSpec.yarnItem.id);
     for (const y of r.weftSpec?.yarns ?? []) yarnIds.add(y.yarnItem.id);
     if (r.costStructure?.finishingRateCode) codes.add(r.costStructure.finishingRateCode);
+    for (const p of r.costStructure?.processes ?? []) codes.add(p.rateCode);
   }
   const prices = yarnIds.size ? await tx.yarnCostPrice.findMany({ where: { ...ACTIVE_YARN_COST_PRICE, yarnItemId: { in: [...yarnIds] } } }) : [];
   const rates = codes.size ? await tx.finishingRate.findMany({ where: { ...ACTIVE_FINISHING_RATE, code: { in: [...codes] } } }) : [];
@@ -110,7 +111,7 @@ const adHocYarn = (y: AdHocYarn): CostYarn => ({
   price: y.pricePerKg ? { amount: y.pricePerKg, currency: y.currency, source: "ELLE" } : null,
 });
 
-function finishingOf(src: CostSources, code: string | null | undefined): CostInput["finishing"] {
+function finishingOf(src: CostSources, code: string | null | undefined): CostRate | null {
   if (!code) return null;
   const r = src.rates.get(code);
   if (!r) return { code, name: code, basis: "RAW_M", price: null };
@@ -149,6 +150,9 @@ export function buildCostInput(src: CostSources, ref: CostSourceRef, o: CostOver
   const code = o.finishingRateCode !== undefined ? o.finishingRateCode : (cs?.finishingRateCode ?? ah?.finishingRateCode ?? null);
   const finishing = finishingOf(src, code);
   const extraTry = o.extraCostPerMTry ?? cs?.extraCostPerMTry ?? null;
+  // Ek işlem (SY-G1) aynı tarife uzayından; çözülemeyen kod motorda FINISHING_RATE_MISSING (0 değil).
+  // Terbiyeyle aynı kod iki kez sayılmaz (yazım kapısının ikinci seddi; what-if terbiye değişimi de kapsanır).
+  const processes = (cs?.processes ?? []).filter((p) => p.rateCode !== code).map((p) => finishingOf(src, p.rateCode)).filter((r): r is CostRate => r !== null);
   return {
     schemaVersion: 1,
     parameterSetId: p?.id ?? null,
@@ -182,6 +186,7 @@ export function buildCostInput(src: CostSources, ref: CostSourceRef, o: CostOver
       lengthM: firstOf([o.beamLengthM, "ELLE"], [cs?.beamLengthM, "YAPI"], [p?.defaultBeamLengthM, "PARAMETRE"]),
     },
     finishing,
+    ...(processes.length ? { processes } : {}),
     lengthShrinkPct: firstOf([o.lengthShrinkPct, "ELLE"], [cs?.lengthShrinkPct, "YAPI"], [finishing && src.rates.get(finishing.code)?.typicalShrinkPct, "KART"]),
     fabricWastePct: firstOf([o.fabricWastePct, "ELLE"], [cs?.fabricWastePct, "YAPI"], [p?.defaultFabricWastePct, "PARAMETRE"]),
     overheadPct: firstOf([p?.overheadPct, "PARAMETRE"]),
@@ -210,5 +215,6 @@ export function costCurrencies(input: CostInput): Currency[] {
   input.weft?.yarns.forEach((y) => add(y.price));
   add(input.finishing?.price);
   add(input.loomPick?.rate);
+  input.processes?.forEach((p) => add(p.price));
   return [...set].sort();
 }

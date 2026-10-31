@@ -183,6 +183,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   financeExpenseCategorySuggestions: "financeEnabled",
   financeCariHoldDefaultScope: "financeEnabled",
   financeCariHoldReleaseBySamePerson: "financeEnabled",
+  financeRiskLimitCurrencyMode: "financeEnabled",
   // D4-G2a: kârlılık geliri faturadan okunur (maliyet ∧ finans); maliyet gizlenebilir modül değil → sahibi finans.
   costProfitSubcontractSource: "financeEnabled",
   costProfitConsumablePriceSource: "financeEnabled",

@@ -19,6 +19,8 @@ const sourced = z.object({ value: dec.nullable(), source: sourceEnum, flag: z.en
 const price = z.object({ amount: dec, currency: currencyEnum, source: sourceEnum, flag: z.enum(COST_WARNING_CODES).optional() }).strict();
 const yarn = z.object({ yarnItemId: z.string().nullable(), name: z.string(), denier: sourced, price: price.nullable() }).strict();
 
+const rate = z.object({ code: z.string(), name: z.string(), basis: z.enum(["RAW_M", "FINISHED_M"]), price: price.nullable() }).strict();
+
 export const costInputSnapshotSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -41,7 +43,8 @@ export const costInputSnapshotSchema = z
       })
       .strict(),
     beam: z.object({ prepCostTry: sourced, lengthM: sourced }).strict(),
-    finishing: z.object({ code: z.string(), name: z.string(), basis: z.enum(["RAW_M", "FINISHED_M"]), price: price.nullable() }).strict().nullable(),
+    finishing: rate.nullable(),
+    processes: z.array(rate).min(1).optional(),
     lengthShrinkPct: sourced,
     fabricWastePct: sourced,
     overheadPct: sourced,

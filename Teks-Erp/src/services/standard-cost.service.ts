@@ -187,7 +187,7 @@ export async function getCostItem(itemId: string) {
   const input = await prisma.$transaction((tx) => assembleCostInputTx(tx, { itemId }));
   const [item, structure, active] = [
     await prisma.item.findUniqueOrThrow({ where: { id: itemId }, select: { id: true, code: true, name: true } }),
-    await prisma.costStructure.findUnique({ where: { itemId } }),
+    await prisma.costStructure.findUnique({ where: { itemId }, include: { processes: { orderBy: { sortOrder: "asc" }, select: { rateCode: true, sortOrder: true } } } }),
     await prisma.standardCostVersion.findFirst({ where: { itemId, recipeId: null, status: "ACTIVE" }, select: { ...versionSelect, lines: { orderBy: { lineNo: "asc" } } } }),
   ];
   const st = structureStatus(input);

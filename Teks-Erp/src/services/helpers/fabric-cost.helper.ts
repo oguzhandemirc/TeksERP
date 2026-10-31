@@ -36,13 +36,14 @@ export const COST_WARNING_CODES = [
 export type CostWarning = (typeof COST_WARNING_CODES)[number];
 export type CostComponent =
   | "WARP_YARN" | "WEFT_YARN" | "LOOM_MACHINE" | "LOOM_LABOR" | "ENERGY" | "BEAM_PREP"
-  | "FINISHING" | "LENGTH_SHRINK" | "FABRIC_WASTE" | "OVERHEAD" | "EXTRA" | "WEAVING_PICK";
+  | "FINISHING" | "LENGTH_SHRINK" | "FABRIC_WASTE" | "OVERHEAD" | "EXTRA" | "PROCESS" | "WEAVING_PICK";
 
 /** Kaynağıyla değer; `flag` derleyicinin türettiği uyarıdır (ör. atkı boyu enden türedi). */
 export interface Sourced<T> { value: T | null; source: CostSource; flag?: CostWarning }
 export interface CostPrice { amount: Dec; currency: Currency; source: CostSource; flag?: CostWarning }
 export interface CostYarn { yarnItemId: string | null; name: string; denier: Sourced<Dec>; price: CostPrice | null }
 export interface CostWeftYarn extends CostYarn { picksInRepeat: number }
+export interface CostRate { code: string; name: string; basis: "RAW_M" | "FINISHED_M"; price: CostPrice | null }
 export interface CostInput {
   schemaVersion: 1;
   parameterSetId: string | null;
@@ -54,7 +55,9 @@ export interface CostInput {
   };
   beam: { prepCostTry: Sourced<Dec>; lengthM: Sourced<Dec> };
   /** null = ham satış (tarife yok): F = 0, sᵦ = 0, uyarı yok. */
-  finishing: { code: string; name: string; basis: "RAW_M" | "FINISHED_M"; price: CostPrice | null } | null;
+  finishing: CostRate | null;
+  /** SY-G1 ek işlemler (kurşun/devere…): yalnız doluyken yazılır — yoksa girdi + hash bayt-aynı. */
+  processes?: CostRate[];
   lengthShrinkPct: Sourced<Dec>;
   fabricWastePct: Sourced<Dec>;
   overheadPct: Sourced<Dec>;
@@ -235,9 +238,9 @@ function yarnLines(input: CostInput, fx: FxRates, kg: { warp: { kg: Dec } | null
 }
 
 /** Ham → mamul (terbiye + boy çekmesi): HAM_M (C+F)/(1−sᵦ) · MAMUL_M C/(1−sᵦ)+F; tarife yok → ham. */
-function finishLines(input: CostInput, fx: FxRates, raw: Dec, c: Collector): { finished: Dec | null; lines: CostLine[] } | null {
+function finishLines(input: CostInput, fx: FxRates, raw: Dec, c: Collector): { finished: Dec | null; keep: Dec; lines: CostLine[] } | null {
   const fin = input.finishing;
-  if (!fin) return { finished: null, lines: [] };
+  if (!fin) return { finished: null, keep: ONE, lines: [] };
   const f = toTry(fin.price, fx, c, "FINISHING_RATE_MISSING");
   const sb = c.take(input.lengthShrinkPct, null) ?? (c.warnings.add("SHRINK_UNKNOWN"), ZERO);
   if (f === null) return null;
@@ -245,11 +248,22 @@ function finishLines(input: CostInput, fx: FxRates, raw: Dec, c: Collector): { f
   const finished = fin.basis === "RAW_M" ? raw.plus(f).div(keep) : raw.div(keep).plus(f);
   return {
     finished,
+    keep,
     lines: [
       line("FINISHING", `Terbiye — ${fin.name}`, f, { unitPriceTry: f, qtyUnit: "m" }),
       line("LENGTH_SHRINK", "Boy çekmesi", finished.minus(raw).minus(f), { qty: sb, qtyUnit: "%" }),
     ],
   };
+}
+
+/** Ek işlem (§8): terbiyeden SONRA, kalite firesi + genel giderden ÖNCE; HAM_M tarifesi boy çekmesiyle mamul metreye taşınır. */
+function processLines(input: CostInput, fx: FxRates, keep: Dec, c: Collector): CostLine[] {
+  const out: CostLine[] = [];
+  for (const p of input.processes ?? []) {
+    const f = toTry(p.price, fx, c, "FINISHING_RATE_MISSING");
+    if (f !== null) out.push(line("PROCESS", `İşlem — ${p.name}`, p.basis === "RAW_M" ? f.div(keep) : f, { unitPriceTry: f, qtyUnit: "m" }));
+  }
+  return out;
 }
 
 /** Plan §2.2 — `{result | null, missing[], warnings[]}`; eksik varsa sonuç YOK (yarım maliyet gösterilmez). */
@@ -267,21 +281,23 @@ export function computeFabricCost(input: CostInput, fx: FxRates): CostOutcome {
   const fk = c.take(input.fabricWastePct, "PARAMETER_SET_MISSING");
   const g = c.take(input.overheadPct, "PARAMETER_SET_MISSING");
   if (!warp || !weft || !yarns || !loom || h === null || lBeam === null || fk === null || g === null) {
-    if (input.finishing) toTry(input.finishing.price, fx, c, "FINISHING_RATE_MISSING"); // eksik listesi tam olsun
+    for (const r of [input.finishing, ...(input.processes ?? [])]) if (r) toTry(r.price, fx, c, "FINISHING_RATE_MISSING"); // eksik listesi tam olsun
     return { result: null, missing: [...c.missing].sort(), warnings: [...c.warnings].sort() };
   }
   const prep = line("BEAM_PREP", "Levent hazırlığı", h.div(lBeam.mul(ONE.minus(warp.takeUp))), { unitPriceTry: h, qty: lBeam, qtyUnit: "m" });
   const rawLines = [...yarns, ...loom.lines, prep];
   const raw = rawLines.reduce((a, l) => a.plus(l.amountPerMTry), ZERO);
   const fin = finishLines(input, fx, raw, c);
+  const procs = processLines(input, fx, fin?.keep ?? ONE, c);
   if (!fin || c.missing.size) return { result: null, missing: [...c.missing].sort(), warnings: [...c.warnings].sort() };
-  const mamul = fin.finished ?? raw;
+  const mamul = procs.reduce((a, l) => a.plus(l.amountPerMTry), fin.finished ?? raw);
   const sound = mamul.div(ONE.minus(pct(fk)));
   const overhead = sound.mul(pct(g));
   const extra = input.extra?.amountTry ?? ZERO;
   const lines = [
     ...rawLines,
     ...fin.lines,
+    ...procs,
     line("FABRIC_WASTE", "Kalite firesi", sound.minus(mamul), { qty: fk, qtyUnit: "%" }),
     line("OVERHEAD", "Genel gider", overhead, { qty: g, qtyUnit: "%" }),
     ...(input.extra ? [line("EXTRA", input.extra.label ?? "Ek kalem", extra)] : []),
@@ -292,7 +308,7 @@ export function computeFabricCost(input: CostInput, fx: FxRates): CostOutcome {
     weftKgPerM: weft.perYarn.reduce((a, x) => a.plus(x.kg), ZERO),
     loomMPerHour: loom.v,
     rawCostPerMTry: raw,
-    finishedCostPerMTry: fin.finished,
+    finishedCostPerMTry: procs.length ? mamul : fin.finished, // ek işlem mamul aşamasıdır
     soundCostPerMTry: sound,
     overheadPerMTry: overhead,
     totalCostPerMTry: sound.plus(overhead).plus(extra),
