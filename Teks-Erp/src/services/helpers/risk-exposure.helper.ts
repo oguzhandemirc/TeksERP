@@ -16,6 +16,7 @@
 import { Prisma, type Currency } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { settingRowPath } from "../../constants/panel-ayar-yolu";
+import { ekranYolu } from "../../constants/panel-ekran-yolu";
 import { readFinanceRiskLimitCurrencyMode, resolveRiskLimitBlockIntake, resolveRiskLimitBlockShipment } from "../system-setting.service";
 import { factoryDayKeyUtcMidnight } from "../../constants/time";
 import { resolveExchangeRateTx } from "./finance.helper";
@@ -46,7 +47,7 @@ async function toTryOrFail(
   const rate = await resolveExchangeRateTx(tx, currency, onDate);
   if (rate) return amount.times(rate);
   throw AppError.conflict(
-    `${currency} için hiç kur yok; Ön Muhasebe → Kurlar ekranından girin. ` +
+    `${currency} için hiç kur yok; ${ekranYolu("kurlar")} ekranından girin. ` +
       `Risk limiti TL'ye çevrilmiş toplamla ölçülüyor (${settingRowPath("financeRiskLimitCurrencyMode")}); kur 1 varsayılmaz.`,
     { code: "RISK_LIMIT_FX_MISSING", cariId, currency },
   );
