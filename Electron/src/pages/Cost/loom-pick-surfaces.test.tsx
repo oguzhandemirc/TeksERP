@@ -99,6 +99,16 @@ describe("Parametre seti — varsayılan atkı ücreti", () => {
     expect(screen.queryByRole("button", { name: /Taslak oluştur/ })).toBeNull();
   });
 
+  it("⭐ cost:settings YOK + açık taslak → taslak değeri salt okunur, giriş yok", async () => {
+    method = "ATKI_UCRETI";
+    perms = ["cost:read"];
+    params.active.mockResolvedValue(SET);
+    params.draft.mockResolvedValue({ ...SET, id: "p2", status: "DRAFT", versionNo: 4 });
+    renderWithProviders(<ParametersPage />);
+    expect(await screen.findByTestId("pick-rate-row")).toHaveTextContent("Taslak:");
+    expect(screen.queryByLabelText("Varsayılan atkı ücreti")).toBeNull();
+  });
+
   it("TEZGAH_SAATI + değersiz set → satır çizilmez; taslak kaydı gövdesinde atkı ücreti yok", async () => {
     perms = ["cost:settings"];
     const plain = { ...SET, defaultLoomPickRate: null, defaultLoomPickCurrency: null };
