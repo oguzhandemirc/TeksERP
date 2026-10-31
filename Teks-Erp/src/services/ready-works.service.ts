@@ -23,12 +23,16 @@ import {
   readinessClassSql,
   type ReadinessClass, type ShipReadyPolicy, type ShipReadyState,
 } from "./helpers/ship-readiness.helper";
-import type { ShipReadyRule } from "./system-setting.service";
+import type { ShipReadyNotifyUnit, ShipReadyRule } from "./system-setting.service";
 
 export type ReadyWorkUnit = "workOrder" | "deliveryNote" | "customerBatch" | "customer";
 export const READY_WORK_UNITS: readonly ReadyWorkUnit[] = ["workOrder", "deliveryNote", "customerBatch", "customer"];
 /** Gelen belge modülünün verisine dayanan birimler — modül kapalıyken 403 MODULE_DISABLED. */
 export const INCOMING_DOC_UNITS: readonly ReadyWorkUnit[] = ["deliveryNote", "customerBatch"];
+/** Sevke hazır bildirim birimi (ayar kodu) → hazır iş birimi. Bildirim kaynağı (`is.ts`) ve gelen belge modülü
+ *  açılışındaki taban sıfırlaması (D4-KUC3a) aynı eşlemeyi okur. */
+export const NOTIFY_UNIT_READY_UNIT: Record<ShipReadyNotifyUnit, ReadyWorkUnit> = { IE: "workOrder", GB: "deliveryNote", PARTI: "customerBatch" };
+export const notifyUnitNeedsIncomingDoc = (u: ShipReadyNotifyUnit): boolean => INCOMING_DOC_UNITS.includes(NOTIFY_UNIT_READY_UNIT[u]);
 
 /** `roll-delivery-note-line.helper` yukarı çözücüsüyle aynı tavan (döngüsel veri sonsuz yürümesin). */
 const MAX_DESCENT_DEPTH = 32;

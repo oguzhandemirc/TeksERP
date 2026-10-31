@@ -10,6 +10,8 @@
 //      "çözüldü" metni · yük = katalog beyanı (tutar yok) · shipping:read'li alır, shipping:read'siz almaz
 //   §3 gelen belge modülü kapalı → PARTI/GB konusu yok (uç 403 verdiği birim bildirim de doğurmaz)
 //   §4 ⭐ tarama sorgu bütçesi: sorgu sayısı READY birim sayısından bağımsız (1 parti ↔ 4 parti EŞİT) ve ≤ 8
+//   §5 ⭐ (D4-KUC3a) gelen belge modülü kapalıdan açığa geçince taban damgası düşer → ilk tur sessiz (toplu bildirim yok);
+//      açıkken yeniden kayıt ve yalnız IE açıkken açılış damgayı korur
 //
 // ⭐ NEGATİF SONDA (ölçüldü 2026-10-31, geri alındı): bkz. BEKCI-HARITASI satırı.
 // Global ayar yazar (gelen kutusu, gelen belge, emanet, shipping.ready.*, taban damgası); `finally`de geri koyar.
@@ -229,6 +231,27 @@ async function body(): Promise<void> {
   let n4 = 0;
   const q4 = await measure(async () => { n4 = (await readyWorkSubjects()).filter((s) => s.key.startsWith(`customerBatch:${cust}`)).length; });
   check("§4 ⭐ tarama sorgu sayısı READY birim sayısından bağımsız (1 ↔ 4 parti) ve ≤ 8", n4 === 4 && q1 === q4 && q4 <= 8 && q1 > 0, `1 parti=${q1} · 4 parti=${q4} (konu ${n4})`);
+
+  console.log("\n── §5 gelen belge modülü kapalıdan açığa (D4-KUC3a) ──");
+  // Kapalıyken taranır (taban damgası basılır, konu yok); kapalıyken READY olan yeni parti açılışta toplu bildirim üretmemeli.
+  await systemSettingService.setFeatureFlags({ gelenBelgeEnabled: false }, sevkci);
+  await scan();
+  check("§5 zemin: kapalıyken taranınca damga var", await stamped());
+  const pF = await batch(cust, "PF", [W, W]);
+  await systemSettingService.setFeatureFlags({ gelenBelgeEnabled: true }, sevkci);
+  check("§5a ⭐ modül açılış yazımı tür damgasını düşürür", !(await stamped()));
+  const t5 = await scan();
+  await dispatch();
+  check("§5b ⭐ açılıştan sonraki ilk tur SESSİZ TABAN: kapalıyken hazır olan parti için koşul açık, ACILDI 0 (toplu bildirim yok)",
+    typeof t5 === "object" && t5.baseline !== undefined && !!(await openCond(pF.key)) && (await outbox(pF.key, "ACILDI")).length === 0, JSON.stringify(t5));
+  await systemSettingService.setFeatureFlags({ gelenBelgeEnabled: true }, sevkci);
+  check("§5c açıkken yeniden kaydetmek damgayı KORUR (gereksiz taban yok)", await stamped());
+  await systemSettingService.setFeatureFlags({ shippingReadyNotifyUnits: ["IE"] }, sevkci);
+  await systemSettingService.setFeatureFlags({ gelenBelgeEnabled: false }, sevkci);
+  await scan();
+  await systemSettingService.setFeatureFlags({ gelenBelgeEnabled: true }, sevkci);
+  check("§5d yalnız IE bildirimi açıkken modül açılışı damgayı düşürmez", await stamped());
+  await systemSettingService.setFeatureFlags({ shippingReadyNotifyUnits: ["PARTI"] }, sevkci);
 }
 
 async function cleanup(): Promise<void> {
