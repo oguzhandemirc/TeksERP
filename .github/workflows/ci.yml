@@ -22,7 +22,78 @@ on:
 permissions:
   contents: read
 
+# Aynı PR'a yeni push gelince eskiyen koşu iptal edilir (kuyruk public repo koşucu sınırında birikiyordu).
+# push/dispatch grubu run_id'dir: grup paylaşılsaydı GitHub bekleyen main koşusunu iptal ederdi.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # ===========================================================================
+  # DEĞİŞİKLİK SÜZGECİ — yalnız PR'da etkilenmeyen işi atlar; push (main) ve
+  # workflow_dispatch'te HER bayrak true (tam güvenlik ağı main'de). Bağımlılıklar
+  # ölçüldü 2026-10-31 (göreli import + `"X", "y"` yol birleşimi taraması); şüphede KOŞAR.
+  # Backend işleri süzgeçsizdir: bekçiler `git ls-files` ile bütün depoyu tarar.
+  # ===========================================================================
+  changes:
+    name: Değişiklik süzgeci
+    runs-on: ubuntu-latest
+    outputs:
+      electron: ${{ steps.suz.outputs.electron }}
+      mobil: ${{ steps.suz.outputs.mobil }}
+      satici: ${{ steps.suz.outputs.satici }}
+      satici_web: ${{ steps.suz.outputs.satici_web }}
+      native: ${{ steps.suz.outputs.native }}
+      patron: ${{ steps.suz.outputs.patron }}
+      load_test: ${{ steps.suz.outputs.load_test }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: Değişen yollardan iş bayrakları
+        id: suz
+        shell: bash
+        env:
+          OLAY: ${{ github.event_name }}
+          TABAN: ${{ github.base_ref }}
+        run: |
+          set -uo pipefail
+          BAYRAKLAR="electron mobil satici satici_web native patron load_test"
+          hepsi() {
+            echo "⏩ süzgeç yok ($1) → bütün işler koşar"
+            for b in $BAYRAKLAR; do echo "$b=true" >> "$GITHUB_OUTPUT"; done
+            exit 0
+          }
+          [ "$OLAY" = "pull_request" ] || hepsi "olay: $OLAY"
+          # Fark alınamazsa fail-open: yanlış atlama main'i kırar, fazla koşu yalnız zamandır.
+          liste=$(git diff --name-only "origin/$TABAN...HEAD") || hepsi "fark alınamadı"
+          [ -n "$liste" ] || hepsi "boş fark"
+          echo "Değişen dosyalar:"; echo "$liste" | sed 's/^/  /'
+          var() { grep -qE "$1" <<<"$liste"; }
+          # ORTAK: iş akışları, kök betikler (lint tavanı, kapı kapsamı, sürüm kapıları), deploy kayıtları,
+          # kökteki .md dışı dosyalar (surum-notlari.json, Dockerfile, …) → her iş.
+          kok_dosya=$(grep -E '^[^/]+$' <<<"$liste" | grep -vE '\.md$' || true)
+          if var '^(\.github/|scripts/|deploy/)' || [ -n "$kok_dosya" ]; then
+            hepsi "ortak yapılandırma değişti"
+          fi
+          karar() {
+            if var "$2"; then echo "$1=true" >> "$GITHUB_OUTPUT"; echo "✅ $1 koşar"
+            else echo "$1=false" >> "$GITHUB_OUTPUT"; echo "⏭ $1 atlanır"; fi
+          }
+          # Electron testleri Teks-Erp/src (+ bütün src'yi okuyan ayna), prisma şeması, Teks-Erp/scripts/lib, mobil/src okur.
+          karar electron   '^(Electron/|Teks-Erp/(src|prisma|scripts)/|mobil/src/)'
+          # mobil testleri Electron/shared (lan-tls) ve Teks-Erp/src (lisans) okur.
+          karar mobil      '^(mobil/|Electron/shared/|Teks-Erp/src/)'
+          # Satıcı: Teks-Erp npm ci + lisans fikstürü/protokolü + native test vektörleri; tören Teks-Erp'i klonlar,
+          # Electron/electron + mobil + patron/ornek.env okur.
+          karar satici     '^(satici/|Teks-Erp/|Electron/electron/|mobil/|patron/)'
+          karar satici_web '^satici/'
+          # Kâhin: TS protokolü (Teks-Erp/src) ↔ gerçek .node; Teks-Erp npm ci + scripts.
+          karar native     '^Teks-Erp/(native/|src/|scripts/|package)'
+          # Patron: sunucu Teks-Erp/src + satici/sunucu/src + mobil okur; uygulama patron/sunucu/src tel aynası + mobil/assets.
+          karar patron     '^(patron/|Teks-Erp/src/|satici/sunucu/src/|mobil/)'
+          karar load_test  '^Teks-Erp/'
+
   # ===========================================================================
   # DOKÜMAN BEKÇİSİ — docs'un koda karşı bayatlamasını önler (zero-dep, DB'siz, hızlı).
   # GATE: ölü doküman-link (taşınmış/silinmiş dosyaya atıf) → fail.
@@ -444,6 +515,8 @@ jobs:
   # ===========================================================================
   load-test:
     name: Yük testi (throughput/p95)
+    needs: changes
+    if: needs.changes.outputs.load_test == 'true'
     runs-on: ubuntu-latest
     continue-on-error: true
     defaults:
@@ -499,8 +572,12 @@ jobs:
   # ===========================================================================
   # ELECTRON — React 19 / Vite 7 renderer; Vitest (jsdom). Electron binary GEREKMEZ.
   # ===========================================================================
-  electron:
-    name: Electron (tsc + vitest)
+  # BÖLÜNDÜ (2026-10-31): tek iş ~12 dk kritik yoldu (vitest 8 dk). lint+tsc ayrı iş, vitest
+  # `--shard` ile 3 dilim (vitest 3.2); özet iş eski adı korur.
+  electron-lint:
+    name: Electron lint + tsc
+    needs: changes
+    if: needs.changes.outputs.electron == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -535,14 +612,60 @@ jobs:
       - name: Kapı kapsamı (tip kapısı SIFIR dosya derlemiyor)
         run: node scripts/kapi-kapsami.mjs Electron
         working-directory: .
+
+  electron-test:
+    name: Electron vitest ${{ matrix.dilim }}/3
+    needs: changes
+    if: needs.changes.outputs.electron == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dilim: [1, 2, 3]
+    defaults:
+      run:
+        working-directory: Electron
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Electron/package-lock.json
+      - run: npm ci
       - name: Test (Vitest)
-        run: npm test
+        run: npm test -- --shard=${{ matrix.dilim }}/3
+
+  # ÖZET: süzgeç Electron'u istediyse iki iş de success; istemediyse ikisi de skipped. Süzgeç
+  # düşerse (bağımlılar sessizce skipped olur) özet KIRMIZI.
+  electron:
+    name: Electron (tsc + vitest)
+    runs-on: ubuntu-latest
+    needs: [changes, electron-lint, electron-test]
+    if: always()
+    steps:
+      - name: Lint + tsc ve bütün vitest dilimleri
+        shell: bash
+        env:
+          SUZGEC: ${{ needs.changes.result }}
+          ISTENDI: ${{ needs.changes.outputs.electron }}
+          LINT: ${{ needs.electron-lint.result }}
+          TEST: ${{ needs.electron-test.result }}
+        run: |
+          echo "süzgeç: $SUZGEC (electron=$ISTENDI) · lint+tsc: $LINT · vitest: $TEST"
+          [ "$SUZGEC" = "success" ] || { echo "❌ süzgeç işi başarısız"; exit 1; }
+          if [ "$ISTENDI" = "true" ]; then beklenen=success; else beklenen=skipped; fi
+          [ "$LINT" = "$beklenen" ] && [ "$TEST" = "$beklenen" ]
 
   # ===========================================================================
   # MOBİL — Expo 54 / RN 0.81; jest-expo (node ortamı, native build GEREKMEZ).
   # ===========================================================================
   mobile:
     name: Mobil (tsc + jest)
+    needs: changes
+    if: needs.changes.outputs.mobil == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -587,6 +710,8 @@ jobs:
   # ===========================================================================
   satici:
     name: Satıcı (tsc + lint + bekçi)
+    needs: changes
+    if: needs.changes.outputs.satici == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -649,6 +774,8 @@ jobs:
   # ===========================================================================
   satici-toren-mac:
     name: Satıcı üretim töreni (macOS RAM diski)
+    needs: changes
+    if: needs.changes.outputs.satici == 'true'
     runs-on: macos-latest
     defaults:
       run:
@@ -680,6 +807,8 @@ jobs:
   # ===========================================================================
   satici-web:
     name: Satıcı web (tsc + lint + vitest + build)
+    needs: changes
+    if: needs.changes.outputs.satici_web == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -715,6 +844,8 @@ jobs:
   # ===========================================================================
   native:
     name: Native çalışma alanı (fmt + clippy + test + kâhin)
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -757,6 +888,8 @@ jobs:
   # ===========================================================================
   patron:
     name: Patron sunucusu (tsc + lint + RLS + bekçi)
+    needs: changes
+    if: needs.changes.outputs.patron == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -814,6 +947,8 @@ jobs:
   # ===========================================================================
   e2e:
     name: Electron E2E (smoke)
+    needs: changes
+    if: needs.changes.outputs.electron == 'true'
     runs-on: ubuntu-latest
     continue-on-error: true
     defaults:
@@ -840,6 +975,8 @@ jobs:
   # ===========================================================================
   patron-uygulama:
     name: Patron uygulaması (tsc + jest + web export)
+    needs: changes
+    if: needs.changes.outputs.patron == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
