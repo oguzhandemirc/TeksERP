@@ -851,7 +851,7 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // diğeri almaz) ve bu yıllar sonra fark edilir.
   { table: "roll_variances", name: "roll_variances_qty_positive" },
   // 2026-10-24 — KQ-D4 (migration 20261024073000_kursun_gramaj_cesit): gramaj değeri
-  // yalnız KURSUN_APPLIED satırında; özellik kendi kendisinin çeşidi olamaz.
+  // yalnız KURSUN_APPLIED satırında (D4-MIG6: + SUBCONTRACTOR_RETURNED dış brode deseni); özellik kendi kendisinin çeşidi olamaz.
   { table: "roll_operations", name: "roll_operations_property_value_ck" },
   // K4P-SEMA (migration 20261024170759) — 4 puan muayene seddi; bekçi `test_k4p_sema_sedleri`.
   { table: "roll_errors", name: "roll_errors_meter_ck" },
@@ -1419,7 +1419,7 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
   {
     table: "rolls",
     trigger: "rolls_sync_parent_moved",
-    timing: ["AFTER UPDATE OF", "FOR EACH ROW", "sync_mark_roll_old_parents()"],
+    timing: ["AFTER UPDATE OF", "\"batchId\"", "FOR EACH ROW", "sync_mark_roll_old_parents()"],
     why: "patron bulutu ayrılma körlüğü: top ESKİ çuval/sevkiyat/iş emrinden ayrılınca eski ebeveyn KIRLI (yeni ebeveyn filigrandan görünür)",
   },
   {
@@ -1433,6 +1433,12 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     trigger: "shipment_orders_sync_dirty",
     timing: ["AFTER INSERT OR DELETE OR UPDATE", "FOR EACH ROW", "sync_mark_shipment_orders()"],
     why: "patron bulutu filigransız küme: shipment_orders ne id ne updatedAt taşır, her yazım sevkiyatı KIRLI yapar",
+  },
+  {
+    table: "batches",
+    trigger: "batches_sync_wo_moved",
+    timing: ["AFTER UPDATE OF", "FOR EACH ROW", "sync_mark_batch_work_order_moved()"],
+    why: "patron bulutu (D4-MIG6): parti başka iş emrine taşınınca toplar değişmez — ESKİ+YENİ iş emri KIRLI, yoksa is-emri.sevkeHazir bayatlar",
   },  {
     table: "document_template_versions",
     trigger: "document_template_versions_block_tamper",
@@ -1589,8 +1595,14 @@ const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragment
   {
     name: "sync_mark_roll_old_parents",
     volatility: "v",
-    bodyFragments: ['OLD."sackId"', 'OLD."shipmentId"', 'OLD."currentStepId"', 'OLD."producedInStepId"', "'work_orders'", "'DIRTY'"],
-    why: "patron bulutu ayrılma körlüğü: dört FK'nın ESKİ ebeveyni KIRLI — biri düşerse eski çuvalın/sevkiyatın/iş emrinin toplamı bulutta bayatlar",
+    bodyFragments: ['OLD."sackId"', 'OLD."shipmentId"', 'OLD."currentStepId"', 'OLD."producedInStepId"', 'OLD."batchId"', "'work_orders'", "'DIRTY'"],
+    why: "patron bulutu ayrılma körlüğü: beş FK'nın (parti D4-MIG6) ESKİ ebeveyni KIRLI — biri düşerse eski çuvalın/sevkiyatın/iş emrinin toplamı bulutta bayatlar",
+  },
+  {
+    name: "sync_mark_batch_work_order_moved",
+    volatility: "v",
+    bodyFragments: ['OLD."workOrderId"', 'NEW."workOrderId"', "'work_orders'", "'DIRTY'"],
+    why: "patron bulutu (D4-MIG6): parti taşımasında eski ve yeni iş emri KIRLI",
   },
   {
     name: "sync_mark_sack_old_shipment",

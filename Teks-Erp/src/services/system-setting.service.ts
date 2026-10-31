@@ -4075,6 +4075,10 @@ export class SystemSettingService {
         userId
       );
     }
+    // Politika değişimi bulutta `is-emri.sevkeHazir`ı bayatlatmasın (D4-MIG6): önceki politika okunur, yazımdan sonra kıyaslanır.
+    const shipReadyTouched = ["shippingReadyRule", "shippingReadyTolerancePct"].some((k) => Object.prototype.hasOwnProperty.call(input, k));
+    const shipReadyDirty = shipReadyTouched ? await import("../cloud-sync/ship-ready-dirty") : null;
+    const shipReadyBefore = shipReadyDirty ? await shipReadyDirty.readReadyPolicySnapshot() : null;
     if (Object.prototype.hasOwnProperty.call(input, "shippingReadyRule")) {
       const v = input.shippingReadyRule;
       if (typeof v !== "string" || !SHIP_READY_RULES.includes(v as ShipReadyRule)) {
@@ -4093,6 +4097,12 @@ export class SystemSettingService {
         "Sevke hazır işler — metre eşiği toleransı (%)",
         userId
       );
+    }
+    // Best-effort: ayar zaten yazıldı; bulut işareti düşerse 5 dk emniyet turu yakalar, istek kesilmez (kalan ayarlar yazılır).
+    if (shipReadyDirty && shipReadyBefore) {
+      await shipReadyDirty.markReadyWorkOrdersDirty(shipReadyBefore).catch((e: unknown) => {
+        uyari("bulut-kirletme", `sevke hazırlık politikası değişimi bulut kirletme işaretine yazılamadı: ${e instanceof Error ? e.message : String(e)}`);
+      });
     }
     if (Object.prototype.hasOwnProperty.call(input, "shippingReadyNotifyUnits")) {
       const v = input.shippingReadyNotifyUnits;

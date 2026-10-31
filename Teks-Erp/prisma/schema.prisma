@@ -6330,7 +6330,8 @@ model RollOperation {
   /// ile filtreleyerek çift sayımı önler.
   inheritedFromParentRollId String?           @db.Uuid
   /// Uygulanan çeşit değeri (KQ-D4: kurşun gramajı) — İLERİ KAYDIN PARÇASI.
-  /// Yalnız KURSUN_APPLIED taşır (DB CHECK `roll_operations_property_value_ck`).
+  /// Yalnız KURSUN_APPLIED ve SUBCONTRACTOR_RETURNED (dış brode deseni, D4-MIG6) taşır
+  /// (DB CHECK `roll_operations_property_value_ck`).
   /// Düzeltme satırı değiştirmez: eski satır damgalanır, yenisi yazılır.
   propertyValueId           String?           @db.Uuid
 
