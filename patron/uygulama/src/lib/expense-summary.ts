@@ -63,6 +63,7 @@ export function expenseView(veri: unknown): ExpenseView | null {
     change: changeText(str(v.fark)),
     lastMonthText: `${monthLabel(str(v.gecenAy))}: ${formatMoney(v.gecenAyToplam)}`,
     yearText: `Son 12 ay: ${formatMoney(v.toplam)}`,
-    rows: v.kategoriler.map((r, i) => rowView(r, i)),
+    // Nesne olmayan satır (bozuk/yabancı veri) atlanır; segment çökmez.
+    rows: v.kategoriler.filter((r) => typeof r === "object" && r !== null).map((r, i) => rowView(r, i)),
   };
 }

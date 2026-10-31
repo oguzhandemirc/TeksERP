@@ -122,6 +122,10 @@ function statik(): void {
   const allowedCloud = new Set(["patron/sunucu/src/wire/api.ts"]);
   const cloudExtra = walk(CLOUD_SRC).filter((f) => FIELD_RE.test(readFileSync(f, "utf8"))).map((f) => path.relative(ROOT, f)).filter((f) => !allowedCloud.has(f));
   check("§2c ⭐ patron/sunucu alanlara yalnız tel sözleşmesinde dokunur (bulut hesap/süzme yapmaz)", cloudExtra.length === 0, cloudExtra.join(", ") || "temiz");
+  // Genel adlı alanlar (toplam/fark) FIELD_RE'ye girmez; anlık adı katalog + tel dışında geçmiyorsa bulut veriyi hiç okumaz.
+  const nameAllowed = new Set(["patron/sunucu/src/wire/api.ts", "patron/sunucu/src/catalog/projections.ts", "patron/sunucu/src/catalog/katalog-ozeti.json"]);
+  const nameExtra = walk(CLOUD_SRC).filter((f) => readFileSync(f, "utf8").includes(NAME)).map((f) => path.relative(ROOT, f)).filter((f) => !nameAllowed.has(f));
+  check("§2c2 ⭐ patron/sunucu'da anlık adı yalnız katalog + tel dosyalarında geçer", nameExtra.length === 0, nameExtra.join(", ") || "temiz");
   const allowedApp = new Set([APP_VIEW, "patron/uygulama/src/api/wire.ts"]);
   const appExtra = APP_DIRS.flatMap(walk).filter((f) => FIELD_RE.test(readFileSync(f, "utf8"))).map((f) => path.relative(ROOT, f)).filter((f) => !allowedApp.has(f));
   const arith = arithmeticIn(readFileSync(path.join(ROOT, APP_VIEW), "utf8"));
