@@ -281,6 +281,11 @@ const COST_SIDE_SERVICE_ITEM_ID_FILES = new Set([
   "services/consumable-norm.service.ts",
   "services/helpers/cost-rate-validity.helper.ts",
   "routes/cost.routes.ts",
+  // D4-G2a kârlılık: işin/bağın kalemini norm + fatura satırı eşlemesi için okur (çözücü değil); dış fason
+  // tahmini FinishingRate'i MALİYET olarak okur — gelir tarafına girmez.
+  "services/helpers/profitability.helper.ts",
+  "services/helpers/profitability-cost.helper.ts",
+  "services/helpers/profitability-finance.helper.ts",
 ]);
 function astChecks(): void {
   section("§8 AST: çözücü tek, eşleme okuyucuları beyanlı, FinishingRate okunmaz");
