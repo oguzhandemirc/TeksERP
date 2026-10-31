@@ -36,12 +36,15 @@ import { useOpenTopLevel } from "@/components/layout/tabs/use-tab-target";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import type { Order } from "./types";
 import { type OrderFormValues } from "./schema";
+import { linePlanPayload, type OrderLinePlanPayload } from "./orderLinePlanPayload";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { usePreferences } from "@/providers/PreferencesProvider";
 import { OrdersStats, type OrderStatsView } from "./OrdersStats";
 import { useOrderStats } from "./useOrderStats";
 import { TERIM } from "@/lib/terim";
+import { OrderPlanView, ORDER_PLAN_QUERY_KEY } from "./OrderPlanView";
+import { OrdersViewTabs, readOrdersView } from "./OrdersViewTabs";
 
 const FILTERS: FilterDef[] = [
   {
@@ -121,7 +124,7 @@ interface CreatePayload {
   branchId: string | null;
   currency?: string;
   deadline: string | null;
-  lines: {
+  lines: ({
     itemId: string;
     colorId: string | null;
     quantity: number;
@@ -133,10 +136,10 @@ interface CreatePayload {
     customerColorName?: string | null;
     cutNote?: string | null;
     requiredPropertyIds: string[];
-  }[];
+  } & OrderLinePlanPayload)[];
 }
 
-interface UpdateLinePayload {
+interface UpdateLinePayload extends OrderLinePlanPayload {
   /** Mevcut OrderLine.id (update). Yeni satırda undefined (create). */
   id?: string;
   itemId: string;
@@ -188,6 +191,7 @@ function buildCreatePayload(
       customerColorName: l.customerColorName?.trim() ? l.customerColorName.trim() : null,
       cutNote: l.cutNote?.trim() ? l.cutNote.trim() : null,
       requiredPropertyIds: l.requiredPropertyIds ?? [],
+      ...linePlanPayload(l, "create"),
     })),
   };
 }
@@ -232,6 +236,7 @@ function buildUpdatePayload(
             customerColorName: l.customerColorName?.trim() ? l.customerColorName.trim() : null,
             cutNote: l.cutNote?.trim() ? l.cutNote.trim() : null,
             requiredPropertyIds: l.requiredPropertyIds ?? [],
+            ...linePlanPayload(l, "update"),
           })),
         }
       : {}),
@@ -352,6 +357,9 @@ export function OrdersPage() {
       ? "SEÇİLİ TARİH ARALIĞI"
       : "TÜM SİPARİŞLER";
 
+  // SY-K2: "Üretim planı" sekmesi URL'de (`?view=plan`) — kayıtlı görünüm sekmeyi de saklar.
+  const view = readOrdersView(searchParams);
+
   const isEmpty = query.isSuccess && !search && pagination.total === 0;
 
   const createMut = useMutation({
@@ -396,7 +404,7 @@ export function OrdersPage() {
         title="Siparişler"
         actions={
           <>
-            <RefreshButton queryKey={QUERY_KEY} />
+            <RefreshButton queryKey={view === "plan" ? ORDER_PLAN_QUERY_KEY : QUERY_KEY} />
             {/* DEFTER ONARIMI — buradan kısa yol. Siparişin "Açık" görünmesinin
                 sebebi çoğu zaman sevkiyatın deftere yazılamamış olmasıdır; o
                 ekrana giden yolun sipariş listesinde durması bilinçli.
@@ -427,6 +435,11 @@ export function OrdersPage() {
         }
       />
 
+      <OrdersViewTabs view={view} />
+      {view === "plan" ? (
+        <OrderPlanView pricingEnabled={pricingEnabled} />
+      ) : (
+      <>
       <DataTableToolbar
         fetchAll={fetchAll}
         search={search}
@@ -513,6 +526,9 @@ export function OrdersPage() {
             : undefined
         }
       />
+
+      </>
+      )}
 
       <OrderDetailSheet
         order={selected}

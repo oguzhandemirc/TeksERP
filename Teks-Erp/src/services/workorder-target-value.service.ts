@@ -8,6 +8,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { staleTargetNoteWarnings } from "./helpers/fason-step-target-note.helper";
 import {
   assertTargetValueItems,
   readActiveTargetValues,
@@ -41,10 +42,13 @@ export async function replaceWorkOrderTargetValues(workOrderId: string, items: T
     });
   }
   const changed = change.revoked.length + change.created.length > 0;
+  // SY-F4: dış adım notu yalnız doğuşta yazılır; hedef değişince eski talimat kaldıysa uyarılır (yoksa yanıt bayt-aynı).
+  const warnings = await staleTargetNoteWarnings(prisma, workOrderId, change.revoked);
   return {
     success: true as const,
     data: { changed, targetValues: await readActiveTargetValues(prisma, workOrderId) },
     message: changed ? "Hedef güncellendi" : "Hedef zaten aynı",
+    ...(warnings.length > 0 ? { warnings } : {}),
   };
 }
 
