@@ -17,12 +17,15 @@
 //   §6 faturalı okuma → 409 SERVICE_ALREADY_BILLED; CUT dışı okuma → 400 METER_READING_NOT_CUT
 //   §7 uç kapısı: verifyToken + kursun:meter-approve; izinsiz 403, router üretim modülü kapısının altında
 //   §9 çok kuşak: SIMULATED kesimli çocuk kendisi de kesilmiş ata olarak sevk edilirse ④ DECLARED'a düşmez
+//   §10 top izi (`/rolls/:id/history`) `measurements`: düzeltilen okuma damgalı + SUPERVISOR aktif; sapma measureSource
 //   §8 iptal edilmiş top → 409 ROLL_NOT_CORRECTABLE; iptal tx'i okuma anlık görüntüsünü aldıktan sonra
 //      gelen düzeltme top kilidinde bekler → iptal topta aktif CUT okuması KALMAZ (roll → okuma kilit sırası)
 // Negatif sondalar (2026-10-30): CUT kolundaki SIMULATED dışlaması kaldırılınca §1 kırmızı ·
 // düzeltme claim'inde `revokedAt: null` çıkarılınca §5 kırmızı · düzeltmedeki top FOR UPDATE + iptal
 // denetimi çıkarılınca §8 kırmızı (aktif=1) · ③ önündeki SIMULATED denetimi eski yerine alınınca §9
 // kırmızı (ata DECLARED 50 faturada) (geri alındı).
+// D4-B4 sondaları (2026-10-30): top izi okuma sorgusuna `revokedAt: null` eklenince §10a kırmızı (yalnız SUPERVISOR) ·
+// sapma `measureSource` null'a sabitlenince §10b kırmızı (geri alındı).
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { Currency, ItemType, MeterPhase, Prisma, PriceKind, RollEntrySource, RollStatus, StationKind, StationType, StepStatus } from "@prisma/client";
@@ -214,6 +217,38 @@ async function main() {
     `supervisor=${supCount}`);
   const collide = await errOf(() => correctCutReading(simReading!.id, { ...body, meters: 31 }, undefined));
   check("§4 aynı token başka metre → 409 CLIENT_TOKEN_COLLISION", collide?.status === 409 && collide.code === "CLIENT_TOKEN_COLLISION", JSON.stringify(collide));
+
+  console.log("\n§10 top izi ölçüm geçmişi (D4-B4 eklemeli alan)");
+  const h10 = await inv.getRollHistory(kSim.id);
+  const m10 = h10.data?.measurements;
+  const cuts10 = (m10?.readings ?? []).filter((r) => r.phase === "CUT");
+  check("§10 top izi düzeltilen SIMULATED okumayı damgalı, SUPERVISOR okumasını aktif listeler (kronolojik)",
+    // §3'ün iptal/geri alması kSim'e damgalı bir SIMULATED satırı daha bıraktı: hepsi listede, yalnız sonuncusu aktif.
+    cuts10.length >= 2 && cuts10.some((r) => r.id === simReading!.id && r.source === "SIMULATED" && r.revokedAt !== null) &&
+      cuts10.slice(0, -1).every((r) => r.revokedAt !== null) && cuts10.every((r, i) => i === 0 || cuts10[i - 1].createdAt <= r.createdAt) &&
+      cuts10.at(-1)?.id === first.data.reading.id && cuts10.at(-1)?.source === "SUPERVISOR" && cuts10.at(-1)?.meters === 29.5,
+    JSON.stringify(cuts10.map((r) => [r.source, r.meters, !!r.revokedAt])));
+  // Aşımlı kesim (MACHINE + SIMULATED) sapma doğurur; zayıf halka SIMULATED top izinde measureSource olarak görünür.
+  await prisma.systemSetting.upsert({ where: { key: "tambur.overQuantityEnabled" }, update: { value: true }, create: { key: "tambur.overQuantityEnabled", value: true, description: "test geçici" } });
+  const v10 = await parentRoll(base.itemId, 100);
+  await tambur.finalize({
+    rollId: v10.rollId, decisions: [],
+    cuts: [
+      { length: 80, qualityGrade: fx.gradeCode, relatedErrorIds: [], measure: { source: "MACHINE" } },
+      { length: 40, qualityGrade: fx.gradeCode, relatedErrorIds: [], measure: { source: "SIMULATED" } },
+    ],
+  }, undefined, fx.machineId);
+  await kids(v10.rollId);
+  await prisma.systemSetting.deleteMany({ where: { key: "tambur.overQuantityEnabled" } });
+  const vDb = await prisma.rollVariance.findMany({ where: { rollId: { in: [a.rollId, v10.rollId] } }, select: { id: true, rollId: true, measureSource: true } });
+  const vApi = [
+    ...((await inv.getRollHistory(a.rollId)).data?.measurements.variances ?? []),
+    ...((await inv.getRollHistory(v10.rollId)).data?.measurements.variances ?? []),
+  ];
+  check("§10 sapma satırları measureSource ile (DB ile birebir; aşımlı kesimde SIMULATED)",
+    vDb.length >= 1 && vApi.length === vDb.length && vDb.every((d) => vApi.some((v) => v.id === d.id && v.measureSource === d.measureSource)) &&
+      vApi.some((v) => v.measureSource === "SIMULATED"),
+    JSON.stringify(vApi.map((v) => [v.kind, v.qty, v.measureSource])));
 
   console.log("\n§5 eşzamanlı iki düzeltme");
   const mReading = await activeCut(kMachine.id);

@@ -18,7 +18,7 @@ describe("Tambur ölçüm kaynağı ayarları", () => {
     const f = flagOf("tamburMeasureSourceRequired");
     expect(f?.defaultOn).toBe(false);
     expect(f?.group).toBe("Tambur");
-    expect(f?.summary).toMatch(/Önce tüm tabletler yeni sürümde olmalı/);
+    expect(f?.summary).toMatch(/Açmadan önce tüm tabletler ölçüm kaynağını gönderen sürümde olmalı/);
     expect(FLAG_MODULE.tamburMeasureSourceRequired).toBe("productionEnabled");
   });
 });

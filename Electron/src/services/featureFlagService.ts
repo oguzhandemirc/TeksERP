@@ -36,6 +36,8 @@ import {
 export type LoginMethod = "list" | "pin" | "card";
 /** Etiket adedi kaynağı — backend `LabelCopiesSource` aynası. */
 export type LabelCopiesSource = "GLOBAL" | "STATION";
+/** D4-F3: müşteri barkodu basan şablonda top kodsuzsa — backend `LabelCustomerCodeMissing` aynası. */
+export type LabelCustomerCodeMissing = "BLOCK" | "ROLL_BARCODE";
 
 export type TravelerCardPageSize = "A4" | "A5";
 export type TravelerCardFontWeight = "light" | "normal" | "bold";
@@ -693,6 +695,8 @@ export interface FeatureFlags {
   /** Akış etiketi adedini kim belirler: GLOBAL (varsayılan — `labelCopies`) | STATION
    *  (tablet seçer; varsayılanı istasyon kartında, boşsa `labelCopies`). Backend çözer. */
   labelCopiesSource: LabelCopiesSource;
+  /** D4-F3 (`label.customerCodeMissing`; varsayılan BLOCK). */
+  labelCustomerCodeMissing: LabelCustomerCodeMissing;
   /** Faz-2 opt-in: native komutları yazıcıya doğrudan (RAW TCP 9100) gönder (default false). */
   nativeSendEnabled: boolean;
   /** Mobil (HC-06/BT) baskıda raster GW bitmap gönderilsin mi (default false → komut yolu).

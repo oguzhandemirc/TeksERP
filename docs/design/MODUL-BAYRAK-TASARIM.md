@@ -249,7 +249,7 @@ Varsayılanlar = bugünkü davranış. Tam liste + maliyet analizi sentez çıkt
 | **Perde üreticisi** | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ | ⚠️ Perde fabrikası da TOP dünyasında (tambur→top→çuval→sevk — kullanıcı düzeltmesi; dikim perakendecinin işi). Konfeksiyon katmanı GEREKMEZ |
 | **Dokuma/örme** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | + gramaj; devere/çözgü istasyon kataloğundan |
 | **Tam** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | |
-| **Hizmet veren (fason işlemci)** (`hizmet`, 2026-10-29) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | SATILIR: + emanet (müşterinin malı) + gelen belge taslağı; dokuma kapalı. Ölçüm/faturalama ayarları profile girmez, `scripts/hizmet-ayar-paketi.ts` (kuru koşu varsayılan) — DALGA2-HIZMET-TASARIM §4, §7 |
+| **Hizmet veren (fason işlemci)** (`hizmet`, 2026-10-29) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | SATILIR: + emanet (müşterinin malı) + gelen belge taslağı + maliyet (2026-10-31 S2: makine ücreti · sarf normu · kârlılık); dokuma kapalı. Ölçüm/faturalama ayarları profile girmez, `scripts/hizmet-ayar-paketi.ts` (kuru koşu varsayılan) — DALGA2-HIZMET-TASARIM §4, §7 |
 | Boyahane aynası (fason aynası + tarife) | — | | | | | | | | | Bugün SATILMAZ: ayrı tasarım; `ownershipEnabled` ilk taş |
 
 ---

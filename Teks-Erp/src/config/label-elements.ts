@@ -134,14 +134,21 @@ export interface TextElement extends ElementBase {
   textCase?: TextCase;
 }
 
+/** Barkod/QR elemanının basacağı kod (D4-F3). Yok → ROLL (topun iç barkodu, bugünkü
+ *  davranış). CUSTOMER_CODE → topa bağlı AKTİF müşteri kodu; yoksa `label.customerCodeMissing`. */
+export type ScanSource = "ROLL" | "CUSTOMER_CODE";
+export const SCAN_SOURCES: readonly ScanSource[] = ["ROLL", "CUSTOMER_CODE"];
+
 export interface QrElement extends ElementBase {
   type: "qr";
+  source?: ScanSource;
   /** Modül büyütme (dots/modül, 2–15). Yok → 5. Ayak izi qrFootprintDots ile. */
   scale?: number;
 }
 
 export interface Code128Element extends ElementBase {
   type: "code128";
+  source?: ScanSource;
   /** Bar yüksekliği (mm). Yok → 9. */
   hMm?: number;
   /** Okunur satır (insan-okur barkod değeri). Yok → true. */
@@ -413,6 +420,11 @@ export function validateCanvasLayout(
       bad(`'${el.id}' bold boolean olmalı`);
     }
 
+    if (el.source !== undefined) {
+      if (type !== "qr" && type !== "code128") bad(`'${el.id}' source yalnız qr/code128 elemanında olabilir`);
+      if (!SCAN_SOURCES.includes(el.source as ScanSource)) bad(`'${el.id}' source geçersiz. İzinli: ${SCAN_SOURCES.join(", ")}`);
+    }
+
     switch (type) {
       case "field":
         if (typeof el.bind !== "string" || (el.bind as string).length === 0) {
@@ -592,6 +604,21 @@ export function prepareElements(elements: LabelElement[], ctx: ConditionContext)
     ? elements.filter((el) => elementConditionMet(el, ctx))
     : elements;
   return expandMultilineText(visible);
+}
+
+/** Yerleşimde müşteri kodu basan barkod/QR elemanı var mı (eksik-kod kapısının sorusu). */
+export function layoutUsesCustomerCode(layout: CanvasLayout | null): boolean {
+  return !!layout?.elements.some((el) => (el.type === "qr" || el.type === "code128") && el.source === "CUSTOMER_CODE");
+}
+
+/** Eksik kodda iç barkoda düşüş: CUSTOMER_CODE kaynaklı elemanlar ROLL'a çevrilir (diğerleri aynen). */
+export function fallbackCustomerCodeToRoll(layout: CanvasLayout): CanvasLayout {
+  return {
+    ...layout,
+    elements: layout.elements.map((el) =>
+      (el.type === "qr" || el.type === "code128") && el.source === "CUSTOMER_CODE" ? { ...el, source: "ROLL" as const } : el,
+    ),
+  };
 }
 
 /** Varyant JSON'ından kanvas yerleşimini oku — geçersiz/boş → null (emit katmanı

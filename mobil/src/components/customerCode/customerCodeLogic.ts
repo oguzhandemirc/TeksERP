@@ -63,6 +63,12 @@ export function canBindCustomerCode(p: {
   return CUSTOMER_CODE_BIND_PERMISSIONS.some((c) => p.has(c));
 }
 
+/** Baskı 400 `CUSTOMER_CODE_MISSING` (D4-F3 BLOCK): şablon müşteri barkodu basıyor, topta kod yok → okut-bağla çıkışı. */
+export function isCustomerCodeMissing(e: unknown): boolean {
+  const err = asError(e);
+  return err.status === 400 && err.details?.code === 'CUSTOMER_CODE_MISSING';
+}
+
 /** Rota yok (eski backend) — Express'in genel 404'ü `details` taşımaz; servisin "Top bulunamadı"sı `details.rollId` taşır. */
 export function isEndpointMissing(e: unknown): boolean {
   const err = asError(e);
