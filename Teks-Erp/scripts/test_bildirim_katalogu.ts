@@ -23,6 +23,7 @@
 //   S4 (2026-10-25) eşlemede `patronKind: "yedek-yok"` (bulutta yok)    ⇒ 1 ❌ (§9b)
 //   S5 (2026-10-25) eşlemeden `yazici.hata` satırı silindi             ⇒ 1 ❌ (§9)
 //   S6 (2026-10-26) render'da `forText` yok sayıldı (String(v))      ⇒ 1 ❌ (§5d)
+//   S7 (2026-10-31, D4-I5) `cari.risk-limiti-asildi.payloadAlanlari`na `riskLimiti` eklendi ⇒ §8 ❌
 // =============================================================================
 import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
 import { SCREEN_CATALOG } from "../src/constants/screen-catalog";
@@ -60,7 +61,7 @@ function main(): void {
   console.log("=== BİLDİRİM KATALOĞU ===\n");
 
   // ── §0 körlük zemini + kimlik ─────────────────────────────────────────────
-  check("§0 katalog v1: 16 tür (A4 yazici.hata, D5 cihaz.halka-kaybi)", girdiler.length === 16, `${girdiler.length} tür`);
+  check("§0 katalog: 19 tür (A4 yazici.hata, D5 cihaz.halka-kaybi, D4-I5 cari ×3)", girdiler.length === 19, `${girdiler.length} tür`);
   kural("§0b `kod` = anahtar ve `<alan>.<tür>` kalıbında",
     girdiler.filter(([k, e]) => e.kod !== k || !/^[a-z0-9]+\.[a-z0-9-]+$/.test(k)).map(([k]) => k), "hepsi");
   kural("§0c `grup` beyanlı dokuz gruptan", girdiler.filter(([, e]) => !NOTIFICATION_GRUPLARI.includes(e.grup))
@@ -157,7 +158,8 @@ function main(): void {
     paramli.filter(([, e]) => e.paramSemasi!.safeParse({ bilinmeyenAnahtar: 1 }).success).map(([k]) => k), "hepsi");
 
   // ── §8 sır/tutar ──────────────────────────────────────────────────────────
-  const YASAK = /tutar|fiyat|bakiye|borc|alacak|parola|sifre|şifre|pin$|token|secret|password/i;
+  // D4-I5: cari türleri — limit/risk/bakiye adı da tutardır (gelen kutusu finans ekranı değil).
+  const YASAK = /tutar|fiyat|bakiye|borc|alacak|limit|risk|amount|balance|price|exposure|parola|sifre|şifre|pin$|token|secret|password/i;
   kural("§8 payload alan adları tutar/sır taşımaz",
     girdiler.flatMap(([k, e]) => e.payloadAlanlari.filter((a) => YASAK.test(a)).map((a) => `${k}: ${a}`)), "hepsi");
 

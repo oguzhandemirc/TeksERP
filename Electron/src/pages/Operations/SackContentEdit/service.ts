@@ -99,9 +99,13 @@ export const sackHubService = {
     apiClient.get<ApiResponse<SackContents>>(`/api/shipping/sacks/${sackId}/contents`).then((r) => r.data),
 
   /** Top yerini bul — barkod tam eşleşme ("bu top nerede?"). */
-  locateRoll: (barcode: string): Promise<ApiResponse<LocatedRoll>> =>
+  /** `probe`: serisiz kodun sessiz sondası — bulunamazsa toast basılmaz (D4-F1c). */
+  locateRoll: (barcode: string, probe = false): Promise<ApiResponse<LocatedRoll>> =>
     apiClient
-      .get<ApiResponse<LocatedRoll>>(`/api/shipping/locate-roll?barcode=${encodeURIComponent(barcode)}`)
+      .get<ApiResponse<LocatedRoll>>(`/api/shipping/locate-roll?barcode=${encodeURIComponent(barcode)}`, {
+        customerCodeChoice: true,
+        suppressErrorToast: probe,
+      })
       .then((r) => r.data),
 
   /** Çeki listesi — seçilen çuvalların içerik özetli dökümü (salt-okunur POST). */
