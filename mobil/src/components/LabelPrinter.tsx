@@ -27,6 +27,7 @@ import {
   reportPrintOutcome,
   type PrintStep,
 } from '../services/printJob.service';
+import { useCustomerCodeMissingExit } from './customerCode/useCustomerCodeMissingExit';
 
 interface Props {
   /** Etiketi basılacak top. null ise hiçbir şey yapılmaz. */
@@ -96,6 +97,10 @@ export function LabelPrinter({ roll, kind, labelContext, confirmScrap, onDone, o
   useEffect(() => {
     onResultRef.current = onResult;
   }, [onResult]);
+  // BLOCK (CUSTOMER_CODE_MISSING) → okut-bağla çıkışı; zincir kapanışından ref'le okunur.
+  const customerCodeExit = useCustomerCodeMissingExit();
+  const offerBindRef = useRef(customerCodeExit.offer);
+  offerBindRef.current = customerCodeExit.offer;
 
   // Async print akışı saniyeler sürer; bu sırada parent unmount olabilir.
   // ⚠️ mountedRef YALNIZ görsel yan etkileri (Toast/Haptic) kapar — onResult/
@@ -295,6 +300,7 @@ export function LabelPrinter({ roll, kind, labelContext, confirmScrap, onDone, o
           retryable: !isCancel && classifyPrintRetry(phase, err),
           error: msg,
         });
+        if (mountedRef.current && !isCancel) offerBindRef.current(err, jobRoll);
         if (mountedRef.current) {
           void Haptics.notificationAsync(
             isCancel
@@ -314,5 +320,5 @@ export function LabelPrinter({ roll, kind, labelContext, confirmScrap, onDone, o
     });
   }, [roll, kind, labelContext, confirmScrap, copies]);
 
-  return null;
+  return customerCodeExit.sheet;
 }

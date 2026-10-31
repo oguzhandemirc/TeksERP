@@ -90,6 +90,7 @@ const LABELS = {
     sevkPartisi: "SEVK PARTİSİ",
     partiKodu: "PARTİ KODU",
     hataNotu: "HATA NOTU",
+    musteriBarkodu: "MÜŞTERİ BARKODU",
     metreToplami: "METRE TOPLAMI",
     kgToplami: "KG TOPLAMI",
     paketSayisi: "TOP ADEDİ",
@@ -146,6 +147,7 @@ const LABELS = {
     sevkPartisi: "LOT",
     partiKodu: "LOT CODE",
     hataNotu: "DEFECT NOTE",
+    musteriBarkodu: "CUSTOMER BARCODE",
     metreToplami: "TOTAL METERS",
     kgToplami: "TOTAL KG",
     paketSayisi: "ROLL COUNT",
@@ -237,6 +239,8 @@ interface ShipmentDocCeki {
   /** Açık (kararsız) hata notu "12,5 m Leke · 40 m Delik" (KQ-D8) — yalnız hatalı topta;
    *  eski snapshot'ta YOK. Kolon OPT-IN (müşteri belgesinde iç kolon). */
   defectNote?: string | null;
+  /** Topa bağlı aktif müşteri barkodu (D4-F3) — sevk anında DONAR; kodsuz topta ve eski snapshot'ta YOK ("—"). */
+  customerCode?: string | null;
 }
 
 /** Donmuş sevk belgesi payload'ı — collectShipmentDocContent / getDispatchReport
@@ -685,6 +689,9 @@ function shipmentDispatchParts(snapshot: PrintedDocSnapshot, meta: RenderMeta) {
         { key: "packingGroupCode", label: L.partiKodu, align: "l", defaultHidden: true,
           kind: TEXT, value: (c: ShipmentDocCeki) => c.packingGroupCode ?? "" },
         { key: "barcode", label: L.barkodNo, align: "l", kind: TEXT, value: (c) => c.barcode ?? "—" },
+        // Müşteri barkodu (D4-F3) — OPT-IN (`defaultHidden`): eski belgeler bayt-aynı; eski snapshot "—".
+        { key: "customerCode", label: L.musteriBarkodu, align: "l", defaultHidden: true,
+          kind: TEXT, value: (c: ShipmentDocCeki) => c.customerCode ?? "—" },
         // Varsayılan GÖRÜNÜR (2026-08-05 ürün kararı — lot no müşterinin de
         // sorduğu bilgi). Normal blocklist: `columns.ceki.hidden` ile kapatılır.
         { key: "batchNumber", label: L.parti, align: "l", kind: TEXT, value: (c) => c.batchNumber ?? "—" },

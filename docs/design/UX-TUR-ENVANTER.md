@@ -293,6 +293,8 @@ Bugün `Electron/eslint.config.mjs` `KATALOG_DOSYALARI` iki karo dosyasını `ma
 | OK | `/cost/calculator` | Maliyet & Teklif › Hızlı Hesaplayıcı | var | cost:read | maliyetEnabled | 10-25 MAL-3 |
 | OK | `/cost/finishing-rates` | Maliyet & Teklif › Fason Tarifeleri | var | cost:read | maliyetEnabled | 10-25 MAL-3 |
 | OK | `/cost/items` | Maliyet & Teklif › Maliyet Kartları | var | cost:read | maliyetEnabled | 10-25 MAL-3 |
+| OK | `/cost/machine-rates` | Maliyet & Teklif › Makine Saat Ücretleri | var | cost:read | maliyetEnabled | 10-31 D4-G1b |
+| OK | `/cost/consumable-norms` | Maliyet & Teklif › Hizmet Sarf Normları | var | cost:read | maliyetEnabled | 10-31 D4-G1b |
 | OK | `/cost/parameters` | Maliyet & Teklif › Maliyet Parametreleri | var | cost:read | maliyetEnabled | 10-25 MAL-3 |
 | OK | `/cost/price-lists` | Maliyet & Teklif › Fiyat Listeleri | var | price-list:read | maliyetEnabled | 10-26 MAL-5 |
 | OK | `/cost/quotes` | Maliyet & Teklif › Teklifler | var | quote:read | maliyetEnabled | 10-26 MAL-5 |

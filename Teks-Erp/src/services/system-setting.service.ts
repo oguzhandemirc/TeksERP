@@ -833,6 +833,8 @@ export const SETTING_KEYS = {
    *  istek, yoksa istasyonun `defaultLabelCopies`i, o da yoksa `label.copies`.
    *  Çözücü TEK: `services/helpers/label-copies.helper.ts`. */
   LABEL_COPIES_SOURCE: "label.copiesSource",
+  /** D4-F3: müşteri barkodu basan şablonda top kodsuzsa — BLOCK (400) | ROLL_BARCODE (iç barkod + uyarı). */
+  LABEL_CUSTOMER_CODE_MISSING: "label.customerCodeMissing",
   /** Sistem VARSAYILAN etiket medyası (Etiket Stüdyosu v2 — "Boyutlar" kataloğu
    *  emekli). Cihazsız baskı/önizleme/kartela bu boyutu kullanır. JSON:
    *  { widthMm, heightMm, dpi, gapMm, marginMm }. */
@@ -1071,6 +1073,12 @@ export type LabelCopiesSource = "GLOBAL" | "STATION";
 export const LABEL_COPIES_SOURCES: LabelCopiesSource[] = ["GLOBAL", "STATION"];
 /** Varsayılan `GLOBAL` — BUGÜNKÜ davranış (hiçbir istemci akış etiketine `copies` göndermiyor; ölçüldü 2026-10-24). */
 export const DEFAULT_LABEL_COPIES_SOURCE: LabelCopiesSource = "GLOBAL";
+
+/** D4-F3: müşteri barkodu basan şablonda kod yoksa. */
+export type LabelCustomerCodeMissing = "BLOCK" | "ROLL_BARCODE";
+export const LABEL_CUSTOMER_CODE_MISSING_MODES: LabelCustomerCodeMissing[] = ["BLOCK", "ROLL_BARCODE"];
+/** Varsayılan `BLOCK` — bugün CUSTOMER_CODE kaynaklı şablon olmadığından etkisiz (bugünkü davranış değişmez). */
+export const DEFAULT_LABEL_CUSTOMER_CODE_MISSING: LabelCustomerCodeMissing = "BLOCK";
 
 /** Sevkin fatura izi nereden yazılır. `dis` = bugünkü davranış. */
 export type ShippingInvoiceMode = "dis" | "ic" | "ikisi";
@@ -2252,6 +2260,8 @@ export interface FeatureFlags {
   labelCopies: number;
   /** Akış etiketi adedinin kaynağı — `GLOBAL` (varsayılan) | `STATION`. */
   labelCopiesSource: LabelCopiesSource;
+  /** D4-F3 (`label.customerCodeMissing`). */
+  labelCustomerCodeMissing: LabelCustomerCodeMissing;
   /** Faz-2 opt-in: native komutları yazıcıya doğrudan (RAW TCP 9100) gönder (default false). */
   nativeSendEnabled: boolean;
   /** Mobil (HC-06/BT) baskıda raster GW bitmap gönderilsin mi (default false → komut yolu).
@@ -2711,6 +2721,7 @@ export class SystemSettingService {
       loginMethods: await readLoginMethods(cacheClient),
       labelCopies: await readLabelCopies(cacheClient),
       labelCopiesSource: await readLabelCopiesSource(cacheClient),
+      labelCustomerCodeMissing: await readLabelCustomerCodeMissing(cacheClient),
       nativeSendEnabled: await readLabelNativeSendEnabled(cacheClient),
       mobileRasterEnabled: await readMobileRasterEnabled(cacheClient),
       scrapGradeLabelEnabled: await readScrapGradeLabelEnabled(cacheClient),
@@ -4936,6 +4947,19 @@ export class SystemSettingService {
         SETTING_KEYS.LABEL_COPIES,
         Math.floor(v),
         "Top etiketi kopya adedi — bir baskıda kaç etiket çıkar (üst+alt için 2)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "labelCustomerCodeMissing")) {
+      const v = input.labelCustomerCodeMissing;
+      if (typeof v !== "string" || !LABEL_CUSTOMER_CODE_MISSING_MODES.includes(v as LabelCustomerCodeMissing)) {
+        throw AppError.badRequest("Müşteri barkodu yoksa davranışı BLOCK ya da ROLL_BARCODE olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.LABEL_CUSTOMER_CODE_MISSING,
+        v,
+        "Müşteri barkodu basan şablonda top kodsuzsa: BLOCK (basma, 400) | ROLL_BARCODE (iç barkod + uyarı)",
         userId
       );
     }
@@ -8359,6 +8383,11 @@ export async function readLabelCopies(
 
 /** Akış etiketinin en çok kopya adedi — genel ayar, istasyon varsayılanı ve istek aynı tavanı paylaşır. */
 export const LABEL_COPIES_MAX = 5;
+
+/** D4-F3: müşteri barkodu yoksa davranışı — tanınmayan değer varsayılana (`BLOCK`) düşer. */
+export function readLabelCustomerCodeMissing(tx?: Pick<typeof prisma, "systemSetting">): Promise<LabelCustomerCodeMissing> {
+  return readServiceEnum(SETTING_KEYS.LABEL_CUSTOMER_CODE_MISSING, LABEL_CUSTOMER_CODE_MISSING_MODES, DEFAULT_LABEL_CUSTOMER_CODE_MISSING, tx);
+}
 
 /** Etiket adedi kaynağı. Çöp değer → varsayılan (`GLOBAL`, bugünkü davranış). */
 export async function readLabelCopiesSource(

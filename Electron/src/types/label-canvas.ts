@@ -90,13 +90,19 @@ export interface TextElement extends ElementBase {
   textCase?: TextCase;
 }
 
+/** Barkod/QR'ın basacağı kod — backend `config/label-elements.ts` `ScanSource` aynası (D4-F3).
+ *  Yok → ROLL (iç top barkodu). CUSTOMER_CODE → topa bağlı müşteri barkodu. */
+export type ScanSource = "ROLL" | "CUSTOMER_CODE";
+
 export interface QrElement extends ElementBase {
   type: "qr";
   scale?: number; // 2-15, yok → 5
+  source?: ScanSource;
 }
 
 export interface Code128Element extends ElementBase {
   type: "code128";
+  source?: ScanSource;
   hMm?: number; // yok → 9
   human?: boolean; // yok → true
   /** Modül (dar çubuk) kalınlığı dot (1-4). Yok → 2. Genişlik serbest ölçü değil —
