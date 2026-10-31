@@ -118,6 +118,23 @@ async function shiftHoursByDay(intervals: Map<string, Array<[number, number]>>, 
   return out;
 }
 
+type RateRow = { machineId: string; hourRateTry: Prisma.Decimal; normMPerHour: Prisma.Decimal | null; createdAt: Date; revokedAt: Date | null };
+
+/** K7 tek kaynak: makinenin `at` anında geçerli saat ücreti (`machineCostRateHistory` satırlarından; yoksa null). */
+export function machineRateAt<R extends RateRow>(rates: R[], machineId: string, at: Date): R | null {
+  return rates.filter((r) => r.machineId === machineId && isCostRateValidAt(r, at)).at(-1) ?? null;
+}
+
+/** K7 tek kaynak: NORM süresi = metre ÷ ücretteki saatlik norm; norm yoksa null (0 değil). */
+export function normHours(meters: Prisma.Decimal, rate: RateRow | null): Prisma.Decimal | null {
+  return rate?.normMPerHour && rate.normMPerHour.gt(0) ? meters.div(rate.normMPerHour) : null;
+}
+
+/** K7 tek kaynak: saat × ücret (TL). Süre ya da ücret bilinmiyorsa null — kârlılık ve dokuma gerçek maliyeti bunu okur. */
+export function machineHourCostTry(hours: Prisma.Decimal | null, rate: RateRow | null): Prisma.Decimal | null {
+  return hours && rate ? hours.mul(rate.hourRateTry) : null;
+}
+
 /** İşin süresini aynı okumaya bağlı kalemler arasında böler; son pay kalanı alır (Σ pay = iş süresi, tek sayım). */
 function shareOf(h: Prisma.Decimal, index: number, count: number): Prisma.Decimal {
   if (count <= 1) return h;
@@ -150,7 +167,7 @@ export async function computeMachineCosts(
   const intervals = mode === "NORM" ? new Map<string, Array<[number, number]>>() : await machineIntervals(winStart, winEnd);
   const machineIds = [...new Set([...attributed.map((w) => w.machineId), ...intervals.keys()])].sort();
   const rates = await machineCostRateHistory(prisma, machineIds);
-  const rateAt = (m: string, at: Date) => rates.filter((r) => r.machineId === m && isCostRateValidAt(r, at)).at(-1) ?? null;
+  const rateAt = (m: string, at: Date) => machineRateAt(rates, m, at);
   const hours = mode === "OTURUM" ? sessionHoursByDay(intervals) : mode === "VARDIYA" ? await shiftHoursByDay(intervals, winStart, winEnd) : new Map<string, Prisma.Decimal>();
   const sessionDays = mode === "VARDIYA" ? sessionHoursByDay(intervals) : hours;
   const { dayMeters: meters, works } = await machineWorkMeters(machineIds, winStart, winEnd);
@@ -164,8 +181,8 @@ export async function computeMachineCosts(
     let h: Prisma.Decimal | null = null;
     if (!work) missing.push("MAKINE_METRESI");
     else if (mode === "NORM") {
-      if (rate?.normMPerHour && rate.normMPerHour.gt(0)) h = work.meters.div(rate.normMPerHour);
-      else missing.push("MAKINE_NORMU");
+      h = normHours(work.meters, rate);
+      if (!h) missing.push("MAKINE_NORMU");
     } else {
       const k = dayKey(ref.machineId, work.day);
       const dh = hours.get(k);
@@ -176,7 +193,7 @@ export async function computeMachineCosts(
     }
     if (h) h = shareOf(h, l.readingShareIndex, l.readingShareCount);
     if (!rate) missing.push("MAKINE_TARIFESI");
-    byLink.set(l.id, { machineAttributed: true, machineHours: h, machineTry: h && rate ? h.mul(rate.hourRateTry) : null, missing });
+    byLink.set(l.id, { machineAttributed: true, machineHours: h, machineTry: machineHourCostTry(h, rate), missing });
   }
 
   const idle: IdleMachineDay[] = [];
@@ -186,7 +203,7 @@ export async function computeMachineCosts(
     const at = factoryDayEndOfKey(day);
     if (at.getTime() < rangeStart.getTime() || at.getTime() >= rangeEnd.getTime()) continue;
     const rate = rateAt(machineId, at);
-    idle.push({ month: day.slice(0, 7), day, machineId, hours: h, costTry: rate ? h.mul(rate.hourRateTry) : null, missing: rate ? [] : ["MAKINE_TARIFESI"] });
+    idle.push({ month: day.slice(0, 7), day, machineId, hours: h, costTry: machineHourCostTry(h, rate), missing: rate ? [] : ["MAKINE_TARIFESI"] });
   }
   idle.sort((a, b) => a.day.localeCompare(b.day) || a.machineId.localeCompare(b.machineId));
   return { byLink, idle };

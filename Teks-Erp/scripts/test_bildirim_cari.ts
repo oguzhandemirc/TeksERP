@@ -8,7 +8,8 @@
 //      (`.gt/.gte/.lt/.lte/.cmp/.comparedTo`) kod yok, `cari.ts` çekirdeği (`riskExposureTx`) çağırıp `exceeded` okur.
 //   §1 kilit koy → tek OUTBOX satırı (kilit başına), aynı token replay ikinci bildirim DOĞURMAZ, aktif kilit
 //      varken ikinci koyma 409 ve bildirimsiz; yük = katalog payloadAlanlari, sayısal tutar yok.
-//   §2 görme: finance:read'li kişi gelen kutusunda görür; finance:read'siz (yalnız shipping:write) görmez.
+//   §2 görme: finance:read'li kişi gelen kutusunda görür; finance:read'siz sevkçi (shipping:write) de görür (D4-KUC3a);
+//      derin bağlantı `?focus=<hesapId>`.
 //   §3 kilit aç → tek `cari.kilit-acildi`; ikinci açma 409 → ikinci bildirim yok.
 //   §4 KOSUL (gerçek okuyucu, gerçek tarayıcı): ilk tur SESSİZ TABAN (0 ACILDI, koşul açık) · tabandan sonra
 //      yeni aşım → tek ACILDI + kutu · sürer → yeni satır yok · okuyucu fırlatır → koşul AÇIK · bakiye limit
@@ -30,6 +31,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { AuditService } from "../src/services/audit.service";
+import { cariService } from "../src/services/cari.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { customerService } from "../src/routes/customer.routes";
 import { cariHoldService } from "../src/services/cari-hold.service";
@@ -218,7 +220,12 @@ async function body(): Promise<void> {
   const im = await inbox(muhasebe, KILIT);
   const isv = await inbox(sevkci, KILIT);
   check("§2a ⭐ finance:read'li muhasebeci gelen kutusunda TEK satır görür", im === 1, `${im}`);
-  check("§2b ⭐ finance:read'siz sevkiyatçı (varsayılan alıcı izni shipping:write olsa da) GÖRMEZ", isv === 0, `${isv}`);
+  // 1e kararı (D4-KUC3a): kilitli caride sevk durur → sevkçi (shipping:write) kilidi bilmeli; görme DNF'si genişledi.
+  check("§2b ⭐ finance:read'siz sevkiyatçı (shipping:write) kilit bildirimini GÖRÜR", isv === 1, `${isv}`);
+  const yol1 = renderNotification(KILIT, (o1[0]?.payload ?? {}) as Record<string, unknown>, "OLAY").yol;
+  check("§2c derin bağlantı cari hesabına odaklanır (?focus=<hesapId>)", yol1 === `/finance/cari?focus=${k.cariId}`, yol1);
+  const odak = await cariService.list({ id: k.cariId, pageSize: 5 });
+  check("§2d odak hedefi: cari listesi `filter[id]` ile o hesabı tek satır döner", odak.data.length === 1 && odak.data[0]!.id === k.cariId, `${odak.data.length}`);
 
   console.log("\n── §3 kilit aç ──");
   await cariHoldService.release(holdId, `${TAG} tahsil edildi`, acan);
@@ -228,7 +235,7 @@ async function body(): Promise<void> {
   const temiz3 = payloadClean(ACILDI, o3[0]?.payload);
   check("§3b açılış yükü beyanlı, açılış sebebi (serbest metin) yok", temiz3 === "" && !JSON.stringify(o3[0]?.payload ?? {}).includes("tahsil"), temiz3);
   await dispatch();
-  check("§3c açılış muhasebeciye gider (açan kişinin kendisine değil), sevkiyatçıya gitmez", (await inbox(muhasebe, ACILDI)) === 1 && (await inbox(sevkci, ACILDI)) === 0 && (await inbox(acan, ACILDI)) === 0);
+  check("§3c açılış muhasebeciye ve sevkiyatçıya gider (sevk yeniden açık — D4-KUC3a), açan kişinin kendisine değil", (await inbox(muhasebe, ACILDI)) === 1 && (await inbox(sevkci, ACILDI)) === 1 && (await inbox(acan, ACILDI)) === 0);
 
   console.log("\n── §4 KOSUL risk limiti aşıldı ──");
   registerCariConditionSources();

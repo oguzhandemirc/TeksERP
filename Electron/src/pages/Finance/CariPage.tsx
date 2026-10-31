@@ -14,6 +14,7 @@ import { cariRoleLabel, listCari, money, type CariRow } from "./service";
 import { StatementDialog } from "./StatementDialog";
 import { activityFilters, CARI_ACTIVITY_DEFAULT, CARI_ACTIVITY_OPTIONS, CARI_EMPTY_ACTIVE_HINT, CARI_EMPTY_ALL_HINT, type CariActivityFilter } from "./cariListFilters";
 import { CariEditDialog } from "./CariEditDialog";
+import { useCariFocus } from "./useCariFocus";
 
 /**
  * Para birimi başına AYRI satır — tek sayıya indirmek 1000 USD ile 30.000 TL'yi toplamak olurdu.
@@ -46,6 +47,8 @@ export function CariPage() {
   const [activity, setActivity] = useState<CariActivityFilter>(CARI_ACTIVITY_DEFAULT);
   const [statementFor, setStatementFor] = useState<CariRow | null>(null);
   const [editFor, setEditFor] = useState<CariRow | null>(null);
+  // Bildirimden `?focus=<hesapId>` → o carinin kartı (ekstre) açılır (D4-KUC3a).
+  useCariFocus(setStatementFor);
 
   const q = useQuery({
     queryKey: ["finance", "cari", search, filters.direction, filters.subcontractor, onlyWithBalance, activity],

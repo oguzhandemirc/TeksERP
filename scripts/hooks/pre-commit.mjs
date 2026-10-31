@@ -31,6 +31,7 @@ import { deftereYaz } from "./lib/kapi-defteri.mjs";
 import { etkilenenProjeler, stagedFiles } from "./lib/staged.mjs";
 import { agirSurecSayisi, slotAl } from "./lib/semafor.mjs";
 import { KAPI_ZAMAN_ASIMI_ENV, kapiZamanAsimiSn } from "./lib/zaman-asimi.mjs";
+import { KAPI_AGIR_CI_ENV, agirAdimlariAyikla } from "./lib/agir-ci.mjs";
 import { dagitimBekcisiTetigi } from "../lib/dagitim.mjs";
 import { panelKimlikTetigi } from "../lib/panel-kimlik.mjs";
 // Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
@@ -378,9 +379,17 @@ if (staged.some((f) => PAROLA_KASASI_TETIK.test(f))) {
 
 if (adimlar.length === 0) process.exit(0);
 
+// Paralel ajan yükünde ağır adımlar CI'a bırakılabilir (`TEKSERP_KAPI_AGIR_CI=1`; iniş CI yeşiline bağlı) — lib/agir-ci.mjs.
+const { kalan, atlanan } = agirAdimlariAyikla(adimlar);
+if (atlanan.length > 0) {
+  process.stderr.write(`⏭ ağır adımlar CI'a bırakıldı (${KAPI_AGIR_CI_ENV}=1): ${atlanan.map((a) => a.ad).join(" · ")}\n`);
+  deftereYaz({ wt: WT, adim: `ağır adımlar CI'a (${atlanan.length})`, sonuc: "⏭", sn: 0, cikis: 0 });
+}
+if (kalan.length === 0) process.exit(0);
+
 // UCUZ KAYIT ADIMLARI ÖNCE (doküman · mandallar · hijyen · kapının kendisi), ağırlar
 // sonra — ısırıkların tamamı kayıt sınıfı ve tip+lint'ten sonra düşüyordu (lib/adim-sirasi.mjs).
-const sirali = sirala(adimlar);
+const sirali = sirala(kalan);
 
 // KAPI SEMAFORU (1e hükmü 2026-09-13): ağır adım (tsc/eslint/test) varsa makine
 // genelinde en çok KAPASITE kapı aynı anda koşar — ölçüm ve tuzaklar lib/semafor.mjs.

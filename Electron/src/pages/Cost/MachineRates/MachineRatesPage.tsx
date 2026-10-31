@@ -1,7 +1,7 @@
 // =============================================================================
 // MALİYET › MAKİNE SAAT ÜCRETLERİ (D4-G1b) — `cost:read` görür, `cost:write` girer/değiştirir/kaldırır.
-// Makine listesi `station:read` ister: izin varsa ücretsiz makineler de satır olur, yoksa yalnız ücretli
-// makineler görünür (izinsiz sorgu ATILMAZ — koşulsuz 403 üretmesin).
+// Makine listesi `station:read` varsa makine ucundan, yoksa `cost:read` kapsamlı hafif seçenek ucundan
+// (`/api/cost/machine-options`, yalnız id/kod/ad) gelir — Muhasebe de ücretsiz makineye satırından ücret girer.
 // =============================================================================
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -38,13 +38,13 @@ export function MachineRatesPage() {
   const canListMachines = hasPermission("station:read");
   const q = useQuery({ queryKey: ["cost-machine-rates", "active"], queryFn: machineRateService.listActive });
   const machinesQ = useQuery({
-    queryKey: ["machines", "cost-rate-list"],
-    queryFn: async () => (await loadAllForPicker(machineService, { sortBy: "code" })).data,
-    enabled: canListMachines,
+    queryKey: ["machines", "cost-rate-list", canListMachines ? "station" : "cost"],
+    queryFn: async (): Promise<MachineBrief[]> =>
+      canListMachines ? (await loadAllForPicker(machineService, { sortBy: "code" })).data : machineRateService.machineOptions(),
   });
   const [edit, setEdit] = useState<Edit | null>(null);
   const [history, setHistory] = useState<MachineCostRate | null>(null);
-  const rows = mergeMachineRows(q.data ?? [], canListMachines ? (machinesQ.data ?? null) : null);
+  const rows = mergeMachineRows(q.data ?? [], machinesQ.data ?? null);
   return (
     <PageShell>
       <PageHeader
@@ -88,9 +88,6 @@ export function MachineRatesPage() {
               </tbody>
             </table>
           </div>
-        )}
-        {!canListMachines && (
-          <p className="mt-3 text-xs text-muted-foreground">Ücreti olmayan makineleri görmek ve yeni ücret girmek için istasyon okuma izni (station:read) gerekir.</p>
         )}
       </PageBody>
       {edit && <MachineRateDialog onClose={() => setEdit(null)} current={edit.current} machine={edit.machine} />}

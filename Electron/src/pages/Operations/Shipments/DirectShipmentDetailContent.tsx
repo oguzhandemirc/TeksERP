@@ -9,6 +9,8 @@ import { safeFormat } from "@/lib/format";
 import { apiErrorText } from "@/lib/api-error";
 import { shipmentService } from "./service";
 import { DirectShipPrintDialog } from "./DirectShipPrintDialog";
+import { DirectShipmentRollListButton } from "./DirectShipmentRollListButton";
+import { DIRECT_ROLL_COLUMNS, directRollBarcode } from "./directRollListExport";
 
 const fmt = (n: number) =>
   Number(n).toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
@@ -119,10 +121,18 @@ export function DirectShipmentDetailContent({
             <Card>
               <CardContent className="p-0">
                 <table className="w-full text-sm">
+                  {/* Başlıklar Excel'le aynı listeden (DIRECT_ROLL_COLUMNS) — iki yüzey kolon ayrışmasın. */}
+                  <thead className="border-b text-left text-[11px] uppercase text-muted-foreground">
+                    <tr>
+                      {DIRECT_ROLL_COLUMNS.map((c) => (
+                        <th key={c.key} className={`px-3 py-1.5 font-medium ${c.key === "width" || c.key === "meters" ? "text-right" : ""}`}>{c.header}</th>
+                      ))}
+                    </tr>
+                  </thead>
                   <tbody>
                     {d.rolls.map((r) => (
                       <tr key={r.id} className="border-b last:border-0">
-                        <td className="px-3 py-2 font-mono text-xs">{r.barcode ?? "açık kumaş"}</td>
+                        <td className="px-3 py-2 font-mono text-xs">{directRollBarcode(r)}</td>
                         <td className="px-3 py-2">
                           <span className="text-muted-foreground">{r.itemName}</span>
                           {r.colorName && (
@@ -176,6 +186,7 @@ export function DirectShipmentDetailContent({
             </div>
           )}
 
+          <DirectShipmentRollListButton detail={d} />
           <Button type="button" className="w-full gap-1.5" onClick={() => setPrintOpen(true)}>
             <FileText className="h-4 w-4" /> İrsaliye
           </Button>
