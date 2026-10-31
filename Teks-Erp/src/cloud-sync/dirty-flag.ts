@@ -18,6 +18,7 @@ import { RECORD_PROJECTIONS, SNAPSHOT_PROJECTIONS, SYNC_AUX_READS } from "./proj
  * iki yönlü ölçer (eksik satır = o tablonun yazımı olay turu doğurmaz; fazla = ölü beyan).
  */
 export const READS_MODEL_MAP: Readonly<Record<string, string>> = {
+  batches: "Batch",
   cari_balances: "CariBalance",
   cari_holds: "CariHold",
   payment_allocations: "PaymentAllocation",
