@@ -443,6 +443,11 @@ export function OrderDetailSheet({
                                   {p.property.name}
                                 </Badge>
                               ))}
+                              {(line.targetValues ?? []).map((t) => (
+                                <Badge key={`tv-${t.propertyId}`} variant="secondary" className="text-[10px]">
+                                  {t.property?.name ?? "Hedef"}: {t.value?.name ?? "—"}
+                                </Badge>
+                              ))}
                             </div>
                           )}
                           <OrderLineWoChips links={line.workOrderLinks} />

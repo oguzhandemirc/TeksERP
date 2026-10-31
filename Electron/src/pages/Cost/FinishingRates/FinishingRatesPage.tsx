@@ -14,7 +14,7 @@ import { CostQueryError } from "../shared/CostQueryState";
 import { fmtDecFull, fmtPct } from "../shared/format";
 import { FinishingRateDialog } from "./FinishingRateDialog";
 import { FinishingRateHistorySheet } from "./FinishingRateHistorySheet";
-import { FINISHING_BASIS_LABEL, finishingRateService, type FinishingRate } from "./service";
+import { FINISHING_BASIS_LABEL, finishingBasisUnit, finishingRateService, type FinishingRate } from "./service";
 
 export function FinishingRatesPage() {
   const q = useQuery({ queryKey: ["cost-finishing-rates", "active"], queryFn: finishingRateService.listActive });
@@ -57,7 +57,7 @@ export function FinishingRatesPage() {
                     <td className="px-3 py-2"><span className="font-medium">{r.code}</span> <span className="text-muted-foreground">{r.name}</span></td>
                     <td className="px-3 py-2">{r.subcontractor?.name ?? "—"}</td>
                     <td className="px-3 py-2">{FINISHING_BASIS_LABEL[r.basis]}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmtDecFull(r.pricePerM)} {r.currency}/m</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{fmtDecFull(r.pricePerM)} {r.currency}/{finishingBasisUnit(r.basis)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{fmtPct(r.typicalShrinkPct)}</td>
                     <td className="px-3 py-2">{fmtFactoryDate(r.createdAt)}</td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
