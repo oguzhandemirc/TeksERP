@@ -164,9 +164,10 @@ export async function updateWeaveDesign(id: string, body: Record<string, unknown
 /** Pasife al — aktif kumaş bağlıyken 409 + liste (MV-06); atomik claim. */
 export async function deactivateWeaveDesign(id: string, userId?: string): Promise<{ id: string }> {
   await getWeaveDesign(id);
-  const users = await prisma.item.findMany({ where: { weaveDesignId: id, isActive: true }, select: { id: true, code: true, name: true }, orderBy: { code: "asc" }, take: 50 });
+  // Canlı ürün = arşivlenmemiş (archive-gate emsali); `isActive` kararı yalnız item-usage helper'ında.
+  const users = await prisma.item.findMany({ where: { weaveDesignId: id, lifecycleStatus: { not: "ARCHIVED" } }, select: { id: true, code: true, name: true }, orderBy: { code: "asc" }, take: 50 });
   if (users.length > 0) {
-    throw AppError.conflict(`Desen kartı ${users.length} aktif üründe kullanılıyor — önce ürünlerden kaldırın.`, { code: "WEAVE_DESIGN_IN_USE", items: users });
+    throw AppError.conflict(`Desen kartı ${users.length} arşivlenmemiş üründe kullanılıyor — önce ürünlerden kaldırın.`, { code: "WEAVE_DESIGN_IN_USE", items: users });
   }
   const claim = await prisma.weaveDesign.updateMany({ where: { id, isActive: true }, data: { isActive: false, updatedById: userId ?? null } });
   if (claim.count === 0) throw AppError.conflict("Desen kartı zaten pasif.");
