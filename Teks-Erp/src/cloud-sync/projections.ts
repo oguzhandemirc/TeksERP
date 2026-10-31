@@ -90,7 +90,7 @@ const SNAPSHOTS: readonly SnapshotProjection[] = [
     // S15 (a): aylık özet + bu ay işlem kırılımı + müşteri ilk 10; hesap ve sıralama fabrikada (`snapshot-profitability.ts`).
     name: "karlilik-ozet", kind: "ANLIK", source: "cloud-sync/snapshot-profitability: profitability.helper computeProfitability (12 ay + bu ay işlem + müşteri ilk 10)",
     cadence: "GUNLUK", permission: "bulut:maliyet:oku", module: "maliyet.enabled",
-    reads: ["invoices", "invoice_lines", "service_billing_links", "cash_transactions", "machine_cost_rates", "service_consumable_norms"],
+    reads: ["invoices", "invoice_lines", "service_billing_links", "cash_transactions", "machine_cost_rates", "service_consumable_norms", "rolls", "subcontractor_receipts", "subcontractor_receipt_items", "finishing_rates", "work_sessions", "shift_instances"],
   },
   {
     name: "stok-karnesi", kind: "ANLIK", source: "reports/stock-scorecard.report.service getStockScorecard",

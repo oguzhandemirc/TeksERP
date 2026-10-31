@@ -61,9 +61,9 @@ function ProfitBody({ veri }: { veri: unknown }) {
         {v.badge ? <Text style={s.badge} testID="karlilik-rozet">{v.badge}</Text> : null}
         {v.settings ? <Text style={s.caption}>{`Hesap: ${v.settings}`}</Text> : null}
       </Card>
-      <SectionHeader title="En kârlı müşteriler" domain="finans" />
+      <SectionHeader title="En kârlı müşteriler (son 12 ay)" domain="finans" />
       <Rows items={v.best} prefix="karli" empty="Kâr bırakan müşteri yok" />
-      <SectionHeader title="En zararlı müşteriler" domain="finans" />
+      <SectionHeader title="En zararlı müşteriler (son 12 ay)" domain="finans" />
       <Rows items={v.worst} prefix="zararli" empty="Zarar ettiren müşteri yok" />
       {v.unknownCustomers ? <Text style={s.caption} testID="karlilik-hesaplanamayan">{v.unknownCustomers}</Text> : null}
       <SectionHeader title="Bu ay işlemler" domain="finans" />

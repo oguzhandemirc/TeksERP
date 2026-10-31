@@ -178,12 +178,14 @@ export function compareMonthsOf(window: ResolvedDayRange): MonthSpan | null {
 
 const monthsRange = (m: MonthSpan) => ({ from: resolveRangeStart(`${m.fromMonth}-01`), to: resolveRangeEnd(lastDayOf(m.toMonth)) });
 
-export function breakdownParameter(selected: ProfitBreakdown): ParametreBeyani {
-  return { ad: "kirilim", etiket: "Kırılım", tur: "secim", deger: selected, secenekler: PROFIT_BREAKDOWNS.map((k) => ({ deger: k, etiket: BREAKDOWN_LABEL[k] })) };
+// Bulut yolu "iş" kırılımını reddeder; beyan yalnız o yüzeyin kabul ettiği seçenekleri ilan eder.
+export function breakdownParameter(selected: ProfitBreakdown, allowed: readonly ProfitBreakdown[] = PROFIT_BREAKDOWNS): ParametreBeyani {
+  return { ad: "kirilim", etiket: "Kırılım", tur: "secim", deger: selected, secenekler: allowed.map((k) => ({ deger: k, etiket: BREAKDOWN_LABEL[k] })) };
 }
 
 export function buildProfitabilitySunumu(p: {
   result: ProfitabilityResult; previous: ProfitabilityResult | null; names: ProfitNames; window: ResolvedDayRange; breakdown: ProfitBreakdown;
+  allowedBreakdowns?: readonly ProfitBreakdown[];
 }): RaporSunumu {
   const { result, previous, names, window, breakdown } = p;
   const total = totalOf(profitGroups(result.rows, "ay", names));
@@ -225,7 +227,7 @@ export function buildProfitabilitySunumu(p: {
       { ad: "Eksik", aciklama: "Norm, fiyat, kur ya da saat ücreti girilmemiş iş; değeri sıfır sayılmaz, boş bırakılır." },
     ],
     parametreler: [
-      ...dayRangeParameters(window.days, window.mode), breakdownParameter(breakdown),
+      ...dayRangeParameters(window.days, window.mode), breakdownParameter(breakdown, p.allowedBreakdowns),
       { ad: "hesap", etiket: "hesap", tur: "metin", deger: settingsSummary(result.settings) },
     ],
     uyarilar: warningsOf(result, notes),

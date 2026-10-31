@@ -6,6 +6,7 @@
 // v2 temel raporlar sonucu `RaporSunumu` olarak gider (ana sayı, kıyas, anlatı FABRİKADA hesaplı);
 // `kisiAdi` işaretli sunum gönderilmez (K-KISI) — bulut sunumu yalnız saklar ve uygulamaya iletir.
 import { gzipSync } from "node:zlib";
+import { AppError } from "../utils/app-error";
 import { z } from "zod";
 import { REPORT_BY_KEY, isReportSurfaced, type ReportKey } from "../constants/report-catalog";
 import { factoryYmd, resolveRangeEnd, resolveRangeStart } from "../constants/time";
@@ -258,8 +259,9 @@ export const REMOTE_REPORTS: readonly RemoteReport[] = [
   // D4-G4 (S15 a): kapı panel ucuyla aynı — maliyet (üretim ∧ maliyet) ∧ ön muhasebe; izin `bulut:maliyet:oku`.
   { key: "maliyet/karlilik", permission: "bulut:maliyet:oku", module: "maliyet.enabled", gate: readFinanceEnabled, params: panelOnlyRejected(cloudProfitabilitySchema), paramNames: ["from", "to", "kiyas", "kirilim"], standard: "DONEMLI", standardParams: dayParams, personalData: "YOK",
     reportRunner: async (p) => {
-      const sunum = await profitabilityReport(dayWindowOf("maliyet/karlilik", p), (p as z.infer<typeof cloudProfitabilitySchema>).kirilim ?? "musteri");
-      if (!sunum) throw new Error("Maliyet ya da ön muhasebe modülü kapalı (MODULE_DISABLED)");
+      const sunum = await profitabilityReport(dayWindowOf("maliyet/karlilik", p), (p as z.infer<typeof cloudProfitabilitySchema>).kirilim ?? "musteri", CLOUD_PROFIT_BREAKDOWNS);
+      // Kapı `availability`de önceden reddeder; bu yalnız istek sırasında modül kapanırsa (yarış) olur.
+      if (!sunum) throw AppError.forbidden("Maliyet ya da ön muhasebe modülü kapalı", { code: "MODULE_DISABLED" });
       return sunum;
     } },
   { key: "finance/alacaklar", permission: "bulut:cari-bakiye:oku", module: "finance.enabled", params: panelOnlyRejected(coreReceivablesQuerySchema), paramNames: ["asOf"], standard: "KESIT", personalData: "YOK",
@@ -365,7 +367,8 @@ export async function computeReportResult(g: {
     if (out === "ZAMAN_ASIMI") return fail("ZAMAN_ASIMI");
     if (carriesPersonName(out)) return fail("RAPOR_KAPALI");
     value = stripUiEnvelope(out);
-  } catch {
+  } catch (e) {
+    if (e instanceof AppError && e.details?.code === "MODULE_DISABLED") return fail("MODUL_KAPALI");
     // İş kuralı hatası (ör. aralık > 366 gün) kullanıcı parametresinin sonucudur.
     return fail("PARAMETRE_GECERSIZ");
   }

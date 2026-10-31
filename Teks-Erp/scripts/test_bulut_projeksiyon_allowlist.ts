@@ -64,6 +64,7 @@ import { buildSnapshots, SNAPSHOT_WIRE_SCHEMAS } from "../src/cloud-sync/snapsho
 import { computeProfitability } from "../src/services/helpers/profitability.helper";
 import { PackageSchema } from "../src/cloud-sync/wire";
 import { REMOTE_REPORTS, carriesPersonName, computeReportResult } from "../src/cloud-sync/report-requests";
+import { AppError } from "../src/utils/app-error";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -436,6 +437,7 @@ async function raporBolumu(): Promise<void> {
       v = await r.reportRunner(r.params.parse({}));
     } catch (e) {
       // Kapalı modül (dokuma/devere/finans) bu DB'de 403 verir; kapı `availability`de ölçülür.
+      if (e instanceof AppError && e.details?.code === "MODULE_DISABLED") continue;
       if (e instanceof Error && /MODULE_DISABLED|kapalı/i.test(e.message)) continue;
       sunumKotu.push(`${r.key}: ${e instanceof Error ? e.message : String(e)}`);
       continue;

@@ -36,6 +36,12 @@ export const READS_MODEL_MAP: Readonly<Record<string, string>> = {
   standard_cost_lines: "StandardCostLine",
   merge_operations: "MergeOperation",
   merge_operation_refs: "MergeOperationRef",
+  // D4-G4 karlilik-ozet: maliyet hesabının okuduğu fason kabul, terbiye tarifesi ve makine oturumu tabloları.
+  subcontractor_receipts: "SubcontractorReceipt",
+  subcontractor_receipt_items: "SubcontractorReceiptItem",
+  finishing_rates: "FinishingRate",
+  work_sessions: "WorkSession",
+  shift_instances: "ShiftInstance",
 };
 
 /** Katalogdan türeyen izlenen tablo kümesi (bekçi §7 bunu `READS_MODEL_MAP` ∪ köklerle kıyaslar). */

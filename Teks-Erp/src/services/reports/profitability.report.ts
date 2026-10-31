@@ -22,11 +22,11 @@ export async function loadNames(results: ProfitabilityResult[]): Promise<ProfitN
   };
 }
 
-export async function profitabilityReport(window: ResolvedDayRange, breakdown: ProfitBreakdown): Promise<RaporSunumu | null> {
+export async function profitabilityReport(window: ResolvedDayRange, breakdown: ProfitBreakdown, allowedBreakdowns?: readonly ProfitBreakdown[]): Promise<RaporSunumu | null> {
   const result = await computeProfitability(monthsOfWindow(window.days));
   if (!result) return null;
   const cmpMonths = compareMonthsOf(window);
   const previous = cmpMonths ? await computeProfitability(cmpMonths) : null;
   const names = await loadNames(previous ? [result, previous] : [result]);
-  return buildProfitabilitySunumu({ result, previous, names, window, breakdown });
+  return buildProfitabilitySunumu({ result, previous, names, window, breakdown, allowedBreakdowns });
 }
