@@ -23,6 +23,9 @@ export const NOTIFICATION_PATRON_MAP: Readonly<Record<NotificationKind, PatronEs
   "kalite.sertifika-suresi-doluyor": { patronKind: null, neden: "bulutta tür yok" },
   "fason.donus-gecikti": { patronKind: null, neden: "bulutta tür yok" },
   "sevkiyat.onay-bekliyor": { patronKind: null, neden: "yalnız fabrika içi iş akışı" },
+  "cari.kilitlendi": { patronKind: "cari-kilit", neden: "bulut cari-hesap.kilit projeksiyonundan üretir (D4-I6, kilit başına tek)" },
+  "cari.kilit-acildi": { patronKind: "cari-kilit", neden: "bulutta aynı türün açılış olayı (`cari-kilit:<kilitId>:acildi`)" },
+  "cari.risk-limiti-asildi": { patronKind: null, neden: "bulutta tür yok (tutar dışarı çıkmaz; risk görünümü fabrika içi)" },
   "dokuma.levent-bitiyor": { patronKind: null, neden: "yalnız fabrika içi (salon işi)" },
   "dokuma.tezgah-alarmi": { patronKind: null, neden: "yalnız fabrika içi (nöbet/kademe alarmı)" },
 };
