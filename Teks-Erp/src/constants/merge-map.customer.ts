@@ -244,6 +244,8 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
       column: "senderCustomerId",
       label: "Gelen belge eşleme sözlüğü",
       uniqueOn: ["scope", "senderCustomerId", "propertyId", "rawKey"],
+      // propertyId nullable ve indeks NULLS NOT DISTINCT: `=` iki NULL'ı kaçırıp UPDATE'i 23505'e düşürürdü.
+      crossSourceOn: { columns: ["scope", "propertyId", "rawKey"], nullSafe: ["propertyId"] },
       policy: "SKIP",
       why: "Aynı ham metin iki gönderende de eşlenmişse survivor'daki eşleme kalır; kaynağınki düşer (sözlük yeniden öğrenir).",
     },
