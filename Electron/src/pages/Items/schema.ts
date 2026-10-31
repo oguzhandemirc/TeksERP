@@ -64,6 +64,9 @@ export const makeItemFormSchema = (isEdit: boolean) =>
       .refine((v) => v === "" || Number(v.replace(",", ".")) > 0, "En sıfırdan büyük olmalı"),
     /** Kumaşın varsayılan çözgü kartı (E4) — yalnız FABRIC'te çizilir, boş = kartsız. */
     warpSpecId: z.string(),
+    /** SY-A4: atkı + desen kartı — yalnız KUMAŞ + dokuma açıkken çizilir, boş = kartsız. */
+    weftSpecId: z.string(),
+    weaveDesignId: z.string(),
     allowedColorIds: z.array(z.string()),
     allowedPropertyIds: z.array(z.string()),
   });
@@ -78,6 +81,8 @@ export const itemFormDefaults: ItemFormValues = {
   linearDensityDen: "",
   widthCm: "",
   warpSpecId: "",
+  weftSpecId: "",
+  weaveDesignId: "",
   allowedColorIds: [],
   allowedPropertyIds: [],
 };

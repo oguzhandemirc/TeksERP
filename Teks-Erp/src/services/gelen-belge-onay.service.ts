@@ -202,7 +202,7 @@ export function aliasKeyAudit(rawKey: string): { rawKeyLength: number; rawKeyDig
   return { rawKeyLength: rawKey.length, rawKeyDigest: createHash("sha256").update(rawKey).digest("hex").slice(0, 12) };
 }
 
-type AliasUpsertRow = { id: string; hitCount: number; inserted: boolean; prevTargetId: string | null };
+type AliasUpsertRow = { id: string; hitCount: number; inserted: boolean; prevTargetId: string | null; propertyId: string | null };
 
 /** Alias öğrenme — onayda çözülmüş (metin → kimlik) eşlemeler sözlüğe; tekrar görülende `hitCount` artar. Best-effort. */
 async function learnAliases(note: { senderCustomerId: string | null; senderText: string | null }, lines: LineRow[], userId: string, processChoices: readonly ProcessChoice[] = []): Promise<void> {
@@ -227,32 +227,35 @@ export type AliasLearnInput = { scope: DeliveryNoteAliasScope; senderCustomerId:
 
 /**
  * Tek anahtar öğrenme — TEK İFADE (E4): eşzamanlı yazarlar aynı anahtarı yazarsa hepsi sayılır, çift satır doğmaz
- * (tekil indeks NULLS NOT DISTINCT; gönderensiz anahtar da tekil). Polimorfik hedef: SON onay kazanır (PROCESS: yalnız aynı özellik içinde).
+ * (tekil indeks NULLS NOT DISTINCT; gönderensiz anahtar da tekil). Polimorfik hedef: SON onay kazanır.
+ * D2b: PROCESS'te kapsam (propertyId) hedef değerin özelliğidir — aynı metin her özellikte ayrı satır; ötekiler NULL.
  * Dışa açık: test_gelen_belge_onay §16b yarışı belirlenimli ölçer. `rawKey` çağıranca katlanmış olmalı (aliasKey).
  */
 export async function learnAlias(a: AliasLearnInput, userId: string): Promise<void> {
   // `prevTargetId` yalnız audit içindir (ifadenin anlık görüntüsü; eşzamanlı çakışmada null olabilir — ayak izi, karar değil).
   const [row] = await prisma.$queryRaw<AliasUpsertRow[]>(Prisma.sql`
-    WITH prev AS (
+    WITH kapsam AS (
+      SELECT (SELECT v."propertyId" FROM "fabric_property_values" v WHERE v."id" = ${a.targetId}::uuid AND ${a.scope}::"DeliveryNoteAliasScope" = 'PROCESS'::"DeliveryNoteAliasScope") AS "propertyId"
+    ), prev AS (
       SELECT "targetId" FROM "delivery_note_aliases"
-      WHERE "scope" = ${a.scope}::"DeliveryNoteAliasScope" AND "senderCustomerId" IS NOT DISTINCT FROM ${a.senderCustomerId}::uuid AND "propertyId" IS NULL AND "rawKey" = ${a.rawKey}
+      WHERE "scope" = ${a.scope}::"DeliveryNoteAliasScope" AND "senderCustomerId" IS NOT DISTINCT FROM ${a.senderCustomerId}::uuid AND "propertyId" IS NOT DISTINCT FROM (SELECT "propertyId" FROM kapsam) AND "rawKey" = ${a.rawKey}
     )
-    INSERT INTO "delivery_note_aliases" ("id", "scope", "senderCustomerId", "rawKey", "targetId", "hitCount", "createdAt", "updatedAt")
-    VALUES (gen_random_uuid(), ${a.scope}::"DeliveryNoteAliasScope", ${a.senderCustomerId}::uuid, ${a.rawKey}, ${a.targetId}::uuid, 1, now(), now()) -- tz-ok: kolonlar timestamptz; ham INSERT Prisma'nın @default/@updatedAt kancasını atlar
-    ON CONFLICT ("scope", "senderCustomerId", "propertyId", "rawKey") DO UPDATE -- D2b: kapsam NULL yazılır (bugünkü anahtar)
+    INSERT INTO "delivery_note_aliases" ("id", "scope", "senderCustomerId", "propertyId", "rawKey", "targetId", "hitCount", "createdAt", "updatedAt")
+    SELECT gen_random_uuid(), ${a.scope}::"DeliveryNoteAliasScope", ${a.senderCustomerId}::uuid, kapsam."propertyId", ${a.rawKey}, ${a.targetId}::uuid, 1, now(), now() FROM kapsam -- tz-ok: kolonlar timestamptz; ham INSERT Prisma'nın @default/@updatedAt kancasını atlar
+    ON CONFLICT ("scope", "senderCustomerId", "propertyId", "rawKey") DO UPDATE
       SET "targetId" = EXCLUDED."targetId", "hitCount" = "delivery_note_aliases"."hitCount" + 1, "updatedAt" = now() -- tz-ok: kolon timestamptz; ham UPDATE @updatedAt kancasını atlar
-      -- PROCESS sözlüğü metin başına tek hedef: başka ÖZELLİĞİN öğrenmesini (ör. düzeltilmiş kurşun gramajı) ezmez, korur.
+      -- Kapsamlı satırda çakışma hep aynı özelliktir; kapsamsız (değer olmayan hedef) PROCESS satırı başka özelliğin öğrenmesini ezmez.
       WHERE "delivery_note_aliases"."scope" <> 'PROCESS'::"DeliveryNoteAliasScope"
          OR NOT EXISTS (SELECT 1 FROM "fabric_property_values" o WHERE o."id" = "delivery_note_aliases"."targetId")
          OR (SELECT o."propertyId" FROM "fabric_property_values" o WHERE o."id" = "delivery_note_aliases"."targetId")
             = (SELECT n."propertyId" FROM "fabric_property_values" n WHERE n."id" = EXCLUDED."targetId")
-    RETURNING "id", "hitCount", (xmax = 0) AS "inserted", (SELECT "targetId" FROM prev) AS "prevTargetId"`);
+    RETURNING "id", "hitCount", (xmax = 0) AS "inserted", (SELECT "targetId" FROM prev) AS "prevTargetId", "propertyId"`);
   if (!row) return; // PROCESS: mevcut öğrenme başka özelliğin → korundu, yazım yok
   const key = aliasKeyAudit(a.rawKey);
   if (row.inserted) {
-    await AuditService.log({ userId, action: "CREATE", tableName: ALIAS_TABLE, recordId: row.id, newData: { scope: a.scope, senderCustomerId: a.senderCustomerId, ...key, targetId: a.targetId, hitCount: row.hitCount } });
+    await AuditService.log({ userId, action: "CREATE", tableName: ALIAS_TABLE, recordId: row.id, newData: { scope: a.scope, senderCustomerId: a.senderCustomerId, propertyId: row.propertyId, ...key, targetId: a.targetId, hitCount: row.hitCount } });
   } else {
-    await AuditService.log({ userId, action: "UPDATE", tableName: ALIAS_TABLE, recordId: row.id, oldData: { targetId: row.prevTargetId, hitCount: row.hitCount - 1 }, newData: { scope: a.scope, ...key, targetId: a.targetId, hitCount: row.hitCount } });
+    await AuditService.log({ userId, action: "UPDATE", tableName: ALIAS_TABLE, recordId: row.id, oldData: { targetId: row.prevTargetId, hitCount: row.hitCount - 1 }, newData: { scope: a.scope, propertyId: row.propertyId, ...key, targetId: a.targetId, hitCount: row.hitCount } });
   }
 }
 

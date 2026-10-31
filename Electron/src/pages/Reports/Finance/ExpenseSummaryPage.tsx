@@ -1,6 +1,7 @@
 import { RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { REPORT_BY_KEY } from "@/lib/report-catalog";
@@ -14,6 +15,14 @@ import { failureOf, useReportV2 } from "@/pages/Reports/_v2/useReportV2";
 
 export const EXPENSE_SUMMARY_KEY = "finance/masraf-ozeti";
 const ENTRY = REPORT_BY_KEY.get(EXPENSE_SUMMARY_KEY)!;
+/** Sunucu satıra Masraf Özeti kovasının anahtarını koyar (`cashCategoryKey`); istemci anahtar ÜRETMEZ. */
+export const EXPENSE_ROW_KEY_FIELD = "kategoriAnahtari";
+
+/** Satır → o kategoriyle süzülmüş Kasa Hareketleri (`?category=<anahtar>`); anahtarsız satır (Toplam vb.) bağsız. */
+export function expenseRowTarget(row: Record<string, unknown>): string | null {
+  const key = row[EXPENSE_ROW_KEY_FIELD];
+  return typeof key === "string" && key.length > 0 ? `/finance/cash-transactions?category=${encodeURIComponent(key)}` : null;
+}
 
 /**
  * Masraf Özeti (D4-H1) — sunucunun v2 zarfını çizer; rapor v2 bayrağından bağımsız (v2 üreteci bu anahtarı
@@ -22,6 +31,8 @@ const ENTRY = REPORT_BY_KEY.get(EXPENSE_SUMMARY_KEY)!;
  */
 export function ExpenseSummaryPage() {
   const navigate = useNavigate();
+  // Kasa Hareketleri rotası `finance:read` ister; izinsiz kullanıcıya tıklanabilir satır (→ yasak sayfası) çizilmez.
+  const canOpenCash = useRoleAccess().hasPermission("finance:read");
   const query = useReportV2(ENTRY);
   const data = query.data;
   const failure = query.isError ? failureOf(query.error) : null;
@@ -52,7 +63,11 @@ export function ExpenseSummaryPage() {
           {failure ? (
             <ReportFailureState failure={failure} error={query.error} onRetry={() => void query.refetch()} />
           ) : data ? (
-            <ReportBody presentation={data} fetchedAt={query.dataUpdatedAt} />
+            <ReportBody
+              presentation={data}
+              fetchedAt={query.dataUpdatedAt}
+              rowLink={canOpenCash ? { target: expenseRowTarget, open: (to) => navigate(to), title: "Bu kategorinin kasa hareketlerini aç" } : undefined}
+            />
           ) : (
             <ReportLoadingState />
           )}
