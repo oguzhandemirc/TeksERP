@@ -192,6 +192,10 @@ async function main(): Promise<void> {
     `INSERT INTO roll_operations (id, "rollId", "workOrderStepId", "operationType", "propertyValueId") VALUES (gen_random_uuid(), $1::uuid, $2::uuid, 'SUBCONTRACTOR_SENT', $3::uuid)`,
     on.srcId, on.stepId, vA).then(() => "kabul", (e: Error) => (String(e.message) + JSON.stringify((e as { meta?: unknown }).meta ?? {})).includes("roll_operations_property_value_ck") ? "CHECK" : e.message.slice(0, 120));
   check("⭐ MIG6: SUBCONTRACTOR_SENT + propertyValueId hâlâ CHECK reddi", ckRed === "CHECK", ckRed);
+  const ckRedQc2 = await prisma.$executeRawUnsafe(
+    `INSERT INTO roll_operations (id, "rollId", "workOrderStepId", "operationType", "propertyValueId") VALUES (gen_random_uuid(), $1::uuid, $2::uuid, 'QC2_COMPLETED', $3::uuid)`,
+    on.srcId, on.stepId, vA).then(() => "kabul", (e: Error) => (String(e.message) + JSON.stringify((e as { meta?: unknown }).meta ?? {})).includes("roll_operations_property_value_ck") ? "CHECK" : e.message.slice(0, 120));
+  check("MIG6: QC2_COMPLETED + propertyValueId de CHECK reddi (gramaj okuyucusuna sızmaz)", ckRedQc2 === "CHECK", ckRedQc2);
 
   // ── §5 ───────────────────────────────────────────────────────────────────
   section("§5 ayar kapıları: bilinmeyen değer reddi");

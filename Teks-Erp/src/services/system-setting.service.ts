@@ -4088,7 +4088,12 @@ export class SystemSettingService {
         userId
       );
     }
-    if (shipReadyDirty && shipReadyBefore) await shipReadyDirty.markReadyWorkOrdersDirty(shipReadyBefore);
+    // Best-effort: ayar zaten yazıldı; bulut işareti düşerse 5 dk emniyet turu yakalar, istek kesilmez (kalan ayarlar yazılır).
+    if (shipReadyDirty && shipReadyBefore) {
+      await shipReadyDirty.markReadyWorkOrdersDirty(shipReadyBefore).catch((e: unknown) => {
+        uyari("bulut-kirletme", `sevke hazırlık politikası değişimi iş emirlerine işaretlenemedi: ${e instanceof Error ? e.message : String(e)}`);
+      });
+    }
     if (Object.prototype.hasOwnProperty.call(input, "shippingReadyNotifyUnits")) {
       const v = input.shippingReadyNotifyUnits;
       if (!Array.isArray(v) || v.some((u) => !SHIP_READY_NOTIFY_UNITS.includes(u as ShipReadyNotifyUnit))) {
