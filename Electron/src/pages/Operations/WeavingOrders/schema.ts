@@ -8,6 +8,10 @@ export const weavingOrderFormSchema = z
     itemId: z.string().min(1, "Kumaş seçilmeli"),
     colorId: z.string().optional().or(z.literal("")),
     warpSpecId: z.string().optional().or(z.literal("")),
+    /** SY-A4: boş = oluştururken ürünün etkin yapısından (sunucu); varyant yalnız seçilirse. */
+    weftSpecId: z.string().optional().or(z.literal("")),
+    weaveDesignId: z.string().optional().or(z.literal("")),
+    recipeId: z.string().optional().or(z.literal("")),
     plannedM: z
       .string()
       .trim()
@@ -52,6 +56,9 @@ export const weavingOrderFormDefaults: WeavingOrderFormValues = {
   itemId: "",
   colorId: "",
   warpSpecId: "",
+  weftSpecId: "",
+  weaveDesignId: "",
+  recipeId: "",
   plannedM: "",
   executionKind: "IN_HOUSE",
   subcontractorId: "",

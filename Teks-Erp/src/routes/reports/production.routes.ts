@@ -15,6 +15,7 @@ import {
   resolveDateRange,
 } from "../../services/reports/_shared";
 import { assertValidUuid } from "../../middlewares/uuid-param.middleware";
+import { readFilterList } from "../../utils/query-parser";
 import {
   getOperatorPerformance,
   getTravelerTrace,
@@ -70,11 +71,17 @@ router.get("/batch-trace/:batchId", ...reportGate("production/batch-trace"), asy
 /**
  * NEREDE TAKILDI (WIP) — anlık bekleyen + dönemsel geçen.
  * Tarih aralığı YALNIZ "geçen" bölümünü etkiler; bekleyen kısım snapshot'tır.
+ * `ownerCustomerId` (CSV): yalnız o müşterilerin emanet toplarının bekleyen/geçen/en uzun bekleyen bölümleri.
  */
+const wipQuerySchema = dateRangeSchema.extend({ ownerCustomerId: z.union([z.string(), z.array(z.string())]).optional() }).strict();
 router.get("/wip", ...reportGate("production/wip"), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const range = resolveDateRange(dateRangeSchema.parse(req.query));
-    const data = await getWipScorecard(range);
+    const { ownerCustomerId, ...rangeInput } = wipQuerySchema.parse(req.query);
+    const range = resolveDateRange(rangeInput);
+    // D4-KUC2 (h): emanet sahibi süzgeci — top listesi (P1a) ile aynı CSV sözdizimi; her kimlik UUID, değilse 400.
+    const ownerCustomerIds = readFilterList(ownerCustomerId);
+    for (const id of ownerCustomerIds) assertValidUuid(id, "ownerCustomerId");
+    const data = await getWipScorecard(range, { ownerCustomerIds });
     res.status(200).json(reportEnvelope(data, range));
   } catch (e) {
     next(e);

@@ -37,6 +37,7 @@ import { assertOrderLineLinkGate } from "./helpers/production-chain-gates.helper
 import { assertNoOpenRunsTx, assertRefs, throwClaimFailureTx } from "./helpers/weaving-order-guards.helper";
 import { countRollsOfWeavingOrder } from "./helpers/weaving-order-of-roll.helper";
 import { itemDefaultWarpSpecId } from "./helpers/tablet-prefill.helper";
+import { normalizeConstructionInput, resolveConstructionPatch, resolveWeavingConstructionChoice } from "./helpers/weaving-order-construction.helper";
 import {
   OPEN_RUN_WHERE,
   WEAVING_ORDER_SELECT,
@@ -170,6 +171,10 @@ function weavingOrderReplay(input: WeavingOrderCreateInput) {
         { ad: "colorId", mevcut: r.colorId, gelen: f.colorId ?? null },
         { ad: "sipariş satırları", mevcut: r.orderLineLinks.map((l) => l.orderLineId).sort().join(","), gelen: lines.map((l) => l.orderLineId).sort().join(",") },
         ...(input.warpSpecId !== undefined ? [{ ad: "warpSpecId", mevcut: r.warpSpecId, gelen: f.warpSpecId ?? null }] : []),
+        // SY-A4: yapı seçimi yalnız GÖNDERİLDİYSE kimliktir (gönderilmeyen atkı/desen etkin yapıdan türer).
+        ...(input.weftSpecId !== undefined ? [{ ad: "weftSpecId", mevcut: r.weftSpecId, gelen: input.weftSpecId || null }] : []),
+        ...(input.weaveDesignId !== undefined ? [{ ad: "weaveDesignId", mevcut: r.weaveDesignId, gelen: input.weaveDesignId || null }] : []),
+        ...(input.recipeId !== undefined ? [{ ad: "recipeId", mevcut: r.recipeId, gelen: input.recipeId || null }] : []),
       ];
     },
     collision: "Bu istemci anahtarı BAŞKA bir dokuma iş emriyle kullanılmış — formu yenileyip yeniden deneyin.",
@@ -199,6 +204,8 @@ async function createWeavingOrderFresh(input: WeavingOrderCreateInput, userId?: 
 
   await assertRefs(fields);
   await assertOrderLinesLinkableTx(prisma, orderLines);
+  // SY-A4: yapı seçimi — gönderilmeyen atkı/desen kartı etkin yapıdan (tek kaynak) dolar; kumaş kapısından SONRA.
+  const construction = await resolveWeavingConstructionChoice(prisma, input.itemId, input);
 
   const outcome = await withBarcodeRetry(
     () =>
@@ -213,6 +220,7 @@ async function createWeavingOrderFresh(input: WeavingOrderCreateInput, userId?: 
         const row = await tx.weavingOrder.create({
           data: {
             ...fields,
+            ...construction,
             weavingOrderNumber,
             status: WeavingOrderStatus.PLANNED,
             clientToken: input.clientToken ?? null,
@@ -253,7 +261,7 @@ export async function updateWeavingOrder(
   input: WeavingOrderUpdateInput,
   userId?: string,
 ): Promise<ApiResponse<WeavingOrderDto>> {
-  const patch = normalizeWeavingOrderFields(input);
+  const patch = { ...normalizeWeavingOrderFields(input), ...normalizeConstructionInput(input) };
   // Z1 (Y1): `orderLines` verildiyse küme replace (③b); verilmediyse bağlara dokunulmaz.
   const orderLines = input.orderLines !== undefined ? normalizeOrderLineLinks(input.orderLines) : null;
   if (Object.keys(patch).length === 0 && orderLines === null) throw AppError.badRequest("Güncellenecek alan yok");
@@ -278,13 +286,14 @@ export async function updateWeavingOrder(
   assertWeavingDateOrder(merged.plannedStartDate, merged.plannedEndDate);
   const retarget = merged.itemId !== before.itemId;
   await assertRefs(merged, retarget ? "NEW_PLAN" : null);
+  const construction = await resolveConstructionPatch(prisma, merged.itemId, normalizeConstructionInput(input), retarget ? before : null);
 
   const updated = await prisma.$transaction(async (tx) => {
     // İLK ifade (dokuma işi satır claim'inden ÖNCE — birleştirme 8030 EXCL tutup o satırı ister).
     if (retarget) await assertItemUsableTx(tx, merged.itemId, "NEW_PLAN");
     const claim = await tx.weavingOrder.updateMany({
       where: { id, status: { in: [...WEAVING_ORDER_OPEN_STATUSES] } },
-      data: { ...patch, updatedById: userId ?? null },
+      data: { ...patch, ...construction, updatedById: userId ?? null },
     });
     if (claim.count === 0) await throwClaimFailureTx(tx, id, "düzenlenemez", "WEAVING_ORDER_NOT_EDITABLE");
     if (orderLines !== null) await replaceOrderLineLinksTx(tx, id, orderLines);

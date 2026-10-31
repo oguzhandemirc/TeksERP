@@ -53,6 +53,10 @@ export interface WeavingOrderPayload {
   itemId: string;
   colorId: string | null;
   warpSpecId: string | null;
+  /** SY-A4: yalnız seçildiyse/temizlendiyse gider (`constructionPayload`). */
+  weftSpecId?: string | null;
+  weaveDesignId?: string | null;
+  recipeId?: string | null;
   plannedM: number | null;
   executionKind: WeavingExecutionKind;
   subcontractorId: string | null;

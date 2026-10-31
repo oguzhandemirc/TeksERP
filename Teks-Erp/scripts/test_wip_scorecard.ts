@@ -12,7 +12,11 @@
 //      sorusu doğar ve operatör durur.
 //   3. ORTALAMA BEKLEME TOP AĞIRLIKLI — istasyon ortalamalarının düz ortalaması,
 //      1 toplu istasyon ile 50 toplu istasyonu eşit sayardı.
+//   7. EMANET SAHİBİ SÜZGECİ (D4-KUC2 h) — top bölümleri yalnız sahibin topları; boş liste = süzgeçsiz.
+//      NEGATİF SONDA (2026-10-31): `ownerScope` hep boş döndürüldü → §7a/§7b/§7c kırmızı (33/3); geri alındı.
 // =============================================================================
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
 import { getWipScorecard } from "../src/services/reports/wip-scorecard.report.service";
 import type { DateRange } from "../src/services/reports/_shared";
@@ -103,7 +107,7 @@ const OTHER: DateRange = {
 
 const ids = {
   movements: [] as string[], rolls: [] as string[], steps: [] as string[],
-  wos: [] as string[], stations: [] as string[],
+  wos: [] as string[], stations: [] as string[], customer: "",
 };
 
 async function main(): Promise<void> {
@@ -326,6 +330,30 @@ async function main(): Promise<void> {
   check("özet bekleyen metrajı kırılımla tutuyor",
     sc.summary.waitingQty === Math.round(sc.byStation.reduce((a, r) => a + r.waitingQty, 0) * 10) / 10,
     `${sc.summary.waitingQty}`);
+
+  // ── 7) EMANET SAHİBİ SÜZGECİ (D4-KUC2 h) ──────────────────────────────────
+  console.log("\n── 7) Emanet sahibi süzgeci ──");
+  const cust = await prisma.customer.create({ data: { code: `${TAG}-C`, name: `${TAG} Sahip` }, select: { id: true } });
+  ids.customer = cust.id;
+  // A'daki 300 m'lik top + C'deki top bu müşterinin emaneti; A'nın 100 m'si ve B'nin geçen topu sahipsiz.
+  const owned = await prisma.rollMovement.findMany({
+    where: { id: { in: ids.movements }, OR: [{ workOrderStepId: stepA, qtyIn: 300 }, { workOrderStepId: stepC }] }, select: { rollId: true },
+  });
+  await prisma.roll.updateMany({ where: { id: { in: owned.map((m) => m.rollId) } }, data: { ownerCustomerId: cust.id } });
+  const sf = await getWipScorecard(RANGE, { ownerCustomerIds: [cust.id] });
+  const fA = sf.byStation.find((r) => r.key === stA.id);
+  check("§7a süzülü: bekleyen yalnız sahibin 2 topu (A 300 m + C), özet = kırılım", sf.summary.waitingCount === 2 && fA?.waitingCount === 1 && fA.waitingQty === 300
+    && sf.byStation.reduce((a, r) => a + r.waitingCount, 0) === 2, `özet ${sf.summary.waitingCount} · A ${fA?.waitingCount}/${fA?.waitingQty}`);
+  check("§7b süzülü: sahipsiz B geçişi sayılmaz; en uzun bekleyen listesi yalnız sahibin topları",
+    !sf.byStation.some((r) => r.key === stB.id && r.passedCount > 0) && sf.oldestWaiting.length === 2 && sf.oldestWaiting.every((w) => owned.some((m) => m.rollId === w.rollId)),
+    `${sf.oldestWaiting.length} satır`);
+  const none = await getWipScorecard(RANGE, { ownerCustomerIds: ["00000000-0000-4000-8000-000000000000"] });
+  check("§7c topsuz müşteri: bekleyen/geçen 0 (sessizce süzgeçsiz DÖNMEZ)", none.summary.waitingCount === 0 && none.summary.passedCount === 0 && none.oldestWaiting.length === 0);
+  const plain = await getWipScorecard(RANGE, { ownerCustomerIds: [] });
+  check("§7d boş süzgeç = süzgeçsiz (bugünkü karne)", plain.summary.waitingCount === sc.summary.waitingCount && plain.summary.passedCount === sc.summary.passedCount);
+  const routeSrc = readFileSync(join(__dirname, "../src/routes/reports/production.routes.ts"), "utf8");
+  check("§7e uç sahip listesini P1a sözdizimiyle (readFilterList) okur, her kimliği UUID denetler (400)",
+    /readFilterList\(ownerCustomerId\)/.test(routeSrc) && /assertValidUuid\(id, "ownerCustomerId"\)/.test(routeSrc) && /getWipScorecard\(range, \{ ownerCustomerIds \}\)/.test(routeSrc));
 }
 
 main()
@@ -336,6 +364,7 @@ main()
     if (ids.steps.length) await prisma.workOrderStep.deleteMany({ where: { id: { in: ids.steps } } });
     if (ids.wos.length) await prisma.workOrder.deleteMany({ where: { id: { in: ids.wos } } });
     if (ids.stations.length) await prisma.station.deleteMany({ where: { id: { in: ids.stations } } });
+    if (ids.customer) await prisma.customer.deleteMany({ where: { id: ids.customer } });
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();
     await pool.end();
