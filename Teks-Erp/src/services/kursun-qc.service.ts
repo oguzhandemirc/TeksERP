@@ -223,6 +223,9 @@ interface StepSummary {
   /// Tablet hata panelini buradan çizer; eski APK yok sayar (paneli hep çizer,
   /// kapalı istasyonda yazma 400 alır).
   inspectionEnabled: boolean;
+  /// D4-E2b: adım istasyonu en ölçer mi (`Station.capturesWidth`). Yalnız true iken anahtar VAR —
+  /// kapalı istasyonda yanıt eskisiyle bayt-aynı; tablet alan yoksa "Ölçülen en" girişini çizmez.
+  capturesWidth?: true;
   /// Atlanmamış sonraki adımın istasyon adı ("Adımı Kapat — Toplar X'e"); son adımsa null.
   nextStepName: string | null;
   /// Adımda açık top yoksa NEDEN boş + topların şu anki istasyonu (KQ-D3, D2 kararı):
@@ -1873,6 +1876,7 @@ export class KursunQcService {
           bypass?.machine.name ?? null,
         ),
         inspectionEnabled: stepCanApplyQuality(step.station),
+        ...(step.station.capturesWidth ? { capturesWidth: true as const } : {}),
         nextStepName,
         emptyStep:
           rolls.length === 0 && step.status !== StepStatus.COMPLETED

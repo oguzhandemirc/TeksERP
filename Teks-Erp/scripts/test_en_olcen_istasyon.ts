@@ -13,6 +13,7 @@
 // §8 kursunFinish (açık kumaş) yolu aynı sözleşme: en yazılır + iz QC2 satırında.
 // §9 ⭐ ensiz KK2 → bitir → yeniden aç → enli KK2: izsiz satır WIDTH_REMEASURE ile damgalanır, en yazılır
 //    (çıkışsız 409 döngüsü yok).
+// §11 ⭐ adım özeti (getStep) capturesWidth yalnız yetenekli istasyonda taşır (tablet alanı buna bağlı).
 // §10 ⭐ kursunFinish örtüşen çift çağrı aynı enle: ikisi de başarılı, tek izli aktif satır (idempotent).
 // Negatif sonda (2026-10-30, elle; PR gövdesinde): restoreMeasuredWidthsTx WHERE'inden
 // `width: trace.widthAfter` çıkarılınca §7a/§7b ❌. (2026-10-31) izsiz satırda damga yerine 409 → §9a/§9b ❌;
@@ -229,6 +230,16 @@ async function main(): Promise<void> {
         ops.length === 2 && ops[0].revokeReason === "WIDTH_REMEASURE" && active.length === 1 && meta(active[0].metadata).widthAfter === 280,
         JSON.stringify(ops.map((o) => [o.revokeReason, o.metadata])),
       );
+    }
+
+    // §11 D4-E2b: adım özeti tablete yeteneği söyler; kapalı istasyonda anahtar YOK (bayt-aynı).
+    {
+      const c = await mkRoll(stCap.id);
+      const p = await mkRoll(stPlain.id);
+      const capSum = (await svc.getStep(c.stepId)).data as unknown as Record<string, unknown>;
+      const plainSum = (await svc.getStep(p.stepId)).data as unknown as Record<string, unknown>;
+      check("§11a ⭐ en ölçen istasyon adımı: capturesWidth=true", capSum.capturesWidth === true, String(capSum.capturesWidth));
+      check("§11b ⭐ en ölçmeyen istasyon adımı: capturesWidth anahtarı YOK", !("capturesWidth" in plainSum), String(plainSum.capturesWidth));
     }
 
     // §10 kursunFinish örtüşen çift çağrı (zaman aşımı sonrası yeniden deneme) aynı enle
