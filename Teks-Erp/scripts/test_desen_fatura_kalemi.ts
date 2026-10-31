@@ -13,14 +13,15 @@
 //   §2 Eşlemesiz desen bayt-aynı: aynı topa eşlemesiz desen eklenince taslak JSON'u değişmez
 //   §3 Ayar KAPALI: fason kabulünde doğan top yalnız bayrağı taşır (özellik satırları bayt-aynı)
 //   §4 Ayar AÇIK: doğan top İE hedef desenini taşır (aynı tx), fatura desen kalemiyle; makbuz
-//      iptali desen satırını DAMGALAR (silmez)
+//      iptali desen satırını DAMGALAR (silmez); MIG6: dönüş işlemi `propertyValueId` = desen (kapalıda null),
+//      iptalde damgalı; CHECK SUBCONTRACTOR_SENT + değer hâlâ reddeder
 //   §5 Ayar dört kapı: bilinmeyen değer servis 400 + Zod reddi; okuma varsayılanı false
 //   §6 AST: kalem zinciri (`.serviceItemId ?? ifade`) yalnız `service-item-pick.helper`de; tek tanım
 //   §7 Geri alma kapısı desen kalemini de görür: desen kalemiyle faturalı topta bayrağı çıkarmak
 //      409 SERVICE_ALREADY_BILLED (bayrak kalemsiz ve kalemli iki yol); faturasız top serbest
 // Negatif sondalar: pickServiceItemId sırası ters çevrilince (bayrak önce) §1/§4 kırmızı · ikinci
 // çözücü (`a.serviceItemId ?? b.serviceItemId`) yazılınca §6 kırmızı · kapı yalnız bayrak kalemine
-// bakınca (desen kalemi kümeye girmeyince) §7 kırmızı.
+// bakınca (desen kalemi kümeye girmeyince) §7 kırmızı · MIG6: dönüş işlemine değer yazılmayınca §4 kırmızı.
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -161,7 +162,8 @@ async function main(): Promise<void> {
     const born = await prisma.roll.findMany({ where: { parentReceiptId: receiptId }, select: { id: true } });
     fx.rollIds.push(...born.map((b) => b.id));
     const props = born.length === 0 ? [] : await prisma.rollProperty.findMany({ where: { rollId: born[0]!.id }, select: { propertyId: true, valueId: true, revokedAt: true }, orderBy: { propertyId: "asc" } });
-    return { receiptId, bornId: born[0]?.id ?? null, props };
+    const op = await prisma.rollOperation.findFirst({ where: { rollId: src, workOrderStepId: w.steps[0]!.id, operationType: "SUBCONTRACTOR_RETURNED" }, select: { id: true, propertyValueId: true } });
+    return { receiptId, bornId: born[0]?.id ?? null, props, srcId: src, stepId: w.steps[0]!.id, op };
   };
 
   section("§3 ayar KAPALI: doğan top yalnız bayrağı taşır");
@@ -170,6 +172,7 @@ async function main(): Promise<void> {
   check("doğan top özellikleri = [BR, değersiz] (bugünkü kabul)", JSON.stringify(off.props) === JSON.stringify([{ propertyId: BR, valueId: null, revokedAt: null }]), JSON.stringify(off.props));
   const offItems = off.bornId ? await itemsOf(off.bornId) : [];
   check("kapalıda fatura bayrak kalemi BRODE", offItems.length === 1 && offItems[0] === BRODE, JSON.stringify(offItems));
+  check("MIG6: kapalıda dönüş işlemi desensiz (propertyValueId null)", !!off.op && off.op.propertyValueId === null, JSON.stringify(off.op));
 
   section("§4 ayar AÇIK: doğan top hedef deseni taşır; iptal damgalar");
   await systemSettingService.setFeatureFlags({ fasonReceiptApplyTargetVariant: true }, actor);
@@ -182,6 +185,13 @@ async function main(): Promise<void> {
   await subSvc.cancelReceipt(on.receiptId, "D4-D3 bekçi iptali", actor, on.bornId ? [on.bornId] : []);
   const afterCancel = on.bornId ? await prisma.rollProperty.findMany({ where: { rollId: on.bornId, propertyId: BRD }, select: { revokedAt: true, revokeReason: true } }) : [];
   check("makbuz iptali: desen satırı SİLİNMEDİ, damgalandı", afterCancel.length === 1 && afterCancel[0]!.revokedAt !== null && !!afterCancel[0]!.revokeReason, JSON.stringify(afterCancel));
+  check("⭐ MIG6: dönüş işlemi (SUBCONTRACTOR_RETURNED) fiilî deseni taşır: propertyValueId = A", on.op?.propertyValueId === vA, JSON.stringify(on.op));
+  const opAfter = on.op ? await prisma.rollOperation.findUnique({ where: { id: on.op.id }, select: { propertyValueId: true, revokedAt: true } }) : null;
+  check("MIG6: iptalde dönüş işlemi SİLİNMEDİ, damgalandı, desen değişmedi", !!opAfter && opAfter.revokedAt !== null && opAfter.propertyValueId === vA, JSON.stringify(opAfter));
+  const ckRed = await prisma.$executeRawUnsafe(
+    `INSERT INTO roll_operations (id, "rollId", "workOrderStepId", "operationType", "propertyValueId") VALUES (gen_random_uuid(), $1::uuid, $2::uuid, 'SUBCONTRACTOR_SENT', $3::uuid)`,
+    on.srcId, on.stepId, vA).then(() => "kabul", (e: Error) => (String(e.message) + JSON.stringify((e as { meta?: unknown }).meta ?? {})).includes("roll_operations_property_value_ck") ? "CHECK" : e.message.slice(0, 120));
+  check("⭐ MIG6: SUBCONTRACTOR_SENT + propertyValueId hâlâ CHECK reddi", ckRed === "CHECK", ckRed);
 
   // ── §5 ───────────────────────────────────────────────────────────────────
   section("§5 ayar kapıları: bilinmeyen değer reddi");
