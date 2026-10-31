@@ -66,6 +66,7 @@ const STATION_EXPORT_COLUMNS: ExportColumn<StationMachineExportRow>[] = [
   { label: "Özellik Uygular", value: (r) => (r.station.appliesProperty ? "Evet" : "Hayır") },
   { label: "Kalite Muayenesi", value: (r) => (r.station.inspectionEnabled ? "Evet" : "Hayır") },
   { label: "Ara İstasyon Kart Akışı", value: (r) => (r.station.appliesQuality ? "Evet" : "Hayır") },
+  { label: "En Ölçer", value: (r) => (r.station.capturesWidth ? "Evet" : "Hayır") },
   { label: "İstasyon Özellik Sayısı", value: (r) => r.propertyCount ?? "" },
   { label: "Makine Kodu", value: (r) => r.machine?.code ?? "" },
   { label: "Makine", value: (r) => r.machine?.name ?? "" },

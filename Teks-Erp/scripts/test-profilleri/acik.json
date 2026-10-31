@@ -68,6 +68,7 @@
     "kartelaMeasurementEnabled": true,
     "fasonNoteMobileEntry": true,
     "fasonShrinkWarnEnabled": true,
+    "fasonReceiptApplyTargetVariant": true,
     "devereLotRequired": true,
     "devereMountTracking": true,
     "devereMountTrackingRequired": true,
