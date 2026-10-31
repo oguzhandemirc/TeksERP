@@ -122,6 +122,7 @@ import { processMeterNumber } from "./helpers/roll-error-meter.helper";
 import { recordRollDefectTx } from "./helpers/roll-defect.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
 import { customerCodeSearchRollIds } from "./helpers/roll-scan-resolve.helper";
+import { readTargetValueChips, type TargetValueChip } from "./helpers/workorder-target-value.helper";
 
 
 // Kesim etiket NİYETİ (hedef sipariş kalemi / müşteri var-mı + müşteri isActive;
@@ -291,6 +292,8 @@ interface TamburStepSummary {
   /** KQ-D7: istasyonda muayene açık mı — tablet "HATA GİR" çekmecesini buna göre çizer. */
   inspectionEnabled: boolean;
   rolls: TamburRollSummary[];
+  /** SY-F1: iş emrinin aktif hedef değerleri ("Kuşak: ZEBRA" çipi); eski tablet alanı yok sayar. */
+  targetValues: TargetValueChip[];
 }
 
 /**
@@ -648,6 +651,7 @@ export class TamburService {
         stationName: step.station.name,
         inspectionEnabled: stepCanApplyQuality(step.station),
         rolls,
+        targetValues: await readTargetValueChips(prisma, step.workOrderId),
       },
     };
   }
@@ -1972,6 +1976,7 @@ export class TamburService {
         stationName: step.station.name,
         inspectionEnabled: stepCanApplyQuality(step.station),
         rolls,
+        targetValues: await readTargetValueChips(prisma, step.workOrderId),
       },
     };
   }
