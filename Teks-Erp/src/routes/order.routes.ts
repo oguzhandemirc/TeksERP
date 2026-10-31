@@ -378,8 +378,6 @@ router.get("/", verifyToken, requireAnyPermission("order:read", "mobile:siparis"
  *       200:
  *         description: Özet sayaçları
  */
-// İzin liste ucuyla AYNI: şeridi göremeyen ama listeyi görebilen bir kullanıcı
-// olmamalı (kart/route hizası dersi — görünen yüzey ile veri yüzeyi ayrışmasın).
 /**
  * @openapi
  * /api/orders/plan-lines:
@@ -408,6 +406,8 @@ router.get("/plan-lines", verifyToken, requirePermission("order:read"), async (r
   }
 });
 
+// İzin liste ucuyla AYNI: şeridi göremeyen ama listeyi görebilen bir kullanıcı
+// olmamalı (kart/route hizası dersi — görünen yüzey ile veri yüzeyi ayrışmasın).
 router.get(
   "/stats",
   verifyToken,
