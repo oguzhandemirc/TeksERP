@@ -1244,7 +1244,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         display: "checks",
         audience: ["Sevkiyat"],
         options: [
-          { value: "IE", label: TERIM.terbiyeIsEmri.tekil, hint: "İş emrinin topları sevke hazır olunca." },
+          { value: "IE", label: TERIM.terbiyeIsEmri.tekil, hint: `${TERIM.terbiyeIsEmri.tekil} topları sevke hazır olunca.` },
           { value: "GB", label: "Gelen belge", hint: "Bir gelen irsaliyenin topları sevke hazır olunca." },
           { value: "PARTI", label: "Müşteri partisi", hint: "Müşterinin parti numarasındaki bütün toplar hazır olunca (“parti bitince”)." },
         ],

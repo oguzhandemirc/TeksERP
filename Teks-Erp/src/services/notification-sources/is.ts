@@ -13,6 +13,7 @@ import prisma from "../../lib/prisma";
 import { effectiveNotificationParams } from "../helpers/notification-params.helper";
 import { getNotificationEntry, type NotificationKind } from "../../constants/notification-catalog";
 import type { ModulKey } from "../../constants/screen-catalog";
+import { TERIM } from "../../constants/terim";
 import { factoryDateTr, factoryDayStart, factoryYmd } from "../../constants/time";
 import { fmtCalendarDate } from "../document-render/fmt-date";
 import { DEADLINE_OPEN_ORDER_STATUSES, daysPastDeadline, isDeadlineApproaching } from "../helpers/order-deadline.helper";
@@ -230,7 +231,7 @@ export const READY_WORK_KIND = "sevkiyat.sevke-hazir" satisfies NotificationKind
 /** Kaynak dakikada bir uyanır; tarama `shipping.ready.scanMinutes`te bir koşar (ayar yeniden başlatmasız değişir). */
 const MINUTE_MS = 60_000;
 const READY_UNIT_OF: Record<ShipReadyNotifyUnit, { unit: ReadyWorkUnit; label: string; type: string; incomingDoc: boolean }> = {
-  IE: { unit: "workOrder", label: "İş emri", type: "isemri", incomingDoc: false },
+  IE: { unit: "workOrder", label: TERIM.terbiyeIsEmri.tekil, type: "isemri", incomingDoc: false },
   GB: { unit: "deliveryNote", label: "Gelen belge", type: "gelen-belge", incomingDoc: true },
   PARTI: { unit: "customerBatch", label: "Parti", type: "musteri-parti", incomingDoc: true },
 };
