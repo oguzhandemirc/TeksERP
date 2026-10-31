@@ -89,6 +89,8 @@ const MOBIL_SRC = path.join(KOK, "mobil/src");
 /** Kapıyı uç seviyesinde taşıyan karma router'lar (aynı dosyada dokuma dışı uç var) — §6u. */
 const UC_KAPILI: ReadonlyArray<{ dosya: string; yollar: string[] }> = [
   { dosya: "routes/reports/temel-dokuma-finans.routes.ts", yollar: ["/dokuma/tezgah-randimani", "/dokuma/duruslar", "/dokuma/levent-dengesi"] },
+  // SY-D3: maliyet router'ında (iplik ihtiyacı dokuma dışı) yalnız dokuma verimlilik ucu dokuma kapısını taşır.
+  { dosya: "routes/reports/maliyet.report.routes.ts", yollar: ["/dokuma-verimlilik"] },
 ];
 // `kapi`: dokuma kapısını DEVRALAN rejim kapısı (D4-A1 `requireMachineStopRegime`: ayar kapalıyken kararı
 // `requireDokumaEnabled`e devreder — §6i ölçer).
@@ -339,7 +341,7 @@ async function main(): Promise<void> {
     for (const yol of u.yollar) {
       const satir = metin.split("\n").find((l) => l.includes(`router.get("${yol}"`)) ?? "";
       const kapiYeri = satir.indexOf(KAPI);
-      const raporKapisi = satir.indexOf("reportGate(");
+      const raporKapisi = Math.max(satir.indexOf("reportGate("), satir.indexOf("requireReportOpen("));
       check(`§6u ⭐ ${u.dosya} ${yol} → kapı UÇ zincirinde, rapor kapısından ÖNCE`, kapiYeri > 0 && raporKapisi > kapiYeri, satir ? "" : "uç bulunamadı");
     }
   }
