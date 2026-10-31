@@ -7,6 +7,7 @@
 //   §2 SEPARATE_BEAM: zemin leventi kendi take-up'ıyla → 100 ÷ 0,92 = 108,696 m (bugünkü davranış)
 //   §3 CREEL: levent yok — zemin leventi bugünkü gibi 108,696 m; ek satır YOK
 //   §4 katmansız ürün: bugünkü davranış (108,696 m)
+//   §5 maliyet önizlemesi iplik fiyatı önerisi katman ipliğini kapsar
 // NEGATİF SONDA: `fastestGroupTakeUpPct` kipe bakmadan zemin döndürünce (SEPARATE'e dönüş) §1 kırmızı.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Bayraklar FOTOĞRAFINA döner.
 // =============================================================================
@@ -20,6 +21,7 @@ import { createWarpBeam, getWarpBeam } from "../src/services/warp-beam.service";
 import { windWarpBeam } from "../src/services/warp-beam-wind.service";
 import { mountBeam } from "../src/services/warp-beam-mount.service";
 import { replaceItemWarpLayers } from "../src/services/item-construction.service";
+import { previewCost } from "../src/services/cost-calc.service";
 
 let pass = 0;
 let fail = 0;
@@ -49,7 +51,8 @@ async function main(): Promise<void> {
   const loom = await prisma.machine.create({ data: { stationId: stLoom.id, name: `${TAG}-T1`, code: `${TAG}-T1`.slice(0, 32), warpBeamSlots: 2 }, select: { id: true } });
   const yarn = await prisma.item.create({ data: { code: `${TAG}-IP`, name: `${TAG} iplik`, itemType: "YARN", unit: "KG", linearDensityDen: 75 }, select: { id: true } });
   const ground = await prisma.warpSpec.create({ data: { code: `${TAG}-CZ`, name: `${TAG} zemin`, yarnItemId: yarn.id, endsCount: 5250, takeUpPct: 8 }, select: { id: true } });
-  const leno = await prisma.warpSpec.create({ data: { code: `${TAG}-CD`, name: `${TAG} döner`, yarnItemId: yarn.id, endsCount: 2720, takeUpPct: 14 }, select: { id: true } });
+  const lenoYarn = await prisma.item.create({ data: { code: `${TAG}-ID`, name: `${TAG} döner iplik`, itemType: "YARN", unit: "KG", linearDensityDen: 50 }, select: { id: true } });
+  const leno = await prisma.warpSpec.create({ data: { code: `${TAG}-CD`, name: `${TAG} döner`, yarnItemId: lenoYarn.id, endsCount: 2720, takeUpPct: 14 }, select: { id: true } });
   const sub = await prisma.subcontractor.create({ data: { code: `${TAG}-F`, name: `${TAG} devereci` }, select: { id: true } });
   const fabric = await prisma.item.create({ data: { code: `${TAG}-KM`, name: `${TAG} tül`, itemType: "FABRIC", warpSpecId: ground.id }, select: { id: true } });
   const plain = await prisma.item.create({ data: { code: `${TAG}-KZ`, name: `${TAG} katmansız`, itemType: "FABRIC", warpSpecId: ground.id }, select: { id: true } });
@@ -99,6 +102,11 @@ async function main(): Promise<void> {
     const r4 = await top(plain.id, 100);
     const c4 = await consumedOf(r4);
     check("§4 katmansız ürün bugünkü gibi 108,696 m", c4.length === 1 && c4[0]!.lengthM?.equals("108.696") === true, String(c4[0]?.lengthM));
+
+    console.log("\n── §5 Maliyet önizlemesi iplik fiyatı önerisi ──");
+    const pv = await previewCost({ itemId: fabric.id });
+    const suggested = pv.oneriler.yarnPrices.map((y) => y.iplikId);
+    check("§5 öneri listesi katman (döner) ipliğini de kapsar", suggested.includes(lenoYarn.id) && suggested.includes(yarn.id), suggested.join(","));
   } finally {
     await prisma.warpBeamEvent.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: rollIds } } });
@@ -112,7 +120,7 @@ async function main(): Promise<void> {
     await prisma.itemWarpLayer.deleteMany({ where: { itemId: fabric.id } });
     await prisma.item.deleteMany({ where: { id: { in: [fabric.id, plain.id] } } });
     await prisma.warpSpec.deleteMany({ where: { id: { in: [ground.id, leno.id] } } });
-    await prisma.item.deleteMany({ where: { id: yarn.id } });
+    await prisma.item.deleteMany({ where: { id: { in: [yarn.id, lenoYarn.id] } } });
     await prisma.subcontractor.delete({ where: { id: sub.id } }).catch(() => undefined);
     await prisma.machine.deleteMany({ where: { id: loom.id } });
     await prisma.station.deleteMany({ where: { id: { in: [stDv.id, stLoom.id] } } });
