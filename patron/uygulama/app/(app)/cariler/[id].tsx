@@ -1,12 +1,13 @@
 // Cari ayrıntısı: kimlik kartı (ad, kod, roller) · bakiye kartları (`cari-hesap`, sunucu `cariKartId` süzgeci; tutar
 // yalnız `.finans` alt satırı izinliyse) · son hareketler (`cari-hareket`, sunucu `cariHesapId` süzgeci — sunucu beyan
 // etmiyorsa bölüm yok) · ekstre isteği (rapor) · son siparişler (`siparis`, `cariKartId`) · iletişim.
-// Bakiye ve vadesi geçen tutar fabrikadan; uygulama hesap yapmaz.
+// Bakiye, vadesi geçen tutar ve cari kilidi (D4-I6) fabrikadan; uygulama hesap yapmaz.
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import type { ProjectionRecord } from "../../../src/api/wire";
 import { can } from "../../../src/lib/access";
+import { cariLockView } from "../../../src/lib/cari-lock";
 import { fmtFactoryDateTime } from "../../../src/lib/factory-time";
 import { formatMoney, formatNumber } from "../../../src/lib/format";
 import { cariKindLabel, cariRoles, destinationLabel } from "../../../src/lib/labels/siparis";
@@ -39,6 +40,7 @@ function BalanceCard({ r }: { r: ProjectionRecord }) {
   const fin = r.finans === undefined ? null : asObj(r.finans);
   const balances = fin ? amounts(fin.bakiyeler, "bakiye") : [];
   const overdue = fin ? amounts(fin.gecikmis, "tutar") : [];
+  const lock = cariLockView(k);
   return (
     <View style={s.card} testID={`cari-hesap-${r.id}`}>
       <View style={[s.stripe, { backgroundColor: t.domain.finans.fg }]} />
@@ -46,7 +48,10 @@ function BalanceCard({ r }: { r: ProjectionRecord }) {
         <IconChip domain="finans" icon="wallet-outline" />
         <Text style={s.cardTitle}>{cariKindLabel(k.tur)}</Text>
         {k.aktif === false ? <StatusBadge kind="bilgi" label="Pasif" size="sm" /> : null}
+        {lock.state === "KILITLI" ? <StatusBadge kind="kritik" label={lock.label} size="sm" testID={`cari-kilit-${r.id}`} /> : null}
       </View>
+      {lock.state === "KILITLI" ? <Text style={s.meta} testID={`cari-kilit-ayrinti-${r.id}`}>{lock.text}</Text> : null}
+      {lock.state === "BILINMIYOR" ? <Text style={s.meta} testID={`cari-kilit-bilinmiyor-${r.id}`}>{lock.text}</Text> : null}
       {fin === null ? <Muted>Tutarları görme izniniz yok.</Muted> : null}
       {fin !== null && balances.length === 0 ? <Text style={s.zero}>Bakiye yok</Text> : null}
       {balances.map((b) => (

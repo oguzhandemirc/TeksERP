@@ -1,6 +1,6 @@
 // Bildirim ayarları ve geçmişi rotaları (B5) — hesap API'si tablosunun parçası (`API_ROUTES`e yayılır).
 import { z } from "zod";
-import { SettingsSchema } from "../catalog/notifications";
+import { IncomingSettingsSchema } from "../catalog/notifications";
 import { getSettingsView, listOwnNotifications, setFacilityDefaults, setOwnSettings } from "../services/notification-settings.service";
 import { sendTestNotification } from "../services/notification-test.service";
 import { body, page, s, uuidCursor, webPushKey, type ApiRouteDef } from "./api-route-kit";
@@ -12,14 +12,14 @@ export const NOTIFICATION_ROUTES: readonly ApiRouteDef[] = [
     path: "/bildirim/ayarlar",
     auth: "OTURUM",
     kimlik: { muaf: "hesabın kendi ayarının TAM yerine konması; tekrarı aynı sonuç" },
-    handler: async (c) => ({ data: await setOwnSettings(c.ctx, s(c), body(c, z.strictObject({ ayarlar: SettingsSchema.nullable() })).ayarlar, webPushKey(c)) }),
+    handler: async (c) => ({ data: await setOwnSettings(c.ctx, s(c), body(c, z.strictObject({ ayarlar: IncomingSettingsSchema.nullable() })).ayarlar, webPushKey(c)) }),
   },
   {
     method: "post",
     path: "/bildirim/tesis-varsayilani",
     auth: "OTURUM",
     kimlik: { muaf: "tesis varsayılanının TAM yerine konması (bulut:hesap:yonet); tekrarı aynı sonuç" },
-    handler: async (c) => ({ data: await setFacilityDefaults(c.ctx, s(c), body(c, z.strictObject({ ayarlar: SettingsSchema })).ayarlar, webPushKey(c)) }),
+    handler: async (c) => ({ data: await setFacilityDefaults(c.ctx, s(c), body(c, z.strictObject({ ayarlar: IncomingSettingsSchema })).ayarlar, webPushKey(c)) }),
   },
   {
     method: "post",

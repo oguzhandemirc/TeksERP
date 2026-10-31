@@ -206,6 +206,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   // ── etiket ─────────────────────────────────────────────────────────────────
   labelCopies: V("kopya adedi; açılacak bir şey değil"),
   labelCopiesSource: A("STATION"), // istasyon kaynağı çözücünün tüm dallarını işletir (istek · istasyon · genel)
+  labelCustomerCodeMissing: V("yalnız CUSTOMER_CODE kaynaklı şablonda etkili; varsayılan BLOCK kapısı da işletir, ROLL_BARCODE kapıyı yumuşatır"),
   nativeSendEnabled: A(true),
   mobileRasterEnabled: A(true),
   scrapGradeLabelEnabled: A(true),

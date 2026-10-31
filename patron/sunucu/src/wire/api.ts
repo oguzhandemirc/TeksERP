@@ -213,6 +213,26 @@ export interface ListCapabilities {
   readonly aranabilir: readonly string[];
 }
 
+// ---------------------------------------------------------------- cari kilidi (D4-I6)
+
+/**
+ * `cari-hesap` kaydının `kilit` alanı (fabrika türetir): aktif kilit, yoksa en son açılan; hiç kilit yoksa `null`.
+ * Eski fabrika alanı GÖNDERMEZ (`undefined`) → "fabrika güncellenince gelir". Serbest sebep metni ve kişi buluta gelmez.
+ */
+export interface CariLock {
+  readonly durum: "AKTIF" | "ACILDI";
+  readonly kilitId: string;
+  readonly kapsam: readonly string[];
+  readonly sebepKodu: string;
+  readonly baslangic: string;
+  readonly acilis: string | null;
+}
+
+/** Kapsam kodu → görünen ad (bilinmeyen kod olduğu gibi gösterilir). */
+export const CARI_LOCK_SCOPE_LABELS: Readonly<Record<string, string>> = { KABUL: "yeni iş kabulü", SEVK: "sevk", FATURA: "fatura onayı" };
+/** Sebep kodu → görünen ad (fabrika `CARI_HOLD_REASON_LABELS` ile aynı). */
+export const CARI_LOCK_REASON_LABELS: Readonly<Record<string, string>> = { BORC: "Borç", RISK: "Risk", ANLASMAZLIK: "Anlaşmazlık", DIGER: "Diğer" };
+
 /** `GET /anlik/:projeksiyon`. */
 export interface Snapshot {
   readonly projeksiyon: string;
@@ -379,6 +399,7 @@ export const NOTIFICATION_KINDS = [
   "esitleme-gecikti",
   "yedek-basarisiz",
   "cek-vadesi",
+  "cari-kilit",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 

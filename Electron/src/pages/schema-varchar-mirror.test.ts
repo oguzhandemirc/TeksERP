@@ -43,6 +43,8 @@ const CIFTLER: Ciftt[] = [
   { dosya: "Cost/FinishingRates/schema.ts", alan: "code", model: "FinishingRate", kolon: "code" },
   { dosya: "Cost/FinishingRates/schema.ts", alan: "name", model: "FinishingRate", kolon: "name" },
   { dosya: "Cost/FinishingRates/schema.ts", alan: "note", model: "FinishingRate", kolon: "note" },
+  { dosya: "Cost/MachineRates/schema.ts", alan: "note", model: "MachineCostRate", kolon: "note" },
+  { dosya: "Cost/ConsumableNorms/schema.ts", alan: "note", model: "ServiceConsumableNorm", kolon: "note" },
   { dosya: "Cost/Items/schema.ts", alan: "extraCostLabel", model: "CostStructure", kolon: "extraCostLabel" },
   { dosya: "Cost/Items/schema.ts", alan: "notes", model: "CostStructure", kolon: "notes" },
   { dosya: "Cost/Items/schema.ts", alan: "reason", model: "StandardCostVersion", kolon: "reason" },

@@ -32,7 +32,7 @@ async function main(): Promise<void> {
   const dflt = buildDefaultFields(LabelKind.ROLL_FINISHED).find((f) => f.key === "openDefects");
   check("§1 ⭐ varsayılan şablonda GÖRÜNMEZ doğar", dflt?.isVisible === false, JSON.stringify(dflt));
   check("§1 diğer alanlar varsayılan görünür kalır (davranış birebir)",
-    buildDefaultFields(LabelKind.ROLL_FINISHED).filter((f) => !["openDefects", "deliveryNoteItemText", "deliveryNoteColorText", "deliveryNoteRollNo"].includes(f.key)).every((f) => f.isVisible));
+    buildDefaultFields(LabelKind.ROLL_FINISHED).filter((f) => !["openDefects", "deliveryNoteItemText", "deliveryNoteColorText", "deliveryNoteRollNo", "customerCode"].includes(f.key)).every((f) => f.isVisible));
 
   console.log("§2 Biçim");
   check("§2 metreye göre sıralı, TR ondalık",

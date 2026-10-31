@@ -1377,6 +1377,7 @@ async function main() {
   const ENUM_PANEL_EXEMPT: Record<string, string> = {
     sameTypeSessionPolicy: "kind:'session' — Oturum section'ı yönetir (kendi select'i var)",
     labelCopiesSource: "kind:'label' — Etiket section'ı yönetir (genel adetle aynı kartta; varsayılan beyanı test_label_copies_source ölçer)",
+    labelCustomerCodeMissing: "kind:'label' — Etiket section'ı yönetir (LabelCustomerCodeMissingField; varsayılan beyanı Electron LabelCustomerCodeMissingField.test ölçer)",
   };
 
   console.log(
@@ -1557,6 +1558,7 @@ async function main() {
     "shippingInvoiceMode",
     "shippingDocItemNameMode",
     "labelCopiesSource",
+    "labelCustomerCodeMissing",
     "tamburPlanGateWidthCheck",
     "shippingReadyRule",
   ] as const;

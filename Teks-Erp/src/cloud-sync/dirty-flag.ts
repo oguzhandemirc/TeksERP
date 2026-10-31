@@ -19,6 +19,7 @@ import { RECORD_PROJECTIONS, SNAPSHOT_PROJECTIONS, SYNC_AUX_READS } from "./proj
  */
 export const READS_MODEL_MAP: Readonly<Record<string, string>> = {
   cari_balances: "CariBalance",
+  cari_holds: "CariHold",
   payment_allocations: "PaymentAllocation",
   roll_movements: "RollMovement",
   roll_returns: "RollReturn",

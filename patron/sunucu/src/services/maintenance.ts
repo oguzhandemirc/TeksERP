@@ -16,6 +16,7 @@ import type { Tx } from "../lib/db";
 import { listReadyFacilities, withCentral, withTesis } from "../lib/tenant";
 import type { CloudContext } from "./context";
 import { closeAndPurgeIdentities } from "./identity-purge";
+import { CARI_LOCK_KIND } from "./notification-cari-lock";
 import { refreshAllServiceEnds } from "./service-lifecycle";
 
 /** Yaşa göre hard delete izni olan tablolar (beyan) → gerekçe. Başka her silme yasak. */
@@ -31,7 +32,7 @@ export const PRUNED_TABLES = {
   push_devices: "kimliği silinen (kapanıştan IDENTITY_PURGE_DAYS sonra) hesabın bildirim cihaz anahtarları (Ek-6/A §2.4)",
   operation_receipts: "ISLEM_SAKLAMA_GUN (işlem kimliği penceresi)",
   account_audit: "ayak izi: başarısız giriş DENETIM_GIRIS_SAKLAMA_GUN · diğerleri DENETIM_SAKLAMA_GUN",
-  notifications: "sonuçlanmış (GONDERILDI · BASARISIZ · ATLANDI) + BILDIRIM_SAKLAMA_GUN (telemetri; olay kimliği günlük/olay başına, pencere ondan uzun)",
+  notifications: "sonuçlanmış (GONDERILDI · BASARISIZ · ATLANDI) + BILDIRIM_SAKLAMA_GUN (telemetri; olay kimliği günlük/olay başına, pencere ondan uzun) · `cari-kilit` HARİÇ: durum bildirimi, satırı tekrar kimliği (kilit sayısıyla sınırlı)",
   login_routes: "merkez giriş dizini: hedef hesap kendi tesis DB'sinde artık ETKİN değil (yönlendirme önbelleği, kişisel veri taşımaz) · kimliği silinen (kapanıştan IDENTITY_PURGE_DAYS sonra) merkez kimliğin bütün üyelikleri",
 } as const;
 
@@ -225,8 +226,9 @@ async function pruneAccountTables(ctx: CloudContext, f: { tesisId: string; reten
       })
     ).count;
     n += (
+      // `cari-kilit` DURUM bildirimidir (kilit aylarca sürer): satırı tekrar kimliğidir, budanırsa aynı kilit yeniden bildirilir.
       await tx.notification.deleteMany({
-        where: { tesisId: f.tesisId, status: { in: ["GONDERILDI", "BASARISIZ", "ATLANDI"] }, updatedAt: { lt: new Date(nowMs - c.BILDIRIM_SAKLAMA_GUN * DAY_MS) } },
+        where: { tesisId: f.tesisId, kind: { not: CARI_LOCK_KIND }, status: { in: ["GONDERILDI", "BASARISIZ", "ATLANDI"] }, updatedAt: { lt: new Date(nowMs - c.BILDIRIM_SAKLAMA_GUN * DAY_MS) } },
       })
     ).count;
     if (f.retentionMonths !== null) {
