@@ -225,3 +225,32 @@ export async function readRecipeWeftOverrides(db: Db, recipeId: string): Promise
 export async function readItemWarpLayers(db: Db, itemId: string): Promise<Array<{ warpSpecId: string; role: string; beamMode: string; sortOrder: number }>> {
   return db.itemWarpLayer.findMany({ where: { itemId }, select: { warpSpecId: true, role: true, beamMode: true, sortOrder: true }, orderBy: { sortOrder: "asc" } });
 }
+
+const COST_LAYER_SELECT = {
+  itemId: true, role: true, beamMode: true,
+  warpSpec: { select: { id: true, endsCount: true, takeUpPct: true, wastePct: true, yarnItem: { select: { id: true, name: true, linearDensityDen: true } } } },
+} satisfies Prisma.ItemWarpLayerSelect;
+export type CostWarpLayerRow = Prisma.ItemWarpLayerGetPayload<{ select: typeof COST_LAYER_SELECT }>;
+
+/** SY-B1: maliyet derleyicisinin ek çözgü katmanları — N ürün için TEK sorgu, ürün başına sıralı. */
+export async function readWarpLayersForItems(db: Db, itemIds: string[]): Promise<Map<string, CostWarpLayerRow[]>> {
+  const out = new Map<string, CostWarpLayerRow[]>();
+  if (!itemIds.length) return out;
+  const rows = await db.itemWarpLayer.findMany({ where: { itemId: { in: itemIds } }, select: COST_LAYER_SELECT, orderBy: [{ itemId: "asc" }, { sortOrder: "asc" }] });
+  for (const r of rows) out.set(r.itemId, [...(out.get(r.itemId) ?? []), r]);
+  return out;
+}
+
+/**
+ * SY-B1 SHARED_BEAM: topun ürününde zemin leventine sarılı tel grupları (zemin kartı + grupların
+ * take-up'ı). Ortak grup yoksa null — levent tüketimi bugünkü gibi (bayt-aynı).
+ */
+export async function readSharedBeamGroupsForRoll(db: Db, rollId: string): Promise<{ groundWarpSpecId: string; layers: Array<{ beamMode: string; takeUpPct: Prisma.Decimal | null }> } | null> {
+  const rows = await db.itemWarpLayer.findMany({
+    where: { beamMode: "SHARED_BEAM", item: { rolls: { some: { id: rollId } }, warpSpecId: { not: null } } },
+    select: { beamMode: true, warpSpec: { select: { takeUpPct: true } }, item: { select: { warpSpecId: true } } },
+    orderBy: { sortOrder: "asc" },
+  });
+  const ground = rows[0]?.item.warpSpecId;
+  return ground ? { groundWarpSpecId: ground, layers: rows.map((r) => ({ beamMode: r.beamMode, takeUpPct: r.warpSpec.takeUpPct })) } : null;
+}

@@ -15,6 +15,7 @@ import { ACTIVE_LINE, MEASURED_LINE } from "../helpers/order-line-scope.helper";
 import { buildCostInput, loadCostSourcesTx } from "../helpers/cost-assembler.helper";
 import { fabricMetersFromWarpM, yarnUsagePerM, type CostInput } from "../helpers/fabric-cost.helper";
 import { readOpenPurchase, readReadyBeams, readYarnStock } from "../helpers/maliyet-bridge.helper";
+import { isSharedBeamLayer } from "../helpers/warp-layer-beam.helper";
 
 type Dec = Prisma.Decimal;
 const D0 = (): Dec => new Prisma.Decimal(0);
@@ -204,6 +205,8 @@ export async function yarnNeedReport(opts: YarnNeedOptions = {}): Promise<YarnNe
   for (const r of ready) {
     kumasMetre = kumasMetre.plus(r.d.meters);
     add(r.usage.warp!.yarnItemId, "warp", r.usage.warp!.kgPerM.mul(warpMeters.get(r)!));
+    // SY-B1: SHARED_BEAM grubu zemin leventinde (aynı düşüm); SEPARATE/CREEL katmanı tam talep (CREEL stoktan).
+    for (const l of r.usage.warpLayers) add(l.yarnItemId, "warp", l.kgPerM.mul(isSharedBeamLayer(l.beamMode) ? warpMeters.get(r)! : r.d.meters));
     for (const w of r.usage.weft) add(w.yarnItemId, "weft", w.kgPerM.mul(r.d.meters));
   }
 
