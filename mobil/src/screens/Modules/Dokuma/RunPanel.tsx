@@ -11,6 +11,7 @@ import { useRunPanel } from './useRunPanel';
 import RunOpenModal from './RunOpenModal';
 import RunCloseModal from './RunCloseModal';
 import RevokeReasonModal from './RevokeReasonModal';
+import RunConstructionCard from './RunConstructionCard';
 import { factoryLocaleTimeString } from '../../../lib/factory-time';
 
 function fmtTime(iso: string): string {
@@ -38,6 +39,7 @@ export default function RunPanel({ entry }: { entry: DoffEntry }) {
         )}
         {run && entry.canRevoke ? <Button compact icon="undo" onPress={() => setRevokeId(run.id)}>Geri al</Button> : null}
       </View>
+      {run?.weavingOrderId ? <RunConstructionCard weavingOrderId={run.weavingOrderId} /> : null}
       <RunOpenModal state={state} />
       <RunCloseModal state={state} />
       <RevokeReasonModal
