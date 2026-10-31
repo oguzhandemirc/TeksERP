@@ -10,6 +10,9 @@
 //   §5 not 500 sınırını aşacaksa eklenmez, uyarı TARGET_NOTE_TOO_LONG
 //   §6 ⭐ basılmış çeki değişmez: not YALNIZ doğuşta yazılır — birleştiricinin tek çağıranı createFresh; satır
 //      değeri sonradan değişse de adım notu aynı kalır (çeki talimatı sevkte `dispatch.instruction`a donar)
+//   §7 İE hedefi PUT ile değişince not yeniden yazılmaz ama eski talimat TARGET_NOTE_STALE ile uyarılır;
+//      eski satır yoksa yanıtta `warnings` anahtarı HİÇ yok (bayt-aynı)
+//   §8 notta aynı etiketli farklı değer → satır yine eklenir + TARGET_NOTE_LABEL_CONFLICT uyarısı
 // Çalıştır: npx tsx scripts/test_fason_adim_hedef_notu.ts (yalnız test DB)
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -17,7 +20,11 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import prisma from "../src/lib/prisma";
 import { WorkOrderService } from "../src/services/workorder.service";
-import { mergeTargetNoteLines, TARGET_NOTE_TOO_LONG } from "../src/services/helpers/fason-step-target-note.helper";
+import ts from "typescript";
+import {
+  mergeTargetNoteLines, TARGET_NOTE_LABEL_CONFLICT, TARGET_NOTE_STALE, TARGET_NOTE_TOO_LONG,
+} from "../src/services/helpers/fason-step-target-note.helper";
+import { replaceWorkOrderTargetValues } from "../src/services/workorder-target-value.service";
 import { assertGelistirmeVeritabani } from "./db-guard";
 
 let pass = 0,
@@ -39,6 +46,29 @@ function sourceFiles(dir: string): string[] {
     const p = path.join(dir, n);
     return statSync(p).isDirectory() ? sourceFiles(p) : p.endsWith(".ts") ? [p] : [];
   });
+}
+
+/** AST: çağrının içinde durduğu en yakın adlı yöntem/fonksiyon + bir `$transaction` geri çağrısının içinde mi. */
+function enclosingCallers(file: string, callee: string): Array<{ fn: string; inTx: boolean }> {
+  const sf = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
+  const out: Array<{ fn: string; inTx: boolean }> = [];
+  const visit = (n: ts.Node): void => {
+    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === callee) {
+      let fn = "?";
+      let inTx = false;
+      for (let p: ts.Node | undefined = n.parent; p; p = p.parent) {
+        if (ts.isCallExpression(p) && p.expression.getText(sf).endsWith("$transaction")) inTx = true;
+        if ((ts.isMethodDeclaration(p) || ts.isFunctionDeclaration(p)) && p.name) {
+          fn = p.name.getText(sf);
+          break;
+        }
+      }
+      out.push({ fn, inTx });
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return out;
 }
 
 async function main(): Promise<void> {
@@ -113,6 +143,7 @@ async function main(): Promise<void> {
   // §1
   const routeA = await mkRoute("rota A", null);
   const [l1] = await order([zebra]);
+  const [l1Fresh] = await order([zebra]);
   const w1 = await createWo(routeA, [l1!]);
   check("§1 ⭐ dış adımın notu = 'Kuşak: Zebra' (BAYRAK adıyla)", w1.notes[1] === expectedLine, JSON.stringify(w1.notes));
   check("§1b iç adım notu değişmez", w1.notes[0] === "İç not", JSON.stringify(w1.notes));
@@ -158,10 +189,24 @@ async function main(): Promise<void> {
     const n = (readFileSync(f, "utf8").match(/appendTargetNotesToExternalSteps\(/g) ?? []).length;
     return f.endsWith("fason-step-target-note.helper.ts") || n === 0 ? [] : [`${path.relative(srcRoot, f)}×${n}`];
   });
-  const svc = readFileSync(path.join(srcRoot, "services", "workorder.service.ts"), "utf8");
-  const at = svc.indexOf("appendTargetNotesToExternalSteps(prisma");
-  const inCreateFresh = at > svc.indexOf("createFresh(") && at < svc.indexOf("withBarcodeRetry(() => prisma.$transaction", svc.indexOf("createFresh("));
-  check("§6b ⭐ birleştiricinin TEK çağıranı createFresh (doğuş öncesi; sevk/düzenleme yolu notu yeniden yazmaz)", callers.join(",") === "services/workorder.service.ts×1" && inCreateFresh, callers.join(","));
+  const sites = enclosingCallers(path.join(srcRoot, "services", "workorder.service.ts"), "appendTargetNotesToExternalSteps");
+  const inCreateFresh = sites.length === 1 && sites[0]!.fn === "createFresh" && !sites[0]!.inTx;
+  check("§6b ⭐ birleştiricinin TEK çağıranı createFresh (doğuş öncesi; sevk/düzenleme yolu notu yeniden yazmaz)", callers.join(",") === "services/workorder.service.ts×1" && inCreateFresh, `${callers.join(",")} ${JSON.stringify(sites)}`);
+
+  // §7
+  const put = await replaceWorkOrderTargetValues(w1.id, [{ propertyId: brand.id, valueId: jasmin }]);
+  const w1After = await prisma.workOrderStep.findMany({ where: { workOrderId: w1.id }, select: { notes: true }, orderBy: { stepSequence: "asc" } });
+  check("§7 ⭐ hedef PUT'u notu yeniden yazmaz, eski talimat TARGET_NOTE_STALE uyarır",
+    w1After[1]?.notes === expectedLine && (put.warnings ?? []).some((w) => w.startsWith(`[${TARGET_NOTE_STALE}]`) && w.includes(expectedLine)), JSON.stringify(put.warnings));
+  const putPlain = await replaceWorkOrderTargetValues(w3c.id, [{ propertyId: brand.id, valueId: jasmin }]);
+  check("§7b notta eski satır yoksa yanıtta warnings anahtarı yok", putPlain.data.changed && !("warnings" in putPlain), JSON.stringify(putPlain));
+
+  // §8
+  const routeC = await mkRoute("çelişen", `${TAG} Kuşak: Leopar`);
+  const w8 = await createWo(routeC, [l1Fresh!]);
+  check("§8 aynı etiketli farklı değer → satır eklenir + TARGET_NOTE_LABEL_CONFLICT",
+    w8.notes[1] === `${TAG} Kuşak: Leopar\n${expectedLine}` && w8.warnings.some((w) => w.startsWith(`[${TARGET_NOTE_LABEL_CONFLICT}]`)), JSON.stringify(w8));
+  check("§8b aynı satır (§2) çelişki sayılmaz", !w2.warnings.some((w) => w.startsWith(`[${TARGET_NOTE_LABEL_CONFLICT}]`)), JSON.stringify(w2.warnings));
 }
 
 async function cleanup(): Promise<void> {

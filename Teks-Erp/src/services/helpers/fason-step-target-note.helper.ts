@@ -15,6 +15,10 @@ type Reader = Prisma.TransactionClient | PrismaClient;
 /** Adım notunun panel/Zod sınırı (workorder.controller `notes: max(500)`); aşılırsa not değişmez, uyarı döner. */
 export const STEP_NOTE_MAX = 500;
 export const TARGET_NOTE_TOO_LONG = "TARGET_NOTE_TOO_LONG";
+/** Notta aynı etiketli ama farklı değerli satır var (elle yazılmış çelişen talimat). */
+export const TARGET_NOTE_LABEL_CONFLICT = "TARGET_NOTE_LABEL_CONFLICT";
+/** İE hedefi doğuştan sonra değişti; bitmemiş dış adım notunda eski talimat satırı duruyor. */
+export const TARGET_NOTE_STALE = "TARGET_NOTE_STALE";
 
 export function targetNoteLine(label: string, valueName: string): string {
   return `${label}: ${valueName}`;
@@ -39,6 +43,21 @@ export function mergeTargetNoteLines(notes: string | null, lines: readonly strin
   if (added.length === 0) return notes;
   const base = (notes ?? "").trimEnd();
   return base === "" ? added.join("\n") : `${base}\n${added.join("\n")}`;
+}
+
+function labelOf(line: string): string | null {
+  const i = line.indexOf(":");
+  return i > 0 ? normalizeLine(line.slice(0, i)) : null;
+}
+
+/** Notta aynı etiketle başlayan ama talimattan farklı satırlar (ör. elle "Kuşak: Leopar" varken "Kuşak: Zebra"). */
+export function conflictingLabelLines(notes: string | null, line: string): string[] {
+  const label = labelOf(line);
+  if (label === null) return [];
+  return (notes ?? "").split(/\r?\n/).filter((e) => {
+    const l = labelOf(e);
+    return l !== null && l.localeCompare(label, "tr", { sensitivity: "accent" }) === 0 && !sameLine(e, line);
+  });
 }
 
 interface NoteStep {
@@ -73,6 +92,10 @@ export async function appendTargetNotesToExternalSteps<T extends NoteStep>(
       .filter((c) => capSet.has(`${step.stationId}|${c.propertyId}`) || (c.flagPropertyId !== null && capSet.has(`${step.stationId}|${c.flagPropertyId}`)))
       .map((c) => targetNoteLine(c.label, c.valueName));
     if (lines.length === 0) return step;
+    const clashes = lines.flatMap((l) => conflictingLabelLines(step.notes, l).map((c) => `'${normalizeLine(c)}' ↔ '${l}'`));
+    if (clashes.length > 0) {
+      warnings.push(`[${TARGET_NOTE_LABEL_CONFLICT}] ${nameById.get(step.stationId)}: adım notunda farklı talimat var (${clashes.join(", ")}) — fason çekisinden önce notu düzeltin.`);
+    }
     const merged = mergeTargetNoteLines(step.notes, lines);
     if (merged === step.notes) return step;
     if ((merged ?? "").length > STEP_NOTE_MAX) {
@@ -82,4 +105,34 @@ export async function appendTargetNotesToExternalSteps<T extends NoteStep>(
     return { ...step, notes: merged };
   });
   return { steps: out, warnings };
+}
+
+/**
+ * İE hedefi PUT ile değişince (eski değer damgalanınca) bitmemiş EXTERNAL adım notunda eski "<etiket>: <değer>"
+ * satırı kalmışsa uyarı üretir. Not KENDİLİĞİNDEN yazılmaz (yalnız doğuşta yazılır kuralı); planlamacı düzeltir.
+ */
+export async function staleTargetNoteWarnings(
+  db: Reader,
+  workOrderId: string,
+  revoked: ReadonlyArray<{ propertyId: string; valueId: string }>,
+): Promise<string[]> {
+  if (revoked.length === 0) return [];
+  const steps = await db.workOrderStep.findMany({
+    where: { workOrderId, status: { in: ["PENDING", "ACTIVE"] }, notes: { not: null }, station: { type: "EXTERNAL" } },
+    select: { notes: true, station: { select: { name: true } } },
+  });
+  if (steps.length === 0) return [];
+  const values = await db.fabricPropertyValue.findMany({
+    where: { id: { in: revoked.map((r) => r.valueId) } },
+    select: { name: true, property: { select: { name: true, variantOf: { select: { name: true } } } } },
+  });
+  const oldLines = values.map((v) => targetNoteLine(v.property.variantOf?.name ?? v.property.name, v.name));
+  const warnings: string[] = [];
+  for (const step of steps) {
+    const stale = oldLines.filter((l) => (step.notes ?? "").split(/\r?\n/).some((e) => sameLine(e, l)));
+    if (stale.length > 0) {
+      warnings.push(`[${TARGET_NOTE_STALE}] ${step.station.name}: adım notunda eski talimat var (${stale.join(", ")}) — fason çekisinden önce notu düzeltin.`);
+    }
+  }
+  return warnings;
 }
