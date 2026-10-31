@@ -32,7 +32,14 @@ export async function revertCariMerge(sourceId: string, reason: string, userId?:
     select: { transferGroupId: true },
     distinct: ["transferGroupId"],
   });
-  const groupIds = groupRows.map((g) => g.transferGroupId).filter((g): g is string => g != null);
+  const candidates = groupRows.map((g) => g.transferGroupId).filter((g): g is string => g != null);
+  // Yalnız birleşmenin HEDEFİNE bacağı olan gruplar — ileride elle cari virman gelirse onun grupları karışmaz.
+  const toTarget = candidates.length === 0 ? [] : await prisma.cariTransaction.findMany({
+    where: { transferGroupId: { in: candidates }, cariId: targetId, sourceType: CariTxnSource.CARI_TRANSFER },
+    select: { transferGroupId: true },
+    distinct: ["transferGroupId"],
+  });
+  const groupIds = toTarget.map((g) => g.transferGroupId).filter((g): g is string => g != null);
   const legs = groupIds.length === 0 ? [] : await prisma.cariTransaction.findMany({
     where: { transferGroupId: { in: groupIds }, sourceType: CariTxnSource.CARI_TRANSFER, reversedBy: { is: null } },
     select: { id: true, cariId: true, currency: true, debit: true, credit: true, amountTry: true, exchangeRate: true, invoiceId: true, transferGroupId: true, createdAt: true },
@@ -42,7 +49,7 @@ export async function revertCariMerge(sourceId: string, reason: string, userId?:
   const now = new Date();
   const reversed = await prisma.$transaction(async (tx) => {
     // TX'İN İLK İFADESİ: iki hesabın dönem kilitleri (sıralı) + bugün kapalıysa 409.
-    await assertPeriodsOpenTx(tx, currencies.flatMap((currency) => [sourceId, targetId].map((cariId) => ({ cariId, currency, txnDate: now }))));
+    await assertPeriodsOpenTx(tx, currencies.flatMap((currency) => [sourceId, targetId].map((cariId) => ({ cariId, currency, txnDate: now }))), { allowMerged: true });
     if (legs.length > 0) {
       const mergedAt = legs[0]!.createdAt;
       const after = await tx.cariTransaction.findMany({

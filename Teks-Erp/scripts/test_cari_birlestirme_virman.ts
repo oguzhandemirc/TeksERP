@@ -14,6 +14,7 @@
 //   §8 eşzamanlı iki birleştirme → biri 409 (hareketli çift + sıfır bakiyeli çift: claim tek başına)
 //   §9 engelli çift (portföyde çek · aktif kilit · bugün kapalı) → 409 CARI_MERGE_BLOCKED + liste, 0 yazım
 //   §10 DB CHECK: mergedIntoId = id insert'i reddedilir
+//   §11 birleşmiş kaynak donmuş: fatura iptali · kapama · kapama çözme 409 CARI_MERGED (çözücüden gizli bakiye doğmaz)
 // ⭐ NEGATİF SONDA (2026-10-31): bkz. BEKCI-HARITASI satırı.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; temizlik `finally`de.
 // =============================================================================
@@ -198,6 +199,18 @@ async function main(): Promise<void> {
     const zOk = zBoth.filter((x) => x.status === "fulfilled").length;
     const zErr = zBoth.filter((x): x is PromiseRejectedResult => x.status === "rejected").map((x) => kod(x.reason));
     check("§8c ⭐ sıfır bakiyeli çift (kilitsiz, claim tek başına) eşzamanlı → biri 200, öbürü 409 CARI_MERGE_CONFLICT", zOk === 1 && zErr.join() === "CARI_MERGE_CONFLICT", JSON.stringify({ zOk, zErr }));
+
+    // §11 birleşmiş kaynak DONMUŞ (p §8'de yeniden birleşti): iptal/kapama/çözme 409 CARI_MERGED, 0 yazım
+    const n11 = await txnCount();
+    const tgt11 = JSON.stringify(await balances(p.target));
+    const alloc = await prisma.paymentAllocation.findFirstOrThrow({ where: { invoiceId: overdue, revokedAt: null }, select: { id: true } });
+    const c11 = await invoiceService.cancel(overdue, "bekçi").then(() => "geçti", kod);
+    const a11 = await paymentAllocationService.allocate({ invoiceId: overdue, paymentId: pay.data.id, amount: 1 }).then(() => "geçti", kod);
+    const d11 = await paymentAllocationService.deallocate(alloc.id).then(() => "geçti", kod);
+    const st11 = await prisma.invoice.findUniqueOrThrow({ where: { id: overdue }, select: { status: true, paidTotal: true } });
+    check("§11 ⭐ birleşmiş kaynakta fatura iptali · kapama · kapama çözme → 409 CARI_MERGED, defter/bakiye/fatura aynı",
+      c11 === "CARI_MERGED" && a11 === "CARI_MERGED" && d11 === "CARI_MERGED" && (await txnCount()) === n11 && JSON.stringify(await balances(p.target)) === tgt11 && st11.status === "CONFIRMED" && new Prisma.Decimal(st11.paidTotal).eq(300),
+      JSON.stringify({ c11, a11, d11, st11 }));
 
     // §9 engelli çift
     const b = await pairOf(3);

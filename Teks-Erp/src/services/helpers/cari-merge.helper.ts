@@ -199,6 +199,12 @@ export async function applyCariMergeTx(tx: Prisma.TransactionClient, plan: CariM
     const expected = plan.balances.find((b) => b.currency === r.currency)?.source ?? "0.00";
     if (!D(r.balance).equals(D(expected))) throw AppError.conflict("Kaynak hesap ön izlemeden sonra değişti — ön izlemeyi yenileyin.", { code: "CARI_MERGE_STALE" });
   }
+  // Ön izlemeden sonra konan kilit/çek defter yazmaz (bayatlık görmez) → tx içinde yeniden sorulur.
+  for (const id of [plan.sourceId, plan.targetId]) {
+    if (await activeHoldByCari(tx, id)) throw AppError.conflict("Ön izlemeden sonra cari kilidi kondu — önce kilidi açın.", { code: "CARI_MERGE_BLOCKED", blockers: ["Aktif cari kilidi var."] });
+  }
+  const openCheques = await tx.cheque.count({ where: { status: { in: OPEN_CHEQUE_STATUSES }, OR: [{ cariId: plan.sourceId }, { endorsedToCariId: plan.sourceId }] } });
+  if (openCheques > 0) throw AppError.conflict("Ön izlemeden sonra sonuçlanmamış çek/senet doğdu.", { code: "CARI_MERGE_BLOCKED", blockers: [`Sonuçlanmamış çek/senet (${openCheques}).`] });
   // ATOMİK CLAIM: aktif ve birleşmemiş kaynak; eşzamanlı ikinci birleştirme 0 satır → 409.
   const claim = await tx.cariAccount.updateMany({ where: { id: plan.sourceId, isActive: true, mergedIntoId: null }, data: { isActive: false, mergedIntoId: plan.targetId } });
   if (claim.count === 0) throw AppError.conflict("Kaynak hesap bu sırada birleştirildi ya da pasife alındı.", { code: "CARI_MERGE_CONFLICT" });
