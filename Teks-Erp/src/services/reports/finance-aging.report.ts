@@ -327,6 +327,19 @@ interface ChequeAllocRow {
   currency: string;
   signedAlloc: string;
 }
+/** Cari virman bacakları (K3d) — fatura başına net; kalemsiz bacakta `invoiceId` null. */
+interface TransferRow {
+  cariId: string;
+  currency: string;
+  invoiceId: string | null;
+  net: string;
+  dueDate: Date | null;
+  invCariId: string | null;
+  docNo: string | null;
+  type: string | null;
+  issueDate: Date | null;
+  grandTotal: string | null;
+}
 interface RateRow {
   currency: string;
   rate: string;
@@ -392,7 +405,7 @@ export async function collectAgingRows(params: AgingRowsParams): Promise<AgingCa
         FROM payment_allocations WHERE "revokedAt" IS NULL AND "createdAt" > ${asOf} GROUP BY 1
     ) al ON al."invoiceId" = i.id`;
 
-  const [cariRows, invoiceRows, invoiceAgg, paymentAgg, ledgerRows, balanceRows, chequeAlloc] =
+  const [cariRows, invoiceRows, invoiceAgg, paymentAgg, ledgerRows, balanceRows, chequeAlloc, transferRows] =
     await Promise.all([
       prisma.$queryRaw<CariRow[]>(Prisma.sql`
         SELECT ca.id, ca.kind::text AS kind, ca."paymentTermDays",
@@ -503,6 +516,22 @@ export async function collectAgingRows(params: AgingRowsParams): Promise<AgingCa
          WHERE pa."revokedAt" IS NULL AND pa."chequeId" IS NOT NULL AND pa."createdAt" <= ${asOf} ${fCari} ${fKind} ${fCurInv}
          GROUP BY 1, 2
       `),
+
+      // CARİ VİRMAN (K3d birleştirme): bacak faturanın KENDİ carisindeyse (kaynak) o kalemi kapatır, başka caride
+      // (hedef) kalemi aktarılan VADESİYLE açar. Storno bacağı aynı faturayı taşır → SUM kendiliğinden netler.
+      prisma.$queryRaw<TransferRow[]>(Prisma.sql`
+        SELECT t."cariId" AS "cariId", t.currency::text AS currency, t."invoiceId" AS "invoiceId",
+               SUM(t.debit - t.credit)::text AS net,
+               MAX(t."dueDate") AS "dueDate",
+               i."cariId" AS "invCariId", i."docNo" AS "docNo", i.type::text AS type,
+               i."issueDate" AS "issueDate", i."grandTotal"::text AS "grandTotal"
+          FROM cari_transactions t
+          JOIN cari_accounts ca ON ca.id = t."cariId"
+          LEFT JOIN invoices i ON i.id = t."invoiceId"
+         WHERE t."sourceType" IN ('CARI_TRANSFER', 'CARI_TRANSFER_CANCEL') AND t."txnDate" <= ${asOf}
+           ${fCari} ${fKind} ${fCurTxn}
+         GROUP BY t."cariId", t.currency, t."invoiceId", i.id
+      `),
     ]);
 
   const cariById = new Map(cariRows.map((c) => [c.id, c]));
@@ -518,6 +547,8 @@ export async function collectAgingRows(params: AgingRowsParams): Promise<AgingCa
     chqNet: Prisma.Decimal;
     chqSignedAlloc: Prisma.Decimal;
     adjNet: Prisma.Decimal;
+    /** Faturasız virman bacakları (avans/devir aktarımı) — devir gibi kalemsiz net. */
+    trfNet: Prisma.Decimal;
     ledger: Prisma.Decimal;
     stored: Prisma.Decimal | null;
   }
@@ -536,6 +567,7 @@ export async function collectAgingRows(params: AgingRowsParams): Promise<AgingCa
         chqNet: D0(),
         chqSignedAlloc: D0(),
         adjNet: D0(),
+        trfNet: D0(),
         ledger: D0(),
         stored: null,
       };
@@ -544,14 +576,26 @@ export async function collectAgingRows(params: AgingRowsParams): Promise<AgingCa
     return a;
   };
 
+  // Virman bacakları (K3d): kaynakta faturanın açığını kapatır, hedefte kalemi aktarılan vadesiyle açar.
+  const transferOut = new Map<string, TransferRow>();
+  const transferIn: TransferRow[] = [];
+  for (const r of transferRows) {
+    if (D(r.net).isZero()) continue;
+    if (r.invoiceId && r.invCariId === r.cariId) transferOut.set(r.invoiceId, r);
+    else if (r.invoiceId) transferIn.push(r);
+    else touch(r.cariId, r.currency).trfNet = touch(r.cariId, r.currency).trfNet.plus(D(r.net));
+  }
+
   // ── AÇIK FATURA SATIRLARI → KOVALAR ────────────────────────────────────────
   for (const r of invoiceRows) {
     const grand = D(r.grandTotal);
     const paid = D(r.paidAsOf);
     const open = invoiceOpenAmount(grand, paid);
-    if (open.isZero()) continue;
+    const moved = transferOut.get(r.id);
+    transferOut.delete(r.id);
     const sign = signOfInvoiceType(r.type);
-    const signedOpen = open.mul(sign);
+    const signedOpen = open.mul(sign).plus(moved ? D(moved.net) : D0());
+    if (signedOpen.isZero()) continue;
 
     // EFEKTİF VADE — uydurma vade basılmaz (bkz. dosya başlığı).
     const { effectiveDue, dueSource } = resolveEffectiveDue(r);
@@ -581,6 +625,35 @@ export async function collectAgingRows(params: AgingRowsParams): Promise<AgingCa
       sortDue: effectiveDue ? effectiveDue.getTime() : Number.POSITIVE_INFINITY,
     });
   }
+
+  // Hedefe aktarılmış kalem: vade bacaktan (kaynağın efektif vadesi doğuşta donar), yoksa "Vadesiz".
+  for (const r of transferIn) {
+    const signedOpen = D(r.net);
+    const effectiveDue = r.dueDate;
+    const daysOverdue = daysOverdueAt(asOf, effectiveDue);
+    const grand = r.grandTotal ? D(r.grandTotal) : signedOpen.abs();
+    touch(r.cariId, r.currency).items.push({
+      item: {
+        invoiceId: r.invoiceId,
+        docNo: r.docNo ?? "VİRMAN",
+        type: r.type ?? "CARI_TRANSFER",
+        issueDate: (r.issueDate ?? asOf).toISOString(),
+        effectiveDueDate: effectiveDue ? effectiveDue.toISOString() : null,
+        dueSource: effectiveDue ? "DOCUMENT" : "NONE",
+        grandTotal: grand.toFixed(2),
+        paid: grand.minus(signedOpen.abs()).toFixed(2),
+        open: signedOpen.toFixed(2),
+        virtualOffset: "0.00",
+        netOpen: signedOpen.toFixed(2),
+        daysOverdue,
+        bucket: bucketOfDaysOverdue(daysOverdue),
+      },
+      signedOpen,
+      sortDue: effectiveDue ? effectiveDue.getTime() : Number.POSITIVE_INFINITY,
+    });
+  }
+  // Kaynak bacağı açık fatura satırı bulamadıysa (aktarımdan sonra kapama) kalemsiz nete düşer — mutabakat korunur.
+  for (const r of transferOut.values()) touch(r.cariId, r.currency).trfNet = touch(r.cariId, r.currency).trfNet.plus(D(r.net));
 
   for (const r of invoiceAgg) {
     const a = touch(r.cariId, r.currency);
@@ -622,25 +695,27 @@ export async function collectAgingRows(params: AgingRowsParams): Promise<AgingCa
     // bir alacaktır ve VADESİZ kovasına düşer (devrin vadesi yoktur); negatifse
     // avanstır ve kredi kolonuna gider. Bu satır olmadan devir girilmiş her
     // caride mutabakat tam devir tutarı kadar sapardı.
-    if (!a.adjNet.isZero()) {
-      if (a.adjNet.gt(0)) {
+    // Faturasız virman bacağı (K3d) aynı kalemsiz nete katılır: kaynakta devri sıfırlar, hedefte devir gibi durur.
+    const looseNet = a.adjNet.plus(a.trfNet);
+    if (!looseNet.isZero()) {
+      if (looseNet.gt(0)) {
         a.items.push({
           item: {
             invoiceId: null,
-            docNo: "DEVİR",
-            type: "ADJUSTMENT",
+            docNo: a.adjNet.isZero() ? "VİRMAN" : "DEVİR",
+            type: a.adjNet.isZero() ? "CARI_TRANSFER" : "ADJUSTMENT",
             issueDate: asOf.toISOString(),
             effectiveDueDate: null,
             dueSource: "NONE",
-            grandTotal: a.adjNet.toFixed(2),
+            grandTotal: looseNet.toFixed(2),
             paid: "0.00",
-            open: a.adjNet.toFixed(2),
+            open: looseNet.toFixed(2),
             virtualOffset: "0.00",
-            netOpen: a.adjNet.toFixed(2),
+            netOpen: looseNet.toFixed(2),
             daysOverdue: null,
             bucket: "noDueDate",
           },
-          signedOpen: a.adjNet,
+          signedOpen: looseNet,
           sortDue: Number.POSITIVE_INFINITY,
         });
       }
@@ -649,7 +724,7 @@ export async function collectAgingRows(params: AgingRowsParams): Promise<AgingCa
     // Çek kredisi DEFTERDEN türetilir: (çekin defter neti) alacağı ne kadar
     // azalttıysa o kadar kredi verir; bundan çekle yapılmış kapamalar düşülür.
     const creditFromCheques = a.chqNet.negated().minus(a.chqSignedAlloc);
-    const creditFromAdjustment = a.adjNet.lt(0) ? a.adjNet.negated() : D0();
+    const creditFromAdjustment = looseNet.lt(0) ? looseNet.negated() : D0();
     const credit = a.creditFromPayments.plus(creditFromCheques).plus(creditFromAdjustment);
 
     // ── SANAL FIFO MAHSUP ────────────────────────────────────────────────────

@@ -242,8 +242,9 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   ),
 
   D("CariTransaction", "cari borç/alacak defteri", { tur: "TERS_BAG", kolon: "reversesTxnId" },
-    [{ dosya: "src/services/cari.service.ts", sembol: "cancelOpeningBalance" }],
-    ["src/services/cari.service.ts", "src/services/cheque.service.ts", "src/services/invoice.service.ts", "src/services/payment.service.ts"]),
+    // K3d: birleştirme virmanının (CARI_TRANSFER) tersi bacak başına CARI_TRANSFER_CANCEL + reversesTxnId.
+    [{ dosya: "src/services/cari.service.ts", sembol: "cancelOpeningBalance" }, { dosya: "src/services/helpers/cari-merge-revert.helper.ts", sembol: "revertCariMerge" }],
+    ["src/services/cari.service.ts", "src/services/cheque.service.ts", "src/services/invoice.service.ts", "src/services/payment.service.ts", "src/services/helpers/cari-merge.helper.ts", "src/services/helpers/cari-merge-revert.helper.ts"]),
 
   D("ChequeEvent", "çek durum defteri; her terminalden tek çıkış",
     { tur: "ENUM_CIFTI", enumAdi: "ChequeEventType", ciftler: [
