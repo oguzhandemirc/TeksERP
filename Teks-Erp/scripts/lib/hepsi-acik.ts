@@ -66,6 +66,8 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   financeServiceBillingMissingMeter: V("eksik ölçüm davranışı; varsayılan satırı uyarıyla yazar (yolu işletir)"),
   financeServiceBillingTrigger: V("tetik; PER_SHIPMENT sevk taslağı yolunu işletir, PERIOD_END dönem sonu ucunu bekletir (iki yol da geçerli)"),
   financeExpenseCategorySuggestions: A("ON"), // öneri ucu sorgu yolunu işletir
+  costProfitSubcontractSource: V("yalnız kârlılık okumasının kaynağı; hiçbir kapıyı açıp kapamaz"),
+  costProfitConsumablePriceSource: V("yalnız kârlılık okumasının kaynağı; hiçbir kapıyı açıp kapamaz"),
   financeCariHoldDefaultScope: V("yalnız form ön seçimi; kapsamı kilit koyan seçer, hiçbir kapıyı açıp kapamaz"),
   financeCariHoldReleaseBySamePerson: A("DENY"), // açma ucunun "koyan kişi" dalını işletir
   financeServiceBillingPriceDate: V("fiyat tarihi; iki değer de geçerli, varsayılan hizmet anı"),

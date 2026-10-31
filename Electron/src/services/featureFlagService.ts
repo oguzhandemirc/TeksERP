@@ -300,8 +300,12 @@ export interface FeatureFlags {
     | "INTAKE,SHIPMENT,INVOICE";
   /** D4-I1a: kilidi koyan kişi kendi kilidini açabilir mi (varsayılan `ALLOW`). */
   financeCariHoldReleaseBySamePerson: "ALLOW" | "DENY";
-  /** D4-I2b (S12): risk limiti para birimi kipi — her para birimi ayrı (varsayılan) · günün kuruyla TL toplamı. */
+  /** D4-I2b (S12): risk limiti para birimi kipi — her para birimi ayrı (varsayılan) · o güne kadarki en son kurla TL toplamı. */
   financeRiskLimitCurrencyMode: "PER_CURRENCY" | "TRY_CONVERTED";
+  /** D4-G2a: kârlılıkta dış fason maliyeti kaynağı (backend aynası; varsayılan `FATURA_ONCE`). */
+  costProfitSubcontractSource: "FATURA_ONCE" | "YALNIZ_FATURA";
+  /** D4-G2a: kârlılıkta sarf birim fiyatı kaynağı (backend aynası; varsayılan `ALIS_FIYATI`). */
+  costProfitConsumablePriceSource: "ALIS_FIYATI" | "SON_ALIS_FATURASI";
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; tahsis elle silinebilir. */
   financeAutoAllocateOnPaymentEnabled: boolean;
