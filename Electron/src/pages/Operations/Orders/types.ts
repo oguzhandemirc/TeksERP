@@ -32,6 +32,14 @@ export interface OrderLineRequiredPropertyLink {
   property: { id: string; code: string; name: string };
 }
 
+/** Satırın hedef değeri (SY-F1/F2, tasarım §7): çeşit özelliği × seçilen değer ("Kuşak markası: ZEBRA"). */
+export interface OrderLineTargetValueLink {
+  propertyId: string;
+  valueId: string;
+  property?: { id: string; code: string; name: string };
+  value?: { id: string; code: string; name: string };
+}
+
 export interface OrderLine {
   id: string;
   itemId: string;
@@ -59,12 +67,7 @@ export interface OrderLine {
   recipeId?: string | null;
   recipe?: { id: string; code: string; name: string; variantCode: string | null } | null;
   /** Satır hedef değerleri (kuşak gibi çeşit özelliği); eski backend göndermez. */
-  targetValues?: Array<{
-    propertyId: string;
-    valueId: string;
-    property?: { id: string; code: string; name: string };
-    value?: { id: string; code: string; name: string };
-  }>;
+  targetValues?: OrderLineTargetValueLink[];
   /**
    * İPTAL İZİ (2026-08-27). NULL = aktif kalem.
    * Kalem SİLİNMEZ: listede "iptal" işaretli ve salt-okunur kalır, sevk edilmiş

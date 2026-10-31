@@ -72,7 +72,8 @@ const finishingRateSchema = z.object({
   code: z.string(),
   name: z.string(),
   subcontractorId: z.string().uuid("Geçersiz fason firma ID").nullable().optional(),
-  basis: z.enum(["RAW_M", "FINISHED_M"], { message: "Tarife bazı HAM ya da MAMUL metre olmalı" }),
+  // SY-E1: KG = boyahane kilo ücreti; `pricePerM` kolonu "tabanın birimi başına" okunur (veri sözleşmesi korunur).
+  basis: z.enum(["RAW_M", "FINISHED_M", "KG"], { message: "Tarife bazı HAM metre, MAMUL metre ya da KİLO olmalı" }),
   currency: currencyEnum,
   pricePerM: decimalInput,
   typicalShrinkPct: decimalInput.nullable().optional(),
@@ -510,6 +511,8 @@ const yarnBody = z
 const previewBody = z
   .object({
     itemId: z.string().uuid("Geçersiz ürün ID").optional(),
+    // SY-E1: varyant (iş emri şablonu) — tarife kodu varyanttaysa ürün yapısınınkini ezer.
+    recipeId: z.string().uuid("Geçersiz varyant ID").optional(),
     adHoc: z
       .object({
         warp: z.object({ endsCount: decimalInput, takeUpPct: decimalInput.optional(), yarn: yarnBody }).strict().nullable().optional(),

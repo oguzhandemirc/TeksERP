@@ -4,8 +4,11 @@ import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
 import type { Currency } from "@/pages/Finance/service";
 
-export type FinishingBasis = "RAW_M" | "FINISHED_M";
-export const FINISHING_BASIS_LABEL: Record<FinishingBasis, string> = { RAW_M: "Ham metre", FINISHED_M: "Mamul metre" };
+// SY-E1: KG = boyahane kilo ücreti; motor kg'ı sunucuda ham metreye çevirir (`maliyet.terbiyeKgTabani`).
+export type FinishingBasis = "RAW_M" | "FINISHED_M" | "KG";
+export const FINISHING_BASIS_LABEL: Record<FinishingBasis, string> = { RAW_M: "Ham metre", FINISHED_M: "Mamul metre", KG: "Kilo (kg)" };
+/** Fiyatın birimi — `pricePerM` kolonu "tabanın birimi başına" okunur. */
+export const finishingBasisUnit = (b: FinishingBasis): string => (b === "KG" ? "kg" : "m");
 
 export interface FinishingRate {
   id: string; code: string; name: string; subcontractorId: string | null; basis: FinishingBasis; currency: Currency;
