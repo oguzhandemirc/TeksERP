@@ -18,8 +18,13 @@ export interface RevenueLinkRow {
   meterBasis: ServiceMeterBasis;
   serviceAt: Date;
   machineId: string | null;
-  /** D4-G2b: ölçüm okumasının anı (makine günü bundan; okuma yoksa `serviceAt`). */
+  /** D4-G2b: ölçüm okumasının anı (okuma yoksa makine günü `serviceAt`). */
   readingAt: Date | null;
+  /** D4-G2b: okumanın adımı — iş anahtarı makine × top × adım (düzeltme zinciri ve fazlar tek iş). */
+  readingStepId: string | null;
+  /** D4-G2b: aynı okumaya bağlı sayılan hizmet kalemleri içinde bu kalemin sırası / sayısı (makine süresi tek sayım). */
+  readingShareIndex: number;
+  readingShareCount: number;
   ownerCustomerId: string | null;
 }
 
@@ -47,6 +52,17 @@ function countedLinks<T extends { revokedAt: Date | null }>(links: T[], confirme
 }
 
 /**
+ * TAMBUR + ETEK gibi aynı okumaya bağlı birden çok kalem makine süresini BÖLÜŞÜR (tek sayım, DALGA4 §8.3). Sayılan bağ:
+ * aktif ya da onaydan sonra damgalı (taslaktan çıkarılan sayılmaz); kalemler belirlenimli sıralanır.
+ */
+function readingShare(itemId: string, siblings: Array<{ serviceItemId: string; revokedAt: Date | null; invoice: { confirmedAt: Date | null } }>): { readingShareIndex: number; readingShareCount: number } {
+  const items = new Set([itemId]);
+  for (const s of siblings) if (countedLinks([s], s.invoice.confirmedAt).length > 0) items.add(s.serviceItemId);
+  const sorted = [...items].sort();
+  return { readingShareIndex: sorted.indexOf(itemId), readingShareCount: sorted.length };
+}
+
+/**
  * Hizmet bağı taşıyan SATIŞ faturaları: [start, end) içinde fatura tarihli (onaylı/iptal ya da taslak) ya da
  * iptal anı bu aralıkta olanlar. Sıra belirlenimli (issueDate, id).
  */
@@ -67,7 +83,12 @@ export async function readServiceRevenueInvoices(start: Date, end: Date): Promis
       serviceBillingLinks: {
         select: {
           id: true, rollId: true, workOrderStepId: true, serviceItemId: true, billedMeters: true, meterBasis: true, serviceAt: true, revokedAt: true,
-          reading: { select: { machineId: true, createdAt: true } },
+          reading: {
+            select: {
+              machineId: true, createdAt: true, workOrderStepId: true,
+              billingLinks: { select: { serviceItemId: true, revokedAt: true, invoice: { select: { confirmedAt: true } } } },
+            },
+          },
           roll: { select: { ownerCustomerId: true } },
         },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -85,6 +106,7 @@ export async function readServiceRevenueInvoices(start: Date, end: Date): Promis
       links: links.map((l) => ({
         id: l.id, rollId: l.rollId, workOrderStepId: l.workOrderStepId, serviceItemId: l.serviceItemId, billedMeters: l.billedMeters,
         meterBasis: l.meterBasis, serviceAt: l.serviceAt, machineId: l.reading?.machineId ?? null, readingAt: l.reading?.createdAt ?? null, ownerCustomerId: l.roll.ownerCustomerId,
+        readingStepId: l.reading?.workOrderStepId ?? null, ...readingShare(l.serviceItemId, l.reading?.billingLinks ?? []),
       })),
     };
   });

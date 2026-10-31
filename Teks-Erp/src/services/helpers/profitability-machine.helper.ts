@@ -8,15 +8,15 @@
 //            yazımı değişmez (tüketicileri §8.9; `test_karlilik_makine_genel_gider` §1 önce/sonra bayt-aynı ölçer).
 //   VARDIYA — makinenin oturumla değdiği iptalsiz vardiyaların tamamı (mola düşülür), vardiyanın başladığı güne.
 //   NORM   — iş metresi ÷ ücretteki saatlik metre normu (günlük bölüşüm yok, boşta satırı yok).
-// Bilinmeyen değer 0 DEĞİLDİR: `null` + eksik kodu. Makinesi atfedilmemiş iş (ölçüm okuması yok) makine maliyeti 0
-// taşır (`machineAttributed: false`); o makinenin süresi gün metresi yoksa boşta satırına düşer.
+// Bilinmeyen değer 0 DEĞİLDİR: `null` + eksik kodu. Makinesi atfedilmemiş iş (ölçüm okuması yok — bugün kurşun) makine
+// maliyeti 0 taşır (`machineAttributed: false`); o makinenin süresi gün metresi yoksa boşta satırına düşer.
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { factoryDayEnd, factoryDayEndOfKey, factoryDayStart, factoryYmd } from "../../constants/time";
 import type { ProfitMachineTimeMode } from "../system-setting.service";
 import { isCostRateValidAt, machineCostRateHistory } from "./cost-rate-validity.helper";
-import { machineDailyMeters } from "./meter-reading.helper";
+import { machineWorkMeters, workFirstReadingAt, workKey, type WorkRef } from "./meter-reading-work.helper";
 import type { RevenueLinkRow } from "./profitability-finance.helper";
 
 export type MachineMissingCode = "MAKINE_TARIFESI" | "MAKINE_NORMU" | "MAKINE_SURESI" | "MAKINE_METRESI" | "VARDIYA_TAKVIMI";
@@ -61,7 +61,10 @@ async function machineIntervals(start: Date, end: Date): Promise<Map<string, Arr
   for (const s of rows) {
     const a = Math.max(s.startedAt.getTime(), start.getTime());
     const b = Math.min(sessionEffectiveEnd(s).getTime(), end.getTime());
-    if (b > a) raw.set(s.machineId!, [...(raw.get(s.machineId!) ?? []), [a, b]]);
+    if (b <= a) continue;
+    const list = raw.get(s.machineId!);
+    if (list) list.push([a, b]);
+    else raw.set(s.machineId!, [[a, b]]);
   }
   const merged = new Map<string, Array<[number, number]>>();
   for (const [m, list] of raw) {
@@ -115,48 +118,63 @@ async function shiftHoursByDay(intervals: Map<string, Array<[number, number]>>, 
   return out;
 }
 
+/** İşin süresini aynı okumaya bağlı kalemler arasında böler; son pay kalanı alır (Σ pay = iş süresi, tek sayım). */
+function shareOf(h: Prisma.Decimal, index: number, count: number): Prisma.Decimal {
+  if (count <= 1) return h;
+  const part = h.div(count).toDecimalPlaces(6);
+  return index < count - 1 ? part : h.minus(part.mul(count - 1));
+}
+
 /**
  * Bağ başına makine maliyeti + aralıktaki boşta makine günleri. `rangeStart/rangeEnd` rapor aralığı (boşta satırı
- * yalnız bunun içinde); iş günleri aralık dışında olabilir (geçen ay yapılan iş bu ay faturalanır).
+ * yalnız bunun içinde); iş günleri aralık dışında olabilir (geçen ay yapılan iş bu ay faturalanır). İş = makine × top ×
+ * adım (`meter-reading-work.helper`): günü ilk okumasının günü, süresi `gün süresi × iş metresi / gün metresi`
+ * (NORM: iş metresi ÷ norm); aynı okumaya bağlı kalemler (TAMBUR + ETEK) bu süreyi BÖLÜŞÜR.
  */
 export async function computeMachineCosts(
   mode: ProfitMachineTimeMode, links: RevenueLinkRow[], rangeStart: Date, rangeEnd: Date,
 ): Promise<{ byLink: Map<string, LinkMachineCost>; idle: IdleMachineDay[] }> {
   const byLink = new Map<string, LinkMachineCost>();
-  const workAt = (l: RevenueLinkRow) => l.readingAt ?? l.serviceAt;
-  const attributed = links.filter((l) => l.machineId !== null);
+  const refOf = (l: RevenueLinkRow): WorkRef | null =>
+    l.machineId !== null && l.readingStepId !== null ? { machineId: l.machineId, rollId: l.rollId, workOrderStepId: l.readingStepId } : null;
+  const attributed = links.flatMap((l) => { const w = refOf(l); return w ? [w] : []; });
+  const firstAt = await workFirstReadingAt(attributed);
   let winStart = rangeStart;
   let winEnd = rangeEnd;
-  for (const l of attributed) {
-    const d0 = factoryDayStart(workAt(l));
+  for (const at of firstAt.values()) {
+    const d0 = factoryDayStart(at);
     if (d0 < winStart) winStart = d0;
-    const d1 = nextDayStart(workAt(l));
+    const d1 = nextDayStart(at);
     if (d1 > winEnd) winEnd = d1;
   }
   const intervals = mode === "NORM" ? new Map<string, Array<[number, number]>>() : await machineIntervals(winStart, winEnd);
-  const machineIds = [...new Set([...attributed.map((l) => l.machineId!), ...intervals.keys()])].sort();
+  const machineIds = [...new Set([...attributed.map((w) => w.machineId), ...intervals.keys()])].sort();
   const rates = await machineCostRateHistory(prisma, machineIds);
   const rateAt = (m: string, at: Date) => rates.filter((r) => r.machineId === m && isCostRateValidAt(r, at)).at(-1) ?? null;
   const hours = mode === "OTURUM" ? sessionHoursByDay(intervals) : mode === "VARDIYA" ? await shiftHoursByDay(intervals, winStart, winEnd) : new Map<string, Prisma.Decimal>();
   const sessionDays = mode === "VARDIYA" ? sessionHoursByDay(intervals) : hours;
-  const meters = mode === "NORM" ? new Map<string, Prisma.Decimal>() : await machineDailyMeters(machineIds, winStart, winEnd);
+  const { dayMeters: meters, works } = await machineWorkMeters(machineIds, winStart, winEnd);
 
   for (const l of links) {
-    if (l.machineId === null) { byLink.set(l.id, { machineAttributed: false, machineHours: D0(), machineTry: D0(), missing: [] }); continue; }
+    const ref = refOf(l);
+    if (ref === null) { byLink.set(l.id, { machineAttributed: false, machineHours: D0(), machineTry: D0(), missing: [] }); continue; }
     const missing: MachineMissingCode[] = [];
-    const rate = rateAt(l.machineId, workAt(l));
+    const work = works.get(workKey(ref));
+    const rate = rateAt(ref.machineId, work?.firstAt ?? l.readingAt ?? l.serviceAt);
     let h: Prisma.Decimal | null = null;
-    if (mode === "NORM") {
-      if (rate?.normMPerHour && rate.normMPerHour.gt(0)) h = l.billedMeters.div(rate.normMPerHour);
+    if (!work) missing.push("MAKINE_METRESI");
+    else if (mode === "NORM") {
+      if (rate?.normMPerHour && rate.normMPerHour.gt(0)) h = work.meters.div(rate.normMPerHour);
       else missing.push("MAKINE_NORMU");
     } else {
-      const k = dayKey(l.machineId, factoryYmd(workAt(l)));
+      const k = dayKey(ref.machineId, work.day);
       const dh = hours.get(k);
       const dm = meters.get(k);
       if (!dh || dh.lte(0)) missing.push(mode === "VARDIYA" && sessionDays.get(k)?.gt(0) ? "VARDIYA_TAKVIMI" : "MAKINE_SURESI");
       else if (!dm || dm.lte(0)) missing.push("MAKINE_METRESI");
-      else h = dh.mul(l.billedMeters).div(dm);
+      else h = dh.mul(work.meters).div(dm);
     }
+    if (h) h = shareOf(h, l.readingShareIndex, l.readingShareCount);
     if (!rate) missing.push("MAKINE_TARIFESI");
     byLink.set(l.id, { machineAttributed: true, machineHours: h, machineTry: h && rate ? h.mul(rate.hourRateTry) : null, missing });
   }

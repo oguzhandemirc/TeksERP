@@ -10,7 +10,9 @@
 //   §3 genel gider — varsayılan YOK + {} → her satırda net = katkı (bayt-aynı), havuz ay özetinde dağıtılmamış;
 //      METRE + sınıflar → genel gider metre payıyla, işçilik makine saatiyle, HARIC dışarıda; Σ pay = havuz (tam)
 //   §4 ayar yazımı — varsayılanlar OTURUM / YOK / {}; tanınmayan değer 400 (üç ayar); harita trim'lenir
-//   §5 ayar paketi — makineSuresi + genelGiderAnahtari satırı var, kategoriSiniflari YOK (S14 cevabı bekleniyor)
+//   §6 tek sayım — aynı CUT okumasına bağlı iki hizmet kalemi (TAMBUR + ETEK) makine süresini BÖLÜŞÜR
+//   §7 düzeltme — ertesi gün düzeltilen okumanın işi ilk okuma gününe atfedilir (maliyet kaybolmaz, null olmaz)
+//   §5 ayar paketi — makineSuresi + genelGiderAnahtari satırı var, kategoriSiniflari 'Maaş' → ISCILIK (S14 kararı)
 //
 // ⭐ NEGATİF SONDA (ölçüldü 2026-10-31): bkz. BEKCI-HARITASI satırı.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Ayarlar fotoğrafa döner; fikstür 2023-03'tedir (canlı veriyle karışmaz).
@@ -68,6 +70,9 @@ function bolum0(): void {
   check("§0a ⭐ kârlılık work_sessions'a YAZMAZ ve yazım helper'ını import etmez", ihlal.length === 0, ihlal.join(", ") || "temiz");
   const ws = readFileSync(path.join(HELPERS, "work-session.helper.ts"), "utf8");
   const idleWrites = ws.match(/endedAt: new Date\(\), endReason: "IDLE"/g)?.length ?? 0;
+  const meterImports = profit.flatMap((f) => [...readFileSync(path.join(HELPERS, f), "utf8").matchAll(/from\s+["']([^"']*meter-reading[^"']*)["']/g)].map((m) => `${f} → ${m[1]}`));
+  check("§0c kârlılık ölçüm okumasını YALNIZ meter-reading-work.helper'dan alır (yazım boğazı import edilmez)",
+    meterImports.length > 0 && meterImports.every((x) => x.endsWith("./meter-reading-work.helper")), meterImports.join(", "));
   check("§0b yazım yolu değişmedi: tembel IDLE kapanışı iki yerde `endedAt: new Date()` yazar (§8.9)", idleWrites === 2, `bulunan=${idleWrites}`);
 }
 
@@ -242,10 +247,62 @@ async function main(): Promise<void> {
     const ff2 = (await systemSettingService.getFeatureFlags()).data!;
     check("§4c geçerli değer yazılır, kategori adı trim'lenir", ff2.costProfitOverheadKey === "GELIR" && JSON.stringify(ff2.costProfitCategoryClasses) === JSON.stringify({ Maaş: "ISCILIK" }), JSON.stringify(ff2.costProfitCategoryClasses));
 
+    // ── §6 tek sayım: aynı CUT okumasına TAMBUR + ETEK iki bağı (13 Mart, oturum 2 sa, tek iş 30 m) ──
+    await prisma.systemSetting.deleteMany({ where: { key: { in: AYARLAR.slice(6) } } });
+    invalidateFeatureFlagsCache();
+    const S2 = await item("S2", ItemType.SERVICE, ItemUnit.MT);
+    const RC = await roll(30);
+    const rdC = await prisma.rollMeterReading.create({
+      data: { rollId: RC, workOrderStepId: step, phase: MeterPhase.CUT, meters: "30", source: MachineDataSource.MACHINE, machineId: M, clientToken: randomUUID(), createdAt: at("2023-03-13", 9) },
+      select: { id: true },
+    });
+    await session(at("2023-03-13", 8), at("2023-03-13", 10), "LOGOUT", at("2023-03-13", 10));
+    // Ertesi gün düzeltme (§7): 14 Mart 50 m okuma (oturum 1 sa), 15 Mart 10:00'da damgalanıp 48 m ile yeniden açılır.
+    const RD = await roll(50);
+    const rdD0 = await prisma.rollMeterReading.create({
+      data: { rollId: RD, workOrderStepId: step, phase: MeterPhase.CUT, meters: "50", source: MachineDataSource.MACHINE, machineId: M, clientToken: randomUUID(), createdAt: at("2023-03-14", 9) },
+      select: { id: true },
+    });
+    await session(at("2023-03-14", 8), at("2023-03-14", 9), "LOGOUT", at("2023-03-14", 9));
+    await prisma.rollMeterReading.update({ where: { id: rdD0.id }, data: { revokedAt: at("2023-03-15", 10), revokeReason: "TEST düzeltme" } });
+    const rdD1 = await prisma.rollMeterReading.create({
+      data: { rollId: RD, workOrderStepId: step, phase: MeterPhase.CUT, meters: "48", source: MachineDataSource.OPERATOR, machineId: M, clientToken: randomUUID(), createdAt: at("2023-03-15", 10) },
+      select: { id: true },
+    });
+    const inv2 = await prisma.invoice.create({
+      data: {
+        docNo: `${P}-F2`, type: "SALES", status: InvoiceStatus.CONFIRMED, cariId: cari.id, currency: Currency.TRY, exchangeRate: "1",
+        issueDate: at("2023-03-21", 9), confirmedAt: at("2023-03-21", 9),
+        lines: { create: [
+          { lineNo: 1, itemId: S, description: "TEST", qty: "78", unitPrice: "8", lineTotal: "624.00", vatAmount: "0" },
+          { lineNo: 2, itemId: S2, description: "TEST", qty: "30", unitPrice: "5", lineTotal: "150.00", vatAmount: "0" },
+        ] },
+      },
+      select: { id: true },
+    });
+    ids.invoices.push(inv2.id);
+    for (const [rollId, readingId, itemId, m] of [[RC, rdC.id, S, "30"], [RC, rdC.id, S2, "30"], [RD, rdD1.id, S, "48"]] as const) {
+      await prisma.serviceBillingLink.create({ data: {
+        invoiceId: inv2.id, rollId, workOrderStepId: step, serviceItemId: itemId, readingId, billedMeters: m, meterBasis: ServiceMeterBasis.CUT,
+        unitPrice: "8", currency: Currency.TRY, serviceAt: at("2023-03-13", 9),
+      } });
+    }
+    const r6 = mine((await report()).rows);
+    const cRows = r6.filter((r) => r.rollId === RC);
+    const cHours = cRows.reduce((s, r) => s.plus(r.machineHours ?? 0), new Prisma.Decimal(0));
+    check("§6 ⭐ aynı okumada iki kalem: Σ makine saati = gün süresi 2,00 (iki kat değil), her kalem 1,00 sa / 100,00",
+      cRows.length === 2 && cHours.eq(2) && cRows.every((r) => f2(r.machineHours) === "1.00" && f2(r.machineTry) === "100.00"),
+      cRows.map((r) => `${f2(r.machineHours)}/${f2(r.machineTry)}`).join(" "));
+    const dRow = r6.find((r) => r.rollId === RD);
+    check("§7 ⭐ ertesi gün düzeltilen okuma asıl güne (14 Mart, 1 sa) atfedilir: 1,00 sa / 100,00, MAKINE_SURESI yok",
+      f2(dRow?.machineHours) === "1.00" && f2(dRow?.machineTry) === "100.00" && dRow?.missing.includes("MAKINE_SURESI") === false,
+      `${f2(dRow?.machineHours)}/${f2(dRow?.machineTry)} ${JSON.stringify(dRow?.missing)}`);
+
     // ── §5 ayar paketi ──
     const paket = readFileSync(path.join(ROOT, "scripts/hizmet-ayar-paketi.ts"), "utf8");
-    check("§5 paket: makineSuresi + genelGiderAnahtari var, kategoriSiniflari satırı YOK (S14)",
-      /anahtar: "maliyet\.karlilik\.makineSuresi"/.test(paket) && /anahtar: "maliyet\.karlilik\.genelGiderAnahtari"/.test(paket) && !/anahtar: "maliyet\.karlilik\.kategoriSiniflari"/.test(paket));
+    check("§5 paket: makineSuresi + genelGiderAnahtari var; kategoriSiniflari 'Maaş' → ISCILIK (S14)",
+      /anahtar: "maliyet\.karlilik\.makineSuresi"/.test(paket) && /anahtar: "maliyet\.karlilik\.genelGiderAnahtari"/.test(paket) &&
+      /anahtar: "maliyet\.karlilik\.kategoriSiniflari".*hedef: \{ "Maaş": "ISCILIK" \}/.test(paket));
   } finally {
     await temizle(foto);
   }
