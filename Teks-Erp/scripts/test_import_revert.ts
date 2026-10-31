@@ -182,7 +182,7 @@ async function main(): Promise<void> {
   // Plan servis dosyasında, YAZIM dal dosyasında (boyut kapısı değil okunabilirlik):
   // iki dosya BİRLİKTE ölçülür, yoksa kontrol dosya bölününce sessizce körleşir.
   let revertSrc = "";
-  for (const f of ["import-revert.service.ts", "import-revert.branches.ts"]) {
+  for (const f of ["import-revert.service.ts", "import-revert.branches.ts", "import-revert.children.ts"]) {
     try {
       revertSrc += yorumlariSok(SRC(f));
     } catch {

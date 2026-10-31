@@ -292,4 +292,9 @@ export interface ImportAdapter {
     line: { recordId: string; action: "CREATE" | "UPDATE" | "REVIVE"; changedFields: unknown },
     userId?: string,
   ): Promise<string | null>;
+  /**
+   * Çocuk kümesiyle BİRLİKTE yazılması gereken skaler alanlar (ör. atkı sıra kodu ↔ adetler):
+   * geri sarmada ayrı claim'le değil, çocukla aynı servis çağrısında geri yazılır.
+   */
+  revertCoupledFields?: readonly string[];
 }

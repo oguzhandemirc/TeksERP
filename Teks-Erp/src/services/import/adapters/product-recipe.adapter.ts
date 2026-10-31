@@ -5,6 +5,7 @@
 // dosyada ne yazıyorsa o kalır, eksikler silinir. Boş bırakmak "dokunma"dır;
 // temizlemek için NULL yazılır.
 
+import { ImportPartialWriteError } from "../import-partial-write";
 import prisma from "../../../lib/prisma";
 import { productRecipeService } from "../../../routes/product-recipe.routes";
 import { resolveReference, resolveReferenceList } from "../import-lookup";
@@ -178,7 +179,7 @@ export const productRecipeImportAdapter: ImportAdapter = {
   async createOne(row: PreparedRow, ctx: ImportContext) {
     const res = await productRecipeService.create(toPayload(row, false), ctx.userId);
     const id = (res.data as { id: string }).id;
-    await writeWeftChanges(row, id, ctx.userId);
+    await writeWeftChangesAfter(row, id, ctx.userId);
     return { id };
   },
 
@@ -186,8 +187,12 @@ export const productRecipeImportAdapter: ImportAdapter = {
     const id = row.result.targetId as string;
     const payload = toPayload(row, true);
     // Yalnız varyant değişimi değiştiyse şablonun kendisine yazım yok (boş PATCH 400'e düşmesin).
-    if (Object.keys(payload).length > 0) await productRecipeService.update(id, payload, ctx.userId);
-    await writeWeftChanges(row, id, ctx.userId);
+    if (Object.keys(payload).length === 0) {
+      await writeWeftChanges(row, id, ctx.userId);
+      return { id };
+    }
+    await productRecipeService.update(id, payload, ctx.userId);
+    await writeWeftChangesAfter(row, id, ctx.userId);
     return { id };
   },
 
@@ -239,4 +244,14 @@ function toPayload(row: PreparedRow, isUpdate: boolean): Record<string, unknown>
     out.properties = (v.propertyCodes__ids as string[]).map((propertyId) => ({ propertyId }));
   }
   return out;
+}
+
+/** Şablon yazıldıktan sonra atkı değişimi düşerse yazılan kayıt deftere girsin (değişim çocuğu hariç). */
+async function writeWeftChangesAfter(row: PreparedRow, id: string, userId?: string): Promise<void> {
+  try {
+    await writeWeftChanges(row, id, userId);
+  } catch (e) {
+    if (row.result.changes) delete row.result.changes.weftChanges;
+    throw new ImportPartialWriteError(id, e);
+  }
 }

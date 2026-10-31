@@ -12,8 +12,8 @@ import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { OrderService } from "../order.service";
-import type { ImportAdapter, ImportContext, PreparedRow } from "./import.types";
-import { importKey } from "./import-key";
+import type { ImportAdapter } from "./import.types";
+import { fromJson, restoreChildren } from "./import-revert.children";
 
 /** Ters yol sınıfı — §8.2 matrisinin koddaki karşılığı. */
 export type RevertMode = "DEACTIVATE" | "DELETE_PIVOT" | "CANCEL_DOCUMENT" | "REVOKE_VERSION";
@@ -39,7 +39,7 @@ export interface RevertAuditEntry {
   newData: Record<string, unknown>;
 }
 
-interface BranchOutcome {
+export interface BranchOutcome {
   skipReason?: string;
   detail?: Record<string, unknown>;
 }
@@ -59,14 +59,6 @@ export const delegateOf = (client: unknown, model: string): Delegate =>
 // route'tan import etmesi emsalsiz bir ters bağımlılık olurdu. İptal yolu
 // `this.config`ten YALNIZ `tableName` okuyor (ölçüldü: order.service.ts:2899).
 const orderCancelService = new OrderService({ modelName: "order", tableName: "ORDER" });
-
-const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
-
-/** JSON'a yazılan tarih METİN döner; WHERE'de Date olmalı yoksa claim hiç tutmaz. */
-function fromJson(v: unknown): unknown {
-  if (typeof v === "string" && ISO.test(v)) return new Date(v);
-  return v ?? null;
-}
 
 /**
  * Bir defter satırının tersini yazar. Dönüş: uygulandı mı, atlandıysa gerekçe,
@@ -112,6 +104,11 @@ export async function revertOneLine(args: {
   // aynı satırı kilitliyken çağrılırsa kendi kilidini bekler ve tx zaman aşımına düşer (SY-H2
   // ölçtü: desen kartı ızgara + aile). Bu yüzden ÖNCE çocuk (fırlatırsa skaler yazılmaz), sonra tx.
   const child = line.action === "CREATE" ? {} : await restoreChildren(adapter, line, userId, permissions);
+  // Çocuk geri yazılamadıysa ona bağlı skaler (ör. atkı sıra kodu ↔ adetler) da yazılmaz: yarım kart olmaz.
+  if (child.skipReason) {
+    await stampSkip(line.id, child.skipReason);
+    return { reverted: false, skipReason: child.skipReason };
+  }
   const outcome = await prisma.$transaction(async (tx) => {
     if (line.action === "CREATE") {
       return plan.mode === "DELETE_PIVOT"
@@ -242,7 +239,12 @@ async function restoreRow(
   // tüm geri sarmayı düşürür. Geri yazılmaz, gerekçesiyle raporlanır (SY-H2).
   const lookupKeys = new Set(adapter.columns.filter((c) => c.type === "lookup").map((c) => c.key));
   const unsupported: string[] = [];
+  const coupledDone = new Set((child.detail?.restoredCoupled as string[] | undefined) ?? []);
   for (const [field, pair] of Object.entries(cf)) {
+    if (coupledDone.has(field)) {
+      restored.push(field);
+      continue;
+    }
     if (lookupKeys.has(field)) {
       unsupported.push(field);
       continue;
@@ -255,7 +257,6 @@ async function restoreRow(
     else restored.push(field);
   }
 
-  if (child.skipReason && restored.length === 0) return { skipReason: child.skipReason };
   if (restored.length === 0 && stale.length === 0 && unsupported.length > 0 && !child.detail) {
     return { skipReason: `Referans alanı geri yazılmaz (${unsupported.join(", ")}) — panelden düzeltin` };
   }
@@ -269,113 +270,6 @@ async function restoreRow(
       ...(stale.length > 0 ? { staleFields: stale } : {}),
       ...(unsupported.length > 0 ? { unsupportedFields: unsupported } : {}),
       ...(child.detail ?? {}),
-      ...(child.skipReason ? { childSkipReason: child.skipReason } : {}),
     },
-  };
-}
-
-/**
- * REPLACE edilmiş çocuk kümesini geri yazar. Yazım ADAPTÖRÜN kendi yolundan geçer
- * (kod→id çözümü + guard'lar korunsun), sonra sonuç `findExisting` ile OKUNUR:
- * beklenen kümeye eşit değilse hata fırlatılır (tx geri alınır) — kör geri yazım yok.
- */
-async function restoreChildren(
-  adapter: ImportAdapter,
-  line: RevertLine,
-  userId?: string,
-  permissions?: string[],
-): Promise<BranchOutcome> {
-  const snap = line.childSnapshot as Record<string, { from: unknown; to: unknown }> | null;
-  if (!snap || Object.keys(snap).length === 0) return {};
-  if (!line.keyValue) return { skipReason: "Çocuk geri yazımı için anahtar yok" };
-
-  const before = await readChildSets(adapter, line.keyValue);
-  if (!before) return { skipReason: "Çocuk geri yazımı: kayıt bulunamadı" };
-
-  // Çocuğun CLAIM'i: küme hâlâ import'un yazdığı mı? Değilse DOKUNMA.
-  const keys = Object.keys(snap);
-  const changedByOthers = keys.filter((k) => !sameSet(before[k], snap[k]!.to));
-  if (changedByOthers.length > 0) {
-    return {
-      skipReason: `Çocuk satırlarını başkası değiştirdi (${changedByOthers.join(", ")}) — geri yazılmadı`,
-    };
-  }
-
-  const ctx: ImportContext = { userId, cache: new Map(), permissions };
-  const row = synthRow(adapter, { recordId: line.recordId, keyValue: line.keyValue, snap, existing: before });
-  await adapter.validateRow?.(row, ctx);
-  if (row.result.errors.length > 0) {
-    return {
-      skipReason: `Çocuk geri yazımı doğrulanamadı: ${row.result.errors.map((e) => e.message).join("; ")}`,
-    };
-  }
-  await adapter.updateOne(row, ctx);
-
-  const after = await readChildSets(adapter, line.keyValue);
-  const unwritten = keys.filter((k) => !sameSet(after?.[k], snap[k]!.from));
-  if (unwritten.length > 0) {
-    throw AppError.internal(
-      `Çocuk geri yazımı doğrulanamadı (${unwritten.join(", ")}) — geri sarma iptal edildi.`,
-    );
-  }
-  return { detail: { restoredChildren: keys } };
-}
-
-async function readChildSets(
-  adapter: ImportAdapter,
-  keyValue: string,
-): Promise<Record<string, unknown> | undefined> {
-  const map = await adapter.findExisting([keyValue]);
-  return map.get(importKey(keyValue)) ?? map.get(keyValue);
-}
-
-/** Motorun diff'iyle AYNI kanonikleştirme: sıra bağımsız, boş=null. */
-function sameSet(a: unknown, b: unknown): boolean {
-  return canon(a) === canon(b);
-}
-function canon(v: unknown): string {
-  if (v === undefined || v === null) return "";
-  if (Array.isArray(v)) return [...v].map((x) => canon(x)).sort().join("|");
-  if (typeof v === "object") {
-    const o = v as Record<string, unknown>;
-    return Object.keys(o)
-      .sort()
-      .map((k) => `${k}=${canon(o[k])}`)
-      .join(";");
-  }
-  return String(v);
-}
-
-/**
- * Adaptörün beklediği `PreparedRow`u kurar: yalnız ANAHTAR + geri yazılacak çocuk
- * kümeleri. Skaler alanlar BURAYA GİRMEZ (onlar atomik claim'le yazıldı; boş hücre
- * "dokunma" demek).
- */
-function synthRow(
-  adapter: ImportAdapter,
-  args: {
-    recordId: string;
-    keyValue: string;
-    snap: Record<string, { from: unknown; to: unknown }>;
-    existing: Record<string, unknown>;
-  },
-): PreparedRow {
-  const { recordId, keyValue, snap, existing } = args;
-  const values: Record<string, unknown> = { [adapter.keyColumns[0]!]: keyValue };
-  let children: PreparedRow["children"];
-  for (const [k, pair] of Object.entries(snap)) {
-    if (k === "__children") {
-      const list = (pair.from as Array<Record<string, unknown>> | null) ?? [];
-      children = list.map((vals, i) => ({ rowNo: i + 1, values: vals }));
-    } else {
-      values[k] = pair.from ?? [];
-    }
-  }
-  return {
-    input: { rowNo: 0, cells: {} },
-    values,
-    result: { rowNo: 0, action: "UPDATE", targetId: recordId, key: keyValue, errors: [], warnings: [] },
-    existing,
-    children,
   };
 }

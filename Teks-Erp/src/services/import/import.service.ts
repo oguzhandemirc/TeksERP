@@ -24,6 +24,7 @@
 //      sonuç asla SESSİZ kalmaz; `ImportRun` satırı da kalıcı iz bırakır.
 // Bu ayrım kullanıcıya da aynen yazılır (panel sonuç kartı + şablon açıklaması).
 
+import { ImportPartialWriteError } from "./import-partial-write";
 import { Prisma } from "@prisma/client";
 import { matchesPermission } from "../../middlewares/rbac.middleware";
 import prisma from "../../lib/prisma";
@@ -591,19 +592,16 @@ export class ImportService {
           skipped++;
           continue;
         }
-        try {
-          const out =
-            p.result.action === "CREATE"
-              ? await adapter.createOne(p, ctx)
-              : await adapter.updateOne(p, ctx);
+        // Yazılan kayıt (tam ya da ilk adımı) sayılır + audit + defter — tek yerden.
+        const record = (recordId: string): void => {
           if (p.result.action === "CREATE") created++;
           else updated++;
-          p.result.targetId = out.id;
+          p.result.targetId = recordId;
           auditEntries.push({
             userId,
             action: p.result.action === "CREATE" ? "CREATE" : "UPDATE",
             tableName: adapter.tableName,
-            recordId: out.id,
+            recordId,
             // `importRunId` iki soruyu birden cevaplar: "bu kayıt nasıl oluştu"
             // ve "bu koşumda neler oluştu". İkincisi olmadan hatalı bir yükleme
             // geri alınamaz (hangi kayıtların yazıldığı bilinmez).
@@ -615,15 +613,23 @@ export class ImportService {
             buildImportRunLine({
               entity,
               tableName: adapter.tableName,
-              recordId: out.id,
+              recordId,
               row: p,
               engineAction: p.result.action === "CREATE" ? "CREATE" : "UPDATE",
               createdClaim: p.result.action === "CREATE" ? adapter.createdClaim?.(p) : undefined,
             }),
           );
+        };
+        try {
+          const out =
+            p.result.action === "CREATE"
+              ? await adapter.createOne(p, ctx)
+              : await adapter.updateOne(p, ctx);
+          record(out.id);
         } catch (e) {
           // Doğrulama geçmişti ama yazma düştü (yarış / DB). DURUYORUZ: devam etmek
           // hasarı büyütür ve kullanıcı nerede kaldığını bilemez.
+          if (e instanceof ImportPartialWriteError) record(e.recordId);
           failed++;
           stoppedAtRowNo = p.input.rowNo;
           p.result.action = "ERROR";

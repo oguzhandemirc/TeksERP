@@ -69,6 +69,7 @@ export const weftSpecImportAdapter: ImportAdapter = {
   keyColumns: ["code"],
   columns: COLUMNS,
   grouped: true,
+  revertCoupledFields: ["sequenceCode"],
   nameGuard: { model: "weftSpec", field: "name", label: "atkı kartı", codeField: "code" },
   notes: [
     "Aynı kodlu satırlar TEK atkı kartıdır; iplik listesi dosyadaki sırayla DEĞİŞTİRİLİR (replace).",

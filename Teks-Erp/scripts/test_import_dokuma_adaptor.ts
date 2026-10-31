@@ -14,7 +14,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { AppError } from "../src/utils/app-error";
 import { ImportService } from "../src/services/import/import.service";
 import { ImportRevertService, REVERT_PLAN } from "../src/services/import/import-revert.service";
-import { listAdapters } from "../src/services/import/import-registry";
+import { getImportAdapter, listAdapters } from "../src/services/import/import-registry";
 import {
   systemSettingService,
   readDevereEnabledRaw,
@@ -139,6 +139,15 @@ async function main(): Promise<void> {
   check("§3b adet sütunu boş aynı dosya → SKIP (türetim diff'te)", fSame.rows[0]?.action === "SKIP", JSON.stringify(fSame.rows[0]?.changes));
   const fBad = await ImportService.preview("weftSpec", [row(2, { code: c("WF2"), name: `${TAG} atkı 2`, yarnCode: c("Y1") })], {}, { userId: adminId, permissions: ALL });
   check("§3c sıra kodu yokken adet zorunlu → ERROR", fBad.rows[0]?.action === "ERROR");
+  const cardOf = async (): Promise<string> => {
+    const w = await prisma.weftSpec.findUnique({ where: { code: c("WF1") }, include: { yarns: { orderBy: { sortOrder: "asc" } } } });
+    return `${w?.sequenceCode} ${w?.yarns.map((y) => y.picksInRepeat).join()}`;
+  };
+  const before3e = await cardOf();
+  const fUpd = await apply("weftSpec", [row(2, { code: c("WF1"), sequenceCode: "a3 b2", yarnCode: c("Y1") }), row(3, { code: c("WF1"), yarnCode: c("Y2") })]);
+  const mid3e = await cardOf();
+  const rv3e = await revertAll(fUpd.runId, [2]);
+  check("§3e sıra kodu güncellemesi geri sarılınca kart TUTARLI önceki hâline döner", fUpd.updated === 1 && mid3e !== before3e && rv3e.reverted === 1 && (await cardOf()) === before3e, `${before3e} → ${mid3e} → ${await cardOf()} ${JSON.stringify(rv3e)}`);
   await revertAll(fApp.runId, [2]);
   check("§3d yaratma geri sarıldı → PASİF", (await prisma.weftSpec.findUnique({ where: { code: c("WF1") } }))?.isActive === false);
 
@@ -197,6 +206,25 @@ async function main(): Promise<void> {
   const legacy = await ImportService.preview("productRecipe", [row(2, { code: recKey, name: rec!.name })], {}, { userId: adminId, permissions: ALL });
   check("§6h varyant sütunsuz eski dosya → SKIP (bugünkü davranış)", legacy.rows[0]?.action === "SKIP");
 
+  // Yarış: doğrulamadan SONRA atkı değişimi geçersizleşir (kartta olmayan sıra) → şablon yazıldı, değişim düştü.
+  const recAdapter = getImportAdapter("productRecipe");
+  const origValidate = recAdapter.validateRow!;
+  recAdapter.validateRow = async (r, ctx) => {
+    await origValidate(r, ctx);
+    if (r.values.weftChanges__rows) r.values.weftChanges__rows = [{ weftSortOrder: 9, yarnItemId: y1 }];
+  };
+  let partial: ImportApplyResult;
+  try {
+    partial = await apply("productRecipe", [row(2, { name: `${TAG} varyant yarış`, itemCode: c("KM"), variantCode: "v02", weftChanges: `B=${c("Y3")}` })]);
+  } finally {
+    recAdapter.validateRow = origValidate;
+  }
+  const orphan = await prisma.productRecipe.findFirst({ where: { itemId: fab.id, variantCode: "V02" }, select: { id: true, isActive: true } });
+  const orphanLine = orphan ? await prisma.importRunLine.count({ where: { importRunId: partial.runId, recordId: orphan.id, action: "CREATE" } }) : 0;
+  check("§6i ikinci adım düştü → yazılan şablon defterde (PARTIAL, CREATE satırı)", partial.status === "PARTIAL" && orphanLine === 1, `${partial.status} line=${orphanLine}`);
+  const rvPartial = await revertAll(partial.runId, [2]);
+  check("§6j yarım şablon geri sarılabilir → PASİF", rvPartial.reverted === 1 && orphan !== null && (await prisma.productRecipe.findUnique({ where: { id: orphan.id } }))?.isActive === false, JSON.stringify(rvPartial));
+
   console.log("§7 yarış: uygula önizlemeye GÜVENMEZ");
   const raceRows = [row(2, { code: c("WR"), name: `${TAG} yarış`, yarnCode: c("YR"), endsCount: "100" })];
   const racePrev = await ImportService.preview("warpSpec", raceRows, {}, { userId: adminId, permissions: ALL });
@@ -209,6 +237,8 @@ async function main(): Promise<void> {
   await systemSettingService.setFeatureFlags({ dokumaEnabled: false }, adminId);
   const off = (await ImportService.listEntities(ALL)).map((e) => e.entity);
   check("§8a dokuma kapalı → desen/atkı adaptörü YOK, modülsüzler VAR", !off.includes("weaveDesign") && !off.includes("weftSpec") && off.includes("productRecipe"), off.join(","));
+  const offRevert = await errCode(() => revertAll(fApp.runId, [2]));
+  check("§8c dokuma kapalı → atkı koşumunun geri sarması 403 MODULE_DISABLED", offRevert === "MODULE_DISABLED", String(offRevert));
   await systemSettingService.setFeatureFlags({ dokumaEnabled: true }, adminId);
   const on = (await ImportService.listEntities(ALL)).map((e) => e.entity);
   check("§8b dokuma açık → ikisi de listede", on.includes("weaveDesign") && on.includes("weftSpec"), on.join(","));
