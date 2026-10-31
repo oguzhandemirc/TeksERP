@@ -83,7 +83,7 @@ export async function convertQuoteToOrder(quoteId: string, body: { clientToken?:
       currency: q.currency,
       clientToken,
       lines: q.lines.map((l) => ({
-        itemId: l.itemId ?? linked.get(l.lineNo), ...(l.colorId ? { colorId: l.colorId } : {}), quantity: l.quantity.toNumber(), unit: l.unit,
+        itemId: l.itemId ?? linked.get(l.lineNo), ...(l.colorId ? { colorId: l.colorId } : {}), ...(l.recipeId ? { recipeId: l.recipeId } : {}), quantity: l.quantity.toNumber(), unit: l.unit,
         unitPrice: l.unitPrice.toNumber(), ...(l.width ? { width: l.width.toNumber() } : {}),
       })),
     };

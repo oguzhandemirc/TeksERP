@@ -14,10 +14,11 @@ import { claimQuoteTx, quoteToday, type QuoteTransition } from "./helpers/sales-
 import { tokenReplay } from "./helpers/token-replay.helper";
 import { freezeQuoteDocumentTx, voidQuoteDocumentTx } from "./quote-documents.service";
 import { validate as isUuidString } from "uuid";
+import { LINE_RECIPE_SELECT } from "./helpers/line-recipe.helper";
 
 export const QUOTE_TABLE = "SALES_QUOTE";
 export const QUOTE_INCLUDE = {
-  lines: { orderBy: { lineNo: "asc" }, include: { item: { select: { id: true, code: true, name: true } }, color: { select: { id: true, code: true, name: true } } } },
+  lines: { orderBy: { lineNo: "asc" }, include: { item: { select: { id: true, code: true, name: true } }, color: { select: { id: true, code: true, name: true } }, recipe: LINE_RECIPE_SELECT } },
   customer: { select: { id: true, code: true, name: true } },
   branch: { select: { id: true, name: true } },
   convertedOrder: { select: { id: true, orderNumber: true, status: true } },
@@ -165,7 +166,7 @@ export async function reviseQuote(id: string, body: { clientToken?: unknown }, u
           updatedById: userId ?? null,
           lines: {
             create: old.lines.map((l) => ({
-              lineNo: l.lineNo, itemId: l.itemId, colorId: l.colorId, description: l.description, width: l.width, quantity: l.quantity,
+              lineNo: l.lineNo, itemId: l.itemId, colorId: l.colorId, recipeId: l.recipeId, description: l.description, width: l.width, quantity: l.quantity,
               unit: l.unit, standardCostVersionId: l.standardCostVersionId, costPerMTry: l.costPerMTry,
               costSnapshot: l.costSnapshot as Prisma.InputJsonValue, markupPct: l.markupPct, suggestedUnitPrice: l.suggestedUnitPrice,
               unitPrice: l.unitPrice, priceSource: l.priceSource, priceListLineId: l.priceListLineId, lineTotal: l.lineTotal, notes: l.notes,

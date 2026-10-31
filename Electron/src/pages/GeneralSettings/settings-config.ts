@@ -1628,6 +1628,21 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "OFF", label: "En karşılaştırılmasın", hint: "Yalnız en kontrolü kapanır; renk farkı yine sorulur." },
         ],
       },
+      {
+        // D4-E3 (2026-10-31): `defaultValue` backend `DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE` ile birebir.
+        enumKey: "tamburChildWidthSource",
+        group: "Tambur",
+        title: "Tambur'dan çıkan topların eni",
+        summary: "Tambur'da bölünen topların enine hangi değer yazılsın.",
+        desc: `${TERIM.terbiyeIsEmri.cekim.ilgi} eni önce (varsayılan): çıkan toplara ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} eni yazılır, boşsa ana topun eni. Ölçülen en önce: ana topun eni en ölçen bir istasyonda (ör. etek kesim) ölçüldüyse çıkan toplara o ölçülen en yazılır; ölçülmediyse varsayılandaki gibi. Yalnız bundan sonra Tambur'dan çıkan topları etkiler; etiket ve çeki listesi bu eni basar.`,
+        defaultValue: "WO_TARGET_FIRST",
+        display: "radio",
+        audience: ["Planlamacı", "Yönetim"],
+        options: [
+          { value: "WO_TARGET_FIRST", label: `${TERIM.terbiyeIsEmri.cekim.ilgi} eni önce (bugünkü)`, hint: "Hedef en yoksa ana topun eni yazılır." },
+          { value: "MEASURED_FIRST", label: "Ölçülen en önce", hint: "Ana topun ölçülmüş eni varsa o yazılır; yoksa hedef en." },
+        ],
+      },
     ],
     numberFlags: [
       {
