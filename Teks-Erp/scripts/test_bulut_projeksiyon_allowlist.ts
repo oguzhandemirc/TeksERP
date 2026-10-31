@@ -7,7 +7,7 @@
 // opt-in'in KENDİSİNİ ölçer: katalog neyi yazıyorsa o gider, fazlası değil; ve katalogdaki bir
 // satırın yanlış sınıfla (kişisel alan kök satırda) ya da yasak türde (not, kullanıcı kimliği,
 // sır) yazılmasını yakalar.
-//   §1 katalog biçimi: 27 KAYIT (7 BOYUT + 20 OLGU) + 8 ANLIK, tel adları tekil, `id` ilk ve İŞLEM
+//   §1 katalog biçimi: 27 KAYIT (7 BOYUT + 20 OLGU) + 9 ANLIK (D4-H2 ozet-masraf), tel adları tekil, `id` ilk ve İŞLEM
 //   §2 ⭐ her opt-in kolon ŞEMADA var (information_schema)
 //   §3 ⭐ SIZINTI: not/katlama/sır/kullanıcı kimliği kolonu HİÇBİR projeksiyonda yok; iletişim ·
 //      keşideci · vergi/adres gibi kişisel kolon KİŞİSEL sınıfta (kök satırla gitmez)
@@ -127,7 +127,7 @@ function bicimBolumu(): void {
   console.log("\n§1 — katalog biçimi");
   const boyut = RECORD_PROJECTIONS.filter((p) => p.role === "BOYUT").length;
   const olgu = RECORD_PROJECTIONS.filter((p) => p.role === "OLGU").length;
-  check("§1a 27 KAYIT (7 BOYUT + 20 OLGU) + 8 ANLIK", RECORD_PROJECTIONS.length === 27 && boyut === 7 && olgu === 20 && SNAPSHOT_PROJECTIONS.length === 8,
+  check("§1a 27 KAYIT (7 BOYUT + 20 OLGU) + 9 ANLIK", RECORD_PROJECTIONS.length === 27 && boyut === 7 && olgu === 20 && SNAPSHOT_PROJECTIONS.length === 9,
     `${RECORD_PROJECTIONS.length} (${boyut}+${olgu}) + ${SNAPSHOT_PROJECTIONS.length}`);
   const adlar = [...RECORD_PROJECTIONS, ...SNAPSHOT_PROJECTIONS].map((p) => p.name);
   check("§1b projeksiyon adları tekil ve tel biçiminde", new Set(adlar).size === adlar.length && adlar.every((a) => /^[a-z][a-z0-9-]*$/.test(a)));
