@@ -14,6 +14,7 @@ import { applyFoldTypeForWriteInPlace } from "./helpers/fold-type";
 import type { ApiResponse } from "../types/api.types";
 import { assertItemUsable } from "./helpers/item-usage.helper";
 import { findRecipeMoveOrphans, throwWeftOverrideOrphan } from "./helpers/effective-construction.helper";
+import { normalizeFinishingRateCode, resolveActiveFinishingRate } from "./finishing-rate.service";
 
 
 /** SY-A2 varyant kodu (V01): kullanıcıdan gelir, büyük harf + kırpılır; boş temizler. Tekillik
@@ -30,6 +31,22 @@ function normalizeVariantCodeInPlace(data: Record<string, unknown>): void {
   const v = raw.trim().toUpperCase();
   if (!VARIANT_CODE_RE.test(v)) throw AppError.badRequest("Varyant kodu en çok 16 karakter; harf, rakam, nokta, tire, alt çizgi (ör. V01)");
   data.variantCode = v;
+}
+
+/** SY-E1 varyant tarife kodu: boş = ürün yapısının tarifesi; dolu kod AKTİF tarifeye çözülmeli
+ *  (maliyet yapısıyla aynı kural — bilinmeyen kod sessizce "terbiyesiz" sayılmaz). */
+async function normalizeRecipeFinishingRateInPlace(data: Record<string, unknown>): Promise<void> {
+  if (!Object.prototype.hasOwnProperty.call(data, "finishingRateCode")) return;
+  const raw = data.finishingRateCode;
+  if (raw === null || raw === undefined || (typeof raw === "string" && raw.trim() === "")) {
+    data.finishingRateCode = null;
+    return;
+  }
+  const code = normalizeFinishingRateCode(raw);
+  if (!(await resolveActiveFinishingRate(code))) {
+    throw AppError.badRequest(`"${code}" kodlu yürürlükte bir terbiye tarifesi yok.`, { code: "COST_FINISHING_RATE_UNKNOWN" });
+  }
+  data.finishingRateCode = code;
 }
 
 /** SY-A2 R4: değişimli reçete başka ürüne taşınamaz — değişim yeni kartta sessizce başka ipliğe kayardı. */
@@ -148,6 +165,7 @@ export class ProductRecipeService extends BaseService {
     const next = { ...data };
     await applyFoldTypeForWriteInPlace(next); // D-13 biçim + katalog doğrulaması
     normalizeVariantCodeInPlace(next);
+    await normalizeRecipeFinishingRateInPlace(next);
     // properties dedup → @@unique([recipeId,propertyId]) ihlali (P2002/409) önlenir.
     // BaseService config (nestedCreateFields:["properties"]) deduped diziyi {create:[...]} sarar.
     if (Array.isArray(next.properties)) {
@@ -166,6 +184,7 @@ export class ProductRecipeService extends BaseService {
     const next = { ...data };
     await applyFoldTypeForWriteInPlace(next); // D-13 biçim + katalog doğrulaması
     normalizeVariantCodeInPlace(next);
+    await normalizeRecipeFinishingRateInPlace(next);
     if (Array.isArray(next.properties)) {
       // dedup → @@unique([recipeId,propertyId]) ihlali (P2002/409) önlenir.
       const ids = recipePropertyIds(next.properties);

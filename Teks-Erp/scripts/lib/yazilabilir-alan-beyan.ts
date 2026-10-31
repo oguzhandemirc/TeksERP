@@ -14,7 +14,7 @@ export const YAZILABILIR_ALAN_BEYANI: Readonly<Record<string, readonly string[]>
   machineStopCodeMap: ["collectorType", "isActive", "machineId", "rawStopCode", "stopReasonId"],
   order: ["branchId", "cancelReason", "cancelReasonCode", "cancelledAt", "clientToken", "completedAt", "createdById", "currency", "customerId", "deadline", "destination", "manualCloseReason", "manualClosedById", "orderDate", "orderNumber", "shippedQty", "status", "totalAmount", "updatedById"],
   peripheralDevice: ["address", "code", "connectionType", "counterMode", "createdById", "decimals", "deviceId", "identifyPattern", "isActive", "kind", "labelDpi", "labelGapMm", "labelHeightMm", "labelWidthMm", "languageOverride", "machineId", "mediaType", "name", "notes", "pollCommand", "port", "rasterMode", "readMode", "resetCommand", "role", "scale", "simulate", "stationId", "terminator", "timeoutMs", "updatedById"],
-  productRecipe: ["code", "colorId", "createdById", "foldType", "isActive", "itemId", "name", "routeId", "updatedById", "variantCode", "width"],
+  productRecipe: ["code", "colorId", "createdById", "finishingRateCode", "foldType", "isActive", "itemId", "name", "routeId", "updatedById", "variantCode", "width"],
   qualityGrade: ["code", "color", "createdById", "description", "isActive", "name", "returnTargetStatus", "role", "skipCustomerName", "skipLabel", "sortOrder", "targetStatus", "updatedById"],
   returnReason: ["code", "color", "createdById", "description", "isActive", "name", "sortOrder", "updatedById"],
   route: ["code", "createdById", "customerId", "description", "isActive", "isFavorite", "name", "updatedById"],
