@@ -10,7 +10,7 @@ import { decToInput, fmtDecFull, toDecimalText } from "./format";
 /** Girdide fiyatı döviz olan para birimleri (TRY hariç) — sıralı, tekil. */
 export function foreignCurrencies(g: CostInputSnap | null | undefined): Currency[] {
   if (!g) return [];
-  const all = [g.warp?.yarn.price?.currency, ...(g.weft?.yarns ?? []).map((y) => y.price?.currency), g.finishing?.price?.currency];
+  const all = [g.warp?.yarn.price?.currency, ...(g.weft?.yarns ?? []).map((y) => y.price?.currency), g.finishing?.price?.currency, ...(g.processes ?? []).map((p) => p.price?.currency)];
   return [...new Set(all.filter((c): c is Currency => !!c && c !== "TRY"))].sort();
 }
 
