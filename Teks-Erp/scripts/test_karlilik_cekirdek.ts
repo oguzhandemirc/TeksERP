@@ -4,10 +4,12 @@
 //   §0 statik — `profitability*.helper` ↔ `fabric-cost.helper` karşılıklı import YOK (statik + dinamik);
 //      kârlılık dosyaları iş listesini yeniden yazmaz (rollProperty / rollMeterReading / rollOperation delegesi YOK)
 //   §1 ALTIN fikstür (2 müşteri, 3 işlem, 1 iptal, 1 dış fason faturası; 2025-01) → müşteri başına gelir/sarf/
-//      dış fason/katkı el hesabına kuruşu kuruşuna eşit; kalem satırının bağlara bölünmüş geliri toplamı = satır
+//      dış fason/katkı el hesabına kuruşu kuruşuna eşit; kalem satırının bağlara bölünmüş geliri toplamı = satır;
+//      dış fason paydası donmuş metre (doğan kardeş top ya da kendisi dönen NULL kalemli top kesilince geçmiş ay değişmez)
 //   §2 taslak fatura kâra GİRMEZ (`draftRows`ta, `rows`ta yok)
 //   §3 iptal İPTAL AYINDA eksi; geçen ayın raporu iptalden sonra BAYT-AYNI; iki ay toplamı iptalsiz katkıya eşit
-//   §4 eksik norm → SARF_NORMU, kur yok → FX_RATE_MISSING; değer null (0 DEĞİL), özet katkısı null
+//   §4 eksik norm → SARF_NORMU, kur yok → FX_RATE_MISSING, gelir satırı yok → GELIR_SATIRI, RECEIVED işin makbuzu
+//      çözülemez → DIS_FASON_MAKBUZU; değer ve katkı null (0 DEĞİL), özet katkısı null
 //   §5 ayarlar — SON_ALIS_FATURASI sarf fiyatını faturadan; FATURA_ONCE faturasız fasonda tarife "tahmini";
 //      YALNIZ_FATURA → DIS_FASON_FATURASI eksik
 //   §6 ayar yazımı — iki ayar getFeatureFlags'te varsayılanla; tanınmayan değer 400; geçerli değer yazılır
@@ -187,7 +189,12 @@ async function main(): Promise<void> {
     await norm(S3, C1, "0.001000");
     await norm(S5, C2, "0.010000");
     await prisma.itemPrice.create({ data: { itemId: C1, customerId: null, kind: PriceKind.PURCHASE, currency: Currency.TRY, price: "200.0000", createdAt: BEFORE } });
-    await prisma.itemPrice.create({ data: { itemId: C2, customerId: null, kind: PriceKind.PURCHASE, currency: Currency.GBP, price: "5.0000", createdAt: BEFORE } });
+    // §4b: ortamda 2025-03-01'e kadar kuru OLMAYAN döviz seçilir; yoksa §4b KIRMIZI (sessiz geçmez).
+    let noFxCurrency: Currency | null = null;
+    for (const c of [Currency.RUB, Currency.GBP, Currency.EUR, Currency.USD]) {
+      if ((await prisma.exchangeRate.count({ where: { currency: c, rateDate: { lte: T("2025-03-01") } } })) === 0) { noFxCurrency = c; break; }
+    }
+    await prisma.itemPrice.create({ data: { itemId: C2, customerId: null, kind: PriceKind.PURCHASE, currency: noFxCurrency ?? Currency.GBP, price: "5.0000", createdAt: BEFORE } });
     const A = await customer("A");
     const B = await customer("B");
     const sander = await ensureTestSander();
@@ -198,7 +205,7 @@ async function main(): Promise<void> {
     const R2 = await roll(A.id, 200);
     const rc = await receipt("RC1", sander.id, T("2025-01-08"));
     const R3 = await roll(B.id, 80, rc.id);
-    await roll(B.id, 20, rc.id);
+    const R4 = await roll(B.id, 20, rc.id);
     const R5 = await roll(B.id, 50);
     const R6 = await roll(A.id, 40);
 
@@ -231,6 +238,21 @@ async function main(): Promise<void> {
     check("§1d işlem kırılımı 3 işlem (S1, S2, S3)", svc.length === 3 && [S1, S2, S3].every((s) => svc.some((x) => x.key === s)), String(svc.length));
     const r3 = mine(jan.rows).find((r) => r.rollId === R3);
     check("§1e dış fason faturadan (tahmini değil), 400,00", f2(r3?.subcontractTry) === "400.00" && r3?.subcontractEstimated === false, f2(r3?.subcontractTry));
+    // Doğan kardeş top sonradan kesilir (currentQty 20 → 5): payda donmuş kabul metresi, geçmiş ay değişmez.
+    await prisma.roll.update({ where: { id: R4 }, data: { currentQty: "5" } });
+    const r3b = mine((await report("2025-01")).rows).find((r) => r.rollId === R3);
+    check("§1f ⭐ dış fason paydası donmuş metre: kardeş top kesilince R3 yine 400,00", f2(r3b?.subcontractTry) === "400.00", f2(r3b?.subcontractTry));
+    // Kendisi dönen top (doğan top yok), eski NULL receivedQty kalemi: payda topun DONMUŞ metresi (60), canlı currentQty değil.
+    const rc3 = await receipt("RC3", sander.id, T("2025-05-03"));
+    const R12 = await roll(B.id, 60);
+    await prisma.subcontractorReceiptItem.create({ data: { receiptId: rc3.id, newRollId: R12, receivedQty: null } });
+    await invoice({ cariId: supplierCari.id, docNo: "AF3", issue: T("2025-05-04"), status: InvoiceStatus.CONFIRMED, type: "PURCHASE", receiptId: rc3.id,
+      lines: [{ item: null, qty: "60", total: "300.00" }] });
+    await invoice({ cariId: B.cariId, docNo: "F7", issue: T("2025-05-10"), status: InvoiceStatus.CONFIRMED,
+      lines: [{ item: S3, qty: "60", total: "360.00" }], links: [{ rollId: R12, item: S3, meters: "60", basis: ServiceMeterBasis.RECEIVED, serviceAt: T("2025-05-03"), stepId: rc3.stepId }] });
+    await prisma.roll.update({ where: { id: R12 }, data: { currentQty: "30" } });
+    const r12 = mine((await report("2025-05")).rows).find((r) => r.rollId === R12);
+    check("§1g ⭐ kendisi dönen top (NULL kalem) kesilince dış fason yine 300 · 60/60 = 300,00", f2(r12?.subcontractTry) === "300.00", f2(r12?.subcontractTry));
 
     // ── §2 taslak ──
     const draftMine = mine(jan.draftRows);
@@ -239,6 +261,7 @@ async function main(): Promise<void> {
       `draft=${draftMine.length}`);
 
     // ── §3 iptal ──
+    // İptal anı geçmiş aya (Şubat) sabitlenmeli; servis iptali cancelledAt=now yazar → claim + bağ geri alma (aynı boğaz) elle.
     const janBefore = JSON.stringify(mine(jan.rows));
     await prisma.$transaction(async (tx) => {
       const n = await tx.invoice.updateMany({ where: { id: inv3, status: InvoiceStatus.CONFIRMED }, data: { status: InvoiceStatus.CANCELLED, cancelledAt: T("2025-02-10"), cancelReason: "TEST" } });
@@ -258,18 +281,27 @@ async function main(): Promise<void> {
     // ── §4 eksik ──
     const R7 = await roll(A.id, 10);
     const R8 = await roll(A.id, 10);
+    const R10 = await roll(A.id, 10); // S2 bağı, faturada S2 satırı yok → GELIR_SATIRI
+    const R11 = await roll(A.id, 10); // RECEIVED bağ, makbuzu yok → DIS_FASON_MAKBUZU
     await invoice({ cariId: A.cariId, docNo: "F5", issue: T("2025-03-05"), status: InvoiceStatus.CONFIRMED,
-      lines: [{ item: S4, qty: "10", total: "30.00" }, { item: S5, qty: "10", total: "40.00" }],
-      links: [{ rollId: R7, item: S4, meters: "10", serviceAt: T("2025-03-01") }, { rollId: R8, item: S5, meters: "10", serviceAt: T("2025-03-01") }] });
-    const gbp = await prisma.exchangeRate.count({ where: { currency: Currency.GBP, rateDate: { lte: T("2025-03-01") } } });
+      lines: [{ item: S4, qty: "10", total: "30.00" }, { item: S5, qty: "10", total: "40.00" }, { item: S3, qty: "10", total: "20.00" }],
+      links: [{ rollId: R7, item: S4, meters: "10", serviceAt: T("2025-03-01") }, { rollId: R8, item: S5, meters: "10", serviceAt: T("2025-03-01") },
+        { rollId: R10, item: S2, meters: "10", serviceAt: T("2025-03-01") },
+        { rollId: R11, item: S3, meters: "10", basis: ServiceMeterBasis.RECEIVED, serviceAt: T("2025-03-01"), stepId: rc.stepId }] });
     const mar = mine((await report("2025-03")).rows);
     const r7 = mar.find((r) => r.rollId === R7);
     const r8 = mar.find((r) => r.rollId === R8);
     check("§4a ⭐ norm yok → SARF_NORMU, sarf ve katkı null (0 değil), gelir yine 30,00",
       r7?.missing.includes("SARF_NORMU") === true && r7.consumableTry === null && r7.contributionTry === null && f2(r7.revenueTry) === "30.00", JSON.stringify(r7?.missing));
-    check("§4b ⭐ kur yok → FX_RATE_MISSING, sarf null", gbp > 0 || (r8?.missing.includes("FX_RATE_MISSING") === true && r8.consumableTry === null),
-      gbp > 0 ? `ortamda GBP kuru var (${gbp}) — bölüm sınanamadı` : JSON.stringify(r8?.missing));
-    check("§4c müşteri özeti katkısı null + eksik satır sayısı 2", (() => { const s = summarizeProfitability(mar, "customer")[0]; return s?.contributionTry === null && s.missingRows === 2; })());
+    check("§4b ⭐ kur yok → FX_RATE_MISSING, sarf null", noFxCurrency !== null && r8?.missing.includes("FX_RATE_MISSING") === true && r8.consumableTry === null,
+      noFxCurrency === null ? "ortamda kursuz döviz yok — §4b ölçülemedi (KIRMIZI)" : `${noFxCurrency} ${JSON.stringify(r8?.missing)}`);
+    const r10 = mar.find((r) => r.rollId === R10);
+    check("§4d ⭐ gelir satırı yok → GELIR_SATIRI, gelir 0 ama katkı null (sayı uydurulmaz)",
+      r10?.missing.includes("GELIR_SATIRI") === true && f2(r10.revenueTry) === "0.00" && r10.contributionTry === null, `${JSON.stringify(r10?.missing)} ${f2(r10?.contributionTry)}`);
+    const r11 = mar.find((r) => r.rollId === R11);
+    check("§4e ⭐ RECEIVED iş, makbuz çözülemez → DIS_FASON_MAKBUZU, dış fason ve katkı null (0 değil)",
+      r11?.missing.includes("DIS_FASON_MAKBUZU") === true && r11.subcontractTry === null && r11.contributionTry === null, `${JSON.stringify(r11?.missing)} ${f2(r11?.subcontractTry)}`);
+    check("§4c müşteri özeti katkısı null + eksik satır sayısı 4", (() => { const s = summarizeProfitability(mar, "customer")[0]; return s?.contributionTry === null && s.missingRows === 4; })());
 
     // ── §5 ayarlar ──
     await invoice({ cariId: supplierCari.id, docNo: "AF2", issue: T("2025-01-05"), status: InvoiceStatus.CONFIRMED, type: "PURCHASE",

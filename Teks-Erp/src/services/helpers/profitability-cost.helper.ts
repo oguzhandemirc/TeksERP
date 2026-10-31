@@ -24,6 +24,7 @@ export type ProfitMissingCode =
   | "FX_RATE_MISSING"
   | "DIS_FASON_FATURASI"
   | "DIS_FASON_TARIFESI"
+  | "DIS_FASON_MAKBUZU"
   | "GELIR_SATIRI";
 
 export interface WorkCost {
@@ -84,14 +85,23 @@ async function loadReceipts(links: RevenueLinkRow[]): Promise<Map<string, Receip
     select: {
       id: true, stepId: true, subcontractorId: true, receivedAt: true,
       bornRolls: { select: { initialQty: true, currentQty: true } },
-      items: { select: { receivedQty: true, newRoll: { select: { currentQty: true } } } },
+      items: { select: { newRollId: true, receivedQty: true, newRoll: { select: { initialQty: true, currentQty: true } } } },
     },
   });
+  // Payda DONMUŞ metreden: kesim/sevkle oynayan currentQty geçmiş ayı değiştirmesin (yalnız eski initialQty=0 verisi).
+  const frozen = (r: { initialQty: Prisma.Decimal; currentQty: Prisma.Decimal }) => (r.initialQty.gt(0) ? r.initialQty : r.currentQty);
   const info = new Map<string, ReceiptInfo>(receipts.map((r) => {
-    // Makbuz metresi: doğan toplar (kabul metresi), yoksa kalemlerin alınan metresi (NULL = topun kendisi).
-    const meters = r.bornRolls.length > 0
-      ? r.bornRolls.reduce((a, b) => a.plus(b.initialQty.gt(0) ? b.initialQty : b.currentQty), D0())
-      : r.items.reduce((a, i) => a.plus(i.receivedQty ?? i.newRoll.currentQty), D0());
+    // Makbuz metresi: doğan toplar (kabul metresi), yoksa kalemlerin alınan metresi; NULL kalem = topun kendisi,
+    // aynı top BİR kez (K3b; service-flag-work.helper receivedOf ile aynı kural).
+    let meters = D0();
+    if (r.bornRolls.length > 0) meters = r.bornRolls.reduce((a, b) => a.plus(frozen(b)), D0());
+    else {
+      const nullCounted = new Set<string>();
+      for (const i of r.items) {
+        if (i.receivedQty !== null) meters = meters.plus(i.receivedQty);
+        else if (!nullCounted.has(i.newRollId)) { nullCounted.add(i.newRollId); meters = meters.plus(frozen(i.newRoll)); }
+      }
+    }
     return [r.id, { id: r.id, stepId: r.stepId, subcontractorId: r.subcontractorId, receivedAt: r.receivedAt, meters }];
   }));
   for (const l of received) {
@@ -127,6 +137,8 @@ export async function computeWorkCosts(ctx: CostContext, links: RevenueLinkRow[]
     let subcontractTry: Prisma.Decimal | null = D0();
     let subcontractEstimated = false;
     const rc = l.meterBasis === ServiceMeterBasis.RECEIVED ? receipts.get(l.id) : undefined;
+    // RECEIVED iş ama makbuz çözülemedi (iptal / adım uyuşmaz) → maliyet sessizce 0 OLMAZ.
+    if (l.meterBasis === ServiceMeterBasis.RECEIVED && !rc) { subcontractTry = null; missing.push("DIS_FASON_MAKBUZU"); }
     if (rc) {
       const billed = invoiceTotals.get(rc.id);
       if (billed && rc.meters.gt(0)) subcontractTry = billed.mul(l.billedMeters).div(rc.meters);

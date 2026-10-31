@@ -2264,7 +2264,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         group: "Kârlılık",
         title: "Kârlılıkta sarf (ip/şerit) birim fiyatı",
         summary: "İşe giden sarf malzemesinin fiyatı nereden alınsın.",
-        desc: "Kart alış fiyatı (varsayılan): sarf kaleminin işin yapıldığı gün geçerli alış fiyatı. Son alış faturası: işin yapıldığı güne kadar onaylanmış son alış faturasındaki birim fiyat. Fiyat bulunamazsa iş \"eksik\" görünür, sıfır yazılmaz.",
+        desc: "Kart alış fiyatı (varsayılan): sarf kaleminin işin yapıldığı gün geçerli alış fiyatı. Son alış faturası: fatura tarihi işin yapıldığı güne kadar olan son onaylı alış faturasındaki birim fiyat. Fiyat bulunamazsa iş \"eksik\" görünür, sıfır yazılmaz.",
         defaultValue: "ALIS_FIYATI",
         display: "radio",
         audience: ["Muhasebeci", "Yönetim"],

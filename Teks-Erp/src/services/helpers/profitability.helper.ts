@@ -130,7 +130,8 @@ export async function computeProfitability(params: { fromMonth: string; toMonth:
         const c = costs.get(l.id)!;
         const neg = (d: Prisma.Decimal | null) => (d === null ? null : sign === 1 ? d : d.neg());
         const missing = [...r.missing, ...c.missing];
-        const contribution = kind === "DRAFT" || c.consumableTry === null || c.subcontractTry === null
+        // Gelir satırı eksikse (GELIR_SATIRI) gelir 0 taşır ama katkı uydurulmaz → null.
+        const contribution = kind === "DRAFT" || r.missing.length > 0 || c.consumableTry === null || c.subcontractTry === null
           ? null
           : r.revenueTry.minus(c.consumableTry).minus(c.subcontractTry);
         (kind === "DRAFT" ? draftRows : rows).push({
