@@ -296,6 +296,7 @@ export const updateSchema = z.strictObject({
     })
     .optional(),
   financeCariHoldReleaseBySamePerson: z.enum(["ALLOW", "DENY"], { message: "Cari kilidi açma kuralı ALLOW ya da DENY olmalı" }).optional(),
+  costPresentationCurrency: z.enum(["TRY", "USD", "EUR"], { message: "Maliyet sunum dövizi TRY, USD ya da EUR olmalı" }).optional(),
   financeServiceBillingPriceDate: z.enum(["SERVICE_DAY", "DISPATCH_DAY"]).optional(),
   /** D4-H1: masraf kategorisi önerisi (`EXPENSE_CATEGORY_SUGGESTION_MODES` ile birebir). */
   financeExpenseCategorySuggestions: z.enum(["ON", "OFF"]).optional(),

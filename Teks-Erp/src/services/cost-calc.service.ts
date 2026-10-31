@@ -21,6 +21,8 @@ import { computeFabricCost, presentCostResult, suggestUnitPrice, type CostInput,
 import { serializeCostInput, type FxRatesSnapshot } from "./helpers/cost-snapshot.helper";
 import { measuredWarpWaste, suggestFxRate, suggestYarnPrices } from "./helpers/maliyet-bridge.helper";
 import { factoryYmd } from "../constants/time";
+import { readCostPresentationCurrency } from "./system-setting.service";
+import { costPresentation, withPresentation } from "./helpers/cost-presentation.helper";
 
 type Dec = Prisma.Decimal;
 const FX_RULE = { label: "Kur", min: 0, minExclusive: true, scale: 6 } as const;
@@ -101,13 +103,18 @@ export function parseFxRates(raw: Record<string, unknown> = {}): Partial<Record<
   return out;
 }
 
-/** Girdinin istediği dövizler için kur: elle → finans önerisi → yok (motor FX_RATE_MISSING). */
-export async function resolveFx(input: CostInput, given: Partial<Record<Currency, Dec>>): Promise<{ rates: FxRates; snapshot: FxRatesSnapshot }> {
+/**
+ * Girdinin istediği dövizler için kur: elle → finans önerisi → yok (motor FX_RATE_MISSING).
+ * `presentation` (SY-J1): sunum dövizi TRY değilse onun kuru da çözülür ki sürümde DONSUN.
+ */
+export async function resolveFx(input: CostInput, given: Partial<Record<Currency, Dec>>, presentation?: Currency): Promise<{ rates: FxRates; snapshot: FxRatesSnapshot }> {
   const rates: FxRates = {};
   const kurlar: FxRatesSnapshot["kurlar"] = {};
   let finans = false;
   const today = factoryYmd();
-  for (const cur of costCurrencies(input)) {
+  const currencies = costCurrencies(input);
+  if (presentation && presentation !== "TRY" && !currencies.includes(presentation)) currencies.push(presentation);
+  for (const cur of currencies.sort()) {
     let r = given[cur] ?? null;
     if (!r) {
       r = await suggestFxRate(cur, new Date());
@@ -134,13 +141,15 @@ export async function previewCost(body: CostCalcBody) {
   const ref = sourceRefOf(body);
   const overrides = parseOverrides(body.overrides);
   const input = await prisma.$transaction((tx) => assembleCostInputTx(tx, ref, overrides));
-  const fx = await resolveFx(input, parseFxRates(body.fxRates));
+  const setting = await readCostPresentationCurrency();
+  const fx = await resolveFx(input, parseFxRates(body.fxRates), setting);
   const out = computeFabricCost(input, fx.rates);
+  const pres = setting === "TRY" ? null : costPresentation(setting, fx.rates[setting], "ONIZLEME");
   const yarnIds = [input.warp?.yarn.yarnItemId, ...(input.weft?.yarns ?? []).map((y) => y.yarnItemId)].filter((x): x is string => !!x);
   const yarnPrices = [];
   for (const id of [...new Set(yarnIds)]) yarnPrices.push(await suggestYarnPrices(id));
   return {
-    sonuc: out.result ? presentCostResult(out.result) : null,
+    sonuc: out.result ? withPresentation(presentCostResult(out.result), pres) : null,
     eksikler: out.missing,
     uyarilar: out.warnings,
     girdi: serializeCostInput(input),

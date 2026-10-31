@@ -14,13 +14,18 @@ import { useAttemptToken } from "@/lib/attemptToken";
 import { QuoteHeaderFields } from "./QuoteHeaderFields";
 import { quoteErrorMessage } from "./quote-errors";
 import { EMPTY_HEADER, quoteService, type QuoteHeaderForm } from "./service";
+import { suggestionHint, useQuoteCurrencySuggestion } from "./quote-currency";
 
 export function QuoteNewPage() {
   const nav = useNavigate();
   const location = useLocation();
   const qc = useQueryClient();
   const attempt = useAttemptToken();
-  const [h, setH] = useState<QuoteHeaderForm>(EMPTY_HEADER);
+  const [draft, setH] = useState<QuoteHeaderForm>(EMPTY_HEADER);
+  // SY-J1: kullanıcı para birimine dokunmadıkça sunucunun ön seçimi uygulanır (türetilmiş; efekt yok).
+  const [currencyTouched, setCurrencyTouched] = useState(false);
+  const suggestion = useQuoteCurrencySuggestion(draft.customerId).data;
+  const h: QuoteHeaderForm = !currencyTouched && suggestion && draft.customerId ? { ...draft, currency: suggestion.doviz } : draft;
   const create = useMutation({
     mutationFn: () => quoteService.create(h, attempt.token()),
     onSuccess: (r) => {
@@ -39,7 +44,15 @@ export function QuoteNewPage() {
     <PageShell>
       <PageHeader title="Yeni teklif" description="Önce başlığı kaydedin; kalemler (kart ürünü ya da yeni desen) sonraki ekranda eklenir ve sunucu fiyat önerir." />
       <PageBody className="space-y-4 p-4 sm:p-6">
-        <QuoteHeaderFields value={h} onChange={(patch) => setH((x) => ({ ...x, ...patch }))} mode="create" />
+        <QuoteHeaderFields
+          value={h}
+          onChange={(patch) => {
+            if (patch.currency !== undefined) setCurrencyTouched(true);
+            setH((x) => ({ ...x, ...patch }));
+          }}
+          mode="create"
+          currencyHint={currencyTouched ? undefined : suggestionHint(suggestion)}
+        />
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => nav("/cost/quotes")}>Vazgeç</Button>
           <Button disabled={!h.customerId || create.isPending} onClick={() => create.mutate()} data-testid="quote-create">

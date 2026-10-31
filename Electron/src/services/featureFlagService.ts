@@ -296,6 +296,8 @@ export interface FeatureFlags {
     | "INTAKE,SHIPMENT,INVOICE";
   /** D4-I1a: kilidi koyan kişi kendi kilidini açabilir mi (varsayılan `ALLOW`). */
   financeCariHoldReleaseBySamePerson: "ALLOW" | "DENY";
+  /** SY-J1: maliyet sunum dövizi (varsayılan `TRY`). */
+  costPresentationCurrency: "TRY" | "USD" | "EUR";
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; tahsis elle silinebilir. */
   financeAutoAllocateOnPaymentEnabled: boolean;

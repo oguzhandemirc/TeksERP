@@ -183,6 +183,8 @@ export const SETTING_KEYS = {
   FINANCE_CARI_HOLD_DEFAULT_SCOPE: "finance.cariHold.defaultScope",
   /** D4-I1a: kilidi koyan kişi kendi kilidini açabilir mi — `ALLOW` (varsayılan, serbest) · `DENY` (başka yetkili açar). */
   FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON: "finance.cariHold.releaseBySamePerson",
+  /** SY-J1: maliyet sunum dövizi — `TRY` (varsayılan; yanıt bayt-aynı) · `USD` · `EUR`. Motor TL'de kalır. */
+  COST_PRESENTATION_CURRENCY: "maliyet.sunumDovizi",
   /** Tahsilat/ödeme kaydında en eski açık faturalara OTOMATİK kapama — FIFO
    *  (default FALSE). Bugün kapama (`PaymentAllocation`) elle seçilir; açıkken
    *  tutar vade/tarih sırasıyla açık bakiyelere dağıtılır ve artan tutar
@@ -1059,6 +1061,9 @@ export const DEFAULT_CARI_HOLD_SCOPE: CariHoldDefaultScope = "INTAKE,SHIPMENT";
 export type CariHoldReleaseBySamePerson = "ALLOW" | "DENY";
 export const CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES: CariHoldReleaseBySamePerson[] = ["ALLOW", "DENY"];
 export const DEFAULT_CARI_HOLD_RELEASE_BY_SAME_PERSON: CariHoldReleaseBySamePerson = "ALLOW";
+export type CostPresentationCurrency = "TRY" | "USD" | "EUR";
+export const COST_PRESENTATION_CURRENCIES: CostPresentationCurrency[] = ["TRY", "USD", "EUR"];
+export const DEFAULT_COST_PRESENTATION_CURRENCY: CostPresentationCurrency = "TRY";
 
 /** Tambur plan kapısı EN kolu (bkz. `SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_CHECK`). */
 export type TamburPlanWidthCheck = "ENFORCE" | "OFF";
@@ -1901,6 +1906,8 @@ export interface FeatureFlags {
   financeCariHoldDefaultScope: CariHoldDefaultScope;
   /** D4-I1a: koyan kişi kendi kilidini açabilir mi (varsayılan `ALLOW`). */
   financeCariHoldReleaseBySamePerson: CariHoldReleaseBySamePerson;
+  /** SY-J1: maliyet sunum dövizi (varsayılan `TRY` = bugünkü TL-yalnız yanıt). */
+  costPresentationCurrency: CostPresentationCurrency;
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; otomatik tahsis elle
    *  silinebilir; farklı para birimli fatura atlanır. */
@@ -2557,6 +2564,7 @@ export class SystemSettingService {
       financeExpenseCategorySuggestions: await readFinanceExpenseCategorySuggestions(cacheClient),
       financeCariHoldDefaultScope: await readFinanceCariHoldDefaultScope(cacheClient),
       financeCariHoldReleaseBySamePerson: await readFinanceCariHoldReleaseBySamePerson(cacheClient),
+      costPresentationCurrency: await readCostPresentationCurrency(cacheClient),
       financeAutoAllocateOnPaymentEnabled:
         await readFinanceAutoAllocateOnPaymentEnabled(cacheClient),
       yarnBlockNegativeBalanceEnabled: await readYarnBlockNegativeBalanceEnabled(cacheClient),
@@ -3097,6 +3105,13 @@ export class SystemSettingService {
         throw AppError.badRequest(`financeCariHoldReleaseBySamePerson şunlardan biri olmalı: ${CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON, v, "Cari kilidini koyan kişi kendi kilidini açabilir mi — serbest · başka yetkili", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "costPresentationCurrency")) {
+      const v = input.costPresentationCurrency;
+      if (typeof v !== "string" || !COST_PRESENTATION_CURRENCIES.includes(v as CostPresentationCurrency)) {
+        throw AppError.badRequest(`costPresentationCurrency şunlardan biri olmalı: ${COST_PRESENTATION_CURRENCIES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.COST_PRESENTATION_CURRENCY, v, "Maliyet ekranlarında tutarların gösterildiği döviz (hesap TL'de kalır)", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "financeAutoAllocateOnPaymentEnabled")) {
@@ -5312,6 +5327,11 @@ export function readFinanceExpenseCategorySuggestions(tx?: Pick<typeof prisma, "
 /** D4-I1a: cari kilidi kapsam ön seçimi — tanınmayan değer varsayılana (`INTAKE,SHIPMENT`) düşer. */
 export function readFinanceCariHoldDefaultScope(tx?: Pick<typeof prisma, "systemSetting">): Promise<CariHoldDefaultScope> {
   return readServiceEnum(SETTING_KEYS.FINANCE_CARI_HOLD_DEFAULT_SCOPE, CARI_HOLD_DEFAULT_SCOPES, DEFAULT_CARI_HOLD_SCOPE, tx);
+}
+
+/** SY-J1: maliyet sunum dövizi — tanınmayan değer varsayılana (`TRY`) düşer. */
+export function readCostPresentationCurrency(tx?: Pick<typeof prisma, "systemSetting">): Promise<CostPresentationCurrency> {
+  return readServiceEnum(SETTING_KEYS.COST_PRESENTATION_CURRENCY, COST_PRESENTATION_CURRENCIES, DEFAULT_COST_PRESENTATION_CURRENCY, tx);
 }
 
 /** D4-I1a: koyan kişi kendi kilidini açabilir mi — tanınmayan değer varsayılana (`ALLOW`) düşer. */
