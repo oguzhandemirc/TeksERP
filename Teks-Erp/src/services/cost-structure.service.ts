@@ -62,7 +62,7 @@ export async function getCostStructure(itemId: string): Promise<{ itemId: string
   return { itemId, structure };
 }
 
-/** YAPIYI YAZ (PUT = tam küme): gönderilmeyen alan NULL'a döner (parametre varsayılanı). */
+/** YAPIYI YAZ (PUT = tam küme): gönderilmeyen alan NULL'a döner (parametre varsayılanı); atkı ücreti çifti istisna (gönderilmezse korunur). */
 export async function putCostStructure(itemId: string, body: Record<string, unknown>, userId?: string): Promise<CostStructureRow> {
   const allowed = new Set([...Object.keys(NUMERIC), ...Object.keys(TEXT), "finishingRateCode", "loomPickRate", "loomPickCurrency"]);
   const unknown = Object.keys(body).filter((k) => !allowed.has(k));
@@ -80,9 +80,12 @@ export async function putCostStructure(itemId: string, body: Record<string, unkn
     data[k] = k === "loomRpm" && v !== null ? v.toNumber() : v;
   }
   for (const [k, t] of Object.entries(TEXT)) data[k] = parseTextField(body[k], t.label, t.max) ?? null;
+  // Çift gövdede yoksa DOKUNULMAZ: alanları göndermeyen panel (SY-D4 öncesi/eski sürüm) ücreti silmesin.
   const pick = parsePickRatePair(body.loomPickRate, body.loomPickCurrency);
-  data.loomPickRate = pick?.rate ?? null;
-  data.loomPickCurrency = pick?.currency ?? null;
+  if (pick !== undefined) {
+    data.loomPickRate = pick.rate;
+    data.loomPickCurrency = pick.currency;
+  }
 
   const rawCode = body.finishingRateCode;
   if (rawCode === undefined || rawCode === null || rawCode === "") {

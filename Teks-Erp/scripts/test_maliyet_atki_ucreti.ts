@@ -10,8 +10,8 @@
 //      gidip-dönüşte aynı hash
 //   §3 (test DB) ayar dört kapı: varsayılan TEZGAH_SAATI, Zod + servis tanınmayan değeri 400
 //   §4 (test DB) ⭐ derleyici ayarı OKUR: TEZGAH'ta girdi/hash ayarsızla aynı; ATKI'da `loomPick`
-//      PARAMETRE'den, yapıda ücret varsa YAPI kazanır; sürüm m/sa null yazılabilir
-//   §5 (test DB) ücret çifti: tek başına ücret ya da döviz 400 COST_PICK_RATE_PAIR
+//      PARAMETRE'den, yapıda ücret varsa YAPI kazanır; devir yokken servis sürümü m/sa null yazar
+//   §5 (test DB) ücret çifti: tek başına ücret ya da döviz 400 COST_PICK_RATE_PAIR; çiftsiz PUT korur
 // Koşum: DATABASE_URL=<_test DB> npx tsx scripts/test_maliyet_atki_ucreti.ts
 // =============================================================================
 import { Prisma } from "@prisma/client";
@@ -21,6 +21,7 @@ import { costInputHash, parseCostInputSnapshot, serializeCostInput } from "../sr
 import { assembleCostInputTx } from "../src/services/helpers/cost-assembler.helper";
 import { putCostStructure } from "../src/services/cost-structure.service";
 import { createDraft } from "../src/services/cost-parameter.service";
+import { createStandardCostVersion } from "../src/services/standard-cost.service";
 import { SETTING_KEYS, invalidateFeatureFlagsCache, systemSettingService } from "../src/services/system-setting.service";
 import { updateSchema } from "../src/routes/feature-flag.routes";
 import { AppError } from "../src/utils/app-error";
@@ -135,16 +136,13 @@ async function bolum4(f: MaliyetFikstur): Promise<void> {
   await putCostStructure(f.fabricId, { loomRpm: 600, efficiencyPct: "85", warpWastePct: "2.5", weftWastePct: "3", fabricWastePct: "2", finishingRateCode: f.rateCode, lengthShrinkPct: "4", loomPickRate: "0.05", loomPickCurrency: "USD" }, admin);
   const yapi = await build();
   check("§4d yapıdaki ücret parametreyi ezer (YAPI 0,05)", yapi.loomPick?.rate?.source === "YAPI" && yapi.loomPick.rate.amount.eq("0.05"), JSON.stringify(yapi.loomPick ?? null));
-  await prisma.$transaction(async (tx) => {
-    const v = await tx.standardCostVersion.create({
-      data: {
-        itemId: f.fabricId, versionNo: 99, status: "SUPERSEDED", parameterSetId: f.paramId, rawCostPerMTry: D(1), totalCostPerMTry: D(1),
-        warpKgPerM: D(0), weftKgPerM: D(0), loomMPerHour: null, fxRates: {}, inputSnapshot: {}, inputHash: "b".repeat(64), warnings: [], computedAt: new Date(), supersededAt: new Date(),
-      },
-    });
-    check("§4e sürüm m/sa null yazılır (okuyucu null'a hazır)", v.loomMPerHour === null);
-    await tx.standardCostVersion.delete({ where: { id: v.id } });
-  });
+  // §4e uçtan uca: devir yokken servis hesapla+yaz yolu m/sa'yı null yazar ve sunar.
+  await putCostStructure(f.fabricId, { efficiencyPct: "85", warpWastePct: "2.5", weftWastePct: "3", fabricWastePct: "2", finishingRateCode: f.rateCode, lengthShrinkPct: "4", loomPickRate: "0.05", loomPickCurrency: "USD" }, admin);
+  await prisma.costParameterSet.update({ where: { id: f.paramId }, data: { defaultLoomRpm: null } });
+  let ver: Awaited<ReturnType<typeof createStandardCostVersion>> | null = null;
+  let verErr: unknown = null;
+  try { ver = await createStandardCostVersion(f.fabricId, { fxRates: { USD: "40" }, reason: "SY-D2 bekçi" }, admin); } catch (x) { verErr = x; }
+  check("§4e ATKI_UCRETI + devir yok: sürüm servisten yazılır, tezgahMSaat null", ver !== null && ver.tezgahMSaat === null, verErr ? String(verErr) : String(ver?.tezgahMSaat));
 }
 
 async function bolum5(f: MaliyetFikstur): Promise<void> {
@@ -158,6 +156,12 @@ async function bolum5(f: MaliyetFikstur): Promise<void> {
   let e3: unknown = null;
   try { await putCostStructure(f.fabricId, { loomPickRate: "0.02", loomPickCurrency: "XYZ" }, admin); } catch (x) { e3 = x; }
   check("§5c tanınmayan döviz 400", e3 instanceof AppError && e3.statusCode === 400);
+  // §5d/§5e eski istemci: ücret çiftini göndermeyen PUT ücreti KORUR; açık null temizler.
+  await putCostStructure(f.fabricId, { loomPickRate: "0.05", loomPickCurrency: "USD" }, admin);
+  const kept = await putCostStructure(f.fabricId, { efficiencyPct: "85" }, admin);
+  check("§5d çiftsiz PUT ücreti korur (eski panel silmez)", kept.loomPickRate?.toString() === "0.05" && kept.loomPickCurrency === "USD", `${kept.loomPickRate} ${kept.loomPickCurrency}`);
+  const cleared = await putCostStructure(f.fabricId, { loomPickRate: null, loomPickCurrency: null }, admin);
+  check("§5e açık null çifti temizler", cleared.loomPickRate === null && cleared.loomPickCurrency === null);
 }
 
 async function main(): Promise<void> {
