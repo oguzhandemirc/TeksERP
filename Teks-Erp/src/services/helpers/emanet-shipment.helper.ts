@@ -12,6 +12,7 @@
 // =============================================================================
 import { Prisma, RollEntrySource } from "@prisma/client";
 import { ROLL_DISPLAY_ORDER } from "../../constants/roll-order";
+import { TAMBUR_ENTRY_SOURCES } from "../../constants/tambur-entry-sources";
 import { readFinanceCariHoldEmanetShipment, type CariHoldEmanetShipment } from "../system-setting.service";
 import { rollsAllOwnedByTx } from "./emanet-owner.helper";
 import { ACTIVE_OPERATION } from "./roll-operation.helper";
@@ -29,7 +30,7 @@ export const PROCESSED_ROLL_WHERE: Prisma.RollWhereInput = {
     { operations: { some: ACTIVE_OPERATION } },
     { meterReadings: { some: { revokedAt: null } } },
     { parentRollId: { not: null } },
-    { entrySource: { in: [RollEntrySource.TAMBUR_SPLIT, RollEntrySource.TAMBUR_MANUAL, RollEntrySource.SUBCONTRACTOR_RETURN] } },
+    { entrySource: { in: [...TAMBUR_ENTRY_SOURCES, RollEntrySource.SUBCONTRACTOR_RETURN] } },
   ],
 };
 
