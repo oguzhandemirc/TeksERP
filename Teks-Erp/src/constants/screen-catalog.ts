@@ -311,7 +311,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // PermissionGate — `loom:manual-entry` (terim düzelt · mühürle; machine-stops ekranıyla PAYLAŞILIR) ve
   // `loom:shift-unseal` (mühür aç; geçmiş rakamı değiştirir, SCREENLESS'tan düştü).
   { key: "reports/dokuma", app: "desktop", modul: "dokumaEnabled", title: "Dokuma Raporları", requires: ["report:production"], capabilities: ["loom:manual-entry", "loom:shift-unseal"] },
-  { key: "reports/maliyet", app: "desktop", modul: "maliyetEnabled", title: "Maliyet Raporları", requires: ["report:yarn-need"], capabilities: [] },
+  { key: "reports/maliyet", app: "desktop", modul: "maliyetEnabled", title: "Maliyet Raporları", requires: ["report:yarn-need"], capabilities: ["cost:read"] },
   // Depo tarafı. ⚠️ `operations/yarn-stock` ve `operations/stock-counts` giriş
   // izni `warehouse:read`tir (backend `yarn.routes`/`stock-count.routes` ile
   // birebir); `yarn:write`/`warehouse:write` ekran İÇİ yetenektir.

@@ -53,6 +53,9 @@ const EXEMPT: Record<string, string> = {
 // açılmadı (1e hükmü 2026-09-14 ③) — route ve karo `report:production`.
 // `ozel`: özel rapor oluşturucusu — kategori değil, izni `report:builder` (route ile aynı).
 const KATEGORI_IZNI_ISTISNASI: Record<string, string> = { dokuma: "report:production", ozel: "report:builder", maliyet: "report:yarn-need" };
+// Alt rapor izni kategoriden farklıysa karo `permission` taşır ve route aynı izni ister: dokuma verimliliği
+// tutar gösterir → `cost:read` (SY-D3; backend ucu aynı izin).
+const ALT_RAPOR_IZNI: Record<string, string> = { "/reports/maliyet/dokuma-verimlilik": "cost:read" };
 
 describe("komut paleti kataloğu", () => {
   const paths = new Set(allCommandEntries.map((e) => e.to.split("?")[0]));
@@ -74,7 +77,7 @@ describe("komut paleti kataloğu", () => {
   it("rapor girişleri kategorinin iznini taşır (görünür ama /forbidden olmasın); istisna listesi bayat değil", () => {
     for (const entry of allCommandEntries.filter((e) => e.to.startsWith("/reports/"))) {
       const domain = entry.to.split("/")[2] ?? "";
-      expect(entry.permission, `${entry.to} izinsiz`).toBe(KATEGORI_IZNI_ISTISNASI[domain] ?? `report:${domain}`);
+      expect(entry.permission, `${entry.to} izinsiz`).toBe(ALT_RAPOR_IZNI[entry.to] ?? KATEGORI_IZNI_ISTISNASI[domain] ?? `report:${domain}`);
     }
     for (const cat of Object.keys(KATEGORI_IZNI_ISTISNASI)) {
       expect(allCommandEntries.some((e) => e.to.startsWith(`/reports/${cat}`)), `${cat} istisnası ölü`).toBe(true);

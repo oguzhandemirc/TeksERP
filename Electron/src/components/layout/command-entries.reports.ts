@@ -51,7 +51,7 @@ export const reportCommandSections: CommandSection[] = reportTiles.map((cat) => 
     description: tile.description,
     icon: tile.icon,
     to: tile.to,
-    permission: cat.permission,
+    permission: tile.permission ?? cat.permission,
     visibleWhen: (ctx: OperationsVisibilityContext) => {
       const key = reportKeyOfPath(tile.to);
       // Yaprak rejimi (D4-A4 `ROUTE_REGIME`) karo ve route ile aynı yüklemden.
