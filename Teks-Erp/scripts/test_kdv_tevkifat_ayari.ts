@@ -7,11 +7,12 @@
 //   §3 tutar el hesabı: 1000 TL, KDV %20 ⇒ 200; tevkifat 5/10 ⇒ 100 (alıcı öder); ödenecek 1100
 //   §4 genel ayar kapısı: Zod (tam sayı, aralık, bilinmeyen anahtar) + servis (açıkken oran, pay ≤ payda) ⇒ 400
 //   §5 cari kapısı: KDV aralığı, yarım oran, pay > payda, pay 0 ⇒ 400 CARI_TAX_OVERRIDE_INVALID; kolon değişmez
-//   §6 AST TEK ÇÖZÜMLEYİCİ: `readFinanceDefaultVatRate` / `readFinanceWithholdingFlags` çağrısı ve carinin
-//      tevkifat alanlarına erişim yalnız beyanlı dosyalarda; üç taslak yolu `resolveInvoiceTaxDefaults` çağırır
+//   §6 AST TEK ÇÖZÜMLEYİCİ: KDV/tevkifat ayar okuyucuları (ince okuyucular dahil), getFeatureFlags'in finance*
+//      alanları, carinin tevkifat alanları ve `cari.vatRate` yalnız beyanlı dosyalarda; üç taslak yolu `resolveInvoiceTaxDefaults` çağırır
 // Dönem taslağı uçtan ucu (müşteri %10 + 5/10 ⇒ satır) `test_hizmet_fatura` §14/§19v'de.
 // Negatif sondalar (2026-10-31): `computeInvoiceTaxDefaults` geçersiz kılmayı yok sayınca §1/§2 kırmızı ·
-// `service-period-invoice.service`e ikinci `readFinanceDefaultVatRate()` yazılınca §6 kırmızı (geri alındı).
+// `service-period-invoice.service`e ikinci `readFinanceDefaultVatRate()` yazılınca §6 kırmızı (geri alındı) ·
+// bitirici: dönem taslağına `readFinanceWithholdingEnabled()` / `flags.financeWithholdingEnabled` / `cari.vatRate` ⇒ §6 kırmızı.
 // =============================================================================
 import fs from "node:fs";
 import path from "node:path";
@@ -26,6 +27,7 @@ import { computeInvoiceTaxDefaults, resolveInvoiceTaxDefaults, taxLineFields } f
 import { computeInvoiceTotals, ensureCariAccountTx } from "../src/services/helpers/finance.helper";
 import { cariService } from "../src/services/cari.service";
 import { testActorId } from "./fixture-test-user";
+import { checkConstraintMessage, extractCheckConstraint } from "../src/middlewares/error.middleware";
 
 let pass = 0;
 let fail = 0;
@@ -50,7 +52,16 @@ async function errOf(fn: () => Promise<unknown>): Promise<{ status: number; code
 const SRC = path.resolve(__dirname, "../src");
 const rel = (f: string) => path.relative(SRC, f).split(path.sep).join("/");
 const RESOLVER = "services/helpers/invoice-tax-defaults.helper.ts";
-const SETTING_READERS = new Set(["readFinanceDefaultVatRate", "readFinanceWithholdingFlags"]);
+const SETTING_READERS = new Set([
+  "readFinanceDefaultVatRate",
+  "readFinanceWithholdingFlags",
+  "readFinanceWithholdingEnabled",
+  "readFinanceWithholdingNumerator",
+  "readFinanceWithholdingDenominator",
+]);
+// getFeatureFlags() sonucundaki ayar alanları da bir okuma kapısıdır: beyanlı dosya (okuyucu · sözleşme · çözümleyici) dışında okunmaz.
+const FLAG_FIELDS = new Set(["financeDefaultVatRate", "financeWithholdingEnabled", "financeWithholdingNumerator", "financeWithholdingDenominator"]);
+const FLAG_FIELD_FILES = new Set(["services/system-setting.service.ts", "routes/feature-flag.routes.ts", RESOLVER]);
 const SETTING_READER_FILES = new Set(["services/system-setting.service.ts", RESOLVER]);
 const CARI_FIELDS = new Set(["withholdingEnabled", "withholdingNumerator", "withholdingDenominator"]);
 // Cari geçersiz kılmasını YAZAN (doğrulama) ve sözleşmeyi taşıyan (Zod) yüzeyler; okuyup karar veren yalnız RESOLVER.
@@ -141,6 +152,10 @@ async function main(): Promise<void> {
     check("servis: genel açıkken pay 0 ⇒ 400 WITHHOLDING_SETTING_INVALID", s1.status === 400 && s1.code === "WITHHOLDING_SETTING_INVALID", JSON.stringify(s1));
     const s2 = await errOf(() => systemSettingService.setFeatureFlags({ financeWithholdingNumerator: 11 }, actor));
     check("servis: pay > payda ⇒ 400", s2.status === 400, JSON.stringify(s2));
+    const vatBefore = (await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, customerId: null })).vatRate;
+    const s3 = await errOf(() => systemSettingService.setFeatureFlags({ financeDefaultVatRate: vatBefore === 1 ? 8 : 1, financeWithholdingEnabled: true, financeWithholdingNumerator: 0 }, actor));
+    const vatAfter = (await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, customerId: null })).vatRate;
+    check("geçersiz tevkifatlı gövde KDV'yi de YAZMAZ (doğrulama her yazmadan önce)", s3.status === 400 && vatAfter === vatBefore, JSON.stringify({ s3, vatBefore, vatAfter }));
     const kept = await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, customerId: null });
     check("reddedilen yazım ayarı değiştirmez (5/10 kalır)", kept.withholdingRate === 50, JSON.stringify(kept));
 
@@ -160,6 +175,15 @@ async function main(): Promise<void> {
     }
     const after = await prisma.cariAccount.findUniqueOrThrow({ where: { id: cariId }, select: { vatRate: true, withholdingNumerator: true, withholdingDenominator: true } });
     check("reddedilen yazımlar kolonu değiştirmez", JSON.stringify(before) === JSON.stringify(after), JSON.stringify(after));
+    // Eşzamanlı iki PATCH uygulama doğrulamasını aşarsa DB seddi (23514 → 409 INTEGRITY_RULE) iş dilinde konuşur.
+    let sedName: string | null = null;
+    try {
+      await prisma.cariAccount.update({ where: { id: cariId }, data: { withholdingNumerator: 9, withholdingDenominator: 3 } });
+    } catch (e) {
+      sedName = extractCheckConstraint(e);
+    }
+    check("DB seddi pay > paydayı reddeder ve Türkçe mesajı var", sedName === "cari_accounts_withholding_ck" && Boolean(checkConstraintMessage(sedName)), String(sedName));
+    check("KDV seddinin Türkçe mesajı var", Boolean(checkConstraintMessage("cari_accounts_vat_override_ck")));
 
     // ── §6 ──
     section("§6 AST tek çözümleyici");
@@ -174,10 +198,18 @@ async function main(): Promise<void> {
           if (SETTING_READERS.has(callee) && !SETTING_READER_FILES.has(r)) offenders.push(`${r}:${sf.getLineAndCharacterOfPosition(n.getStart()).line + 1} ${callee}()`);
           if (callee === "resolveInvoiceTaxDefaults") draftCalls.add(r);
         }
+        // Takma adla içe aktarım (`import { readFinance… as x }`) çağrı adını gizler — belirteç adından yakala.
+        if (ts.isImportSpecifier(n) && SETTING_READERS.has((n.propertyName ?? n.name).text) && !SETTING_READER_FILES.has(r)) {
+          offenders.push(`${r}:${sf.getLineAndCharacterOfPosition(n.getStart()).line + 1} import ${(n.propertyName ?? n.name).text}`);
+        }
         let name: string | null = null;
         if (ts.isPropertyAccessExpression(n)) name = n.name.text;
         else if ((ts.isPropertyAssignment(n) || ts.isShorthandPropertyAssignment(n) || ts.isBindingElement(n)) && n.name && ts.isIdentifier(n.name)) name = n.name.text;
-        if (name && CARI_FIELDS.has(name) && !CARI_FIELD_FILES.has(r)) offenders.push(`${r}:${sf.getLineAndCharacterOfPosition(n.getStart()).line + 1} .${name}`);
+        const at = () => `${r}:${sf.getLineAndCharacterOfPosition(n.getStart()).line + 1} .${name}`;
+        if (name && CARI_FIELDS.has(name) && !CARI_FIELD_FILES.has(r)) offenders.push(at());
+        if (name && FLAG_FIELDS.has(name) && !FLAG_FIELD_FILES.has(r)) offenders.push(at());
+        // `vatRate` fatura satırında da var; yalnız cari nesnesinden (`cari.vatRate`, `cariAccount?.vatRate`) okunuşu yasak.
+        if (name === "vatRate" && ts.isPropertyAccessExpression(n) && /cari/i.test(n.expression.getText(sf)) && !CARI_FIELD_FILES.has(r)) offenders.push(at());
         ts.forEachChild(n, visit);
       };
       visit(sf);

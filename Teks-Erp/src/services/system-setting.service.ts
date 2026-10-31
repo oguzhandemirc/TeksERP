@@ -2962,15 +2962,13 @@ export class SystemSettingService {
     );
   }
 
-  /** D4-V1k: genel tevkifat — üç anahtar birlikte doğrulanır (girdi ?? kayıtlı); açıkken oran ZORUNLU (fail-closed 400). */
-  private async applyWithholdingSettings(
-    input: { financeWithholdingEnabled?: boolean; financeWithholdingNumerator?: number | null; financeWithholdingDenominator?: number | null },
-    userId?: string,
-  ): Promise<void> {
+  /** D4-V1k: genel tevkifat — üç anahtar birlikte doğrulanır (girdi ?? kayıtlı); açıkken oran ZORUNLU (fail-closed 400).
+   *  Doğrulama setFeatureFlags'in başında, HİÇBİR yazmadan önce koşar (aksi hâlde KDV yazılıp 400 dönerdi). */
+  private async resolveWithholdingWrite(input: WithholdingInput, userId?: string): Promise<(() => Promise<void>) | null> {
     const hasEnabled = Object.prototype.hasOwnProperty.call(input, "financeWithholdingEnabled");
     const hasNumerator = Object.prototype.hasOwnProperty.call(input, "financeWithholdingNumerator");
     const hasDenominator = Object.prototype.hasOwnProperty.call(input, "financeWithholdingDenominator");
-    if (!hasEnabled && !hasNumerator && !hasDenominator) return;
+    if (!hasEnabled && !hasNumerator && !hasDenominator) return null;
     // null = girilmemiş pay (0) / varsayılan payda — panelin boş alanı.
     const parsed: Partial<WithholdingFlags> = {
       ...(hasEnabled ? { financeWithholdingEnabled: input.financeWithholdingEnabled } : {}),
@@ -2980,9 +2978,11 @@ export class SystemSettingService {
     const next = { ...(await readFinanceWithholdingFlags()), ...parsed };
     const problem = withholdingSettingProblem(next);
     if (problem) throw AppError.badRequest(problem, { code: "WITHHOLDING_SETTING_INVALID" });
-    if (hasEnabled) await this.set(SETTING_KEYS.FINANCE_WITHHOLDING_ENABLED, next.financeWithholdingEnabled, "Satış faturası taslağında genel tevkifat", userId);
-    if (hasNumerator) await this.set(SETTING_KEYS.FINANCE_WITHHOLDING_NUMERATOR, next.financeWithholdingNumerator, "Genel tevkifat oranı — pay", userId);
-    if (hasDenominator) await this.set(SETTING_KEYS.FINANCE_WITHHOLDING_DENOMINATOR, next.financeWithholdingDenominator, "Genel tevkifat oranı — payda", userId);
+    return async () => {
+      if (hasEnabled) await this.set(SETTING_KEYS.FINANCE_WITHHOLDING_ENABLED, next.financeWithholdingEnabled, "Satış faturası taslağında genel tevkifat", userId);
+      if (hasNumerator) await this.set(SETTING_KEYS.FINANCE_WITHHOLDING_NUMERATOR, next.financeWithholdingNumerator, "Genel tevkifat oranı — pay", userId);
+      if (hasDenominator) await this.set(SETTING_KEYS.FINANCE_WITHHOLDING_DENOMINATOR, next.financeWithholdingDenominator, "Genel tevkifat oranı — payda", userId);
+    };
   }
 
   private async assertModuleDependencies(input: Record<string, unknown>): Promise<void> {
@@ -3074,6 +3074,7 @@ export class SystemSettingService {
     this.assertModuleWritesLicensed(input as Record<string, unknown>);
     await this.assertTezgahAlarmShiftRequirement(input as Record<string, unknown>);
     await this.assertTezgahAlarmUnclassifiedRequirement(input as Record<string, unknown>);
+    const writeWithholding = await this.resolveWithholdingWrite(input, userId);
 
     if (Object.prototype.hasOwnProperty.call(input, "pricingEnabled")) {
       if (typeof input.pricingEnabled !== "boolean") {
@@ -3130,7 +3131,7 @@ export class SystemSettingService {
         userId
       );
     }
-    await this.applyWithholdingSettings(input, userId);
+    if (writeWithholding) await writeWithholding();
     if (Object.prototype.hasOwnProperty.call(input, "financeInvoiceMatchTolerance")) {
       if (typeof input.financeInvoiceMatchTolerance !== "boolean") {
         throw AppError.badRequest("financeInvoiceMatchTolerance boolean olmalı");
@@ -5423,6 +5424,8 @@ export const DEFAULT_WITHHOLDING_DENOMINATOR = 10;
 export type WithholdingFlags = Pick<FeatureFlags, "financeWithholdingEnabled" | "financeWithholdingNumerator" | "financeWithholdingDenominator">;
 
 /** Türkçe hata cümlesi ya da null — servis yazımı ve bekçi aynı yüklemi okur. */
+type WithholdingInput = { financeWithholdingEnabled?: boolean; financeWithholdingNumerator?: number | null; financeWithholdingDenominator?: number | null };
+
 export function withholdingSettingProblem(v: WithholdingFlags): string | null {
   const num = v.financeWithholdingNumerator;
   const den = v.financeWithholdingDenominator;
