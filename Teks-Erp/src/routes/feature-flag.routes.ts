@@ -305,6 +305,13 @@ export const updateSchema = z.strictObject({
   // D4-G2a: kârlılık kaynakları (`PROFIT_SUBCONTRACT_SOURCES` / `PROFIT_CONSUMABLE_PRICE_SOURCES` ile birebir).
   costProfitSubcontractSource: z.enum(["FATURA_ONCE", "YALNIZ_FATURA"], { message: "Dış fason kaynağı FATURA_ONCE ya da YALNIZ_FATURA olmalı" }).optional(),
   costProfitConsumablePriceSource: z.enum(["ALIS_FIYATI", "SON_ALIS_FATURASI"], { message: "Sarf fiyatı kaynağı ALIS_FIYATI ya da SON_ALIS_FATURASI olmalı" }).optional(),
+  // D4-G2b: makine süresi, genel gider anahtarı, kategori sınıfları (`PROFIT_*` sabitleri ile birebir; harita süzgeci serviste).
+  costProfitMachineTime: z.enum(["OTURUM", "VARDIYA", "NORM"], { message: "Makine süresi OTURUM, VARDIYA ya da NORM olmalı" }).optional(),
+  costProfitOverheadKey: z.enum(["YOK", "METRE", "GELIR", "MAKINE_SAATI"], { message: "Genel gider anahtarı YOK, METRE, GELIR ya da MAKINE_SAATI olmalı" }).optional(),
+  costProfitCategoryClasses: z
+    .record(z.string().trim().min(1, "Kategori adı boş olamaz").max(100, "Kategori adı en çok 100 karakter"), z.enum(["ISCILIK", "GENEL_GIDER", "HARIC"], { message: "Kategori sınıfı ISCILIK, GENEL_GIDER ya da HARIC olmalı" }))
+    .refine((m) => Object.keys(m).length <= 200, { message: "En çok 200 kategori sınıflanabilir" })
+    .optional(),
   financeServiceBillingPriceDate: z.enum(["SERVICE_DAY", "DISPATCH_DAY"]).optional(),
   /** D4-H1: masraf kategorisi önerisi (`EXPENSE_CATEGORY_SUGGESTION_MODES` ile birebir). */
   financeExpenseCategorySuggestions: z.enum(["ON", "OFF"]).optional(),
