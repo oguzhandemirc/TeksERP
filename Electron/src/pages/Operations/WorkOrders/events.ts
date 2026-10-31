@@ -86,6 +86,6 @@ export interface LookupHit {
 }
 
 export async function lookupWorkOrdersForEvents(q: string): Promise<LookupHit[]> {
-  const res = await apiClient.get("/api/work-orders/events/lookup", { params: { q } });
+  const res = await apiClient.get("/api/work-orders/events/lookup", { params: { q }, customerCodeChoice: true });
   return (res.data as { data: LookupHit[] }).data;
 }

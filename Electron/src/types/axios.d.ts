@@ -6,6 +6,8 @@ import "axios";
 declare module "axios" {
   export interface AxiosRequestConfig {
     suppressErrorToast?: boolean;
+    /** Okutma noktası belirsiz müşteri kodu 409'unu aday modalıyla kendi çözer (lib/customer-code-choice.ts). */
+    customerCodeChoice?: boolean;
     /**
      * Başarılı yazım yanıtının `warnings`i genel TOSTA basılmasın (lib/serverNotes.ts):
      * `handled` — ekran uyarıyı kendi gösterir (satır içi / liste) · `silent` — istek

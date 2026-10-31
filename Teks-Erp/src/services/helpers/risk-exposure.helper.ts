@@ -19,6 +19,9 @@ import { CARI_HOLD_EMANET_SHIPMENT } from "./cari-hold.helper";
 
 type Tx = Prisma.TransactionClient;
 
+/** "Limiti tanımlı hesap" süzgeci — kapı ve bildirim kaynağı aynı parçayı kullanır (kayıt yokluğu sıfır limit değildir). */
+export const RISK_LIMITED_ACCOUNT_WHERE = { riskLimit: { not: null } } as const satisfies Prisma.CariAccountWhereInput;
+
 export interface RiskExposure {
   cariId: string;
   name: string;
@@ -80,7 +83,7 @@ export async function assertCustomerRiskLimitTx(
   const enabled = scope === "INTAKE" ? await resolveRiskLimitBlockIntake(tx) : await resolveRiskLimitBlockShipment(tx);
   if (!enabled) return;
   const accounts = await tx.cariAccount.findMany({
-    where: { AND: [cariAccountWhereForCard({ customerId, subcontractorId: null }), { riskLimit: { not: null } }] },
+    where: { AND: [cariAccountWhereForCard({ customerId, subcontractorId: null }), RISK_LIMITED_ACCOUNT_WHERE] },
     select: { id: true },
     orderBy: { id: "asc" },
   });

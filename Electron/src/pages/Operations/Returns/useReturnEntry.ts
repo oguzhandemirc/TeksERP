@@ -6,6 +6,7 @@ import { classifyBarcode } from "@/lib/scanner/barcode-kind";
 import { returnReasonService } from "@/pages/ReturnReasons/service";
 import { qualityGradeService } from "@/pages/QualityGrades/service";
 import { returnsService } from "./service";
+import { useCustomerCodeChoice } from "@/components/scanner/useCustomerCodeChoice";
 import {
   allRollIds, autoOrders, buildBatchPayload, ordersValid, scopeFromLot, scopeFromRoll, scopeFromSack, scopeFromShipment, summarize,
   type ReturnScope, type ReturnScopeKind,
@@ -51,7 +52,7 @@ export function useReturnEntry(open: boolean, initialBarcode: string | undefined
     setQualityGradeId(null);
   };
 
-  const { lookupMut, lookupShipmentMut, lookupLotMut } = useReturnLookups(open, initialBarcode, { applyScope, setBarcode, clear: () => setScope(null) });
+  const { lookupMut, lookupShipmentMut, lookupLotMut, candidateDialog } = useReturnLookups(open, initialBarcode, { applyScope, setBarcode, clear: () => setScope(null) });
 
   const summary = scope ? summarize(scope, selected) : { rollCount: 0, meters: 0, docCount: 0 };
   const hasReason = !!reasonId || reasonText.trim().length > 0;
@@ -88,7 +89,7 @@ export function useReturnEntry(open: boolean, initialBarcode: string | undefined
   return {
     barcode, setBarcode, scope, selected, setSelected, orderByGroup, setOrderByGroup,
     reasonId, setReasonId, reasonText, setReasonText, note, setNote, qualityGradeId, setQualityGradeId,
-    picker, setPicker, reasons, grades, lookupMut, lookupShipmentMut, lookupLotMut, createMut,
+    picker, setPicker, reasons, grades, lookupMut, lookupShipmentMut, lookupLotMut, createMut, candidateDialog,
     summary, hasReason, canSubmit, activeKind, reset,
   };
 }
@@ -104,14 +105,19 @@ function useReturnLookups(
   h: { applyScope: (s: ReturnScope) => void; setBarcode: (v: string) => void; clear: () => void },
 ) {
   const { applyScope, setBarcode, clear } = h;
+  // Belirsiz müşteri kodu → aday modalı; seçim iç barkodla aynı okutma, Vazgeç → kapsam değişmez (D4-F1c).
+  const choice = useCustomerCodeChoice();
   const lookupMut = useMutation({
-    mutationFn: async (raw: string): Promise<ReturnScope> => {
+    mutationFn: async (raw: string): Promise<ReturnScope | null> => {
       const { kind, code } = classifyBarcode(raw);
       if (kind === "SACK") return scopeFromSack((await returnsService.lookupSack(code)).data);
       if (kind === "SHIPMENT") return scopeFromShipment((await returnsService.lookupShipment({ shipmentNo: code })).data);
-      return scopeFromRoll((await returnsService.lookup(raw.trim())).data);
+      const res = await choice.resolveScan(raw.trim(), returnsService.lookup);
+      return res ? scopeFromRoll(res.data) : null;
     },
-    onSuccess: applyScope,
+    onSuccess: (s) => {
+      if (s) applyScope(s);
+    },
     onError: clear,
   });
   const lookupShipmentMut = useMutation({
@@ -134,7 +140,7 @@ function useReturnLookups(
     // lookupMut kararlı değil; yalnız open+initialBarcode değişiminde tetikle.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialBarcode]);
-  return { lookupMut, lookupShipmentMut, lookupLotMut };
+  return { lookupMut, lookupShipmentMut, lookupLotMut, candidateDialog: choice.dialog };
 }
 
 /** Neden ve kalite katalogları (picker yükü, 5 dk taze). */
