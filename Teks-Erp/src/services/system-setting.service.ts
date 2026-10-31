@@ -4546,7 +4546,7 @@ export class SystemSettingService {
       await this.set(
         SETTING_KEYS.TAMBUR_CHILD_WIDTH_SOURCE,
         v,
-        "Tambur finalize çocuk top eni: WO_TARGET_FIRST (iş emri eni, yoksa ana top) | MEASURED_FIRST (ölçülmüş ana top eni önce)",
+        "Tambur finalize çocuk top eni: WO_TARGET_FIRST (hedef en, yoksa ana top) | MEASURED_FIRST (ölçülmüş ana top eni önce)",
         userId
       );
     }
