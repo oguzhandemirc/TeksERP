@@ -21,6 +21,7 @@ import { OrderLineQuantityField } from "./OrderLineQuantityField";
 import { PhaseOutLineNote } from "./PhaseOutLineNote";
 import { LineTargetValuesField } from "./LineTargetValuesField";
 import { pruneTargetValues, useVariantCatalog } from "./lineTargetValues";
+import { OrderLinePlanButton } from "./OrderLinePlanDialog";
 import type { OrderLineFormValues } from "./schema";
 
 export const ITEM_WARNING_TEXT = "Önce kumaş seçin";
@@ -71,7 +72,7 @@ export function OrderLineRow(p: OrderLineRowProps) {
               kalır; kumaş değişince renk/özellik/birim sıfırlama davranışı aynen. */}
           <ItemSelect
             value={line.itemId || null}
-            onChange={(v) => onPatch({ itemId: v ?? "", colorId: null, requiredPropertyIds: [], targetValues: [], unit: undefined })}
+            onChange={(v) => onPatch({ itemId: v ?? "", colorId: null, requiredPropertyIds: [], targetValues: [], unit: undefined, recipeId: null })}
             allowedTypes={ORDER_LINE_ITEM_TYPES}
             lifecycle={lifecycle}
             aria-label="Kumaş seç"
@@ -134,6 +135,7 @@ function OrderLineExtras(p: OrderLineRowProps) {
         <Button type="button" size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={p.onQuickAddItem}>
           <PackagePlus className="h-3.5 w-3.5" /> Yeni Kumaş
         </Button>
+        <OrderLinePlanButton line={line} onPatch={onPatch} onMissingItem={onWarnItem} />
         <LineRequiredPropertiesEditor
           itemId={line.itemId}
           value={line.requiredPropertyIds ?? []}

@@ -57,8 +57,10 @@ function orderToFormValues(order: Order): OrderFormValues {
       customerItemName: l.customerItemName ?? "",
       customerColorName: l.customerColorName ?? "",
       requiredPropertyIds: (l.requiredProperties ?? []).map((p) => p.propertyId),
-      targetValues: (l.targetValues ?? []).map((t) => ({ propertyId: t.propertyId, valueId: t.valueId })),
       cutNote: l.cutNote ?? "",
+      recipeId: l.recipeId ?? null,
+      pieceLengthM: l.pieceLengthM == null ? null : Number(l.pieceLengthM),
+      targetValues: (l.targetValues ?? []).map((t) => ({ propertyId: t.propertyId, valueId: t.valueId })),
     })),
   };
 }

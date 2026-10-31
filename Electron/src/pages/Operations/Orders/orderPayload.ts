@@ -5,8 +5,9 @@
 // =============================================================================
 import type { ItemUnitCode } from "@/lib/item-unit";
 import type { Order } from "./types";
-import type { OrderFormValues } from "./schema";
+import type { OrderFormValues, OrderLineFormValues } from "./schema";
 import type { TargetValueItem } from "./lineTargetValues";
+import { linePlanPayload, type OrderLinePlanPayload } from "./orderLinePlanPayload";
 
 export interface CreatePayload {
   /** Boş = backend otomatik üretir (SIP + günlük sayaç). Doluysa o kullanılır. */
@@ -17,7 +18,7 @@ export interface CreatePayload {
   branchId: string | null;
   currency?: string;
   deadline: string | null;
-  lines: {
+  lines: ({
     itemId: string;
     colorId: string | null;
     quantity: number;
@@ -29,12 +30,10 @@ export interface CreatePayload {
     customerColorName?: string | null;
     cutNote?: string | null;
     requiredPropertyIds: string[];
-    /** Yalnız hedef seçilmişse gönderilir — hedefsiz satırın gövdesi bugünküyle bayt-aynı (SY-F2). */
-    targetValues?: TargetValueItem[];
-  }[];
+  } & OrderLinePlanPayload)[];
 }
 
-interface UpdateLinePayload {
+interface UpdateLinePayload extends Omit<OrderLinePlanPayload, "targetValues"> {
   /** Mevcut OrderLine.id (update). Yeni satırda undefined (create). */
   id?: string;
   itemId: string;
@@ -88,7 +87,8 @@ export function buildCreatePayload(
       customerColorName: l.customerColorName?.trim() ? l.customerColorName.trim() : null,
       cutNote: l.cutNote?.trim() ? l.cutNote.trim() : null,
       requiredPropertyIds: l.requiredPropertyIds ?? [],
-      ...((l.targetValues ?? []).length > 0 ? { targetValues: l.targetValues } : {}),
+      // SY-K2 plan alanları + hedef: yalnız dolu olan gider (hedefsiz satır gövdesi bayt-aynı).
+      ...linePlanPayload(l, "create"),
     })),
   };
 }
@@ -134,11 +134,17 @@ export function buildUpdatePayload(
             customerColorName: l.customerColorName?.trim() ? l.customerColorName.trim() : null,
             cutNote: l.cutNote?.trim() ? l.cutNote.trim() : null,
             requiredPropertyIds: l.requiredPropertyIds ?? [],
-            ...targetValuesForUpdate(l.targetValues ?? [], savedTargets.get(l.clientId)),
+            ...updatePlanFields(l, savedTargets.get(l.clientId)),
           })),
         }
       : {}),
   };
+}
+
+/** SY-K2 varyant/top boyu her zaman gider; hedef yalnız değiştiyse (targetValuesForUpdate). */
+function updatePlanFields(l: OrderLineFormValues, saved: string | undefined): Pick<UpdateLinePayload, "recipeId" | "pieceLengthM" | "targetValues"> {
+  const { recipeId, pieceLengthM } = linePlanPayload(l, "update");
+  return { recipeId, pieceLengthM, ...targetValuesForUpdate(l.targetValues ?? [], saved) };
 }
 
 /** Sıra bağımsız küme anahtarı — kayıtlı hedefle formdakini karşılaştırmak için. */

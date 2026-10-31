@@ -61,6 +61,13 @@ export interface OrderLine {
   colorNameScope?: ColorNameScope | null;
   /** Kesim/sevk için serbest not — örn. kaç parçaya bölüneceği. Tamburda görünür. */
   cutNote: string | null;
+  /** Top boyu (m) — eski backend göndermez. */
+  pieceLengthM?: number | string | null;
+  /** Satır varyantı (SY-K1k); NULL = desen geneli. Eski backend göndermez. */
+  recipeId?: string | null;
+  recipe?: { id: string; code: string; name: string; variantCode: string | null } | null;
+  /** Satır hedef değerleri (kuşak gibi çeşit özelliği); eski backend göndermez. */
+  targetValues?: OrderLineTargetValueLink[];
   /**
    * İPTAL İZİ (2026-08-27). NULL = aktif kalem.
    * Kalem SİLİNMEZ: listede "iptal" işaretli ve salt-okunur kalır, sevk edilmiş
@@ -72,8 +79,6 @@ export interface OrderLine {
   color?: OrderLineColor | null;
   /** Müşterinin istediği özellikler — WO açılırken targetProperties önerisi olur. */
   requiredProperties?: OrderLineRequiredPropertyLink[];
-  /** Satırın hedef değerleri; eski backend göndermez (undefined = yok). */
-  targetValues?: OrderLineTargetValueLink[];
   /**
    * WO picker (gap) yanıtında gelir: Açık = quantity − sevk. KG/ADET satırda `null`
    * (karşılama metre defterinden ölçülmez); eski backend alanı göndermez (undefined).

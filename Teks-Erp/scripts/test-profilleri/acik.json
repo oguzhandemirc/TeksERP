@@ -51,6 +51,7 @@
     "tamburOverQuantityEnabled": true,
     "tamburUndoFullSameDayOnly": true,
     "tamburSimulatedMeterEnabled": true,
+    "tamburCalibrationCheck": "UYAR",
     "tamburShortCutA1Enabled": true,
     "tamburShortCutA1ThresholdM": 5,
     "tamburPlanGateWidthToleranceCm": 5,
