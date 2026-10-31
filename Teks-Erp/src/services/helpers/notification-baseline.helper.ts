@@ -41,3 +41,9 @@ export async function resetNotificationBaselines(client: SettingClient): Promise
   });
   return r.count;
 }
+
+/** Tek türün damgasını düşür: türün kaynağı yeni konu kümesine açılınca (ör. birim ayarı) sonraki tur yeniden taban. */
+export async function resetNotificationBaseline(client: SettingClient, kind: string): Promise<number> {
+  const r = await client.systemSetting.updateMany({ where: { key: notificationBaselineKey(kind) }, data: { value: false } });
+  return r.count;
+}

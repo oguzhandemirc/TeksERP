@@ -28,6 +28,8 @@ import { NotificationsPage } from "@/pages/Notifications/NotificationsPage"; // 
 import { NotificationProfilesPage } from "@/pages/System/NotificationProfiles/NotificationProfilesPage"; // bildirim:
 import { DefinitionsHubPage } from "@/pages/Definitions/DefinitionsHubPage";
 import { WarpSpecsPage } from "@/pages/WarpSpecs/WarpSpecsPage";
+import { WeaveDesignsPage } from "@/pages/WeaveDesigns/WeaveDesignsPage";
+import { WeaveDesignDetailPage } from "@/pages/WeaveDesigns/WeaveDesignDetailPage";
 import { AccessHubPage } from "@/pages/Access/AccessHubPage";
 import { AccessUsersPage } from "@/pages/Access/Users/AccessUsersPage";
 import { UserFootprintPage } from "@/pages/Access/Users/footprint/UserFootprintPage";
@@ -71,6 +73,7 @@ import { PeriodClosePage } from "@/pages/Finance/PeriodClose/PeriodClosePage";
 import { FinanceReportsHubPage } from "@/pages/Reports/Finance/FinanceReportsHubPage";
 import { DokumaReportsHubPage } from "@/pages/Reports/Dokuma/DokumaReportsHubPage";
 import { MaliyetReportsHubPage } from "@/pages/Reports/Maliyet/MaliyetReportsHubPage";
+import { ProfitabilityReportPage } from "@/pages/Reports/Maliyet/ProfitabilityReportPage";
 import { RandimanPage } from "@/pages/Reports/Dokuma/RandimanPage";
 import { DurusParetoPage } from "@/pages/Reports/Dokuma/DurusParetoPage";
 import { MudahalePage } from "@/pages/Reports/Dokuma/MudahalePage";
@@ -374,6 +377,23 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="warpspec:read">
         <WarpSpecsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // DESEN KARTLARI (dokuma modülü, SY-A3) — karo ile aynı izin; modül kapısı ROUTE_MODULE'dan.
+    path: "definitions/weave-designs",
+    element: (
+      <ProtectedRoute requirePermission="warpspec:read">
+        <WeaveDesignsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/weave-designs/:id",
+    element: (
+      <ProtectedRoute requirePermission="warpspec:read">
+        <WeaveDesignDetailPage />
       </ProtectedRoute>
     ),
   },
@@ -1681,6 +1701,16 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="report:finance">
         <ExpenseSummaryPage />
+      </ProtectedRoute>
+    ),
+  },
+  // Kârlılık (D4-G3) — rejim `ROUTE_MODULE` (`reports/maliyet` → maliyetEnabled); izin katalogla aynı (`cost:read`);
+  // uç ayrıca ön muhasebe + `report:finance` ister, sayfa ikisi yoksa sorgu atmaz. v2 bayrağına bağlı DEĞİL.
+  {
+    path: "reports/maliyet/karlilik",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <ProfitabilityReportPage />
       </ProtectedRoute>
     ),
   },

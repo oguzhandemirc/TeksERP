@@ -8,6 +8,7 @@ import { z } from "zod";
 import { KursunQcService } from "../services/kursun-qc.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { meterSourceSchema } from "../services/helpers/meter-reading.helper";
+import { meterCalibrationWarnings, withResponseWarnings } from "../services/helpers/meter-calibration.helper";
 import "../types/express-augment";
 import { assertNoBareFilterParams } from "../utils/query-parser";
 import { METER_DEVIATION_FILTER_NAMES, parseMeterDeviationQuery } from "../services/helpers/kursun-meter-deviation-list.helper";
@@ -201,7 +202,7 @@ export class KursunQcController {
         req.user?.userId,
         stamp?.machineId ?? req.device?.machineId ?? null
       );
-      res.status(201).json(result);
+      res.status(201).json(withResponseWarnings(result, await meterCalibrationWarnings([body.meterOut])));
     } catch (err) {
       next(err);
     }
@@ -278,7 +279,7 @@ export class KursunQcController {
         req.user?.userId,
         stamp?.machineId ?? req.device?.machineId ?? null,
       );
-      res.status(201).json(result);
+      res.status(201).json(withResponseWarnings(result, await meterCalibrationWarnings([input])));
     } catch (err) {
       next(err);
     }
