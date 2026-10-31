@@ -11,11 +11,14 @@
 //      kapsayan kabul → fark null (uydurulmaz)
 //   §4 DB: metre tabanlı tarifede (bugünkü dokuma/Adnan Şahin kurulumu) satır YOK; KG tarifesinde
 //      satır = el hesabı; başka firmaya bağlı tarife → satır yok; bağlı ALIŞ faturası farkı;
-//      iptal faturası sayılmaz; bilinmeyen sevk 404
+//      iptal faturası sayılmaz; bilinmeyen sevk 404; varyant (sipariş satırı reçetesi) DB yolunda yapıyı ezer;
+//      kısmi kabul → fark null; finance:read yok / ön muhasebe kapalı → fatura HİÇ okunmaz; iptal sevk → satır yok
 // Koşum: DATABASE_URL=<test DB> npx tsx scripts/test_fason_kg_kontrol.ts
 // NEGATİF SONDA — 2026-11-01: `resolveFinishingRateCode` önceliği `structureCode ?? variantCode`
 //   olarak TERS çevrilince §2a ❌; `computeDispatchFinishingCheck`te NOT_KG_BASIS dalı silinince
 //   §1c ve §4a ❌ (metre tarifesi kg ile çarpıldı). İkisi de geri alındı.
+// NEGATİF SONDA — 2026-11-01 (bitirici): servisteki `opts.canReadInvoices &&` kaldırılınca §4f ❌; `readFinanceEnabled()`
+//   kaldırılınca §4g ❌; helper'da `&& !partial` kaldırılınca §3f/§4d ❌. Hepsi geri alındı.
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import prisma from "../src/lib/prisma";
@@ -28,6 +31,7 @@ import {
 import { resolveFinishingRateCode } from "../src/services/helpers/finishing-rate-code.helper";
 import { getDispatchFinishingCheck } from "../src/services/dispatch-finishing-check.service";
 import { AppError } from "../src/utils/app-error";
+import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { altinYapiYaz, fiksturKur, fiksturSil } from "./lib/maliyet-fikstur";
 import { ensureTestDyeHouse, ensureTestSander } from "./fixture-subcontractor";
 import { assertGelistirmeVeritabani } from "./db-guard";
@@ -47,7 +51,7 @@ const kgRate = (over: Partial<FinishingCheckRate> = {}): FinishingCheckRate => (
 });
 const inp = (over: Partial<FinishingCheckInput> = {}): FinishingCheckInput => ({
   subcontractorId: SUB, fabricWeights: [D("12.5"), D("7.5")], rateCodes: ["BOYA-R"], rate: kgRate(),
-  invoices: [], invoicesCoverOtherDispatches: false, ...over,
+  invoices: [], invoicesCoverOtherDispatches: false, invoicesCoverWholeDispatch: true, ...over,
 });
 
 function bolum1(): void {
@@ -83,15 +87,26 @@ function bolum3(): void {
   const draft = computeDispatchFinishingCheck(inp({ invoices: [inv("USD", "10", "DRAFT"), inv("USD", "9")] }));
   check("§3d taslak işaretlenir, iki fatura toplanır", draft.line?.invoice?.hasDraft === true && draft.line.invoice.difference === "1.00");
   check("§3e fatura yoksa invoice null", computeDispatchFinishingCheck(inp()).line?.invoice === null);
+  const part = computeDispatchFinishingCheck(inp({ invoices: [inv("USD", "7")], invoicesCoverWholeDispatch: false }));
+  check("§3f kısmi kabulün faturası → fark null, kısmi işaretli", part.line?.invoice?.difference === null && part.line.invoice.partial === true && part.line.invoice.netAmount === "7.00");
+  check("§3g iptal edilmiş sevk → satır yok", computeDispatchFinishingCheck(inp({ cancelled: true })).reason === "DISPATCH_CANCELLED");
 }
 
-interface Created { rollIds: string[]; woId?: string; batchId?: string; stationId?: string; stepId?: string; dispatchId?: string; receiptId?: string; invoiceIds: string[]; cariId?: string; rateCodes: string[] }
+const ALL = { canReadInvoices: true } as const;
+const FIN = SETTING_KEYS.FINANCE_ENABLED;
+async function setFinance(on: boolean): Promise<void> {
+  await prisma.systemSetting.upsert({ where: { key: FIN }, create: { key: FIN, value: on }, update: { value: on } });
+}
+
+interface Created { customerId?: string; orderId?: string; recipeId?: string; linkId?: string; rollIds: string[]; woId?: string; batchId?: string; stationId?: string; stepId?: string; dispatchId?: string; receiptId?: string; invoiceIds: string[]; cariId?: string; rateCodes: string[] }
 
 async function bolum4(): Promise<void> {
   const f = await fiksturKur("FKG");
   const c: Created = { rollIds: [], invoiceIds: [], rateCodes: [] };
   const dye = await ensureTestDyeHouse();
   const sander = await ensureTestSander();
+  const finSnap = await prisma.systemSetting.findUnique({ where: { key: FIN }, select: { value: true } });
+  await setFinance(true);
   try {
     await altinYapiYaz(f); // ürün yapısı → fikstürün RAW_M TRY apre tarifesi
     const wo = await prisma.workOrder.create({ data: { workOrderNumber: `${f.tag}-WO`, status: "IN_PROGRESS", targetItemId: f.fabricId }, select: { id: true } });
@@ -108,25 +123,39 @@ async function bolum4(): Promise<void> {
     const r2 = await roll("2");
     const disp = await prisma.subcontractorDispatch.create({ data: { dispatchNo: `${f.tag}-SD`, workOrderId: wo.id, batchId: c.batchId, stepId: c.stepId, subcontractorId: dye.id }, select: { id: true } });
     c.dispatchId = disp.id;
-    await prisma.subcontractorDispatchItem.create({ data: { dispatchId: disp.id, rollId: r1, dispatchedQty: D(100), dispatchedWeight: D("12.5") } });
+    const di1 = (await prisma.subcontractorDispatchItem.create({ data: { dispatchId: disp.id, rollId: r1, dispatchedQty: D(100), dispatchedWeight: D("12.5") }, select: { id: true } })).id;
     const di2 = await prisma.subcontractorDispatchItem.create({ data: { dispatchId: disp.id, rollId: r2, dispatchedQty: D(100), dispatchedWeight: D("7.5") }, select: { id: true } });
 
-    const a = await getDispatchFinishingCheck(disp.id);
+    const a = await getDispatchFinishingCheck(disp.id, ALL);
     check("§4a metre tabanlı tarife (bugünkü kurulum) → satır YOK", a.line === null && a.reason === "NOT_KG_BASIS", JSON.stringify(a));
 
     const kg = `${f.tag}-KG`.slice(0, 32);
     c.rateCodes.push(kg);
     await prisma.finishingRate.create({ data: { code: kg, name: `${f.tag} boya renkli`, basis: "KG", currency: "USD", pricePerM: D("0.9") } });
     await prisma.costStructure.update({ where: { itemId: f.fabricId }, data: { finishingRateCode: kg } });
-    const b = await getDispatchFinishingCheck(disp.id);
+    const b = await getDispatchFinishingCheck(disp.id, ALL);
     check("§4b KG tarifesi → 20 kg × 0,90 = 18,00 USD", b.line?.expectedAmount === "18.00" && b.line.totalKg === "20.000" && b.line.rateCode === kg && b.line.invoice === null, JSON.stringify(b));
 
     const bound = `${f.tag}-KGZ`.slice(0, 32);
     c.rateCodes.push(bound);
     await prisma.finishingRate.create({ data: { code: bound, name: `${f.tag} zımpara`, basis: "KG", currency: "USD", pricePerM: D("0.5"), subcontractorId: sander.id } });
     await prisma.costStructure.update({ where: { itemId: f.fabricId }, data: { finishingRateCode: bound } });
-    check("§4c başka firmaya bağlı tarife → satır yok", (await getDispatchFinishingCheck(disp.id)).reason === "OTHER_SUBCONTRACTOR");
+    check("§4c başka firmaya bağlı tarife → satır yok", (await getDispatchFinishingCheck(disp.id, ALL)).reason === "OTHER_SUBCONTRACTOR");
     await prisma.costStructure.update({ where: { itemId: f.fabricId }, data: { finishingRateCode: kg } });
+
+    // Varyant yolu: iş emri → aktif sipariş bağı → satırın reçetesi (varyant) kodu yapının kodunu ezer.
+    const kgv = `${f.tag}-KGV`.slice(0, 32);
+    c.rateCodes.push(kgv);
+    await prisma.finishingRate.create({ data: { code: kgv, name: `${f.tag} boya varyant`, basis: "KG", currency: "USD", pricePerM: D("1.1") } });
+    c.customerId = (await prisma.customer.create({ data: { code: `${f.tag}-C`.slice(0, 32), name: `${f.tag} müşteri` }, select: { id: true } })).id;
+    c.orderId = (await prisma.order.create({ data: { orderNumber: `${f.tag}-O`, customerId: c.customerId }, select: { id: true } })).id;
+    c.recipeId = (await prisma.productRecipe.create({ data: { code: `${f.tag}-V`.slice(0, 32), name: `${f.tag} varyant`, itemId: f.fabricId, finishingRateCode: kgv }, select: { id: true } })).id;
+    const ol = await prisma.orderLine.create({ data: { orderId: c.orderId, itemId: f.fabricId, quantity: D(100), recipeId: c.recipeId }, select: { id: true } });
+    c.linkId = (await prisma.workOrderToOrderLine.create({ data: { workOrderId: wo.id, orderLineId: ol.id }, select: { id: true } })).id;
+    const v = await getDispatchFinishingCheck(disp.id, ALL);
+    check("§4h DB: sipariş satırı varyant kodu yapıyı ezer → 20 × 1,10 = 22,00", v.line?.rateCode === kgv && v.line.expectedAmount === "22.00", JSON.stringify(v));
+    await prisma.workOrderToOrderLine.update({ where: { id: c.linkId }, data: { unlinkedAt: new Date() } });
+    check("§4h2 koparılmış bağ okunmaz → yapı kodu", (await getDispatchFinishingCheck(disp.id, ALL)).line?.rateCode === kg);
 
     const existingCari = await prisma.cariAccount.findUnique({ where: { subcontractorId: dye.id }, select: { id: true } });
     const cari = existingCari ?? (await prisma.cariAccount.create({ data: { kind: "SUBCONTRACTOR", subcontractorId: dye.id }, select: { id: true } }));
@@ -144,11 +173,22 @@ async function bolum4(): Promise<void> {
     };
     await mkInv("1", "CONFIRMED", "19.40");
     await mkInv("2", "CANCELLED", "500");
-    const d = await getDispatchFinishingCheck(disp.id);
-    check("§4d bağlı ALIŞ faturası: 19,40 − 18,00 = 1,40; iptal sayılmaz", d.line?.invoice?.difference === "1.40" && d.line.invoice.docNos.length === 1, JSON.stringify(d.line?.invoice));
+    const p = await getDispatchFinishingCheck(disp.id, ALL);
+    check("§4d kısmi kabul (yalnız 7,5 kg'lık top) faturası → fark null, kısmi; iptal sayılmaz", p.line?.invoice?.difference === null && p.line.invoice.partial === true && p.line.invoice.docNos.length === 1, JSON.stringify(p.line?.invoice));
+    await prisma.subcontractorReceiptItem.create({ data: { receiptId: rec.id, newRollId: await roll("4"), sourceDispatchItemId: di1 } });
+    const d = await getDispatchFinishingCheck(disp.id, ALL);
+    check("§4d2 tam kabul faturası: 19,40 − 18,00 = 1,40", d.line?.invoice?.difference === "1.40" && d.line.invoice.partial === false, JSON.stringify(d.line?.invoice));
+    const noPerm = await getDispatchFinishingCheck(disp.id, { canReadInvoices: false });
+    check("§4f ⭐ finance:read yok → fatura okunmaz (invoice null), satır kalır", noPerm.line?.expectedAmount === "18.00" && noPerm.line.invoice === null, JSON.stringify(noPerm.line?.invoice));
+    await setFinance(false);
+    const finOff = await getDispatchFinishingCheck(disp.id, ALL);
+    check("§4g ⭐ ön muhasebe kapalı → fatura okunmaz (invoice null)", finOff.line?.expectedAmount === "18.00" && finOff.line.invoice === null, JSON.stringify(finOff.line?.invoice));
+    await setFinance(true);
+    await prisma.subcontractorDispatch.update({ where: { id: disp.id }, data: { cancelledAt: new Date() } });
+    check("§4i iptal edilmiş sevk → satır yok (DISPATCH_CANCELLED)", (await getDispatchFinishingCheck(disp.id, ALL)).reason === "DISPATCH_CANCELLED");
 
     let code: unknown = null;
-    try { await getDispatchFinishingCheck("00000000-0000-4000-8000-000000000000"); } catch (e) { code = e instanceof AppError ? e.details?.code : String(e); }
+    try { await getDispatchFinishingCheck("00000000-0000-4000-8000-000000000000", ALL); } catch (e) { code = e instanceof AppError ? e.details?.code : String(e); }
     check("§4e bilinmeyen sevk → 404 DISPATCH_NOT_FOUND", code === "DISPATCH_NOT_FOUND");
   } finally {
     await prisma.invoice.deleteMany({ where: { id: { in: c.invoiceIds } } });
@@ -162,6 +202,13 @@ async function bolum4(): Promise<void> {
       await prisma.subcontractorDispatch.delete({ where: { id: c.dispatchId } });
     }
     await prisma.roll.deleteMany({ where: { id: { in: c.rollIds } } });
+    if (c.linkId) await prisma.workOrderToOrderLine.delete({ where: { id: c.linkId } });
+    if (c.orderId) {
+      await prisma.orderLine.deleteMany({ where: { orderId: c.orderId } });
+      await prisma.order.delete({ where: { id: c.orderId } });
+    }
+    if (c.recipeId) await prisma.productRecipe.delete({ where: { id: c.recipeId } });
+    if (c.customerId) await prisma.customer.delete({ where: { id: c.customerId } });
     if (c.stepId) await prisma.workOrderStep.delete({ where: { id: c.stepId } });
     if (c.stationId) await prisma.station.delete({ where: { id: c.stationId } });
     if (c.batchId) await prisma.batch.delete({ where: { id: c.batchId } });
@@ -169,6 +216,8 @@ async function bolum4(): Promise<void> {
     await prisma.costStructure.updateMany({ where: { itemId: f.fabricId }, data: { finishingRateCode: f.rateCode } });
     await prisma.finishingRate.deleteMany({ where: { code: { in: c.rateCodes } } });
     await fiksturSil(f);
+    if (finSnap) await prisma.systemSetting.update({ where: { key: FIN }, data: { value: finSnap.value as Prisma.InputJsonValue } });
+    else await prisma.systemSetting.deleteMany({ where: { key: FIN } });
   }
 }
 

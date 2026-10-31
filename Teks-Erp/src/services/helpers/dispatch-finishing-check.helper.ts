@@ -4,12 +4,13 @@
 // Boyahane kilo başına faturalar; sevk kaleminde tartılmış kg (`dispatchedWeight`) zaten var.
 // Bilgi satırı: beklenen tutar = Σ kg × aktif KG tarifesi. YALNIZ OKUMA — hiçbir şey yazmaz.
 // Satır üretilemiyorsa `line: null` + sebep döner; ASLA 0 tutar uydurulmaz (tarife yok ≠ bedava).
-// Fatura farkı yalnız fatura(lar) bu sevke ÖZGÜ ve para birimi aynıysa hesaplanır.
+// Fatura farkı yalnız fatura(lar) bu sevke ÖZGÜ, sevkin TÜM kumaş toplarını kapsıyor ve para birimi aynıysa hesaplanır.
 // =============================================================================
 import { Prisma, type Currency, type FinishingBasis } from "@prisma/client";
 
 /** Satır üretilmeme sebebi — panel bunları göstermez (satır yok), API okuyucusu için açıklayıcı. */
 export type FinishingCheckSkipReason =
+  | "DISPATCH_CANCELLED" // sevk iptal edilmiş
   | "NO_FABRIC_ITEMS" // sevkte kumaş topu yok (levent/iplik fasonu)
   | "NO_RATE_CODE" // ürün/varyantta terbiye tarife kodu yok
   | "AMBIGUOUS_RATE_CODE" // iş emrinin satırları farklı tarife kodlarına çözülüyor
@@ -37,6 +38,8 @@ export interface FinishingCheckInvoice {
 
 export interface FinishingCheckInput {
   subcontractorId: string;
+  /** Sevk iptal edilmiş mi (`cancelledAt` dolu). */
+  cancelled?: boolean;
   /** Sevkteki kumaş topu kalemlerinin kg'ı (null = tartılmamış). */
   fabricWeights: (Prisma.Decimal | null)[];
   /** Her bağlı sipariş satırı/ürün için çözülmüş tarife kodu (`resolveFinishingRateCode` çıktıları). */
@@ -45,6 +48,8 @@ export interface FinishingCheckInput {
   invoices: FinishingCheckInvoice[];
   /** Faturalanan fason kabul(ler)i başka sevklerin toplarını da içeriyor mu. */
   invoicesCoverOtherDispatches: boolean;
+  /** Faturalanan kabul(ler) sevkin TÜM kumaş topu kalemlerini kapsıyor mu (kısmi kabulde fark uydurulmaz). */
+  invoicesCoverWholeDispatch: boolean;
 }
 
 export interface FinishingCheckLine {
@@ -61,9 +66,11 @@ export interface FinishingCheckLine {
     hasDraft: boolean;
     currency: Currency | null;
     netAmount: string | null;
-    /** fatura − beklenen; yalnız fatura bu sevke özgü ve para birimi aynıysa. */
+    /** fatura − beklenen; yalnız fatura bu sevke özgü, sevkin tamamını kapsıyor ve para birimi aynıysa. */
     difference: string | null;
     coversOtherDispatches: boolean;
+    /** Faturalı kabul sevkin yalnız bir kısmını kapsıyor (kısmi kabul) → fark null. */
+    partial: boolean;
   } | null;
 }
 
@@ -81,6 +88,7 @@ export function pickDispatchRateCode(codes: (string | null)[]): string | null | 
 }
 
 export function computeDispatchFinishingCheck(inp: FinishingCheckInput): FinishingCheckResult {
+  if (inp.cancelled) return skip("DISPATCH_CANCELLED");
   if (inp.fabricWeights.length === 0) return skip("NO_FABRIC_ITEMS");
   const code = pickDispatchRateCode(inp.rateCodes);
   if (code === "AMBIGUOUS") return skip("AMBIGUOUS_RATE_CODE");
@@ -114,7 +122,8 @@ function invoiceSummary(inp: FinishingCheckInput, expected: Prisma.Decimal, rate
   const currencies = new Set(inp.invoices.map((i) => i.currency));
   const currency = currencies.size === 1 ? inp.invoices[0].currency : null;
   const net = currency ? inp.invoices.reduce((a, i) => a.plus(i.net), new Prisma.Decimal(0)) : null;
-  const comparable = net !== null && currency === rateCurrency && !inp.invoicesCoverOtherDispatches;
+  const partial = !inp.invoicesCoverWholeDispatch;
+  const comparable = net !== null && currency === rateCurrency && !inp.invoicesCoverOtherDispatches && !partial;
   return {
     docNos: inp.invoices.map((i) => i.docNo),
     hasDraft: inp.invoices.some((i) => i.status === "DRAFT"),
@@ -122,5 +131,6 @@ function invoiceSummary(inp: FinishingCheckInput, expected: Prisma.Decimal, rate
     netAmount: net ? money(net) : null,
     difference: comparable ? money(net.minus(expected.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP))) : null,
     coversOtherDispatches: inp.invoicesCoverOtherDispatches,
+    partial,
   };
 }

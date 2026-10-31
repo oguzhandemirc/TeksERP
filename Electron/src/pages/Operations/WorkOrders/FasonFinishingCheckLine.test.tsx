@@ -40,9 +40,25 @@ describe("FasonFinishingCheckLine", () => {
   });
 
   it("fatura farkını işaretiyle gösterir", async () => {
+    state.perms = ["cost:read", "finance:read"];
     state.result = line({ invoice: { docNos: ["AF-1"], hasDraft: false, currency: "USD", netAmount: "19.40", difference: "1.40", coversOtherDispatches: false } });
     renderWithProviders(<FasonFinishingCheckLine dispatchId="d2" open />);
     expect((await screen.findByTestId("fason-kg-kontrol")).textContent).toContain("Fark +1,40 USD");
+  });
+
+  it("kısmi kabul faturasında fark yerine açıklama gösterir", async () => {
+    state.perms = ["cost:read", "finance:read"];
+    state.result = line({ invoice: { docNos: ["AF-2"], hasDraft: false, currency: "USD", netAmount: "7.00", difference: null, coversOtherDispatches: false, partial: true } });
+    renderWithProviders(<FasonFinishingCheckLine dispatchId="d6" open />);
+    expect((await screen.findByTestId("fason-kg-kontrol")).textContent).toContain("yalnız bir kısmını kapsıyor");
+  });
+
+  it("finance:read yoksa fatura parçası çizilmez", async () => {
+    state.result = line({ invoice: { docNos: ["AF-3"], hasDraft: false, currency: "USD", netAmount: "19.40", difference: "1.40", coversOtherDispatches: false } });
+    renderWithProviders(<FasonFinishingCheckLine dispatchId="d7" open />);
+    const el = await screen.findByTestId("fason-kg-kontrol");
+    expect(el.textContent).toContain("18,00 USD");
+    expect(el.textContent).not.toContain("AF-3");
   });
 
   it("satır yoksa (tarife yok) hiçbir şey çizmez — 0 gösterilmez", async () => {

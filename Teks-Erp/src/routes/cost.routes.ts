@@ -10,7 +10,7 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { matchesPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { requireMaliyetEnabled } from "../middlewares/module.middleware";
 import {
   activateDraft,
@@ -632,7 +632,7 @@ router.get("/items", requirePermission("cost:read"), wrap(async (req, res) => {
  *   get:
  *     tags: [Cost]
  *     summary: Fason sevk kg kontrolü — beklenen boyahane tutarı (Σ sevk kg × aktif KG tarifesi), fatura varsa fark
- *     description: Yalnız okuma (SY-E2). KG tarifesi çözülemezse `line` null + `reason` (0 tutar uydurulmaz).
+ *     description: Yalnız okuma (SY-E2). KG tarifesi çözülemezse `line` null + `reason` (0 tutar uydurulmaz). Fatura kısmı yalnız `finance:read` ∧ ön muhasebe açıkken dolar.
  *     security: [{ bearerAuth: [] }]
  *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
  *     responses:
@@ -641,7 +641,9 @@ router.get("/items", requirePermission("cost:read"), wrap(async (req, res) => {
  */
 router.get("/subcontractor-dispatches/:id/finishing-check", requirePermission("cost:read"), wrap(async (req, res) => {
   const { id } = idParam.parse(req.params);
-  res.status(200).json({ success: true, data: await getDispatchFinishingCheck(id) });
+  // Fatura kısmı finans kapılı: finance:read yoksa servis faturayı hiç okumaz (invoice null).
+  const canReadInvoices = matchesPermission(req.user?.permissions ?? [], "finance:read");
+  res.status(200).json({ success: true, data: await getDispatchFinishingCheck(id, { canReadInvoices }) });
 }));
 
 /**

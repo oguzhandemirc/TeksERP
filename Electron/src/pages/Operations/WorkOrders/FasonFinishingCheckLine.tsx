@@ -23,6 +23,8 @@ export interface FinishingCheckLine {
     netAmount: string | null;
     difference: string | null;
     coversOtherDispatches: boolean;
+    /** Faturalı kabul sevkin yalnız bir kısmını kapsıyor → fark null. Eski sunucu alanı göndermez. */
+    partial?: boolean;
   } | null;
 }
 export interface FinishingCheckResult {
@@ -41,6 +43,7 @@ function differenceText(inv: NonNullable<FinishingCheckLine["invoice"]>, currenc
     const sign = inv.difference.startsWith("-") || /^0(\.0*)?$/.test(inv.difference) ? "" : "+";
     return `Fark ${sign}${fmtDec(inv.difference)} ${currency}`;
   }
+  if (inv.partial) return "Fatura sevkin yalnız bir kısmını kapsıyor — fark hesaplanmadı";
   if (inv.coversOtherDispatches) return "Fatura başka sevkleri de kapsıyor — fark hesaplanmadı";
   return "Para birimi farklı — fark hesaplanmadı";
 }
@@ -48,6 +51,7 @@ function differenceText(inv: NonNullable<FinishingCheckLine["invoice"]>, currenc
 /**
  * Fason sevk kg kontrolü bilgi satırı — beklenen boyahane tutarı = Σ sevk kg × aktif kg tarifesi.
  * Maliyet modülü kapalıysa ya da `cost:read` yoksa sorgu atılmaz; tarife yoksa satır çizilmez (0 gösterilmez).
+ * Fatura parçası finans kapılı: sunucu `finance:read` ∧ ön muhasebe açık değilse göndermez; panel de izinsiz çizmez.
  */
 export function FasonFinishingCheckLine({ dispatchId, open }: { dispatchId: string; open: boolean }) {
   const { hasPermission } = useRoleAccess();
@@ -61,7 +65,7 @@ export function FasonFinishingCheckLine({ dispatchId, open }: { dispatchId: stri
   });
   const line = enabled ? (q.data?.data?.line ?? null) : null;
   if (!line) return null;
-  const inv = line.invoice;
+  const inv = hasPermission("finance:read") ? line.invoice : null;
   return (
     <div
       data-testid="fason-kg-kontrol"

@@ -4,9 +4,12 @@
 // Sevkin ürününü/varyantını, aktif terbiye tarifesini, topların sevk kg'ını ve bu sevkin
 // toplarını kabul eden fason kabul(ler)ine bağlı ALIŞ faturalarını okur; hesap saf helper'da.
 // YALNIZ OKUMA: yazım, audit, kilit yok. Tarife çözümü `resolveFinishingRateCode` (maliyetle aynı öncelik).
+// Fatura okuması FİNANS kapılıdır: yalnız `finance:read` izni (route) ∧ ön muhasebe açık (`readFinanceEnabled`);
+// aksi hâlde fatura sorgusu ATILMAZ, `invoice` null döner (cost:read tek başına fatura bilgisi vermez).
 // =============================================================================
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
+import { readFinanceEnabled } from "./system-setting.service";
 import { ACTIVE_FINISHING_RATE } from "./helpers/cost-price-validity.helper";
 import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
 import { resolveFinishingRateCode } from "./helpers/finishing-rate-code.helper";
@@ -17,12 +20,18 @@ import {
   type FinishingCheckResult,
 } from "./helpers/dispatch-finishing-check.helper";
 
-export async function getDispatchFinishingCheck(dispatchId: string): Promise<FinishingCheckResult> {
+export interface DispatchFinishingCheckOptions {
+  /** Çağıranın `finance:read` izni var mı — route `matchesPermission` ile hesaplar. */
+  canReadInvoices: boolean;
+}
+
+export async function getDispatchFinishingCheck(dispatchId: string, opts: DispatchFinishingCheckOptions): Promise<FinishingCheckResult> {
   const d = await prisma.subcontractorDispatch.findUnique({
     where: { id: dispatchId },
     select: {
       id: true,
       subcontractorId: true,
+      cancelledAt: true,
       items: { where: { kind: "ROLL" }, select: { id: true, dispatchedWeight: true, roll: { select: { itemId: true } } } },
       workOrder: {
         select: {
@@ -33,6 +42,7 @@ export async function getDispatchFinishingCheck(dispatchId: string): Promise<Fin
     },
   });
   if (!d) throw AppError.notFound("Fason sevk bulunamadı.", { code: "DISPATCH_NOT_FOUND" });
+  if (d.cancelledAt) return { line: null, reason: "DISPATCH_CANCELLED" };
 
   const rateCodes = await resolveRateCodes(d);
   const picked = pickDispatchRateCode(rateCodes);
@@ -42,7 +52,10 @@ export async function getDispatchFinishingCheck(dispatchId: string): Promise<Fin
         select: { code: true, name: true, basis: true, currency: true, pricePerM: true, subcontractorId: true },
       })
     : null;
-  const { invoices, coversOther } = rate?.basis === "KG" ? await readInvoices(d.id, d.items.map((i) => i.id)) : { invoices: [], coversOther: false };
+  const invoicesAllowed = rate?.basis === "KG" && opts.canReadInvoices && (await readFinanceEnabled());
+  const { invoices, coversOther, coversWhole } = invoicesAllowed
+    ? await readInvoices(d.id, d.items.map((i) => i.id))
+    : { invoices: [], coversOther: false, coversWhole: false };
 
   return computeDispatchFinishingCheck({
     subcontractorId: d.subcontractorId,
@@ -51,6 +64,7 @@ export async function getDispatchFinishingCheck(dispatchId: string): Promise<Fin
     rate,
     invoices,
     invoicesCoverOtherDispatches: coversOther,
+    invoicesCoverWholeDispatch: coversWhole,
   });
 }
 
@@ -73,9 +87,11 @@ async function resolveRateCodes(d: DispatchRow): Promise<(string | null)[]> {
   return itemIds.map((id) => resolveFinishingRateCode(null, byItem.get(id)));
 }
 
+interface InvoiceRead { invoices: FinishingCheckInvoice[]; coversOther: boolean; coversWhole: boolean }
+
 /** Bu sevkin toplarını kabul eden fason kabullerine bağlı, iptal edilmemiş ALIŞ faturaları. */
-async function readInvoices(dispatchId: string, itemIds: string[]): Promise<{ invoices: FinishingCheckInvoice[]; coversOther: boolean }> {
-  if (itemIds.length === 0) return { invoices: [], coversOther: false };
+async function readInvoices(dispatchId: string, itemIds: string[]): Promise<InvoiceRead> {
+  if (itemIds.length === 0) return { invoices: [], coversOther: false, coversWhole: false };
   const rows = await prisma.invoice.findMany({
     where: {
       type: "PURCHASE",
@@ -85,12 +101,17 @@ async function readInvoices(dispatchId: string, itemIds: string[]): Promise<{ in
     orderBy: [{ issueDate: "asc" }, { id: "asc" }],
     select: {
       docNo: true, status: true, currency: true, subtotal: true, discountTotal: true,
-      subcontractorReceipt: { select: { items: { select: { sourceDispatchItem: { select: { dispatchId: true } } } } } },
+      subcontractorReceipt: { select: { items: { select: { sourceDispatchItemId: true, sourceDispatchItem: { select: { dispatchId: true } } } } } },
     },
   });
-  const coversOther = rows.some((r) => (r.subcontractorReceipt?.items ?? []).some((it) => it.sourceDispatchItem?.dispatchId !== dispatchId));
+  const receiptItems = rows.flatMap((r) => r.subcontractorReceipt?.items ?? []);
+  const coversOther = receiptItems.some((it) => it.sourceDispatchItem?.dispatchId !== dispatchId);
+  // Kısmi kabul: faturalı kabuller sevkin her kumaş kalemini kapsamıyorsa fark tüm sevkle kıyaslanamaz.
+  const covered = new Set(receiptItems.map((it) => it.sourceDispatchItemId));
+  const coversWhole = itemIds.every((id) => covered.has(id));
   return {
     invoices: rows.map((r) => ({ docNo: r.docNo, status: r.status === "DRAFT" ? "DRAFT" : "CONFIRMED", currency: r.currency, net: r.subtotal.minus(r.discountTotal) })),
     coversOther,
+    coversWhole,
   };
 }
