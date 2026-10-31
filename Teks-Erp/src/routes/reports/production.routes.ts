@@ -73,7 +73,7 @@ router.get("/batch-trace/:batchId", ...reportGate("production/batch-trace"), asy
  * Tarih aralığı YALNIZ "geçen" bölümünü etkiler; bekleyen kısım snapshot'tır.
  * `ownerCustomerId` (CSV): yalnız o müşterilerin emanet toplarının bekleyen/geçen/en uzun bekleyen bölümleri.
  */
-const wipQuerySchema = dateRangeSchema.extend({ ownerCustomerId: z.union([z.string(), z.array(z.string())]).optional() });
+const wipQuerySchema = dateRangeSchema.extend({ ownerCustomerId: z.union([z.string(), z.array(z.string())]).optional() }).strict();
 router.get("/wip", ...reportGate("production/wip"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { ownerCustomerId, ...rangeInput } = wipQuerySchema.parse(req.query);
