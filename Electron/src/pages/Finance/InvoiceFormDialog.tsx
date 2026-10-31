@@ -431,7 +431,9 @@ function InvoiceFormBody({
   // yalnız hâlâ önceki ön değeri taşıyan satır yenilenir — kullanıcının yazdığı oran ezilmez.
   const taxDefaults = useInvoiceTaxDefaults(type, customerId, !isEdit);
   const newLineTax = taxDefaults ?? { vatRate: defaultVatRate, withholdingRate: 0 };
-  const appliedTaxRef = useRef(newLineTax);
+  // Taban, satırların GERÇEKTEN kurulduğu değerdir (emptyLine(defaultVatRate) → tevkifat 0); sorgu önbellekteyse
+  // taxDefaults ilk render'da dolu gelir ve taban ona eşitlenirse ön değer hiç uygulanmazdı.
+  const appliedTaxRef = useRef({ vatRate: defaultVatRate, withholdingRate: 0 });
   useEffect(() => {
     if (!taxDefaults) return;
     const prev = appliedTaxRef.current;
