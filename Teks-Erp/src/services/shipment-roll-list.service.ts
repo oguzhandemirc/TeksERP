@@ -34,15 +34,13 @@ export interface ShipmentRollList {
   totals: { rollCount: number; totalMeters: number };
 }
 
-type CekiWithRoll = { rollId?: string | null };
-
 export async function getShipmentRollList(shipmentId: string): Promise<ApiResponse<ShipmentRollList>> {
   const { content, doc } = await resolveShipmentDispatchContent(shipmentId);
   const ceki = content.cekiRows ?? [];
-  const rollIds = ceki.map((c) => (c as CekiWithRoll).rollId).filter((id): id is string => Boolean(id));
+  const rollIds = ceki.map((c) => c.rollId).filter((id): id is string => Boolean(id));
   const lines = rollIds.length > 0 ? await resolveDeliveryNoteLinesForRolls(rollIds) : new Map();
   const rows: ShipmentRollListRow[] = ceki.map((c) => {
-    const rollId = (c as CekiWithRoll).rollId;
+    const rollId = c.rollId;
     const dnl = rollId ? lines.get(rollId) : undefined;
     return {
       barcode: c.barcode,

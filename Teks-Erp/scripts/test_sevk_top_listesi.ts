@@ -123,6 +123,8 @@ async function main() {
     check("§4d işlem metni belge başlığından", row1?.processText === "KURŞUN 50G", String(row1?.processText));
     check("§4e desen + sevk no", row1?.desen === `PERDE TUL ${ts0}` && list.shipmentNo === tag);
   } finally {
+    // Belgesiz DISPATCHED sevkte ilk okuma lazy-init PrintedDocument yazar; artık satır bırakma.
+    await prisma.printedDocument.deleteMany({ where: { sourceId: shipment.id } });
     await prisma.rollCustomerCode.deleteMany({ where: { rollId: { in: rollIds } } });
     if (noteId) {
       await prisma.customerDeliveryNoteLine.deleteMany({ where: { noteId } });
