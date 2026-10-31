@@ -34,3 +34,28 @@ describe("Kârlılık kaynak ayar satırları", () => {
     }
   });
 });
+
+// D4-G2b: makine süresi + genel gider anahtarı (backend `PROFIT_MACHINE_TIME_MODES` / `PROFIT_OVERHEAD_KEYS`;
+// backend tarafı `Teks-Erp/scripts/test_karlilik_makine_genel_gider.ts` §6). Kategori sınıfı haritası panel satırı
+// DEĞİL (S14 cevabı bekleniyor); yalnız `featureFlagService` tip aynası.
+describe("Kârlılık makine süresi / genel gider ayar satırları (D4-G2b)", () => {
+  it("makine süresi: OTURUM varsayılan, üç değer", () => {
+    const r = row("costProfitMachineTime");
+    expect(r?.defaultValue).toBe("OTURUM");
+    expect(r?.options.map((o) => o.value)).toEqual(["OTURUM", "VARDIYA", "NORM"]);
+    expect(r?.group).toBe("Kârlılık");
+  });
+
+  it("genel gider anahtarı: YOK varsayılan, dört değer", () => {
+    const r = row("costProfitOverheadKey");
+    expect(r?.defaultValue).toBe("YOK");
+    expect(r?.options.map((o) => o.value)).toEqual(["YOK", "METRE", "GELIR", "MAKINE_SAATI"]);
+    expect(r?.group).toBe("Kârlılık");
+  });
+
+  it("iki yeni satır ön muhasebe modülüne bağlı", () => {
+    for (const k of ["costProfitMachineTime", "costProfitOverheadKey"] as const) {
+      expect(FLAG_MODULE[k]).toBe("financeEnabled");
+    }
+  });
+});

@@ -165,6 +165,8 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "financeCariHoldReleaseBySamePerson",
       "costProfitSubcontractSource",
       "costProfitConsumablePriceSource",
+      "costProfitMachineTime",
+      "costProfitOverheadKey",
       "financeServiceBillingPriceDate",
       "financeExpenseCategorySuggestions",
       "financeAutoAllocateOnPaymentEnabled",
