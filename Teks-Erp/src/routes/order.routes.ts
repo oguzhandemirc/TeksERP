@@ -13,6 +13,7 @@ import "../types/express-augment";
 import { ACTIVE_ORDER_LINK } from "../services/helpers/order-link.helper";
 import { LINE_RECIPE_SELECT } from "../services/helpers/line-recipe.helper";
 import { LINE_TARGET_VALUES_SELECT } from "../services/helpers/order-line-target-value.helper";
+import { listOrderPlan } from "../services/order-plan.service";
 
 // F157: /available query şeması — ham parse yerine Zod (geçersiz uuid/width net 400).
 const emptyToUndef = (v: unknown) => (v === "" || v == null ? undefined : v);
@@ -379,6 +380,34 @@ router.get("/", verifyToken, requireAnyPermission("order:read", "mobile:siparis"
  */
 // İzin liste ucuyla AYNI: şeridi göremeyen ama listeyi görebilen bir kullanıcı
 // olmamalı (kart/route hizası dersi — görünen yüzey ile veri yüzeyi ayrışmasın).
+/**
+ * @openapi
+ * /api/orders/plan-lines:
+ *   get:
+ *     tags: [Orders]
+ *     summary: Üretim planı — sipariş satırları + türetilen renk (SY-K2)
+ *     description: |
+ *       Satır başına plan kolonları ve `orderLineProductionState` rengi (WHITE · YELLOW · GREEN · RED).
+ *       Liste + cursor + özet aynı süzgeçten; renk süzgeci sunucuda. Tanınmayan renk/durum 400.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: state, schema: { type: string }, description: "CSV: WHITE,YELLOW,GREEN,RED" }
+ *       - { in: query, name: status, schema: { type: string }, description: "CSV sipariş durumu; boş = açık siparişler" }
+ *       - { in: query, name: customerId, schema: { type: string } }
+ *       - { in: query, name: itemId, schema: { type: string } }
+ *       - { in: query, name: cursor, schema: { type: string } }
+ *       - { in: query, name: limit, schema: { type: integer } }
+ *     responses:
+ *       200: { description: "{ items, nextCursor, summary }" }
+ */
+router.get("/plan-lines", verifyToken, requirePermission("order:read"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(await listOrderPlan(req.query));
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.get(
   "/stats",
   verifyToken,
