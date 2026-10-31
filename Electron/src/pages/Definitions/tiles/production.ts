@@ -1,5 +1,5 @@
 // Tanımlar › Üretim & Kalite karoları (sıra = hub sırası).
-import { Factory, Route as RouteIcon, FlaskConical, AlertTriangle, Bookmark, Undo2, Warehouse, Printer, Ruler, MessageSquareText, Clock3, BellRing, Cpu, Binary } from "lucide-react";
+import { Factory, Route as RouteIcon, FlaskConical, AlertTriangle, Bookmark, Undo2, Warehouse, Printer, Ruler, MessageSquareText, Clock3, BellRing, Cpu, Binary, Grid3x3 } from "lucide-react";
 import { isProductRecipesVisible, isRoutesVisible } from "../production-regime";
 import { isShiftDefinitionsVisible } from "@/pages/ShiftDefinitions/shift-regime";
 import { isLoomAlarmDutyVisible } from "@/pages/LoomAlarmDuty/duty-regime";
@@ -167,5 +167,18 @@ export const productionTiles: DefinitionTile[] = [
     permission: "warpspec:read",
     visibleWhen: (ctx) => ctx.devereEnabled,
     offHint: flagOffHint("devereEnabled"),
+  },
+  {
+    // DESEN KARTLARI (Seyitoğlu SY-A3) — dokuma modülü; uçlar `requireDokumaEnabled` arkasında.
+    // İzin çözgü kartıyla aynı kod (`warpspec:read`; yeni izin yok, tasarım §2.7).
+    key: "weave-designs",
+    title: "Desen Kartları",
+    description: "Örgü türü · armür planı · atkı sırası · varyantlar (bir desen çok kumaşı besler)",
+    icon: Grid3x3,
+    to: "/definitions/weave-designs",
+    group: "production",
+    permission: "warpspec:read",
+    visibleWhen: (ctx) => ctx.dokumaEnabled,
+    offHint: flagOffHint("dokumaEnabled"),
   },
 ];
