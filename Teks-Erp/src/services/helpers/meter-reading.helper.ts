@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 import { MachineDataSource, MeterPhase, Prisma, type MeterApprovalMode, type MeterVarianceBasis, type RollMeterReading } from "@prisma/client";
 import { z } from "zod";
 import prisma from "../../lib/prisma";
+import { factoryDayEnd, factoryYmd } from "../../constants/time";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import { readTamburMeasureSourceRequired, readTamburSimulatedMeterEnabled } from "../system-setting.service";
@@ -250,4 +251,34 @@ export async function auditCutReadings(
       newData: { phase: "CUT", revoked: true, reason: revoked!.reason },
     });
   }
+}
+
+/**
+ * D4-G2b: makine × fabrika günü ölçülen metre — kârlılıkta makine-saat maliyetini o günün metresine bölmenin paydası.
+ * As-of: okuma, kaydedildiği günün SONUNDA damgasızsa sayılır (sonradan düzeltme geçmiş günü değiştirmez). Aynı top ×
+ * adımın birden çok fazı tek iştir: CUT, yoksa OUT, yoksa IN (iki kez sayılmaz). Anahtar `${machineId}|${YYYY-MM-DD}`.
+ */
+export async function machineDailyMeters(machineIds: string[], start: Date, end: Date): Promise<Map<string, Prisma.Decimal>> {
+  const out = new Map<string, Prisma.Decimal>();
+  if (machineIds.length === 0) return out;
+  const rows = await prisma.rollMeterReading.findMany({
+    where: { machineId: { in: machineIds }, createdAt: { gte: start, lt: end } },
+    select: { machineId: true, rollId: true, workOrderStepId: true, phase: true, meters: true, createdAt: true, revokedAt: true },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  const rank: Record<MeterPhase, number> = { CUT: 3, OUT: 2, IN: 1 };
+  const best = new Map<string, { day: string; machineId: string; phase: MeterPhase; meters: Prisma.Decimal }>();
+  for (const r of rows) {
+    if (r.machineId === null) continue;
+    if (r.revokedAt !== null && r.revokedAt.getTime() <= factoryDayEnd(r.createdAt).getTime()) continue;
+    const day = factoryYmd(r.createdAt);
+    const k = `${r.machineId}|${day}|${r.rollId}|${r.workOrderStepId}`;
+    const prev = best.get(k);
+    if (!prev || rank[r.phase] > rank[prev.phase]) best.set(k, { day, machineId: r.machineId, phase: r.phase, meters: r.meters });
+  }
+  for (const b of best.values()) {
+    const k = `${b.machineId}|${b.day}`;
+    out.set(k, (out.get(k) ?? new Prisma.Decimal(0)).plus(b.meters));
+  }
+  return out;
 }

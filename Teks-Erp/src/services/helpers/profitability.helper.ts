@@ -10,23 +10,34 @@
 //   (son bağ kalanı alır → toplam kuruşu kuruşuna satır toplamı). Ay = fatura tarihinin fabrika ayı.
 //   İptal: İPTAL AYINDA aynı tutarlarla EKSİ satır; geçmiş ayın satırı değişmez (defter.md "ters kayıt bugüne").
 //   Taslak: ayrı `draftRows`, katkıya GİRMEZ. Eksik norm/fiyat/kur: değer `null` + kod (0 değil).
+//   D4-G2b: katkıya makine-saat maliyeti girer (`profitability-machine`); net = katkı − işçilik − genel gider
+//   (`profitability-overhead`; genel gider varsayılan `YOK` → dağıtılmaz, net = katkı). Ay özeti `months`.
 // Modül: maliyet KAPALI → null, tabloya sorgu yok; finans kapalı → null (gelir faturadan; maliyet-bridge emsali).
 // =============================================================================
 import { InvoiceStatus, Prisma, ServiceMeterBasis } from "@prisma/client";
 import { factoryDayStartOfKey, factoryYmd } from "../../constants/time";
 import { AppError } from "../../utils/app-error";
 import {
+  readCostProfitCategoryClasses,
   readCostProfitConsumablePriceSource,
+  readCostProfitMachineTime,
+  readCostProfitOverheadKey,
   readCostProfitSubcontractSource,
   readMaliyetEnabled,
+  type ProfitCategoryClassMap,
   type ProfitConsumablePriceSource,
+  type ProfitMachineTimeMode,
+  type ProfitOverheadKey,
   type ProfitSubcontractSource,
 } from "../system-setting.service";
 import { loadProfitabilityFinance } from "./maliyet-bridge.helper";
-import { computeWorkCosts, type ProfitMissingCode } from "./profitability-cost.helper";
+import { computeWorkCosts, type ProfitMissingCode as CostMissingCode } from "./profitability-cost.helper";
 import type { RevenueInvoiceRow, RevenueLinkRow } from "./profitability-finance.helper";
+import { computeMachineCosts, type IdleMachineDay, type MachineMissingCode } from "./profitability-machine.helper";
+import { buildMonthPools, distributePool, overheadBase, type PoolCategory } from "./profitability-overhead.helper";
 
-export type { ProfitMissingCode } from "./profitability-cost.helper";
+export type ProfitMissingCode = CostMissingCode | MachineMissingCode;
+export type { IdleMachineDay } from "./profitability-machine.helper";
 
 export type ProfitRowKind = "INVOICED" | "CANCELLED" | "DRAFT";
 
@@ -48,17 +59,46 @@ export interface ProfitabilityRow {
   consumableTry: Prisma.Decimal | null;
   subcontractTry: Prisma.Decimal | null;
   subcontractEstimated: boolean;
-  /** Gelir − sarf − dış fason; herhangi biri eksikse `null`. Taslakta hep `null` (kâra girmez). */
+  /** D4-G2b: işin makinesi ölçüm okumasından atfedildi mi (değilse makine maliyeti 0, süre boşta satırında). */
+  machineAttributed: boolean;
+  machineHours: Prisma.Decimal | null;
+  machineTry: Prisma.Decimal | null;
+  /** Gelir − sarf − dış fason − makine; herhangi biri eksikse `null`. Taslakta hep `null` (kâra girmez). */
   contributionTry: Prisma.Decimal | null;
+  /** D4-G2b: ayın işçilik havuzundan makine saati payı (iptal/taslak satırda 0). */
+  laborTry: Prisma.Decimal;
+  /** D4-G2b: ayın genel gider havuzundan pay (`YOK` ya da iptal/taslak satırda 0). */
+  overheadTry: Prisma.Decimal;
+  /** Katkı − işçilik − genel gider; katkı `null` ise `null`. `YOK` + sınıfsız kurulumda = katkı. */
+  netTry: Prisma.Decimal | null;
   missing: ProfitMissingCode[];
+}
+
+/** D4-G2b: ay özeti — havuzlar, dağıtılan kısım, boşta makine (dağıtılmayan her şey burada görünür). */
+export interface ProfitMonthSummary {
+  month: string;
+  overheadPoolTry: Prisma.Decimal;
+  overheadDistributedTry: Prisma.Decimal;
+  laborPoolTry: Prisma.Decimal;
+  laborDistributedTry: Prisma.Decimal;
+  excludedTry: Prisma.Decimal;
+  idleMachineHours: Prisma.Decimal;
+  /** Tarifesi eksik boşta gün varsa `null`. */
+  idleMachineTry: Prisma.Decimal | null;
+  categories: PoolCategory[];
 }
 
 export interface ProfitabilityResult {
   fromMonth: string;
   toMonth: string;
-  settings: { subcontractSource: ProfitSubcontractSource; consumablePriceSource: ProfitConsumablePriceSource };
+  settings: {
+    subcontractSource: ProfitSubcontractSource; consumablePriceSource: ProfitConsumablePriceSource;
+    machineTime: ProfitMachineTimeMode; overheadKey: ProfitOverheadKey; categoryClasses: ProfitCategoryClassMap;
+  };
   rows: ProfitabilityRow[];
   draftRows: ProfitabilityRow[];
+  months: ProfitMonthSummary[];
+  idleMachineDays: IdleMachineDay[];
 }
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -110,7 +150,10 @@ export async function computeProfitability(params: { fromMonth: string; toMonth:
   if (!(await readMaliyetEnabled())) return null;
   const finance = await loadProfitabilityFinance();
   if (!finance) return null;
-  const settings = { subcontractSource: await readCostProfitSubcontractSource(), consumablePriceSource: await readCostProfitConsumablePriceSource() };
+  const settings = {
+    subcontractSource: await readCostProfitSubcontractSource(), consumablePriceSource: await readCostProfitConsumablePriceSource(),
+    machineTime: await readCostProfitMachineTime(), overheadKey: await readCostProfitOverheadKey(), categoryClasses: await readCostProfitCategoryClasses(),
+  };
   const start = factoryDayStartOfKey(`${fromMonth}-01`);
   const end = factoryDayStartOfKey(`${nextMonth(toMonth)}-01`);
   const invoices = await finance.readServiceRevenueInvoices(start, end);
@@ -119,6 +162,7 @@ export async function computeProfitability(params: { fromMonth: string; toMonth:
   const linkById = new Map<string, RevenueLinkRow>();
   for (const inv of invoices) for (const l of inv.links) linkById.set(l.id, l);
   const costs = await computeWorkCosts({ ...settings, finance }, [...linkById.values()]);
+  const machine = await computeMachineCosts(settings.machineTime, [...linkById.values()], start, end);
 
   const rows: ProfitabilityRow[] = [];
   const draftRows: ProfitabilityRow[] = [];
@@ -128,18 +172,20 @@ export async function computeProfitability(params: { fromMonth: string; toMonth:
       for (const l of inv.links) {
         const r = revenue.get(l.id)!;
         const c = costs.get(l.id)!;
+        const mc = machine.byLink.get(l.id)!;
         const neg = (d: Prisma.Decimal | null) => (d === null ? null : sign === 1 ? d : d.neg());
-        const missing = [...r.missing, ...c.missing];
+        const missing: ProfitMissingCode[] = [...r.missing, ...c.missing, ...mc.missing];
         // Gelir satırı eksikse (GELIR_SATIRI) gelir 0 taşır ama katkı uydurulmaz → null.
-        const contribution = kind === "DRAFT" || r.missing.length > 0 || c.consumableTry === null || c.subcontractTry === null
+        const contribution = kind === "DRAFT" || r.missing.length > 0 || c.consumableTry === null || c.subcontractTry === null || mc.machineTry === null
           ? null
-          : r.revenueTry.minus(c.consumableTry).minus(c.subcontractTry);
+          : r.revenueTry.minus(c.consumableTry).minus(c.subcontractTry).minus(mc.machineTry);
         (kind === "DRAFT" ? draftRows : rows).push({
           month, kind, invoiceId: inv.id, docNo: inv.docNo, linkId: l.id, customerId: l.ownerCustomerId ?? inv.cariCustomerId,
           rollId: l.rollId, serviceItemId: l.serviceItemId, workOrderStepId: l.workOrderStepId, machineId: l.machineId,
           meterBasis: l.meterBasis, meters: sign === 1 ? l.billedMeters : l.billedMeters.neg(),
           revenueTry: neg(r.revenueTry)!, consumableTry: neg(c.consumableTry), subcontractTry: neg(c.subcontractTry),
-          subcontractEstimated: c.subcontractEstimated, contributionTry: neg(contribution), missing,
+          subcontractEstimated: c.subcontractEstimated, machineAttributed: mc.machineAttributed, machineHours: neg(mc.machineHours),
+          machineTry: neg(mc.machineTry), contributionTry: neg(contribution), laborTry: D0(), overheadTry: D0(), netTry: neg(contribution), missing,
         });
       }
     };
@@ -150,7 +196,42 @@ export async function computeProfitability(params: { fromMonth: string; toMonth:
   }
   const order = (a: ProfitabilityRow, b: ProfitabilityRow) => a.month.localeCompare(b.month) || (a.kind === b.kind ? 0 : a.kind === "INVOICED" ? -1 : 1);
   rows.sort(order);
-  return { fromMonth, toMonth, settings, rows, draftRows };
+  const months = await applyPools(rows, { settings, finance, fromMonth, toMonth, start, end, idle: machine.idle });
+  return { fromMonth, toMonth, settings, rows, draftRows, months, idleMachineDays: machine.idle };
+}
+
+/** Ay havuzlarını o ayın FATURALANAN satırlarına dağıtır (satırı yerinde günceller) ve ay özetini döner. */
+async function applyPools(
+  rows: ProfitabilityRow[],
+  ctx: {
+    settings: ProfitabilityResult["settings"]; finance: NonNullable<Awaited<ReturnType<typeof loadProfitabilityFinance>>>;
+    fromMonth: string; toMonth: string; start: Date; end: Date; idle: IdleMachineDay[];
+  },
+): Promise<ProfitMonthSummary[]> {
+  const { settings, finance, fromMonth, toMonth, start, end, idle } = ctx;
+  const monthList: string[] = [];
+  for (let m = fromMonth; m <= toMonth; m = nextMonth(m)) monthList.push(m);
+  const cells = await finance.readExpenseCells(start, end, Object.keys(settings.categoryClasses));
+  const pools = buildMonthPools(monthList, cells, settings.categoryClasses);
+  return monthList.map((month) => {
+    const p = pools.get(month)!;
+    const target = rows.filter((r) => r.month === month && r.kind === "INVOICED");
+    const labor = distributePool(p.laborPoolTry, target.map((r) => r.machineHours ?? D0()));
+    const overhead = settings.overheadKey === "YOK" ? null : distributePool(p.overheadPoolTry, target.map((r) => overheadBase(settings.overheadKey as Exclude<ProfitOverheadKey, "YOK">, r)));
+    target.forEach((r, i) => {
+      if (labor) r.laborTry = labor[i]!;
+      if (overhead) r.overheadTry = overhead[i]!;
+      if (labor || overhead) r.netTry = r.contributionTry === null ? null : r.contributionTry.minus(r.laborTry).minus(r.overheadTry);
+    });
+    const idleHere = idle.filter((d) => d.month === month);
+    return {
+      month, overheadPoolTry: p.overheadPoolTry, overheadDistributedTry: overhead ? p.overheadPoolTry : D0(),
+      laborPoolTry: p.laborPoolTry, laborDistributedTry: labor ? p.laborPoolTry : D0(), excludedTry: p.excludedTry,
+      idleMachineHours: idleHere.reduce((a, d) => a.plus(d.hours), D0()),
+      idleMachineTry: idleHere.some((d) => d.costTry === null) ? null : idleHere.reduce((a, d) => a.plus(d.costTry!), D0()),
+      categories: p.categories,
+    };
+  });
 }
 
 export type ProfitGroupBy = "customer" | "serviceItem" | "month" | "machine";
@@ -160,8 +241,12 @@ export interface ProfitSummary {
   revenueTry: Prisma.Decimal;
   consumableTry: Prisma.Decimal | null;
   subcontractTry: Prisma.Decimal | null;
+  machineTry: Prisma.Decimal | null;
   /** Grupta eksikli satır varsa `null` ("eksik" rozeti; 0 değil). */
   contributionTry: Prisma.Decimal | null;
+  laborTry: Prisma.Decimal;
+  overheadTry: Prisma.Decimal;
+  netTry: Prisma.Decimal | null;
   missingRows: number;
   estimatedRows: number;
 }
@@ -173,11 +258,18 @@ export function summarizeProfitability(rows: ProfitabilityRow[], by: ProfitGroup
   const add = (a: Prisma.Decimal | null, b: Prisma.Decimal | null) => (a === null || b === null ? null : a.plus(b));
   for (const r of rows) {
     const k = keyOf(r);
-    const g = groups.get(k) ?? { key: k, revenueTry: D0(), consumableTry: D0(), subcontractTry: D0(), contributionTry: D0(), missingRows: 0, estimatedRows: 0 };
+    const g = groups.get(k) ?? {
+      key: k, revenueTry: D0(), consumableTry: D0(), subcontractTry: D0(), machineTry: D0(), contributionTry: D0(),
+      laborTry: D0(), overheadTry: D0(), netTry: D0(), missingRows: 0, estimatedRows: 0,
+    };
     g.revenueTry = g.revenueTry.plus(r.revenueTry);
     g.consumableTry = add(g.consumableTry, r.consumableTry);
     g.subcontractTry = add(g.subcontractTry, r.subcontractTry);
+    g.machineTry = add(g.machineTry, r.machineTry);
     g.contributionTry = add(g.contributionTry, r.contributionTry);
+    g.laborTry = g.laborTry.plus(r.laborTry);
+    g.overheadTry = g.overheadTry.plus(r.overheadTry);
+    g.netTry = add(g.netTry, r.netTry);
     if (r.missing.length > 0) g.missingRows++;
     if (r.subcontractEstimated) g.estimatedRows++;
     groups.set(k, g);

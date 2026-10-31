@@ -18,6 +18,8 @@ export interface RevenueLinkRow {
   meterBasis: ServiceMeterBasis;
   serviceAt: Date;
   machineId: string | null;
+  /** D4-G2b: ölçüm okumasının anı (makine günü bundan; okuma yoksa `serviceAt`). */
+  readingAt: Date | null;
   ownerCustomerId: string | null;
 }
 
@@ -65,7 +67,7 @@ export async function readServiceRevenueInvoices(start: Date, end: Date): Promis
       serviceBillingLinks: {
         select: {
           id: true, rollId: true, workOrderStepId: true, serviceItemId: true, billedMeters: true, meterBasis: true, serviceAt: true, revokedAt: true,
-          reading: { select: { machineId: true } },
+          reading: { select: { machineId: true, createdAt: true } },
           roll: { select: { ownerCustomerId: true } },
         },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -82,7 +84,7 @@ export async function readServiceRevenueInvoices(start: Date, end: Date): Promis
       cariCustomerId: r.cari.customerId, lineTotalByItem,
       links: links.map((l) => ({
         id: l.id, rollId: l.rollId, workOrderStepId: l.workOrderStepId, serviceItemId: l.serviceItemId, billedMeters: l.billedMeters,
-        meterBasis: l.meterBasis, serviceAt: l.serviceAt, machineId: l.reading?.machineId ?? null, ownerCustomerId: l.roll.ownerCustomerId,
+        meterBasis: l.meterBasis, serviceAt: l.serviceAt, machineId: l.reading?.machineId ?? null, readingAt: l.reading?.createdAt ?? null, ownerCustomerId: l.roll.ownerCustomerId,
       })),
     };
   });
@@ -118,4 +120,18 @@ export async function readSubcontractInvoiceTotals(receiptIds: string[]): Promis
 /** Kur (1 döviz kaç TL) — finansın tek çözücüsü; yoksa null (asla 1 varsayılmaz). */
 export function readFxRate(currency: Currency, at: Date): Promise<Prisma.Decimal | null> {
   return resolveExchangeRateTx(prisma as unknown as Prisma.TransactionClient, currency, at);
+}
+
+/**
+ * D4-G2b: kasa masrafları kategori × fabrika ayı TL (genel gider / işçilik havuzu). Evren ve kategori anahtarı TEK
+ * kaynaktan (`expense-summary.helper` — asıl satır `txnDate` ayında +, iptal `cancelledAt` ayında −); burada toplanmaz.
+ * `classNames` (ayardaki kategori adları) aynı `cashCategoryKey` ile eşlenir → hücrenin `className`i.
+ */
+export async function readExpenseCells(start: Date, end: Date, classNames: string[]): Promise<Array<{ key: string; label: string; className: string | null; month: string; amountTry: Prisma.Decimal }>> {
+  const { getExpenseSummary, cashCategoryKey } = await import("./expense-summary.helper");
+  const byKey = new Map(classNames.map((n) => [cashCategoryKey(n).key, n]));
+  const sum = await getExpenseSummary({ range: { from: start, to: new Date(end.getTime() - 1) } });
+  return sum.categories.flatMap((c) => c.cells.map((cell) => ({
+    key: c.key, label: c.label, className: byKey.get(c.key) ?? null, month: cell.month, amountTry: new Prisma.Decimal(cell.amountTry),
+  })));
 }
