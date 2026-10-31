@@ -5537,6 +5537,14 @@ export function readFinanceCariHoldEmanetShipment(tx?: Pick<typeof prisma, "syst
   return readServiceEnum(SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT, CARI_HOLD_EMANET_SHIPMENT_MODES, DEFAULT_CARI_HOLD_EMANET_SHIPMENT, tx);
 }
 
+/**
+ * D4-I4: aynı ayarın liste sorgusuna gömülen SQL kolonu (ek sorgu açmamak için) — ham metin döner; tanınmayan/eksik
+ * değer okuyucuda olduğu gibi `EXEMPT` sayılır (`cari-hold.helper` `listHoldView`).
+ */
+export function cariHoldEmanetShipmentColumnSql(): Prisma.Sql {
+  return Prisma.sql`(SELECT ss.value #>> '{}' FROM system_settings ss WHERE ss.key = ${SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT})`;
+}
+
 /** D4-I2b: risk limiti para birimi kipi — tanınmayan değer varsayılana (`PER_CURRENCY`) düşer; guard tx içinde taze okur. */
 export function readFinanceRiskLimitCurrencyMode(tx?: Pick<typeof prisma, "systemSetting">): Promise<RiskLimitCurrencyMode> {
   return readServiceEnum(SETTING_KEYS.FINANCE_RISK_LIMIT_CURRENCY_MODE, RISK_LIMIT_CURRENCY_MODES, DEFAULT_RISK_LIMIT_CURRENCY_MODE, tx);
