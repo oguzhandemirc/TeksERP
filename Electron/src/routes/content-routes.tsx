@@ -28,6 +28,8 @@ import { NotificationsPage } from "@/pages/Notifications/NotificationsPage"; // 
 import { NotificationProfilesPage } from "@/pages/System/NotificationProfiles/NotificationProfilesPage"; // bildirim:
 import { DefinitionsHubPage } from "@/pages/Definitions/DefinitionsHubPage";
 import { WarpSpecsPage } from "@/pages/WarpSpecs/WarpSpecsPage";
+import { WeaveDesignsPage } from "@/pages/WeaveDesigns/WeaveDesignsPage";
+import { WeaveDesignDetailPage } from "@/pages/WeaveDesigns/WeaveDesignDetailPage";
 import { AccessHubPage } from "@/pages/Access/AccessHubPage";
 import { AccessUsersPage } from "@/pages/Access/Users/AccessUsersPage";
 import { UserFootprintPage } from "@/pages/Access/Users/footprint/UserFootprintPage";
@@ -374,6 +376,23 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="warpspec:read">
         <WarpSpecsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // DESEN KARTLARI (dokuma modülü, SY-A3) — karo ile aynı izin; modül kapısı ROUTE_MODULE'dan.
+    path: "definitions/weave-designs",
+    element: (
+      <ProtectedRoute requirePermission="warpspec:read">
+        <WeaveDesignsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/weave-designs/:id",
+    element: (
+      <ProtectedRoute requirePermission="warpspec:read">
+        <WeaveDesignDetailPage />
       </ProtectedRoute>
     ),
   },

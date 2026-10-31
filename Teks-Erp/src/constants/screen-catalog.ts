@@ -153,6 +153,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // ÇÖZGÜ KARTLARI (devere Faz 1a) — bir çözgü tanımı N deseni besler; levent
   // bu karta göre sarılır. Modül kapalıyken karo çizilmez, uçlar 403 verir.
   { key: "definitions/warp-specs", app: "desktop", modul: "devereEnabled", title: "Çözgü Kartları", requires: ["warpspec:read"], capabilities: ["warpspec:write"] },
+  // DESEN KARTLARI (Seyitoğlu SY-A3) — armür/örgü kataloğu + atkı sırası + varyant; dokuma modülü.
+  { key: "definitions/weave-designs", app: "desktop", modul: "dokumaEnabled", title: "Desen Kartları", requires: ["warpspec:read"], capabilities: ["warpspec:write"] },
   { key: "definitions/quality-grades", app: "desktop", modul: "cekirdek:ana-veri", title: "Kalite Sınıfları", requires: ["quality:read"], capabilities: [] },
   { key: "definitions/colors", app: "desktop", modul: "cekirdek:ana-veri", title: "Renkler", requires: ["property:read"], capabilities: ["property:write"] },
   { key: "definitions/return-reasons", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "İade Nedenleri", requires: ["return:read"], capabilities: ["return:write"] },
