@@ -552,6 +552,12 @@ export const updateSchema = z.strictObject({
   tamburPlanGateWidthCheck: z
     .enum(["ENFORCE", "OFF"], { message: "Tambur en kontrolü ENFORCE ya da OFF olmalı" })
     .optional(),
+  // Tambur finalize çocuk top en kaynağı (D4-E3); servisteki TAMBUR_CHILD_WIDTH_SOURCES aynası.
+  tamburChildWidthSource: z
+    .enum(["WO_TARGET_FIRST", "MEASURED_FIRST"], {
+      message: "Tambur çocuk top en kaynağı WO_TARGET_FIRST ya da MEASURED_FIRST olmalı",
+    })
+    .optional(),
   // Tablet Tambur listesi istasyon süzgeci (ister 2.8).
   tamburListByStationEnabled: z.boolean().optional(),
   // Dokumasız fabrikada makine duruşu takibi (D4-A1, ister 5.5).

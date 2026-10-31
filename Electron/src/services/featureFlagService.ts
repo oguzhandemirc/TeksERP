@@ -592,6 +592,8 @@ export interface FeatureFlags {
   tamburPlanGateWidthToleranceCm: number;
   /** Tambur plan kapısı en kontrolü (default ENFORCE); OFF yalnız en kolunu atlar, renk kapısı aynı. */
   tamburPlanGateWidthCheck: "ENFORCE" | "OFF";
+  /** Tambur finalize çocuk top en kaynağı (default WO_TARGET_FIRST = bugünkü; D4-E3). */
+  tamburChildWidthSource: "WO_TARGET_FIRST" | "MEASURED_FIRST";
   /** Tablet Tambur açık kart listesi oturum istasyonuyla süzülsün mü (false=default; ister 2.8). */
   tamburListByStationEnabled: boolean;
   /** Dokuma kapalıyken de kurşun/tambur/brode makinesi duruşu kaydedilsin mi (false=default; D4-A1). */

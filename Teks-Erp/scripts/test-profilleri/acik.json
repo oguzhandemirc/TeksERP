@@ -55,6 +55,7 @@
     "tamburShortCutA1ThresholdM": 5,
     "tamburPlanGateWidthToleranceCm": 5,
     "tamburPlanGateWidthCheck": "ENFORCE",
+    "tamburChildWidthSource": "MEASURED_FIRST",
     "tamburListByStationEnabled": true,
     "machineStopTrackingEnabled": true,
     "machineStopOpenWarningEnabled": true,
