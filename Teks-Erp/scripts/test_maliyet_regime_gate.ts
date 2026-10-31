@@ -62,6 +62,11 @@ const MODEL_MUAF: ReadonlyArray<{ dosya: string; model: string; neden: string }>
     model: "serviceConsumableNorm",
     neden: "Kart yaşam döngüsü (item-lifecycle) aktif sarf normunu canlı referans olarak yalnız SAYAR — pasife almayı reddetmek için; maliyet kapalıyken norm doğamaz, sayım 0'dır (D4-G1a).",
   },
+  {
+    dosya: "routes/product-recipe.routes.ts",
+    model: "finishingRate",
+    neden: "Varyant tarife kodu (SY-E1) yalnız aktif tarifeye ÇÖZÜLÜYOR MU diye okunur — bilinmeyen kod 400; maliyet kapalıyken tarife doğamaz, kod boş bırakılır (reçete yazımı dokuma/iş emri yüzeyidir).",
+  },
 ];
 
 const ADLA_BEKLENEN_KAPILI: ReadonlyArray<{ dosya: string; neden: string }> = [
