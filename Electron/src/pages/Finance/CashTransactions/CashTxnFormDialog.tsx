@@ -35,6 +35,7 @@ import { CashAccountPicker, type CashAccountOption } from "../PeriodClose/CashAc
 import { dayStartIso, ymd } from "../Cheques/dates";
 import { cashTxnErrorText, createCashTxn } from "./service";
 import { CategorySuggestionChips } from "./CategorySuggestionChips";
+import { CategoryPrivacyHint } from "./CategoryPrivacyHint";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import { useAttemptToken } from "@/lib/attemptToken";
 import {
@@ -170,6 +171,7 @@ export function CashTxnFormDialog({ open, onOpenChange, onCreated }: Props) {
               onChange={(e) => setCategory(e.target.value)}
             />
             <CategorySuggestionChips active={open && kind === "EXPENSE"} value={category} onPick={setCategory} />
+            <CategoryPrivacyHint active={kind === "EXPENSE"} />
           </div>
 
           <div>

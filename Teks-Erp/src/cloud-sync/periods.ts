@@ -9,7 +9,7 @@ export type StandardPeriod = (typeof STANDARD_PERIODS)[number];
 const DAY_MS = 86_400_000;
 
 /** Fabrika ayının ilk gününün başlangıcı; `monthOffset` −1 = önceki ay. */
-function factoryMonthStart(now: Date, monthOffset: number): Date {
+export function factoryMonthStart(now: Date, monthOffset: number): Date {
   const [y, m] = factoryYmd(now).split("-").map(Number) as [number, number];
   const idx = y * 12 + (m - 1) + monthOffset;
   const yy = Math.floor(idx / 12);

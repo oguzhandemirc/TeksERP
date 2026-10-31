@@ -82,6 +82,11 @@ const SNAPSHOTS: readonly SnapshotProjection[] = [
     reads: ["cash_boxes", "bank_accounts", "cheques", "invoices", "payments", "payment_allocations", "cari_accounts"],
   },
   {
+    // S15 (a): kategori METNİ + aylık TL; toplama fabrikada (`snapshot-expense.ts`), bulut aritmetik yapmaz.
+    name: "ozet-masraf", kind: "ANLIK", source: "cloud-sync/snapshot-expense: expense-summary.helper getExpenseSummary (12 ay × ilk 15 kategori + Diğer)",
+    cadence: "SAATLIK", permission: "bulut:kasa:oku", module: "finance.enabled", reads: ["cash_transactions"],
+  },
+  {
     name: "stok-karnesi", kind: "ANLIK", source: "reports/stock-scorecard.report.service getStockScorecard",
     cadence: "SAATLIK", permission: "bulut:stok:oku", reads: ["rolls", "order_lines", "orders", "items", "colors"],
   },
