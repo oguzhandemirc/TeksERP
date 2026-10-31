@@ -82,8 +82,12 @@ export async function resolveLineTargetValues(values: ChildValues, ctx: ImportCo
       select: { id: true, code: true, isActive: true },
     });
     const match = candidates.filter((c) => upperTr(c.code) === upperTr(valueCode));
-    if (match.length !== 1) {
+    if (match.length === 0) {
       fail(`'${propCode}' özelliğinde '${valueCode}' değeri yok.`);
+      continue;
+    }
+    if (match.length > 1) {
+      fail(`'${propCode}=${valueCode}' birden fazla değere uyuyor — panelden düzeltin.`);
       continue;
     }
     if (!match[0]!.isActive) {
