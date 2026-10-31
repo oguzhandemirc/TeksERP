@@ -10,9 +10,11 @@
 // ikinci kaynak olmaz, zincir tek: doff varsa koşumdan, yoksa kolondan.
 // Bekçi (`test_subcontractor_weaving §5`) bu zincirleri başka dosyada aramaz.
 // =============================================================================
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { K18_DEAD_STATUSES } from "../batch.service";
+
+const Decimal = Prisma.Decimal;
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -60,5 +62,34 @@ export async function receivedMetersByWeavingOrder(db: Db, weavingOrderIds: stri
     select: { initialQty: true, parentReceipt: { select: { weavingOrderId: true } } },
   });
   for (const r of rolls) { const id = r.parentReceipt?.weavingOrderId; if (id) out.set(id, (out.get(id) ?? 0) + Number(r.initialQty)); }
+  return out;
+}
+
+/**
+ * SY-D3: işin CANLI top metresi (gerçek maliyet paydası), iki kova: `viaRun` indirme→koşum zinciri (B yolu),
+ * `viaOrder` KK1 iş seçimi (A yolu, tezgah bilinmiyor). İptal/ölü top (`K18_DEAD_STATUSES`) paydaya GİRMEZ.
+ */
+export async function liveRollMetersByWeavingOrder(
+  db: Db, weavingOrderIds: string[],
+): Promise<Map<string, { viaRun: Prisma.Decimal; viaOrder: Prisma.Decimal }>> {
+  const out = new Map<string, { viaRun: Prisma.Decimal; viaOrder: Prisma.Decimal }>();
+  if (weavingOrderIds.length === 0) return out;
+  const rolls = await db.roll.findMany({
+    where: {
+      status: { notIn: K18_DEAD_STATUSES },
+      OR: [{ doffEvent: { revokedAt: null, machineRun: { weavingOrderId: { in: weavingOrderIds } } } }, { weavingOrderId: { in: weavingOrderIds } }],
+    },
+    select: { initialQty: true, weavingOrderId: true, doffEvent: { select: { revokedAt: true, machineRun: { select: { weavingOrderId: true } } } } },
+    orderBy: { id: "asc" },
+  });
+  for (const r of rolls) {
+    const runWo = r.doffEvent && !r.doffEvent.revokedAt ? r.doffEvent.machineRun?.weavingOrderId ?? null : null;
+    const id = runWo ?? r.weavingOrderId;
+    if (!id) continue;
+    const cur = out.get(id) ?? { viaRun: new Decimal(0), viaOrder: new Decimal(0) };
+    if (runWo) cur.viaRun = cur.viaRun.plus(r.initialQty);
+    else cur.viaOrder = cur.viaOrder.plus(r.initialQty);
+    out.set(id, cur);
+  }
   return out;
 }

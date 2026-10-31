@@ -1,4 +1,4 @@
-import { Spool } from "lucide-react";
+import { Factory, Spool } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
 
 /**
@@ -13,4 +13,19 @@ export const maliyetReportTiles: HubTile[] = [
     icon: Spool,
     to: "/cost/yarn-need",
   },
+  {
+    // SY-D3: tutar gösterir → `cost:read`; dokuma kapalıysa gizli (uç 403 MODULE_DISABLED verir).
+    key: "dokuma-verimlilik",
+    title: "Dokuma maliyet verimliliği",
+    description: "Dokuma işi başına standart ve gerçek dokuma maliyeti /m, fark, teorik ve gerçek m/saat, duruş payı",
+    icon: Factory,
+    to: "/reports/maliyet/dokuma-verimlilik",
+    permission: "cost:read",
+  },
 ];
+
+/** Karo görünürlüğü — iplik ihtiyacı `report:yarn-need`, dokuma verimliliği `cost:read` ∧ dokuma (SY-D3). */
+export function visibleMaliyetTiles(hasPermission: (code: string) => boolean, weavingOn: boolean): HubTile[] {
+  return maliyetReportTiles.filter((t) =>
+    t.key === "dokuma-verimlilik" ? weavingOn && hasPermission(t.permission ?? "cost:read") : hasPermission("report:yarn-need"));
+}

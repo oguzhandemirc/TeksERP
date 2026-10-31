@@ -71,6 +71,7 @@ import { PeriodClosePage } from "@/pages/Finance/PeriodClose/PeriodClosePage";
 import { FinanceReportsHubPage } from "@/pages/Reports/Finance/FinanceReportsHubPage";
 import { DokumaReportsHubPage } from "@/pages/Reports/Dokuma/DokumaReportsHubPage";
 import { MaliyetReportsHubPage } from "@/pages/Reports/Maliyet/MaliyetReportsHubPage";
+import { WeavingEfficiencyPage } from "@/pages/Reports/Maliyet/WeavingEfficiencyPage";
 import { RandimanPage } from "@/pages/Reports/Dokuma/RandimanPage";
 import { DurusParetoPage } from "@/pages/Reports/Dokuma/DurusParetoPage";
 import { MudahalePage } from "@/pages/Reports/Dokuma/MudahalePage";
@@ -1684,12 +1685,22 @@ export const contentRoutes: RouteObject[] = [
       </ProtectedRoute>
     ),
   },
-  // Maliyet raporları (MAL-7) — rejim `ROUTE_MODULE` (`reports/maliyet` → maliyetEnabled); izin `report:yarn-need`.
+  // Maliyet raporları (MAL-7) — rejim `ROUTE_MODULE` (`reports/maliyet` → maliyetEnabled); hub iplik ihtiyacı
+  // (`report:yarn-need`) ya da dokuma verimliliği (`cost:read`, SY-D3) okuyana açık, karolar kendi izniyle süzülür.
   {
     path: "reports/maliyet",
     element: (
-      <ProtectedRoute requirePermission="report:yarn-need">
+      <ProtectedRoute requireAnyPermission={["report:yarn-need", "cost:read"]}>
         <MaliyetReportsHubPage />
+      </ProtectedRoute>
+    ),
+  },
+  // Dokuma maliyet verimliliği (SY-D3) — izin backend ucuyla aynı (`cost:read`); v2 bayrağına bağlı DEĞİL.
+  {
+    path: "reports/maliyet/dokuma-verimlilik",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <WeavingEfficiencyPage />
       </ProtectedRoute>
     ),
   },
