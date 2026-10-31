@@ -178,7 +178,9 @@ export async function assertCariNotHeldTx(
 
 /** Tutulan emanet topların cümlesi — kapı mesajı ve önizleme uyarısı aynı metni basar. */
 function heldRollsText(rolls: HeldRollView[]): string {
-  const list = rolls.map((r) => r.barcode ?? "?").join(", ");
+  // Toast okunur kalsın: ilk 10 barkod + kalan sayısı; tam liste `details.heldRolls`ta.
+  const shown = rolls.slice(0, 10).map((r) => r.barcode ?? "?").join(", ");
+  const list = rolls.length > 10 ? `${shown} +${rolls.length - 10} top daha` : shown;
   return rolls[0]?.reason === "ALL_HELD"
     ? ` Fabrika ayarı gereği müşterinin emanet malı da kilit açılana dek sevk edilmez (${rolls.length} top: ${list}).`
     : ` Fabrika ayarı gereği işlenmiş emanet top kilit açılana dek sevk edilmez (${rolls.length} işlenmiş top: ${list}); işlenmemiş emanet ayrı sevkle iade edilebilir.`;

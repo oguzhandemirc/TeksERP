@@ -2451,7 +2451,9 @@ export class ShippingService {
   }> {
     // Cari kilidi (D4-I1, SHIPMENT) + risk limiti (D4-I2, finance.riskLimitBlock.shipment) — yazımdan önce, tx içinde;
     // emanet sevki kararı ikisinde de aynı helper'dan (D4-I1c). Risk: bakiye FOR UPDATE, sıra fatura onayıyla aynı.
-    const emanetRelease = () => emanetShipmentReleaseTx(tx, { sackId: { in: p.sackIds } }, p.customerId);
+    // Kilit + risk kapısı birlikte ısırırsa karar bir kez hesaplanır (aynı tx, aynı sonuç).
+    let emanetMemo: ReturnType<typeof emanetShipmentReleaseTx> | undefined;
+    const emanetRelease = () => (emanetMemo ??= emanetShipmentReleaseTx(tx, { sackId: { in: p.sackIds } }, p.customerId));
     await assertShipmentNotHeldTx(tx, p.customerId, emanetRelease);
     await assertCustomerRiskLimitTx(tx, p.customerId, "SHIPMENT", emanetRelease);
     const yon = await this.decideShipmentDestinationTx(tx, {
@@ -3472,7 +3474,8 @@ export class ShippingService {
     // yoksa kapı geçer, aşağıdaki claim 409 verir (bugünkü davranış).
     const holdHeader = await tx.shipment.findUnique({ where: { id: shipmentId }, select: { customerId: true } });
     if (holdHeader) {
-      const emanetRelease = () => emanetShipmentReleaseTx(tx, { shipmentId }, holdHeader.customerId);
+      let emanetMemo: ReturnType<typeof emanetShipmentReleaseTx> | undefined;
+      const emanetRelease = () => (emanetMemo ??= emanetShipmentReleaseTx(tx, { shipmentId }, holdHeader.customerId));
       await assertShipmentNotHeldTx(tx, holdHeader.customerId, emanetRelease);
       await assertCustomerRiskLimitTx(tx, holdHeader.customerId, "SHIPMENT", emanetRelease);
     }

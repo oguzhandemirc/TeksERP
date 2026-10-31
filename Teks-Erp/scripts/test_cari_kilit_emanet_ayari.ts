@@ -12,13 +12,15 @@
 //
 // ⭐ NEGATİF SONDA (ölçüldü 2026-10-31): ① `PROCESSED_ROLL_WHERE` `NOT:` ile ters çevrildi → §3a/§3b/§3c ❌;
 //    ② `shipping.service`e `meterReadings: { some: {} }` süzgeçli ikinci yüklem eklendi → §0b ❌. Geri alındı → yeşil.
+//    ③ yüklemin dört kolu TEK TEK silindi (ölçüm · parentRollId · TAMBUR_ENTRY_SOURCES · SUBCONTRACTOR_RETURN) → her
+//    birinde yalnız kendi §3e+ maddesi ❌ (ölçüldü 2026-10-31: 28/1; ölçüm kolunda §0b da). §0b yalnız ölçüm-kolu imzasını sayar.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Ayarlar fotoğrafa döner; olumlu yollar GERİ SARILAN tx'te koşar.
 // =============================================================================
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import ts from "typescript";
-import { Prisma, RollStatus } from "@prisma/client";
+import { MachineDataSource, MeterPhase, Prisma, RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { ensureTestAdmin } from "./fixture-test-user";
@@ -162,6 +164,19 @@ async function main(): Promise<void> {
     const geriAlinmis = await cuval([geriAlinan]);
     const tamburParca = await cuval([parca]);
     const karisik = await cuval([await top("HAM4"), await top("FAB", { ownerCustomerId: null })]);
+    // Yüklemin her kolu TEK BAŞINA ısırmalı (inceleme bulgusu): kol başına yalnız o kolu taşıyan top.
+    const okuma = async (ek: string, revoked: boolean) => {
+      const t = await top(ek);
+      await prisma.rollMeterReading.create({ data: { rollId: t, workOrderStepId: step.id, phase: MeterPhase.CUT, meters: "10.000", source: MachineDataSource.OPERATOR, clientToken: randomUUID(), createdById: admin.id, ...(revoked ? { revokedAt: new Date(), revokeReason: TAG } : {}) } });
+      return t;
+    };
+    const kollar = {
+      olcum: await cuval([await okuma("OLC", false)]),
+      olcumGeri: await cuval([await okuma("OLCGERI", true)]),
+      cocuk: await cuval([await top("COCUK", { parentRollId: ata })]),
+      tamburKaynak: await cuval([await top("TMAN", { entrySource: "TAMBUR_MANUAL" })]),
+      fasonDonus: await cuval([await top("FASON", { entrySource: "SUBCONTRACTOR_RETURN" })]),
+    };
 
     const svc = shippingService as unknown as {
       createShipmentCoreTx(tx: Prisma.TransactionClient, p: Record<string, unknown>): Promise<{ id: string }>;
@@ -197,6 +212,11 @@ async function main(): Promise<void> {
     check("§3c ⭐ işlenmemiş emanet geçer (iade edilebilir)", kod(await sevk(ham)) === "GEÇTİ");
     check("§3d geri alınmış işlem izi işlenmiş SAYILMAZ → geçer", kod(await sevk(geriAlinmis)) === "GEÇTİ");
     check("§3e karışık sevk yine 409 (heldRolls yok)", kod(await sevk(karisik)) === "CARI_HOLD");
+    for (const [ad, sack, ek] of [["aktif makine ölçümü", kollar.olcum, "OLC"], ["üst topu olan (parentRollId)", kollar.cocuk, "COCUK"], ["tambur kaynaklı (parent yok)", kollar.tamburKaynak, "TMAN"], ["fason dönüşü", kollar.fasonDonus, "FASON"]] as const) {
+      const k = await sevk(sack);
+      check(`§3e+ yalnız ${ad} → 409, heldRolls ${ek}`, kod(k) === "CARI_HOLD" && JSON.stringify(tutulan(k)) === JSON.stringify([`${TAG}-${ek}`]), `${kod(k)} ${tutulan(k)}`);
+    }
+    check("§3e+ geri alınmış ölçüm işlenmiş SAYILMAZ → geçer", kod(await sevk(kollar.olcumGeri)) === "GEÇTİ");
     const p3 = await onizle(karisikIslenmis);
     check("§3f önizleme: cariHold.heldRolls + warnings[] tutulan barkodu söyler", p3.cariHold?.heldRolls?.[0]?.barcode === `${TAG}-ISL` && p3.warnings.some((w) => w.includes(`${TAG}-ISL`) && /işlenmiş/.test(w)), JSON.stringify(p3.cariHold));
     const p3g = await onizle(ham);
@@ -240,6 +260,7 @@ async function temizle(ids: { customers: string[]; items: string[]; rolls: strin
   await prisma.shipment.deleteMany({ where: { id: { in: ids.shipments } } });
   await prisma.sack.deleteMany({ where: { id: { in: ids.sacks } } });
   await prisma.rollOperation.deleteMany({ where: { rollId: { in: ids.rolls } } });
+  await prisma.rollMeterReading.deleteMany({ where: { rollId: { in: ids.rolls } } });
   await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: ids.rolls } } });
   await prisma.roll.deleteMany({ where: { id: { in: ids.rolls } } });
   await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: ids.wos } } });

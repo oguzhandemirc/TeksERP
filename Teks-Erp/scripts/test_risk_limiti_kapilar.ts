@@ -150,7 +150,7 @@ function statik(): void {
   check("§0g sipariş yaratma + müşteri değişimi INTAKE risk kapısı", /assertCustomerRiskLimitTx\(prisma, data\.customerId as string, "INTAKE"\)/.test(ord) && /assertCustomerRiskLimitTx\(prisma, finalCustomerId, "INTAKE"\)/.test(ord));
   const ship = oku("services/shipping.service.ts");
   const core = govde(ship, "private async createShipmentCoreTx(", 4000);
-  check("§0h createShipmentCoreTx: risk kapısı yazımdan ÖNCE, emanet yüklemiyle", /assertCustomerRiskLimitTx\(tx, p\.customerId, "SHIPMENT", emanetRelease\)/.test(core) && /const emanetRelease = \(\) => emanetShipmentReleaseTx\(/.test(core) && core.indexOf("assertCustomerRiskLimitTx(") < core.indexOf("tx.shipment.create("));
+  check("§0h createShipmentCoreTx: risk kapısı yazımdan ÖNCE, emanet yüklemiyle", /assertCustomerRiskLimitTx\(tx, p\.customerId, "SHIPMENT", emanetRelease\)/.test(core) && /const emanetRelease = \(\) => \(?(?:emanetMemo \?\?= )?emanetShipmentReleaseTx\(/.test(core) && core.indexOf("assertCustomerRiskLimitTx(") < core.indexOf("tx.shipment.create("));
   const disp = govde(ship, "private async performDispatchTx(", 3000);
   check("§0i ⭐ performDispatchTx: risk kapısı claim'den (updateMany) ÖNCE", disp.includes('assertCustomerRiskLimitTx(tx, holdHeader.customerId, "SHIPMENT", emanetRelease)') && disp.indexOf("assertCustomerRiskLimitTx(") < disp.indexOf("tx.shipment.updateMany("));
   const importers = tumTs(SRC).filter((f) => /from "[^"]*risk-exposure\.helper"/.test(readFileSync(f, "utf8"))).map((f) => path.relative(SRC, f)).sort();
