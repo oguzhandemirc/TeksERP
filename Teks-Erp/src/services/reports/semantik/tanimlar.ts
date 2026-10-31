@@ -180,6 +180,19 @@ export const OLCU_TANIMLARI: readonly OlcuTanimi[] = [
   { kimlik: "cek.yaklasanVade", ad: "Vadesi yaklaşan çek",
     aciklama: "Önümüzdeki günlerde vadesi gelecek, portföyde ya da bankada bekleyen çeklerin tutarı; her para birimi ayrı.",
     birim: "para", iyiYon: "notr", kaynak: { dosya: "src/services/cheque.service.ts", alan: "ChequeDueSummary.buckets" } },
+  // D4-G3: kârlılık (hizmet işleri) — tek kaynak `helpers/profitability.helper.ts`; rapor `maliyet/karlilik`.
+  { kimlik: "karlilik.gelir", ad: "Kesinleşen gelir",
+    aciklama: "Onaylı hizmet faturalarının vergiler hariç TL tutarı; taslak fatura girmez, iptal edilen fatura iptal ayında düşülür.",
+    birim: "para", iyiYon: "artis", kaynak: { dosya: "src/services/helpers/profitability.helper.ts", alan: "ProfitabilityRow.revenueTry" } },
+  { kimlik: "karlilik.makine", ad: "Makineye giden",
+    aciklama: "İşin yapıldığı makinenin o gün çalıştığı saat ile saat ücretinden işin metresine düşen pay.",
+    birim: "para", iyiYon: "azalis", kaynak: { dosya: "src/services/helpers/profitability.helper.ts", alan: "ProfitabilityRow.machineTry" } },
+  { kimlik: "karlilik.katki", ad: "Kalan (katkı)",
+    aciklama: "Kesinleşen gelirden ipe, makineye ve dışarıya giden çıkınca kalan; eksik girdili iş varsa hesaplanmaz.",
+    birim: "para", iyiYon: "artis", kaynak: { dosya: "src/services/helpers/profitability.helper.ts", alan: "ProfitabilityRow.contributionTry" } },
+  { kimlik: "karlilik.net", ad: "Net",
+    aciklama: "Kalandan işçilik ve genel gider payı da düşülünce kalan; genel gider dağıtılmıyorsa kalanla aynıdır.",
+    birim: "para", iyiYon: "artis", kaynak: { dosya: "src/services/helpers/profitability.helper.ts", alan: "ProfitabilityRow.netTry" } },
 ] as const;
 
 /** Kimlik → tanım. Bilinmeyen kimlik `undefined` (çağıran fail-closed davranır). */

@@ -289,6 +289,9 @@ const COST_SIDE_SERVICE_ITEM_ID_FILES = new Set([
   "services/helpers/profitability.helper.ts",
   "services/helpers/profitability-cost.helper.ts",
   "services/helpers/profitability-finance.helper.ts",
+  // D4-G3 kârlılık raporu: helper satırındaki kalemi yalnız ad sözlüğü ve kırılım anahtarı olarak okur.
+  "services/reports/profitability.report.ts",
+  "services/reports/profitability.sunum.ts",
 ]);
 function astChecks(): void {
   section("§8 AST: çözücü tek, eşleme okuyucuları beyanlı, FinishingRate okunmaz");

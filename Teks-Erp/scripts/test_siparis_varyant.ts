@@ -5,7 +5,8 @@
 //   §2 doğru varyant yazılır; pasif varyant yeni satırda 400 RECIPE_INACTIVE; varyantsız satır bugünkü gibi (NULL, hedef yok)
 //   §3 güncelleme: gövdede recipeId yoksa korunur; ürün değişip eski varyant kalırsa 400 RECIPE_ITEM_MISMATCH
 //   §4 ⭐ hedef değer: çeşit değeri yazılır + BAYRAK ikizi requiredProperties'e KENDİLİĞİNDEN girer;
-//      çeşit olmayan özellik 400; gövdede yoksa küme korunur (ikizi de, §4e); boş dizi temizler
+//      çeşit olmayan özellik 400; gövdede yoksa küme korunur (ikizi de, §4e); boş dizi temizler;
+//      pasife alınan MEVCUT hedef düzenlemeyi kesmez, YENİ bağda 400 (§4f/§4g)
 //   §5 ⭐ teklif kalemi uyumsuz varyant 400; teklif → sipariş varyantı TAŞIR
 //   §6 ⭐ fiyat listesi: varyantsız tekillik AYNI (aynı ürün+renk iki kez 400 · DB unique P2002); varyantlı satır
 //      desen genelinin yanında durur; uyumsuz varyant 400; teklif önerisi varyant fiyatını önce seçer
@@ -124,6 +125,18 @@ async function main(): Promise<void> {
       l4e.targetValues.length === 1 && l4e.requiredProperties.some((p) => p.propertyId === flag.id),
       JSON.stringify(l4e),
     );
+    // §4f SY-K2 bitirici: panel güncellemede hedefleri hep gönderir; sonradan pasife alınan MEVCUT hedef düzenlemeyi kesmez, YENİ bağ keser.
+    await prisma.fabricPropertyValue.update({ where: { id: zebra }, data: { isActive: false } });
+    try {
+      const e4f = await hata(() =>
+        svc.update(o4, { lines: [{ id: l4.id, itemId: m.fabricId, quantity: 110, unitPrice: 10, requiredPropertyIds: [flag.id], targetValues: [{ propertyId: kusak.id, valueId: zebra }] }] }),
+      );
+      check("§4f ⭐ pasif MEVCUT hedef aynen gönderildi → düzenleme geçer", e4f === null && Number((await linesOf(o4))[0]!.quantity) === 110, JSON.stringify(e4f));
+      const e4g = await hata(() => order({ targetValues: [{ propertyId: kusak.id, valueId: zebra }] }));
+      check("§4g pasif değer YENİ satırda → 400 TARGET_VALUE_INVALID ailesi", e4g?.status === 400, JSON.stringify(e4g));
+    } finally {
+      await prisma.fabricPropertyValue.update({ where: { id: zebra }, data: { isActive: true } });
+    }
     await svc.update(o4, { lines: [{ id: l4.id, itemId: m.fabricId, quantity: 100, unitPrice: 10, requiredPropertyIds: [flag.id], targetValues: [] }] });
     check("§4d boş dizi → küme temizlenir", (await linesOf(o4))[0]!.targetValues.length === 0);
 
