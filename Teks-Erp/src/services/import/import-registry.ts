@@ -27,6 +27,10 @@ import { customerItemColorAliasImportAdapter } from "./adapters/customer-item-co
 import { productRecipeImportAdapter } from "./adapters/product-recipe.adapter";
 import { routeImportAdapter } from "./adapters/route.adapter";
 import { orderImportAdapter } from "./adapters/order.adapter";
+import { warpSpecImportAdapter } from "./adapters/warp-spec.adapter";
+import { weftSpecImportAdapter } from "./adapters/weft-spec.adapter";
+import { weaveDesignImportAdapter } from "./adapters/weave-design.adapter";
+import { yarnCostPriceImportAdapter } from "./adapters/yarn-cost-price.adapter";
 
 const ADAPTERS: ImportAdapter[] = [
   // — Ana veri (F1 pilotları)
@@ -50,6 +54,11 @@ const ADAPTERS: ImportAdapter[] = [
   routeImportAdapter,
   // — İşlem verisi (F4)
   orderImportAdapter,
+  // — Dokuma kartları + iplik maliyeti (SY-H2; modül kapılı, kapalıysa listede yok)
+  warpSpecImportAdapter,
+  weftSpecImportAdapter,
+  weaveDesignImportAdapter,
+  yarnCostPriceImportAdapter,
 ];
 
 const BY_ENTITY = new Map(ADAPTERS.map((a) => [a.entity, a]));

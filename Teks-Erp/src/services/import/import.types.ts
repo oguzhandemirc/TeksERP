@@ -171,6 +171,8 @@ export interface ImportContext {
   userId?: string;
   /** Aynı istekteki tüm satırlar için paylaşılan lookup önbelleği. */
   cache: Map<string, Map<string, LookupHit>>;
+  /** İsteği yapanın izinleri — sütun başına EK izin isteyen adaptör okur (SY-H2); yoksa fail-closed. */
+  permissions?: string[];
 }
 
 export interface LookupHit {
@@ -224,6 +226,9 @@ export interface NameGuardSpec {
   };
 }
 
+/** İçe aktarım adaptörünün bağlı olduğu modül kapısı (`import-module-gate.ts`). */
+export type ImportModule = "dokuma" | "devere" | "maliyet";
+
 export interface ImportAdapter {
   /** URL'de görünen kimlik: /api/import/<entity>/preview */
   entity: string;
@@ -252,6 +257,11 @@ export interface ImportAdapter {
    * ⚠️ Çocuk listesi REPLACE semantiğidir: dosyadaki adımlar neyse o kalır.
    */
   grouped?: boolean;
+  /**
+   * Hedef modelin MODÜL KAPISI (SY-H2): kapalıysa adaptör `/entities` listesinde YOK ve
+   * uçları 403 `MODULE_DISABLED` döner — kapı varlığın kendi router'ındaki middleware'dir.
+   */
+  module?: ImportModule;
 
   /** Anahtar değerine göre mevcut kayıtları toplu getirir (N+1 yok). */
   findExisting(keys: string[]): Promise<Map<string, Record<string, unknown>>>;
@@ -272,4 +282,14 @@ export interface ImportAdapter {
    * donar; geri sarma satırı ancak bu değerler hâlâ yerindeyse siler (atomik claim).
    */
   createdClaim?(row: PreparedRow): Record<string, unknown>;
+
+  /**
+   * DAMGALI SÜRÜM varlığının (③a, `REVOKE_VERSION`) ters yolu (SY-H2): içe aktarımın yazdığı sürüm
+   * hâlâ yürürlükteyse damgalanır (UPDATE'te önceki değer yeni sürüm olarak yazılır). Dönüş:
+   * atlama gerekçesi ya da `null` (uygulandı). Satır silinmez, ileri sürüm değişmez.
+   */
+  revertVersion?(
+    line: { recordId: string; action: "CREATE" | "UPDATE" | "REVIVE"; changedFields: unknown },
+    userId?: string,
+  ): Promise<string | null>;
 }

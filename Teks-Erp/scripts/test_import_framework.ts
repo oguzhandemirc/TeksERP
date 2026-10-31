@@ -389,9 +389,15 @@ async function main(): Promise<void> {
     // üretim kanalına terfide vardır ve YAYIN SIRASIYLA kapanır (önce tablet D4). Şablon her
     // kurulumda listede doğar — test fabrikasında da denenebilmeli.
     console.log("\n--- 14. Kumaşa özel renk adı şablonu listede (kapı yayın sırasında) ---");
-    const listed = ImportService.listEntities(["*"]).map((e) => e.entity);
+    const listed = (await ImportService.listEntities(["*"])).map((e) => e.entity);
     check("kumaşa özel renk adı şablonu /entities listesinde", listed.includes("customerItemColorAlias"), listed.join(","));
-    check("/entities bütün adaptörleri listeler (gizli şablon yok)", listed.length === listAdapters().length, `${listed.length}/${listAdapters().length}`);
+    // SY-H2: yalnız MODÜLE BAĞLI adaptör (dokuma/devere/maliyet) kapalı modülde süzülür; modülsüz hepsi listede.
+    const unGated = listAdapters().filter((a) => !a.module);
+    check(
+      "/entities modülsüz bütün adaptörleri listeler (gizli şablon yok)",
+      unGated.every((a) => listed.includes(a.entity)) && unGated.length >= 18,
+      `${unGated.filter((a) => listed.includes(a.entity)).length}/${unGated.length}`,
+    );
   } finally {
     // Cleanup — testin kendi yarattığı her şey.
     // ⚠️ SIRA ZORUNLU: `ImportRunLine.importRun` ilişkisi RESTRICT'tir ve motor

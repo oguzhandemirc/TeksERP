@@ -53,9 +53,14 @@ import type {
 } from "./import.types";
 import { upperTr } from "../../utils/tr-case";
 import { importKey } from "./import-key";
+import { isImportModuleOpen } from "./import-module-gate";
 
-function emptyContext(userId?: string): ImportContext {
-  return { userId, cache: new Map() };
+/** Çağıran: eski imza yalnız `userId` verir; SY-H2 adaptör-içi izin kapısı için izin listesi de taşınır. */
+export type ImportActor = string | { userId?: string; permissions?: string[] };
+
+function emptyContext(actor?: ImportActor): ImportContext {
+  const a = typeof actor === "string" ? { userId: actor } : (actor ?? {});
+  return { userId: a.userId, cache: new Map(), permissions: a.permissions };
 }
 
 /** Hücre metnini sütun tipine göre dönüştürür; hata mesajı Türkçe. */
@@ -377,19 +382,22 @@ function summarize(results: ImportRowResult[]): ImportPreviewResult["summary"] {
 
 export class ImportService {
   /** İzinli varlık listesi (menü + panel). */
-  static listEntities(permissions: string[]): Array<{
+  static async listEntities(permissions: string[]): Promise<Array<{
     entity: string;
     label: string;
     keyColumns: string[];
     canWrite: boolean;
     canRead: boolean;
-  }> {
+  }>> {
     // ⚠️ `matchesPermission` — gerçek kapı (`routes/import.routes.ts`) zaten onu
     // kullanıyor; burası yalnız LİSTE süslemesiydi ve süperadmine her satırı
     // `canRead:false` gösteriyordu ("ekran hayır, uç evet" tutarsızlığı).
     const has = (code: string): boolean =>
       matchesPermission(permissions, code) || matchesPermission(permissions, "admin:*");
-    return listAdapters().map((a) => ({
+    // SY-H2: kapalı modülün adaptörü listede YOK (modülsüz adaptörler her kurulumda açık).
+    const open: ImportAdapter[] = [];
+    for (const a of listAdapters()) if (await isImportModuleOpen(a)) open.push(a);
+    return open.map((a) => ({
       entity: a.entity,
       label: a.label,
       keyColumns: a.keyColumns,
@@ -428,11 +436,11 @@ export class ImportService {
     entity: string,
     rows: ImportRowInput[],
     options: ImportOptions,
-    userId?: string,
+    actor?: ImportActor,
   ): Promise<ImportPreviewResult> {
     assertRowLimit(rows.length);
     const adapter = getImportAdapter(entity);
-    const ctx = emptyContext(userId);
+    const ctx = emptyContext(actor);
     const { prepared, unknownColumns } = await prepareRows(adapter, rows, options, ctx);
     const results = prepared.map((p) => p.result);
     return { entity, rows: results, summary: summarize(results), unknownColumns };
@@ -447,9 +455,10 @@ export class ImportService {
     entity: string,
     rows: ImportRowInput[],
     options: ImportOptions,
-    userId?: string,
+    actor?: ImportActor,
   ): Promise<ImportApplyResult> {
     assertRowLimit(rows.length);
+    const userId = typeof actor === "string" ? actor : actor?.userId;
     const adapter = getImportAdapter(entity);
     const started = Date.now();
 
@@ -543,7 +552,7 @@ export class ImportService {
     // aynı denemeyi tekrar gönderemez ve sebebini de anlamaz. Damgayı burada
     // basıyoruz: koşum bitti, sonuç başarısız.
     try {
-      const ctx = emptyContext(userId);
+      const ctx = emptyContext(actor);
       const { prepared, unknownColumns } = await prepareRows(adapter, rows, options, ctx);
       const results = prepared.map((p) => p.result);
       const errorRows = results.filter((r) => r.action === "ERROR");

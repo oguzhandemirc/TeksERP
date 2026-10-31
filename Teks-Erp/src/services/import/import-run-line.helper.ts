@@ -32,6 +32,8 @@ const CHILD_KEYS = [
   "valueCodes", // fabricProperty değer listesi
   "propertyCodes", // productRecipe özellikleri
   "categoryCodes", // subcontractor kategorileri
+  "liftPlan", // weaveDesign armür ızgarası (Json kolon — skaler claim'e girmez)
+  "weftChanges", // productRecipe varyant atkı ipliği değişimi (③b pivot)
 ] as const;
 
 /**

@@ -16,7 +16,7 @@ import type { ImportAdapter, ImportContext, PreparedRow } from "./import.types";
 import { importKey } from "./import-key";
 
 /** Ters yol sınıfı — §8.2 matrisinin koddaki karşılığı. */
-export type RevertMode = "DEACTIVATE" | "DELETE_PIVOT" | "CANCEL_DOCUMENT";
+export type RevertMode = "DEACTIVATE" | "DELETE_PIVOT" | "CANCEL_DOCUMENT" | "REVOKE_VERSION";
 
 export interface RevertLine {
   id: string;
@@ -78,8 +78,9 @@ export async function revertOneLine(args: {
   adapter: ImportAdapter;
   reason: string;
   userId?: string;
+  permissions?: string[];
 }): Promise<{ reverted: boolean; skipReason?: string; audit?: RevertAuditEntry }> {
-  const { line, plan, adapter, reason, userId } = args;
+  const { line, plan, adapter, reason, userId, permissions } = args;
   if (line.revertedAt !== null) {
     return { reverted: false, skipReason: "Bu satır zaten geri sarıldı" };
   }
@@ -95,13 +96,29 @@ export async function revertOneLine(args: {
     return { reverted: true, audit: auditOf(line, reason, userId, { action: "CANCEL_DOCUMENT" }) };
   }
 
+  // ③a damgalı sürüm (SY-H2): adaptörün servis yolu kendi tx'ini ve claim'ini açar.
+  if (plan.mode === "REVOKE_VERSION") {
+    if (!adapter.revertVersion) throw AppError.internal(`'${adapter.entity}' için sürüm ters yolu tanımlı değil.`);
+    const blocker = await adapter.revertVersion(line, userId);
+    if (blocker) {
+      await stampSkip(line.id, blocker);
+      return { reverted: false, skipReason: blocker };
+    }
+    await stampReverted(line.id, userId);
+    return { reverted: true, audit: auditOf(line, reason, userId, { action: "REVOKE_VERSION" }) };
+  }
+
+  // Çocuk geri yazımı adaptörün SERVİS yolundan geçer (kendi bağlantısı): skaler claim'in tx'i
+  // aynı satırı kilitliyken çağrılırsa kendi kilidini bekler ve tx zaman aşımına düşer (SY-H2
+  // ölçtü: desen kartı ızgara + aile). Bu yüzden ÖNCE çocuk (fırlatırsa skaler yazılmaz), sonra tx.
+  const child = line.action === "CREATE" ? {} : await restoreChildren(adapter, line, userId, permissions);
   const outcome = await prisma.$transaction(async (tx) => {
     if (line.action === "CREATE") {
       return plan.mode === "DELETE_PIVOT"
         ? await deletePivot(tx, plan.model, line)
         : await deactivate(tx, plan.model, line.recordId);
     }
-    return await restoreRow(tx, { adapter, model: plan.model, line, userId });
+    return await restoreRow(tx, { adapter, model: plan.model, line, child });
   });
 
   if (outcome.skipReason) {
@@ -208,20 +225,28 @@ async function cancelDocument(recordId: string, userId?: string): Promise<string
 }
 
 /**
- * UPDATE/REVIVE satırının tersi: önce skaler alanlar (alan bazlı atomik claim),
- * sonra REPLACE edilmiş çocuk koleksiyonları. `REVIVE`ın tersi kör `isActive:false`
+ * UPDATE/REVIVE satırının tersi: skaler alanlar (alan bazlı atomik claim); REPLACE edilmiş
+ * çocuk koleksiyonları tx'ten ÖNCE yazılmış olarak (`child`) gelir. `REVIVE`ın tersi kör `isActive:false`
  * DEĞİLDİR — `changedFields.isActive.from` defterde ne yazıyorsa o yazılır.
  */
 async function restoreRow(
   tx: Prisma.TransactionClient,
-  args: { adapter: ImportAdapter; model: string; line: RevertLine; userId?: string },
+  args: { adapter: ImportAdapter; model: string; line: RevertLine; child: BranchOutcome },
 ): Promise<BranchOutcome> {
-  const { adapter, model, line, userId } = args;
+  const { adapter, model, line, child } = args;
   const cf = (line.changedFields as Record<string, { from: unknown; to: unknown }> | null) ?? {};
   const restored: string[] = [];
   const stale: string[] = [];
 
+  // Referans (lookup) sütunu DB kolonu değildir (kod ↔ id): claim'e girerse Prisma doğrulaması
+  // tüm geri sarmayı düşürür. Geri yazılmaz, gerekçesiyle raporlanır (SY-H2).
+  const lookupKeys = new Set(adapter.columns.filter((c) => c.type === "lookup").map((c) => c.key));
+  const unsupported: string[] = [];
   for (const [field, pair] of Object.entries(cf)) {
+    if (lookupKeys.has(field)) {
+      unsupported.push(field);
+      continue;
+    }
     const claim = await delegateOf(tx, model).updateMany({
       where: { id: line.recordId, [field]: fromJson(pair.to) },
       data: { [field]: fromJson(pair.from) },
@@ -230,8 +255,10 @@ async function restoreRow(
     else restored.push(field);
   }
 
-  const child = await restoreChildren(adapter, line, userId);
   if (child.skipReason && restored.length === 0) return { skipReason: child.skipReason };
+  if (restored.length === 0 && stale.length === 0 && unsupported.length > 0 && !child.detail) {
+    return { skipReason: `Referans alanı geri yazılmaz (${unsupported.join(", ")}) — panelden düzeltin` };
+  }
   if (restored.length === 0 && stale.length > 0) {
     return { skipReason: `Kayıt içe aktarımdan sonra değişti (${stale.join(", ")}) — geri yazılmadı` };
   }
@@ -240,6 +267,7 @@ async function restoreRow(
       action: "RESTORE_FIELDS",
       restored,
       ...(stale.length > 0 ? { staleFields: stale } : {}),
+      ...(unsupported.length > 0 ? { unsupportedFields: unsupported } : {}),
       ...(child.detail ?? {}),
       ...(child.skipReason ? { childSkipReason: child.skipReason } : {}),
     },
@@ -255,6 +283,7 @@ async function restoreChildren(
   adapter: ImportAdapter,
   line: RevertLine,
   userId?: string,
+  permissions?: string[],
 ): Promise<BranchOutcome> {
   const snap = line.childSnapshot as Record<string, { from: unknown; to: unknown }> | null;
   if (!snap || Object.keys(snap).length === 0) return {};
@@ -272,7 +301,7 @@ async function restoreChildren(
     };
   }
 
-  const ctx: ImportContext = { userId, cache: new Map() };
+  const ctx: ImportContext = { userId, cache: new Map(), permissions };
   const row = synthRow(adapter, { recordId: line.recordId, keyValue: line.keyValue, snap, existing: before });
   await adapter.validateRow?.(row, ctx);
   if (row.result.errors.length > 0) {
