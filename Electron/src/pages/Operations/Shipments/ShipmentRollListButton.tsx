@@ -16,7 +16,7 @@ export function ShipmentRollListButton({ shipmentId }: { shipmentId: string }) {
       const res = await shipmentService.getRollList(shipmentId);
       if (!res.data) throw new Error("liste yok");
       const blob = await buildWorkbook([buildRollListSheet(res.data)]);
-      await saveWorkbook(blob, rollListFileName(res.data.shipmentNo));
+      await saveWorkbook(blob, rollListFileName(res.data.shipmentNo, res.data.frozen));
     } catch {
       toast.error("Top listesi oluşturulamadı");
     } finally {

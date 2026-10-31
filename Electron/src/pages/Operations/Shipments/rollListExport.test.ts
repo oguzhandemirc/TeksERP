@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildWorkbook } from "@/lib/xlsx-export";
-import { buildRollListSheet, type ShipmentRollList } from "./rollListExport";
+import { buildRollListSheet, DRAFT_MARK, rollListFileName, type ShipmentRollList } from "./rollListExport";
 
 /** D4-J6 — sevk top listesi Excel'i: satır = sunucunun çeki satırı, toplam = sunucunun toplamı. */
 
@@ -64,5 +64,16 @@ describe("buildRollListSheet", () => {
     const src = readFileSync(resolve(__dirname, "rollListExport.ts"), "utf8");
     expect(src).toContain("list.totals.totalMeters");
     expect(src).not.toMatch(/\.reduce\(/);
+  });
+
+  it("donmamış (sevk edilmemiş) liste TASLAK işaretli; tarih başlığı Oluşturma Tarihi", () => {
+    const draft = buildRollListSheet({ ...LIST, frozen: false });
+    expect(String(draft.preamble?.[0]?.[0])).toContain(DRAFT_MARK);
+    expect(draft.preamble?.[2]?.[0]).toBe("Oluşturma Tarihi");
+    expect(draft.columns.map((c) => c.header)).not.toContain("Sevk Tarihi");
+    expect(rollListFileName("SVK-42", false)).toBe("Top_Listesi_SVK-42_TASLAK");
+    const frozen = buildRollListSheet(LIST);
+    expect(String(frozen.preamble?.[0]?.[0])).not.toContain(DRAFT_MARK);
+    expect(rollListFileName("SVK-42", true)).toBe("Top_Listesi_SVK-42");
   });
 });

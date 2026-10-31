@@ -27,11 +27,17 @@ export interface ShipmentRollList {
 /** Boş hücre: değer yoksa "" (Excel'de gerçekten boş görünür, "—" basılmaz). */
 const cell = (v: string | null | undefined): string => v ?? "";
 
+/** Donmamış (sevk edilmemiş) listede canlı içerik değişebilir; müşteriye taslak olduğu yazılır. */
+export const DRAFT_MARK = "TASLAK — sevk edilmedi";
+
 export function buildRollListSheet(list: ShipmentRollList): SheetSpec {
   const date = list.date ? fmtFactoryDate(list.date, "") : "";
+  // Donmamışta tarih sevk değil oluşturma tarihidir (sunucu dispatchedAt ?? createdAt verir).
+  const dateLabel = list.frozen ? "Sevk Tarihi" : "Oluşturma Tarihi";
+  const title = `Sevk Top Listesi — ${list.shipmentNo}${list.frozen ? "" : ` (${DRAFT_MARK})`}`;
   return {
     name: "Top Listesi",
-    preamble: [[`Sevk Top Listesi — ${list.shipmentNo}`], ["Müşteri", list.customerName], ["Sevk Tarihi", date]],
+    preamble: [[title], ["Müşteri", list.customerName], [dateLabel, date]],
     columns: [
       { header: "Barkod", key: "barcode", width: 18 },
       { header: "Müşteri Top No", key: "customerRollNo", width: 15 },
@@ -41,7 +47,7 @@ export function buildRollListSheet(list: ShipmentRollList): SheetSpec {
       { header: "İşlem", key: "processText", width: 20 },
       { header: "Metre", key: "meters", width: 11, numFmt: upTo3ExcelNumFmt(), align: "right" },
       { header: "Sevk No", key: "shipmentNo", width: 16 },
-      { header: "Sevk Tarihi", key: "date", width: 12 },
+      { header: dateLabel, key: "date", width: 12 },
     ],
     rows: list.rows.map((r) => ({
       barcode: cell(r.barcode),
@@ -59,4 +65,5 @@ export function buildRollListSheet(list: ShipmentRollList): SheetSpec {
   };
 }
 
-export const rollListFileName = (shipmentNo: string): string => `Top_Listesi_${shipmentNo}`;
+export const rollListFileName = (shipmentNo: string, frozen = true): string =>
+  `Top_Listesi_${shipmentNo}${frozen ? "" : "_TASLAK"}`;
