@@ -281,6 +281,9 @@ export const updateSchema = z.strictObject({
   // finance.riskLimitBlockEnabled — risk limiti aşımında SATIŞ faturası onayı 409.
   // Bugün limit yalnız uyarıdır. MUAF: alış faturası, taslak yolları, iptal/storno.
   financeRiskLimitBlockEnabled: z.boolean().optional(),
+  // D4-I2: risk limiti iş kabulü (gelen belge onayı + sipariş) / sevk kapıları — 409 RISK_LIMIT_EXCEEDED; varsayılan kapalı.
+  financeRiskLimitBlockIntake: z.boolean().optional(),
+  financeRiskLimitBlockShipment: z.boolean().optional(),
   // finance.autoDraftFromShipmentEnabled — sevk onayında otomatik fatura TASLAĞI.
   // Onay her zaman elle; `financeEnabled` kapalıyken kanca no-op.
   financeAutoDraftFromShipmentEnabled: z.boolean().optional(),
