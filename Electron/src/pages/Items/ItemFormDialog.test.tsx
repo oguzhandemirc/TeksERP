@@ -22,7 +22,7 @@ vi.mock("@/components/RecordInfoButton", () => ({ RecordInfoButton: () => null }
 vi.mock("./AllowedColorsDialog", () => ({ AllowedColorsDialog: () => null }));
 vi.mock("./AllowedPropertiesDialog", () => ({ AllowedPropertiesDialog: () => null }));
 const flags = vi.hoisted(() => ({ kg: false }));
-vi.mock("@/hooks/usePricingEnabled", () => ({ useDevereEnabled: () => false, useKaliteGuvenceEnabled: () => flags.kg, useMaliyetEnabled: () => false }));
+vi.mock("@/hooks/usePricingEnabled", () => ({ useDevereEnabled: () => false, useDokumaEnabled: () => false, useKaliteGuvenceEnabled: () => flags.kg, useMaliyetEnabled: () => false }));
 
 const COLORS = "İzinli Renkler (opsiyonel)";
 const PROPS = "İzinli Özellikler (opsiyonel)";

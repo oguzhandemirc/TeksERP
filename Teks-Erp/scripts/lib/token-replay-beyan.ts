@@ -283,7 +283,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}warp-beam-mount.service.ts::mountReplay`]: ["beamId", "kind", "machineId", "mountPosition"],
   [`${S}warp-beam-wind.service.ts::windReplay`]: ["beamId", "kind", "lengthM"],
   [`${S}warp-beam.service.ts::warpBeamReplay`]: ["warpSpecId", "originKind", "plannedLengthM", "subcontractorId", "supplierId", "ownerCustomerId", "weavingOrderId", "physicalBeamNo"],
-  [`${S}weaving-order.service.ts::weavingOrderReplay`]: ["itemId", "executionKind", "subcontractorId", "plannedM", "colorId", "sipariş satırları", "warpSpecId"],
+  [`${S}weaving-order.service.ts::weavingOrderReplay`]: ["itemId", "executionKind", "subcontractorId", "plannedM", "colorId", "sipariş satırları", "warpSpecId", "weftSpecId", "weaveDesignId", "recipeId"],
   [`${S}workorder-batch-add.service.ts::batchReplay`]: ["workOrderId", "missingRolls"],
   [`${S}workorder.service.ts::quickStartReplay`]: ["targetItemId", "orderLines"],
   [`${S}workorder.service.ts::woReplay`]: ["orderLines", "targetItemId", "type"],
