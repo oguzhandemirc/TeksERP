@@ -297,6 +297,9 @@ async function scenario(): Promise<void> {
   const marked = (r: Awaited<ReturnType<typeof solve>> | null) => (r?.lines ?? []).reduce((a, l) => a + l.manualMeterRollCount, 0);
   check("D4-KUC2 c: OPERATOR Tambur kesimi (RB) okumalıyken satır işareti +1; okuma geri sarılınca işaret düşer",
     marked(cutSolved) === marked(plainSolved) + 1, `okumalı=${marked(cutSolved)} okumasız=${marked(plainSolved)}`);
+  // S6 kapsamı TAMBUR kesimi: kurşun OUT okumaları (yukarıda OPERATOR girildi) satırı işaretlemez — bugünkü uyarı yüzeyi.
+  check("D4-KUC2 c: kurşun OPERATOR okumaları 'elle ölçüm' işareti üretmez (yalnız Tambur CUT)",
+    marked(plainSolved) === 0 && ((plainSolved as Awaited<ReturnType<typeof solve>> | null)?.works ?? []).some((w) => w.meterBasis === "OUT" && w.readingId !== null), `okumasız=${marked(plainSolved)}`);
   const withCut = sansReading(cutSolved);
   const withoutCut = sansReading(plainSolved);
   check("D4-B1b: hizmet çözümü (kurşun + Tambur bayrak işi) CUT varken/yokken satırlar bayt-aynı", withCut.length > 20 && withCut === withoutCut, withCut === withoutCut ? "" : `${withCut.slice(0, 200)} ≠ ${withoutCut.slice(0, 200)}`);

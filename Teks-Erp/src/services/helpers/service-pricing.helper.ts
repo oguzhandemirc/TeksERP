@@ -137,9 +137,9 @@ export function manualMeterWarning(lineName: string, count: number): string {
   return `"${lineName}" satırında ${count} işin metresi elle ölçüm (operatör girişi) — faturaya alındı, kontrol edin.`;
 }
 
-/** Elle (OPERATOR) okunmuş metreyle çözülen işlerin okuma kimlikleri — satır işareti için tek sorgu. */
+/** S6: elle (OPERATOR) okunmuş TAMBUR kesim metresi (CUT) — kurşun okumaları işaretlenmez (bugünkü uyarı yüzeyi). */
 async function loadManualReadingIds(works: ServiceRollWork[], db: Db): Promise<Set<string>> {
-  const ids = [...new Set(works.map((w) => w.readingId).filter((v): v is string => v !== null))];
+  const ids = [...new Set(works.filter((w) => w.meterBasis === "CUT").map((w) => w.readingId).filter((v): v is string => v !== null))];
   if (ids.length === 0) return new Set();
   const rows = await db.rollMeterReading.findMany({ where: { id: { in: ids }, source: MachineDataSource.OPERATOR }, select: { id: true } });
   return new Set(rows.map((r) => r.id));
