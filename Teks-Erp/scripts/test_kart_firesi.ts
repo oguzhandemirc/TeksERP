@@ -68,8 +68,8 @@ async function bolum1ve2ve3(f: MaliyetFikstur): Promise<void> {
 async function bolum4(f: MaliyetFikstur): Promise<void> {
   const code = async (fn: () => Promise<unknown>) =>
     fn().then(() => "ok", (e: { statusCode?: number }) => String(e.statusCode ?? "?"));
-  for (const bad of [100, -1, "abc"]) {
-    check(`§4a Aralık dışı fire (${bad}) → 400`, (await code(() => warpSpecService.update(f.warpSpecId, { wastePct: bad }))) === "400");
+  for (const bad of [100, -1, "abc", true, [], " "] as unknown[]) {
+    check(`§4a Aralık dışı fire (${JSON.stringify(bad)}) → 400`, (await code(() => warpSpecService.update(f.warpSpecId, { wastePct: bad }))) === "400");
   }
   check("§4b Genel CRUD fireyi yazar (write-guard açık)", (await code(() => warpSpecService.update(f.warpSpecId, { wastePct: "3.25" }))) === "ok");
   const row = await prisma.warpSpec.findUniqueOrThrow({ where: { id: f.warpSpecId }, select: { wastePct: true } });

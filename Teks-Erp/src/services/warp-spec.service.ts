@@ -23,6 +23,10 @@ import { ApiResponse } from "../types/api.types";import { assertItemUsable } fro
 /** 0 ≤ x < 100; "" / null / gönderilmemiş = bilinmiyor (boş bırakılabilir). */
 function assertPct(v: unknown, message: string): void {
   if (v === undefined || v === null || v === "") return;
+  // true/[]/" " Number() ile sayıya döner; Prisma'nın genel hatasına düşmeden 400.
+  if ((typeof v !== "number" && typeof v !== "string") || (typeof v === "string" && v.trim() === "")) {
+    throw AppError.badRequest(message);
+  }
   const n = Number(v);
   if (!Number.isFinite(n) || n < 0 || n >= 100) throw AppError.badRequest(message);
 }
