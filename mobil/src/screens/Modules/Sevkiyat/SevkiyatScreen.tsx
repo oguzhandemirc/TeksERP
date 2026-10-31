@@ -27,6 +27,7 @@ import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import { FLAGS_KEY } from '../../../hooks/useFeatureFlags';
 import type { MainStackParamList } from '../../../navigation/types';
 import SackContentsModal from './SackContentsModal';
+import { CariHoldBlockedScreen, CariHoldChip, cariHoldBlockFromError, holdChipText, type CariHoldBlock } from './CariHold';
 import { showScreenError } from '../../../lib/screenToast';
 import TruncatedText from '../../../components/TruncatedText';
 
@@ -62,6 +63,8 @@ export default function SevkiyatScreen() {
 
   const [contentsShip, setContentsShip] = useState<SackStoreShipmentLite | null>(null);
   const [dispatchShip, setDispatchShip] = useState<SackStoreShipmentLite | null>(null);
+  // D4-I4: 409 CARI_HOLD → tam ekran (metin sunucudan); diğer hatalar tost.
+  const [holdBlock, setHoldBlock] = useState<CariHoldBlock | null>(null);
   const [plate, setPlate] = useState('');
   const [driver, setDriver] = useState('');
   const [carrier, setCarrier] = useState('');
@@ -108,7 +111,11 @@ export default function SevkiyatScreen() {
     },
     // L fix: 409'da (baska operator ayni sevkiyati degistirdi) board tazelensin.
     onError: (e: Error) => {
-      showScreenError(e, 'Sevk edilemedi');
+      const block = cariHoldBlockFromError(e);
+      if (block) {
+        setDispatchShip(null);
+        setHoldBlock(block);
+      } else showScreenError(e, 'Sevk edilemedi');
       refresh();
     },
   });
@@ -141,6 +148,7 @@ export default function SevkiyatScreen() {
 
   const renderCard = ({ item: sh }: { item: SackStoreShipmentLite }) => {
     const wait = waitText(sh.createdAt);
+    const holdChip = holdChipText(sh);
     return (
       <Surface style={styles.card} elevation={1}>
         <View style={styles.cardHead}>
@@ -167,6 +175,7 @@ export default function SevkiyatScreen() {
           </TruncatedText>
           {wait ? <Text style={styles.waitText}>⏳ {wait}</Text> : null}
         </View>
+        {holdChip ? <CariHoldChip text={holdChip} testID={`sevk-cari-kilit-${sh.id}`} /> : null}
 
         {/* İçeriği gör — tıklayınca çuval+rulo dökümü lazy gelir (çuval çıkarma) */}
         <TouchableRipple onPress={() => setContentsShip(sh)} style={styles.contentsBtn}>
@@ -311,6 +320,7 @@ export default function SevkiyatScreen() {
           </View>
         </Surface>
       </AppModal>
+      <CariHoldBlockedScreen block={holdBlock} onClose={() => setHoldBlock(null)} />
     </ScreenChrome>
   );
 }

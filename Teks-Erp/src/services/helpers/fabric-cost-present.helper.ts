@@ -45,7 +45,7 @@ export function presentCostResult(r: CostResult) {
     })),
     cozguKgM: r6(r.warpKgPerM),
     atkiKgM: r6(r.weftKgPerM),
-    tezgahMSaat: r4(r.loomMPerHour),
+    tezgahMSaat: r.loomMPerHour === null ? null : r4(r.loomMPerHour),
     hamTlM: r4(r.rawCostPerMTry),
     mamulTlM: r.finishedCostPerMTry === null ? null : r4(r.finishedCostPerMTry),
     saglamTlM: r4(r.soundCostPerMTry),
