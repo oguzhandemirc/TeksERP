@@ -20,6 +20,13 @@ import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";import { assertItemUsable } from "./helpers/item-usage.helper";
 
 
+/** 0 ≤ x < 100; "" / null / gönderilmemiş = bilinmiyor (boş bırakılabilir). */
+function assertPct(v: unknown, message: string): void {
+  if (v === undefined || v === null || v === "") return;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0 || n >= 100) throw AppError.badRequest(message);
+}
+
 export class WarpSpecService extends BaseService {
   /**
    * @param partial `update` yolunda alan GÖNDERİLMEMİŞ olabilir (kısmi güncelleme);
@@ -37,13 +44,9 @@ export class WarpSpecService extends BaseService {
     }
 
     // Faz 4 take-up (%): 0 ≤ x < 100 (DB CHECK `warp_specs_take_up_pct_range` ikinci hat); "" / null = bilinmiyor.
-    const takeUp = data.takeUpPct;
-    if (takeUp !== undefined && takeUp !== null && takeUp !== "") {
-      const t = Number(takeUp);
-      if (!Number.isFinite(t) || t < 0 || t >= 100) {
-        throw AppError.badRequest("Take-up yüzdesi 0 ile 100 arasında olmalı (100 hariç).");
-      }
-    }
+    assertPct(data.takeUpPct, "Take-up yüzdesi 0 ile 100 arasında olmalı (100 hariç).");
+    // SY-C1 kart firesi: maliyet zincirinde YAPI'dan sonra, PARAMETRE'den önce (DB CHECK `warp_specs_waste_pct_range` ikinci hat).
+    assertPct(data.wastePct, "Fire yüzdesi 0 ile 100 arasında olmalı (100 hariç).");
 
     const yarnItemId = data.yarnItemId;
     if (typeof yarnItemId === "string" && yarnItemId.length > 0) {
