@@ -30,6 +30,12 @@ export interface NotificationSaklama {
   okunmamisGun: number;
 }
 
+export const NOTIFICATION_DEFAULT_RETENTION: NotificationSaklama = { okunmusGun: 90, okunmamisGun: 180 };
+
+// MASAUSTU seçilebilir ama varsayılanı KAPALI (N3 "varsayılan hiçbiri" = bugünkü davranış, patron kararı 2026-10-25);
+// kullanıcı Kullanıcı Tercihleri → Masaüstü bildirimleri'nden açar. Tezgah alarmı kendi kanalıyla ayrıdır.
+export const NOTIFICATION_DESKTOP_CHANNELS: readonly NotificationKanal[] = ["UYGULAMA", "OZET", "MASAUSTU"];
+
 /**
  * Kişisel kapsam süzgeci beyanı (plan §5.2) — yalnız DARALTIR. Beyan edilmeyen anahtar o türde 400.
  * `esik`: anahtar `paramSemasi` alanıdır; ölçü payload alanından okunur (`UST`: ölçü ≤ eşik iletilir ·
