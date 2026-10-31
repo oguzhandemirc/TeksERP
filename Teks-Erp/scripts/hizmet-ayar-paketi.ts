@@ -83,6 +83,8 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   { anahtar: "uretim.makineDurusTakibi", alan: "machineStopTrackingEnabled", hedef: true, dilim: "D4-A1" },
   // DALGA4 §2.5/5 (K2): açık duruşta tablet gramaj/metre dokunuşu uyarır (göndermeyi kesmez).
   { anahtar: "uretim.makineDurusAcikUyarisi", alan: "machineStopOpenWarningEnabled", hedef: true, dilim: "D4-A2b" },
+  // DALGA4 §5.5/6 (K8): dış brodeden dönen top iş emrinin hedef desenini taşır (faturada desen kalemi).
+  { anahtar: "fason.receiptApplyTargetVariant", alan: "fasonReceiptApplyTargetVariant", hedef: true, dilim: "D4-D3" },
 ];
 
 export type PlanDurumu = "DEGISECEK" | "AYNI" | "ANAHTAR_YOK" | "ALAN_YOK";

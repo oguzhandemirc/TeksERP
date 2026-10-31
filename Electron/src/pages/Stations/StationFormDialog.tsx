@@ -43,6 +43,7 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
         inspectionEnabled: initial.inspectionEnabled ?? false,
         producesWarpBeam: initial.producesWarpBeam ?? false,
         consumesWarpBeam: initial.consumesWarpBeam ?? false,
+        capturesWidth: initial.capturesWidth ?? false,
         defaultLabelCopies: initial.defaultLabelCopies ?? null,
         defaultCategoryId: initial.defaultCategoryId ?? null,
       }
@@ -176,6 +177,12 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
                   </label>
                 </>
               )}
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" data-testid="station-captures-width" {...form.register("capturesWidth")} /> En ölçer
+              </label>
+              <p className="-mt-1 pl-6 text-xs text-muted-foreground">
+                Tablette top bitişinde isteğe bağlı &quot;Ölçülen en (cm)&quot; alanı çıkar (ör. etek kesim). Boş bırakılırsa topun eni değişmez.
+              </p>
             </div>
           </FormField>
           <StationLabelCopiesField form={form} />
