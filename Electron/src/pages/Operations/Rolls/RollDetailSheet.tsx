@@ -29,6 +29,7 @@ import { TERIM } from "@/lib/terim";
 import { PrintHistoryLink } from "@/components/print/PrintHistoryLink";
 import { RollTraceLink } from "./RollTraceLink";
 import { RollMeasurementsCard } from "./measurements/RollMeasurementsCard";
+import { widthChangeLine } from "./widthChange";
 
 interface Props {
   roll: Roll | null;
@@ -713,6 +714,11 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                             {" · "}
                             {safeFormat(ev.at, "dd.MM.yyyy HH:mm")}
                           </div>
+                          {widthChangeLine(ev) && (
+                            <div className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-400" data-testid="roll-history-width-change">
+                              {widthChangeLine(ev)}
+                            </div>
+                          )}
                           {/* details serbest bir sözlüktür (olay tipine göre
                               değişir); ham JSON basmak yerine yalnız METİN/SAYI
                               değerleri okunur — nesne/dizi alanlar atlanır ki

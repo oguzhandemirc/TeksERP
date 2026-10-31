@@ -30,6 +30,7 @@ import { sirala } from "./lib/adim-sirasi.mjs";
 import { deftereYaz } from "./lib/kapi-defteri.mjs";
 import { etkilenenProjeler, stagedFiles } from "./lib/staged.mjs";
 import { agirSurecSayisi, slotAl } from "./lib/semafor.mjs";
+import { KAPI_ZAMAN_ASIMI_ENV, kapiZamanAsimiSn } from "./lib/zaman-asimi.mjs";
 import { dagitimBekcisiTetigi } from "../lib/dagitim.mjs";
 import { panelKimlikTetigi } from "../lib/panel-kimlik.mjs";
 // Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
@@ -394,6 +395,9 @@ const slotAlVeYaz = () => {
   deftereYaz({ wt: WT, adim: `semafor bekleme · ağır ${agirSurecSayisi()}`, sonuc: "✅", sn: (Date.now() - t) / 1000, cikis: 0 });
 };
 
+// Adım süre sınırı ortamdan (yük altında uzatılır); geçersiz değer uyarıyla 600'e düşer.
+const ZAMAN_ASIMI_SN = kapiZamanAsimiSn();
+
 process.stderr.write(`⏳ commit kapısı: ${sirali.length} adım (${sirali.map((a) => a.ad).join(" · ")})\n`);
 
 for (const adim of sirali) {
@@ -402,7 +406,7 @@ for (const adim of sirali) {
   const r = spawnSync(adim.cmd[0], adim.cmd[1], {
     cwd: join(REPO, adim.cwd),
     encoding: "utf8",
-    timeout: 600_000,
+    timeout: ZAMAN_ASIMI_SN * 1000,
     // `gitEnvSil`: git, hook sürecine GIT_DIR/GIT_INDEX_FILE/GIT_PREFIX verir ve bunlar
     // çocuğa iner. Geçici repoda `git init/add/commit` yapan bir adım (kapsam bekçisi)
     // o env ile GERÇEK repoya commit atar — 2026-09-13'te oldu, ÜÇ YÜZÜ vardı: "taban"
@@ -436,9 +440,14 @@ for (const adim of sirali) {
     continue;
   }
   const govde = `${r.stdout || ""}\n${r.stderr || ""}`.split("\n").filter(Boolean).slice(-30).join("\n");
+  // spawnSync süre sınırında ETIMEDOUT + SIGTERM döner; ipucu yalnız o dalda basılır.
+  const zamanAsimi = r.error?.code === "ETIMEDOUT";
   process.stderr.write(
     `   ❌ ${adim.ad} KIRMIZI (${sn}s, çıkış ${cikis})\n` +
       `${govde.replace(/^/gm, "      | ")}\n\n` +
+      (zamanAsimi
+        ? `⏱ Adım ${ZAMAN_ASIMI_SN} sn süre sınırını aştı — yük altında ${KAPI_ZAMAN_ASIMI_ENV}=1500 ile yeniden dene.\n`
+        : "") +
       `⛔ Commit atılmadı. Bilerek geçmek gerekiyorsa: TEKSERP_HOOK_SKIP=1 git commit …\n`,
   );
   // Isıran mandalın adı teşhis için yeter; ilk ❌ satırı da alınır (koşucu biçimi: "❌ test_x …"),
