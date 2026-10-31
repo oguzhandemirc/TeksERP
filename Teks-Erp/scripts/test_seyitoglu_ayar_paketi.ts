@@ -28,7 +28,7 @@ import {
   type StopReasonSeed,
 } from "./lib/seyitoglu-kurulum-verisi";
 import { testActorId } from "./fixture-test-user";
-import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { fixtureHedefEngeli, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0,
   fail = 0;
@@ -102,8 +102,8 @@ async function main(): Promise<void> {
   const shared = keys.filter((k) => HIZMET_AYAR_PAKETI.some((h) => h.anahtar === k));
   check("§1e hizmet paketiyle ortak anahtar yok", shared.length === 0, shared.join(","));
 
-  // ── §2 CANLI kuru koşu ──
-  const block = hedefDbEngeli();
+  // ── §2 CANLI kuru koşu ── §4 YAZAR → fixture DB (_test) zorunlu.
+  const block = hedefDbEngeli() ?? fixtureHedefEngeli();
   if (block) {
     check("§2 hedef DB test DB'si", false, block);
     return;

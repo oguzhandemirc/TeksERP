@@ -19,7 +19,9 @@ import { applySetup, planSetupFromDb, type SetupRow } from "./lib/seyitoglu-kuru
 
 /**
  * §15.1 Seyitoğlu sütunu. `maliyet.verimlilik.sureKaynagi` İKİNCİ ayar olarak açılmaz
- * (§15.1 notu): Gülkesim D4-G2b'nin `maliyet.karlilik.makineSuresi` ayarı okunur, KOSUM = OTURUM.
+ * (§15.1 notu): Gülkesim D4-G2b'nin `maliyet.karlilik.makineSuresi` ayarı okunur. KOSUM (MachineRun)
+ * = OTURUM (WorkSession) denkliği ÖLÇÜLMEDİ; OTURUM G2b varsayılanı olduğundan satır bugün etkisiz —
+ * SY-D2 ölçerek karar verir (G2b kümesine KOSUM eklenir ya da tezgâhta eşlik kabul edilir).
  */
 export const SEYITOGLU_SETTINGS: readonly PaketSatiri[] = [
   { anahtar: "maliyet.dokumaStandartYontemi", alan: "costWeavingStandardMethod", hedef: "ATKI_UCRETI", dilim: "SY-D2" },
