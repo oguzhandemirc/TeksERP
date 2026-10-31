@@ -5244,14 +5244,7 @@ export class ShippingService {
    * (belge içeriği donuk, SUNUM canlı).
    */
   async getDispatchReport(shipmentId: string): Promise<ApiResponse<unknown>> {
-    const doc = (
-      await printedDocumentService.getCurrent(PrintedDocType.SHIPMENT_DISPATCH, shipmentId)
-    ).data as { snapshot: { doc: unknown }; status: string; version: number } | null;
-
-    const content = doc
-      ? (doc.snapshot.doc as ShipmentDispatchDoc)
-      : await collectShipmentDocContent(prisma, shipmentId, { requireDispatched: false });
-    if (!content) throw AppError.notFound("Sevkiyat bulunamadı");
+    const { content, doc } = await resolveShipmentDispatchContent(shipmentId);
 
     return {
       success: true,
@@ -5808,6 +5801,24 @@ async function collectShipmentDocContent(
       manualSackCount: sh.manualSackCount,
     },
   };
+}
+
+/**
+ * Muhasebe fişi + sevk top listesi (D4-J6) içerik kaynağı — TEK yol: donmuş snapshot, yoksa
+ * canlı toplayıcı. Sevk içeriğini okuyan yeni yüzey buradan beslenir (ikinci toplayıcı yasak,
+ * `test_sevk_top_listesi` AST ile ölçer).
+ */
+export async function resolveShipmentDispatchContent(
+  shipmentId: string
+): Promise<{ content: ShipmentDispatchDoc; doc: { status: string; version: number } | null }> {
+  const doc = (
+    await printedDocumentService.getCurrent(PrintedDocType.SHIPMENT_DISPATCH, shipmentId)
+  ).data as { snapshot: { doc: unknown }; status: string; version: number } | null;
+  const content = doc
+    ? (doc.snapshot.doc as ShipmentDispatchDoc)
+    : await collectShipmentDocContent(prisma, shipmentId, { requireDispatched: false });
+  if (!content) throw AppError.notFound("Sevkiyat bulunamadı");
+  return { content, doc };
 }
 
 /** Freeze / reissue / lazy-init — yalnız DISPATCHED sevkiyat belgelenir. */

@@ -211,6 +211,8 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
         "Aynı top işi iki hizmet kalemiyle AYRI faturalanmışsa birleşmiş kalemde çift fatura olur; hangi " +
         "faturanın iptal edileceği muhasebe kararıdır (H7). Çakışmasız bağ taşınır (fatura kalemi emsali).",
     },
+    // D4-H3: masraf payı hizmet kalemine referans bağdır (tekillik yok) — birleşen hizmet kalemine taşınır.
+    { kind: "MOVE", model: "ExpenseAllocation", table: "expense_allocations", column: "serviceItemId", label: "Masraf payı (hizmet kalemi)" },
     // D4-G1a: sarf normu damgalı sürüm ana verisidir; partial UNIQUE (serviceItemId, consumableItemId) yalnız aktifte.
     {
       kind: "CONFLICT",

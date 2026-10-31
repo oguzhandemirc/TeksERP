@@ -23,6 +23,8 @@ export interface WarpSpec {
   reedWidthCm: string | null;
   /** Faz 4: take-up (%) — Decimal string; null = bilinmiyor. */
   takeUpPct: string | null;
+  /** SY-C1 kart firesi (%) — Decimal string; null = maliyet parametre varsayılanını kullanır. */
+  wastePct?: string | null;
   notes: string | null;
   isActive: boolean;
   createdAt: string;

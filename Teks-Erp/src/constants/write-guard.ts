@@ -6,13 +6,13 @@
 
 export const BASE_WRITE_CLOSED_FIELDS: Readonly<Record<string, readonly string[]>> = {
   warehouse: ["isDefault"],
-  peripheralDevice: ["lastSeenAt", "deletedAt"],
+  // B5 kalibrasyonu: tür kapısı (yalnız METER) + tarih doğrulaması D4-B5k'de gelene dek kapalı.
+  peripheralDevice: ["lastSeenAt", "deletedAt", "calibratedAt", "calibrationDueAt", "calibrationNote"],
   // Künye yalnız oturumdan (`withActor`); gövde ayrıca Zod `.strict()` allowlist'inden geçer.
   machineStopCodeMap: ["createdById", "updatedById"],
-  // SEYİTOĞLU MİG-1: kendi doğrulayıcısı (tarife kodu çözümü · fire aralığı) E1/C1 dilimlerinde
-  // doğana dek genel CRUD'a KAPALI. `Item.weaveDesignId` + `ProductRecipe.variantCode` SY-A2'de açıldı.
+  // SEYİTOĞLU MİG-1: kendi doğrulayıcısı (tarife kodu çözümü) E1 diliminde doğana dek genel CRUD'a
+  // KAPALI. `Item.weaveDesignId` + `ProductRecipe.variantCode` SY-A2'de, `warpSpec.wastePct` C1'de açıldı.
   productRecipe: ["finishingRateCode"],
-  warpSpec: ["wastePct"],
 };
 
 export function baseWriteClosedFields(modelName: string): readonly string[] {

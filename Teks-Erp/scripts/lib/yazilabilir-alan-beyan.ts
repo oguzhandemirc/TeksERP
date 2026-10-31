@@ -20,5 +20,5 @@ export const YAZILABILIR_ALAN_BEYANI: Readonly<Record<string, readonly string[]>
   route: ["code", "createdById", "customerId", "description", "isActive", "isFavorite", "name", "updatedById"],
   station: ["allowAsWorkOrderStep", "appliesColor", "appliesProperty", "appliesQuality", "capturesWidth", "code", "consumesWarpBeam", "createdById", "defaultCategoryId", "defaultLabelCopies", "department", "inspectionEnabled", "isActive", "kind", "name", "producesWarpBeam", "type", "updatedById"],
   warehouse: ["address", "code", "isActive", "name", "notes"],
-  warpSpec: ["code", "createdById", "endsCount", "endsPerDent", "isActive", "name", "notes", "reedNo", "reedWidthCm", "selvedgeEnds", "takeUpPct", "updatedById", "yarnItemId"],
+  warpSpec: ["code", "createdById", "endsCount", "endsPerDent", "isActive", "name", "notes", "reedNo", "reedWidthCm", "selvedgeEnds", "takeUpPct", "updatedById", "wastePct", "yarnItemId"],
 };
