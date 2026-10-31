@@ -22,7 +22,8 @@ import { queryOpenDispatchAges, type OpenDispatchAgeRow } from "../helpers/subco
 import { loadNotificationVisibilityEnv } from "../helpers/notification-visibility.helper";
 import { finishForecastReport, type FinishForecastRow } from "../reports/levent-bitis-tahmini.report.service";
 import { registerConditionSource, type ConditionSubject } from "../../jobs/notification-condition.job";
-import { computeReadyWorks, type ReadyWorkUnit } from "../ready-works.service";
+import { computeReadyWorks, INCOMING_DOC_UNITS, type ReadyWorkUnit } from "../ready-works.service";
+import { READY_WORK_KIND as READY_WORK_KIND_CODE } from "../../constants/notification-catalog-sevkiyat";
 import { effectiveShipReadyPolicy } from "../helpers/ship-readiness.helper";
 import { readGelenBelgeEnabled, readShippingReadyNotifyUnits, readShippingReadyScanMinutes, type ShipReadyNotifyUnit } from "../system-setting.service";
 
@@ -227,13 +228,13 @@ export async function beamEndingSubjects(): Promise<ConditionSubject[]> {
 }
 
 // ── 13 · İş sevke hazır (D4-J2) — birim türü başına tek toplu okuma; hazırlık kararı helper'ın `state`i ──────
-export const READY_WORK_KIND = "sevkiyat.sevke-hazir" satisfies NotificationKind;
+export const READY_WORK_KIND = READY_WORK_KIND_CODE satisfies NotificationKind;
 /** Kaynak dakikada bir uyanır; tarama `shipping.ready.scanMinutes`te bir koşar (ayar yeniden başlatmasız değişir). */
 const MINUTE_MS = 60_000;
-const READY_UNIT_OF: Record<ShipReadyNotifyUnit, { unit: ReadyWorkUnit; label: string; type: string; incomingDoc: boolean }> = {
-  IE: { unit: "workOrder", label: TERIM.terbiyeIsEmri.tekil, type: "isemri", incomingDoc: false },
-  GB: { unit: "deliveryNote", label: "Gelen belge", type: "gelen-belge", incomingDoc: true },
-  PARTI: { unit: "customerBatch", label: "Parti", type: "musteri-parti", incomingDoc: true },
+const READY_UNIT_OF: Record<ShipReadyNotifyUnit, { unit: ReadyWorkUnit; label: string; type: string }> = {
+  IE: { unit: "workOrder", label: TERIM.terbiyeIsEmri.tekil, type: "isemri" },
+  GB: { unit: "deliveryNote", label: "Gelen belge", type: "gelen-belge" },
+  PARTI: { unit: "customerBatch", label: "Parti", type: "musteri-parti" },
 };
 let lastReadyScanAt: number | null = null;
 
@@ -248,15 +249,16 @@ export async function readyWorkSubjects(): Promise<ConditionSubject[]> {
   if (units.length === 0 || !(await deps.moduleOpen(kind))) return [];
   const now = deps.now();
   if (lastReadyScanAt !== null && now - lastReadyScanAt < (await deps.scanMinutes()) * MINUTE_MS) {
-    // Periyot dolmadı: açık konular KORUNUR (boş küme dönmek hepsini "çözüldü" yapardı).
+    // Periyot dolmadı: açık konular KORUNUR (boş küme dönmek hepsini "çözüldü" yapardı). Bilinçli seçim: periyot motorda
+    // kayıt anında sabit olduğundan kaynak kendi saatini tutar ve açık konuları koşul tablosundan okur (tek süreç).
     const open = await prisma.notificationCondition.findMany({ where: { kind, resolvedAt: null }, select: { subjectKey: true, subjectType: true, subjectId: true, payload: true } });
     return open.map((r) => ({ key: r.subjectKey, type: r.subjectType, id: r.subjectId, payload: (r.payload ?? {}) as Record<string, unknown> }));
   }
-  const docOpen = units.some((u) => READY_UNIT_OF[u].incomingDoc) ? await deps.incomingDocOpen() : false;
+  const docOpen = units.some((u) => INCOMING_DOC_UNITS.includes(READY_UNIT_OF[u].unit)) ? await deps.incomingDocOpen() : false;
   const out: ConditionSubject[] = [];
   for (const u of units) {
     const def = READY_UNIT_OF[u];
-    if (def.incomingDoc && !docOpen) continue;
+    if (INCOMING_DOC_UNITS.includes(def.unit) && !docOpen) continue; // panel ucu kapısıyla (readyWorksModuleGate) aynı liste
     for (const r of await deps.readyUnits(def.unit)) {
       if (r.state !== "READY") continue;
       out.push({

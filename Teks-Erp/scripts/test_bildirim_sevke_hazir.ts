@@ -21,7 +21,7 @@ import * as bcrypt from "bcryptjs";
 import { Prisma, RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
-import { SETTING_KEYS } from "../src/services/system-setting.service";
+import { SETTING_KEYS, systemSettingService } from "../src/services/system-setting.service";
 import { NOTIFICATION_CATALOG } from "../src/constants/notification-catalog";
 import { runNotificationDispatchOnce } from "../src/services/notification-dispatch.service";
 import { runConditionSourceOnce } from "../src/jobs/notification-condition.job";
@@ -172,9 +172,12 @@ async function body(): Promise<void> {
     (await readyWorkSubjects()).length === 0 && condCount === 0 && (await outbox(pA.key)).length === 0 && q0 <= 1,
     `${JSON.stringify(bos)} koşul=${condCount} sorgu=${q0}`);
 
-  console.log("\n── §2 {PARTI} ──");
-  await setSetting(SETTING_KEYS.SHIPPING_READY_NOTIFY_UNITS, ["PARTI"]);
-  await prisma.systemSetting.deleteMany({ where: { key: notificationBaselineKey(KIND) } });
+  const stamped = async () => typeof (await prisma.systemSetting.findUnique({ where: { key: notificationBaselineKey(KIND) } }))?.value === "string";
+  check("§1b boş turda da taban damgası basılır (gerçek akış — §2 bunu ELLE SİLMEZ)", await stamped());
+
+  console.log("\n── §2 {PARTI} — panel/paket yazım yolu (setFeatureFlags) ──");
+  await systemSettingService.setFeatureFlags({ shippingReadyNotifyUnits: ["PARTI"] }, sevkci);
+  check("§2 ⭐ birim eklenince ayar yazımı tür damgasını düşürür", !(await stamped()));
   const t = await scan();
   await dispatch();
   check("§2a ⭐ ilk tur SESSİZ TABAN: READY parti için koşul açık, ACILDI 0",
@@ -189,6 +192,8 @@ async function body(): Promise<void> {
   check("§2d shipping:read'li sevkiyatçı gelen kutusunda alır; shipping:read'siz muhasebeci almaz", (await inbox(sevkci)) === 1 && (await inbox(muhasebe)) === 0);
   for (let i = 0; i < 2; i++) await scan();
   check("§2e sürer (2 tur) → yeni ACILDI yok", (await outbox(pB.key, "ACILDI")).length === 1);
+  await systemSettingService.setFeatureFlags({ shippingReadyNotifyUnits: ["PARTI"] }, sevkci);
+  check("§2e2 aynı küme yeniden kaydedilince damga KORUNUR (gereksiz taban yok)", await stamped());
 
   const pl = (ob[0]?.payload ?? {}) as Record<string, unknown>;
   const declared = [...NOTIFICATION_CATALOG[KIND].payloadAlanlari].sort();

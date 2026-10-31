@@ -7,9 +7,12 @@
 // =============================================================================
 import { NOTIFICATION_DEFAULT_RETENTION as SAKLAMA, NOTIFICATION_DESKTOP_CHANNELS as KANAL_MASAUSTU, type NotificationCatalogEntry } from "./notification-catalog.types";
 
+/** Tür kodu tek kaynak: kaynak (is.ts) + ayar yazımı (birim eklenince taban damgası düşer) buradan okur. */
+export const READY_WORK_KIND = "sevkiyat.sevke-hazir";
+
 export const READY_WORK_NOTIFICATION_ENTRIES = {
-  "sevkiyat.sevke-hazir": {
-    kod: "sevkiyat.sevke-hazir", ad: "İş sevke hazır",
+  [READY_WORK_KIND]: {
+    kod: READY_WORK_KIND, ad: "İş sevke hazır",
     sinif: "BILDIRIM", altTur: "KOSUL", grup: "Sevkiyat",
     izinler: [["shipping:read"]],
     modul: "cekirdek:sevkiyat-depo",
