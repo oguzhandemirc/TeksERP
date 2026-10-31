@@ -198,9 +198,7 @@ export class CariService {
         return {
           id: r.id,
           kind: r.kind,
-          code: p.code,
-          name: p.name,
-          taxNumber: p.taxNumber,
+          code: p.code, name: p.name, taxNumber: p.taxNumber,
           roles: rolesOf(r),
           taxOffice: r.taxOffice,
           defaultCurrency: r.defaultCurrency,
