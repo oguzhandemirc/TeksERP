@@ -32,6 +32,7 @@ import {
 } from '../services/kursunQc.service';
 import { rollService, type InitialEntryRequest } from '../services/roll.service';
 import { tamburService } from '../services/tambur.service';
+import { kursunFinishRequest, type KursunFinishVars } from './kursunFinishVars';
 import {
   subcontractorService,
   type DispatchRequest,
@@ -162,6 +163,12 @@ const OFFLINE_AWARE = {
   retryDelay: stationRetryDelay,
 };
 
+// D4-E2b: eski kuyruk kaydı düz rollId (gövde `{}`); en girildiyse `{rollId, measuredWidthCm}`.
+function kursunFinishCall(vars: KursunFinishVars) {
+  const req = kursunFinishRequest(vars);
+  return rollService.kursunFinish(req.rollId, req.body);
+}
+
 export function registerStationMutationDefaults(): void {
   // queryClient default 'always' — burada explicit'ten 'online'a override:
   // offline'da pause + AsyncStorage persist + online resume.
@@ -200,7 +207,7 @@ export function registerStationMutationDefaults(): void {
   // Açık kumaş bitirme (fason dönüşü) — barkodlu QC2 ile aynı offline pattern.
   // Backend idempotent: priorFinish check + skipDuplicates RollOperation.
   queryClient.setMutationDefaults(STATION_MUT.KURSUN_FINISH, {
-    mutationFn: withAuthGuard((rollId: string) => rollService.kursunFinish(rollId, {})),
+    mutationFn: withAuthGuard(kursunFinishCall),
     ...OFFLINE_AWARE,
   });
   // Tambur açık kumaş bitirme (Tambur'un son aksiyonu).

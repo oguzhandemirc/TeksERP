@@ -14,6 +14,8 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { assertItemUsable } from "./helpers/item-usage.helper";
 import { isUniqueViolation, parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
+import { parseWeftSequence } from "./helpers/weft-sequence.helper";
+import { findWeftOverrideOrphans, throwWeftOverrideOrphan } from "./helpers/effective-construction.helper";
 
 export const WEFT_SPEC_SELECT = {
   id: true,
@@ -21,6 +23,8 @@ export const WEFT_SPEC_SELECT = {
   name: true,
   picksPerCm: true,
   sequenceNote: true,
+  sequenceCode: true,
+  weftProgramNo: true,
   notes: true,
   isActive: true,
   createdAt: true,
@@ -43,10 +47,11 @@ export type WeftSpecRow = Prisma.WeftSpecGetPayload<{ select: typeof WEFT_SPEC_S
 
 interface YarnLine {
   yarnItemId: string;
-  picksInRepeat: number;
+  /** Sıra kodu doluysa gövdede verilmeyebilir; türetim sonrası hep dolu. */
+  picksInRepeat: number | null;
 }
 
-const ALLOWED = new Set(["code", "name", "picksPerCm", "sequenceNote", "notes", "yarns"]);
+const ALLOWED = new Set(["code", "name", "picksPerCm", "sequenceNote", "sequenceCode", "weftProgramNo", "notes", "yarns"]);
 
 function rejectUnknown(body: Record<string, unknown>): void {
   const unknown = Object.keys(body).filter((k) => !ALLOWED.has(k));
@@ -54,12 +59,13 @@ function rejectUnknown(body: Record<string, unknown>): void {
 }
 
 /** İplik satırları: her biri İPLİK + denyesi dolu + kullanılabilir; aynı iplik iki kez yazılmaz. */
-async function parseYarns(raw: unknown): Promise<YarnLine[]> {
+async function parseYarns(raw: unknown, picksOptional: boolean): Promise<YarnLine[]> {
   if (!Array.isArray(raw)) throw AppError.badRequest("Atkı iplikleri bir liste olmalı.");
   const lines: YarnLine[] = raw.map((r, i) => {
     const o = (r ?? {}) as Record<string, unknown>;
-    const n = Number(o.picksInRepeat);
     if (typeof o.yarnItemId !== "string" || o.yarnItemId.length === 0) throw AppError.badRequest(`${i + 1}. satır: iplik seçilmedi.`);
+    if (picksOptional && (o.picksInRepeat === undefined || o.picksInRepeat === null)) return { yarnItemId: o.yarnItemId, picksInRepeat: null };
+    const n = Number(o.picksInRepeat);
     if (!Number.isInteger(n) || n <= 0) throw AppError.badRequest(`${i + 1}. satır: rapordaki atkı adedi sıfırdan büyük bir tam sayı olmalı.`);
     return { yarnItemId: o.yarnItemId, picksInRepeat: n };
   });
@@ -94,9 +100,40 @@ function parseScalars(body: Record<string, unknown>, partial: boolean): Prisma.W
   if (picks !== undefined) out.picksPerCm = picks;
   const seq = parseTextField(body.sequenceNote, "Sıra notu", 300);
   if (seq !== undefined) out.sequenceNote = seq;
+  const program = parseTextField(body.weftProgramNo, "Atkı program no", 16);
+  if (program !== undefined) out.weftProgramNo = program;
   const notes = parseTextField(body.notes, "Not", 500);
   if (notes !== undefined) out.notes = notes;
   return out;
+}
+
+/** `sequenceCode` gövde alanı: `undefined` dokunmaz, `null`/boş temizler (elle adet), metin 120 sınırı. */
+function parseSequenceField(raw: unknown): string | null | undefined {
+  const v = parseTextField(raw, "Atkı sıra kodu", 120);
+  return v === "" ? null : v;
+}
+
+/**
+ * Sıra kodu doluysa satır adetleri ONDAN türetilir (gövdede verilen adet türetilenle çelişirse 400);
+ * boşsa her satır kendi adedini taşımalı (bugünkü davranış).
+ */
+function applySequence(sequence: string | null, lines: YarnLine[]): { sequenceCode: string | null; lines: Array<{ yarnItemId: string; picksInRepeat: number }> } {
+  if (sequence === null) {
+    const missing = lines.findIndex((l) => l.picksInRepeat === null);
+    if (missing >= 0) throw AppError.badRequest(`${missing + 1}. satır: rapordaki atkı adedi girilmedi (sıra kodu yokken adet zorunlu).`);
+    return { sequenceCode: null, lines: lines.map((l) => ({ yarnItemId: l.yarnItemId, picksInRepeat: l.picksInRepeat! })) };
+  }
+  const parsed = parseWeftSequence(sequence, lines.length);
+  return {
+    sequenceCode: parsed.normalized,
+    lines: lines.map((l, i) => {
+      const derived = parsed.picksBySortOrder[i]!;
+      if (l.picksInRepeat !== null && l.picksInRepeat !== derived) {
+        throw AppError.badRequest(`${i + 1}. satır: girilen adet (${l.picksInRepeat}) sıra kodundan türeyen adetle (${derived}) çelişiyor.`, { code: "WEFT_SEQUENCE_MISMATCH" });
+      }
+      return { yarnItemId: l.yarnItemId, picksInRepeat: derived };
+    }),
+  };
 }
 
 function conflict(e: unknown): never {
@@ -127,7 +164,10 @@ export async function getWeftSpec(id: string): Promise<WeftSpecRow> {
 export async function createWeftSpec(body: Record<string, unknown>, userId?: string): Promise<WeftSpecRow> {
   rejectUnknown(body);
   const scalars = parseScalars(body, false) as Prisma.WeftSpecUncheckedCreateInput;
-  const yarns = body.yarns === undefined ? [] : await parseYarns(body.yarns);
+  const seq = parseSequenceField(body.sequenceCode) ?? null;
+  const applied = applySequence(seq, body.yarns === undefined ? [] : await parseYarns(body.yarns, seq !== null));
+  const yarns = applied.lines;
+  if (applied.sequenceCode !== null) scalars.sequenceCode = applied.sequenceCode;
   let row: WeftSpecRow;
   try {
     row = await prisma.weftSpec.create({
@@ -147,7 +187,7 @@ export async function createWeftSpec(body: Record<string, unknown>, userId?: str
     action: "CREATE",
     tableName: "WEFT_SPEC",
     recordId: row.id,
-    newData: { code: row.code, name: row.name, picksPerCm: row.picksPerCm?.toString() ?? null, yarns },
+    newData: { code: row.code, name: row.name, picksPerCm: row.picksPerCm?.toString() ?? null, sequenceCode: row.sequenceCode, weftProgramNo: row.weftProgramNo, yarns },
   });
   return row;
 }
@@ -157,12 +197,23 @@ export async function updateWeftSpec(id: string, body: Record<string, unknown>, 
   rejectUnknown(body);
   const before = await getWeftSpec(id);
   const scalars = parseScalars(body, true);
-  const yarns = body.yarns === undefined ? undefined : await parseYarns(body.yarns);
+  const seqField = parseSequenceField(body.sequenceCode);
+  const effectiveSeq = seqField !== undefined ? seqField : before.sequenceCode;
+  const yarnsIn = body.yarns === undefined ? undefined : await parseYarns(body.yarns, effectiveSeq !== null);
+  // Yeni sıra kodu mevcut satırlardan yeniden türetir; kod temizlenince adetler olduğu gibi kalır.
+  const rewrite = yarnsIn !== undefined || (seqField !== undefined && seqField !== null);
+  const base = yarnsIn ?? before.yarns.map((y) => ({ yarnItemId: y.yarnItemId, picksInRepeat: null }));
+  const applied = rewrite ? applySequence(effectiveSeq, base) : null;
+  if (seqField !== undefined) scalars.sequenceCode = applied?.sequenceCode ?? null;
+  const yarns = applied?.lines;
   if (Object.keys(scalars).length === 0 && yarns === undefined) throw AppError.badRequest("Güncellenecek alan yok.");
   try {
     await prisma.$transaction(async (tx) => {
+      // UPDATE kart satırını kilitler — varyant değişimi yazıcısı aynı satırı FOR UPDATE ile bekler.
       await tx.weftSpec.update({ where: { id }, data: { ...scalars, updatedById: userId ?? null } });
       if (yarns !== undefined) {
+        const orphans = await findWeftOverrideOrphans(tx, { weftSpecId: id }, yarns.length);
+        if (orphans.length > 0) throwWeftOverrideOrphan(orphans);
         // ③b saf yapılandırma pivotu: satırlar deftere yazmaz; parasal sonuç maliyet sürümünde donar.
         await tx.weftSpecYarn.deleteMany({ where: { weftSpecId: id } });
         if (yarns.length > 0) {
@@ -181,6 +232,8 @@ export async function updateWeftSpec(id: string, body: Record<string, unknown>, 
     name: r.name,
     picksPerCm: r.picksPerCm?.toString() ?? null,
     sequenceNote: r.sequenceNote,
+    sequenceCode: r.sequenceCode,
+    weftProgramNo: r.weftProgramNo,
     notes: r.notes,
     yarns: r.yarns.map((y) => ({ yarnItemId: y.yarnItemId, picksInRepeat: y.picksInRepeat })),
   });

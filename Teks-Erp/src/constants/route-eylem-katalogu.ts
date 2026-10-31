@@ -24,6 +24,13 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/admin/devices/proof-reset": e("cihazları yeniden bağlamak için kanıtı sıfırladı", "cihaz kanıtını sıfırlamaya çalıştı"),
   // ── Belge tasarımcısı
   "POST /api/document-templates/sistem-onizleme/:docType": e("sistem belge tasarımını önizledi", "sistem belge tasarımını önizlemeye çalıştı"),
+  // ── Desen kartı + ürün yapısı (Seyitoğlu SY-A2)
+  "POST /api/weave-designs": e("desen kartı oluşturdu", "desen kartı oluşturmaya çalıştı"),
+  "PATCH /api/weave-designs/:id": e("desen kartını düzenledi", "desen kartını düzenlemeye çalıştı"),
+  "DELETE /api/weave-designs/:id": e("desen kartını pasife aldı", "desen kartını pasife almaya çalıştı"),
+  "POST /api/weave-designs/:id/activate": e("desen kartını yeniden aktif etti", "desen kartını aktif etmeye çalıştı"),
+  "PUT /api/item-construction/:itemId/warp-layers": e("ürünün çözgü katmanlarını değiştirdi", "ürünün çözgü katmanlarını değiştirmeye çalıştı"),
+  "PUT /api/item-construction/recipes/:recipeId/weft-yarns": e("varyantın atkı ipliği değişimlerini değiştirdi", "varyantın atkı ipliği değişimlerini değiştirmeye çalıştı"),
   // ── Sipariş
   "POST /api/orders": e("sipariş oluşturdu", "sipariş oluşturmaya çalıştı"),
   "PATCH /api/orders/:id": e("siparişi düzenledi", "siparişi düzenlemeye çalıştı"),

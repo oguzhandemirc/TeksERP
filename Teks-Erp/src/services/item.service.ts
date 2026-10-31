@@ -46,6 +46,7 @@ import {
 } from "./helpers/code-unique.helper";
 import { assertItemUsable } from "./helpers/item-usage.helper";
 import { parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
+import { findWeftOverrideOrphans, throwWeftOverrideOrphan } from "./helpers/effective-construction.helper";
 
 export interface ItemCreateInput {
   /** Boş/verilmezse backend `STK-NNNNNN` üretir; doluysa manuel kod kabul edilir. */
@@ -164,8 +165,25 @@ async function assertWarpSpecAssignable(itemType: string | undefined, warpSpecId
   if (n === 0) throw AppError.badRequest("Çözgü kartı bulunamadı ya da pasif", { code: "WARP_SPEC_NOT_FOUND" });
 }
 
+/** SY-A2: desen kartı bağı — aktif `WeaveDesign` (400); `null`/boş temizler. */
+async function readWeaveDesignRef(raw: unknown): Promise<string | null> {
+  if (raw === null || raw === "") return null;
+  if (typeof raw !== "string") throw AppError.badRequest("Desen kartı kimliği geçersiz.");
+  const n = await prisma.weaveDesign.count({ where: { id: raw, isActive: true } });
+  if (n === 0) throw AppError.badRequest("Desen kartı bulunamadı ya da pasif", { code: "WEAVE_DESIGN_NOT_FOUND" });
+  return raw;
+}
+
+/** SY-A2: ürün başka atkı kartına geçerken varyant değişimlerinin sırası yeni kartta kalmalı (409). */
+async function assertWeftSwitchKeepsOverrides(itemId: string, weftSpecId: unknown): Promise<void> {
+  if (weftSpecId === undefined) return;
+  const yarnCount = typeof weftSpecId === "string" ? await prisma.weftSpecYarn.count({ where: { weftSpecId } }) : 0;
+  const orphans = await findWeftOverrideOrphans(prisma, { itemId }, yarnCount);
+  if (orphans.length > 0) throwWeftOverrideOrphan(orphans);
+}
+
 /** MAL-1 (S2 çekirdeği): kumaş yapısı alanları — gövdede adı geçen anahtarlar (`undefined` dokunmaz). */
-const FABRIC_STRUCTURE_KEYS = ["rawWidthCm", "rawGsm", "finishedGsm", "composition", "weftSpecId"] as const;
+const FABRIC_STRUCTURE_KEYS = ["rawWidthCm", "rawGsm", "finishedGsm", "composition", "weftSpecId", "weaveDesignId"] as const;
 
 /**
  * Kumaş yapısı alanlarını doğrular ve Prisma verisine çevirir: yalnız KUMAŞ kartında (400), sayılar
@@ -193,9 +211,10 @@ async function readFabricStructureFields(itemType: string | undefined, data: Rec
       out.weftSpecId = w;
     }
   }
+  if (present.includes("weaveDesignId")) out.weaveDesignId = await readWeaveDesignRef(data.weaveDesignId);
   const setsValue = Object.values(out).some((v) => v !== null);
   if (setsValue && itemType !== undefined && itemType !== "FABRIC") {
-    throw AppError.badRequest("En/gramaj/kompozisyon/atkı kartı yalnız KUMAŞ kartına girilir", { code: "ITEM_FABRIC_STRUCTURE_FABRIC_ONLY" });
+    throw AppError.badRequest("En/gramaj/kompozisyon/atkı/desen kartı yalnız KUMAŞ kartına girilir", { code: "ITEM_FABRIC_STRUCTURE_FABRIC_ONLY" });
   }
   return out;
 }
@@ -516,6 +535,7 @@ export class ItemService extends BaseService {
     if (FABRIC_STRUCTURE_KEYS.some((k) => Object.prototype.hasOwnProperty.call(data, k))) {
       const cur = await prisma.item.findUnique({ where: { id }, select: { itemType: true } });
       Object.assign(data, await readFabricStructureFields(cur?.itemType, data));
+      await assertWeftSwitchKeepsOverrides(id, data.weftSpecId);
     }
 
     // name güncelleniyorsa length + trim kontrolü
