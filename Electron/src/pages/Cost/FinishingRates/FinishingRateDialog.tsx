@@ -63,7 +63,7 @@ export function FinishingRateDialog({ onClose, current }: Props) {
               {(Object.keys(FINISHING_BASIS_LABEL) as FinishingBasis[]).map((b) => <option key={b} value={b}>{FINISHING_BASIS_LABEL[b]}</option>)}
             </select></label>
           <div className="flex items-end gap-2">
-            <label className="flex-1"><span className="text-muted-foreground">Fiyat (metre başına)</span>
+            <label className="flex-1"><span className="text-muted-foreground">{basis === "KG" ? "Fiyat (kilo başına)" : "Fiyat (metre başına)"}</span>
               <Input className="mt-1 text-right tabular-nums" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} /></label>
             <CurrencySelect value={currency} onChange={setCurrency} />
           </div>

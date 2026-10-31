@@ -24,12 +24,13 @@ import {
   type ReadinessClass, type ShipReadyPolicy, type ShipReadyState,
 } from "./helpers/ship-readiness.helper";
 import type { ShipReadyRule } from "./system-setting.service";
-import { holdViewsByCustomer, NO_HOLD_VIEW } from "./helpers/cari-hold-badge.helper";
+import { withCustomerHoldRows, type NO_HOLD_VIEW } from "./helpers/cari-hold-badge.helper";
 
-export type ReadyWorkUnit = "workOrder" | "deliveryNote" | "customerBatch" | "customer";
-export const READY_WORK_UNITS: readonly ReadyWorkUnit[] = ["workOrder", "deliveryNote", "customerBatch", "customer"];
-/** Gelen belge modülünün verisine dayanan birimler — modül kapalıyken 403 MODULE_DISABLED. */
-export const INCOMING_DOC_UNITS: readonly ReadyWorkUnit[] = ["deliveryNote", "customerBatch"];
+import { READY_WORK_UNITS, type ReadyWorkUnit } from "../constants/ready-work-units";
+
+export {
+  INCOMING_DOC_UNITS, NOTIFY_UNIT_READY_UNIT, notifyUnitNeedsIncomingDoc, READY_WORK_UNITS, type ReadyWorkUnit,
+} from "../constants/ready-work-units";
 
 /** `roll-delivery-note-line.helper` yukarı çözücüsüyle aynı tavan (döngüsel veri sonsuz yürümesin). */
 const MAX_DESCENT_DEPTH = 32;
@@ -342,7 +343,6 @@ export async function listReadyWorks(q: ReadyWorkQuery): Promise<{ success: true
   const hasMore = start >= 0 && start + limit < filtered.length;
   const last = page[page.length - 1];
   const nextCursor = hasMore && last ? encodeDynamicCursor({ v: JSON.stringify([STATE_RANK[last.state], last.label]), id: last.id, t: "s" }) : null;
-  const holds = await holdViewsByCustomer(page.map((r) => r.customerId));
-  const items = page.map(({ customerIds: _omit, ...row }) => ({ ...row, customerHold: (row.customerId && holds.get(row.customerId)) || NO_HOLD_VIEW }));
+  const items = await withCustomerHoldRows(page.map(({ customerIds: _omit, ...row }) => row));
   return { success: true, data: { items, nextCursor, summary, policy } };
 }

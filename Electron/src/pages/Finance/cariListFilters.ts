@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { useLocation } from "react-router-dom";
 // Cari Hesaplar listesi — "Durum" süzgeci (Z-B ④, 2026-09-18): VARSAYILAN Hareketli (yalnız hareketi olan hesaplar,
 // `filter[hasActivity]=true`); Tümü süzgeç GÖNDERMEZ (bugünkü davranış). Hesap kartla doğar (Z-A) — listede "Yeni hesap" yolu YOK.
 export type CariActivityFilter = "active" | "all";
@@ -27,3 +29,8 @@ export function holdFilterFromSearch(search: string): CariHoldFilter {
   return new URLSearchParams(search).get("kilit") === "1" ? "held" : "all";
 }
 export const CARI_EMPTY_HELD_HINT = "Kilitli cari yok. Kilit, cari kartının Kilit sekmesinden ya da bu listedeki Kilit düğmesinden konur.";
+/** Cari Hesaplar "Kilit" süzgeci durumu — ilk değer derin bağlantıdan (`?kilit=1`). */
+export function useHoldFilter() {
+  const { search } = useLocation();
+  return useState<CariHoldFilter>(() => holdFilterFromSearch(search));
+}

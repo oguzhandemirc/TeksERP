@@ -13,6 +13,7 @@
 //   §5 DB seddi — çift aktif tarife / norm insert 23505; negatif ücret 23514; damga açansız 23514
 //   §6 pasif makine / pasif kalem → 409; kaldırma damgadır, ikinci kaldırma 409
 //   §7 HTTP — maliyet kapalıyken dört uç 403 MODULE_DISABLED; cost:read okur ama yazamaz (403); cost:write 201;
+//      §7g–j makine seçenek ucu: cost:read yeter (station:read gerekmez), izinsiz 403, modül kapalı 403;
 //      filter[machineId] süzer, çıplak machineId 400
 //   §8 audit — CREATE/UPDATE satırları var, yükte ücret/norm DEĞERİ yok
 //
@@ -20,6 +21,7 @@
 //    (çift aktif insert geçti; 37/1); index geri kondu → yeşil. ② `changeMachineCostRate` claim'inden `revokedAt: null`
 //    çıkarıldı → §2c + §2d ❌ (kaybeden STALE yerine ACTIVE_EXISTS; 36/2). ③ `consumable-norm.service.ts`e ikinci
 //    pencere yüklemi (`revokedAt: { gt: at }`) eklendi → §0a ❌ (37/1). Hepsi geri alındı → 38/0.
+//    ④ (D4-KUC3a, 2026-10-31) `/machine-options` ucundan `requirePermission("cost:read")` çıkarıldı → §7i ❌ (43/1); geri alındı → 44/0.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Ayarlar fotoğrafa döner; temizlik yalnız `temizle`.
 // =============================================================================
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -339,6 +341,21 @@ async function main(): Promise<void> {
     check("§7e çıplak machineId → 400 BARE_FILTER_PARAM", r7e.status === 400 && r7e.body.details?.code === "BARE_FILTER_PARAM", `${r7e.status}`);
     const r7f = await call("POST", "/api/cost/machine-rates", yazar.token, { machineId: m7, hourRateTry: "12.5" });
     check("§7f clientToken'sız yaratma → 400", r7f.status === 400, String(r7f.status));
+    // §7g–§7i (D4-KUC3a): Muhasebe `station:read` taşımaz → ücret ekranı makine seçeneklerini `cost:read` ucundan alır.
+    const pasifMakine = await makine(false);
+    const istasyoncu = await kullanici("istasyoncu", ["station:read"]);
+    const r7g = await call("GET", "/api/cost/machine-options", okur.token);
+    const secenek = (r7g.body.data as Array<Record<string, unknown>> | undefined) ?? [];
+    const alanlar = [...new Set(secenek.flatMap((o) => Object.keys(o)))].sort().join(",");
+    check("§7g ⭐ cost:read'li, station:read'siz kullanıcı makine seçeneklerini alır (aktif makine var, pasif yok)",
+      r7g.status === 200 && secenek.some((o) => o.id === m7) && !secenek.some((o) => o.id === pasifMakine), `${r7g.status} n=${secenek.length}`);
+    check("§7h seçenek satırı yalnız id/kod/ad taşır", alanlar === "code,id,name", alanlar);
+    const r7i = await call("GET", "/api/cost/machine-options", istasyoncu.token);
+    await setSetting(SETTING_KEYS.MALIYET_ENABLED, false);
+    const r7j = await call("GET", "/api/cost/machine-options", okur.token);
+    await setSetting(SETTING_KEYS.MALIYET_ENABLED, true);
+    check("§7i ⭐ cost:read'siz (yalnız station:read) → 403 (fail-closed)", r7i.status === 403, String(r7i.status));
+    check("§7j maliyet kapalıyken seçenek ucu 403 MODULE_DISABLED", r7j.status === 403 && r7j.body.details?.code === "MODULE_DISABLED", `${r7j.status}/${String(r7j.body.details?.code)}`);
 
     // ── §8 audit ──
     console.log("\n── §8 Audit ──");

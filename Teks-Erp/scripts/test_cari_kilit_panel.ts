@@ -52,7 +52,7 @@ function statik(): void {
   );
   check("§2b süzgeç parçası helper'dan (HELD_CARI_ACCOUNT_WHERE) ve list() where'i tek kurucudan", /params\.held\)[^\n]*HELD_CARI_ACCOUNT_WHERE/.test(src) && /const where = cariListWhere\(params\);/.test(list));
   for (const f of ["services/ready-works.service.ts", "services/roll-owner.service.ts", "services/customer.service.ts"]) {
-    check(`§4c ${path.basename(f)} rozeti holdViewsByCustomer'dan`, /holdViewsByCustomer\(|withCustomerHolds\(/.test(readFileSync(path.join(SRC, f), "utf8")));
+    check(`§4c ${path.basename(f)} rozeti holdViewsByCustomer'dan`, /holdViewsByCustomer\(|withCustomerHolds\(|withCustomerHoldRows\(/.test(readFileSync(path.join(SRC, f), "utf8")));
   }
   const ship = readFileSync(path.join(SRC, "services/shipping.service.ts"), "utf8");
   check("§4d sevk önizlemesi: şerit metni (cariHold.warning) warnings[]'e giden satırın aynısı", /warning: cariHoldWarning\(holdNotice\)/.test(ship) && ship.includes("warnings.push(cariHold.warning)"));

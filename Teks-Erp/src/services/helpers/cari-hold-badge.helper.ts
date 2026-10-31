@@ -39,3 +39,9 @@ export async function withCustomerHolds<T extends { data: unknown }>(res: T): Pr
   const holds = await holdViewsByCustomer(rows.map((r) => r.id));
   return { ...res, data: rows.map((r) => ({ ...r, cariHold: holds.get(r.id) ?? NO_HOLD_VIEW })) };
 }
+
+/** Sevke Hazır İşler satırlarına birincil müşterinin rozeti (`customerHold`) — sayfa başına tek sorgu. */
+export async function withCustomerHoldRows<T extends { customerId: string | null }>(rows: T[]): Promise<Array<T & { customerHold: ListHoldView }>> {
+  const holds = await holdViewsByCustomer(rows.map((r) => r.customerId));
+  return rows.map((r) => ({ ...r, customerHold: (r.customerId && holds.get(r.customerId)) || NO_HOLD_VIEW }));
+}

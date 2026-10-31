@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, FileSpreadsheet, Pencil } from "lucide-react";
-import { useLocation } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RelocatedToolStrip } from "@/pages/Reports/_v2/RelocatedTools";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
@@ -13,9 +12,10 @@ import { LabeledSelect } from "@/components/forms/LabeledSelect";
 import { DIRECTION_OPTIONS, ROLE_FILTER_DEFAULTS, SUBCONTRACTOR_OPTIONS, directionFilters, isRoleFilterDirty, subcontractorFilters, type DirectionFilter, type RoleFilterPair, type SubcontractorFilter } from "@/lib/partnerRoles";
 import { cariRoleLabel, listCari, money, type CariRow } from "./service";
 import { StatementDialog } from "./StatementDialog";
-import { activityFilters, CARI_ACTIVITY_DEFAULT, CARI_ACTIVITY_OPTIONS, CARI_EMPTY_ACTIVE_HINT, CARI_EMPTY_ALL_HINT, CARI_EMPTY_HELD_HINT, CARI_HOLD_FILTER_OPTIONS, holdFilterFromSearch, holdFilters, type CariActivityFilter, type CariHoldFilter } from "./cariListFilters";
+import { activityFilters, CARI_ACTIVITY_DEFAULT, CARI_ACTIVITY_OPTIONS, CARI_EMPTY_ACTIVE_HINT, CARI_EMPTY_ALL_HINT, CARI_EMPTY_HELD_HINT, CARI_HOLD_FILTER_OPTIONS, holdFilters, useHoldFilter, type CariActivityFilter, type CariHoldFilter } from "./cariListFilters";
 import { CariHoldButton, CariHoldDialog, CariStatusBadges } from "./CariRowExtras";
 import { CariEditDialog } from "./CariEditDialog";
+import { useCariFocus } from "./useCariFocus";
 
 /**
  * Para birimi başına AYRI satır — tek sayıya indirmek 1000 USD ile 30.000 TL'yi toplamak olurdu.
@@ -48,10 +48,10 @@ export function CariPage() {
   const [activity, setActivity] = useState<CariActivityFilter>(CARI_ACTIVITY_DEFAULT);
   const [statementFor, setStatementFor] = useState<CariRow | null>(null);
   const [editFor, setEditFor] = useState<CariRow | null>(null);
-  // D4-I3: "Kilit" süzgeci sunucuda; menüdeki "Kilitli cariler" `?kilit=1` ile açar.
-  const { search: locationSearch } = useLocation();
-  const [held, setHeld] = useState<CariHoldFilter>(() => holdFilterFromSearch(locationSearch));
+  const [held, setHeld] = useHoldFilter(); // D4-I3: süzgeç sunucuda; menü `?kilit=1` ile açar.
   const [holdFor, setHoldFor] = useState<CariRow | null>(null);
+  // Bildirimden `?focus=<hesapId>` → o carinin kartı (ekstre) açılır (D4-KUC3a).
+  useCariFocus(setStatementFor);
 
   const q = useQuery({
     queryKey: ["finance", "cari", search, filters.direction, filters.subcontractor, onlyWithBalance, activity, held],
