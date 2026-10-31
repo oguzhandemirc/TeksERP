@@ -132,6 +132,7 @@ import { hata, uyari } from "../lib/logger";
 import { hasRoll, isRollItem } from "./helpers/dispatch-item-kind.helper";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
 import { ekranYolu } from "../constants/panel-ekran-yolu";
+import { readReceiptTargetVariantsTx } from "./helpers/fason-receipt-variant.helper";
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -3500,10 +3501,15 @@ export class SubcontractorService {
         // @@unique(rollId,propertyId) çakışması koca tx'i retry'a sokmasın
         // (receiptProperty createMany'siyle aynı savunma).
         if (resolvedAppliedPropertyIds.length > 0) {
+          // D4-D3 (K8): ayar açıkken uygulanan bayrağın çeşidindeki İE hedefi (desen) doğan topa — aynı tx;
+          // çeşit özelliği değersiz satır olarak da gelmişse değerli satır onun yerini alır (aktif çift tekil).
+          const variants = await readReceiptTargetVariantsTx(tx, { workOrderId: data.workOrderId, appliedFlagIds: resolvedAppliedPropertyIds });
+          const valued = new Set(variants.map((v) => v.propertyId));
           await tx.rollProperty.createMany({
-            data: bornRollInputs.flatMap(({ id }) =>
-              resolvedAppliedPropertyIds.map((propertyId) => ({ rollId: id, propertyId }))
-            ),
+            data: bornRollInputs.flatMap(({ id }) => [
+              ...resolvedAppliedPropertyIds.filter((propertyId) => !valued.has(propertyId)).map((propertyId) => ({ rollId: id, propertyId })),
+              ...variants.map((v) => ({ rollId: id, propertyId: v.propertyId, valueId: v.valueId })),
+            ]),
             skipDuplicates: true,
           });
         }

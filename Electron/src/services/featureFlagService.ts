@@ -605,6 +605,8 @@ export interface FeatureFlags {
    *  yalnız bilgi olarak yazar, uyarı/onay çıkarmaz. Sapma defterine yazım bu
    *  ayardan BAĞIMSIZDIR (fark her hâlükârda kaydedilir). */
   fasonShrinkWarnEnabled: boolean;
+  /** Fason kabulünde İE hedef çeşit değeri (desen) doğan topa (D4-D3, K8; default false). */
+  fasonReceiptApplyTargetVariant: boolean;
   /** Çekme toleransı — YÜZDE (default 10). Altındaki fark uyarı üretmez.
    *  ⚠️ null DÖNMEZ: alan temizlenirse fabrika varsayılanına döner. */
   fasonShrinkTolerancePct: number;
