@@ -92,6 +92,7 @@ describe("§1 üç yüzeyin dağılımı", () => {
       "finance",
       "gelen-belge",
       "kartela",
+      "maliyet",
       "orders",
       "production",
       "shipping",

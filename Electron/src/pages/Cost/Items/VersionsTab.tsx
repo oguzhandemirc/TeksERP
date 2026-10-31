@@ -11,7 +11,14 @@ import { fmtFactoryDateTime } from "@/lib/factory-time";
 import { CostBreakdown } from "../shared/CostBreakdown";
 import type { CostVersion } from "../shared/cost-types";
 import { fmtDec } from "../shared/format";
+import { presentationAmount } from "../shared/PresentationNote";
 import { costItemService } from "./service";
+
+/** Sunum alanlarını yalnız varsa taşır (ayar TRY iken nesne bugünkü gibi kalır). */
+function presentationOf(v: CostVersion) {
+  const { sunumDovizi, sunumKuru, sunumKuruKaynagi, sunumUyarisi, standartDovizM } = v;
+  return sunumDovizi ? { sunumDovizi, sunumKuru, sunumKuruKaynagi, sunumUyarisi, standartDovizM } : {};
+}
 
 export function VersionsTab({ itemId, active }: { itemId: string; active: CostVersion | null }) {
   const qc = useQueryClient();
@@ -34,6 +41,7 @@ export function VersionsTab({ itemId, active }: { itemId: string; active: CostVe
               <span className="font-medium">v{v.surumNo}</span>{" "}
               {v.durum === "ACTIVE" ? <Badge>Aktif</Badge> : <Badge variant="muted">Geçersiz</Badge>}{" "}
               <span className="tabular-nums">{fmtDec(v.standartTlM)} TL/m</span>
+              {v.sunumDovizi && <span className="tabular-nums text-muted-foreground"> · {presentationAmount(v, v.standartDovizM)}</span>}
               <span className="text-muted-foreground"> · {fmtFactoryDateTime(v.hesaplananAt)}{v.gerekce ? ` · ${v.gerekce}` : ""}</span>
             </span>
             {v.durum !== "ACTIVE" && (
@@ -48,7 +56,7 @@ export function VersionsTab({ itemId, active }: { itemId: string; active: CostVe
         <section>
           <h3 className="mb-2 text-sm font-medium">Aktif sürüm v{active.surumNo} — kayıttaki döküm (donmuş)</h3>
           <CostBreakdown
-            sonuc={{ satirlar: active.satirlar, cozguKgM: active.cozguKgM, atkiKgM: active.atkiKgM, tezgahMSaat: active.tezgahMSaat, hamTlM: active.hamTlM, mamulTlM: active.mamulTlM, saglamTlM: null, genelGiderTlM: null, standartTlM: active.standartTlM }}
+            sonuc={{ satirlar: active.satirlar, cozguKgM: active.cozguKgM, atkiKgM: active.atkiKgM, tezgahMSaat: active.tezgahMSaat, hamTlM: active.hamTlM, mamulTlM: active.mamulTlM, saglamTlM: null, genelGiderTlM: null, standartTlM: active.standartTlM, ...presentationOf(active) }}
             eksikler={[]}
             uyarilar={active.uyarilar}
           />
