@@ -10,7 +10,7 @@
 // ikinci kaynak olmaz, zincir tek: doff varsa koşumdan, yoksa kolondan.
 // Bekçi (`test_subcontractor_weaving §5`) bu zincirleri başka dosyada aramaz.
 // =============================================================================
-import { Prisma } from "@prisma/client";
+import { Prisma, RollStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { K18_DEAD_STATUSES } from "../batch.service";
 
@@ -24,9 +24,10 @@ export type WeavingOrderOfRoll = {
   via: "DOFF" | "RECEIPT" | "ORDER";
 };
 
-/** "Bu işten doğan top" yüklemi (indirme zinciri ∪ doff'suz iş bağı) — sayı (detay) ve metre/liste (genel bakış) AYNI where'i okur. */
-export function rollsOfWeavingOrderWhere(weavingOrderId: string): Prisma.RollWhereInput {
-  return { OR: [{ doffEvent: { revokedAt: null, machineRun: { weavingOrderId } } }, { weavingOrderId }] };
+/** "Bu işten doğan top" yüklemi (indirme zinciri ∪ doff'suz iş bağı) — sayı (detay), metre/liste (genel bakış) ve gerçek maliyet paydası AYNI where'i okur. */
+export function rollsOfWeavingOrderWhere(weavingOrderId: string | string[]): Prisma.RollWhereInput {
+  const wo = Array.isArray(weavingOrderId) ? { in: weavingOrderId } : weavingOrderId;
+  return { OR: [{ doffEvent: { revokedAt: null, machineRun: { weavingOrderId: wo } } }, { weavingOrderId: wo }] };
 }
 
 /** Z1 (Y3 türetme, kolon yok): bu işten indirme yoluyla doğan (iptal edilmemiş) top sayısı — aynı zincir, aynı dosya. */
@@ -67,7 +68,8 @@ export async function receivedMetersByWeavingOrder(db: Db, weavingOrderIds: stri
 
 /**
  * SY-D3: işin CANLI top metresi (gerçek maliyet paydası), iki kova: `viaRun` indirme→koşum zinciri (B yolu),
- * `viaOrder` KK1 iş seçimi (A yolu, tezgah bilinmiyor). İptal/ölü top (`K18_DEAD_STATUSES`) paydaya GİRMEZ.
+ * `viaOrder` KK1 iş seçimi (A yolu, tezgah bilinmiyor). Yalnız İPTAL topu paydaya GİRMEZ; fason/tambur/kartela
+ * tüketimi (K18'in diğer üyeleri) dokunan metreyi yok etmez — boyahaneye giden ham top işin paydasında KALIR.
  */
 export async function liveRollMetersByWeavingOrder(
   db: Db, weavingOrderIds: string[],
@@ -75,10 +77,7 @@ export async function liveRollMetersByWeavingOrder(
   const out = new Map<string, { viaRun: Prisma.Decimal; viaOrder: Prisma.Decimal }>();
   if (weavingOrderIds.length === 0) return out;
   const rolls = await db.roll.findMany({
-    where: {
-      status: { notIn: K18_DEAD_STATUSES },
-      OR: [{ doffEvent: { revokedAt: null, machineRun: { weavingOrderId: { in: weavingOrderIds } } } }, { weavingOrderId: { in: weavingOrderIds } }],
-    },
+    where: { status: { not: RollStatus.CANCELLED }, ...rollsOfWeavingOrderWhere(weavingOrderIds) },
     select: { initialQty: true, weavingOrderId: true, doffEvent: { select: { revokedAt: true, machineRun: { select: { weavingOrderId: true } } } } },
     orderBy: { id: "asc" },
   });

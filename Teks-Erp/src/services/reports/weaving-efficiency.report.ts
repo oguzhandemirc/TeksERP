@@ -105,7 +105,9 @@ export function weavingEfficiencyTable(r: WeavingEfficiencyReport): TabloBlok {
 }
 
 export function buildWeavingEfficiencySunumu(r: WeavingEfficiencyReport, window: ResolvedDayRange): RaporSunumu {
-  const measured = r.rows.filter((w) => w.actualCostTry !== null && w.standardPerMTry !== null && w.totalMeters.gt(0));
+  // Devam eden işte maliyet şu ana akar ama tezgâhtaki kumaş henüz top değil → ana sayıya yalnız bitmiş işler girer.
+  const measured = r.rows.filter((w) => !w.ongoing && w.actualCostTry !== null && w.standardPerMTry !== null && w.totalMeters.gt(0));
+  const ongoingCount = r.rows.filter((w) => w.ongoing).length;
   const actual = measured.reduce((a, w) => a + Number(w.actualCostTry), 0);
   const standard = measured.reduce((a, w) => a + Number(w.standardPerMTry!.mul(w.totalMeters)), 0);
   const deviation = standard > 0 ? Math.round(((actual - standard) / standard) * 1000) / 10 : null;
@@ -113,6 +115,7 @@ export function buildWeavingEfficiencySunumu(r: WeavingEfficiencyReport, window:
   const warnings: string[] = [];
   if (r.currency !== "TRY" && r.fxRate === null) warnings.push(`${r.currency} kuru bulunamadı: tutarlar "eksik" yazıldı (sıfır değil).`);
   if (Number(r.runlessMeters) > 0) warnings.push(`Koşum açılmadan dokunan ${r.runlessMeters} m kumaşın gerçek maliyeti ölçülemedi (koşumsuz metre).`);
+  if (ongoingCount > 0) warnings.push(`Devam eden ${ongoingCount} iş tabloda gösterildi, sapma ana sayısına girmedi (tezgâhtaki kumaş henüz top değil).`);
   if (timeSource === "NORM") warnings.push("Tezgâh süresi metre normundan hesaplandı (Kârlılık makine süresi ayarı: NORM).");
   return {
     anahtar: WEAVING_EFFICIENCY_KEY,
@@ -129,7 +132,9 @@ export function buildWeavingEfficiencySunumu(r: WeavingEfficiencyReport, window:
     tablo: weavingEfficiencyTable(r),
     tanimlar: [
       { ad: "Standart dokuma", aciklama: "Ürünün etkin standart maliyet sürümündeki dokuma satırları: tezgâh, işçilik, enerji ya da atkı ücreti." },
-      { ad: "Gerçek dokuma", aciklama: "İşin koşumlarındaki tezgâh saati çarpı tezgâhın o tarihteki saat ücreti, işin iptal edilmemiş toplarının metresine bölünür. Atkı ipliği tartılmaz; iplik bu rapora girmez." },
+      { ad: "Gerçek dokuma", aciklama: "İşin koşumlarındaki tezgâh saati çarpı tezgâhın o tarihteki saat ücreti, işin iptal edilmemiş toplarının metresine bölünür (boyahaneye ya da tambura geçmiş ham top da sayılır). Atkı ipliği tartılmaz; iplik bu rapora girmez." },
+      { ad: "Satır kapsamı", aciklama: "Dönem yalnız işi seçer; satırdaki saat, maliyet ve metre işin tüm ömrüdür. Sapma ana sayısına yalnız bitmiş işler girer." },
+      { ad: "Kur", aciklama: "TL dışı sunumda standart ve gerçek tutarlar günün kuruyla çevrilir; standart maliyet ekranındaki donmuş sürüm kurundan farklı olabilir, fark yüzdesi etkilenmez." },
       { ad: "Koşumsuz top", aciklama: "Kalite girişinde işe bağlanan ama tezgâhı bilinmeyen top. İşin hiç koşumu yoksa gerçek maliyet ölçülemez." },
       { ad: "Duruş payı", aciklama: "Kapanmış koşumlarda duruş süresinin koşum süresine oranı." },
       { ad: EKSIK, aciklama: "Kur, saat ücreti, koşum ya da standart maliyet bulunamadığı için değer hesaplanamadı; sıfır demek değildir." },

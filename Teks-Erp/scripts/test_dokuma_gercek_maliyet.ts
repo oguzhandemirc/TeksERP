@@ -2,7 +2,7 @@
 // BEKÇİ — Dokuma gerçek maliyeti + verimlilik farkı raporu (SY-D3; TASARIM-2026-10-31 §5.5, §16.1, K7)
 // =============================================================================
 //   §1 ⭐ A + B yolu fikstüründe gerçek TL/m el hesabına eşit (10 sa × 120 TL ÷ (60+40 B + 20 A) = 10); iptal topu
-//      ve geri alınmış indirmenin topu paydaya GİRMEZ
+//      ve geri alınmış indirmenin topu paydaya GİRMEZ; boyahaneye/tambura geçmiş (tüketilmiş) ham top KALIR (§1e)
 //   §2 koşumsuz iş → gerçek null + KOSUM_YOK, metresi "koşumsuz metre" kovasında; ücretsiz tezgâh → null (0 değil)
 //   §3 NORM kipi (kârlılık makine süresi ayarı) → süre = koşum metresi ÷ norm (100 ÷ 50 = 2 sa → 240 ÷ 120 = 2)
 //   §4 standart dokuma = dokuma satırları (tezgah + işçilik + enerji), iplik girmez; teorik/gerçek m/saat, duruş payı
@@ -13,6 +13,8 @@
 //   ① `liveRollMetersByWeavingOrder`dan `status: { notIn: K18_DEAD_STATUSES }` kaldırıldı → §1a/§1c ❌
 //   ② dokuma helper'ında `machineHourCostTry(h, rate)` yerine `h.mul(rate.hourRateTry)` → §6a ❌
 //   ③ `money()` kur yokken 0 döndü → §5a ❌
+//   ④ (inceleme düzeltmesi) payda süzgeci yeniden `notIn: K18_DEAD_STATUSES` yapıldı → §1e ❌
+//   ⑤ (inceleme düzeltmesi) ana sayıdan `!w.ongoing` süzgeci kaldırıldı → §5e ❌
 // ⚠️ DB'ye yazar → `hedefDbEngeli()` ilk adım; fikstür `finally`de silinir.
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -62,12 +64,12 @@ async function fixture(now: Date) {
     select: { id: true },
   });
   ids.version = v.id;
-  const wo = async (n: string) => {
-    const r = await prisma.weavingOrder.create({ data: { weavingOrderNumber: code(n), itemId: fabric, executionKind: "IN_HOUSE", status: "IN_PROGRESS" }, select: { id: true } });
+  const wo = async (n: string, status: "IN_PROGRESS" | "COMPLETED" = "COMPLETED") => {
+    const r = await prisma.weavingOrder.create({ data: { weavingOrderNumber: code(n), itemId: fabric, executionKind: "IN_HOUSE", status }, select: { id: true } });
     ids.orders.push(r.id);
     return r.id;
   };
-  const [A, B, C] = [await wo("A"), await wo("B"), await wo("C")];
+  const [A, B, C, Dw, E] = [await wo("A"), await wo("B"), await wo("C"), await wo("D"), await wo("E", "IN_PROGRESS")];
   const run = (machineId: string, weavingOrderId: string, p: Record<string, unknown>) =>
     prisma.machineRun.create({ data: { machineId, weavingOrderId, ...p } as never, select: { id: true } });
   const doff = (machineId: string, machineRunId: string, extra: Record<string, unknown> = {}) =>
@@ -93,7 +95,16 @@ async function fixture(now: Date) {
   const rC = await run(t2, C, { startedAt: new Date(now.getTime() - 5 * H), endedAt: new Date(now.getTime() - 3 * H), producedM: 10, stopSecAtClose: 0 });
   const dC = await doff(t2, rC.id);
   await roll("C1", 10, { doffEventId: dC.id });
-  return { A, B, C };
+  // D: ham top boyahaneye (fason kabul) ve tambura geçti — tüketim dokunan metreyi yok etmez, paydada KALIR.
+  const rD = await run(t1, Dw, { startedAt: new Date(now.getTime() - 9 * H), endedAt: new Date(now.getTime() - 4 * H), producedM: 60, stopSecAtClose: 0 });
+  const dD = await doff(t1, rD.id);
+  await roll("D1", 40, { doffEventId: dD.id }, RollStatus.SUBCONTRACTOR_CONSUMED);
+  await roll("D2", 20, { doffEventId: dD.id }, RollStatus.TAMBUR_CONSUMED);
+  // E: açık koşum (maliyet şu ana akar, tezgâhtaki kumaş henüz top değil) → ana sayıya GİRMEZ.
+  const rE = await run(t1, E, { startedAt: new Date(now.getTime() - 8 * H), producedM: 5 });
+  const dE = await doff(t1, rE.id);
+  await roll("E1", 5, { doffEventId: dE.id });
+  return { A, B, C, D: Dw, E };
 }
 
 const eq = (d: Prisma.Decimal | null, v: string) => d !== null && d.toDecimalPlaces(6).eq(D(v));
@@ -107,6 +118,9 @@ async function serviceSections(f: Awaited<ReturnType<typeof fixture>>, now: Date
   check("§1b koşum süresi 10 sa, maliyet 10 × 120 = 1200 TL (geri alınmış koşum girmez)", eq(a!.machineHours, "10") && eq(a!.actualCostTry, "1200"), `${s(a!.machineHours)} sa · ${s(a!.actualCostTry)}`);
   check("§1c ⭐ gerçek dokuma TL/m = 1200 ÷ 120 = 10 (el hesabı)", eq(a!.actualPerMTry, "10"), s(a!.actualPerMTry));
   check("§1d süre kaynağı OTURUM varsayılanında KOSUM; tezgâh kodu satırda", a!.timeSource === "KOSUM" && a!.machines.length === 1 && a!.missing.length === 0, JSON.stringify(a!.missing));
+  const [dd] = await weavingActualCostTx(prisma, [f.D], "OTURUM", now);
+  check("§1e ⭐ boyahaneye (SUBCONTRACTOR_CONSUMED) ve tambura (TAMBUR_CONSUMED) geçen ham top paydada KALIR: 40+20 → 600 ÷ 60 = 10",
+    eq(dd!.totalMeters, "60") && eq(dd!.actualPerMTry, "10") && !dd!.missing.includes("TOP_YOK"), `${s(dd!.totalMeters)} · ${s(dd!.actualPerMTry)}`);
 
   console.log("\n§2 — koşumsuz iş, ücretsiz tezgâh");
   check("§2a koşumsuz iş: gerçek null + KOSUM_YOK, metresi 25 (koşumsuz kova)", b!.actualPerMTry === null && b!.actualCostTry === null && b!.missing.includes("KOSUM_YOK") && eq(b!.metersViaOrder, "25"));
@@ -123,7 +137,9 @@ async function serviceSections(f: Awaited<ReturnType<typeof fixture>>, now: Date
   const range = { from: new Date(now.getTime() - 48 * H), to: new Date(now.getTime() + H) };
   const active = await weavingOrdersActiveIn(prisma, range);
   check("§4c rapor iş kümesi aralıkta koşumu ya da topu olan işleri alır (A, B, C)", [f.A, f.B, f.C].every((id) => active.includes(id)), `${active.length}`);
-  return { currency: "TRY", fxRate: null, rows: [a!, b!, c!], runlessMeters: "25.000" };
+  const [e] = await weavingActualCostTx(prisma, [f.E], "OTURUM", now);
+  check("§1f açık koşumlu iş devam ediyor işaretli", e!.ongoing && e!.openRunCount === 1, `${e!.ongoing}`);
+  return { currency: "TRY", fxRate: null, rows: [a!, b!, c!, e!], runlessMeters: "25.000" };
 }
 
 function presentationSection(r: WeavingEfficiencyReport): void {
@@ -139,6 +155,8 @@ function presentationSection(r: WeavingEfficiencyReport): void {
   const sun = buildWeavingEfficiencySunumu(r, window);
   check("§5d ana sayı yalnız ölçülebilen işlerden: (1200 − 6×120) ÷ 720 = %66,7; koşumsuz metre yan sayıda 25",
     sun.anaSayi.deger === 66.7 && sun.yanSayilar[1]!.deger === 25 && sun.uyarilar.some((u) => u.includes("koşumsuz")), `${sun.anaSayi.deger}`);
+  check("§5e ⭐ açık koşumlu (devam eden) iş ana sayıya ve ölçülen metreye GİRMEZ (120 m), uyarıda sayılır",
+    sun.yanSayilar[0]!.deger === 120 && sun.uyarilar.some((u) => u.includes("Devam eden 1 iş")), `${sun.yanSayilar[0]!.deger}`);
 }
 
 function structuralSection(): void {
@@ -150,8 +168,10 @@ function structuralSection(): void {
     !weaving.includes("hourRateTry") && /machineHourCostTry\(/.test(weaving));
   check("§6b kârlılık helper'ında `hourRateTry` çarpımı TEK yerde (paylaşılan fonksiyon)",
     (prof.match(/\.mul\([^)]*hourRateTry\)/g) ?? []).length === 1 && /export function machineHourCostTry/.test(prof));
-  check("§6c payda zinciri tek dosyada (`liveRollMetersByWeavingOrder`), ölü top süzgeci orada",
-    /liveRollMetersByWeavingOrder/.test(weaving) && /status: \{ notIn: K18_DEAD_STATUSES \}[\s\S]*doffEvent: \{ revokedAt: null, machineRun/.test(src("src/services/helpers/weaving-order-of-roll.helper.ts")));
+  const rollHelper = src("src/services/helpers/weaving-order-of-roll.helper.ts");
+  check("§6c payda zinciri tek dosyada: `liveRollMetersByWeavingOrder` iş yüklemini `rollsOfWeavingOrderWhere`den alır (kopya OR yok)",
+    /liveRollMetersByWeavingOrder/.test(weaving) && /status: \{ not: RollStatus\.CANCELLED \}, \.\.\.rollsOfWeavingOrderWhere\(weavingOrderIds\)/.test(rollHelper)
+      && (rollHelper.match(/doffEvent: \{ revokedAt: null, machineRun/g) ?? []).length === 1);
 
   console.log("\n§7 — uç ve katalog");
   const route = src("src/routes/reports/maliyet.report.routes.ts");
