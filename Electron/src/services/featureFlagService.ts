@@ -302,6 +302,10 @@ export interface FeatureFlags {
   financeCariHoldReleaseBySamePerson: "ALLOW" | "DENY";
   /** SY-J1: maliyet sunum dövizi (varsayılan `TRY`). */
   costPresentationCurrency: "TRY" | "USD" | "EUR";
+  /** D4-G2a: kârlılıkta dış fason maliyeti kaynağı (backend aynası; varsayılan `FATURA_ONCE`). */
+  costProfitSubcontractSource: "FATURA_ONCE" | "YALNIZ_FATURA";
+  /** D4-G2a: kârlılıkta sarf birim fiyatı kaynağı (backend aynası; varsayılan `ALIS_FIYATI`). */
+  costProfitConsumablePriceSource: "ALIS_FIYATI" | "SON_ALIS_FATURASI";
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; tahsis elle silinebilir. */
   financeAutoAllocateOnPaymentEnabled: boolean;

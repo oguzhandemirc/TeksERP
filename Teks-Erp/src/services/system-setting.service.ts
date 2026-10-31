@@ -191,6 +191,10 @@ export const SETTING_KEYS = {
   FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON: "finance.cariHold.releaseBySamePerson",
   /** SY-J1: maliyet sunum dövizi — `TRY` (varsayılan; yanıt bayt-aynı) · `USD` · `EUR`. Motor TL'de kalır. */
   COST_PRESENTATION_CURRENCY: "maliyet.sunumDovizi",
+  /** D4-G2a: kârlılıkta dış fason maliyeti — `FATURA_ONCE` (varsayılan; onaylı fason faturası, yoksa tarife tahmini) · `YALNIZ_FATURA`. */
+  COST_PROFIT_SUBCONTRACT_SOURCE: "maliyet.karlilik.disFasonKaynagi",
+  /** D4-G2a: kârlılıkta sarf birim fiyatı — `ALIS_FIYATI` (varsayılan; kartın alış fiyatı) · `SON_ALIS_FATURASI`. */
+  COST_PROFIT_CONSUMABLE_PRICE_SOURCE: "maliyet.karlilik.sarfFiyatKaynagi",
   /** Tahsilat/ödeme kaydında en eski açık faturalara OTOMATİK kapama — FIFO
    *  (default FALSE). Bugün kapama (`PaymentAllocation`) elle seçilir; açıkken
    *  tutar vade/tarih sırasıyla açık bakiyelere dağıtılır ve artan tutar
@@ -1070,6 +1074,14 @@ export const DEFAULT_CARI_HOLD_RELEASE_BY_SAME_PERSON: CariHoldReleaseBySamePers
 export type CostPresentationCurrency = "TRY" | "USD" | "EUR";
 export const COST_PRESENTATION_CURRENCIES: CostPresentationCurrency[] = ["TRY", "USD", "EUR"];
 export const DEFAULT_COST_PRESENTATION_CURRENCY: CostPresentationCurrency = "TRY";
+/** D4-G2a: kârlılık dış fason kaynağı (rapor okuma anında uygular; sonuç saklanmaz). */
+export const PROFIT_SUBCONTRACT_SOURCES = ["FATURA_ONCE", "YALNIZ_FATURA"] as const;
+export type ProfitSubcontractSource = (typeof PROFIT_SUBCONTRACT_SOURCES)[number];
+export const DEFAULT_PROFIT_SUBCONTRACT_SOURCE: ProfitSubcontractSource = "FATURA_ONCE";
+/** D4-G2a: kârlılık sarf birim fiyatı kaynağı. */
+export const PROFIT_CONSUMABLE_PRICE_SOURCES = ["ALIS_FIYATI", "SON_ALIS_FATURASI"] as const;
+export type ProfitConsumablePriceSource = (typeof PROFIT_CONSUMABLE_PRICE_SOURCES)[number];
+export const DEFAULT_PROFIT_CONSUMABLE_PRICE_SOURCE: ProfitConsumablePriceSource = "ALIS_FIYATI";
 
 /** Tambur plan kapısı EN kolu (bkz. `SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_CHECK`). */
 export type TamburPlanWidthCheck = "ENFORCE" | "OFF";
@@ -1918,6 +1930,10 @@ export interface FeatureFlags {
   financeCariHoldReleaseBySamePerson: CariHoldReleaseBySamePerson;
   /** SY-J1: maliyet sunum dövizi (varsayılan `TRY` = bugünkü TL-yalnız yanıt). */
   costPresentationCurrency: CostPresentationCurrency;
+  /** D4-G2a: kârlılık dış fason kaynağı (varsayılan `FATURA_ONCE`). */
+  costProfitSubcontractSource: ProfitSubcontractSource;
+  /** D4-G2a: kârlılık sarf birim fiyatı kaynağı (varsayılan `ALIS_FIYATI`). */
+  costProfitConsumablePriceSource: ProfitConsumablePriceSource;
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; otomatik tahsis elle
    *  silinebilir; farklı para birimli fatura atlanır. */
@@ -2577,6 +2593,8 @@ export class SystemSettingService {
       financeCariHoldDefaultScope: await readFinanceCariHoldDefaultScope(cacheClient),
       financeCariHoldReleaseBySamePerson: await readFinanceCariHoldReleaseBySamePerson(cacheClient),
       costPresentationCurrency: await readCostPresentationCurrency(cacheClient),
+      costProfitSubcontractSource: await readCostProfitSubcontractSource(cacheClient),
+      costProfitConsumablePriceSource: await readCostProfitConsumablePriceSource(cacheClient),
       financeAutoAllocateOnPaymentEnabled:
         await readFinanceAutoAllocateOnPaymentEnabled(cacheClient),
       yarnBlockNegativeBalanceEnabled: await readYarnBlockNegativeBalanceEnabled(cacheClient),
@@ -3133,6 +3151,20 @@ export class SystemSettingService {
         throw AppError.badRequest(`costPresentationCurrency şunlardan biri olmalı: ${COST_PRESENTATION_CURRENCIES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.COST_PRESENTATION_CURRENCY, v, "Maliyet ekranlarında tutarların gösterildiği döviz (hesap TL'de kalır)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "costProfitSubcontractSource")) {
+      const v = input.costProfitSubcontractSource;
+      if (typeof v !== "string" || !PROFIT_SUBCONTRACT_SOURCES.includes(v as ProfitSubcontractSource)) {
+        throw AppError.badRequest(`costProfitSubcontractSource şunlardan biri olmalı: ${PROFIT_SUBCONTRACT_SOURCES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.COST_PROFIT_SUBCONTRACT_SOURCE, v, "Kârlılıkta dış fason maliyeti — önce fatura (yoksa tarife tahmini) · yalnız fatura", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "costProfitConsumablePriceSource")) {
+      const v = input.costProfitConsumablePriceSource;
+      if (typeof v !== "string" || !PROFIT_CONSUMABLE_PRICE_SOURCES.includes(v as ProfitConsumablePriceSource)) {
+        throw AppError.badRequest(`costProfitConsumablePriceSource şunlardan biri olmalı: ${PROFIT_CONSUMABLE_PRICE_SOURCES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.COST_PROFIT_CONSUMABLE_PRICE_SOURCE, v, "Kârlılıkta sarf birim fiyatı — kart alış fiyatı · son alış faturası", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "financeAutoAllocateOnPaymentEnabled")) {
@@ -5365,6 +5397,16 @@ export function readFinanceCariHoldDefaultScope(tx?: Pick<typeof prisma, "system
 /** SY-J1: maliyet sunum dövizi — tanınmayan değer varsayılana (`TRY`) düşer. */
 export function readCostPresentationCurrency(tx?: Pick<typeof prisma, "systemSetting">): Promise<CostPresentationCurrency> {
   return readServiceEnum(SETTING_KEYS.COST_PRESENTATION_CURRENCY, COST_PRESENTATION_CURRENCIES, DEFAULT_COST_PRESENTATION_CURRENCY, tx);
+}
+
+/** D4-G2a: kârlılık dış fason kaynağı — tanınmayan değer varsayılana (`FATURA_ONCE`) düşer. */
+export function readCostProfitSubcontractSource(tx?: Pick<typeof prisma, "systemSetting">): Promise<ProfitSubcontractSource> {
+  return readServiceEnum(SETTING_KEYS.COST_PROFIT_SUBCONTRACT_SOURCE, PROFIT_SUBCONTRACT_SOURCES, DEFAULT_PROFIT_SUBCONTRACT_SOURCE, tx);
+}
+
+/** D4-G2a: kârlılık sarf fiyatı kaynağı — tanınmayan değer varsayılana (`ALIS_FIYATI`) düşer. */
+export function readCostProfitConsumablePriceSource(tx?: Pick<typeof prisma, "systemSetting">): Promise<ProfitConsumablePriceSource> {
+  return readServiceEnum(SETTING_KEYS.COST_PROFIT_CONSUMABLE_PRICE_SOURCE, PROFIT_CONSUMABLE_PRICE_SOURCES, DEFAULT_PROFIT_CONSUMABLE_PRICE_SOURCE, tx);
 }
 
 /** D4-I1a: koyan kişi kendi kilidini açabilir mi — tanınmayan değer varsayılana (`ALLOW`) düşer. */

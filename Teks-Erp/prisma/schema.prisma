@@ -1103,6 +1103,9 @@ model Station {
   /// `label.copiesSource = STATION` iken okunur; NULL = genel adet (`label.copies`).
   /// DB CHECK 1–5 (`stations_default_label_copies_range`); çözücü `label-copies.helper.ts`.
   defaultLabelCopies Int?
+  /// En ölçer yeteneği (D4-E2, K10): adım bitişinde ölçülen en `Roll.width`e yazılır, iz
+  /// `RollOperation.metadata.widthBefore/widthAfter`. VARSAYILAN FALSE = bugün (hiçbir istasyon en yazmaz).
+  capturesWidth      Boolean @default(false)
 
   // Relations
   machines             Machine[]
