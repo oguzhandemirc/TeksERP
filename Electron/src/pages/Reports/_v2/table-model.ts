@@ -5,8 +5,8 @@ import { BIRIM_METNI, PARA_BIRIMLERI, type TabloBlok, type TabloKolonu } from ".
 
 const isNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-/** Para kolonu ve para kartı (`formatFigure`) TEK biçim: sabit 0 ondalık (sunucu anlatısı `sayi-bicim` ile aynı). */
-export const MONEY_NUM_FMT = "#,##0";
+/** Para kolonu ve para kartı (`formatFigure`) TEK biçim: kuruşlu, sabit 2 ondalık (1e kararı, sektör standardı; D4-KUC2 g). */
+export const MONEY_NUM_FMT = "#,##0.00";
 
 /** Kolonun sayı biçimi: para kolonu sabit `MONEY_NUM_FMT`; diğeri hepsi tam sayıysa ondalıksız, değilse tek hane; sayı yoksa biçimsiz (literal: biçim bekçisi okur). */
 export function columnFormat(table: TabloBlok, column: TabloKolonu): Pick<ReportColumn, "numFmt"> {

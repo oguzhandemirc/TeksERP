@@ -62,7 +62,8 @@ import { resolveSeriesFormat } from "./number-series.service";
 import { updateSeriesNumberSource } from "./helpers/series-write.helper";
 import { alarmEnableBlocked } from "./helpers/loom-floor.helper";
 import { isShiftDefined } from "./helpers/loom-alarm-shift.helper";
-import { resetNotificationBaselines } from "./helpers/notification-baseline.helper";
+import { resetNotificationBaseline, resetNotificationBaselines } from "./helpers/notification-baseline.helper";
+import { READY_WORK_KIND } from "../constants/notification-catalog-sevkiyat";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { TAMBUR_PLAN_WIDTH_TOLERANCE_CM } from "../constants/tambur-plan-gate";
 import {
@@ -658,8 +659,8 @@ export const SETTING_KEYS = {
   /**
    * SEVKE HAZIR İŞLER (D4-J1, 1e kararları K25–K26): hazırlık TÜRETİLİR, saklanmaz. Kural
    * (ALL_DONE | METER_THRESHOLD) + tolerans yalnız `effectiveShipReadyPolicy` (ship-readiness.helper)
-   * üzerinden okunur. `notifyUnits` + `scanMinutes` KOSUL bildiriminin (D4-J2) ayarlarıdır; bu dilimde
-   * yalnız kayıtlıdır (okuyan iş yok).
+   * üzerinden okunur. `notifyUnits` + `scanMinutes` KOSUL bildiriminin (D4-J2) ayarlarıdır; okuyucusu
+   * `notification-sources/is.ts` `readyWorkSubjects` (boş küme = bildirim kapalı).
    */
   SHIPPING_READY_RULE: "shipping.ready.rule",
   SHIPPING_READY_TOLERANCE_PCT: "shipping.ready.tolerancePct",
@@ -4090,7 +4091,10 @@ export class SystemSettingService {
       }
       // Tekil + kanonik sıra: aynı küme iki farklı JSON olarak yazılmasın.
       const units = SHIP_READY_NOTIFY_UNITS.filter((u) => v.includes(u));
+      const before = await readShippingReadyNotifyUnits();
       await this.set(SETTING_KEYS.SHIPPING_READY_NOTIFY_UNITS, units, "Sevke hazır işler — bildirim birimleri (boş = kapalı)", userId);
+      // Birim eklenince tür damgası düşer → sonraki tur SESSİZ taban (o an hazır birikim toplu bildirim üretmez; §12.2).
+      if (units.some((u) => !before.includes(u))) await resetNotificationBaseline(prisma, READY_WORK_KIND);
     }
     if (Object.prototype.hasOwnProperty.call(input, "shippingReadyScanMinutes")) {
       const v = input.shippingReadyScanMinutes;

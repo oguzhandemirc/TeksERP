@@ -31,6 +31,9 @@ export interface Item {
   linearDensityDen: string | null;
   /** KUMAŞ → varsayılan çözgü kartı (E4, 2026-09-18): dokuma işi formu ve sunucu ön-dolum kaynağı; yalnız FABRIC. */
   warpSpecId?: string | null;
+  /** SY-A4: atkı kartı + desen kartı (yalnız KUMAŞ; eski sunucuda yok). */
+  weftSpecId?: string | null;
+  weaveDesignId?: string | null;
   /** K4P ürün kartı eni (cm); Decimal metin gelir. Eski sunucuda yok. */
   widthCm?: string | number | null;
   /** Saha (mobil KK1) "yeni desen" olarak açtı → admin gözden geçirmesi bekleniyor. */
@@ -54,6 +57,9 @@ export interface ItemCreatePayload {
   linearDensityDen?: string | null;
   /** Varsayılan çözgü kartı — yalnız KUMAŞ; boş = `null` (temizler). */
   warpSpecId?: string | null;
+  /** SY-A4: atkı/desen kartı — anahtar yalnız seçici görünür ve alan dolu/temizlenmişse gider. */
+  weftSpecId?: string | null;
+  weaveDesignId?: string | null;
   /** K4P en (cm) — yalnız Kalite Güvence açıkken ve KUMAŞta gider; boş = `null` (temizler). */
   widthCm?: string | null;
   /** Düzenlemede admin onayı: kaydedince saha işareti temizlenir (false). */

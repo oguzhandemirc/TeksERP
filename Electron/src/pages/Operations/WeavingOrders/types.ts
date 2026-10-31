@@ -40,6 +40,13 @@ export interface WeavingOrder {
   color: Ref | null;
   warpSpec: Ref | null;
   subcontractor: Ref | null;
+  /** SY-A4: iş emrinin yapı seçimi — sunucu YALNIZ doluyken gönderir (yapısız işte anahtar yok). */
+  weftSpecId?: string | null;
+  weftSpec?: Ref;
+  weaveDesignId?: string | null;
+  weaveDesign?: Ref;
+  recipeId?: string | null;
+  recipe?: Ref & { variantCode: string | null };
   /** Kapanışı engelleyen açık koşum sayısı (backend `endedAt IS NULL AND revokedAt IS NULL`). */
   openRunCount: number;
   /** Z1 (01): sipariş satırı bağları — küme REPLACE, boş = bağsız (stoka dokuma meşru). Eski backend göndermez → opsiyonel okunur. */

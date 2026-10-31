@@ -6,11 +6,12 @@
 //   ② 3 duruşlu fikstür (gece yarısını aşan 1 · geri alınan 1 · açık 1 + kapalı 1): toplam dakika EL HESABINA eşit,
 //      geri alınan hariç, açık "sürüyor"; gün kırılımı sınırda bölünmüş; zarf (ana sayı · tablo · uyarı) aynı sayıyı basar,
 //   ③ HTTP: 200 + zarf; bilinmeyen tür 400; rejim kapalı (dokuma ∧ ayar kapalı) 403 MODULE_DISABLED,
-//   ④ bulut: katalogda yalnız `üretim ∧ ayar` iken; `dokuma/duruslar` kaydı ayardan bağımsız (weavingOpen dokunulmaz),
+//   ④ bulut: katalogda panel kapısıyla aynı (`dokuma ∨ (üretim ∧ ayar)`, D4-KUC2 a); `dokuma/duruslar` kaydı ayardan bağımsız (weavingOpen dokunulmaz),
 //   ⑤ dokuma fabrikasında mevcut duruş raporu (`dokuma/duruslar`) ayardan bağımsız: ayar KAPALI/AÇIK bayt-aynı
 //      (PR öncesi davranışla snapshot DEĞİL; PR dokuma rapor servisine dokunmaz),
 //   ⑥ AST: rapor kapsamı `machineStopScopeWhere` + `machineStopRegime`den; kopya istasyon-türü where'i, ayar
 //      okuyucusu, çıplak gün kesimi yok; bulut kapısı rejim helper'ından.
+// NEGATİF SONDA (2026-10-31, D4-KUC2 a): bulut kapısı eski `machineStopRegime().general`e döndürülünce §5e + §6d kırmızı (30/2).
 // NEGATİF SONDALAR (2026-10-30, D4-A4):
 //   S1 `getMachineStopReport` kapsamı helper yerine `{ machine: { station: { kind: { not: StationKind.WEAVING } } } }` → §6a + §6b kırmızı (28/2).
 //   S2 `splitByFactoryDay` tek parça döndürdü (gün bölme kaldırıldı) → §1b + §2d kırmızı (28/2).
@@ -208,6 +209,13 @@ async function main(): Promise<void> {
     check("§5c bulut kataloğunun geri kalanı (dokuma/duruslar dahil) ayardan bağımsız", catOff === catOn && catOn.includes("dokuma/duruslar"));
     const loomFab = await call(`/api/reports/production/makine-duruslari?${q}`);
     check("§5d dokuma açık fabrikada rapor açık (dokuma ∨ …)", loomFab.status === 200, `status=${loomFab.status}`);
+    // D4-KUC2 (a): bulut kapısı panel rota kapısıyla AYNI yüklem — dokuma açık + takip KAPALI iken de patron görür.
+    await setSetting(SETTING_KEYS.MACHINE_STOP_TRACKING_ENABLED, false);
+    const loomOnlyPanel = await call(`/api/reports/production/makine-duruslari?${q}`);
+    const loomOnlyCloud = (await remoteReportCatalog()).map((e) => e.anahtar);
+    check("§5e dokuma ∧ takip KAPALI: panel 200 ⇒ bulut kataloğunda production/makine-duruslari VAR (aynı kapı)",
+      loomOnlyPanel.status === 200 && loomOnlyCloud.includes("production/makine-duruslari"), `panel=${loomOnlyPanel.status}`);
+    await setSetting(SETTING_KEYS.MACHINE_STOP_TRACKING_ENABLED, true);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
@@ -220,8 +228,8 @@ async function main(): Promise<void> {
     !/station:\s*\{\s*kind/.test(code) && !/StationKind\.WEAVING/.test(code) && !/readMachineStopTrackingEnabled|readDokumaEnabled/.test(code));
   check("§6c gün kesimi constants/time'dan; çıplak SQL gün kesimi yok", /from "\.\.\/\.\.\/constants\/time"/.test(code) && !new RegExp(`${["DATE", "TRUNC"].join("_")}|AT TIME ZONE`, "i").test(code));
   const cloud = readFileSync(join(SRC, "cloud-sync/report-requests.ts"), "utf8");
-  check("§6d bulut kapısı rejim helper'ından (machineStopRegime().general); weavingOpen dokuma'da kalır",
-    /machineStopCloudOpen = async \(\): Promise<boolean> => \(await machineStopRegime\(\)\)\.general/.test(cloud) && /key: "dokuma\/duruslar"[^\n]*gate: weavingOpen/.test(cloud) && /key: "production\/makine-duruslari"[^\n]*gate: machineStopCloudOpen/.test(cloud));
+  check("§6d bulut kapısı rejim helper'ından (machineStopRegimeOpen = panel kapısı); weavingOpen dokuma'da kalır",
+    /machineStopCloudOpen = async \(\): Promise<boolean> => machineStopRegimeOpen\(await machineStopRegime\(\)\)/.test(cloud) && /key: "dokuma\/duruslar"[^\n]*gate: weavingOpen/.test(cloud) && /key: "production\/makine-duruslari"[^\n]*gate: machineStopCloudOpen/.test(cloud));
   const route = readFileSync(join(SRC, "routes/reports/temel-uretim.routes.ts"), "utf8");
   check("§6e uç kapısı requireMachineStopRegime + rapor kapısı", /router\.get\("\/production\/makine-duruslari", requireMachineStopRegime, \.\.\.reportGate\("production\/makine-duruslari"\)/.test(route));
 }
