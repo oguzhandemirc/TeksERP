@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { shipmentService } from "./service";
 import { shipmentStatusLabels, shipmentStatusTones } from "./types";
 import { ShipmentDocDialog } from "./ShipmentDocDialog";
+import { ShipmentRollListButton } from "./ShipmentRollListButton";
 import { ShipmentSheetBody } from "./ShipmentSheetBody";
 import { normalizeSearch, rollMatchesQuery, rollMatchesContext, csvIds } from "./roll-search";
 import { PrintHistoryLink } from "@/components/print/PrintHistoryLink";
@@ -148,6 +149,7 @@ export function ShipmentDetailSheet({
               <Button type="button" size="sm" variant="default" className="gap-1" onClick={() => setNoteOpen(true)}>
                 <FileText className="h-3.5 w-3.5" /> Sevk İrsaliyesi
               </Button>
+              <ShipmentRollListButton shipmentId={d.id} />
               {/* Sevk Et: PLANNED sevkiyat BURADAN da çıkarılır (2026-08-22) — Sevk
                   Kapısı ekranı yalnız sevk onayı bayrağı açıkken menüde; bayrak
                   kapalıyken storno ile PLANNED'a dönmüş (ya da bayrak açıkken
