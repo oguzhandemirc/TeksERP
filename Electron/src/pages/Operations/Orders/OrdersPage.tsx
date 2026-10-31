@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { ItemUnitCode } from "@/lib/item-unit";
 import { Ban, PanelRight, Pencil, Plus, Wrench } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
@@ -35,8 +34,7 @@ import { useTabsStore } from "@/store/tabs";
 import { useOpenTopLevel } from "@/components/layout/tabs/use-tab-target";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import type { Order } from "./types";
-import { type OrderFormValues } from "./schema";
-import { linePlanPayload, type OrderLinePlanPayload } from "./orderLinePlanPayload";
+import { buildCreatePayload, buildUpdatePayload, type CreatePayload, type UpdatePayload } from "./orderPayload";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { usePreferences } from "@/providers/PreferencesProvider";
@@ -114,134 +112,6 @@ const FILTERS: FilterDef[] = [
 ];
 
 const QUERY_KEY = "orders";
-
-interface CreatePayload {
-  /** Boş = backend otomatik üretir (SIP + günlük sayaç). Doluysa o kullanılır. */
-  orderNumber?: string;
-  /** İdempotency anahtarı — timeout sonrası tekrar gönderimde mükerrer sipariş önlenir. */
-  clientToken?: string;
-  customerId: string;
-  branchId: string | null;
-  currency?: string;
-  deadline: string | null;
-  lines: ({
-    itemId: string;
-    colorId: string | null;
-    quantity: number;
-    /** Gönderilmezse sunucu kalem kartından kopyalar. */
-    unit?: ItemUnitCode;
-    width: number | null;
-    unitPrice?: string | null;
-    customerItemName?: string | null;
-    customerColorName?: string | null;
-    cutNote?: string | null;
-    requiredPropertyIds: string[];
-  } & OrderLinePlanPayload)[];
-}
-
-interface UpdateLinePayload extends OrderLinePlanPayload {
-  /** Mevcut OrderLine.id (update). Yeni satırda undefined (create). */
-  id?: string;
-  itemId: string;
-  colorId: string | null;
-  quantity: number;
-  unit?: ItemUnitCode;
-  width: number | null;
-  unitPrice?: string | null;
-  customerItemName?: string | null;
-  customerColorName?: string | null;
-  cutNote?: string | null;
-  requiredPropertyIds: string[];
-}
-
-interface UpdatePayload {
-  customerId?: string;
-  branchId?: string | null;
-  currency?: string;
-  deadline?: string | null;
-  /** Kalem listesi (sipariş WO'ya bağlı değilse). Diff backend'de yapılır. */
-  lines?: UpdateLinePayload[];
-}
-
-function buildCreatePayload(
-  v: OrderFormValues,
-  pricingEnabled: boolean,
-  clientToken: string,
-): CreatePayload {
-  // Elle girildiyse o numara; boş bırakıldıysa alanı hiç göndermeyip backend'in
-  // otomatik numaralandırmasını (SIP + günlük sayaç) devreye sokuyoruz.
-  const manualOrderNumber = v.orderNumber?.trim();
-  return {
-    ...(manualOrderNumber ? { orderNumber: manualOrderNumber } : {}),
-    clientToken,
-    customerId: v.customerId,
-    branchId: v.branchId || null,
-    ...(pricingEnabled ? { currency: v.currency.trim().toUpperCase() } : {}),
-    deadline: v.deadline ? new Date(v.deadline).toISOString() : null,
-    lines: v.lines.map((l) => ({
-      itemId: l.itemId,
-      colorId: l.colorId ?? null,
-      quantity: l.quantity,
-      ...(l.unit ? { unit: l.unit } : {}),
-      width: l.width ?? null,
-      ...(pricingEnabled
-        ? { unitPrice: l.unitPrice ? String(l.unitPrice) : null }
-        : {}),
-      customerItemName: l.customerItemName?.trim() ? l.customerItemName.trim() : null,
-      customerColorName: l.customerColorName?.trim() ? l.customerColorName.trim() : null,
-      cutNote: l.cutNote?.trim() ? l.cutNote.trim() : null,
-      requiredPropertyIds: l.requiredPropertyIds ?? [],
-      ...linePlanPayload(l, "create"),
-    })),
-  };
-}
-
-
-function buildUpdatePayload(
-  v: OrderFormValues,
-  pricingEnabled: boolean,
-  editing: Order,
-): UpdatePayload {
-  // Kalemler ne zaman gönderilir: sipariş PARTIAL_SHIPPED değil + hiçbir kalem
-  // aktif (CANCELLED dışı) bir WO'ya bağlı değil. Dialog aynı kontrolü yapıp
-  // editor'u açıyor; backend de aynı kontrolü tekrar enforce ediyor.
-  const linesEditable =
-    editing.status !== "PARTIAL_SHIPPED" &&
-    editing.lines.every((l) =>
-      (l.workOrderLinks ?? []).every((link) => link.workOrder.status === "CANCELLED"),
-    );
-
-  const existingIds = new Set(editing.lines.map((l) => l.id));
-
-  return {
-    customerId: v.customerId,
-    branchId: v.branchId ?? null,
-    ...(pricingEnabled ? { currency: v.currency.trim().toUpperCase() } : {}),
-    deadline: v.deadline ? new Date(v.deadline).toISOString() : null,
-    ...(linesEditable
-      ? {
-          lines: v.lines.map((l) => ({
-            // Form'daki clientId existing line id'siyle eşleşiyorsa update,
-            // değilse yeni satır (id verilmez).
-            ...(existingIds.has(l.clientId) ? { id: l.clientId } : {}),
-            itemId: l.itemId,
-            colorId: l.colorId ?? null,
-            quantity: l.quantity,
-            ...(l.unit ? { unit: l.unit } : {}),
-            width: l.width ?? null,
-            ...(pricingEnabled
-              ? { unitPrice: l.unitPrice ? String(l.unitPrice) : null }
-              : {}),
-            customerItemName: l.customerItemName?.trim() ? l.customerItemName.trim() : null,
-            customerColorName: l.customerColorName?.trim() ? l.customerColorName.trim() : null,
-            cutNote: l.cutNote?.trim() ? l.cutNote.trim() : null,
-            requiredPropertyIds: l.requiredPropertyIds ?? [],
-            ...linePlanPayload(l, "update"),
-          })),
-        }
-      : {}),
-  };
-}
 
 export function OrdersPage() {
   const qc = useQueryClient();

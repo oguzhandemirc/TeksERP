@@ -31,7 +31,7 @@ vi.mock("@/pages/FabricProperties/service", () => ({ fabricPropertyService: {} }
 vi.mock("@/lib/picker-loader", () => ({ loadAllForPicker: () => Promise.resolve({ data: [] }) }));
 vi.mock("@/components/forms/color-picker/ColorPickerModal", () => ({ ColorPickerModal: () => <button type="button">Renk seç...</button> }));
 
-const line = (o: Partial<OrderLineFormValues> = {}): OrderLineFormValues => ({ clientId: "l1", itemId: "", colorId: null, quantity: 0, width: null, unitPrice: "", customerItemName: "", customerColorName: "", requiredPropertyIds: [], cutNote: "", ...o });
+const line = (o: Partial<OrderLineFormValues> = {}): OrderLineFormValues => ({ clientId: "l1", itemId: "", colorId: null, quantity: 0, width: null, unitPrice: "", customerItemName: "", customerColorName: "", requiredPropertyIds: [], targetValues: [], cutNote: "", ...o });
 
 afterEach(() => vi.useRealTimers());
 
