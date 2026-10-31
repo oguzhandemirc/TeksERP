@@ -7,14 +7,17 @@
 //      bildirim YOK; açılınca bir "açıldı" bildirimi, tekrar yok; yeni kilit yeni anahtar
 //   §3 izinsiz hesap (`bulut:cari-bakiye:oku` yok) → ATLANDI · IZIN_YOK
 //   §4 bulutun hiç AKTİF görmediği (devreye alınıştan önce açılmış) kilit → açılış bildirimi YOK
+//   §6 ⭐ bakım budaması saklama süresi dolan cari-kilit satırını SİLMEZ → AKTİF kilit yeniden bildirilmez
 //   §5 eski uygulama: `cari-kilit` anahtarı OLMAYAN ayar gövdesi 200 (eksik tür varsayılandan); tanınmayan tür 400
 // ⭐ NEGATİF SONDA (ölçüldü 2026-10-31): `cariLockText` koyma anahtarına tur sayacı eklendi
 //    (`cari-kilit:<id>:<Date.now()>`) → §1a + §2a + §2b + §2c + §4a ❌ (9/5); geri alındı → 14/0.
+//    Bakım budamasından `kind: { not: CARI_LOCK_KIND }` kaldırıldı → §6a ❌ (14/1; aynı kilit 2. kez); geri alındı → 15/0.
 // Koşum: npx tsx scripts/test_bildirim_cari_kilit.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { withTesis } from "../src/lib/tenant";
 import { RecordingTransport } from "../src/push/transports";
+import { runDaily } from "../src/services/maintenance";
 import { asCariLock, cariLockText, type CariLockFact } from "../src/services/notification-cari-lock";
 import type { CariLock } from "../src/wire/api";
 import { ayar, ayarYaz, bildirimler, cihazKaydet, tur } from "./lib/bildirim-fikstur";
@@ -93,6 +96,14 @@ async function main(): Promise<void> {
     await kayitYaz(o, k.tesisId, "cari-hesap", hesap2, { id: hesap2, tur: "CUSTOMER", cariKartId: kart, aktif: true, kilit: eskiKilit });
     const r5 = await tur(o, k.tesisId, t);
     kontrol("§4a devreye alınıştan önce açılmış kilit → bildirim YOK", r5.created === 0 && !(await bildirimler(o, k.tesisId, "cari-kilit")).some((n) => n.dedupKey.includes(eskiKilit.kilitId)));
+
+    console.log("\n§6 bakım budaması");
+    const eski = new Date(o.saat.simdi() - (o.ctx.config.BILDIRIM_SAKLAMA_GUN + 1) * 86_400_000);
+    await withTesis(o.goc, { tesisId: k.tesisId }, (tx) => tx.$executeRaw`UPDATE notifications SET updated_at = ${eski}::timestamptz WHERE tesis_id = ${k.tesisId}::uuid AND kind = 'cari-kilit'`);
+    await runDaily(o.ctx, o.saat.simdi());
+    const r6 = await tur(o, k.tesisId, t);
+    const k2Satir = (await bildirimler(o, k.tesisId, "cari-kilit")).filter((n) => n.accountId === fin.accountId && n.dedupKey === `cari-kilit:${k2.kilitId}`);
+    kontrol("§6a ⭐ saklama süresi dolsa da cari-kilit satırı budanmaz; sonraki turda AKTİF kilit yeniden bildirilmez", k2Satir.length === 1 && r6.created === 0 && t.sent.length === 3, `${k2Satir.length}/${r6.created}/${t.sent.length}`);
 
     console.log("\n§5 eski uygulama ayar gövdesi");
     const eskiGovde = ayar() as unknown as { turler: Record<string, boolean> };

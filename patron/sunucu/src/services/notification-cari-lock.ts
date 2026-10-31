@@ -6,6 +6,8 @@ import type { Tx } from "../lib/db";
 import { CARI_LOCK_REASON_LABELS, CARI_LOCK_SCOPE_LABELS, type CariLock } from "../wire/api";
 
 export const CARI_LOCK_SOURCE = "cari-hesap";
+/** Bildirim türü; bakım budaması bu türü dışlar (tekrar kimliği satırın kendisi). */
+export const CARI_LOCK_KIND = "cari-kilit";
 /** Bildirim metnindeki cari adı kaynağı (izni `bulut:oturum`; her hesap okur). */
 export const CARI_NAME_SOURCE = "cari-kart";
 
@@ -59,7 +61,7 @@ export async function loadCariLocks(tx: Tx, tesisId: string): Promise<{ facts: C
   const cards = cardIds.length === 0 ? [] : await tx.projectionRow.findMany({ where: { tesisId, projection: CARI_NAME_SOURCE, recordId: { in: cardIds }, deletedAt: null }, select: { recordId: true, data: true } });
   const names = new Map(cards.map((c) => [c.recordId, typeof obj(c.data).ad === "string" ? (obj(c.data).ad as string) : null]));
   const released = locks.filter((l) => l.kilit.durum === "ACILDI").map((l) => placedKey(l.kilit));
-  const prior = released.length === 0 ? [] : await tx.notification.findMany({ where: { tesisId, kind: "cari-kilit", dedupKey: { in: released } }, select: { accountId: true, dedupKey: true } });
+  const prior = released.length === 0 ? [] : await tx.notification.findMany({ where: { tesisId, kind: CARI_LOCK_KIND, dedupKey: { in: released } }, select: { accountId: true, dedupKey: true } });
   return {
     facts: locks.map((l) => ({ ...l, ad: l.cariKartId ? (names.get(l.cariKartId) ?? null) : null })),
     seen: new Set(prior.map((p) => `${p.accountId}|${p.dedupKey}`)),

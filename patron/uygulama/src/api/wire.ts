@@ -213,7 +213,6 @@ export interface ListCapabilities {
   readonly aranabilir: readonly string[];
 }
 
-/** `GET /anlik/:projeksiyon`. */
 // ---------------------------------------------------------------- cari kilidi (D4-I6)
 
 /**
@@ -234,6 +233,7 @@ export const CARI_LOCK_SCOPE_LABELS: Readonly<Record<string, string>> = { KABUL:
 /** Sebep kodu → görünen ad (fabrika `CARI_HOLD_REASON_LABELS` ile aynı). */
 export const CARI_LOCK_REASON_LABELS: Readonly<Record<string, string>> = { BORC: "Borç", RISK: "Risk", ANLASMAZLIK: "Anlaşmazlık", DIGER: "Diğer" };
 
+/** `GET /anlik/:projeksiyon`. */
 export interface Snapshot {
   readonly projeksiyon: string;
   readonly veri: unknown;

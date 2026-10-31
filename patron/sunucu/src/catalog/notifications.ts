@@ -82,7 +82,7 @@ export const KIND_RULES: Readonly<Record<NotificationKind, KindRule>> = {
     description: "Fabrikada bir cari kilitlendi ya da kilidi açıldı (her kilit için bir kez)",
     source: "cari-hesap",
     permissions: ["bulut:cari-bakiye:oku"],
-    finance: false,
+    finance: true,
   },
 };
 
