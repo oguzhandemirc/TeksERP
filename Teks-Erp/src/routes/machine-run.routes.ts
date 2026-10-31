@@ -22,6 +22,7 @@ import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { closeMachineRun, openMachineRun, revokeMachineRun } from "../services/machine-run.service";
 import { listOpenMachineRuns } from "../services/loom-list.service";
 import { machineRunTabletContext } from "../services/helpers/machine-run-suggest.helper";
+import { weavingOrderTabletConstruction } from "../services/helpers/tablet-construction.helper";
 import { BULK_RUN_MAX, assignBulkRuns, bulkRunContext, finishBulkRuns, previewBulkRuns } from "../services/machine-run-bulk.service";
 
 const router = Router();
@@ -87,6 +88,32 @@ router.get("/tablet-context", requireAnyPermission("loom:run", ...MOBILE_DOKUMA)
   try {
     const q = z.object({ machineId: z.string().uuid() }).strict().parse(req.query);
     res.json({ success: true, data: await machineRunTabletContext(q.machineId) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/machine-runs/construction:
+ *   get:
+ *     tags: [MachineRuns]
+ *     summary: Tablet iş kartı — dokuma işinin etkin yapısı (atkı sırası, armür dosyası, sıklık), SALT-OKUNUR (SY-M4)
+ *     description: >
+ *       `resolveEffectiveConstruction(itemId, recipeId)`in dar tablet biçimi; armür ızgarası gönderilmez.
+ *       Yapısız iş → `data: null` (tablet hiçbir şey çizmez).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: weavingOrderId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "Etkin yapı ya da null" }
+ *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ *       404: { description: Dokuma işi yok }
+ */
+router.get("/construction", requireAnyPermission("loom:run", "loom:doff", ...MOBILE_DOKUMA), async (req, res, next) => {
+  try {
+    const q = z.object({ weavingOrderId: z.string().uuid("Geçersiz dokuma işi") }).strict().parse(req.query);
+    res.json({ success: true, data: await weavingOrderTabletConstruction(q.weavingOrderId) });
   } catch (e) {
     next(e);
   }
