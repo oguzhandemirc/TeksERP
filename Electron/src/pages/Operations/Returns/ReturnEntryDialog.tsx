@@ -127,6 +127,7 @@ export function ReturnEntryDialog({ open, onOpenChange, initialBarcode }: Props)
         onPickShipment={(id) => s.lookupShipmentMut.mutate(id)}
       />
       <ReturnLotPicker open={s.picker === "lot"} onOpenChange={(o) => !o && s.setPicker(null)} onPick={(id) => s.lookupLotMut.mutate(id)} />
+      {s.candidateDialog}
     </Dialog>
   );
 }

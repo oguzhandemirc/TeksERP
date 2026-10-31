@@ -43,7 +43,7 @@ const PUBLISHED_LIST = (customerId: string | null, currency: Currency): Prisma.P
 /** Bir listede ürünün satırı: renk eşleşen önce, sonra renksiz. */
 async function listLineTx(tx: Prisma.TransactionClient, list: Prisma.PriceListWhereInput, itemId: string, colorId: string | null) {
   const rows = await tx.priceListLine.findMany({
-    where: { priceList: list, itemId, OR: [{ colorId: null }, ...(colorId ? [{ colorId }] : [])] },
+    where: { priceList: list, itemId, recipeId: null, OR: [{ colorId: null }, ...(colorId ? [{ colorId }] : [])] },
     select: { id: true, colorId: true, unitPrice: true },
   });
   return rows.find((r) => colorId && r.colorId === colorId) ?? rows.find((r) => r.colorId === null) ?? null;
