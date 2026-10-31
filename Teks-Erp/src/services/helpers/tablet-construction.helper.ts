@@ -55,6 +55,6 @@ export function toTabletConstruction(weavingOrderId: string, c: EffectiveConstru
 /** `GET /machine-runs/construction?weavingOrderId=` — dokuma işinin ürün + varyantından etkin yapı; iş yoksa 404. */
 export async function weavingOrderTabletConstruction(weavingOrderId: string): Promise<TabletConstructionDto | null> {
   const wo = await prisma.weavingOrder.findUnique({ where: { id: weavingOrderId }, select: { id: true, itemId: true, recipeId: true } });
-  if (!wo) throw AppError.notFound("Dokuma işi bulunamadı");
+  if (!wo) throw AppError.notFound("Dokuma iş emri bulunamadı");
   return toTabletConstruction(wo.id, await resolveEffectiveConstruction(prisma, wo.itemId, wo.recipeId));
 }

@@ -98,7 +98,7 @@ router.get("/tablet-context", requireAnyPermission("loom:run", ...MOBILE_DOKUMA)
  * /api/machine-runs/construction:
  *   get:
  *     tags: [MachineRuns]
- *     summary: Tablet iş kartı — dokuma işinin etkin yapısı (atkı sırası, armür dosyası, sıklık), SALT-OKUNUR (SY-M4)
+ *     summary: Tablet iş kartı — dokuma iş emrinin etkin yapısı (atkı sırası, armür dosyası, sıklık), SALT-OKUNUR (SY-M4)
  *     description: >
  *       `resolveEffectiveConstruction(itemId, recipeId)`in dar tablet biçimi; armür ızgarası gönderilmez.
  *       Yapısız iş → `data: null` (tablet hiçbir şey çizmez).
@@ -108,11 +108,11 @@ router.get("/tablet-context", requireAnyPermission("loom:run", ...MOBILE_DOKUMA)
  *     responses:
  *       200: { description: "Etkin yapı ya da null" }
  *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
- *       404: { description: Dokuma işi yok }
+ *       404: { description: Dokuma iş emri yok }
  */
 router.get("/construction", requireAnyPermission("loom:run", "loom:doff", ...MOBILE_DOKUMA), async (req, res, next) => {
   try {
-    const q = z.object({ weavingOrderId: z.string().uuid("Geçersiz dokuma işi") }).strict().parse(req.query);
+    const q = z.object({ weavingOrderId: z.string().uuid("Geçersiz dokuma iş emri") }).strict().parse(req.query);
     res.json({ success: true, data: await weavingOrderTabletConstruction(q.weavingOrderId) });
   } catch (e) {
     next(e);
