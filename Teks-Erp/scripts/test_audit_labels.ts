@@ -174,6 +174,14 @@ if (tableLabels) {
     missingTables.join(", "),
   );
 
+  // D4-KUC2 (d): ROLL_METER_READING'i kurşun (kursun-meter.helper) VE tambur CUT/SUPERVISOR
+  // (meter-reading.helper) yazar — istasyona özgü ad tambur satırını "Kurşun" diye gösterirdi.
+  check(
+    "ROLL_METER_READING etiketi istasyon-bağımsız ('Metre Okuması')",
+    tableLabels.ROLL_METER_READING === "Metre Okuması",
+    String(tableLabels.ROLL_METER_READING),
+  );
+
   // Ölü etiket UYARIDIR, kırmızı değil: eski kayıtlar hâlâ o tableName'i taşıyor
   // olabilir (audit geriye dönük okunur — etiketi silmek geçmişi bozar).
   const dead = Object.keys(tableLabels).filter((t) => !tableLiterals.has(t)).sort();

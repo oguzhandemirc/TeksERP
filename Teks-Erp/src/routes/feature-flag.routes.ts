@@ -310,6 +310,8 @@ export const updateSchema = z.strictObject({
   // D4-G2a: kârlılık kaynakları (`PROFIT_SUBCONTRACT_SOURCES` / `PROFIT_CONSUMABLE_PRICE_SOURCES` ile birebir).
   costProfitSubcontractSource: z.enum(["FATURA_ONCE", "YALNIZ_FATURA"], { message: "Dış fason kaynağı FATURA_ONCE ya da YALNIZ_FATURA olmalı" }).optional(),
   costProfitConsumablePriceSource: z.enum(["ALIS_FIYATI", "SON_ALIS_FATURASI"], { message: "Sarf fiyatı kaynağı ALIS_FIYATI ya da SON_ALIS_FATURASI olmalı" }).optional(),
+  // SY-D2: dokuma standart maliyet yöntemi (`WEAVING_STANDARD_METHODS` ile birebir).
+  costWeavingStandardMethod: z.enum(["TEZGAH_SAATI", "ATKI_UCRETI"], { message: "Dokuma standart yöntemi TEZGAH_SAATI ya da ATKI_UCRETI olmalı" }).optional(),
   // D4-G2b: makine süresi, genel gider anahtarı, kategori sınıfları (`PROFIT_*` sabitleri ile birebir; harita süzgeci serviste).
   costProfitMachineTime: z.enum(["OTURUM", "VARDIYA", "NORM"], { message: "Makine süresi OTURUM, VARDIYA ya da NORM olmalı" }).optional(),
   costProfitOverheadKey: z.enum(["YOK", "METRE", "GELIR", "MAKINE_SAATI"], { message: "Genel gider anahtarı YOK, METRE, GELIR ya da MAKINE_SAATI olmalı" }).optional(),
@@ -588,6 +590,7 @@ export const updateSchema = z.strictObject({
   /** D4-B1: Tambur simüle metre kabulü (varsayılan açık) · ölçüm kaynağı zorunluluğu (varsayılan kapalı). */
   tamburSimulatedMeterEnabled: z.boolean().optional(),
   tamburMeasureSourceRequired: z.boolean().optional(),
+  tamburCalibrationCheck: z.enum(["KAPALI", "UYAR"], { message: "Sayaç kalibrasyon kontrolü KAPALI ya da UYAR olmalı" }).optional(),
   // production.kursunBypassEnabled — kurşun istasyonuna tablet konulmayan düzen (default false).
   // ENFORCE edilir ama yalnız YENİ dağıtım oluşturmayı kapılar; dağıtılmış iş emirleri
   // bayrak kapansa da bypass rejiminde biter.

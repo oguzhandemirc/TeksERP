@@ -225,7 +225,8 @@ function statik(): void {
     (fasonQ.match(/\$\{openDispatchItemsSql\(/g) ?? []).length === 2 && /queryOpenDispatchAges/.test(isKod));
   check("§B1 levent: koşul `finishForecastReport`u doğrudan çağırır", /finishForecastReport\(\{\}\)/.test(isKod));
   // B2 · eşik kopyası yok: is.ts'te sayı sabiti yalnız beyanlı küme (eşikler katalog paramSemasi'ndan).
-  const izinli = new Set([0, 1, 100, 300_000, 86_400_000]);
+  // 60_000 = dakika birimi (D4-J2 sevke hazır tarama saati; periyot ayardan `shipping.ready.scanMinutes`), eşik değil.
+  const izinli = new Set([0, 1, 100, 60_000, 300_000, 86_400_000]);
   const sf = ts.createSourceFile(isYol, isKod, ts.ScriptTarget.Latest, true);
   const yabanci: string[] = [];
   const gez = (n: ts.Node): void => {
@@ -233,7 +234,7 @@ function statik(): void {
     ts.forEachChild(n, gez);
   };
   gez(sf);
-  check("§B2 is.ts'te eşik/parametre kopyası yok (sayı sabiti ⊂ {0,1,100,300000,86400000})", yabanci.length === 0, yabanci.join(", "));
+  check("§B2 is.ts'te eşik/parametre kopyası yok (sayı sabiti ⊂ {0,1,100,60000,300000,86400000})", yabanci.length === 0, yabanci.join(", "));
   const paramAdlari = WORK_CONDITION_KINDS.flatMap((k) => Object.keys((getNotificationEntry(k).paramSemasi?.parse({}) ?? {}) as object));
   check("§B2 her katalog parametresi is.ts'te `num(kind, \"<ad>\")` ile okunur",
     paramAdlari.every((p) => isKod.includes(`num(kind, "${p}")`)), paramAdlari.join(","));

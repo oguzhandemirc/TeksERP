@@ -36,6 +36,13 @@ export const WEAVING_ORDER_SELECT = {
   item: { select: { id: true, code: true, name: true } },
   color: { select: { id: true, code: true, name: true } },
   warpSpec: { select: { id: true, code: true, name: true } },
+  // SY-A4: iş emrinin kendi yapı seçimi (doğuşta etkin yapıdan dolar); null'sa DTO'da anahtar YOK.
+  weftSpecId: true,
+  weaveDesignId: true,
+  recipeId: true,
+  weftSpec: { select: { id: true, code: true, name: true } },
+  weaveDesign: { select: { id: true, code: true, name: true } },
+  recipe: { select: { id: true, code: true, name: true, variantCode: true } },
   subcontractor: { select: { id: true, code: true, name: true } },
   // Z1: sipariş satırı bağları (pivot) — liste + detay aynı projeksiyon; levent sayısı Y2 bağından.
   orderLineLinks: { select: ORDER_LINE_LINK_SELECT, orderBy: { createdAt: "asc" as const } },
@@ -66,6 +73,13 @@ export interface WeavingOrderDto {
   color: { id: string; code: string; name: string } | null;
   warpSpec: { id: string; code: string; name: string } | null;
   subcontractor: { id: string; code: string; name: string } | null;
+  /** SY-A4: yalnız DOLUYSA çizilir — yapısız işte yanıt bayt-aynı (eski istemci görmez). */
+  weftSpecId?: string;
+  weftSpec?: { id: string; code: string; name: string };
+  weaveDesignId?: string;
+  weaveDesign?: { id: string; code: string; name: string };
+  recipeId?: string;
+  recipe?: { id: string; code: string; name: string; variantCode: string | null };
   /** Kapanışı engelleyen açık koşum sayısı (`endedAt IS NULL AND revokedAt IS NULL`). */
   openRunCount: number;
   /** Z1 (Y1): bağlı sipariş satırları — boş dizi = stoka dokuma (meşru). */
@@ -81,6 +95,10 @@ export interface WeavingOrderCreateInput {
   itemId: string;
   colorId?: string | null;
   warpSpecId?: string | null;
+  /** SY-A4: verilmezse atkı/desen kartı ürünün etkin yapısından dolar; varyant türetilmez. */
+  weftSpecId?: string | null;
+  weaveDesignId?: string | null;
+  recipeId?: string | null;
   plannedM?: number | string | null;
   executionKind: WeavingExecutionKind;
   subcontractorId?: string | null;
@@ -113,13 +131,22 @@ export const WEAVING_ORDER_STATUS_LABEL: Record<WeavingOrderStatus, string> = {
   CANCELLED: "iptal edildi",
 };
 
+/** Yapı seçimi yalnız DOLU alanlarıyla — DTO ve audit görünümü bunu yayar (yapısız işte boş nesne). */
+export function weavingConstructionView(row: WeavingOrderRow): Partial<Pick<WeavingOrderDto, "weftSpecId" | "weftSpec" | "weaveDesignId" | "weaveDesign" | "recipeId" | "recipe">> {
+  return {
+    ...(row.weftSpecId && row.weftSpec ? { weftSpecId: row.weftSpecId, weftSpec: row.weftSpec } : {}),
+    ...(row.weaveDesignId && row.weaveDesign ? { weaveDesignId: row.weaveDesignId, weaveDesign: row.weaveDesign } : {}),
+    ...(row.recipeId && row.recipe ? { recipeId: row.recipeId, recipe: row.recipe } : {}),
+  };
+}
+
 export function toWeavingOrderDto(row: WeavingOrderRow): WeavingOrderDto {
-  const { _count, closedById: _c, cancelledById: _x, ...rest } = row;
-  void _c;
-  void _x;
+  const { _count, closedById: _c, cancelledById: _x, weftSpecId: _w, weftSpec: _ws, weaveDesignId: _d, weaveDesign: _wd, recipeId: _r, recipe: _rc, ...rest } = row;
+  void [_c, _x, _w, _ws, _d, _wd, _r, _rc];
   const { orderLineLinks, ...scalar } = rest;
   return {
     ...scalar,
+    ...weavingConstructionView(row),
     plannedM: row.plannedM === null ? null : Number(row.plannedM),
     openRunCount: _count.machineRuns,
     orderLines: orderLineLinks.map(toOrderLineLinkDto),
@@ -143,6 +170,9 @@ export function weavingOrderAuditView(row: WeavingOrderRow): Record<string, unkn
     notes: row.notes,
     cancelReason: row.cancelReason,
     orderLines: orderLineLinksAuditView(row.orderLineLinks),
+    ...(row.weftSpecId ? { weftSpecId: row.weftSpecId } : {}),
+    ...(row.weaveDesignId ? { weaveDesignId: row.weaveDesignId } : {}),
+    ...(row.recipeId ? { recipeId: row.recipeId } : {}),
   };
 }
 

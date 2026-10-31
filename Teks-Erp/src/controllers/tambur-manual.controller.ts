@@ -13,6 +13,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { meterSourceSchema } from "../services/helpers/meter-reading.helper";
+import { meterCalibrationWarnings, withResponseWarnings } from "../services/helpers/meter-calibration.helper";
 import { TamburManualService } from "../services/tambur-manual.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { foldTypeSchema } from "../services/helpers/fold-type";
@@ -255,13 +256,12 @@ export class TamburManualController {
     try {
       const body = manualRollSchema.parse(req.body);
       const stamp = await getStampContext(req, { enforceForMobile: true });
-      res.status(201).json(
-        await this.service.createManualRoll(body, {
-          userId: req.user?.userId,
-          machineId: stamp?.machineId ?? req.device?.machineId ?? null,
-          stationId: stamp?.stationId ?? null,
-        }),
-      );
+      const result = await this.service.createManualRoll(body, {
+        userId: req.user?.userId,
+        machineId: stamp?.machineId ?? req.device?.machineId ?? null,
+        stationId: stamp?.stationId ?? null,
+      });
+      res.status(201).json(withResponseWarnings(result, await meterCalibrationWarnings([body.measure])));
     } catch (error) {
       next(error);
     }
@@ -276,13 +276,12 @@ export class TamburManualController {
     try {
       const body = produceSchema.parse(req.body);
       const stamp = await getStampContext(req, { enforceForMobile: true });
-      res.status(201).json(
-        await this.service.produceFinishedRoll(body, {
-          userId: req.user?.userId,
-          machineId: stamp?.machineId ?? req.device?.machineId ?? null,
-          stationId: stamp?.stationId ?? null,
-        }),
-      );
+      const result = await this.service.produceFinishedRoll(body, {
+        userId: req.user?.userId,
+        machineId: stamp?.machineId ?? req.device?.machineId ?? null,
+        stationId: stamp?.stationId ?? null,
+      });
+      res.status(201).json(withResponseWarnings(result, await meterCalibrationWarnings([body.measure])));
     } catch (error) {
       next(error);
     }

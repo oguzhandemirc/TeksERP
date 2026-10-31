@@ -27,6 +27,10 @@ export const orderLineSchema = z.object({
     .optional()
     .or(z.literal("")),
   requiredPropertyIds: z.array(z.string()).optional().default([]),
+  // SY-K2 plan alanları: varyant (NULL = desen geneli), top boyu, hedef değerler (kuşak).
+  recipeId: z.string().nullable().optional(),
+  pieceLengthM: z.number().positive("Top boyu 0'dan büyük olmalı").nullable().optional(),
+  targetValues: z.array(z.object({ propertyId: z.string(), valueId: z.string() })).optional(),
   cutNote: z
     .string()
     .max(500, "Kesim notu en fazla 500 karakter olabilir")

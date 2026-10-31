@@ -190,7 +190,7 @@ export const TABLE_LABELS: Record<string, string> = {
   CUSTOMER_DELIVERY_NOTE: "Gelen Belge Taslağı",
   CUSTOMER_DELIVERY_NOTE_LINE: "Gelen Belge Satırı",
   DOCUMENT_SCAN: "Belge Taraması",
-  ROLL_METER_READING: "Kurşun Metre Okuması",
+  ROLL_METER_READING: "Metre Okuması",
   ROLL_METER_ACK: "Kurşun Metre Sapma Onayı",
   ROLL_METER_STOCK_APPLY: "Kurşun Metre Stok Uygulaması",
   ROLL_CUSTOMER_CODE: "Müşteri Barkodu",
