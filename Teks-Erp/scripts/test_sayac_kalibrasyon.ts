@@ -102,6 +102,12 @@ function section3(): void {
     statusOf(() => assertMeterCalibrationFields({ calibrationDueAt: "2026-04-01" }, "METER", { calibratedAt: new Date("2026-05-01T00:00:00Z"), calibrationDueAt: null })) === "CALIBRATION_DUE_BEFORE_DATE");
   check("§3f bozuk tarih 400", statusOf(() => assertMeterCalibrationFields({ calibratedAt: "dün" }, "METER")) === "INVALID_CALIBRATION_DATE");
   check("§3g 200 karakteri aşan not 400", statusOf(() => assertMeterCalibrationFields({ calibrationNote: "x".repeat(201) }, "METER")) === "INVALID_CALIBRATION_NOTE");
+  // ISO anı da fabrika gününün BAŞINA normalize edilir (dilim sınırına yakın an gün kaydırmasın).
+  const isoInstant = new Date(factoryDayStartOfKey("2026-03-10").getTime() + 23 * 3600_000 + 30 * 60_000);
+  const d4: Record<string, unknown> = { calibrationDueAt: isoInstant.toISOString() };
+  assertMeterCalibrationFields(d4, "METER");
+  check("§3i ISO anı → o fabrika gününün başı",
+    d4.calibrationDueAt instanceof Date && (d4.calibrationDueAt as Date).getTime() === factoryDayStartOfKey("2026-03-10").getTime());
   const d3: Record<string, unknown> = { kind: "SCALE" };
   assertMeterCalibrationFields(d3, "SCALE");
   check("§3h tür METER'den çıkınca alanlar temizlenir", d3.calibratedAt === null && d3.calibrationDueAt === null && d3.calibrationNote === null);

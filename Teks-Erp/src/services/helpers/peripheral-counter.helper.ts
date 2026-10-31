@@ -3,7 +3,7 @@
 // =============================================================================
 import { PeripheralKind } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
-import { factoryDayStartOfKey } from "../../constants/time";
+import { factoryDayStartOfKey, factoryYmd } from "../../constants/time";
 
 /**
  * H4 sayaç alanları (BaseController'dan yazılabilir — doğrulama burada): `counterMode` RESETTING/CUMULATIVE,
@@ -36,13 +36,13 @@ export function assertMeterCounterFields(data: Record<string, unknown>, kind: st
 
 const CALIBRATION_DATE_FIELDS = ["calibratedAt", "calibrationDueAt"] as const;
 
-/** "YYYY-AA-GG" → o FABRİKA gününün başı; ISO anı olduğu gibi; başka biçim 400 (sessiz düşürme yok). */
+/** "YYYY-AA-GG" ya da ISO anı → o FABRİKA gününün başı (vade gün bazlı; an dilim sınırında kaymasın); başka biçim 400. */
 function parseCalibrationDate(field: string, v: unknown): Date | null {
   if (v === null || v === "") return null;
-  if (v instanceof Date && !Number.isNaN(v.getTime())) return v;
+  if (v instanceof Date && !Number.isNaN(v.getTime())) return factoryDayStartOfKey(factoryYmd(v));
   if (typeof v === "string") {
     const d = /^\d{4}-\d{2}-\d{2}$/.test(v) ? factoryDayStartOfKey(v) : new Date(v);
-    if (/^\d{4}-\d{2}-\d{2}/.test(v) && !Number.isNaN(d.getTime())) return d;
+    if (/^\d{4}-\d{2}-\d{2}/.test(v) && !Number.isNaN(d.getTime())) return factoryDayStartOfKey(factoryYmd(d));
   }
   throw AppError.badRequest(
     field === "calibratedAt" ? "Kalibrasyon tarihi geçersiz (YYYY-AA-GG)" : "Kalibrasyon geçerlilik sonu geçersiz (YYYY-AA-GG)",
