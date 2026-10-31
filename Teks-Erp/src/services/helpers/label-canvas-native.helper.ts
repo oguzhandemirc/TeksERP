@@ -35,7 +35,7 @@ import {
   alignOffsetDots,
   applyTextCase,
 } from "./native-label.shared";
-import { fieldDisplayValue } from "./label-field-values";
+import { fieldDisplayValue, scanElementValue } from "./label-field-values";
 import {
   elementSupported,
   prepareElements,
@@ -214,7 +214,8 @@ export function emitCanvasPplb({ payload, format, copies, layout, iconGraphicsOk
   lines.push("D8");
   lines.push("I8,E,001"); // Select Symbol Set: 8-bit, Türkçe (CP1254) → gerçek Türkçe glif
 
-  const bc = payload.barcode ? eplData(payload.barcode) : "";
+  // Barkod/QR değeri ELEMAN başına (source: ROLL | CUSTOMER_CODE — D4-F3, tek kaynak scanElementValue).
+  const bcOf = (el: { source?: string }) => { const v = scanElementValue(payload, el); return v ? eplData(v) : ""; };
 
   for (const el of prepareElements(layout.elements, payload)) {
     if (!elementSupported(el.type, "PPLB")) continue;
@@ -250,11 +251,13 @@ export function emitCanvasPplb({ payload, format, copies, layout, iconGraphicsOk
         break;
       }
       case "qr": {
+        const bc = bcOf(el);
         if (!bc) break;
         lines.push(`b${x},${y},Q,m2,s${resolveQrScale(el.scale)},"${bc}"`);
         break;
       }
       case "code128": {
+        const bc = bcOf(el);
         if (!bc) break;
         const h = d(el.hMm ?? 9);
         // Modül (dar çubuk) kalınlığı — genişlik bununla ORANTILI büyür; mw yokken
@@ -355,7 +358,8 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
   lines.push("D11"); // basılan dot elemanı w×h çarpanı (1×1). Koyuluk AYRI komut (H).
   lines.push("H10");
 
-  const bc = payload.barcode ? cleanCtl(payload.barcode) : "";
+  // Barkod/QR değeri ELEMAN başına (source: ROLL | CUSTOMER_CODE — D4-F3, tek kaynak scanElementValue).
+  const bcOf = (el: { source?: string }) => { const v = scanElementValue(payload, el); return v ? cleanCtl(v) : ""; };
   // DPL rot: 1=0°, 2=90°, 3=180°, 4=270°
   const dplRot = (rot?: number) => String(((rot ?? 0) / 90) + 1);
   // Argox origin = SOL-ALT, Y YUKARI artar; tuval Y ÜSTTEN. Her Argox Y'si = tuval-üst
@@ -398,6 +402,7 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
         break;
       }
       case "qr": {
+        const bc = bcOf(el);
         if (!bc) break;
         // DPL QR: W1d (auto) = QR; W1c DataMatrix'ti (yanlış sembol). Modül TEK karakter
         // (dplBarcodeMul), c=d kare hücre, eee='000'. NORMAL tek-CR kaydı.
@@ -408,6 +413,7 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
         break;
       }
       case "code128": {
+        const bc = bcOf(el);
         if (!bc) break;
         const h = d(el.hMm ?? 9);
         const mw = Math.min(9, el.mw ?? 2); // dar+geniş modül; barkod yüksekliği 3 HANE (pad3)
@@ -494,7 +500,8 @@ export async function emitCanvasZpl({ payload, format, copies, layout }: CanvasR
   lines.push(`^PW${d(format.widthMm)}`);
   lines.push(`^LL${d(format.heightMm)}`);
 
-  const bc = payload.barcode ? zplData(payload.barcode) : "";
+  // Barkod/QR değeri ELEMAN başına (source: ROLL | CUSTOMER_CODE — D4-F3, tek kaynak scanElementValue).
+  const bcOf = (el: { source?: string }) => { const v = scanElementValue(payload, el); return v ? zplData(v) : ""; };
 
   for (const el of prepareElements(layout.elements, payload)) {
     if (!elementSupported(el.type, "ZPL")) continue;
@@ -528,12 +535,14 @@ export async function emitCanvasZpl({ payload, format, copies, layout }: CanvasR
         break;
       }
       case "qr": {
+        const bc = bcOf(el);
         if (!bc) break;
         const mag = Math.min(10, resolveQrScale(el.scale)); // ZPL BQ mag 1–10
         lines.push(`^FO${x},${y}^BQN,2,${mag}^FDQA,${bc}^FS`);
         break;
       }
       case "code128": {
+        const bc = bcOf(el);
         if (!bc) break;
         const h = d(el.hMm ?? 9);
         // ^BY = modül kalınlığı (genişlik orantılı) — mw yokken emit edilmez (bayt-uyum).

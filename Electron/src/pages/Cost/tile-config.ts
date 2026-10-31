@@ -5,7 +5,7 @@
 // Görüntüleme kapısı `cost:read` (teklif `quote:read`, fiyat listesi `price-list:read`); yazma sayfa İÇİNDE `PermissionGate`.
 // Menü satırı ayrıca `maliyetEnabled` bayrağına bağlıdır (`nav-config`): modül kapalıysa hiçbiri çizilmez.
 // =============================================================================
-import { Calculator, Factory, FileSignature, Layers, ListOrdered, SlidersHorizontal, Spool, type LucideIcon } from "lucide-react";
+import { Calculator, Cog, Factory, FileSignature, Layers, ListOrdered, PackageOpen, SlidersHorizontal, Spool, type LucideIcon } from "lucide-react";
 
 export interface CostTile {
   key: string;
@@ -44,6 +44,24 @@ export const costTiles: CostTile[] = [
     to: "/cost/finishing-rates",
     icon: Factory,
     tone: "text-station-fason",
+    permissionAny: ["cost:read"],
+  },
+  {
+    key: "machine-rates",
+    title: "Makine Saat Ücretleri",
+    description: "Kârlılıkta makineye giden maliyet: makine başına saat ücreti (TL) ve beklenen metre/saat — değişiklik şu andan itibaren geçerli, eskisi damgalı kalır.",
+    to: "/cost/machine-rates",
+    icon: Cog,
+    tone: "text-station-depo",
+    permissionAny: ["cost:read"],
+  },
+  {
+    key: "consumable-norms",
+    title: "Hizmet Sarf Normları",
+    description: "Hizmetin metresi başına harcanan sarf (ip, kurşun…): hizmet kalemi × sarf kalemi × miktar — değişiklik yeni sürümdür.",
+    to: "/cost/consumable-norms",
+    icon: PackageOpen,
+    tone: "text-warning",
     permissionAny: ["cost:read"],
   },
   {

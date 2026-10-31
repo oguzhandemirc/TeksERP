@@ -116,6 +116,8 @@ export function buildLandscapeRollLabelHtml({
   if (isVisibleOptIn(fields, "deliveryNoteItemText") && payload.deliveryNoteItemText) rows.push(row("deliveryNoteItemText", "Müşteri kumaşı", escapeHtml(payload.deliveryNoteItemText)));
   if (isVisibleOptIn(fields, "deliveryNoteColorText") && payload.deliveryNoteColorText) rows.push(row("deliveryNoteColorText", "Müşteri rengi", escapeHtml(payload.deliveryNoteColorText)));
   if (isVisibleOptIn(fields, "deliveryNoteRollNo") && payload.deliveryNoteRollNo) rows.push(row("deliveryNoteRollNo", "Müşteri top no", escapeHtml(payload.deliveryNoteRollNo)));
+  // Müşteri barkodu (D4-F3) — OPT-IN, kodsuz topta boş.
+  if (isVisibleOptIn(fields, "customerCode") && payload.customerCode) rows.push(row("customerCode", "Müşteri barkodu", escapeHtml(payload.customerCode)));
   if (isSwatch && vis("cardNumber") && cardNumber) rows.push(row("cardNumber", "Kart No", cardNumber));
   if (isSwatch && vis("parentRollBarcode") && parentRollBarcode)
     rows.push(row("parentRollBarcode", "Ana Top", parentRollBarcode));

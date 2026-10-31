@@ -9,7 +9,8 @@
 // =============================================================================
 
 import type { CanvasRenderInput } from "./label-canvas-native.helper";
-import { fieldDisplayValue } from "./label-field-values";
+import { fieldDisplayValue, scanElementValue } from "./label-field-values";
+import { renderCode128Svg, renderQrSvg } from "./barcode-svg.helper";
 import { escapeHtml, applyCopies } from "./label-html.shared";
 import { asciiFold, qrFootprintDots, bannerValueText, resolveEplTextStyle, EPL_FONT, applyTextCase } from "./native-label.shared";
 import type { FieldElement, TextElement } from "../../config/label-elements";
@@ -93,16 +94,21 @@ export function buildCanvasLabelHtml(input: CanvasHtmlInput): string {
         break;
       }
       case "qr": {
-        if (!payload.barcode || !qrSvg) break;
-        const sizeMm = qrFootprintDots(payload.barcode, el.scale ?? 5) / dotsPerMm;
+        // İç barkodda hazır SVG (bayt-aynı); müşteri kodunda elemanın kendi SVG'si (D4-F3).
+        const code = scanElementValue(payload, el);
+        const svg = code === payload.barcode ? qrSvg : code ? renderQrSvg(code) : "";
+        if (!code || !svg) break;
+        const sizeMm = qrFootprintDots(code, el.scale ?? 5) / dotsPerMm;
         els.push(
           `<div style="position:absolute;left:${el.x}mm;top:${el.y}mm;width:${sizeMm.toFixed(1)}mm;height:${sizeMm.toFixed(1)}mm">` +
-            `<div style="width:100%;height:100%">${qrSvg.replace("<svg ", '<svg style="width:100%;height:100%" ')}</div></div>`,
+            `<div style="width:100%;height:100%">${svg.replace("<svg ", '<svg style="width:100%;height:100%" ')}</div></div>`,
         );
         break;
       }
       case "code128": {
-        if (!payload.barcode || !barcodeSvg) break;
+        const code = scanElementValue(payload, el);
+        const svg = code === payload.barcode ? barcodeSvg : code ? renderCode128Svg(code) : "";
+        if (!code || !svg) break;
         const h = el.hMm ?? 9;
         const human = el.human !== false;
         // Modül kalınlığı: native'de dar-çubuk dot'u — HTML'de eşdeğeri yatay
@@ -117,9 +123,9 @@ export function buildCanvasLabelHtml(input: CanvasHtmlInput): string {
             ? `;transform:translate(${el.humanDx ?? 0}mm,${el.humanDy ?? 0}mm)`
             : "";
         const inner =
-          `<div style="height:${h}mm">${barcodeSvg.replace("<svg ", `<svg style="height:${h}mm;width:auto" `)}</div>` +
+          `<div style="height:${h}mm">${svg.replace("<svg ", `<svg style="height:${h}mm;width:auto" `)}</div>` +
           (human
-            ? `<div style="font-family:'Courier New',monospace;font-size:${humanFontMm}mm;letter-spacing:0.12em;text-align:center${humanShift}">${escapeHtml(payload.barcode)}</div>`
+            ? `<div style="font-family:'Courier New',monospace;font-size:${humanFontMm}mm;letter-spacing:0.12em;text-align:center${humanShift}">${escapeHtml(code)}</div>`
             : "");
         els.push(
           `<div style="position:absolute;left:${el.x}mm;top:${el.y}mm${

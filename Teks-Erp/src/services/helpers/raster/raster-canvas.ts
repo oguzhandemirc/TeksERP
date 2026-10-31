@@ -9,7 +9,7 @@
 // =============================================================================
 
 import { mmToDots, resolveQrScale, bannerValueText, alignOffsetDots } from "../native-label.shared";
-import { fieldDisplayValue } from "../label-field-values";
+import { fieldDisplayValue, scanElementValue } from "../label-field-values";
 import { elementText, type CanvasRenderInput } from "../label-canvas-native.helper";
 import type { LabelPayload } from "../../../types/label.types";
 import type { ResolvedLabelFormat } from "../label-format.resolver";
@@ -38,7 +38,6 @@ export async function rasterizeCanvasLayout(input: CanvasRenderInput): Promise<B
   const dpi = format.dpi || 203;
   const d = (mm: number) => mmToDots(mm, dpi);
   const bmp = new Bitmap1(d(format.widthMm), d(format.heightMm));
-  const bc = payload.barcode ? String(payload.barcode) : "";
 
   for (const el of prepareElements(layout.elements, payload)) {
     const x = d(el.x);
@@ -67,11 +66,13 @@ export async function rasterizeCanvasLayout(input: CanvasRenderInput): Promise<B
         break;
       }
       case "qr": {
+        const bc = scanElementValue(payload, el);
         if (!bc) break;
         drawQr(bmp, x, y, bc, resolveQrScale(el.scale));
         break;
       }
       case "code128": {
+        const bc = scanElementValue(payload, el);
         if (!bc) break;
         const h = d(el.hMm ?? 9);
         const res = drawCode128(bmp, x, y, bc, { heightDots: h, moduleDots: el.mw ?? 2 });

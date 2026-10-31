@@ -789,6 +789,8 @@ export const DOC_DEFS: DocDef[] = [
           { key: "packingGroupName", label: "Sevk partisi" },
           { key: "packingGroupCode", label: "Parti kodu", defaultHidden: true },
           { key: "barcode", label: "Barkod no" },
+          // MÜŞTERİ BARKODU (D4-F3) — topa bağlı müşteri kodu, sevkte donar; varsayılan KAPALI, eski belgede "—".
+          { key: "customerCode", label: "Müşteri kodu (müşteri barkodu)", defaultHidden: true },
           { key: "batchNumber", label: "Parti no" },
           { key: "desen", label: "Desen" },
           { key: "varyant", label: "Varyant" },
