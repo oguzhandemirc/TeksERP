@@ -83,7 +83,23 @@ export interface WipScorecard {
   }>;
 }
 
-export async function getWipScorecard(range: DateRange): Promise<WipScorecard> {
+/** WIP süzgeçleri — sahip (emanet müşterisi) listesi P1a top süzgeciyle aynı sözdizimi (`readFilterList`, CSV). */
+export interface WipFilters {
+  ownerCustomerIds?: readonly string[];
+}
+
+/**
+ * Sahip süzgeci yalnız TOP bölümlerine (bekleyen · geçen · en uzun bekleyen) uygulanır; hiç başlamamış iş emri
+ * topsuzdur, süzgeçten etkilenmez. Boş liste = süzgeç yok (bayt-aynı sorgu).
+ */
+function ownerScope(f: WipFilters): Prisma.Sql {
+  const ids = f.ownerCustomerIds ?? [];
+  if (ids.length === 0) return Prisma.empty;
+  return Prisma.sql`AND EXISTS (SELECT 1 FROM rolls ro WHERE ro.id = rm."rollId" AND ro."ownerCustomerId"::text IN (${Prisma.join([...ids])}))`;
+}
+
+export async function getWipScorecard(range: DateRange, filters: WipFilters = {}): Promise<WipScorecard> {
+  const owner = ownerScope(filters);
   const [waitingRows, passedRows, oldestRows, neverStartedRows, neverStartedAgg] = await Promise.all([
     // ── ANLIK: açık hareketler (istasyonda duran mal) ───────────────────────
     prisma.$queryRaw<
@@ -107,6 +123,7 @@ export async function getWipScorecard(range: DateRange): Promise<WipScorecard> {
       JOIN stations s           ON s.id = wos."stationId"
       WHERE rm."exitedAt" IS NULL
         AND rm."revokedAt" IS NULL
+        ${owner}
       GROUP BY s.id, s.name, s.kind
     `),
     // ── DÖNEM: kapanan hareketler (istasyondan geçen mal) ───────────────────
@@ -123,6 +140,7 @@ export async function getWipScorecard(range: DateRange): Promise<WipScorecard> {
       WHERE rm."exitedAt" IS NOT NULL
         AND rm."revokedAt" IS NULL
         AND rm."exitedAt" >= ${range.from} AND rm."exitedAt" <= ${range.to}
+        ${owner}
       GROUP BY wos."stationId"
     `),
     // ── En uzun bekleyen toplar ─────────────────────────────────────────────
@@ -147,6 +165,7 @@ export async function getWipScorecard(range: DateRange): Promise<WipScorecard> {
       LEFT JOIN colors c        ON c.id = r."colorId"
       WHERE rm."exitedAt" IS NULL
         AND rm."revokedAt" IS NULL
+        ${owner}
       ORDER BY rm."enteredAt" ASC
       LIMIT 25
     `),
