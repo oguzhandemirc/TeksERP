@@ -21,7 +21,7 @@ import { readFinanceRiskLimitCurrencyMode, resolveRiskLimitBlockIntake, resolveR
 import { factoryDayKeyUtcMidnight } from "../../constants/time";
 import { resolveExchangeRateTx } from "./finance.helper";
 import { cariAccountWhereForCard } from "./cari-card-where.helper";
-import { CARI_HOLD_EMANET_SHIPMENT } from "./cari-hold.helper";
+import type { EmanetShipmentRelease } from "./emanet-shipment.helper";
 
 type Tx = Prisma.TransactionClient;
 
@@ -106,14 +106,14 @@ const SCOPE_LABEL: Record<RiskGateScope, string> = { INTAKE: "yeni iş kabulü",
 /**
  * KAPI (iş kabulü / sevk): ön muhasebe ya da ayar kapalıysa yalnız ayar okunur, başka sorgu yok (bugünkü davranış bayt-aynı). Açıkken
  * kartın limitli hesap(lar)ı (K3a where'i) için `riskExposureTx(…, null, 0)`; bir para biriminde aşım → 409
- * `RISK_LIMIT_EXCEEDED`. SHIPMENT'ta K22: `ownEmanetOnly` (tüm toplar sevk müşterisinin emaneti) yalnız aşım
- * VARSA (ya da TL kipinde kur yoksa) sorulur ve cari kilidinin kod sabitine uyar. Mesaj tutar taşımaz (sevk/kabul ekranı finans ekranı değil).
+ * `RISK_LIMIT_EXCEEDED`. SHIPMENT'ta K22: `emanetRelease` (`emanetShipmentReleaseTx`, ayar `finance.cariHold.emanetShipment`)
+ * yalnız aşım VARSA (ya da TL kipinde kur yoksa) sorulur; cari kilidiyle AYNI karar (D4-I1c). Mesaj tutar taşımaz (sevk/kabul ekranı finans ekranı değil).
  */
 export async function assertCustomerRiskLimitTx(
   tx: Pick<Tx, "cariAccount" | "$queryRaw" | "systemSetting" | "exchangeRate">,
   customerId: string,
   scope: RiskGateScope,
-  ownEmanetOnly?: () => Promise<boolean>,
+  emanetRelease?: () => Promise<EmanetShipmentRelease>,
 ): Promise<void> {
   const enabled = scope === "INTAKE" ? await resolveRiskLimitBlockIntake(tx) : await resolveRiskLimitBlockShipment(tx);
   if (!enabled) return;
@@ -122,23 +122,24 @@ export async function assertCustomerRiskLimitTx(
     select: { id: true },
     orderBy: { id: "asc" },
   });
-  const emanetExempt = async () => scope === "SHIPMENT" && CARI_HOLD_EMANET_SHIPMENT === "EXEMPT" && !!ownEmanetOnly && (await ownEmanetOnly());
+  const release = async () => (scope === "SHIPMENT" && emanetRelease ? await emanetRelease() : null);
   for (const acc of accounts) {
     let hit: RiskExposure | undefined;
     try {
       hit = (await riskExposureTx(tx, acc.id, null, new Prisma.Decimal(0))).find((e) => e.exceeded);
     } catch (err) {
       // K22: TL kipinde kur eksikliği de aşım gibi emanet muafiyetine sorulur (tamamı emanet sevk durmaz).
-      if (err instanceof AppError && err.details?.code === "RISK_LIMIT_FX_MISSING" && (await emanetExempt())) return;
+      if (err instanceof AppError && err.details?.code === "RISK_LIMIT_FX_MISSING" && (await release())?.exempt) return;
       throw err;
     }
     if (!hit) continue;
-    if (await emanetExempt()) return;
+    const held = await release();
+    if (held?.exempt) return;
     throw AppError.conflict(
       `"${hit.name}" risk limitini aştı (${hit.converted ? "TL'ye çevrilmiş toplam bakiye" : `${hit.currency} bakiyesi`} limitin üstünde) — ${SCOPE_LABEL[scope]} durduruldu. ` +
         `Tahsilat girildiğinde ya da limit Cari Kartından güncellendiğinde devam edilebilir; ` +
         `ayar: ${scope === "INTAKE" ? settingRowPath("financeRiskLimitBlockIntake") : settingRowPath("financeRiskLimitBlockShipment")}.`,
-      { code: "RISK_LIMIT_EXCEEDED", scope, cariId: hit.cariId, currency: hit.currency },
+      { code: "RISK_LIMIT_EXCEEDED", scope, cariId: hit.cariId, currency: hit.currency, ...(held?.heldRolls.length ? { emanetShipment: held.mode, heldRolls: held.heldRolls } : {}) },
     );
   }
 }

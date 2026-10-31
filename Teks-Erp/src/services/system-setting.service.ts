@@ -163,7 +163,7 @@ export const SETTING_KEYS = {
    *  `RISK_LIMIT_EXCEEDED` (default FALSE = bugünkü davranış). Bakiye her para biriminde ayrı ölçülür (fatura ilkesi). */
   FINANCE_RISK_LIMIT_BLOCK_INTAKE: "finance.riskLimitBlock.intake",
   /** D4-I2: risk limiti aşılmış caride SEVK (kurulum + dispatch) 409 `RISK_LIMIT_EXCEEDED` (default FALSE). K22: tamamı
-   *  sevk müşterisinin emaneti olan sevk takılmaz (cari kilidinin kod sabiti `CARI_HOLD_EMANET_SHIPMENT`). */
+   *  emanet sevki cari kilidiyle aynı kararı alır (`finance.cariHold.emanetShipment`, `emanetShipmentReleaseTx`). */
   FINANCE_RISK_LIMIT_BLOCK_SHIPMENT: "finance.riskLimitBlock.shipment",
   /** Sevk onayında otomatik satış faturası TASLAĞI üret (default FALSE).
    *  ⚠️ Üretilen şey TASLAKTIR (`InvoiceStatus.DRAFT`) — onay HER ZAMAN elle
@@ -189,6 +189,8 @@ export const SETTING_KEYS = {
   FINANCE_CARI_HOLD_DEFAULT_SCOPE: "finance.cariHold.defaultScope",
   /** D4-I1a: kilidi koyan kişi kendi kilidini açabilir mi — `ALLOW` (varsayılan, serbest) · `DENY` (başka yetkili açar). */
   FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON: "finance.cariHold.releaseBySamePerson",
+  /** D4-I1c (S11): kilitli caride emanetin sahibine sevki — `EXEMPT` (varsayılan, bugünkü) · `PROCESSED_HELD` · `ALL_HELD`. */
+  FINANCE_CARI_HOLD_EMANET_SHIPMENT: "finance.cariHold.emanetShipment",
   /** SY-J1: maliyet sunum dövizi — `TRY` (varsayılan; yanıt bayt-aynı) · `USD` · `EUR`. Motor TL'de kalır. */
   COST_PRESENTATION_CURRENCY: "maliyet.sunumDovizi",
   /** D4-I2b (S12): risk limiti karşılaştırması — `PER_CURRENCY` (varsayılan, her para birimi ayrı) · `TRY_CONVERTED`
@@ -1080,6 +1082,10 @@ export const DEFAULT_CARI_HOLD_SCOPE: CariHoldDefaultScope = "INTAKE,SHIPMENT";
 export type CariHoldReleaseBySamePerson = "ALLOW" | "DENY";
 export const CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES: CariHoldReleaseBySamePerson[] = ["ALLOW", "DENY"];
 export const DEFAULT_CARI_HOLD_RELEASE_BY_SAME_PERSON: CariHoldReleaseBySamePerson = "ALLOW";
+/** D4-I1c (S11): kilitli caride emanet sevki — hapis hakkı seçimi fabrikanındır (hukuki teyit önerilir). */
+export const CARI_HOLD_EMANET_SHIPMENT_MODES = ["EXEMPT", "PROCESSED_HELD", "ALL_HELD"] as const;
+export type CariHoldEmanetShipment = (typeof CARI_HOLD_EMANET_SHIPMENT_MODES)[number];
+export const DEFAULT_CARI_HOLD_EMANET_SHIPMENT: CariHoldEmanetShipment = "EXEMPT";
 export type CostPresentationCurrency = "TRY" | "USD" | "EUR";
 export const COST_PRESENTATION_CURRENCIES: CostPresentationCurrency[] = ["TRY", "USD", "EUR"];
 export const DEFAULT_COST_PRESENTATION_CURRENCY: CostPresentationCurrency = "TRY";
@@ -1956,6 +1962,8 @@ export interface FeatureFlags {
   financeCariHoldDefaultScope: CariHoldDefaultScope;
   /** D4-I1a: koyan kişi kendi kilidini açabilir mi (varsayılan `ALLOW`). */
   financeCariHoldReleaseBySamePerson: CariHoldReleaseBySamePerson;
+  /** D4-I1c: kilitli caride emanet sevki (varsayılan `EXEMPT`). */
+  financeCariHoldEmanetShipment: CariHoldEmanetShipment;
   /** SY-J1: maliyet sunum dövizi (varsayılan `TRY` = bugünkü TL-yalnız yanıt). */
   costPresentationCurrency: CostPresentationCurrency;
   /** D4-I2b: risk limiti para birimi kipi (varsayılan `PER_CURRENCY`). */
@@ -2628,6 +2636,7 @@ export class SystemSettingService {
       financeExpenseCategorySuggestions: await readFinanceExpenseCategorySuggestions(cacheClient),
       financeCariHoldDefaultScope: await readFinanceCariHoldDefaultScope(cacheClient),
       financeCariHoldReleaseBySamePerson: await readFinanceCariHoldReleaseBySamePerson(cacheClient),
+      financeCariHoldEmanetShipment: await readFinanceCariHoldEmanetShipment(cacheClient),
       costPresentationCurrency: await readCostPresentationCurrency(cacheClient),
       financeRiskLimitCurrencyMode: await readFinanceRiskLimitCurrencyMode(cacheClient),
       costProfitSubcontractSource: await readCostProfitSubcontractSource(cacheClient),
@@ -3184,6 +3193,13 @@ export class SystemSettingService {
         throw AppError.badRequest(`financeCariHoldReleaseBySamePerson şunlardan biri olmalı: ${CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON, v, "Cari kilidini koyan kişi kendi kilidini açabilir mi — serbest · başka yetkili", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeCariHoldEmanetShipment")) {
+      const v = input.financeCariHoldEmanetShipment;
+      if (typeof v !== "string" || !CARI_HOLD_EMANET_SHIPMENT_MODES.includes(v as CariHoldEmanetShipment)) {
+        throw AppError.badRequest(`financeCariHoldEmanetShipment şunlardan biri olmalı: ${CARI_HOLD_EMANET_SHIPMENT_MODES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT, v, "Kilitli caride müşterinin emanet malının sevki — serbest · işlenmiş tutulur · hepsi tutulur", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "costPresentationCurrency")) {
       const v = input.costPresentationCurrency;
@@ -5514,6 +5530,11 @@ export async function readCostProfitCategoryClasses(tx?: Pick<typeof prisma, "sy
 /** D4-I1a: koyan kişi kendi kilidini açabilir mi — tanınmayan değer varsayılana (`ALLOW`) düşer. */
 export function readFinanceCariHoldReleaseBySamePerson(tx?: Pick<typeof prisma, "systemSetting">): Promise<CariHoldReleaseBySamePerson> {
   return readServiceEnum(SETTING_KEYS.FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON, CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES, DEFAULT_CARI_HOLD_RELEASE_BY_SAME_PERSON, tx);
+}
+
+/** D4-I1c: kilitli caride emanet sevki — tanınmayan değer varsayılana (`EXEMPT`, bugünkü) düşer. Kapı okuması `emanet-shipment.helper`dedir. */
+export function readFinanceCariHoldEmanetShipment(tx?: Pick<typeof prisma, "systemSetting">): Promise<CariHoldEmanetShipment> {
+  return readServiceEnum(SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT, CARI_HOLD_EMANET_SHIPMENT_MODES, DEFAULT_CARI_HOLD_EMANET_SHIPMENT, tx);
 }
 
 /** D4-I2b: risk limiti para birimi kipi — tanınmayan değer varsayılana (`PER_CURRENCY`) düşer; guard tx içinde taze okur. */

@@ -300,6 +300,8 @@ export interface FeatureFlags {
     | "INTAKE,SHIPMENT,INVOICE";
   /** D4-I1a: kilidi koyan kişi kendi kilidini açabilir mi (varsayılan `ALLOW`). */
   financeCariHoldReleaseBySamePerson: "ALLOW" | "DENY";
+  /** D4-I1c: kilitli caride emanet sevki (backend aynası; varsayılan `EXEMPT`). */
+  financeCariHoldEmanetShipment: "EXEMPT" | "PROCESSED_HELD" | "ALL_HELD";
   /** SY-J1: maliyet sunum dövizi (varsayılan `TRY`). */
   costPresentationCurrency: "TRY" | "USD" | "EUR";
   /** D4-I2b (S12): risk limiti para birimi kipi — her para birimi ayrı (varsayılan) · o güne kadarki en son kurla TL toplamı. */
