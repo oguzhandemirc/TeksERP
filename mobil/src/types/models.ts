@@ -919,6 +919,8 @@ export interface KursunStepSummary {
   /** Adım istasyonu muayene (hata girişi) yapar mı (KQ-D3). Eski backend
    *  göndermez → undefined → hata paneli bugünkü gibi çizilir. */
   inspectionEnabled?: boolean;
+  /** D4-E2b: adım istasyonu en ölçer mi. Yalnız true iken gelir; eski backend göndermez → alan gizli. */
+  capturesWidth?: boolean;
   /** KQ-D6: iş emrinin hedef değerleri (gramaj vurgusu, KQ-D5). Eski backend göndermez. */
   targetValues?: { propertyId: string; valueId: string; valueCode: string }[];
   /** Sonraki (atlanmamış) adımın istasyon adı — "Toplar X'e" metni (KQ-D3). */
@@ -1006,6 +1008,8 @@ export interface KursunFinishRequest {
     defectTypeId?: string | null;
   }>;
   notes?: string | null;
+  /** D4-E2b ölçülen en (cm); yalnız en ölçen istasyonda ve girildiyse. */
+  measuredWidthCm?: number;
 }
 
 // =============================================================================

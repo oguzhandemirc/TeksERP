@@ -569,6 +569,8 @@ export const updateSchema = z.strictObject({
   // yüzde = eşik. ⚠️ `min(0)` — 0 GEÇERLİ ("tolerans yok, her fark uyarır");
   // `positive()` yazılsaydı panelden sıfır tolerans seçilemezdi.
   fasonShrinkWarnEnabled: z.boolean().optional(),
+  // Dış brode kabulünde hedef desen doğan topa (D4-D3, K8).
+  fasonReceiptApplyTargetVariant: z.boolean({ message: "Fason kabulünde hedef desen açık/kapalı olmalı" }).optional(),
   fasonShrinkTolerancePct: z.number().min(0).max(100).nullable().optional(),
   // Mükerrer paneli (2026-08-22): bulanık ad eşleştirme bayrağı + eşik (yüzde).
   // `null` = eşiği temizle → fabrika varsayılanı (90). Alt sınır 50 (gürültü).

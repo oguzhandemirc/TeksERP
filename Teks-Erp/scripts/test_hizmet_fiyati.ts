@@ -270,6 +270,9 @@ const SERVICE_ITEM_ID_FILES = new Set([
   "services/helpers/service-flag-work.helper.ts",
   // H10: bayrak geri alma kapısı — eşlenmiş kalemi yalnız faturalı bağ aramak için okur (çözücü değil).
   "services/helpers/service-billing-gate.helper.ts",
+  // D4-D3: topun aktif desen değerinin kalemi — fatura (service-flag-work) ve geri alma kapısı aynı okumayı
+  // buradan alır; seçim `pickServiceItemId`te (çözücü değil, okuma).
+  "services/helpers/property-revoke.helper.ts",
   // F1: önizleme kapısı — taze bağların kalemini fatura satırıyla karşılaştırır (çözücü değil; toplayıcıyı çağırır).
   "services/helpers/service-preview-gate.helper.ts",
   // K2a: ürün kartı canlı referans kataloğu — eşlenmiş kalemi pasife alma kapısı için sayar (çözücü değil).

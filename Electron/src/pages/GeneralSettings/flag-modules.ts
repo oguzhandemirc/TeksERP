@@ -215,6 +215,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   // (`module.middleware.ts` başlığı ve `screen-catalog` aynı kararı taşır).
   // Anahtar doğana kadar bu satırlar HER kurulumda görünür.
   fasonShrinkWarnEnabled: "planlanan:fason",
+  fasonReceiptApplyTargetVariant: "planlanan:fason",
   fasonShrinkTolerancePct: "planlanan:fason",
   fasonNoteMobileEntry: "planlanan:fason",
   kartelaMeasurementEnabled: "planlanan:kartela",
