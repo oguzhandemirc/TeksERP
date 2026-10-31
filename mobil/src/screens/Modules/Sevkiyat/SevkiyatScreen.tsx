@@ -24,10 +24,12 @@ import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
-import { FLAGS_KEY } from '../../../hooks/useFeatureFlags';
+import { FLAGS_KEY, useFeatureFlags } from '../../../hooks/useFeatureFlags';
 import type { MainStackParamList } from '../../../navigation/types';
 import SackContentsModal from './SackContentsModal';
 import { CariHoldBlockedScreen, CariHoldChip, cariHoldBlockFromError, holdChipText, type CariHoldBlock } from './CariHold';
+import { READY_WORKS_KEY, ReadyWorksSheet, ReadyWorksStrip } from './ReadyWorks';
+import type { ReadyWorkRow } from '../../../services/readyWorks.service';
 import { showScreenError } from '../../../lib/screenToast';
 import TruncatedText from '../../../components/TruncatedText';
 
@@ -65,6 +67,9 @@ export default function SevkiyatScreen() {
   const [dispatchShip, setDispatchShip] = useState<SackStoreShipmentLite | null>(null);
   // D4-I4: 409 CARI_HOLD → tam ekran (metin sunucudan); diğer hatalar tost.
   const [holdBlock, setHoldBlock] = useState<CariHoldBlock | null>(null);
+  // D4-J4: hazır iş çipine dokunulan müşteri (liste lazy; sevk mevcut Paketleme akışından).
+  const [readyCustomer, setReadyCustomer] = useState<ReadyWorkRow | null>(null);
+  const incomingDocsEnabled = useFeatureFlags().data?.gelenBelgeEnabled === true;
   const [plate, setPlate] = useState('');
   const [driver, setDriver] = useState('');
   const [carrier, setCarrier] = useState('');
@@ -89,7 +94,7 @@ export default function SevkiyatScreen() {
     void qc.invalidateQueries({ queryKey: ['sack-contents'] });
   };
   const headerRefresh = useManualRefresh(
-    [() => qc.invalidateQueries({ queryKey: FLAGS_KEY }), () => listQ.refetch()],
+    [() => qc.invalidateQueries({ queryKey: FLAGS_KEY }), () => listQ.refetch(), () => qc.invalidateQueries({ queryKey: READY_WORKS_KEY })],
     'Liste güncellendi',
   );
 
@@ -247,6 +252,7 @@ export default function SevkiyatScreen() {
           left={<TextInput.Icon icon="magnify" />}
         />
       </View>
+      <ReadyWorksStrip onOpen={setReadyCustomer} />
 
       <View style={{ flex: 1 }}>
         <FlashList
@@ -320,6 +326,15 @@ export default function SevkiyatScreen() {
           </View>
         </Surface>
       </AppModal>
+      <ReadyWorksSheet
+        customer={readyCustomer}
+        incomingDocsEnabled={incomingDocsEnabled}
+        onDismiss={() => setReadyCustomer(null)}
+        onGoPacking={(customerId) => {
+          setReadyCustomer(null);
+          nav.navigate('Paketleme', { customerId });
+        }}
+      />
       <CariHoldBlockedScreen block={holdBlock} onClose={() => setHoldBlock(null)} />
     </ScreenChrome>
   );
