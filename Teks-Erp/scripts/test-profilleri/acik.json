@@ -23,6 +23,8 @@
     "financeInvoicePriceTolerancePct": 5,
     "financeChequeNoteMovementEnabled": true,
     "financeRiskLimitBlockEnabled": true,
+    "financeRiskLimitBlockIntake": true,
+    "financeRiskLimitBlockShipment": true,
     "financeAutoDraftFromShipmentEnabled": true,
     "financeServiceBillingEnabled": true,
     "financeExpenseCategorySuggestions": "ON",

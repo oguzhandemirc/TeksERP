@@ -185,6 +185,7 @@ import { assertWorkOrderBound } from "./helpers/dispatch-header.helper";
 import { assertOwnerMatchesTx, previewOwnerMismatches } from "./helpers/emanet-owner.helper";
 import { emanetShipmentReleaseTx } from "./helpers/emanet-shipment.helper";
 import { assertShipmentNotHeldTx, cariHoldWarning, shipmentHoldNotice } from "./helpers/cari-hold.helper";
+import { assertCustomerRiskLimitTx } from "./helpers/risk-exposure.helper";
 import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
 import { assertRollsRevivable, assertSwatchesRevivable } from "./helpers/item-usage.helper";
 import { SWATCH_IN_STOCK_WHERE, transitionSwatchesTx } from "./helpers/swatch-event.helper";
@@ -2448,8 +2449,11 @@ export class ShippingService {
     kapsamaUyarisi: string | null;
     yon: ShipmentDestinationDecision;
   }> {
-    // Cari kilidi (D4-I1, SHIPMENT; emanet sevki ayarı D4-I1c) — yazımdan önce, tx içinde.
-    await assertShipmentNotHeldTx(tx, p.customerId, () => emanetShipmentReleaseTx(tx, { sackId: { in: p.sackIds } }, p.customerId));
+    // Cari kilidi (D4-I1, SHIPMENT) + risk limiti (D4-I2, finance.riskLimitBlock.shipment) — yazımdan önce, tx içinde;
+    // emanet sevki kararı ikisinde de aynı helper'dan (D4-I1c). Risk: bakiye FOR UPDATE, sıra fatura onayıyla aynı.
+    const emanetRelease = () => emanetShipmentReleaseTx(tx, { sackId: { in: p.sackIds } }, p.customerId);
+    await assertShipmentNotHeldTx(tx, p.customerId, emanetRelease);
+    await assertCustomerRiskLimitTx(tx, p.customerId, "SHIPMENT", emanetRelease);
     const yon = await this.decideShipmentDestinationTx(tx, {
       customerId: p.customerId,
       branchId: p.branchId,
@@ -3467,7 +3471,11 @@ export class ShippingService {
     // Cari kilidi (D4-I1, SHIPMENT) claim'den ÖNCE: PLANNED kalıp sonra kilitlenen sevkiyat da kesilir. Sevkiyat
     // yoksa kapı geçer, aşağıdaki claim 409 verir (bugünkü davranış).
     const holdHeader = await tx.shipment.findUnique({ where: { id: shipmentId }, select: { customerId: true } });
-    if (holdHeader) await assertShipmentNotHeldTx(tx, holdHeader.customerId, () => emanetShipmentReleaseTx(tx, { shipmentId }, holdHeader.customerId));
+    if (holdHeader) {
+      const emanetRelease = () => emanetShipmentReleaseTx(tx, { shipmentId }, holdHeader.customerId);
+      await assertShipmentNotHeldTx(tx, holdHeader.customerId, emanetRelease);
+      await assertCustomerRiskLimitTx(tx, holdHeader.customerId, "SHIPMENT", emanetRelease);
+    }
     const claim = await tx.shipment.updateMany({
       where: { id: shipmentId, status: ShipmentStatus.PLANNED },
       data: {
