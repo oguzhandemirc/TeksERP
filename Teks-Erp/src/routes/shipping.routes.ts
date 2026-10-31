@@ -670,7 +670,9 @@ router.get("/shipments/:id/dispatch-report", verifyToken, ACCOUNTING_READ, contr
  *       200: { description: "rows[] (barkod, müşteri top no, müşteri kodu, desen, işlem, metre) + totals" }
  *       404: { description: "Sevkiyat bulunamadı" }
  */
-router.get("/shipments/:id/roll-list", verifyToken, READ, controller.getShipmentRollList);
+// Panel düğmesiyle aynı küme: belgesiz DISPATCHED sevkte ilk okuma irsaliyeyi lazy-init yazar;
+// tablet izinleri (mobile:*) bu yazımı tetiklemesin.
+router.get("/shipments/:id/roll-list", verifyToken, requireAnyPermission("shipping:read", "shipping:write"), controller.getShipmentRollList);
 router.get("/direct-shipments/:id/dispatch-report", verifyToken, ACCOUNTING_READ, controller.getDirectShipmentDispatchReport);
 router.get("/accounting-export", verifyToken, ACCOUNTING_READ, controller.getAccountingExport);
 

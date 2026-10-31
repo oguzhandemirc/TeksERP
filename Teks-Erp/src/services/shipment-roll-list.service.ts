@@ -7,6 +7,7 @@
 // Müşteri top no / işlem metni yalnız GELEN BELGE açıklamasıdır (etiketteki H9 çözücüsü);
 // sayıya dokunmaz, rollId'si olmayan eski snapshot satırında boş kalır.
 // =============================================================================
+import { PrintedDocStatus } from "@prisma/client";
 import type { ApiResponse } from "../types/api.types";
 import { resolveShipmentDispatchContent } from "./shipping.service";
 import { resolveDeliveryNoteLinesForRolls } from "./helpers/roll-delivery-note-line.helper";
@@ -29,7 +30,11 @@ export interface ShipmentRollList {
   shipmentNo: string;
   customerName: string;
   date: string | null;
+  /** Yalnız ACTIVE donmuş belge "nihai liste"dir; VOIDED (sevk geri alındı) frozen DEĞİLDİR. */
   frozen: boolean;
+  /** Sevk geri alınmış — içerik iptal edilmiş irsaliyenin snapshot'ı; Excel İPTAL işareti basar. */
+  voided: boolean;
+  docStatus: string | null;
   rows: ShipmentRollListRow[];
   totals: { rollCount: number; totalMeters: number };
 }
@@ -58,7 +63,9 @@ export async function getShipmentRollList(shipmentId: string): Promise<ApiRespon
       shipmentNo: content.header.shipmentNo,
       customerName: content.header.customerName,
       date: content.header.date,
-      frozen: Boolean(doc),
+      frozen: doc?.status === PrintedDocStatus.ACTIVE,
+      voided: doc?.status === PrintedDocStatus.VOIDED,
+      docStatus: doc?.status ?? null,
       rows,
       // Toplam çekinin toplamıdır (belgeyle aynı rakam); satırlardan yeniden toplanmaz.
       totals: { rollCount: content.totals.totalRolls, totalMeters: content.totals.totalMeters },
