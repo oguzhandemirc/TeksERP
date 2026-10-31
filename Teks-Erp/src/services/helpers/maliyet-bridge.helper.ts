@@ -76,6 +76,29 @@ export async function suggestSalePrice(itemId: string, currency: Currency, custo
   return r?.price ?? null;
 }
 
+// ── Kârlılık (D4-G2a) köprüleri — `null` = modül kapalı ──
+
+/** Kârlılığın finans okumaları (fatura, satır, kur). Finans kapalı → SORGU ATMADAN null. */
+export async function loadProfitabilityFinance(): Promise<typeof import("./profitability-finance.helper") | null> {
+  if (!(await readFinanceEnabled())) return null;
+  return import("./profitability-finance.helper");
+}
+
+/** Sarf kalemlerinin `at` anında geçerli genel alış fiyatı (`ItemPrice(PURCHASE)`, TRY önce); ticaret kapalı → null. */
+export async function suggestConsumablePurchasePrices(itemIds: string[], at: Date): Promise<Map<string, { price: Prisma.Decimal; currency: Currency }> | null> {
+  if (!(await readTicaretEnabled())) return null;
+  const { resolveItemPricesFor } = await import("../item-price.service");
+  const out = new Map<string, { price: Prisma.Decimal; currency: Currency }>();
+  let rest = [...new Set(itemIds)];
+  for (const currency of ["TRY", "USD", "EUR", "GBP", "RUB"] as const) {
+    if (rest.length === 0) break;
+    const hit = await resolveItemPricesFor({ itemIds: rest, kind: "PURCHASE", currency, asOf: at });
+    for (const [id, r] of hit) out.set(id, { price: new Prisma.Decimal(r.price), currency });
+    rest = rest.filter((id) => !hit.has(id));
+  }
+  return out;
+}
+
 // ── İplik ihtiyaç planı (MAL-7) köprüleri — `null` = modül kapalı, "bilinmiyor"; 0 DEĞİL ──
 
 export interface YarnStockRead { serbestKg: Prisma.Decimal; emanetKg: Prisma.Decimal | null }

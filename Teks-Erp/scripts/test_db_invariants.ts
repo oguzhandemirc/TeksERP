@@ -360,12 +360,14 @@ const PARTIAL_INDEXES: Array<{
     predicate: `(status = ANY (ARRAY['DRAFT'::"CostParamStatus", 'ACTIVE'::"CostParamStatus"]))`,
     why: "tek index iki tekillik: en fazla BİR taslak ve BİR aktif parametre seti",
   },
+  // standard_cost_versions_active_uq → 5) EXPRESSION_UNIQUES (SEYİTOĞLU MİG-2b varyant genişlemesi).
   {
-    table: "standard_cost_versions",
-    index: "standard_cost_versions_active_uq",
+    // SEYİTOĞLU MİG-1 (20261031200000_desen_karti_varyant) — kodsuz reçeteler serbest.
+    table: "product_recipes",
+    index: "product_recipes_item_variant_uq",
     uniq: true,
-    predicate: `(status = 'ACTIVE'::"StandardCostStatus")`,
-    why: "kumaş başına TEK yürürlükteki standart maliyet sürümü (eşzamanlı kayıt → P2002 → 409)",
+    predicate: `("variantCode" IS NOT NULL)`,
+    why: "ürün başına varyant kodu (V01) tekil; kodsuz (renk) reçeteleri kısıta girmez",
   },
   {
     table: "yarn_cost_prices",
@@ -990,6 +992,15 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "standard_cost_versions", name: "standard_cost_versions_superseded_ck" },
   { table: "standard_cost_versions", name: "standard_cost_versions_hash_ck" },
   { table: "standard_cost_lines", name: "standard_cost_lines_line_no_ck" },
+  // SEYİTOĞLU MİG-1 (20261031200000_desen_karti_varyant)
+  { table: "warp_specs", name: "warp_specs_waste_pct_range" },
+  { table: "weave_designs", name: "weave_designs_values_ck" },
+  { table: "item_warp_layers", name: "item_warp_layers_sort_ck" },
+  { table: "product_recipe_weft_yarns", name: "product_recipe_weft_yarns_sort_ck" },
+  // SEYİTOĞLU MİG-2b (20261031200200_maliyet_tul) — atkı ücreti çifti ikisi birlikte dolu/boş
+  { table: "cost_structures", name: "cost_structures_loom_pick_pair_ck" },
+  { table: "cost_parameter_sets", name: "cost_parameter_sets_loom_pick_pair_ck" },
+  { table: "cost_structure_processes", name: "cost_structure_processes_sort_ck" },
   // MAL-4 teklif + fiyat listesi (20261025170000_teklif_fiyat_listesi)
   { table: "sales_quotes", name: "sales_quotes_converted_ck" },
   { table: "sales_quotes", name: "sales_quotes_superseded_ck" },
@@ -1216,10 +1227,19 @@ const EXPRESSION_UNIQUES: Array<{ table: string; index: string; expr: string; pr
     why: "yayın yarışında ikinci PUBLISHED doğamaz (P2002 → 409)",
   },
   {
+    // SEYİTOĞLU MİG-3: + COALESCE(recipeId) — varyantsız (NULL) satırlarda eski tekillik aynen.
     table: "price_list_lines",
     index: "price_list_lines_item_color_uq",
-    expr: `COALESCE("colorId", '00000000-0000-0000-0000-000000000000'::uuid)`,
-    why: "liste içinde ürün+renk başına tek satır — renksiz satır da TEK",
+    expr: `COALESCE("colorId", '00000000-0000-0000-0000-000000000000'::uuid), COALESCE("recipeId", '00000000-0000-0000-0000-000000000000'::uuid)`,
+    why: "liste içinde ürün+renk+varyant başına tek satır — renksiz/varyantsız satır da TEK",
+  },
+  {
+    // MAL-2 + SEYİTOĞLU MİG-2b (20261031200200_maliyet_tul): (itemId) → (itemId, COALESCE(recipeId)).
+    table: "standard_cost_versions",
+    index: "standard_cost_versions_active_uq",
+    expr: `COALESCE("recipeId", '00000000-0000-0000-0000-000000000000'::uuid)`,
+    predicate: `(status = 'ACTIVE'::"StandardCostStatus")`,
+    why: "kumaş × varyant başına TEK yürürlükteki standart maliyet sürümü (eşzamanlı kayıt → P2002 → 409)",
   },
 ];
 

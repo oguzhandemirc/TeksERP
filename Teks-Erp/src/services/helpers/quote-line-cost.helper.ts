@@ -63,7 +63,7 @@ async function liveCost(input: CostInput, kaynak: "CANLI" | "ELLE_YAPI", extraWa
 export async function resolveQuoteLineCost(ref: CostSourceRef): Promise<QuoteLineCost> {
   if ("itemId" in ref) {
     const v = await prisma.standardCostVersion.findFirst({
-      where: { itemId: ref.itemId, status: "ACTIVE" },
+      where: { itemId: ref.itemId, recipeId: null, status: "ACTIVE" },
       select: { id: true, versionNo: true, totalCostPerMTry: true, inputSnapshot: true, fxRates: true, warnings: true },
     });
     if (v) {

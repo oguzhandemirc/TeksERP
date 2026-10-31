@@ -286,6 +286,8 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   FABRIC_WASTE: "Kalite firesi",
   OVERHEAD: "Genel gider",
   EXTRA: "Ek kalem",
+  WEAVING_PICK: "Atkı ücreti (dokuma)",
+  // PROCESS (proses tarifesi satırı) — global "Süreç hatası"; satır audit'e ALAN olarak yazılmaz (bkz. paylaşım beyanı).
   SIMULATED: "Simüle edildi",
   // PrintedDocType (eksik kalanlar)
   TRAVELER_CARD: "Refakat Kartı",
