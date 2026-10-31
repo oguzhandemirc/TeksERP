@@ -14,6 +14,7 @@ import { FUZZY_NOISE_WORDS } from "../constants/duplicate-rules";
 import { firmNameSimilarity, productNameSimilarity } from "../utils/string-similarity";
 import { foldColorNameForCompare, foldNameForCompare } from "./helpers/name-normalize.helper";
 import { loadKursunGramajOptions } from "./helpers/kursun-bypass-gramaj.helper";
+import { KURSUN_PROPERTY_CODE } from "./helpers/quality-station.helper";
 import { loadProcessChoiceGroups, type ProcessChoiceGroup } from "./helpers/process-choice-catalog.helper";
 import { matchChoiceOption, matchGramajOption, type GramajOption } from "../lib/gelen-belge/gramaj-oneri";
 import { resolveEffectiveDefaultItem, type EffectiveDefaultItem } from "./gelen-belge-varsayilan.service";
@@ -162,10 +163,42 @@ export interface VariantSuggestion {
 
 const EMPTY_PROCESS: ProcessSuggestion = { rawText: null, suggested: null, source: "NONE" };
 
+type ProcessAliasRow = { targetId: string; senderCustomerId: string | null; propertyId: string | null; kursun: boolean };
+
+async function processAliasRows(senderCustomerId: string | null, raw: string): Promise<ProcessAliasRow[]> {
+  const rawKey = aliasKey("PROCESS", raw);
+  if (!rawKey) return [];
+  const rows = await prisma.deliveryNoteAlias.findMany({
+    where: { scope: "PROCESS", rawKey, OR: [{ senderCustomerId: null }, ...(senderCustomerId ? [{ senderCustomerId }] : [])] },
+    select: { targetId: true, senderCustomerId: true, propertyId: true, property: { select: { variantOf: { select: { code: true } } } } },
+    // Birden çok kurşun çeşidi özelliğinde grupta iki kapsamlı satır olabilir: son onaylanan kazanır (belirlenimli).
+    orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+  });
+  return rows.map((r) => ({ targetId: r.targetId, senderCustomerId: r.senderCustomerId, propertyId: r.propertyId, kursun: r.property?.variantOf?.code === KURSUN_PROPERTY_CODE }));
+}
+
+/**
+ * D2b: bir özellik grubunun sözlük hedefi. Kapsamlı satır (propertyId) YALNIZ kendi özelliğinde okunur; NULL kapsamlı
+ * eski satır bugünkü kuralla (tek hedef, gönderene özel genel satırı ezer) — yalnız eski satır varken yanıt bayt-aynı.
+ * Sıra: kapsamlı+gönderene özel > eski+gönderene özel (grupta) > kapsamlı genel > eski kural.
+ * Kapsamlı özel satırın hedefi pasife alınmışsa genel satıra DÜŞMEZ, çağıran kalıba düşer (eski aliasTarget anlamı).
+ */
+function processAliasFor(rows: readonly ProcessAliasRow[], senderCustomerId: string | null, inGroup: (r: ProcessAliasRow) => boolean, options: readonly { id: string }[]): string | null {
+  const scoped = rows.filter((r) => r.propertyId !== null && inGroup(r));
+  const legacy = rows.filter((r) => r.propertyId === null);
+  const mine = <T extends ProcessAliasRow>(list: readonly T[]) => (senderCustomerId ? list.find((r) => r.senderCustomerId === senderCustomerId) : undefined);
+  const scopedSpecific = mine(scoped);
+  if (scopedSpecific) return scopedSpecific.targetId;
+  const legacySpecific = mine(legacy);
+  if (legacySpecific && options.some((o) => o.id === legacySpecific.targetId)) return legacySpecific.targetId;
+  const scopedGeneral = scoped.find((r) => r.senderCustomerId === null);
+  return scopedGeneral?.targetId ?? legacySpecific?.targetId ?? legacy.find((r) => r.senderCustomerId === null)?.targetId ?? null;
+}
+
 /**
  * Sözlük kalıptan ÖNCE (gönderene özel satır genel satırı ezer); sözlük hedefi artık aktif çeşit değeri değilse yok
- * sayılır (kalıba düşer). Sözlük metin başına TEK değer tutar: hedef hangi özelliğin değeriyse o grup ALIAS olur,
- * öteki gruplar kalıpla çözülür. Grup içinde iki değere uyan metin → öneri YOK.
+ * sayılır (kalıba düşer). D2b: sözlük ÖZELLİK KAPSAMLIDIR — aynı metin her özellikte ayrı değere öğrenilir; NULL
+ * kapsamlı eski satır metin başına tek değerdir (hedef hangi özelliğin değeriyse o grup). Grup içinde iki değere uyan metin → öneri YOK.
  */
 export async function suggestProcess(
   raw: string | null | undefined,
@@ -177,14 +210,16 @@ export async function suggestProcess(
   const withVariants = (base: ProcessSuggestion, variants: VariantSuggestion[]): ProcessSuggestion => (groups.length > 0 ? { ...base, variants } : base);
   const none = (): VariantSuggestion[] => groups.map((g) => ({ propertyId: g.propertyId, suggested: null, source: "NONE" }));
   if (!text || (options.length === 0 && groups.length === 0)) return withVariants(text ? { ...EMPTY_PROCESS, rawText: text } : EMPTY_PROCESS, none());
-  const target = await aliasTarget("PROCESS", senderCustomerId, text);
+  const rows = await processAliasRows(senderCustomerId, text);
   const variants: VariantSuggestion[] = groups.map((g) => {
+    const target = processAliasFor(rows, senderCustomerId, (r) => r.propertyId === g.propertyId, g.options);
     const alias = target ? g.options.find((o) => o.id === target) : undefined;
     if (alias) return { propertyId: g.propertyId, suggested: { id: alias.id, name: alias.name }, source: "ALIAS" };
     const hit = matchChoiceOption(text, g.options);
     return hit ? { propertyId: g.propertyId, suggested: { id: hit.id, name: hit.name }, source: "PATTERN" } : { propertyId: g.propertyId, suggested: null, source: "NONE" };
   });
   if (options.length === 0) return withVariants({ ...EMPTY_PROCESS, rawText: text }, variants);
+  const target = processAliasFor(rows, senderCustomerId, (r) => r.kursun, options);
   const alias = target ? options.find((o) => o.id === target) : undefined;
   if (alias) return withVariants({ rawText: text, suggested: alias, source: "ALIAS" }, variants);
   const hit = matchGramajOption(text, options);

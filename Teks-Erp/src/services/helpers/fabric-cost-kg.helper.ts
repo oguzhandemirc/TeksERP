@@ -6,7 +6,7 @@
 // IPLIK_TUKETIMI = fireli `warpKgPerM + weftKgPerM` (Excel uyumu). Saf, DB'siz; `number` yok.
 // =============================================================================
 import type { Prisma } from "@prisma/client";
-import type { CostLine, CostRate } from "./fabric-cost.helper";
+import type { CostLine, CostRate, FxRates } from "./fabric-cost.helper";
 
 type Dec = Prisma.Decimal;
 
@@ -16,6 +16,9 @@ export type FinishingKgBasis = (typeof FINISHING_KG_BASES)[number];
 
 /** Motorun ham metre başı iplik kg'ı: `kg` fireli, `net` firesiz (ikisi de take-up'lı). */
 export interface FabricKg { warp: { kg: Dec; net: Dec }; weft: { perYarn: Array<{ kg: Dec; net: Dec }> } }
+
+/** Motorun tarife satırı bağlamı (kur + kg/m + motorun eksik toplayıcısı). */
+export interface RateContext<C> { fx: FxRates; kg: FabricKg; c: C }
 
 function kgPerRawM(kg: FabricKg, base: FinishingKgBasis | undefined): Dec {
   const pick = (x: { kg: Dec; net: Dec }) => (base === "IPLIK_TUKETIMI" ? x.kg : x.net);

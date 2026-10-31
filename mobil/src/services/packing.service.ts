@@ -369,6 +369,13 @@ export interface SackStoreShipmentLite {
   rollCount: number;
   totalKg: number;
   totalQty: number;
+  /**
+   * D4-I4: müşterinin aktif cari kilidi — kapsam + çip metni SUNUCUDAN (istemci metin üretmez).
+   * Eski backend alanları GÖNDERMEZ → `undefined`, çip çizilmez (opsiyonel).
+   */
+  held?: boolean;
+  holdScopes?: string[];
+  holdText?: string | null;
 }
 
 // Çuval içeriği — ürün+renk+en bazında grup (irsaliye-benzeri özet).

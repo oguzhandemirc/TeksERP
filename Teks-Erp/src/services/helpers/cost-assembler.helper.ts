@@ -13,7 +13,7 @@ import { ACTIVE_FINISHING_RATE, ACTIVE_YARN_COST_PRICE } from "./cost-price-vali
 import type { CostInput, CostPrice, CostRate, CostSource, CostWeftYarn, CostYarn, Sourced } from "./fabric-cost.helper";
 import type { FinishingKgBasis } from "./fabric-cost-kg.helper";
 import { resolveDenier } from "../../constants/warp-beam";
-import { DEFAULT_COST_FINISHING_KG_BASIS, readCostFinishingKgBasis } from "../system-setting.service";
+import { DEFAULT_COST_FINISHING_KG_BASIS, readCostFinishingKgBasis, readCostWeavingStandardMethod, type WeavingStandardMethod } from "../system-setting.service";
 
 
 type Dec = Prisma.Decimal;
@@ -63,6 +63,8 @@ export interface CostRecipeRow { id: string; itemId: string; finishingRateCode: 
 /** Derleyicinin okuduğu her şey — liste N kalem için TEK seferde yükler (kalem başı sorgu yok). */
 export interface CostSources {
   items: Map<string, CostItemRow>; params: ParamRow | null; prices: Map<string, PriceRow>; rates: Map<string, RateRow>; asOf: Date;
+  /** SY-D2: `maliyet.dokumaStandartYontemi` — yükleme anında BİR kez okunur; girdide (`loomPick`) donar. */
+  weavingMethod: WeavingStandardMethod;
   /** SY-E1: istenen varyantlar + KG tabanı ayarı (yalnız KG tarifesi yüklendiyse okunur). */
   recipes?: Map<string, CostRecipeRow>; kgBasis?: FinishingKgBasis;
 }
@@ -84,6 +86,7 @@ export async function loadCostSourcesTx(tx: Db, itemIds: string[], extraRateCode
   }
   const prices = yarnIds.size ? await tx.yarnCostPrice.findMany({ where: { ...ACTIVE_YARN_COST_PRICE, yarnItemId: { in: [...yarnIds] } } }) : [];
   const rates = codes.size ? await tx.finishingRate.findMany({ where: { ...ACTIVE_FINISHING_RATE, code: { in: [...codes] } } }) : [];
+  const weavingMethod = await readCostWeavingStandardMethod(tx);
   // Metre tabanlı tarifelerde ayar okunmaz (sorgu sayısı bugünkü).
   const kgBasis = rates.some((r) => r.basis === "KG") ? await readCostFinishingKgBasis(tx) : undefined;
   return {
@@ -92,6 +95,7 @@ export async function loadCostSourcesTx(tx: Db, itemIds: string[], extraRateCode
     prices: new Map(prices.map((p) => [p.yarnItemId, p])),
     rates: new Map(rates.map((r) => [r.code, r])),
     asOf: new Date(),
+    weavingMethod,
     ...(recipes.length ? { recipes: new Map(recipes.map((r) => [r.id, r])) } : {}),
     ...(kgBasis ? { kgBasis } : {}),
   };
@@ -125,6 +129,14 @@ function finishingOf(src: CostSources, code: string | null | undefined): CostRat
   // KG (SY-E1): kg kaynağı girdiye DONAR (`kgBase`) — ayar sonradan değişse de sürüm aynı sayıyı verir.
   if (r.basis === "KG") return { code, name: r.name, basis: "KG", kgBase: src.kgBasis ?? DEFAULT_COST_FINISHING_KG_BASIS, price: { amount: r.pricePerM, currency: r.currency, source: "KART" } };
   return { code, name: r.name, basis: r.basis, price: { amount: r.pricePerM, currency: r.currency, source: "KART" } };
+}
+
+/** Atkı ücreti: YAPI > PARAMETRE; ikisi de boşsa `null` (motor PICK_RATE_MISSING). Çift CHECK'le birlikte dolu. */
+function loomPickOf(src: CostSources, cs: CostItemRow["costStructure"]): NonNullable<CostInput["loomPick"]> {
+  const p = src.params;
+  if (cs?.loomPickRate && cs.loomPickCurrency) return { rate: { amount: cs.loomPickRate, currency: cs.loomPickCurrency, source: "YAPI" } };
+  if (p?.defaultLoomPickRate && p.defaultLoomPickCurrency) return { rate: { amount: p.defaultLoomPickRate, currency: p.defaultLoomPickCurrency, source: "PARAMETRE" } };
+  return { rate: null };
 }
 
 /** Plan §2.1 öncelik tablosu — saf; `src` önceden yüklenmiş olmalı. */
@@ -193,6 +205,7 @@ export function buildCostInput(src: CostSources, ref: CostSourceRef, o: CostOver
     fabricWastePct: firstOf([o.fabricWastePct, "ELLE"], [cs?.fabricWastePct, "YAPI"], [p?.defaultFabricWastePct, "PARAMETRE"]),
     overheadPct: firstOf([p?.overheadPct, "PARAMETRE"]),
     extra: extraTry ? { amountTry: extraTry, label: cs?.extraCostLabel ?? null } : null,
+    ...(src.weavingMethod === "ATKI_UCRETI" ? { loomPick: loomPickOf(src, cs) } : {}),
   };
 }
 
@@ -219,6 +232,7 @@ export function costCurrencies(input: CostInput): Currency[] {
   add(input.warp?.yarn.price);
   input.weft?.yarns.forEach((y) => add(y.price));
   add(input.finishing?.price);
+  add(input.loomPick?.rate);
   input.processes?.forEach((p) => add(p.price));
   return [...set].sort();
 }

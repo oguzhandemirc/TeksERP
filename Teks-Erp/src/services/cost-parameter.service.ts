@@ -7,7 +7,7 @@
 // yarışın son hattı `cost_parameter_sets_live_uq` (tek DRAFT + tek ACTIVE) → P2002 → 409.
 // Hard delete yalnız hiç yürürlüğe girmemiş taslakta (defter.md ④ sınıfı).
 // =============================================================================
-import { CostParamStatus, Prisma } from "@prisma/client";
+import { CostParamStatus, Prisma, type Currency } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -17,6 +17,7 @@ import {
   PCT_RULE,
   isUniqueViolation,
   parseDecimalField,
+  parsePickRatePair,
   parseTextField,
   type DecimalRule,
 } from "./helpers/cost-input.helper";
@@ -46,6 +47,8 @@ export const COST_PARAMETER_SET_SELECT = {
   weftSelvedgeAllowanceCm: true,
   defaultMarkupPct: true,
   monthlyFinanceRatePct: true,
+  defaultLoomPickRate: true,
+  defaultLoomPickCurrency: true,
   createdAt: true,
   updatedAt: true,
   createdById: true,
@@ -79,15 +82,26 @@ type NumericField = keyof typeof NUMERIC_FIELDS;
 const NUMERIC_KEYS = Object.keys(NUMERIC_FIELDS) as NumericField[];
 
 /** Gövdeden yalnız bilinen alanlar okunur (sessiz allowlist DEĞİL: bilinmeyen alan 400). */
-function parseInput(body: Record<string, unknown>): Partial<Record<NumericField, Prisma.Decimal | number | null>> & { note?: string | null } {
-  const unknown = Object.keys(body).filter((k) => k !== "note" && !(k in NUMERIC_FIELDS));
+type ParsedInput = Partial<Record<NumericField, Prisma.Decimal | number | null>> & {
+  note?: string | null; defaultLoomPickRate?: Prisma.Decimal | null; defaultLoomPickCurrency?: Currency | null;
+};
+/** SY-D2: atkı ücreti çifti NUMERIC_FIELDS dışında (döviz kolonu + çift kuralı); taslak kopyası ikisini birlikte taşır. */
+const PICK_KEYS = ["defaultLoomPickRate", "defaultLoomPickCurrency"] as const;
+
+function parseInput(body: Record<string, unknown>): ParsedInput {
+  const unknown = Object.keys(body).filter((k) => k !== "note" && !(k in NUMERIC_FIELDS) && !(PICK_KEYS as readonly string[]).includes(k));
   if (unknown.length > 0) throw AppError.badRequest(`Tanınmayan alan: ${unknown.join(", ")}`);
-  const out: Partial<Record<NumericField, Prisma.Decimal | number | null>> & { note?: string | null } = {};
+  const out: ParsedInput = {};
   for (const k of NUMERIC_KEYS) {
     const v = parseDecimalField(body[k], NUMERIC_FIELDS[k].rule);
     if (v === undefined) continue;
     if (v === null && NUMERIC_FIELDS[k].required) throw AppError.badRequest(`${NUMERIC_FIELDS[k].rule.label} boş bırakılamaz.`);
     out[k] = k === "defaultLoomRpm" && v !== null ? v.toNumber() : v;
+  }
+  const pick = parsePickRatePair(body.defaultLoomPickRate, body.defaultLoomPickCurrency);
+  if (pick) {
+    out.defaultLoomPickRate = pick.rate;
+    out.defaultLoomPickCurrency = pick.currency;
   }
   const note = parseTextField(body.note, "Not", 300);
   if (note !== undefined) out.note = note;
@@ -116,7 +130,7 @@ export async function createDraft(body: Record<string, unknown>, userId?: string
   const input = parseInput(body);
   const active = await getParameterSetByStatus("ACTIVE");
   const base: Record<string, unknown> = {};
-  if (active) for (const k of NUMERIC_KEYS) base[k] = active[k];
+  if (active) for (const k of [...NUMERIC_KEYS, ...PICK_KEYS]) base[k] = active[k];
   const merged: Record<string, unknown> = { ...base, ...input };
   const missing = NUMERIC_KEYS.filter((k) => NUMERIC_FIELDS[k].required && (merged[k] === undefined || merged[k] === null));
   if (missing.length > 0) {

@@ -53,6 +53,8 @@ export const costInputSnapshotSchema = z
     fabricWastePct: sourced,
     overheadPct: sourced,
     extra: z.object({ amountTry: dec, label: z.string().nullable() }).strict().nullable(),
+    // SY-D2: yalnız ATKI_UCRETI'de yazılır; eski fotoğraflarda yok (opsiyonel → eski hash bayt-aynı).
+    loomPick: z.object({ rate: price.nullable() }).strict().optional(),
   })
   .strict();
 export type CostInputSnapshot = z.infer<typeof costInputSnapshotSchema>;

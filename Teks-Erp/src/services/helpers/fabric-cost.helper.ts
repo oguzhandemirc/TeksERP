@@ -10,7 +10,7 @@
 import { Prisma, type Currency } from "@prisma/client";
 import { warpYarnKgExact } from "../../constants/warp-beam";
 import { theoreticalMPerHourDecimal } from "./dokuma-levent-rapor.helper";
-import { ratePerM, type FabricKg, type FinishingKgBasis } from "./fabric-cost-kg.helper";
+import { ratePerM, type FinishingKgBasis, type RateContext } from "./fabric-cost-kg.helper";
 
 type Dec = Prisma.Decimal;
 const D = (v: Prisma.Decimal.Value): Dec => new Prisma.Decimal(v);
@@ -26,6 +26,8 @@ export const COST_MISSING_CODES = [
   "WEFT_LENGTH_MISSING", "YARN_PRICE_MISSING", "FX_RATE_MISSING", "RPM_MISSING", "PARAMETER_SET_MISSING",
   // Plan §2.2 listesine ek (MAL-2): yapıdaki tarife kodu aktif tarifeye çözülmüyor — terbiye sessizce 0 olmasın.
   "FINISHING_RATE_MISSING",
+  // SY-D2: ATKI_UCRETI yönteminde ne yapıda ne parametre setinde atkı ücreti var — dokuma sessizce 0 olmasın.
+  "PICK_RATE_MISSING",
 ] as const;
 export type CostMissing = (typeof COST_MISSING_CODES)[number];
 export const COST_WARNING_CODES = [
@@ -35,7 +37,7 @@ export const COST_WARNING_CODES = [
 export type CostWarning = (typeof COST_WARNING_CODES)[number];
 export type CostComponent =
   | "WARP_YARN" | "WEFT_YARN" | "LOOM_MACHINE" | "LOOM_LABOR" | "ENERGY" | "BEAM_PREP"
-  | "FINISHING" | "LENGTH_SHRINK" | "FABRIC_WASTE" | "OVERHEAD" | "EXTRA" | "PROCESS";
+  | "FINISHING" | "LENGTH_SHRINK" | "FABRIC_WASTE" | "OVERHEAD" | "EXTRA" | "PROCESS" | "WEAVING_PICK";
 
 /** Kaynağıyla değer; `flag` derleyicinin türettiği uyarıdır (ör. atkı boyu enden türedi). */
 export interface Sourced<T> { value: T | null; source: CostSource; flag?: CostWarning }
@@ -62,6 +64,11 @@ export interface CostInput {
   fabricWastePct: Sourced<Dec>;
   overheadPct: Sourced<Dec>;
   extra: { amountTry: Dec; label: string | null } | null;
+  /**
+   * SY-D2: yalnız `maliyet.dokumaStandartYontemi = ATKI_UCRETI` iken YAZILIR (yokken anahtar hiç yok →
+   * TEZGAH_SAATI girdisi/hash'i bayt-aynı). Ücret birimi: 1 atkı/cm sıklık için metre başına.
+   */
+  loomPick?: { rate: CostPrice | null };
 }
 /** 1 birim döviz kaç TL; TRY verilmese de 1'dir. Eksik döviz → FX_RATE_MISSING. */
 export type FxRates = Partial<Record<Currency, Dec>>;
@@ -71,7 +78,8 @@ export interface CostLine {
   qty: Dec | null; qtyUnit: string | null; unitPriceTry: Dec | null; amountPerMTry: Dec;
 }
 export interface CostResult {
-  lines: CostLine[]; warpKgPerM: Dec; weftKgPerM: Dec; loomMPerHour: Dec;
+  /** `loomMPerHour` null = atkı ücreti yönteminde devir/randıman bilinmiyor (bilgi satırı; hesaba girmez). */
+  lines: CostLine[]; warpKgPerM: Dec; weftKgPerM: Dec; loomMPerHour: Dec | null;
   rawCostPerMTry: Dec; finishedCostPerMTry: Dec | null; soundCostPerMTry: Dec; overheadPerMTry: Dec; totalCostPerMTry: Dec;
 }
 export interface CostOutcome { result: CostResult | null; missing: CostMissing[]; warnings: CostWarning[] }
@@ -204,6 +212,16 @@ function loomLines(input: CostInput, picksPerCm: Dec | null, c: Collector): { v:
   };
 }
 
+/** SY-D2 ATKI_UCRETI: tek satır p × ücret × kur; tezgah/işçilik/enerji yok, devir eksik sayılmaz. */
+function weavingPickLines(input: CostInput, picksPerCm: Dec | null, fx: FxRates, c: Collector): { v: Dec | null; lines: CostLine[] } | null {
+  const rateTry = toTry(input.loomPick?.rate ?? null, fx, c, "PICK_RATE_MISSING");
+  const { rpm, efficiencyPct } = input.loom;
+  const theo = theoreticalMPerHourDecimal(rpm.value, picksPerCm);
+  const v = theo && efficiencyPct.value ? theo.mul(pct(efficiencyPct.value)) : null;
+  if (rateTry === null || picksPerCm === null) return null;
+  return { v, lines: [line("WEAVING_PICK", "Dokuma (atkı ücreti)", picksPerCm.mul(rateTry), { qty: picksPerCm, qtyUnit: "atkı/cm", unitPriceTry: rateTry })] };
+}
+
 /** Ham metre maliyetinin iplik satırları (fiyat × kur). */
 function yarnLines(input: CostInput, fx: FxRates, kg: { warp: { kg: Dec } | null; weft: ReturnType<typeof weftKgs> }, c: Collector): CostLine[] | null {
   const { warp, weft } = kg;
@@ -223,9 +241,8 @@ function yarnLines(input: CostInput, fx: FxRates, kg: { warp: { kg: Dec } | null
   return ok ? out : null;
 }
 
+type RateCtx = RateContext<Collector>;
 /** Ham → mamul (terbiye + boy çekmesi): HAM_M/KG (C+F)/(1−sᵦ) · MAMUL_M C/(1−sᵦ)+F; tarife yok → ham. */
-/** Tarife satırlarının ortak bağlamı (kur + kg/m + eksik toplayıcı). */
-interface RateCtx { fx: FxRates; kg: FabricKg; c: Collector }
 function finishLines(input: CostInput, raw: Dec, { fx, kg, c }: RateCtx): { finished: Dec | null; keep: Dec; lines: CostLine[] } | null {
   const fin = input.finishing;
   if (!fin) return { finished: null, keep: ONE, lines: [] };
@@ -235,14 +252,8 @@ function finishLines(input: CostInput, raw: Dec, { fx, kg, c }: RateCtx): { fini
   const { amount: f, extra } = ratePerM(fin, unit, kg);
   const keep = ONE.minus(pct(sb));
   const finished = fin.basis === "FINISHED_M" ? raw.div(keep).plus(f) : raw.plus(f).div(keep);
-  return {
-    finished,
-    keep,
-    lines: [
-      line("FINISHING", `Terbiye — ${fin.name}`, f, extra),
-      line("LENGTH_SHRINK", "Boy çekmesi", finished.minus(raw).minus(f), { qty: sb, qtyUnit: "%" }),
-    ],
-  };
+  const shrinkLine = line("LENGTH_SHRINK", "Boy çekmesi", finished.minus(raw).minus(f), { qty: sb, qtyUnit: "%" });
+  return { finished, keep, lines: [line("FINISHING", `Terbiye — ${fin.name}`, f, extra), shrinkLine] };
 }
 
 /** Ek işlem (§8): terbiyeden SONRA, kalite firesi + genel giderden ÖNCE; HAM_M tarifesi boy çekmesiyle mamul metreye taşınır. */
@@ -264,7 +275,9 @@ export function computeFabricCost(input: CostInput, fx: FxRates): CostOutcome {
   const warp = warpKg(input, c);
   const weft = weftKgs(input, c);
   const yarns = yarnLines(input, fx, { warp, weft }, c);
-  const loom = loomLines(input, weft?.picksPerCm ?? null, c);
+  const loom = input.loomPick
+    ? weavingPickLines(input, weft?.picksPerCm ?? null, fx, c)
+    : loomLines(input, weft?.picksPerCm ?? null, c);
   const h = c.take(input.beam.prepCostTry, "PARAMETER_SET_MISSING");
   const lBeam = c.take(input.beam.lengthM, "PARAMETER_SET_MISSING");
   const fk = c.take(input.fabricWastePct, "PARAMETER_SET_MISSING");
@@ -337,7 +350,7 @@ export function presentCostResult(r: CostResult) {
     })),
     cozguKgM: r6(r.warpKgPerM),
     atkiKgM: r6(r.weftKgPerM),
-    tezgahMSaat: r4(r.loomMPerHour),
+    tezgahMSaat: r.loomMPerHour === null ? null : r4(r.loomMPerHour),
     hamTlM: r4(r.rawCostPerMTry),
     mamulTlM: r.finishedCostPerMTry === null ? null : r4(r.finishedCostPerMTry),
     saglamTlM: r4(r.soundCostPerMTry),
