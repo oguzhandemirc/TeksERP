@@ -238,6 +238,8 @@ async function main(): Promise<void> {
   check("§6b eski rotadaki iki varyant yeni rotada, diğeri dokunulmadı", routeOf(r1.id) === newRoute && routeOf(r2.id) === newRoute && routeOf(r3.id) === newRoute);
   const woAfter = await prisma.workOrder.findUniqueOrThrow({ where: { id: openWo.id }, select: { routeTemplateId: true } });
   check("§6c açık iş emri eski rotasını korur", woAfter.routeTemplateId === oldRoute);
+  const stamped = await prisma.productRecipe.findMany({ where: { id: { in: [r1.id, r2.id] } }, select: { updatedById: true } });
+  check("§6f taşınan reçetede künye (updatedById) uygulayan kullanıcı", stamped.length === 2 && stamped.every((s) => s.updatedById === ADMIN), JSON.stringify(stamped));
   const audits = await prisma.systemLog.count({ where: { tableName: "PRODUCT_RECIPE", recordId: { in: [r1.id, r2.id] } } });
   check("§6d varyant başına audit", audits === 2, String(audits));
   const again = run([`--eski-rota=${oldCode}`, `--yeni-rota=${newCode}`]);

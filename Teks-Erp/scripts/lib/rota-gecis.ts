@@ -113,10 +113,14 @@ export async function applyRouteSwitch(
 ): Promise<{ written: string[]; skipped: string[] }> {
   const written: string[] = [];
   const skipped: string[] = [];
+  // Plan ile uygulama arasında hedef rota pasifleşmiş olabilir: yeniden oku, fail-closed.
+  const target = await prisma.route.findUnique({ where: { id: plan.to.id }, select: { isActive: true } });
+  if (!target?.isActive) throw new Error(`Yeni rota artık aktif değil: ${plan.to.name}`);
   for (const v of plan.variants) {
+    // updatedById: servis yolundaki withActor künyesinin aynası (ProductRecipe PROVENANCE_MODELS'te).
     const res = await prisma.productRecipe.updateMany({
-      where: { id: v.id, routeId: plan.from.id },
-      data: { routeId: plan.to.id },
+      where: { id: v.id, routeId: plan.from.id, isActive: true },
+      data: { routeId: plan.to.id, updatedById: userId },
     });
     if (res.count === 0) {
       skipped.push(v.code);
