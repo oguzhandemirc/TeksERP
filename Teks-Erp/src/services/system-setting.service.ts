@@ -643,8 +643,8 @@ export const SETTING_KEYS = {
   /**
    * SEVKE HAZIR İŞLER (D4-J1, 1e kararları K25–K26): hazırlık TÜRETİLİR, saklanmaz. Kural
    * (ALL_DONE | METER_THRESHOLD) + tolerans yalnız `effectiveShipReadyPolicy` (ship-readiness.helper)
-   * üzerinden okunur. `notifyUnits` + `scanMinutes` KOSUL bildiriminin (D4-J2) ayarlarıdır; bu dilimde
-   * yalnız kayıtlıdır (okuyan iş yok).
+   * üzerinden okunur. `notifyUnits` + `scanMinutes` KOSUL bildiriminin (D4-J2) ayarlarıdır; okuyucusu
+   * `notification-sources/is.ts` `readyWorkSubjects` (boş küme = bildirim kapalı).
    */
   SHIPPING_READY_RULE: "shipping.ready.rule",
   SHIPPING_READY_TOLERANCE_PCT: "shipping.ready.tolerancePct",

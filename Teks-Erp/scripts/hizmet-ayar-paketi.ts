@@ -21,7 +21,7 @@ export interface PaketSatiri {
   anahtar: string;
   /** `FeatureFlags` alan adı (okuma + `setFeatureFlags` girdisi). */
   alan: string;
-  hedef: boolean | string | number;
+  hedef: boolean | string | number | readonly string[];
   /** Anahtarı getiren dilim (yokken raporda gösterilir). */
   dilim: string;
 }
@@ -66,6 +66,8 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   // DALGA4 §12.1 / K26: ister "tüm metraj aşağı yukarı tamamlandığında" sevke hazır = metre eşiği, %2 tolerans.
   { anahtar: "shipping.ready.rule", alan: "shippingReadyRule", hedef: "METER_THRESHOLD", dilim: "D4-J1" },
   { anahtar: "shipping.ready.tolerancePct", alan: "shippingReadyTolerancePct", hedef: 2, dilim: "D4-J1" },
+  // DALGA4 §12.1: ister "parti bitince" (ISTER-LISTESI:27) → yalnız müşteri partisi sevke hazır bildirimi.
+  { anahtar: "shipping.ready.notifyUnits", alan: "shippingReadyNotifyUnits", hedef: ["PARTI"], dilim: "D4-J2" },
   { anahtar: "scan.customerCodeLookup", alan: "scanCustomerCodeLookupEnabled", hedef: true, dilim: "D4-F1" },
   // DALGA4 §12.1: müşteri barkodu basan şablonda kodsuz top basılmaz (Gülkesim BLOCK = varsayılan; açık beyan).
   { anahtar: "label.customerCodeMissing", alan: "labelCustomerCodeMissing", hedef: "BLOCK", dilim: "D4-F3" },
@@ -95,7 +97,9 @@ export function paketPlani(
     if (!bilinenAnahtarlar.has(s.anahtar)) return { ...s, durum: "ANAHTAR_YOK", mevcut: undefined };
     if (!Object.prototype.hasOwnProperty.call(flags, s.alan)) return { ...s, durum: "ALAN_YOK", mevcut: undefined };
     const mevcut = flags[s.alan];
-    return { ...s, durum: mevcut === s.hedef ? "AYNI" : "DEGISECEK", mevcut };
+    // Liste değerli ayar (notifyUnits) kanonik sıralı yazılır → JSON eşitliği yeter.
+    const same = Array.isArray(s.hedef) ? JSON.stringify(mevcut) === JSON.stringify(s.hedef) : mevcut === s.hedef;
+    return { ...s, durum: same ? "AYNI" : "DEGISECEK", mevcut };
   });
 }
 
