@@ -14,6 +14,8 @@ export interface HubTile {
   description: string;
   icon: LucideIcon;
   to: string;
+  /** Kategori izninden FARKLI izin isteyen alt rapor (SY-D3: tutar gösteren dokuma verimliliği `cost:read`); palet bunu taşır. */
+  permission?: string;
 }
 
 interface Props {

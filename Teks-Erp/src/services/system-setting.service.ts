@@ -64,6 +64,7 @@ import { alarmEnableBlocked } from "./helpers/loom-floor.helper";
 import { isShiftDefined } from "./helpers/loom-alarm-shift.helper";
 import { resetNotificationBaseline, resetNotificationBaselines } from "./helpers/notification-baseline.helper";
 import { READY_WORK_KIND } from "../constants/notification-catalog-sevkiyat";
+import { notifyUnitNeedsIncomingDoc } from "../constants/ready-work-units";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { TAMBUR_PLAN_WIDTH_TOLERANCE_CM } from "../constants/tambur-plan-gate";
 import { FINISHING_KG_BASES, type FinishingKgBasis } from "./helpers/fabric-cost-kg.helper";
@@ -3077,6 +3078,10 @@ export class SystemSettingService {
     this.assertModuleWritesLicensed(input as Record<string, unknown>);
     await this.assertTezgahAlarmShiftRequirement(input as Record<string, unknown>);
     await this.assertTezgahAlarmUnclassifiedRequirement(input as Record<string, unknown>);
+    // D4-KUC3a: gelen belge zinciri (emanet ∧ gelenBelge) yazımdan ÖNCE ölçülür; kapalıdan açığa geçerse aşağıda taban düşer.
+    const incomingDocWasOpen = Object.prototype.hasOwnProperty.call(input, "emanetEnabled") || Object.prototype.hasOwnProperty.call(input, "gelenBelgeEnabled")
+      ? await effectiveIncomingDocsEnabled()
+      : null;
 
     if (Object.prototype.hasOwnProperty.call(input, "pricingEnabled")) {
       if (typeof input.pricingEnabled !== "boolean") {
@@ -3653,6 +3658,7 @@ export class SystemSettingService {
         userId
       );
     }
+    if (incomingDocWasOpen === false) await resetReadyBaselineOnIncomingDocOpen();
 
     if (Object.prototype.hasOwnProperty.call(input, "targetQuantityEnabled")) {
       if (typeof input.targetQuantityEnabled !== "boolean") {
@@ -6955,6 +6961,15 @@ export async function readShippingReadyTolerancePct(tx?: Pick<typeof prisma, "sy
   const parsed = asNumber(setting.value);
   if (parsed === null || !Number.isFinite(parsed) || parsed < 0 || parsed > SHIP_READY_TOLERANCE_MAX_PCT) return DEFAULT_SHIP_READY_TOLERANCE_PCT;
   return parsed;
+}
+
+/** D4-KUC3a: gelen belge modülü kapalıdan açığa geçti ve GB/PARTI bildirimi açıksa sevke-hazır taban damgası düşer →
+ *  sonraki tur SESSİZ taban (kapalıyken biriken hazır partiler toplu ACILDI üretmez; birim ekleme yazımıyla aynı kural). */
+async function resetReadyBaselineOnIncomingDocOpen(): Promise<boolean> {
+  if (!(await effectiveIncomingDocsEnabled())) return false;
+  if (!(await readShippingReadyNotifyUnits()).some(notifyUnitNeedsIncomingDoc)) return false;
+  await resetNotificationBaseline(prisma, READY_WORK_KIND);
+  return true;
 }
 
 /** Sevke hazır bildirim birimleri. Kayıt yok/çöp → [] (bildirim kapalı); tanınmayan eleman düşer. */
