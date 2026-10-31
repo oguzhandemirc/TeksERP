@@ -4,7 +4,7 @@
 // §1 ayarlar: varsayılan OFF/ALLOW; OFF iken uç 409 EXPENSE_ALLOCATION_DISABLED; REQUIRED ve bilinmeyen değer 400
 // §2 yarat + aynı token replay (tek satır) + aynı token başka yük → 409 CLIENT_TOKEN_COLLISION
 // §3 ⭐ Σ pay > 100 → 409 EXPENSE_ALLOCATION_OVER (tam 100 geçer); paralel iki bağdan biri düşer
-// §4 değiştir = damga + yeni satır (tek tx); damgalı bağ değiştirilemez (409 NOT_ACTIVE)
+// §4 değiştir = damga + yeni satır (tek tx); damgalı bağ değiştirilemez (409 NOT_ACTIVE); değişimde de Σ ≤ 100
 // §5 kaldır = damga (kaldıranı taşır); ikinci kaldırma 409
 // §6 ⭐ iptal masrafa bağ 409 CASH_TXN_CANCELLED; masraf iptali bağı DAMGALAMAZ
 // §7 ⭐ kapalı kasa dönemine düşen masrafa bağ 409
@@ -13,7 +13,8 @@
 // §10 ⭐ listExpenseAllocationsAsOf iki parça: dönem sonu geçerli bağlar + geç bağ olayları; geçmiş dönem bayt-aynı
 // Fikstür 2019 aylarında; bağ olay anları (createdAt/revokedAt) fikstürde 2019'a taşınır (servis now() yazar).
 // NEGATİF SONDA (2026-10-31): `assertShareWithinLimitTx` çağrısı `createExpenseAllocation`dan silindi → §3a/§3b/§3c/§3d ❌ (7/5);
-// geri alındı → yeşil.
+// geri alındı → yeşil. (2026-11-01) değişim yolundaki Σ çağrısı silindi → §4c ❌; formdaki auditAllocation kapatılıp
+// bağ kapısı replay'in önüne alındı → §9f ❌ + §9g 409 ile düştü; geri alındı → 38/0.
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { ItemType, StationType, type Prisma } from "@prisma/client";
@@ -165,6 +166,9 @@ async function main(): Promise<void> {
       !!eski.revokedAt && eski.revokedById === uid && r4.data!.serviceItemId === svc && l4.activePct === "70" && l4.rows.length === 3, `Σ ${l4.activePct} satır ${l4.rows.length}`);
     const e4b = await hata(() => changeExpenseAllocation(r2.data!.id, { machineId: m1, sharePct: "10", clientToken: randomUUID() }, uid));
     check("§4b damgalı bağ değiştirilemez → 409 EXPENSE_ALLOCATION_NOT_ACTIVE", kod(e4b) === "EXPENSE_ALLOCATION_NOT_ACTIVE", kod(e4b));
+    const e4c = await hata(() => changeExpenseAllocation(r4.data!.id, { serviceItemId: svc, sharePct: "61", clientToken: randomUUID() }, uid));
+    const r4hala = await prisma.expenseAllocation.findUniqueOrThrow({ where: { id: r4.data!.id } });
+    check("§4c değişimde Σ>100 (40 + 61) → 409 OVER, eski bağ damgasız kalır (tx geri döner)", kod(e4c) === "EXPENSE_ALLOCATION_OVER" && !r4hala.revokedAt, kod(e4c));
 
     console.log("\n── §5 kaldır ──");
     await revokeExpenseAllocation(r4.data!.id, "artık geçerli değil", uid);
@@ -214,7 +218,13 @@ async function main(): Promise<void> {
     check("§9a masraf + bağ aynı istekte (bağ token'ı = masraf token'ı)", b9.length === 1 && b9[0].clientToken === tok9 && b9[0].sharePct.toString() === "100");
     const r9b = await cashTransactionService.create({ kind: "EXPENSE", cashBoxId: box.id, amount: 750, txnDate: day("2019-06-10"), clientToken: tok9, allocation: { machineId: m1, sharePct: "100" } }, uid);
     check("§9b form replay → aynı masraf, ikinci bağ yok", r9b.data!.id === r9.data!.id && (await prisma.expenseAllocation.count({ where: { cashTransactionId: r9.data!.id } })) === 1);
+    const iz9 = await prisma.systemLog.count({ where: { tableName: "EXPENSE_ALLOCATION", recordId: b9[0].id, action: "CREATE" } });
+    check("§9f formda doğan bağ EXPENSE_ALLOCATION ayak izi bırakır (replay ikinciyi yazmaz)", iz9 === 1, String(iz9));
+    const tok9g = randomUUID();
+    const r9g = await cashTransactionService.create({ kind: "EXPENSE", cashBoxId: box.id, amount: 5, txnDate: day("2019-06-10"), clientToken: tok9g, allocation: { machineId: m1, sharePct: "100" } }, uid);
     await systemSettingService.setFeatureFlags({ financeExpenseAllocationField: "OFF" }, uid);
+    const r9g2 = await cashTransactionService.create({ kind: "EXPENSE", cashBoxId: box.id, amount: 5, txnDate: day("2019-06-10"), clientToken: tok9g, allocation: { machineId: m1, sharePct: "100" } }, uid);
+    check("§9g ayar sonradan OFF: aynı token'lı yeniden deneme önceki kaydı alır (409 değil)", r9g2.data?.id === r9g.data?.id);
     const once9 = await prisma.cashTransaction.count({ where: { cashBoxId: box.id } });
     const e9c = await hata(() => cashTransactionService.create({ kind: "EXPENSE", cashBoxId: box.id, amount: 10, txnDate: day("2019-06-11"), clientToken: randomUUID(), allocation: { machineId: m1, sharePct: "100" } }, uid));
     check("§9c OFF'ta bağlı form → 409, masraf da YAZILMAZ", kod(e9c) === "EXPENSE_ALLOCATION_DISABLED" && (await prisma.cashTransaction.count({ where: { cashBoxId: box.id } })) === once9, kod(e9c));

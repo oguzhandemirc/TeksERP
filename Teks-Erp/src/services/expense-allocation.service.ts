@@ -14,6 +14,7 @@ import { AuditService } from "./audit.service";
 import { tokenReplay } from "./helpers/token-replay.helper";
 import { assertCashPeriodOpenTx } from "./helpers/cash-period-guard.helper";
 import {
+  activeSharePct,
   allocationTargetKey,
   assertAllocationTargetTx,
   assertShareWithinLimitTx,
@@ -120,7 +121,7 @@ export async function linkNewExpenseTx(
   return insertExpenseAllocationTx(tx, { cashTransactionId, target, sharePct: share, clientToken, userId });
 }
 
-async function auditAllocation(userId: string, action: "CREATE" | "UPDATE", row: ExpenseAllocation, extra: Record<string, unknown> = {}): Promise<void> {
+export async function auditAllocation(userId: string | undefined, action: "CREATE" | "UPDATE", row: ExpenseAllocation, extra: Record<string, unknown> = {}): Promise<void> {
   await AuditService.log({
     userId,
     action,
@@ -220,7 +221,7 @@ export async function listExpenseAllocationsForTxn(
   const exists = await prisma.cashTransaction.findUnique({ where: { id: cashTransactionId }, select: { id: true } });
   if (!exists) throw AppError.notFound("Kasa hareketi bulunamadı.", { code: "CASH_TXN_NOT_FOUND" });
   const rows = await prisma.expenseAllocation.findMany({ where: { cashTransactionId }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 200 });
-  const active = rows.filter((r) => !r.revokedAt).reduce((s, r) => s.plus(r.sharePct), new Prisma.Decimal(0));
+  const active = await activeSharePct(prisma, cashTransactionId);
   return {
     success: true,
     data: { rows: await toRows(rows), activePct: active.toString(), remainingPct: EXPENSE_ALLOCATION_SHARE_MAX.minus(active).toString() },

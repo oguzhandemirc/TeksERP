@@ -101,9 +101,14 @@ export async function assertAllocationTargetTx(
 }
 
 /** Σ aktif pay + yeni pay ≤ 100. Masraf satırı kilitliyken çağrılır (kilit Σ okumasını serileştirir). */
+/** Masrafın aktif bağ payı toplamı — Σ kapısı ve panel "kalan pay" gösterimi TEK kaynaktan okur. */
+export async function activeSharePct(db: Prisma.TransactionClient, cashTransactionId: string): Promise<Prisma.Decimal> {
+  const agg = await db.expenseAllocation.aggregate({ where: { cashTransactionId, revokedAt: null }, _sum: { sharePct: true } });
+  return agg._sum.sharePct ?? new Prisma.Decimal(0);
+}
+
 export async function assertShareWithinLimitTx(tx: Prisma.TransactionClient, cashTransactionId: string, sharePct: Prisma.Decimal): Promise<void> {
-  const agg = await tx.expenseAllocation.aggregate({ where: { cashTransactionId, revokedAt: null }, _sum: { sharePct: true } });
-  const used = agg._sum.sharePct ?? new Prisma.Decimal(0);
+  const used = await activeSharePct(tx, cashTransactionId);
   if (used.plus(sharePct).gt(EXPENSE_ALLOCATION_SHARE_MAX)) {
     const remaining = EXPENSE_ALLOCATION_SHARE_MAX.minus(used);
     throw AppError.conflict(
