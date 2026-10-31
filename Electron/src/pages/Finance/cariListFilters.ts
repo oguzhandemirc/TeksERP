@@ -12,3 +12,18 @@ export function activityFilters(v: CariActivityFilter): Record<string, string> {
 }
 export const CARI_EMPTY_ACTIVE_HINT = "Hareketi olan cari hesap yok. Tümü'nü seçerek hareketsiz hesapları da görün. Yeni hesap Cariler'den kart açılınca kendiliğinden doğar.";
 export const CARI_EMPTY_ALL_HINT = "Cari hesap yok. Hesap, Cariler'de kart açılınca kendiliğinden doğar; terimler kart formunun Finans bölümünden yazılır.";
+
+// D4-I3: "Kilit" süzgeci — Kilitli → `filter[held]=true` (SUNUCUDA; liste + toplam aynı where). Tümü süzgeç göndermez.
+export type CariHoldFilter = "all" | "held";
+export const CARI_HOLD_FILTER_OPTIONS: readonly { value: CariHoldFilter; label: string }[] = [
+  { value: "all", label: "Tümü" },
+  { value: "held", label: "Kilitli" },
+];
+export function holdFilters(v: CariHoldFilter): Record<string, string> {
+  return v === "held" ? { held: "true" } : {};
+}
+/** Menüdeki "Kilitli cariler" derin bağlantısı `?kilit=1` ile gelir. */
+export function holdFilterFromSearch(search: string): CariHoldFilter {
+  return new URLSearchParams(search).get("kilit") === "1" ? "held" : "all";
+}
+export const CARI_EMPTY_HELD_HINT = "Kilitli cari yok. Kilit, cari kartının Kilit sekmesinden ya da bu listedeki Kilit düğmesinden konur.";

@@ -1,4 +1,4 @@
-import { Cog, Copy, KeyRound, ServerCog, Settings2, Link2, FileText, CalendarRange } from "lucide-react";
+import { Cog, Copy, KeyRound, ServerCog, Settings2, Link2, FileText, CalendarRange, Lock } from "lucide-react";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
 import { ROLL_TABS } from "@/pages/Operations/Rolls/tabs-config";
 import { ETIKET_TABS } from "@/pages/Labels/tabs-config";
@@ -207,6 +207,17 @@ const orphanPageEntries: CommandEntry[] = [
     to: "/finance/invoices?donemSonu=1",
     permission: "finance:write",
     keywords: "dönem sonu ay sonu hizmet fatura taslak emanet kurşun işçilik toplu aylık",
+    deep: true,
+  },
+  {
+    // D4-I3: Cari Hesaplar "Kilit: Kilitli" süzgeciyle açılır (`?kilit=1`); süzme sunucuda.
+    key: "finance:held-cari",
+    label: "Cari Hesaplar · Kilitli cariler",
+    description: "Kilitli carileri listele, kilidi gör, koy ya da aç",
+    icon: Lock,
+    to: "/finance/cari?kilit=1",
+    permission: "finance:read",
+    keywords: "cari kilit kilitli bloke borç risk durdur sevk iş kabulü fatura onayı",
     deep: true,
   },
 ];

@@ -53,6 +53,8 @@ export interface CariRow {
    *  ⚠️ Tutar STRING'tir ("3400.00") — yaşlandırma raporu para hassasiyeti için
    *  string basar ve `money()` string kabul eder; `Number()`a çevirip toplama. */
   overdue?: Array<{ currency: Currency; amount: string }>;
+  /** D4-I3: aktif cari kilidi (rozet) — eski backend göndermez (undefined). */
+  hold?: { holdId: string; scopes: Array<"INTAKE" | "SHIPMENT" | "INVOICE">; reasonLabel: string; createdAt: string } | null;
 }
 
 export interface InvoiceRow {

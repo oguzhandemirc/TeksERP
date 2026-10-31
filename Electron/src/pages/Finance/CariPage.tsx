@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, FileSpreadsheet, Pencil } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RelocatedToolStrip } from "@/pages/Reports/_v2/RelocatedTools";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
@@ -12,7 +13,8 @@ import { LabeledSelect } from "@/components/forms/LabeledSelect";
 import { DIRECTION_OPTIONS, ROLE_FILTER_DEFAULTS, SUBCONTRACTOR_OPTIONS, directionFilters, isRoleFilterDirty, subcontractorFilters, type DirectionFilter, type RoleFilterPair, type SubcontractorFilter } from "@/lib/partnerRoles";
 import { cariRoleLabel, listCari, money, type CariRow } from "./service";
 import { StatementDialog } from "./StatementDialog";
-import { activityFilters, CARI_ACTIVITY_DEFAULT, CARI_ACTIVITY_OPTIONS, CARI_EMPTY_ACTIVE_HINT, CARI_EMPTY_ALL_HINT, type CariActivityFilter } from "./cariListFilters";
+import { activityFilters, CARI_ACTIVITY_DEFAULT, CARI_ACTIVITY_OPTIONS, CARI_EMPTY_ACTIVE_HINT, CARI_EMPTY_ALL_HINT, CARI_EMPTY_HELD_HINT, CARI_HOLD_FILTER_OPTIONS, holdFilterFromSearch, holdFilters, type CariActivityFilter, type CariHoldFilter } from "./cariListFilters";
+import { CariHoldButton, CariHoldDialog, CariStatusBadges } from "./CariRowExtras";
 import { CariEditDialog } from "./CariEditDialog";
 
 /**
@@ -46,15 +48,19 @@ export function CariPage() {
   const [activity, setActivity] = useState<CariActivityFilter>(CARI_ACTIVITY_DEFAULT);
   const [statementFor, setStatementFor] = useState<CariRow | null>(null);
   const [editFor, setEditFor] = useState<CariRow | null>(null);
+  // D4-I3: "Kilit" süzgeci sunucuda; menüdeki "Kilitli cariler" `?kilit=1` ile açar.
+  const { search: locationSearch } = useLocation();
+  const [held, setHeld] = useState<CariHoldFilter>(() => holdFilterFromSearch(locationSearch));
+  const [holdFor, setHoldFor] = useState<CariRow | null>(null);
 
   const q = useQuery({
-    queryKey: ["finance", "cari", search, filters.direction, filters.subcontractor, onlyWithBalance, activity],
+    queryKey: ["finance", "cari", search, filters.direction, filters.subcontractor, onlyWithBalance, activity, held],
     queryFn: () =>
       listCari({
         page: 1,
         pageSize: 100,
         search: search || undefined,
-        filters: { ...directionFilters(filters.direction), ...subcontractorFilters(filters.subcontractor), ...activityFilters(activity) },
+        filters: { ...directionFilters(filters.direction), ...subcontractorFilters(filters.subcontractor), ...activityFilters(activity), ...holdFilters(held) },
         onlyWithBalance,
         // "Gecikmiş" kolonu bu sayfanın parçası → daima istenir. Backend bunu
         // yaşlandırma ÇEKİRDEĞİNDEN üretir (tek kaynak); eski backend bayrağı
@@ -87,6 +93,7 @@ export function CariPage() {
         <LabeledSelect label="Fason" value={filters.subcontractor} options={SUBCONTRACTOR_OPTIONS} onChange={(v) => setFilters((f) => ({ ...f, subcontractor: v as SubcontractorFilter }))} title="Fason iş yapan kartların hesapları" />
 
         <LabeledSelect label="Durum" value={activity} options={CARI_ACTIVITY_OPTIONS} onChange={(v) => setActivity(v as CariActivityFilter)} title="Hareketli: en az bir cari hareketi olan hesaplar" />
+        <LabeledSelect label="Kilit" value={held} options={CARI_HOLD_FILTER_OPTIONS} onChange={(v) => setHeld(v as CariHoldFilter)} title="Kilitli: aktif cari kilidi olan hesaplar" />
         {isRoleFilterDirty(filters) && (
           <Button variant="ghost" size="sm" onClick={() => setFilters(ROLE_FILTER_DEFAULTS)}>
             Süzgeci temizle
@@ -122,7 +129,7 @@ export function CariPage() {
             </Button>
           </div>
         ) : rows.length === 0 ? (
-          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">{activity === "active" ? CARI_EMPTY_ACTIVE_HINT : CARI_EMPTY_ALL_HINT}</div>
+          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">{held === "held" ? CARI_EMPTY_HELD_HINT : activity === "active" ? CARI_EMPTY_ACTIVE_HINT : CARI_EMPTY_ALL_HINT}</div>
         ) : (
           <div className="space-y-3">
             {/* İKİNCİ KATMAN — bayat satırlar duruyor: liste gizlenmez, uyarılır. */}
@@ -153,14 +160,7 @@ export function CariPage() {
                     <td className="px-3 py-2 font-mono text-xs">{c.code}</td>
                     <td className="px-3 py-2 font-medium">
                       <span className={c.isActive ? undefined : "text-muted-foreground"}>{c.name}</span>
-                      {/* Pasifleştirme buradan yapılabildiği için görünür de olmalı:
-                          rozetsiz satır "kaydettim ama hiçbir şey değişmedi" hissi
-                          verir ve pasif cari yeni fatura/tahsilatı REDDEDER. */}
-                      {!c.isActive && (
-                        <Badge variant="outline" className="ml-2 text-[10px] text-muted-foreground">
-                          Pasif
-                        </Badge>
-                      )}
+                      <CariStatusBadges row={c} />
                     </td>
                     <td className="px-3 py-2">
                       <Badge variant="outline">{cariRoleLabel(c)}</Badge>
@@ -187,6 +187,7 @@ export function CariPage() {
                           <FileSpreadsheet className="mr-1 h-4 w-4" />
                           Ekstre
                         </Button>
+                        <CariHoldButton onClick={() => setHoldFor(c)} />
                         <PermissionGate permission="finance:write">
                           <Button variant="ghost" size="sm" onClick={() => setEditFor(c)}>
                             <Pencil className="mr-1 h-4 w-4" />
@@ -218,6 +219,7 @@ export function CariPage() {
 
       {/* KOŞULLU mount — her açılış taze state demektir; kalıcı mount edilseydi
           başka bir cariye geçildiğinde önceki kartın değerleri formda kalırdı. */}
+      {holdFor && <CariHoldDialog cariId={holdFor.id} cariName={holdFor.name} onClose={() => setHoldFor(null)} />}
       {editFor && <CariEditDialog cari={editFor} open onOpenChange={() => setEditFor(null)} />}
     </PageShell>
   );

@@ -18,6 +18,8 @@ export interface ConsignedOwnerRow {
   ready: ConsignedBucket;
   other: ConsignedBucket;
   total: ConsignedBucket;
+  /** D4-I3: sahibin cari kilidi (rozet; metin sunucudan) — eski backend göndermez. */
+  hold?: { held: boolean; holdScopes: string[]; holdText: string | null };
 }
 
 export interface ConsignedWorkSummary {

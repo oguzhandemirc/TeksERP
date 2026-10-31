@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { CariHoldBadge } from "@/pages/Finance/CariHold/CariHoldBadge";
 import type { ReadyWorkRow, ReadyWorkSummary, ReadyWorkUnit } from "./service";
 import { readinessPercent, STATE_FILTERS, STATE_LABEL, type ReadyStateFilter, type ReadyWorksTab } from "./ready-works-view";
 
@@ -123,8 +124,16 @@ export function ReadyWorksTable({ rows, unit, unitLabel, onOpen }: { rows: Ready
               onKeyDown={(e) => onKey(e, r)}
               aria-label={`${r.label} toplarını aç`}
             >
-              <TableCell className="min-w-[8rem] font-medium">{r.label}</TableCell>
-              {unit !== "customer" && <TableCell className="hidden sm:table-cell">{r.customerName ?? "—"}</TableCell>}
+              <TableCell className="min-w-[8rem] font-medium">
+                {r.label}
+                {unit === "customer" && <CariHoldBadge view={r.customerHold} />}
+              </TableCell>
+              {unit !== "customer" && (
+                <TableCell className="hidden sm:table-cell">
+                  {r.customerName ?? "—"}
+                  <CariHoldBadge view={r.customerHold} />
+                </TableCell>
+              )}
               <TableCell>
                 <Badge variant={r.state === "READY" ? "default" : r.state === "PARTIAL" ? "secondary" : "muted"} className="whitespace-nowrap">
                   {STATE_LABEL[r.state]}

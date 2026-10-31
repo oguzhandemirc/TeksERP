@@ -14,6 +14,7 @@ import { TERIM } from "@/lib/terim";
 import { CONSIGNED_WORK_QUERY_KEY, getConsignedWork, type ConsignedBucket, type ConsignedOwnerRow, type ConsignedWorkSummary } from "./service";
 import { primaryBucket, rollsLinkFor, type ConsignedBucketKey } from "./consigned-links";
 import { Badge } from "@/components/ui/badge";
+import { CariHoldBadge } from "@/pages/Finance/CariHold/CariHoldBadge";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { getAllReadyWorks, READY_WORKS_PATH, READY_WORKS_QUERY_KEY, type ReadyWorkRow } from "@/pages/Operations/ReadyWorks/service";
 import { STATE_LABEL } from "@/pages/Operations/ReadyWorks/ready-works-view";
@@ -127,7 +128,10 @@ function OwnersTable({
               onKeyDown={(e) => onKey(e, r)}
               aria-label={`${r.ownerName} toplarını aç`}
             >
-              <TableCell className="min-w-[9rem] font-medium">{r.ownerName}</TableCell>
+              <TableCell className="min-w-[9rem] font-medium">
+                {r.ownerName}
+                <CariHoldBadge view={r.hold} />
+              </TableCell>
               {showRaw && <TableCell className="text-right"><BucketCell bucket={r.waiting} ownerId={r.ownerCustomerId} kind="waiting" /></TableCell>}
               {showSemi && <TableCell className="text-right"><BucketCell bucket={r.waitingSemi} ownerId={r.ownerCustomerId} kind="waitingSemi" /></TableCell>}
               <TableCell className="text-right"><BucketCell bucket={r.inProcess} ownerId={r.ownerCustomerId} kind="inProcess" /></TableCell>
