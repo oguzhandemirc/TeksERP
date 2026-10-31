@@ -22,6 +22,22 @@ export function parseMeasuredWidth(text: string): WidthParse {
   return { ok: true, value: n };
 }
 
+/** Sunucunun yazdığı en sınırı (adım özeti `widthLimit`); istemci eşik HESAPLAMAZ, yalnız karşılaştırır. */
+export interface MeasuredWidthLimit {
+  widthBefore: number | null;
+  toleranceCm: number;
+  maxCm: number | null;
+}
+
+/**
+ * Sınır dışı en → sunucunun 400 WIDTH_OUT_OF_RANGE metniyle aynı Türkçe sebep; içerideyse ya da
+ * sınır yoksa (eski backend / en bilinmiyor) null — karar yine sunucuda.
+ */
+export function measuredWidthLimitError(value: number, limit: MeasuredWidthLimit | null | undefined): string | null {
+  if (limit?.maxCm == null || value <= limit.maxCm) return null;
+  return `Ölçülen en 0'dan büyük ve en fazla ${limit.maxCm} cm olmalı (mevcut en ${limit.widthBefore} cm + eşik ${limit.toleranceCm} cm)`;
+}
+
 /** Değer yoksa gövde AYNEN döner (anahtar eklenmez); varsa `measuredWidthCm` eklenir. */
 export function withMeasuredWidth<T extends object>(vars: T, widthCm: number | null): T | (T & { measuredWidthCm: number }) {
   return widthCm == null ? vars : { ...vars, measuredWidthCm: widthCm };

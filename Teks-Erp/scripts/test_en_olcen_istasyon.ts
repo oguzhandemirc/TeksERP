@@ -14,7 +14,8 @@
 // §9 ⭐ ensiz KK2 → bitir → yeniden aç → enli KK2: izsiz satır WIDTH_REMEASURE ile damgalanır, en yazılır
 //    (çıkışsız 409 döngüsü yok).
 // §10 ⭐ kursunFinish örtüşen çift çağrı aynı enle: ikisi de başarılı, tek izli aktif satır (idempotent).
-// §11 ⭐ adım özeti (getStep) capturesWidth yalnız yetenekli istasyonda taşır (tablet alanı buna bağlı).
+// §11 ⭐ adım özeti (getStep) capturesWidth yalnız yetenekli istasyonda taşır (tablet alanı buna bağlı);
+//     §11c–e top başına widthLimit (D4-KUC3b; tablet eşik dışı eni istek göndermeden uyarır).
 // Negatif sonda (2026-10-30, elle; PR gövdesinde): restoreMeasuredWidthsTx WHERE'inden
 // `width: trace.widthAfter` çıkarılınca §7a/§7b ❌. (2026-10-31) izsiz satırda damga yerine 409 → §9a/§9b ❌;
 // kursunFinish SAME dalı kapatılınca §10a ❌ (WIDTH_ALREADY_RECORDED).
@@ -240,6 +241,20 @@ async function main(): Promise<void> {
       const plainSum = (await svc.getStep(p.stepId)).data as unknown as Record<string, unknown>;
       check("§11a ⭐ en ölçen istasyon adımı: capturesWidth=true", capSum.capturesWidth === true, String(capSum.capturesWidth));
       check("§11b ⭐ en ölçmeyen istasyon adımı: capturesWidth anahtarı YOK", !("capturesWidth" in plainSum), String(plainSum.capturesWidth));
+      // D4-KUC3b: tablet ön-denetimi sınırı sunucudan alır — yazım kapısıyla aynı hesap (mevcut en + ayar eşiği).
+      const capRoll = (capSum.rolls as Record<string, unknown>[]).find((r) => r.rollId === c.rollId);
+      const plainRoll = (plainSum.rolls as Record<string, unknown>[]).find((r) => r.rollId === p.rollId);
+      check(
+        "§11c ⭐ en ölçen adımda top widthLimit = {300, eşik 10, üst 310}",
+        JSON.stringify(capRoll?.widthLimit) === JSON.stringify({ widthBefore: 300, toleranceCm: 10, maxCm: 310 }),
+        JSON.stringify(capRoll?.widthLimit),
+      );
+      check("§11d ⭐ en ölçmeyen adımda widthLimit anahtarı YOK (bayt-aynı)", !!plainRoll && !("widthLimit" in plainRoll), JSON.stringify(plainRoll));
+      await setFlag(SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_TOLERANCE_CM, 25);
+      const capSum25 = (await svc.getStep(c.stepId)).data as unknown as Record<string, unknown>;
+      await setFlag(SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_TOLERANCE_CM, 10);
+      const capRoll25 = (capSum25.rolls as Record<string, unknown>[]).find((r) => r.rollId === c.rollId);
+      check("§11e ⭐ eşik ayarı 25 → üst sınır 325 (sınır ayardan, kopya eşik yok)", (capRoll25?.widthLimit as { maxCm?: number } | undefined)?.maxCm === 325, JSON.stringify(capRoll25?.widthLimit));
     }
 
     // §10 kursunFinish örtüşen çift çağrı (zaman aşımı sonrası yeniden deneme) aynı enle
