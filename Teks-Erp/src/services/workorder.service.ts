@@ -489,6 +489,18 @@ async function resolvePlanDates(
 // statü olarak kaldırıldı; "üretim sürüyor mu?" sorusu line.workOrderLinks
 // üzerinden runtime hesabı.
 
+type PreparedWorkOrder = Awaited<ReturnType<WorkOrderService["prepareCreate"]>>;
+
+/** Oluşturma yanıtının projeksiyonu (create + üretim önerisi aynı biçimi döner). */
+const WO_CREATE_INCLUDE = {
+  steps:      { include: { station: true }, orderBy: { stepSequence: "asc" } },
+  orderLinks: {
+    where: ACTIVE_ORDER_LINK, orderBy: { createdAt: "asc" },
+    include: { orderLine: { include: { order: { include: { customer: true } }, item: true, color: true } } },
+  },
+  routeTemplate: true,
+} satisfies Prisma.WorkOrderInclude;
+
 export interface WorkOrderCreateInput {
   batchNumber?:       string | null;
   /** İdempotency anahtarı (UUID) — istemci form-oturumu başına üretir. Aynı
@@ -785,7 +797,7 @@ export class WorkOrderService {
    * (örn IE1207260001). Günlük sıra work_orders'taki mevcut maksimum +1.
    * (Parti no P… AYRI kimliktir — `batch.service.generateBatchNumberTx` üretir.)
    */
-  async generateWorkOrderNumber(): Promise<string> {
+  async generateWorkOrderNumber(db: Pick<typeof prisma, "workOrder"> = prisma): Promise<string> {
     const now = new Date();
 
     // Retry loop — nadiren de olsa unique çakışma olursa tekrar dene.
@@ -801,7 +813,7 @@ export class WorkOrderService {
       const candidate = await nextSeriesNo(
         "workOrder",
         async (prefix) => {
-          const todays = await prisma.workOrder.findMany({
+          const todays = await db.workOrder.findMany({
             where: { workOrderNumber: { gte: prefix, startsWith: prefix } },
             select: { workOrderNumber: true, createdAt: true },
           });
@@ -810,7 +822,7 @@ export class WorkOrderService {
         now,
       );
 
-      const exists = await prisma.workOrder.findUnique({ where: { workOrderNumber: candidate } });
+      const exists = await db.workOrder.findUnique({ where: { workOrderNumber: candidate } });
       if (!exists) return candidate;
     }
 
@@ -891,6 +903,26 @@ export class WorkOrderService {
      */
     goods?: { colorIds: (string | null)[]; propertyIdSets: string[][] },
   ): Promise<ApiResponse<WorkOrder> & { idempotentReplay?: boolean }> {
+    const prep = await this.prepareCreate(data, goods);
+    const { manualWorkOrderNumber } = prep;
+    // Otomatik iş emri no sequence çakışırsa (P2002) tx'i baştan dene. Tx'in İLK ifadesi
+    // kart kilidi: 8030 SHARED → FOR SHARE (eşzamanlı "Pasif'e geç" bu iş emrini görür).
+    const workOrder = await withBarcodeRetry(() => prisma.$transaction((tx) => this.insertPreparedTx(tx, prep, userId)), undefined, (err) => {
+      // İdempotent replay: clientToken P2002'si retry EDİLMEZ (retry hep aynı
+      // token'ı yazar) — false ile propagate edilir, boğaz (`woReplay.run`) replay'e çevirir.
+      if (isClientTokenP2002(err)) return false;
+      // F61: workOrderNumber P2002'si MANUEL modda retry EDİLMEZ (hep aynı numarayı
+      // yazar) — doğrudan anlaşılır 409. (Auto modda taze numarayla retry edilir.)
+      if (manualWorkOrderNumber && p2002Mentions(err, /workOrderNumber/i)) {
+        throw AppError.conflict(`Bu terbiye iş emri numarası zaten kullanılıyor: ${manualWorkOrderNumber}`);
+      }
+      return true;
+    });
+    return this.finishCreate(workOrder, prep, userId);
+  }
+
+  /** Tx ÖNCESİ doğrulama + normalizasyon (SY-M1: üretim önerisi aynı çekirdeği kendi tx'inde çağırır; ikinci yaratma yolu yok). */
+  async prepareCreate(data: WorkOrderCreateInput, goods?: { colorIds: (string | null)[]; propertyIdSets: string[][] }) {
     // Kat katalog doğrulaması — YERİNDE kanonikleştirir, böylece aşağıdaki tüm
     // kullanımlar (yazım + kilit karşılaştırmaları) aynı değeri görür.
     await applyFoldTypeForWriteInPlace(data as Record<string, unknown>);
@@ -1231,116 +1263,98 @@ export class WorkOrderService {
     // ONUN üzerinden karar verilir (alan adı `batchNumber`, anlamı iş emri no).
     assertManualNumberAllowed("workOrder", manualWorkOrderNumber);
 
-    // Otomatik iş emri no sequence çakışırsa (P2002) tx'i baştan dene. Tx'in İLK ifadesi
-    // kart kilidi: 8030 SHARED → FOR SHARE (eşzamanlı "Pasif'e geç" bu iş emrini görür).
-    const workOrder = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
-      if (resolvedTargetItemId) await assertItemUsableTx(tx, resolvedTargetItemId, woItemUsage);
-      const workOrderNumber = manualWorkOrderNumber ?? (await this.generateWorkOrderNumber());
-      // Gevşek model: per-kalem aşırı-tahsis kontrolü YOK. Sipariş bağı yalnız
-      // "bu iş emri hangi siparişler için" niyetidir (metraj taşımaz); fazla
-      // üretim Tambur'da stoğa düşer. Yalnız satırların varlığını doğrula.
-      if (allocations.length > 0) {
-        const found = await tx.orderLine.count({ where: { id: { in: allocations.map((a) => a.orderLineId) } } });
-        if (found !== allocations.length) {
-          throw AppError.badRequest("Bazı sipariş satırları bulunamadı");
-        }
+    return { data, type, finalSteps, allocations, resolvedTargetItemId, woItemUsage, resolvedTargetColorId, routeWarnings, targetPropertyIds, targetValues, manualWorkOrderNumber };
+  }
+
+  /** Tx gövdesi — `numberDb` verilmezse numara bugünkü gibi tx DIŞINDAN okunur; çok kayıtlı tx kendi tx'ini verir (kendi satırını görsün). */
+  async insertPreparedTx(tx: Prisma.TransactionClient, prep: PreparedWorkOrder, userId?: string, numberDb: Pick<typeof prisma, "workOrder"> = prisma) {
+    const { data, type, finalSteps, allocations, resolvedTargetItemId, woItemUsage, resolvedTargetColorId, targetPropertyIds, targetValues, manualWorkOrderNumber } = prep;
+    if (resolvedTargetItemId) await assertItemUsableTx(tx, resolvedTargetItemId, woItemUsage);
+    const workOrderNumber = manualWorkOrderNumber ?? (await this.generateWorkOrderNumber(numberDb));
+    // Gevşek model: per-kalem aşırı-tahsis kontrolü YOK. Sipariş bağı yalnız
+    // "bu iş emri hangi siparişler için" niyetidir (metraj taşımaz); fazla
+    // üretim Tambur'da stoğa düşer. Yalnız satırların varlığını doğrula.
+    if (allocations.length > 0) {
+      const found = await tx.orderLine.count({ where: { id: { in: allocations.map((a) => a.orderLineId) } } });
+      if (found !== allocations.length) {
+        throw AppError.badRequest("Bazı sipariş satırları bulunamadı");
       }
+    }
 
-      const planDates = await resolvePlanDates(
-        data.plannedStartDate,
-        data.plannedEndDate,
-      );
+    const planDates = await resolvePlanDates(
+      data.plannedStartDate,
+      data.plannedEndDate,
+    );
 
-      const wo = await createWorkOrderTx(tx, { trigger: "WO_CREATE", userId }, {
-        data: {
-          // Künye (Faz A2) — "iş emrini KİM AÇTI" bilgisi bugüne kadar HİÇ
-          // yoktu; yalnız audit'ten okunabiliyordu ve audit 6 ayda arşivlenir.
-          createdById: userId ?? null,
-          updatedById: userId ?? null,
-          workOrderNumber,
-          clientToken:       data.clientToken ?? null,
-          type,
-          width:             data.width          ?? null,
-          targetQuantity:    data.targetQuantity ?? null,
-          targetWeight:      data.targetWeight ?? null,
-          parameters:        (data.parameters as Prisma.InputJsonValue) ?? undefined,
-          status:            WorkOrderStatus.PLANNED,
-          plannedStartDate:  planDates.plannedStartDate,
-          plannedEndDate:    planDates.plannedEndDate,
-          routeTemplateId:   data.routeTemplateId   ?? null,
-          targetItemId:      resolvedTargetItemId,
-          targetColorId:     resolvedTargetColorId,
-          foldType:          data.foldType          ?? null,
-          steps: {
-            create: finalSteps.map((step, index) => ({
-              stationId:              step.stationId,
-              stepSequence:           index + 1,
-              notes:                  step.notes,
-              requiredCategoryId:     step.requiredCategoryId ?? null,
-              plannedSubcontractorId: step.plannedSubcontractorId ?? null,
-              // "Fasona renksiz git" (2026-08-17 ekru kuralı). Bu satır 2026-08-25'e
-              // kadar YOKTU: finalSteps alanı taşıyordu ama yazıma girmiyordu, yani
-              // şablondan miras da form overlay'i de sessizce düşüyordu.
-              dispatchWithoutColor:   step.dispatchWithoutColor ?? false,
-            })),
-          },
-          ...(allocations.length > 0
-            ? {
-                orderLinks: {
-                  create: allocations.map((a) => ({
-                    orderLineId:  a.orderLineId,
-                    allocatedQty: a.allocatedQty,
-                  })),
-                },
-              }
-            : {}),
-          ...(targetPropertyIds.length > 0
-            ? {
-                targetProperties: {
-                  create: targetPropertyIds.map((propertyId) => ({ propertyId })),
-                },
-              }
-            : {}),
-          ...targetValuesNestedCreate(targetValues, userId),
+    const wo = await createWorkOrderTx(tx, { trigger: "WO_CREATE", userId }, {
+      data: {
+        // Künye (Faz A2) — "iş emrini KİM AÇTI" bilgisi bugüne kadar HİÇ
+        // yoktu; yalnız audit'ten okunabiliyordu ve audit 6 ayda arşivlenir.
+        createdById: userId ?? null,
+        updatedById: userId ?? null,
+        workOrderNumber,
+        clientToken:       data.clientToken ?? null,
+        type,
+        width:             data.width          ?? null,
+        targetQuantity:    data.targetQuantity ?? null,
+        targetWeight:      data.targetWeight ?? null,
+        parameters:        (data.parameters as Prisma.InputJsonValue) ?? undefined,
+        status:            WorkOrderStatus.PLANNED,
+        plannedStartDate:  planDates.plannedStartDate,
+        plannedEndDate:    planDates.plannedEndDate,
+        routeTemplateId:   data.routeTemplateId   ?? null,
+        targetItemId:      resolvedTargetItemId,
+        targetColorId:     resolvedTargetColorId,
+        foldType:          data.foldType          ?? null,
+        steps: {
+          create: finalSteps.map((step, index) => ({
+            stationId:              step.stationId,
+            stepSequence:           index + 1,
+            notes:                  step.notes,
+            requiredCategoryId:     step.requiredCategoryId ?? null,
+            plannedSubcontractorId: step.plannedSubcontractorId ?? null,
+            // "Fasona renksiz git" (2026-08-17 ekru kuralı). Bu satır 2026-08-25'e
+            // kadar YOKTU: finalSteps alanı taşıyordu ama yazıma girmiyordu, yani
+            // şablondan miras da form overlay'i de sessizce düşüyordu.
+            dispatchWithoutColor:   step.dispatchWithoutColor ?? false,
+          })),
         },
-        include: {
-          steps:      { include: { station: true }, orderBy: { stepSequence: "asc" } },
-          orderLinks: {
-            where: ACTIVE_ORDER_LINK, orderBy: { createdAt: "asc" },
-            include: {
-              orderLine: {
-                include: {
-                  order: { include: { customer: true } },
-                  item: true,
-                  color: true,
-                },
+        ...(allocations.length > 0
+          ? {
+              orderLinks: {
+                create: allocations.map((a) => ({
+                  orderLineId:  a.orderLineId,
+                  allocatedQty: a.allocatedQty,
+                })),
               },
-            },
-          },
-          routeTemplate: true,
-        },
-      });
-
-      // Phase 1: WO açılışı order status'a dokunmuyor. "Üretim sürüyor mu?"
-      // sorusu line.workOrderLinks üzerinden runtime hesabı.
-
-      // Refakat kartı İŞ EMRİ açılışında doğar (İE başına tek kart, barkod = İE).
-      // Parti (Batch) sonradan doğsa da yeni kart üretmez; kart hep bu WO'ya bağlı.
-      // Kartsız WO olmaz → mobil fason sevkte ilk sevkten önce bile okutulabilir.
-      await travelerCardService.createForWorkOrder(tx, wo.id, userId);
-
-      return wo;
-    }), undefined, (err) => {
-      // İdempotent replay: clientToken P2002'si retry EDİLMEZ (retry hep aynı
-      // token'ı yazar) — false ile propagate edilir, boğaz (`woReplay.run`) replay'e çevirir.
-      if (isClientTokenP2002(err)) return false;
-      // F61: workOrderNumber P2002'si MANUEL modda retry EDİLMEZ (hep aynı numarayı
-      // yazar) — doğrudan anlaşılır 409. (Auto modda taze numarayla retry edilir.)
-      if (manualWorkOrderNumber && p2002Mentions(err, /workOrderNumber/i)) {
-        throw AppError.conflict(`Bu terbiye iş emri numarası zaten kullanılıyor: ${manualWorkOrderNumber}`);
-      }
-      return true;
+            }
+          : {}),
+        ...(targetPropertyIds.length > 0
+          ? {
+              targetProperties: {
+                create: targetPropertyIds.map((propertyId) => ({ propertyId })),
+              },
+            }
+          : {}),
+        ...targetValuesNestedCreate(targetValues, userId),
+      },
+      include: WO_CREATE_INCLUDE,
     });
+
+    // Phase 1: WO açılışı order status'a dokunmuyor. "Üretim sürüyor mu?"
+    // sorusu line.workOrderLinks üzerinden runtime hesabı.
+
+    // Refakat kartı İŞ EMRİ açılışında doğar (İE başına tek kart, barkod = İE).
+    // Parti (Batch) sonradan doğsa da yeni kart üretmez; kart hep bu WO'ya bağlı.
+    // Kartsız WO olmaz → mobil fason sevkte ilk sevkten önce bile okutulabilir.
+    await travelerCardService.createForWorkOrder(tx, wo.id, userId);
+
+    return wo;
+  }
+
+  /** Tx SONRASI: audit + karar uyarıları (commit'ten sonra okunur). */
+  async finishCreate(workOrder: Awaited<ReturnType<WorkOrderService["insertPreparedTx"]>>, prep: PreparedWorkOrder, userId?: string) {
+    const { finalSteps, allocations, routeWarnings, targetPropertyIds, targetValues } = prep;
 
     await AuditService.log({
       userId,
@@ -1380,7 +1394,7 @@ export class WorkOrderService {
    * sipariş satırı kümesi (her zaman), hedef kumaş ve tip (verildiyse). Türetilmiş tip kimlik olmaz: `WorkOrder.type`
    * bağın aynasıdır. İlk commit refakat kartı dahil her şeyi yazdı; audit yalnız gerçek create yolunda.
    */
-  private woReplay(data: WorkOrderCreateInput) {
+  woReplay(data: WorkOrderCreateInput) {
     const lineIds = inputOrderLineIds(data);
     return tokenReplay<WorkOrderReplayRow, ApiResponse<WorkOrder> & { idempotentReplay?: boolean }>({
       find: (db, clientToken) => db.workOrder.findUnique({ where: { clientToken }, include: WO_REPLAY_INCLUDE }),

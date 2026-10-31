@@ -52,6 +52,7 @@ import machineDoffRoutes from "./routes/machine-doff.routes";
 import subcontractorWeavingRoutes from "./routes/subcontractor-weaving.routes";
 import inventoryRoutes from "./routes/inventory.routes";
 import orderRoutes from "./routes/order.routes";
+import productionProposalRoutes from "./routes/production-proposal.routes";
 import recordInfoRoutes from "./routes/record-info.routes";
 import scanRoutes from "./routes/scan.routes";
 import numberSeriesRoutes from "./routes/number-series.routes";
@@ -570,6 +571,8 @@ app.use("/api/shift-definitions", shiftDefinitionRoutes);
 app.use("/api/machine-doffs", machineDoffRoutes);
 app.use("/api/subcontractor-weaving", subcontractorWeavingRoutes);
 app.use("/api/rolls", inventoryRoutes);
+// SY-M1: üretim önerisi alt yolları (`/:id/production-proposal/*`); eşleşmeyen istek orderRoutes'a düşer.
+app.use("/api/orders", productionProposalRoutes);
 app.use("/api/orders", orderRoutes);
 // ⚠️ MOUNT — "yazıldı ama mount edilmedi" sınıfı hata için bkz. reboot-kurtarma notu.
 app.use("/api/record-info", recordInfoRoutes);
