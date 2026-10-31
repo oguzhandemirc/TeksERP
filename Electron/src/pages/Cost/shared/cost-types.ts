@@ -26,8 +26,21 @@ export interface CostInputSnap {
 export interface CostLineOut {
   sira: number; bilesen: string; etiket: string; iplikId: string | null; miktar: DecStr | null; birim: string | null;
   birimFiyatTl: DecStr | null; tutarTlM: DecStr;
+  /** SY-J1: sunum dövizinde tutar/m (sunucu böler); ayar TRY iken alan YOK, kur yoksa null. */
+  tutarDoviz?: DecStr | null;
 }
-export interface CostResultOut {
+/**
+ * SY-J1 sunum dövizi alanları (backend `cost-presentation.helper`). Ayar TRY iken HİÇBİRİ gelmez.
+ * Kaynak SURUM = kayıttaki donmuş kur; ONIZLEME = günün kuru. Kur yoksa null + FX_MISSING.
+ */
+export interface CostPresentationFields {
+  sunumDovizi?: "USD" | "EUR";
+  sunumKuru?: DecStr | null;
+  sunumKuruKaynagi?: "SURUM" | "ONIZLEME";
+  sunumUyarisi?: "FX_MISSING" | null;
+  standartDovizM?: DecStr | null;
+}
+export interface CostResultOut extends CostPresentationFields {
   satirlar: CostLineOut[]; cozguKgM: DecStr; atkiKgM: DecStr; tezgahMSaat: DecStr; hamTlM: DecStr; mamulTlM: DecStr | null;
   /** Kayıtlı sürümde saklanmaz → null (zincirde çizilmez). */
   saglamTlM: DecStr | null; genelGiderTlM: DecStr | null; standartTlM: DecStr;
@@ -52,7 +65,7 @@ export interface CostPreview {
 
 export type StructureStatus = "YAPI_EKSIK" | "VARSAYILAN" | "TAM";
 
-export interface CostVersion {
+export interface CostVersion extends CostPresentationFields {
   id: string; surumNo: number; durum: "ACTIVE" | "SUPERSEDED"; hamTlM: DecStr; mamulTlM: DecStr | null; standartTlM: DecStr;
   cozguKgM: DecStr; atkiKgM: DecStr; tezgahMSaat: DecStr; kurlar: FxSnapshot; uyarilar: string[]; gerekce: string | null;
   hesaplananAt: string; gecersizAt: string | null; geriAlinanSurumId: string | null;

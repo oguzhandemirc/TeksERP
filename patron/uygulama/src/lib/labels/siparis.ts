@@ -82,6 +82,8 @@ export const CARI_TXN_SOURCE: Readonly<Record<string, string>> = {
   CHEQUE_ENDORSE_CANCEL: "Çek/senet ciro stornosu",
   CHEQUE_BOUNCE_CANCEL: "Çek/senet karşılıksız stornosu",
   CHEQUE_RETURN_CANCEL: "Çek/senet iade stornosu",
+  CARI_TRANSFER: "Cari virman",
+  CARI_TRANSFER_CANCEL: "Cari virman stornosu",
 };
 
 export const cariTxnSourceLabel = (v: unknown): string => dictLabel(CARI_TXN_SOURCE, v);

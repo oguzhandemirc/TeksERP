@@ -27,6 +27,8 @@
 //     aynı renk → mükerrersiz) · BLOCK (önizleme ENGEL + işlem 409, P2002/500 değil).
 //  ⑨ NULLSAFE HEDEF TARAFI (K1) — `crossSourceOn.nullSafe` kolonu survivor yükleminde de
 //     `IS NOT DISTINCT FROM`: NULL anahtarlı iki satır önizlemede ENGEL, işlem 409.
+//  ⑪ ALIAS KAPSAMI NULL (D2b) — `delivery_note_aliases` anahtarı nullable `propertyId` taşır
+//     (NULLS NOT DISTINCT): aynı ham metni öğrenmiş gönderenler SKIP ile birleşir, 23505 değil.
 
 import prisma, { pool } from "../src/lib/prisma";
 import { MasterDataMergeService } from "../src/services/master-data-merge.service";
@@ -326,6 +328,7 @@ async function main(): Promise<void> {
 
   await crossSourceCases();
   await nullSafeSurvivorSide();
+  await aliasNullScope();
   await recipeVariantConflict();
 }
 
@@ -660,6 +663,27 @@ async function nullSafeSurvivorSide(): Promise<void> {
     pv2.blockers.map((b) => b.key).join(","));
 }
 
+/** ⑪ D2b: `propertyId` NULL iken `=` çakışmayı kaçırırsa taşıma UPDATE'i yeni tekil indekse çarpar. */
+async function aliasNullScope(): Promise<void> {
+  console.log("\n── ⑪ Gelen belge alias'ı kapsamsız (propertyId NULL) ──");
+  const s = await mkCustomer("DNA-S");
+  const k1 = await mkCustomer("DNA-K1");
+  const k2 = await mkCustomer("DNA-K2");
+  const target = await mkItem("DNA-I");
+  const raw = `${TAG}-ham`.toLowerCase();
+  for (const sender of [s, k1, k2]) {
+    await prisma.deliveryNoteAlias.create({ data: { scope: "ITEM", senderCustomerId: sender, rawKey: raw, targetId: target } });
+  }
+  const only = `${TAG}-yalniz-k2`.toLowerCase();
+  await prisma.deliveryNoteAlias.create({ data: { scope: "ITEM", senderCustomerId: k2, rawKey: only, targetId: target } });
+  const err = await tryMerge("customer", s, [k1, k2], "alias kapsamsiz null sondasi");
+  check("⑪ ⭐ aynı ham metinli üç gönderen birleşir (23505 DEĞİL)", err === null, err ?? "");
+  const rows = await prisma.deliveryNoteAlias.findMany({ where: { rawKey: { in: [raw, only] } }, select: { senderCustomerId: true, rawKey: true } });
+  check("⑪ çakışan anahtar survivor'da TEK satır", rows.filter((r) => r.rawKey === raw && r.senderCustomerId === s).length === 1,
+    JSON.stringify(rows));
+  check("⑪ çakışmayan anahtar survivor'a taşındı", rows.some((r) => r.rawKey === only && r.senderCustomerId === s), JSON.stringify(rows));
+}
+
 /**
  * ⑩ REÇETE VARYANT KODU (SY-MIG) — `product_recipes_item_variant_uq` kısmi unique. Aynı varyant kodu
  * iki kumaşta varsa reçete taşıması ham 23505'e düşerdi; harita BLOCK → önizleme ENGEL + işlem 409.
@@ -701,6 +725,7 @@ main()
     await prisma.deliveryNoteCustomerDefault.deleteMany({ where: { OR: [{ customerId: { in: trash.customers } }, { defaultItemId: { in: trash.items } }] } }).catch(() => undefined);
     await prisma.customerItemColorAlias.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
     await prisma.customerItemAlias.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
+    await prisma.deliveryNoteAlias.deleteMany({ where: { senderCustomerId: { in: trash.customers } } }).catch(() => undefined);
     const ops = await prisma.mergeOperation
       .findMany({ where: { survivorId: { in: [...trash.items, ...trash.colors, ...trash.customers] } }, select: { id: true } })
       .catch(() => [] as Array<{ id: string }>);
