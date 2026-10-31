@@ -253,6 +253,7 @@ const PARTIAL_INDEXES: Array<{
   { table: "roll_customer_codes", index: "roll_customer_codes_roll_active_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "topta tek aktif müşteri kodu (D4-F1)" },
   { table: "cari_holds", index: "cari_holds_active_cariId_key", uniq: true, predicate: `("releasedAt" IS NULL)`, why: "hesap başına tek AKTİF cari kilidi; açmak damga, yeniden kilit yeni satır (D4-I1a, bekçi test_cari_kilit)" },
   { table: "machine_cost_rates", index: "machine_cost_rates_active_machine_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "makine başına TEK AKTİF saat ücreti; değişim damga + yeni satır (D4-G1a, bekçi test_makine_ucreti_sarf_normu)" },
+  { table: "expense_allocations", index: "expense_allocations_active_txn_idx", uniq: false, predicate: `("revokedAt" IS NULL)`, why: "masrafın AKTİF bağları (Σ pay ≤ 100 kilitli okuması + as-of); damgalı satır tarihçe (D4-H3)" },
   { table: "service_consumable_norms", index: "service_consumable_norms_active_pair_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "(hizmet, sarf) çifti başına TEK AKTİF norm (D4-G1a, bekçi test_makine_ucreti_sarf_normu)" },
   // H7 hizmet faturası bağı (migration 20261029140000) — iş (top × kalem × adım, NULLS NOT DISTINCT) başına TEK aktif bağ.
   { table: "service_billing_links", index: "service_billing_links_active_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "aynı iş iki faturaya bağlanamaz; iptal damgası yeri boşaltır (bekçi test_hizmet_fatura)" },
@@ -898,6 +899,19 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "machine_cost_rates", name: "machine_cost_rates_revoke_actor_chk" },
   { table: "service_consumable_norms", name: "service_consumable_norms_qty_ck" },
   { table: "service_consumable_norms", name: "service_consumable_norms_revoke_actor_chk" },
+  // D4-SEMA (2026-10-31): H3 masraf bağı · K3d cari virman/birleştirme · D2b alias kapsamı · V1 KDV/tevkifat · B5 kalibrasyon.
+  { table: "expense_allocations", name: "expense_allocations_target_ck" },
+  { table: "expense_allocations", name: "expense_allocations_share_ck" },
+  { table: "expense_allocations", name: "expense_allocations_revoke_actor_chk" },
+  { table: "cari_transactions", name: "cari_transactions_transfer_group_ck" },
+  { table: "cari_transactions", name: "cari_transactions_transfer_cancel_link_ck" },
+  { table: "cari_transactions", name: "cari_transactions_transfer_due_ck" },
+  { table: "cari_accounts", name: "cari_accounts_merged_self_ck" },
+  { table: "cari_accounts", name: "cari_accounts_merged_inactive_ck" },
+  { table: "cari_accounts", name: "cari_accounts_vat_override_ck" },
+  { table: "cari_accounts", name: "cari_accounts_withholding_ck" },
+  { table: "delivery_note_aliases", name: "delivery_note_aliases_property_scope_ck" },
+  { table: "peripheral_devices", name: "peripheral_devices_calibration_ck" },
   { table: "customer_barcode_series", name: "customer_barcode_series_shape_ck" },
   { table: "service_billing_links", name: "service_billing_links_meters_ck" },
   { table: "service_billing_links", name: "service_billing_links_revoke_ck" },
@@ -2084,7 +2098,8 @@ async function main(): Promise<void> {
   // migration bayrağı sessizce düşürür → NULL kolonlu anahtar yeniden çiftlenir. Burada bayrak ölçülür.
   const NULLS_NOT_DISTINCT_UNIQUES: Array<{ table: string; index: string; why: string }> = [
     // E4 (migration 20261029160000): gönderensiz (SENDER kapsamı) öğrenme de tekil; `INSERT … ON CONFLICT` hedefi.
-    { table: "delivery_note_aliases", index: "delivery_note_aliases_scope_senderCustomerId_rawKey_key", why: "sözlük anahtarı NULL gönderende de tek satır (bekçi test_gelen_belge_onay §16)" },
+    // D2b (migration 20261031040300): anahtar özellik kapsamını (propertyId) da taşır; kapsamsız (NULL) satır da tekil.
+    { table: "delivery_note_aliases", index: "delivery_note_aliases_scope_senderCustomerId_propertyId_raw_key", why: "sözlük anahtarı NULL gönderen/kapsamda da tek satır (bekçi test_gelen_belge_onay §16)" },
     // Kısmi (WHERE) canlı-tekillik indeksleri: NULL kolonlu anahtar (adımsız iş · tezgahsız eşleme · kişisiz/izinsiz kural) da tek canlı satır.
     { table: "service_billing_links", index: "service_billing_links_active_uq", why: "adımsız (workOrderStepId NULL) iş başına tek aktif hizmet bağı (H7, 20261029140000)" },
     { table: "loom_alarm_tier_rules", index: "loom_alarm_tier_rules_live_uq", why: "userId/permissionCode NULL kuralda da tek canlı satır (20261011200000)" },
