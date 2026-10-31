@@ -153,12 +153,13 @@ interface AggRow {
   scrap_m: Prisma.Decimal | null;
 }
 
-async function aggregateUnits(unit: ReadyWorkUnit): Promise<AggRow[]> {
+async function aggregateUnits(unit: ReadyWorkUnit, onlyIds?: readonly string[]): Promise<AggRow[]> {
+  const only = onlyIds ? Prisma.sql`WHERE m.unit_id IN (${Prisma.join(onlyIds)})` : Prisma.empty;
   return prisma.$queryRaw<AggRow[]>(Prisma.sql`
     WITH members AS (${membershipSql(unit)}),
     classed AS (
       SELECT m.unit_id, r."currentQty" AS qty, ${readinessClassSql("r")} AS cls
-      FROM members m JOIN rolls r ON r.id = m.roll_id
+      FROM members m JOIN rolls r ON r.id = m.roll_id ${only}
     )
     SELECT unit_id,
       COUNT(*) FILTER (WHERE cls = 'READY')            AS ready_count,
@@ -253,9 +254,10 @@ function compareKeys(a: SortKey, b: SortKey): number {
   return a[0] - b[0] || a[1].localeCompare(b[1], "tr") || (a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0);
 }
 
-/** Bütün birimleri hazırlığıyla üretir (süzgeçsiz) — liste ve bekçi aynı kaynağı okur. */
-export async function computeReadyWorks(unit: ReadyWorkUnit, policy: ShipReadyPolicy): Promise<Array<ReadyWorkRow & { customerIds: string[] }>> {
-  const agg = await aggregateUnits(unit);
+/** Bütün birimleri hazırlığıyla üretir (süzgeçsiz) — liste, bekçi ve bulut projeksiyonu (`onlyIds`) aynı kaynağı okur. */
+export async function computeReadyWorks(unit: ReadyWorkUnit, policy: ShipReadyPolicy, onlyIds?: readonly string[]): Promise<Array<ReadyWorkRow & { customerIds: string[] }>> {
+  if (onlyIds?.length === 0) return [];
+  const agg = await aggregateUnits(unit, onlyIds);
   const meta = await loadUnitMeta(unit, agg.map((a) => a.unit_id));
   const rows: Array<ReadyWorkRow & { customerIds: string[] }> = [];
   for (const a of agg) {

@@ -299,6 +299,9 @@ export const updateSchema = z.strictObject({
     })
     .optional(),
   financeCariHoldReleaseBySamePerson: z.enum(["ALLOW", "DENY"], { message: "Cari kilidi açma kuralı ALLOW ya da DENY olmalı" }).optional(),
+  costPresentationCurrency: z.enum(["TRY", "USD", "EUR"], { message: "Maliyet sunum dövizi TRY, USD ya da EUR olmalı" }).optional(),
+  // D4-I2b (S12): risk limiti para birimi kipi — her para birimi ayrı (varsayılan) · TL'ye çevrilmiş toplam.
+  financeRiskLimitCurrencyMode: z.enum(["PER_CURRENCY", "TRY_CONVERTED"], { message: "Risk limiti para birimi kipi PER_CURRENCY ya da TRY_CONVERTED olmalı" }).optional(),
   // D4-G2a: kârlılık kaynakları (`PROFIT_SUBCONTRACT_SOURCES` / `PROFIT_CONSUMABLE_PRICE_SOURCES` ile birebir).
   costProfitSubcontractSource: z.enum(["FATURA_ONCE", "YALNIZ_FATURA"], { message: "Dış fason kaynağı FATURA_ONCE ya da YALNIZ_FATURA olmalı" }).optional(),
   costProfitConsumablePriceSource: z.enum(["ALIS_FIYATI", "SON_ALIS_FATURASI"], { message: "Sarf fiyatı kaynağı ALIS_FIYATI ya da SON_ALIS_FATURASI olmalı" }).optional(),

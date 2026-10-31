@@ -241,6 +241,8 @@ interface ShipmentDocCeki {
   defectNote?: string | null;
   /** Topa bağlı aktif müşteri barkodu (D4-F3) — sevk anında DONAR; kodsuz topta ve eski snapshot'ta YOK ("—"). */
   customerCode?: string | null;
+  /** Topun id'si — çalışma anında yazılır, eski snapshot'ta YOK (sevk top listesi gelen belge eşlemesi). */
+  rollId?: string | null;
 }
 
 /** Donmuş sevk belgesi payload'ı — collectShipmentDocContent / getDispatchReport

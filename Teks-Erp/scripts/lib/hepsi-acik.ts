@@ -59,6 +59,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   financeRiskLimitBlockEnabled: A(true),
   financeRiskLimitBlockIntake: A(true),
   financeRiskLimitBlockShipment: A(true),
+  financeRiskLimitCurrencyMode: V("risk karşılaştırma kipi; TRY_CONVERTED dövizli bakiyede kur ister (yoksa 409 FX_MISSING), varsayılan her para birimini ayrı ölçer"),
   financeAutoDraftFromShipmentEnabled: A(true),
   financeServiceBillingEnabled: A(true),
   financeServiceBillingMeterBasis: V("metre tabanı; üç değer de geçerli, varsayılan OUT okuma yolunu işletir"),
@@ -69,6 +70,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   costProfitConsumablePriceSource: V("yalnız kârlılık okumasının kaynağı; hiçbir kapıyı açıp kapamaz"),
   financeCariHoldDefaultScope: V("yalnız form ön seçimi; kapsamı kilit koyan seçer, hiçbir kapıyı açıp kapamaz"),
   financeCariHoldReleaseBySamePerson: A("DENY"), // açma ucunun "koyan kişi" dalını işletir
+  costPresentationCurrency: A("USD"), // sunum alanlarını (kur + döviz tutarı) yanıta yazdırır
   financeServiceBillingPriceDate: V("fiyat tarihi; iki değer de geçerli, varsayılan hizmet anı"),
   financeAutoAllocateOnPaymentEnabled: A(true),
   financeAllowZeroPriceLineEnabled: A(true),
