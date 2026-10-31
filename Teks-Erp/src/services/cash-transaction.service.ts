@@ -21,6 +21,7 @@ import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { D, resolveExchangeRateTx } from "./helpers/finance.helper";
+import { assertExpenseAllocationEnabled, linkNewExpenseTx, type ExpenseAllocationInput } from "./expense-allocation.service";
 import { assertCashPeriodOpenTx, assertCashPeriodsOpenTx } from "./helpers/cash-period-guard.helper";
 import { applyCashTxTx, cancelCashTxTx, KIND_DIRECTION, nextCashNoTx, type AccountRef } from "./helpers/cash-ledger.helper";
 import { buildTurkishSearch } from "../utils/query-parser";
@@ -42,6 +43,8 @@ export interface CashTxnInput extends AccountRef {
   reference?: string | null;
   exchangeRate?: Prisma.Decimal.Value | null;
   clientToken?: string | null;
+  /** D4-H3: masraf formunda "Bağla" — masraf satırıyla aynı tx'te bağ (token = masrafın token'ı). */
+  allocation?: Omit<ExpenseAllocationInput, "clientToken"> | null;
 }
 
 export interface TransferInput {
@@ -189,6 +192,15 @@ function compareLockKeys(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+/** Formdaki bağ yalnız masrafta, token'lı istekte ve ayar açıkken; hedef/pay doğrulaması tx içinde. */
+async function assertNewExpenseLinkable(input: CashTxnInput): Promise<void> {
+  if (input.kind !== CashTxnKind.EXPENSE) {
+    throw AppError.badRequest("Yalnız masraf satırı makineye/işe bağlanır.", { code: "EXPENSE_ALLOCATION_NOT_EXPENSE" });
+  }
+  if (!input.clientToken) throw AppError.badRequest("Bağlı masraf kaydı clientToken ister.", { code: "EXPENSE_ALLOCATION_TOKEN" });
+  await assertExpenseAllocationEnabled();
+}
+
 export class CashTransactionService {
   /**
    * Masraf / gelir / açılış fişi.
@@ -200,6 +212,7 @@ export class CashTransactionService {
   async create(input: CashTxnInput, userId?: string): Promise<ApiResponse<{ id: string; docNo: string }>> {
     const amount = D(input.amount);
     if (amount.lte(0)) throw AppError.badRequest("Tutar sıfırdan büyük olmalı.");
+    if (input.allocation) await assertNewExpenseLinkable(input);
 
     // R: token her kuraldan önce okunur ve hareket hangi hatayla düşerse düşsün (açılış tekilliği, bakiye,
     // token P2002) yeniden okunur — kaybeden deneme iş kuralı 409'unu değil önceki kaydı alır.
@@ -263,6 +276,7 @@ export class CashTransactionService {
         category: input.category, description: input.description, reference: input.reference,
         createdById: userId ?? null, clientToken: input.clientToken ?? null,
       });
+      if (input.allocation && input.clientToken) await linkNewExpenseTx(tx, { cashTransactionId: row.id, input: input.allocation, clientToken: input.clientToken, userId: userId ?? null });
       return { id: row.id, docNo: row.docNo };
         }),
       undefined,

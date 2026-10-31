@@ -187,6 +187,8 @@ export const SETTING_KEYS = {
   FINANCE_SERVICE_BILLING_PRICE_DATE: "finance.serviceBilling.priceDate",
   /** D4-H1: kasa masraf formunda "son kullanılan kategoriler" önerisi — `ON` (varsayılan) · `OFF`; katalog DEĞİL. */
   FINANCE_EXPENSE_CATEGORY_SUGGESTIONS: "finance.masraf.kategoriOnerisi",
+  FINANCE_EXPENSE_ALLOCATION_FIELD: "finance.masraf.bagAlani",
+  FINANCE_EXPENSE_ALLOCATION_CLOSED_WORK_ORDER: "finance.masraf.kapaliIsEmrineBag",
   /** D4-I1a: cari kilidi formunun kapsam ÖN SEÇİMİ (K20) — kapsamı kilit koyan seçer; varsayılan iş kabulü + sevk. */
   FINANCE_CARI_HOLD_DEFAULT_SCOPE: "finance.cariHold.defaultScope",
   /** D4-I1a: kilidi koyan kişi kendi kilidini açabilir mi — `ALLOW` (varsayılan, serbest) · `DENY` (başka yetkili açar). */
@@ -1084,6 +1086,14 @@ export const DEFAULT_SERVICE_BILLING_PRICE_DATE: ServiceBillingPriceDate = "SERV
 export type ExpenseCategorySuggestions = "ON" | "OFF";
 export const EXPENSE_CATEGORY_SUGGESTION_MODES: ExpenseCategorySuggestions[] = ["ON", "OFF"];
 export const DEFAULT_EXPENSE_CATEGORY_SUGGESTIONS: ExpenseCategorySuggestions = "ON";
+/** D4-H3: kasa masraf formunda "Bağla" alanı — kapalı (bugünkü form) · isteğe bağlı · zorunlu. */
+export type ExpenseAllocationField = "OFF" | "OPTIONAL" | "REQUIRED";
+export const EXPENSE_ALLOCATION_FIELD_MODES: ExpenseAllocationField[] = ["OFF", "OPTIONAL", "REQUIRED"];
+export const DEFAULT_EXPENSE_ALLOCATION_FIELD: ExpenseAllocationField = "OFF";
+/** D4-H3: kapanmış iş emrine masraf bağı — serbest (bugün kural yok) · engelli. */
+export type ExpenseAllocationClosedWorkOrder = "ALLOW" | "DENY";
+export const EXPENSE_ALLOCATION_CLOSED_WORK_ORDER_MODES: ExpenseAllocationClosedWorkOrder[] = ["ALLOW", "DENY"];
+export const DEFAULT_EXPENSE_ALLOCATION_CLOSED_WORK_ORDER: ExpenseAllocationClosedWorkOrder = "ALLOW";
 /** D4-I1a: kilit kapsamı ön seçimi — {INTAKE, SHIPMENT, INVOICE}in boş olmayan alt kümesi, sabit sırayla virgüllü. */
 export const CARI_HOLD_DEFAULT_SCOPES = [
   "INTAKE,SHIPMENT",
@@ -1991,6 +2001,8 @@ export interface FeatureFlags {
   financeServiceBillingPriceDate: ServiceBillingPriceDate;
   /** D4-H1: kasa masraf formunda kategori önerisi (varsayılan `ON`). */
   financeExpenseCategorySuggestions: ExpenseCategorySuggestions;
+  financeExpenseAllocationField: ExpenseAllocationField;
+  financeExpenseAllocationClosedWorkOrder: ExpenseAllocationClosedWorkOrder;
   /** D4-I1a: cari kilidi kapsam ön seçimi (varsayılan `INTAKE,SHIPMENT`). */
   financeCariHoldDefaultScope: CariHoldDefaultScope;
   /** D4-I1a: koyan kişi kendi kilidini açabilir mi (varsayılan `ALLOW`). */
@@ -2677,6 +2689,8 @@ export class SystemSettingService {
       financeServiceBillingTrigger: await readFinanceServiceBillingTrigger(cacheClient),
       financeServiceBillingPriceDate: await readFinanceServiceBillingPriceDate(cacheClient),
       financeExpenseCategorySuggestions: await readFinanceExpenseCategorySuggestions(cacheClient),
+      financeExpenseAllocationField: await readFinanceExpenseAllocationField(cacheClient),
+      financeExpenseAllocationClosedWorkOrder: await readFinanceExpenseAllocationClosedWorkOrder(cacheClient),
       financeCariHoldDefaultScope: await readFinanceCariHoldDefaultScope(cacheClient),
       financeCariHoldReleaseBySamePerson: await readFinanceCariHoldReleaseBySamePerson(cacheClient),
       financeCariHoldEmanetShipment: await readFinanceCariHoldEmanetShipment(cacheClient),
@@ -3227,6 +3241,26 @@ export class SystemSettingService {
         throw AppError.badRequest(`financeExpenseCategorySuggestions şunlardan biri olmalı: ${EXPENSE_CATEGORY_SUGGESTION_MODES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.FINANCE_EXPENSE_CATEGORY_SUGGESTIONS, v, "Kasa masraf formunda kategori önerisi — açık · kapalı", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeExpenseAllocationField")) {
+      const v = input.financeExpenseAllocationField;
+      if (typeof v !== "string" || !EXPENSE_ALLOCATION_FIELD_MODES.includes(v as ExpenseAllocationField)) {
+        throw AppError.badRequest(`financeExpenseAllocationField şunlardan biri olmalı: ${EXPENSE_ALLOCATION_FIELD_MODES.join(", ")}`);
+      }
+      // Çıkışsız kapı yasağı: "zorunlu" kipi her masraf giriş yüzeyinde bağ adımı olmadan masrafı kilitler; o yüzeyler inmeden seçilemez.
+      if (v === "REQUIRED") {
+        throw AppError.badRequest("Masraf bağı ZORUNLU kipi henüz seçilemez: her masraf giriş yüzeyinde bağ adımı yok. Kapalı ya da İsteğe bağlı seçin.", {
+          code: "EXPENSE_ALLOCATION_REQUIRED_UNAVAILABLE",
+        });
+      }
+      await this.set(SETTING_KEYS.FINANCE_EXPENSE_ALLOCATION_FIELD, v, "Kasa masraf formunda masraf bağı (makine / iş emri / hizmet kalemi) — kapalı · isteğe bağlı", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeExpenseAllocationClosedWorkOrder")) {
+      const v = input.financeExpenseAllocationClosedWorkOrder;
+      if (typeof v !== "string" || !EXPENSE_ALLOCATION_CLOSED_WORK_ORDER_MODES.includes(v as ExpenseAllocationClosedWorkOrder)) {
+        throw AppError.badRequest(`financeExpenseAllocationClosedWorkOrder şunlardan biri olmalı: ${EXPENSE_ALLOCATION_CLOSED_WORK_ORDER_MODES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.FINANCE_EXPENSE_ALLOCATION_CLOSED_WORK_ORDER, v, "Kapanmış iş emrine masraf bağı — serbest · engelli", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "financeCariHoldDefaultScope")) {
       const v = input.financeCariHoldDefaultScope;
@@ -5580,6 +5614,16 @@ export function readFinanceServiceBillingPriceDate(tx?: Pick<typeof prisma, "sys
 }
 
 /** D4-H1: masraf kategorisi önerisi — tanınmayan değer varsayılana (`ON`) düşer. */
+/** D4-H3: masraf bağı alanı — tanınmayan değer varsayılana (`OFF`) düşer. */
+export function readFinanceExpenseAllocationField(tx?: Pick<typeof prisma, "systemSetting">): Promise<ExpenseAllocationField> {
+  return readServiceEnum(SETTING_KEYS.FINANCE_EXPENSE_ALLOCATION_FIELD, EXPENSE_ALLOCATION_FIELD_MODES, DEFAULT_EXPENSE_ALLOCATION_FIELD, tx);
+}
+
+/** D4-H3: kapanmış iş emrine bağ — tanınmayan değer varsayılana (`ALLOW`) düşer. */
+export function readFinanceExpenseAllocationClosedWorkOrder(tx?: Pick<typeof prisma, "systemSetting">): Promise<ExpenseAllocationClosedWorkOrder> {
+  return readServiceEnum(SETTING_KEYS.FINANCE_EXPENSE_ALLOCATION_CLOSED_WORK_ORDER, EXPENSE_ALLOCATION_CLOSED_WORK_ORDER_MODES, DEFAULT_EXPENSE_ALLOCATION_CLOSED_WORK_ORDER, tx);
+}
+
 export function readFinanceExpenseCategorySuggestions(tx?: Pick<typeof prisma, "systemSetting">): Promise<ExpenseCategorySuggestions> {
   return readServiceEnum(SETTING_KEYS.FINANCE_EXPENSE_CATEGORY_SUGGESTIONS, EXPENSE_CATEGORY_SUGGESTION_MODES, DEFAULT_EXPENSE_CATEGORY_SUGGESTIONS, tx);
 }

@@ -28,6 +28,8 @@
     "financeAutoDraftFromShipmentEnabled": true,
     "financeServiceBillingEnabled": true,
     "financeExpenseCategorySuggestions": "ON",
+    "financeExpenseAllocationField": "OPTIONAL",
+    "financeExpenseAllocationClosedWorkOrder": "DENY",
     "financeCariHoldReleaseBySamePerson": "DENY",
     "financeCariHoldEmanetShipment": "PROCESSED_HELD",
     "costPresentationCurrency": "USD",
