@@ -32,6 +32,14 @@ export interface OrderLineRequiredPropertyLink {
   property: { id: string; code: string; name: string };
 }
 
+/** Satırın hedef değeri (SY-F1/F2, tasarım §7): çeşit özelliği × seçilen değer ("Kuşak markası: ZEBRA"). */
+export interface OrderLineTargetValueLink {
+  propertyId: string;
+  valueId: string;
+  property?: { id: string; code: string; name: string };
+  value?: { id: string; code: string; name: string };
+}
+
 export interface OrderLine {
   id: string;
   itemId: string;
@@ -64,6 +72,8 @@ export interface OrderLine {
   color?: OrderLineColor | null;
   /** Müşterinin istediği özellikler — WO açılırken targetProperties önerisi olur. */
   requiredProperties?: OrderLineRequiredPropertyLink[];
+  /** Satırın hedef değerleri; eski backend göndermez (undefined = yok). */
+  targetValues?: OrderLineTargetValueLink[];
   /**
    * WO picker (gap) yanıtında gelir: Açık = quantity − sevk. KG/ADET satırda `null`
    * (karşılama metre defterinden ölçülmez); eski backend alanı göndermez (undefined).
