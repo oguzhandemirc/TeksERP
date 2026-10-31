@@ -182,7 +182,8 @@ import {
   buildNextDynamicCursor,
 } from "../utils/cursor";
 import { assertWorkOrderBound } from "./helpers/dispatch-header.helper";
-import { assertOwnerMatchesTx, previewOwnerMismatches, rollsAllOwnedByTx } from "./helpers/emanet-owner.helper";
+import { assertOwnerMatchesTx, previewOwnerMismatches } from "./helpers/emanet-owner.helper";
+import { emanetShipmentReleaseTx } from "./helpers/emanet-shipment.helper";
 import { assertShipmentNotHeldTx, cariHoldWarning, shipmentHoldNotice } from "./helpers/cari-hold.helper";
 import { assertCustomerRiskLimitTx } from "./helpers/risk-exposure.helper";
 import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
@@ -2448,10 +2449,13 @@ export class ShippingService {
     kapsamaUyarisi: string | null;
     yon: ShipmentDestinationDecision;
   }> {
-    // Cari kilidi (D4-I1, SHIPMENT; K22 emanet muafiyeti) — yazımdan önce, tx içinde.
-    await assertShipmentNotHeldTx(tx, p.customerId, () => rollsAllOwnedByTx(tx, { sackId: { in: p.sackIds } }, p.customerId));
-    // Risk limiti (D4-I2, finance.riskLimitBlock.shipment; K22 aynı) — bakiye FOR UPDATE, sıra fatura onayıyla aynı.
-    await assertCustomerRiskLimitTx(tx, p.customerId, "SHIPMENT", () => rollsAllOwnedByTx(tx, { sackId: { in: p.sackIds } }, p.customerId));
+    // Cari kilidi (D4-I1, SHIPMENT) + risk limiti (D4-I2, finance.riskLimitBlock.shipment) — yazımdan önce, tx içinde;
+    // emanet sevki kararı ikisinde de aynı helper'dan (D4-I1c). Risk: bakiye FOR UPDATE, sıra fatura onayıyla aynı.
+    // Kilit + risk kapısı birlikte ısırırsa karar bir kez hesaplanır (aynı tx, aynı sonuç).
+    let emanetMemo: ReturnType<typeof emanetShipmentReleaseTx> | undefined;
+    const emanetRelease = () => (emanetMemo ??= emanetShipmentReleaseTx(tx, { sackId: { in: p.sackIds } }, p.customerId));
+    await assertShipmentNotHeldTx(tx, p.customerId, emanetRelease);
+    await assertCustomerRiskLimitTx(tx, p.customerId, "SHIPMENT", emanetRelease);
     const yon = await this.decideShipmentDestinationTx(tx, {
       customerId: p.customerId,
       branchId: p.branchId,
@@ -2899,7 +2903,7 @@ export class ShippingService {
   /** Cari kilidi önizlemesi (D4-I1) — kapının ikizi, aynı helper; red değil uyarı + `cariHold{}`. */
   private async previewShipmentHold(sackIds: string[], customerId: string | null) {
     if (!customerId) return null;
-    return shipmentHoldNotice(prisma, customerId, () => rollsAllOwnedByTx(prisma, { sackId: { in: sackIds } }, customerId));
+    return shipmentHoldNotice(prisma, customerId, () => emanetShipmentReleaseTx(prisma, { sackId: { in: sackIds } }, customerId));
   }
 
   /**
@@ -3470,9 +3474,10 @@ export class ShippingService {
     // yoksa kapı geçer, aşağıdaki claim 409 verir (bugünkü davranış).
     const holdHeader = await tx.shipment.findUnique({ where: { id: shipmentId }, select: { customerId: true } });
     if (holdHeader) {
-      const ownEmanetOnly = () => rollsAllOwnedByTx(tx, { shipmentId }, holdHeader.customerId);
-      await assertShipmentNotHeldTx(tx, holdHeader.customerId, ownEmanetOnly);
-      await assertCustomerRiskLimitTx(tx, holdHeader.customerId, "SHIPMENT", ownEmanetOnly);
+      let emanetMemo: ReturnType<typeof emanetShipmentReleaseTx> | undefined;
+      const emanetRelease = () => (emanetMemo ??= emanetShipmentReleaseTx(tx, { shipmentId }, holdHeader.customerId));
+      await assertShipmentNotHeldTx(tx, holdHeader.customerId, emanetRelease);
+      await assertCustomerRiskLimitTx(tx, holdHeader.customerId, "SHIPMENT", emanetRelease);
     }
     const claim = await tx.shipment.updateMany({
       where: { id: shipmentId, status: ShipmentStatus.PLANNED },

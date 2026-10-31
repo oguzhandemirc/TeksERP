@@ -62,6 +62,8 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   // S14 (kullanıcı 2026-10-31): işçilik = toplam 'Maaş' kasa masrafı (kişi adı yok), makine saatine göre dağıtılır.
   { anahtar: "maliyet.karlilik.kategoriSiniflari", alan: "costProfitCategoryClasses", hedef: { "Maaş": "ISCILIK" }, dilim: "D4-G2b" },
   { anahtar: "finance.cariHold.releaseBySamePerson", alan: "financeCariHoldReleaseBySamePerson", hedef: "ALLOW", dilim: "D4-I1a" },
+  // S11: kilitli caride emanet sevki — hapis hakkı seçimi fabrikanın (hukuki teyit); paket bugünkü EXEMPT'i yazar.
+  { anahtar: "finance.cariHold.emanetShipment", alan: "financeCariHoldEmanetShipment", hedef: "EXEMPT", dilim: "D4-I1c" },
   // DALGA4 §12.1: risk limiti iş kabulü/sevk kapısı — Gülkesim değeri kullanıcı kararı (S12 para), varsayılan bırakıldı.
   { anahtar: "finance.riskLimitBlock.intake", alan: "financeRiskLimitBlockIntake", hedef: false, dilim: "D4-I2" },
   { anahtar: "finance.riskLimitBlock.shipment", alan: "financeRiskLimitBlockShipment", hedef: false, dilim: "D4-I2" },

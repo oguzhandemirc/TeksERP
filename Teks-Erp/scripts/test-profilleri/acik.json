@@ -29,6 +29,7 @@
     "financeServiceBillingEnabled": true,
     "financeExpenseCategorySuggestions": "ON",
     "financeCariHoldReleaseBySamePerson": "DENY",
+    "financeCariHoldEmanetShipment": "PROCESSED_HELD",
     "costPresentationCurrency": "USD",
     "financeAutoAllocateOnPaymentEnabled": true,
     "financeAllowZeroPriceLineEnabled": true,

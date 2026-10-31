@@ -299,6 +299,7 @@ export const updateSchema = z.strictObject({
     })
     .optional(),
   financeCariHoldReleaseBySamePerson: z.enum(["ALLOW", "DENY"], { message: "Cari kilidi açma kuralı ALLOW ya da DENY olmalı" }).optional(),
+  financeCariHoldEmanetShipment: z.enum(["EXEMPT", "PROCESSED_HELD", "ALL_HELD"], { message: "Kilitli caride emanet sevki EXEMPT, PROCESSED_HELD ya da ALL_HELD olmalı" }).optional(),
   costPresentationCurrency: z.enum(["TRY", "USD", "EUR"], { message: "Maliyet sunum dövizi TRY, USD ya da EUR olmalı" }).optional(),
   // D4-I2b (S12): risk limiti para birimi kipi — her para birimi ayrı (varsayılan) · TL'ye çevrilmiş toplam.
   financeRiskLimitCurrencyMode: z.enum(["PER_CURRENCY", "TRY_CONVERTED"], { message: "Risk limiti para birimi kipi PER_CURRENCY ya da TRY_CONVERTED olmalı" }).optional(),
