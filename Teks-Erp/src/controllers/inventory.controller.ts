@@ -10,6 +10,7 @@ import { z } from "zod";
 import { InventoryService } from "../services/inventory.service";
 import { DuplicateRollsService } from "../services/duplicate-rolls.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
+import { measuredWidthCmSchema } from "../services/helpers/measured-width.helper";
 import { foldTypeSchema } from "../services/helpers/fold-type";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { SETTING_KEYS, readDokumaEnabled, resolveDokumaRollBirth } from "../services/system-setting.service";
@@ -265,6 +266,8 @@ export const kursunFinishSchema = z.object({
     )
     .max(50)
     .nullish(),
+  // D4-E2a: completeQc2 ile BİREBİR — en ölçer istasyonda ölçülen en (cm).
+  measuredWidthCm: measuredWidthCmSchema,
 });
 
 export class InventoryController {
