@@ -3,7 +3,8 @@
 // =============================================================================
 // Soru: "bu topa kurşun DIŞINDA hangi faturalanacak iş yapıldı, kaç metre?"
 // İşin izi topun AKTİF BAYRAK özelliğidir (`RollProperty`; kesimde `inheritRollPropertiesTx`
-// ile çocuğa geçer); kalem `FabricProperty.serviceItemId`ten. Kurşun bayrağı ve çeşidi
+// ile çocuğa geçer); kalem `pickServiceItemId` sırasıyla: topun aktif ÇEŞİT değeri (brode deseni)
+// eşlenmişse o, yoksa `FabricProperty.serviceItemId` (D4-D3; eşlemesiz veride bayt-aynı). Kurşun bayrağı ve çeşidi
 // (gramaj) olan bayraklar BURADA OKUNMAZ — onlar `listKursunApplications` yolundadır.
 // Metre sırası (ilk bulunan; iş, metrenin ölçüldüğü topa bağlanır):
 //   ① özelliği verebilen istasyondaki adımın aktif okuması (iç brode) — topta ya da atasında
@@ -23,8 +24,9 @@ import { MachineDataSource, MeterPhase, Prisma, RollEntrySource, ServiceMeterBas
 import prisma from "../../lib/prisma";
 
 type Db = Prisma.TransactionClient | typeof prisma;
-import { ACTIVE_ROLL_PROPERTY } from "./property-revoke.helper";
+import { ACTIVE_ROLL_PROPERTY, loadVariantValueItems } from "./property-revoke.helper";
 import { KURSUN_PROPERTY_CODE } from "./quality-station.helper";
+import { pickServiceItemId } from "./service-item-pick.helper";
 
 export type FlagWorkBasis = "OUT" | "IN" | "DECLARED" | "CUT" | "RECEIVED";
 
@@ -101,6 +103,26 @@ async function loadActiveCutReadings(leaves: RollRow[], db: Db) {
   return new Map(rows.map((r) => [r.rollId, r]));
 }
 
+/** Kurşun dışı bayrak; kalemi ya kendinde ya çeşit değerinde (D4-D3: desen başına kalem, bayrak kalemsiz olabilir). */
+const BILLABLE_FLAG_PROPERTY: Prisma.FabricPropertyWhereInput = {
+  valueType: "FLAG", code: { not: KURSUN_PROPERTY_CODE },
+  OR: [{ serviceItemId: { not: null } }, { variant: { is: { values: { some: { serviceItemId: { not: null } } } } } }],
+};
+
+/** Yapraklardaki aktif faturalanabilir bayraklar, kalemi çözülmüş; kalemi çözülmeyen (desen eşlemesiz + bayrak kalemsiz) düşer — bugünkü gibi iş yok. */
+async function loadBillableFlagProps(rollIds: string[], db: Db) {
+  const rows = await db.rollProperty.findMany({
+    where: { rollId: { in: rollIds }, ...ACTIVE_ROLL_PROPERTY, property: BILLABLE_FLAG_PROPERTY },
+    select: { rollId: true, propertyId: true, createdAt: true, property: { select: { name: true, serviceItemId: true } } },
+    orderBy: [{ rollId: "asc" }, { propertyId: "asc" }],
+  });
+  if (rows.length === 0) return [];
+  const valueItemOf = await loadVariantValueItems(db, rows);
+  return rows
+    .map((p) => ({ ...p, serviceItemId: pickServiceItemId({ value: valueItemOf.get(`${p.rollId}:${p.propertyId}`), property: p.property.serviceItemId }) }))
+    .filter((p): p is typeof p & { serviceItemId: string } => p.serviceItemId !== null);
+}
+
 /**
  * Verilen toplardaki bayrak tipi işler. Kümede çocuğu bulunan top (ata) iş TAŞIMAZ:
  * işi çocuk taşır, atanın ölçümü ancak ①/② ile (tamamı, bir kez) faturalanır.
@@ -129,15 +151,7 @@ export async function listFlagServiceWorks(
   const leaves = rolls.filter((r) => !parents.has(r.id) || opts.shippedRollIds?.has(r.id));
   if (leaves.length === 0) return none;
 
-  const props = await db.rollProperty.findMany({
-    where: {
-      rollId: { in: leaves.map((r) => r.id) },
-      ...ACTIVE_ROLL_PROPERTY,
-      property: { valueType: "FLAG", serviceItemId: { not: null }, code: { not: KURSUN_PROPERTY_CODE } },
-    },
-    select: { rollId: true, propertyId: true, createdAt: true, property: { select: { name: true, serviceItemId: true } } },
-    orderBy: [{ rollId: "asc" }, { propertyId: "asc" }],
-  });
+  const props = await loadBillableFlagProps(leaves.map((r) => r.id), db);
   if (props.length === 0) return none;
 
   const propertyIds = [...new Set(props.map((p) => p.propertyId))];
@@ -173,7 +187,7 @@ export async function listFlagServiceWorks(
   for (const p of props) {
     const leaf = byId.get(p.rollId)!;
     const stations = stationsOf.get(p.propertyId) ?? new Set<string>();
-    const base = { propertyId: p.propertyId, propertyName: p.property.name, serviceItemId: p.property.serviceItemId! };
+    const base = { propertyId: p.propertyId, propertyName: p.property.name, serviceItemId: p.serviceItemId };
     let work: FlagWork | null = null;
     for (const rid of chainOf(leaf.id)) {
       if (rid !== leaf.id && pieceBilled.has(`${rid}:${base.serviceItemId}`)) break;
