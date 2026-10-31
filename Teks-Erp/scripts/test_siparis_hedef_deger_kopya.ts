@@ -116,12 +116,15 @@ async function main(): Promise<void> {
   const [cancelled] = await order([line(zebra)]);
   await prisma.orderLine.update({ where: { id: cancelled! }, data: { cancelledAt: new Date(), cancelReason: "test" } });
   void noLen;
+  // Kısmi sevk: 1000 − 400 BRÜT = 600 m → ⌈600÷300⌉ = 2 top (sevk düşümünü ölçer)
+  const [shipped] = await order([line(zebra)]);
+  await prisma.orderLine.update({ where: { id: shipped! }, data: { shippedQty: 400 } });
   const rep = await targetValueNeedReport({ musteriId: customer.id });
   const z = rep.satirlar.find((s) => s.deger === "Zebra");
   const j = rep.satirlar.find((s) => s.deger === "Jasmin");
-  check("§5a ⭐ Zebra: 6 kalem (iptal hariç), 5×⌈1000÷300⌉ = 20 top, 1 kalemin top boyu yok", z?.kalemSayisi === 6 && z.beklenenTop === 20 && z.topuBilinmeyenKalem === 1 && z.kalanMetre === "6000.000", JSON.stringify(z));
+  check("§5a ⭐ Zebra: 7 kalem (iptal hariç), 5×⌈1000÷300⌉ + ⌈600÷300⌉ = 22 top, 1 kalemin top boyu yok", z?.kalemSayisi === 7 && z.beklenenTop === 22 && z.topuBilinmeyenKalem === 1 && z.kalanMetre === "6600.000", JSON.stringify(z));
   check("§5b Jasmin: 1 kalem, 4 top", j?.kalemSayisi === 1 && j.beklenenTop === 4, JSON.stringify(j));
-  check("§5c özet: hedefli kalemlerin kalanı ve topu (hedefsiz kalem yok)", rep.ozet.beklenenTop === 24 && rep.ozet.topuBilinmeyenKalem === 1, JSON.stringify(rep.ozet));
+  check("§5c özet: hedefli kalemlerin kalanı ve topu (hedefsiz kalem yok)", rep.ozet.beklenenTop === 26 && rep.ozet.topuBilinmeyenKalem === 1, JSON.stringify(rep.ozet));
 }
 
 async function cleanup(): Promise<void> {

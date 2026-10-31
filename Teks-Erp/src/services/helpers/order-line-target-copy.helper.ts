@@ -14,6 +14,7 @@ type Reader = Prisma.TransactionClient | PrismaClient;
 
 /** Uyarı kodu — yanıttaki uyarı metninin başında köşeli parantezle durur (istemci metni ayrıştırmadan tanır). */
 export const TARGET_VALUE_CONFLICT = "TARGET_VALUE_CONFLICT";
+export const TARGET_VALUE_INACTIVE = "TARGET_VALUE_INACTIVE";
 
 export interface LineTargetCopy {
   items: TargetValueItem[];
@@ -61,7 +62,7 @@ export async function deriveOrderLineTargetValues(
     if (values.length === 1 && everyLine) {
       // Pasife alınmış katalog değeri iş emrine taşınmaz (doğrulayıcı 400 verirdi); uyarıyla atlanır.
       if (!first.property.isActive || !first.value.isActive) {
-        warnings.push(`${first.property.name}: sipariş kalemindeki '${first.value.name}' değeri pasif — iş emrine kopyalanmadı.`);
+        warnings.push(`[${TARGET_VALUE_INACTIVE}] ${first.property.name}: sipariş kalemindeki '${first.value.name}' değeri pasif — iş emrine kopyalanmadı.`);
         continue;
       }
       items.push({ propertyId, valueId: values[0]![0] });
