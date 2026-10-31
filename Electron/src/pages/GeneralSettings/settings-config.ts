@@ -2343,6 +2343,35 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         ],
       },
       {
+        // D4-H3: `defaultValue` backend `DEFAULT_EXPENSE_ALLOCATION_FIELD` ile birebir. "Zorunlu" kipi her masraf giriş
+        // yüzeyinde bağ adımı inene kadar sunulmaz (backend 400 — çıkışsız kapı yasağı).
+        enumKey: "financeExpenseAllocationField",
+        title: "Masrafı makineye / işe bağlama",
+        summary: "Kasa masraf formunda masrafın hangi makineye, iş emrine ya da hizmet kalemine ait olduğu seçilebilsin mi.",
+        desc: "Kapalı: masraf formu bugünkü gibidir. İsteğe bağlı: formda \"Bağla\" bölümü çıkar; masraf bir makineye, iş emrine ya da hizmet kalemine yüzde payla bağlanabilir, kayıtlı masrafa sonradan da bağ eklenir. Bir masrafın bağlarının toplamı en çok %100'dür. Bağ kârlılıkta doğrudan maliyet olur; bağlanmayan masraf genel giderde kalır.",
+        defaultValue: "OFF",
+        display: "radio",
+        audience: ["Muhasebeci"],
+        options: [
+          { value: "OFF", label: "Kapalı (varsayılan)", hint: "Masraf formu bugünkü gibi." },
+          { value: "OPTIONAL", label: "İsteğe bağlı", hint: "Formda \"Bağla\" bölümü çıkar; boş bırakılabilir." },
+        ],
+      },
+      {
+        // D4-H3: `defaultValue` backend `DEFAULT_EXPENSE_ALLOCATION_CLOSED_WORK_ORDER` ile birebir.
+        enumKey: "financeExpenseAllocationClosedWorkOrder",
+        title: "Kapanmış iş emrine masraf bağlanabilsin",
+        summary: "Tamamlanmış ya da iptal edilmiş iş emrine sonradan masraf bağlanabilsin mi.",
+        desc: "Serbest: geç gelen faturanın masrafı bitmiş işe yine yazılır. Engelli: yalnız açık iş emrine bağ kurulur; kapanmış işe bağ denemesi uyarıyla durur.",
+        defaultValue: "ALLOW",
+        display: "radio",
+        audience: ["Muhasebeci"],
+        options: [
+          { value: "ALLOW", label: "Serbest (varsayılan)", hint: "Kapanmış iş emrine de bağlanır." },
+          { value: "DENY", label: "Engelli", hint: "Yalnız açık iş emrine bağlanır." },
+        ],
+      },
+      {
         // D4-I1a: `defaultValue` backend `DEFAULT_CARI_HOLD_SCOPE` ile birebir; kapsamı kilit koyan formda yine seçer.
         enumKey: "financeCariHoldDefaultScope",
         group: "Cari kilidi",
