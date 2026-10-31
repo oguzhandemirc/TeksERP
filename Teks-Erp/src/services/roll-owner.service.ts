@@ -74,7 +74,21 @@ export async function listRollOwnerCustomers(): Promise<ApiResponse<{ id: string
   return { success: true, data: customers.map((c) => ({ id: c.id, name: c.name, code: c.code })) };
 }
 
-export async function getConsignedWorkSummary(): Promise<ApiResponse<ConsignedWorkSummary>> {
+export interface ConsignedWorkQuery {
+  /** "Yalnız sevke hazır" (D4-KUC2 b): yalnız hazır kovası dolu sahipler; satırlar VE toplamlar aynı WHERE'den. */
+  onlyReady?: boolean;
+}
+
+/** Sahip kapsamı — liste ile özet şeridi (`totals`) AYNI sorgudan doğar; süzme sunucuda (filtre-liste.md). */
+function consignedOwnerScope(q: ConsignedWorkQuery): Prisma.Sql {
+  if (!q.onlyReady) return Prisma.empty;
+  return Prisma.sql`AND r."ownerCustomerId" IN (
+      SELECT rr."ownerCustomerId" FROM rolls rr
+      WHERE rr."ownerCustomerId" IS NOT NULL AND rr.status::text IN (${Prisma.join(READY_STATUSES)})
+    )`;
+}
+
+export async function getConsignedWorkSummary(q: ConsignedWorkQuery = {}): Promise<ApiResponse<ConsignedWorkSummary>> {
   // Kova ayrımı Envanter sekme kapsamlarının aynası: ready = FINISHED_STOCK, inProcess = PRODUCTION_ACTIVE
   // (adımda; SHIPPED/KARTELA_CONSUMED adımlı top sekmede görünür ama içeride sayılmaz — bilinçli fark),
   // waiting = RAW_STOCK_PURE, waitingSemi = SEMI_FINISHED. Hücre o sekmeyi sahip süzgeciyle açar.
@@ -98,6 +112,7 @@ export async function getConsignedWorkSummary(): Promise<ApiResponse<ConsignedWo
     JOIN customers c ON c.id = r."ownerCustomerId"
     WHERE r."ownerCustomerId" IS NOT NULL
       AND r.status::text NOT IN (${Prisma.join(NOT_INSIDE_STATUSES)})
+      ${consignedOwnerScope(q)}
     GROUP BY 1, 2, 3
   `);
 

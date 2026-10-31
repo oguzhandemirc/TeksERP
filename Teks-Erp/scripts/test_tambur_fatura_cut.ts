@@ -16,6 +16,7 @@
 //   §5 eşzamanlı iki düzeltme → biri 409 METER_READING_ALREADY_CORRECTED, tek aktif okuma
 //   §6 faturalı okuma → 409 SERVICE_ALREADY_BILLED; CUT dışı okuma → 400 METER_READING_NOT_CUT
 //   §7 uç kapısı: verifyToken + kursun:meter-approve; izinsiz 403, router üretim modülü kapısının altında
+//   §11 S6 (D4-KUC2 c, 2026-10-31): OPERATOR kesim metresi faturalanır, satır `manualMeterRollCount` + 'elle ölçüm' uyarısı; MACHINE işaretsiz
 //   §9 çok kuşak: SIMULATED kesimli çocuk kendisi de kesilmiş ata olarak sevk edilirse ④ DECLARED'a düşmez
 //   §10 top izi (`/rolls/:id/history`) `measurements`: düzeltilen okuma damgalı + SUPERVISOR aktif; sapma measureSource
 //   §8 iptal edilmiş top → 409 ROLL_NOT_CORRECTABLE; iptal tx'i okuma anlık görüntüsünü aldıktan sonra
@@ -24,6 +25,7 @@
 // düzeltme claim'inde `revokedAt: null` çıkarılınca §5 kırmızı · düzeltmedeki top FOR UPDATE + iptal
 // denetimi çıkarılınca §8 kırmızı (aktif=1) · ③ önündeki SIMULATED denetimi eski yerine alınınca §9
 // kırmızı (ata DECLARED 50 faturada) (geri alındı).
+// D4-KUC2 c sondası (2026-10-31): satır işaret sayacı (`manualMeterRollCount += 1`) kaldırılınca §11a + §11c kırmızı (24/2); geri alındı.
 // D4-B4 sondaları (2026-10-30): top izi okuma sorgusuna `revokedAt: null` eklenince §10a kırmızı (yalnız SUPERVISOR) ·
 // sapma `measureSource` null'a sabitlenince §10b kırmızı (geri alındı).
 // =============================================================================
@@ -32,7 +34,7 @@ import { Currency, ItemType, MeterPhase, Prisma, PriceKind, RollEntrySource, Rol
 import prisma from "../src/lib/prisma";
 import { TamburService } from "../src/services/tambur.service";
 import { InventoryService } from "../src/services/inventory.service";
-import { resolveServiceItemsForRolls, simulatedCutWarning } from "../src/services/helpers/service-pricing.helper";
+import { manualMeterWarning, resolveServiceItemsForRolls, simulatedCutWarning } from "../src/services/helpers/service-pricing.helper";
 import { correctCutReading } from "../src/services/tambur-meter-correct.service";
 import { ensureCariAccountTx } from "../src/services/helpers/finance.helper";
 import { collectServiceBillingDraft } from "../src/services/helpers/service-billing.helper";
@@ -323,6 +325,26 @@ async function main() {
   check("§9 SIMULATED kesimli ata (çocuğuyla birlikte sevk) faturada YOK + uyarı; çocuğun işi duruyor",
     !r9.works.some((w) => w.rollId === ke) && r9.works.some((w) => w.rollId === kf.id) && r9.warnings.includes(simulatedCutWarning(1)),
     JSON.stringify({ works: r9.works.map((w) => [w.rollId === ke ? "ata" : "cocuk", w.meterBasis, String(w.meters)]), w: r9.warnings }));
+
+  console.log("\n§11 S6: elle (OPERATOR) kesim metresi faturalanır, satır İŞARETLİ (D4-KUC2 c)");
+  const g = await parentRoll(base.itemId, 100);
+  const kOp = (await tambur.cutOpenFabric(g.rollId, { lengthMeters: 15, status: "WAREHOUSE", measure: { source: "OPERATOR" } }, undefined, fx.machineId)).data.childRoll.id;
+  const kMc = (await tambur.cutOpenFabric(g.rollId, { lengthMeters: 18, status: "WAREHOUSE", measure: { source: "MACHINE" } }, undefined, fx.machineId)).data.childRoll.id;
+  await kids(g.rollId);
+  const r11op = await resolve([kOp]);
+  const lineOp = r11op.lines[0];
+  check("§11a OPERATOR okumalı iş faturada (15 m) ve satır işaretli (manualMeterRollCount 1) + 'elle ölçüm' uyarısı",
+    r11op.works.length === 1 && lineOp?.quantity === "15.000" && lineOp.manualMeterRollCount === 1 && r11op.warnings.includes(manualMeterWarning(lineOp.name, 1)),
+    JSON.stringify({ l: r11op.lines, w: r11op.warnings }));
+  const r11mc = await resolve([kMc]);
+  check("§11b MACHINE okumalı iş: satır işaretsiz (0), 'elle ölçüm' uyarısı YOK",
+    r11mc.lines.length === 1 && r11mc.lines[0]!.manualMeterRollCount === 0 && !r11mc.warnings.some((w) => w.includes("elle ölçüm")), JSON.stringify(r11mc.warnings));
+  const d11 = await collectServiceBillingDraft({
+    rollIds: [kOp, kMc], customerId: fx.customerId!, currency: Currency.TRY, settings: await loadServiceBillingSettings(), dispatchedAt: new Date(),
+  });
+  check("§11c taslak toplayıcısı: iki iş de bağda (33 m), işaret taslak uyarısında (1 iş — yalnız OPERATOR)",
+    d11.links.length === 2 && d11.links.reduce((a, l) => a + Number(l.billedMeters), 0) === 33 && d11.warnings.includes(manualMeterWarning(lineOp!.name, 1)),
+    JSON.stringify({ links: d11.links.length, w: d11.warnings }));
 
   console.log("\n§7 uç kapısı");
   const stack = tamburRouter.stack;

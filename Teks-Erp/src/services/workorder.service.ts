@@ -120,6 +120,8 @@ import {
 } from "./helpers/workorder-field-diff.helper";
 import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { assertTargetValueItems, targetValuesNestedCreate, type TargetValueItem } from "./helpers/workorder-target-value.helper";
+import { deriveOrderLineTargetValues } from "./helpers/order-line-target-copy.helper";
+import { appendTargetNotesToExternalSteps } from "./helpers/fason-step-target-note.helper";
 import { assertTargetColorChange } from "./helpers/workorder-target-color.helper";
 import { applyFoldTypeForWriteInPlace } from "./helpers/fold-type";
 import {
@@ -1074,7 +1076,7 @@ export class WorkOrderService {
     /** Engel olmayan planlama notları — yanıtta `warnings` olarak döner. */
     const routeWarnings: string[] = [...planWarnings];
     let targetPropertyIds = [...new Set(data.targetPropertyIds ?? [])];
-    const targetValues = data.targetValues ?? [];
+    let targetValues = data.targetValues ?? [];
     if (
       targetPropertyIds.length === 0 &&
       type === "ORDER_PRODUCTION" &&
@@ -1086,6 +1088,16 @@ export class WorkOrderService {
         select: { propertyId: true },
       });
       targetPropertyIds = [...new Set(required.map((r) => r.propertyId))];
+    }
+    // SY-F1 (§7.5/2): bağlı satırların hedef değerleri kopyalanır; özellikte satırlar ayrışırsa uyarı + kopya yok.
+    if (type === "ORDER_PRODUCTION" && allocations.length > 0) {
+      const copied = await deriveOrderLineTargetValues(prisma, allocations.map((a) => a.orderLineId), targetValues);
+      targetValues = copied.items;
+      routeWarnings.push(...copied.warnings);
+      // SY-F4 (§7.5/4): satırdan gelen değer, onu uygulayan fason adımın notuna (→ çeki talimatı) doğuşta eklenir.
+      const noted = await appendTargetNotesToExternalSteps(prisma, finalSteps, copied.copied);
+      finalSteps = noted.steps;
+      routeWarnings.push(...noted.warnings);
     }
 
     if (resolvedTargetItemId) {

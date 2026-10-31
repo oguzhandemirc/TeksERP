@@ -39,6 +39,10 @@ export interface PeripheralDevice {
   simulate: boolean;
   counterMode?: "RESETTING" | "CUMULATIVE" | null;
   resetCommand?: string | null;
+  /** D4-B5k kalibrasyon kaydı — İSTEĞE BAĞLI, yalnız METER (ISO an; boş = kayıt yok). */
+  calibratedAt?: string | null;
+  calibrationDueAt?: string | null;
+  calibrationNote?: string | null;
   machineId: string | null;
   /** MAKİNESİZ istasyona sabit donanım (SHIPPING kantarı vb.) — çalışma oturumu modeli. */
   stationId: string | null;

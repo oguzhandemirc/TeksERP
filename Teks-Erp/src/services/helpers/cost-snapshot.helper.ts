@@ -21,11 +21,16 @@ const yarn = z.object({ yarnItemId: z.string().nullable(), name: z.string(), den
 
 const rate = z.object({ code: z.string(), name: z.string(), basis: z.enum(["RAW_M", "FINISHED_M"]), price: price.nullable() }).strict();
 
+const warp = z.object({ warpSpecId: z.string().nullable(), endsCount: z.number().int(), takeUpPct: sourced, wastePct: sourced, yarn }).strict();
+// SY-B1: ek çözgü katmanı — anahtar yalnız doluyken (min 1) yazılır; katmansız fotoğraf bayt-aynı.
+const warpLayer = warp.extend({ role: z.enum(["LENO", "SECONDARY"]), beamMode: z.enum(["SEPARATE_BEAM", "SHARED_BEAM", "CREEL"]) }).strict();
+
 export const costInputSnapshotSchema = z
   .object({
     schemaVersion: z.literal(1),
     parameterSetId: z.string().nullable(),
-    warp: z.object({ warpSpecId: z.string().nullable(), endsCount: z.number().int(), takeUpPct: sourced, wastePct: sourced, yarn }).strict().nullable(),
+    warp: warp.nullable(),
+    warpLayers: z.array(warpLayer).min(1).optional(),
     weft: z
       .object({
         weftSpecId: z.string().nullable(),
@@ -49,6 +54,8 @@ export const costInputSnapshotSchema = z
     fabricWastePct: sourced,
     overheadPct: sourced,
     extra: z.object({ amountTry: dec, label: z.string().nullable() }).strict().nullable(),
+    // SY-D2: yalnız ATKI_UCRETI'de yazılır; eski fotoğraflarda yok (opsiyonel → eski hash bayt-aynı).
+    loomPick: z.object({ rate: price.nullable() }).strict().optional(),
   })
   .strict();
 export type CostInputSnapshot = z.infer<typeof costInputSnapshotSchema>;

@@ -1,4 +1,5 @@
 import { apiClient } from './api';
+import { showMeterWarnings } from '../lib/meterWarnings';
 import type { ApiResponse } from '../types/api';
 import type { KursunStepSummary, KursunOpenCard } from '../types/models';
 
@@ -125,7 +126,7 @@ export const kursunQcService = {
   completeQc2: (data: CompleteQc2Request): Promise<ApiResponse<unknown>> =>
     apiClient
       .post<ApiResponse<unknown>>('/kursun-qc/complete-qc2', data)
-      .then((r) => r.data),
+      .then((r) => showMeterWarnings(r.data)),
 
   reportError: (data: ReportErrorRequest): Promise<ApiResponse<unknown>> =>
     apiClient
@@ -151,7 +152,7 @@ export const kursunQcService = {
   // reopen-step öncesi salt-okunur önizleme — onay modalında hangi topların
   // Tambur'dan geri çekileceğini göstermek için.
   recordMeterReading: (data: MeterReadingRequest): Promise<ApiResponse<unknown>> =>
-    apiClient.post<ApiResponse<unknown>>('/kursun-qc/meter-readings', data).then((r) => r.data),
+    apiClient.post<ApiResponse<unknown>>('/kursun-qc/meter-readings', data).then((r) => showMeterWarnings(r.data)),
 
   /** Süpervizör PIN onayı — YALNIZ çevrimiçi, kuyruğa alınmaz; PIN yalnız bu istek gövdesinde. */
   pinAckMeterReading: (readingId: string, pin: string): Promise<ApiResponse<unknown>> =>

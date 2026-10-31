@@ -35,7 +35,7 @@ import { buildLoomStopsReport } from "../services/reports/temel/duruslar.temel";
 import { buildBeamBalanceReport } from "../services/reports/temel/levent-dengesi.temel";
 import { buildReceivablesReport } from "../services/reports/temel/alacaklar.temel";
 import { buildMachineStopsReport } from "../services/reports/temel/makine-duruslari.temel";
-import { machineStopRegime } from "../services/helpers/machine-stop-regime.helper";
+import { machineStopRegime, machineStopRegimeOpen } from "../services/helpers/machine-stop-regime.helper";
 // Parametre şemaları v2 uçlarının KENDİSİNDEN (tek kaynak): buluttan gelen istek panelin ucuyla aynı anahtarları kabul eder.
 import {
   coreDeadlineQuerySchema,
@@ -177,8 +177,8 @@ function panelOnlyRejected<T extends z.ZodTypeAny>(schema: T, allow: readonly st
 
 const dayParams = (range: DateRange): Record<string, unknown> => ({ from: factoryYmd(range.from), to: factoryYmd(range.to) } satisfies Partial<DayWindow>);
 const weavingOpen = (): Promise<boolean> => readDokumaEnabled();
-/** D4-A4 (§2.5 md. 6): bulutta makine duruşu `üretim ∧ uretim.makineDurusTakibi` — rejimin TEK helper'ından; `weavingOpen` dokunulmaz. */
-const machineStopCloudOpen = async (): Promise<boolean> => (await machineStopRegime()).general;
+/** D4-KUC2 (a): bulut kapısı = panel rota kapısı (`requireMachineStopRegime`): dokuma ∨ (üretim ∧ takip) — rejimin TEK yüklemi. */
+const machineStopCloudOpen = async (): Promise<boolean> => machineStopRegimeOpen(await machineStopRegime());
 const beamBalanceOpen = async (): Promise<boolean> => (await readDokumaEnabled()) && (await readDevereEnabled());
 
 /** Sunum kişi adı taşıyor mu (K-KISI) — taşıyorsa sonuç buluta GİTMEZ (statik listeye ek savunma). */

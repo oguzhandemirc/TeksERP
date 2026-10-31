@@ -26,6 +26,8 @@ import { isSettingRowVisible, type SettingsSearchHit } from "./settings-groups";
 import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
 import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
 import { EnumRadioOptions } from "./EnumRadioOptions";
+import { EnumCheckOptions } from "./EnumCheckOptions";
+import { decodeEnumSet, encodeEnumSet } from "./enum-set-codec";
 import { LicenseCeilingBadge } from "@/components/license/LicenseCeilingBadge";
 import { isModuleFlagKey } from "@/lib/module-flags";
 import { unsavedFlagKeys } from "./flag-save";
@@ -225,6 +227,7 @@ export function FeatureFlagSection({
   // dokunmadan "değişti" sayılıp yanlış bir değer kaydedilebilirdi.
   const serverEnumFor = (f: EnumFlagDef): string => {
     const v = server?.[f.enumKey];
+    if (f.display === "checks") return encodeEnumSet(v, f.options) ?? f.defaultValue;
     return typeof v === "string" && f.options.some((o) => o.value === v) ? v : f.defaultValue;
   };
   // SERBEST METİN taslağı (2026-09-22) — enum ile aynı kalıp, ayrı küme.
@@ -318,7 +321,7 @@ export function FeatureFlagSection({
     for (const f of enumFlags) {
       const v = enumDraft[f.enumKey];
       if (v !== undefined && v !== serverEnumFor(f)) {
-        (patch as Record<string, string>)[f.enumKey] = v;
+        (patch as Record<string, string | string[]>)[f.enumKey] = f.display === "checks" ? decodeEnumSet(v) : v;
       }
     }
     for (const f of textFlags) {
@@ -350,6 +353,10 @@ export function FeatureFlagSection({
     const nextEnum: Record<string, string> = {};
     for (const f of enumFlags) {
       const v = src?.[f.enumKey];
+      if (f.display === "checks") {
+        nextEnum[f.enumKey] = encodeEnumSet(v, f.options) ?? f.defaultValue;
+        continue;
+      }
       nextEnum[f.enumKey] = typeof v === "string" && f.options.some((o) => o.value === v) ? v : f.defaultValue;
     }
     setEnumDraft(nextEnum);
@@ -563,14 +570,17 @@ export function FeatureFlagSection({
 
   const renderEnumBody = (f: EnumFlagDef) => {
     const value = enumDraft[f.enumKey] ?? serverEnumFor(f);
-    const selected = f.options.find((o) => o.value === value);
-    const defaultLabel =
-      f.options.find((o) => o.value === f.defaultValue)?.label ?? f.defaultValue;
+    const isSet = f.display === "checks";
+    const selected = isSet ? undefined : f.options.find((o) => o.value === value);
+    const setLabel = (v: string) => f.options.filter((o) => decodeEnumSet(v).includes(o.value)).map((o) => o.label).join(", ") || "Hiçbiri";
+    const defaultLabel = isSet
+      ? setLabel(f.defaultValue)
+      : (f.options.find((o) => o.value === f.defaultValue)?.label ?? f.defaultValue);
     return (
       <div
         key={f.enumKey}
         // Dar pencerede (<640px) radyo listesi başlığın ALTINA iner: yan yana iken w-72 liste başlığı ezer.
-        className={f.display === "radio" && canEdit ? "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4" : "flex items-center justify-between gap-4"}
+        className={(f.display === "radio" || isSet) && canEdit ? "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4" : "flex items-center justify-between gap-4"}
       >
         {/* Uzun açıklama + künye (i) balonunda (2026-09-07 / 2026-09-22): satırda yalnız
             başlık + tek cümle; seçim sağda, iOS anahtarla aynı hizada. */}
@@ -589,7 +599,15 @@ export function FeatureFlagSection({
           </div>
           <p className="text-xs text-muted-foreground"><Vurgu text={f.summary} query={searchQuery} /></p>
         </div>
-        {canEdit && f.display === "radio" ? (
+        {canEdit && isSet ? (
+          <EnumCheckOptions
+            name={f.title}
+            value={value}
+            options={f.options}
+            disabled={mut.isPending}
+            onChange={(v) => setEnumDraft((d) => ({ ...d, [f.enumKey]: v }))}
+          />
+        ) : canEdit && f.display === "radio" ? (
           <EnumRadioOptions
             name={f.title}
             value={value}
@@ -612,7 +630,7 @@ export function FeatureFlagSection({
             ))}
           </select>
         ) : (
-          <div className="shrink-0 text-sm font-semibold">{selected?.label ?? value}</div>
+          <div className="shrink-0 text-sm font-semibold">{isSet ? setLabel(value) : (selected?.label ?? value)}</div>
         )}
       </div>
     );

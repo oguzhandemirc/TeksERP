@@ -1,7 +1,7 @@
 // İÇERİDEKİ İŞLER (ister 3.2) — müşteri başına içerideki emanet top/metre, durum kırılımıyla. Tek sunucu toplaması
 // (`/api/consigned-work`); satır ya da hücre tıklaması Kumaş Stoğu'nu o sahibin süzgeciyle açar. Modül kapısı `ROUTE_MODULE`.
 // Hazırlık kolonu (D4-J3) İKİNCİ HESAP DEĞİL: `ready-works?groupBy=customer` ucundan; `shipping:read` yoksa istek atılmaz.
-import type { KeyboardEvent } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
@@ -149,7 +149,8 @@ function OwnersTable({
 
 export function ConsignedWorkPage() {
   const navigate = useNavigate();
-  const q = useQuery({ queryKey: [CONSIGNED_WORK_QUERY_KEY], queryFn: getConsignedWork });
+  const [onlyReady, setOnlyReady] = useState(false);
+  const q = useQuery({ queryKey: [CONSIGNED_WORK_QUERY_KEY, onlyReady ? "ready" : "all"], queryFn: () => getConsignedWork(onlyReady) });
   const rows = q.data?.rows ?? [];
   const open = (row: ConsignedOwnerRow) => navigate(rollsLinkFor(row.ownerCustomerId, primaryBucket(row)));
   const canReadShipping = useRoleAccess().hasPermission("shipping:read");
@@ -167,7 +168,21 @@ export function ConsignedWorkPage() {
       <PageHeader
         title="İçerideki İşler"
         description="Müşterilerin işlenmek üzere bıraktığı (emanet) mal — müşteri başına top ve metre. Sevk edilen, hurdaya ayrılan ve iptal/tüketilmiş toplar sayılmaz; fasondaki ve karteladaki emanet içeride sayılır (Diğer). Satıra tıklayınca toplar o müşterinin süzgeciyle açılır."
-        actions={<RefreshButton queryKey={CONSIGNED_WORK_QUERY_KEY} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant={onlyReady ? "default" : "outline"}
+              size="sm"
+              aria-pressed={onlyReady}
+              title="Yalnız sevke hazır (depoda) emaneti olan müşteriler; toplamlar da bu kapsamdan"
+              onClick={() => setOnlyReady((v) => !v)}
+            >
+              Yalnız sevke hazır
+            </Button>
+            <RefreshButton queryKey={CONSIGNED_WORK_QUERY_KEY} />
+          </div>
+        }
       />
       <PageBody className="min-h-0 space-y-3 p-4 sm:p-6">
         {q.isLoading ? (
@@ -185,7 +200,9 @@ export function ConsignedWorkPage() {
             {q.data && <TotalsStrip totals={q.data.totals} />}
             {rows.length === 0 ? (
               <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                İçeride emanet mal yok. Emanet top, girişte “Sahibi” seçilerek ya da gelen belge onayıyla doğar.
+                {onlyReady
+                  ? "Sevke hazır emaneti olan müşteri yok."
+                  : "İçeride emanet mal yok. Emanet top, girişte “Sahibi” seçilerek ya da gelen belge onayıyla doğar."}
               </div>
             ) : (
               q.data && <OwnersTable rows={rows} totals={q.data.totals} onOpen={open} readiness={readiness} readinessStatus={readinessStatus} />

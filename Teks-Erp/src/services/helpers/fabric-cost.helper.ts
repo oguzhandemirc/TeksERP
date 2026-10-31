@@ -10,6 +10,7 @@
 import { Prisma, type Currency } from "@prisma/client";
 import { warpYarnKgExact } from "../../constants/warp-beam";
 import { theoreticalMPerHourDecimal } from "./dokuma-levent-rapor.helper";
+import { fastestGroupTakeUpPct } from "./warp-layer-beam.helper";
 
 type Dec = Prisma.Decimal;
 const D = (v: Prisma.Decimal.Value): Dec => new Prisma.Decimal(v);
@@ -25,6 +26,8 @@ export const COST_MISSING_CODES = [
   "WEFT_LENGTH_MISSING", "YARN_PRICE_MISSING", "FX_RATE_MISSING", "RPM_MISSING", "PARAMETER_SET_MISSING",
   // Plan §2.2 listesine ek (MAL-2): yapıdaki tarife kodu aktif tarifeye çözülmüyor — terbiye sessizce 0 olmasın.
   "FINISHING_RATE_MISSING",
+  // SY-D2: ATKI_UCRETI yönteminde ne yapıda ne parametre setinde atkı ücreti var — dokuma sessizce 0 olmasın.
+  "PICK_RATE_MISSING",
 ] as const;
 export type CostMissing = (typeof COST_MISSING_CODES)[number];
 export const COST_WARNING_CODES = [
@@ -34,7 +37,7 @@ export const COST_WARNING_CODES = [
 export type CostWarning = (typeof COST_WARNING_CODES)[number];
 export type CostComponent =
   | "WARP_YARN" | "WEFT_YARN" | "LOOM_MACHINE" | "LOOM_LABOR" | "ENERGY" | "BEAM_PREP"
-  | "FINISHING" | "LENGTH_SHRINK" | "FABRIC_WASTE" | "OVERHEAD" | "EXTRA" | "PROCESS";
+  | "FINISHING" | "LENGTH_SHRINK" | "FABRIC_WASTE" | "OVERHEAD" | "EXTRA" | "PROCESS" | "WEAVING_PICK";
 
 /** Kaynağıyla değer; `flag` derleyicinin türettiği uyarıdır (ör. atkı boyu enden türedi). */
 export interface Sourced<T> { value: T | null; source: CostSource; flag?: CostWarning }
@@ -42,10 +45,16 @@ export interface CostPrice { amount: Dec; currency: Currency; source: CostSource
 export interface CostYarn { yarnItemId: string | null; name: string; denier: Sourced<Dec>; price: CostPrice | null }
 export interface CostWeftYarn extends CostYarn { picksInRepeat: number }
 export interface CostRate { code: string; name: string; basis: "RAW_M" | "FINISHED_M"; price: CostPrice | null }
+export interface CostWarp { warpSpecId: string | null; endsCount: number; takeUpPct: Sourced<Dec>; wastePct: Sourced<Dec>; yarn: CostYarn }
+/** SY-B1 ek çözgü katmanı (döner/ikinci çözgü): zeminle AYNI formül, kendi tel/iplik/take-up'ı. */
+export interface CostWarpLayer extends CostWarp { role: "LENO" | "SECONDARY"; beamMode: "SEPARATE_BEAM" | "SHARED_BEAM" | "CREEL" }
+export const WARP_LAYER_ROLE_LABEL: Record<CostWarpLayer["role"], string> = { LENO: "döner", SECONDARY: "ikinci" };
 export interface CostInput {
   schemaVersion: 1;
   parameterSetId: string | null;
-  warp: { warpSpecId: string | null; endsCount: number; takeUpPct: Sourced<Dec>; wastePct: Sourced<Dec>; yarn: CostYarn } | null;
+  warp: CostWarp | null;
+  /** SY-B1 ek çözgü katmanları: yalnız doluyken yazılır — yoksa girdi + hash bayt-aynı. */
+  warpLayers?: CostWarpLayer[];
   weft: { weftSpecId: string | null; picksPerCm: Sourced<Dec>; lengthCm: Sourced<Dec>; wastePct: Sourced<Dec>; yarns: CostWeftYarn[] } | null;
   loom: {
     rpm: Sourced<Dec>; efficiencyPct: Sourced<Dec>; machineRateTry: Sourced<Dec>; laborRateTry: Sourced<Dec>;
@@ -60,6 +69,11 @@ export interface CostInput {
   fabricWastePct: Sourced<Dec>;
   overheadPct: Sourced<Dec>;
   extra: { amountTry: Dec; label: string | null } | null;
+  /**
+   * SY-D2: yalnız `maliyet.dokumaStandartYontemi = ATKI_UCRETI` iken YAZILIR (yokken anahtar hiç yok →
+   * TEZGAH_SAATI girdisi/hash'i bayt-aynı). Ücret birimi: 1 atkı/cm sıklık için metre başına.
+   */
+  loomPick?: { rate: CostPrice | null };
 }
 /** 1 birim döviz kaç TL; TRY verilmese de 1'dir. Eksik döviz → FX_RATE_MISSING. */
 export type FxRates = Partial<Record<Currency, Dec>>;
@@ -69,7 +83,8 @@ export interface CostLine {
   qty: Dec | null; qtyUnit: string | null; unitPriceTry: Dec | null; amountPerMTry: Dec;
 }
 export interface CostResult {
-  lines: CostLine[]; warpKgPerM: Dec; weftKgPerM: Dec; loomMPerHour: Dec;
+  /** `loomMPerHour` null = atkı ücreti yönteminde devir/randıman bilinmiyor (bilgi satırı; hesaba girmez). */
+  lines: CostLine[]; warpKgPerM: Dec; weftKgPerM: Dec; loomMPerHour: Dec | null;
   rawCostPerMTry: Dec; finishedCostPerMTry: Dec | null; soundCostPerMTry: Dec; overheadPerMTry: Dec; totalCostPerMTry: Dec;
 }
 export interface CostOutcome { result: CostResult | null; missing: CostMissing[]; warnings: CostWarning[] }
@@ -108,9 +123,8 @@ function toTry(p: CostPrice | null, fx: FxRates, c: Collector, missingCode: Cost
   return p.amount.mul(rate);
 }
 
-/** Kᶜ = (N × dᶜ / 9 000 000) / (1 − t) / (1 − fᶜ) — kg/m. */
-function warpKg(input: CostInput, c: Collector): { kg: Dec; takeUp: Dec } | null {
-  const w = input.warp;
+/** Kᶜ = (N × dᶜ / 9 000 000) / (1 − t) / (1 − fᶜ) — kg/m. Zemin ve HER ek katman bunu çağırır (kopya yok). */
+function warpKg(w: CostWarp | null, c: Collector): { kg: Dec; takeUp: Dec } | null {
   if (!w) {
     c.missing.add("WARP_SPEC_MISSING");
     return null;
@@ -121,6 +135,15 @@ function warpKg(input: CostInput, c: Collector): { kg: Dec; takeUp: Dec } | null
   if (d === null || t === null || f === null) return null;
   const takeUp = pct(t);
   return { kg: warpYarnKgExact(w.endsCount, d, 1).div(ONE.minus(takeUp)).div(ONE.minus(pct(f))), takeUp };
+}
+
+/** Zemin + ek katmanlar; herhangi biri eksikse null (yarım çözgü kg'ı gösterilmez). */
+function warpKgs(input: CostInput, c: Collector): { kg: Dec; groundKg: Dec; takeUp: Dec; layers: Array<{ layer: CostWarpLayer; kg: Dec }> } | null {
+  const ground = warpKg(input.warp, c);
+  const layers = (input.warpLayers ?? []).map((layer) => ({ layer, r: warpKg(layer, c) }));
+  if (!ground || layers.some((l) => l.r === null)) return null;
+  const out = layers.map((l) => ({ layer: l.layer, kg: l.r!.kg }));
+  return { kg: out.reduce((a, l) => a.plus(l.kg), ground.kg), groundKg: ground.kg, takeUp: ground.takeUp, layers: out };
 }
 
 /** Kⱼ = p × 100 × W × sⱼ × dⱼ / 9 000 000 / (1 − fᵃ), sⱼ = picksInRepeat / Σ — kg/m. */
@@ -151,15 +174,30 @@ export function yarnUsagePerM(input: CostInput): {
   missing: CostMissing[];
   warp: { yarnItemId: string | null; kgPerM: Dec } | null;
   weft: Array<{ yarnItemId: string | null; kgPerM: Dec }>;
+  /** SY-B1 ek çözgü katmanları (zemin `warp`a KATILMAZ — kip başına ayrı düşüm). */
+  warpLayers: Array<{ yarnItemId: string | null; warpSpecId: string | null; beamMode: CostWarpLayer["beamMode"]; kgPerM: Dec }>;
 } {
   const c = new Collector();
-  const warp = warpKg(input, c);
+  const warp = warpKg(input.warp, c);
+  const layers = (input.warpLayers ?? []).map((l) => ({ l, r: warpKg(l, c) }));
   const weft = weftKgs(input, c);
   return {
     missing: [...c.missing].sort(),
     warp: warp && input.warp ? { yarnItemId: input.warp.yarn.yarnItemId, kgPerM: warp.kg } : null,
     weft: (weft?.perYarn ?? []).map((x) => ({ yarnItemId: x.yarn.yarnItemId, kgPerM: x.kg })),
+    warpLayers: layers.flatMap(({ l, r }) => (r ? [{ yarnItemId: l.yarn.yarnItemId, warpSpecId: l.warpSpecId, beamMode: l.beamMode, kgPerM: r.kg }] : [])),
   };
+}
+
+/**
+ * Zemin leventinin etkin take-up'ı (SY-B1): SHARED_BEAM katmanı varsa en hızlı tükenen grup;
+ * yoksa zemin değeri aynen. Levent hazırlığı ve hazır levent düşümü bunu okur.
+ */
+function groundBeamTakeUp(input: CostInput, groundTakeUp: Dec): Dec {
+  const shared = (input.warpLayers ?? []).filter((l) => l.beamMode === "SHARED_BEAM");
+  if (!shared.length) return groundTakeUp;
+  const layerT = shared.map((l) => ({ beamMode: l.beamMode, takeUpPct: new Collector().take(l.takeUpPct, null) }));
+  return pct(fastestGroupTakeUpPct(groundTakeUp.mul(HUNDRED), layerT)!);
 }
 
 /**
@@ -169,7 +207,7 @@ export function yarnUsagePerM(input: CostInput): {
 export function fabricMetersFromWarpM(input: CostInput, warpM: Dec): Dec | null {
   if (!input.warp) return null;
   const t = new Collector().take(input.warp.takeUpPct, "TAKEUP_MISSING");
-  return t === null ? null : warpM.mul(ONE.minus(pct(t)));
+  return t === null ? null : warpM.mul(ONE.minus(groundBeamTakeUp(input, pct(t))));
 }
 
 const line = (component: CostComponent, label: string, amount: Dec, extra: Partial<CostLine> = {}): CostLine => ({
@@ -200,15 +238,32 @@ function loomLines(input: CostInput, picksPerCm: Dec | null, c: Collector): { v:
   };
 }
 
+/** SY-D2 ATKI_UCRETI: tek satır p × ücret × kur; tezgah/işçilik/enerji yok, devir eksik sayılmaz. */
+function weavingPickLines(input: CostInput, picksPerCm: Dec | null, fx: FxRates, c: Collector): { v: Dec | null; lines: CostLine[] } | null {
+  const rateTry = toTry(input.loomPick?.rate ?? null, fx, c, "PICK_RATE_MISSING");
+  const { rpm, efficiencyPct } = input.loom;
+  const theo = theoreticalMPerHourDecimal(rpm.value, picksPerCm);
+  const v = theo && efficiencyPct.value ? theo.mul(pct(efficiencyPct.value)) : null;
+  if (rateTry === null || picksPerCm === null) return null;
+  return { v, lines: [line("WEAVING_PICK", "Dokuma (atkı ücreti)", picksPerCm.mul(rateTry), { qty: picksPerCm, qtyUnit: "atkı/cm", unitPriceTry: rateTry })] };
+}
+
 /** Ham metre maliyetinin iplik satırları (fiyat × kur). */
-function yarnLines(input: CostInput, fx: FxRates, kg: { warp: { kg: Dec } | null; weft: ReturnType<typeof weftKgs> }, c: Collector): CostLine[] | null {
+function yarnLines(input: CostInput, fx: FxRates, kg: { warp: ReturnType<typeof warpKgs>; weft: ReturnType<typeof weftKgs> }, c: Collector): CostLine[] | null {
   const { warp, weft } = kg;
   const out: CostLine[] = [];
   let ok = warp !== null && weft !== null;
   if (input.warp) {
     const p = toTry(input.warp.yarn.price, fx, c);
+    const groundKg = warp?.groundKg;
     if (p === null) ok = false;
-    else if (warp) out.push(line("WARP_YARN", `Çözgü — ${input.warp.yarn.name}`, warp.kg.mul(p), { yarnItemId: input.warp.yarn.yarnItemId, qty: warp.kg, qtyUnit: "kg", unitPriceTry: p }));
+    else if (groundKg) out.push(line("WARP_YARN", `Çözgü — ${input.warp.yarn.name}`, groundKg.mul(p), { yarnItemId: input.warp.yarn.yarnItemId, qty: groundKg, qtyUnit: "kg", unitPriceTry: p }));
+  }
+  for (const [i, l] of (input.warpLayers ?? []).entries()) {
+    const p = toTry(l.yarn.price, fx, c);
+    const lk = warp?.layers[i]?.kg;
+    if (p === null) ok = false;
+    else if (lk) out.push(line("WARP_YARN", `Çözgü (${WARP_LAYER_ROLE_LABEL[l.role]}) — ${l.yarn.name}`, lk.mul(p), { yarnItemId: l.yarn.yarnItemId, qty: lk, qtyUnit: "kg", unitPriceTry: p }));
   }
   for (const [i, y] of (input.weft?.yarns ?? []).entries()) {
     const p = toTry(y.price, fx, c);
@@ -252,10 +307,12 @@ function processLines(input: CostInput, fx: FxRates, keep: Dec, c: Collector): C
 export function computeFabricCost(input: CostInput, fx: FxRates): CostOutcome {
   const c = new Collector();
   if (!input.parameterSetId) c.missing.add("PARAMETER_SET_MISSING");
-  const warp = warpKg(input, c);
+  const warp = warpKgs(input, c);
   const weft = weftKgs(input, c);
   const yarns = yarnLines(input, fx, { warp, weft }, c);
-  const loom = loomLines(input, weft?.picksPerCm ?? null, c);
+  const loom = input.loomPick
+    ? weavingPickLines(input, weft?.picksPerCm ?? null, fx, c)
+    : loomLines(input, weft?.picksPerCm ?? null, c);
   const h = c.take(input.beam.prepCostTry, "PARAMETER_SET_MISSING");
   const lBeam = c.take(input.beam.lengthM, "PARAMETER_SET_MISSING");
   const fk = c.take(input.fabricWastePct, "PARAMETER_SET_MISSING");
@@ -264,7 +321,7 @@ export function computeFabricCost(input: CostInput, fx: FxRates): CostOutcome {
     for (const r of [input.finishing, ...(input.processes ?? [])]) if (r) toTry(r.price, fx, c, "FINISHING_RATE_MISSING"); // eksik listesi tam olsun
     return { result: null, missing: [...c.missing].sort(), warnings: [...c.warnings].sort() };
   }
-  const prep = line("BEAM_PREP", "Levent hazırlığı", h.div(lBeam.mul(ONE.minus(warp.takeUp))), { unitPriceTry: h, qty: lBeam, qtyUnit: "m" });
+  const prep = line("BEAM_PREP", "Levent hazırlığı", h.div(lBeam.mul(ONE.minus(groundBeamTakeUp(input, warp.takeUp)))), { unitPriceTry: h, qty: lBeam, qtyUnit: "m" });
   const rawLines = [...yarns, ...loom.lines, prep];
   const raw = rawLines.reduce((a, l) => a.plus(l.amountPerMTry), ZERO);
   const fin = finishLines(input, fx, raw, c);
@@ -296,44 +353,5 @@ export function computeFabricCost(input: CostInput, fx: FxRates): CostOutcome {
   return { result, missing: [], warnings: [...c.warnings].sort() };
 }
 
-/**
- * Teklif fiyatı önerisi (plan §2.2): P_TL = C × (1 + m) × (1 + vade) / (1 − komisyon); öneri = P_TL / r + navlun.
- * Kur yoksa ya da ≤ 0 → null (1 VARSAYILMAZ). 4 hane; kullanıcı 2 haneye kesinleştirir.
- */
-export function suggestUnitPrice(p: {
-  costPerMTry: Dec; markupPct: Dec; fxRate: Dec | null; freightPerM?: Dec | null; financeChargePct?: Dec | null; commissionPct?: Dec | null;
-}): Dec | null {
-  if (!p.fxRate || !p.fxRate.gt(0)) return null;
-  let tl = p.costPerMTry.mul(ONE.plus(pct(p.markupPct)));
-  if (p.financeChargePct) tl = tl.mul(ONE.plus(pct(p.financeChargePct)));
-  if (p.commissionPct) tl = tl.div(ONE.minus(pct(p.commissionPct)));
-  return tl.div(p.fxRate).plus(p.freightPerM ?? ZERO).toDecimalPlaces(4, HALF_UP);
-}
-
-/** SUNUM — tek yuvarlama noktası: TL/m 4, kg/m 6, m/sa 4 hane; tel anahtarları Türkçe. */
-const r4 = (v: Dec): string => v.toDecimalPlaces(4, HALF_UP).toFixed(4);
-const r6 = (v: Dec): string => v.toDecimalPlaces(6, HALF_UP).toFixed(6);
-export function presentCostResult(r: CostResult) {
-  return {
-    satirlar: r.lines.map((l, i) => ({
-      sira: i + 1,
-      bilesen: l.component,
-      etiket: l.label,
-      iplikId: l.yarnItemId,
-      miktar: l.qty === null ? null : l.qtyUnit === "kg" ? r6(l.qty) : l.qty.toString(),
-      birim: l.qtyUnit,
-      birimFiyatTl: l.unitPriceTry === null ? null : r4(l.unitPriceTry),
-      tutarTlM: r4(l.amountPerMTry),
-    })),
-    cozguKgM: r6(r.warpKgPerM),
-    atkiKgM: r6(r.weftKgPerM),
-    tezgahMSaat: r4(r.loomMPerHour),
-    hamTlM: r4(r.rawCostPerMTry),
-    mamulTlM: r.finishedCostPerMTry === null ? null : r4(r.finishedCostPerMTry),
-    saglamTlM: r4(r.soundCostPerMTry),
-    genelGiderTlM: r4(r.overheadPerMTry),
-    standartTlM: r4(r.totalCostPerMTry),
-  };
-}
-export const roundCost4 = (v: Dec): Dec => v.toDecimalPlaces(4, HALF_UP);
-export const roundKg6 = (v: Dec): Dec => v.toDecimalPlaces(6, HALF_UP);
+// Sunum ve teklif önerisi ayrı modülde (dosya boyu); tüketiciler bu dosyadan almaya devam eder.
+export { presentCostResult, roundCost4, roundKg6, suggestUnitPrice } from "./fabric-cost-present.helper";

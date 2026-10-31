@@ -30,7 +30,10 @@ export interface ConsignedWorkSummary {
 export const CONSIGNED_WORK_QUERY_KEY = "consigned-work";
 export const CONSIGNED_WORK_PATH = "/operations/icerideki-isler";
 
-export async function getConsignedWork(): Promise<ConsignedWorkSummary> {
-  const r = await apiClient.get<{ success: boolean; data: ConsignedWorkSummary }>("/api/consigned-work");
+/** `onlyReady`: "Yalnız sevke hazır" — süzme SUNUCUDA (satırlar + toplam şeridi aynı kapsam); istemci satır süzmez. */
+export async function getConsignedWork(onlyReady = false): Promise<ConsignedWorkSummary> {
+  const r = await apiClient.get<{ success: boolean; data: ConsignedWorkSummary }>("/api/consigned-work", {
+    params: onlyReady ? { onlyReady: "true" } : undefined,
+  });
   return r.data.data;
 }

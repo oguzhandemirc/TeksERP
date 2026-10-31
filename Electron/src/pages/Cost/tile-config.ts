@@ -5,7 +5,7 @@
 // Görüntüleme kapısı `cost:read` (teklif `quote:read`, fiyat listesi `price-list:read`); yazma sayfa İÇİNDE `PermissionGate`.
 // Menü satırı ayrıca `maliyetEnabled` bayrağına bağlıdır (`nav-config`): modül kapalıysa hiçbiri çizilmez.
 // =============================================================================
-import { Calculator, Cog, Factory, FileSignature, Layers, ListOrdered, PackageOpen, SlidersHorizontal, Spool, type LucideIcon } from "lucide-react";
+import { Calculator, Cog, Factory, FileSignature, Layers, ListOrdered, PackageOpen, SlidersHorizontal, Spool, TrendingUp, type LucideIcon } from "lucide-react";
 
 export interface CostTile {
   key: string;
@@ -108,6 +108,15 @@ export const costTiles: CostTile[] = [
     icon: Spool,
     tone: "text-warning",
     permissionAny: ["report:yarn-need"],
+  },
+  {
+    key: "karlilik",
+    title: "Kârlılık",
+    description: "Hangi müşteri, hangi işlem, hangi ay ne kazandırdı: kesinleşen gelirden ipe, makineye ve dışarıya giden çıkınca kalan; eksik girdiler rozetli.",
+    to: "/reports/maliyet/karlilik",
+    icon: TrendingUp,
+    tone: "text-success",
+    permissionAny: ["cost:read"],
   },
 ];
 

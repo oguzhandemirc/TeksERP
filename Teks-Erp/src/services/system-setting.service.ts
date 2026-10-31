@@ -62,7 +62,8 @@ import { resolveSeriesFormat } from "./number-series.service";
 import { updateSeriesNumberSource } from "./helpers/series-write.helper";
 import { alarmEnableBlocked } from "./helpers/loom-floor.helper";
 import { isShiftDefined } from "./helpers/loom-alarm-shift.helper";
-import { resetNotificationBaselines } from "./helpers/notification-baseline.helper";
+import { resetNotificationBaseline, resetNotificationBaselines } from "./helpers/notification-baseline.helper";
+import { READY_WORK_KIND } from "../constants/notification-catalog-sevkiyat";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { TAMBUR_PLAN_WIDTH_TOLERANCE_CM } from "../constants/tambur-plan-gate";
 import {
@@ -200,6 +201,8 @@ export const SETTING_KEYS = {
   COST_PROFIT_SUBCONTRACT_SOURCE: "maliyet.karlilik.disFasonKaynagi",
   /** D4-G2a: kârlılıkta sarf birim fiyatı — `ALIS_FIYATI` (varsayılan; kartın alış fiyatı) · `SON_ALIS_FATURASI`. */
   COST_PROFIT_CONSUMABLE_PRICE_SOURCE: "maliyet.karlilik.sarfFiyatKaynagi",
+  /** SY-D2: dokuma standart maliyet yöntemi — `TEZGAH_SAATI` (varsayılan; devir × randıman × saat ücreti) · `ATKI_UCRETI` (atkı/cm × ücret). */
+  COST_WEAVING_STANDARD_METHOD: "maliyet.dokumaStandartYontemi",
   /** D4-G2b: kârlılıkta makine süresi — `OTURUM` (varsayılan; iş oturumu, IDLE `lastActivityAt`ta kesilir) · `VARDIYA` · `NORM`. */
   COST_PROFIT_MACHINE_TIME: "maliyet.karlilik.makineSuresi",
   /** D4-G2b: genel gider havuzunun işlere dağıtım anahtarı — `YOK` (varsayılan; dağıtılmaz) · `METRE` · `GELIR` · `MAKINE_SAATI`. */
@@ -656,8 +659,8 @@ export const SETTING_KEYS = {
   /**
    * SEVKE HAZIR İŞLER (D4-J1, 1e kararları K25–K26): hazırlık TÜRETİLİR, saklanmaz. Kural
    * (ALL_DONE | METER_THRESHOLD) + tolerans yalnız `effectiveShipReadyPolicy` (ship-readiness.helper)
-   * üzerinden okunur. `notifyUnits` + `scanMinutes` KOSUL bildiriminin (D4-J2) ayarlarıdır; bu dilimde
-   * yalnız kayıtlıdır (okuyan iş yok).
+   * üzerinden okunur. `notifyUnits` + `scanMinutes` KOSUL bildiriminin (D4-J2) ayarlarıdır; okuyucusu
+   * `notification-sources/is.ts` `readyWorkSubjects` (boş küme = bildirim kapalı).
    */
   SHIPPING_READY_RULE: "shipping.ready.rule",
   SHIPPING_READY_TOLERANCE_PCT: "shipping.ready.tolerancePct",
@@ -787,6 +790,8 @@ export const SETTING_KEYS = {
   TAMBUR_SIMULATED_METER_ENABLED: "tambur.simulatedMeterEnabled",
   /** D4-B1: Tambur kesim gövdesinde ölçüm kaynağı (`measure`) zorunlu mu — satır yok = KAPALI (eski APK göndermez). */
   TAMBUR_MEASURE_SOURCE_REQUIRED: "tambur.olcumKaynagiZorunlu",
+  /** D4-B5k (B-3): süresi geçmiş kalibrasyonlu sayaçla ölçümde uyarı — satır yok = KAPALI (bugünkü davranış). */
+  TAMBUR_CALIBRATION_CHECK: "tambur.kalibrasyonKontrolu",
   /** Kurşun bypass (kurşun istasyonuna tablet KOYULMAYAN fabrika düzeni) açık mı.
    *  Default FALSE (kapalı). Diğer flag'lerin çoğunun aksine backend ENFORCE eder,
    *  ama ENFORCE kapsamı DAR: yalnız YENİ ATAMA OLUŞTURMAYI kapılar (bayrak kapalıyken
@@ -1110,6 +1115,10 @@ export const DEFAULT_PROFIT_SUBCONTRACT_SOURCE: ProfitSubcontractSource = "FATUR
 export const PROFIT_CONSUMABLE_PRICE_SOURCES = ["ALIS_FIYATI", "SON_ALIS_FATURASI"] as const;
 export type ProfitConsumablePriceSource = (typeof PROFIT_CONSUMABLE_PRICE_SOURCES)[number];
 export const DEFAULT_PROFIT_CONSUMABLE_PRICE_SOURCE: ProfitConsumablePriceSource = "ALIS_FIYATI";
+/** SY-D2: dokuma standart maliyet yöntemi (motor girdisi derlenirken okunur; sürüm girdisinde donar). */
+export const WEAVING_STANDARD_METHODS = ["TEZGAH_SAATI", "ATKI_UCRETI"] as const;
+export type WeavingStandardMethod = (typeof WEAVING_STANDARD_METHODS)[number];
+export const DEFAULT_WEAVING_STANDARD_METHOD: WeavingStandardMethod = "TEZGAH_SAATI";
 /** D4-G2b: kârlılıkta makine süresinin kaynağı. */
 export const PROFIT_MACHINE_TIME_MODES = ["OTURUM", "VARDIYA", "NORM"] as const;
 export type ProfitMachineTimeMode = (typeof PROFIT_MACHINE_TIME_MODES)[number];
@@ -1150,6 +1159,11 @@ export type LabelCustomerCodeMissing = "BLOCK" | "ROLL_BARCODE";
 export const LABEL_CUSTOMER_CODE_MISSING_MODES: LabelCustomerCodeMissing[] = ["BLOCK", "ROLL_BARCODE"];
 /** Varsayılan `BLOCK` — bugün CUSTOMER_CODE kaynaklı şablon olmadığından etkisiz (bugünkü davranış değişmez). */
 export const DEFAULT_LABEL_CUSTOMER_CODE_MISSING: LabelCustomerCodeMissing = "BLOCK";
+/** D4-B5k: sayaç kalibrasyon kontrolü — UYAR yalnız uyarır (ölçüm engellenmez, kaynak MACHINE kalır). */
+export type TamburCalibrationCheck = "KAPALI" | "UYAR";
+export const TAMBUR_CALIBRATION_CHECK_MODES: TamburCalibrationCheck[] = ["KAPALI", "UYAR"];
+/** Varsayılan `KAPALI` — kalibrasyon tarihi hiçbir yanıtı değiştirmez (bugünkü davranış). */
+export const DEFAULT_TAMBUR_CALIBRATION_CHECK: TamburCalibrationCheck = "KAPALI";
 
 /** Sevkin fatura izi nereden yazılır. `dis` = bugünkü davranış. */
 export type ShippingInvoiceMode = "dis" | "ic" | "ikisi";
@@ -1986,6 +2000,8 @@ export interface FeatureFlags {
   costProfitSubcontractSource: ProfitSubcontractSource;
   /** D4-G2a: kârlılık sarf birim fiyatı kaynağı (varsayılan `ALIS_FIYATI`). */
   costProfitConsumablePriceSource: ProfitConsumablePriceSource;
+  /** SY-D2: dokuma standart maliyet yöntemi (varsayılan `TEZGAH_SAATI`). */
+  costWeavingStandardMethod: WeavingStandardMethod;
   /** D4-G2b: kârlılık makine süresi kaynağı (varsayılan `OTURUM`). */
   costProfitMachineTime: ProfitMachineTimeMode;
   /** D4-G2b: genel gider dağıtım anahtarı (varsayılan `YOK`). */
@@ -2249,6 +2265,8 @@ export interface FeatureFlags {
   tamburSimulatedMeterEnabled: boolean;
   /** D4-B1: Tambur kesiminde ölçüm kaynağı zorunlu (varsayılan KAPALI; önce tüm tabletler yeni sürümde olmalı). */
   tamburMeasureSourceRequired: boolean;
+  /** D4-B5k: süresi geçmiş sayaç kalibrasyonunda ölçüm uyarısı (varsayılan KAPALI). */
+  tamburCalibrationCheck: TamburCalibrationCheck;
   /** Kısa kesimde otomatik A1 — FABRİKA VARSAYILANI (default FALSE/kapalı).
    *  Kural istemcide koşar; tablet yetkilisi cihaz bazında ezebilir. */
   tamburShortCutA1Enabled: boolean;
@@ -2659,6 +2677,7 @@ export class SystemSettingService {
       financeRiskLimitCurrencyMode: await readFinanceRiskLimitCurrencyMode(cacheClient),
       costProfitSubcontractSource: await readCostProfitSubcontractSource(cacheClient),
       costProfitConsumablePriceSource: await readCostProfitConsumablePriceSource(cacheClient),
+      costWeavingStandardMethod: await readCostWeavingStandardMethod(cacheClient),
       costProfitMachineTime: await readCostProfitMachineTime(cacheClient),
       costProfitOverheadKey: await readCostProfitOverheadKey(cacheClient),
       costProfitCategoryClasses: await readCostProfitCategoryClasses(cacheClient),
@@ -2782,6 +2801,7 @@ export class SystemSettingService {
       tamburUndoFullSameDayOnly: await readTamburUndoFullSameDayOnly(cacheClient),
       tamburSimulatedMeterEnabled: await readTamburSimulatedMeterEnabled(cacheClient),
       tamburMeasureSourceRequired: await readTamburMeasureSourceRequired(cacheClient),
+      tamburCalibrationCheck: await readTamburCalibrationCheck(cacheClient),
       tamburShortCutA1Enabled: await readTamburShortCutA1Enabled(cacheClient),
       tamburShortCutA1ThresholdM: await readTamburShortCutA1ThresholdM(cacheClient),
       tamburPlanGateWidthToleranceCm: await readTamburPlanGateWidthToleranceCm(cacheClient),
@@ -3248,6 +3268,13 @@ export class SystemSettingService {
         throw AppError.badRequest(`costProfitConsumablePriceSource şunlardan biri olmalı: ${PROFIT_CONSUMABLE_PRICE_SOURCES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.COST_PROFIT_CONSUMABLE_PRICE_SOURCE, v, "Kârlılıkta sarf birim fiyatı — kart alış fiyatı · son alış faturası", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "costWeavingStandardMethod")) {
+      const v = input.costWeavingStandardMethod;
+      if (typeof v !== "string" || !WEAVING_STANDARD_METHODS.includes(v as WeavingStandardMethod)) {
+        throw AppError.badRequest(`costWeavingStandardMethod şunlardan biri olmalı: ${WEAVING_STANDARD_METHODS.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.COST_WEAVING_STANDARD_METHOD, v, "Dokuma standart maliyet yöntemi — tezgah saati · atkı ücreti", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "costProfitMachineTime")) {
       const v = input.costProfitMachineTime;
@@ -4048,6 +4075,10 @@ export class SystemSettingService {
         userId
       );
     }
+    // Politika değişimi bulutta `is-emri.sevkeHazir`ı bayatlatmasın (D4-MIG6): önceki politika okunur, yazımdan sonra kıyaslanır.
+    const shipReadyTouched = ["shippingReadyRule", "shippingReadyTolerancePct"].some((k) => Object.prototype.hasOwnProperty.call(input, k));
+    const shipReadyDirty = shipReadyTouched ? await import("../cloud-sync/ship-ready-dirty") : null;
+    const shipReadyBefore = shipReadyDirty ? await shipReadyDirty.readReadyPolicySnapshot() : null;
     if (Object.prototype.hasOwnProperty.call(input, "shippingReadyRule")) {
       const v = input.shippingReadyRule;
       if (typeof v !== "string" || !SHIP_READY_RULES.includes(v as ShipReadyRule)) {
@@ -4067,6 +4098,12 @@ export class SystemSettingService {
         userId
       );
     }
+    // Best-effort: ayar zaten yazıldı; bulut işareti düşerse 5 dk emniyet turu yakalar, istek kesilmez (kalan ayarlar yazılır).
+    if (shipReadyDirty && shipReadyBefore) {
+      await shipReadyDirty.markReadyWorkOrdersDirty(shipReadyBefore).catch((e: unknown) => {
+        uyari("bulut-kirletme", `sevke hazırlık politikası değişimi bulut kirletme işaretine yazılamadı: ${e instanceof Error ? e.message : String(e)}`);
+      });
+    }
     if (Object.prototype.hasOwnProperty.call(input, "shippingReadyNotifyUnits")) {
       const v = input.shippingReadyNotifyUnits;
       if (!Array.isArray(v) || v.some((u) => !SHIP_READY_NOTIFY_UNITS.includes(u as ShipReadyNotifyUnit))) {
@@ -4074,7 +4111,10 @@ export class SystemSettingService {
       }
       // Tekil + kanonik sıra: aynı küme iki farklı JSON olarak yazılmasın.
       const units = SHIP_READY_NOTIFY_UNITS.filter((u) => v.includes(u));
+      const before = await readShippingReadyNotifyUnits();
       await this.set(SETTING_KEYS.SHIPPING_READY_NOTIFY_UNITS, units, "Sevke hazır işler — bildirim birimleri (boş = kapalı)", userId);
+      // Birim eklenince tür damgası düşer → sonraki tur SESSİZ taban (o an hazır birikim toplu bildirim üretmez; §12.2).
+      if (units.some((u) => !before.includes(u))) await resetNotificationBaseline(prisma, READY_WORK_KIND);
     }
     if (Object.prototype.hasOwnProperty.call(input, "shippingReadyScanMinutes")) {
       const v = input.shippingReadyScanMinutes;
@@ -4807,6 +4847,19 @@ export class SystemSettingService {
       );
     }
 
+    if (Object.prototype.hasOwnProperty.call(input, "tamburCalibrationCheck")) {
+      const v = input.tamburCalibrationCheck;
+      if (typeof v !== "string" || !TAMBUR_CALIBRATION_CHECK_MODES.includes(v as TamburCalibrationCheck)) {
+        throw AppError.badRequest("Sayaç kalibrasyon kontrolü KAPALI ya da UYAR olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.TAMBUR_CALIBRATION_CHECK,
+        v,
+        "Sayaç kalibrasyonu: KAPALI | UYAR (süresi geçmiş sayaçla ölçümde uyarı; ölçüm engellenmez)",
+        userId
+      );
+    }
+
     if (Object.prototype.hasOwnProperty.call(input, "sessionDurationHours")) {
       const v = input.sessionDurationHours;
       if (
@@ -5534,6 +5587,11 @@ export function readCostProfitSubcontractSource(tx?: Pick<typeof prisma, "system
 /** D4-G2a: kârlılık sarf fiyatı kaynağı — tanınmayan değer varsayılana (`ALIS_FIYATI`) düşer. */
 export function readCostProfitConsumablePriceSource(tx?: Pick<typeof prisma, "systemSetting">): Promise<ProfitConsumablePriceSource> {
   return readServiceEnum(SETTING_KEYS.COST_PROFIT_CONSUMABLE_PRICE_SOURCE, PROFIT_CONSUMABLE_PRICE_SOURCES, DEFAULT_PROFIT_CONSUMABLE_PRICE_SOURCE, tx);
+}
+
+/** SY-D2: dokuma standart maliyet yöntemi — tanınmayan değer varsayılana (`TEZGAH_SAATI`, bugünkü motor) düşer. */
+export function readCostWeavingStandardMethod(tx?: Pick<typeof prisma, "systemSetting">): Promise<WeavingStandardMethod> {
+  return readServiceEnum(SETTING_KEYS.COST_WEAVING_STANDARD_METHOD, WEAVING_STANDARD_METHODS, DEFAULT_WEAVING_STANDARD_METHOD, tx);
 }
 
 /** D4-G2b: kârlılık makine süresi — tanınmayan değer varsayılana (`OTURUM`) düşer. */
@@ -7794,6 +7852,11 @@ export async function readTamburSimulatedMeterEnabled(tx?: Pick<typeof prisma, "
 export async function readTamburMeasureSourceRequired(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.TAMBUR_MEASURE_SOURCE_REQUIRED }, select: { value: true } });
   return asBoolean(setting?.value);
+}
+
+/** D4-B5k: sayaç kalibrasyon kontrolü — satır yok / tanınmayan değer = KAPALI (bugünkü davranış). */
+export function readTamburCalibrationCheck(tx?: Pick<typeof prisma, "systemSetting">): Promise<TamburCalibrationCheck> {
+  return readServiceEnum(SETTING_KEYS.TAMBUR_CALIBRATION_CHECK, TAMBUR_CALIBRATION_CHECK_MODES, DEFAULT_TAMBUR_CALIBRATION_CHECK, tx);
 }
 
 /**
