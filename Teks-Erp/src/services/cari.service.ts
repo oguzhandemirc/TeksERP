@@ -113,6 +113,8 @@ export class CariService {
     hasActivity?: boolean;
     /** Belirli kartın hesabı (`readIdCondition`). */
     customerId?: string | { in: string[] };
+    /** Belirli hesap(lar) (`readIdCondition`) — bildirimden `?focus=<hesapId>` derin bağlantısı (D4-KUC3a). */
+    id?: string | { in: string[] };
     /** Vadesi geçmiş açık tutarları da getir (H2). Bayrak verilmezse ek sorgu
      *  KOŞMAZ — bugünkü yol bayt-bayt aynı kalır. */
     withOverdue?: boolean;
@@ -120,7 +122,7 @@ export class CariService {
     const page = Math.max(1, params.page ?? 1);
     const pageSize = Math.min(200, Math.max(1, params.pageSize ?? 50));
 
-    const where: Prisma.CariAccountWhereInput = {};
+    const where: Prisma.CariAccountWhereInput = params.id ? { id: params.id } : {};
     if (params.kind) where.kind = params.kind;
     if (params.isActive !== undefined) where.isActive = params.isActive;
     if (params.roleWhere) where.customer = params.roleWhere;

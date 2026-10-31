@@ -25,10 +25,11 @@ import {
 } from "./helpers/ship-readiness.helper";
 import type { ShipReadyRule } from "./system-setting.service";
 
-export type ReadyWorkUnit = "workOrder" | "deliveryNote" | "customerBatch" | "customer";
-export const READY_WORK_UNITS: readonly ReadyWorkUnit[] = ["workOrder", "deliveryNote", "customerBatch", "customer"];
-/** Gelen belge modülünün verisine dayanan birimler — modül kapalıyken 403 MODULE_DISABLED. */
-export const INCOMING_DOC_UNITS: readonly ReadyWorkUnit[] = ["deliveryNote", "customerBatch"];
+import { READY_WORK_UNITS, type ReadyWorkUnit } from "../constants/ready-work-units";
+
+export {
+  INCOMING_DOC_UNITS, NOTIFY_UNIT_READY_UNIT, notifyUnitNeedsIncomingDoc, READY_WORK_UNITS, type ReadyWorkUnit,
+} from "../constants/ready-work-units";
 
 /** `roll-delivery-note-line.helper` yukarı çözücüsüyle aynı tavan (döngüsel veri sonsuz yürümesin). */
 const MAX_DESCENT_DEPTH = 32;

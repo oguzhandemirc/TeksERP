@@ -23,7 +23,7 @@ import {
 import { changeYarnCostPrice, listYarnCostPrices, revokeYarnCostPrice } from "../services/yarn-cost-price.service";
 import { changeFinishingRate, listFinishingRates, revokeFinishingRate } from "../services/finishing-rate.service";
 import { getCostStructure, putCostStructure } from "../services/cost-structure.service";
-import { changeMachineCostRate, createMachineCostRate, listMachineCostRates, revokeMachineCostRate } from "../services/machine-cost-rate.service";
+import { changeMachineCostRate, createMachineCostRate, listMachineCostOptions, listMachineCostRates, revokeMachineCostRate } from "../services/machine-cost-rate.service";
 import { changeConsumableNorm, createConsumableNorm, listConsumableNorms, revokeConsumableNorm } from "../services/consumable-norm.service";
 import { previewCost } from "../services/cost-calc.service";
 import { getDispatchFinishingCheck } from "../services/dispatch-finishing-check.service";
@@ -357,6 +357,21 @@ router.get("/machine-rates", requirePermission("cost:read"), wrap(async (req, re
   assertNoBareFilterParams(req, ["machineId"]);
   const data = await listMachineCostRates({ machineId: readUuidFilter(req, "machineId"), includeRevoked: historyQ(req) });
   res.status(200).json({ success: true, data });
+}));
+
+/**
+ * @openapi
+ * /api/cost/machine-options:
+ *   get:
+ *     tags: [Cost]
+ *     summary: Ücret ekranı için aktif makine seçenekleri (yalnız id/kod/ad; cost:read — station:read gerektirmez)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Liste }
+ *       403: { description: cost:read yok ya da maliyet modülü kapalı }
+ */
+router.get("/machine-options", requirePermission("cost:read"), wrap(async (_req, res) => {
+  res.status(200).json({ success: true, data: await listMachineCostOptions() });
 }));
 
 router.post("/machine-rates", requirePermission("cost:write"), wrap(async (req, res) => {
