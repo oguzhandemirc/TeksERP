@@ -6,7 +6,7 @@
 // §1 ⭐ HTTP: yalnız `roll:customer-code` taşıyan kullanıcı bağlar + kaldırır (roll:write'sız).
 // §2 ⭐ HTTP: ne `roll:customer-code` ne `roll:write` ne `mobile:tambur` taşıyan → bağla/kaldır 403 PERMISSION_DENIED.
 // §3 ⭐ geri uyum: D4-F1'de bağlayabilen `roll:write` ve `mobile:tambur` bağlamaya DEVAM eder.
-// §4 tablet aday sözleşmesi: 409 CUSTOMER_CODE_AMBIGUOUS adayı `barcode` + `customerName` + `currentQty` taşır.
+// §4 tablet/panel aday sözleşmesi: 409 CUSTOMER_CODE_AMBIGUOUS adayı `barcode` + `customerName` + `currentQty` + `status` (D4-F1c) taşır.
 // Negatif sonda (elle, PR gövdesinde): `ROLL_CUSTOMER_CODE_WRITE`tan `roll:customer-code` çıkarılınca §1 ❌;
 // `mobile:tambur` çıkarılınca §3b ❌.
 // =============================================================================
@@ -135,11 +135,14 @@ async function main(): Promise<void> {
     // ── §4 tablet aday sözleşmesi ──
     await RollCustomerCodeService.bind(r4.id, { code: SHARED, clientToken: randomUUID() }, actor);
     const amb = await call("GET", `/api/rolls/barcode/${SHARED}`, packer);
-    const cands = (amb.body.details?.candidates ?? []) as Array<{ rollId?: string; barcode?: string; customerName?: string; currentQty?: unknown }>;
+    const cands = (amb.body.details?.candidates ?? []) as Array<{ rollId?: string; barcode?: string; customerName?: string; currentQty?: unknown; status?: unknown }>;
     check("§4a belirsiz okutma → 409 CUSTOMER_CODE_AMBIGUOUS + 2 aday", amb.status === 409 && amb.body.details?.code === "CUSTOMER_CODE_AMBIGUOUS" && cands.length === 2, `${amb.status} ${cands.length}`);
     const q2 = cands.find((c) => c.rollId === r2.id);
     const q4 = cands.find((c) => c.rollId === r4.id);
     check("§4b ⭐ aday barkod + müşteri + metre taşır (sayı)", q2?.barcode === r2.barcode && typeof q2?.customerName === "string" && q2?.currentQty === 41.5 && q4?.currentQty === 37, JSON.stringify(cands.map((c) => c.currentQty)));
+    // §4c panel aday modalı (D4-F1c): aday topun GÜNCEL durumunu taşır.
+    const st = await prisma.roll.findUnique({ where: { id: r2.id }, select: { status: true } });
+    check("§4c ⭐ aday top durumunu taşır (panel modalı)", typeof q2?.status === "string" && q2?.status === st?.status, `${String(q2?.status)} ≠ ${String(st?.status)}`);
   } finally {
     server.close();
     for (const k of keys) {

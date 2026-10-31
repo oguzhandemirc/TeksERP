@@ -15,7 +15,8 @@
 
 import { z } from "zod";
 import { TERIM } from "./terim";
-import type { NotificationCatalogEntry, NotificationKanal, NotificationSaklama } from "./notification-catalog.types";
+import { NOTIFICATION_DEFAULT_RETENTION, NOTIFICATION_DESKTOP_CHANNELS, type NotificationCatalogEntry } from "./notification-catalog.types";
+import { CARI_NOTIFICATION_ENTRIES } from "./notification-catalog-cari";
 
 export { NOTIFICATION_PHASES, NOTIFICATION_GRUPLARI } from "./notification-catalog.types";
 export type {
@@ -23,11 +24,8 @@ export type {
   NotificationPhase, NotificationSaklama, NotificationCatalogEntry, NotificationScopeDeclaration,
 } from "./notification-catalog.types";
 
-const SAKLAMA: NotificationSaklama = { okunmusGun: 90, okunmamisGun: 180 };
-
-// MASAUSTU seçilebilir ama varsayılanı KAPALI (N3 "varsayılan hiçbiri" = bugünkü davranış, patron kararı 2026-10-25);
-// kullanıcı Kullanıcı Tercihleri → Masaüstü bildirimleri'nden açar. Tezgah alarmı kendi kanalıyla ayrıdır.
-const KANAL_MASAUSTU: readonly NotificationKanal[] = ["UYGULAMA", "OZET", "MASAUSTU"];
+const SAKLAMA = NOTIFICATION_DEFAULT_RETENTION;
+const KANAL_MASAUSTU = NOTIFICATION_DESKTOP_CHANNELS;
 
 export const NOTIFICATION_CATALOG = {
   // ── Sistem ────────────────────────────────────────────────────────────────
@@ -287,6 +285,9 @@ export const NOTIFICATION_CATALOG = {
     payloadAlanlari: ["sevkiyatId", "sevkiyatNo", "musteriAd"],
     tahminiHaftalik: 15, saklama: SAKLAMA,
   },
+
+  // ── Finans (D4-I5) — ayrı dosyada (dosya boyu); yük TUTAR taşımaz ──
+  ...CARI_NOTIFICATION_ENTRIES,
 
   // ── Dokuma ────────────────────────────────────────────────────────────────
   "dokuma.levent-bitiyor": {
