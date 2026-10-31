@@ -9,6 +9,9 @@
 //      sayı karşılaştırması / aritmetik yok (görünüm yalnız etiketler)
 //   §3 ⭐ canlı — 2 hazır + 1 işlemde top → KISMEN (hazirTop 2, hazirMetre = panel listesiyle aynı);
 //      işlemdeki top depoya inince HAZIR; topu olmayan iş emrinde alan VAR ve null
+//   §4 ⭐ (D4-MIG6) shipping.ready kural/tolerans yazımı canlı iş emrini `sync_marks` KIRLI yapar; aynı
+//      politika yeniden yazılınca işaret yok. Parti/top tetikleyicileri: `test_bulut_silme_damgasi` §4f–h.
+//      NEGATİF SONDA: ayar yolundaki `markReadyWorkOrdersDirty` çağrısı kaldırılınca §4a/§4d ❌.
 // ⭐ NEGATİF SONDA (ölçüldü 2026-10-31): patron/sunucu/src/services/ altına `sevkeHazir` hesaplayan
 //    yardımcı eklendi → §2b ❌ (exit 1); uygulama görünümüne `o.hazirTop > 0` yüklemi eklendi → §2c ❌;
 //    geri alındı → yeşil.
@@ -20,7 +23,8 @@ import ts from "typescript";
 import { Prisma, RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
-import { SETTING_KEYS } from "../src/services/system-setting.service";
+import { testActorId } from "./fixture-test-user";
+import { SETTING_KEYS, systemSettingService } from "../src/services/system-setting.service";
 import { RECORD_PROJECTIONS } from "../src/cloud-sync/projections";
 import { buildRecords } from "../src/cloud-sync/record-builder";
 import { mapToRoots } from "../src/cloud-sync/change-scan";
@@ -157,6 +161,22 @@ async function main(): Promise<void> {
     check("§3d işlemdeki top depoya inince HAZIR, hazirTop 3", t2?.durum === "HAZIR" && t2.hazirTop === 3, JSON.stringify(t2));
     const row0 = await telSatiri(ids.woEmpty);
     check("§3e topu olmayan iş emrinde alan VAR ve null", !!row0 && "sevkeHazir" in row0 && row0.sevkeHazir === null, JSON.stringify(row0?.sevkeHazir));
+
+    console.log("\n── §4 Politika yazımı kirletir (D4-MIG6) ──");
+    const actor = await testActorId();
+    const marks = async (since: Date, woId: string) =>
+      prisma.syncMark.count({ where: { tableName: "work_orders", rowId: woId, kind: "DIRTY", createdAt: { gte: since } } });
+    const t4 = new Date();
+    await systemSettingService.setFeatureFlags({ shippingReadyRule: "METER_THRESHOLD", shippingReadyTolerancePct: 5 }, actor);
+    check("§4a ⭐ shipping.ready kuralı değişince canlı iş emri KIRLI", (await marks(t4, ids.wo)) === 1, String(await marks(t4, ids.wo)));
+    check("§4b topu olmayan iş emri işaretlenmez (alan null kalır)", (await marks(t4, ids.woEmpty)) === 0);
+    const t4c = new Date();
+    await systemSettingService.setFeatureFlags({ shippingReadyRule: "METER_THRESHOLD", shippingReadyTolerancePct: 5 }, actor);
+    check("§4c aynı politika yeniden yazılınca işaret YOK (değişim ölçülür)", (await marks(t4c, ids.wo)) === 0);
+    const t4d = new Date();
+    await systemSettingService.setFeatureFlags({ shippingReadyTolerancePct: 7 }, actor);
+    check("§4d ⭐ yalnız tolerans değişimi de kirletir", (await marks(t4d, ids.wo)) === 1);
+    await prisma.syncMark.deleteMany({ where: { rowId: { in: [ids.wo, ids.woEmpty] }, createdAt: { gte: t4 } } });
   } catch (e) {
     check("beklenmeyen hata", false, e instanceof Error ? `${e.message}\n${e.stack}` : String(e));
   } finally {

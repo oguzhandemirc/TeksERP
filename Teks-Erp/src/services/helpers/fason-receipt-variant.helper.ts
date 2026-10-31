@@ -23,3 +23,12 @@ export async function readReceiptTargetVariantsTx(
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
 }
+
+/**
+ * Dönüş işlemine (`RollOperation.propertyValueId`, SUBCONTRACTOR_RETURNED) yazılacak fiilî desen (D4-MIG6, §5.4).
+ * Kolon tek değer taşır: hedef TEK çeşit değeriyse o, yoksa ya da birden çoksa null (çoklu desen RollProperty'de kalır).
+ */
+export function receiptOperationValueId(variants: ReadonlyArray<{ valueId: string }>): string | null {
+  const ids = new Set(variants.map((v) => v.valueId));
+  return ids.size === 1 ? [...ids][0]! : null;
+}

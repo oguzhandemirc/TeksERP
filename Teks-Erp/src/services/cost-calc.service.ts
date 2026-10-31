@@ -149,7 +149,11 @@ export async function previewCost(body: CostCalcBody) {
   const fx = await resolveFx(input, parseFxRates(body.fxRates), setting);
   const out = computeFabricCost(input, fx.rates);
   const pres = setting === "TRY" ? null : costPresentation(setting, fx.rates[setting], "ONIZLEME");
-  const yarnIds = [input.warp?.yarn.yarnItemId, ...(input.weft?.yarns ?? []).map((y) => y.yarnItemId)].filter((x): x is string => !!x);
+  const yarnIds = [
+    input.warp?.yarn.yarnItemId,
+    ...(input.warpLayers ?? []).map((l) => l.yarn.yarnItemId),
+    ...(input.weft?.yarns ?? []).map((y) => y.yarnItemId),
+  ].filter((x): x is string => !!x);
   const yarnPrices = [];
   for (const id of [...new Set(yarnIds)]) yarnPrices.push(await suggestYarnPrices(id));
   return {
