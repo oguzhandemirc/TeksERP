@@ -41,6 +41,8 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   // tablet OTA'sı (D4-B3 sürümü) tüm cihazlara inince açılır — önce açılırsa eski APK çıkışsız 400 alır.
   { anahtar: "tambur.simulatedMeterEnabled", alan: "tamburSimulatedMeterEnabled", hedef: false, dilim: "D4-B1a" },
   { anahtar: "tambur.olcumKaynagiZorunlu", alan: "tamburMeasureSourceRequired", hedef: false, dilim: "D4-B1a" },
+  // B-3 (kullanıcı kararı 2026-10-31): kalibrasyon kaydı isteğe bağlı, zorunluluk yok — Gülkesim KAPALI (açık beyan).
+  { anahtar: "tambur.kalibrasyonKontrolu", alan: "tamburCalibrationCheck", hedef: "KAPALI", dilim: "D4-B5k" },
   { anahtar: "finance.serviceBilling.enabled", alan: "financeServiceBillingEnabled", hedef: true, dilim: "H7" },
   { anahtar: "finance.serviceBilling.meterBasis", alan: "financeServiceBillingMeterBasis", hedef: "OUT", dilim: "H7" },
   {

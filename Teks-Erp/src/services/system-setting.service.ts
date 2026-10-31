@@ -790,6 +790,8 @@ export const SETTING_KEYS = {
   TAMBUR_SIMULATED_METER_ENABLED: "tambur.simulatedMeterEnabled",
   /** D4-B1: Tambur kesim gövdesinde ölçüm kaynağı (`measure`) zorunlu mu — satır yok = KAPALI (eski APK göndermez). */
   TAMBUR_MEASURE_SOURCE_REQUIRED: "tambur.olcumKaynagiZorunlu",
+  /** D4-B5k (B-3): süresi geçmiş kalibrasyonlu sayaçla ölçümde uyarı — satır yok = KAPALI (bugünkü davranış). */
+  TAMBUR_CALIBRATION_CHECK: "tambur.kalibrasyonKontrolu",
   /** Kurşun bypass (kurşun istasyonuna tablet KOYULMAYAN fabrika düzeni) açık mı.
    *  Default FALSE (kapalı). Diğer flag'lerin çoğunun aksine backend ENFORCE eder,
    *  ama ENFORCE kapsamı DAR: yalnız YENİ ATAMA OLUŞTURMAYI kapılar (bayrak kapalıyken
@@ -1157,6 +1159,11 @@ export type LabelCustomerCodeMissing = "BLOCK" | "ROLL_BARCODE";
 export const LABEL_CUSTOMER_CODE_MISSING_MODES: LabelCustomerCodeMissing[] = ["BLOCK", "ROLL_BARCODE"];
 /** Varsayılan `BLOCK` — bugün CUSTOMER_CODE kaynaklı şablon olmadığından etkisiz (bugünkü davranış değişmez). */
 export const DEFAULT_LABEL_CUSTOMER_CODE_MISSING: LabelCustomerCodeMissing = "BLOCK";
+/** D4-B5k: sayaç kalibrasyon kontrolü — UYAR yalnız uyarır (ölçüm engellenmez, kaynak MACHINE kalır). */
+export type TamburCalibrationCheck = "KAPALI" | "UYAR";
+export const TAMBUR_CALIBRATION_CHECK_MODES: TamburCalibrationCheck[] = ["KAPALI", "UYAR"];
+/** Varsayılan `KAPALI` — kalibrasyon tarihi hiçbir yanıtı değiştirmez (bugünkü davranış). */
+export const DEFAULT_TAMBUR_CALIBRATION_CHECK: TamburCalibrationCheck = "KAPALI";
 
 /** Sevkin fatura izi nereden yazılır. `dis` = bugünkü davranış. */
 export type ShippingInvoiceMode = "dis" | "ic" | "ikisi";
@@ -2258,6 +2265,8 @@ export interface FeatureFlags {
   tamburSimulatedMeterEnabled: boolean;
   /** D4-B1: Tambur kesiminde ölçüm kaynağı zorunlu (varsayılan KAPALI; önce tüm tabletler yeni sürümde olmalı). */
   tamburMeasureSourceRequired: boolean;
+  /** D4-B5k: süresi geçmiş sayaç kalibrasyonunda ölçüm uyarısı (varsayılan KAPALI). */
+  tamburCalibrationCheck: TamburCalibrationCheck;
   /** Kısa kesimde otomatik A1 — FABRİKA VARSAYILANI (default FALSE/kapalı).
    *  Kural istemcide koşar; tablet yetkilisi cihaz bazında ezebilir. */
   tamburShortCutA1Enabled: boolean;
@@ -2792,6 +2801,7 @@ export class SystemSettingService {
       tamburUndoFullSameDayOnly: await readTamburUndoFullSameDayOnly(cacheClient),
       tamburSimulatedMeterEnabled: await readTamburSimulatedMeterEnabled(cacheClient),
       tamburMeasureSourceRequired: await readTamburMeasureSourceRequired(cacheClient),
+      tamburCalibrationCheck: await readTamburCalibrationCheck(cacheClient),
       tamburShortCutA1Enabled: await readTamburShortCutA1Enabled(cacheClient),
       tamburShortCutA1ThresholdM: await readTamburShortCutA1ThresholdM(cacheClient),
       tamburPlanGateWidthToleranceCm: await readTamburPlanGateWidthToleranceCm(cacheClient),
@@ -4823,6 +4833,19 @@ export class SystemSettingService {
         SETTING_KEYS.TAMBUR_MEASURE_SOURCE_REQUIRED,
         input.tamburMeasureSourceRequired,
         "Tambur: kesim metresinin ölçüm kaynağı zorunlu (önce tüm tabletler yeni sürümde olmalı)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "tamburCalibrationCheck")) {
+      const v = input.tamburCalibrationCheck;
+      if (typeof v !== "string" || !TAMBUR_CALIBRATION_CHECK_MODES.includes(v as TamburCalibrationCheck)) {
+        throw AppError.badRequest("Sayaç kalibrasyon kontrolü KAPALI ya da UYAR olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.TAMBUR_CALIBRATION_CHECK,
+        v,
+        "Sayaç kalibrasyonu: KAPALI | UYAR (süresi geçmiş sayaçla ölçümde uyarı; ölçüm engellenmez)",
         userId
       );
     }
@@ -7819,6 +7842,11 @@ export async function readTamburSimulatedMeterEnabled(tx?: Pick<typeof prisma, "
 export async function readTamburMeasureSourceRequired(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.TAMBUR_MEASURE_SOURCE_REQUIRED }, select: { value: true } });
   return asBoolean(setting?.value);
+}
+
+/** D4-B5k: sayaç kalibrasyon kontrolü — satır yok / tanınmayan değer = KAPALI (bugünkü davranış). */
+export function readTamburCalibrationCheck(tx?: Pick<typeof prisma, "systemSetting">): Promise<TamburCalibrationCheck> {
+  return readServiceEnum(SETTING_KEYS.TAMBUR_CALIBRATION_CHECK, TAMBUR_CALIBRATION_CHECK_MODES, DEFAULT_TAMBUR_CALIBRATION_CHECK, tx);
 }
 
 /**

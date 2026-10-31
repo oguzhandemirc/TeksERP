@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { maliyetReportTiles, visibleMaliyetTiles } from "./tile-config";
 
-// SY-D3: dokuma verimliliği tutar gösterir → `cost:read` ∧ dokuma; iplik ihtiyacı `report:yarn-need`.
+// SY-D3: dokuma verimliliği tutar gösterir → `cost:read` ∧ dokuma; kârlılık (D4-G3) `cost:read`; iplik ihtiyacı `report:yarn-need`.
 const keys = (perms: string[], weavingOn: boolean) =>
   visibleMaliyetTiles((p) => perms.includes(p), weavingOn).map((t) => t.key);
 
@@ -12,9 +12,9 @@ describe("maliyet rapor karoları", () => {
     expect(t?.permission).toBe("cost:read");
   });
   it("cost:read + dokuma açık → görünür; dokuma kapalı ya da izin yok → gizli", () => {
-    expect(keys(["cost:read"], true)).toEqual(["dokuma-verimlilik"]);
-    expect(keys(["cost:read"], false)).toEqual([]);
+    expect(keys(["cost:read"], true)).toEqual(["karlilik", "dokuma-verimlilik"]);
+    expect(keys(["cost:read"], false)).toEqual(["karlilik"]);
     expect(keys(["report:yarn-need"], true)).toEqual(["iplik-ihtiyaci"]);
-    expect(keys(["report:yarn-need", "cost:read"], true)).toEqual(["iplik-ihtiyaci", "dokuma-verimlilik"]);
+    expect(keys(["report:yarn-need", "cost:read"], true)).toEqual(["iplik-ihtiyaci", "karlilik", "dokuma-verimlilik"]);
   });
 });

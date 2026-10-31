@@ -301,6 +301,12 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
     sinif: "basit", izin: "report:yarn-need", modul: "maliyetEnabled", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/maliyet/iplik-ihtiyaci", uc: "/api/reports/maliyet/iplik-ihtiyaci", kapiTasiyici: [{ dosya: "src/routes/reports/maliyet.report.routes.ts", yol: "/iplik-ihtiyaci" }], yuzey: "yaprak",
     nesil: "v2", kategoriV2: "uretim", persona: ["planlama", "patron"], varyantBoyutlari: ["musteri", "urun"], hazir: true, yeniRapor: true },
+  // D4-G3: kârlılık (hizmet işleri; tek kaynak `profitability.helper`); panelde kendi sayfası (V2_KEYS_WITH_OWN_PAGE),
+  // Maliyet & Teklif hub'ında karo. Kapı maliyet ∧ ön muhasebe; izin `cost:read` (+ uçta `report:finance`). Varyant sonraki dilim.
+  { key: "maliyet/karlilik", baslik: "Kârlılık", soru: "Hangi müşteri, hangi işlem ve hangi ay ne kazandırdı; gelirden ipe, makineye ve dışarıya ne gitti?",
+    sinif: "basit", izin: "cost:read", modul: "maliyetEnabled", varsayilanGun: 90, tarih: "aralik-gun",
+    panelYolu: "reports/maliyet/karlilik", uc: "/api/reports/maliyet/karlilik", kapiTasiyici: [{ dosya: "src/routes/reports/maliyet.report.routes.ts", yol: "/karlilik" }], yuzey: "yaprak",
+    nesil: "v2", kategoriV2: "para", persona: ["patron", "muhasebe"], varyantBoyutlari: ["musteri", "makine"], hazir: true, yeniRapor: true },
   { key: "quality/kalite", baslik: "Kalite nasıl gidiyor?", soru: "Bu dönemde kumaşın ne kadarı birinci kalite çıktı ve önceki döneme göre nasıl değişti?",
     sinif: "basit", izin: "report:quality", modul: "productionEnabled", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/quality/kalite", uc: "/api/reports/quality/kalite", kapiTasiyici: [{ dosya: "src/routes/reports/temel-uretim.routes.ts", yol: "/quality/kalite" }], yuzey: "yaprak",

@@ -11,6 +11,16 @@ import { categoryHasOpenReport, reportKeyOfPath } from "@/lib/report-gate";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 
 /**
+ * Yaprak izni: v1 hub'ındaki v2 karosu yalnız kendi sayfalı v2 satırıdır (`test_rapor_katalogu §3`) ve route'u
+ * katalog iznini ister (D4-G3 `maliyet/karlilik` → `cost:read`); diğer yapraklar kategori iznini taşır.
+ */
+export function leafPermission(to: string, categoryPermission: string | undefined): string | undefined {
+  const key = reportKeyOfPath(to);
+  const row = key ? REPORT_BY_KEY.get(key) : undefined;
+  return row?.nesil === "v2" ? row.izin : categoryPermission;
+}
+
+/**
  * Raporlar bölümleri — kategori hub'ı + o kategorinin TÜM alt raporları.
  *
  * NEDEN AYRI DOSYA: `reportCategoryTiles` yedi alt-config'i toplar; palet
@@ -51,7 +61,7 @@ export const reportCommandSections: CommandSection[] = reportTiles.map((cat) => 
     description: tile.description,
     icon: tile.icon,
     to: tile.to,
-    permission: tile.permission ?? cat.permission,
+    permission: leafPermission(tile.to, cat.permission),
     visibleWhen: (ctx: OperationsVisibilityContext) => {
       const key = reportKeyOfPath(tile.to);
       // Yaprak rejimi (D4-A4 `ROUTE_REGIME`) karo ve route ile aynı yüklemden.

@@ -72,6 +72,7 @@ import { FinanceReportsHubPage } from "@/pages/Reports/Finance/FinanceReportsHub
 import { DokumaReportsHubPage } from "@/pages/Reports/Dokuma/DokumaReportsHubPage";
 import { MaliyetReportsHubPage } from "@/pages/Reports/Maliyet/MaliyetReportsHubPage";
 import { WeavingEfficiencyPage } from "@/pages/Reports/Maliyet/WeavingEfficiencyPage";
+import { ProfitabilityReportPage } from "@/pages/Reports/Maliyet/ProfitabilityReportPage";
 import { RandimanPage } from "@/pages/Reports/Dokuma/RandimanPage";
 import { DurusParetoPage } from "@/pages/Reports/Dokuma/DurusParetoPage";
 import { MudahalePage } from "@/pages/Reports/Dokuma/MudahalePage";
@@ -1682,6 +1683,16 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="report:finance">
         <ExpenseSummaryPage />
+      </ProtectedRoute>
+    ),
+  },
+  // Kârlılık (D4-G3) — rejim `ROUTE_MODULE` (`reports/maliyet` → maliyetEnabled); izin katalogla aynı (`cost:read`);
+  // uç ayrıca ön muhasebe + `report:finance` ister, sayfa ikisi yoksa sorgu atmaz. v2 bayrağına bağlı DEĞİL.
+  {
+    path: "reports/maliyet/karlilik",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <ProfitabilityReportPage />
       </ProtectedRoute>
     ),
   },
