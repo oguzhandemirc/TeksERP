@@ -23,6 +23,7 @@ const buildPayload = (v: WarpSpecFormValues): Partial<WarpSpec> => ({
   endsPerDent: sayi(v.endsPerDent),
   reedWidthCm: (v.reedWidthCm ?? "").trim() || null,
   takeUpPct: (v.takeUpPct ?? "").trim() || null,
+  wastePct: (v.wastePct ?? "").trim() || null,
   notes: (v.notes ?? "").trim() || null,
   isActive: v.isActive,
 });

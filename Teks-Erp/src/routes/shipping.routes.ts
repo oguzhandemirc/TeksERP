@@ -654,6 +654,23 @@ router.get("/locate-roll", verifyToken, READ, controller.locateRoll);
 router.get("/sack-store/board", verifyToken, READ, controller.listSackStoreBoard);
 router.get("/shipments/:id/sack-contents", verifyToken, READ, controller.getShipmentSackContents);
 router.get("/shipments/:id/dispatch-report", verifyToken, ACCOUNTING_READ, controller.getDispatchReport);
+/**
+ * @swagger
+ * /api/shipping/shipments/{id}/roll-list:
+ *   get:
+ *     summary: Sevk top listesi (müşteriye verilecek top–barkod listesi, Excel kaynağı)
+ *     description: >
+ *       Satırlar ve metre çeki listesiyle AYNI kaynaktan (donmuş snapshot ya da canlı
+ *       toplayıcı) gelir; metre BRÜT. Müşteri top no / işlem gelen belge satırından.
+ *     tags: [Shipping]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "rows[] (barkod, müşteri top no, müşteri kodu, desen, işlem, metre) + totals" }
+ *       404: { description: "Sevkiyat bulunamadı" }
+ */
+router.get("/shipments/:id/roll-list", verifyToken, READ, controller.getShipmentRollList);
 router.get("/direct-shipments/:id/dispatch-report", verifyToken, ACCOUNTING_READ, controller.getDirectShipmentDispatchReport);
 router.get("/accounting-export", verifyToken, ACCOUNTING_READ, controller.getAccountingExport);
 

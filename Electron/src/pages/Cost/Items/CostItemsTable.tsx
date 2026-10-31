@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { fmtFactoryDate } from "@/lib/factory-time";
 import { fmtDec } from "../shared/format";
 import { STRUCTURE_STATUS_LABEL } from "../shared/labels";
+import { presentationAmount } from "../shared/PresentationNote";
 import type { CostItemRow } from "./service";
 
 const STATUS_CLASS: Record<string, string> = {
@@ -24,7 +25,15 @@ export function CostItemsTable({ rows, onOpen }: { rows: CostItemRow[]; onOpen: 
           {rows.map((r) => (
             <tr key={r.itemId} className="cursor-pointer border-t hover:bg-muted/40" onClick={() => onOpen(r.itemId)}>
               <td className="px-3 py-2"><span className="font-medium">{r.kod}</span> <span className="text-muted-foreground">{r.ad}</span></td>
-              <td className="px-3 py-2 text-right tabular-nums">{r.aktifSurum ? `${fmtDec(r.aktifSurum.standartTlM)} TL/m` : "—"}</td>
+              <td className="px-3 py-2 text-right tabular-nums">
+                {/* SY-J1: sunum dövizi ayarlıysa döviz birincil, TL ikincil (ikisi de sunucu sayısı). */}
+                {r.aktifSurum?.sunumDovizi ? (
+                  <>
+                    {presentationAmount(r.aktifSurum, r.aktifSurum.standartDovizM)}
+                    <span className="block text-xs text-muted-foreground">{fmtDec(r.aktifSurum.standartTlM)} TL/m</span>
+                  </>
+                ) : r.aktifSurum ? `${fmtDec(r.aktifSurum.standartTlM)} TL/m` : "—"}
+              </td>
               <td className="px-3 py-2">{r.aktifSurum ? `v${r.aktifSurum.surumNo}` : "—"}</td>
               <td className="px-3 py-2">{r.aktifSurum ? fmtFactoryDate(r.aktifSurum.hesaplananAt) : "—"}</td>
               <td className="space-x-1 px-3 py-2 whitespace-nowrap">

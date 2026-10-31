@@ -121,6 +121,37 @@ describe("Üretim", () => {
     expect(screen.getByTestId("durum-w1").props.accessibilityLabel).toBe("Durum: Üretimde");
     expect(screen.getByTestId("durum-w2").props.accessibilityLabel).toBe("Durum: İptal");
   });
+
+  // D4-J5: `sevkeHazir` fabrikadan gelir; uygulama yalnız etiketler. Eski fabrika alanı göndermez → rozet yok, hata yok.
+  it("§5 iş emri satırında 'Sevke hazır / Kısmen hazır' rozeti; eski fabrika (alan yok) hatasız, rozetsiz", async () => {
+    mockSession.permissions = ["bulut:oturum", "bulut:uretim:oku"];
+    mockApi.list.mockResolvedValueOnce({
+      kayitlar: [
+        { id: "h1", kayit: { isEmriNo: "TIE-H", durum: "IN_PROGRESS", sevkeHazir: { durum: "HAZIR", hazirTop: 12, hazirMetre: "1234.500" } }, surum: "1" },
+        { id: "k1", kayit: { isEmriNo: "TIE-K", durum: "IN_PROGRESS", sevkeHazir: { durum: "KISMEN", hazirTop: 3, hazirMetre: 300 } }, surum: "1" },
+        { id: "e1", kayit: { isEmriNo: "TIE-E", durum: "IN_PROGRESS" }, surum: "1" },
+        { id: "n1", kayit: { isEmriNo: "TIE-N", durum: "IN_PROGRESS", sevkeHazir: null }, surum: "1" },
+        { id: "y1", kayit: { isEmriNo: "TIE-Y", durum: "IN_PROGRESS", sevkeHazir: { durum: "YOK", hazirTop: 0, hazirMetre: "0" } }, surum: "1" },
+      ],
+      sonraki: null,
+    });
+    render(<Production />);
+    await waitFor(() => expect(screen.getByTestId("durum-e1")).toBeTruthy());
+    expect(screen.getByTestId("sevke-hazir-h1")).toBeTruthy();
+    expect(within(screen.getByTestId("kayit-h1")).getByText("Sevke hazır: 12 top · 1.235 m")).toBeTruthy();
+    expect(screen.getByTestId("sevke-hazir-k1")).toBeTruthy();
+    expect(within(screen.getByTestId("kayit-k1")).getByText("Kısmen hazır: 3 top · 300 m")).toBeTruthy();
+    for (const id of ["e1", "n1", "y1"]) expect(screen.queryByTestId(`sevke-hazir-${id}`)).toBeNull();
+  });
+
+  it("§6 görünüm sınıflamaz: bilinmeyen kod ve bozuk alan rozet çizmez", () => {
+    const { shipReadinessView } = require("../src/lib/ship-readiness") as typeof import("../src/lib/ship-readiness");
+    expect(shipReadinessView({})).toBeNull();
+    expect(shipReadinessView({ sevkeHazir: "HAZIR" })).toBeNull();
+    expect(shipReadinessView({ sevkeHazir: { durum: "YENI", hazirTop: 5 } })).toBeNull();
+    // Görünüm sayılardan durum çıkarmaz: fabrika KISMEN dediyse metre ne olursa olsun KISMEN kalır.
+    expect(shipReadinessView({ sevkeHazir: { durum: "KISMEN", hazirTop: 99, hazirMetre: 99999 } })?.label).toBe("Kısmen hazır");
+  });
 });
 
 describe("kayıt durumu tonu = anlam (tek kaynak `labels/uretim`)", () => {

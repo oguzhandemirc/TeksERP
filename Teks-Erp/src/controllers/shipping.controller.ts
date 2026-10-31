@@ -15,6 +15,7 @@ import "../types/express-augment";
 import { AppError } from "../utils/app-error";
 import { INCOMING_DOC_UNITS, listReadyWorks, type ReadyWorkUnit } from "../services/ready-works.service";
 import { listReadyWorkRolls } from "../services/ready-work-rolls.service";
+import { getShipmentRollList } from "../services/shipment-roll-list.service";
 import { requireGelenBelgeEnabled } from "../middlewares/module.middleware";
 
 // ---- Zod şemaları ----------------------------------------------------------
@@ -828,6 +829,13 @@ export class ShippingController {
     try {
       const result = await this.service.getDispatchReport(req.params.id as string);
       res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  /** D4-J6 — sevk top listesi (Excel kaynağı); çeki listesiyle aynı içerik. */
+  getShipmentRollList = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await getShipmentRollList(req.params.id as string));
     } catch (e) { next(e); }
   };
 
