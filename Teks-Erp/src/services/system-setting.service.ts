@@ -189,6 +189,9 @@ export const SETTING_KEYS = {
   FINANCE_CARI_HOLD_DEFAULT_SCOPE: "finance.cariHold.defaultScope",
   /** D4-I1a: kilidi koyan kişi kendi kilidini açabilir mi — `ALLOW` (varsayılan, serbest) · `DENY` (başka yetkili açar). */
   FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON: "finance.cariHold.releaseBySamePerson",
+  /** D4-I2b (S12): risk limiti karşılaştırması — `PER_CURRENCY` (varsayılan, her para birimi ayrı) · `TRY_CONVERTED`
+   *  (tüm bakiyeler günün kuruyla TL'ye çevrilip toplanır; kur yoksa 409 `RISK_LIMIT_FX_MISSING`). */
+  FINANCE_RISK_LIMIT_CURRENCY_MODE: "finance.riskLimit.currencyMode",
   /** Tahsilat/ödeme kaydında en eski açık faturalara OTOMATİK kapama — FIFO
    *  (default FALSE). Bugün kapama (`PaymentAllocation`) elle seçilir; açıkken
    *  tutar vade/tarih sırasıyla açık bakiyelere dağıtılır ve artan tutar
@@ -1065,6 +1068,10 @@ export const DEFAULT_CARI_HOLD_SCOPE: CariHoldDefaultScope = "INTAKE,SHIPMENT";
 export type CariHoldReleaseBySamePerson = "ALLOW" | "DENY";
 export const CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES: CariHoldReleaseBySamePerson[] = ["ALLOW", "DENY"];
 export const DEFAULT_CARI_HOLD_RELEASE_BY_SAME_PERSON: CariHoldReleaseBySamePerson = "ALLOW";
+/** D4-I2b (S12): risk limiti para birimi kipi — her para birimi ayrı (bugünkü) · günün kuruyla TL'ye çevrilmiş toplam. */
+export type RiskLimitCurrencyMode = "PER_CURRENCY" | "TRY_CONVERTED";
+export const RISK_LIMIT_CURRENCY_MODES: RiskLimitCurrencyMode[] = ["PER_CURRENCY", "TRY_CONVERTED"];
+export const DEFAULT_RISK_LIMIT_CURRENCY_MODE: RiskLimitCurrencyMode = "PER_CURRENCY";
 
 /** Tambur plan kapısı EN kolu (bkz. `SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_CHECK`). */
 export type TamburPlanWidthCheck = "ENFORCE" | "OFF";
@@ -1911,6 +1918,8 @@ export interface FeatureFlags {
   financeCariHoldDefaultScope: CariHoldDefaultScope;
   /** D4-I1a: koyan kişi kendi kilidini açabilir mi (varsayılan `ALLOW`). */
   financeCariHoldReleaseBySamePerson: CariHoldReleaseBySamePerson;
+  /** D4-I2b: risk limiti para birimi kipi (varsayılan `PER_CURRENCY`). */
+  financeRiskLimitCurrencyMode: RiskLimitCurrencyMode;
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; otomatik tahsis elle
    *  silinebilir; farklı para birimli fatura atlanır. */
@@ -2569,6 +2578,7 @@ export class SystemSettingService {
       financeExpenseCategorySuggestions: await readFinanceExpenseCategorySuggestions(cacheClient),
       financeCariHoldDefaultScope: await readFinanceCariHoldDefaultScope(cacheClient),
       financeCariHoldReleaseBySamePerson: await readFinanceCariHoldReleaseBySamePerson(cacheClient),
+      financeRiskLimitCurrencyMode: await readFinanceRiskLimitCurrencyMode(cacheClient),
       financeAutoAllocateOnPaymentEnabled:
         await readFinanceAutoAllocateOnPaymentEnabled(cacheClient),
       yarnBlockNegativeBalanceEnabled: await readYarnBlockNegativeBalanceEnabled(cacheClient),
@@ -3118,6 +3128,13 @@ export class SystemSettingService {
         throw AppError.badRequest(`financeCariHoldReleaseBySamePerson şunlardan biri olmalı: ${CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON, v, "Cari kilidini koyan kişi kendi kilidini açabilir mi — serbest · başka yetkili", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeRiskLimitCurrencyMode")) {
+      const v = input.financeRiskLimitCurrencyMode;
+      if (typeof v !== "string" || !RISK_LIMIT_CURRENCY_MODES.includes(v as RiskLimitCurrencyMode)) {
+        throw AppError.badRequest(`financeRiskLimitCurrencyMode şunlardan biri olmalı: ${RISK_LIMIT_CURRENCY_MODES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.FINANCE_RISK_LIMIT_CURRENCY_MODE, v, "Risk limiti para birimi — her para birimi ayrı · TL'ye çevrilmiş toplam", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "financeAutoAllocateOnPaymentEnabled")) {
@@ -5350,6 +5367,11 @@ export function readFinanceCariHoldDefaultScope(tx?: Pick<typeof prisma, "system
 /** D4-I1a: koyan kişi kendi kilidini açabilir mi — tanınmayan değer varsayılana (`ALLOW`) düşer. */
 export function readFinanceCariHoldReleaseBySamePerson(tx?: Pick<typeof prisma, "systemSetting">): Promise<CariHoldReleaseBySamePerson> {
   return readServiceEnum(SETTING_KEYS.FINANCE_CARI_HOLD_RELEASE_BY_SAME_PERSON, CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES, DEFAULT_CARI_HOLD_RELEASE_BY_SAME_PERSON, tx);
+}
+
+/** D4-I2b: risk limiti para birimi kipi — tanınmayan değer varsayılana (`PER_CURRENCY`) düşer; guard tx içinde taze okur. */
+export function readFinanceRiskLimitCurrencyMode(tx?: Pick<typeof prisma, "systemSetting">): Promise<RiskLimitCurrencyMode> {
+  return readServiceEnum(SETTING_KEYS.FINANCE_RISK_LIMIT_CURRENCY_MODE, RISK_LIMIT_CURRENCY_MODES, DEFAULT_RISK_LIMIT_CURRENCY_MODE, tx);
 }
 
 /** H7 — hizmet faturası ana anahtarı, ETKİN değer: ön muhasebe kapalıyken daima KAPALI (bugünkü davranış). */
