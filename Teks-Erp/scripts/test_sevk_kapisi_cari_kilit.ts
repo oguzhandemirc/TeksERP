@@ -82,7 +82,7 @@ async function main(): Promise<void> {
   check("§0b board kilidi aynı lateral'le, TEK sorguda okur (ikinci okuma yok)", /activeHoldFlagsLateralSql\(/.test(board) && !/cari_holds|cariHold\.|activeHoldBy/.test(board));
 
   const admin = await ensureTestAdmin();
-  const ids = { customers: [] as string[], subs: [] as string[], shipments: [] as string[] };
+  const ids = { customers: [] as string[], subs: [] as string[], shipments: [] as string[], items: [] as string[] };
   const foto = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT } });
   const kart = async (suffix: string): Promise<{ customerId: string; cariId: string }> => {
     const c = await prisma.customer.create({ data: { code: `${TAG}-${suffix}`.slice(0, 32), name: `${TAG} ${suffix}` }, select: { id: true } });
@@ -144,6 +144,12 @@ async function main(): Promise<void> {
     const sB = await ship(B.customerId, "SB");
     await prisma.sack.create({ data: { sackNo: `${TAG}-K1`, shipmentId: sA, customerId: A.customerId, weightKg: new Prisma.Decimal("12.500") } });
     await prisma.sack.create({ data: { sackNo: `${TAG}-K2`, shipmentId: sA, customerId: A.customerId, weightKg: new Prisma.Decimal("3.250") } });
+    // Top alt sorgusu da gerçek veriyle ölçülsün (0 = 0 körlüğü): sA'ya iki top, sB'ye hiç.
+    const item = await prisma.item.create({ data: { code: `${TAG}-IT`, name: `${TAG} kumaş`, itemType: "FABRIC" }, select: { id: true } });
+    ids.items.push(item.id);
+    for (const [no, qty] of [["R1", "40.500"], ["R2", "12.250"]] as const) {
+      await prisma.roll.create({ data: { barcode: `${TAG}-${no}`, itemId: item.id, initialQty: new Prisma.Decimal(qty), currentQty: new Prisma.Decimal(qty), shipmentId: sA } });
+    }
     const shipping = new ShippingService();
     const boardPage = await shipping.listSackStoreBoard({ search: TAG, limit: 100 });
     const rows = boardPage.data as Array<Item & { id: string; totalKg: number; totalQty: number }>;
@@ -152,7 +158,13 @@ async function main(): Promise<void> {
     check("§2a ⭐ kilitli müşterinin sevkiyatı held + kapsam + çip metni", rA?.held === true && JSON.stringify(rA?.holdScopes) === '["SHIPMENT","INVOICE"]' && /Cari kilitli/.test(rA?.holdText ?? ""), JSON.stringify(rA));
     check("§2b açılmış kilitli müşteride çip yok", rB?.held === false && rB?.holdText === null);
     const g = await prisma.sack.groupBy({ by: ["shipmentId"], where: { shipmentId: sA }, _count: { _all: true }, _sum: { weightKg: true } });
-    check("§2c toplamlar groupBy ile aynı (2 çuval · 15.75 kg · 0 top)", rA?.sackCount === g[0]?._count._all && rA?.totalKg === Number(g[0]?._sum.weightKg) && rA?.rollCount === 0 && rA?.totalQty === 0, JSON.stringify(rA));
+    check("§2c toplamlar groupBy ile aynı (2 çuval · 15.75 kg)", rA?.sackCount === g[0]?._count._all && rA?.totalKg === Number(g[0]?._sum.weightKg), JSON.stringify(rA));
+    const gr = await prisma.roll.groupBy({ by: ["shipmentId"], where: { shipmentId: sA }, _count: { _all: true }, _sum: { currentQty: true } });
+    check(
+      "§2c2 ⭐ top toplamları groupBy ile aynı (2 top · 52.75 m, BRÜT) ve topsuz sevkiyat 0",
+      gr[0]?._count._all === 2 && rA?.rollCount === gr[0]?._count._all && rA?.totalQty === Number(gr[0]?._sum.currentQty) && rB?.rollCount === 0 && rB?.totalQty === 0,
+      JSON.stringify({ rA, gr }),
+    );
     await prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT }, create: { key: SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT, value: "ALL_HELD" }, update: { value: "ALL_HELD" } });
     const allHeld = (await shipping.listSackStoreBoard({ search: TAG, limit: 100 })).data as Array<Item & { id: string }>;
     check("§2d emanet ayarı ALL_HELD → metin 'emanet dahil sevk durur'", /emanet dahil sevk durur/.test(allHeld.find((r) => r.id === sA)?.holdText ?? ""));
@@ -168,6 +180,8 @@ async function main(): Promise<void> {
     if (foto) await prisma.systemSetting.update({ where: { key: foto.key }, data: { value: foto.value as Prisma.InputJsonValue } });
     else await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT } });
     await prisma.sack.deleteMany({ where: { shipmentId: { in: ids.shipments } } });
+    await prisma.roll.deleteMany({ where: { itemId: { in: ids.items } } });
+    await prisma.item.deleteMany({ where: { id: { in: ids.items } } });
     await prisma.shipment.deleteMany({ where: { id: { in: ids.shipments } } });
     const accs = await prisma.cariAccount.findMany({ where: { OR: [{ customerId: { in: ids.customers } }, { subcontractorId: { in: ids.subs } }] }, select: { id: true } });
     const accIds = accs.map((x) => x.id);
