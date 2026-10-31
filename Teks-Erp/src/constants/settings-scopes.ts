@@ -164,6 +164,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "financeServiceBillingTrigger",
       "financeCariHoldDefaultScope",
       "financeCariHoldReleaseBySamePerson",
+      "financeRiskLimitCurrencyMode",
       "costProfitSubcontractSource",
       "costProfitConsumablePriceSource",
       "financeServiceBillingPriceDate",
