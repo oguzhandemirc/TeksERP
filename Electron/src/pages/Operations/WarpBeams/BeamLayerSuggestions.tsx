@@ -32,7 +32,7 @@ export function BeamLayerSuggestions({ form }: { form: UseFormReturn<WarpBeamPla
     enabled: canRead && Boolean(itemId),
     staleTime: 30_000,
   });
-  const list = beamSuggestionsForConstruction(c.data);
+  const list = beamSuggestionsForConstruction(c.data, wo.data?.data?.warpSpec);
   if (!canRead || !orderId || list.length === 0) return null;
   return (
     <div className="space-y-1 rounded-md border bg-muted/30 p-3 text-xs" data-testid="beam-layer-suggestions">

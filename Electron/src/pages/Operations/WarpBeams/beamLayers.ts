@@ -27,10 +27,17 @@ const NOTE: Record<BeamLayerSuggestionKind, string | null> = {
   CREEL: "cağlıktan beslenir — levent yok",
 };
 
-export function beamSuggestionsForConstruction(c: Pick<EffectiveConstruction, "groundWarp" | "warpLayers"> | null | undefined): BeamLayerSuggestion[] {
+type WarpRef = { id: string; code: string; name: string };
+
+/** `orderGround`: işin kendi çözgü kartı — rapor (`wo.warpSpecId ?? item.warpSpecId`) ile aynı öncelik. */
+export function beamSuggestionsForConstruction(
+  c: Pick<EffectiveConstruction, "groundWarp" | "warpLayers"> | null | undefined,
+  orderGround?: WarpRef | null,
+): BeamLayerSuggestion[] {
   if (!c || c.warpLayers.length === 0) return [];
   const out: BeamLayerSuggestion[] = [];
-  if (c.groundWarp) out.push({ warpSpecId: c.groundWarp.id, code: c.groundWarp.code, name: c.groundWarp.name, role: "Zemin çözgü", kind: "BEAM", note: null });
+  const g = orderGround ?? c.groundWarp;
+  if (g) out.push({ warpSpecId: g.id, code: g.code, name: g.name, role: "Zemin çözgü", kind: "BEAM", note: null });
   for (const l of [...c.warpLayers].sort((a, b) => a.sortOrder - b.sortOrder)) {
     // Bilinmeyen kip levent İSTEMEZ sayılmaz — ayrı levent (sunucu varsayılanı SEPARATE_BEAM).
     const kind = KIND_OF[l.beamMode] ?? "BEAM";

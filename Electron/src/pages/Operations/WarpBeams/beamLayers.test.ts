@@ -33,4 +33,10 @@ describe("beamSuggestionsForConstruction", () => {
     const s = beamSuggestionsForConstruction({ groundWarp: ground, warpLayers: [layer("SEPARATE_BEAM", 2), layer("SEPARATE_BEAM", 1)] });
     expect(s.map((x) => x.warpSpecId)).toEqual(["g", "l1", "l2"]);
   });
+  it("işin kendi çözgü kartı ürününkinden farklıysa zemin önerisi işin kartını gösterir", () => {
+    const own = { id: "w", code: "CZ-IS", name: "İşin çözgüsü" };
+    const s = beamSuggestionsForConstruction({ groundWarp: ground, warpLayers: [layer("SEPARATE_BEAM")] }, own);
+    expect(s[0]).toMatchObject({ warpSpecId: "w", role: "Zemin çözgü", kind: "BEAM" });
+    expect(s.map((x) => x.warpSpecId)).not.toContain("g");
+  });
 });
