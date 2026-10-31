@@ -4101,7 +4101,7 @@ export class SystemSettingService {
     // Best-effort: ayar zaten yazıldı; bulut işareti düşerse 5 dk emniyet turu yakalar, istek kesilmez (kalan ayarlar yazılır).
     if (shipReadyDirty && shipReadyBefore) {
       await shipReadyDirty.markReadyWorkOrdersDirty(shipReadyBefore).catch((e: unknown) => {
-        uyari("bulut-kirletme", `sevke hazırlık politikası değişimi iş emirlerine işaretlenemedi: ${e instanceof Error ? e.message : String(e)}`);
+        uyari("bulut-kirletme", `sevke hazırlık politikası değişimi bulut kirletme işaretine yazılamadı: ${e instanceof Error ? e.message : String(e)}`);
       });
     }
     if (Object.prototype.hasOwnProperty.call(input, "shippingReadyNotifyUnits")) {
