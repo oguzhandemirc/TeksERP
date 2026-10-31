@@ -1,6 +1,7 @@
 import { RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { REPORT_BY_KEY } from "@/lib/report-catalog";
@@ -30,6 +31,8 @@ export function expenseRowTarget(row: Record<string, unknown>): string | null {
  */
 export function ExpenseSummaryPage() {
   const navigate = useNavigate();
+  // Kasa Hareketleri rotası `finance:read` ister; izinsiz kullanıcıya tıklanabilir satır (→ yasak sayfası) çizilmez.
+  const canOpenCash = useRoleAccess().hasPermission("finance:read");
   const query = useReportV2(ENTRY);
   const data = query.data;
   const failure = query.isError ? failureOf(query.error) : null;
@@ -63,7 +66,7 @@ export function ExpenseSummaryPage() {
             <ReportBody
               presentation={data}
               fetchedAt={query.dataUpdatedAt}
-              rowLink={{ target: expenseRowTarget, open: (to) => navigate(to), title: "Bu kategorinin kasa hareketlerini aç" }}
+              rowLink={canOpenCash ? { target: expenseRowTarget, open: (to) => navigate(to), title: "Bu kategorinin kasa hareketlerini aç" } : undefined}
             />
           ) : (
             <ReportLoadingState />
