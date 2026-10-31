@@ -185,7 +185,7 @@ export const returnsService = {
   /** QR/barkod okut → top + sevkiyat + aday siparişler + returnGradingEnabled. */
   lookup: (barcode: string): Promise<ApiResponse<ReturnLookupResult>> =>
     apiClient
-      .get<ApiResponse<ReturnLookupResult>>(`/api/returns/lookup?barcode=${encodeURIComponent(barcode)}`)
+      .get<ApiResponse<ReturnLookupResult>>(`/api/returns/lookup?barcode=${encodeURIComponent(barcode)}`, { customerCodeChoice: true })
       .then((r) => r.data),
 
   /** Sevkiyatın tamamı — numara (SVK…) ya da id. */
