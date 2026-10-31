@@ -744,6 +744,7 @@ export class WorkOrderManualMoveService {
         //     işleyince grade'i tekrar kazanır. Partial unique sayesinde geri
         //     alınmış satır dururken aynı üçlü yeniden yazılabilir.
         let qcVoided = false;
+        const widthRestored = { count: 0 };
         if (laterStepIds.length > 0) {
           const revokedCount = await revokeRollOperations(tx, {
             rollIds: selectedIds,
@@ -751,6 +752,7 @@ export class WorkOrderManualMoveService {
             operationTypes: [...BLOCKING_OPS],
             reason: "MANUAL_MOVE_QC_VOID",
             userId,
+            widthRestored,
           });
           if (revokedCount > 0) {
             await tx.roll.updateMany({
@@ -917,6 +919,7 @@ export class WorkOrderManualMoveService {
           synthesizedColorId,
           synthColorRollIds,
           qcVoided,
+          widthRestoredRollCount: widthRestored.count,
           bypassVoided,
         };
       }),
@@ -946,6 +949,8 @@ export class WorkOrderManualMoveService {
         synthColorRollIds: result.synthColorRollIds,
         qcBypassed: result.skippedStepIds.length > 0,
         qcVoided: result.qcVoided,
+        // D4-E2a: geri alınan KK2'nin ölçülen eni topa geri kondu (iz damgalı QC2 satırında).
+        widthRestoredRollCount: result.widthRestoredRollCount,
         // Kurşun dağıtımı bu taşıma yüzünden iptal olduysa iz bırak — "işi kurşuna
         // dağıtmıştık, neden listede yok?" sorusunun cevabı burası.
         ...(result.bypassVoided > 0 ? { kursunBypassVoided: result.bypassVoided } : {}),

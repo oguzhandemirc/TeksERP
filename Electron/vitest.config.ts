@@ -32,7 +32,8 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
-    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    // scripts/: tek seferlik kurulum betiklerinin (ör. ice-aktar/tul-excel) saf mantık testleri.
+    include: ["src/**/*.{test,spec}.{ts,tsx}", "scripts/**/*.test.ts"],
     css: false,
     restoreMocks: true,
     testTimeout: KAPI_KIPI ? 20_000 : 5_000,
