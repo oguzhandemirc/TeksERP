@@ -10,7 +10,8 @@ import type { NextFunction, Request, Response } from "express";
 import { z } from "zod";
 
 const stationDevereFields = z
-  .object({ producesWarpBeam: z.boolean().optional(), consumesWarpBeam: z.boolean().optional() })
+  // `capturesWidth` (D4-E2a en ölçer yeteneği) BİLEREK yazılabilir — aynı boolean sözleşmesi.
+  .object({ producesWarpBeam: z.boolean().optional(), consumesWarpBeam: z.boolean().optional(), capturesWidth: z.boolean().optional() })
   .passthrough();
 
 const machineDevereFields = z
