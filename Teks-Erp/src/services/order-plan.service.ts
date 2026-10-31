@@ -10,6 +10,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { decodeDynamicCursor, encodeDynamicCursor } from "../utils/cursor";
 import { LINE_RECIPE_SELECT } from "./helpers/line-recipe.helper";
+import { DEADLINE_OPEN_ORDER_STATUSES } from "./helpers/order-deadline.helper";
 import { LINE_TARGET_VALUES_SELECT } from "./helpers/order-line-target-value.helper";
 import {
   ORDER_LINE_PRODUCTION_STATES,
@@ -21,7 +22,8 @@ import { parseLimit, readQueryList, UUID_RE } from "./ready-works.service";
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 /** Plan varsayılanı açık siparişler; kapanmış/iptal yalnız açıkça istenirse (iptal satırı hiç gelmez). */
-const OPEN_ORDER_STATUSES: readonly OrderStatus[] = [OrderStatus.PENDING, OrderStatus.APPROVED, OrderStatus.PARTIAL_SHIPPED];
+// Açık durum kümesi termin tek kaynağından (§S bekçisi).
+const OPEN_ORDER_STATUSES = DEADLINE_OPEN_ORDER_STATUSES;
 const PLAN_ORDER_STATUSES: readonly OrderStatus[] = [...OPEN_ORDER_STATUSES, OrderStatus.COMPLETED];
 
 export interface OrderPlanQuery {
