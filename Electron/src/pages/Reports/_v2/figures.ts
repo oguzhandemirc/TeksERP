@@ -1,7 +1,7 @@
 // Rapor v2 sayı kartı metinleri — ekran kartı ile PDF/Excel "Özet" AYNI metni bassın diye tek yerde.
-// Biçim sunucunun anlatı biçimiyle aynı kural (`anlati/sayi-bicim.ts`): oran "%78", para 0 ondalık,
-// diğerleri en çok 1 ondalık. Ölçülemeyen değer "0" YAZILMAZ — "Ölçülemedi" yazılır.
-import { fixedDecimalsOf } from "@/lib/number-format";
+// Oran "%78", para kuruşlu sabit 2 ondalık (`MONEY_NUM_FMT`, tablo hücresiyle aynı), diğerleri en çok 1 ondalık
+// (sunucu anlatısı `anlati/sayi-bicim.ts` cümlede tam TL yazar). Ölçülemeyen değer "0" YAZILMAZ — "Ölçülemedi" yazılır.
+import { reportCellText } from "@/lib/number-format";
 import { BIRIM_METNI, PARA_BIRIMLERI, type AnaSayi, type Birim, type ComparisonTone } from "./sunum";
 import { MONEY_NUM_FMT } from "./table-model";
 
@@ -11,11 +11,11 @@ function numberText(n: number, maxDecimals: number): string {
   return n.toLocaleString("tr-TR", { maximumFractionDigits: maxDecimals });
 }
 
-/** Değer + birim: "%78" · "42.300 m" · "1.200 TL"; `null` → "Ölçülemedi". */
+/** Değer + birim: "%78" · "42.300 m" · "1.200,00 TL"; `null` → "Ölçülemedi". */
 export function formatFigure(value: number | null, unit: Birim): string {
   if (value === null || !Number.isFinite(value)) return NOT_MEASURED_TEXT;
   if (unit === "yuzde") return `%${numberText(value, 1)}`;
-  if (PARA_BIRIMLERI.includes(unit)) return `${numberText(value, fixedDecimalsOf(MONEY_NUM_FMT))} ${BIRIM_METNI[unit]}`;
+  if (PARA_BIRIMLERI.includes(unit)) return `${reportCellText(value, MONEY_NUM_FMT)} ${BIRIM_METNI[unit]}`;
   return `${numberText(value, 1)} ${BIRIM_METNI[unit]}`;
 }
 

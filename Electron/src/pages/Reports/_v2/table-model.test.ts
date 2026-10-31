@@ -24,19 +24,29 @@ describe("rapor v2 tablosu — para kolonları tek biçim", () => {
     const f1 = columnFormat(TABLE, m1!);
     const f2 = columnFormat(TABLE, m2!);
     expect(f1).toEqual(f2);
-    expect(cellText(45000.4, f1)).toBe(cellText(45000, f2));
-    expect(cellText(45000, f2)).toBe("45.000");
+    // Kuruşlu ve tam sayı TL hücresi AYNI hane sayısıyla basılır (kolon başına ölçülmez).
+    expect(cellText(45000.4, f1).split(",")[1]!.length).toBe(cellText(45000, f2).split(",")[1]!.length);
+    expect(cellText(45000, f2)).toBe("45.000,00");
+    expect(cellText(45000.4, f1)).toBe("45.000,40");
   });
 
   it("para kolonu kartla (formatFigure) aynı metni basar", () => {
     const f = columnFormat(TABLE, TABLE.kolonlar[1]!);
     expect(`${cellText(46200.4, f)} TL`).toBe(formatFigure(46200.4, "TRY"));
+    expect(formatFigure(1200, "TRY")).toBe("1.200,00 TL");
+  });
+
+  it("TL kuruşlu (2 ondalık) basılır; metre/adet biçimi değişmez (D4-KUC2 g)", () => {
+    const f = columnFormat(TABLE, TABLE.kolonlar[1]!);
+    expect(cellText(1234.5, f)).toBe("1.234,50");
+    expect(columnFormat(TABLE, TABLE.kolonlar[3]!).numFmt).toBe("#,##0.0");
+    expect(formatFigure(42300, "m")).toBe("42.300 m");
   });
 
   it("Excel/PDF zarfı ekranla aynı biçimi taşır; para dışı kolon ölçülen ondalıkta kalır", () => {
     const cols = tableToExport(TABLE, "Tablo").columns;
     expect(cols[1]!.numFmt).toBe(cols[2]!.numFmt);
-    expect(cols[1]!.numFmt).toBe("#,##0");
+    expect(cols[1]!.numFmt).toBe("#,##0.00");
     expect(cols[3]!.numFmt).toBe("#,##0.0");
     expect(cols[0]!.numFmt).toBeUndefined();
   });
