@@ -57,7 +57,8 @@ export function settingsSummary(s: ProfitabilityResult["settings"]): string {
   return [machine, overhead, sub, cons, labor.length ? `işçilik: ${labor.join(", ")}` : "işçilik kategorisi yok"].join(" · ");
 }
 
-interface Group {
+/** Kırılım satırı — panel tablosu ve patron `karlilik-ozet` anlığı AYNI gruplamadan (D4-G4). */
+export interface Group {
   label: string; meters: Prisma.Decimal; revenue: Prisma.Decimal; consumable: Prisma.Decimal | null; subcontract: Prisma.Decimal | null;
   machine: Prisma.Decimal | null; contribution: Prisma.Decimal | null; labor: Prisma.Decimal; overhead: Prisma.Decimal; net: Prisma.Decimal | null;
   missing: Set<ProfitMissingCode>; estimated: boolean;
@@ -98,7 +99,7 @@ export function profitGroups(rows: ProfitabilityRow[], by: ProfitBreakdown, name
   }));
 }
 
-function totalOf(groups: Group[]): Group {
+export function totalOf(groups: Group[]): Group {
   return groups.reduce<Group>((t, g) => ({
     label: "Toplam", meters: t.meters.plus(g.meters), revenue: t.revenue.plus(g.revenue), consumable: add(t.consumable, g.consumable),
     subcontract: add(t.subcontract, g.subcontract), machine: add(t.machine, g.machine), contribution: add(t.contribution, g.contribution),

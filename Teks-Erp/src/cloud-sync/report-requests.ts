@@ -57,6 +57,9 @@ import {
   coreLoomStopsQuerySchema,
   coreReceivablesQuerySchema,
 } from "../routes/reports/temel-dokuma-finans.routes";
+import { profitabilityQuerySchema } from "../routes/reports/maliyet.report.routes";
+import { profitabilityReport } from "../services/reports/profitability.report";
+import { PROFIT_BREAKDOWNS } from "../services/reports/profitability.sunum";
 import { getOrderIntake } from "../services/reports/order-intake.report.service";
 import { getShipmentScorecard } from "../services/reports/shipment-scorecard.report.service";
 import { getStockScorecard } from "../services/reports/stock-scorecard.report.service";
@@ -179,6 +182,9 @@ const dayParams = (range: DateRange): Record<string, unknown> => ({ from: factor
 const weavingOpen = (): Promise<boolean> => readDokumaEnabled();
 /** D4-KUC2 (a): bulut kapısı = panel rota kapısı (`requireMachineStopRegime`): dokuma ∨ (üretim ∧ takip) — rejimin TEK yüklemi. */
 const machineStopCloudOpen = async (): Promise<boolean> => machineStopRegimeOpen(await machineStopRegime());
+/** D4-G4: bulutta "iş" kırılımı YOK (top barkodu + belge no taşır); S15 (a) yalnız müşteri/işlem/makine/ay. */
+const CLOUD_PROFIT_BREAKDOWNS = PROFIT_BREAKDOWNS.filter((b) => b !== "is") as [Exclude<(typeof PROFIT_BREAKDOWNS)[number], "is">, ...Array<Exclude<(typeof PROFIT_BREAKDOWNS)[number], "is">>];
+const cloudProfitabilitySchema = profitabilityQuerySchema.extend({ kirilim: z.enum(CLOUD_PROFIT_BREAKDOWNS, { message: "Tanınmayan kırılım" }).optional() }).strict();
 const beamBalanceOpen = async (): Promise<boolean> => (await readDokumaEnabled()) && (await readDevereEnabled());
 
 /** Sunum kişi adı taşıyor mu (K-KISI) — taşıyorsa sonuç buluta GİTMEZ (statik listeye ek savunma). */
@@ -248,6 +254,13 @@ export const REMOTE_REPORTS: readonly RemoteReport[] = [
     reportRunner: async (p) => {
       const q = p as z.infer<typeof coreMachineStopsQuerySchema>;
       return (await buildMachineStopsReport({ window: dayWindowOf("production/makine-duruslari", p), filters: { machineId: q.machineId, stationKind: q.stationKind, reasonCode: q.reasonCode } })).sunum;
+    } },
+  // D4-G4 (S15 a): kapı panel ucuyla aynı — maliyet (üretim ∧ maliyet) ∧ ön muhasebe; izin `bulut:maliyet:oku`.
+  { key: "maliyet/karlilik", permission: "bulut:maliyet:oku", module: "maliyet.enabled", gate: readFinanceEnabled, params: panelOnlyRejected(cloudProfitabilitySchema), paramNames: ["from", "to", "kiyas", "kirilim"], standard: "DONEMLI", standardParams: dayParams, personalData: "YOK",
+    reportRunner: async (p) => {
+      const sunum = await profitabilityReport(dayWindowOf("maliyet/karlilik", p), (p as z.infer<typeof cloudProfitabilitySchema>).kirilim ?? "musteri");
+      if (!sunum) throw new Error("Maliyet ya da ön muhasebe modülü kapalı (MODULE_DISABLED)");
+      return sunum;
     } },
   { key: "finance/alacaklar", permission: "bulut:cari-bakiye:oku", module: "finance.enabled", params: panelOnlyRejected(coreReceivablesQuerySchema), paramNames: ["asOf"], standard: "KESIT", personalData: "YOK",
     reportRunner: async (p) => (await buildReceivablesReport(typeof p.asOf === "string" ? new Date(p.asOf) : new Date())).sunum },

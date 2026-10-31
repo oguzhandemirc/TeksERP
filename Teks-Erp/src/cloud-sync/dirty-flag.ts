@@ -20,10 +20,13 @@ import { RECORD_PROJECTIONS, SNAPSHOT_PROJECTIONS, SYNC_AUX_READS } from "./proj
 export const READS_MODEL_MAP: Readonly<Record<string, string>> = {
   cari_balances: "CariBalance",
   cari_holds: "CariHold",
+  machine_cost_rates: "MachineCostRate",
   payment_allocations: "PaymentAllocation",
   roll_movements: "RollMovement",
   roll_returns: "RollReturn",
   rolls: "Roll",
+  service_billing_links: "ServiceBillingLink",
+  service_consumable_norms: "ServiceConsumableNorm",
   shipment_orders: "ShipmentOrder",
   subcontractor_dispatch_items: "SubcontractorDispatchItem",
   subcontractor_dispatches: "SubcontractorDispatch",

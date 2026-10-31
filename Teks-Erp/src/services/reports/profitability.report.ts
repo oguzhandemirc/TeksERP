@@ -6,7 +6,8 @@ import type { ResolvedDayRange } from "./temel/_day-range";
 import { buildProfitabilitySunumu, compareMonthsOf, monthsOfWindow, type ProfitBreakdown, type ProfitNames } from "./profitability.sunum";
 import type { RaporSunumu } from "./sunum/sunum.types";
 
-async function loadNames(results: ProfitabilityResult[]): Promise<ProfitNames> {
+/** Kârlılık satırlarının ad sözlükleri (müşteri/işlem/makine/top) — panel raporu ve patron anlığı (D4-G4) ortak. */
+export async function loadNames(results: ProfitabilityResult[]): Promise<ProfitNames> {
   const rows = results.flatMap((r) => r.rows);
   const ids = <T,>(pick: (x: (typeof rows)[number]) => T | null) => [...new Set(rows.map(pick).filter((v): v is T => v !== null))];
   const customers = await prisma.customer.findMany({ where: { id: { in: ids((r) => r.customerId) } }, select: { id: true, name: true } });
