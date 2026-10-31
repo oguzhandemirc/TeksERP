@@ -2040,7 +2040,8 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "eksi bakiye negatif kasa engeli kdv oran varsayılan vergi " +
       "risk limiti aşım onay engel taslak otomatik sevk fifo kapama tahsis avans sıfır fiyat promosyon " +
       "numune bedelsiz ileri tarih çek keşide iplik stok düşme " +
-      "kârlılık karlilik fason sarf alış fiyatı",
+      "kârlılık karlilik fason sarf alış fiyatı " +
+      "makine süresi saat ücreti genel gider dağıtım",
     kind: "flags",
     section: "trade",
     permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:finance"],
@@ -2342,6 +2343,39 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: [
           { value: "ALIS_FIYATI", label: "Kartın alış fiyatı (varsayılan)", hint: "Fiyat geçmişindeki o günkü değer." },
           { value: "SON_ALIS_FATURASI", label: "Son alış faturası", hint: "O güne kadarki son onaylı alış faturası." },
+        ],
+      },
+      {
+        // D4-G2b: `defaultValue` backend `DEFAULT_PROFIT_MACHINE_TIME_MODE` ile birebir; yalnız kârlılık okumasını etkiler.
+        enumKey: "costProfitMachineTime",
+        group: "Kârlılık",
+        title: "Kârlılıkta makine süresi",
+        summary: "Makine saat ücreti hangi süreyle çarpılsın.",
+        desc: "İş oturumu (varsayılan): makinede açık oturum süresi; hareketsizlikten kapanan oturum son hareket anında kesilir. Vardiya: makinenin çalıştığı vardiyaların tamamı (mola düşülür). Metre normu: yapılan metre ÷ makinenin saatlik metre normu. Süre o günün metresine bölünür; metresiz gün \"boşta makine\" olarak ayrı görünür.",
+        defaultValue: "OTURUM",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "OTURUM", label: "İş oturumu (varsayılan)", hint: "Hareketsiz oturum son harekette kesilir." },
+          { value: "VARDIYA", label: "Vardiya süresi", hint: "Vardiya takvimi gerekir." },
+          { value: "NORM", label: "Metre normu", hint: "Makine ücretinde saatlik metre normu gerekir." },
+        ],
+      },
+      {
+        // D4-G2b: `defaultValue` backend `DEFAULT_PROFIT_OVERHEAD_KEY` ile birebir.
+        enumKey: "costProfitOverheadKey",
+        group: "Kârlılık",
+        title: "Genel giderin işlere dağıtımı",
+        summary: "İşe bağlanmamış masraflar (kira, elektrik…) işlere nasıl paylaştırılsın.",
+        desc: "Dağıtma (varsayılan): genel gider ay toplamı olarak ayrı görünür, işin \"kalan\" tutarı değişmez. Metre / gelir / makine saati: ayın genel gideri o ay faturalanan işlere bu ölçüye göre paylaştırılır. Ayar yalnız kârlılık hesabını etkiler; kasa kayıtları değişmez.",
+        defaultValue: "YOK",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "YOK", label: "Dağıtma (varsayılan)", hint: "Genel gider ay toplamında ayrı satır." },
+          { value: "METRE", label: "Metreye göre", hint: "Çok metre yapan iş çok pay alır." },
+          { value: "GELIR", label: "Gelire göre", hint: "Çok kazandıran iş çok pay alır." },
+          { value: "MAKINE_SAATI", label: "Makine saatine göre", hint: "Makinede uzun kalan iş çok pay alır." },
         ],
       },
     ],

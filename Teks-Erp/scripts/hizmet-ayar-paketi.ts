@@ -21,7 +21,8 @@ export interface PaketSatiri {
   anahtar: string;
   /** `FeatureFlags` alan adı (okuma + `setFeatureFlags` girdisi). */
   alan: string;
-  hedef: boolean | string | number;
+  /** Harita değerli ayar (ör. kategori → sınıf) JSON eşitliğiyle karşılaştırılır. */
+  hedef: boolean | string | number | Readonly<Record<string, string>>;
   /** Anahtarı getiren dilim (yokken raporda gösterilir). */
   dilim: string;
 }
@@ -56,6 +57,10 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   // DALGA4 §12.1: Gülkesim kârlılık kaynakları varsayılanla aynı (açık yazılır ki paket raporunda görünsün).
   { anahtar: "maliyet.karlilik.disFasonKaynagi", alan: "costProfitSubcontractSource", hedef: "FATURA_ONCE", dilim: "D4-G2a" },
   { anahtar: "maliyet.karlilik.sarfFiyatKaynagi", alan: "costProfitConsumablePriceSource", hedef: "ALIS_FIYATI", dilim: "D4-G2a" },
+  { anahtar: "maliyet.karlilik.makineSuresi", alan: "costProfitMachineTime", hedef: "OTURUM", dilim: "D4-G2b" },
+  { anahtar: "maliyet.karlilik.genelGiderAnahtari", alan: "costProfitOverheadKey", hedef: "YOK", dilim: "D4-G2b" },
+  // S14 (kullanıcı 2026-10-31): işçilik = toplam 'Maaş' kasa masrafı (kişi adı yok), makine saatine göre dağıtılır.
+  { anahtar: "maliyet.karlilik.kategoriSiniflari", alan: "costProfitCategoryClasses", hedef: { "Maaş": "ISCILIK" }, dilim: "D4-G2b" },
   { anahtar: "finance.cariHold.releaseBySamePerson", alan: "financeCariHoldReleaseBySamePerson", hedef: "ALLOW", dilim: "D4-I1a" },
   // DALGA4 §12.1: risk limiti iş kabulü/sevk kapısı — Gülkesim değeri kullanıcı kararı (S12 para), varsayılan bırakıldı.
   { anahtar: "finance.riskLimitBlock.intake", alan: "financeRiskLimitBlockIntake", hedef: false, dilim: "D4-I2" },
@@ -99,7 +104,7 @@ export function paketPlani(
     if (!bilinenAnahtarlar.has(s.anahtar)) return { ...s, durum: "ANAHTAR_YOK", mevcut: undefined };
     if (!Object.prototype.hasOwnProperty.call(flags, s.alan)) return { ...s, durum: "ALAN_YOK", mevcut: undefined };
     const mevcut = flags[s.alan];
-    return { ...s, durum: mevcut === s.hedef ? "AYNI" : "DEGISECEK", mevcut };
+    return { ...s, durum: mevcut === s.hedef || (typeof s.hedef === "object" && JSON.stringify(mevcut) === JSON.stringify(s.hedef)) ? "AYNI" : "DEGISECEK", mevcut };
   });
 }
 

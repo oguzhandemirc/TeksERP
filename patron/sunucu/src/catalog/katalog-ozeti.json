@@ -506,6 +506,13 @@
       ]
     },
     {
+      "name": "ozet-masraf",
+      "kind": "ANLIK",
+      "permissions": [
+        "bulut:kasa:oku"
+      ]
+    },
+    {
       "name": "stok-karnesi",
       "kind": "ANLIK",
       "permissions": [
@@ -710,6 +717,9 @@
     ],
     "ozet-finans": [
       "bulut:cari-bakiye:oku"
+    ],
+    "ozet-masraf": [
+      "bulut:kasa:oku"
     ],
     "stok-karnesi": [
       "bulut:stok:oku"

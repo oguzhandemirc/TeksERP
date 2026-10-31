@@ -167,6 +167,8 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "financeRiskLimitCurrencyMode",
       "costProfitSubcontractSource",
       "costProfitConsumablePriceSource",
+      "costProfitMachineTime",
+      "costProfitOverheadKey",
       "financeServiceBillingPriceDate",
       "financeExpenseCategorySuggestions",
       "financeAutoAllocateOnPaymentEnabled",

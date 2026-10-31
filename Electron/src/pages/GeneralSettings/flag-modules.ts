@@ -188,6 +188,8 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   // D4-G2a: kârlılık geliri faturadan okunur (maliyet ∧ finans); maliyet gizlenebilir modül değil → sahibi finans.
   costProfitSubcontractSource: "financeEnabled",
   costProfitConsumablePriceSource: "financeEnabled",
+  costProfitMachineTime: "financeEnabled",
+  costProfitOverheadKey: "financeEnabled",
   financeAutoAllocateOnPaymentEnabled: "financeEnabled",
   // ⚠️ İPLİK bayrağı DEĞİL: kural FATURA ONAYINDA koşar (`finance/invoices`),
   // iplik defteri yalnız etkilenen taraftır. İplik modülü kapalı bir kurulumda

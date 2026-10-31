@@ -198,6 +198,12 @@ export const SETTING_KEYS = {
   COST_PROFIT_SUBCONTRACT_SOURCE: "maliyet.karlilik.disFasonKaynagi",
   /** D4-G2a: kârlılıkta sarf birim fiyatı — `ALIS_FIYATI` (varsayılan; kartın alış fiyatı) · `SON_ALIS_FATURASI`. */
   COST_PROFIT_CONSUMABLE_PRICE_SOURCE: "maliyet.karlilik.sarfFiyatKaynagi",
+  /** D4-G2b: kârlılıkta makine süresi — `OTURUM` (varsayılan; iş oturumu, IDLE `lastActivityAt`ta kesilir) · `VARDIYA` · `NORM`. */
+  COST_PROFIT_MACHINE_TIME: "maliyet.karlilik.makineSuresi",
+  /** D4-G2b: genel gider havuzunun işlere dağıtım anahtarı — `YOK` (varsayılan; dağıtılmaz) · `METRE` · `GELIR` · `MAKINE_SAATI`. */
+  COST_PROFIT_OVERHEAD_KEY: "maliyet.karlilik.genelGiderAnahtari",
+  /** D4-G2b: masraf kategorisi → sınıf (`ISCILIK` / `GENEL_GIDER` / `HARIC`); varsayılan `{}` (her kategori genel gider). */
+  COST_PROFIT_CATEGORY_CLASSES: "maliyet.karlilik.kategoriSiniflari",
   /** Tahsilat/ödeme kaydında en eski açık faturalara OTOMATİK kapama — FIFO
    *  (default FALSE). Bugün kapama (`PaymentAllocation`) elle seçilir; açıkken
    *  tutar vade/tarih sırasıyla açık bakiyelere dağıtılır ve artan tutar
@@ -1092,6 +1098,21 @@ export const DEFAULT_PROFIT_SUBCONTRACT_SOURCE: ProfitSubcontractSource = "FATUR
 export const PROFIT_CONSUMABLE_PRICE_SOURCES = ["ALIS_FIYATI", "SON_ALIS_FATURASI"] as const;
 export type ProfitConsumablePriceSource = (typeof PROFIT_CONSUMABLE_PRICE_SOURCES)[number];
 export const DEFAULT_PROFIT_CONSUMABLE_PRICE_SOURCE: ProfitConsumablePriceSource = "ALIS_FIYATI";
+/** D4-G2b: kârlılıkta makine süresinin kaynağı. */
+export const PROFIT_MACHINE_TIME_MODES = ["OTURUM", "VARDIYA", "NORM"] as const;
+export type ProfitMachineTimeMode = (typeof PROFIT_MACHINE_TIME_MODES)[number];
+export const DEFAULT_PROFIT_MACHINE_TIME_MODE: ProfitMachineTimeMode = "OTURUM";
+/** D4-G2b: genel gider havuzunun dağıtım anahtarı (`YOK` = dağıtılmaz; net = katkı). */
+export const PROFIT_OVERHEAD_KEYS = ["YOK", "METRE", "GELIR", "MAKINE_SAATI"] as const;
+export type ProfitOverheadKey = (typeof PROFIT_OVERHEAD_KEYS)[number];
+export const DEFAULT_PROFIT_OVERHEAD_KEY: ProfitOverheadKey = "YOK";
+/** D4-G2b: masraf kategorisi sınıfı; sınıflanmamış kategori `GENEL_GIDER` sayılır (tasarım §8.3 "bağlanmamış EXPENSE havuzu"). */
+export const PROFIT_CATEGORY_CLASSES = ["ISCILIK", "GENEL_GIDER", "HARIC"] as const;
+export type ProfitCategoryClass = (typeof PROFIT_CATEGORY_CLASSES)[number];
+export type ProfitCategoryClassMap = Record<string, ProfitCategoryClass>;
+/** Kategori sınıfı haritası sınırları — panel ve Zod aynı tavanı okur. */
+export const PROFIT_CATEGORY_CLASS_MAX_ENTRIES = 200;
+export const PROFIT_CATEGORY_CLASS_MAX_KEY = 100;
 
 /** Tambur plan kapısı EN kolu (bkz. `SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_CHECK`). */
 export type TamburPlanWidthCheck = "ENFORCE" | "OFF";
@@ -1946,6 +1967,12 @@ export interface FeatureFlags {
   costProfitSubcontractSource: ProfitSubcontractSource;
   /** D4-G2a: kârlılık sarf birim fiyatı kaynağı (varsayılan `ALIS_FIYATI`). */
   costProfitConsumablePriceSource: ProfitConsumablePriceSource;
+  /** D4-G2b: kârlılık makine süresi kaynağı (varsayılan `OTURUM`). */
+  costProfitMachineTime: ProfitMachineTimeMode;
+  /** D4-G2b: genel gider dağıtım anahtarı (varsayılan `YOK`). */
+  costProfitOverheadKey: ProfitOverheadKey;
+  /** D4-G2b: masraf kategorisi → sınıf haritası (varsayılan `{}`). */
+  costProfitCategoryClasses: ProfitCategoryClassMap;
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; otomatik tahsis elle
    *  silinebilir; farklı para birimli fatura atlanır. */
@@ -2610,6 +2637,9 @@ export class SystemSettingService {
       financeRiskLimitCurrencyMode: await readFinanceRiskLimitCurrencyMode(cacheClient),
       costProfitSubcontractSource: await readCostProfitSubcontractSource(cacheClient),
       costProfitConsumablePriceSource: await readCostProfitConsumablePriceSource(cacheClient),
+      costProfitMachineTime: await readCostProfitMachineTime(cacheClient),
+      costProfitOverheadKey: await readCostProfitOverheadKey(cacheClient),
+      costProfitCategoryClasses: await readCostProfitCategoryClasses(cacheClient),
       financeAutoAllocateOnPaymentEnabled:
         await readFinanceAutoAllocateOnPaymentEnabled(cacheClient),
       yarnBlockNegativeBalanceEnabled: await readYarnBlockNegativeBalanceEnabled(cacheClient),
@@ -3188,6 +3218,27 @@ export class SystemSettingService {
         throw AppError.badRequest(`costProfitConsumablePriceSource şunlardan biri olmalı: ${PROFIT_CONSUMABLE_PRICE_SOURCES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.COST_PROFIT_CONSUMABLE_PRICE_SOURCE, v, "Kârlılıkta sarf birim fiyatı — kart alış fiyatı · son alış faturası", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "costProfitMachineTime")) {
+      const v = input.costProfitMachineTime;
+      if (typeof v !== "string" || !PROFIT_MACHINE_TIME_MODES.includes(v as ProfitMachineTimeMode)) {
+        throw AppError.badRequest(`costProfitMachineTime şunlardan biri olmalı: ${PROFIT_MACHINE_TIME_MODES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.COST_PROFIT_MACHINE_TIME, v, "Kârlılıkta makine süresi — iş oturumu · vardiya · metre normu", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "costProfitOverheadKey")) {
+      const v = input.costProfitOverheadKey;
+      if (typeof v !== "string" || !PROFIT_OVERHEAD_KEYS.includes(v as ProfitOverheadKey)) {
+        throw AppError.badRequest(`costProfitOverheadKey şunlardan biri olmalı: ${PROFIT_OVERHEAD_KEYS.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.COST_PROFIT_OVERHEAD_KEY, v, "Kârlılıkta genel gider dağıtımı — yok · metre · gelir · makine saati", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "costProfitCategoryClasses")) {
+      const map = sanitizeProfitCategoryClasses(input.costProfitCategoryClasses);
+      if (!map) {
+        throw AppError.badRequest(`costProfitCategoryClasses kategori → sınıf eşlemesi olmalı (sınıf: ${PROFIT_CATEGORY_CLASSES.join(", ")}; en çok ${PROFIT_CATEGORY_CLASS_MAX_ENTRIES} kategori)`);
+      }
+      await this.set(SETTING_KEYS.COST_PROFIT_CATEGORY_CLASSES, map, "Kârlılıkta masraf kategorisi sınıfları — işçilik · genel gider · hariç", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "financeAutoAllocateOnPaymentEnabled")) {
@@ -5441,6 +5492,40 @@ export function readCostProfitSubcontractSource(tx?: Pick<typeof prisma, "system
 /** D4-G2a: kârlılık sarf fiyatı kaynağı — tanınmayan değer varsayılana (`ALIS_FIYATI`) düşer. */
 export function readCostProfitConsumablePriceSource(tx?: Pick<typeof prisma, "systemSetting">): Promise<ProfitConsumablePriceSource> {
   return readServiceEnum(SETTING_KEYS.COST_PROFIT_CONSUMABLE_PRICE_SOURCE, PROFIT_CONSUMABLE_PRICE_SOURCES, DEFAULT_PROFIT_CONSUMABLE_PRICE_SOURCE, tx);
+}
+
+/** D4-G2b: kârlılık makine süresi — tanınmayan değer varsayılana (`OTURUM`) düşer. */
+export function readCostProfitMachineTime(tx?: Pick<typeof prisma, "systemSetting">): Promise<ProfitMachineTimeMode> {
+  return readServiceEnum(SETTING_KEYS.COST_PROFIT_MACHINE_TIME, PROFIT_MACHINE_TIME_MODES, DEFAULT_PROFIT_MACHINE_TIME_MODE, tx);
+}
+
+/** D4-G2b: genel gider dağıtım anahtarı — tanınmayan değer varsayılana (`YOK`) düşer. */
+export function readCostProfitOverheadKey(tx?: Pick<typeof prisma, "systemSetting">): Promise<ProfitOverheadKey> {
+  return readServiceEnum(SETTING_KEYS.COST_PROFIT_OVERHEAD_KEY, PROFIT_OVERHEAD_KEYS, DEFAULT_PROFIT_OVERHEAD_KEY, tx);
+}
+
+/**
+ * D4-G2b: kategori → sınıf haritasının TEK süzgeci (yazım ve okuma). Anahtar `trim`lenir (kategori anahtarı
+ * `cashCategoryKey` gibi); boş anahtar, tanınmayan sınıf, tavan aşımı → null (yazımda 400, okumada `{}`).
+ */
+export function sanitizeProfitCategoryClasses(raw: unknown): ProfitCategoryClassMap | null {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+  const entries = Object.entries(raw as Record<string, unknown>);
+  if (entries.length > PROFIT_CATEGORY_CLASS_MAX_ENTRIES) return null;
+  const out: ProfitCategoryClassMap = {};
+  for (const [k, v] of entries) {
+    const key = k.trim();
+    if (!key || key.length > PROFIT_CATEGORY_CLASS_MAX_KEY) return null;
+    if (typeof v !== "string" || !PROFIT_CATEGORY_CLASSES.includes(v as ProfitCategoryClass)) return null;
+    out[key] = v as ProfitCategoryClass;
+  }
+  return Object.fromEntries(Object.keys(out).sort().map((k) => [k, out[k]!]));
+}
+
+/** D4-G2b: kategori sınıfı haritası — bozuk kayıt `{}`e düşer (her kategori genel gider = bugünkü davranış). */
+export async function readCostProfitCategoryClasses(tx?: Pick<typeof prisma, "systemSetting">): Promise<ProfitCategoryClassMap> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.COST_PROFIT_CATEGORY_CLASSES }, select: { value: true } });
+  return sanitizeProfitCategoryClasses(setting?.value ?? {}) ?? {};
 }
 
 /** D4-I1a: koyan kişi kendi kilidini açabilir mi — tanınmayan değer varsayılana (`ALLOW`) düşer. */
