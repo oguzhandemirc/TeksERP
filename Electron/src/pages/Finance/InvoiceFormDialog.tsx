@@ -15,6 +15,7 @@ import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { useCustomerTerms } from "./useCustomerTerms";
+import { applyTaxDefaults, useInvoiceTaxDefaults } from "./useInvoiceTaxDefaults";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import {
@@ -110,7 +111,7 @@ type DraftLine = InvoiceFormLine;
  * kabulden ürettiği alış taslağı da AYNI ayardan okur — oran iki yerde ayrı
  * sürüklenmez. Yalnız ön-dolum: kullanıcı satırda değiştirebilir.
  */
-const emptyLine = (vatRate: number = 20): DraftLine => ({
+const emptyLine = (vatRate: number = 20, withholdingRate: number = 0): DraftLine => ({
   key: crypto.randomUUID(),
   itemId: null,
   description: "",
@@ -119,7 +120,7 @@ const emptyLine = (vatRate: number = 20): DraftLine => ({
   unitPrice: 0,
   discountRate: 0,
   vatRate,
-  withholdingRate: 0,
+  withholdingRate,
 });
 
 const CURRENCIES: Currency[] = ["TRY", "USD", "EUR", "GBP", "RUB"];
@@ -426,6 +427,18 @@ function InvoiceFormBody({
   const isCustomerParty = !legacySubcontractorId;
   const partyId = isCustomerParty ? customerId : legacySubcontractorId;
 
+  // D4-V1k: yeni faturada KDV/tevkifat ön değeri müşteri cari ?? genel ayar (sunucunun tek çözümleyicisi);
+  // yalnız hâlâ önceki ön değeri taşıyan satır yenilenir — kullanıcının yazdığı oran ezilmez.
+  const taxDefaults = useInvoiceTaxDefaults(type, customerId, !isEdit);
+  const newLineTax = taxDefaults ?? { vatRate: defaultVatRate, withholdingRate: 0 };
+  const appliedTaxRef = useRef(newLineTax);
+  useEffect(() => {
+    if (!taxDefaults) return;
+    const prev = appliedTaxRef.current;
+    appliedTaxRef.current = taxDefaults;
+    setLines((ls) => applyTaxDefaults(ls, prev, taxDefaults));
+  }, [taxDefaults]);
+
   // ── VADE ÖNERİSİ ──────────────────────────────────────────────────────────
   // Cari seçilince, alan BOŞKEN issueDate + `paymentTermDays`'ten türetilir
   // (formda, backend'de değil). Kullanıcının yazdığı tarih ASLA ezilmez; cari
@@ -532,7 +545,7 @@ function InvoiceFormBody({
     onSuccess: (r) => {
       attempt.onSuccess();
       toast.success(r.message ?? "Taslak oluşturuldu.");
-      setLines([emptyLine(defaultVatRate)]);
+      setLines([emptyLine(newLineTax.vatRate, newLineTax.withholdingRate)]);
       setExternalNo("");
       setDueDate("");
       setAppliedDueSuggestion(null);
@@ -738,7 +751,7 @@ function InvoiceFormBody({
         </div>
 
         <div className="flex items-start justify-between">
-          <Button variant="ghost" size="sm" onClick={() => setLines((ls) => [...ls, emptyLine(defaultVatRate)])}>
+          <Button variant="ghost" size="sm" onClick={() => setLines((ls) => [...ls, emptyLine(newLineTax.vatRate, newLineTax.withholdingRate)])}>
             <Plus className="mr-1 h-4 w-4" />
             Satır ekle
           </Button>
