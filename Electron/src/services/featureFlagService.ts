@@ -304,6 +304,8 @@ export interface FeatureFlags {
   costProfitSubcontractSource: "FATURA_ONCE" | "YALNIZ_FATURA";
   /** D4-G2a: kârlılıkta sarf birim fiyatı kaynağı (backend aynası; varsayılan `ALIS_FIYATI`). */
   costProfitConsumablePriceSource: "ALIS_FIYATI" | "SON_ALIS_FATURASI";
+  /** SY-D2: dokuma standart maliyet yöntemi (backend aynası; varsayılan `TEZGAH_SAATI`). */
+  costWeavingStandardMethod: "TEZGAH_SAATI" | "ATKI_UCRETI";
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; tahsis elle silinebilir. */
   financeAutoAllocateOnPaymentEnabled: boolean;

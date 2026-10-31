@@ -2001,7 +2001,8 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "eksi bakiye negatif kasa engeli kdv oran varsayılan vergi " +
       "risk limiti aşım onay engel taslak otomatik sevk fifo kapama tahsis avans sıfır fiyat promosyon " +
       "numune bedelsiz ileri tarih çek keşide iplik stok düşme " +
-      "kârlılık karlilik fason sarf alış fiyatı",
+      "kârlılık karlilik fason sarf alış fiyatı " +
+      "maliyet dokuma atkı ücreti tezgah saati cent standart yöntem",
     kind: "flags",
     section: "trade",
     permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:finance"],
@@ -2289,6 +2290,21 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: [
           { value: "ALIS_FIYATI", label: "Kartın alış fiyatı (varsayılan)", hint: "Fiyat geçmişindeki o günkü değer." },
           { value: "SON_ALIS_FATURASI", label: "Son alış faturası", hint: "O güne kadarki son onaylı alış faturası." },
+        ],
+      },
+      {
+        // SY-D2: `defaultValue` backend `DEFAULT_WEAVING_STANDARD_METHOD` ile birebir; yalnız YENİ hesabı etkiler.
+        enumKey: "costWeavingStandardMethod",
+        group: "Maliyet",
+        title: "Dokuma maliyeti nasıl hesaplansın",
+        summary: "Standart maliyette dokuma satırı tezgâh saatinden mi, atkı ücretinden mi gelsin.",
+        desc: "Tezgâh saati (varsayılan): tezgâh devri ve randımandan saatte kaç metre dokunduğu bulunur; tezgâh, işçilik ve enerji saat ücretleri metreye bölünür. Atkı ücreti: dokuma = atkı sıklığı (atkı/cm) × atkı başı ücret (ör. 17 atkı × 0,02 $ = 0,34 $/m); ücret maliyet parametrelerinde ya da ürünün maliyet yapısında girilir. Ayar yalnız yeni hesaplanan maliyeti etkiler; kayıtlı standart maliyet sürümleri değişmez.",
+        defaultValue: "TEZGAH_SAATI",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "TEZGAH_SAATI", label: "Tezgâh saati (varsayılan)", hint: "Devir × randıman × saat ücretleri." },
+          { value: "ATKI_UCRETI", label: "Atkı ücreti", hint: "Atkı/cm × atkı başı ücret (ör. cent)." },
         ],
       },
     ],

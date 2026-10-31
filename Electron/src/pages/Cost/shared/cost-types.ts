@@ -19,6 +19,8 @@ export interface CostInputSnap {
   fabricWastePct: Sourced;
   overheadPct: Sourced;
   extra: { amountTry: DecStr; label: string | null } | null;
+  /** SY-D2: yalnız atkı ücreti yönteminde gelir (backend `CostInput.loomPick` aynası). */
+  loomPick?: { rate: CostPriceSnap | null };
 }
 
 export interface CostLineOut {
@@ -26,7 +28,8 @@ export interface CostLineOut {
   birimFiyatTl: DecStr | null; tutarTlM: DecStr;
 }
 export interface CostResultOut {
-  satirlar: CostLineOut[]; cozguKgM: DecStr; atkiKgM: DecStr; tezgahMSaat: DecStr; hamTlM: DecStr; mamulTlM: DecStr | null;
+  // SY-D2: atkı ücreti yönteminde devir/randıman bilinmiyorsa tezgah hızı null ("—").
+  satirlar: CostLineOut[]; cozguKgM: DecStr; atkiKgM: DecStr; tezgahMSaat: DecStr | null; hamTlM: DecStr; mamulTlM: DecStr | null;
   /** Kayıtlı sürümde saklanmaz → null (zincirde çizilmez). */
   saglamTlM: DecStr | null; genelGiderTlM: DecStr | null; standartTlM: DecStr;
 }
@@ -52,7 +55,7 @@ export type StructureStatus = "YAPI_EKSIK" | "VARSAYILAN" | "TAM";
 
 export interface CostVersion {
   id: string; surumNo: number; durum: "ACTIVE" | "SUPERSEDED"; hamTlM: DecStr; mamulTlM: DecStr | null; standartTlM: DecStr;
-  cozguKgM: DecStr; atkiKgM: DecStr; tezgahMSaat: DecStr; kurlar: FxSnapshot; uyarilar: string[]; gerekce: string | null;
+  cozguKgM: DecStr; atkiKgM: DecStr; tezgahMSaat: DecStr | null; kurlar: FxSnapshot; uyarilar: string[]; gerekce: string | null;
   hesaplananAt: string; gecersizAt: string | null; geriAlinanSurumId: string | null;
   satirlar?: CostLineOut[];
 }
