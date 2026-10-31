@@ -42,6 +42,9 @@ const MAX_PROCESSES = 20;
  * Ek işlem kodları: `undefined` = DOKUNMA (pivotu bilmeyen eski istemci tam küme PUT'unda listeyi silmesin);
  * dizi = sıralı tam küme. Kod aktif tarifeye çözülmeli; tekrar ve terbiyeyle aynı kod çift sayımdır → 400.
  */
+const sameAsFinishing = (code: string) =>
+  AppError.badRequest(`"${code}" hem terbiye hem ek işlem olamaz (çift sayım).`, { code: "COST_PROCESS_SAME_AS_FINISHING" });
+
 async function parseProcessCodes(raw: unknown, finishingCode: unknown): Promise<string[] | undefined> {
   if (raw === undefined) return undefined;
   if (!Array.isArray(raw)) throw AppError.badRequest("Ek işlemler bir kod listesi olmalı.", { code: "COST_PROCESS_INVALID" });
@@ -49,9 +52,7 @@ async function parseProcessCodes(raw: unknown, finishingCode: unknown): Promise<
   const codes = raw.map((c) => normalizeFinishingRateCode(c));
   const dup = codes.find((c, i) => codes.indexOf(c) !== i);
   if (dup) throw AppError.badRequest(`"${dup}" ek işlemlerde iki kez var.`, { code: "COST_PROCESS_DUPLICATE" });
-  if (typeof finishingCode === "string" && codes.includes(finishingCode)) {
-    throw AppError.badRequest(`"${finishingCode}" hem terbiye hem ek işlem olamaz (çift sayım).`, { code: "COST_PROCESS_SAME_AS_FINISHING" });
-  }
+  if (typeof finishingCode === "string" && codes.includes(finishingCode)) throw sameAsFinishing(finishingCode);
   for (const code of codes) {
     if (!(await resolveActiveFinishingRate(code))) {
       throw AppError.badRequest(`"${code}" kodlu yürürlükte bir tarife yok.`, { code: "COST_FINISHING_RATE_UNKNOWN" });
@@ -129,7 +130,11 @@ export async function putCostStructure(itemId: string, body: Record<string, unkn
         update: { ...(data as Prisma.CostStructureUncheckedUpdateInput), updatedById: userId ?? null },
         select: COST_STRUCTURE_SELECT,
       });
-      if (processCodes === undefined) return up;
+      if (processCodes === undefined) {
+        // `processes` verilmeden terbiye kodu mevcut ek işleme eşitlenirse çift sayım olur → geri al, 400.
+        if (up.finishingRateCode && up.processes.some((p) => p.rateCode === up.finishingRateCode)) throw sameAsFinishing(up.finishingRateCode);
+        return up;
+      }
       // Saf yapılandırma pivotu (③b): replace; eski/yeni küme audit'te.
       await tx.costStructureProcess.deleteMany({ where: { costStructureId: up.id } });
       if (processCodes.length) {

@@ -136,7 +136,8 @@ export function buildCostInput(src: CostSources, ref: CostSourceRef, o: CostOver
   const finishing = finishingOf(src, code);
   const extraTry = o.extraCostPerMTry ?? cs?.extraCostPerMTry ?? null;
   // Ek işlem (SY-G1) aynı tarife uzayından; çözülemeyen kod motorda FINISHING_RATE_MISSING (0 değil).
-  const processes = (cs?.processes ?? []).map((p) => finishingOf(src, p.rateCode)).filter((r): r is CostRate => r !== null);
+  // Terbiyeyle aynı kod iki kez sayılmaz (yazım kapısının ikinci seddi; what-if terbiye değişimi de kapsanır).
+  const processes = (cs?.processes ?? []).filter((p) => p.rateCode !== code).map((p) => finishingOf(src, p.rateCode)).filter((r): r is CostRate => r !== null);
   return {
     schemaVersion: 1,
     parameterSetId: p?.id ?? null,

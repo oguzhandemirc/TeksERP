@@ -64,7 +64,7 @@ const withProcs = (procs: CostRate[]): CostInput => ({ ...base(), processes: pro
 function bolum1(): void {
   const a = computeFabricCost(base(), FX);
   const b = computeFabricCost({ ...base(), processes: undefined }, FX);
-  check("§1a Pivot boş: sonuç bayt-aynı (JSON)", JSON.stringify(a) === JSON.stringify(b) && !!a.result);
+  check("§1a Pivot boş: undefined ≡ yok (önceki motorla bayt-aynılık kanıtı test_maliyet_formul altını)", JSON.stringify(a) === JSON.stringify(b) && !!a.result);
   check("§1b Pivot boş: PROCESS satırı yok", !a.result?.lines.some((l) => l.component === "PROCESS"));
   check("§1c Pivot boş: fotoğrafta `processes` anahtarı yok, hash aynı", !("processes" in serializeCostInput(base())) && costInputHash(base()) === costInputHash({ ...base(), processes: undefined }));
 }
@@ -82,7 +82,7 @@ function bolum2(): void {
   check("§2d ⭐ Genel gider tabanı ek işlemleri içerir: genel gider = (ham + apre + kurşun + devere) × %3", r.overheadPerMTry.eq(base103.mul(D("0.03"))), `${r.overheadPerMTry} vs ${base103.mul(D("0.03"))}`);
   check("§2e ⭐ Standart = (ham + apre + kurşun + devere) × 1,03", r.totalCostPerMTry.eq(base103.mul(D("1.03"))), r.totalCostPerMTry.toFixed(6));
   const excel = D("0.7903").plus(D("0.34")).plus(D("0.2361")).plus(D("0.15")).plus(D("0.05")).mul(D("1.03")).toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP);
-  check("§2f Excel 3000 serisi kalıbı: (0,7903+0,34+0,2361+0,15+0,05)×1,03 = 1,6134 (aynı özdeşlik)", excel.toFixed(4) === "1.6134");
+  check("§2f Excel 3000 serisi kalıbı: (0,7903+0,34+0,2361+0,15+0,05)×1,03 = 1,6134 (yalnız aritmetik; motor birebiri SY-H3)", excel.toFixed(4) === "1.6134");
   check("§2g Döküm satırları toplamı = standart", r.lines.reduce((a, l) => a.plus(l.amountPerMTry), D(0)).eq(r.totalCostPerMTry));
   check("§2h Levent hazırlığı 0 — devere tarife satırı, çift sayım yok", r.lines.find((l) => l.component === "BEAM_PREP")?.amountPerMTry.isZero() === true);
   check("§2i Mamul = ham + apre + ek işlemler", r.finishedCostPerMTry?.eq(base103) === true);
@@ -147,6 +147,11 @@ async function bolum6ve7(f: MaliyetFikstur, k: string, d: string): Promise<void>
 
   check("§6g Tekrar eden kod → 400 COST_PROCESS_DUPLICATE", (await code400(() => putCostStructure(f.fabricId, { ...body, processes: [k, k] }))) === "COST_PROCESS_DUPLICATE");
   check("§6h Terbiyeyle aynı kod → 400 COST_PROCESS_SAME_AS_FINISHING", (await code400(() => putCostStructure(f.fabricId, { ...body, processes: [f.rateCode] }))) === "COST_PROCESS_SAME_AS_FINISHING");
+  check("§6h2 `processes` yokken terbiye mevcut ek işleme eşitlenirse → 400 COST_PROCESS_SAME_AS_FINISHING", (await code400(() => putCostStructure(f.fabricId, { ...body, finishingRateCode: k }))) === "COST_PROCESS_SAME_AS_FINISHING");
+  const csAfter = await prisma.costStructure.findUnique({ where: { itemId: f.fabricId }, select: { finishingRateCode: true } });
+  check("§6h3 Reddedilen yazım terbiye kodunu geri aldı (tx rollback)", csAfter?.finishingRateCode === f.rateCode);
+  const inWhatIf = await prisma.$transaction((tx) => assembleCostInputTx(tx, { itemId: f.fabricId }, { finishingRateCode: k }));
+  check("§6h4 Derleyici terbiyeyle aynı ek işlemi süzer (what-if çift sayım yok)", inWhatIf.processes?.map((p) => p.code).join(",") === d);
   check("§6i Bilinmeyen kod → 400 COST_FINISHING_RATE_UNKNOWN", (await code400(() => putCostStructure(f.fabricId, { ...body, processes: [`${f.tag}-YOK`] }))) === "COST_FINISHING_RATE_UNKNOWN");
   check("§6j Liste değil → 400 COST_PROCESS_INVALID", (await code400(() => putCostStructure(f.fabricId, { ...body, processes: k }))) === "COST_PROCESS_INVALID");
   check("§6k Reddedilen yazım pivotu değiştirmedi", (await prisma.costStructureProcess.count({ where: { costStructure: { itemId: f.fabricId } } })) === 2);
