@@ -10,7 +10,8 @@
 //   §1e/§2c silme beyanı YOK olan kökün kodda hard delete yolu yok; cari hesap silmesi damgalanır
 //   §3 ⭐ KASKADLA silinen çocuk da işaretlenir (sipariş → kalemler) + ebeveyn KIRLI
 //   §4 ⭐ ayrılma körlüğü (§4.3a): top çuval/sevkiyat/adım değiştirince ESKİ ebeveyn KIRLI;
-//      FK dışı güncelleme işaret YAZMAZ (sıcak yolda maliyet yok)
+//      FK dışı güncelleme işaret YAZMAZ (sıcak yolda maliyet yok); D4-MIG6: top partiden çıkınca ESKİ
+//      partinin iş emri, parti iş emri değiştirince ESKİ+YENİ iş emri KIRLI
 //   §5 filigransız küme (§4.3b): `shipment_orders` ekleme/silme sevkiyatı KIRLI yapar
 //      §5c ölçüm aracının kendisi: pencere µs hassas (DB saati metin taşınır; JS Date ms'ye keser)
 //   §6 bekleyen adım silinince iş emri KIRLI
@@ -24,6 +25,7 @@
 //   S2 `sync_mark_roll_old_parents` sackId dalı kaldırıldı (DB'de yeniden kuruldu) → §4 ❌
 //   S3 `scanMarks` SILINDI işaretlerini yok saydı                           → §7 ❌
 //   S4 `isaretler` penceresi ms'ye kesildi (eski JS Date davranışı)          → §5c ❌
+//   S5 (D4-MIG6) `sync_mark_roll_old_parents` batchId dalı kaldırıldı (DB'de yeniden kuruldu) → §4f ❌
 // =============================================================================
 import fs from "node:fs";
 import path from "node:path";
@@ -105,8 +107,8 @@ async function envanterBolumu(): Promise<void> {
   const dbKok = new Set(db.filter((r) => r.tgname === `${r.relname}_sync_deleted` && r.tgenabled !== "D").map((r) => r.relname));
   const dbEksik = [...kok].filter((t) => !dbKok.has(t));
   check("§1c ⭐ DB'de her kök tablonun tetikleyicisi KURULU ve etkin (elle restore kopukluğu)", dbEksik.length === 0, dbEksik.length ? `eksik: ${dbEksik.join(",")}` : `${dbKok.size} etkin`);
-  const yardimci = ["rolls_sync_parent_moved", "sacks_sync_parent_moved", "shipment_orders_sync_dirty", "work_order_steps_sync_deleted"];
-  check("§1d ayrılma/küme/çocuk tetikleyicileri DB'de", yardimci.every((n) => db.some((r) => r.tgname === n)), yardimci.filter((n) => !db.some((r) => r.tgname === n)).join(",") || "4/4");
+  const yardimci = ["rolls_sync_parent_moved", "sacks_sync_parent_moved", "shipment_orders_sync_dirty", "work_order_steps_sync_deleted", "batches_sync_wo_moved"];
+  check("§1d ayrılma/küme/çocuk tetikleyicileri DB'de", yardimci.every((n) => db.some((r) => r.tgname === n)), yardimci.filter((n) => !db.some((r) => r.tgname === n)).join(",") || "5/5");
   // §1e: "YOK" beyanı = ölçülmüş hard delete yolu yok. Uygulama + düzeltme betiklerinde
   // kök modelin `.delete(`/`.deleteMany(` çağrısı varsa beyan DAMGA olmalı (K3a cari hesabı).
   const kaynaklar = [path.join(__dirname, "..", "src"), __dirname].flatMap((d) =>
@@ -178,6 +180,22 @@ async function txBolumleri(): Promise<void> {
     check("§4c ⭐ top sevkiyattan çıktı → ESKİ sevkiyat KIRLI", var_(m4, "shipments", s1, "DIRTY"));
     check("§4d ⭐ top adım değiştirdi → iş emri KIRLI", var_(m4, "work_orders", is1, "DIRTY"));
     check("§4e çuval sevkiyattan çıktı → ESKİ sevkiyat KIRLI", m4.filter((m) => m.tableName === "shipments" && m.rowId === s1).length >= 2);
+    // D4-MIG6 (J5 kalanı): `is-emri.sevkeHazir` parti koluyla da türer — parti değişimi iş emrini kirletir.
+    const [is2, is3, pA, pB] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+    await c.query(`INSERT INTO "work_orders" ("id", "workOrderNumber", "updatedAt") VALUES ($1, $3, now()), ($2, $4, now())`, [is2, is3, `${TAG}W2`, `${TAG}W3`]);
+    await c.query(`INSERT INTO "batches" ("id", "batchNumber", "workOrderId", "updatedAt") VALUES ($1, $3, $4, now()), ($2, $3, $5, now())`, [pA, pB, `${TAG}P`, is2, is3]);
+    await c.query(`UPDATE "rolls" SET "batchId" = $2 WHERE "id" = $1`, [top, pA]);
+    const t4f = await dbSaati(c);
+    await c.query(`UPDATE "rolls" SET "batchId" = $2 WHERE "id" = $1`, [top, pB]);
+    const m4f = await isaretler(c, t4f);
+    check("§4f ⭐ top başka partiye geçti → ESKİ partinin iş emri KIRLI (yeni taraf filigrandan)", var_(m4f, "work_orders", is2, "DIRTY") && !var_(m4f, "work_orders", is3, "DIRTY"), JSON.stringify(m4f));
+    const t4g = await dbSaati(c);
+    await c.query(`UPDATE "batches" SET "workOrderId" = $2 WHERE "id" = $1`, [pB, is2]);
+    const m4g = await isaretler(c, t4g);
+    check("§4g ⭐ parti başka iş emrine taşındı → ESKİ ve YENİ iş emri KIRLI", var_(m4g, "work_orders", is3, "DIRTY") && var_(m4g, "work_orders", is2, "DIRTY"), JSON.stringify(m4g));
+    const t4h = await dbSaati(c);
+    await c.query(`UPDATE "batches" SET "batchNumber" = $2 WHERE "id" = $1`, [pB, `${TAG}P2`]);
+    check("§4h parti iş emri dışı güncelleme işaret YAZMAZ", (await isaretler(c, t4h)).length === 0);
 
     console.log("\n§5 — filigransız küme (shipment_orders)");
     const siparis2 = randomUUID();

@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { Prisma, type Currency } from "@prisma/client";
 import { z } from "zod";
 import { COST_WARNING_CODES, type CostInput, type FxRates } from "./fabric-cost.helper";
+import { FINISHING_KG_BASES } from "./fabric-cost-kg.helper";
 
 const dec = z.string().regex(/^-?\d+(\.\d+)?$/, "Decimal metin bekleniyor");
 const sourceEnum = z.enum(["KART", "YAPI", "PARAMETRE", "OLCULMUS", "ELLE"]);
@@ -19,13 +20,21 @@ const sourced = z.object({ value: dec.nullable(), source: sourceEnum, flag: z.en
 const price = z.object({ amount: dec, currency: currencyEnum, source: sourceEnum, flag: z.enum(COST_WARNING_CODES).optional() }).strict();
 const yarn = z.object({ yarnItemId: z.string().nullable(), name: z.string(), denier: sourced, price: price.nullable() }).strict();
 
-const rate = z.object({ code: z.string(), name: z.string(), basis: z.enum(["RAW_M", "FINISHED_M"]), price: price.nullable() }).strict();
+// SY-E1: `kgBase` yalnız KG tabanında yazılır; eski fotoğraflar (anahtarsız) aynen okunur.
+const rate = z
+  .object({ code: z.string(), name: z.string(), basis: z.enum(["RAW_M", "FINISHED_M", "KG"]), kgBase: z.enum(FINISHING_KG_BASES).optional(), price: price.nullable() })
+  .strict();
+
+const warp = z.object({ warpSpecId: z.string().nullable(), endsCount: z.number().int(), takeUpPct: sourced, wastePct: sourced, yarn }).strict();
+// SY-B1: ek çözgü katmanı — anahtar yalnız doluyken (min 1) yazılır; katmansız fotoğraf bayt-aynı.
+const warpLayer = warp.extend({ role: z.enum(["LENO", "SECONDARY"]), beamMode: z.enum(["SEPARATE_BEAM", "SHARED_BEAM", "CREEL"]) }).strict();
 
 export const costInputSnapshotSchema = z
   .object({
     schemaVersion: z.literal(1),
     parameterSetId: z.string().nullable(),
-    warp: z.object({ warpSpecId: z.string().nullable(), endsCount: z.number().int(), takeUpPct: sourced, wastePct: sourced, yarn }).strict().nullable(),
+    warp: warp.nullable(),
+    warpLayers: z.array(warpLayer).min(1).optional(),
     weft: z
       .object({
         weftSpecId: z.string().nullable(),
