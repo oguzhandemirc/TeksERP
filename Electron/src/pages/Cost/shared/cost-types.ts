@@ -14,9 +14,10 @@ export interface CostInputSnap {
   weft: { weftSpecId: string | null; picksPerCm: Sourced; lengthCm: Sourced; wastePct: Sourced; yarns: CostYarnSnap[] } | null;
   loom: Record<"rpm" | "efficiencyPct" | "machineRateTry" | "laborRateTry" | "loomsPerOperator" | "energyKwhPerHour" | "energyPriceTry", Sourced>;
   beam: { prepCostTry: Sourced; lengthM: Sourced };
-  finishing: { code: string; name: string; basis: "RAW_M" | "FINISHED_M"; price: CostPriceSnap | null } | null;
+  /** SY-E1: `kgBase` yalnız KG tarifesinde gelir (sürüme donmuş kg kaynağı). */
+  finishing: { code: string; name: string; basis: "RAW_M" | "FINISHED_M" | "KG"; kgBase?: "NET_HAM" | "IPLIK_TUKETIMI"; price: CostPriceSnap | null } | null;
   /** SY-G1 ek işlemler — yalnız doluyken gelir. */
-  processes?: Array<{ code: string; name: string; basis: "RAW_M" | "FINISHED_M"; price: CostPriceSnap | null }>;
+  processes?: Array<{ code: string; name: string; basis: "RAW_M" | "FINISHED_M" | "KG"; kgBase?: "NET_HAM" | "IPLIK_TUKETIMI"; price: CostPriceSnap | null }>;
   lengthShrinkPct: Sourced;
   fabricWastePct: Sourced;
   overheadPct: Sourced;

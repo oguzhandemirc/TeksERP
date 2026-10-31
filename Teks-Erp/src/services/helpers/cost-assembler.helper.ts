@@ -11,7 +11,9 @@ import { Prisma, type Currency } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { ACTIVE_FINISHING_RATE, ACTIVE_YARN_COST_PRICE } from "./cost-price-validity.helper";
 import type { CostInput, CostPrice, CostRate, CostSource, CostWeftYarn, CostYarn, Sourced } from "./fabric-cost.helper";
+import type { FinishingKgBasis } from "./fabric-cost-kg.helper";
 import { resolveDenier } from "../../constants/warp-beam";
+import { DEFAULT_COST_FINISHING_KG_BASIS, readCostFinishingKgBasis } from "../system-setting.service";
 
 
 type Dec = Prisma.Decimal;
@@ -42,7 +44,8 @@ export interface AdHocStructure {
   weft: { picksPerCm: Dec | null; rawWidthCm?: Dec | null; yarns: AdHocYarn[] } | null;
   finishingRateCode?: string | null;
 }
-export type CostSourceRef = { itemId: string } | { adHoc: AdHocStructure };
+/** `recipeId` (SY-E1): varyantın tarife kodu ürün yapısınınkinden önce gelir; varyant ürünün olmalı. */
+export type CostSourceRef = { itemId: string; recipeId?: string } | { adHoc: AdHocStructure };
 
 const yarnSelect = { id: true, name: true, linearDensityDen: true } as const;
 const itemSelect = {
@@ -55,17 +58,24 @@ export type CostItemRow = Prisma.ItemGetPayload<{ select: typeof itemSelect }>;
 type ParamRow = Prisma.CostParameterSetGetPayload<object>;
 type PriceRow = Prisma.YarnCostPriceGetPayload<object>;
 type RateRow = Prisma.FinishingRateGetPayload<object>;
+export interface CostRecipeRow { id: string; itemId: string; finishingRateCode: string | null }
 
 /** Derleyicinin okuduğu her şey — liste N kalem için TEK seferde yükler (kalem başı sorgu yok). */
-export interface CostSources { items: Map<string, CostItemRow>; params: ParamRow | null; prices: Map<string, PriceRow>; rates: Map<string, RateRow>; asOf: Date }
+export interface CostSources {
+  items: Map<string, CostItemRow>; params: ParamRow | null; prices: Map<string, PriceRow>; rates: Map<string, RateRow>; asOf: Date;
+  /** SY-E1: istenen varyantlar + KG tabanı ayarı (yalnız KG tarifesi yüklendiyse okunur). */
+  recipes?: Map<string, CostRecipeRow>; kgBasis?: FinishingKgBasis;
+}
 
 type Db = Prisma.TransactionClient;
 
-export async function loadCostSourcesTx(tx: Db, itemIds: string[], extraRateCodes: string[] = []): Promise<CostSources> {
+export async function loadCostSourcesTx(tx: Db, itemIds: string[], extraRateCodes: string[] = [], recipeIds: string[] = []): Promise<CostSources> {
   const rows = itemIds.length ? await tx.item.findMany({ where: { id: { in: itemIds } }, select: itemSelect }) : [];
   const params = await tx.costParameterSet.findFirst({ where: { status: "ACTIVE" } });
+  const recipes = recipeIds.length ? await tx.productRecipe.findMany({ where: { id: { in: recipeIds } }, select: { id: true, itemId: true, finishingRateCode: true } }) : [];
   const yarnIds = new Set<string>();
   const codes = new Set(extraRateCodes);
+  for (const r of recipes) if (r.finishingRateCode) codes.add(r.finishingRateCode);
   for (const r of rows) {
     if (r.warpSpec) yarnIds.add(r.warpSpec.yarnItem.id);
     for (const y of r.weftSpec?.yarns ?? []) yarnIds.add(y.yarnItem.id);
@@ -74,12 +84,16 @@ export async function loadCostSourcesTx(tx: Db, itemIds: string[], extraRateCode
   }
   const prices = yarnIds.size ? await tx.yarnCostPrice.findMany({ where: { ...ACTIVE_YARN_COST_PRICE, yarnItemId: { in: [...yarnIds] } } }) : [];
   const rates = codes.size ? await tx.finishingRate.findMany({ where: { ...ACTIVE_FINISHING_RATE, code: { in: [...codes] } } }) : [];
+  // Metre tabanlı tarifelerde ayar okunmaz (sorgu sayısı bugünkü).
+  const kgBasis = rates.some((r) => r.basis === "KG") ? await readCostFinishingKgBasis(tx) : undefined;
   return {
     items: new Map(rows.map((r) => [r.id, r])),
     params,
     prices: new Map(prices.map((p) => [p.yarnItemId, p])),
     rates: new Map(rates.map((r) => [r.code, r])),
     asOf: new Date(),
+    ...(recipes.length ? { recipes: new Map(recipes.map((r) => [r.id, r])) } : {}),
+    ...(kgBasis ? { kgBasis } : {}),
   };
 }
 
@@ -108,8 +122,8 @@ function finishingOf(src: CostSources, code: string | null | undefined): CostRat
   if (!code) return null;
   const r = src.rates.get(code);
   if (!r) return { code, name: code, basis: "RAW_M", price: null };
-  // KG tabanı (MİG-2a) motora SY-E1'de bağlanır; o güne kadar fail-closed EKSİK (0 değil). Yazım yolu KG'yi zaten reddeder.
-  if (r.basis === "KG") return { code, name: r.name, basis: "RAW_M", price: null };
+  // KG (SY-E1): kg kaynağı girdiye DONAR (`kgBase`) — ayar sonradan değişse de sürüm aynı sayıyı verir.
+  if (r.basis === "KG") return { code, name: r.name, basis: "KG", kgBase: src.kgBasis ?? DEFAULT_COST_FINISHING_KG_BASIS, price: { amount: r.pricePerM, currency: r.currency, source: "KART" } };
   return { code, name: r.name, basis: r.basis, price: { amount: r.pricePerM, currency: r.currency, source: "KART" } };
 }
 
@@ -132,7 +146,9 @@ export function buildCostInput(src: CostSources, ref: CostSourceRef, o: CostOver
     : (ah?.weft?.yarns ?? []).map((y) => ({ ...adHocYarn(y), picksInRepeat: y.picksInRepeat ?? 1 }));
   const picks = item?.weftSpec ? item.weftSpec.picksPerCm : ah?.weft ? dec(ah.weft.picksPerCm) : null;
   const hasWeft = !!item?.weftSpec || !!ah?.weft;
-  const code = o.finishingRateCode !== undefined ? o.finishingRateCode : (cs?.finishingRateCode ?? ah?.finishingRateCode ?? null);
+  // Öncelik (tasarım §6.5): ELLE > varyant kodu > ürün yapısı kodu > yok.
+  const recipe = "itemId" in ref && ref.recipeId ? src.recipes?.get(ref.recipeId) : undefined;
+  const code = o.finishingRateCode !== undefined ? o.finishingRateCode : (recipe?.finishingRateCode ?? cs?.finishingRateCode ?? ah?.finishingRateCode ?? null);
   const finishing = finishingOf(src, code);
   const extraTry = o.extraCostPerMTry ?? cs?.extraCostPerMTry ?? null;
   // Ek işlem (SY-G1) aynı tarife uzayından; çözülemeyen kod motorda FINISHING_RATE_MISSING (0 değil).
@@ -183,11 +199,15 @@ export function buildCostInput(src: CostSources, ref: CostSourceRef, o: CostOver
 /** Tek kalem/ad-hoc için yükle + derle. Kalem yoksa 404, KUMAŞ değilse 400. */
 export async function assembleCostInputTx(tx: Db, ref: CostSourceRef, overrides: CostOverrides = {}): Promise<CostInput> {
   const extraCodes = [overrides.finishingRateCode, "adHoc" in ref ? ref.adHoc.finishingRateCode : null].filter((c): c is string => !!c);
-  const src = await loadCostSourcesTx(tx, "itemId" in ref ? [ref.itemId] : [], extraCodes);
+  const recipeIds = "itemId" in ref && ref.recipeId ? [ref.recipeId] : [];
+  const src = await loadCostSourcesTx(tx, "itemId" in ref ? [ref.itemId] : [], extraCodes, recipeIds);
   if ("itemId" in ref) {
     const item = src.items.get(ref.itemId);
     if (!item) throw AppError.notFound("Ürün bulunamadı.");
     if (item.itemType !== "FABRIC") throw AppError.badRequest("Maliyet yalnız KUMAŞ ürünlerde hesaplanır.", { code: "COST_FABRIC_ONLY" });
+    if (ref.recipeId && src.recipes?.get(ref.recipeId)?.itemId !== ref.itemId) {
+      throw AppError.badRequest("Varyant bu ürüne ait değil.", { code: "COST_RECIPE_MISMATCH" });
+    }
   }
   return buildCostInput(src, ref, overrides);
 }

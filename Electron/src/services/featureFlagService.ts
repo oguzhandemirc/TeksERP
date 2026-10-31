@@ -304,6 +304,8 @@ export interface FeatureFlags {
   financeCariHoldEmanetShipment: "EXEMPT" | "PROCESSED_HELD" | "ALL_HELD";
   /** SY-J1: maliyet sunum dövizi (varsayılan `TRY`). */
   costPresentationCurrency: "TRY" | "USD" | "EUR";
+  /** SY-E1: kg bazlı terbiye tarifesinin kg kaynağı (backend aynası; varsayılan `NET_HAM`). */
+  costFinishingKgBasis: "NET_HAM" | "IPLIK_TUKETIMI";
   /** D4-I2b (S12): risk limiti para birimi kipi — her para birimi ayrı (varsayılan) · o güne kadarki en son kurla TL toplamı. */
   financeRiskLimitCurrencyMode: "PER_CURRENCY" | "TRY_CONVERTED";
   /** D4-G2a: kârlılıkta dış fason maliyeti kaynağı (backend aynası; varsayılan `FATURA_ONCE`). */

@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { Prisma, type Currency } from "@prisma/client";
 import { z } from "zod";
 import { COST_WARNING_CODES, type CostInput, type FxRates } from "./fabric-cost.helper";
+import { FINISHING_KG_BASES } from "./fabric-cost-kg.helper";
 
 const dec = z.string().regex(/^-?\d+(\.\d+)?$/, "Decimal metin bekleniyor");
 const sourceEnum = z.enum(["KART", "YAPI", "PARAMETRE", "OLCULMUS", "ELLE"]);
@@ -19,7 +20,10 @@ const sourced = z.object({ value: dec.nullable(), source: sourceEnum, flag: z.en
 const price = z.object({ amount: dec, currency: currencyEnum, source: sourceEnum, flag: z.enum(COST_WARNING_CODES).optional() }).strict();
 const yarn = z.object({ yarnItemId: z.string().nullable(), name: z.string(), denier: sourced, price: price.nullable() }).strict();
 
-const rate = z.object({ code: z.string(), name: z.string(), basis: z.enum(["RAW_M", "FINISHED_M"]), price: price.nullable() }).strict();
+// SY-E1: `kgBase` yalnız KG tabanında yazılır; eski fotoğraflar (anahtarsız) aynen okunur.
+const rate = z
+  .object({ code: z.string(), name: z.string(), basis: z.enum(["RAW_M", "FINISHED_M", "KG"]), kgBase: z.enum(FINISHING_KG_BASES).optional(), price: price.nullable() })
+  .strict();
 
 export const costInputSnapshotSchema = z
   .object({
