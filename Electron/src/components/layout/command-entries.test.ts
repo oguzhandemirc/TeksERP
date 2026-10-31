@@ -54,7 +54,8 @@ const EXEMPT: Record<string, string> = {
 // açılmadı (1e hükmü 2026-09-14 ③) — route ve karo `report:production`.
 // `ozel`: özel rapor oluşturucusu — kategori değil, izni `report:builder` (route ile aynı).
 const KATEGORI_IZNI_ISTISNASI: Record<string, string> = { dokuma: "report:production", ozel: "report:builder", maliyet: "report:yarn-need" };
-
+// Alt rapor izni kategoriden farklıysa karo `permission` taşır ve route aynı izni ister: dokuma verimliliği
+// tutar gösterir → `cost:read` (SY-D3; backend ucu aynı izin).
 describe("komut paleti kataloğu", () => {
   const paths = new Set(allCommandEntries.map((e) => e.to.split("?")[0]));
 

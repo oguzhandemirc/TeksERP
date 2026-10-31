@@ -8,7 +8,7 @@ import type { ReportExportSpec } from "../_components/reportExport";
 import { fmtDate, fmtMeters } from "../_components/formatters";
 import { formatPct } from "./dokuma-regime";
 import { kumasKaynakNotu, horizonNote } from "./leventShared";
-import type { BeamResultReport, BeamResultRow, CapacityReport, FinishForecastReport } from "./leventReportTypes";
+import { warpSpecCellText, type BeamResultReport, type BeamResultRow, type CapacityReport, type FinishForecastReport } from "./leventReportTypes";
 
 const M = "#,##0.0";
 const INT = "#,##0";
@@ -20,7 +20,7 @@ interface Ortak { periodLabel?: string; filterNotes?: string[] }
 function beamRows(rows: BeamResultRow[], acik: boolean): Array<Record<string, unknown>> {
   return rows.map((r) => ({
     levent: r.physicalBeamNo ? `${r.beamNo} · ${r.physicalBeamNo}` : r.beamNo,
-    cozgu: `${r.warpSpec.code} · ${r.warpSpec.name}`,
+    cozgu: warpSpecCellText(r),
     tezgah: r.tezgahlar.join(", ") || "—",
     sarilan: r.sarilanM, gercek: r.gercekKumasM, otomatik: r.gercekKaynak.otomatik, elle: r.gercekKaynak.elle,
     ...(acik

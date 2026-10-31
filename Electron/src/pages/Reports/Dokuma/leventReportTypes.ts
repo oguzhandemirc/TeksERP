@@ -14,6 +14,8 @@ export interface KumasKaynak { otomatik: number; elle: number }
 export interface BeamResultRow {
   beamId: string; beamNo: string; physicalBeamNo: string | null;
   warpSpec: { id: string; code: string; name: string; takeUpPct: number | null };
+  /** SY-B2: yalnız bağlı işin ürününde ek çözgü katmanı varken (zemin / döner / ek); etiket sunucudan. */
+  katman?: { rol: "GROUND" | "LENO" | "SECONDARY"; beamMode: string | null; etiket: string };
   sarilanM: number; sarilanKg: number | null; kgKaynak: "WEIGHED" | "THEORETICAL" | "KARMA" | null;
   beklenenKumasM: number | null; gercekKumasM: number; gercekKaynak: KumasKaynak;
   kalanM: number; fireM: number | null; firePct: number | null;
@@ -21,6 +23,10 @@ export interface BeamResultRow {
   /** Yalnız açık leventte. */
   kullanimPct?: number | null;
 }
+/** Çözgü hücresi (tablo + Excel/PDF aynı metin): "KOD · Ad", katmanlı işte "— <katman etiketi>". */
+export const warpSpecCellText = (r: Pick<BeamResultRow, "warpSpec" | "katman">): string =>
+  `${r.warpSpec.code} · ${r.warpSpec.name}${r.katman ? ` — ${r.katman.etiket}` : ""}`;
+
 export interface BeamResultReport {
   kapananlar: BeamResultRow[];
   acikLeventler: BeamResultRow[];
