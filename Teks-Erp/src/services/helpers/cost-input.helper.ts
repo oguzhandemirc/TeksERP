@@ -5,7 +5,7 @@
 // gövde metin ya da sayı gelir, buradan `Prisma.Decimal`e çevrilir. Aralıklar migration
 // `maliyet_girdileri` CHECK'lerinin aynasıdır (DB ikinci hat; kullanıcı Türkçe 400 görür).
 // =============================================================================
-import { Prisma } from "@prisma/client";
+import { Currency, Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 
@@ -52,6 +52,26 @@ export function parseDecimalField(raw: unknown, rule: DecimalRule): Prisma.Decim
     throw AppError.badRequest(`${rule.label} ${rule.maxExclusive ? `${rule.max}'den küçük` : `en çok ${rule.max}`} olmalı.`);
   }
   return d;
+}
+
+/** SY-D2 atkı ücreti (1 atkı/cm için metre başına; Excel'in "cent"i 0,02 USD) — CHECK `*_loom_pick_pair_ck` aynası. */
+export const PICK_RATE_RULE: DecimalRule = { label: "Atkı ücreti", min: 0, scale: 4 };
+
+/**
+ * Ücret + döviz ÇİFTİ: ikisi birlikte gelir, birlikte dolu ya da birlikte boş (DB CHECK ikinci hat).
+ * `undefined` = ikisi de gönderilmedi (dokunma).
+ */
+export function parsePickRatePair(rateRaw: unknown, currencyRaw: unknown): { rate: Prisma.Decimal | null; currency: Currency | null } | undefined {
+  if (rateRaw === undefined && currencyRaw === undefined) return undefined;
+  const rate = parseDecimalField(rateRaw, PICK_RATE_RULE) ?? null;
+  const cur = currencyRaw === undefined || currencyRaw === null || currencyRaw === "" ? null : currencyRaw;
+  if (cur !== null && !(typeof cur === "string" && (Object.values(Currency) as string[]).includes(cur))) {
+    throw AppError.badRequest(`Atkı ücreti dövizi şunlardan biri olmalı: ${Object.values(Currency).join(", ")}`);
+  }
+  if ((rate === null) !== (cur === null)) {
+    throw AppError.badRequest("Atkı ücreti ve dövizi birlikte girilir ya da birlikte boş bırakılır.", { code: "COST_PICK_RATE_PAIR" });
+  }
+  return { rate, currency: cur as Currency | null };
 }
 
 /** İsteğe bağlı kısa metin: `undefined` dokunma · boş → null · uzunluk tavanı. */

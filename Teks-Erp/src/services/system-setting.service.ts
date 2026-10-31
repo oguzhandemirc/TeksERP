@@ -193,6 +193,8 @@ export const SETTING_KEYS = {
   COST_PROFIT_SUBCONTRACT_SOURCE: "maliyet.karlilik.disFasonKaynagi",
   /** D4-G2a: kârlılıkta sarf birim fiyatı — `ALIS_FIYATI` (varsayılan; kartın alış fiyatı) · `SON_ALIS_FATURASI`. */
   COST_PROFIT_CONSUMABLE_PRICE_SOURCE: "maliyet.karlilik.sarfFiyatKaynagi",
+  /** SY-D2: dokuma standart maliyet yöntemi — `TEZGAH_SAATI` (varsayılan; devir × randıman × saat ücreti) · `ATKI_UCRETI` (atkı/cm × ücret). */
+  COST_WEAVING_STANDARD_METHOD: "maliyet.dokumaStandartYontemi",
   /** Tahsilat/ödeme kaydında en eski açık faturalara OTOMATİK kapama — FIFO
    *  (default FALSE). Bugün kapama (`PaymentAllocation`) elle seçilir; açıkken
    *  tutar vade/tarih sırasıyla açık bakiyelere dağıtılır ve artan tutar
@@ -1077,6 +1079,10 @@ export const DEFAULT_PROFIT_SUBCONTRACT_SOURCE: ProfitSubcontractSource = "FATUR
 export const PROFIT_CONSUMABLE_PRICE_SOURCES = ["ALIS_FIYATI", "SON_ALIS_FATURASI"] as const;
 export type ProfitConsumablePriceSource = (typeof PROFIT_CONSUMABLE_PRICE_SOURCES)[number];
 export const DEFAULT_PROFIT_CONSUMABLE_PRICE_SOURCE: ProfitConsumablePriceSource = "ALIS_FIYATI";
+/** SY-D2: dokuma standart maliyet yöntemi (motor girdisi derlenirken okunur; sürüm girdisinde donar). */
+export const WEAVING_STANDARD_METHODS = ["TEZGAH_SAATI", "ATKI_UCRETI"] as const;
+export type WeavingStandardMethod = (typeof WEAVING_STANDARD_METHODS)[number];
+export const DEFAULT_WEAVING_STANDARD_METHOD: WeavingStandardMethod = "TEZGAH_SAATI";
 
 /** Tambur plan kapısı EN kolu (bkz. `SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_CHECK`). */
 export type TamburPlanWidthCheck = "ENFORCE" | "OFF";
@@ -1927,6 +1933,8 @@ export interface FeatureFlags {
   costProfitSubcontractSource: ProfitSubcontractSource;
   /** D4-G2a: kârlılık sarf birim fiyatı kaynağı (varsayılan `ALIS_FIYATI`). */
   costProfitConsumablePriceSource: ProfitConsumablePriceSource;
+  /** SY-D2: dokuma standart maliyet yöntemi (varsayılan `TEZGAH_SAATI`). */
+  costWeavingStandardMethod: WeavingStandardMethod;
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; otomatik tahsis elle
    *  silinebilir; farklı para birimli fatura atlanır. */
@@ -2587,6 +2595,7 @@ export class SystemSettingService {
       financeCariHoldReleaseBySamePerson: await readFinanceCariHoldReleaseBySamePerson(cacheClient),
       costProfitSubcontractSource: await readCostProfitSubcontractSource(cacheClient),
       costProfitConsumablePriceSource: await readCostProfitConsumablePriceSource(cacheClient),
+      costWeavingStandardMethod: await readCostWeavingStandardMethod(cacheClient),
       financeAutoAllocateOnPaymentEnabled:
         await readFinanceAutoAllocateOnPaymentEnabled(cacheClient),
       yarnBlockNegativeBalanceEnabled: await readYarnBlockNegativeBalanceEnabled(cacheClient),
@@ -3150,6 +3159,13 @@ export class SystemSettingService {
         throw AppError.badRequest(`costProfitConsumablePriceSource şunlardan biri olmalı: ${PROFIT_CONSUMABLE_PRICE_SOURCES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.COST_PROFIT_CONSUMABLE_PRICE_SOURCE, v, "Kârlılıkta sarf birim fiyatı — kart alış fiyatı · son alış faturası", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "costWeavingStandardMethod")) {
+      const v = input.costWeavingStandardMethod;
+      if (typeof v !== "string" || !WEAVING_STANDARD_METHODS.includes(v as WeavingStandardMethod)) {
+        throw AppError.badRequest(`costWeavingStandardMethod şunlardan biri olmalı: ${WEAVING_STANDARD_METHODS.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.COST_WEAVING_STANDARD_METHOD, v, "Dokuma standart maliyet yöntemi — tezgah saati · atkı ücreti", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "financeAutoAllocateOnPaymentEnabled")) {
@@ -5387,6 +5403,11 @@ export function readCostProfitSubcontractSource(tx?: Pick<typeof prisma, "system
 /** D4-G2a: kârlılık sarf fiyatı kaynağı — tanınmayan değer varsayılana (`ALIS_FIYATI`) düşer. */
 export function readCostProfitConsumablePriceSource(tx?: Pick<typeof prisma, "systemSetting">): Promise<ProfitConsumablePriceSource> {
   return readServiceEnum(SETTING_KEYS.COST_PROFIT_CONSUMABLE_PRICE_SOURCE, PROFIT_CONSUMABLE_PRICE_SOURCES, DEFAULT_PROFIT_CONSUMABLE_PRICE_SOURCE, tx);
+}
+
+/** SY-D2: dokuma standart maliyet yöntemi — tanınmayan değer varsayılana (`TEZGAH_SAATI`, bugünkü motor) düşer. */
+export function readCostWeavingStandardMethod(tx?: Pick<typeof prisma, "systemSetting">): Promise<WeavingStandardMethod> {
+  return readServiceEnum(SETTING_KEYS.COST_WEAVING_STANDARD_METHOD, WEAVING_STANDARD_METHODS, DEFAULT_WEAVING_STANDARD_METHOD, tx);
 }
 
 /** D4-I1a: koyan kişi kendi kilidini açabilir mi — tanınmayan değer varsayılana (`ALLOW`) düşer. */

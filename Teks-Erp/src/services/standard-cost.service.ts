@@ -95,7 +95,7 @@ async function writeVersion(p: {
           totalCostPerMTry: roundCost4(r.totalCostPerMTry),
           warpKgPerM: roundKg6(r.warpKgPerM),
           weftKgPerM: roundKg6(r.weftKgPerM),
-          loomMPerHour: roundCost4(r.loomMPerHour),
+          loomMPerHour: r.loomMPerHour === null ? null : roundCost4(r.loomMPerHour),
           fxRates: fxRatesSnapshotSchema.parse(p.fx),
           inputSnapshot: serializeCostInput(p.input),
           inputHash: costInputHash(p.input),

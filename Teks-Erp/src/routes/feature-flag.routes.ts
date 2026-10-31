@@ -302,6 +302,8 @@ export const updateSchema = z.strictObject({
   // D4-G2a: kârlılık kaynakları (`PROFIT_SUBCONTRACT_SOURCES` / `PROFIT_CONSUMABLE_PRICE_SOURCES` ile birebir).
   costProfitSubcontractSource: z.enum(["FATURA_ONCE", "YALNIZ_FATURA"], { message: "Dış fason kaynağı FATURA_ONCE ya da YALNIZ_FATURA olmalı" }).optional(),
   costProfitConsumablePriceSource: z.enum(["ALIS_FIYATI", "SON_ALIS_FATURASI"], { message: "Sarf fiyatı kaynağı ALIS_FIYATI ya da SON_ALIS_FATURASI olmalı" }).optional(),
+  // SY-D2: dokuma standart maliyet yöntemi (`WEAVING_STANDARD_METHODS` ile birebir).
+  costWeavingStandardMethod: z.enum(["TEZGAH_SAATI", "ATKI_UCRETI"], { message: "Dokuma standart yöntemi TEZGAH_SAATI ya da ATKI_UCRETI olmalı" }).optional(),
   financeServiceBillingPriceDate: z.enum(["SERVICE_DAY", "DISPATCH_DAY"]).optional(),
   /** D4-H1: masraf kategorisi önerisi (`EXPENSE_CATEGORY_SUGGESTION_MODES` ile birebir). */
   financeExpenseCategorySuggestions: z.enum(["ON", "OFF"]).optional(),
