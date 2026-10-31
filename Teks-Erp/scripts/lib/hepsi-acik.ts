@@ -57,6 +57,8 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   financeInvoicePriceTolerancePct: A(5),
   financeChequeNoteMovementEnabled: A(true),
   financeRiskLimitBlockEnabled: A(true),
+  financeRiskLimitBlockIntake: A(true),
+  financeRiskLimitBlockShipment: A(true),
   financeAutoDraftFromShipmentEnabled: A(true),
   financeServiceBillingEnabled: A(true),
   financeServiceBillingMeterBasis: V("metre tabanı; üç değer de geçerli, varsayılan OUT okuma yolunu işletir"),

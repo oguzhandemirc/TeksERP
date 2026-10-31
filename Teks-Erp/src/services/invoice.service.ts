@@ -10,6 +10,7 @@
 // değiştirilebilen bir defter denetimde hiçbir şey kanıtlamaz.
 // =============================================================================
 import { assertCariNotHeldTx } from "./helpers/cari-hold.helper";
+import { riskExposureTx } from "./helpers/risk-exposure.helper";
 import {
   Prisma,
   InvoiceStatus,
@@ -1375,34 +1376,16 @@ export class InvoiceService {
     const enabled = await readFinanceRiskLimitBlockEnabled(tx);
     if (!enabled) return;
 
-    const cari = await tx.cariAccount.findUnique({
-      where: { id: ref.cariId },
-      select: {
-        riskLimit: true,
-        customer: { select: { name: true } },
-        subcontractor: { select: { name: true } },
-      },
-    });
-    if (!cari?.riskLimit) return; // limitsiz cari — kontrol yok
-
-    const rows = await tx.$queryRaw<Array<{ balance: string | number | Prisma.Decimal }>>`
-      SELECT balance FROM cari_balances
-       WHERE "cariId" = ${ref.cariId}::uuid AND currency = ${ref.currency}::"Currency"
-       FOR UPDATE
-    `;
-    const balance = rows[0] ? D(String(rows[0].balance)) : D0();
-    // POZİTİF bakiye = cari BİZE borçlu (`applyCariBalanceTx` sözleşmesi).
-    // Risk = mevcut borç + kesilecek faturanın tutarı.
-    const exposure = balance.plus(ref.amount);
-    const limit = D(cari.riskLimit);
-    if (exposure.lte(limit)) return;
-
-    const name = cari.customer?.name ?? cari.subcontractor?.name ?? "Cari";
+    // TEK çekirdek (D4-I2): FOR UPDATE + sıra aynen; limitsiz cari → [] (kontrol yok).
+    const [hit] = await riskExposureTx(tx, ref.cariId, ref.currency, ref.amount);
+    if (!hit?.exceeded) return;
+    const { name, limit, balance, exposure } = hit;
     throw AppError.conflict(
       `"${name}" risk limiti aşılıyor: limit ${limit.toFixed(2)} ${ref.currency}, ` +
         `mevcut bakiye ${balance.toFixed(2)}, bu fatura ${ref.amount.toFixed(2)} → toplam ${exposure.toFixed(2)}. ` +
         `Risk limiti engeli açık — limiti Cari Kartından güncelleyebilir, tahsilat girip tekrar deneyebilir ` +
         `ya da ${settingRowPath("financeRiskLimitBlockEnabled")} ayarını kapatabilirsiniz.`,
+      { code: "RISK_LIMIT_EXCEEDED" },
     );
   }
 

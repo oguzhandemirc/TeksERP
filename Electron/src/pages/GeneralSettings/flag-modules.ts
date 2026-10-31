@@ -170,6 +170,8 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   financeChequeNoteMovementEnabled: "financeEnabled",
   financeBlockNegativeCashEnabled: "financeEnabled",
   financeRiskLimitBlockEnabled: "financeEnabled",
+  financeRiskLimitBlockIntake: "financeEnabled",
+  financeRiskLimitBlockShipment: "financeEnabled",
   financeAllowZeroPriceLineEnabled: "financeEnabled",
   financeFutureDatedDocumentBlockEnabled: "financeEnabled",
   financeAutoDraftFromShipmentEnabled: "financeEnabled",
