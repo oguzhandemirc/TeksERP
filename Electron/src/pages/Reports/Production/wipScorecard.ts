@@ -46,12 +46,18 @@ export interface WipScorecard {
   }>;
 }
 
+/** İstek parametreleri — emanet sahibi süzgeci (D4-KUC3a) SUNUCUDA uygulanır (`ownerCustomerId`, D4-KUC2 h); boşsa gönderilmez. */
+export function wipQueryParams(p: ReportDateParams, ownerCustomerId: string | null): Record<string, string | undefined> {
+  return { ...p, ownerCustomerId: ownerCustomerId ?? undefined };
+}
+
 export const wipScorecardApi = {
-  get: (p: ReportDateParams) => reportsClient.get<WipScorecard>("production/wip", p),
+  get: (p: ReportDateParams, ownerCustomerId: string | null = null) =>
+    reportsClient.get<WipScorecard>("production/wip", wipQueryParams(p, ownerCustomerId)),
 };
 
-export function buildWipExport(opts: { sc: WipScorecard; periodLabel: string }): ReportExportSpec {
-  const { sc, periodLabel } = opts;
+export function buildWipExport(opts: { sc: WipScorecard; periodLabel: string; ownerFiltered?: boolean }): ReportExportSpec {
+  const { sc, periodLabel, ownerFiltered = false } = opts;
   return {
     title: "Nerede Takıldı (WIP)",
     subtitle: periodLabel,
@@ -61,6 +67,7 @@ export function buildWipExport(opts: { sc: WipScorecard; periodLabel: string }):
       "BEKLEYEN sütunları ANLIK durumdur — tarih aralığından ETKİLENMEZ.",
       "GEÇEN sütunları seçilen döneme aittir (o aralıkta istasyondan çıkan toplar).",
       "Bekleyen metraj, topun istasyona GİRİŞ metrajıdır. Giriş/çıkış farkı bir kayıp ölçüsü DEĞİLDİR ve bu yüzden basılmaz.",
+      ...(ownerFiltered ? ["Yalnız seçilen müşterinin emanet topları (sahip süzgeci); hiç başlamamış iş emirleri süzgeçten etkilenmez."] : []),
     ],
     tables: [
       {
