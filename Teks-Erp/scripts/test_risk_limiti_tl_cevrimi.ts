@@ -166,7 +166,8 @@ async function main(): Promise<void> {
     const kurYokSevk = (emanet: boolean) =>
       geriSarilan(async (tx) => {
         await tx.exchangeRate.deleteMany({ where: { currency: "USD" } });
-        return assertCustomerRiskLimitTx(tx, customerId, "SHIPMENT", async () => emanet);
+        // D4-I1c: muafiyet `emanetShipmentReleaseTx` kararıyla gelir (EXEMPT kipinde tamamı emanet → exempt).
+        return assertCustomerRiskLimitTx(tx, customerId, "SHIPMENT", async () => ({ mode: "EXEMPT", exempt: emanet, heldRolls: [] }));
       });
     const k3 = await kurYokSevk(true);
     check("§3c ⭐ K22: kur yok + tamamı emanet sevk → geçer (aşım gibi muafiyete sorulur)", k3.kod === "geçti", `${k3.kod} ${k3.mesaj}`);

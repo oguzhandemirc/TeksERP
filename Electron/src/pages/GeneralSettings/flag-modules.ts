@@ -156,6 +156,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   tamburShortCutA1ThresholdM: "productionEnabled",
   tamburPlanGateWidthToleranceCm: "productionEnabled",
   tamburPlanGateWidthCheck: "productionEnabled",
+  tamburChildWidthSource: "productionEnabled",
   tamburListByStationEnabled: "productionEnabled",
   machineStopTrackingEnabled: "productionEnabled",
   machineStopOpenWarningEnabled: "productionEnabled",
@@ -183,12 +184,16 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   financeExpenseCategorySuggestions: "financeEnabled",
   financeCariHoldDefaultScope: "financeEnabled",
   financeCariHoldReleaseBySamePerson: "financeEnabled",
+  financeCariHoldEmanetShipment: "financeEnabled",
+  costPresentationCurrency: "cekirdek", // SY-J1: `maliyetEnabled` gizlenebilir modül değil (HideableModule dışı)
   financeRiskLimitCurrencyMode: "financeEnabled",
   // D4-G2a: kârlılık geliri faturadan okunur (maliyet ∧ finans); maliyet gizlenebilir modül değil → sahibi finans.
   costProfitSubcontractSource: "financeEnabled",
   costProfitConsumablePriceSource: "financeEnabled",
   // SY-D2: yalnız dokuma kumaşının standart maliyetini etkiler → dokuma kapalıysa satır gizli.
   costWeavingStandardMethod: "dokumaEnabled",
+  costProfitMachineTime: "financeEnabled",
+  costProfitOverheadKey: "financeEnabled",
   financeAutoAllocateOnPaymentEnabled: "financeEnabled",
   // ⚠️ İPLİK bayrağı DEĞİL: kural FATURA ONAYINDA koşar (`finance/invoices`),
   // iplik defteri yalnız etkilenen taraftır. İplik modülü kapalı bir kurulumda

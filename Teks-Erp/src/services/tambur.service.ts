@@ -47,6 +47,7 @@ import {
   stepCanApplyQuality,
 } from "./helpers/quality-station.helper";
 import { resolveTargetWarehouseId } from "./helpers/warehouse.helper";
+import { pickFinalizeChildWidthTx } from "./helpers/finalize-child-width.helper";
 import {
   resolveTamburOverQuantityEnabled,
   readQualityGradeRequiredEnabled,
@@ -1218,6 +1219,10 @@ export class TamburService {
       // (Segmentler ve barkodları tx AÇILMADAN ÖNCE hazırlandı — gerekçe ve
       // ölçüm yukarıdaki blokta; barkodu burada üretmek sayaç kilidini bu tx'in
       // sonuna kadar tutardı.)
+      // Çocuk eni kaynağı fabrika ayarı (D4-E3; varsayılan bugünkü `wo.width ?? roll.width`).
+      const childWidth = await pickFinalizeChildWidthTx(tx, {
+        parentRollId: roll.id, parentWidth: roll.width, woWidth: wo?.width ?? null,
+      });
       const cutMeasures: CutReadingInput[] = [];
       for (const [segIndex, seg] of segments.entries()) {
         const splitBarcode = segmentBarcodes[segIndex]!;
@@ -1226,9 +1231,9 @@ export class TamburService {
             barcode: splitBarcode,
             itemId: roll.itemId,
             colorId: roll.colorId,
-            // Bitmiş topun eni = WO hedef eni (ham en KK1'de opsiyonel; ham
-            // top eni null olabilir). WO eni yoksa ham parent'ın enine düşülür.
-            width: wo?.width ?? roll.width,
+            // Bitmiş topun eni: ayar WO_TARGET_FIRST → WO hedef eni, yoksa ham parent;
+            // MEASURED_FIRST → ölçülmüş parent eni önce (pickFinalizeChildWidthTx).
+            width: childWidth,
             initialQty: seg.qty,
             currentQty: seg.qty,
             weightKg: null,

@@ -24,6 +24,8 @@ import {
 import { parseFxRates, resolveFx } from "./cost-calc.service";
 import { buildTurkishSearch } from "../utils/query-parser";
 import { decodeOffsetCursor, encodeOffsetCursor } from "../utils/cursor";
+import { readCostPresentationCurrency, type CostPresentationCurrency } from "./system-setting.service";
+import { costPresentation, frozenRate, presentationHeader, withPresentation } from "./helpers/cost-presentation.helper";
 
 const TABLE = "STANDARD_COST_VERSION";
 const versionSelect = {
@@ -34,8 +36,14 @@ const versionSelect = {
 type VersionRow = Prisma.StandardCostVersionGetPayload<{ select: typeof versionSelect }>;
 type LineRow = Prisma.StandardCostLineGetPayload<object>;
 
+/** Sunum dövizi (SY-J1): kur YALNIZ sürümün donmuş `fxRates`inden; ayar TRY iken yanıt bayt-aynı. */
+function presentVersion(v: VersionRow, setting: CostPresentationCurrency, lines?: LineRow[]) {
+  const pres = setting === "TRY" ? null : costPresentation(setting, frozenRate(v.fxRates, setting), "SURUM");
+  return withPresentation(storedVersionView(v, lines), pres);
+}
+
 /** Saklanan sürümün sunumu — DB değeri olduğu gibi (yeniden hesap YOK). */
-function presentVersion(v: VersionRow, lines?: LineRow[]) {
+function storedVersionView(v: VersionRow, lines?: LineRow[]) {
   return {
     id: v.id,
     surumNo: v.versionNo,
@@ -136,12 +144,13 @@ function auditVersion(res: { created: VersionRow; supersededId: string | null },
 /** `POST /api/cost/items/:itemId/versions` — canlı girdiden yeni ACTIVE sürüm. */
 export async function createStandardCostVersion(itemId: string, body: { reason?: string | null; fxRates?: Record<string, unknown> }, userId?: string) {
   const input = await prisma.$transaction((tx) => assembleCostInputTx(tx, { itemId }));
-  const fx = await resolveFx(input, parseFxRates(body.fxRates));
+  const setting = await readCostPresentationCurrency();
+  const fx = await resolveFx(input, parseFxRates(body.fxRates), setting);
   const out = computeFabricCost(input, fx.rates);
   if (!out.result) throw missingError(out);
   const res = await writeVersion({ itemId, input, out, fx: fx.snapshot, reason: body.reason ?? null, restoredFromId: null, userId });
   auditVersion(res, userId);
-  return presentVersion(res.created);
+  return presentVersion(res.created, setting);
 }
 
 /** Geri alma: eski sürümün DONMUŞ girdisi + kuruyla YENİ sürüm; eski satır değişmez. */
@@ -156,19 +165,20 @@ export async function restoreStandardCostVersion(itemId: string, versionId: stri
   const reason = body.reason ?? `Sürüm ${old.versionNo} geri alındı`;
   const res = await writeVersion({ itemId, input, out, fx: fxSnap, reason, restoredFromId: old.id, userId });
   auditVersion(res, userId);
-  return presentVersion(res.created);
+  return presentVersion(res.created, await readCostPresentationCurrency());
 }
 
 export async function listStandardCostVersions(itemId: string) {
   const rows = await prisma.standardCostVersion.findMany({ where: { itemId }, orderBy: { versionNo: "desc" }, select: versionSelect });
-  return rows.map((v) => presentVersion(v));
+  const setting = await readCostPresentationCurrency();
+  return rows.map((v) => presentVersion(v, setting));
 }
 
 /** `GET /api/cost/items/:itemId/versions/:versionId` — saklanan sürüm + satır dökümü (teklif kaleminin dondurduğu sürüm). */
 export async function getStandardCostVersion(itemId: string, versionId: string) {
   const v = await prisma.standardCostVersion.findFirst({ where: { id: versionId, itemId }, select: { ...versionSelect, lines: { orderBy: { lineNo: "asc" } } } });
   if (!v) throw AppError.notFound("Maliyet sürümü bulunamadı.");
-  return presentVersion(v, v.lines);
+  return presentVersion(v, await readCostPresentationCurrency(), v.lines);
 }
 
 export type StructureStatus = "YAPI_EKSIK" | "VARSAYILAN" | "TAM";
@@ -198,7 +208,7 @@ export async function getCostItem(itemId: string) {
     yapiDurumu: st.durum,
     eksikler: st.eksikler,
     uyarilar: st.uyarilar,
-    aktifSurum: active ? presentVersion(active, active.lines) : null,
+    aktifSurum: active ? presentVersion(active, await readCostPresentationCurrency(), active.lines) : null,
     girdiDegisti: active ? active.inputHash !== costInputHash(input) : false,
   };
 }
@@ -216,13 +226,18 @@ export async function listCostItems(q: CostItemListQuery) {
   const src = await prisma.$transaction((tx) => loadCostSourcesTx(tx, ids));
   const actives = ids.length ? await prisma.standardCostVersion.findMany({ where: { status: "ACTIVE", recipeId: null, itemId: { in: ids } }, select: versionSelect }) : [];
   const byItem = new Map(actives.map((v) => [v.itemId, v]));
+  const setting = await readCostPresentationCurrency();
+  const listPresentation = (v: VersionRow) => {
+    const pres = setting === "TRY" ? null : costPresentation(setting, frozenRate(v.fxRates, setting), "SURUM");
+    return pres ? presentationHeader(pres, v.totalCostPerMTry) : {};
+  };
   const rows = items.map((it) => {
     const input = buildCostInput(src, { itemId: it.id });
     const st = structureStatus(input);
     const v = byItem.get(it.id);
     return {
       itemId: it.id, kod: it.code, ad: it.name, yapiDurumu: st.durum, eksikler: st.eksikler, uyarilar: st.uyarilar,
-      aktifSurum: v ? { id: v.id, surumNo: v.versionNo, standartTlM: v.totalCostPerMTry.toFixed(4), hesaplananAt: v.computedAt } : null,
+      aktifSurum: v ? { id: v.id, surumNo: v.versionNo, standartTlM: v.totalCostPerMTry.toFixed(4), hesaplananAt: v.computedAt, ...listPresentation(v) } : null,
       girdiDegisti: v ? v.inputHash !== costInputHash(input) : false,
     };
   });

@@ -8,13 +8,16 @@
 //   §1 ayarlar KAPALI (varsayılan) — kapı tek ayar okuması, başka sorgu YOK; aşımlı caride sipariş/gelen belge/sevk geçer
 //   §2 iş kabulü AÇIK — sipariş + müşteri taşıma + gelen belge onayı 409 RISK_LIMIT_EXCEEDED (Türkçe), yazım yok;
 //      limit altı / limitsiz cari geçer; para birimleri AYRI ölçülür
-//   §3 sevk AÇIK — karışık sevk 409; tamamı emanet sevk GEÇER (K22); PLANNED dispatch 409, PLANNED kalır
+//   §3 sevk AÇIK — karışık sevk 409; tamamı emanet sevk GEÇER (K22); PLANNED dispatch 409, PLANNED kalır; emanet kararı
+//      cari kilidiyle AYNI ayardan (D4-I1c `finance.cariHold.emanetShipment`: ALL_HELD 409 + heldRolls, PROCESSED_HELD
+//      işlenmemiş emanet geçer)
 //   §4 fatura onayı — 409 metni bayt-aynı + details.code RISK_LIMIT_EXCEEDED (K24)
 //   §5 bilinmeyen ayar değeri 400
 //
 // ⭐ NEGATİF SONDA (ölçüldü 2026-10-30): ① shipping.service'e `cariAccount.riskLimit` okuyup `bal.plus(0).gt(limit)`
 //    yapan ikinci hesap eklendi → §0b ❌ (adıyla: shipping.service.ts:probeSecondExposure); ② performDispatchTx'ten
 //    risk kapısı silindi → §0i + §3c ❌ (PLANNED sevkiyat DISPATCHED oldu). Geri alındı → 30/0.
+//    ③ (D4-I1c, 2026-10-31) risk helper emanet kararını yok saydı (`if (release) return;`) → §3a §3c §3f §3g ❌; geri alındı → 33/0.
 // =============================================================================
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
@@ -79,6 +82,7 @@ const AYARLAR = [
   SETTING_KEYS.FINANCE_RISK_LIMIT_BLOCK_ENABLED,
   SETTING_KEYS.FINANCE_RISK_LIMIT_BLOCK_INTAKE,
   SETTING_KEYS.FINANCE_RISK_LIMIT_BLOCK_SHIPMENT,
+  SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT,
 ];
 const CMP = new Set(["gt", "gte", "lt", "lte", "greaterThan", "greaterThanOrEqualTo", "lessThan", "lessThanOrEqualTo", "comparedTo", "cmp"]);
 
@@ -146,9 +150,9 @@ function statik(): void {
   check("§0g sipariş yaratma + müşteri değişimi INTAKE risk kapısı", /assertCustomerRiskLimitTx\(prisma, data\.customerId as string, "INTAKE"\)/.test(ord) && /assertCustomerRiskLimitTx\(prisma, finalCustomerId, "INTAKE"\)/.test(ord));
   const ship = oku("services/shipping.service.ts");
   const core = govde(ship, "private async createShipmentCoreTx(", 4000);
-  check("§0h createShipmentCoreTx: risk kapısı yazımdan ÖNCE, emanet yüklemiyle", /assertCustomerRiskLimitTx\(tx, p\.customerId, "SHIPMENT", \(\) => rollsAllOwnedByTx/.test(core) && core.indexOf("assertCustomerRiskLimitTx(") < core.indexOf("tx.shipment.create("));
+  check("§0h createShipmentCoreTx: risk kapısı yazımdan ÖNCE, emanet yüklemiyle", /assertCustomerRiskLimitTx\(tx, p\.customerId, "SHIPMENT", emanetRelease\)/.test(core) && /const emanetRelease = \(\) => \(?(?:emanetMemo \?\?= )?emanetShipmentReleaseTx\(/.test(core) && core.indexOf("assertCustomerRiskLimitTx(") < core.indexOf("tx.shipment.create("));
   const disp = govde(ship, "private async performDispatchTx(", 3000);
-  check("§0i ⭐ performDispatchTx: risk kapısı claim'den (updateMany) ÖNCE", disp.includes('assertCustomerRiskLimitTx(tx, holdHeader.customerId, "SHIPMENT", ownEmanetOnly)') && disp.indexOf("assertCustomerRiskLimitTx(") < disp.indexOf("tx.shipment.updateMany("));
+  check("§0i ⭐ performDispatchTx: risk kapısı claim'den (updateMany) ÖNCE", disp.includes('assertCustomerRiskLimitTx(tx, holdHeader.customerId, "SHIPMENT", emanetRelease)') && disp.indexOf("assertCustomerRiskLimitTx(") < disp.indexOf("tx.shipment.updateMany("));
   const importers = tumTs(SRC).filter((f) => /from "[^"]*risk-exposure\.helper"/.test(readFileSync(f, "utf8"))).map((f) => path.relative(SRC, f)).sort();
   // D4-I5: bildirim koşul kaynağı çekirdeği OKUR (yazmaz, kapı değil) — `cari.risk-limiti-asildi`.
   const BEKLENEN = ["services/gelen-belge-onay.service.ts", "services/invoice.service.ts", "services/notification-sources/cari.ts", "services/order.service.ts", "services/shipping.service.ts"];
@@ -229,7 +233,7 @@ async function main(): Promise<void> {
       },
     });
     await assertCustomerRiskLimitTx(casus, A.customerId, "INTAKE");
-    await assertCustomerRiskLimitTx(casus, A.customerId, "SHIPMENT", async () => { sorgular.push("emanet"); return false; });
+    await assertCustomerRiskLimitTx(casus, A.customerId, "SHIPMENT", async () => { sorgular.push("emanet"); return { mode: "EXEMPT" as const, exempt: false, heldRolls: [] }; });
     check("§1a ⭐ kapalı kapı yalnız ayar okur (cari/bakiye/emanet sorgusu yok)", sorgular.length > 0 && sorgular.every((q) => q === "systemSetting.findUnique"), sorgular.join(", "));
     check("§1b aşımlı caride sipariş ön kapısı geçer", (await hata(() => orderService.prepareOrderCreate(govdeS(A.customerId), null, { userId: admin.id } as never))) === "geçti");
     const n1 = await not(A.customerId, 1);
@@ -283,6 +287,20 @@ async function main(): Promise<void> {
     const d3d = await geriSarilan((tx) => svc.performDispatchTx(tx, sEm.id, {}, admin.id));
     check("§3d K22: emanet PLANNED dispatch GEÇER", d3d === "GEÇTİ", d3d);
     check("§3e iş kabulü ayarı kapalıyken sipariş geçer", (await hata(() => orderService.prepareOrderCreate(govdeS(A.customerId), null, { userId: admin.id } as never))) === "geçti");
+    // D4-I1c: risk kapısı emanet kararını cari kilidiyle AYNI ayardan (`emanetShipmentReleaseTx`) alır.
+    const emanetMod = (v: string) => prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT }, create: { key: SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT, value: v }, update: { value: v } });
+    await emanetMod("ALL_HELD");
+    let held3f: unknown = null;
+    const k3f = await geriSarilan(async (tx) => {
+      try { await core(tx, A.customerId, emanet2, true); } catch (e) { held3f = (e as { details?: { heldRolls?: unknown[] } }).details?.heldRolls?.length ?? null; throw e; }
+    });
+    check("§3f ⭐ D4-I1c ALL_HELD: tamamı emanet sevk de 409 RISK_LIMIT_EXCEEDED, details.heldRolls tutulan top", k3f === "RISK_LIMIT_EXCEEDED" && held3f === 1, `${k3f} heldRolls=${String(held3f)}`);
+    const d3g = await geriSarilan((tx) => svc.performDispatchTx(tx, sEm.id, {}, admin.id));
+    check("§3g D4-I1c ALL_HELD: emanet PLANNED dispatch 409", d3g === "RISK_LIMIT_EXCEEDED", d3g);
+    await emanetMod("PROCESSED_HELD");
+    const k3h = await geriSarilan((tx) => core(tx, A.customerId, emanet2, true));
+    check("§3h D4-I1c PROCESSED_HELD: işlenmemiş emanet sevk geçer", k3h === "GEÇTİ", k3h);
+    await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.FINANCE_CARI_HOLD_EMANET_SHIPMENT } });
     await ayar(SETTING_KEYS.FINANCE_RISK_LIMIT_BLOCK_SHIPMENT, false);
 
     // ── §4 Fatura onayı ──

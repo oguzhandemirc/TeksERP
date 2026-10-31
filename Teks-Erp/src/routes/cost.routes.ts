@@ -26,6 +26,7 @@ import { getCostStructure, putCostStructure } from "../services/cost-structure.s
 import { changeMachineCostRate, createMachineCostRate, listMachineCostRates, revokeMachineCostRate } from "../services/machine-cost-rate.service";
 import { changeConsumableNorm, createConsumableNorm, listConsumableNorms, revokeConsumableNorm } from "../services/consumable-norm.service";
 import { previewCost } from "../services/cost-calc.service";
+import { suggestQuoteCurrency } from "../services/quote-currency.service";
 import {
   createStandardCostVersion,
   getCostItem,
@@ -562,6 +563,23 @@ const listQuery = z.object({
 router.post("/preview", requirePermission("cost:read"), wrap(async (req, res) => {
   const data = await previewCost(previewBody.parse(req.body ?? {}));
   res.status(200).json({ success: true, data });
+}));
+
+/**
+ * @openapi
+ * /api/cost/quote-currency:
+ *   get:
+ *     tags: [Cost]
+ *     summary: Yeni teklif para birimi ön seçimi (SY-J1) — müşterinin yayındaki fiyat listesi > maliyet sunum dövizi; ayar TRY iken TRY
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: query, name: customerId, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "{doviz, kaynak: VARSAYILAN|FIYAT_LISTESI|AYAR, fiyatListesiNo}" }
+ *       400: { description: Geçersiz müşteri ID }
+ */
+router.get("/quote-currency", requirePermission("quote:write"), wrap(async (req, res) => {
+  const { customerId } = z.object({ customerId: z.string().uuid("Geçersiz müşteri ID") }).parse(req.query);
+  res.status(200).json({ success: true, data: await suggestQuoteCurrency(customerId) });
 }));
 
 /**
