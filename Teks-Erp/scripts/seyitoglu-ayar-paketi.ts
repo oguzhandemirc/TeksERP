@@ -30,7 +30,7 @@ export const SEYITOGLU_SETTINGS: readonly PaketSatiri[] = [
   { anahtar: "maliyet.terbiyeKgTabani", alan: "costFinishingKgBasis", hedef: "IPLIK_TUKETIMI", dilim: "SY-E1" },
   { anahtar: "maliyet.sunumDovizi", alan: "costPresentationCurrency", hedef: "USD", dilim: "SY-J1" },
   { anahtar: "siparis.uretimOnerisi", alan: "orderProductionProposal", hedef: "ONIZLEME", dilim: "SY-M1" },
-  { anahtar: "siparis.hedefDegerOnerisi", alan: "orderTargetValueSuggestion", hedef: "MUSTERI_SON", dilim: "SY-F1" },
+  { anahtar: "siparis.hedefDegerOnerisi", alan: "orderTargetValueSuggestion", hedef: "MUSTERI_SON", dilim: "SY-F2b (ayrı dilim)" },
 ];
 
 /** TAM profilin Seyitoğlu için şart modülleri; kapalıysa uyarı (profil seçimi kurulumda). */

@@ -109,7 +109,7 @@ export function buildUpdatePayload(
     );
 
   const existingIds = new Set(editing.lines.map((l) => l.id));
-  const hadTargets = new Set(editing.lines.filter((l) => (l.targetValues ?? []).length > 0).map((l) => l.id));
+  const savedTargets = new Map(editing.lines.map((l) => [l.id, targetKey(l.targetValues ?? [])]));
 
   return {
     customerId: v.customerId,
@@ -134,14 +134,23 @@ export function buildUpdatePayload(
             customerColorName: l.customerColorName?.trim() ? l.customerColorName.trim() : null,
             cutNote: l.cutNote?.trim() ? l.cutNote.trim() : null,
             requiredPropertyIds: l.requiredPropertyIds ?? [],
-            ...targetValuesForUpdate(l.targetValues ?? [], hadTargets.has(l.clientId)),
+            ...targetValuesForUpdate(l.targetValues ?? [], savedTargets.get(l.clientId)),
           })),
         }
       : {}),
   };
 }
 
-/** Hedef varsa gönder; yoksa yalnız önceden hedefli satırda `[]` (temizle) gönder, aksi halde alan hiç yok. */
-function targetValuesForUpdate(targets: TargetValueItem[], hadTargets: boolean): { targetValues?: TargetValueItem[] } {
-  return targets.length > 0 || hadTargets ? { targetValues: targets } : {};
+/** Sıra bağımsız küme anahtarı — kayıtlı hedefle formdakini karşılaştırmak için. */
+function targetKey(targets: ReadonlyArray<{ propertyId: string; valueId: string }>): string {
+  return targets.map((t) => `${t.propertyId}:${t.valueId}`).sort().join("|");
+}
+
+/**
+ * Yalnız küme DEĞİŞTİYSE gönder; değişmediyse anahtar yok → sunucu mevcut kümeyi korur ve yeniden doğrulamaz
+ * (sonradan pasife alınan değer ilgisiz alanın kaydını 400'le kilitlemesin). Yeni satırda: hedef varsa gönder.
+ */
+function targetValuesForUpdate(targets: TargetValueItem[], saved: string | undefined): { targetValues?: TargetValueItem[] } {
+  if (saved === undefined) return targets.length > 0 ? { targetValues: targets } : {};
+  return targetKey(targets) === saved ? {} : { targetValues: targets };
 }

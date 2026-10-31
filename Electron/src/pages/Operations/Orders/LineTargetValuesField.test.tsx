@@ -84,9 +84,13 @@ describe("LineTargetValuesField", () => {
   });
 
   it("⭐ editörde: yalnız çeşitsiz bayrak → alan yok", async () => {
-    renderWithProviders(<OrderLinesEditor value={[line({ requiredPropertyIds: ["f-yikama"] })]} onChange={() => {}} customerId={null} />);
-    await screen.findByText("Yıkama");
-    expect(screen.queryByTestId("line-target-values")).toBeNull();
+    // Kuşaklı komşu satırın radiogroup'u = katalog YÜKLENDİ kanıtı; ardından çeşitsiz satırda alan olmadığı ölçülür.
+    renderWithProviders(<OrderLinesEditor value={[
+      line({ clientId: "k", requiredPropertyIds: ["f-kusak"] }),
+      line({ clientId: "y", requiredPropertyIds: ["f-yikama"] }),
+    ]} onChange={() => {}} customerId={null} />);
+    await screen.findByRole("radiogroup", { name: "Kuşak markası" });
+    expect(screen.getAllByTestId("line-target-values")).toHaveLength(1);
   });
 });
 
@@ -107,5 +111,23 @@ describe("Sipariş gövdesi — sıfır fark (§15.5)", () => {
     const [a, b] = body.lines ?? [];
     expect(Object.keys(a ?? {})).not.toContain("targetValues");
     expect(b?.targetValues).toEqual([]);
+  });
+
+  it("⭐ update: kayıtlı hedef DEĞİŞMEDİYSE anahtar yok (pasif değer ilgisiz kaydı kilitlemez); değiştiyse gider", () => {
+    const zeb = { propertyId: "c-kusak", valueId: "v-zeb" };
+    const editing = { status: "PENDING", lines: [
+      { id: "a", targetValues: [zeb], workOrderLinks: [] },
+      { id: "b", targetValues: [zeb], workOrderLinks: [] },
+    ] } as unknown as Order;
+    const other = { propertyId: "c-kusak", valueId: "v-diger" };
+    const body = buildUpdatePayload(
+      form([line({ clientId: "a", targetValues: [zeb] }), line({ clientId: "b", targetValues: [other] }), line({ clientId: "yeni", targetValues: [zeb] })]),
+      false,
+      editing,
+    );
+    const [a, b, c] = body.lines ?? [];
+    expect(Object.keys(a ?? {})).not.toContain("targetValues");
+    expect(b?.targetValues).toEqual([other]);
+    expect(c?.targetValues).toEqual([zeb]);
   });
 });
