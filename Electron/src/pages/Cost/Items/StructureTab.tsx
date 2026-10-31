@@ -12,6 +12,8 @@ import type { MeasuredWarpWaste } from "../shared/cost-types";
 import { decToInput, fmtDecFull, toDecimalText } from "../shared/format";
 import { CardSummary } from "./CardSummary";
 import { ProcessesEditor } from "./ProcessesEditor";
+import { StructurePickField } from "./StructurePickField";
+import { isCostCurrency, showPickFields, useWeavingPickMethod, type PickPair } from "../shared/loom-pick";
 import { STRUCTURE_FIELDS, STRUCTURE_MAX } from "./schema";
 import { costItemService, STRUCTURE_KEYS, type CostItemDetail, type StructureKey } from "./service";
 
@@ -28,6 +30,11 @@ export function StructureTab({ detail, measured, flagged }: { detail: CostItemDe
   const canWrite = useRoleAccess().hasPermission("cost:write");
   const [f, setF] = useState<Form>(() => formOf(detail));
   const [procs, setProcs] = useState<string[]>(() => (detail.yapi?.processes ?? []).map((p) => p.rateCode));
+  const pickVisible = showPickFields(useWeavingPickMethod(), { rate: detail.yapi?.loomPickRate, currency: detail.yapi?.loomPickCurrency });
+  const [pick, setPick] = useState<PickPair>(() => ({
+    rate: decToInput(detail.yapi?.loomPickRate ?? null),
+    currency: isCostCurrency(detail.yapi?.loomPickCurrency) ? detail.yapi.loomPickCurrency : "",
+  }));
   const rates = useQuery({ queryKey: ["cost-finishing-rates", "active"], queryFn: finishingRateService.listActive });
   const set = (k: keyof Form, v: string) => setF((x) => ({ ...x, [k]: v }));
   const save = useMutation({
@@ -38,6 +45,7 @@ export function StructureTab({ detail, measured, flagged }: { detail: CostItemDe
         extraCostLabel: f.extraCostLabel.trim() || null,
         notes: f.notes.trim() || null,
         processes: procs.filter((c) => c !== f.finishingRateCode),
+        ...(pickVisible ? { loomPick: { rate: toDecimalText(pick.rate), currency: pick.currency || null } } : {}),
       }),
     onSuccess: (r) => {
       toast.success(r.message ?? "Maliyet yapısı kaydedildi.");
@@ -71,6 +79,7 @@ export function StructureTab({ detail, measured, flagged }: { detail: CostItemDe
             {f.finishingRateCode && !(rates.data ?? []).some((r) => r.code === f.finishingRateCode) && <option value={f.finishingRateCode}>{f.finishingRateCode} (aktif değil)</option>}
           </select>
         </label>
+        {pickVisible && <StructurePickField value={pick} onChange={setPick} disabled={!canWrite} />}
         <label className="text-sm"><span className="text-muted-foreground">Ek kalem etiketi</span>
           <Input className="mt-1" disabled={!canWrite} maxLength={STRUCTURE_MAX.extraCostLabel} value={f.extraCostLabel} onChange={(e) => set("extraCostLabel", e.target.value)} /></label>
         <label className="text-sm sm:col-span-2"><span className="text-muted-foreground">Not</span>
