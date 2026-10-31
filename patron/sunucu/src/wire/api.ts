@@ -233,6 +233,22 @@ export const CARI_LOCK_SCOPE_LABELS: Readonly<Record<string, string>> = { KABUL:
 /** Sebep kodu → görünen ad (fabrika `CARI_HOLD_REASON_LABELS` ile aynı). */
 export const CARI_LOCK_REASON_LABELS: Readonly<Record<string, string>> = { BORC: "Borç", RISK: "Risk", ANLASMAZLIK: "Anlaşmazlık", DIGER: "Diğer" };
 
+// ---------------------------------------------------------------- iş emri sevke hazırlığı (D4-J5)
+
+/**
+ * `is-emri` kaydının `sevkeHazir` alanı (fabrika `ship-readiness` ile türetir; bulut ve uygulama hesap YAPMAZ).
+ * Canlı topu olmayan iş emrinde `null`; eski fabrika alanı GÖNDERMEZ (`undefined`) → rozet yok.
+ * Metreler tel ondalığıdır (string ya da sayı); yalnız biçimlenir.
+ */
+export interface WorkOrderShipReadiness {
+  readonly durum: "HAZIR" | "KISMEN" | "YOK";
+  readonly hazirTop: number;
+  readonly hazirMetre: string | number;
+}
+
+/** Durum kodu → rozet metni; `YOK` ve bilinmeyen kod rozet çizmez. */
+export const SHIP_READINESS_LABELS: Readonly<Record<string, string>> = { HAZIR: "Sevke hazır", KISMEN: "Kısmen hazır" };
+
 /** `GET /anlik/:projeksiyon`. */
 export interface Snapshot {
   readonly projeksiyon: string;

@@ -7,6 +7,7 @@ import { Text, View } from "react-native";
 import { can } from "../../../src/lib/access";
 import { formatDate, formatNumber } from "../../../src/lib/format";
 import { lookup } from "../../../src/lib/labels";
+import { shipReadinessView } from "../../../src/lib/ship-readiness";
 import { PERIODS, PERIOD_LABEL, UNIT, WORK_ORDER_STATUS, WORK_ORDER_TYPE, recordStatus, type PeriodKey } from "../../../src/lib/labels/uretim";
 import { TERIM } from "../../../src/lib/terim";
 import { useSession } from "../../../src/state/session";
@@ -23,6 +24,7 @@ import { FactoryStamp, SnapshotGate } from "../../../src/ui/pano/SnapshotGate";
 import { combine, useSnapshot } from "../../../src/ui/pano/useSnapshot";
 import { SectionHeader } from "../../../src/ui/SectionHeader";
 import { SegmentedControl } from "../../../src/ui/SegmentedControl";
+import { StatusBadge } from "../../../src/ui/StatusBadge";
 import { makeStyles } from "../../../src/ui/theme-context";
 import { space, typography } from "../../../src/ui/tokens";
 import { EMPTY_ICON } from "../../../src/ui/icons";
@@ -114,11 +116,18 @@ export default function Production() {
           const k = obj(r.kayit);
           const st = recordStatus(WORK_ORDER_STATUS, k.durum);
           const end = str(k.planBitis);
+          const ready = shipReadinessView(k);
+          const lines = [`${lookup(WORK_ORDER_TYPE, k.tur)}${end ? ` · plan ${formatDate(end)}` : ""}`, `${formatNumber(k.uretilenMetre, 0)} / ${formatNumber(k.hedefMiktar, 0)} ${UNIT.metre} üretildi`];
           return (
             <ListRow
               title={str(k.isEmriNo) ?? "—"}
-              accessory={<RecordStatusBadge entry={st} testID={`durum-${r.id}`} />}
-              lines={[`${lookup(WORK_ORDER_TYPE, k.tur)}${end ? ` · plan ${formatDate(end)}` : ""}`, `${formatNumber(k.uretilenMetre, 0)} / ${formatNumber(k.hedefMiktar, 0)} ${UNIT.metre} üretildi`]}
+              accessory={
+                <View style={s.badges}>
+                  <RecordStatusBadge entry={st} testID={`durum-${r.id}`} />
+                  {ready ? <StatusBadge kind={ready.kind} label={ready.label} size="sm" testID={`sevke-hazir-${r.id}`} /> : null}
+                </View>
+              }
+              lines={ready ? [...lines, ready.text] : lines}
               domain="uretim"
               icon="clipboard-outline"
               onPress={() => openRecord(router, "is-emri", r.id)}
@@ -134,4 +143,5 @@ export default function Production() {
 const useStyles = makeStyles((t) => ({
   caption: { ...typography.footnote, fontWeight: "600" as const, color: t.textSecondary, marginTop: space.s, marginBottom: space.xs },
   segment: { marginBottom: space.m },
+  badges: { flexDirection: "row" as const, flexWrap: "wrap" as const, gap: space.xs, justifyContent: "flex-end" as const },
 }));

@@ -13,7 +13,7 @@ export function CardSummary({ g }: { g: CostInputSnap }) {
         <h3 className="mb-1 font-medium">Çözgü</h3>
         {g.warp ? (
           <p className="text-muted-foreground">
-            {g.warp.endsCount} tel · {g.warp.yarn.name} {fmtDecFull(g.warp.yarn.denier.value)} den · çekme %{src(g.warp.takeUpPct)}
+            {g.warp.endsCount} tel · {g.warp.yarn.name} {fmtDecFull(g.warp.yarn.denier.value)} den · çekme %{src(g.warp.takeUpPct)} · fire %{src(g.warp.wastePct)}
           </p>
         ) : <p className="text-destructive">Çözgü kartı bağlı değil.</p>}
         <Link className="text-xs underline" to="/definitions/warp-specs">Çözgü kartlarına git</Link>

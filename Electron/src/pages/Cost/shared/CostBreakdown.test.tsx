@@ -37,3 +37,25 @@ describe("CostBreakdown", () => {
     expect(screen.getByText(/tahminle doldurulmaz/)).toBeInTheDocument();
   });
 });
+
+describe("CostBreakdown — sunum dövizi (SY-J1)", () => {
+  const usd = { ...sonuc, sunumDovizi: "USD" as const, sunumKuru: "34", sunumKuruKaynagi: "SURUM" as const, sunumUyarisi: null, standartDovizM: "2.2659",
+    satirlar: [{ ...line(1, "10.0000"), tutarDoviz: "0.2941" }] };
+  it("ayar TRY (alan yok) → döviz sütunu ve kur notu çizilmez", () => {
+    render(<CostBreakdown sonuc={sonuc} eksikler={[]} uyarilar={[]} />);
+    expect(screen.queryByTestId("cost-total-fx")).toBeNull();
+    expect(screen.queryByTestId("presentation-rate")).toBeNull();
+  });
+  it("USD → standart döviz/m sunucu alanından, donmuş kur notu", () => {
+    render(<CostBreakdown sonuc={usd} eksikler={[]} uyarilar={[]} />);
+    expect(screen.getByTestId("cost-total-fx")).toHaveTextContent("2,2659 USD/m");
+    expect(screen.getByTestId("presentation-rate")).toHaveTextContent("1 USD = 34 TL");
+    expect(screen.getByTestId("presentation-rate")).toHaveTextContent(/donmuş/);
+    expect(screen.getByText("0,2941")).toBeInTheDocument();
+  });
+  it("kur yok → uyarı, döviz tutarı '—' (1 varsayılmaz)", () => {
+    render(<CostBreakdown sonuc={{ ...usd, sunumKuru: null, sunumUyarisi: "FX_MISSING", standartDovizM: null }} eksikler={[]} uyarilar={[]} />);
+    expect(screen.getByText(/USD kuru bulunamadı/)).toBeInTheDocument();
+    expect(screen.getByTestId("cost-total-fx")).toHaveTextContent("—");
+  });
+});

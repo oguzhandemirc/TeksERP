@@ -1192,35 +1192,37 @@ model Machine {
   warpBeamSlots Int @default(1) @db.SmallInt
 
   // Relations
-  station        Station                  @relation(fields: [stationId], references: [id])
-  devices        Device[]
-  peripherals    PeripheralDevice[] // birleşik cihaz kaydı (yazıcı/kantar/metre/sinyal — makineye sabit)
-  rollOperations RollOperation[]
-  meterReadings  RollMeterReading[]
-  rollMovements  RollMovement[]
-  workSessions   WorkSession[]
-  rollsCreated   Roll[]                   @relation("RollCreatedMachine") // KK1 girişi makine atfı
-  warpBeamEvents WarpBeamEvent[]          @relation("WarpBeamEventMachine") // devere: WOUND.machineId
-  mountedBeams   WarpBeam[]               @relation("WarpBeamCurrentMachine") // Faz 3: yuvadaki leventler
+  station            Station                  @relation(fields: [stationId], references: [id])
+  devices            Device[]
+  peripherals        PeripheralDevice[] // birleşik cihaz kaydı (yazıcı/kantar/metre/sinyal — makineye sabit)
+  rollOperations     RollOperation[]
+  meterReadings      RollMeterReading[]
+  rollMovements      RollMovement[]
+  workSessions       WorkSession[]
+  rollsCreated       Roll[]                   @relation("RollCreatedMachine") // KK1 girişi makine atfı
+  warpBeamEvents     WarpBeamEvent[]          @relation("WarpBeamEventMachine") // devere: WOUND.machineId
+  mountedBeams       WarpBeam[]               @relation("WarpBeamCurrentMachine") // Faz 3: yuvadaki leventler
   /// Kurşun bypass: bu MAKİNEYE atanan işler. Atama makine bazındadır — tek
   /// PROCESS_QC istasyonu altında N fiziksel kurşun makinesi vardır.
-  kursunBypasses KursunBypassAssignment[]
+  kursunBypasses     KursunBypassAssignment[]
   /// Tezgah koşumları — `Restrict`, ve `MACHINE_DELETE_GUARDS`ta sayacı var.
-  machineRuns    MachineRun[]
+  machineRuns        MachineRun[]
   /// Tezgah künyesi — `Cascade` (künye makinesiz anlamsız). Referans profilde BOŞ.
-  machineSpec    MachineSpec?
+  machineSpec        MachineSpec?
   /// Tezgah duruşları — `Restrict`; guard'ı ingest diliminde (yazan yol orada doğar).
-  machineStops   MachineStopEvent[]
-  loomAlarms     LoomAlarm[]
-  doffEvents     DoffEvent[]
+  machineStops       MachineStopEvent[]
+  loomAlarms         LoomAlarm[]
+  doffEvents         DoffEvent[]
   /// Vardiya karneleri — `Restrict`, `MACHINE_DELETE_GUARDS`ta sayacı var (`machineShiftStatCount`).
-  shiftStats     MachineShiftStat[]
+  shiftStats         MachineShiftStat[]
   /// Toplayıcı kapsamı — `Cascade` (kapsam satırı makinesiz anlamsız).
-  collectorLinks MachineCollectorLink[]
+  collectorLinks     MachineCollectorLink[]
   /// Ham duruş kodu eşlemesinin tezgah üst-yazımı — `Cascade` (yapılandırma, makinesiz konusuz).
-  stopCodeMaps   MachineStopCodeMap[]
+  stopCodeMaps       MachineStopCodeMap[]
   /// Saat ücreti sürümleri (D4-G1a) — `Restrict`: tarifesi olan makine silinmez (pasife alınır).
-  costRates      MachineCostRate[]
+  costRates          MachineCostRate[]
+  /// Masraf bağları (D4-H3) — `Restrict`: masraf bağlanmış makine silinmez.
+  expenseAllocations ExpenseAllocation[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -1390,18 +1392,23 @@ model PeripheralDevice {
   identifyPattern String? @db.VarChar(255) // SCALE/METER veri çözüm regex'i
 
   // --- Giriş cihazı (SCALE/METER) okuma protokolü — davranış tamamen VERİ ---
-  readMode     PeripheralReadMode @default(POLL) // POLL=sor-cevap (komut yolla), STREAM=sürekli yayın (dinle)
-  pollCommand  String?            @db.VarChar(64) // POLL sorgu komutu; escape destekli (\r \n \xNN), TAM gönderilir
-  terminator   String?            @db.VarChar(8) // Yanıt satır sonu (örn "\r\n"); boş → herhangi CR/LF
-  decimals     Int? // Codec yuvarlama hassasiyeti (boş → 1)
-  scale        Decimal?           @db.Decimal(10, 4) // Ham → mühendislik çarpanı (cm→m: 0.01); boş → 1
-  timeoutMs    Int? // Okuma zaman aşımı ms (boş → 2500)
-  role         String?            @db.VarChar(24) // Makine içi ayraç: "2-KAT" / "4-KAT" / "PRIMARY"
-  simulate     Boolean            @default(false) // Per-cihaz simülasyon (gerçek I/O yerine sahte değer)
+  readMode         PeripheralReadMode @default(POLL) // POLL=sor-cevap (komut yolla), STREAM=sürekli yayın (dinle)
+  pollCommand      String?            @db.VarChar(64) // POLL sorgu komutu; escape destekli (\r \n \xNN), TAM gönderilir
+  terminator       String?            @db.VarChar(8) // Yanıt satır sonu (örn "\r\n"); boş → herhangi CR/LF
+  decimals         Int? // Codec yuvarlama hassasiyeti (boş → 1)
+  scale            Decimal?           @db.Decimal(10, 4) // Ham → mühendislik çarpanı (cm→m: 0.01); boş → 1
+  timeoutMs        Int? // Okuma zaman aşımı ms (boş → 2500)
+  role             String?            @db.VarChar(24) // Makine içi ayraç: "2-KAT" / "4-KAT" / "PRIMARY"
+  simulate         Boolean            @default(false) // Per-cihaz simülasyon (gerçek I/O yerine sahte değer)
   /// Sayaç sıfırlama komutu (pollCommand ikizi, escape destekli); boş → sıfırlanmaz, metre = okuma − başlangıç.
-  resetCommand String?            @db.VarChar(64)
+  resetCommand     String?            @db.VarChar(64)
   /// Sayaç davranışı — RESETTING her işte sıfırlanır, CUMULATIVE birikir (fark alınır). Boş → cihaz verisi yok.
-  counterMode  MeterCounterMode?
+  counterMode      MeterCounterMode?
+  /// B5 (B-3, kullanıcı kararı 2026-10-31): sayaç KALİBRASYON kaydı İSTEĞE BAĞLI — NULL = kayıt yok. Kontrol ayarı
+  /// system_settings'te (varsayılan kapalı; açıksa yalnız UYARIR). CHECK vade ≥ kalibrasyon (`peripheral_devices_calibration_ck`).
+  calibratedAt     DateTime?          @db.Timestamptz
+  calibrationDueAt DateTime?          @db.Timestamptz
+  calibrationNote  String?            @db.VarChar(200)
 
   // Sahiplik — tam biri (serviste enforce edilir).
   machineId String?  @db.Uuid
@@ -3571,6 +3578,8 @@ model Item {
   consumableNormsAsService       ServiceConsumableNorm[]     @relation("ServiceConsumableNormService")
   consumableNormsAsConsumable    ServiceConsumableNorm[]     @relation("ServiceConsumableNormConsumable")
   serviceBillingLinks            ServiceBillingLink[]        @relation("ServiceBillingLinkItem")
+  /// D4-H3: hizmet kalemine bağlanan kasa masrafı payları.
+  expenseAllocations             ExpenseAllocation[]
   /// G1: fasona giden iplik kalemleri (kind=YARN).
   subcontractorDispatchYarnItems SubcontractorDispatchItem[] @relation("DispatchItemYarnItem")
 
@@ -4845,6 +4854,9 @@ model WorkOrder {
   createdBy   User?   @relation("WorkOrderCreatedBy", fields: [createdById], references: [id])
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("WorkOrderUpdatedBy", fields: [updatedById], references: [id])
+
+  /// D4-H3: işe bağlanan kasa masrafı payları.
+  expenseAllocations ExpenseAllocation[]
 
   @@index([routeTemplateId])
   @@index([targetItemId])
@@ -9205,6 +9217,9 @@ model FabricProperty {
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   categoryFold          String?                        @default(dbgenerated())
 
+  /// D2b: bu özelliğe kapsamlı gelen belge PROCESS eşlemeleri.
+  deliveryNoteAliases DeliveryNoteAlias[]
+
   // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
   // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
   // Audit'ten OKUNMAZ — audit 6 ayda arşivlenir, künye kaybolmamalı.
@@ -10802,7 +10817,24 @@ model CariAccount {
   /// `PER_SHIPMENT` | `PERIOD_END` (DB CHECK). Tek çözücü `resolveCustomerServiceBillingTrigger`.
   serviceBillingTrigger String? @db.VarChar(20)
 
+  /// V1 (B-1, kullanıcı kararı 2026-10-31): KDV / tevkifat MÜŞTERİ GEÇERSİZ KILMASI — NULL = genel ayar
+  /// (system_settings). Fatura satırı oranı DOĞUŞTA damgalar (`InvoiceLine.vatRate/withholdingRate`); bu alanlar
+  /// yalnız yeni faturanın ön değeridir. KDV CHECK 0..100; tevkifat pay/payda ikisi birlikte, 1 ≤ pay ≤ payda
+  /// (`cari_accounts_vat_override_ck`, `cari_accounts_withholding_ck`).
+  vatRate                Decimal? @db.Decimal(5, 2)
+  /// Tevkifat uygulanır mı — NULL = genel ayar; false = bu caride uygulanmaz.
+  withholdingEnabled     Boolean?
+  /// Tevkifat oranı pay/payda (ör. 5/10) — NULL = genel ayar.
+  withholdingNumerator   Int?     @db.SmallInt
+  withholdingDenominator Int?     @db.SmallInt
+
+  /// BİRLEŞTİRİLDİ (K3d): çift hesabın bakiyesi virmanla aktarıldığı SURVIVOR hesap. Dolu ⇒ `isActive=false`
+  /// (CHECK `cari_accounts_merged_inactive_ck`); kendini gösteremez (CHECK `cari_accounts_merged_self_ck`).
+  mergedIntoId String? @db.Uuid
+
   customer      Customer?      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  mergedInto    CariAccount?   @relation("CariAccountMerge", fields: [mergedIntoId], references: [id], onDelete: Restrict)
+  mergedFrom    CariAccount[]  @relation("CariAccountMerge")
   subcontractor Subcontractor? @relation(fields: [subcontractorId], references: [id], onDelete: Restrict)
 
   balances     CariBalance[]
@@ -10834,6 +10866,7 @@ model CariAccount {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@index([kind, isActive])
+  @@index([mergedIntoId])
   // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
   @@index([updatedAt, id], map: "cari_accounts_updatedAt_esitleme_idx")
   @@map("cari_accounts")
@@ -11101,6 +11134,12 @@ enum CariTxnSource {
   /// İade stornosu — iadenin yazdığı `CHEQUE_CANCEL` satırının tersi. İptalin
   /// tersiyle karışmasın diye ayrı değer: ekstre hangi olayın geri alındığını söyler.
   CHEQUE_RETURN_CANCEL
+  /// CARİ VİRMAN (K3d, kullanıcı kararı 2026-10-30; SAP transfer posting / cari virman fişi): hareketli çift
+  /// hesabın bakiyesi survivor'a İKİ BACAKLA aktarılır (kaynakta kapatan, hedefte açan; `transferGroupId` bağlar).
+  /// Geçmiş taşınmaz. Kendi migration'ında ADD VALUE (aynı-tx kuralı).
+  CARI_TRANSFER
+  /// Virman stornosu — iki bacağın tersi (`reversesTxnId` her bacağı kendi orijinaline bağlar).
+  CARI_TRANSFER_CANCEL
 }
 
 /// Cari hareket defteri — APPEND-ONLY.
@@ -11141,6 +11180,13 @@ model CariTransaction {
   reversesTxnId String?       @unique @db.Uuid
   description   String?       @db.VarChar(300)
 
+  /// Virmanın İKİ bacağını bağlar (K3d; `CashTransaction.transferGroupId` emsali). CHECK: yalnız
+  /// `CARI_TRANSFER*` satırında dolu ve orada ZORUNLU (`cari_transactions_transfer_group_ck`).
+  transferGroupId String?   @db.Uuid
+  /// Aktarılan açık kalemin VADESİ (yalnız `CARI_TRANSFER`; CHECK `cari_transactions_transfer_due_ck`).
+  /// Yaşlandırma vadeyi faturadan okur; virman bacağının faturası yoktur (DEVİR gibi "Vadesiz" düşerdi).
+  dueDate         DateTime? @db.Timestamptz
+
   createdById String? @db.Uuid
 
   cari       CariAccount      @relation(fields: [cariId], references: [id], onDelete: Restrict)
@@ -11161,6 +11207,7 @@ model CariTransaction {
   // sorguda okunur. PARTIAL DEĞİL — komşu iki kaynak bağı da (invoiceId,
   // paymentId) tam index; aynı tablodaki üç bağın üçü aynı desende kalsın.
   @@index([chequeId])
+  @@index([transferGroupId])
   // Patron bulutu eşitleme filigranı `(createdAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
   @@index([createdAt, id], map: "cari_transactions_createdAt_esitleme_idx")
   @@map("cari_transactions")
@@ -11457,6 +11504,9 @@ model CashTransaction {
   cashBox     CashBox?     @relation(fields: [cashBoxId], references: [id], onDelete: Restrict)
   bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
   payment     Payment?     @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  /// D4-H3: masrafın makine / iş emri / hizmet kalemine pay bağları (damgalı; kolon DEĞİL, K19).
+  expenseAllocations ExpenseAllocation[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -13747,6 +13797,40 @@ model ServiceConsumableNorm {
   @@map("service_consumable_norms")
 }
 
+/// MASRAF BAĞI — kasa masrafının (EXPENSE) makine / iş emri / hizmet kalemine PAYI (D4-H3, K19, ister 5.3/4.3).
+/// DEFTER (silinirse kârlılık değişir): ters = DAMGA (`revokedAt`); değişim = damga + yeni satır (tek tx).
+/// Hedef TAM OLARAK BİRİ (CHECK `expense_allocations_target_ck`); pay 0 < x ≤ 100 (CHECK `expense_allocations_share_ck`);
+/// Σ aktif pay ≤ 100 serviste (kilitli). Okuma YALNIZ as-of okuyucu `listExpenseAllocationsAsOf` (§9.5).
+model ExpenseAllocation {
+  id                String    @id @default(uuid()) @db.Uuid
+  cashTransactionId String    @db.Uuid
+  machineId         String?   @db.Uuid
+  workOrderId       String?   @db.Uuid
+  serviceItemId     String?   @db.Uuid
+  /// Masrafın yüzde payı — CHECK 0 < x ≤ 100.
+  sharePct          Decimal   @db.Decimal(5, 2)
+  clientToken       String    @unique @db.Uuid
+  createdById       String?   @db.Uuid
+  /// Damga açanı taşır (CHECK `expense_allocations_revoke_actor_chk`).
+  revokedAt         DateTime? @db.Timestamptz
+  revokedById       String?   @db.Uuid
+  revokeReason      String?   @db.VarChar(300)
+
+  cashTransaction CashTransaction @relation(fields: [cashTransactionId], references: [id], onDelete: Restrict)
+  machine         Machine?        @relation(fields: [machineId], references: [id], onDelete: Restrict)
+  workOrder       WorkOrder?      @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  serviceItem     Item?           @relation(fields: [serviceItemId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // Masrafın aktif bağları: ŞEMA-DIŞI kısmi index `expense_allocations_active_txn_idx` (WHERE revokedAt IS NULL).
+  @@index([machineId])
+  @@index([workOrderId])
+  @@index([serviceItemId])
+  @@map("expense_allocations")
+}
+
 /// ÜRÜNÜN MALİYETE ÖZGÜ EKLERİ — KATALOG (canlı ayar; parasal sonucu standart maliyet
 /// sürümünde donar). Yalnız kartta OLMAYANLAR; her alan NULL = parametre varsayılanı.
 /// `finishingRateCode` KOD tutar (fiyat değişince yapı değişmez; aktif tarifeye çözülür).
@@ -14361,14 +14445,19 @@ model DeliveryNoteAlias {
   /// Katlanmış ham metin (uygulama katlar; `Fold` son eki GENERATED kolonlara ayrılmıştır).
   rawKey           String                 @db.VarChar(160)
   targetId         String                 @db.Uuid
+  /// D2b (D4-SEMA): ÖZELLİK KAPSAMI — yalnız `PROCESS` (CHECK `delivery_note_aliases_property_scope_ck`); aynı ham
+  /// metin farklı özellikte farklı değere eşlenebilir. NULL = kapsamsız (bugünkü satırlar; davranış aynı).
+  propertyId       String?                @db.Uuid
   hitCount         Int                    @default(0)
   createdAt        DateTime               @default(now()) @db.Timestamptz
   updatedAt        DateTime               @updatedAt @db.Timestamptz
 
-  senderCustomer Customer? @relation(fields: [senderCustomerId], references: [id], onDelete: Restrict)
+  senderCustomer Customer?       @relation(fields: [senderCustomerId], references: [id], onDelete: Restrict)
+  property       FabricProperty? @relation(fields: [propertyId], references: [id], onDelete: Restrict)
 
-  // E4: DB'de NULLS NOT DISTINCT (gönderensiz anahtar da tekil; öğrenme tek ifade `INSERT … ON CONFLICT`).
-  @@unique([scope, senderCustomerId, rawKey])
+  // E4: DB'de NULLS NOT DISTINCT (gönderensiz/kapsamsız anahtar da tekil; öğrenme tek ifade `INSERT … ON CONFLICT`).
+  @@unique([scope, senderCustomerId, propertyId, rawKey])
+  @@index([propertyId])
   @@index([targetId])
   @@map("delivery_note_aliases")
 }

@@ -4,8 +4,8 @@ import { factoryDaySql } from "../constants/time";
 import { col, derived, lookup, self, via, type RecordProjection } from "./projection-types";
 
 // ── OLGU projeksiyonları ──────────────────────────────────────────────────────
-const WO_OF_ROLLS =
-  'SELECT DISTINCT s."workOrderId" AS root_id FROM "rolls" r JOIN "work_order_steps" s ON s."id" IN (r."producedInStepId", r."currentStepId") WHERE r."id" = ANY($1::uuid[])';
+// İkinci kol: sevke hazırlık (D4-J5) topu partisinin iş emrinden sayar — top durumu değişince o iş emri de gider.
+const WO_OF_ROLLS = 'SELECT s."workOrderId" AS root_id FROM "rolls" r JOIN "work_order_steps" s ON s."id" IN (r."producedInStepId", r."currentStepId") WHERE r."id" = ANY($1::uuid[]) UNION SELECT b."workOrderId" AS root_id FROM "rolls" r JOIN "batches" b ON b."id" = r."batchId" WHERE r."id" = ANY($1::uuid[]) AND b."workOrderId" IS NOT NULL';
 const WO_OF_STEPS = 'SELECT DISTINCT s."workOrderId" AS root_id FROM "work_order_steps" s WHERE s."id" = ANY($1::uuid[])';
 const WO_OF_ORDER_LINES =
   'SELECT DISTINCT l."workOrderId" AS root_id FROM "work_order_to_order_lines" l WHERE l."orderLineId" = ANY($1::uuid[]) AND l."unlinkedAt" IS NULL';
@@ -124,6 +124,7 @@ export const FACTS: readonly RecordProjection[] = [
       derived("siparisMetre", "workorder.service withProductionMeters.orderedMeters", ["work_order_to_order_lines", "order_lines"]),
       derived("cariKartIdleri", "helpers/work-order-customers.helper rollupWorkOrderCustomers (bağlanma sırası, liste önizlemesi)", ["work_order_to_order_lines", "order_lines", "orders"]),
       derived("aktifIstasyonId", "helpers/work-order-current-step.helper currentWorkOrderStep", ["work_order_steps"]),
+      derived("sevkeHazir", "cloud-sync/derived-ship-ready workOrderReadyWorksWire (ready-works computeReadyWorks + ship-readiness.helper; durum HAZIR/KISMEN/YOK + hazır top·metre; canlı top yoksa null; BİLİNEN GECİKME: batches.workOrderId ve shipping.ready.* değişimi kirletmez — sonraki top değişimine kadar bayat, kaynak migration ister)", ["rolls"]),
     ],
     sources: [self("work_orders"),
       via("work_order_steps", "workOrderId"),
