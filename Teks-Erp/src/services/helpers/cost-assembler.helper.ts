@@ -47,7 +47,7 @@ export type CostSourceRef = { itemId: string } | { adHoc: AdHocStructure };
 const yarnSelect = { id: true, name: true, linearDensityDen: true } as const;
 const itemSelect = {
   id: true, code: true, name: true, itemType: true, isActive: true, rawWidthCm: true,
-  warpSpec: { select: { id: true, endsCount: true, takeUpPct: true, reedWidthCm: true, yarnItem: { select: yarnSelect } } },
+  warpSpec: { select: { id: true, endsCount: true, takeUpPct: true, wastePct: true, reedWidthCm: true, yarnItem: { select: yarnSelect } } },
   weftSpec: { select: { id: true, picksPerCm: true, yarns: { orderBy: { sortOrder: "asc" }, select: { picksInRepeat: true, yarnItem: { select: yarnSelect } } } } },
   costStructure: { include: { processes: { orderBy: { sortOrder: "asc" }, select: { rateCode: true } } } },
 } satisfies Prisma.ItemSelect;
@@ -145,7 +145,8 @@ export function buildCostInput(src: CostSources, ref: CostSourceRef, o: CostOver
       warpSpecId: warpBase.warpSpecId,
       endsCount: warpBase.endsCount,
       takeUpPct: firstOf([o.takeUpPct, "ELLE"], [warpBase.takeUp, warpBase.takeUpSrc], [p?.defaultTakeUpPct, "PARAMETRE"]),
-      wastePct: firstOf([o.warpWastePct, o.warpWasteMeasured ? "OLCULMUS" : "ELLE"], [cs?.warpWastePct, "YAPI"], [p?.defaultWarpWastePct, "PARAMETRE"]),
+      // Kart firesi (SY-C1): aynı çözgüyü paylaşan desenler tek yerden; boş kartta zincir bugünkü gibi PARAMETRE'ye düşer.
+      wastePct: firstOf([o.warpWastePct, o.warpWasteMeasured ? "OLCULMUS" : "ELLE"], [cs?.warpWastePct, "YAPI"], [ws?.wastePct, "KART"], [p?.defaultWarpWastePct, "PARAMETRE"]),
       yarn: warpBase.yarn,
     },
     weft: hasWeft

@@ -31,6 +31,7 @@ function buildDefaults(initial?: WarpSpec | null): WarpSpecFormValues {
     endsPerDent: initial.endsPerDent === null ? "" : String(initial.endsPerDent),
     reedWidthCm: initial.reedWidthCm ?? "",
     takeUpPct: initial.takeUpPct ?? "",
+    wastePct: initial.wastePct ?? "",
     notes: initial.notes ?? "",
     isActive: initial.isActive,
   };
@@ -41,6 +42,15 @@ function TakeUpField({ form }: { form: UseFormReturn<WarpSpecFormValues> }) {
   return (
     <FormField label="Take-up (%)" htmlFor="takeUpPct" error={form.formState.errors.takeUpPct} hint="Çözgü ÷ kumaş oranı: çözgü = kumaş ÷ (1 − take-up). Boşsa tezgahtan doğan topun otomatik tüketimi çözgü = kumaş sayar ve uyarır.">
       <Input id="takeUpPct" {...form.register("takeUpPct")} inputMode="decimal" placeholder="ör. 8" />
+    </FormField>
+  );
+}
+
+/** SY-C1 kart firesi (%): bu çözgüyü kullanan her desenin maliyetinde, ürün maliyet yapısı boşsa geçerli. */
+function WasteField({ form }: { form: UseFormReturn<WarpSpecFormValues> }) {
+  return (
+    <FormField label="Fire (%)" htmlFor="wastePct" error={form.formState.errors.wastePct} hint="Çözgü ipliği firesi; maliyette çözgü = kumaş ÷ (1 − take-up) ÷ (1 − fire). Ürünün maliyet yapısındaki fire bunu ezer; boşsa maliyet parametrelerindeki varsayılan kullanılır.">
+      <Input id="wastePct" {...form.register("wastePct")} inputMode="decimal" placeholder="ör. 3" />
     </FormField>
   );
 }
@@ -125,6 +135,7 @@ export function WarpSpecFormDialog({ open, onOpenChange, initial, onSubmit, isSu
             <Input id="reedWidthCm" {...form.register("reedWidthCm")} inputMode="decimal" placeholder="280" />
           </FormField>
           <TakeUpField form={form} />
+          <WasteField form={form} />
 
           <FormField label="Not" htmlFor="notes" error={form.formState.errors.notes}>
             <Textarea id="notes" {...form.register("notes")} rows={2} placeholder="Tahar planı, jakar koşumu…" />

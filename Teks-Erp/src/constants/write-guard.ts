@@ -10,10 +10,9 @@ export const BASE_WRITE_CLOSED_FIELDS: Readonly<Record<string, readonly string[]
   // Künye yalnız oturumdan (`withActor`); gövde ayrıca Zod `.strict()` allowlist'inden geçer.
   machineStopCodeMap: ["createdById", "updatedById"],
   // SEYİTOĞLU MİG-1 (SY-MIG yalnız şema): kendi doğrulayıcısı (FABRIC/aktif desen · varyant kodu
-  // tekilliği · tarife kodu çözümü · fire aralığı) A2/C1 dilimlerinde doğana dek genel CRUD'a KAPALI.
+  // tekilliği · tarife kodu çözümü) A2 diliminde doğana dek genel CRUD'a KAPALI. `warpSpec.wastePct` C1'de açıldı.
   item: ["weaveDesignId"],
   productRecipe: ["variantCode", "finishingRateCode"],
-  warpSpec: ["wastePct"],
 };
 
 export function baseWriteClosedFields(modelName: string): readonly string[] {
