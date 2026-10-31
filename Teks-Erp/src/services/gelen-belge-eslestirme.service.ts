@@ -171,6 +171,8 @@ async function processAliasRows(senderCustomerId: string | null, raw: string): P
   const rows = await prisma.deliveryNoteAlias.findMany({
     where: { scope: "PROCESS", rawKey, OR: [{ senderCustomerId: null }, ...(senderCustomerId ? [{ senderCustomerId }] : [])] },
     select: { targetId: true, senderCustomerId: true, propertyId: true, property: { select: { variantOf: { select: { code: true } } } } },
+    // Birden çok kurşun çeşidi özelliğinde grupta iki kapsamlı satır olabilir: son onaylanan kazanır (belirlenimli).
+    orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
   });
   return rows.map((r) => ({ targetId: r.targetId, senderCustomerId: r.senderCustomerId, propertyId: r.propertyId, kursun: r.property?.variantOf?.code === KURSUN_PROPERTY_CODE }));
 }
@@ -179,6 +181,7 @@ async function processAliasRows(senderCustomerId: string | null, raw: string): P
  * D2b: bir özellik grubunun sözlük hedefi. Kapsamlı satır (propertyId) YALNIZ kendi özelliğinde okunur; NULL kapsamlı
  * eski satır bugünkü kuralla (tek hedef, gönderene özel genel satırı ezer) — yalnız eski satır varken yanıt bayt-aynı.
  * Sıra: kapsamlı+gönderene özel > eski+gönderene özel (grupta) > kapsamlı genel > eski kural.
+ * Kapsamlı özel satırın hedefi pasife alınmışsa genel satıra DÜŞMEZ, çağıran kalıba düşer (eski aliasTarget anlamı).
  */
 function processAliasFor(rows: readonly ProcessAliasRow[], senderCustomerId: string | null, inGroup: (r: ProcessAliasRow) => boolean, options: readonly { id: string }[]): string | null {
   const scoped = rows.filter((r) => r.propertyId !== null && inGroup(r));
