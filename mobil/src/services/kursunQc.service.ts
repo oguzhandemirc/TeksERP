@@ -34,6 +34,8 @@ export interface CompleteQc2Request {
    * alan HİÇ yazılmaz (gövde eski APK ile bayt-aynı). PIN bu gövdeye ASLA girmez.
    */
   meterOut?: MeterReadingBody;
+  /** D4-E2b ölçülen en (cm) — yalnız `capturesWidth` adımda ve operatör girdiyse; boşsa anahtar YOK. */
+  measuredWidthCm?: number;
 }
 
 /** Sayaç okuması gövdesi — sunucu `meterReadingBodySchema` (kursun-qc.controller.ts) aynası. */

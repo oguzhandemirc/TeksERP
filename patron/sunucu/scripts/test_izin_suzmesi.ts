@@ -43,7 +43,7 @@ function katalogBolumu(): void {
   const cariFinans = PROJECTION_CATALOG.get("cari-hareket.finans")!.permissions;
   kontrol("§1e finans kökünün .finans'ı KENDİ iznine bağlı (fiyat değil)", cariFinans.length === 1 && cariFinans[0] === "bulut:cari-bakiye:oku");
   const satis = new Set(sessionProjections(effectivePermissions(ROLE_TEMPLATES.SATIS)));
-  kontrol("§1f Satış şablonu hiçbir finans projeksiyonu okumaz", !["siparis.finans", "fatura", "kasa", "cari-hesap", "ozet-finans", "rapor.finance"].some((p) => satis.has(p)));
+  kontrol("§1f Satış şablonu hiçbir finans projeksiyonu okumaz", !["siparis.finans", "fatura", "kasa", "cari-hesap", "ozet-finans", "ozet-masraf", "rapor.finance"].some((p) => satis.has(p)));
 }
 
 function raporSunumuBolumu(): void {
@@ -138,6 +138,7 @@ async function fikstur(o: Ortam, k: TestKurulumu): Promise<{ siparis: string; ca
   const anliklar = [
     { projeksiyon: "ozet.siparis", icerikOzeti: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", veri: { acik: 1 } },
     { projeksiyon: "ozet-finans", icerikOzeti: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", veri: { kasa: "100.00" } },
+    { projeksiyon: "ozet-masraf", icerikOzeti: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", veri: { buAyToplam: "250.00", kategoriler: [] } },
   ];
   const r = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk, kayitlar, anliklar }) });
   if (r.status !== 200 || (r.json as unknown as { ret: unknown[] }).ret.length > 0) throw new Error(`fikstür: ${r.status} ${JSON.stringify(r.json)}`);
@@ -162,6 +163,8 @@ async function finanssiz(o: Ortam, h: TestHesabi, ids: { siparis: string; cari: 
   }
   const oz = await api(o, "GET", "/api/anlik/ozet-finans", { belirtec: h.belirtec });
   kontrol("§2e finans özeti (anlık) → 403", oz.status === 403);
+  const om = await api(o, "GET", "/api/anlik/ozet-masraf", { belirtec: h.belirtec });
+  kontrol("§2e2 masraf özeti (D4-H2, bulut:kasa:oku yok) → 403", om.status === 403);
   const ozs = await api(o, "GET", "/api/anlik/ozet.siparis", { belirtec: h.belirtec });
   kontrol("§2f sipariş özeti (ozet:oku + siparis:oku) → 200", ozs.status === 200);
   const c = await liste(o, h, "cari-kart");
@@ -192,6 +195,8 @@ async function patron(o: Ortam, h: TestHesabi, ids: { siparis: string }): Promis
   kontrol("§4b fatura + finans görünür", f.status === 200 && fs?.finans?.genelToplam === "15000.00");
   const oz = await api(o, "GET", "/api/anlik/ozet-finans", { belirtec: h.belirtec });
   kontrol("§4c finans özeti 200", oz.status === 200);
+  const om = await api(o, "GET", "/api/anlik/ozet-masraf", { belirtec: h.belirtec });
+  kontrol("§4d masraf özeti (bulut:kasa:oku) 200, fabrikanın verisi aynen", om.status === 200 && (om.json.data as { veri?: { buAyToplam?: string } }).veri?.buAyToplam === "250.00");
 }
 
 async function dbDuzeyi(o: Ortam, k: TestKurulumu, ids: { siparis: string }): Promise<void> {

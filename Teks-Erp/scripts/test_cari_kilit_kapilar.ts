@@ -108,7 +108,6 @@ function statik(): void {
     "services/gelen-belge-note.service.ts",
     "services/gelen-belge-onay.service.ts",
     "services/helpers/cari-hold-notify.helper.ts", // D4-I5: yalnız `holdScopeText`/`reasonLabel` (bildirim yükü), kapı çağırmaz
-    "services/helpers/risk-exposure.helper.ts",
     "services/inventory.service.ts",
     "services/invoice.service.ts",
     "services/order.service.ts",

@@ -21,6 +21,7 @@ import { remoteReportCatalog } from "./report-requests";
 import { snapshotDigest } from "./digest";
 import { publicFactoryTimezone } from "../services/helpers/factory-timezone-state.helper";
 import { TesisVerisiSchema } from "./wire/esitleme";
+import { EXPENSE_SNAPSHOT, EXPENSE_SNAPSHOT_SCHEMA, buildExpenseSnapshotData } from "./snapshot-expense";
 
 export interface BuiltSnapshot {
   /** Tel adı (`ozet.stok`, `stok-karnesi`…). */
@@ -57,6 +58,7 @@ export const SNAPSHOT_WIRE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
     cekVade: z.array(z.strictObject({ kova: Str, tur: Str, doviz: Str, adet: Num, tutar: NumStr })),
     yaslandirma: z.array(z.strictObject({ doviz: Str, kovalar: z.record(z.enum(AGING_BUCKETS), NumStr), acikToplam: NumStr, gecikmis: NumStr, avans: NumStr })),
   }),
+  [EXPENSE_SNAPSHOT]: EXPENSE_SNAPSHOT_SCHEMA,
   "stok-karnesi": z.strictObject({
     ozet: z.strictObject({
       bitmisMiktar: Num, bitmisAdet: Num, hamMiktar: Num, hamAdet: Num, yariMamulMiktar: Num, yariMamulAdet: Num,
@@ -237,6 +239,9 @@ export async function buildSnapshots(ctx: SnapshotContext): Promise<BuiltSnapsho
         break;
       case "ozet-finans":
         out.push(await buildFinance(ctx.now));
+        break;
+      case EXPENSE_SNAPSHOT:
+        out.push(seal(EXPENSE_SNAPSHOT, await buildExpenseSnapshotData(ctx.now)));
         break;
       case "stok-karnesi":
         out.push(await buildStock());
