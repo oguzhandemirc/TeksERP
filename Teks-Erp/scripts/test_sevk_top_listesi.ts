@@ -9,16 +9,18 @@
 //   §3 müşteri kodu olmayan topta boş (null); kodlu topta kod
 //   §4 müşteri top no gelen belgeden (atadan miras dahil); işlem metni
 //   §5 AST: liste servisi ikinci toplayıcı DEĞİL — prisma/sorgu yok, tek kaynak
+//   §6 storno: irsaliye VOIDED olunca liste "nihai" (frozen) DEĞİL, voided işaretli
 //      resolveShipmentDispatchContent; getDispatchReport da aynı kaynaktan
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
-import { Prisma } from "@prisma/client";
+import { Prisma, PrintedDocType } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";
 import { getShipmentRollList } from "../src/services/shipment-roll-list.service";
+import { printedDocumentService } from "../src/services/printed-document.service";
 import { firstGrade } from "./fixture-quality-grade";
 
 let pass = 0;
@@ -122,6 +124,12 @@ async function main() {
     check("§4c satırsız topta top no boş", row2?.customerRollNo === null);
     check("§4d işlem metni belge başlığından", row1?.processText === "KURŞUN 50G", String(row1?.processText));
     check("§4e desen + sevk no", row1?.desen === `PERDE TUL ${ts0}` && list.shipmentNo === tag);
+    // §6 — sevk geri alma irsaliyeyi VOIDED'e çeker (undoDispatch'in yaptığı voidForSource)
+    check("§6a ACTIVE belgede liste nihai (frozen, voided değil)", list.frozen && !list.voided && list.docStatus === "ACTIVE", `${list.frozen}/${list.voided}/${list.docStatus}`);
+    await prisma.$transaction((tx) => printedDocumentService.voidForSource(tx, PrintedDocType.SHIPMENT_DISPATCH, shipment.id, "test storno"));
+    const voided = (await getShipmentRollList(shipment.id)).data!;
+    check("§6b VOIDED belgede liste nihai DEĞİL (frozen=false)", voided.frozen === false, String(voided.frozen));
+    check("§6c VOIDED belgede voided=true + docStatus VOIDED", voided.voided === true && voided.docStatus === "VOIDED");
   } finally {
     // Belgesiz DISPATCHED sevkte ilk okuma lazy-init PrintedDocument yazar; artık satır bırakma.
     await prisma.printedDocument.deleteMany({ where: { sourceId: shipment.id } });

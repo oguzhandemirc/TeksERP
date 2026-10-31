@@ -13,6 +13,7 @@ import prisma from "../../lib/prisma";
 import { effectiveNotificationParams } from "../helpers/notification-params.helper";
 import { getNotificationEntry, type NotificationKind } from "../../constants/notification-catalog";
 import type { ModulKey } from "../../constants/screen-catalog";
+import { TERIM } from "../../constants/terim";
 import { factoryDateTr, factoryDayStart, factoryYmd } from "../../constants/time";
 import { fmtCalendarDate } from "../document-render/fmt-date";
 import { DEADLINE_OPEN_ORDER_STATUSES, daysPastDeadline, isDeadlineApproaching } from "../helpers/order-deadline.helper";
@@ -21,6 +22,10 @@ import { queryOpenDispatchAges, type OpenDispatchAgeRow } from "../helpers/subco
 import { loadNotificationVisibilityEnv } from "../helpers/notification-visibility.helper";
 import { finishForecastReport, type FinishForecastRow } from "../reports/levent-bitis-tahmini.report.service";
 import { registerConditionSource, type ConditionSubject } from "../../jobs/notification-condition.job";
+import { computeReadyWorks, INCOMING_DOC_UNITS, type ReadyWorkUnit } from "../ready-works.service";
+import { READY_WORK_KIND as READY_WORK_KIND_CODE } from "../../constants/notification-catalog-sevkiyat";
+import { effectiveShipReadyPolicy } from "../helpers/ship-readiness.helper";
+import { effectiveIncomingDocsEnabled, readShippingReadyNotifyUnits, readShippingReadyScanMinutes, type ShipReadyNotifyUnit } from "../system-setting.service";
 
 export const WORK_CONDITION_PERIOD_MS = 300_000;
 const DAY_MS = 86_400_000;
@@ -39,6 +44,7 @@ export type WorkConditionKind = (typeof WORK_CONDITION_KINDS)[number];
 export interface DeadlineOrderRow { id: string; orderNumber: string; deadline: Date | null; customerName: string }
 export interface LateWorkOrderRow { id: string; workOrderNumber: string; plannedEndDate: Date | null }
 export interface PlannedShipmentRow { id: string; shipmentNo: string; customerName: string }
+export interface ReadyUnitRow { id: string; label: string; customerName: string | null; state: string; readyCount: number; readyMeters: number }
 export interface QualityDay { topCode: string | null; byItem: ScorecardBreakdownRow[] }
 
 /** Okuyucuların dar yüzü — bekçi sahteyle değiştirir; karar (eşik, pencere) bu dosyada. */
@@ -52,6 +58,11 @@ export interface WorkSourceDeps {
   openDispatchAges: () => Promise<OpenDispatchAgeRow[]>;
   plannedShipments: () => Promise<PlannedShipmentRow[]>;
   beamForecast: () => Promise<FinishForecastRow[]>;
+  /** Sevke hazır (D4-J2): ayar okuyucuları + birim satırları — yüklem `computeReadyWorks` → `ship-readiness.helper`. */
+  notifyUnits: () => Promise<ShipReadyNotifyUnit[]>;
+  scanMinutes: () => Promise<number>;
+  incomingDocOpen: () => Promise<boolean>;
+  readyUnits: (unit: ReadyWorkUnit) => Promise<ReadyUnitRow[]>;
   params: (kind: NotificationKind) => Record<string, unknown>;
   now: () => number;
 }
@@ -89,6 +100,10 @@ export const WORK_SOURCE_REAL_DEPS: Readonly<WorkSourceDeps> = {
     return rows.map((r) => ({ id: r.id, shipmentNo: r.shipmentNo, customerName: r.customer.name }));
   },
   beamForecast: async () => (await finishForecastReport({})).data.satirlar,
+  notifyUnits: () => readShippingReadyNotifyUnits(),
+  scanMinutes: () => readShippingReadyScanMinutes(),
+  incomingDocOpen: () => effectiveIncomingDocsEnabled(),
+  readyUnits: async (unit) => computeReadyWorks(unit, await effectiveShipReadyPolicy()),
   params: effectiveNotificationParams,
   now: Date.now,
 };
@@ -210,6 +225,54 @@ export async function beamEndingSubjects(): Promise<ConditionSubject[]> {
       key: r.beamId, type: "levent", id: r.beamId,
       payload: { leventId: r.beamId, leventNo: r.beamNo, tezgahNo: r.machine.code, kalanGun: tr1(r.kalanGun ?? 0) },
     }));
+}
+
+// ── 13 · İş sevke hazır (D4-J2) — birim türü başına tek toplu okuma; hazırlık kararı helper'ın `state`i ──────
+export const READY_WORK_KIND = READY_WORK_KIND_CODE satisfies NotificationKind;
+/** Kaynak dakikada bir uyanır; tarama `shipping.ready.scanMinutes`te bir koşar (ayar yeniden başlatmasız değişir). */
+const MINUTE_MS = 60_000;
+const READY_UNIT_OF: Record<ShipReadyNotifyUnit, { unit: ReadyWorkUnit; label: string; type: string }> = {
+  IE: { unit: "workOrder", label: TERIM.terbiyeIsEmri.tekil, type: "isemri" },
+  GB: { unit: "deliveryNote", label: "Gelen belge", type: "gelen-belge" },
+  PARTI: { unit: "customerBatch", label: "Parti", type: "musteri-parti" },
+};
+let lastReadyScanAt: number | null = null;
+
+/** Bekçi: tarama saatini sıfırlar (bir sonraki tur periyodu beklemeden tarar). */
+export function resetReadyWorkScanClock(): void {
+  lastReadyScanAt = null;
+}
+
+export async function readyWorkSubjects(): Promise<ConditionSubject[]> {
+  const kind = READY_WORK_KIND;
+  const units = await deps.notifyUnits();
+  if (units.length === 0 || !(await deps.moduleOpen(kind))) return [];
+  const now = deps.now();
+  if (lastReadyScanAt !== null && now - lastReadyScanAt < (await deps.scanMinutes()) * MINUTE_MS) {
+    // Periyot dolmadı: açık konular KORUNUR (boş küme dönmek hepsini "çözüldü" yapardı). Bilinçli seçim: periyot motorda
+    // kayıt anında sabit olduğundan kaynak kendi saatini tutar ve açık konuları koşul tablosundan okur (tek süreç).
+    const open = await prisma.notificationCondition.findMany({ where: { kind, resolvedAt: null }, select: { subjectKey: true, subjectType: true, subjectId: true, payload: true } });
+    return open.map((r) => ({ key: r.subjectKey, type: r.subjectType, id: r.subjectId, payload: (r.payload ?? {}) as Record<string, unknown> }));
+  }
+  const docOpen = units.some((u) => INCOMING_DOC_UNITS.includes(READY_UNIT_OF[u].unit)) ? await deps.incomingDocOpen() : false;
+  const out: ConditionSubject[] = [];
+  for (const u of units) {
+    const def = READY_UNIT_OF[u];
+    if (INCOMING_DOC_UNITS.includes(def.unit) && !docOpen) continue; // panel ucu kapısıyla (readyWorksModuleGate) aynı liste
+    for (const r of await deps.readyUnits(def.unit)) {
+      if (r.state !== "READY") continue;
+      out.push({
+        key: `${def.unit}:${r.id}`, type: def.type, id: def.unit === "customerBatch" ? null : r.id,
+        payload: { birim: def.label, sekme: def.unit, id: r.id, no: r.label, musteriAd: r.customerName ?? "—", hazirTop: r.readyCount, hazirMetre: r.readyMeters },
+      });
+    }
+  }
+  lastReadyScanAt = now;
+  return out;
+}
+
+export function registerReadyWorkConditionSource(): void {
+  registerConditionSource({ kind: READY_WORK_KIND, periodMs: MINUTE_MS, evaluate: readyWorkSubjects });
 }
 
 export const WORK_SOURCE_EVALUATORS: Record<WorkConditionKind, () => Promise<ConditionSubject[]>> = {

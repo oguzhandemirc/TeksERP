@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 
 const oku = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 // Katalog tek nesnedir ama boyut yüzünden parça dosyalara yayılır (D4-I5 `notification-catalog-cari.ts`).
-const katalog = ["notification-catalog.ts", "notification-catalog-cari.ts"]
+const katalog = ["notification-catalog.ts", "notification-catalog-cari.ts", "notification-catalog-sevkiyat.ts"]
   .map((f) => oku(`../../../../Teks-Erp/src/constants/${f}`))
   .join("\n");
 const rotalar = [...oku("../../routes/content-routes.tsx").matchAll(/path:\s*"([^"]+)"/g)]

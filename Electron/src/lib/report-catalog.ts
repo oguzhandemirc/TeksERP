@@ -346,6 +346,11 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
     sinif: "basit", izin: "report:production", modul: "productionEnabled", varsayilanGun: 7, tarih: "aralik-gun",
     panelYolu: "reports/production/makine-duruslari", uc: "/api/reports/production/makine-duruslari", kapiTasiyici: [{ dosya: "src/routes/reports/temel-uretim.routes.ts", yol: "/production/makine-duruslari" }], yuzey: "yaprak",
     nesil: "v2", kategoriV2: "uretim", persona: ["uretim", "patron"], varyantBoyutlari: ["makine", "istasyon", "sebep"], hazir: true, yeniRapor: true },
+  // SY-F1: kuşak / hedef değer ihtiyacı — açık sipariş kalemi × `OrderLineTargetValue` → beklenen top (sarf stoğu yok, K17).
+  { key: "sales/hedef-deger-ihtiyaci", baslik: "Kuşak ve Hedef Değer İhtiyacı", soru: "Açık siparişler için hangi kuşaktan ya da hedef değerden kaç top gerekecek?",
+    sinif: "basit", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: null, tarih: "yok",
+    panelYolu: "reports/sales/hedef-deger-ihtiyaci", uc: "/api/reports/sales/hedef-deger-ihtiyaci", kapiTasiyici: [{ dosya: "src/routes/reports/hedef-deger.report.routes.ts", yol: "/hedef-deger-ihtiyaci" }], yuzey: "yaprak",
+    nesil: "v2", kategoriV2: "satis-sevkiyat", persona: ["planlama", "satis"], varyantBoyutlari: ["musteri", "urun"], hazir: true, yeniRapor: true },
 ];
 
 /** Katalogdan TÜRETİLİR — derleyici bilinmeyen anahtarı reddeder (K4). */
