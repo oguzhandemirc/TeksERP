@@ -10,7 +10,6 @@ import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
 import { ScanField } from "@/components/scanner/ScanField";
-import { classifyBarcode } from "@/lib/scanner/barcode-kind";
 import { useScanSeed } from "@/hooks/useScanSeed";
 import { useDataTable } from "@/hooks/useDataTable";
 import { customerService } from "@/pages/Customers/service";
@@ -24,6 +23,7 @@ import { sackTagService } from "@/pages/SackTags/service";
 import { sackHubService } from "./service";
 import { hasContentFilter, sacksKolonlari } from "./sacksColumns";
 import { useCustomerBranchesEnabled, usePackingGroupMode, usePackingGroupsEnabled } from "@/hooks/usePricingEnabled";
+import { useRollLocate } from "./useRollLocate";
 import { RollLocateCard } from "./RollLocateCard";
 import { PickListPrintDialog } from "./PickListPrintDialog";
 import { CreateShipmentDialog } from "./CreateShipmentDialog";
@@ -41,7 +41,6 @@ import {
   isWarehouseSack,
   hasSackContents,
   scopeLabels,
-  type LocatedRoll,
   type SackSearchRow,
   type SackSearchScope,
 } from "./types";
@@ -220,7 +219,6 @@ export function SacksListView({ onEditSack }: Props) {
   const groupsEnabled = usePackingGroupsEnabled();
   // Sevk partisi modu (2026-09-21): şerit, sütun ve "Partiye Al" sözü buna göre.
   const lotMode = isLotMode(groupsEnabled, usePackingGroupMode());
-  const [located, setLocated] = useState<LocatedRoll | null>(null);
   const [pickListIds, setPickListIds] = useState<string[] | null>(null);
   const [shipSacks, setShipSacks] = useState<SackSearchRow[] | null>(null);
   /** Toplu dağıtma diyaloğu — seçili çuval id'leri; null = kapalı. */
@@ -242,21 +240,7 @@ export function SacksListView({ onEditSack }: Props) {
   });
 
   // Barkod okut — top: nerede?; çuval kodu (CV-): arama kutusuna uygula (sackNo eşleşir).
-  const locate = useMutation({
-    mutationFn: (code: string) => sackHubService.locateRoll(code),
-    onSuccess: (res) => setLocated(res.data),
-    onError: () => setLocated(null),
-  });
-
-  // Tek giriş: top barkodu → "nerede?" (locate); metin/çuval kodu → aramaya.
-  const handleScan = (code: string) => {
-    if (classifyBarcode(code).kind === "ROLL") {
-      locate.mutate(code);
-      setSearch(""); // barkod arama kutusunu kirletmesin
-      return;
-    }
-    setSearch(code);
-  };
+  const { located, clearLocated, handleScan, busy: locateBusy, dialog: candidateDialog } = useRollLocate(setSearch);
 
   // Scan-anywhere yönlendirmeleri (eski Çuval Arama + Paketleme hedefleri birleşti).
   useScanSeed("scanCode", (code) => handleScan(code));
@@ -337,7 +321,7 @@ export function SacksListView({ onEditSack }: Props) {
               onScan={handleScan}
               placeholder="Ara ya da barkod okut…"
               expectPrefix={["ROLL", "SACK"]}
-              busy={locate.isPending}
+              busy={locateBusy}
               widthClassName="w-72"
               clearable
             />
@@ -354,7 +338,8 @@ export function SacksListView({ onEditSack }: Props) {
           eylemleri alt şeritte (`PackingLotBarActions`). Grup modunda çip şeridi bugünkü gibi. */}
       {groupsEnabled && !lotMode && <PackingGroupBar customerId={tekCariId} />}
 
-      {located && <RollLocateCard roll={located} onClear={() => setLocated(null)} />}
+      {located && <RollLocateCard roll={located} onClear={clearLocated} />}
+      {candidateDialog}
 
       {showDispatchedHint && (
         <div className="mx-4 mb-2 flex items-center justify-between gap-3 rounded-md border border-info/40 bg-info/5 px-3 py-2 text-xs">
