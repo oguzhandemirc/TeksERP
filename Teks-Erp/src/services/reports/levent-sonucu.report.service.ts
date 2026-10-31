@@ -15,6 +15,8 @@ import { LOOM_HORIZON_DAY, loomHorizonStart } from "../../constants/dokuma-ufku"
 import { resolveRangeEnd, resolveRangeStart } from "../../constants/time";
 import { remainingByBeam } from "../helpers/warp-beam.helper";
 import { expectedFabricM, roundM, shareOfPct, usedSharePct } from "../helpers/dokuma-levent-rapor.helper";
+import { readWarpLayersForItems } from "../helpers/effective-construction.helper";
+import { beamLayerTag, type BeamLayerTag } from "../helpers/warp-layer-beam.helper";
 import { optionList, type Secenek } from "./_secenekler";
 
 const CLOSED: WarpBeamStatus[] = [WarpBeamStatus.EXHAUSTED, WarpBeamStatus.SCRAPPED];
@@ -27,6 +29,8 @@ export interface BeamResultRow {
   beamNo: string;
   physicalBeamNo: string | null;
   warpSpec: { id: string; code: string; name: string; takeUpPct: number | null };
+  /** SY-B2: yalnız bağlı işin ürününde ek çözgü katmanı varken — zemin mi, döner/ek mi (tek katmanlıda anahtar YOK). */
+  katman?: BeamLayerTag;
   sarilanM: number;
   sarilanKg: number | null;
   kgKaynak: KgSourceMix;
@@ -114,13 +118,28 @@ async function beamIdsInRange(range: { from: Date; to: Date }): Promise<{ closed
   return { closedAt, ids };
 }
 
+type BeamWithOrder = { id: string; warpSpec: { id: string }; weavingOrder: { itemId: string; warpSpecId: string | null; item: { warpSpecId: string | null } } | null };
+/** SY-B2: bağlı işin ürününde ek katman varsa leventin yeri (zemin/döner/ek) — katmanlar toplu, tek sorgu. */
+async function layerTagsByBeam(beams: BeamWithOrder[]): Promise<Map<string, BeamLayerTag>> {
+  const layersByItem = await readWarpLayersForItems(prisma, [...new Set(beams.flatMap((b) => (b.weavingOrder ? [b.weavingOrder.itemId] : [])))]);
+  const out = new Map<string, BeamLayerTag>();
+  for (const b of beams) {
+    const wo = b.weavingOrder;
+    if (!wo) continue;
+    const layers = (layersByItem.get(wo.itemId) ?? []).map((l) => ({ warpSpecId: l.warpSpec.id, role: l.role, beamMode: l.beamMode }));
+    const tag = beamLayerTag(b.warpSpec.id, wo.warpSpecId ?? wo.item.warpSpecId, layers);
+    if (tag) out.set(b.id, tag);
+  }
+  return out;
+}
+
 export async function beamResultReport(p: BeamResultInput): Promise<{ data: BeamResultReport; dusenSatir?: number; range: { from: Date; to: Date } }> {
   const range = { from: resolveRangeStart(p.from), to: resolveRangeEnd(p.to) };
   const { closedAt, ids } = await beamIdsInRange(range);
   const beams = ids.length
     ? await prisma.warpBeam.findMany({
         where: { id: { in: ids } },
-        select: { id: true, beamNo: true, physicalBeamNo: true, status: true, currentMachineId: true, warpSpec: { select: { id: true, code: true, name: true, takeUpPct: true } } },
+        select: { id: true, beamNo: true, physicalBeamNo: true, status: true, currentMachineId: true, warpSpec: { select: { id: true, code: true, name: true, takeUpPct: true } }, weavingOrder: { select: { itemId: true, warpSpecId: true, item: { select: { warpSpecId: true } } } } },
         orderBy: { beamNo: "asc" },
       })
     : [];
@@ -131,6 +150,7 @@ export async function beamResultReport(p: BeamResultInput): Promise<{ data: Beam
       })
     : [];
   const remaining = await remainingByBeam(prisma, ids);
+  const layerTags = await layerTagsByBeam(beams);
   const machineIds = [...new Set([...events.map((e) => e.machineId), ...beams.map((b) => b.currentMachineId)].filter((x): x is string => !!x))];
   const machines = machineIds.length ? await prisma.machine.findMany({ where: { id: { in: machineIds } }, select: { id: true, code: true, name: true } }) : [];
   const machineById = new Map(machines.map((m) => [m.id, m]));
@@ -154,10 +174,12 @@ export async function beamResultReport(p: BeamResultInput): Promise<{ data: Beam
     const closedRow = CLOSED.includes(b.status) && closedAt.has(b.id);
     const remainingM = remaining.get(b.id) ?? 0;
     const fireM = closedRow && beklenen !== null ? roundM(beklenen - gercek) : null;
+    const katman = layerTags.get(b.id);
     const firstWound = wound.reduce<Date | null>((a, e) => (a === null || e.createdAt < a ? e.createdAt : a), null);
     return {
       beamId: b.id, beamNo: b.beamNo, physicalBeamNo: b.physicalBeamNo,
       warpSpec: { id: b.warpSpec.id, code: b.warpSpec.code, name: b.warpSpec.name, takeUpPct: takeUp },
+      ...(katman ? { katman } : {}),
       sarilanM, sarilanKg: kgValues.length ? roundM(kgValues.reduce((a, v) => a + v, 0)) : null,
       kgKaynak: kgSources.length > 1 ? "KARMA" : (kgSources[0] ?? null),
       beklenenKumasM: beklenen, gercekKumasM: gercek, gercekKaynak: { otomatik, elle }, kalanM: remainingM,
