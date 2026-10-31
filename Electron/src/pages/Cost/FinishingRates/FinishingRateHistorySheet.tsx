@@ -9,7 +9,7 @@ import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
 import { fmtFactoryDateTime } from "@/lib/factory-time";
 import { fmtDecFull, fmtPct } from "../shared/format";
-import { FINISHING_BASIS_LABEL, finishingRateService, type FinishingRate } from "./service";
+import { FINISHING_BASIS_LABEL, finishingBasisUnit, finishingRateService, type FinishingRate } from "./service";
 
 export function FinishingRateHistorySheet({ row, onClose }: { row: FinishingRate; onClose: () => void }) {
   const qc = useQueryClient();
@@ -35,7 +35,7 @@ export function FinishingRateHistorySheet({ row, onClose }: { row: FinishingRate
           {(q.data ?? []).map((p) => (
             <li key={p.id} className="rounded-md border p-2">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-medium tabular-nums">{fmtDecFull(p.pricePerM)} {p.currency}/m · {FINISHING_BASIS_LABEL[p.basis]}</span>
+                <span className="font-medium tabular-nums">{fmtDecFull(p.pricePerM)} {p.currency}/{finishingBasisUnit(p.basis)} · {FINISHING_BASIS_LABEL[p.basis]}</span>
                 {p.revokedAt ? <Badge variant="muted">Damgalı</Badge> : <Badge>Aktif</Badge>}
               </div>
               <p className="text-xs text-muted-foreground">
@@ -53,7 +53,7 @@ export function FinishingRateHistorySheet({ row, onClose }: { row: FinishingRate
           open={revokeOpen}
           onOpenChange={setRevokeOpen}
           title={`${row.code} tarifesi kaldırılsın mı?`}
-          description={`${row.code} (${fmtDecFull(row.pricePerM)} ${row.currency}/m) damgalanır, silinmez. Bu kodu kullanan kumaşlar tarife yeniden yazılana dek "tarife çözülemedi" eksikliği verir; kayıtlı standart maliyetler değişmez.`}
+          description={`${row.code} (${fmtDecFull(row.pricePerM)} ${row.currency}/${finishingBasisUnit(row.basis)}) damgalanır, silinmez. Bu kodu kullanan kumaşlar tarife yeniden yazılana dek "tarife çözülemedi" eksikliği verir; kayıtlı standart maliyetler değişmez.`}
           confirmLabel="Kaldır"
           destructive
           isPending={revoke.isPending}

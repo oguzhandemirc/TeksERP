@@ -66,6 +66,9 @@ export async function resolveActiveFinishingRate(code: string): Promise<Finishin
   return prisma.finishingRate.findFirst({ where: { code, ...ACTIVE_FINISHING_RATE }, select: FINISHING_RATE_SELECT });
 }
 
+/** SY-E1: KG tabanında fiyat kilo başınadır (kolon adı `pricePerM` korunur). */
+const priceLabel = (b: FinishingBasis): string => (b === "KG" ? "Kilo fiyatı" : "Metre fiyatı");
+
 /** TARİFE YAZ/DEĞİŞTİR — aynı değerler no-op; farklıysa eski aktif sürüm damgalanır + yeni satır. */
 export async function changeFinishingRate(
   input: FinishingRateChangeInput,
@@ -74,8 +77,8 @@ export async function changeFinishingRate(
   const code = normalizeFinishingRateCode(input.code);
   const name = parseTextField(input.name, "Tarife adı", 100);
   if (!name) throw AppError.badRequest("Tarife adı zorunludur.");
-  const price = parseDecimalField(input.pricePerM, { label: "Metre fiyatı", min: 0, scale: 4 });
-  if (price === null || price === undefined) throw AppError.badRequest("Metre fiyatı zorunludur.");
+  const price = parseDecimalField(input.pricePerM, { label: priceLabel(input.basis), min: 0, scale: 4 });
+  if (price === null || price === undefined) throw AppError.badRequest(`${priceLabel(input.basis)} zorunludur.`);
   const shrink = parseDecimalField(input.typicalShrinkPct, PCT_RULE("Tipik boy çekmesi")) ?? null;
   const note = parseTextField(input.note, "Not", 300) ?? null;
   const subcontractorId = input.subcontractorId ?? null;
