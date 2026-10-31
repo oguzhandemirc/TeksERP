@@ -33,6 +33,7 @@ import type {
   PreparedRow,
 } from "../import.types";
 import { upperTr } from "../../../utils/tr-case";
+import { ORDER_LINE_EXTRA_COLUMNS, applyLineExtras, resolveLineTargetValues, resolveLineVariant } from "./order-line-extras";
 
 const COLUMNS: ImportColumn[] = [
   // ── Başlık (grubun İLK satırından) ────────────────────────────────────────
@@ -144,6 +145,8 @@ const COLUMNS: ImportColumn[] = [
     example: "",
   },
   { key: "customerColorName", label: "Müşterideki Renk Adı", type: "text", maxLen: 200, child: true, example: "" },
+  // SY-K3: isteğe bağlı varyant + hedef değer — SONA eklenir, eski şablonun sırası değişmez.
+  ...ORDER_LINE_EXTRA_COLUMNS,
 ];
 
 /**
@@ -263,6 +266,12 @@ export const orderImportAdapter: ImportAdapter = {
         child.values.requiredPropertyCodes__ids = ids;
       }
 
+      const variantIssue = await resolveLineVariant(child.values);
+      if (variantIssue) row.result.errors.push(childIssue(variantIssue.column, child.rowNo, variantIssue));
+      for (const m of await resolveLineTargetValues(child.values, ctx)) {
+        row.result.errors.push(childIssue("targetValueCodes", child.rowNo, m));
+      }
+
       const qty = child.values.quantity;
       if (typeof qty === "number" && qty <= 0) {
         row.result.errors.push({
@@ -325,6 +334,7 @@ export const orderImportAdapter: ImportAdapter = {
         if (c.values.customerColorName !== undefined) line.customerColorName = c.values.customerColorName;
         const props = c.values.requiredPropertyCodes__ids as string[] | undefined;
         if (props && props.length > 0) line.requiredPropertyIds = props;
+        applyLineExtras(c.values, line);
         return line;
       }),
     };
