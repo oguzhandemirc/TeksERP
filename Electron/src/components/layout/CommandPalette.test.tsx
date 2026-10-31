@@ -175,7 +175,8 @@ describe("CommandPalette", () => {
     regime = { productionEnabled: true, financeEnabled: true, dokumaEnabled: false, machineStopEnabled: false };
     open();
     type("risk limiti");
-    expect(await screen.findByText(/risk limiti aşımında/i)).toBeInTheDocument();
+    // D4-I2 sonrası üç satır eşleşir (fatura · iş kabulü · sevk); en az biri bulunmalı.
+    expect((await screen.findAllByText(/risk limiti aşımında/i)).length).toBeGreaterThan(0);
   });
 
   it("seçim hedefi sekme olarak açar — varsa odaklar (yeni PENCERE açmaz)", () => {
