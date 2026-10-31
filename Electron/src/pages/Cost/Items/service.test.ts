@@ -14,4 +14,10 @@ describe("Maliyet kartları servisi", () => {
     expect(body.loomRpm).toBe("650");
     expect(body.efficiencyPct).toBeNull();
   });
+  it("ek işlemler: verilmezse gövdeye girmez (sunucu dokunmaz), verilirse sıralı liste", () => {
+    const base = buildStructureBody({} as StructureBody);
+    expect("processes" in base).toBe(false);
+    expect(buildStructureBody({ processes: ["KURSUN-DIS", "", "DEVERE"] } as unknown as StructureBody).processes).toEqual(["KURSUN-DIS", "DEVERE"]);
+    expect(buildStructureBody({ processes: [] } as unknown as StructureBody).processes).toEqual([]);
+  });
 });
