@@ -14,6 +14,7 @@ import ModuleSheet from '../../../components/ModuleSheet';
 import TruncatedText from '../../../components/TruncatedText';
 import { readyWorksService, type ReadyWorkRow } from '../../../services/readyWorks.service';
 import { colors, palette, spacing } from '../../../theme/tokens';
+import { TERIM } from '../../../lib/terim';
 
 export const READY_WORKS_KEY = ['sack-store', 'ready-works'] as const;
 
@@ -111,7 +112,7 @@ export function ReadyWorksSheet({
           value={effectiveAxis}
           onValueChange={(v) => setAxis(v as WorkAxis)}
           buttons={[
-            { value: 'workOrder', label: 'İş emri' },
+            { value: 'workOrder', label: TERIM.terbiyeIsEmri.tekil },
             { value: 'deliveryNote', label: 'Gelen belge' },
           ]}
         />
