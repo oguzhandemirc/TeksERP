@@ -53,6 +53,9 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   { anahtar: "finance.masraf.kategoriOnerisi", alan: "financeExpenseCategorySuggestions", hedef: "ON", dilim: "D4-H1" },
   // DALGA4 §12.1 / K20: cari kilidi — ön seçim iş kabulü + sevk, koyan kişi kendi kilidini açabilir (Gülkesim de aynı).
   { anahtar: "finance.cariHold.defaultScope", alan: "financeCariHoldDefaultScope", hedef: "INTAKE,SHIPMENT", dilim: "D4-I1a" },
+  // DALGA4 §12.1: Gülkesim kârlılık kaynakları varsayılanla aynı (açık yazılır ki paket raporunda görünsün).
+  { anahtar: "maliyet.karlilik.disFasonKaynagi", alan: "costProfitSubcontractSource", hedef: "FATURA_ONCE", dilim: "D4-G2a" },
+  { anahtar: "maliyet.karlilik.sarfFiyatKaynagi", alan: "costProfitConsumablePriceSource", hedef: "ALIS_FIYATI", dilim: "D4-G2a" },
   { anahtar: "finance.cariHold.releaseBySamePerson", alan: "financeCariHoldReleaseBySamePerson", hedef: "ALLOW", dilim: "D4-I1a" },
   // DALGA4 §12.1: risk limiti iş kabulü/sevk kapısı — Gülkesim değeri kullanıcı kararı (S12 para), varsayılan bırakıldı.
   { anahtar: "finance.riskLimitBlock.intake", alan: "financeRiskLimitBlockIntake", hedef: false, dilim: "D4-I2" },

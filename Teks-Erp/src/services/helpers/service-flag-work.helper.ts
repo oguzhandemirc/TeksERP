@@ -39,6 +39,8 @@ export interface FlagWork {
   meters: Prisma.Decimal;
   meterBasis: FlagWorkBasis;
   readingId: string | null;
+  /** D4-G2a: işi ölçen okumanın makinesi (kârlılık makine kırılımı); okumasız (RECEIVED/DECLARED/eski CUT) iş `null`. */
+  machineId: string | null;
   serviceAt: Date;
 }
 
@@ -95,7 +97,7 @@ async function loadActiveCutReadings(leaves: RollRow[], db: Db) {
   const ids = leaves.filter((r) => r.entrySource === RollEntrySource.TAMBUR_SPLIT && r.parentRollId).map((r) => r.id);
   const rows = ids.length === 0 ? [] : await db.rollMeterReading.findMany({
     where: { rollId: { in: ids }, phase: MeterPhase.CUT, revokedAt: null },
-    select: { id: true, rollId: true, meters: true, source: true },
+    select: { id: true, rollId: true, meters: true, source: true, machineId: true },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
   return new Map(rows.map((r) => [r.rollId, r]));
@@ -176,7 +178,7 @@ export async function listFlagServiceWorks(
   const phases = meterBasis === "OUT" ? [MeterPhase.OUT, MeterPhase.IN] : meterBasis === "IN" ? [MeterPhase.IN] : [];
   const readings = phases.length === 0 || allStations.length === 0 ? [] : await db.rollMeterReading.findMany({
     where: { rollId: { in: chainIds }, revokedAt: null, source: { not: MachineDataSource.SIMULATED }, phase: { in: phases }, step: { stationId: { in: allStations } } },
-    select: { id: true, rollId: true, workOrderStepId: true, phase: true, meters: true, createdAt: true, step: { select: { stationId: true } } },
+    select: { id: true, rollId: true, workOrderStepId: true, phase: true, meters: true, machineId: true, createdAt: true, step: { select: { stationId: true } } },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
   const receivedOf = await loadReceivedResolver(byId, allStations, db);
@@ -206,13 +208,13 @@ export async function listFlagServiceWorks(
       // ① okuma: seçilen faz sırasıyla (OUT tabanında OUT → IN), adımın en son aktif okuması.
       for (const phase of phases) {
         const hit = readings.filter((r) => r.rollId === rid && r.phase === phase && stations.has(r.step.stationId)).at(-1);
-        if (hit) { work = { ...base, rollId: rid, workOrderStepId: hit.workOrderStepId, meters: hit.meters, meterBasis: phase, readingId: hit.id, serviceAt: hit.createdAt }; break; }
+        if (hit) { work = { ...base, rollId: rid, workOrderStepId: hit.workOrderStepId, meters: hit.meters, meterBasis: phase, readingId: hit.id, machineId: hit.machineId, serviceAt: hit.createdAt }; break; }
       }
       if (work) break;
       // ② dış (fason) iş — RECEIVED (doğan top ya da kendisi dönen top).
       const rcv = receivedOf(rid, stations);
       if (rcv) {
-        work = { ...base, rollId: rid, workOrderStepId: rcv.stepId, meters: rcv.meters, meterBasis: "RECEIVED", readingId: null, serviceAt: rcv.at };
+        work = { ...base, rollId: rid, workOrderStepId: rcv.stepId, meters: rcv.meters, meterBasis: "RECEIVED", readingId: null, machineId: null, serviceAt: rcv.at };
         break;
       }
     }
@@ -222,9 +224,9 @@ export async function listFlagServiceWorks(
     if (cut?.source === MachineDataSource.SIMULATED) { simulatedCut.add(leaf.id); continue; }
     if (!work && leaf.entrySource === RollEntrySource.TAMBUR_SPLIT && leaf.parentRollId && !parents.has(leaf.id)) {
       // ③ kesim: iş çocuk topta, metre kesilen metre — okuma varsa okumadan.
-      work = { ...base, rollId: leaf.id, workOrderStepId: leaf.producedInStepId, meters: cut ? cut.meters : leaf.initialQty, meterBasis: "CUT", readingId: cut?.id ?? null, serviceAt: leaf.createdAt };
+      work = { ...base, rollId: leaf.id, workOrderStepId: leaf.producedInStepId, meters: cut ? cut.meters : leaf.initialQty, meterBasis: "CUT", readingId: cut?.id ?? null, machineId: cut?.machineId ?? null, serviceAt: leaf.createdAt };
     }
-    work ??= { ...base, rollId: leaf.id, workOrderStepId: null, meters: leaf.currentQty, meterBasis: "DECLARED", readingId: null, serviceAt: p.createdAt };
+    work ??= { ...base, rollId: leaf.id, workOrderStepId: null, meters: leaf.currentQty, meterBasis: "DECLARED", readingId: null, machineId: null, serviceAt: p.createdAt };
     // Aynı ata işine iki çocuktan varılır — tek iş (bağ anahtarıyla aynı üçlü).
     works.set(`${work.rollId}:${work.serviceItemId}:${work.workOrderStepId ?? "-"}`, work);
   }
