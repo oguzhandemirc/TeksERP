@@ -107,6 +107,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   kartelaMeasurementEnabled: A(true),
   fasonNoteMobileEntry: A(true),
   fasonShrinkWarnEnabled: A(true),
+  fasonReceiptApplyTargetVariant: A(true),
   fasonShrinkTolerancePct: V("eşik yüzdesi; uyarı bayrağı açıkken varsayılan eşik geçerli"),
   // ── devere / dokuma ────────────────────────────────────────────────────────
   devereLotRequired: A(true),
