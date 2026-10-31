@@ -154,7 +154,8 @@ function statik(): void {
   const disp = govde(ship, "private async performDispatchTx(", 3000);
   check("§0i ⭐ performDispatchTx: risk kapısı claim'den (updateMany) ÖNCE", disp.includes('assertCustomerRiskLimitTx(tx, holdHeader.customerId, "SHIPMENT", emanetRelease)') && disp.indexOf("assertCustomerRiskLimitTx(") < disp.indexOf("tx.shipment.updateMany("));
   const importers = tumTs(SRC).filter((f) => /from "[^"]*risk-exposure\.helper"/.test(readFileSync(f, "utf8"))).map((f) => path.relative(SRC, f)).sort();
-  const BEKLENEN = ["services/gelen-belge-onay.service.ts", "services/invoice.service.ts", "services/order.service.ts", "services/shipping.service.ts"];
+  // D4-I5: bildirim koşul kaynağı çekirdeği OKUR (yazmaz, kapı değil) — `cari.risk-limiti-asildi`.
+  const BEKLENEN = ["services/gelen-belge-onay.service.ts", "services/invoice.service.ts", "services/notification-sources/cari.ts", "services/order.service.ts", "services/shipping.service.ts"];
   check("§0j helper'ı import eden küme SABİT (taslak/iade/storno/tahsilat yolları çağırmaz)", JSON.stringify(importers) === JSON.stringify(BEKLENEN), importers.join(", "));
 }
 

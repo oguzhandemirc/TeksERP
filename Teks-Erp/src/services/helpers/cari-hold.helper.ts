@@ -60,6 +60,11 @@ export function holdScopes(h: Pick<ActiveCariHold, "blocksIntake" | "blocksShipm
   return CARI_HOLD_SCOPES.filter((s) => h[SCOPE_COLUMN[s]]);
 }
 
+/** Kapsamların okunur metni ("sevk, fatura onayı") — bildirim yükü ve görüntü için. */
+export function holdScopeText(h: Pick<ActiveCariHold, "blocksIntake" | "blocksShipment" | "blocksInvoice">): string {
+  return holdScopes(h).map((s) => SCOPE_LABEL[s]).join(", ");
+}
+
 export function reasonLabel(code: string): string {
   return CARI_HOLD_REASON_LABELS[code as CariHoldReasonCode] ?? code;
 }
