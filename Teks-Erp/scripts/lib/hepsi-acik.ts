@@ -68,6 +68,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   financeExpenseCategorySuggestions: A("ON"), // öneri ucu sorgu yolunu işletir
   costProfitSubcontractSource: V("yalnız kârlılık okumasının kaynağı; hiçbir kapıyı açıp kapamaz"),
   costProfitConsumablePriceSource: V("yalnız kârlılık okumasının kaynağı; hiçbir kapıyı açıp kapamaz"),
+  costWeavingStandardMethod: V("yalnız standart maliyetin dokuma satır yöntemi; hiçbir kapıyı açıp kapamaz"),
   costProfitMachineTime: V("yalnız kârlılık okumasının kaynağı; hiçbir kapıyı açıp kapamaz"),
   costProfitOverheadKey: V("yalnız kârlılık okumasının dağıtım anahtarı; hiçbir kapıyı açıp kapamaz"),
   costProfitCategoryClasses: V("yalnız kârlılık okumasının masraf sınıfları; hiçbir kapıyı açıp kapamaz"),
@@ -119,6 +120,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   kartelaMeasurementEnabled: A(true),
   fasonNoteMobileEntry: A(true),
   fasonShrinkWarnEnabled: A(true),
+  fasonReceiptApplyTargetVariant: A(true),
   fasonShrinkTolerancePct: V("eşik yüzdesi; uyarı bayrağı açıkken varsayılan eşik geçerli"),
   // ── devere / dokuma ────────────────────────────────────────────────────────
   devereLotRequired: A(true),

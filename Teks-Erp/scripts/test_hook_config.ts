@@ -455,6 +455,23 @@ function main(): void {
   check("§10e pre-commit adımı 'prisma istemcisi güncel'in ardında, ağır değil",
     /ad: "prisma istemcisi güncel"[\s\S]{0,400}ad: "test DB'si şeması", cwd: "\.", cmd: \["node", \["scripts\/hooks\/lib\/test-db-semasi\.mjs"\]\] \}/.test(preCommit) && !/test DB'si şeması"[^\n]*agir: true/.test(preCommit));
 
+  // §11 Adım süre sınırı ortamdan (`TEKSERP_KAPI_ZAMAN_ASIMI_SN`): yük altında 600 sn'de
+  //    SIGTERM'le düşen tip adımı commit'i kilitliyordu (2026-10-31); kaçış değil ayar.
+  //    Varsayılan 600 = bugünkü davranış; geçersiz değer uyarıyla 600'e düşer.
+  const za = JSON.stringify(join(KOK, "scripts/hooks/lib/zaman-asimi.mjs"));
+  const zaKos = (deger: string | undefined) => spawnSync("node", ["--input-type=module", "-e",
+    `const m = await import(${za}); const env = ${JSON.stringify(deger === undefined ? {} : { TEKSERP_KAPI_ZAMAN_ASIMI_SN: deger })}; process.stdout.write(String(m.kapiZamanAsimiSn(env)));`],
+    { encoding: "utf8", cwd: KOK, timeout: 30_000 });
+  const zYok = zaKos(undefined), z1500 = zaKos("1500");
+  const zGecersiz = ["0", "-5", "abc", "1.5"].map((d) => ({ d, r: zaKos(d) }));
+  check("§11a süre sınırı varsayılanı 600 sn (env yok)", zYok.status === 0 && zYok.stdout === "600", zYok.stdout || zYok.stderr.slice(0, 120));
+  check("§11b `TEKSERP_KAPI_ZAMAN_ASIMI_SN=1500` okunuyor", z1500.status === 0 && z1500.stdout === "1500" && z1500.stderr === "", z1500.stdout);
+  const zKotu = zGecersiz.filter(({ r }) => !(r.status === 0 && r.stdout === "600" && r.stderr.trim().split("\n").length === 1 && r.stderr.includes("TEKSERP_KAPI_ZAMAN_ASIMI_SN")));
+  check("§11c geçersiz değer (0 · -5 · abc · 1.5) 600'e düşer + stderr'e tek satır uyarı", zKotu.length === 0, zKotu.map(({ d, r }) => `${d}→${r.stdout}`).join(" ¦ "));
+  check("§11d pre-commit adım süresini sabitten değil `kapiZamanAsimiSn()`ten alıyor + zaman aşımında 1500 ipucu basıyor",
+    /const ZAMAN_ASIMI_SN = kapiZamanAsimiSn\(\);/.test(preCommit) && /timeout: ZAMAN_ASIMI_SN \* 1000,/.test(preCommit) &&
+      !/timeout: \d[\d_]*,/.test(preCommit) && /ETIMEDOUT/.test(preCommit) && /\$\{KAPI_ZAMAN_ASIMI_ENV\}=1500 ile yeniden dene/.test(preCommit));
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   process.exitCode = fail > 0 ? 1 : 0;
 }

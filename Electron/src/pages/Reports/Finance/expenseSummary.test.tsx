@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { buildExportSpec } from "@/pages/Reports/_v2/export-spec";
 import { ReportTable } from "@/pages/Reports/_v2/ReportTable";
 import type { RaporSunumu, TabloBlok } from "@/pages/Reports/_v2/sunum";
 import { REPORT_BY_KEY } from "@/lib/report-catalog";
 import { V2_KEYS_WITH_OWN_PAGE } from "@/pages/Reports/_v2/routes";
 import { visibleCategorySuggestions, SUGGESTION_CHIP_LIMIT } from "@/pages/Finance/CashTransactions/cashTxnRules";
-import { EXPENSE_SUMMARY_KEY } from "./ExpenseSummaryPage";
+import { EXPENSE_SUMMARY_KEY, expenseRowTarget } from "./ExpenseSummaryPage";
 
 // Sunucu zarfının küçük kopyası (`expense-summary.sunum.ts` biçimi): iptal iptal ayında eksi.
 const tablo: TabloBlok = {
@@ -27,6 +27,40 @@ const sunum = {
   anahtar: EXPENSE_SUMMARY_KEY, baslik: "Masraf Özeti", soru: "?", donem: { from: "", to: "", etiket: "Ocak–Mart 2019" },
   anaSayi: { olcu: "masraf.harcanan", ad: "Harcanan", deger: 1000, birim: "TRY" }, yanSayilar: [], anlati: [], uyarilar: [], tanimlar: [], parametreler: [], grafik: null, tablo,
 } as unknown as RaporSunumu;
+
+describe("Masraf Özeti satırından Kasa Hareketleri'ne geçiş (D4-KUC2 e)", () => {
+  const linked: TabloBlok = {
+    ...tablo,
+    satirlar: [
+      { kategori: "Kira", kategoriAnahtari: "CAT:Kira", ay_2019_01: 1000, ay_2019_03: 0, toplam: 1000 },
+      { kategori: "Kategorisiz", kategoriAnahtari: "CAT:", ay_2019_01: 5, ay_2019_03: 0, toplam: 5 },
+      { kategori: "Eski zarf", ay_2019_01: 1, ay_2019_03: 0, toplam: 1 },
+    ],
+  };
+
+  it("hedef sunucu anahtarından kurulur (istemci anahtar üretmez); anahtarsız satır bağsız", () => {
+    expect(expenseRowTarget(linked.satirlar[0]!)).toBe("/finance/cash-transactions?category=CAT%3AKira");
+    expect(expenseRowTarget(linked.satirlar[2]!)).toBeNull();
+    expect(expenseRowTarget(tablo.toplam!)).toBeNull();
+  });
+
+  it("satıra tıklama ve Enter kategoriyle süzülmüş Kasa Hareketleri'ni açar; anahtarsız satır tıklanmaz", () => {
+    const opened: string[] = [];
+    render(<ReportTable table={linked} rowLink={{ target: expenseRowTarget, open: (to) => opened.push(to), title: "aç" }} />);
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(2);
+    fireEvent.click(screen.getByText("Kira"));
+    fireEvent.keyDown(links[1]!, { key: "Enter" });
+    fireEvent.click(screen.getByText("Eski zarf"));
+    expect(opened).toEqual(["/finance/cash-transactions?category=CAT%3AKira", "/finance/cash-transactions?category=CAT%3A"]);
+  });
+
+  it("gizli anahtar alanı kolon olarak basılmaz (Excel/PDF kolonları değişmez)", () => {
+    render(<ReportTable table={linked} />);
+    expect(screen.queryByText("CAT:Kira")).toBeNull();
+    expect(screen.queryAllByRole("link")).toHaveLength(0);
+  });
+});
 
 describe("Masraf Özeti (D4-H1)", () => {
   it("ekran tablosu iptal ayındaki eksiyi gösterir", () => {

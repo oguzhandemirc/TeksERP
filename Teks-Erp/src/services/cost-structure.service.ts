@@ -10,7 +10,7 @@ import { ItemType, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
-import { EFFICIENCY_RULE, PCT_RULE, isUniqueViolation, parseDecimalField, parseTextField, type DecimalRule } from "./helpers/cost-input.helper";
+import { EFFICIENCY_RULE, PCT_RULE, isUniqueViolation, parseDecimalField, parsePickRatePair, parseTextField, type DecimalRule } from "./helpers/cost-input.helper";
 import { normalizeFinishingRateCode, resolveActiveFinishingRate } from "./finishing-rate.service";
 
 export const COST_STRUCTURE_SELECT = {
@@ -27,6 +27,8 @@ export const COST_STRUCTURE_SELECT = {
   lengthShrinkPct: true,
   extraCostPerMTry: true,
   extraCostLabel: true,
+  loomPickRate: true,
+  loomPickCurrency: true,
   notes: true,
   createdAt: true,
   updatedAt: true,
@@ -87,9 +89,9 @@ export async function getCostStructure(itemId: string): Promise<{ itemId: string
   return { itemId, structure };
 }
 
-/** YAPIYI YAZ (PUT = tam küme): gönderilmeyen alan NULL'a döner (parametre varsayılanı). */
+/** YAPIYI YAZ (PUT = tam küme): gönderilmeyen alan NULL'a döner (parametre varsayılanı); atkı ücreti çifti istisna (gönderilmezse korunur). */
 export async function putCostStructure(itemId: string, body: Record<string, unknown>, userId?: string): Promise<CostStructureRow> {
-  const allowed = new Set([...Object.keys(NUMERIC), ...Object.keys(TEXT), "finishingRateCode", "processes"]);
+  const allowed = new Set([...Object.keys(NUMERIC), ...Object.keys(TEXT), "finishingRateCode", "processes", "loomPickRate", "loomPickCurrency"]);
   const unknown = Object.keys(body).filter((k) => !allowed.has(k));
   if (unknown.length > 0) throw AppError.badRequest(`Tanınmayan alan: ${unknown.join(", ")}`);
 
@@ -105,6 +107,12 @@ export async function putCostStructure(itemId: string, body: Record<string, unkn
     data[k] = k === "loomRpm" && v !== null ? v.toNumber() : v;
   }
   for (const [k, t] of Object.entries(TEXT)) data[k] = parseTextField(body[k], t.label, t.max) ?? null;
+  // Çift gövdede yoksa DOKUNULMAZ: alanları göndermeyen panel (SY-D4 öncesi/eski sürüm) ücreti silmesin.
+  const pick = parsePickRatePair(body.loomPickRate, body.loomPickCurrency);
+  if (pick !== undefined) {
+    data.loomPickRate = pick.rate;
+    data.loomPickCurrency = pick.currency;
+  }
 
   const rawCode = body.finishingRateCode;
   if (rawCode === undefined || rawCode === null || rawCode === "") {

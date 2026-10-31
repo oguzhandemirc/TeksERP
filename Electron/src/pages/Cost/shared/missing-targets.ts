@@ -9,6 +9,7 @@ const TARGETS: Record<string, MissingTarget> = {
   WEFT_LENGTH_MISSING: { kind: "field", field: "weftLengthCm" },
   FINISHING_RATE_MISSING: { kind: "field", field: "finishingRateCode" },
   PARAMETER_SET_MISSING: { kind: "link", to: "/cost/parameters", label: "Maliyet Parametreleri" },
+  PICK_RATE_MISSING: { kind: "link", to: "/cost/parameters", label: "Maliyet Parametreleri" },
   YARN_PRICE_MISSING: { kind: "link", to: "/cost/yarn-prices", label: "İplik Maliyet Fiyatları" },
   WARP_SPEC_MISSING: { kind: "link", to: "/definitions/items", label: "Ürün kartı" },
   WEFT_SPEC_MISSING: { kind: "link", to: "/definitions/items", label: "Ürün kartı" },

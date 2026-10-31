@@ -14,6 +14,7 @@ import { useDokumaOrderLineLinkRequired } from "@/hooks/usePricingEnabled";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { weavingOrderFormDefaults, weavingOrderFormSchema, type WeavingOrderFormValues } from "./schema";
 import { FabricFields, PartyFields, PlanFields } from "./WeavingOrderFormFields";
+import { ConstructionFields } from "./ConstructionFields";
 import { WeavingOrderLinesSection } from "./WeavingOrderLinesSection";
 import { BeamPrefillField, type PlannedMSuggestion } from "./BeamPrefillField";
 import { isoToDay, type WeavingOrder } from "./types";
@@ -34,6 +35,9 @@ function buildDefaults(initial?: WeavingOrder | null): WeavingOrderFormValues {
     itemId: initial.itemId,
     colorId: initial.colorId ?? "",
     warpSpecId: initial.warpSpecId ?? "",
+    weftSpecId: initial.weftSpecId ?? "",
+    weaveDesignId: initial.weaveDesignId ?? "",
+    recipeId: initial.recipeId ?? "",
     plannedM: initial.plannedM === null ? "" : String(initial.plannedM),
     executionKind: initial.executionKind,
     subcontractorId: initial.subcontractorId ?? "",
@@ -64,6 +68,7 @@ export function WeavingOrderFormDialog({ open, onOpenChange, initial, onSubmit, 
         <>
           {devereEnabled && <BeamPrefillField form={form} onSuggestion={setSuggestion} />}
           <FabricFields form={form} devereEnabled={devereEnabled} />
+          <ConstructionFields form={form} initialItemId={initial?.itemId ?? null} />
           <WeavingOrderLinesSection form={form} initialLines={initial?.orderLines ?? []} required={orderLineRequired} />
           <PartyFields form={form} />
           <PlanFields form={form} suggestion={suggestion} />

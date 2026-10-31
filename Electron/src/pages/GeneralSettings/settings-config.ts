@@ -1436,6 +1436,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         },
       },
       {
+        key: "fasonReceiptApplyTargetVariant",
+        group: "Fason",
+        title: `Fason kabulünde ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedef desenini dönen topa yaz`,
+        summary: `Dış brodeden dönen top, ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} seçilen deseni taşır; fatura desenin hizmet kalemini kullanır.`,
+        defaultOn: false,
+        audience: ["Planlamacı", "Muhasebeci"],
+        desc: `Açıkken fason kabulünde (ör. dışarıda brode) uygulanan bayrağın çeşidi için ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} seçilmiş hedef değer (desen) dönen topa da yazılır; desene hizmet kalemi eşlenmişse hizmet faturası o kalemle kesilir. Kapalıyken (varsayılan) dönen top yalnız bayrağı taşır, desen yazılmaz. Makbuz iptal edilirse topun deseni de geri alınır.`,
+      },
+      {
         key: "fasonNoteMobileEntry",
         group: "Fason",
         title: "Fason Sevk'te fason talimatını sahadaki operatör telefondan girebilsin",
@@ -2062,6 +2071,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "risk limiti aşım onay engel taslak otomatik sevk fifo kapama tahsis avans sıfır fiyat promosyon " +
       "numune bedelsiz ileri tarih çek keşide iplik stok düşme " +
       "kârlılık karlilik fason sarf alış fiyatı " +
+      "maliyet dokuma atkı ücreti tezgah saati cent standart yöntem " +
       "makine süresi saat ücreti genel gider dağıtım",
     kind: "flags",
     section: "trade",
@@ -2380,6 +2390,21 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: [
           { value: "ALIS_FIYATI", label: "Kartın alış fiyatı (varsayılan)", hint: "Fiyat geçmişindeki o günkü değer." },
           { value: "SON_ALIS_FATURASI", label: "Son alış faturası", hint: "O güne kadarki son onaylı alış faturası." },
+        ],
+      },
+      {
+        // SY-D2: `defaultValue` backend `DEFAULT_WEAVING_STANDARD_METHOD` ile birebir; yalnız YENİ hesabı etkiler.
+        enumKey: "costWeavingStandardMethod",
+        group: "Maliyet",
+        title: "Dokuma maliyeti nasıl hesaplansın",
+        summary: "Standart maliyette dokuma satırı tezgâh saatinden mi, atkı ücretinden mi gelsin.",
+        desc: "Tezgâh saati (varsayılan): tezgâh devri ve randımandan saatte kaç metre dokunduğu bulunur; tezgâh, işçilik ve enerji saat ücretleri metreye bölünür. Atkı ücreti: dokuma = atkı sıklığı (atkı/cm) × atkı başı ücret (ör. 17 atkı × 0,02 $ = 0,34 $/m); ücret maliyet parametrelerinde ya da ürünün maliyet yapısında girilir. Ayar yalnız yeni hesaplanan maliyeti etkiler; kayıtlı standart maliyet sürümleri değişmez.",
+        defaultValue: "TEZGAH_SAATI",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "TEZGAH_SAATI", label: "Tezgâh saati (varsayılan)", hint: "Devir × randıman × saat ücretleri." },
+          { value: "ATKI_UCRETI", label: "Atkı ücreti", hint: "Atkı/cm × atkı başı ücret (ör. cent)." },
         ],
       },
       {

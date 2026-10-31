@@ -10,6 +10,7 @@
 // §7 ⭐ varyant `paraBirimi`: hücre = asıl para birimiyle süzülmüş özet (TL karşılığı), Σ hücre = ana sayı; şema kapalı küme
 // §8 anlatı: "En büyük pay <kategori>: <tutar> (toplamın %<pay>'ı)." — boş dönemde ve eksi toplamlı kategoride cümle YOK
 // Fikstür 2019 aylarında (başka veri o aylara düşmez); iptal anı fikstürde 2019'a taşınır (servis iptali `now()` yazar).
+// NEGATİF SONDA (2026-10-31, D4-KUC2 e): satırdan `kategoriAnahtari` çıkarıldı → §4f ❌ (28/1); geri alındı.
 // NEGATİF SONDA (2026-10-29): helper'dan iptal kolu (UNION ALL 2. dal) silindi → §1/§2 ❌;
 // cash-book `bucketOf`a `CAT:` literali geri yazıldı → §5 ❌; ikisi de geri alındı → ✅.
 // (2026-10-30) para birimi süzgeci `Prisma.empty` yapıldı → §7a/§7b/§7c ❌; sunum `anlati: []` → §8a ❌; geri alındı → 28/0.
@@ -26,7 +27,7 @@ import {
   getExpenseSummary,
   UNCATEGORIZED_LABEL,
 } from "../src/services/helpers/expense-summary.helper";
-import { buildExpenseSummarySunumu, expenseSummaryNarrative, monthColumnKey } from "../src/services/reports/expense-summary.sunum";
+import { EXPENSE_ROW_KEY_FIELD, buildExpenseSummarySunumu, expenseSummaryNarrative, monthColumnKey } from "../src/services/reports/expense-summary.sunum";
 import { EXPENSE_SUMMARY_DIMS } from "../src/services/reports/temel/core-runs";
 import { expenseSummaryRunner } from "../src/services/reports/expense-summary.run";
 import { runCoreWithExtras } from "../src/services/reports/temel/_variant";
@@ -168,6 +169,9 @@ async function main(): Promise<void> {
   }));
   check("§4c satır sırası helper sırası", JSON.stringify(t.satirlar.map((r) => r.kategori)) === JSON.stringify(s.categories.map((c) => c.label)));
   check("§4d iptal uyarısı günlük dilde", sunum.uyarilar.some((u) => u.includes("iptal edildiği ayda eksi")));
+  check("§4f satır Kasa Hareketleri süzgecinin anahtarını taşır (helper anahtarı), kolon olarak basılmaz (D4-KUC2 e)",
+    t.satirlar.every((r, i) => r[EXPENSE_ROW_KEY_FIELD] === s.categories[i]!.key) && !t.kolonlar.some((k) => k.anahtar === EXPENSE_ROW_KEY_FIELD)
+      && t.toplam?.[EXPENSE_ROW_KEY_FIELD] === undefined);
   check("§4e para birimi süzgeci beyanlı (varyant hücresinin yazdığı anahtar)", sunum.parametreler.some((p) => p.ad === "currency" && p.deger === null));
 
   console.log("\n── §7 para birimi varyantı ──");
