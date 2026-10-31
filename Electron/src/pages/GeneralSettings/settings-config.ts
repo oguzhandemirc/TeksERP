@@ -2081,6 +2081,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Muhasebeci"],
       },
       {
+        key: "financeWithholdingDenominator",
+        title: "Genel tevkifat oranı — payda",
+        desc: "Tevkifat oranının paydası (5/10 için 10). Yalnız “Satış faturasında genel tevkifat” açıkken kullanılır; oranı mali müşavirinizle teyit edin.",
+        min: 1,
+        max: 99,
+        fallback: 10,
+        audience: ["Muhasebeci"],
+      },
+      {
         key: "financeInvoicePriceTolerancePct",
         title: "Fatura ↔ mal kabul tutar toleransı",
         desc: "“Fatura onayında mal kabul fişleriyle karşılaştır” açıkken fatura tutarı ile fiş tutarı arasındaki sapma bu yüzdeyi aşarsa onay reddedilir. 0 = hiç fark kabul edilmez.",
@@ -2108,6 +2117,25 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           min: 0,
           max: 100,
           emptyWarning: "Boş bırakılırsa 0 (fark kabul edilmez).",
+        },
+      },
+      {
+        key: "financeWithholdingEnabled",
+        group: "Fatura",
+        title: "Satış faturasında genel tevkifat",
+        summary:
+          "Satış faturası taslağı ve fatura formunun yeni satırı bu tevkifat oranıyla açılır; farklı olan müşteri cari kartında değiştirilir.",
+        defaultOn: false,
+        audience: ["Muhasebeci"],
+        desc: "Açıkken satış faturası taslakları (sevk, dönem sonu hizmet faturası) ve fatura formunun yeni satırı KDV'nin aşağıdaki oranı kadar tevkifatla açılır (5/10: KDV'nin yarısını alıcı öder). Oran sabit değildir — mali müşavirinizle teyit edip girin; önce payı girin, sonra açın. Müşterinin cari kartındaki KDV / tevkifat seçimi bu ayarı ezer; muhasebe faturada satır bazında yine değiştirebilir. Kapalıyken (varsayılan) tevkifat uygulanmaz. Alış faturalarına uygulanmaz.",
+        numberField: {
+          numberKey: "financeWithholdingNumerator",
+          label: "Tevkifat payı",
+          unit: "/ payda",
+          min: 0,
+          max: 99,
+          emptyWarning: "Boş ya da 0 iken tevkifat açılamaz (sunucu reddeder).",
+          showWhenOff: true,
         },
       },
       {

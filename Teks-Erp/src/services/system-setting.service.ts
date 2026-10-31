@@ -132,6 +132,12 @@ export const SETTING_KEYS = {
    *  kullanıcı satırda her zaman değiştirebilir, backend satır bazında geleni
    *  kabul etmeye devam eder. */
   FINANCE_DEFAULT_VAT_RATE: "finance.defaultVatRate",
+  /** D4-V1k (B-1): SATIŞ faturası taslağının genel tevkifatı — açık/kapalı + pay/payda (ör. 5/10). Varsayılan
+   *  KAPALI = bugünkü davranış (tevkifat 0). Müşteri cari hesabında geçersiz kılınır; çözüm TEK yerde:
+   *  `helpers/invoice-tax-defaults.helper.resolveInvoiceTaxDefaults`. Oran SABİT KODLANMAZ (mali müşavir teyidi). */
+  FINANCE_WITHHOLDING_ENABLED: "finance.withholding.enabled",
+  FINANCE_WITHHOLDING_NUMERATOR: "finance.withholding.numerator",
+  FINANCE_WITHHOLDING_DENOMINATOR: "finance.withholding.denominator",
   /** n irsaliye → 1 fatura (2026-09-18): fatura ↔ bağlı fişler tolerans kontrolü (ONAY anı). Varsayılan KAPALI = kontrol yok. */
   FINANCE_INVOICE_MATCH_TOLERANCE: "finance.invoiceMatchTolerance",
   FINANCE_INVOICE_QTY_TOLERANCE_PCT: "finance.invoiceQtyTolerancePct",
@@ -1937,6 +1943,10 @@ export interface FeatureFlags {
   /** Fatura satırının varsayılan KDV oranı, % (0-100; default 20). Yalnız
    *  ön-dolum — kullanıcı satırda değiştirebilir. */
   financeDefaultVatRate: number;
+  /** D4-V1k: satış taslağında genel tevkifat (varsayılan KAPALI). Pay 0 = girilmemiş; payda varsayılan 10. */
+  financeWithholdingEnabled: boolean;
+  financeWithholdingNumerator: number;
+  financeWithholdingDenominator: number;
   /** Fatura onayında bağlı mal kabul fişleriyle miktar/tutar toleransı ölçülsün mü (varsayılan KAPALI = kontrol yok). HAM; etkin `finance && bayrak`. */
   financeInvoiceMatchTolerance: boolean;
   /** Miktar / tutar sapma üst sınırı (%; 0 = fark kabul edilmez). Yalnız bayrak açıkken anlamlı. */
@@ -2637,6 +2647,9 @@ export class SystemSettingService {
       financeEnabled: await readFinanceEnabledRaw(cacheClient),
       financeBlockNegativeCashEnabled: await readFinanceBlockNegativeCashEnabled(cacheClient),
       financeDefaultVatRate: await readFinanceDefaultVatRate(cacheClient),
+      financeWithholdingEnabled: await readFinanceWithholdingEnabled(cacheClient),
+      financeWithholdingNumerator: await readFinanceWithholdingNumerator(cacheClient),
+      financeWithholdingDenominator: await readFinanceWithholdingDenominator(cacheClient),
       financeInvoiceMatchTolerance: await readFinanceInvoiceMatchTolerance(cacheClient),
       financeInvoiceQtyTolerancePct: await readFinanceInvoiceQtyTolerancePct(cacheClient),
       financeInvoicePriceTolerancePct: await readFinanceInvoicePriceTolerancePct(cacheClient),
@@ -2949,6 +2962,29 @@ export class SystemSettingService {
     );
   }
 
+  /** D4-V1k: genel tevkifat — üç anahtar birlikte doğrulanır (girdi ?? kayıtlı); açıkken oran ZORUNLU (fail-closed 400). */
+  private async applyWithholdingSettings(
+    input: { financeWithholdingEnabled?: boolean; financeWithholdingNumerator?: number | null; financeWithholdingDenominator?: number | null },
+    userId?: string,
+  ): Promise<void> {
+    const hasEnabled = Object.prototype.hasOwnProperty.call(input, "financeWithholdingEnabled");
+    const hasNumerator = Object.prototype.hasOwnProperty.call(input, "financeWithholdingNumerator");
+    const hasDenominator = Object.prototype.hasOwnProperty.call(input, "financeWithholdingDenominator");
+    if (!hasEnabled && !hasNumerator && !hasDenominator) return;
+    // null = girilmemiş pay (0) / varsayılan payda — panelin boş alanı.
+    const parsed: Partial<WithholdingFlags> = {
+      ...(hasEnabled ? { financeWithholdingEnabled: input.financeWithholdingEnabled } : {}),
+      ...(hasNumerator ? { financeWithholdingNumerator: input.financeWithholdingNumerator ?? 0 } : {}),
+      ...(hasDenominator ? { financeWithholdingDenominator: input.financeWithholdingDenominator ?? DEFAULT_WITHHOLDING_DENOMINATOR } : {}),
+    };
+    const next = { ...(await readFinanceWithholdingFlags()), ...parsed };
+    const problem = withholdingSettingProblem(next);
+    if (problem) throw AppError.badRequest(problem, { code: "WITHHOLDING_SETTING_INVALID" });
+    if (hasEnabled) await this.set(SETTING_KEYS.FINANCE_WITHHOLDING_ENABLED, next.financeWithholdingEnabled, "Satış faturası taslağında genel tevkifat", userId);
+    if (hasNumerator) await this.set(SETTING_KEYS.FINANCE_WITHHOLDING_NUMERATOR, next.financeWithholdingNumerator, "Genel tevkifat oranı — pay", userId);
+    if (hasDenominator) await this.set(SETTING_KEYS.FINANCE_WITHHOLDING_DENOMINATOR, next.financeWithholdingDenominator, "Genel tevkifat oranı — payda", userId);
+  }
+
   private async assertModuleDependencies(input: Record<string, unknown>): Promise<void> {
     for (const [dependent, prerequisite] of Object.entries(MODULE_DEPENDENCIES)) {
       // Gövde bu çiftin HİÇBİR ucuna dokunmuyorsa ölçmeye gerek yok (iki
@@ -3000,7 +3036,7 @@ export class SystemSettingService {
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
+      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
     > & {
       /** null = fabrika varsayılanına dön (1). */
       shippingSackSeqStart?: number | null;
@@ -3014,6 +3050,9 @@ export class SystemSettingService {
       tezgahCollectorSilenceMinutes?: number | null;
       financeInvoiceQtyTolerancePct?: number | null;
       financeInvoicePriceTolerancePct?: number | null;
+      /** null = girilmemiş (pay 0) / varsayılan payda (10). */
+      financeWithholdingNumerator?: number | null;
+      financeWithholdingDenominator?: number | null;
       /** null = fabrika varsayılanına dön (1 cm). */
       shippingAllocWidthToleranceCm?: number | null;
       /** null = fabrika varsayılanına dön (%2); `0` geçerli. */
@@ -3091,6 +3130,7 @@ export class SystemSettingService {
         userId
       );
     }
+    await this.applyWithholdingSettings(input, userId);
     if (Object.prototype.hasOwnProperty.call(input, "financeInvoiceMatchTolerance")) {
       if (typeof input.financeInvoiceMatchTolerance !== "boolean") {
         throw AppError.badRequest("financeInvoiceMatchTolerance boolean olmalı");
@@ -5375,6 +5415,49 @@ export async function readFinanceBlockNegativeCashEnabled(
     select: { value: true },
   });
   return asBoolean(setting?.value);
+}
+
+/** D4-V1k: genel tevkifat ayarının sınırları (müşteri geçersiz kılması DB CHECK'iyle aynı: 1 ≤ pay ≤ payda). */
+export const WITHHOLDING_MAX_DENOMINATOR = 99;
+export const DEFAULT_WITHHOLDING_DENOMINATOR = 10;
+export type WithholdingFlags = Pick<FeatureFlags, "financeWithholdingEnabled" | "financeWithholdingNumerator" | "financeWithholdingDenominator">;
+
+/** Türkçe hata cümlesi ya da null — servis yazımı ve bekçi aynı yüklemi okur. */
+export function withholdingSettingProblem(v: WithholdingFlags): string | null {
+  const num = v.financeWithholdingNumerator;
+  const den = v.financeWithholdingDenominator;
+  if (typeof v.financeWithholdingEnabled !== "boolean") return "Genel tevkifat açık/kapalı (true/false) olmalı";
+  if (!Number.isInteger(num) || num < 0 || num > WITHHOLDING_MAX_DENOMINATOR) return `Tevkifat payı 0–${WITHHOLDING_MAX_DENOMINATOR} arasında tam sayı olmalı`;
+  if (!Number.isInteger(den) || den < 1 || den > WITHHOLDING_MAX_DENOMINATOR) return `Tevkifat paydası 1–${WITHHOLDING_MAX_DENOMINATOR} arasında tam sayı olmalı`;
+  if (num > den) return "Tevkifat payı paydadan büyük olamaz (ör. 5/10)";
+  if (v.financeWithholdingEnabled && num < 1) return "Genel tevkifat açıkken oran girilmeli (ör. 5/10)";
+  return null;
+}
+
+/** Genel tevkifat ayarı; satır yoksa KAPALI · pay 0 · payda 10 (bugünkü davranış: tevkifat yok). Bozuk kayıt kapalıya düşer. */
+export async function readFinanceWithholdingFlags(tx?: Pick<typeof prisma, "systemSetting">): Promise<WithholdingFlags> {
+  const client = tx ?? prisma;
+  const read = async (key: string) => (await client.systemSetting.findUnique({ where: { key }, select: { value: true } }))?.value;
+  const flags: WithholdingFlags = {
+    financeWithholdingEnabled: asBoolean(await read(SETTING_KEYS.FINANCE_WITHHOLDING_ENABLED)),
+    financeWithholdingNumerator: asNumber(await read(SETTING_KEYS.FINANCE_WITHHOLDING_NUMERATOR)) ?? 0,
+    financeWithholdingDenominator: asNumber(await read(SETTING_KEYS.FINANCE_WITHHOLDING_DENOMINATOR)) ?? DEFAULT_WITHHOLDING_DENOMINATOR,
+  };
+  return withholdingSettingProblem(flags) ? { financeWithholdingEnabled: false, financeWithholdingNumerator: 0, financeWithholdingDenominator: DEFAULT_WITHHOLDING_DENOMINATOR } : flags;
+}
+
+/** getFeatureFlags satır okuyucuları (panel sözleşme bekçisi okuyucuyu adıyla çözer) — doğrulanmış üçlüden. */
+export async function readFinanceWithholdingEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  // Anahtar SETTING_KEYS.FINANCE_WITHHOLDING_ENABLED — üçlüyle birlikte doğrulanmış değer.
+  return (await readFinanceWithholdingFlags(tx)).financeWithholdingEnabled;
+}
+export async function readFinanceWithholdingNumerator(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  // Anahtar SETTING_KEYS.FINANCE_WITHHOLDING_NUMERATOR — üçlüyle birlikte doğrulanmış değer.
+  return (await readFinanceWithholdingFlags(tx)).financeWithholdingNumerator;
+}
+export async function readFinanceWithholdingDenominator(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  // Anahtar SETTING_KEYS.FINANCE_WITHHOLDING_DENOMINATOR — üçlüyle birlikte doğrulanmış değer.
+  return (await readFinanceWithholdingFlags(tx)).financeWithholdingDenominator;
 }
 
 /**
