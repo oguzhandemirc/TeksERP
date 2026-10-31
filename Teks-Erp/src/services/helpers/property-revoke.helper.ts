@@ -148,6 +148,27 @@ export async function setRollPropertyValueTx(
 }
 
 /**
+ * D4-D3: topların bayrağa bağlı aktif ÇEŞİT değerinin kalemi — `${rollId}:${bayrakId}` → kalem (eşlenmişse).
+ * Fatura (`listFlagServiceWorks`) ile geri alma kapısı aynı okumayı buradan alır (import döngüsü olmasın diye burada).
+ */
+export async function loadVariantValueItems(
+  db: Pick<Tx, "rollProperty">,
+  props: Array<{ rollId: string; propertyId: string }>,
+): Promise<Map<string, string | null>> {
+  if (props.length === 0) return new Map();
+  const rows = await db.rollProperty.findMany({
+    where: {
+      rollId: { in: [...new Set(props.map((p) => p.rollId))] },
+      ...ACTIVE_ROLL_PROPERTY,
+      property: { variantOfPropertyId: { in: [...new Set(props.map((p) => p.propertyId))] } },
+      value: { is: { serviceItemId: { not: null } } },
+    },
+    select: { rollId: true, property: { select: { variantOfPropertyId: true } }, value: { select: { serviceItemId: true } } },
+  });
+  return new Map(rows.map((r) => [`${r.rollId}:${r.property.variantOfPropertyId}`, r.value?.serviceItemId ?? null]));
+}
+
+/**
  * Topun BAYRAK (FLAG) kümesini istenen kümeye getirir — FARK BAZLI, sürümleyerek.
  * Çıkanlar tx içinde TAZE okunan aktif satır id'lerine PİNLİ damgalanır (araya giren
  * yazım sayıyı düşürürse 409), girenler `createMany skipDuplicates`; değişmeyen satıra
@@ -169,7 +190,16 @@ export async function applyRollFlagSetTx(
   let revoked = 0;
   if (leaving.length > 0) {
     // Faturalı bayrak işinin kanıtı geri alınamaz (önce hizmet faturası iptal edilir).
-    await assertFlagWorkNotBilledTx(tx, { rollId: args.rollId, propertyIds: leaving.map((r) => r.propertyId) });
+    const leavingIds = leaving.map((r) => r.propertyId);
+    await assertFlagWorkNotBilledTx(tx, {
+      rollId: args.rollId,
+      propertyIds: leavingIds,
+      // D4-D3: iş desen kalemiyle de faturalanmış olabilir — ata zincirindeki aktif desen kalemleri de sorulur.
+      loadVariantItemIds: async (lineage) => {
+        const items = await loadVariantValueItems(tx, lineage.flatMap((rollId) => leavingIds.map((propertyId) => ({ rollId, propertyId }))));
+        return [...items.values()].filter((v): v is string => v !== null);
+      },
+    });
     revoked = await revokeRollProperties(tx, {
       rollIds: [args.rollId],
       ids: leaving.map((r) => r.id),

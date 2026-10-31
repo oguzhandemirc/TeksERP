@@ -104,18 +104,24 @@ export async function listShipmentServiceBilledDocNos(db: Db, shipmentId: string
 
 /**
  * Bayrak geri alma kapısı (salt-okuma, H10): faturalı bayrak işinin kanıtı (topun aktif özelliği) geri
- * alınamaz — top ya da ataları o kalemle aktif bağ taşıyorsa 409 `SERVICE_ALREADY_BILLED`.
+ * alınamaz — top ya da ataları işin OLASI kalemlerinden biriyle aktif bağ taşıyorsa 409 `SERVICE_ALREADY_BILLED`.
+ * Olası kalem kümesi = bayrağın kalemi ∪ zincirdeki aktif desen kalemleri (D4-D3, `pickServiceItemId` sırası
+ * desen kalemini öne alır; küme birleşimi fail-closed — desen ya da eşleme sonradan değişse de kapı tutar).
  */
-export async function assertFlagWorkNotBilledTx(tx: Db, input: { rollId: string; propertyIds: string[] }): Promise<void> {
+export async function assertFlagWorkNotBilledTx(
+  tx: Db,
+  input: { rollId: string; propertyIds: string[]; loadVariantItemIds: (lineage: string[]) => Promise<string[]> },
+): Promise<void> {
   if (input.propertyIds.length === 0) return;
-  const props = await tx.fabricProperty.findMany({ where: { id: { in: input.propertyIds }, serviceItemId: { not: null } }, select: { serviceItemId: true } });
-  if (props.length === 0) return;
   const lineage = [input.rollId];
   for (let cur: string | null = input.rollId, d = 0; cur && d < 32; d++) {
     const row: { parentRollId: string | null } | null = await tx.roll.findUnique({ where: { id: cur }, select: { parentRollId: true } });
     cur = row?.parentRollId ?? null;
     if (cur) lineage.push(cur);
   }
-  const prior = await findActiveBillingTx(tx, { rollId: { in: lineage }, serviceItemId: { in: props.map((p) => p.serviceItemId!) } });
+  const props = await tx.fabricProperty.findMany({ where: { id: { in: input.propertyIds }, serviceItemId: { not: null } }, select: { serviceItemId: true } });
+  const items = new Set([...props.map((p) => p.serviceItemId!), ...(await input.loadVariantItemIds(lineage))]);
+  if (items.size === 0) return;
+  const prior = await findActiveBillingTx(tx, { rollId: { in: lineage }, serviceItemId: { in: [...items] } });
   if (prior) throw alreadyBilled(prior.docNo);
 }

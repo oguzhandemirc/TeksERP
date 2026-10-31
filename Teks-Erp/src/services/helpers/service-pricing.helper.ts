@@ -5,7 +5,7 @@
 // Zincir: gramaj `listKursunApplications` (process-summary; TABLET + KAĞIT) → yoksa
 // iş emri hedefi (uyarıyla) → `value.serviceItemId` → `property.serviceItemId` →
 // ana bayrağın (variantOf) eşlemesi. Kurşun DIŞI bayrak işleri (Tambur, etek, brode — H10)
-// `listFlagServiceWorks`ten, kalem `property.serviceItemId`ten gelir. Fiyat `resolveItemPricesFor(SALE)`, hizmet
+// `listFlagServiceWorks`ten, kalem desen değeri → `property.serviceItemId` (D4-D3) sırasıyla gelir. Fiyat `resolveItemPricesFor(SALE)`, hizmet
 // anına (as-of) çözülür: istisna genelden önce, damgalı eski sürüm eski işe.
 // ⚠️ `FinishingRate` BURADA OKUNMAZ: o bizim ödediğimiz terbiye/fason MALİYETİDİR,
 // gelir değildir — `test_hizmet_fiyati` AST taraması ikinci kopyayı ve okumayı yasaklar.
@@ -18,6 +18,7 @@ import { TERIM } from "../../constants/terim";
 import { resolveItemPricesFor } from "../item-price.service";
 import { listKursunApplications, readKursunTarget, type KursunApplication } from "./process-summary.helper";
 import { listFlagServiceWorks } from "./service-flag-work.helper";
+import { pickServiceItemId } from "./service-item-pick.helper";
 
 /** `kursun-qc.service` reopenStep damga sebebi — yeniden açılan adım yeni hizmettir. */
 const KURSUN_REOPEN_REASON = "KURSUN_REOPEN";
@@ -71,7 +72,7 @@ async function loadValueServiceMap(valueIds: string[], db: Db): Promise<Map<stri
     where: { id: { in: valueIds } },
     select: { id: true, serviceItemId: true, property: { select: { serviceItemId: true, variantOf: { select: { serviceItemId: true } } } } },
   });
-  for (const r of rows) out.set(r.id, r.serviceItemId ?? r.property.serviceItemId ?? r.property.variantOf?.serviceItemId ?? null);
+  for (const r of rows) out.set(r.id, pickServiceItemId({ value: r.serviceItemId, property: r.property.serviceItemId, parentFlag: r.property.variantOf?.serviceItemId }));
   return out;
 }
 
