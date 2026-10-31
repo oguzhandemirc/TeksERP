@@ -2,7 +2,7 @@
 // bulunabilirlik (karo · palet · modül tablosu) ve top listesi "Sahibi" çipinin emanet bayrağına bağlılığı.
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import { operationsTiles } from "@/pages/Operations/tile-config";
 import { allCommandEntries } from "@/components/layout/command-entries";
@@ -25,7 +25,7 @@ vi.mock("@/components/RefreshButton", () => ({ RefreshButton: () => null }));
 const get = vi.fn();
 vi.mock("../service", async (orig) => ({
   ...(await orig<typeof import("../service")>()),
-  getConsignedWork: () => get(),
+  getConsignedWork: (...a: unknown[]) => get(...a),
 }));
 
 const b = (count: number, qty: number) => ({ count, qty });
@@ -50,6 +50,19 @@ describe("İçerideki İşler", () => {
     expect(screen.getAllByText("8 top").length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText(/^1170(,0)? m$/).length).toBeGreaterThanOrEqual(1);
     expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it("'Yalnız sevke hazır' süzgeci SUNUCUYA gider (onlyReady), sunucu cevabı süzülmeden basılır (D4-KUC2 b)", async () => {
+    const notReady: ConsignedOwnerRow = { ...rowA, ownerCustomerId: "cB", ownerName: "Hazırsız Müşteri", ready: b(0, 0) };
+    // Sunucu bu satırı döndürdüyse istemci onu SÜZMEZ (tek where sunucuda; liste ve şerit aynı kapsam).
+    get.mockImplementation(async (onlyReady?: boolean) => (onlyReady ? { ...summary, rows: [rowA, notReady] } : summary));
+    renderWithProviders(<ConsignedWorkPage />);
+    await screen.findByText("Gül Perde");
+    expect(get).toHaveBeenLastCalledWith(false);
+    fireEvent.click(screen.getByRole("button", { name: "Yalnız sevke hazır" }));
+    await waitFor(() => expect(get).toHaveBeenLastCalledWith(true));
+    expect(await screen.findByText("Hazırsız Müşteri")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Yalnız sevke hazır" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("hücre bağlantısı kovanın sekmesine sahip süzgeciyle gider", async () => {

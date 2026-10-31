@@ -36,6 +36,7 @@ import type { WarpSpec } from "@/pages/WarpSpecs/types";
 import { useDevereEnabled, useKaliteGuvenceEnabled } from "@/hooks/usePricingEnabled";
 import { AllowedPropertiesDialog } from "./AllowedPropertiesDialog";
 import { ItemCardTabs } from "./ItemCardTabs";
+import { ItemConstructionPickers, constructionPayload, useConstructionPickersVisible } from "./ItemConstructionPickers";
 
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
@@ -70,6 +71,8 @@ export function ItemFormDialog({
         linearDensityDen: initial.linearDensityDen ?? "",
         widthCm: initial.widthCm == null ? "" : String(Number(initial.widthCm)).replace(".", ","),
         warpSpecId: initial.warpSpecId ?? "",
+        weftSpecId: initial.weftSpecId ?? "",
+        weaveDesignId: initial.weaveDesignId ?? "",
         allowedColorIds: initial.allowedColors?.map((c) => c.colorId) ?? [],
         allowedPropertyIds:
           initial.allowedProperties?.map((p) => p.propertyId) ?? [],
@@ -93,6 +96,7 @@ export function ItemFormDialog({
   const itemType = form.watch("itemType");
   const devereEnabled = useDevereEnabled();
   const kaliteGuvenceEnabled = useKaliteGuvenceEnabled();
+  const constructionVisible = useConstructionPickersVisible(itemType);
   const derivedUnit = unitForItemType[itemType] ?? "MT";
 
   useEffect(() => {
@@ -153,7 +157,7 @@ export function ItemFormDialog({
   }, [allowedPropertyIds, propsQ.data?.data]);
 
   const handleSubmit = form.handleSubmit(async (v) => {
-    await onSubmit(buildItemPayload(v, isEdit, kaliteGuvenceEnabled));
+    await onSubmit({ ...buildItemPayload(v, isEdit, kaliteGuvenceEnabled), ...constructionPayload(v, initial, constructionVisible) });
   });
 
   return (
@@ -288,6 +292,9 @@ export function ItemFormDialog({
               />
             </FormField>
           )}
+
+          {/* SY-A4: atkı + desen kartı — kumaş + dokuma + `warpspec:read` yoksa hiç çizilmez (bugünkü form). */}
+          {constructionVisible && <ItemConstructionPickers form={form} />}
 
           {carriesLists && (
           <FormField label="İzinli Renkler (opsiyonel)">
