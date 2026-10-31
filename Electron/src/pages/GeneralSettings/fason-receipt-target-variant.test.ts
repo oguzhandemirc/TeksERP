@@ -10,7 +10,7 @@ describe("fasonReceiptApplyTargetVariant ayar satırı", () => {
 
   it("varsayılan kapalı (bugünkü davranış: dönen top yalnız bayrağı taşır)", () => {
     expect(flag?.defaultOn).toBe(false);
-    expect(flag?.title).toBe("Fason kabulünde iş emrinin hedef desenini dönen topa yaz");
+    expect(flag?.title).toBe("Fason kabulünde terbiye iş emrinin hedef desenini dönen topa yaz");
   });
 
   it("Fason grubunda, fason modülüne bağlı, kardeş fason ayarıyla aynı kartta", () => {

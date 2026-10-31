@@ -4508,7 +4508,7 @@ export class SystemSettingService {
       await this.set(
         SETTING_KEYS.FASON_RECEIPT_APPLY_TARGET_VARIANT,
         input.fasonReceiptApplyTargetVariant,
-        "Fason kabulünde iş emrinin hedef desen/çeşit değeri doğan topa yazılsın",
+        "Fason kabulünde hedef desen/çeşit değeri doğan topa yazılsın",
         userId
       );
     }
