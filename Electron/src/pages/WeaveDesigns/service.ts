@@ -55,7 +55,7 @@ export function listDesignFabrics(designId: string) {
   return apiClient.get<PaginatedResponse<DesignFabric>>(`/api/items${qs}`).then((r) => r.data.data);
 }
 
-/** Atkı kartını kullanan kumaş sayısı ("N desende kullanılıyor" bandı) — sayım sunucuda (`pagination.total`). */
+/** Atkı kartını kullanan kumaş sayısı ("N kumaşta kullanılıyor" bandı) — sayım sunucuda (`pagination.total`). */
 export function countWeftSpecUsers(weftSpecId: string) {
   const qs = buildQueryString({ pageSize: 1, filters: { weftSpecId } });
   return apiClient.get<PaginatedResponse<DesignFabric>>(`/api/items${qs}`).then((r) => r.data.pagination.total);

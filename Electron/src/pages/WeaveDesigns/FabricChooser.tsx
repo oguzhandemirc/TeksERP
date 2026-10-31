@@ -10,7 +10,7 @@ export function FabricChooser({ fabrics, loading, selectedId, onSelect }: Props)
   if (fabrics.length === 0) {
     return (
       <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-        Bu desene bağlı kumaş yok. Kumaşı Tanımlar → Ürünler'de açıp "Desen" alanından bu deseni seçin; atkı sırası, varyant ve maliyet kumaş üzerinden tutulur.
+        Bu desene bağlı kumaş yok. Kumaşı Tanımlar → Ürünler'de açıp "Desen kartı" alanından bu deseni seçin; atkı sırası, varyant ve maliyet kumaş üzerinden tutulur.
       </p>
     );
   }
