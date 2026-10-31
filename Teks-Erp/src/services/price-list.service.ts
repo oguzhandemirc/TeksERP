@@ -24,10 +24,11 @@ import { quoteToday } from "./helpers/sales-quote-state.helper";
 import { tokenReplay } from "./helpers/token-replay.helper";
 import { readQuoteToken } from "./sales-quote-transitions.service";
 import { freezePriceListDocumentTx } from "./quote-documents.service";
+import { assertRecipesMatchItems, LINE_RECIPE_SELECT, readRecipeId } from "./helpers/line-recipe.helper";
 
 export const PRICE_LIST_TABLE = "PRICE_LIST";
 export const PRICE_LIST_INCLUDE = {
-  lines: { orderBy: { lineNo: "asc" }, include: { item: { select: { id: true, code: true, name: true } }, color: { select: { id: true, code: true, name: true } } } },
+  lines: { orderBy: { lineNo: "asc" }, include: { item: { select: { id: true, code: true, name: true } }, color: { select: { id: true, code: true, name: true } }, recipe: LINE_RECIPE_SELECT } },
   customer: { select: { id: true, code: true, name: true } },
 } satisfies Prisma.PriceListInclude;
 export type PriceListRecord = Prisma.PriceListGetPayload<{ include: typeof PRICE_LIST_INCLUDE }>;
@@ -154,7 +155,7 @@ export async function updatePriceList(id: string, body: Record<string, unknown>,
   return out;
 }
 
-interface LineInput { itemId: string; colorId: string | null; unitPrice: Prisma.Decimal; minQty: Prisma.Decimal | null; standardCostVersionId?: string | null; costPerMTry?: Prisma.Decimal | null; markupPct?: Prisma.Decimal | null }
+interface LineInput { itemId: string; colorId: string | null; recipeId?: string | null; unitPrice: Prisma.Decimal; minQty: Prisma.Decimal | null; standardCostVersionId?: string | null; costPerMTry?: Prisma.Decimal | null; markupPct?: Prisma.Decimal | null }
 
 function readLines(raw: unknown): LineInput[] {
   if (!Array.isArray(raw)) throw AppError.badRequest("Satırlar dizi olmalı.");
@@ -165,20 +166,30 @@ function readLines(raw: unknown): LineInput[] {
     return {
       itemId: readUuid(r.itemId, `${i + 1}. satır ürünü`),
       colorId: r.colorId ? readUuid(r.colorId, `${i + 1}. satır rengi`) : null,
+      recipeId: readRecipeId(r.recipeId, `${i + 1}. satır`) ?? null,
       unitPrice,
       minQty: parseDecimalField(r.minQty, MINQTY_RULE) ?? null,
     };
   });
 }
 
-/** Satır kümesini YENİDEN yazar (④ taslak replace): aynı ürün+renk iki kez → 400. */
+/**
+ * Satır kümesini YENİDEN yazar (④ taslak replace): aynı ürün+renk+varyant iki kez → 400 — DB'deki
+ * `price_list_lines_item_color_uq` (COALESCE renk, COALESCE varyant) ile aynı anahtar. Varyant ürüne ait olmalı.
+ */
 async function writeLinesTx(tx: Prisma.TransactionClient, id: string, lines: LineInput[]): Promise<void> {
   const seen = new Set<string>();
   for (const l of lines) {
-    const k = `${l.itemId}|${l.colorId ?? ""}`;
-    if (seen.has(k)) throw AppError.badRequest("Aynı ürün ve renk listede iki kez yer alamaz.", { code: "PRICE_LIST_DUPLICATE_LINE" });
+    const k = `${l.itemId}|${l.colorId ?? ""}|${l.recipeId ?? ""}`;
+    if (seen.has(k)) throw AppError.badRequest("Aynı ürün, renk ve varyant listede iki kez yer alamaz.", { code: "PRICE_LIST_DUPLICATE_LINE" });
     seen.add(k);
   }
+  const prior = await tx.priceListLine.findMany({ where: { priceListId: id, recipeId: { not: null } }, select: { recipeId: true } });
+  const priorRecipes = new Set(prior.map((p) => p.recipeId));
+  await assertRecipesMatchItems(
+    tx,
+    lines.flatMap((l, i) => (l.recipeId ? [{ itemId: l.itemId, recipeId: l.recipeId, label: `${i + 1}. satır`, isNew: !priorRecipes.has(l.recipeId) }] : [])),
+  );
   await tx.priceListLine.deleteMany({ where: { priceListId: id } });
   if (lines.length) await tx.priceListLine.createMany({ data: lines.map((l, i) => ({ priceListId: id, lineNo: i + 1, ...l })) });
 }
@@ -217,10 +228,10 @@ export async function fillFromStandardCost(id: string, body: Record<string, unkn
     await claimDraftTx(tx, id, userId);
     const existing = await tx.priceListLine.findMany({ where: { priceListId: id }, orderBy: { lineNo: "asc" } });
     const kept: LineInput[] = existing
-      .filter((l) => !(l.colorId === null && filled.has(l.itemId)))
-      .map((l) => ({ itemId: l.itemId, colorId: l.colorId, unitPrice: l.unitPrice, minQty: l.minQty, standardCostVersionId: l.standardCostVersionId, costPerMTry: l.costPerMTry, markupPct: l.markupPct }));
+      .filter((l) => !(l.colorId === null && l.recipeId === null && filled.has(l.itemId)))
+      .map((l) => ({ itemId: l.itemId, colorId: l.colorId, recipeId: l.recipeId, unitPrice: l.unitPrice, minQty: l.minQty, standardCostVersionId: l.standardCostVersionId, costPerMTry: l.costPerMTry, markupPct: l.markupPct }));
     const added: LineInput[] = versions.map((v) => ({
-      itemId: v.itemId, colorId: null, minQty: existing.find((l) => l.itemId === v.itemId && l.colorId === null)?.minQty ?? null,
+      itemId: v.itemId, colorId: null, minQty: existing.find((l) => l.itemId === v.itemId && l.colorId === null && l.recipeId === null)?.minQty ?? null,
       unitPrice: suggestUnitPrice({ costPerMTry: v.totalCostPerMTry, markupPct, fxRate })!.toDecimalPlaces(2, HALF_UP),
       standardCostVersionId: v.id, costPerMTry: v.totalCostPerMTry, markupPct,
     }));
@@ -284,7 +295,7 @@ export async function revisePriceList(id: string, body: { clientToken?: unknown 
             currency: old.currency, validFromDate: old.validFromDate, validUntilDate: old.validUntilDate, notes: old.notes, createdById: userId ?? null, updatedById: userId ?? null,
             lines: {
               create: old.lines.map((l) => ({
-                lineNo: l.lineNo, itemId: l.itemId, colorId: l.colorId, unitPrice: l.unitPrice, minQty: l.minQty,
+                lineNo: l.lineNo, itemId: l.itemId, colorId: l.colorId, recipeId: l.recipeId, unitPrice: l.unitPrice, minQty: l.minQty,
                 standardCostVersionId: l.standardCostVersionId, costPerMTry: l.costPerMTry, markupPct: l.markupPct,
               })),
             },
