@@ -732,6 +732,12 @@ export const SETTING_KEYS = {
   TAMBUR_PLAN_GATE_WIDTH_TOLERANCE_CM: "tambur.planGate.widthToleranceCm",
   TAMBUR_PLAN_GATE_WIDTH_CHECK: "tambur.planGate.widthCheck",
   /**
+   * Tambur finalize çocuk topun en kaynağı (D4-E3): WO_TARGET_FIRST (bugünkü: iş emri eni,
+   * yoksa ana top) | MEASURED_FIRST (ana topun ÖLÇÜLMÜŞ eni — D4-E2a izi — varsa o).
+   * Okuma YALNIZ `readTamburChildWidthSource` üzerinden.
+   */
+  TAMBUR_CHILD_WIDTH_SOURCE: "tambur.childWidthSource",
+  /**
    * FASON KABULÜ — ÇEKME UYARISI (2026-08-21).
    * Boyahanede kumaş çeker: 250 m giden mal 220 m döner. Eski ekran bu farkı
    * "EKSİK DÖNEN / giden-gelen uyuşmuyor" diye KIRMIZI bir onay modalıyla
@@ -1124,6 +1130,11 @@ export const TAMBUR_PLAN_WIDTH_CHECKS: TamburPlanWidthCheck[] = ["ENFORCE", "OFF
 export const DEFAULT_TAMBUR_PLAN_WIDTH_CHECK: TamburPlanWidthCheck = "ENFORCE";
 /** Eşik üst sınırı (cm) — panel/Zod/okuyucu aynı sınırı kullanır. */
 export const TAMBUR_PLAN_WIDTH_TOLERANCE_MAX_CM = 100;
+/** Tambur finalize çocuk en kaynağı (bkz. `SETTING_KEYS.TAMBUR_CHILD_WIDTH_SOURCE`). */
+export type TamburChildWidthSource = "WO_TARGET_FIRST" | "MEASURED_FIRST";
+export const TAMBUR_CHILD_WIDTH_SOURCES: TamburChildWidthSource[] = ["WO_TARGET_FIRST", "MEASURED_FIRST"];
+/** Varsayılan `WO_TARGET_FIRST` — BUGÜNKÜ davranış (`wo.width ?? roll.width`, ölçüldü 2026-10-31). */
+export const DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE: TamburChildWidthSource = "WO_TARGET_FIRST";
 
 /** Etiket adedi kaynağı (bkz. `SETTING_KEYS.LABEL_COPIES_SOURCE`). */
 export type LabelCopiesSource = "GLOBAL" | "STATION";
@@ -2244,6 +2255,8 @@ export interface FeatureFlags {
   tamburPlanGateWidthToleranceCm: number;
   /** Tambur plan kapısı en kontrolü (default ENFORCE); OFF yalnız en kolunu atlar. */
   tamburPlanGateWidthCheck: TamburPlanWidthCheck;
+  /** Tambur finalize çocuk en kaynağı (default WO_TARGET_FIRST = bugünkü). */
+  tamburChildWidthSource: TamburChildWidthSource;
   /** Tablet Tambur listesi oturum istasyonuyla süzülsün mü (default FALSE; istemcide uygulanır). */
   tamburListByStationEnabled: boolean;
   /** Dokuma kapalıyken de makine duruşu kaydedilsin mi (D4-A1; default FALSE = bugünkü). HAM değer;
@@ -2768,6 +2781,7 @@ export class SystemSettingService {
       tamburShortCutA1ThresholdM: await readTamburShortCutA1ThresholdM(cacheClient),
       tamburPlanGateWidthToleranceCm: await readTamburPlanGateWidthToleranceCm(cacheClient),
       tamburPlanGateWidthCheck: await readTamburPlanGateWidthCheck(cacheClient),
+      tamburChildWidthSource: await readTamburChildWidthSource(cacheClient),
       tamburListByStationEnabled: await readTamburListByStationEnabled(cacheClient),
       machineStopTrackingEnabled: await readMachineStopTrackingEnabled(cacheClient),
       machineStopOpenWarningEnabled: await readMachineStopOpenWarningEnabled(cacheClient),
@@ -4652,6 +4666,18 @@ export class SystemSettingService {
         SETTING_KEYS.TAMBUR_PLAN_GATE_WIDTH_CHECK,
         v,
         "Tambur plan kapısı en kontrolü: ENFORCE (sor) | OFF (en kolunu atla; renk kapısı aynı kalır)",
+        userId
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "tamburChildWidthSource")) {
+      const v = input.tamburChildWidthSource;
+      if (typeof v !== "string" || !TAMBUR_CHILD_WIDTH_SOURCES.includes(v as TamburChildWidthSource)) {
+        throw AppError.badRequest("Tambur çocuk top en kaynağı WO_TARGET_FIRST ya da MEASURED_FIRST olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.TAMBUR_CHILD_WIDTH_SOURCE,
+        v,
+        "Tambur finalize çocuk top eni: WO_TARGET_FIRST (hedef en, yoksa ana top) | MEASURED_FIRST (ölçülmüş ana top eni önce)",
         userId
       );
     }
@@ -7568,6 +7594,25 @@ export async function readTamburPlanGateWidthCheck(
     return v as TamburPlanWidthCheck;
   }
   return DEFAULT_TAMBUR_PLAN_WIDTH_CHECK;
+}
+
+/**
+ * Tambur finalize çocuk en kaynağının TEK çözücüsü (D4-E3). Kayıt yok/çöp →
+ * WO_TARGET_FIRST (bugünkü davranış). Ad `read*` — `test_feature_flag_contract` okuyucuyu getFeatureFlags gövdesinden çözer.
+ */
+export async function readTamburChildWidthSource(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<TamburChildWidthSource> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.TAMBUR_CHILD_WIDTH_SOURCE },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (typeof v === "string" && TAMBUR_CHILD_WIDTH_SOURCES.includes(v as TamburChildWidthSource)) {
+    return v as TamburChildWidthSource;
+  }
+  return DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE;
 }
 
 /**
