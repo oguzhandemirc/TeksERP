@@ -26,7 +26,7 @@ const wrap = (h: H) => (req: Request, res: Response, next: NextFunction): void =
 };
 const itemParam = z.object({ itemId: z.string().uuid("Geçersiz ürün ID") });
 const recipeParam = z.object({ recipeId: z.string().uuid("Geçersiz şablon ID") });
-const constructionQuery = z.object({ recipeId: z.string().uuid("Geçersiz şablon ID").optional() }).strict();
+const constructionQuery = z.object({ recipeId: z.string().uuid("Geçersiz şablon ID").optional() }, { error: "Tanınmayan sorgu parametresi" }).strict();
 const warpLayersBody = z.object({
   layers: z.array(z.object({
     warpSpecId: z.string().uuid("Geçersiz çözgü kartı ID"),
@@ -38,7 +38,7 @@ const weftOverridesBody = z.object({
   overrides: z.array(z.object({
     weftSortOrder: z.number().int().min(0, "Atkı sırası 0 ya da büyük olmalı").max(25, "Atkı sırası en çok Z (25)"),
     yarnItemId: z.string().uuid("Geçersiz iplik ID"),
-  }).strict()).max(26),
+  }).strict()).max(26, "En çok 26 atkı değişimi"),
 }).strict();
 
 /**

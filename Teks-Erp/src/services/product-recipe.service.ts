@@ -11,7 +11,9 @@ import { BaseService } from "./base.service";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { applyFoldTypeForWriteInPlace } from "./helpers/fold-type";
-import type { ApiResponse } from "../types/api.types";import { assertItemUsable } from "./helpers/item-usage.helper";
+import type { ApiResponse } from "../types/api.types";
+import { assertItemUsable } from "./helpers/item-usage.helper";
+import { findRecipeMoveOrphans, throwWeftOverrideOrphan } from "./helpers/effective-construction.helper";
 
 
 /** SY-A2 varyant kodu (V01): kullanıcıdan gelir, büyük harf + kırpılır; boş temizler. Tekillik
@@ -28,6 +30,12 @@ function normalizeVariantCodeInPlace(data: Record<string, unknown>): void {
   const v = raw.trim().toUpperCase();
   if (!VARIANT_CODE_RE.test(v)) throw AppError.badRequest("Varyant kodu en çok 16 karakter; harf, rakam, nokta, tire, alt çizgi (ör. V01)");
   data.variantCode = v;
+}
+
+/** SY-A2 R4: değişimli reçete başka ürüne taşınamaz — değişim yeni kartta sessizce başka ipliğe kayardı. */
+async function assertNoMoveOrphans(recipeId: string, nextItemId: unknown): Promise<void> {
+  const orphans = await findRecipeMoveOrphans(prisma, recipeId, nextItemId);
+  if (orphans.length > 0) throwWeftOverrideOrphan(orphans);
 }
 
 /** properties[] dizisinden BENZERSİZ propertyId'leri çıkar (dedup). */
@@ -154,6 +162,7 @@ export class ProductRecipeService extends BaseService {
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
     await this.validateRefs(data, id);
+    await assertNoMoveOrphans(id, data.itemId);
     const next = { ...data };
     await applyFoldTypeForWriteInPlace(next); // D-13 biçim + katalog doğrulaması
     normalizeVariantCodeInPlace(next);
@@ -179,6 +188,7 @@ export class ProductRecipeService extends BaseService {
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
     const { properties, ...rest } = data;
+    await assertNoMoveOrphans(id, rest.itemId);
     const oldRecord = await this.delegate.findUnique({ where: { id } });
     const updateData: Record<string, unknown> = { ...rest, isActive: true };
     await applyFoldTypeForWriteInPlace(updateData); // D-13 biçim + katalog doğrulaması

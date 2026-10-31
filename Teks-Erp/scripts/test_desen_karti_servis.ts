@@ -117,6 +117,15 @@ async function main(): Promise<void> {
   const ok5 = await updateWeftSpec(w1.id, { yarns: [{ yarnItemId: y1 }, { yarnItemId: y3 }, { yarnItemId: y2 }] }, admin.id);
   check("§5e sıra korunan replace geçer (adet koddan)", ok5.yarns.length === 3 && ok5.yarns.map((y) => y.picksInRepeat).join() === "2,2,1");
 
+  const fabric2 = await prisma.item.create({ data: { code: `${TAG}-KM2`, name: `${TAG} KUMAŞ 2`, itemType: "FABRIC", weftSpecId: w1.id }, select: { id: true } });
+  ids.items.push(fabric2.id);
+  const mv = await errOf(() => productRecipeService.update(r2.id, { itemId: fabric2.id }, admin.id));
+  const moved = (await prisma.productRecipe.findUniqueOrThrow({ where: { id: r2.id }, select: { itemId: true } })).itemId;
+  check("§5f değişimli varyant başka ürüne taşınınca 409 WEFT_OVERRIDE_ORPHAN, reçete yerinde", mv?.code === "WEFT_OVERRIDE_ORPHAN" && moved === fabric.id, JSON.stringify(mv?.code));
+  await productRecipeService.update(r2.id, { itemId: fabric.id, name: `${TAG} V02 SIM` }, admin.id);
+  check("§5g aynı ürünle PATCH geçer; değişimsiz varyant taşınabilir", (await errOf(() => productRecipeService.update(r1.id, { itemId: fabric2.id }, admin.id))) === null);
+  await productRecipeService.update(r1.id, { itemId: fabric.id }, admin.id);
+
   console.log("§6 desen kartı canlı referans + çözgü katmanı");
   const inUse = await errOf(() => deactivateWeaveDesign(d.id, admin.id));
   check("§6a aktif ürün bağlıyken pasif → 409 WEAVE_DESIGN_IN_USE + ürün listesi", inUse?.code === "WEAVE_DESIGN_IN_USE" && (inUse.details.items as Array<{ id: string }>).some((i) => i.id === fabric.id));

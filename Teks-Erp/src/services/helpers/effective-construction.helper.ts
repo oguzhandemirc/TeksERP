@@ -182,6 +182,31 @@ export async function findWeftOverrideOrphans(
   }));
 }
 
+/**
+ * Reçete başka ürüne taşınırsa (PATCH/reactivate `itemId`) sıra numarasıyla tutulan değişimler yeni
+ * ürünün atkı kartında anlamını yitirir — taşınan reçetenin TÜM değişimleri sahipsiz sayılır.
+ */
+export async function findRecipeMoveOrphans(db: Db, recipeId: string, nextItemId: unknown): Promise<WeftOverrideOrphan[]> {
+  if (typeof nextItemId !== "string") return [];
+  const rows = await db.productRecipeWeftYarn.findMany({
+    where: { recipeId, recipe: { itemId: { not: nextItemId } } },
+    select: {
+      weftSortOrder: true,
+      recipe: { select: { id: true, code: true, name: true, variantCode: true, item: { select: { id: true, code: true } } } },
+    },
+    orderBy: { weftSortOrder: "asc" },
+  });
+  return rows.map((r) => ({
+    recipeId: r.recipe.id,
+    recipeCode: r.recipe.code,
+    recipeName: r.recipe.name,
+    variantCode: r.recipe.variantCode,
+    itemId: r.recipe.item.id,
+    itemCode: r.recipe.item.code,
+    weftSortOrder: r.weftSortOrder,
+  }));
+}
+
 /** 409 `WEFT_OVERRIDE_ORPHAN` — etkilenen varyant listesiyle (sessiz kayma yok). */
 export function throwWeftOverrideOrphan(orphans: WeftOverrideOrphan[]): never {
   const names = [...new Set(orphans.map((o) => o.variantCode ? `${o.itemCode} ${o.variantCode}` : o.recipeCode))];

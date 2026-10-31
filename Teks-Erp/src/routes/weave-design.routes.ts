@@ -29,7 +29,7 @@ const wrap = (h: H) => (req: Request, res: Response, next: NextFunction): void =
 const idParam = z.object({ id: z.string().uuid("Geçersiz kayıt ID") });
 const body = z.record(z.string(), z.unknown());
 const listQuery = z.object({
-  search: z.string().max(100).optional(),
+  search: z.string().max(100, "Arama en çok 100 karakter").optional(),
   includeInactive: z.enum(["0", "1", "true", "false"], { message: "includeInactive yalnız 0/1/true/false olabilir" }).optional()
     .transform((v) => v === "1" || v === "true"),
 });
