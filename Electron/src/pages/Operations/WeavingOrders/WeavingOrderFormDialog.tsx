@@ -19,6 +19,15 @@ import { WeavingOrderLinesSection } from "./WeavingOrderLinesSection";
 import { BeamPrefillField, type PlannedMSuggestion } from "./BeamPrefillField";
 import { isoToDay, type WeavingOrder } from "./types";
 import { TERIM } from "@/lib/terim";
+import type { UseFormReturn } from "react-hook-form";
+import { useProposalGates } from "../Orders/production-proposal/gates";
+import { LoomSuggestionSection, draftOf } from "./loom-suggestion/LoomSuggestionSection";
+
+/** SY-M3: formun canlı değerlerinden tezgâh önerisi (ürün/varyant/çözgü/plan m değiştikçe yeniden sorar). */
+function FormLoomSuggestion({ form }: { form: UseFormReturn<WeavingOrderFormValues> }) {
+  const [itemId, recipeId, warpSpecId, plannedM] = form.watch(["itemId", "recipeId", "warpSpecId", "plannedM"]);
+  return <LoomSuggestionSection draft={draftOf({ itemId, recipeId, warpSpecId, plannedM })} />;
+}
 
 interface Props {
   open: boolean;
@@ -53,6 +62,7 @@ export function WeavingOrderFormDialog({ open, onOpenChange, initial, onSubmit, 
   const { devereEnabled } = useOperationsVisibilityContext();
   const orderLineRequired = useDokumaOrderLineLinkRequired();
   const [suggestion, setSuggestion] = useState<PlannedMSuggestion | null>(null);
+  const { loomSuggestionVisible } = useProposalGates();
   return (
     <EntityFormDialog<WeavingOrderFormValues>
       open={open}
@@ -72,6 +82,7 @@ export function WeavingOrderFormDialog({ open, onOpenChange, initial, onSubmit, 
           <WeavingOrderLinesSection form={form} initialLines={initial?.orderLines ?? []} required={orderLineRequired} />
           <PartyFields form={form} />
           <PlanFields form={form} suggestion={suggestion} />
+          {loomSuggestionVisible && <FormLoomSuggestion form={form} />}
         </>
       )}
     </EntityFormDialog>

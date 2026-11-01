@@ -94,6 +94,8 @@ const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: bool
   { yer: "Electron/src/pages/Reports/_v2/custom/layout/useLayoutEditor.ts::customReportApi.preview", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   // Analiz kartı "Tezgaha göre ayrı bak" diyaloğu açılınca karıştırıcı kırılımını önizler (yazmaz, uyarısız zarf) — R3-ANALIZ.
   { yer: "Electron/src/pages/Reports/_v2/analysis/AnalysisCard.tsx::customReportApi.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
+  // SY-M3 "Üretime gönder" diyaloğu açılınca öneriyi hesaplar (salt okuma POST; yazmaz, uyarısız zarf).
+  { yer: "Electron/src/pages/Operations/Orders/production-proposal/ProductionProposalDialog.tsx::productionProposalService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   // Veri paneli: taslak değişince gecikmeli `dogrula` (yazmaz, uyarısız zarf) + süzgeç değer listesi (sorgu zarfı `warnings` basabilir) — R2-VERI.
   { yer: "Electron/src/pages/Reports/_v2/custom/data/useDataPanel.ts::customReportApi.validate", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   { yer: "Electron/src/pages/Reports/_v2/custom/data/dimension-values.ts::customReportApi.dimensionValues", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: true },

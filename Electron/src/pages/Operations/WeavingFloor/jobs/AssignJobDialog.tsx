@@ -13,6 +13,8 @@ import type { LiveLoom } from "../types";
 import { PreviewTable, ResultView, usePickedRows } from "./BulkParts";
 import { JobPicker } from "./JobPicker";
 import { RowJobs } from "./RowJobs";
+import { LoomFitList } from "./LoomFitList";
+import { useProposalGates } from "@/pages/Operations/Orders/production-proposal/gates";
 import { allJobsChosen, assignRowsOf, assignTargetsOf, effectiveJobOf, initialSelection, isMixed, jobIdOf, maxLinesOf, rowKey, withRowJobs, type JobDialogMode } from "./plan";
 import { runService, type BulkPreview, type BulkResult, type BulkTarget } from "./runService";
 
@@ -112,6 +114,8 @@ export function AssignJobDialog({ open, onOpenChange, looms, mode, online }: Pro
   const { ctx, jobId, setJobId, line, setLine, maxLines, preview, setPreview, picked, toggle, result, previewMut, assignMut, pickedCount, retryFailed } = f;
   const required = ctx.data?.weavingOrderRequired ?? true;
   const title = mode === "replace" ? "İşi değiştir" : "İş ver";
+  const { loomSuggestionVisible } = useProposalGates();
+  const fitJobId = loomSuggestionVisible && !f.mixed ? jobIdOf(jobId) : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -144,6 +148,7 @@ export function AssignJobDialog({ open, onOpenChange, looms, mode, online }: Pro
             {ctx.data?.rowJobs === true && looms.length > 1 && (
               <RowJobs looms={looms} jobs={ctx.data.weavingOrders} required={required} shared={jobId} overrides={f.overrides} onPick={f.pickRow} />
             )}
+            {fitJobId && <LoomFitList looms={looms} weavingOrderId={fitJobId} />}
             {maxLines > 1 && <LinePicker max={maxLines} value={line} onChange={setLine} />}
           </div>
         )}
