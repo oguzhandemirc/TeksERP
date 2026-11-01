@@ -58,6 +58,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/customers/:id/barcode-series/preview": e("müşteri barkod serisini önizledi", "müşteri barkod serisini önizlemeye çalıştı"),
   "POST /api/finance/cari/:id/holds": e("cariye kilit koydu", "cariye kilit koymaya çalıştı"),
   "POST /api/finance/cari/holds/:holdId/release": e("cari kilidini açtı", "cari kilidini açmaya çalıştı"),
+  "POST /api/finance/cari/merge": e("cari hesabı birleştirdi", "cari hesabı birleştirmeye çalıştı"),
   "POST /api/finance/cash-transactions/:id/allocations": e("masrafı makineye/işe bağladı", "masrafı bağlamaya çalıştı"),
   "POST /api/finance/expense-allocations/:id/change": e("masraf bağını değiştirdi", "masraf bağını değiştirmeye çalıştı"),
   "POST /api/finance/expense-allocations/:id/revoke": e("masraf bağını kaldırdı", "masraf bağını kaldırmaya çalıştı"),

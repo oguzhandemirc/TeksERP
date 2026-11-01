@@ -174,7 +174,7 @@ async function main(): Promise<void> {
     console.log("\n── §3 clientToken replay ──");
     const n3 = await transferCount(B);
     const r3 = await call("POST", "/api/finance/cari/merge", acc, { sourceId: B.source, targetId: B.target, stamp: pv?.stamp, clientToken: tokenB });
-    check("§3a ⭐ aynı token → 200 replay, yeni bacak yok", r3.status === 200 && (r3.body.data as { alreadyMerged?: boolean } | undefined)?.alreadyMerged === true && (await transferCount(B)) === n3, `${r3.status} ${code(r3)} ${n3}→${await transferCount(B)}`);
+    check("§3a ⭐ aynı token → 200 (replay ya da durum üzerinden idempotent), yeni bacak yok", r3.status === 200 && (r3.body.data as { alreadyMerged?: boolean } | undefined)?.alreadyMerged === true && (await transferCount(B)) === n3, `${r3.status} ${code(r3)} ${n3}→${await transferCount(B)}`);
     const pvC = (await previewOf(C, acc)).body.data as { stamp: string } | undefined;
     const r3b = await call("POST", "/api/finance/cari/merge", acc, { sourceId: C.source, targetId: C.target, stamp: pvC?.stamp, clientToken: tokenB });
     check("§3b aynı token + başka çift → 409 CLIENT_TOKEN_COLLISION, C'ye yazım yok", r3b.status === 409 && code(r3b) === "CLIENT_TOKEN_COLLISION" && (await transferCount(C)) === 0, `${r3b.status} ${code(r3b)}`);
