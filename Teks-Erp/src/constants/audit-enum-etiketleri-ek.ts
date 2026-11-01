@@ -218,6 +218,8 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   TRANSFORM: "Kesim dönüşümü",
   ADJUST: "Metraj düzeltmesi",
   OPENING_BALANCE: "Açılış bakiyesi",
+  CARI_MERGE: "Cari birleştirme virmanı",
+  CARI_MERGE_REVERT: "Cari birleştirme geri alındı",
   // ── Birleştirme defteri referans tipi (MergeRefKind)
   MOVED: "Taşındı",
   DELETED: "Silindi (çakışma)",

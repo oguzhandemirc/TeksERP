@@ -39,6 +39,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { D, D0, findCariAccountIdByCustomer, invoiceOpenAmount, unallocatedAmount } from "./helpers/finance.helper";
+import { assertCariNotMergedTx } from "./helpers/cari-merged-guard.helper";
 // ⚠️ Çek durum adları TEK KAYNAK: `cheque.service` sözlüğü ("Ekranda ve hata
 // mesajında okunan durum adları"). Buraya ikinci bir sözlük yazmak, aynı
 // durumun iki farklı adla anılmasına giden en kısa yoldur.
@@ -683,6 +684,8 @@ export class PaymentAllocationService {
         `${src.label} başka bir cariye ait — farklı carinin ödemesiyle fatura kapatılamaz (mahsuplaşma ayrı bir işlemdir).`,
       );
     }
+    // K3d: birleşmiş kaynağın kalemi hedefe taşındı — burada kapamak çift kapama olur.
+    await assertCariNotMergedTx(tx, [inv.cariId]);
     if (src.currency !== inv.currency) {
       throw AppError.badRequest(
         `${src.label} ${src.currency}, fatura ${inv.currency} — farklı para biriminde kapama kur farkı doğurur ve bu sürümde desteklenmiyor.`,
@@ -887,6 +890,8 @@ export class PaymentAllocationService {
         select: { id: true, invoiceId: true, paymentId: true, chequeId: true, amount: true },
       });
       if (!row) throw AppError.notFound("Kapama kaydı bulunamadı.");
+      const owner = await tx.invoice.findUnique({ where: { id: row.invoiceId }, select: { cariId: true } });
+      if (owner) await assertCariNotMergedTx(tx, [owner.cariId]);
       const revoked = await tx.paymentAllocation.updateMany({
         where: { id, ...ACTIVE_ALLOCATION },
         data: { revokedAt: new Date(), revokedById: userId ?? null, revokeReason: "DEALLOCATE" },
