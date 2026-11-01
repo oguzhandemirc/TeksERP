@@ -261,6 +261,7 @@ describe("⭐ rejim kapısı — anahtarın kendisi asla kapının arkasında ol
     expect((warehouse?.flags ?? []).map((f) => f.key)).toEqual([
       "purchaseBlockOverReceiptEnabled",
       "goodsReceiptRequirePriceEnabled",
+      "consumableStockEnabled",
     ]);
     expect(
       (SETTINGS_CATEGORIES.find((c) => c.id === "yarn")?.flags ?? []).map((f) => f.key),

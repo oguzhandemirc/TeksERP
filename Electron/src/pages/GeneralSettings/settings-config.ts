@@ -2053,6 +2053,14 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Depocu", "Muhasebeci"],
         desc: "Açıkken satırda birim fiyat yoksa ve siparişten de çözülemiyorsa mal kabul kaydedilemez. Fiyat kabul anında donar; alış faturası taslağı ve maliyet oradan doğar. Kapalıyken fiyatsız kabul serbesttir.",
       },
+      {
+        key: "consumableStockEnabled",
+        title: "Sarf stoğu tut (kuşak / kurşun şeridi)",
+        summary: "Mal kabul sarf satırı alır; üretim adımı bitince sarf stoktan düşer, geri alınınca geri yazılır.",
+        defaultOn: false,
+        audience: ["Depocu", "Planlamacı"],
+        desc: "Açıkken mal kabul fişine sarf malzemesi (kuşak, kurşun şeridi) satırı girilir; kurşun uygulanınca işlenen metre × sarf normu, tambur kesiminde kuşak (top başına 1) stoktan düşer. Stok eksiye düşerse yalnız uyarı verilir, iş durmaz. Kapalıyken (varsayılan) sarf stoğu tutulmaz, yalnız kuşak ihtiyacı raporu çalışır.",
+      },
     ],
   },
   {

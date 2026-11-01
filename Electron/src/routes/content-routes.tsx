@@ -50,6 +50,7 @@ import { ColorsPage } from "@/pages/Colors/ColorsPage";
 import { ReturnReasonsPage } from "@/pages/ReturnReasons/ReturnReasonsPage";
 import { WarehousesPage } from "@/pages/Warehouses/WarehousesPage";
 import { GoodsReceiptsPage } from "@/pages/Operations/GoodsReceipts/GoodsReceiptsPage";
+import { ConsumableStockPage } from "@/pages/Operations/ConsumableStock/ConsumableStockPage";
 import { IncomingDocumentsPage } from "@/pages/Operations/GelenBelgeler/GelenBelgelerPage";
 import { ConsignedWorkPage } from "@/pages/Operations/ConsignedWork/ConsignedWorkPage";
 import { ReadyWorksPage } from "@/pages/Operations/ReadyWorks/ReadyWorksPage";
@@ -531,6 +532,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="goods-receipt:read">
         <GoodsReceiptsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Sarf stoğu (kuşak / kurşun şeridi) — karo ile AYNI izin; backend ucu goods-receipt:read|write + ticaret.
+    path: "operations/sarf-stogu",
+    element: (
+      <ProtectedRoute requirePermission="goods-receipt:read">
+        <ConsumableStockPage />
       </ProtectedRoute>
     ),
   },

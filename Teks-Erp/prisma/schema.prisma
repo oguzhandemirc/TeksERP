@@ -3577,6 +3577,8 @@ model Item {
   /// D4-G1a: hizmet kaleminin sarf normları (SERVICE) / sarf kalemi olarak geçtiği normlar (CONSUMABLE).
   consumableNormsAsService       ServiceConsumableNorm[]     @relation("ServiceConsumableNormService")
   consumableNormsAsConsumable    ServiceConsumableNorm[]     @relation("ServiceConsumableNormConsumable")
+  consumableMovements            ConsumableMovement[]
+  consumableForPropertyValues    FabricPropertyValue[]       @relation("FabricPropertyValueConsumableItem")
   serviceBillingLinks            ServiceBillingLink[]        @relation("ServiceBillingLinkItem")
   /// D4-H3: hizmet kalemine bağlanan kasa masrafı payları.
   expenseAllocations             ExpenseAllocation[]
@@ -6356,6 +6358,7 @@ model RollOperation {
   machine             Machine?             @relation(fields: [machineId], references: [id])
   inheritedFromParent Roll?                @relation("RollOperationInherited", fields: [inheritedFromParentRollId], references: [id])
   propertyValue       FabricPropertyValue? @relation(fields: [propertyValueId], references: [id], onDelete: Restrict)
+  consumableMovements ConsumableMovement[]
 
   /// Append-only işlem log'u → `updatedAt` YOK (konvansiyon). İki güncelleme
   /// yolu var, ikisi de satırın İÇERİĞİNİ değiştirmez: idempotent `upsert`
@@ -9291,6 +9294,9 @@ model FabricPropertyValue {
   /// Gramaj kademesi → hizmet kalemi (H6, "KURŞUN-K2"); yoksa özelliğin eşlemesi.
   serviceItemId           String?                  @db.Uuid
   serviceItem             Item?                    @relation("FabricPropertyValueServiceItem", fields: [serviceItemId], references: [id], onDelete: Restrict)
+  /// Sarf stoğu (kuşak): bu değer üretimde uygulanınca top başına 1 birim düşülen sarf kalemi (CONSUMABLE); yoksa düşüm yok.
+  consumableItemId        String?                  @db.Uuid
+  consumableItem          Item?                    @relation("FabricPropertyValueConsumableItem", fields: [consumableItemId], references: [id], onDelete: Restrict)
   /// Brode deseni: bir adetteki vuruş (dikiş) sayısı — VURUŞ fiyat biriminde miktar = adet × bu (CHECK > 0).
   stitchCount             Int?
 
@@ -9299,6 +9305,7 @@ model FabricPropertyValue {
 
   @@unique([propertyId, code])
   @@index([serviceItemId])
+  @@index([consumableItemId])
   @@index([propertyId, sortOrder])
   @@map("fabric_property_values")
 }
@@ -10747,6 +10754,7 @@ model GoodsReceipt {
   movements             WarehouseMovement[]
   invoices              Invoice[]
   invoiceLinks          InvoiceToGoodsReceipt[]
+  consumableMovements   ConsumableMovement[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -14552,4 +14560,47 @@ model ServiceBillingLink {
   @@index([serviceItemId])
   @@index([readingId])
   @@map("service_billing_links")
+}
+
+/// Sarf stok hareketinin türü. Ters türler (`*_CANCEL_OUT`, `*_REVERSAL_IN`) daima `reversesId` ile ileri satıra bağlıdır.
+enum ConsumableMovementKind {
+  RECEIPT_IN
+  RECEIPT_CANCEL_OUT
+  CONSUMPTION_OUT
+  CONSUMPTION_REVERSAL_IN
+}
+
+/// SARF STOK DEFTERİ (kuşak, kurşun şeridi …) — DEFTER sınıfı, APPEND-ONLY (`updatedAt` YOK, `YarnMovement` emsali).
+/// Bakiye ayrı tabloda TUTULMAZ: kalem başına Σ işaret × qty türetilir (`consumable-stock.service`); eksi bakiye
+/// yalnız uyarıdır. Satır silinmez/düzeltilmez: ters kayıt `reversesId` ile ileri satıra bağlanır (tekil).
+/// CHECK'ler: qty > 0 · ters tür ⇔ `reversesId` dolu · CONSUMPTION_OUT ⇔ `rollOperationId` dolu.
+model ConsumableMovement {
+  id        String                 @id @default(uuid()) @db.Uuid
+  itemId    String                 @db.Uuid
+  kind      ConsumableMovementKind
+  /// HER ZAMAN POZİTİF; yönü `kind` söyler. Birim kalem kartının birimidir (`Item.unit`).
+  qty       Decimal                @db.Decimal(14, 3)
+  /// Mal kabulde fişin para biriminde birim fiyat; ters kayıt fiyat taşımaz.
+  unitPrice Decimal?               @db.Decimal(14, 4)
+
+  goodsReceiptId  String? @db.Uuid
+  /// Tüketimi doğuran üretim izi (kurşun/tambur); iz geri alınınca ters kayıt yazılır.
+  rollOperationId String? @db.Uuid
+  reversesId      String? @unique @db.Uuid
+  reason          String? @db.VarChar(300)
+  userId          String? @db.Uuid
+
+  item          Item                @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  goodsReceipt  GoodsReceipt?       @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
+  rollOperation RollOperation?      @relation(fields: [rollOperationId], references: [id], onDelete: Restrict)
+  reverses      ConsumableMovement? @relation("ConsumableMovementReversal", fields: [reversesId], references: [id], onDelete: Restrict)
+  reversedBy    ConsumableMovement? @relation("ConsumableMovementReversal")
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  /// Aynı izden aynı kaleme tek tüketim (tekrar çağrı no-op).
+  @@unique([rollOperationId, itemId])
+  @@index([itemId, createdAt])
+  @@index([goodsReceiptId])
+  @@map("consumable_movements")
 }

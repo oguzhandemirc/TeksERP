@@ -14,6 +14,7 @@ import { assertWorkNotBilledTx } from "./service-billing-gate.helper";
 import { Prisma, RollOperationType } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { ACTIVE_OPERATION } from "./roll-operation.helper";
+import { consumeForOperationTx, reverseConsumptionTx } from "./consumable-stock.helper";
 
 type Tx = Prisma.TransactionClient;
 
@@ -29,6 +30,8 @@ export interface ApplyKursunArgs {
   userId?: string | null;
   machineId?: string | null;
   metadata?: Prisma.InputJsonValue;
+  /** Sarf uyarılarının toplanacağı dizi (eksi bakiye engellemez; çağıran yanıtın `warnings`ine taşır). */
+  warnings?: string[];
 }
 
 const CONFLICT = () =>
@@ -71,6 +74,14 @@ async function readActive(tx: Tx, a: ApplyKursunArgs) {
   });
 }
 
+/** Yeni aktif satırın sarf düşümü (ayar kapalıysa no-op; uyarılar engellemez). */
+async function consumeNewActiveTx(tx: Tx, a: ApplyKursunArgs): Promise<void> {
+  const row = await readActive(tx, a);
+  if (!row) return;
+  const warnings = await consumeForOperationTx(tx, row.id, a.userId);
+  a.warnings?.push(...warnings.map((w) => w.message));
+}
+
 /**
  * Topun bu adımdaki aktif `KURSUN_APPLIED` satırını istenen değere getirir.
  *   • satır yok          → yazılır ("created"); eşzamanlı ilk yazımda kaybeden
@@ -82,7 +93,10 @@ async function readActive(tx: Tx, a: ApplyKursunArgs) {
 export async function applyKursunOperationTx(tx: Tx, a: ApplyKursunArgs): Promise<KursunWriteOutcome> {
   const active = await readActive(tx, a);
   if (!active) {
-    if ((await insertActive(tx, a)) === 1) return "created";
+    if ((await insertActive(tx, a)) === 1) {
+      await consumeNewActiveTx(tx, a);
+      return "created";
+    }
     const winner = await readActive(tx, a);
     if (winner && (a.valueId === null || winner.propertyValueId === a.valueId)) return "noop";
     throw CONFLICT();
@@ -97,5 +111,8 @@ export async function applyKursunOperationTx(tx: Tx, a: ApplyKursunArgs): Promis
   });
   if (claimed.count === 0) throw CONFLICT();
   if ((await insertActive(tx, a)) === 0) throw CONFLICT();
+  // Sarf stoğu: eski gramajın tüketimi geri yazılır, yeni gramajınki düşülür.
+  await reverseConsumptionTx(tx, { id: active.id }, a.userId, KURSUN_CORRECTION_REASON);
+  await consumeNewActiveTx(tx, a);
   return "corrected";
 }

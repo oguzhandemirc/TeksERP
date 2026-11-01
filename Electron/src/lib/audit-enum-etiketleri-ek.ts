@@ -416,4 +416,9 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   SEPARATE_BEAM: "Ayrı levent",
   SHARED_BEAM: "Zeminle aynı levent",
   CREEL: "Cağlık (bobinden)",
+  // ConsumableMovementKind (sarf stok defteri — kuşak / kurşun şeridi)
+  RECEIPT_IN: "Mal kabul girişi",
+  RECEIPT_CANCEL_OUT: "Mal kabul iptali",
+  CONSUMPTION_OUT: "Üretim tüketimi",
+  CONSUMPTION_REVERSAL_IN: "Tüketim geri alındı",
 };

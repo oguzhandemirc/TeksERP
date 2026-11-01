@@ -454,6 +454,8 @@ function main(): void {
     readTezgahAlarmEnabled: { resolver: "resolveTezgahAlarmEnabled", ebeveyn: "tezgah" },
     // Sebepsiz duruş hedefi: tezgah modülü ∧ sebepsiz anahtar (`tezgah.alarm.unclassifiedEnabled`) ∧ süre.
     readTezgahAlarmUnclassifiedTargetMinutes: { resolver: "resolveTezgahAlarmUnclassifiedTarget", ebeveyn: "tezgah" },
+    // Sarf stoğu (kuşak / kurşun şeridi): mal kabul sarf satırı + üretim düşümü + rapor sütunu yalnız resolver okur.
+    readConsumableStockEnabled: { resolver: "resolveConsumableStockEnabled", ebeveyn: "ticaret" },
   };
 
   const servisKodu = yorumlariSok(fs.readFileSync(SERVIS, "utf8"));
