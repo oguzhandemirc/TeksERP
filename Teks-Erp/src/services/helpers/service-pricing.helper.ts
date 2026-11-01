@@ -182,6 +182,24 @@ async function loadFlagWorks(rollIds: string[], basis: "OUT" | "IN" | "DECLARED"
   });
 }
 
+/** Fiyat hizmet anına çözülür (geç taslak eski fiyatı korur); aynı an tek sorgu. Birim uyuşmazsa fiyat yok. */
+async function applyAsOfPrices(works: ServiceRollWork[], ctx: { opt: ServiceResolveOptions; currency: Currency; customerId: string | null; db: Db }): Promise<void> {
+  const byAt = new Map<number, ServiceRollWork[]>();
+  const priceAt = (w: ServiceRollWork) => (ctx.opt.priceAsOfByRoll?.get(w.rollId) ?? ctx.opt.priceAsOf ?? w.serviceAt).getTime();
+  for (const w of works) if (w.serviceItemId) byAt.set(priceAt(w), [...(byAt.get(priceAt(w)) ?? []), w]);
+  for (const [at, group] of byAt) {
+    const prices = await resolveItemPricesFor({
+      itemIds: group.map((w) => w.serviceItemId!), kind: PriceKind.SALE, currency: ctx.currency,
+      customerId: ctx.customerId, asOf: new Date(at), db: ctx.db,
+    });
+    for (const w of group) {
+      const hit = prices.get(w.serviceItemId!);
+      // Tarife satırının birimi işin birimiyle aynı değilse fiyat yok sayılır (metre fiyatı adede uygulanmaz).
+      w.unitPrice = hit && priceUnitMatches(hit.priceUnit, w.qtyUnit) ? hit.price : null;
+    }
+  }
+}
+
 /**
  * Toplara yapılan kurşun ve bayrak tipi (H10) işleri hizmet kalemine ve müşteri fiyatına çözer.
  * Yazmaz; eşleşmeyen top ve fiyatsız kalem `warnings`te görünür (sessiz düşmez).
@@ -238,21 +256,7 @@ export async function resolveServiceItemsForRolls(params: {
   for (const u of new Set(unknown.map((w) => w.qtyUnit))) warnings.push(missingQuantityWarning(u, unknown.filter((w) => w.qtyUnit === u).length));
   const works = billable.filter((w) => !unknown.includes(w));
 
-  // Fiyat hizmet anına çözülür (geç taslak eski fiyatı korur); aynı an tek sorgu.
-  const byAt = new Map<number, ServiceRollWork[]>();
-  const priceAt = (w: ServiceRollWork) => (opt.priceAsOfByRoll?.get(w.rollId) ?? opt.priceAsOf ?? w.serviceAt).getTime();
-  for (const w of works) if (w.serviceItemId) byAt.set(priceAt(w), [...(byAt.get(priceAt(w)) ?? []), w]);
-  for (const [at, group] of byAt) {
-    const prices = await resolveItemPricesFor({
-      itemIds: group.map((w) => w.serviceItemId!), kind: PriceKind.SALE, currency: params.currency,
-      customerId: params.customerId, asOf: new Date(at), db,
-    });
-    for (const w of group) {
-      const hit = prices.get(w.serviceItemId!);
-      // Tarife satırının birimi işin birimiyle aynı değilse fiyat yok sayılır (metre fiyatı adede uygulanmaz).
-      w.unitPrice = hit && priceUnitMatches(hit.priceUnit, w.qtyUnit) ? hit.price : null;
-    }
-  }
+  await applyAsOfPrices(works, { opt, currency: params.currency, customerId: params.customerId, db });
 
   const items = await db.item.findMany({
     where: { id: { in: [...new Set(works.map((w) => w.serviceItemId).filter((v): v is string => v !== null))] } },

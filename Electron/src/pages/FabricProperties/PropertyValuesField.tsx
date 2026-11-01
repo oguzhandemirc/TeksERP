@@ -50,12 +50,7 @@ export function PropertyValuesField({ value, onChange, existingCodes, service, s
 
   return (
     <div className="space-y-2">
-      {value.length === 0 && (
-        <p className="rounded border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
-          Henüz değer yok. Kat için örnek: <span className="font-mono">2-KAT</span>,{" "}
-          <span className="font-mono">4-KAT</span>, <span className="font-mono">TUP</span>
-        </p>
-      )}
+      {value.length === 0 && <EmptyValuesHint />}
 
       {value.map((row, i) => {
         const isSaved = saved.has(row.code.trim().toUpperCase());
@@ -83,20 +78,7 @@ export function PropertyValuesField({ value, onChange, existingCodes, service, s
                 value={row.name}
                 onChange={(e) => patch(i, { name: e.target.value })}
               />
-              {showStitch && (
-                <Input
-                  className="w-24 shrink-0"
-                  type="number"
-                  min={1}
-                  step={1}
-                  inputMode="numeric"
-                  placeholder="Vuruş"
-                  aria-label={`${row.code || "Yeni değer"} vuruş sayısı`}
-                  title="Bir adetteki vuruş (dikiş) sayısı — brode vuruşla fiyatlanırken kullanılır"
-                  value={row.stitchCount ?? ""}
-                  onChange={(e) => patch(i, { stitchCount: e.target.value === "" ? null : Math.trunc(Number(e.target.value)) })}
-                />
-              )}
+              {showStitch && <StitchCountInput row={row} onChange={(stitchCount) => patch(i, { stitchCount })} />}
               <label className="flex shrink-0 items-center gap-1 text-xs sm:w-20">
                 <input
                   type="checkbox"
@@ -166,5 +148,32 @@ function ValueServiceRow({
         {serviceHintText(hint, service.items)}
       </p>
     </div>
+  );
+}
+
+function EmptyValuesHint() {
+  return (
+    <p className="rounded border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
+      Henüz değer yok. Kat için örnek: <span className="font-mono">2-KAT</span>,{" "}
+      <span className="font-mono">4-KAT</span>, <span className="font-mono">TUP</span>
+    </p>
+  );
+}
+
+/** Desen başına vuruş sayısı (brode vuruşla fiyatlanırken kullanılır). */
+function StitchCountInput({ row, onChange }: { row: PropertyValueRow; onChange: (stitchCount: number | null) => void }) {
+  return (
+    <Input
+      className="w-24 shrink-0"
+      type="number"
+      min={1}
+      step={1}
+      inputMode="numeric"
+      placeholder="Vuruş"
+      aria-label={`${row.code || "Yeni değer"} vuruş sayısı`}
+      title="Bir adetteki vuruş (dikiş) sayısı — brode vuruşla fiyatlanırken kullanılır"
+      value={row.stitchCount ?? ""}
+      onChange={(e) => onChange(e.target.value === "" ? null : Math.trunc(Number(e.target.value)))}
+    />
   );
 }

@@ -119,10 +119,7 @@ export function meterReadingReplay(expect: { rollId: string; stepId: string; pha
     find: (db, clientToken) => db.rollMeterReading.findUnique({ where: { clientToken } }),
     alive: (prior) => {
       if (prior.revokedAt) {
-        throw AppError.conflict("Bu metre okuması sonradan düzeltildi ya da geri alındı — yeni okuma yapın", {
-          code: "METER_READING_REVOKED",
-          readingId: prior.id,
-        });
+        throw AppError.conflict("Bu metre okuması sonradan düzeltildi ya da geri alındı — yeni okuma yapın", { code: "METER_READING_REVOKED", readingId: prior.id });
       }
     },
     identity: (prior) => [

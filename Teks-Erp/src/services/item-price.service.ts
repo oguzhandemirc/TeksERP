@@ -48,6 +48,7 @@ import { buildWhereClause, buildTurkishSearch, isEnumMember, readIdCondition } f
 import type { ApiResponse } from "../types/api.types";
 import { assertItemUsable, assertItemUsableTx } from "./helpers/item-usage.helper";
 import { ACTIVE_ITEM_PRICE, ITEM_PRICE_REVOKE_REASON, itemPriceValidAt } from "./helpers/item-price-validity.helper";
+import { logItemPriceVersionWrite, requestedPriceUnit } from "./helpers/item-price-audit.helper";
 
 
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -372,10 +373,7 @@ export class ItemPriceService {
   async upsert(input: ItemPriceUpsertInput, userId?: string): Promise<ApiResponse<ResolvedItemPrice & { created: boolean }>> {
     const price = normalizePrice(input.price);
     const customerId = input.customerId ?? null;
-    // METER = NULL (bugünkü satırlarla aynı biçim). Alan GÖNDERİLMEZSE mevcut sürümün birimi korunur
-    // (eski panel fiyat kaydederken ADET/VURUŞ satırını sessizce metreye çevirmesin).
-    const requestedUnit: ServiceQtyUnit | null | undefined =
-      input.priceUnit === undefined ? undefined : input.priceUnit && input.priceUnit !== "METER" ? input.priceUnit : null;
+    const requestedUnit = requestedPriceUnit(input.priceUnit); // undefined = mevcut sürümün birimi korunur
     let priceUnit: ServiceQtyUnit | null = requestedUnit ?? null;
 
     // ── Dış referanslar: var mı + AKTİF mi ────────────────────────────────
@@ -433,28 +431,8 @@ export class ItemPriceService {
 
     const { row, previous, wrote } = outcome;
     const created = previous === null;
-    const priceStr = price.toFixed(4);
     const key = { itemId: input.itemId, customerId, kind: input.kind, currency: input.currency };
-    if (wrote && previous) {
-      void AuditService.log({
-        userId,
-        action: "UPDATE",
-        tableName: "ITEM_PRICE",
-        recordId: previous.id,
-        oldData: { revokeReason: null },
-        newData: { ...key, price: previous.price.toFixed(4), revokeReason: ITEM_PRICE_REVOKE_REASON.CHANGED },
-      });
-    }
-    if (wrote) {
-      void AuditService.log({
-        userId,
-        action: "CREATE",
-        tableName: "ITEM_PRICE",
-        recordId: row.id,
-        oldData: previous ? { price: previous.price.toFixed(4), ...(previous.priceUnit ? { priceUnit: previous.priceUnit } : {}) } : null,
-        newData: { ...key, price: priceStr, ...(priceUnit ? { priceUnit } : {}) },
-      });
-    }
+    if (wrote) logItemPriceVersionWrite({ userId, key, rowId: row.id, previous, price, priceUnit });
 
     return {
       success: true,
