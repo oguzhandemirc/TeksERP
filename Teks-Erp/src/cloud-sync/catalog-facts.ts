@@ -2,7 +2,7 @@
 // `projections.ts` üzerinden dışa açılır; tasarım `docs/design/PATRON-BULUTU-ESITLEME.md` §3.2.
 import { factoryDaySql } from "../constants/time";
 import { col, derived, lookup, self, via, type RecordProjection } from "./projection-types";
-import { MERGED_INVOICE_COLUMN, MERGED_INVOICE_READS, MERGED_INVOICE_SOURCES, MERGED_NOTE, TRANSFER_DUE_CROSSING } from "./catalog-merged-cari";
+import { MERGED_INVOICE_RESOLVER, MERGED_INVOICE_READS, MERGED_INVOICE_SOURCES, MERGED_NOTE, TRANSFER_DUE_CROSSING } from "./catalog-merged-cari";
 
 // ── OLGU projeksiyonları ──────────────────────────────────────────────────────
 // İkinci kol: sevke hazırlık (D4-J5) topu partisinin iş emrinden sayar — top durumu değişince o iş emri de gider.
@@ -210,7 +210,7 @@ export const FACTS: readonly RecordProjection[] = [
   {
     name: "fatura", kind: "KAYIT", role: "OLGU", root: { table: "invoices", model: "Invoice" },
     scope: { note: "taslak (DRAFT) buluta GİRMEZ; taslağın silinmesi kapsam dışı", prismaWhere: { status: { not: "DRAFT" } }, sql: `t."status" <> 'DRAFT'` },
-    columns: [col("id", "id"), col("belgeNo", "docNo"), col("tur", "type"), col("durum", "status"), MERGED_INVOICE_COLUMN,
+    columns: [col("id", "id"), col("belgeNo", "docNo"), col("tur", "type"), col("durum", "status"), { ...col("cariHesapId", "cariId"), resolvedBy: MERGED_INVOICE_RESOLVER },
       col("doviz", "currency"), col("kur", "exchangeRate", "FINANS"), col("tarih", "issueDate"), col("vade", "dueDate"),
       col("disNo", "externalNo"), col("araToplam", "subtotal", "FINANS"), col("iskonto", "discountTotal", "FINANS"),
       col("kdv", "vatTotal", "FINANS"), col("tevkifat", "withholdingTotal", "FINANS"), col("genelToplam", "grandTotal", "FINANS"),

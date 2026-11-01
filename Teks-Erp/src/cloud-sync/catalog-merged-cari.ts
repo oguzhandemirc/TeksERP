@@ -1,6 +1,6 @@
 // Birleşmiş cari (K3d) faturasının bulut kataloğu parçaları (D4-K3dk2): fatura hedef hesap altında görünür,
 // açığı hedefin hareketiyle değişir — kolon çözümü, okumalar, değişiklik kaynakları ve virman vadesi geçişi.
-import { col, lookup, type ChangeSource, type ColumnSpec } from "./projection-types";
+import { lookup, type ChangeSource, type ColumnSpec } from "./projection-types";
 
 // $1'e (geçişli: A→B→C zinciri) birleşmiş hesapların kimlikleri; UNION döngüyü keser.
 const MERGED_INTO_ANY = 'WITH RECURSIVE m(id) AS (SELECT c."id" FROM "cari_accounts" c WHERE c."mergedIntoId" = ANY($1::uuid[]) UNION SELECT c."id" FROM "cari_accounts" c JOIN m ON c."mergedIntoId" = m."id")';
@@ -19,9 +19,10 @@ export const TRANSFER_DUE_CROSSING = {
   invoice: { name: "virman-vadesi", sql: `SELECT DISTINCT t."invoiceId" AS root_id ${TRANSFER_DUE_FROM} AND t."invoiceId" IS NOT NULL` },
 } as const;
 
-export const MERGED_INVOICE_COLUMN: ColumnSpec = {
-  ...col("cariHesapId", "cariId"),
-  resolvedBy: { helper: "cloud-sync/derived-merged-invoice mergedInvoiceViews: birleşmiş hesabın faturası mergedIntoId (hedef) altında; satırın cariId'si değişmez", reads: ["cari_accounts"] },
+/** `fatura.cariHesapId` çözümü; kolon `col("cariHesapId", …)` catalog-facts'te METİN olarak kalır (patron test_liste_arama onu okur). */
+export const MERGED_INVOICE_RESOLVER: NonNullable<ColumnSpec["resolvedBy"]> = {
+  helper: "cloud-sync/derived-merged-invoice mergedInvoiceViews: birleşmiş hesabın faturası mergedIntoId zincirinin son hedefi altında; satırın cariId'si değişmez",
+  reads: ["cari_accounts"],
 };
 
 export const MERGED_INVOICE_SOURCES: readonly ChangeSource[] = [
