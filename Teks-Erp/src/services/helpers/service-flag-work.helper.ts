@@ -27,6 +27,7 @@ type Db = Prisma.TransactionClient | typeof prisma;
 import { ACTIVE_ROLL_PROPERTY, loadVariantValueItems } from "./property-revoke.helper";
 import { KURSUN_PROPERTY_CODE } from "./quality-station.helper";
 import { pickServiceItemId } from "./service-item-pick.helper";
+import { loadPatternStitchCounts } from "./service-quantity.helper";
 
 export type FlagWorkBasis = "OUT" | "IN" | "DECLARED" | "CUT" | "RECEIVED";
 
@@ -35,6 +36,8 @@ export interface FlagWork {
   workOrderStepId: string | null;
   propertyId: string;
   propertyName: string;
+  /** Bayrağın kodu — brode fiyat birimi yalnız `BRODE_PROPERTY_CODE` işine uygulanır (`service-quantity.helper`). */
+  propertyCode: string;
   serviceItemId: string;
   meters: Prisma.Decimal;
   meterBasis: FlagWorkBasis;
@@ -42,6 +45,10 @@ export interface FlagWork {
   /** D4-G2a: işi ölçen okumanın makinesi (kârlılık makine kırılımı); okumasız (RECEIVED/DECLARED/eski CUT) iş `null`. */
   machineId: string | null;
   serviceAt: Date;
+  /** Okumada girilen adet (brode ADET/VURUŞ); okumasız ya da adetsiz iş `null`. */
+  pieceCount: number | null;
+  /** Yapraktaki desen değerinin vuruş sayısı; desensiz/vuruşsuz `null`. */
+  stitchCount: number | null;
 }
 
 type RollRow = {
@@ -113,13 +120,18 @@ const BILLABLE_FLAG_PROPERTY: Prisma.FabricPropertyWhereInput = {
 async function loadBillableFlagProps(rollIds: string[], db: Db) {
   const rows = await db.rollProperty.findMany({
     where: { rollId: { in: rollIds }, ...ACTIVE_ROLL_PROPERTY, property: BILLABLE_FLAG_PROPERTY },
-    select: { rollId: true, propertyId: true, createdAt: true, property: { select: { name: true, serviceItemId: true } } },
+    select: { rollId: true, propertyId: true, createdAt: true, property: { select: { name: true, code: true, serviceItemId: true } } },
     orderBy: [{ rollId: "asc" }, { propertyId: "asc" }],
   });
   if (rows.length === 0) return [];
   const valueItemOf = await loadVariantValueItems(db, rows);
+  const stitchOf = await loadPatternStitchCounts(db, rows);
   return rows
-    .map((p) => ({ ...p, serviceItemId: pickServiceItemId({ value: valueItemOf.get(`${p.rollId}:${p.propertyId}`), property: p.property.serviceItemId }) }))
+    .map((p) => ({
+      ...p,
+      stitchCount: stitchOf.get(`${p.rollId}:${p.propertyId}`) ?? null,
+      serviceItemId: pickServiceItemId({ value: valueItemOf.get(`${p.rollId}:${p.propertyId}`), property: p.property.serviceItemId }),
+    }))
     .filter((p): p is typeof p & { serviceItemId: string } => p.serviceItemId !== null);
 }
 
@@ -164,7 +176,7 @@ export async function listFlagServiceWorks(
   const phases = meterBasis === "OUT" ? [MeterPhase.OUT, MeterPhase.IN] : meterBasis === "IN" ? [MeterPhase.IN] : [];
   const readings = phases.length === 0 || allStations.length === 0 ? [] : await db.rollMeterReading.findMany({
     where: { rollId: { in: chainIds }, revokedAt: null, source: { not: MachineDataSource.SIMULATED }, phase: { in: phases }, step: { stationId: { in: allStations } } },
-    select: { id: true, rollId: true, workOrderStepId: true, phase: true, meters: true, machineId: true, createdAt: true, step: { select: { stationId: true } } },
+    select: { id: true, rollId: true, workOrderStepId: true, phase: true, meters: true, pieceCount: true, machineId: true, createdAt: true, step: { select: { stationId: true } } },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
   const receivedOf = await loadReceivedResolver(byId, allStations, db);
@@ -187,14 +199,14 @@ export async function listFlagServiceWorks(
   for (const p of props) {
     const leaf = byId.get(p.rollId)!;
     const stations = stationsOf.get(p.propertyId) ?? new Set<string>();
-    const base = { propertyId: p.propertyId, propertyName: p.property.name, serviceItemId: p.serviceItemId };
+    const base = { propertyId: p.propertyId, propertyName: p.property.name, propertyCode: p.property.code, serviceItemId: p.serviceItemId, stitchCount: p.stitchCount, pieceCount: null };
     let work: FlagWork | null = null;
     for (const rid of chainOf(leaf.id)) {
       if (rid !== leaf.id && pieceBilled.has(`${rid}:${base.serviceItemId}`)) break;
       // ① okuma: seçilen faz sırasıyla (OUT tabanında OUT → IN), adımın en son aktif okuması.
       for (const phase of phases) {
         const hit = readings.filter((r) => r.rollId === rid && r.phase === phase && stations.has(r.step.stationId)).at(-1);
-        if (hit) { work = { ...base, rollId: rid, workOrderStepId: hit.workOrderStepId, meters: hit.meters, meterBasis: phase, readingId: hit.id, machineId: hit.machineId, serviceAt: hit.createdAt }; break; }
+        if (hit) { work = { ...base, rollId: rid, workOrderStepId: hit.workOrderStepId, meters: hit.meters, meterBasis: phase, readingId: hit.id, machineId: hit.machineId, serviceAt: hit.createdAt, pieceCount: hit.pieceCount }; break; }
       }
       if (work) break;
       // ② dış (fason) iş — RECEIVED (doğan top ya da kendisi dönen top).

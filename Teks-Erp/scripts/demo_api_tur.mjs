@@ -13,7 +13,8 @@
  */
 const BASE = process.env.TUR_BASE || "http://127.0.0.1:4000";
 const USER = process.env.TUR_USER || "demo";
-const PASS = process.env.TUR_PASS || "Zuo3LyGi9pNm";
+// Parola repoya girmez: yalnız ortamdan okunur.
+const PASS = process.env.TUR_PASS;
 
 const gun = (n) => new Date(Date.now() - n * 86400000).toISOString();
 const ARALIK = `dateFrom=${encodeURIComponent(gun(120))}&dateTo=${encodeURIComponent(gun(-1))}`;
@@ -68,7 +69,8 @@ const UCLAR = [
   // ── RAPORLAR ──
   ["Rapor: kalite karnesi", `/api/reports/quality/scorecard?${ARALIK}`],
   ["Rapor: fire karnesi", `/api/reports/quality/scrap-scorecard?${ARALIK}`],
-  ["Rapor: stok karnesi", `/api/reports/inventory/scorecard?${ARALIK}`],
+  // Stok karnesi anlık görüntüdür; uç sorgu parametresi kabul etmez (emptyQuerySchema).
+  ["Rapor: stok karnesi", "/api/reports/inventory/scorecard"],
   ["Rapor: müşteri karnesi", `/api/reports/customer/scorecard?${ARALIK}`],
   ["Rapor: sipariş girişi", `/api/reports/sales/order-intake?${ARALIK}`],
   ["Rapor: sevkiyat karnesi", `/api/reports/sales/shipment-scorecard?${ARALIK}`],
@@ -94,46 +96,55 @@ function satirSay(gövde) {
   return 0;
 }
 
-const giris = await fetch(`${BASE}/api/auth/login`, {
-  method: "POST",
-  headers: { "content-type": "application/json" },
-  body: JSON.stringify({ username: USER, password: PASS, clientType: "electron" }),
-});
-if (!giris.ok) {
-  console.error(`❌ GİRİŞ BAŞARISIZ (${giris.status}):`, (await giris.text()).slice(0, 300));
-  process.exit(1);
-}
-const token = (await giris.json())?.data?.token;
-if (!token) { console.error("❌ token yok"); process.exit(1); }
-console.log(`✅ giriş: ${USER}\n`);
-
-const hatalar = [], boslar = [], dolular = [];
-for (const [ad, yol] of UCLAR) {
-  try {
-    const res = await fetch(BASE + yol, { headers: { authorization: `Bearer ${token}` } });
-    const metin = await res.text();
-    let gövde = null;
-    try { gövde = JSON.parse(metin); } catch { /* JSON değil */ }
-    if (!res.ok) {
-      hatalar.push([ad, res.status, (gövde?.message ?? metin).slice(0, 110)]);
-    } else {
-      const n = satirSay(gövde);
-      (n === 0 ? boslar : dolular).push([ad, n]);
-    }
-  } catch (e) {
-    hatalar.push([ad, "AĞ", String(e).slice(0, 110)]);
+async function tur() {
+  const giris = await fetch(`${BASE}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ username: USER, password: PASS, clientType: "electron" }),
+  });
+  if (!giris.ok) {
+    console.error(`❌ GİRİŞ BAŞARISIZ (${giris.status}):`, (await giris.text()).slice(0, 300));
+    process.exit(1);
   }
+  const token = (await giris.json())?.data?.token;
+  if (!token) { console.error("❌ token yok"); process.exit(1); }
+  console.log(`✅ giriş: ${USER}\n`);
+
+  const hatalar = [], boslar = [], dolular = [];
+  for (const [ad, yol] of UCLAR) {
+    try {
+      const res = await fetch(BASE + yol, { headers: { authorization: `Bearer ${token}` } });
+      const metin = await res.text();
+      let gövde = null;
+      try { gövde = JSON.parse(metin); } catch { /* JSON değil */ }
+      if (!res.ok) {
+        hatalar.push([ad, res.status, (gövde?.message ?? metin).slice(0, 110)]);
+      } else {
+        const n = satirSay(gövde);
+        (n === 0 ? boslar : dolular).push([ad, n]);
+      }
+    } catch (e) {
+      hatalar.push([ad, "AĞ", String(e).slice(0, 110)]);
+    }
+  }
+
+  console.log(`=== ${UCLAR.length} uç · ✓ dolu ${dolular.length} · ○ boş ${boslar.length} · ✗ hata ${hatalar.length} ===\n`);
+  if (hatalar.length) {
+    console.log("--- ✗ HATA (müşteri 'çalışmıyor' der) ---");
+    for (const [a, k, m] of hatalar) console.log(`  ${String(k).padEnd(4)} ${a.padEnd(26)} ${m}`);
+  }
+  if (boslar.length) {
+    console.log("\n--- ○ BOŞ (müşteri 'özellik yok' der) ---");
+    for (const [a] of boslar) console.log(`  ${a}`);
+  }
+  console.log("\n--- ✓ DOLU ---");
+  for (const [a, n] of dolular) console.log(`  ${a.padEnd(26)} ${n}`);
+  process.exit(hatalar.length > 0 ? 1 : 0);
 }
 
-console.log(`=== ${UCLAR.length} uç · ✓ dolu ${dolular.length} · ○ boş ${boslar.length} · ✗ hata ${hatalar.length} ===\n`);
-if (hatalar.length) {
-  console.log("--- ✗ HATA (müşteri 'çalışmıyor' der) ---");
-  for (const [a, k, m] of hatalar) console.log(`  ${String(k).padEnd(4)} ${a.padEnd(26)} ${m}`);
+if (PASS) {
+  await tur();
+} else {
+  console.error("HATA: TUR_PASS ortam değişkeni tanımlı değil — demo hesabının parolasını TUR_PASS ile verin.");
+  process.exitCode = 2;
 }
-if (boslar.length) {
-  console.log("\n--- ○ BOŞ (müşteri 'özellik yok' der) ---");
-  for (const [a] of boslar) console.log(`  ${a}`);
-}
-console.log("\n--- ✓ DOLU ---");
-for (const [a, n] of dolular) console.log(`  ${a.padEnd(26)} ${n}`);
-process.exit(hatalar.length > 0 ? 1 : 0);

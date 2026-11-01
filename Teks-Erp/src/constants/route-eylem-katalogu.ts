@@ -31,6 +31,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/weave-designs/:id/activate": e("desen kartını yeniden aktif etti", "desen kartını aktif etmeye çalıştı"),
   "PUT /api/item-construction/:itemId/warp-layers": e("ürünün çözgü katmanlarını değiştirdi", "ürünün çözgü katmanlarını değiştirmeye çalıştı"),
   "PUT /api/item-construction/recipes/:recipeId/weft-yarns": e("varyantın atkı ipliği değişimlerini değiştirdi", "varyantın atkı ipliği değişimlerini değiştirmeye çalıştı"),
+  "POST /api/weft-specs/:id/fork": e("ortak atkı kartının bu desene özel kopyasını aldı", "atkı kartının özel kopyasını almaya çalıştı"),
   // ── Sipariş
   "POST /api/orders": e("sipariş oluşturdu", "sipariş oluşturmaya çalıştı"),
   "PATCH /api/orders/:id": e("siparişi düzenledi", "siparişi düzenlemeye çalıştı"),
@@ -58,6 +59,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/customers/:id/barcode-series/preview": e("müşteri barkod serisini önizledi", "müşteri barkod serisini önizlemeye çalıştı"),
   "POST /api/finance/cari/:id/holds": e("cariye kilit koydu", "cariye kilit koymaya çalıştı"),
   "POST /api/finance/cari/holds/:holdId/release": e("cari kilidini açtı", "cari kilidini açmaya çalıştı"),
+  "POST /api/finance/cari/merge": e("cari hesabı birleştirdi", "cari hesabı birleştirmeye çalıştı"),
   "POST /api/finance/cash-transactions/:id/allocations": e("masrafı makineye/işe bağladı", "masrafı bağlamaya çalıştı"),
   "POST /api/finance/expense-allocations/:id/change": e("masraf bağını değiştirdi", "masraf bağını değiştirmeye çalıştı"),
   "POST /api/finance/expense-allocations/:id/revoke": e("masraf bağını kaldırdı", "masraf bağını kaldırmaya çalıştı"),

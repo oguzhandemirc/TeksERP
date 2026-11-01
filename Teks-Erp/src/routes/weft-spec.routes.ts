@@ -17,6 +17,7 @@ import {
   listWeftSpecs,
   updateWeftSpec,
 } from "../services/weft-spec.service";
+import { forkWeftSpecForItem } from "../services/weft-spec-fork.service";
 
 const router = Router();
 router.use(verifyToken, requireDokumaEnabled);
@@ -80,6 +81,34 @@ router.get("/:id", requirePermission("warpspec:read"), wrap(async (req, res) => 
 router.post("/", requirePermission("warpspec:write"), wrap(async (req, res) => {
   const data = await createWeftSpec(body.parse(req.body ?? {}), req.user?.userId);
   res.status(201).json({ success: true, data, message: "Atkı kartı oluşturuldu." });
+}));
+
+const forkBody = z.object({
+  itemId: z.string().uuid("Geçersiz kumaş ID"),
+  code: z.string().max(32, "Atkı kartı kodu en çok 32 karakter olabilir"),
+  name: z.string().max(100, "Atkı kartı adı en çok 100 karakter olabilir"),
+}).strict();
+
+/**
+ * @openapi
+ * /api/weft-specs/{id}/fork:
+ *   post:
+ *     tags: [WeftSpecs]
+ *     summary: Bu desene özel kopya — kartı kopyalar, YALNIZ verilen kumaşın bağını kopyaya çevirir (SY-P3)
+ *     description: Aynı kod bu kumaşa zaten bağlıysa önceki denemenin tekrarı sayılır (200, replayed=true).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       201: { description: Kopya oluşturuldu ve kumaş bağı çevrildi }
+ *       200: { description: Tekrar deneme — mevcut kopya döndü }
+ *       400: { description: Kod/ad boş ya da gövde geçersiz }
+ *       404: { description: Kart ya da kumaş bulunamadı }
+ *       409: { description: WEFT_SPEC_DUPLICATE · WEFT_SPEC_BINDING_CHANGED · WEFT_SPEC_NOT_SHARED }
+ */
+router.post("/:id/fork", requirePermission("warpspec:write"), wrap(async (req, res) => {
+  const { id } = idParam.parse(req.params);
+  const data = await forkWeftSpecForItem(id, forkBody.parse(req.body ?? {}), req.user?.userId);
+  res.status(data.replayed ? 200 : 201).json({ success: true, data, message: data.replayed ? "Özel kopya zaten oluşturulmuştu." : "Bu desene özel atkı kartı oluşturuldu." });
 }));
 
 /**
