@@ -306,6 +306,8 @@ apiClient.interceptors.response.use(
         }
         if (status && status >= 400 && status < 500) {
           toast.error(buildErrorMessage(body));
+        } else if (status === 503 && body?.details?.code === "AUTH_BUSY") {
+          toast.error(body.message ?? "Sunucu şu an çok yoğun. Birkaç saniye sonra tekrar deneyin.");
         } else if (status && status >= 500) {
           toast.error("Sunucu hatası. Lütfen daha sonra tekrar deneyin.");
         } else if (!error.response) {

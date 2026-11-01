@@ -87,6 +87,7 @@ describe('OnsiteRebindApprove', () => {
     expect(settled.settled).toBe(true);
     expect(onsiteErrorMessage({ status: 404, details: { code: 'REBIND_REQUEST_NOT_FOUND' } }).settled).toBe(true);
     expect(onsiteErrorMessage({}).text).toMatch(/Sunucuya ulaşılamadı/);
+    expect(onsiteErrorMessage({ status: 503, details: { code: 'AUTH_BUSY' } }).text).toMatch(/çok yoğun/);
   });
 
   it('§5 talep zaten işlenmiş → hata gösterilir ve durum yeniden çekilir', async () => {
