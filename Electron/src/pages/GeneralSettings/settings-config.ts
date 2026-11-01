@@ -27,6 +27,7 @@ import {
   FileScan,
   Calculator,
   type LucideIcon,
+  ShieldCheck,
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import type { FeatureFlags } from "@/services/featureFlagService";
@@ -2731,6 +2732,38 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:session"],
   },
   {
+    // Web girişi 2FA politikası (2026-11-01): yazma YALNIZ süperadmin (`SUPERADMIN_ONLY_FLAG_KEYS`);
+    // fabrika yöneticisi salt-okunur görür. Kullanıcının kendi tercihi Kullanıcı Tercihleri'nde.
+    id: "web-giris",
+    label: "İnternetten Giriş",
+    icon: ShieldCheck,
+    description: "Web panelinde (tarayıcıdan) girişte iki adımlı doğrulamanın herkese zorunlu mu, kullanıcının tercihine mi bırakıldığı.",
+    keywords: "iki adımlı doğrulama 2fa totp kod web tarayıcı internet bulut giriş güvenlik parola kapat zorunlu tercih",
+    kind: "flags",
+    section: "system",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION],
+    superadminOnly: true,
+    enumFlags: [
+      {
+        enumKey: "webTotpPolicy",
+        title: "İnternetten girişte iki adımlı doğrulama",
+        summary: "Web panelinde girişte doğrulama kodu herkese zorunlu mu, yoksa her kullanıcı kendi hesabı için mi karar versin.",
+        defaultValue: "REQUIRED",
+        options: [
+          { value: "REQUIRED", label: "Herkese zorunlu", hint: "Bugünkü davranış: tarayıcıdan girişte parola + doğrulama kodu istenir." },
+          {
+            value: "USER_CHOICE",
+            label: "Kullanıcının tercihine bırak",
+            hint: "Her kullanıcı Kullanıcı Tercihleri'nden kendi hesabında kodu kapatabilir (parola + kodla). Önerilmez.",
+          },
+        ],
+        display: "radio",
+        audience: ["Yönetim"],
+        desc: "“Herkese zorunlu” (varsayılan): web paneline girişte iki adımlı doğrulama kurulu olmalı ve kod istenir. “Kullanıcının tercihine bırak”: kodu kendi hesabında kapatan kullanıcı internetten yalnız parolayla girer — önerilmez; yalnız deneme/demo kurulumları için. Sistem hesabı her durumda kod verir; masaüstü ve tablet kuralları değişmez. Bu ayarı yalnız sistem yöneticisi değiştirir.",
+      },
+    ],
+  },
+  {
     id: "support",
     label: "Destek Talepleri",
     icon: LifeBuoy,
@@ -2894,7 +2927,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
 
 // bildirim: dar izin TAŞIMAYAN (yalnız `admin:settings`) fabrika kategorileri — beyan iki
 // yönlü ölçülür (settings-surface §6 + settings-scope-mirror): anahtarları kapsam tablosunda olamaz.
-export const ADMIN_ONLY_CATEGORY_IDS: ReadonlySet<string> = new Set(["bildirim", "belgeler", "gelen-belge", "maliyet"]);
+export const ADMIN_ONLY_CATEGORY_IDS: ReadonlySet<string> = new Set(["bildirim", "belgeler", "gelen-belge", "maliyet", "web-giris"]);
 
 /** Kategorinin çizildiği ekran — BÖLÜMÜNDEN türetilir (tek yazar). */
 export function categorySurface(cat: SettingsCategory): SettingsSurface {

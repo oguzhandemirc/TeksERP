@@ -19,6 +19,7 @@ import { usePreferences } from "@/providers/PreferencesProvider";
 import { readTabOpenMode } from "@/components/layout/tabs/tab-open-mode";
 import { MasaustuBildirimKarti } from "@/components/bildirim/MasaustuBildirimKarti";
 import { BildirimTercihKarti } from "@/components/bildirim/BildirimTercihKarti";
+import { WebTotpPreferenceCard } from "./WebTotpPreferenceCard";
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -145,6 +146,9 @@ export function SettingsPage() {
         </Card>
 
         <MasaustuBildirimKarti />
+
+        {/* İnternetten giriş: politika USER_CHOICE iken kendi hesabında web 2FA tercihi. */}
+        <WebTotpPreferenceCard />
 
         <Card>
           <CardHeader>

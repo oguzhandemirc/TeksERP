@@ -15,6 +15,7 @@ import { readClientVersionHeader } from "../constants/client-info";
 import { CURRENT_PASSWORD_INVALID_CODE, type LoginContext } from "../services/auth.service";
 import { AuditService } from "../services/audit.service";
 import { TotpAccountService } from "../services/totp-account.service";
+import { WebTotpService } from "../services/web-totp.service";
 import {
   readDevicePairingRequired,
   readLoginMethods,
@@ -36,6 +37,12 @@ import {
 import { passwordPolicyViolation } from "../constants/password-policy";
 import { clearSessionCookie, cookieLoginApplies, isWebPanelMode, setSessionCookie } from "../lib/web-session-cookie";
 import "../types/express-augment";
+
+const webTotpSchema = z.strictObject({
+  optOut: z.boolean(),
+  currentPassword: z.string().max(200).optional(),
+  totpCode: z.string().max(40).optional(),
+});
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Mevcut parola gerekli"),
@@ -813,6 +820,93 @@ export class AuthController {
       const wrongCurrent =
         error instanceof AppError && error.details?.code === CURRENT_PASSWORD_INVALID_CODE;
       if (!wrongCurrent) releaseLoginAttempt(lockKeys);
+      next(error);
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/auth/web-totp:
+   *   get:
+   *     tags: [Auth]
+   *     summary: İnternetten (web paneli) girişte doğrulama kodu — kendi tercihim
+   *     description: Fabrika politikası (`auth.webTotpPolicy`) + kendi `webTotpOptOut` tercihi.
+   *     security:
+   *       - bearerAuth: []
+   *     responses:
+   *       200: { description: "policy, optOut, effective, totpEnabled, canChange" }
+   *   put:
+   *     tags: [Auth]
+   *     summary: İnternetten girişte doğrulama kodunu KENDİ hesabımda kapat/aç
+   *     description: >
+   *       Kapatmak (`optOut:true`) yalnız politika USER_CHOICE iken; mevcut parola + (2FA kuruluysa)
+   *       güncel kod ister. Açmak serbest. Sistem hesabı değiştiremez. Başka kullanıcı adına yazma yolu YOK.
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [optOut]
+   *             properties:
+   *               optOut: { type: boolean }
+   *               currentPassword: { type: string }
+   *               totpCode: { type: string }
+   *     responses:
+   *       200: { description: Tercih kaydedildi }
+   *       400: { description: Mevcut parola yanlış (CURRENT_PASSWORD_INVALID) ya da kod eksik/yanlış (TOTP_REQUIRED/TOTP_INVALID) }
+   *       403: { description: Sistem hesabı (WEB_TOTP_SYSTEM_ACCOUNT) }
+   *       409: { description: Politika herkese zorunlu (WEB_TOTP_POLICY_REQUIRED) ya da eşzamanlı değişim }
+   *       429: { description: Çok fazla yanlış deneme }
+   */
+  static async webTotpGet(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const userId = req.user?.userId;
+    if (!userId) {
+      next(AppError.unauthorized("Token bulunamadı."));
+      return;
+    }
+    try {
+      res.status(200).json({ success: true, data: await WebTotpService.getOwnState(userId) });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async webTotpSet(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const userId = req.user?.userId;
+    if (!userId) {
+      next(AppError.unauthorized("Token bulunamadı."));
+      return;
+    }
+    let body: z.infer<typeof webTotpSchema>;
+    try {
+      body = webTotpSchema.parse(req.body);
+    } catch (error) {
+      next(error);
+      return;
+    }
+    // Parola değişimiyle aynı kalıp, ayrı kova: oturumu ele geçiren parola/kodu sınırsız deneyemesin.
+    const lockKeys = resolveLoginLockoutKeys(req, `wt:${userId}`).map((spec) => ({ ...spec, key: `wt:${spec.key}` }));
+    const lock = await reserveLoginAttempt(lockKeys);
+    if (lock.blocked) {
+      next(
+        AppError.tooManyRequests(
+          `Çok fazla hatalı deneme. ${lock.retryAfterSec} saniye sonra tekrar deneyin.`,
+          { code: "LOGIN_LOCKED", retryAfterSec: lock.retryAfterSec },
+        ),
+      );
+      return;
+    }
+    try {
+      const data = await WebTotpService.setOwnOptOut(userId, body);
+      resetLoginLockout(lockKeys);
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      const code = error instanceof AppError ? error.details?.code : undefined;
+      const wrong = code === CURRENT_PASSWORD_INVALID_CODE || code === "TOTP_INVALID";
+      if (!wrong) releaseLoginAttempt(lockKeys);
       next(error);
     }
   }

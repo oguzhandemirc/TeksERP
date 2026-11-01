@@ -18,6 +18,7 @@ import { readAuditProtection, readLastAuditChainReport, verifyAndRecordAuditChai
 import { AuthService } from "../services/auth.service";
 import { PermissionManagementService } from "../services/permission-management.service";
 import { TotpAccountService } from "../services/totp-account.service";
+import { WebTotpService } from "../services/web-totp.service";
 import { assertDirectCredentialResetAllowed } from "../services/credential-reset.service";
 import { systemSettingService, SETTING_KEYS } from "../services/system-setting.service";
 import { MODULE_SETTING_KEYS, SUPERADMIN_ONLY_SETTING_KEYS } from "../constants/module-flags";
@@ -474,10 +475,34 @@ router.get(
   requirePermission("admin:users"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const id = req.params.id as string;
+      const status = await TotpAccountService.getStatus(id);
+      // Web girişi tercihi yöneticiye yalnız GÖRÜNÜR; yazma yolu kullanıcının kendi ucunda.
       res.status(200).json({
         success: true,
-        data: await TotpAccountService.getStatus(req.params.id as string),
+        data: { ...status, webTotpOptOut: await WebTotpService.readOptOut(id) },
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/web-totp-summary:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Web girişi 2FA politikası + kendi hesabında kapatmış kullanıcı sayısı (Sistem uyarısı)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/web-totp-summary",
+  verifyToken,
+  requireAnyPermission("admin:users", "admin:settings"),
+  async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json({ success: true, data: await WebTotpService.summary() });
     } catch (error) {
       next(error);
     }
@@ -1680,12 +1705,14 @@ router.put(
           { code: "SETTING_KEY_RESERVED", key },
         );
       }
-      // ⚠️ KÜME `SUPERADMIN_ONLY_SETTING_KEYS` (bütün modül anahtarları + `reports.closedKeys`):
+      // ⚠️ KÜME `SUPERADMIN_ONLY_SETTING_KEYS` (bütün modül anahtarları + `reports.closedKeys` + `auth.webTotpPolicy`):
       // ham ayar ucu ikinci bir yazma yüzeyi açamaz, yoksa `flagWriteGuard`ın süperadmin
       // dalı buradan dolanılırdı (Raporlar K3/K7).
       if (SUPERADMIN_ONLY_SETTING_KEYS.has(key)) {
         throw AppError.badRequest(
-          `Modül anahtarları ve rapor görünürlük listesi yalnız ${settingScreenPath("modules")} ekranından (PATCH /api/feature-flags) değiştirilir`,
+          key === "auth.webTotpPolicy"
+            ? "Web girişi iki adımlı doğrulama politikası yalnız sistem hesabıyla (PATCH /api/feature-flags) değiştirilir"
+            : `Modül anahtarları ve rapor görünürlük listesi yalnız ${settingScreenPath("modules")} ekranından (PATCH /api/feature-flags) değiştirilir`,
           { code: "MODULE_KEY_RESERVED", key },
         );
       }
