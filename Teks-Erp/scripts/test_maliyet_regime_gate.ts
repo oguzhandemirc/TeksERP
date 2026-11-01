@@ -70,7 +70,7 @@ const MODEL_MUAF: ReadonlyArray<{ dosya: string; model: string; neden: string }>
   {
     dosya: "routes/production-proposal.routes.ts",
     model: "costStructure",
-    neden: "Üretim önerisi (SY-M1) ürün yapısından yalnız tarife KODUNU okur (varyantta yoksa; effectiveFinishingRateCode); fiyat okumaz.",
+    neden: "Üretim önerisi (SY-M1) ürün yapısından yalnız tarife KODUNU okur (varyantta yoksa; resolveFinishingRateCode); fiyat okumaz.",
   },
   {
     dosya: "routes/product-recipe.routes.ts",

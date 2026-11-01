@@ -7,7 +7,7 @@
 //   §3 bağlı satır öneriden düşer (ORDER_LINE_ALREADY_PLANNED)
 //   §4 ⭐ eşzamanlı FARKLI token'lı uygula → tek dokuma işi; kaybedenler 409 ORDER_LINE_ALREADY_PLANNED
 //      (negatif sonda: `lockOrderLinesTx` FOR NO KEY UPDATE'i kaldırılınca çift dokuma işi doğar)
-//   §1d çekme, varyant tarifesi yoksa ürün yapısının (CostStructure) tarifesinden (tek kural: effectiveFinishingRateCode)
+//   §1d çekme, varyant tarifesi yoksa ürün yapısının (CostStructure) tarifesinden (tek kural: resolveFinishingRateCode)
 //   §2d aynı token'la EŞZAMANLI iki istek → bir yaratma + bir replay, sayım 1/1
 //   §5 bayat seçim 409 PROPOSAL_STALE · yazma izni yoksa 403 (anahtar-kapsamlı) · aynı anahtar iki kez → 400
 //   §6 dokuma modülü kapalı → önizlemede yalnız iş emri; dokuma seçimi 403 MODULE_DISABLED

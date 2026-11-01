@@ -13,7 +13,7 @@ import { AppError } from "../../utils/app-error";
 import { resolveEffectiveConstruction } from "./effective-construction.helper";
 import { ACTIVE_FINISHING_RATE } from "./cost-price-validity.helper";
 import { ACTIVE_ORDER_LINK } from "./order-link.helper";
-import { effectiveFinishingRateCode } from "./finishing-rate-code.helper";
+import { resolveFinishingRateCode } from "./finishing-rate-code.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -138,7 +138,7 @@ async function buildWeavingGroups(db: Db, lines: LineRow[], out: ProductionPropo
       g = {
         key, itemId: l.itemId, itemName: l.item.name, recipeId: l.recipeId,
         warpSpecId: c.groundWarp?.id ?? null, weftSpecId: c.weft?.weftSpecId ?? null, weaveDesignId: c.weaveDesign?.id ?? null,
-        shrinkPct: await shrinkPctOf(db, effectiveFinishingRateCode(l.recipe?.finishingRateCode, l.item.costStructure?.finishingRateCode), shrinkMemo), plannedM: null, orderLines: [],
+        shrinkPct: await shrinkPctOf(db, resolveFinishingRateCode(l.recipe?.finishingRateCode, l.item.costStructure?.finishingRateCode), shrinkMemo), plannedM: null, orderLines: [],
       };
       groups.set(key, g);
     }
