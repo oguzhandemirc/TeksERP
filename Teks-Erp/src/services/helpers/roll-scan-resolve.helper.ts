@@ -25,6 +25,7 @@
 //   tambur.service.ts:1690      listRecentOutputRolls (çıkış araması)     [AÇIK] — çıkış topları kod taşır
 //   tambur.service.ts:1761      getSwatchByBarcode                        [İÇ] — kartela
 //   tambur.service.ts:1803-1804 listSwatches (barcode · cardNumber)       [İÇ] — kartela
+//   helpers/customer-code-birth.helper.ts:115 customerCodeCollidesWithOurs [İÇ] — doğan kod top barkoduyla çakışmasın
 //   tambur.service.ts:1908-1909 getSwatchStats (barcode · cardNumber)     [İÇ] — kartela
 //   tambur.service.ts:4012      getTamburContext (Tambur girişi)          [İÇ] — kod Tambur çıkışında doğar (K13)
 //   traveler-card.service.ts:616  scan (refakat kartı)                    [İÇ] — kart kodu = iş emri no
@@ -136,4 +137,12 @@ export async function customerCodeSearchRollIds(rawSearch: string | null | undef
   });
   if (r.kind === "AMBIGUOUS") return r.candidates.map((c) => c.rollId);
   return r.kind === "FOUND" && r.matchedBy === "CUSTOMER_CODE" ? [r.roll.id] : [];
+}
+
+/**
+ * Kod değeri müşteride hiç kullanıldı mı (kaldırılmış DAHİL) — seriden doğumda aynı değer ikinci kez
+ * verilmesin diye (D4-F2 `customer-code-birth.helper`). Okutma değil; koda göre okuma bu dosyada kalır.
+ */
+export async function customerCodeValueUsed(db: Pick<Prisma.TransactionClient, "rollCustomerCode">, customerId: string, code: string): Promise<boolean> {
+  return (await db.rollCustomerCode.findFirst({ where: { customerId, code }, select: { id: true } })) !== null;
 }

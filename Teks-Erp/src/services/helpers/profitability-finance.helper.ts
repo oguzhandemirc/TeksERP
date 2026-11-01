@@ -157,3 +157,43 @@ export async function readExpenseCells(start: Date, end: Date, classNames: strin
     key: c.key, label: c.label, className: byKey.get(c.key) ?? null, month: cell.month, amountTry: new Prisma.Decimal(cell.amountTry),
   })));
 }
+
+/** D4-G2c: masraf bağı parçası (işaretli TL); türü ve aritmetiği `profitability-allocation.helper`dadır. */
+export interface ExpenseAllocationPiece {
+  kind: "AS_OF" | "LATE_ADJUSTMENT" | "CANCEL_REVERSAL";
+  cashTransactionId: string;
+  docNo: string | null;
+  className: string | null;
+  machineId: string | null;
+  workOrderId: string | null;
+  serviceItemId: string | null;
+  sharePct: Prisma.Decimal;
+  amountTry: Prisma.Decimal;
+}
+
+const ALLOCATION_EPOCH = new Date(Date.UTC(1970, 0, 1));
+
+/**
+ * D4-G2c: `[start, end)` ayının masraf bağları — YALNIZ as-of okuyucudan (`listExpenseAllocationsAsOf`; "aktif bağ"
+ * okuması yasak). AS_OF: ay masrafının ay sonunda geçerli bağı · LATE_ADJUSTMENT: önceki ay masraflarına bu ay yapılan
+ * bağ olayları (iptali önceki ayda kalmış masrafınki hariç — iptal ayında ters çevrildi) · CANCEL_REVERSAL: bu ay iptal
+ * edilen masrafın ay sonundaki bağları eksiyle (masraf özetinin iptal ayı eksisinin doğrudan payı).
+ */
+export async function readExpenseAllocationPieces(start: Date, end: Date, classNames: string[]): Promise<ExpenseAllocationPiece[]> {
+  const { listExpenseAllocationsAsOf } = await import("./expense-allocation.helper");
+  const { cashCategoryKey } = await import("./expense-summary.helper");
+  const byKey = new Map(classNames.map((n) => [cashCategoryKey(n).key, n]));
+  const month = await listExpenseAllocationsAsOf(prisma, { start, end }, { withCancelledIn: true });
+  type Row = (typeof month.atPeriodEnd)[number];
+  const piece = (kind: ExpenseAllocationPiece["kind"], r: Row, sign: 1 | -1): ExpenseAllocationPiece => ({
+    kind, cashTransactionId: r.cashTransactionId, docNo: r.docNo, className: byKey.get(cashCategoryKey(r.category).key) ?? null,
+    machineId: r.machineId, workOrderId: r.workOrderId, serviceItemId: r.serviceItemId, sharePct: r.sharePct,
+    amountTry: sign === 1 ? r.allocatedTry : r.allocatedTry.neg(),
+  });
+  const cancelledIn = (r: Row, from: Date, to: Date) => r.status === "CANCELLED" && r.cancelledAt !== null && r.cancelledAt >= from && r.cancelledAt < to;
+  return [
+    ...month.atPeriodEnd.map((r) => piece("AS_OF", r, 1)),
+    ...month.lateEvents.filter((r) => !cancelledIn(r, ALLOCATION_EPOCH, start)).map((r) => piece("LATE_ADJUSTMENT", r, 1)),
+    ...(month.cancelledIn ?? []).map((r) => piece("CANCEL_REVERSAL", r, -1)),
+  ];
+}
