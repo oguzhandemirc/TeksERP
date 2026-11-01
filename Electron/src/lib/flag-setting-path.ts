@@ -16,7 +16,7 @@ export function flagSettingTrail(flagKey: string): string {
   return cat ? settingsCategoryTrail(cat) : "Sistem";
 }
 
-/** Kapalı karo / menü satırının ipucu: "kapalı — <ayar yolu>" (K3: kapalı özellik görünür kalır, nereden açılacağını söyler). */
+/** Kapalı karo / menü satırının ipucu: "kapalı — <ayar yolu>"; yalnız modülü açabilene çizilir (`lib/off-module-visibility.ts`). */
 export function flagOffHint(flagKey: string): string {
   return `kapalı — ${flagSettingTrail(flagKey)}`;
 }

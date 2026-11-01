@@ -2,19 +2,21 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { TERIM_AD } from "@/lib/terim";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { offEntryMode, useCanSeeOffModules } from "@/lib/off-module-visibility";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { HubSkeleton } from "@/components/hub/HubSkeleton";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import { qualityTiles, type QualityTile } from "./tile-config";
 
-/** Kalite Güvence kökü (UX-2 K1) — Operasyon hub'ıyla aynı kural: izin şart, kapalı modül karosu soluk + ipucu. */
+/** Kalite Güvence kökü (UX-2 K1) — Operasyon hub'ıyla aynı kural: izin şart, kapalı modül karosu yalnız modülü açabilene soluk + ipucu. */
 export function QualityHubPage() {
   const { hasPermission, hasAnyPermission } = useRoleAccess();
   const ctx = useOperationsVisibilityContext();
+  const canSeeOff = useCanSeeOffModules();
   const permitted = (t: QualityTile) =>
     t.permissionAny ? hasAnyPermission(t.permissionAny) : !t.permission || hasPermission(t.permission);
   const isOff = (t: QualityTile) => Boolean(t.visibleWhen && !t.visibleWhen(ctx));
-  const visible = qualityTiles.filter((t) => permitted(t) && (!isOff(t) || Boolean(t.offHint)));
+  const visible = qualityTiles.filter((t) => permitted(t) && offEntryMode(isOff(t), Boolean(t.offHint), canSeeOff) !== "hide");
   return (
     <PageShell>
       <PageHeader
