@@ -292,6 +292,10 @@ const COST_SIDE_SERVICE_ITEM_ID_FILES = new Set([
   // D4-G3 kârlılık raporu: helper satırındaki kalemi yalnız ad sözlüğü ve kırılım anahtarı olarak okur.
   "services/reports/profitability.report.ts",
   "services/reports/profitability.sunum.ts",
+  // D4-H3 masraf bağı: hizmet kalemi masrafın HEDEFİ (maliyet tarafı); fiyat/eşleme çözmez.
+  "routes/finance-expense-allocation.routes.ts",
+  "services/expense-allocation.service.ts",
+  "services/helpers/expense-allocation.helper.ts",
 ]);
 function astChecks(): void {
   section("§8 AST: çözücü tek, eşleme okuyucuları beyanlı, FinishingRate okunmaz");

@@ -56,6 +56,9 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   { anahtar: "finance.serviceBilling.trigger", alan: "financeServiceBillingTrigger", hedef: "PER_SHIPMENT", dilim: "H7" },
   { anahtar: "finance.serviceBilling.priceDate", alan: "financeServiceBillingPriceDate", hedef: "SERVICE_DAY", dilim: "H7" },
   { anahtar: "finance.masraf.kategoriOnerisi", alan: "financeExpenseCategorySuggestions", hedef: "ON", dilim: "D4-H1" },
+  // DALGA4 §12.1: Gülkesim masrafı makineye/işe bağlar (isteğe bağlı); kapanmış iş emrine bağ serbest (varsayılanla aynı).
+  { anahtar: "finance.masraf.bagAlani", alan: "financeExpenseAllocationField", hedef: "OPTIONAL", dilim: "D4-H3" },
+  { anahtar: "finance.masraf.kapaliIsEmrineBag", alan: "financeExpenseAllocationClosedWorkOrder", hedef: "ALLOW", dilim: "D4-H3" },
   // DALGA4 §12.1 / K20: cari kilidi — ön seçim iş kabulü + sevk, koyan kişi kendi kilidini açabilir (Gülkesim de aynı).
   { anahtar: "finance.cariHold.defaultScope", alan: "financeCariHoldDefaultScope", hedef: "INTAKE,SHIPMENT", dilim: "D4-I1a" },
   // DALGA4 §12.1: Gülkesim kârlılık kaynakları varsayılanla aynı (açık yazılır ki paket raporunda görünsün).

@@ -126,6 +126,12 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   // D4-G1a: makine saat ücreti / sarf normu yaratma + değişim (damga + yeni satır) panelden clientToken ile; damgalı sürümün token'ı 409.
   [`${S}machine-cost-rate.service.ts::createMachineCostRate`]: { giris: { [`${S}machine-cost-rate.service.ts::createMachineCostRate`]: "R" } },
   [`${S}machine-cost-rate.service.ts::changeMachineCostRate`]: { giris: { [`${S}machine-cost-rate.service.ts::changeMachineCostRate`]: "R" } },
+  // D4-H3: masraf bağı — yaratma + değişim (damga + yeni satır) K kipi: 8036 → masraf satırı FOR UPDATE → 8028 → Σ pay.
+  [`${S}expense-allocation.service.ts::insertExpenseAllocationTx`]: { helper: "masraf bağı satırı tek yazarı" },
+  // Kasa masraf formundaki "Bağla": bağ masrafın token'ıyla aynı tx'te yazılır; replay kararı kasa hareketinin (R `cashTxnReplay`).
+  [`${S}expense-allocation.service.ts::linkNewExpenseTx`]: { helper: "masraf formu bağ yazarı (masrafın token'ı)" },
+  [`${S}expense-allocation.service.ts::createExpenseAllocation`]: { giris: { [`${S}expense-allocation.service.ts::createExpenseAllocation`]: "K" } },
+  [`${S}expense-allocation.service.ts::changeExpenseAllocation`]: { giris: { [`${S}expense-allocation.service.ts::changeExpenseAllocation`]: "K" } },
   [`${S}consumable-norm.service.ts::createConsumableNorm`]: { giris: { [`${S}consumable-norm.service.ts::createConsumableNorm`]: "R" } },
   [`${S}consumable-norm.service.ts::changeConsumableNorm`]: { giris: { [`${S}consumable-norm.service.ts::changeConsumableNorm`]: "R" } },
   [`${S}machine-run.service.ts::openMachineRunFresh`]: { giris: { [`${S}machine-run.service.ts::openMachineRun`]: "R" } },
@@ -240,6 +246,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}roll-customer-code.service.ts::bindReplay`]: ["rollId", "code"],
   [`${S}customer-barcode-series.service.ts::createReplay`]: ["customerId", "prefix", "dateSegment", "digits", "separator", "startValue", "maxValue"],
   [`${S}cari-hold.service.ts::placeReplay`]: ["cariId", "kapsam", "reasonCode"],
+  [`${S}expense-allocation.service.ts::allocationReplay`]: ["cashTransactionId", "hedef", "sharePct"],
   [`${S}machine-cost-rate.service.ts::rateReplay`]: ["machineId", "hourRateTry"],
   [`${S}consumable-norm.service.ts::normReplay`]: ["serviceItemId", "consumableItemId", "qtyPerM"],
   [`${S}machine-doff.service.ts::doffReplay`]: ["machineId", "productionLineNo", "pieceCount"],

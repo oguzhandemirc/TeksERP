@@ -32,6 +32,7 @@ import { expenseCategorySuggestions } from "../services/helpers/expense-summary.
 import { listCashCategoryOptions, readCategoryParam } from "../services/helpers/cash-category-filter.helper";
 import allocationRoutes from "./finance-allocation.routes";
 import cariHoldRoutes from "./finance-cari-hold.routes";
+import expenseAllocationRoutes, { allocationFieldsSchema } from "./finance-expense-allocation.routes";
 import { fetchTcmbRates } from "../jobs/exchange-rate.job";
 
 const router = Router();
@@ -54,6 +55,8 @@ router.use("/allocations", allocationRoutes);
 // Cari kilidi (D4-I1a): `/cari/:id/holds` + `/cari/holds/:holdId/release` — aşağıdaki `/cari/:id` desenlerinden ÖNCE
 // bağlanır; rejim kapısı yukarıdaki `router.use`tan miras.
 router.use("/cari", cariHoldRoutes);
+// Masraf bağı (D4-H3): `/cash-transactions/:id/allocations` + `/expense-allocations/:id/{change,revoke}`; kapı miras.
+router.use(expenseAllocationRoutes);
 
 const decimalString = z.union([z.number(), z.string()]);
 const isoDate = z.string().datetime({ offset: true }).or(z.string().date());
@@ -401,6 +404,8 @@ router.post("/cash-transactions", requirePermission("finance:payment"), async (r
         reference: z.string().max(120).nullable().optional(),
         exchangeRate: decimalString.nullable().optional(),
         clientToken: z.string().uuid().optional(),
+        // D4-H3: formda "Bağla" — masrafla aynı tx; eski istemci göndermez (strict şema eski gövdeyi bayt-aynı kabul eder).
+        allocation: z.strictObject(allocationFieldsSchema).nullable().optional(),
       })
       .strict()
       .parse(req.body);
