@@ -77,11 +77,12 @@ export async function buildRecords(p: RecordProjection, rootIds: readonly string
         return r;
       };
       rowOf("ISLEM");
+      const d = derived.get(raw.id) ?? {};
       for (const c of p.columns) {
         if (c.wire === "id") continue;
-        rowOf(c.dataClass)[c.wire] = toWireValue(raw[c.source]);
+        if (c.resolvedBy && !(c.wire in d)) throw new Error(`Eşitleme: ${p.name}.${c.wire} çözülmedi`);
+        rowOf(c.dataClass)[c.wire] = toWireValue(c.resolvedBy ? d[c.wire] : raw[c.source]);
       }
-      const d = derived.get(raw.id) ?? {};
       for (const spec of p.derived) {
         if (!(spec.wire in d)) throw new Error(`Eşitleme: ${p.name}.${spec.wire} türetilmedi`);
         rowOf(spec.dataClass)[spec.wire] = toWireValue(d[spec.wire]);

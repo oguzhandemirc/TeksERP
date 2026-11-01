@@ -17,6 +17,8 @@ export interface ColumnSpec {
   /** Prisma alan adı (= DB kolonu; şema ölçümü `patron-sema-olcumu` ①). */
   readonly source: string;
   readonly dataClass: DataClass;
+  /** Değeri ham kolondan değil türeticiden gelir (aynı tel konumu; türetici çoğu satırda ham değeri döndürür). */
+  readonly resolvedBy?: { readonly helper: string; readonly reads: readonly string[] };
 }
 
 export interface DerivedSpec {

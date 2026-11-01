@@ -22,6 +22,7 @@ import { COST_DERIVERS, COST_DERIVER_ROW_FIELDS } from "./derived-cost";
 import { CASH_DERIVERS, CASH_DERIVER_ROW_FIELDS } from "./derived-cash";
 import { cariLockByCari } from "./derived-cari-hold";
 import { workOrderReadyWorksWire } from "./derived-ship-ready";
+import { mergedInvoiceViews } from "./derived-merged-invoice";
 
 type RawRow = Record<string, unknown> & { id: string };
 export type DerivedValues = Map<string, Record<string, unknown>>;
@@ -186,8 +187,15 @@ async function invoiceDerived(rows: readonly RawRow[], nowMs: number): Promise<D
   const terms = await prisma.cariAccount.findMany({ where: { id: { in: cariIds } }, select: { id: true, paymentTermDays: true } });
   const termBy = new Map(terms.map((t) => [t.id, t.paymentTermDays]));
   const asOf = new Date(nowMs);
+  // Birleşmiş hesabın faturası hedef altında, açığı hedefin yaşlandırma kaleminden (D4-K3dk2).
+  const merged = await mergedInvoiceViews(rows.map((r) => ({ id: r.id, cariId: r.cariId as string, status: String(r.status) })), nowMs);
   const out: DerivedValues = new Map();
   for (const r of rows) {
+    const m = merged.get(r.id);
+    if (m?.aging) {
+      out.set(r.id, { cariHesapId: m.targetCariId, acikTutar: dec(m.aging.open), vadesiGecti: m.aging.overdue });
+      continue;
+    }
     const open = invoiceOpenAmount(r.grandTotal as Prisma.Decimal.Value, r.paidTotal as Prisma.Decimal.Value);
     const { effectiveDue } = resolveEffectiveDue({
       dueDate: r.dueDate as Date | null,
@@ -195,7 +203,7 @@ async function invoiceDerived(rows: readonly RawRow[], nowMs: number): Promise<D
       paymentTermDays: termBy.get(r.cariId as string) ?? null,
     });
     const overdue = r.status === "CONFIRMED" && !open.isZero() && isOverdueBucket(bucketOfDaysOverdue(daysOverdueAt(asOf, effectiveDue)));
-    out.set(r.id, { acikTutar: open, vadesiGecti: overdue });
+    out.set(r.id, { cariHesapId: m?.targetCariId ?? r.cariId, acikTutar: open, vadesiGecti: overdue });
   }
   return out;
 }

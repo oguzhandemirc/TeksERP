@@ -2,6 +2,7 @@
 // `projections.ts` üzerinden dışa açılır; tasarım `docs/design/PATRON-BULUTU-ESITLEME.md` §3.2.
 import { factoryDaySql } from "../constants/time";
 import { col, derived, lookup, self, via, type RecordProjection } from "./projection-types";
+import { MERGED_INVOICE_RESOLVER, MERGED_INVOICE_READS, MERGED_INVOICE_SOURCES, MERGED_NOTE, TRANSFER_DUE_CROSSING } from "./catalog-merged-cari";
 
 // ── OLGU projeksiyonları ──────────────────────────────────────────────────────
 // İkinci kol: sevke hazırlık (D4-J5) topu partisinin iş emrinden sayar — top durumu değişince o iş emri de gider.
@@ -150,7 +151,7 @@ export const FACTS: readonly RecordProjection[] = [
     sources: [self("cari_accounts"),
       { table: "cari_balances", watermark: "updatedAt", tieBreaker: [{ column: "cariId", cast: "uuid" }, { column: "currency", cast: '"Currency"' }], root: { kind: "column", column: "cariId" } },
       via("invoices", "cariId"), via("payments", "cariId"), via("cheques", "cariId"), via("cari_holds", "cariId")],
-    crossings: [{ name: "vade", sql: `SELECT DISTINCT i."cariId" AS root_id ${DUE_CROSSING_FROM}` }],
+    crossings: [{ name: "vade", sql: `SELECT DISTINCT i."cariId" AS root_id ${DUE_CROSSING_FROM}` }, TRANSFER_DUE_CROSSING.cari],
     // Hard delete yolu ölçüldü: K3a `scripts/fix_cari_cift_hesap.ts` hareketsiz çift hesabı siler;
     // `cari_accounts_sync_deleted` SILINDI işareti yazar, bulut satırı düşer.
     deletion: "DAMGA", permission: "bulut:cari-bakiye:oku", module: "finance.enabled", catalogVersion: 1,
@@ -209,7 +210,7 @@ export const FACTS: readonly RecordProjection[] = [
   {
     name: "fatura", kind: "KAYIT", role: "OLGU", root: { table: "invoices", model: "Invoice" },
     scope: { note: "taslak (DRAFT) buluta GİRMEZ; taslağın silinmesi kapsam dışı", prismaWhere: { status: { not: "DRAFT" } }, sql: `t."status" <> 'DRAFT'` },
-    columns: [col("id", "id"), col("belgeNo", "docNo"), col("tur", "type"), col("durum", "status"), col("cariHesapId", "cariId"),
+    columns: [col("id", "id"), col("belgeNo", "docNo"), col("tur", "type"), col("durum", "status"), { ...col("cariHesapId", "cariId"), resolvedBy: MERGED_INVOICE_RESOLVER },
       col("doviz", "currency"), col("kur", "exchangeRate", "FINANS"), col("tarih", "issueDate"), col("vade", "dueDate"),
       col("disNo", "externalNo"), col("araToplam", "subtotal", "FINANS"), col("iskonto", "discountTotal", "FINANS"),
       col("kdv", "vatTotal", "FINANS"), col("tevkifat", "withholdingTotal", "FINANS"), col("genelToplam", "grandTotal", "FINANS"),
@@ -217,15 +218,14 @@ export const FACTS: readonly RecordProjection[] = [
       col("dogrudanSevkId", "directShipmentId"), col("onay", "confirmedAt"), col("iptalTarihi", "cancelledAt"),
       col("olusturulma", "createdAt")],
     derived: [
-      derived("acikTutar", "helpers/finance.helper invoiceOpenAmount (grandTotal − paidTotal)", ["invoices"], { dataClass: "FINANS" }),
-      derived("vadesiGecti", "reports/finance-aging.report resolveEffectiveDue + daysOverdueAt + bucketOfDaysOverdue + isOverdueBucket",
-        ["invoices", "cari_accounts"], { timeBound: true }),
+      derived("acikTutar", `helpers/finance.helper invoiceOpenAmount (grandTotal − paidTotal)${MERGED_NOTE}`, MERGED_INVOICE_READS, { dataClass: "FINANS" }),
+      derived("vadesiGecti", `reports/finance-aging.report resolveEffectiveDue + daysOverdueAt + bucketOfDaysOverdue + isOverdueBucket${MERGED_NOTE}`, MERGED_INVOICE_READS, { timeBound: true }),
     ],
-    sources: [self("invoices"),
-      lookup("cari_accounts", "id", 'SELECT i."id" AS root_id FROM "invoices" i WHERE i."cariId" = ANY($1::uuid[])', "cari vade günü efektif vadeyi değiştirir")],
-    crossings: [{ name: "vade", sql: `SELECT i."id" AS root_id ${DUE_CROSSING_FROM}` }],
+    sources: [self("invoices"), ...MERGED_INVOICE_SOURCES],
+    crossings: [{ name: "vade", sql: `SELECT i."id" AS root_id ${DUE_CROSSING_FROM}` }, TRANSFER_DUE_CROSSING.invoice],
     deletion: "KAPSAM_DISI", permission: "bulut:fatura:oku", module: "finance.enabled",
-    retention: { wireFields: ["tarih"], sql: 't."issueDate"' }, catalogVersion: 1,
+    // v2 (D4-K3dk2): birleşmiş hesabın faturası hedef altında — TAM gönderim eski satırları düzeltir.
+    retention: { wireFields: ["tarih"], sql: 't."issueDate"' }, catalogVersion: 2,
   },
   {
     name: "fatura-kalemi", kind: "KAYIT", role: "OLGU", root: { table: "invoice_lines", model: "InvoiceLine" },

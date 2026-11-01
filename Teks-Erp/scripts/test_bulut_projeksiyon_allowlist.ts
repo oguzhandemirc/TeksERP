@@ -116,6 +116,8 @@ export function turetilmisKapsamDenetimi(projs: readonly RecordProjection[]): st
       for (const t of d.reads) if (!gorunen.has(t)) out.push(`${p.name}.${d.wire} ${t}'yi okuyor ama değişikliği görülmüyor`);
       if (d.timeBound && !(p.crossings && p.crossings.length > 0)) out.push(`${p.name}.${d.wire} zamana bağlı ama geçiş kaynağı yok`);
     }
+    // Türeticiden çözülen kolon (D4-K3dk2 `fatura.cariHesapId`) türetilmiş alanla aynı kapsam kuralına tabidir.
+    for (const c of p.columns) for (const t of c.resolvedBy?.reads ?? []) if (!gorunen.has(t)) out.push(`${p.name}.${c.wire} ${t}'yi okuyor ama değişikliği görülmüyor`);
   }
   return out;
 }
