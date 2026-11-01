@@ -30,6 +30,7 @@
         { "kind": "regex", "pattern": "\\b(P\\d{7})\\b" }
       ] }
   ],
+  "blockFields": ["siparisNo", "topAdet", "islem", "isEmriNo", "hamPartiNo"],
   "tables": [
     { "key": "toplar", "minHeaderMatches": 3,
       "columns": [

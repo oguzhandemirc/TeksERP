@@ -81,6 +81,7 @@ function lineRows(lines: DraftLine[], scanId: string, lineBase = 0, blockBase = 
     widthCm: l.widthCm ? new Prisma.Decimal(l.widthCm) : null,
     itemText: l.itemText,
     colorText: l.colorText,
+    processText: l.processText,
     confidence: new Prisma.Decimal(l.confidence.toFixed(4)),
     needsReview: l.needsReview,
     sourceRects: toJson(l.sourceRects),

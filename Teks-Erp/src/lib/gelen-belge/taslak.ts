@@ -13,6 +13,8 @@ export interface DraftLine {
   widthCm: string | null;
   itemText: string | null;
   colorText: string | null;
+  /** Çok bloklu belgede satırın KENDİ bloğunun İşlem metni (başlık yalnız blok 1'i taşır); tek blokta null → başlığa düşer. */
+  processText: string | null;
   confidence: number;
   needsReview: boolean;
   sourceRects: Record<string, OcrRect>;
@@ -32,7 +34,7 @@ export interface DraftHeader {
   totalsDeclared: { blocks: Array<{ blockNo: number; count: string | null; kg: string | null; m: string | null }> };
   warnings: string[];
   /** Bölge başına özet (şablon kimliği, puan, başlık alanları) — scan.ocrResult zarfına; panel "bölgeyi ayır" buradan okur. */
-  regions: Array<{ regionNo: number; templateId: string | null; score: number; fields: Record<string, string | null> }>;
+  regions: Array<{ regionNo: number; templateId: string | null; score: number; fields: Record<string, string | null>; blocks?: Array<{ blockNo: number; fields: Record<string, string | null> }> }>;
 }
 
 export interface DraftFromOcr {
@@ -46,7 +48,9 @@ const DOC_NO_KEYS = ["fisNo", "irsaliyeNo", "evrakNo", "sevkNo", "belgeNo", "isE
 const DATE_KEYS = ["tarih", "sevkTarihi"];
 const BATCH_KEYS = ["hamPartiNo", "partiNo", "musteriPartiNo"];
 const PROCESS_KEYS = ["islem", "yapilanIslem"];
-const TOP_COUNT_KEYS = ["topAdet", "cikisAdet"];
+const TOP_COUNT_KEYS = ["topAdet", "girisAdet", "cikisAdet"];
+/** Blok başına okunup bloklar arasında farkı uyarılan iş kimliği alanları (sipariş · parti · boyahane iş emri · işlem). */
+const BLOCK_ID_KEYS = ["siparisNo", "hamPartiNo", "isEmriNo", "islem"];
 const METER_KEYS = ["m", "metre"];
 const WIDTH_KEYS = ["en", "cm"];
 
@@ -70,6 +74,14 @@ const positive = (v: string | null | undefined): string | null => (v && Number(v
 
 function tableLines(reg: RegionExtraction, blockOffset: number, out: DraftLine[], warnings: string[]): number {
   let maxBlock = 0;
+  // Yalnız ≥ 2 blokta satıra yazılır: tek blokta başlık işlemi zaten aynıdır (bugünkü davranış, satır null).
+  const blockProcess = new Map<number, string>();
+  if (reg.blockFields.length >= 2) {
+    for (const bf of reg.blockFields) {
+      const v = clip(bf.fields.islem?.value, 120);
+      if (v) blockProcess.set(bf.blockNo, v);
+    }
+  }
   for (const t of reg.tables) {
     for (const b of t.blocks) {
       const blockNo = blockOffset + b.blockNo;
@@ -98,6 +110,7 @@ function tableLines(reg: RegionExtraction, blockOffset: number, out: DraftLine[]
           widthCm: positive(widthCell?.value),
           itemText: null,
           colorText: null,
+          processText: blockProcess.get(b.blockNo) ?? null,
           confidence: confs.length ? Math.min(...confs) : 0,
           needsReview: r.needsReview,
           sourceRects: rects,
@@ -140,6 +153,7 @@ function gridLines(reg: RegionExtraction, blockNo: number, out: DraftLine[], war
       widthCm: positive(widthCand),
       itemText: null,
       colorText: null,
+      processText: null,
       confidence: Math.max(0, Math.min(1, cand.confidence ?? 0)),
       needsReview: true,
       sourceRects: rects,
@@ -147,6 +161,70 @@ function gridLines(reg: RegionExtraction, blockNo: number, out: DraftLine[], war
     });
   }
   if (skipped) warnings.push(`GRID_CELLS_UNREAD: ${skipped} hücrede sayı adayı yok (elle girilir)`);
+  const suspects = suspectGridSeqs(out.filter((l) => l.blockNo === blockNo));
+  if (suspects.length) warnings.push(`GRID_SUSPECT_VALUES: ${suspects.join(", ")} numaralı hücre(ler)in metresi şüpheli (harf karışmış ya da diğerlerinin çok altında) — önce bunları kontrol edin`);
+}
+
+/**
+ * El yazısında OCR güveni yanlış rakamı doğrudan ayırmıyor (ölçüm 2026-11-02: yanlışlar 0,64–0,91, doğrular 0,59–0,98);
+ * iki ucuz işaret ayırıyor: ham metinde harf ("1J6" → 1) ya da medyanın %25'inden küçük değer ("137" → 3). Yalnız UYARI.
+ */
+export function suspectGridSeqs(lines: Array<{ senderRollNo: string | null; meters: string; ocrRaw: Record<string, string | null> }>): string[] {
+  const vals = lines.map((l) => Number(l.meters)).sort((a, b) => a - b);
+  const median = vals.length ? vals[Math.floor(vals.length / 2)]! : 0;
+  return lines
+    .filter((l) => {
+      const raw = Object.entries(l.ocrRaw).find(([k]) => METER_KEYS.includes(k))?.[1] ?? "";
+      return /\p{L}/u.test(raw) || (vals.length >= 3 && Number(l.meters) < median * 0.25);
+    })
+    .map((l) => l.senderRollNo ?? "?");
+}
+
+/** Bloklar farklı sipariş/parti/iş emri/işlem taşıyorsa TEK uyarı (başlık yalnız blok 1'i taşır). */
+function blockDiffWarning(reg: RegionExtraction, blockOffset: number): string | null {
+  if (reg.blockFields.length < 2) return null;
+  const differing = BLOCK_ID_KEYS.filter((k) => new Set(reg.blockFields.map((b) => b.fields[k]?.value ?? null).filter((v) => v !== null)).size > 1);
+  if (differing.length === 0) return null;
+  const desc = reg.blockFields
+    .map((b) => `blok ${blockOffset + b.blockNo}: ${differing.map((k) => `${k}=${b.fields[k]?.value ?? "?"}`).join(" ")}`)
+    .join(" · ");
+  return `BLOCK_IDS_DIFFER: belgede ${reg.blockFields.length} blok farklı iş kimliği taşıyor (${desc}) — başlık yalnız ilk bloğu gösterir; satır işlemi kendi bloğundan`;
+}
+
+/**
+ * Tablosuz belge (ürün sevk fişi: tek top başlıkta): şablonun `headerLine` eşlemesiyle TEK satır; metre pozitif olmalı,
+ * satır her zaman needsReview. Adet > 1 → satır yok + uyarı (top dökümü yok); adet okunamadı → tek top + uyarı.
+ */
+function headerOnlyLine(reg: RegionExtraction, out: DraftLine[], warnings: string[]): void {
+  const spec = reg.headerLine;
+  const f = reg.fields?.fields;
+  if (!spec || !f) return;
+  const count = f[spec.count]?.value ?? null;
+  const first = (keys: string[] | undefined) => (keys ?? []).map((k) => f[k]).find((x) => x?.value && positive(x.value));
+  const m = first(spec.m);
+  if (count !== null && count !== "1") {
+    warnings.push(`HEADER_LINE_SKIPPED: belgede ${count} top yazıyor, top dökümü yok — satırları elle girin`);
+    return;
+  }
+  if (count === null && m) warnings.push("HEADER_LINE_COUNT_UNREAD: top adedi okunamadı — tek top varsayıldı, belgeyle karşılaştırın");
+  if (!m) {
+    warnings.push("HEADER_LINE_SKIPPED: toplam metre okunamadı — satırı elle girin");
+    return;
+  }
+  const kg = first(spec.kg);
+  const en = first(spec.en);
+  const used = [m, kg, en].filter((x): x is FieldResult => !!x);
+  const rects: Record<string, OcrRect> = {};
+  const raw: Record<string, string | null> = {};
+  for (const x of used) {
+    if (x.source.rect) rects[x.key] = x.source.rect;
+    raw[x.key] = x.raw;
+  }
+  out.push({
+    blockNo: 1, lineKind: "TOP", senderRollNo: null, meters: m.value!, weightKg: kg?.value ?? null, widthCm: en?.value ?? null,
+    itemText: null, colorText: null, processText: null, confidence: Math.min(...used.map((x) => x.confidence)), needsReview: true,
+    sourceRects: rects, ocrRaw: raw,
+  });
 }
 
 /** Motor çıktısını taslak başlık + satırlara çevirir; bölge ≥ 2 satırları blok numarasını SÜRDÜRÜR (tek taslak, panel ayırır). */
@@ -160,8 +238,13 @@ export function draftFromExtraction(doc: DocumentExtraction): DraftFromOcr {
   const regions: DraftHeader["regions"] = [];
   for (const reg of doc.regions) {
     const prefix = doc.regions.length > 1 ? `R${reg.region.regionNo}: ` : "";
+    const blockOffset0 = blockOffset;
     const regionWarnings: string[] = [];
     const maxBlock = tableLines(reg, blockOffset, lines, regionWarnings);
+    const diff = blockDiffWarning(reg, blockOffset);
+    if (diff) regionWarnings.push(diff);
+    // Başlıktan satır yalnız İLK bölgede: ikinci bölge başka belgedir (başka sahip) — aynı taslağa top eklenmez.
+    if (reg === first && maxBlock === 0 && !reg.grid) headerOnlyLine(reg, lines, regionWarnings);
     if (reg.totals) {
       for (const b of reg.totals.blocks) totalsBlocks.push({ blockNo: blockOffset + b.blockNo, count: b.declared?.count ?? null, kg: b.declared?.kg ?? null, m: b.declared?.m ?? null });
     }
@@ -171,7 +254,8 @@ export function draftFromExtraction(doc: DocumentExtraction): DraftFromOcr {
     for (const w of [...reg.warnings, ...regionWarnings]) warnings.push(prefix + w);
     const fields: Record<string, string | null> = {};
     for (const [k, v] of Object.entries(reg.fields?.fields ?? {})) fields[k] = v.value;
-    regions.push({ regionNo: reg.region.regionNo, templateId: reg.templateId, score: reg.classificationScore, fields });
+    const blocks = reg.blockFields.map((b) => ({ blockNo: blockOffset0 + b.blockNo, fields: Object.fromEntries(Object.entries(b.fields).map(([k, v]) => [k, v.value])) }));
+    regions.push({ regionNo: reg.region.regionNo, templateId: reg.templateId, score: reg.classificationScore, fields, ...(blocks.length ? { blocks } : {}) });
   }
   const topCount = pick(f, TOP_COUNT_KEYS);
   return {
