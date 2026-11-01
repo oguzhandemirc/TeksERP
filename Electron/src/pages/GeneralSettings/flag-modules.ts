@@ -197,6 +197,8 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   costProfitConsumablePriceSource: "financeEnabled",
   // SY-D2: yalnız dokuma kumaşının standart maliyetini etkiler → dokuma kapalıysa satır gizli.
   costWeavingStandardMethod: "dokumaEnabled",
+  // SY-M1: iş emri kısmı üretim modülüyle de çalışır (dokuma kapalıysa yalnız iş emri) → sahibi üretim.
+  orderProductionProposal: "productionEnabled",
   costProfitMachineTime: "financeEnabled",
   costProfitOverheadKey: "financeEnabled",
   financeAutoAllocateOnPaymentEnabled: "financeEnabled",
