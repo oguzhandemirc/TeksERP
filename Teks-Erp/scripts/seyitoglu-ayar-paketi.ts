@@ -30,6 +30,14 @@ export const SEYITOGLU_SETTINGS: readonly PaketSatiri[] = [
   { anahtar: "maliyet.sunumDovizi", alan: "costPresentationCurrency", hedef: "USD", dilim: "SY-J1" },
   { anahtar: "siparis.uretimOnerisi", alan: "orderProductionProposal", hedef: "ONIZLEME", dilim: "SY-M1" },
   { anahtar: "siparis.hedefDegerOnerisi", alan: "orderTargetValueSuggestion", hedef: "MUSTERI_SON", dilim: "SY-F2b" },
+  // Sunum provası (2026-11-01): demo DB'de elle açılmıştı. Top KK1'de doğar (etiket ya da açık iş emri),
+  // levent tezgaha takılır ve doğan top leventten otomatik düşer.
+  { anahtar: "dokuma.rollBirth", alan: "dokumaRollBirth", hedef: "KK1_LABEL_OR_ORDER", dilim: "S1" },
+  { anahtar: "devere.mountTracking", alan: "devereMountTracking", hedef: true, dilim: "devere" },
+  { anahtar: "devere.autoConsume", alan: "devereAutoConsume", hedef: true, dilim: "devere" },
+  // Boyahaneye fason sevk kg'ı topun KK1 tartısından (`Roll.weightKg` → `dispatchedWeight`) gelir; kapalıyken
+  // fason kg kontrolü NO_WEIGHT döner (boyahane kg ile faturalar).
+  { anahtar: "kk1.weightEntryEnabled", alan: "kk1WeightEntryEnabled", hedef: true, dilim: "kk1" },
 ];
 
 /** TAM profilin Seyitoğlu için şart modülleri; kapalıysa uyarı (profil seçimi kurulumda). */
