@@ -163,7 +163,8 @@ export function LoginPage() {
           <TotpStep
             submitting={submitting}
             invalid={totp.invalid}
-            onSubmit={(code) => void performLogin(totp.values, false, code)}
+            trustDeviceDays={totp.trustDeviceDays}
+            onSubmit={(code, remember) => void performLogin(totp.values, false, code, remember)}
             onCancel={() => {
               setTotp(null);
               // Şifreyi TEMİZLE: kullanıcı geri döndüyse ya yanlış hesapla

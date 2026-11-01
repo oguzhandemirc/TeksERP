@@ -10,6 +10,25 @@ import type {
 } from "@/types/auth";
 import { IS_ELECTRON } from "@/lib/runtime-env";
 
+/** Hatırlanan (güvenilir) cihaz — belirteç/özet hiç dönmez. */
+export interface TrustedDeviceView {
+  id: string;
+  label: string;
+  firstIp: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string;
+  revokedAt: string | null;
+  revokeReason: string | null;
+  state: "GECERLI" | "SURESI_DOLDU" | "IPTAL" | "GECERSIZ";
+}
+
+export interface TrustedDeviceList {
+  /** Fabrika ayarı `auth.trustedDeviceDays` (0 = kapalı). */
+  days: number;
+  devices: TrustedDeviceView[];
+}
+
 export interface WebTotpOwnState {
   policy: "REQUIRED" | "USER_CHOICE";
   optOut: boolean;
@@ -111,6 +130,18 @@ export const authService = {
     apiClient
       .put<ApiResponse<WebTotpOwnState>>("/api/auth/web-totp", body)
       .then((r) => r.data),
+
+  /** Kendi hatırlanan cihazlarım. Eski backend 404 → çağıran kartı gizler. */
+  listTrustedDevices: (): Promise<ApiResponse<TrustedDeviceList>> =>
+    apiClient
+      .get<ApiResponse<TrustedDeviceList>>("/api/auth/trusted-devices", { suppressErrorToast: true })
+      .then((r) => r.data),
+
+  revokeTrustedDevice: (id: string): Promise<void> =>
+    apiClient.post(`/api/auth/trusted-devices/${id}/revoke`, {}).then(() => undefined),
+
+  revokeAllTrustedDevices: (): Promise<void> =>
+    apiClient.post("/api/auth/trusted-devices/revoke-all", {}).then(() => undefined),
 
   changePassword: (
     body: ChangePasswordRequest,

@@ -20,6 +20,8 @@ import { readTabOpenMode } from "@/components/layout/tabs/tab-open-mode";
 import { MasaustuBildirimKarti } from "@/components/bildirim/MasaustuBildirimKarti";
 import { BildirimTercihKarti } from "@/components/bildirim/BildirimTercihKarti";
 import { WebTotpPreferenceCard } from "./WebTotpPreferenceCard";
+import { TrustedDevicesCard } from "@/components/auth/TrustedDevicesCard";
+import { authService } from "@/services/authService";
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -149,6 +151,14 @@ export function SettingsPage() {
 
         {/* İnternetten giriş: politika USER_CHOICE iken kendi hesabında web 2FA tercihi. */}
         <WebTotpPreferenceCard />
+
+        {/* Hatırlanan cihazlar: "Bu cihazı N gün hatırla" ile kod sorulmayan tarayıcılarım. */}
+        <TrustedDevicesCard
+          scopeKey="self"
+          load={authService.listTrustedDevices}
+          revoke={authService.revokeTrustedDevice}
+          revokeAll={authService.revokeAllTrustedDevices}
+        />
 
         <Card>
           <CardHeader>

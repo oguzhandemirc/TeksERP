@@ -14,6 +14,7 @@ import {
   isTotpEnrollmentRequired,
   isTotpInvalid,
   isTotpRequired,
+  readTrustDeviceDays,
 } from "@/lib/totp-auth";
 import { useAuthStore } from "@/store/auth";
 import { canEnterApp, type ExistingSessionInfo, type JwtPayload, type LoginResponse } from "@/types/auth";
@@ -77,10 +78,10 @@ export function useLoginFlow() {
   const [submitting, setSubmitting] = useState(false);
   // 409 SESSION_EXISTS ('notify' politikası) — onay bekleyen çakışma bilgisi.
   const [conflict, setConflict] = useState<{ values: LoginFormValues; existing: ExistingSessionInfo } | null>(null);
-  // İkinci faktör — yalnız sunucu isterse (hesapta 2FA açık) doldurulur. `pending` kod
+  // İkinci faktör — yalnız sunucu isterse (hesapta 2FA açık) doldurulur; `trustDeviceDays` > 0 "hatırla" kutusu. `pending` kod
   // adımını açar; `invalid` son denemenin yanlış olduğunu söyler; `enrollment`
   // hiç kurulmamış hesabın ekranını açar.
-  const [totp, setTotp] = useState<{ values: LoginFormValues; invalid: boolean } | null>(null);
+  const [totp, setTotp] = useState<{ values: LoginFormValues; invalid: boolean; trustDeviceDays: number } | null>(null);
   const [enrollmentNeeded, setEnrollmentNeeded] = useState(false);
 
   const form = useForm<LoginFormValues>({ resolver: zodResolver(schema), defaultValues: EMPTY_LOGIN });
@@ -96,11 +97,11 @@ export function useLoginFlow() {
    * yönetir (`suppressErrorToast`): 401 (yanlış şifre) interceptor'ın özel dalında
    * zaten toast'lanır; 409 SESSION_EXISTS onay diyaloğunu açar; diğerleri burada.
    */
-  const performLogin = async (values: LoginFormValues, confirmKick: boolean, totpCode?: string) => {
+  const performLogin = async (values: LoginFormValues, confirmKick: boolean, totpCode?: string, rememberDevice?: boolean) => {
     setSubmitting(true);
     try {
       const res = await authService.login(
-        { ...values, confirmKick: confirmKick || undefined, totpCode },
+        { ...values, confirmKick: confirmKick || undefined, totpCode, rememberDevice: rememberDevice || undefined },
         { suppressErrorToast: true },
       );
       if (res.data.mustChangePassword === true) {
@@ -136,13 +137,13 @@ export function useLoginFlow() {
       // açardı.
       if (isTotpRequired(err)) {
         // Sunucu kod istedi — parola DOĞRU. Kod adımını aç.
-        setTotp({ values, invalid: false });
+        setTotp({ values, invalid: false, trustDeviceDays: readTrustDeviceDays(err) });
         return;
       }
       if (isTotpInvalid(err)) {
         // Kod yanlış: adımda KAL, alanı kırmızıya çek. Kullanıcıyı parola
         // ekranına geri atmak, doğru bildiği şeyi yeniden yazdırmak olurdu.
-        setTotp({ values, invalid: true });
+        setTotp((prev) => ({ values, invalid: true, trustDeviceDays: prev?.trustDeviceDays ?? 0 }));
         return;
       }
       if (isTotpEnrollmentRequired(err)) {
