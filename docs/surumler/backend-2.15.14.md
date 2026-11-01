@@ -3,7 +3,7 @@
 **Durum:** TASLAK — terfide kullanıcı onayı. İlk hedef yalnız `test` grubu (üyesi tek kurulum: bulut deneme sunucusu,
 satıcı DB'sinde `kurulum.kanalKodu = test` tek satır, 2026-11-01 ölçüldü); öncü/genel gruba çıkış ayrı karar (terfi
 etiketi). Bu belge `2.15.14-taslak.md` girdi notunun (KÜÇÜK-F, teklif belgesi donması) üstüne 2026-11-01 sürüm
-hazırlığında yazıldı; açık dilimler (SY-P2…P4, D4-K3e) indikten sonra §2 ve §4 yeniden ölçülür.
+hazırlığında yazıldı; §2 ve §4 her iniş turunda yeniden ölçülür (son ölçüm `origin/main` @ `cdd52f581`; bekleyen: D4-K3e #400, E1 #403, E2 #402, E3 #401, F1–F3).
 **Paket:** _(paketleme doldurur)_
 **SHA256:** _(paketleme doldurur)_
 **Commit:** _(paketleme doldurur)_
@@ -24,7 +24,7 @@ doğar; operatöre görünür etki ancak ayar açılınca başlar.
 
 ## 2. Ne değişti
 
-Ölçüm: `backend-v2.15.13` (`4e6cad988`) → `origin/main` @ `be9180daa`, ilk ebeveyn hattında 158 commit (≈150 PR).
+Ölçüm: `backend-v2.15.13` (`4e6cad988`) → `origin/main` @ `cdd52f581`, ilk ebeveyn hattında 161 commit (≈153 PR).
 Alt proje farkı: `Teks-Erp/src` 445 dosya · `Electron/src` 523 dosya (web paneli imajda) · `mobil/src` 133 dosya
 (bu turda tablet yayını YOK) · `patron/sunucu` 14 · `patron/uygulama` 36 · `satici` 2 (modül kataloğu satırı) ·
 `okuma/` 28 (yeni yerel okuma servisi — imaja GİRMEZ).
@@ -62,14 +62,17 @@ Kapısı çipleri, bildirim koşulu, sevk top listesi Excel'i.
 **Masraf, kârlılık, maliyet** — #279, #307, #315, #319, #322, #332, #334, #335, #338, #347, #357, #358, #361,
 #362, #373, #377, #381, #386, #391–#394, #396. Masraf özeti ve masraf bağı, makine saat ücreti + hizmet sarf normu,
 gerçekleşen kârlılık (gelir + sarf + dış fason + makine-saat + genel gider), sunum dövizi (donmuş kur), kg bazlı
-terbiye tarifesi, dokuma gerçek maliyeti, varyant standart maliyeti, SEPARATE_BEAM katman firesi.
+terbiye tarifesi, dokuma gerçek maliyeti, varyant standart maliyeti, SEPARATE_BEAM katman firesi; boyahane faturası
+kontrolü sevk günündeki tarifeyle karşılaştırılır (SY-P2 #397; tarihli geçmiş yoksa sonuç eskisiyle aynı).
 
 **Fatura KDV + tevkifat** — #359. Genel ve müşteri bazında (`finance.withholding.enabled` varsayılan kapalı).
 
 **Dokuma: desen kartı, varyant, çözgü katmanları, üretim önerisi** — #317, #326, #333, #337, #343, #351, #353–#356,
-#364–#368, #372, #375, #380, #384, #385, #388. Desen kartı + atkı sıra kodu + varyant, sipariş satırı varyantı ve
+#364–#368, #372, #375, #380, #384, #385, #388, #398, #399. Desen kartı + atkı sıra kodu + varyant, sipariş satırı varyantı ve
 hedef değer (kuşak), çözgü katmanları motoru (`beamMode`), levent raporu katman kırılımı, tezgâh önerisi, siparişten
-üretim önerisi (önizleme + uygula), Üretim planı sekmesi, tül Excel içe aktarımı, fason rota finalize ölçümü.
+üretim önerisi (önizleme + uygula), Üretim planı sekmesi, tül Excel içe aktarımı, fason rota finalize ölçümü, ortak
+atkı kartından "Bu desene özel kopya" (SY-P3, göçsüz), son adımı fason rotaya iç "Son kontrol" adımı kurulum betiği
+(SY-P4, `scripts/seyitoglu-son-kontrol.ts`, kuru koşu varsayılan; yalnız o profilin kurulumunda koşulur).
 
 **Patron bulutu** — #294, #299, #314, #321, #347, #373, #374, #395. Yeni anlıklar `ozet-masraf`, `karlilik-ozet`;
 cari hesap projeksiyonuna kilit alanı; iş emrine sevke hazırlık alanı; makine duruş kartı; kasa hareketleri.
@@ -113,7 +116,7 @@ turda YOK (yayındaki masaüstü panel 1.6.6).
 ## 4. Migration
 
 - **Var mı:** evet — `backend-v2.15.13`ten bu yana **29** yeni göç (2026-11-01 ölçüldü, `origin/main` @
-  `be9180daa`; açık dilimler inince yeniden sayılır). Deneme 2.15.12'den geçtiği için orada **59** göç uygulanır
+  `cdd52f581`; SY-P2…P4 göçsüz; bekleyen dilimler inince yeniden sayılır). Deneme 2.15.12'den geçtiği için orada **59** göç uygulanır
   (2.15.13'ün 30'u + bu sürümün 29'u).
 - İçerik: hepsi ADDITIVE — yeni tablolar (gelen belge, kurşun metre okuması, hizmet eşlemesi/fatura bağı, müşteri
   barkodu, cari kilidi, makine ücreti/sarf normu, desen kartı varyantı, maliyet tül, sipariş varyant hedefi, masraf
@@ -123,8 +126,13 @@ turda YOK (yayındaki masaüstü panel 1.6.6).
   (`gelenBelge.enabled = false`, yalnız top geçmişi olan kurulumda, `ON CONFLICT DO NOTHING`). DROP TABLE/COLUMN,
   SET NOT NULL, tip değişimi YOK (göç dosyalarında sayıldı).
 - **Toplam migration:** 454 (2.15.13'te 425, 2.15.12'de 395). Paketleme anında yeniden sayılır.
-- **Canlı döküm provası:** bu sürüm için henüz YOK. Test grubu yayını öncesi öneri: deneme DB'sinin dökümü
-  (395 göç) yerel PG16'da `migrate deploy` → 454; öncü/genel terfisinden önce fabrika dökümünde prova ŞART.
+- **Döküm provası YAPILDI (2026-11-01, deneme sunucusu):** deneme yedeği
+  `tekserp_pre-demo-iki-fabrika_20261101T084501Z.dump` (PG 16.15, 395 göç, 15.476 top) yerel PG 16.15'te
+  `tekserp_prova21514_test`e yüklendi (9 sn) → `prisma migrate deploy` 59 göç, çıkış 0, duvar 5 sn (göç süresi
+  toplamı 2,1 sn), yarım/geri alınmış göç 0, toplam 454; `gelenBelge.enabled = false` yazıldı. `migrate diff` farkı
+  yalnız iki beyanlı DEFERRABLE FK (`rolls_/swatches_sackId_shipmentId_consistency_fkey`, 2.15.13 provasıyla aynı).
+  `rolls_qty_le_initial` dökümde zaten NOT VALID (bu sürümün göçleri dokunmaz). Öncü/genel terfisinden önce
+  fabrika dökümünde prova ŞART.
 - **Geri alınabilir mi:** göç geri alınmaz; eklenen tablo/kolonları eski imaj okumaz (bkz. §6).
 
 ## 5. Kurulum notu
@@ -183,6 +191,8 @@ sürümü o turda yazılır). Metin terfide kullanıcı onayıyla donar.
     { "kapsam": "panel", "tip": "yeni", "metin": "Kârlılık ve masraf: müşteri ve iş bazında gerçekleşen kârlılık, masraf özeti, masrafı işe bağlama, makine saat ücretleri. Maliyet modülü açık kurulumlarda." },
     { "kapsam": "panel", "tip": "yeni", "metin": "Faturada KDV ve tevkifat oranı genel olarak ya da müşteri bazında tanımlanır." },
     { "kapsam": "panel", "tip": "yeni", "metin": "Dokuma: Desen Kartları ekranı (atkı sırası, varyant), sipariş satırında varyant ve hedef değer, siparişten üretim önerisi ve tezgâh önerisi, Siparişler altında Üretim planı sekmesi." },
+    { "kapsam": "panel", "tip": "iyilestirme", "metin": "Desen kartında başka kumaşlarla ortak kullanılan atkı kartı, \"Bu desene özel kopya\" ile yalnız bu kumaşa ayrılır; diğer kumaşlar eski kartta kalır." },
+    { "kapsam": "panel", "tip": "duzeltme", "metin": "Boyahane faturası kontrolü artık sevk günündeki tarifeyle karşılaştırılır; sonradan değişen tarife eski sevki etkilemez." },
     { "kapsam": "panel", "tip": "yeni", "metin": "Makine Duruşları ekranı dokuma dışındaki istasyonlarda da kullanılır; duruş raporu eklendi." },
     { "kapsam": "panel", "tip": "iyilestirme", "metin": "Müşteri barkodu: topa müşterinin barkodu bağlanır, okutulan her noktada müşteri koduyla da bulunur; birden çok eşleşmede seçim penceresi açılır." },
     { "kapsam": "panel", "tip": "iyilestirme", "metin": "Kurşun ve Tambur'da metre kaynağı (makine, operatör, tahmini) kaydedilir; tahmini kesim metresi faturaya girmez, süpervizör kesim metresini düzeltebilir." },
