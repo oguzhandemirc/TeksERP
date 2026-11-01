@@ -18,6 +18,7 @@ import app from "../src/app";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { reconcileReasonPresets } from "../src/jobs/reason-preset-catalog.job";
 
 let pass = 0;
 let fail = 0;
@@ -37,6 +38,8 @@ async function main(): Promise<void> {
     return;
   }
   console.log("=== HAZIR SEBEP kind SÜZGECİ ===");
+  // Katalog satırları boot uzlaştırmasından gelir; taze DB'de de dolu olsun diye burada da koşulur.
+  await reconcileReasonPresets();
   const admin = await ensureTestAdmin();
   const server = app.listen(0);
   await new Promise<void>((r) => server.once("listening", () => r()));
@@ -67,7 +70,9 @@ async function main(): Promise<void> {
     const allRows = Array.isArray(all.body) ? (all.body as Row[]) : [];
     check("§2b kind'sız yanıt da zarfsız dizi", all.status === 200 && Array.isArray(all.body));
     check("§3a kind'sız liste birden çok tür taşır (istemci süzer)", new Set(allRows.map((r) => r.kind)).size > 1);
-    check("§3b uydurma kind → 400", (await get("?kind=UYDURMA")).status === 400);
+    const bad = await get("?kind=UYDURMA");
+    const badMsg = (bad.body as { errors?: Array<{ message?: string }> }).errors?.[0]?.message;
+    check("§3b uydurma kind → 400 + Türkçe mesaj", bad.status === 400 && badMsg === "Bilinmeyen sebep türü");
   } finally {
     await new Promise<void>((r) => server.close(() => r()));
   }
