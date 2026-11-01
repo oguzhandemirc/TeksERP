@@ -565,6 +565,10 @@ export const updateSchema = z.strictObject({
       message: "Tambur çocuk top en kaynağı WO_TARGET_FIRST ya da MEASURED_FIRST olmalı",
     })
     .optional(),
+  // Müşteri kodunun doğduğu yer (D4-F2); servisteki LABEL_CUSTOMER_CODE_AT_MODES aynası.
+  labelCustomerCodeAt: z
+    .enum(["NONE", "TAMBUR_OUTPUT"], { message: "Müşteri barkodunun doğduğu yer NONE ya da TAMBUR_OUTPUT olmalı" })
+    .optional(),
   // Tablet Tambur listesi istasyon süzgeci (ister 2.8).
   tamburListByStationEnabled: z.boolean().optional(),
   // Dokumasız fabrikada makine duruşu takibi (D4-A1, ister 5.5).

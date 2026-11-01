@@ -48,9 +48,11 @@ import {
 } from "./helpers/quality-station.helper";
 import { resolveTargetWarehouseId } from "./helpers/warehouse.helper";
 import { pickFinalizeChildWidthTx } from "./helpers/finalize-child-width.helper";
+import { auditBornCustomerCodes, birthCustomerCodesTx, type BornCustomerCode } from "./helpers/customer-code-birth.helper";
 import {
   resolveTamburOverQuantityEnabled,
   readQualityGradeRequiredEnabled,
+  readLabelCustomerCodeAt,
 } from "./system-setting.service";
 import { recordVarianceTx, overageOf } from "./helpers/roll-variance.helper";
 import {
@@ -708,6 +710,8 @@ export class TamburService {
       originalRoll: Roll;
       splitRolls: Roll[];
       processedErrors: number;
+      /** D4-F2: yalnız kod doğduysa (label.customerCodeAt=TAMBUR_OUTPUT + müşteri serisi). */
+      customerCodes?: Array<{ rollId: string; code: string }>;
     }>
   > {
     // D4-B1 ölçüm kapıları tx AÇILMADAN (SIMULATED kapalı · kaynak zorunlu · kart örneği yok).
@@ -1103,6 +1107,9 @@ export class TamburService {
     // F140: kapatılan RollError'lar için tx-sonrası per-satır audit (agregat log
     // kapatılan tekil hatayı iz tutmuyordu). tx İÇİNDE toplanır, commit sonrası emit.
     const closedErrorAudits: Array<{ errorId: string; actionTaken: string }> = [];
+    // D4-F2: müşteri kodu doğum yeri — yalnız emanet topta okunur (NONE iken tx ve cevap bayt-aynı).
+    const birthCustomerCodes = roll.ownerCustomerId != null && (await readLabelCustomerCodeAt()) === "TAMBUR_OUTPUT";
+    let bornCustomerCodes: BornCustomerCode[] = [];
     const updatedRoll = await prisma.$transaction(async (tx) => {
       // O-2 write-skew guard: WO satırını kilitle → son-top tamamlama sayımı
       // (~1024) eşzamanlı finalize/finalizeOpenFabric/receive/cancel/directShip ile
@@ -1349,6 +1356,11 @@ export class TamburService {
           },
         });
       }
+      if (birthCustomerCodes) {
+        // Depo topu müşteri serisinden kodunu çocukla AYNI tx'te alır (numaralandirma.md: doğuşta materyalize).
+        const shippable = splitRolls.filter((r) => r.status === RollStatus.WAREHOUSE).map((r) => r.id);
+        bornCustomerCodes = await birthCustomerCodesTx(tx, { customerId: roll.ownerCustomerId!, rollIds: shippable, userId: userId ?? null });
+      }
       // D4-B1b: CUT okumaları çocuklar doğduktan sonra AYNI tx'te (measure'sız kesim okuma yazmaz).
       cutReadings = await writeCutReadingsTx(tx, { stepId: roll.currentStep!.id, machineId: machineId ?? null, userId: userId ?? null, cuts: cutMeasures });
 
@@ -1549,6 +1561,7 @@ export class TamburService {
       },
     });
     await auditCutReadings(userId, cutReadings);
+    await auditBornCustomerCodes(userId, bornCustomerCodes);
 
     // F140: kapatılan RollError'ların per-satır izini emit et (best-effort, tx dışı).
     if (closedErrorAudits.length > 0) {
@@ -1569,6 +1582,7 @@ export class TamburService {
         originalRoll: updatedRoll,
         splitRolls,
         processedErrors: processedCount,
+        ...(bornCustomerCodes.length > 0 ? { customerCodes: bornCustomerCodes.map((c) => ({ rollId: c.rollId, code: c.code })) } : {}),
       },
       message: colorWarning ? `${baseMsg} Uyarı: ${colorWarning}` : baseMsg,
     };

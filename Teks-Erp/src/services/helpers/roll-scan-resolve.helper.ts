@@ -137,3 +137,11 @@ export async function customerCodeSearchRollIds(rawSearch: string | null | undef
   if (r.kind === "AMBIGUOUS") return r.candidates.map((c) => c.rollId);
   return r.kind === "FOUND" && r.matchedBy === "CUSTOMER_CODE" ? [r.roll.id] : [];
 }
+
+/**
+ * Kod değeri müşteride hiç kullanıldı mı (kaldırılmış DAHİL) — seriden doğumda aynı değer ikinci kez
+ * verilmesin diye (D4-F2 `customer-code-birth.helper`). Okutma değil; koda göre okuma bu dosyada kalır.
+ */
+export async function customerCodeValueUsed(db: Pick<Prisma.TransactionClient, "rollCustomerCode">, customerId: string, code: string): Promise<boolean> {
+  return (await db.rollCustomerCode.findFirst({ where: { customerId, code }, select: { id: true } })) !== null;
+}

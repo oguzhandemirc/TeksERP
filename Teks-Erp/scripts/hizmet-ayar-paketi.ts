@@ -85,6 +85,8 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   { anahtar: "scan.customerCodeLookup", alan: "scanCustomerCodeLookupEnabled", hedef: true, dilim: "D4-F1" },
   // DALGA4 §12.1: müşteri barkodu basan şablonda kodsuz top basılmaz (Gülkesim BLOCK = varsayılan; açık beyan).
   { anahtar: "label.customerCodeMissing", alan: "labelCustomerCodeMissing", hedef: "BLOCK", dilim: "D4-F3" },
+  // Seri tanımlı müşteride kod Tambur çıkışında doğar; serisiz müşteride ayar etkisizdir (kod doğmaz).
+  { anahtar: "label.customerCodeAt", alan: "labelCustomerCodeAt", hedef: "TAMBUR_OUTPUT", dilim: "D4-F2" },
   // DALGA4 §12.1: dokumasız fabrikada kurşun/tambur/brode makinesi duruşu (ister 5.5).
   { anahtar: "uretim.makineDurusTakibi", alan: "machineStopTrackingEnabled", hedef: true, dilim: "D4-A1" },
   // DALGA4 §2.5/5 (K2): açık duruşta tablet gramaj/metre dokunuşu uyarır (göndermeyi kesmez).

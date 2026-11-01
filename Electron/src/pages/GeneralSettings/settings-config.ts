@@ -1697,6 +1697,21 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "MEASURED_FIRST", label: "Ölçülen en önce", hint: "Ana topun ölçülmüş eni varsa o yazılır; yoksa hedef en." },
         ],
       },
+      {
+        // D4-F2 (2026-11-01): `defaultValue` backend `DEFAULT_LABEL_CUSTOMER_CODE_AT` ile birebir.
+        enumKey: "labelCustomerCodeAt",
+        group: "Tambur",
+        title: "Müşteri barkodu Tambur çıkışında verilsin",
+        summary: "Barkod serisi tanımlı müşterinin topları Tambur'dan çıkarken müşteri barkodu alsın mı.",
+        desc: "Kapalı (varsayılan): müşteri barkodu yalnız tablette müşteri etiketi okutularak bağlanır. Tambur çıkışında: müşterinin cari kartında Barkod serisi tanımlıysa, o müşterinin malından Tambur'da çıkan her depo topu serinin sıradaki kodunu alır; kod topla aynı anda kaydedilir ve etikette müşteri barkodu olarak basılabilir. Serisi olmayan müşteride hiçbir şey değişmez. Yalnız bundan sonra çıkan topları etkiler.",
+        defaultValue: "NONE",
+        display: "radio",
+        audience: ["Operatör", "Yönetim"],
+        options: [
+          { value: "NONE", label: "Kapalı (bugünkü)", hint: "Seriden kod üretilmez." },
+          { value: "TAMBUR_OUTPUT", label: "Tambur çıkışında", hint: "Seri tanımlı müşterinin çıkan toplarına sıradaki kod verilir." },
+        ],
+      },
     ],
     numberFlags: [
       {

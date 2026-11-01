@@ -113,6 +113,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   tamburPlanGateWidthToleranceCm: A(5),
   tamburPlanGateWidthCheck: A("ENFORCE"),
   tamburChildWidthSource: A("MEASURED_FIRST"),
+  labelCustomerCodeAt: A("TAMBUR_OUTPUT"), // seriden doğum yolunu işletir; serisiz müşteride etkisiz
   tamburListByStationEnabled: A(true),
   machineStopTrackingEnabled: A(true),
   machineStopOpenWarningEnabled: A(true),
