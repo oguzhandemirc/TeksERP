@@ -719,6 +719,8 @@ export interface FeatureFlags {
   mobileLockOnBackground: boolean;
   /** Çevrimdışıyken tablet hareketsizlik + arka plan kilidi ertelenir (default false). Client ENFORCE (yalnız mobil). */
   mobileOfflineLockDefer: boolean;
+  /** Masaüstü/web giriş ekranı son kullanıcıyı hatırlar, yalnız parola sorar (default false). Sistem hesabı hatırlanmaz. Client ENFORCE (panel). */
+  rememberLastUser: boolean;
   /** Mutlak oturum tavanı — gün (default 30, 0..365; 0 = 30 gün sert tavan). Zaman aşımı kapalı
    *  olsa bile token en fazla bu kadar gün yaşar (sızan token sonsuza kadar geçerli
    *  kalmasın). Backend ENFORCE eder (issueToken). */

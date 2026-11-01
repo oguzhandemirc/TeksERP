@@ -100,7 +100,8 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   { anahtar: "fason.receiptApplyTargetVariant", alan: "fasonReceiptApplyTargetVariant", hedef: true, dilim: "D4-D3" },
   // Kullanıcı kararı 2026-11-01: fabrikadakiler için her web girişinde kod pratik değil → web girişinde
   // "Bu cihazı 30 gün hatırla" (süperadmine uygulanmaz). Ayar normalde yalnız süperadmin yazar; paket kurulumcunun işidir.
-  { anahtar: "auth.trustedDeviceDays", alan: "trustedDeviceDays", hedef: 30, dilim: "GUVENILIR-CIHAZ" },
+  { anahtar: "auth.trustedDeviceDays", alan: "trustedDeviceDays", hedef: 30, dilim: "GUVENILIR-CIHAZ" },  // Kullanıcı isteği 2026-11-01: girişte son kullanıcı hatırlanır, yalnız parola sorulur (sistem hesabı hatırlanmaz).
+  { anahtar: "auth.rememberLastUser", alan: "rememberLastUser", hedef: true, dilim: "GIRIS-SON-KULLANICI" },
 ];
 
 export type PlanDurumu = "DEGISECEK" | "AYNI" | "ANAHTAR_YOK" | "ALAN_YOK";

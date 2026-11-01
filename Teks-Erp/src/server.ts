@@ -70,6 +70,8 @@ const HOST = LAN_TLS.httpHost;
 // Yatay ölçeklenirse taşıma katmanı gerekir: presence/cache → Redis (pub/sub
 // invalidation), scheduler → DB advisory lock veya ayrı tek worker. Bu varsayım
 // LAN-only tek-sunucu kurulumda kasıtlıdır (ARCHITECTURE.md "Single-process").
+// İstisna: parola özeti worker havuzu (services/helpers/password-hash-pool.helper.ts) DURUMSUZ hesaplamadır,
+// bellek-içi durum taşımaz — bu değişmezi bozmaz.
 // =============================================================================
 
 // LİSANS DEPOSU dinlemeden ÖNCE ve SENKRON yüklenir: ilk istek geldiğinde kurulum anahtarı,

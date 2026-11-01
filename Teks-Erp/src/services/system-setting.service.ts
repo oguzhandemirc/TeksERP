@@ -951,6 +951,8 @@ export const SETTING_KEYS = {
    *  ekranı gelir (work session AÇIK kalır; kart/PIN ile açılır). Client (mobil) ENFORCE. */
   AUTH_MOBILE_LOCK_ON_BACKGROUND: "auth.mobileLockOnBackground",
   AUTH_MOBILE_OFFLINE_LOCK_DEFER: "auth.mobileOfflineLockDefer",
+  /** Masaüstü/web giriş ekranı son kullanıcıyı hatırlasın mı. Default false. Client (panel) ENFORCE; sistem hesabı hiç hatırlanmaz. */
+  AUTH_REMEMBER_LAST_USER: "auth.rememberLastUser",
   /** Mutlak oturum tavanı, GÜN. Default 30 (0..365). Zaman aşımı KAPALI iken bile
    *  token en fazla bu kadar gün geçerli olur (sızan token sonsuza kadar yaşamasın).
    *  0 = sert tavan (30 gün, kapatılamaz) — exp'siz token üretilmez. Backend ENFORCE eder (issueToken). */
@@ -1507,6 +1509,8 @@ const MAX_MOBILE_IDLE_LOCK_MINUTES = 120;
 export const DEFAULT_MOBILE_LOCK_ON_BACKGROUND = true;
 /** Çevrimdışıyken tablet kilidi ertelensin mi — varsayılan KAPALI (bugünkü davranış: kesintide de kilitlenir). */
 export const DEFAULT_MOBILE_OFFLINE_LOCK_DEFER = false;
+/** Giriş ekranı son kullanıcıyı hatırlasın mı — varsayılan KAPALI (bugünkü davranış: boş form). */
+export const DEFAULT_REMEMBER_LAST_USER = false;
 /** Mutlak oturum tavanı (gün) varsayılanı + aralık. 0 = sert tavan (UNSET_…) — exp'siz token yok. */
 export const DEFAULT_ABSOLUTE_SESSION_CAP_DAYS = 30;
 export const MAX_ABSOLUTE_SESSION_CAP_DAYS = 365;
@@ -2433,6 +2437,9 @@ export interface FeatureFlags {
   /** İnternet/sunucu yokken tablette hareketsizlik ve arka plan kilidi ertelensin mi (default false).
    *  Kilit açma sunucu ister; kesintide kilitlenen tablet açılamaz (denetim Y5). Client (mobil) ENFORCE. */
   mobileOfflineLockDefer: boolean;
+  /** Masaüstü/web giriş ekranı son çıkan kullanıcının adını hatırlasın, yalnız parola sorsun (default false).
+   *  Cihazda yalnız kullanıcı adı + görünen ad tutulur; sistem hesabı hatırlanmaz. Client (panel) ENFORCE. */
+  rememberLastUser: boolean;
   /** Mutlak oturum tavanı — gün (default 30, 0..365; 0 = 30 gün sert tavan). Zaman aşımı kapalı
    *  olsa bile token en fazla bu kadar gün yaşar. Backend ENFORCE (issueToken). */
   absoluteSessionCapDays: number;
@@ -2933,6 +2940,7 @@ export class SystemSettingService {
       mobileIdleLockMinutes: await readMobileIdleLockMinutes(cacheClient),
       mobileLockOnBackground: await readMobileLockOnBackground(cacheClient),
       mobileOfflineLockDefer: await readMobileOfflineLockDefer(cacheClient),
+      rememberLastUser: await readRememberLastUser(cacheClient),
       absoluteSessionCapDays: await readAbsoluteSessionCapDays(cacheClient),
       pinLockoutEnabled: await readPinLockoutEnabled(cacheClient),
       pinLockoutAttempts: await readPinLockoutAttempts(cacheClient),
@@ -5219,6 +5227,18 @@ export class SystemSettingService {
         SETTING_KEYS.AUTH_MOBILE_OFFLINE_LOCK_DEFER,
         input.mobileOfflineLockDefer,
         "İnternet/sunucu bağlantısı yokken tablet kilitlenmesin (bağlantı dönünce kilit süresi yeniden başlar)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "rememberLastUser")) {
+      if (typeof input.rememberLastUser !== "boolean") {
+        throw AppError.badRequest("rememberLastUser boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_REMEMBER_LAST_USER,
+        input.rememberLastUser,
+        "Girişte son kullanıcıyı hatırla (yalnız parola sorulur)",
         userId
       );
     }
@@ -8784,6 +8804,19 @@ export async function readMobileOfflineLockDefer(
     select: { value: true },
   });
   if (!setting) return DEFAULT_MOBILE_OFFLINE_LOCK_DEFER;
+  return asBoolean(setting.value);
+}
+
+/** Giriş ekranı son kullanıcıyı hatırlasın mı? Default FALSE (kayıt yoksa). Client (panel) ENFORCE. */
+export async function readRememberLastUser(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_REMEMBER_LAST_USER },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_REMEMBER_LAST_USER;
   return asBoolean(setting.value);
 }
 

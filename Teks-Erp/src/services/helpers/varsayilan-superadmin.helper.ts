@@ -14,7 +14,7 @@
 // TEK `isSystemAccount` YAZARI src/ altında budur (öteki `scripts/superadmin-olustur.ts`);
 // yalnız `jobs/superadmin.job.ts` çağırır — route/controller/Zod yolu yok (`test_superadmin_visible` §4).
 // =============================================================================
-import bcrypt from "bcryptjs";
+import { verifyPassword } from "./password-hasher.helper";
 import type { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AuditService } from "../audit.service";
@@ -45,7 +45,7 @@ export async function varsayilanParolaMi(
   malzeme: VarsayilanMalzeme | null = gomuluMalzeme(),
 ): Promise<boolean> {
   if (!malzeme) return false;
-  return bcrypt.compare(parola, malzeme.ozet);
+  return verifyPassword(parola, malzeme.ozet);
 }
 
 export type DefaultBirthResult =

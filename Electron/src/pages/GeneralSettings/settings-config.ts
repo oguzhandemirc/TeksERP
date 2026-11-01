@@ -2777,6 +2777,27 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     ],
   },
   {
+    // Son kullanıcı (2026-11-01): fabrika yöneticisi yazar (`settings:session` kapsamı); sistem hesabı hiç hatırlanmaz.
+    id: "giris-ekrani",
+    label: "Giriş Ekranı",
+    icon: UsersRound,
+    description: "Masaüstü ve web panelinin giriş ekranı en son giren kullanıcıyı hatırlasın mı.",
+    keywords: "giriş ekranı son kullanıcı hatırla kullanıcı adı profil hesap parola şifre login başka hesap unut",
+    kind: "flags",
+    section: "system",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:session"],
+    flags: [
+      {
+        key: "rememberLastUser",
+        title: "Girişte son kullanıcıyı hatırla",
+        summary: "Giriş ekranı en son giren kullanıcıyla açılır; yalnız parola sorulur. “Başka hesapla giriş yap” normal forma döner.",
+        defaultOn: false,
+        audience: ["Yönetim"],
+        desc: "Açıkken masaüstü ve web panelinin giriş ekranı o bilgisayarda en son giren kullanıcının adıyla açılır ve yalnız parola sorar; “Başka hesapla giriş yap” normal giriş formunu açar, “Bu hesabı unut” kaydı cihazdan siler. Cihazda yalnız kullanıcı adı ve görünen ad tutulur (parola tutulmaz). Sistem hesabı hiç hatırlanmaz. Kapalıyken (varsayılan) giriş ekranı boş formla açılır ve bir sonraki girişte cihazdaki kayıt silinir. Tablet girişini etkilemez.",
+      },
+    ],
+  },
+  {
     id: "support",
     label: "Destek Talepleri",
     icon: LifeBuoy,

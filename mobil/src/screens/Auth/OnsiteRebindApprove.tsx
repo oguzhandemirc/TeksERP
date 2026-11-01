@@ -35,6 +35,8 @@ export function onsiteErrorMessage(err: unknown): { text: string; totpNeeded?: b
       const wait = sec >= 60 ? `${Math.ceil(sec / 60)} dakika` : sec > 0 ? `${sec} saniye` : 'bir süre';
       return { text: `Çok fazla hatalı deneme — hesap kilitli. ${wait} sonra tekrar deneyin.` };
     }
+    case 'AUTH_BUSY':
+      return { text: 'Sunucu şu an çok yoğun. Birkaç saniye sonra tekrar deneyin.' };
     case 'REBIND_RATE_LIMITED':
       return { text: 'Çok fazla onay denemesi. Birkaç dakika sonra tekrar deneyin.' };
     case 'REBIND_APPROVER_FORBIDDEN':

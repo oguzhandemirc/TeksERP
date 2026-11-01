@@ -31,6 +31,8 @@ import type { Request, RequestHandler, Response, NextFunction } from "express";
 import { AppError } from "../utils/app-error";
 import "../types/express-augment";
 import { uyari } from "../lib/logger";
+import { clientIpBucket } from "../lib/client-ip-prefix";
+import { isHostedInstallation } from "../services/helpers/install-class.helper";
 
 // -----------------------------------------------------------------------------
 // Çözülmüş yapılandırma
@@ -371,7 +373,19 @@ export function classifyRateLimitRequest(method: string, originalUrl: string): R
  * Başlık VAR ama boş/bozuk gelirse yine `req.ip`'e düşülür: eksik bir başlık
  * yüzünden isteği reddetmek, korumadan beklenen şey değil.
  */
-export function resolveClientIp(req: Request, header: string | null): string | null {
+export function resolveClientIp(
+  req: Request,
+  header: string | null,
+  hosted: () => boolean = isHostedInstallation,
+): string | null {
+  const ip = readRawClientIp(req, header);
+  // IPv6 → /64 yalnız internete açık kurulumda (barındırılan sınıf ya da kenar başlığı tanımlı);
+  // LAN'da tabletler aynı /64'tedir, birleştirmek kilidi paylaştırırdı → LAN bayt-aynı.
+  if (ip && (header || hosted())) return clientIpBucket(ip);
+  return ip;
+}
+
+function readRawClientIp(req: Request, header: string | null): string | null {
   if (header) {
     const raw = req.headers[header];
     const v = Array.isArray(raw) ? raw[0] : raw;

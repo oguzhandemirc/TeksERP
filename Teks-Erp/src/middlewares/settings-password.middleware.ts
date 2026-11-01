@@ -214,7 +214,10 @@ export async function requireSettingsPassword(
     }
 
     // ⑥ Yanlış → rezervasyon DURUR (sayaç ilerler).
-    const ok = await verifySettingsPassword(supplied, hash);
+    const ok = await verifySettingsPassword(supplied, hash).catch((err: unknown) => {
+      releaseLoginAttempt(lockKeys); // 503 AUTH_BUSY deneme sayılmaz
+      throw err;
+    });
     if (!ok) {
       void AuditService.logEvent({
         category: "SYSTEM",

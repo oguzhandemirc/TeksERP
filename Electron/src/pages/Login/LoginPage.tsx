@@ -10,6 +10,8 @@ import { ApiEndpointDialog } from "@/components/settings/ApiEndpointDialog";
 import { connectToDiscoveredServer } from "@/lib/server-identity";
 import { useLoginFlow, type LoginFormValues } from "./useLoginFlow";
 import { LoginForm } from "./LoginForm";
+import { RememberedLoginForm } from "./RememberedLoginForm";
+import { useRememberedLogin } from "./useRememberedLogin";
 import { TotpStep } from "./TotpStep";
 import { PasswordChangeStep } from "./PasswordChangeStep";
 import { TotpEnrollmentNotice } from "./TotpEnrollmentNotice";
@@ -69,6 +71,8 @@ export function LoginPage() {
   const activationLocked = useLoginActivationLocked();
 
   const onSubmit = (values: LoginFormValues) => performLogin(values, false);
+  // Son kullanıcı (ayar `auth.rememberLastUser`): kayıt varsa yalnız parola sorulur.
+  const rememberedLogin = useRememberedLogin(form);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden">
@@ -182,6 +186,15 @@ export function LoginPage() {
             </Callout>
             <LoginForm form={form} submitting={submitting} onSubmit={onSubmit} />
           </div>
+        ) : rememberedLogin.remembered ? (
+          <RememberedLoginForm
+            account={rememberedLogin.remembered}
+            form={form}
+            submitting={submitting}
+            onSubmit={onSubmit}
+            onSwitchAccount={rememberedLogin.switchAccount}
+            onForget={() => void rememberedLogin.forget()}
+          />
         ) : (
           <LoginForm form={form} submitting={submitting} onSubmit={onSubmit} />
         )}

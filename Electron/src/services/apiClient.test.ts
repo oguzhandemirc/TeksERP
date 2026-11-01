@@ -301,6 +301,15 @@ describe("apiClient interceptor", () => {
       expect(toastError).toHaveBeenCalledWith(expect.stringMatching(/Sunucu hatası/i));
       expect(toastError).not.toHaveBeenCalledWith("stack trace");
     });
+
+    it("503 AUTH_BUSY: sunucunun 'çok yoğun' cümlesi gösterilir (genel sunucu hatası değil)", async () => {
+      const message = "Sunucu şu an çok yoğun. Birkaç saniye sonra tekrar deneyin.";
+      await expect(
+        getInterceptor().rejected(makeError(503, { body: { message, details: { code: "AUTH_BUSY" } } })),
+      ).rejects.toBeDefined();
+      expect(toastError).toHaveBeenCalledWith(message);
+      expect(toastError).not.toHaveBeenCalledWith(expect.stringMatching(/Sunucu hatası/i));
+    });
   });
 
   describe("ağ durumu", () => {

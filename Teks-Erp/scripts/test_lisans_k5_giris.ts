@@ -102,6 +102,7 @@ const DISLAMALAR: K5Dislama[] = [
   { dosya: "Electron/src/components/layout/LicenseLockGate.tsx", ad: "LicenseLockGate", gerekce: "kısıtlı kip kilidi oturum-dışında çizilmez", kanit: { dosya: APP, desen: /\{!oturumDisi && <LicenseLockGate \/>\}/ } },
   { dosya: APP, ad: "FactoryTimezoneLoader", gerekce: "fabrika saat dilimi bayrak ucundan yalnız oturum-içi dalda yüklenir (K5'te varsayılan dilim)", kanit: { dosya: APP, desen: /\{!oturumDisi && <FactoryTimezoneLoader \/>\}/ } },
   { dosya: APP, ad: "ScanSeriesLoader", gerekce: "okutma seri tablosu K5'te yüklenmez", kanit: { dosya: APP, desen: /if \(!userId \|\| suspended \|\| activationLocked\) return;/ } },
+  { dosya: "Electron/src/pages/Login/syncRememberedLogin.ts", ad: "syncRememberedLoginAfterLogin", gerekce: "girişte son kullanıcı senkronu (bayrak ucu) K5/G2'de koşmaz", kanit: { dosya: "Electron/src/pages/Login/syncRememberedLogin.ts", desen: /if \(useLicenseSuspension\.getState\(\)\.suspended \|\| useActivationLock\.getState\(\)\.sinif !== "YOK"\) return "skipped";/ } },
   { dosya: "Electron/src/providers/PreferencesProvider.tsx", ad: "PreferencesProvider", gerekce: "tercih sorgusu K5'te kapalı; kayıt yalnız ayar ekranlarından (kabuk)", kanit: { dosya: "Electron/src/providers/PreferencesProvider.tsx", desen: /const enabled = hydrated && !!user && !licenseSuspended;/ } },
 ];
 

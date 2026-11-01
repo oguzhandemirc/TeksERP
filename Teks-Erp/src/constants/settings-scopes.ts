@@ -209,6 +209,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "mobileIdleLockEnabled",
       "mobileLockOnBackground",
       "mobileOfflineLockDefer",
+      "rememberLastUser",
       "sameTypeSessionPolicy",
       "loginMethods",
       "shortCredentialTotpRequired",

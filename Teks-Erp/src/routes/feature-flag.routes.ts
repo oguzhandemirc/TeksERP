@@ -665,6 +665,8 @@ export const updateSchema = z.strictObject({
   mobileLockOnBackground: z.boolean().optional(),
   // auth.mobileOfflineLockDefer — çevrimdışıyken tablet kilidi ertelenir (default false). Client (mobil) ENFORCE.
   mobileOfflineLockDefer: z.boolean().optional(),
+  // auth.rememberLastUser — masaüstü/web giriş ekranı son kullanıcıyı hatırlar (default false). Client (panel) ENFORCE.
+  rememberLastUser: z.boolean().optional(),
   // label.mobileRasterEnabled — mobil (HC-06/BT) baskıda raster GW bitmap gönder (default false → komut yolu). Client (mobil) ENFORCE.
   mobileRasterEnabled: z.boolean().optional(),
   // label.scrapGradeLabelEnabled — fire (QualityGrade.skipLabel) kalitede de OTOMATİK etiket bas (default false → fire topa kâğıt çıkmaz). Client (mobil) ENFORCE; elle baskı onayla mümkün.
