@@ -12,6 +12,8 @@
 //   §5 değişiklik kaynağı: hedefin tahsilatı ve kaynağın hesap satırı (mergedIntoId) aktarılan faturayı kirletir;
 //      katalog sürümü 2 (TAM gönderim eski satırları düzeltir)
 //   §6 geri alma → fatura kaynak altında, açık = grandTotal − paidTotal
+//   §7 ⭐ zincir A→B→C (savunma; engeller bugün üretmez): fatura son hedef altında, açık/vade C'nin gecikmişiyle aynı; lookup geçişli
+//   §8 virman vadesi geçişi SQL'i: bacak vadesini kapsayan pencere faturayı + hedef cariyi döndürür
 // ⭐ NEGATİF SONDA: bkz. BEKCI-HARITASI satırı.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; temizlik `finally`de.
 // =============================================================================
@@ -150,6 +152,45 @@ async function main(): Promise<void> {
     const g2 = await overdueOf(target);
     check("§4a ⭐ hedefe tahsilat sanal FIFO ile aktarılan vadesi geçmiş kalemi düşürür (700 → 300)", part(later.get(overdue), "fatura.finans").acikTutar === "300", String(part(later.get(overdue), "fatura.finans").acikTutar));
     check("§4b ⭐ düşen açık gecikmişle yine eşit", overdueSum(later, target) === g2 && g2 === "300.00", `${overdueSum(later, target)} ↔ ${g2}`);
+
+    // §8 virman vadesi geçişi: bacağın dueDate'ini kapsayan pencere aktarılan faturayı ve hedef cariyi döndürür
+    const crossing = async (p: typeof FATURA, from: Date, to: Date): Promise<string[]> => {
+      const c = p.crossings?.find((x) => x.name === "virman-vadesi");
+      if (!c) return [];
+      const r = await prisma.$queryRawUnsafe<Array<{ root_id: string }>>(c.sql, from, to);
+      return r.map((x) => x.root_id);
+    };
+    const leg = await prisma.cariTransaction.findFirstOrThrow({ where: { cariId: target, sourceType: "CARI_TRANSFER", invoiceId: overdue }, select: { dueDate: true } });
+    const due = (leg.dueDate as Date).getTime();
+    const win = [new Date(due - DAY), new Date(due + 1)] as const;
+    const xInv = await crossing(FATURA, ...win);
+    const xCari = await crossing(CARI, ...win);
+    check("§8a virman vadesi geçişi: aktarılan vadesi geçmiş fatura döner", xInv.includes(overdue) && !xInv.includes(notDue), `${xInv.length}`);
+    check("§8b virman vadesi geçişi: hedef cari (gecikmiş yeniden gönderilir) döner", xCari.includes(target));
+    check("§8c pencere dışı: dönmez", !(await crossing(FATURA, new Date(due + 1), new Date(due + DAY))).includes(overdue));
+
+    // §7 ⭐ zincir A→B→C: bugünkü engellerle (hesap başına tek fason bağı, kart hesabı kaynak olamaz) üretilemez;
+    // projeksiyonun geçişli çözümü savunmadır → A→C gerçek birleşmeyle kurulur, ara B elle zincire sokulur.
+    const card2 = (await prisma.customer.create({ data: { code: `${TAG}-K2`, name: `${TAG} kart 2` }, select: { id: true } })).id;
+    ids.customers.push(card2);
+    const subA = (await prisma.subcontractor.create({ data: { code: `${TAG}-FA`, name: `${TAG} fason A` }, select: { id: true } })).id;
+    const subB = (await prisma.subcontractor.create({ data: { code: `${TAG}-FB`, name: `${TAG} fason B` }, select: { id: true } })).id;
+    ids.subs.push(subA, subB);
+    const chainInv = await sales({ subcontractorId: subA }, 800, ago(40), ago(10));
+    await prisma.subcontractor.update({ where: { id: subA }, data: { customerId: card2 } });
+    const accA = (await prisma.cariAccount.findUniqueOrThrow({ where: { subcontractorId: subA }, select: { id: true } })).id;
+    const accC = (await prisma.cariAccount.create({ data: { kind: "CUSTOMER", customerId: card2 }, select: { id: true } })).id;
+    await applyCariMerge(accA, accC);
+    const accB = (await prisma.cariAccount.create({ data: { kind: "SUBCONTRACTOR", subcontractorId: subB, isActive: false, mergedIntoId: accC }, select: { id: true } })).id;
+    await prisma.cariAccount.update({ where: { id: accA }, data: { mergedIntoId: accB } });
+    const ch = await wire(FATURA, [chainInv]);
+    const gC = await overdueOf(accC);
+    check("§7a ⭐ zincir: fatura SON hedef (C) altında", part(ch.get(chainInv), "fatura").cariHesapId === accC, String(part(ch.get(chainInv), "fatura").cariHesapId));
+    check("§7b ⭐ zincir: açık 800 + vadesi geçti = C gecikmişi", part(ch.get(chainInv), "fatura.finans").acikTutar === "800" && part(ch.get(chainInv), "fatura").vadesiGecti === true && overdueSum(ch, accC) === gC,
+      `${String(part(ch.get(chainInv), "fatura.finans").acikTutar)} ↔ ${gC}`);
+    const byPayC = await mapToRoots(src("payments").root, [accC]);
+    const byAccC = await mapToRoots(src("cari_accounts").root, [accC]);
+    check("§7c zincir: C'nin tahsilatı ve hesap satırı A'nın faturasını kirletir (lookup geçişli)", byPayC.includes(chainInv) && byAccC.includes(chainInv));
 
   } finally {
     await temizle();

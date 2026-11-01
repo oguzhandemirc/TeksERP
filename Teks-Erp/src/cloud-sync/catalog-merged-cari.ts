@@ -2,8 +2,9 @@
 // açığı hedefin hareketiyle değişir — kolon çözümü, okumalar, değişiklik kaynakları ve virman vadesi geçişi.
 import { col, lookup, type ChangeSource, type ColumnSpec } from "./projection-types";
 
-const MERGED_INVOICES_OF_CARIS =
-  'SELECT i."id" AS root_id FROM "invoices" i JOIN "cari_accounts" c ON c."id" = i."cariId" WHERE c."mergedIntoId" = ANY($1::uuid[])';
+// $1'e (geçişli: A→B→C zinciri) birleşmiş hesapların kimlikleri; UNION döngüyü keser.
+const MERGED_INTO_ANY = 'WITH RECURSIVE m(id) AS (SELECT c."id" FROM "cari_accounts" c WHERE c."mergedIntoId" = ANY($1::uuid[]) UNION SELECT c."id" FROM "cari_accounts" c JOIN m ON c."mergedIntoId" = m."id")';
+const MERGED_INVOICES_OF_CARIS = `${MERGED_INTO_ANY} SELECT i."id" AS root_id FROM "invoices" i WHERE i."cariId" IN (SELECT "id" FROM m)`;
 
 /** Türetilmiş `acikTutar`/`vadesiGecti`nin okuduğu tablolar (hedefin collectAgingRows kalemi dahil). */
 export const MERGED_INVOICE_READS = ["invoices", "cari_accounts", "cari_transactions", "payments", "cheques", "payment_allocations"];
@@ -24,7 +25,7 @@ export const MERGED_INVOICE_COLUMN: ColumnSpec = {
 };
 
 export const MERGED_INVOICE_SOURCES: readonly ChangeSource[] = [
-  lookup("cari_accounts", "id", 'SELECT i."id" AS root_id FROM "invoices" i WHERE i."cariId" = ANY($1::uuid[]) OR i."cariId" IN (SELECT c."id" FROM "cari_accounts" c WHERE c."mergedIntoId" = ANY($1::uuid[]))', "cari vade günü efektif vadeyi; birleşme (mergedIntoId) görünen hesabı değiştirir"),
+  lookup("cari_accounts", "id", `${MERGED_INTO_ANY} SELECT i."id" AS root_id FROM "invoices" i WHERE i."cariId" = ANY($1::uuid[]) OR i."cariId" IN (SELECT "id" FROM m)`, "cari vade günü efektif vadeyi; birleşme (mergedIntoId) görünen hesabı değiştirir"),
   lookup("payments", "cariId", MERGED_INVOICES_OF_CARIS, "hedefin tahsilatı aktarılan kalemi sanal FIFO ile kapatır"),
   lookup("cheques", "cariId", MERGED_INVOICES_OF_CARIS, "hedefin çeki aktarılan kalemi sanal FIFO ile kapatır"),
   { table: "cari_transactions", watermark: "createdAt", tieBreaker: [{ column: "id", cast: "uuid" }], root: { kind: "lookup", keyColumn: "cariId", sql: MERGED_INVOICES_OF_CARIS } },

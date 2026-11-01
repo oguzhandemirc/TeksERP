@@ -21,12 +21,8 @@ export async function mergedInvoiceViews(
   const out = new Map<string, MergedInvoiceView>();
   const cariIds = [...new Set(rows.map((r) => r.cariId))];
   if (cariIds.length === 0) return out;
-  const merged = await prisma.cariAccount.findMany({
-    where: { id: { in: cariIds }, mergedIntoId: { not: null } },
-    select: { id: true, mergedIntoId: true },
-  });
-  if (merged.length === 0) return out;
-  const targetOf = new Map(merged.map((m) => [m.id, m.mergedIntoId as string]));
+  const targetOf = await rootTargets(cariIds);
+  if (targetOf.size === 0) return out;
   const targets = [...new Set(targetOf.values())].sort();
   const aging = await collectAgingRows({ asOf: new Date(nowMs), cariIds: targets, includeDetail: true });
   const itemBy = new Map<string, { open: string; overdue: boolean }>();
@@ -46,3 +42,31 @@ export async function mergedInvoiceViews(
   }
   return out;
 }
+
+/**
+ * Hesap → zincirin SON (birleşmemiş) hedefi. Birleştirme zinciri mümkündür (A→B sonra B→C; virman kalemi
+ * invoiceId'siyle C'ye taşınır), tek adım yetmez. Döngü/derinlik korumalı; birleşmemiş hesap haritada YOK.
+ */
+async function rootTargets(cariIds: string[]): Promise<Map<string, string>> {
+  const next = new Map<string, string | null>();
+  let frontier = cariIds;
+  for (let depth = 0; frontier.length > 0 && depth < MAX_CHAIN; depth++) {
+    const rows = await prisma.cariAccount.findMany({ where: { id: { in: frontier } }, select: { id: true, mergedIntoId: true } });
+    for (const r of rows) next.set(r.id, r.mergedIntoId);
+    frontier = [...new Set(rows.map((r) => r.mergedIntoId).filter((x): x is string => !!x && !next.has(x)))];
+  }
+  const out = new Map<string, string>();
+  for (const id of cariIds) {
+    const seen = new Set<string>([id]);
+    let cur = next.get(id) ?? null;
+    let last: string | null = null;
+    while (cur && !seen.has(cur)) {
+      seen.add(cur);
+      last = cur;
+      cur = next.get(cur) ?? null;
+    }
+    if (last) out.set(id, last);
+  }
+  return out;
+}
+const MAX_CHAIN = 16;
