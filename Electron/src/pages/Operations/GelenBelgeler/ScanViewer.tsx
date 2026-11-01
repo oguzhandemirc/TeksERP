@@ -1,9 +1,10 @@
-// Belge fotoğrafı + seçili satırın kaynak kutusu (yüzde konumlu kaplama; görüntü genişliğe sığar).
+// Belge fotoğrafı + seçili satırın kaynak kutusu; yakınlaştırma/kaydırma/döndürme ZoomableScan'de (sayfa başına sıfırlanır).
 // Satır kendi sayfasının taramasını taşıyorsa (E4 scanId) görüntü o sayfaya geçer ve vurgu yalnız orada çizilir;
 // taşımıyorsa (elle satır/eski backend) bugünkü davranış: vurgu seçili sayfanın üstüne.
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useScanImage } from "./useScanImage";
+import { ZoomableScan } from "./ZoomableScan";
 import type { DocumentScanInfo, OcrRect } from "./types";
 
 interface Props {
@@ -27,15 +28,23 @@ export function ScanViewer({ scans, highlight, highlightScanId = null, selection
   }, [ownScanId, selectionKey, scanKey]);
   const scan = scans[Math.min(idx, scans.length - 1)] ?? null;
   const img = useScanImage(scan?.id ?? null);
-  const [nat, setNat] = useState<{ w: number; h: number } | null>(null);
-  if (!scan) return <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">Bu taslağın fotoğrafı yok (elle ya da Excel'den açıldı).</div>;
-  const pct = (r: OcrRect) => (nat ? { left: `${(r.x / nat.w) * 100}%`, top: `${(r.y / nat.h) * 100}%`, width: `${(r.width / nat.w) * 100}%`, height: `${(r.height / nat.h) * 100}%` } : undefined);
+  if (!scan)
+    return (
+      <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+        Bu taslağın fotoğrafı yok (elle ya da Excel'den açıldı).
+      </div>
+    );
   return (
     <div className="flex min-w-0 flex-col gap-2">
       {scans.length > 1 && (
         <div className="flex flex-wrap gap-1">
           {scans.map((s, i) => (
-            <Button key={s.id} size="sm" variant={i === idx ? "default" : "outline"} onClick={() => setIdx(i)}>
+            <Button
+              key={s.id}
+              size="sm"
+              variant={i === idx ? "default" : "outline"}
+              onClick={() => setIdx(i)}
+            >
               Sayfa {s.pageNo}
               {s.regionNo ? `/${s.regionNo}` : ""}
             </Button>
@@ -50,10 +59,13 @@ export function ScanViewer({ scans, highlight, highlightScanId = null, selection
         </a>
       )}
       {img.url && !img.isPdf && (
-        <div className="relative w-full overflow-hidden rounded border" data-testid="scan-viewer">
-          <img src={img.url} alt={`Belge sayfa ${scan.pageNo}`} className="block h-auto w-full" onLoad={(e) => setNat({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} />
-          {highlight && nat && (!ownScanId || ownScanId === scan.id) && <div className="pointer-events-none absolute rounded-sm border-2 border-amber-500 bg-amber-400/20" style={pct(highlight)} data-testid="scan-highlight" />}
-        </div>
+        <ZoomableScan
+          key={scan.id}
+          url={img.url}
+          alt={`Belge sayfa ${scan.pageNo}`}
+          highlight={highlight && (!ownScanId || ownScanId === scan.id) ? highlight : null}
+          selectionKey={selectionKey}
+        />
       )}
     </div>
   );

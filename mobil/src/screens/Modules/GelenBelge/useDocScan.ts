@@ -4,7 +4,7 @@ import { onlineManager } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { useAttemptToken } from '../../../offline/attemptToken';
 import { inboundDocService } from '../../../services/inboundDoc.service';
-import { EMPTY_PROGRESS, MAX_PAGES, SubmitError, addPage, barcodeToDocNo, submitDocScan, type ScanPage, type SubmitProgress } from './docScan';
+import { EMPTY_PROGRESS, MAX_PAGES, SubmitError, addPage, addPages, barcodeToDocNo, submitDocScan, type ScanPage, type SubmitProgress } from './docScan';
 import type { Owner } from './DocHeader';
 
 export function useDocScan() {
@@ -42,6 +42,18 @@ export function useDocScan() {
     else if (r.kind === 'full') Toast.show({ type: 'error', text1: `Bir belgede en çok ${MAX_PAGES} sayfa` });
   };
 
+  // Tarayıcının çok sayfalı sonucu: tek özet bildirimi (sayfa başına toast yağdırmaz).
+  const captureMany = (incoming: ScanPage[]) => {
+    const r = addPages(pages, incoming);
+    setPages(r.pages);
+    const notes = [
+      r.duplicates ? `${r.duplicates} sayfa zaten ekliydi` : '',
+      r.tooLarge ? `${r.tooLarge} sayfa 5 MB sınırını aştı` : '',
+      r.overflow ? `en çok ${MAX_PAGES} sayfa; ${r.overflow} sayfa alınmadı` : '',
+    ].filter(Boolean);
+    if (notes.length) Toast.show({ type: r.added ? 'info' : 'error', text1: `${r.added} sayfa eklendi`, text2: notes.join(' · ') });
+  };
+
   const send = async () => {
     if (sending || !pages.length) return;
     if (!onlineManager.isOnline()) {
@@ -66,7 +78,7 @@ export function useDocScan() {
   };
 
   return {
-    pages, setPages, owner, setOwner: changeOwner, setBarcode: changeBarcode, senderDocNo, sending, progress, done, reset, capture, send,
+    pages, setPages, owner, setOwner: changeOwner, setBarcode: changeBarcode, senderDocNo, sending, progress, done, reset, capture, captureMany, send,
     // Taslak doğduktan sonra başlık kilitlenir (yeniden deneme aynı taslağa sayfa yükler).
     headerLocked: progress.note !== null,
     remaining: pages.filter((p) => !progress.uploaded.has(p.sha256)).length,

@@ -17,12 +17,14 @@ import PageCameraModal from './PageCameraModal';
 import PageList from './PageList';
 import PagePreviewModal from './PagePreviewModal';
 import { removePage } from './docScan';
+import { usePageSource } from './usePageSource';
 import { useDocScan } from './useDocScan';
 
 export default function DocScanScreen() {
   const b = useDocScan();
   const [cameraOpen, setCameraOpen] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const source = usePageSource(b.pages.length, b.captureMany, () => setCameraOpen(true));
 
   const remove = (i: number) => b.setPages(removePage(b.pages, i));
   // Önizlemeden silince komşu sayfada kalınır; son sayfa da gidince önizleme kapanır.
@@ -41,7 +43,15 @@ export default function DocScanScreen() {
           </View>
         )}
         <DocHeader owner={b.owner} onOwner={b.setOwner} senderDocNo={b.senderDocNo} onBarcode={b.setBarcode} locked={b.headerLocked} />
-        <PageList pages={b.pages} uploaded={b.progress.uploaded} onRemove={remove} onAdd={() => setCameraOpen(true)} onOpen={setPreviewIndex} />
+        <PageList
+          pages={b.pages}
+          uploaded={b.progress.uploaded}
+          onRemove={remove}
+          onAdd={source.add}
+          onAddClassic={() => setCameraOpen(true)}
+          busy={source.busy}
+          onOpen={setPreviewIndex}
+        />
         <View style={styles.footer}>
           {(b.pages.length > 0 || b.headerLocked) && (
             <Button mode="text" onPress={b.reset} disabled={b.sending}>

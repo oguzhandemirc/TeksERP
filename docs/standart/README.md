@@ -30,6 +30,7 @@ Karar hikâyeleri (tarih, ölçüm, hangi alternatif neden reddedildi) `docs/his
 | [`MOBIL.md`](MOBIL.md) | Tablet: ekran kalıbı (kabuk + görünüm + hook + saf mantık), offline kuyruk, OTA/APK sınırı |
 | [`KUTUPHANELER.md`](KUTUPHANELER.md) | Katman × ihtiyaç → kütüphane tablosu, yeni bağımlılık karar kaydı, ölü paket teşhisi |
 | [`KUTUPHANELER-TABLO.md`](KUTUPHANELER-TABLO.md) | Kütüphane ENVANTERİ (§2) — katman × ihtiyaç tablosunun kendisi; 2026-09-13'te `KUTUPHANELER.md`'den bölündü, §2 numarası çapalar kopmasın diye korundu |
+| [`KUTUPHANELER-KAYIT.md`](KUTUPHANELER-KAYIT.md) | Kütüphane KAYIT DEFTERİ (§9) — her yeni bağımlılığın altı satırlık karar kaydı, en yeni üstte; 2026-11-02'de `KUTUPHANELER.md`'den bölündü, §9 numarası korundu |
 | [`ESZAMANLILIK.md`](ESZAMANLILIK.md) | Yarış ve idempotency tutumu (§1), karar tablosu (§2), bekçi yazımı (§4), istemci tarafı (§5), yanlış refleks listesi (§7), beklenen uyarı (§8) |
 | [`ESZAMANLILIK-ENVANTER.md`](ESZAMANLILIK-ENVANTER.md) | Kilit uzayı envanteri (§3) ve bilinen boşluklar (§6) — 2026-09-13'te `ESZAMANLILIK.md`'den bölündü, §3/§6 numaraları çapalar kopmasın diye korundu |
 | [`TEST-VE-DERLEME.md`](TEST-VE-DERLEME.md) | Ne zaman ne koşar, hangi kapı nerede (§1–§3, §6) |
