@@ -63,7 +63,7 @@ export function BackupsPage() {
         </Callout>
 
         {plainNotice && (
-          <Callout tone="warning" title={plainNotice.title}>
+          <Callout tone={plainNotice.tone} title={plainNotice.title}>
             {plainNotice.body}
           </Callout>
         )}

@@ -7,7 +7,7 @@
 # İZİNLİ anahtarlar okunur; yedek dosyalarının yalnız adı/yaşı.
 #
 # Kullanım (Mac'ten):  ssh <sunucu> 'bash -s' -- --ad <kanal>.etkiliyazilim.com < deploy/bulut/barindirma-kontrol.sh
-#           (sunucuda): bash barindirma-kontrol.sh --ad <ad> [--proje <compose projesi>] [--kenar <konteyner>]
+#           (sunucuda): bash barindirma-kontrol.sh --ad <ad> [--proje <compose projesi>] [--kenar <konteyner>] [--cek-damga <dosya>]
 # Her madde: YEŞİL / KIRMIZI / ÖLÇÜLEMEDİ. Çıkış kodu = KIRMIZI sayısı (en çok 100); ÖLÇÜLEMEDİ kırmızı sayılmaz
 # ama özet satırında görünür. Bekçi: scripts/test_bulut_kenar.mjs §3. Runbook: docs/ops/LINUX-DOCKER-KURULUM.md §10.
 # =============================================================================
@@ -18,11 +18,14 @@ AD=""
 PROJE=""
 KENAR=""
 YEDEK_AZAMI_SAAT="${YEDEK_AZAMI_SAAT:-26}"
+CEKIM_AZAMI_SAAT="${CEKIM_AZAMI_SAAT:-26}"
+CEK_DAMGA="/var/lib/tekserp-cek/son-cekim"
 while [ $# -gt 0 ]; do
   case "$1" in
     --ad) AD="${2:-}"; shift 2 ;;
     --proje) PROJE="${2:-}"; shift 2 ;;
     --kenar) KENAR="${2:-}"; shift 2 ;;
+    --cek-damga) CEK_DAMGA="${2:-}"; shift 2 ;;
     -h|--help) sed -n '2,13p' "$0" 2>/dev/null; exit 0 ;;
     *) echo "tanınmayan argüman: $1" >&2; exit 100 ;;
   esac
@@ -159,8 +162,11 @@ else
     DUZ=$(find "$YEDEK_KOK" -maxdepth 2 -type f \( -name '*.dump' -o -name '*.sql' -o -name '*.dump.part' \) 2>/dev/null | wc -l)
     if [ "$DUZ" -eq 0 ]; then yesil "şifresiz döküm yok"; else kirmizi "şifresiz döküm var ($DUZ dosya)"; fi
   fi
-  # Makine dışı kopya (K2) konaktan ölçülemez (hedef sağlayıcıya göre değişir); sessiz geçmesin.
-  olculemedi "makine dışı yedek kopyası (K2) ölçülmedi — hedefteki son dosyanın yaşını elle doğrulayın"
+  # Makine dışı kopya (K2): yedek VDS'i çeker (deploy/bulut/yedek-cek); çekme kapısı her başarılı çekimde damga yazar.
+  if [ ! -f "$CEK_DAMGA" ]; then kirmizi "makine dışı çekim hiç yapılmamış ($CEK_DAMGA yok — docs/ops/BULUT-YEDEK-CEKME.md)"; else
+    CEK_YAS=$(( ( $(date +%s) - $(cat "$CEK_DAMGA" 2>/dev/null || echo 0) ) / 3600 ))
+    if [ "$CEK_YAS" -le "$CEKIM_AZAMI_SAAT" ]; then yesil "son makine dışı çekim $CEK_YAS saat önce"; else kirmizi "son makine dışı çekim $CEK_YAS saat önce (≤$CEKIM_AZAMI_SAAT)"; fi
+  fi
 
   # Kenar nginx yapılandırması (nginx -T yalnız okur).
   [ -n "$KENAR" ] || KENAR=$(docker ps --format '{{.Names}} {{.Image}}' | awk '$2 ~ /nginx/ {print $1; exit}')
