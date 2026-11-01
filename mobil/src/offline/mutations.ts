@@ -20,6 +20,7 @@ import { queryClient, PERSIST_BUSTER, PERSIST_STORAGE_KEY } from './queryClient'
 import { PERSIST_DEHYDRATE_OPTIONS, shouldPersistMutation } from './persistPolicy';
 import { jitteredBackoff } from './backoff';
 import { runStationLimited } from './stationLimiter';
+import { notifyQueuedBusy } from './busyToast';
 import type { TransientKind } from './transientHttp';
 import { resolveAuthToken } from '../services/api';
 import { isLicenseBlocked } from '../lib/license';
@@ -124,7 +125,10 @@ const withAuthGuard =
   <V, R>(fn: (vars: V) => Promise<R>) =>
   async (vars: V): Promise<R> => {
     if (!(await resolveAuthToken())) throw new NoAuthError();
-    return runStationLimited(() => fn(vars));
+    return runStationLimited(() => fn(vars)).catch((e: unknown) => {
+      notifyQueuedBusy(e);
+      throw e;
+    });
   };
 
 // Y12 fix: 401 retry edilmez — ilk 401 token'ı sildiğinden kalan denemeler de

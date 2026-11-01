@@ -89,7 +89,6 @@ export function isWorkSessionLost(err: unknown): boolean {
 // yetkili "neden giremiyorum" toast'ını gösterir; login ekranı kendi genel
 // "Giriş başarısız" toast'ını isLoginLocked ile bastırır (aksi hâlde iki toast).
 let lastLoginLockToastAt = 0;
-let lastBusyToastAt = 0;
 
 /** Hata "çok fazla yanlış giriş denemesi" (429 LOGIN_LOCKED) mi? Interceptor bu
  *  durumda ZATEN net toast gösterir → LoginScreen kendi genel "Giriş başarısız"
@@ -202,18 +201,7 @@ apiClient.interceptors.response.use(
     const transient = classifyHttpFailure(status, error.response?.data);
     if (error.response && transient !== 'gateway') reportServerReachable();
     else reportServerUnreachable();
-    if (transient === 'busy' || (transient === 'rate-limit' && error.response?.data?.details?.code !== 'LOGIN_LOCKED')) {
-      const now = Date.now();
-      if (now - lastBusyToastAt > 10_000) {
-        lastBusyToastAt = now;
-        Toast.show({
-          type: 'info',
-          text1: 'Sunucu şu an meşgul',
-          text2: 'Bekleyen kayıtlar kaybolmaz, otomatik yeniden gönderilir.',
-          visibilityTime: 5000,
-        });
-      }
-    }
+    // Meşgul toast'ı burada DEĞİL: yalnız istasyon kuyruğu kaydı korur (offline/busyToast.ts).
     sampleFromConfig(
       error.config,
       status ?? (error.code === 'ECONNABORTED' ? 'TIMEOUT' : 'ERR'),

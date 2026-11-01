@@ -65,6 +65,9 @@ export function useIdleLock(): IdleLockUi {
   const deferred = isLockDeferred(deferSetting, reason);
   const deferredRef = useRef(deferred);
   deferredRef.current = deferred;
+  // Erteleme sırasında operatör uygulamadan ayrıldıysa (gerçek arka plan) kilit borçtur:
+  // bağlantı dönünce ödenir — dönen kişi başkası olabilir.
+  const missedBgLockRef = useRef(false);
 
   const activeGuard = enabled && !!user; // idle timeout (hareketsizlik)
   const bgGuard = lockOnBackground && !!user; // arka plana geçince anında kilit (bağımsız)
@@ -75,10 +78,15 @@ export function useIdleLock(): IdleLockUi {
     if (activeGuard) recordActivity();
   }, [activeGuard]);
 
-  // Bağlantı dönünce (erteleme biter) hareketsizlik süresi baştan başlar — anında kilit yok.
+  // Bağlantı dönünce (erteleme biter) hareketsizlik süresi baştan başlar — anında kilit yok;
+  // erteleme sırasında kaçırılmış arka plan kilidi VARSA şimdi uygulanır.
   useEffect(() => {
-    if (!deferred && activeGuard) recordActivity();
-  }, [deferred, activeGuard]);
+    if (deferred) return;
+    if (missedBgLockRef.current) {
+      missedBgLockRef.current = false;
+      if (bgGuard) lock();
+    } else if (activeGuard) recordActivity();
+  }, [deferred, activeGuard, bgGuard, lock]);
 
   // Periyodik idle kontrolü (kilitli değilken).
   useEffect(() => {
@@ -117,7 +125,11 @@ export function useIdleLock(): IdleLockUi {
   useEffect(() => {
     if (!bgGuard) return;
     const sub = AppState.addEventListener('change', (s) => {
-      if (deferredRef.current) return; // Y5: çevrimdışı erteleme — açılamayacak kilide sokma
+      if (deferredRef.current) {
+        // Y5: çevrimdışı erteleme — açılamayacak kilide sokma; gerçek ayrılışı borç olarak tut.
+        if (s !== 'active' && !isSystemDialogPending()) missedBgLockRef.current = true;
+        return;
+      }
       if (s !== 'active') {
         if (isSystemDialogPending()) noteSuppressedBackground();
         else lock();

@@ -195,6 +195,17 @@ describe('useIdleLock — çevrimdışı kilit ertelemesi (Y5)', () => {
     expect(useLockStore.getState().locked).toBe(true);
   });
 
+  it('⭐ ayar AÇIK: erteleme sırasında arka plana geçildiyse bağlantı dönünce kilitlenir', () => {
+    mockOfflineDefer = true;
+    renderHook(() => useIdleLock());
+    act(() => reportServerUnreachable());
+    emit('background');
+    emit('active');
+    expect(useLockStore.getState().locked).toBe(false);
+    act(() => reportServerReachable());
+    expect(useLockStore.getState().locked).toBe(true);
+  });
+
   it('ayar AÇIK + çevrimiçi: kilit bugünkü gibi çalışır', () => {
     mockOfflineDefer = true;
     renderHook(() => useIdleLock());

@@ -55,13 +55,13 @@ describe('api.ts — vekil 5xx / 429 sınıflandırması', () => {
     expect(e.transient).toBe('gateway');
   });
 
-  it('backend JSON 503 (meşgul) → çevrimiçi kalır, "busy" + Retry-After, meşgul toastı', async () => {
+  it('backend JSON 503 (meşgul) → çevrimiçi kalır, "busy" + Retry-After; kuyruksuz istekte "kaybolmaz" toastı YOK', async () => {
     const e = await post(failWith(503, { success: false, message: 'Sunucu meşgul' }, { 'retry-after': '3' }));
     expect(offlineReason()).toBeNull();
     expect(e.transient).toBe('busy');
     expect(e.retryAfterMs).toBe(3000);
     expect(e.message).toBe('Sunucu meşgul');
-    expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ text1: 'Sunucu şu an meşgul' }));
+    expect(Toast.show).not.toHaveBeenCalledWith(expect.objectContaining({ text1: 'Sunucu şu an meşgul' }));
   });
 
   it('⭐ 429 Retry-After\'lı → rate-limit, bekleme başlıktan', async () => {

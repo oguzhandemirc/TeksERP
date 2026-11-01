@@ -6,6 +6,8 @@ import { MutationObserver, onlineManager } from '@tanstack/react-query';
 import { kursunQcService } from '../services/kursunQc.service';
 import { registerStationMutationDefaults, STATION_MUT } from './mutations';
 import { queryClient } from './queryClient';
+import Toast from 'react-native-toast-message';
+import { resetBusyToastForTests } from './busyToast';
 import { STATION_CONCURRENCY } from './stationLimiter';
 import { classifyHttpFailure, parseRetryAfterMs } from './transientHttp';
 // jest.mock çağrıları babel-jest ile içe aktarımların üstüne taşınır.
@@ -198,5 +200,30 @@ describe('kuyruk boşaltma — sınırlı eşzamanlılık', () => {
     expect(peak).toBeLessThanOrEqual(STATION_CONCURRENCY);
     expect(peak).toBeGreaterThan(1);
     expect(order).toEqual(Array.from({ length: 10 }, (_, i) => `r${i}`));
+  });
+});
+
+describe('meşgul toastı — "kaybolmaz" sözü yalnız kuyruk kaydına', () => {
+  const fn = () => defaults().mutationFn as (v: unknown) => Promise<unknown>;
+  beforeEach(() => {
+    resetBusyToastForTests();
+    (Toast.show as jest.Mock).mockClear();
+  });
+
+  it('⭐ kuyruk kaydı 429/backend 503 alınca toast çıkar, 10 sn içinde tekrarlanmaz', async () => {
+    (kursunQcService.completeQc2 as jest.Mock).mockRejectedValue(err(429, { transient: 'rate-limit' }));
+    await expect(fn()({ rollId: 'r1' })).rejects.toBeTruthy();
+    (kursunQcService.completeQc2 as jest.Mock).mockRejectedValue(err(503, { transient: 'busy' }));
+    await expect(fn()({ rollId: 'r2' })).rejects.toBeTruthy();
+    expect(Toast.show).toHaveBeenCalledTimes(1);
+    expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ text1: 'Sunucu şu an meşgul' }));
+  });
+
+  it('vekil 5xx, JSON 500 ve 4xx kuyruk hatasında meşgul toastı yok', async () => {
+    for (const e of [err(502, { transient: 'gateway' }), err(500), err(409)]) {
+      (kursunQcService.completeQc2 as jest.Mock).mockRejectedValue(e);
+      await expect(fn()({ rollId: 'r' })).rejects.toBe(e);
+    }
+    expect(Toast.show).not.toHaveBeenCalled();
   });
 });
