@@ -43,6 +43,8 @@ import { useOrderStats } from "./useOrderStats";
 import { TERIM } from "@/lib/terim";
 import { OrderPlanView, ORDER_PLAN_QUERY_KEY } from "./OrderPlanView";
 import { OrdersViewTabs, readOrdersView } from "./OrdersViewTabs";
+import { opensProposalOnApprove, useProposalGates } from "./production-proposal/gates";
+import { ProductionProposalDialog } from "./production-proposal/ProductionProposalDialog";
 
 const FILTERS: FilterDef[] = [
   {
@@ -232,16 +234,20 @@ export function OrdersPage() {
 
   const isEmpty = query.isSuccess && !search && pagination.total === 0;
 
+  const proposalGates = useProposalGates();
+  const [proposalOrder, setProposalOrder] = useState<Order | null>(null);
   const createMut = useMutation({
     mutationFn: (payload: CreatePayload) =>
       orderService.create(payload as unknown as Partial<Order>),
     // Sunucu `warnings` (kg/adet satırda karşılama ölçülmüyor) apiClient interceptor'ında basılır.
     onError: (e) => createAttempt.onFailure(e),
-    onSuccess: () => {
+    onSuccess: (r) => {
       createAttempt.onSuccess();
       toast.success("Sipariş oluşturuldu.");
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
       setFormOpen(false);
+      // SY-M3: ONAYDA_TASLAK — sipariş doğuşta onaylıdır; önizleme kendiliğinden açılır (sessiz yaratma yok).
+      if (opensProposalOnApprove(proposalGates.mode, proposalGates.buttonVisible, r.data)) setProposalOrder(r.data);
     },
   });
 
@@ -440,6 +446,9 @@ export function OrdersPage() {
         }}
         isSubmitting={createMut.isPending || updateMut.isPending}
       />
+      {proposalOrder && (
+        <ProductionProposalDialog open onOpenChange={(o) => !o && setProposalOrder(null)} orderId={proposalOrder.id} orderNumber={proposalOrder.orderNumber} lines={proposalOrder.lines} />
+      )}
     </PageShell>
   );
 }

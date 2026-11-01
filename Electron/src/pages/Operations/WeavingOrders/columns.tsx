@@ -1,6 +1,9 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useMemo } from "react";
+import { useProposalGates } from "../Orders/production-proposal/gates";
+import { LoomSuggestionCell } from "./loom-suggestion/LoomSuggestionCell";
 import { WEAVING_KIND_LABEL, WEAVING_STATUS_META, formatDay, formatPlannedM, type WeavingOrder } from "./types";
 
 /** Sıralama başlığı YOK: uç yalnız "en yeni önce" sıralar (sortBy göndermez). */
@@ -106,3 +109,25 @@ export const weavingOrderColumns: ColumnDef<WeavingOrder>[] = [
     },
   },
 ];
+
+/** SY-M3 "Uygun tezgâh" kolonu — yalnız `gates.loomSuggestionVisible` iken eklenir (KAPALI'da liste bugünkü gibi). */
+export const loomFitColumn: ColumnDef<WeavingOrder> = {
+  id: "loomFit",
+  header: "Uygun tezgâh",
+  cell: ({ row }) => (
+    <LoomSuggestionCell weavingOrderId={row.original.id} open={row.original.status === "PLANNED" || row.original.status === "IN_PROGRESS"} />
+  ),
+};
+
+/** Kolon seti: öneri görünürse durum kolonundan önce "Uygun tezgâh". */
+export function buildWeavingOrderColumns(withLoomFit: boolean): ColumnDef<WeavingOrder>[] {
+  if (!withLoomFit) return weavingOrderColumns;
+  const at = weavingOrderColumns.findIndex((c) => "accessorKey" in c && c.accessorKey === "status");
+  return [...weavingOrderColumns.slice(0, at), loomFitColumn, ...weavingOrderColumns.slice(at)];
+}
+
+/** Sayfanın kolon seti: kapı (`siparis.uretimOnerisi` + dokuma + izin) açıksa "Uygun tezgâh" eklenir. */
+export function useWeavingOrderColumns(): ColumnDef<WeavingOrder>[] {
+  const { loomSuggestionVisible } = useProposalGates();
+  return useMemo(() => buildWeavingOrderColumns(loomSuggestionVisible), [loomSuggestionVisible]);
+}

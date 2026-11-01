@@ -38,6 +38,7 @@ import { LinkedWorkOrdersCard } from "./LinkedWorkOrdersCard";
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import { OrderLineWoChips } from "./OrderLineWoChips";
 import { OrderShipmentsCard } from "./OrderShipmentsCard";
+import { ProductionProposalButton } from "./production-proposal/ProductionProposalButton";
 import type { Order, OrderLine } from "./types";
 import { useOrderLineCustomerNames } from "./useOrderLineCustomerNames";
 
@@ -506,6 +507,7 @@ export function OrderDetailSheet({
                       </Button>
                     </PermissionGate>
                   )}
+                  {order && <ProductionProposalButton order={order} />}
                   <PermissionGate permission="order:write">
                     {isEditable && onEdit && (
                       <Button

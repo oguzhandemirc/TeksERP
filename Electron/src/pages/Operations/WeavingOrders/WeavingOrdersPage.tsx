@@ -29,7 +29,7 @@ import { itemService } from "@/pages/Items/service";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import { orderService } from "@/pages/Operations/Orders/service";
 import type { Order } from "@/pages/Operations/Orders/types";
-import { weavingOrderColumns } from "./columns";
+import { useWeavingOrderColumns } from "./columns";
 import { weavingOrderService } from "./service";
 import { WeavingOrderFormDialog } from "./WeavingOrderFormDialog";
 import { WeavingOrderCancelDialog, WeavingOrderCloseDialog } from "./WeavingOrderActionDialogs";
@@ -88,7 +88,7 @@ export function WeavingOrdersPage() {
   const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<WeavingOrder>({
     queryKey: WEAVING_ORDERS_QUERY_KEY,
     fetchFn: weavingOrderService.listCursor,
-    columns: weavingOrderColumns,
+    columns: useWeavingOrderColumns(),
     defaultPageSize: 50,
     enableSelection: false,
   });
