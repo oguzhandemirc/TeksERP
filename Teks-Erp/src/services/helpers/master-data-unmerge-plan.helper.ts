@@ -86,6 +86,27 @@ async function liveNameFolds(
   return new Map(live.map((r: { id: string; name: string }) => [foldOf(entity, r.name), r.name]));
 }
 
+/**
+ * LIFO (PR #417): kart birleşince kaynağın hesabı mezar taşında kalır; cari birleştirme onu kalan kartın hesabına
+ * aktardıysa kart dirilip hesabı yabancı kimlikte donmuş kalmasın — önce cari birleştirme geri alınır. Tek çözücü
+ * virmanla kapanmış hesabı bilinçli gizler (`cari-card-where`); burada sorulan tam o hesaptır.
+ */
+async function cariMergeBlockers(db: Prisma.TransactionClient | typeof prisma, op: OperationWithChildren): Promise<string[]> {
+  const mergedAway = await db.cariAccount.findMany({
+    where: { mergedIntoId: { not: null }, customerId: { in: op.sources.map((src) => src.sourceId) } },
+    select: { customerId: true, mergedInto: { select: { customerId: true } } },
+  });
+  return mergedAway
+    .filter((a) => a.mergedInto?.customerId !== a.customerId)
+    .map((acc) => {
+      const src = op.sources.find((x) => x.sourceId === acc.customerId);
+      return (
+        `${src?.codeBefore ?? src?.nameBefore ?? "Kaynak"} kartının cari hesabı sonradan başka hesaba birleştirilmiş — önce ` +
+        `${ekranYolu("cariHesaplar")} ekranında o cari birleştirme geri alınmalı (en yenisi önce).`
+      );
+    });
+}
+
 /** Geri alma planı — önizleme ve işlem AYNI fonksiyondan okur. */
 export async function buildPlan(
   db: Prisma.TransactionClient | typeof prisma,
@@ -131,23 +152,7 @@ export async function buildPlan(
     );
   }
 
-  // LIFO (PR #417): kart birleşince kaynağın hesabı mezar taşında kalır; cari birleştirme onu kalan kartın hesabına
-  // aktardıysa kart dirilip hesabı yabancı kimlikte donmuş kalmasın — önce cari birleştirme geri alınır.
-  // Tek çözücü virmanla kapanmış hesabı bilinçli gizler (`cari-card-where`); burada sorulan tam o hesaptır.
-  if (entity === "customer") {
-    const sourceIds = op.sources.map((src) => src.sourceId);
-    const mergedAway = await db.cariAccount.findMany({
-      where: { mergedIntoId: { not: null }, customerId: { in: sourceIds } },
-      select: { customerId: true, mergedInto: { select: { customerId: true } } },
-    });
-    for (const acc of mergedAway.filter((a) => a.mergedInto?.customerId !== a.customerId)) {
-      const src = op.sources.find((x) => x.sourceId === acc.customerId);
-      blockers.push(
-        `${src?.codeBefore ?? src?.nameBefore ?? "Kaynak"} kartının cari hesabı sonradan başka hesaba birleştirilmiş — önce ` +
-          `${ekranYolu("cariHesaplar")} ekranında o cari birleştirme geri alınmalı (en yenisi önce).`,
-      );
-    }
-  }
+  if (entity === "customer") blockers.push(...(await cariMergeBlockers(db, op)));
 
   const liveFolds = await liveNameFolds(db, entity, table, op.sources.map((s) => s.sourceId));
   const sources: UnmergeSourcePlan[] = op.sources.map((src) => {
