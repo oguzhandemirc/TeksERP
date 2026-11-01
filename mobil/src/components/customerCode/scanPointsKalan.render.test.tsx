@@ -18,6 +18,8 @@ import DepoScreen from '../../screens/Modules/Depo/DepoScreen';
 import FasonSevkScreen from '../../screens/Modules/FasonSevk/FasonSevkScreen';
 import { useQuickWorkOrder } from '../../screens/Modules/HizliIsEmri/useQuickWorkOrder';
 import ScannerRollStrip from '../ScannerRollStrip';
+import Toast from 'react-native-toast-message';
+import { signalScan } from '../../services/scanFeedback';
 
 const mockGet = jest.fn();
 let mockScanCode = '';
@@ -99,6 +101,7 @@ jest.mock('../BarcodeScannerModal', () => {
 });
 
 beforeEach(() => {
+  jest.clearAllMocks();
   mockLegacyBackend = false;
   mockGet.mockReset();
   mockGet.mockImplementation(async (url: string) => {
@@ -140,6 +143,8 @@ describe('Hızlı Sipariş', () => {
     renderWithPaper(<HizliSiparisScreen />);
     await scanWith(TITLE, AMBIGUOUS_CODE);
     expect(screen.queryByText(ambiguousTitle())).toBeNull();
+    expect(Toast.show).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Okutulan Toplar \(1 top/)).toBeNull();
   });
 });
 
@@ -168,6 +173,8 @@ describe('Depo', () => {
     renderWithPaper(<DepoScreen />);
     await scanWith(TITLE, AMBIGUOUS_CODE);
     expect(screen.queryByText(ambiguousTitle())).toBeNull();
+    expect(signalScan).toHaveBeenCalledWith('reject');
+    expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ text1: 'Sorgulanamadı' }));
   });
 });
 
@@ -181,6 +188,8 @@ describe('Fason Sevk', () => {
     await act(async () => fireEvent.press(screen.getByText('H2')));
     await waitFor(() => expect(lastRollCall()).toBe('/rolls/barcode/H2'));
     await waitFor(() => expect(screen.queryByText(ambiguousTitle())).toBeNull());
+    // İş emri seçilmeden sevk listesi kartı çizilmez; seçilen top tarayıcı şeridine girer.
+    expect(await screen.findByText('H2')).toBeTruthy();
     expect(screen.queryByTestId('musteri-kodu-eslesme')).toBeNull();
   });
 
@@ -195,6 +204,8 @@ describe('Fason Sevk', () => {
     renderWithPaper(<FasonSevkScreen />);
     await scanWith(TITLE, AMBIGUOUS_CODE);
     expect(screen.queryByText(ambiguousTitle())).toBeNull();
+    expect(signalScan).toHaveBeenCalledWith('reject');
+    expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ text1: 'Top eklenmedi' }));
   });
 });
 
@@ -235,5 +246,16 @@ describe('Hızlı İş Emri — top ekleme', () => {
     renderWithPaper(<QuickWorkOrderHost />);
     await scanWith('quick', AMBIGUOUS_CODE);
     expect(screen.queryByText(ambiguousTitle())).toBeNull();
+    expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ text1: 'Top eklenmedi' }));
+  });
+
+  it('⭐ ekran bağlantısı: NewWorkOrderView kancanın modalını çizer (yoksa intercept okutmayı sessizce yutar)', () => {
+    // Ekran ağır (iş emri formu + servisler); render yerine kaynakta modal satırı ölçülür — davranışı yukarıdaki Host sınar.
+    const src = jest.requireActual<typeof import('fs')>('fs').readFileSync(
+      require.resolve('../../screens/Modules/HizliIsEmri/NewWorkOrderView.tsx'),
+      'utf8',
+    );
+    expect(src).toMatch(/useQuickWorkOrder\(/);
+    expect(src).toMatch(/\{wo\.ambiguousModal\}/);
   });
 });
