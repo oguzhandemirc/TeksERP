@@ -2,6 +2,18 @@
 // Kaynak: `Teks-Erp/src/services/gelen-belge-{note,line,scan,eslestirme,onay}.service.ts` select/dönüş şekilleri.
 // Prisma Decimal JSON'da metindir (`meters`/`weightKg`/`widthCm`); hesap `totals.ts`te sayıya çevrilir.
 
+import type { AutoWorkOrderResult } from "./workOrderTypes";
+export type {
+  AutoWorkOrderGroup,
+  AutoWorkOrderResult,
+  ChoiceProperty,
+  PlanGroup,
+  PlanRoll,
+  PlanTarget,
+  ProcessValuePage,
+  WorkOrderPlan,
+} from "./workOrderTypes";
+
 export const NOTE_STATUSES = ["DRAFT", "APPROVING", "APPROVED", "PARTIAL", "CANCELLED"] as const;
 export type NoteStatus = (typeof NOTE_STATUSES)[number];
 export type NoteSourceKind = "OCR" | "MANUAL" | "IMPORT";
@@ -167,7 +179,11 @@ export interface ProcessSuggestion {
   suggested: { id: string; name: string } | null;
   source: "ALIAS" | "PATTERN" | "NONE";
   /** Kurşun dışı çeşit özellikleri (brode deseni vb., D4-D1): özellik başına öneri. Böyle özellik yoksa / eski backend → yok. */
-  variants?: Array<{ propertyId: string; suggested: { id: string; name: string } | null; source: "ALIAS" | "PATTERN" | "NONE" }>;
+  variants?: Array<{
+    propertyId: string;
+    suggested: { id: string; name: string } | null;
+    source: "ALIAS" | "PATTERN" | "NONE";
+  }>;
 }
 /** Kurşun dışı çeşit kataloğu (D4-D1) — backend `helpers/process-choice-catalog.helper.ts` aynası. */
 export interface ProcessChoiceGroup {
@@ -186,7 +202,13 @@ export interface NoteMatchSuggestions {
   processOptions?: Array<{ id: string; name: string }>;
   /** Kurşun dışı çeşit katalogları (D4-D1); böyle özellik yoksa ya da eski backend → yok (panel yalnız kurşunu çizer). */
   processGroups?: ProcessChoiceGroup[];
-  lines: Array<{ lineId: string; lineNo: number; item: MatchSuggestion; color: MatchSuggestion; process?: ProcessSuggestion }>;
+  lines: Array<{
+    lineId: string;
+    lineNo: number;
+    item: MatchSuggestion;
+    color: MatchSuggestion;
+    process?: ProcessSuggestion;
+  }>;
   /** Sahibin ETKİN varsayılan ürünü (E4); eski backend göndermez → undefined (panel hüküm vermez). */
   defaultItem?: EffectiveDefaultItem;
 }
@@ -210,6 +232,8 @@ export interface ProcessChoice {
 export interface ApproveResult {
   note: DeliveryNoteDetail;
   summary: { entered: number; failed: number; skipped: number; replayed: number; rollIds: string[] };
+  /** Yalnız fabrika ayarı açıkken (eski backend / ayar kapalı → yok). */
+  autoWorkOrders?: AutoWorkOrderResult;
 }
 
 export interface ReaderStatus {
@@ -255,6 +279,8 @@ export interface IncomingDocumentSettings {
   defaultItem: { id: string; code: string; name: string; problem: string | null } | null;
   unreviewedApproval: UnreviewedApproval;
   defaultUnreviewedApproval: UnreviewedApproval;
+  /** Onaydan sonra net gruplara iş emri kendiliğinden; eski backend göndermez (undefined = kapalı). */
+  autoWorkOrder?: boolean;
 }
 
 /** Gönderen şablonu (E2): dosyadaki motor şablonu + fabrikaya özgü bağ (`GET /sablonlar`). */
@@ -291,59 +317,4 @@ export interface CustomerDefaultView {
   /** null = top doğurabilir; dolu = onayda 409 verecek sebep. */
   problem: string | null;
   updatedAt: string;
-}
-
-/** Belgeden iş emri planı (D4-D2) — backend `gelen-belge-is-emri.service` `WorkOrderPlan` aynası. */
-export interface PlanTarget {
-  propertyId: string;
-  propertyName: string;
-  /** Çeşidin bayrağı (BRODE, KURŞUN…) — iş emrinin hedef özelliği (rota kapsaması). */
-  flagPropertyId: string;
-  valueId: string;
-  valueName: string;
-  /** ALIAS/PATTERN: sunucu önerisi · MANUAL: panelde seçildi (sunucu üretmez). */
-  source: "ALIAS" | "PATTERN" | "MANUAL";
-}
-export interface PlanRoll {
-  rollId: string;
-  barcode: string | null;
-  lineNo: number;
-  senderRollNo: string | null;
-  meters: string;
-  status: string;
-  attachable: boolean;
-  liveWorkOrder: { id: string; workOrderNumber: string } | null;
-}
-export interface PlanGroup {
-  key: string;
-  patternless: boolean;
-  targets: PlanTarget[];
-  itemId: string;
-  itemName: string;
-  processText: string | null;
-  rolls: PlanRoll[];
-  totalMeters: string;
-  attachableCount: number;
-}
-export interface ChoiceProperty {
-  propertyId: string;
-  propertyName: string;
-  flagPropertyId: string;
-  optionCount: number;
-}
-export interface WorkOrderPlan {
-  noteId: string;
-  noteNo: string;
-  status: NoteStatus;
-  owner: { id: string; name: string } | null;
-  customerBatch: { key: string; batchNo: string } | null;
-  suggestedRouteTemplateId: string | null;
-  choiceProperties: ChoiceProperty[];
-  groups: PlanGroup[];
-}
-export interface ProcessValuePage {
-  property: { id: string; name: string };
-  items: Array<{ id: string; code: string; name: string }>;
-  total: number;
-  nextCursor: string | null;
 }

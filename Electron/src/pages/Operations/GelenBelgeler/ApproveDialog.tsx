@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { apiErrorText } from "@/lib/api-error";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { approveNote, getIncomingDocumentSettings, getSuggestions, INCOMING_DOCUMENT_QUERY_KEY, INCOMING_DOCUMENT_SETTINGS_QUERY_KEY } from "./service";
-import { approveErrorText, approvePrecheck, needsVarianceReason, summarizeApprove, unusableDefaultSource, type ApproveOutcome } from "./approveFlow";
+import { approveErrorText, approvePrecheck, needsVarianceReason, summarizeApprove, summarizeAutoWorkOrders, unusableDefaultSource, type ApproveOutcome, type AutoWorkOrderSummary } from "./approveFlow";
 import { CUSTOMER_DEFAULTS_PATH } from "./paths";
 import type { DeliveryNoteLine, ProcessChoice } from "./types";
 
@@ -62,17 +62,33 @@ function ApproveError({ text, source }: { text: string | null; source: "CUSTOMER
   );
 }
 
+/** Onay sonrası otomatik iş emri sonucu (ayar kapalıysa / eski backend → çizilmez). */
+function AutoWorkOrderBox({ auto }: { auto: AutoWorkOrderSummary | null }) {
+  if (!auto) return null;
+  const warn = "text-amber-800 dark:text-amber-300";
+  return (
+    <div className="rounded border p-2 text-xs" data-testid="approve-auto-wo" data-tone={auto.tone}>
+      <p className={`font-medium ${auto.tone === "ok" ? "text-emerald-700 dark:text-emerald-400" : warn}`}>{auto.title}</p>
+      {auto.lines.length > 0 && (
+        <ul className="mt-1 max-h-40 overflow-y-auto">
+          {auto.lines.map((l) => <li key={l.key} className={l.tone === "ok" ? "" : warn}>{l.text}</li>)}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun = "kurşun gramajı", open, onOpenChange, onDone }: Props) {
   const [reason, setReason] = useState("");
   const [askReason, setAskReason] = useState(false);
   // Hata metni + kullanılamaz varsayılanın kaynağı (E4; müşteri ise yönetim ekranı bağlantısı çıkar).
   const [error, setError] = useState<{ text: string; source: "CUSTOMER" | "FACTORY" | null } | null>(null);
-  const [outcome, setOutcome] = useState<{ o: ApproveOutcome; warnings: string[] } | null>(null);
+  const [outcome, setOutcome] = useState<{ o: ApproveOutcome; warnings: string[]; auto: AutoWorkOrderSummary | null } | null>(null);
   const pre = useApprovePrecheck(noteId, lines, open);
   const run = useMutation({
     mutationFn: () => approveNote(noteId, askReason ? reason.trim() : null, processChoices),
     onSuccess: ({ result, warnings }) => {
-      setOutcome({ o: summarizeApprove(result), warnings });
+      setOutcome({ o: summarizeApprove(result), warnings, auto: summarizeAutoWorkOrders(result.autoWorkOrders) });
       setError(null);
       onDone();
     },
@@ -111,6 +127,7 @@ export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun =
                 ))}
               </ul>
             )}
+            <AutoWorkOrderBox auto={outcome.auto} />
           </div>
         ) : (
           <div className="flex flex-col gap-2">

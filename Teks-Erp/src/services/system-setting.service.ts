@@ -392,6 +392,9 @@ export const SETTING_KEYS = {
   GELEN_BELGE_DEFAULT_ITEM_ID: "gelenBelge.defaultItemId",
   /** Gözden geçirilmemiş (needsReview) satır varken onay: WARN (varsayılan = bugünkü, geçer) | BLOCK (409). Tek yazar aynı uç. */
   GELEN_BELGE_UNREVIEWED_APPROVAL: "gelenBelge.unreviewedApproval",
+  /** Onaydan SONRA net desen grupları için iş emrini kendiliğinden aç (MEVCUT quickStart; best-effort). Varsayılan
+   *  KAPALI = bugünkü davranış (iş emri panelden elle). Feature-flag yükünde DÖNMEZ; tek yazar aynı uç. */
+  GELEN_BELGE_AUTO_WORK_ORDER: "gelenBelge.autoWorkOrder",
   /** Z1 ÜRETİM BELGE ZİNCİRİ (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bugünkü davranış (bağ opsiyonel). */
   DEVERE_BEAM_WEAVING_LINK_REQUIRED: "devere.beamWeavingLinkRequired",
   DOKUMA_RUN_WEAVING_ORDER_REQUIRED: "dokuma.runWeavingOrderRequired",
@@ -6542,6 +6545,16 @@ export async function readUnreviewedApprovalMode(
   return typeof v === "string" && (UNREVIEWED_APPROVAL_VALUES as readonly string[]).includes(v)
     ? (v as UnreviewedApprovalMode)
     : DEFAULT_UNREVIEWED_APPROVAL;
+}
+
+/** Onay sonrası otomatik iş emri; kayıt yok / bozuk → false (bugünkü davranış: iş emri elle açılır). */
+export async function readIncomingDocAutoWorkOrder(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
 }
 
 /** Enforcement okuyucusu: ham değer ∧ lisans modül tavanı. `readGelenBelgeEnabledRaw` yalnız panel geri-okuması ve

@@ -20,6 +20,7 @@ import {
   getDeliveryNote, listDeliveryNotes, updateDeliveryNote, updateDeliveryNoteLine,
 } from "../services/gelen-belge-note.service";
 import { approveDeliveryNote } from "../services/gelen-belge-onay.service";
+import { withAutoWorkOrders } from "../services/gelen-belge-oto-is-emri.service";
 import { applyBulkDeleteDeliveryNotes, BULK_DELETE_MAX, previewBulkDeleteDeliveryNotes } from "../services/gelen-belge-toplu-sil.service";
 import { getIncomingDocSettings, updateIncomingDocSettings } from "../services/gelen-belge-ayar.service";
 import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
@@ -35,6 +36,7 @@ import { readerJobStatus, requestImmediateReaderRun } from "../jobs/gelen-belge-
 import { getReaderUrl } from "../lib/gelen-belge/url";
 import { readerHealth } from "../lib/gelen-belge/okuma-istemcisi";
 import { AppError } from "../utils/app-error";
+import { TERIM } from "../constants/terim";
 
 const router = Router();
 router.use(verifyToken, requireGelenBelgeEnabled);
@@ -315,6 +317,7 @@ router.post("/taramalar/:id/oku", requirePermission("gelen-belge:write"), wrap(a
 const SettingsBody = z.strictObject({
   defaultItemId: Id.nullable().optional(),
   unreviewedApproval: z.enum(["WARN", "BLOCK"], "Seçenek WARN ya da BLOCK olmalı").optional(),
+  autoWorkOrder: z.boolean(`Otomatik ${TERIM.terbiyeIsEmri.tekilKucuk} evet/hayır olmalı`).optional(),
 });
 /**
  * @openapi
@@ -324,7 +327,7 @@ const SettingsBody = z.strictObject({
  *     summary: Gelen belge ayarları — varsayılan ürün (ad + kullanılabilirlik) ve gözden geçirilmemiş hücreyle onay kipi
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "defaultItem (id, code, name, problem) | null · unreviewedApproval WARN|BLOCK" }
+ *       200: { description: "defaultItem (id, code, name, problem) | null · unreviewedApproval WARN|BLOCK · autoWorkOrder boolean" }
  *   put:
  *     tags: [GelenBelge]
  *     summary: Gelen belge ayarlarını yaz (yalnız admin:settings + ayar şifresi); pasif/top doğuramayan ürün 400 GELEN_BELGE_DEFAULT_ITEM_INVALID
@@ -337,6 +340,7 @@ const SettingsBody = z.strictObject({
  *             properties:
  *               defaultItemId: { type: string, format: uuid, nullable: true }
  *               unreviewedApproval: { type: string, enum: [WARN, BLOCK] }
+ *               autoWorkOrder: { type: boolean, description: "Onaydan sonra net desen gruplarına iş emri kendiliğinden (varsayılan false)" }
  *     responses:
  *       200: { description: Güncel ayarlar }
  */
@@ -443,13 +447,14 @@ router.delete("/irsaliyeler/:id/satirlar/:lineId", requirePermission("gelen-belg
  *               varianceReason: { type: string, maxLength: 500 }
  *               processChoices: { type: array, description: "Kabul edilen işlem önerileri (H9 gramaj, D4-D1 her çeşit değeri; metin başına tek) → PROCESS sözlüğü; değer yazmaz", items: { type: object, properties: { lineId: { type: string, format: uuid, nullable: true }, valueId: { type: string, format: uuid } } } }
  *     responses:
- *       200: { description: "{ note, summary: { entered, failed, skipped, replayed, rollIds } } + üst düzey warnings (başlık top adedi ↔ satır; gerekçeyle geçilen sayfa)" }
+ *       200: { description: "{ note, summary: { entered, failed, skipped, replayed, rollIds }, autoWorkOrders? } + üst düzey warnings (başlık top adedi ↔ satır; gerekçeyle geçilen sayfa). autoWorkOrders yalnız `gelenBelge.autoWorkOrder` açıkken: { opened, manual, reason, groups: [{ key, itemName, targets, rollCount, outcome OPENED|SKIPPED|FAILED, workOrderNumber?, attached?, reason? }] }" }
  *       400: { description: "DELIVERY_NOTE_OWNER_REQUIRED · OWNER_CUSTOMER_INVALID (sahip pasif/bulunamadı) · DELIVERY_NOTE_LINE_UNRESOLVED · PROCESS_VALUE_INVALID (değer aktif işlem çeşidi değil) · PROCESS_CHOICE_CONFLICT · PROCESS_CHOICE_LINE_INVALID · PROCESS_CHOICE_TEXT_EMPTY" }
  *       403: { description: "MODULE_DISABLED (emanet) ya da izin yok" }
  *       409: { description: "TOTAL_MISMATCH (blok adet/kg/m; varianceReason ile geçilir) · DELIVERY_NOTE_PAGES_MISSING (varianceReason ile geçilir) · DELIVERY_NOTE_CHANGED (ön kontrolden sonra düzenlendi) · DELIVERY_NOTE_NOT_APPROVABLE · DELIVERY_NOTE_NO_OPEN_LINES" }
  */
 router.post("/irsaliyeler/:id/onay", requirePermission("gelen-belge:approve"), wrap(async (req) => ({
-  ...(await approveDeliveryNote(Id.parse(req.params.id), ApproveBody.parse(req.body ?? {}), req.user!.userId).then(({ warnings, ...data }) => ({ status: 200, data, warnings }))),
+  // Onay önce ve aynen; otomatik iş emri (ayar açıksa) onaydan SONRA, best-effort — `autoWorkOrders` yalnız ayar açıkken.
+  ...(await approveDeliveryNote(Id.parse(req.params.id), ApproveBody.parse(req.body ?? {}), req.user!.userId).then((r) => withAutoWorkOrders(r, req.user!)).then(({ warnings, ...data }) => ({ status: 200, data, warnings }))),
 })));
 
 // ── E2 gönderen şablonları (`gelen-belge:template`) ───────────────────────────

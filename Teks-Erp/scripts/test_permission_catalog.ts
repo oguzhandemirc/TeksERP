@@ -170,6 +170,9 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   "src/services/notification-dispatch.service.ts": [`${DELEGE}scripts/test_bildirim_katalogu.ts`],
   // Tercih çözücüsünün katalog varsayılan kapsaması (`entry.varsayilan` kodları) — aynı katalog bekçisi.
   "src/services/helpers/notification-preference.helper.ts": [`${DELEGE}scripts/test_bildirim_katalogu.ts`],
+  // Gelen belge otomatik iş emri: `matchesPermission(perms, p)` — p ∈ AUTO_WORK_ORDER_PERMISSIONS (quick-start kapısının
+  // kümesi; route literal'iyle eşitliğini `test_gelen_belge_oto_is_emri` §0 ölçer).
+  "src/services/gelen-belge-oto-is-emri.service.ts": ["AUTO_WORK_ORDER_PERMISSIONS"],
   // Kayıt takibi ucu: `matchesPermission(perms, c)` — c ∈ FOLLOW_PERMISSIONS[tur] (sipariş/iş emri/dokuma işi okuma).
   "src/services/notification-follow.service.ts": ["ORDER_FOLLOW_PERMISSIONS", "WORK_ORDER_FOLLOW_PERMISSIONS", "WEAVING_FOLLOW_PERMISSIONS"],
   // GERİ SARMA (2026-09-12): `assertEntityPermission` ikinci kapıyı yine
