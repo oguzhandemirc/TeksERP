@@ -9,6 +9,7 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { TERIM } from "../../constants/terim";
 import { LOOM_MACHINE_WHERE } from "../../constants/loom-shift";
 import { resolveEffectiveConstruction } from "./effective-construction.helper";
 import { mountedBeamViewsTx, type MountedBeamView } from "./warp-beam-mount.helper";
@@ -118,7 +119,7 @@ export function compareCandidates(a: LoomCandidate, b: LoomCandidate): number {
 async function resolveTarget(db: Db, input: LoomSuggestionInput) {
   if ("weavingOrderId" in input) {
     const wo = await db.weavingOrder.findUnique({ where: { id: input.weavingOrderId }, select: { id: true, itemId: true, recipeId: true, plannedM: true, warpSpecId: true, weaveDesignId: true, status: true } });
-    if (!wo) throw AppError.notFound("Dokuma işi bulunamadı");
+    if (!wo) throw AppError.notFound(`${TERIM.dokumaIsEmri.tekil} bulunamadı`);
     const closed = wo.status === "COMPLETED" || wo.status === "CANCELLED";
     return { weavingOrderId: wo.id, itemId: wo.itemId, recipeId: wo.recipeId, plannedM: wo.plannedM == null ? null : Number(wo.plannedM), warpSpecId: wo.warpSpecId, weaveDesignId: wo.weaveDesignId, closed };
   }
@@ -142,7 +143,7 @@ export async function suggestLoomsForWeaving(db: Db, input: LoomSuggestionInput)
     out.warnings.push({ code: LOOM_SUGGESTION_WARNING.reedNarrower, message: `Çözgü kartının tarak eni (${ground.reedWidthCm!.toString()} cm) ürün eninden (${c.widthCm!.toString()} cm) dar.` });
   }
   if (t.closed) {
-    out.warnings.push({ code: LOOM_SUGGESTION_WARNING.orderClosed, message: "Dokuma işi kapalı (tamamlandı/iptal) — tezgâh önerisi yok." });
+    out.warnings.push({ code: LOOM_SUGGESTION_WARNING.orderClosed, message: `${TERIM.dokumaIsEmri.tekil} kapalı (tamamlandı/iptal) — tezgâh önerisi yok.` });
     return out;
   }
   // Takılı levent kaydı yalnız devere + levent takibi açıkken doğar; kapalıyken sınıflamak her tezgâhı yanlış T3 yapar.
