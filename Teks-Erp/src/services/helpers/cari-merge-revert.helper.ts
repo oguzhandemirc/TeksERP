@@ -10,7 +10,7 @@ import { CariTxnSource, Currency, Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
-import { D, applyCariBalanceTx } from "./finance.helper";
+import { CARI_STATEMENT_ORDER, D, applyCariBalanceTx } from "./finance.helper";
 import { assertPeriodsOpenTx } from "./period-guard.helper";
 
 export interface CariMergeRevertResult {
@@ -43,7 +43,7 @@ export async function revertCariMerge(sourceId: string, reason: string, userId?:
   const legs = groupIds.length === 0 ? [] : await prisma.cariTransaction.findMany({
     where: { transferGroupId: { in: groupIds }, sourceType: CariTxnSource.CARI_TRANSFER, reversedBy: { is: null } },
     select: { id: true, cariId: true, currency: true, debit: true, credit: true, amountTry: true, exchangeRate: true, invoiceId: true, transferGroupId: true, createdAt: true },
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    orderBy: CARI_STATEMENT_ORDER,
   });
   const currencies = [...new Set(legs.map((l) => l.currency))].sort() as Currency[];
   const now = new Date();
@@ -51,11 +51,11 @@ export async function revertCariMerge(sourceId: string, reason: string, userId?:
     // TX'İN İLK İFADESİ: iki hesabın dönem kilitleri (sıralı) + bugün kapalıysa 409.
     await assertPeriodsOpenTx(tx, currencies.flatMap((currency) => [sourceId, targetId].map((cariId) => ({ cariId, currency, txnDate: now }))), { allowMerged: true });
     if (legs.length > 0) {
-      const mergedAt = legs[0]!.createdAt;
+      const mergedAt = new Date(Math.min(...legs.map((l) => l.createdAt.getTime())));
       const after = await tx.cariTransaction.findMany({
         where: { cariId: sourceId, createdAt: { gte: mergedAt }, OR: [{ transferGroupId: null }, { transferGroupId: { notIn: groupIds } }] },
         select: { sourceType: true, description: true, txnDate: true },
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        orderBy: CARI_STATEMENT_ORDER,
       });
       if (after.length > 0) {
         throw AppError.conflict(`Kaynak hesapta birleşmeden sonra ${after.length} hareket var — geri alma yapılmaz.`, {

@@ -108,6 +108,7 @@ function statik(): void {
     "services/gelen-belge-note.service.ts",
     "services/gelen-belge-onay.service.ts",
     "services/helpers/cari-hold-notify.helper.ts", // D4-I5: yalnız `holdScopeText`/`reasonLabel` (bildirim yükü), kapı çağırmaz
+    "services/helpers/cari-merge.helper.ts", // D4-K3d: yalnız `activeHoldByCari` (birleştirme ENGELİ), kapı çağırmaz
     "services/helpers/sack-store-board.helper.ts", // D4-I4: yalnız liste lateral'i (`activeHoldFlagsLateralSql`/`listHoldView`), kapı çağırmaz
     "services/inventory.service.ts",
     "services/invoice.service.ts",
