@@ -183,8 +183,7 @@ export async function readExpenseAllocationPieces(start: Date, end: Date, classN
   const { listExpenseAllocationsAsOf } = await import("./expense-allocation.helper");
   const { cashCategoryKey } = await import("./expense-summary.helper");
   const byKey = new Map(classNames.map((n) => [cashCategoryKey(n).key, n]));
-  const month = await listExpenseAllocationsAsOf(prisma, { start, end });
-  const upToEnd = await listExpenseAllocationsAsOf(prisma, { start: ALLOCATION_EPOCH, end });
+  const month = await listExpenseAllocationsAsOf(prisma, { start, end }, { withCancelledIn: true });
   type Row = (typeof month.atPeriodEnd)[number];
   const piece = (kind: ExpenseAllocationPiece["kind"], r: Row, sign: 1 | -1): ExpenseAllocationPiece => ({
     kind, cashTransactionId: r.cashTransactionId, docNo: r.docNo, className: byKey.get(cashCategoryKey(r.category).key) ?? null,
@@ -195,6 +194,6 @@ export async function readExpenseAllocationPieces(start: Date, end: Date, classN
   return [
     ...month.atPeriodEnd.map((r) => piece("AS_OF", r, 1)),
     ...month.lateEvents.filter((r) => !cancelledIn(r, ALLOCATION_EPOCH, start)).map((r) => piece("LATE_ADJUSTMENT", r, 1)),
-    ...upToEnd.atPeriodEnd.filter((r) => cancelledIn(r, start, end)).map((r) => piece("CANCEL_REVERSAL", r, -1)),
+    ...(month.cancelledIn ?? []).map((r) => piece("CANCEL_REVERSAL", r, -1)),
   ];
 }

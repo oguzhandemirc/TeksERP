@@ -6,7 +6,7 @@
 //   §1 saf — %60 bağlı 1000 TL: hedef satıra 600 doğrudan, havuzda 400; iş emri hedefi adımdan çözülür; hedefsiz
 //      ay "dağıtılmamış doğrudan"; parça yoksa satıra alan eklenmez
 //   §2 DB — bağ alanı OFF ile bağsız OPTIONAL rapor BAYT-AYNI; %60 bağ → Ocak havuzu 600 eksik, doğrudan 600
-//   §3 DB — Şubat'ta bağ %60 → %100: Ocak raporu BAYT-AYNI; Şubat'ta "geç bağ düzeltmesi" +400; iptal edilen bağlı
+//   §3 DB — Şubat'ta bağ %60 → %100: Ocak raporu BAYT-AYNI; Şubat'ta "geç bağ düzeltmesi" +400; (§3f iptal tersi yalnız iptal ayında) iptal edilen bağlı
 //      masraf iptal ayında ters çevrilir; iki ayda havuz + doğrudan = bağsız havuz (toplam korunur)
 //
 // ⭐ NEGATİF SONDA: bkz. BEKCI-HARITASI satırı.
@@ -57,6 +57,8 @@ function bolum0(): void {
     const visit = (n: ts.Node): void => {
       if (ts.isPropertyAccessExpression(n) && n.name.text === "expenseAllocation") ihlal.push(`${f}: .expenseAllocation`);
       if (ts.isElementAccessExpression(n) && ts.isStringLiteral(n.argumentExpression) && n.argumentExpression.text === "expenseAllocation") ihlal.push(`${f}: ["expenseAllocation"]`);
+      // İlişki üzerinden okuma (`include/select: { expenseAllocations: … }`) da as-of okuyucuyu atlar.
+      if ((ts.isIdentifier(n) || ts.isStringLiteral(n)) && n.text === "expenseAllocations") ihlal.push(`${f}: expenseAllocations ilişkisi`);
       if ((ts.isTaggedTemplateExpression(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isStringLiteral(n)) && /expense_allocations/.test(n.getText())) ihlal.push(`${f}: ham SQL expense_allocations`);
       // Bağ dosyası damga kolonuna hiç dokunmaz (geçerlilik yalnız as-of okuyucuda).
       if (f === "profitability-allocation.helper.ts" && (ts.isIdentifier(n) || ts.isStringLiteral(n)) && n.text === "revokedAt") ihlal.push(`${f}: revokedAt`);
@@ -68,6 +70,7 @@ function bolum0(): void {
       if (ts.isVariableDeclaration(n) && ts.isObjectBindingPattern(n.name) && n.initializer && /expense-allocation\.helper/.test(n.initializer.getText())) {
         for (const e of n.name.elements) if (e.name.getText() !== "listExpenseAllocationsAsOf") ihlal.push(`${f}: dinamik ${e.name.getText()}`);
       }
+      if (ts.isVariableDeclaration(n) && !ts.isObjectBindingPattern(n.name) && n.initializer && /import\(\s*["'].*expense-allocation\.helper/.test(n.initializer.getText())) ihlal.push(`${f}: dinamik import (destructure edilmemiş)`);
       ts.forEachChild(n, visit);
     };
     visit(src);
@@ -166,6 +169,8 @@ async function main(): Promise<void> {
     check("§3d ⭐ iki ay toplamı korunur: havuz + doğrudan = bağsız havuz", onSum.eq(offSum), `${onSum} / ${offSum}`);
     const directTotal = r.months.reduce((a, x) => a.plus(x.directExpenses?.directTry ?? 0).plus(x.directExpenses?.lateAdjustmentTry ?? 0).plus(x.directExpenses?.cancelReversalTry ?? 0), D(0));
     check("§3e iki ay doğrudan toplamı = son bağ durumu (e1 %100 = 1000; iptal e2 = 0)", directTotal.eq(1000), String(directTotal));
+    const mar = (await computeProfitability({ fromMonth: "2017-03", toMonth: "2017-03" }))!.months[0]!;
+    check("§3f iptal ters kaydı YALNIZ iptal ayında: Mart'ta CANCEL_REVERSAL yok", !(mar.directExpenses?.cancelReversalTry ?? D(0)).abs().gt(0), String(mar.directExpenses?.cancelReversalTry));
   } finally {
     if (ids.boxes.length) {
       await prisma.expenseAllocation.deleteMany({ where: { cashTransaction: { cashBoxId: { in: ids.boxes } } } });

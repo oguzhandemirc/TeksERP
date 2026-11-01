@@ -235,6 +235,9 @@ export function buildProfitabilitySunumu(p: {
       { ad: "Dışarıya ödenen", aciklama: "Dış fasona verilen işin bedeli: fason faturası, ayar izin veriyorsa yoksa tarife (tahmini)." },
       { ad: "Kalan (katkı)", aciklama: "Kesinleşen gelirden ipe, makineye ve dışarıya giden çıkınca kalan." },
       { ad: "Net", aciklama: "Kalandan işçilik ve genel gider payı da düşülünce kalan; dağıtım anahtarı ayardadır." },
+      ...(result.rows.some((x) => x.directExpenseTry) || result.months.some((x) => x.directExpenses)
+        ? [{ ad: "Bağlı masraf", aciklama: "Kasa masrafının makineye, iş emrine ya da hizmete bağlanan payı (bağın o ay sonundaki hâliyle); işin metre payıyla nete düşer." }]
+        : []),
       { ad: "Eksik", aciklama: "Norm, fiyat, kur ya da saat ücreti girilmemiş iş; değeri sıfır sayılmaz, boş bırakılır." },
     ],
     parametreler: [
