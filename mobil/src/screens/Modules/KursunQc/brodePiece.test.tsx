@@ -127,6 +127,19 @@ describe('Brode adedi — tablet girişi (GK-H1b)', () => {
     expect(r.complete).not.toHaveBeenCalled();
   });
 
+  it('§3b boş adet: hata alanın ALTINDA görünür, alana odaklanılır; yazınca hata kalkar (prova-2)', () => {
+    const focusSpy = jest.spyOn(jest.requireActual<typeof import('react-native')>('react-native').TextInput.prototype, 'focus');
+    const r = render('PIECE');
+    expect(r.queryByTestId('brode-adet-hata')).toBeNull();
+    fireEvent.press(r.getByTestId('gramaj-tap-GUL'));
+    expect(r.complete).not.toHaveBeenCalled();
+    expect(r.getByTestId('brode-adet-hata').props.children).toBe('Brode adedini girin (fatura adetle kesilir)');
+    expect(focusSpy).toHaveBeenCalled();
+    fireEvent.changeText(r.getByTestId('brode-adet-giris'), '3');
+    expect(r.queryByTestId('brode-adet-hata')).toBeNull();
+    focusSpy.mockRestore();
+  });
+
   it('§4 saf yardımcılar: tanınmayan kip null, ayrıştırma, okumasız gövde aynen', () => {
     expect(pieceInputOf({ pieceInput: 'KG' as never })).toBeNull();
     expect(pieceInputOf(null)).toBeNull();
