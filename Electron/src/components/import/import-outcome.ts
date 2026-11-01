@@ -12,12 +12,15 @@ export function importOutcomeTitle(r: Outcome): string {
   if (r.status === "FAILED") return "Hiçbir kayıt yazılamadı.";
   if (r.status === "APPLIED") return "İçe aktarım tamamlandı.";
   const written = r.created + r.updated;
-  const tail = r.stoppedAtRowNo ? `yazma ${r.stoppedAtRowNo}. satırda durdu` : `${r.failed} satır atlandı`;
-  return `Kısmen tamamlandı: ${written} kayıt yazıldı, ${tail}.`;
+  if (!r.stoppedAtRowNo) return `Kısmen tamamlandı: ${written} kayıt yazıldı, ${r.failed} satır atlandı.`;
+  // Backend durmada `failed`ı bir artırır (doğrulamada atlananlar + durulan satır) — atlananlar gizlenmez.
+  const skipped = r.failed - 1;
+  const skippedTail = skipped > 0 ? `, ${skipped} satır atlandı` : "";
+  return `Kısmen tamamlandı: ${written} kayıt yazıldı${skippedTail}, yazma ${r.stoppedAtRowNo}. satırda durdu.`;
 }
 
 /** Geçmiş tablosu rozeti — yazma durduysa satır no eklenir. */
 export function importStatusBadgeText(r: Outcome): string {
   const base = IMPORT_STATUS_LABEL[r.status];
-  return r.status === "PARTIAL" && r.stoppedAtRowNo ? `${base} (satır ${r.stoppedAtRowNo}'de durdu)` : base;
+  return r.status === "PARTIAL" && r.stoppedAtRowNo ? `${base} (yazma durdu: satır ${r.stoppedAtRowNo})` : base;
 }

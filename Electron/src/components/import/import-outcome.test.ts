@@ -10,7 +10,9 @@ describe("içe aktarım sonuç dili", () => {
   });
   it("PARTIAL + yazma durdu: satır no söylenir", () => {
     expect(importOutcomeTitle({ status: "PARTIAL", created: 4, updated: 0, failed: 0, stoppedAtRowNo: 12 })).toBe("Kısmen tamamlandı: 4 kayıt yazıldı, yazma 12. satırda durdu.");
-    expect(importStatusBadgeText({ status: "PARTIAL", created: 4, updated: 0, failed: 0, stoppedAtRowNo: 12 })).toBe("Kısmen tamamlandı (satır 12'de durdu)");
+    expect(importStatusBadgeText({ status: "PARTIAL", created: 4, updated: 0, failed: 0, stoppedAtRowNo: 12 })).toBe("Kısmen tamamlandı (yazma durdu: satır 12)");
+    // Doğrulamada atlananlar + durma birlikte: failed = 3 atlanan + 1 durulan satır → atlananlar gizlenmez.
+    expect(importOutcomeTitle({ status: "PARTIAL", created: 5, updated: 1, failed: 4, stoppedAtRowNo: 20 })).toBe("Kısmen tamamlandı: 6 kayıt yazıldı, 3 satır atlandı, yazma 20. satırda durdu.");
   });
   it("FAILED ve APPLIED ayrı kalır", () => {
     expect(importOutcomeTitle({ status: "FAILED", created: 0, updated: 0, failed: 5 })).toBe("Hiçbir kayıt yazılamadı.");

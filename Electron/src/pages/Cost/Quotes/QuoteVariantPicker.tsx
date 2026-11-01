@@ -4,6 +4,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Layers } from "lucide-react";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { productRecipeService } from "@/pages/ProductRecipes/service";
@@ -16,7 +17,9 @@ export const variantText = (r: { name: string; variantCode?: string | null }) =>
 interface Props { itemId: string; value: string | null; onChange: (recipeId: string | null) => void }
 
 export function QuoteVariantPicker({ itemId, value, onChange }: Props) {
-  const canRead = useRoleAccess().hasPermission("station:read");
+  // Uç üretim modülü kapısının arkasında (MODULE_DISABLED): modül kapalıysa ya da bayrak henüz bilinmiyorsa sorgu atılmaz.
+  const productionOn = useFeatureFlags().data?.data?.productionEnabled === true;
+  const canRead = useRoleAccess().hasPermission("station:read") && productionOn;
   const variants = useQuery({
     queryKey: ["quote-line-variants", itemId],
     queryFn: () => loadAllForPicker(productRecipeService, { filters: { itemId, isActive: "true" }, sortBy: "code" }).then((r) => r.data),

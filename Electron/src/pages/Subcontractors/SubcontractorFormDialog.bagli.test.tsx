@@ -27,7 +27,9 @@ describe("SubcontractorFormDialog — bağlı cari zorunlu", () => {
     await userEvent.type(document.getElementById("name") as HTMLInputElement, "Boyahane Ltd");
     await userEvent.click(await screen.findByRole("checkbox", { name: /Boyahane/ }));
     await userEvent.click(screen.getByRole("button", { name: "Kaydet" }));
-    await screen.findByText(NO_LINK_MESSAGE);
+    // Mesaj iki yerde: alanın altında + Kaydet yanındaki hata özeti (FormErrorSummary).
+    expect(await screen.findAllByText(NO_LINK_MESSAGE)).toHaveLength(2);
+    expect(screen.getByRole("alert")).toHaveTextContent(NO_LINK_MESSAGE);
     expect(onSubmit).not.toHaveBeenCalled();
   });
 

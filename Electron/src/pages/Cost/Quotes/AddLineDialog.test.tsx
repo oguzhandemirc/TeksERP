@@ -8,7 +8,11 @@ const addLine = vi.fn(async () => ({ success: true, data: {} }));
 vi.mock("./service", () => ({ quoteService: { addLine: (...a: unknown[]) => addLine(...(a as [])) } }));
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: () => true }) }));
 vi.mock("@/components/forms/color-picker/ColorPickerModal", () => ({ ColorPickerModal: () => null }));
-vi.mock("@/components/forms/ItemPickerModal", () => ({ ItemPickerModal: () => null }));
+vi.mock("@/components/forms/ItemPickerModal", () => ({
+  ItemPickerModal: ({ onPick }: { onPick: (r: { id: string; code: string; name: string }) => void }) => (
+    <button type="button" onClick={() => onPick({ id: "i-2", code: "K2", name: "Kristal 2" })}>urun-degistir</button>
+  ),
+}));
 vi.mock("./QuoteVariantPicker", () => ({
   variantText: (r: { name: string }) => r.name,
   QuoteVariantPicker: ({ onChange }: { onChange: (id: string | null) => void }) => (
@@ -28,6 +32,16 @@ describe("AddLineDialog — varyant", () => {
     fireEvent.click(screen.getByTestId("line-add"));
     await waitFor(() => expect(addLine).toHaveBeenCalledTimes(1));
     expect(addLine).toHaveBeenCalledWith("q1", expect.objectContaining({ itemId: "i-1", recipeId: "r-1", quantity: "500" }));
+  });
+  it("ürün değişince seçili varyant sıfırlanır (eski ürünün varyantı yeni ürüne gitmez)", async () => {
+    renderWithProviders(<AddLineDialog quoteId="q1" customerId="c1" currency="USD" open onOpenChange={() => {}} pending={pending} />);
+    fireEvent.click(screen.getByRole("button", { name: "varyant-sec" }));
+    fireEvent.click(screen.getByRole("button", { name: "urun-degistir" }));
+    fireEvent.change(screen.getByLabelText("Miktar (m) *"), { target: { value: "500" } });
+    fireEvent.click(screen.getByTestId("line-add"));
+    await waitFor(() => expect(addLine).toHaveBeenCalledTimes(1));
+    expect(addLine).toHaveBeenCalledWith("q1", expect.objectContaining({ itemId: "i-2" }));
+    expect(addLine.mock.calls[0]).not.toHaveProperty("1.recipeId");
   });
   it("varyant seçilmezse recipeId gönderilmez (bugünkü gövde)", async () => {
     renderWithProviders(<AddLineDialog quoteId="q1" customerId="c1" currency="USD" open onOpenChange={() => {}} pending={pending} />);
