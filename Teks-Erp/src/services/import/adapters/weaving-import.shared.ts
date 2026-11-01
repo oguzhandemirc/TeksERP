@@ -16,7 +16,7 @@ export async function resolveYarnCode(
   ctx: ImportContext,
   opts: { requireDenier?: boolean } = {},
 ): Promise<string | null> {
-  const out = await resolveReference("item", code, ctx);
+  const out = await resolveReference("item", code, ctx, { itemType: "YARN" });
   if (out.error) {
     // Yaratma ipucu (`fix`) bilerek düşer: paneldeki hızlı yaratma KUMAŞ açar, iplik değil.
     row.result.errors.push({ column, message: out.error.message });
