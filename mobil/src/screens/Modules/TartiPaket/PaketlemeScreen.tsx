@@ -60,6 +60,7 @@ import { showScreenError } from '../../../lib/screenToast';
 import { formatFactory } from '../../../lib/factory-time';
 import TruncatedText from '../../../components/TruncatedText';
 import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
+import { CariHoldBlockedScreen, openCariHoldBlock, type CariHoldBlock } from '../Sevkiyat/CariHold';
 
 // =============================================================================
 // Paketleme — ÇUVAL DEPO akış (MÜŞTERİ-BAZLI). Param: { customerId, branchId? }.
@@ -129,6 +130,8 @@ export default function PaketlemeScreen() {
   const [moveTarget, setMoveTarget] = useState<{ rollId: string; fromSackId: string; label: string } | null>(null);
   // Dolu çuval silme onayı — içindeki toplar (depoya dönecekler) somut listelenir.
   const [removeSackTarget, setRemoveSackTarget] = useState<PoolSack | null>(null);
+  // D4-KUC3e: "Hemen Sevk Et" 409 CARI_HOLD → Sevk Kapısı'yla aynı tam ekran (metin sunucudan).
+  const [holdBlock, setHoldBlock] = useState<CariHoldBlock | null>(null);
 
   // Sevk onayı açık: createShipment PLANNED bırakır (çıkış Sevk Çıkışı'ndan).
   // Kapalı (varsayılan): backend doğrudan sevk eder (tek adım).
@@ -376,6 +379,7 @@ export default function PaketlemeScreen() {
     onError: (e: Error) => {
       if (isWorkSessionLost(e)) return;
       shipAttempt.onFailure(e);
+      if (openCariHoldBlock(e, setHoldBlock)) return;
       showScreenError(e, 'Sevkiyat kurulamadı');
     },
   });
@@ -933,6 +937,7 @@ export default function PaketlemeScreen() {
       <SackNoteSheet target={noteTarget} onDismiss={() => setNoteTarget(null)} onSaved={refreshPool} />
 
       <SackLabelPrinter job={printJob} onDone={() => setPrintJob(null)} />
+      <CariHoldBlockedScreen block={holdBlock} onClose={() => setHoldBlock(null)} />
 
       <SackManualWeightSheet
         target={manualWeighTarget}
