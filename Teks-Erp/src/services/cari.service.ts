@@ -25,6 +25,9 @@ import { buildTurkishSearch } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";
 import { factoryDateTr } from "../constants/time";
 import { SERVICE_BILLING_TRIGGERS, type ServiceBillingTrigger } from "./system-setting.service";
+import { ACTIVE_HOLD_INCLUDE, HELD_CARI_ACCOUNT_WHERE, holdScopes, reasonLabel, type CariHoldScope } from "./helpers/cari-hold.helper";
+import { CARI_TAX_SELECT } from "./helpers/invoice-tax-defaults.helper";
+import { cariTaxOverrideData, taxOverrideOf, type CariTaxOverrideInput } from "./helpers/cari-tax-override.helper";
 
 /**
  * H8b: müşteri tetiği yalnız fabrika ayarının değerleri ya da null (fabrika ayarı); yalnız MÜŞTERİ carisinde
@@ -57,6 +60,11 @@ export interface CariListRow {
   isActive: boolean;
   /** H8b: müşterinin hizmet faturası tetiği; null = fabrika ayarı. */
   serviceBillingTrigger: ServiceBillingTrigger | null;
+  /** D4-V1k: KDV / tevkifat geçersiz kılması; null = genel ayar (çözüm `invoice-tax-defaults.helper`). */
+  vatRate: Prisma.Decimal | null;
+  withholdingEnabled: boolean | null;
+  withholdingNumerator: number | null;
+  withholdingDenominator: number | null;
   /** Kartın rolleri (rol modeli) — kartsız eski fason hesabında null; panel rozeti buradan yazar. */
   roles: { isCustomerRole: boolean; isSupplierRole: boolean; isSubcontractorRole: boolean } | null;
   balances: Array<{ currency: Currency; balance: Prisma.Decimal }>;
@@ -66,12 +74,21 @@ export interface CariListRow {
    *  aynıdır (POZİTİF = cari bize borçlu). STRING taşınır — para `number`'a
    *  çevrilmez (aging raporuyla aynı gerekçe). */
   overdue?: Array<{ currency: Currency; amount: string }>;
+  /** D4-I3: aktif cari kilidi (rozet); yoksa null. Eski istemci alanı yok sayar. */
+  hold: { holdId: string; scopes: CariHoldScope[]; reasonLabel: string; createdAt: Date } | null;
 }
 
 const PARTY_SELECT = {
+  holds: ACTIVE_HOLD_INCLUDE,
   customer: { select: { id: true, code: true, name: true, taxNumber: true, isCustomerRole: true, isSupplierRole: true, isSubcontractorRole: true } },
   subcontractor: { select: { id: true, code: true, name: true, taxNumber: true } },
 } as const;
+
+/** D4-I3: satırın aktif kilit görünümü (rozet) — `ACTIVE_HOLD_INCLUDE`ten. */
+function holdOf(row: { holds: Array<{ id: string; blocksIntake: boolean; blocksShipment: boolean; blocksInvoice: boolean; reasonCode: string; createdAt: Date }> }): CariListRow["hold"] {
+  const h = row.holds[0];
+  return h ? { holdId: h.id, scopes: holdScopes(h), reasonLabel: reasonLabel(h.reasonCode), createdAt: h.createdAt } : null;
+}
 
 /** Kartın rol bayrakları — kartsız (eski fason kind'lı) hesapta null. */
 function rolesOf(row: { customer: { isCustomerRole: boolean; isSupplierRole: boolean; isSubcontractorRole: boolean } | null }): CariListRow["roles"] {
@@ -92,6 +109,59 @@ function partyOf(row: {
   return { code: p.code, name: p.name, taxNumber: p.taxNumber };
 }
 
+/** Cari listesinin parametreleri (route `GET /api/finance/cari`). */
+export interface CariListParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  kind?: CariKind;
+  isActive?: boolean;
+  /** Kartın rol süzgeci (`partnerRoleAccountWhere`): hesap KARTIN bayrağıyla süzülür; eski panel göndermez → hepsi. */
+  roleWhere?: Prisma.CustomerWhereInput;
+  /** Yalnız bakiyesi SIFIR OLMAYANLAR — "kimden alacağım var" sorusu. */
+  onlyWithBalance?: boolean;
+  /** Yalnız HAREKETİ olan hesaplar (herhangi bir cari hareket; açılış bakiyesi dahil) — kartla doğan boş hesaplar listeyi şişirmesin (panel varsayılanı). Verilmezse hepsi (eski panel aynen). */
+  hasActivity?: boolean;
+  /** Belirli kartın hesabı (`readIdCondition`). */
+  customerId?: string | { in: string[] };
+  /** Belirli hesap(lar) (`readIdCondition`) — bildirimden `?focus=<hesapId>` derin bağlantısı (D4-KUC3a). */
+  id?: string | { in: string[] };
+  /** Vadesi geçmiş açık tutarları da getir (H2). Bayrak verilmezse ek sorgu
+   *  KOŞMAZ — bugünkü yol bayt-bayt aynı kalır. */
+  withOverdue?: boolean;
+  /** D4-I3: yalnız AKTİF kilidi olan hesaplar — liste ve `total` aynı where'den (filtre-liste). */
+  held?: boolean;
+}
+
+/** Cari listesi where'i — liste ve sayım bunu paylaşır (tek where). */
+function cariListWhere(params: CariListParams): Prisma.CariAccountWhereInput {
+  const where: Prisma.CariAccountWhereInput = params.id ? { id: params.id } : {};
+  if (params.kind) where.kind = params.kind;
+  if (params.isActive !== undefined) where.isActive = params.isActive;
+  if (params.roleWhere) where.customer = params.roleWhere;
+  if (params.search?.trim()) {
+    // ⚠️ TÜRKÇE-DUYARLI (kural + gerekçe: `utils/query-parser`).
+    // ⚠️ CARİ ADI **NORMALİZE EDİLMEZ** — `Item.name`in aksine BÜYÜĞE
+    // çevrilmez (bu kurulumda 49 müşterinin 22'si başlık düzeninde) ve
+    // düzeltmenin en kritik yeri burasıdır: ILIKE noktalı/noktasız i'yi
+    // katlamadığı için "iş bankası" yazan kullanıcı "T. İş Bankası"yı düz
+    // `contains + insensitive` ile HİÇ bulamaz.
+    where.OR = buildTurkishSearch(params.search, [
+      "customer.name",
+      "customer.code",
+      "subcontractor.name",
+      "subcontractor.code",
+    ]);
+  }
+  if (params.onlyWithBalance) {
+    where.balances = { some: { NOT: { balance: 0 } } };
+  }
+  if (params.hasActivity) where.transactions = { some: {} };
+  if (params.customerId) where.customerId = params.customerId;
+  if (params.held) Object.assign(where, HELD_CARI_ACCOUNT_WHERE);
+  return where;
+}
+
 export class CariService {
   /**
    * Cari listesi + bakiyeler.
@@ -99,52 +169,12 @@ export class CariService {
    * ⚠️ Bakiye SATIRLA BİRLİKTE gelir (N+1 yok) ve PARA BİRİMİ BAZINDA dizidir —
    * tek sayıya indirmek 1000 USD ile 30.000 TL'yi toplamak olurdu.
    */
-  async list(params: {
-    page?: number;
-    pageSize?: number;
-    search?: string;
-    kind?: CariKind;
-    isActive?: boolean;
-    /** Kartın rol süzgeci (`partnerRoleAccountWhere`): hesap KARTIN bayrağıyla süzülür; eski panel göndermez → hepsi. */
-    roleWhere?: Prisma.CustomerWhereInput;
-    /** Yalnız bakiyesi SIFIR OLMAYANLAR — "kimden alacağım var" sorusu. */
-    onlyWithBalance?: boolean;
-    /** Yalnız HAREKETİ olan hesaplar (herhangi bir cari hareket; açılış bakiyesi dahil) — kartla doğan boş hesaplar listeyi şişirmesin (panel varsayılanı). Verilmezse hepsi (eski panel aynen). */
-    hasActivity?: boolean;
-    /** Belirli kartın hesabı (`readIdCondition`). */
-    customerId?: string | { in: string[] };
-    /** Belirli hesap(lar) (`readIdCondition`) — bildirimden `?focus=<hesapId>` derin bağlantısı (D4-KUC3a). */
-    id?: string | { in: string[] };
-    /** Vadesi geçmiş açık tutarları da getir (H2). Bayrak verilmezse ek sorgu
-     *  KOŞMAZ — bugünkü yol bayt-bayt aynı kalır. */
-    withOverdue?: boolean;
-  }): Promise<{ data: CariListRow[]; pagination: { total: number; page: number; pageSize: number; totalPages: number } }> {
+  async list(params: CariListParams): Promise<{ data: CariListRow[]; pagination: { total: number; page: number; pageSize: number; totalPages: number } }> {
     const page = Math.max(1, params.page ?? 1);
     const pageSize = Math.min(200, Math.max(1, params.pageSize ?? 50));
 
-    const where: Prisma.CariAccountWhereInput = params.id ? { id: params.id } : {};
-    if (params.kind) where.kind = params.kind;
-    if (params.isActive !== undefined) where.isActive = params.isActive;
-    if (params.roleWhere) where.customer = params.roleWhere;
-    if (params.search?.trim()) {
-      // ⚠️ TÜRKÇE-DUYARLI (kural + gerekçe: `utils/query-parser`).
-      // ⚠️ CARİ ADI **NORMALİZE EDİLMEZ** — `Item.name`in aksine BÜYÜĞE
-      // çevrilmez (bu kurulumda 49 müşterinin 22'si başlık düzeninde) ve
-      // düzeltmenin en kritik yeri burasıdır: ILIKE noktalı/noktasız i'yi
-      // katlamadığı için "iş bankası" yazan kullanıcı "T. İş Bankası"yı düz
-      // `contains + insensitive` ile HİÇ bulamaz.
-      where.OR = buildTurkishSearch(params.search, [
-        "customer.name",
-        "customer.code",
-        "subcontractor.name",
-        "subcontractor.code",
-      ]);
-    }
-    if (params.onlyWithBalance) {
-      where.balances = { some: { NOT: { balance: 0 } } };
-    }
-    if (params.hasActivity) where.transactions = { some: {} };
-    if (params.customerId) where.customerId = params.customerId;
+    // Liste ve `total` AYNI where (filtre-liste; D4-I3 bekçisi `test_cari_kilit_panel` §2).
+    const where = cariListWhere(params);
 
     const [rows, total] = await Promise.all([
       prisma.cariAccount.findMany({
@@ -191,9 +221,7 @@ export class CariService {
         return {
           id: r.id,
           kind: r.kind,
-          code: p.code,
-          name: p.name,
-          taxNumber: p.taxNumber,
+          code: p.code, name: p.name, taxNumber: p.taxNumber,
           roles: rolesOf(r),
           taxOffice: r.taxOffice,
           defaultCurrency: r.defaultCurrency,
@@ -202,6 +230,8 @@ export class CariService {
           notes: r.notes,
           isActive: r.isActive,
           serviceBillingTrigger: r.serviceBillingTrigger as ServiceBillingTrigger | null,
+          hold: holdOf(r),
+          ...taxOverrideOf(r),
           // Sıfır bakiyeli para birimi satırları gürültüdür; ekranda yer kaplar.
           balances: r.balances.filter((b) => !D(b.balance).isZero()),
           // Alan yalnız İSTENDİĞİNDE var — bayraksız yanıt bugünküyle birebir.
@@ -255,6 +285,8 @@ export class CariService {
       notes: row.notes,
       isActive: row.isActive,
       serviceBillingTrigger: row.serviceBillingTrigger as ServiceBillingTrigger | null,
+      hold: holdOf(row),
+      ...taxOverrideOf(row),
       balances: row.balances,
     };
   }
@@ -330,15 +362,16 @@ export class CariService {
       notes?: string | null;
       isActive?: boolean;
       serviceBillingTrigger?: string | null;
-    },
+    } & CariTaxOverrideInput,
     userId?: string,
   ): Promise<ApiResponse<{ id: string }>> {
     const existing = await prisma.cariAccount.findUnique({
       where: { id },
-      select: { id: true, kind: true, taxOffice: true, defaultCurrency: true, paymentTermDays: true, isActive: true, serviceBillingTrigger: true },
+      select: { id: true, kind: true, taxOffice: true, defaultCurrency: true, paymentTermDays: true, isActive: true, serviceBillingTrigger: true, ...CARI_TAX_SELECT },
     });
     if (!existing) throw AppError.notFound("Cari hesap bulunamadı.");
     assertServiceBillingTriggerInput(input.serviceBillingTrigger, existing.kind);
+    const taxData = cariTaxOverrideData(input, existing);
 
     // ⚠️ Bakiyesi olan cari PASİFLEŞTİRİLEMEZ: pasif cari listelerden düşer ve
     // açık bakiye görünmez olur — muhasebede "kapatılmamış hesabı gizlemek"
@@ -365,6 +398,7 @@ export class CariService {
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
         ...(input.serviceBillingTrigger !== undefined ? { serviceBillingTrigger: input.serviceBillingTrigger } : {}),
+        ...taxData,
       },
       select: { id: true },
     });

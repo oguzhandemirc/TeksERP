@@ -261,6 +261,10 @@ export interface FeatureFlags {
    *  ÖN-DOLUM — fatura formunun yeni satırı ve mal kabulden üretilen alış
    *  taslağı bu değerle açılır; satırda değiştirilebilir. */
   financeDefaultVatRate: number;
+  /** D4-V1k: satış taslağında genel tevkifat (varsayılan kapalı) + oran pay/payda (pay 0 = girilmemiş; payda varsayılan 10). */
+  financeWithholdingEnabled: boolean;
+  financeWithholdingNumerator: number;
+  financeWithholdingDenominator: number;
   /** n irsaliye → 1 fatura (2026-09-18): onayda fiş toleransı (varsayılan kapalı = kontrol yok) + iki eşik (%; varsayılan 0). */
   financeInvoiceMatchTolerance: boolean;
   financeInvoiceQtyTolerancePct: number;

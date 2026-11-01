@@ -174,6 +174,14 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "CARİ KART (çekirdek, her kurulumda). Finans dokunuşu SALT-OKUMADIR: cari kart arşiv kapısı (URUN-YASAM-DONGUSU.md §6) sıfırdan farklı cari bakiyeyi canlı referans olarak SAYAR (cari.service'teki bakiye kapısının kart ikizi). Ön muhasebe kapalı kurulumda `cari_balances` boştur, sayı 0 döner; router satır yazmaz. Kapı takılsaydı müşteri kartı ön muhasebesiz fabrikada yönetilemezdi.",
   },
   {
+    dosya: "routes/cost.routes.ts",
+    neden:
+      "MALİYET kendi rejim kapısını taşır (`requireMaliyetEnabled`), ön muhasebeye bağlanamaz. `invoice` izi tek daldan gelir " +
+      "(SY-E2, 2026-11-01): `dispatch-finishing-check.service` fason sevk kg kontrolünde bağlı ALIŞ faturasını SALT-OKUMA sorar ve " +
+      "bu okuma uç İÇİNDE finans kapılıdır: yalnız `finance:read` izni ∧ `readFinanceEnabled()` doğruysa sorgu atılır, aksi hâlde " +
+      "`invoice` null (`test_fason_kg_kontrol` §4f/§4g ölçer). Router hiçbir ticaret tablosuna yazmaz (`return.routes` emsali).",
+  },
+  {
     dosya: "routes/return.routes.ts",
     neden:
       "İade FABRİKANIN ana akışıdır (mobil iade ekranı + RollReturn) → rejim kapısı KONULAMAZ. " +

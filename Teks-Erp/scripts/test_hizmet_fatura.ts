@@ -30,6 +30,8 @@
 //   §20 H8b müşteri tetiği: fabrika PER_SHIPMENT + müşteri PERIOD_END ⇒ sevkte bağ yok, dönem toplar · fabrika
 //       PERIOD_END + müşteri PER_SHIPMENT ⇒ sevkte bağ var, dönem açık + uyarı, yalnız faturasız kalan işi toplar · NULL ⇒
 //       fabrika ayarı · geçersiz 400 · fason cari 400 NOT_CUSTOMER · audit
+//   §14 V1k dönem taslağı, ayar + müşteri değeri yokken: satır KDV = genel varsayılan, tevkifat 0 (bugünkü)
+//   §19v V1k müşteri cari KDV %10 + tevkifat 5/10 ⇒ dönem taslağı satırı ondan; tutarlar el hesabıyla
 //   §22 F1 önizleme/oluşturma yarışı: tetik (müşteri · fabrika) değişti ya da iş başka faturaya bağlandı ⇒ 409
 //       SERVICE_PREVIEW_STALE + sıfır yazım · normal yol bağları önizlemeyle bayt-aynı · eşzamanlı iki oluşturma ⇒ 1 + 409 ·
 //       düzenlemede bağsız emanet hizmet satırı ⇒ 409 SERVICE_LINE_UNLINKED
@@ -48,7 +50,7 @@ import { shippingService } from "../src/services/shipping.service";
 import { invoiceService } from "../src/services/invoice.service";
 import { InventoryService } from "../src/services/inventory.service";
 import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
-import { SETTING_KEYS, loadServiceBillingSettings, systemSettingService } from "../src/services/system-setting.service";
+import { SETTING_KEYS, loadServiceBillingSettings, readFinanceDefaultVatRate, systemSettingService } from "../src/services/system-setting.service";
 import { PERIOD_END_SERVICE_WARNING, autoDraftInvoiceAfterDispatch, collectShipmentInvoiceDraftLines } from "../src/services/helpers/shipment-auto-draft.helper";
 import { CUSTOMER_PER_SHIPMENT_PERIOD_WARNING, createServicePeriodDraft, previewServicePeriodDraft } from "../src/services/service-period-invoice.service";
 import { ensureCariAccountTx } from "../src/services/helpers/finance.helper";
@@ -361,7 +363,10 @@ async function main(): Promise<void> {
   check("önizleme: 2 sevk, 2 iş, 108,750 m, 870,00", dpv.shipmentCount === 2 && dpv.workCount === 2 && dpv.totalMeters === "108.750" && dpv.subtotal === "870.00" && dpv.periodClosed === null, JSON.stringify({ s: dpv.shipmentCount, w: dpv.workCount, m: dpv.totalMeters, t: dpv.subtotal }));
   const tok1 = randomUUID();
   const d1 = await createServicePeriodDraft({ cariId: cari2.id, period, clientToken: tok1 }, actor);
-  const pInv = await prisma.invoice.findUniqueOrThrow({ where: { id: d1.data!.id }, select: { shipmentId: true, status: true, lines: { select: { itemId: true, qty: true } } } });
+  const pInv = await prisma.invoice.findUniqueOrThrow({ where: { id: d1.data!.id }, select: { shipmentId: true, status: true, withholdingTotal: true, lines: { select: { itemId: true, qty: true, vatRate: true, withholdingRate: true } } } });
+  const generalVat = await readFinanceDefaultVatRate();
+  check("V1k: ayar/müşteri değeri yok ⇒ satır KDV genel varsayılan, tevkifat 0 (bugünkü taslak)",
+    pInv.lines.every((l) => Number(l.vatRate) === generalVat && Number(l.withholdingRate) === 0) && Number(pInv.withholdingTotal) === 0, JSON.stringify(pInv.lines));
   const pl = await linksOn([pa, pb]);
   check("1 taslak, 2 bağ aynı faturada, tek K2 satırı 108,75 m, shipmentId boş",
     pInv.shipmentId === null && pInv.status === InvoiceStatus.DRAFT && pl.length === 2 && pl.every((l) => l.invoiceId === d1.data!.id)
@@ -436,7 +441,19 @@ async function main(): Promise<void> {
   section("§19 dönem taslağına bağlı sevk geri alınamaz; taslak iptali ⇒ geri alınır");
   const pu = await mkWorkedRoll(25, "24.000", undefined, cust2.id);
   const s5 = await ship([pu], cust2.id);
+  // §19v V1k: müşteri değeri genel ayarı ezer (yok sayılırsa satır genel KDV/tevkifat 0 alır ⇒ kırmızı).
+  await cariService.update(cari2.id, { vatRate: 10, withholdingEnabled: true, withholdingNumerator: 5, withholdingDenominator: 10 }, actor);
   const d5 = await createServicePeriodDraft({ cariId: cari2.id, period, clientToken: randomUUID() }, actor);
+  await cariService.update(cari2.id, { vatRate: null, withholdingEnabled: null, withholdingNumerator: null, withholdingDenominator: null }, actor);
+  const v5 = await prisma.invoice.findUniqueOrThrow({ where: { id: d5.data!.id }, select: { subtotal: true, vatTotal: true, withholdingTotal: true, grandTotal: true, lines: { select: { vatRate: true, withholdingRate: true } } } });
+  // El hesabı: KDV = matrah × %10; tevkifat = KDV × 5/10 (alıcı öder); ödenecek = matrah + KDV − tevkifat.
+  const sub5 = Number(v5.subtotal);
+  const vat5 = Math.round(sub5 * 10) / 100;
+  const wh5 = Math.round(vat5 * 50) / 100;
+  check("V1k §19v: müşteri cari KDV %10 + tevkifat 5/10 ⇒ satır 10/50, tutarlar el hesabıyla",
+    v5.lines.length > 0 && v5.lines.every((l) => Number(l.vatRate) === 10 && Number(l.withholdingRate) === 50)
+    && sub5 > 0 && Number(v5.vatTotal) === vat5 && Number(v5.withholdingTotal) === wh5 && Number(v5.grandTotal) === Math.round((sub5 + vat5 - wh5) * 100) / 100,
+    JSON.stringify(v5));
   const d5DocNo = (await prisma.invoice.findUniqueOrThrow({ where: { id: d5.data!.id }, select: { docNo: true } })).docNo;
   // Dönem taslağı shipmentId taşımaz: kapı topun ata zincirinden bulmazsa geri alma 200 döner (negatif sonda burada kırmızı).
   const undoPe = await errOf(() => shippingService.undoDispatch(s5.id, "test geri alma", actor));

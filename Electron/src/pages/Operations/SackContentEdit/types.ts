@@ -575,6 +575,8 @@ export interface CreateShipmentPreview {
   /** Fazla mal / mükerrer / siparişsiz uyarıları — DİKKAT çekilecek. */
   warnings: string[];
   totals: { totalMeters: number; sackCount: number; surplusMeters: number };
+  /** D4-I3: müşterinin SEVK kapsamlı aktif cari kilidi (metin sunucudan; `warning` warnings[]'teki satırın aynısı). Eski backend göndermez. */
+  cariHold?: { sebepEtiketi: string; koyan: string; exempt?: boolean; warning?: string; message: string } | null;
 }
 
 export interface CreatedShipment {
