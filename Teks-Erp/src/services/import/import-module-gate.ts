@@ -8,8 +8,10 @@ import {
   SETTING_KEYS,
   readDevereEnabled,
   readDokumaEnabled,
+  readFinanceEnabled,
   readMaliyetEnabled,
   readProductionEnabled,
+  readTicaretEnabled,
 } from "../system-setting.service";
 import { AppError } from "../../utils/app-error";
 import { licenseModuleError } from "../../lib/license/module-ceiling";
@@ -19,6 +21,9 @@ const MODULE_READERS: Record<ImportModule, () => Promise<boolean>> = {
   dokuma: async () => (await readProductionEnabled()) && (await readDokumaEnabled()),
   devere: () => readDevereEnabled(),
   maliyet: async () => (await readProductionEnabled()) && (await readMaliyetEnabled()),
+  // Toplu açılış aktarımı: cari/çek uçlarının rejim kapısı (`requireFinanceEnabled`) ve fiyat uçlarınınki aynası.
+  finans: () => readFinanceEnabled(),
+  ticaret: () => readTicaretEnabled(),
 };
 
 /** Modülsüz adaptör her zaman açıktır (bugünkü 18 adaptör). */
@@ -36,6 +41,10 @@ export async function assertImportModuleOpen(adapter: ImportAdapter): Promise<vo
       throw licenseModuleError(SETTING_KEYS.DEVERE_ENABLED, "Devere") ?? moduleDisabled(adapter);
     case "maliyet":
       throw licenseModuleError(SETTING_KEYS.MALIYET_ENABLED, "Maliyet") ?? moduleDisabled(adapter);
+    case "finans":
+      throw licenseModuleError(SETTING_KEYS.FINANCE_ENABLED, "Ön muhasebe") ?? moduleDisabled(adapter);
+    case "ticaret":
+      throw licenseModuleError(SETTING_KEYS.TICARET_ENABLED, "Ticaret") ?? moduleDisabled(adapter);
   }
 }
 

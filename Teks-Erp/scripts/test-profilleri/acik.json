@@ -44,6 +44,7 @@
     "yarnBlockNegativeBalanceEnabled": true,
     "purchaseBlockOverReceiptEnabled": true,
     "goodsReceiptRequirePriceEnabled": true,
+    "consumableStockEnabled": true,
     "goodsReceiptYarnQualityHoldEnabled": true,
     "productionCancelReasonRequired": true,
     "targetQuantityEnabled": true,

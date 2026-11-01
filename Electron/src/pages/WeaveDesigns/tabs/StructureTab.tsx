@@ -11,6 +11,7 @@ import { NATIVE_SELECT_CLASS } from "../WeaveDesignCreateDialog";
 import { weaveDesignApi } from "../service";
 import { WEAVE_DESIGN_KINDS, WEAVE_KIND_LABEL, type DesignFabric, type WeaveDesign, type WeaveDesignKind } from "../types";
 import { WarpLayersSection } from "./WarpLayersSection";
+import { decimalToFormText } from "@/lib/decimal-form-text";
 
 type Form = Record<"code" | "name" | "familyLabel" | "frameCount" | "repeatCm" | "loomFileName" | "lenoSetup" | "notes", string> & { kind: WeaveDesignKind };
 
@@ -27,7 +28,7 @@ const TEXT_FIELDS: Array<{ key: keyof Omit<Form, "kind" | "notes">; label: strin
 function toForm(d: WeaveDesign): Form {
   return {
     code: d.code, name: d.name, kind: d.kind, familyLabel: d.familyLabel ?? "", frameCount: d.frameCount?.toString() ?? "",
-    repeatCm: d.repeatCm ?? "", loomFileName: d.loomFileName ?? "", lenoSetup: d.lenoSetup ?? "", notes: d.notes ?? "",
+    repeatCm: decimalToFormText(d.repeatCm), loomFileName: d.loomFileName ?? "", lenoSetup: d.lenoSetup ?? "", notes: d.notes ?? "",
   };
 }
 

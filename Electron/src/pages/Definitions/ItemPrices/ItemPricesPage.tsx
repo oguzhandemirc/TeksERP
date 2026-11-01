@@ -127,7 +127,7 @@ export function ItemPricesPage() {
             Kalem fiyatlarını görmek için <strong>item:read</strong> yetkisi gerekir.
           </Callout>
         ) : itemId ? (
-          <ItemPricesPanel itemId={itemId} itemLabel={itemLabel} unit={item?.unit ?? null} />
+          <ItemPricesPanel itemId={itemId} itemLabel={itemLabel} unit={item?.unit ?? null} isService={item?.itemType === "SERVICE"} />
         ) : (
           <div className="space-y-4">
             <div className="relative w-96">

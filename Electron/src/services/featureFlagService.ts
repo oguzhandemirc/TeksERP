@@ -291,6 +291,8 @@ export interface FeatureFlags {
   financeServiceBillingEnabled: boolean;
   financeServiceBillingMeterBasis: "OUT" | "IN" | "DECLARED";
   financeServiceBillingMissingMeter: "DECLARED_WITH_WARNING" | "BLOCK_LINE";
+  /** Brode fiyat birimi (backend aynası; default METER). */
+  financeServiceBillingBrodeUnit: "METER" | "PIECE" | "STITCH";
   financeServiceBillingTrigger: "PER_SHIPMENT" | "PERIOD_END";
   financeServiceBillingPriceDate: "SERVICE_DAY" | "DISPATCH_DAY";
   /** D4-H1: kasa masraf formunda kategori önerisi (varsayılan ON). */
@@ -343,6 +345,7 @@ export interface FeatureFlags {
   purchaseBlockOverReceiptEnabled: boolean;
   /** Mal kabul satırında birim fiyat zorunlu (default false; çözülemezse 400). */
   goodsReceiptRequirePriceEnabled: boolean;
+  consumableStockEnabled: boolean;
   /** İplik lotu kalite bekletme (2026-09-18): mal kabulde doğan lot bekletmede doğar; bekletmede/bloke lota çıkış yazılamaz — varsayılan kapalı. */
   goodsReceiptYarnQualityHoldEnabled: boolean;
   /** İptalde sebep zorunlu (2026-09-18): top iptalinde sebep şart — varsayılan kapalı; formlar önizlemedeki `reasonRequired`i okur. */

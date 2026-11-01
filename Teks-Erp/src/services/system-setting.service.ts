@@ -188,6 +188,8 @@ export const SETTING_KEYS = {
   FINANCE_SERVICE_BILLING_METER_BASIS: "finance.serviceBilling.meterBasis",
   /** H7: ölçüm yoksa — `DECLARED_WITH_WARNING` (bugün) · `BLOCK_LINE`. */
   FINANCE_SERVICE_BILLING_MISSING_METER: "finance.serviceBilling.missingMeter",
+  /** Brode fiyat birimi — `METER` (bugün, DALGA4 S7) · `PIECE` (adet) · `STITCH` (vuruş = adet × desen vuruşu). */
+  FINANCE_SERVICE_BILLING_BRODE_UNIT: "finance.serviceBilling.brodeUnit",
   /** H7/H8: tetik — `PER_SHIPMENT` (bugün); `PERIOD_END` sevk taslağı hizmet satırı üretmez, iş dönem sonu taslağına kalır. */
   FINANCE_SERVICE_BILLING_TRIGGER: "finance.serviceBilling.trigger",
   /** H7: fiyat tarihi — `SERVICE_DAY` (hizmet anı; bugün) · `DISPATCH_DAY` (sevk anı). */
@@ -254,6 +256,8 @@ export const SETTING_KEYS = {
    *  ticari bir olay değildir) ve bedelsiz kalemler için kaçış yolu
    *  `financeAllowZeroPriceLineEnabled`tir — ikisi birlikte düşünülür. */
   GOODS_RECEIPT_REQUIRE_PRICE_ENABLED: "goodsReceipt.requirePriceEnabled",
+  /** Sarf stok defteri (kuşak/kurşun şeridi): mal kabulde sarf satırı + üretimde tüketim düşümü. Kapalı = bugünkü davranış. */
+  CONSUMABLE_STOCK_ENABLED: "consumable.stockEnabled",
   /** İplik lotu kalite bekletme (2026-09-18): açıkken mal kabulde doğan lot ON_HOLD doğar, ON_HOLD/BLOKE lota çıkış 400. Varsayılan KAPALI. */
   GOODS_RECEIPT_YARN_QUALITY_HOLD_ENABLED: "goodsReceipt.yarnQualityHoldEnabled",
   /** İptalde sebep zorunlu (top iptali; sebep alanı OPSİYONEL olan tek üretim iptal ucu) — varsayılan false = bugünkü. */
@@ -1087,6 +1091,11 @@ export const DEFAULT_SERVICE_BILLING_METER_BASIS: ServiceBillingMeterBasis = "OU
 export type ServiceBillingMissingMeter = "DECLARED_WITH_WARNING" | "BLOCK_LINE";
 export const SERVICE_BILLING_MISSING_METER_MODES: ServiceBillingMissingMeter[] = ["DECLARED_WITH_WARNING", "BLOCK_LINE"];
 export const DEFAULT_SERVICE_BILLING_MISSING_METER: ServiceBillingMissingMeter = "DECLARED_WITH_WARNING";
+export type ServiceBillingBrodeUnit = "METER" | "PIECE" | "STITCH";
+export const SERVICE_BILLING_BRODE_UNITS: ServiceBillingBrodeUnit[] = ["METER", "PIECE", "STITCH"];
+export const DEFAULT_SERVICE_BILLING_BRODE_UNIT: ServiceBillingBrodeUnit = "METER";
+/** Panelden YAZILABİLEN birimler — adet kaynağı (tablet brode adet girişi) olmadan PIECE/STITCH çıkışsız kapıdır. */
+export const SERVICE_BILLING_BRODE_UNITS_WRITABLE: ServiceBillingBrodeUnit[] = ["METER"];
 export type ServiceBillingTrigger = "PER_SHIPMENT" | "PERIOD_END";
 export const SERVICE_BILLING_TRIGGERS: ServiceBillingTrigger[] = ["PER_SHIPMENT", "PERIOD_END"];
 export const DEFAULT_SERVICE_BILLING_TRIGGER: ServiceBillingTrigger = "PER_SHIPMENT";
@@ -2019,6 +2028,8 @@ export interface FeatureFlags {
   financeServiceBillingMeterBasis: ServiceBillingMeterBasis;
   /** H7: ölçüm yoksa (default `DECLARED_WITH_WARNING`). */
   financeServiceBillingMissingMeter: ServiceBillingMissingMeter;
+  /** Brode fiyat birimi (default `METER`). */
+  financeServiceBillingBrodeUnit: ServiceBillingBrodeUnit;
   /** H7/H8: tetik (default `PER_SHIPMENT`; `PERIOD_END` → dönem sonu taslağı). */
   financeServiceBillingTrigger: ServiceBillingTrigger;
   /** H7: fiyat tarihi (default `SERVICE_DAY`). */
@@ -2068,6 +2079,7 @@ export interface FeatureFlags {
    *  MUAF: ters/iptal satırları. Bedelsiz kalem kaçışı
    *  `financeAllowZeroPriceLineEnabled`tir. */
   goodsReceiptRequirePriceEnabled: boolean;
+  consumableStockEnabled: boolean;
   /** İplik lotu kalite bekletme: mal kabulde doğan lot ON_HOLD doğar; ON_HOLD/BLOCKED lota çıkış 400 (varsayılan KAPALI = bugünkü). HAM; etkin `ticaret && iplik && bayrak`. */
   goodsReceiptYarnQualityHoldEnabled: boolean;
   /** İptalde sebep zorunlu (kullanıcı kararı 2026-09-18): top iptalinde sebep metni ya da katalog kodu şart; varsayılan false. */
@@ -2717,6 +2729,7 @@ export class SystemSettingService {
       financeServiceBillingEnabled: await readFinanceServiceBillingEnabled(cacheClient),
       financeServiceBillingMeterBasis: await readFinanceServiceBillingMeterBasis(cacheClient),
       financeServiceBillingMissingMeter: await readFinanceServiceBillingMissingMeter(cacheClient),
+      financeServiceBillingBrodeUnit: await readFinanceServiceBillingBrodeUnit(cacheClient),
       financeServiceBillingTrigger: await readFinanceServiceBillingTrigger(cacheClient),
       financeServiceBillingPriceDate: await readFinanceServiceBillingPriceDate(cacheClient),
       financeExpenseCategorySuggestions: await readFinanceExpenseCategorySuggestions(cacheClient),
@@ -2740,6 +2753,7 @@ export class SystemSettingService {
       yarnBlockNegativeBalanceEnabled: await readYarnBlockNegativeBalanceEnabled(cacheClient),
       purchaseBlockOverReceiptEnabled: await readPurchaseBlockOverReceiptEnabled(cacheClient),
       goodsReceiptRequirePriceEnabled: await readGoodsReceiptRequirePriceEnabled(cacheClient),
+      consumableStockEnabled: await readConsumableStockEnabled(cacheClient),
       goodsReceiptYarnQualityHoldEnabled: await readGoodsReceiptYarnQualityHoldEnabled(cacheClient),
       productionCancelReasonRequired: await readProductionCancelReasonRequired(cacheClient),
       financeAllowZeroPriceLineEnabled: await readFinanceAllowZeroPriceLineEnabled(cacheClient),
@@ -3286,6 +3300,18 @@ export class SystemSettingService {
       }
       await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_MISSING_METER, v, "Hizmet faturası ölçüm yoksa — bildirilenle uyar · satırı durdur", userId);
     }
+    if (Object.prototype.hasOwnProperty.call(input, "financeServiceBillingBrodeUnit")) {
+      const v = input.financeServiceBillingBrodeUnit;
+      if (typeof v !== "string" || !SERVICE_BILLING_BRODE_UNITS.includes(v as ServiceBillingBrodeUnit)) {
+        throw AppError.badRequest(`financeServiceBillingBrodeUnit şunlardan biri olmalı: ${SERVICE_BILLING_BRODE_UNITS.join(", ")}`);
+      }
+      // Çıkışsız kapı seddi: tablette brode adedi girilemiyorken ADET/VURUŞ seçilirse iç brode işleri
+      // faturadan düşer. Tablet adet girişi inince bu sed kalkar (okuyucu üç değeri de zaten tanır).
+      if (!SERVICE_BILLING_BRODE_UNITS_WRITABLE.includes(v as ServiceBillingBrodeUnit)) {
+        throw AppError.badRequest("Adet ve vuruş birimi henüz seçilemez: tablette brode adedi girişi yok, brode işleri faturaya giremezdi.", { code: "BRODE_UNIT_NO_PIECE_INPUT" });
+      }
+      await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_BRODE_UNIT, v, "Brode fiyat birimi — metre · adet · vuruş", userId);
+    }
     if (Object.prototype.hasOwnProperty.call(input, "financeServiceBillingTrigger")) {
       const v = input.financeServiceBillingTrigger;
       if (typeof v !== "string" || !SERVICE_BILLING_TRIGGERS.includes(v as ServiceBillingTrigger)) {
@@ -3453,6 +3479,13 @@ export class SystemSettingService {
         "Alış siparişine bağlı mal kabulde sipariş miktarını aşan satırı engelle",
         userId
       );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "consumableStockEnabled")) {
+      if (typeof input.consumableStockEnabled !== "boolean") {
+        throw AppError.badRequest("consumableStockEnabled boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.CONSUMABLE_STOCK_ENABLED, input.consumableStockEnabled, "Sarf stok takibi (kuşak / kurşun şeridi)", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "goodsReceiptRequirePriceEnabled")) {
@@ -5734,6 +5767,11 @@ export function readFinanceServiceBillingMissingMeter(tx?: Pick<typeof prisma, "
   return readServiceEnum(SETTING_KEYS.FINANCE_SERVICE_BILLING_MISSING_METER, SERVICE_BILLING_MISSING_METER_MODES, DEFAULT_SERVICE_BILLING_MISSING_METER, tx);
 }
 
+/** Brode fiyat birimi — tanınmayan değer varsayılana (`METER`) düşer. */
+export function readFinanceServiceBillingBrodeUnit(tx?: Pick<typeof prisma, "systemSetting">): Promise<ServiceBillingBrodeUnit> {
+  return readServiceEnum(SETTING_KEYS.FINANCE_SERVICE_BILLING_BRODE_UNIT, SERVICE_BILLING_BRODE_UNITS, DEFAULT_SERVICE_BILLING_BRODE_UNIT, tx);
+}
+
 /** H7: tetik — tanınmayan değer varsayılana (`PER_SHIPMENT`) düşer. */
 export function readFinanceServiceBillingTrigger(tx?: Pick<typeof prisma, "systemSetting">): Promise<ServiceBillingTrigger> {
   return readServiceEnum(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, SERVICE_BILLING_TRIGGERS, DEFAULT_SERVICE_BILLING_TRIGGER, tx);
@@ -5874,6 +5912,7 @@ export async function loadServiceBillingSettings(tx?: Pick<typeof prisma, "syste
   enabled: boolean;
   meterBasis: ServiceBillingMeterBasis;
   missingMeter: ServiceBillingMissingMeter;
+  brodeUnit: ServiceBillingBrodeUnit;
   trigger: ServiceBillingTrigger;
   priceDate: ServiceBillingPriceDate;
 }> {
@@ -5881,6 +5920,7 @@ export async function loadServiceBillingSettings(tx?: Pick<typeof prisma, "syste
     enabled: await resolveServiceBillingEnabled(tx),
     meterBasis: await readFinanceServiceBillingMeterBasis(tx),
     missingMeter: await readFinanceServiceBillingMissingMeter(tx),
+    brodeUnit: await readFinanceServiceBillingBrodeUnit(tx),
     trigger: await readFinanceServiceBillingTrigger(tx),
     priceDate: await readFinanceServiceBillingPriceDate(tx),
   };
@@ -5935,6 +5975,23 @@ export async function readProductionCancelReasonRequired(tx?: Pick<typeof prisma
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({ where: { key: SETTING_KEYS.PRODUCTION_CANCEL_REASON_REQUIRED }, select: { value: true } });
   return asBoolean(setting?.value);
+}
+
+export async function readConsumableStockEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.CONSUMABLE_STOCK_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Sarf stoğu ETKİN mi (`ticaret && bayrak`) — mal kabul sarf satırı ve tüketim düşümü bunu okur. */
+export async function resolveConsumableStockEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  if (!(await readTicaretEnabled(tx))) return false;
+  return readConsumableStockEnabled(tx);
 }
 
 export async function readGoodsReceiptRequirePriceEnabled(

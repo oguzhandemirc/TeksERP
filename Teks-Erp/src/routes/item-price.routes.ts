@@ -79,6 +79,8 @@ const upsertSchema = z.object({
   // söyler (`item_prices_price_nonneg`). Zod burada durmasaydı kullanıcı ham
   // Postgres kısıt hatası görürdü.
   price: z.number().nonnegative("Fiyat negatif olamaz").finite(),
+  // Hizmet fiyatının birimi (brode fiyat birimi ayarı); atlanmış = metre (eski istemci).
+  priceUnit: z.enum(["METER", "PIECE", "STITCH"], { message: "Fiyat birimi METER, PIECE ya da STITCH olmalı" }).nullish(),
 });
 
 /**

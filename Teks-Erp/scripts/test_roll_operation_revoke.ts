@@ -295,6 +295,8 @@ const OPERASYON_ISTISNA_DOSYALARI = new Set<string>([
   "src/services/workorder.service.ts", // rota düzenleme: adımın defter geçmişi + RESTRICT FK
   "src/services/helpers/workorder-clone.helper.ts", // bölmede iz topla birlikte taşınır
   "src/services/license-sync.service.ts", // lisans yüksek suyu: defterde YAZILMIŞ en geç an
+  "src/services/helpers/consumable-stock.helper.ts", // sarf düşümü: aynı tx'te yeni yazılan iz, id ile
+  "src/services/consumable-stock.service.ts", // sarf hareket geçmişi geri alınmış izin tüketimini de gösterir
 ]);
 
 async function cleanup(): Promise<void> {

@@ -8,6 +8,7 @@
 // Modül kapısı: dokuma kapalıyken desen/atkı adaptörleri `/entities` listesinde yok.
 // NEGATİF SONDA (ölçüldü, geri alındı): `weave-design`/`warp-spec` adaptöründe iplik çözümü modül
 // düzeyi önbelleğe alınınca (uygula önizlemeye güvenir) §7a/§7b kırmızı — BEKCI-HARITASI satırı.
+// SY-F3K §1a'': `resolveYarnCode` itemType vermeyince mesaj "kumaş bulunamadı" → ❌ (42/1); geri alındı.
 // Fikstür `TEST-SYH2-<ts>`; temizlik `finally`de FK sırasıyla; modül bayrakları birebir geri yüklenir.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
@@ -97,7 +98,7 @@ async function main(): Promise<void> {
   const c = (s: string): string => `${TAG}-${s}`;
 
   console.log("§0 statik: kayıt defteri + ters yol");
-  const gated = listAdapters().filter((a) => a.module).map((a) => `${a.entity}:${a.module}`).sort().join(",");
+  const gated = listAdapters().filter((a) => a.module && ["dokuma", "devere", "maliyet"].includes(a.module)).map((a) => `${a.entity}:${a.module}`).sort().join(",");
   check("§0a dört yeni adaptör modül kapılı", gated === "warpSpec:devere,weaveDesign:dokuma,weftSpec:dokuma,yarnCostPrice:maliyet", gated);
   check("§0b ters yollar: kartlar DEACTIVATE, fiyat REVOKE_VERSION",
     REVERT_PLAN.warpSpec?.mode === "DEACTIVATE" && REVERT_PLAN.weftSpec?.mode === "DEACTIVATE" && REVERT_PLAN.weaveDesign?.mode === "DEACTIVATE" && REVERT_PLAN.yarnCostPrice?.mode === "REVOKE_VERSION");
@@ -106,6 +107,9 @@ async function main(): Promise<void> {
   const missWarp = await ImportService.preview("warpSpec", [row(2, { code: c("WX"), name: `${TAG} çözgü x`, yarnCode: c("YOK"), endsCount: "100" })], {}, { userId: adminId, permissions: ALL });
   check("§1a yüklenmemiş iplik → ERROR (yarnCode)", missWarp.rows[0]?.action === "ERROR" && missWarp.rows[0].errors.some((e) => e.column === "yarnCode"), JSON.stringify(missWarp.rows[0]?.errors));
   check("§1a' iplik için kumaş yaratma ipucu YOK", missWarp.rows[0]?.errors.every((e) => !e.fix) === true);
+  // SY-F3K: `item` çözücüsünün etiketi beklenen türden gelir — iplik sütununda "kumaş bulunamadı" denmez.
+  const missMsg = missWarp.rows[0]?.errors.find((e) => e.column === "yarnCode")?.message ?? "";
+  check("§1a'' iplik bulunamadı mesajı 'iplik' der, 'kumaş' demez", /eşleşen iplik bulunamadı/.test(missMsg) && !/kumaş/.test(missMsg), missMsg);
   const nonYarn = await ImportService.preview("weftSpec", [row(2, { code: c("WFX"), name: `${TAG} atkı x`, yarnCode: c("KMX"), picksInRepeat: "4" })], {}, { userId: adminId, permissions: ALL });
   check("§1b kumaş kodu atkı ipliği olamaz → ERROR", nonYarn.rows[0]?.action === "ERROR" && nonYarn.rows[0].errors.some((e) => /İPLİK/.test(e.message)));
   const missApply = await errCode(() => ImportService.apply("warpSpec", [row(2, { code: c("WX"), name: `${TAG} çözgü x`, yarnCode: c("YOK"), endsCount: "100" })], {}, { userId: adminId, permissions: ALL }));

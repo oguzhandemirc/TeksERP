@@ -214,6 +214,12 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                         <TraceLink recordNo={r.barcode} />
                       </div>
                     </div>
+                    {r.customerCode ? (
+                      <div data-testid="roll-customer-code">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">Müşteri kodu</div>
+                        <span className="mt-1 block break-all font-mono text-sm font-semibold">{r.customerCode}</span>
+                      </div>
+                    ) : null}
                     <div className="flex flex-wrap items-start gap-1">
                       <StatusBadge status={r.status} labels={rollStatusLabels} tones={rollStatusTones} />
                       {r.markedForKartela && (

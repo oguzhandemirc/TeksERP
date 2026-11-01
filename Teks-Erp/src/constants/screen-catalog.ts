@@ -319,6 +319,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // izni `warehouse:read`tir (backend `yarn.routes`/`stock-count.routes` ile
   // birebir); `yarn:write`/`warehouse:write` ekran İÇİ yetenektir.
   { key: "operations/goods-receipts", app: "desktop", modul: "ticaretEnabled", title: "Mal Kabul", requires: ["goods-receipt:read"], capabilities: ["goods-receipt:write"] },
+  { key: "operations/sarf-stogu", app: "desktop", modul: "ticaretEnabled", title: "Sarf Stoğu", requires: ["goods-receipt:read"], capabilities: [] },
   // Gelen belge (Gülkesim OCR D5): onay SoD yeteneğidir (Muhasebe/Süpervizör) — emanet topunu doğurur.
   { key: "operations/gelen-belgeler", app: "desktop", modul: "gelenBelgeEnabled", title: "Gelen Belgeler", requires: ["gelen-belge:read"], capabilities: ["gelen-belge:write", "gelen-belge:approve", "gelen-belge:template"] },
   { key: "operations/purchase-orders", app: "desktop", modul: "ticaretEnabled", title: "Alış Siparişleri", requires: ["purchase-order:read", "purchase-order:write"], capabilities: [] },

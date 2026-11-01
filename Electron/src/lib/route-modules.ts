@@ -67,6 +67,7 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
   "reports/finance": "financeEnabled",
   // ── TİCARET · İPLİK · ÇOKLU DEPO ────────────────────────────────────────
   "operations/goods-receipts": "ticaretEnabled",
+  "operations/sarf-stogu": "ticaretEnabled",
   "operations/purchase-orders": "ticaretEnabled",
   "operations/stock-counts": "ticaretEnabled",
   "definitions/item-prices": "ticaretEnabled",

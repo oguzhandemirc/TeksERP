@@ -31,6 +31,9 @@ import { warpSpecImportAdapter } from "./adapters/warp-spec.adapter";
 import { weftSpecImportAdapter } from "./adapters/weft-spec.adapter";
 import { weaveDesignImportAdapter } from "./adapters/weave-design.adapter";
 import { yarnCostPriceImportAdapter } from "./adapters/yarn-cost-price.adapter";
+import { cariOpeningBalanceImportAdapter } from "./adapters/cari-opening-balance.adapter";
+import { chequePortfolioImportAdapter } from "./adapters/cheque-portfolio.adapter";
+import { customerServicePriceImportAdapter } from "./adapters/customer-service-price.adapter";
 
 const ADAPTERS: ImportAdapter[] = [
   // — Ana veri (F1 pilotları)
@@ -59,6 +62,10 @@ const ADAPTERS: ImportAdapter[] = [
   weftSpecImportAdapter,
   weaveDesignImportAdapter,
   yarnCostPriceImportAdapter,
+  // — Toplu açılış aktarımı (finans/ticaret modül kapılı; tekil uçların servis yolundan yazar)
+  cariOpeningBalanceImportAdapter,
+  chequePortfolioImportAdapter,
+  customerServicePriceImportAdapter,
 ];
 
 const BY_ENTITY = new Map(ADAPTERS.map((a) => [a.entity, a]));

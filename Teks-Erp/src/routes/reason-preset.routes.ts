@@ -32,7 +32,7 @@ const router = Router();
 /** Katalogu DÜZENLEYEBİLEN kişi — tek yerde, dört uçta aynısı. */
 const canEdit = requireAnyPermission("roll:manual-adjust", "mobile:tambur-duzelt");
 
-const kindSchema = z.nativeEnum(ReasonPresetKind);
+const kindSchema = z.nativeEnum(ReasonPresetKind, { error: "Bilinmeyen sebep türü" });
 
 /** Kind'e bağlı zorunluluk (MACHINE_STOP'ta şart, diğerlerinde yasak) serviste — Zod yalnız değeri tanır. */
 const stopLossClassSchema = z.nativeEnum(MachineStopLossClass).optional().nullable();

@@ -3,6 +3,12 @@ import { propertyServiceItemPatch, valueServiceItemPatch } from "./serviceMappin
 import type { FabricPropertyFormValues } from "./schema";
 import type { FabricProperty } from "./types";
 
+/** Vuruş sayısı yalnız DEĞİŞTİYSE gönderilir (backend: alan yok = dokunma, null = kaldır). */
+export function valueStitchPatch(initial: FabricProperty | null, code: string, next: number | null): { stitchCount?: number | null } {
+  const saved = (initial?.values ?? []).find((v) => v.code.toUpperCase() === code.toUpperCase());
+  return (saved?.stitchCount ?? null) === next ? {} : { stitchCount: next };
+}
+
 export const buildFabricPropertyPayload = (
   v: FabricPropertyFormValues,
   initial: FabricProperty | null,
@@ -34,6 +40,7 @@ export const buildFabricPropertyPayload = (
             isActive: x.isActive,
             // H6 sözleşmesi: alan yoksa eşleme korunur — yalnız değişen satır taşır.
             ...valueServiceItemPatch(initial, x.code.trim(), x.serviceItemId ?? null),
+            ...valueStitchPatch(initial, x.code.trim(), x.stitchCount ?? null),
           })),
         }
       : {}),

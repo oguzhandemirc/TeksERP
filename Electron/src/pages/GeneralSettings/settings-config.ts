@@ -2053,6 +2053,14 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Depocu", "Muhasebeci"],
         desc: "Açıkken satırda birim fiyat yoksa ve siparişten de çözülemiyorsa mal kabul kaydedilemez. Fiyat kabul anında donar; alış faturası taslağı ve maliyet oradan doğar. Kapalıyken fiyatsız kabul serbesttir.",
       },
+      {
+        key: "consumableStockEnabled",
+        title: "Sarf stoğu tut (kuşak / kurşun şeridi)",
+        summary: "Mal kabul sarf satırı alır; üretim adımı bitince sarf stoktan düşer, geri alınınca geri yazılır.",
+        defaultOn: false,
+        audience: ["Depocu", "Planlamacı"],
+        desc: "Açıkken mal kabul fişine sarf malzemesi (kuşak, kurşun şeridi) satırı girilir; kurşun uygulanınca işlenen metre × sarf normu, tambur kesiminde kuşak (top başına 1) stoktan düşer. Stok eksiye düşerse yalnız uyarı verilir, iş durmaz. Kapalıyken (varsayılan) sarf stoğu tutulmaz, yalnız kuşak ihtiyacı raporu çalışır.",
+      },
     ],
   },
   {
@@ -2358,6 +2366,20 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: [
           { value: "DECLARED_WITH_WARNING", label: "Bildirilen metreyle yaz, uyar (bugünkü)", hint: "Taslak notunda uyarı görünür." },
           { value: "BLOCK_LINE", label: "O işi faturaya alma", hint: "İş faturasız kalır; uyarıda listelenir." },
+        ],
+      },
+      {
+        // `defaultValue` backend `DEFAULT_SERVICE_BILLING_BRODE_UNIT` ile birebir.
+        enumKey: "financeServiceBillingBrodeUnit",
+        title: "Brode hangi birimle fiyatlansın",
+        summary: "Brode işi metreyle mi, adetle mi, vuruşla mı faturalansın.",
+        desc: "Şimdilik yalnız Metre seçilebilir: Adet ve Vuruş, tablette brode adedi girilebildiğinde açılacak (o güne kadar brode işleri faturaya giremezdi). Adet kipinde dış (fason) brode ve okumasız işler faturaya girmez. Fiyat kartındaki satırın birimi bu seçimle aynı olmalı; değilse satır fiyatsız gelir ve uyarı görünür.",
+        defaultValue: "METER",
+        display: "radio",
+        audience: ["Muhasebeci"],
+        options: [
+          { value: "METER", label: "Metre (bugünkü)", hint: "İşin ölçülen metresi." },
+          // PIECE/STITCH: tablette brode adet girişi inene kadar gizli (sunucu da 400 BRODE_UNIT_NO_PIECE_INPUT verir).
         ],
       },
       {

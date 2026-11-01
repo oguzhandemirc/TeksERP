@@ -295,6 +295,7 @@ export const updateSchema = z.strictObject({
   financeServiceBillingEnabled: z.boolean().optional(),
   financeServiceBillingMeterBasis: z.enum(["OUT", "IN", "DECLARED"]).optional(),
   financeServiceBillingMissingMeter: z.enum(["DECLARED_WITH_WARNING", "BLOCK_LINE"]).optional(),
+  financeServiceBillingBrodeUnit: z.enum(["METER", "PIECE", "STITCH"]).optional(),
   financeServiceBillingTrigger: z.enum(["PER_SHIPMENT", "PERIOD_END"]).optional(),
   // D4-I1a: cari kilidi — kapsam ön seçimi (boş olmayan alt küme, sabit sıra) + koyanın kendi kilidini açması.
   financeCariHoldDefaultScope: z
@@ -344,6 +345,7 @@ export const updateSchema = z.strictObject({
   // ⚠️ ACİL KAPATMA anahtarı — fiyatı henüz belli olmayan mal depoda beklerse
   // kabul hiç yapılamaz.
   goodsReceiptRequirePriceEnabled: z.boolean().optional(),
+  consumableStockEnabled: z.boolean().optional(),
   // goodsReceipt.yarnQualityHoldEnabled — iplik lotu kalite bekletme (default false). Backend ENFORCE.
   goodsReceiptYarnQualityHoldEnabled: z.boolean().optional(),
   productionCancelReasonRequired: z.boolean().optional(),

@@ -901,6 +901,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "machine_cost_rates", name: "machine_cost_rates_revoke_actor_chk" },
   { table: "service_consumable_norms", name: "service_consumable_norms_qty_ck" },
   { table: "service_consumable_norms", name: "service_consumable_norms_revoke_actor_chk" },
+  // Sarf stok defteri (2026-11-01): qty > 0 · ters tür ⇔ reversesId · tüketim ⇔ rollOperationId.
+  { table: "consumable_movements", name: "consumable_movements_qty_positive_ck" },
+  { table: "consumable_movements", name: "consumable_movements_reversal_link_ck" },
+  { table: "consumable_movements", name: "consumable_movements_consumption_link_ck" },
   // D4-SEMA (2026-10-31): H3 masraf bağı · K3d cari virman/birleştirme · D2b alias kapsamı · V1 KDV/tevkifat · B5 kalibrasyon.
   { table: "expense_allocations", name: "expense_allocations_target_ck" },
   { table: "expense_allocations", name: "expense_allocations_share_ck" },
@@ -917,6 +921,9 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "customer_barcode_series", name: "customer_barcode_series_shape_ck" },
   { table: "service_billing_links", name: "service_billing_links_meters_ck" },
   { table: "service_billing_links", name: "service_billing_links_revoke_ck" },
+  { table: "service_billing_links", name: "service_billing_links_billed_qty_ck" },
+  { table: "roll_meter_readings", name: "roll_meter_readings_piece_count_ck" },
+  { table: "fabric_property_values", name: "fabric_property_values_stitch_count_ck" },
   // H8b (migration 20261029180000): müşteri hizmet faturası tetiği yalnız fabrika ayarının değerleri. Bekçi `test_hizmet_fatura` §20.
   { table: "cari_accounts", name: "cari_accounts_service_billing_trigger_ck" },
   // H1b (migration 20261029200000): initialQty yükseltmesi yalnız pozitif ve yalnız OVERAGE satırında. Bekçi `test_kursun_metre_stok`.

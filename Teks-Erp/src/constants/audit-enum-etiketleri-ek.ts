@@ -19,6 +19,8 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   QUALITY_CERTIFICATE: "Kalite belgesi",
   INSPECTION_REPORT: "Muayene raporu",
   SALES_QUOTE: "Satış teklifi", // PrintedDocType (MAL-6)
+  PIECE: "Adet", // ServiceQtyUnit (EKS-E2 brode fiyat birimi)
+  STITCH: "Vuruş",
   WEIGH: "Tartım",
   SESSION: "Oturum",
   PRIMARY: "Birincil",
@@ -414,4 +416,9 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   SEPARATE_BEAM: "Ayrı levent",
   SHARED_BEAM: "Zeminle aynı levent",
   CREEL: "Cağlık (bobinden)",
+  // ConsumableMovementKind (sarf stok defteri — kuşak / kurşun şeridi)
+  RECEIPT_IN: "Mal kabul girişi",
+  RECEIPT_CANCEL_OUT: "Mal kabul iptali",
+  CONSUMPTION_OUT: "Üretim tüketimi",
+  CONSUMPTION_REVERSAL_IN: "Tüketim geri alındı",
 };

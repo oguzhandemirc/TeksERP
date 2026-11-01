@@ -93,9 +93,34 @@ const MODEL_MUAF: ReadonlyArray<{ dosya: string; model: string; neden: string }>
     neden: "Varyant tarife kodu (SY-E1) yalnız aktif tarifeye ÇÖZÜLÜYOR MU diye okunur — bilinmeyen kod 400; maliyet kapalıyken tarife doğamaz, kod boş bırakılır (reçete yazımı dokuma/iş emri yüzeyidir).",
   },
   {
-    dosya: "routes/master-data-merge.routes.ts",
-    model: "yarnCostPrice",
-    neden: "Birleştirme içe aktarım kayıt defterini YALNIZ varlık→yazma izni eşlemesi için okur (MERGE_ENTITIES); iplik maliyet fiyatı adaptörü (SY-H2) zincire bu yüzden girer, birleştirme ona dokunmaz.",
+    dosya: "routes/consumable-stock.routes.ts",
+    model: "serviceConsumableNorm",
+    neden: "Sarf stoğu (kuşak / kurşun şeridi) kurşun düşümünde geçerli sarf normunu yalnız OKUR (consumable-stock.helper → consumableNormsValidAt; miktar = metre × norm); maliyet kapalıyken norm doğamaz, düşüm 0 — fiyat okumaz.",
+  },
+  {
+    dosya: "routes/goods-receipt.routes.ts",
+    model: "serviceConsumableNorm",
+    neden: "Sarf stoğu (kuşak / kurşun şeridi) kurşun düşümünde geçerli sarf normunu yalnız OKUR (consumable-stock.helper → consumableNormsValidAt; miktar = metre × norm); maliyet kapalıyken norm doğamaz, düşüm 0 — fiyat okumaz.",
+  },
+  {
+    dosya: "routes/reports/hedef-deger.report.routes.ts",
+    model: "serviceConsumableNorm",
+    neden: "Sarf stoğu (kuşak / kurşun şeridi) kurşun düşümünde geçerli sarf normunu yalnız OKUR (consumable-stock.helper → consumableNormsValidAt; miktar = metre × norm); maliyet kapalıyken norm doğamaz, düşüm 0 — fiyat okumaz.",
+  },
+  {
+    dosya: "routes/consumable-stock.routes.ts",
+    model: "machineCostRate",
+    neden: "Sarf stoğu zinciri cost-rate-validity.helper modülünden YALNIZ consumableNormsValidAt çağırır; machineCostRate aynı modüldeki komşu fonksiyondur (tarayıcı dosya düzeyinde), okunmaz. Pencere yüklemi o dosyada tek kaynak kalmalı (test_makine_ucreti_sarf_normu §7) — bölünmez.",
+  },
+  {
+    dosya: "routes/goods-receipt.routes.ts",
+    model: "machineCostRate",
+    neden: "Sarf stoğu zinciri cost-rate-validity.helper modülünden YALNIZ consumableNormsValidAt çağırır; machineCostRate aynı modüldeki komşu fonksiyondur (tarayıcı dosya düzeyinde), okunmaz. Pencere yüklemi o dosyada tek kaynak kalmalı (test_makine_ucreti_sarf_normu §7) — bölünmez.",
+  },
+  {
+    dosya: "routes/reports/hedef-deger.report.routes.ts",
+    model: "machineCostRate",
+    neden: "Sarf stoğu zinciri cost-rate-validity.helper modülünden YALNIZ consumableNormsValidAt çağırır; machineCostRate aynı modüldeki komşu fonksiyondur (tarayıcı dosya düzeyinde), okunmaz. Pencere yüklemi o dosyada tek kaynak kalmalı (test_makine_ucreti_sarf_normu §7) — bölünmez.",
   },
 ];
 

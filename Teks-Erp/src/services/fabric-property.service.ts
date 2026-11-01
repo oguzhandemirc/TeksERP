@@ -23,6 +23,8 @@ import { ApiResponse } from "../types/api.types";
 import prisma from "../lib/prisma";
 import { readServiceItemIdField, withServiceMapping } from "./helpers/service-item-mapping.helper";
 import { AppError } from "../utils/app-error";
+import { type ConsumableItemField, consumableItemPatch, extractStationIds, readStitchCountField } from "./helpers/fabric-property-input.helper";
+import { assertConsumableItemsTx } from "./helpers/consumable-item-link.helper";
 import { nextSeriesNo } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { deriveCapabilityFlags } from "./station-capability.service";
@@ -53,13 +55,15 @@ async function nextPropertyCode(): Promise<string> {
 }
 
 /** SEÇİM tipli özelliğin değer satırı — istemci sözleşmesi (DÜZ, nested write DEĞİL). */
-export interface PropertyValueInput {
+export interface PropertyValueInput extends ConsumableItemField {
   code: string;
   name: string;
   sortOrder?: number;
   isActive?: boolean;
   /** Gramaj kademesi → hizmet kalemi (H6). `undefined` = dokunma, `null` = eşlemeyi kaldır. */
   serviceItemId?: string | null;
+  /** Brode deseni vuruş sayısı (VURUŞ fiyat birimi). `undefined` = dokunma, `null` = kaldır. */
+  stitchCount?: number | null;
 }
 
 /**
@@ -95,24 +99,11 @@ function extractValues(data: Record<string, unknown>): PropertyValueInput[] | un
       );
     }
     const sid = readServiceItemIdField(row.serviceItemId, `'${code}' değerinin`);
+    const stitch = readStitchCountField(row.stitchCount, code);
     const sortOrder = typeof row.sortOrder === "number" ? row.sortOrder : (i + 1) * 10;
     const isActive = row.isActive === undefined ? true : Boolean(row.isActive);
-    return { code, name, sortOrder, isActive, ...(sid === undefined ? {} : { serviceItemId: sid }) };
+    return { code, name, sortOrder, isActive, ...(sid === undefined ? {} : { serviceItemId: sid }), ...consumableItemPatch(row.consumableItemId, code), ...(stitch === undefined ? {} : { stitchCount: stitch }) };
   });
-}
-
-/**
- * Gövdeden `stationIds`'i ayıklar (tekrarları eler) ve payload'dan siler.
- * `undefined` = alan hiç gönderilmedi (update'te "dokunma" demek).
- */
-function extractStationIds(data: Record<string, unknown>): string[] | undefined {
-  if (!("stationIds" in data)) return undefined;
-  const raw = data.stationIds;
-  delete data.stationIds;
-  if (!Array.isArray(raw) || raw.some((v) => typeof v !== "string")) {
-    throw AppError.badRequest("stationIds bir istasyon id listesi olmalı");
-  }
-  return [...new Set(raw as string[])];
 }
 
 /**
@@ -198,8 +189,13 @@ async function replaceValuesTx(
     where: { propertyId, code: { notIn: keep } },
     data: { isActive: false },
   });
+  await assertConsumableItemsTx(tx, values);
   for (const v of values) {
-    const svc = v.serviceItemId !== undefined ? { serviceItemId: v.serviceItemId } : {};
+    const svc = {
+      ...(v.serviceItemId !== undefined ? { serviceItemId: v.serviceItemId } : {}),
+      ...(v.consumableItemId !== undefined ? { consumableItemId: v.consumableItemId } : {}),
+      ...(v.stitchCount !== undefined ? { stitchCount: v.stitchCount } : {}),
+    };
     await tx.fabricPropertyValue.upsert({
       where: { propertyId_code: { propertyId, code: v.code } },
       create: {

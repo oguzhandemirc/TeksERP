@@ -145,7 +145,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
   { permission: "settings:dokuma", flagKeys: ["dokumaRunWeavingOrderRequired", "dokumaOrderLineLinkRequired", "dokumaRollBirth", "tezgahEscalationGraceMinutes", "tezgahAlarmEnabled", "tezgahAlarmUnclassifiedTargetMinutes", "tezgahAlarmUnclassifiedEnabled", "tezgahAlarmRenotifyMinutes", "tezgahAlarmEscalateWhenAcked", "tezgahAlarmNoShiftMode", "tezgahCollectorSilenceMinutes", "tezgahMaxOpenStopHours"] },
   {
     permission: "settings:warehouse",
-    flagKeys: ["purchaseBlockOverReceiptEnabled", "goodsReceiptRequirePriceEnabled"],
+    flagKeys: ["purchaseBlockOverReceiptEnabled", "goodsReceiptRequirePriceEnabled", "consumableStockEnabled"],
   },
   { permission: "settings:yarn", flagKeys: ["yarnBlockNegativeBalanceEnabled", "goodsReceiptYarnQualityHoldEnabled"] },
   {
@@ -164,6 +164,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "financeServiceBillingEnabled",
       "financeServiceBillingMeterBasis",
       "financeServiceBillingMissingMeter",
+      "financeServiceBillingBrodeUnit",
       "financeServiceBillingTrigger",
       "financeCariHoldDefaultScope",
       "financeCariHoldReleaseBySamePerson",

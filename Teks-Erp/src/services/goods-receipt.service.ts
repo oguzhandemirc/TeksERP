@@ -47,6 +47,7 @@ import { InventoryService } from "./inventory.service";
 import { resolveItemPricesFor } from "./item-price.service";
 import { applyYarnMovementTx } from "./yarn.service";
 import { reverseGoodsReceiptYarnTx } from "./helpers/yarn-receipt-reversal.helper";
+import { recordConsumableReceiptTx, reverseConsumableReceiptTx } from "./helpers/consumable-stock.helper";
 import { ensureYarnLotTx, normalizeLotNo } from "./helpers/yarn-lot.helper";
 import { assertReceiptLinesValid, overReceiptMessage, priceRequiredMessage, qtyText, YARN_LOT_REQUIRED_MESSAGE, type PreflightContext } from "./helpers/goods-receipt-preflight.helper";
 import { yarnMovementSign } from "./helpers/yarn-sign.helper";
@@ -55,6 +56,7 @@ import { yarnMovementSign } from "./helpers/yarn-sign.helper";
 import {
   readDevereLotRequired,
   resolveGoodsReceiptRequirePriceEnabled,
+  resolveConsumableStockEnabled,
   resolvePurchaseBlockOverReceiptEnabled,
 } from "./system-setting.service";
 // Paket D3 — fiş bir ALIŞ SİPARİŞİNİ karşılayabilir. Bağ OPSİYONELDİR: sipariş
@@ -82,7 +84,8 @@ import { nextSeriesNo } from "./number-series.service";
 import { applyDateRange, buildWhereClause } from "../utils/query-parser";
 import { tokenReplay } from "./helpers/token-replay.helper";
 import { isClientTokenP2002 } from "../utils/p2002";
-import type { ApiResponse } from "../types/api.types";import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
+import type { ApiResponse } from "../types/api.types";
+import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
 
 
 const inventory = new InventoryService();
@@ -181,6 +184,8 @@ export interface AddLinesResult {
   created: string[];
   /** Doğan `YarnMovement` id'leri (iplik satırları). */
   createdYarn: string[];
+  /** Doğan `ConsumableMovement` id'leri (sarf satırları; `consumable.stockEnabled` açıkken). */
+  createdConsumable?: string[];
   failed: LineFailure[];
   /**
    * D3 — fiş bir alış siparişine bağlıysa satırlardan SONRA koşan karşılanma
@@ -621,7 +626,8 @@ async function buildPreflightContext(
   const docItemIds = new Set(
     orderCtx ? [...orderCtx.capacity.entries()].filter(([, ls]) => ls.some((l) => l.remaining.gt(0))).map(([id]) => id) : [],
   );
-  return { ctx: { requirePrice, priceFor, currency: p.currency, overReceipt, docItemIds }, priceFor, contract, orderCtx, blockOverReceipt, requirePrice };
+  const consumableStock = await resolveConsumableStockEnabled();
+  return { ctx: { requirePrice, priceFor, currency: p.currency, overReceipt, docItemIds, consumableStock }, priceFor, contract, orderCtx, blockOverReceipt, requirePrice };
 }
 
 /**
@@ -1027,6 +1033,7 @@ export class GoodsReceiptService {
 
     const created: string[] = [];
     const createdYarn: string[] = [];
+    const createdConsumable: string[] = [];
     const failed: LineFailure[] = [];
 
     /**
@@ -1112,6 +1119,15 @@ export class GoodsReceiptService {
           continue;
         }
 
+        // ── SARF DALI ── `Roll` doğurmaz; sarf defterine giriş (ön-uçuş yalnız ayar açıkken geçirir).
+        if (info?.itemType === ItemType.CONSUMABLE) {
+          const usage: ItemUsage = claim ? "DOC_COMPLETION" : "NEW_STOCK";
+          await assertItemUsable(prisma, line.itemId, usage);
+          createdConsumable.push(await this.addConsumableLine(receipt, line, priceFor(line), { userId, itemUsage: usage }));
+          noteAccepted(line, claim);
+          continue;
+        }
+
         const res = await inventory.createInitialEntry(
           {
             itemId: line.itemId,
@@ -1190,6 +1206,7 @@ export class GoodsReceiptService {
     return {
       created,
       createdYarn,
+      ...(createdConsumable.length > 0 ? { createdConsumable } : {}),
       failed,
       purchaseOrder,
       contractPricing: {
@@ -1312,6 +1329,32 @@ export class GoodsReceiptService {
     });
 
     return res.movementId;
+  }
+
+  /** Sarf satırı — fiş claim'i İLK ifade (iplik yolunun ikizi); miktar kalem kartının biriminde. */
+  private async addConsumableLine(
+    receipt: { id: string; receiptNo: string },
+    line: GoodsReceiptLineInput,
+    unitPrice: Prisma.Decimal.Value | null,
+    opts: { userId?: string; itemUsage: ItemUsage },
+  ): Promise<string> {
+    if (line.colorId || line.width != null || line.qualityGrade || line.foldType || line.propertyIds?.length || line.lotNo) {
+      throw AppError.badRequest("Sarf satırı renk / en / kalite / kat / özellik / lot taşıyamaz — yalnız miktar ve fiyat girilir.");
+    }
+    const qty = new Prisma.Decimal(line.initialQty);
+    const id = await prisma.$transaction(async (tx) => {
+      await this.claimActiveReceiptTx(tx, receipt.id, receipt.receiptNo);
+      await assertItemUsableTx(tx, line.itemId, opts.itemUsage);
+      return recordConsumableReceiptTx(tx, { itemId: line.itemId, qty, unitPrice, goodsReceiptId: receipt.id, userId: opts.userId ?? null });
+    });
+    void AuditService.log({
+      userId: opts.userId,
+      action: "CREATE",
+      tableName: "CONSUMABLE_MOVEMENT",
+      recordId: id,
+      newData: { source: "GOODS_RECEIPT", receiptNo: receipt.receiptNo, itemId: line.itemId, kind: "RECEIPT_IN", qty: qty.toString() },
+    });
+    return id;
   }
 
   /**
@@ -1486,6 +1529,8 @@ export class GoodsReceiptService {
         reason?.trim() || `Mal kabul fişi iptali (${receipt.receiptNo})`,
         userId ?? null,
       );
+      // Sarf satırları: ters kaydı aynı tx'te (ayardan bağımsız; eksi bakiye engel değil).
+      await reverseConsumableReceiptTx(tx, id, userId ?? null);
       return { yarnReversal, freshRolls };
     });
 
