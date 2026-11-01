@@ -52,6 +52,10 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   pricingEnabled: A(true),
   financeBlockNegativeCashEnabled: A(true),
   financeDefaultVatRate: V("KDV ön-dolum oranı; açılacak bir şey değil"),
+  // D4-V1k: açık profilde genel tevkifat 5/10 (kural devrede); açıkken oran zorunlu olduğundan üçü birlikte.
+  financeWithholdingEnabled: A(true),
+  financeWithholdingNumerator: A(5),
+  financeWithholdingDenominator: A(10),
   financeInvoiceMatchTolerance: A(true),
   financeInvoiceQtyTolerancePct: A(5),
   financeInvoicePriceTolerancePct: A(5),
@@ -76,6 +80,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   financeCariHoldReleaseBySamePerson: A("DENY"), // açma ucunun "koyan kişi" dalını işletir
   financeCariHoldEmanetShipment: A("PROCESSED_HELD"), // "işlenmiş" yüklemini işletir; işlenmemiş emanet yine geçer
   costPresentationCurrency: A("USD"), // sunum alanlarını (kur + döviz tutarı) yanıta yazdırır
+  costFinishingKgBasis: V("yalnız KG tabanlı terbiye tarifesinin kg kaynağı; hiçbir kapıyı açıp kapamaz"),
   financeServiceBillingPriceDate: V("fiyat tarihi; iki değer de geçerli, varsayılan hizmet anı"),
   financeAutoAllocateOnPaymentEnabled: A(true),
   financeAllowZeroPriceLineEnabled: A(true),

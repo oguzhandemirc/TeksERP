@@ -20,9 +20,11 @@ import { buildShipmentInvoiceDraftPreview } from "../services/helpers/shipment-a
 import { cariService } from "../services/cari.service";
 import { partnerRoleAccountWhere } from "../services/helpers/partner-roles.helper";
 import { parseQueryParams, readFilterList, readIdCondition } from "../utils/query-parser";
+import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import type { Prisma } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { invoiceService } from "../services/invoice.service";
+import { resolveInvoiceTaxDefaults } from "../services/helpers/invoice-tax-defaults.helper";
 import { SERVICE_PERIOD_PATTERN, createServicePeriodDraft, previewServicePeriodDraft } from "../services/service-period-invoice.service";
 import { paymentService } from "../services/payment.service";
 import { cashTransactionService } from "../services/cash-transaction.service";
@@ -71,6 +73,11 @@ const cariCreateSchema = z
     notes: z.string().max(500).nullable().optional(),
     // H8b: null = fabrika ayarı; değer kümesi servis + DB CHECK ile aynı (servis Türkçe 400 verir).
     serviceBillingTrigger: z.string().max(20).nullable().optional(),
+    // D4-V1k: KDV / tevkifat geçersiz kılması (null = genel ayar); aralık + pay/payda çifti serviste Türkçe 400.
+    vatRate: decimalString.nullable().optional(),
+    withholdingEnabled: z.boolean().nullable().optional(),
+    withholdingNumerator: z.number().int().nullable().optional(),
+    withholdingDenominator: z.number().int().nullable().optional(),
   })
   .strict();
 
@@ -92,6 +99,7 @@ const cariCreateSchema = z
  *       - { in: query, name: "filter[isCustomerRole]", schema: { type: string, enum: ["true", "false"] } }
  *       - { in: query, name: "filter[isSubcontractorRole]", schema: { type: string, enum: ["true", "false"] } }
  *       - { in: query, name: kind, schema: { type: string, enum: [CUSTOMER, SUBCONTRACTOR] }, description: "Eski istemci" }
+ *       - { in: query, name: "filter[id]", schema: { type: string }, description: "Hesap kimliği (CSV) — bildirim derin bağlantısı ?focus" }
  *     responses:
  *       200: { description: Liste }
  *       400: { description: Tanınmayan rol süzgeci }
@@ -110,6 +118,7 @@ router.get("/cari", requirePermission("finance:read"), async (req, res, next) =>
       // Z-A: kartla doğan boş hesaplar — panel varsayılanı "Hareketli"; sunucu varsayılanı DEĞİŞMEZ (hepsi).
       hasActivity: readFilterList(parseQueryParams(req).filters.hasActivity)[0] === "true",
       customerId: readIdCondition(parseQueryParams(req).filters.customerId) ?? undefined,
+      id: readIdCondition(readFilterList(parseQueryParams(req).filters.id).map((v) => assertValidUuid(v, "id"))) ?? undefined,
       // H2 (2026-08-14): "Gecikmiş" kolonu — bayrak verilmeyince servis ek
       // sorgu KOŞMAZ (bugünkü yol bayt-bayt; bekçi kaynak taramasıyla kilitli).
       withOverdue: q.withOverdue === "true",
@@ -519,6 +528,31 @@ router.get("/invoices", requirePermission("finance:read"), async (req, res, next
       to: q.to ? new Date(q.to) : undefined,
     });
     res.json({ success: true, ...result });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/finance/invoices/tax-defaults:
+ *   get:
+ *     tags: [Finance]
+ *     summary: Yeni fatura satırının KDV / tevkifat ön değeri (D4-V1k — müşteri cari ?? genel ayar ?? bugünkü)
+ *     parameters:
+ *       - { in: query, name: type, required: true, schema: { type: string, enum: [SALES, PURCHASE] } }
+ *       - { in: query, name: customerId, schema: { type: string, format: uuid } }
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ vatRate, withholdingRate (KDV'nin %'si), withholdingRatio, source }" }
+ */
+router.get("/invoices/tax-defaults", requirePermission("finance:read"), async (req, res, next) => {
+  try {
+    const q = z
+      .object({ type: z.enum(["SALES", "PURCHASE"], { message: "Fatura türü SALES ya da PURCHASE olmalı" }), customerId: z.string().uuid().optional() })
+      .strict()
+      .parse(req.query);
+    res.json({ success: true, data: await resolveInvoiceTaxDefaults({ type: q.type, customerId: q.customerId ?? null }) });
   } catch (e) {
     next(e);
   }

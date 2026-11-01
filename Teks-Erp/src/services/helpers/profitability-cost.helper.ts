@@ -120,7 +120,7 @@ export async function computeWorkCosts(ctx: CostContext, links: RevenueLinkRow[]
   const priceOf = await consumablePriceResolver(ctx, [...new Set(norms.map((n) => n.consumableItemId))], fx);
   const receipts = await loadReceipts(links);
   const invoiceTotals = await ctx.finance.readSubcontractInvoiceTotals([...new Set([...receipts.values()].map((r) => r.id))]);
-  const rateMemo = new Map<string, Promise<Array<{ pricePerM: Prisma.Decimal; currency: Currency }>>>();
+  const rateMemo = new Map<string, Promise<Array<{ pricePerM: Prisma.Decimal; currency: Currency; basis: string }>>>();
 
   for (const l of links) {
     const missing: ProfitMissingCode[] = [];
@@ -147,12 +147,13 @@ export async function computeWorkCosts(ctx: CostContext, links: RevenueLinkRow[]
         const key = `${rc.subcontractorId}:${rc.receivedAt.getTime()}`;
         if (!rateMemo.has(key)) rateMemo.set(key, prisma.finishingRate.findMany({
           where: { AND: [{ subcontractorId: rc.subcontractorId }, finishingRateValidAt(rc.receivedAt)] },
-          select: { pricePerM: true, currency: true },
+          select: { pricePerM: true, currency: true, basis: true },
         }));
         const rates = await rateMemo.get(key)!;
         // Firmanın o gün tek geçerli tarifesi varsa tahmin; yoksa (hiç ya da hangisi belirsiz) eksik.
         const fxRate = rates.length === 1 ? await fx(rates[0]!.currency, rc.receivedAt) : null;
-        if (rates.length !== 1) { subcontractTry = null; missing.push("DIS_FASON_TARIFESI"); }
+        // KG tarifesi metreyle çarpılamaz (sevk kilosu SY-E2'de) → tahmin yok, eksik (fail-closed).
+        if (rates.length !== 1 || rates[0]!.basis === "KG") { subcontractTry = null; missing.push("DIS_FASON_TARIFESI"); }
         else if (!fxRate) { subcontractTry = null; if (!missing.includes("FX_RATE_MISSING")) missing.push("FX_RATE_MISSING"); }
         else { subcontractTry = rates[0]!.pricePerM.mul(l.billedMeters).mul(fxRate); subcontractEstimated = true; }
       }

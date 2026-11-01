@@ -264,6 +264,10 @@ export const updateSchema = z.strictObject({
   // default 20). Yalnız ÖN-DOLUM: fatura formunun yeni satırı + mal kabulden
   // üretilen alış taslağı bu değerle açılır, satırda değiştirilebilir.
   financeDefaultVatRate: z.number().min(0).max(100).optional(),
+  // D4-V1k (B-1): satış taslağının genel tevkifatı (varsayılan kapalı); açıkken pay ≥ 1 servis kapısında (400).
+  financeWithholdingEnabled: z.boolean().optional(),
+  financeWithholdingNumerator: z.number().int({ message: "Tevkifat payı tam sayı olmalı" }).min(0).max(99).optional(),
+  financeWithholdingDenominator: z.number().int({ message: "Tevkifat paydası tam sayı olmalı" }).min(1).max(99).optional(),
   // n irsaliye → 1 fatura (2026-09-18): onayda fiş toleransı (default false = kontrol yok) + iki eşik (null = varsayılan 0).
   financeInvoiceMatchTolerance: z.boolean().optional(),
   financeInvoiceQtyTolerancePct: z.number().min(0).max(100).nullable().optional(),
@@ -301,6 +305,7 @@ export const updateSchema = z.strictObject({
   financeCariHoldReleaseBySamePerson: z.enum(["ALLOW", "DENY"], { message: "Cari kilidi açma kuralı ALLOW ya da DENY olmalı" }).optional(),
   financeCariHoldEmanetShipment: z.enum(["EXEMPT", "PROCESSED_HELD", "ALL_HELD"], { message: "Kilitli caride emanet sevki EXEMPT, PROCESSED_HELD ya da ALL_HELD olmalı" }).optional(),
   costPresentationCurrency: z.enum(["TRY", "USD", "EUR"], { message: "Maliyet sunum dövizi TRY, USD ya da EUR olmalı" }).optional(),
+  costFinishingKgBasis: z.enum(["NET_HAM", "IPLIK_TUKETIMI"], { message: "Terbiye kg tabanı NET_HAM ya da IPLIK_TUKETIMI olmalı" }).optional(),
   // D4-I2b (S12): risk limiti para birimi kipi — her para birimi ayrı (varsayılan) · TL'ye çevrilmiş toplam.
   financeRiskLimitCurrencyMode: z.enum(["PER_CURRENCY", "TRY_CONVERTED"], { message: "Risk limiti para birimi kipi PER_CURRENCY ya da TRY_CONVERTED olmalı" }).optional(),
   // D4-G2a: kârlılık kaynakları (`PROFIT_SUBCONTRACT_SOURCES` / `PROFIT_CONSUMABLE_PRICE_SOURCES` ile birebir).

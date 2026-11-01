@@ -23,6 +23,7 @@ import {
 } from "@/services/printedDocumentService";
 import { workOrderService, type FasonDispatchDoc, type DispatchDyeOverlay } from "./service";
 import { fasonNoteLabel } from "./fasonNote";
+import { FasonFinishingCheckLine } from "./FasonFinishingCheckLine";
 
 interface Props {
   dispatchId: string | null;
@@ -134,6 +135,7 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange, onBack }:
                 templateStale={currentDoc?.templateStale ?? false}
               />
               <PrintNoteField value={printNote} onChange={setPrintNote} />
+              <FasonFinishingCheckLine dispatchId={dispatchId} open={open} />
               {/* Fason talimatı editörü — yalnız güncel ACTIVE belgede, kilitli değilse.
                   Kaydet + Revize Et ile yeni versiyon donar; iframe o versiyonu gösterir. */}
               {!viewingOld && shown.status === "ACTIVE" && overlay && (

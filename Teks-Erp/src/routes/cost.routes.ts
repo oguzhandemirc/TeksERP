@@ -10,7 +10,7 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { matchesPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { requireMaliyetEnabled } from "../middlewares/module.middleware";
 import {
   activateDraft,
@@ -23,9 +23,10 @@ import {
 import { changeYarnCostPrice, listYarnCostPrices, revokeYarnCostPrice } from "../services/yarn-cost-price.service";
 import { changeFinishingRate, listFinishingRates, revokeFinishingRate } from "../services/finishing-rate.service";
 import { getCostStructure, putCostStructure } from "../services/cost-structure.service";
-import { changeMachineCostRate, createMachineCostRate, listMachineCostRates, revokeMachineCostRate } from "../services/machine-cost-rate.service";
+import { changeMachineCostRate, createMachineCostRate, listMachineCostOptions, listMachineCostRates, revokeMachineCostRate } from "../services/machine-cost-rate.service";
 import { changeConsumableNorm, createConsumableNorm, listConsumableNorms, revokeConsumableNorm } from "../services/consumable-norm.service";
 import { previewCost } from "../services/cost-calc.service";
+import { getDispatchFinishingCheck } from "../services/dispatch-finishing-check.service";
 import { suggestQuoteCurrency } from "../services/quote-currency.service";
 import {
   createStandardCostVersion,
@@ -72,7 +73,8 @@ const finishingRateSchema = z.object({
   code: z.string(),
   name: z.string(),
   subcontractorId: z.string().uuid("Geçersiz fason firma ID").nullable().optional(),
-  basis: z.enum(["RAW_M", "FINISHED_M"], { message: "Tarife bazı HAM ya da MAMUL metre olmalı" }),
+  // SY-E1: KG = boyahane kilo ücreti; `pricePerM` kolonu "tabanın birimi başına" okunur (veri sözleşmesi korunur).
+  basis: z.enum(["RAW_M", "FINISHED_M", "KG"], { message: "Tarife bazı HAM metre, MAMUL metre ya da KİLO olmalı" }),
   currency: currencyEnum,
   pricePerM: decimalInput,
   typicalShrinkPct: decimalInput.nullable().optional(),
@@ -357,6 +359,21 @@ router.get("/machine-rates", requirePermission("cost:read"), wrap(async (req, re
   res.status(200).json({ success: true, data });
 }));
 
+/**
+ * @openapi
+ * /api/cost/machine-options:
+ *   get:
+ *     tags: [Cost]
+ *     summary: Ücret ekranı için aktif makine seçenekleri (yalnız id/kod/ad; cost:read — station:read gerektirmez)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Liste }
+ *       403: { description: cost:read yok ya da maliyet modülü kapalı }
+ */
+router.get("/machine-options", requirePermission("cost:read"), wrap(async (_req, res) => {
+  res.status(200).json({ success: true, data: await listMachineCostOptions() });
+}));
+
 router.post("/machine-rates", requirePermission("cost:write"), wrap(async (req, res) => {
   const { machineId, ...values } = machineRateCreateSchema.parse(req.body ?? {});
   const r = await createMachineCostRate(machineId, values, actorOf(req));
@@ -510,6 +527,8 @@ const yarnBody = z
 const previewBody = z
   .object({
     itemId: z.string().uuid("Geçersiz ürün ID").optional(),
+    // SY-E1: varyant (iş emri şablonu) — tarife kodu varyanttaysa ürün yapısınınkini ezer.
+    recipeId: z.string().uuid("Geçersiz varyant ID").optional(),
     adHoc: z
       .object({
         warp: z.object({ endsCount: decimalInput, takeUpPct: decimalInput.optional(), yarn: yarnBody }).strict().nullable().optional(),
@@ -605,6 +624,26 @@ router.get("/items", requirePermission("cost:read"), wrap(async (req, res) => {
   const raw = req.query.girdiDegisti;
   const out = await listCostItems({ ...q, durum: statuses, girdiDegisti: raw === undefined ? undefined : q.girdiDegisti });
   res.status(200).json({ success: true, ...out });
+}));
+
+/**
+ * @openapi
+ * /api/cost/subcontractor-dispatches/{id}/finishing-check:
+ *   get:
+ *     tags: [Cost]
+ *     summary: Fason sevk kg kontrolü — beklenen boyahane tutarı (Σ sevk kg × aktif KG tarifesi), fatura varsa fark
+ *     description: Yalnız okuma (SY-E2). KG tarifesi çözülemezse `line` null + `reason` (0 tutar uydurulmaz). Fatura kısmı yalnız `finance:read` ∧ ön muhasebe açıkken dolar.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "{ line, reason }" }
+ *       404: { description: Sevk yok }
+ */
+router.get("/subcontractor-dispatches/:id/finishing-check", requirePermission("cost:read"), wrap(async (req, res) => {
+  const { id } = idParam.parse(req.params);
+  // Fatura kısmı finans kapılı: finance:read yoksa servis faturayı hiç okumaz (invoice null).
+  const canReadInvoices = matchesPermission(req.user?.permissions ?? [], "finance:read");
+  res.status(200).json({ success: true, data: await getDispatchFinishingCheck(id, { canReadInvoices }) });
 }));
 
 /**

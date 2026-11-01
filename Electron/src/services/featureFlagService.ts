@@ -261,6 +261,10 @@ export interface FeatureFlags {
    *  ÖN-DOLUM — fatura formunun yeni satırı ve mal kabulden üretilen alış
    *  taslağı bu değerle açılır; satırda değiştirilebilir. */
   financeDefaultVatRate: number;
+  /** D4-V1k: satış taslağında genel tevkifat (varsayılan kapalı) + oran pay/payda (pay 0 = girilmemiş; payda varsayılan 10). */
+  financeWithholdingEnabled: boolean;
+  financeWithholdingNumerator: number;
+  financeWithholdingDenominator: number;
   /** n irsaliye → 1 fatura (2026-09-18): onayda fiş toleransı (varsayılan kapalı = kontrol yok) + iki eşik (%; varsayılan 0). */
   financeInvoiceMatchTolerance: boolean;
   financeInvoiceQtyTolerancePct: number;
@@ -306,6 +310,8 @@ export interface FeatureFlags {
   financeCariHoldEmanetShipment: "EXEMPT" | "PROCESSED_HELD" | "ALL_HELD";
   /** SY-J1: maliyet sunum dövizi (varsayılan `TRY`). */
   costPresentationCurrency: "TRY" | "USD" | "EUR";
+  /** SY-E1: kg bazlı terbiye tarifesinin kg kaynağı (backend aynası; varsayılan `NET_HAM`). */
+  costFinishingKgBasis: "NET_HAM" | "IPLIK_TUKETIMI";
   /** D4-I2b (S12): risk limiti para birimi kipi — her para birimi ayrı (varsayılan) · o güne kadarki en son kurla TL toplamı. */
   financeRiskLimitCurrencyMode: "PER_CURRENCY" | "TRY_CONVERTED";
   /** D4-G2a: kârlılıkta dış fason maliyeti kaynağı (backend aynası; varsayılan `FATURA_ONCE`). */

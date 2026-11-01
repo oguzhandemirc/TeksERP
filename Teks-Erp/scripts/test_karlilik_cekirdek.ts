@@ -11,7 +11,7 @@
 //   §4 eksik norm → SARF_NORMU, kur yok → FX_RATE_MISSING, gelir satırı yok → GELIR_SATIRI, RECEIVED işin makbuzu
 //      çözülemez → DIS_FASON_MAKBUZU; değer ve katkı null (0 DEĞİL), özet katkısı null
 //   §5 ayarlar — SON_ALIS_FATURASI sarf fiyatını faturadan; FATURA_ONCE faturasız fasonda tarife "tahmini";
-//      YALNIZ_FATURA → DIS_FASON_FATURASI eksik
+//      YALNIZ_FATURA → DIS_FASON_FATURASI eksik; KG tabanlı tek tarife → DIS_FASON_TARIFESI eksik (SY-E1)
 //   §6 ayar yazımı — iki ayar getFeatureFlags'te varsayılanla; tanınmayan değer 400; geçerli değer yazılır
 //   §7 modül — maliyet KAPALI → null ve fatura/kur/fiyat tablolarına SIFIR sorgu; geçersiz ay 400 PROFIT_RANGE_INVALID
 //
@@ -322,6 +322,12 @@ async function main(): Promise<void> {
     const r9b = mine((await report("2025-04")).rows).find((r) => r.rollId === R9);
     check("§5c YALNIZ_FATURA → DIS_FASON_FATURASI eksik, dış fason ve katkı null",
       r9b?.missing.includes("DIS_FASON_FATURASI") === true && r9b.subcontractTry === null && r9b.contributionTry === null, JSON.stringify(r9b?.missing));
+    // SY-E1: KG tabanlı tarife metreyle çarpılmaz → tahmin yok, DIS_FASON_TARIFESI eksik (fail-closed).
+    await systemSettingService.setFeatureFlags({ costProfitSubcontractSource: "FATURA_ONCE" }, (await ensureTestAdmin()).id);
+    await prisma.finishingRate.update({ where: { id: fr.id }, data: { basis: "KG" } });
+    const r9c = mine((await report("2025-04")).rows).find((r) => r.rollId === R9);
+    check("§5d FATURA_ONCE + tek geçerli tarife KG tabanlı → DIS_FASON_TARIFESI eksik, dış fason null (kg fiyatı × metre DEĞİL)",
+      r9c?.missing.includes("DIS_FASON_TARIFESI") === true && r9c.subcontractTry === null && r9c.subcontractEstimated === false, `${JSON.stringify(r9c?.missing)} ${f2(r9c?.subcontractTry)}`);
 
     // ── §6 ayar yazımı ──
     await prisma.systemSetting.deleteMany({ where: { key: { in: AYARLAR.slice(4) } } });

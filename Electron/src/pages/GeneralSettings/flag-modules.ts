@@ -165,6 +165,9 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
 
   // --- ÖN MUHASEBE (cari · fatura · kasa · çek) ------------------------------
   financeDefaultVatRate: "financeEnabled",
+  financeWithholdingEnabled: "financeEnabled",
+  financeWithholdingNumerator: "financeEnabled",
+  financeWithholdingDenominator: "financeEnabled",
   // n irsaliye → 1 fatura (2026-09-18): fatura onayı tolerans kontrolü muhasebe modülünün davranış bayrağı + iki eşik.
   financeInvoiceMatchTolerance: "financeEnabled",
   financeInvoiceQtyTolerancePct: "financeEnabled",
@@ -187,6 +190,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   financeCariHoldReleaseBySamePerson: "financeEnabled",
   financeCariHoldEmanetShipment: "financeEnabled",
   costPresentationCurrency: "cekirdek", // SY-J1: `maliyetEnabled` gizlenebilir modül değil (HideableModule dışı)
+  costFinishingKgBasis: "cekirdek", // SY-E1: aynı gerekçe (maliyet gizlenebilir modül değil)
   financeRiskLimitCurrencyMode: "financeEnabled",
   // D4-G2a: kârlılık geliri faturadan okunur (maliyet ∧ finans); maliyet gizlenebilir modül değil → sahibi finans.
   costProfitSubcontractSource: "financeEnabled",
