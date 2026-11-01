@@ -2365,7 +2365,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         enumKey: "financeServiceBillingBrodeUnit",
         title: "Brode hangi birimle fiyatlansın",
         summary: "Brode işi metreyle mi, adetle mi, vuruşla mı faturalansın.",
-        desc: "Adet tabletteki brode okumasında girilir; Vuruş = adet × desen vuruşu. Adet ve Vuruş için "Kurşun makinesinde metre ölçülsün" ayarı açık olmalı (adet o okumayla girilir); adedi girilmemiş iş, dış (fason) brode ve okumasız işler faturaya girmez, uyarıda listelenir. Fiyat kartındaki satırın birimi bu seçimle aynı olmalı; değilse satır fiyatsız gelir ve uyarı görünür.",
+        desc: "Adet tabletteki brode okumasında girilir; Vuruş = adet × desen vuruşu. Adet ve Vuruş için «Kurşun makinesinde metre ölçülsün» ayarı açık olmalı (adet o okumayla girilir); adedi girilmemiş iş, dış (fason) brode ve okumasız işler faturaya girmez, uyarıda listelenir. Fiyat kartındaki satırın birimi bu seçimle aynı olmalı; değilse satır fiyatsız gelir ve uyarı görünür.",
         defaultValue: "METER",
         display: "radio",
         audience: ["Muhasebeci"],
