@@ -23,6 +23,8 @@ export interface BackupEncryptionSummary {
   localKey: boolean;
   problems: string[];
   warnings: string[];
+  /** Yalnız barındırılan (bulut VDS) sunucu gönderir: orada şifresiz yedek KRİTİKTİR. Eski sunucu göndermez. */
+  hostedRequired?: boolean;
 }
 
 export interface BackupRestoreTarget {
@@ -78,11 +80,23 @@ export const PLAIN_BACKUP_DOWNLOAD_TOAST =
  */
 export function plainBackupWarning(
   listing: Pick<BackupListing, "encryption" | "backupDir"> | undefined,
-): { title: string; body: string } | null {
+): { title: string; body: string; tone: "warning" | "danger" } | null {
   const enc = listing?.encryption;
   if (!enc || listing?.backupDir === null || enc.state === "acik") return null;
+  // Barındırılan sunucuda yedek canlı veriyle aynı diskte ve makine dışına yalnız şifreli dosya çekilir (K2).
+  if (enc.hostedRequired) {
+    return {
+      tone: "danger",
+      title: "Bulut sunucusunda yedekler ŞİFRESİZ — makine dışına çekilmiyor",
+      body:
+        "Yedekler yine alınıyor ama şifresiz; şifreli kopya olmadığı için sunucu dışındaki yedek sunucusuna da " +
+        "gitmiyor. Yedek anahtar dizinine alıcı anahtarlarını (etkili, müşteri) koyun." +
+        (enc.state === "gecersiz" ? ` Sorun: ${enc.problems[0] ?? "bilinmiyor"}` : ""),
+    };
+  }
   if (enc.state === "gecersiz") {
     return {
+      tone: "warning",
       title: "Yedek şifrelemesi çalışmıyor — yedekler şifresiz",
       body:
         "Şifreleme açılmak istenmiş ama anahtar dizini kullanılamıyor; yedekler düz alınıyor ve sunucu dışına kopyalanmıyor. " +
@@ -90,6 +104,7 @@ export function plainBackupWarning(
     };
   }
   return {
+    tone: "warning",
     title: "Yedekler şifresiz",
     body:
       "Yedek dosyaları düz alınıyor: içlerinde parola özetleri ve kimlik kayıtları var. Dosyayı ele geçiren biri bunları " +
