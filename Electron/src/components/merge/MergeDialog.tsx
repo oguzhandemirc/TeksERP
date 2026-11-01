@@ -5,20 +5,16 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Callout } from "@/components/ui/callout";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { matchesConfirmation } from "@/components/forms/TypeToConfirm";
 import { MergeConfirmGate } from "@/pages/System/Duplicates/MergeConfirmGate";
 import {
   MERGE_ENTITY_LABEL,
   mergeService,
   type MergeEntity,
+  type MergeFollowUp,
 } from "@/services/mergeService";
+import { MergeCariFollowUpDialog, MergeCariFollowUpNote } from "./MergeCariFollowUps";
 
 /**
  * BİRLEŞTİRME DİYALOĞU — TEK KAYNAK (2026-08-22).
@@ -62,6 +58,8 @@ export function MergeDialog({
   const [reason, setReason] = useState("");
   const [seenConflicts, setSeenConflicts] = useState(false);
   const [fieldPicks, setFieldPicks] = useState<Record<string, string>>({});
+  // Diyalog kapansa da yaşar: birleştirmeden sonra cari birleştirmeye yönlendirme (KEEP_ON_SOURCE).
+  const [followUps, setFollowUps] = useState<MergeFollowUp[]>([]);
 
   // Diyalog her açılışta SIFIRLANIR: önceki birleştirmenin yazılmış gerekçesi
   // ve onay metni bir sonrakine taşınırsa "yazarak onay" kapısı boşa düşer.
@@ -114,6 +112,7 @@ export function MergeDialog({
       }),
     onSuccess: (res) => {
       toast.success(res.message ?? `${res.data.mergedCount} kayıt birleştirildi.`);
+      setFollowUps(res.data.followUps ?? []);
       onOpenChange(false);
       void qc.invalidateQueries({ queryKey: ["duplicate-records"] });
       void qc.invalidateQueries({ queryKey: ["duplicate-candidates"] });
@@ -132,81 +131,83 @@ export function MergeDialog({
     !mergeMutation.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{MERGE_ENTITY_LABEL[entity]} kayıtlarını birleştir</DialogTitle>
-        </DialogHeader>
+    <>
+      {followUps.length > 0 && (
+        <MergeCariFollowUpDialog followUps={followUps} onClose={() => setFollowUps([])} />
+      )}
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{MERGE_ENTITY_LABEL[entity]} kayıtlarını birleştir</DialogTitle>
+          </DialogHeader>
 
-        <div className="space-y-4">
-          <div>
-            <h4 className="mb-2 text-sm font-medium">
-              Hangi kayıt KALSIN? (diğerleri buna birleşecek)
-            </h4>
-            {columns.length === 0 ? (
-              <Skeleton className="h-16 w-full" />
-            ) : (
-              <div className="space-y-1">
-                {columns.map((r) => (
-                  <label key={r.id} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="radio"
-                      name="survivor"
-                      checked={survivorId === r.id}
-                      onChange={() => {
-                        setSurvivorId(r.id);
-                        setTyped("");
-                        setFieldPicks({});
-                      }}
-                    />
-                    <code className="text-xs text-muted-foreground">{r.code ?? "—"}</code>
-                    <span className="min-w-0 truncate">{r.name}</span>
-                    {r.isSurvivor && (
-                      <span className="ml-auto flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400">
-                        <Users className="h-3 w-3" />
-                        kalacak
-                      </span>
-                    )}
-                  </label>
-                ))}
-              </div>
+          <div className="space-y-4">
+            <div>
+              <h4 className="mb-2 text-sm font-medium">Hangi kayıt KALSIN? (diğerleri buna birleşecek)</h4>
+              {columns.length === 0 ? (
+                <Skeleton className="h-16 w-full" />
+              ) : (
+                <div className="space-y-1">
+                  {columns.map((r) => (
+                    <label key={r.id} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="radio"
+                        name="survivor"
+                        checked={survivorId === r.id}
+                        onChange={() => {
+                          setSurvivorId(r.id);
+                          setTyped("");
+                          setFieldPicks({});
+                        }}
+                      />
+                      <code className="text-xs text-muted-foreground">{r.code ?? "—"}</code>
+                      <span className="min-w-0 truncate">{r.name}</span>
+                      {r.isSurvivor && (
+                        <span className="ml-auto flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400">
+                          <Users className="h-3 w-3" />
+                          kalacak
+                        </span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {extraActions}
+
+            {previewQuery.isLoading && <Skeleton className="h-40 w-full" />}
+            {previewQuery.isError && (
+              <Callout tone="danger" title="Önizleme alınamadı">
+                {(previewQuery.error as Error).message}
+              </Callout>
             )}
+            {preview && (
+              <MergeConfirmGate
+                preview={preview}
+                typed={typed}
+                onTypedChange={setTyped}
+                reason={reason}
+                onReasonChange={setReason}
+                seenConflicts={seenConflicts}
+                onSeenConflictsChange={setSeenConflicts}
+                fieldPicks={fieldPicks}
+                onFieldPickChange={(field, recordId) => setFieldPicks((p) => ({ ...p, [field]: recordId }))}
+              />
+            )}
+            {preview && <MergeCariFollowUpNote followUps={preview.followUps ?? []} />}
           </div>
 
-          {extraActions}
-
-          {previewQuery.isLoading && <Skeleton className="h-40 w-full" />}
-          {previewQuery.isError && (
-            <Callout tone="danger" title="Önizleme alınamadı">
-              {(previewQuery.error as Error).message}
-            </Callout>
-          )}
-          {preview && (
-            <MergeConfirmGate
-              preview={preview}
-              typed={typed}
-              onTypedChange={setTyped}
-              reason={reason}
-              onReasonChange={setReason}
-              seenConflicts={seenConflicts}
-              onSeenConflictsChange={setSeenConflicts}
-              fieldPicks={fieldPicks}
-              onFieldPickChange={(field, recordId) =>
-                setFieldPicks((p) => ({ ...p, [field]: recordId }))
-              }
-            />
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Vazgeç
-          </Button>
-          <Button variant="destructive" disabled={!canSubmit} onClick={() => mergeMutation.mutate()}>
-            {mergeMutation.isPending ? "Birleştiriliyor…" : "Birleştir"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Vazgeç
+            </Button>
+            <Button variant="destructive" disabled={!canSubmit} onClick={() => mergeMutation.mutate()}>
+              {mergeMutation.isPending ? "Birleştiriliyor…" : "Birleştir"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

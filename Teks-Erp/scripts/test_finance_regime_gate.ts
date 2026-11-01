@@ -161,6 +161,14 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "kapalı kurulumda `cari_balances` boştur, risk 0 döner, hiçbir sipariş kesilmez; router hiçbir ticaret tablosuna yazmaz.",
   },
   {
+    dosya: "routes/master-data-merge.routes.ts",
+    neden:
+      "MÜKERRER ANA VERİ birleştirmesi müşteri kartının çekirdek akışıdır → rejim kapısı KONULAMAZ (ön muhasebe kapalı fabrikada da kart " +
+      "birleşir). `cariAccount` izi tek daldan gelir (PR #417, 2026-11-01): `master-data-merge.service` → " +
+      "`helpers/merge-keep-on-source.helper` (`mergeFollowUps`) mezar taşında kalan hesabın bakiyesini panel takibi için SALT-OKUMA " +
+      "sorar; kapanış yazıcısı rejim kapılı cari birleştirme ucudur. Ön muhasebe kapalı kurulumda tablo boştur, takip listesi boş döner.",
+  },
+  {
     dosya: "routes/gelen-belge.routes.ts",
     neden:
       "GELEN BELGE (emanet mal kabulü) hizmet fabrikasının ana akışıdır → rejim kapısı KONULAMAZ. `cariAccount` izi tek daldan gelir " +
