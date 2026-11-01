@@ -12,6 +12,7 @@ import prisma from "../lib/prisma";
 import { ApiResponse } from "../types/api.types";
 import { NO_LIVE_MATERIAL_STATUSES } from "./batch.service";
 import { readEmanetEnabled } from "./system-setting.service";
+import { holdViewsByCustomer, NO_HOLD_VIEW } from "./helpers/cari-hold-badge.helper";
 
 /**
  * "İÇERİDE DEĞİL" kümesi — canlı malzemesi kalmamış top (K18 + SHIPPED + SCRAP; batch.service tek kaynağı) +
@@ -45,11 +46,13 @@ export interface ConsignedOwnerRow {
   /** İçeride ama üç kovanın dışında (adımsız fason/kartela vb.) — toplam eksiksiz kalsın diye. */
   other: ConsignedBucket;
   total: ConsignedBucket;
+  /** D4-I3: sahibin cari kilidi (rozet; sunucu metni) — eski istemci yok sayar. */
+  hold: typeof NO_HOLD_VIEW;
 }
 
 export interface ConsignedWorkSummary {
   rows: ConsignedOwnerRow[];
-  totals: Omit<ConsignedOwnerRow, "ownerCustomerId" | "ownerName">;
+  totals: Omit<ConsignedOwnerRow, "ownerCustomerId" | "ownerName" | "hold">;
 }
 
 const BUCKET_KEYS = ["waiting", "waitingSemi", "inProcess", "ready", "other"] as const;
@@ -134,6 +137,7 @@ export async function getConsignedWorkSummary(q: ConsignedWorkQuery = {}): Promi
         ready: emptyBucket(),
         other: emptyBucket(),
         total: emptyBucket(),
+        hold: NO_HOLD_VIEW,
       };
       byOwner.set(r.ownerCustomerId, row);
     }
@@ -147,6 +151,8 @@ export async function getConsignedWorkSummary(q: ConsignedWorkQuery = {}): Promi
     totals.total.count += n;
     totals.total.qty = addQty("*:total", r.qty);
   }
+  const holds = await holdViewsByCustomer([...byOwner.keys()]);
+  for (const [id, row] of byOwner) row.hold = holds.get(id) ?? NO_HOLD_VIEW;
   const list = [...byOwner.values()].sort((a, b) => b.total.qty - a.total.qty || a.ownerName.localeCompare(b.ownerName, "tr"));
   return { success: true, data: { rows: list, totals } };
 }

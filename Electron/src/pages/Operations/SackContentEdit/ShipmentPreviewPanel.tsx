@@ -1,4 +1,4 @@
-import { PackageCheck } from "lucide-react";
+import { Lock, PackageCheck } from "lucide-react";
 import { Callout } from "@/components/ui/callout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -25,7 +25,10 @@ export function ShipmentPreviewPanel({ preview, isLoading }: Props) {
   if (isLoading) return <Skeleton className="h-32 w-full" />;
   if (!preview) return <p className="py-4 text-center text-sm text-muted-foreground">Önizleme alınamadı.</p>;
 
-  const { totals, warnings, lines } = preview;
+  const { totals, lines, cariHold } = preview;
+  // D4-I3: cari kilidi sarı ŞERİTTE; aynı satır uyarı listesinde tekrar etmez (metin sunucudan, birebir eşleşme).
+  const holdText = cariHold ? (cariHold.warning ?? cariHold.message) : null;
+  const warnings = preview.warnings.filter((w) => w !== holdText);
 
   return (
     <div className="space-y-3">
@@ -43,6 +46,12 @@ export function ShipmentPreviewPanel({ preview, isLoading }: Props) {
           </span>
         )}
       </div>
+
+      {cariHold && holdText && (
+        <Callout tone="warning" icon={Lock} title={cariHold.exempt ? "Cari kilitli — bu sevk durdurulmaz" : "Cari kilitli — sevk durur"}>
+          {holdText}
+        </Callout>
+      )}
 
       {/* Uyarılar — BÜYÜK, renkli, ikonlu (kaçırılamaz) */}
       {warnings.length > 0 && (

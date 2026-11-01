@@ -13,10 +13,12 @@ import { CariServiceBillingTriggerField, type ServiceBillingTriggerChoice } from
 import { FINANCE_CURRENCIES, financeFieldsFromView, riskLimitError, termDaysError, type FinanceFormFields } from "./customerFinance";
 
 /** Üç kapı tek yerde: modül · okuma · yazma — dialog ve iki sayfa (payload) aynı cevabı okur. */
-export function useCustomerFinanceAccess(): { enabled: boolean; canRead: boolean; canWrite: boolean } {
+export function useCustomerFinanceAccess(): { enabled: boolean; canRead: boolean; canWrite: boolean; canSeeHold: boolean } {
   const enabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
   const { hasPermission } = useRoleAccess();
-  return { enabled, canRead: enabled && hasPermission("finance:read"), canWrite: enabled && hasPermission("finance:write") };
+  // D4-I3: Kilit sekmesi — okuma ucu `finance:read | finance:hold` (koşulsuz 403 sorgusu atılmaz).
+  const canSeeHold = enabled && (hasPermission("finance:read") || hasPermission("finance:hold"));
+  return { enabled, canRead: enabled && hasPermission("finance:read"), canWrite: enabled && hasPermission("finance:write"), canSeeHold };
 }
 
 interface Props {

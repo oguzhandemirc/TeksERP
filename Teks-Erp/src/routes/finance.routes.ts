@@ -99,6 +99,7 @@ const cariCreateSchema = z
  *       - { in: query, name: "filter[isCustomerRole]", schema: { type: string, enum: ["true", "false"] } }
  *       - { in: query, name: "filter[isSubcontractorRole]", schema: { type: string, enum: ["true", "false"] } }
  *       - { in: query, name: kind, schema: { type: string, enum: [CUSTOMER, SUBCONTRACTOR] }, description: "Eski istemci" }
+ *       - { in: query, name: "filter[held]", schema: { type: string, enum: ["true"] }, description: "D4-I3 — yalnız aktif kilidi olan hesaplar; satırda `hold` alanı her zaman döner" }
  *       - { in: query, name: "filter[id]", schema: { type: string }, description: "Hesap kimliği (CSV) — bildirim derin bağlantısı ?focus" }
  *     responses:
  *       200: { description: Liste }
@@ -122,6 +123,8 @@ router.get("/cari", requirePermission("finance:read"), async (req, res, next) =>
       // H2 (2026-08-14): "Gecikmiş" kolonu — bayrak verilmeyince servis ek
       // sorgu KOŞMAZ (bugünkü yol bayt-bayt; bekçi kaynak taramasıyla kilitli).
       withOverdue: q.withOverdue === "true",
+      // D4-I3: "Kilitli" süzgeci SUNUCUDA — liste ile `pagination.total` aynı where'den.
+      held: readHeldFilter(readFilterList(parseQueryParams(req).filters.held)),
     });
     res.json({ success: true, ...result });
   } catch (e) {
@@ -1033,3 +1036,10 @@ router.get("/shipments/:id/invoice-draft-lines", requirePermission("finance:read
 });
 
 export default router;
+
+// FAIL-CLOSED: tanınmayan `filter[held]` değeri 400 — yazım hatası sessizce "hepsi" listesine dönmesin.
+function readHeldFilter(values: string[]): boolean {
+  if (values.length === 0) return false;
+  if (values.length === 1 && values[0] === "true") return true;
+  throw AppError.badRequest("Kilit süzgeci yalnız 'true' olabilir.", { code: "INVALID_FILTER_VALUE" });
+}
