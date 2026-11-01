@@ -13,18 +13,23 @@
 //      satır = el hesabı; başka firmaya bağlı tarife → satır yok; bağlı ALIŞ faturası farkı;
 //      iptal faturası sayılmaz; bilinmeyen sevk 404; varyant (sipariş satırı reçetesi) DB yolunda yapıyı ezer;
 //      kısmi kabul → fark null; finance:read yok / ön muhasebe kapalı → fatura HİÇ okunmaz; iptal sevk → satır yok
+//   §5 #377 tarife SEVK TARİHİNDEKİ sürüm (fabrika günü sonu); tarihli geçmiş yoksa ilk sürüm (= eski sonuç);
+//      farklı dövizli fatura → kur çevrilmez, `currencyMismatch`; DB'de tarife sevkten sonra değişince eski fiyat
 // Koşum: DATABASE_URL=<test DB> npx tsx scripts/test_fason_kg_kontrol.ts
 // NEGATİF SONDA — 2026-11-01: `resolveFinishingRateCode` önceliği `structureCode ?? variantCode`
 //   olarak TERS çevrilince §2a ❌; `computeDispatchFinishingCheck`te NOT_KG_BASIS dalı silinince
 //   §1c ve §4a ❌ (metre tarifesi kg ile çarpıldı). İkisi de geri alındı.
 // NEGATİF SONDA — 2026-11-01 (bitirici): servisteki `opts.canReadInvoices &&` kaldırılınca §4f ❌; `readFinanceEnabled()`
 //   kaldırılınca §4g ❌; helper'da `&& !partial` kaldırılınca §3f/§4d ❌. Hepsi geri alındı.
+// NEGATİF SONDA — 2026-11-01 (SY-P2): `pickFinishingRateAtDispatch`te an = `new Date()` (aktif tarife) → §5a §5d §5i ❌;
+//   an = çıplak `dispatchedAt` (gün sonu yok) → §5c ❌; `!currencyMismatch &&` kaldırılınca §3b §5f ❌. Hepsi geri alındı.
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import {
   computeDispatchFinishingCheck,
   pickDispatchRateCode,
+  pickFinishingRateAtDispatch,
   type FinishingCheckInput,
   type FinishingCheckRate,
 } from "../src/services/helpers/dispatch-finishing-check.helper";
@@ -94,6 +99,28 @@ function bolum3(): void {
 
 const ALL = { canReadInvoices: true } as const;
 const FIN = SETTING_KEYS.FINANCE_ENABLED;
+function bolum5(): void {
+  const v1 = { id: "v1", createdAt: new Date("2026-10-01T09:00:00Z"), revokedAt: new Date("2026-10-10T14:00:00Z") };
+  const v2 = { id: "v2", createdAt: new Date("2026-10-10T14:00:00Z"), revokedAt: null };
+  const at = (iso: string) => pickFinishingRateAtDispatch([v2, v1], new Date(iso));
+  const a = at("2026-10-05T08:00:00Z");
+  check("§5a ⭐ sevk günü geçerli eski sürüm seçilir (aktif değil)", a?.rate.id === "v1" && a.asOf.day === "2026-10-05" && !a.asOf.fallback, JSON.stringify(a));
+  check("§5b değişiklikten sonraki sevk → yeni sürüm", at("2026-10-15T08:00:00Z")?.rate.id === "v2");
+  // 2026-10-09T22:30Z = İstanbul 10.10 01:30 → fabrika günü 10.10, gün sonunda v2 geçerli (UTC günü 09.10 olurdu → v1).
+  const b = at("2026-10-09T22:30:00Z");
+  check("§5c ⭐ gün fabrika diliminden; aynı gün sonradan girilen sürüm sayılır", b?.rate.id === "v2" && b.asOf.day === "2026-10-10", JSON.stringify(b));
+  const only = pickFinishingRateAtDispatch([v2], new Date("2026-10-01T08:00:00Z"));
+  check("§5d tarihli geçmiş yok (tek aktif, sevkten sonra girilmiş) → aktif tarife, fallback işaretli", only?.rate.id === "v2" && only.asOf.fallback === true, JSON.stringify(only));
+  check("§5e sürüm yok → null", pickFinishingRateAtDispatch([], new Date()) === null);
+  const inv = (currency: "USD" | "TRY") => ({ docNo: "F", status: "CONFIRMED" as const, currency, net: D("19") });
+  const tl = computeDispatchFinishingCheck(inp({ invoices: [inv("TRY")] })).line?.invoice;
+  check("§5f ⭐ farklı döviz → kur çevrilmez, fark null + currencyMismatch", tl?.difference === null && tl.currencyMismatch === true && tl.netAmount === "19.00", JSON.stringify(tl));
+  const usd = computeDispatchFinishingCheck(inp({ invoices: [inv("USD")] })).line?.invoice;
+  check("§5g aynı döviz → currencyMismatch false, fark 1,00", usd?.currencyMismatch === false && usd.difference === "1.00", JSON.stringify(usd));
+  const mixed = computeDispatchFinishingCheck(inp({ invoices: [inv("USD"), inv("TRY")] })).line?.invoice;
+  check("§5h karışık dövizli faturalar → currencyMismatch, toplanmaz", mixed?.currencyMismatch === true && mixed.netAmount === null && mixed.difference === null);
+}
+
 async function setFinance(on: boolean): Promise<void> {
   await prisma.systemSetting.upsert({ where: { key: FIN }, create: { key: FIN, value: on }, update: { value: on } });
 }
@@ -178,6 +205,14 @@ async function bolum4(): Promise<void> {
     await prisma.subcontractorReceiptItem.create({ data: { receiptId: rec.id, newRollId: await roll("4"), sourceDispatchItemId: di1 } });
     const d = await getDispatchFinishingCheck(disp.id, ALL);
     check("§4d2 tam kabul faturası: 19,40 − 18,00 = 1,40", d.line?.invoice?.difference === "1.40" && d.line.invoice.partial === false, JSON.stringify(d.line?.invoice));
+    // #377: tarife sevkten SONRA değişti → karşılaştırma sevk günündeki 0,90 ile kalır (aktif 1,20 DEĞİL).
+    const dayMs = 86_400_000;
+    await prisma.finishingRate.updateMany({ where: { code: kg }, data: { createdAt: new Date(Date.now() - 5 * dayMs) } });
+    await prisma.subcontractorDispatch.update({ where: { id: disp.id }, data: { dispatchedAt: new Date(Date.now() - 3 * dayMs) } });
+    await prisma.finishingRate.updateMany({ where: { code: kg, revokedAt: null }, data: { revokedAt: new Date() } });
+    await prisma.finishingRate.create({ data: { code: kg, name: `${f.tag} boya renkli`, basis: "KG", currency: "USD", pricePerM: D("1.2") } });
+    const old = await getDispatchFinishingCheck(disp.id, ALL);
+    check("§5i ⭐ DB: sevk tarihindeki tarife (0,90) → 18,00; fark 1,40", old.line?.expectedAmount === "18.00" && old.line.invoice?.difference === "1.40" && old.line.rateFallback === false, JSON.stringify(old.line));
     const noPerm = await getDispatchFinishingCheck(disp.id, { canReadInvoices: false });
     check("§4f ⭐ finance:read yok → fatura okunmaz (invoice null), satır kalır", noPerm.line?.expectedAmount === "18.00" && noPerm.line.invoice === null, JSON.stringify(noPerm.line?.invoice));
     await setFinance(false);
@@ -225,6 +260,7 @@ async function main(): Promise<void> {
   bolum1();
   bolum2();
   bolum3();
+  bolum5();
   assertGelistirmeVeritabani("test_fason_kg_kontrol");
   await bolum4();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

@@ -1,7 +1,7 @@
 // =============================================================================
 // FASON SEVK KG KONTROLÜ — okuyucu (SY-E2, tasarım §6.5)
 // =============================================================================
-// Sevkin ürününü/varyantını, aktif terbiye tarifesini, topların sevk kg'ını ve bu sevkin
+// Sevkin ürününü/varyantını, SEVK TARİHİNDEKİ terbiye tarifesini (`pickFinishingRateAtDispatch`), topların sevk kg'ını ve bu sevkin
 // toplarını kabul eden fason kabul(ler)ine bağlı ALIŞ faturalarını okur; hesap saf helper'da.
 // YALNIZ OKUMA: yazım, audit, kilit yok. Tarife çözümü `resolveFinishingRateCode` (maliyetle aynı öncelik).
 // Fatura okuması FİNANS kapılıdır: yalnız `finance:read` izni (route) ∧ ön muhasebe açık (`readFinanceEnabled`);
@@ -10,12 +10,12 @@
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { readFinanceEnabled } from "./system-setting.service";
-import { ACTIVE_FINISHING_RATE } from "./helpers/cost-price-validity.helper";
 import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
 import { resolveFinishingRateCode } from "./helpers/finishing-rate-code.helper";
 import {
   computeDispatchFinishingCheck,
   pickDispatchRateCode,
+  pickFinishingRateAtDispatch,
   type FinishingCheckInvoice,
   type FinishingCheckResult,
 } from "./helpers/dispatch-finishing-check.helper";
@@ -32,6 +32,7 @@ export async function getDispatchFinishingCheck(dispatchId: string, opts: Dispat
       id: true,
       subcontractorId: true,
       cancelledAt: true,
+      dispatchedAt: true,
       items: { where: { kind: "ROLL" }, select: { id: true, dispatchedWeight: true, roll: { select: { itemId: true } } } },
       workOrder: {
         select: {
@@ -46,12 +47,15 @@ export async function getDispatchFinishingCheck(dispatchId: string, opts: Dispat
 
   const rateCodes = await resolveRateCodes(d);
   const picked = pickDispatchRateCode(rateCodes);
-  const rate = picked && picked !== "AMBIGUOUS"
-    ? await prisma.finishingRate.findFirst({
-        where: { ...ACTIVE_FINISHING_RATE, code: picked },
-        select: { code: true, name: true, basis: true, currency: true, pricePerM: true, subcontractorId: true },
+  // Kodun TÜM sürümleri (damgalılar dahil); hangisinin geçerli olduğunu tek yardımcı seçer.
+  const versions = picked && picked !== "AMBIGUOUS"
+    ? await prisma.finishingRate.findMany({
+        where: { code: picked },
+        select: { id: true, createdAt: true, revokedAt: true, code: true, name: true, basis: true, currency: true, pricePerM: true, subcontractorId: true },
       })
-    : null;
+    : [];
+  const atDispatch = pickFinishingRateAtDispatch(versions, d.dispatchedAt);
+  const rate = atDispatch?.rate ?? null;
   const invoicesAllowed = rate?.basis === "KG" && opts.canReadInvoices && (await readFinanceEnabled());
   const { invoices, coversOther, coversWhole } = invoicesAllowed
     ? await readInvoices(d.id, d.items.map((i) => i.id))
@@ -62,6 +66,7 @@ export async function getDispatchFinishingCheck(dispatchId: string, opts: Dispat
     fabricWeights: d.items.map((i) => i.dispatchedWeight),
     rateCodes,
     rate,
+    rateAsOf: atDispatch?.asOf ?? null,
     invoices,
     invoicesCoverOtherDispatches: coversOther,
     invoicesCoverWholeDispatch: coversWhole,
