@@ -19,6 +19,8 @@ import { dehydrate } from '@tanstack/react-query';
 import { queryClient, PERSIST_BUSTER, PERSIST_STORAGE_KEY } from './queryClient';
 import { PERSIST_DEHYDRATE_OPTIONS, shouldPersistMutation } from './persistPolicy';
 import { jitteredBackoff } from './backoff';
+import { runStationLimited } from './stationLimiter';
+import type { TransientKind } from './transientHttp';
 import { resolveAuthToken } from '../services/api';
 import { isLicenseBlocked } from '../lib/license';
 import { useAuthStore } from '../store/authStore';
@@ -122,7 +124,7 @@ const withAuthGuard =
   <V, R>(fn: (vars: V) => Promise<R>) =>
   async (vars: V): Promise<R> => {
     if (!(await resolveAuthToken())) throw new NoAuthError();
-    return fn(vars);
+    return runStationLimited(() => fn(vars));
   };
 
 // Y12 fix: 401 retry edilmez — ilk 401 token'ı sildiğinden kalan denemeler de
@@ -138,8 +140,12 @@ const withAuthGuard =
 // beklemesidir, kalıcı düşürme değil (api.ts toast'ı zaten 'girişten sonra
 // gönderilir' diyor; sözü kod da tutsun). Token bellekte DURUYORKEN gelen 401
 // (kick/iptal) eski Y12 kuralıyla fail-fast kalır.
+// GEÇİCİ (Y4): vekil 5xx · 429 · backend 503 kaydı DÜŞÜRMEZ — süresiz bekler (ömür sınırı
+// persist maxAge'dir); vekil 5xx'te api.ts zaten çevrimdışına geçirir, retryer bağlantıyı bekler.
+type TransientError = { transient?: TransientKind; retryAfterMs?: number } | null;
 export const stationRetry = (failureCount: number, error: unknown): boolean => {
   if (isNoAuthError(error) || isLicenseBlocked(error)) return true;
+  if ((error as TransientError)?.transient) return true;
   const status = (error as { status?: number } | null)?.status;
   if (status === 401 && !useAuthStore.getState().token) return true;
   if (status && status >= 400 && status < 500) return false;
@@ -154,6 +160,10 @@ export const stationRetryDelay = (attempt: number, error: unknown): number => {
   if (isLicenseBlocked(error)) return LICENSE_RETRY_MS;
   const status = (error as { status?: number } | null)?.status;
   if (status === 401 && !useAuthStore.getState().token) return NO_AUTH_RETRY_MS;
+  const t = error as TransientError;
+  // Retry-After'dan ÖNCE denenmez; jitter yalnız ileri yönde (+%30) — tabletler aynı saniyede dönmesin.
+  if (t?.transient && t.retryAfterMs) return Math.round(t.retryAfterMs * (1 + Math.random() * 0.3));
+  if (t?.transient) return jitteredBackoff(attempt, 2000, 60_000);
   return jitteredBackoff(attempt);
 };
 

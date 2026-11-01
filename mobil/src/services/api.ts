@@ -17,6 +17,7 @@ import {
   revalidateServer,
 } from '../offline/serverReachability';
 import { createRequestHold } from '../lib/sunucu-kesintisi';
+import { classifyHttpFailure, parseRetryAfterMs } from '../offline/transientHttp';
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -88,6 +89,7 @@ export function isWorkSessionLost(err: unknown): boolean {
 // yetkili "neden giremiyorum" toast'ını gösterir; login ekranı kendi genel
 // "Giriş başarısız" toast'ını isLoginLocked ile bastırır (aksi hâlde iki toast).
 let lastLoginLockToastAt = 0;
+let lastBusyToastAt = 0;
 
 /** Hata "çok fazla yanlış giriş denemesi" (429 LOGIN_LOCKED) mi? Interceptor bu
  *  durumda ZATEN net toast gösterir → LoginScreen kendi genel "Giriş başarısız"
@@ -195,8 +197,23 @@ apiClient.interceptors.response.use(
     // B6 kanıtı: YANIT YOKSA sunucuya ulaşılamıyor demektir (ağ hatası / zaman
     // aşımı). Yanıt VARSA — 500 bile olsa — sunucu ayaktadır; tek bir hatalı uç
     // tüm kuyruğu durdurmamalı.
-    if (error.response) reportServerReachable();
+    // Y4 (barındırma): vekilin (nginx/Cloudflare) 502/52x'i ya da backend zarfı OLMAYAN 5xx
+    // backend'in cevabı değildir → ulaşılamaz sayılır (kuyruk bekler, createRequestHold çalışır).
+    const transient = classifyHttpFailure(status, error.response?.data);
+    if (error.response && transient !== 'gateway') reportServerReachable();
     else reportServerUnreachable();
+    if (transient === 'busy' || (transient === 'rate-limit' && error.response?.data?.details?.code !== 'LOGIN_LOCKED')) {
+      const now = Date.now();
+      if (now - lastBusyToastAt > 10_000) {
+        lastBusyToastAt = now;
+        Toast.show({
+          type: 'info',
+          text1: 'Sunucu şu an meşgul',
+          text2: 'Bekleyen kayıtlar kaybolmaz, otomatik yeniden gönderilir.',
+          visibilityTime: 5000,
+        });
+      }
+    }
     sampleFromConfig(
       error.config,
       status ?? (error.code === 'ECONNABORTED' ? 'TIMEOUT' : 'ERR'),
@@ -319,17 +336,27 @@ apiClient.interceptors.response.use(
         ? 'Sunucu yanıt vermedi (zaman aşımı) — ağ bağlantısını kontrol edin'
         : !error.response
           ? 'Sunucuya ulaşılamıyor — Wi-Fi/ağ bağlantısını kontrol edin'
-          : 'Sunucu hatası';
-    const message = error.response?.data?.message || fallback;
+          : transient === 'gateway'
+            ? 'Sunucuya şu an ulaşılamıyor (güncelleme ya da bağlantı kesintisi olabilir)'
+            : 'Sunucu hatası';
+    // Vekil gövdesi HTML'dir; `.message` yalnız backend zarfından okunur.
+    const message = (transient !== 'gateway' && error.response?.data?.message) || fallback;
     // Backend AppError.details payload'ı koru — frontend "ITEM_MISMATCH" gibi
     // özel handling için (modal göster, override ile retry) bu yapıya bakar.
     const details = error.response?.data?.details;
     const wrapped = new Error(message) as Error & {
       details?: Record<string, unknown>;
       status?: number;
+      transient?: typeof transient;
+      retryAfterMs?: number;
     };
-    if (details) wrapped.details = details;
+    if (details && transient !== 'gateway') wrapped.details = details;
     if (status) wrapped.status = status;
+    if (transient) {
+      wrapped.transient = transient;
+      const ra = parseRetryAfterMs(error.response?.headers?.['retry-after'], details);
+      if (ra) wrapped.retryAfterMs = ra;
+    }
     return Promise.reject(wrapped);
   }
 );
