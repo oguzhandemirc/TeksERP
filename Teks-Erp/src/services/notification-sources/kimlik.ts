@@ -13,7 +13,6 @@ import { visibleUsersFor } from "../helpers/notification-visibility.helper";
 import { registerRecipientResolver, type InboxReason, type RecipientResolver } from "../notification-dispatch.service";
 
 export const NEW_DEVICE_LOGIN_KIND = "kimlik.yeni-cihaz-girisi" as const;
-const ADMIN_PERMISSION = "admin:users";
 
 export interface NewDeviceLoginInput {
   userId: string;
@@ -32,7 +31,7 @@ export async function emitNewDeviceLogin(
 ): Promise<string | null> {
   return emitNotification(
     tx,
-    NEW_DEVICE_LOGIN_KIND,
+    "kimlik.yeni-cihaz-girisi",
     { type: "user", id: input.userId, key: input.userId },
     {
       kullaniciId: input.userId,
@@ -53,7 +52,7 @@ export const resolveNewDeviceLoginRecipients: RecipientResolver = async (ctx) =>
   const out: Array<{ userId: string; reason: InboxReason }> = [];
   for (const userId of visible) {
     const isSubject = userId === subject;
-    if (isSubject || matchesPermission(ctx.grants.get(userId) ?? [], ADMIN_PERMISSION)) out.push({ userId, reason: "IZIN" });
+    if (isSubject || matchesPermission(ctx.grants.get(userId) ?? [], "admin:users")) out.push({ userId, reason: "IZIN" });
   }
   return out;
 };
