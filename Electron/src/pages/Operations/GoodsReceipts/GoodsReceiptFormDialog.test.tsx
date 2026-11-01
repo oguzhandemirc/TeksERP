@@ -115,6 +115,7 @@ vi.mock("./service", () => ({
 vi.mock("./useItemTypes", () => ({
   useItemTypes: () => new Map<string, string>(),
   yarnIdsFrom: () => new Set<string>(),
+  consumableIdsFrom: () => new Set<string>(),
 }));
 vi.mock("@/hooks/useWarehouses", () => ({
   useMultiWarehouse: () => ({ multiWarehouse: false, warehouses: [] }),

@@ -12,6 +12,8 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { formatNumber } from "@/lib/format";
+import { flagSettingTrail } from "@/lib/flag-setting-path";
 import { listConsumableStock, type ConsumableStockRow } from "./service";
 import { ConsumableMovementsSheet } from "./ConsumableMovementsSheet";
 
@@ -29,7 +31,7 @@ export function ConsumableStockPage() {
       <PageBody>
         {data && !data.enabled && (
           <p className="mb-3 rounded-md border p-3 text-sm text-muted-foreground">
-            Sarf stoğu takibi kapalı — Ayarlar › Mal Kabul &amp; Alış › &quot;Sarf stoğu tut&quot; açılınca mal kabul sarf satırı alır ve üretim düşer.
+            Sarf stoğu takibi kapalı — {flagSettingTrail("consumableStockEnabled")} → &quot;Sarf stoğu tut&quot; açılınca mal kabul sarf satırı alır ve üretim düşer.
           </p>
         )}
         <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -65,7 +67,7 @@ export function ConsumableStockPage() {
                     </td>
                     <td className={`p-2 text-right tabular-nums ${r.negative ? "text-amber-600" : ""}`}>
                       {r.negative && <AlertTriangle className="mr-1 inline h-4 w-4" aria-label="Eksi bakiye — mal kabul girişini kontrol edin" />}
-                      {r.balance} {r.unit}
+                      {formatNumber(r.balance, 3)} {r.unit}
                     </td>
                     <td className="p-2 text-right">
                       <Button size="sm" variant="ghost" onClick={() => setOpen(r)}>Hareketler</Button>

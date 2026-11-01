@@ -148,10 +148,11 @@ export function GoodsReceiptsPage() {
                         İptal rozetli satırdır (backend listReceipts yorumu). */}
                       <td className="p-3 text-right tabular-nums">
                         {[
-                          ...(r._count.rolls > 0 || (r._count.yarnMovements ?? 0) === 0
+                          ...(r._count.rolls > 0 || (r._count.yarnMovements ?? 0) + (r._count.consumableMovements ?? 0) === 0
                             ? [`${r._count.rolls} top`]
                             : []),
                           ...((r._count.yarnMovements ?? 0) > 0 ? [`${r._count.yarnMovements} iplik`] : []),
+                          ...((r._count.consumableMovements ?? 0) > 0 ? [`${r._count.consumableMovements} sarf`] : []),
                         ].join(" + ")}
                       </td>
                       <td className="p-3">

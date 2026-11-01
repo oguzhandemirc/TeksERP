@@ -24,7 +24,7 @@ export interface GoodsReceiptListRow {
   rawStockEntry?: boolean;
   /** `yarnMovements` Sınıf 5 ile geldi (2026-08-14) — eski backend'e karşı
    *  opsiyonel okunur (`?? 0`), yoksa liste kumaş sayacına düşer. */
-  _count: { rolls: number; yarnMovements?: number };
+  _count: { rolls: number; yarnMovements?: number; consumableMovements?: number };
 }
 
 export interface GoodsReceiptLineInput {
@@ -135,7 +135,7 @@ export interface GoodsReceiptDetail {
    *  Eski backend'de alan yoktur → `?? []` ile okunur. */
   lines?: ReceiptDetailLine[];
   /** İplik alanları Sınıf 5 ile geldi — eski backend'e karşı opsiyonel. */
-  totals: { rollCount: number; totalQty: number; yarnLineCount?: number; totalYarnKg?: number };
+  totals: { rollCount: number; totalQty: number; yarnLineCount?: number; totalYarnKg?: number; /** Sarf defter satırı (ters kayıt dahil) — eski backend'de yok. */ consumableLineCount?: number };
   /** Atlanan satırlar — SEBEBİYLE döner (sessiz yutma yok). */
   failed?: Array<{ index: number; itemId: string; reason: string }>;
   /** Bağlı alış siparişinin başlığı — siparişsiz fişte `null`/yok (D3). */

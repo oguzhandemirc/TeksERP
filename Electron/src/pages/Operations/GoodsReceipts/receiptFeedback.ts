@@ -45,6 +45,8 @@ export interface ReceiptOutcome {
   rollCount: number;
   /** Yanıttaki iplik satırı sayısı (`totals.yarnLineCount`). */
   yarnLineCount: number;
+  /** Yanıttaki sarf defter satırı sayısı (`totals.consumableLineCount`; eski backend → 0). */
+  consumableLineCount?: number;
   /** Fişteki kumaş satırlarının SINIFLARI (tekil; EK 7) — hedef sekme(ler) bundan çözülür. */
   lineClasses: readonly ReceiptLineClass[];
   /**
@@ -84,6 +86,9 @@ export function receiptSuccessText(o: ReceiptOutcome): string {
   }
   if (o.yarnLineCount > 0) {
     parts.push(`${o.yarnLineCount} iplik satırı İplik Stoku'na işlendi.`);
+  }
+  if ((o.consumableLineCount ?? 0) > 0) {
+    parts.push(`${o.consumableLineCount} sarf satırı Sarf Stoğu'na işlendi.`);
   }
   return parts.length === 0 ? head : `${head} ${parts.join(" ")}`;
 }

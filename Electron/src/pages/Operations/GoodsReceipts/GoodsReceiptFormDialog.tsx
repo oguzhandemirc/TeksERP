@@ -20,7 +20,7 @@ import {
 } from "./ReceiptLineRows";
 import { ReceiptImportButton } from "./ReceiptImportButton";
 import { useAttemptToken } from "@/lib/attemptToken";
-import { useItemTypes, yarnIdsFrom } from "./useItemTypes";
+import { consumableIdsFrom, useItemTypes, yarnIdsFrom } from "./useItemTypes";
 // TİCARET (D3) — alış siparişi bağı. Bölüm görünürlük kararını KENDİ verir
 // (`showPurchaseOrderFields`) ve fabrikada tek bayt çizmez; burada bir `&&`
 // zinciri YOK, çünkü zincir bir gün ters çevrilirse hiçbir test kırılmazdı.
@@ -49,7 +49,10 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
   // ⚠️ Başarı cümlesindeki SEKME ADI rejime bağlı ("Bitmiş Depo" ↔ "Depo") ve
   // bu ekran tam da adların değiştiği kurulumda yaşıyor. Bayrak yüklenmemişse
   // `false` = fabrika adlandırması (bugünkü davranış).
-  const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
+  const flags = useFeatureFlags().data?.data;
+  const financeEnabled = flags?.financeEnabled ?? false;
+  // Sarf stoğu (#401) — kapalı/yüklenmemiş = bugünkü form (sarf seçilemez).
+  const consumableEnabled = flags?.consumableStockEnabled ?? false;
 
   const [warehouseId, setWarehouseId] = useState<string>("");
   // C4 — tedarikçi İKİ kaynaktan gelebilir (cari kart / fason firma); seçim
@@ -75,9 +78,11 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
   // maliyet satır sayısıyla sınırlı ve önemsiz).
   const itemTypes = useItemTypes(lines.map((l) => l.itemId));
   const yarnIds = yarnIdsFrom(itemTypes);
-  const totals = receiptTotals(lines, yarnIds);
-  // İplik-only fiş MEŞRU — "top yok" diye kilitlemek 500 kg ipliği girilemez yapardı.
-  const valid = Boolean(effectiveWarehouseId) && (totals.rolls > 0 || totals.yarnLines > 0);
+  // Ayar kapalıyken boş küme: form bugünkü davranışla bayt-aynı kalır (sarf kumaş gibi gider, backend 400).
+  const consumableIds = consumableEnabled ? consumableIdsFrom(itemTypes) : new Set<string>();
+  const totals = receiptTotals(lines, yarnIds, consumableIds);
+  // İplik-only / sarf-only fiş MEŞRU — "top yok" diye kilitlemek 500 kg ipliği girilemez yapardı.
+  const valid = Boolean(effectiveWarehouseId) && (totals.rolls > 0 || totals.yarnLines > 0 || totals.consumableLines > 0);
   // C8: doğrulama sınıfı hata SATIRDA — yerel (bayrak biliniyorsa sunucuya gitmeden) + sunucu 400 `details.lines` (aynı alan).
   const lotRequired = useDevereLotRequired();
   const [serverIssues, setServerIssues] = useState<ReadonlyMap<string, string>>(new Map());
@@ -91,6 +96,7 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
     [
       totals.rolls > 0 ? `${totals.rolls} top` : null,
       totals.yarnLines > 0 ? `${totals.yarnLines} iplik` : null,
+      totals.consumableLines > 0 ? `${totals.consumableLines} sarf` : null,
     ]
       .filter(Boolean)
       .join(" + ") || "0 top";
@@ -112,13 +118,13 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
         clientToken: attempt.token(),
         // Servis, değer yoksa anahtarı gövdeye HİÇ koymaz (bkz. service.ts).
         purchaseOrderId,
-        lines: expandLines(lines, yarnIds, attempt.keyed),
+        lines: expandLines(lines, yarnIds, attempt.keyed, consumableIds),
       }),
     onError: (error) => {
       attempt.onFailure(error);
       // C8: sunucu ön-uçuşu → satıra bağla, modal AÇIK kalır, toast yok. Başka hata → mevcut yol (interceptor toast'ı).
       const issues = receiptLinesInvalidFrom(error);
-      if (issues) setServerIssues(serverLineIssues(issues, expandLineKeys(lines)));
+      if (issues) setServerIssues(serverLineIssues(issues, expandLineKeys(lines, consumableIds)));
     },
     onSuccess: (res) => {
       attempt.onSuccess();
@@ -135,7 +141,8 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
             receiptNo: res.data.receiptNo,
             rollCount: res.data.totals?.rollCount ?? 0,
             yarnLineCount: res.data.totals?.yarnLineCount ?? 0,
-            lineClasses: lines.filter((l) => l.itemId && lineKind(l, yarnIds) === "FABRIC").map((l) => l.lineClass ?? "FINISHED"),
+            consumableLineCount: res.data.totals?.consumableLineCount ?? 0,
+            lineClasses: lines.filter((l) => l.itemId && lineKind(l, yarnIds, consumableIds) === "FABRIC").map((l) => l.lineClass ?? "FINISHED"),
             financeEnabled,
           }),
         );
@@ -254,7 +261,7 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
               kalemleri kumaş sayar: iplik satırı renk/en/kat sorar, backend
               400 verir ve "kg" rozeti hiç çizilmez (sözleşme ReceiptLineRows
               Props yorumunda). */}
-          <ReceiptLineRows lines={lines} onChange={setLinesAndClear} yarnItemIds={yarnIds} lineIssues={lineIssues} />
+          <ReceiptLineRows lines={lines} onChange={setLinesAndClear} yarnItemIds={yarnIds} lineIssues={lineIssues} consumableItemIds={consumableIds} consumableEnabled={consumableEnabled} />
 
           {/* Satır ekleme düğmeleri grupların kendisinde (EK 5) — burada yalnız özet. */}
           <div className="flex items-center justify-end">
@@ -271,6 +278,7 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
                   <b className="text-foreground">{totals.yarnKg.toLocaleString("tr-TR")}</b> kg iplik
                 </>
               )}
+              {totals.consumableLines > 0 && <>{" + "}<b className="text-foreground">{totals.consumableLines}</b> sarf satırı</>}
               {totals.amount > 0 && (
                 <>
                   {" · "}
