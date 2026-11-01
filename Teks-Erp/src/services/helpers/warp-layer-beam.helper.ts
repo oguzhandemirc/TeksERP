@@ -23,6 +23,15 @@ export const isSharedBeamLayer = (mode: string): boolean => mode === "SHARED_BEA
 export const layerHasOwnBeam = (mode: string): boolean => mode === "SEPARATE_BEAM";
 
 /**
+ * Ek katmanın çözgü firesi (2026-11-01 kullanıcı kararı, #355): SEPARATE_BEAM katmanı ayrı
+ * leventte hazırlandığı için firesi KENDİ çözgü kartından; kartta fire yoksa ya da kip
+ * SHARED_BEAM/CREEL ise zemin zinciri AYNEN (bayt-aynı). Maliyet ve iplik ihtiyacı yalnız buradan.
+ */
+export function layerOwnCardWastePct(beamMode: string, cardWastePct: Prisma.Decimal | null): Prisma.Decimal | null {
+  return layerHasOwnBeam(beamMode) ? cardWastePct : null;
+}
+
+/**
  * Zemin leventinin ETKİN take-up'ı: zemin + SHARED_BEAM gruplarının en büyüğü (en hızlı tükenen
  * grup leventin kalanını belirler). Ortak grup yoksa zemin değeri AYNEN döner (bayt-aynı).
  * Bilinmeyen (null) grup yok sayılır; hepsi null ise null.
