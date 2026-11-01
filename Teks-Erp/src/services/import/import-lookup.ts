@@ -11,6 +11,7 @@
 // Sorgular satır başına değil, İSTEK başına toplu koşar (tüm kodlar toplanır →
 // tek `findMany`) — 5.000 satırlık bir dosyada N+1 sorgu, isteği dakikalara taşır.
 
+import type { ItemType } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { foldNameForCompare } from "../helpers/name-normalize.helper";
 import type { ImportContext, ImportFixHint, LookupHit } from "./import.types";
@@ -52,6 +53,17 @@ export const LOOKUP_SOURCES: Record<string, LookupSource> = {
 };
 
 /**
+ * `item` tek tablodur ama kullanıcı için iplik ≠ kumaş: çağıran beklediği türü verirse mesaj o türün
+ * adını taşır ("… ile eşleşen iplik bulunamadı"); vermezse beyandaki etiket ("kumaş") kalır.
+ */
+export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
+  YARN: "iplik",
+  FABRIC: "kumaş",
+  CONSUMABLE: "sarf malzemesi",
+  SERVICE: "hizmet kalemi",
+};
+
+/**
  * Çözümleme hatası — düz string DEĞİL, çünkü "bulunamadı" ile "belirsiz" ve
  * "pasif" arasındaki fark panelde EYLEM farkı yaratıyor (bkz. ImportFixHint).
  * Tipi değiştirmek bilinçli: `error: string` kalsaydı 18 çağrı noktasının 17'si
@@ -76,10 +88,12 @@ export async function resolveReference(
   entity: string,
   rawValue: string,
   ctx: ImportContext,
-  by: "code" | "name" = "code",
+  opts: { by?: "code" | "name"; itemType?: ItemType } = {},
 ): Promise<ResolveOutcome> {
-  const src = LOOKUP_SOURCES[entity];
-  if (!src) return { error: { message: `Bilinmeyen referans türü: ${entity}` } };
+  const by = opts.by ?? "code";
+  const base = LOOKUP_SOURCES[entity];
+  if (!base) return { error: { message: `Bilinmeyen referans türü: ${entity}` } };
+  const src = entity === "item" && opts.itemType ? { ...base, label: ITEM_TYPE_LABELS[opts.itemType] } : base;
   const value = rawValue.trim();
   if (!value) return {};
 

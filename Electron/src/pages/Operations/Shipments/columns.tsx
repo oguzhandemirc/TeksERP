@@ -3,7 +3,7 @@ import { StatusBadge } from "@/components/operations/StatusBadge";
 import { ReturnsBadge } from "@/components/operations/ReturnsBadge";
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
-import { safeFormat, formatNumber } from "@/lib/format";
+import { safeFormat, formatNumber, formatFixed } from "@/lib/format";
 import { shipmentStatusLabels, shipmentStatusTones, type ShipmentListItem } from "./types";
 import { EIrsaliyeStatusBadge } from "./eirsaliye/EIrsaliyeStatusBadge";
 
@@ -96,7 +96,7 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
       const s = row.original;
       return (
         <span className="whitespace-nowrap text-xs tabular-nums">
-          {formatNumber(s.totalMeters, 0)} m
+          {formatFixed(s.totalMeters, 2)} m
           {s.totalKg > 0 && (
             <span className="text-muted-foreground"> · {formatNumber(s.totalKg, 1)} kg</span>
           )}

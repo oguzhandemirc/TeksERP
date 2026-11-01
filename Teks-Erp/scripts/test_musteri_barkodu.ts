@@ -311,6 +311,10 @@ async function main(): Promise<void> {
     const onCode = await inventory.findRollByBarcode(CODE.toLowerCase());
     const onData = onCode.data as unknown as { id: string; matchedBy?: string; customerCode?: string };
     check("§3 ⭐ ON findRollByBarcode müşteri koduyla topu bulur", onCode.success && onData.id === rA1.id && onData.matchedBy === "CUSTOMER_CODE" && onData.customerCode === CODE);
+    // Top Detayı künyesi: findRollById aktif kodu taşır, kodsuz topta null (PR #408).
+    const byIdA = (await inventory.findRollById(rA1.id)).data as unknown as { customerCode?: string | null };
+    const byIdB = (await inventory.findRollById(rB1.id)).data as unknown as { customerCode?: string | null };
+    check("§3 findRollById customerCode: kodlu topta kod, kodsuz topta null", byIdA.customerCode === CODE && byIdB.customerCode === null, `${byIdA.customerCode} / ${byIdB.customerCode}`);
     const onSack = await shipping.scanIntoSack({ sackId: sackOff.id, barcode: CODE }, actor);
     const onSackData = onSack.data as { rollId?: string; matchedBy?: string };
     check("§3 ⭐ ON scanIntoSack müşteri koduyla topu çuvala ekler", onSackData.rollId === rA1.id && onSackData.matchedBy === "CUSTOMER_CODE");

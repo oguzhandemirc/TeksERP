@@ -12,6 +12,7 @@
 // Koşum: DATABASE_URL=<test DB> npx tsx scripts/test_seyitoglu_ayar_paketi.ts
 // NEGATİF SONDA — 2026-10-31: kuru koşu dalına `systemSetting.updateMany` + rapordan "ayar sonraki
 // dilimde" silindi + vardiya SKIP dalı kapatıldı → 14/4, §1c · §2c · §2e · §3c kırmızı (taban 18/0); cp ile geri alındı.
+// SY-F3K §2g: paketten `kk1.weightEntryEnabled` satırı silinince §2g ❌ (3/4); geri alındı.
 // =============================================================================
 import { spawnSync } from "node:child_process";
 import * as path from "node:path";
@@ -124,6 +125,15 @@ async function main(): Promise<void> {
     reported.length === absent.length,
     `${reported.length}/${absent.length} (${absent.map((p) => p.anahtar).join(", ") || "hepsi kodda"})`,
   );
+  // SY-F3K (sunum provası 2026-11-01): KK1 doğuşu + levent bağı + otomatik tüketim + KK1 kg girişi pakette, kodda VAR.
+  const provaKeys: Array<[string, unknown]> = [
+    ["dokuma.rollBirth", "KK1_LABEL_OR_ORDER"],
+    ["devere.mountTracking", true],
+    ["devere.autoConsume", true],
+    ["kk1.weightEntryEnabled", true],
+  ];
+  const provaListed = provaKeys.filter(([k, v]) => known.has(k) && dry.out.split("\n").some((l) => !l.includes("ANAHTAR_YOK") && l.includes(`${k}:`) && l.endsWith(`→ ${JSON.stringify(v)}`)));
+  check("§2g kuru koşu KK1 doğuşu + devere bağı/tüketimi + KK1 kg girişini hedef değerle listeliyor", provaListed.length === provaKeys.length, `${provaListed.length}/${provaKeys.length}`);
   const setupListed = [...SEYITOGLU_STOP_REASONS.map((r) => r.label), ...SEYITOGLU_SHIFTS.map((s) => s.name), "Dokuma Salonu"].filter(
     (l) => dry.out.includes(l),
   );
