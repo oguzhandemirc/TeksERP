@@ -64,6 +64,7 @@ export function ConsumableNormDialog({ onClose, current }: { onClose: () => void
             <span className="text-muted-foreground">Metre başına miktar{consumable?.unit ? ` (${consumable.unit}/m)` : ""}</span>
             <Input aria-label="Metre başına miktar" className="mt-1 text-right tabular-nums" inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} />
           </label>
+          <ZeroNormHint />
           {current && <p className="text-xs text-muted-foreground">Şu anki: {decToInput(current.qtyPerM)} {current.unit}/m</p>}
           <label>
             <span className="text-muted-foreground">Not</span>
@@ -92,5 +93,14 @@ export function ConsumableNormDialog({ onClose, current }: { onClose: () => void
         }}
       />
     </Dialog>
+  );
+}
+
+// Sıfır norm açık beyandır; normsuz hizmetle karışmasın diye formda söylenir.
+function ZeroNormHint() {
+  return (
+    <p className="text-xs text-muted-foreground">
+      0 girerseniz "bu hizmet sarf kullanmaz" beyanı olur (ör. Tambur): kârlılıkta sarf maliyeti 0 sayılır. Hiç norm girilmeyen hizmet "eksik" görünür.
+    </p>
   );
 }

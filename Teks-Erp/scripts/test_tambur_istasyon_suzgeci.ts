@@ -74,14 +74,14 @@ async function makeWorkOrder(label: string, stationIds: string[]) {
   return { woId: wo.id, steps };
 }
 
-async function makeRoll(itemId: string, stepId: string | null) {
+async function makeRoll(itemId: string, stepId: string | null, qty = 100) {
   const r = await prisma.roll.create({
     data: {
       barcode: null,
       itemId,
       width: 150,
-      initialQty: 100,
-      currentQty: 100,
+      initialQty: qty,
+      currentQty: qty,
       status: RollStatus.IN_PRODUCTION,
       entrySource: RollEntrySource.SUBCONTRACTOR_RETURN,
       currentStepId: stepId,
@@ -190,6 +190,13 @@ async function main() {
   check("§4f çoklu id sessizce düşmez → 400", multi.status === 400, `status=${multi.status}`);
   const nf = await viaController("listOpenCards", { stationId: unknownId });
   check("§4g controller bilinmeyen id → 404", nf.status === 404, `status=${nf.status}`);
+
+  // §5 açık kart toplam metresi Decimal'den toplanır (Number toplamı 0.1+0.2 = 0.30000000000000004 artığı bırakır).
+  const c = await makeWorkOrder("C", [kursun, t1]);
+  await makeRoll(item.id, c.steps[1]!, 0.1);
+  await makeRoll(item.id, c.steps[1]!, 0.2);
+  const cardC = (await tambur.listOpenCards(t1)).data!.find((x) => x.stepId === c.steps[1]);
+  check("§5a open-cards totalCurrentQty kayan nokta artığı taşımaz (0.1 + 0.2 = 0.3)", cardC?.totalCurrentQty === 0.3, `toplam=${cardC?.totalCurrentQty}`);
 }
 
 async function cleanup() {
