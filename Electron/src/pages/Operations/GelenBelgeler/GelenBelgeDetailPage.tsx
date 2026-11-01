@@ -19,6 +19,7 @@ import { CellReviewDialog } from "./CellReviewDialog";
 import { ApproveDialog } from "./ApproveDialog";
 import { ScanReadBanner } from "./ScanReadBanner";
 import { AddPagesAction } from "./AddPagesAction";
+import { DeleteDraftNoteAction } from "./DeleteDraftNoteAction";
 import { buildReviewQueue, lineRect } from "./review-queue";
 import { isApprovable, isEditable, isWorkOrderOpenable, NOTE_STATUS_LABEL, NOTE_STATUS_VARIANT, SOURCE_LABEL } from "./noteStatus";
 import { useNoteDetail } from "./useNoteDetail";
@@ -65,6 +66,12 @@ function DetailActions({ note, reviewCount, addPages, onReview, onApprove }: Det
             {TERIM.terbiyeIsEmri.tekil} aç
           </Button>
           {workOrderOpen && <WorkOrderFromNoteDialog noteId={note.id} open onOpenChange={setWorkOrderOpen} />}
+        </PermissionGate>
+      )}
+      {/* Taslak silme: yalnız DRAFT (bileşen kendisi de süzer); backend aynı izin + DRAFT claim'i. */}
+      {note.status === "DRAFT" && (
+        <PermissionGate permission="gelen-belge:write">
+          <DeleteDraftNoteAction note={note} listPath={LIST_PATH} />
         </PermissionGate>
       )}
     </div>
