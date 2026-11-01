@@ -44,7 +44,7 @@ while [ $# -gt 0 ]; do
     *) echo "tanınmayan argüman: $1" >&2; exit 2 ;;
   esac
 done
-[ -n "$KAYNAK" ] && [ -n "$HEDEF" ] || { echo "--kaynak ve --hedef zorunlu" >&2; exit 2; }
+if [ -z "$KAYNAK" ] || [ -z "$HEDEF" ]; then echo "--kaynak ve --hedef zorunlu" >&2; exit 2; fi
 [ "$HEDEF" != "/" ] || { echo "hedef / olamaz" >&2; exit 2; }
 command -v rsync >/dev/null 2>&1 || { echo "rsync yok" >&2; exit 2; }
 mkdir -p "$HEDEF/karantina" || exit 2
@@ -55,7 +55,7 @@ KILIT="$HEDEF/.cekim.kilit"
 if ! mkdir "$KILIT" 2>/dev/null; then log "HATA başka çekim sürüyor ($KILIT)"; exit 5; fi
 trap 'rmdir "$KILIT" 2>/dev/null' EXIT
 
-AD_DESENI='^[a-z0-9_]+_[0-9]{8}_[0-9]{6}\.dump\.tkenc$'
+AD_DESENI='^tekserp[a-z0-9_]*_[0-9]{8}_[0-9]{6}\.dump\.tkenc$'
 SIHIR="544b53454e430001"
 sihirli() { [ "$(head -c 8 "$1" 2>/dev/null | od -An -tx1 | tr -d ' \n')" = "$SIHIR" ]; }
 
@@ -86,7 +86,7 @@ fi
 # Gelen dosyaları süz: ad deseni ve sihirli bayt tutmayan karantinaya (silinmez — inceleme için).
 YENI=0
 while read -r ad; do
-  [ -n "$ad" ] && [ -f "$HEDEF/$ad" ] || continue
+  if [ -z "$ad" ] || [ ! -f "$HEDEF/$ad" ]; then continue; fi
   if printf '%s\n' "$ad" | grep -Eq "$AD_DESENI" && sihirli "$HEDEF/$ad"; then chmod 0400 "$HEDEF/$ad"; YENI=$((YENI + 1))
   else mv -f "$HEDEF/$ad" "$HEDEF/karantina/" && log "UYARI karantina: $ad (ad/sihirli bayt tutmadı)"; fi
 done < <(printf '%s\n' "$CIKTI" | grep -E '\.dump\.tkenc$')

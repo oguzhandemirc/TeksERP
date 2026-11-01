@@ -60,7 +60,8 @@ sudo -u yedekcek ssh -i ~yedekcek/.ssh/cek_<musteri> -p <port> tekserp-cek@<must
 sudo install -d -m 0700 -o yedekcek /srv/yedek-cekilen/<musteri>
 sudo install -m 0755 deploy/bulut/yedek-cek/yedek-cek.sh /usr/local/bin/tekserp-yedek-cek
 
-# Önce KURU: ne çekileceğini listeler, yazmaz
+# Önce KURU: ne çekileceğini listeler, yazmaz (dikkat: kapı rsync bayraklarını ayırt etmez, kuru kip de
+# müşteri tarafındaki son-cekim damgasını tazeler — kuru koşumu tatbikat dışında zamanlayıcıya koyma)
 sudo -u yedekcek tekserp-yedek-cek --kaynak tekserp-cek@<musteri-vds>: --hedef /srv/yedek-cekilen/<musteri> \
   --anahtar ~yedekcek/.ssh/cek_<musteri> --port <port> --kuru
 
@@ -82,4 +83,5 @@ echo "30 */6 * * * yedekcek /usr/local/bin/tekserp-yedek-cek --kaynak tekserp-ce
 
 - Ele geçirilmiş müşteri VDS'i geçmiş kopyaları bozamaz. Ama **yeni** sahte `.tkenc` üretebilir; geri yüklemede imza değil şifre çözme doğrular. Sahte dosya alıcı anahtarlarıyla açılmaz ya da TKENC doğrulamasından geçmez. Bu yüzden geri yüklemeden önce `yedek-sifrele.cjs dogrula` koşulur.
 - Kaynak birden çok sahte "yeni" dosyayla saklamanın en-az kotasını doldurabilir. Saklama yalnız `SAKLAMA_GUN`den (90) eski dosyaları siler. Geliş anı yerel saattir, kaynaktan alınmaz. Yani gerçek kopyalar 90 gün boyunca kalır.
+- Çekim başına toplam dosya sayısı/boyut tavanı YOK (yalnız dosya başına `--max-size=20G`). Ele geçirilmiş bir müşteri VDS'i sayısız geçerli adlı dosyayla yedek VDS'in diskini doldurabilir; aynı diski paylaşan öteki müşteriler de etkilenir. Önlem: her müşteri hedef dizini ayrı dosya sistemi/kota (ör. XFS proje kotası) — kalan risk.
 - RPO hâlâ gece yedeğidir (≤ 24 sa). Daha kısa RPO için WAL arşivi gerekir; bu bir iş kararıdır (denetim K2 Nasıl-7).

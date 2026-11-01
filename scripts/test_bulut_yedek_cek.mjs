@@ -135,6 +135,27 @@ function scenario(dir, tag, report) {
   ok('§2g yaş eşiği aşılınca çıkış 4 + HATA YEDEK_ESKI', c6.code === 4 && /YEDEK_ESKI/.test(c6.out), `${c6.code} ${c6.out}`);
   const c7 = run(path.join(dir, 'yedek-cek.sh'), ['--kaynak', 'sunucu-adsiz', '--hedef', dst]);
   ok('§2h biçimsiz kaynak çıkış 2', c7.code === 2, `${c7.code}`);
+
+  // §2i: kaynak 30, çıkış 7 gün tutar — saklamadan eski kaynak her saatlik koşumda yeniden kopyalanıp silinmemeli.
+  const src2 = path.join(w, 'kaynak-eski');
+  const out2 = path.join(w, 'cikis-eski');
+  fs.mkdirSync(src2, { recursive: true });
+  for (let i = 0; i < 6; i += 1) {
+    const f = path.join(src2, `tekserp_202610${String(10 + i).padStart(2, '0')}_030000.dump.tkenc`);
+    fs.writeFileSync(f, tkenc(`eski-${i}`));
+    const t = new Date(Date.now() - (20 - i) * 86400_000);
+    fs.utimesSync(f, t, t);
+  }
+  const P = 'premigrate_20261101_030000.dump.tkenc';
+  fs.writeFileSync(path.join(src2, P), tkenc('premigrate'));
+  const hz = () => run(path.join(dir, 'cikis-hazirla.sh'), ['--kaynak', src2, '--cikis', out2, '--grup', ''], { CIKIS_SAKLAMA_GUN: '7', CIKIS_EN_AZ: '3' });
+  const h1 = hz();
+  const h2 = hz();
+  const out2List = fs.existsSync(out2) ? fs.readdirSync(out2) : [];
+  ok('§2i ⭐ saklamadan eski kaynak yalnız en yeni EN_AZ kadar kopyalanır; ikinci koşum 0 yeni, silme YOK',
+    h1.code === 0 && h2.code === 0 && /tamam: 3 yeni/.test(h1.out) && /tamam: 0 yeni/.test(h2.out)
+      && !/saklama: silindi/.test(`${h1.out}${h2.out}`) && out2List.length === 3, `${h1.out} || ${h2.out}`);
+  ok('§2j premigrate_ dökümü (şifreli de olsa) çıkışa girmez', !out2List.includes(P), `${out2List}`);
   return bad;
 }
 if (!has('rsync') || !has('bash')) {
@@ -156,6 +177,8 @@ if (!has('rsync') || !has('bash')) {
   probeDir('sihir-yok', 'yedek-cek.sh', '&& sihirli "$HEDEF/$ad"; then', '; then');
   probeDir('hazirlayici-sihir-yok', 'cikis-hazirla.sh', 'if ! sihirli "$yol"; then', 'if false; then');
   probeDir('yas-yok', 'yedek-cek.sh', 'if [ "$YAS_SAAT" -gt "$AZAMI_SAAT" ]', 'if false');
+  probeDir('eski-kaynak-tekrar', 'cikis-hazirla.sh', '"$EN_YENI" | grep -Fqx "$ad"; then continue', '"$EN_YENI" | grep -Fqx "$ad"; then :');
+  probeDir('premigrate-gecer', 'cikis-hazirla.sh', "AD_DESENI='^tekserp[a-z0-9_]*_", "AD_DESENI='^[a-z0-9_]+_");
 }
 
 // --- §3 zorunlu komut zinciri -------------------------------------------------------

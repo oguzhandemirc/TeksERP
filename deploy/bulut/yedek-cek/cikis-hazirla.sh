@@ -33,8 +33,8 @@ while [ $# -gt 0 ]; do
 done
 
 log() { printf '%s cikis-hazirla %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
-[ -n "$KAYNAK" ] && [ -d "$KAYNAK" ] || { log "HATA kaynak dizini yok: ${KAYNAK:-?}"; exit 2; }
-[ -n "$CIKIS" ] && [ "$CIKIS" != "/" ] || { log "HATA çıkış dizini geçersiz"; exit 2; }
+if [ -z "$KAYNAK" ] || [ ! -d "$KAYNAK" ]; then log "HATA kaynak dizini yok: ${KAYNAK:-?}"; exit 2; fi
+if [ -z "$CIKIS" ] || [ "$CIKIS" = "/" ]; then log "HATA çıkış dizini geçersiz"; exit 2; fi
 case "$(cd "$CIKIS" 2>/dev/null && pwd -P)/" in
   "$(cd "$KAYNAK" && pwd -P)/"*) log "HATA çıkış dizini kaynağın içinde olamaz"; exit 2 ;;
 esac
@@ -42,9 +42,14 @@ mkdir -p "$CIKIS" || { log "HATA çıkış dizini yaratılamadı: $CIKIS"; exit 
 
 # TKENC sihirli baytı: "TKSENC\0\1" (src/lib/backup-crypto/format.ts TKENC_MAGIC).
 SIHIR="544b53454e430001"
-AD_DESENI='^[a-z0-9_]+_[0-9]{8}_[0-9]{6}\.dump\.tkenc$'
+# Yalnız gece öneği (`tekserp…`); premigrate_/pre-restore_ dökümleri çıkışa hiç girmez.
+AD_DESENI='^tekserp[a-z0-9_]*_[0-9]{8}_[0-9]{6}\.dump\.tkenc$'
 sihirli() { [ "$(head -c 8 "$1" 2>/dev/null | od -An -tx1 | tr -d ' \n')" = "$SIHIR" ]; }
 
+# Saklamadan eski kaynak yalnız en yeni ENAZ içindeyse kopyalanır; yoksa her koşum onu kopyalayıp
+# aynı koşumun saklaması siler (kaynak 30 gün, çıkış 7 gün tutar) — boşa disk yazımı + geçici şişme.
+# shellcheck disable=SC2010 # adlar sıkı desenle süzülür
+EN_YENI=$(ls -1t "$KAYNAK" 2>/dev/null | grep -E "$AD_DESENI" | head -n "$ENAZ")
 HATA=0
 YENI=0
 for yol in "$KAYNAK"/*.dump.tkenc; do
@@ -53,6 +58,8 @@ for yol in "$KAYNAK"/*.dump.tkenc; do
   ad=$(basename "$yol")
   printf '%s\n' "$ad" | grep -Eq "$AD_DESENI" || continue
   [ -e "$CIKIS/$ad" ] && continue
+  if [ -n "$(find "$yol" -maxdepth 0 -mtime +"$SAKLAMA" 2>/dev/null)" ] \
+     && ! printf '%s\n' "$EN_YENI" | grep -Fqx "$ad"; then continue; fi
   if ! sihirli "$yol"; then log "UYARI sihirli bayt yok, kopyalanmadı: $ad"; continue; fi
   if cp -p "$yol" "$CIKIS/.$ad.part" && { [ -z "$GRUP" ] || chgrp "$GRUP" "$CIKIS/.$ad.part"; } && chmod 0640 "$CIKIS/.$ad.part" \
      && mv -f "$CIKIS/.$ad.part" "$CIKIS/$ad"; then
@@ -70,7 +77,7 @@ ls -1t "$CIKIS" 2>/dev/null | grep -E "$AD_DESENI" | tail -n +"$((ENAZ + 1))" | 
   fi
 done
 
-{ [ -z "$GRUP" ] || chgrp "$GRUP" "$CIKIS"; } && chmod 0750 "$CIKIS"
+if [ -z "$GRUP" ] || chgrp "$GRUP" "$CIKIS"; then chmod 0750 "$CIKIS"; fi
 log "tamam: $YENI yeni şifreli yedek çıkışa kondu"
 [ "$HATA" -eq 0 ] || exit 3
 exit 0

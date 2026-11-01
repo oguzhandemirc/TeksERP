@@ -23,7 +23,7 @@ fi
 if [ -z "$RRSYNC" ]; then
   for r in /usr/bin/rrsync /usr/local/bin/rrsync; do [ -x "$r" ] && RRSYNC="$r" && break; done
 fi
-[ -n "$RRSYNC" ] && [ -x "$RRSYNC" ] || { echo "cek-kapisi: rrsync bulunamadı (rsync >= 3.2.4)" >&2; exit 2; }
+if [ -z "$RRSYNC" ] || [ ! -x "$RRSYNC" ]; then echo "cek-kapisi: rrsync bulunamadı (rsync >= 3.2.4)" >&2; exit 2; fi
 case "${SSH_ORIGINAL_COMMAND:-}" in
   "rsync --server --sender "*) ;;
   *) echo "cek-kapisi: yalnız rsync çekimi kabul edilir" >&2; exit 2 ;;
