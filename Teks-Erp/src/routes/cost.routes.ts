@@ -633,8 +633,8 @@ router.get("/items", requirePermission("cost:read"), wrap(async (req, res) => {
  * /api/cost/subcontractor-dispatches/{id}/finishing-check:
  *   get:
  *     tags: [Cost]
- *     summary: Fason sevk kg kontrolü — beklenen boyahane tutarı (Σ sevk kg × aktif KG tarifesi), fatura varsa fark
- *     description: Yalnız okuma (SY-E2). KG tarifesi çözülemezse `line` null + `reason` (0 tutar uydurulmaz). Fatura kısmı yalnız `finance:read` ∧ ön muhasebe açıkken dolar.
+ *     summary: Fason sevk kg kontrolü — beklenen boyahane tutarı (Σ sevk kg × sevk tarihindeki KG tarifesi), fatura varsa fark
+ *     description: Yalnız okuma (SY-E2). KG tarifesi çözülemezse `line` null + `reason` (0 tutar uydurulmaz). Tarife sevkin fabrika günündeki sürümdür (yoksa ilk sürüm, `rateFallback`); farklı dövizli faturada kur çevrilmez (`currencyMismatch`, fark null). Fatura kısmı yalnız `finance:read` ∧ ön muhasebe açıkken dolar.
  *     security: [{ bearerAuth: [] }]
  *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
  *     responses:
