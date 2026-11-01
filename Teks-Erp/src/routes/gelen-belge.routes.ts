@@ -32,6 +32,7 @@ import { searchProcessChoiceValues } from "../services/helpers/process-choice-ca
 import { listSenderTemplates, updateSenderTemplate } from "../services/gelen-belge-sablon.service";
 import { listCustomerDefaults, removeCustomerDefault, setCustomerDefault } from "../services/gelen-belge-varsayilan.service";
 import { assertScanReadable, readerQueueCounts, requeueScanForReading } from "../services/gelen-belge-okuma.service";
+import { getReadSummary } from "../services/gelen-belge-okuma-ozeti.service";
 import { readerJobStatus, requestImmediateReaderRun } from "../jobs/gelen-belge-okuma.job";
 import { getReaderUrl } from "../lib/gelen-belge/url";
 import { readerHealth } from "../lib/gelen-belge/okuma-istemcisi";
@@ -295,6 +296,21 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  */
 // D7: tarayan `customer:read` taşımaz; KK1 emanet seçicisinin opt-in allowlist'i (`getRollTabletContext`) yeniden kullanılır.
 router.get("/tablet-baglam", requirePermission("gelen-belge:write"), wrap(async () => ({ status: 200, data: (await getRollTabletContext()).data })));
+/**
+ * @openapi
+ * /api/gelen-belge/irsaliyeler/{id}/okuma-ozeti:
+ *   get:
+ *     tags: [Gelen belge]
+ *     summary: 'Tablet "Belge Tara" okuma özeti — durum (NO_PAGES|READING|NO_SERVICE|READ|PARTIAL|FAILED) + Türkçe neden, satır/gözden geçirme sayısı, toplam kapısı (salt okunur)'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "noteId, noteNo, noteStatus, state, reason, pages (total/waiting/read/failed), lineCount, reviewCount, totals (declared, ok, mismatches[]), warnings[]" }
+ *       404: { description: DELIVERY_NOTE_NOT_FOUND }
+ */
+// Tarayan `gelen-belge:read` taşımaz (D7): taslağın kendi okuma sonucunu yalnız bu özetten görür; ayrıntı panelde.
+router.get("/irsaliyeler/:id/okuma-ozeti", requirePermission("gelen-belge:write"), wrap(async (req) => ({ status: 200, data: await getReadSummary(Id.parse(req.params.id)) })));
 // ── D3b okuma durumu / okut / eşleme ──────────────────────────────────────────
 // Servis yok → "yok" (taslak elle sürer; çıkışsız kapı değil). Sağlık yoklaması canlı (5 s), adres maskelenmez (köken; sır yok).
 router.get("/okuma/durum", requirePermission("gelen-belge:read"), wrap(async () => {

@@ -14,15 +14,28 @@ export function useDocScan() {
   const [barcode, setBarcode] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState<SubmitProgress>(EMPTY_PROGRESS);
-  const [done, setDone] = useState<{ noteNo: string; pages: number } | null>(null);
+  // Son gönderilen taslak: okuma sonucu bunun için izlenir; `runKey` aynı taslağa yeni sayfa gidince artar.
+  const [done, setDone] = useState<{ note: { id: string; noteNo: string }; pages: number; runKey: number } | null>(null);
+  // "Yeni sayfa çek": sayfalar YENİ taslak değil, `done` taslağına eklenir (sayfa no kaldığı yerden).
+  const [continuing, setContinuing] = useState(false);
   const senderDocNo = barcodeToDocNo(barcode);
 
   const reset = () => {
     setPages([]);
     setBarcode(null);
     setProgress(EMPTY_PROGRESS);
+    setContinuing(false);
     attempt.renew();
   };
+
+  const addToNote = () => {
+    if (!done) return;
+    setPages([]);
+    setProgress({ note: done.note, uploaded: new Set() });
+    setContinuing(true);
+  };
+
+  const finish = () => { reset(); setDone(null); };
 
   // Başlık girdisi değişince deneme de yenidir (kk1): yapışık token farklı yükle gidip 409 + sayfasız taslak bırakmaz.
   const changeOwner = (o: Owner | null) => {
@@ -62,13 +75,15 @@ export function useDocScan() {
     }
     setSending(true);
     try {
-      const input = { pages, ownerCustomerId: owner?.id ?? null, senderDocNo, barcodeText: barcode };
+      const pageBase = continuing && done ? done.pages : 0;
+      const input = { pages, ownerCustomerId: owner?.id ?? null, senderDocNo, barcodeText: barcode, pageBase };
       // Deneme nesnesi birimden çıkmaz (test_istemci_token_uretimi): yalnız üç yöntem sarılarak verilir.
       const binding = { token: () => attempt.token(), onFailure: (e: unknown) => attempt.onFailure(e), onSuccess: () => attempt.onSuccess() };
       const r = await submitDocScan(inboundDocService, input, binding, progress);
-      setDone({ noteNo: r.note.noteNo, pages: r.uploaded });
+      setDone({ note: r.note, pages: pageBase + r.uploaded, runKey: (done?.runKey ?? 0) + 1 });
       reset();
-      Toast.show({ type: 'success', text1: `Taslak ${r.note.noteNo} oluşturuldu`, text2: 'Onay panelden (Gelen Belgeler) yapılır.' });
+      const text1 = continuing ? `${r.uploaded} sayfa ${r.note.noteNo} taslağına eklendi` : `Taslak ${r.note.noteNo} oluşturuldu`;
+      Toast.show({ type: 'success', text1, text2: 'Okuma sonucu ekranda; onay panelden (Gelen Belgeler) yapılır.' });
     } catch (e) {
       if (e instanceof SubmitError) setProgress(e.progress);
       Toast.show({ type: 'error', text1: 'Gönderilemedi', text2: e instanceof Error ? e.message : undefined });
@@ -79,6 +94,7 @@ export function useDocScan() {
 
   return {
     pages, setPages, owner, setOwner: changeOwner, setBarcode: changeBarcode, senderDocNo, sending, progress, done, reset, capture, captureMany, send,
+    continuing, addToNote, finish,
     // Taslak doğduktan sonra başlık kilitlenir (yeniden deneme aynı taslağa sayfa yükler).
     headerLocked: progress.note !== null,
     remaining: pages.filter((p) => !progress.uploaded.has(p.sha256)).length,

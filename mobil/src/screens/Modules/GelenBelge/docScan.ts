@@ -151,6 +151,8 @@ export interface SubmitInput {
   senderDocNo: string | null;
   /** Barkodun ham metni (tarama künyesine; senderDocNo'dan ayrı alan). */
   barcodeText: string | null;
+  /** Aynı taslağa sonradan eklenen sayfalar: sunucudaki son sayfa no (ilk gönderimde 0/yok). */
+  pageBase?: number;
 }
 
 /** Yarıda kalan gönderimin kaldığı yer: taslak doğduysa id'si + yüklenen sayfa özetleri. */
@@ -212,7 +214,7 @@ export async function submitDocScan(
       const r = await api.uploadScan({
         contentBase64: page.base64,
         noteId: note.id,
-        pageNo: i + 1,
+        pageNo: (input.pageBase ?? 0) + i + 1,
         barcodeText: input.barcodeText,
         sha256: page.sha256,
       });
