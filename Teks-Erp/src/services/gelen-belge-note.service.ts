@@ -19,7 +19,7 @@ import { decodeOffsetCursor, encodeOffsetCursor } from "../utils/cursor";
 import { readIdCondition } from "../utils/query-parser";
 import { AuditService } from "./audit.service";
 import { tokenReplay } from "./helpers/token-replay.helper";
-import { nextSeriesNo } from "./number-series.service";
+import { reserveSeriesNo } from "./helpers/series-counter-store.helper";
 import { SCAN_SELECT } from "./gelen-belge-scan.service";
 import { LINE_SELECT, lineColumns, notDraft, text, type DeliveryNoteLineInput } from "./gelen-belge-line.service";
 
@@ -207,12 +207,23 @@ function replayFor(input: DeliveryNoteCreateInput) {
   });
 }
 
+/**
+ * Sayaç satırlı seri (`reserveSeriesNo`): taslak SİLİNEBİLİR (hard delete) — tarama
+ * "max + 1" en son taslak silinince aynı numarayı yeniden verirdi (G3f, GB0111260006).
+ * Satır yalnız ilerler; silinen numara boşta kalır. ⚠️ tx DIŞINDA çağrılır.
+ */
 export async function nextNoteNo(): Promise<string> {
-  return nextSeriesNo(SERIES_KEY, async (prefix) =>
-    prisma.customerDeliveryNote.findMany({
-      where: { noteNo: { gte: prefix, startsWith: prefix } },
-      select: { noteNo: true, createdAt: true },
-    }).then((rows) => rows.map((r) => ({ code: r.noteNo, createdAt: r.createdAt }))), new Date());
+  return reserveSeriesNo(
+    SERIES_KEY,
+    new Date(),
+    async (prefix) =>
+      prisma.customerDeliveryNote.findMany({
+        where: { noteNo: { gte: prefix, startsWith: prefix } },
+        select: { noteNo: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+      }).then((rows) => rows.map((r) => ({ code: r.noteNo, createdAt: r.createdAt }))),
+    async (code) => (await prisma.customerDeliveryNote.findUnique({ where: { noteNo: code }, select: { id: true } })) !== null,
+  );
 }
 
 export async function createDeliveryNote(input: DeliveryNoteCreateInput, userId: string) {

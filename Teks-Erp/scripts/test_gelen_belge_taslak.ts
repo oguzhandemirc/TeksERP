@@ -14,6 +14,7 @@
 //   §8 audit yükü: DOCUMENT_SCAN ve CUSTOMER_DELIVERY_NOTE satırlarında fotoğraf baytı / "content" yok
 //   §10 yarış: iki PATCH farklı alan → ikisi de korunur (kayıp güncelleme yok) · aynı clientToken iki POST → tek kayıt · aynı parti kimliğiyle iki toplu satır ekleme → satırlar ikilenmez · aynı tarama iki taslak → biri 409 · aynı sha256 + noteId → mevcut kayıt bağlanır / başka taslağa bağlıysa 409
 //   §9 DRAFT silme: 200, satırlar Cascade, tarama çözülür (noteId null), top doğmaz (DEFTER-ÖNCELİKLİ)
+//   §9b en son taslak silinince yeni taslak FARKLI numara alır (sayaç satırı; numara yeniden verilmez)
 // Emsal: scripts/test_sertifika.ts (app.listen(0) + ensureTestAdmin + ayar()).
 // =============================================================================
 import type { AddressInfo } from "net";
@@ -305,6 +306,21 @@ async function main(): Promise<void> {
     check("satırlar Cascade ile gitti, tarama çözüldü (noteId null) ama silinmedi", (await prisma.customerDeliveryNoteLine.count({ where: { noteId } })) === 0 && (await prisma.documentScan.findUnique({ where: { id: scanId }, select: { noteId: true } }))?.noteId === null);
     check("taslak top doğurmaz (roll sayısı değişmedi)", (await prisma.roll.count()) === rollsBefore);
     check("silinen taslak → 404", (await call("GET", `/api/gelen-belge/irsaliyeler/${noteId}`, tk)).status === 404);
+
+    // §9b numara yeniden VERİLMEZ (G3f, Gülkesim provası: GB0111260006 iki kayıtta): EN SON
+    // doğan taslak silinince tarama "max + 1" aynı numarayı üretirdi; sayaç satırı yalnız ilerler.
+    console.log("§9b silinen taslağın numarası yeniden verilmez");
+    const birth = async (n: number) => {
+      const r = await call("POST", "/api/gelen-belge/irsaliyeler", tk, { sourceKind: "MANUAL", ownerCustomerId: owner, senderText: `${TAG} gönderen`, senderDocNo: `${TAG}-N${n}` });
+      const id = String(r.data?.id ?? "");
+      if (id) made.notes.push(id);
+      return { id, no: String(r.data?.noteNo ?? "") };
+    };
+    const last = await birth(1);
+    check("§9b en son taslak doğdu", last.id !== "" && /^GB/.test(last.no), last.no);
+    check("§9b en son taslak silindi", (await call("DELETE", `/api/gelen-belge/irsaliyeler/${last.id}`, tk)).status === 200);
+    const next = await birth(2);
+    check("⭐ §9b yeni taslak FARKLI numara alır (silinen numara boşta kalır)", next.id !== "" && next.no !== "" && next.no !== last.no, `${last.no} → ${next.no}`);
   } catch (e) {
     check("beklenmeyen hata", false, e instanceof Error ? `${e.message}\n${e.stack}` : String(e));
   } finally {

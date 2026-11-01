@@ -24,6 +24,7 @@ import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import type { Prisma } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { invoiceService } from "../services/invoice.service";
+import { invoiceListQuerySchema } from "./finance-invoice-list.query";
 import { resolveInvoiceTaxDefaults } from "../services/helpers/invoice-tax-defaults.helper";
 import { SERVICE_PERIOD_PATTERN, createServicePeriodDraft, previewServicePeriodDraft } from "../services/service-period-invoice.service";
 import { paymentService } from "../services/payment.service";
@@ -525,17 +526,12 @@ const invoiceCreateSchema = z
 
 router.get("/invoices", requirePermission("finance:read"), async (req, res, next) => {
   try {
-    const q = req.query as Record<string, string | undefined>;
+    // Fail-closed: tanınmayan parametre 400 (sessizce TÜM liste dönmez) — gerekçe şema başlığında.
+    const { limit, shipmentId, ...q } = invoiceListQuerySchema.parse(req.query);
     const result = await invoiceService.list({
-      page: q.page ? Number(q.page) : undefined,
-      pageSize: q.pageSize ? Number(q.pageSize) : undefined,
-      search: q.search,
-      type: q.type as never,
-      status: q.status as never,
-      cariId: q.cariId,
-      goodsReceiptId: q.goodsReceiptId,
-      from: q.from ? new Date(q.from) : undefined,
-      to: q.to ? new Date(q.to) : undefined,
+      ...q,
+      pageSize: q.pageSize ?? limit,
+      shipmentId: readIdCondition(shipmentId) ?? undefined,
     });
     res.json({ success: true, ...result });
   } catch (e) {
