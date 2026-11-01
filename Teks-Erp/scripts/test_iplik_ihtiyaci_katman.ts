@@ -35,7 +35,7 @@ const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const kg3 = (v: Prisma.Decimal) => v.toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP).toFixed(3);
 const FLAGS: Record<string, boolean> = { [SETTING_KEYS.MALIYET_ENABLED]: true, [SETTING_KEYS.DEVERE_ENABLED]: true };
 
-interface Fx { f: MaliyetFikstur; customerId: string; lenoYarnId: string; lenoSpecId: string; plainId: string }
+interface Fx { f: MaliyetFikstur; customerId: string; lenoYarnId: string; lenoSpecId: string }
 
 async function beam(tag: string, warpSpecId: string, lengthM: number): Promise<void> {
   const b = await prisma.warpBeam.create({
@@ -51,12 +51,11 @@ async function kur(f: MaliyetFikstur): Promise<Fx> {
   await altinYapiYaz(f);
   const leno = await prisma.item.create({ data: { code: `${f.tag}-ID`, name: `${f.tag} döner iplik`, itemType: "YARN", unit: "KG", linearDensityDen: 50 }, select: { id: true } });
   const lenoSpec = await prisma.warpSpec.create({ data: { code: `${f.tag}-CD`, name: `${f.tag} döner`, yarnItemId: leno.id, endsCount: 2720, takeUpPct: 14 }, select: { id: true } });
-  const plain = await prisma.item.create({ data: { code: `${f.tag}-KZ`, name: `${f.tag} katmansız`, itemType: "FABRIC", warpSpecId: f.warpSpecId }, select: { id: true } });
   const cust = await prisma.customer.create({ data: { code: `${f.tag}-M`, name: `${f.tag} müşteri` }, select: { id: true } });
   await prisma.order.create({ data: { orderNumber: `${f.tag}-S`, customerId: cust.id, lines: { create: [{ itemId: f.fabricId, quantity: D(1000) }] } } });
   await beam(`${f.tag}-LD`, lenoSpec.id, 500);
   await beam(`${f.tag}-LZ`, f.warpSpecId, 1000);
-  return { f, customerId: cust.id, lenoYarnId: leno.id, lenoSpecId: lenoSpec.id, plainId: plain.id };
+  return { f, customerId: cust.id, lenoYarnId: leno.id, lenoSpecId: lenoSpec.id };
 }
 
 async function temizle(x: Fx | null, f: MaliyetFikstur): Promise<void> {
@@ -68,7 +67,6 @@ async function temizle(x: Fx | null, f: MaliyetFikstur): Promise<void> {
   await prisma.order.deleteMany({ where: { orderNumber: tag } });
   await prisma.customer.deleteMany({ where: { code: tag } });
   if (x) {
-    await prisma.item.deleteMany({ where: { id: x.plainId } });
     await prisma.warpSpec.deleteMany({ where: { id: x.lenoSpecId } });
     await prisma.item.deleteMany({ where: { id: x.lenoYarnId } });
   }
