@@ -324,6 +324,9 @@ const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {
   // — boot job'ı 5 denemeden sonra `PERMISSION_CATALOG_RECONCILE_FAILED` basar.
   reason_presets_machine_class_chk:
     "Tezgah duruş sebebi bir kayıp sınıfı taşımalı (plansız / kurulum / planlı / çalışma dışı) — 'mikro duruş' bir sebep sınıfı değildir.",
+  // D4-V1k: cari KDV/tevkifat geçersiz kılması — eşzamanlı iki PATCH uygulama doğrulamasını aşarsa sed konuşur.
+  cari_accounts_vat_override_ck: "Carinin KDV oranı 0–100 arasında olmalı.",
+  cari_accounts_withholding_ck: "Carinin tevkifat oranı geçersiz: pay 1 ile payda arasında olmalı (eşzamanlı bir düzenleme çakışmış olabilir, yeniden deneyin).",
 };
 
 /** Kısıt adı → Türkçe mesaj (bekçiler eşlemeyi ÜRÜNDEN okur, kopya tutmaz). */

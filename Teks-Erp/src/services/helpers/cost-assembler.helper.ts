@@ -15,6 +15,7 @@ import type { FinishingKgBasis } from "./fabric-cost-kg.helper";
 import { resolveDenier } from "../../constants/warp-beam";
 import { DEFAULT_COST_FINISHING_KG_BASIS, readCostFinishingKgBasis, readCostWeavingStandardMethod, type WeavingStandardMethod } from "../system-setting.service";
 import { readWarpLayersForItems, type CostWarpLayerRow } from "./effective-construction.helper";
+import { resolveFinishingRateCode } from "./finishing-rate-code.helper";
 
 
 type Dec = Prisma.Decimal;
@@ -166,7 +167,7 @@ export function buildCostInput(src: CostSources, ref: CostSourceRef, o: CostOver
   const hasWeft = !!item?.weftSpec || !!ah?.weft;
   // Öncelik (tasarım §6.5): ELLE > varyant kodu > ürün yapısı kodu > yok.
   const recipe = "itemId" in ref && ref.recipeId ? src.recipes?.get(ref.recipeId) : undefined;
-  const code = o.finishingRateCode !== undefined ? o.finishingRateCode : (recipe?.finishingRateCode ?? cs?.finishingRateCode ?? ah?.finishingRateCode ?? null);
+  const code = o.finishingRateCode !== undefined ? o.finishingRateCode : (resolveFinishingRateCode(recipe?.finishingRateCode, cs?.finishingRateCode) ?? ah?.finishingRateCode ?? null);
   const finishing = finishingOf(src, code);
   const extraTry = o.extraCostPerMTry ?? cs?.extraCostPerMTry ?? null;
   // Ek işlem (SY-G1) aynı tarife uzayından; çözülemeyen kod motorda FINISHING_RATE_MISSING (0 değil).
