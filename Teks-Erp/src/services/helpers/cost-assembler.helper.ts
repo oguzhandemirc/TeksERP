@@ -153,6 +153,19 @@ function loomPickOf(src: CostSources, cs: CostItemRow["costStructure"]): NonNull
   return { rate: null };
 }
 
+// F2: varyant kapsamında atkı satırı varyantın ipliğiyle (pay/sıklık kartta); değişim yoksa desen geneli.
+function weftYarnsOf(
+  src: CostSources,
+  item: CostItemRow | undefined,
+  recipe: CostRecipeRow | undefined,
+  ah: AdHocStructure | null,
+): CostWeftYarn[] {
+  const swaps = recipe && recipe.itemId === item?.id ? src.weftOverrides?.get(recipe.id) : undefined;
+  return item?.weftSpec
+    ? item.weftSpec.yarns.map((y) => ({ ...cardYarn(src, weftOverrideFor(swaps, y.sortOrder) ?? y.yarnItem), picksInRepeat: y.picksInRepeat }))
+    : (ah?.weft?.yarns ?? []).map((y) => ({ ...adHocYarn(y), picksInRepeat: y.picksInRepeat ?? 1 }));
+}
+
 /** Plan §2.1 öncelik tablosu — saf; `src` önceden yüklenmiş olmalı. */
 export function buildCostInput(src: CostSources, ref: CostSourceRef, o: CostOverrides = {}): CostInput {
   const p = src.params;
@@ -169,11 +182,7 @@ export function buildCostInput(src: CostSources, ref: CostSourceRef, o: CostOver
       : null;
   // Öncelik (tasarım §6.5): ELLE > varyant kodu > ürün yapısı kodu > yok.
   const recipe = "itemId" in ref && ref.recipeId ? src.recipes?.get(ref.recipeId) : undefined;
-  // F2: varyant kapsamında atkı satırı varyantın ipliğiyle (pay/sıklık kartta); değişim yoksa desen geneli.
-  const swaps = recipe && recipe.itemId === item?.id ? src.weftOverrides?.get(recipe.id) : undefined;
-  const weftYarns: CostWeftYarn[] = item?.weftSpec
-    ? item.weftSpec.yarns.map((y) => ({ ...cardYarn(src, weftOverrideFor(swaps, y.sortOrder) ?? y.yarnItem), picksInRepeat: y.picksInRepeat }))
-    : (ah?.weft?.yarns ?? []).map((y) => ({ ...adHocYarn(y), picksInRepeat: y.picksInRepeat ?? 1 }));
+  const weftYarns = weftYarnsOf(src, item, recipe, ah);
   const picks = item?.weftSpec ? item.weftSpec.picksPerCm : ah?.weft ? dec(ah.weft.picksPerCm) : null;
   const hasWeft = !!item?.weftSpec || !!ah?.weft;
   const code = o.finishingRateCode !== undefined ? o.finishingRateCode : (resolveFinishingRateCode(recipe?.finishingRateCode, cs?.finishingRateCode) ?? ah?.finishingRateCode ?? null);

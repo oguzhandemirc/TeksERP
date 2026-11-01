@@ -165,19 +165,23 @@ async function bolum9(f: MaliyetFikstur, plainHash: string): Promise<void> {
   const asm = (recipeId?: string) => prisma.$transaction((tx) => assembleCostInputTx(tx, recipeId ? { itemId: f.fabricId, recipeId } : { itemId: f.fabricId }));
   check("§9a ⭐ Değişimsiz varyant: girdi desen geneliyle bayt-aynı (hash)", costInputHash(await asm(v)) === plainHash);
   const sim = await prisma.item.create({ data: { code: `${f.tag}-SIM`, name: `${f.tag} ŞEFFAF SİM`, itemType: "YARN", linearDensityDen: D(69) }, select: { id: true, name: true } });
-  await prisma.yarnCostPrice.create({ data: { yarnItemId: sim.id, currency: "USD", pricePerKg: D("4.80"), note: f.tag } });
-  await prisma.productRecipeWeftYarn.create({ data: { recipeId: v, weftSortOrder: 2, yarnItemId: sim.id } });
-  const inp = await asm(v);
-  const y = inp.weft?.yarns ?? [];
-  check("§9b ⭐ Varyant kapsamı: atkı B satırı varyantın ipliği + onun fiyatı; A ve pay/sıklık kartın",
-    y.length === 2 && y[1]?.yarnItemId === sim.id && y[1]?.price?.amount.eq(D("4.80")) === true && y[1]?.denier.value?.eq(69) === true
-      && y[0]?.yarnItemId === f.weftAId && y[1]?.picksInRepeat === 1 && inp.weft?.picksPerCm.value?.eq(28) === true, JSON.stringify(y.map((r) => r.name)));
-  const lines = computeFabricCost(inp, FX).result?.lines.filter((l) => l.component === "WEFT_YARN") ?? [];
-  check("§9c Döküm satırı etiketi varyantın ipliğini gösterir", lines.some((l) => l.label === `Atkı — ${sim.name}` && l.yarnItemId === sim.id) && !lines.some((l) => l.yarnItemId === f.weftBId), lines.map((l) => l.label).join(" | "));
-  check("§9d Varyantsız hesap değişmez (desen geneli)", costInputHash(await asm()) === plainHash);
-  await prisma.productRecipe.delete({ where: { id: v } });
-  await prisma.yarnCostPrice.deleteMany({ where: { yarnItemId: sim.id } });
-  await prisma.item.delete({ where: { id: sim.id } });
+  try {
+    await prisma.yarnCostPrice.create({ data: { yarnItemId: sim.id, currency: "USD", pricePerKg: D("4.80"), note: f.tag } });
+    await prisma.productRecipeWeftYarn.create({ data: { recipeId: v, weftSortOrder: 2, yarnItemId: sim.id } });
+    const inp = await asm(v);
+    const y = inp.weft?.yarns ?? [];
+    check("§9b ⭐ Varyant kapsamı: atkı B satırı varyantın ipliği + onun fiyatı; A ve pay/sıklık kartın",
+      y.length === 2 && y[1]?.yarnItemId === sim.id && y[1]?.price?.amount.eq(D("4.80")) === true && y[1]?.denier.value?.eq(69) === true
+        && y[0]?.yarnItemId === f.weftAId && y[1]?.picksInRepeat === 1 && inp.weft?.picksPerCm.value?.eq(28) === true, JSON.stringify(y.map((r) => r.name)));
+    const lines = computeFabricCost(inp, FX).result?.lines.filter((l) => l.component === "WEFT_YARN") ?? [];
+    check("§9c Döküm satırı etiketi varyantın ipliğini gösterir", lines.some((l) => l.label === `Atkı — ${sim.name}` && l.yarnItemId === sim.id) && !lines.some((l) => l.yarnItemId === f.weftBId), lines.map((l) => l.label).join(" | "));
+    check("§9d Varyantsız hesap değişmez (desen geneli)", costInputHash(await asm()) === plainHash);
+  } finally {
+    // Ortada düşse de sim ipliği + fiyatı test DB'sinde kalmaz.
+    await prisma.productRecipe.delete({ where: { id: v } });
+    await prisma.yarnCostPrice.deleteMany({ where: { yarnItemId: sim.id } });
+    await prisma.item.delete({ where: { id: sim.id } });
+  }
 }
 
 async function main(): Promise<void> {
