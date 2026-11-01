@@ -2,6 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { partnerRoleBadges } from "@/lib/partnerRoles";
+import { CariHoldBadge } from "@/pages/Finance/CariHold/CariHoldBadge";
 import type { Customer } from "./types";
 
 export const customerColumns: ColumnDef<Customer>[] = [
@@ -13,6 +14,13 @@ export const customerColumns: ColumnDef<Customer>[] = [
   {
     accessorKey: "name",
     header: () => <SortableHeader field="name" label="Ad" />,
+    // D4-I3: kilitli müşteri rozeti — `cariHold` sunucudan (eski backend göndermez → rozet yok).
+    cell: ({ row }) => (
+      <span>
+        {row.original.name}
+        <CariHoldBadge view={row.original.cariHold} />
+      </span>
+    ),
   },
   {
     accessorKey: "type",
