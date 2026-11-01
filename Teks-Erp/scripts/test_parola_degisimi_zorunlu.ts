@@ -449,7 +449,7 @@ function statik(): void {
     kullanimlar.join(" | "),
   );
   const admin = oku(join(BACKEND, "src/routes/admin.routes.ts"));
-  check("§5b admin uçlarında eski 6 karakter kuralı yok, politika tek kaynaktan", !/min\(6\b/.test(admin) && admin.includes("passwordPolicyViolation("));
+  check("§5b admin uçlarında eski 6 karakter kuralı yok, politika tek kaynaktan", !/min\(6\b/.test(admin) && admin.includes("newPasswordViolation("));
   const panel = oku(join(KOK, "Electron/src/lib/password-policy.ts"));
   check(
     "§5c panel politika aynası backend'e eşit",

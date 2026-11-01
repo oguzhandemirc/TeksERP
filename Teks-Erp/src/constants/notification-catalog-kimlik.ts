@@ -41,4 +41,25 @@ export const KIMLIK_NOTIFICATION_ENTRIES = {
     payloadAlanlari: ["kullaniciId", "kullanici", "tarayici", "ip", "saat"],
     tahminiHaftalik: 2, saklama: SAKLAMA,
   },
+  "kimlik.supheli-giris-denemesi": {
+    kod: "kimlik.supheli-giris-denemesi", ad: "Hesaba yoğun hatalı giriş denemesi",
+    sinif: "BILDIRIM", altTur: "OLAY", grup: "Sistem",
+    // Alıcı: hesabın sahibi + kullanıcı yöneticileri (`notification-sources/kimlik.ts` çözücüsü).
+    izinler: [["admin:users"], ["web:access"]],
+    screenlessViewers: {
+      permissions: ["web:access"],
+      reason: "Hesabın sahibi kendi hesabına yapılan yoğun deneme uyarısını görür; parolasını Kullanıcı Tercihleri'nden değiştirir.",
+    },
+    modul: "cekirdek:sistem-kimlik-belge",
+    // Hesap başına saatte en çok bir uyarı (kaynak eşiği zaten saatte bir yayar); pencere ikinci bir sed.
+    tekilKalibi: "{kullaniciId}",
+    pencereSn: 3600, varsayilan: "HERKES", kilit: "YOK",
+    kanallar: KANAL_MASAUSTU,
+    varsayilanKanallar: ["UYGULAMA"],
+    baslik: "{kullanici} hesabına son 1 saatte {hataSayisi} hatalı giriş denemesi",
+    govde: "{kaynakSayisi} farklı adresten · {saat}. Tanımadığınız bir deneme ise parolayı değiştirin ve iki adımlı doğrulamayı açın.",
+    panelEkran: "access/users", panelYol: "/access/users",
+    payloadAlanlari: ["kullaniciId", "kullanici", "hataSayisi", "kaynakSayisi", "saat"],
+    tahminiHaftalik: 0.1, saklama: SAKLAMA,
+  },
 } as const satisfies Record<string, NotificationCatalogEntry>;

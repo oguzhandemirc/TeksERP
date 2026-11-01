@@ -23,6 +23,8 @@ declare module "express-serve-static-core" {
       /** TABLET / PHONE / DESKTOP — çalışma oturumu zorunluluğu yalnız saha
        *  cihazlarına (TABLET/PHONE) uygulanır; DESKTOP (Electron) muaf. */
       kind: string;
+      /** Bu istekte cihaz kanıtı (HMAC) doğrulandı mı — hız sınırı cihaz kovası ve kilit muafiyeti bundan. */
+      proofVerified?: boolean;
     };
     /**
      * Onaysız (PENDING + aktif) cihaz `device.unpairedPasswordLogin` sayesinde geçti — yalnız

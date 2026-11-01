@@ -125,7 +125,7 @@ async function main() {
       body: {
         username: lowUsername,
         fullName: "HTTP RBAC Test",
-        password: "test123456",
+        password: "Ht-Rbac-7319x",
         grantOperatorDefaults: false,
         generateMobileCredentials: false,
       },
@@ -133,7 +133,7 @@ async function main() {
     lowUserId = (((lowCreate.body.data ?? {}) as Record<string, unknown>).id as string) ?? null;
     check("0-izinli kullanıcı oluşturuldu (201)", lowCreate.status === 201, `status=${lowCreate.status}`);
     const lowLogin = await call("POST", "/api/auth/login", {
-      body: { username: lowUsername, password: "test123456" },
+      body: { username: lowUsername, password: "Ht-Rbac-7319x" },
     });
     const lowToken = ((lowLogin.body.data ?? {}) as Record<string, unknown>).token as string | undefined;
     check("yetkisiz kullanıcı login → 200 (aktif)", lowLogin.status === 200, `status=${lowLogin.status}`);

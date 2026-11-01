@@ -126,6 +126,7 @@ import { requireAnyPermission } from "./middlewares/rbac.middleware";
 import dbCopyRoutes from "./routes/db-copy.routes";
 import shortCredentialRoutes from "./routes/short-credential.routes";
 import credentialResetRoutes from "./routes/credential-reset.routes";
+import loginLockoutRoutes from "./routes/login-lockout.routes";
 import readOnlyDbRoutes from "./routes/read-only-db.routes";
 import dashboardRoutes from "./routes/dashboard.routes";
 import reportsRoutes from "./routes/reports.routes";
@@ -144,6 +145,7 @@ import {
   createRateLimiter,
   HSTS_MAX_AGE_SEC,
 } from "./middlewares/web-hardening";
+import { buildRateLimitSubjectResolver } from "./middlewares/rate-limit-subject";
 
 import { runWithRequestContext } from "./lib/request-context";
 import searchRoutes from "./routes/search.routes";
@@ -522,6 +524,8 @@ if (hardening.rateLimit.enabled) {
       // ⚠️ Giriş kilidiyle AYNI istemci kaynağı: biri kenar IP'sini, diğeri
       // gerçek ziyaretçiyi sayarsa iki koruma farklı kişileri sınırlar.
       clientIpHeader: hardening.clientIpHeader,
+      // Y3: kanıtlı cihaz / oturum sahibi kendi kovasında; beyanlı fabrika IP'si yüksek eşikte.
+      resolveSubject: buildRateLimitSubjectResolver(hardening.clientIpHeader),
     }),
   );
 }
@@ -686,6 +690,7 @@ app.use("/api/config-bundle", configBundleRoutes);
 app.use("/api/admin/db-copies", dbCopyRoutes);
 app.use("/api/admin/short-credentials", shortCredentialRoutes);
 app.use("/api/admin/credential-reset-requests", credentialResetRoutes);
+app.use("/api/admin/login-lockouts", loginLockoutRoutes); // O4: kilitli giriş kovaları
 app.use("/api/admin/read-only-db", readOnlyDbRoutes);
 // ZENGİN sağlık yükü — `/health`ten AYRILDI (F-CORE-GUV-002). adminRoutes'tan
 // ÖNCE kaydedilir ki aynı prefix altında bu özel yol önce eşleşsin. Guard'lar

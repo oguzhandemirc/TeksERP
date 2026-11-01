@@ -141,6 +141,7 @@ export const resolveDevice = async (
     name: device.name,
     machineId: device.machineId,
     kind: device.kind,
+    proofVerified: verdict === "OK",
   };
   touchDevice(device.deviceId); // anlık "bağlı cihaz" izleme (bellekte)
   next();

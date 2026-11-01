@@ -7,6 +7,7 @@
  * Koşum: `cd Teks-Erp && npx tsx scripts/test_parola_kilidi_ip.ts` (yalnız fikstür DB)
  */
 import prisma from "../src/lib/prisma"; // İLK import: dotenv → DATABASE_URL
+import { resetAccountThrottleForTests } from "../src/middlewares/account-soft-throttle";
 import http from "node:http";
 import { randomInt } from "node:crypto";
 import { AuthService } from "../src/services/auth.service";
@@ -110,6 +111,9 @@ async function main(): Promise<void> {
 
     for (const kapsam of ["ip+identity", "ip"] as const) {
       process.env.LOGIN_LOCKOUT_SCOPE = kapsam;
+      // Hesap başına yumuşak kova (Y2) ayrı bekçide (test_giris_kova_ayrimi §2); burada yalnız IP kilidi ölçülür —
+      // iki kapsamın 10 yanlışı aynı hesapta birikip kurbanın yeni IP'sini bekletmesin.
+      resetAccountThrottleForTests();
       const e = kapsam === "ip" ? "§2 kapsam ip (fabrika varsayılanı)" : "§1 kapsam ip|kullanıcı (vekil arkası)";
       console.log(`\n=== ${e} ===`);
       const saldirgan = ipUret();
