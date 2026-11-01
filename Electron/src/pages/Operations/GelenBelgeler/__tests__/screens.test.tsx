@@ -15,6 +15,7 @@ import { SuggestionChips } from "../SuggestionChips";
 import { ApproveDialog } from "../ApproveDialog";
 import { LineRow } from "../LineRow";
 import type { DeliveryNoteHeader, DeliveryNoteLine } from "../types";
+import * as noteService from "../service";
 
 vi.mock("@/components/layout/PageHeader", () => ({
   PageHeader: ({ title, actions, titleExtra }: { title: string; actions?: ReactNode; titleExtra?: ReactNode }) => (
@@ -75,6 +76,17 @@ describe("liste", () => {
     expect(within(group).getByText(/Tümü \(1\)/)).toBeInTheDocument();
     await userEvent.click(within(group).getByRole("button", { name: /Onaylandı/ }));
     await waitFor(() => expect(listDeliveryNotes).toHaveBeenLastCalledWith(expect.objectContaining({ status: "APPROVED" })));
+  });
+  it("Yenile düğmesi çizilir; liste + sekme sayaçlarını yeniden ister", async () => {
+    // Okuma durumu çözülmezse düğme "yükleniyor" sayıp pasif kalır (kök anahtar onu da kapsar).
+    vi.mocked(noteService.getReaderStatus).mockResolvedValueOnce({ enabled: false } as never);
+    renderWithProviders(<IncomingDocumentsPage />);
+    expect(await screen.findByText("GB-0001")).toBeInTheDocument();
+    const calls = listDeliveryNotes.mock.calls.length;
+    const btn = screen.getByRole("button", { name: /Yenile/ });
+    await waitFor(() => expect(btn).toBeEnabled());
+    await userEvent.click(btn);
+    await waitFor(() => expect(listDeliveryNotes.mock.calls.length).toBeGreaterThan(calls));
   });
   it("liste hatası 'belge yok' gibi gösterilmez", async () => {
     listDeliveryNotes.mockRejectedValue(new Error("ağ"));

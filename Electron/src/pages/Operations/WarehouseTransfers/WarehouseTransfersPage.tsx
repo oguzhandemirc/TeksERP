@@ -3,7 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { formatFactory } from "@/lib/factory-time";
 import { ArrowRight, Ban, Plus, Printer } from "lucide-react";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { RefreshButton } from "@/components/RefreshButton";
+import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -59,46 +61,52 @@ export function WarehouseTransfersPage() {
         title="Depo Transferi"
         description="Depolar arası taşıma. Toplar tek işlemde taşınır — biri uygun değilse hiçbiri taşınmaz."
         actions={
-          <PermissionGate permission="warehouse:transfer">
-            <Button onClick={() => setFormOpen(true)}>
-              <Plus className="mr-1 h-4 w-4" />
-              Yeni Transfer
-            </Button>
-          </PermissionGate>
+          <div className="flex flex-wrap gap-2">
+            <RefreshButton queryKey="warehouse-transfers" extraKeys={["warehouse-transfer"]} />
+            <PermissionGate permission="warehouse:transfer">
+              <Button onClick={() => setFormOpen(true)}>
+                <Plus className="mr-1 h-4 w-4" />
+                Yeni Transfer
+              </Button>
+            </PermissionGate>
+          </div>
         }
       />
 
-      <PageBody className="p-6">
+      <ListBody>
         {listQ.isLoading ? (
-          <div className="text-sm text-muted-foreground">Yükleniyor…</div>
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
         ) : listQ.isError && rows.length === 0 ? (
           /* ⚠️ "Henüz transfer yok." hata anında basılırsa depocu az önce yaptığı
              taşımayı yok sanıp AYNI TOPLARI ikinci kez transfer etmeye kalkar;
              ikinci deneme reddedilir ("bu depoda değil") ve sebebi de o mesajdan
              anlaşılmaz — çıkmaz. */
-          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-            <p className="font-medium text-destructive">Transfer listesi yüklenemedi.</p>
-            <p className="mt-1 text-muted-foreground">
-              Bu bir “transfer yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi.
-              Yeni transfer açmadan önce tekrar deneyin.
-            </p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => void listQ.refetch()}>
-              Tekrar dene
-            </Button>
-          </div>
+          <ListMessage>
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+              <p className="font-medium text-destructive">Transfer listesi yüklenemedi.</p>
+              <p className="mt-1 text-muted-foreground">
+                Bu bir “transfer yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi.
+                Yeni transfer açmadan önce tekrar deneyin.
+              </p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => void listQ.refetch()}>
+                Tekrar dene
+              </Button>
+            </div>
+          </ListMessage>
         ) : rows.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-            Henüz transfer yok.
-          </div>
+          <ListMessage>
+            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+              Henüz transfer yok.
+            </div>
+          </ListMessage>
         ) : (
-          <div className="space-y-3">
+          <>
             {listQ.isError && (
-              <p className="rounded-md bg-amber-100 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+              <p className="border-b bg-amber-100 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
                 Liste tazelenemedi — aşağıdaki belgeler son başarılı okumaya aittir; az önce
                 yapılmış bir transfer burada görünmeyebilir.
               </p>
             )}
-            <div className="overflow-hidden rounded-lg border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                 <tr>
@@ -129,16 +137,16 @@ export function WarehouseTransfersPage() {
                 ))}
               </tbody>
             </table>
-            </div>
             {/* KIRPMA SESSİZ DEĞİL (norm: CashTransactionsPage). */}
             {total > rows.length && (
-              <p className="text-xs text-amber-700 dark:text-amber-500">
+              <p className="border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
                 {total} transferin ilk {rows.length} tanesi gösteriliyor (en yeniden geriye).
               </p>
             )}
-          </div>
+          </>
         )}
-      </PageBody>
+      </ListBody>
+      {rows.length > 0 && <ListFooter loaded={rows.length} total={total} />}
 
       <TransferFormDialog
         open={formOpen}

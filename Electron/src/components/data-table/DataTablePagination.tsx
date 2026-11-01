@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Loader2 } from "lucide-react";
+import { ListFooter } from "@/components/layout/ListPage";
 import type { DataTablePagination as Pagination } from "@/hooks/useDataTable";
 
 interface Props {
@@ -14,41 +14,25 @@ const PAGE_SIZE_OPTIONS = [50, 100];
 /**
  * Cursor pagination footer — sayfa numarası YOK, buton da YOK. Sonraki sayfa liste
  * dibine gelince otomatik yüklenir (DataTable içindeki useInfiniteScroll sentinel'i).
- * Bu çubuk yalnız durum gösterir: yüklü/toplam sayaç + yükleniyor / tümü yüklendi.
+ * Görünüm liste standardının alt şeridi (`ListFooter`): yüklü/toplam + durum; buraya yalnız sayfa boyu eklenir.
  */
 export function DataTablePagination({ pagination, actions }: Props) {
   const { loaded, total, hasMore, isFetchingMore, pageSize, setPageSize } = pagination;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t px-3 py-2 text-xs text-muted-foreground">
-      <div>
-        {total != null
-          ? `Yüklü ${loaded.toLocaleString("tr-TR", { useGrouping: false })} / ${total.toLocaleString("tr-TR", { useGrouping: false })} kayıt`
-          : `Yüklü ${loaded.toLocaleString("tr-TR", { useGrouping: false })} kayıt`}
-      </div>
-      <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
-        {isFetchingMore ? (
-          <span className="flex items-center gap-1.5">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Yükleniyor…
-          </span>
-        ) : hasMore ? null : (
-          // Hepsi yüklendiğinde düz durum yazısı.
-          <span>Tüm kayıtlar yüklendi</span>
-        )}
-        {actions}
-        <select
-          className="h-7 rounded-md border bg-background px-2 text-xs"
-          value={pageSize}
-          onChange={(e) => setPageSize(Number(e.target.value))}
-        >
-          {PAGE_SIZE_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {s}/sf
-            </option>
-          ))}
-        </select>
-      </div>
-    </div>
+    <ListFooter loaded={loaded} total={total} hasMore={hasMore} isFetchingMore={isFetchingMore}>
+      {actions}
+      <select
+        className="h-7 rounded-md border bg-background px-2 text-xs"
+        value={pageSize}
+        onChange={(e) => setPageSize(Number(e.target.value))}
+      >
+        {PAGE_SIZE_OPTIONS.map((s) => (
+          <option key={s} value={s}>
+            {s}/sf
+          </option>
+        ))}
+      </select>
+    </ListFooter>
   );
 }

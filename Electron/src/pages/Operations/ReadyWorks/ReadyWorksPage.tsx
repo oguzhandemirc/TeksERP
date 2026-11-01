@@ -4,7 +4,8 @@
 import { useState } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -92,38 +93,46 @@ export function ReadyWorksPage() {
         description={`${TERIM.terbiyeIsEmri.tekil}, gelen belge, parti ya da müşteri başına sevke hazırlık. Hazır = Bitmiş Depo / 2. kalite stoktaki toplar; kural fabrika ayarından (tümü bitti ya da metre eşiği). Satıra tıklayınca toplar açılır, hazır olanlar oradan sevke alınır.`}
         actions={<RefreshButton queryKey={READY_WORKS_QUERY_KEY} />}
       />
-      <PageBody className="min-h-0 space-y-3 p-4 sm:p-6">
+      <ListToolbar>
+        {!q.isLoading && !q.isError && first && <SummaryStrip s={first.summary} />}
         <ReadyWorksToolbar tabs={tabs} unit={unit} onUnit={setPicked} stateFilter={stateFilter} onStateFilter={setStateFilter} />
+      </ListToolbar>
+      <ListBody>
         {q.isLoading ? (
-          <div className="text-sm text-muted-foreground">Yükleniyor…</div>
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
         ) : q.isError ? (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-            <p className="font-medium text-destructive">Liste yüklenemedi.</p>
-            <p className="mt-1 text-muted-foreground">Bu bir “hazır iş yok” cevabı değildir — istek reddedildi ya da sunucuya ulaşılamadı.</p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-              Tekrar dene
-            </Button>
-          </div>
+          <ListMessage>
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+              <p className="font-medium text-destructive">Liste yüklenemedi.</p>
+              <p className="mt-1 text-muted-foreground">Bu bir “hazır iş yok” cevabı değildir — istek reddedildi ya da sunucuya ulaşılamadı.</p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+                Tekrar dene
+              </Button>
+            </div>
+          </ListMessage>
         ) : (
           <>
-            {first && <SummaryStrip s={first.summary} />}
             {rows.length === 0 ? (
-              <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                Bu süzgeçte iş yok. Tamamı sevk edilmiş işler listede görünmez.
-              </div>
+              <ListMessage>
+                <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                  Bu süzgeçte iş yok. Tamamı sevk edilmiş işler listede görünmez.
+                </div>
+              </ListMessage>
             ) : (
               <ReadyWorksTable rows={rows} unit={unit} unitLabel={tabs.find((t) => t.unit === unit)?.label ?? "İş"} onOpen={setOpenRow} />
             )}
-            {q.hasNextPage && (
-              <div className="flex justify-center">
-                <Button variant="outline" size="sm" disabled={q.isFetchingNextPage} onClick={() => void q.fetchNextPage()}>
-                  {q.isFetchingNextPage ? "Yükleniyor…" : "Daha fazla"}
-                </Button>
-              </div>
-            )}
           </>
         )}
-      </PageBody>
+      </ListBody>
+      {!q.isLoading && !q.isError && rows.length > 0 && (
+        <ListFooter loaded={rows.length} hasMore={Boolean(q.hasNextPage)} isFetchingMore={q.isFetchingNextPage}>
+          {q.hasNextPage && (
+            <Button variant="outline" size="sm" className="h-7" disabled={q.isFetchingNextPage} onClick={() => void q.fetchNextPage()}>
+              {q.isFetchingNextPage ? "Yükleniyor…" : "Daha fazla"}
+            </Button>
+          )}
+        </ListFooter>
+      )}
       <ShipFlow openRow={openRow} onCloseRow={() => setOpenRow(null)} canShip={canShip} />
     </PageShell>
   );

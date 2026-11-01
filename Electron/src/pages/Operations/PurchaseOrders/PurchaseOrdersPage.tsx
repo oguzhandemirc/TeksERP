@@ -29,7 +29,9 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { RefreshButton } from "@/components/RefreshButton";
+import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -48,6 +50,9 @@ import {
 import { dayEndIso, dayStartIso } from "./dates";
 
 const PAGE_SIZE = 100;
+
+/** Sekme gövdesi: kalan yüksekliği doldurur; içindeki ListBody tek kaydırıcıdır. */
+const TAB_PANE = "mt-0 flex min-h-0 flex-1 flex-col";
 
 export function PurchaseOrdersPage() {
   const [filters, setFilters] = useState<PurchaseOrderFilterState>(EMPTY_PO_FILTERS);
@@ -97,17 +102,20 @@ export function PurchaseOrdersPage() {
         title="Alış Siparişleri"
         description="Tedarikçiye verilen sipariş bir TAAHHÜTTÜR — stoğa hiçbir şey yazmaz. Mal geldikçe mal kabul fişi siparişe bağlanır ve “ne kaldı” kendiliğinden hesaplanır."
         actions={
-          <PermissionGate permission="purchase-order:write">
-            <Button
-              onClick={() => {
-                setEditId(null);
-                setFormOpen(true);
-              }}
-            >
-              <Plus className="mr-1 h-4 w-4" />
-              Yeni Sipariş
-            </Button>
-          </PermissionGate>
+          <div className="flex flex-wrap gap-2">
+            <RefreshButton queryKey="purchase-orders" extraKeys={["purchase-order-open-lines"]} />
+            <PermissionGate permission="purchase-order:write">
+              <Button
+                onClick={() => {
+                  setEditId(null);
+                  setFormOpen(true);
+                }}
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                Yeni Sipariş
+              </Button>
+            </PermissionGate>
+          </div>
         }
       />
 
@@ -120,38 +128,44 @@ export function PurchaseOrdersPage() {
         scope={tab === "orders" ? "orders" : "open-lines"}
       />
 
-      <PageBody className="p-6">
-        <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
-          <TabsList>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="flex min-h-0 flex-1 flex-col">
+        <ListToolbar>
+          <TabsList className="self-start">
             <TabsTrigger value="orders">Siparişler</TabsTrigger>
             {/* Ekranın asıl sorusu bu sekmede — adı da soruyla aynı. */}
             <TabsTrigger value="open-lines">Ne bekliyorum?</TabsTrigger>
           </TabsList>
+        </ListToolbar>
 
-          <TabsContent value="orders">
+        <TabsContent value="orders" className={TAB_PANE}>
+          <ListBody>
             {q.isLoading ? (
-              <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+              <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
             ) : q.isError ? (
               /* "HATA" ile "KAYIT YOK" AYRI EKRANLAR: boş diziyi "sipariş yok"
                  diye basmak, kullanıcıyı aynı siparişi ikinci kez açmaya iter.
                  Interceptor'ın toast'ı birkaç saniyede kaybolur; ekranda kalan
                  cümle doğruyu söylemek zorunda. */
-              <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-                <p className="font-medium text-destructive">Sipariş listesi yüklenemedi.</p>
-                <p className="mt-1 text-muted-foreground">
-                  Bu bir “sipariş yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi.
-                  Kayıtlarınız yerinde duruyor; yeni sipariş açmadan önce tekrar deneyin.
-                </p>
-                <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-                  Tekrar dene
-                </Button>
-              </div>
+              <ListMessage>
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+                  <p className="font-medium text-destructive">Sipariş listesi yüklenemedi.</p>
+                  <p className="mt-1 text-muted-foreground">
+                    Bu bir “sipariş yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi.
+                    Kayıtlarınız yerinde duruyor; yeni sipariş açmadan önce tekrar deneyin.
+                  </p>
+                  <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+                    Tekrar dene
+                  </Button>
+                </div>
+              </ListMessage>
             ) : rows.length === 0 ? (
-              <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-                {dirty
-                  ? "Bu filtreyle sipariş yok. Tamamlanan ve iptal edilenleri görmek için durum filtresini “Tümü” yapın."
-                  : "Henüz alış siparişi yok. “Yeni Sipariş” ile tedarikçiye verdiğiniz siparişi kaydedin; mal geldikçe kalan miktar kendiliğinden düşer."}
-              </div>
+              <ListMessage>
+                <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+                  {dirty
+                    ? "Bu filtreyle sipariş yok. Tamamlanan ve iptal edilenleri görmek için durum filtresini “Tümü” yapın."
+                    : "Henüz alış siparişi yok. “Yeni Sipariş” ile tedarikçiye verdiğiniz siparişi kaydedin; mal geldikçe kalan miktar kendiliğinden düşer."}
+                </div>
+              </ListMessage>
             ) : (
               <>
                 <PurchaseOrderTable
@@ -161,27 +175,28 @@ export function PurchaseOrdersPage() {
                   onCancel={(r) => setCancelId(r.id)}
                 />
                 {total > rows.length && (
-                  <p className="mt-3 text-xs text-amber-700 dark:text-amber-500">
+                  <p className="border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
                     {total} siparişin ilk {rows.length} tanesi gösteriliyor (en yeni önce). Aradığınızı
                     bulmak için arama, tedarikçi ya da tarih filtresini kullanın.
                   </p>
                 )}
               </>
             )}
-          </TabsContent>
+          </ListBody>
+          {rows.length > 0 && <ListFooter loaded={rows.length} total={total} />}
+        </TabsContent>
 
-          <TabsContent value="open-lines">
-            <OpenLinesPanel
-              supplier={supplier}
-              itemId={openLineItemId}
-              onItemChange={setOpenLineItemId}
-              overdueOnly={overdueOnly}
-              onOverdueChange={setOverdueOnly}
-              onOpenOrder={setDetailId}
-            />
-          </TabsContent>
-        </Tabs>
-      </PageBody>
+        <TabsContent value="open-lines" className={TAB_PANE}>
+          <OpenLinesPanel
+            supplier={supplier}
+            itemId={openLineItemId}
+            onItemChange={setOpenLineItemId}
+            overdueOnly={overdueOnly}
+            onOverdueChange={setOverdueOnly}
+            onOpenOrder={setDetailId}
+          />
+        </TabsContent>
+      </Tabs>
 
       {/* Diyaloglar KOŞULLU mount edilir: her açılış taze bileşen demektir —
           ön-doldurma yalnız başlangıç değeri olarak kalır ve `clientToken`

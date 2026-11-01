@@ -10,11 +10,12 @@ import { PageShell } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
+import { RefreshButton } from "@/components/RefreshButton";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useAttemptToken } from "@/lib/attemptToken";
-import { createManualNote } from "./service";
+import { createManualNote, INCOMING_DOCUMENT_QUERY_KEY } from "./service";
 import { SENDER_TEMPLATES_PATH } from "./GonderenSablonlariPage";
 import { CUSTOMER_DEFAULTS_PATH } from "./paths";
 import { UploadDialog } from "./UploadDialog";
@@ -97,6 +98,8 @@ export function IncomingDocumentsPage() {
         description="Müşteri irsaliyesi — fotoğraftan okunan ya da elle girilen taslak; onayda emanet topu doğar."
         actions={
           <div className="flex flex-wrap gap-2">
+            {/* Kök anahtar: liste + sekme sayaçları/özet (aynı yanıt) + okuma durumu birlikte tazelenir. Yer Kumaş Stoğu ile aynı. */}
+            <RefreshButton queryKey={INCOMING_DOCUMENT_QUERY_KEY} />
             <TemplateLinks />
             <PermissionGate permission="gelen-belge:write">
               <div className="flex flex-wrap gap-2">

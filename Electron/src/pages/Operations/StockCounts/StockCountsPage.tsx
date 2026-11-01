@@ -21,7 +21,9 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatFactory } from "@/lib/factory-time";
 import { ClipboardList, Plus, RotateCcw, Search } from "lucide-react";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { RefreshButton } from "@/components/RefreshButton";
+import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -80,12 +82,15 @@ export function StockCountsPage() {
         title="Stok Sayımı"
         description="Depoyu baştan sona say, defterle karşılaştır, farkı kayda geçir. Sayım açmak ve işaretlemek hiçbir deftere yazmaz — fark yalnız “Tamamla” ile kaydedilir."
         actions={
-          <PermissionGate permission="warehouse:transfer">
-            <Button onClick={() => setFormOpen(true)}>
-              <Plus className="mr-1 h-4 w-4" />
-              Yeni Sayım
-            </Button>
-          </PermissionGate>
+          <div className="flex flex-wrap gap-2">
+            <RefreshButton queryKey="stock-counts" />
+            <PermissionGate permission="warehouse:transfer">
+              <Button onClick={() => setFormOpen(true)}>
+                <Plus className="mr-1 h-4 w-4" />
+                Yeni Sayım
+              </Button>
+            </PermissionGate>
+          </div>
         }
       />
 
@@ -140,106 +145,104 @@ export function StockCountsPage() {
         )}
       </div>
 
-      <PageBody className="p-6">
+      <ListBody>
         {q.isLoading ? (
-          <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
         ) : q.isError ? (
-          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-            <p className="font-medium text-destructive">Sayım listesi yüklenemedi.</p>
-            <p className="mt-1 text-muted-foreground">
-              Bu bir “sayım yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi. Yeni
-              sayım açmadan önce tekrar deneyin: aynı depoda açık bir sayım varsa ikincisi
-              reddedilir.
-            </p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-              Tekrar dene
-            </Button>
-          </div>
+          <ListMessage>
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+              <p className="font-medium text-destructive">Sayım listesi yüklenemedi.</p>
+              <p className="mt-1 text-muted-foreground">
+                Bu bir “sayım yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi. Yeni
+                sayım açmadan önce tekrar deneyin: aynı depoda açık bir sayım varsa ikincisi
+                reddedilir.
+              </p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+                Tekrar dene
+              </Button>
+            </div>
+          </ListMessage>
         ) : rows.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-            {stockCountEmptyMessage(filters)}
-          </div>
+          <ListMessage>
+            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+              {stockCountEmptyMessage(filters)}
+            </div>
+          </ListMessage>
         ) : (
           <>
-            <div className="overflow-hidden rounded-lg border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-                  <tr>
-                    <th className="p-3 text-left">Sayım No</th>
-                    <th className="p-3 text-left">Açılış</th>
-                    <th className="p-3 text-left">Depo</th>
-                    <th className="p-3 text-right">Satır</th>
-                    <th className="p-3 text-left">Durum</th>
-                    <th className="p-3 text-left">Kapanış</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => {
-                    const closedAt = r.completedAt ?? r.cancelledAt;
-                    return (
-                      <tr
-                        key={r.id}
-                        className="cursor-pointer border-t hover:bg-muted/40"
-                        onClick={(e) => openTarget(stockCountPath(r.id), e)}
-                      >
-                        <td className="p-3 font-mono text-xs">{r.countNo}</td>
-                        <td className="p-3">
-                          {formatFactory(r.createdAt, "dd MMM yyyy HH:mm")}
-                        </td>
-                        <td className="p-3">{r.warehouse?.name ?? "—"}</td>
-                        {/* Kırılım (top/iplik) DETAYDA — listede tek sayı yeterli ve
-                            iki birimi tek hücrede toplamak zaten yanlış olurdu. */}
-                        <td className="p-3 text-right tabular-nums">{r._count.lines}</td>
-                        <td className="p-3">
-                          <Badge variant={STATUS_BADGE[r.status]}>{STATUS_LABEL[r.status]}</Badge>
-                          {r.reversedAt && (
-                            <Badge variant="outline" className="ml-1">
-                              Stornolandı
-                            </Badge>
-                          )}
-                        </td>
-                        <td className="p-3 text-xs text-muted-foreground">
-                          {closedAt ? formatFactory(closedAt, "dd MMM yyyy HH:mm") : "—"}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="p-3 text-left">Sayım No</th>
+                  <th className="p-3 text-left">Açılış</th>
+                  <th className="p-3 text-left">Depo</th>
+                  <th className="p-3 text-right">Satır</th>
+                  <th className="p-3 text-left">Durum</th>
+                  <th className="p-3 text-left">Kapanış</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const closedAt = r.completedAt ?? r.cancelledAt;
+                  return (
+                    <tr
+                      key={r.id}
+                      className="cursor-pointer border-t hover:bg-muted/40"
+                      onClick={(e) => openTarget(stockCountPath(r.id), e)}
+                    >
+                      <td className="p-3 font-mono text-xs">{r.countNo}</td>
+                      <td className="p-3">
+                        {formatFactory(r.createdAt, "dd MMM yyyy HH:mm")}
+                      </td>
+                      <td className="p-3">{r.warehouse?.name ?? "—"}</td>
+                      {/* Kırılım (top/iplik) DETAYDA — listede tek sayı yeterli ve
+                          iki birimi tek hücrede toplamak zaten yanlış olurdu. */}
+                      <td className="p-3 text-right tabular-nums">{r._count.lines}</td>
+                      <td className="p-3">
+                        <Badge variant={STATUS_BADGE[r.status]}>{STATUS_LABEL[r.status]}</Badge>
+                        {r.reversedAt && (
+                          <Badge variant="outline" className="ml-1">
+                            Stornolandı
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="p-3 text-xs text-muted-foreground">
+                        {closedAt ? formatFactory(closedAt, "dd MMM yyyy HH:mm") : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
 
-            <p className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
-              <ClipboardList className="h-3 w-3" />
-              {total} sayım{totalPages > 1 ? ` · sayfa ${page}/${totalPages}` : ""} — satıra
-              tıklayarak sayım kâğıdını açın.
-            </p>
-
-            {totalPages > 1 && (
-              <div className="mt-3 flex items-center justify-end gap-2 text-sm">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1 || q.isFetching}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  Önceki
-                </Button>
-                <span className="text-muted-foreground">
-                  Sayfa {page} / {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= totalPages || q.isFetching}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  Sonraki
-                </Button>
-              </div>
-            )}
           </>
         )}
-      </PageBody>
+      </ListBody>
+      {rows.length > 0 && (
+        <ListFooter
+          loaded={rows.length}
+          label={
+            <span className="flex items-center gap-1">
+              <ClipboardList className="h-3 w-3" />
+              {total} sayım{totalPages > 1 ? ` · sayfa ${page}/${totalPages}` : ""} — satıra tıklayarak sayım kâğıdını açın.
+            </span>
+          }
+        >
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="h-7" disabled={page <= 1 || q.isFetching} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                Önceki
+              </Button>
+              <span>
+                Sayfa {page} / {totalPages}
+              </span>
+              <Button variant="outline" size="sm" className="h-7" disabled={page >= totalPages || q.isFetching} onClick={() => setPage((p) => p + 1)}>
+                Sonraki
+              </Button>
+            </div>
+          )}
+        </ListFooter>
+      )}
 
       {/* Diyalog KOŞULLU mount edilir: her açılış taze bileşen demektir (depo/not
           alanları önceki denemeden kalmaz). */}

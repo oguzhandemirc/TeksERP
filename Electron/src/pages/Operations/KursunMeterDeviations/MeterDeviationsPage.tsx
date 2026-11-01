@@ -3,12 +3,12 @@
 import { useState } from "react";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListMessage, ListSentinel, ListToolbar } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { RefreshButton } from "@/components/RefreshButton";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
-import { AutoLoadMore } from "@/components/data-table/AutoLoadMore";
 import { METER_DEVIATIONS_QUERY_KEY, listMeterDeviations, officeAckMeterReading } from "./service";
 import { DeviationFilters } from "./DeviationFilters";
 import { DeviationTable } from "./DeviationTable";
@@ -53,30 +53,37 @@ export function MeterDeviationsPage() {
         description="Kurşun çıkış metresinin girişten eşik üstü farkları. İmza bekleyen sapma adımı kapatmaz; imzasız sapma yalnız işarettir."
         actions={<RefreshButton queryKey={METER_DEVIATIONS_QUERY_KEY} />}
       />
-      <PageBody ref={rootRef} className="min-h-0 space-y-3 p-4 sm:p-6">
+      <ListToolbar>
         <SummaryStrip summary={summary} />
         <DeviationFilters filter={filter} onChange={setFilter} />
+      </ListToolbar>
+      <ListBody ref={rootRef}>
         {list.isLoading ? (
-          <div className="text-sm text-muted-foreground">Yükleniyor…</div>
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
         ) : list.isError && items.length === 0 ? (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-            <p className="font-medium text-destructive">Liste yüklenemedi.</p>
-            <p className="mt-1 text-muted-foreground">Bu bir “sapma yok” cevabı değildir — istek reddedildi ya da sunucuya ulaşılamadı.</p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => void list.refetch()}>
-              Tekrar dene
-            </Button>
-          </div>
+          <ListMessage>
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+              <p className="font-medium text-destructive">Liste yüklenemedi.</p>
+              <p className="mt-1 text-muted-foreground">Bu bir “sapma yok” cevabı değildir — istek reddedildi ya da sunucuya ulaşılamadı.</p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => void list.refetch()}>
+                Tekrar dene
+              </Button>
+            </div>
+          </ListMessage>
         ) : items.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-            Bu süzgece uyan metre sapması yok. Eşik ve onay kipi Sistem › Özellik Anahtarları › Üretim — Saha bölümünde seçilir.
-          </div>
+          <ListMessage>
+            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+              Bu süzgece uyan metre sapması yok. Eşik ve onay kipi Sistem › Özellik Anahtarları › Üretim — Saha bölümünde seçilir.
+            </div>
+          </ListMessage>
         ) : (
           <>
             <DeviationTable rows={items} onAck={setTarget} />
-            <AutoLoadMore ref={sentinelRef} hasMore={Boolean(list.hasNextPage)} isFetchingMore={list.isFetchingNextPage} count={items.length} />
+            <ListSentinel ref={sentinelRef} />
           </>
         )}
-      </PageBody>
+      </ListBody>
+      <ListFooter loaded={items.length} total={summary?.total} hasMore={Boolean(list.hasNextPage)} isFetchingMore={list.isFetchingNextPage} />
       {target && (
         <OfficeAckDialog
           target={target}
