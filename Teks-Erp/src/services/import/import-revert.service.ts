@@ -12,6 +12,7 @@ import { matchesPermission } from "../../middlewares/rbac.middleware";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import { getImportAdapter } from "./import-registry";
+import { assertImportModuleOpen } from "./import-module-gate";
 import {
   delegateOf,
   PIVOT_LEGACY_SKIP,
@@ -47,6 +48,11 @@ export const REVERT_PLAN: Record<string, { model: string; mode: RevertMode; hard
   productRecipe: { model: "productRecipe", mode: "DEACTIVATE", hardDeleteForbidden: true },
   route: { model: "route", mode: "DEACTIVATE", hardDeleteForbidden: true },
   order: { model: "order", mode: "CANCEL_DOCUMENT" },
+  // SY-H2 — dokuma kartları pasife alınır; iplik maliyet fiyatı ③a damgalı sürümdür.
+  warpSpec: { model: "warpSpec", mode: "DEACTIVATE" },
+  weftSpec: { model: "weftSpec", mode: "DEACTIVATE" },
+  weaveDesign: { model: "weaveDesign", mode: "DEACTIVATE" },
+  yarnCostPrice: { model: "yarnCostPrice", mode: "REVOKE_VERSION" },
 };
 
 export type RevertRowAction =
@@ -55,6 +61,7 @@ export type RevertRowAction =
   | "RESTORE_CHILDREN"
   | "CANCEL_DOCUMENT"
   | "DELETE_PIVOT"
+  | "REVOKE_VERSION"
   | "SKIP";
 
 export interface RevertPlanRow {
@@ -112,6 +119,7 @@ async function loadRun(
   if (!run) throw AppError.notFound("İçe aktarım kaydı bulunamadı");
   const adapter = getImportAdapter(run.entity);
   assertEntityPermission(adapter, permissions);
+  await assertImportModuleOpen(adapter);
   const plan = REVERT_PLAN[run.entity];
   if (!plan) {
     throw AppError.badRequest(`'${run.entity}' için ters yol tanımlı değil — geri sarma yapılamaz.`, {
@@ -168,6 +176,7 @@ export class ImportRevertService {
         row.skipReason = "Kayıt bulunamadı (sonradan silinmiş)";
         return row;
       }
+      if (plan.mode === "REVOKE_VERSION") return planVersion(row, rec);
       return l.action === "CREATE" ? planCreate(row, rec, { mode: plan.mode, line: l }) : planUpdate(row);
     });
 
@@ -219,7 +228,7 @@ export class ImportRevertService {
     const auditEntries: RevertAuditEntry[] = [];
     let reverted = 0;
     for (const line of lines) {
-      const out = await revertOneLine({ line, plan, adapter, reason, userId: opts.userId });
+      const out = await revertOneLine({ line, plan, adapter, reason, userId: opts.userId, permissions: opts.permissions });
       if (out.skipReason) {
         skipped.push({ rowNo: line.rowNo, reason: out.skipReason });
         continue;
@@ -265,6 +274,15 @@ function planCreate(
   }
   row.action = "DEACTIVATE";
   if (rec.isActive === false) row.skipReason = "Kayıt zaten pasif";
+  return row;
+}
+
+/** ③a sürüm: içe aktarımın yazdığı sürüm hâlâ yürürlükteyse damgalanır (yazımın claim'iyle aynı koşul). */
+function planVersion(row: RevertPlanRow, rec: Record<string, unknown>): RevertPlanRow {
+  row.action = "REVOKE_VERSION";
+  if (rec.revokedAt !== null && rec.revokedAt !== undefined) {
+    row.skipReason = "Fiyat içe aktarımdan sonra değişti ya da kaldırıldı — geri alınmaz";
+  }
   return row;
 }
 
