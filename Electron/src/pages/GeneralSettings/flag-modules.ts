@@ -309,6 +309,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   mobileIdleLockMinutes: "cekirdek",
   mobileLockOnBackground: "cekirdek",
   mobileOfflineLockDefer: "cekirdek",
+  rememberLastUser: "cekirdek",
   absoluteSessionCapDays: "cekirdek",
   pinLockoutEnabled: "cekirdek",
   pinLockoutAttempts: "cekirdek",

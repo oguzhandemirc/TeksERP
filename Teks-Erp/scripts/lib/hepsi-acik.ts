@@ -216,6 +216,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   mobileIdleLockMinutes: V("güvenlik süresi"),
   mobileLockOnBackground: A(true),
   mobileOfflineLockDefer: A(true),
+  rememberLastUser: A(true),
   absoluteSessionCapDays: V("güvenlik süresi"),
   pinLockoutEnabled: A(true),
   pinLockoutAttempts: V("güvenlik sayısı"),

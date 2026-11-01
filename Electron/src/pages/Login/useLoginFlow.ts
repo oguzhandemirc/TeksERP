@@ -19,6 +19,7 @@ import {
 import { useAuthStore } from "@/store/auth";
 import { canEnterApp, type ExistingSessionInfo, type JwtPayload, type LoginResponse } from "@/types/auth";
 import { usePasswordChangeStep } from "./usePasswordChangeStep";
+import { syncRememberedLoginAfterLogin } from "./syncRememberedLogin";
 
 /**
  * GİRİŞ AKIŞI — `LoginPage`ten AYRILDI (sayfa 200 satır kuralını aşıyordu).
@@ -127,6 +128,8 @@ export function useLoginFlow() {
       // Kimlik sabitleme: insan bu sunucuya GİRDİ, yani "bu benim sunucum" dedi.
       // Bundan sonraki keşiflerde kimlik tutmazsa kullanıcıya sorulur.
       void pinServerIdentityAfterLogin();
+      // Son kullanıcı kaydı ayara göre yazılır/silinir; sistem hesabı hiç yazılmaz (arka planda).
+      void syncRememberedLoginAfterLogin(decoded.username);
       const dest = (location.state as { from?: { pathname?: string } })?.from?.pathname ?? "/";
       navigate(dest, { replace: true });
     } catch (err) {

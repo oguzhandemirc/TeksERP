@@ -101,7 +101,7 @@ async function main(): Promise<void> {
   const fields = SEYITOGLU_SETTINGS.map((p) => p.alan);
   check("§1d paket anahtarları ve alanları tekil", new Set(keys).size === keys.length && new Set(fields).size === fields.length);
   // Fabrika türünden bağımsız kimlik ayarı iki pakette de bilerek aynı değerle durur (2026-11-01).
-  const ORTAK_BILEREK = new Set(["auth.trustedDeviceDays"]);
+  const ORTAK_BILEREK = new Set(["auth.trustedDeviceDays", "auth.rememberLastUser"]);
   const shared = keys.filter((k) => !ORTAK_BILEREK.has(k) && HIZMET_AYAR_PAKETI.some((h) => h.anahtar === k));
   check("§1e hizmet paketiyle ortak anahtar yok (beyanlı kimlik ayarı hariç)", shared.length === 0, shared.join(","));
   const ortakFark = [...ORTAK_BILEREK].filter(
