@@ -30,8 +30,8 @@ export async function fetchPresentation(key: string, params: Record<string, stri
   return res.data.data;
 }
 
-/** v2 raporunun TEK veri kancası: URL → istek → `RaporSunumu`. */
-export function useReportV2(entry: ReportCatalogEntry) {
+/** v2 raporunun TEK veri kancası: URL → istek → `RaporSunumu`. `allowed=false` koşulsuz 403 verecek isteği atmaz (SY-D3). */
+export function useReportV2(entry: ReportCatalogEntry, allowed = true) {
   const [search] = useSearchParams();
   const searchText = search.toString();
   const params = useMemo(() => buildReportRequest(entry, new URLSearchParams(searchText)), [entry, searchText]);
@@ -39,7 +39,7 @@ export function useReportV2(entry: ReportCatalogEntry) {
   const query = useQuery({
     queryKey: ["report-v2", entry.key, params],
     queryFn: () => fetchPresentation(entry.key, params),
-    enabled: ready,
+    enabled: ready && allowed,
     retry: (count, error) => failureOf(error) === "other" && count < 1,
   });
   return { ...query, params, ready };

@@ -26,6 +26,8 @@ import type { ApiResponse } from "../types/api.types";
 import { factoryDateTr } from "../constants/time";
 import { SERVICE_BILLING_TRIGGERS, type ServiceBillingTrigger } from "./system-setting.service";
 import { ACTIVE_HOLD_INCLUDE, HELD_CARI_ACCOUNT_WHERE, holdScopes, reasonLabel, type CariHoldScope } from "./helpers/cari-hold.helper";
+import { CARI_TAX_SELECT } from "./helpers/invoice-tax-defaults.helper";
+import { cariTaxOverrideData, taxOverrideOf, type CariTaxOverrideInput } from "./helpers/cari-tax-override.helper";
 
 /**
  * H8b: müşteri tetiği yalnız fabrika ayarının değerleri ya da null (fabrika ayarı); yalnız MÜŞTERİ carisinde
@@ -58,6 +60,11 @@ export interface CariListRow {
   isActive: boolean;
   /** H8b: müşterinin hizmet faturası tetiği; null = fabrika ayarı. */
   serviceBillingTrigger: ServiceBillingTrigger | null;
+  /** D4-V1k: KDV / tevkifat geçersiz kılması; null = genel ayar (çözüm `invoice-tax-defaults.helper`). */
+  vatRate: Prisma.Decimal | null;
+  withholdingEnabled: boolean | null;
+  withholdingNumerator: number | null;
+  withholdingDenominator: number | null;
   /** Kartın rolleri (rol modeli) — kartsız eski fason hesabında null; panel rozeti buradan yazar. */
   roles: { isCustomerRole: boolean; isSupplierRole: boolean; isSubcontractorRole: boolean } | null;
   balances: Array<{ currency: Currency; balance: Prisma.Decimal }>;
@@ -214,9 +221,7 @@ export class CariService {
         return {
           id: r.id,
           kind: r.kind,
-          code: p.code,
-          name: p.name,
-          taxNumber: p.taxNumber,
+          code: p.code, name: p.name, taxNumber: p.taxNumber,
           roles: rolesOf(r),
           taxOffice: r.taxOffice,
           defaultCurrency: r.defaultCurrency,
@@ -226,6 +231,7 @@ export class CariService {
           isActive: r.isActive,
           serviceBillingTrigger: r.serviceBillingTrigger as ServiceBillingTrigger | null,
           hold: holdOf(r),
+          ...taxOverrideOf(r),
           // Sıfır bakiyeli para birimi satırları gürültüdür; ekranda yer kaplar.
           balances: r.balances.filter((b) => !D(b.balance).isZero()),
           // Alan yalnız İSTENDİĞİNDE var — bayraksız yanıt bugünküyle birebir.
@@ -280,6 +286,7 @@ export class CariService {
       isActive: row.isActive,
       serviceBillingTrigger: row.serviceBillingTrigger as ServiceBillingTrigger | null,
       hold: holdOf(row),
+      ...taxOverrideOf(row),
       balances: row.balances,
     };
   }
@@ -355,15 +362,16 @@ export class CariService {
       notes?: string | null;
       isActive?: boolean;
       serviceBillingTrigger?: string | null;
-    },
+    } & CariTaxOverrideInput,
     userId?: string,
   ): Promise<ApiResponse<{ id: string }>> {
     const existing = await prisma.cariAccount.findUnique({
       where: { id },
-      select: { id: true, kind: true, taxOffice: true, defaultCurrency: true, paymentTermDays: true, isActive: true, serviceBillingTrigger: true },
+      select: { id: true, kind: true, taxOffice: true, defaultCurrency: true, paymentTermDays: true, isActive: true, serviceBillingTrigger: true, ...CARI_TAX_SELECT },
     });
     if (!existing) throw AppError.notFound("Cari hesap bulunamadı.");
     assertServiceBillingTriggerInput(input.serviceBillingTrigger, existing.kind);
+    const taxData = cariTaxOverrideData(input, existing);
 
     // ⚠️ Bakiyesi olan cari PASİFLEŞTİRİLEMEZ: pasif cari listelerden düşer ve
     // açık bakiye görünmez olur — muhasebede "kapatılmamış hesabı gizlemek"
@@ -390,6 +398,7 @@ export class CariService {
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
         ...(input.serviceBillingTrigger !== undefined ? { serviceBillingTrigger: input.serviceBillingTrigger } : {}),
+        ...taxData,
       },
       select: { id: true },
     });

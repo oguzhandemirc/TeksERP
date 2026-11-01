@@ -58,6 +58,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cariRoleLabel, updateCari, type CariRow, type CariUpdateInput, type Currency } from "./service";
 import { CariServiceBillingTriggerField, type ServiceBillingTriggerChoice } from "./CariServiceBillingTriggerField";
+import { CariTaxOverrideFields } from "./CariTaxOverrideFields";
+import { buildTaxOverrideBody, taxFormFromCari, type CariTaxForm } from "./cariTaxOverride";
 
 export const CURRENCIES: Currency[] = ["TRY", "USD", "EUR", "GBP", "RUB"];
 
@@ -76,11 +78,14 @@ export interface CariEditForm {
   isActive: boolean;
   /** H8b: `null` = alan bu caride yok (fason hesabı ya da alanı göndermeyen eski backend) → gövdeye girmez. */
   serviceBillingTrigger: ServiceBillingTriggerChoice | null;
+  /** D4-V1k: `null` = alanı göndermeyen eski backend → gövdeye girmez. */
+  tax: CariTaxForm | null;
 }
 
 export interface CariEditErrors {
   paymentTermDays?: string;
   riskLimit?: string;
+  tax?: string;
 }
 
 /**
@@ -133,6 +138,7 @@ export function formFromCari(c: CariRow): CariEditForm {
     notes: c.notes ?? "",
     isActive: c.isActive,
     serviceBillingTrigger: c.kind === "CUSTOMER" && c.serviceBillingTrigger !== undefined ? (c.serviceBillingTrigger ?? "FACTORY") : null,
+    tax: taxFormFromCari(c),
   };
 }
 
@@ -154,7 +160,9 @@ export function buildCariUpdatePayload(
   if (risk === undefined) {
     errors.riskLimit = "Binlik ayracı kullanmayın — örn. 50000 ya da 50000,50.";
   }
-  if (errors.paymentTermDays !== undefined || errors.riskLimit !== undefined) {
+  const tax = form.tax ? buildTaxOverrideBody(form.tax) : null;
+  if (tax && !tax.ok) errors.tax = tax.error;
+  if (errors.paymentTermDays !== undefined || errors.riskLimit !== undefined || errors.tax !== undefined) {
     return { ok: false, errors };
   }
   const taxOffice = form.taxOffice.trim();
@@ -171,6 +179,7 @@ export function buildCariUpdatePayload(
       ...(form.serviceBillingTrigger !== null
         ? { serviceBillingTrigger: form.serviceBillingTrigger === "FACTORY" ? null : form.serviceBillingTrigger }
         : {}),
+      ...(tax?.ok ? tax.body : {}),
     },
   };
 }
@@ -350,6 +359,8 @@ export function CariEditDialog({ cari, open, onOpenChange }: Props) {
           </div>
 
           <CariServiceBillingTriggerField value={form.serviceBillingTrigger} onChange={(v) => patch({ serviceBillingTrigger: v })} />
+
+          <CariTaxOverrideFields value={form.tax} onChange={(v) => patch({ tax: v })} error={errors.tax} />
 
           <div className="col-span-2 flex items-start gap-2 rounded-md border p-3">
             <Checkbox

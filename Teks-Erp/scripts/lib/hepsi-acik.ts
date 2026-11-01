@@ -52,6 +52,10 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   pricingEnabled: A(true),
   financeBlockNegativeCashEnabled: A(true),
   financeDefaultVatRate: V("KDV ön-dolum oranı; açılacak bir şey değil"),
+  // D4-V1k: açık profilde genel tevkifat 5/10 (kural devrede); açıkken oran zorunlu olduğundan üçü birlikte.
+  financeWithholdingEnabled: A(true),
+  financeWithholdingNumerator: A(5),
+  financeWithholdingDenominator: A(10),
   financeInvoiceMatchTolerance: A(true),
   financeInvoiceQtyTolerancePct: A(5),
   financeInvoicePriceTolerancePct: A(5),
