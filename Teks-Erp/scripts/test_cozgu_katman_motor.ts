@@ -162,6 +162,15 @@ function main(): void {
   check("§5e iplik ihtiyacı aynı girdiden: kendi kart firesi (%1) katman kg'ını zincire (%2,5) göre düşürür; zemin kg'ı aynı",
     !!usageOwn && !!usageChain && usageOwn.lt(usageChain) && r6(yarnUsagePerM(sepOwn).warp?.kgPerM) === r6(yarnUsagePerM(layerOf("SEPARATE_BEAM", null)).warp?.kgPerM),
     `${r6(usageOwn)} < ${r6(usageChain)}`);
+  // Bugünkü davranışı sabitler (ELLE ezmesi yalnız zemine, take-up ile aynı ilke); öncelik kararı açık soru.
+  const layerElle = (waste: Prisma.Decimal | null) => buildCostInput({
+    ...src, warpLayers: new Map([["i1", [{ itemId: "i1", role: "LENO", beamMode: "SEPARATE_BEAM", warpSpec: { id: "w2", endsCount: 2720, takeUpPct: D(14), wastePct: waste, yarnItem: yarn("yl", 50) } }]]]),
+  } as unknown as CostSources, { itemId: "i1" }, { warpWastePct: D(4) });
+  const elleOwn = layerElle(D(1)).warpLayers?.[0]?.wastePct;
+  const elleNone = layerElle(null).warpLayers?.[0]?.wastePct;
+  check("§5f SEPARATE_BEAM + ELLE %4: kartta %1 varsa KART %1 (ELLE katmana geçmez); kart boşsa zemin zinciri ELLE %4",
+    elleOwn?.value?.equals(1) === true && elleOwn.source === "KART" && elleNone?.value?.equals(4) === true && elleNone.source === "ELLE",
+    `${elleOwn?.value?.toString()}/${elleOwn?.source} · ${elleNone?.value?.toString()}/${elleNone?.source}`);
 
   console.log("\n── §6 İplik ihtiyacı kullanımı ──");
   const u = yarnUsagePerM(withLayer("CREEL"));
