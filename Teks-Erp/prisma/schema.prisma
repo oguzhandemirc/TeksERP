@@ -481,6 +481,10 @@ model User {
   /// 30 sn boyunca geçerlidir; bu alan olmadan araya giren biri onu ikinci kez
   /// kullanabilirdi.
   totpLastStep       Int?
+  /// Kullanıcı KENDİ hesabında web (tarayıcı) girişinde TOTP'yi kapattı. Yalnız `auth.webTotpPolicy`
+  /// USER_CHOICE iken etkili; yazarı tek uç `PUT /api/auth/web-totp` (parola + kod ile kapatılır).
+  /// Sistem hesabında hep false (CHECK) — süperadmin web'de her zaman kod verir.
+  webTotpOptOut      Boolean   @default(false)
 
   /// KALICI SİLME işareti (geri alınamaz). NULL = normal kayıt (isActive true=aktif,
   /// false=GEÇİCİ pasif, geri alınabilir). Dolu = silinmiş: kayıt yalnız veri

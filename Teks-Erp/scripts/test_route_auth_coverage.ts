@@ -225,7 +225,12 @@ const EXEMPT: Record<string, string> = {
  * yalnız `verifyToken` taşır: satır kapsamı `userId`; takip ucu kayıt iznini serviste ölçer (yoksa 404). Yönetici
  * uçları (`profiller*`, `fabrika-varsayilani`) `settings:notifications|admin:settings` guard'lıdır.
  */
-const BARE_CHAIN_BASELINE = 38;
+/**
+ * ⚠️ 38 → 40 (2026-11-01, web 2FA iki katman, BİLİNÇLİ): `GET/PUT /api/auth/web-totp` yalnız `verifyToken` taşır —
+ * kullanıcı KENDİ hesabının web girişi tercihini okur/yazar (satır kapsamı token'daki `userId`, gövde strict:
+ * başka kullanıcı alanı 400); izin kodu yazmak kendi güvenlik tercihini yetkiye bağlardı. `test_web_cerez_oturumu` §13 ölçer.
+ */
+const BARE_CHAIN_BASELINE = 40;
 
 /** Körlük zemini: tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın. */
 const MIN_ROUTE_LAYERS = 400;

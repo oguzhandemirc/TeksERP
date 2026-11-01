@@ -526,6 +526,10 @@ export const SETTING_KEYS = {
   /** 2FA'sı açık (süperadmin OLMAYAN) hesabın hızlı PIN / kart girişinde de kod sorulsun mu.
    *  Default false (bugünkü davranış). Süperadminde ayardan bağımsız HER ZAMAN sorulur (Y-02). */
   AUTH_SHORT_CREDENTIAL_TOTP_REQUIRED: "auth.shortCredentialTotpRequired",
+  /** Bulut web paneli (tarayıcı, çerez kipi) TOTP politikası: REQUIRED (default, K4 bugünkü davranış)
+   *  | USER_CHOICE (kullanıcı kendi hesabında `webTotpOptOut` ile kapatabilir). Yalnız süperadmin
+   *  yazar (`SUPERADMIN_ONLY_FLAG_KEYS`); süperadminde ayardan bağımsız hep sorulur. */
+  AUTH_WEB_TOTP_POLICY: "auth.webTotpPolicy",
   /** Sevk için ayrı onay adımı zorunlu mu. Default false (KAPALI): çuvalları seç → Sevk Et
    *  → DOĞRUDAN sevk edilir (DISPATCHED). AÇIKKEN: Sevk Et yalnız PLANNED sevkiyat kurar;
    *  çıkış ayrıca "Sevk Kapısı" ekranından dispatch edilir. */
@@ -1207,6 +1211,12 @@ export type TamburCalibrationCheck = "KAPALI" | "UYAR";
 export const TAMBUR_CALIBRATION_CHECK_MODES: TamburCalibrationCheck[] = ["KAPALI", "UYAR"];
 /** Varsayılan `KAPALI` — kalibrasyon tarihi hiçbir yanıtı değiştirmez (bugünkü davranış). */
 export const DEFAULT_TAMBUR_CALIBRATION_CHECK: TamburCalibrationCheck = "KAPALI";
+
+/** Web paneli girişi TOTP politikası. USER_CHOICE: kullanıcı kendi hesabında kapatabilir (süperadmin hariç). */
+export type WebTotpPolicy = "REQUIRED" | "USER_CHOICE";
+export const WEB_TOTP_POLICIES: WebTotpPolicy[] = ["REQUIRED", "USER_CHOICE"];
+/** Varsayılan `REQUIRED` — BUGÜNKÜ davranış (K4: web girişinde TOTP herkese zorunlu). */
+export const DEFAULT_WEB_TOTP_POLICY: WebTotpPolicy = "REQUIRED";
 
 /** Sevkin fatura izi nereden yazılır. `dis` = bugünkü davranış. */
 export type ShippingInvoiceMode = "dis" | "ic" | "ikisi";
@@ -2218,6 +2228,8 @@ export interface FeatureFlags {
   shortCredentialApprovedDeviceOnly: boolean;
   /** 2FA'sı açık hesabın PIN/kart girişinde kod sorulur mu (default false; süperadminde hep sorulur). */
   shortCredentialTotpRequired: boolean;
+  /** Web paneli (tarayıcı) girişi TOTP politikası (default REQUIRED; süperadminde ayardan bağımsız hep). */
+  webTotpPolicy: WebTotpPolicy;
   /** Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu (default false). */
   shipmentConfirmationEnabled: boolean;
   shipmentManualSackCountEnabled: boolean;
@@ -2815,6 +2827,7 @@ export class SystemSettingService {
       deviceUnpairedPasswordLogin: await readDeviceUnpairedPasswordLogin(cacheClient),
       shortCredentialApprovedDeviceOnly: await readShortCredentialApprovedDeviceOnly(cacheClient),
       shortCredentialTotpRequired: await readShortCredentialTotpRequired(cacheClient),
+      webTotpPolicy: await readWebTotpPolicy(cacheClient),
       shipmentConfirmationEnabled: await readShipmentConfirmationEnabled(cacheClient),
       shipmentManualSackCountEnabled: await readShipmentManualSackCountEnabled(cacheClient),
       shipmentUndoSameDayOnly: await readShipmentUndoSameDayOnly(cacheClient),
@@ -4002,6 +4015,20 @@ export class SystemSettingService {
         SETTING_KEYS.AUTH_SHORT_CREDENTIAL_TOTP_REQUIRED,
         input.shortCredentialTotpRequired,
         "İki adımlı doğrulaması açık hesabın hızlı PIN ve QR kart girişinde de kod sorulsun",
+        userId
+      );
+    }
+
+    // Yazma kapısı route'ta (`flagWriteGuard` süperadmin dalı); burada yalnız tip.
+    if (Object.prototype.hasOwnProperty.call(input, "webTotpPolicy")) {
+      const v = input.webTotpPolicy;
+      if (typeof v !== "string" || !WEB_TOTP_POLICIES.includes(v as WebTotpPolicy)) {
+        throw AppError.badRequest("Web girişi doğrulama politikası 'REQUIRED' veya 'USER_CHOICE' olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_WEB_TOTP_POLICY,
+        v,
+        "Web paneli girişinde iki adımlı doğrulama: REQUIRED (herkese zorunlu) / USER_CHOICE (kullanıcı kendi hesabında kapatabilir)",
         userId
       );
     }
@@ -6861,6 +6888,24 @@ export async function readShortCredentialTotpRequired(
     select: { value: true },
   });
   return asBoolean(setting?.value);
+}
+
+/**
+ * Web paneli (tarayıcı, çerez kipi) TOTP politikası. Default REQUIRED (K4, bugünkü davranış).
+ * FAIL-CLOSED: satır yok / çöp değer → REQUIRED. Süperadmin bu ayara BAKMAZ.
+ * ENFORCE: `AuthService.assertSecondFactor` (tek boğaz).
+ */
+export async function readWebTotpPolicy(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<WebTotpPolicy> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_WEB_TOTP_POLICY },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (typeof v === "string" && WEB_TOTP_POLICIES.includes(v as WebTotpPolicy)) return v as WebTotpPolicy;
+  return DEFAULT_WEB_TOTP_POLICY;
 }
 
 /**

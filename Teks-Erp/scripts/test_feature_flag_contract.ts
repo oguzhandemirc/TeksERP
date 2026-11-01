@@ -72,6 +72,9 @@ import {
   readSameTypeSessionPolicy,
   readShippingOrderRequirement,
   readShippingInvoiceMode,
+  readWebTotpPolicy,
+  WEB_TOTP_POLICIES,
+  DEFAULT_WEB_TOTP_POLICY,
   readShippingDocItemNameMode,
   SAME_TYPE_SESSION_POLICIES,
   SHIPMENT_ORDER_REQUIREMENTS,
@@ -1542,6 +1545,7 @@ async function main() {
     ["sameTypeSessionPolicy", await readSameTypeSessionPolicy(junkClient), DEFAULT_SAME_TYPE_SESSION_POLICY],
     ["shippingOrderRequirement", await readShippingOrderRequirement(junkClient), DEFAULT_SHIPMENT_ORDER_REQUIREMENT],
     ["shippingInvoiceMode", await readShippingInvoiceMode(junkClient), DEFAULT_SHIPPING_INVOICE_MODE],
+    ["webTotpPolicy", await readWebTotpPolicy(junkClient), DEFAULT_WEB_TOTP_POLICY],
     ["tamburPlanGateWidthCheck", await readTamburPlanGateWidthCheck(junkClient), DEFAULT_TAMBUR_PLAN_WIDTH_CHECK],
     ["tamburChildWidthSource", await readTamburChildWidthSource(junkClient), DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE],
     ["labelCustomerCodeAt", await readLabelCustomerCodeAt(junkClient), DEFAULT_LABEL_CUSTOMER_CODE_AT],
@@ -1573,6 +1577,7 @@ async function main() {
     "tamburChildWidthSource",
     "labelCustomerCodeAt",
     "shippingReadyRule",
+    "webTotpPolicy",
   ] as const;
   const enumGaps = ENUM_FLAGS.flatMap((k) => {
     const missing = [
@@ -1597,6 +1602,7 @@ async function main() {
     ["sameTypeSessionPolicy", SAME_TYPE_SESSION_POLICIES],
     ["shippingOrderRequirement", SHIPMENT_ORDER_REQUIREMENTS],
     ["shippingInvoiceMode", SHIPPING_INVOICE_MODES],
+    ["webTotpPolicy", WEB_TOTP_POLICIES],
     ["tamburPlanGateWidthCheck", TAMBUR_PLAN_WIDTH_CHECKS],
     ["tamburChildWidthSource", TAMBUR_CHILD_WIDTH_SOURCES],
     ["labelCustomerCodeAt", LABEL_CUSTOMER_CODE_AT_MODES],

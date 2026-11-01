@@ -58,7 +58,7 @@ const FLAG: FlagDef = {
 // "yalnız sistem yöneticisi değiştirir" diyor (`ReadOnlyRow.reason`), yani eski
 // desen İKİ elemana birden uyup `getByText`i düşürüyordu. Bandı ayıran parça
 // yönlendirme cümlesidir.
-const BANT = /Modül açma\/kapatma talebiniz için yazılım firmanıza başvurun/i;
+const BANT = /Değişiklik talebiniz için yazılım firmanıza başvurun/i;
 const SATIR_SEBEBI = /^Bu anahtarı yalnız sistem yöneticisi değiştirir\.$/;
 
 function setIdentity(isSystemAccount: boolean, systemAccountExists: boolean) {

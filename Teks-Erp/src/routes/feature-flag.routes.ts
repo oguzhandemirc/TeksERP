@@ -445,6 +445,8 @@ export const updateSchema = z.strictObject({
   shortCredentialApprovedDeviceOnly: z.boolean().optional(),
   // 2FA'sı açık hesabın PIN/kart girişinde de kod sorulsun (false=default; süperadminde hep sorulur).
   shortCredentialTotpRequired: z.boolean().optional(),
+  // Web paneli girişi TOTP politikası (REQUIRED=default; yalnız süperadmin yazar — SUPERADMIN_ONLY_FLAG_KEYS).
+  webTotpPolicy: z.enum(["REQUIRED", "USER_CHOICE"]).optional(),
   // shipping.confirmationEnabled — sevk onay adımı (UI rehberi).
   shipmentConfirmationEnabled: z.boolean().optional(),
   // shipping.manualSackCountEnabled — "araca yüklenen gerçek çuval adedi" alanı
