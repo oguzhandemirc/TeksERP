@@ -10,6 +10,10 @@ export interface BrodePieceState {
   mode: PieceInputMode | null;
   text: string;
   setText: (t: string) => void;
+  /** Son başarısız dokunuşun sebebi — alanın ALTINDA görünür (toast modalın arkasında kalabiliyor). */
+  error: string | null;
+  /** Her başarısız dokunuşta artar; alan bunu görünce kendine odaklanır. */
+  focusRequest: number;
   /** Dokunuş öncesi denetim; kapalıyken hep true. */
   precheck: (rollId: string) => boolean;
   /** Gövdeye adedi ekler (kapalıyken ya da başka topun gövdesinde aynen döner). */
@@ -17,12 +21,25 @@ export interface BrodePieceState {
 }
 
 export function useBrodePieceCount(mode: PieceInputMode | null, rollId: string | null): BrodePieceState {
-  const [text, setText] = useState('');
-  useEffect(() => setText(''), [rollId]);
+  const [text, setRawText] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [focusRequest, setFocusRequest] = useState(0);
+  useEffect(() => {
+    setRawText('');
+    setError(null);
+  }, [rollId]);
+  const setText = (t: string) => {
+    setRawText(t);
+    setError(null);
+  };
   const precheck = (rid: string): boolean => {
     if (!mode || rid !== rollId) return true;
     const parsed = parsePieceCount(text);
-    if (!parsed.ok) Toast.show({ type: 'error', text1: 'Brode adedi eksik', text2: parsed.message });
+    if (!parsed.ok) {
+      Toast.show({ type: 'error', text1: 'Brode adedi eksik', text2: parsed.message });
+      setError(parsed.message);
+      setFocusRequest((n) => n + 1);
+    }
     return parsed.ok;
   };
   // Ön koşul: çağıran önce `precheck`ten geçer (pieceGatedTap); geçersiz adet burada sessizce düşer.
@@ -31,7 +48,7 @@ export function useBrodePieceCount(mode: PieceInputMode | null, rollId: string |
     const parsed = parsePieceCount(text);
     return parsed.ok ? withPieceCount(vars, parsed.value) : vars;
   };
-  return { mode, text, setText, precheck, attach };
+  return { mode, text, setText, error, focusRequest, precheck, attach };
 }
 
 /** Gramaj dokunuşuna adet kapısını ekler: önce adet denetimi, sonra içteki (en) kapısı. */
