@@ -14,7 +14,7 @@ import type { CostInput, CostPrice, CostRate, CostSource, CostWarpLayer, CostWef
 import type { FinishingKgBasis } from "./fabric-cost-kg.helper";
 import { resolveDenier } from "../../constants/warp-beam";
 import { DEFAULT_COST_FINISHING_KG_BASIS, readCostFinishingKgBasis, readCostWeavingStandardMethod, type WeavingStandardMethod } from "../system-setting.service";
-import { readWarpLayersForItems, type CostWarpLayerRow } from "./effective-construction.helper";
+import { readWarpLayersForItems, readWeftOverridesForRecipes, weftOverrideFor, type CostWarpLayerRow } from "./effective-construction.helper";
 import { resolveFinishingRateCode } from "./finishing-rate-code.helper";
 import { layerOwnCardWastePct } from "./warp-layer-beam.helper";
 
@@ -51,10 +51,11 @@ export interface AdHocStructure {
 export type CostSourceRef = { itemId: string; recipeId?: string } | { adHoc: AdHocStructure };
 
 const yarnSelect = { id: true, name: true, linearDensityDen: true } as const;
+type CostYarnRow = { id: string; name: string; linearDensityDen: Dec | null };
 const itemSelect = {
   id: true, code: true, name: true, itemType: true, isActive: true, rawWidthCm: true,
   warpSpec: { select: { id: true, endsCount: true, takeUpPct: true, wastePct: true, reedWidthCm: true, yarnItem: { select: yarnSelect } } },
-  weftSpec: { select: { id: true, picksPerCm: true, yarns: { orderBy: { sortOrder: "asc" }, select: { picksInRepeat: true, yarnItem: { select: yarnSelect } } } } },
+  weftSpec: { select: { id: true, picksPerCm: true, yarns: { orderBy: { sortOrder: "asc" }, select: { sortOrder: true, picksInRepeat: true, yarnItem: { select: yarnSelect } } } } },
   costStructure: { include: { processes: { orderBy: { sortOrder: "asc" }, select: { rateCode: true } } } },
 } satisfies Prisma.ItemSelect;
 export type CostItemRow = Prisma.ItemGetPayload<{ select: typeof itemSelect }>;
@@ -72,6 +73,8 @@ export interface CostSources {
   recipes?: Map<string, CostRecipeRow>; kgBasis?: FinishingKgBasis;
   /** SY-B1 ek çözgü katmanları (etkin yapı helper'ından; boş harita = katmansız, bayt-aynı). */
   warpLayers?: Map<string, CostWarpLayerRow[]>;
+  /** F2: varyant → (atkı sırası → iplik); yalnız değişimi olan varyantlar (yoksa desen geneli, bayt-aynı). */
+  weftOverrides?: Map<string, Map<number, CostYarnRow>>;
 }
 
 type Db = Prisma.TransactionClient;
@@ -81,7 +84,9 @@ export async function loadCostSourcesTx(tx: Db, itemIds: string[], extraRateCode
   const params = await tx.costParameterSet.findFirst({ where: { status: "ACTIVE" } });
   const recipes = recipeIds.length ? await tx.productRecipe.findMany({ where: { id: { in: recipeIds } }, select: { id: true, itemId: true, finishingRateCode: true } }) : [];
   const warpLayers = await readWarpLayersForItems(tx, rows.map((r) => r.id));
+  const weftOverrides = await readWeftOverridesForRecipes(tx, recipes.map((r) => r.id));
   const yarnIds = new Set<string>();
+  for (const m of weftOverrides.values()) for (const y of m.values()) yarnIds.add(y.id);
   for (const ls of warpLayers.values()) for (const l of ls) yarnIds.add(l.warpSpec.yarnItem.id);
   const codes = new Set(extraRateCodes);
   for (const r of recipes) if (r.finishingRateCode) codes.add(r.finishingRateCode);
@@ -106,6 +111,7 @@ export async function loadCostSourcesTx(tx: Db, itemIds: string[], extraRateCode
     ...(recipes.length ? { recipes: new Map(recipes.map((r) => [r.id, r])) } : {}),
     ...(kgBasis ? { kgBasis } : {}),
     warpLayers,
+    ...(weftOverrides.size ? { weftOverrides } : {}),
   };
 }
 
@@ -122,7 +128,7 @@ function yarnPrice(src: CostSources, yarnItemId: string): CostPrice | null {
   const stale = src.asOf.getTime() - p.createdAt.getTime() > PRICE_STALE_DAYS * 86_400_000;
   return { amount: p.pricePerKg, currency: p.currency, source: "KART", ...(stale ? { flag: "PRICE_STALE" as const } : {}) };
 }
-const cardYarn = (src: CostSources, y: { id: string; name: string; linearDensityDen: Dec | null }): CostYarn => ({
+const cardYarn = (src: CostSources, y: CostYarnRow): CostYarn => ({
   yarnItemId: y.id, name: y.name, denier: { value: resolveDenier(y), source: "KART" }, price: yarnPrice(src, y.id),
 });
 const adHocYarn = (y: AdHocYarn): CostYarn => ({
@@ -161,13 +167,15 @@ export function buildCostInput(src: CostSources, ref: CostSourceRef, o: CostOver
     : ah?.warp
       ? { warpSpecId: null, endsCount: ah.warp.endsCount, takeUp: dec(ah.warp.takeUpPct), takeUpSrc: "ELLE" as const, yarn: adHocYarn(ah.warp.yarn) }
       : null;
+  // Öncelik (tasarım §6.5): ELLE > varyant kodu > ürün yapısı kodu > yok.
+  const recipe = "itemId" in ref && ref.recipeId ? src.recipes?.get(ref.recipeId) : undefined;
+  // F2: varyant kapsamında atkı satırı varyantın ipliğiyle (pay/sıklık kartta); değişim yoksa desen geneli.
+  const swaps = recipe && recipe.itemId === item?.id ? src.weftOverrides?.get(recipe.id) : undefined;
   const weftYarns: CostWeftYarn[] = item?.weftSpec
-    ? item.weftSpec.yarns.map((y) => ({ ...cardYarn(src, y.yarnItem), picksInRepeat: y.picksInRepeat }))
+    ? item.weftSpec.yarns.map((y) => ({ ...cardYarn(src, weftOverrideFor(swaps, y.sortOrder) ?? y.yarnItem), picksInRepeat: y.picksInRepeat }))
     : (ah?.weft?.yarns ?? []).map((y) => ({ ...adHocYarn(y), picksInRepeat: y.picksInRepeat ?? 1 }));
   const picks = item?.weftSpec ? item.weftSpec.picksPerCm : ah?.weft ? dec(ah.weft.picksPerCm) : null;
   const hasWeft = !!item?.weftSpec || !!ah?.weft;
-  // Öncelik (tasarım §6.5): ELLE > varyant kodu > ürün yapısı kodu > yok.
-  const recipe = "itemId" in ref && ref.recipeId ? src.recipes?.get(ref.recipeId) : undefined;
   const code = o.finishingRateCode !== undefined ? o.finishingRateCode : (resolveFinishingRateCode(recipe?.finishingRateCode, cs?.finishingRateCode) ?? ah?.finishingRateCode ?? null);
   const finishing = finishingOf(src, code);
   const extraTry = o.extraCostPerMTry ?? cs?.extraCostPerMTry ?? null;
