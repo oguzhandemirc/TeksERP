@@ -174,7 +174,7 @@ async function main(): Promise<void> {
   const stamp = Date.now();
   const AYARLAR = [
     SETTING_KEYS.DEVICE_PAIRING_REQUIRED, SETTING_KEYS.AUTH_SHORT_CREDENTIAL_APPROVED_DEVICE_ONLY,
-    SETTING_KEYS.DEVICE_PROOF_REQUIRED,
+    SETTING_KEYS.DEVICE_PROOF_REQUIRED, SETTING_KEYS.AUTH_WEB_TOTP_POLICY,
   ];
   const once = new Map<string, unknown>();
   for (const k of AYARLAR) {
@@ -187,7 +187,7 @@ async function main(): Promise<void> {
   const yonetici = await prisma.user.create({
     data: {
       username: `cyb-yon-${stamp}`, fullName: "Yeniden bağlama bekçisi yönetici",
-      passwordHash: await AuthService.hashPassword(adminParola), isActive: true,
+      passwordHash: await AuthService.hashPassword(adminParola), isActive: true, webTotpOptOut: true,
       permissions: { create: [{ permissionId: perm.id }] },
     },
     select: { id: true, username: true },
@@ -195,7 +195,7 @@ async function main(): Promise<void> {
   const yetkisiz = await prisma.user.create({
     data: {
       username: `cyb-ops-${stamp}`, fullName: "Yeniden bağlama bekçisi operatör",
-      passwordHash: await AuthService.hashPassword(adminParola), isActive: true,
+      passwordHash: await AuthService.hashPassword(adminParola), isActive: true, webTotpOptOut: true,
     },
     select: { id: true, username: true },
   });
@@ -224,6 +224,8 @@ async function main(): Promise<void> {
     await set(SETTING_KEYS.DEVICE_PAIRING_REQUIRED, false);
     await set(SETTING_KEYS.AUTH_SHORT_CREDENTIAL_APPROVED_DEVICE_ONLY, false);
     await set(SETTING_KEYS.DEVICE_PROOF_REQUIRED, false);
+    // Ölçülen bağlama akışı; barındırılan yerinde onayın 2FA'sı test_barindirma_ikinci_faktor §7'de.
+    await set(SETTING_KEYS.AUTH_WEB_TOTP_POLICY, "USER_CHOICE");
     await kilitTemizle();
 
     // ─── §2 bayrak kapalı: bilinen donanım yeni localId'yle → AYNI satır ───
