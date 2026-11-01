@@ -201,8 +201,7 @@ async function section8(): Promise<void> {
   const pool = new PasswordHashPool({ concurrency: 1, verifyQueue: 8, mode: "worker" }, inline);
   await pool.run({ op: "compare", plain: "isinma", hash }); // worker hazır
   const pending = pool.run({ op: "hash", plain: "TEST-uzun", cost: 12 });
-  const slots = (pool as unknown as { slots: Array<{ worker: { terminate(): Promise<number> } }> }).slots;
-  await slots[0]?.worker.terminate();
+  await pool.killFirstWorkerForTests();
   const out = await pending.then((v) => v, (e: unknown) => e);
   check("§8c iş sürerken ölen worker: iş ana iş parçacığında tamamlanır", typeof out === "string" && out.startsWith("$2"), String(out).slice(0, 40));
   check("§8d tek düşüşte worker kipi sürer (yeniden kurulur)", pool.mode === "worker", pool.mode);

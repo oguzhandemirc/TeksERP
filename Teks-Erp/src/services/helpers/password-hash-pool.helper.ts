@@ -205,6 +205,11 @@ export class PasswordHashPool {
     uyari("parola-havuzu", `worker kurulamadı, parola özeti ana iş parçacığında (semafor geçerli): ${reason}`);
   }
 
+  /** Yalnız bekçi: ilk worker'ı havuzdan ÇIKARMADAN öldür (iş sürerken düşüş sondası). */
+  async killFirstWorkerForTests(): Promise<void> {
+    await this.slots[0]?.worker.terminate();
+  }
+
   /** Yalnız bekçi: worker'ları kapat (süreç çıkışını tutmaz; unref'li). */
   async close(): Promise<void> {
     const slots = this.slots;
