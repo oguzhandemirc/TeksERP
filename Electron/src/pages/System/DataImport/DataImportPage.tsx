@@ -14,6 +14,7 @@ import { EntityPreviewDialog } from "@/components/import/EntityPreviewDialog";
 import { importService, type ImportEntityInfo, type ImportRunRow } from "@/services/importService";
 import { safeFormat } from "@/lib/format";
 import type { ExportColumn } from "@/lib/list-export";
+import { IMPORT_STATUS_LABEL, importOutcomeTitle, importStatusBadgeText } from "@/components/import/import-outcome";
 
 /**
  * Veri Aktarımı — TEK merkezî yüzey.
@@ -236,9 +237,8 @@ function StatusBadge({ run }: { run: ImportRunRow }) {
   }
   if (run.status === "PARTIAL") {
     return (
-      <span className="flex items-center gap-1 text-warning" title={`Yazma ${run.stoppedAtRowNo}. satırda durdu`}>
-        <AlertTriangle className="h-3.5 w-3.5" /> Yarıda kesildi
-        {run.stoppedAtRowNo ? ` (satır ${run.stoppedAtRowNo})` : ""}
+      <span className="flex items-center gap-1 text-warning" title={importOutcomeTitle(run)}>
+        <AlertTriangle className="h-3.5 w-3.5" /> {importStatusBadgeText(run)}
       </span>
     );
   }
@@ -249,11 +249,7 @@ function StatusBadge({ run }: { run: ImportRunRow }) {
   );
 }
 
-const STATUS_LABEL: Record<ImportRunRow["status"], string> = {
-  APPLIED: "Tamamlandı",
-  PARTIAL: "Yarıda kesildi",
-  FAILED: "Başarısız",
-};
+const STATUS_LABEL = IMPORT_STATUS_LABEL;
 
 const RUN_EXPORT_COLUMNS: ExportColumn<ImportRunRow>[] = [
   { label: "Tarih", value: (r) => safeFormat(r.createdAt, "dd.MM.yyyy HH:mm") },

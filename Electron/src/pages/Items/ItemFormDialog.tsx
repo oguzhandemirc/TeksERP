@@ -41,6 +41,7 @@ import { ItemConstructionPickers, constructionPayload, useConstructionPickersVis
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 import { loadAllForPicker } from "@/lib/picker-loader";
+import { decimalToFormText } from "@/lib/decimal-form-text";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -68,7 +69,7 @@ export function ItemFormDialog({
         name: initial.name,
         itemType: initial.itemType,
         unit: initial.unit,
-        linearDensityDen: initial.linearDensityDen ?? "",
+        linearDensityDen: decimalToFormText(initial.linearDensityDen),
         widthCm: initial.widthCm == null ? "" : String(Number(initial.widthCm)).replace(".", ","),
         warpSpecId: initial.warpSpecId ?? "",
         weftSpecId: initial.weftSpecId ?? "",

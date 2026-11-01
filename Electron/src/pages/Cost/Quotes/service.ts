@@ -77,6 +77,7 @@ export interface LineBody {
   adHoc?: Record<string, unknown>;
   description?: string | null;
   colorId?: string | null;
+  recipeId?: string | null;
   width?: string | null;
   quantity?: string | null;
   unitPrice?: string | null;

@@ -12,6 +12,7 @@ import {
 import type { ZodType } from "zod";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { FormErrorSummary } from "./FormErrorSummary";
 
 interface Props<TValues extends FieldValues> {
   open: boolean;
@@ -62,6 +63,7 @@ export function EntityFormDialog<TValues extends FieldValues>({
             className="space-y-3"
           >
             {children(form)}
+            <FormErrorSummary errors={form.formState.errors} submitCount={form.formState.submitCount} />
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 İptal

@@ -60,6 +60,7 @@ import { replaceCellValue } from "@/lib/import/overrides";
 import { foldSearchText } from "@/lib/search-fold";
 import type { CreatedLookup } from "@/lib/import/lookup-create";
 import { useAttemptToken } from "@/lib/attemptToken";
+import { importOutcomeTitle } from "./import-outcome";
 
 // Sunucu tavanıyla hizalı (import-coerce.MAX_IMPORT_ROWS). Panelde de kontrol
 // edilir ki kullanıcı 40.000 satırlık bir dosyayı yükleyip 30 sn bekledikten
@@ -1024,11 +1025,7 @@ function ResultStep({ result }: { result: ImportApplyResult | null }) {
         )}
         <div>
           <p className="font-medium">
-            {failed
-              ? "Hiçbir kayıt yazılamadı."
-              : partial
-                ? "İşlem YARIDA kesildi."
-                : "İçe aktarım tamamlandı."}
+            {importOutcomeTitle(result)}
           </p>
           <p className="text-muted-foreground">
             {result.created} yeni · {result.updated} güncellendi · {result.skipped} değişiklik yok ·{" "}

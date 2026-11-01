@@ -33,7 +33,7 @@ export interface WeaveDesign {
   kind: WeaveDesignKind;
   familyLabel: string | null;
   frameCount: number | null;
-  repeatCm: string | null;
+  repeatCm: string | number | null;
   liftPlan?: LiftPlan | null;
   loomFileName: string | null;
   lenoSetup: string | null;
@@ -87,7 +87,7 @@ export interface DesignVariant {
 
 export interface WeftSpecYarnRow { yarnItemId: string; picksInRepeat: number; sortOrder: number; yarnItem?: YarnRef }
 export interface WeftSpecDetail {
-  id: string; code: string; name: string; picksPerCm: string | null; sequenceCode: string | null; weftProgramNo: string | null;
+  id: string; code: string; name: string; picksPerCm: string | number | null; sequenceCode: string | null; weftProgramNo: string | null;
   yarns: WeftSpecYarnRow[];
 }
 
