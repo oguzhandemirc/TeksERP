@@ -13,7 +13,7 @@ import { DIRECTION_OPTIONS, ROLE_FILTER_DEFAULTS, SUBCONTRACTOR_OPTIONS, directi
 import { cariRoleLabel, listCari, money, type CariRow } from "./service";
 import { StatementDialog } from "./StatementDialog";
 import { activityFilters, CARI_ACTIVITY_DEFAULT, CARI_ACTIVITY_OPTIONS, CARI_EMPTY_ACTIVE_HINT, CARI_EMPTY_ALL_HINT, CARI_EMPTY_HELD_HINT, CARI_HOLD_FILTER_OPTIONS, holdFilters, useHoldFilter, type CariActivityFilter, type CariHoldFilter } from "./cariListFilters";
-import { CariHoldButton, CariHoldDialog, CariStatusBadges } from "./CariRowExtras";
+import { CariHoldDialog, CariRowActions, CariStatusBadges } from "./CariRowExtras";
 import { CariEditDialog } from "./CariEditDialog";
 import { useCariFocus } from "./useCariFocus";
 
@@ -187,7 +187,7 @@ export function CariPage() {
                           <FileSpreadsheet className="mr-1 h-4 w-4" />
                           Ekstre
                         </Button>
-                        <CariHoldButton onClick={() => setHoldFor(c)} />
+                        <CariRowActions row={c} onHold={() => setHoldFor(c)} />
                         <PermissionGate permission="finance:write">
                           <Button variant="ghost" size="sm" onClick={() => setEditFor(c)}>
                             <Pencil className="mr-1 h-4 w-4" />
