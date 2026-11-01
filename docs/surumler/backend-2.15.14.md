@@ -3,7 +3,7 @@
 **Durum:** TASLAK — terfide kullanıcı onayı. İlk hedef yalnız `test` grubu (üyesi tek kurulum: bulut deneme sunucusu,
 satıcı DB'sinde `kurulum.kanalKodu = test` tek satır, 2026-11-01 ölçüldü); öncü/genel gruba çıkış ayrı karar (terfi
 etiketi). Bu belge `2.15.14-taslak.md` girdi notunun (KÜÇÜK-F, teklif belgesi donması) üstüne 2026-11-01 sürüm
-hazırlığında yazıldı; §2 ve §4 her iniş turunda yeniden ölçülür (son ölçüm `origin/main` @ `9bf102b92`; bekleyen: #410 fatura süzgeci / gelen belge numarası).
+hazırlığında yazıldı; §2 ve §4 her iniş turunda yeniden ölçülür (son ölçüm `origin/main` @ `a2c323ef9`).
 **Paket:** _(paketleme doldurur)_
 **SHA256:** _(paketleme doldurur)_
 **Commit:** _(paketleme doldurur)_
@@ -24,8 +24,8 @@ doğar; operatöre görünür etki ancak ayar açılınca başlar.
 
 ## 2. Ne değişti
 
-Ölçüm: `backend-v2.15.13` (`4e6cad988`) → `origin/main` @ `9bf102b92`, ilk ebeveyn hattında 171 commit (≈163 PR).
-Alt proje farkı: `Teks-Erp/src` 467 dosya · `Electron/src` 566 dosya (web paneli imajda) · `mobil/src` 133 dosya
+Ölçüm: `backend-v2.15.13` (`4e6cad988`) → `origin/main` @ `a2c323ef9`, ilk ebeveyn hattında 172 commit (≈164 PR).
+Alt proje farkı: `Teks-Erp/src` 468 dosya · `Electron/src` 566 dosya (web paneli imajda) · `mobil/src` 133 dosya
 (bu turda tablet yayını YOK) · `patron/sunucu` 14 · `patron/uygulama` 36 · `satici` 2 (modül kataloğu satırı) ·
 `okuma/` 28 (yeni yerel okuma servisi — imaja GİRMEZ).
 
@@ -98,7 +98,8 @@ basılmamış kayıt ilk basımda eskisi gibi oluşur), #242, #268, #269, #281, 
 #308, #382, #389, #370, #406 (çözgü kartı formu ondalık alanları, teklif kaleminde varyant seçici, içe
 aktarımda "Kısmen tamamlandı" dili), #407 (iplik içe aktarım etiketi, Seyitoğlu ayar paketi), #408 (cari formu
 taşması, ölçüm faz etiketi istasyon adıyla, top detayında müşteri kodu, sevkiyat metrajı 2 hane, yeniden etiket
-anahtarı); #404 yalnız betik.
+anahtarı), #410 (fatura listesi tanınmayan süzgeçte 400 + `shipmentId` süzgeci; silinen gelen belge taslağının
+numarası yeniden verilmez — seri sayaç satırına geçti); #404 yalnız betik.
 
 **Güncelleyici ve hizmet konağı** — `tekserp-guncelleyici` 0.2.8 → 0.2.9, `tekserp-hizmet` 0.2.0 → 0.2.1
 (`scripts/test_guncelleyici_surum.mjs` yeşil, taban `backend-v2.15.13`). `Teks-Erp/docker`, `deploy/pg`,
@@ -135,7 +136,7 @@ turda YOK (yayındaki masaüstü panel 1.6.6).
 ## 4. Migration
 
 - **Var mı:** evet — `backend-v2.15.13`ten bu yana **29** yeni göç (2026-11-01 ölçüldü, `origin/main` @
-  `a40b3afdd`; SY-P2…P4 ve D4-K3e göçsüz) + `9bf102b92` ölçümünde #402, #401, #409 ile **3** göç daha → **32**.
+  `a40b3afdd`; SY-P2…P4 ve D4-K3e göçsüz) + `9bf102b92` ölçümünde #402, #401, #409 ile **3** göç daha → **32** (#410 göçsüz, `a2c323ef9`te yeniden sayıldı).
   Deneme 2.15.12'den geçtiği için orada **62** göç uygulanır (2.15.13'ün 30'u + bu sürümün 32'si).
 - İçerik: hepsi ADDITIVE — yeni tablolar (gelen belge, kurşun metre okuması, hizmet eşlemesi/fatura bağı, müşteri
   barkodu, cari kilidi, makine ücreti/sarf normu, desen kartı varyantı, maliyet tül, sipariş varyant hedefi, masraf
@@ -226,7 +227,8 @@ sürümü o turda yazılır). Metin terfide kullanıcı onayıyla donar.
     { "kapsam": "panel", "tip": "iyilestirme", "metin": "Hizmet sarf normuna 0 girilebilir: bu hizmetin sarf kullanmadığı anlamına gelir; Tambur gibi işlerin kârlılığı artık ölçülür." },
     { "kapsam": "panel", "tip": "duzeltme", "metin": "Atkısı değişen varyantın standart maliyeti varyantın ipliğiyle hesaplanır; bu varyantlarda maliyet sürümünü yeniden oluşturun, eski sürüm olduğu gibi kalır." },
     { "kapsam": "panel", "tip": "duzeltme", "metin": "Çözgü kartı düzenlenip kaydedilebiliyor; teklif kaleminde varyant seçilebiliyor; içe aktarım kısmen bittiğinde \"Kısmen tamamlandı\" yazar ve kaç kaydın yazıldığını söyler." },
-    { "kapsam": "panel", "tip": "duzeltme", "metin": "Cari düzenleme penceresi taşmıyor; top ölçümleri istasyon adıyla görünür; top detayında müşteri kodu yazar; Sevkiyatlar listesinde metraj iki haneli; içe aktarımda bulunamayan iplik kodu doğru adlandırılır." }
+    { "kapsam": "panel", "tip": "duzeltme", "metin": "Cari düzenleme penceresi taşmıyor; top ölçümleri istasyon adıyla görünür; top detayında müşteri kodu yazar; Sevkiyatlar listesinde metraj iki haneli; içe aktarımda bulunamayan iplik kodu doğru adlandırılır." },
+    { "kapsam": "panel", "tip": "duzeltme", "metin": "Silinen gelen belge taslağının numarası bir sonraki taslağa yeniden verilmez; her taslak kendi numarasıyla kalır." }
   ]
 }
 ```
