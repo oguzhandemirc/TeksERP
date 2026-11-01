@@ -292,4 +292,16 @@ export function useDataTable<T>({
   };
 }
 
-export type DataTablePagination = ReturnType<typeof useDataTable>["pagination"];
+/**
+ * DataTable altlığının sözleşmesi — açık arayüz: cursor'ı kendi sorgusuyla yöneten liste (ör. özet şeritli
+ * Gelen Belgeler) de aynı altlığı kullanabilsin; `loadMore`un dönüşü okunmaz.
+ */
+export interface DataTablePagination {
+  loaded: number;
+  total: number | undefined;
+  hasMore: boolean;
+  isFetchingMore: boolean;
+  pageSize: number;
+  loadMore: () => unknown;
+  setPageSize: (size: number) => void;
+}

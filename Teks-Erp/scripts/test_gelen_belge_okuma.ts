@@ -356,7 +356,7 @@ async function main(): Promise<void> {
 
     // ── §8e–§8h üst üste binen çekim: aynı kâğıt iki parça çekilince ortak satır ikilenmez ──
     // §8e saf: aynı taramanın eşit iki satırı birbirini ELEMEZ; mevcut tek eşi yalnız BİR yeni satırı yutar; sıra no anahtar değildir.
-    const dl = (topNo: string | null, m: string, kg: string | null, siraNo?: string) => ({ blockNo: 1, lineKind: "TOP" as const, senderRollNo: topNo ?? siraNo ?? null, meters: m, weightKg: kg, widthCm: null, itemText: null, colorText: null, confidence: 1, needsReview: false, sourceRects: {}, ocrRaw: topNo ? { topNo } : { siraNo: siraNo ?? null } });
+    const dl = (topNo: string | null, m: string, kg: string | null, siraNo?: string) => ({ blockNo: 1, lineKind: "TOP" as const, senderRollNo: topNo ?? siraNo ?? null, meters: m, weightKg: kg, widthCm: null, itemText: null, colorText: null, confidence: 1, needsReview: false, sourceRects: {}, ocrRaw: (topNo ? { topNo } : { siraNo: siraNo ?? null }) as Record<string, string | null> });
     const ex = (topNo: string, m: string, kg: string | null) => ({ senderRollNo: topNo, meters: m, weightKg: kg, ocrRaw: { topNo } });
     const o1 = dropOverlapDuplicates([dl("T1", "100", "20"), dl("T1", "100", "20")], [], 2);
     const o2 = dropOverlapDuplicates([dl("t 1", "100.00", "20.0"), dl("T1", "100", "20")], [ex("T1", "100", "20")], 2);

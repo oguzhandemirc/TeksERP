@@ -65,20 +65,7 @@ export function ResetPasswordTab({ userId, username }: Props) {
       className="space-y-4"
     >
       <CredentialApprovalRequest error={mutation.error} userId={userId} kind="PASSWORD" />
-      <div className="flex gap-3 rounded-md border bg-card p-4">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
-          <KeyRound className="h-4 w-4" />
-        </div>
-        <div className="text-sm">
-          <p className="font-medium">
-            <span className="font-mono">{username}</span> için yeni şifre
-          </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Eski şifre sorulmaz; yeni şifre en az {PASSWORD_MIN_LENGTH} karakter olmalı. Şifreyi
-            kullanıcıya güvenli bir kanaldan ilet.
-          </p>
-        </div>
-      </div>
+      <ResetPasswordIntro username={username} />
 
       <FormField label="Yeni Şifre" htmlFor="password" error={form.formState.errors.password} required>
         <Input
@@ -90,45 +77,13 @@ export function ResetPasswordTab({ userId, username }: Props) {
         />
       </FormField>
 
-      <FormField
-        label="Yeni Şifre (tekrar)"
-        htmlFor="confirm"
-        error={form.formState.errors.confirm}
-        required
-      >
-        <Input
-          id="confirm"
-          type="password"
-          autoComplete="new-password"
-          {...form.register("confirm")}
-        />
+      <FormField label="Yeni Şifre (tekrar)" htmlFor="confirm" error={form.formState.errors.confirm} required>
+        <Input id="confirm" type="password" autoComplete="new-password" {...form.register("confirm")} />
       </FormField>
 
-      <div className="flex items-start gap-2">
-        <Checkbox
-          id="requireChange"
-          checked={requireChange}
-          onCheckedChange={(x) => setRequireChange(x === true)}
-          className="mt-0.5"
-        />
-        <label htmlFor="requireChange" className="cursor-pointer text-sm">
-          Kullanıcı ilk girişte kendi parolasını belirlesin
-          <span className="mt-0.5 block text-xs text-muted-foreground">
-            {requireChange
-              ? "Yazdığınız parola geçicidir: kullanıcı ilk girişte (panel ya da tablet) kendi parolasını belirlemeden devam edemez."
-              : "İşaretsiz: yazdığınız parola kalıcı olur; kullanıcı bu parolayla doğrudan girer, yeni parola istenmez."}
-          </span>
-        </label>
-      </div>
+      <RequireChangeField checked={requireChange} onChange={setRequireChange} />
 
-      {done && (
-        <div className="flex items-center gap-2 rounded-md border border-success/40 bg-success/10 p-2 text-xs text-success">
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          {doneRequireChange
-            ? "Şifre sıfırlandı. Kullanıcı geçici şifreyle girip kendi şifresini belirleyecek."
-            : "Şifre sıfırlandı. Kullanıcı bu şifreyle doğrudan girecek."}
-        </div>
-      )}
+      {done && <ResetDoneBanner requireChange={doneRequireChange} />}
 
       <div className="flex items-center justify-between border-t pt-3">
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -139,5 +94,56 @@ export function ResetPasswordTab({ userId, username }: Props) {
         </Button>
       </div>
     </form>
+  );
+}
+
+function ResetPasswordIntro({ username }: { username: string }) {
+  return (
+    <div className="flex gap-3 rounded-md border bg-card p-4">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
+        <KeyRound className="h-4 w-4" />
+      </div>
+      <div className="text-sm">
+        <p className="font-medium">
+          <span className="font-mono">{username}</span> için yeni şifre
+        </p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Eski şifre sorulmaz; yeni şifre en az {PASSWORD_MIN_LENGTH} karakter olmalı. Şifreyi kullanıcıya
+          güvenli bir kanaldan ilet.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function RequireChangeField({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex items-start gap-2">
+      <Checkbox
+        id="requireChange"
+        checked={checked}
+        onCheckedChange={(x) => onChange(x === true)}
+        className="mt-0.5"
+      />
+      <label htmlFor="requireChange" className="cursor-pointer text-sm">
+        Kullanıcı ilk girişte kendi parolasını belirlesin
+        <span className="mt-0.5 block text-xs text-muted-foreground">
+          {checked
+            ? "Yazdığınız parola geçicidir: kullanıcı ilk girişte (panel ya da tablet) kendi parolasını belirlemeden devam edemez."
+            : "İşaretsiz: yazdığınız parola kalıcı olur; kullanıcı bu parolayla doğrudan girer, yeni parola istenmez."}
+        </span>
+      </label>
+    </div>
+  );
+}
+
+function ResetDoneBanner({ requireChange }: { requireChange: boolean }) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-success/40 bg-success/10 p-2 text-xs text-success">
+      <CheckCircle2 className="h-3.5 w-3.5" />
+      {requireChange
+        ? "Şifre sıfırlandı. Kullanıcı geçici şifreyle girip kendi şifresini belirleyecek."
+        : "Şifre sıfırlandı. Kullanıcı bu şifreyle doğrudan girecek."}
+    </div>
   );
 }

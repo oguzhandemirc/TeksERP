@@ -99,6 +99,22 @@ async function linesToAppend(tx: Prisma.TransactionClient, noteId: string, scan:
   return dropOverlapDuplicates(lines, existing, scan.pageNo);
 }
 
+/** Bağlı taslakta yalnız BOŞ başlık alanları OCR'dan dolar — operatörün yazdığı ezilmez. */
+function fillEmptyHeader(
+  patch: Prisma.CustomerDeliveryNoteUpdateInput,
+  note: { ownerText: string | null; senderText: string | null; templateId: string | null; senderDocNo: string | null; senderDocDate: Date | null; customerBatchNo: string | null; processText: string | null; declaredTopCount: number | null },
+  headerCols: { ownerText: string | null; senderText: string | null; templateId: string | null; senderDocNo: string | null; senderDocDate: Date | null; customerBatchNo: string | null; processText: string | null; declaredTopCount: number | null },
+): void {
+  if (!note.ownerText) patch.ownerText = headerCols.ownerText;
+  if (!note.senderText) patch.senderText = headerCols.senderText;
+  if (!note.templateId && headerCols.templateId) patch.template = { connect: { id: headerCols.templateId } };
+  if (!note.senderDocNo) patch.senderDocNo = headerCols.senderDocNo;
+  if (!note.senderDocDate) patch.senderDocDate = headerCols.senderDocDate;
+  if (!note.customerBatchNo) patch.customerBatchNo = headerCols.customerBatchNo;
+  if (!note.processText) patch.processText = headerCols.processText;
+  if (note.declaredTopCount === null) patch.declaredTopCount = headerCols.declaredTopCount;
+}
+
 /** E2: eşleşen motor şablonunun DB satırı (yoksa idempotent doğar) taslağa bağlanır — gönderen önerisi buradan; isabet best-effort. */
 async function bindDraftTemplate(code: string | null, userId: string | undefined) {
   const template = code ? await ensureSenderTemplate(code, userId) : null;
@@ -155,14 +171,7 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
       const blockBase = agg._max.blockNo ?? 0;
       const prevWarnings = Array.isArray(note.warnings) ? note.warnings : [];
       const patch: Prisma.CustomerDeliveryNoteUpdateInput = { warnings: toJson([...prevWarnings, ...header.warnings, ...overlap.warnings]) };
-      if (!note.ownerText) patch.ownerText = headerCols.ownerText;
-      if (!note.senderText) patch.senderText = headerCols.senderText;
-      if (!note.templateId && headerCols.templateId) patch.template = { connect: { id: headerCols.templateId } };
-      if (!note.senderDocNo) patch.senderDocNo = headerCols.senderDocNo;
-      if (!note.senderDocDate) patch.senderDocDate = headerCols.senderDocDate;
-      if (!note.customerBatchNo) patch.customerBatchNo = headerCols.customerBatchNo;
-      if (!note.processText) patch.processText = headerCols.processText;
-      if (note.declaredTopCount === null) patch.declaredTopCount = headerCols.declaredTopCount;
+      fillEmptyHeader(patch, note, headerCols);
       const addLines = overlap.lines.length > 0;
       const prevBlocks = (note.totalsDeclared as { blocks?: unknown[] } | null)?.blocks;
       if (note.totalsDeclared === null || !Array.isArray(prevBlocks)) patch.totalsDeclared = totalsDeclared;
