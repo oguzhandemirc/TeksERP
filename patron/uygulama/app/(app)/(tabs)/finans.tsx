@@ -1,5 +1,5 @@
 // Finans: açık alacak + yaşlandırma (fabrikanın `ozet-finans` anlığı), çek vadeleri ve izinli hareket segmentleri
-// (Kasa · Masraf · Kârlılık · Çek · Fatura · Tahsilat). İzinsiz segment HİÇ konmaz; tutarlar fabrikanın, para birimiyle basılır.
+// (Kasa · Masraf · Kârlılık · Çek · Fatura · Tahsilat); Kasa segmentinde kasa hareketleri kategori süzgeciyle (D4-KUC3c). İzinsiz segment HİÇ konmaz; tutarlar fabrikanın, para birimiyle basılır.
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { View } from "react-native";
@@ -10,12 +10,14 @@ import { invalidate } from "../../../src/state/changes";
 import { useSession } from "../../../src/state/session";
 import { useRemote } from "../../../src/state/useRemote";
 import { ProjectionList, type ProjectionRowView } from "../../../src/ui/data";
+import { CashTransactions } from "../../../src/ui/finans/CashTransactions";
 import { ExpenseSummary } from "../../../src/ui/finans/ExpenseSummary";
 import { ProfitabilitySummary } from "../../../src/ui/finans/ProfitabilitySummary";
 import { ChequeDue, ReceivableHero } from "../../../src/ui/finans/FinanceSummary";
 import { FINANCE_TABS, FINANCE_TAGS, type FinanceTab } from "../../../src/ui/finans/tabs";
 import { bankaRow, cekRow, faturaRow, kasaRow, tahsilatRow } from "../../../src/ui/finans/rows";
 import { Screen } from "../../../src/ui/Frame";
+import { useListCapability } from "../../../src/ui/siparis/capabilities";
 import { openRecord } from "../../../src/ui/nav";
 import { SectionHeader } from "../../../src/ui/SectionHeader";
 import { SegmentedControl } from "../../../src/ui/SegmentedControl";
@@ -31,6 +33,13 @@ export default function Finance() {
   const { api, permissions, factoryStamp } = useSession();
   const tabs = FINANCE_TABS.filter((t) => can(permissions, t.perm));
   const [picked, setPicked] = useState<FinanceTab | undefined>(undefined);
+  // Kasa listesinin kategori süzgeci (D4-KUC3c); Masraf'ta kategoriye dokununca Kasa segmentine bununla geçilir.
+  const [category, setCategory] = useState<string | null>(null);
+  const keyFilter = useListCapability().keyFilter("kasa-hareketi", "kategoriAnahtari");
+  const pickCategory = useCallback((key: string) => {
+    setCategory(key);
+    setPicked("kasa");
+  }, []);
   const tab = picked && tabs.some((t) => t.key === picked) ? picked : tabs[0]?.key;
   const summaryAllowed = can(permissions, "bulut:cari-bakiye:oku");
   const summary = useRemote(summaryAllowed ? "anlik:ozet-finans" : null, () => api.snapshot("ozet-finans"), { tags: ["ozet-finans"] });
@@ -63,9 +72,10 @@ export default function Finance() {
               <List projection="kasa" row={kasaRow} empty="Kasa yok" />
               <SectionHeader title="Bankalar" />
               <List projection="banka" row={bankaRow} empty="Banka hesabı yok" />
+              <CashTransactions category={category} onCategory={setCategory} />
             </>
           ) : null}
-          {tab === "masraf" ? <ExpenseSummary /> : null}
+          {tab === "masraf" ? <ExpenseSummary onPickCategory={keyFilter ? pickCategory : undefined} /> : null}
           {tab === "karlilik" ? <ProfitabilitySummary /> : null}
           {tab === "cek" ? <List projection="cek-senet" row={cekRow} empty="Çek/senet yok" /> : null}
           {tab === "fatura" ? <List projection="fatura" row={faturaRow} empty="Fatura yok" /> : null}

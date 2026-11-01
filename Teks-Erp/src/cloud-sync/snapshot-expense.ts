@@ -30,6 +30,8 @@ export const EXPENSE_SNAPSHOT_SCHEMA = z.strictObject({
   aylikToplam: z.array(MonthCell),
   kategoriler: z.array(z.strictObject({
     etiket: z.string(),
+    /** Kasa hareketi `kategoriAnahtari` ile AYNI (`cashCategoryKey`); patron kasa listesi buna süzer. "Diğer"de null. */
+    kategoriAnahtari: z.string().nullable(),
     digerMi: z.boolean(),
     /** "Diğer" satırında içindeki kategori sayısı; adıyla gelen satırda 1. */
     kategoriSayisi: z.number().int(),
@@ -67,12 +69,14 @@ export async function buildExpenseSnapshotData(now: Date): Promise<z.input<typeo
   const monthTotal = (m: string): Prisma.Decimal => D(summary.monthTotals.find((x) => x.month === m)?.amountTry ?? "0");
   const thisTotal = monthTotal(thisMonth);
 
-  const row = (label: string, isOther: boolean, group: readonly ExpenseSummaryCategory[]) => {
+  const row = (label: string, key: string | null, group: readonly ExpenseSummaryCategory[]) => {
+    const isOther = key === null;
     const perMonth = months.map((m) => ({ ay: m, tutar: group.reduce((s, c) => s.plus(monthAmount(c, m)), ZERO()) }));
     const cur = perMonth.find((x) => x.ay === thisMonth)?.tutar ?? ZERO();
     const prev = perMonth.find((x) => x.ay === lastMonth)?.tutar ?? ZERO();
     return {
       etiket: label,
+      kategoriAnahtari: key,
       digerMi: isOther,
       kategoriSayisi: group.length,
       toplam: group.reduce((s, c) => s.plus(D(c.totalTry)), ZERO()).toFixed(2),
@@ -87,8 +91,8 @@ export async function buildExpenseSnapshotData(now: Date): Promise<z.input<typeo
   // Sıra helper'ındır (12 aylık net TL azalan, eşitlikte anahtar); burada yeniden sıralanmaz.
   const named = summary.categories.slice(0, EXPENSE_TOP_CATEGORIES);
   const rest = summary.categories.slice(EXPENSE_TOP_CATEGORIES);
-  const kategoriler = named.map((c) => row(c.label, false, [c]));
-  if (rest.length > 0) kategoriler.push(row(EXPENSE_OTHER_LABEL, true, rest));
+  const kategoriler = named.map((c) => row(c.label, c.key, [c]));
+  if (rest.length > 0) kategoriler.push(row(EXPENSE_OTHER_LABEL, null, rest));
 
   return {
     aylar: months,

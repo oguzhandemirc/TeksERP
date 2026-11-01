@@ -33,7 +33,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
   {
     permission: "settings:orders",
     // itemPhaseOut* — Siparişler kategorisindeki "Ürün yaşam döngüsü" grubu (URUN-YASAM-DONGUSU.md §4.1).
-    flagKeys: ["pricingEnabled", "itemPhaseOutNewOrder", "itemPhaseOutLineQty", "itemPhaseOutNewPlan"],
+    flagKeys: ["pricingEnabled", "itemPhaseOutNewOrder", "itemPhaseOutLineQty", "itemPhaseOutNewPlan", "orderProductionProposal"],
     settingKeys: ["order.defaultDeadlineDays", "shipping.toleranceMeters"],
   },
   {

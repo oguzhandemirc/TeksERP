@@ -184,8 +184,8 @@ export const FACTS: readonly RecordProjection[] = [
       col("tutarTl", "amountTry", "FINANS"), col("tarih", "txnDate"), col("kategori", "category"), col("aciklama", "description"),
       col("transferGrubu", "transferGroupId"), col("tahsilatOdemeId", "paymentId"), col("iptalTarihi", "cancelledAt"),
       col("olusturulma", "createdAt")],
-    derived: [], sources: [self("cash_transactions")], deletion: "YOK", permission: "bulut:kasa:oku", module: "finance.enabled",
-    retention: { wireFields: ["tarih"], sql: 't."txnDate"' }, catalogVersion: 1,
+    derived: [derived("kategoriAnahtari", "helpers/expense-summary.helper cashCategoryKey (masraf özeti + panel süzgeciyle AYNI anahtar; patron kasa süzgeci D4-KUC3c — v2 TAM gönderim eski satırlara da yazar)", ["cash_transactions"])],
+    sources: [self("cash_transactions")], deletion: "YOK", permission: "bulut:kasa:oku", module: "finance.enabled", retention: { wireFields: ["tarih"], sql: 't."txnDate"' }, catalogVersion: 2,
   },
   {
     name: "cek-senet", kind: "KAYIT", role: "OLGU", root: { table: "cheques", model: "Cheque" },

@@ -8,6 +8,24 @@ import { ImportRevertService } from "../services/import/import-revert.service";
 import { AppError } from "../utils/app-error";
 import { ImportService } from "../services/import/import.service";
 import { getImportAdapter } from "../services/import/import-registry";
+import type { ImportAdapter, ImportModule } from "../services/import/import.types";
+import {
+  requireDevereEnabled,
+  requireDokumaEnabled,
+  requireMaliyetEnabled,
+} from "../middlewares/module.middleware";
+
+/** SY-H2: modüle bağlı adaptörün kapısı varlığın KENDİ router middleware'idir (lisans mesajı dahil). */
+const MODULE_GATES: Record<ImportModule, (req: Request, res: Response, next: NextFunction) => Promise<void>> = {
+  dokuma: requireDokumaEnabled,
+  devere: requireDevereEnabled,
+  maliyet: requireMaliyetEnabled,
+};
+
+function passModuleGate(adapter: ImportAdapter, req: Request, res: Response, next: NextFunction): void {
+  if (!adapter.module) return next();
+  void MODULE_GATES[adapter.module](req, res, next);
+}
 
 // =============================================================================
 // TOPLU İÇE / DIŞA AKTARIM UÇLARI
@@ -45,7 +63,7 @@ function requireEntityWrite(req: Request, _res: Response, next: NextFunction): v
       ),
     );
   }
-  next();
+  passModuleGate(adapter, req, _res, next);
 }
 
 /** Dışa aktarım: yalnız varlığın READ izni (D6). */
@@ -62,7 +80,7 @@ function requireEntityRead(req: Request, _res: Response, next: NextFunction): vo
       AppError.forbidden(`Bu liste için '${adapter.readPermission}' yetkisi gerekli.`),
     );
   }
-  next();
+  passModuleGate(adapter, req, _res, next);
 }
 
 const rowSchema = z.object({
@@ -100,9 +118,9 @@ router.get(
   "/entities",
   verifyToken,
   requirePermission("data:import"),
-  (req: Request, res: Response, next: NextFunction) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
-      res.json({ success: true, data: ImportService.listEntities(req.user?.permissions ?? []) });
+      res.json({ success: true, data: await ImportService.listEntities(req.user?.permissions ?? []) });
     } catch (e) {
       next(e);
     }
@@ -326,7 +344,7 @@ router.post(
         String(req.params.entity),
         body.rows,
         body.options,
-        req.user?.userId,
+        { userId: req.user?.userId, permissions: req.user?.permissions ?? [] },
       );
       res.json({ success: true, data });
     } catch (e) {
@@ -363,7 +381,7 @@ router.post(
         String(req.params.entity),
         body.rows,
         body.options,
-        req.user?.userId,
+        { userId: req.user?.userId, permissions: req.user?.permissions ?? [] },
       );
       res.json({ success: true, data });
     } catch (e) {

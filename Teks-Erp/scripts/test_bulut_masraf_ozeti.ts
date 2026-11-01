@@ -9,6 +9,7 @@
 //      uygulamada alanları yalnız görünüm (`lib/expense-summary.ts`) + tel aynası okur; görünümde aritmetik yok
 //   §3 ⭐ canlı — 17 kategori: ilk 15 adıyla + "Diğer"; rakamlar helper'la birebir; açıklama metni tele girmez;
 //      katı şema yabancı anahtarı reddeder; finans modülü kapalıyken / SAATLIK dışı turda üretilmez
+//   §3h/§3i ⭐ (D4-KUC3c) kategori satırı `kategoriAnahtari` taşır; kasa-hareketi türeticisi AYNI anahtarı üretir
 // ⭐ NEGATİF SONDA (ölçüldü 2026-10-31): şemaya + kurucuya kategori satırında `aciklama` alanı eklendi → §2b ❌
 //    ve §3e ❌ (exit 1); patron/sunucu/src/services/ altına `buAyToplam` okuyan yardımcı → §2c ❌; uygulama görünümüne
 //    `Number(a) + Number(b)` → §2d ❌; geri alındı → yeşil.
@@ -26,6 +27,8 @@ import { SNAPSHOT_WIRE_SCHEMAS, buildSnapshots } from "../src/cloud-sync/snapsho
 import { factoryMonthStart } from "../src/cloud-sync/periods";
 import { getExpenseSummary } from "../src/services/helpers/expense-summary.helper";
 import { cashTransactionService } from "../src/services/cash-transaction.service";
+import { cashCategoryKey } from "../src/services/helpers/expense-summary.helper";
+import { DERIVERS } from "../src/cloud-sync/derived";
 
 let pass = 0;
 let fail = 0;
@@ -48,7 +51,7 @@ const FIELD_RE = /\b(buAyToplam|gecenAyToplam|buAyPay|kategoriSayisi|digerMi|ayl
 /** Telde izinli anahtar yolları — kategori METNİ + tutar; ham satır/açıklama/kişi YOK (S15 a). */
 const ALLOWED_KEYS = [
   "aylar", "buAy", "gecenAy", "toplam", "buAyToplam", "gecenAyToplam", "fark", "aylikToplam", "aylikToplam.ay", "aylikToplam.tutar",
-  "kategoriler", "kategoriler.etiket", "kategoriler.digerMi", "kategoriler.kategoriSayisi", "kategoriler.toplam", "kategoriler.buAy",
+  "kategoriler", "kategoriler.etiket", "kategoriler.kategoriAnahtari", "kategoriler.digerMi", "kategoriler.kategoriSayisi", "kategoriler.toplam", "kategoriler.buAy",
   "kategoriler.gecenAy", "kategoriler.fark", "kategoriler.buAyPay", "kategoriler.aylik", "kategoriler.aylik.ay", "kategoriler.aylik.tutar",
 ].sort();
 
@@ -145,12 +148,14 @@ async function canli(ids: { box: string }): Promise<void> {
     await cashTransactionService.create({ kind: "EXPENSE", cashBoxId: ids.box, amount: 50_000_000 - i * 1_000_000, txnDate: now, category: cat(i), description: SECRET });
   }
   await cashTransactionService.create({ kind: "EXPENSE", cashBoxId: ids.box, amount: 10_000_000, txnDate: lastMonthDay, category: cat(0), description: SECRET });
+  // Boşluklu yazım aynı kategoridir (anahtar fabrikada kırpılır); iki ay önceye: §3d'nin bu/geçen ay rakamı değişmez.
+  await cashTransactionService.create({ kind: "EXPENSE", cashBoxId: ids.box, amount: 1, txnDate: new Date(factoryMonthStart(now, -2).getTime() + 3 * 86_400_000), category: `  ${cat(0)} `, description: SECRET });
 
   const snaps = await buildSnapshots({ now, productionOn: true, financeOn: true, cadences: new Set(["SAATLIK"]) });
   const snap = snaps.find((s) => s.projection === NAME);
   const d = snap?.data as unknown as {
     buAy: string; buAyToplam: string; fark: string; aylar: string[];
-    kategoriler: Array<{ etiket: string; digerMi: boolean; kategoriSayisi: number; buAy: string; gecenAy: string; fark: string; buAyPay: number }>;
+    kategoriler: Array<{ etiket: string; kategoriAnahtari: string | null; digerMi: boolean; kategoriSayisi: number; buAy: string; gecenAy: string; fark: string; buAyPay: number }>;
   } | undefined;
   check("§3a SAATLIK turda üretilir, 12 ay", !!d && d.aylar.length === 12, JSON.stringify(d?.aylar));
   if (!d) return;
@@ -168,6 +173,16 @@ async function canli(ids: { box: string }): Promise<void> {
   const k0 = named[0];
   check("§3d geçen aya göre fark fabrikada (50M − 10M = 40M) + pay", k0?.buAy === "50000000.00" && k0.gecenAy === "10000000.00" && k0.fark === "40000000.00" && k0.buAyPay > 0 && k0.buAyPay <= 100,
     JSON.stringify(k0));
+  check("§3h ⭐ kategori satırı fabrika anahtarını taşır (cashCategoryKey); 'Diğer'de null",
+    named.every((k) => k.kategoriAnahtari === cashCategoryKey(k.etiket).key) && other?.kategoriAnahtari === null, `${named[0]?.kategoriAnahtari} · ${other?.kategoriAnahtari}`);
+  // Patron kasa listesinin süzgeci (D4-KUC3c) kasa-hareketi `kategoriAnahtari` eşitliğidir: iki yüzey AYNI anahtarı üretmeli.
+  const txs = await prisma.cashTransaction.findMany({ where: { cashBoxId: ids.box, category: { contains: cat(0) } }, select: { id: true, category: true } });
+  // Servis yazımda kırpar; eski/elle girilmiş boşluklu satırı türeticinin kendisi kırpmalı → sentetik satır.
+  const legacy = { id: "legacy-padded", category: `  ${cat(0)} ` };
+  const derivedKeys = await DERIVERS["kasa-hareketi"]!([...txs, legacy], now.getTime());
+  const txKeys = [...derivedKeys.values()].map((v) => v.kategoriAnahtari);
+  check("§3i ⭐ kasa-hareketi kategoriAnahtari = özet satırının anahtarı (boşluklu yazım dahil)",
+    txs.length === 3 && txKeys.length === 4 && txKeys.every((x) => x === k0?.kategoriAnahtari), JSON.stringify(txKeys));
   const keys = [...new Set(dataKeys(snap!.data))].sort();
   const raw = JSON.stringify(snap!.data);
   check("§3e ⭐ tel yalnız izinli anahtarlar; serbest açıklama metni GİTMEZ", keys.every((k) => ALLOWED_KEYS.includes(k)) && !raw.includes(SECRET),

@@ -207,10 +207,25 @@ export const LIST_ID_FILTERS: Readonly<Record<ListIdFilterKey, readonly string[]
   urunId: ["siparis-kalemi", "is-emri", "fatura-kalemi", "fiyat", "teklif-kalemi", "standart-maliyet"],
 };
 
+// ---------------------------------------------------------------- liste anahtar süzgeçleri (D4-KUC3c)
+export const LIST_KEY_FILTER_KEYS = ["kategoriAnahtari"] as const;
+export type ListKeyFilterKey = (typeof LIST_KEY_FILTER_KEYS)[number];
+export const ANAHTAR_SUZGEC_AZAMI = 200;
+
+/**
+ * `GET /veri/:projeksiyon?<anahtar>=<metin>` ⇒ kayıttaki AYNI ADLI, FABRİKANIN ürettiği anahtarın birebir eşitliği
+ * (bulut kırpmaz, katlamaz, hesaplamaz). Beyansız projeksiyonda ya da uzun değerde 400.
+ */
+export const LIST_KEY_FILTERS: Readonly<Record<ListKeyFilterKey, readonly string[]>> = {
+  kategoriAnahtari: ["kasa-hareketi"],
+};
+
 /** `GET /oturum` `liste` — bu sunucunun liste yetenekleri; eski sunucu göndermez (istemci süzgeçli görünümü gizler). */
 export interface ListCapabilities {
   readonly kimlikSuzgecleri: Readonly<Partial<Record<ListIdFilterKey, readonly string[]>>>;
   readonly aranabilir: readonly string[];
+  /** D4-KUC3c; eski sunucu göndermez ⇒ istemci anahtar süzgecini (kasa kategori çipleri) gizler. */
+  readonly anahtarSuzgecleri?: Readonly<Partial<Record<ListKeyFilterKey, readonly string[]>>>;
 }
 
 // ---------------------------------------------------------------- cari kilidi (D4-I6)
@@ -264,6 +279,8 @@ export interface ExpenseMonthCell {
  */
 export interface ExpenseCategoryRow {
   readonly etiket: string;
+  /** Kasa hareketi `kategoriAnahtari` ile aynı (fabrika üretir); "Diğer"de null; eski fabrika göndermez (D4-KUC3c). */
+  readonly kategoriAnahtari?: string | null;
   readonly digerMi: boolean;
   readonly kategoriSayisi: number;
   readonly toplam: string;

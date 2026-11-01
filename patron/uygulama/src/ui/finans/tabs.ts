@@ -15,4 +15,4 @@ export const FINANCE_TABS: readonly { readonly key: FinanceTab; readonly label: 
 ];
 
 /** Ekranın geçersizleştirme etiketleri (aşağı çek hepsini tazeler). */
-export const FINANCE_TAGS: readonly string[] = ["ozet-finans", "ozet-masraf", "karlilik-ozet", "kasa", "banka", "cek-senet", "fatura", "tahsilat-odeme"];
+export const FINANCE_TAGS: readonly string[] = ["ozet-finans", "ozet-masraf", "karlilik-ozet", "kasa", "banka", "kasa-hareketi", "cek-senet", "fatura", "tahsilat-odeme"];

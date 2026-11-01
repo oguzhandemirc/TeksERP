@@ -213,6 +213,8 @@ export const SETTING_KEYS = {
   COST_PROFIT_CONSUMABLE_PRICE_SOURCE: "maliyet.karlilik.sarfFiyatKaynagi",
   /** SY-D2: dokuma standart maliyet yöntemi — `TEZGAH_SAATI` (varsayılan; devir × randıman × saat ücreti) · `ATKI_UCRETI` (atkı/cm × ücret). */
   COST_WEAVING_STANDARD_METHOD: "maliyet.dokumaStandartYontemi",
+  /** SY-M1: siparişten üretim önerisi — `KAPALI` (varsayılan; düğme/uç yok) · `ONIZLEME` · `ONAYDA_TASLAK` (onayda önizleme açılır; sessiz yaratma yok). */
+  ORDER_PRODUCTION_PROPOSAL: "siparis.uretimOnerisi",
   /** D4-G2b: kârlılıkta makine süresi — `OTURUM` (varsayılan; iş oturumu, IDLE `lastActivityAt`ta kesilir) · `VARDIYA` · `NORM`. */
   COST_PROFIT_MACHINE_TIME: "maliyet.karlilik.makineSuresi",
   /** D4-G2b: genel gider havuzunun işlere dağıtım anahtarı — `YOK` (varsayılan; dağıtılmaz) · `METRE` · `GELIR` · `MAKINE_SAATI`. */
@@ -1131,6 +1133,10 @@ export const DEFAULT_PROFIT_CONSUMABLE_PRICE_SOURCE: ProfitConsumablePriceSource
 export const WEAVING_STANDARD_METHODS = ["TEZGAH_SAATI", "ATKI_UCRETI"] as const;
 export type WeavingStandardMethod = (typeof WEAVING_STANDARD_METHODS)[number];
 export const DEFAULT_WEAVING_STANDARD_METHOD: WeavingStandardMethod = "TEZGAH_SAATI";
+/** SY-M1: siparişten üretim önerisi kipi. */
+export const ORDER_PRODUCTION_PROPOSAL_MODES = ["KAPALI", "ONIZLEME", "ONAYDA_TASLAK"] as const;
+export type OrderProductionProposalMode = (typeof ORDER_PRODUCTION_PROPOSAL_MODES)[number];
+export const DEFAULT_ORDER_PRODUCTION_PROPOSAL: OrderProductionProposalMode = "KAPALI";
 /** D4-G2b: kârlılıkta makine süresinin kaynağı. */
 export const PROFIT_MACHINE_TIME_MODES = ["OTURUM", "VARDIYA", "NORM"] as const;
 export type ProfitMachineTimeMode = (typeof PROFIT_MACHINE_TIME_MODES)[number];
@@ -2020,6 +2026,8 @@ export interface FeatureFlags {
   costProfitConsumablePriceSource: ProfitConsumablePriceSource;
   /** SY-D2: dokuma standart maliyet yöntemi (varsayılan `TEZGAH_SAATI`). */
   costWeavingStandardMethod: WeavingStandardMethod;
+  /** SY-M1: siparişten üretim önerisi (varsayılan `KAPALI`). */
+  orderProductionProposal: OrderProductionProposalMode;
   /** D4-G2b: kârlılık makine süresi kaynağı (varsayılan `OTURUM`). */
   costProfitMachineTime: ProfitMachineTimeMode;
   /** D4-G2b: genel gider dağıtım anahtarı (varsayılan `YOK`). */
@@ -2700,6 +2708,7 @@ export class SystemSettingService {
       costProfitSubcontractSource: await readCostProfitSubcontractSource(cacheClient),
       costProfitConsumablePriceSource: await readCostProfitConsumablePriceSource(cacheClient),
       costWeavingStandardMethod: await readCostWeavingStandardMethod(cacheClient),
+      orderProductionProposal: await readOrderProductionProposal(cacheClient),
       costProfitMachineTime: await readCostProfitMachineTime(cacheClient),
       costProfitOverheadKey: await readCostProfitOverheadKey(cacheClient),
       costProfitCategoryClasses: await readCostProfitCategoryClasses(cacheClient),
@@ -3336,6 +3345,13 @@ export class SystemSettingService {
         throw AppError.badRequest(`costWeavingStandardMethod şunlardan biri olmalı: ${WEAVING_STANDARD_METHODS.join(", ")}`);
       }
       await this.set(SETTING_KEYS.COST_WEAVING_STANDARD_METHOD, v, "Dokuma standart maliyet yöntemi — tezgah saati · atkı ücreti", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "orderProductionProposal")) {
+      const v = input.orderProductionProposal;
+      if (typeof v !== "string" || !ORDER_PRODUCTION_PROPOSAL_MODES.includes(v as OrderProductionProposalMode)) {
+        throw AppError.badRequest(`orderProductionProposal şunlardan biri olmalı: ${ORDER_PRODUCTION_PROPOSAL_MODES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.ORDER_PRODUCTION_PROPOSAL, v, "Siparişten üretim önerisi — kapalı · önizleme · onayda taslak", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "costProfitMachineTime")) {
       const v = input.costProfitMachineTime;
@@ -5704,6 +5720,11 @@ export function readCostProfitConsumablePriceSource(tx?: Pick<typeof prisma, "sy
 /** SY-D2: dokuma standart maliyet yöntemi — tanınmayan değer varsayılana (`TEZGAH_SAATI`, bugünkü motor) düşer. */
 export function readCostWeavingStandardMethod(tx?: Pick<typeof prisma, "systemSetting">): Promise<WeavingStandardMethod> {
   return readServiceEnum(SETTING_KEYS.COST_WEAVING_STANDARD_METHOD, WEAVING_STANDARD_METHODS, DEFAULT_WEAVING_STANDARD_METHOD, tx);
+}
+
+/** SY-M1: siparişten üretim önerisi — tanınmayan değer varsayılana (`KAPALI`, bugünkü davranış) düşer. */
+export function readOrderProductionProposal(tx?: Pick<typeof prisma, "systemSetting">): Promise<OrderProductionProposalMode> {
+  return readServiceEnum(SETTING_KEYS.ORDER_PRODUCTION_PROPOSAL, ORDER_PRODUCTION_PROPOSAL_MODES, DEFAULT_ORDER_PRODUCTION_PROPOSAL, tx);
 }
 
 /** D4-G2b: kârlılık makine süresi — tanınmayan değer varsayılana (`OTURUM`) düşer. */
