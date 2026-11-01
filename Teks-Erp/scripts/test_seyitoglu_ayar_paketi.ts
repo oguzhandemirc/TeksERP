@@ -100,8 +100,14 @@ async function main(): Promise<void> {
   const keys = SEYITOGLU_SETTINGS.map((p) => p.anahtar);
   const fields = SEYITOGLU_SETTINGS.map((p) => p.alan);
   check("§1d paket anahtarları ve alanları tekil", new Set(keys).size === keys.length && new Set(fields).size === fields.length);
-  const shared = keys.filter((k) => HIZMET_AYAR_PAKETI.some((h) => h.anahtar === k));
-  check("§1e hizmet paketiyle ortak anahtar yok", shared.length === 0, shared.join(","));
+  // Fabrika türünden bağımsız kimlik ayarı iki pakette de bilerek aynı değerle durur (2026-11-01).
+  const ORTAK_BILEREK = new Set(["auth.trustedDeviceDays"]);
+  const shared = keys.filter((k) => !ORTAK_BILEREK.has(k) && HIZMET_AYAR_PAKETI.some((h) => h.anahtar === k));
+  check("§1e hizmet paketiyle ortak anahtar yok (beyanlı kimlik ayarı hariç)", shared.length === 0, shared.join(","));
+  const ortakFark = [...ORTAK_BILEREK].filter(
+    (k) => JSON.stringify(SEYITOGLU_SETTINGS.find((p) => p.anahtar === k)?.hedef) !== JSON.stringify(HIZMET_AYAR_PAKETI.find((p) => p.anahtar === k)?.hedef),
+  );
+  check("§1e' beyanlı ortak anahtar iki pakette aynı hedefte", ortakFark.length === 0, ortakFark.join(","));
 
   // ── §2 CANLI kuru koşu ── §4 YAZAR → fixture DB (_test) zorunlu.
   const block = hedefDbEngeli() ?? fixtureHedefEngeli();

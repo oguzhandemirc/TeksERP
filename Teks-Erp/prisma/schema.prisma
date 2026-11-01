@@ -582,6 +582,8 @@ model User {
   /// İki adımlı doğrulama (2026-09-01, patron modülü / uzaktan erişim).
   totpEnrollments       TotpEnrollment[]   @relation("TotpEnrollmentUser")
   openedTotpEnrollments TotpEnrollment[]   @relation("TotpEnrollmentOpenedBy")
+  trustedDevices        TrustedDevice[]    @relation("TrustedDeviceUser")
+  revokedTrustedDevices TrustedDevice[]    @relation("TrustedDeviceRevokedBy")
   recoveryCodes         UserRecoveryCode[] @relation("UserRecoveryCodeUser")
 
   createdAt DateTime @default(now()) @db.Timestamptz
@@ -811,6 +813,9 @@ model Session {
   /// yapar). Login'de yazılır, oturum boyunca DEĞİŞMEZ — panel güncellenirse
   /// yeni oturumda yeni değer görünür.
   clientVersion String?    @db.VarChar(32)
+  /// Web (çerez kipi) girişinde tarayıcı tanınmadı mı (geçerli güvenilir cihaz / oturum çerezi yok).
+  /// NULL = web dışı giriş ya da alan eklenmeden önceki oturum (ölçülmedi).
+  newDevice     Boolean?
 
   // Ayak izi korunur — kullanıcı silinirken (soft-delete kalıbı) oturum geçmişi kaybolmaz.
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
@@ -891,6 +896,38 @@ model TotpEnrollment {
 
   @@index([userId])
   @@map("totp_enrollments")
+}
+
+/// Web girişinde "Bu cihazı N gün hatırla" (2026-11-01): geçerli satırın belirteci çerezde olan
+/// tarayıcıdan TOTP kodu sorulmaz (`AuthService.assertSecondFactor` tek boğaz). AÇIK belirteç DB'de
+/// YOK — yalnız kısa kimlik halkasıyla HMAC özeti (`<kid>:<hex>`). Silinmez, iptal DURUM geçişidir
+/// (`revokedAt`, atomik claim). `tokenVersion` kullanıcınınkiyle eşit değilse satır ölüdür
+/// (parola/TOTP/izin değişimi, pasifleştirme — her oturum düşüren artış cihazı da düşürür).
+model TrustedDevice {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @db.Uuid
+  /// HMAC özeti — `<kid>:<64 hex>` (digestTrustedDeviceToken).
+  tokenHash    String    @unique @db.VarChar(100)
+  /// Tarayıcı / işletim sistemi özeti ("Chrome · Windows"); User-Agent'ın kendisi saklanmaz.
+  label        String    @db.VarChar(120)
+  firstIp      String?   @db.VarChar(64)
+  /// Doğuştaki `User.tokenVersion` — eşit değilse cihaz geçersizdir.
+  tokenVersion Int
+  lastUsedAt   DateTime? @db.Timestamptz
+  expiresAt    DateTime  @db.Timestamptz
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  /// SELF | ADMIN | PASSWORD_CHANGE | PASSWORD_RESET | TOTP_RESET | DEACTIVATED (CHECK).
+  revokeReason String?   @db.VarChar(32)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  user      User  @relation("TrustedDeviceUser", fields: [userId], references: [id], onDelete: Restrict)
+  revokedBy User? @relation("TrustedDeviceRevokedBy", fields: [revokedById], references: [id], onDelete: Restrict)
+
+  @@index([userId, revokedAt])
+  @@map("trusted_devices")
 }
 
 /// KURTARMA KODLARI — telefon kaybedildiğinde hesabın tek çıkışı.

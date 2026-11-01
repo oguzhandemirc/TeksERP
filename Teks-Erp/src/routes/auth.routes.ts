@@ -35,5 +35,9 @@ router.put("/preferences", verifyToken, UserPreferenceController.updateMine);
 // Kendi hesabında web girişi TOTP tercihi (2026-11-01) — yalnız KENDİ kaydı; başkası adına uç yok.
 router.get("/web-totp", verifyToken, AuthController.webTotpGet);
 router.put("/web-totp", verifyToken, AuthController.webTotpSet);
+// Kendi hatırlanan cihazlarım (2026-11-01) — yalnız KENDİ kaydı; yönetici yolu /api/admin/users/:id/trusted-devices.
+router.get("/trusted-devices", verifyToken, AuthController.trustedDevicesList);
+router.post("/trusted-devices/revoke-all", verifyToken, AuthController.trustedDevicesRevokeAll);
+router.post("/trusted-devices/:id/revoke", verifyToken, AuthController.trustedDeviceRevoke);
 
 export default router;

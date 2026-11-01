@@ -53,6 +53,7 @@ import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { ekranYolu } from "../constants/panel-ekran-yolu";
 import { cookieLoginApplies } from "../lib/web-session-cookie";
 import { webTotpWaived } from "./web-totp.service";
+import { consumeTrustedDevice, noteWebLogin, revokeAllTrustedDevicesTx, auditBulkRevoke, trustedDeviceDaysFor } from "./trusted-device.service";
 import { CURRENT_PASSWORD_INVALID_CODE } from "../constants/password-policy";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { grantsDesktopPanel } from "../constants/permission-catalog";
@@ -84,6 +85,16 @@ export interface LoginContext {
    * Yalnız İLETİYİ seçer (eski tablet "güncelleyin" duyar); kapı kararına girmez.
    */
   totpCapable?: boolean;
+  /** Web (çerez kipi): güvenilir cihaz çerezinin değeri (yalnız giriş ucuna gelir). */
+  trustedDeviceToken?: string | null;
+  /** Web: kod adımında "Bu cihazı hatırla" işaretlendi mi. */
+  rememberDevice?: boolean;
+  /** Web: girişten ÖNCE tarayıcıdaki oturum çerezinin (imzası ve süresi geçerli) sahibi — yeni cihaz tanıması. */
+  sessionCookieUserId?: string | null;
+  userAgent?: string | null;
+  ip?: string | null;
+  /** `assertSecondFactor` YAZAR (çıktı): ikinci faktör nasıl geçildi. Girdi olarak okunmaz. */
+  secondFactorOutcome?: "CODE" | "TRUSTED_DEVICE";
 }
 
 /** Token'ı hangi kimlik bilgisi açtı — zorunlu değişim dalı yönteme göre ayrışır. */
@@ -93,7 +104,15 @@ type LoginVia = "password" | "quick-pin" | "card";
 export type LoginClientType = "electron" | "mobile" | "web";
 
 /** Giriş çıktısı. `mustChangePassword` panelde ve değişim adımını taşıyan tabletin parolalı girişinde true olabilir. */
-export type LoginResult = { token: string; user: JwtPayload; mustChangePassword: boolean };
+export type LoginResult = {
+  token: string;
+  user: JwtPayload;
+  mustChangePassword: boolean;
+  /** Yalnız çerez kipi: hatırlanan cihazın AÇIK belirteci (yalnız Set-Cookie'ye gider, gövdeye ASLA). */
+  trustedDevice?: { token: string; maxAgeSeconds: number } | null;
+  /** Yalnız çerez kipi: tarayıcı tanınmadı (yeni cihaz bildirimi yazıldı). */
+  newDevice?: boolean;
+};
 
 export const PASSWORD_CHANGE_REQUIRED_CODE = "PASSWORD_CHANGE_REQUIRED";
 /** Satıcı hesabının yeni parolası ortak varsayılan parolayla aynı. */
@@ -555,13 +574,20 @@ export class AuthService {
     let isSystemAccount = false;
     // Bulut web paneli (çerez kipi, K4): giriş yolu ne olursa olsun TOTP zorunlu; kurulmamışsa giriş yok.
     // USER_CHOICE politikasında kullanıcının kendi opt-out'u kodu kaldırır — süperadmin HARİÇ (opt-out yok sayılır).
-    if (cookieLoginApplies(ctx?.clientType)) {
+    const webCookie = cookieLoginApplies(ctx?.clientType);
+    if (webCookie) {
       if (await webTotpWaived(userId)) return;
       if (!status.enabled) {
         throw AppError.forbidden(
           "Web paneline giriş için iki adımlı doğrulama kurulmalı. Yöneticinizden kurulum bağlantısı isteyin.",
           { code: "TOTP_ENROLLMENT_REQUIRED" },
         );
+      }
+      // Güvenilir cihaz (2026-11-01): yalnız parolalı web girişi; ayar 0, sistem hesabı, süresi dolmuş,
+      // iptal ya da başka kullanıcının belirteci → `consumeTrustedDevice` false → kod sorulur.
+      if (ctx && via === "password" && (await consumeTrustedDevice(userId, ctx.trustedDeviceToken))) {
+        ctx.secondFactorOutcome = "TRUSTED_DEVICE";
+        return;
       }
     } else if (shortPath) {
       const row = await prisma.user.findUnique({ where: { id: userId }, select: { isSystemAccount: true } });
@@ -579,11 +605,17 @@ export class AuthService {
 
     const code = (ctx?.totpCode ?? "").trim();
     if (!code) {
-      throw AppError.conflict(await this.totpRequiredMessage(userId, ctx, shortPath), { code: "TOTP_REQUIRED" });
+      // Kod adımı "Bu cihazı N gün hatırla" kutusunu yalnız `trustDeviceDays > 0` iken çizer (eski panel alanı yok sayar).
+      const trustDeviceDays = webCookie && via === "password" ? await trustedDeviceDaysFor(userId) : 0;
+      throw AppError.conflict(await this.totpRequiredMessage(userId, ctx, shortPath), {
+        code: "TOTP_REQUIRED",
+        ...(trustDeviceDays > 0 ? { trustDeviceDays } : {}),
+      });
     }
     if (!(await TotpAccountService.verifySecondFactor(userId, code))) {
       throw AppError.unauthorized("Doğrulama kodu geçersiz.", { code: "TOTP_INVALID" });
     }
+    if (ctx) ctx.secondFactorOutcome = "CODE";
   }
 
   /** 409 TOTP_REQUIRED iletisi: kod adımı olan istemciye kısa; eski tablete çıkış yolu. */
@@ -764,6 +796,20 @@ export class AuthService {
     const token = jwt.sign(claim, JWT_SECRET, signOptions);
 
     const payload: JwtPayload = { ...signPayload, jti };
+    if (ctx && cookieLoginApplies(ctx.clientType)) {
+      const web = await noteWebLogin({
+        userId: user.id,
+        jti,
+        secondFactor: ctx.secondFactorOutcome ?? "NONE",
+        rememberDevice: ctx.rememberDevice === true,
+        viaPassword: via === "password",
+        trustedDeviceToken: ctx.trustedDeviceToken,
+        sessionCookieUserId: ctx.sessionCookieUserId,
+        userAgent: ctx.userAgent,
+        ip: ctx.ip,
+      });
+      return { token, user: payload, mustChangePassword, trustedDevice: web.trustedDevice, newDevice: web.newDevice };
+    }
     return { token, user: payload, mustChangePassword };
   }
 
@@ -910,21 +956,26 @@ export class AuthService {
     const passwordHash = await hashPassword(newPassword, PASSWORD_BCRYPT_COST);
     const varsayilanKapaniyor = user.defaultPasswordIssuedAt !== null && user.defaultPasswordChangedAt === null;
     const reseal = await credentialReseal(prisma, userId, { passwordHash });
-    const claimed = await prisma.user.updateMany({
-      where: { id: userId, isActive: true, tokenVersion: user.tokenVersion, ...reseal.where },
-      data: {
-        passwordHash,
-        ...reseal.data,
-        mustChangePassword: false,
-        tokenVersion: { increment: 1 },
-        ...(varsayilanKapaniyor ? { defaultPasswordChangedAt: new Date() } : {}),
-      },
-    });
-    if (claimed.count === 0) {
-      throw AppError.conflict("Hesap bu sırada değişti. Tekrar giriş yapıp yeniden deneyin.", {
-        code: "PASSWORD_CHANGE_CONFLICT",
+    // Parola + güvenilir cihaz iptali AYNI tx'te: yeni parolayla eski "hatırlanan" tarayıcı kodsuz girmesin.
+    const revokedDevices = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.user.updateMany({
+        where: { id: userId, isActive: true, tokenVersion: user.tokenVersion, ...reseal.where },
+        data: {
+          passwordHash,
+          ...reseal.data,
+          mustChangePassword: false,
+          tokenVersion: { increment: 1 },
+          ...(varsayilanKapaniyor ? { defaultPasswordChangedAt: new Date() } : {}),
+        },
       });
-    }
+      if (claimed.count === 0) {
+        throw AppError.conflict("Hesap bu sırada değişti. Tekrar giriş yapıp yeniden deneyin.", {
+          code: "PASSWORD_CHANGE_CONFLICT",
+        });
+      }
+      return revokeAllTrustedDevicesTx(tx, userId, "PASSWORD_CHANGE", userId);
+    });
+    await auditBulkRevoke(userId, revokedDevices, "PASSWORD_CHANGE", userId);
     await SessionRegistryService.revokeAllForUser(userId, "PASSWORD_RESET").catch(() => undefined);
     await AuditService.log({
       userId,
