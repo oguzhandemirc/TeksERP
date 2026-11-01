@@ -7,7 +7,7 @@
 // opt-in'in KENDİSİNİ ölçer: katalog neyi yazıyorsa o gider, fazlası değil; ve katalogdaki bir
 // satırın yanlış sınıfla (kişisel alan kök satırda) ya da yasak türde (not, kullanıcı kimliği,
 // sır) yazılmasını yakalar.
-//   §1 katalog biçimi: 27 KAYIT (7 BOYUT + 20 OLGU) + 9 ANLIK (D4-H2 ozet-masraf), tel adları tekil, `id` ilk ve İŞLEM
+//   §1 katalog biçimi: 27 KAYIT (7 BOYUT + 20 OLGU) + 10 ANLIK (D4-H2 ozet-masraf, D4-G4 karlilik-ozet), tel adları tekil, `id` ilk ve İŞLEM
 //   §2 ⭐ her opt-in kolon ŞEMADA var (information_schema)
 //   §3 ⭐ SIZINTI: not/katlama/sır/kullanıcı kimliği kolonu HİÇBİR projeksiyonda yok; iletişim ·
 //      keşideci · vergi/adres gibi kişisel kolon KİŞİSEL sınıfta (kök satırla gitmez)
@@ -61,8 +61,10 @@ import { getFactoryTimezone, resolveRangeEnd, resolveRangeStart } from "../src/c
 import { buildRecords } from "../src/cloud-sync/record-builder";
 import { mapToRoots } from "../src/cloud-sync/change-scan";
 import { buildSnapshots, SNAPSHOT_WIRE_SCHEMAS } from "../src/cloud-sync/snapshots";
+import { computeProfitability } from "../src/services/helpers/profitability.helper";
 import { PackageSchema } from "../src/cloud-sync/wire";
 import { REMOTE_REPORTS, carriesPersonName, computeReportResult } from "../src/cloud-sync/report-requests";
+import { AppError } from "../src/utils/app-error";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -127,7 +129,7 @@ function bicimBolumu(): void {
   console.log("\n§1 — katalog biçimi");
   const boyut = RECORD_PROJECTIONS.filter((p) => p.role === "BOYUT").length;
   const olgu = RECORD_PROJECTIONS.filter((p) => p.role === "OLGU").length;
-  check("§1a 27 KAYIT (7 BOYUT + 20 OLGU) + 9 ANLIK", RECORD_PROJECTIONS.length === 27 && boyut === 7 && olgu === 20 && SNAPSHOT_PROJECTIONS.length === 9,
+  check("§1a 27 KAYIT (7 BOYUT + 20 OLGU) + 10 ANLIK", RECORD_PROJECTIONS.length === 27 && boyut === 7 && olgu === 20 && SNAPSHOT_PROJECTIONS.length === 10,
     `${RECORD_PROJECTIONS.length} (${boyut}+${olgu}) + ${SNAPSHOT_PROJECTIONS.length}`);
   const adlar = [...RECORD_PROJECTIONS, ...SNAPSHOT_PROJECTIONS].map((p) => p.name);
   check("§1b projeksiyon adları tekil ve tel biçiminde", new Set(adlar).size === adlar.length && adlar.every((a) => /^[a-z][a-z0-9-]*$/.test(a)));
@@ -325,10 +327,12 @@ async function canliBolumu(): Promise<void> {
 
 async function anlikBolumu(): Promise<void> {
   console.log("\n§6 — anlık kayıtlar");
-  const snaps = await buildSnapshots({ now: new Date(), productionOn: true, financeOn: true, cadences: new Set(["HER_TUR", "SAATLIK", "GUNLUK"]) });
+  const snaps = await buildSnapshots({ now: new Date(), productionOn: true, financeOn: true, maliyetOn: true, cadences: new Set(["HER_TUR", "SAATLIK", "GUNLUK"]) });
   const uretilen = new Set(snaps.map((s) => s.projection));
   const sema = new Set(Object.keys(SNAPSHOT_WIRE_SCHEMAS));
-  const eksik = [...sema].filter((n) => !uretilen.has(n));
+  // D4-G4: `karlilik-ozet` DB'deki maliyet ∧ ön muhasebe ayarına bağlı (hesap null → anlık yok); kapalıysa beklenmez.
+  const karlilikAcik = (await computeProfitability({ fromMonth: "2026-01", toMonth: "2026-01" })) !== null;
+  const eksik = [...sema].filter((n) => !uretilen.has(n) && (n !== "karlilik-ozet" || karlilikAcik));
   const fazla = [...uretilen].filter((n) => !sema.has(n));
   check("§6a ⭐ üretilen anlık kümesi ↔ tel şeması kümesi birebir (ölü şema da, şemasız çıktı da yok)", eksik.length === 0 && fazla.length === 0,
     [eksik.length ? `üretilmeyen: ${eksik.join(",")}` : "", fazla.length ? `şemasız: ${fazla.join(",")}` : ""].filter(Boolean).join(" · ") || `${uretilen.size} kayıt`);
@@ -433,6 +437,7 @@ async function raporBolumu(): Promise<void> {
       v = await r.reportRunner(r.params.parse({}));
     } catch (e) {
       // Kapalı modül (dokuma/devere/finans) bu DB'de 403 verir; kapı `availability`de ölçülür.
+      if (e instanceof AppError && e.details?.code === "PROFITABILITY_MODULE_CHANGED") continue;
       if (e instanceof Error && /MODULE_DISABLED|kapalı/i.test(e.message)) continue;
       sunumKotu.push(`${r.key}: ${e instanceof Error ? e.message : String(e)}`);
       continue;
