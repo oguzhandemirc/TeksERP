@@ -4,6 +4,7 @@ import { Text, TouchableRipple, Icon } from 'react-native-paper';
 
 import type { ScanReject } from '../hooks/useScanFeedback';
 import { colors, palette } from '../theme';
+import { customerCodeMatchText, type ScanMatchExtras } from './customerCode/customerCodeLogic';
 
 /** Şeridin çizmek için ihtiyaç duyduğu ASGARİ top şekli. Ekranların kendi
  *  `ScannedRoll` tipleri (Hızlı İş Emri / Fason Sevk) buna eşlenir — şerit
@@ -13,6 +14,8 @@ export interface ScanStripRoll {
   /** Metraj (m). */
   qty: number;
   width?: number | null;
+  /** Müşteri barkoduyla bulunduysa (D4-F1b) satırda kısa not; iç barkodda yok. */
+  customerMatch?: ScanMatchExtras;
 }
 
 interface Props {
@@ -123,6 +126,11 @@ export default function ScannerRollStrip({
                   {r.barcode}
                 </Text>
                 {dup ? <Text style={styles.dupTag}>zaten listede</Text> : null}
+                {customerCodeMatchText(r.customerMatch) ? (
+                  <Text testID="musteri-kodu-eslesme" style={styles.matchTag} numberOfLines={1}>
+                    {customerCodeMatchText(r.customerMatch)}
+                  </Text>
+                ) : null}
                 {showWidth && r.width != null ? (
                   <Text style={styles.width}>{r.width} cm</Text>
                 ) : null}
@@ -180,6 +188,7 @@ const styles = StyleSheet.create({
   rowReject: { backgroundColor: 'rgba(239,68,68,0.16)' },
   barcode: { flex: 1, color: '#fff', fontFamily: 'monospace', fontSize: 13 },
   dupTag: { color: palette.amber[500], fontSize: 11, fontWeight: '800' },
+  matchTag: { color: palette.indigo[200], fontSize: 11, fontWeight: '700', flexShrink: 1 },
   width: { color: palette.amber[500], fontSize: 12, fontWeight: '700' },
   qty: { color: colors.textOnDarkMuted, fontSize: 13, fontWeight: '700' },
   rejectText: { flex: 1 },

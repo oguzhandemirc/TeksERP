@@ -81,6 +81,9 @@ import { isWrongTypeForCardField, isWrongTypeForRollField } from './fasonScanGua
 import { showScreenError } from '../../../lib/screenToast';
 import { formatFactory } from '../../../lib/factory-time';
 import { TERIM } from '../../../lib/terim';
+import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
+import { CustomerCodeMatchNote } from '../../../components/customerCode/CustomerCodeMatchNote';
+import { scanMatchOf, type ScanMatchExtras } from '../../../components/customerCode/customerCodeLogic';
 
 // Barkod tipi sezgisi — yanlış alana okutmayı backend 404'üne güvenmeden anında,
 // net mesajla yakalar. Tür SUNUCU TABLOSUNDAN gelir (ön ek tablette sabit
@@ -110,6 +113,8 @@ interface ScannedRoll {
   width: number | null;
   qualityGrade: string;
   status: string;
+  /** Müşteri barkoduyla bulunduysa (D4-F1b) satırda not; iç barkodda yok. */
+  customerMatch?: ScanMatchExtras;
 }
 
 export default function FasonSevkScreen() {
@@ -808,6 +813,7 @@ export default function FasonSevkScreen() {
         width: r.width ?? null,
         qualityGrade: r.qualityGrade,
         status: r.status,
+        customerMatch: scanMatchOf(r),
       },
       ...prev,
     ]);
@@ -884,12 +890,15 @@ export default function FasonSevkScreen() {
       addRollToList(r);
       setBarcodeInput('');
     } catch (err) {
+      // Belirsiz müşteri barkodu → aday modalı; seçilen topun İÇ barkodu aynı yoldan eklenir.
+      if (ambiguous.intercept(err)) return;
       notifyReject(barcode, (err as Error).message || 'Okunamadı');
     } finally {
       setScanning(false);
       resolvingBarcodesRef.current.delete(barcode);
     }
   };
+  const ambiguous = useAmbiguousScanPicker((b) => void addBarcodeFromString(b));
 
   const handleRemoveRoll = useCallback((id: string) => {
     setScannedRolls((prev) => prev.filter((r) => r.id !== id));
@@ -912,7 +921,7 @@ export default function FasonSevkScreen() {
     () =>
       scannedRolls
         .filter((r): r is ScannedRoll & { barcode: string } => !!r.barcode)
-        .map((r) => ({ barcode: r.barcode, qty: Number(r.currentQty ?? 0), width: r.width }))
+        .map((r) => ({ barcode: r.barcode, qty: Number(r.currentQty ?? 0), width: r.width, customerMatch: r.customerMatch }))
         .reverse(),
     [scannedRolls],
   );
@@ -1562,6 +1571,7 @@ export default function FasonSevkScreen() {
           />
         }
       />
+      {ambiguous.modal}
 
       {/* Item mismatch onay modal'ı — WO ürünü ile rulo ürünü uyuşmuyor.
           Operatör "Yine de sevk et" derse allowItemOverride:true ile retry. */}
@@ -2417,6 +2427,7 @@ const ScannedRollRow = React.memo(function ScannedRollRow({
           {roll.itemName}
           {roll.colorName ? ` · ${roll.colorName}` : ''}
         </Text>
+        <CustomerCodeMatchNote match={roll.customerMatch} />
         <View style={styles.rollBadgeRow}>
           <View style={styles.rollBadge}>
             <Icon source="arrow-expand-vertical" size={14} color="#0f172a" />

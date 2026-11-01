@@ -366,6 +366,8 @@ export default function NewWorkOrderView({
         }}
       />
 
+      {wo.ambiguousModal}
+
       {/* Listeden çoklu top seç */}
       <RollPickerModal
         visible={rollListOpen}

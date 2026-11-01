@@ -14,6 +14,7 @@ import GramajTapPanel from './GramajTapPanel';
 import MeasuredWidthField from './MeasuredWidthField';
 import { useGramajTap } from './useGramajTap';
 import { useMeasuredWidth } from './useMeasuredWidth';
+import { widthGatedTap } from './widthGatedTap';
 import { composeStationPanels } from './stationPanels';
 import { measuredWidthLimitError, type MeasuredWidthLimit } from './measuredWidth';
 import type { KursunStepSummary } from '../../../types/models';
@@ -40,7 +41,7 @@ const SUMMARY = {
   rolls: [],
 } as unknown as KursunStepSummary;
 
-/** Ekranın kurduğu düzenin aynası: en alanı + gramaj paneli; complete öncesi attach, dokunuş öncesi precheck. */
+/** Ekranın kurduğu düzen: en alanı + gramaj paneli; bağlantı ekranla AYNI fonksiyondan (`widthGatedTap`). */
 function Harness({ limit, complete }: { limit?: MeasuredWidthLimit; complete: jest.Mock }) {
   const qc = useQueryClient();
   useState(() => {
@@ -54,13 +55,8 @@ function Harness({ limit, complete }: { limit?: MeasuredWidthLimit; complete: je
     summary: SUMMARY,
     roll: { rollId: 'roll-1', barcode: 'T000123456' },
     operator: 'Ayşe',
-    complete: (vars, opts) => {
-      const v = width.attach(vars);
-      if (v) complete(v, opts);
-      else opts.onSettled?.();
-    },
+    ...widthGatedTap(width, complete),
     refresh: jest.fn(),
-    precheck: (rollId) => width.attach({ rollId }) !== null,
   });
   return (
     <>
@@ -128,4 +124,13 @@ describe('Gramaj tek dokunuş — ölçülen en ön-denetimi', () => {
     expect(measuredWidthLimitError(310.5, LIMIT_10)).toMatch(/en fazla 310 cm/);
     expect(measuredWidthLimitError(999, undefined)).toBeNull();
   });
+
+  it('§8 ⭐ ekran bağlantısı (D4-KUC3d): KursunQcScreen gramaj dokunuşunu widthGatedTap ile kurar, ham complete/precheck YOK', () => {
+    // Ekran 2800+ satır ve onlarca servis ister; render yerine kaynakta TEK çağrı ölçülür — davranışı §1–§6 sınar.
+    const src = jest.requireActual<typeof import('fs')>('fs').readFileSync(require.resolve('./KursunQcScreen.tsx'), 'utf8');
+    const call = src.slice(src.indexOf('useGramajTap({'), src.indexOf('});', src.indexOf('useGramajTap({')));
+    expect(call).toMatch(/\.\.\.widthGatedTap\(measuredWidth,/);
+    expect(call).not.toMatch(/\bcomplete:|\bprecheck:/);
+  });
 });
+

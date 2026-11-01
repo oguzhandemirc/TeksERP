@@ -6,6 +6,7 @@ import { renderWithPaper } from '../../../test/render';
 import { useInspectionDraftStore } from '../../../components/inspection/inspectionDraftStore';
 import { standaloneDraftKey } from './standaloneInspectionHost';
 import InspectionScreen from './InspectionScreen';
+import { AMBIGUOUS_CODE, UNIQUE_CUSTOMER_CODE, ambiguousScanError, ambiguousTitle, customerCodeMatch } from '../../../test/ambiguousScanFixture';
 
 const mockGetByBarcode = jest.fn();
 const mockPreview = jest.fn();
@@ -132,5 +133,41 @@ describe('InspectionScreen (bağımsız muayene)', () => {
     fireEvent.press(r.getByTestId('inspection-save'));
     expect(mockCreate).not.toHaveBeenCalled();
     expect(useInspectionDraftStore.getState().drafts[standaloneDraftKey('e')]?.defects).toHaveLength(1);
+  });
+});
+
+describe('InspectionScreen — D4-KUC3d müşteri barkodu', () => {
+  async function scanCode(code: string) {
+    mockScanCode = code;
+    const r = renderWithPaper(<InspectionScreen />);
+    fireEvent.press(r.getByTestId('open-camera'));
+    await act(async () => fireEvent.press(r.getByTestId('camera')));
+    return r;
+  }
+
+  it('⭐ belirsiz kod → aday modalı; seçim İÇ barkodla yeniden okutulur', async () => {
+    mockGetByBarcode.mockRejectedValueOnce(ambiguousScanError([{ rollId: 'a', barcode: 'T-a', customerName: 'Acar Perde' }, { rollId: 'b', barcode: 'T-b', customerName: 'Bora Tekstil' }]));
+    const r = await scanCode(AMBIGUOUS_CODE);
+    expect(await r.findByText(ambiguousTitle())).toBeOnTheScreen();
+    expect(r.queryByTestId('inspection-scan-error')).toBeNull();
+    mockGetByBarcode.mockResolvedValueOnce({ data: roll('b') });
+    await act(async () => fireEvent.press(r.getByText('T-b')));
+    expect(mockGetByBarcode).toHaveBeenLastCalledWith('T-b');
+    await waitFor(() => expect(r.getByTestId('inspection-roll-strip')).toBeOnTheScreen());
+    expect(r.queryByTestId('musteri-kodu-eslesme')).toBeNull();
+  });
+
+  it('⭐ müşteri koduyla bulunan top → "müşteri barkodu ile bulundu" notu', async () => {
+    mockGetByBarcode.mockResolvedValueOnce({ data: { ...roll('a'), ...customerCodeMatch() } });
+    const r = await scanCode(UNIQUE_CUSTOMER_CODE);
+    await waitFor(() => expect(r.getByTestId('inspection-roll-strip')).toBeOnTheScreen());
+    expect(r.getByTestId('musteri-kodu-eslesme')).toHaveTextContent('Müşteri barkodu ACR500 ile bulundu');
+  });
+
+  it('404 (bulunamadı / eski backend) → bugünkü hata metni, modal YOK', async () => {
+    mockGetByBarcode.mockRejectedValueOnce({ status: 404, message: 'Endpoint bulunamadı', details: {} });
+    const r = await scanCode(AMBIGUOUS_CODE);
+    await waitFor(() => expect(r.getByTestId('inspection-scan-error')).toHaveTextContent('MK77 — top bulunamadı'));
+    expect(r.queryByText(ambiguousTitle())).toBeNull();
   });
 });

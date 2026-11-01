@@ -28,6 +28,8 @@ import {
 } from './scanClassify';
 import { buildReworkPlan } from './reworkPayload';
 import { collectQuickWoIssues, parsePositiveNumber } from './quickWorkOrderIssues';
+import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
+import { scanMatchOf, type ScanMatchExtras } from '../../../components/customerCode/customerCodeLogic';
 
 export interface ScannedRoll {
   id: string;
@@ -43,6 +45,8 @@ export interface ScannedRoll {
    * sorulur ve fasona gidiyorsa ölü etiket uyarısı basılır.
    */
   status: AttachableStatus;
+  /** Müşteri barkoduyla bulunduysa (D4-F1b `matchedBy`) satırda not çıkar; iç barkodda null. */
+  customerMatch?: ScanMatchExtras;
   /** Bitmiş topun mevcut rengi — rozetin yanında görünür (hedef renk AYRI). */
   colorName: string | null;
   /**
@@ -594,6 +598,7 @@ export function useQuickWorkOrder() {
           colorName: roll.color?.name ?? null,
           labelPrintedAt: roll.labelPrintedAt ?? null,
           itemLifecycle: itemLifecycleOf(roll.item),
+          customerMatch: scanMatchOf(roll),
         });
       }
 
@@ -637,6 +642,10 @@ export function useQuickWorkOrder() {
   // operatör art arda okutur, kamera ✓ verir, top listeye girmez). Paketleme'deki
   // FIFO kuyruğun aynısı: meşgulken kuyruğa al, bitince sıradakini işle.
   const pendingScanQueueRef = useRef<string[]>([]);
+  // Belirsiz müşteri barkodu → aday modalı; seçilen topun İÇ barkodu aynı okutma yolundan geçer.
+  const handleScanRef = useRef<(raw: string) => Promise<void>>(async () => {});
+  const ambiguous = useAmbiguousScanPicker((b) => void handleScanRef.current(b));
+  const interceptAmbiguous = ambiguous.intercept;
 
   const handleScan = useCallback(
     async (raw: string) => {
@@ -668,7 +677,8 @@ export function useQuickWorkOrder() {
           return;
         }
         addRolls([roll]);
-      } catch {
+      } catch (e) {
+        if (interceptAmbiguous(e)) return;
         pushRejects([{ barcode, reason: 'Okunamadı' }]);
         Toast.show({ type: 'error', text1: 'Top eklenmedi', text2: `${barcode} okunamadı` });
       } finally {
@@ -677,8 +687,9 @@ export function useQuickWorkOrder() {
         if (next) void handleScan(next);
       }
     },
-    [addRolls, pushRejects, flashDuplicate],
+    [addRolls, pushRejects, flashDuplicate, interceptAmbiguous],
   );
+  handleScanRef.current = handleScan;
 
   const removeRoll = useCallback(
     (barcode: string) => setScanned((prev) => prev.filter((s) => s.barcode !== barcode)),
@@ -976,6 +987,7 @@ export function useQuickWorkOrder() {
     cancelledScan,
     dismissCancelledScan: () => setCancelledScan(null),
     handleScan,
+    ambiguousModal: ambiguous.modal,
     removeRoll,
     clearScanned,
     // okuma geri bildirimi

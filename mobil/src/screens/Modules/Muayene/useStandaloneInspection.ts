@@ -4,7 +4,7 @@
 // Okut → top → durum önizlemesi (aktif muayene + en) → taslak → KAYDET. Token mantıksal
 // deneme başına (`useAttemptToken`): belirsiz hatada yapışır, kesin 4xx'te ve yeni topta yenilenir.
 // =============================================================================
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { defectTypeService } from '../../../services/defectType.service';
@@ -21,6 +21,7 @@ import type { InspectionDefect, InspectionDefectInput, InspectionSummary } from 
 import { useInspectionPreview } from '../../../components/inspection/useInspectionPreview';
 import { fmtPer100 } from '../../../components/inspection/InspectionSummaryStrip';
 import type { DefectType, Roll } from '../../../types/models';
+import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
 import { saveErrorText, standaloneCreateBody, standaloneDraftKey, standaloneInspectionVisible } from './standaloneInspectionHost';
 
 const newId = () => `d${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
@@ -32,6 +33,10 @@ function useRollScan() {
   const [roll, setRoll] = useState<Roll | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Belirsiz müşteri barkodu → aday modalı; seçim topun İÇ barkoduyla yeniden okutulur.
+  const scanRef = useRef<(code: string) => Promise<void>>(async () => {});
+  const ambiguous = useAmbiguousScanPicker((b) => void scanRef.current(b));
+  const intercept = ambiguous.intercept;
   const scan = useCallback(
     async (code: string) => {
       const c = code.trim();
@@ -43,15 +48,17 @@ function useRollScan() {
         setRoll(res.data);
         setBarcode('');
       } catch (e) {
+        if (intercept(e)) return;
         const st = (e as { status?: number }).status;
         setError(st === 404 ? `${c} — top bulunamadı` : st === undefined ? 'Sunucuya ulaşılamıyor — top okunamadı' : (e as Error).message || 'Top okunamadı');
       } finally {
         setBusy(false);
       }
     },
-    [],
+    [intercept],
   );
-  return { barcode, setBarcode, roll, setRoll, scan, scanBusy: busy, scanError: error };
+  scanRef.current = scan;
+  return { barcode, setBarcode, roll, setRoll, scan, scanBusy: busy, scanError: error, ambiguousModal: ambiguous.modal };
 }
 
 interface SaveArgs {
