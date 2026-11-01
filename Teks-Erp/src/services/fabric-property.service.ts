@@ -21,6 +21,7 @@
 import { BaseService } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import prisma from "../lib/prisma";
+import { ItemType } from "@prisma/client";
 import { readServiceItemIdField, withServiceMapping } from "./helpers/service-item-mapping.helper";
 import { AppError } from "../utils/app-error";
 import { nextSeriesNo } from "./number-series.service";
@@ -60,6 +61,8 @@ export interface PropertyValueInput {
   isActive?: boolean;
   /** Gramaj kademesi → hizmet kalemi (H6). `undefined` = dokunma, `null` = eşlemeyi kaldır. */
   serviceItemId?: string | null;
+  /** Kuşak değeri → sarf kalemi (top başına 1 düşüm). `undefined` = dokunma, `null` = kaldır. */
+  consumableItemId?: string | null;
 }
 
 /**
@@ -97,7 +100,12 @@ function extractValues(data: Record<string, unknown>): PropertyValueInput[] | un
     const sid = readServiceItemIdField(row.serviceItemId, `'${code}' değerinin`);
     const sortOrder = typeof row.sortOrder === "number" ? row.sortOrder : (i + 1) * 10;
     const isActive = row.isActive === undefined ? true : Boolean(row.isActive);
-    return { code, name, sortOrder, isActive, ...(sid === undefined ? {} : { serviceItemId: sid }) };
+    const cid = readConsumableItemIdField(row.consumableItemId, code);
+    return {
+      code, name, sortOrder, isActive,
+      ...(sid === undefined ? {} : { serviceItemId: sid }),
+      ...(cid === undefined ? {} : { consumableItemId: cid }),
+    };
   });
 }
 
@@ -188,6 +196,27 @@ function assertChoiceHasValues(
  * `resolveFoldTypeForWrite` o kaydın düzenlenmesini reddetmeye başlar.
  * Kodu tekrar listeye eklemek satırı yeniden aktifleştirir.
  */
+/** Gövdedeki `consumableItemId`: undefined = dokunma, ""/null = kaldır; başka tip 400. */
+function readConsumableItemIdField(raw: unknown, code: string): string | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === "") return null;
+  if (typeof raw !== "string") throw AppError.badRequest(`'${code}' değerinin sarf kalemi geçersiz`, { code: "CONSUMABLE_ITEM_INVALID" });
+  return raw;
+}
+
+/** Değerlere eşlenen sarf kalemleri var ve Sarf türünde olmalı (fail-closed 400). */
+async function assertConsumableItemsTx(tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0], values: PropertyValueInput[]): Promise<void> {
+  const ids = [...new Set(values.map((v) => v.consumableItemId).filter((x): x is string => typeof x === "string"))];
+  if (ids.length === 0) return;
+  const rows = await tx.item.findMany({ where: { id: { in: ids } }, select: { id: true, itemType: true, name: true } });
+  for (const id of ids) {
+    const r = rows.find((x) => x.id === id);
+    if (!r || r.itemType !== ItemType.CONSUMABLE) {
+      throw AppError.badRequest(`${r ? `"${r.name}"` : "Seçilen kalem"} bir sarf malzemesi değil — kuşak eşlemesi yalnız Sarf türü kaleme yapılır.`, { code: "CONSUMABLE_ITEM_INVALID", itemId: id });
+    }
+  }
+}
+
 async function replaceValuesTx(
   tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
   propertyId: string,
@@ -198,8 +227,12 @@ async function replaceValuesTx(
     where: { propertyId, code: { notIn: keep } },
     data: { isActive: false },
   });
+  await assertConsumableItemsTx(tx, values);
   for (const v of values) {
-    const svc = v.serviceItemId !== undefined ? { serviceItemId: v.serviceItemId } : {};
+    const svc = {
+      ...(v.serviceItemId !== undefined ? { serviceItemId: v.serviceItemId } : {}),
+      ...(v.consumableItemId !== undefined ? { consumableItemId: v.consumableItemId } : {}),
+    };
     await tx.fabricPropertyValue.upsert({
       where: { propertyId_code: { propertyId, code: v.code } },
       create: {

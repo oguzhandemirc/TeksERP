@@ -254,6 +254,8 @@ export const SETTING_KEYS = {
    *  ticari bir olay değildir) ve bedelsiz kalemler için kaçış yolu
    *  `financeAllowZeroPriceLineEnabled`tir — ikisi birlikte düşünülür. */
   GOODS_RECEIPT_REQUIRE_PRICE_ENABLED: "goodsReceipt.requirePriceEnabled",
+  /** Sarf stok defteri (kuşak/kurşun şeridi): mal kabulde sarf satırı + üretimde tüketim düşümü. Kapalı = bugünkü davranış. */
+  CONSUMABLE_STOCK_ENABLED: "consumable.stockEnabled",
   /** İplik lotu kalite bekletme (2026-09-18): açıkken mal kabulde doğan lot ON_HOLD doğar, ON_HOLD/BLOKE lota çıkış 400. Varsayılan KAPALI. */
   GOODS_RECEIPT_YARN_QUALITY_HOLD_ENABLED: "goodsReceipt.yarnQualityHoldEnabled",
   /** İptalde sebep zorunlu (top iptali; sebep alanı OPSİYONEL olan tek üretim iptal ucu) — varsayılan false = bugünkü. */
@@ -2068,6 +2070,7 @@ export interface FeatureFlags {
    *  MUAF: ters/iptal satırları. Bedelsiz kalem kaçışı
    *  `financeAllowZeroPriceLineEnabled`tir. */
   goodsReceiptRequirePriceEnabled: boolean;
+  consumableStockEnabled: boolean;
   /** İplik lotu kalite bekletme: mal kabulde doğan lot ON_HOLD doğar; ON_HOLD/BLOCKED lota çıkış 400 (varsayılan KAPALI = bugünkü). HAM; etkin `ticaret && iplik && bayrak`. */
   goodsReceiptYarnQualityHoldEnabled: boolean;
   /** İptalde sebep zorunlu (kullanıcı kararı 2026-09-18): top iptalinde sebep metni ya da katalog kodu şart; varsayılan false. */
@@ -2740,6 +2743,7 @@ export class SystemSettingService {
       yarnBlockNegativeBalanceEnabled: await readYarnBlockNegativeBalanceEnabled(cacheClient),
       purchaseBlockOverReceiptEnabled: await readPurchaseBlockOverReceiptEnabled(cacheClient),
       goodsReceiptRequirePriceEnabled: await readGoodsReceiptRequirePriceEnabled(cacheClient),
+      consumableStockEnabled: await readConsumableStockEnabled(cacheClient),
       goodsReceiptYarnQualityHoldEnabled: await readGoodsReceiptYarnQualityHoldEnabled(cacheClient),
       productionCancelReasonRequired: await readProductionCancelReasonRequired(cacheClient),
       financeAllowZeroPriceLineEnabled: await readFinanceAllowZeroPriceLineEnabled(cacheClient),
@@ -3453,6 +3457,13 @@ export class SystemSettingService {
         "Alış siparişine bağlı mal kabulde sipariş miktarını aşan satırı engelle",
         userId
       );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "consumableStockEnabled")) {
+      if (typeof input.consumableStockEnabled !== "boolean") {
+        throw AppError.badRequest("consumableStockEnabled boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.CONSUMABLE_STOCK_ENABLED, input.consumableStockEnabled, "Sarf stok takibi (kuşak / kurşun şeridi)", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "goodsReceiptRequirePriceEnabled")) {
@@ -5935,6 +5946,23 @@ export async function readProductionCancelReasonRequired(tx?: Pick<typeof prisma
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({ where: { key: SETTING_KEYS.PRODUCTION_CANCEL_REASON_REQUIRED }, select: { value: true } });
   return asBoolean(setting?.value);
+}
+
+export async function readConsumableStockEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.CONSUMABLE_STOCK_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Sarf stoğu ETKİN mi (`ticaret && bayrak`) — mal kabul sarf satırı ve tüketim düşümü bunu okur. */
+export async function resolveConsumableStockEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  if (!(await readTicaretEnabled(tx))) return false;
+  return readConsumableStockEnabled(tx);
 }
 
 export async function readGoodsReceiptRequirePriceEnabled(

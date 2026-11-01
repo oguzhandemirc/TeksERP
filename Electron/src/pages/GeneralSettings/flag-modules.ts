@@ -213,6 +213,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   // --- TİCARET (alış siparişi · mal kabul · fiyat listesi · sayım) -----------
   purchaseBlockOverReceiptEnabled: "ticaretEnabled",
   goodsReceiptRequirePriceEnabled: "ticaretEnabled",
+  consumableStockEnabled: "ticaretEnabled",
 
   // --- İPLİK (kg defteri) ---------------------------------------------------
   yarnBlockNegativeBalanceEnabled: "iplikEnabled",

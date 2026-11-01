@@ -92,6 +92,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   yarnBlockNegativeBalanceEnabled: A(true),
   purchaseBlockOverReceiptEnabled: A(true),
   goodsReceiptRequirePriceEnabled: A(true),
+  consumableStockEnabled: A(true),
   goodsReceiptYarnQualityHoldEnabled: A(true),
   // ── üretim ─────────────────────────────────────────────────────────────────
   productionCancelReasonRequired: A(true),

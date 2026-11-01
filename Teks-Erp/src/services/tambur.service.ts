@@ -14,6 +14,7 @@
 //   - Tambur'dan sonraki akış: Depo (WAREHOUSE) → Tartı/Paket → Sevkiyat.
 // =============================================================================
 
+import { consumeForOperationTx } from "./helpers/consumable-stock.helper";
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, inheritRollPropertiesTx } from "./helpers/property-revoke.helper";
 import {
@@ -1443,7 +1444,7 @@ export class TamburService {
       if (oldStepId) {
         // Geri alınmış iz dururken üçlü anahtar onu bulur ve yeni satır YAZILMAZ —
         // unique PARTIAL'dır, upsert de yalnız aktif satıra bakmalı.
-        await tx.rollOperation.upsert({
+        const tamburOp = await tx.rollOperation.upsert({
           where: {
             rollId_workOrderStepId_operationType: {
               rollId: data.rollId,
@@ -1476,6 +1477,8 @@ export class TamburService {
           },
           update: {},
         });
+        // Kuşak sarf düşümü (ayar kapalıysa no-op; eksi bakiye engellemez).
+        await consumeForOperationTx(tx, tamburOp.id, userId ?? null);
         await recomputeStepStatus(tx, oldStepId);
       }
 
@@ -3866,7 +3869,7 @@ export class TamburService {
 
       // TAMBUR_PROCESSED log — upsert yalnız aktif satıra bakar (partial unique;
       // geri alınmış iz bulunursa yeniden finalize yeni satır yazmazdı).
-      await tx.rollOperation.upsert({
+      const tamburOp = await tx.rollOperation.upsert({
         where: {
           rollId_workOrderStepId_operationType: {
             rollId: parent.id,
@@ -3895,6 +3898,8 @@ export class TamburService {
         },
         update: {},
       });
+      // Kuşak sarf düşümü (ayar kapalıysa no-op; eksi bakiye engellemez).
+      await consumeForOperationTx(tx, tamburOp.id, userId ?? null);
 
       // SAPMA DEFTERİ (2026-08-09) — kalan metrajın kaderi sorgulanabilir hale gelir.
       // `keep_*` sapma DEĞİLDİR (kalan gerçek bir top olarak stoğa girer); yalnız
