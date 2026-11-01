@@ -14,6 +14,8 @@ import { resolveEffectiveConstruction } from "./effective-construction.helper";
 import { ACTIVE_FINISHING_RATE } from "./cost-price-validity.helper";
 import { ACTIVE_ORDER_LINK } from "./order-link.helper";
 import { resolveFinishingRateCode } from "./finishing-rate-code.helper";
+import { availableBySpec, beamNeeds, readBeamLengthsM, warpRequirements, type BeamNeed } from "./beam-need.helper";
+import { readBeamStockBySpec } from "./warp-beam-stock.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -32,6 +34,8 @@ export interface ProposalScope {
   weaving: boolean;
   /** İş emri bölümü (üretim modülü). */
   workOrder: boolean;
+  /** SY-M2: dokuma işi başına levent ihtiyacı (yalnız önizleme ∧ devere açık); kapalıyken anahtar yazılmaz. */
+  beamNeeds?: boolean;
 }
 
 export interface WeavingProposal {
@@ -46,6 +50,8 @@ export interface WeavingProposal {
   /** Önerilen plan metresi (ham ihtiyaç toplamı); ölçülmeyen birimde null. */
   plannedM: number | null;
   orderLines: Array<{ orderLineId: string; openM: number | null; allocatedM: number | null }>;
+  /** SY-M2: çözgü katmanı başına gerekli metre + eksik için PLANNED levent önerisi (yalnız `scope.beamNeeds`). */
+  beamNeeds?: BeamNeed[];
 }
 
 export interface WorkOrderProposal {
@@ -118,8 +124,9 @@ export function rawNeedMeters(openM: number | null, shrinkPct: number | null): n
   return round3(openM / (1 - shrinkPct / 100));
 }
 
-async function buildWeavingGroups(db: Db, lines: LineRow[], out: ProductionProposal): Promise<void> {
+async function buildWeavingGroups(db: Db, lines: LineRow[], out: ProductionProposal, withBeamNeeds: boolean): Promise<void> {
   const groups = new Map<string, WeavingProposal>();
+  const constructions = new Map<string, Awaited<ReturnType<typeof resolveEffectiveConstruction>>>();
   const shrinkMemo = new Map<string, number | null>();
   for (const l of lines) {
     if (l.weavingOrderLinks.length > 0) {
@@ -141,6 +148,7 @@ async function buildWeavingGroups(db: Db, lines: LineRow[], out: ProductionPropo
         shrinkPct: await shrinkPctOf(db, resolveFinishingRateCode(l.recipe?.finishingRateCode, l.item.costStructure?.finishingRateCode), shrinkMemo), plannedM: null, orderLines: [],
       };
       groups.set(key, g);
+      constructions.set(key, c);
     }
     const openM = openMeters(l);
     g.orderLines.push({ orderLineId: l.id, openM, allocatedM: rawNeedMeters(openM, g.shrinkPct) });
@@ -151,6 +159,16 @@ async function buildWeavingGroups(db: Db, lines: LineRow[], out: ProductionPropo
     if (g.plannedM === 0) g.plannedM = null;
     out.weavingOrders.push(g);
   }
+  if (withBeamNeeds) await attachBeamNeeds(db, out.weavingOrders, constructions);
+}
+
+/** Levent ihtiyacı: grup başına (çözülmüş yapıdan, ikinci okuma yok); stok ve levent boyu tek sorguda. */
+async function attachBeamNeeds(db: Db, groups: WeavingProposal[], constructions: Map<string, Awaited<ReturnType<typeof resolveEffectiveConstruction>>>): Promise<void> {
+  const reqs = new Map(groups.map((g) => [g.key, warpRequirements(constructions.get(g.key)!, null, g.plannedM)]));
+  const specIds = [...new Set([...reqs.values()].flat().filter((r) => r.ownBeam).map((r) => r.warpSpecId))];
+  const available = availableBySpec(await readBeamStockBySpec(db, specIds));
+  const lengths = await readBeamLengthsM(db, [...new Set(groups.map((g) => g.itemId))]);
+  for (const g of groups) g.beamNeeds = beamNeeds(reqs.get(g.key) ?? [], available, lengths.get(g.itemId) ?? null);
 }
 
 function buildWorkOrderGroups(lines: LineRow[], out: ProductionProposal): void {
@@ -203,7 +221,7 @@ export async function buildProductionProposal(db: Db, orderId: string, scope: Pr
     if (m === 0) out.excluded.push({ orderLineId: r.id, kind: "LINE", code: PROPOSAL_CODES.lineClosed });
     else open.push(r);
   }
-  if (scope.weaving) await buildWeavingGroups(db, open, out);
+  if (scope.weaving) await buildWeavingGroups(db, open, out, scope.beamNeeds === true);
   if (scope.workOrder) buildWorkOrderGroups(open, out);
   return out;
 }

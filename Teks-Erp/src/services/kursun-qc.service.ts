@@ -61,7 +61,7 @@ import {
 } from "./helpers/station-capability-transfer.helper";
 import { applyKursunOperationTx } from "./helpers/kursun-operation.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
-import { applyMeasuredWidthTx, assertStationCapturesWidth } from "./helpers/measured-width.helper";
+import { applyMeasuredWidthTx, assertStationCapturesWidth, measuredWidthLimit, type MeasuredWidthLimit } from "./helpers/measured-width.helper";
 import { awaitsMeterSignature, loadRollMeterBases, type RollMeterBase } from "./helpers/kursun-meter-variance-sql.helper";
 import { listMeterDeviations, type MeterDeviationFilter } from "./helpers/kursun-meter-deviation-list.helper";
 import {
@@ -92,7 +92,7 @@ import {
   assertKursunTabletMayWrite,
   resolveStepBypassEligibility,
 } from "./helpers/kursun-bypass-eligibility.helper";
-import { resolveKursunBypassEnabled, resolveKursunMeterCapture, type KursunMeterCapture } from "./system-setting.service";
+import { effectiveTamburPlanWidthGate, resolveKursunBypassEnabled, resolveKursunMeterCapture, type KursunMeterCapture } from "./system-setting.service";
 import { uyari } from "../lib/logger";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
 import { processMeterNumber, requireProcessMeter } from "./helpers/roll-error-meter.helper";
@@ -144,6 +144,8 @@ interface RollSummary {
   priorOpenErrorCount: number;
   /// H3b: sapma tabanı — YALNIZ `kursun.meterCapture` OUT/IN_OUT iken eklenir (OFF'ta anahtar yok, yanıt bayt-aynı).
   meter?: RollMeterBase;
+  /// D4-KUC3b: ölçülen en sınırı — YALNIZ `capturesWidth` adımda (tablet isteği göndermeden uyarır; sınır yazım kapısıyla aynı hesap).
+  widthLimit?: MeasuredWidthLimit;
 }
 
 interface PriorDefectSummary {
@@ -1708,7 +1710,7 @@ export class KursunQcService {
     const openMovements = await prisma.rollMovement.findMany({
       where: { ...ACTIVE_MOVEMENT, workOrderStepId: stepId, exitedAt: null },
       select: {
-        roll: { select: { id: true, barcode: true, currentQty: true } },
+        roll: { select: { id: true, barcode: true, currentQty: true, width: true } },
       },
       orderBy: { enteredAt: "asc" },
     });
@@ -1820,6 +1822,8 @@ export class KursunQcService {
     const meterOn = capture !== "OFF";
     const meterPolicy = meterOn ? await resolveKursunMeterPolicy(prisma) : null;
     const meterBases = meterOn ? await loadRollMeterBases(prisma, stepId, rollIds) : null;
+    // D4-KUC3b: eşik tek kaynaktan (Tambur en kapısı ayarı); en ölçmeyen istasyonda okunmaz, anahtar eklenmez.
+    const widthToleranceCm = step.station.capturesWidth ? (await effectiveTamburPlanWidthGate()).toleranceCm : null;
     const rolls: RollSummary[] = openMovements.map((m) => {
       const defects = defectsByRoll.get(m.roll.id) ?? [];
       return {
@@ -1834,6 +1838,9 @@ export class KursunQcService {
         priorDefects: priorByRoll.get(m.roll.id) ?? [],
         priorOpenErrorCount: priorByRoll.get(m.roll.id)?.length ?? 0,
         ...(meterBases ? { meter: meterBases.get(m.roll.id) ?? { declaredIn: null, measuredIn: null } } : {}),
+        ...(widthToleranceCm != null
+          ? { widthLimit: measuredWidthLimit(m.roll.width == null ? null : Number(m.roll.width), widthToleranceCm) }
+          : {}),
       };
     });
 

@@ -27,6 +27,9 @@ import type { Roll } from '../../../types/models';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
+import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
+import { CustomerCodeMatchNote } from '../../../components/customerCode/CustomerCodeMatchNote';
+import { showScreenError } from '../../../lib/screenToast';
 
 // =============================================================================
 // Çuval Düzeltme (saha #3) — top okutarak yerini bul, HAVUZ çuvalında düzelt:
@@ -64,11 +67,23 @@ export default function CuvalDuzeltScreen() {
   const [rlQuality, setRlQuality] = useState('');
   const [reprintRoll, setReprintRoll] = useState<Roll | null>(null);
 
+  // Okutma boğazı sunucuda (iç barkod önce, ayar açıksa müşteri barkodu — D4-F1b); belirsiz
+  // müşteri barkodunda aday modalı, seçim topun İÇ barkoduyla yeniden çözülür (D4-KUC3b).
   const locate = useMutation({
     mutationFn: (code: string) => packingService.locateRoll(code),
     onSuccess: (res) => setRoll(res.data ?? null),
-    onError: () => setRoll(null),
+    onError: (e: unknown) => {
+      setRoll(null);
+      if (locateAmbiguous.intercept(e)) return;
+      showScreenError(e, 'Top bulunamadı');
+    },
   });
+  const locateAmbiguous = useAmbiguousScanPicker((b) => {
+    setBarcode(b);
+    locate.mutate(b);
+  });
+  // Taşıma hedefi de aynı boğazdan; belirsizlikte seçilen topun iç barkoduyla sürer.
+  const moveAmbiguous = useAmbiguousScanPicker((b) => handleMoveScan(b));
 
   const relocate = () => {
     if (roll) locate.mutate(roll.barcode);
@@ -174,8 +189,9 @@ export default function CuvalDuzeltScreen() {
           run: () => moveMut.mutate(other.sack!.id),
         });
       })
-      .catch(() => {
-        /* toast apiClient interceptor'dan gelir */
+      .catch((e: unknown) => {
+        if (moveAmbiguous.intercept(e)) return;
+        showScreenError(e, 'Hedef top bulunamadı');
       });
   };
 
@@ -187,6 +203,7 @@ export default function CuvalDuzeltScreen() {
           <TextInput
             mode="outlined"
             label="Top barkodu"
+            testID="cuval-duzelt-barkod"
             value={barcode}
             onChangeText={setBarcode}
             autoCapitalize="characters"
@@ -210,6 +227,7 @@ export default function CuvalDuzeltScreen() {
               </Text>
               <Chip compact>{roll.status}</Chip>
             </View>
+            <CustomerCodeMatchNote match={roll} />
             <Text variant="bodyMedium" style={styles.dim}>
               {roll.item.name} · {roll.color?.name ?? 'Ham'}
               {roll.width ? ` · ${roll.width} cm` : ''} · {roll.currentQty} m · {roll.qualityGrade}
@@ -332,6 +350,8 @@ export default function CuvalDuzeltScreen() {
         )}
       </ScrollView>
 
+      {locateAmbiguous.modal}
+      {moveAmbiguous.modal}
       {/* 1. top okutma */}
       <BarcodeScannerModal
         visible={scanOpen}

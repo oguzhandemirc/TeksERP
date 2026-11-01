@@ -39,6 +39,8 @@ export interface GramajTapInput {
   meter?: Pick<MeterCaptureState, 'outOn' | 'captureOut'> | null;
   /** Dokunuşta açık duruş uyarısı verilsin mi (D4-A2b: açık duruş ∧ ayar). UYARIR, gönderim sürer — K2. */
   stopOpen?: boolean;
+  /** D4-KUC3b: dokunuş ÖNCESİ yerel denetim (ölçülen en sınırı); false → hiçbir şey olmaz (kilit, sayaç, istek yok). */
+  precheck?: (rollId: string) => boolean;
 }
 
 // Paused (çevrimdışı) mutasyon settle olmaz → kilit kısa süre sonra kendiliğinden açılır.
@@ -122,7 +124,8 @@ export function useGramajTap(input: GramajTapInput) {
   const markSent = (at: Date) => setLast((p) => (p && p.at === at ? { ...p, queued: false } : p));
 
   const send = (value: GramajValue | null) => {
-    if (!cfg || !roll || !stepId || !lock.take()) return;
+    // D4-KUC3b: precheck kilitten ÖNCE — reddedilen dokunuş kilit/sayaç/şerit oynatmaz.
+    if (!cfg || !roll || !stepId || input.precheck?.(roll.rollId) === false || !lock.take()) return;
     const prevLast = last;
     const at = new Date();
     const online = onlineManager.isOnline();

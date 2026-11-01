@@ -101,3 +101,14 @@ export function describeBindError(e: unknown): { kind: BindFailureKind; title: s
 export function candidateMeters(c: CustomerCodeCandidate): string {
   return typeof c.currentQty === 'number' && Number.isFinite(c.currentQty) ? `${c.currentQty.toFixed(1)} m` : '— m';
 }
+
+/** Okutma boğazının müşteri kodu eşleşme eki (`matchExtras`; iç barkodla bulunduysa alanlar YOK). */
+export interface ScanMatchExtras {
+  matchedBy?: 'CUSTOMER_CODE';
+  customerCode?: string;
+}
+
+/** Top müşteri koduyla bulunduysa operatöre söylenecek satır; iç barkodla bulunduysa null. */
+export function customerCodeMatchText(r: ScanMatchExtras | null | undefined): string | null {
+  return r?.matchedBy === 'CUSTOMER_CODE' && r.customerCode ? `Müşteri barkodu ${r.customerCode} ile bulundu` : null;
+}

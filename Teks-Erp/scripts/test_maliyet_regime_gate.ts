@@ -73,6 +73,21 @@ const MODEL_MUAF: ReadonlyArray<{ dosya: string; model: string; neden: string }>
     neden: "Üretim önerisi (SY-M1) ürün yapısından yalnız tarife KODUNU okur (varyantta yoksa; resolveFinishingRateCode); fiyat okumaz.",
   },
   {
+    dosya: "routes/production-proposal.routes.ts",
+    model: "costParameterSet",
+    neden: "Levent ihtiyacı (SY-M2) levent boyunu ürün yapısında yoksa etkin parametre setinin defaultBeamLengthM'inden OKUR; set yoksa boy boş, öneri sayısız — fiyat okumaz.",
+  },
+  {
+    dosya: "routes/loom-suggestion.routes.ts",
+    model: "costParameterSet",
+    neden: "Tezgâh önerisi (SY-M2) levent boyunu yalnız ihtiyaç satırı için parametre setinden OKUR (beam-need.helper); fiyat okumaz, maliyet kapalıyken öneri yine çalışır.",
+  },
+  {
+    dosya: "routes/loom-suggestion.routes.ts",
+    model: "costStructure",
+    neden: "Tezgâh önerisi (SY-M2) ürün yapısından yalnız levent boyunu ve etkin yapı alanlarını OKUR (resolveEffectiveConstruction / beam-need.helper); fiyat okumaz.",
+  },
+  {
     dosya: "routes/product-recipe.routes.ts",
     model: "finishingRate",
     neden: "Varyant tarife kodu (SY-E1) yalnız aktif tarifeye ÇÖZÜLÜYOR MU diye okunur — bilinmeyen kod 400; maliyet kapalıyken tarife doğamaz, kod boş bırakılır (reçete yazımı dokuma/iş emri yüzeyidir).",
