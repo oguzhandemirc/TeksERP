@@ -21,10 +21,10 @@
 import { BaseService } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import prisma from "../lib/prisma";
-import { ItemType } from "@prisma/client";
 import { readServiceItemIdField, withServiceMapping } from "./helpers/service-item-mapping.helper";
 import { AppError } from "../utils/app-error";
-import { extractStationIds, readStitchCountField } from "./helpers/fabric-property-input.helper";
+import { type ConsumableItemField, consumableItemPatch, extractStationIds, readStitchCountField } from "./helpers/fabric-property-input.helper";
+import { assertConsumableItemsTx } from "./helpers/consumable-item-link.helper";
 import { nextSeriesNo } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { deriveCapabilityFlags } from "./station-capability.service";
@@ -55,15 +55,13 @@ async function nextPropertyCode(): Promise<string> {
 }
 
 /** SEÇİM tipli özelliğin değer satırı — istemci sözleşmesi (DÜZ, nested write DEĞİL). */
-export interface PropertyValueInput {
+export interface PropertyValueInput extends ConsumableItemField {
   code: string;
   name: string;
   sortOrder?: number;
   isActive?: boolean;
   /** Gramaj kademesi → hizmet kalemi (H6). `undefined` = dokunma, `null` = eşlemeyi kaldır. */
   serviceItemId?: string | null;
-  /** Kuşak değeri → sarf kalemi (top başına 1 düşüm). `undefined` = dokunma, `null` = kaldır. */
-  consumableItemId?: string | null;
   /** Brode deseni vuruş sayısı (VURUŞ fiyat birimi). `undefined` = dokunma, `null` = kaldır. */
   stitchCount?: number | null;
 }
@@ -104,13 +102,7 @@ function extractValues(data: Record<string, unknown>): PropertyValueInput[] | un
     const stitch = readStitchCountField(row.stitchCount, code);
     const sortOrder = typeof row.sortOrder === "number" ? row.sortOrder : (i + 1) * 10;
     const isActive = row.isActive === undefined ? true : Boolean(row.isActive);
-    const cid = readConsumableItemIdField(row.consumableItemId, code);
-    return {
-      code, name, sortOrder, isActive,
-      ...(sid === undefined ? {} : { serviceItemId: sid }),
-      ...(cid === undefined ? {} : { consumableItemId: cid }),
-      ...(stitch === undefined ? {} : { stitchCount: stitch }),
-    };
+    return { code, name, sortOrder, isActive, ...(sid === undefined ? {} : { serviceItemId: sid }), ...consumableItemPatch(row.consumableItemId, code), ...(stitch === undefined ? {} : { stitchCount: stitch }) };
   });
 }
 
@@ -187,30 +179,6 @@ function assertChoiceHasValues(
  * `resolveFoldTypeForWrite` o kaydın düzenlenmesini reddetmeye başlar.
  * Kodu tekrar listeye eklemek satırı yeniden aktifleştirir.
  */
-/** Gövdedeki `consumableItemId`: undefined = dokunma, ""/null = kaldır; başka tip 400. */
-function readConsumableItemIdField(raw: unknown, code: string): string | null | undefined {
-  if (raw === undefined) return undefined;
-  if (raw === null || raw === "") return null;
-  // Uuid kolonuna biçimsiz değer giderse Prisma 500 verir; fail-closed 400.
-  if (typeof raw !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) {
-    throw AppError.badRequest(`'${code}' değerinin sarf kalemi geçersiz`, { code: "CONSUMABLE_ITEM_INVALID" });
-  }
-  return raw;
-}
-
-/** Değerlere eşlenen sarf kalemleri var ve Sarf türünde olmalı (fail-closed 400). */
-async function assertConsumableItemsTx(tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0], values: PropertyValueInput[]): Promise<void> {
-  const ids = [...new Set(values.map((v) => v.consumableItemId).filter((x): x is string => typeof x === "string"))];
-  if (ids.length === 0) return;
-  const rows = await tx.item.findMany({ where: { id: { in: ids } }, select: { id: true, itemType: true, name: true } });
-  for (const id of ids) {
-    const r = rows.find((x) => x.id === id);
-    if (!r || r.itemType !== ItemType.CONSUMABLE) {
-      throw AppError.badRequest(`${r ? `"${r.name}"` : "Seçilen kalem"} bir sarf malzemesi değil — kuşak eşlemesi yalnız Sarf türü kaleme yapılır.`, { code: "CONSUMABLE_ITEM_INVALID", itemId: id });
-    }
-  }
-}
-
 async function replaceValuesTx(
   tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
   propertyId: string,
