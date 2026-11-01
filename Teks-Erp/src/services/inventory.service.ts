@@ -20,6 +20,7 @@ import { reserveDoffCode } from "./helpers/machine-doff-open.helper";
 import { readDbNow } from "./helpers/machine-run-open.helper";
 import { postRescueEntryTx } from "./helpers/production-entry-ledger.helper";
 import { postEntryCorrectionTx } from "./helpers/entry-correction-ledger.helper";
+import { loadActiveCustomerCodes } from "./helpers/roll-customer-code-read.helper";
 import { ambiguousCustomerCodeError, customerCodeSearchRollIds, matchExtras, resolveRollByScanCode } from "./helpers/roll-scan-resolve.helper";
 import { normalizeScanCode } from "../utils/code-format";
 import { AuditService } from "./audit.service";
@@ -2767,9 +2768,11 @@ export class InventoryService {
     // Okutma ucuyla AYNI teşhis — Electron detay panelinde "İptali Geri Al"
     // butonunun çizilip çizilmeyeceğini bu belirler.
     const cancelDiag = await this.buildCancelDiagnostics(roll);
+    // Panel künyesinde aktif müşteri kodu (D4-F2) — etiket/çeki ile AYNI okuyucu; kodsuz top → null.
+    const customerCode = (await loadActiveCustomerCodes([roll.id])).get(roll.id) ?? null;
     return {
       success: true,
-      data: { ...roll, manualReason, ...(cancelDiag ?? {}) } as unknown as Roll,
+      data: { ...roll, manualReason, customerCode, ...(cancelDiag ?? {}) } as unknown as Roll,
     };
   }
 

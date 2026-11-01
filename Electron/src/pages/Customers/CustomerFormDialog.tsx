@@ -320,7 +320,8 @@ export function CustomerFormDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={requestClose}>
-        <DialogContent className="max-w-3xl">
+        {/* Düzenlemede 7 sekme ~810 px: pencere geniş, şerit dar ekranda sarar (Gülkesim prova: Kaydet kesikti). */}
+        <DialogContent className={isEdit ? "max-w-5xl" : "max-w-3xl"}>
           <DialogHeader>
             <div className="flex items-center gap-1.5">
             <DialogTitle>{isEdit ? "Cari Kartını Düzenle" : "Yeni Cari"}</DialogTitle>
@@ -345,8 +346,8 @@ export function CustomerFormDialog({
           </DialogHeader>
 
           {isEdit ? (
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0">
+              <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1" data-testid="customer-form-tabs">
                 <TabsTrigger value="info">Bilgiler</TabsTrigger>
                 {branchesEnabled && <TabsTrigger value="branches">Şubeler</TabsTrigger>}
                 <TabsTrigger value="item-aliases">Müşterideki Kumaş Adları</TabsTrigger>
