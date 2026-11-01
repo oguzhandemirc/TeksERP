@@ -133,6 +133,20 @@ describe("toplu taslak silme", () => {
     expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
     expect(screen.queryByTestId("notes-bulk-delete")).toBeNull();
   });
+  it("§5b uzun adlı satır diyaloğu taşırmaz: önizleme gövdesi ızgaranın min-w-0 hücresinde çizilir", async () => {
+    // jsdom düzen hesaplamaz; ızgara hücresinin min-width:auto ile büyümesini sınıf düzeyinde bekleriz.
+    const long = "Çok Uzun Adlı Tekstil Boya Apre Sanayi ve Ticaret Anonim Şirketi Merkez Şubesi";
+    previewBulkDeleteNotes.mockResolvedValue({ items: [pItem({ ownerName: long, senderName: long })], summary: { requested: 1, deletable: 1, blocked: 0, lines: 3, scans: 1 } });
+    renderWithProviders(<IncomingDocumentsPage />);
+    await screen.findByText("GB-0002");
+    await userEvent.click(within(rowOf("GB-0001")).getByRole("checkbox", { name: "Seç" }));
+    await userEvent.click(screen.getByTestId("notes-bulk-delete"));
+    const dialog = await screen.findByRole("dialog");
+    let cell: HTMLElement = await within(dialog).findByTestId("bulk-delete-row");
+    while (cell.parentElement && cell.parentElement !== dialog) cell = cell.parentElement;
+    expect(cell.parentElement).toBe(dialog);
+    expect(cell).toHaveClass("min-w-0");
+  });
 });
 
 describe("sağ tık menüsü", () => {

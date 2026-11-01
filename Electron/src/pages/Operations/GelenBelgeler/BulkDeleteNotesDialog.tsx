@@ -158,7 +158,10 @@ export function BulkDeleteNotesDialog({ ids, onOpenChange, onDone }: Props) {
             kullanılabilir. Silinen numaralar yeniden verilmez. Silmek istemediğinizin işaretini kaldırın.
           </DialogDescription>
         </DialogHeader>
-        <PreviewBody loading={preview.isLoading} error={preview.isError} deletable={deletable} blocked={blocked} chosen={chosen} excluded={excluded} toggle={toggle} />
+        {/* Izgara hücresi varsayılan min-width:auto ile uzun satır adına göre genişler; min-w-0 kırpmayı satıra bırakır. */}
+        <div className="min-w-0">
+          <PreviewBody loading={preview.isLoading} error={preview.isError} deletable={deletable} blocked={blocked} chosen={chosen} excluded={excluded} toggle={toggle} />
+        </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={apply.isPending}>
             Vazgeç
