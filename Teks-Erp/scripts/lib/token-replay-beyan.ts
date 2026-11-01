@@ -246,6 +246,8 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}roll-customer-code.service.ts::bindReplay`]: ["rollId", "code"],
   [`${S}customer-barcode-series.service.ts::createReplay`]: ["customerId", "prefix", "dateSegment", "digits", "separator", "startValue", "maxValue"],
   [`${S}cari-hold.service.ts::placeReplay`]: ["cariId", "kapsam", "reasonCode"],
+  // D4-K3e: token kaydı virman bacaklarının `transferGroupId`si; kimlik = birleşmenin yönü (kaynak → hedef).
+  [`${S}cari-merge.service.ts::applyReplay`]: ["sourceId", "targetId"],
   [`${S}expense-allocation.service.ts::allocationReplay`]: ["cashTransactionId", "hedef", "sharePct"],
   [`${S}machine-cost-rate.service.ts::rateReplay`]: ["machineId", "hourRateTry"],
   [`${S}consumable-norm.service.ts::normReplay`]: ["serviceItemId", "consumableItemId", "qtyPerM"],

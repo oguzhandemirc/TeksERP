@@ -8,7 +8,7 @@
 // satırlar YERİNDE kalır; kaynak sıfır bakiyede pasif + `mergedIntoId`. KUR DÖNÜŞÜMÜ YOK (para birimi başına).
 // Ters yol `cari-merge-revert.helper.ts`. Yazan tek yer burası (bekçi `test_cari_birlestirme_virman`).
 // =============================================================================
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { CariTxnSource, ChequeStatus, Currency, InvoiceStatus, Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
@@ -87,6 +87,9 @@ async function accountBlockers(source: AccountRow, target: AccountRow): Promise<
   if (source.id === target.id) b.push("Kaynak ve hedef aynı hesap.");
   if (source.mergedIntoId) b.push(`Kaynak hesap zaten başka bir hesaba birleşmiş (${source.mergedIntoId}).`);
   else if (!source.isActive) b.push("Kaynak hesap pasif — önce aktifleştirin.");
+  // Zincir kurulmaz: kendisine başka hesap birleşmiş hesap kaynak olursa ilk birleşmenin geri alması hedefsiz kalır.
+  const mergedIntoSource = await prisma.cariAccount.count({ where: { mergedIntoId: source.id } });
+  if (mergedIntoSource > 0) b.push(`Kaynak hesaba daha önce ${mergedIntoSource} hesap birleşmiş — bu hesap kaynak olamaz, hedef seçin.`);
   if (target.mergedIntoId) b.push("Hedef hesap kendisi birleşmiş — asıl hesabı hedef seçin.");
   else if (!target.isActive) b.push("Hedef hesap pasif — önce aktifleştirin.");
   // Kart hesabı kaynak olursa `customerId @unique` kaynakta kalır ve eski bacağın karta çevrilmesi kilitlenir.
@@ -158,6 +161,22 @@ export async function planCariMerge(sourceId: string, targetId: string): Promise
   };
 }
 
+/**
+ * Ön izleme SÜRÜM DAMGASI — kullanıcıya gösterilen kayıt kümesinin özeti. Uygula ucu damgayı yeniden hesaplar;
+ * farklıysa (arada fatura/ödeme/terim/engel değişti) 409 `CARI_MERGE_STALE` — onaylanmamış küme yazılmaz.
+ */
+export function cariMergePlanStamp(plan: CariMergePlan): string {
+  const body = { s: plan.sourceId, t: plan.targetId, m: plan.alreadyMerged, b: plan.blockers, bal: plan.balances, i: plan.items, terms: plan.termsToCopy, d: plan.draftInvoices };
+  return createHash("sha256").update(JSON.stringify(body)).digest("hex").slice(0, 32);
+}
+
+export interface CariMergeApplyOptions {
+  /** Panel yolu: ön izlemedeki damga; verilmezse (betik) kontrol yok. */
+  expectedStamp?: string;
+  /** Panel yolu: virman bacaklarının grup kimliği = istemcinin clientToken'ı (replay okuyucusu bacaklardan bulur). */
+  transferGroupId?: string;
+}
+
 export interface CariMergeResult {
   alreadyMerged: boolean;
   transferGroupId: string | null;
@@ -169,13 +188,16 @@ export interface CariMergeResult {
  * Birleştirmeyi YAZAR (tek tx). ENGEL varsa 409 `CARI_MERGE_BLOCKED` + liste, sıfır yazım. Kaynak zaten bu hedefe
  * birleşmişse 0 yazım. Kilit: iki hesabın her para biriminin dönem kilidi (sıralı) tx'in ilk ifadesi.
  */
-export async function applyCariMerge(sourceId: string, targetId: string, userId?: string): Promise<CariMergeResult> {
+export async function applyCariMerge(sourceId: string, targetId: string, userId?: string, opts: CariMergeApplyOptions = {}): Promise<CariMergeResult> {
   const plan = await planCariMerge(sourceId, targetId);
   if (plan.alreadyMerged) return { alreadyMerged: true, transferGroupId: null, legs: 0, movedDrafts: 0 };
+  if (opts.expectedStamp !== undefined && opts.expectedStamp !== cariMergePlanStamp(plan)) {
+    throw AppError.conflict("Ön izlemeden sonra kayıtlar değişti — ön izlemeyi yenileyin.", { code: "CARI_MERGE_STALE" });
+  }
   if (plan.blockers.length > 0) {
     throw AppError.conflict(`Cari birleştirme yapılamaz: ${plan.blockers.join(" · ")}`, { code: "CARI_MERGE_BLOCKED", blockers: plan.blockers });
   }
-  const groupId = plan.items.length > 0 ? randomUUID() : null;
+  const groupId = plan.items.length > 0 ? (opts.transferGroupId ?? randomUUID()) : null;
   const result = await prisma.$transaction((tx) => applyCariMergeTx(tx, plan, groupId, userId));
   await AuditService.log({
     userId,
@@ -206,7 +228,7 @@ export async function applyCariMergeTx(tx: Prisma.TransactionClient, plan: CariM
   const openCheques = await tx.cheque.count({ where: { status: { in: OPEN_CHEQUE_STATUSES }, OR: [{ cariId: plan.sourceId }, { endorsedToCariId: plan.sourceId }] } });
   if (openCheques > 0) throw AppError.conflict("Ön izlemeden sonra sonuçlanmamış çek/senet doğdu.", { code: "CARI_MERGE_BLOCKED", blockers: [`Sonuçlanmamış çek/senet (${openCheques}).`] });
   // ATOMİK CLAIM: aktif ve birleşmemiş kaynak; eşzamanlı ikinci birleştirme 0 satır → 409.
-  const claim = await tx.cariAccount.updateMany({ where: { id: plan.sourceId, isActive: true, mergedIntoId: null }, data: { isActive: false, mergedIntoId: plan.targetId } });
+  const claim = await tx.cariAccount.updateMany({ where: { id: plan.sourceId, isActive: true, mergedIntoId: null, mergedFrom: { none: {} } }, data: { isActive: false, mergedIntoId: plan.targetId } });
   if (claim.count === 0) throw AppError.conflict("Kaynak hesap bu sırada birleştirildi ya da pasife alındı.", { code: "CARI_MERGE_CONFLICT" });
   const target = await tx.cariAccount.updateMany({ where: { id: plan.targetId, isActive: true, mergedIntoId: null }, data: plan.termsToCopy as Prisma.CariAccountUpdateManyMutationInput });
   if (target.count === 0) throw AppError.conflict("Hedef hesap bu sırada pasife alındı ya da birleşti.", { code: "CARI_MERGE_CONFLICT" });

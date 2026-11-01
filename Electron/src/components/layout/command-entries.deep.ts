@@ -1,4 +1,4 @@
-import { Cog, Copy, KeyRound, ServerCog, Settings2, Link2, FileText, CalendarRange, ListChecks, Lock } from "lucide-react";
+import { Cog, Copy, KeyRound, ServerCog, Settings2, Link2, FileText, CalendarRange, ListChecks, Lock, GitMerge } from "lucide-react";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
 import { ROLL_TABS } from "@/pages/Operations/Rolls/tabs-config";
 import { ETIKET_TABS } from "@/pages/Labels/tabs-config";
@@ -232,6 +232,17 @@ const orphanPageEntries: CommandEntry[] = [
     to: "/finance/cari?kilit=1",
     permission: "finance:read",
     keywords: "cari kilit kilitli bloke borç risk durdur sevk iş kabulü fatura onayı",
+    deep: true,
+  },
+  {
+    // D4-K3e: birleştirme Cari Hesaplar satırındaki "Birleştir" düğmesindedir (satır eylemi); palet listeyi açar.
+    key: "finance:cari-merge",
+    label: "Cari Hesaplar · Başka cariyle birleştir",
+    description: "Aynı karta açılmış iki cari hesabı ön izleyip birleştir (satırdaki Birleştir düğmesi)",
+    icon: GitMerge,
+    to: "/finance/cari",
+    permission: "finance:cari-merge",
+    keywords: "cari birleştir birleştirme çift hesap mükerrer virman fason hesabı aktar",
     deep: true,
   },
 ];
