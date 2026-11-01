@@ -114,7 +114,7 @@ export async function assertMeterInputAllowed(phase: MeterPhase, input: MeterRea
 }
 
 /** Token replay boğazı (K kipi): 8036 kilidi + taze okuma; geri alınmış okumanın token'ı 409 (4. durum). */
-export function meterReadingReplay(expect: { rollId: string; stepId: string; phase: MeterPhase; meters: number }) {
+export function meterReadingReplay(expect: { rollId: string; stepId: string; phase: MeterPhase; meters: number; pieceCount?: number | null }) {
   return tokenReplay<RollMeterReading, RollMeterReading>({
     find: (db, clientToken) => db.rollMeterReading.findUnique({ where: { clientToken } }),
     alive: (prior) => {
@@ -130,6 +130,8 @@ export function meterReadingReplay(expect: { rollId: string; stepId: string; pha
       { ad: "workOrderStepId", mevcut: prior.workOrderStepId, gelen: expect.stepId },
       { ad: "phase", mevcut: prior.phase, gelen: expect.phase },
       { ad: "meters", mevcut: new Prisma.Decimal(prior.meters).toFixed(3), gelen: canonicalMeters(expect.meters) },
+      // Adet yalnız OUT okumasına yazılır; aynı token farklı adetle gelirse çarpışmadır (sessiz eski adet değil).
+      ...(expect.pieceCount === undefined ? [] : [{ ad: "pieceCount", mevcut: prior.pieceCount ?? null, gelen: expect.phase === MeterPhase.OUT ? expect.pieceCount : null }]),
     ],
     collision: "Bu okuma kimliği başka bir top/adım/metre için kullanılmış — yeni okuma yapın",
     respond: (prior) => prior,

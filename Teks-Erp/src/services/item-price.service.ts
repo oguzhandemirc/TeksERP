@@ -372,8 +372,11 @@ export class ItemPriceService {
   async upsert(input: ItemPriceUpsertInput, userId?: string): Promise<ApiResponse<ResolvedItemPrice & { created: boolean }>> {
     const price = normalizePrice(input.price);
     const customerId = input.customerId ?? null;
-    // METER = NULL (bugünkü satırlarla aynı biçim); alan gönderilmezse metre.
-    const priceUnit: ServiceQtyUnit | null = input.priceUnit && input.priceUnit !== "METER" ? input.priceUnit : null;
+    // METER = NULL (bugünkü satırlarla aynı biçim). Alan GÖNDERİLMEZSE mevcut sürümün birimi korunur
+    // (eski panel fiyat kaydederken ADET/VURUŞ satırını sessizce metreye çevirmesin).
+    const requestedUnit: ServiceQtyUnit | null | undefined =
+      input.priceUnit === undefined ? undefined : input.priceUnit && input.priceUnit !== "METER" ? input.priceUnit : null;
+    let priceUnit: ServiceQtyUnit | null = requestedUnit ?? null;
 
     // ── Dış referanslar: var mı + AKTİF mi ────────────────────────────────
     // Fiyat karta yeni TANIM ekler (B) — "Tükenene kadar"/Pasif kartta kapalı.
@@ -399,6 +402,7 @@ export class ItemPriceService {
           where: { itemId: input.itemId, kind: input.kind, currency: input.currency, customerId, ...ACTIVE_ITEM_PRICE },
           select: { id: true, price: true, priceUnit: true },
         });
+        if (requestedUnit === undefined) priceUnit = current?.priceUnit ?? null;
         // Aynı fiyat ve birim: sürüm yazılmaz (geçmiş anlamsız tekrarla şişmesin); birim değişimi yeni sürümdür.
         if (current && current.price.equals(price) && current.priceUnit === priceUnit) return { row: current, previous: current, wrote: false };
         if (current) {
@@ -447,7 +451,7 @@ export class ItemPriceService {
         action: "CREATE",
         tableName: "ITEM_PRICE",
         recordId: row.id,
-        oldData: previous ? { price: previous.price.toFixed(4) } : null,
+        oldData: previous ? { price: previous.price.toFixed(4), ...(previous.priceUnit ? { priceUnit: previous.priceUnit } : {}) } : null,
         newData: { ...key, price: priceStr, ...(priceUnit ? { priceUnit } : {}) },
       });
     }

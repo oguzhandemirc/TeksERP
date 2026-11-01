@@ -189,6 +189,15 @@ async function main(): Promise<void> {
   const bad = await systemSettingService.setFeatureFlags({ financeServiceBillingBrodeUnit: "KG" as unknown as "METER" }, await testActorId())
     .then(() => 200, (e: { statusCode?: number; message?: string }) => e.statusCode ?? `500 ${e.message}`);
   check("servis: bilinmeyen birim 400", bad === 400, String(bad));
+  // Çıkışsız kapı seddi: tablette adet girişi yokken ADET/VURUŞ yazılamaz, ayar değişmez.
+  const before = await readFinanceServiceBillingBrodeUnit();
+  const gated = await systemSettingService.setFeatureFlags({ financeServiceBillingBrodeUnit: "PIECE" }, await testActorId())
+    .then(() => "200", (e: { statusCode?: number; details?: { code?: string } }) => `${e.statusCode}:${e.details?.code}`);
+  check("servis: PIECE/STITCH tablet girişi yokken 400 BRODE_UNIT_NO_PIECE_INPUT, ayar değişmez",
+    gated === "400:BRODE_UNIT_NO_PIECE_INPUT" && (await readFinanceServiceBillingBrodeUnit()) === before, gated);
+  const panelCfg = readFileSync(join(__dirname, "..", "..", "Electron", "src", "pages", "GeneralSettings", "settings-config.ts"), "utf8");
+  const brodeRow = panelCfg.slice(panelCfg.indexOf('enumKey: "financeServiceBillingBrodeUnit"'), panelCfg.indexOf("enumKey:", panelCfg.indexOf('enumKey: "financeServiceBillingBrodeUnit"') + 10));
+  check("panel ADET/VURUŞ seçeneğini sunmaz (çıkışsız kapı)", brodeRow.includes('value: "METER"') && !brodeRow.includes('value: "PIECE"') && !brodeRow.includes('value: "STITCH"'));
   await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.FINANCE_SERVICE_BILLING_BRODE_UNIT } });
   check("okuma varsayılanı METER (bugünkü davranış)", (await readFinanceServiceBillingBrodeUnit()) === "METER" && (await loadServiceBillingSettings()).brodeUnit === "METER");
   const body = { rollId: randomUUID(), stepId: randomUUID(), meterOut: { meters: 10, source: "OPERATOR", clientToken: randomUUID(), pieceCount: 12 } };
@@ -204,6 +213,10 @@ async function main(): Promise<void> {
   const v2 = await setPrice(3, "METER");
   const row2 = await prisma.itemPrice.findUnique({ where: { id: v2.data!.id }, select: { priceUnit: true } });
   check("METER birimi NULL olarak saklanır (bugünkü satır biçimi)", row2 !== null && row2.priceUnit === null);
+  await setPrice(3, "PIECE");
+  const v3 = await itemPriceService.upsert({ itemId: svc, customerId: null, kind: PriceKind.SALE, currency: Currency.TRY, price: 4 });
+  const row3 = await prisma.itemPrice.findUnique({ where: { id: v3.data!.id }, select: { priceUnit: true } });
+  check("eski istemci (priceUnit göndermez) fiyat değiştirince birim korunur (PIECE → PIECE)", row3?.priceUnit === "PIECE", String(row3?.priceUnit));
 
   // ── §9 ───────────────────────────────────────────────────────────────────
   section("§9 AST: miktar tek yardımcıdan");
@@ -213,6 +226,8 @@ async function main(): Promise<void> {
   const rec = fnBody(src("service-billing.helper.ts"), "reconcileServiceLinksWithLines");
   check("allocateRevenue payı `linkBilledQty`den, `billedMeters` okumaz", alloc.includes("linkBilledQty(") && !alloc.includes(".billedMeters"), alloc.slice(0, 120));
   check("reconcileServiceLinksWithLines `linkBilledQty` kullanır", rec.includes("linkBilledQty(") && !rec.includes("plus(l.billedMeters)"));
+  check("kârlılık okuyucusu fatura bağında `billedQty` seçer (yoksa pay sessizce metreye döner)",
+    /serviceBillingLinks:\s*\{\s*select:\s*\{[^}]*billedQty:\s*true/.test(src("profitability-finance.helper.ts")));
   check("önizleme kapısı toplamı `linkBilledQty`den", src("service-preview-gate.helper.ts").includes("a.plus(linkBilledQty(l))") && !src("service-preview-gate.helper.ts").includes("a.plus(l.billedMeters)"));
   const pricing = src("service-pricing.helper.ts");
   check("hizmet çözücüsü miktarı `serviceWorkQuantity`den alır, adet × vuruş başka yerde yazılmaz",

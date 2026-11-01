@@ -229,7 +229,7 @@ export const TOKENSIZ_UCLAR: Record<string, TokensizUc> = {
  * kural): alanı hem koddan hem beyandan silen değişiklik kapıdan geçer, gözden geçirmede görünür olmalıdır.
  */
 export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
-  [`${S}helpers/kursun-meter.helper.ts::meterReadingReplay`]: ["rollId", "workOrderStepId", "phase", "meters"],
+  [`${S}helpers/kursun-meter.helper.ts::meterReadingReplay`]: ["rollId", "workOrderStepId", "phase", "meters", "pieceCount"],
   [`${S}tambur-meter-correct.service.ts::cutCorrectionReplay`]: ["rollId", "workOrderStepId", "phase", "meters", "source"],
   [`${S}quality-inspection.service.ts::createReplay`]: ["rollId", "phase"],
   [`${S}quality-inspection.service.ts::reviseReplay`]: ["supersedesId"],
