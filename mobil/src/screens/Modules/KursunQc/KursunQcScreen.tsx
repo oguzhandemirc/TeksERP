@@ -367,7 +367,11 @@ export default function KursunQcScreen() {
     properties: stationProps,
   });
   // D4-E2b: en ölçen istasyonda isteğe bağlı "Ölçülen en"; eski backend alanı göndermez → gizli.
-  const measuredWidth = useMeasuredWidth(widthCaptureEnabled(activeJob?.stepSummary), selectedRoll?.rollId ?? null);
+  const measuredWidth = useMeasuredWidth(
+    widthCaptureEnabled(activeJob?.stepSummary),
+    selectedRoll?.rollId ?? null,
+    selectedRoll?.widthLimit,
+  );
   const nextStation = nextStationLabel(activeJob?.stepSummary.nextStepName);
   const nextStationDative = nextStation ? dativeTr(nextStation) : null;
 
@@ -1035,6 +1039,8 @@ export default function KursunQcScreen() {
     refresh: () => void refetchActiveJob().catch(() => undefined),
     meter,
     stopOpen: machineStop.entryWarning,
+    // D4-KUC3b: sınır dışı en sayaç okumadan / istek gitmeden uyarılır.
+    precheck: (rollId) => measuredWidth.attach({ rollId }) !== null,
   });
   const tapLayout = panels.completion === 'TAP_VALUE';
 

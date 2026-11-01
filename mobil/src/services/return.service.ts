@@ -16,6 +16,9 @@ export interface ReturnLookupRoll {
   currentQty: number;
   qualityGrade: string;
   qualityGradeRef: { id: string; code: string; name: string; color: string | null } | null;
+  /** D4-F1b: müşteri barkoduyla bulunduysa (iç barkodda alan yok). */
+  matchedBy?: 'CUSTOMER_CODE';
+  customerCode?: string;
 }
 
 export interface ReturnCandidateOrder {

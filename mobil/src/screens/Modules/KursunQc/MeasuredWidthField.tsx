@@ -20,7 +20,10 @@ export default function MeasuredWidthField({ state, hidden }: { state: MeasuredW
         dense
         right={<TextInput.Affix text="cm" />}
       />
-      <Text style={s.hint}>İsteğe bağlı — boş bırakılırsa topun eni değişmez.</Text>
+      <Text style={s.hint}>
+        İsteğe bağlı — boş bırakılırsa topun eni değişmez.
+        {state.limit?.maxCm != null ? ` En fazla ${state.limit.maxCm} cm.` : ''}
+      </Text>
     </View>
   );
 }
