@@ -74,9 +74,9 @@ async function writeInvoiceReceiptsTx(tx: Prisma.TransactionClient, invoiceId: s
   await tx.invoice.update({ where: { id: invoiceId }, data: { goodsReceiptId: receiptIds.length === 1 ? receiptIds[0] : null } });
 }
 import { printedDocumentService, registerPrintedDocBuilder } from "./printed-document.service";
+import { resolveInvoiceTaxDefaults } from "./helpers/invoice-tax-defaults.helper";
 import {
   readFinanceAllowZeroPriceLineEnabled,
-  readFinanceDefaultVatRate,
   readFinanceRiskLimitBlockEnabled,
   resolveYarnOutOnInvoiceEnabled,
 } from "./system-setting.service";
@@ -799,7 +799,8 @@ export class InvoiceService {
       conflictItems += part.contract.conflictItems.size;
       for (const [k, v] of part.receiptQty) receiptQty.set(k, v);
     }
-    const defaultVatRate = await readFinanceDefaultVatRate();
+    // D4-V1k: tek çözümleyici; ALIŞ'ta bugünkü gibi genel KDV, tevkifat 0 (müşteri geçersiz kılması satışa özgü).
+    const defaultVatRate = (await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE })).vatRate;
 
     // ── VADE ÖN-DOLUMU (2026-08-15) ─────────────────────────────────────────
     // Taslak vadesiz doğduğu için Faturalar listesi "gecikmemiş", Yaşlandırma

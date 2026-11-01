@@ -42,6 +42,7 @@ const baseForm: CariEditForm = {
   notes: "",
   isActive: true,
   serviceBillingTrigger: null,
+  tax: null,
 };
 
 const form = (p: Partial<CariEditForm> = {}): CariEditForm => ({ ...baseForm, ...p });
@@ -244,5 +245,38 @@ describe("H8b hizmet faturası tetiği", () => {
   it("alanı göndermeyen eski backend ve fason hesabı → gövdeye anahtar GİRMEZ (.strict() 400'ü)", () => {
     expect("serviceBillingTrigger" in okBody(formFromCari(cust()))).toBe(false);
     expect("serviceBillingTrigger" in okBody(formFromCari(cust({ kind: "SUBCONTRACTOR", serviceBillingTrigger: null })))).toBe(false);
+  });
+});
+
+describe("D4-V1k KDV / tevkifat geçersiz kılması", () => {
+  const cust = (p: Partial<CariRow> = {}): CariRow => ({
+    id: "c1", kind: "CUSTOMER", code: "M1", name: "Müşteri", taxNumber: null, taxOffice: null, defaultCurrency: "TRY",
+    paymentTermDays: null, riskLimit: null, notes: null, isActive: true, balances: [], ...p,
+  });
+  const v1k = { vatRate: null, withholdingEnabled: null, withholdingNumerator: null, withholdingDenominator: null };
+
+  it("eski backend (alan yok) → form.tax null, gövdeye vergi anahtarı GİRMEZ", () => {
+    const f = formFromCari(cust());
+    expect(f.tax).toBeNull();
+    const body = okBody(f);
+    for (const k of ["vatRate", "withholdingEnabled", "withholdingNumerator", "withholdingDenominator"]) expect(k in body).toBe(false);
+  });
+
+  it("hepsi null (genel ayar) tur atmada null kalır", () => {
+    const body = okBody(formFromCari(cust(v1k)));
+    expect(body).toMatchObject(v1k);
+  });
+
+  it("müşteri %10 + uygulanır + 5/10 tur atmada korunur", () => {
+    const f = formFromCari(cust({ vatRate: "10", withholdingEnabled: true, withholdingNumerator: 5, withholdingDenominator: 10 }));
+    expect(f.tax).toEqual({ vatRate: "10", withholding: "APPLY", ratio: "5/10" });
+    expect(okBody(f)).toMatchObject({ vatRate: "10", withholdingEnabled: true, withholdingNumerator: 5, withholdingDenominator: 10 });
+  });
+
+  it("geçersiz oran → istek KURULMAZ, hata tax alanında", () => {
+    const f = { ...formFromCari(cust(v1k)), tax: { vatRate: "", withholding: "APPLY" as const, ratio: "11/10" } };
+    const r = buildCariUpdatePayload(f);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.tax).toMatch(/pay\/payda/);
   });
 });

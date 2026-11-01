@@ -24,6 +24,7 @@ import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import type { Prisma } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { invoiceService } from "../services/invoice.service";
+import { resolveInvoiceTaxDefaults } from "../services/helpers/invoice-tax-defaults.helper";
 import { SERVICE_PERIOD_PATTERN, createServicePeriodDraft, previewServicePeriodDraft } from "../services/service-period-invoice.service";
 import { paymentService } from "../services/payment.service";
 import { cashTransactionService } from "../services/cash-transaction.service";
@@ -75,6 +76,11 @@ const cariCreateSchema = z
     notes: z.string().max(500).nullable().optional(),
     // H8b: null = fabrika ayarı; değer kümesi servis + DB CHECK ile aynı (servis Türkçe 400 verir).
     serviceBillingTrigger: z.string().max(20).nullable().optional(),
+    // D4-V1k: KDV / tevkifat geçersiz kılması (null = genel ayar); aralık + pay/payda çifti serviste Türkçe 400.
+    vatRate: decimalString.nullable().optional(),
+    withholdingEnabled: z.boolean().nullable().optional(),
+    withholdingNumerator: z.number().int().nullable().optional(),
+    withholdingDenominator: z.number().int().nullable().optional(),
   })
   .strict();
 
@@ -527,6 +533,31 @@ router.get("/invoices", requirePermission("finance:read"), async (req, res, next
       to: q.to ? new Date(q.to) : undefined,
     });
     res.json({ success: true, ...result });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/finance/invoices/tax-defaults:
+ *   get:
+ *     tags: [Finance]
+ *     summary: Yeni fatura satırının KDV / tevkifat ön değeri (D4-V1k — müşteri cari ?? genel ayar ?? bugünkü)
+ *     parameters:
+ *       - { in: query, name: type, required: true, schema: { type: string, enum: [SALES, PURCHASE] } }
+ *       - { in: query, name: customerId, schema: { type: string, format: uuid } }
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ vatRate, withholdingRate (KDV'nin %'si), withholdingRatio, source }" }
+ */
+router.get("/invoices/tax-defaults", requirePermission("finance:read"), async (req, res, next) => {
+  try {
+    const q = z
+      .object({ type: z.enum(["SALES", "PURCHASE"], { message: "Fatura türü SALES ya da PURCHASE olmalı" }), customerId: z.string().uuid().optional() })
+      .strict()
+      .parse(req.query);
+    res.json({ success: true, data: await resolveInvoiceTaxDefaults({ type: q.type, customerId: q.customerId ?? null }) });
   } catch (e) {
     next(e);
   }
