@@ -92,6 +92,10 @@ const UC_KAPILI: ReadonlyArray<{ dosya: string; yollar: string[] }> = [
   // SY-D3: maliyet router'ında (iplik ihtiyacı dokuma dışı) yalnız dokuma verimlilik ucu dokuma kapısını taşır.
   { dosya: "routes/reports/maliyet.report.routes.ts", yollar: ["/dokuma-verimlilik"] },
 ];
+/** Kapıyı VARLIK başına seçen router'lar (SY-H2 içe aktarım): dokuma adaptörünün her ucu `requireDokumaEnabled`den geçer — §6v. */
+const VARLIK_KAPILI: ReadonlyArray<{ dosya: string; eslem: RegExp }> = [
+  { dosya: "routes/import.routes.ts", eslem: /dokuma:\s*requireDokumaEnabled\b/ },
+];
 // `kapi`: dokuma kapısını DEVRALAN rejim kapısı (D4-A1 `requireMachineStopRegime`: ayar kapalıyken kararı
 // `requireDokumaEnabled`e devreder — §6i ölçer).
 const KAPILI: ReadonlyArray<{ dosya: string; mount: string; kimlik?: string; kapi?: string }> = [
@@ -345,7 +349,11 @@ async function main(): Promise<void> {
       check(`§6u ⭐ ${u.dosya} ${yol} → kapı UÇ zincirinde, rapor kapısından ÖNCE`, kapiYeri > 0 && raporKapisi > kapiYeri, satir ? "" : "uç bulunamadı");
     }
   }
-  const anilan = new Set([...KAPILI.map((x) => x.dosya), ...UC_KAPILI.map((x) => x.dosya)]);
+  for (const v of VARLIK_KAPILI) {
+    const metin = yorumlariSok(fs.readFileSync(path.join(SRC, v.dosya), "utf8"));
+    check(`§6v ⭐ ${v.dosya} → dokuma modüllü varlık kapısı \`${KAPI}\`e eşlenir`, v.eslem.test(metin));
+  }
+  const anilan = new Set([...KAPILI.map((x) => x.dosya), ...UC_KAPILI.map((x) => x.dosya), ...VARLIK_KAPILI.map((x) => x.dosya)]);
   const listesiz = kapiTasiyan.filter((rel) => !anilan.has(rel));
   check(
     "§6d Körlük zemini: route dizini tarandı, kapı taşıyan dosya bulundu",

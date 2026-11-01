@@ -313,6 +313,8 @@ export const updateSchema = z.strictObject({
   costProfitConsumablePriceSource: z.enum(["ALIS_FIYATI", "SON_ALIS_FATURASI"], { message: "Sarf fiyatı kaynağı ALIS_FIYATI ya da SON_ALIS_FATURASI olmalı" }).optional(),
   // SY-D2: dokuma standart maliyet yöntemi (`WEAVING_STANDARD_METHODS` ile birebir).
   costWeavingStandardMethod: z.enum(["TEZGAH_SAATI", "ATKI_UCRETI"], { message: "Dokuma standart yöntemi TEZGAH_SAATI ya da ATKI_UCRETI olmalı" }).optional(),
+  // SY-M1: siparişten üretim önerisi (`ORDER_PRODUCTION_PROPOSAL_MODES` ile birebir).
+  orderProductionProposal: z.enum(["KAPALI", "ONIZLEME", "ONAYDA_TASLAK"], { message: "Üretim önerisi KAPALI, ONIZLEME ya da ONAYDA_TASLAK olmalı" }).optional(),
   // D4-G2b: makine süresi, genel gider anahtarı, kategori sınıfları (`PROFIT_*` sabitleri ile birebir; harita süzgeci serviste).
   costProfitMachineTime: z.enum(["OTURUM", "VARDIYA", "NORM"], { message: "Makine süresi OTURUM, VARDIYA ya da NORM olmalı" }).optional(),
   costProfitOverheadKey: z.enum(["YOK", "METRE", "GELIR", "MAKINE_SAATI"], { message: "Genel gider anahtarı YOK, METRE, GELIR ya da MAKINE_SAATI olmalı" }).optional(),

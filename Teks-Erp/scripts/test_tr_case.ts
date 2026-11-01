@@ -74,7 +74,7 @@ for (const f of adapters) {
   check(`§2 okuyan ${f}: anahtar importKey · ham toLocale yok · upperTr/toUpperCase anahtarda yok`, !rawFold && !otherOnKey);
 }
 check("§2 kod haritası kuran adaptör sayısı ≥ 14 (yazan↔okuyan çifti var)", okuyan >= 14, `okuyan=${okuyan}`);
-for (const f of ["import-lookup.ts", "import-revert.branches.ts"]) {
+for (const f of ["import-lookup.ts", "import-revert.children.ts"]) {
   const src = readFileSync(join(ROOT, f), "utf8").replace(/\/\/.*$/gm, "");
   check(`§2 ${f} anahtarı importKey ile`, /importKey\(/.test(src) && !/upperTr\((value|keyValue)\)/.test(src));
 }

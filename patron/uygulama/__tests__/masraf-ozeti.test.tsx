@@ -1,5 +1,5 @@
 // D4-H2 — Finans › Masraf segmenti (`ozet-masraf` anlığı): §1 izinsiz hesapta segment YOK ve anlık istenmez ·
-// §2 izinli hesapta fabrikanın rakamları aynen (toplam, fark, ilk 15 + "Diğer") · §3 eski fabrika (anlık yok) çökmez ·
+// §2 izinli hesapta fabrikanın rakamları aynen (toplam, fark, ilk 15 + "Diğer") · §3 eski fabrika (anlık 404) boş durum ·
 // §4 görünüm hesap yapmaz (fark yönü işaretten; tutar yalnız biçimlenir).
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import type React from "react";
@@ -83,7 +83,7 @@ describe("§2 izinli hesapta fabrikanın rakamları", () => {
 });
 
 describe("§3 eski fabrika: anlık yok", () => {
-  it("404 → hata görünümü, çökme yok", async () => {
+  it("404 → hata DEĞİL boş durum ('henüz gelmedi'), çökme yok (D4-KUC3c)", async () => {
     mockSession.permissions = ["bulut:kasa:oku"];
     mockApi.snapshot.mockImplementation(async () => { throw new ApiError(404, "BULUNAMADI", "Anlık görüntü bulunamadı"); });
     render(<Finance />);
@@ -91,7 +91,8 @@ describe("§3 eski fabrika: anlık yok", () => {
     fireEvent.press(screen.getByTestId("sekme-masraf"));
     await flush();
     expect(screen.queryByTestId("masraf-toplam")).toBeNull();
-    expect(screen.queryByTestId("masraf-ozeti-hata") ?? screen.queryByTestId("masraf-ozeti-bos")).toBeTruthy();
+    expect(screen.getByTestId("masraf-ozeti-bos")).toBeTruthy();
+    expect(screen.queryByTestId("masraf-ozeti-hata")).toBeNull();
   });
 
   it("şekli bozuk veri → 'henüz gelmedi', çökme yok", () => {

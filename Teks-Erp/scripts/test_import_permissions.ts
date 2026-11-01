@@ -68,6 +68,10 @@ const ROUTE_FILE_FOR_SERVICE_ADAPTERS: Record<string, string> = {
   // Fason firma + kategori TEK router'da (subcontractorRouter / categoryRouter).
   subcontractor: "subcontractor-management.routes.ts",
   subcontractorCategory: "subcontractor-management.routes.ts",
+  // SY-H2: fonksiyon servisli kartlar + iplik maliyet fiyatı (maliyet router'ı).
+  weftSpec: "weft-spec.routes.ts",
+  weaveDesign: "weave-design.routes.ts",
+  yarnCostPrice: "cost.routes.ts",
 };
 
 /** Adaptör dosyasından servis kaynağını çöz: routes/<x>.routes veya <x>.service. */

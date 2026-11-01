@@ -24,6 +24,7 @@ export const PANEL_SETTING_SCREEN = {
   "e-irsaliye": "Sistem → Şirket & Güvenlik → e-İrsaliye",
   belgeler: "Sistem → Baskı & Cihazlar → Belgeler",
   "gelen-belge": "Sistem → Özellik Anahtarları → Gelen Belge",
+  orders: "Sistem → Özellik Anahtarları → Siparişler",
 } as const;
 
 export type PanelSettingScreen = keyof typeof PANEL_SETTING_SCREEN;
@@ -46,6 +47,7 @@ export const PANEL_SETTING_ROW = {
   financeFutureDatedDocumentBlockEnabled: { ekran: "finance", baslik: "İleri tarihli mali belgeyi engelle" },
   financeExpenseAllocationField: { ekran: "finance", baslik: "Masrafı makineye / işe bağlama" },
   financeAutoAllocateOnPaymentEnabled: { ekran: "finance", baslik: "Tahsilat/ödemeyi en eski faturalara otomatik kapat (FIFO)" },
+  orderProductionProposal: { ekran: "orders", baslik: "Siparişten üretim önerisi" },
 } as const satisfies Record<string, { ekran: PanelSettingScreen; baslik: string }>;
 
 export type PanelSettingRow = keyof typeof PANEL_SETTING_ROW;

@@ -132,7 +132,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}consumable-norm.service.ts::changeConsumableNorm`]: { giris: { [`${S}consumable-norm.service.ts::changeConsumableNorm`]: "R" } },
   [`${S}machine-run.service.ts::openMachineRunFresh`]: { giris: { [`${S}machine-run.service.ts::openMachineRun`]: "R" } },
   // #12: quickStart create'i çağırır (iç boğaz) ve kendi boğazıyla sarar; kimlikte top kümesi YOK (kısmi bağlama).
-  [`${S}workorder.service.ts::createFresh`]: { giris: { [`${S}workorder.service.ts::create`]: "R" } },
+  // SY-M1: yaratma çekirdeği tx gövdesine ayrıldı; üretim önerisi türetilmiş token'ı 8036 kilidinin ARKASINDA okur.
+  [`${S}workorder.service.ts::insertPreparedTx`]: { giris: { [`${S}workorder.service.ts::create`]: "R", [`${S}production-proposal.service.ts::readReplaySetTx`]: "K′" } },
   // #13/#14 K′ HIZ YOLUDUR, kapı değil: kaldırılınca R yedeği aynı yarışı kapatır (sonda 2026-09-26) — kaybeden
   // kilitte bekleyip replay'i doğrudan alır, iş kuralını boşa koşmaz.
   [`${S}workorder-batch-add.service.ts::addBatch`]: { giris: { [`${S}workorder-batch-add.service.ts::addBatch`]: "K′" } },
@@ -151,7 +152,9 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   // Levent planı yalnız R. Emanet kapısı 8029'dan önce koşar ama 8029'un koruduğu gün önekli numarayı OKUMAZ (yalnız
   // emanet ayarı + sahip müşteri) → TOCTOU yok, kilit sırası değişmedi (4b kararı; arşiv D5b).
   [`${S}warp-beam.service.ts::createWarpBeamFresh`]: { giris: { [`${S}warp-beam.service.ts::createWarpBeam`]: "R" } },
-  [`${S}weaving-order.service.ts::createWeavingOrderFresh`]: { giris: { [`${S}weaving-order.service.ts::createWeavingOrder`]: "R", [`${S}weaving-order.service.ts::createWeavingOrderFresh`]: "K′" } },
+  [`${S}weaving-order.service.ts::insertWeavingOrderTx`]: {
+    giris: { [`${S}weaving-order.service.ts::createWeavingOrder`]: "R", [`${S}weaving-order.service.ts::insertWeavingOrderTx`]: "K′", [`${S}production-proposal.service.ts::readReplaySetTx`]: "K′" },
+  },
   [`${S}subcontractor-weaving.service.ts::receiveForWeavingFresh`]: { giris: { [`${S}subcontractor-weaving.service.ts::receiveForWeaving`]: "R", [`${S}subcontractor-weaving.service.ts::receiveForWeavingFresh`]: "K′" } },
   // Top indirme yalnız R: kod sayaç satırından tx'ten ÖNCE (Perf-4 B-03), 8029 kalktı → K′'nin bekleyeceği kilit yok.
   [`${S}machine-doff.service.ts::openDoffFresh`]: { giris: { [`${S}machine-doff.service.ts::openDoff`]: "R" } },
@@ -290,7 +293,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}warp-beam-mount.service.ts::mountReplay`]: ["beamId", "kind", "machineId", "mountPosition"],
   [`${S}warp-beam-wind.service.ts::windReplay`]: ["beamId", "kind", "lengthM"],
   [`${S}warp-beam.service.ts::warpBeamReplay`]: ["warpSpecId", "originKind", "plannedLengthM", "subcontractorId", "supplierId", "ownerCustomerId", "weavingOrderId", "physicalBeamNo"],
-  [`${S}weaving-order.service.ts::weavingOrderReplay`]: ["itemId", "executionKind", "subcontractorId", "plannedM", "colorId", "sipariş satırları", "warpSpecId", "weftSpecId", "weaveDesignId", "recipeId"],
+  [`${S}helpers/weaving-order-replay.helper.ts::weavingOrderReplay`]: ["itemId", "executionKind", "subcontractorId", "plannedM", "colorId", "sipariş satırları", "warpSpecId", "weftSpecId", "weaveDesignId", "recipeId"],
   [`${S}workorder-batch-add.service.ts::batchReplay`]: ["workOrderId", "missingRolls"],
   [`${S}workorder.service.ts::quickStartReplay`]: ["targetItemId", "orderLines"],
   [`${S}workorder.service.ts::woReplay`]: ["orderLines", "targetItemId", "type"],

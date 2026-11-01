@@ -15,16 +15,17 @@ import { FONT_SCALE, space, typography } from "../tokens";
 
 const NOT_YET = "Fabrikadan masraf özeti henüz gelmedi";
 
-export function ExpenseSummary() {
+/** `onPickCategory` verilirse (sunucu anahtar süzgecini biliyor) anahtarlı kategori satırı kasa listesini o kategoriyle açar. */
+export function ExpenseSummary({ onPickCategory }: { readonly onPickCategory?: (categoryKey: string) => void }) {
   const remote = useSnapshot("ozet-masraf");
   return (
     <SnapshotGate remote={remote} domain="finans" variant="list" rows={3} empty={NOT_YET} testID="masraf-ozeti">
-      {(veri) => <ExpenseBody veri={veri} />}
+      {(veri) => <ExpenseBody veri={veri} onPickCategory={onPickCategory} />}
     </SnapshotGate>
   );
 }
 
-function ExpenseBody({ veri }: { veri: unknown }) {
+function ExpenseBody({ veri, onPickCategory }: { veri: unknown; onPickCategory?: (categoryKey: string) => void }) {
   const s = useStyles();
   const v = expenseView(veri);
   if (!v) return <Empty text={NOT_YET} domain="finans" icon={EMPTY_ICON.bekliyor} testID="masraf-ozeti-bos" />;
@@ -43,7 +44,11 @@ function ExpenseBody({ veri }: { veri: unknown }) {
       {v.rows.length === 0 ? (
         <Empty text="Son 12 ayda masraf yok" domain="finans" icon={EMPTY_ICON.bekliyor} testID="masraf-kategori-yok" />
       ) : (
-        v.rows.map((r) => <ListRow key={r.key} title={r.title} value={r.value} lines={r.lines} domain="finans" icon="pricetag-outline" testID={`masraf-kategori-${r.key}`} />)
+        v.rows.map((r) => {
+          const key = r.categoryKey;
+          const onPress = onPickCategory && key !== null ? () => onPickCategory(key) : undefined;
+          return <ListRow key={r.key} title={r.title} value={r.value} lines={r.lines} domain="finans" icon="pricetag-outline" onPress={onPress} testID={`masraf-kategori-${r.key}`} />;
+        })
       )}
     </View>
   );
