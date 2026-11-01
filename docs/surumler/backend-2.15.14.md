@@ -3,7 +3,7 @@
 **Durum:** TASLAK — terfide kullanıcı onayı. İlk hedef yalnız `test` grubu (üyesi tek kurulum: bulut deneme sunucusu,
 satıcı DB'sinde `kurulum.kanalKodu = test` tek satır, 2026-11-01 ölçüldü); öncü/genel gruba çıkış ayrı karar (terfi
 etiketi). Bu belge `2.15.14-taslak.md` girdi notunun (KÜÇÜK-F, teklif belgesi donması) üstüne 2026-11-01 sürüm
-hazırlığında yazıldı; §2 ve §4 her iniş turunda yeniden ölçülür (son ölçüm `origin/main` @ `a2c323ef9`).
+hazırlığında yazıldı; §2 ve §4 her iniş turunda yeniden ölçülür (son ölçüm `origin/main` @ `64e42620f`).
 **Paket:** _(paketleme doldurur)_
 **SHA256:** _(paketleme doldurur)_
 **Commit:** _(paketleme doldurur)_
@@ -24,8 +24,8 @@ doğar; operatöre görünür etki ancak ayar açılınca başlar.
 
 ## 2. Ne değişti
 
-Ölçüm: `backend-v2.15.13` (`4e6cad988`) → `origin/main` @ `a2c323ef9`, ilk ebeveyn hattında 172 commit (≈164 PR).
-Alt proje farkı: `Teks-Erp/src` 468 dosya · `Electron/src` 566 dosya (web paneli imajda) · `mobil/src` 133 dosya
+Ölçüm: `backend-v2.15.13` (`4e6cad988`) → `origin/main` @ `64e42620f`, ilk ebeveyn hattında 174 commit (≈165 PR).
+Alt proje farkı: `Teks-Erp/src` 468 dosya · `Electron/src` 566 dosya (web paneli imajda) · `mobil/src` 137 dosya
 (bu turda tablet yayını YOK) · `patron/sunucu` 14 · `patron/uygulama` 36 · `satici` 2 (modül kataloğu satırı) ·
 `okuma/` 28 (yeni yerel okuma servisi — imaja GİRMEZ).
 
@@ -69,9 +69,10 @@ varyantın atkı değişimi standart maliyete girer (#405; önceden dondurulmuş
 `0` = "bu hizmet sarf kullanmaz" açık beyanı, kârlılık sarfsız hizmet içeren işi (Tambur) artık ölçer (#409; norm
 satırı hiç yoksa bugünkü gibi "eksik").
 
-**Brode fiyat birimi** — #402. Ayar `finance.serviceBilling.brodeUnit` (varsayılan `METER` = bugünkü davranış);
-desen değerinde vuruş sayısı, hizmet fiyat satırında birim. Panelde şimdilik yalnız Metre seçilebilir: Adet/Vuruş
-tablette brode adet girişi inene dek gizli (sunucu da `BRODE_UNIT_NO_PIECE_INPUT` ile reddeder).
+**Brode fiyat birimi** — #402, #411. Ayar `finance.serviceBilling.brodeUnit`: Metre (varsayılan `METER` = bugünkü
+davranış) · Adet · Vuruş; desen değerinde vuruş sayısı, hizmet fiyat satırında birim. Adet tablette brode okumasında
+girilir (yeni tablet; görünmesi için `kursun.meterCapture` açık ve birim Adet/Vuruş olmalı); Vuruş = adet × desen
+vuruşu. Adet/Vuruş kipinde adedi olmayan iş (eski tablet, okumasız ya da dış brode) uyarıyla faturaya alınmaz.
 
 **Sarf stoğu (kuşak / kurşun şeridi)** — #401. Ayar `consumable.stockEnabled` (varsayılan KAPALI = bugünkü
 davranış): açıkken mal kabulde sarf girişi, kurşun/tambur işleminde normla tüketim düşümü, ters kayıtla iptal,
@@ -118,7 +119,8 @@ turda YOK (yayındaki masaüstü panel 1.6.6).
     bugünkü gibi; kurşun metresi göndermez → `kursun.meterCapture = OFF`ta bugünkü gibi; cari kilidi açılırsa
     kilitli caride sevk 409 alır ve genel hata metni görür (tam ekran yalnız yeni tablette); müşteri barkodu
     okutması yeni tablette. Zorunluluk ayarlarının açıklamaları "önce tüm tabletler yeni sürümde" der. Brode adedi
-    göndermez → yalnız Metre birimi seçilebildiği için fark yok.
+    göndermez → Metre kipinde (varsayılan) fark yok; Adet/Vuruş kipinde o iş uyarıyla faturaya alınmaz (tablet bu
+    turda yayınlanmıyor — Adet/Vuruş yeni tablet sürümü sahaya çıkınca açılmalı).
   - Masaüstü panel 1.6.6: yeni ekranları göstermez, yeni alanları yok sayar; Kasa & Banka Defteri notu eski koşulla
     çizilir.
   - Patron bulutu 0.2.0 (VDS, `5156f26d2259`): yeni anlıkları (`ozet-masraf`, `karlilik-ozet`) giriş başına
@@ -136,7 +138,7 @@ turda YOK (yayındaki masaüstü panel 1.6.6).
 ## 4. Migration
 
 - **Var mı:** evet — `backend-v2.15.13`ten bu yana **29** yeni göç (2026-11-01 ölçüldü, `origin/main` @
-  `a40b3afdd`; SY-P2…P4 ve D4-K3e göçsüz) + `9bf102b92` ölçümünde #402, #401, #409 ile **3** göç daha → **32** (#410 göçsüz, `a2c323ef9`te yeniden sayıldı).
+  `a40b3afdd`; SY-P2…P4 ve D4-K3e göçsüz) + `9bf102b92` ölçümünde #402, #401, #409 ile **3** göç daha → **32** (#410 göçsüz, #411 göçsüz; `64e42620f`te yeniden sayıldı: 457).
   Deneme 2.15.12'den geçtiği için orada **62** göç uygulanır (2.15.13'ün 30'u + bu sürümün 32'si).
 - İçerik: hepsi ADDITIVE — yeni tablolar (gelen belge, kurşun metre okuması, hizmet eşlemesi/fatura bağı, müşteri
   barkodu, cari kilidi, makine ücreti/sarf normu, desen kartı varyantı, maliyet tül, sipariş varyant hedefi, masraf
@@ -222,7 +224,7 @@ sürümü o turda yazılır). Metin terfide kullanıcı onayıyla donar.
     { "kapsam": "panel", "tip": "iyilestirme", "metin": "Kurşun ve Tambur'da metre kaynağı (makine, operatör, tahmini) kaydedilir; tahmini kesim metresi faturaya girmez, süpervizör kesim metresini düzeltebilir." },
     { "kapsam": "panel", "tip": "iyilestirme", "metin": "Sevkiyat ekranının adı Sevk Edilenler oldu; top kartında İz sür düğmesi; teklif gönderildiği anda belgesi oluşur." },
     { "kapsam": "panel", "tip": "yeni", "metin": "Veri İçe Aktarma'da üç yeni tür: cari açılış bakiyeleri, çek/senet portföyü ve müşteri hizmet fiyat listesi Excel'den toplu girilir; yanlış aktarım geçmişten ters kayıtla geri alınır." },
-    { "kapsam": "panel", "tip": "yeni", "metin": "Brode fiyat birimi fabrika ayarı eklendi; şimdilik yalnız Metre seçilebilir. Desen değerine vuruş sayısı, hizmet fiyatına birim girilebilir." },
+    { "kapsam": "her-ikisi", "tip": "yeni", "metin": "Brode Metre / Adet / Vuruş ile fiyatlanabilir (Ayarlar → Finans → Hizmet faturası). Adet, tablette brode okumasında girilir; Vuruş = adet × desen vuruşu. Adet/Vuruş için kurşun metre sayacı ayarı açık olmalı. Eski tablet adet göndermez, o iş faturaya alınmaz: Adet/Vuruş kullanmadan önce tabletinizi güncelleyin." },
     { "kapsam": "panel", "tip": "yeni", "metin": "Kuşak ve kurşun şeridi için sarf stoğu: ayar açılınca mal kabulde sarf girişi yapılır, işlenen toplar için stoktan kendiliğinden düşülür; kuşak ihtiyacı raporunda Stokta ve Eksik sütunları görünür." },
     { "kapsam": "panel", "tip": "iyilestirme", "metin": "Hizmet sarf normuna 0 girilebilir: bu hizmetin sarf kullanmadığı anlamına gelir; Tambur gibi işlerin kârlılığı artık ölçülür." },
     { "kapsam": "panel", "tip": "duzeltme", "metin": "Atkısı değişen varyantın standart maliyeti varyantın ipliğiyle hesaplanır; bu varyantlarda maliyet sürümünü yeniden oluşturun, eski sürüm olduğu gibi kalır." },
