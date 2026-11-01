@@ -848,6 +848,8 @@ router.delete(
 
 const resetPasswordSchema = z.object({
   password: newPasswordField,
+  // Alan yoksa true (eski panel): verilen parola geçicidir. false → kalıcı parola.
+  requireChange: z.boolean().optional(),
 });
 
 /**
@@ -857,8 +859,9 @@ const resetPasswordSchema = z.object({
  *     tags: [Admin]
  *     summary: Kullanıcı şifresini sıfırla (admin)
  *     description: >
- *       Eski şifre sorulmaz; yalnızca admin:users yetkisi yeterli. Verilen parola geçicidir —
- *       hedef ilk girişte yeni parola belirler (mustChangePassword; kendi hesabı ve satıcı hesabı hariç).
+ *       Eski şifre sorulmaz; yalnızca admin:users yetkisi yeterli. Varsayılan (requireChange yok/true)
+ *       verilen parola geçicidir — hedef ilk girişte yeni parola belirler (mustChangePassword; kendi
+ *       hesabı ve satıcı hesabı hariç). requireChange=false → parola kalıcı.
  *     security: [{ bearerAuth: [] }]
  */
 router.post(
@@ -867,12 +870,13 @@ router.post(
   requirePermission("admin:users"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { password } = resetPasswordSchema.parse(req.body);
+      const { password, requireChange } = resetPasswordSchema.parse(req.body);
       await assertDirectCredentialResetAllowed(req.user?.userId, req.params.id as string, "PASSWORD");
       await PermissionManagementService.resetUserPassword(
         req.params.id as string,
         password,
-        req.user?.userId
+        req.user?.userId,
+        { requireChange },
       );
       res.status(204).end();
     } catch (error) {

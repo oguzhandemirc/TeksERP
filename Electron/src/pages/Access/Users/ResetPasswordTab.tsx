@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { KeyRound, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/forms/FormField";
 import { adminUserService } from "@/services/adminUserService";
 import { CredentialApprovalRequest } from "./CredentialApprovalRequest";
@@ -31,6 +32,9 @@ type FormValues = z.infer<typeof schema>;
 
 export function ResetPasswordTab({ userId, username }: Props) {
   const [done, setDone] = useState(false);
+  // Varsayılan işaretli = eski davranış (geçici parola). Kaldırılırsa yazılan parola kalıcıdır.
+  const [requireChange, setRequireChange] = useState(true);
+  const [doneRequireChange, setDoneRequireChange] = useState(true);
   const form = useForm<FormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(schema as any) as unknown as Resolver<FormValues>,
@@ -39,14 +43,17 @@ export function ResetPasswordTab({ userId, username }: Props) {
 
   const password = form.watch("password");
   useEffect(() => {
-    if (done) setDone(false);
+    // Başarı sonrası form.reset parolayı boşaltır; bant yalnız yeni yazımda kalkar.
+    if (done && password) setDone(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [password]);
 
   const mutation = useMutation({
-    mutationFn: (newPassword: string) => adminUserService.resetPassword(userId, newPassword),
-    onSuccess: () => {
+    mutationFn: (v: { password: string; requireChange: boolean }) =>
+      adminUserService.resetPassword(userId, v.password, v.requireChange),
+    onSuccess: (_data, v) => {
       toast.success("Şifre güncellendi.");
+      setDoneRequireChange(v.requireChange);
       setDone(true);
       form.reset({ password: "", confirm: "" });
     },
@@ -54,7 +61,7 @@ export function ResetPasswordTab({ userId, username }: Props) {
 
   return (
     <form
-      onSubmit={form.handleSubmit((v) => mutation.mutate(v.password))}
+      onSubmit={form.handleSubmit((v) => mutation.mutate({ password: v.password, requireChange }))}
       className="space-y-4"
     >
       <CredentialApprovalRequest error={mutation.error} userId={userId} kind="PASSWORD" />
@@ -67,9 +74,8 @@ export function ResetPasswordTab({ userId, username }: Props) {
             <span className="font-mono">{username}</span> için yeni şifre
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Eski şifre sorulmaz; yeni şifre en az {PASSWORD_MIN_LENGTH} karakter olmalı. Bu şifre
-            geçicidir: kullanıcı ilk girişte (panel ya da tablet) kendi şifresini belirlemeden devam
-            edemez. Geçici şifreyi güvenli bir kanaldan ilet.
+            Eski şifre sorulmaz; yeni şifre en az {PASSWORD_MIN_LENGTH} karakter olmalı. Şifreyi
+            kullanıcıya güvenli bir kanaldan ilet.
           </p>
         </div>
       </div>
@@ -98,10 +104,29 @@ export function ResetPasswordTab({ userId, username }: Props) {
         />
       </FormField>
 
+      <div className="flex items-start gap-2">
+        <Checkbox
+          id="requireChange"
+          checked={requireChange}
+          onCheckedChange={(x) => setRequireChange(x === true)}
+          className="mt-0.5"
+        />
+        <label htmlFor="requireChange" className="cursor-pointer text-sm">
+          Kullanıcı ilk girişte kendi parolasını belirlesin
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            {requireChange
+              ? "Yazdığınız parola geçicidir: kullanıcı ilk girişte (panel ya da tablet) kendi parolasını belirlemeden devam edemez."
+              : "İşaretsiz: yazdığınız parola kalıcı olur; kullanıcı bu parolayla doğrudan girer, yeni parola istenmez."}
+          </span>
+        </label>
+      </div>
+
       {done && (
         <div className="flex items-center gap-2 rounded-md border border-success/40 bg-success/10 p-2 text-xs text-success">
           <CheckCircle2 className="h-3.5 w-3.5" />
-          Şifre sıfırlandı. Kullanıcı geçici şifreyle girip kendi şifresini belirleyecek.
+          {doneRequireChange
+            ? "Şifre sıfırlandı. Kullanıcı geçici şifreyle girip kendi şifresini belirleyecek."
+            : "Şifre sıfırlandı. Kullanıcı bu şifreyle doğrudan girecek."}
         </div>
       )}
 

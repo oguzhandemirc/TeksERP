@@ -14,7 +14,9 @@
 //      dışı değer reddedilir; geçerli değer zorunlu değişimle doğar.
 //   §6 Yönetici sıfırlaması (POST /admin/users/:id/reset-password): başkasının parolası →
 //      bayrak açılır (audit `requireChange`), değişim adımlı tablet kısıtlı token alıp kendi
-//      parolasını belirler; kendi parolası ve satıcı hesabı bayrak doğurmaz.
+//      parolasını belirler; kendi parolası ve satıcı hesabı bayrak doğurmaz. HTTP'de gövdede
+//      `requireChange` yoksa bayrak açılır (eski panel); `requireChange:false` kalıcı parola verir
+//      (bayrak kapalı, eski tablet bile tam token alır, audit `requireChange:false`).
 //   §5 Statik: beyanlı uç kümesi tam üç · admin uçlarında 6 karakter kuralı yok · panel
 //      politika aynası backend'e eşit · kurulum betiklerinde sabit parola yok · iki compose
 //      ILK_YONETICI_PAROLASI geçirir · sabit geliştirme parolası yalnız `--gelistirme`le.
@@ -113,7 +115,19 @@ async function dinamik(): Promise<void> {
     },
     select: { id: true, username: true },
   });
-  const userIds = [user.id, sistem.id, sfrUser.id];
+  const adminUsers = await prisma.permission.findUnique({ where: { code: "admin:users" }, select: { id: true } });
+  if (!adminUsers) throw new Error("Fikstür bulunamadı: izin admin:users");
+  const yonParola = `Yon-Parola-${ts}`;
+  const yonUser = await prisma.user.create({
+    data: {
+      username: `TEST-pdz-yon-${ts}`,
+      passwordHash: await AuthService.hashPassword(yonParola),
+      fullName: "TEST Yönetici",
+      permissions: { create: [{ permissionId: rollRead.id }, { permissionId: adminUsers.id }] },
+    },
+    select: { id: true, username: true },
+  });
+  const userIds = [user.id, sistem.id, sfrUser.id, yonUser.id];
 
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((r) => server.once("listening", () => r()));
@@ -377,6 +391,67 @@ async function dinamik(): Promise<void> {
     await PermissionManagementService.resetUserPassword(sistem.id, geciciParola, user.id);
     const sis6 = await prisma.user.findUniqueOrThrow({ where: { id: sistem.id }, select: { mustChangePassword: true } });
     check("§6g satıcı hesabının sıfırlanması bayrak doğurmaz", !sis6.mustChangePassword);
+
+    // §6h–§6i HTTP ucu: `requireChange` seçeneği (kullanıcı şikâyeti 2026-11-01).
+    const yonGiris = await call("POST", "/api/auth/login", null, {
+      username: yonUser.username,
+      password: yonParola,
+      clientType: "electron",
+      confirmKick: true,
+    });
+    const yonToken = String(yonGiris.body.data?.token ?? "");
+    const sonAudit = async (): Promise<boolean | undefined> => {
+      for (let i = 0; i < 20; i++) {
+        const row = await prisma.systemLog.findFirst({
+          where: { tableName: "USER_PASSWORD", recordId: sfrUser.id, userId: yonUser.id },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          select: { newData: true },
+        });
+        if (row) return (row.newData as { requireChange?: boolean } | null)?.requireChange;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return undefined;
+    };
+    const eskiPanel = await call("POST", `/api/admin/users/${sfrUser.id}/reset-password`, yonToken, {
+      password: geciciParola,
+    });
+    const eskiBayrak = await prisma.user.findUniqueOrThrow({
+      where: { id: sfrUser.id },
+      select: { mustChangePassword: true },
+    });
+    const eskiAudit = await sonAudit();
+    check(
+      "§6h gövdede requireChange yoksa (eski panel) bayrak açılır, audit requireChange:true",
+      yonGiris.status === 200 && eskiPanel.status === 204 && eskiBayrak.mustChangePassword && eskiAudit === true,
+      `giriş=${yonGiris.status} sıfırla=${eskiPanel.status} bayrak=${eskiBayrak.mustChangePassword} audit=${String(eskiAudit)}`,
+    );
+    await prisma.systemLog.deleteMany({ where: { tableName: "USER_PASSWORD", recordId: sfrUser.id, userId: yonUser.id } });
+    const kalici = `Kalici-Parola-${ts}`;
+    const kaliciSifirla = await call("POST", `/api/admin/users/${sfrUser.id}/reset-password`, yonToken, {
+      password: kalici,
+      requireChange: false,
+    });
+    const kaliciBayrak = await prisma.user.findUniqueOrThrow({
+      where: { id: sfrUser.id },
+      select: { mustChangePassword: true },
+    });
+    const kaliciAudit = await sonAudit();
+    const kaliciTablet = await call("POST", "/api/auth/login", null, {
+      username: sfrUser.username,
+      password: kalici,
+      clientType: "mobile",
+    });
+    const kaliciIs = await call("GET", "/api/rolls?limit=1", String(kaliciTablet.body.data?.token ?? ""));
+    check(
+      "§6i requireChange:false → bayrak kapalı, audit requireChange:false, eski tablet tam token alır (iş ucu 200)",
+      kaliciSifirla.status === 204 &&
+        !kaliciBayrak.mustChangePassword &&
+        kaliciAudit === false &&
+        kaliciTablet.status === 200 &&
+        kaliciTablet.body.data?.mustChangePassword === false &&
+        kaliciIs.status === 200,
+      `sıfırla=${kaliciSifirla.status} bayrak=${kaliciBayrak.mustChangePassword} audit=${String(kaliciAudit)} giriş=${kaliciTablet.status} iş=${kaliciIs.status}`,
+    );
 
     // ── §3 satıcı hesabı ───────────────────────────────────────────────────────
     const sisOnce = await prisma.user.findUniqueOrThrow({ where: { id: sistem.id }, select: { tokenVersion: true } });

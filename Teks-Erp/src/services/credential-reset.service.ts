@@ -202,6 +202,7 @@ export class CredentialResetService {
 
     let result: unknown = null;
     try {
+      // İki kişilik onay yolunda parola HEP geçicidir: onaylayan, daha yetkili hedefin parolasını bilmemeli.
       if (kind === "PASSWORD") await PermissionManagementService.resetUserPassword(req.targetUserId, payload.password!, approverId);
       else if (kind === "TOTP") await TotpAccountService.reset({ userId: req.targetUserId, byId: approverId });
       else if (kind === "QUICK_PIN") result = await AuthService.setQuickPin(req.targetUserId, {}, approverId);

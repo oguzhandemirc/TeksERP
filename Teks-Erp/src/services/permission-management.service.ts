@@ -79,12 +79,16 @@ function normalizeFullName(name: string): string {
   return name.trim().replace(/\s+/g, " ");
 }
 
-/** Yönetici sıfırlaması zorunlu parola değişimi doğurur mu? Kendi parolası ve satıcı hesabı hariç. */
+/**
+ * Yönetici sıfırlaması zorunlu parola değişimi doğurur mu? Kendi parolası ve satıcı hesabı hariç;
+ * yönetici "ilk girişte değiştirsin" kutusunu kaldırdıysa (`requested=false`) parola kalıcıdır.
+ */
 export function resetRequiresPasswordChange(
   target: { id: string; isSystemAccount: boolean },
   actorUserId: string | undefined,
+  requested = true,
 ): boolean {
-  return !target.isSystemAccount && target.id !== actorUserId;
+  return !target.isSystemAccount && target.id !== actorUserId && requested;
 }
 
 export class PermissionManagementService {
@@ -499,12 +503,14 @@ export class PermissionManagementService {
    * Yöneticinin verdiği parola GEÇİCİDİR: hedef ilk girişte kendi parolasını belirlemek
    * zorundadır (`mustChangePassword`). İki muafiyet: kendi parolasını sıfırlayan (başka
    * kimse görmedi) ve satıcı hesabı (başkası onu sıfırlayamaz; kendisi sıfırlarsa bayrak
-   * anlamsız). Satıcı hesabı ortak varsayılan parolaya dönemez.
+   * anlamsız). Satıcı hesabı ortak varsayılan parolaya dönemez. `requireChange=false` (yönetici
+   * kutuyu kaldırdı) parolayı kalıcı yapar; varsayılan `true` = eski panelin davranışı.
    */
   static async resetUserPassword(
     userId: string,
     newPassword: string,
-    actorUserId: string | undefined
+    actorUserId: string | undefined,
+    opts: { requireChange?: boolean } = {},
   ) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -523,7 +529,7 @@ export class PermissionManagementService {
       throw AppError.badRequest("Yeni parola ortak varsayılan parolayla aynı olamaz.", { code: "PASSWORD_IS_DEFAULT" });
     }
 
-    const requireChange = resetRequiresPasswordChange(user, actorUserId);
+    const requireChange = resetRequiresPasswordChange(user, actorUserId, opts.requireChange ?? true);
     const varsayilanKapaniyor = user.defaultPasswordIssuedAt !== null && user.defaultPasswordChangedAt === null;
     const passwordHash = await hashPassword(newPassword, PASSWORD_BCRYPT_COST);
     // Parola + bayrak + tokenVersion TEK yazımda; bayrak kararı okunan hesap türüne bağlı
