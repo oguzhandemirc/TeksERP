@@ -76,6 +76,7 @@
 import { Prisma, Currency } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { factoryDayKeyUtcMidnight, factoryDayStart } from "../../constants/time";
+import { assertCariNotMergedTx } from "./cari-merged-guard.helper";
 
 /**
  * Cari-dönem kapsamlı advisory lock namespace'i (2 ARGÜMANLI form).
@@ -154,6 +155,11 @@ export function formatDayKeyTr(dayKey: Date): string {
   return `${d}.${m}.${dayKey.getUTCFullYear()}`;
 }
 
+/** `allowMerged`: yalnız birleştirme GERİ ALMASI (kaynak o an hâlâ birleşmiş) açar. */
+export interface PeriodGuardOptions {
+  allowMerged?: boolean;
+}
+
 export interface PeriodWriteRef {
   cariId: string;
   currency: Currency;
@@ -173,8 +179,10 @@ export interface PeriodWriteRef {
  * belge zaten `cari_balances` satır kilidinde serileşiyordu — yeni serileşme
  * penceresi yalnız birkaç ifade uzar. İlgisiz cariler hiç etkilenmez.
  */
-export async function assertPeriodOpenTx(tx: Prisma.TransactionClient, ref: PeriodWriteRef): Promise<void> {
+export async function assertPeriodOpenTx(tx: Prisma.TransactionClient, ref: PeriodWriteRef, opts?: PeriodGuardOptions): Promise<void> {
   await lockCariPeriodScopeTx(tx, ref.cariId, ref.currency);
+  // Kilit ALTINDA: birleştirme claim'i aynı kilidi tutar → birleşmiş hesaba yazım yarışsız 409 (K3d).
+  if (!opts?.allowMerged) await assertCariNotMergedTx(tx, [ref.cariId]);
 
   const dayKey = periodDayKey(ref.txnDate);
   // "Bu günü kapsayan aktif kapanış var mı": kapanış `periodEnd`'e KADAR (dahil)
@@ -218,6 +226,7 @@ export async function assertPeriodOpenTx(tx: Prisma.TransactionClient, ref: Peri
 export async function assertPeriodsOpenTx(
   tx: Prisma.TransactionClient,
   refs: PeriodWriteRef[],
+  opts?: PeriodGuardOptions,
 ): Promise<void> {
   const byScope = new Map<string, PeriodWriteRef>();
   for (const r of refs) {
@@ -228,6 +237,6 @@ export async function assertPeriodsOpenTx(
   // Deterministik kilit sırası — deadlock'un tek yapısal panzehiri.
   const ordered = [...byScope.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   for (const [, ref] of ordered) {
-    await assertPeriodOpenTx(tx, ref);
+    await assertPeriodOpenTx(tx, ref, opts);
   }
 }

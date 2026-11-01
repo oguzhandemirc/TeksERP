@@ -108,6 +108,8 @@ export const AUDIT_ISIMLERI: Readonly<Record<string, TermCases>> = {
   ROLL_CUSTOMER_CODE: onEkli("müşteri", iyelik("barkod", "u", "a", "u")),
   // ── Cari kilidi (D4-I1a, 2026-10-30)
   CARI_HOLD: onEkli("cari", iyelik("kilid", "i", "e", "i")),
+  // ── Cari hesap birleştirme virmanı (D4-K3d, 2026-10-31)
+  CARI_ACCOUNT: onEkli("cari", iyelik("hesab", "ı", "a", "ı")),
   DELIVERY_NOTE_ALIAS: onEkli("gelen belge", sIyelik("eşleme", "i", "e")),
   SENDER_TEMPLATE: onEkli("gönderen", iyelik("şablon", "u", "a", "u")),
   DELIVERY_NOTE_CUSTOMER_DEFAULT: onEkli("gelen belge", iyelik("varsayılan ürün", "ü", "e", "ü")),
