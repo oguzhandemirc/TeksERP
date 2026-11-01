@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
 import { deviceService } from "./service";
 import type { DeviceListItem } from "./types";
+import { DeviceOriginSummary } from "./DeviceOriginSummary";
 
 interface Props {
   device: DeviceListItem | null;
@@ -62,6 +63,7 @@ export function ApproveAssignDialog({ device, onOpenChange, onDone }: Props) {
         </DialogHeader>
 
         <div className="space-y-4">
+          {device && <DeviceOriginSummary device={device} />}
           <FormField
             label="Takma Ad (opsiyonel)"
             hint='Yalnız bu panelde görünür — cihazı tanımak için, örn. "Beratın telefonu". Boş bırakılırsa cihaz kimliği gösterilir.'

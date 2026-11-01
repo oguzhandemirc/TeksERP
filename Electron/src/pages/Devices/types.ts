@@ -18,6 +18,10 @@ export interface DeviceListItem {
     name: string;
     station: { id: string; name: string };
   } | null;
+  /** Duyurunun geldiği kaynak (IP, IPv6'da /64) — doğuş olayından. Eski backend/eski satır: yok. */
+  announcedFrom?: string | null;
+  /** Donanım özeti kaynağı (ANDROID_ID · WIN_MACHINE_GUID · …); özet değeri gösterilmez. */
+  hwSource?: string | null;
   /** Birleşmiş kopya → ana kayıt (D4). Eski backend göndermez. */
   mergedIntoId?: string | null;
   mergedAt?: string | null;

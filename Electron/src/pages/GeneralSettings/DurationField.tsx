@@ -19,7 +19,8 @@ export interface DurationFieldProps {
   minMinutes?: number;
   disabled?: boolean;
   /** Verilirse başlık yerine inline aç/kapa gelir; input yalnız `enabled` iken düzenlenir. */
-  toggle?: { enabled: boolean; onToggle: (b: boolean) => void; label: string };
+  /** `locked`: sınıf kilidi notu — verilirse anahtar kilitli ve not gösterilir. */
+  toggle?: { enabled: boolean; onToggle: (b: boolean) => void; label: string; locked?: string };
   error?: string;
   /** Açıklama gösterimi: inline (varsayılan) / popover / disclosure. */
   hint?: HintVariant;
@@ -79,7 +80,7 @@ export function DurationField({
             type="checkbox"
             checked={toggle.enabled}
             onChange={(e) => toggle.onToggle(e.target.checked)}
-            disabled={disabled}
+            disabled={disabled || Boolean(toggle.locked)}
             className="h-5 w-5 cursor-pointer"
           />
         </label>
@@ -91,6 +92,9 @@ export function DurationField({
       )}
 
       <HintBody variant={hint} desc={desc} />
+      {toggle?.locked && (
+        <p className="text-xs text-muted-foreground" data-testid="duration-locked-note">{toggle.locked}</p>
+      )}
 
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <input

@@ -5187,6 +5187,12 @@ export class SystemSettingService {
       if (typeof input.autoLogoutOnExpiry !== "boolean") {
         throw AppError.badRequest("autoLogoutOnExpiry boolean olmalı");
       }
+      if (!input.autoLogoutOnExpiry && isHostedInstallation()) {
+        throw AppError.conflict(
+          "Barındırılan (bulut) kurulumda süresi dolan oturum otomatik kapanır — bu kural kapatılamaz.",
+          { code: "HOSTED_CLASS_FORCED" },
+        );
+      }
       await this.set(
         SETTING_KEYS.AUTH_AUTO_LOGOUT_ON_EXPIRY,
         input.autoLogoutOnExpiry,
@@ -5484,6 +5490,12 @@ export class SystemSettingService {
     if (Object.prototype.hasOwnProperty.call(input, "nativeSendEnabled")) {
       if (typeof input.nativeSendEnabled !== "boolean") {
         throw AppError.badRequest("nativeSendEnabled boolean olmalı");
+      }
+      if (input.nativeSendEnabled && isHostedInstallation()) {
+        throw AppError.conflict(
+          "Barındırılan (bulut) kurulumda sunucudan yazıcıya doğrudan gönderim kapalıdır — bu kural açılamaz.",
+          { code: "HOSTED_CLASS_FORCED" },
+        );
       }
       await this.set(
         SETTING_KEYS.LABEL_NATIVE_SEND_ENABLED,
@@ -8752,6 +8764,8 @@ export async function readSameTypeSessionPolicy(
 export async function readAutoLogoutOnExpiry(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
+  // Barındırılan (internete açık) kurulumda sınıf kilidi: çalınan token sessizce aylarca yaşamasın (VDS O2).
+  if (isHostedInstallation()) return true;
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.AUTH_AUTO_LOGOUT_ON_EXPIRY },
@@ -9258,6 +9272,8 @@ export async function readDefaultLabelMedia(
 export async function readLabelNativeSendEnabled(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
+  // Barındırılan sunucu fabrika LAN'ındaki yazıcıya ulaşamaz; açık bayrak yalnız SSRF yüzeyidir (VDS D3).
+  if (isHostedInstallation()) return false;
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.LABEL_NATIVE_SEND_ENABLED },

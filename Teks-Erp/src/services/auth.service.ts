@@ -21,6 +21,7 @@ import {
   readShortCredentialTotpRequired,
 } from "./system-setting.service";
 import { loadJwtSecretAtBoot } from "../lib/jwt-secret";
+import { isHostedInstallation } from "./helpers/install-class.helper";
 import { uyari } from "../lib/logger";
 import { PASSWORD_BCRYPT_COST } from "../constants/password-policy";
 import { newPasswordViolation } from "../lib/new-password-policy";
@@ -145,6 +146,12 @@ const PASSWORD_CHANGE_REQUIRED_MESSAGE_SHORT_ID =
  */
 function isDesktopClient(clientType: LoginClientType | undefined): boolean {
   return clientType === "electron" || clientType === "web";
+}
+
+/** Barındırılan kurulumda masaüstü/tarayıcı oturumu en çok 24 saat (VDS O2; autoLogout orada kilitli açık). */
+export const HOSTED_DESKTOP_SESSION_MAX_MINUTES = 24 * 60;
+export function hostedDesktopSessionMinutes(minutes: number, clientType: LoginClientType | undefined, hosted = isHostedInstallation()): number {
+  return hosted && isDesktopClient(clientType) ? Math.min(minutes, HOSTED_DESKTOP_SESSION_MAX_MINUTES) : minutes;
 }
 
 /** Gövde değeri → `Session.deviceType`. Bilinmeyen/eksik → MOBILE (tarihsel varsayılan). */
@@ -727,7 +734,7 @@ export class AuthService {
     //    uygulanır; exp'siz token üretilmez.
     // (Dakika ayarı yoksa reader eski saat ayarına ×60 düşer — geriye-uyum.)
     const timeoutEnabled = await readAutoLogoutOnExpiry();
-    const sessionMinutes = await readSessionDurationMinutes();
+    const sessionMinutes = hostedDesktopSessionMinutes(await readSessionDurationMinutes(), ctx?.clientType);
     const capDays = await readAbsoluteSessionCapDays();
 
     // jti = Session satırı anahtarı. Taban (mutlak) son-kullanma:

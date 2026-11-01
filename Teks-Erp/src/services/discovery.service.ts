@@ -33,6 +33,7 @@ import { getLanTlsAdvert, type LanTlsAdvert } from "../lib/lan-tls/listener";
 import type { ForwardedView } from "../lib/forwarded-view";
 import { SERVER_NAME_ENV, parseServerName, resolveServerName } from "../lib/server-name";
 import { uyari } from "../lib/logger";
+import { isHostedInstallation } from "./helpers/install-class.helper";
 
 /** Keşif sözleşmesinin sürümü. İstemci buna bakıp dallanır (ikinci bir 404 probu atmadan). */
 export const DISCOVERY_VERSION = 1;
@@ -70,18 +71,23 @@ let cachedPort = Number(process.env.PORT) || 4000;
  * bekçi (`scripts/test_discovery_identity.ts`) ikisini de ölçer. Buraya `await`
  * ekleyen bir değişiklik yukarıdaki 1. kuralı sessizce iptal eder.
  */
-export function buildDiscoveryIdentity(via: ForwardedView | null = null): DiscoveryIdentityPayload {
+export function buildDiscoveryIdentity(
+    via: ForwardedView | null = null,
+    hosted: boolean = isHostedInstallation(),
+): DiscoveryIdentityPayload {
     const identity = getCachedInstallationIdentity();
     // Lisans adı bellekteki doğrulanmış HAK'tan okunur (DB'siz); HAK sonradan gelirse restart beklemez.
-    const licensee = currentLicenseeName();
+    // Barındırılan (internete açık) kurulum firma adı, makine adı ve sürüm VERMEZ (VDS D1); kurulum
+    // kimliği kalır — tablet donanım özetinin anahtarıdır (mobil `resolveInstallationId`).
+    const licensee = hosted ? null : currentLicenseeName();
     return {
         product: "TeksERP",
         discoveryVersion: DISCOVERY_VERSION,
         installationId: identity?.installationId ?? null,
-        serverName: resolveServerName(),
+        serverName: hosted ? DEFAULT_COMPANY_NAME : resolveServerName(),
         companyName: (licensee ?? DEFAULT_COMPANY_NAME).slice(0, COMPANY_NAME_MAX),
         etkin: licensee !== null,
-        version: APP_VERSION,
+        version: hosted ? "" : APP_VERSION,
         protocol: via?.protocol ?? "http",
         apiPort: via?.port ?? cachedPort,
         apiBasePath: "/api",

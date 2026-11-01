@@ -93,11 +93,7 @@ export function SessionSettingsSection({
           onChangeMinutes={s.setSessionMin}
           maxMinutes={MAX_SESSION_MINUTES}
           minMinutes={1}
-          toggle={{
-            enabled: s.autoLogout,
-            onToggle: s.setAutoLogout,
-            label: "Token dolunca otomatik çıkış",
-          }}
+          toggle={{ enabled: s.autoLogout, onToggle: s.setAutoLogout, label: "Token dolunca otomatik çıkış", locked: s.hostedLockNote }}
           error={
             s.autoLogout && !s.sessionValid
               ? `1–${MAX_SESSION_MINUTES} arası bir dakika girin.`

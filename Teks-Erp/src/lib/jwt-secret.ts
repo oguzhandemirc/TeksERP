@@ -4,7 +4,8 @@
 // Açılış (`auth.service.ts`), ilk kurulum seed'i ve `scripts/jwt-sir.ts` (paket aracı)
 // AYNI fonksiyonu çağırır. Ret listesi DEĞER değil SHA-256 ÖZET tutar.
 // Bilinen/zayıf sır MEVCUT kurulumu durdurmaz (fabrika aniden durmaz): açılış uyarır ve
-// sağlık bayrağı kalkar; açılışı yalnız bugün de durduran sınıflar (yok/kısa) durdurur.
+// sağlık bayrağı kalkar; açılışı yalnız bugün de durduran sınıflar (yok/kısa) durdurur —
+// BARINDIRILAN sınıfta bilinen/zayıf sır da durdurur (`jwtSecretHostedRefusal`, server.ts).
 // YENİ kurulum yolu (seed, Docker ilk `up`) bilinen/zayıf sırrı reddeder.
 // =============================================================================
 
@@ -93,6 +94,15 @@ export function loadJwtSecretAtBoot(
   bootWarning = karar.kod;
   uyar(karar.mesaj);
   return deger as string;
+}
+
+/**
+ * Barındırılan (internete açık) kurulumda bilinen/zayıf sır açılışı DURDURUR (VDS denetimi D7).
+ * Sınıf lisanstan da okunduğu için server.ts lisans deposundan SONRA çağırır. Dönüş: ret mesajı.
+ */
+export function jwtSecretHostedRefusal(hosted: boolean): string | null {
+  if (!hosted || bootWarning === null) return null;
+  return `barındırılan kurulumda JWT_SECRET ${bootWarning} — açılış durduruldu. ${ROTATION_HINT}`;
 }
 
 /** `/api/admin/health` → `jwtSecret`. Değer ya da özet TAŞIMAZ; yalnız sınıf. */

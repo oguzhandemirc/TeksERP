@@ -39,6 +39,10 @@ export const deviceService = {
       .post<ApiResponse<unknown>>(`${BASE}/${id}/assign-hardware`, { peripheralIds })
       .then((r) => r.data),
 
+  /** Seçili bekleyen cihazları toplu reddet (pasife al). Dönüş: gerçekten reddedilen id'ler. */
+  rejectPending: (ids: string[]): Promise<ApiResponse<{ rejected: string[] }>> =>
+    apiClient.post<ApiResponse<{ rejected: string[] }>>(`${BASE}/pending/reject`, { ids }).then((r) => r.data),
+
   /** Onayı/atamayı geri al (→ PENDING). */
   revoke: (id: string): Promise<ApiResponse<DeviceListItem>> =>
     apiClient.post<ApiResponse<DeviceListItem>>(`${BASE}/${id}/revoke`).then((r) => r.data),

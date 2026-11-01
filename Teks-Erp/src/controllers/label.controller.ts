@@ -12,6 +12,7 @@ import { PRINT_SUBJECT_IDS_MAX } from "../constants/print-subject-catalog";
 import { LabelService } from "../services/label.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { parseCopiesQuery } from "../services/helpers/label-copies.helper";
+import { printerTestTargetRefusal } from "../services/helpers/printer-target-guard.helper";
 import "../types/express-augment";
 
 /**
@@ -85,6 +86,10 @@ const testNativeSchema = z.object({
   printerIp: z.string().trim().min(3, "Yazıcı IP gerekli").max(64),
   port: z.number().int().min(1).max(65535).optional(),
   language: z.enum(["RASTER_HTML", "PPLA", "PPLB", "ZPL"]).optional(),
+}).superRefine((v, ctx) => {
+  // SSRF süzgeci (VDS D3) — her kurulumda: yazıcı LAN'dadır, uç başka hedefe TCP açtırmaz.
+  const refusal = printerTestTargetRefusal(v.printerIp, v.port);
+  if (refusal) ctx.addIssue({ code: "custom", path: ["printerIp"], message: refusal });
 });
 
 // F180: recordPrintEvent + seedRollLabelSnapshot gövdesi (eskiden ham `as` cast; malformed

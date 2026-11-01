@@ -33,6 +33,7 @@ import "../types/express-augment";
 import { uyari } from "../lib/logger";
 import { clientIpBucket } from "../lib/client-ip-prefix";
 import { isHostedInstallation } from "../services/helpers/install-class.helper";
+import { jwtSecretHostedRefusal } from "../lib/jwt-secret";
 
 // -----------------------------------------------------------------------------
 // Çözülmüş yapılandırma
@@ -291,6 +292,11 @@ export function trustProxyHostedRefusal(trustProxy: WebHardeningConfig["trustPro
     "başlığına koşulsuz güvenilir, giriş kilidi ve hız sınırı sahte IP ile atlanır. Ters vekil " +
     "sıçrama SAYISINI yazın (tek vekil: TRUST_PROXY=1) ve sunucuyu yeniden başlatın."
   );
+}
+
+/** Barındırılan sınıfın açılış retleri tek çağrıda: koşulsuz XFF güveni ya da bilinen/zayıf JWT sırrı (VDS D7). */
+export function hostedBootRefusal(trustProxy: WebHardeningConfig["trustProxy"], hosted: boolean): string | null {
+  return trustProxyHostedRefusal(trustProxy, hosted) ?? jwtSecretHostedRefusal(hosted);
 }
 
 /** Sertleştirme değişkenlerinden en az biri verilmiş mi (boot banner'ı için). */

@@ -8,7 +8,8 @@
 //      (yeni örnek değer eklenince kırmızı). Sentetik kontrol grubu her koşumda ısırır.
 //   §4 Depo GEÇMİŞİNDEKİ her uzun değer reddediliyor (sığ klonda "ölçülemedi" beyanı).
 //   §5 AÇILIŞ: bilinen/zayıf sır mevcut kurulumu DURDURMAZ (backend yüklenir, uyarı +
-//      sağlık bayrağı); yok/kısa sır açılışı durdurur (bugünkü davranış).
+//      sağlık bayrağı); yok/kısa sır açılışı durdurur (bugünkü davranış). BARINDIRILAN
+//      sınıfta bilinen/zayıf da durdurur (§5h–j, VDS denetimi D7).
 //   §6 Yeni kurulum yolu (seed, geliştirme dışı) bilinen/zayıf sırrı reddeder.
 //   §7 Paket aracı (`scripts/jwt-sir.ts`) aynı yüklemi kullanır; .env yenilemesi
 //      satır sonunu korur, bütün satırları değiştirir, yeni sır kabul edilir.
@@ -165,8 +166,10 @@ if (gecmisDegerler.size === 0) {
 // -----------------------------------------------------------------------------
 const ACILIS_KODU =
   'const s=require("./src/lib/jwt-secret");require("./src/services/auth.service");' +
-  'process.stdout.write("SAGLIK="+JSON.stringify(s.jwtSecretHealth())+"\\n");process.exit(0);';
-function acilis(sir: string): { kod: number | null; cikti: string; saglik: { status?: string; rotationRequired?: boolean } | null } {
+  'process.stdout.write("SAGLIK="+JSON.stringify(s.jwtSecretHealth())+"\\n");' +
+  'process.stdout.write("BARINDIRILAN="+JSON.stringify([s.jwtSecretHostedRefusal(true),s.jwtSecretHostedRefusal(false)])+"\\n");process.exit(0);';
+type Acilis = { kod: number | null; cikti: string; saglik: { status?: string; rotationRequired?: boolean } | null; barindirilan: [string | null, string | null] | null };
+function acilis(sir: string): Acilis {
   const r = spawnSync("npx", ["tsx", "-e", ACILIS_KODU], {
     cwd: BACKEND,
     encoding: "utf8",
@@ -180,7 +183,8 @@ function acilis(sir: string): { kod: number | null; cikti: string; saglik: { sta
   });
   const cikti = `${r.stdout ?? ""}${r.stderr ?? ""}`;
   const m = /SAGLIK=(\{.*\})/.exec(cikti);
-  return { kod: r.status, cikti, saglik: m ? JSON.parse(m[1]) : null };
+  const b = /BARINDIRILAN=(\[.*\])/.exec(cikti);
+  return { kod: r.status, cikti, saglik: m ? JSON.parse(m[1]) : null, barindirilan: b ? JSON.parse(b[1]) : null };
 }
 const zayif = acilis("ab".repeat(20));
 check(
@@ -212,6 +216,23 @@ check("§5e KISA sır: açılış DURUR (bugünkü davranış)", kisa.kod !== 0 
 const saglam = acilis(temiz);
 check("§5f temiz sır: bayrak yok", saglam.kod === 0 && saglam.saglik?.status === "OK" && saglam.saglik?.rotationRequired === false);
 const saglik = readFileSync(join(BACKEND, "src/lib/health-snapshot.ts"), "utf8");
+// D7 (VDS denetimi): barındırılanda bilinen/zayıf sır açılışı durdurur; LAN'da bugünkü gibi yalnız uyarı.
+check(
+  "§5h BARINDIRILAN + ZAYIF sır: ret mesajı (açılış durur), LAN'da ret yok",
+  typeof zayif.barindirilan?.[0] === "string" && zayif.barindirilan?.[0]?.includes("ZAYIF") === true && zayif.barindirilan?.[1] === null,
+  JSON.stringify(zayif.barindirilan),
+);
+check("§5i BARINDIRILAN + temiz sır: ret yok", saglam.barindirilan?.[0] === null && saglam.barindirilan?.[1] === null);
+const sunucu = readFileSync(join(BACKEND, "src/server.ts"), "utf8");
+const sertlestirme = readFileSync(join(BACKEND, "src/middlewares/web-hardening.ts"), "utf8");
+const lisansYukle = sunucu.indexOf("initLicenseEngine();");
+const hostedRet = sunucu.indexOf("hostedBootRefusal(tp, hosted)");
+check(
+  "§5j server.ts barındırılan ret kapısını (JWT dahil) lisans deposundan SONRA çağırıp process.exit(1) ile durur",
+  lisansYukle > 0 && hostedRet > lisansYukle &&
+    /const red = hostedBootRefusal\(tp, hosted\);[^\n]*\n\s*if \(red\) \{\s*\n\s*hata\("boot", red\);\s*\n\s*process\.exit\(1\)/.test(sunucu) &&
+    /return trustProxyHostedRefusal\(trustProxy, hosted\) \?\? jwtSecretHostedRefusal\(hosted\);/.test(sertlestirme),
+);
 check("§5g /api/admin/health jwtSecret alanını taşıyor", /jwtSecret:\s*jwtSecretHealth\(\)/.test(saglik));
 
 // -----------------------------------------------------------------------------
