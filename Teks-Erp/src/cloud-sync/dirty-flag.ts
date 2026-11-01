@@ -42,6 +42,8 @@ export const READS_MODEL_MAP: Readonly<Record<string, string>> = {
   finishing_rates: "FinishingRate",
   work_sessions: "WorkSession",
   shift_instances: "ShiftInstance",
+  // SY-N3 standart-maliyet: varyant adı/kodu lookup kaynağı.
+  product_recipes: "ProductRecipe",
 };
 
 /** Katalogdan türeyen izlenen tablo kümesi (bekçi §7 bunu `READS_MODEL_MAP` ∪ köklerle kıyaslar). */
