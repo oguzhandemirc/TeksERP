@@ -14,6 +14,7 @@ import type {
   WeaveDesign,
   WeaveDesignInput,
   WeftSpecDetail,
+  WeftSpecForkResult,
 } from "./types";
 
 const BASE = "/api/weave-designs";
@@ -61,6 +62,12 @@ export function countWeftSpecUsers(weftSpecId: string) {
   return apiClient.get<PaginatedResponse<DesignFabric>>(`/api/items${qs}`).then((r) => r.data.pagination.total);
 }
 
+/** Atkı kartını kullanan kumaşlar — özel kopya onayında "eski kartta kalanlar" listesi (süzme sunucuda). */
+export function listWeftSpecUsers(weftSpecId: string) {
+  const qs = buildQueryString({ pageSize: PICKER_MAX_PAGE_SIZE, sortBy: "code", sortOrder: "asc", filters: { weftSpecId } });
+  return apiClient.get<PaginatedResponse<DesignFabric>>(`/api/items${qs}`).then((r) => r.data.data);
+}
+
 export function listItemVariants(itemId: string) {
   const qs = buildQueryString({ pageSize: PICKER_MAX_PAGE_SIZE, sortBy: "code", sortOrder: "asc", filters: { itemId } });
   return apiClient.get<PaginatedResponse<DesignVariant>>(`/api/product-recipes${qs}`).then((r) => r.data.data);
@@ -74,6 +81,9 @@ export const weftSpecApi = {
   get: (id: string) => apiClient.get<ApiResponse<WeftSpecDetail>>(`/api/weft-specs/${id}`).then((r) => r.data.data),
   update: (id: string, body: Record<string, unknown>) =>
     apiClient.patch<ApiResponse<WeftSpecDetail>>(`/api/weft-specs/${id}`, body).then((r) => r.data.data),
+  /** "Bu desene özel kopya" — kartı kopyalar, YALNIZ `itemId` kumaşını yeni karta geçirir (SY-P3). */
+  fork: (id: string, body: { itemId: string; code: string; name: string }) =>
+    apiClient.post<ApiResponse<WeftSpecForkResult>>(`/api/weft-specs/${id}/fork`, body).then((r) => r.data.data),
 };
 
 /** Kumaşın standart maliyet önizlemesi — sayı yalnız sunucudan (istemci hesaplamaz). */
