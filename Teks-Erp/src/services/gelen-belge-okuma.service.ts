@@ -11,7 +11,7 @@ import { AppError } from "../utils/app-error";
 import { bilgi, uyari } from "../lib/logger";
 import { p2002TargetsCode, withBarcodeRetry } from "../utils/barcode-retry";
 import { extractDocument, loadTemplates } from "../lib/gelen-belge/motor";
-import { clip, draftFromExtraction, type DraftLine } from "../lib/gelen-belge/taslak";
+import { clip, draftFromExtraction, linesToPhotoFrame, type DraftLine } from "../lib/gelen-belge/taslak";
 import { readerOcr, type ReaderResult } from "../lib/gelen-belge/okuma-istemcisi";
 import { AuditService } from "./audit.service";
 import { nextNoteNo, translateUnique } from "./gelen-belge-note.service";
@@ -109,7 +109,9 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
     return release(id, scan.attempts, `PROGRAM_HATASI:${(err as Error).name}`, { userId: scan.capturedById ?? undefined });
   }
   if (!r.ok) return release(id, scan.attempts, r.code, { permanent: r.kind === "HTTP" || r.kind === "INVALID", userId: scan.capturedById ?? undefined });
-  const draft = draftFromExtraction(extractDocument(r.result, loadTemplates(), FALLBACK_TEMPLATE_CODE));
+  const extracted = draftFromExtraction(extractDocument(r.result, loadTemplates(), FALLBACK_TEMPLATE_CODE));
+  // Yan dönük sayfa: kutular panelin çizdiği (dönmemiş) fotoğrafın çerçevesine döner.
+  const draft = { ...extracted, lines: linesToPhotoFrame(extracted.lines, r.result) };
   const { code: firstTemplate, template } = await bindDraftTemplate(draft.header.regions[0]?.templateId ?? null, scan.capturedById ?? undefined);
   const envelope = toJson({ ocr: r.result, regions: draft.header.regions });
   const scanData = { status: "READ" as const, ocrResult: envelope, ocrEngine: clip(r.engine, 32), ocrVersion: clip(r.version, 32), ocrDurationMs: r.durationMs };

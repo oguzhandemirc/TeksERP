@@ -38,6 +38,7 @@ export const OcrResultSchema = z.object({
   imageHeight: z.number().int().positive(),
   durationMs: z.number().optional(),
   engine: z.string().optional(),
+  rotation: z.number().int().optional(),
 });
 
 const HealthSchema = z.object({ status: z.string().optional(), engine: z.string().optional(), version: z.string().optional() }).loose();

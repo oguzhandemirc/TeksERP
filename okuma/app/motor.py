@@ -17,6 +17,7 @@ from typing import Optional, Sequence
 import numpy as np
 
 from .contract import OcrBlock, OcrElement, OcrLine, OcrPoint, OcrRect, OcrResult
+from .goruntu import cv2  # piksel tavanı ortamı cv2'den önce goruntu.py'de kurulur
 from .indirme_kapisi import indirmeyi_kapat
 
 log = logging.getLogger("okuma.motor")
@@ -101,10 +102,32 @@ class Motor:
             log.error("motor yüklenemedi: %s", self.hata)
 
     def oku(self, img: np.ndarray) -> OcrResult:
-        """BGR dizi → OcrResult. Çağıran `self.kilit`i tutar."""
+        """BGR dizi → OcrResult. Çağıran `self.kilit`i tutar.
+
+        Yan dönük sayfa: ilk geçişte satırların çoğu dikeyse 90° ve 270° döndürülmüş hâller de okunur, en yüksek
+        puanlı (Σ güven × uzunluk) seçilir; dik sayfada ek geçiş yok. Koordinatlar seçilen DİK çerçevededir.
+        """
         if self._ocr is None:
             raise MotorYok(self.hata or "ENGINE_NOT_READY")
         t0 = time.perf_counter()
+        lines = self._satirlar(img)
+        donus, secilen = 0, img
+        if yan_donuk_mu(lines):
+            puan = sayfa_puani(lines)
+            for derece, kod in ((90, cv2.ROTATE_90_CLOCKWISE), (270, cv2.ROTATE_90_COUNTERCLOCKWISE)):
+                aday_img = cv2.rotate(img, kod)
+                aday = self._satirlar(aday_img)
+                if sayfa_puani(aday) > puan:
+                    puan, lines, donus, secilen = sayfa_puani(aday), aday, derece, aday_img
+        sonuc = lines_to_result(lines)
+        sonuc.imageWidth = int(secilen.shape[1])
+        sonuc.imageHeight = int(secilen.shape[0])
+        sonuc.rotation = donus
+        sonuc.durationMs = round((time.perf_counter() - t0) * 1000, 1)
+        sonuc.engine = MOTOR_ADI
+        return sonuc
+
+    def _satirlar(self, img: np.ndarray) -> list[OcrLine]:
         res = self._ocr(np.ascontiguousarray(img), use_cls=False, return_word_box=True)
         lines: list[OcrLine] = []
         boxes = getattr(res, "boxes", None)
@@ -122,12 +145,21 @@ class Motor:
                     if elems:
                         line.elements = elems
                 lines.append(line)
-        sonuc = lines_to_result(lines)
-        sonuc.imageWidth = int(img.shape[1])
-        sonuc.imageHeight = int(img.shape[0])
-        sonuc.durationMs = round((time.perf_counter() - t0) * 1000, 1)
-        sonuc.engine = MOTOR_ADI
-        return sonuc
+        return lines
+
+
+def yan_donuk_mu(lines: list[OcrLine]) -> bool:
+    """En az 3 karakterli satırların yarıdan fazlası dikey (yükseklik ≥ 1,5 × genişlik) ise sayfa yan yatmıştır.
+    Hiç okunur satır yoksa da denenir: dedektör yan yatmış iri yazıyı hiç bulamayabilir (boş sayfanın bedeli 2 geçiş)."""
+    uzun = [ln for ln in lines if len(ln.text.strip()) >= 3]
+    if not uzun:
+        return True
+    dikey = sum(1 for ln in uzun if ln.rect.height >= 1.5 * ln.rect.width)
+    return dikey * 2 > len(uzun)
+
+
+def sayfa_puani(lines: list[OcrLine]) -> float:
+    return sum((ln.confidence or 0.0) * len(ln.text.strip()) for ln in lines)
 
 
 # ── Geometri (prototip base.py) ──────────────────────────────────────────────

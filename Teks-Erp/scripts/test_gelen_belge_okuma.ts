@@ -2,6 +2,7 @@
 // GELEN BELGE — D3b okuma istemcisi + okuma işi + eşleme bekçisi (sahte loopback sidecar, gerçek DB)
 // =============================================================================
 // Karar belgesi TASARIM-KARARI-2026-10-28 §2 (egress istisnası) · §3.2–3.4 (okuma işi, çıkarım, eşleme) · §6 D3b.
+//   §1i/§1j sayfa yönü: rotation → kutular fotoğraf çerçevesine döner; Zod `rotation` opsiyonel tam sayı
 //   §1 egress NEGATİF SONDA: http://1.2.3.4:8765 ve http://okuma.local REDDEDİLİR; http://127.0.0.1:8765 ve
 //      (beyanla) http://okuma:8765 geçer; `allowPlainHttpServiceHost` tek çağıran `lib/gelen-belge/url.ts` (AST/grep)
 //   §2 servis yok: /okuma/durum "yok" · POST /taramalar/:id/oku → 503 OCR_SERVICE_UNAVAILABLE · iş ADRES_YOK, dış istek yok
@@ -31,6 +32,8 @@ import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { __clearPlainHttpServiceHostsForTests, allowPlainHttpServiceHost, isEgressTargetAllowed } from "../src/lib/http-egress";
 import { resolveReaderUrl, setReaderUrlForTests } from "../src/lib/gelen-belge/url";
+import { rectToPhotoFrame } from "../src/lib/gelen-belge/taslak";
+import { OcrResultSchema } from "../src/lib/gelen-belge/okuma-istemcisi";
 import { __resetDocumentReaderForTests, runReaderOnce } from "../src/jobs/gelen-belge-okuma.job";
 import { claimNextScan } from "../src/services/gelen-belge-okuma.service";
 import { aliasKey, suggestCustomer, suggestForNote } from "../src/services/gelen-belge-eslestirme.service";
@@ -111,6 +114,19 @@ async function main(): Promise<void> {
   const walk = (d: string): void => { for (const e of readdirSync(d, { withFileTypes: true })) { const p = join(d, e.name); if (e.isDirectory()) walk(p); else if (p.endsWith(".ts") && readFileSync(p, "utf8").includes("allowPlainHttpServiceHost(")) callers.push(p.slice(srcDir.length + 1)); } };
   walk(srcDir);
   check("§1h allowPlainHttpServiceHost TEK çağıran: lib/gelen-belge/url.ts (+ tanım)", callers.sort().join(",") === "lib/gelen-belge/url.ts,lib/http-egress.ts", callers.join(","));
+  // §1i yön: servis yan sayfayı dikleştirdiyse (rotation) kutu saklanan fotoğrafın çerçevesine geri döner (DB'siz).
+  // Foto 100×50, kutu {x:10,y:5,w:30,h:8}; saat yönü 90° → dik 50×100'de {x:37,y:10,w:8,h:30}; 270° → {x:5,y:60,w:8,h:30}.
+  const foto = { x: 10, y: 5, width: 30, height: 8 };
+  check("§1i rotation 90/270/180/0 → kutu fotoğraf çerçevesine döner",
+    JSON.stringify(rectToPhotoFrame({ x: 37, y: 10, width: 8, height: 30 }, 90, 50, 100)) === JSON.stringify(foto)
+    && JSON.stringify(rectToPhotoFrame({ x: 5, y: 60, width: 8, height: 30 }, 270, 50, 100)) === JSON.stringify(foto)
+    && JSON.stringify(rectToPhotoFrame({ x: 60, y: 37, width: 30, height: 8 }, 180, 100, 50)) === JSON.stringify(foto)
+    && rectToPhotoFrame(foto, 0, 100, 50) === foto && rectToPhotoFrame(foto, undefined, 100, 50) === foto);
+  const zr = OcrResultSchema.safeParse({ text: "", blocks: [], imageWidth: 50, imageHeight: 100, rotation: 90 });
+  const z0 = OcrResultSchema.safeParse({ text: "", blocks: [], imageWidth: 50, imageHeight: 100 });
+  check("§1j Zod rotation alanını taşır; yokluğu (eski servis) geçer; kesirli reddedilir",
+    zr.success && zr.data.rotation === 90 && z0.success && z0.data.rotation === undefined
+    && !OcrResultSchema.safeParse({ text: "", blocks: [], imageWidth: 1, imageHeight: 1, rotation: 1.5 }).success);
   __clearPlainHttpServiceHostsForTests();
 
   const keys = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED];
