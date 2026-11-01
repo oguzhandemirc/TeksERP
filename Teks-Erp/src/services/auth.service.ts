@@ -4,7 +4,7 @@
 
 import prisma from "../lib/prisma";
 import { ClientType } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { hashPassword, passwordHashRounds, verifyAgainstDummy, verifyPassword } from "./helpers/password-hasher.helper";
 import { readPatronCloudUserId } from "./helpers/patron-cloud-user.helper";
 import jwt from "jsonwebtoken";
 import { randomBytes, randomUUID, timingSafeEqual } from "crypto";
@@ -235,10 +235,12 @@ export class AuthService {
     });
 
     if (!user || !user.isActive) {
+      // D2: kullanıcı yok/pasif iken de aynı maliyetli doğrulama — süre kullanıcı adını ele vermesin.
+      await verifyAgainstDummy(password);
       throw AppError.unauthorized("Geçersiz kullanıcı adı veya şifre");
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    const isPasswordValid = await verifyPassword(password, user.passwordHash);
     if (!isPasswordValid) {
       throw AppError.unauthorized("Geçersiz kullanıcı adı veya şifre");
     }
@@ -281,8 +283,8 @@ export class AuthService {
    */
   static async upgradePasswordHash(userId: string, password: string, oldHash: string): Promise<boolean> {
     try {
-      if (bcrypt.getRounds(oldHash) >= PASSWORD_BCRYPT_COST) return false;
-      const passwordHash = await bcrypt.hash(password, PASSWORD_BCRYPT_COST);
+      if (passwordHashRounds(oldHash) >= PASSWORD_BCRYPT_COST) return false;
+      const passwordHash = await hashPassword(password, PASSWORD_BCRYPT_COST);
       const reseal = await credentialReseal(prisma, userId, { passwordHash });
       const updated = await prisma.user.updateMany({
         where: { id: userId, passwordHash: oldHash, ...reseal.where },
@@ -827,7 +829,7 @@ export class AuthService {
    * Hash a plain-text password.
    */
   static async hashPassword(password: string): Promise<string> {
-    return bcrypt.hash(password, PASSWORD_BCRYPT_COST);
+    return hashPassword(password, PASSWORD_BCRYPT_COST);
   }
 
   /**
@@ -936,12 +938,12 @@ export class AuthService {
     if (!user || !user.isActive) {
       throw AppError.unauthorized("Hesap pasif veya bulunamadı. Tekrar giriş yapın.");
     }
-    if (!(await bcrypt.compare(currentPassword, user.passwordHash))) {
+    if (!(await verifyPassword(currentPassword, user.passwordHash))) {
       throw AppError.badRequest("Mevcut parola yanlış.", { code: CURRENT_PASSWORD_INVALID_CODE });
     }
     const violation = passwordPolicyViolation(newPassword);
     if (violation) throw AppError.badRequest(violation, { code: "PASSWORD_POLICY" });
-    if (await bcrypt.compare(newPassword, user.passwordHash)) {
+    if (await verifyPassword(newPassword, user.passwordHash)) {
       throw AppError.badRequest("Yeni parola mevcut parolayla aynı olamaz.", { code: "PASSWORD_UNCHANGED" });
     }
     // Satıcı hesabı ortak varsayılan parolaya geri dönemez (her kurulumda aynı parola).
@@ -951,7 +953,7 @@ export class AuthService {
       });
     }
 
-    const passwordHash = await bcrypt.hash(newPassword, PASSWORD_BCRYPT_COST);
+    const passwordHash = await hashPassword(newPassword, PASSWORD_BCRYPT_COST);
     const varsayilanKapaniyor = user.defaultPasswordIssuedAt !== null && user.defaultPasswordChangedAt === null;
     const reseal = await credentialReseal(prisma, userId, { passwordHash });
     // Parola + güvenilir cihaz iptali AYNI tx'te: yeni parolayla eski "hatırlanan" tarayıcı kodsuz girmesin.

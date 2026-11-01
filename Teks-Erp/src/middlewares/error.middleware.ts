@@ -477,7 +477,7 @@ export const errorHandler = (
     // süreyi hesaplayan yerler `details.retryAfterSec` yazar, başlığı BURASI
     // basar — iki yerde hesaplansaydı ayrışırlardı.
     const retryAfterSec = (err.details as { retryAfterSec?: unknown } | undefined)?.retryAfterSec;
-    if (err.statusCode === 429 && typeof retryAfterSec === "number" && retryAfterSec > 0) {
+    if ((err.statusCode === 429 || err.statusCode === 503) && typeof retryAfterSec === "number" && retryAfterSec > 0) {
       res.setHeader("Retry-After", String(Math.ceil(retryAfterSec)));
     }
     res.status(err.statusCode).json({

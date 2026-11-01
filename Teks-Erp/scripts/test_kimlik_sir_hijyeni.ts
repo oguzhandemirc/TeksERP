@@ -56,6 +56,8 @@ function check(label: string, ok: boolean, extra = "") {
 const BCRYPT_MUAF: Record<string, string> = {
   "src/services/totp-account.service.ts": "RECOVERY_CODE_BCRYPT_COST",
   "scripts/varsayilan-superadmin-ozet.ts": "maliyet",
+  // Tek boğaz (K1): tur çağırandan gelir; çağıranların `hashPassword(x, tur)`u aşağıda ayrıca taranır.
+  "src/services/helpers/password-hasher.helper.ts": "job.cost",
 };
 function tsDosyalari(dizin: string, out: string[] = []): string[] {
   for (const e of fs.readdirSync(dizin, { withFileTypes: true })) {
@@ -66,7 +68,7 @@ function tsDosyalari(dizin: string, out: string[] = []): string[] {
   }
   return out;
 }
-/** `bcrypt.hash(…)`/`hashSync(…)` çağrılarının ikinci argüman metni. */
+/** `bcrypt.hash(…)`/`hashSync(…)` ve tek boğaz `hashPassword(x, tur)` çağrılarının ikinci argüman metni. */
 export function bcryptTurlari(kaynak: string, ad = "x.ts"): string[] {
   const sf = ts.createSourceFile(ad, kaynak, ts.ScriptTarget.Latest, true);
   const out: string[] = [];
@@ -74,6 +76,10 @@ export function bcryptTurlari(kaynak: string, ad = "x.ts"): string[] {
     if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) &&
         /^bcrypt/i.test(n.expression.expression.getText(sf)) && /^hash(Sync)?$/.test(n.expression.name.text)) {
       out.push(n.arguments[1]?.getText(sf) ?? "<yok>");
+    }
+    // Tek argümanlı `hashPassword(x)` helper varsayılanı PASSWORD_BCRYPT_COST'tur (ya da yerel sarmalayıcı, iç çağrısı taranır).
+    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === "hashPassword" && n.arguments.length >= 2) {
+      out.push(n.arguments[1]!.getText(sf));
     }
     ts.forEachChild(n, gez);
   };
@@ -100,7 +106,7 @@ function bcryptAst() {
   const totp = fs.readFileSync(path.join(KOK, "src/services/totp.service.ts"), "utf8");
   check("§1c kurtarma kodu turu beyanlı (RECOVERY_CODE_BCRYPT_COST = 10)", /export const RECOVERY_CODE_BCRYPT_COST = 10;/.test(totp));
   check("§1s sentetik: literal tur yakalanır, sabit geçer",
-    JSON.stringify(bcryptTurlari("bcrypt.hash(a, 10); bcrypt.hashSync(b, PASSWORD_BCRYPT_COST)")) === JSON.stringify(["10", "PASSWORD_BCRYPT_COST"]));
+    JSON.stringify(bcryptTurlari("bcrypt.hash(a, 10); bcrypt.hashSync(b, PASSWORD_BCRYPT_COST); hashPassword(c, 9)")) === JSON.stringify(["10", "PASSWORD_BCRYPT_COST", "9"]));
 }
 
 // ── fikstür ──────────────────────────────────────────────────────────────────

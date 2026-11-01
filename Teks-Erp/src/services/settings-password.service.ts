@@ -25,7 +25,7 @@
 //    TTL boyunca geçerli kalması demekti.
 // =============================================================================
 
-import bcrypt from "bcryptjs";
+import { hashPassword, passwordTruncates, verifyPassword } from "./helpers/password-hasher.helper";
 import prisma from "../lib/prisma";
 import { AuditService } from "../services/audit.service";
 import { SETTINGS_PASSWORD_HASH_KEY } from "../constants/reserved-settings";
@@ -111,7 +111,7 @@ export async function isSettingsPasswordConfigured(
  * bildiğinden kısadır. Görünür bir 400, sessiz bir zayıflamadan iyidir.
  */
 export function assertSettingsPasswordUsable(password: string): void {
-  if (bcrypt.truncates(password)) {
+  if (passwordTruncates(password)) {
     throw AppError.badRequest(
       `Ayar şifresi en fazla ${SETTINGS_PASSWORD_MAX_LENGTH} bayt olabilir (bcrypt sınırı) — daha kısa bir şifre seçin.`,
       { code: "SETTINGS_PASSWORD_TOO_LONG" },
@@ -130,7 +130,7 @@ export async function setSettingsPassword(
 ): Promise<{ rotated: boolean }> {
   assertSettingsPasswordUsable(password);
   const rotated = (await readSettingsPasswordHash()) !== null;
-  const hash = await bcrypt.hash(password, PASSWORD_BCRYPT_COST);
+  const hash = await hashPassword(password, PASSWORD_BCRYPT_COST);
   await prisma.systemSetting.upsert({
     where: { key: SETTINGS_PASSWORD_HASH_KEY },
     // `description` yalnız ilk oluşturmada yazılır (systemSettingService.set
@@ -198,5 +198,5 @@ export async function verifySettingsPassword(
   candidate: string,
   hash: string,
 ): Promise<boolean> {
-  return bcrypt.compare(candidate, hash);
+  return verifyPassword(candidate, hash);
 }

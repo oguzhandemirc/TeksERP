@@ -13,7 +13,7 @@ import { AuthService } from "../services/auth.service";
 import { AuditService } from "../services/audit.service";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import {
-  releaseLoginAttempt, reserveLoginAttempt, resetLoginLockout, resolveLoginLockoutKey, resolveLoginLockoutKeys,
+  releaseLoginAttempt, reserveLoginAttempt, resetLoginLockout, resolveLoginLockoutKeys, resolveRequestSourceKey,
 } from "../middlewares/login-lockout";
 import { AppError } from "../utils/app-error";
 import "../types/express-augment";
@@ -73,8 +73,10 @@ const onsiteApproveSchema = z.object({
  */
 const ONSITE_WINDOW_MS = 10 * 60 * 1000;
 const ONSITE_MAX_PER_WINDOW = 10;
+/** Kaynak (IP, IPv6'da /64) başına tavan — localId saldırganın seçimidir, tek başına anahtar olamaz. */
+const ONSITE_MAX_PER_SOURCE = 30;
 const onsiteHits = new Map<string, { n: number; since: number }>();
-function onsiteRateLimited(key: string, now = Date.now()): boolean {
+function onsiteRateLimited(key: string, max: number, now = Date.now()): boolean {
   if (onsiteHits.size > 5000) {
     for (const [k, v] of onsiteHits) if (now - v.since > ONSITE_WINDOW_MS) onsiteHits.delete(k);
   }
@@ -84,7 +86,13 @@ function onsiteRateLimited(key: string, now = Date.now()): boolean {
     return false;
   }
   e.n += 1;
-  return e.n > ONSITE_MAX_PER_WINDOW;
+  return e.n > max;
+}
+/** Her deneme İKİ kovayı da sayar: kaynak+tablet (10) ve yalnız kaynak (30). */
+export function onsiteSourceRateLimited(source: string, localId: string): boolean {
+  const perDevice = onsiteRateLimited(`${source}|${localId}`, ONSITE_MAX_PER_WINDOW);
+  const perSource = onsiteRateLimited(`${source}|*`, ONSITE_MAX_PER_SOURCE);
+  return perDevice || perSource;
 }
 /** Yalnız bekçi: hız sınırı durumunu sıfırla. */
 export function resetOnsiteRebindRateForTests(): void {
@@ -170,7 +178,7 @@ export class DeviceController {
       next(error);
       return;
     }
-    if (onsiteRateLimited(`${resolveLoginLockoutKey(req)}|${body.localId}`)) {
+    if (onsiteSourceRateLimited(resolveRequestSourceKey(req), body.localId)) {
       next(AppError.tooManyRequests("Çok fazla onay denemesi. Birkaç dakika sonra tekrar deneyin.", { code: "REBIND_RATE_LIMITED" }));
       return;
     }
