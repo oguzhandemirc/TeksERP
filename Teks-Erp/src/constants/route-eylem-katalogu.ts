@@ -23,6 +23,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/admin/devices/merge/:sourceId/undo": e("cihaz birleştirmesini geri aldı", "cihaz birleştirmesini geri almaya çalıştı"),
   "POST /api/admin/devices/proof-reset": e("cihazları yeniden bağlamak için kanıtı sıfırladı", "cihaz kanıtını sıfırlamaya çalıştı"),
   // ── Kimlik: web girişi 2FA kullanıcı tercihi
+  "POST /api/admin/login-lockouts/:id/release": e("bir giriş kilidini kaldırdı", "bir giriş kilidini kaldırmaya çalıştı"),
   "PUT /api/auth/web-totp": e("internetten giriş 2FA tercihini değiştirdi", "internetten giriş 2FA tercihini değiştirmeye çalıştı"),
   "POST /api/auth/trusted-devices/:id/revoke": e("hatırlanan bir cihazını kaldırdı", "hatırlanan bir cihazını kaldırmaya çalıştı"),
   "POST /api/auth/trusted-devices/revoke-all": e("hatırlanan bütün cihazlarını kaldırdı", "hatırlanan bütün cihazlarını kaldırmaya çalıştı"),

@@ -47,7 +47,7 @@ export function eventActionVariant(
 // ⚠️ Liste ELLE TUTULMAZ: sözlükten türer, yani sözlüğe eklenen her yeni olay
 // filtrede de kendiliğinden belirir. Eski hâli elle yazılmıştı ve backend 27
 // olay basarken filtre 11'ini gösteriyordu.
-const AUTH_ACTIONS = new Set(["LOGIN_SUCCESS", "LOGIN_FAILED", "LOGIN_CONFLICT", "LOGOUT"]);
+const AUTH_ACTIONS = new Set(["LOGIN_SUCCESS", "LOGIN_FAILED", "LOGIN_CONFLICT", "LOGOUT", "LOGIN_LOCK_RELEASED"]);
 
 export const ACTIONS_BY_CATEGORY: Record<"AUTH" | "SYSTEM", string[]> = {
   AUTH: Object.keys(EVENT_ACTION_LABELS).filter((a) => AUTH_ACTIONS.has(a)),

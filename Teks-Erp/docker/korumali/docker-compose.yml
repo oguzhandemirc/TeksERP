@@ -82,6 +82,8 @@ services:
       RATE_LIMIT_WINDOW_SEC: ${RATE_LIMIT_WINDOW_SEC:-}
       RATE_LIMIT_WRITE_MAX: ${RATE_LIMIT_WRITE_MAX:-}
       RATE_LIMIT_LOGIN_MAX: ${RATE_LIMIT_LOGIN_MAX:-}
+      RATE_LIMIT_FACTORY_IPS: ${RATE_LIMIT_FACTORY_IPS:-}
+      RATE_LIMIT_FACTORY_MULTIPLIER: ${RATE_LIMIT_FACTORY_MULTIPLIER:-}
       # HTTPS vekili arkası (HSTS + upgrade-insecure-requests) ve izinli tarayıcı kökenleri: boş = verilmemiş,
       # bugünkü davranış. Geçirilmezse .env'e yazılan değer backend'e ULAŞMAZ (denetim 2026-11-01 O7).
       HTTPS_ENABLED: ${HTTPS_ENABLED:-}

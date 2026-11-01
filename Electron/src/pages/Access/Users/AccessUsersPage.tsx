@@ -29,6 +29,7 @@ import { UserDetailDialog } from "./UserDetailDialog";
 import { NewUserCredentialsDialog } from "./NewUserCredentialsDialog";
 import { ShortCredentialsDialog } from "./ShortCredentialsDialog";
 import { PendingCredentialResets } from "./PendingCredentialResets";
+import { LoginLockoutsButton } from "./LoginLockoutsDialog";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useEnabledLoginMethods } from "@/hooks/usePricingEnabled";
 
@@ -185,6 +186,7 @@ export function AccessUsersPage() {
         actions={
           <>
             <RefreshButton queryKey={QUERY_KEY} />
+            {hasPermission("admin:users") && <LoginLockoutsButton />}
             {canManageShortCredentials && (
               <Button size="sm" variant="outline" onClick={() => setShortCredOpen(true)}>
                 <KeyRound className="h-4 w-4" /> Kısa Kimlikler

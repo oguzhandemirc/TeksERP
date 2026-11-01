@@ -7,7 +7,7 @@
 // =============================================================================
 
 import { randomBytes, randomInt } from "node:crypto";
-import { passwordPolicyViolation } from "../constants/password-policy";
+import { newPasswordViolation } from "./new-password-policy";
 
 export type IlkYoneticiParolasi = {
   parola: string;
@@ -18,7 +18,7 @@ export type IlkYoneticiParolasi = {
 
 export function ilkYoneticiParolasi(verilen: string | undefined): IlkYoneticiParolasi {
   if (verilen !== undefined && verilen !== "") {
-    const kusur = passwordPolicyViolation(verilen);
+    const kusur = newPasswordViolation(verilen);
     if (kusur) throw new Error(`ILK_YONETICI_PAROLASI kabul edilmedi: ${kusur}`);
     return { parola: verilen, mustChangePassword: true, uretildi: false };
   }

@@ -265,6 +265,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   // Dilim 1 (modül/bayrak) olayları — Sistem → Olaylar ekranında ham kodla
   // görünmesinler diye Türkçeleri burada. `test_audit_labels` bunları ölçer.
   LOGIN_LOCKED: "Giriş kilitlendi",
+  LOGIN_LOCK_RELEASED: "Giriş kilidi yönetici tarafından kaldırıldı",
   MODULE_PROFILE_APPLIED: "Kurulum profili uygulandı",
   SUPERADMIN_PROVISIONED: "Satıcı hesabı kuruldu",
   SUPERADMIN_ROTATED: "Satıcı hesabının parolası/PIN'i yenilendi",

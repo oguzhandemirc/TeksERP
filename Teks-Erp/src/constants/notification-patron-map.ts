@@ -16,6 +16,7 @@ export const NOTIFICATION_PATRON_MAP: Readonly<Record<NotificationKind, PatronEs
   "yazici.hata": { patronKind: null, neden: "yalnız fabrika içi (cihaz arızası)" },
   "cihaz.halka-kaybi": { patronKind: null, neden: "yalnız fabrika içi (cihaz kimliği; anahtar bilgisi dışarı çıkmaz)" },
   "kimlik.yeni-cihaz-girisi": { patronKind: null, neden: "kişisel güvenlik olayı (IP, tarayıcı) fabrika içinde kalır; bulut kataloğuna tür eklemek ayrı karar" },
+  "kimlik.supheli-giris-denemesi": { patronKind: null, neden: "kişisel güvenlik olayı fabrika içinde kalır; bulut kataloğuna tür eklemek ayrı karar" },
   "siparis.patron-siparisi": { patronKind: null, neden: "patronun kendi gönderisi; sonucu bulutta `gelen-kutusu-sonucu` ayrı olayıdır" },
   "siparis.termin-yaklasti": { patronKind: null, neden: "bulutta tür yok (yalnız termini geçmiş sayısı)" },
   "siparis.termin-gecti": { patronKind: "geciken-siparis", neden: "bulutta kalem sayısı eşiği, günde bir kez" },

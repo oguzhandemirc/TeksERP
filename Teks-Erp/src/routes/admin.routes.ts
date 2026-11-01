@@ -27,7 +27,7 @@ import {
   MODULE_PROFILE_IDS,
 } from "../constants/module-profiles";
 import { ERROR_REPORT_CONSENT_SETTING_KEY, FACTORY_TIMEZONE_SETTING_KEY, isReservedSettingKey, PROFILE_STAMP_SETTING_KEY } from "../constants/reserved-settings";
-import { passwordPolicyViolation } from "../constants/password-policy";
+import { newPasswordViolation } from "../lib/new-password-policy";
 import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
 import {
   protectSystemAccountTarget,
@@ -294,7 +294,7 @@ router.get(
 
 // Yeni/değişen parola politikası — tek kaynak `constants/password-policy.ts` (girişte uygulanmaz).
 const newPasswordField = z.string().superRefine((value, ctx) => {
-  const violation = passwordPolicyViolation(value);
+  const violation = newPasswordViolation(value);
   if (violation) ctx.addIssue({ code: "custom", message: violation });
 });
 

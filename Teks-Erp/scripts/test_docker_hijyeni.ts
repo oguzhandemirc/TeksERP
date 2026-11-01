@@ -376,7 +376,7 @@ function korumaliStatik(dockerfile: string, ignore: string, compose: string): st
 
 // §5d — vekil ayarları: compose backend'e geçer (yoksa vekil arkasında herkes tek IP), varsayılan BOŞ
 // (vekilsiz kurulumda bugünkü davranış), şablon TRUST_PROXY'yi boş doğurur ("true" sahte XFF'e güvenir).
-const VEKIL_ANAHTARLARI = ["TRUST_PROXY", "LOGIN_LOCKOUT_SCOPE", "RATE_LIMIT_ENABLED", "RATE_LIMIT_WINDOW_SEC", "RATE_LIMIT_WRITE_MAX", "RATE_LIMIT_LOGIN_MAX"];
+const VEKIL_ANAHTARLARI = ["TRUST_PROXY", "LOGIN_LOCKOUT_SCOPE", "RATE_LIMIT_ENABLED", "RATE_LIMIT_WINDOW_SEC", "RATE_LIMIT_WRITE_MAX", "RATE_LIMIT_LOGIN_MAX", "RATE_LIMIT_FACTORY_IPS", "RATE_LIMIT_FACTORY_MULTIPLIER"];
 function vekilStatik(compose: string, envOrnek: string): string[] {
   const ih: string[] = [];
   const bas = compose.indexOf("\n  backend:");

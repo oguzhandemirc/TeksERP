@@ -59,7 +59,7 @@ export function clipText(v: string | null | undefined, max: number): string | nu
 
 // ─── Sağlık + kova ──────────────────────────────────────────────────────────
 
-const health = { yazilan: 0, dusen: 0, sonHata: null as string | null, sonHataAt: null as string | null };
+const health = { yazilan: 0, dusen: 0, anonimOrneklenmeyen: 0, sonHata: null as string | null, sonHataAt: null as string | null };
 
 /** Süreç başı jeton kovası: saniyede `rate` satır, en çok `burst` birikim. Taşma `dusen`. */
 const bucket = { rate: 50, burst: 200, tokens: 200, at: Date.now() };
@@ -70,6 +70,24 @@ function takeToken(now: number): boolean {
   if (bucket.tokens < 1) return false;
   bucket.tokens -= 1;
   return true;
+}
+
+const anonBucket = { rate: 1, burst: 60, tokens: 60, at: Date.now() };
+
+function takeAnonToken(now: number): boolean {
+  anonBucket.tokens = Math.min(anonBucket.burst, anonBucket.tokens + ((now - anonBucket.at) / 1000) * anonBucket.rate);
+  anonBucket.at = now;
+  if (anonBucket.tokens < 1) return false;
+  anonBucket.tokens -= 1;
+  return true;
+}
+
+/** Bekçi düzeneği: kimliksiz red örnek kovasını daraltır/sıfırlar. */
+export function setAnonTraceBucketForTest(rate: number, burst: number): void {
+  anonBucket.rate = rate;
+  anonBucket.burst = burst;
+  anonBucket.tokens = burst;
+  anonBucket.at = Date.now();
 }
 
 /** Bekçi düzeneği: kovayı daraltır/sıfırlar. Üretimde çağrılmaz. */
@@ -86,7 +104,7 @@ const pending: TraceSnapshot[] = [];
 let timer: NodeJS.Timeout | null = null;
 
 /** `/health` → `requestTraces`: `dusen > 0` = istek başlıkları sessizce düşüyor. */
-export function getRequestTraceHealth(): { yazilan: number; dusen: number; kuyruk: number; sonHata: string | null; sonHataAt: string | null } {
+export function getRequestTraceHealth(): { yazilan: number; dusen: number; anonimOrneklenmeyen: number; kuyruk: number; sonHata: string | null; sonHataAt: string | null } {
   return { ...health, kuyruk: pending.length };
 }
 
@@ -94,6 +112,12 @@ export function getRequestTraceHealth(): { yazilan: number; dusen: number; kuyru
 
 /** TEK yazar. Senkron, DB'siz: yalnız kuyruğa ekler; boşaltma zamanlayıcıyla. */
 export function recordTrace(snap: TraceSnapshot): void {
+  // D4 (VDS denetimi): kimliksiz 401/404 örneklenir — tarama/sel meşru izlerin kovasını tüketmesin.
+  // Normal yükte görünmez (saniyede 1, 60'lık birikim) → her kurulumda.
+  if (snap.userId === null && (snap.status === 401 || snap.status === 404) && !takeAnonToken(Date.now())) {
+    health.anonimOrneklenmeyen++;
+    return;
+  }
   if (pending.length >= PENDING_MAX) {
     health.dusen++;
     return;
