@@ -53,6 +53,7 @@ import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { ekranYolu } from "../constants/panel-ekran-yolu";
 import { cookieLoginApplies } from "../lib/web-session-cookie";
 import { webTotpWaived } from "./web-totp.service";
+import { CURRENT_PASSWORD_INVALID_CODE } from "../constants/password-policy";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { grantsDesktopPanel } from "../constants/permission-catalog";
 
@@ -99,7 +100,7 @@ export const PASSWORD_CHANGE_REQUIRED_CODE = "PASSWORD_CHANGE_REQUIRED";
 export const PASSWORD_IS_DEFAULT_CODE = "PASSWORD_IS_DEFAULT";
 export const PASSWORD_CHANGE_REQUIRED_MESSAGE =
   "Parolanızı değiştirmeniz gerekiyor. Yeni parola belirlemeden devam edilemez.";
-export const CURRENT_PASSWORD_INVALID_CODE = "CURRENT_PASSWORD_INVALID";
+export { CURRENT_PASSWORD_INVALID_CODE } from "../constants/password-policy";
 /** Değişim adımı taşımayan (eski) tabletin parolalı girişi. */
 const PASSWORD_CHANGE_REQUIRED_MESSAGE_LEGACY_TABLET =
   "Bu hesabın parolası değiştirilmeli. Bu tablet sürümü parola değiştiremiyor — tableti güncelleyin ya da yönetim panelinden giriş yapıp yeni parola belirleyin.";

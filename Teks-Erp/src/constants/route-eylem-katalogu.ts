@@ -22,6 +22,8 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/admin/devices/merge": e("cihaz kopyalarını birleştirdi", "cihaz kopyalarını birleştirmeye çalıştı"),
   "POST /api/admin/devices/merge/:sourceId/undo": e("cihaz birleştirmesini geri aldı", "cihaz birleştirmesini geri almaya çalıştı"),
   "POST /api/admin/devices/proof-reset": e("cihazları yeniden bağlamak için kanıtı sıfırladı", "cihaz kanıtını sıfırlamaya çalıştı"),
+  // ── Kimlik: web girişi 2FA kullanıcı tercihi
+  "PUT /api/auth/web-totp": e("internetten giriş 2FA tercihini değiştirdi", "internetten giriş 2FA tercihini değiştirmeye çalıştı"),
   // ── Belge tasarımcısı
   "POST /api/document-templates/sistem-onizleme/:docType": e("sistem belge tasarımını önizledi", "sistem belge tasarımını önizlemeye çalıştı"),
   // ── Desen kartı + ürün yapısı (Seyitoğlu SY-A2)

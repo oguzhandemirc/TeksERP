@@ -13,8 +13,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { TotpAccountService } from "./totp-account.service";
 import { readWebTotpPolicy, type WebTotpPolicy } from "./system-setting.service";
-// Döngüsel import (auth.service → bu dosya) güvenli: sabit yalnız çağrı anında okunur.
-import { CURRENT_PASSWORD_INVALID_CODE } from "./auth.service";
+import { CURRENT_PASSWORD_INVALID_CODE } from "../constants/password-policy";
 
 export interface WebTotpOwnState {
   policy: WebTotpPolicy;

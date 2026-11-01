@@ -30,3 +30,6 @@ export function passwordPolicyViolation(password: string): string | null {
   }
   return null;
 }
+
+/** Parola doğrulamalı uçlarda (parola değişimi, web 2FA kapatma) "mevcut parola yanlış" kodu. */
+export const CURRENT_PASSWORD_INVALID_CODE = "CURRENT_PASSWORD_INVALID";
