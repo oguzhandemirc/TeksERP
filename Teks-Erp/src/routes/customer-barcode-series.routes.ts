@@ -43,7 +43,7 @@ const id = (req: Request) => req.params.id as string;
  *       409: { description: CUSTOMER_SERIES_EXISTS · CUSTOMER_CODE_COLLIDES · CLIENT_TOKEN_COLLISION }
  *   put:
  *     tags: [Customers]
- *     summary: Biçim/etkinlik değiştir (expectedFormatChangedAt atomik; eski kodlar değişmez, sayaç yeni biçimden)
+ *     summary: Biçim/etkinlik değiştir (expectedUpdatedAt atomik; eski kodlar değişmez, sayaç yeni biçimden)
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Seri }

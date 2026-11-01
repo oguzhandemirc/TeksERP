@@ -2,8 +2,9 @@
 // MÜŞTERİ BARKOD SERİSİ — tanım · biçim değişimi · önizleme (D4-F2, DALGA4 §7.4)
 // =============================================================================
 // Müşteri başına TEK seri (`customerId @unique`). Yaratma replay'i token boğazından (R); biçim değişimi
-// `formatChangedAt` üstünde atomik claim (0 → 409 SERIES_CHANGED). Biçim değişimi yalnız YENİ kodu etkiler:
-// sayaç kapsamı `formatChangedAt`i içerir (`helpers/customer-code-birth.helper.ts`). Ana veri, defter değil.
+// `updatedAt` üstünde atomik claim (her alan değişimi ilerletir; 0 → 409 SERIES_CHANGED). Görünür biçim değişimi
+// yalnız YENİ kodu etkiler: sayaç kapsamı `formatChangedAt`i içerir (`helpers/customer-code-birth.helper.ts`).
+// Başlangıç/üst sınır sayaç ayarıdır, `formatChangedAt`i yenilemez (yeni kapsam yine doğar, tohum eski kodların üstünden).
 // =============================================================================
 import { NumberSeriesDateSegment, type CustomerBarcodeSeries } from "@prisma/client";
 import { z } from "zod";
@@ -16,6 +17,7 @@ import {
   customerCodeCollidesWithOurs,
   customerSeriesFormat,
   peekCustomerSeriesCode,
+  peekCustomerSeriesSeq,
 } from "./helpers/customer-code-birth.helper";
 import { formatSeriesCode } from "./helpers/series-format.helper";
 import { tokenReplay } from "./helpers/token-replay.helper";
@@ -24,6 +26,10 @@ const TABLE = "CUSTOMER_BARCODE_SERIES";
 /** Replay/değişiklik-yok cevabı işaretlenir (route 201 yerine 200 döner). */
 type SeriesResponse<T> = ApiResponse<T> & { idempotent?: boolean };
 const FORMAT_FIELDS = ["prefix", "dateSegment", "digits", "separator", "startValue", "maxValue"] as const;
+/** Kodun GÖRÜNÜR biçimi — yalnız bunlar değişince `formatChangedAt` yenilenir. */
+/** Henüz serisi olmayan müşteride önizleme tohumu — hiçbir kod bu seriye bağlı değildir. */
+const NO_SERIES_ID = "00000000-0000-0000-0000-000000000000";
+const VISIBLE_FORMAT_FIELDS = ["prefix", "dateSegment", "digits", "separator"] as const;
 
 const formatShape = {
   prefix: z
@@ -41,7 +47,7 @@ const createSchema = z.strictObject({ ...formatShape, clientToken: z.uuid({ erro
 const updateSchema = z.strictObject({
   ...formatShape,
   isActive: z.boolean({ error: "Etkinlik true/false olmalı" }),
-  expectedFormatChangedAt: z.iso.datetime({ error: "expectedFormatChangedAt ISO tarih olmalı", offset: true }),
+  expectedUpdatedAt: z.iso.datetime({ error: "expectedUpdatedAt ISO tarih olmalı", offset: true }),
 });
 const previewSchema = z.strictObject(formatShape).partial();
 
@@ -146,11 +152,12 @@ export class CustomerBarcodeSeriesService {
 
   /**
    * PUT /api/customers/:id/barcode-series — biçim/etkinlik değişimi. Aynı içerik → değişiklik yok (200, idempotent).
-   * Biçim değişirse `formatChangedAt` yenilenir (sayaç yeni biçimden); eski kodlar değişmez.
+   * Görünür biçim değişirse `formatChangedAt` yenilenir (sayaç yeni biçimden); eski kodlar değişmez.
+   * Claim `updatedAt` üstünde: eşzamanlı iki PUT'tan (yalnız etkinlik değişimi dahil) biri 409 alır.
    */
   static async update(customerId: string, body: unknown, userId?: string): Promise<SeriesResponse<CustomerBarcodeSeries>> {
     await assertCustomer(customerId);
-    const { expectedFormatChangedAt, isActive, ...fmt } = parse(updateSchema, body);
+    const { expectedUpdatedAt, isActive, ...fmt } = parse(updateSchema, body);
     const current = await prisma.customerBarcodeSeries.findUnique({ where: { customerId } });
     if (!current) throw AppError.notFound("Bu müşterinin barkod serisi yok", { code: "CUSTOMER_SERIES_NOT_FOUND", customerId });
     const formatChanged = !sameFormat(current, fmt);
@@ -158,10 +165,11 @@ export class CustomerBarcodeSeriesService {
       return { success: true, data: current, message: "Barkod serisinde değişiklik yok", idempotent: true };
     }
     if (formatChanged) await assertFormatUsable(fmt);
+    const visibleChanged = VISIBLE_FORMAT_FIELDS.some((k) => current[k] !== fmt[k]);
     const now = new Date();
     const claimed = await prisma.customerBarcodeSeries.updateMany({
-      where: { id: current.id, formatChangedAt: new Date(expectedFormatChangedAt) },
-      data: { ...fmt, isActive, ...(formatChanged ? { formatChangedAt: now } : {}) },
+      where: { id: current.id, updatedAt: new Date(expectedUpdatedAt) },
+      data: { ...fmt, isActive, ...(visibleChanged ? { formatChangedAt: now } : {}) },
     });
     if (claimed.count === 0) {
       throw AppError.conflict("Barkod serisi bu sırada başka biri tarafından değiştirildi — sayfayı yenileyip tekrar deneyin.", {
@@ -176,9 +184,9 @@ export class CustomerBarcodeSeriesService {
       tableName: TABLE,
       recordId: row.id,
       oldData: { ...formatAudit(current), isActive: current.isActive },
-      newData: { customerId, ...formatAudit(row), isActive: row.isActive, formatChanged },
+      newData: { customerId, ...formatAudit(row), isActive: row.isActive, formatChanged: visibleChanged },
     }).catch(() => undefined);
-    return { success: true, data: row, message: formatChanged ? "Barkod serisi biçimi değişti — yeni kodlar yeni biçimden" : "Barkod serisi güncellendi" };
+    return { success: true, data: row, message: visibleChanged ? "Barkod serisi biçimi değişti — yeni kodlar yeni biçimden" : "Barkod serisi güncellendi" };
   }
 
   /**
@@ -194,12 +202,17 @@ export class CustomerBarcodeSeriesService {
       : { prefix: "", dateSegment: NumberSeriesDateSegment.NONE, digits: 4, separator: "", startValue: null, maxValue: null };
     const fmt: FormatInput = { ...base, ...over };
     if (!fmt.prefix) throw AppError.badRequest("Ön ek zorunlu", { code: "VALIDATION_ERROR" });
-    const formatChanged = !current || !sameFormat(current, fmt);
-    const start = fmt.startValue ?? 1;
+    // Görünür biçim değişiyorsa yeni kapsam (ilk üç kod); değilse aynı kapsamda sıradaki kod. Tohum her iki yolda
+    // da doğumla AYNI hesaptan (aynı görünür biçimde eski kodların üstünden).
+    const formatChanged = !current || VISIBLE_FORMAT_FIELDS.some((k) => current[k] !== fmt[k]);
+    const draft = {
+      ...fmt,
+      id: current?.id ?? NO_SERIES_ID,
+      formatChangedAt: formatChanged ? new Date() : current!.formatChangedAt,
+    };
+    const seq = await peekCustomerSeriesSeq(prisma, draft);
     const plain = customerSeriesFormat({ ...fmt, formatChangedAt: null });
-    const codes = formatChanged
-      ? [0, 1, 2].map((i) => formatSeriesCode(plain, start + i))
-      : [await peekCustomerSeriesCode(prisma, current!)];
+    const codes = (formatChanged ? [0, 1, 2] : [0]).map((i) => formatSeriesCode(plain, seq + i));
     const collides = await customerCodeCollidesWithOurs(prisma, codes[0]!);
     return { success: true, data: { codes, formatChanged, collides } };
   }

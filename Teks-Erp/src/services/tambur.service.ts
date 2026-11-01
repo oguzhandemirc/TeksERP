@@ -1110,6 +1110,7 @@ export class TamburService {
     // D4-F2: müşteri kodu doğum yeri — yalnız emanet topta okunur (NONE iken tx ve cevap bayt-aynı).
     const birthCustomerCodes = roll.ownerCustomerId != null && (await readLabelCustomerCodeAt()) === "TAMBUR_OUTPUT";
     let bornCustomerCodes: BornCustomerCode[] = [];
+    let customerCodeWarning: string | null = null;
     const updatedRoll = await prisma.$transaction(async (tx) => {
       // O-2 write-skew guard: WO satırını kilitle → son-top tamamlama sayımı
       // (~1024) eşzamanlı finalize/finalizeOpenFabric/receive/cancel/directShip ile
@@ -1359,7 +1360,7 @@ export class TamburService {
       if (birthCustomerCodes) {
         // Depo topu müşteri serisinden kodunu çocukla AYNI tx'te alır (numaralandirma.md: doğuşta materyalize).
         const shippable = splitRolls.filter((r) => r.status === RollStatus.WAREHOUSE).map((r) => r.id);
-        bornCustomerCodes = await birthCustomerCodesTx(tx, { customerId: roll.ownerCustomerId!, rollIds: shippable, userId: userId ?? null });
+        ({ born: bornCustomerCodes, warning: customerCodeWarning } = await birthCustomerCodesTx(tx, { customerId: roll.ownerCustomerId!, rollIds: shippable, userId: userId ?? null }));
       }
       // D4-B1b: CUT okumaları çocuklar doğduktan sonra AYNI tx'te (measure'sız kesim okuma yazmaz).
       cutReadings = await writeCutReadingsTx(tx, { stepId: roll.currentStep!.id, machineId: machineId ?? null, userId: userId ?? null, cuts: cutMeasures });
@@ -1585,6 +1586,8 @@ export class TamburService {
         ...(bornCustomerCodes.length > 0 ? { customerCodes: bornCustomerCodes.map((c) => ({ rollId: c.rollId, code: c.code })) } : {}),
       },
       message: colorWarning ? `${baseMsg} Uyarı: ${colorWarning}` : baseMsg,
+      // D4-F2: seri tükendiyse kodsuz kalan toplar — üretim sürer, uyarı görünür.
+      ...(customerCodeWarning ? { warnings: [customerCodeWarning] } : {}),
     };
   }
 

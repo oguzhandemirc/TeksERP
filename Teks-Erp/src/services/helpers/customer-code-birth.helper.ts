@@ -15,7 +15,7 @@ import { CustomerCodeSource, type CustomerBarcodeSeries, type Prisma } from "@pr
 import { randomUUID } from "node:crypto";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
-import { formatSeriesCode, seriesCodeSeq, seriesPrefix, type NumberSeriesFormat } from "./series-format.helper";
+import { formatSeriesCode, seriesPrefix, type NumberSeriesFormat } from "./series-format.helper";
 import { counterScopeKey } from "./series-counter-store.helper";
 import { nextCounterSeq } from "./series-counter.helper";
 import { classifyScannedCode } from "./series-classifier.helper";
@@ -57,14 +57,28 @@ export function customerSeriesScope(series: SeriesFormatFields & { id: string },
 
 type Scope = ReturnType<typeof customerSeriesScope>;
 
-/** Kapsam başı tohumu: bu biçimle (formatChangedAt sonrası) doğmuş en büyük sıra + 1; yoksa başlangıç. */
+/**
+ * Kodun sırası — ön ek TAM kesilerek okunur. `seriesCodeSeq` sondaki rakam koşusunu aldığı için ayraçsız ve
+ * rakamla biten müşteri ön ekinde ("GK1" + "0001") ön ekin rakamlarını sıraya katar; müşteri ön eki serbesttir.
+ */
+function seqAfterPrefix(scope: Scope, code: string): number | null {
+  if (!code.startsWith(scope.fullPrefix)) return null;
+  const tail = code.slice(scope.fullPrefix.length);
+  if (!/^\d+$/.test(tail) || tail.length < scope.fmt.digits || tail.length > 15) return null;
+  const n = Number.parseInt(tail, 10);
+  if (n < (scope.fmt.startValue ?? 1) || (scope.fmt.maxValue != null && n > scope.fmt.maxValue)) return null;
+  return n;
+}
+
+/**
+ * Kapsam başı tohumu: serinin aynı görünür ön ekli TÜM kodlarından (kaldırılmış dahil, tarih süzgeci YOK) en
+ * büyük sıra + 1. Üst sınır yükseltme ya da A→B→A dönüşü yeni kapsam satırı doğurur; tohum eski kodların
+ * üstünden sürmezse her doğum dolu kodlara çarpar ve atlama sınırına takılır (PR #383 inceleme bulgusu).
+ */
 async function seedSeq(db: Db, seriesId: string, scope: Scope): Promise<number> {
-  // Koda göre süzme yok (tek okutma boğazı kuralı): kapsamdaki satırlar seriden + tarihten, ön ek bellekte.
-  const rows = await db.rollCustomerCode.findMany({
-    where: { seriesId, createdAt: { gte: scope.fmt.formatChangedAt ?? new Date(0) } },
-    select: { code: true },
-  });
-  const max = rows.reduce((m, r) => (r.code.startsWith(scope.fullPrefix) ? Math.max(m, seriesCodeSeq(scope.fmt, r.code) ?? 0) : m), 0);
+  // Koda göre süzme yok (tek okutma boğazı kuralı): satırlar seriden, ön ek bellekte.
+  const rows = await db.rollCustomerCode.findMany({ where: { seriesId }, select: { code: true } });
+  const max = rows.reduce((m, r) => Math.max(m, seqAfterPrefix(scope, r.code) ?? 0), 0);
   return nextCounterSeq(scope.fmt, max, scope.fullPrefix);
 }
 
@@ -100,19 +114,27 @@ export async function customerCodeCollidesWithOurs(db: Pick<Db, "roll">, code: s
   return (await db.roll.findUnique({ where: { barcode: code }, select: { id: true } })) !== null;
 }
 
-/** Önizleme: sayacı TÜKETMEDEN sıradaki kod (sayaç satırı yoksa tohum hesabı). */
-export async function peekCustomerSeriesCode(
+/** Önizleme: sayacı TÜKETMEDEN sıradaki sıra (sayaç satırı yoksa tohum hesabı). */
+export async function peekCustomerSeriesSeq(
   db: Db,
   series: SeriesFormatFields & { id: string },
   date: Date = new Date(),
-): Promise<string> {
+): Promise<number> {
   const scope = customerSeriesScope(series, date);
   const row = await db.numberSeriesCounter.findUnique({
     where: { seriesKey_scopeKey: { seriesKey: scope.seriesKey, scopeKey: scope.scopeKey } },
     select: { n: true },
   });
-  const seq = row ? row.n + 1 : await seedSeq(db, series.id, scope);
-  return formatSeriesCode(scope.fmt, seq, date);
+  return row ? row.n + 1 : seedSeq(db, series.id, scope);
+}
+
+/** Önizleme: sayacı TÜKETMEDEN sıradaki kod. */
+export async function peekCustomerSeriesCode(
+  db: Db,
+  series: SeriesFormatFields & { id: string },
+  date: Date = new Date(),
+): Promise<string> {
+  return formatSeriesCode(customerSeriesFormat(series), await peekCustomerSeriesSeq(db, series, date), date);
 }
 
 export interface BornCustomerCode {
@@ -123,47 +145,78 @@ export interface BornCustomerCode {
   seriesId: string;
 }
 
+export interface CustomerCodeBirthResult {
+  born: BornCustomerCode[];
+  /** Seri doldu / atlama sınırı aşıldı → kalan toplar kodsuz; üretim DURMAZ (basımda `label.customerCodeMissing`). */
+  warning: string | null;
+}
+
+/** Kod doğumunun "seri tükendi" hataları — finalize'ı geri almaz, uyarıya döner. */
+const NON_FATAL_CODES = new Set(["NUMBER_SERIES_RANGE_EXHAUSTED", "CUSTOMER_SERIES_EXHAUSTED"]);
+
+function nonFatalBirthError(e: unknown): string | null {
+  if (!(e instanceof AppError)) return null;
+  const code = (e.details as { code?: string } | undefined)?.code;
+  return code && NON_FATAL_CODES.has(code) ? e.message : null;
+}
+
+/** Tek topa sıradaki kod; dolu kodlar atlanır. Topun zaten aktif kodu varsa null. */
+async function birthOneTx(
+  tx: Db,
+  ctx: { series: CustomerBarcodeSeries; scope: Scope; at: Date; customerId: string; userId: string | null },
+  rollId: string,
+): Promise<BornCustomerCode | null> {
+  const { series, scope, at } = ctx;
+  const input = ctx;
+  for (let attempt = 0; ; attempt++) {
+    if (attempt >= CUSTOMER_CODE_SKIP_LIMIT) {
+      throw AppError.conflict(
+        `Müşteri barkod serisinde ${CUSTOMER_CODE_SKIP_LIMIT} ardışık kod dolu — cari kartta Barkod serisi biçimini kontrol edin.`,
+        { code: "CUSTOMER_SERIES_EXHAUSTED", seriesId: series.id },
+      );
+    }
+    const code = formatSeriesCode(scope.fmt, await takeSeqTx(tx, series.id, scope), at);
+    // Kaldırılmış kod da DAHİL: bir kod değeri müşteride iki kez doğmaz.
+    if ((await customerCodeValueUsed(tx, input.customerId, code)) || (await customerCodeCollidesWithOurs(tx, code))) continue;
+    const id = randomUUID();
+    // skipDuplicates = ON CONFLICT DO NOTHING: kısmi unique çakışması tx'i bozmadan 0 döner.
+    const inserted = await tx.rollCustomerCode.createMany({
+      data: [{ id, rollId, customerId: input.customerId, code, source: CustomerCodeSource.CUSTOMER_SERIES, seriesId: series.id, clientToken: randomUUID(), createdById: input.userId }],
+      skipDuplicates: true,
+    });
+    if (inserted.count === 1) return { id, rollId, customerId: input.customerId, code, seriesId: series.id };
+    // Çakışma: eşzamanlı bağlama aynı kodu aldıysa sıradaki numara; topun zaten aktif kodu varsa top atlanır.
+    const hasActive = await tx.rollCustomerCode.findFirst({ where: { rollId, revokedAt: null }, select: { id: true } });
+    if (hasActive) return null;
+  }
+}
+
 /**
  * Tambur çıkışı (D4-F2): müşterinin AKTİF serisinden her top için sıradaki kod, çağıranın tx'inde.
- * Seri yok/pasif → boş dizi (hiçbir yazım yok). Audit çağıranın işidir (tx dışında, commit sonrası).
+ * Seri yok/pasif → boş (hiçbir yazım yok). Seri tükenirse kalan toplar kodsuz kalır + uyarı (üretim durmaz).
+ * Audit çağıranın işidir (tx dışında, commit sonrası).
  */
 export async function birthCustomerCodesTx(
   tx: Db,
   input: { customerId: string; rollIds: string[]; userId: string | null; at?: Date },
-): Promise<BornCustomerCode[]> {
-  if (input.rollIds.length === 0) return [];
+): Promise<CustomerCodeBirthResult> {
+  if (input.rollIds.length === 0) return { born: [], warning: null };
   const series = await tx.customerBarcodeSeries.findUnique({ where: { customerId: input.customerId } });
-  if (!series || !series.isActive) return [];
+  if (!series || !series.isActive) return { born: [], warning: null };
   const at = input.at ?? new Date();
   const scope = customerSeriesScope(series, at);
   const born: BornCustomerCode[] = [];
-  for (const rollId of input.rollIds) {
-    for (let attempt = 0; ; attempt++) {
-      if (attempt >= CUSTOMER_CODE_SKIP_LIMIT) {
-        throw AppError.conflict(
-          `Müşteri barkod serisinde ${CUSTOMER_CODE_SKIP_LIMIT} ardışık kod dolu — cari kartta Barkod serisi biçimini kontrol edin.`,
-          { code: "CUSTOMER_SERIES_EXHAUSTED", seriesId: series.id },
-        );
-      }
-      const code = formatSeriesCode(scope.fmt, await takeSeqTx(tx, series.id, scope), at);
-      // Kaldırılmış kod da DAHİL: bir kod değeri müşteride iki kez doğmaz.
-      if ((await customerCodeValueUsed(tx, input.customerId, code)) || (await customerCodeCollidesWithOurs(tx, code))) continue;
-      const id = randomUUID();
-      // skipDuplicates = ON CONFLICT DO NOTHING: kısmi unique çakışması tx'i bozmadan 0 döner.
-      const inserted = await tx.rollCustomerCode.createMany({
-        data: [{ id, rollId, customerId: input.customerId, code, source: CustomerCodeSource.CUSTOMER_SERIES, seriesId: series.id, clientToken: randomUUID(), createdById: input.userId }],
-        skipDuplicates: true,
-      });
-      if (inserted.count === 1) {
-        born.push({ id, rollId, customerId: input.customerId, code, seriesId: series.id });
-        break;
-      }
-      // Çakışma: eşzamanlı bağlama aynı kodu aldıysa sıradaki numara; topun zaten aktif kodu varsa top atlanır.
-      const hasActive = await tx.rollCustomerCode.findFirst({ where: { rollId, revokedAt: null }, select: { id: true } });
-      if (hasActive) break;
+  for (const [i, rollId] of input.rollIds.entries()) {
+    try {
+      const one = await birthOneTx(tx, { series, scope, at, customerId: input.customerId, userId: input.userId }, rollId);
+      if (one) born.push(one);
+    } catch (e) {
+      const msg = nonFatalBirthError(e);
+      if (msg === null) throw e;
+      return { born, warning: `${input.rollIds.length - i} topa müşteri kodu verilemedi: ${msg}` };
     }
   }
-  return born;
+  return { born, warning: null };
 }
 
 /** Tambur çıkışında doğan kodların audit'i — tx DIŞINDA, commit sonrası (best-effort). */
@@ -179,6 +232,50 @@ export async function auditBornCustomerCodes(
       tableName: "ROLL_CUSTOMER_CODE",
       recordId: b.id,
       newData: { rollId: b.rollId, customerId: b.customerId, code: b.code, source: "CUSTOMER_SERIES", seriesId: b.seriesId },
+    })),
+  ).catch(() => undefined);
+}
+
+/** Tambur geri alımı ters yolu: iptal edilen çocuğun aktif kodu damgalanır (etiket ölü topa bağlı kalmasın). */
+export const TAMBUR_UNDO_CODE_REASON = "Tambur geri alındı — top iptal";
+
+/**
+ * İptal edilen toplarının AKTİF müşteri kodlarını çağıranın tx'inde damgalar (satır silinmez; kod değeri
+ * kaldırılmış olarak müşteride kalır, yeniden verilmez). Yalnız GERÇEKTEN damgalanan satırlar döner.
+ */
+export async function revokeCustomerCodesOfRollsTx(
+  tx: Db,
+  args: { rollIds: string[]; userId: string | null; reason: string },
+): Promise<Array<{ id: string; rollId: string; customerId: string; code: string }>> {
+  if (args.rollIds.length === 0) return [];
+  const rows = await tx.rollCustomerCode.findMany({
+    where: { rollId: { in: args.rollIds }, revokedAt: null },
+    orderBy: { id: "asc" },
+    select: { id: true, rollId: true, customerId: true, code: true },
+  });
+  const stamped: typeof rows = [];
+  const data = { revokedAt: new Date(), revokedById: args.userId, revokeReason: args.reason.slice(0, 300) };
+  for (const r of rows) {
+    if ((await tx.rollCustomerCode.updateMany({ where: { id: r.id, revokedAt: null }, data })).count > 0) stamped.push(r);
+  }
+  return stamped;
+}
+
+/** Damgalanan kodların audit'i — tx DIŞINDA (best-effort). */
+export async function auditRevokedCustomerCodes(
+  userId: string | undefined,
+  rows: ReadonlyArray<{ id: string; rollId: string; customerId: string; code: string }>,
+  reason: string,
+): Promise<void> {
+  if (rows.length === 0) return;
+  await AuditService.logMany(
+    rows.map((r) => ({
+      userId,
+      action: "UPDATE" as const,
+      tableName: "ROLL_CUSTOMER_CODE",
+      recordId: r.id,
+      oldData: { revokedAt: null },
+      newData: { rollId: r.rollId, customerId: r.customerId, code: r.code, revoked: true, reason },
     })),
   ).catch(() => undefined);
 }
