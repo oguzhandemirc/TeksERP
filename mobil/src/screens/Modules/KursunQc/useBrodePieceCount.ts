@@ -25,6 +25,7 @@ export function useBrodePieceCount(mode: PieceInputMode | null, rollId: string |
     if (!parsed.ok) Toast.show({ type: 'error', text1: 'Brode adedi eksik', text2: parsed.message });
     return parsed.ok;
   };
+  // Ön koşul: çağıran önce `precheck`ten geçer (pieceGatedTap); geçersiz adet burada sessizce düşer.
   const attach = (vars: CompleteQc2Request): CompleteQc2Request => {
     if (!mode || vars.rollId !== rollId) return vars;
     const parsed = parsePieceCount(text);

@@ -192,7 +192,20 @@ async function main(): Promise<void> {
   const bad = await systemSettingService.setFeatureFlags({ financeServiceBillingBrodeUnit: "KG" as unknown as "METER" }, await testActorId())
     .then(() => 200, (e: { statusCode?: number; message?: string }) => e.statusCode ?? `500 ${e.message}`);
   check("servis: bilinmeyen birim 400", bad === 400, String(bad));
-  // GK-H1b: tablette brode adet girişi indi → sed kalktı; PIECE/STITCH yazılır ve geri okunur.
+  // GK-H1b: tablette brode adet girişi indi → sed kalktı; PIECE/STITCH sayaç açıkken yazılır ve geri okunur.
+  const meterKey = SETTING_KEYS.KURSUN_METER_CAPTURE;
+  const meterRow = await prisma.systemSetting.findUnique({ where: { key: meterKey }, select: { value: true } });
+  priorMeter = { existed: meterRow !== null, value: meterRow?.value ?? null };
+  const setMeter = (v: string) => prisma.systemSetting.upsert({ where: { key: meterKey }, create: { key: meterKey, value: v }, update: { value: v } });
+  const flagRes = (input: Parameters<typeof systemSettingService.setFeatureFlags>[0]) => async () => systemSettingService.setFeatureFlags(input, await testActorId())
+    .then(() => "200", (e: { statusCode?: number; details?: { code?: string } }) => `${e.statusCode}:${e.details?.code}`);
+  await setMeter("OFF");
+  const offRes = await flagRes({ financeServiceBillingBrodeUnit: "PIECE" })();
+  check("çıkışsız kapı: sayaç OFF iken PIECE 400 BRODE_UNIT_NEEDS_METER_CAPTURE", offRes === "400:BRODE_UNIT_NEEDS_METER_CAPTURE", offRes);
+  const bothRes = await flagRes({ financeServiceBillingBrodeUnit: "STITCH", kursunMeterCapture: "OUT" })();
+  check("aynı istekte sayaç OUT + STITCH kabul", bothRes === "200", bothRes);
+  const backOff = await flagRes({ kursunMeterCapture: "OFF" })();
+  check("ters yön: STITCH varken sayaç OFF'a çekilemez (400)", backOff === "400:BRODE_UNIT_NEEDS_METER_CAPTURE", backOff);
   for (const unit of ["PIECE", "STITCH"] as const) {
     const res = await systemSettingService.setFeatureFlags({ financeServiceBillingBrodeUnit: unit }, await testActorId())
       .then(() => "200", (e: { statusCode?: number; details?: { code?: string } }) => `${e.statusCode}:${e.details?.code}`);
@@ -210,15 +223,14 @@ async function main(): Promise<void> {
 
   // ── §10 ──────────────────────────────────────────────────────────────────
   section("§10 tablet adım özeti `pieceInput` (adet girişi yalnız sayaç açık brode istasyonunda, ADET/VURUŞ'ta)");
-  const meterKey = SETTING_KEYS.KURSUN_METER_CAPTURE;
-  const meterRow = await prisma.systemSetting.findUnique({ where: { key: meterKey }, select: { value: true } });
-  priorMeter = { existed: meterRow !== null, value: meterRow?.value ?? null };
   const pieceOf = async () => ((await new KursunQcService().getStep(stepId)).data as { pieceInput?: string }).pieceInput ?? "YOK";
   const setUnit = (v: string) => prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.FINANCE_SERVICE_BILLING_BRODE_UNIT }, create: { key: SETTING_KEYS.FINANCE_SERVICE_BILLING_BRODE_UNIT, value: v }, update: { value: v } });
-  const setMeter = (v: string) => prisma.systemSetting.upsert({ where: { key: meterKey }, create: { key: meterKey, value: v }, update: { value: v } });
   await setMeter("OUT");
   await setUnit("PIECE");
   check("sayaç OUT + PIECE + brode istasyonu → pieceInput PIECE", (await pieceOf()) === "PIECE", await pieceOf());
+  await setMeter("IN_OUT");
+  check("sayaç IN_OUT + PIECE → pieceInput PIECE", (await pieceOf()) === "PIECE", await pieceOf());
+  await setMeter("OUT");
   await setUnit("STITCH");
   check("STITCH → pieceInput STITCH", (await pieceOf()) === "STITCH", await pieceOf());
   await setUnit("METER");
@@ -227,6 +239,29 @@ async function main(): Promise<void> {
   await setMeter("OFF");
   check("sayaç OFF → anahtar YOK (okuma yok, adet taşınamaz)", (await pieceOf()) === "YOK", await pieceOf());
   check("brode olmayan istasyon → null", brodePieceInputOf({ meterOn: true, stationPropertyCodes: ["KURSUN"], brodeUnit: "PIECE" }) === null);
+  // ── §10b ─────────────────────────────────────────────────────────────────
+  section("§10b servis halkası: completeQc2 meterOut.pieceCount → okuma satırı → taslak miktarı");
+  await setMeter("OUT");
+  await setUnit("PIECE");
+  const actor = await testActorId();
+  // Desen seçimi istasyonda tanımlı olmalı (Gülkesim düzeni: BRODE + BRODE-DESEN).
+  await prisma.stationProperty.create({ data: { stationId: st.id, propertyId: patternId } });
+  const live = await prisma.roll.create({
+    data: { barcode: `${P}-LIVE`.slice(0, 40), itemId: fabric, initialQty: 50, currentQty: 50, status: RollStatus.IN_PRODUCTION, entrySource: "SUPPLIER_RECEIPT", createdById: actor, currentStepId: stepId, ownerCustomerId: cust.id },
+    select: { id: true },
+  });
+  fx.rollIds.push(live.id);
+  await prisma.rollMovement.create({ data: { rollId: live.id, workOrderStepId: stepId, qtyIn: 50, operatorId: actor } });
+  const vCode = (await prisma.fabricPropertyValue.findUniqueOrThrow({ where: { id: vStitch }, select: { code: true } })).code;
+  const qcRes = await new KursunQcService().completeQc2({
+    rollId: live.id, stepId, properties: [{ propertyId: flag.id }, { propertyId: patternId, valueCode: vCode }],
+    meterOut: { meters: 50, source: MachineDataSource.OPERATOR, clientToken: randomUUID(), pieceCount: 12, rawCounter: null, peripheralId: null, cardSampleId: null },
+  }, actor, null).then(() => "200", (e: { statusCode?: number; message?: string }) => `${e.statusCode}:${e.message}`);
+  const liveRead = await prisma.rollMeterReading.findFirst({ where: { rollId: live.id, phase: MeterPhase.OUT }, select: { pieceCount: true } });
+  check("completeQc2 başarılı ve okuma satırına pieceCount 12 yazıldı", qcRes === "200" && liveRead?.pieceCount === 12, `${qcRes} ${JSON.stringify(liveRead)}`);
+  await setPrice(3, "PIECE");
+  const liveDraft = await draft([live.id], "PIECE");
+  check("taslak miktarı 12 adet (tablet adedi faturaya ulaşır)", liveDraft.lines.length === 1 && eq(liveDraft.lines[0]?.qty, 12) && liveDraft.lines[0]?.unit === "adet", JSON.stringify(liveDraft.lines));
   await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.FINANCE_SERVICE_BILLING_BRODE_UNIT } });
 
   // ── §8 ───────────────────────────────────────────────────────────────────

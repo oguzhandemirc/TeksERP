@@ -3304,6 +3304,8 @@ export class SystemSettingService {
         throw AppError.badRequest(`financeServiceBillingBrodeUnit şunlardan biri olmalı: ${SERVICE_BILLING_BRODE_UNITS.join(", ")}`);
       }
       // ADET/VURUŞ: adet tabletteki brode okumasında girilir (adım özeti `pieceInput`); adetsiz iş uyarıyla fatura dışı.
+      const capture = Object.prototype.hasOwnProperty.call(input, "kursunMeterCapture") ? input.kursunMeterCapture : await readKursunMeterCapture();
+      assertBrodeUnitHasPieceInput(v as ServiceBillingBrodeUnit, capture);
       await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_BRODE_UNIT, v, "Brode fiyat birimi — metre · adet · vuruş", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "financeServiceBillingTrigger")) {
@@ -4538,6 +4540,8 @@ export class SystemSettingService {
       if (typeof v !== "string" || !KURSUN_METER_CAPTURE_MODES.includes(v as KursunMeterCapture)) {
         throw AppError.badRequest(`kursunMeterCapture şunlardan biri olmalı: ${KURSUN_METER_CAPTURE_MODES.join(", ")}`);
       }
+      const brodeUnit = Object.prototype.hasOwnProperty.call(input, "financeServiceBillingBrodeUnit") ? input.financeServiceBillingBrodeUnit : await readFinanceServiceBillingBrodeUnit();
+      assertBrodeUnitHasPieceInput(brodeUnit as ServiceBillingBrodeUnit, v);
       await this.set(SETTING_KEYS.KURSUN_METER_CAPTURE, v, "Kurşun metre ölçümü — kapalı · yalnız çıkış · giriş + çıkış", userId);
     }
 
@@ -5759,6 +5763,14 @@ export function readFinanceServiceBillingMeterBasis(tx?: Pick<typeof prisma, "sy
 /** H7: ölçüm yoksa — tanınmayan değer varsayılana (`DECLARED_WITH_WARNING`) düşer. */
 export function readFinanceServiceBillingMissingMeter(tx?: Pick<typeof prisma, "systemSetting">): Promise<ServiceBillingMissingMeter> {
   return readServiceEnum(SETTING_KEYS.FINANCE_SERVICE_BILLING_MISSING_METER, SERVICE_BILLING_MISSING_METER_MODES, DEFAULT_SERVICE_BILLING_MISSING_METER, tx);
+}
+
+/** Çıkışsız kapı yasağı: ADET/VURUŞ adedi yalnız kurşun sayaç çıkış okumasında girilir; sayaç kapalıyken seçilemez (iki yönde). */
+export function assertBrodeUnitHasPieceInput(unit: ServiceBillingBrodeUnit, capture: unknown): void {
+  if (unit === "METER" || capture !== "OFF") return;
+  throw AppError.badRequest("Brode ADET/VURUŞ birimi kurşun metre ölçümü kapalıyken seçilemez: adet tablette sayaç çıkış okumasında girilir. Önce kurşun metre ölçümünü açın ya da Metre seçin.", {
+    code: "BRODE_UNIT_NEEDS_METER_CAPTURE",
+  });
 }
 
 /** Brode fiyat birimi — tanınmayan değer varsayılana (`METER`) düşer. */
