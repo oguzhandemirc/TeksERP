@@ -7,6 +7,7 @@ import { z } from "zod";
 import { AuthService } from "../services/auth.service";
 import { resolveSystemAccountLock } from "../services/helpers/system-account.registry";
 import { varsayilanParolaBekliyor } from "../services/helpers/varsayilan-superadmin.helper";
+import { isAuthBusyError } from "../services/helpers/password-hasher.helper";
 import { sealBandStatus, sealSummary } from "../services/helpers/system-account-seal.helper";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { factoryAdminExists as factoryAdminExistsCheck } from "../services/helpers/factory-admin.helper";
@@ -300,16 +301,19 @@ export class AuthController {
       // uyarısını üst üste gören meşru kullanıcı kendini 429'a kilitlerdi.
       const isCredentialError = error instanceof AppError && error.statusCode === 401;
       if (!isCredentialError) releaseLoginAttempt(lockoutKey);
-      void AuditService.logEvent({
-        category: "AUTH",
-        action: isCredentialError ? "LOGIN_FAILED" : "LOGIN_CONFLICT",
-        recordId: body.username,
-        ipAddress,
-        payload: {
-          statusCode: error instanceof AppError ? error.statusCode : 500,
-          reason: error instanceof Error ? error.message : "unknown",
-        },
-      });
+      // 503 AUTH_BUSY saldırı altında saniyede onlarca döner — audit satırı tabloyu şişirirdi.
+      if (!isAuthBusyError(error)) {
+        void AuditService.logEvent({
+          category: "AUTH",
+          action: isCredentialError ? "LOGIN_FAILED" : "LOGIN_CONFLICT",
+          recordId: body.username,
+          ipAddress,
+          payload: {
+            statusCode: error instanceof AppError ? error.statusCode : 500,
+            reason: error instanceof Error ? error.message : "unknown",
+          },
+        });
+      }
       next(error);
     }
   }

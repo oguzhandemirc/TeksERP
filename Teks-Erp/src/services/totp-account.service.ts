@@ -11,7 +11,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
-import bcrypt from "bcryptjs";
+import { hashPassword, verifyPassword } from "./helpers/password-hasher.helper";
 import { randomUUID } from "crypto";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -219,7 +219,7 @@ export class TotpAccountService {
     }
 
     const plainCodes = generateRecoveryCodes();
-    const hashed = await Promise.all(plainCodes.map((c) => bcrypt.hash(c, RECOVERY_CODE_BCRYPT_COST)));
+    const hashed = await Promise.all(plainCodes.map((c) => hashPassword(c, RECOVERY_CODE_BCRYPT_COST)));
 
     await prisma.$transaction(async (tx) => {
       const claimed = await tx.totpEnrollment.updateMany({
@@ -311,7 +311,7 @@ export class TotpAccountService {
       select: { id: true, codeHash: true },
     });
     for (const row of rows) {
-      if (!(await bcrypt.compare(candidate, row.codeHash))) continue;
+      if (!(await verifyPassword(candidate, row.codeHash))) continue;
       const claimed = await prisma.userRecoveryCode.updateMany({
         where: { id: row.id, usedAt: null },
         data: { usedAt: new Date() },

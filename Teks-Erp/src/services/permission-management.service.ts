@@ -10,7 +10,7 @@ import { forgetIssuedCard, forgetIssuedPin } from "./helpers/credential-reveal.h
 import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
 import { randomBytes } from "crypto";
-import bcrypt from "bcryptjs";
+import { hashPassword } from "./helpers/password-hasher.helper";
 import { AppError } from "../utils/app-error";
 import { PASSWORD_BCRYPT_COST, passwordPolicyViolation } from "../constants/password-policy";
 import { AuditService } from "./audit.service";
@@ -523,7 +523,7 @@ export class PermissionManagementService {
 
     const requireChange = resetRequiresPasswordChange(user, actorUserId);
     const varsayilanKapaniyor = user.defaultPasswordIssuedAt !== null && user.defaultPasswordChangedAt === null;
-    const passwordHash = await bcrypt.hash(newPassword, PASSWORD_BCRYPT_COST);
+    const passwordHash = await hashPassword(newPassword, PASSWORD_BCRYPT_COST);
     // Parola + bayrak + tokenVersion TEK yazımda; bayrak kararı okunan hesap türüne bağlı
     // olduğu için tür WHERE'de (arada değiştiyse 409).
     const reseal = await credentialReseal(prisma, userId, { passwordHash });
@@ -599,7 +599,7 @@ export class PermissionManagementService {
         })
       : [];
 
-    const passwordHash = await bcrypt.hash(input.password, PASSWORD_BCRYPT_COST);
+    const passwordHash = await hashPassword(input.password, PASSWORD_BCRYPT_COST);
     const user = await prisma.user.create({
       data: {
         // ⚠️ SELF-RELATION: "bu hesabı KİM açtı" — ISO 27001 açısından anlamlı.
@@ -666,7 +666,7 @@ export class PermissionManagementService {
     actorUserId: string | undefined,
   ) {
     const temporaryPassword = geciciParolaUret();
-    const passwordHash = await bcrypt.hash(temporaryPassword, PASSWORD_BCRYPT_COST);
+    const passwordHash = await hashPassword(temporaryPassword, PASSWORD_BCRYPT_COST);
     const { user, permissionCount } = await prisma.$transaction(async (tx) => {
       await PermissionManagementService.acquireAdminGuardLock(tx);
       if (await factoryAdminExists(tx)) {
