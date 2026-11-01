@@ -89,7 +89,12 @@ async function section2(pure: Map<string, Map<GoldenComponent, Prisma.Decimal>>,
   check("§2 ayar: sunum dövizi USD okunuyor", presentCur === "USD", presentCur);
 
   const imp = { runIds: ids.runIds, userId: admin };
-  const code = (c: GoldenCase, k: string) => `${tag}-${c.key}-${k}`.slice(0, 32);
+  // Kesme iki iplik anahtarını aynı koda düşürüp içe aktarımı sessizce çakıştırırdı; kesmek yerine düş.
+  const code = (c: GoldenCase, k: string) => {
+    const full = `${tag}-${c.key}-${k}`;
+    if (full.length > 32) throw new Error(`Altın test kalem kodu 32 karakteri aşıyor: ${full}`);
+    return full;
+  };
   const yarnsOf = (c: GoldenCase) => [c.warp.yarn, ...c.weft.yarns.map((w) => w.yarn)];
   const yarnRows = GOLDEN_CASES.flatMap((c) => yarnsOf(c).map((y) => ({ code: code(c, y.key), name: `${tag} ${y.name}`, itemType: "YARN", unit: "KG", linearDensityDen: y.denier })));
   await importRows("item", yarnRows, imp);
