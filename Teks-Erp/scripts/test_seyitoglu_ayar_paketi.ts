@@ -13,10 +13,12 @@
 // NEGATİF SONDA — 2026-10-31: kuru koşu dalına `systemSetting.updateMany` + rapordan "ayar sonraki
 // dilimde" silindi + vardiya SKIP dalı kapatıldı → 14/4, §1c · §2c · §2e · §3c kırmızı (taban 18/0); cp ile geri alındı.
 // SY-F3K §2g: paketten `kk1.weightEntryEnabled` satırı silinince §2g ❌ (3/4); geri alındı.
+// §1f (2026-11-01): `auth.webTotpPolicy` hedefi "OPTIONAL" yapılınca §1f ❌; geri alındı.
 // =============================================================================
 import { spawnSync } from "node:child_process";
 import * as path from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
+import { WEB_TOTP_POLICIES, type WebTotpPolicy } from "../src/services/system-setting.service";
 import { HIZMET_AYAR_PAKETI } from "./hizmet-ayar-paketi";
 import { SEYITOGLU_SETTINGS } from "./seyitoglu-ayar-paketi";
 import {
@@ -108,6 +110,13 @@ async function main(): Promise<void> {
     (k) => JSON.stringify(SEYITOGLU_SETTINGS.find((p) => p.anahtar === k)?.hedef) !== JSON.stringify(HIZMET_AYAR_PAKETI.find((p) => p.anahtar === k)?.hedef),
   );
   check("§1e' beyanlı ortak anahtar iki pakette aynı hedefte", ortakFark.length === 0, ortakFark.join(","));
+  // Kullanıcı kararı 2026-11-01: barındırılan Seyitoğlu'da iki adımlı giriş kullanıcı tercihi (varsayılan REQUIRED).
+  const totp = SEYITOGLU_SETTINGS.find((p) => p.anahtar === "auth.webTotpPolicy");
+  check(
+    "§1f web TOTP politikası USER_CHOICE ve geçerli politika değeri",
+    totp?.alan === "webTotpPolicy" && totp.hedef === "USER_CHOICE" && WEB_TOTP_POLICIES.includes(totp.hedef as WebTotpPolicy),
+    JSON.stringify(totp?.hedef),
+  );
 
   // ── §2 CANLI kuru koşu ── §4 YAZAR → fixture DB (_test) zorunlu.
   const block = hedefDbEngeli() ?? fixtureHedefEngeli();

@@ -31,6 +31,8 @@ const AUTH_EVENTS = {
   LOGIN_FAILED: "LOGIN_FAILED",
   /** Ardışık başarısız deneme eşiği aşıldı. */
   LOGIN_LOCKED: "LOGIN_LOCKED",
+  /** Yönetici kilitli bir giriş kovasını kaldırdı (O4). */
+  LOGIN_LOCK_RELEASED: "LOGIN_LOCK_RELEASED",
   /** Açık oturum varken giriş engellendi. */
   LOGIN_CONFLICT: "LOGIN_CONFLICT",
   LOGOUT: "LOGOUT",

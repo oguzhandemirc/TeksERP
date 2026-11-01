@@ -37,7 +37,14 @@ import {
   releaseLoginAttempt,
   type LockoutKeySpec,
 } from "../middlewares/login-lockout";
-import { passwordPolicyViolation } from "../constants/password-policy";
+import { newPasswordViolation } from "../lib/new-password-policy";
+import {
+  applyAccountThrottle,
+  recordAccountSuccess,
+  releaseAccountAttempt,
+  settleAccountAttempt,
+  shouldWriteLoginFailure,
+} from "../services/login-attempt-monitor.service";
 import {
   clearSessionCookie,
   cookieLoginApplies,
@@ -61,7 +68,7 @@ const webTotpSchema = z.strictObject({
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Mevcut parola gerekli"),
   newPassword: z.string().superRefine((value, ctx) => {
-    const violation = passwordPolicyViolation(value);
+    const violation = newPasswordViolation(value);
     if (violation) ctx.addIssue({ code: "custom", message: violation });
   }),
 });
@@ -335,6 +342,9 @@ export class AuthController {
     //
     // ⚠️ Kilit KAPATILAMAZ (O-04, 2026-10-12): adı "pin" olsa da ŞİFRE girişini de
     // kapsar; `auth.pinLockout*` yalnız eşik/ceza süresini ayarlar.
+    // Y2: hesap başına yumuşak kova (IP'den bağımsız; sert kilit yok) — bcrypt'ten ve kilit sayacından ÖNCE.
+    const throttled = applyAccountThrottle(req, res, body.username);
+    if (throttled) return next(throttled);
     const lockoutKey = resolveLoginLockoutKeys(req, `u:${body.username}`);
     const lock = await reserveLoginAttempt(lockoutKey);
     // ⚠️ DENETİM: kilit YALNIZ KURULDUĞU ANDA yazılır (ayar şifresi kapısıyla
@@ -353,6 +363,7 @@ export class AuthController {
       });
     }
     if (lock.blocked) {
+      releaseAccountAttempt(req);
       next(
         AppError.tooManyRequests(
           `Çok fazla hatalı giriş denemesi. ${lock.retryAfterSec} saniye sonra tekrar deneyin.`,
@@ -377,6 +388,7 @@ export class AuthController {
     try {
       const result = await AuthService.login(body.username, body.password, ctx);
       resetLoginLockout(lockoutKey);
+      recordAccountSuccess(req, body.username);
 
       // SystemLog'a AUTH event (Sistem Kayıtları sayfası bunu okur).
       void AuditService.logEvent({
@@ -395,8 +407,11 @@ export class AuthController {
       // uyarısını üst üste gören meşru kullanıcı kendini 429'a kilitlerdi.
       const isCredentialError = error instanceof AppError && error.statusCode === 401;
       if (!isCredentialError) releaseLoginAttempt(lockoutKey);
+      settleAccountAttempt(req, body.username, isCredentialError);
       // 503 AUTH_BUSY saldırı altında saniyede onlarca döner — audit satırı tabloyu şişirirdi.
-      if (!isAuthBusyError(error)) {
+      // D4: internete açık kurulumda aynı ad + IP'nin hatası dakikada tek satır + özet.
+      const reason = error instanceof Error ? error.message : "unknown";
+      if (!isAuthBusyError(error) && (!isCredentialError || shouldWriteLoginFailure(body.username, ipAddress, reason))) {
         void AuditService.logEvent({
           category: "AUTH",
           action: isCredentialError ? "LOGIN_FAILED" : "LOGIN_CONFLICT",
@@ -404,7 +419,7 @@ export class AuthController {
           ipAddress,
           payload: {
             statusCode: error instanceof AppError ? error.statusCode : 500,
-            reason: error instanceof Error ? error.message : "unknown",
+            reason,
           },
         });
       }
@@ -456,6 +471,7 @@ export class AuthController {
     const lock = await reserveLoginAttempt(lockoutKey);
     await auditLockedOnce(lock, "card", req);
     if (lock.blocked) {
+      releaseAccountAttempt(req);
       next(
         AppError.tooManyRequests(
           `Çok fazla hatalı giriş denemesi. ${lock.retryAfterSec} saniye sonra tekrar deneyin.`,
@@ -544,6 +560,7 @@ export class AuthController {
     const lock = await reserveLoginAttempt(lockoutKey);
     await auditLockedOnce(lock, "quick-pin", req);
     if (lock.blocked) {
+      releaseAccountAttempt(req);
       next(
         AppError.tooManyRequests(
           `Çok fazla hatalı giriş denemesi. ${lock.retryAfterSec} saniye sonra tekrar deneyin.`,

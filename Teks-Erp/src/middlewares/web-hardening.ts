@@ -429,6 +429,8 @@ export type RateLimiterOptions = {
    * gerçek istemciyi sayarsa iki koruma farklı kişileri sınırlar.
    */
   clientIpHeader?: string | null;
+  /** Kova sahibi + eşik çarpanı (Y3: kanıtlı cihaz / kullanıcı / fabrika IP'si). Verilmezse IP anahtarı, ×1. */
+  resolveSubject?: (req: Request, bucket: RateLimitBucket) => { key: string; multiplier: number };
 };
 
 export type RateLimiter = RequestHandler & {
@@ -482,9 +484,13 @@ export function createRateLimiter(opts: RateLimiterOptions): RateLimiter {
     const bucket = classifyRateLimitRequest(req.method, req.originalUrl);
     if (!bucket) return next();
 
-    const limit = opts.limits[bucket];
-    if (limit === null) return next();
-    const key = resolveRateLimitKey(req, bucket, opts.clientIpHeader ?? null);
+    const baseLimit = opts.limits[bucket];
+    if (baseLimit === null) return next();
+    const subject = opts.resolveSubject
+      ? opts.resolveSubject(req, bucket)
+      : { key: resolveRateLimitKey(req, bucket, opts.clientIpHeader ?? null), multiplier: 1 };
+    const key = subject.key;
+    const limit = Math.min(COUNT_MAX, baseLimit * subject.multiplier);
     const t = now();
     const windowStart = t - opts.windowMs;
 

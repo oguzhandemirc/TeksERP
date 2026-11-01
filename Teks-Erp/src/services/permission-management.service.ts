@@ -13,7 +13,8 @@ import { Prisma } from "@prisma/client";
 import { randomBytes } from "crypto";
 import { hashPassword } from "./helpers/password-hasher.helper";
 import { AppError } from "../utils/app-error";
-import { PASSWORD_BCRYPT_COST, passwordPolicyViolation } from "../constants/password-policy";
+import { PASSWORD_BCRYPT_COST } from "../constants/password-policy";
+import { newPasswordViolation } from "../lib/new-password-policy";
 import { AuditService } from "./audit.service";
 import { credentialReseal } from "./helpers/system-account-seal.helper";
 import { AuthService } from "./auth.service";
@@ -516,7 +517,7 @@ export class PermissionManagementService {
       },
     });
     if (!user) throw AppError.notFound("Kullanıcı bulunamadı");
-    const violation = passwordPolicyViolation(newPassword);
+    const violation = newPasswordViolation(newPassword);
     if (violation) throw AppError.badRequest(violation, { code: "PASSWORD_POLICY" });
     if (user.isSystemAccount && (await varsayilanParolaMi(newPassword))) {
       throw AppError.badRequest("Yeni parola ortak varsayılan parolayla aynı olamaz.", { code: "PASSWORD_IS_DEFAULT" });

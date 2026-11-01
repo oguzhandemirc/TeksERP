@@ -19,6 +19,11 @@ services:
       # Cloudflare'in verdiği gerçek adresle EZER, istemcinin yazdığı başlık API'ye ulaşmaz.
       TRUST_PROXY: "1"
       RATE_LIMIT_ENABLED: "true"
+      # Y3: kanıtlı tablet ve oturumlu yazma kendi kovasında sayılır; IP kovasına yalnız kanıtsız istemciler
+      # (tarayıcı, ilk giriş) düşer. Tek NAT IP'li fabrikada vardiya başı girişler 429 almasın diye cömert.
+      # Fabrika/ofis çıkış IP(ler)i .env'de RATE_LIMIT_FACTORY_IPS (eşik × RATE_LIMIT_FACTORY_MULTIPLIER, vars. 10).
+      RATE_LIMIT_LOGIN_MAX: ${RATE_LIMIT_LOGIN_MAX:-60}
+      RATE_LIMIT_WRITE_MAX: ${RATE_LIMIT_WRITE_MAX:-600}
       # Bulut sunucusu BARINDIRILAN sınıftadır (ZORUNLU): .env ne derse desin burada sabit.
       TEKSERP_KURULUM_SINIFI: BARINDIRILAN
       # Kenar TLS'i sonlandırır (Cloudflare Full strict): backend HSTS'i (180 gün) tek kaynaktan basar, nginx basmaz.

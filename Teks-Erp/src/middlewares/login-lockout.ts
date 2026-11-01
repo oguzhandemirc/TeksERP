@@ -15,6 +15,7 @@ import { loadActiveBuckets, pruneIdleBuckets, saveBucket } from "../services/hel
 import { uyari } from "../lib/logger";
 import { readWebHardeningConfig, resolveClientIp } from "./web-hardening";
 import { isHostedInstallation } from "../services/helpers/install-class.helper";
+import { factoryMultiplierFor, readFactoryEgressConfig } from "./factory-egress";
 import "../types/express-augment";
 
 /** Anahtar başına deneme durumu: ardışık yanlış (fails), toplam ceza turu
@@ -161,7 +162,12 @@ export function resolveRequestSourceKey(req: Request, env: NodeJS.ProcessEnv = p
 // =============================================================================
 
 /** Bir kilit kovası: anahtar + eşik çarpanı (1 = bugünkü eşik). */
-export type LockoutKeySpec = { key: string; budgetMultiplier: number };
+export type LockoutKeySpec = {
+  key: string;
+  budgetMultiplier: number;
+  /** Başarılı girişte ceza merdiveni de sıfırlanır (O4: yalnız DAR kova — sahibi kanıtladı; geniş kova paylaşımlı). */
+  resetPenaltyOnSuccess?: boolean;
+};
 
 /**
  * GENİŞ (IP) kovanın bütçe çarpanı. 5 seçildi: varsayılan eşik 5 deneme →
@@ -208,10 +214,28 @@ export function resolveLoginLockoutKeys(
   const { loginLockoutScope, clientIpHeader } = readWebHardeningConfig(env, () => {});
   const ipKey = resolveLoginLockoutKey(req, clientIpHeader);
   if (loginLockoutScope === "ip") return [{ key: ipKey, budgetMultiplier: 1 }];
-  return [
-    { key: `${ipKey}|${normalizeIdentity(identity)}`, budgetMultiplier: 1 },
-    { key: ipKey, budgetMultiplier: WIDE_KEY_BUDGET_MULTIPLIER },
-  ];
+  // O4: geniş kova YÖNTEME göre ayrı (parola `ip` — eski anahtar korunur; PIN/kart önekli) → tabletlerin PIN
+  // yanlışları ofisin parola girişini kilitlemez. Kanıtlı cihazdan PIN/kart geniş kovaya hiç girmez (dar kova cihazdır).
+  const method = lockoutMethodOf(identity);
+  // Ceza merdiveni başarıda yalnız HESAP kimlikli dar kovada sıfırlanır; PIN/kart dar kovası CİHAZDIR — kendi
+  // PIN'ini bilen biri o cihazın merdivenini sıfırlayamasın.
+  const narrow: LockoutKeySpec = {
+    key: `${ipKey}|${normalizeIdentity(identity)}`,
+    budgetMultiplier: 1,
+    resetPenaltyOnSuccess: method === "password",
+  };
+  if (method !== "password" && req.device?.proofVerified) return [narrow];
+  const factory = factoryMultiplierFor(ipKey, readFactoryEgressConfig(env, () => {}));
+  const wideKey = method === "password" ? ipKey : `${method}|${ipKey}`;
+  return [narrow, { key: wideKey, budgetMultiplier: WIDE_KEY_BUDGET_MULTIPLIER * factory }];
+}
+
+/** Kimlik önekinden yöntem: `pin:` · `card:` · diğerleri (u:, sp:, cp:, bp:, wt:) parola sınıfı. */
+function lockoutMethodOf(identity: string | null | undefined): "password" | "pin" | "card" {
+  const v = (identity ?? "").trim().toLowerCase();
+  if (v.startsWith("pin:")) return "pin";
+  if (v.startsWith("card:")) return "card";
+  return "password";
 }
 
 /** `string` (eski sözleşme) ya da kova listesi → kova listesi (+ SHA-256 anahtar). */
@@ -304,6 +328,7 @@ export async function reserveLoginAttempt(
       newBlockMs = Math.max(newBlockMs, entry.blockedUntil - now);
     }
     failCounts.set(spec.hash, entry);
+    rememberLabel(spec.hash, spec.key);
     markDirty(spec.hash);
   }
 
@@ -343,6 +368,7 @@ export function resetLoginLockout(key: string | LockoutKeySpec[]): void {
     if (!e) continue;
     e.fails = 0;
     e.blockedUntil = 0;
+    if (spec.resetPenaltyOnSuccess) e.penaltyRounds = 0;
     markDirty(spec.hash);
   }
 }
@@ -361,4 +387,60 @@ export function releaseLoginAttempt(key: string | LockoutKeySpec[]): void {
     if (e.fails > 0) e.fails -= 1;
     markDirty(spec.hash);
   }
+}
+
+// ─── Yönetici görünümü (O4): kilitli kovalar + audit'li kaldırma ─────────────────────────────────
+// DB yalnız SHA-256 özeti tutar; okunur etiket (IP | kimlik — sır yok) bu süreçte görülen kovalar için
+// bellekte. Yeniden başlatma öncesinden kalan kovada etiket null (yalnız kısa özet gösterilir).
+const labels = new Map<string, string>();
+const MAX_LABELS = 5000;
+
+function rememberLabel(hash: string, key: string): void {
+  if (labels.size >= MAX_LABELS && !labels.has(hash)) labels.delete(labels.keys().next().value as string);
+  labels.set(hash, key.slice(0, 200));
+}
+
+export type BlockedLoginBucket = { id: string; label: string | null; blockedUntil: Date; penaltyRounds: number };
+
+/** Şu an kilitli kovalar (en geç açılan önce). */
+export async function listBlockedLoginBuckets(now = Date.now()): Promise<BlockedLoginBucket[]> {
+  await ensureHydrated();
+  const out: BlockedLoginBucket[] = [];
+  for (const [hash, e] of failCounts) {
+    if (e.blockedUntil > now && !isProtectedGateLabel(labels.get(hash) ?? null)) {
+      out.push({ id: hash, label: labels.get(hash) ?? null, blockedUntil: new Date(e.blockedUntil), penaltyRounds: e.penaltyRounds });
+    }
+  }
+  return out.sort((a, b) => b.blockedUntil.getTime() - a.blockedUntil.getTime());
+}
+
+/** Ayar/yedek şifresi, parola değişimi ve web-TOTP kapılarının kovaları: yönetici bu kilitleri GÖRMEZ ve
+ *  KALDIRAMAZ — ayar şifresi admin'i korumalı ayardan uzak tutan ikinci kapıdır (O-04, superadmin.md). */
+export function isProtectedGateLabel(label: string | null): boolean {
+  return label !== null && /^(sp|bp|cp|wt):/.test(label);
+}
+
+/** Yalnız etiketi bilinen GİRİŞ kovası kaldırılabilir; etiketsiz kova (yeniden başlatma öncesi) türü belirsiz → fail-closed. */
+export function isReleasableLoginLabel(label: string | null): boolean {
+  return label !== null && !isProtectedGateLabel(label);
+}
+
+export type ReleaseLoginBucketResult =
+  | { status: "OK"; bucket: BlockedLoginBucket }
+  | { status: "NOT_ACTIVE" }
+  | { status: "NOT_RELEASABLE" };
+
+/** Kilidi kaldırır (sayaç + ceza merdiveni sıfır). Kontrol ile mutasyon arasında await yok (atomik). */
+export async function releaseBlockedLoginBucket(id: string, now = Date.now()): Promise<ReleaseLoginBucketResult> {
+  await ensureHydrated();
+  const e = failCounts.get(id);
+  if (!e || e.blockedUntil <= now) return { status: "NOT_ACTIVE" };
+  if (!isReleasableLoginLabel(labels.get(id) ?? null)) return { status: "NOT_RELEASABLE" };
+  const before: BlockedLoginBucket = { id, label: labels.get(id) ?? null, blockedUntil: new Date(e.blockedUntil), penaltyRounds: e.penaltyRounds };
+  e.fails = 0;
+  e.blockedUntil = 0;
+  e.penaltyRounds = 0;
+  markDirty(id);
+  await flushLoginLockoutPersistence();
+  return { status: "OK", bucket: before };
 }

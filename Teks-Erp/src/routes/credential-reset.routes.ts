@@ -7,7 +7,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
-import { passwordPolicyViolation } from "../constants/password-policy";
+import { newPasswordViolation } from "../lib/new-password-policy";
 import {
   CREDENTIAL_RESET_KINDS,
   CREDENTIAL_RESET_STATUSES,
@@ -29,7 +29,7 @@ const approveSchema = z.object({
   password: z
     .string()
     .superRefine((value, ctx) => {
-      const violation = passwordPolicyViolation(value);
+      const violation = newPasswordViolation(value);
       if (violation) ctx.addIssue({ code: "custom", message: violation });
     })
     .optional(),

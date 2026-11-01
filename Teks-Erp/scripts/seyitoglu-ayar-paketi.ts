@@ -42,6 +42,8 @@ export const SEYITOGLU_SETTINGS: readonly PaketSatiri[] = [
   // "Bu cihazı 30 gün hatırla" (süperadmine uygulanmaz). Ayar normalde yalnız süperadmin yazar; paket kurulumcunun işidir.
   { anahtar: "auth.trustedDeviceDays", alan: "trustedDeviceDays", hedef: 30, dilim: "GUVENILIR-CIHAZ" },  // Kullanıcı isteği 2026-11-01: girişte son kullanıcı hatırlanır, yalnız parola sorulur (sistem hesabı hatırlanmaz).
   { anahtar: "auth.rememberLastUser", alan: "rememberLastUser", hedef: true, dilim: "GIRIS-SON-KULLANICI" },
+  // Kullanıcı kararı 2026-11-01 ("herkes kendi seçer"): barındırılanda varsayılan REQUIRED, TOTP'siz kullanıcı 403 alırdı.
+  { anahtar: "auth.webTotpPolicy", alan: "webTotpPolicy", hedef: "USER_CHOICE", dilim: "WEB-TOTP" },
 ];
 
 /** TAM profilin Seyitoğlu için şart modülleri; kapalıysa uyarı (profil seçimi kurulumda). */

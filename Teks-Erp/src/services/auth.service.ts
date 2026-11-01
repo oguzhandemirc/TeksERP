@@ -23,7 +23,8 @@ import {
 import { loadJwtSecretAtBoot } from "../lib/jwt-secret";
 import { isHostedInstallation } from "./helpers/install-class.helper";
 import { uyari } from "../lib/logger";
-import { PASSWORD_BCRYPT_COST, passwordPolicyViolation } from "../constants/password-policy";
+import { PASSWORD_BCRYPT_COST } from "../constants/password-policy";
+import { newPasswordViolation } from "../lib/new-password-policy";
 import { SessionRegistryService } from "./session-registry.service";
 import { TotpAccountService } from "./totp-account.service";
 import { getShortCredentialKeyRing, ringKeyByKid } from "../lib/short-credential/keyring";
@@ -968,7 +969,7 @@ export class AuthService {
     if (!(await verifyPassword(currentPassword, user.passwordHash))) {
       throw AppError.badRequest("Mevcut parola yanlış.", { code: CURRENT_PASSWORD_INVALID_CODE });
     }
-    const violation = passwordPolicyViolation(newPassword);
+    const violation = newPasswordViolation(newPassword);
     if (violation) throw AppError.badRequest(violation, { code: "PASSWORD_POLICY" });
     if (await verifyPassword(newPassword, user.passwordHash)) {
       throw AppError.badRequest("Yeni parola mevcut parolayla aynı olamaz.", { code: "PASSWORD_UNCHANGED" });

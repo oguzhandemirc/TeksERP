@@ -57,6 +57,38 @@ export const resolveNewDeviceLoginRecipients: RecipientResolver = async (ctx) =>
   return out;
 };
 
+export const SUSPICIOUS_LOGIN_KIND = "kimlik.supheli-giris-denemesi" as const;
+
+export interface SuspiciousLoginInput {
+  userId: string;
+  displayName: string;
+  failCount: number;
+  sourceCount: number;
+  at: Date;
+}
+
+/** Hesap başına yumuşak kova uyarı eşiği aşıldı (Y2) — TEK yayma noktası `login-attempt-monitor.service`. */
+export async function emitSuspiciousLogin(
+  tx: Parameters<typeof emitNotification>[0],
+  input: SuspiciousLoginInput,
+): Promise<string | null> {
+  return emitNotification(
+    tx,
+    "kimlik.supheli-giris-denemesi", // literal: yayma tarayıcısı türü değişkenden okuyamaz (SUSPICIOUS_LOGIN_KIND)
+    { type: "user", id: input.userId, key: input.userId },
+    {
+      kullaniciId: input.userId,
+      kullanici: input.displayName,
+      hataSayisi: input.failCount,
+      kaynakSayisi: input.sourceCount,
+      saat: factoryDateTimeTr(input.at),
+    },
+    {},
+  );
+}
+
 export function registerIdentityRecipientResolvers(): void {
   registerRecipientResolver(NEW_DEVICE_LOGIN_KIND, resolveNewDeviceLoginRecipients);
+  // Aynı alıcı kuralı: konu kullanıcı ∪ admin:users.
+  registerRecipientResolver(SUSPICIOUS_LOGIN_KIND, resolveNewDeviceLoginRecipients);
 }
