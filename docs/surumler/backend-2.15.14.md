@@ -3,7 +3,7 @@
 **Durum:** TASLAK — terfide kullanıcı onayı. İlk hedef yalnız `test` grubu (üyesi tek kurulum: bulut deneme sunucusu,
 satıcı DB'sinde `kurulum.kanalKodu = test` tek satır, 2026-11-01 ölçüldü); öncü/genel gruba çıkış ayrı karar (terfi
 etiketi). Bu belge `2.15.14-taslak.md` girdi notunun (KÜÇÜK-F, teklif belgesi donması) üstüne 2026-11-01 sürüm
-hazırlığında yazıldı; §2 ve §4 her iniş turunda yeniden ölçülür (son ölçüm `origin/main` @ `a40b3afdd`; bekleyen: E1 #403, E2 #402, E3 #401, F1–F3).
+hazırlığında yazıldı; §2 ve §4 her iniş turunda yeniden ölçülür (son ölçüm `origin/main` @ `9bf102b92`; bekleyen: #410 fatura süzgeci / gelen belge numarası).
 **Paket:** _(paketleme doldurur)_
 **SHA256:** _(paketleme doldurur)_
 **Commit:** _(paketleme doldurur)_
@@ -24,8 +24,8 @@ doğar; operatöre görünür etki ancak ayar açılınca başlar.
 
 ## 2. Ne değişti
 
-Ölçüm: `backend-v2.15.13` (`4e6cad988`) → `origin/main` @ `a40b3afdd`, ilk ebeveyn hattında 162 commit (≈154 PR).
-Alt proje farkı: `Teks-Erp/src` 445 dosya · `Electron/src` 523 dosya (web paneli imajda) · `mobil/src` 133 dosya
+Ölçüm: `backend-v2.15.13` (`4e6cad988`) → `origin/main` @ `9bf102b92`, ilk ebeveyn hattında 171 commit (≈163 PR).
+Alt proje farkı: `Teks-Erp/src` 467 dosya · `Electron/src` 566 dosya (web paneli imajda) · `mobil/src` 133 dosya
 (bu turda tablet yayını YOK) · `patron/sunucu` 14 · `patron/uygulama` 36 · `satici` 2 (modül kataloğu satırı) ·
 `okuma/` 28 (yeni yerel okuma servisi — imaja GİRMEZ).
 
@@ -61,10 +61,24 @@ izleme, yazılı onay) ve yeni izin `finance:cari-merge` (SoD kümesi, şablonda
 Kapısı çipleri, bildirim koşulu, sevk top listesi Excel'i.
 
 **Masraf, kârlılık, maliyet** — #279, #307, #315, #319, #322, #332, #334, #335, #338, #347, #357, #358, #361,
-#362, #373, #377, #381, #386, #391–#394, #396. Masraf özeti ve masraf bağı, makine saat ücreti + hizmet sarf normu,
+#362, #373, #377, #381, #386, #391–#394, #396, #405, #409. Masraf özeti ve masraf bağı, makine saat ücreti + hizmet sarf normu,
 gerçekleşen kârlılık (gelir + sarf + dış fason + makine-saat + genel gider), sunum dövizi (donmuş kur), kg bazlı
 terbiye tarifesi, dokuma gerçek maliyeti, varyant standart maliyeti, SEPARATE_BEAM katman firesi; boyahane faturası
-kontrolü sevk günündeki tarifeyle karşılaştırılır (SY-P2 #397; tarihli geçmiş yoksa sonuç eskisiyle aynı).
+kontrolü sevk günündeki tarifeyle karşılaştırılır (SY-P2 #397; tarihli geçmiş yoksa sonuç eskisiyle aynı);
+varyantın atkı değişimi standart maliyete girer (#405; önceden dondurulmuş sürüm değişmez); hizmet sarf normunda
+`0` = "bu hizmet sarf kullanmaz" açık beyanı, kârlılık sarfsız hizmet içeren işi (Tambur) artık ölçer (#409; norm
+satırı hiç yoksa bugünkü gibi "eksik").
+
+**Brode fiyat birimi** — #402. Ayar `finance.serviceBilling.brodeUnit` (varsayılan `METER` = bugünkü davranış);
+desen değerinde vuruş sayısı, hizmet fiyat satırında birim. Panelde şimdilik yalnız Metre seçilebilir: Adet/Vuruş
+tablette brode adet girişi inene dek gizli (sunucu da `BRODE_UNIT_NO_PIECE_INPUT` ile reddeder).
+
+**Sarf stoğu (kuşak / kurşun şeridi)** — #401. Ayar `consumable.stockEnabled` (varsayılan KAPALI = bugünkü
+davranış): açıkken mal kabulde sarf girişi, kurşun/tambur işleminde normla tüketim düşümü, ters kayıtla iptal,
+`GET /api/consumable-stock`; kuşak ihtiyacı raporuna Stokta/Eksik sütunları.
+
+**Toplu açılış aktarımı** — #403. Veri İçe Aktarma'ya üç tür: cari açılış bakiyesi, çek/senet portföyü, müşteri
+hizmet fiyat listesi; geri sarma ters kayıtla (silmez).
 
 **Fatura KDV + tevkifat** — #359. Genel ve müşteri bazında (`finance.withholding.enabled` varsayılan kapalı).
 
@@ -81,7 +95,10 @@ cari hesap projeksiyonuna kilit alanı; iş emrine sevke hazırlık alanı; maki
 **Küçükler ve önceki taslak** — #236 (KÜÇÜK-F: "Sevk Edilenler" adı, kasa notunda `multiCurrency`, top kartında
 "İz sür"), #241 (teklif SENT / fiyat listesi PUBLISHED geçişinde belge tx içinde donar; önce gönderilmiş ve hiç
 basılmamış kayıt ilk basımda eskisi gibi oluşur), #242, #268, #269, #281, #286, #290 (sekme davranışı tercihi),
-#308, #382, #389, #370.
+#308, #382, #389, #370, #406 (çözgü kartı formu ondalık alanları, teklif kaleminde varyant seçici, içe
+aktarımda "Kısmen tamamlandı" dili), #407 (iplik içe aktarım etiketi, Seyitoğlu ayar paketi), #408 (cari formu
+taşması, ölçüm faz etiketi istasyon adıyla, top detayında müşteri kodu, sevkiyat metrajı 2 hane, yeniden etiket
+anahtarı); #404 yalnız betik.
 
 **Güncelleyici ve hizmet konağı** — `tekserp-guncelleyici` 0.2.8 → 0.2.9, `tekserp-hizmet` 0.2.0 → 0.2.1
 (`scripts/test_guncelleyici_surum.mjs` yeşil, taban `backend-v2.15.13`). `Teks-Erp/docker`, `deploy/pg`,
@@ -99,7 +116,8 @@ turda YOK (yayındaki masaüstü panel 1.6.6).
   - Tablet 1.4.3 (sahadaki): ölçüm kaynağı alanı göndermez → `tambur.olcumKaynagiZorunlu` KAPALI kaldıkça kesim
     bugünkü gibi; kurşun metresi göndermez → `kursun.meterCapture = OFF`ta bugünkü gibi; cari kilidi açılırsa
     kilitli caride sevk 409 alır ve genel hata metni görür (tam ekran yalnız yeni tablette); müşteri barkodu
-    okutması yeni tablette. Zorunluluk ayarlarının açıklamaları "önce tüm tabletler yeni sürümde" der.
+    okutması yeni tablette. Zorunluluk ayarlarının açıklamaları "önce tüm tabletler yeni sürümde" der. Brode adedi
+    göndermez → yalnız Metre birimi seçilebildiği için fark yok.
   - Masaüstü panel 1.6.6: yeni ekranları göstermez, yeni alanları yok sayar; Kasa & Banka Defteri notu eski koşulla
     çizilir.
   - Patron bulutu 0.2.0 (VDS, `5156f26d2259`): yeni anlıkları (`ozet-masraf`, `karlilik-ozet`) giriş başına
@@ -111,34 +129,37 @@ turda YOK (yayındaki masaüstü panel 1.6.6).
     ÖNCE).
 - **`minVersion` dokunuldu mu:** hayır — `Teks-Erp/src/config/client-version-policy.ts` `backend-v2.15.13`e göre
   farksız; öneri: değişmesin.
-- **Yeni ayarlar:** 53 ayar anahtarı (`system-setting.service.ts` `SETTING_KEYS` farkı) ve modül anahtarı
+- **Yeni ayarlar:** 55 ayar anahtarı (`system-setting.service.ts` `SETTING_KEYS` farkı) ve modül anahtarı
   `gelenBelge.enabled`; hepsi bugünkü davranışla doğar (geçmişi olan kurulumda modül göçü sabit `false` yazar).
 
 ## 4. Migration
 
 - **Var mı:** evet — `backend-v2.15.13`ten bu yana **29** yeni göç (2026-11-01 ölçüldü, `origin/main` @
-  `a40b3afdd`; SY-P2…P4 ve D4-K3e göçsüz; bekleyen dilimler inince yeniden sayılır). Deneme 2.15.12'den geçtiği için orada **59** göç uygulanır
-  (2.15.13'ün 30'u + bu sürümün 29'u).
+  `a40b3afdd`; SY-P2…P4 ve D4-K3e göçsüz) + `9bf102b92` ölçümünde #402, #401, #409 ile **3** göç daha → **32**.
+  Deneme 2.15.12'den geçtiği için orada **62** göç uygulanır (2.15.13'ün 30'u + bu sürümün 32'si).
 - İçerik: hepsi ADDITIVE — yeni tablolar (gelen belge, kurşun metre okuması, hizmet eşlemesi/fatura bağı, müşteri
   barkodu, cari kilidi, makine ücreti/sarf normu, desen kartı varyantı, maliyet tül, sipariş varyant hedefi, masraf
   bağı, cari virman, sayaç kalibrasyonu), var olan tablolara boş/varsayılanlı kolon, enum değeri ekleme, trigger
   (`20261029180000_cari_service_billing_trigger`, `20261031230000_d4_desen_islem_isemri_kirletme` — yalnız
   `sync_marks` kirletme trigger'ları). Veri yazan tek göç `20261029000100_gelen_belge_modul_anahtari`
   (`gelenBelge.enabled = false`, yalnız top geçmişi olan kurulumda, `ON CONFLICT DO NOTHING`). DROP TABLE/COLUMN,
-  SET NOT NULL, tip değişimi YOK (göç dosyalarında sayıldı).
-- **Toplam migration:** 454 (2.15.13'te 425, 2.15.12'de 395). Paketleme anında yeniden sayılır.
+  SET NOT NULL, tip değişimi YOK (göç dosyalarında sayıldı). Tek kısıt değişimi
+  `20261101120000_sarf_normu_sifir_beyan`: `service_consumable_norms_qty_ck` aynı adla `> 0` → `>= 0` gevşer (veri
+  değişmez).
+- **Toplam migration:** 457 (2.15.13'te 425, 2.15.12'de 395). Paketleme anında yeniden sayılır.
 - **Döküm provası YAPILDI (2026-11-01, deneme sunucusu):** deneme yedeği
   `tekserp_pre-demo-iki-fabrika_20261101T084501Z.dump` (PG 16.15, 395 göç, 15.476 top) yerel PG 16.15'te
   `tekserp_prova21514_test`e yüklendi (9 sn) → `prisma migrate deploy` 59 göç, çıkış 0, duvar 5 sn (göç süresi
   toplamı 2,1 sn), yarım/geri alınmış göç 0, toplam 454; `gelenBelge.enabled = false` yazıldı. `migrate diff` farkı
   yalnız iki beyanlı DEFERRABLE FK (`rolls_/swatches_sackId_shipmentId_consistency_fkey`, 2.15.13 provasıyla aynı).
   `rolls_qty_le_initial` dökümde zaten NOT VALID (bu sürümün göçleri dokunmaz). Öncü/genel terfisinden önce
-  fabrika dökümünde prova ŞART.
+  fabrika dökümünde prova ŞART. Aynı prova DB'sinde `9bf102b92`in 3 yeni göçü ayrıca uygulandı: çıkış 0,
+  göç süresi toplamı 0,04 sn, toplam 457, yarım/geri alınmış 0; `migrate diff` farkı yine yalnız aynı iki FK.
 - **Geri alınabilir mi:** göç geri alınmaz; eklenen tablo/kolonları eski imaj okumaz (bkz. §6).
 
 ## 5. Kurulum notu
 
-- **Beklenen kesinti:** güncelleyici yedek + göç + yeniden başlatma; 59 ekleme göçü tablo yeniden yazmaz.
+- **Beklenen kesinti:** güncelleyici yedek + göç + yeniden başlatma; 62 göç (61 ekleme + 1 CHECK gevşetme) tablo yeniden yazmaz.
   Önceki ölçüm: 2.15.13 provasında 62 göç 2 sn. Süre kurulumda ölçülür.
 - **Sıra:** (isteğe bağlı) satıcı → backend → patron bulutu → masaüstü panel / tablet. Backend tek başına güvenli
   (bkz. §3); bulut güncellenmezse yalnız iki yeni özet görünmez.
@@ -166,7 +187,7 @@ yalnız kullanıcı onayıyla. Grupta geri inme yok; düzeltme ileri sürümle. 
 ## 7. Doğrulama — kurulumdan sonra rapor edilecekler
 
 - Sağlık bilgisi: sürüm 2.15.14, sunucu ve veritabanı ayakta; güncelleyici durumu `BASARILI`.
-- Veritabanı: 454 migration bitmiş, sorunlu/yarım migration yok.
+- Veritabanı: 457 migration bitmiş, sorunlu/yarım migration yok.
 - `GET /api/feature-flags` → `gelenBelgeEnabled: false` (profil ya da elle açılmadıysa).
 - Web paneli açılıyor; "Sevk Edilenler" ekranı ve Kasa & Banka Defteri açılıyor.
 - Tablet 1.4.3 ile PIN girişi, bir Tambur kesimi ve bir sevk bugünkü gibi (ayarlar kapalıyken).
@@ -198,7 +219,14 @@ sürümü o turda yazılır). Metin terfide kullanıcı onayıyla donar.
     { "kapsam": "panel", "tip": "yeni", "metin": "Makine Duruşları ekranı dokuma dışındaki istasyonlarda da kullanılır; duruş raporu eklendi." },
     { "kapsam": "panel", "tip": "iyilestirme", "metin": "Müşteri barkodu: topa müşterinin barkodu bağlanır, okutulan her noktada müşteri koduyla da bulunur; birden çok eşleşmede seçim penceresi açılır." },
     { "kapsam": "panel", "tip": "iyilestirme", "metin": "Kurşun ve Tambur'da metre kaynağı (makine, operatör, tahmini) kaydedilir; tahmini kesim metresi faturaya girmez, süpervizör kesim metresini düzeltebilir." },
-    { "kapsam": "panel", "tip": "iyilestirme", "metin": "Sevkiyat ekranının adı Sevk Edilenler oldu; top kartında İz sür düğmesi; teklif gönderildiği anda belgesi oluşur." }
+    { "kapsam": "panel", "tip": "iyilestirme", "metin": "Sevkiyat ekranının adı Sevk Edilenler oldu; top kartında İz sür düğmesi; teklif gönderildiği anda belgesi oluşur." },
+    { "kapsam": "panel", "tip": "yeni", "metin": "Veri İçe Aktarma'da üç yeni tür: cari açılış bakiyeleri, çek/senet portföyü ve müşteri hizmet fiyat listesi Excel'den toplu girilir; yanlış aktarım geçmişten ters kayıtla geri alınır." },
+    { "kapsam": "panel", "tip": "yeni", "metin": "Brode fiyat birimi fabrika ayarı eklendi; şimdilik yalnız Metre seçilebilir. Desen değerine vuruş sayısı, hizmet fiyatına birim girilebilir." },
+    { "kapsam": "panel", "tip": "yeni", "metin": "Kuşak ve kurşun şeridi için sarf stoğu: ayar açılınca mal kabulde sarf girişi yapılır, işlenen toplar için stoktan kendiliğinden düşülür; kuşak ihtiyacı raporunda Stokta ve Eksik sütunları görünür." },
+    { "kapsam": "panel", "tip": "iyilestirme", "metin": "Hizmet sarf normuna 0 girilebilir: bu hizmetin sarf kullanmadığı anlamına gelir; Tambur gibi işlerin kârlılığı artık ölçülür." },
+    { "kapsam": "panel", "tip": "duzeltme", "metin": "Atkısı değişen varyantın standart maliyeti varyantın ipliğiyle hesaplanır; bu varyantlarda maliyet sürümünü yeniden oluşturun, eski sürüm olduğu gibi kalır." },
+    { "kapsam": "panel", "tip": "duzeltme", "metin": "Çözgü kartı düzenlenip kaydedilebiliyor; teklif kaleminde varyant seçilebiliyor; içe aktarım kısmen bittiğinde \"Kısmen tamamlandı\" yazar ve kaç kaydın yazıldığını söyler." },
+    { "kapsam": "panel", "tip": "duzeltme", "metin": "Cari düzenleme penceresi taşmıyor; top ölçümleri istasyon adıyla görünür; top detayında müşteri kodu yazar; Sevkiyatlar listesinde metraj iki haneli; içe aktarımda bulunamayan iplik kodu doğru adlandırılır." }
   ]
 }
 ```
