@@ -16,6 +16,7 @@ import { resolveDenier } from "../../constants/warp-beam";
 import { DEFAULT_COST_FINISHING_KG_BASIS, readCostFinishingKgBasis, readCostWeavingStandardMethod, type WeavingStandardMethod } from "../system-setting.service";
 import { readWarpLayersForItems, type CostWarpLayerRow } from "./effective-construction.helper";
 import { resolveFinishingRateCode } from "./finishing-rate-code.helper";
+import { layerOwnCardWastePct } from "./warp-layer-beam.helper";
 
 
 type Dec = Prisma.Decimal;
@@ -174,12 +175,17 @@ export function buildCostInput(src: CostSources, ref: CostSourceRef, o: CostOver
   // Terbiyeyle aynı kod iki kez sayılmaz (yazım kapısının ikinci seddi; what-if terbiye değişimi de kapsanır).
   const warpWaste = (card: Dec | null): Sourced<Dec> =>
     firstOf([o.warpWastePct, o.warpWasteMeasured ? "OLCULMUS" : "ELLE"], [cs?.warpWastePct, "YAPI"], [card, "KART"], [p?.defaultWarpWastePct, "PARAMETRE"]);
-  // SY-B1: ek katman kendi kartının take-up'ıyla (ELLE ezmesi yalnız zemine); fire zinciri zeminle aynı.
+  // SY-B1: ek katman kendi kartının take-up'ıyla (ELLE ezmesi yalnız zemine). Fire: SEPARATE_BEAM'de
+  // kendi kartı, yoksa/diğer kiplerde zemin zinciri (SY-P1, `layerOwnCardWastePct`).
+  const layerWaste = (mode: string, card: Dec | null): Sourced<Dec> => {
+    const own = layerOwnCardWastePct(mode, card);
+    return own !== null ? { value: own, source: "KART" } : warpWaste(card);
+  };
   const warpLayers: CostWarpLayer[] = (item ? src.warpLayers?.get(item.id) ?? [] : []).map((l) => ({
     warpSpecId: l.warpSpec.id,
     endsCount: l.warpSpec.endsCount,
     takeUpPct: firstOf([l.warpSpec.takeUpPct, "KART"], [p?.defaultTakeUpPct, "PARAMETRE"]),
-    wastePct: warpWaste(l.warpSpec.wastePct),
+    wastePct: layerWaste(l.beamMode, l.warpSpec.wastePct),
     yarn: cardYarn(src, l.warpSpec.yarnItem),
     role: l.role,
     beamMode: l.beamMode,

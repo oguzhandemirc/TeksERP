@@ -9,9 +9,11 @@
 //   §3 SHARED_BEAM: levent hazırlığı ve hazır levent düşümü EN HIZLI tükenen gruptan (%14);
 //      SEPARATE/CREEL zemin take-up'ında kalır · `fastestGroupTakeUpPct` kipe bakar
 //   §4 fotoğraf gidiş-dönüş (katmanlı) + bilinmeyen kip zod'da reddedilir
-//   §5 derleyici: katman satırı kartın take-up'ını, zemin fire zincirini alır; katmansızda anahtar yok
+//   §5 derleyici: katman satırı kartın take-up'ını alır; fire SEPARATE_BEAM'de kendi kartından (SY-P1),
+//      kartta yoksa/SHARED/CREEL'de zemin zinciri; katmansızda anahtar yok
 //   §6 iplik ihtiyacı kullanımı katman başına kip taşır
-// NEGATİF SONDALAR: bkz. BEKCI-HARITASI satırı (katman döngüsü kaldırıldı → §2 · kip okunmadı → §3).
+// NEGATİF SONDALAR: bkz. BEKCI-HARITASI satırı (katman döngüsü kaldırıldı → §2 · kip okunmadı → §3 ·
+//   katman kart firesi yerine zemin zinciri → §5c).
 // Koşum: npx tsx scripts/test_cozgu_katman_motor.ts
 // =============================================================================
 import { Prisma } from "@prisma/client";
@@ -141,6 +143,25 @@ function main(): void {
     bl?.takeUpPct.value?.equals(14) === true && bl.takeUpPct.source === "KART" && bl.wastePct.value?.equals("2.5") === true && bl.wastePct.source === "YAPI" && bl.beamMode === "SHARED_BEAM" && bl.role === "LENO" && bl.yarn.yarnItemId === "yl");
   const bare = buildCostInput({ ...src, warpLayers: new Map() } as CostSources, { itemId: "i1" });
   check("§5b ⭐ katmansız üründe derlenen girdide `warpLayers` anahtarı YOK", !("warpLayers" in bare));
+
+  // SY-P1 (2026-11-01 kararı #355): SEPARATE_BEAM katmanı firesini KENDİ kartından alır; kartta yoksa
+  // ve SHARED_BEAM/CREEL'de zemin zinciri aynen (§5a SHARED kartta %1 olsa da YAPI %2,5 kalır).
+  const layerOf = (mode: string, waste: Prisma.Decimal | null) => buildCostInput({
+    ...src, warpLayers: new Map([["i1", [{ itemId: "i1", role: "LENO", beamMode: mode, warpSpec: { id: "w2", endsCount: 2720, takeUpPct: D(14), wastePct: waste, yarnItem: yarn("yl", 50) } }]]]),
+  } as unknown as CostSources, { itemId: "i1" });
+  const sepOwn = layerOf("SEPARATE_BEAM", D(1));
+  check("§5c ⭐ SEPARATE_BEAM: katman firesi kendi kartından (KART %1), YAPI %2,5 değil",
+    sepOwn.warpLayers?.[0]?.wastePct.value?.equals(1) === true && sepOwn.warpLayers[0]!.wastePct.source === "KART",
+    `${sepOwn.warpLayers?.[0]?.wastePct.value?.toString()}/${sepOwn.warpLayers?.[0]?.wastePct.source}`);
+  const sepNone = layerOf("SEPARATE_BEAM", null).warpLayers?.[0]?.wastePct;
+  const creelOwn = layerOf("CREEL", D(1)).warpLayers?.[0]?.wastePct;
+  check("§5d SEPARATE_BEAM kartta fire yok → zemin zinciri (YAPI %2,5); CREEL kartta %1 olsa da zemin zinciri",
+    sepNone?.value?.equals("2.5") === true && sepNone.source === "YAPI" && creelOwn?.value?.equals("2.5") === true && creelOwn.source === "YAPI");
+  const usageOwn = yarnUsagePerM(sepOwn).warpLayers[0]?.kgPerM;
+  const usageChain = yarnUsagePerM(layerOf("SEPARATE_BEAM", null)).warpLayers[0]?.kgPerM;
+  check("§5e iplik ihtiyacı aynı girdiden: kendi kart firesi (%1) katman kg'ını zincire (%2,5) göre düşürür; zemin kg'ı aynı",
+    !!usageOwn && !!usageChain && usageOwn.lt(usageChain) && r6(yarnUsagePerM(sepOwn).warp?.kgPerM) === r6(yarnUsagePerM(layerOf("SEPARATE_BEAM", null)).warp?.kgPerM),
+    `${r6(usageOwn)} < ${r6(usageChain)}`);
 
   console.log("\n── §6 İplik ihtiyacı kullanımı ──");
   const u = yarnUsagePerM(withLayer("CREEL"));
