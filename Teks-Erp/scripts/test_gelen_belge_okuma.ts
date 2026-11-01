@@ -14,6 +14,8 @@
 //   §7 eşleme: "GÜLEÇSOY TEKSTİL" ↔ "Güleçsoy Tekstil San." ≥ 0,90 öneri · ilgisiz → boş · alias önce (ALIAS) · /eslestirme ucu
 //   §6d bayat READING (10 dk+) yeniden alınır · §7f /eslestirme yok id → 404
 //   §8 bağlı taslak: operatörün yazdığı başlık/satır EZİLMEZ, yalnız boş alanlar dolar; taslak DRAFT değilse tarama yine READ'e kapanır
+//   §8e–§8g üst üste binen çekim: başka sayfada Top No + kg + metre birebir olan satır atlanır (uyarı), aynı Top No farklı sayı →
+//      yazılır + needsReview; aynı taramanın eşit satırları ikisi de yazılır; paralel iki sayfa ortak satırı TEK kez yazar
 //   §10 K6 PDF: yükleme READ_FAILED (deneme 0) doğar · eski PENDING PDF bile claim EDİLMEZ · sidecar'a 0 PDF isteği ·
 //       okut → 400 DOCUMENT_SCAN_PDF_NOT_READABLE (servis yokken de 503'ten önce) · kuyruk sayaçlarına girmez
 //   §9 İSTEĞE BAĞLI (OKUMA_GERCEK_URL=http://127.0.0.1:8765): GERÇEK okuma servisi (okuma/, D6) — sağlık + sentetik PNG → READ +
@@ -32,10 +34,10 @@ import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { __clearPlainHttpServiceHostsForTests, allowPlainHttpServiceHost, isEgressTargetAllowed } from "../src/lib/http-egress";
 import { resolveReaderUrl, setReaderUrlForTests } from "../src/lib/gelen-belge/url";
-import { rectToPhotoFrame } from "../src/lib/gelen-belge/taslak";
+import { dropOverlapDuplicates, rectToPhotoFrame } from "../src/lib/gelen-belge/taslak";
 import { OcrResultSchema } from "../src/lib/gelen-belge/okuma-istemcisi";
 import { __resetDocumentReaderForTests, runReaderOnce } from "../src/jobs/gelen-belge-okuma.job";
-import { claimNextScan } from "../src/services/gelen-belge-okuma.service";
+import { claimNextScan, processClaimedScan } from "../src/services/gelen-belge-okuma.service";
 import { aliasKey, suggestCustomer, suggestForNote } from "../src/services/gelen-belge-eslestirme.service";
 import { FALLBACK_TEMPLATE_CODE, ensureSenderTemplate } from "../src/services/gelen-belge-sablon.service";
 import bcrypt from "bcryptjs";
@@ -351,6 +353,56 @@ async function main(): Promise<void> {
       det8d.status === 200 && l8d.length === 22 && l8d.slice(0, 21).every((l) => l.scanId === page1) && l8d[21]?.scanId === page2 && page1 !== page2
         && manLines.length === 1 && manLines[0]!.scanId === null,
       JSON.stringify({ p1: page1, p2: page2, ids: [...new Set(l8d.map((l) => l.scanId))], man: manLines.map((l) => l.scanId) }));
+
+    // ── §8e–§8h üst üste binen çekim: aynı kâğıt iki parça çekilince ortak satır ikilenmez ──
+    // §8e saf: aynı taramanın eşit iki satırı birbirini ELEMEZ; mevcut tek eşi yalnız BİR yeni satırı yutar; sıra no anahtar değildir.
+    const dl = (topNo: string | null, m: string, kg: string | null, siraNo?: string) => ({ blockNo: 1, lineKind: "TOP" as const, senderRollNo: topNo ?? siraNo ?? null, meters: m, weightKg: kg, widthCm: null, itemText: null, colorText: null, confidence: 1, needsReview: false, sourceRects: {}, ocrRaw: topNo ? { topNo } : { siraNo: siraNo ?? null } });
+    const ex = (topNo: string, m: string, kg: string | null) => ({ senderRollNo: topNo, meters: m, weightKg: kg, ocrRaw: { topNo } });
+    const o1 = dropOverlapDuplicates([dl("T1", "100", "20"), dl("T1", "100", "20")], [], 2);
+    const o2 = dropOverlapDuplicates([dl("t 1", "100.00", "20.0"), dl("T1", "100", "20")], [ex("T1", "100", "20")], 2);
+    const o3 = dropOverlapDuplicates([dl(null, "100", "20", "1")], [{ senderRollNo: "1", meters: "100", weightKg: "20", ocrRaw: { siraNo: "1" } }], 2);
+    check("§8e saf: tek taramada eşit iki satır → ikisi yazılır · mevcut tek eş tek satırı yutar (normalize Top No + 100.00=100), ikincisi needsReview · sıra no anahtar değil",
+      o1.lines.length === 2 && o1.warnings.length === 0
+        && o2.lines.length === 1 && o2.lines[0]!.needsReview && o2.warnings.some((w) => w.startsWith("OVERLAP_DUPLICATE_SKIPPED: Sayfa 2: 1 satır")) && o2.warnings.some((w) => w.startsWith("OVERLAP_ROLL_NO_CONFLICT: Sayfa 2: 1 satır"))
+        && o3.lines.length === 1 && !o3.lines[0]!.needsReview && o3.warnings.length === 0,
+      JSON.stringify({ o1: o1.lines.length, o2: o2.lines.map((l) => l.needsReview), w2: o2.warnings, o3: o3.warnings }));
+    // §8f iki tarama: sayfa 1'den yalnız ilk 3 satır kalır (2'si birebir, 3.'nün metresi değişik) → sayfa 2 (aynı içerik) 2 atlar, 1 needsReview, 18 yazar
+    for (let i = 0; i < 6 && (await runReaderOnce()).outcome !== "BOS"; i++) { /* önceki §'lerin kuyruğu boşalsın */ }
+    const cr8f = await call("POST", "/api/gelen-belge/irsaliyeler", { sourceKind: "MANUAL", senderDocNo: `${TAG}-USTUSTE` });
+    const ovId = cr8f.data?.id as string;
+    made.notes.push(ovId);
+    const ov1 = await up("0245", { noteId: ovId, pageNo: 1 }, "ust1");
+    await runReaderOnce();
+    await prisma.customerDeliveryNoteLine.deleteMany({ where: { noteId: ovId, lineNo: { gt: 3 } } });
+    const third = await prisma.customerDeliveryNoteLine.findFirstOrThrow({ where: { noteId: ovId, lineNo: 3 }, select: { id: true, senderRollNo: true, meters: true } });
+    await prisma.customerDeliveryNoteLine.update({ where: { id: third.id }, data: { meters: third.meters.plus(1) } });
+    const ov2 = await up("0245", { noteId: ovId, pageNo: 2 }, "ust2");
+    await runReaderOnce();
+    const n8f = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: ovId }, select: { warnings: true, lines: { select: { scanId: true, senderRollNo: true, needsReview: true } } } });
+    const p2 = n8f.lines.filter((l) => l.scanId === ov2);
+    const w8f = n8f.warnings as string[];
+    check("§8f üst üste binen çekim: birebir 2 satır sayfa 2'de ATLANIR + Türkçe uyarı; aynı Top No farklı metre → yazılır + needsReview + uyarı; kalan 18 satır yazılır",
+      n8f.lines.length === 22 && n8f.lines.filter((l) => l.scanId === ov1).length === 3 && p2.length === 19
+        && p2.filter((l) => l.needsReview).map((l) => l.senderRollNo).join() === third.senderRollNo && (await scan(ov2)).status === "READ"
+        && w8f.includes("OVERLAP_DUPLICATE_SKIPPED: Sayfa 2: 2 satır başka sayfada zaten vardı (üst üste binen çekim) — atlandı")
+        && w8f.some((w) => w.startsWith("OVERLAP_ROLL_NO_CONFLICT: Sayfa 2: 1 satır")),
+      JSON.stringify({ n: n8f.lines.length, p2: p2.length, rev: p2.filter((l) => l.needsReview).map((l) => l.senderRollNo), w: w8f.filter((w) => w.startsWith("OVERLAP")) }));
+    // §8g yarış: aynı taslağın iki sayfası PARALEL okunur — DRAFT claim'inin satır kilidi ikinciyi bekletir, ortak 21 satır TEK kez yazılır
+    const cr8g = await call("POST", "/api/gelen-belge/irsaliyeler", { sourceKind: "MANUAL", senderDocNo: `${TAG}-YARIS` });
+    const raceId = cr8g.data?.id as string;
+    made.notes.push(raceId);
+    await up("0245", { noteId: raceId, pageNo: 1 }, "yaris1");
+    await up("0245", { noteId: raceId, pageNo: 2 }, "yaris2");
+    const [k1, k2] = [await claimNextScan(), await claimNextScan()];
+    fake.delayMs = 150;
+    const outs = k1.kind === "CLAIMED" && k2.kind === "CLAIMED" ? await Promise.all([processClaimedScan(k1.id, sidecar.url), processClaimedScan(k2.id, sidecar.url)]) : [];
+    fake.delayMs = 0;
+    const n8g = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: raceId }, select: { warnings: true, lines: { select: { scanId: true } } } });
+    const perScan = [...new Set(n8g.lines.map((l) => l.scanId))];
+    check("§8g paralel iki sayfa (aynı içerik) → 21 satır TEK taramadan, diğeri 21 satırı atlar (uyarı), ikisi de READ",
+      outs.join() === "READ,READ" && n8g.lines.length === 21 && perScan.length === 1
+        && (n8g.warnings as string[]).some((w) => /^OVERLAP_DUPLICATE_SKIPPED: Sayfa [12]: 21 satır/.test(w)),
+      JSON.stringify({ outs, n: n8g.lines.length, scans: perScan.length, w: (n8g.warnings as string[]).filter((w) => w.startsWith("OVERLAP")) }));
 
     // ── §10 K6 PDF: arşiv — kuyruğa girmez, sidecar'a gitmez, okut 400 ───────
     fake.mode = "ok";
