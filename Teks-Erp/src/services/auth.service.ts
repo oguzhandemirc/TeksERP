@@ -57,6 +57,7 @@ import { consumeTrustedDevice, noteWebLogin, revokeAllTrustedDevicesTx, auditBul
 import { CURRENT_PASSWORD_INVALID_CODE } from "../constants/password-policy";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { grantsDesktopPanel } from "../constants/permission-catalog";
+import { appliesHostedBearerRule, decideHostedBearer, HOSTED_ENROLLMENT_MESSAGE } from "./hosted-second-factor";
 
 /** Login çağrılarının istemci bağlamı — Session registry + aynı-tip politika için.
  *  clientType body'den (default 'mobile'); deviceId x-device-id/req.device'den;
@@ -95,6 +96,10 @@ export interface LoginContext {
   ip?: string | null;
   /** `assertSecondFactor` YAZAR (çıktı): ikinci faktör nasıl geçildi. Girdi olarak okunmaz. */
   secondFactorOutcome?: "CODE" | "TRUSTED_DEVICE";
+  /** Barındırılan Bearer parola girişi: istek onaylı + HMAC kanıtlı saha cihazından mı (`req.device.proofVerified`). */
+  approvedDeviceProven?: boolean;
+  /** `assertSecondFactor` YAZAR (çıktı): barındırılan kanal-bağımsız kural uygulandı → giriş sonrası cihaz takibi. */
+  hostedBearerFollowUp?: boolean;
 }
 
 /** Token'ı hangi kimlik bilgisi açtı — zorunlu değişim dalı yönteme göre ayrışır. */
@@ -562,6 +567,8 @@ export class AuthService {
    *   • PIN/kart, diğerleri: TOTP açık ∧ `auth.shortCredentialTotpRequired` (varsayılan kapalı).
    *   • Web (çerez kipi): TOTP zorunlu (kurulmamışsa 403). `auth.webTotpPolicy=USER_CHOICE` ∧ kullanıcı
    *     kendi hesabında `webTotpOptOut` → ne kurulum ne kod istenir. Süperadmin web'de her zaman kod verir.
+   *   • Barındırılan kurulumda Bearer parola girişi (electron / mobile / boş): çerez yolunun aynı kuralı +
+   *     onaylı ve kanıtlı tablet cihazı ikinci faktör sayılır (`hosted-second-factor.ts`, Y1). LAN'da yok.
    * Kodlar giriş kilidine göre seçildi (yalnız 401 kaba kuvvet sayılır):
    *   • 409 TOTP_REQUIRED → kod istendi; kimlik denemesi DEĞİL (istemci kodu ekleyip tekrar POST eder).
    *   • 401 TOTP_INVALID  → yanlış kod; SAYILIR (TOTP uzayı 10^6, kilitsiz tahmin edilirdi).
@@ -573,6 +580,8 @@ export class AuthService {
     // Bulut web paneli (çerez kipi, K4): giriş yolu ne olursa olsun TOTP zorunlu; kurulmamışsa giriş yok.
     // USER_CHOICE politikasında kullanıcının kendi opt-out'u kodu kaldırır — süperadmin HARİÇ (opt-out yok sayılır).
     const webCookie = cookieLoginApplies(ctx?.clientType);
+    // Kod adımında "Bu cihazı hatırla" kutusu çizilebilir mi (web çerez kipi ya da barındırılan masaüstü).
+    let rememberable = webCookie && via === "password";
     if (webCookie) {
       if (await webTotpWaived(userId)) return;
       if (!status.enabled) {
@@ -587,6 +596,17 @@ export class AuthService {
         ctx.secondFactorOutcome = "TRUSTED_DEVICE";
         return;
       }
+    } else if (appliesHostedBearerRule(ctx?.clientType, via)) {
+      // Barındırılan (Y1): clientType beyanı kuralı gevşetemez — çerez yolunun katmanları + onaylı tablet cihazı.
+      const verdict = await decideHostedBearer(userId, ctx?.clientType, ctx?.approvedDeviceProven === true);
+      if (verdict.kind !== "REQUIRE") return;
+      if (ctx) ctx.hostedBearerFollowUp = true;
+      if (!status.enabled) throw AppError.forbidden(HOSTED_ENROLLMENT_MESSAGE, { code: "TOTP_ENROLLMENT_REQUIRED" });
+      if (ctx && (await consumeTrustedDevice(userId, ctx.trustedDeviceToken))) {
+        ctx.secondFactorOutcome = "TRUSTED_DEVICE";
+        return;
+      }
+      rememberable = verdict.desktop;
     } else if (shortPath) {
       const row = await prisma.user.findUnique({ where: { id: userId }, select: { isSystemAccount: true } });
       isSystemAccount = row?.isSystemAccount === true;
@@ -604,7 +624,7 @@ export class AuthService {
     const code = (ctx?.totpCode ?? "").trim();
     if (!code) {
       // Kod adımı "Bu cihazı N gün hatırla" kutusunu yalnız `trustDeviceDays > 0` iken çizer (eski panel alanı yok sayar).
-      const trustDeviceDays = webCookie && via === "password" ? await trustedDeviceDaysFor(userId) : 0;
+      const trustDeviceDays = rememberable ? await trustedDeviceDaysFor(userId) : 0;
       throw AppError.conflict(await this.totpRequiredMessage(userId, ctx, shortPath), {
         code: "TOTP_REQUIRED",
         ...(trustDeviceDays > 0 ? { trustDeviceDays } : {}),
@@ -794,7 +814,7 @@ export class AuthService {
     const token = jwt.sign(claim, JWT_SECRET, signOptions);
 
     const payload: JwtPayload = { ...signPayload, jti };
-    if (ctx && cookieLoginApplies(ctx.clientType)) {
+    if (ctx && (cookieLoginApplies(ctx.clientType) || ctx.hostedBearerFollowUp === true)) {
       const web = await noteWebLogin({
         userId: user.id,
         jti,

@@ -46,6 +46,7 @@ import {
   setTrustedDeviceCookie,
 } from "../lib/web-session-cookie";
 import "../types/express-augment";
+import { appliesHostedBearerRule } from "../services/hosted-second-factor";
 
 const webTotpSchema = z.strictObject({
   optOut: z.boolean(),
@@ -84,6 +85,8 @@ const loginSchema = z.object({
   totpCapable: z.boolean().optional(),
   // Web kod adımı: "Bu cihazı N gün hatırla" (yalnız çerez kipinde ve ayar > 0 iken etkili).
   rememberDevice: z.boolean().optional(),
+  // Barındırılan masaüstü (Bearer): önceki kodlu girişte dönen güvenilir cihaz belirteci (LAN'da okunmaz).
+  trustedDeviceToken: z.string().max(256).optional(),
 });
 
 // PIN/kart girişinde de ikinci faktör (Y-02): süperadminde hep, diğerlerinde ayarla istenir.
@@ -184,6 +187,21 @@ function webLoginContext(req: Request, clientType: string | undefined, ip: strin
 }
 
 /**
+ * Barındırılan Bearer parola girişi (Y1): güvenilir cihaz belirteci GÖVDEDEN, cihaz kanıtı middleware'den.
+ * Çerez kipinde ve LAN'da boş — o akışlar bayt-aynı kalır.
+ */
+function hostedBearerLoginContext(req: Request, clientType: string | undefined, ip: string | null): Partial<LoginContext> {
+  if (!appliesHostedBearerRule(clientType, "password")) return {};
+  const ua = req.headers["user-agent"];
+  return {
+    trustedDeviceToken: readTrustedDeviceToken(req, "body"),
+    approvedDeviceProven: req.device?.proofVerified === true,
+    userAgent: typeof ua === "string" ? ua.slice(0, 512) : null,
+    ip: ip ?? null,
+  };
+}
+
+/**
  * Giriş cevabı — üç giriş yolunun TEK çıkışı. Bulut web paneli çerez kipinde (panel kipi +
  * `clientType:"web"`) token httpOnly çereze gider, gövdede `token` yerine `cookieSession:true`.
  */
@@ -222,6 +240,16 @@ function respondLogin(
       user: result.user,
       // Panel bunu görünce uygulamaya girmeden parola değiştirme adımını açar.
       mustChangePassword: result.mustChangePassword,
+      // Barındırılan masaüstü: cihaz takibi alanları yalnız o akışta (LAN cevabı bayt-aynı).
+      ...(result.newDevice !== undefined
+        ? {
+            newDevice: result.newDevice === true,
+            deviceRemembered: Boolean(result.trustedDevice),
+            ...(result.trustedDevice
+              ? { trustedDeviceToken: result.trustedDevice.token, trustedDeviceMaxAgeSeconds: result.trustedDevice.maxAgeSeconds }
+              : {}),
+          }
+        : {}),
     },
     message: "Giriş başarılı",
   });
@@ -338,6 +366,7 @@ export class AuthController {
       passwordChangeCapable: body.passwordChangeCapable,
       rememberDevice: body.rememberDevice === true,
       ...webLoginContext(req, body.clientType, ipAddress),
+      ...hostedBearerLoginContext(req, body.clientType, ipAddress),
     };
 
     try {
