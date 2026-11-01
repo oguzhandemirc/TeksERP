@@ -298,6 +298,8 @@ const COST_SIDE_SERVICE_ITEM_ID_FILES = new Set([
   "services/helpers/expense-allocation.helper.ts",
   // D4-G2c kârlılık bağ payı: bağın hedef kalemini satır eşlemesi için okur (çözücü değil).
   "services/helpers/profitability-allocation.helper.ts",
+  // Sarf stoğu (kurşun şeridi): değer/özellik kalemini `pickServiceItemId` ile seçip norm sorgusuna verir (çözücü değil).
+  "services/helpers/consumable-stock.helper.ts",
 ]);
 function astChecks(): void {
   section("§8 AST: çözücü tek, eşleme okuyucuları beyanlı, FinishingRate okunmaz");

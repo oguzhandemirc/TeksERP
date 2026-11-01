@@ -4,7 +4,7 @@
 // Yazarlar `helpers/consumable-stock.helper.ts`te (mal kabul, iptal, üretim tüketimi + ters kaydı).
 // Bakiye defterden türetilir; eksi bakiye `negative: true` ile işaretlenir (engellemez, uyarır).
 // =============================================================================
-import { ConsumableMovementKind, ItemType, ItemUnit, Prisma } from "@prisma/client";
+import { ConsumableMovementKind, ItemLifecycleStatus, ItemType, ItemUnit, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { consumableBalances, consumableMovementSign } from "./helpers/consumable-stock.helper";
@@ -31,16 +31,18 @@ export async function listConsumableStock(o: { search?: string } = {}): Promise<
       itemType: ItemType.CONSUMABLE,
       ...(q ? { OR: [{ name: { contains: q, mode: "insensitive" } }, { code: { contains: q, mode: "insensitive" } }] } : {}),
     },
-    select: { id: true, code: true, name: true, unit: true, isActive: true },
+    select: { id: true, code: true, name: true, unit: true, lifecycleStatus: true },
     orderBy: [{ name: "asc" }, { id: "asc" }],
   });
   const bal = await consumableBalances(prisma, items.map((i) => i.id));
-  // Pasif kalem yalnız hareketi varsa görünür (geçmiş bakiyesi kaybolmasın).
+  // Arşivlenmiş (pasif) kalem yalnız hareketi varsa görünür (geçmiş bakiyesi kaybolmasın). Bu bir
+  // GÖRÜNÜRLÜK kuralıdır, kullanılabilirlik kararı değil (o `assertItemUsable`da).
   const rows = items
-    .filter((i) => i.isActive || bal.has(i.id))
+    .filter((i) => i.lifecycleStatus !== ItemLifecycleStatus.ARCHIVED || bal.has(i.id))
     .map((i) => {
       const b = bal.get(i.id) ?? new Prisma.Decimal(0);
-      return { itemId: i.id, code: i.code, name: i.name, unit: i.unit, balance: b.toFixed(3), negative: b.lt(0), isActive: i.isActive };
+      const isActive = i.lifecycleStatus !== ItemLifecycleStatus.ARCHIVED;
+      return { itemId: i.id, code: i.code, name: i.name, unit: i.unit, balance: b.toFixed(3), negative: b.lt(0), isActive };
     });
   return {
     enabled: await resolveConsumableStockEnabled(),

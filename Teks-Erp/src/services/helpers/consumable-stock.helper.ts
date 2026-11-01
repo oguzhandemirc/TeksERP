@@ -13,6 +13,7 @@ import { consumableNormsValidAt } from "./cost-rate-validity.helper";
 import { pickServiceItemId } from "./service-item-pick.helper";
 import { ACTIVE_ORDER_LINK } from "./order-link.helper";
 import { expectedRolls } from "./expected-rolls.helper";
+import { TERIM } from "../../constants/terim";
 
 type Tx = Prisma.TransactionClient;
 type Reader = Pick<Prisma.TransactionClient, "consumableMovement">;
@@ -133,7 +134,7 @@ async function kusakDemands(tx: Tx, op: OpRow, warnings: ConsumableWarning[], gi
   const lengths = [...new Set(links.map((l) => l.orderLine.pieceLengthM?.toString() ?? null))];
   const rolls = lengths.length === 1 && lengths[0] !== null ? expectedRolls(processedMeters(op.roll, given), new Prisma.Decimal(lengths[0])) : null;
   if (rolls === null) {
-    warnings.push({ code: "CONSUMABLE_PIECE_LENGTH_UNKNOWN", message: "İş emrinin top boyu tek ve belli değil — kuşak sarf stoktan düşülmedi." });
+    warnings.push({ code: "CONSUMABLE_PIECE_LENGTH_UNKNOWN", message: `${TERIM.terbiyeIsEmri.cekim.ilgi} top boyu tek ve belli değil — kuşak sarf stoktan düşülmedi.` });
     return [];
   }
   return targets.map((t) => ({ itemId: t.value.consumableItemId!, qty: new Prisma.Decimal(rolls) }));
