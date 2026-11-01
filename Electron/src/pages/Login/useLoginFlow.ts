@@ -7,6 +7,8 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { authService } from "@/services/authService";
 import { tokenStore } from "@/lib/secure-token";
+import { trustedDeviceStore } from "@/lib/trusted-device-store";
+import { getActiveApiBaseUrl } from "@/lib/api-config";
 import { decodeJwt } from "@/lib/jwt";
 import { readSessionConflict } from "@/lib/session-auth";
 import { pinServerIdentityAfterLogin } from "@/lib/server-identity";
@@ -71,6 +73,15 @@ async function dropLoginSession(data: LoginResponse["data"]): Promise<void> {
   await tokenStore.clear();
 }
 
+/**
+ * Barındırılan sunucu "bu cihazı hatırla" belirteci — yuva sunucu + kullanıcı (başka hesabın belirteci
+ * gönderilmez/silinmez). LAN/eski sunucu alanı yok sayar.
+ */
+async function loadRememberedDevice(username: string): Promise<{ slot: string; token: string | null }> {
+  const slot = `${getActiveApiBaseUrl()}\n${username.trim().toLowerCase()}`;
+  return { slot, token: await trustedDeviceStore.get(slot).catch(() => null) };
+}
+
 export function useLoginFlow() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -99,11 +110,13 @@ export function useLoginFlow() {
    */
   const performLogin = async (values: LoginFormValues, confirmKick: boolean, totpCode?: string, rememberDevice?: boolean) => {
     setSubmitting(true);
+    const device = await loadRememberedDevice(values.username);
     try {
       const res = await authService.login(
-        { ...values, confirmKick: confirmKick || undefined, totpCode, rememberDevice: rememberDevice || undefined },
+        { ...values, confirmKick: confirmKick || undefined, totpCode, rememberDevice: rememberDevice || undefined, trustedDeviceToken: device.token ?? undefined },
         { suppressErrorToast: true },
       );
+      if (res.data.trustedDeviceToken) await trustedDeviceStore.set(device.slot, res.data.trustedDeviceToken).catch(() => undefined);
       if (res.data.mustChangePassword === true) {
         // ⑤ Token yalnız bellekte: yeni parola belirlenmeden uygulamaya girilmez.
         setConflict(null);
@@ -136,7 +149,8 @@ export function useLoginFlow() {
       // koda bağlı bırakmak, ileride biri kodu unutursa sessizce yanlış ekranı
       // açardı.
       if (isTotpRequired(err)) {
-        // Sunucu kod istedi — parola DOĞRU. Kod adımını aç.
+        // Sunucu kod istedi — parola DOĞRU. Gönderilen belirteç geçmediyse (süre/iptal) bırak; kod adımını aç.
+        if (device.token && !totpCode) await trustedDeviceStore.clear(device.slot).catch(() => undefined);
         setTotp({ values, invalid: false, trustDeviceDays: readTrustDeviceDays(err) });
         return;
       }
