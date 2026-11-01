@@ -212,6 +212,9 @@ jobs:
       # compose ortam geçişi (.env.production.example ↔ iki korumalı compose) ve salt-okur barındırma kontrol betiği. Zero-dep, ağsız.
       - name: Bulut kenarı sertleştirmesi
         run: node scripts/test_bulut_kenar.mjs
+      # K2 makine dışı yedek ÇEKME modeli: yedek VDS yalnız .tkenc çeker, silmez/ezmez; rrsync -ro kapısı; shellcheck.
+      - name: Bulut yedek çekme modeli
+        run: node scripts/test_bulut_yedek_cek.mjs
       # Play K2: herkese açık gizlilik sayfası (tekserp.etkiliyazilim.com/gizlilik) — kaynak ↔ html, compose, nginx, kablolama.
       - name: Gizlilik sayfası (Play K2)
         run: node scripts/test_gizlilik_sayfasi.mjs && node scripts/test_gizlilik_sayfasi.mjs --sonda

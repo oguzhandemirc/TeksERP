@@ -27,7 +27,7 @@ Bulut kurulum, fabrika kurulumunun aynısıdır. Tek fark, backend ile PostgreSQ
 | K-B12 | Dış izleme (S3) | Kendi gözcümüz (`satici-gozcu`, satıcı VDS'inde) |
 | K-B13 | VDS paketi (S4) | **Müşteri seçer, iki paket vardır:** "Standart" (ekonomik TR sağlayıcı, ~150–250 TL/ay) ve "Kurumsal" (SLA'lı TR sağlayıcı, ~600–1.200 TL/ay). Kurulum betiği sağlayıcıdan bağımsızdır |
 | K-B14 | Güncelleme varsayılanı (S5) | ONAYLI (fabrikadakiyle aynı varsayılan) |
-| K-B15 | İki adımlı giriş (S6) | Bulutta da **isteğe bağlı** kalır (2026-09-30 kararı aynen). Açığı hız sınırı, kalıcı giriş kilidi ve onaylı cihaz kapatır (R4–R6) |
+| K-B15 | İki adımlı giriş (S6) | Bulutta da **isteğe bağlı** kalır (2026-09-30 kararı aynen). Açığı hız sınırı, kalıcı giriş kilidi ve onaylı cihaz kapatır (R4–R6). **Güncelleme 2026-11-01 (Y1):** "isteğe bağlı" = fabrika politikası `auth.webTotpPolicy` + kullanıcı tercihi; barındırılanda kanaldan bağımsız uygulanır (masaüstü/tablet `clientType` atlatamaz), onaylı + kanıtlı tablet cihazı ikinci faktördür — `kurallar/yetki-izin.md`, arşiv 2026-11. **Kurulum kontrol maddesi:** barındırılanda politika varsayılanı REQUIRED; açılıştan ÖNCE ya her masaüstü kullanıcısına (ve yerinde cihaz onayı verecek yöneticilere) TOTP kurulum bağlantısı dağıtılır ya da süperadmin USER_CHOICE seçer — aksi halde TOTP'siz kullanıcı 403 TOTP_ENROLLMENT_REQUIRED alır (karar kullanıcıya sorulur). |
 
 ### 0.2 Teknik kararlar
 
@@ -224,9 +224,9 @@ Güncelleyici konakta systemd hizmeti olarak çalışır (`Restart=always`), ayn
 | Canlı | PostgreSQL birimi | Müşteri VDS'i | — |
 | Gece yedeği | `pg_dump -Fc` → `pg_restore --list` doğrulaması → `.tkenc` (`docs/ops/YEDEK-SIFRELEME.md` biçimi) | VDS, `yedek` birimi | 30 gün, en yeni 3 kopya asla silinmez |
 | Güncelleme öncesi | §4.4 adım 2 | VDS, güncelleyici dizini | Son 3 |
-| Başka sağlayıcı | Aynı `.tkenc` dosyası, `rclone copy` (sync değil) ile SFTP | **Yedek deposu VDS'i** (Türkiye, müşteri VDS'lerinden farklı sağlayıcı, bütün bulut müşterilerine ortak; K-B11) | 30 gün günlük + 12 ay aylık (`docs/ops/YEDEK-VPS-KURULUM.md` kalıbı) |
+| Başka sağlayıcı | Aynı `.tkenc` dosyası; yedek deposu VDS'i **çeker** (`deploy/bulut/yedek-cek`, rrsync -ro, `--ignore-existing`; `docs/ops/BULUT-YEDEK-CEKME.md`) — rclone/gönderme yerine (denetim 2026-11-01 K2: imajda yeni paket yok, müşteri VDS'inde hedef kimliği yok) | **Yedek deposu VDS'i** (Türkiye, müşteri VDS'lerinden farklı sağlayıcı, bütün bulut müşterilerine ortak; K-B11) | 30 gün günlük + 12 ay aylık (`docs/ops/YEDEK-VPS-KURULUM.md` kalıbı) |
 
-**Fidye yazılımına karşı direnç:** müşteri VDS'inin depodaki hesabı kabuksuz ve chroot'ludur, yalnız kendi `gelen/` dizinine yazabilir. Silemez ve arşivi göremez. Arşivi depodaki root zamanlayıcısı **kopyalar** (taşımaz). Depo ele geçirilirse içerik yine şifrelidir, çünkü çözme anahtarları depoda durmaz. Depo da §1.4 sertleştirmesinden geçer ve gözcünün listesine girer.
+**Fidye yazılımına karşı direnç:** müşteri VDS'inde depoya giden hiçbir kimlik yoktur. Bağlantıyı depo açar ve yalnız çıkış dizinini salt-okur çeker. Var olan kopyayı ezmez, kaynaktan silmez, zaman damgasını kaynaktan almaz (`BULUT-YEDEK-CEKME.md`). Depo ele geçirilirse içerik yine şifrelidir, çünkü çözme anahtarları depoda durmaz. Depo da §1.4 sertleştirmesinden geçer ve gözcünün listesine girer.
 
 **Sağlayıcı kuralı:** iki paket iki ayrı sağlayıcı anlamına gelebilir. Deponun sağlayıcısı, müşteri VDS'lerinin **hiçbirinin** sağlayıcısı olamaz. Kurulum betiği adım 0'da kanal kaydındaki sağlayıcıyı deponunkiyle karşılaştırır; aynıysa DURUR.
 

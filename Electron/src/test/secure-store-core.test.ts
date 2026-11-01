@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { AUTH_TOKEN_STORE_KEY } from "@shared/download-token";
+import { TRUSTED_DEVICE_STORE_KEY } from "@shared/trusted-device";
 import { UPDATE_FEED_OVERRIDE_KEY } from "@shared/update-feed";
 import {
   createSecureStore,
@@ -135,7 +136,7 @@ describe("şifreleme YOKKEN gizli anahtar fail-closed", () => {
 describe("yalnız ana sürecin anahtarları renderer'dan yazılamaz", () => {
   it("liste beyanlı ve ölçülen dört anahtar; gizli anahtar kümesi tek", () => {
     expect([...MAIN_ONLY_KEYS].sort()).toEqual(["config.lastDiscovery", "config.serverIdentity", "config.serverTlsPin", UPDATE_FEED_OVERRIDE_KEY].sort());
-    expect([...SECRET_KEYS]).toEqual([AUTH_TOKEN_STORE_KEY]);
+    expect([...SECRET_KEYS]).toEqual([AUTH_TOKEN_STORE_KEY, TRUSTED_DEVICE_STORE_KEY]);
   });
 
   it("⭐ renderer yazma/silme RED, disk değişmez; ana süreç yazar", () => {

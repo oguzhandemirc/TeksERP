@@ -6,6 +6,7 @@ import { UPDATE_FEED_OVERRIDE_KEY } from "@shared/update-feed";
 import { LAST_DISCOVERY_KEY, PINNED_IDENTITY_KEY } from "@shared/discovery";
 import { TLS_PIN_KEY } from "@shared/lan-tls";
 import { AUTH_TOKEN_STORE_KEY } from "@shared/download-token";
+import { TRUSTED_DEVICE_STORE_KEY } from "@shared/trusted-device";
 
 /**
  * YALNIZ ANA SÜRECİN yazdığı anahtarlar — renderer `secure-store:set/delete` ile bunlara
@@ -22,7 +23,7 @@ export const MAIN_ONLY_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 /** Şifreleme yokken DİSKE DÜZ YAZILMAYAN gizli anahtarlar (yalnız süreç belleğinde tutulur). */
-export const SECRET_KEYS: ReadonlySet<string> = new Set([AUTH_TOKEN_STORE_KEY]);
+export const SECRET_KEYS: ReadonlySet<string> = new Set([AUTH_TOKEN_STORE_KEY, TRUSTED_DEVICE_STORE_KEY]);
 
 export const MAIN_ONLY_KEY_ERROR = "Bu anahtar yalnız ana süreç tarafından yazılır";
 

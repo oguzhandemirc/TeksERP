@@ -8,7 +8,7 @@ import type { AxiosError } from "axios";
 // FARKLI HTTP koduyla ayırır. Ayrım keyfi değil, giriş kilidine bağlı: kilit
 // yalnız **401**'i kaba kuvvet sayar (`auth.controller` F49 kuralı).
 //
-//   • 403 TOTP_ENROLLMENT_REQUIRED → 2FA hiç kurulmamış (zorunluluk yok → bugün dönmez).
+//   • 403 TOTP_ENROLLMENT_REQUIRED → 2FA hiç kurulmamış; barındırılan sunucu fabrika politikası kod isterken döner.
 //   • 409 TOTP_REQUIRED            → kod istendi. Kimlik denemesi DEĞİL.
 //   • 401 TOTP_INVALID             → yanlış kod. SAYILIR ve sayılmalı (TOTP uzayı
 //                                    yalnız 10^6; kilitsiz çevrimiçi tahmin edilebilir).

@@ -147,6 +147,31 @@ gerçek rakam yazılır ("dakikalar" değil, "N dakika").
 
 ---
 
+## Barındırılan VDS: boş VDS'e geri yükleme (VDS kaybı tatbikatı)
+
+> Denetim 2026-11-01 K2. Kapsam: bizim barındırdığımız bulut VDS'i tümüyle kaybedildi. Disk, hesap ya da root gitti.
+> Kaynak yedek VDS'indeki çekilmiş `.tkenc` kopyasıdır (`BULUT-YEDEK-CEKME.md`). `kur.mjs --geri-yukle` henüz
+> yazılmadı; adımlar elle yapılır. **Tatbikat yalnız TEST VDS'inde yapılır** ve müşteri VDS'ine dokunulmaz.
+> İlk müşteriden önce bir kez, sonra altı ayda bir. Her adımın süresi aşağıdaki tabloya yazılır.
+
+| # | Adım | Komut / not | Süre (dk) |
+|---|---|---|---|
+| 0 | Saat başlar: "VDS yok" anı | — | — |
+| 1 | Boş VDS teslim alınır + konak sertleştirmesi | sağlayıcı paneli · `BULUT-KURULUM.md` §1.4 | |
+| 2 | Korumalı imaj + compose, **yalnız postgres** ayağa | `docker compose up -d postgres` (backend henüz KAPALI) | |
+| 3 | Son şifreli yedek yedek VDS'inden alınır | `ls -1t /srv/yedek-cekilen/<musteri> \| head -1` → `scp` bizim güvenilir makinemize | |
+| 4 | Bizim makinemizde çözülür (Etkili anahtarı VDS'e GİTMEZ) | `node dist/tools/yedek-sifrele.cjs dogrula --girdi X.dump.tkenc --anahtar <etkili anahtarı>` → `coz … --cikti X.dump` | |
+| 5 | Düz döküm yeni VDS'e taşınır, yüklenir, bizdeki kopya silinir | `docker compose exec -T postgres pg_restore -U tekserp -d tekserp --no-owner < X.dump` · sonra `shred -u X.dump` | |
+| 6 | Backend açılır, göçler koşar | `docker compose up -d` · `/health` 200 | |
+| 7 | Lisans taşıma (yeni parmak izi) | satıcı portalında taşıma akışı | |
+| 8 | **Kısa kimlik halkası emanetten geri konur** | `docker compose exec backend node dist/tools/kisa-kimlik.cjs durum` dökümle gelen yabancı anahtarı ve emaneti ("emanet VAR") gösterir. Ardından `… kisa-kimlik.cjs anahtar-geri-yukle --anahtar=<etkili ya da müşteri kâğıt anahtarı> --canli-onay` çalıştırılır. Anahtar dosyası konteynere geçici bağlanır ve işten sonra silinir | |
+| 9 | DNS / kenar / Origin sertifikası yeni IP'ye | Cloudflare kaydı | |
+| 10 | Saat durur: tablet PIN'le girer, panel bağlanır | PIN ve kart girişi çalışmalı. "anahtar uyuşmuyor" çıkarsa 8. adım eksiktir | |
+
+**Ölçülecek sayılar:** toplam RTO (0→10), döküm boyutu, pg_restore süresi ve halka geri koyma sonucu (`restored` ve `notEscrowed`). `notEscrowed` boş değilse o anahtar emanete hiç mühürlenmemiştir; PIN'ler toplu sıfırlanır. RPO, son çekilen yedeğin yaşıdır. `BULUT-KURULUM.md` §5.4'teki hedefler (2–4 saat) ölçülen sayıyla değiştirilir. Sözleşmeye yalnız ölçülmüş sayı girer.
+
+**Halka emaneti neden dökümün içinde:** `short_credential_key_escrows` tablosu her gece yedeğinden önce yedek alıcılarına yeniden mühürlenir ve dökümle birlikte gider. Bunu `test_yedek_barindirma` §4 ölçer. Halka dosyası (`LICENSE_DIR`) yedekte yoktur. Emanet olmasa yeni VDS'te bütün PIN'ler, kart özetleri ve cihaz kanıtları geçersiz olurdu.
+
 ## Bu provanın KAPSAMADIĞI şey
 
 ⚠️ Faz B (gerçek takas) denenmiyor. Yani "kopya doğru üretiliyor" kanıtlanıyor,
