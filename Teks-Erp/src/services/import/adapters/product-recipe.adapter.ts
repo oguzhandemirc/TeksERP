@@ -5,6 +5,7 @@
 // dosyada ne yazıyorsa o kalır, eksikler silinir. Boş bırakmak "dokunma"dır;
 // temizlemek için NULL yazılır.
 
+import { ImportPartialWriteError } from "../import-partial-write";
 import prisma from "../../../lib/prisma";
 import { productRecipeService } from "../../../routes/product-recipe.routes";
 import { resolveReference, resolveReferenceList } from "../import-lookup";
@@ -12,6 +13,14 @@ import { splitList } from "../import-coerce";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
 import { importKey } from "../import-key";
 import { TERIM } from "../../../constants/terim";
+import {
+  RECIPE_VARIANT_COLUMNS,
+  VARIANT_SELECT,
+  existingVariantFields,
+  validateVariantFields,
+  variantPayload,
+  writeWeftChanges,
+} from "./product-recipe-variant.import";
 
 const COLUMNS: ImportColumn[] = [
   {
@@ -67,6 +76,7 @@ const COLUMNS: ImportColumn[] = [
     example: "",
   },
   { key: "isActive", label: "Aktif", type: "bool", example: "Evet" },
+  ...RECIPE_VARIANT_COLUMNS,
 ];
 
 export const productRecipeImportAdapter: ImportAdapter = {
@@ -101,6 +111,7 @@ export const productRecipeImportAdapter: ImportAdapter = {
         color: { select: { code: true } },
         route: { select: { code: true } },
         properties: { select: { property: { select: { code: true } } } },
+        ...VARIANT_SELECT,
       },
     });
     const map = new Map<string, Record<string, unknown>>();
@@ -114,6 +125,7 @@ export const productRecipeImportAdapter: ImportAdapter = {
         routeCode: r.route?.code ?? null,
         propertyCodes: r.properties.map((p) => p.property.code),
         width: r.width === null ? null : Number(r.width),
+        ...existingVariantFields(r),
       });
     }
     return map;
@@ -153,6 +165,8 @@ export const productRecipeImportAdapter: ImportAdapter = {
       }
     }
 
+    await validateVariantFields(row, ctx);
+
     const code = row.values.code;
     if (typeof code === "string" && code.trim() && !row.existing) {
       row.result.errors.push({
@@ -164,12 +178,21 @@ export const productRecipeImportAdapter: ImportAdapter = {
 
   async createOne(row: PreparedRow, ctx: ImportContext) {
     const res = await productRecipeService.create(toPayload(row, false), ctx.userId);
-    return { id: (res.data as { id: string }).id };
+    const id = (res.data as { id: string }).id;
+    await writeWeftChangesAfter(row, id, ctx.userId);
+    return { id };
   },
 
   async updateOne(row: PreparedRow, ctx: ImportContext) {
     const id = row.result.targetId as string;
-    await productRecipeService.update(id, toPayload(row, true), ctx.userId);
+    const payload = toPayload(row, true);
+    // Yalnız varyant değişimi değiştiyse şablonun kendisine yazım yok (boş PATCH 400'e düşmesin).
+    if (Object.keys(payload).length === 0) {
+      await writeWeftChanges(row, id, ctx.userId);
+      return { id };
+    }
+    await productRecipeService.update(id, payload, ctx.userId);
+    await writeWeftChangesAfter(row, id, ctx.userId);
     return { id };
   },
 
@@ -186,6 +209,7 @@ export const productRecipeImportAdapter: ImportAdapter = {
         color: { select: { code: true } },
         route: { select: { code: true } },
         properties: { select: { property: { select: { code: true } } } },
+        ...VARIANT_SELECT,
       },
     });
     return rows.map((r) => ({
@@ -198,6 +222,7 @@ export const productRecipeImportAdapter: ImportAdapter = {
       routeCode: r.route?.code ?? "",
       propertyCodes: r.properties.map((p) => p.property.code).join(";"),
       isActive: r.isActive ? "Evet" : "Hayır",
+      ...Object.fromEntries(Object.entries(existingVariantFields(r)).map(([k, v]) => [k, (v as string | null) ?? ""])),
     }));
   },
 };
@@ -214,8 +239,19 @@ function toPayload(row: PreparedRow, isUpdate: boolean): Record<string, unknown>
   if (v.itemCode__id !== undefined) out.itemId = v.itemCode__id;
   if (v.colorCode__id !== undefined) out.colorId = v.colorCode__id;
   if (v.routeCode__id !== undefined) out.routeId = v.routeCode__id;
+  variantPayload(row, out);
   if (v.propertyCodes__ids !== undefined) {
     out.properties = (v.propertyCodes__ids as string[]).map((propertyId) => ({ propertyId }));
   }
   return out;
+}
+
+/** Şablon yazıldıktan sonra atkı değişimi düşerse yazılan kayıt deftere girsin (değişim çocuğu hariç). */
+async function writeWeftChangesAfter(row: PreparedRow, id: string, userId?: string): Promise<void> {
+  try {
+    await writeWeftChanges(row, id, userId);
+  } catch (e) {
+    if (row.result.changes) delete row.result.changes.weftChanges;
+    throw new ImportPartialWriteError(id, e);
+  }
 }
