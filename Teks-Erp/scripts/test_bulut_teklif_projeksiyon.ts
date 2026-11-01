@@ -11,6 +11,8 @@
 //      `.finans` marjı panel yanıtıyla AYNI; aynı kök iki kez kurulunca bayt-eşit satır (idempotent senkron)
 //   §4 geçiş: geçerlilik günü dönünce SENT teklif yeniden seçilir (önceki gün seçilmez)
 //   §5 standart maliyet grup toplamları kalemlerden fabrikada; beş grubun toplamı metre maliyetine eşit
+//   §6 ⭐ SY-N3 varyant sürümü: kök satır `varyantId` + varyant adı/kodu taşır (anahtar urunId + varyantId), desen
+//      geneli sürümde üçü null; katalog sürümü 2 (TAM gönderim) ve varyant adı değişimi sürümü kirletir
 // NEGATİF SONDALAR — 2026-10-26 koşuldu (cp + shasum ile birebir geri alındı): commit mesajında.
 // Koşum: npx tsx scripts/test_bulut_teklif_projeksiyon.ts   (yalnız _test DB)
 // =============================================================================
@@ -22,6 +24,7 @@ import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { RECORD_PROJECTIONS, projectionPermissions, subRowPermission, type RecordProjection } from "../src/cloud-sync/projections";
 import { DERIVERS } from "../src/cloud-sync/derived";
 import { buildRecords } from "../src/cloud-sync/record-builder";
+import { mapToRoots } from "../src/cloud-sync/change-scan";
 import { quoteMargin } from "../src/services/helpers/quote-view.helper";
 import { quoteToday } from "../src/services/helpers/sales-quote-state.helper";
 import { factoryDayStart } from "../src/constants/time";
@@ -141,6 +144,8 @@ async function maliyetBolumu(): Promise<void> {
   console.log("\n§5 — standart maliyet grupları");
   let mf: MaliyetFikstur | null = null;
   let versionId: string | null = null;
+  let variantVersionId: string | null = null;
+  let recipeId: string | null = null;
   try {
     mf = await fiksturKur("BTP");
     const D = (v: string): Prisma.Decimal => new Prisma.Decimal(v);
@@ -161,11 +166,38 @@ async function maliyetBolumu(): Promise<void> {
     const toplam = ["cozguTl", "atkiTl", "dokumaTl", "terbiyeTl", "genelGiderTl"].reduce((s, g) => s.plus(D(String(fin?.[g] ?? 0))), D("0"));
     check("§5b beş grubun toplamı = metre maliyeti", toplam.eq(D(String(fin?.metreMaliyetiTl ?? -1))), `${toplam.toString()} / ${String(fin?.metreMaliyetiTl)}`);
     check("§5c kök satırda maliyet yok; ürün adı türetilmiş", !!kok && !("metreMaliyetiTl" in kok) && typeof kok.urunAdi === "string" && kok.surum === 1);
+
+    console.log("\n§6 — varyant sürümü (SY-N3)");
+    const rc = await prisma.productRecipe.create({ data: { code: `BTP-${Date.now().toString(36)}`.slice(0, 32), name: "BTP varyant", itemId: mf.fabricId, variantCode: "V01" }, select: { id: true } });
+    recipeId = rc.id;
+    const vv = await prisma.standardCostVersion.create({
+      data: {
+        itemId: mf.fabricId, recipeId: rc.id, versionNo: 2, parameterSetId: mf.paramId, rawCostPerMTry: D("30"), finishedCostPerMTry: D("36"), totalCostPerMTry: D("36"),
+        warpKgPerM: D("0.1"), weftKgPerM: D("0.1"), loomMPerHour: D("10"), fxRates: {}, inputSnapshot: {}, inputHash: "b".repeat(64), warnings: [],
+      },
+      select: { id: true },
+    });
+    variantVersionId = vv.id;
+    const r2 = await buildRecords(byName("standart-maliyet")!, [v.id, vv.id], Date.now());
+    const koks = r2.rows.get("standart-maliyet") ?? [];
+    const genel = koks.find((x) => x.id === v.id);
+    const varyant = koks.find((x) => x.id === vv.id);
+    check("§6a ⭐ varyant sürümü kök satırda varyantId + varyant adı/kodu taşır (aynı ürünün iki ACTIVE sürümü ayrışır)",
+      !!varyant && varyant.varyantId === rc.id && varyant.varyantAdi === "BTP varyant" && varyant.varyantKodu === "V01" && varyant.urunId === genel?.urunId, JSON.stringify(varyant));
+    check("§6b desen geneli sürümde varyantId/varyantAdi/varyantKodu null (eski alanlar aynen)",
+      !!genel && genel.varyantId === null && genel.varyantAdi === null && genel.varyantKodu === null && genel.surum === 1 && genel.urunAdi === kok?.urunAdi, JSON.stringify(genel));
+    const sm = byName("standart-maliyet")!;
+    const kaynak = sm.sources.find((x) => x.table === "product_recipes");
+    check("§6c katalog sürümü 2 (eski kayıtlar TAM yeniden gider) ve varyant adı değişimi kaynaklı", sm.catalogVersion === 2 && !!kaynak, `v${sm.catalogVersion}`);
+    const kokler = kaynak ? await mapToRoots(kaynak.root, [rc.id]) : [];
+    check("§6d varyant değişimi o varyantın sürüm köküne eşlenir (desen geneli sürüm kirlenmez)", kokler.includes(vv.id) && !kokler.includes(v.id), JSON.stringify(kokler));
   } finally {
-    if (versionId) {
-      await prisma.standardCostLine.deleteMany({ where: { versionId } });
-      await prisma.standardCostVersion.delete({ where: { id: versionId } });
+    for (const id of [versionId, variantVersionId]) {
+      if (!id) continue;
+      await prisma.standardCostLine.deleteMany({ where: { versionId: id } });
+      await prisma.standardCostVersion.delete({ where: { id } });
     }
+    if (recipeId) await prisma.productRecipe.delete({ where: { id: recipeId } });
     if (mf) await fiksturSil(mf);
   }
 }
