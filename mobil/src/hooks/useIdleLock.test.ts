@@ -136,9 +136,7 @@ describe('useIdleLock — çevrimdışı kilit ertelemesi (Y5)', () => {
       appStateHandler = fn;
       return { remove: jest.fn() } as never;
     });
-    global.fetch = jest.fn(async () => {
-      throw new Error('ağ yok');
-    }) as unknown as typeof fetch;
+    global.fetch = jest.fn().mockRejectedValue(new Error('ağ yok')) as unknown as typeof fetch;
     __resetOnlineSignalForTests();
     useAuthStore.setState({ user: { userId: 'u1', username: 'op' } as JwtPayload });
     useLockStore.setState({ locked: false });
@@ -170,7 +168,7 @@ describe('useIdleLock — çevrimdışı kilit ertelemesi (Y5)', () => {
     expect(useLockStore.getState().locked).toBe(true);
   });
 
-  it('⭐ ayar AÇIK + çevrimdışı: hareketsizlik ve arka plan kilidi ERTELENİR; arka plan borcu bağlantı dönünce ödenir', () => {
+  it('⭐ ayar AÇIK + çevrimdışı: hareketsizlik ve arka plan kilidi ERTELENİR', () => {
     mockOfflineDefer = true;
     renderHook(() => useIdleLock());
     act(() => reportServerUnreachable());
@@ -178,9 +176,14 @@ describe('useIdleLock — çevrimdışı kilit ertelemesi (Y5)', () => {
     tick();
     expect(useLockStore.getState().locked).toBe(false);
     emit('background');
-    emit('active');
     expect(useLockStore.getState().locked).toBe(false);
-    // Erteleme sırasındaki gerçek arka plan geçişi borçtur: bağlantı dönünce kilitlenir.
+  });
+
+  it('⭐ ayar AÇIK: ertelemedeki arka plan geçişi borçtur, bağlantı dönünce kilitler', () => {
+    mockOfflineDefer = true;
+    renderHook(() => useIdleLock());
+    act(() => reportServerUnreachable());
+    emit('background');
     act(() => reportServerReachable());
     expect(useLockStore.getState().locked).toBe(true);
   });
