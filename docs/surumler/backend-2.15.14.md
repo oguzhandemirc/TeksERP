@@ -3,7 +3,7 @@
 **Durum:** TASLAK — terfide kullanıcı onayı. İlk hedef yalnız `test` grubu (üyesi tek kurulum: bulut deneme sunucusu,
 satıcı DB'sinde `kurulum.kanalKodu = test` tek satır, 2026-11-01 ölçüldü); öncü/genel gruba çıkış ayrı karar (terfi
 etiketi). Bu belge `2.15.14-taslak.md` girdi notunun (KÜÇÜK-F, teklif belgesi donması) üstüne 2026-11-01 sürüm
-hazırlığında yazıldı; §2 ve §4 her iniş turunda yeniden ölçülür (son ölçüm `origin/main` @ `cdd52f581`; bekleyen: D4-K3e #400, E1 #403, E2 #402, E3 #401, F1–F3).
+hazırlığında yazıldı; §2 ve §4 her iniş turunda yeniden ölçülür (son ölçüm `origin/main` @ `a40b3afdd`; bekleyen: E1 #403, E2 #402, E3 #401, F1–F3).
 **Paket:** _(paketleme doldurur)_
 **SHA256:** _(paketleme doldurur)_
 **Commit:** _(paketleme doldurur)_
@@ -24,7 +24,7 @@ doğar; operatöre görünür etki ancak ayar açılınca başlar.
 
 ## 2. Ne değişti
 
-Ölçüm: `backend-v2.15.13` (`4e6cad988`) → `origin/main` @ `cdd52f581`, ilk ebeveyn hattında 161 commit (≈153 PR).
+Ölçüm: `backend-v2.15.13` (`4e6cad988`) → `origin/main` @ `a40b3afdd`, ilk ebeveyn hattında 162 commit (≈154 PR).
 Alt proje farkı: `Teks-Erp/src` 445 dosya · `Electron/src` 523 dosya (web paneli imajda) · `mobil/src` 133 dosya
 (bu turda tablet yayını YOK) · `patron/sunucu` 14 · `patron/uygulama` 36 · `satici` 2 (modül kataloğu satırı) ·
 `okuma/` 28 (yeni yerel okuma servisi — imaja GİRMEZ).
@@ -53,8 +53,9 @@ belirsiz kodda aday modalı, müşteri barkod serisi, Tambur çıkışında kod 
 `NONE`), yeni izin `roll:customer-code`.
 
 **Cari kilidi, risk limiti, cari birleştirme** — #291, #298, #301, #311, #314, #324, #327, #328, #349, #378,
-#379, #395. Cari kilidi modeli + 5 kapı (409 `CARI_HOLD`), risk limiti iş kabulü/sevk (`RISK_LIMIT_EXCEEDED`,
-varsayılan kapalı), kart başına tek cari hesap, hareketli çift hesabın virmanla birleştirilmesi + geri alma.
+#379, #395, #400. Cari kilidi modeli + 5 kapı (409 `CARI_HOLD`), risk limiti iş kabulü/sevk (`RISK_LIMIT_EXCEEDED`,
+varsayılan kapalı), kart başına tek cari hesap, hareketli çift hesabın virmanla birleştirilmesi + geri alma; panelde cari birleştirme ekranı (aday seçimi, ön
+izleme, yazılı onay) ve yeni izin `finance:cari-merge` (SoD kümesi, şablonda Muhasebe).
 
 **Sevke hazır işler** — #287, #297, #321, #341, #342, #360, #363. Hazırlık yüklemi, panel ekranı, tablet Sevk
 Kapısı çipleri, bildirim koşulu, sevk top listesi Excel'i.
@@ -116,7 +117,7 @@ turda YOK (yayındaki masaüstü panel 1.6.6).
 ## 4. Migration
 
 - **Var mı:** evet — `backend-v2.15.13`ten bu yana **29** yeni göç (2026-11-01 ölçüldü, `origin/main` @
-  `cdd52f581`; SY-P2…P4 göçsüz; bekleyen dilimler inince yeniden sayılır). Deneme 2.15.12'den geçtiği için orada **59** göç uygulanır
+  `a40b3afdd`; SY-P2…P4 ve D4-K3e göçsüz; bekleyen dilimler inince yeniden sayılır). Deneme 2.15.12'den geçtiği için orada **59** göç uygulanır
   (2.15.13'ün 30'u + bu sürümün 29'u).
 - İçerik: hepsi ADDITIVE — yeni tablolar (gelen belge, kurşun metre okuması, hizmet eşlemesi/fatura bağı, müşteri
   barkodu, cari kilidi, makine ücreti/sarf normu, desen kartı varyantı, maliyet tül, sipariş varyant hedefi, masraf
@@ -187,6 +188,7 @@ sürümü o turda yazılır). Metin terfide kullanıcı onayıyla donar.
     { "kapsam": "panel", "tip": "yeni", "metin": "Gelen Belgeler: müşterinin irsaliye fotoğrafı ya da PDF'i yüklenir, okunan satırlar gözden geçirilip onaylanınca emanet toplar girilir. Emanet ve gelen belge modülleri açık kurulumlarda görünür." },
     { "kapsam": "panel", "tip": "yeni", "metin": "Hizmet veren fabrikalar için hizmet faturası: işlem başına fiyat, gramaj kademesi ve dönem sonunda toplu fatura taslağı. Ayar açılmadıkça fatura akışı aynı." },
     { "kapsam": "panel", "tip": "yeni", "metin": "Cari kilidi: bir cari hesabı iş kabulüne, sevke ya da faturaya kapatabilirsiniz; kilitli hesap listede rozetle görünür. Risk limiti aşımında iş kabulü ve sevk isteğe bağlı durdurulur." },
+    { "kapsam": "panel", "tip": "yeni", "metin": "Aynı firmanın iki ayrı cari hesabı panelden birleştirilir: önce etkilenen hareketler listelenir, onayla birleşir, gerekirse geri alınır. Yetkiyi yönetici verir." },
     { "kapsam": "panel", "tip": "yeni", "metin": "Sevke Hazır İşler ekranı: sevke hazır olan işler tek listede; İçerideki İşler ekranında hazırlık sütunu; sevk top listesi Excel'e indirilir." },
     { "kapsam": "panel", "tip": "yeni", "metin": "Kârlılık ve masraf: müşteri ve iş bazında gerçekleşen kârlılık, masraf özeti, masrafı işe bağlama, makine saat ücretleri. Maliyet modülü açık kurulumlarda." },
     { "kapsam": "panel", "tip": "yeni", "metin": "Faturada KDV ve tevkifat oranı genel olarak ya da müşteri bazında tanımlanır." },
