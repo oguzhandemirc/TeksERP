@@ -51,7 +51,17 @@ export function measureSourceClass(source: string | null | undefined): string {
   return "bg-secondary text-secondary-foreground";
 }
 
-export const METER_PHASE_LABEL: Record<string, string> = { IN: "Kurşun giriş", OUT: "Kurşun çıkış", CUT: "Tambur kesim" };
+export const METER_PHASE_LABEL: Record<string, string> = { IN: "Giriş", OUT: "Çıkış", CUT: "Tambur kesim" };
+const METER_PHASE_SUFFIX: Record<string, string> = { IN: "giriş", OUT: "çıkış" };
+
+/** Okumanın FAZ etiketi — giriş/çıkış okumanın KENDİ istasyonundan ("Etek çıkış"); istasyon bilinmiyorsa nötr. */
+export function meterPhaseLabel(r: Pick<RollMeterReadingView, "phase" | "stationName">): string {
+  const base = METER_PHASE_LABEL[r.phase];
+  if (!base) return r.phase;
+  const station = r.stationName?.trim();
+  if (r.phase === "CUT" || !station) return base;
+  return `${station} ${METER_PHASE_SUFFIX[r.phase] ?? base}`;
+}
 
 export const VARIANCE_KIND_LABEL: Record<string, string> = {
   SCRAP: "Fire",

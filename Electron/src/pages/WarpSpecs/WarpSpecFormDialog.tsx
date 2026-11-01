@@ -10,6 +10,7 @@ import type { Item } from "@/pages/Items/types";
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 import { warpSpecFormDefaults, warpSpecFormSchema, type WarpSpecFormValues } from "./schema";
 import type { WarpSpec } from "./types";
+import { decimalToFormText } from "@/lib/decimal-form-text";
 
 interface Props {
   open: boolean;
@@ -25,13 +26,14 @@ function buildDefaults(initial?: WarpSpec | null): WarpSpecFormValues {
     code: initial.code,
     name: initial.name,
     yarnItemId: initial.yarnItemId,
-    endsCount: String(initial.endsCount ?? ""),
-    selvedgeEnds: initial.selvedgeEnds === null ? "" : String(initial.selvedgeEnds),
-    reedNo: initial.reedNo ?? "",
-    endsPerDent: initial.endsPerDent === null ? "" : String(initial.endsPerDent),
-    reedWidthCm: initial.reedWidthCm ?? "",
-    takeUpPct: initial.takeUpPct ?? "",
-    wastePct: initial.wastePct ?? "",
+    // API Decimal/Int alanlarını SAYI döndürür; form metin taşır (sunum provası: düzenle→Kaydet sessiz kalıyordu).
+    endsCount: decimalToFormText(initial.endsCount),
+    selvedgeEnds: decimalToFormText(initial.selvedgeEnds),
+    reedNo: decimalToFormText(initial.reedNo),
+    endsPerDent: decimalToFormText(initial.endsPerDent),
+    reedWidthCm: decimalToFormText(initial.reedWidthCm),
+    takeUpPct: decimalToFormText(initial.takeUpPct),
+    wastePct: decimalToFormText(initial.wastePct),
     notes: initial.notes ?? "",
     isActive: initial.isActive,
   };

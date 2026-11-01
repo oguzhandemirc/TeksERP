@@ -34,6 +34,7 @@ const ACTION_LABELS: Record<ImportRevertPlanRow["action"], string> = {
   CANCEL_DOCUMENT: "Belge iptal edilecek",
   DELETE_PIVOT: "Satır silinecek",
   REVOKE_VERSION: "Fiyat sürümü geri alınacak",
+  REVERSE_ENTRY: "Ters kayıtla iptal edilecek",
   SKIP: "Atlanacak",
 };
 

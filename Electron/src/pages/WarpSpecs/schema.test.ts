@@ -12,3 +12,16 @@ describe("warpSpecFormSchema — wastePct", () => {
     for (const v of ["100", "-1", "abc"]) expect(warpSpecFormSchema.safeParse({ ...base, wastePct: v }).success).toBe(false);
   });
 });
+
+// Sunum provası: API Decimal'i SAYI döndürür; düzenle→Kaydet "expected string, received number" ile sessiz kalıyordu.
+describe("warpSpecFormSchema — sayı ve metin girdisi", () => {
+  it("API'den gelen sayı değerlerini kabul eder ve metne çevirir", () => {
+    const r = warpSpecFormSchema.safeParse({ ...base, endsCount: 9600, reedNo: 14.5, endsPerDent: 4, reedWidthCm: 280, takeUpPct: 8, wastePct: 3 });
+    expect(r.success).toBe(true);
+    if (r.success) expect([r.data.endsCount, r.data.takeUpPct, r.data.wastePct, r.data.reedNo]).toEqual(["9600", "8", "3", "14.5"]);
+  });
+  it("metin girdisi aynen geçer; sayı da olsa aralık kuralı işler", () => {
+    expect(warpSpecFormSchema.safeParse({ ...base, takeUpPct: "8" }).success).toBe(true);
+    expect(warpSpecFormSchema.safeParse({ ...base, takeUpPct: 100 }).success).toBe(false);
+  });
+});

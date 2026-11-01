@@ -121,6 +121,8 @@ export interface Roll {
    * Okuyacak yer `detail`'dir.
    */
   manualReason?: string | null;
+  /** Topa bağlı AKTİF müşteri kodu (D4-F2, `RollCustomerCode`) — YALNIZ detay ucunda; kodsuz top → null. */
+  customerCode?: string | null;
   /** Ekleme sebebinin KATALOG KODU (`Roll.entryReasonCode`, 2026-08-21) — liste+detayda döner. */
   entryReasonCode?: string | null;
   /** Topu sisteme giren kullanıcı — liste VE detay ucunda döner (ROLL_LIST_INCLUDE). */

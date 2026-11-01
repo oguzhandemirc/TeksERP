@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScanField } from "@/components/scanner/ScanField";
-import { classifyBarcode, matchesFullFormat } from "@/lib/scanner/barcode-kind";
+import { canOpenRollDetail } from "@/lib/scanner/roll-open-gate";
 import { useScanSeed } from "@/hooks/useScanSeed";
 import { usePreferences } from "@/providers/PreferencesProvider";
 
@@ -12,6 +12,8 @@ interface Props {
   openDetail: (code: string) => void;
   /** scanLookup.isPending — "Aç" butonu için. */
   scanPending: boolean;
+  /** `scan.customerCodeLookup` açık → müşteri kodu da "Aç"ı etkinleştirir (çözüm backend'de). */
+  customerCodeLookup?: boolean;
 }
 
 /**
@@ -22,7 +24,7 @@ interface Props {
  * debounce'lı URL `search` yazımında (300ms) tazelenir. (Prefs aboneliği de
  * buraya taşındı — RollsPage artık prefs değişiminde re-render olmaz.)
  */
-export function RollScanBar({ openDetail, scanPending }: Props) {
+export function RollScanBar({ openDetail, scanPending, customerCodeLookup = false }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   // Birleşik "okut/ara" input'u: yazınca listeyi süzer (URL search), okut/Enter'da
   // (ROLL barkodu ise) detay panelini açar. Açılışta URL'deki search ile senkron.
@@ -47,7 +49,7 @@ export function RollScanBar({ openDetail, scanPending }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanBarcode]);
 
-  const canOpen = matchesFullFormat("ROLL", classifyBarcode(scanBarcode).code);
+  const canOpen = canOpenRollDetail(scanBarcode, customerCodeLookup);
 
   // Okut/Enter → her zaman listeyi süz; detay yalnız toggle AÇIK ise açılır.
   const handleScan = (code: string) => {
@@ -76,7 +78,7 @@ export function RollScanBar({ openDetail, scanPending }: Props) {
         variant="outline"
         onClick={() => openDetail(scanBarcode.trim())}
         disabled={!canOpen || scanPending}
-        title={canOpen ? "Bu barkodun detayını aç" : "Tam bir top barkodu okut/yaz"}
+        title={canOpen ? "Bu barkodun detayını aç" : "Tam bir top barkodu ya da müşteri kodu okut/yaz"}
       >
         {scanPending ? "…" : "Aç"}
       </Button>

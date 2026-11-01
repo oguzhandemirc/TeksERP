@@ -11,6 +11,8 @@ export interface LineForm {
   rateCode: string;
   description: string;
   colorId: string | null;
+  /** Seçilen desenin varyantı (ürün şablonu); yalnız ürünlü kalemde gider, ürün değişince sıfırlanır. */
+  recipeId: string | null;
   width: string;
   quantity: string;
   unitPrice: string;
@@ -24,7 +26,7 @@ export type PendingLine =
 
 export function emptyLineForm(pending?: PendingLine | null): LineForm {
   const base: LineForm = {
-    mode: "item", item: null, adHoc: emptyCalculator().adHoc, rateCode: "", description: "", colorId: null,
+    mode: "item", item: null, adHoc: emptyCalculator().adHoc, rateCode: "", description: "", colorId: null, recipeId: null,
     width: "", quantity: "", unitPrice: "", markupPct: "",
   };
   if (!pending) return base;
@@ -44,7 +46,7 @@ export function buildLineBody(f: LineForm): LineBody | null {
   };
   if (f.mode === "item") {
     if (!f.item) return null;
-    return { ...common, itemId: f.item.id, ...(f.description.trim() ? { description: f.description.trim() } : {}) };
+    return { ...common, itemId: f.item.id, ...(f.recipeId ? { recipeId: f.recipeId } : {}), ...(f.description.trim() ? { description: f.description.trim() } : {}) };
   }
   const adHoc = adHocBody(f.adHoc, f.rateCode);
   if (!adHoc || !f.description.trim()) return null;

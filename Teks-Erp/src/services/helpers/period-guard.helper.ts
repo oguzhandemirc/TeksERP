@@ -168,6 +168,22 @@ export interface PeriodWriteRef {
 }
 
 /**
+ * Satırın düşeceği AKTİF kapanış (yoksa null). Yazım guard'ı ve içe aktarım önizlemesi AYNI yüklemi okur;
+ * kapanış `periodEnd`e KADAR (dahil) kapatır, `asc` = en dar kapsayan dönem (mesaj onu söyler).
+ * Kilitsiz okuma yalnız ÖNİZLEMEDİR — koruma `assertPeriodOpenTx`.
+ */
+export async function findCoveringCloseTx(
+  db: Pick<Prisma.TransactionClient, "cariPeriodClose">,
+  ref: PeriodWriteRef,
+): Promise<{ periodEnd: Date } | null> {
+  return db.cariPeriodClose.findFirst({
+    where: { cariId: ref.cariId, currency: ref.currency, reopenedAt: null, periodEnd: { gte: periodDayKey(ref.txnDate) } },
+    orderBy: { periodEnd: "asc" },
+    select: { periodEnd: true },
+  });
+}
+
+/**
  * TEK YÜKLEM — kapalı döneme yazmayı 409 ile durdurur.
  *
  * Çağıran, satırı yazacağı TX'İN İÇİNDE ve satırı yazmadan ÖNCE çağırır.
@@ -185,20 +201,7 @@ export async function assertPeriodOpenTx(tx: Prisma.TransactionClient, ref: Peri
   if (!opts?.allowMerged) await assertCariNotMergedTx(tx, [ref.cariId]);
 
   const dayKey = periodDayKey(ref.txnDate);
-  // "Bu günü kapsayan aktif kapanış var mı": kapanış `periodEnd`'e KADAR (dahil)
-  // kapatır → gün <= periodEnd ise kapalıdır.
-  // `orderBy asc` = kaydın GERÇEKTEN düştüğü dönem (en yakın kapanış); mesajın
-  // anlaşılır olması için en dar kapsayan dönem söylenir.
-  const closed = await tx.cariPeriodClose.findFirst({
-    where: {
-      cariId: ref.cariId,
-      currency: ref.currency,
-      reopenedAt: null,
-      periodEnd: { gte: dayKey },
-    },
-    orderBy: { periodEnd: "asc" },
-    select: { periodEnd: true },
-  });
+  const closed = await findCoveringCloseTx(tx, ref);
   if (!closed) return;
 
   throw AppError.conflict(

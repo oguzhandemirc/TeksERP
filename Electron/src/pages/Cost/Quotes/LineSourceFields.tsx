@@ -11,6 +11,7 @@ import { AdHocFields } from "../Calculator/AdHocFields";
 import { finishingRateService } from "../FinishingRates/service";
 import { fmtDecFull } from "../shared/format";
 import type { LineForm } from "./line-body";
+import { QuoteVariantPicker } from "./QuoteVariantPicker";
 
 interface Props { value: LineForm; onChange: (patch: Partial<LineForm>) => void; customerId: string }
 
@@ -30,12 +31,13 @@ function ItemSource({ value, onChange, customerId }: Props) {
           <ColorPickerModal value={value.colorId} onChange={(colorId) => onChange({ colorId })} customerId={customerId} triggerClassName="h-9" />
         </div>
       </div>
+      {value.item && <QuoteVariantPicker itemId={value.item.id} value={value.recipeId} onChange={(recipeId) => onChange({ recipeId })} />}
       <ItemPickerModal
         open={open}
         onOpenChange={setOpen}
         allowedTypes={["FABRIC"]}
         onPick={(r) => {
-          onChange({ item: { id: r.id, code: r.code, name: r.name }, colorId: null });
+          onChange({ item: { id: r.id, code: r.code, name: r.name }, colorId: null, recipeId: null });
           setOpen(false);
         }}
       />

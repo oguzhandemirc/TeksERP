@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { Undo2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { safeFormat, formatNumber, safeFormatCalendar } from "@/lib/format";
+import { safeFormat, formatNumber, formatFixed, safeFormatCalendar } from "@/lib/format";
 import { rollMatchesQuery, rollMatchesContext } from "./roll-search";
 import type { ShipmentDetail, ShipmentDetailRoll } from "./types";
 import { ShipmentSheetSackCard } from "./ShipmentSheetSackCard";
@@ -57,7 +57,7 @@ export function ShipmentSheetBody({
     <div className="mt-4 space-y-4">
       <div className="grid grid-cols-3 gap-2">
         <SummaryCard label="Top" value={int(d.summary.rollCount)} />
-        <SummaryCard label="Toplam Metraj" value={`${int(d.summary.totalMeters)} m`} />
+        <SummaryCard label="Toplam Metraj" value={`${formatFixed(d.summary.totalMeters, 2)} m`} />
         <SummaryCard label="Çuval / Kg" value={`${d.summary.sackCount} · ${num(d.summary.totalKg)} kg`} />
       </div>
 

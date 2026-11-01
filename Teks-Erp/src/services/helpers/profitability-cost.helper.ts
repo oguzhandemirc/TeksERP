@@ -129,6 +129,8 @@ export async function computeWorkCosts(ctx: CostContext, links: RevenueLinkRow[]
     let consumableTry: Prisma.Decimal | null = D0();
     if (valid.length === 0) { missing.push("SARF_NORMU"); consumableTry = null; }
     for (const n of valid) {
+      // Sıfır norm = "sarf kullanmaz" açık beyanı: ölçülmüş 0, fiyat aranmaz (fiyatsız sarf eksik saymasın).
+      if (n.qtyPerM.isZero()) continue;
       const p = await priceOf(n.consumableItemId, l.serviceAt);
       if ("missing" in p) { if (!missing.includes(p.missing)) missing.push(p.missing); consumableTry = null; continue; }
       if (consumableTry) consumableTry = consumableTry.plus(l.billedMeters.mul(n.qtyPerM).mul(p.unitTry));
