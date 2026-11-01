@@ -28,7 +28,7 @@ const ACCOUNT_SELECT = {
   id: true, isActive: true, mergedIntoId: true, customerId: true, subcontractorId: true, defaultCurrency: true,
   paymentTermDays: true, taxOffice: true, riskLimit: true, serviceBillingTrigger: true, notes: true,
   vatRate: true, withholdingEnabled: true, withholdingNumerator: true, withholdingDenominator: true,
-  customer: { select: { code: true, name: true } },
+  customer: { select: { code: true, name: true, mergedIntoId: true } },
   subcontractor: { select: { code: true, name: true, customerId: true } },
 } as const;
 type AccountRow = Prisma.CariAccountGetPayload<{ select: typeof ACCOUNT_SELECT }>;
@@ -53,6 +53,8 @@ export interface CariMergePlan {
   alreadyMerged: boolean;
   /** Boş değilse birleştirme YAPILMAZ (fail-closed); her satır kullanıcıya okunur gerekçe. */
   blockers: string[];
+  /** Kaynak, birleşmiş (mezar taşı) bir kartın hesabıysa o kartın survivor'ı — claim bu bağı yeniden sorar. */
+  sourceTombstoneOf?: string | null;
   balances: Array<{ currency: Currency; source: string; target: string }>;
   items: CariMergeItem[];
   termsToCopy: Record<string, unknown>;
@@ -63,7 +65,14 @@ const label = (a: AccountRow): string => {
   const p = a.customer ?? a.subcontractor;
   return p ? `${p.code} ${p.name}` : a.id;
 };
-const cardOf = (a: AccountRow): string | null => a.customerId ?? a.subcontractor?.customerId ?? null;
+/**
+ * Hesabın KİMLİĞİ: kart hesabında kart — ana veri birleştirmesinin mezar taşında kalan hesabı (KEEP_ON_SOURCE)
+ * mezar taşının survivor'ına çözülür (tek düzey; survivor'ın kendisi birleşmişse zincir izlenmez → farklı kimlik).
+ */
+const cardOf = (a: AccountRow): string | null =>
+  a.customerId ? (a.customer?.mergedIntoId ?? a.customerId) : (a.subcontractor?.customerId ?? null);
+/** Mezar taşındaki kart hesabı: `customerId @unique` mezar taşında kalır, kaynak olması kilit doğurmaz. */
+const onTombstone = (a: AccountRow): string | null => (a.customerId ? (a.customer?.mergedIntoId ?? null) : null);
 
 function termDecision(source: AccountRow, target: AccountRow): { copy: Record<string, unknown>; conflicts: string[] } {
   const copy: Record<string, unknown> = {};
@@ -92,8 +101,9 @@ async function accountBlockers(source: AccountRow, target: AccountRow): Promise<
   if (mergedIntoSource > 0) b.push(`Kaynak hesaba daha önce ${mergedIntoSource} hesap birleşmiş — bu hesap kaynak olamaz, hedef seçin.`);
   if (target.mergedIntoId) b.push("Hedef hesap kendisi birleşmiş — asıl hesabı hedef seçin.");
   else if (!target.isActive) b.push("Hedef hesap pasif — önce aktifleştirin.");
+  if (onTombstone(target)) b.push("Hedef, birleşmiş (kaldırılmış) bir kartın hesabı — kalan kartın hesabını hedef seçin.");
   // Kart hesabı kaynak olursa `customerId @unique` kaynakta kalır ve eski bacağın karta çevrilmesi kilitlenir.
-  if (source.customerId) b.push("Kaynak kartın kendi hesabı — birleştirme eski bacaktan kart hesabına yapılır (yönü çevirin).");
+  if (source.customerId && !onTombstone(source)) b.push("Kaynak kartın kendi hesabı — birleştirme eski bacaktan kart hesabına yapılır (yönü çevirin).");
   const card = cardOf(source);
   if (!card || card !== cardOf(target)) b.push("Hesaplar aynı karta ait değil — farklı kimlikler birleştirilmez.");
   const { conflicts } = termDecision(source, target);
@@ -129,6 +139,7 @@ export async function planCariMerge(sourceId: string, targetId: string): Promise
     return { ...base, alreadyMerged: true, blockers: [], balances: [], items: [], termsToCopy: {}, draftInvoices: 0 };
   }
   const blockers = await accountBlockers(source, target);
+  const sourceTombstoneOf = onTombstone(source);
   const bal = await prisma.cariBalance.findMany({ where: { cariId: { in: [sourceId, targetId] } }, select: { cariId: true, currency: true, balance: true } });
   const currencies = [...new Set(bal.filter((r) => !D(r.balance).isZero()).map((r) => r.currency))].sort();
   const balanceOf = (id: string, c: Currency): Prisma.Decimal => D(bal.find((r) => r.cariId === id && r.currency === c)?.balance ?? 0);
@@ -154,6 +165,7 @@ export async function planCariMerge(sourceId: string, targetId: string): Promise
     ...base,
     alreadyMerged: false,
     blockers,
+    sourceTombstoneOf,
     balances: currencies.map((c) => ({ currency: c, source: balanceOf(sourceId, c).toFixed(2), target: balanceOf(targetId, c).toFixed(2) })),
     items,
     termsToCopy: termDecision(source, target).copy,
@@ -228,7 +240,9 @@ export async function applyCariMergeTx(tx: Prisma.TransactionClient, plan: CariM
   const openCheques = await tx.cheque.count({ where: { status: { in: OPEN_CHEQUE_STATUSES }, OR: [{ cariId: plan.sourceId }, { endorsedToCariId: plan.sourceId }] } });
   if (openCheques > 0) throw AppError.conflict("Ön izlemeden sonra sonuçlanmamış çek/senet doğdu.", { code: "CARI_MERGE_BLOCKED", blockers: [`Sonuçlanmamış çek/senet (${openCheques}).`] });
   // ATOMİK CLAIM: aktif ve birleşmemiş kaynak; eşzamanlı ikinci birleştirme 0 satır → 409.
-  const claim = await tx.cariAccount.updateMany({ where: { id: plan.sourceId, isActive: true, mergedIntoId: null, mergedFrom: { none: {} } }, data: { isActive: false, mergedIntoId: plan.targetId } });
+  // Mezar taşı kaynağında kart birleşmesi hâlâ yerinde olmalı (arada ana veri geri alındıysa iki ayrı kimlik → 409).
+  const tombstone = plan.sourceTombstoneOf ? { customer: { mergedIntoId: plan.sourceTombstoneOf } } : {};
+  const claim = await tx.cariAccount.updateMany({ where: { id: plan.sourceId, isActive: true, mergedIntoId: null, mergedFrom: { none: {} }, ...tombstone }, data: { isActive: false, mergedIntoId: plan.targetId } });
   if (claim.count === 0) throw AppError.conflict("Kaynak hesap bu sırada birleştirildi ya da pasife alındı.", { code: "CARI_MERGE_CONFLICT" });
   const target = await tx.cariAccount.updateMany({ where: { id: plan.targetId, isActive: true, mergedIntoId: null }, data: plan.termsToCopy as Prisma.CariAccountUpdateManyMutationInput });
   if (target.count === 0) throw AppError.conflict("Hedef hesap bu sırada pasife alındı ya da birleşti.", { code: "CARI_MERGE_CONFLICT" });
