@@ -40,7 +40,7 @@ describe("Üretime gönder (SY-M3)", () => {
   it("ONIZLEME'de düğme diyaloğu açar; her kayıt listelenir, dışarıda kalan nedenle yazılır", async () => {
     renderWithProviders(<ProductionProposalButton order={order} />);
     fireEvent.click(screen.getByRole("button", { name: /Üretime gönder/ }));
-    expect(await screen.findByText(/Dokuma işleri \(1\)/)).toBeTruthy();
+    expect(await screen.findByText(/Dokuma İş Emirleri \(1\)/)).toBeTruthy();
     expect(screen.getByText(/Terbiye iş emirleri \(1\)/)).toBeTruthy();
     expect(screen.getByText(/zaten planlanmış/)).toBeTruthy();
   });
@@ -59,7 +59,7 @@ describe("Üretime gönder (SY-M3)", () => {
   it("409 cümlesi diyalogda kalır, Oluştur kapanır; yenileme yeni önizleme ister", async () => {
     api.apply.mockRejectedValue({ response: { status: 409, data: { message: "Seçilen sipariş satırlarından bazıları bu arada planlanmış — önizlemeyi yenileyin.", details: { code: "ORDER_LINE_ALREADY_PLANNED", orderLineIds: ["l1"] } } } });
     renderWithProviders(<ProductionProposalDialog open onOpenChange={() => {}} orderId="o1" />);
-    await screen.findByText(/Dokuma işleri/);
+    await screen.findByText(/Dokuma İş Emirleri/);
     fireEvent.click(screen.getByRole("button", { name: "Oluştur" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/bu arada planlanmış/);
     expect(screen.getByRole("button", { name: "Oluştur" })).toBeDisabled();

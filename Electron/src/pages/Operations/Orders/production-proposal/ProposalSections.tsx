@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { TERIM } from "@/lib/terim";
 import { excludedKindLabel, excludedReason, parsePlannedM, type ProposalSelection } from "./selection";
 import type { BeamNeed, ProductionProposal, WeavingProposal, WorkOrderProposal } from "./types";
 
@@ -32,14 +33,14 @@ interface WeavingProps {
 export function WeavingSection({ rows, sel, canCreate, lineLabel, onToggle, onPlannedM }: WeavingProps) {
   if (rows.length === 0) return null;
   return (
-    <Section title={`Dokuma işleri (${rows.length})`} hint={canCreate ? "Plan metresi = açık metre ÷ (1 − çekme); düzeltebilirsiniz." : "Dokuma iş emri oluşturma izniniz yok."}>
+    <Section title={`${TERIM.dokumaIsEmri.cogul} (${rows.length})`} hint={canCreate ? "Plan metresi = açık metre ÷ (1 − çekme); düzeltebilirsiniz." : "Dokuma iş emri oluşturma izniniz yok."}>
       <ul className="divide-y rounded-md border">
         {rows.map((w) => {
           const text = sel.plannedM.get(w.key) ?? (w.plannedM == null ? "" : String(w.plannedM));
           const invalid = Number.isNaN(parsePlannedM(text));
           return (
             <li key={w.key} className="flex items-start gap-2 p-2 text-sm">
-              <Checkbox checked={sel.weaving.has(w.key)} disabled={!canCreate} onCheckedChange={() => onToggle(w.key)} aria-label={`${w.itemName} dokuma işini seç`} />
+              <Checkbox checked={sel.weaving.has(w.key)} disabled={!canCreate} onCheckedChange={() => onToggle(w.key)} aria-label={`${w.itemName} ${TERIM.dokumaIsEmri.cekim.belirtme} seç`} />
               <div className="min-w-0 flex-1 space-y-0.5">
                 <div className="font-medium">{w.itemName}</div>
                 <div className="text-xs text-muted-foreground">
