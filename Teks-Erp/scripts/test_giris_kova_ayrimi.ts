@@ -3,16 +3,20 @@
 // =============================================================================
 //   §1 Y3 hız sınırı: aynı IP'den 50 kanıtlı cihaz 429 almaz · cihazsız 11. giriş 429 · sahte cihaz IP kovasında ·
 //      yazma kullanıcı başına · fabrika IP'si × çarpan (IPv4-eşlemli dahil) · LAN'da (internete kapalı) bugünkü IP kovası ·
-//      belirteç kimliği yalnız imzalıysa
+//      belirteç kimliği yalnız imzalıysa · gerçek cihaz kanıtı middleware'i → limiter (geçerli kanıt cihaz kovası, bozuk IP)
 //   §2 Y2 yumuşak kova: eşik altı serbest · eşik üstü yabancı kaynak bekler · tanınan kaynak beklemez · sert kilit yok ·
-//      uyarı eşiği tek kez · LAN'da etkisiz · bildirim outbox satırı
+//      uyarı eşiği tek kez · eşzamanlı yabancılardan 1'i geçer (yuva) · LAN'da etkisiz · bildirim outbox satırı
 //   §3 parola politikası: yaygın / firma türevi / rakam dizisi red, güçlü kabul · parola değişimi 400 PASSWORD_POLICY Türkçe
 //   §4 O4 kilit: yöntem ayrı geniş kova · kanıtlı cihaz PIN geniş kovadan muaf · LAN tek anahtar · fabrika çarpanı ·
-//      başarıda dar kovanın ceza merdiveni sıfır, genişin değil · yönetici listesi + audit'li kaldırma + 409
+//      başarıda dar kovanın ceza merdiveni sıfır, genişin/PIN'in değil · yönetici listesi + audit'li kaldırma + 409 ·
+//      ayar şifresi kovası listelenmez/kaldırılamaz (403)
 //   §5 D4: LOGIN_FAILED dakikalık özet (internete açıkta) · LAN'da her hata yazılır · kimliksiz 401/404 izi örneklenir
 // =============================================================================
 import prisma from "../src/lib/prisma"; // İLK import: dotenv.config()
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
@@ -20,8 +24,8 @@ import { createRateLimiter } from "../src/middlewares/web-hardening";
 import { resolveRateLimitSubject, identifyTokenUser, type SubjectResolverDeps } from "../src/middlewares/rate-limit-subject";
 import { readFactoryEgressConfig } from "../src/middlewares/factory-egress";
 import {
-  ACCOUNT_ALERT_THRESHOLD, ACCOUNT_SOFT_THRESHOLD, accountThrottleWaitSec, noteAccountFailure, noteAccountSuccess,
-  resetAccountThrottleForTests,
+  ACCOUNT_ALERT_THRESHOLD, ACCOUNT_SOFT_THRESHOLD, accountThrottleWaitSec, claimAccountAttempt, noteAccountFailure,
+  noteAccountSuccess, releaseAccountGate, resetAccountThrottleForTests,
 } from "../src/middlewares/account-soft-throttle";
 import {
   accountThrottleError, recordAccountFailure, shouldWriteLoginFailure, flushLoginFailureSummaries,
@@ -32,6 +36,9 @@ import {
   flushLoginLockoutPersistence, listBlockedLoginBuckets, reserveLoginAttempt, resetLoginLockout, resolveLoginLockoutKeys,
 } from "../src/middlewares/login-lockout";
 import { LoginLockoutAdminService } from "../src/services/login-lockout-admin.service";
+import { resolveDevice } from "../src/middlewares/device.middleware";
+import { buildDeviceProof, deriveDeviceSecret, newProofSalt, DEVICE_PROOF_HEADER } from "../src/lib/device-proof";
+import { getShortCredentialKeyRing, setShortCredentialKeyDirForTests } from "../src/lib/short-credential/keyring";
 import { recordTrace, getRequestTraceHealth, setAnonTraceBucketForTest, type TraceSnapshot } from "../src/services/request-trace.service";
 import { SUSPICIOUS_LOGIN_KIND } from "../src/services/notification-sources/kimlik";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
@@ -135,6 +142,45 @@ function section1(): void {
   }
 }
 
+/** §1m-n: gerçek resolveDevice → limiter zinciri; `proofVerified` işaretini middleware koymazsa Y3 ölü kalır. */
+async function section1Integration(): Promise<void> {
+  console.log("\n=== §1 entegrasyon: cihaz kanıtı middleware'i → hız sınırı ===");
+  setShortCredentialKeyDirForTests(mkdtempSync(join(tmpdir(), "giris-kova-halka-")));
+  const st = getShortCredentialKeyRing();
+  if (!st.ok) {
+    check("§1m anahtar halkası okunur (ön koşul)", false, st.detail);
+    return;
+  }
+  const deviceId = `${TAG}-dev`;
+  const salt = newProofSalt(st.ring.active);
+  const secret = deriveDeviceSecret(st.ring, deviceId, salt)!;
+  const dev = await prisma.device.create({
+    data: { deviceId, name: "Kova bekçisi tableti", status: "APPROVED", isActive: true, proofSalt: salt },
+    select: { id: true },
+  });
+  try {
+    const NAT = "198.51.100.77";
+    const lim = limiter(deps());
+    const res = { status: () => res, json: () => res, setHeader: () => undefined } as unknown as Response;
+    const through = async (headers: Record<string, string>): Promise<boolean> => {
+      const r = { ...fakeReq({ ip: NAT, headers }), path: "/api/auth/login" } as Request;
+      let err: unknown;
+      await resolveDevice(r, res, (e?: unknown) => { err = e; });
+      return !err && runLimiter(lim, r);
+    };
+    for (let i = 0; i < 10; i++) await through({});
+    const proof = buildDeviceProof(secret, Date.now(), "POST", "/api/auth/login");
+    const okProof = await through({ "x-device-id": deviceId, [DEVICE_PROOF_HEADER]: proof });
+    check("§1m ⭐ gerçek middleware: geçerli kanıtlı cihaz, IP kovası dolu NAT'ta 11. girişte 429 almaz", okProof);
+    const badProof = buildDeviceProof("00".repeat(32), Date.now(), "POST", "/api/auth/login");
+    const bad = await through({ "x-device-id": deviceId, [DEVICE_PROOF_HEADER]: badProof });
+    const none = await through({ "x-device-id": deviceId });
+    check("§1n ⭐ bozuk HMAC'li ya da kanıtsız aynı cihaz IP kovasına düşer → 429", !bad && !none, `bad=${bad} none=${none}`);
+  } finally {
+    await prisma.device.delete({ where: { id: dev.id } }).catch(() => undefined);
+  }
+}
+
 async function section2(): Promise<void> {
   console.log("\n=== §2 Y2 hesap başına yumuşak kova ===");
   resetAccountThrottleForTests();
@@ -152,6 +198,20 @@ async function section2(): Promise<void> {
   let alerts = 0;
   for (let i = 0; i < ACCOUNT_ALERT_THRESHOLD + 5; i++) if (noteAccountFailure(`${acc}-al`, `s${i}`, t0 + i).alert) alerts++;
   check("§2e uyarı 1 saatte eşik aşılınca TEK kez", alerts === 1, `alerts=${alerts}`);
+  {
+    const race = `${TAG}-race`;
+    for (let i = 0; i < ACCOUNT_SOFT_THRESHOLD + 1; i++) noteAccountFailure(race, `r${i}`, t0 + i);
+    const at = t0 + 10 * 60_000; // bekleme penceresi çoktan doldu
+    let passed = 0;
+    let gate = 0;
+    for (let i = 0; i < 10; i++) {
+      const c = claimAccountAttempt(race, `2001:db8:${(0x100 + i).toString(16)}::/64`, at);
+      if (c.wait === 0) { passed++; gate = c.gateAt; }
+    }
+    check("§2i ⭐ eşik üstü: aynı anda 10 yabancı denemeden yalnız 1'i bcrypt'e iner (yuva rezervasyonu)", passed === 1, `geçen=${passed}`);
+    releaseAccountGate(race, gate);
+    check("§2j 401 dışı sonuçta yuva bırakılır → sıradaki deneme geçer", claimAccountAttempt(race, "2001:db8:200::/64", at + 1).wait === 0);
+  }
 
   const prev = process.env[HOSTED_ENV];
   try {
@@ -203,6 +263,8 @@ async function section3(): Promise<void> {
   check("§3d güçlü parola ve firma adını içeren uzun ifade kabul",
     passwordPolicyViolation("mavi-Deniz-48k", firm) === null && passwordPolicyViolation("seyitoglu-mavi-kapı-77", firm) === null);
   check("§3e kısa parola eski gerekçeyle (uzunluk) — sıra korunur", /en az/.test(passwordPolicyViolation("abc") ?? ""));
+  check("§3h harfli klavye desenleri (1qaz2wsx3edc, zaq12wsxcde3) red",
+    passwordPolicyViolation("1qaz2wsx3edc") !== null && passwordPolicyViolation("zaq12wsxcde3") !== null);
 
   const u = await prisma.user.create({
     data: { username: `${TAG}-pw`.toLowerCase(), fullName: `${TAG} Parola`, passwordHash: await AuthService.hashPassword("Qz-81-mavi-kap"), isActive: true },
@@ -281,6 +343,27 @@ async function section4(): Promise<void> {
       }
     }
     check("§4k kilitli olmayan kovayı kaldırma 409 LOCKOUT_NOT_ACTIVE", st === 409 && code === "LOCKOUT_NOT_ACTIVE", `${st} ${String(code)}`);
+    // Ayar şifresi kovası (sp:) yöneticiye kapalı: admin kendini kilitleyen ikinci kapıyı açamasın.
+    const spKeys = resolveLoginLockoutKeys(fakeReq({ ip }), `sp:${admin.id}`, proxy).map((k) => ({ ...k, key: `sp:${k.key}` }));
+    let spLocked = false;
+    for (let i = 0; i < 20 && !spLocked; i++) spLocked = (await reserveLoginAttempt(spKeys)).justLocked;
+    const listed = (await LoginLockoutAdminService.list()).some((b) => b.label?.startsWith("sp:"));
+    let spStatus = 0;
+    let spCode: unknown;
+    const spId = createHash("sha256").update(spKeys[0]!.key).digest("hex");
+    try {
+      await LoginLockoutAdminService.release(admin.id, spId, null);
+    } catch (e) {
+      if (e instanceof AppError) {
+        spStatus = e.statusCode;
+        spCode = (e.details as { code?: string } | undefined)?.code;
+      }
+    }
+    const stillLocked = (await reserveLoginAttempt(spKeys)).blocked;
+    check("§4n ⭐ ayar şifresi kovası listede yok, kaldırma 403 LOCKOUT_NOT_RELEASABLE ve kova kilitli kalır",
+      spLocked && !listed && spStatus === 403 && spCode === "LOCKOUT_NOT_RELEASABLE" && stillLocked,
+      `kilit=${spLocked} listede=${listed} ${spStatus} ${String(spCode)} kilitli=${stillLocked}`);
+    resetLoginLockout(spKeys);
     await prisma.systemLog.deleteMany({ where: { action: "LOGIN_LOCK_RELEASED", recordId: mine.id.slice(0, 16) } }).catch(() => undefined);
   }
   await prisma.user.update({ where: { id: admin.id }, data: { isActive: false } }).catch(() => undefined);
@@ -300,6 +383,8 @@ async function section4(): Promise<void> {
   check("§4l ⭐ başarılı girişte dar kovanın ceza merdiveni sıfırlanır", !!before && before.penaltyRounds >= 1 && row?.penaltyRounds === 0, `önce=${before?.penaltyRounds} sonra=${row?.penaltyRounds}`);
   const wide = await reserveLoginAttempt([{ key: ip, budgetMultiplier: 1000 }]);
   check("§4m geniş kova paylaşımlı — başarı onun merdivenini sıfırlamaz (resetPenaltyOnSuccess yok)", k2[1]?.resetPenaltyOnSuccess !== true && !wide.blocked);
+  const pinNarrow = resolveLoginLockoutKeys(fakeReq({ ip }), "pin:tab1", proxy)[0];
+  check("§4o PIN dar kovası cihazdır — başarı ceza merdivenini sıfırlamaz", pinNarrow?.resetPenaltyOnSuccess === false);
 }
 
 function trace(over: Partial<TraceSnapshot>): TraceSnapshot {
@@ -361,6 +446,7 @@ async function main(): Promise<void> {
   try {
     await prisma.systemSetting.upsert({ where: { key: inboxKey }, create: { key: inboxKey, value: true as never }, update: { value: true as never } });
     section1();
+    await section1Integration();
     await section2();
     await section3();
     await section4();

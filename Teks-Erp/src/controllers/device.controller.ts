@@ -3,7 +3,7 @@
 // =============================================================================
 
 import {
-  accountThrottleError, recordAccountFailure, recordAccountSuccess, shouldWriteLoginFailure,
+  accountThrottleError, recordAccountSuccess, releaseAccountAttempt, settleAccountAttempt, shouldWriteLoginFailure,
 } from "../services/login-attempt-monitor.service";
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
@@ -200,6 +200,7 @@ export class DeviceController {
         payload: { retryAfterSec: lock.retryAfterSec, channel: "DEVICE_REBIND_ONSITE" } });
     }
     if (lock.blocked) {
+      releaseAccountAttempt(req);
       next(AppError.tooManyRequests(`Çok fazla hatalı giriş denemesi. ${lock.retryAfterSec} saniye sonra tekrar deneyin.`,
         { code: "LOGIN_LOCKED", retryAfterSec: lock.retryAfterSec }));
       return;
@@ -215,7 +216,7 @@ export class DeviceController {
       // Giriş ucuyla aynı: yalnız 401 kaba kuvvet sayılır; 409 TOTP_REQUIRED / 403 deneme değildir.
       const isCredentialError = error instanceof AppError && error.statusCode === 401;
       if (!isCredentialError) releaseLoginAttempt(lockKeys);
-      else recordAccountFailure(req, body.username);
+      settleAccountAttempt(req, body.username, isCredentialError);
       if (isCredentialError && shouldWriteLoginFailure(body.username, ipAddress, "DEVICE_REBIND_ONSITE")) {
         void AuditService.logEvent({ category: "AUTH", action: "LOGIN_FAILED", recordId: body.username, ipAddress,
           payload: { statusCode: 401, channel: "DEVICE_REBIND_ONSITE" } });

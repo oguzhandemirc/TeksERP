@@ -35,7 +35,7 @@ router.get("/", async (_req: Request, res: Response, next: NextFunction): Promis
  * /api/admin/login-lockouts/{id}/release:
  *   post:
  *     tags: [Admin]
- *     summary: Kilitli giriş kovasını kaldır (audit LOGIN_LOCK_RELEASED); kilitli değilse 409 LOCKOUT_NOT_ACTIVE
+ *     summary: Kilitli giriş kovasını kaldır (audit LOGIN_LOCK_RELEASED); kilitli değilse 409 LOCKOUT_NOT_ACTIVE; ayar/yedek şifresi, parola değişimi, web-TOTP ya da etiketsiz kova 403 LOCKOUT_NOT_RELEASABLE
  *     security: [{ bearerAuth: [] }]
  */
 router.post("/:id/release", async (req: Request, res: Response, next: NextFunction): Promise<void> => {

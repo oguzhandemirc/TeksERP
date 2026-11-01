@@ -10,13 +10,15 @@ export interface LoginLockoutItem {
   method: "PASSWORD" | "PIN" | "CARD" | "OTHER";
   blockedUntil: string;
   penaltyRounds: number;
+  /** false: türü belirsiz (sunucu yeniden başladı) — süresi dolunca kendiliğinden açılır. */
+  releasable: boolean;
 }
 
 export const LOGIN_LOCKOUT_METHOD_LABELS: Record<LoginLockoutItem["method"], string> = {
   PASSWORD: "Parola",
   PIN: "Hızlı PIN",
   CARD: "Personel kartı",
-  OTHER: "Diğer (parola değişimi / ayar şifresi)",
+  OTHER: "Bilinmiyor",
 };
 
 export const loginLockoutService = {

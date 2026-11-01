@@ -60,13 +60,13 @@ function LoginLockoutsDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             {rows.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center gap-2 rounded-md border p-2">
                 <span className="min-w-0 flex-1 break-all">
-                  <b>{r.label ?? `Kilit ${r.id.slice(0, 8)} (sunucu yeniden başladı, ayrıntı yok)`}</b>
+                  <b>{r.label ?? `Kilit ${r.id.slice(0, 8)} (sunucu yeniden başladı, türü bilinmiyor — süresi dolunca kendiliğinden açılır)`}</b>
                   <span className="block text-xs text-muted-foreground">
                     {LOGIN_LOCKOUT_METHOD_LABELS[r.method]} · açılış {safeFormat(r.blockedUntil, "dd.MM.yyyy HH:mm")} · ceza turu{" "}
                     {r.penaltyRounds}
                   </span>
                 </span>
-                <Button size="sm" variant="outline" disabled={release.isPending} onClick={() => release.mutate(r.id)}>
+                <Button size="sm" variant="outline" disabled={release.isPending || !r.releasable} onClick={() => release.mutate(r.id)}>
                   Kaldır
                 </Button>
               </li>

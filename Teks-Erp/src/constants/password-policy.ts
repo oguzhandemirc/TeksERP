@@ -59,10 +59,11 @@ const COMMON_CORE_SET = new Set(COMMON_PASSWORD_CORES);
 const SEQUENCES = ["01234567890123456789", "98765432109876543210"];
 
 function isCommonPassword(password: string): boolean {
+  // Tam biçim deseni kökten ÖNCE: harfli klavye desenleri ("1qaz2wsx3edc") kök denetimine hiç düşmez.
+  if (COMMON_PASSWORD_DIGIT_PATTERNS.includes(password.toLowerCase())) return true;
   const core = passwordCore(password);
   if (core) return COMMON_CORE_SET.has(core);
   const digits = password.replace(/[^0-9]/g, "");
-  if (COMMON_PASSWORD_DIGIT_PATTERNS.includes(password.toLowerCase())) return true;
   if (digits.length === 0) return false;
   if (new Set(digits).size <= 2) return true;
   return SEQUENCES.some((seq) => seq.includes(digits));

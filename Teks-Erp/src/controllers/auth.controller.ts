@@ -39,8 +39,9 @@ import {
 import { newPasswordViolation } from "../lib/new-password-policy";
 import {
   accountThrottleError,
-  recordAccountFailure,
   recordAccountSuccess,
+  releaseAccountAttempt,
+  settleAccountAttempt,
   shouldWriteLoginFailure,
 } from "../services/login-attempt-monitor.service";
 import {
@@ -313,8 +314,7 @@ export class AuthController {
     const throttled = accountThrottleError(req, body.username);
     if (throttled) {
       res.setHeader("Retry-After", String(throttled.retryAfterSec));
-      next(throttled.error);
-      return;
+      return next(throttled.error);
     }
     const lockoutKey = resolveLoginLockoutKeys(req, `u:${body.username}`);
     const lock = await reserveLoginAttempt(lockoutKey);
@@ -334,6 +334,7 @@ export class AuthController {
       });
     }
     if (lock.blocked) {
+      releaseAccountAttempt(req);
       next(
         AppError.tooManyRequests(
           `Çok fazla hatalı giriş denemesi. ${lock.retryAfterSec} saniye sonra tekrar deneyin.`,
@@ -376,7 +377,7 @@ export class AuthController {
       // uyarısını üst üste gören meşru kullanıcı kendini 429'a kilitlerdi.
       const isCredentialError = error instanceof AppError && error.statusCode === 401;
       if (!isCredentialError) releaseLoginAttempt(lockoutKey);
-      else recordAccountFailure(req, body.username);
+      settleAccountAttempt(req, body.username, isCredentialError);
       // 503 AUTH_BUSY saldırı altında saniyede onlarca döner — audit satırı tabloyu şişirirdi.
       // D4: internete açık kurulumda aynı ad + IP'nin hatası dakikada tek satır + özet.
       const reason = error instanceof Error ? error.message : "unknown";
@@ -440,6 +441,7 @@ export class AuthController {
     const lock = await reserveLoginAttempt(lockoutKey);
     await auditLockedOnce(lock, "card", req);
     if (lock.blocked) {
+      releaseAccountAttempt(req);
       next(
         AppError.tooManyRequests(
           `Çok fazla hatalı giriş denemesi. ${lock.retryAfterSec} saniye sonra tekrar deneyin.`,
@@ -525,6 +527,7 @@ export class AuthController {
     const lock = await reserveLoginAttempt(lockoutKey);
     await auditLockedOnce(lock, "quick-pin", req);
     if (lock.blocked) {
+      releaseAccountAttempt(req);
       next(
         AppError.tooManyRequests(
           `Çok fazla hatalı giriş denemesi. ${lock.retryAfterSec} saniye sonra tekrar deneyin.`,

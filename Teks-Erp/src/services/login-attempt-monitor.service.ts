@@ -12,16 +12,21 @@ import { AuditService } from "./audit.service";
 import { emitSuspiciousLogin } from "./notification-sources/kimlik";
 import {
   accountSourceOf,
-  accountThrottleWaitSec,
+  claimAccountAttempt,
   isInternetFacingInstallation,
   noteAccountFailure,
   noteAccountSuccess,
+  releaseAccountGate,
 } from "../middlewares/account-soft-throttle";
+
+/** Bu isteğin tuttuğu hesap yuvası (claimAccountAttempt); isteğin sonucu gelince bırakılır. */
+const heldGates = new WeakMap<Request, { username: string; gateAt: number }>();
 
 /** Eşik üstünde tanınmayan kaynaktan deneme → 429 LOGIN_THROTTLED (bcrypt'ten ÖNCE çağrılır); geçerse null. */
 export function accountThrottleError(req: Request, username: string): { error: AppError; retryAfterSec: number } | null {
   if (!isInternetFacingInstallation()) return null;
-  const wait = accountThrottleWaitSec(username, accountSourceOf(req));
+  const { wait, gateAt } = claimAccountAttempt(username, accountSourceOf(req));
+  if (gateAt) heldGates.set(req, { username, gateAt });
   if (wait <= 0) return null;
   return {
     retryAfterSec: wait,
@@ -32,8 +37,23 @@ export function accountThrottleError(req: Request, username: string): { error: A
   };
 }
 
+/** Deneme kimlik bilgisi sonucu üretmeden bitti (kilit 429 / 409 / 403 / 5xx): tutulan yuvayı bırak. */
+export function releaseAccountAttempt(req: Request): void {
+  const held = heldGates.get(req);
+  if (!held) return;
+  heldGates.delete(req);
+  releaseAccountGate(held.username, held.gateAt);
+}
+
+/** Denemenin sonucu: 401 → hata sayılır; başka her sonuç (409/403/5xx) yalnız yuvayı bırakır. */
+export function settleAccountAttempt(req: Request, username: string, credentialError: boolean): void {
+  if (credentialError) recordAccountFailure(req, username);
+  else releaseAccountAttempt(req);
+}
+
 /** Hatalı parola: sayaç + gerekirse sahibe ve kullanıcı yöneticilerine uyarı (best-effort, isteği bekletmez). */
 export function recordAccountFailure(req: Request, username: string): void {
+  releaseAccountAttempt(req); // hata zaman damgası yuvanın yerini alır
   if (!isInternetFacingInstallation()) return;
   const r = noteAccountFailure(username, accountSourceOf(req));
   if (r.alert) void notifySuspiciousLogin(username, r.failCount, r.sourceCount);
@@ -41,13 +61,18 @@ export function recordAccountFailure(req: Request, username: string): void {
 
 /** Başarılı giriş: kaynak bu hesap için tanınır (sonraki yoğun saldırıda beklemez). */
 export function recordAccountSuccess(req: Request, username: string): void {
+  releaseAccountAttempt(req);
   if (!isInternetFacingInstallation()) return;
   noteAccountSuccess(username, accountSourceOf(req));
 }
 
 async function notifySuspiciousLogin(username: string, failCount: number, sourceCount: number): Promise<void> {
   try {
-    const user = await prisma.user.findUnique({ where: { username }, select: { id: true, fullName: true, username: true } });
+    // Kova küçük harfli adla sayar; son deneme farklı harf büyüklüğüyle gelse de sahip bulunsun.
+    const user = await prisma.user.findFirst({
+      where: { username: { equals: username.trim(), mode: "insensitive" } },
+      select: { id: true, fullName: true, username: true },
+    });
     if (!user) return; // var olmayan ad: uyarılacak sahip yok (kova yine işler — ad keşfi farkı doğmaz)
     await prisma.$transaction((tx) =>
       emitSuspiciousLogin(tx, {

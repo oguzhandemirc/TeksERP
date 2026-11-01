@@ -26,6 +26,8 @@ type AccountEntry = {
   sources: Set<string>;
   known: Map<string, number>;
   alertedAt: number;
+  /** Eşik üstünde geçen yabancı denemenin yuvası (ms); sonuç gelene kadar pencereyi tutar — TOCTOU seddi. */
+  gateAt: number;
 };
 
 const accounts = new Map<string, AccountEntry>();
@@ -51,7 +53,7 @@ function entryOf(username: string, create: boolean): AccountEntry | null {
   let e = accounts.get(k);
   if (!e && create) {
     if (accounts.size >= MAX_ACCOUNTS) sweep(Date.now());
-    e = { fails: [], sources: new Set(), known: new Map(), alertedAt: 0 };
+    e = { fails: [], sources: new Set(), known: new Map(), alertedAt: 0, gateAt: 0 };
     accounts.set(k, e);
   }
   return e ?? null;
@@ -72,26 +74,53 @@ function sweep(now: number): void {
     for (const [src, at] of e.known) if (now - at > KNOWN_SOURCE_TTL_MS) e.known.delete(src);
     if (e.fails.length === 0 && e.known.size === 0) accounts.delete(k);
   }
-  // Hâlâ doluysa en eski eklenenden buda — bellek tavanı saldırganın rastgele adlarına karşı.
-  for (const k of accounts.keys()) {
-    if (accounts.size < MAX_ACCOUNTS) break;
-    accounts.delete(k);
+  // Hâlâ doluysa en eski eklenenden buda — bellek tavanı saldırganın rastgele adlarına karşı. Önce tanınan
+  // kaynağı OLMAYAN girdiler gider: rastgele adlarla doldurma sahibin "tanınan kaynak" kaydını sildiremesin.
+  for (const keepKnown of [true, false]) {
+    for (const [k, e] of accounts) {
+      if (accounts.size < MAX_ACCOUNTS) return;
+      if (keepKnown && e.known.size > 0) continue;
+      accounts.delete(k);
+    }
   }
 }
 
-/** Eşik üstündeki tanınmayan kaynak için kalan bekleme (sn); 0 = geçebilir. Sayaç artırmaz. */
+/** Eşik üstündeki tanınmayan kaynak için kalan bekleme (sn); 0 = geçebilir. Sayaç artırmaz, yuva tutmaz. */
 export function accountThrottleWaitSec(username: string, source: string, now = Date.now()): number {
+  return evaluate(username, source, now).wait;
+}
+
+/**
+ * Denetim + yuva rezervasyonu TEK senkron adım: eşik üstünde geçen yabancı deneme `gateAt`i alır, böylece
+ * aynı anda gelen diğerleri bcrypt'e inmeden bekler (pencere başına 1 deneme). Dönen `gateAt` sahibi,
+ * sonuç 401 değilse `releaseAccountGate` ile yuvayı bırakır. 0 = yuva alınmadı (eşik altı / tanınan kaynak).
+ */
+export function claimAccountAttempt(username: string, source: string, now = Date.now()): { wait: number; gateAt: number } {
+  const r = evaluate(username, source, now);
+  if (r.wait > 0 || !r.entry || !r.gated) return { wait: r.wait, gateAt: 0 };
+  r.entry.gateAt = now;
+  return { wait: 0, gateAt: now };
+}
+
+/** Yuvayı bırak (başarı / 401 dışı sonuç / kilit 429). Başka deneme yuvayı devraldıysa dokunmaz. */
+export function releaseAccountGate(username: string, gateAt: number): void {
+  if (!gateAt) return;
   const e = entryOf(username, false);
-  if (!e) return 0;
+  if (e && e.gateAt === gateAt) e.gateAt = 0;
+}
+
+function evaluate(username: string, source: string, now: number): { wait: number; gated: boolean; entry: AccountEntry | null } {
+  const e = entryOf(username, false);
+  if (!e) return { wait: 0, gated: false, entry: null };
   const fails = liveFails(e, now);
-  if (fails.length < ACCOUNT_SOFT_THRESHOLD) return 0;
+  if (fails.length < ACCOUNT_SOFT_THRESHOLD) return { wait: 0, gated: false, entry: e };
   const seen = e.known.get(source);
-  if (seen !== undefined && now - seen <= KNOWN_SOURCE_TTL_MS) return 0;
+  if (seen !== undefined && now - seen <= KNOWN_SOURCE_TTL_MS) return { wait: 0, gated: false, entry: e };
   const over = fails.length - ACCOUNT_SOFT_THRESHOLD;
   const delayMs = Math.min(ACCOUNT_MAX_DELAY_SEC, 2 ** Math.min(over, 10)) * 1000;
-  const last = fails[fails.length - 1] as number;
+  const last = Math.max(fails[fails.length - 1] as number, e.gateAt);
   const wait = last + delayMs - now;
-  return wait > 0 ? Math.ceil(wait / 1000) : 0;
+  return { wait: wait > 0 ? Math.ceil(wait / 1000) : 0, gated: true, entry: e };
 }
 
 /** Hatalı parola (401). `alert` = 1 saatte ACCOUNT_ALERT_THRESHOLD aşıldı (hesap başına saatte bir kez). */
