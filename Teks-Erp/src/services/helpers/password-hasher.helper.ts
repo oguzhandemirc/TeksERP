@@ -1,7 +1,7 @@
 // =============================================================================
 // PAROLA ÖZETİ — TEK BOĞAZ (VDS denetimi K1 + D2, 2026-11-01)
 // =============================================================================
-// src/ altında bcryptjs YALNIZ burada çağrılır (`test_parola_havuzu` AST taraması): giriş, yerinde
+// src/ altında bcryptjs YALNIZ burada çağrılır (`test_parola_havuzu` §1 içe aktarma taraması): giriş, yerinde
 // onay, parola değişimi, ayar şifresi, kurtarma kodu, varsayılan süperadmin. Hepsi aynı semafor +
 // worker havuzundan geçer; doğrulama kuyruğu dolunca 503 AUTH_BUSY (yalnız parola uçları).
 // =============================================================================

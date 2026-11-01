@@ -3,7 +3,8 @@
 // =============================================================================
 // bcryptjs saf JS'tir; ana iş parçacığında maliyet 12 ≈ 0,46 sn CPU (VDS ölçümü). Kimliksiz yanlış
 // parola istekleri tek çekirdeği doyurup bütün fabrikayı yavaşlatıyordu. Burada:
-//   • aynı anda en çok N iş (PASSWORD_HASH_CONCURRENCY, varsayılan 2) — worker havuzu boyu da N;
+//   • aynı anda en çok N iş (PASSWORD_HASH_CONCURRENCY; varsayılan min(2, çekirdek-1), en az 1 —
+//     tek çekirdekli VDS'te 2 worker ana döngünün payını kemirir) — worker havuzu boyu da N;
 //   • doğrulama kuyruğu sınırlı (PASSWORD_VERIFY_QUEUE, varsayılan 8); dolunca `PasswordHashBusyError`
 //     (çağıran 503 AUTH_BUSY'ye çevirir). Özet ÜRETİMİ (kimlikli uçlar) kuyruk tavanına takılmaz.
 // Worker DURUMSUZ hesaplamadır (server.ts TEK-PROCESS notu bellek-içi durum içindir); kodu `eval`
@@ -11,6 +12,7 @@
 // prod node_modules'ünden çözülür; worker kurulamazsa aynı semaforla ana iş parçacığına düşer.
 // =============================================================================
 import { createRequire } from "node:module";
+import { availableParallelism } from "node:os";
 import { Worker } from "node:worker_threads";
 import { uyari } from "../../lib/logger";
 
@@ -30,11 +32,22 @@ function readPositiveInt(raw: string | undefined, fallback: number, max: number)
   return Number.isFinite(n) && n >= 1 ? Math.min(n, max) : fallback;
 }
 
-export type PoolConfig = { concurrency: number; verifyQueue: number; mode: "worker" | "inline" };
+export type PoolConfig = {
+  concurrency: number;
+  verifyQueue: number;
+  mode: "worker" | "inline";
+  /** Yalnız bekçi: worker'ın yükleyeceği modül (bozuk yol → ana iş parçacığına düşüş sondası). */
+  bcryptPath?: string;
+};
+
+/** Ölçülen VDS nproc=1: worker'lar ana döngü ve Postgres'le aynı çekirdeği paylaşmasın. */
+export function defaultConcurrency(cores: number = availableParallelism()): number {
+  return Math.min(2, Math.max(1, cores - 1));
+}
 
 export function readPoolConfig(env: NodeJS.ProcessEnv = process.env): PoolConfig {
   return {
-    concurrency: readPositiveInt(env.PASSWORD_HASH_CONCURRENCY, 2, 16),
+    concurrency: readPositiveInt(env.PASSWORD_HASH_CONCURRENCY, defaultConcurrency(), 16),
     verifyQueue: readPositiveInt(env.PASSWORD_VERIFY_QUEUE, 8, 256),
     mode: (env.PASSWORD_HASH_MODE ?? "").trim().toLowerCase() === "inline" ? "inline" : "worker",
   };
@@ -55,8 +68,10 @@ parentPort.on("message", (j) => {
 parentPort.postMessage({ ready: true });
 `;
 
-type Pending = { resolve: (v: string | boolean) => void; reject: (e: Error) => void };
-type Slot = { worker: Worker; pending: Map<number, Pending> };
+type Pending = { job: HashOp; resolve: (v: string | boolean) => void; reject: (e: Error) => void };
+type Slot = { worker: Worker; pending: Map<number, Pending>; ready: boolean };
+/** Hazır olduktan sonra art arda bu kadar düşüşte worker kipi bırakılır (sonsuz yeniden kurma yok). */
+const MAX_CONSECUTIVE_CRASHES = 3;
 
 /** Ana modülün yanındaki node_modules'ten bcryptjs'in mutlak yolu (tsx, esbuild .cjs ve bytenode .jsc'de aynı). */
 function resolveBcryptPath(): string | null {
@@ -74,6 +89,7 @@ export class PasswordHashPool {
   private nextSlot = 0;
   private nextId = 1;
   private workerFailed = false;
+  private consecutiveCrashes = 0;
   /** Bekçi ölçümü: aynı anda koşan en yüksek iş sayısı ve başlatılan iş sayısı. */
   peakActive = 0;
   started = 0;
@@ -108,25 +124,28 @@ export class PasswordHashPool {
     if (!slot) return this.inline(job);
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      slot.pending.set(id, { resolve, reject });
+      slot.pending.set(id, { job, resolve, reject });
       slot.worker.ref(); // iş sürerken süreç ayakta kalsın (betik/bekçi); boşta unref
       slot.worker.postMessage({ ...job, id });
     });
   }
 
+  /** Eksik worker'ları tamamlar; boştaki worker'ı tercih eder, yoksa sıradakini. */
   private pickSlot(): Slot | null {
-    if (this.slots.length === 0) this.spawnAll();
+    if (this.slots.length < this.config.concurrency) this.fillSlots();
     if (this.workerFailed || this.slots.length === 0) return null;
+    const idle = this.slots.find((s) => s.pending.size === 0);
+    if (idle) return idle;
     const slot = this.slots[this.nextSlot % this.slots.length]!;
     this.nextSlot += 1;
     return slot;
   }
 
-  private spawnAll(): void {
-    const bcryptPath = resolveBcryptPath();
+  private fillSlots(): void {
+    const bcryptPath = this.config.bcryptPath ?? resolveBcryptPath();
     if (!bcryptPath) return this.fallBack("bcryptjs çözülemedi");
     try {
-      for (let i = 0; i < this.config.concurrency; i++) this.slots.push(this.spawn(bcryptPath));
+      while (this.slots.length < this.config.concurrency) this.slots.push(this.spawn(bcryptPath));
     } catch (err) {
       this.fallBack(err instanceof Error ? err.message : String(err));
     }
@@ -134,13 +153,18 @@ export class PasswordHashPool {
 
   private spawn(bcryptPath: string): Slot {
     const worker = new Worker(WORKER_SOURCE, { eval: true, workerData: { bcryptPath } });
-    const slot: Slot = { worker, pending: new Map() };
-    worker.on("message", (msg: { id?: number; ok?: boolean; r?: string | boolean; e?: string }) => {
+    const slot: Slot = { worker, pending: new Map(), ready: false };
+    worker.on("message", (msg: { id?: number; ok?: boolean; r?: string | boolean; e?: string; ready?: boolean }) => {
+      if (msg.ready) {
+        slot.ready = true;
+        return;
+      }
       if (msg.id === undefined) return;
       const p = slot.pending.get(msg.id);
       slot.pending.delete(msg.id);
       if (slot.pending.size === 0) worker.unref();
       if (!p) return;
+      this.consecutiveCrashes = 0; // yalnız tamamlanan iş sayacı sıfırlar (hazır olup her işte ölen worker döngüye girmesin)
       if (msg.ok) p.resolve(msg.r as string | boolean);
       else p.reject(new Error(msg.e ?? "password hash worker error"));
     });
@@ -150,17 +174,34 @@ export class PasswordHashPool {
     return slot;
   }
 
-  /** Ölen worker'ın bekleyen işleri hata alır; havuz bir sonraki işte yeniden kurulur. */
+  /**
+   * Ölen worker'ın bekleyen işleri ana iş parçacığında yeniden koşar (semafor yuvası hâlâ onların;
+   * 500 dönmez). Hazır olmadan ölen (ör. require hatası) ya da art arda düşen worker → kalıcı düşüş.
+   */
   private dropSlot(slot: Slot, err: Error): void {
     if (!this.slots.includes(slot)) return;
     this.slots = this.slots.filter((s) => s !== slot);
-    for (const p of slot.pending.values()) p.reject(err);
+    const orphans = [...slot.pending.values()];
     slot.pending.clear();
-    if (this.slots.length === 0 && !this.workerFailed) uyari("parola-havuzu", `worker düştü, yeniden kurulacak: ${err.message}`);
+    this.consecutiveCrashes += 1;
+    if (!this.workerFailed) {
+      if (!slot.ready) this.fallBack(`worker hazır olmadan düştü: ${err.message}`);
+      else if (this.consecutiveCrashes >= MAX_CONSECUTIVE_CRASHES) this.fallBack(`worker art arda düştü: ${err.message}`);
+      else uyari("parola-havuzu", `worker düştü, yeniden kurulacak: ${err.message}`);
+    }
+    for (const p of orphans) this.inline(p.job).then(p.resolve, p.reject);
   }
 
   private fallBack(reason: string): void {
+    if (this.workerFailed) return;
     this.workerFailed = true;
+    const live = this.slots;
+    this.slots = [];
+    for (const s of live) {
+      for (const p of s.pending.values()) this.inline(p.job).then(p.resolve, p.reject);
+      s.pending.clear();
+      void s.worker.terminate();
+    }
     uyari("parola-havuzu", `worker kurulamadı, parola özeti ana iş parçacığında (semafor geçerli): ${reason}`);
   }
 

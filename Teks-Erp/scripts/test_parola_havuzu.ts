@@ -9,6 +9,8 @@
 // §4 IPv6 /64 kovası (::ffff: IPv4 kalır; LAN bayt-aynı) + giriş kilidi anahtarı aynı kaynaktan.
 // §5 D2: bilinmeyen kullanıcıda doğrulama koşar.  §6 yerinde onay: kaynak (/64) başına tavan.
 // §7 boşta worker süreci ayakta tutmaz (her bekçi/betik doğal çıkmalı).
+// §8 worker düşerse iş ana iş parçacığında biter (500 yok); hazır olmadan düşen → kalıcı düşüş;
+//    varsayılan eşzamanlılık tek çekirdekte 1.
 // Sonda: `--sonda=inline` worker'sız kip → §2 ELU ❌ (ölçümün ayırt ettiğini kanıtlar).
 // =============================================================================
 import prisma from "../src/lib/prisma"; // İLK import: dotenv → DATABASE_URL
@@ -26,6 +28,8 @@ import { AuthService } from "../src/services/auth.service";
 import { onsiteSourceRateLimited, resetOnsiteRebindRateForTests } from "../src/controllers/device.controller";
 import { hashPassword, resetPasswordHashPoolForTests, verifyPassword } from "../src/services/helpers/password-hasher.helper";
 import { AppError } from "../src/utils/app-error";
+import bcrypt from "bcryptjs";
+import { defaultConcurrency, PasswordHashPool, type HashOp } from "../src/services/helpers/password-hash-pool.helper";
 
 let pass = 0;
 let fail = 0;
@@ -50,7 +54,7 @@ function walk(dir: string, out: string[] = []): string[] {
 function section1(): void {
   console.log("\n§1 bcryptjs tek boğaz");
   const offenders = walk(join(ROOT, "src"))
-    .filter((f) => /from\s+["']bcryptjs["']|require\(\s*["']bcryptjs["']\s*\)/.test(readFileSync(f, "utf8")))
+    .filter((f) => /from\s+["']bcrypt(js)?["']|(require|import)\(\s*["']bcrypt(js)?["']\s*\)/.test(readFileSync(f, "utf8")))
     .map((f) => f.slice(ROOT.length + 1));
   check("§1a bcryptjs yalnız password-hasher.helper.ts'te içe aktarılır",
     offenders.length === 1 && offenders[0] === "src/services/helpers/password-hasher.helper.ts", offenders.join(", "));
@@ -104,6 +108,7 @@ async function section2(): Promise<void> {
       busy.every((r) => r.headers.get("retry-after") === "2") && body?.success === false && body?.details?.code === "AUTH_BUSY");
     check("§2e eşzamanlı sağlık isteği zamanında döner (< 1500 ms)", health.status === 200 && healthMs < 1500, `${healthMs}ms`);
     check("§2f worker kipinde ana iş parçacığı kullanımı (ELU) < 0,5", elu.utilization < 0.5, elu.utilization.toFixed(3));
+    check("§2g olay döngüsü gecikmesi (max) < 400 ms", lagMaxMs < 400, `${lagMaxMs}ms`);
   } finally {
     server.close();
   }
@@ -182,6 +187,31 @@ function section7(): void {
     `status=${r.status} ${r.error ? "zaman aşımı" : ""} ${ms}ms`);
 }
 
+async function section8(): Promise<void> {
+  console.log("\n§8 worker düşüşü — ana iş parçacığına dönüş");
+  const inline = (j: HashOp): Promise<string | boolean> => (j.op === "compare" ? bcrypt.compare(j.plain, j.hash) : bcrypt.hash(j.plain, j.cost));
+  const hash = await bcrypt.hash("TEST-dusus", 4);
+  const broken = new PasswordHashPool({ concurrency: 1, verifyQueue: 8, mode: "worker", bcryptPath: "/yok/bcryptjs.js" }, inline);
+  const r1 = await broken.run({ op: "compare", plain: "TEST-dusus", hash }).then((v) => v, (e: unknown) => e);
+  const r2 = await broken.run({ op: "compare", plain: "yanlis", hash }).then((v) => v, (e: unknown) => e);
+  check("§8a bozuk worker modülü: doğrulama yine doğru sonuç (500 yok)", r1 === true && r2 === false, `${String(r1)} / ${String(r2)}`);
+  check("§8b hazır olmadan düşen worker → kalıcı ana iş parçacığı kipi", broken.mode === "inline", broken.mode);
+  await broken.close();
+
+  const pool = new PasswordHashPool({ concurrency: 1, verifyQueue: 8, mode: "worker" }, inline);
+  await pool.run({ op: "compare", plain: "isinma", hash }); // worker hazır
+  const pending = pool.run({ op: "hash", plain: "TEST-uzun", cost: 12 });
+  const slots = (pool as unknown as { slots: Array<{ worker: { terminate(): Promise<number> } }> }).slots;
+  await slots[0]?.worker.terminate();
+  const out = await pending.then((v) => v, (e: unknown) => e);
+  check("§8c iş sürerken ölen worker: iş ana iş parçacığında tamamlanır", typeof out === "string" && out.startsWith("$2"), String(out).slice(0, 40));
+  check("§8d tek düşüşte worker kipi sürer (yeniden kurulur)", pool.mode === "worker", pool.mode);
+  await pool.close();
+
+  check("§8e varsayılan eşzamanlılık: 1 çekirdek→1, 2→1, 4→2, 16→2",
+    [1, 2, 4, 16].map((c) => defaultConcurrency(c)).join() === "1,1,2,2");
+}
+
 async function main(): Promise<void> {
   try {
     section1();
@@ -191,6 +221,7 @@ async function main(): Promise<void> {
     await section5();
     section6();
     section7();
+    await section8();
   } finally {
     await resetPasswordHashPoolForTests({}).then((p) => p.close());
     await prisma.$disconnect();
