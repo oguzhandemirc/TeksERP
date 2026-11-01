@@ -206,6 +206,7 @@ describe("karo bağlantıları", () => {
       "product-balance",
       "purchase-orders",
       "sack-store",
+      "sarf-stogu",
       "stock-counts",
       "warehouse-transfers",
       "warp-beams",

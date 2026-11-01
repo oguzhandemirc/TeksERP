@@ -56,6 +56,18 @@ export const warehouseTiles: OperationsTile[] = [
     offHint: flagOffHint("ticaretEnabled"),
   },
   {
+    // Sarf stoğu (kuşak / kurşun şeridi): mal kabulle aynı iki kapı (izin + ticaret rejimi).
+    key: "sarf-stogu",
+    title: "Sarf Stoğu",
+    description: "Kuşak ve kurşun şeridi — mal kabul girişi, üretim düşümü, eksi bakiye uyarısı",
+    icon: Boxes,
+    to: "/operations/sarf-stogu",
+    group: "warehouse",
+    permission: "goods-receipt:read",
+    visibleWhen: isGoodsReceiptVisible,
+    offHint: flagOffHint("ticaretEnabled"),
+  },
+  {
     // İçerideki İşler (P1a, ister 3.2): müşteri başına içerideki emanet mal. Emanet KAPALIYKEN gizli (Gelen Belgeler emsali).
     key: "icerideki-isler",
     title: "İçerideki İşler",
