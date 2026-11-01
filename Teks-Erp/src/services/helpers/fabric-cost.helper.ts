@@ -210,10 +210,13 @@ function groundBeamTakeUp(input: CostInput, groundTakeUp: Dec): Dec {
  * Çözgü metresinin kumaş karşılığı: L × (1 − t) — levent hazırlığı satırıyla aynı take-up çözümü.
  * İhtiyaç planı hazır levent düşümünde kullanır (formül kopyalanmaz); take-up yoksa null.
  */
-export function fabricMetersFromWarpM(input: CostInput, warpM: Dec): Dec | null {
-  if (!input.warp) return null;
-  const t = new Collector().take(input.warp.takeUpPct, "TAKEUP_MISSING");
-  return t === null ? null : warpM.mul(ONE.minus(groundBeamTakeUp(input, pct(t))));
+export function fabricMetersFromWarpM(input: CostInput, warpM: Dec, ownBeamLayer?: CostWarpLayer): Dec | null {
+  // SY-N2: ayrı leventli (SEPARATE_BEAM) katman kendi take-up'ıyla; ortak grup etkisi yalnız zeminde.
+  const w = ownBeamLayer ?? input.warp;
+  if (!w) return null;
+  const t = new Collector().take(w.takeUpPct, "TAKEUP_MISSING");
+  if (t === null) return null;
+  return warpM.mul(ONE.minus(ownBeamLayer ? pct(t) : groundBeamTakeUp(input, pct(t))));
 }
 
 const line = (component: CostComponent, label: string, amount: Dec, extra: Partial<CostLine> = {}): CostLine => ({

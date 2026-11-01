@@ -13,9 +13,9 @@ import { factoryDateTimeTr } from "../../constants/time";
 import { ProductionBalanceService, type BalanceGroup } from "../production-balance.service";
 import { ACTIVE_LINE, MEASURED_LINE } from "../helpers/order-line-scope.helper";
 import { buildCostInput, loadCostSourcesTx } from "../helpers/cost-assembler.helper";
-import { fabricMetersFromWarpM, yarnUsagePerM, type CostInput } from "../helpers/fabric-cost.helper";
+import { fabricMetersFromWarpM, yarnUsagePerM, type CostInput, type CostWarpLayer } from "../helpers/fabric-cost.helper";
 import { readOpenPurchase, readReadyBeams, readYarnStock } from "../helpers/maliyet-bridge.helper";
-import { isSharedBeamLayer } from "../helpers/warp-layer-beam.helper";
+import { isSharedBeamLayer, layerHasOwnBeam } from "../helpers/warp-layer-beam.helper";
 
 type Dec = Prisma.Decimal;
 const D0 = (): Dec => new Prisma.Decimal(0);
@@ -164,19 +164,22 @@ export async function yarnNeedReport(opts: YarnNeedOptions = {}): Promise<YarnNe
   ready.sort((a, b) => a.code.localeCompare(b.code, "tr"));
 
   // Hazır çözgü: aynı çözgü kartının kalan levent metresi, kartın ürünlerine kod sırasıyla dağıtılır.
-  const warpSpecIds = [...new Set(ready.map((r) => r.input.warp?.warpSpecId).filter((x): x is string => !!x))].sort();
+  // SY-N2: SEPARATE_BEAM katmanının kendi leventi de AYNI düşümle (katman başına) — SHARED zemini izler, CREEL düşülmez.
+  const ownBeamLayers = (r: typeof ready[number]) => (r.input.warpLayers ?? []).filter((l) => layerHasOwnBeam(l.beamMode) && l.warpSpecId);
+  const specIdsOf = (r: typeof ready[number]) => [r.input.warp?.warpSpecId, ...ownBeamLayers(r).map((l) => l.warpSpecId)];
+  const warpSpecIds = [...new Set(ready.flatMap(specIdsOf).filter((x): x is string => !!x))].sort();
   const beams = leventDus ? await readReadyBeams(warpSpecIds) : null;
   const warpMeters = new Map<typeof ready[number], Dec>();
+  const layerMeters = new Map<string, Dec>();
   const leventler: YarnNeedReport["meta"]["leventler"] = [];
   const pool = new Map<string, Dec>();
   if (beams) for (const [id, b] of beams) pool.set(id, b.remainingM);
   const covered = new Map<string, Dec>();
-  for (const r of ready) {
+  const deductReadyBeam = (r: typeof ready[number], specId: string | null, layer?: CostWarpLayer): Dec => {
     let need = r.d.meters;
-    const specId = r.input.warp?.warpSpecId ?? null;
     const remW = specId ? pool.get(specId) : undefined;
     if (specId && remW && remW.gt(0) && need.gt(0)) {
-      const fabricAvail = fabricMetersFromWarpM(r.input, remW);
+      const fabricAvail = fabricMetersFromWarpM(r.input, remW, layer);
       if (fabricAvail && fabricAvail.gt(0)) {
         const take = minD(need, fabricAvail);
         // Kullanılan çözgü metresi oranla (take-up formülü kopyalanmaz): remW × take / fabricAvail.
@@ -185,7 +188,11 @@ export async function yarnNeedReport(opts: YarnNeedOptions = {}): Promise<YarnNe
         need = need.minus(take);
       }
     }
-    warpMeters.set(r, need);
+    return need;
+  };
+  for (const r of ready) {
+    warpMeters.set(r, deductReadyBeam(r, r.input.warp?.warpSpecId ?? null));
+    for (const l of ownBeamLayers(r)) layerMeters.set(`${r.d.itemId}|${l.warpSpecId}`, deductReadyBeam(r, l.warpSpecId, l));
   }
   if (beams) {
     for (const id of warpSpecIds) {
@@ -205,8 +212,11 @@ export async function yarnNeedReport(opts: YarnNeedOptions = {}): Promise<YarnNe
   for (const r of ready) {
     kumasMetre = kumasMetre.plus(r.d.meters);
     add(r.usage.warp!.yarnItemId, "warp", r.usage.warp!.kgPerM.mul(warpMeters.get(r)!));
-    // SY-B1: SHARED_BEAM grubu zemin leventinde (aynı düşüm); SEPARATE/CREEL katmanı tam talep (CREEL stoktan).
-    for (const l of r.usage.warpLayers) add(l.yarnItemId, "warp", l.kgPerM.mul(isSharedBeamLayer(l.beamMode) ? warpMeters.get(r)! : r.d.meters));
+    // SY-B1/N2: SHARED_BEAM zemin leventinde (aynı düşüm); SEPARATE kendi leventinin düşümüyle; CREEL tam talep (stoktan).
+    for (const l of r.usage.warpLayers) {
+      const own = layerMeters.get(`${r.d.itemId}|${l.warpSpecId}`);
+      add(l.yarnItemId, "warp", l.kgPerM.mul(isSharedBeamLayer(l.beamMode) ? warpMeters.get(r)! : (own ?? r.d.meters)));
+    }
     for (const w of r.usage.weft) add(w.yarnItemId, "weft", w.kgPerM.mul(r.d.meters));
   }
 
