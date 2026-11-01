@@ -15,9 +15,32 @@ function draftQuery(d: LoomSuggestionDraft): string {
   return p.toString();
 }
 
+// Liste kolonu satır başına sorar (toplu uç yok); sunucu her istekte tüm tezgâhları hesapladığından aynı anda
+// en fazla LIST_CONCURRENCY istek uçar. Hata hücrede/bölümde gösterilir, global toast basılmaz.
+const LIST_CONCURRENCY = 4;
+let inFlight = 0;
+const waiting: Array<() => void> = [];
+
+export async function withListSlot<T>(run: () => Promise<T>): Promise<T> {
+  if (inFlight >= LIST_CONCURRENCY) await new Promise<void>((resolve) => waiting.push(resolve));
+  inFlight += 1;
+  try {
+    return await run();
+  } finally {
+    inFlight -= 1;
+    waiting.shift()?.();
+  }
+}
+
 export const loomSuggestionService = {
   forWeavingOrder: (id: string): Promise<LoomSuggestion> =>
-    apiClient.get<ApiResponse<LoomSuggestion>>(`${BASE}/weaving-orders/${id}`).then((r) => r.data.data),
+    withListSlot(() =>
+      apiClient
+        .get<ApiResponse<LoomSuggestion>>(`${BASE}/weaving-orders/${id}`, { suppressErrorToast: true })
+        .then((r) => r.data.data),
+    ),
   forDraft: (d: LoomSuggestionDraft): Promise<LoomSuggestion> =>
-    apiClient.get<ApiResponse<LoomSuggestion>>(`${BASE}?${draftQuery(d)}`).then((r) => r.data.data),
+    apiClient
+      .get<ApiResponse<LoomSuggestion>>(`${BASE}?${draftQuery(d)}`, { suppressErrorToast: true })
+      .then((r) => r.data.data),
 };

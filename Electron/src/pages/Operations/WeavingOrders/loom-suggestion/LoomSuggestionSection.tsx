@@ -1,6 +1,8 @@
 // Dokuma iş emri formunda "Tezgâh önerisi" bölümü (SY-M3, tasarım §14.8). Taslak (ürün + varyant + çözgü + plan m)
 // üzerinden salt okuma; ürün seçilmeden sorgu atılmaz. Kapı çağıranda (`gates.loomSuggestionVisible`).
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { apiErrorMessage } from "@/services/apiClient";
 import { LoomCandidateList } from "./LoomSuggestionParts";
 import { LOOM_SUGGESTION_QUERY_KEY, loomSuggestionService } from "./service";
@@ -13,7 +15,10 @@ export function draftOf(v: { itemId?: string; recipeId?: string; warpSpecId?: st
   return { itemId: v.itemId, recipeId: v.recipeId || null, warpSpecId: v.warpSpecId || null, plannedM: Number.isFinite(m) && m > 0 ? m : null };
 }
 
-export function LoomSuggestionSection({ draft }: { draft: LoomSuggestionDraft | null }) {
+export function LoomSuggestionSection({ draft: liveDraft }: { draft: LoomSuggestionDraft | null }) {
+  // Plan metresi yazılırken her tuşta istek atılmasın: taslak, metin anahtarı üzerinden 400 ms debounce edilir.
+  const debouncedKey = useDebouncedValue(JSON.stringify(liveDraft), 400);
+  const draft = useMemo(() => JSON.parse(debouncedKey) as LoomSuggestionDraft | null, [debouncedKey]);
   const q = useQuery({
     queryKey: [...LOOM_SUGGESTION_QUERY_KEY, "draft", draft],
     queryFn: () => loomSuggestionService.forDraft(draft!),

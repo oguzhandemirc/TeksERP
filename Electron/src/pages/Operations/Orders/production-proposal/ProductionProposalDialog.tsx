@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { useAttemptToken } from "@/lib/attemptToken";
+import { isAmbiguousFailure, useAttemptToken } from "@/lib/attemptToken";
 import { apiErrorMessage } from "@/services/apiClient";
 import type { OrderLine } from "../types";
 import { productionProposalService } from "./service";
@@ -65,8 +65,15 @@ function useProposalFlow(open: boolean, orderId: string) {
     attempt.renew();
     void preview.refetch();
   };
+  // Seçim değişirse yeni mantıksal deneme: eski token'ın replay'i ilk seçimi döndürüp yenisini yutmasın. İlk deneme
+  // yazılmışsa sunucu satırları ORDER_LINE_ALREADY_PLANNED (409) ile reddeder; çift kayıt açılmaz.
+  const changeSelection = (update: (s: ProposalSelection) => ProposalSelection) => {
+    if (apply.isError && !isConflict(apply.error)) apply.reset();
+    attempt.renew();
+    setSel(update);
+  };
   const canApply = preview.data != null && buildApplyBody(preview.data, sel, "-") != null;
-  return { preview, sel, setSel, result, apply, refresh, canApply };
+  return { preview, sel, setSel: changeSelection, result, apply, refresh, canApply };
 }
 
 export function ProductionProposalDialog({ open, onOpenChange, orderId, orderNumber, lines }: Props) {
@@ -123,7 +130,11 @@ function ApplyError({ error, lineLabel }: { error: unknown; lineLabel: LineLabel
     <div role="alert" className="space-y-1 text-sm text-destructive">
       <p>
         {apiErrorMessage(error)}
-        {isConflict(error) ? " Önizlemeyi yenileyip yeniden seçin." : " Aynı seçimle tekrar gönderebilirsiniz; çift kayıt açılmaz."}
+        {isConflict(error)
+          ? " Önizlemeyi yenileyip yeniden seçin."
+          : isAmbiguousFailure(error)
+            ? " Aynı seçimle tekrar gönderebilirsiniz; çift kayıt açılmaz."
+            : ""}
       </p>
       {ids.length > 0 && <ul className="list-disc pl-5 text-xs">{ids.map((id) => <li key={id}>{lineLabel(id)}</li>)}</ul>}
     </div>
