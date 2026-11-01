@@ -75,8 +75,8 @@ export function RelabelStationPage() {
             />
             <LastLabelBanner snap={ctx.lastLabelSnapshot} />
             <div className="grid gap-4 lg:grid-cols-2">
-              <RelabelSpecForm key={ctx.id} ctx={ctx} onSaved={refresh} />
-              <RelabelPrintForCustomer key={ctx.id} ctx={ctx} onPrinted={refresh} />
+              <RelabelSpecForm key={`spec-${ctx.id}`} ctx={ctx} onSaved={refresh} />
+              <RelabelPrintForCustomer key={`print-${ctx.id}`} ctx={ctx} onPrinted={refresh} />
             </div>
           </div>
         )}

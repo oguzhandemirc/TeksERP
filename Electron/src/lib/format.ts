@@ -49,3 +49,14 @@ export function formatNumber(
   if (!Number.isFinite(num)) return "—";
   return getNumberFormatter(fractionDigits).format(num);
 }
+
+/**
+ * SABİT haneli sayı (239,5 → "239,50") — irsaliye/belge metre sütunu (`ondalik: 2`) ile aynı hane sayısı,
+ * böylece liste ile basılı belge aynı rakamı gösterir. Binlik ayıracı yok (program kuralı, `formatNumber` emsali).
+ */
+export function formatFixed(n: number | string | null | undefined, fractionDigits = 2): string {
+  if (n == null) return "—";
+  const num = typeof n === "number" ? n : Number(n);
+  if (!Number.isFinite(num)) return "—";
+  return num.toLocaleString("tr-TR", { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits, useGrouping: false });
+}

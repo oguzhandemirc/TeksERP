@@ -19,7 +19,7 @@ vi.mock("@/hooks/usePricingEnabled", () => ({ useFeatureFlags: () => ({ data: fl
 
 import { RollMeasurementsCard } from "../RollMeasurementsCard";
 import { MeterCorrectionDialog } from "../MeterCorrectionDialog";
-import { isMeasureColumnVisible, measureSourceLabel, readingStatusLabel, type RollMeasurements, type RollMeterReadingView } from "../measure-source";
+import { isMeasureColumnVisible, measureSourceLabel, meterPhaseLabel, readingStatusLabel, type RollMeasurements, type RollMeterReadingView } from "../measure-source";
 import { SimulatedMeterBanner, shouldShowSimulatedMeterBanner } from "@/components/operations/SimulatedMeterBanner";
 
 const wrap = (ui: ReactNode) => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { mutations: { retry: false } } })}>{ui}</QueryClientProvider>);
@@ -138,5 +138,18 @@ describe("Düzeltme diyaloğu", () => {
     fill();
     fireEvent.click(screen.getByRole("button", { name: "Düzelt" }));
     await waitFor(() => expect(screen.getByTestId("cut-correct-error").textContent).toMatch(/az önce düzeltildi/));
+  });
+});
+
+describe("Faz etiketi okumanın istasyonundan (Gülkesim prova bulgusu)", () => {
+  it("çıkış/giriş okuması kendi istasyon adıyla; istasyon yoksa nötr; kesim değişmez", () => {
+    expect(meterPhaseLabel({ phase: "OUT", stationName: "Etek" })).toBe("Etek çıkış");
+    expect(meterPhaseLabel({ phase: "OUT", stationName: "Kurşun" })).toBe("Kurşun çıkış");
+    expect(meterPhaseLabel({ phase: "IN", stationName: "Tambur" })).toBe("Tambur giriş");
+    expect(meterPhaseLabel({ phase: "OUT", stationName: null })).toBe("Çıkış");
+    expect(meterPhaseLabel({ phase: "CUT", stationName: "Tambur" })).toBe("Tambur kesim");
+    wrap(<RollMeasurementsCard measurements={{ readings: [reading({ id: "e", phase: "OUT", stationName: "Etek" })], variances: [] }} onChanged={() => {}} />);
+    expect(screen.getByText("Etek çıkış")).toBeTruthy();
+    expect(screen.queryByText("Kurşun çıkış")).toBeNull();
   });
 });

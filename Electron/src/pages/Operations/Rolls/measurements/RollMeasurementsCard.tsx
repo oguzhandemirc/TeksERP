@@ -11,7 +11,7 @@ import { formatFactory } from "@/lib/factory-time";
 import { useOptionalPreferences } from "@/providers/PreferencesProvider";
 import { MeterCorrectionDialog } from "./MeterCorrectionDialog";
 import {
-  METER_PHASE_LABEL,
+  meterPhaseLabel,
   MEASURE_SOURCE_COLUMN,
   ROLL_MEASUREMENTS_TABLE_KEY,
   VARIANCE_KIND_LABEL,
@@ -78,7 +78,7 @@ function ReadingsTable({ readings, showSource, onCorrect }: ReadingsProps) {
             <tr key={r.id} data-testid="reading-row" className={`border-t align-top ${r.revokedAt ? "text-muted-foreground" : ""}`}>
               <td className="whitespace-nowrap py-1 pr-2">{formatFactory(r.createdAt, "dd.MM.yyyy HH:mm")}</td>
               <td className="py-1 pr-2">
-                {METER_PHASE_LABEL[r.phase] ?? r.phase}
+                {meterPhaseLabel(r)}
                 {r.machineName ? <span className="block text-[11px] text-muted-foreground">{r.machineName}</span> : null}
               </td>
               <td className={`whitespace-nowrap py-1 pr-2 text-right tabular-nums ${r.revokedAt ? "line-through" : ""}`}>{fmt(r.meters)}</td>
