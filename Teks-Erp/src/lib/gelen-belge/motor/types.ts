@@ -70,6 +70,8 @@ export interface OcrResult {
   durationMs?: number;
   /** 'mlkit-latin' gibi; ileride 'paddleocr' vb. eklenebilir. */
   engine?: string;
+  /** Okuma servisi sayfayı dikleştirmek için girdiye saat yönünde uyguladığı dönüş (0/90/180/270); rect'ler DİK çerçevededir. */
+  rotation?: number;
 }
 
 // ---------------------------------------------------------------------------

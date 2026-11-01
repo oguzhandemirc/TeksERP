@@ -53,6 +53,8 @@ class OcrResult(BaseModel):
     imageHeight: int = Field(gt=0)
     durationMs: Optional[float] = None
     engine: Optional[str] = None
+    # Sayfayı dikleştirmek için girdiye uygulanan saat yönü dönüş (0/90/270); rect/corners/imageWidth bu DİK çerçevededir.
+    rotation: Optional[int] = None
 
 
 class OcrIstegi(BaseModel):
