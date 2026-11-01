@@ -177,10 +177,12 @@ async function canli(ids: { box: string }): Promise<void> {
     named.every((k) => k.kategoriAnahtari === cashCategoryKey(k.etiket).key) && other?.kategoriAnahtari === null, `${named[0]?.kategoriAnahtari} · ${other?.kategoriAnahtari}`);
   // Patron kasa listesinin süzgeci (D4-KUC3c) kasa-hareketi `kategoriAnahtari` eşitliğidir: iki yüzey AYNI anahtarı üretmeli.
   const txs = await prisma.cashTransaction.findMany({ where: { cashBoxId: ids.box, category: { contains: cat(0) } }, select: { id: true, category: true } });
-  const derivedKeys = await DERIVERS["kasa-hareketi"]!(txs, now.getTime());
+  // Servis yazımda kırpar; eski/elle girilmiş boşluklu satırı türeticinin kendisi kırpmalı → sentetik satır.
+  const legacy = { id: "legacy-padded", category: `  ${cat(0)} ` };
+  const derivedKeys = await DERIVERS["kasa-hareketi"]!([...txs, legacy], now.getTime());
   const txKeys = [...derivedKeys.values()].map((v) => v.kategoriAnahtari);
   check("§3i ⭐ kasa-hareketi kategoriAnahtari = özet satırının anahtarı (boşluklu yazım dahil)",
-    txs.length === 3 && txKeys.length === 3 && txKeys.every((x) => x === k0?.kategoriAnahtari), JSON.stringify(txKeys));
+    txs.length === 3 && txKeys.length === 4 && txKeys.every((x) => x === k0?.kategoriAnahtari), JSON.stringify(txKeys));
   const keys = [...new Set(dataKeys(snap!.data))].sort();
   const raw = JSON.stringify(snap!.data);
   check("§3e ⭐ tel yalnız izinli anahtarlar; serbest açıklama metni GİTMEZ", keys.every((k) => ALLOWED_KEYS.includes(k)) && !raw.includes(SECRET),
