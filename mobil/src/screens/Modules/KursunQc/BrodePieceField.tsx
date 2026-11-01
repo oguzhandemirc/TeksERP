@@ -10,8 +10,15 @@ import type { BrodePieceState } from './useBrodePieceCount';
 
 export default function BrodePieceField({ state, hidden }: { state: BrodePieceState; hidden?: boolean }) {
   const inputRef = useRef<RNTextInput>(null);
+  // Yalnız sayaç DEĞİŞİNCE odaklan: alan yeniden bağlanınca (çıkış ölçümü aç/kapa) eski istek numpad'i açmasın.
+  const handledFocus = useRef(state.focusRequest);
   useEffect(() => {
-    if (state.focusRequest > 0) inputRef.current?.focus();
+    if (state.focusRequest === handledFocus.current) return;
+    handledFocus.current = state.focusRequest;
+    const input = inputRef.current;
+    // Zaten odaktaysa focus() onFocus'u tetiklemez → numpad kapalı kalırdı; önce bırak.
+    if (input?.isFocused?.()) input.blur();
+    input?.focus();
   }, [state.focusRequest]);
   if (!state.mode || hidden) return null;
   return (

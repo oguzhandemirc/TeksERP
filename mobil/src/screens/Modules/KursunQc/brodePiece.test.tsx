@@ -16,7 +16,7 @@ import BrodePieceField from './BrodePieceField';
 import { useGramajTap } from './useGramajTap';
 import { useMeasuredWidth } from './useMeasuredWidth';
 import { widthGatedTap } from './widthGatedTap';
-import { pieceGatedTap, useBrodePieceCount } from './useBrodePieceCount';
+import { pieceGatedTap, useBrodePieceCount, type BrodePieceState } from './useBrodePieceCount';
 import { composeStationPanels } from './stationPanels';
 import { parsePieceCount, pieceInputOf, withPieceCount } from './brodePiece';
 import type { MeterReadingBody } from '../../../services/kursunQc.service';
@@ -137,6 +137,16 @@ describe('Brode adedi — tablet girişi (GK-H1b)', () => {
     expect(focusSpy).toHaveBeenCalled();
     fireEvent.changeText(r.getByTestId('brode-adet-giris'), '3');
     expect(r.queryByTestId('brode-adet-hata')).toBeNull();
+    focusSpy.mockRestore();
+  });
+
+  it('§3c yeniden bağlanış: eski odak isteği numpad açmaz; yalnız sayaç artınca odaklanır', () => {
+    const focusSpy = jest.spyOn(jest.requireActual<typeof import('react-native')>('react-native').TextInput.prototype, 'focus');
+    const state: BrodePieceState = { mode: 'PIECE', text: '', setText: jest.fn(), error: 'x', focusRequest: 2, precheck: () => true, attach: (v) => v };
+    const r = renderWithPaper(<BrodePieceField state={state} />);
+    expect(focusSpy).not.toHaveBeenCalled();
+    r.rerender(<BrodePieceField state={{ ...state, focusRequest: 3 }} />);
+    expect(focusSpy).toHaveBeenCalledTimes(1);
     focusSpy.mockRestore();
   });
 

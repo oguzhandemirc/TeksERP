@@ -18,8 +18,18 @@ export function DeleteDraftNoteAction({ note, listPath }: { note: Pick<DeliveryN
     mutationFn: () => deleteDraftNote(note.id),
     onSuccess: () => {
       toast.success(`${note.noteNo} taslağı silindi.`);
-      void qc.invalidateQueries({ queryKey: [INCOMING_DOCUMENT_QUERY_KEY] });
+      // Silinen belgenin sorguları düşer, kalanlar yalnız bayat işaretlenir (refetch YOK): sayfa henüz bağlıyken
+      // tazeleme yeniden render ettirir ve silinen detay yeniden çekilip 404 toast'ı basar (PackingLotHeader emsali).
+      // Liste sayfası bağlanınca bayat sorgusunu kendisi çeker.
       void navigate(listPath);
+      const isDeletedNote = (key: readonly unknown[]) => key[0] === INCOMING_DOCUMENT_QUERY_KEY && key[2] === note.id;
+      qc.removeQueries({ predicate: (q) => isDeletedNote(q.queryKey) });
+      void qc.invalidateQueries({ queryKey: [INCOMING_DOCUMENT_QUERY_KEY], refetchType: "none" });
+    },
+    // 409 (başka oturum onayladı): bayat DRAFT görünümünde kalma — detay yeni durumu çeksin, Sil kalksın.
+    onError: () => {
+      setOpen(false);
+      void qc.invalidateQueries({ queryKey: [INCOMING_DOCUMENT_QUERY_KEY, "detail", note.id] });
     },
   });
   if (note.status !== "DRAFT") return null;
