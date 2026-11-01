@@ -943,6 +943,7 @@ export const SETTING_KEYS = {
    *  kilitten BAĞIMSIZ — operatör uygulamadan çıkınca (home/başka app) hemen kilit
    *  ekranı gelir (work session AÇIK kalır; kart/PIN ile açılır). Client (mobil) ENFORCE. */
   AUTH_MOBILE_LOCK_ON_BACKGROUND: "auth.mobileLockOnBackground",
+  AUTH_MOBILE_OFFLINE_LOCK_DEFER: "auth.mobileOfflineLockDefer",
   /** Mutlak oturum tavanı, GÜN. Default 30 (0..365). Zaman aşımı KAPALI iken bile
    *  token en fazla bu kadar gün geçerli olur (sızan token sonsuza kadar yaşamasın).
    *  0 = sert tavan (30 gün, kapatılamaz) — exp'siz token üretilmez. Backend ENFORCE eder (issueToken). */
@@ -1488,6 +1489,8 @@ const MAX_MOBILE_IDLE_LOCK_MINUTES = 120;
 /** Mobil arka-plan kilidi varsayılanı — açık (eski davranış: idle kilit açıkken
  *  arka plana geçince de kilitlenirdi; artık bağımsız bayrak, default korunur). */
 export const DEFAULT_MOBILE_LOCK_ON_BACKGROUND = true;
+/** Çevrimdışıyken tablet kilidi ertelensin mi — varsayılan KAPALI (bugünkü davranış: kesintide de kilitlenir). */
+export const DEFAULT_MOBILE_OFFLINE_LOCK_DEFER = false;
 /** Mutlak oturum tavanı (gün) varsayılanı + aralık. 0 = sert tavan (UNSET_…) — exp'siz token yok. */
 export const DEFAULT_ABSOLUTE_SESSION_CAP_DAYS = 30;
 export const MAX_ABSOLUTE_SESSION_CAP_DAYS = 365;
@@ -2407,6 +2410,9 @@ export interface FeatureFlags {
   /** Mobil "uygulama arka plana geçince anında kilitle" açık mı (default true).
    *  Idle kilitten bağımsız. Client (mobil) ENFORCE. */
   mobileLockOnBackground: boolean;
+  /** İnternet/sunucu yokken tablette hareketsizlik ve arka plan kilidi ertelensin mi (default false).
+   *  Kilit açma sunucu ister; kesintide kilitlenen tablet açılamaz (denetim Y5). Client (mobil) ENFORCE. */
+  mobileOfflineLockDefer: boolean;
   /** Mutlak oturum tavanı — gün (default 30, 0..365; 0 = 30 gün sert tavan). Zaman aşımı kapalı
    *  olsa bile token en fazla bu kadar gün yaşar. Backend ENFORCE (issueToken). */
   absoluteSessionCapDays: number;
@@ -2904,6 +2910,7 @@ export class SystemSettingService {
       mobileIdleLockEnabled: await readMobileIdleLockEnabled(cacheClient),
       mobileIdleLockMinutes: await readMobileIdleLockMinutes(cacheClient),
       mobileLockOnBackground: await readMobileLockOnBackground(cacheClient),
+      mobileOfflineLockDefer: await readMobileOfflineLockDefer(cacheClient),
       absoluteSessionCapDays: await readAbsoluteSessionCapDays(cacheClient),
       pinLockoutEnabled: await readPinLockoutEnabled(cacheClient),
       pinLockoutAttempts: await readPinLockoutAttempts(cacheClient),
@@ -5150,6 +5157,18 @@ export class SystemSettingService {
         SETTING_KEYS.AUTH_MOBILE_LOCK_ON_BACKGROUND,
         input.mobileLockOnBackground,
         "Mobil uygulama arka plana geçince (operatör uygulamadan çıkınca) anında kilitlensin",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "mobileOfflineLockDefer")) {
+      if (typeof input.mobileOfflineLockDefer !== "boolean") {
+        throw AppError.badRequest("mobileOfflineLockDefer boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_MOBILE_OFFLINE_LOCK_DEFER,
+        input.mobileOfflineLockDefer,
+        "İnternet/sunucu bağlantısı yokken tablet kilitlenmesin (bağlantı dönünce kilit süresi yeniden başlar)",
         userId
       );
     }
@@ -8665,6 +8684,19 @@ export async function readMobileLockOnBackground(
     select: { value: true },
   });
   if (!setting) return DEFAULT_MOBILE_LOCK_ON_BACKGROUND;
+  return asBoolean(setting.value);
+}
+
+/** Çevrimdışıyken tablet kilidi ertelensin mi? Default FALSE (kayıt yoksa). Client (mobil) ENFORCE. */
+export async function readMobileOfflineLockDefer(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_MOBILE_OFFLINE_LOCK_DEFER },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_MOBILE_OFFLINE_LOCK_DEFER;
   return asBoolean(setting.value);
 }
 

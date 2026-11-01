@@ -16,6 +16,7 @@ export function SessionSettingsReadOnly({
   mobileLock,
   mobileLockMinutes,
   mobileLockBg,
+  offlineLockDefer = false,
   methods,
   absoluteCapDays,
   pinLockoutEnabled,
@@ -33,6 +34,7 @@ export function SessionSettingsReadOnly({
   mobileLock: boolean;
   mobileLockMinutes: number;
   mobileLockBg: boolean;
+  offlineLockDefer?: boolean;
   methods: { enabled: LoginMethod[]; primary: LoginMethod };
   absoluteCapDays: number;
   pinLockoutEnabled: boolean;
@@ -48,10 +50,7 @@ export function SessionSettingsReadOnly({
         label="Oturum süresi"
         value={`${sessionMinutes} dakika (${minutesToLabel(sessionMinutes)})`}
       />
-      <ReadOnlyLine
-        label="Hareketsizlik zaman aşımı"
-        value={idleMinutes > 0 ? `${idleMinutes} dakika` : "Kapalı"}
-      />
+      <ReadOnlyLine label="Hareketsizlik zaman aşımı" value={idleMinutes > 0 ? `${idleMinutes} dakika` : "Kapalı"} />
       <ReadOnlyLine label="Token dolunca otomatik çıkış" value={autoLogout ? "Açık" : "Kapalı"} />
       <ReadOnlyLine label="Aynı hesap aynı cihaz tipinde" value={sessionPolicyLabel(policy)} />
       <ReadOnlyLine
@@ -60,6 +59,7 @@ export function SessionSettingsReadOnly({
       />
       <ReadOnlyLine label="Mobil hareketsizlik kilidi" value={mobileLock ? `${mobileLockMinutes} dakika` : "Kapalı"} />
       <ReadOnlyLine label="Uygulamadan çıkınca kilitle (mobil)" value={mobileLockBg ? "Açık" : "Kapalı"} />
+      <ReadOnlyLine label="İnternet yokken tablet kilitlenmesin" value={offlineLockDefer ? "Açık" : "Kapalı"} />
       <ReadOnlyLine
         label="Mutlak oturum tavanı"
         value={absoluteCapDays > 0 ? `${absoluteCapDays} gün` : `${UNSET_ABSOLUTE_CAP_DAYS} gün (sert tavan)`}

@@ -148,6 +148,7 @@
     "autoLogoutOnExpiry": true,
     "mobileIdleLockEnabled": true,
     "mobileLockOnBackground": true,
+    "mobileOfflineLockDefer": true,
     "pinLockoutEnabled": true,
     "devicePairingRequired": true,
     "deviceProofRequired": true,
