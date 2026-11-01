@@ -102,6 +102,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}helpers/meter-reading.helper.ts::writeCutReadingsTx`]: { helper: "Tambur CUT okuması yazarı (sunucu token'ı)" },
   // İptali geri al: iptal damgalı CUT okumasının yeni kopyası — token SUNUCU üretir; replay kararı restore claim'inindir (CANCELLED → hedef).
   [`${S}helpers/meter-reading.helper.ts::reinstateCancelledCutReadingsTx`]: { helper: "Tambur CUT okuması yeniden kurucu (sunucu token'ı)" },
+  // D4-F2: Tambur çıkışında seriden müşteri kodu — token SUNUCU üretir; replay kararı finalize'ın claim'inindir.
+  [`${S}helpers/customer-code-birth.helper.ts::birthOneTx`]: { helper: "müşteri kodu doğum yazarı (sunucu token'ı)" },
   // D4-B2: süpervizör CUT düzeltmesi — gövdedeki token yeni SUPERVISOR okumasının token'ı; K kipi `cutCorrectionReplay.inTx`.
   [`${S}tambur-meter-correct.service.ts::correctCutReading`]: { giris: { [`${S}tambur-meter-correct.service.ts::correctCutReading`]: "K" } },
 
@@ -117,6 +119,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}machine-collector.service.ts::createCollectorFresh`]: { giris: { [`${S}machine-collector.service.ts::create`]: "R" } },
   // D4-F1: müşteri barkodu bağlama — token satırı tek insert; replay boğazdan (R).
   [`${S}roll-customer-code.service.ts::bindFresh`]: { giris: { [`${S}roll-customer-code.service.ts::bind`]: "R" } },
+  // D4-F2: müşteri barkod serisi tanımı — tek insert; ikinci seriyi `customerId @unique` keser, token yarışını boğaz.
+  [`${S}customer-barcode-series.service.ts::createFresh`]: { giris: { [`${S}customer-barcode-series.service.ts::create`]: "R" } },
   // D4-I1a: cari kilidi — tek insert; aktif kilit yarışını kısmi unique keser, token yarışını boğaz.
   [`${S}cari-hold.service.ts::placeFresh`]: { giris: { [`${S}cari-hold.service.ts::place`]: "R" } },
   // D4-G1a: makine saat ücreti / sarf normu yaratma + değişim (damga + yeni satır) panelden clientToken ile; damgalı sürümün token'ı 409.
@@ -240,6 +244,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}service-period-invoice.service.ts::servicePeriodReplay`]: ["type", "cariId", "period"],
   [`${S}machine-collector.service.ts::collectorReplay`]: ["name", "collectorType", "machineIds"],
   [`${S}roll-customer-code.service.ts::bindReplay`]: ["rollId", "code"],
+  [`${S}customer-barcode-series.service.ts::createReplay`]: ["customerId", "prefix", "dateSegment", "digits", "separator", "startValue", "maxValue"],
   [`${S}cari-hold.service.ts::placeReplay`]: ["cariId", "kapsam", "reasonCode"],
   [`${S}expense-allocation.service.ts::allocationReplay`]: ["cashTransactionId", "hedef", "sharePct"],
   [`${S}machine-cost-rate.service.ts::rateReplay`]: ["machineId", "hourRateTry"],

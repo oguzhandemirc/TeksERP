@@ -16,7 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormField } from "@/components/forms/FormField";
 import { partnerRoleLabels } from "@/lib/partnerRoles";
-import { useCustomerBranchesEnabled } from "@/hooks/usePricingEnabled";
+import { useCustomerBranchesEnabled, useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { customerFormDefaults, customerFormSchema, SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE, type CustomerFormValues } from "./schema";
 import { CustomerBranchesDraftField } from "./CustomerBranchesDraftField";
 import { CustomerFinanceSection, useCustomerFinanceAccess } from "./CustomerFinanceSection";
@@ -29,6 +30,7 @@ import { CustomerTemplateRoutesPanel } from "./CustomerTemplateRoutesPanel";
 import { CustomerStandaloneLabelsPanel } from "./CustomerStandaloneLabelsPanel";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { CariHoldPanel } from "@/pages/Finance/CariHold/CariHoldPanel";
+import { CustomerBarcodeSeriesPanel } from "./BarcodeSeries/CustomerBarcodeSeriesPanel";
 import { DocumentProfileSelect } from "@/components/forms/DocumentProfileSelect";
 import type { Customer } from "./types";
 
@@ -66,6 +68,9 @@ export function CustomerFormDialog({
   const branchesEnabled = useCustomerBranchesEnabled();
   // Z-B: Finans bölümü yalnız finance:read + modül açıkken; yazma yetkisi yoksa salt-okunur (gövdeye alt nesne konmaz).
   const financeAccess = useCustomerFinanceAccess();
+  // D4-F2: müşteri barkod serisi uçları emanet modül kapısının arkasında — izinsiz/kapalıda sorgu atılmaz.
+  const { hasPermission } = useRoleAccess();
+  const seriesVisible = (useFeatureFlags().data?.data?.emanetEnabled ?? false) && hasPermission("customer:read");
   const defaults: CustomerFormValues = initial
     ? {
         ...financeFormDefaults,
@@ -348,6 +353,7 @@ export function CustomerFormDialog({
                 <TabsTrigger value="color-aliases">Müşterideki Renk Adları</TabsTrigger>
                 <TabsTrigger value="label-templates">Etiket Şablonları</TabsTrigger>
                 {financeAccess.canSeeHold && <TabsTrigger value="cari-hold">Kilit</TabsTrigger>}
+                {seriesVisible && <TabsTrigger value="barcode-series">Barkod serisi</TabsTrigger>}
               </TabsList>
 
               <TabsContent value="info">
@@ -390,6 +396,11 @@ export function CustomerFormDialog({
               {financeAccess.canSeeHold && initial && (
                 <TabsContent value="cari-hold">
                   <CariHoldPanel target={{ customerId: initial.id }} cariName={initial.name} />
+                </TabsContent>
+              )}
+              {seriesVisible && initial && (
+                <TabsContent value="barcode-series">
+                  <CustomerBarcodeSeriesPanel customerId={initial.id} />
                 </TabsContent>
               )}
             </Tabs>
