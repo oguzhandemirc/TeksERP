@@ -3,7 +3,8 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { factoryLocaleString } from "@/lib/factory-time";
+import { fmtFactoryDateTime } from "@/lib/factory-time";
+import { formatNumber } from "@/lib/format";
 import { CONSUMABLE_KIND_LABEL, listConsumableMovements, type ConsumableMovementRow, type ConsumableStockRow } from "./service";
 
 function source(m: ConsumableMovementRow): string {
@@ -45,12 +46,12 @@ export function ConsumableMovementsSheet({ row, onClose }: { row: ConsumableStoc
               <tbody>
                 {rows.map((m) => (
                   <tr key={m.id} className="border-t">
-                    <td className="p-2 whitespace-nowrap">{factoryLocaleString(m.createdAt)}</td>
+                    <td className="p-2 whitespace-nowrap">{fmtFactoryDateTime(m.createdAt)}</td>
                     <td className="p-2">
                       {CONSUMABLE_KIND_LABEL[m.kind]}
                       {m.reversed && <Badge variant="outline" className="ml-2">geri alındı</Badge>}
                     </td>
-                    <td className="p-2 text-right tabular-nums">{m.signedQty}</td>
+                    <td className="p-2 text-right tabular-nums">{formatNumber(m.signedQty, 3)}</td>
                     <td className="p-2">{source(m)}</td>
                   </tr>
                 ))}
