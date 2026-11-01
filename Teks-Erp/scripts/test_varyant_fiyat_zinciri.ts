@@ -4,15 +4,18 @@
 //   §1 varyantsız (recipeId NULL) bugünkü gibi: doldurma desen geneli satırı yazar; elle girilmiş varyant satırı
 //      KORUNUR (anahtar itemId + renk + recipeId); sürüm geçmişi yalnız desen geneli zinciri
 //   §2 ⭐ varyant sürümü: desen geneli ACTIVE sürümü SUPERSEDE ETMEZ; varyantın ikinci sürümü yalnız kendi
-//      öncülünü kapatır; geri alma varyantı taşır; başka ürünün varyantı 400 COST_RECIPE_MISMATCH
+//      öncülünü kapatır; geri alma varyantı taşır; başka ürünün varyantı 400 COST_RECIPE_MISMATCH; §2f pasif
+//      varyanta sürüm/geri alma 400 RECIPE_INACTIVE
 //   §3 ⭐ doldurma varyant sürümüyle varyant satırını (sürüm + maliyet donar) yazar, elle satırın yerine geçer
 //      (asgari miktar korunur); pasif varyantın sürümü satır doğurmaz
 //   §4 ⭐ teklif kalemi varyantın KENDİ sürümünü dondurur; varyant sürümü yoksa desen geneline DÜŞMEZ
-//      (canlı hesap + STANDARD_COST_MISSING); maliyeti tazele varyantı korur
+//      (canlı hesap + STANDARD_COST_MISSING); maliyeti tazele varyantı korur; §4e/§4f kurlu fikstürde
+//      varyant sürümü olmayan kalem CANLI doğar ve tazelenince CANLI kalır
 // Çalıştır: DATABASE_URL=<test DB> npx tsx scripts/test_varyant_fiyat_zinciri.ts
 // NEGATİF SONDA — 2026-11-01: standard-cost.service writeVersion öncül araması `recipeId: null`a geri
 //   çevrilince §2a §2b ❌ (desen geneli sürüm varyant kaydıyla SUPERSEDED oldu); quote-line-cost
-//   `recipeId: ref.recipeId ?? null` → `recipeId: null` yapılınca §4a §4c ❌. İkisi de geri alındı.
+//   `recipeId: ref.recipeId ?? null` → `recipeId: null` yapılınca §4a/§4c/§4d ❌ (14/3); price-list doldurmaya
+//   `recipeId: null` süzgeci geri konunca §3a ❌. Hepsi geri alındı.
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
@@ -20,6 +23,7 @@ import prisma from "../src/lib/prisma";
 import * as pl from "../src/services/price-list.service";
 import { createStandardCostVersion, listStandardCostVersions, restoreStandardCostVersion } from "../src/services/standard-cost.service";
 import { addQuoteLine, refreshQuoteCosts } from "../src/services/sales-quote-lines.service";
+import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { altinYapiYaz, fiksturKur, fiksturSil } from "./lib/maliyet-fikstur";
 import { teklifFiksturKur, teklifFiksturSil, teklifYaz } from "./lib/teklif-fikstur";
 import { assertGelistirmeVeritabani } from "./db-guard";
@@ -42,6 +46,16 @@ async function hata(fn: () => Promise<unknown>): Promise<{ status?: number; code
 }
 const D = (v: string | number): Prisma.Decimal => new Prisma.Decimal(v);
 const FX = { USD: "34" };
+async function withSetting<T>(key: string, value: boolean, fn: () => Promise<T>): Promise<T> {
+  const prev = await prisma.systemSetting.findUnique({ where: { key }, select: { value: true } });
+  try {
+    await prisma.systemSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
+    return await fn();
+  } finally {
+    if (prev) await prisma.systemSetting.update({ where: { key }, data: { value: prev.value as Prisma.InputJsonValue } });
+    else await prisma.systemSetting.delete({ where: { key } });
+  }
+}
 const statusOf = async (id: string) => (await prisma.standardCostVersion.findUniqueOrThrow({ where: { id }, select: { status: true } })).status;
 
 async function main(): Promise<void> {
@@ -96,6 +110,9 @@ async function main(): Promise<void> {
     // §3
     const passiveVer = await createStandardCostVersion(m.fabricId, { fxRates: FX, recipeId: vPassive });
     await prisma.productRecipe.update({ where: { id: vPassive }, data: { isActive: false } });
+    const eP = await hata(() => createStandardCostVersion(m.fabricId, { fxRates: FX, recipeId: vPassive }));
+    const eR = await hata(() => restoreStandardCostVersion(m.fabricId, passiveVer.id, {}));
+    check("§2f pasif varyanta sürüm yazımı ve geri alma → 400 RECIPE_INACTIVE", eP?.code === "RECIPE_INACTIVE" && eR?.code === "RECIPE_INACTIVE" && eP.status === 400, JSON.stringify([eP, eR]));
     const f3 = await pl.fillFromStandardCost(a.id, { itemIds: [m.fabricId], markupPct: "20", fxRate: "34" });
     const v1Lines = f3.lines.filter((l) => l.recipeId === v1);
     const activeV1 = await prisma.standardCostVersion.findFirstOrThrow({ where: { itemId: m.fabricId, recipeId: v1, status: "ACTIVE" }, select: { id: true, totalCostPerMTry: true } });
@@ -123,6 +140,26 @@ async function main(): Promise<void> {
     await refreshQuoteCosts(q);
     const after = await ql();
     check("§4d maliyeti tazele varyant sürümünü korur", after.find((l) => l.recipeId === v1)?.standardCostVersionId === activeV1.id && after.find((l) => l.recipeId === null)?.standardCostVersionId === generic.id);
+    // §4e kurlu fikstür: varyant sürümü olmayan kalem CANLI doğar; tazele de CANLI tutar, desen geneli sürüme DÜŞMEZ.
+    const rateDate = new Date(Date.UTC(2000, 0, 4));
+    await prisma.exchangeRate.deleteMany({ where: { rateDate, currency: "USD" } });
+    await prisma.exchangeRate.create({ data: { rateDate, currency: "USD", rate: D("34") } });
+    try {
+      await withSetting(SETTING_KEYS.FINANCE_ENABLED, true, async () => {
+        const q2 = await teklifYaz(t, "DRAFT", { itemId: m.fabricId, lines: 0 });
+        await addQuoteLine(q2, { itemId: m.fabricId, recipeId: v2, quantity: 10, unitPrice: 3, markupPct: 10 });
+        const isLive = async () => {
+          const l = await prisma.salesQuoteLine.findFirst({ where: { quoteId: q2, recipeId: v2 }, select: { standardCostVersionId: true, costSnapshot: true } });
+          const snap = l?.costSnapshot as { kaynak?: string } | undefined;
+          return l?.standardCostVersionId === null && snap?.kaynak === "CANLI";
+        };
+        check("§4e ⭐ varyant sürümü yok + kur var: kalem CANLI doğar (desen geneli sürüm donmaz)", await isLive());
+        await refreshQuoteCosts(q2);
+        check("§4f ⭐ tazele varyant sürümü olmayan kalemi CANLI tutar, desen geneline düşürmez", await isLive());
+      });
+    } finally {
+      await prisma.exchangeRate.deleteMany({ where: { rateDate, currency: "USD" } });
+    }
   } finally {
     await teklifFiksturSil(t);
     const vs = await prisma.standardCostVersion.findMany({ where: { itemId: m.fabricId }, select: { id: true } });

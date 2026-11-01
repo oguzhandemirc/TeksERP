@@ -142,10 +142,18 @@ function auditVersion(res: { created: VersionRow; supersededId: string | null },
   });
 }
 
+/** Pasif varyanta yeni sürüm yazılmaz (doldurma/teklif kalemi zaten atlıyor/reddediyor); aitlik derleyicide. */
+async function assertRecipeActive(recipeId: string | null): Promise<void> {
+  if (!recipeId) return;
+  const r = await prisma.productRecipe.findUnique({ where: { id: recipeId }, select: { isActive: true, code: true } });
+  if (r && !r.isActive) throw AppError.badRequest(`'${r.code}' varyantı pasif; maliyet sürümü yazılamaz.`, { code: "RECIPE_INACTIVE", recipeId });
+}
+
 /** `POST /api/cost/items/:itemId/versions` — canlı girdiden yeni ACTIVE sürüm. */
 export async function createStandardCostVersion(itemId: string, body: { reason?: string | null; fxRates?: Record<string, unknown>; recipeId?: string | null }, userId?: string) {
   // Varyant sürümü (SY-N1): derleyici varyantın ürüne aitliğini doğrular (COST_RECIPE_MISMATCH); yoksa desen geneli.
   const recipeId = body.recipeId ?? null;
+  await assertRecipeActive(recipeId);
   const input = await prisma.$transaction((tx) => assembleCostInputTx(tx, recipeId ? { itemId, recipeId } : { itemId }));
   const setting = await readCostPresentationCurrency();
   const fx = await resolveFx(input, parseFxRates(body.fxRates), setting);
@@ -160,6 +168,7 @@ export async function createStandardCostVersion(itemId: string, body: { reason?:
 export async function restoreStandardCostVersion(itemId: string, versionId: string, body: { reason?: string | null }, userId?: string) {
   const old = await prisma.standardCostVersion.findFirst({ where: { id: versionId, itemId }, select: { id: true, versionNo: true, recipeId: true, inputSnapshot: true, fxRates: true } });
   if (!old) throw AppError.notFound("Maliyet sürümü bulunamadı.");
+  await assertRecipeActive(old.recipeId);
   const input = parseCostInputSnapshot(old.inputSnapshot);
   const fxSnap = fxRatesSnapshotSchema.parse(old.fxRates);
   const rates: FxRates = fxSnapshotToRates(fxSnap);
