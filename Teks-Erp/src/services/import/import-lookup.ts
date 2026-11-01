@@ -88,9 +88,9 @@ export async function resolveReference(
   entity: string,
   rawValue: string,
   ctx: ImportContext,
-  by: "code" | "name" = "code",
-  opts: { itemType?: ItemType } = {},
+  opts: { by?: "code" | "name"; itemType?: ItemType } = {},
 ): Promise<ResolveOutcome> {
+  const by = opts.by ?? "code";
   const base = LOOKUP_SOURCES[entity];
   if (!base) return { error: { message: `Bilinmeyen referans türü: ${entity}` } };
   const src = entity === "item" && opts.itemType ? { ...base, label: ITEM_TYPE_LABELS[opts.itemType] } : base;
