@@ -304,15 +304,16 @@ export const FACTS: readonly RecordProjection[] = [
   },
   {
     name: "standart-maliyet", kind: "KAYIT", role: "OLGU", root: { table: "standard_cost_versions", model: "StandardCostVersion" },
-    columns: [col("id", "id"), col("urunId", "itemId"), col("surum", "versionNo"), col("durum", "status"), col("hesapTarihi", "computedAt"),
-      col("metreMaliyetiTl", "totalCostPerMTry", "FINANS")],
+    // SY-N3: varyant sürümü (recipeId) ayrı zincirdir — anahtar urunId + varyantId; desen geneli sürümde varyantId null.
+    columns: [col("id", "id"), col("urunId", "itemId"), col("varyantId", "recipeId"), col("surum", "versionNo"), col("durum", "status"),
+      col("hesapTarihi", "computedAt"), col("metreMaliyetiTl", "totalCostPerMTry", "FINANS")],
     derived: [
       ...(["cozguTl", "atkiTl", "dokumaTl", "terbiyeTl", "genelGiderTl"] as const).map((g) =>
         derived(g, "helpers/cost-component-groups.helper sumCostGroups (standard_cost_lines.amountPerMTry, COST_COMPONENT_GROUP)", ["standard_cost_lines"], { dataClass: "FINANS" })),
-      derived("urunAdi", NAME_OF("Item"), ["items"]),
+      derived("urunAdi", NAME_OF("Item"), ["items"]), ...(["varyantAdi", "varyantKodu"] as const).map((w) => derived(w, "cloud-sync/derived-cost standardCostDerived: ProductRecipe.name / variantCode (desen geneli sürümde null)", ["product_recipes"])),
     ],
     sources: [self("standard_cost_versions"), via("standard_cost_lines", "versionId"),
-      lookup("items", "id", 'SELECT v."id" AS root_id FROM "standard_cost_versions" v WHERE v."itemId" = ANY($1::uuid[])', "ürün adı değişince sürümleri yeniden gider")],
-    deletion: "YOK", permission: "bulut:teklif:oku", module: "maliyet.enabled", catalogVersion: 1,
+      lookup("items", "id", 'SELECT v."id" AS root_id FROM "standard_cost_versions" v WHERE v."itemId" = ANY($1::uuid[])', "ürün adı değişince sürümleri yeniden gider"),
+      lookup("product_recipes", "id", 'SELECT v."id" AS root_id FROM "standard_cost_versions" v WHERE v."recipeId" = ANY($1::uuid[])', "varyant adı/kodu değişince sürümleri yeniden gider")], deletion: "YOK", permission: "bulut:teklif:oku", module: "maliyet.enabled", catalogVersion: 2,
   },
 ];
