@@ -62,10 +62,11 @@ export function countWeftSpecUsers(weftSpecId: string) {
   return apiClient.get<PaginatedResponse<DesignFabric>>(`/api/items${qs}`).then((r) => r.data.pagination.total);
 }
 
-/** Atkı kartını kullanan kumaşlar — özel kopya onayında "eski kartta kalanlar" listesi (süzme sunucuda). */
+/** Atkı kartını kullanan kumaşlar — özel kopya onayında "eski kartta kalanlar" listesi (süzme sunucuda).
+ *  `total` sayfa sınırında kesilen kısmı "+N kumaş daha" diye söylemek için döner. */
 export function listWeftSpecUsers(weftSpecId: string) {
   const qs = buildQueryString({ pageSize: PICKER_MAX_PAGE_SIZE, sortBy: "code", sortOrder: "asc", filters: { weftSpecId } });
-  return apiClient.get<PaginatedResponse<DesignFabric>>(`/api/items${qs}`).then((r) => r.data.data);
+  return apiClient.get<PaginatedResponse<DesignFabric>>(`/api/items${qs}`).then((r) => ({ rows: r.data.data, total: r.data.pagination.total }));
 }
 
 export function listItemVariants(itemId: string) {

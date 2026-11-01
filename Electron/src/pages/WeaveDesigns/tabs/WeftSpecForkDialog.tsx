@@ -18,7 +18,8 @@ export function WeftSpecForkDialog({ spec, fabric, onClose }: Props) {
   const [code, setCode] = useState(() => suggestForkCode(spec.code, fabric.code));
   const [name, setName] = useState(() => suggestForkName(spec.name, fabric.code));
   const users = useQuery({ queryKey: ["weft-specs", "users-list", spec.id], queryFn: () => listWeftSpecUsers(spec.id) });
-  const staying = (users.data ?? []).filter((f) => f.id !== fabric.id);
+  const staying = (users.data?.rows ?? []).filter((f) => f.id !== fabric.id);
+  const hidden = Math.max(0, (users.data?.total ?? 0) - (users.data?.rows.length ?? 0));
   const fork = useMutation({
     mutationFn: () => weftSpecApi.fork(spec.id, { itemId: fabric.id, code: code.trim(), name: name.trim() }),
     onSuccess: (r) => {
@@ -48,6 +49,7 @@ export function WeftSpecForkDialog({ spec, fabric, onClose }: Props) {
             <ul className="mt-1 max-h-40 space-y-0.5 overflow-y-auto">
               {staying.map((f) => <li key={f.id}>{f.code} — {f.name}</li>)}
             </ul>
+            {hidden > 0 && <p className="text-muted-foreground" data-testid="fork-staying-more">+{hidden} kumaş daha</p>}
             <p className="mt-2 text-xs text-muted-foreground">Açık dokuma iş emirleri ve kayıtlı standart maliyet sürümleri değişmez.</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">

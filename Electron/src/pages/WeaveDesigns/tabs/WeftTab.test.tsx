@@ -28,7 +28,7 @@ const BUTTON = /Bu desene özel kopya/;
 beforeEach(() => {
   vi.clearAllMocks();
   api.get.mockResolvedValue(SPEC);
-  listUsers.mockResolvedValue([FABRIC, { ...FABRIC, id: "it-b", code: "D2058", name: "TÜL D2058" }, { ...FABRIC, id: "it-c", code: "D2059", name: "TÜL D2059" }]);
+  listUsers.mockResolvedValue({ rows: [FABRIC, { ...FABRIC, id: "it-b", code: "D2058", name: "TÜL D2058" }, { ...FABRIC, id: "it-c", code: "D2059", name: "TÜL D2059" }], total: 3 });
 });
 
 describe("WeftTab — bu desene özel kopya", () => {
@@ -61,9 +61,18 @@ describe("WeftTab — bu desene özel kopya", () => {
     await waitFor(() => expect(screen.getByTestId("fork-staying")).toHaveTextContent("D2058"));
     expect(screen.getByTestId("fork-staying")).toHaveTextContent("D2059");
     expect(screen.getByTestId("fork-staying")).not.toHaveTextContent("D2057 — ");
+    expect(screen.queryByTestId("fork-staying-more")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Kopyala ve bu kumaşa bağla" }));
     await waitFor(() => expect(api.fork).toHaveBeenCalledWith("w-1", { itemId: "it-a", code: "ATK-ORTAK-D2057", name: "Ortak atkı (D2057)" }));
   });
+  it("§4b liste sayfa sınırında kesilirse \"+N kumaş daha\" söylenir", async () => {
+    countUsers.mockResolvedValue(250);
+    listUsers.mockResolvedValue({ rows: [FABRIC, { ...FABRIC, id: "it-b", code: "D2058", name: "TÜL D2058" }], total: 250 });
+    renderWithProviders(<WeftTab fabric={FABRIC} canWrite />);
+    fireEvent.click(await screen.findByRole("button", { name: BUTTON }));
+    await waitFor(() => expect(screen.getByTestId("fork-staying-more")).toHaveTextContent("+248 kumaş daha"));
+  });
+
   it("§5 öneri kod 32 / ad 100 karaktere kırpılır, ad son eki korur", () => {
     expect(suggestForkCode("A".repeat(30), "D2057")).toHaveLength(32);
     const n = suggestForkName("B".repeat(120), "D2057");

@@ -76,6 +76,9 @@ async function main(): Promise<void> {
   const dupName = await errOf(() => forkWeftSpecForItem(src.id, { itemId: fb, code: `${TAG}-WB`, name: `${TAG} ortak atkı` }, admin.id));
   check("§2d ad mükerrer → 409 WEFT_SPEC_DUPLICATE, tx geri (kart yok, B yerinde)", dupName?.code === "WEFT_SPEC_DUPLICATE" && (await prisma.weftSpec.count({ where: { code: `${TAG}-WB` } })) === 0 && (await bound(fb)) === src.id, JSON.stringify(dupName));
 
+  const selfCode = await errOf(() => forkWeftSpecForItem(src.id, { itemId: fb, code: `${TAG}-W`, name: `${TAG} atkı KB` }, admin.id));
+  check("§2e kaynağın kendi koduyla kopya → 409 WEFT_SPEC_DUPLICATE (sahte replay yok), B kaynakta", selfCode?.status === 409 && selfCode.code === "WEFT_SPEC_DUPLICATE" && (await bound(fb)) === src.id, JSON.stringify(selfCode));
+
   console.log("§3 atomik claim + kullanım kapısı");
   const stale = await errOf(() => forkWeftSpecForItem(src.id, { itemId: fa, code: `${TAG}-WA2`, name: `${TAG} atkı KA2` }, admin.id));
   check("§3a kumaş artık kaynağa bağlı değil → 409 WEFT_SPEC_BINDING_CHANGED, kart doğmadı", stale?.code === "WEFT_SPEC_BINDING_CHANGED" && (await prisma.weftSpec.count({ where: { code: `${TAG}-WA2` } })) === 0, JSON.stringify(stale));
@@ -97,6 +100,10 @@ async function main(): Promise<void> {
   ids.weft.push(r3.weftSpec.id);
   const solo = await errOf(() => forkWeftSpecForItem(src.id, { itemId: fc, code: `${TAG}-WC`, name: `${TAG} atkı KC` }, admin.id));
   check("§3b kart tek kumaşta kaldı → 409 WEFT_SPEC_NOT_SHARED, C yerinde", solo?.code === "WEFT_SPEC_NOT_SHARED" && (await bound(fc)) === src.id, JSON.stringify(solo));
+  await prisma.weftSpec.update({ where: { id: src.id }, data: { isActive: false } });
+  const inactive = await errOf(() => forkWeftSpecForItem(src.id, { itemId: fc, code: `${TAG}-WI`, name: `${TAG} atkı pasif` }, admin.id));
+  await prisma.weftSpec.update({ where: { id: src.id }, data: { isActive: true } });
+  check("§3f pasif kaynak kart → 409 WEFT_SPEC_INACTIVE, kart doğmadı", inactive?.code === "WEFT_SPEC_INACTIVE" && (await prisma.weftSpec.count({ where: { code: `${TAG}-WI` } })) === 0, JSON.stringify(inactive));
   check("§3c olmayan kart → 404", (await errOf(() => forkWeftSpecForItem(fa, { itemId: fc, code: `${TAG}-WZ`, name: `${TAG} z` }, admin.id)))?.status === 404);
   check("§3d boş kod → 400", (await errOf(() => forkWeftSpecForItem(src.id, { itemId: fc, code: "  ", name: `${TAG} z` }, admin.id)))?.status === 400);
 

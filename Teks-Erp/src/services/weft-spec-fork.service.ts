@@ -37,16 +37,28 @@ function requiredText(raw: unknown, label: string, max: number): string {
   return v;
 }
 
-async function forkInTx(tx: Prisma.TransactionClient, sourceId: string, itemId: string, code: string, name: string, userId: string | null): Promise<ForkOutcome> {
+interface ForkArgs {
+  sourceId: string;
+  itemId: string;
+  code: string;
+  name: string;
+  userId: string | null;
+}
+
+async function forkInTx(tx: Prisma.TransactionClient, { sourceId, itemId, code, name, userId }: ForkArgs): Promise<ForkOutcome> {
   // Kaynak kart satırı kilidi — kart güncellemesi ve varyant değişimi yazıcısı aynı satırı bekler;
   // eşzamanlı iki kopya isteği burada sıraya girer (ikincisi kullanım sayısını güncel okur).
-  const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM weft_specs WHERE id = ${sourceId}::uuid FOR UPDATE`;
+  const locked = await tx.$queryRaw<Array<{ id: string; isActive: boolean }>>`SELECT id, "isActive" FROM weft_specs WHERE id = ${sourceId}::uuid FOR UPDATE`;
   if (locked.length === 0) throw AppError.notFound("Atkı kartı bulunamadı.");
+  // Pasif kart kopyayla dolaylı yoldan yeniden etkinleşmesin (ürün formu da yalnız aktif karta bağlar).
+  if (!locked[0].isActive) throw AppError.conflict("Pasif atkı kartından kopya alınamaz.", { code: "WEFT_SPEC_INACTIVE" });
 
   const item = await tx.item.findUnique({ where: { id: itemId }, select: { id: true, code: true, weftSpecId: true } });
   if (!item) throw AppError.notFound("Kumaş bulunamadı.");
   const existing = await tx.weftSpec.findUnique({ where: { code }, select: { id: true } });
   if (existing) {
+    // Kaynağın kendi kodu "önceki deneme" sayılmaz — sayılsa kopya yapılmadan sahte başarı dönerdi.
+    if (existing.id === sourceId) throw AppError.conflict("Kopyaya kaynak kartın kodu verilemez.", { code: "WEFT_SPEC_DUPLICATE" });
     if (item.weftSpecId === existing.id) return { kind: "replay", id: existing.id };
     throw AppError.conflict("Bu kodla bir atkı kartı zaten var — kopyaya başka bir kod verin.", { code: "WEFT_SPEC_DUPLICATE" });
   }
@@ -91,7 +103,7 @@ export async function forkWeftSpecForItem(sourceId: string, input: WeftSpecForkI
   const name = requiredText(input.name, "Atkı kartı adı", 100);
   let outcome: ForkOutcome;
   try {
-    outcome = await prisma.$transaction((tx) => forkInTx(tx, sourceId, input.itemId, code, name, userId ?? null));
+    outcome = await prisma.$transaction((tx) => forkInTx(tx, { sourceId, itemId: input.itemId, code, name, userId: userId ?? null }));
   } catch (e) {
     if (isUniqueViolation(e)) throw AppError.conflict("Bu kod ya da adla bir atkı kartı zaten var.", { code: "WEFT_SPEC_DUPLICATE" });
     throw e;
