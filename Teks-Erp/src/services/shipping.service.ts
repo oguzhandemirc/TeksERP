@@ -2935,8 +2935,10 @@ export class ShippingService {
 
     // Sahiplik (G3 emanet): dispatch'teki 409 `OWNER_MISMATCH` kapısının önizleme ikizi — RED DEĞİL uyarı + liste.
     const { ownerMismatches, warnings } = await previewOwnerMismatches(prisma, { sackIds, customerId: data.customerId ?? null });
-    const cariHold = await this.previewShipmentHold(sackIds, data.customerId ?? null);
-    if (cariHold) warnings.push(cariHoldWarning(cariHold));
+    const holdNotice = await this.previewShipmentHold(sackIds, data.customerId ?? null);
+    // D4-I3: şerit metni `warning` = warnings[]'e giden satırın AYNISI (panel şeridi çizer, listede tekrar etmez).
+    const cariHold = holdNotice ? { ...holdNotice, warning: cariHoldWarning(holdNotice) } : null;
+    if (cariHold) warnings.push(cariHold.warning);
     let lines: { lineId: string; orderNumber: string; item: string; color: string | null; width: number | null; need: number; allocated: number }[] = [];
     let surplusMeters = Number(totalMeters);
 

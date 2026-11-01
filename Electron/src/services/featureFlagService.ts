@@ -295,6 +295,10 @@ export interface FeatureFlags {
   financeServiceBillingPriceDate: "SERVICE_DAY" | "DISPATCH_DAY";
   /** D4-H1: kasa masraf formunda kategori önerisi (varsayılan ON). */
   financeExpenseCategorySuggestions: "ON" | "OFF";
+  /** D4-H3: kasa masraf formunda "Bağla" (varsayılan OFF; REQUIRED backend'de henüz seçilemez → 400). */
+  financeExpenseAllocationField: "OFF" | "OPTIONAL" | "REQUIRED";
+  /** D4-H3: kapanmış iş emrine masraf bağı (varsayılan ALLOW). */
+  financeExpenseAllocationClosedWorkOrder: "ALLOW" | "DENY";
   /** D4-I1a: cari kilidi formu kapsam ön seçimi (backend aynası; varsayılan `INTAKE,SHIPMENT`). */
   financeCariHoldDefaultScope:
     | "INTAKE,SHIPMENT"
@@ -320,6 +324,8 @@ export interface FeatureFlags {
   costProfitConsumablePriceSource: "ALIS_FIYATI" | "SON_ALIS_FATURASI";
   /** SY-D2: dokuma standart maliyet yöntemi (backend aynası; varsayılan `TEZGAH_SAATI`). */
   costWeavingStandardMethod: "TEZGAH_SAATI" | "ATKI_UCRETI";
+  /** SY-M1: siparişten üretim önerisi (backend aynası; varsayılan `KAPALI`). */
+  orderProductionProposal: "KAPALI" | "ONIZLEME" | "ONAYDA_TASLAK";
   /** D4-G2b: kârlılıkta makine süresi kaynağı (backend aynası; varsayılan `OTURUM`). */
   costProfitMachineTime: "OTURUM" | "VARDIYA" | "NORM";
   /** D4-G2b: genel gider dağıtım anahtarı (backend aynası; varsayılan `YOK` = dağıtılmaz). */

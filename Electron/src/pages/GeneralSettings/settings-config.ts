@@ -831,6 +831,21 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     ],
     enumFlags: [
       {
+        // SY-M1: `defaultValue` backend `DEFAULT_ORDER_PRODUCTION_PROPOSAL` ile birebir; KAPALI = bugünkü davranış.
+        enumKey: "orderProductionProposal",
+        title: "Siparişten üretim önerisi",
+        summary: "Sipariş detayında \"Üretime gönder\" ile dokuma iş emri ve terbiye iş emri önerisi.",
+        desc: "Kapalı (varsayılan): bugünkü gibi; terbiye iş emirleri elle ya da toplu eylemle açılır. Önizleme: sipariş detayında \"Üretime gönder\" düğmesi çıkar; program sipariş satırlarından hangi dokuma iş emirlerinin ve terbiye iş emirlerinin açılacağını listeler, siz işaretleyip tek seferde oluşturursunuz. Onayda taslak: sipariş onaylanınca bu önizleme kendiliğinden açılır; yine siz onaylamadan hiçbir kayıt yaratılmaz.",
+        defaultValue: "KAPALI",
+        display: "radio",
+        audience: ["Planlamacı", "Yönetim"],
+        options: [
+          { value: "KAPALI", label: "Kapalı (varsayılan)", hint: "Düğme yok; bugünkü davranış." },
+          { value: "ONIZLEME", label: "Önizleme", hint: "\"Üretime gönder\" düğmesi + işaretlenebilir önizleme." },
+          { value: "ONAYDA_TASLAK", label: "Onayda taslak", hint: "Sipariş onayında önizleme kendiliğinden açılır." },
+        ],
+      },
+      {
         enumKey: "itemPhaseOutNewOrder",
         title: "Tükenene kadar karta yeni sipariş",
         summary: "Kullanımdan kaldırılan (Tükenene kadar) karta yeni sipariş satırı nasıl açılsın.",
@@ -2368,6 +2383,35 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: [
           { value: "ON", label: "Önerilsin (varsayılan)", hint: "Son kullanılan kategoriler formda görünür." },
           { value: "OFF", label: "Önerilmesin", hint: "Kategori kutusu boş açılır." },
+        ],
+      },
+      {
+        // D4-H3: `defaultValue` backend `DEFAULT_EXPENSE_ALLOCATION_FIELD` ile birebir. "Zorunlu" kipi her masraf giriş
+        // yüzeyinde bağ adımı inene kadar sunulmaz (backend 400 — çıkışsız kapı yasağı).
+        enumKey: "financeExpenseAllocationField",
+        title: "Masrafı makineye / işe bağlama",
+        summary: `Kasa masraf formunda masrafın hangi makineye, ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} ya da hizmet kalemine ait olduğu seçilebilsin mi.`,
+        desc: `Kapalı: masraf formu bugünkü gibidir. İsteğe bağlı: formda "Bağla" bölümü çıkar; masraf bir makineye, ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} ya da hizmet kalemine yüzde payla bağlanabilir, kayıtlı masrafa sonradan da bağ eklenir. Bir masrafın bağlarının toplamı en çok %100'dür. Bağ kârlılıkta doğrudan maliyet olur; bağlanmayan masraf genel giderde kalır.`,
+        defaultValue: "OFF",
+        display: "radio",
+        audience: ["Muhasebeci"],
+        options: [
+          { value: "OFF", label: "Kapalı (varsayılan)", hint: "Masraf formu bugünkü gibi." },
+          { value: "OPTIONAL", label: "İsteğe bağlı", hint: "Formda \"Bağla\" bölümü çıkar; boş bırakılabilir." },
+        ],
+      },
+      {
+        // D4-H3: `defaultValue` backend `DEFAULT_EXPENSE_ALLOCATION_CLOSED_WORK_ORDER` ile birebir.
+        enumKey: "financeExpenseAllocationClosedWorkOrder",
+        title: `Kapanmış ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} masraf bağlanabilsin`,
+        summary: `Tamamlanmış ya da iptal edilmiş ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} sonradan masraf bağlanabilsin mi.`,
+        desc: `Serbest: geç gelen faturanın masrafı bitmiş işe yine yazılır. Engelli: yalnız açık ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağ kurulur; kapanmış işe bağ denemesi uyarıyla durur.`,
+        defaultValue: "ALLOW",
+        display: "radio",
+        audience: ["Muhasebeci"],
+        options: [
+          { value: "ALLOW", label: "Serbest (varsayılan)", hint: `Kapanmış ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} de bağlanır.` },
+          { value: "DENY", label: "Engelli", hint: `Yalnız açık ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlanır.` },
         ],
       },
       {

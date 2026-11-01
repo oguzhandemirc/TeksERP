@@ -313,6 +313,8 @@ export const updateSchema = z.strictObject({
   costProfitConsumablePriceSource: z.enum(["ALIS_FIYATI", "SON_ALIS_FATURASI"], { message: "Sarf fiyatı kaynağı ALIS_FIYATI ya da SON_ALIS_FATURASI olmalı" }).optional(),
   // SY-D2: dokuma standart maliyet yöntemi (`WEAVING_STANDARD_METHODS` ile birebir).
   costWeavingStandardMethod: z.enum(["TEZGAH_SAATI", "ATKI_UCRETI"], { message: "Dokuma standart yöntemi TEZGAH_SAATI ya da ATKI_UCRETI olmalı" }).optional(),
+  // SY-M1: siparişten üretim önerisi (`ORDER_PRODUCTION_PROPOSAL_MODES` ile birebir).
+  orderProductionProposal: z.enum(["KAPALI", "ONIZLEME", "ONAYDA_TASLAK"], { message: "Üretim önerisi KAPALI, ONIZLEME ya da ONAYDA_TASLAK olmalı" }).optional(),
   // D4-G2b: makine süresi, genel gider anahtarı, kategori sınıfları (`PROFIT_*` sabitleri ile birebir; harita süzgeci serviste).
   costProfitMachineTime: z.enum(["OTURUM", "VARDIYA", "NORM"], { message: "Makine süresi OTURUM, VARDIYA ya da NORM olmalı" }).optional(),
   costProfitOverheadKey: z.enum(["YOK", "METRE", "GELIR", "MAKINE_SAATI"], { message: "Genel gider anahtarı YOK, METRE, GELIR ya da MAKINE_SAATI olmalı" }).optional(),
@@ -323,6 +325,9 @@ export const updateSchema = z.strictObject({
   financeServiceBillingPriceDate: z.enum(["SERVICE_DAY", "DISPATCH_DAY"]).optional(),
   /** D4-H1: masraf kategorisi önerisi (`EXPENSE_CATEGORY_SUGGESTION_MODES` ile birebir). */
   financeExpenseCategorySuggestions: z.enum(["ON", "OFF"]).optional(),
+  /** D4-H3: masraf bağı alanı (`EXPENSE_ALLOCATION_FIELD_MODES` ile birebir; REQUIRED serviste 400 — bağ adımı her yüzeyde yok). */
+  financeExpenseAllocationField: z.enum(["OFF", "OPTIONAL", "REQUIRED"], { message: "Masraf bağı alanı OFF, OPTIONAL ya da REQUIRED olmalı" }).optional(),
+  financeExpenseAllocationClosedWorkOrder: z.enum(["ALLOW", "DENY"], { message: "Kapanmış terbiye iş emrine bağ ALLOW ya da DENY olmalı" }).optional(),
   // finance.autoAllocateOnPaymentEnabled — tahsilat/ödemede FIFO otomatik kapama.
   // Artan tutar avansta kalır; otomatik tahsis elle silinebilir.
   financeAutoAllocateOnPaymentEnabled: z.boolean().optional(),

@@ -2,6 +2,7 @@
 import { useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { CheckCircle2, Factory, ScanSearch } from "lucide-react";
+import { CariHoldStrip } from "@/pages/Finance/CariHold/CariHoldStrip";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -110,6 +111,7 @@ export function IncomingDocumentDetailPage() {
       />
       <PageBody className="min-h-0 p-4 sm:p-6">
         <div className="flex flex-col gap-4">
+          {isApprovable(n.status) && <CariHoldStrip message={n.cariHold?.message} title="Cari kilitli — bu belge onaylanamaz" />}
           <ScanReadBanner scans={n.scans} canRequeue={hasPermission("gelen-belge:write")} onRequeued={() => void invalidate()} />
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <ScanViewer scans={n.scans} highlight={sel ? lineRect(sel) : null} highlightScanId={sel?.scanId ?? null} selectionKey={sel?.id ?? null} />

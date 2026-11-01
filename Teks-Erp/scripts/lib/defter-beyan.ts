@@ -332,6 +332,15 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
       { dosya: "src/services/consumable-norm.service.ts", sembol: "revokeConsumableNorm" },
     ],
     ["src/services/consumable-norm.service.ts"], { sinif: "PIVOT_TICARI", yari: true }),
+  // D4-H3 (2026-10-31): masrafın makine / iş emri / hizmet kalemi payı — silinirse kârlılığın doğrudan maliyeti
+  // değişir ⇒ DEFTER. Değişim = damga + yeni satır (tek tx), kaldırma = damga; masraf iptali bağı damgalamaz.
+  // updatedAt yalnız damga için (yarı). Okuma tek kaynak `listExpenseAllocationsAsOf` (as-of).
+  D("ExpenseAllocation", "masraf bağı — değişim = damga + yeni satır (tek tx), kaldırma = damga — ters = DAMGA", { tur: "DAMGA", kolon: "revokedAt" },
+    [
+      { dosya: "src/services/expense-allocation.service.ts", sembol: "changeExpenseAllocation" },
+      { dosya: "src/services/expense-allocation.service.ts", sembol: "revokeExpenseAllocation" },
+    ],
+    ["src/services/expense-allocation.service.ts"], { yari: true }),
 
   D("RollVariance", "fire · düzeltme · aşım defteri", { tur: "DAMGA", kolon: "reversedAt" },
     [

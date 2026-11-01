@@ -42,6 +42,7 @@ import {
   ENTRY_KINDS, ENTRY_KIND_DIRECTION, KIND_LABEL, amountHint, entryBlockReason, entryReady,
   parseAmount, type EntryKind,
 } from "./cashTxnRules";
+import { ExpenseLinkSection, useExpenseLink } from "./allocation/useExpenseLink";
 
 interface Props {
   open: boolean;
@@ -58,13 +59,15 @@ export function CashTxnFormDialog({ open, onOpenChange, onCreated }: Props) {
   const [description, setDescription] = useState("");
   const [reference, setReference] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // D4-H3: "Bağla" yalnız ayar OPTIONAL + masrafta; OFF'ta form ve gövde bugünkü gibi.
+  const link = useExpenseLink(kind);
 
   // Mantıksal deneme kimliği — dosya başındaki nota bak.
   const attempt = useAttemptToken();
 
   const parsed = parseAmount(amount);
   const blockReason = entryBlockReason(account);
-  const ready = entryReady(account, amount, txnDate) && !blockReason;
+  const ready = entryReady(account, amount, txnDate) && !blockReason && !link.blocksSave;
   const direction = ENTRY_KIND_DIRECTION[kind];
 
   const saveM = useMutation({
@@ -79,7 +82,7 @@ export function CashTxnFormDialog({ open, onOpenChange, onCreated }: Props) {
         category: category.trim() || null,
         description: description.trim() || null,
         reference: reference.trim() || null,
-        clientToken: attempt.token(),
+        clientToken: attempt.token(), allocation: link.body,
       }),
     onSuccess: (r) => {
       attempt.onSuccess();
@@ -195,6 +198,8 @@ export function CashTxnFormDialog({ open, onOpenChange, onCreated }: Props) {
             />
           </div>
         </div>
+
+        {link.visible && <ExpenseLinkSection value={link.draft} onChange={link.setDraft} />}
 
         {kind === "OPENING" && (
           <p className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">

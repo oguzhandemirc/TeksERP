@@ -28,6 +28,8 @@ export function changeText(fark: string): { text: string; tone: "artis" | "azali
 
 export interface ExpenseRowView {
   readonly key: string;
+  /** Kasa listesini süzecek fabrika anahtarı; "Diğer" ve eski fabrika satırında null (dokunuş yok). */
+  readonly categoryKey: string | null;
   readonly title: string;
   readonly value: string;
   readonly lines: readonly string[];
@@ -47,6 +49,7 @@ function rowView(r: ExpenseCategoryRow, i: number): ExpenseRowView {
   const pay = typeof r.buAyPay === "number" ? `Bu ayın %${String(r.buAyPay).replace(".", ",")}'i` : "";
   return {
     key: `${i}-${r.etiket}`,
+    categoryKey: r.digerMi || typeof r.kategoriAnahtari !== "string" ? null : r.kategoriAnahtari,
     title,
     value: formatMoney(r.buAy),
     lines: [`Geçen aya göre ${changeText(str(r.fark)).text}`, [pay, `12 ayda ${formatMoney(r.toplam)}`].filter(Boolean).join(" · ")],
@@ -66,4 +69,21 @@ export function expenseView(veri: unknown): ExpenseView | null {
     // Nesne olmayan satır (bozuk/yabancı veri) atlanır; segment çökmez.
     rows: v.kategoriler.filter((r) => typeof r === "object" && r !== null).map((r, i) => rowView(r, i)),
   };
+}
+
+export interface CashCategoryOption {
+  readonly key: string;
+  readonly label: string;
+}
+
+/**
+ * Kasa listesi kategori çipleri (D4-KUC3c): yalnız fabrikanın anahtarını taşıyan, adıyla gelen kategoriler (sıra
+ * fabrikanın). `legacy`: özette kategori var ama hiçbiri anahtar taşımıyor → eski fabrika ("güncellenince gelir").
+ */
+export function cashCategoryOptions(veri: unknown): { readonly options: readonly CashCategoryOption[]; readonly legacy: boolean } {
+  const rows = expenseView(veri)?.rows ?? [];
+  const options = rows.flatMap((r) => (r.categoryKey === null ? [] : [{ key: r.categoryKey, label: r.title }]));
+  const named = obj(veri).kategoriler;
+  const anyNamed = Array.isArray(named) && named.some((r) => obj(r).digerMi === false);
+  return { options, legacy: anyNamed && options.length === 0 };
 }

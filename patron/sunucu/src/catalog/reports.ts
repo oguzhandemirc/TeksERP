@@ -30,6 +30,8 @@ export const REPORT_KEY_PERMISSION: Readonly<Record<string, CloudPermission>> = 
   "dokuma/levent-dengesi": "bulut:uretim:oku",
   "production/makine-duruslari": "bulut:uretim:oku",
   "finance/alacaklar": "bulut:cari-bakiye:oku",
+  // D4-G4 (S15 a): kârlılık — maliyet tabanı ticari sır, yalnız maliyet okuma izinli hesap.
+  "maliyet/karlilik": "bulut:maliyet:oku",
 };
 
 /** Buluttan İSTENEMEYEN raporlar (aile ya da tam anahtar). */

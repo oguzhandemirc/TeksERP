@@ -23,9 +23,11 @@ import { currencyMismatchOf } from "./currencyMismatch";
 interface Props {
   rows: CashTxnRow[];
   onCancel: (row: CashTxnRow) => void;
+  /** D4-H3: masraf bağları — yalnız `finance.masraf.bagAlani` OPTIONAL iken verilir (OFF'ta tablo bayt-aynı). */
+  onAllocations?: (row: CashTxnRow) => void;
 }
 
-export function CashTxnTable({ rows, onCancel }: Props) {
+export function CashTxnTable({ rows, onCancel, onAllocations }: Props) {
   return (
     <div className="overflow-hidden rounded-md border">
       <table className="w-full text-sm">
@@ -75,6 +77,11 @@ export function CashTxnTable({ rows, onCancel }: Props) {
                   )}
                 </td>
                 <td className="px-3 py-2 text-right">
+                  {onAllocations && r.kind === "EXPENSE" && (
+                    <Button variant="ghost" size="sm" className="mr-1" onClick={() => onAllocations(r)}>
+                      Bağlar
+                    </Button>
+                  )}
                   {!cancelled && !isPaymentLedgerRow(r) && (
                     <PermissionGate permission="finance:payment">
                       <Button variant="outline" size="sm" onClick={() => onCancel(r)}>

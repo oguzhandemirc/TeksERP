@@ -35,6 +35,8 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/orders": e("sipariş oluşturdu", "sipariş oluşturmaya çalıştı"),
   "PATCH /api/orders/:id": e("siparişi düzenledi", "siparişi düzenlemeye çalıştı"),
   "DELETE /api/orders/:id": e("siparişi sildi", "siparişi silmeye çalıştı"),
+  "POST /api/orders/:id/production-proposal/preview": e("siparişin üretim önerisine baktı", "siparişin üretim önerisine bakmaya çalıştı"),
+  "POST /api/orders/:id/production-proposal/apply": e("siparişten dokuma/terbiye iş emirlerini oluşturdu", "siparişten dokuma/terbiye iş emirlerini oluşturmaya çalıştı"),
   // ── Finans: dönem sonu hizmet faturası (H8)
   "POST /api/finance/invoices/service-period-draft": e("dönem sonu hizmet faturası taslağı oluşturdu", "dönem sonu hizmet faturası taslağı oluşturmaya çalıştı"),
   // ── Terbiye iş emri
@@ -53,6 +55,9 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/rolls/:id/customer-code/revoke": e("topun müşteri barkodunu kaldırdı", "topun müşteri barkodunu kaldırmaya çalıştı"),
   "POST /api/finance/cari/:id/holds": e("cariye kilit koydu", "cariye kilit koymaya çalıştı"),
   "POST /api/finance/cari/holds/:holdId/release": e("cari kilidini açtı", "cari kilidini açmaya çalıştı"),
+  "POST /api/finance/cash-transactions/:id/allocations": e("masrafı makineye/işe bağladı", "masrafı bağlamaya çalıştı"),
+  "POST /api/finance/expense-allocations/:id/change": e("masraf bağını değiştirdi", "masraf bağını değiştirmeye çalıştı"),
+  "POST /api/finance/expense-allocations/:id/revoke": e("masraf bağını kaldırdı", "masraf bağını kaldırmaya çalıştı"),
   "POST /api/cost/machine-rates": e("makine saat ücreti yazdı", "makine saat ücreti yazmaya çalıştı"),
   "POST /api/cost/machine-rates/:id/change": e("makine saat ücretini değiştirdi", "makine saat ücretini değiştirmeye çalıştı"),
   "POST /api/cost/machine-rates/:id/revoke": e("makine saat ücretini kaldırdı", "makine saat ücretini kaldırmaya çalıştı"),

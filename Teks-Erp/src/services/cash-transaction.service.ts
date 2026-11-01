@@ -21,6 +21,7 @@ import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { D, resolveExchangeRateTx } from "./helpers/finance.helper";
+import { assertExpenseAllocationEnabled, auditAllocation, linkNewExpenseTx, type ExpenseAllocationInput } from "./expense-allocation.service";
 import { assertCashPeriodOpenTx, assertCashPeriodsOpenTx } from "./helpers/cash-period-guard.helper";
 import { applyCashTxTx, cancelCashTxTx, KIND_DIRECTION, nextCashNoTx, type AccountRef } from "./helpers/cash-ledger.helper";
 import { buildTurkishSearch } from "../utils/query-parser";
@@ -42,6 +43,8 @@ export interface CashTxnInput extends AccountRef {
   reference?: string | null;
   exchangeRate?: Prisma.Decimal.Value | null;
   clientToken?: string | null;
+  /** D4-H3: masraf formunda "Bağla" — masraf satırıyla aynı tx'te bağ (token = masrafın token'ı). */
+  allocation?: Omit<ExpenseAllocationInput, "clientToken"> | null;
 }
 
 export interface TransferInput {
@@ -189,6 +192,15 @@ function compareLockKeys(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+/** Formdaki bağ yalnız masrafta, token'lı istekte ve ayar açıkken; hedef/pay doğrulaması tx içinde. */
+async function assertNewExpenseLinkable(input: CashTxnInput): Promise<void> {
+  if (input.kind !== CashTxnKind.EXPENSE) {
+    throw AppError.badRequest("Yalnız masraf satırı makineye/işe bağlanır.", { code: "EXPENSE_ALLOCATION_NOT_EXPENSE" });
+  }
+  if (!input.clientToken) throw AppError.badRequest("Bağlı masraf kaydı clientToken ister.", { code: "EXPENSE_ALLOCATION_TOKEN" });
+  await assertExpenseAllocationEnabled();
+}
+
 export class CashTransactionService {
   /**
    * Masraf / gelir / açılış fişi.
@@ -207,6 +219,8 @@ export class CashTransactionService {
   }
 
   private async createFresh(input: CashTxnInput, amount: Prisma.Decimal, userId?: string): Promise<ApiResponse<{ id: string; docNo: string }>> {
+    // Bağ kapısı replay'den SONRA: ayar sonradan OFF'a çekilse de belirsiz hatadaki yeniden deneme önceki kaydı alır.
+    if (input.allocation) await assertNewExpenseLinkable(input);
     const txnDate = input.txnDate ?? new Date();
     // ⚠️ ÖN KONTROL TEK BAŞINA YETMEZ (check-then-act): aynı token'la İKİ
     // PARALEL istek ikisi de "token yok" görür, ikisi de INSERT eder ve biri
@@ -263,7 +277,10 @@ export class CashTransactionService {
         category: input.category, description: input.description, reference: input.reference,
         createdById: userId ?? null, clientToken: input.clientToken ?? null,
       });
-      return { id: row.id, docNo: row.docNo };
+      const allocation = input.allocation && input.clientToken
+        ? await linkNewExpenseTx(tx, { cashTransactionId: row.id, input: input.allocation, clientToken: input.clientToken, userId: userId ?? null })
+        : null;
+      return { id: row.id, docNo: row.docNo, allocation };
         }),
       undefined,
       // Belge numarası yarışı (P2002 `docNo`) RETRY EDİLİR; `clientToken`
@@ -278,7 +295,9 @@ export class CashTransactionService {
       recordId: result.id,
       newData: { docNo: result.docNo, kind: input.kind, amount: amount.toString() },
     });
-    return { success: true, data: result, message: `${result.docNo} kaydedildi.` };
+    // Formda doğan bağ da ayrı uçtaki gibi EXPENSE_ALLOCATION ayak izi bırakır (tx DIŞINDA).
+    if (result.allocation) await auditAllocation(userId, "CREATE", result.allocation, { kaynak: "kasa-formu" });
+    return { success: true, data: { id: result.id, docNo: result.docNo }, message: `${result.docNo} kaydedildi.` };
   }
 
   /**

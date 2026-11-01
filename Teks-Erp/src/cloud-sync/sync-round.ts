@@ -247,7 +247,7 @@ export async function runSyncRound(opts: RoundOptions, deps: RoundDeps): Promise
   await saveWatermarks(plan.idle);
   const snapshots =
     opts.kind === "ARTIMLI"
-      ? (await buildSnapshots({ now: new Date(now()), productionOn: flags.production, financeOn: flags.finance, cadences: opts.cadences })).filter(
+      ? (await buildSnapshots({ now: new Date(now()), productionOn: flags.production, financeOn: flags.finance, maliyetOn: flags.maliyet, cadences: opts.cadences })).filter(
           (s) => stored.get(wmKey.snapshot(s.projection))?.digest !== s.digest,
         )
       : [];

@@ -84,6 +84,17 @@ export const PAYMENT_STATUS: Readonly<Record<string, StatusEntry>> = {
   CANCELLED: { label: "İptal", tone: "bilgi" },
 };
 
+/** Kasa hareketi türü (`CashTxnKind`, fabrika). */
+export const CASH_TXN_KIND: Readonly<Record<string, string>> = {
+  EXPENSE: "Masraf",
+  INCOME: "Gelir",
+  TRANSFER_OUT: "Virman çıkışı",
+  TRANSFER_IN: "Virman girişi",
+  COLLECTION: "Tahsilat",
+  PAYMENT: "Ödeme",
+  OPENING: "Açılış",
+};
+
 const labelsOf = (d: Readonly<Record<string, StatusEntry>>): Readonly<Record<string, string>> =>
   Object.fromEntries(Object.entries(d).map(([k, v]) => [k, v.label]));
 
@@ -93,6 +104,7 @@ export const RECORD_ENUMS: Readonly<Record<string, Readonly<Record<string, Reado
   "standart-maliyet": { durum: labelsOf(STANDARD_COST_STATUS) },
   fatura: { tur: INVOICE_TYPE, durum: labelsOf(INVOICE_STATUS) },
   "cek-senet": { tur: CHEQUE_KIND, belgeTuru: CHEQUE_DOC_TYPE, durum: labelsOf(CHEQUE_STATUS) },
+  "kasa-hareketi": { tur: CASH_TXN_KIND, durum: labelsOf(PAYMENT_STATUS) },
   "tahsilat-odeme": {
     yon: Object.fromEntries(Object.entries(PAYMENT_DIRECTION).map(([k, v]) => [k, v.label])),
     yontem: PAYMENT_METHOD,
@@ -177,6 +189,7 @@ export const REPORT_TITLE: Readonly<Record<string, string>> = {
   "dokuma/levent-dengesi": "Leventten beklenen kumaş çıktı mı?",
   "production/makine-duruslari": "Makineler neden durdu?",
   "finance/alacaklar": "Kimden ne alacağız?",
+  "maliyet/karlilik": "Kârlılık",
 };
 
 /** Katalogda ad varsa ondan, yoksa sözlükten; ikisi de yoksa "Rapor" (ham anahtar ekrana basılmaz). */

@@ -70,9 +70,12 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   financeServiceBillingMissingMeter: V("eksik ölçüm davranışı; varsayılan satırı uyarıyla yazar (yolu işletir)"),
   financeServiceBillingTrigger: V("tetik; PER_SHIPMENT sevk taslağı yolunu işletir, PERIOD_END dönem sonu ucunu bekletir (iki yol da geçerli)"),
   financeExpenseCategorySuggestions: A("ON"), // öneri ucu sorgu yolunu işletir
+  financeExpenseAllocationField: A("OPTIONAL"), // formda Bağla yolunu işletir (REQUIRED seçilemez)
+  financeExpenseAllocationClosedWorkOrder: A("DENY"), // kapanmış iş emri kapısının dalını işletir
   costProfitSubcontractSource: V("yalnız kârlılık okumasının kaynağı; hiçbir kapıyı açıp kapamaz"),
   costProfitConsumablePriceSource: V("yalnız kârlılık okumasının kaynağı; hiçbir kapıyı açıp kapamaz"),
   costWeavingStandardMethod: V("yalnız standart maliyetin dokuma satır yöntemi; hiçbir kapıyı açıp kapamaz"),
+  orderProductionProposal: A("ONIZLEME"), // önizleme + uygula uçlarını açar; ONAYDA_TASLAK yalnız panelde kendiliğinden açar
   costProfitMachineTime: V("yalnız kârlılık okumasının kaynağı; hiçbir kapıyı açıp kapamaz"),
   costProfitOverheadKey: V("yalnız kârlılık okumasının dağıtım anahtarı; hiçbir kapıyı açıp kapamaz"),
   costProfitCategoryClasses: V("yalnız kârlılık okumasının masraf sınıfları; hiçbir kapıyı açıp kapamaz"),

@@ -105,8 +105,10 @@ function statik(): void {
     "cloud-sync/derived-cari-hold.ts", // D4-I6: yalnız `holdScopes` (bulut görünümü), kapı çağırmaz
     "routes/finance-cari-hold.routes.ts",
     "services/cari-hold.service.ts",
+    "services/cari.service.ts", // D4-I3: yalnız liste süzgeci/rozet parçaları (`HELD_CARI_ACCOUNT_WHERE`, `ACTIVE_HOLD_INCLUDE`), kapı çağırmaz
     "services/gelen-belge-note.service.ts",
     "services/gelen-belge-onay.service.ts",
+    "services/helpers/cari-hold-badge.helper.ts", // D4-I3: yalnız liste lateral'i (panel rozetleri), kapı çağırmaz
     "services/helpers/cari-hold-notify.helper.ts", // D4-I5: yalnız `holdScopeText`/`reasonLabel` (bildirim yükü), kapı çağırmaz
     "services/helpers/cari-merge.helper.ts", // D4-K3d: yalnız `activeHoldByCari` (birleştirme ENGELİ), kapı çağırmaz
     "services/helpers/sack-store-board.helper.ts", // D4-I4: yalnız liste lateral'i (`activeHoldFlagsLateralSql`/`listHoldView`), kapı çağırmaz

@@ -207,10 +207,25 @@ export const LIST_ID_FILTERS: Readonly<Record<ListIdFilterKey, readonly string[]
   urunId: ["siparis-kalemi", "is-emri", "fatura-kalemi", "fiyat", "teklif-kalemi", "standart-maliyet"],
 };
 
+// ---------------------------------------------------------------- liste anahtar süzgeçleri (D4-KUC3c)
+export const LIST_KEY_FILTER_KEYS = ["kategoriAnahtari"] as const;
+export type ListKeyFilterKey = (typeof LIST_KEY_FILTER_KEYS)[number];
+export const ANAHTAR_SUZGEC_AZAMI = 200;
+
+/**
+ * `GET /veri/:projeksiyon?<anahtar>=<metin>` ⇒ kayıttaki AYNI ADLI, FABRİKANIN ürettiği anahtarın birebir eşitliği
+ * (bulut kırpmaz, katlamaz, hesaplamaz). Beyansız projeksiyonda ya da uzun değerde 400.
+ */
+export const LIST_KEY_FILTERS: Readonly<Record<ListKeyFilterKey, readonly string[]>> = {
+  kategoriAnahtari: ["kasa-hareketi"],
+};
+
 /** `GET /oturum` `liste` — bu sunucunun liste yetenekleri; eski sunucu göndermez (istemci süzgeçli görünümü gizler). */
 export interface ListCapabilities {
   readonly kimlikSuzgecleri: Readonly<Partial<Record<ListIdFilterKey, readonly string[]>>>;
   readonly aranabilir: readonly string[];
+  /** D4-KUC3c; eski sunucu göndermez ⇒ istemci anahtar süzgecini (kasa kategori çipleri) gizler. */
+  readonly anahtarSuzgecleri?: Readonly<Partial<Record<ListKeyFilterKey, readonly string[]>>>;
 }
 
 // ---------------------------------------------------------------- cari kilidi (D4-I6)
@@ -264,6 +279,8 @@ export interface ExpenseMonthCell {
  */
 export interface ExpenseCategoryRow {
   readonly etiket: string;
+  /** Kasa hareketi `kategoriAnahtari` ile aynı (fabrika üretir); "Diğer"de null; eski fabrika göndermez (D4-KUC3c). */
+  readonly kategoriAnahtari?: string | null;
   readonly digerMi: boolean;
   readonly kategoriSayisi: number;
   readonly toplam: string;
@@ -286,6 +303,45 @@ export interface ExpenseSummarySnapshot {
   readonly fark: string;
   readonly aylikToplam: readonly ExpenseMonthCell[];
   readonly kategoriler: readonly ExpenseCategoryRow[];
+}
+
+// ---------------------------------------------------------------- kârlılık özeti (D4-G4)
+
+/**
+ * `karlilik-ozet` tutar kümesi (TL, tel ondalığı). Eksik girdili kalem 0 yazılmaz: `katki`/`net` `null` ve `rozet`
+ * fabrikanın metni ("eksik: sarf normu, döviz kuru" · "tahmini" · ""). Bulut ve uygulama hesaplamaz, yalnız basar.
+ */
+export interface ProfitMoney {
+  readonly gelir: string;
+  readonly katki: string | null;
+  readonly net: string | null;
+  readonly rozet: string;
+}
+
+/** `karlilik-ozet` ay satırı: fabrika ayı `YYYY-MM`. */
+export interface ProfitMonthRow extends ProfitMoney {
+  readonly ay: string;
+}
+
+/** `karlilik-ozet` adlı satır (bu ayın işlemi ya da müşteri); müşteri sıralaması FABRİKADA. */
+export interface ProfitNamedRow extends ProfitMoney {
+  readonly etiket: string;
+}
+
+/** `GET /anlik/karlilik-ozet` verisi (izin `bulut:maliyet:oku`): son 12 fabrika ayı; eski fabrika anlığı GÖNDERMEZ (404). */
+export interface ProfitSummarySnapshot {
+  readonly buAy: string;
+  /** Hesap ayarlarının okuma anındaki özeti (panel raporu başlığıyla aynı metin). */
+  readonly hesap: string;
+  readonly donem: ProfitMoney & { readonly sarf: string | null; readonly makine: string | null; readonly disFason: string | null };
+  readonly aylar: readonly ProfitMonthRow[];
+  readonly buAyIslemler: readonly (ProfitNamedRow & { readonly metre: string })[];
+  /** Katkısı en yüksek ilk 10 müşteri (katkı > 0, azalan). */
+  readonly enKarli: readonly ProfitNamedRow[];
+  /** Katkısı en düşük ilk 10 müşteri (katkı < 0, artan). */
+  readonly enZararli: readonly ProfitNamedRow[];
+  /** Katkısı eksik girdi yüzünden hesaplanamayan müşteri sayısı. */
+  readonly hesaplanamayanMusteri: number;
 }
 
 /** `GET /anlik/:projeksiyon`. */

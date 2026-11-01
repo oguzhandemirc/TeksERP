@@ -32,6 +32,7 @@ import { expenseCategorySuggestions } from "../services/helpers/expense-summary.
 import { listCashCategoryOptions, readCategoryParam } from "../services/helpers/cash-category-filter.helper";
 import allocationRoutes from "./finance-allocation.routes";
 import cariHoldRoutes from "./finance-cari-hold.routes";
+import expenseAllocationRoutes, { allocationFieldsSchema } from "./finance-expense-allocation.routes";
 import { fetchTcmbRates } from "../jobs/exchange-rate.job";
 
 const router = Router();
@@ -54,6 +55,8 @@ router.use("/allocations", allocationRoutes);
 // Cari kilidi (D4-I1a): `/cari/:id/holds` + `/cari/holds/:holdId/release` — aşağıdaki `/cari/:id` desenlerinden ÖNCE
 // bağlanır; rejim kapısı yukarıdaki `router.use`tan miras.
 router.use("/cari", cariHoldRoutes);
+// Masraf bağı (D4-H3): `/cash-transactions/:id/allocations` + `/expense-allocations/:id/{change,revoke}`; kapı miras.
+router.use(expenseAllocationRoutes);
 
 const decimalString = z.union([z.number(), z.string()]);
 const isoDate = z.string().datetime({ offset: true }).or(z.string().date());
@@ -99,6 +102,7 @@ const cariCreateSchema = z
  *       - { in: query, name: "filter[isCustomerRole]", schema: { type: string, enum: ["true", "false"] } }
  *       - { in: query, name: "filter[isSubcontractorRole]", schema: { type: string, enum: ["true", "false"] } }
  *       - { in: query, name: kind, schema: { type: string, enum: [CUSTOMER, SUBCONTRACTOR] }, description: "Eski istemci" }
+ *       - { in: query, name: "filter[held]", schema: { type: string, enum: ["true"] }, description: "D4-I3 — yalnız aktif kilidi olan hesaplar; satırda `hold` alanı her zaman döner" }
  *       - { in: query, name: "filter[id]", schema: { type: string }, description: "Hesap kimliği (CSV) — bildirim derin bağlantısı ?focus" }
  *     responses:
  *       200: { description: Liste }
@@ -122,6 +126,8 @@ router.get("/cari", requirePermission("finance:read"), async (req, res, next) =>
       // H2 (2026-08-14): "Gecikmiş" kolonu — bayrak verilmeyince servis ek
       // sorgu KOŞMAZ (bugünkü yol bayt-bayt; bekçi kaynak taramasıyla kilitli).
       withOverdue: q.withOverdue === "true",
+      // D4-I3: "Kilitli" süzgeci SUNUCUDA — liste ile `pagination.total` aynı where'den.
+      held: readHeldFilter(readFilterList(parseQueryParams(req).filters.held)),
     });
     res.json({ success: true, ...result });
   } catch (e) {
@@ -398,6 +404,8 @@ router.post("/cash-transactions", requirePermission("finance:payment"), async (r
         reference: z.string().max(120).nullable().optional(),
         exchangeRate: decimalString.nullable().optional(),
         clientToken: z.string().uuid().optional(),
+        // D4-H3: formda "Bağla" — masrafla aynı tx; eski istemci göndermez (strict şema eski gövdeyi bayt-aynı kabul eder).
+        allocation: z.strictObject(allocationFieldsSchema).nullable().optional(),
       })
       .strict()
       .parse(req.body);
@@ -1033,3 +1041,10 @@ router.get("/shipments/:id/invoice-draft-lines", requirePermission("finance:read
 });
 
 export default router;
+
+// FAIL-CLOSED: tanınmayan `filter[held]` değeri 400 — yazım hatası sessizce "hepsi" listesine dönmesin.
+function readHeldFilter(values: string[]): boolean {
+  if (values.length === 0) return false;
+  if (values.length === 1 && values[0] === "true") return true;
+  throw AppError.badRequest("Kilit süzgeci yalnız 'true' olabilir.", { code: "INVALID_FILTER_VALUE" });
+}
