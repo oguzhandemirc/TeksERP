@@ -176,9 +176,30 @@ export interface ProcessChoice {
   valueId: string;
 }
 
+/** Onay sonrası otomatik iş emri — backend `gelen-belge-oto-is-emri.service.ts` `AutoWorkOrderResult` aynası. */
+export interface AutoWorkOrderGroup {
+  key: string;
+  itemName: string;
+  targets: string[];
+  rollCount: number;
+  outcome: "OPENED" | "SKIPPED" | "FAILED";
+  workOrderId?: string;
+  workOrderNumber?: string;
+  attached?: number;
+  reason?: string;
+}
+export interface AutoWorkOrderResult {
+  opened: number;
+  manual: number;
+  reason: string | null;
+  groups: AutoWorkOrderGroup[];
+}
+
 export interface ApproveResult {
   note: DeliveryNoteDetail;
   summary: { entered: number; failed: number; skipped: number; replayed: number; rollIds: string[] };
+  /** Yalnız fabrika ayarı açıkken (eski backend / ayar kapalı → yok). */
+  autoWorkOrders?: AutoWorkOrderResult;
 }
 
 export interface ReaderStatus {
@@ -224,6 +245,8 @@ export interface IncomingDocumentSettings {
   defaultItem: { id: string; code: string; name: string; problem: string | null } | null;
   unreviewedApproval: UnreviewedApproval;
   defaultUnreviewedApproval: UnreviewedApproval;
+  /** Onaydan sonra net gruplara iş emri kendiliğinden; eski backend göndermez (undefined = kapalı). */
+  autoWorkOrder?: boolean;
 }
 
 /** Gönderen şablonu (E2): dosyadaki motor şablonu + fabrikaya özgü bağ (`GET /sablonlar`). */

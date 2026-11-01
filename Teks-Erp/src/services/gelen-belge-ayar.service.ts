@@ -1,10 +1,11 @@
 // =============================================================================
 // TeksERP — Gelen belge AYARLARI (hizmet ekseni E3; TASARIM-KARARI §8 HİZMET EKSENİ (1))
 // =============================================================================
-// İki fabrika ayarı, TEK yazar `PUT /api/gelen-belge/ayarlar` (ham `PUT /api/admin/settings/:key` bu anahtarları
+// Üç fabrika ayarı, TEK yazar `PUT /api/gelen-belge/ayarlar` (ham `PUT /api/admin/settings/:key` bu anahtarları
 // REDDEDER — doğrulamasız düz metin yazıp ürün kapısını dolanmasın):
 //   · `gelenBelge.defaultItemId` — ürünü seçilmemiş satır onayda bu ürünle doğar (boş = bugünkü: 400 UNRESOLVED)
 //   · `gelenBelge.unreviewedApproval` — needsReview satır varken onay: WARN (varsayılan, geçer) | BLOCK (409)
+//   · `gelenBelge.autoWorkOrder` — onaydan sonra net gruplara iş emri kendiliğinden (boş/false = bugünkü: elle)
 // Ürün kapısı tek karar: yaşam döngüsü `assertItemUsable(NEW_STOCK)` + top doğurabilen tür ALLOWLIST'i
 // (`ROLL_BEARING_ITEM_TYPES`; yeni tür — ör. SERVICE — eklendiği gün kendiliğinden dışarıda kalır).
 // =============================================================================
@@ -17,6 +18,7 @@ import {
   DEFAULT_UNREVIEWED_APPROVAL,
   UNREVIEWED_APPROVAL_VALUES,
   SETTING_KEYS,
+  readIncomingDocAutoWorkOrder,
   readIncomingDocDefaultItemId,
   readUnreviewedApprovalMode,
   systemSettingService,
@@ -30,6 +32,7 @@ export const ROLL_BEARING_ITEM_TYPES: readonly ItemType[] = [ItemType.FABRIC];
 export const INCOMING_DOC_DEDICATED_SETTING_KEYS: ReadonlySet<string> = new Set([
   SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID,
   SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL,
+  SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER,
 ]);
 
 export interface DefaultItemView {
@@ -44,6 +47,8 @@ export interface IncomingDocSettings {
   defaultItem: DefaultItemView | null;
   unreviewedApproval: UnreviewedApprovalMode;
   defaultUnreviewedApproval: UnreviewedApprovalMode;
+  /** Onaydan sonra net desen gruplarına iş emri kendiliğinden açılır mı (varsayılan false). */
+  autoWorkOrder: boolean;
 }
 
 /**
@@ -76,6 +81,7 @@ export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
     defaultItem,
     unreviewedApproval: await readUnreviewedApprovalMode(),
     defaultUnreviewedApproval: DEFAULT_UNREVIEWED_APPROVAL,
+    autoWorkOrder: await readIncomingDocAutoWorkOrder(),
   };
 }
 
@@ -83,6 +89,7 @@ export interface IncomingDocSettingsInput {
   /** null = temizle (bugünkü davranışa dön). */
   defaultItemId?: string | null;
   unreviewedApproval?: UnreviewedApprovalMode;
+  autoWorkOrder?: boolean;
 }
 
 /** Yazım: ürün doğrulaması 400 `GELEN_BELGE_DEFAULT_ITEM_INVALID`; audit `systemSettingService.set` içinde. */
@@ -102,6 +109,9 @@ export async function updateIncomingDocSettings(input: IncomingDocSettingsInput,
       throw AppError.badRequest("Geçersiz seçenek: WARN ya da BLOCK olmalı.", { code: "VALIDATION_ERROR" });
     }
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, input.unreviewedApproval, "Gelen belge: gözden geçirilmemiş hücre varken onay (WARN/BLOCK)", userId);
+  }
+  if (input.autoWorkOrder !== undefined) {
+    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER, input.autoWorkOrder, "Gelen belge: onaydan sonra net desen gruplarına iş emri kendiliğinden açılır", userId);
   }
   return getIncomingDocSettings();
 }

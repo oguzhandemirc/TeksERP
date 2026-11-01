@@ -1,6 +1,6 @@
 // Onay akışının saf parçaları: hangi 409 gerekçeyle geçilir, sonuç özeti nasıl okunur.
 import axios from "axios";
-import type { ApproveResult, DefaultItemSource, DeliveryNoteLine, EffectiveDefaultItem, IncomingDocumentSettings } from "./types";
+import type { ApproveResult, AutoWorkOrderResult, DefaultItemSource, DeliveryNoteLine, EffectiveDefaultItem, IncomingDocumentSettings } from "./types";
 
 /** Gerekçeyle (varianceReason) geçilebilen kapılar — backend `gelen-belge-onay.service.ts` precheck. */
 export const VARIANCE_CODES = new Set(["TOTAL_MISMATCH", "DELIVERY_NOTE_PAGES_MISSING"]);
@@ -121,4 +121,27 @@ export function summarizeApprove(r: ApproveResult): ApproveOutcome {
   if (s === "APPROVED") return { status: "APPROVED", title: `Onaylandı — ${counts}.`, failed };
   if (s === "PARTIAL") return { status: "PARTIAL", title: `Kısmi onay — ${counts}, ${r.summary.failed} satır girilemedi.`, failed };
   return { status: "OTHER", title: `Durum: ${s}`, failed };
+}
+
+export interface AutoWorkOrderSummary {
+  tone: "ok" | "warn";
+  title: string;
+  /** Grup başına satır: açılan İE no ya da elle açılma nedeni. */
+  lines: Array<{ key: string; tone: "ok" | "warn"; text: string }>;
+}
+
+/** Onay sonrası otomatik iş emri özeti; alan yoksa (ayar kapalı / eski backend) null — diyalog bugünkü gibi kalır. */
+export function summarizeAutoWorkOrders(r: AutoWorkOrderResult | undefined | null): AutoWorkOrderSummary | null {
+  if (!r) return null;
+  if (r.groups.length === 0) return null;
+  const parts: string[] = [];
+  if (r.opened > 0) parts.push(`${r.opened} iş emri açıldı`);
+  if (r.manual > 0) parts.push(`${r.manual} grup elle açılmalı`);
+  const title = parts.join(", ") + (r.reason ? ` — ${r.reason}` : "") + ".";
+  const lines = r.groups.map((g) => {
+    const name = `${g.itemName}${g.targets.length ? ` · ${g.targets.join(" + ")}` : " · desensiz"} (${g.rollCount} top)`;
+    if (g.outcome === "OPENED") return { key: g.key, tone: "ok" as const, text: `${name}: ${g.workOrderNumber ?? "iş emri"} açıldı${g.attached != null ? `, ${g.attached} top bağlandı` : ""}` };
+    return { key: g.key, tone: "warn" as const, text: `${name}: elle açılmalı — ${g.reason ?? "neden bildirilmedi"}` };
+  });
+  return { tone: r.manual > 0 ? "warn" : "ok", title, lines: r.reason ? [] : lines };
 }

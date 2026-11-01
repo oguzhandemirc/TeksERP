@@ -1,9 +1,10 @@
 // =============================================================================
 // GENEL AYARLAR → GELEN BELGE (hizmet ekseni E3)
 // =============================================================================
-// İki ayar, tek uç (`PUT /api/gelen-belge/ayarlar`; ham ayar ucu bu anahtarları reddeder):
+// Üç ayar, tek uç (`PUT /api/gelen-belge/ayarlar`; ham ayar ucu bu anahtarları reddeder):
 //   · varsayılan ürün — ürünü seçilmemiş satır onayda bu ürünle girer (boş = bugünkü: ürün seçilmeli)
 //   · gözden geçirilmemiş hücre varken onay — Uyar (varsayılan, bugünkü) | Engelle
+//   · onaydan sonra otomatik iş emri — kapalı (varsayılan, bugünkü: iş emri plan ekranından elle)
 // Ürün seçici DOĞRUDAN modal açar (combobox yok); yalnız aktif kumaş listelenir, sunucu ikinci kapıdır.
 // =============================================================================
 import { useEffect, useState } from "react";
@@ -15,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ItemPickerModal } from "@/components/forms/ItemPickerModal";
 import { apiErrorText } from "@/lib/api-error";
-import { FieldLabel } from "./SettingRow";
+import { FieldLabel, FlagToggle } from "./SettingRow";
 import { EnumRadioOptions } from "./EnumRadioOptions";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { useRegisterSettingsDirty } from "./settings-dirty";
@@ -33,6 +34,23 @@ export const UNREVIEWED_APPROVAL_OPTIONS: ReadonlyArray<{ value: UnreviewedAppro
   { value: "BLOCK", label: "Engelle", hint: "Gözden geçirilmemiş satır varken onay reddedilir; önce hücreler gözden geçirilir." },
 ];
 
+const AUTO_WORK_ORDER_DESC = "Onaylanan belgenin topları desen/gramaj ve kumaşa göre gruplanır; işlem değeri net çözülen her grup için iş emri, müşterinin son iş emrindeki rotayla açılır (plan ekranındaki 'iş emri aç' ile aynı işlem). Deseni çözülemeyen gruplar, rota önerisi olmayan müşteri ve iş emri açma yetkisi olmayan onaylayan için iş emri açılmaz; onay sonucu hangi grubun elle açılması gerektiğini yazar. Onay bundan etkilenmez. Kapalı (varsayılan) = bugünkü davranış: iş emirleri plan ekranından elle açılır.";
+
+function AutoWorkOrderToggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div data-testid="gb-auto-work-order">
+      <FlagToggle
+        title="Onaydan sonra iş emrini otomatik aç"
+        summary="Belge onaylanınca deseni/gramajı belli her grup için iş emri kendiliğinden açılır."
+        desc={AUTO_WORK_ORDER_DESC}
+        defaultOn={false}
+        checked={checked}
+        onChange={onChange}
+      />
+    </div>
+  );
+}
+
 type DraftItem = { id: string; label: string } | null;
 
 export function IncomingDocumentSettingsSection({ writePermissions = [SETTINGS_ADMIN_PERMISSION] }: { writePermissions?: string[] }) {
@@ -45,16 +63,21 @@ export function IncomingDocumentSettingsSection({ writePermissions = [SETTINGS_A
   const serverItem: DraftItem = server?.defaultItem ? { id: server.defaultItem.id, label: `${server.defaultItem.name} — ${server.defaultItem.code}` } : null;
   const [item, setItem] = useState<DraftItem>(serverItem);
   const [mode, setMode] = useState<UnreviewedApproval>(server?.unreviewedApproval ?? "WARN");
+  // Eski backend alanı göndermez → false (bugünkü davranış).
+  const serverAuto = server?.autoWorkOrder === true;
+  const [auto, setAuto] = useState(serverAuto);
   const [picking, setPicking] = useState(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setItem(serverItem); setMode(server?.unreviewedApproval ?? "WARN"); }, [server?.defaultItem?.id, server?.unreviewedApproval]);
+  useEffect(() => { setItem(serverItem); setMode(server?.unreviewedApproval ?? "WARN"); setAuto(serverAuto); }, [server?.defaultItem?.id, server?.unreviewedApproval, serverAuto]);
 
   const itemDirty = (item?.id ?? null) !== (server?.defaultItem?.id ?? null);
   const modeDirty = mode !== (server?.unreviewedApproval ?? "WARN");
-  useRegisterSettingsDirty(itemDirty || modeDirty);
+  const autoDirty = auto !== serverAuto;
+  const dirty = itemDirty || modeDirty || autoDirty;
+  useRegisterSettingsDirty(dirty);
 
   const mut = useMutation({
-    mutationFn: () => updateIncomingDocumentSettings({ ...(itemDirty ? { defaultItemId: item?.id ?? null } : {}), ...(modeDirty ? { unreviewedApproval: mode } : {}) }),
+    mutationFn: () => updateIncomingDocumentSettings({ ...(itemDirty ? { defaultItemId: item?.id ?? null } : {}), ...(modeDirty ? { unreviewedApproval: mode } : {}), ...(autoDirty ? { autoWorkOrder: auto } : {}) }),
     onSuccess: (saved) => {
       qc.setQueryData(INCOMING_DOCUMENT_SETTINGS_QUERY_KEY, saved);
       toast.success("Gelen belge ayarları kaydedildi.");
@@ -101,7 +124,9 @@ export function IncomingDocumentSettingsSection({ writePermissions = [SETTINGS_A
           <p className="mt-1 text-xs text-muted-foreground">Varsayılan: {UNREVIEWED_APPROVAL_OPTIONS.find((o) => o.value === server?.defaultUnreviewedApproval)?.label ?? "Uyar"}</p>
         </div>
 
-        <SettingsSaveBar dirty={itemDirty || modeDirty} saving={mut.isPending} onSave={() => mut.mutate()} onReset={() => { setItem(serverItem); setMode(server?.unreviewedApproval ?? "WARN"); }} />
+        <AutoWorkOrderToggle checked={auto} onChange={setAuto} />
+
+        <SettingsSaveBar dirty={dirty} saving={mut.isPending} onSave={() => mut.mutate()} onReset={() => { setItem(serverItem); setMode(server?.unreviewedApproval ?? "WARN"); setAuto(serverAuto); }} />
         <ItemPickerModal
           open={picking}
           onOpenChange={setPicking}

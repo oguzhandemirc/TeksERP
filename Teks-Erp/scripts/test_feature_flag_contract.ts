@@ -584,6 +584,11 @@ async function main() {
       file: "Electron/src/pages/GeneralSettings/GelenBelgeSettingsSection.tsx",
       needle: "UNREVIEWED_APPROVAL_OPTIONS",
     },
+    GELEN_BELGE_AUTO_WORK_ORDER: {
+      why: "Onay sonrası otomatik iş emri (boolean) — varsayılan ürünle aynı doğrulamalı uç ve aynı panel kartı; flag yüküne konmaz",
+      file: "Electron/src/pages/GeneralSettings/GelenBelgeSettingsSection.tsx",
+      needle: "gb-auto-work-order",
+    },
     SYSTEM_INSTALLATION_ID: {
       why: "Feature flag değil, kurulum kimliği — panel yüzeyi YOK (bilinçli); boot işi üretir, /api/discovery/identity okur",
       file: "Teks-Erp/src/jobs/installation-identity.job.ts",
