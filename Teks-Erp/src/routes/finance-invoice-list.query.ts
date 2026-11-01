@@ -29,7 +29,11 @@ export const invoiceListQuerySchema = z
     shipmentId: z
       .string()
       .max(400)
-      .refine((v) => readFilterList(v).every((id) => z.string().uuid().safeParse(id).success), uuidMessage)
+      // Boş liste (`?shipmentId=` / `,`) süzgeçsizliğe düşüp TÜM listeyi verirdi ⇒ red.
+      .refine((v) => {
+        const ids = readFilterList(v);
+        return ids.length > 0 && ids.every((id) => z.string().uuid().safeParse(id).success);
+      }, uuidMessage)
       .optional(),
     from: isoDate.optional().transform(toDate),
     to: isoDate.optional().transform(toDate),

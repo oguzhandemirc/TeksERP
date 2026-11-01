@@ -45,6 +45,7 @@ function schemaSection(): void {
   check("shipmentId tekil + virgüllü kabul", ok({ shipmentId: UUID }) && ok({ shipmentId: `${UUID},${UUID}` }));
   check("⭐ tanınmayan ad → red", !ok({ foo: "1" }) && !ok({ shipmentID: UUID }));
   check("bozuk UUID → red", !ok({ shipmentId: "abc" }) && !ok({ shipmentId: `${UUID},abc` }) && !ok({ cariId: "abc" }));
+  check("boş shipmentId → red", !ok({ shipmentId: "" }) && !ok({ shipmentId: "," }));
   check("bilinmeyen enum → red", !ok({ status: "APPROVED" }) && !ok({ type: "X" }));
   check("sayfa boyu > 200 ve sayı olmayan sayfa → red", !ok({ pageSize: "201" }) && !ok({ limit: "0" }) && !ok({ page: "abc" }));
 }
@@ -91,6 +92,9 @@ async function main(): Promise<void> {
     console.log("§2 HTTP");
     const unknown = await get(`foo=1&cariId=${cari.id}`);
     check("⭐ tanınmayan parametre → 400 (TÜM liste DÖNMEZ)", unknown.status === 400 && unknown.ids.length === 0, String(unknown.status));
+    const emptyId = await get("shipmentId=");
+    const commaId = await get("shipmentId=%2C");
+    check("⭐ boş shipmentId (`=` / `,`) → 400 (TÜM liste DÖNMEZ)", emptyId.status === 400 && emptyId.ids.length === 0 && commaId.status === 400 && commaId.ids.length === 0, `${emptyId.status}/${commaId.status}`);
     const badId = await get("shipmentId=abc");
     check("bozuk shipmentId → 400", badId.status === 400, String(badId.status));
     const one = await get(`shipmentId=${s1}`);
