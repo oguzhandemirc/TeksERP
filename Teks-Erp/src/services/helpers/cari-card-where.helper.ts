@@ -12,6 +12,7 @@ export type CardRef = { customerId: string | null; subcontractorId: string | nul
 
 export function cariAccountWhereForCard(card: CardRef): Prisma.CariAccountWhereInput {
   // Kart hesabı YA DA kartın fason profiline eski bacaktan bağlı hesap: ikisi de AYNI kimliğin hesabıdır.
-  if (card.customerId) return { OR: [{ customerId: card.customerId }, { subcontractor: { customerId: card.customerId } }] };
-  return { subcontractorId: card.subcontractorId as string };
+  // Virmanla birleşmiş hesap (K3d, `mergedIntoId` dolu) hiçbir çözücüye görünmez — yazım asıl hesaba gider.
+  if (card.customerId) return { mergedIntoId: null, OR: [{ customerId: card.customerId }, { subcontractor: { customerId: card.customerId } }] };
+  return { mergedIntoId: null, subcontractorId: card.subcontractorId as string };
 }

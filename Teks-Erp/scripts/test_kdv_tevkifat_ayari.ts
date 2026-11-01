@@ -65,7 +65,8 @@ const FLAG_FIELD_FILES = new Set(["services/system-setting.service.ts", "routes/
 const SETTING_READER_FILES = new Set(["services/system-setting.service.ts", RESOLVER]);
 const CARI_FIELDS = new Set(["withholdingEnabled", "withholdingNumerator", "withholdingDenominator"]);
 // Cari geçersiz kılmasını YAZAN (doğrulama) ve sözleşmeyi taşıyan (Zod) yüzeyler; okuyup karar veren yalnız RESOLVER.
-const CARI_FIELD_FILES = new Set([RESOLVER, "services/helpers/cari-tax-override.helper.ts", "routes/finance.routes.ts"]);
+// cari-merge.helper (D4-K3d): birleştirmede kaynak terimini boş hedefe KOPYALAR (çatışmada durur) — çözümlemez.
+const CARI_FIELD_FILES = new Set([RESOLVER, "services/helpers/cari-tax-override.helper.ts", "routes/finance.routes.ts", "services/helpers/cari-merge.helper.ts"]);
 const DRAFT_PATHS = ["services/helpers/shipment-auto-draft.helper.ts", "services/service-period-invoice.service.ts", "services/invoice.service.ts"];
 
 function walk(dir: string, out: string[] = []): string[] {

@@ -154,6 +154,9 @@ const OLAY_SABLONLARI: Record<string, Sablon> = {
   "devices:PROOF_RESET": olay("ilgi", "kanıtını sıfırladı (aynı donanımla yeniden bağlanacak)"),
   // Fatura kapama
   "PAYMENT_ALLOCATION:ALLOCATIONS_RELEASED": olay("belirtme", "çözdü"),
+  // Cari hesap birleştirme (D4-K3d)
+  "CARI_ACCOUNT:CARI_MERGE": olay("belirtme", "virmanla asıl hesaba birleştirdi"),
+  "CARI_ACCOUNT:CARI_MERGE_REVERT": olay("ilgi", "birleştirmesini geri aldı"),
   // Etiket basımı (kaydın numarası yok: yalnız eylem)
   "LABEL_PRINT_EVENT:LABEL_PRINTED": (_s, b) => [b.kisi, m(", etiket bastı")],
   "LABEL_PRINT_EVENT:CREATE": (_s, b) => [b.kisi, m(", etiket basımını kaydetti")],

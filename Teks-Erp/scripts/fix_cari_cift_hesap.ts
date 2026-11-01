@@ -16,7 +16,9 @@
 // claim `isActive: true`; kart hesabıysa deftere hiç yazmamış satır silinir ve ilk hesap karta çevrilir — `ciftUygula`). İkinci hesaptaki terimler (vade · para birimi · vergi dairesi · risk ·
 // hizmet tetiği) kalan hesapta BOŞSA taşınır — K2b okuyucusu kart hesabını gösteriyordu, kullanıcının gördüğü değer
 // kaybolmasın; iki hesapta FARKLI dolu terim varsa çifte DOKUNMAZ (kullanıcı kararı). Hareketli çiftte DURUR ve
-// listeler: birleştirme (defter taşıma + bakiye toplama) kullanıcı kararıdır, bu betik yapmaz → çıkış 3.
+// listeler → çıkış 3. K3d (2026-10-31): HAREKETLİ çift VİRMANLA birleşir (`helpers/cari-merge.helper`: eski bacak →
+// kart hesabı, geçmiş taşınmaz, açık kalemler vadeleriyle bugünün tarihli bacak çiftleriyle aktarılır); dry-run planı
+// listeler, `--apply` uygular; ENGELLİ çift (sonuçlanmamış çek · aktif kilit · terim çatışması · kapalı gün …) DURUR.
 // Pasif eski fason hesabı (rol modeli göçünün BİRLEŞME İZİ) çift sayılmaz. KART HESABI PASİF + eski bacak aktif ayrı
 // kategoridir (çözücü kartın kendi hesabını seçer → yazım 409): pasif kart hesabı hareketsizse silinir ve eski bacak
 // karta çevrilir, hareketliyse DURUR. İDEMPOTENT: ikinci koşum 0 yazar.
@@ -27,6 +29,8 @@ import prisma, { pool } from "../src/lib/prisma";
 import { AuditService } from "../src/services/audit.service";
 import { fixtureHedefEngeli, hedefDbAdi } from "./lib/hedef-db-kapisi";
 import { COCUKLAR } from "./lib/cari-cocuk-baglari";
+import { applyCariMerge, planCariMerge, type CariMergePlan } from "../src/services/helpers/cari-merge.helper";
+import { AppError } from "../src/utils/app-error";
 
 const APPLY = process.argv.includes("--apply");
 const CANLI_ONAY = process.argv.includes("--canli-onay");
@@ -53,6 +57,8 @@ export interface CiftSatiri {
   engel: string | null;
   /** Kart hesabı PASİF, eski bacak aktif (ikinci her zaman kart hesabı). */
   pasifKart: boolean;
+  /** K3d: hareketli çiftin virman planı (eski bacak → kart hesabı); engelliyse `engel` dolu. */
+  birlestirme: CariMergePlan | null;
 }
 
 /** Kapı: fixture dışı hedefe (`fixtureHedefEngeli` — `_test` / bilinen güvenli ad, CI `teks_ci`) yazmak `--canli-onay` ister; dry-run her hedefte serbest. */
@@ -127,9 +133,16 @@ export async function ciftOlc(): Promise<{ hedef: string; ciftler: CiftSatiri[];
     const o2 = await ozet(ikinci);
     const { tasi, catisma } = terimKarari(ilk, ikinci);
     let engel: string | null = null;
-    if (o2.hareket > 0 || Object.keys(o2.bakiye).length > 0) engel = `${pasifKart ? "PASİF kart hesabı" : "ikinci hesap"} HAREKETLİ (${o2.hareket} hareket, bakiye ${JSON.stringify(o2.bakiye)}) — birleştirme kullanıcı kararı`;
-    else if (catisma.length > 0) engel = `terim çatışması (${catisma.join(", ")}) — hangi değerin kalacağı kullanıcı kararı`;
-    ciftler.push({ customerId, kartKodu: kart.customer!.code, kartAdi: kart.customer!.name, ilk: await ozet(ilk), ikinci: o2, terimTasi: tasi, engel, pasifKart });
+    let birlestirme: CariMergePlan | null = null;
+    if (o2.hareket > 0 || Object.keys(o2.bakiye).length > 0) {
+      if (pasifKart) engel = `PASİF kart hesabı HAREKETLİ (${o2.hareket} hareket, bakiye ${JSON.stringify(o2.bakiye)}) — önce kart hesabını aktifleştirin`;
+      else {
+        // Virman yönü sabit: eski fason bacağı → kart hesabı (çözücü kart hesabını seçer; `customerId @unique` kartta kalır).
+        birlestirme = await planCariMerge(eski.id, kart.id);
+        if (birlestirme.blockers.length > 0) engel = `birleştirme ENGELLİ — ${birlestirme.blockers.join(" · ")}`;
+      }
+    } else if (catisma.length > 0) engel = `terim çatışması (${catisma.join(", ")}) — hangi değerin kalacağı kullanıcı kararı`;
+    ciftler.push({ customerId, kartKodu: kart.customer!.code, kartAdi: kart.customer!.name, ilk: await ozet(ilk), ikinci: o2, terimTasi: tasi, engel, pasifKart, birlestirme });
   }
   return { hedef: hedefDbAdi(), ciftler, birlesmeIzi };
 }
@@ -145,6 +158,18 @@ export async function ciftUygula(ciftler: CiftSatiri[]): Promise<number> {
   let kapatilan = 0;
   for (const c of ciftler) {
     if (c.engel) continue;
+    if (c.birlestirme) {
+      const r = await applyCariMerge(c.birlestirme.sourceId, c.birlestirme.targetId).catch((e: unknown) => {
+        // Ön izlemeden sonra değişen/engellenen çift DURUR (fail-closed); çağıran çıkış 3 basar.
+        if (e instanceof AppError && e.statusCode === 409) {
+          c.engel = `birleştirme DURDU — ${e.message}`;
+          return null;
+        }
+        throw e;
+      });
+      if (r && !r.alreadyMerged) kapatilan++;
+      continue;
+    }
     const kartHesabiIkinci = c.ikinci.kind === "CUSTOMER";
     const ok = await prisma.$transaction(async (tx) => {
       // Atomik claim: ikinci hesap hâlâ ölçülen durumda (aktif · pasif kart) VE hâlâ hareketsiz (arada fatura/ödeme yazıldıysa dokunma).
@@ -205,7 +230,12 @@ function bas(c: CiftSatiri): void {
   console.log(`      ilk    : ${h(c.ilk)}`);
   console.log(`      ikinci : ${h(c.ikinci)}`);
   if (Object.keys(c.terimTasi).length > 0) console.log(`      taşınacak terimler: ${Object.keys(c.terimTasi).join(", ")}`);
-  const karar = c.pasifKart ? "hareketsiz PASİF kart hesabı silinir, aktif eski fason hesabı kartın hesabına çevrilir" : c.ikinci.kind === "CUSTOMER" ? "hareketsiz ikinci kart hesabı silinir, ilk hesap kartın hesabına çevrilir" : "ikinci (eski fason) hesap pasife çekilir";
+  if (c.birlestirme) {
+    const p = c.birlestirme;
+    console.log(`      virman : ${p.sourceLabel} → ${p.targetLabel} · ${p.items.length} kalem · taslak fatura ${p.draftInvoices}`);
+    for (const it of p.items) console.log(`               ${it.currency} ${it.docNo} ${it.signedAmount} vade ${it.dueDate ?? "—"}`);
+  }
+  const karar = c.birlestirme ? "eski fason hesabı VİRMANLA kart hesabına birleşir (geçmiş yerinde kalır; kaynak pasif + mergedIntoId)" : c.pasifKart ? "hareketsiz PASİF kart hesabı silinir, aktif eski fason hesabı kartın hesabına çevrilir" : c.ikinci.kind === "CUSTOMER" ? "hareketsiz ikinci kart hesabı silinir, ilk hesap kartın hesabına çevrilir" : "ikinci (eski fason) hesap pasife çekilir";
   console.log(`      karar  : ${c.engel ? `⛔ DURUR — ${c.engel}` : karar}`);
 }
 
@@ -221,15 +251,17 @@ async function main(): Promise<void> {
   console.log(`Aynı karta iki hesap (iki aktif ya da kart hesabı PASİF + eski bacak aktif): ${o.ciftler.length}`);
   for (const c of o.ciftler) bas(c);
   console.log(`Birleşme izi (eski fason hesabı pasif, çift sayılmaz): ${o.birlesmeIzi}`);
-  const duran = o.ciftler.filter((c) => c.engel);
+  const duranOnce = o.ciftler.filter((c) => c.engel).length;
   if (!APPLY) {
     console.log("\n(dry-run — hiçbir şey yazılmadı; yazmak için --apply)");
     return;
   }
   const kapatilan = await ciftUygula(o.ciftler);
-  console.log(`\n✅ ${kapatilan} çift onarıldı (ikinci hesap kapatıldı).`);
+  console.log(`\n✅ ${kapatilan} çift onarıldı (ikinci hesap kapatıldı ya da virmanla birleşti).`);
+  const duran = o.ciftler.filter((c) => c.engel);
+  if (duran.length > duranOnce) for (const c of duran) if (c.engel?.startsWith("birleştirme DURDU")) console.log(`  ⛔ ${c.kartKodu}: ${c.engel}`);
   if (duran.length > 0) {
-    console.log(`⛔ ${duran.length} çift DURDU (hareketli ya da terim çatışması) — birleştirme kullanıcı kararı; yukarıdaki listeye bak.`);
+    console.log(`⛔ ${duran.length} çift DURDU (birleştirme engeli ya da terim çatışması) — yukarıdaki listeye bak.`);
     process.exitCode = 3;
   }
 }
