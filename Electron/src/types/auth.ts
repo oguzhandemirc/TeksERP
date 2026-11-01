@@ -72,6 +72,8 @@ export interface LoginRequest {
   totpCode?: string;
   /** Web kod adımı: "Bu cihazı N gün hatırla" — sunucu `trustDeviceDays > 0` dediyse gönderilir. */
   rememberDevice?: boolean;
+  /** Barındırılan sunucu (Bearer): önceki kodlu girişte saklanan güvenilir cihaz belirteci. Eski/LAN sunucu yok sayar. */
+  trustedDeviceToken?: string;
 }
 
 /** 409 SESSION_EXISTS yanıtındaki mevcut oturum bilgisi (backend `details`). */
@@ -101,6 +103,10 @@ export interface LoginResponse {
      * adımını açar. Eski backend göndermez (= false).
      */
     mustChangePassword?: boolean;
+    /** Barındırılan sunucu + "hatırla": güvenilir cihaz belirteci (yalnız güvenli depoya; log'a/ekrana girmez). */
+    trustedDeviceToken?: string;
+    deviceRemembered?: boolean;
+    newDevice?: boolean;
   };
   message: string;
 }

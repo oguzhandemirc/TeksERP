@@ -84,6 +84,7 @@ async function main(): Promise<void> {
     SETTING_KEYS.AUTH_LOGIN_METHODS, SETTING_KEYS.AUTH_SAME_TYPE_SESSION_POLICY,
     SETTING_KEYS.AUTH_SHORT_CREDENTIAL_APPROVED_DEVICE_ONLY, SETTING_KEYS.DEVICE_PROOF_REQUIRED,
     SETTING_KEYS.DEVICE_PAIRING_REQUIRED, SETTING_KEYS.DEVICE_UNPAIRED_PASSWORD_LOGIN,
+    SETTING_KEYS.AUTH_WEB_TOTP_POLICY,
   ];
   const once = new Map<string, unknown>();
   for (const k of AYARLAR) {
@@ -92,7 +93,7 @@ async function main(): Promise<void> {
   }
   const parola = `Onaysiz-${ts}-x`;
   const kisi = await prisma.user.create({
-    data: { username: `test-onaysiz-u-${ts}`, passwordHash: await AuthService.hashPassword(parola), fullName: "Onaysız Parola Bekçisi" },
+    data: { username: `test-onaysiz-u-${ts}`, passwordHash: await AuthService.hashPassword(parola), fullName: "Onaysız Parola Bekçisi", webTotpOptOut: true },
     select: { id: true, username: true },
   });
   const set = async (key: string, value: unknown): Promise<void> => {
@@ -115,6 +116,8 @@ async function main(): Promise<void> {
     await set(SETTING_KEYS.DEVICE_PROOF_REQUIRED, false);
     await set(SETTING_KEYS.DEVICE_PAIRING_REQUIRED, false);
     await set(SETTING_KEYS.DEVICE_UNPAIRED_PASSWORD_LOGIN, false);
+    // Ölçülen cihaz kapısı; onaysız cihazdan barındırılan girişin 2FA'sı test_barindirma_ikinci_faktor §2'de.
+    await set(SETTING_KEYS.AUTH_WEB_TOTP_POLICY, "USER_CHOICE");
     await kilitTemizle();
     const pin = await ShortCredentialService.assignQuickPin(kisi.id); // değer basılmaz
     await prisma.device.createMany({

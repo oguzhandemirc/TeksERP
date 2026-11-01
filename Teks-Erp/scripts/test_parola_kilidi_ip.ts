@@ -79,6 +79,7 @@ async function main(): Promise<void> {
   const AYARLAR = [
     SETTING_KEYS.AUTH_PIN_LOCKOUT_ATTEMPTS, SETTING_KEYS.AUTH_PIN_LOCKOUT_PENALTY_SEC,
     SETTING_KEYS.AUTH_PIN_LOCKOUT_ESCALATE_AFTER, SETTING_KEYS.AUTH_SAME_TYPE_SESSION_POLICY,
+    SETTING_KEYS.AUTH_WEB_TOTP_POLICY,
   ];
   const once = new Map<string, unknown>();
   for (const k of AYARLAR) {
@@ -87,7 +88,7 @@ async function main(): Promise<void> {
   }
   const parola = `Kilit-${ts}-x`;
   const kurban = await prisma.user.create({
-    data: { username: `test-kilit-ip-${ts}`, passwordHash: await AuthService.hashPassword(parola), fullName: "Parola Kilidi Bekçisi" },
+    data: { username: `test-kilit-ip-${ts}`, passwordHash: await AuthService.hashPassword(parola), fullName: "Parola Kilidi Bekçisi", webTotpOptOut: true },
     select: { id: true, username: true },
   });
   const set = async (key: string, value: unknown): Promise<void> => {
@@ -107,6 +108,8 @@ async function main(): Promise<void> {
     await set(SETTING_KEYS.AUTH_PIN_LOCKOUT_PENALTY_SEC, CEZA_SN);
     await set(SETTING_KEYS.AUTH_PIN_LOCKOUT_ESCALATE_AFTER, 20);
     await set(SETTING_KEYS.AUTH_SAME_TYPE_SESSION_POLICY, "off");
+    // Ölçülen kilit; barındırılan kanal-bağımsız 2FA (Y1) USER_CHOICE + tercihle devre dışı.
+    await set(SETTING_KEYS.AUTH_WEB_TOTP_POLICY, "USER_CHOICE");
 
     for (const kapsam of ["ip+identity", "ip"] as const) {
       process.env.LOGIN_LOCKOUT_SCOPE = kapsam;
