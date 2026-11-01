@@ -9,8 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { authService } from "@/services/authService";
-import { apiErrorText } from "@/lib/api-error";
+import { authService, type WebTotpOwnState } from "@/services/authService";
 
 const QUERY_KEY = ["auth-web-totp"];
 
@@ -18,25 +17,18 @@ export function WebTotpPreferenceCard() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: QUERY_KEY, queryFn: authService.getWebTotp, retry: false });
   const [closing, setClosing] = useState(false);
-  const [password, setPassword] = useState("");
-  const [code, setCode] = useState("");
-
   const mut = useMutation({
     mutationFn: authService.setWebTotp,
     onSuccess: (res) => {
       qc.setQueryData(QUERY_KEY, res);
       setClosing(false);
-      setPassword("");
-      setCode("");
       toast.success(res.data.optOut ? "Doğrulama kodu internetten girişte artık istenmeyecek." : "Doğrulama kodu yeniden açıldı.");
     },
-    onError: (e) => toast.error(apiErrorText(e, "Tercih kaydedilemedi.")),
   });
 
   const s = q.data?.data;
   if (!s || !s.canChange) return null;
   if (s.policy === "REQUIRED" && !s.optOut) return null;
-
   const asking = !s.optOut;
   return (
     <Card data-testid="web-totp-tercih-karti">
@@ -50,69 +42,83 @@ export function WebTotpPreferenceCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        {s.policy === "REQUIRED" && (
-          <p className="text-xs text-muted-foreground">
-            Bu kurulumda doğrulama kodu herkese zorunlu — kayıtlı tercihiniz şu an etkisiz.
-          </p>
-        )}
-        {s.effective && (
-          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive" role="alert">
-            Hesabınız internetten yalnız parolayla açılabilir.
-          </p>
-        )}
+        <StateNotes s={s} />
         <label className="flex items-center justify-between gap-3 text-sm">
           <span>İnternetten girişte doğrulama kodu iste</span>
           <Switch
             checked={asking && !closing}
             disabled={mut.isPending || (asking && s.policy !== "USER_CHOICE")}
             onCheckedChange={(on) => {
-              if (on) {
-                if (closing) setClosing(false);
-                else mut.mutate({ optOut: false });
-              } else {
-                setClosing(true);
-              }
+              if (!on) setClosing(true);
+              else if (closing) setClosing(false);
+              else mut.mutate({ optOut: false });
             }}
           />
         </label>
         {closing && (
-          <form
-            className="space-y-2 rounded-md border p-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              mut.mutate({ optOut: true, currentPassword: password, ...(s.totpEnabled ? { totpCode: code } : {}) });
-            }}
-          >
-            <p className="text-xs text-muted-foreground">
-              Kapatmak için kimliğinizi doğrulayın. Önerilmez: parolanızı ele geçiren biri internetten girebilir.
-            </p>
-            <Input
-              type="password"
-              autoComplete="current-password"
-              placeholder="Mevcut parola"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            {s.totpEnabled && (
-              <Input
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                placeholder="Doğrulama kodu"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-              />
-            )}
-            <div className="flex gap-2">
-              <Button type="submit" size="sm" variant="destructive" disabled={mut.isPending || !password || (s.totpEnabled && !code)}>
-                Kodu kapat
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => setClosing(false)}>
-                Vazgeç
-              </Button>
-            </div>
-          </form>
+          <CloseForm
+            totpEnabled={s.totpEnabled}
+            pending={mut.isPending}
+            onCancel={() => setClosing(false)}
+            onSubmit={(currentPassword, totpCode) =>
+              mut.mutate({ optOut: true, currentPassword, ...(s.totpEnabled ? { totpCode } : {}) })
+            }
+          />
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function StateNotes({ s }: { s: WebTotpOwnState }) {
+  return (
+    <>
+      {s.policy === "REQUIRED" && (
+        <p className="text-xs text-muted-foreground">
+          Bu kurulumda doğrulama kodu herkese zorunlu — kayıtlı tercihiniz şu an etkisiz.
+        </p>
+      )}
+      {s.effective && (
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive" role="alert">
+          Hesabınız internetten yalnız parolayla açılabilir.
+        </p>
+      )}
+    </>
+  );
+}
+
+/** Kapatma yeniden doğrulama ister: mevcut parola + (2FA kuruluysa) güncel kod. */
+function CloseForm(props: {
+  totpEnabled: boolean;
+  pending: boolean;
+  onCancel: () => void;
+  onSubmit: (password: string, code: string) => void;
+}) {
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  return (
+    <form
+      className="space-y-2 rounded-md border p-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        props.onSubmit(password, code);
+      }}
+    >
+      <p className="text-xs text-muted-foreground">
+        Kapatmak için kimliğinizi doğrulayın. Önerilmez: parolanızı ele geçiren biri internetten girebilir.
+      </p>
+      <Input type="password" autoComplete="current-password" placeholder="Mevcut parola" value={password} onChange={(e) => setPassword(e.target.value)} />
+      {props.totpEnabled && (
+        <Input inputMode="numeric" autoComplete="one-time-code" placeholder="Doğrulama kodu" value={code} onChange={(e) => setCode(e.target.value)} />
+      )}
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" variant="destructive" disabled={props.pending || !password || (props.totpEnabled && !code)}>
+          Kodu kapat
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={props.onCancel}>
+          Vazgeç
+        </Button>
+      </div>
+    </form>
   );
 }

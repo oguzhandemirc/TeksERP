@@ -106,10 +106,10 @@ export const authService = {
       .get<ApiResponse<WebTotpOwnState>>("/api/auth/web-totp", { suppressErrorToast: true })
       .then((r) => r.data),
 
-  /** Kapatmak parola + (kuruluysa) kod ister; açmak serbest. Hata UX'ini çağıran yönetir. */
+  /** Kapatmak parola + (kuruluysa) kod ister; açmak serbest. Hata toast'ı apiClient'tan (4xx backend mesajı). */
   setWebTotp: (body: { optOut: boolean; currentPassword?: string; totpCode?: string }): Promise<ApiResponse<WebTotpOwnState>> =>
     apiClient
-      .put<ApiResponse<WebTotpOwnState>>("/api/auth/web-totp", body, { suppressErrorToast: true })
+      .put<ApiResponse<WebTotpOwnState>>("/api/auth/web-totp", body)
       .then((r) => r.data),
 
   changePassword: (
