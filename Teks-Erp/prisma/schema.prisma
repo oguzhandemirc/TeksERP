@@ -6165,6 +6165,8 @@ model RollMeterReading {
   meters          Decimal           @db.Decimal(12, 3)
   /// Cihazın ham sayaç değeri (CUMULATIVE farkı ve denetim için) — metre değil.
   rawCounter      Decimal?          @db.Decimal(14, 3)
+  /// Brode ADET/VURUŞ fiyat biriminde operatörün saydığı adet (CHECK > 0); metre fiyatlamada NULL.
+  pieceCount      Int?
   /// `@default` YOK: kaynak her yazımda açıkça beyan edilir (SIMULATED ayar kapalıyken 400).
   source          MachineDataSource
   machineId       String?           @db.Uuid
@@ -9289,6 +9291,8 @@ model FabricPropertyValue {
   /// Gramaj kademesi → hizmet kalemi (H6, "KURŞUN-K2"); yoksa özelliğin eşlemesi.
   serviceItemId           String?                  @db.Uuid
   serviceItem             Item?                    @relation("FabricPropertyValueServiceItem", fields: [serviceItemId], references: [id], onDelete: Restrict)
+  /// Brode deseni: bir adetteki vuruş (dikiş) sayısı — VURUŞ fiyat biriminde miktar = adet × bu (CHECK > 0).
+  stitchCount             Int?
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -12214,12 +12218,14 @@ enum PriceKind {
 /// hangisini seçtiğini kimse söyleyemezdi. Şemada `@@unique` olarak durmak
 /// ZORUNDA: Prisma 7 predicate farkını drift saymaz, index↔unique farkını SAYAR.
 model ItemPrice {
-  id         String    @id @default(uuid()) @db.Uuid
-  itemId     String    @db.Uuid
-  customerId String?   @db.Uuid
+  id         String          @id @default(uuid()) @db.Uuid
+  itemId     String          @db.Uuid
+  customerId String?         @db.Uuid
   kind       PriceKind
   currency   Currency
-  price      Decimal   @db.Decimal(14, 4)
+  price      Decimal         @db.Decimal(14, 4)
+  /// Hizmet fiyatının birimi (brode: metre/adet/vuruş). NULL = METER (bugünkü satırlar).
+  priceUnit  ServiceQtyUnit?
 
   item     Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
@@ -14496,6 +14502,13 @@ enum ServiceMeterBasis {
   RECEIVED
 }
 
+/// Hizmet fiyat/miktar birimi (brode fiyat birimi ayarı `finance.serviceBilling.brodeUnit`).
+enum ServiceQtyUnit {
+  METER
+  PIECE
+  STITCH
+}
+
 /// H7 — hizmet işi (top × adım × hizmet kalemi) ↔ fatura bağı. PIVOT_TICARI ③a: DRAFT silinince
 /// Cascade (taslak sınıfı), DRAFT/CONFIRMED iptalinde AYNI tx'te damga; iş yeniden faturalanabilir.
 /// `rollId` işin UYGULANDIĞI toptur (sevk edilen çocuk değil). Tek yazar `service-billing.helper.ts`.
@@ -14508,6 +14521,9 @@ model ServiceBillingLink {
   readingId       String?           @db.Uuid
   billedMeters    Decimal           @db.Decimal(12, 3)
   meterBasis      ServiceMeterBasis
+  /// METRE dışı birimde faturalanan miktar (adet ya da vuruş) ve birimi; NULL = metre (`billedMeters`).
+  billedQty       Decimal?          @db.Decimal(16, 3)
+  billedUnit      ServiceQtyUnit?
   /// Bağ anındaki birim fiyat (fiyat donar; geç düzeltme faturayı değiştirmez).
   unitPrice       Decimal           @db.Decimal(14, 4)
   currency        Currency

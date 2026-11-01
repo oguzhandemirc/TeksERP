@@ -54,6 +54,8 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
     dilim: "H7",
   },
   { anahtar: "finance.serviceBilling.trigger", alan: "financeServiceBillingTrigger", hedef: "PER_SHIPMENT", dilim: "H7" },
+  // DALGA4 S7: Gülkesim brodeyi bugün metreyle fiyatlar (açık beyan; adet/vuruş panelden seçilir).
+  { anahtar: "finance.serviceBilling.brodeUnit", alan: "financeServiceBillingBrodeUnit", hedef: "METER", dilim: "EKS-E2" },
   { anahtar: "finance.serviceBilling.priceDate", alan: "financeServiceBillingPriceDate", hedef: "SERVICE_DAY", dilim: "H7" },
   { anahtar: "finance.masraf.kategoriOnerisi", alan: "financeExpenseCategorySuggestions", hedef: "ON", dilim: "D4-H1" },
   // DALGA4 §12.1: Gülkesim masrafı makineye/işe bağlar (isteğe bağlı); kapanmış iş emrine bağ serbest (varsayılanla aynı).

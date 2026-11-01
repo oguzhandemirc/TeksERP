@@ -291,6 +291,8 @@ export interface FeatureFlags {
   financeServiceBillingEnabled: boolean;
   financeServiceBillingMeterBasis: "OUT" | "IN" | "DECLARED";
   financeServiceBillingMissingMeter: "DECLARED_WITH_WARNING" | "BLOCK_LINE";
+  /** Brode fiyat birimi (backend aynası; default METER). */
+  financeServiceBillingBrodeUnit: "METER" | "PIECE" | "STITCH";
   financeServiceBillingTrigger: "PER_SHIPMENT" | "PERIOD_END";
   financeServiceBillingPriceDate: "SERVICE_DAY" | "DISPATCH_DAY";
   /** D4-H1: kasa masraf formunda kategori önerisi (varsayılan ON). */

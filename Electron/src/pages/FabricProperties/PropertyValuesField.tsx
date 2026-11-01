@@ -10,6 +10,7 @@ export interface PropertyValueRow {
   name: string;
   isActive: boolean;
   serviceItemId?: string | null;
+  stitchCount?: number | null;
 }
 
 /** Hizmet kalemi eşlemesi (H6b) — verilmezse satırlar bugünkü gibi çizilir. */
@@ -27,6 +28,8 @@ interface Props {
   /** Düzenlenen kayıtta zaten VAR OLAN kodlar — silinemez, yalnız pasifleşir. */
   existingCodes: string[];
   service?: ValueServiceContext;
+  /** Desen başına vuruş sayısı kutusu (bayrak çeşidi — brode deseni). */
+  showStitch?: boolean;
 }
 
 /**
@@ -39,7 +42,7 @@ interface Props {
  * kullanıcının niyetiyle sonucu HİZALAR: sil tuşu görünmez, "Pasif" görünür.
  * Henüz kaydedilmemiş (yeni eklenen) satır serbestçe silinebilir.
  */
-export function PropertyValuesField({ value, onChange, existingCodes, service }: Props) {
+export function PropertyValuesField({ value, onChange, existingCodes, service, showStitch }: Props) {
   const saved = new Set(existingCodes.map((c) => c.toUpperCase()));
 
   const patch = (i: number, next: Partial<PropertyValueRow>) =>
@@ -47,12 +50,7 @@ export function PropertyValuesField({ value, onChange, existingCodes, service }:
 
   return (
     <div className="space-y-2">
-      {value.length === 0 && (
-        <p className="rounded border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
-          Henüz değer yok. Kat için örnek: <span className="font-mono">2-KAT</span>,{" "}
-          <span className="font-mono">4-KAT</span>, <span className="font-mono">TUP</span>
-        </p>
-      )}
+      {value.length === 0 && <EmptyValuesHint />}
 
       {value.map((row, i) => {
         const isSaved = saved.has(row.code.trim().toUpperCase());
@@ -80,6 +78,7 @@ export function PropertyValuesField({ value, onChange, existingCodes, service }:
                 value={row.name}
                 onChange={(e) => patch(i, { name: e.target.value })}
               />
+              {showStitch && <StitchCountInput row={row} onChange={(stitchCount) => patch(i, { stitchCount })} />}
               <label className="flex shrink-0 items-center gap-1 text-xs sm:w-20">
                 <input
                   type="checkbox"
@@ -116,7 +115,7 @@ export function PropertyValuesField({ value, onChange, existingCodes, service }:
         type="button"
         variant="outline"
         size="sm"
-        onClick={() => onChange([...value, { code: "", name: "", isActive: true, serviceItemId: null }])}
+        onClick={() => onChange([...value, { code: "", name: "", isActive: true, serviceItemId: null, stitchCount: null }])}
       >
         <Plus className="mr-1 h-4 w-4" /> Değer Ekle
       </Button>
@@ -149,5 +148,32 @@ function ValueServiceRow({
         {serviceHintText(hint, service.items)}
       </p>
     </div>
+  );
+}
+
+function EmptyValuesHint() {
+  return (
+    <p className="rounded border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
+      Henüz değer yok. Kat için örnek: <span className="font-mono">2-KAT</span>,{" "}
+      <span className="font-mono">4-KAT</span>, <span className="font-mono">TUP</span>
+    </p>
+  );
+}
+
+/** Desen başına vuruş sayısı (brode vuruşla fiyatlanırken kullanılır). */
+function StitchCountInput({ row, onChange }: { row: PropertyValueRow; onChange: (stitchCount: number | null) => void }) {
+  return (
+    <Input
+      className="w-24 shrink-0"
+      type="number"
+      min={1}
+      step={1}
+      inputMode="numeric"
+      placeholder="Vuruş"
+      aria-label={`${row.code || "Yeni değer"} vuruş sayısı`}
+      title="Bir adetteki vuruş (dikiş) sayısı — brode vuruşla fiyatlanırken kullanılır"
+      value={row.stitchCount ?? ""}
+      onChange={(e) => onChange(e.target.value === "" ? null : Math.trunc(Number(e.target.value)))}
+    />
   );
 }
