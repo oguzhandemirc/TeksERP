@@ -28,19 +28,26 @@ export interface ScanPage {
 
 /**
  * Kameranın sunduğu boylardan uzun kenarı 2600'e en yakın OLAN-ÜSTÜ boy; yoksa en büyüğü.
+ * Yalnız 4:3 boylar aday (yoksa hepsi): expo-camera/CameraX çözünürlük seçicisi varsayılan 4:3 oran
+ * süzgeciyle "en yakın alt" boyu iki kenardan kıyaslar — 16:9 bir sınır (2688x1512) 4:3'te 1600x1200'e düşer.
  * Tanınmayan biçim ("High" vb.) elenir; hiç uygun yoksa `undefined` (kamera varsayılanı).
  */
 export function pickPictureSize(sizes: readonly string[], target = TARGET_LONG_EDGE_PX): string | undefined {
   const parsed = sizes
     .map((s) => {
       const m = /^(\d+)x(\d+)$/.exec(s.trim());
-      return m ? { s, long: Math.max(Number(m[1]), Number(m[2])) } : null;
+      if (!m) return null;
+      const long = Math.max(Number(m[1]), Number(m[2]));
+      const short = Math.min(Number(m[1]), Number(m[2]));
+      return short > 0 ? { s, long, fourThree: Math.abs(long / short - 4 / 3) < 0.02 } : null;
     })
-    .filter((x): x is { s: string; long: number } => x !== null);
+    .filter((x): x is { s: string; long: number; fourThree: boolean } => x !== null);
   if (!parsed.length) return undefined;
-  const above = parsed.filter((p) => p.long >= target).sort((a, b) => a.long - b.long);
+  const ratioOk = parsed.filter((p) => p.fourThree);
+  const pool = ratioOk.length ? ratioOk : parsed;
+  const above = pool.filter((p) => p.long >= target).sort((a, b) => a.long - b.long);
   if (above.length) return above[0]!.s;
-  return parsed.sort((a, b) => b.long - a.long)[0]!.s;
+  return pool.sort((a, b) => b.long - a.long)[0]!.s;
 }
 
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';

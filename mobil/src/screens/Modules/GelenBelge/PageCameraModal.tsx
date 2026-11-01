@@ -1,7 +1,7 @@
 // =============================================================================
 // Belge Tara — sayfa çekim kamerası (expo-camera `takePictureAsync`, yeni paket yok)
 // =============================================================================
-// Boy: kameranın sunduğu listeden uzun kenarı ≈2600 px (`pickPictureSize`), JPEG kalite 0,8, base64.
+// Boy: kameranın sunduğu 4:3 boylardan uzun kenarı ≈2600 px (`pickPictureSize`), JPEG kalite 0,8, base64.
 // Özet (sha256) çekimden hemen sonra hesaplanır; ekran aynı fotoğrafı ikinci kez listeye almaz.
 // `initialFacing` zorlanmaz (mobil/CLAUDE.md § Kamera) — arka kamera expo varsayılanıdır.
 // =============================================================================

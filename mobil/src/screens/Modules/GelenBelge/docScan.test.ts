@@ -72,6 +72,13 @@ describe('Belge Tara — çekim ayarı', () => {
     expect(pickPictureSize(['2600x1950', '4000x3000'])).toBe('2600x1950');
     expect(pickPictureSize(['Photo'])).toBeUndefined();
   });
+  it('⭐ 16:9 boy seçilmez — Galaxy Tab A9+ (SM-X210) arka kamera JPEG listesinde 4:3 seçilir', () => {
+    // dumpsys media.camera JPEG listesi (kısaltılmış): eski kural 2688x1512 seçiyordu, CameraX 4:3'te 1600x1200'e düşürdü.
+    const tabA9 = ['3264x2448', '3264x2032', '3264x1824', '3200x2400', '2688x1512', '2592x1944', '2592x1940', '2560x1920', '2048x1536', '1920x1080', '1600x1200'];
+    expect(pickPictureSize(tabA9)).toBe('3200x2400');
+    expect(pickPictureSize(['2688x1512', '1920x1080', '1600x1200', '1440x1080'])).toBe('1600x1200');
+    expect(pickPictureSize(['2688x1512', '1920x1080'])).toBe('2688x1512'); // 4:3 yoksa eski kural
+  });
 });
 
 describe('Belge Tara — sha256 istemcide', () => {
