@@ -58,6 +58,7 @@ function differenceText(inv: NonNullable<FinishingCheckLine["invoice"]>, currenc
   if (inv.currencyMismatch) return "Farklı döviz — kur çevrilmez, fark hesaplanmadı";
   if (inv.partial) return "Fatura sevkin yalnız bir kısmını kapsıyor — fark hesaplanmadı";
   if (inv.coversOtherDispatches) return "Fatura başka sevkleri de kapsıyor — fark hesaplanmadı";
+  // Eski sunucu (currencyMismatch alanı yok) uyumu için kalır.
   return "Para birimi farklı — fark hesaplanmadı";
 }
 
