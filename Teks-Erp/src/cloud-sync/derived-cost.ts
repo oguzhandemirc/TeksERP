@@ -41,8 +41,14 @@ async function standardCostDerived(rows: readonly RawRow[]): Promise<DerivedValu
   const byVersion = new Map<string, Array<{ component: CostComponent; amountPerMTry: Prisma.Decimal }>>();
   for (const l of lines) byVersion.set(l.versionId, [...(byVersion.get(l.versionId) ?? []), l]);
   const items = await names("item", rows.map((r) => r.itemId));
+  const recipeIds = [...new Set(rows.map((r) => r.recipeId).filter((k): k is string => typeof k === "string"))];
+  const recipes = recipeIds.length === 0 ? [] : await prisma.productRecipe.findMany({ where: { id: { in: recipeIds } }, select: { id: true, name: true, variantCode: true } });
+  const recipeOf = new Map(recipes.map((x) => [x.id, x]));
   const out: DerivedValues = new Map();
-  for (const r of rows) out.set(r.id, { ...sumCostGroups(byVersion.get(r.id) ?? []), urunAdi: items.get(r.itemId as string) ?? null });
+  for (const r of rows) {
+    const recipe = typeof r.recipeId === "string" ? recipeOf.get(r.recipeId) : undefined;
+    out.set(r.id, { ...sumCostGroups(byVersion.get(r.id) ?? []), urunAdi: items.get(r.itemId as string) ?? null, varyantAdi: recipe?.name ?? null, varyantKodu: recipe?.variantCode ?? null });
+  }
   return out;
 }
 
@@ -51,5 +57,5 @@ export const COST_DERIVERS = { teklif: quoteDerived, "standart-maliyet": standar
 /** Türeticinin ham satırdan okuduğu (tel'e girmeyen) kolonlar. */
 export const COST_DERIVER_ROW_FIELDS: Readonly<Record<string, readonly string[]>> = {
   teklif: ["status", "validUntilDate", "customerId", "totalAmount", "fxRate", "totalCostTry"],
-  "standart-maliyet": ["itemId"],
+  "standart-maliyet": ["itemId", "recipeId"],
 };

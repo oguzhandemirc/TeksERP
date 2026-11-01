@@ -27,8 +27,10 @@ export function standardCostRowText(r: ProjectionRecord) {
   const k = asObj(r.kayit);
   const f = r.finans ? asObj(r.finans) : null;
   const groups = f ? COST_GROUPS.filter((g) => f[g.key] != null).map((g) => `${g.label} ${formatMoney(f[g.key], "TRY")}`) : [];
+  // SY-N3: varyant sürümü desen geneli sürümden ayrışsın; alan yoksa (desen geneli / eski fabrika) başlık aynen.
+  const variant = str(k.varyantKodu) ?? str(k.varyantAdi);
   return {
-    title: str(k.urunAdi) ?? "—",
+    title: `${str(k.urunAdi) ?? "—"}${variant ? ` · ${variant}` : ""}`,
     line: `Sürüm ${typeof k.surum === "number" ? k.surum : "—"} · ${recordStatus(STANDARD_COST_STATUS, k.durum).label} · ${formatDate(k.hesapTarihi)}`,
     groups: groups.join(" · "),
     value: f && f.metreMaliyetiTl != null ? `${formatMoney(f.metreMaliyetiTl, "TRY")}/m` : undefined,

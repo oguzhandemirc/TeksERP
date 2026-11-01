@@ -9,12 +9,14 @@
 //   §5 ⭐ sunum: kur yok → "eksik" (0 değil); kur var → TL/m ÷ kur; TRY'de çevirme yok
 //   §6 ⭐ K7 tek kaynak: "saat × ücret" yalnız `machineHourCostTry`de; dokuma helper'ı ücreti kendisi çarpmaz
 //   §7 rapor ucu kapıları (maliyet ∧ dokuma, rapor kapısı, `cost:read`) + katalog satırı
+//   §8 ⭐ SY-N3 varyant: varyantlı işte varyantın ACTIVE sürümü önce; sürümü olmayan varyant ve varyantsız iş desen geneli
 // NEGATİF SONDALAR (2026-10-31, hepsi kırmızı verdi, geri alındı):
 //   ① `liveRollMetersByWeavingOrder`dan `status: { notIn: K18_DEAD_STATUSES }` kaldırıldı → §1a/§1c ❌
 //   ② dokuma helper'ında `machineHourCostTry(h, rate)` yerine `h.mul(rate.hourRateTry)` → §6a ❌
 //   ③ `money()` kur yokken 0 döndü → §5a ❌
 //   ④ (inceleme düzeltmesi) payda süzgeci yeniden `notIn: K18_DEAD_STATUSES` yapıldı → §1e ❌
 //   ⑤ (inceleme düzeltmesi) ana sayıdan `!w.ongoing` süzgeci kaldırıldı → §5e ❌
+//   ⑥ (SY-N3, 2026-11-01) `versionOf` varyant haritasını atlayıp yalnız desen genelini okudu → §8a ❌
 // ⚠️ DB'ye yazar → `hedefDbEngeli()` ilk adım; fikstür `finally`de silinir.
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -41,7 +43,7 @@ const TAG = `TEST-SYD3-${Date.now().toString(36).toUpperCase()}`;
 const H = 3_600_000;
 const D = (v: string | number) => new Prisma.Decimal(v);
 const code = (s: string) => `${TAG}-${s}`.slice(0, 32);
-const ids = { station: "", machines: [] as string[], orders: [] as string[], rolls: [] as string[], version: "" };
+const ids = { station: "", machines: [] as string[], orders: [] as string[], rolls: [] as string[], version: "", variantVersion: "", recipes: [] as string[] };
 let mf: MaliyetFikstur | null = null;
 
 async function fixture(now: Date) {
@@ -181,6 +183,38 @@ function structuralSection(): void {
   check("§7b katalog satırı v2, hazır, izin `cost:read`, modül maliyet", !!e && e.nesil === "v2" && e.izin === "cost:read" && e.modul === "maliyetEnabled");
 }
 
+async function variantSection(now: Date): Promise<void> {
+  console.log("\n§8 — varyant standart sürümü (SY-N3)");
+  const fabric = mf!.fabricId;
+  const recipe = async (n: string) => {
+    const r = await prisma.productRecipe.create({ data: { code: code(`RC${n}`), name: `${TAG} varyant ${n}`, itemId: fabric, variantCode: n }, select: { id: true } });
+    ids.recipes.push(r.id);
+    return r.id;
+  };
+  const [v1, v2] = [await recipe("V1"), await recipe("V2")];
+  const vv = await prisma.standardCostVersion.create({
+    data: {
+      itemId: fabric, recipeId: v1, versionNo: 2, parameterSetId: mf!.paramId, rawCostPerMTry: D("20"), totalCostPerMTry: D("20"),
+      warpKgPerM: D("0.1"), weftKgPerM: D("0.1"), loomMPerHour: D("20"), fxRates: {}, inputSnapshot: {}, inputHash: "e".repeat(64), warnings: [],
+      lines: { create: [["WARP_YARN", "12"], ["LOOM_MACHINE", "5"], ["LOOM_LABOR", "2"], ["ENERGY", "1"]].map(([component, amount], i) => ({ lineNo: i + 1, component: component as "WARP_YARN", label: component, amountPerMTry: D(amount) })) },
+    },
+    select: { id: true },
+  });
+  ids.variantVersion = vv.id;
+  const wo = async (n: string, recipeId: string) => {
+    const r = await prisma.weavingOrder.create({ data: { weavingOrderNumber: code(n), itemId: fabric, recipeId, executionKind: "IN_HOUSE", status: "COMPLETED" }, select: { id: true } });
+    ids.orders.push(r.id);
+    return r.id;
+  };
+  const [w1, w2] = [await wo("V1", v1), await wo("V2", v2)];
+  const plain = ids.orders[0]!;
+  const rows = await weavingActualCostTx(prisma, [w1, w2, plain], "OTURUM", now);
+  const [a, b, c] = [rows.find((x) => x.weavingOrderId === w1), rows.find((x) => x.weavingOrderId === w2), rows.find((x) => x.weavingOrderId === plain)];
+  check("§8a ⭐ varyantlı iş varyantın sürümünü okur: 5 + 2 + 1 = 8, teorik 20 m/sa", !!a && eq(a.standardPerMTry, "8") && eq(a.theoreticalMPerHour, "20"), `${s(a?.standardPerMTry ?? null)} · ${s(a?.theoreticalMPerHour ?? null)}`);
+  check("§8b sürümü olmayan varyant desen geneline düşer (6, STANDART_YOK yok)", !!b && eq(b.standardPerMTry, "6") && !b.missing.includes("STANDART_YOK"), s(b?.standardPerMTry ?? null));
+  check("§8c varyantsız iş bugünkü gibi desen geneli (6)", !!c && eq(c.standardPerMTry, "6"), s(c?.standardPerMTry ?? null));
+}
+
 async function cleanup(): Promise<void> {
   try {
     await prisma.roll.deleteMany({ where: { id: { in: ids.rolls } } });
@@ -190,10 +224,11 @@ async function cleanup(): Promise<void> {
     await prisma.weavingOrder.deleteMany({ where: { id: { in: ids.orders } } });
     await prisma.machine.deleteMany({ where: { id: { in: ids.machines } } });
     if (ids.station) await prisma.station.deleteMany({ where: { id: ids.station } });
-    if (ids.version) {
-      await prisma.standardCostLine.deleteMany({ where: { versionId: ids.version } });
-      await prisma.standardCostVersion.delete({ where: { id: ids.version } });
+    for (const versionId of [ids.version, ids.variantVersion].filter(Boolean)) {
+      await prisma.standardCostLine.deleteMany({ where: { versionId } });
+      await prisma.standardCostVersion.delete({ where: { id: versionId } });
     }
+    await prisma.productRecipe.deleteMany({ where: { id: { in: ids.recipes } } });
     if (mf) await fiksturSil(mf);
   } catch (err) {
     fail++;
@@ -210,6 +245,7 @@ async function main(): Promise<void> {
   const r = await serviceSections(f, now);
   presentationSection(r);
   structuralSection();
+  await variantSection(now);
 }
 
 main()

@@ -119,7 +119,7 @@ export async function weavingActualCostTx(
   const orders = await db.weavingOrder.findMany({
     where: { id: { in: weavingOrderIds } },
     select: {
-      id: true, weavingOrderNumber: true, itemId: true, status: true, executionKind: true,
+      id: true, weavingOrderNumber: true, itemId: true, recipeId: true, status: true, executionKind: true,
       item: { select: { code: true, name: true } },
       machineRuns: {
         where: { revokedAt: null },
@@ -132,11 +132,20 @@ export async function weavingActualCostTx(
   const machineIds = [...new Set(orders.flatMap((o) => o.machineRuns.map((r) => r.machineId)))].sort();
   const rates = await machineCostRateHistory(db, machineIds);
   const itemIds = [...new Set(orders.map((o) => o.itemId))];
+  // SY-N3: varyantlı işte varyantın ACTIVE sürümü önce; yoksa desen geneli (recipeId null) sürüm — varyantsızda bugünkü sorgu.
+  const recipeIds = [...new Set(orders.flatMap((o) => (o.recipeId ? [o.recipeId] : [])))];
   const versions = await db.standardCostVersion.findMany({
     where: { itemId: { in: itemIds }, recipeId: null, status: "ACTIVE" },
     select: { itemId: true, loomMPerHour: true, lines: { where: { component: { in: [...WEAVING_STANDARD_COMPONENTS] } }, select: { component: true, amountPerMTry: true } } },
   });
-  const versionOf = new Map(versions.map((v) => [v.itemId, v]));
+  const variantVersions = recipeIds.length === 0 ? [] : await db.standardCostVersion.findMany({
+    where: { itemId: { in: itemIds }, recipeId: { in: recipeIds }, status: "ACTIVE" },
+    select: { itemId: true, recipeId: true, loomMPerHour: true, lines: { where: { component: { in: [...WEAVING_STANDARD_COMPONENTS] } }, select: { component: true, amountPerMTry: true } } },
+  });
+  const genericOf = new Map(versions.map((v) => [v.itemId, v]));
+  const variantOf = new Map(variantVersions.map((v) => [`${v.itemId}|${v.recipeId}`, v]));
+  const versionOf = (o: { itemId: string; recipeId: string | null }) =>
+    (o.recipeId ? variantOf.get(`${o.itemId}|${o.recipeId}`) : undefined) ?? genericOf.get(o.itemId);
   const byId = new Map(orders.map((o) => [o.id, o]));
 
   return weavingOrderIds.flatMap((id) => {
@@ -145,7 +154,7 @@ export async function weavingActualCostTx(
     const missing: WeavingActualMissing[] = [];
     const m = meters.get(id) ?? { viaRun: D0(), viaOrder: D0() };
     const totalMeters = m.viaRun.plus(m.viaOrder);
-    const v = versionOf.get(o.itemId);
+    const v = versionOf(o);
     const standardPerMTry = v ? v.lines.reduce((a, l) => a.plus(l.amountPerMTry), D0()) : null;
     if (!v) missing.push("STANDART_YOK");
 
