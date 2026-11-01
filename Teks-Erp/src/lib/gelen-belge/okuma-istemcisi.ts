@@ -41,6 +41,14 @@ export const OcrResultSchema = z.object({
   rotation: z.number().int().optional(),
 });
 
+/** Sidecar `POST /donustur` yanıtı — okuma `app/contract.py` `DonusumSonucu` ile BİREBİR (`tests/test_donustur.py` ölçer). */
+export const ConvertResultSchema = z.object({
+  imageBase64: z.string().min(1),
+  mimeType: z.literal("image/jpeg"),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+});
+
 const HealthSchema = z.object({ status: z.string().optional(), engine: z.string().optional(), version: z.string().optional() }).loose();
 
 export type ReaderFailureKind = "UNAVAILABLE" | "HTTP" | "INVALID";
@@ -99,4 +107,41 @@ export async function readerOcr(base: string, content: Buffer, mimeType: string,
   if (!parsed.success) return { ok: false, kind: "INVALID", code: "OCR_RESULT_SCHEMA" };
   const version = typeof res.headers["x-okuma-version"] === "string" ? (res.headers["x-okuma-version"] as string) : null;
   return { ok: true, result: parsed.data as OcrResult, engine: parsed.data.engine ?? null, version, durationMs: Date.now() - started };
+}
+
+/** HEIC → JPEG dönüşümü küçük ve hızlıdır (OCR kilidine girmez); yükleme isteği bunu bekler. */
+export const CONVERT_TIMEOUT_MS = 30 * 1000;
+
+export type ConvertResult =
+  | { ok: true; content: Buffer; width: number; height: number }
+  | { ok: false; kind: ReaderFailureKind; code: string; status?: number };
+
+/**
+ * `POST /donustur` — HEIC/HEIF baytı `{imageBase64}` ile gider, JPEG döner. Sınıflar `readerOcr` ile aynı:
+ * 5xx/429/ağ/zaman aşımı → UNAVAILABLE · 4xx → HTTP (404 = eski okuma sürümü, çağıran "yok" sayar) · şema dışı → INVALID.
+ */
+export async function readerConvert(base: string, content: Buffer, timeoutMs: number = CONVERT_TIMEOUT_MS): Promise<ConvertResult> {
+  let res: { status: number; body: Buffer };
+  try {
+    res = await egressRequest(`${base}/donustur`, {
+      method: "POST",
+      timeoutMs,
+      maxBytes: READER_MAX_RESPONSE_BYTES,
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ imageBase64: content.toString("base64") }),
+    });
+  } catch (err) {
+    return { ok: false, kind: "UNAVAILABLE", code: err instanceof EgressError ? err.code : "EGRESS_NETWORK" };
+  }
+  if (res.status >= 500 || res.status === 429) return { ok: false, kind: "UNAVAILABLE", code: `HTTP_${res.status}`, status: res.status };
+  if (res.status < 200 || res.status >= 300) return { ok: false, kind: "HTTP", code: `HTTP_${res.status}`, status: res.status };
+  let json: unknown;
+  try {
+    json = JSON.parse(res.body.toString("utf8"));
+  } catch {
+    return { ok: false, kind: "INVALID", code: "CONVERT_RESULT_NOT_JSON" };
+  }
+  const parsed = ConvertResultSchema.safeParse(json);
+  if (!parsed.success) return { ok: false, kind: "INVALID", code: "CONVERT_RESULT_SCHEMA" };
+  return { ok: true, content: Buffer.from(parsed.data.imageBase64, "base64"), width: parsed.data.width, height: parsed.data.height };
 }

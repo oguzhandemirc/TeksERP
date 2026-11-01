@@ -1,5 +1,6 @@
 // GELEN BELGELER (Gülkesim OCR D5) — müşteri irsaliyesi taslakları: liste + süzgeç + yeni elle taslak + toplu taslak silme.
 // Düzen Kumaş Stoğu ile aynı: başlık → süzgeç şeridi → tam genişlik DataTable (kendi kaydırıcısı + altlığı).
+// Sayfaya dosya bırakmak "Belge yükle"yi o dosyalarla açar (`usePageFileDrop`).
 // Fotoğraf tabletten ya da panelden (Belge yükle) gelir (okuma işi DRAFT yazar); panel gözden geçirir ve onaylar (SoD: `gelen-belge:approve`).
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -22,6 +23,7 @@ import { NoteListFilters } from "./NoteListFilters";
 import { NoteListTable } from "./NoteListTable";
 import { EMPTY_FILTER, toQuery, useNoteList, type NoteListFilter } from "./useNoteList";
 import { useNoteTable } from "./useNoteTable";
+import { usePageFileDrop } from "./usePageFileDrop";
 
 export const INCOMING_DOCUMENTS_PATH = "/operations/gelen-belgeler";
 
@@ -51,7 +53,8 @@ export function IncomingDocumentsPage() {
   const [pageSize, setPageSize] = useState(50);
   const q = useDebouncedValue(filter.q, 250);
   const { q: list, items, summary } = useNoteList({ ...filter, q }, pageSize);
-  const canDelete = useRoleAccess().hasPermission("gelen-belge:write");
+  const canWrite = useRoleAccess().hasPermission("gelen-belge:write");
+  const canDelete = canWrite;
   const table = useNoteTable(items, canDelete, JSON.stringify(toQuery({ ...filter, q })));
   const pagination = {
     loaded: items.length,
@@ -64,6 +67,13 @@ export function IncomingDocumentsPage() {
     setPageSize,
   };
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [droppedFiles, setDroppedFiles] = useState<File[] | undefined>(undefined);
+  const openUpload = (files?: File[]) => {
+    setDroppedFiles(files);
+    setUploadOpen(true);
+  };
+  // Modal açıkken sayfa bırakmayı dinlemez (modalın kendi bırakma alanı var; portal olayları buraya da kabarır).
+  const drop = usePageFileDrop(canWrite && !uploadOpen, (files) => openUpload(files));
   const attempt = useAttemptToken();
   const create = useMutation({
     mutationFn: () => createManualNote(attempt.token()),
@@ -75,7 +85,12 @@ export function IncomingDocumentsPage() {
   });
 
   return (
-    <PageShell>
+    <PageShell className="relative" data-testid="incoming-documents-page" {...drop.handlers}>
+      {drop.over && (
+        <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10 text-lg font-medium" data-testid="page-drop-overlay">
+          Bırakın — Belge yükle bu dosyalarla açılır
+        </div>
+      )}
       <PageHeader
         title="Gelen Belgeler"
         titleExtra={<ReaderStatusBadge />}
@@ -85,7 +100,7 @@ export function IncomingDocumentsPage() {
             <TemplateLinks />
             <PermissionGate permission="gelen-belge:write">
               <div className="flex flex-wrap gap-2">
-                <Button onClick={() => setUploadOpen(true)}>
+                <Button onClick={() => openUpload()}>
                   <Upload className="mr-1 h-4 w-4" />
                   Belge yükle
                 </Button>
@@ -110,7 +125,7 @@ export function IncomingDocumentsPage() {
         canDelete={canDelete}
       />
       {uploadOpen && (
-        <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} target={{ kind: "new" }} onDone={(note) => void navigate(`${INCOMING_DOCUMENTS_PATH}/${note.id}`)} />
+        <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} target={{ kind: "new" }} initialFiles={droppedFiles} onDone={(note) => void navigate(`${INCOMING_DOCUMENTS_PATH}/${note.id}`)} />
       )}
     </PageShell>
   );

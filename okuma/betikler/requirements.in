@@ -1,5 +1,7 @@
 # Okuma servisi çalışma bağımlılıkları — KULLANICI ONAYI 2026-10-29: onnxruntime, rapidocr, opencv-python-headless,
-# numpy, fastapi, uvicorn. Diğer satırlar bunların ZORUNLU geçişli bağımlılıklarıdır (pip freeze ile ölçüldü).
+# numpy, fastapi, uvicorn. KULLANICI ONAYI 2026-11-02 (gelen belge HEIC yükleme, şıklı karar): pi-heif — yalnız çözücü
+# (libheif + libde265, LGPL; x265/GPL kodlayıcı YOK), tek geçişlisi pillow (zaten rapidocr'dan). Diğer satırlar bunların
+# ZORUNLU geçişli bağımlılıklarıdır (pip freeze ile ölçüldü).
 # Üretim: python betikler/hash-uret.py betikler/requirements.in > requirements.txt
 onnxruntime==1.31.0
 rapidocr==3.10.0
@@ -7,6 +9,7 @@ opencv-python-headless==5.0.0.93
 numpy==2.3.5
 fastapi==0.159.1
 uvicorn==0.54.0
+pi-heif==1.4.0
 # geçişli — onnxruntime
 flatbuffers==25.12.19
 packaging==26.3

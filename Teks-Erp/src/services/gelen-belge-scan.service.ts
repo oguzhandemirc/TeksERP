@@ -1,5 +1,6 @@
 // =============================================================================
 // GELEN BELGE — belge taraması (D2): fotoğraf/PDF yükle · künye oku · ikili indir
+// HEIC/HEIF (iPhone) `ftyp` markasından tanınır, okuma servisinde JPEG'e çevrilip JPEG saklanır (`lib/gelen-belge/heic.ts`).
 // =============================================================================
 // Tür beyana değil SİHİRLİ BAYTA bakılarak belirlenir (`certificate-file.service` ile aynı
 // tespit — iki yerde imza listesi yazılmaz). Sınır 5 MB (DB CHECK `document_scans_size_ck` ikizi).
@@ -13,6 +14,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { detectCertificateMime } from "./certificate-file.service";
+import { convertHeicToJpeg, isHeic } from "../lib/gelen-belge/heic";
 
 export const DOCUMENT_SCAN_MAX_BYTES = 5 * 1024 * 1024;
 /** PDF arşivdir (K6): okuma kuyruğuna girmez, sidecar'a gitmez — claim süzgeci ve okut ucu bunu okur. */
@@ -39,6 +41,12 @@ export interface DocumentScanInput {
 function tooLarge(): AppError {
   return new AppError("Belge dosyası 5 MB sınırını aşıyor.", 413, true, { code: "DOCUMENT_SCAN_TOO_LARGE", maxBytes: DOCUMENT_SCAN_MAX_BYTES });
 }
+
+function typeError(): AppError {
+  return AppError.badRequest("Yalnız JPEG, PNG, HEIC ya da PDF belge yüklenebilir (dosya içeriği tanınmadı).", { code: "DOCUMENT_SCAN_TYPE" });
+}
+
+const sha256Hex = (b: Buffer): string => createHash("sha256").update(b).digest("hex");
 
 /** data-URL öneki ve boşluk soyulmuş ham base64 gövdesi. */
 function base64Body(raw: string): string {
@@ -92,16 +100,21 @@ export async function uploadDocumentScan(input: DocumentScanInput, userId: strin
   // Tahmin önek/boşluk soyulmuş gövde üstünde: tam 5 MB'lık meşru dosya data-URL önekiyle gelse de 413 almaz.
   const body = base64Body(input.contentBase64);
   if (Math.floor((body.length * 3) / 4) > DOCUMENT_SCAN_MAX_BYTES + 4) throw tooLarge();
-  const content = decodeBase64(body);
-  if (content.length > DOCUMENT_SCAN_MAX_BYTES) throw tooLarge();
-  const kind = detectCertificateMime(content);
-  if (!kind) {
-    throw AppError.badRequest("Yalnız JPEG, PNG ya da PDF belge yüklenebilir (dosya içeriği tanınmadı).", { code: "DOCUMENT_SCAN_TYPE" });
-  }
-  const sha256 = createHash("sha256").update(content).digest("hex");
-  if (input.sha256 && input.sha256.toLowerCase() !== sha256) {
+  const received = decodeBase64(body);
+  if (received.length > DOCUMENT_SCAN_MAX_BYTES) throw tooLarge();
+  const heic = isHeic(received);
+  if (!heic && !detectCertificateMime(received)) throw typeError();
+  const receivedSha = sha256Hex(received);
+  // İstemci özeti GELEN baytındır (HEIC'te dönüşüm öncesi): yolda bozulan dosya okumaya hiç gitmez.
+  if (input.sha256 && input.sha256.toLowerCase() !== receivedSha) {
     throw AppError.badRequest("Fotoğraf yolda bozuldu (özet tutmuyor); yeniden gönderin.", { code: "DOCUMENT_SCAN_HASH_MISMATCH" });
   }
+  // HEIC → JPEG (okuma servisi; yoksa 503, hiçbir şey yazılmaz). Sistem JPEG saklar; tavan dönüşümden SONRA da geçerli.
+  const content = heic ? await convertHeicToJpeg(received) : received;
+  if (content.length > DOCUMENT_SCAN_MAX_BYTES) throw tooLarge();
+  const kind = detectCertificateMime(content);
+  if (!kind) throw typeError();
+  const sha256 = heic ? sha256Hex(content) : receivedSha;
   const existing = await prisma.documentScan.findUnique({ where: { sha256 }, select: SCAN_SELECT });
   if (existing) return reuseExisting(existing, input.noteId, userId);
   const data = {
@@ -131,7 +144,9 @@ export async function uploadDocumentScan(input: DocumentScanInput, userId: strin
     }
     throw err;
   }
-  await AuditService.log({ userId, action: "CREATE", tableName: AUDIT_TABLE, recordId: scan.id, newData: data });
+  // HEIC'ten dönüşen kaydın künyesi kaynak türü/boyunu da taşır (bayt yok).
+  const auditData = heic ? { ...data, convertedFrom: "image/heic", sourceSizeBytes: received.length } : data;
+  await AuditService.log({ userId, action: "CREATE", tableName: AUDIT_TABLE, recordId: scan.id, newData: auditData });
   return { scan, duplicate: false, boundTo: scan.noteId };
 }
 

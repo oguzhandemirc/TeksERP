@@ -3,6 +3,7 @@
 // =============================================================================
 // Büyük görüntü tarayıcıda canvas ile uzun kenar 2600 px'e, JPEG 0,8'e iner (K4; tabletin çekim boyu).
 // Küçük dosya DOKUNULMAZ (özeti değişmesin). PDF arşivdir (K6): küçültülmez, okunmaz. Sunucu tavanı 5 MB.
+// HEIC (iPhone) tarayıcıda çizilemez: dokunulmadan gider, sunucu okuma servisinde JPEG'e çevirir.
 // Görüntü çözücü enjekte edilir — test canvas'sız koşar.
 // =============================================================================
 
@@ -13,8 +14,17 @@ export const MAX_SCAN_BYTES = 5 * 1024 * 1024;
 /** Tek gönderimde sayfa sınırı (tablet ile aynı). */
 export const MAX_PAGES = 20;
 export const PDF_MIME = "application/pdf";
+export const HEIC_MIME = "image/heic";
 
-export type ScanMime = "image/jpeg" | "image/png" | typeof PDF_MIME;
+export type ScanMime = "image/jpeg" | "image/png" | typeof HEIC_MIME | typeof PDF_MIME;
+
+/** Dosya seçicinin `accept`i — Chromium HEIC'e boş MIME verebildiği için uzantılar da yazılır. */
+export const UPLOAD_ACCEPT = "image/jpeg,image/png,application/pdf,image/heic,image/heif,.jpg,.jpeg,.png,.pdf,.heic,.heif";
+const ACCEPTED_MIMES = new Set(["image/jpeg", "image/png", PDF_MIME, "image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence"]);
+const ACCEPTED_EXTS = [".jpg", ".jpeg", ".png", ".pdf", ".heic", ".heif"];
+/** Liste satırında HEIC önizleme yer tutucusu. */
+export const HEIC_PLACEHOLDER_TEXT = "HEIC — yüklenince JPEG'e çevrilir";
+const SUPPORTED_TEXT = "yalnız JPEG, PNG, HEIC ya da PDF yüklenebilir";
 
 export interface UploadPage {
   name: string;
@@ -28,13 +38,34 @@ export interface UploadPage {
   resized: boolean;
 }
 
-/** Tür beyana değil sihirli bayta bakar — sunucunun `detectCertificateMime` aynası. */
+/** Sunucu `lib/gelen-belge/heic.ts` `HEIF_BRANDS` aynası (`ftyp` ana markası; AVIF yok). */
+const HEIF_BRANDS = new Set(["heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs", "mif1", "msf1"]);
+
+/** Tür beyana değil sihirli bayta bakar — sunucunun `detectCertificateMime` + `isHeic` aynası. */
 export function detectScanMime(bytes: Uint8Array): ScanMime | null {
   const starts = (sig: number[]) => sig.every((b, i) => bytes[i] === b);
+  const ascii = (a: number, b: number) => String.fromCharCode(...bytes.subarray(a, b));
+  if (bytes.length >= 12 && ascii(4, 8) === "ftyp" && HEIF_BRANDS.has(ascii(8, 12))) return HEIC_MIME;
   if (starts([0x25, 0x50, 0x44, 0x46])) return PDF_MIME;
   if (starts([0xff, 0xd8, 0xff])) return "image/jpeg";
   if (starts([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png";
   return null;
+}
+
+/** Seçici/bırakma ön süzgeci: MIME ya da uzantı tanıdıksa aday (asıl tür yine sihirli bayttan). */
+export function isAcceptedFile(file: { name: string; type: string }): boolean {
+  if (file.type && ACCEPTED_MIMES.has(file.type.toLowerCase())) return true;
+  const name = file.name.toLowerCase();
+  return ACCEPTED_EXTS.some((e) => name.endsWith(e));
+}
+
+/** Bırakılan/seçilen dosyaları ayırır; reddedilenler için TEK Türkçe uyarı (yoksa null). */
+export function splitAcceptedFiles<T extends { name: string; type: string }>(files: readonly T[]): { accepted: T[]; notice: string | null } {
+  const accepted = files.filter(isAcceptedFile);
+  const rejected = files.filter((f) => !isAcceptedFile(f)).map((f) => f.name);
+  if (!rejected.length) return { accepted, notice: null };
+  const shown = rejected.slice(0, 3).join(", ") + (rejected.length > 3 ? ` ve ${rejected.length - 3} dosya daha` : "");
+  return { accepted, notice: `Desteklenmeyen dosya türü (${shown}): ${SUPPORTED_TEXT}.` };
 }
 
 /** Uzun kenarı `max`a sığdırır (oran korunur); zaten sığıyorsa `scaled: false`. */
@@ -117,7 +148,7 @@ export async function prepareFile(file: Blob & { name: string }, codec: ImageCod
   let width: number | null = null;
   let height: number | null = null;
   let resized = false;
-  if (mime !== PDF_MIME) {
+  if (mime !== PDF_MIME && mime !== HEIC_MIME) {
     const dim = await codec.size(file);
     const fit = fitLongEdge(dim.width, dim.height);
     width = fit.width;
@@ -157,8 +188,8 @@ export async function addPickedFiles(current: readonly UploadPage[], files: Read
     try {
       const r = await prepareFile(f, codec);
       if (r.kind === "ok") ready.push(r.page);
-      else if (r.kind === "too-large") notices.push(`${r.name}: küçültmeden sonra da 5 MB sınırını aşıyor (${formatBytes(r.sizeBytes)}); yüklenmedi.`);
-      else notices.push(`${r.name}: yalnız JPEG, PNG ya da PDF yüklenebilir.`);
+      else if (r.kind === "too-large") notices.push(`${r.name}: 5 MB sınırını aşıyor (${formatBytes(r.sizeBytes)}); yüklenmedi.`);
+      else notices.push(`${r.name}: ${SUPPORTED_TEXT} (dosya içeriği tanınmadı).`);
     } catch (e) {
       notices.push(`${f.name}: ${e instanceof Error ? e.message : "okunamadı"}`);
     }
