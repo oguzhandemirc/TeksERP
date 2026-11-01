@@ -1,13 +1,14 @@
 // =============================================================================
 // TEST: gelen belge ONAYINDAN SONRA otomatik iş emri (`gelenBelge.autoWorkOrder`, varsayılan KAPALI)
 // =============================================================================
-//   §0 tek kaynak: quick-start route kapısı ↔ AUTO_WORK_ORDER_PERMISSIONS birebir; onay ucu `approveAndAutoOpen`
+//   §0 tek kaynak: quick-start route kapısı ↔ AUTO_WORK_ORDER_PERMISSIONS birebir; onay ucu onay → `withAutoWorkOrders`
 //   §1 ⭐ ayar KAPALI (satır yok): onay sonucu bugünküyle aynı (`autoWorkOrders` anahtarı YOK), iş emri 0; ayar okuması false
 //   §2 ayar açık, sahibin rotalı önceki iş emri yok → hiçbir grup denenmez, genel neden + onay APPROVED
 //   §3 ⭐ net gruplar (Q10 · Q11) → 2 iş emri (kendi hedef değeriyle, belirlenimli token), desensiz grup SKIPPED + neden
 //   §4 ⭐ ikinci çağrı / yeniden onay ikinci iş emri doğurmaz; aynı token replay → aynı iş emri
 //   §5 ⭐ onaylayanın quick-start izni yok → hepsi SKIPPED + neden, iş emri 0, onay APPROVED
 //   §6 ⭐ bir grup düşer (rota BASKI bayrağını uygulamıyor → 400) → o grup FAILED + neden, öteki açılır, onay APPROVED
+// Onay ucunun bileşimi (route ile aynı): onay → otomatik iş emri.
 // Negatif sonda: token `randomUUID()` → §3 token + §4 replay kırmızı; desensiz atlama kaldırılınca §3 "desensiz SKIPPED" kırmızı.
 // Çalıştır: npx tsx scripts/test_gelen_belge_oto_is_emri.ts
 // =============================================================================
@@ -16,11 +17,13 @@ import path from "node:path";
 import prisma from "../src/lib/prisma";
 import { AppError } from "../src/utils/app-error";
 import { createDeliveryNote } from "../src/services/gelen-belge-note.service";
+import { approveDeliveryNote } from "../src/services/gelen-belge-onay.service";
 import { buildWorkOrderPlan } from "../src/services/gelen-belge-is-emri.service";
 import { getIncomingDocSettings, updateIncomingDocSettings } from "../src/services/gelen-belge-ayar.service";
 import {
-  approveAndAutoOpen, autoOpenWorkOrders, autoWorkOrderToken, AUTO_WORK_ORDER_PERMISSIONS, type AutoWorkOrderResult,
+  autoOpenWorkOrders, withAutoWorkOrders, autoWorkOrderToken, AUTO_WORK_ORDER_PERMISSIONS, type AutoWorkOrderResult,
 } from "../src/services/gelen-belge-oto-is-emri.service";
+import type { ApproveInput } from "../src/services/gelen-belge-onay.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
@@ -43,6 +46,9 @@ const TAG = `TST-GOI${Date.now().toString(36).toUpperCase()}Z`;
 const SETTINGS = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER];
 const made = { notes: [] as string[], items: [] as string[], customers: [] as string[], props: [] as string[], routes: [] as string[], stations: [] as string[] };
 const svc = new WorkOrderService();
+
+const approveAndAutoOpen = (id: string, input: ApproveInput, actor: { userId: string; permissions: string[] }) =>
+  approveDeliveryNote(id, input, actor.userId).then((r) => withAutoWorkOrders(r, actor));
 
 async function errorOf(fn: () => Promise<unknown>): Promise<{ status: number; code?: string } | null> {
   try { await fn(); return null; } catch (e) {
@@ -67,7 +73,7 @@ async function run(): Promise<void> {
   const literal = `requireAnyPermission(${AUTO_WORK_ORDER_PERMISSIONS.map((p) => `"${p}"`).join(", ")})`;
   check("§0 quick-start kapısı = AUTO_WORK_ORDER_PERMISSIONS (sıra dahil)", qs.includes(literal), qs.replace(/\s+/g, " ").slice(0, 120));
   const gbRoutes = readFileSync(path.join(__dirname, "../src/routes/gelen-belge.routes.ts"), "utf8");
-  check("§0 onay ucu approveAndAutoOpen'dan geçer (approveDeliveryNote doğrudan çağrılmaz)", gbRoutes.includes("approveAndAutoOpen(") && !gbRoutes.includes("approveDeliveryNote("));
+  check("§0 onay ucu: approveDeliveryNote → withAutoWorkOrders (onaydan SONRA)", /approveDeliveryNote\([^\n]*\)\.then\(\(r\) => withAutoWorkOrders\(r, req\.user!\)\)/.test(gbRoutes));
 
   // Katalog: BRODE bayrağı + desen çeşidi; BASKI bayrağı + çeşidi (rota uygulamaz → §6).
   const flag = await prisma.fabricProperty.create({ data: { code: `${TAG}-BR`.slice(0, 32), name: `TEST Brode ${TAG}`, valueType: "FLAG" }, select: { id: true } });

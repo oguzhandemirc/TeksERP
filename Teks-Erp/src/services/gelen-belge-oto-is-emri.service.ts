@@ -13,7 +13,7 @@ import { v5 as uuidv5 } from "uuid";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import type { JwtPayload } from "../types/api.types";
 import { buildWorkOrderPlan, WORK_ORDER_PLAN_STATUSES, type PlanGroup } from "./gelen-belge-is-emri.service";
-import { approveDeliveryNote, type ApproveInput, type ApproveResult } from "./gelen-belge-onay.service";
+import type { ApproveResult } from "./gelen-belge-onay.service";
 import { readIncomingDocAutoWorkOrder, readProductionEnabled } from "./system-setting.service";
 import { WorkOrderService } from "./workorder.service";
 
@@ -122,16 +122,14 @@ export async function autoOpenWorkOrders(noteId: string, actor: Pick<JwtPayload,
 }
 
 /**
- * Onay ucu bileşimi: ÖNCE onay (değişmeden; hatası aynen fırlar), SONRA yalnız APPROVED/PARTIAL'da otomatik iş emri.
- * Ayar kapalıyken dönen nesne `approveDeliveryNote` ile bayt-aynıdır (`autoWorkOrders` anahtarı yok).
+ * Onay ucu bileşimi: onay (`approveDeliveryNote`) önce ve aynen koşmuş olur; yalnız APPROVED/PARTIAL'da otomatik iş emri.
+ * Ayar kapalıyken dönen nesne onay sonucuyla bayt-aynıdır (`autoWorkOrders` anahtarı yok).
  */
-export async function approveAndAutoOpen(
-  id: string,
-  input: ApproveInput,
+export async function withAutoWorkOrders<T extends Pick<ApproveResult, "note">>(
+  approved: T,
   actor: Pick<JwtPayload, "userId" | "permissions">,
-): Promise<ApproveResult & { autoWorkOrders?: AutoWorkOrderResult }> {
-  const approved = await approveDeliveryNote(id, input, actor.userId);
+): Promise<T & { autoWorkOrders?: AutoWorkOrderResult }> {
   if (!WORK_ORDER_PLAN_STATUSES.includes(approved.note.status as DeliveryNoteStatus)) return approved;
-  const auto = await autoOpenWorkOrders(id, actor);
+  const auto = await autoOpenWorkOrders(approved.note.id, actor);
   return auto ? { ...approved, autoWorkOrders: auto } : approved;
 }

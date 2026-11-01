@@ -19,7 +19,8 @@ import {
   addDeliveryNoteLines, createDeliveryNote, deleteDeliveryNote, deleteDeliveryNoteLine,
   getDeliveryNote, listDeliveryNotes, updateDeliveryNote, updateDeliveryNoteLine,
 } from "../services/gelen-belge-note.service";
-import { approveAndAutoOpen } from "../services/gelen-belge-oto-is-emri.service";
+import { approveDeliveryNote } from "../services/gelen-belge-onay.service";
+import { withAutoWorkOrders } from "../services/gelen-belge-oto-is-emri.service";
 import { getIncomingDocSettings, updateIncomingDocSettings } from "../services/gelen-belge-ayar.service";
 import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
 import { getRollTabletContext } from "../services/roll-tablet.service";
@@ -423,7 +424,7 @@ router.delete("/irsaliyeler/:id/satirlar/:lineId", requirePermission("gelen-belg
  */
 router.post("/irsaliyeler/:id/onay", requirePermission("gelen-belge:approve"), wrap(async (req) => ({
   // Onay önce ve aynen; otomatik iş emri (ayar açıksa) onaydan SONRA, best-effort — `autoWorkOrders` yalnız ayar açıkken.
-  ...(await approveAndAutoOpen(Id.parse(req.params.id), ApproveBody.parse(req.body ?? {}), req.user!).then(({ warnings, ...data }) => ({ status: 200, data, warnings }))),
+  ...(await approveDeliveryNote(Id.parse(req.params.id), ApproveBody.parse(req.body ?? {}), req.user!.userId).then((r) => withAutoWorkOrders(r, req.user!)).then(({ warnings, ...data }) => ({ status: 200, data, warnings }))),
 })));
 
 // ── E2 gönderen şablonları (`gelen-belge:template`) ───────────────────────────
