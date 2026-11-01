@@ -15,8 +15,9 @@
 // `/health` yoklaması başlar ve sunucu dönünce durur. Tabletin pili ve fabrika
 // ağı boşuna meşgul edilmez.
 //
-// ⚠️ 5xx "ULAŞILAMIYOR" DEĞİLDİR — sunucu CEVAP VERMİŞTİR. Yalnız **yanıtsız**
-// düşen istek (ağ hatası / zaman aşımı) erişilemezlik kanıtıdır. Aksi hâlde
+// ⚠️ BACKEND'İN 5xx'i "ULAŞILAMIYOR" DEĞİLDİR — sunucu CEVAP VERMİŞTİR. Erişilemezlik
+// kanıtı: yanıtsız düşen istek (ağ hatası / zaman aşımı) ve VEKİLİN 5xx'i (502/504/52x ya
+// da backend zarfı taşımayan gövde — `transientHttp.ts`, denetim Y4). Aksi hâlde
 // sunucunun tek bir hatalı ucu tüm kuyruğu durdururdu.
 //
 // ⚠️ NEDEN ÖNCE TEHLİKELİYDİ, ŞİMDİ GÜVENLİ: bu değişiklik tek başına yapılsaydı
@@ -37,6 +38,7 @@ import { onlineManager } from '@tanstack/react-query';
 // adres değişimini aşağıda `subscribe` ile biz dinliyoruz.
 import { useBaseUrlStore, getCurrentBaseUrl } from '../store/baseUrlStore';
 import { jitteredBackoff } from './backoff';
+import { classifyHttpFailure } from './transientHttp';
 
 /** Çevrimdışıysak SEBEBİ. UI bunu farklı anlatır, `entryAttempt` farklı davranır. */
 export type OfflineReason = 'link' | 'server' | null;
@@ -88,8 +90,11 @@ async function probeOnce(): Promise<boolean> {
       // Ham `fetch` — axios interceptor'ından geçmesin, yoksa yoklamanın kendi
       // başarısızlığı "sunucuya ulaşılamıyor" olarak yeniden bildirilir (döngü).
       const res = await fetch(healthUrl(), { method: 'GET', signal: ctrl.signal });
-      // 5xx bile "ulaşılabilir"dir — sunucu cevap veriyor.
-      return res.status > 0;
+      // Backend'in 5xx'i "ulaşılabilir"dir; vekilin (nginx/Cloudflare) 502/52x'i ya da zarfsız 5xx'i DEĞİL (Y4).
+      if (!(res.status > 0)) return false;
+      if (res.status < 500) return true;
+      const body: unknown = await res.json().catch(() => null);
+      return classifyHttpFailure(res.status, body) !== 'gateway';
     } finally {
       clearTimeout(t);
     }
@@ -204,7 +209,7 @@ export function reportServerUnreachable(): void {
   scheduleProbe();
 }
 
-/** Sunucudan HERHANGİ bir yanıt geldi (2xx de 5xx de) → erişilebilir. */
+/** Backend'den yanıt geldi (2xx de backend'in 5xx'i de) → erişilebilir. */
 export function reportServerReachable(): void {
   if (serverReachable) return;
   serverReachable = true;

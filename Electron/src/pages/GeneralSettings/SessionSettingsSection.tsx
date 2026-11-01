@@ -10,6 +10,7 @@ import { HintIcon, HintBody, type HintVariant } from "./SettingHint";
 import { LoginMethodsField } from "./LoginMethodsField";
 import { SessionSettingsReadOnly } from "./SessionSettingsReadOnly";
 import { ShortCredentialTotpToggle } from "./ShortCredentialTotpToggle";
+import { OfflineLockDeferToggle } from "./OfflineLockDeferToggle";
 import {
   MAX_SESSION_MINUTES,
   MAX_IDLE_MINUTES,
@@ -68,6 +69,7 @@ export function SessionSettingsSection({
           mobileLock={s.current.mobileLock}
           mobileLockMinutes={s.current.mobileLockMin}
           mobileLockBg={s.current.mobileLockBg}
+          offlineLockDefer={s.current.offlineLockDefer}
           methods={s.current.methods}
           absoluteCapDays={s.current.capDays}
           pinLockoutEnabled={s.current.pinEnabled}
@@ -174,11 +176,11 @@ export function SessionSettingsSection({
             hint={hint}
             title="Uygulamadan çıkınca kilitle (mobil)"
             desc="Açıkken (varsayılan) operatör uygulamadan çıktığı anda (ana ekran / başka uygulama) tablet hemen kilit ekranına geçer — iş oturumu açık kalır, kart/PIN ile devam edilir. Hareketsizlik kilidinden BAĞIMSIZ: kapatırsan uygulamadan çıkınca kilitlenmez, yalnız (açıksa) hareketsizlik süresi dolunca kilitlenir. Uygulamanın kendi açtığı sistem diyalogları (Bluetooth/kamera izni) kilit tetiklemez. Açık tabletler yeni ayarı öne gelince otomatik alır."
-            checked={s.mobileLockBg}
-            disabled={s.isSaving}
-            onChange={s.setMobileLockBg}
+            checked={s.mobileLockBg} disabled={s.isSaving} onChange={s.setMobileLockBg}
           />
         </div>
+
+        <OfflineLockDeferToggle hint={hint} checked={s.offlineLockDefer} disabled={s.isSaving} onChange={s.setOfflineLockDefer} />
 
         {/* 5) Çalışma oturumu zaman aşımı — saha */}
         <div className="border-t pt-4">

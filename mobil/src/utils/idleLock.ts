@@ -59,6 +59,14 @@ export const IDLE_WARNING_MS = 20_000;
  *  demektir (paylaşımlı tablet: dönen kişi başkası olabilir). */
 export const SUPPRESSED_BACKGROUND_GRACE_MS = 90_000;
 
+/**
+ * Çevrimdışı kilit ertelemesi (denetim Y5): kilit açma sunucu ister; ayar açıkken ve bağlantı
+ * yokken (ağ linki ya da sunucu) hareketsizlik + arka plan kilidi uygulanmaz. Ayar kapalı → hep false.
+ */
+export function isLockDeferred(deferSetting: boolean, offlineReason: 'link' | 'server' | null): boolean {
+  return deferSetting && offlineReason !== null;
+}
+
 /** Dakika ayarını güvenli ms'e çevirir (1..120 dk clamp; geçersiz → default). */
 export function idleMinutesToMs(minutes: number | undefined, fallbackMinutes = 10): number {
   const m =

@@ -66,6 +66,7 @@
 - **[ÇEKİRDEK]** Çok top okutan YÜZEY `trigger="tap"` kullanır (kamera kendiliğinden okumaz); tek okuyup kapanan yüzey `auto` kalır. Ölçüt EKRAN ADI DEĞİL YÜZEY — KK1'in etiket-doğrulama tarayıcısı da tap. Sorun 'yanlış okuma' değil 'İSTENMEDEN okuma'dır. · bekçi: `mobil/src/components/BarcodeScannerView.test.tsx` <sub>(CLAUDE.md:415)</sub>
 - **[ÇEKİRDEK]** Metraj kaynağı (elle ↔ makineden oku) ekran state'i değil CİHAZ ayarı: `kk1ManualEntry` + `tamburCutMode`; ömür OTURUM değil CİHAZ (operatör değişse de kalır). Diskteki BOZUK değer güvenli varsayılana düşer; setter ÖNCE state'i SONRA diski yazar. · bekçi: `mobil/src/store/deviceSettingsStore.test.ts` <sub>(CLAUDE.md:365, CLAUDE.md:379)</sub>
 - **[PROFİL]** KK1_* top doğuş modunda KK1 soru sormaz, tezgah etiketini okutur (`loomBirth.ts`); okutma 4xx ise REDDEDİLİR, ağ/5xx hatasında kabul edilip bağlanınca doğrulanır; kuyruk gövdesi `machineCode`/`weavingOrderId`/`warpBeamId` alanlarını SÜZMEZ. Bekçi: `loomBirth.test` + `mutations.test`.
+- **[ÇEKİRDEK]** Vekilin (nginx/Cloudflare) 5xx'i — 502/504/520–530 ya da backend zarfı (`success`) taşımayan 5xx — ulaşılamazlıktır; 429 ve backend 503 geçicidir: kuyruk kaydı bunlarda DÜŞMEZ, Retry-After'a uyar; sınıflama tek kaynak `mobil/src/offline/transientHttp.ts`, istasyon mutationFn'leri ortak FIFO sınırlayıcıdan (≤3) geçer. · bekçi: `mobil/src/offline/kuyrukDayaniklilik.test.ts`, `mobil/src/services/api.transient.test.ts`
 
 ### Yasaklar
 
