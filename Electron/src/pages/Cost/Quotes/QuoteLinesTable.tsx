@@ -8,6 +8,7 @@ import { fmtDec, fmtDecFull, fmtPct } from "../shared/format";
 import { PRICE_SOURCE_LABEL } from "./labels";
 import { hasCostColumns } from "./line-columns";
 import { PriceCell } from "./PriceCell";
+import { variantText } from "./QuoteVariantPicker";
 import type { QuoteLine } from "./quote-types";
 
 interface Props {
@@ -23,6 +24,7 @@ function Product({ l }: { l: QuoteLine }) {
   return (
     <div className="min-w-40">
       <p className="font-medium">{l.item ? `${l.item.code ?? ""} ${l.item.name}`.trim() : l.description}</p>
+      {l.recipe && <p className="text-xs text-muted-foreground" data-testid="line-variant">Varyant: {variantText(l.recipe)}</p>}
       {!l.itemId && <Badge variant="outline" className="mt-0.5 border-warning/50 text-warning">Yeni desen — ürün bağlı değil</Badge>}
       {l.item && l.description !== l.item.name && <p className="text-xs text-muted-foreground">{l.description}</p>}
     </div>
