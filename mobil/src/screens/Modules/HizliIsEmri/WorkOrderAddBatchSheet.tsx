@@ -12,6 +12,7 @@ import { workOrderBatchService } from '../../../services/workOrderBatch.service'
 import { generateClientUuid } from '../../../offline/barcode';
 import { addBatchPreview, serverRejects, slotAfterFailure, tokenFor, totalQty, type TokenSlot } from './addBatch';
 import { useAddBatchRolls } from './useAddBatchRolls';
+import { CustomerCodeMatchNote } from '../../../components/customerCode/CustomerCodeMatchNote';
 import { errorText, Footer, useAfterSave, type FixWo } from './fixSheetParts';
 
 type Props = { wo: FixWo; onDismiss: () => void; onDone: () => void };
@@ -22,7 +23,7 @@ type Props = { wo: FixWo; onDismiss: () => void; onDone: () => void };
  */
 export default function WorkOrderAddBatchSheet({ wo, onDismiss, onDone }: Props) {
   const lockedItemId = wo.targetItemId ?? null;
-  const { rolls, take, onScan, remove, feedback } = useAddBatchRolls(lockedItemId);
+  const { rolls, take, onScan, remove, feedback, ambiguousModal } = useAddBatchRolls(lockedItemId);
   const [reason, setReason] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -57,6 +58,7 @@ export default function WorkOrderAddBatchSheet({ wo, onDismiss, onDone }: Props)
         title="Stok Topu Okut" continuous trigger="tap" captureHaptic={false} barcodeTypes={['qr', 'code128']} flash={feedback.flash}
         footer={<ScannerRollStrip rolls={rolls} totalQty={totalQty(rolls)} onRemove={remove} rejects={feedback.rejects} onDismissReject={feedback.dismissReject} duplicateBarcode={feedback.duplicateBarcode} />}
       />
+      {ambiguousModal}
       <RollPickerModal
         visible={pickerOpen} onDismiss={() => setPickerOpen(false)} multiSelect confirmLabel="Ekle"
         onConfirm={(picked) => { take(picked); setPickerOpen(false); }}
@@ -82,7 +84,10 @@ export default function WorkOrderAddBatchSheet({ wo, onDismiss, onDone }: Props)
       {rolls.length === 0 ? <Text style={sheet.hint}>Henüz top yok — okutun ya da listeden seçin.</Text> : null}
       {rolls.map((r) => (
         <View key={r.id} style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={[sheet.line, { flex: 1 }]}>{`${r.barcode} · ${Math.round(r.qty)} m`}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={sheet.line}>{`${r.barcode} · ${Math.round(r.qty)} m`}</Text>
+            <CustomerCodeMatchNote match={r.customerMatch} />
+          </View>
           <IconButton icon="close" size={18} onPress={() => remove(r.barcode)} accessibilityLabel={`${r.barcode} çıkar`} />
         </View>
       ))}

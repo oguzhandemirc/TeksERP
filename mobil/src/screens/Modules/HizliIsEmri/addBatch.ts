@@ -2,12 +2,15 @@
 import type { Roll } from '../../../types/models';
 import { isAmbiguousFailure } from '../../../offline/entryAttempt';
 import { classifyScannedRoll } from './scanClassify';
+import { scanMatchOf, type ScanMatchExtras } from '../../../components/customerCode/customerCodeLogic';
 
 export interface AddBatchRoll {
   id: string;
   barcode: string;
   qty: number;
   width?: number | null;
+  /** Müşteri barkoduyla bulunduysa (D4-F1b) şeritte not; iç barkodda null. */
+  customerMatch?: ScanMatchExtras;
 }
 
 export type AddOutcome =
@@ -25,7 +28,10 @@ export function addBatchOutcome(
   const d = classifyScannedRoll(roll, lockedItemId);
   if (d.kind === 'cancelled') return { kind: 'reject', reason: 'İptal edilmiş top — önce iptali geri alın' };
   if (d.kind === 'reject') return { kind: 'reject', reason: d.reason };
-  return { kind: 'added', roll: { id: roll.id, barcode: roll.barcode ?? '', qty: Number(roll.currentQty ?? 0), width: roll.width } };
+  return {
+    kind: 'added',
+    roll: { id: roll.id, barcode: roll.barcode ?? '', qty: Number(roll.currentQty ?? 0), width: roll.width, customerMatch: scanMatchOf(roll) },
+  };
 }
 
 export function totalQty(list: readonly AddBatchRoll[]): number {

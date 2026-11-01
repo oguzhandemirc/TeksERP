@@ -112,3 +112,11 @@ export interface ScanMatchExtras {
 export function customerCodeMatchText(r: ScanMatchExtras | null | undefined): string | null {
   return r?.matchedBy === 'CUSTOMER_CODE' && r.customerCode ? `Müşteri barkodu ${r.customerCode} ile bulundu` : null;
 }
+
+/** Okutma yanıtından yalnız eşleşme ekini ayırır (listeye eklenen satır topun tamamını taşımasın). */
+export function scanMatchOf(r: unknown): ScanMatchExtras | undefined {
+  const x = (r ?? {}) as ScanMatchExtras;
+  return x.matchedBy === 'CUSTOMER_CODE' && typeof x.customerCode === 'string'
+    ? { matchedBy: 'CUSTOMER_CODE', customerCode: x.customerCode }
+    : undefined;
+}

@@ -19,6 +19,8 @@ import { palette } from '../../../theme/tokens';
 import { OFFLINE_TEXT, saveBlockReason } from './standaloneInspectionHost';
 import { useStandaloneInspection, type StandaloneInspection } from './useStandaloneInspection';
 import { ActiveInspectionBanner, RollStrip, ScanEmptyState } from './InspectionRollStrip';
+import { CustomerCodeMatchNote } from '../../../components/customerCode/CustomerCodeMatchNote';
+import { scanMatchOf } from '../../../components/customerCode/customerCodeLogic';
 
 function confirmClear(count: number, onYes: () => void) {
   Alert.alert('Muayene taslağı silinsin mi?', `${count} hata kaydı silinecek.`, [
@@ -101,6 +103,7 @@ export default function InspectionScreen() {
             tone="indigo"
           />
           {s.scanError ? <Text style={styles.error} testID="inspection-scan-error">{s.scanError}</Text> : null}
+          <CustomerCodeMatchNote match={scanMatchOf(s.roll)} />
         </View>
         <View style={styles.flex}>
           <Body s={s} compact={compact} />
@@ -117,6 +120,7 @@ export default function InspectionScreen() {
           void s.scan(code);
         }}
       />
+      {s.ambiguousModal}
     </ScreenChrome>
   );
 }

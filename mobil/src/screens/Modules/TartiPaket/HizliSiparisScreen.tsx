@@ -16,6 +16,9 @@ import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import type { MainStackParamList } from '../../../navigation/types';
 import { showScreenError } from '../../../lib/screenToast';
+import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
+import { CustomerCodeMatchNote } from '../../../components/customerCode/CustomerCodeMatchNote';
+import { scanMatchOf, type ScanMatchExtras } from '../../../components/customerCode/customerCodeLogic';
 
 // =============================================================================
 // Saha #11 — Hızlı Sipariş. Ham/stok topları arka arkaya okut → müşteri seç →
@@ -31,6 +34,8 @@ interface ScannedRoll {
   colorName: string | null;
   width: number | null;
   qty: number;
+  /** Müşteri barkoduyla bulunduysa (D4-F1b `matchedBy`) satırda not çıkar. */
+  match?: ScanMatchExtras;
 }
 
 export default function HizliSiparisScreen() {
@@ -69,11 +74,17 @@ export default function HizliSiparisScreen() {
           colorName: r.color?.name ?? null,
           width: r.width != null ? Number(r.width) : null,
           qty: Number(r.currentQty),
+          match: scanMatchOf(r),
         },
       ]);
       Toast.show({ type: 'success', text1: 'Eklendi', text2: r.barcode ?? '' });
     },
+    // Belirsiz müşteri barkodu → aday modalı; başka hata bugünkü gibi (sessiz).
+    onError: (e) => {
+      ambiguous.intercept(e);
+    },
   });
+  const ambiguous = useAmbiguousScanPicker((b) => lookupMut.mutate(b));
 
   const custQ = useQuery({
     queryKey: ['customers', 'quick-order', custSearch],
@@ -147,8 +158,8 @@ export default function HizliSiparisScreen() {
               Okutulan Toplar ({rolls.length} top · {totalMeters.toLocaleString('tr-TR')} m)
             </Text>
             {rolls.map((r) => (
+              <React.Fragment key={r.id}>
               <List.Item
-                key={r.id}
                 title={r.barcode}
                 description={`${r.itemName} · ${r.colorName ?? 'Ham'}${r.width ? ` · ${r.width}cm` : ''} · ${r.qty} m`}
                 left={(p) => <List.Icon {...p} icon="package-variant" />}
@@ -160,6 +171,10 @@ export default function HizliSiparisScreen() {
                   />
                 )}
               />
+              <View style={{ paddingLeft: 56 }}>
+                <CustomerCodeMatchNote match={r.match} />
+              </View>
+              </React.Fragment>
             ))}
 
             <Divider style={{ marginVertical: 8 }} />
@@ -196,6 +211,7 @@ export default function HizliSiparisScreen() {
         title="Ham Top Okut"
         continuous
       />
+      {ambiguous.modal}
 
       <PickerModal
         visible={custOpen}

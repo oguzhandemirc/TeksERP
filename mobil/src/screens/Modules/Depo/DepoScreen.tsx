@@ -55,6 +55,9 @@ import { KartelaStockReduceModal } from './KartelaStockReduceModal';
 import { useScanClassifier } from '../../../hooks/useScanSeries';
 import { showScreenError } from '../../../lib/screenToast';
 import { formatFactory } from '../../../lib/factory-time';
+import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
+import { CustomerCodeMatchNote } from '../../../components/customerCode/CustomerCodeMatchNote';
+import { scanMatchOf } from '../../../components/customerCode/customerCodeLogic';
 
 const PAGE_SIZE = 50;
 
@@ -352,6 +355,11 @@ export default function DepoScreen() {
         }
       }
     } catch (err) {
+      // Belirsiz müşteri barkodu (409 CUSTOMER_CODE_AMBIGUOUS) → aday modalı; seçim iç barkodla yeniden sorulur.
+      if (ambiguous.intercept(err)) {
+        setScannerOpen(false);
+        return;
+      }
       // Sorgu düştüğünde de sonuç RET'tir: eskiden bu dal tek sessiz yoldu ve
       // operatör "okumadı" sanıp aynı topu tekrar okutuyordu.
       signalScan('reject');
@@ -372,6 +380,11 @@ export default function DepoScreen() {
     else if (pending.kind === 'cancelled') setCancelledRoll(pending.data);
     else setDetailSwatch(pending.data);
   }, []);
+
+  // Tarayıcı zaten kapalı: seçilen adayın detayı onModalHide'ı beklemeden açılır.
+  const ambiguous = useAmbiguousScanPicker((b) => {
+    void handleBarcodeScanned(b).then(handleScannerHidden);
+  });
 
   // İptal önizlemesi — hedef seçilince koşar. Ekran ile uç AYNI yüklemi görsün
   // diye karar backend'den gelir (`canCancel`/`requiresConfirm`/`labelPrinted`);
@@ -696,6 +709,7 @@ export default function DepoScreen() {
         onModalHide={handleScannerHidden}
         title={isSwatchMode ? 'Kartela Barkodu Okut' : 'Top Barkodu Okut'}
       />
+      {ambiguous.modal}
 
       {/* Detay modal — yalnızca seçili top varken mount: hook'lar/query'ler boşa çalışmasın */}
       {detailRoll && (
@@ -1160,6 +1174,7 @@ function RollDetailModal({
         ) : undefined
       }
     >
+      <CustomerCodeMatchNote match={scanMatchOf(roll)} />
       {/* Geçmiş — açılır/kapanır section, varsayılan KAPALI */}
       <CollapsibleSection title={`Yaşam Döngüsü (${events.length})`}>
         {historyQuery.isLoading ? (
