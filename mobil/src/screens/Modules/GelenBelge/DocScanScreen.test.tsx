@@ -1,6 +1,6 @@
 // Belge Tara ekranı uçtan uca (sahte API): çekim → barkod → gönder → DRAFT + sayfa yüklemesi.
 import React, { type ReactNode } from 'react';
-import { fireEvent, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../test/render';
 import DocScanScreen from './DocScanScreen';
 
@@ -8,6 +8,7 @@ const mockCreate = jest.fn();
 const mockUpload = jest.fn();
 // Sahte JPEG (sihirli bayt) — her çekimde aynı içerik: ikinci çekim aynı fotoğraftır.
 const mockB64 = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from('sayfa-1'.repeat(40))]).toString('base64');
+const mockB64b = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from('sayfa-2'.repeat(40))]).toString('base64');
 
 jest.mock('../../../services/inboundDoc.service', () => ({
   inboundDocService: {
@@ -30,18 +31,30 @@ jest.mock('../../../components/BarcodeScannerModal', () => {
   };
 });
 jest.mock('./PageCameraModal', () => {
-  const { Pressable, Text } = jest.requireActual('react-native');
+  const { Pressable, Text, View } = jest.requireActual('react-native');
   const { photoSha256 } = jest.requireActual('./docScan');
+  const shot = (b64: string, uri: string) => ({ base64: b64, sha256: photoSha256(b64), uri, width: 2600, height: 1950 });
   return {
     __esModule: true,
     default: (p: { visible: boolean; onCaptured: (x: unknown) => void }) =>
       p.visible ? (
-        <Pressable testID="sayfa-kamera" onPress={() => p.onCaptured({ base64: mockB64, sha256: photoSha256(mockB64), uri: 'file:///1.jpg', width: 2600, height: 1950 })}>
-          <Text>kamera</Text>
-        </Pressable>
+        <View>
+          <Pressable testID="sayfa-kamera" onPress={() => p.onCaptured(shot(mockB64, 'file:///1.jpg'))}>
+            <Text>kamera</Text>
+          </Pressable>
+          <Pressable testID="sayfa-kamera-2" onPress={() => p.onCaptured(shot(mockB64b, 'file:///2.jpg'))}>
+            <Text>kamera 2</Text>
+          </Pressable>
+        </View>
       ) : null,
   };
 });
+
+// Portal içeriği host'a mikrotask'ta taşınır (SimplePortal): önizleme içi dokunuştan sonra boşalt.
+async function pressFlush(el: Parameters<typeof fireEvent.press>[0]) {
+  fireEvent.press(el);
+  await act(async () => {});
+}
 
 describe('DocScanScreen', () => {
   beforeEach(() => {
@@ -69,5 +82,48 @@ describe('DocScanScreen', () => {
     expect(mockUpload).toHaveBeenCalledTimes(1);
     expect(mockUpload.mock.calls[0][0]).toMatchObject({ noteId: 'n1', pageNo: 1, barcodeText: '  IRS-77 ', contentBase64: mockB64 });
     expect(mockUpload.mock.calls[0][0].sha256).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('küçük resme dokununca tam ekran önizleme açılır; geçiş sayfayı değiştirir; sil ve kapat çalışır', async () => {
+    const r = renderWithPaper(<DocScanScreen />);
+    fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
+    fireEvent.press(r.getByTestId('sayfa-kamera'));
+    fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
+    fireEvent.press(r.getByTestId('sayfa-kamera-2'));
+    expect(r.getByText('Sayfalar (2)')).toBeTruthy();
+    expect(r.queryByTestId('belge-tara-onizleme')).toBeNull();
+    // AppModal'ın ilk (kapalı) bağlanışındaki animasyon geri çağrısı (`finishHide`) açılıştan ÖNCE boşalsın; yoksa açılışı ezer.
+    await act(async () => {});
+
+    fireEvent.press(r.getByTestId('belge-tara-sayfa-2'));
+    await act(async () => {});
+    expect(r.getByTestId('belge-tara-onizleme')).toBeTruthy();
+    expect(r.getByTestId('belge-tara-onizleme-baslik')).toHaveTextContent('Sayfa 2 / 2');
+    expect(r.getByTestId('belge-tara-onizleme-gorsel').props.source).toEqual({ uri: 'file:///2.jpg' });
+
+    await pressFlush(r.getByTestId('belge-tara-onizleme-onceki'));
+    expect(r.getByTestId('belge-tara-onizleme-baslik')).toHaveTextContent('Sayfa 1 / 2');
+    expect(r.getByTestId('belge-tara-onizleme-gorsel').props.source).toEqual({ uri: 'file:///1.jpg' });
+    await pressFlush(r.getByTestId('belge-tara-onizleme-sonraki'));
+    expect(r.getByTestId('belge-tara-onizleme-baslik')).toHaveTextContent('Sayfa 2 / 2');
+
+    // Önizlemeden sil → kalan sayfada kalır.
+    await pressFlush(r.getByTestId('belge-tara-onizleme-sil'));
+    expect(r.getByText('Sayfalar (1)')).toBeTruthy();
+    expect(r.getByTestId('belge-tara-onizleme-baslik')).toHaveTextContent('Sayfa 1 / 1');
+    expect(r.queryByTestId('belge-tara-onizleme-onceki')).toBeNull();
+
+    // Kapanış animasyonu (reanimated) sahte saatle sürülür; sonunda `finishHide` portal kaydını siler.
+    jest.useFakeTimers();
+    try {
+      await pressFlush(r.getByTestId('belge-tara-onizleme-kapat'));
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
+      await act(async () => {});
+      expect(r.queryByTestId('belge-tara-onizleme')).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
