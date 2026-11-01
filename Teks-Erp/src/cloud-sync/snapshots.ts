@@ -22,6 +22,7 @@ import { snapshotDigest } from "./digest";
 import { publicFactoryTimezone } from "../services/helpers/factory-timezone-state.helper";
 import { TesisVerisiSchema } from "./wire/esitleme";
 import { EXPENSE_SNAPSHOT, EXPENSE_SNAPSHOT_SCHEMA, buildExpenseSnapshotData } from "./snapshot-expense";
+import { PROFIT_SNAPSHOT, PROFIT_SNAPSHOT_SCHEMA, buildProfitSnapshotData } from "./snapshot-profitability";
 
 export interface BuiltSnapshot {
   /** Tel adı (`ozet.stok`, `stok-karnesi`…). */
@@ -59,6 +60,7 @@ export const SNAPSHOT_WIRE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
     yaslandirma: z.array(z.strictObject({ doviz: Str, kovalar: z.record(z.enum(AGING_BUCKETS), NumStr), acikToplam: NumStr, gecikmis: NumStr, avans: NumStr })),
   }),
   [EXPENSE_SNAPSHOT]: EXPENSE_SNAPSHOT_SCHEMA,
+  [PROFIT_SNAPSHOT]: PROFIT_SNAPSHOT_SCHEMA,
   "stok-karnesi": z.strictObject({
     ozet: z.strictObject({
       bitmisMiktar: Num, bitmisAdet: Num, hamMiktar: Num, hamAdet: Num, yariMamulMiktar: Num, yariMamulAdet: Num,
@@ -222,6 +224,8 @@ export interface SnapshotContext {
   readonly now: Date;
   readonly productionOn: boolean;
   readonly financeOn: boolean;
+  /** Maliyet modülü (üretim ∧ maliyet; D4-G4 `karlilik-ozet`). Verilmezse KAPALI sayılır. */
+  readonly maliyetOn?: boolean;
   /** Bu tura düşen sıklıklar (HER_TUR her turda; SAATLIK/GUNLUK zamanı gelince). */
   readonly cadences: ReadonlySet<SnapshotProjection["cadence"]>;
 }
@@ -233,6 +237,7 @@ export async function buildSnapshots(ctx: SnapshotContext): Promise<BuiltSnapsho
     if (!ctx.cadences.has(p.cadence)) continue;
     if (p.module === "production.enabled" && !ctx.productionOn) continue;
     if (p.module === "finance.enabled" && !ctx.financeOn) continue;
+    if (p.module === "maliyet.enabled" && ctx.maliyetOn !== true) continue;
     switch (p.name) {
       case "ozet":
         out.push(...(await buildOverview(ctx.now, ctx.productionOn)));
@@ -243,6 +248,12 @@ export async function buildSnapshots(ctx: SnapshotContext): Promise<BuiltSnapsho
       case EXPENSE_SNAPSHOT:
         out.push(seal(EXPENSE_SNAPSHOT, await buildExpenseSnapshotData(ctx.now)));
         break;
+      case PROFIT_SNAPSHOT: {
+        // Ön muhasebe kapalıyken hesap `null` döner — anlık üretilmez (kâr, kesinleşen fatura olmadan yoktur).
+        const data = await buildProfitSnapshotData(ctx.now);
+        if (data) out.push(seal(PROFIT_SNAPSHOT, data));
+        break;
+      }
       case "stok-karnesi":
         out.push(await buildStock());
         break;
