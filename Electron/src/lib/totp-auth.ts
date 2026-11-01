@@ -29,7 +29,16 @@ export const TOTP_INVALID_CODE = "TOTP_INVALID";
 
 interface TotpErrorBody {
   message?: string;
-  details?: { code?: string };
+  details?: { code?: string; trustDeviceDays?: unknown };
+}
+
+/**
+ * 409 TOTP_REQUIRED'daki "bu cihazı N gün hatırla" süresi (web çerez kipi, ayar > 0). Alan yoksa/çöpse 0 →
+ * kutu çizilmez (eski sunucu ya da ayar kapalı).
+ */
+export function readTrustDeviceDays(error: unknown): number {
+  const v = (error as AxiosError<TotpErrorBody> | undefined)?.response?.data?.details?.trustDeviceDays;
+  return typeof v === "number" && Number.isInteger(v) && v > 0 && v <= 365 ? v : 0;
 }
 
 /** Hatanın `details.code` alanı — yoksa null. */

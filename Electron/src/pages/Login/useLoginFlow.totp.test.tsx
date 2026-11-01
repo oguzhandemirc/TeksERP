@@ -50,7 +50,7 @@ describe("isteğe bağlı 2FA — giriş akışı", () => {
     login.mockRejectedValueOnce(hata(409, "TOTP_REQUIRED")).mockResolvedValueOnce(ok);
     const { result } = renderHook(() => useLoginFlow(), { wrapper });
     await act(() => result.current.performLogin(values, false));
-    expect(result.current.totp).toEqual({ values, invalid: false });
+    expect(result.current.totp).toEqual({ values, invalid: false, trustDeviceDays: 0 });
 
     await act(() => result.current.performLogin(values, false, "123456"));
     expect(login).toHaveBeenCalledTimes(2);
@@ -62,7 +62,7 @@ describe("isteğe bağlı 2FA — giriş akışı", () => {
     login.mockRejectedValueOnce(hata(401, "TOTP_INVALID"));
     const { result } = renderHook(() => useLoginFlow(), { wrapper });
     await act(() => result.current.performLogin(values, false, "000000"));
-    expect(result.current.totp).toEqual({ values, invalid: true });
+    expect(result.current.totp).toEqual({ values, invalid: true, trustDeviceDays: 0 });
   });
 
   it("409 SESSION_EXISTS kod adımı sanılmaz (oturum çakışması ayrı ekran)", async () => {

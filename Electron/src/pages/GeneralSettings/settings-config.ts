@@ -2762,6 +2762,19 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "“Herkese zorunlu” (varsayılan): web paneline girişte iki adımlı doğrulama kurulu olmalı ve kod istenir. “Kullanıcının tercihine bırak”: kodu kendi hesabında kapatan kullanıcı internetten yalnız parolayla girer — önerilmez; yalnız deneme/demo kurulumları için. Sistem hesabı her durumda kod verir; masaüstü ve tablet kuralları değişmez. Bu ayarı yalnız sistem yöneticisi değiştirir.",
       },
     ],
+    numberFlags: [
+      {
+        key: "trustedDeviceDays",
+        title: "Bu cihazı hatırla (gün)",
+        desc: "Web girişinin kod adımında “Bu cihazı N gün hatırla” kutusu çıkar; işaretleyen kullanıcı o tarayıcıdan N gün boyunca kod girmeden (yalnız parolayla) girer. 0 = kapalı (varsayılan): her girişte kod istenir. Parola değişince, doğrulama sıfırlanınca ya da hesap pasife alınınca hatırlanan cihazlar silinir; kullanıcı ve yönetici cihazları tek tek kaldırabilir. Sistem hesabına uygulanmaz. Bu ayarı yalnız sistem yöneticisi değiştirir.",
+        min: 0,
+        max: 90,
+        fallback: 0,
+        unit: "gün",
+        step: 1,
+        audience: ["Yönetim"],
+      },
+    ],
   },
   {
     id: "support",

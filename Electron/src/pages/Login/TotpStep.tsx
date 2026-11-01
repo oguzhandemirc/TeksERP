@@ -19,12 +19,15 @@ export interface TotpStepProps {
   submitting: boolean;
   /** Son denemede kod yanlış mıydı (401 TOTP_INVALID) — alanı kırmızıya çeker. */
   invalid: boolean;
-  onSubmit: (code: string) => void;
+  /** > 0 ise "Bu cihazı N gün hatırla" kutusu (sunucu 409 TOTP_REQUIRED `details.trustDeviceDays`). */
+  trustDeviceDays?: number;
+  onSubmit: (code: string, rememberDevice: boolean) => void;
   onCancel: () => void;
 }
 
-export function TotpStep({ submitting, invalid, onSubmit, onCancel }: TotpStepProps) {
+export function TotpStep({ submitting, invalid, trustDeviceDays = 0, onSubmit, onCancel }: TotpStepProps) {
   const [code, setCode] = useState("");
+  const [remember, setRemember] = useState(false);
   const trimmed = code.trim();
 
   return (
@@ -47,7 +50,7 @@ export function TotpStep({ submitting, invalid, onSubmit, onCancel }: TotpStepPr
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (trimmed) onSubmit(trimmed);
+          if (trimmed) onSubmit(trimmed, trustDeviceDays > 0 && remember);
         }}
         className="space-y-4"
       >
@@ -76,6 +79,23 @@ export function TotpStep({ submitting, invalid, onSubmit, onCancel }: TotpStepPr
         <p className="text-center text-xs text-muted-foreground">
           Telefonuna ulaşamıyorsan kurtarma kodlarından birini yazabilirsin.
         </p>
+
+        {trustDeviceDays > 0 && (
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+            />
+            <span>
+              Bu cihazı {trustDeviceDays} gün hatırla
+              <span className="block text-xs text-muted-foreground">
+                Bu tarayıcıdan girişte {trustDeviceDays} gün kod sorulmaz. Ortak kullanılan bilgisayarda işaretleme.
+              </span>
+            </span>
+          </label>
+        )}
 
         <Button type="submit" className="w-full" disabled={submitting || !trimmed}>
           {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

@@ -80,6 +80,16 @@ async function revokeOverCap(tx: Prisma.TransactionClient, userId: string): Prom
   });
 }
 
+/** Oturum satırına "yeni cihaz" işareti — yalnız bilgi kolonu; çağıranın tx'inde (bildirimle aynı). */
+export async function markSessionNewDeviceTx(
+  tx: Prisma.TransactionClient,
+  jti: string,
+  userId: string,
+  newDevice: boolean,
+): Promise<void> {
+  await tx.session.updateMany({ where: { jti, userId }, data: { newDevice } });
+}
+
 export class SessionRegistryService {
   /**
    * Login sırasında yeni oturum kaydı aç — aynı-tip politikasını uygular.

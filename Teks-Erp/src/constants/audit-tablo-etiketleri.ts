@@ -123,6 +123,7 @@ export const TABLE_LABELS: Record<string, string> = {
   USER_QUICK_PIN: "Hızlı PIN",
   USER_CARD_TOKEN: "Kart Anahtarı",
   USER_WEB_TOTP: "İnternetten Giriş 2FA Tercihi",
+  TRUSTED_DEVICE: "Hatırlanan Cihaz",
   PERMISSION: "Yetki",
   PERMISSION_TEMPLATE: "Yetki Şablonu",
   SYSTEM_SETTING: "Sistem Ayarı",

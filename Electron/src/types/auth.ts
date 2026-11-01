@@ -70,6 +70,8 @@ export interface LoginRequest {
    * yaklaşımı fabrikadaki her operatöre gereksiz bir alan gösterirdi.
    */
   totpCode?: string;
+  /** Web kod adımı: "Bu cihazı N gün hatırla" — sunucu `trustDeviceDays > 0` dediyse gönderilir. */
+  rememberDevice?: boolean;
 }
 
 /** 409 SESSION_EXISTS yanıtındaki mevcut oturum bilgisi (backend `details`). */

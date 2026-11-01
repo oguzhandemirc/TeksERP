@@ -26,6 +26,7 @@ import { Currency, ItemType, Prisma, PriceKind } from "@prisma/client";
 import app from "../src/app";
 import prisma, { pool } from "../src/lib/prisma";
 import { MODULE_FIELD_BY_SETTING_KEY } from "../src/constants/module-profiles";
+import { SUPERADMIN_ONLY_FLAG_KEYS } from "../src/constants/module-flags";
 import { KURSUN_PROPERTY_CODE } from "../src/services/helpers/quality-station.helper";
 import { factoryYmd } from "../src/constants/time";
 import { resolveServiceItemsForRolls } from "../src/services/helpers/service-pricing.helper";
@@ -137,7 +138,10 @@ async function scenario(): Promise<void> {
   const live = plan.filter((p) => p.durum !== "ANAHTAR_YOK");
   check("ayar paketi planı: ALAN_YOK yok (paket ↔ servis ayrışmamış)", plan.every((p) => p.durum !== "ALAN_YOK"), plan.map((p) => `${p.alan}:${p.durum}`).join(", "));
   console.log(`   ℹ️ paket: ${live.length} satır uygulanır, ${plan.length - live.length} ANAHTAR_YOK (${plan.filter((p) => p.durum === "ANAHTAR_YOK").map((p) => `${p.anahtar}→${p.dilim}`).join(", ")})`);
-  const pkg: Record<string, unknown> = Object.fromEntries(live.map((s) => [s.alan, s.hedef]));
+  const pkg: Record<string, unknown> = Object.fromEntries(live.filter((s) => !SUPERADMIN_ONLY_FLAG_KEYS.has(s.alan)).map((s) => [s.alan, s.hedef]));
+  // Süperadmin anahtarları (ör. auth.trustedDeviceDays) HTTP'den yazılamaz; betik gibi servisten girer.
+  const saPkg = Object.fromEntries(live.filter((s) => SUPERADMIN_ONLY_FLAG_KEYS.has(s.alan)).map((s) => [s.alan, s.hedef]));
+  if (Object.keys(saPkg).length > 0) await systemSettingService.setFeatureFlags(saPkg as never, await testActorId());
   must(await api("PATCH", "/api/feature-flags", { ...pkg, kursunMeterVarianceApproval: "OFFICE", financeAutoDraftFromShipmentEnabled: true, shipmentConfirmationEnabled: false }), "ayar paketi");
   const ff = must<Record<string, unknown>>(await api("GET", "/api/feature-flags"), "bayrak oku");
   const off = live.filter((s) => s.alan !== "kursunMeterVarianceApproval" && JSON.stringify(ff[s.alan]) !== JSON.stringify(s.hedef));
