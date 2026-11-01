@@ -12,6 +12,7 @@
 //   Taslak: ayrı `draftRows`, katkıya GİRMEZ. Eksik norm/fiyat/kur: değer `null` + kod (0 değil).
 //   D4-G2b: katkıya makine-saat maliyeti girer (`profitability-machine`); net = katkı − işçilik − genel gider
 //   (`profitability-overhead`; genel gider varsayılan `YOK` → dağıtılmaz, net = katkı). Ay özeti `months`.
+//   D4-G2c: bağlı masraf as-of doğrudan masraftır (`profitability-allocation`); bağ yoksa alan eklenmez (bayt-aynı).
 // Modül: maliyet KAPALI → null, tabloya sorgu yok; finans kapalı → null (gelir faturadan; maliyet-bridge emsali).
 // =============================================================================
 import { InvoiceStatus, Prisma, ServiceMeterBasis } from "@prisma/client";
@@ -23,6 +24,7 @@ import {
   readCostProfitMachineTime,
   readCostProfitOverheadKey,
   readCostProfitSubcontractSource,
+  readFinanceExpenseAllocationField,
   readMaliyetEnabled,
   type ProfitCategoryClassMap,
   type ProfitConsumablePriceSource,
@@ -34,6 +36,7 @@ import { loadProfitabilityFinance } from "./maliyet-bridge.helper";
 import { computeWorkCosts, type ProfitMissingCode as CostMissingCode } from "./profitability-cost.helper";
 import type { RevenueInvoiceRow, RevenueLinkRow } from "./profitability-finance.helper";
 import { computeMachineCosts, type IdleMachineDay, type MachineMissingCode } from "./profitability-machine.helper";
+import { attachDirectExpenses, deductFromPools, readMonthAllocations, workOrderOfSteps, type MonthDirectExpenses } from "./profitability-allocation.helper";
 import { buildMonthPools, distributePool, overheadBase, type PoolCategory } from "./profitability-overhead.helper";
 
 export type ProfitMissingCode = CostMissingCode | MachineMissingCode;
@@ -69,7 +72,9 @@ export interface ProfitabilityRow {
   laborTry: Prisma.Decimal;
   /** D4-G2b: ayın genel gider havuzundan pay (`YOK` ya da iptal/taslak satırda 0). */
   overheadTry: Prisma.Decimal;
-  /** Katkı − işçilik − genel gider; katkı `null` ise `null`. `YOK` + sınıfsız kurulumda = katkı. */
+  /** D4-G2c: masraf bağından doğrudan masraf payı — yalnız o ay bu satıra bağ düştüyse var. */
+  directExpenseTry?: Prisma.Decimal;
+  /** Katkı − işçilik − genel gider (− doğrudan masraf); katkı `null` ise `null`. `YOK` + sınıfsız kurulumda = katkı. */
   netTry: Prisma.Decimal | null;
   missing: ProfitMissingCode[];
 }
@@ -86,6 +91,8 @@ export interface ProfitMonthSummary {
   /** Tarifesi eksik boşta gün varsa `null`. */
   idleMachineTry: Prisma.Decimal | null;
   categories: PoolCategory[];
+  /** D4-G2c: ayın masraf bağı parçaları (as-of + geç bağ düzeltmesi + iptal tersi); bağ yoksa alan yok. */
+  directExpenses?: MonthDirectExpenses;
 }
 
 export interface ProfitabilityResult {
@@ -213,8 +220,13 @@ async function applyPools(
   for (let m = fromMonth; m <= toMonth; m = nextMonth(m)) monthList.push(m);
   const cells = await finance.readExpenseCells(start, end, Object.keys(settings.categoryClasses));
   const pools = buildMonthPools(monthList, cells, settings.categoryClasses);
+  const bounds = monthList.map((m) => ({ month: m, start: factoryDayStartOfKey(`${m}-01`), end: factoryDayStartOfKey(`${nextMonth(m)}-01`) }));
+  const pieces = await readMonthAllocations((await readFinanceExpenseAllocationField()) !== "OFF", finance.readExpenseAllocationPieces, bounds, Object.keys(settings.categoryClasses));
+  const workOrderOf = await workOrderOfSteps(pieces, rows.map((r) => r.workOrderStepId));
   return monthList.map((month) => {
     const p = pools.get(month)!;
+    const monthPieces = pieces.get(month);
+    if (monthPieces) deductFromPools(p, monthPieces, settings.categoryClasses);
     const target = rows.filter((r) => r.month === month && r.kind === "INVOICED");
     const labor = distributePool(p.laborPoolTry, target.map((r) => r.machineHours ?? D0()));
     const overhead = settings.overheadKey === "YOK" ? null : distributePool(p.overheadPoolTry, target.map((r) => overheadBase(settings.overheadKey as Exclude<ProfitOverheadKey, "YOK">, r)));
@@ -223,13 +235,15 @@ async function applyPools(
       if (overhead) r.overheadTry = overhead[i]!;
       if (labor || overhead) r.netTry = r.contributionTry === null ? null : r.contributionTry.minus(r.laborTry).minus(r.overheadTry);
     });
+    const direct = monthPieces ? attachDirectExpenses(target, monthPieces, settings.categoryClasses, workOrderOf) : undefined;
+    if (direct) for (const r of target) if (r.directExpenseTry && r.contributionTry !== null) r.netTry = r.contributionTry.minus(r.laborTry).minus(r.overheadTry).minus(r.directExpenseTry);
     const idleHere = idle.filter((d) => d.month === month);
     return {
       month, overheadPoolTry: p.overheadPoolTry, overheadDistributedTry: overhead ? p.overheadPoolTry : D0(),
       laborPoolTry: p.laborPoolTry, laborDistributedTry: labor ? p.laborPoolTry : D0(), excludedTry: p.excludedTry,
       idleMachineHours: idleHere.reduce((a, d) => a.plus(d.hours), D0()),
       idleMachineTry: idleHere.some((d) => d.costTry === null) ? null : idleHere.reduce((a, d) => a.plus(d.costTry!), D0()),
-      categories: p.categories,
+      categories: p.categories, ...(direct ? { directExpenses: direct } : {}),
     };
   });
 }
@@ -246,6 +260,8 @@ export interface ProfitSummary {
   contributionTry: Prisma.Decimal | null;
   laborTry: Prisma.Decimal;
   overheadTry: Prisma.Decimal;
+  /** D4-G2c: grupta doğrudan masraflı satır varsa toplamı (yoksa alan yok). */
+  directExpenseTry?: Prisma.Decimal;
   netTry: Prisma.Decimal | null;
   missingRows: number;
   estimatedRows: number;
@@ -270,6 +286,7 @@ export function summarizeProfitability(rows: ProfitabilityRow[], by: ProfitGroup
     g.laborTry = g.laborTry.plus(r.laborTry);
     g.overheadTry = g.overheadTry.plus(r.overheadTry);
     g.netTry = add(g.netTry, r.netTry);
+    if (r.directExpenseTry) g.directExpenseTry = (g.directExpenseTry ?? D0()).plus(r.directExpenseTry);
     if (r.missing.length > 0) g.missingRows++;
     if (r.subcontractEstimated) g.estimatedRows++;
     groups.set(k, g);

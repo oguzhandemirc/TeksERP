@@ -11,6 +11,7 @@ import { catalogHeader, metricFigure, periodOf } from "./temel/_common";
 import { dayRangeParameters, type ResolvedDayRange } from "./temel/_day-range";
 import { anlatiUret } from "./anlati/anlati";
 import { resolveRangeEnd, resolveRangeStart } from "../../constants/time";
+import { TERIM } from "../../constants/terim";
 import {
   summarizeProfitability, type ProfitabilityResult, type ProfitabilityRow, type ProfitGroupBy, type ProfitMissingCode,
 } from "../helpers/profitability.helper";
@@ -62,6 +63,8 @@ export interface Group {
   label: string; meters: Prisma.Decimal; revenue: Prisma.Decimal; consumable: Prisma.Decimal | null; subcontract: Prisma.Decimal | null;
   machine: Prisma.Decimal | null; contribution: Prisma.Decimal | null; labor: Prisma.Decimal; overhead: Prisma.Decimal; net: Prisma.Decimal | null;
   missing: Set<ProfitMissingCode>; estimated: boolean;
+  /** D4-G2c: masraf bağından doğrudan masraf (bağ yoksa alan yok → tablo bayt-aynı). */
+  direct?: Prisma.Decimal;
 }
 
 function labelOf(by: Exclude<ProfitBreakdown, "is">, key: string | null, names: ProfitNames): string {
@@ -82,6 +85,7 @@ export function profitGroups(rows: ProfitabilityRow[], by: ProfitBreakdown, name
       label: `${names.rolls.get(r.rollId) ?? "—"} · ${names.serviceItems.get(r.serviceItemId) ?? "—"} · ${r.docNo}${r.kind === "CANCELLED" ? " (iptal)" : ""}`,
       meters: r.meters, revenue: r.revenueTry, consumable: r.consumableTry, subcontract: r.subcontractTry, machine: r.machineTry,
       contribution: r.contributionTry, labor: r.laborTry, overhead: r.overheadTry, net: r.netTry, missing: new Set(r.missing), estimated: r.subcontractEstimated,
+      ...(r.directExpenseTry ? { direct: r.directExpenseTry } : {}),
     }));
   }
   const side = new Map<string | null, { meters: Prisma.Decimal; missing: Set<ProfitMissingCode> }>();
@@ -95,7 +99,7 @@ export function profitGroups(rows: ProfitabilityRow[], by: ProfitBreakdown, name
   return summarizeProfitability(rows, GROUP_BY[by]).map((g) => ({
     label: labelOf(by, g.key, names), meters: side.get(g.key)!.meters, revenue: g.revenueTry, consumable: g.consumableTry,
     subcontract: g.subcontractTry, machine: g.machineTry, contribution: g.contributionTry, labor: g.laborTry, overhead: g.overheadTry,
-    net: g.netTry, missing: side.get(g.key)!.missing, estimated: g.estimatedRows > 0,
+    net: g.netTry, missing: side.get(g.key)!.missing, estimated: g.estimatedRows > 0, ...(g.directExpenseTry ? { direct: g.directExpenseTry } : {}),
   }));
 }
 
@@ -105,6 +109,7 @@ export function totalOf(groups: Group[]): Group {
     subcontract: add(t.subcontract, g.subcontract), machine: add(t.machine, g.machine), contribution: add(t.contribution, g.contribution),
     labor: t.labor.plus(g.labor), overhead: t.overhead.plus(g.overhead), net: add(t.net, g.net),
     missing: new Set([...t.missing, ...g.missing]), estimated: t.estimated || g.estimated,
+    ...(t.direct || g.direct ? { direct: (t.direct ?? D0()).plus(g.direct ?? D0()) } : {}),
   }), { label: "Toplam", meters: D0(), revenue: D0(), consumable: D0(), subcontract: D0(), machine: D0(), contribution: D0(), labor: D0(), overhead: D0(), net: D0(), missing: new Set(), estimated: false });
 }
 
@@ -114,22 +119,25 @@ export function badgeOf(g: Pick<Group, "missing" | "estimated">): string {
   return g.estimated ? "tahmini" : "";
 }
 
-const cellsOf = (g: Group): Record<string, TabloHucresi> => ({
+const cellsOf = (g: Group, withDirect: boolean): Record<string, TabloHucresi> => ({
   ad: g.label, metre: Number(g.meters.toFixed(2)), gelir: tl(g.revenue), sarf: tl(g.consumable), makine: tl(g.machine), disFason: tl(g.subcontract),
-  katki: tl(g.contribution), iscilik: tl(g.labor), genelGider: tl(g.overhead), net: tl(g.net), durum: badgeOf(g),
+  katki: tl(g.contribution), iscilik: tl(g.labor), genelGider: tl(g.overhead), ...(withDirect ? { dogrudanMasraf: tl(g.direct ?? D0()) } : {}),
+  net: tl(g.net), durum: badgeOf(g),
 });
 
 export function profitTable(rows: ProfitabilityRow[], by: ProfitBreakdown, names: ProfitNames): TabloBlok {
   const groups = profitGroups(rows, by, names);
+  const withDirect = groups.some((g) => g.direct !== undefined);
   const money = (anahtar: string, baslik: string): TabloKolonu => ({ anahtar, baslik, birim: "TRY", hiza: "sag" });
   const kolonlar: TabloKolonu[] = [
     { anahtar: "ad", baslik: BREAKDOWN_LABEL[by] }, { anahtar: "metre", baslik: "Metre", birim: "m", hiza: "sag" },
     money("gelir", "Kesinleşen gelir"), money("sarf", "İpe giden"), money("makine", "Makineye giden"), money("disFason", "Dışarıya ödenen"),
-    money("katki", "Kalan (katkı)"), money("iscilik", "İşçilik"), money("genelGider", "Genel gider"), money("net", "Net"), { anahtar: "durum", baslik: "Durum" },
+    money("katki", "Kalan (katkı)"), money("iscilik", "İşçilik"), money("genelGider", "Genel gider"),
+    ...(withDirect ? [money("dogrudanMasraf", "Bağlı masraf")] : []), money("net", "Net"), { anahtar: "durum", baslik: "Durum" },
   ];
   const shown = by === "is" ? groups.slice(0, PROFIT_WORK_ROW_LIMIT) : groups;
   return {
-    kolonlar, satirlar: shown.map(cellsOf), toplam: cellsOf(totalOf(groups)),
+    kolonlar, satirlar: shown.map((g) => cellsOf(g, withDirect)), toplam: cellsOf(totalOf(groups), withDirect),
     ...(shown.length < groups.length ? { kesildi: { gosterilen: shown.length, toplam: groups.length } } : {}),
   };
 }
@@ -149,6 +157,10 @@ function warningsOf(r: ProfitabilityResult, rangeNotes: string[]): string[] {
   }
   const undistributed = r.months.reduce((a, m) => a.plus(m.overheadPoolTry.minus(m.overheadDistributedTry)).plus(m.laborPoolTry.minus(m.laborDistributedTry)), D0());
   if (undistributed.gt(0)) w.push(`${say(undistributed)} TL genel gider/işçilik bu dönemde işlere dağıtılmadı (ayar ya da dağıtacak iş yok).`);
+  const late = r.months.reduce((a, m) => a.plus(m.directExpenses?.lateAdjustmentTry ?? 0), D0());
+  if (!late.isZero()) w.push(`Geç bağ düzeltmesi: önceki ayların masraflarına bu dönemde yapılan bağ değişikliği ${say(late)} TL doğrudan masrafa aktarıldı; eski ay değişmedi.`);
+  const directLeft = r.months.reduce((a, m) => a.plus(m.directExpenses?.undistributedTry ?? 0), D0());
+  if (!directLeft.isZero()) w.push(`${say(directLeft)} TL bağlı masrafın hedefinin (makine/${TERIM.terbiyeIsEmri.cekimKucuk.yalin}/işlem) bu dönemde faturalanan işi yok; işlere yüklenmedi.`);
   return w;
 }
 
@@ -224,6 +236,9 @@ export function buildProfitabilitySunumu(p: {
       { ad: "Dışarıya ödenen", aciklama: "Dış fasona verilen işin bedeli: fason faturası, ayar izin veriyorsa yoksa tarife (tahmini)." },
       { ad: "Kalan (katkı)", aciklama: "Kesinleşen gelirden ipe, makineye ve dışarıya giden çıkınca kalan." },
       { ad: "Net", aciklama: "Kalandan işçilik ve genel gider payı da düşülünce kalan; dağıtım anahtarı ayardadır." },
+      ...(result.rows.some((x) => x.directExpenseTry) || result.months.some((x) => x.directExpenses)
+        ? [{ ad: "Bağlı masraf", aciklama: `Kasa masrafının makineye, ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} ya da hizmete bağlanan payı (bağın o ay sonundaki hâliyle); işin metre payıyla nete düşer.` }]
+        : []),
       { ad: "Eksik", aciklama: "Norm, fiyat, kur ya da saat ücreti girilmemiş iş; değeri sıfır sayılmaz, boş bırakılır." },
     ],
     parametreler: [

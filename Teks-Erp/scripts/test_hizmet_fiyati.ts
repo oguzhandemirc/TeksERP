@@ -296,6 +296,8 @@ const COST_SIDE_SERVICE_ITEM_ID_FILES = new Set([
   "routes/finance-expense-allocation.routes.ts",
   "services/expense-allocation.service.ts",
   "services/helpers/expense-allocation.helper.ts",
+  // D4-G2c kârlılık bağ payı: bağın hedef kalemini satır eşlemesi için okur (çözücü değil).
+  "services/helpers/profitability-allocation.helper.ts",
 ]);
 function astChecks(): void {
   section("§8 AST: çözücü tek, eşleme okuyucuları beyanlı, FinishingRate okunmaz");

@@ -168,6 +168,8 @@ export interface ExpenseAllocationsAsOf {
   atPeriodEnd: ExpenseAllocationAsOfRow[];
   /** (2) Dönemden ÖNCEKİ masraflara dönem İÇİNDE yapılan bağ olayları (geç bağ düzeltmesi; toplam korunur). */
   lateEvents: ExpenseAllocationLateEvent[];
+  /** (3) İsteğe bağlı (`withCancelledIn`): dönem İÇİNDE iptal edilen masrafların dönem SONUNDA geçerli bağları. */
+  cancelledIn?: ExpenseAllocationAsOfRow[];
 }
 
 function toAsOfRow(a: AsOfSource, sign: 1 | -1): ExpenseAllocationAsOfRow {
@@ -195,7 +197,11 @@ const ORDER: Prisma.ExpenseAllocationOrderByWithRelationInput[] = [{ cashTransac
  * TEK OKUYUCU (K19/K15) — `[start, end)` dönemi için masraf bağları. Dönem sınırlarını çağıran fabrika saatinden
  * (`constants/time.ts`) verir. Yalnız EXPENSE masrafları; iptal edilmiş masraf satırı durumuyla döner.
  */
-export async function listExpenseAllocationsAsOf(db: AsOfReader, range: { start: Date; end: Date }): Promise<ExpenseAllocationsAsOf> {
+export async function listExpenseAllocationsAsOf(
+  db: AsOfReader,
+  range: { start: Date; end: Date },
+  opts: { withCancelledIn?: boolean } = {},
+): Promise<ExpenseAllocationsAsOf> {
   const { start, end } = range;
   if (!(start < end)) throw AppError.badRequest("Dönem başlangıcı bitişinden önce olmalı.");
   const current = await db.expenseAllocation.findMany({
@@ -221,5 +227,19 @@ export async function listExpenseAllocationsAsOf(db: AsOfReader, range: { start:
     if (a.revokedAt && a.revokedAt >= start && a.revokedAt < end) lateEvents.push({ ...toAsOfRow(a, -1), event: "REVOKED", eventAt: a.revokedAt });
   }
   lateEvents.sort((x, y) => x.eventAt.getTime() - y.eventAt.getTime() || (x.allocationId < y.allocationId ? -1 : x.allocationId > y.allocationId ? 1 : 0));
-  return { atPeriodEnd: current.map((a) => toAsOfRow(a, 1)), lateEvents };
+  const result: ExpenseAllocationsAsOf = { atPeriodEnd: current.map((a) => toAsOfRow(a, 1)), lateEvents };
+  if (opts.withCancelledIn) {
+    // Süzgeç DB'de (iptal damgası dönem içinde) — kârlılık iptal ters kaydı için tüm geçmişi taramaz.
+    const cancelled = await db.expenseAllocation.findMany({
+      where: {
+        createdAt: { lt: end },
+        OR: [{ revokedAt: null }, { revokedAt: { gte: end } }],
+        cashTransaction: { kind: CashTxnKind.EXPENSE, txnDate: { lt: end }, status: PaymentStatus.CANCELLED, cancelledAt: { gte: start, lt: end } },
+      },
+      select: AS_OF_SELECT,
+      orderBy: ORDER,
+    });
+    result.cancelledIn = cancelled.map((a) => toAsOfRow(a, 1));
+  }
+  return result;
 }
