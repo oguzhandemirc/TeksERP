@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ItemType } from "@/types/enums";
+import { acceptNumberAsText } from "@/lib/decimal-form-text";
 
 const itemTypeEnum = z.enum(
   [ItemType.FABRIC, ItemType.YARN, ItemType.CONSUMABLE, ItemType.SERVICE],
@@ -42,17 +43,19 @@ export const makeItemFormSchema = (isEdit: boolean) =>
      * onların düzenlenmesini kilitlerdi. Metin taşınır — Decimal kolona JS
      * float yazmak yasak.
      */
-    linearDensityDen: z
-      .string()
-      .trim()
-      .refine(
-        (v) => v === "" || (Number.isFinite(Number(v)) && Number(v) > 0),
-        "Denye pozitif bir sayı olmalı",
-      )
-      .refine(
-        (v) => v === "" || /^\d+(\.\d{1,4})?$/.test(v),
-        "Denye en fazla 4 ondalık basamak taşıyabilir",
-      ),
+    linearDensityDen: acceptNumberAsText(
+      z
+        .string()
+        .trim()
+        .refine(
+          (v) => v === "" || (Number.isFinite(Number(v)) && Number(v) > 0),
+          "Denye pozitif bir sayı olmalı",
+        )
+        .refine(
+          (v) => v === "" || /^\d+(\.\d{1,4})?$/.test(v),
+          "Denye en fazla 4 ondalık basamak taşıyabilir",
+        ),
+    ),
     /**
      * K4P ürün kartı eni (cm) — `Item.widthCm` Decimal(8,2); muayene puan/100 m² bu enden. Metin taşınır
      * (Decimal'e float yazılmaz); virgül kabul, "" = en yok. Yalnız Kalite Güvence açıkken çizilir.

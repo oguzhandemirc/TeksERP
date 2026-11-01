@@ -28,7 +28,7 @@ export interface Item {
   /** Yaşam döngüsü (eski sunucuda yok → `itemLifecycleOf` isActive'ten türetir). */
   lifecycleStatus?: ItemLifecycleStatus;
   /** İplik inceliği (denye). Yalnız YARN'da dolu; çözgü kartı bunu ister. */
-  linearDensityDen: string | null;
+  linearDensityDen: string | number | null;
   /** KUMAŞ → varsayılan çözgü kartı (E4, 2026-09-18): dokuma işi formu ve sunucu ön-dolum kaynağı; yalnız FABRIC. */
   warpSpecId?: string | null;
   /** SY-A4: atkı kartı + desen kartı (yalnız KUMAŞ; eski sunucuda yok). */
