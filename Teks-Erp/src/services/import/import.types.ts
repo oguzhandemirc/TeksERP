@@ -267,7 +267,7 @@ export interface ImportAdapter {
    * türetilir; dosya-içi mükerrer kontrolü bu anahtarla koşar. Yoksa `keyColumns[0]` sütunu.
    */
   rowKey?(values: Record<string, unknown>): string | null;
-  /** Audit yüküne GİRMEYEN sütunlar (fiyat — sır/ticari hijyen); defter satırı (`changedFields`) etkilenmez. */
+  /** İçe aktarımın KENDİ audit satırına girmeyen sütunlar; yazan servisin audit'i tekil uçla aynı kalır, defter satırı (`changedFields`) etkilenmez. */
   auditOmit?: readonly string[];
   /**
    * TERS KAYIT dalının (`REVERSE_ENTRY`) önizleme engelleri: kayıt id → atlama gerekçesi. Toplu tek

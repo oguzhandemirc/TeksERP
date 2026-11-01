@@ -7,7 +7,8 @@
 import { CariTxnSource, type Currency } from "@prisma/client";
 import prisma from "../../../lib/prisma";
 import { cariService } from "../../cari.service";
-import { ensureCariAccountTx } from "../../helpers/finance.helper";
+import { CARI_STATEMENT_ORDER, ensureCariAccountTx } from "../../helpers/finance.helper";
+import { factoryDateTr } from "../../../constants/time";
 import { logLegacyLegAdoption } from "../../helpers/cari-account-adopt.helper";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
 import {
@@ -114,7 +115,7 @@ export const cariOpeningBalanceImportAdapter: ImportAdapter = {
   async exportRows() {
     const rows = await prisma.cariTransaction.findMany({
       where: { sourceType: CariTxnSource.ADJUSTMENT, reversedBy: { is: null } },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      orderBy: CARI_STATEMENT_ORDER,
       select: {
         currency: true, debit: true, credit: true, txnDate: true, description: true,
         cari: { select: { customer: { select: { code: true } }, subcontractor: { select: { code: true } } } },
@@ -128,7 +129,8 @@ export const cariOpeningBalanceImportAdapter: ImportAdapter = {
         currency: r.currency,
         amount: (isDebit ? r.debit : r.credit).toString(),
         direction: isDebit ? "Borçlu" : "Alacaklı",
-        txnDate: r.txnDate.toISOString(),
+        // Fabrika günü GG.AA.YYYY — `parseDateCell` aynı güne döner (UTC ISO metni günü kaydırarak gösterirdi).
+        txnDate: factoryDateTr(r.txnDate),
         description: r.description ?? "",
       };
     });

@@ -126,15 +126,6 @@ const TICARET_MODELLERI = new Set([
 
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
-    dosya: "routes/master-data-merge.routes.ts",
-    neden:
-      "ANA VERİ BİRLEŞTİRME rejim kapısı taşıyamaz (müşteri/renk/kalem birleştirmesi finanssız kurulumda da çalışır). " +
-      "Finans izi tek geçişli daldan gelir (toplu açılış aktarımı, 2026-11-01): `getImportAdapter` yalnız `MERGE_ENTITIES` " +
-      "varlığının izin kodunu/etiketini okur; kayıt defteri (`import-registry`) devir/çek adaptörlerini taşıdığı için AST " +
-      "`cariTransaction`a ulaşır. O adaptörler bu router'dan ÇAĞRILMAZ (MERGE_ENTITIES'te yoklar); yazma uçları " +
-      "`import.routes` içinde adaptörün `module: \"finans\"` kapısıyla (`requireFinanceEnabled`) korunur.",
-  },
-  {
     dosya: "routes/demo.routes.ts",
     neden:
       "DEMO verisi (yalnız demo kipinde) — finans dokunuşu SALT-OKUMADIR ve geçişlidir (H10, 2026-10-29): " +

@@ -6,7 +6,6 @@
 import { Currency, ItemType, ItemUnit, PriceKind } from "@prisma/client";
 import prisma from "../../../lib/prisma";
 import { itemPriceService } from "../../item-price.service";
-import { ACTIVE_ITEM_PRICE } from "../../helpers/item-price-validity.helper";
 import { resolveReference } from "../import-lookup";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
 import { CURRENCY_VALUES, claimInFile, joinKey, revertBranchMessage } from "./opening-import.shared";
@@ -73,10 +72,7 @@ export const customerServicePriceImportAdapter: ImportAdapter = {
     row.result.label = `${cust.hit.name ?? v.customerCode} · ${item.hit.name ?? v.itemCode}`;
     claimInFile(ctx, row, { key: `${ids.customerId}|${ids.itemId}|${v.currency}`, column: "itemCode", message: "Aynı müşteri + hizmet + para birimi dosyada iki kez var" });
 
-    const current = await prisma.itemPrice.findFirst({
-      where: { ...ids, kind: PriceKind.SALE, currency: v.currency as Currency, ...ACTIVE_ITEM_PRICE },
-      select: { id: true, price: true },
-    });
+    const current = await itemPriceService.findActiveSale({ ...ids, currency: v.currency as Currency });
     if (!current) return;
     row.existing = { id: current.id, price: Number(current.price) };
     row.result.targetId = current.id;
@@ -94,11 +90,7 @@ export const customerServicePriceImportAdapter: ImportAdapter = {
   },
 
   async exportRows() {
-    const rows = await prisma.itemPrice.findMany({
-      where: { kind: PriceKind.SALE, customerId: { not: null }, item: { itemType: ItemType.SERVICE }, ...ACTIVE_ITEM_PRICE },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      select: { price: true, currency: true, customer: { select: { code: true } }, item: { select: { code: true, unit: true } } },
-    });
+    const rows = await itemPriceService.listActiveCustomerServicePrices();
     return rows.map((r) => ({
       customerCode: r.customer?.code ?? "",
       itemCode: r.item.code,
@@ -114,12 +106,8 @@ export const customerServicePriceImportAdapter: ImportAdapter = {
         await itemPriceService.remove(line.recordId, userId);
         return null;
       }
-      const row = await prisma.itemPrice.findUnique({
-        where: { id: line.recordId },
-        select: { itemId: true, customerId: true, currency: true, revokedAt: true },
-      });
-      if (!row) return "Fiyat satırı bulunamadı";
-      if (row.revokedAt) return "Fiyat içe aktarımdan sonra değişti ya da kaldırıldı — geri alınmaz";
+      const row = await itemPriceService.findActiveKey(line.recordId);
+      if (!row) return "Fiyat içe aktarımdan sonra değişti ya da kaldırıldı — geri alınmaz";
       const from = (line.changedFields as Record<string, { from: unknown }> | null)?.price?.from;
       if (from === undefined || from === null) return "Önceki fiyat defterde yok";
       await itemPriceService.upsert({ itemId: row.itemId, customerId: row.customerId, kind: PriceKind.SALE, currency: row.currency, price: String(from) }, userId);

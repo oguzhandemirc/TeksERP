@@ -180,7 +180,7 @@ async function main(): Promise<void> {
     const prices = await prisma.itemPrice.findMany({ where: { itemId: svc.id, customerId: e.id }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { price: true, revokedAt: true } });
     check("§3d farklı fiyat UPDATE: eski sürüm damgalı, yenisi aktif", upd.updated === 1 && prices.length === 2 && prices[0]!.revokedAt !== null && prices[1]!.price.toString() === "4.1", JSON.stringify(prices));
     const logs = await prisma.systemLog.findMany({ where: { tableName: "ITEM_PRICE", newData: { path: ["importRunId"], equals: upd.runId } }, select: { newData: true } });
-    check("§3e audit yükünde fiyat YOK", logs.length === 1 && !("price" in ((logs[0]?.newData as Record<string, unknown>) ?? {})), JSON.stringify(logs[0]?.newData));
+    check("§3e içe aktarım audit satırında (importRunId) fiyat YOK — servis audit'i tekil uçla aynı, kapsam dışı", logs.length === 1 && !("price" in ((logs[0]?.newData as Record<string, unknown>) ?? {})), JSON.stringify(logs[0]?.newData));
     await ImportRevertService.revert(upd.runId, { reason: "Fiyat bekçi geri sarma", selectedRowNos: [2], permissions: ALL, userId: adminId });
     const active = await prisma.itemPrice.findFirst({ where: { itemId: svc.id, customerId: e.id, revokedAt: null }, select: { price: true } });
     check("§3f geri sarma önceki fiyatı yeni sürüm olarak yazar (3.75)", active?.price.toString() === "3.75", active?.price.toString());
@@ -196,19 +196,21 @@ async function main(): Promise<void> {
 }
 
 async function cleanup(): Promise<void> {
+  // Fason fixture kalıcı: yalnız bu bekçinin içe aktarımının yazdığı devir satırları (run satırlarının recordId'si) + tersleri silinir.
+  const runTxnIds = (await prisma.importRunLine.findMany({ where: { importRunId: { in: runs } }, select: { recordId: true } }))
+    .map((x) => x.recordId)
+    .filter((x): x is string => typeof x === "string");
   if (runs.length > 0) {
     await prisma.importRunLine.deleteMany({ where: { importRunId: { in: runs } } });
     await prisma.importRun.deleteMany({ where: { id: { in: runs } } });
   }
   const accs = (await prisma.cariAccount.findMany({ where: { customerId: { in: customers } }, select: { id: true } })).map((x) => x.id);
-  const fasonAcc = await prisma.cariAccount.findMany({ where: { subcontractor: { code: { startsWith: "TEST-" } } }, select: { id: true } });
-  const fasonTxn = { cariId: { in: fasonAcc.map((x) => x.id) }, currency: "RUB" as const, description: { in: ["Devir", "Devir iptali — İçe aktarım geri sarması"] } };
   const cheques = (await prisma.cheque.findMany({ where: { cariId: { in: accs } }, select: { id: true } })).map((x) => x.id);
   await prisma.chequeEvent.deleteMany({ where: { chequeId: { in: cheques } } });
-  for (const where of [{ cariId: { in: accs } }, fasonTxn]) {
-    await prisma.cariTransaction.deleteMany({ where: { ...where, reversesTxnId: { not: null } } });
-    await prisma.cariTransaction.deleteMany({ where });
-  }
+  await prisma.cariTransaction.deleteMany({ where: { cariId: { in: accs }, reversesTxnId: { not: null } } });
+  await prisma.cariTransaction.deleteMany({ where: { cariId: { in: accs } } });
+  await prisma.cariTransaction.deleteMany({ where: { reversesTxnId: { in: runTxnIds } } });
+  await prisma.cariTransaction.deleteMany({ where: { id: { in: runTxnIds } } });
   await prisma.cheque.deleteMany({ where: { id: { in: cheques } } });
   await prisma.cariBalance.deleteMany({ where: { cariId: { in: accs } } });
   // Fason fixture kalıcıdır: RUB bakiyesi yalnız bu bekçinin hareketiydi (yaz/ters = 0) — satır kalabilir, sıfırdır.

@@ -40,7 +40,7 @@
 // damgası + yeni satır, kaldırma = damga; maliyet/teklif fiyatı "şu tarih
 // itibarıyla" okur. Okuma yüklemi tek kaynak: `helpers/item-price-validity.helper`.
 // =============================================================================
-import { Prisma, PriceKind, Currency, type ServiceQtyUnit } from "@prisma/client";
+import { Prisma, PriceKind, Currency, ItemType, type ServiceQtyUnit } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -485,6 +485,23 @@ export class ItemPriceService {
     });
 
     return { success: true, data: { id }, message: "Fiyat satırı kaldırıldı." };
+  }
+
+  /** Toplu açılış aktarımı okuyucuları — `itemPrice` delegesinin tek sahibi bu dosya (`test_item_price_surum` §7e). */
+  findActiveSale(key: { itemId: string; customerId: string; currency: Currency }) {
+    return prisma.itemPrice.findFirst({ where: { ...key, kind: PriceKind.SALE, ...ACTIVE_ITEM_PRICE }, select: { id: true, price: true } });
+  }
+  listActiveCustomerServicePrices() {
+    const select = { price: true, currency: true, customer: { select: { code: true } }, item: { select: { code: true, unit: true } } };
+    return prisma.itemPrice.findMany({
+      where: { kind: PriceKind.SALE, customerId: { not: null }, item: { itemType: ItemType.SERVICE }, ...ACTIVE_ITEM_PRICE },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select,
+    });
+  }
+  /** Aktif sürüm anahtarı; damgalı (sonradan değişmiş/kaldırılmış) ya da yok → null. */
+  findActiveKey(id: string) {
+    return prisma.itemPrice.findFirst({ where: { id, ...ACTIVE_ITEM_PRICE }, select: { itemId: true, customerId: true, currency: true } });
   }
 }
 
