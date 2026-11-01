@@ -1092,8 +1092,6 @@ export const DEFAULT_SERVICE_BILLING_MISSING_METER: ServiceBillingMissingMeter =
 export type ServiceBillingBrodeUnit = "METER" | "PIECE" | "STITCH";
 export const SERVICE_BILLING_BRODE_UNITS: ServiceBillingBrodeUnit[] = ["METER", "PIECE", "STITCH"];
 export const DEFAULT_SERVICE_BILLING_BRODE_UNIT: ServiceBillingBrodeUnit = "METER";
-/** Panelden YAZILABİLEN birimler — adet kaynağı (tablet brode adet girişi) olmadan PIECE/STITCH çıkışsız kapıdır. */
-export const SERVICE_BILLING_BRODE_UNITS_WRITABLE: ServiceBillingBrodeUnit[] = ["METER"];
 export type ServiceBillingTrigger = "PER_SHIPMENT" | "PERIOD_END";
 export const SERVICE_BILLING_TRIGGERS: ServiceBillingTrigger[] = ["PER_SHIPMENT", "PERIOD_END"];
 export const DEFAULT_SERVICE_BILLING_TRIGGER: ServiceBillingTrigger = "PER_SHIPMENT";
@@ -3301,11 +3299,7 @@ export class SystemSettingService {
       if (typeof v !== "string" || !SERVICE_BILLING_BRODE_UNITS.includes(v as ServiceBillingBrodeUnit)) {
         throw AppError.badRequest(`financeServiceBillingBrodeUnit şunlardan biri olmalı: ${SERVICE_BILLING_BRODE_UNITS.join(", ")}`);
       }
-      // Çıkışsız kapı seddi: tablette brode adedi girilemiyorken ADET/VURUŞ seçilirse iç brode işleri
-      // faturadan düşer. Tablet adet girişi inince bu sed kalkar (okuyucu üç değeri de zaten tanır).
-      if (!SERVICE_BILLING_BRODE_UNITS_WRITABLE.includes(v as ServiceBillingBrodeUnit)) {
-        throw AppError.badRequest("Adet ve vuruş birimi henüz seçilemez: tablette brode adedi girişi yok, brode işleri faturaya giremezdi.", { code: "BRODE_UNIT_NO_PIECE_INPUT" });
-      }
+      // ADET/VURUŞ: adet tabletteki brode okumasında girilir (adım özeti `pieceInput`); adetsiz iş uyarıyla fatura dışı.
       await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_BRODE_UNIT, v, "Brode fiyat birimi — metre · adet · vuruş", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "financeServiceBillingTrigger")) {

@@ -45,6 +45,8 @@ export interface MeterReadingBody {
   peripheralId?: string | null;
   rawCounter?: number | null;
   clientToken: string;
+  /** GK-H1b brode adedi (yalnız çıkış okumasında, `pieceInput` adımında); yoksa anahtar YOK. */
+  pieceCount?: number;
   /** OPERATOR_REASON imzası (kod ≤64, metin ≤300). */
   ack?: { reasonCode?: string | null; reasonText?: string | null } | null;
 }

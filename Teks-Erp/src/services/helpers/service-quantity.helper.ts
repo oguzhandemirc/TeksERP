@@ -24,6 +24,15 @@ export function serviceWorkUnit(propertyCode: string | null, brodeUnit: ServiceQ
   return propertyCode === BRODE_PROPERTY_CODE ? brodeUnit : "METER";
 }
 
+/**
+ * Tablet brode okumasında "Adet" girişi istenir mi (adım özeti `pieceInput`): yalnız brode istasyonunda, sayaç
+ * çıkış okuması açıkken ve ayar ADET/VURUŞ iken. METER → null (yanıt anahtarsız, bugünküyle bayt-aynı).
+ */
+export function brodePieceInputOf(input: { meterOn: boolean; stationPropertyCodes: readonly string[]; brodeUnit: ServiceQtyUnit }): "PIECE" | "STITCH" | null {
+  if (!input.meterOn || input.brodeUnit === "METER" || !input.stationPropertyCodes.includes(BRODE_PROPERTY_CODE)) return null;
+  return input.brodeUnit;
+}
+
 export interface ServiceQuantityInput {
   meters: Prisma.Decimal;
   pieceCount: number | null;

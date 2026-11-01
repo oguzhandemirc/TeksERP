@@ -129,7 +129,8 @@ describe('Gramaj tek dokunuş — ölçülen en ön-denetimi', () => {
     // Ekran 2800+ satır ve onlarca servis ister; render yerine kaynakta TEK çağrı ölçülür — davranışı §1–§6 sınar.
     const src = jest.requireActual<typeof import('fs')>('fs').readFileSync(require.resolve('./KursunQcScreen.tsx'), 'utf8');
     const call = src.slice(src.indexOf('useGramajTap({'), src.indexOf('});', src.indexOf('useGramajTap({')));
-    expect(call).toMatch(/\.\.\.widthGatedTap\(measuredWidth,/);
+    // GK-H1b: en kapısı brode adet kapısının İÇİNDE (`pieceGatedTap(brodePiece, widthGatedTap(...))`).
+    expect(call).toMatch(/\.\.\.pieceGatedTap\(brodePiece, widthGatedTap\(measuredWidth,/);
     expect(call).not.toMatch(/\bcomplete:|\bprecheck:/);
   });
 });

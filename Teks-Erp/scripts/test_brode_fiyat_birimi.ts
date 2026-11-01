@@ -15,8 +15,9 @@
 //   §5 Eksik adet / eksik desen vuruşu: iş faturaya alınmaz + uyarı (uydurma miktar yok)
 //   §6 Fatura ↔ kârlılık: `reconcileServiceLinksWithLines` satır miktarını bağ miktarıyla tutturur (metreyle 409);
 //      `allocateRevenue` iş başına payı birim fiyat × miktar verir (toplam = satır tutarı)
-//   §7 Ayar dört kapı: Zod + servis bilinmeyen değeri reddeder; okuma varsayılanı METER; tablet okuma gövdesi adet alır
+//   §7 Ayar dört kapı: Zod + servis bilinmeyen değeri reddeder, PIECE/STITCH yazılır (sed kalktı, GK-H1b); panel üç seçenek; okuma varsayılanı METER; tablet okuma gövdesi adet alır
 //   §8 Tarife satırı birimi: upsert birimi saklar (METER = NULL); aynı fiyat farklı birim yeni sürüm
+//   §10 Tablet adım özeti `pieceInput`: sayaç açık brode istasyonunda ADET/VURUŞ'ta dolu; METER/sayaç OFF'ta anahtar yok
 //   §9 AST: miktar okuyucuları `linkBilledQty`/`serviceWorkQuantity` dışında `billedMeters` ile miktar toplamaz
 // Negatif sondalar: `serviceWorkQuantity` PIECE dalı metre döndürünce §2 kırmızı · `priceUnitMatches` hep true
 // dönünce §4 kırmızı · `allocateRevenue` `billedMeters` payına dönünce §6/§9 kırmızı.
@@ -31,7 +32,8 @@ import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
 import { SETTING_KEYS, loadServiceBillingSettings, readFinanceServiceBillingBrodeUnit, systemSettingService } from "../src/services/system-setting.service";
 import { collectServiceBillingDraft, reconcileServiceLinksWithLines } from "../src/services/helpers/service-billing.helper";
 import { allocateRevenue, type RevenueLinkRow } from "../src/services/helpers/profitability.helper";
-import { BRODE_PROPERTY_CODE } from "../src/services/helpers/service-quantity.helper";
+import { BRODE_PROPERTY_CODE, brodePieceInputOf } from "../src/services/helpers/service-quantity.helper";
+import { KursunQcService } from "../src/services/kursun-qc.service";
 import { itemPriceService } from "../src/services/item-price.service";
 import { updateSchema } from "../src/routes/feature-flag.routes";
 import { completeQc2Schema } from "../src/controllers/kursun-qc.controller";
@@ -53,6 +55,7 @@ const fx = {
   woIds: [] as string[], customerId: null as string | null, createdBrodeFlag: false,
 };
 let priorUnit: { existed: boolean; value: unknown } = { existed: false, value: null };
+let priorMeter: { existed: boolean; value: unknown } = { existed: false, value: null };
 
 async function main(): Promise<void> {
   console.log("=== Brode fiyat birimi: metre | adet | vuruş (EKS-E2) ===");
@@ -189,21 +192,42 @@ async function main(): Promise<void> {
   const bad = await systemSettingService.setFeatureFlags({ financeServiceBillingBrodeUnit: "KG" as unknown as "METER" }, await testActorId())
     .then(() => 200, (e: { statusCode?: number; message?: string }) => e.statusCode ?? `500 ${e.message}`);
   check("servis: bilinmeyen birim 400", bad === 400, String(bad));
-  // Çıkışsız kapı seddi: tablette adet girişi yokken ADET/VURUŞ yazılamaz, ayar değişmez.
-  const before = await readFinanceServiceBillingBrodeUnit();
-  const gated = await systemSettingService.setFeatureFlags({ financeServiceBillingBrodeUnit: "PIECE" }, await testActorId())
-    .then(() => "200", (e: { statusCode?: number; details?: { code?: string } }) => `${e.statusCode}:${e.details?.code}`);
-  check("servis: PIECE/STITCH tablet girişi yokken 400 BRODE_UNIT_NO_PIECE_INPUT, ayar değişmez",
-    gated === "400:BRODE_UNIT_NO_PIECE_INPUT" && (await readFinanceServiceBillingBrodeUnit()) === before, gated);
+  // GK-H1b: tablette brode adet girişi indi → sed kalktı; PIECE/STITCH yazılır ve geri okunur.
+  for (const unit of ["PIECE", "STITCH"] as const) {
+    const res = await systemSettingService.setFeatureFlags({ financeServiceBillingBrodeUnit: unit }, await testActorId())
+      .then(() => "200", (e: { statusCode?: number; details?: { code?: string } }) => `${e.statusCode}:${e.details?.code}`);
+    check(`servis: ${unit} kabul edilir (sed yok) ve okuyucu ${unit} döner`, res === "200" && (await readFinanceServiceBillingBrodeUnit()) === unit, res);
+  }
   const panelCfg = readFileSync(join(__dirname, "..", "..", "Electron", "src", "pages", "GeneralSettings", "settings-config.ts"), "utf8");
   const brodeRow = panelCfg.slice(panelCfg.indexOf('enumKey: "financeServiceBillingBrodeUnit"'), panelCfg.indexOf("enumKey:", panelCfg.indexOf('enumKey: "financeServiceBillingBrodeUnit"') + 10));
-  check("panel ADET/VURUŞ seçeneğini sunmaz (çıkışsız kapı)", brodeRow.includes('value: "METER"') && !brodeRow.includes('value: "PIECE"') && !brodeRow.includes('value: "STITCH"'));
+  check("panel üç seçeneği sunar (Metre · Adet · Vuruş)", ['value: "METER"', 'value: "PIECE"', 'value: "STITCH"'].every((v) => brodeRow.includes(v)));
   await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.FINANCE_SERVICE_BILLING_BRODE_UNIT } });
   check("okuma varsayılanı METER (bugünkü davranış)", (await readFinanceServiceBillingBrodeUnit()) === "METER" && (await loadServiceBillingSettings()).brodeUnit === "METER");
   const body = { rollId: randomUUID(), stepId: randomUUID(), meterOut: { meters: 10, source: "OPERATOR", clientToken: randomUUID(), pieceCount: 12 } };
   const parsed = completeQc2Schema.safeParse(body);
   check("tablet çıkış okuması adet taşır (Zod korur) ve 0 adet reddedilir",
     parsed.success && parsed.data.meterOut?.pieceCount === 12 && !completeQc2Schema.safeParse({ ...body, meterOut: { ...body.meterOut, pieceCount: 0 } }).success);
+
+  // ── §10 ──────────────────────────────────────────────────────────────────
+  section("§10 tablet adım özeti `pieceInput` (adet girişi yalnız sayaç açık brode istasyonunda, ADET/VURUŞ'ta)");
+  const meterKey = SETTING_KEYS.KURSUN_METER_CAPTURE;
+  const meterRow = await prisma.systemSetting.findUnique({ where: { key: meterKey }, select: { value: true } });
+  priorMeter = { existed: meterRow !== null, value: meterRow?.value ?? null };
+  const pieceOf = async () => ((await new KursunQcService().getStep(stepId)).data as { pieceInput?: string }).pieceInput ?? "YOK";
+  const setUnit = (v: string) => prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.FINANCE_SERVICE_BILLING_BRODE_UNIT }, create: { key: SETTING_KEYS.FINANCE_SERVICE_BILLING_BRODE_UNIT, value: v }, update: { value: v } });
+  const setMeter = (v: string) => prisma.systemSetting.upsert({ where: { key: meterKey }, create: { key: meterKey, value: v }, update: { value: v } });
+  await setMeter("OUT");
+  await setUnit("PIECE");
+  check("sayaç OUT + PIECE + brode istasyonu → pieceInput PIECE", (await pieceOf()) === "PIECE", await pieceOf());
+  await setUnit("STITCH");
+  check("STITCH → pieceInput STITCH", (await pieceOf()) === "STITCH", await pieceOf());
+  await setUnit("METER");
+  check("METER → anahtar YOK (bugünküyle bayt-aynı)", (await pieceOf()) === "YOK", await pieceOf());
+  await setUnit("PIECE");
+  await setMeter("OFF");
+  check("sayaç OFF → anahtar YOK (okuma yok, adet taşınamaz)", (await pieceOf()) === "YOK", await pieceOf());
+  check("brode olmayan istasyon → null", brodePieceInputOf({ meterOn: true, stationPropertyCodes: ["KURSUN"], brodeUnit: "PIECE" }) === null);
+  await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.FINANCE_SERVICE_BILLING_BRODE_UNIT } });
 
   // ── §8 ───────────────────────────────────────────────────────────────────
   section("§8 tarife satırı birimi");
@@ -256,6 +280,9 @@ async function cleanup(): Promise<void> {
   const key = SETTING_KEYS.FINANCE_SERVICE_BILLING_BRODE_UNIT;
   if (priorUnit.existed) await prisma.systemSetting.upsert({ where: { key }, create: { key, value: priorUnit.value as never }, update: { value: priorUnit.value as never } });
   else await prisma.systemSetting.deleteMany({ where: { key } });
+  const mk = SETTING_KEYS.KURSUN_METER_CAPTURE;
+  if (priorMeter.existed) await prisma.systemSetting.upsert({ where: { key: mk }, create: { key: mk, value: priorMeter.value as never }, update: { value: priorMeter.value as never } });
+  else await prisma.systemSetting.deleteMany({ where: { key: mk } });
   check("temizlik: TEST-BFB top kalıntısı yok", (await prisma.roll.count({ where: { id: { in: ids } } })) === 0);
 }
 
