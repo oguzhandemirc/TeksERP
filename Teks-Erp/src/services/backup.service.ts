@@ -70,6 +70,7 @@ import prisma from "../lib/prisma";
 import { bilgi, uyari } from "../lib/logger";
 import { processControlInfo } from "../lib/hizmet-duzeni";
 import { ShortCredentialAdminService } from "./short-credential-admin.service";
+import { isHostedInstallation } from "./helpers/install-class.helper";
 
 const BACKUP_DIR = process.env.BACKUP_DIR;
 // Offsite (makine dışı) ikinci kopya hedefi — NAS/UNC/harici disk. Y-4: tek disk
@@ -437,6 +438,7 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
     // `.part` doğrudan şifrelenir. Şifreleme düşerse düz yedek KORUNUR (yedeksiz
     // kalmaktan iyidir) ama makine dışına çıkmaz ve iş kırmızı biter.
     const crypt = await readBackupCryptoConfig();
+    const hosted = isHostedInstallation();
     let encryptionProblem: string | null = null;
     if (crypt.state === "acik") {
       const enc = encryptedBackupName(out);
@@ -455,6 +457,9 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
       }
     } else if (crypt.state === "gecersiz") {
       encryptionProblem = `ŞİFRELEME YAPILANDIRMASI GEÇERSİZ (${crypt.problems.join(" | ")})`;
+    } else if (hosted) {
+      // K2: barındırılan kurulumda şifresiz yedek sessiz kalmaz; yedek yine alınır (yedeksiz kalmaktan iyidir).
+      encryptionProblem = "BARINDIRILAN KURULUMDA ŞİFRELEME KAPALI (BACKUP_KEY_DIR yok)";
     }
     if (!published) {
       await fs.promises.rename(partPath, out);
@@ -490,7 +495,8 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
     }
 
     // --- 4) Offsite kopya (Y-4) — şifreleme niyeti varken DÜZ döküm makine dışına çıkmaz.
-    const offsiteAllowed = crypt.state === "kapali" || isEncryptedBackupName(finalPath);
+    // Barındırılan kurulumda düz döküm hiçbir koşulda makine dışına çıkmaz (K2).
+    const offsiteAllowed = (crypt.state === "kapali" && !hosted) || isEncryptedBackupName(finalPath);
     if (OFFSITE_DIR && !offsiteAllowed) {
       warnings.push("düz yedek OFFSITE klasörüne KOPYALANMADI (şifreleme yapılandırılmış ama bu yedek şifrelenemedi).");
     } else if (OFFSITE_DIR) {
@@ -687,7 +693,8 @@ export interface BackupListing {
    */
   scheduleEnabled: boolean;
   /** Yedek şifreleme durumu (anahtar dizini) — anahtar baytı ve parola TAŞIMAZ. */
-  encryption: BackupCryptoSummary;
+  /** `hostedRequired` YALNIZ barındırılan kurulumda gelir (şifresiz yedek orada kırmızıdır); LAN yanıtı aynı kalır. */
+  encryption: BackupCryptoSummary & { hostedRequired?: true };
 }
 
 export async function listBackups(): Promise<BackupListing> {
@@ -708,7 +715,10 @@ export async function listBackups(): Promise<BackupListing> {
     // aynı cümlenin tersidir; iki yerde iki farklı yüklem yazmak, panelin
     // "açık" dediği bir kurulumda zamanlayıcının kapalı olması demekti.
     scheduleEnabled: process.env.BACKUP_SCHEDULE_ENABLED !== "false",
-    encryption: summarizeBackupCrypto(await readBackupCryptoConfig()),
+    encryption: {
+      ...summarizeBackupCrypto(await readBackupCryptoConfig()),
+      ...(isHostedInstallation() ? { hostedRequired: true as const } : {}),
+    },
   };
   const dir = BACKUP_DIR;
   if (!dir) return { files: [], backupDir: null, ...base };

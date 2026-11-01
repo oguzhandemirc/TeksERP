@@ -27,6 +27,7 @@ import { licenseHealthBlock } from "./license/license-health";
 import { compareBackupCryptoIntent, type BackupCryptoIntent } from "./backup-crypto/intent";
 import { factoryTimezoneWarning, getFactoryTimezone } from "../constants/time";
 import { sealHealthSnapshot } from "../services/helpers/system-account-seal.helper";
+import { currentHostedPlainBackupReason } from "../services/helpers/hosted-backup.helper";
 
 // Yedek klasörü: BACKUP_DIR üretimde pm2 ortamından gelir (ecosystem.config env
 // veya .env — tipik değer C:\ProgramData\TeksERP\backups). Tanımlıysa durum sayfası
@@ -154,6 +155,9 @@ export function backupHealth(): {
   const yasSaat = (Date.now() - new Date(nightlyCache.time).getTime()) / 3_600_000;
   const yuvarlak = Math.round(yasSaat * 10) / 10;
   const verdict = yasSaat <= NIGHTLY_OK_HOURS ? "ok" : yasSaat <= NIGHTLY_WARN_HOURS ? "uyari" : "kritik";
+  // Barındırılan kurulumda şifresiz yedek KRİTİK (K2); yaş zaten kritikse yaş sebebi önde kalır. LAN'da hep null.
+  const plain = verdict === "kritik" ? null : currentHostedPlainBackupReason(nightlyCache.name);
+  if (plain) return { verdict: "kritik", nightly: nightlyCache, ageHours: yuvarlak, scheduler: backupScheduler(), reason: plain };
   return {
     verdict,
     nightly: nightlyCache,
