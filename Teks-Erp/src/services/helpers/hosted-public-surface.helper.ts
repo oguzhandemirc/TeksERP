@@ -1,5 +1,5 @@
 // Barındırılan (internete açık) kurulumda kimliksiz yüzeyin daraltılması (VDS denetimi D1).
-// LAN kurulumu bayt-aynıdır. Onaylı cihaz (kanıtlı `req.device`) tam yanıtı alır: tablet giriş
+// LAN kurulumu bayt-aynıdır. Onaylı cihaz (`req.device`; kanıt zorunlu değilse kanıtsız da) tam yanıtı alır: tablet giriş
 // ekranı firma adını ve K5/G2 lisans sinyalini bugünkü gibi gösterir; masaüstü/tarayıcı lisans
 // durumunu girişten sonra `GET /api/license/durum`dan okur.
 import { DEFAULT_COMPANY_NAME } from "../../constants/company";

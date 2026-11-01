@@ -17,6 +17,7 @@ import {
   readWebHardeningConfig,
   classifyRateLimitRequest,
   trustProxyHostedRefusal,
+  hostedBootRefusal,
   parseTrustProxy,
 } from "../src/middlewares/web-hardening";
 import { readLanTlsConfig } from "../src/lib/lan-tls/config";
@@ -61,8 +62,9 @@ function s1(): void {
   check("§1f BARINDIRILAN + TRUST_PROXY=true → açılış reddi", trustProxyHostedRefusal(parseTrustProxy("true", sessiz), true) !== null);
   check("§1g fabrika + TRUST_PROXY=true → red yok (uyarı kalır)", trustProxyHostedRefusal(true, false) === null);
   check("§1h BARINDIRILAN + TRUST_PROXY=1 → red yok", trustProxyHostedRefusal(parseTrustProxy("1", sessiz), true) === null);
+  check("§1j açılış reddi (hostedBootRefusal) TRUST_PROXY reddini kapsar", hostedBootRefusal(parseTrustProxy("true", sessiz), true) !== null);
   const serverOlc = (s: string): boolean =>
-    /const hosted = isHostedInstallation\(\);\s*const red = trustProxyHostedRefusal\(tp, hosted\);\s*if \(red\) \{\s*hata\([^)]*\);\s*process\.exit\(1\);/.test(yorumsuz(s));
+    /const hosted = isHostedInstallation\(\);\s*const red = hostedBootRefusal\(tp, hosted\);(?:[ \t]*\/\/[^\n]*)?\s*if \(red\) \{\s*hata\([^)]*\);\s*process\.exit\(1\);/.test(yorumsuz(s));
   const server = oku("Teks-Erp/src/server.ts");
   dedektor("§1i server.ts reddi açılışı durdurur (process.exit(1))", serverOlc, server,
     server.replace(/process\.exit\(1\);(\s*\}\s*if \(hosted && tp === null\))/, "/* devam */$1"));

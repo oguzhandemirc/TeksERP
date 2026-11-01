@@ -22,6 +22,11 @@ const NEVER_APPROVED: Prisma.DeviceWhereInput = {
   proofConfirmedAt: null,
 };
 
+/** Son görülmesi de eski olmalı: onaysız parola girişiyle kullanılan bekleyen tablet düşmesin. */
+function idleSince(cutoff: Date): Prisma.DeviceWhereInput {
+  return { createdAt: { lt: cutoff }, OR: [{ lastSeenAt: null }, { lastSeenAt: { lt: cutoff } }] };
+}
+
 /** Süre aşımı ve toplu reddin ortak yüklemi: canlı, aktif, bekleyen. */
 const PENDING_LIVE: Prisma.DeviceWhereInput = { status: "PENDING", isActive: true, ...liveDeviceWhere() };
 
@@ -48,7 +53,7 @@ export async function expireStalePendingDevices(now = new Date(), hosted = isHos
   if (!hosted) return 0;
   const cutoff = new Date(now.getTime() - PENDING_DEVICE_TTL_MS);
   const stale = await prisma.device.findMany({
-    where: { ...PENDING_LIVE, ...NEVER_APPROVED, createdAt: { lt: cutoff } },
+    where: { ...PENDING_LIVE, ...NEVER_APPROVED, ...idleSince(cutoff) },
     select: { id: true },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     take: EXPIRE_BATCH,
@@ -56,7 +61,7 @@ export async function expireStalePendingDevices(now = new Date(), hosted = isHos
   let expired = 0;
   for (const { id } of stale) {
     const r = await prisma.device.updateMany({
-      where: { id, ...PENDING_LIVE, ...NEVER_APPROVED, createdAt: { lt: cutoff } },
+      where: { id, ...PENDING_LIVE, ...NEVER_APPROVED, ...idleSince(cutoff) },
       data: { isActive: false },
     });
     if (r.count === 0) continue;

@@ -104,7 +104,10 @@ async function main(): Promise<void> {
     // ---------------------------------------------------------------- §2
     setHosted(true);
     const old = new Date(Date.now() - PENDING_DEVICE_TTL_MS - 60_000);
-    await prisma.device.updateMany({ where: { deviceId: { in: [ids[0], ids[1]] } }, data: { createdAt: old } });
+    await prisma.device.updateMany({ where: { deviceId: { in: [ids[0], ids[1]] } }, data: { createdAt: old, lastSeenAt: old } });
+    const usedId = `${PREFIX}-s0`; // eski doğuş ama taze görülme: onaysız parola girişiyle kullanılan tablet
+    await announceErr(usedId, SRC_B);
+    await prisma.device.updateMany({ where: { deviceId: usedId }, data: { createdAt: old, lastSeenAt: new Date() } });
     const revoked = await prisma.device.findUniqueOrThrow({ where: { deviceId: ids[1] }, select: { id: true } });
     await DeviceService.revoke(revoked.id); // REVOKED olayı → "hiç onaylanmamış" değil
     setHosted(false);
@@ -116,6 +119,8 @@ async function main(): Promise<void> {
     check("§2b ⭐ 24 saati geçmiş PENDING pasife düştü (satır silinmedi, durum PENDING kaldı)", n >= 1 && by.get(ids[0])?.isActive === false && by.get(ids[0])?.status === "PENDING", `n=${n}`);
     check("§2c geri alınmış (REVOKED) cihaz süre aşımına düşmez", by.get(ids[1])?.isActive === true);
     check("§2d taze PENDING düşmez", by.get(ids[2])?.isActive === true);
+    const used = await prisma.device.findUnique({ where: { deviceId: usedId }, select: { isActive: true } });
+    check("§2g ⭐ son görülmesi taze (kullanılan) PENDING düşmez", used?.isActive === true);
     check("§2e ikinci tur aynı satırı yeniden saymaz", (await prisma.device.count({ where: { deviceId: ids[0], isActive: false } })) === 1 && (await expireStalePendingDevices()) === 0);
     check("§2f süre aşımı kaynağın tavanını boşaltır (yeni duyuru açılır)", (await announceErr(`${PREFIX}-a10`, SRC_A)) === null);
 
@@ -129,6 +134,11 @@ async function main(): Promise<void> {
     const row = list.find((d) => d.deviceId === ids[4]) as { announcedFrom?: string | null; createdAt?: Date; hwSource?: string | null } | undefined;
     check("§3b liste duyuru kaynağını, ilk görülmeyi ve donanım kaynağını taşır", row?.announcedFrom === SRC_A && row?.createdAt instanceof Date && row !== undefined && "hwSource" in row);
     check("§3c liste ham olay satırı taşımaz", list.every((d) => !("bindingEvents" in d)));
+    // Pasif PENDING çöpü (süre aşımı/red birikimi) liste tavanını doldurunca onaylı cihaz düşmemeli.
+    const approvedId = `${PREFIX}-ok`;
+    await prisma.device.create({ data: { deviceId: approvedId, name: "VDS onaylı", status: "APPROVED", createdAt: new Date(Date.now() - 7 * PENDING_DEVICE_TTL_MS) } });
+    await prisma.device.createMany({ data: Array.from({ length: 510 }, (_, i) => ({ deviceId: `${PREFIX}-z${i}`, name: "çöp", isActive: false })) });
+    check("§3e ⭐ 500+ pasif PENDING varken onaylı cihaz listede kalır", (await DeviceService.list()).some((d) => d.deviceId === approvedId));
     const routes = src("src/routes/device.routes.ts");
     check("§3d toplu reddet ucu admin:settings ister", /deviceAdminRouter\.post\("\/pending\/reject", verifyToken, requirePermission\("admin:settings"\)/.test(routes));
 
@@ -192,7 +202,8 @@ async function main(): Promise<void> {
     for (const r of savedSettings) {
       await prisma.systemSetting.update({ where: { key: r.key }, data: { value: r.value ?? false, description: r.description } }).catch(() => undefined);
     }
-    await prisma.deviceBindingEvent.deleteMany({ where: { localId: { startsWith: PREFIX } } }).catch(() => undefined);
+    const mine = (await prisma.device.findMany({ where: { deviceId: { startsWith: PREFIX } }, select: { deviceId: true } })).map((d) => d.deviceId);
+    if (mine.length > 0) await prisma.deviceBindingEvent.deleteMany({ where: { localId: { in: mine } } }).catch(() => undefined);
     await prisma.device.deleteMany({ where: { deviceId: { startsWith: PREFIX } } }).catch(() => undefined);
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     process.exitCode = fail > 0 ? 1 : 0;

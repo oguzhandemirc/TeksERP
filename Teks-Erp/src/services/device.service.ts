@@ -138,10 +138,12 @@ function normalizeDeviceKind(k?: string | null): DeviceKind {
 }
 
 export class DeviceService {
-  /** Admin: tüm cihazları listele (PENDING'ler önce). */
+  /** Admin: tüm cihazları listele (aktifler önce, aktif içinde PENDING'ler önce). */
   static async list() {
     const rows = await prisma.device.findMany({
-      orderBy: [{ status: "asc" }, { isActive: "desc" }, { createdAt: "desc" }],
+      // isActive ÖNCE: süre aşımı/toplu red pasif PENDING biriktirir; status önde olsaydı bu çöp
+      // tavanı doldurup onaylı cihazları listeden düşürürdü (VDS O3 inceleme bulgusu).
+      orderBy: [{ isActive: "desc" }, { status: "asc" }, { createdAt: "desc" }],
       // Onay ekranı "nereden geldi": doğuş olayının kaynağı (VDS O3; eski satırda yok → null).
       include: { ...DEVICE_INCLUDE, bindingEvents: { where: { event: "REGISTERED" }, select: { meta: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 1 } },
       omit: DEVICE_SECRET_OMIT,
@@ -149,8 +151,8 @@ export class DeviceService {
       // doğrulamasız `announce` ucuyla birleşince asıl zararı üretiyordu: sahte
       // kayıtlar tek yanıtta dönüp ekranı kullanılamaz hale getiriyordu. Artık
       // hem kaynakta tavan (MAX_PENDING_DEVICES) hem burada okuma tavanı var —
-      // iki bağımsız hat. Sıralama PENDING'i öne aldığı için tavan, eşleşme
-      // bekleyen cihazları KESMEZ; kesilen taraf eski APPROVED kuyruğudur.
+      // iki bağımsız hat. Sıralama aktifleri (aktif içinde PENDING'i) öne aldığı için
+      // tavan aktif cihazları KESMEZ; kesilen taraf pasif (eski/reddedilmiş) kuyruktur.
       take: DEVICE_LIST_LIMIT,
     });
     return rows.map(({ bindingEvents, ...d }) => ({ ...d, announcedFrom: registrationSource(bindingEvents[0]?.meta) }));
