@@ -30,6 +30,14 @@ export function cariHoldBlockFromError(err: unknown): CariHoldBlock | null {
   return { message, placedBy: typeof e.details.koyan === 'string' ? e.details.koyan : null };
 }
 
+/** Hata cari kilitse tam ekranı açar ve true döner; değilse false (çağıran eski tost yolunu sürer). */
+export function openCariHoldBlock(err: unknown, open: (block: CariHoldBlock) => void): boolean {
+  const block = cariHoldBlockFromError(err);
+  if (!block) return false;
+  open(block);
+  return true;
+}
+
 export function CariHoldChip({ text, testID }: { text: string; testID?: string }) {
   return (
     <View style={styles.chip} testID={testID}>
