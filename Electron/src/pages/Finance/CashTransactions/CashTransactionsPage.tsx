@@ -32,6 +32,8 @@ import { CashTxnTable } from "./CashTxnTable";
 import { CashTxnFormDialog } from "./CashTxnFormDialog";
 import { CashTransferDialog } from "./CashTransferDialog";
 import { CashTxnCancelDialog } from "./CashTxnCancelDialog";
+import { ExpenseAllocationsDialog } from "./allocation/ExpenseAllocationsDialog";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { EMPTY_FILTERS, isFilterDirty, type CashTxnFilterState } from "./cashTxnRules";
 import { listCashTransactions, type CashTxnRow } from "./service";
 
@@ -51,6 +53,8 @@ export function CashTransactionsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<CashTxnRow | null>(null);
+  const [allocTarget, setAllocTarget] = useState<CashTxnRow | null>(null);
+  const allocOn = useFeatureFlags().data?.data?.financeExpenseAllocationField === "OPTIONAL";
 
   const q = useQuery({
     queryKey: [
@@ -140,7 +144,7 @@ export function CashTransactionsPage() {
           </div>
         ) : (
           <>
-            <CashTxnTable rows={rows} onCancel={setCancelTarget} />
+            <CashTxnTable rows={rows} onCancel={setCancelTarget} onAllocations={allocOn ? setAllocTarget : undefined} />
             {total > rows.length && (
               <p className="mt-3 text-xs text-amber-700 dark:text-amber-500">
                 {total} kaydın ilk {rows.length} tanesi gösteriliyor (en yeni tarihten geriye). Aradığınızı
@@ -168,6 +172,7 @@ export function CashTransactionsPage() {
           onDone={invalidate}
         />
       )}
+      {allocTarget && <ExpenseAllocationsDialog row={allocTarget} onOpenChange={(o) => !o && setAllocTarget(null)} />}
     </PageShell>
   );
 }

@@ -175,6 +175,8 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "costProfitOverheadKey",
       "financeServiceBillingPriceDate",
       "financeExpenseCategorySuggestions",
+      "financeExpenseAllocationField",
+      "financeExpenseAllocationClosedWorkOrder",
       "financeAutoAllocateOnPaymentEnabled",
       "financeYarnOutOnInvoiceEnabled",
       "financeDefaultVatRate",
