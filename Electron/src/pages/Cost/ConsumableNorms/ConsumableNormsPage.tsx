@@ -59,7 +59,7 @@ export function ConsumableNormsPage() {
                   <tr key={r.id} className="border-t">
                     <td className="px-3 py-2"><span className="font-medium">{r.serviceItem.code}</span> <span className="text-muted-foreground">{r.serviceItem.name}</span></td>
                     <td className="px-3 py-2"><span className="font-medium">{r.consumableItem.code}</span> <span className="text-muted-foreground">{r.consumableItem.name}</span></td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmtDecFull(r.qtyPerM, 6)} {r.unit}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{Number(r.qtyPerM) === 0 ? "0 — sarf kullanmaz" : `${fmtDecFull(r.qtyPerM, 6)} ${r.unit}`}</td>
                     <td className="px-3 py-2">{fmtFactoryDate(r.createdAt)}</td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       <PermissionGate permission="cost:write">
