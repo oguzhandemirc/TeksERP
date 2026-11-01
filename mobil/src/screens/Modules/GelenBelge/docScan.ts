@@ -101,6 +101,39 @@ export function addPage(pages: readonly ScanPage[], page: ScanPage): AddPageOutc
   return { kind: 'added', pages: [...pages, page] };
 }
 
+export interface AddPagesSummary {
+  pages: ScanPage[];
+  added: number;
+  duplicates: number;
+  tooLarge: number;
+  /** Sayfa sınırı yüzünden alınamayan. */
+  overflow: number;
+}
+
+/** Tarayıcının çok sayfalı sonucu: her sayfa `addPage` kuralından geçer (aynı özet · 5 MB · sayfa sınırı). */
+export function addPages(pages: readonly ScanPage[], incoming: readonly ScanPage[]): AddPagesSummary {
+  const sum: AddPagesSummary = { pages: [...pages], added: 0, duplicates: 0, tooLarge: 0, overflow: 0 };
+  for (const page of incoming) {
+    const r = addPage(sum.pages, page);
+    sum.pages = r.pages;
+    if (r.kind === 'added') sum.added++;
+    else if (r.kind === 'duplicate') sum.duplicates++;
+    else if (r.kind === 'too-large') sum.tooLarge++;
+    else sum.overflow++;
+  }
+  return sum;
+}
+
+/** Tarayıcının açılabileceği sayfa sınırı: listede kalan yer (en az 1; liste doluysa tarayıcı açılmaz). */
+export function scannerPageLimit(current: number): number {
+  return Math.max(0, MAX_PAGES - current);
+}
+
+/** Native tarayıcı sayfası → ScanPage (özet ham JPEG baytından; kamera yolu ile aynı sözleşme). */
+export function scannedToScanPage(raw: { uri: string; base64: string; width: number; height: number }): ScanPage {
+  return { base64: raw.base64, sha256: photoSha256(raw.base64), uri: raw.uri, width: raw.width, height: raw.height };
+}
+
 export function removePage(pages: readonly ScanPage[], index: number): ScanPage[] {
   return pages.filter((_, i) => i !== index);
 }

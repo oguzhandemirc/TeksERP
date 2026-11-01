@@ -2,6 +2,7 @@
 import React, { type ReactNode } from 'react';
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../test/render';
+import Toast from 'react-native-toast-message';
 import DocScanScreen from './DocScanScreen';
 
 const mockCreate = jest.fn();
@@ -17,6 +18,8 @@ jest.mock('../../../services/inboundDoc.service', () => ({
     uploadScan: (b: unknown) => mockUpload(b),
   },
 }));
+const mockScanner = jest.fn();
+jest.mock('../../../services/docScannerNative', () => ({ scanWithDocScanner: (req: unknown) => mockScanner(req) }));
 jest.mock('react-native-toast-message', () => ({ __esModule: true, default: { show: jest.fn() } }));
 jest.mock('../../../components/ScreenChrome', () => ({ __esModule: true, default: ({ children }: { children: ReactNode }) => children }));
 jest.mock('../../../components/BarcodeScannerModal', () => {
@@ -51,16 +54,28 @@ jest.mock('./PageCameraModal', () => {
 });
 
 // Portal içeriği host'a mikrotask'ta taşınır (SimplePortal): önizleme içi dokunuştan sonra boşalt.
+// "Sayfa çek" önce tarayıcıyı dener (asenkron); tarayıcı yoksa kamera açılır.
+async function addViaCamera(r: ReturnType<typeof renderWithPaper>, shot: 'sayfa-kamera' | 'sayfa-kamera-2') {
+  fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
+  fireEvent.press(await r.findByTestId(shot));
+  await act(async () => {});
+}
+
 async function pressFlush(el: Parameters<typeof fireEvent.press>[0]) {
   fireEvent.press(el);
   await act(async () => {});
 }
 
+// Varsayılan: tarayıcı yok (eski APK) → "Sayfa çek" klasik kamerayı açar.
+function resetMocks() {
+  mockScanner.mockReset().mockResolvedValue({ kind: 'unavailable', reason: 'no_module' });
+  (Toast.show as jest.Mock).mockClear();
+  mockCreate.mockReset().mockResolvedValue({ id: 'n1', noteNo: 'GB-0001', status: 'DRAFT' });
+  mockUpload.mockReset().mockResolvedValue({ scan: { id: 's1', sha256: 'x', noteId: 'n1' }, duplicate: false, boundTo: 'n1' });
+}
+
 describe('DocScanScreen', () => {
-  beforeEach(() => {
-    mockCreate.mockReset().mockResolvedValue({ id: 'n1', noteNo: 'GB-0001', status: 'DRAFT' });
-    mockUpload.mockReset().mockResolvedValue({ scan: { id: 's1', sha256: 'x', noteId: 'n1' }, duplicate: false, boundTo: 'n1' });
-  });
+  beforeEach(resetMocks);
 
   it('⭐ çekim (aynı foto iki kez → tek sayfa) + barkod → senderDocNo → gönder → DRAFT + tek tarama', async () => {
     const r = renderWithPaper(<DocScanScreen />);
@@ -68,10 +83,8 @@ describe('DocScanScreen', () => {
     fireEvent.press(r.getByTestId('barkod-kamera'));
     expect(r.getByTestId('belge-tara-belge-no')).toHaveTextContent('IRS-77');
 
-    fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
-    fireEvent.press(r.getByTestId('sayfa-kamera'));
-    fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
-    fireEvent.press(r.getByTestId('sayfa-kamera'));
+    await addViaCamera(r, 'sayfa-kamera');
+    await addViaCamera(r, 'sayfa-kamera');
     expect(r.getByText('Sayfalar (1)')).toBeTruthy();
 
     fireEvent.press(r.getByTestId('belge-tara-gonder'));
@@ -86,10 +99,8 @@ describe('DocScanScreen', () => {
 
   it('küçük resme dokununca tam ekran önizleme açılır; geçiş sayfayı değiştirir; sil ve kapat çalışır', async () => {
     const r = renderWithPaper(<DocScanScreen />);
-    fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
-    fireEvent.press(r.getByTestId('sayfa-kamera'));
-    fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
-    fireEvent.press(r.getByTestId('sayfa-kamera-2'));
+    await addViaCamera(r, 'sayfa-kamera');
+    await addViaCamera(r, 'sayfa-kamera-2');
     expect(r.getByText('Sayfalar (2)')).toBeTruthy();
     expect(r.queryByTestId('belge-tara-onizleme')).toBeNull();
     // AppModal'ın ilk (kapalı) bağlanışındaki animasyon geri çağrısı (`finishHide`) açılıştan ÖNCE boşalsın; yoksa açılışı ezer.
@@ -125,5 +136,71 @@ describe('DocScanScreen', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+});
+
+describe('DocScanScreen — ML Kit belge tarayıcısı', () => {
+  beforeEach(resetMocks);
+
+  const raw = (b64: string, uri: string) => ({ uri, base64: b64, width: 1950, height: 2600, bytes: 300 });
+
+  it('⭐ tarayıcı çok sayfa döndürür → sayfalar listeye girer, kamera açılmaz; gönderilen bayt tarayıcınınki', async () => {
+    mockScanner.mockResolvedValue({ kind: 'pages', pages: [raw(mockB64, 'file:///t1.jpg'), raw(mockB64b, 'file:///t2.jpg'), raw(mockB64, 'file:///t1b.jpg')] });
+    const r = renderWithPaper(<DocScanScreen />);
+    fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
+    await waitFor(() => expect(r.getByText('Sayfalar (2)')).toBeTruthy());
+    expect(r.queryByTestId('sayfa-kamera')).toBeNull();
+    expect(mockScanner).toHaveBeenCalledWith({ pageLimit: 20, longEdge: 2600, maxBytes: 5 * 1024 * 1024, quality: 0.8 });
+    // Aynı fotoğraf iki kez → tek sayfa; özet bildirimi.
+    expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ text1: '2 sayfa eklendi', text2: '1 sayfa zaten ekliydi' }));
+
+    fireEvent.press(r.getByTestId('belge-tara-gonder'));
+    await waitFor(() => expect(r.getByTestId('belge-tara-sonuc')).toHaveTextContent(/GB-0001/));
+    expect(mockUpload).toHaveBeenCalledTimes(2);
+    expect(mockUpload.mock.calls.map((c) => [c[0].pageNo, c[0].contentBase64])).toEqual([[1, mockB64], [2, mockB64b]]);
+  });
+
+  it('ikinci taramada sayfa sınırı kalan yer kadardır', async () => {
+    mockScanner.mockResolvedValueOnce({ kind: 'pages', pages: [raw(mockB64, 'file:///t1.jpg')] });
+    const r = renderWithPaper(<DocScanScreen />);
+    fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
+    await waitFor(() => expect(r.getByText('Sayfalar (1)')).toBeTruthy());
+    mockScanner.mockResolvedValueOnce({ kind: 'canceled' });
+    fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
+    await act(async () => {});
+    expect(mockScanner).toHaveBeenLastCalledWith(expect.objectContaining({ pageLimit: 19 }));
+  });
+
+  it('iptal → kamera AÇILMAZ, liste değişmez', async () => {
+    mockScanner.mockResolvedValue({ kind: 'canceled' });
+    const r = renderWithPaper(<DocScanScreen />);
+    fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
+    await act(async () => {});
+    expect(mockScanner).toHaveBeenCalledTimes(1);
+    expect(r.queryByTestId('sayfa-kamera')).toBeNull();
+    expect(r.getByText('Sayfalar (0)')).toBeTruthy();
+  });
+
+  it('tarayıcı hatası → bilgi verip klasik kameraya düşer', async () => {
+    mockScanner.mockResolvedValue({ kind: 'error', message: 'Taranan sayfa işlenemedi' });
+    const r = renderWithPaper(<DocScanScreen />);
+    fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
+    expect(await r.findByTestId('sayfa-kamera')).toBeTruthy();
+    expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ text1: 'Belge tarayıcı açılamadı; klasik kamera açıldı' }));
+  });
+
+  it('tarayıcı yok (eski APK / modül inmemiş) → sessizce klasik kamera', async () => {
+    const r = renderWithPaper(<DocScanScreen />);
+    fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
+    expect(await r.findByTestId('sayfa-kamera')).toBeTruthy();
+    expect(Toast.show).not.toHaveBeenCalled();
+  });
+
+  it('"Klasik kamera" düğmesi tarayıcıyı hiç denemeden kamerayı açar', async () => {
+    const r = renderWithPaper(<DocScanScreen />);
+    fireEvent.press(r.getByTestId('belge-tara-klasik-kamera'));
+    expect(await r.findByTestId('sayfa-kamera')).toBeTruthy();
+    expect(mockScanner).not.toHaveBeenCalled();
   });
 });

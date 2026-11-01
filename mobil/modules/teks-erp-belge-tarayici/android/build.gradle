@@ -1,0 +1,24 @@
+// Belge Tara — Google ML Kit belge tarayıcısı (kenar bulma · kırpma · perspektif · netleştirme).
+// Depo içi yerel Expo modülü (mobil/modules/ otomatik bağlanır). Tek yeni bağımlılık ML Kit istemcisidir;
+// tarayıcı arayüzü + modeli Google Play Hizmetleri'nden gelir (APK'ya girmez). Karar: KUTUPHANELER.md §9.
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.tekserp'
+version = '1.0.0'
+
+android {
+  namespace "com.tekserp.belgetarayici"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  implementation 'com.facebook.react:react-android'
+  // TAM SABİT: tarayıcı seçenek kümesi (galeri kapalı, sayfa sınırı) bu sürümde ölçüldü.
+  implementation 'com.google.android.gms:play-services-mlkit-document-scanner:16.0.0'
+}
