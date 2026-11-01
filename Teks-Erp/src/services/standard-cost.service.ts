@@ -79,14 +79,14 @@ const missingError = (out: CostOutcome) =>
 
 /** Tek tx: önceki ACTIVE → SUPERSEDED + yeni ACTIVE sürüm + kalemler. */
 async function writeVersion(p: {
-  itemId: string; input: CostInput; out: CostOutcome; fx: FxRatesSnapshot; reason: string | null; restoredFromId: string | null; userId?: string;
+  itemId: string; recipeId: string | null; input: CostInput; out: CostOutcome; fx: FxRatesSnapshot; reason: string | null; restoredFromId: string | null; userId?: string;
 }): Promise<{ created: VersionRow; supersededId: string | null }> {
   const r = p.out.result!;
   const now = new Date();
   try {
     return await prisma.$transaction(async (tx) => {
-      // Aktif tekillik (itemId, recipeId) başına (SY-MIG); bu yol desen geneli sürümü yazar → varyant sürümüne dokunmaz.
-      const prev = await tx.standardCostVersion.findFirst({ where: { itemId: p.itemId, recipeId: null, status: "ACTIVE" }, select: { id: true } });
+      // Aktif tekillik (itemId, recipeId) başına (SY-MIG): desen geneli ile varyant sürümü birbirini SUPERSEDE etmez.
+      const prev = await tx.standardCostVersion.findFirst({ where: { itemId: p.itemId, recipeId: p.recipeId, status: "ACTIVE" }, select: { id: true } });
       if (prev) {
         const claim = await tx.standardCostVersion.updateMany({ where: { id: prev.id, status: "ACTIVE" }, data: { status: "SUPERSEDED", supersededAt: now } });
         if (claim.count === 0) throw AppError.conflict("Maliyet sürümü aynı anda değişti; yeniden deneyin.", { code: "COST_VERSION_CONFLICT" });
@@ -95,6 +95,7 @@ async function writeVersion(p: {
       const created = await tx.standardCostVersion.create({
         data: {
           itemId: p.itemId,
+          ...(p.recipeId ? { recipeId: p.recipeId } : {}),
           versionNo: (max._max.versionNo ?? 0) + 1,
           status: "ACTIVE",
           parameterSetId: p.input.parameterSetId!,
@@ -130,32 +131,34 @@ async function writeVersion(p: {
   }
 }
 
-function auditVersion(res: { created: VersionRow; supersededId: string | null }, userId?: string): void {
+function auditVersion(res: { created: VersionRow; supersededId: string | null }, userId?: string, recipeId: string | null = null): void {
   if (res.supersededId) {
     void AuditService.log({ userId, action: "UPDATE", tableName: TABLE, recordId: res.supersededId, oldData: { status: "ACTIVE" }, newData: { status: "SUPERSEDED" } });
   }
   const v = res.created;
   void AuditService.log({
     userId, action: "CREATE", tableName: TABLE, recordId: v.id, oldData: null,
-    newData: { itemId: v.itemId, versionNo: v.versionNo, status: v.status, totalCostPerMTry: v.totalCostPerMTry.toString(), reason: v.reason, restoredFromId: v.restoredFromId },
+    newData: { itemId: v.itemId, versionNo: v.versionNo, status: v.status, totalCostPerMTry: v.totalCostPerMTry.toString(), reason: v.reason, restoredFromId: v.restoredFromId, ...(recipeId ? { recipeId } : {}) },
   });
 }
 
 /** `POST /api/cost/items/:itemId/versions` — canlı girdiden yeni ACTIVE sürüm. */
-export async function createStandardCostVersion(itemId: string, body: { reason?: string | null; fxRates?: Record<string, unknown> }, userId?: string) {
-  const input = await prisma.$transaction((tx) => assembleCostInputTx(tx, { itemId }));
+export async function createStandardCostVersion(itemId: string, body: { reason?: string | null; fxRates?: Record<string, unknown>; recipeId?: string | null }, userId?: string) {
+  // Varyant sürümü (SY-N1): derleyici varyantın ürüne aitliğini doğrular (COST_RECIPE_MISMATCH); yoksa desen geneli.
+  const recipeId = body.recipeId ?? null;
+  const input = await prisma.$transaction((tx) => assembleCostInputTx(tx, recipeId ? { itemId, recipeId } : { itemId }));
   const setting = await readCostPresentationCurrency();
   const fx = await resolveFx(input, parseFxRates(body.fxRates), setting);
   const out = computeFabricCost(input, fx.rates);
   if (!out.result) throw missingError(out);
-  const res = await writeVersion({ itemId, input, out, fx: fx.snapshot, reason: body.reason ?? null, restoredFromId: null, userId });
-  auditVersion(res, userId);
+  const res = await writeVersion({ itemId, recipeId, input, out, fx: fx.snapshot, reason: body.reason ?? null, restoredFromId: null, userId });
+  auditVersion(res, userId, recipeId);
   return presentVersion(res.created, setting);
 }
 
 /** Geri alma: eski sürümün DONMUŞ girdisi + kuruyla YENİ sürüm; eski satır değişmez. */
 export async function restoreStandardCostVersion(itemId: string, versionId: string, body: { reason?: string | null }, userId?: string) {
-  const old = await prisma.standardCostVersion.findFirst({ where: { id: versionId, itemId }, select: { id: true, versionNo: true, inputSnapshot: true, fxRates: true } });
+  const old = await prisma.standardCostVersion.findFirst({ where: { id: versionId, itemId }, select: { id: true, versionNo: true, recipeId: true, inputSnapshot: true, fxRates: true } });
   if (!old) throw AppError.notFound("Maliyet sürümü bulunamadı.");
   const input = parseCostInputSnapshot(old.inputSnapshot);
   const fxSnap = fxRatesSnapshotSchema.parse(old.fxRates);
@@ -163,13 +166,14 @@ export async function restoreStandardCostVersion(itemId: string, versionId: stri
   const out = computeFabricCost(input, rates);
   if (!out.result) throw missingError(out);
   const reason = body.reason ?? `Sürüm ${old.versionNo} geri alındı`;
-  const res = await writeVersion({ itemId, input, out, fx: fxSnap, reason, restoredFromId: old.id, userId });
-  auditVersion(res, userId);
+  const res = await writeVersion({ itemId, recipeId: old.recipeId, input, out, fx: fxSnap, reason, restoredFromId: old.id, userId });
+  auditVersion(res, userId, old.recipeId);
   return presentVersion(res.created, await readCostPresentationCurrency());
 }
 
-export async function listStandardCostVersions(itemId: string) {
-  const rows = await prisma.standardCostVersion.findMany({ where: { itemId }, orderBy: { versionNo: "desc" }, select: versionSelect });
+export async function listStandardCostVersions(itemId: string, recipeId: string | null = null) {
+  // Geçmiş (itemId, recipeId) zinciridir; varsayılan desen geneli (varyant sürümü yokken bugünkü liste).
+  const rows = await prisma.standardCostVersion.findMany({ where: { itemId, recipeId }, orderBy: { versionNo: "desc" }, select: versionSelect });
   const setting = await readCostPresentationCurrency();
   return rows.map((v) => presentVersion(v, setting));
 }

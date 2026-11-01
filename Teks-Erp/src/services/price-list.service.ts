@@ -212,6 +212,7 @@ export async function replacePriceListLines(id: string, body: Record<string, unk
 /**
  * `POST /api/price-lists/:id/fill-from-standard-cost` — seçilen (ya da standart sürümü olan TÜM) kumaşlar için
  * renksiz satır = aktif sürüm × (1 + kâr) / kur, 2 hane; satırda sürüm + maliyet + kâr DONAR. Kur yoksa 400.
+ * Varyant sürümü (SY-N1) kendi varyant satırını doldurur; anahtar itemId + renk(null) + recipeId.
  */
 export async function fillFromStandardCost(id: string, body: Record<string, unknown>, userId?: string): Promise<PriceListRecord> {
   const head = await prisma.priceList.findUnique({ where: { id }, select: { currency: true, status: true } });
@@ -222,19 +223,22 @@ export async function fillFromStandardCost(id: string, body: Record<string, unkn
   if (!fxRate) throw AppError.badRequest(`${head.currency} kuru bulunamadı; kuru elle girin.`, { code: "COST_INPUT_MISSING", missing: ["FX_RATE_MISSING"] });
   const itemIds = Array.isArray(body.itemIds) ? body.itemIds.map((x, i) => readUuid(x, `${i + 1}. ürün`)) : null;
   const versions = await prisma.standardCostVersion.findMany({
-    where: { status: "ACTIVE", recipeId: null, ...(itemIds ? { itemId: { in: itemIds } } : {}) },
-    select: { id: true, itemId: true, totalCostPerMTry: true },
+    // Pasif varyantın sürümü yeni satır doğurmaz (RECIPE_INACTIVE yerine atlanır).
+    where: { status: "ACTIVE", OR: [{ recipeId: null }, { recipe: { isActive: true } }], ...(itemIds ? { itemId: { in: itemIds } } : {}) },
+    select: { id: true, itemId: true, recipeId: true, totalCostPerMTry: true },
   });
   if (versions.length === 0) throw AppError.badRequest("Seçilen ürünlerin yürürlükte standart maliyeti yok.", { code: "COST_INPUT_MISSING", missing: ["STANDARD_COST_MISSING"] });
-  const filled = new Map(versions.map((v) => [v.itemId, v]));
+  const fillKey = (itemId: string, recipeId: string | null) => `${itemId}|${recipeId ?? ""}`;
+  const filled = new Set(versions.map((v) => fillKey(v.itemId, v.recipeId)));
   const out = await prisma.$transaction(async (tx) => {
     await claimDraftTx(tx, id, userId);
     const existing = await tx.priceListLine.findMany({ where: { priceListId: id }, orderBy: { lineNo: "asc" } });
     const kept: LineInput[] = existing
-      .filter((l) => !(l.colorId === null && l.recipeId === null && filled.has(l.itemId)))
+      .filter((l) => !(l.colorId === null && filled.has(fillKey(l.itemId, l.recipeId))))
       .map((l) => ({ itemId: l.itemId, colorId: l.colorId, recipeId: l.recipeId, unitPrice: l.unitPrice, minQty: l.minQty, standardCostVersionId: l.standardCostVersionId, costPerMTry: l.costPerMTry, markupPct: l.markupPct }));
     const added: LineInput[] = versions.map((v) => ({
-      itemId: v.itemId, colorId: null, minQty: existing.find((l) => l.itemId === v.itemId && l.colorId === null && l.recipeId === null)?.minQty ?? null,
+      itemId: v.itemId, colorId: null, ...(v.recipeId ? { recipeId: v.recipeId } : {}),
+      minQty: existing.find((l) => l.itemId === v.itemId && l.colorId === null && l.recipeId === v.recipeId)?.minQty ?? null,
       unitPrice: suggestUnitPrice({ costPerMTry: v.totalCostPerMTry, markupPct, fxRate })!.toDecimalPlaces(2, HALF_UP),
       standardCostVersionId: v.id, costPerMTry: v.totalCostPerMTry, markupPct,
     }));

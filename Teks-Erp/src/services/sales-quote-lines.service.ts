@@ -88,7 +88,7 @@ export async function addQuoteLine(quoteId: string, body: Record<string, unknown
   if (!description && itemId) description = (await prisma.item.findUnique({ where: { id: itemId }, select: { name: true } }))?.name ?? null;
   if (!description) throw AppError.badRequest("Kalem açıklaması zorunlu (yeni desen adı).");
   const markupPct = await resolveMarkup(body.markupPct);
-  const cost = await resolveQuoteLineCost(itemId ? { itemId } : { adHoc: parseAdHoc(adHoc!) });
+  const cost = await resolveQuoteLineCost(itemId ? (recipeId ? { itemId, recipeId } : { itemId }) : { adHoc: parseAdHoc(adHoc!) });
   const line = await prisma.$transaction(async (tx) => {
     await claimDraftQuoteTx(tx, quoteId, userId);
     const priced = await priceLineTx(tx, quoteId, cost, { markupPct, manualPrice, quantity, colorId, itemId, recipeId });

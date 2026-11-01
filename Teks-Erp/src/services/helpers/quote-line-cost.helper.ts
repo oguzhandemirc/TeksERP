@@ -59,11 +59,14 @@ async function liveCost(input: CostInput, kaynak: "CANLI" | "ELLE_YAPI", extraWa
   };
 }
 
-/** Ürünlü ya da elle yapılı kalemin maliyeti (tx DIŞINDA okunur; kalem yazımı ayrı tx'te). */
+/**
+ * Ürünlü ya da elle yapılı kalemin maliyeti (tx DIŞINDA okunur; kalem yazımı ayrı tx'te). Varyantlı kalem (SY-N1)
+ * yalnız KENDİ varyant sürümünü okur; yoksa varyantla canlı hesap — desen geneli sürüme düşmez (iplik/tarife farklı).
+ */
 export async function resolveQuoteLineCost(ref: CostSourceRef): Promise<QuoteLineCost> {
   if ("itemId" in ref) {
     const v = await prisma.standardCostVersion.findFirst({
-      where: { itemId: ref.itemId, recipeId: null, status: "ACTIVE" },
+      where: { itemId: ref.itemId, recipeId: ref.recipeId ?? null, status: "ACTIVE" },
       select: { id: true, versionNo: true, totalCostPerMTry: true, inputSnapshot: true, fxRates: true, warnings: true },
     });
     if (v) {
@@ -84,8 +87,8 @@ export async function resolveQuoteLineCost(ref: CostSourceRef): Promise<QuoteLin
 }
 
 /** "Maliyeti tazele": ürünlü kalem yeniden çözülür; elle yapı donmuş girdiyle bugünkü kurdan yeniden hesaplanır. */
-export async function refreshQuoteLineCost(line: { itemId: string | null; costSnapshot: Prisma.JsonValue }): Promise<QuoteLineCost> {
-  if (line.itemId) return resolveQuoteLineCost({ itemId: line.itemId });
+export async function refreshQuoteLineCost(line: { itemId: string | null; recipeId?: string | null; costSnapshot: Prisma.JsonValue }): Promise<QuoteLineCost> {
+  if (line.itemId) return resolveQuoteLineCost(line.recipeId ? { itemId: line.itemId, recipeId: line.recipeId } : { itemId: line.itemId });
   const snap = quoteCostSnapshotSchema.parse(line.costSnapshot);
   return liveCost(parseCostInputSnapshot(snap.girdi), "ELLE_YAPI", []);
 }

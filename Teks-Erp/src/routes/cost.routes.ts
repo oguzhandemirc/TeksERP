@@ -545,7 +545,9 @@ const previewBody = z
       .optional(),
   })
   .strict();
-const versionBody = z.object({ reason: z.string().trim().max(300).optional(), fxRates: z.partialRecord(currencyEnum, decimalInput).optional() }).strict();
+const versionBody = z.object({ reason: z.string().trim().max(300).optional(), fxRates: z.partialRecord(currencyEnum, decimalInput).optional(), recipeId: z.string().uuid().nullable().optional() }).strict();
+// Sürüm geçmişi süzgeci (SY-N1): yoksa desen geneli zinciri (bugünkü liste).
+const versionListQuery = z.object({ recipeId: z.string().uuid().optional() });
 const restoreBody = z.object({ reason: z.string().trim().max(300).optional() }).strict();
 const STRUCTURE_STATUSES = ["YAPI_EKSIK", "VARSAYILAN", "TAM"] as const;
 
@@ -676,7 +678,8 @@ router.get("/items/:itemId", requirePermission("cost:read"), wrap(async (req, re
  */
 router.get("/items/:itemId/versions", requirePermission("cost:read"), wrap(async (req, res) => {
   const { itemId } = itemIdParam.parse(req.params);
-  res.status(200).json({ success: true, data: await listStandardCostVersions(itemId) });
+  const { recipeId } = versionListQuery.parse(req.query);
+  res.status(200).json({ success: true, data: await listStandardCostVersions(itemId, recipeId ?? null) });
 }));
 
 /**
