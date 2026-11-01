@@ -101,6 +101,20 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "InvoiceLine", table: "invoice_lines", column: "itemId", label: "Fatura kalemi" },
     { kind: "MOVE", model: "YarnMovement", table: "yarn_movements", column: "itemId", label: "İplik hareketi" },
     {
+      // Sarf stok defteri — `YarnMovement.itemId` emsali; tek çakışma aynı üretim izinin iki kalemi
+      // tüketmesi (`@@unique([rollOperationId, itemId])`). Toplanırsa tüketim miktarı sessizce birleşir.
+      kind: "CONFLICT",
+      model: "ConsumableMovement",
+      table: "consumable_movements",
+      column: "itemId",
+      label: "Sarf stok hareketi",
+      uniqueOn: ["rollOperationId", "itemId"],
+      policy: "BLOCK",
+      why:
+        "Aynı üretim izi iki sarf kalemini ayrı ayrı tüketmişse birleşme tek izde iki tüketim satırı " +
+        "doğurur; defter satırı yeniden yazılmaz. Mal kabul satırlarında iz yoktur, serbestçe taşınır.",
+    },
+    {
       // Devere Faz 2 — lot kalemin ALTINDAKİ kimliktir (`[itemId, lotNo]` tekil): iki kalemde
       // aynı lot numarası varsa birleştirme iki lotu tek satıra indiremez (hareketleri ayrı
       // lotlara bağlı) — sessizce toplamak lot bakiyesini yalanlar. Farklı numaralar taşınır.
@@ -195,6 +209,7 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
     // H6: hizmet kalemi eşlemesi referans bağdır (tekillik yok) — birleşen hizmet kalemine taşınır.
     { kind: "MOVE", model: "FabricProperty", table: "fabric_properties", column: "serviceItemId", label: "Özellik hizmet eşlemesi" },
     { kind: "MOVE", model: "FabricPropertyValue", table: "fabric_property_values", column: "serviceItemId", label: "Gramaj değeri hizmet eşlemesi" },
+    { kind: "MOVE", model: "FabricPropertyValue", table: "fabric_property_values", column: "consumableItemId", label: "Kuşak değeri sarf eşlemesi" },
     {
       kind: "CONFLICT",
       model: "ServiceBillingLink",

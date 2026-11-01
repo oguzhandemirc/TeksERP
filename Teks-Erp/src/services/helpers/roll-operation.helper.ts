@@ -18,6 +18,7 @@
 import type { Prisma, RollOperationType } from "@prisma/client";
 import { readWidthTrace, WIDTH_TRACE_OPERATION_TYPES } from "./measured-width.helper";
 import { AppError } from "../../utils/app-error";
+import { reverseConsumptionTx } from "./consumable-stock.helper";
 
 type Tx = Prisma.TransactionClient;
 
@@ -70,6 +71,8 @@ export async function revokeRollOperations(tx: Tx, args: RevokeOperationsArgs): 
   // D4-E2a ters yol: damgalanan satır ölçülen en izi taşıyorsa `Roll.width` aynı tx'te geri konur.
   const restored = await restoreMeasuredWidthsTx(tx, where);
   if (args.widthRestored) args.widthRestored.count += restored;
+  // Sarf stoğu ters yolu: damgalanan izin düşülmüş tüketimi aynı tx'te geri yazılır (ayardan bağımsız).
+  await reverseConsumptionTx(tx, where, args.userId, args.reason);
   const res = await tx.rollOperation.updateMany({
     where,
     data: {

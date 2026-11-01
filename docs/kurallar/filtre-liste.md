@@ -52,6 +52,7 @@
 
 - **[ÇEKİRDEK]** Statü ÇOKLU daraltması kapsam anahtarı `status`a DOKUNMADAN ayrı anahtarla yapılır: rolls'ta `statusIn[]` (öncelik statusIn > status > varsayılan STOCK) — 2026-08-25 Arşiv 'Kayıt Türü' emsali. <sub>(CLAUDE.md:67, arşiv:134)</sub>
 - **[ÇEKİRDEK]** Kesim çocukları `createdMachineId` damgası alır (dört TAMBUR_SPLIT doğum yolu: cutWarehouseRoll · finalizeWarehouseCut · cutOpenFabric · finalizeOpenFabric) — yoksa 'Bu makine' süzgeci kesimleri hiç görmez; eski kesimler geriye doldurulmadı (entryStationId emsali). · bekçi: `Teks-Erp/scripts/test_tambur_cut_idempotency.ts (11; createdMachineId damgası kesim çocuklarına yazılır) + test_tambur_recent_output_filter.ts (12; 'Bu makine' süzgeci o damgadan okur)` <sub>(CLAUDE.md:56)</sub>
+- **[ÇEKİRDEK]** Süzgeci ELLE okuyan liste ucu sorgusunu `.strict()` Zod şemasıyla okur: tanınmayan parametre 400 (sessizce TÜM liste dönmez); istemcinin gerçekten gönderdiği ad desteklenen süzgeç olur (fatura listesi `shipmentId` virgüllü `readIdCondition`, `limit` = `pageSize` eşanlamlısı) — 2026-11-01 Arşiv "Fatura listesi fail-closed + gelen belge numarası" · bekçi: `test_fatura_liste_suzgec` (§1 saf · §2 HTTP)
 
 ## Panel (Electron)
 
@@ -120,7 +121,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_bare_filter_param`, `test_item_allowed_filter`, `test_filter_multi_select`, `test_workorder_location`
+Backend: `test_fatura_liste_suzgec`, `test_bare_filter_param`, `test_item_allowed_filter`, `test_filter_multi_select`, `test_workorder_location`
 
 İstemci: `Electron/src/components/forms/ItemPickerModal.test.tsx`
 

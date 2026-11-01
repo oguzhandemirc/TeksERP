@@ -901,6 +901,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "machine_cost_rates", name: "machine_cost_rates_revoke_actor_chk" },
   { table: "service_consumable_norms", name: "service_consumable_norms_qty_ck" },
   { table: "service_consumable_norms", name: "service_consumable_norms_revoke_actor_chk" },
+  // Sarf stok defteri (2026-11-01): qty > 0 · ters tür ⇔ reversesId · tüketim ⇔ rollOperationId.
+  { table: "consumable_movements", name: "consumable_movements_qty_positive_ck" },
+  { table: "consumable_movements", name: "consumable_movements_reversal_link_ck" },
+  { table: "consumable_movements", name: "consumable_movements_consumption_link_ck" },
   // D4-SEMA (2026-10-31): H3 masraf bağı · K3d cari virman/birleştirme · D2b alias kapsamı · V1 KDV/tevkifat · B5 kalibrasyon.
   { table: "expense_allocations", name: "expense_allocations_target_ck" },
   { table: "expense_allocations", name: "expense_allocations_share_ck" },

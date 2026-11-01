@@ -1728,6 +1728,8 @@ export class InvoiceService {
     to?: Date;
     /** n irsaliye → 1 fatura: bu fişe bağlı faturalar (pivot). */
     goodsReceiptId?: string;
+    /** Sevkiyata bağlı faturalar (`readIdCondition` çıktısı — tekil ya da `{ in }`). */
+    shipmentId?: string | { in: string[] };
   }) {
     const page = Math.max(1, params.page ?? 1);
     const pageSize = Math.min(200, Math.max(1, params.pageSize ?? 50));
@@ -1735,6 +1737,7 @@ export class InvoiceService {
     if (params.type) where.type = params.type;
     if (params.status) where.status = params.status;
     if (params.cariId) where.cariId = params.cariId;
+    if (params.shipmentId) where.shipmentId = params.shipmentId;
     if (params.goodsReceiptId) where.goodsReceiptLinks = { some: { goodsReceiptId: params.goodsReceiptId } };
     if (params.from || params.to) {
       where.issueDate = { ...(params.from ? { gte: params.from } : {}), ...(params.to ? { lte: params.to } : {}) };

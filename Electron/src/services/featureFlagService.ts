@@ -345,6 +345,7 @@ export interface FeatureFlags {
   purchaseBlockOverReceiptEnabled: boolean;
   /** Mal kabul satırında birim fiyat zorunlu (default false; çözülemezse 400). */
   goodsReceiptRequirePriceEnabled: boolean;
+  consumableStockEnabled: boolean;
   /** İplik lotu kalite bekletme (2026-09-18): mal kabulde doğan lot bekletmede doğar; bekletmede/bloke lota çıkış yazılamaz — varsayılan kapalı. */
   goodsReceiptYarnQualityHoldEnabled: boolean;
   /** İptalde sebep zorunlu (2026-09-18): top iptalinde sebep şart — varsayılan kapalı; formlar önizlemedeki `reasonRequired`i okur. */

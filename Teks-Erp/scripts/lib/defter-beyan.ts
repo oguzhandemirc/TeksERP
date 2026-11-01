@@ -205,6 +205,13 @@ const PIVOT = (model: string, gerekce = "saf ayar kümesi — parasal/ticari/kal
 
 export const DEFTER_BEYANI: DefterBeyani[] = [
   // ── DEFTERLER ──────────────────────────────────────────────────────────────
+  D("ConsumableMovement", "sarf stok defteri (kuşak / kurşun şeridi): mal kabul girişi ↔ fiş iptali, üretim tüketimi ↔ iz geri alımı; bakiye TÜRETİLİR",
+    { tur: "TERS_BAG", kolon: "reversesId" },
+    [
+      { dosya: "src/services/helpers/consumable-stock.helper.ts", sembol: "reverseConsumableReceiptTx" },
+      { dosya: "src/services/helpers/consumable-stock.helper.ts", sembol: "reverseConsumptionTx" },
+    ],
+    ["src/services/helpers/consumable-stock.helper.ts"]),
   D("WarehouseMovement", "depo giriş/çıkış defteri; 13 olay", { tur: "TERS_BAG", kolon: "reversesMovementId" },
     // ⚠️ Ters helper'lar AYRI DOSYAYA taşındı (kaynak dosya 281/300 kod satırındaydı,
     // lint tavanı her eklemeyi reddediyordu) ve dördüncüsü o bölmede doğdu:

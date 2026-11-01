@@ -11,6 +11,9 @@ import { factoryDateTimeTr } from "../../constants/time";
 import { OPEN_ORDER } from "../helpers/live-ref-where.helper";
 import { MEASURED_LINE, openLineWhere } from "../helpers/order-line-scope.helper";
 import { anaSayiKur } from "./sunum/sunum-kur";
+import { expectedRolls } from "../helpers/expected-rolls.helper";
+import { consumableBalances } from "../helpers/consumable-stock.helper";
+import { resolveConsumableStockEnabled } from "../system-setting.service";
 import type { ParametreBeyani, RaporSunumu, TabloBlok } from "./sunum/sunum.types";
 
 export const TARGET_VALUE_NEED_KEY = "sales/hedef-deger-ihtiyaci";
@@ -30,6 +33,9 @@ export interface TargetValueNeedRow {
   kalanMetre: string;
   beklenenTop: number;
   topuBilinmeyenKalem: number;
+  /** Yalnız sarf stoğu açıkken ve değerin sarf kalemi varsa: stok bakiyesi ve eksik (beklenen top − stok, ≥ 0). */
+  stokta?: string;
+  eksik?: string;
 }
 
 export interface TargetValueNeedReport {
@@ -41,11 +47,7 @@ export interface TargetValueNeedReport {
   };
 }
 
-/** Bir kalemin beklenen top sayısı — top boyu yoksa `null` (bilinmiyor; 0 değil). */
-export function expectedRolls(remaining: Prisma.Decimal, pieceLengthM: Prisma.Decimal | null): number | null {
-  if (!pieceLengthM || pieceLengthM.lte(0)) return null;
-  return remaining.div(pieceLengthM).ceil().toNumber();
-}
+export { expectedRolls };
 
 export async function targetValueNeedReport(o: TargetValueNeedOptions = {}): Promise<TargetValueNeedReport> {
   const rows = await prisma.orderLine.findMany({
@@ -62,10 +64,10 @@ export async function targetValueNeedReport(o: TargetValueNeedOptions = {}): Pro
       pieceLengthM: true,
       item: { select: { id: true, name: true } },
       order: { select: { customer: { select: { id: true, name: true } } } },
-      targetValues: { select: { property: { select: { name: true } }, value: { select: { id: true, code: true, name: true } } } },
+      targetValues: { select: { property: { select: { name: true } }, value: { select: { id: true, code: true, name: true, consumableItemId: true } } } },
     },
   });
-  const acc = new Map<string, { row: Omit<TargetValueNeedRow, "kalanMetre">; meters: Prisma.Decimal }>();
+  const acc = new Map<string, { row: Omit<TargetValueNeedRow, "kalanMetre">; meters: Prisma.Decimal; consumableItemId: string | null }>();
   const customers = new Map<string, string>();
   const items = new Map<string, string>();
   let total = new Prisma.Decimal(0);
@@ -83,6 +85,7 @@ export async function targetValueNeedReport(o: TargetValueNeedOptions = {}): Pro
       const a = acc.get(t.value.id) ?? {
         row: { ozellik: t.property.name, deger: t.value.name, degerKodu: t.value.code, kalemSayisi: 0, beklenenTop: 0, topuBilinmeyenKalem: 0 },
         meters: new Prisma.Decimal(0),
+        consumableItemId: t.value.consumableItemId,
       };
       a.row.kalemSayisi += 1;
       a.meters = a.meters.plus(remaining);
@@ -91,6 +94,7 @@ export async function targetValueNeedReport(o: TargetValueNeedOptions = {}): Pro
       acc.set(t.value.id, a);
     }
   }
+  await attachStock([...acc.values()]);
   const sortTr = (m: Map<string, string>) => [...m].map(([id, ad]) => ({ id, ad })).sort((a, b) => a.ad.localeCompare(b.ad, "tr"));
   return {
     satirlar: [...acc.values()]
@@ -101,7 +105,22 @@ export async function targetValueNeedReport(o: TargetValueNeedOptions = {}): Pro
   };
 }
 
+/** Sarf stoğu açıkken kuşak değerinin sarf kalemine stokta/eksik yazar (beklenen top − bakiye; birim top = 1 kuşak). */
+async function attachStock(rows: Array<{ row: Omit<TargetValueNeedRow, "kalanMetre">; consumableItemId: string | null }>): Promise<void> {
+  if (!(await resolveConsumableStockEnabled())) return;
+  const ids = [...new Set(rows.map((r) => r.consumableItemId).filter((x): x is string => x !== null))];
+  const bal = await consumableBalances(prisma, ids);
+  for (const r of rows) {
+    if (!r.consumableItemId) continue;
+    const stock = bal.get(r.consumableItemId) ?? new Prisma.Decimal(0);
+    const short = Prisma.Decimal.max(new Prisma.Decimal(r.row.beklenenTop).minus(stock), 0);
+    r.row.stokta = stock.toFixed(3);
+    r.row.eksik = short.toFixed(3);
+  }
+}
+
 function table(r: TargetValueNeedReport): TabloBlok {
+  const stockCols = r.satirlar.some((s) => s.stokta !== undefined);
   return {
     kolonlar: [
       { anahtar: "ozellik", baslik: "Özellik" },
@@ -110,6 +129,12 @@ function table(r: TargetValueNeedReport): TabloBlok {
       { anahtar: "kalanMetre", baslik: "Kalan", birim: "m", hiza: "sag" },
       { anahtar: "beklenenTop", baslik: "Beklenen top", birim: "top", hiza: "sag" },
       { anahtar: "topuBilinmeyenKalem", baslik: "Top boyu yazılmamış kalem", birim: "adet", hiza: "sag" },
+      ...(stockCols
+        ? [
+            { anahtar: "stokta", baslik: "Stokta", birim: "adet" as const, hiza: "sag" as const },
+            { anahtar: "eksik", baslik: "Eksik", birim: "adet" as const, hiza: "sag" as const },
+          ]
+        : []),
     ],
     satirlar: r.satirlar.map((s) => ({
       ozellik: s.ozellik,
@@ -118,6 +143,7 @@ function table(r: TargetValueNeedReport): TabloBlok {
       kalanMetre: Number(s.kalanMetre),
       beklenenTop: s.beklenenTop,
       topuBilinmeyenKalem: s.topuBilinmeyenKalem,
+      ...(stockCols ? { stokta: s.stokta === undefined ? null : Number(s.stokta), eksik: s.eksik === undefined ? null : Number(s.eksik) } : {}),
     })),
   };
 }

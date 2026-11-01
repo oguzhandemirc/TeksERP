@@ -46,6 +46,8 @@ export interface OverReceiptView {
 export interface PreflightContext {
   /** `goodsReceipt.requirePriceEnabled` açık mı; açıksa `priceFor` servisin zinciridir (kopya değil). */
   requirePrice?: boolean;
+  /** `consumable.stockEnabled` (ticaret && bayrak) açıksa sarf (CONSUMABLE) satırı kabul edilir; kapalıyken bugünkü 400. */
+  consumableStock?: boolean;
   priceFor?: (line: PreflightLine) => Prisma.Decimal.Value | null;
   /** `purchase.blockOverReceiptEnabled` açık ve fiş siparişe bağlıysa bağlam; yoksa null/verilmez. */
   overReceipt?: OverReceiptView | null;
@@ -141,7 +143,8 @@ export async function collectReceiptLineIssues(lines: PreflightLine[], ctx: Pref
     const usage = usageIssue.get(l.itemId);
     if (usage) return issues.push({ lineNo, ...usage });
     // Fail-closed: yalnız kumaş ve iplik geçer — SERVICE (H6) gibi yeni tür sessizce stok doğurmasın.
-    if (it.itemType !== ItemType.FABRIC && it.itemType !== ItemType.YARN) {
+    const consumableOk = it.itemType === ItemType.CONSUMABLE && ctx.consumableStock === true;
+    if (it.itemType !== ItemType.FABRIC && it.itemType !== ItemType.YARN && !consumableOk) {
       const noun = it.itemType === ItemType.CONSUMABLE ? "sarf malzeme" : "hizmet kalemi";
       return issues.push({ lineNo, code: "ITEM_TYPE_NOT_ALLOWED", message: `"${it.name}" ${noun} — mal kabul fişi yalnız kumaş ve iplik alır.` });
     }

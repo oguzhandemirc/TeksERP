@@ -173,7 +173,10 @@ function main(): void {
   // 38 → 39 (2026-10-30, D4-E2a): `helpers/measured-width.helper.ts` — ölçülen enin `Roll.width`e
   // TEK ileri yazarı (`applyMeasuredWidthTx`, FOR UPDATE + atomik claim, tx İÇİNDE); iz QC2 satırında,
   // audit'i çağıran eylem basar (completeQc2 · kursunFinish yükünde widthBefore/widthAfter) — EBEVEYN_EYLEMDE.
-  const AUDITSIZ_YAZICI_TABAN = 39;
+  // 39 → 40 (2026-11-01, sarf stok defteri): `helpers/consumable-stock.helper.ts` — ConsumableMovement TEK yazarı
+  // (mal kabul girişi/iptali, kurşun/tambur tüketimi ve ters kaydı, tx İÇİNDE); audit'i çağıran eylem basar
+  // (mal kabul `CONSUMABLE_MOVEMENT`; iptal/kurşun/tambur kendi audit'inde) — EBEVEYN_EYLEMDE.
+  const AUDITSIZ_YAZICI_TABAN = 40;
   const auditsizYazici: string[] = [];
   for (const [rel, s] of metin) {
     if (auditDosya.has(rel) || /tableName:\s*"/.test(s)) continue;
