@@ -8,10 +8,13 @@
 //   §2 barındırılan + REQUIRED: TOTP'siz → 403 TOTP_ENROLLMENT_REQUIRED, TOTP'li → 409 TOTP_REQUIRED (üç kanal);
 //      masaüstünde details.trustDeviceDays, mobilde yok.
 //   §3 USER_CHOICE + webTotpOptOut: kodsuz 200; tercihsiz kullanıcı 409.
-//   §4 onaylı + kanıtlı tablet: mobil/boş kodsuz 200; aynı cihazdan electron beyanı 409; kanıtsız 401.
+//   §4 onaylı + kanıtlı tablet: mobil/boş kodsuz 200; aynı cihazdan electron beyanı 409; kanıtsız 401;
+//      kanıtlı DESKTOP kaydı + mobile beyanı 409 (muafiyet cihaz türüne bağlı).
 //   §5 süperadmin: üç kanal + onaylı tablet → 409 (opt-out ve cihaz muafiyeti yok).
 //   §6 masaüstü güvenilir cihaz: kod + rememberDevice → gövdede belirteç + yeni cihaz bildirimi; ikinci giriş
 //      kodsuz (bildirim yok); başka kullanıcı / iptal sonrası 409; belirteç audit yükünde yok.
+//   §7 tablette yerinde yeniden bağlama onayı (verifyPasswordForApproval) barındırılanda aynı kurala bağlı:
+//      TOTP'siz 403 enrollment, TOTP'li kodsuz 409, kodla geçer; LAN'da parola yeter (bugünkü davranış).
 // Negatif sondalar: dosya sonu. İzolasyon: TEST- kullanıcıları + ayar anlık görüntüsü; finally geri yükler.
 // =============================================================================
 import prisma from "../src/lib/prisma"; // İLK import: dotenv.config()
@@ -105,6 +108,7 @@ async function main(): Promise<void> {
     return { status: r.status, body: parsed };
   };
   let deviceRowId: string | null = null;
+  let deskRowId: string | null = null;
   const hosted = (on: boolean) => { if (on) process.env[INSTALL_CLASS_ENV] = "BARINDIRILAN"; else delete process.env[INSTALL_CLASS_ENV]; invalidateFeatureFlagsCache(); };
 
   try {
@@ -186,6 +190,14 @@ async function main(): Promise<void> {
     check("§4d ⭐ kanıtsız x-device-id → 401 DEVICE_PROOF_INVALID (barındırılanda kanıt zorunlu)", codeOf(bare) === "401:DEVICE_PROOF_INVALID", codeOf(bare));
     const wrong = await login(withTotp.username, "mobile", {}, { "x-device-id": devId, "x-device-proof": buildDeviceProof("11".repeat(32), Date.now(), "POST", LOGIN) });
     check("§4e yanlış kanıt → 401", wrong.status === 401, codeOf(wrong));
+    // Muafiyet cihaz kaydının türüne bağlı: kanıtlı DESKTOP kaydı mobil beyanıyla da kod ister.
+    const deskDevId = `TEST-bif-masa-${Date.now()}`;
+    const deskSalt = newProofSalt(ring.ring.active);
+    const deskSecret = deriveDeviceSecret(ring.ring, deskDevId, deskSalt)!;
+    deskRowId = (await prisma.device.create({ data: { deviceId: deskDevId, name: "TEST bif masaüstü", status: "APPROVED", isActive: true, kind: "DESKTOP", proofSalt: deskSalt }, select: { id: true } })).id;
+    const deskProven = { "x-device-id": deskDevId, "x-device-proof": buildDeviceProof(deskSecret, Date.now(), "POST", LOGIN) };
+    const deskMobile = await login(withTotp.username, "mobile", {}, deskProven);
+    check("§4f ⭐ kanıtlı DESKTOP kaydı + mobile beyanı muafiyet almaz (409)", codeOf(deskMobile) === "409:TOTP_REQUIRED", codeOf(deskMobile));
 
     // ── §5 süperadmin ─────────────────────────────────────────────────────
     console.log("\n=== §5 süperadmin her kanalda kod ===");
@@ -219,6 +231,30 @@ async function main(): Promise<void> {
     check("§6g belirteç hiçbir audit/log satırında yok", !JSON.stringify(logs).includes(token), `satır=${logs.length}`);
     const rows = await prisma.trustedDevice.findMany({ where: { userId: withTotp.id }, select: { tokenHash: true } });
     check("§6h DB'de yalnız özet", rows.length === 1 && !rows[0]!.tokenHash.includes(token));
+
+    // ── §7 tablette yerinde yeniden bağlama onayı (bilerek kabul edilen yan etki) ──
+    // device.controller onsite-approve aynı bağlamla çağırır: cihaz muafiyeti yok (uç EXEMPT_PATHS'te).
+    console.log("\n=== §7 yerinde onay (verifyPasswordForApproval) aynı kurala bağlı ===");
+    const approve = async (username: string, totp?: string): Promise<string> => {
+      try {
+        await AuthService.verifyPasswordForApproval(username, PASSWORD, { clientType: "mobile", totpCode: totp, totpCapable: true });
+        return "200:";
+      } catch (e) {
+        const err = e as { statusCode?: number; details?: { code?: string } };
+        return `${err.statusCode ?? "?"}:${String(err.details?.code ?? "")}`;
+      }
+    };
+    hosted(true);
+    await setting(SETTING_KEYS.AUTH_WEB_TOTP_POLICY, "REQUIRED");
+    const a1 = await approve(plain.username);
+    check("§7a ⭐ barındırılan REQUIRED: TOTP'siz yönetici onayda 403 TOTP_ENROLLMENT_REQUIRED", a1 === "403:TOTP_ENROLLMENT_REQUIRED", a1);
+    const a2 = await approve(withTotp.username);
+    check("§7b ⭐ barındırılan REQUIRED: TOTP'li yönetici kodsuz 409", a2 === "409:TOTP_REQUIRED", a2);
+    const a3 = await approve(withTotp.username, await freshCode(withTotp.id, sTotp));
+    check("§7c barındırılan: kodla onay geçer", a3 === "200:", a3);
+    hosted(false);
+    const a4 = await approve(plain.username);
+    check("§7d LAN: TOTP'siz yönetici yalnız parolayla onaylar (bugünkü davranış)", a4 === "200:", a4);
   } finally {
     await new Promise<void>((r) => server.close(() => r()));
     if (originalClass === undefined) delete process.env[INSTALL_CLASS_ENV]; else process.env[INSTALL_CLASS_ENV] = originalClass;
@@ -230,6 +266,7 @@ async function main(): Promise<void> {
     }
     invalidateFeatureFlagsCache();
     if (deviceRowId) await prisma.device.deleteMany({ where: { id: deviceRowId } }).catch(() => undefined);
+    if (deskRowId) await prisma.device.deleteMany({ where: { id: deskRowId } }).catch(() => undefined);
     await prisma.notificationOutbox.deleteMany({ where: { kind: NEW_DEVICE_LOGIN_KIND, subjectId: { in: ids } } }).catch(() => undefined);
     await prisma.trustedDevice.deleteMany({ where: { userId: { in: ids } } }).catch((e) => check("cihaz temizliği", false, String(e)));
     await prisma.userRecoveryCode.deleteMany({ where: { userId: { in: ids } } }).catch(() => undefined);
@@ -256,3 +293,4 @@ main().catch(async (e) => {
 //   S2 cihaz muafiyetinden `!desktop` çıkarıldı → §4c kırmızı.
 //   S3 cihaz muafiyetinden `!systemAccount` çıkarıldı → §5b kırmızı.
 //   S4 hostedBearerLoginContext belirteci çerezden okur → §6c kırmızı.
+//   S5 approvedDeviceProven'dan cihaz türü koşulu çıkarıldı → §4f kırmızı (kanıtlı DESKTOP kaydı mobil beyanıyla 200).

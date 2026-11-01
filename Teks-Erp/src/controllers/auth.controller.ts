@@ -195,7 +195,8 @@ function hostedBearerLoginContext(req: Request, clientType: string | undefined, 
   const ua = req.headers["user-agent"];
   return {
     trustedDeviceToken: readTrustedDeviceToken(req, "body"),
-    approvedDeviceProven: req.device?.proofVerified === true,
+    // Muafiyet beyana değil cihaz kaydının türüne bağlı: DESKTOP kaydı kanıtlı olsa da saha cihazı sayılmaz.
+    approvedDeviceProven: req.device?.proofVerified === true && (req.device.kind === "TABLET" || req.device.kind === "PHONE"),
     userAgent: typeof ua === "string" ? ua.slice(0, 512) : null,
     ip: ip ?? null,
   };
