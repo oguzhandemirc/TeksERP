@@ -33,6 +33,7 @@
 - **[ÇEKİRDEK]** Çözgü firesi zinciri ELLE/OLCULMUS > YAPI (`CostStructure.warpWastePct`) > KART (`WarpSpec.wastePct`) > PARAMETRE; kart firesi boşken girdi bugünküyle bayt-aynıdır, aralık 0 ≤ x < 100 `WarpSpecService`te + DB CHECK'te. · bekçi: `test_kart_firesi`
 - **[ÇEKİRDEK]** Önizleme hiçbir şey yazmaz (sürüm de audit de). · bekçi: `test_standart_maliyet_surum` (§6b)
 - **[ÇEKİRDEK]** Makine saat ücreti (`MachineCostRate`) ve hizmet sarf normu (`ServiceConsumableNorm`) "şu andan itibaren" damgalı sürümdür: değişim aynı tx'te `updateMany WHERE {id, revokedAt: null}` (0 → 409 `*_STALE`) + yeni satır, kaldırma damga, hard delete yok; geçmiş ya da şimdiki değeri YALNIZ `helpers/cost-rate-validity.helper.ts` (`machineCostRateValidAt` / `consumableNormsValidAt`) okur; norm yalnız SERVICE hizmet × CONSUMABLE sarf kalemine kurulur; aktif norm iki kalem için de canlı referanstır (`CONSUMABLE_NORM`, pasife alma 409) ve yazım tx'i kartları `runItemUsageChecksTx` ile FOR SHARE kilitler. · bekçi: `test_makine_ucreti_sarf_normu`
+- **[ÇEKİRDEK]** Hizmet sarf normu `qtyPerM = 0` "bu hizmet sarf kullanmaz" AÇIK beyanıdır (CHECK ≥ 0, negatif 400): kârlılık onu ölçülmüş 0 sarf sayar ve fiyat aramaz; hizmet anında HİÇ geçerli norm satırı yoksa sarf null + `SARF_NORMU` eksik kalır (sessiz 0 varsayımı yok). · bekçi: `test_karlilik_cekirdek` (§4a/§4f), `test_makine_ucreti_sarf_normu` (§4i/§4j/§5e)
 
 ## Teklif ve fiyat listesi (MAL-4)
 
