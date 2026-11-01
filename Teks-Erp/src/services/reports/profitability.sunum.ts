@@ -11,6 +11,7 @@ import { catalogHeader, metricFigure, periodOf } from "./temel/_common";
 import { dayRangeParameters, type ResolvedDayRange } from "./temel/_day-range";
 import { anlatiUret } from "./anlati/anlati";
 import { resolveRangeEnd, resolveRangeStart } from "../../constants/time";
+import { TERIM } from "../../constants/terim";
 import {
   summarizeProfitability, type ProfitabilityResult, type ProfitabilityRow, type ProfitGroupBy, type ProfitMissingCode,
 } from "../helpers/profitability.helper";
@@ -159,7 +160,7 @@ function warningsOf(r: ProfitabilityResult, rangeNotes: string[]): string[] {
   const late = r.months.reduce((a, m) => a.plus(m.directExpenses?.lateAdjustmentTry ?? 0), D0());
   if (!late.isZero()) w.push(`Geç bağ düzeltmesi: önceki ayların masraflarına bu dönemde yapılan bağ değişikliği ${say(late)} TL doğrudan masrafa aktarıldı; eski ay değişmedi.`);
   const directLeft = r.months.reduce((a, m) => a.plus(m.directExpenses?.undistributedTry ?? 0), D0());
-  if (!directLeft.isZero()) w.push(`${say(directLeft)} TL bağlı masrafın hedefinin (makine/iş emri/işlem) bu dönemde faturalanan işi yok; işlere yüklenmedi.`);
+  if (!directLeft.isZero()) w.push(`${say(directLeft)} TL bağlı masrafın hedefinin (makine/${TERIM.terbiyeIsEmri.cekimKucuk.yalin}/işlem) bu dönemde faturalanan işi yok; işlere yüklenmedi.`);
   return w;
 }
 
@@ -236,7 +237,7 @@ export function buildProfitabilitySunumu(p: {
       { ad: "Kalan (katkı)", aciklama: "Kesinleşen gelirden ipe, makineye ve dışarıya giden çıkınca kalan." },
       { ad: "Net", aciklama: "Kalandan işçilik ve genel gider payı da düşülünce kalan; dağıtım anahtarı ayardadır." },
       ...(result.rows.some((x) => x.directExpenseTry) || result.months.some((x) => x.directExpenses)
-        ? [{ ad: "Bağlı masraf", aciklama: "Kasa masrafının makineye, iş emrine ya da hizmete bağlanan payı (bağın o ay sonundaki hâliyle); işin metre payıyla nete düşer." }]
+        ? [{ ad: "Bağlı masraf", aciklama: `Kasa masrafının makineye, ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} ya da hizmete bağlanan payı (bağın o ay sonundaki hâliyle); işin metre payıyla nete düşer.` }]
         : []),
       { ad: "Eksik", aciklama: "Norm, fiyat, kur ya da saat ücreti girilmemiş iş; değeri sıfır sayılmaz, boş bırakılır." },
     ],
