@@ -34,7 +34,13 @@ export type ConflictPolicy =
   /** "Boş = hepsi" asimetrisi: survivor boşsa kaynağınki ATILIR (bkz. aşağı). */
   | "EMPTY_MEANS_ALL"
   /** Çözülemez — 409 ile operatöre geri döner (bkz. şube ihracat kodu). */
-  | "BLOCK";
+  | "BLOCK"
+  /**
+   * Çakışan kaynak satırı MEZAR TAŞINDA KALIR: taşınmaz, silinmez; kimliği mezar taşının `mergedIntoId`
+   * zinciriyle survivor'a çözülür. Yalnız `uniqueOn = [column]` kuralında geçerli (kaynak başına tek satır).
+   * Kalan satırın kapanışı ayrı yazıcının işidir (cari hesap → `helpers/cari-merge.helper.ts`).
+   */
+  | "KEEP_ON_SOURCE";
 
 export type MoveRule =
   | { kind: "MOVE"; model: string; table: string; column: string; label: string }
