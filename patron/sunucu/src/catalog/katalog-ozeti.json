@@ -513,6 +513,13 @@
       ]
     },
     {
+      "name": "karlilik-ozet",
+      "kind": "ANLIK",
+      "permissions": [
+        "bulut:maliyet:oku"
+      ]
+    },
+    {
       "name": "stok-karnesi",
       "kind": "ANLIK",
       "permissions": [
@@ -721,6 +728,9 @@
     "ozet-masraf": [
       "bulut:kasa:oku"
     ],
+    "karlilik-ozet": [
+      "bulut:maliyet:oku"
+    ],
     "stok-karnesi": [
       "bulut:stok:oku"
     ],
@@ -762,7 +772,8 @@
     "dokuma/duruslar": "bulut:uretim:oku",
     "dokuma/levent-dengesi": "bulut:uretim:oku",
     "production/makine-duruslari": "bulut:uretim:oku",
-    "finance/alacaklar": "bulut:cari-bakiye:oku"
+    "finance/alacaklar": "bulut:cari-bakiye:oku",
+    "maliyet/karlilik": "bulut:maliyet:oku"
   },
   "REPORTS_NOT_IN_CLOUD": [
     "audit/*",

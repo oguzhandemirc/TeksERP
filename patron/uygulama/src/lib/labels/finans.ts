@@ -189,6 +189,7 @@ export const REPORT_TITLE: Readonly<Record<string, string>> = {
   "dokuma/levent-dengesi": "Leventten beklenen kumaş çıktı mı?",
   "production/makine-duruslari": "Makineler neden durdu?",
   "finance/alacaklar": "Kimden ne alacağız?",
+  "maliyet/karlilik": "Kârlılık",
 };
 
 /** Katalogda ad varsa ondan, yoksa sözlükten; ikisi de yoksa "Rapor" (ham anahtar ekrana basılmaz). */

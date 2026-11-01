@@ -6,7 +6,8 @@ import type { ResolvedDayRange } from "./temel/_day-range";
 import { buildProfitabilitySunumu, compareMonthsOf, monthsOfWindow, type ProfitBreakdown, type ProfitNames } from "./profitability.sunum";
 import type { RaporSunumu } from "./sunum/sunum.types";
 
-async function loadNames(results: ProfitabilityResult[]): Promise<ProfitNames> {
+/** Kârlılık satırlarının ad sözlükleri (müşteri/işlem/makine/top) — panel raporu ve patron anlığı (D4-G4) ortak. */
+export async function loadNames(results: ProfitabilityResult[]): Promise<ProfitNames> {
   const rows = results.flatMap((r) => r.rows);
   const ids = <T,>(pick: (x: (typeof rows)[number]) => T | null) => [...new Set(rows.map(pick).filter((v): v is T => v !== null))];
   const customers = await prisma.customer.findMany({ where: { id: { in: ids((r) => r.customerId) } }, select: { id: true, name: true } });
@@ -21,11 +22,11 @@ async function loadNames(results: ProfitabilityResult[]): Promise<ProfitNames> {
   };
 }
 
-export async function profitabilityReport(window: ResolvedDayRange, breakdown: ProfitBreakdown): Promise<RaporSunumu | null> {
+export async function profitabilityReport(window: ResolvedDayRange, breakdown: ProfitBreakdown, allowedBreakdowns?: readonly ProfitBreakdown[]): Promise<RaporSunumu | null> {
   const result = await computeProfitability(monthsOfWindow(window.days));
   if (!result) return null;
   const cmpMonths = compareMonthsOf(window);
   const previous = cmpMonths ? await computeProfitability(cmpMonths) : null;
   const names = await loadNames(previous ? [result, previous] : [result]);
-  return buildProfitabilitySunumu({ result, previous, names, window, breakdown });
+  return buildProfitabilitySunumu({ result, previous, names, window, breakdown, allowedBreakdowns });
 }
