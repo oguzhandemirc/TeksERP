@@ -10,7 +10,7 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { matchesPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { requireMaliyetEnabled } from "../middlewares/module.middleware";
 import {
   activateDraft,
@@ -26,6 +26,7 @@ import { getCostStructure, putCostStructure } from "../services/cost-structure.s
 import { changeMachineCostRate, createMachineCostRate, listMachineCostOptions, listMachineCostRates, revokeMachineCostRate } from "../services/machine-cost-rate.service";
 import { changeConsumableNorm, createConsumableNorm, listConsumableNorms, revokeConsumableNorm } from "../services/consumable-norm.service";
 import { previewCost } from "../services/cost-calc.service";
+import { getDispatchFinishingCheck } from "../services/dispatch-finishing-check.service";
 import { suggestQuoteCurrency } from "../services/quote-currency.service";
 import {
   createStandardCostVersion,
@@ -623,6 +624,26 @@ router.get("/items", requirePermission("cost:read"), wrap(async (req, res) => {
   const raw = req.query.girdiDegisti;
   const out = await listCostItems({ ...q, durum: statuses, girdiDegisti: raw === undefined ? undefined : q.girdiDegisti });
   res.status(200).json({ success: true, ...out });
+}));
+
+/**
+ * @openapi
+ * /api/cost/subcontractor-dispatches/{id}/finishing-check:
+ *   get:
+ *     tags: [Cost]
+ *     summary: Fason sevk kg kontrolü — beklenen boyahane tutarı (Σ sevk kg × aktif KG tarifesi), fatura varsa fark
+ *     description: Yalnız okuma (SY-E2). KG tarifesi çözülemezse `line` null + `reason` (0 tutar uydurulmaz). Fatura kısmı yalnız `finance:read` ∧ ön muhasebe açıkken dolar.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "{ line, reason }" }
+ *       404: { description: Sevk yok }
+ */
+router.get("/subcontractor-dispatches/:id/finishing-check", requirePermission("cost:read"), wrap(async (req, res) => {
+  const { id } = idParam.parse(req.params);
+  // Fatura kısmı finans kapılı: finance:read yoksa servis faturayı hiç okumaz (invoice null).
+  const canReadInvoices = matchesPermission(req.user?.permissions ?? [], "finance:read");
+  res.status(200).json({ success: true, data: await getDispatchFinishingCheck(id, { canReadInvoices }) });
 }));
 
 /**

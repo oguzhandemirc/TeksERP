@@ -28,6 +28,7 @@ import { CustomerColorAliasesPanel } from "./CustomerColorAliasesPanel";
 import { CustomerTemplateRoutesPanel } from "./CustomerTemplateRoutesPanel";
 import { CustomerStandaloneLabelsPanel } from "./CustomerStandaloneLabelsPanel";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
+import { CariHoldPanel } from "@/pages/Finance/CariHold/CariHoldPanel";
 import { DocumentProfileSelect } from "@/components/forms/DocumentProfileSelect";
 import type { Customer } from "./types";
 
@@ -346,6 +347,7 @@ export function CustomerFormDialog({
                 <TabsTrigger value="item-aliases">Müşterideki Kumaş Adları</TabsTrigger>
                 <TabsTrigger value="color-aliases">Müşterideki Renk Adları</TabsTrigger>
                 <TabsTrigger value="label-templates">Etiket Şablonları</TabsTrigger>
+                {financeAccess.canSeeHold && <TabsTrigger value="cari-hold">Kilit</TabsTrigger>}
               </TabsList>
 
               <TabsContent value="info">
@@ -384,6 +386,12 @@ export function CustomerFormDialog({
                   </>
                 )}
               </TabsContent>
+
+              {financeAccess.canSeeHold && initial && (
+                <TabsContent value="cari-hold">
+                  <CariHoldPanel target={{ customerId: initial.id }} cariName={initial.name} />
+                </TabsContent>
+              )}
             </Tabs>
           ) : (
             <form onSubmit={submit} className="space-y-4">

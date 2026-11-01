@@ -5,6 +5,7 @@ import { Text, View } from "react-native";
 import type { ProjectionRecord } from "../../api/wire";
 import { formatDate, formatMoney } from "../../lib/format";
 import {
+  CASH_TXN_KIND,
   CHEQUE_DOC_TYPE,
   CHEQUE_DOC_TYPE_LOWER,
   CHEQUE_KIND,
@@ -121,5 +122,19 @@ export function tahsilatRow(r: ProjectionRecord): ProjectionRowView {
     icon: k.yon === "OUT" ? "arrow-up-circle-outline" : "arrow-down-circle-outline",
     domain: "finans",
     ...amountView(r, "tutar", dir?.sign),
+  };
+}
+
+/** Kasa hareketi: başlık kategori (yoksa tür), işaret yönden; kategorisiz masraf "Kategorisiz" yazılmaz, türüyle görünür. */
+export function kasaHareketiRow(r: ProjectionRecord): ProjectionRowView {
+  const k = obj(r.kayit);
+  const kind = dict(CASH_TXN_KIND, k.tur);
+  const sign = typeof k.yon === "string" ? PAYMENT_DIRECTION[k.yon]?.sign : undefined;
+  return {
+    title: str(k.kategori)?.trim() || kind || recordTitle(r.kayit),
+    subtitle: join(str(k.kategori) ? kind : undefined, str(k.belgeNo), str(k.tarih) && formatDate(k.tarih), k.durum === "CANCELLED" && PAYMENT_STATUS.CANCELLED!.label),
+    icon: k.yon === "OUT" ? "arrow-up-circle-outline" : "arrow-down-circle-outline",
+    domain: "finans",
+    ...amountView(r, "tutar", sign),
   };
 }

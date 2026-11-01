@@ -21,6 +21,8 @@ export interface ReadyWorkRow {
   shippedMeters: number;
   scrapMeters: number;
   targetMeters: number | null;
+  /** D4-I3: birincil müşterinin cari kilidi (rozet; metin sunucudan) — eski backend göndermez. */
+  customerHold?: { held: boolean; holdScopes: string[]; holdText: string | null };
 }
 
 export interface ReadyWorkSummary {

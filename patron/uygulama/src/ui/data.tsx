@@ -192,6 +192,7 @@ export interface ListFilter {
   readonly cariKartId?: string;
   readonly ara?: string;
   readonly suzgec?: string;
+  readonly kategoriAnahtari?: string;
 }
 
 /** Satırı `ListRow` olarak çizen eşleme (dokunma ve testID listeden gelir). */
@@ -230,12 +231,12 @@ const NO_MORE: MorePages = { of: null, items: [], next: null, loading: false, er
  */
 export function ProjectionList(p: ProjectionListProps) {
   const { api, cache } = useSession();
-  const { durum, cariKartId, ara, suzgec } = p.filter ?? {};
+  const { durum, cariKartId, ara, suzgec, kategoriAnahtari } = p.filter ?? {};
   const search = typeof ara === "string" && ara !== "";
-  const key = `veri:${p.projection}:liste:${durum ?? ""}:${cariKartId ?? ""}:${suzgec ?? ""}`;
+  const key = `veri:${p.projection}:liste:${durum ?? ""}:${cariKartId ?? ""}:${suzgec ?? ""}${kategoriAnahtari === undefined ? "" : `:k=${kategoriAnahtari}`}`;
   const first = useRemote(
     search ? null : key,
-    () => api.list(p.projection, { imlec: undefined, limit: 50, durum, cariKartId, ara: undefined, suzgec }),
+    () => api.list(p.projection, { imlec: undefined, limit: 50, durum, cariKartId, ara: undefined, suzgec, kategoriAnahtari }),
     { tags: p.tags ?? [p.projection] },
   );
 
@@ -248,14 +249,14 @@ export function ProjectionList(p: ProjectionListProps) {
     const mine = ++seq.current;
     setFound({ page: null, loading: true, error: null });
     api
-      .list(p.projection, { imlec: undefined, limit: 50, durum, cariKartId, ara, suzgec })
+      .list(p.projection, { imlec: undefined, limit: 50, durum, cariKartId, ara, suzgec, kategoriAnahtari })
       .then((page) => {
         if (mine === seq.current) setFound({ page, loading: false, error: null });
       })
       .catch((err: unknown) => {
         if (mine === seq.current) setFound({ page: null, loading: false, error: errorMessage(err) });
       });
-  }, [search, cache, api, p.projection, durum, cariKartId, ara, suzgec, searchTick]);
+  }, [search, cache, api, p.projection, durum, cariKartId, ara, suzgec, kategoriAnahtari, searchTick]);
 
   const base: Page<ProjectionRecord> | null = search ? found.page : first.data;
   const baseNext = search ? (found.page?.sonraki ?? null) : first.offline ? null : (first.data?.sonraki ?? null);
@@ -270,12 +271,12 @@ export function ProjectionList(p: ProjectionListProps) {
     if (!of || !cursor) return;
     setMore((m) => ({ of, items: m.of === of ? m.items : [], next: cursor, loading: true, error: null }));
     try {
-      const page = await api.list(p.projection, { imlec: cursor, limit: 50, durum, cariKartId, ara: search ? ara : undefined, suzgec });
+      const page = await api.list(p.projection, { imlec: cursor, limit: 50, durum, cariKartId, ara: search ? ara : undefined, suzgec, kategoriAnahtari });
       setMore((m) => (m.of !== of ? m : { of, items: [...m.items, ...page.kayitlar], next: page.sonraki, loading: false, error: null }));
     } catch (err) {
       setMore((m) => (m.of !== of ? m : { ...m, loading: false, error: errorMessage(err) }));
     }
-  }, [api, base, next, p.projection, durum, cariKartId, ara, search, suzgec]);
+  }, [api, base, next, p.projection, durum, cariKartId, ara, search, suzgec, kategoriAnahtari]);
 
   const loading = search ? found.loading : first.loading && !first.data;
   const error = search ? found.error : first.data ? null : first.error;

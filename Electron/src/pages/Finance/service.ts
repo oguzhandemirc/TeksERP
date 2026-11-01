@@ -47,12 +47,19 @@ export interface CariRow {
   isActive: boolean;
   /** H8b: müşterinin hizmet faturası tetiği; null = fabrika ayarı. Eski backend göndermez (undefined). */
   serviceBillingTrigger?: ServiceBillingTrigger | null;
+  /** D4-V1k: KDV / tevkifat geçersiz kılması; null = genel ayar. Eski backend göndermez (undefined → alan çizilmez). */
+  vatRate?: string | number | null;
+  withholdingEnabled?: boolean | null;
+  withholdingNumerator?: number | null;
+  withholdingDenominator?: number | null;
   balances: Array<{ currency: Currency; balance: number }>;
   /** Vadesi geçmiş AÇIK tutar, para birimi bazında (H2). YALNIZ `withOverdue`
    *  ile istenince gelir; eski backend'de hiç gelmez → alan OPSİYONEL okunur.
    *  ⚠️ Tutar STRING'tir ("3400.00") — yaşlandırma raporu para hassasiyeti için
    *  string basar ve `money()` string kabul eder; `Number()`a çevirip toplama. */
   overdue?: Array<{ currency: Currency; amount: string }>;
+  /** D4-I3: aktif cari kilidi (rozet) — eski backend göndermez (undefined). */
+  hold?: { holdId: string; scopes: Array<"INTAKE" | "SHIPMENT" | "INVOICE">; reasonLabel: string; createdAt: string } | null;
 }
 
 export interface InvoiceRow {
@@ -430,6 +437,32 @@ export interface CariUpdateInput {
   isActive?: boolean;
   /** H8b: `null` → fabrika ayarı. Yalnız müşteri carisinde ve backend alanı okuyorsa gönderilir. */
   serviceBillingTrigger?: ServiceBillingTrigger | null;
+  vatRate?: string | null;
+  withholdingEnabled?: boolean | null;
+  withholdingNumerator?: number | null;
+  withholdingDenominator?: number | null;
+}
+
+/** D4-V1k: cari KDV / tevkifat gövdesi (null = genel ayar). */
+export interface CariTaxOverrideBody {
+  vatRate: string | null;
+  withholdingEnabled: boolean | null;
+  withholdingNumerator: number | null;
+  withholdingDenominator: number | null;
+}
+
+/** D4-V1k: yeni fatura satırının ön değeri — sunucunun TEK çözümleyicisinden (müşteri cari ?? genel ayar). */
+export interface InvoiceTaxDefaults {
+  vatRate: number;
+  /** KDV'nin %'si (5/10 → 50); 0 = tevkifat yok. */
+  withholdingRate: number;
+}
+
+export async function getInvoiceTaxDefaults(type: "SALES" | "PURCHASE", customerId: string | null): Promise<InvoiceTaxDefaults> {
+  const res = await apiClient.get<{ data: InvoiceTaxDefaults }>("/api/finance/invoices/tax-defaults", {
+    params: { type, ...(customerId ? { customerId } : {}) },
+  });
+  return res.data.data;
 }
 
 /** H8b: hizmet faturası tetiği — fabrika ayarı `finance.serviceBilling.trigger` ile aynı değer kümesi. */
