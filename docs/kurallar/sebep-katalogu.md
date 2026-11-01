@@ -101,7 +101,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_iade_enhancements`, `test_order_cancel_reason`, `test_reason_preset_kind_parity`, `test_reason_presets`, `test_reason_quick_pick`, `test_roll_cancel_undo`⚠️, `test_roll_fold_and_reason`
+Backend: `test_iade_enhancements`, `test_order_cancel_reason`, `test_reason_preset_kind_parity`, `test_reason_preset_kind_filtre`, `test_reason_presets`, `test_reason_quick_pick`, `test_roll_cancel_undo`⚠️, `test_roll_fold_and_reason`
 
 İstemci: `RollCancelModal.test.tsx`, `ReasonPresetPicker.test.tsx`, `varianceReasons.test.ts`⚠️, `useReasonPresets.test.tsx`, `reworkPayload.test.ts`, `reasonPreset.order.test.ts`
 
