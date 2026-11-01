@@ -7,7 +7,7 @@
 //    (kuruluysa) kod ister, açmak serbest. Sistem hesabında tercih yok sayılır (CHECK de var).
 // Kararın TEK tüketicisi `AuthService.assertSecondFactor` → `webTotpWaived`.
 // =============================================================================
-import bcrypt from "bcryptjs";
+import { verifyPassword } from "./helpers/password-hasher.helper";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -80,7 +80,7 @@ export class WebTotpService {
         });
       }
       const pw = input.currentPassword ?? "";
-      if (!pw || !(await bcrypt.compare(pw, user.passwordHash))) {
+      if (!pw || !(await verifyPassword(pw, user.passwordHash))) {
         throw AppError.badRequest("Mevcut parola yanlış.", { code: CURRENT_PASSWORD_INVALID_CODE });
       }
       if ((await TotpAccountService.getStatus(userId)).enabled) {
