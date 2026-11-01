@@ -75,9 +75,15 @@ export const costItemService = {
   list: async (f: CostItemFilter, cursor: string | null, limit = 50) =>
     (await apiClient.get<ApiResponse<CostItemRow[]> & CostItemPage>("/api/cost/items", { params: listParams(f, cursor, limit) })).data as CostItemPage,
   detail: async (itemId: string) => (await apiClient.get<ApiResponse<CostItemDetail>>(`/api/cost/items/${itemId}`)).data.data,
-  versions: async (itemId: string) => (await apiClient.get<ApiResponse<CostVersion[]>>(`/api/cost/items/${itemId}/versions`)).data.data,
-  saveVersion: async (itemId: string, body: { reason?: string; fxRates?: FxRates }) =>
-    (await apiClient.post<ApiResponse<CostVersion>>(`/api/cost/items/${itemId}/versions`, { reason: body.reason, fxRates: body.fxRates })).data,
+  /** `recipeId` yoksa sorgu parametresi YOK → desen geneli zinciri (bugünkü istek bayt-aynı). */
+  versions: async (itemId: string, recipeId: string | null = null) =>
+    (await apiClient.get<ApiResponse<CostVersion[]>>(`/api/cost/items/${itemId}/versions`, recipeId ? { params: { recipeId } } : undefined)).data.data,
+  version: async (itemId: string, versionId: string) =>
+    (await apiClient.get<ApiResponse<CostVersion>>(`/api/cost/items/${itemId}/versions/${versionId}`)).data.data,
+  saveVersion: async (itemId: string, body: { reason?: string; fxRates?: FxRates; recipeId?: string | null }) =>
+    (await apiClient.post<ApiResponse<CostVersion>>(`/api/cost/items/${itemId}/versions`, {
+      reason: body.reason, fxRates: body.fxRates, ...(body.recipeId ? { recipeId: body.recipeId } : {}),
+    })).data,
   restore: async (itemId: string, versionId: string, reason?: string) =>
     (await apiClient.post<ApiResponse<CostVersion>>(`/api/cost/items/${itemId}/versions/${versionId}/restore`, { reason })).data,
   putStructure: async (itemId: string, v: StructureBody) =>
