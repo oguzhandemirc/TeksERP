@@ -224,9 +224,9 @@ Güncelleyici konakta systemd hizmeti olarak çalışır (`Restart=always`), ayn
 | Canlı | PostgreSQL birimi | Müşteri VDS'i | — |
 | Gece yedeği | `pg_dump -Fc` → `pg_restore --list` doğrulaması → `.tkenc` (`docs/ops/YEDEK-SIFRELEME.md` biçimi) | VDS, `yedek` birimi | 30 gün, en yeni 3 kopya asla silinmez |
 | Güncelleme öncesi | §4.4 adım 2 | VDS, güncelleyici dizini | Son 3 |
-| Başka sağlayıcı | Aynı `.tkenc` dosyası, `rclone copy` (sync değil) ile SFTP | **Yedek deposu VDS'i** (Türkiye, müşteri VDS'lerinden farklı sağlayıcı, bütün bulut müşterilerine ortak; K-B11) | 30 gün günlük + 12 ay aylık (`docs/ops/YEDEK-VPS-KURULUM.md` kalıbı) |
+| Başka sağlayıcı | Aynı `.tkenc` dosyası; yedek deposu VDS'i **çeker** (`deploy/bulut/yedek-cek`, rrsync -ro, `--ignore-existing`; `docs/ops/BULUT-YEDEK-CEKME.md`) — rclone/gönderme yerine (denetim 2026-11-01 K2: imajda yeni paket yok, müşteri VDS'inde hedef kimliği yok) | **Yedek deposu VDS'i** (Türkiye, müşteri VDS'lerinden farklı sağlayıcı, bütün bulut müşterilerine ortak; K-B11) | 30 gün günlük + 12 ay aylık (`docs/ops/YEDEK-VPS-KURULUM.md` kalıbı) |
 
-**Fidye yazılımına karşı direnç:** müşteri VDS'inin depodaki hesabı kabuksuz ve chroot'ludur, yalnız kendi `gelen/` dizinine yazabilir. Silemez ve arşivi göremez. Arşivi depodaki root zamanlayıcısı **kopyalar** (taşımaz). Depo ele geçirilirse içerik yine şifrelidir, çünkü çözme anahtarları depoda durmaz. Depo da §1.4 sertleştirmesinden geçer ve gözcünün listesine girer.
+**Fidye yazılımına karşı direnç:** müşteri VDS'inde depoya giden hiçbir kimlik yoktur. Bağlantıyı depo açar ve yalnız çıkış dizinini salt-okur çeker. Var olan kopyayı ezmez, kaynaktan silmez, zaman damgasını kaynaktan almaz (`BULUT-YEDEK-CEKME.md`). Depo ele geçirilirse içerik yine şifrelidir, çünkü çözme anahtarları depoda durmaz. Depo da §1.4 sertleştirmesinden geçer ve gözcünün listesine girer.
 
 **Sağlayıcı kuralı:** iki paket iki ayrı sağlayıcı anlamına gelebilir. Deponun sağlayıcısı, müşteri VDS'lerinin **hiçbirinin** sağlayıcısı olamaz. Kurulum betiği adım 0'da kanal kaydındaki sağlayıcıyı deponunkiyle karşılaştırır; aynıysa DURUR.
 

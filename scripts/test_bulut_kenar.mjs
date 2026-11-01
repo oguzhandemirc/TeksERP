@@ -239,7 +239,7 @@ function checkerFindings(src) {
     [/recidive/, 'recidive'], [/reboot-required/, 'reboot-required'], [/Automatic-Reboot/, 'otomatik yeniden başlatma'],
     [/\.dump\.tkenc/, 'şifreli yedek'], [/-name '\*\.dump'/, 'düz döküm'], [/RATE_LIMIT_LOGIN_MAX/, 'hız sınırı ortamı'],
     [/NanoCpus/, 'kaynak sınırı'], [/strict-transport-security/i, 'HSTS'], [/--tls-max/, 'TLS 1.0/1.1'], [/location: https:/i, 'HTTP→HTTPS'],
-    [/zone=kenar_giris/, 'kenar hız bölgesi'], [/ssl_verify_client/, 'AOP'],
+    [/zone=kenar_giris/, 'kenar hız bölgesi'], [/ssl_verify_client/, 'AOP'], [/son-cekim/, 'makine dışı çekim yaşı'],
   ]) if (!re.test(code)) out.push(`ölçülmüyor: ${name}`);
   return out;
 }
@@ -256,6 +256,7 @@ function checkerFindings(src) {
     ['ortam süzgecinde sır', src.replace('|LOGIN_LOCKOUT_SCOPE)=', '|LOGIN_LOCKOUT_SCOPE|JWT_SECRET)=')],
     ['çıkış hep 0', src.replace('exit "$KIRMIZI"', 'exit 0')],
     ['HSTS ölçülmüyor', src.replace(/^.*strict-transport-security.*\n/gim, '')],
+    ['makine dışı çekim yaşı ölçülmüyor', src.replace(/son-cekim/g, 'x')],
   ]);
 }
 
