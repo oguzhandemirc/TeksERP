@@ -974,6 +974,8 @@ jobs:
     if: needs.changes.outputs.electron == 'true'
     runs-on: ubuntu-latest
     continue-on-error: true
+    # apt aynası bir koşumda ~55 dk takıldı; asılan iş inişi bekletmesin (continue-on-error ile koşu yeşil kalır)
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: Electron
@@ -986,7 +988,8 @@ jobs:
           cache-dependency-path: Electron/package-lock.json
       - run: npm ci # E2E electron binary İSTER → ELECTRON_SKIP_BINARY_DOWNLOAD verilmez
       - name: Playwright + Electron sistem bağımlılıkları
-        run: npx playwright install-deps
+        # yalnız Chromium bağımlılıkları (Electron = Chromium); firefox/webkit apt yükü inmez
+        run: npx playwright install-deps chromium
       - name: E2E (build + headless launch)
         run: xvfb-run --auto-servernum npm run e2e
 
