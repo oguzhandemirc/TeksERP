@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ItemPickerModal } from "@/components/forms/ItemPickerModal";
 import { apiErrorText } from "@/lib/api-error";
+import { TERIM } from "@/lib/terim";
 import { FieldLabel, FlagToggle } from "./SettingRow";
 import { EnumRadioOptions } from "./EnumRadioOptions";
 import { SettingsSaveBar } from "./SettingsSaveBar";
@@ -34,14 +35,15 @@ export const UNREVIEWED_APPROVAL_OPTIONS: ReadonlyArray<{ value: UnreviewedAppro
   { value: "BLOCK", label: "Engelle", hint: "Gözden geçirilmemiş satır varken onay reddedilir; önce hücreler gözden geçirilir." },
 ];
 
-const AUTO_WORK_ORDER_DESC = "Onaylanan belgenin topları desen/gramaj ve kumaşa göre gruplanır; işlem değeri net çözülen her grup için iş emri, müşterinin son iş emrindeki rotayla açılır (plan ekranındaki 'iş emri aç' ile aynı işlem). Deseni çözülemeyen gruplar, rota önerisi olmayan müşteri ve iş emri açma yetkisi olmayan onaylayan için iş emri açılmaz; onay sonucu hangi grubun elle açılması gerektiğini yazar. Onay bundan etkilenmez. Kapalı (varsayılan) = bugünkü davranış: iş emirleri plan ekranından elle açılır.";
+const IE = TERIM.terbiyeIsEmri;
+const AUTO_WORK_ORDER_DESC = `Onaylanan belgenin topları desen/gramaj ve kumaşa göre gruplanır; işlem değeri net çözülen her grup için ${IE.tekilKucuk}, müşterinin son ${IE.cekimKucuk.bulunma}ki rotayla açılır (plan ekranındaki '${IE.tekilKucuk} aç' ile aynı işlem). Deseni çözülemeyen gruplar, rota önerisi olmayan müşteri ve ${IE.tekilKucuk} açma yetkisi olmayan onaylayan için ${IE.tekilKucuk} açılmaz; onay sonucu hangi grubun elle açılması gerektiğini yazar. Onay bundan etkilenmez. Kapalı (varsayılan) = bugünkü davranış: ${IE.cogulKucuk} plan ekranından elle açılır.`;
 
 function AutoWorkOrderToggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <div data-testid="gb-auto-work-order">
       <FlagToggle
-        title="Onaydan sonra iş emrini otomatik aç"
-        summary="Belge onaylanınca deseni/gramajı belli her grup için iş emri kendiliğinden açılır."
+        title={`Onaydan sonra ${IE.cekimKucuk.belirtme} otomatik aç`}
+        summary={`Belge onaylanınca deseni/gramajı belli her grup için ${IE.tekilKucuk} kendiliğinden açılır.`}
         desc={AUTO_WORK_ORDER_DESC}
         defaultOn={false}
         checked={checked}

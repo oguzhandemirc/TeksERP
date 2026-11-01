@@ -13,6 +13,7 @@ import { ItemType } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
+import { TERIM } from "../constants/terim";
 import { assertItemUsable } from "./helpers/item-usage.helper";
 import {
   DEFAULT_UNREVIEWED_APPROVAL,
@@ -111,7 +112,7 @@ export async function updateIncomingDocSettings(input: IncomingDocSettingsInput,
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, input.unreviewedApproval, "Gelen belge: gözden geçirilmemiş hücre varken onay (WARN/BLOCK)", userId);
   }
   if (input.autoWorkOrder !== undefined) {
-    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER, input.autoWorkOrder, "Gelen belge: onaydan sonra net desen gruplarına iş emri kendiliğinden açılır", userId);
+    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER, input.autoWorkOrder, `Gelen belge: onaydan sonra net desen gruplarına ${TERIM.terbiyeIsEmri.tekilKucuk} kendiliğinden açılır`, userId);
   }
   return getIncomingDocSettings();
 }

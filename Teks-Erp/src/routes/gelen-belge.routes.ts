@@ -36,6 +36,7 @@ import { readerJobStatus, requestImmediateReaderRun } from "../jobs/gelen-belge-
 import { getReaderUrl } from "../lib/gelen-belge/url";
 import { readerHealth } from "../lib/gelen-belge/okuma-istemcisi";
 import { AppError } from "../utils/app-error";
+import { TERIM } from "../constants/terim";
 
 const router = Router();
 router.use(verifyToken, requireGelenBelgeEnabled);
@@ -316,7 +317,7 @@ router.post("/taramalar/:id/oku", requirePermission("gelen-belge:write"), wrap(a
 const SettingsBody = z.strictObject({
   defaultItemId: Id.nullable().optional(),
   unreviewedApproval: z.enum(["WARN", "BLOCK"], "Seçenek WARN ya da BLOCK olmalı").optional(),
-  autoWorkOrder: z.boolean("Otomatik iş emri evet/hayır olmalı").optional(),
+  autoWorkOrder: z.boolean(`Otomatik ${TERIM.terbiyeIsEmri.tekilKucuk} evet/hayır olmalı`).optional(),
 });
 /**
  * @openapi

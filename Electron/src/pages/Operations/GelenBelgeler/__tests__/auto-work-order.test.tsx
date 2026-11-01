@@ -44,7 +44,7 @@ describe("summarizeAutoWorkOrders", () => {
   });
   it("⭐ başlık 'N iş emri açıldı, M grup elle açılmalı' + grup başına İE no / neden", () => {
     const s = summarizeAutoWorkOrders(RESULT)!;
-    expect(s.title).toBe("2 iş emri açıldı, 1 grup elle açılmalı.");
+    expect(s.title).toBe("2 terbiye iş emri açıldı, 1 grup elle açılmalı.");
     expect(s.tone).toBe("warn");
     expect(s.lines.map((l) => l.text)).toEqual([
       "Perde · Desen Q10 (3 top): IE0211260001 açıldı, 3 top bağlandı",
@@ -70,7 +70,7 @@ describe("ApproveDialog otomatik iş emri sonucu", () => {
     renderWithProviders(<ApproveDialog noteId="n1" lines={[]} open onOpenChange={() => {}} onDone={() => {}} />);
     await userEvent.click(screen.getByRole("button", { name: "Onayla" }));
     const box = await screen.findByTestId("approve-auto-wo");
-    expect(box).toHaveTextContent("2 iş emri açıldı, 1 grup elle açılmalı.");
+    expect(box).toHaveTextContent("2 terbiye iş emri açıldı, 1 grup elle açılmalı.");
     expect(box).toHaveTextContent("IE0211260001 açıldı");
     expect(box).toHaveTextContent("elle açılmalı — İşlem değeri");
   });
@@ -92,7 +92,7 @@ describe("Genel Ayarlar → Gelen Belge: otomatik iş emri anahtarı", () => {
     getSettings.mockResolvedValue({ defaultItem: null, unreviewedApproval: "WARN", defaultUnreviewedApproval: "WARN" });
     updateSettings.mockResolvedValue({ defaultItem: null, unreviewedApproval: "WARN", defaultUnreviewedApproval: "WARN", autoWorkOrder: true });
     renderWithProviders(<IncomingDocumentSettingsSection />);
-    const sw = await screen.findByRole("switch", { name: "Onaydan sonra iş emrini otomatik aç" });
+    const sw = await screen.findByRole("switch", { name: "Onaydan sonra terbiye iş emrini otomatik aç" });
     expect(sw).toHaveAttribute("aria-checked", "false");
     expect(screen.getByTestId("gb-auto-work-order")).toHaveTextContent("Varsayılan: KAPALI");
     await userEvent.click(sw);
@@ -103,7 +103,7 @@ describe("Genel Ayarlar → Gelen Belge: otomatik iş emri anahtarı", () => {
   it("sunucu açık derse anahtar açık gelir", async () => {
     getSettings.mockResolvedValue({ defaultItem: null, unreviewedApproval: "WARN", defaultUnreviewedApproval: "WARN", autoWorkOrder: true });
     renderWithProviders(<IncomingDocumentSettingsSection />);
-    const sw = await screen.findByRole("switch", { name: "Onaydan sonra iş emrini otomatik aç" });
+    const sw = await screen.findByRole("switch", { name: "Onaydan sonra terbiye iş emrini otomatik aç" });
     expect(sw).toHaveAttribute("aria-checked", "true");
   });
 });

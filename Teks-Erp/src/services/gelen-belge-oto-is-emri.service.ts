@@ -16,6 +16,9 @@ import { buildWorkOrderPlan, WORK_ORDER_PLAN_STATUSES, type PlanGroup } from "./
 import type { ApproveResult } from "./gelen-belge-onay.service";
 import { readIncomingDocAutoWorkOrder, readProductionEnabled } from "./system-setting.service";
 import { WorkOrderService } from "./workorder.service";
+import { TERIM } from "../constants/terim";
+
+const IE = TERIM.terbiyeIsEmri;
 
 /**
  * `POST /work-orders/quick-start` kapısının izin kümesi (`requireAnyPermission`, biri yeter) — onaylayanda yoksa otomatik
@@ -80,12 +83,12 @@ export async function autoOpenWorkOrders(noteId: string, actor: Pick<JwtPayload,
     groups = plan.groups;
     if (groups.length === 0) return { opened: 0, manual: 0, reason: null, groups: [] };
     if (!AUTO_WORK_ORDER_PERMISSIONS.some((p) => matchesPermission(actor.permissions, p))) {
-      return allSkipped(groups, "Onaylayanın iş emri açma yetkisi yok (workorder:write ya da mobile:hizli-is-emri); yetkili kişi plan ekranından açmalı.");
+      return allSkipped(groups, `Onaylayanın ${IE.tekilKucuk} açma yetkisi yok (workorder:write ya da mobile:hizli-is-emri); yetkili kişi plan ekranından açmalı.`);
     }
-    if (!(await readProductionEnabled())) return allSkipped(groups, "Üretim modülü kapalı; iş emri açılamaz.");
+    if (!(await readProductionEnabled())) return allSkipped(groups, `Üretim modülü kapalı; ${IE.tekilKucuk} açılamaz.`);
     const routeTemplateId = plan.suggestedRouteTemplateId;
     if (!routeTemplateId) {
-      return allSkipped(groups, "Bu müşterinin rotalı önceki iş emri yok, rota önerilemedi; ilk iş emrini plan ekranından rota seçerek açın.");
+      return allSkipped(groups, `Bu müşterinin rotalı önceki ${IE.tekilKucuk} yok, rota önerilemedi; ilk ${IE.cekimKucuk.belirtme} plan ekranından rota seçerek açın.`);
     }
     const out: AutoWorkOrderGroup[] = [];
     // SIRAYLA (paralel değil): aynı belgenin topları; bir grubun hatası ötekini durdurmaz.
@@ -97,7 +100,7 @@ export async function autoOpenWorkOrders(noteId: string, actor: Pick<JwtPayload,
       }
       const rolls = g.rolls.filter((r) => r.attachable && !r.liveWorkOrder && r.barcode);
       if (rolls.length === 0) {
-        out.push({ ...base, outcome: "SKIPPED", reason: "Bağlanabilir top yok (toplar iş emrinde, çuvalda ya da sevkte)." });
+        out.push({ ...base, outcome: "SKIPPED", reason: `Bağlanabilir top yok (toplar ${IE.cekimKucuk.bulunma}, çuvalda ya da sevkte).` });
         continue;
       }
       try {
@@ -117,7 +120,7 @@ export async function autoOpenWorkOrders(noteId: string, actor: Pick<JwtPayload,
     const opened = out.filter((g) => g.outcome === "OPENED").length;
     return { opened, manual: out.length - opened, reason: null, groups: out };
   } catch (err) {
-    return allSkipped(groups, `Otomatik iş emri denenemedi: ${errText(err)}`);
+    return allSkipped(groups, `Otomatik ${IE.tekilKucuk} denenemedi: ${errText(err)}`);
   }
 }
 

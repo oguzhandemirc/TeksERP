@@ -1,5 +1,6 @@
 // Onay akışının saf parçaları: hangi 409 gerekçeyle geçilir, sonuç özeti nasıl okunur.
 import axios from "axios";
+import { TERIM } from "@/lib/terim";
 import type { ApproveResult, AutoWorkOrderResult, DefaultItemSource, DeliveryNoteLine, EffectiveDefaultItem, IncomingDocumentSettings } from "./types";
 
 /** Gerekçeyle (varianceReason) geçilebilen kapılar — backend `gelen-belge-onay.service.ts` precheck. */
@@ -135,12 +136,12 @@ export function summarizeAutoWorkOrders(r: AutoWorkOrderResult | undefined | nul
   if (!r) return null;
   if (r.groups.length === 0) return null;
   const parts: string[] = [];
-  if (r.opened > 0) parts.push(`${r.opened} iş emri açıldı`);
+  if (r.opened > 0) parts.push(`${r.opened} ${TERIM.terbiyeIsEmri.tekilKucuk} açıldı`);
   if (r.manual > 0) parts.push(`${r.manual} grup elle açılmalı`);
   const title = parts.join(", ") + (r.reason ? ` — ${r.reason}` : "") + ".";
   const lines = r.groups.map((g) => {
     const name = `${g.itemName}${g.targets.length ? ` · ${g.targets.join(" + ")}` : " · desensiz"} (${g.rollCount} top)`;
-    if (g.outcome === "OPENED") return { key: g.key, tone: "ok" as const, text: `${name}: ${g.workOrderNumber ?? "iş emri"} açıldı${g.attached != null ? `, ${g.attached} top bağlandı` : ""}` };
+    if (g.outcome === "OPENED") return { key: g.key, tone: "ok" as const, text: `${name}: ${g.workOrderNumber ?? TERIM.terbiyeIsEmri.tekilKucuk} açıldı${g.attached != null ? `, ${g.attached} top bağlandı` : ""}` };
     return { key: g.key, tone: "warn" as const, text: `${name}: elle açılmalı — ${g.reason ?? "neden bildirilmedi"}` };
   });
   return { tone: r.manual > 0 ? "warn" : "ok", title, lines: r.reason ? [] : lines };
