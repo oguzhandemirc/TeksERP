@@ -3,7 +3,7 @@ import { Label } from "@/components/ui/label";
 import type { SeriesDateSegment, SeriesFormatInput } from "./types";
 
 /** Tarih segmenti = SAYACIN SIFIRLAMA DÖNEMİ; ayrı bir "periyot" ayarı YOKTUR. */
-const SEGMENTLER: Array<{ value: SeriesDateSegment; label: string }> = [
+export const SEGMENTLER: Array<{ value: SeriesDateSegment; label: string }> = [
   { value: "DDMMYY", label: "Günlük (GGAAYY)" },
   { value: "DDMMYYYY", label: "Günlük (GGAAYYYY — 23092026)" },
   { value: "YYYYMMDD", label: "Günlük (YYYYAAGG — 20260923)" },
