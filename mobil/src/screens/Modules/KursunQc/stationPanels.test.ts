@@ -115,3 +115,22 @@ describe('top seçilmedi ipucu', () => {
     expect(hint).not.toMatch(/Sağ/);
   });
 });
+
+// D4-D4: `Teks-Erp/scripts/brode-kurulum.ts`in kurduğu iç brode istasyonu (bayrak AUTO + desen
+// REQUIRED, muayene kapalı) tabletde desen düğmesi verir; aynı istasyona gramaj da bağlanırsa
+// (iki çeşit) düğme düzeni bozulur — kurulum brode'yi ayrı istasyon yapar (DALGA4 §5.8).
+describe('iç brode istasyonu (D4-D4 kurulum şekli)', () => {
+  const DESENLER = [{ code: 'LALE', name: 'Desen Lale' }, { code: 'PAPATYA', name: 'Desen Papatya' }];
+  const brode = { propertyId: 'brode', valueType: 'FLAG' as const, mode: 'AUTO' as const };
+  const desen = { propertyId: 'desen', valueType: 'CHOICE' as const, mode: 'REQUIRED' as const, variantOfPropertyId: 'brode', values: DESENLER };
+  it('bayrak AUTO + desen REQUIRED → desen düğmesi (TAP_VALUE)', () => {
+    const p = composeStationPanels({ inspectionEnabled: false, properties: [brode, desen] });
+    expect(p.completion).toBe('TAP_VALUE');
+    expect(p.tap).toEqual({ variantPropertyId: 'desen', variantMode: 'REQUIRED', flagPropertyId: 'brode', flagMode: 'AUTO' });
+  });
+  it('aynı istasyonda kurşun gramajı da varsa → BUTTON', () => {
+    const kursun = { propertyId: 'kursun', valueType: 'FLAG' as const, mode: 'AUTO' as const };
+    const gramaj = { propertyId: 'gramaj', valueType: 'CHOICE' as const, mode: 'REQUIRED' as const, variantOfPropertyId: 'kursun', values: [{ code: '25GR', name: '25 gr' }] };
+    expect(composeStationPanels({ inspectionEnabled: false, properties: [brode, desen, kursun, gramaj] }).completion).toBe('BUTTON');
+  });
+});
