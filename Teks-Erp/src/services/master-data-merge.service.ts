@@ -34,6 +34,7 @@ import { markTravelerCardsDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { foldColorNameForCompare, foldNameForCompare } from "./helpers/name-normalize.helper";
 import { DuplicateReviewService } from "./duplicate-review.service";
 import { describeItemColorShadowing, type MergeShadowRow } from "./helpers/merge-shadowing.helper";
+import { mergeFollowUps, type KeptOnSourceRow, type MergeFollowUp } from "./helpers/merge-keep-on-source.helper";
 import {
   MERGEABLE_FIELDS,
   MERGE_NAME_FIELD,
@@ -121,6 +122,8 @@ export interface MergeConflictRow {
   /** Operatöre gösterilecek somut örnekler (kırpılmış olabilir). */
   rows: Array<Record<string, unknown>>;
   truncated: boolean;
+  /** `KEEP_ON_SOURCE`: kaynakta KALACAK satırların TAMAMI (kırpılmaz — önizleme her kaydı listeler). */
+  keptRowIds?: string[];
 }
 
 /**
@@ -159,6 +162,8 @@ export interface MergePreview {
   /** Tüm sayımlar gerçekten ölçülebildi mi (biri bile `null` ise false). */
   measuredAll: boolean;
   computedAt: string;
+  /** Birleştirmeden SONRA yapılacak iş (KEEP_ON_SOURCE): ör. mezar taşında kalan cari hesabın cari birleştirmesi. */
+  followUps: MergeFollowUp[];
 }
 
 interface EntityMeta {
@@ -492,6 +497,12 @@ export class MasterDataMergeService {
       totalRowsToMove,
       measuredAll,
       computedAt: new Date().toISOString(),
+      followUps: survivor
+        ? await mergeFollowUps(
+            conflicts.flatMap((c) => (c.keptRowIds ? [{ table: c.table, label: c.label, sourceId: "", rowIds: c.keptRowIds }] : [])),
+            survivor.id,
+          )
+        : [],
     };
   }
 
@@ -606,6 +617,9 @@ export class MasterDataMergeService {
     conflictsResolved: number;
     /** Survivor'a yazılan alanlar (audit + panel özeti). */
     fieldsApplied: Array<{ field: string; from: string; value: string | null }>;
+    /** KEEP_ON_SOURCE: mezar taşında kalan satırlar + panelin "şimdi birleştir" takibi. */
+    keptOnSource: KeptOnSourceRow[];
+    followUps: MergeFollowUp[];
   }> {
     const entity = assertEntity(rawEntity);
     const meta = META[entity];
@@ -732,6 +746,7 @@ export class MasterDataMergeService {
         const refRows: Prisma.MergeOperationRefCreateManyInput[] = [];
         const pkCache: PkCache = newPkCache();
         let conflictsResolved = 0;
+        const keptOnSource: KeptOnSourceRow[] = [];
         for (const rule of MERGE_MAP[entity]) {
           if (rule.kind === "EXEMPT") continue;
           // ⚠️ ÇÖZÜCÜ NE ZAMAN KOŞAR — iki ayrı soru, karıştırma:
@@ -756,6 +771,11 @@ export class MasterDataMergeService {
             if (mustResolve && rule.kind === "CONFLICT") {
               const res = await resolveConflictTx(tx, rule, survivor.id, [sourceId]);
               conflictsResolved += res.count;
+              // KEEP_ON_SOURCE: satır mezar taşında kalır (kural kaynak başına TEK satır) → bu kaynakta taşıma YOK.
+              if (res.keptRowIds && res.keptRowIds.length > 0) {
+                keptOnSource.push({ table: rule.table, label: rule.label, sourceId, rowIds: res.keptRowIds });
+                continue;
+              }
               if (res.deletedRows.length > 0) {
                 refRows.push({
                   operationId: operation.id,
@@ -905,6 +925,7 @@ export class MasterDataMergeService {
           operationId: operation.id,
           movedRows,
           conflictsResolved,
+          keptOnSource,
           survivorName: survivor.name,
           sources,
           fieldsApplied,
@@ -930,6 +951,7 @@ export class MasterDataMergeService {
           reason: params.reason.trim(),
           event: "MASTER_DATA_MERGE",
           movedRows: result.movedRows.filter((m) => m.count > 0),
+          keptOnSource: result.keptOnSource.filter((k) => k.sourceId === s.id).map((k) => ({ table: k.table, rowIds: k.rowIds })),
         },
       });
     }
@@ -971,6 +993,8 @@ export class MasterDataMergeService {
       movedRows: result.movedRows,
       conflictsResolved: result.conflictsResolved,
       fieldsApplied: result.fieldsApplied,
+      keptOnSource: result.keptOnSource,
+      followUps: await mergeFollowUps(result.keptOnSource, params.survivorId),
     };
   }
 }
@@ -1057,6 +1081,27 @@ interface ConflictResolution {
   deletedRows: Array<Record<string, unknown>>;
   /** `MERGE_FIELDS`te ZENGİNLEŞTİRİLMEDEN ÖNCEKİ survivor satırları. */
   snapshotRows: Array<Record<string, unknown>>;
+  /** `KEEP_ON_SOURCE`: mezar taşında KALAN satırların id'leri (taşınmaz, silinmez). */
+  keptRowIds?: string[];
+}
+
+/** KEEP_ON_SOURCE: çakışan kaynak satırı mezar taşında KALIR — yalnız kimlikleri döner, yazmaz. */
+async function keepOnSourceTx(
+  tx: Prisma.TransactionClient,
+  rule: ConflictRule,
+  conflictWhere: string,
+  { sourceIds, survivorId }: { sourceIds: string[]; survivorId: string },
+): Promise<ConflictResolution> {
+  // Kaynak başına tek satır varsayımı (kısıt kolonun kendisinde); aksi kural sessiz yarım taşıma yapardı.
+  if (rule.uniqueOn.length !== 1 || rule.uniqueOn[0] !== rule.column) {
+    throw AppError.internal(`'${rule.label}' KEEP_ON_SOURCE yalnız uniqueOn=[column] kuralında geçerli.`);
+  }
+  const kept = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT s."id"::text AS id FROM "${rule.table}" s WHERE ${conflictWhere} ORDER BY s."id"`,
+    sourceIds,
+    survivorId,
+  );
+  return { count: kept.length, deletedRows: [], snapshotRows: [], keptRowIds: kept.map((k) => k.id) };
 }
 
 async function resolveConflictTx(
@@ -1075,6 +1120,9 @@ async function resolveConflictTx(
     case "BLOCK":
       // Buraya gelinmez — çağıran zaten 409 attı. Yine de sessiz geçme.
       throw AppError.conflict(`'${rule.label}' çakışması otomatik çözülemez.`);
+
+    case "KEEP_ON_SOURCE":
+      return keepOnSourceTx(tx, rule, conflictWhere, { sourceIds, survivorId });
 
     case "EMPTY_MEANS_ALL": {
       // (fotoğraflı silme — gerekçe aşağıda)
@@ -1295,6 +1343,7 @@ async function describeConflict(
   let count = 0;
   let survivorCount = 0;
   let rows: Array<Record<string, unknown>> = [];
+  let keptRowIds: string[] | undefined;
   try {
     // İşlem ikiziyle AYNI yüklem (`conflictPredicateSql`); ek kolon yalnız çakışmanın
     // YÖNÜNÜ söyler (survivor'la mı, yalnız önceki bir kaynakla mı) — sayımı değiştirmez.
@@ -1308,6 +1357,7 @@ async function describeConflict(
     count = all.length;
     survivorCount = all.filter((r) => r[VS_SURVIVOR] === true).length;
     rows = all.slice(0, sample).map(({ [VS_SURVIVOR]: _dir, ...r }) => r);
+    if (rule.policy === "KEEP_ON_SOURCE") keptRowIds = all.map((r) => String(r.id));
   } catch {
     count = 0;
   }
@@ -1323,6 +1373,7 @@ async function describeConflict(
     crossSourceNote: crossSourceCount > 0 ? crossSourceNote(rule, crossSourceCount, sources) : null,
     rows,
     truncated: count > rows.length,
+    ...(keptRowIds ? { keptRowIds } : {}),
   };
 }
 
@@ -1337,6 +1388,8 @@ function crossSourceNote(rule: ConflictRule, n: number, sources: Array<{ name: u
       return `${head} Alan alan birleşir: sıradaki ilk kaydın dolu değeri kalır, atanmışlık korunur. Sıra: ${order}.`;
     case "BLOCK":
       return `${head} İkisi hedefe birlikte gidemez — önce birini elle düzeltin.`;
+    case "KEEP_ON_SOURCE":
+      return `${head} Sıradaki İLK kaydınki taşınır, sonrakilerinki kendi (birleşen) kaydında KALIR. Sıra: ${order}.`;
     case "EMPTY_MEANS_ALL":
       return `${head} Hedefin kısıtı boşsa hepsi atılır (hepsi serbest kalır); değilse yinelenen satır tek satıra iner.`;
     default:
