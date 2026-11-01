@@ -26,6 +26,7 @@ vi.mock("@/lib/api-config", () => ({
 import { syncRememberedLoginAfterLogin } from "./syncRememberedLogin";
 import { readRememberedLogin, REMEMBERED_LOGIN_STORE_KEY, writeRememberedLogin } from "@/lib/remembered-login";
 import { useRememberedLogin } from "./useRememberedLogin";
+import { useLicenseSuspension } from "@/lib/license/suspension";
 import { RememberedLoginForm } from "./RememberedLoginForm";
 import { LoginForm, type LoginFormValues } from "./LoginForm";
 
@@ -103,6 +104,19 @@ describe("girişten sonra kayıt senkronu", () => {
     await writeRememberedLogin({ username: "mehmet", displayName: null });
     activeUrl = "https://fabrika-a.local:4443";
     expect(await readRememberedLogin()).toEqual({ username: "ayse", displayName: null });
+  });
+
+  it("K5 (lisans durduruldu) girişinde senkron koşmaz, kayda dokunulmaz", async () => {
+    await writeRememberedLogin({ username: "ayse", displayName: null });
+    useLicenseSuspension.getState().setSuspended(true);
+    try {
+      getFlags.mockResolvedValue(flags(false));
+      expect(await syncRememberedLoginAfterLogin("ayse")).toBe("skipped");
+      expect(getMe).not.toHaveBeenCalled();
+      expect(await readRememberedLogin()).toEqual({ username: "ayse", displayName: null });
+    } finally {
+      useLicenseSuspension.getState().setSuspended(false);
+    }
   });
 
   it("bozuk kayıt 'yok' sayılır", async () => {

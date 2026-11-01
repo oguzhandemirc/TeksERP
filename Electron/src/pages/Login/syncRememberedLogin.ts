@@ -1,6 +1,8 @@
 import { authService } from "@/services/authService";
 import { featureFlagService } from "@/services/featureFlagService";
 import { forgetRememberedLogin, writeRememberedLogin } from "@/lib/remembered-login";
+import { useLicenseSuspension } from "@/lib/license/suspension";
+import { useActivationLock } from "@/lib/license/activation-lock";
 
 export type RememberSyncResult = "saved" | "cleared" | "skipped";
 
@@ -11,6 +13,8 @@ export type RememberSyncResult = "saved" | "cleared" | "skipped";
  * okunamazsa hiçbir şey yapılmaz (fail-closed — sistem hesabı yanlışlıkla yazılmasın).
  */
 export async function syncRememberedLoginAfterLogin(username: string): Promise<RememberSyncResult> {
+  // K5/G2 girişi "verilerimi al" / etkinleştirme içindir; bayrak ucu orada kapalı → kayda dokunulmaz.
+  if (useLicenseSuspension.getState().suspended || useActivationLock.getState().sinif !== "YOK") return "skipped";
   try {
     const me = (await authService.getMe()).data;
     // Alanı taşımayan eski backend ya da sistem hesabı → dokunma.
