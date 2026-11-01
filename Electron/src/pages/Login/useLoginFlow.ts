@@ -113,10 +113,8 @@ export function useLoginFlow() {
     setSubmitting(true);
     const device = await loadRememberedDevice(values.username);
     try {
-      const res = await authService.login(
-        { ...values, confirmKick: confirmKick || undefined, totpCode, rememberDevice: rememberDevice || undefined, trustedDeviceToken: device.token ?? undefined },
-        { suppressErrorToast: true },
-      );
+      const body = { ...values, confirmKick: confirmKick || undefined, totpCode, rememberDevice: rememberDevice || undefined };
+      const res = await authService.login({ ...body, trustedDeviceToken: device.token ?? undefined }, { suppressErrorToast: true });
       if (res.data.trustedDeviceToken) await trustedDeviceStore.set(device.slot, res.data.trustedDeviceToken).catch(() => undefined);
       if (res.data.mustChangePassword === true) {
         // ⑤ Token yalnız bellekte: yeni parola belirlenmeden uygulamaya girilmez.
