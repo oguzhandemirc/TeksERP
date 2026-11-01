@@ -10,16 +10,25 @@ interface Props {
   uploaded: ReadonlySet<string>;
   onRemove: (index: number) => void;
   onAdd: () => void;
+  /** Küçük resme dokununca tam ekran önizleme. */
+  onOpen: (index: number) => void;
 }
 
-export default function PageList({ pages, uploaded, onRemove, onAdd }: Props) {
+export default function PageList({ pages, uploaded, onRemove, onAdd, onOpen }: Props) {
   return (
     <View>
       <Text style={styles.section}>Sayfalar ({pages.length})</Text>
       <View style={styles.pages}>
         {pages.map((p, i) => (
           <View key={p.sha256} style={styles.thumbBox}>
-            <Image source={{ uri: p.uri }} style={styles.thumb} resizeMode="cover" />
+            <TouchableRipple
+              style={styles.thumb}
+              onPress={() => onOpen(i)}
+              testID={`belge-tara-sayfa-${i + 1}`}
+              accessibilityLabel={`Sayfa ${i + 1} önizle`}
+            >
+              <Image source={{ uri: p.uri }} style={styles.thumbImage} resizeMode="cover" />
+            </TouchableRipple>
             <View style={styles.thumbBar}>
               <Text style={styles.thumbText}>
                 Sayfa {i + 1}
@@ -46,6 +55,7 @@ const styles = StyleSheet.create({
   pages: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   thumbBox: { width: 150, height: 200, borderRadius: 8, overflow: 'hidden', backgroundColor: colors.surfaceMuted },
   thumb: { flex: 1 },
+  thumbImage: { width: '100%', height: '100%' },
   thumbBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: spacing.sm, minHeight: 56 },
   thumbText: { fontSize: typography.size.sm, color: colors.text },
   addBox: { justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderStyle: 'dashed', borderColor: colors.textMuted },

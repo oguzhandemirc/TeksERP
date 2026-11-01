@@ -15,12 +15,22 @@ import { colors, spacing, typography } from '../../../theme';
 import DocHeader from './DocHeader';
 import PageCameraModal from './PageCameraModal';
 import PageList from './PageList';
+import PagePreviewModal from './PagePreviewModal';
 import { removePage } from './docScan';
 import { useDocScan } from './useDocScan';
 
 export default function DocScanScreen() {
   const b = useDocScan();
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+
+  const remove = (i: number) => b.setPages(removePage(b.pages, i));
+  // Önizlemeden silince komşu sayfada kalınır; son sayfa da gidince önizleme kapanır.
+  const removeFromPreview = (i: number) => {
+    const left = b.pages.length - 1;
+    remove(i);
+    setPreviewIndex(left <= 0 ? null : Math.min(i, left - 1));
+  };
 
   return (
     <ScreenChrome title="Belge Tara" subtitle="Müşteri irsaliyesi → taslak">
@@ -31,7 +41,7 @@ export default function DocScanScreen() {
           </View>
         )}
         <DocHeader owner={b.owner} onOwner={b.setOwner} senderDocNo={b.senderDocNo} onBarcode={b.setBarcode} locked={b.headerLocked} />
-        <PageList pages={b.pages} uploaded={b.progress.uploaded} onRemove={(i) => b.setPages(removePage(b.pages, i))} onAdd={() => setCameraOpen(true)} />
+        <PageList pages={b.pages} uploaded={b.progress.uploaded} onRemove={remove} onAdd={() => setCameraOpen(true)} onOpen={setPreviewIndex} />
         <View style={styles.footer}>
           {(b.pages.length > 0 || b.headerLocked) && (
             <Button mode="text" onPress={b.reset} disabled={b.sending}>
@@ -51,6 +61,14 @@ export default function DocScanScreen() {
           </Button>
         </View>
       </ScrollView>
+      <PagePreviewModal
+        pages={b.pages}
+        index={previewIndex}
+        uploaded={b.progress.uploaded}
+        onIndex={setPreviewIndex}
+        onRemove={removeFromPreview}
+        onDismiss={() => setPreviewIndex(null)}
+      />
       <PageCameraModal
         visible={cameraOpen}
         pageNo={b.pages.length + 1}
