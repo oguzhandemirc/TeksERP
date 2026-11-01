@@ -7,14 +7,16 @@
 // AYNI satıra bağlanır — modal kapanmaz, toast yok. `lineNo` sunucunun gördüğü GENİŞLETİLMİŞ satır sırasıdır (adet N →
 // N satır), bu yüzden anahtar eşlemesi `expandLines` ile aynı süzgeç/çoğaltma kuralını izler (`expandLineKeys`).
 // =============================================================================
-import type { DraftLine } from "./ReceiptLineRows";
+import { lineKind, type DraftLine } from "./receiptLineTypes";
 
 export const LOT_REQUIRED_TEXT = "Lot zorunlu (Devere ayarı)";
 export const RECEIPT_LINES_INVALID = "RECEIPT_LINES_INVALID";
 
 /** `expandLines` ile AYNI sırada: gönderilen her satırın taslak anahtarı (adet kadar tekrar). */
-export function expandLineKeys(lines: DraftLine[]): string[] {
-  return lines.filter((l) => l.itemId && l.initialQty > 0 && l.count > 0).flatMap((l) => Array.from({ length: l.count }, () => l.key));
+export function expandLineKeys(lines: DraftLine[], consumableItemIds?: ReadonlySet<string>): string[] {
+  return lines
+    .filter((l) => l.itemId && l.initialQty > 0 && l.count > 0)
+    .flatMap((l) => Array.from({ length: lineKind(l, undefined, consumableItemIds) === "CONSUMABLE" ? 1 : l.count }, () => l.key));
 }
 
 /** Yerel doğrulama: lot zorunluyken lotsuz İPLİK satırı. Bayrak kapalı/yüklenmemişse boş (sunucu son sözü söyler). */

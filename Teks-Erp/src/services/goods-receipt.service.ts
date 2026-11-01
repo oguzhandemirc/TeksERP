@@ -1686,7 +1686,7 @@ export class GoodsReceiptService {
           // rozetiyle çizilir. `yarnMovements` sayacı Sınıf 5 ile eklendi:
           // yalnız `rolls` saymak, 500 kg iplik alınmış fişi listede "0 satır"
           // gösteriyordu (2026-08-14 denetim bulgusu #17'nin liste yüzü).
-          _count: { select: { rolls: true, yarnMovements: true } },
+          _count: { select: { rolls: true, yarnMovements: true, consumableMovements: { where: { kind: 'RECEIPT_IN' } } } },
         },
       }),
       prisma.goodsReceipt.count({ where }),
@@ -1812,12 +1812,14 @@ export class GoodsReceiptService {
     if (!receipt) throw AppError.notFound("Mal kabul fişi bulunamadı.");
 
     const asm = await this.assembleReceiptLines(id);
+    // Sarf defter satırı sayısı (ters kayıt DAHİL; `yarnLineCount` ikizi) — yalnız detay/oluşturma yanıtı; donmuş belge almaz.
+    const consumableLineCount = await prisma.consumableMovement.count({ where: { goodsReceiptId: id, kind: 'RECEIPT_IN' } }); // ters kayıt (iptal) satır sayılmaz
     return {
       ...receipt,
       rolls: asm.rolls,
       yarnMovements: asm.yarnMovements,
       lines: asm.lines,
-      totals: asm.totals,
+      totals: { ...asm.totals, consumableLineCount },
     };
   }
 }

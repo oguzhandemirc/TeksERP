@@ -55,10 +55,10 @@ export function emptyLine(kind: ReceiptLineKind = "FABRIC", lineClass: ReceiptLi
 }
 
 /** Yeni kumaş satırının sınıfı — listedeki SON kumaş satırınınki (miras), hiç yoksa bitmiş. */
-export function inheritedLineClass(lines: readonly DraftLine[], yarnItemIds?: ReadonlySet<string>): ReceiptLineClass {
+export function inheritedLineClass(lines: readonly DraftLine[], yarnItemIds?: ReadonlySet<string>, consumableItemIds?: ReadonlySet<string>): ReceiptLineClass {
   for (let i = lines.length - 1; i >= 0; i--) {
     const l = lines[i]!;
-    if (lineKind(l, yarnItemIds) === "FABRIC") return l.lineClass ?? DEFAULT_LINE_CLASS;
+    if (lineKind(l, yarnItemIds, consumableItemIds) === "FABRIC") return l.lineClass ?? DEFAULT_LINE_CLASS;
   }
   return DEFAULT_LINE_CLASS;
 }
@@ -70,8 +70,9 @@ export function duplicateLine(l: DraftLine): DraftLine {
 
 /** Satırın grubu: ürün türü çözüldüyse o (`useItemTypes`, asenkron; import/siparişten gelen satırın tek kaynağı), değilse
  *  doğduğu grup (`kind`; ürün seçici o gruba kilitli olduğu için çelişmez); ikisi de yoksa kumaş (eski davranış). */
-export function lineKind(l: DraftLine, yarnItemIds?: ReadonlySet<string>): ReceiptLineKind {
+export function lineKind(l: DraftLine, yarnItemIds?: ReadonlySet<string>, consumableItemIds?: ReadonlySet<string>): ReceiptLineKind {
   if (l.itemId && yarnItemIds?.has(l.itemId)) return "YARN";
+  if (l.itemId && consumableItemIds?.has(l.itemId)) return "CONSUMABLE";
   if (l.kind) return l.kind;
   return "FABRIC";
 }

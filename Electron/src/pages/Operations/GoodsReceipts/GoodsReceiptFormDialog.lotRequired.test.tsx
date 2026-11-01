@@ -42,6 +42,7 @@ vi.mock("./service", () => ({ createGoodsReceipt: (...a: unknown[]) => createGoo
 vi.mock("./useItemTypes", () => ({
   useItemTypes: (ids: Array<string | null>) => new Map(ids.filter((i): i is string => i === "yarn-1").map((i) => [i, "YARN"])),
   yarnIdsFrom: (m: Map<string, string>) => new Set([...m.entries()].filter(([, t]) => t === "YARN").map(([id]) => id)),
+  consumableIdsFrom: () => new Set<string>(),
 }));
 vi.mock("@/hooks/useWarehouses", () => ({
   useMultiWarehouse: () => ({ multiWarehouse: false, warehouses: [] }),
