@@ -10,6 +10,7 @@ export interface PropertyValueRow {
   name: string;
   isActive: boolean;
   serviceItemId?: string | null;
+  stitchCount?: number | null;
 }
 
 /** Hizmet kalemi eşlemesi (H6b) — verilmezse satırlar bugünkü gibi çizilir. */
@@ -27,6 +28,8 @@ interface Props {
   /** Düzenlenen kayıtta zaten VAR OLAN kodlar — silinemez, yalnız pasifleşir. */
   existingCodes: string[];
   service?: ValueServiceContext;
+  /** Desen başına vuruş sayısı kutusu (bayrak çeşidi — brode deseni). */
+  showStitch?: boolean;
 }
 
 /**
@@ -39,7 +42,7 @@ interface Props {
  * kullanıcının niyetiyle sonucu HİZALAR: sil tuşu görünmez, "Pasif" görünür.
  * Henüz kaydedilmemiş (yeni eklenen) satır serbestçe silinebilir.
  */
-export function PropertyValuesField({ value, onChange, existingCodes, service }: Props) {
+export function PropertyValuesField({ value, onChange, existingCodes, service, showStitch }: Props) {
   const saved = new Set(existingCodes.map((c) => c.toUpperCase()));
 
   const patch = (i: number, next: Partial<PropertyValueRow>) =>
@@ -80,6 +83,20 @@ export function PropertyValuesField({ value, onChange, existingCodes, service }:
                 value={row.name}
                 onChange={(e) => patch(i, { name: e.target.value })}
               />
+              {showStitch && (
+                <Input
+                  className="w-24 shrink-0"
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder="Vuruş"
+                  aria-label={`${row.code || "Yeni değer"} vuruş sayısı`}
+                  title="Bir adetteki vuruş (dikiş) sayısı — brode vuruşla fiyatlanırken kullanılır"
+                  value={row.stitchCount ?? ""}
+                  onChange={(e) => patch(i, { stitchCount: e.target.value === "" ? null : Math.trunc(Number(e.target.value)) })}
+                />
+              )}
               <label className="flex shrink-0 items-center gap-1 text-xs sm:w-20">
                 <input
                   type="checkbox"
@@ -116,7 +133,7 @@ export function PropertyValuesField({ value, onChange, existingCodes, service }:
         type="button"
         variant="outline"
         size="sm"
-        onClick={() => onChange([...value, { code: "", name: "", isActive: true, serviceItemId: null }])}
+        onClick={() => onChange([...value, { code: "", name: "", isActive: true, serviceItemId: null, stitchCount: null }])}
       >
         <Plus className="mr-1 h-4 w-4" /> Değer Ekle
       </Button>
