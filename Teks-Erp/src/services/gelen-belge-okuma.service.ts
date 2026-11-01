@@ -11,7 +11,7 @@ import { AppError } from "../utils/app-error";
 import { bilgi, uyari } from "../lib/logger";
 import { p2002TargetsCode, withBarcodeRetry } from "../utils/barcode-retry";
 import { extractDocument, loadTemplates } from "../lib/gelen-belge/motor";
-import { clip, draftFromExtraction, linesToPhotoFrame, type DraftLine } from "../lib/gelen-belge/taslak";
+import { clip, draftFromExtraction, dropOverlapDuplicates, linesToPhotoFrame, type DraftLine } from "../lib/gelen-belge/taslak";
 import { readerOcr, type ReaderResult } from "../lib/gelen-belge/okuma-istemcisi";
 import { AuditService } from "./audit.service";
 import { nextNoteNo, translateUnique } from "./gelen-belge-note.service";
@@ -88,6 +88,33 @@ function lineRows(lines: DraftLine[], scanId: string, lineBase = 0, blockBase = 
   }));
 }
 
+/**
+ * Bağlı taslağa eklenecek OCR satırları. Elle girilmiş satır (ocrRaw yok) varsa hiç satır eklenmez — panelin elle işi
+ * ezilmez/ikizlenmez; yoksa BAŞKA taramalardan gelmiş satırlara karşı üst üste binen çekim süzgeci (`dropOverlapDuplicates`).
+ */
+async function linesToAppend(tx: Prisma.TransactionClient, noteId: string, scan: { id: string; pageNo: number }, lines: DraftLine[]) {
+  const rows = await tx.customerDeliveryNoteLine.findMany({ where: { noteId }, select: { scanId: true, senderRollNo: true, meters: true, weightKg: true, ocrRaw: true } });
+  if (rows.some((r) => r.ocrRaw === null)) return { lines: [], warnings: [] };
+  const existing = rows.filter((r) => r.scanId !== scan.id).map((r) => ({ senderRollNo: r.senderRollNo, meters: r.meters.toString(), weightKg: r.weightKg?.toString() ?? null, ocrRaw: r.ocrRaw }));
+  return dropOverlapDuplicates(lines, existing, scan.pageNo);
+}
+
+/** Bağlı taslakta yalnız BOŞ başlık alanları OCR'dan dolar — operatörün yazdığı ezilmez. */
+function fillEmptyHeader(
+  patch: Prisma.CustomerDeliveryNoteUpdateInput,
+  note: { ownerText: string | null; senderText: string | null; templateId: string | null; senderDocNo: string | null; senderDocDate: Date | null; customerBatchNo: string | null; processText: string | null; declaredTopCount: number | null },
+  headerCols: { ownerText: string | null; senderText: string | null; templateId: string | null; senderDocNo: string | null; senderDocDate: Date | null; customerBatchNo: string | null; processText: string | null; declaredTopCount: number | null },
+): void {
+  if (!note.ownerText) patch.ownerText = headerCols.ownerText;
+  if (!note.senderText) patch.senderText = headerCols.senderText;
+  if (!note.templateId && headerCols.templateId) patch.template = { connect: { id: headerCols.templateId } };
+  if (!note.senderDocNo) patch.senderDocNo = headerCols.senderDocNo;
+  if (!note.senderDocDate) patch.senderDocDate = headerCols.senderDocDate;
+  if (!note.customerBatchNo) patch.customerBatchNo = headerCols.customerBatchNo;
+  if (!note.processText) patch.processText = headerCols.processText;
+  if (note.declaredTopCount === null) patch.declaredTopCount = headerCols.declaredTopCount;
+}
+
 /** E2: eşleşen motor şablonunun DB satırı (yoksa idempotent doğar) taslağa bağlanır — gönderen önerisi buradan; isabet best-effort. */
 async function bindDraftTemplate(code: string | null, userId: string | undefined) {
   const template = code ? await ensureSenderTemplate(code, userId) : null;
@@ -100,7 +127,7 @@ async function bindDraftTemplate(code: string | null, userId: string | undefined
  * yalnız BOŞ alanlar dolar ve satırsız taslağa satırlar eklenir (operatörün yazdığı ezilmez); bağlı değilse yeni taslak.
  */
 export async function processClaimedScan(id: string, readerUrl: string, ocr: typeof readerOcr = readerOcr): Promise<ProcessOutcome> {
-  const scan = await prisma.documentScan.findUnique({ where: { id }, select: { id: true, status: true, attempts: true, noteId: true, mimeType: true, content: true, capturedById: true, sha256: true } });
+  const scan = await prisma.documentScan.findUnique({ where: { id }, select: { id: true, status: true, attempts: true, noteId: true, pageNo: true, mimeType: true, content: true, capturedById: true, sha256: true } });
   if (!scan || scan.status !== "READING") return "LOST";
   let r: ReaderResult;
   try {
@@ -136,31 +163,25 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
       }
       const note = await tx.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteId }, select: { ownerText: true, senderText: true, templateId: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, processText: true, declaredTopCount: true, totalsDeclared: true, warnings: true } });
       // Çok sayfalı taslak: her sayfanın taraması satırlarını EKLER (blok no kaydırılır, uyarılar birikir);
-      // elle girilmiş satır (ocrRaw yok) varsa OCR satır eklemez — panelin elle işi ezilmez/ikizlenmez.
-      const manualLines = await tx.customerDeliveryNoteLine.count({ where: { noteId, ocrRaw: { equals: Prisma.DbNull } } });
+      // elle satır varsa OCR satır eklemez; başka sayfada birebir olan satır (üst üste binen çekim) atlanır. Okuma DRAFT
+      // claim'inin satır kilidinin ARDINDAN: paralel ikinci sayfa claim'de bekler, READ COMMITTED ile birincinin satırlarını görür.
+      const overlap = await linesToAppend(tx, noteId, scan, draft.lines);
       const agg = await tx.customerDeliveryNoteLine.aggregate({ where: { noteId }, _max: { lineNo: true, blockNo: true } });
       const lineBase = agg._max.lineNo ?? 0;
       const blockBase = agg._max.blockNo ?? 0;
       const prevWarnings = Array.isArray(note.warnings) ? note.warnings : [];
-      const patch: Prisma.CustomerDeliveryNoteUpdateInput = { warnings: toJson([...prevWarnings, ...header.warnings]) };
-      if (!note.ownerText) patch.ownerText = headerCols.ownerText;
-      if (!note.senderText) patch.senderText = headerCols.senderText;
-      if (!note.templateId && headerCols.templateId) patch.template = { connect: { id: headerCols.templateId } };
-      if (!note.senderDocNo) patch.senderDocNo = headerCols.senderDocNo;
-      if (!note.senderDocDate) patch.senderDocDate = headerCols.senderDocDate;
-      if (!note.customerBatchNo) patch.customerBatchNo = headerCols.customerBatchNo;
-      if (!note.processText) patch.processText = headerCols.processText;
-      if (note.declaredTopCount === null) patch.declaredTopCount = headerCols.declaredTopCount;
-      const addLines = manualLines === 0 && draft.lines.length > 0;
+      const patch: Prisma.CustomerDeliveryNoteUpdateInput = { warnings: toJson([...prevWarnings, ...header.warnings, ...overlap.warnings]) };
+      fillEmptyHeader(patch, note, headerCols);
+      const addLines = overlap.lines.length > 0;
       const prevBlocks = (note.totalsDeclared as { blocks?: unknown[] } | null)?.blocks;
       if (note.totalsDeclared === null || !Array.isArray(prevBlocks)) patch.totalsDeclared = totalsDeclared;
       else if (addLines && blockBase > 0) patch.totalsDeclared = toJson({ blocks: [...prevBlocks, ...header.totalsDeclared.blocks.map((b) => ({ ...b, blockNo: blockBase + b.blockNo }))] });
       patch.templateScore = headerCols.templateScore;
-      if (addLines) patch.lines = { create: lineRows(draft.lines, id, lineBase, blockBase) };
+      if (addLines) patch.lines = { create: lineRows(overlap.lines, id, lineBase, blockBase) };
       await tx.customerDeliveryNote.update({ where: { id: noteId }, data: patch });
       const s = await tx.documentScan.updateMany({ where: { id, status: "READING" }, data: scanData });
       if (s.count === 0) throw new Error("SCAN_LOST");
-      return { noteId, lines: addLines ? draft.lines.length : 0, filled: true };
+      return { noteId, lines: addLines ? overlap.lines.length : 0, filled: true };
     }).catch((err) => (err instanceof Error && err.message === "SCAN_LOST" ? null : Promise.reject(err)));
     if (!res) return "LOST";
     if (res.filled) await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: noteId, newData: { source: "OCR", scanId: id, sha256: scan.sha256, lineCount: res.lines, engine: scanData.ocrEngine, warnings: header.warnings.length } });
