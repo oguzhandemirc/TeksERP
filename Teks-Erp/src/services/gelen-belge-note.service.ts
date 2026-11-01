@@ -22,6 +22,7 @@ import { tokenReplay } from "./helpers/token-replay.helper";
 import { reserveSeriesNo } from "./helpers/series-counter-store.helper";
 import { SCAN_SELECT } from "./gelen-belge-scan.service";
 import { LINE_SELECT, lineColumns, notDraft, text, type DeliveryNoteLineInput } from "./gelen-belge-line.service";
+import { lineProblems, totalsCheck } from "./gelen-belge-kontrol.service";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const SERIES_KEY = "customerDeliveryNote";
@@ -137,7 +138,9 @@ export async function getDeliveryNote(id: string) {
   if (!note) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
   // Cari kilidi önizlemesi (D4-I1, INTAKE): onay kapısıyla aynı helper; kilit yoksa null. Eski istemci alanı yok sayar.
   const cariHold = note.ownerCustomerId ? await cariHoldNotice(prisma, note.ownerCustomerId, "INTAKE") : null;
-  return { ...note, cariHold };
+  // Gözden geçirme: onay kapısının AYNI yüklemleri (satır `problems`, toplam `totalsCheck`) — panel yeniden hesaplamaz.
+  const lines = note.lines.map((l) => ({ ...l, problems: lineProblems(l) }));
+  return { ...note, lines, totalsCheck: totalsCheck(note, note.lines), cariHold };
 }
 
 /** Liste where'i — özet şeridi de BUNDAN türer (durum süzgeci hariç; şerit duruma göre sayar). */

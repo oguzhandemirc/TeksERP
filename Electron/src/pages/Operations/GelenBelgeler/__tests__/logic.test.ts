@@ -1,8 +1,7 @@
-// Gelen belge saf mantığı: toplam şeridi (blok başına), hücre kuyruğu, Türkçe sayı, Excel ayrıştırma,
+// Gelen belge saf mantığı: hücre kuyruğu, Türkçe sayı, Excel ayrıştırma,
 // onay sonucu özeti, hata kodu yalnız `details.code`, liste sorgusu (süzme sunucuda), rejim yüklemi.
 import { describe, expect, it } from "vitest";
 import { AxiosError, type AxiosResponse } from "axios";
-import { blockTotals, hasMismatch } from "../totals";
 import { buildReviewQueue, cellPatch, fieldRect, lineRect, lineScanId, parseTrNumber } from "../review-queue";
 import { parseLineRows, MAX_IMPORT_LINES } from "../lineImport";
 import { approveErrorText, approvePrecheck, defaultItemHint, errorCode, needsVarianceReason, summarizeApprove, unusableDefaultSource } from "../approveFlow";
@@ -13,38 +12,6 @@ import type { ApproveResult, DeliveryNoteLine } from "../types";
 type L = Pick<DeliveryNoteLine, "id" | "lineNo" | "blockNo" | "meters" | "weightKg" | "status" | "needsReview" | "rollId" | "sourceRects">;
 const line = (o: Partial<L>): L => ({
   id: "l1", lineNo: 1, blockNo: 1, meters: "100", weightKg: null, status: "PENDING", needsReview: false, rollId: null, sourceRects: null, ...o,
-});
-
-describe("toplam şeridi — blok başına Σ satır ↔ beyan", () => {
-  it("her blok kendi beyanıyla ölçülür; SKIPPED satır sayılmaz", () => {
-    const lines = [
-      line({ blockNo: 1, meters: "100.5" }),
-      line({ blockNo: 1, meters: "99.5" }),
-      line({ blockNo: 1, meters: "50", status: "SKIPPED" }),
-      line({ blockNo: 2, meters: "80" }),
-    ];
-    const t = blockTotals(lines, [
-      { blockNo: 1, count: "2", m: "200", kg: null },
-      { blockNo: 2, count: "2", m: "80", kg: null },
-    ]);
-    expect(t.map((b) => [b.blockNo, b.count, b.m, b.ok])).toEqual([[1, 2, 200, true], [2, 1, 80, false]]);
-    expect(t[1]!.mismatches).toEqual(["beyan 2 top, satır 1"]);
-    expect(hasMismatch(t)).toBe(true);
-  });
-  it("binde 5 hoşgörü içinde tutar, dışında tutmaz", () => {
-    expect(blockTotals([line({ meters: "1004" })], [{ blockNo: 1, count: null, m: "1000", kg: null }])[0]!.ok).toBe(true);
-    expect(blockTotals([line({ meters: "1006" })], [{ blockNo: 1, count: null, m: "1000", kg: null }])[0]!.ok).toBe(false);
-  });
-  it("beyan yoksa doğrulanamaz (null), uyuşmazlık sayılmaz", () => {
-    const t = blockTotals([line({})], null);
-    expect(t[0]!.ok).toBeNull();
-    expect(hasMismatch(t)).toBe(false);
-  });
-  it("satırı olmayan beyanlı blok da şeritte görünür", () => {
-    const t = blockTotals([line({ blockNo: 1 })], [{ blockNo: 3, count: "4", m: null, kg: null }]);
-    expect(t.map((b) => b.blockNo)).toEqual([1, 3]);
-    expect(t[1]!.ok).toBe(false);
-  });
 });
 
 describe("hücre gözden geçirme kuyruğu", () => {
