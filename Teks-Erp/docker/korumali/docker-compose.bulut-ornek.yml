@@ -21,6 +21,8 @@ services:
       RATE_LIMIT_ENABLED: "true"
       # Bulut sunucusu BARINDIRILAN sınıftadır (ZORUNLU): .env ne derse desin burada sabit.
       TEKSERP_KURULUM_SINIFI: BARINDIRILAN
+      # Kenar TLS'i sonlandırır (Cloudflare Full strict): backend HSTS'i (180 gün) tek kaynaktan basar, nginx basmaz.
+      HTTPS_ENABLED: "true"
     # TRUST_PROXY=1 yalnız API portu dışarıya kapalıyken güvenlidir: .env'deki TEKSERP_DINLE ne olursa
     # olsun port yalnız döngü adresinde yayımlanır.
     ports: !override
@@ -43,6 +45,8 @@ services:
       - ./kenar/site.conf:/etc/nginx/conf.d/default.conf:ro
       - ./kenar/cloudflare-ips.conf:/etc/nginx/cloudflare-ips.conf:ro
       - ./kenar/tls:/etc/nginx/tls:ro
+      # Toplam giriş tavanından muaf fabrika/ofis adresleri (`adresler.conf`, boş doğar — runbook §10 madde 4).
+      - ./kenar/muaf:/etc/nginx/muaf:ro
     depends_on:
       backend:
         condition: service_healthy
