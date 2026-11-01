@@ -101,22 +101,26 @@ interface Demand {
   qty: Prisma.Decimal;
 }
 
-/** Bir işlenen topun metresi: tambur sonrası top tükenmiş olabilir → ilk metre. */
-function processedMeters(r: { currentQty: Prisma.Decimal; initialQty: Prisma.Decimal }): Prisma.Decimal {
+/**
+ * Bir işlenen topun metresi. Çağıran istasyon hareketinin `qtyIn`ini verdiyse o esastır (tambur
+ * finalize'ın qtyOut kuralı — girişte kesilmiş topta initialQty fazla sayar); yoksa kalan, o da 0 ise ilk metre.
+ */
+function processedMeters(r: { currentQty: Prisma.Decimal; initialQty: Prisma.Decimal }, given?: Prisma.Decimal | null): Prisma.Decimal {
+  if (given && given.gt(0)) return given;
   return r.currentQty.gt(0) ? r.currentQty : r.initialQty;
 }
 
-async function kursunDemands(tx: Tx, op: OpRow, at: Date): Promise<Demand[]> {
+async function kursunDemands(tx: Tx, op: OpRow, at: Date, given?: Prisma.Decimal | null): Promise<Demand[]> {
   if (!op.propertyValue) return [];
   const serviceItemId = pickServiceItemId({ value: op.propertyValue.serviceItemId, property: op.propertyValue.property.serviceItemId });
   if (!serviceItemId) return [];
   const norms = await consumableNormsValidAt(tx, serviceItemId, at);
-  const meters = processedMeters(op.roll);
+  const meters = processedMeters(op.roll, given);
   return norms.map((n) => ({ itemId: n.consumableItemId, qty: meters.mul(n.qtyPerM).toDecimalPlaces(3) }));
 }
 
 /** Kuşak: iş emri hedef değerinin sarf kalemi × beklenen top (`expectedRolls`; top boyu siparişten, tekse). */
-async function kusakDemands(tx: Tx, op: OpRow, warnings: ConsumableWarning[]): Promise<Demand[]> {
+async function kusakDemands(tx: Tx, op: OpRow, warnings: ConsumableWarning[], given?: Prisma.Decimal | null): Promise<Demand[]> {
   const targets = await tx.workOrderTargetValue.findMany({
     where: { workOrderId: op.step.workOrderId, revokedAt: null, value: { consumableItemId: { not: null } } },
     select: { value: { select: { name: true, consumableItemId: true } } },
@@ -127,7 +131,7 @@ async function kusakDemands(tx: Tx, op: OpRow, warnings: ConsumableWarning[]): P
     select: { orderLine: { select: { pieceLengthM: true } } },
   });
   const lengths = [...new Set(links.map((l) => l.orderLine.pieceLengthM?.toString() ?? null))];
-  const rolls = lengths.length === 1 && lengths[0] !== null ? expectedRolls(processedMeters(op.roll), new Prisma.Decimal(lengths[0])) : null;
+  const rolls = lengths.length === 1 && lengths[0] !== null ? expectedRolls(processedMeters(op.roll, given), new Prisma.Decimal(lengths[0])) : null;
   if (rolls === null) {
     warnings.push({ code: "CONSUMABLE_PIECE_LENGTH_UNKNOWN", message: "İş emrinin top boyu tek ve belli değil — kuşak sarf stoktan düşülmedi." });
     return [];
@@ -150,15 +154,20 @@ type OpRow = Prisma.RollOperationGetPayload<{ select: typeof OP_SELECT }>;
  * mirassa (bölünmede kopyalanan) ya da kalem/norm yoksa hiçbir şey yazılmaz. Aynı ize ikinci çağrı no-op
  * (`@@unique([rollOperationId, itemId])`, `skipDuplicates`). Dönen: uyarılar (eksi bakiye engellemez).
  */
-export async function consumeForOperationTx(tx: Tx, operationId: string, userId?: string | null): Promise<ConsumableWarning[]> {
+export async function consumeForOperationTx(
+  tx: Tx,
+  operationId: string,
+  userId?: string | null,
+  opts?: { processedQty?: Prisma.Decimal | null },
+): Promise<ConsumableWarning[]> {
   if (!(await resolveConsumableStockEnabled(tx))) return [];
   // ⚠️ `revokedAt` SÜZÜLMEZ (bilinçli): çağıran izi aynı tx'te YENİ yazdı; id ile tekil okuma.
   const op = await tx.rollOperation.findUnique({ where: { id: operationId }, select: OP_SELECT });
   if (!op || op.inheritedFromParentRollId) return [];
   const warnings: ConsumableWarning[] = [];
   let demands: Demand[] = [];
-  if (op.operationType === RollOperationType.KURSUN_APPLIED) demands = await kursunDemands(tx, op, new Date());
-  else if (op.operationType === RollOperationType.TAMBUR_PROCESSED) demands = await kusakDemands(tx, op, warnings);
+  if (op.operationType === RollOperationType.KURSUN_APPLIED) demands = await kursunDemands(tx, op, new Date(), opts?.processedQty);
+  else if (op.operationType === RollOperationType.TAMBUR_PROCESSED) demands = await kusakDemands(tx, op, warnings, opts?.processedQty);
   demands = demands.filter((d) => d.qty.gt(0));
   if (demands.length === 0) return warnings;
   await tx.consumableMovement.createMany({

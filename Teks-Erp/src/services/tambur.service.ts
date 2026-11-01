@@ -1112,7 +1112,10 @@ export class TamburService {
     const birthCustomerCodes = roll.ownerCustomerId != null && (await readLabelCustomerCodeAt()) === "TAMBUR_OUTPUT";
     let bornCustomerCodes: BornCustomerCode[] = [];
     let customerCodeWarning: string | null = null;
+    // Sarf (kuşak) uyarıları — eksi bakiye işi durdurmaz, yanıtın `warnings`ine taşınır.
+    let consumableWarnings: string[] = [];
     const updatedRoll = await prisma.$transaction(async (tx) => {
+      consumableWarnings = [];
       // O-2 write-skew guard: WO satırını kilitle → son-top tamamlama sayımı
       // (~1024) eşzamanlı finalize/finalizeOpenFabric/receive/cancel/directShip ile
       // serileşsin; hepsi WO satırını tx başında kilitlediğinden sayım COMMIT'li
@@ -1392,6 +1395,7 @@ export class TamburService {
       // KK1 kenarı) kalan metraja düşülür.
       const now = new Date();
       const oldStepId = roll.currentStepId;
+      let processedQtyD: Prisma.Decimal | null = null;
       if (oldStepId) {
         const openMove = await tx.rollMovement.findFirst({
           where: { ...ACTIVE_MOVEMENT, rollId: data.rollId, workOrderStepId: oldStepId, exitedAt: null },
@@ -1401,6 +1405,7 @@ export class TamburService {
           openMove && new Prisma.Decimal(openMove.qtyIn).greaterThan(0)
             ? new Prisma.Decimal(openMove.qtyIn)
             : new Prisma.Decimal(totalQty);
+        processedQtyD = qtyOutD;
         await tx.rollMovement.updateMany({
           where: {
             ...ACTIVE_MOVEMENT,
@@ -1478,7 +1483,7 @@ export class TamburService {
           update: {},
         });
         // Kuşak sarf düşümü (ayar kapalıysa no-op; eksi bakiye engellemez).
-        await consumeForOperationTx(tx, tamburOp.id, userId ?? null);
+        consumableWarnings = (await consumeForOperationTx(tx, tamburOp.id, userId ?? null, { processedQty: processedQtyD })).map((w) => w.message);
         await recomputeStepStatus(tx, oldStepId);
       }
 
@@ -1590,7 +1595,9 @@ export class TamburService {
       },
       message: colorWarning ? `${baseMsg} Uyarı: ${colorWarning}` : baseMsg,
       // D4-F2: seri tükendiyse kodsuz kalan toplar — üretim sürer, uyarı görünür.
-      ...(customerCodeWarning ? { warnings: [customerCodeWarning] } : {}),
+      ...(customerCodeWarning || consumableWarnings.length > 0
+        ? { warnings: [...(customerCodeWarning ? [customerCodeWarning] : []), ...consumableWarnings] }
+        : {}),
     };
   }
 
@@ -3899,7 +3906,7 @@ export class TamburService {
         update: {},
       });
       // Kuşak sarf düşümü (ayar kapalıysa no-op; eksi bakiye engellemez).
-      await consumeForOperationTx(tx, tamburOp.id, userId ?? null);
+      const consumableWarnings = (await consumeForOperationTx(tx, tamburOp.id, userId ?? null, { processedQty: qtyOutD })).map((w) => w.message);
 
       // SAPMA DEFTERİ (2026-08-09) — kalan metrajın kaderi sorgulanabilir hale gelir.
       // `keep_*` sapma DEĞİLDİR (kalan gerçek bir top olarak stoğa girer); yalnız
@@ -3927,7 +3934,7 @@ export class TamburService {
       // CANCELLED/SUPERSEDED buradan COMPLETED'a dirilmez.
       await completeWorkOrderIfStepsDone(tx, woId, { trigger: "TAMBUR_FINALIZE_OPEN_FABRIC" });
 
-      return { remainingChildId, remainingQty, wantChild };
+      return { remainingChildId, remainingQty, wantChild, consumableWarnings };
     });
 
     await AuditService.log({
@@ -3959,6 +3966,7 @@ export class TamburService {
         remainingQty: result.remainingQty,
       },
       message,
+      ...(result.consumableWarnings.length > 0 ? { warnings: result.consumableWarnings } : {}),
     };
   }
 

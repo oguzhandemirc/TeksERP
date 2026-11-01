@@ -30,6 +30,8 @@ export interface ApplyKursunArgs {
   userId?: string | null;
   machineId?: string | null;
   metadata?: Prisma.InputJsonValue;
+  /** Sarf uyarılarının toplanacağı dizi (eksi bakiye engellemez; çağıran yanıtın `warnings`ine taşır). */
+  warnings?: string[];
 }
 
 const CONFLICT = () =>
@@ -75,7 +77,9 @@ async function readActive(tx: Tx, a: ApplyKursunArgs) {
 /** Yeni aktif satırın sarf düşümü (ayar kapalıysa no-op; uyarılar engellemez). */
 async function consumeNewActiveTx(tx: Tx, a: ApplyKursunArgs): Promise<void> {
   const row = await readActive(tx, a);
-  if (row) await consumeForOperationTx(tx, row.id, a.userId);
+  if (!row) return;
+  const warnings = await consumeForOperationTx(tx, row.id, a.userId);
+  a.warnings?.push(...warnings.map((w) => w.message));
 }
 
 /**

@@ -8,10 +8,14 @@
 //   §3 Kurşun izi → metre × geçerli norm düşer; aynı ize ikinci çağrı no-op; gramaj düzeltmesi eski
 //      tüketimi ters kayıtla geri yazar; iz geri alınınca (revokeRollOperations) ters kayıt — ileri satır silinmez
 //   §4 Eksi bakiye ENGELLEMEZ, uyarı döner
-//   §5 Kuşak: top boyu bilinmeyen iş emrinde düşüm yok + uyarı
-//   §6 Kuşak ihtiyacı raporu: değerin sarf kalemi varsa stokta/eksik sütunu (ayar açık)
+//   §4b Eksi bakiye uyarısı çağırana taşınır (kurşun `warnings` toplayıcısı; tambur/QC2 yanıtına bağlı)
+//   §5 Kuşak: top boyu bilinmeyen iş emrinde düşüm yok + uyarı; top boyu tekse beklenen top düşer,
+//      işlenen metre istasyon hareketinin qtyIn'i (initialQty değil)
+//   §6 Kuşak ihtiyacı raporu: değerin sarf kalemi varsa stokta/eksik sütunu (ayar açık; somut değer)
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { ConsumableMovementKind, Prisma, RollOperationType, RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
@@ -22,7 +26,7 @@ import { applyKursunOperationTx } from "../src/services/helpers/kursun-operation
 import { revokeRollOperations } from "../src/services/helpers/roll-operation.helper";
 import { consumableBalances, consumeForOperationTx } from "../src/services/helpers/consumable-stock.helper";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
-import { targetValueNeedReport } from "../src/services/reports/target-value-need.report";
+import { buildTargetValueNeedSunumu, targetValueNeedReport } from "../src/services/reports/target-value-need.report";
 
 let pass = 0;
 let fail = 0;
@@ -38,7 +42,7 @@ function check(label: string, cond: boolean, detail = ""): void {
 
 const TAG = `TST-SARF-${Date.now()}`;
 const FLAG_KEYS = [SETTING_KEYS.CONSUMABLE_STOCK_ENABLED, SETTING_KEYS.TICARET_ENABLED];
-const created = { items: [] as string[], props: [] as string[], wos: [] as string[], rolls: [] as string[], receipts: [] as string[], norms: [] as string[] };
+const created = { customers: [] as string[], items: [] as string[], props: [] as string[], wos: [] as string[], rolls: [] as string[], receipts: [] as string[], norms: [] as string[] };
 let savedSettings: Array<{ key: string; value: Prisma.JsonValue } | null> = [];
 
 async function setFlag(key: string, value: boolean): Promise<void> {
@@ -118,8 +122,20 @@ async function main(): Promise<void> {
   }
   check("§1b kapalı: mal kabul sarf satırını bugünkü 400 ile reddeder", rejected);
   await prisma.workOrderTargetValue.create({ data: { workOrderId: wo.id, propertyId: prop.id, valueId: val("ZEBRA") } });
+  // Rapor açık sipariş kalemini okur: 500 m / 50 m top → 10 beklenen top (ZEBRA kuşağı).
+  const customer = await prisma.customer.create({ data: { code: `${TAG}-M`.slice(0, 32), name: `${TAG} müşteri` }, select: { id: true } });
+  created.customers.push(customer.id);
+  const order = await prisma.order.create({ data: { orderNumber: `${TAG}-SIP`, customerId: customer.id }, select: { id: true } });
+  const line = await prisma.orderLine.create({ data: { orderId: order.id, itemId: fabricId, quantity: 500, pieceLengthM: 50 }, select: { id: true } });
+  await prisma.orderLineTargetValue.create({ data: { orderLineId: line.id, propertyId: prop.id, valueId: val("ZEBRA") } });
+  const zebraRow = (rep: Awaited<ReturnType<typeof targetValueNeedReport>>) => rep.satirlar.find((s) => s.degerKodu === "ZEBRA" && s.ozellik === `${TAG} gramaj`);
   const repOff = await targetValueNeedReport();
-  check("§1c kapalı: rapor satırlarında stokta/eksik anahtarı yok", repOff.satirlar.every((s) => !("stokta" in s) && !("eksik" in s)));
+  const offRow = zebraRow(repOff);
+  check(
+    "§1c kapalı: ZEBRA satırı var (10 top), stokta/eksik anahtarı ve Stokta kolonu yok",
+    !!offRow && offRow.beklenenTop === 10 && !("stokta" in offRow) && !("eksik" in offRow) && !JSON.stringify(buildTargetValueNeedSunumu(repOff, {})).includes('"Stokta"'),
+    JSON.stringify(offRow),
+  );
 
   // ── §2 AÇIK: mal kabul + iptal ─────────────────────────────────────────
   await setFlag(SETTING_KEYS.CONSUMABLE_STOCK_ENABLED, true);
@@ -162,6 +178,21 @@ async function main(): Promise<void> {
   });
   const warns = await prisma.$transaction((tx) => consumeForOperationTx(tx, bigOp.id, adminId));
   check("§4 eksi bakiye engellemez + CONSUMABLE_NEGATIVE_BALANCE uyarısı", (await balanceOf(stripId)) === "-10.000" && warns.some((w) => w.code === "CONSUMABLE_NEGATIVE_BALANCE"));
+  const roll4 = await mkRoll("R4");
+  const sink: string[] = [];
+  await prisma.$transaction((tx) => applyKursunOperationTx(tx, { rollId: roll4, stepId: step.id, valueId: val("G1"), userId: adminId, warnings: sink }));
+  check("§4b kurşun: eksi bakiye uyarısı çağıranın warnings toplayıcısına düşer", sink.some((m) => m.includes("eksiye düştü")), JSON.stringify(sink));
+  // Tambur finalize ×2 ve QC2 uyarıyı yanıtın `warnings`ine taşır, kuşak metresi hareketin qtyIn'idir.
+  const tamburSrc = readFileSync(path.join(__dirname, "../src/services/tambur.service.ts"), "utf8");
+  const qcSrc = readFileSync(path.join(__dirname, "../src/services/kursun-qc.service.ts"), "utf8");
+  check(
+    "§4c tambur iki finalize qtyIn'i geçirir + uyarıyı yanıta taşır; QC2 toplayıcı bağlı",
+    (tamburSrc.match(/consumableWarnings = \(await consumeForOperationTx\(tx, tamburOp\.id, userId \?\? null, \{ processedQty: /g) ?? []).length === 2 &&
+      /warnings: \[\.\.\.\(customerCodeWarning[^\n]*\.\.\.consumableWarnings\]/.test(tamburSrc) &&
+      tamburSrc.includes("{ warnings: result.consumableWarnings }") &&
+      qcSrc.includes("warnings: consumableWarnings,") &&
+      qcSrc.includes("{ warnings: result.consumableWarnings }"),
+  );
 
   // ── §5 KUŞAK — top boyu bilinmiyor ─────────────────────────────────────
   const tamburOp = await prisma.rollOperation.create({
@@ -171,11 +202,30 @@ async function main(): Promise<void> {
   const kw = await prisma.$transaction((tx) => consumeForOperationTx(tx, tamburOp.id, adminId));
   check("§5 kuşak: top boyu bilinmeyen iş emrinde düşüm yok + uyarı", (await balanceOf(beltId)) === "0.000" && kw.some((w) => w.code === "CONSUMABLE_PIECE_LENGTH_UNKNOWN"));
 
+  // ── §5b KUŞAK — top boyu tek (50 m) ────────────────────────────────────
+  const beltRec = await goodsReceiptService.create({ warehouseId: wh, lines: [{ itemId: beltId, initialQty: 4 }] }, adminId);
+  created.receipts.push((beltRec.data as { id: string }).id);
+  await prisma.workOrderToOrderLine.create({ data: { workOrderId: wo.id, orderLineId: line.id } });
+  // Tambur sonrası tükenmiş top: doğuşta 120 m, istasyona 90 m girdi (girişte kesilmiş).
+  const r5 = await prisma.roll.create({
+    data: { barcode: `${TAG}-R5`, itemId: fabricId, initialQty: 120, currentQty: 0, status: RollStatus.IN_PRODUCTION, currentStepId: step.id },
+    select: { id: true },
+  });
+  created.rolls.push(r5.id);
+  const op5 = await prisma.rollOperation.create({ data: { rollId: r5.id, workOrderStepId: step.id, operationType: RollOperationType.TAMBUR_PROCESSED }, select: { id: true } });
+  const kw5 = await prisma.$transaction((tx) => consumeForOperationTx(tx, op5.id, adminId, { processedQty: new Prisma.Decimal(90) }));
+  const used5 = await prisma.consumableMovement.findFirst({ where: { rollOperationId: op5.id, itemId: beltId, kind: ConsumableMovementKind.CONSUMPTION_OUT }, select: { qty: true } });
+  check("§5b kuşak: qtyIn 90 m / 50 m → 2 kuşak düşer (initialQty 120 → 3 DEĞİL), uyarısız", used5?.qty.toFixed(3) === "2.000" && (await balanceOf(beltId)) === "2.000" && kw5.length === 0, `${used5?.qty} / ${JSON.stringify(kw5)}`);
+
   // ── §6 RAPOR STOK SÜTUNU (açık) ────────────────────────────────────────
-  // Rapor açık sipariş kalemi ister; fikstür siparişi yok → yalnız sözleşme: satırı olan değerde
-  // stokta/eksik dolu, olmayanda anahtar yok. Toplu ölçüm: açıkken hiçbir satır stoksuz sarf kaleminde boş kalmaz.
   const repOn = await targetValueNeedReport();
-  check("§6 açık: sarf kalemli değer satırları stokta/eksik taşır", repOn.satirlar.every((s) => (s.stokta === undefined) === (s.eksik === undefined)));
+  const onRow = zebraRow(repOn);
+  const sunumOn = JSON.stringify(buildTargetValueNeedSunumu(repOn, {}));
+  check(
+    "§6 açık: ZEBRA satırı stokta=2, eksik=max(10−2,0)=8; tabloda Stokta/Eksik kolonu",
+    onRow?.beklenenTop === 10 && onRow.stokta === "2.000" && onRow.eksik === "8.000" && sunumOn.includes('"Stokta"') && sunumOn.includes('"Eksik"'),
+    JSON.stringify(onRow),
+  );
 }
 
 async function cleanup(): Promise<void> {
@@ -190,6 +240,9 @@ async function cleanup(): Promise<void> {
   await prisma.consumableMovement.deleteMany({ where: { id: { in: mv.filter((m) => m.reversesId === null).map((m) => m.id) } } });
   await prisma.rollOperation.deleteMany({ where: { id: { in: opIds } } });
   await prisma.workOrderTargetValue.deleteMany({ where: { workOrderId: { in: created.wos } } });
+  await prisma.workOrderToOrderLine.deleteMany({ where: { workOrderId: { in: created.wos } } });
+  await prisma.orderLine.deleteMany({ where: { order: { customerId: { in: created.customers } } } });
+  await prisma.order.deleteMany({ where: { customerId: { in: created.customers } } });
   await prisma.roll.deleteMany({ where: { OR: [{ id: { in: created.rolls } }, { goodsReceiptId: { in: created.receipts } }] } });
   await prisma.goodsReceipt.deleteMany({ where: { id: { in: created.receipts } } });
   await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: created.wos } } });
@@ -198,6 +251,7 @@ async function cleanup(): Promise<void> {
   await prisma.fabricPropertyValue.deleteMany({ where: { propertyId: { in: created.props } } });
   await prisma.fabricProperty.deleteMany({ where: { id: { in: created.props } } });
   await prisma.item.deleteMany({ where: { id: { in: created.items } } });
+  await prisma.customer.deleteMany({ where: { id: { in: created.customers } } });
   for (let i = 0; i < FLAG_KEYS.length; i++) {
     const s = savedSettings[i];
     if (s) await prisma.systemSetting.update({ where: { key: s.key }, data: { value: s.value as Prisma.InputJsonValue } });

@@ -632,6 +632,7 @@ export class KursunQcService {
 
       // Gramaj düzeltmesi defteri değiştirmez: eski satır damgalanır, yenisi
       // yazılır (`applyKursunOperationTx`); aynı değer replay'i no-op.
+      const consumableWarnings: string[] = [];
       const kursunOutcome = kursunApplied
         ? await applyKursunOperationTx(tx, {
             rollId: data.rollId,
@@ -639,6 +640,7 @@ export class KursunQcService {
             valueId: kursun.valueId,
             userId: userId ?? null,
             machineId: machineId ?? null,
+            warnings: consumableWarnings,
           })
         : "noop";
 
@@ -664,7 +666,7 @@ export class KursunQcService {
             })
           : null;
 
-      return { qc2Op, kursunOutcome, propertiesChanged: copied.changed, meterWrite, widthTrace };
+      return { qc2Op, kursunOutcome, propertiesChanged: copied.changed, meterWrite, widthTrace, consumableWarnings };
     });
     const op = result.qc2Op;
     if (result.meterWrite) await auditMeterReadingWrite(userId, result.meterWrite, "COMPLETE_QC2");
@@ -712,7 +714,12 @@ export class KursunQcService {
       });
     }
 
-    return { success: true, data: meter ? { ...op, meter } : op, message: "Kalite Kontrol 2 tamamlandı" };
+    return {
+      success: true,
+      data: meter ? { ...op, meter } : op,
+      message: "Kalite Kontrol 2 tamamlandı",
+      ...(result.consumableWarnings.length > 0 ? { warnings: result.consumableWarnings } : {}),
+    };
   }
 
   /** completeQc2 cevabındaki metre özeti (H2 işareti) — replay'de aynı token'ın aktif okumasından. */
