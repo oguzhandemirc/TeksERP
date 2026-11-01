@@ -27,6 +27,7 @@ import apiClient from "@/services/apiClient";
 import axios from "axios";
 import type { Currency } from "../service";
 import { buildListQuery, type CashTxnFilterState } from "./cashTxnRules";
+import type { AllocationBody } from "./allocation/allocationRules";
 
 /** COLLECTION (tahsilat) · PAYMENT (ödeme): carili ödemenin kasa defteri satırı — tek yazar dilimi (2026-09-18); ödeme iptaliyle iptal olur. */
 export type CashTxnKind = "EXPENSE" | "INCOME" | "OPENING" | "TRANSFER_OUT" | "TRANSFER_IN" | "COLLECTION" | "PAYMENT";
@@ -107,6 +108,8 @@ export interface CashTxnCreateBody extends AccountRefBody {
   reference?: string | null;
   /** Mantıksal deneme başına TEK token — tekrar denemede AYNISI gönderilir. */
   clientToken?: string;
+  /** D4-H3: formda "Bağla" — yalnız seçildiyse gider; yoksa gövde bugünküyle bayt-aynı. */
+  allocation?: AllocationBody | null;
 }
 
 /**
@@ -128,6 +131,7 @@ export async function createCashTxn(body: CashTxnCreateBody) {
     category: body.category ?? null,
     description: body.description ?? null,
     reference: body.reference ?? null,
+    ...(body.allocation ? { allocation: body.allocation } : {}),
   };
   const res = await apiClient.post("/api/finance/cash-transactions", payload, { suppressErrorToast: true });
   return res.data as { data: { id: string; docNo: string }; message?: string };

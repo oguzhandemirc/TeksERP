@@ -31,6 +31,8 @@
     "financeAutoDraftFromShipmentEnabled": true,
     "financeServiceBillingEnabled": true,
     "financeExpenseCategorySuggestions": "ON",
+    "financeExpenseAllocationField": "OPTIONAL",
+    "financeExpenseAllocationClosedWorkOrder": "DENY",
     "orderProductionProposal": "ONIZLEME",
     "financeCariHoldReleaseBySamePerson": "DENY",
     "financeCariHoldEmanetShipment": "PROCESSED_HELD",
