@@ -35,6 +35,8 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/orders": e("sipariş oluşturdu", "sipariş oluşturmaya çalıştı"),
   "PATCH /api/orders/:id": e("siparişi düzenledi", "siparişi düzenlemeye çalıştı"),
   "DELETE /api/orders/:id": e("siparişi sildi", "siparişi silmeye çalıştı"),
+  "POST /api/orders/:id/production-proposal/preview": e("siparişin üretim önerisine baktı", "siparişin üretim önerisine bakmaya çalıştı"),
+  "POST /api/orders/:id/production-proposal/apply": e("siparişten dokuma/terbiye iş emirlerini oluşturdu", "siparişten dokuma/terbiye iş emirlerini oluşturmaya çalıştı"),
   // ── Finans: dönem sonu hizmet faturası (H8)
   "POST /api/finance/invoices/service-period-draft": e("dönem sonu hizmet faturası taslağı oluşturdu", "dönem sonu hizmet faturası taslağı oluşturmaya çalıştı"),
   // ── Terbiye iş emri

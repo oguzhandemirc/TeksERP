@@ -31,6 +31,7 @@
     "financeAutoDraftFromShipmentEnabled": true,
     "financeServiceBillingEnabled": true,
     "financeExpenseCategorySuggestions": "ON",
+    "orderProductionProposal": "ONIZLEME",
     "financeCariHoldReleaseBySamePerson": "DENY",
     "financeCariHoldEmanetShipment": "PROCESSED_HELD",
     "costPresentationCurrency": "USD",

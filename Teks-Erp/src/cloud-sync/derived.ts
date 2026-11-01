@@ -19,6 +19,7 @@ import {
 } from "../services/reports/finance-aging.report";
 import { WorkOrderService, WO_LIST_CUSTOMER_LINKS } from "../services/workorder.service";
 import { COST_DERIVERS, COST_DERIVER_ROW_FIELDS } from "./derived-cost";
+import { CASH_DERIVERS, CASH_DERIVER_ROW_FIELDS } from "./derived-cash";
 import { cariLockByCari } from "./derived-cari-hold";
 import { workOrderReadyWorksWire } from "./derived-ship-ready";
 
@@ -218,6 +219,7 @@ export const DERIVERS: Readonly<Record<string, Deriver>> = {
   fatura: invoiceDerived,
   "tahsilat-odeme": paymentDerived,
   ...COST_DERIVERS,
+  ...CASH_DERIVERS,
 };
 
 /**
@@ -231,5 +233,6 @@ export const DERIVER_ROW_FIELDS: Readonly<Record<string, readonly string[]>> = {
   fatura: ["grandTotal", "paidTotal", "dueDate", "issueDate", "cariId", "status"],
   "tahsilat-odeme": ["amount", "allocatedTotal"],
   ...COST_DERIVER_ROW_FIELDS,
+  ...CASH_DERIVER_ROW_FIELDS,
 };
 

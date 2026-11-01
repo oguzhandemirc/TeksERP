@@ -70,6 +70,7 @@ const KAPILI: ReadonlyArray<{ dosya: string; mount: string }> = [
   { dosya: "routes/traveler-card.routes.ts", mount: "/api/traveler-cards" },
   { dosya: "routes/batch.routes.ts", mount: "/api/batches" },
   { dosya: "routes/station-capability.routes.ts", mount: "/api/station-capabilities" },
+  { dosya: "routes/production-proposal.routes.ts", mount: "/api/orders/:id/production-proposal" },
   // Dokuma üçlüsü (`weaving-order` · `machine-run` · `machine-doff`) 2026-09-13'e
   // dek buradaydı; ekran dilimiyle `requireDokumaEnabled`a geçti ve kendi rejim
   // bekçisine taşındı (`test_dokuma_regime_gate` — aynı KAPILI/sıra ölçümü).

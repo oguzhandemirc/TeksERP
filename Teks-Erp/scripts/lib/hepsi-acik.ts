@@ -73,6 +73,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   costProfitSubcontractSource: V("yalnız kârlılık okumasının kaynağı; hiçbir kapıyı açıp kapamaz"),
   costProfitConsumablePriceSource: V("yalnız kârlılık okumasının kaynağı; hiçbir kapıyı açıp kapamaz"),
   costWeavingStandardMethod: V("yalnız standart maliyetin dokuma satır yöntemi; hiçbir kapıyı açıp kapamaz"),
+  orderProductionProposal: A("ONIZLEME"), // önizleme + uygula uçlarını açar; ONAYDA_TASLAK yalnız panelde kendiliğinden açar
   costProfitMachineTime: V("yalnız kârlılık okumasının kaynağı; hiçbir kapıyı açıp kapamaz"),
   costProfitOverheadKey: V("yalnız kârlılık okumasının dağıtım anahtarı; hiçbir kapıyı açıp kapamaz"),
   costProfitCategoryClasses: V("yalnız kârlılık okumasının masraf sınıfları; hiçbir kapıyı açıp kapamaz"),

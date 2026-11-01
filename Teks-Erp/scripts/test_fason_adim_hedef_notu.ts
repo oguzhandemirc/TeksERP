@@ -190,8 +190,9 @@ async function main(): Promise<void> {
     return f.endsWith("fason-step-target-note.helper.ts") || n === 0 ? [] : [`${path.relative(srcRoot, f)}×${n}`];
   });
   const sites = enclosingCallers(path.join(srcRoot, "services", "workorder.service.ts"), "appendTargetNotesToExternalSteps");
-  const inCreateFresh = sites.length === 1 && sites[0]!.fn === "createFresh" && !sites[0]!.inTx;
-  check("§6b ⭐ birleştiricinin TEK çağıranı createFresh (doğuş öncesi; sevk/düzenleme yolu notu yeniden yazmaz)", callers.join(",") === "services/workorder.service.ts×1" && inCreateFresh, `${callers.join(",")} ${JSON.stringify(sites)}`);
+  // SY-M1: createFresh'in tx öncesi hazırlığı `prepareCreate`e ayrıldı (tek ve çok kayıtlı doğuş aynı yoldan).
+  const inCreateFresh = sites.length === 1 && sites[0]!.fn === "prepareCreate" && !sites[0]!.inTx;
+  check("§6b ⭐ birleştiricinin TEK çağıranı prepareCreate (doğuş öncesi; sevk/düzenleme yolu notu yeniden yazmaz)", callers.join(",") === "services/workorder.service.ts×1" && inCreateFresh, `${callers.join(",")} ${JSON.stringify(sites)}`);
 
   // §7
   const put = await replaceWorkOrderTargetValues(w1.id, [{ propertyId: brand.id, valueId: jasmin }]);

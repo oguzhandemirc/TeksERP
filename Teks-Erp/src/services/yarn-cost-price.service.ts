@@ -39,6 +39,8 @@ export interface YarnCostPriceChangeInput {
   source?: YarnCostPriceSource;
   sourceRef?: unknown;
   note?: unknown;
+  /** Yalnız bu sürüm hâlâ yürürlükteyse yaz (içe aktarım geri sarmasının claim'i, SY-H2). */
+  expectedActiveId?: string | null;
 }
 
 /** Liste — varsayılan YALNIZ aktif; geçmiş açıkça istenir (`includeRevoked`). */
@@ -74,6 +76,9 @@ export async function changeYarnCostPrice(
         where: { yarnItemId: input.yarnItemId, ...ACTIVE_YARN_COST_PRICE },
         select: { id: true, pricePerKg: true, currency: true, source: true, sourceRef: true, note: true },
       });
+      if (input.expectedActiveId !== undefined && (current?.id ?? null) !== input.expectedActiveId) {
+        throw AppError.conflict("İplik fiyatı sonradan değişti — beklenen sürüm yürürlükte değil.", { code: "COST_PRICE_CONFLICT" });
+      }
       if (
         current &&
         current.pricePerKg.equals(price) &&
