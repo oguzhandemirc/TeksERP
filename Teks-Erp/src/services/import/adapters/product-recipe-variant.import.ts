@@ -68,7 +68,7 @@ export async function validateVariantFields(row: PreparedRow, ctx: ImportContext
 
 async function validateWeftChanges(row: PreparedRow, ctx: ImportContext): Promise<void> {
   const column = "weftChanges";
-  if (!ctx.permissions || !matchesPermission(ctx.permissions, WEFT_CHANGE_PERMISSION)) {
+  if (!ctx.permissions || !matchesPermission(ctx.permissions, "warpspec:write")) {
     row.result.errors.push({ column, message: `Atkı ipliği değişimi için '${WEFT_CHANGE_PERMISSION}' yetkisi de gerekli.` });
     return;
   }
