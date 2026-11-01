@@ -49,11 +49,11 @@ import { invoiceService } from "./../invoice.service";
 import { resolveItemPricesFor } from "./../item-price.service";
 import {
   readFinanceAutoDraftFromShipmentEnabled,
-  readFinanceDefaultVatRate,
   readFinanceEnabled,
 } from "./../system-setting.service";
 import { D0 } from "./allocation.helper";
 import { deriveInvoiceDueDate, findCariAccountForCardTx } from "./finance.helper";
+import { resolveInvoiceTaxDefaults, taxLineFields } from "./invoice-tax-defaults.helper";
 import { SACK_ABSENT_STATUSES } from "./sack-invariants.helper";
 import { LEDGER_UNIT, unitLabel } from "../../constants/item-unit";
 import { uyari } from "../../lib/logger";
@@ -102,6 +102,8 @@ export interface ShipmentDraftLine {
   unit: string;
   unitPrice: Prisma.Decimal;
   vatRate: number;
+  /** D4-V1k: tevkifat (KDV'nin %'si) — yalnız sıfırdan farklıyken taşınır (ayarsız kurulumda yanıt bayt-aynı). */
+  withholdingRate?: number;
 }
 
 export interface ShipmentDraftLinesResult {
@@ -194,10 +196,10 @@ export async function collectShipmentInvoiceDraftLines(
   }
   const sh = await prisma.shipment.findUnique({ where: { id: shipmentId }, select: { dispatchedAt: true } });
   const svc = await collectShipmentServiceBilling({ shipmentId, customerId, currency, settings: service, dispatchedAt: sh?.dispatchedAt ?? null });
-  const vatRate = await readFinanceDefaultVatRate();
+  const tax = taxLineFields(await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, customerId }));
   return {
     ...product,
-    lines: [...product.lines, ...svc.lines.map((l) => ({ ...l, vatRate }))],
+    lines: [...product.lines, ...svc.lines.map((l) => ({ ...l, ...tax }))],
     warnings: [...product.warnings, ...svc.warnings],
     serviceLinks: svc.links,
   };
@@ -323,9 +325,8 @@ async function collectProductDraftLines(
     customerId,
   });
 
-  // KDV oranı firma parametresinden — panel fatura formunun yeni satırı ve
-  // mal kabul taslağı da AYNI ayardan okur (oran üç yerde ayrı sürüklenmez).
-  const vatRate = await readFinanceDefaultVatRate();
+  // KDV/tevkifat TEK çözümleyiciden (müşteri cari ?? genel ayar) — panel formu ve dönem taslağı da aynı helper'ı okur.
+  const tax = taxLineFields(await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, customerId }));
 
   const lines = [...groups.values()].map((g) => {
     const contract = contractPriceOf(g);
@@ -337,7 +338,7 @@ async function collectProductDraftLines(
       unit: "m",
       // Sıra: sipariş (sözleşme) fiyatı > D2 zinciri (müşteri istisnası > kart).
       unitPrice: contract ?? priceMap.get(g.itemId)?.price ?? D0(),
-      vatRate,
+      ...tax,
     };
   });
   return { lines, orderPriced, orderConflicts, warnings, ...(shipmentGross ? { shipmentGross } : {}) };

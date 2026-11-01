@@ -17,6 +17,7 @@ import { activeHoldByCari, holdScopes, reasonLabel, type CariHoldReasonCode, typ
 import { readFinanceCariHoldReleaseBySamePerson } from "./system-setting.service";
 import { cariHoldNotificationTx } from "./helpers/cari-hold-notify.helper";
 import { emitNotification } from "./helpers/notification-emit.helper";
+import { resolveCariAccountByCustomerTx } from "./helpers/finance.helper";
 
 const TABLE = "CARI_HOLD";
 
@@ -204,6 +205,17 @@ export const cariHoldService = {
       newData: { cariId: row.cariId, released: true, releaseReason: row.releaseReason },
     }).catch(() => undefined);
     return { success: true, data: toRow(row, await userNames([row.placedById, row.releasedById])), message: "Cari kilidi açıldı." };
+  },
+
+  /**
+   * GET /api/finance/cari/by-customer/:customerId/holds — cari kartının Kilit sekmesi (D4-I3): kartın hesabı
+   * (K3a where'i) + aktif kilit + tarihçe. Hesap yoksa 404 `CARI_ACCOUNT_MISSING` (yaratmaz).
+   */
+  async listByCustomer(customerId: string): Promise<ApiResponse<{ cariId: string; active: CariHoldRow | null; history: CariHoldRow[] }>> {
+    const acc = await resolveCariAccountByCustomerTx(prisma, customerId);
+    if (!acc) throw AppError.notFound("Bu kartın cari hesabı yok.", { code: "CARI_ACCOUNT_MISSING", customerId });
+    const res = await this.listByCari(acc.id);
+    return { success: true, data: { cariId: acc.id, ...(res.data ?? { active: null, history: [] }) } };
   },
 
   /** GET /api/finance/cari/:id/holds — aktif kilit + tarihçe (yeniden eskiye). */

@@ -12,6 +12,8 @@
 // H1/H2/H7 indikçe aynı paket kendiliğinden kapsar.
 // Pakete GİRMEYENLER (veri, ayar değil): `CariAccount.defaultOfficial` (cari başına),
 // etiket müşteri top no (şablon), sayaç sıfırlama (cihaz kaydı), brode yeri (rota).
+// KDV / tevkifat (D4-V1k, B-1): `finance.defaultVatRate`, `finance.withholding.*` ve cari geçersiz kılması
+// pakete BİLEREK girmez — yasal oran, Gülkesim değerini mali müşavir teyidiyle kullanıcı girer.
 // Çıkış: 0 tamam · 1 uygulanamadı · 2 kullanım.
 // =============================================================================
 import { hedefDbAdi } from "./lib/hedef-db-kapisi";

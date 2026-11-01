@@ -98,6 +98,8 @@ export interface DocumentScanInfo {
 export interface DeliveryNoteDetail extends DeliveryNoteHeader {
   lines: DeliveryNoteLine[];
   scans: DocumentScanInfo[];
+  /** D4-I3: sahibin İŞ KABULÜ kapsamlı aktif cari kilidi (metin sunucudan); eski backend göndermez. */
+  cariHold?: { sebepEtiketi: string; koyan: string; message: string } | null;
 }
 
 export interface DeliveryNoteListResponse {

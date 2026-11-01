@@ -80,6 +80,27 @@ const releaseSchema = z.strictObject({
  *       404: { description: CARI_ACCOUNT_NOT_FOUND }
  *       409: { description: "CARI_HOLD_EXISTS · CARI_INACTIVE · CARI_HOLD_RELEASED · CLIENT_TOKEN_COLLISION" }
  */
+/**
+ * @openapi
+ * /api/finance/cari/by-customer/{customerId}/holds:
+ *   get:
+ *     tags: [Finance]
+ *     summary: Cari kartının kilit bölümü — kartın hesabı + aktif kilit + tarihçe (D4-I3)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: customerId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{ data: { cariId, active, history[] } }" }
+ *       404: { description: CARI_ACCOUNT_MISSING }
+ */
+router.get("/by-customer/:customerId/holds", requireAnyPermission("finance:read", "finance:hold"), async (req, res, next) => {
+  try {
+    res.json(await cariHoldService.listByCustomer(uuidParam(req.params.customerId, "müşteri")));
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.get("/:id/holds", requireAnyPermission("finance:read", "finance:hold"), async (req, res, next) => {
   try {
     res.json(await cariHoldService.listByCari(uuidParam(req.params.id, "cari")));

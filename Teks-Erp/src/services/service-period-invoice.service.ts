@@ -16,7 +16,8 @@ import { collectPeriodServiceBilling, resolveCustomerServiceBillingTrigger } fro
 import { alreadyBilled } from "./helpers/service-billing-gate.helper";
 import { tokenReplay } from "./helpers/token-replay.helper";
 import { formatDayKeyTr, periodDayKey } from "./helpers/period-guard.helper";
-import { loadServiceBillingSettings, readFinanceDefaultVatRate } from "./system-setting.service";
+import { loadServiceBillingSettings } from "./system-setting.service";
+import { resolveInvoiceTaxDefaults, taxLineFields } from "./helpers/invoice-tax-defaults.helper";
 import { invoiceService } from "./invoice.service";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
@@ -100,9 +101,10 @@ async function buildPeriodDraft(input: ServicePeriodInput) {
   const effective = await resolveCustomerServiceBillingTrigger(cari.customerId, settings);
   const bounds = resolvePeriodBounds(input.period);
   const draft = await collectPeriodServiceBilling({ customerId: cari.customerId, currency: cari.currency, settings, ...bounds });
-  const vatRate = await readFinanceDefaultVatRate();
+  // D4-V1k: KDV/tevkifat müşterinin cari geçersiz kılmasından, yoksa genel ayardan (tek çözümleyici).
+  const tax = taxLineFields(await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, cariId: cari.id }));
   const closedAt = await findClosedPeriod(cari.id, cari.currency, bounds.issueDate);
-  return { settings, cari, bounds, draft, vatRate, closedAt, effective };
+  return { settings, cari, bounds, draft, tax, closedAt, effective };
 }
 
 /** Önizleme: iş sayısı, metre, tutar, uyarılar — yazmaz. */
@@ -165,7 +167,7 @@ export async function createServicePeriodDraft(
   userId?: string,
 ): Promise<ApiResponse<{ id: string; docNo: string }>> {
   return servicePeriodReplay(input).run(input.clientToken, async () => {
-    const { cari, bounds, draft, vatRate, closedAt } = await buildPeriodDraft(input);
+    const { cari, bounds, draft, tax, closedAt } = await buildPeriodDraft(input);
     if (closedAt) {
       throw AppError.conflict(
         `${input.period} dönemi ${formatDayKeyTr(closedAt)} cari kapanışıyla KAPALI — Dönem Kapanışı ekranından yeniden açın.`,
@@ -190,7 +192,7 @@ export async function createServicePeriodDraft(
         currency: cari.currency,
         issueDate: bounds.issueDate,
         notes: notes.slice(0, 500),
-        lines: draft.lines.map((l) => ({ ...l, vatRate })),
+        lines: draft.lines.map((l) => ({ ...l, ...tax })),
         clientToken: input.clientToken,
         serviceLinks: draft.links,
         serviceShipmentIds: draft.shipments.map((s) => s.id),

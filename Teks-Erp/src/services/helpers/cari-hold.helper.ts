@@ -74,6 +74,11 @@ export async function activeHoldByCari(db: HoldReader, cariId: string): Promise<
   return db.cariHold.findFirst({ where: { cariId, releasedAt: null }, select: ACTIVE_HOLD_SELECT });
 }
 
+/** D4-I3: "Kilitli" cari listesi süzgeci — liste ve sayım AYNI where'e bu parçayı koyar (tek yüklem). */
+export const HELD_CARI_ACCOUNT_WHERE = { holds: { some: { releasedAt: null } } } as const satisfies Prisma.CariAccountWhereInput;
+/** D4-I3: cari liste satırının aktif kilidi (include parçası; kısmi unique → en çok bir satır). */
+export const ACTIVE_HOLD_INCLUDE = { where: { releasedAt: null }, select: ACTIVE_HOLD_SELECT, take: 1 } as const;
+
 /**
  * Kartın AKTİF kilidi — kart hesabı YA DA eski fason bacağı hesabı (K3a where'i). Onarılmamış çiftte iki
  * hesapta ayrı kilit olabilir: `scope` verilirse o kapsamı kapsayan kilit WHERE'de aranır (fail-closed);
