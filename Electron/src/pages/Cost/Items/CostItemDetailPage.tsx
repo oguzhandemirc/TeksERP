@@ -20,6 +20,7 @@ import { SaveVersionDialog } from "./SaveVersionDialog";
 import { StructureTab } from "./StructureTab";
 import { VersionsTab } from "./VersionsTab";
 import { costItemService } from "./service";
+import { useCostVariants } from "./variant-scope";
 
 export function CostItemDetailPage() {
   const { itemId = "" } = useParams();
@@ -29,6 +30,7 @@ export function CostItemDetailPage() {
   const [flagged, setFlagged] = useState<Set<string>>(new Set());
   const detail = useQuery({ queryKey: ["cost-items", "detail", itemId], queryFn: () => costItemService.detail(itemId), enabled: !!itemId });
   const fxRates = fxBody(fx);
+  const variants = useCostVariants(itemId);
   const preview = useCostPreview(itemId ? { itemId, fxRates } : null);
   const d = detail.data;
   return (
@@ -63,11 +65,11 @@ export function CostItemDetailPage() {
                 fxFlagged={flagged.has("fx")} onSave={() => setSaveOpen(true)} />
               {preview.isError && <CostQueryError error={preview.error} what="Önizleme" onRetry={() => void preview.refetch()} />}
             </TabsContent>
-            <TabsContent value="versions" className="mt-4"><VersionsTab itemId={itemId} active={d.aktifSurum} /></TabsContent>
+            <TabsContent value="versions" className="mt-4"><VersionsTab itemId={itemId} active={d.aktifSurum} variants={variants} /></TabsContent>
           </Tabs>
         )}
       </PageBody>
-      {saveOpen && <SaveVersionDialog itemId={itemId} fxRates={fxRates} onClose={() => setSaveOpen(false)} onMissing={(m) => setFlagged(missingFields(m))} />}
+      {saveOpen && <SaveVersionDialog itemId={itemId} fxRates={fxRates} variants={variants} onClose={() => setSaveOpen(false)} onMissing={(m) => setFlagged(missingFields(m))} />}
     </PageShell>
   );
 }
