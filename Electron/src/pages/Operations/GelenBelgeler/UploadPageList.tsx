@@ -1,7 +1,7 @@
-// Yükleme modalındaki dosya listesi: ad, boy, "küçültüldü"/"gönderildi" işareti, kaldır.
+// Yükleme modalındaki dosya listesi: ad, boy, "küçültüldü"/"gönderildi" işareti, kaldır (HEIC: boy yerine yer tutucu).
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatBytes, PDF_MIME, type UploadPage } from "./uploadPrep";
+import { formatBytes, HEIC_MIME, HEIC_PLACEHOLDER_TEXT, PDF_MIME, type UploadPage } from "./uploadPrep";
 
 interface Props {
   pages: UploadPage[];
@@ -19,7 +19,7 @@ export function UploadPageList({ pages, uploaded, disabled, onRemove }: Props) {
           <span className="shrink-0 text-xs text-muted-foreground">#{i + 1}</span>
           <span className="min-w-0 flex-1 truncate" title={p.name}>{p.name}</span>
           <span className="shrink-0 text-xs text-muted-foreground">
-            {p.mimeType === PDF_MIME ? "PDF" : `${p.width}×${p.height}`} · {formatBytes(p.sizeBytes)}
+            {p.mimeType === PDF_MIME ? "PDF" : p.mimeType === HEIC_MIME ? <span data-testid="upload-heic-note">{HEIC_PLACEHOLDER_TEXT}</span> : `${p.width}×${p.height}`} · {formatBytes(p.sizeBytes)}
             {p.resized ? " · küçültüldü" : ""}
             {uploaded.has(p.sha256) ? " · gönderildi" : ""}
           </span>

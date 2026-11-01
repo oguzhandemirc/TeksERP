@@ -83,6 +83,13 @@ Paket `deploy/` ve `scripts/`yi TAŞIMAZ (`docs/KOD-KURALLARI.md` § deploy) —
 | Şema doğrulama | **YOK** (`zod` bağımlılığı yok, 386 dosyada 0 `z.object`) | §8 açık karar |
 | Web hedefi | **YOK** | `react-native-web` + `react-dom` ölü (§7) |
 
+### 2.4 okuma (`okuma/`) — Python 3.12, yerel okuma servisi
+
+| İhtiyaç | Paket | Not / reddedilen |
+|---|---|---|
+| OCR · görüntü · HTTP | `rapidocr` + `onnxruntime` · `opencv-python-headless` + `numpy` · `fastapi` + `uvicorn` (onay 2026-10-29) | sürümler `betikler/requirements.in`, hash'li `requirements.txt` (tüm platform dağıtımları); kural `okuma/CLAUDE.md` |
+| HEIC/HEIF çözme (iPhone) | `pi-heif` **1.4.0 SABİT** (yalnız `app/donustur.py`; tek geçişlisi `pillow`, rapidocr'dan zaten var) | yalnız çözücü (libheif + libde265, LGPL), x265/GPL yok · `pillow-heif` (kodlayıcıyla, x265 GPL) ve Node tarafında `heic-convert`/`sharp` reddedildi (§9 2026-11-02) |
+
 - **[KU-04]** Bir paketi bu tabloya yazmadan `package.json`a ekleme; tablo ile `dependencies` arasındaki fark bir arızadır · zorlama: bekçi:`test_dependency_contract.ts §(c)` (üç projede `dependencies` ∖ tablo = ∅ + iki yönlü: tabloda olup `package.json`da olmayan da kırmızı; `devDependencies` gerekçeli muaf) · kanıt: `Teks-Erp/scripts/test_dependency_contract.ts:210-243`, körlük zeminleri `EN_AZ_TABLO_TOKEN` / `EN_AZ_DEPS` · devralınan: `KAYIT_BEKLEYEN` donmuş listesi (bayatlaması da ölçülüyor)
 - **[KU-05]** mobilde oturum/interceptor taşıyan her çağrı `axios`, kimliksiz sonda ve manifest okuması ham `fetch`tir · zorlama: insan:iki HTTP yolu meşru, ayrımı "istek kimlik taşıyor mu" sorusu belirler ve AST bunu göremez · kanıt: `services/api.ts` axios; `services/discovery.service.ts:125`, `services/appUpdate.service.ts:267`, `offline/serverReachability.ts:90` fetch (ölçüm: 3 site) · devralınan: yok
 - **[KU-06]** Electron'da ham `fetch` yazılmaz; HTTP `axios` + `services/apiClient.ts` üzerindendir · zorlama: insan:ham `fetch` yasağının KAPISI YOK — `api-path-prefix.test.ts` yol ÖNEKİNİ ölçer, HTTP istemcisinin kimliğini değil; kimliksiz sunucu yoklaması ([EL-10]) meşru istisnadır ve selector'dan ayrılamaz · kanıt: ölçüm 2026-09-05 — `Electron/src|electron|shared`ta `fetch(` 0; kural gerçeği DONDURUR, düzeltmez · devralınan: yok

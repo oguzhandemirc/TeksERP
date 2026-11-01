@@ -135,12 +135,13 @@ const ListQuery = z.object({
  * /api/gelen-belge/taramalar:
  *   post:
  *     tags: [Gelen belge]
- *     summary: Belge fotoğrafı/PDF yükle (base64; tür sihirli bayttan; aynı sha256 = aynı kayıt, 200; PDF arşivdir — READ_FAILED doğar, okunmaz)
+ *     summary: Belge fotoğrafı/PDF yükle (base64; tür sihirli bayttan; HEIC okuma servisinde JPEG'e çevrilir; aynı sha256 = aynı kayıt, 200; PDF arşivdir — READ_FAILED doğar, okunmaz)
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       201: { description: "scan künyesi (bayt yok)" }
- *       400: { description: "DOCUMENT_SCAN_INVALID · DOCUMENT_SCAN_TYPE" }
- *       413: { description: "DOCUMENT_SCAN_TOO_LARGE (5 MB)" }
+ *       400: { description: "DOCUMENT_SCAN_INVALID · DOCUMENT_SCAN_TYPE · HEIC_CONVERT_FAILED" }
+ *       413: { description: "DOCUMENT_SCAN_TOO_LARGE (5 MB; HEIC'te dönüşüm sonrası da)" }
+ *       503: { description: "HEIC_CONVERT_UNAVAILABLE (HEIC geldi, okuma servisi yok/eski/ulaşılamaz — hiçbir şey yazılmaz)" }
  * /api/gelen-belge/taramalar/{id}:
  *   get:
  *     tags: [Gelen belge]

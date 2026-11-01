@@ -1,4 +1,4 @@
-"""OcrResult sözleşmesi — Teks-Erp/src/lib/gelen-belge/okuma-istemcisi.ts `OcrResultSchema` (Zod) ile BİREBİR.
+"""OcrResult + DonusumSonucu sözleşmesi — Teks-Erp/src/lib/gelen-belge/okuma-istemcisi.ts `OcrResultSchema` (Zod) ile BİREBİR.
 
 Zod'da `corners` yalnız `.optional()` (null KABUL ETMEZ) → yanıt `exclude_none` ile yazılır.
 Alan adı değişikliği iki uçta birden yapılır; `tests/test_sozlesme.py` iki şemayı karşılaştırır.
@@ -62,6 +62,21 @@ class OcrIstegi(BaseModel):
 
     imageBase64: str
     mimeType: Optional[str] = None
+
+
+class DonusumIstegi(BaseModel):
+    """`POST /donustur` gövdesi — istemci HEIC baytını `{imageBase64}` ile yollar."""
+
+    imageBase64: str
+
+
+class DonusumSonucu(BaseModel):
+    """`POST /donustur` yanıtı — okuma-istemcisi.ts `ConvertResultSchema` (Zod) ile BİREBİR."""
+
+    imageBase64: str
+    mimeType: str
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
 
 
 class Saglik(BaseModel):

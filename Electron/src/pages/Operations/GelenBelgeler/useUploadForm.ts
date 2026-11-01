@@ -4,7 +4,7 @@ import { useState } from "react";
 import { apiErrorText } from "@/lib/api-error";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { createUploadNote, uploadScan } from "./service";
-import { addPickedFiles, type UploadPage } from "./uploadPrep";
+import { addPickedFiles, splitAcceptedFiles, type UploadPage } from "./uploadPrep";
 import { EMPTY_UPLOAD_PROGRESS, pageLimitError, submitUpload, UploadError, type UploadProgress } from "./submitUpload";
 
 export type UploadTarget = { kind: "new" } | { kind: "pages"; noteId: string; noteNo: string; firstPageNo: number };
@@ -39,12 +39,14 @@ export function useUploadForm(target: UploadTarget, onSent: (note: { id: string;
     if (v !== docNo) attempt.renew();
     setDocNoState(v);
   };
+  // Seçici ve bırakma aynı yoldan: tanınmayan türler TEK uyarıda toplanır, kalanlar sihirli baytla hazırlanır.
   const pick = async (files: File[]) => {
     if (!files.length) return;
+    const { accepted, notice } = splitAcceptedFiles(files);
     setBusy(true);
-    const r = await addPickedFiles(pages, files);
+    const r = await addPickedFiles(pages, accepted);
     setPages(r.pages);
-    setNotices(r.notices);
+    setNotices(notice ? [notice, ...r.notices] : r.notices);
     setBusy(false);
   };
   const send = async () => {

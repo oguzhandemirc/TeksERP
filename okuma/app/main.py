@@ -1,4 +1,5 @@
-"""FastAPI uygulaması — `GET /health`, `POST /ocr` (gövde `{imageBase64, mimeType}` → OcrResult).
+"""FastAPI uygulaması — `GET /health`, `POST /ocr` (gövde `{imageBase64, mimeType}` → OcrResult),
+`POST /donustur` (gövde `{imageBase64}` HEIC/HEIF → DonusumSonucu, JPEG).
 
 Sözleşme: Teks-Erp/src/lib/gelen-belge/okuma-istemcisi.ts (readerHealth / readerOcr). Hata gövdesi
 `{"code", "message"}`; 4xx kalıcı, 5xx/504 istemcide "yeniden dene" sayılır.
@@ -20,7 +21,8 @@ from starlette.concurrency import run_in_threadpool
 
 from . import __version__
 from .config import MAX_GOVDE_BAYT, Ayarlar, ayarlari_oku, baglanti_adresi_izinli
-from .contract import OcrIstegi, Saglik
+from .contract import DonusumIstegi, DonusumSonucu, OcrIstegi, Saglik
+from .donustur import heic_jpeg
 from .goruntu import GoruntuHatasi, coz, hazirla
 from .motor import MOTOR_ADI, Motor, MotorYok
 
@@ -29,6 +31,26 @@ log = logging.getLogger("okuma.sunucu")
 
 def _hata(durum: int, kod: str, mesaj: str) -> JSONResponse:
     return JSONResponse({"code": kod, "message": mesaj}, status_code=durum)
+
+
+async def _govde_oku(request: Request, model, mesaj: str) -> bytes | JSONResponse:
+    """JSON gövdesini akışla (5 MB seddiyle) okur, `imageBase64`ü çözer; hata → hazır JSONResponse."""
+    govde = bytearray()
+    async for parca in request.stream():
+        govde.extend(parca)
+        if len(govde) > MAX_GOVDE_BAYT:
+            return _hata(413, "IMAGE_TOO_LARGE", "Görüntü 5 MB sınırını aşıyor.")
+    try:
+        istek = model.model_validate(json.loads(govde))
+    except (ValueError, TypeError):
+        return _hata(400, "INVALID_BODY", mesaj)
+    b64 = istek.imageBase64
+    if b64.startswith("data:") and "," in b64:
+        b64 = b64.split(",", 1)[1]
+    try:
+        return base64.b64decode(b64, validate=True)
+    except (binascii.Error, ValueError):
+        return _hata(400, "INVALID_BASE64", "imageBase64 çözülemedi.")
 
 
 def uygulama_kur(ayarlar: Ayarlar | None = None, motor: Motor | None = None) -> FastAPI:
@@ -65,22 +87,9 @@ def uygulama_kur(ayarlar: Ayarlar | None = None, motor: Motor | None = None) -> 
     @app.post("/ocr")
     async def ocr(request: Request) -> JSONResponse:
         t0 = time.perf_counter()
-        govde = bytearray()
-        async for parca in request.stream():
-            govde.extend(parca)
-            if len(govde) > MAX_GOVDE_BAYT:
-                return _hata(413, "IMAGE_TOO_LARGE", "Görüntü 5 MB sınırını aşıyor.")
-        try:
-            istek = OcrIstegi.model_validate(json.loads(govde))
-        except (ValueError, TypeError):
-            return _hata(400, "INVALID_BODY", "Gövde {imageBase64, mimeType} JSON'u olmalı.")
-        b64 = istek.imageBase64
-        if b64.startswith("data:") and "," in b64:
-            b64 = b64.split(",", 1)[1]
-        try:
-            veri = base64.b64decode(b64, validate=True)
-        except (binascii.Error, ValueError):
-            return _hata(400, "INVALID_BASE64", "imageBase64 çözülemedi.")
+        veri = await _govde_oku(request, OcrIstegi, "Gövde {imageBase64, mimeType} JSON'u olmalı.")
+        if isinstance(veri, JSONResponse):
+            return veri
         try:
             img = hazirla(coz(veri), ay.max_kenar)
         except GoruntuHatasi as exc:
@@ -111,5 +120,27 @@ def uygulama_kur(ayarlar: Ayarlar | None = None, motor: Motor | None = None) -> 
         log.info("/ocr 200 boyut=%d %dx%d satir=%d motor_ms=%.0f toplam_ms=%.0f", len(veri), sonuc.imageWidth, sonuc.imageHeight,
                  len(sonuc.blocks), sonuc.durationMs or 0, (time.perf_counter() - t0) * 1000)
         return JSONResponse(sonuc.model_dump(exclude_none=True), headers={"x-okuma-version": __version__})
+
+    @app.post("/donustur")
+    async def donustur(request: Request) -> JSONResponse:
+        # OCR motoruna ve tek sayfa kilidine girmez: motor hazır olmasa da dönüşüm çalışır.
+        t0 = time.perf_counter()
+        veri = await _govde_oku(request, DonusumIstegi, "Gövde {imageBase64} JSON'u olmalı.")
+        if isinstance(veri, JSONResponse):
+            return veri
+        try:
+            jpeg, w, h = await asyncio.wait_for(run_in_threadpool(heic_jpeg, veri, ay.max_kenar), timeout=ay.zaman_asimi_s)
+        except GoruntuHatasi as exc:
+            log.info("/donustur %d %s boyut=%d", exc.durum, exc.kod, len(veri))
+            return _hata(exc.durum, exc.kod, exc.mesaj)
+        except (TimeoutError, asyncio.TimeoutError):
+            log.warning("/donustur 504 zaman aşımı %.0f s", ay.zaman_asimi_s)
+            return _hata(504, "CONVERT_TIMEOUT", "Dönüşüm zaman aşımına uğradı.")
+        except Exception as exc:  # noqa: BLE001 — mesaj içerik taşıyabilir; yalnız sınıf adı
+            log.error("/donustur 500 %s", type(exc).__name__)
+            return _hata(500, "CONVERT_FAILED", "Dönüşüm başarısız.")
+        sonuc = DonusumSonucu(imageBase64=base64.b64encode(jpeg).decode("ascii"), mimeType="image/jpeg", width=w, height=h)
+        log.info("/donustur 200 boyut=%d cikti=%d %dx%d toplam_ms=%.0f", len(veri), len(jpeg), w, h, (time.perf_counter() - t0) * 1000)
+        return JSONResponse(sonuc.model_dump(), headers={"x-okuma-version": __version__})
 
     return app

@@ -2,7 +2,7 @@
 
 Python 3.12 + FastAPI + RapidOCR (onnxruntime, PaddleOCR PP-OCRv5 ONNX: det mobile + latin rec mobile). Backend'in
 okuma işi (`Teks-Erp/src/lib/gelen-belge/okuma-istemcisi.ts`) fotoğrafı `POST /ocr {imageBase64, mimeType}` ile yollar,
-`OcrResult` alır; servis ERP verisine dokunmaz, deftere yazmaz. Karar: `TASARIM-KARARI-2026-10-28` §2–§3, dilim D6.
+`OcrResult` alır; yükleme yolu HEIC/HEIF'i `POST /donustur {imageBase64}` ile JPEG'e çevirtir (pi-heif). Servis ERP verisine dokunmaz, deftere yazmaz. Karar: `TASARIM-KARARI-2026-10-28` §2–§3, dilim D6.
 
 ## Çalıştırma (geliştirici)
 - `okuma/betikler/calistir.sh` → `.venv` (hash'li kurulum) + `betikler/modelleri-getir.py` + `python -m app` (http://127.0.0.1:8765).
@@ -19,6 +19,6 @@ Teks-Erp tarafı gerçek servise karşı: `OKUMA_GERCEK_URL=http://127.0.0.1:876
 - Yalnız döngü adresi dinler; compose iç servis adı yalnız açık izinle; 0.0.0.0 / :: / LAN IP REDDEDİLİR (`config.py` + middleware ikinci seddi).
 - Çalışma anında model İNDİRİLMEZ: modeller `modeller/manifest.json` (SHA-256) ile kurulumda gelir; `indirme_kapisi.py` RapidOCR'ın indirme yolunu kapatır.
 - Log'a fotoğraf baytı, base64, okunan metin, hata mesajı içeriği YAZILMAZ — yalnız boyut/süre/sayı/kod.
-- 5 MB görüntü tavanı (backend `DOCUMENT_SCAN_MAX_BYTES` ile aynı); yalnız JPEG/PNG sihirli baytı.
+- 5 MB görüntü tavanı (backend `DOCUMENT_SCAN_MAX_BYTES` ile aynı); `/ocr` yalnız JPEG/PNG sihirli baytı, `/donustur` yalnız HEIF `ftyp` markası (AVIF yok).
 - Yeni Python paketi = kullanıcı onayı; sürüm değişimi `betikler/requirements.in` + `betikler/hash-uret.py` ile (hash'siz satır yok).
 - Paketleme (Windows hizmeti, compose, korumalı paket) bu dizinde YOK — ayrı dilim.

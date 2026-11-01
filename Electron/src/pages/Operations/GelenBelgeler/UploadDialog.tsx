@@ -1,12 +1,14 @@
-// Belge yükle (yeni DRAFT) / Sayfa ekle (mevcut DRAFT) — çoklu dosya; büyük görüntü tarayıcıda küçülür, PDF arşivdir.
+// Belge yükle (yeni DRAFT) / Sayfa ekle (mevcut DRAFT) — çoklu dosya; büyük görüntü tarayıcıda küçülür, PDF arşivdir,
+// HEIC sunucuda JPEG'e çevrilir. Dosya seçiciyle ya da bırakma alanına sürükleyerek; liste sayfası `initialFiles` verir.
 // Yarıda kalan gönderimin tekrarı aynı taslağa kalan sayfaları yükler (ikinci taslak açılmaz) — `useUploadForm`.
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
-import { hasPdf, PDF_NOT_READ_TEXT } from "./uploadPrep";
+import { hasPdf, PDF_NOT_READ_TEXT, UPLOAD_ACCEPT } from "./uploadPrep";
+import { UploadDropZone } from "./UploadDropZone";
 import { UploadPageList } from "./UploadPageList";
 import { useUploadForm, type UploadTarget } from "./useUploadForm";
 
@@ -17,16 +19,25 @@ interface Props {
   onOpenChange: (o: boolean) => void;
   target: UploadTarget;
   onDone: (note: { id: string; noteNo: string }) => void;
+  /** Liste sayfasına bırakılan dosyalar — modal açılınca bir kez listeye eklenir. */
+  initialFiles?: File[];
 }
 
 const NOTE = "rounded px-2 py-1 text-xs";
 
-export function UploadDialog({ open, onOpenChange, target, onDone }: Props) {
+export function UploadDialog({ open, onOpenChange, target, onDone, initialFiles }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const f = useUploadForm(target, (note) => {
     onOpenChange(false);
     onDone(note);
   });
+  const seeded = useRef(false);
+  const { pick } = f;
+  useEffect(() => {
+    if (seeded.current || !initialFiles?.length) return;
+    seeded.current = true;
+    void pick(initialFiles);
+  }, [initialFiles, pick]);
   const close = (o: boolean) => {
     if (f.busy) return;
     if (!o) f.clearFields();
@@ -38,7 +49,7 @@ export function UploadDialog({ open, onOpenChange, target, onDone }: Props) {
       <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{target.kind === "new" ? "Belge yükle" : `Sayfa ekle — ${target.noteNo}`}</DialogTitle>
-          <DialogDescription>Fotoğraf (JPEG/PNG) ya da PDF. Büyük fotoğraf gönderilmeden önce küçültülür; tek dosya en çok 5 MB.</DialogDescription>
+          <DialogDescription>Fotoğraf (JPEG/PNG/HEIC) ya da PDF. Büyük fotoğraf gönderilmeden önce küçültülür, HEIC sunucuda JPEG'e çevrilir; tek dosya en çok 5 MB.</DialogDescription>
         </DialogHeader>
         <div className="flex min-w-0 flex-col gap-3">
           {target.kind === "new" && (
@@ -51,7 +62,7 @@ export function UploadDialog({ open, onOpenChange, target, onDone }: Props) {
             ref={fileRef}
             type="file"
             multiple
-            accept="image/jpeg,image/png,application/pdf"
+            accept={UPLOAD_ACCEPT}
             className="hidden"
             data-testid="upload-file-input"
             onChange={(e) => {
@@ -59,10 +70,12 @@ export function UploadDialog({ open, onOpenChange, target, onDone }: Props) {
               e.target.value = "";
             }}
           />
-          <Button type="button" variant="outline" onClick={() => fileRef.current?.click()} disabled={f.busy}>
-            <Upload className="mr-1 h-4 w-4" />
-            Dosya seç
-          </Button>
+          <UploadDropZone disabled={f.busy} onFiles={(files) => void f.pick(files)}>
+            <Button type="button" variant="outline" onClick={() => fileRef.current?.click()} disabled={f.busy}>
+              <Upload className="mr-1 h-4 w-4" />
+              Dosya seç
+            </Button>
+          </UploadDropZone>
           <UploadPageList pages={f.pages} uploaded={f.progress.uploaded} disabled={f.busy} onRemove={f.discard} />
           {hasPdf(f.pages) && <p className={`${NOTE} bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200`} data-testid="upload-pdf-note">{PDF_NOT_READ_TEXT}</p>}
           {f.notices.map((n) => (
