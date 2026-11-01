@@ -36,6 +36,7 @@ import {
 import { loadProfitabilityFinance } from "./maliyet-bridge.helper";
 import { computeWorkCosts, type ProfitMissingCode as CostMissingCode } from "./profitability-cost.helper";
 import type { RevenueInvoiceRow, RevenueLinkRow } from "./profitability-finance.helper";
+export type { RevenueLinkRow };
 import { computeMachineCosts, type IdleMachineDay, type MachineMissingCode } from "./profitability-machine.helper";
 import { attachDirectExpenses, deductFromPools, readMonthAllocations, workOrderOfSteps, type MonthDirectExpenses } from "./profitability-allocation.helper";
 import { buildMonthPools, distributePool, overheadBase, type PoolCategory } from "./profitability-overhead.helper";

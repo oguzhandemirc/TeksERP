@@ -31,8 +31,8 @@ export interface ServiceBillingLinkInput {
   readingId: string | null;
   billedMeters: Prisma.Decimal;
   /** Metre dışı birimde (adet/vuruş) faturalanan miktar + birim; metre işinde ikisi de null (bayt-aynı). */
-  billedQty: Prisma.Decimal | null;
-  billedUnit: ServiceQtyUnit | null;
+  billedQty?: Prisma.Decimal | null;
+  billedUnit?: ServiceQtyUnit | null;
   meterBasis: ServiceMeterBasis;
   unitPrice: Prisma.Decimal;
   currency: Currency;
@@ -193,8 +193,8 @@ export async function insertServiceLinksTx(tx: Tx, invoiceId: string, links: Ser
         serviceItemId: l.serviceItemId,
         readingId: l.readingId,
         billedMeters: l.billedMeters,
-        billedQty: l.billedQty,
-        billedUnit: l.billedUnit,
+        billedQty: l.billedQty ?? null,
+        billedUnit: l.billedUnit ?? null,
         meterBasis: l.meterBasis,
         unitPrice: l.unitPrice,
         currency: l.currency,
