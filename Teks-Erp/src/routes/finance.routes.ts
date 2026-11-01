@@ -118,7 +118,7 @@ router.get("/cari", requirePermission("finance:read"), async (req, res, next) =>
       // sorgu KOŞMAZ (bugünkü yol bayt-bayt; bekçi kaynak taramasıyla kilitli).
       withOverdue: q.withOverdue === "true",
       // D4-I3: "Kilitli" süzgeci SUNUCUDA — liste ile `pagination.total` aynı where'den.
-      held: readFilterList(parseQueryParams(req).filters.held)[0] === "true",
+      held: readHeldFilter(readFilterList(parseQueryParams(req).filters.held)),
     });
     res.json({ success: true, ...result });
   } catch (e) {
@@ -1005,3 +1005,10 @@ router.get("/shipments/:id/invoice-draft-lines", requirePermission("finance:read
 });
 
 export default router;
+
+// FAIL-CLOSED: tanınmayan `filter[held]` değeri 400 — yazım hatası sessizce "hepsi" listesine dönmesin.
+function readHeldFilter(values: string[]): boolean {
+  if (values.length === 0) return false;
+  if (values.length === 1 && values[0] === "true") return true;
+  throw AppError.badRequest("Kilit süzgeci yalnız 'true' olabilir.", { code: "INVALID_FILTER_VALUE" });
+}

@@ -11,6 +11,7 @@ import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { apiErrorText } from "@/lib/api-error";
 import { CARI_HOLD_REASON_OPTIONS, CARI_HOLD_SCOPE_OPTIONS, placeCariHold, scopesFromSetting, type CariHoldReasonCode, type CariHoldScope } from "./cariHoldService";
+import { invalidateHoldViews } from "./invalidateHoldViews";
 
 interface Props {
   cariId: string;
@@ -37,13 +38,14 @@ export function PlaceHoldDialog({ cariId, cariName, onClose }: Props) {
     onSuccess: (r) => {
       attempt.onSuccess();
       toast.success(r.message ?? "Cari kilitlendi.");
-      void qc.invalidateQueries({ queryKey: ["finance"] });
-      void qc.invalidateQueries({ queryKey: ["cari-hold"] });
+      invalidateHoldViews(qc);
       onClose();
     },
     onError: (e) => {
       attempt.onFailure(e);
       setError(apiErrorText(e, "Kilit konamadı."));
+      // 409 (ör. CARI_HOLD_EXISTS): başkası araya kilit koymuş olabilir — panel bayat kalmasın.
+      if ((e as { response?: { status?: number } }).response?.status === 409) void qc.invalidateQueries({ queryKey: ["cari-hold"] });
     },
   });
 

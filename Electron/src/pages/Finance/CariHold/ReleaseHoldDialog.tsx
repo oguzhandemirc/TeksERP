@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { apiErrorText } from "@/lib/api-error";
 import { RELEASE_REASON_MIN, releaseCariHold, scopeLabels, type CariHoldRow } from "./cariHoldService";
+import { invalidateHoldViews } from "./invalidateHoldViews";
 
 interface Props {
   hold: CariHoldRow;
@@ -23,8 +24,7 @@ export function ReleaseHoldDialog({ hold, onClose }: Props) {
     mutationFn: () => releaseCariHold(hold.id, reason),
     onSuccess: (r) => {
       toast.success(r.message ?? "Cari kilidi açıldı.");
-      void qc.invalidateQueries({ queryKey: ["finance"] });
-      void qc.invalidateQueries({ queryKey: ["cari-hold"] });
+      invalidateHoldViews(qc);
       onClose();
     },
     onError: (e) => setError(apiErrorText(e, "Kilit açılamadı.")),

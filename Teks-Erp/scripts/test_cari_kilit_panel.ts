@@ -11,7 +11,8 @@
 //      aynı helper'ı çağırır (kaynak taraması); sevk önizlemesi şerit metni = warnings[] satırı (§4d)
 //
 // ⭐ NEGATİF SONDA (ölçüldü 2026-10-31): ① `cari.service.ts`te `held` satırı yoruma alındı (süzgeç istemciye
-//    taşınmış gibi) → §1a/§1b/§1d ❌ (12/3); ② count'a ayrı where (`{ ...where }`) verildi → §2a ❌ (14/1). Geri alındı → 15/0.
+//    taşınmış gibi) → §1a/§1b/§1d ❌ (13/3); ② count'a ayrı where (`{ ...where }`) verildi → §2a ❌ (15/1). Geri alındı → 16/0.
+//    ③ `readHeldFilter` tanınmayan değerde `return false` → §1f ❌ (16/1); geri alındı → 17/0.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; ayar fotoğrafa döner.
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -123,6 +124,8 @@ async function main(): Promise<void> {
     const h = heldRows[0]?.hold;
     check("§1d satırın hold alanı sunucudan (kapsam + sebep etiketi)", !!h && h.scopes.join(",") === "INTAKE,INVOICE" && !!h.reasonLabel, JSON.stringify(h));
     check("§1e kilitsiz/açılmış hesapta hold=null", allRows.filter((r) => r.id !== kilitli.cariId).every((r) => r.hold === null));
+    const bad = await call(`/api/finance/cari?search=${q}&filter[held]=yes`, okur);
+    check("§1f tanınmayan filter[held] değeri 400 (fail-closed)", bad.status === 400, String(bad.status));
 
     console.log("── §3 Kart Kilit sekmesi ucu ──");
     const bc = await call(`/api/finance/cari/by-customer/${kilitli.customerId}/holds`, koyan);
