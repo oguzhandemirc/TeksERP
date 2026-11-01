@@ -120,6 +120,12 @@ function coerceCell(
   }
 }
 
+/** Audit yükünden beyanlı sütunları düşürür (fiyat audit'e girmez). */
+function omitKeys(values: Record<string, unknown>, omit?: readonly string[]): Record<string, unknown> {
+  if (!omit || omit.length === 0) return values;
+  return Object.fromEntries(Object.entries(values).filter(([k]) => !omit.includes(k)));
+}
+
 /** Değerleri karşılaştırılabilir hâle getirir (diff için). */
 function comparable(v: unknown): unknown {
   if (v === undefined || v === null) return null;
@@ -175,7 +181,7 @@ async function prepareRows(
   const keyCol = adapter.keyColumns[0];
   if (!keyCol) throw new Error(`${adapter.entity}: keyColumns boş`);
   for (const p of prepared) {
-    const rawKey = p.values[keyCol];
+    const rawKey = adapter.rowKey ? adapter.rowKey(p.values) : p.values[keyCol];
     p.result.key = typeof rawKey === "string" && rawKey.trim() ? rawKey.trim() : null;
   }
 
@@ -605,7 +611,7 @@ export class ImportService {
             // `importRunId` iki soruyu birden cevaplar: "bu kayıt nasıl oluştu"
             // ve "bu koşumda neler oluştu". İkincisi olmadan hatalı bir yükleme
             // geri alınamaz (hangi kayıtların yazıldığı bilinmez).
-            newData: { ...p.values, _source: "IMPORT", importRunId: runId },
+            newData: { ...omitKeys(p.values, adapter.auditOmit), _source: "IMPORT", importRunId: runId },
           });
           // Audit DENETİM izidir (6 ayda arşivlenir, `oldData` yok); geri sarma bir İŞ
           // KARARIdır ve kalıcı kolondan okunur — bu yüzden aynı olay deftere de yazılır.

@@ -94,6 +94,22 @@ function constructionWarnings(c: Omit<EffectiveConstruction, "warnings">): Effec
   return out;
 }
 
+/** "Bu varyantta şu sıradaki atkı ipliği ne?" — değişim yoksa null (kart ipliği geçerli). Etkin yapı + maliyet derleyicisi TEK cevap. */
+export function weftOverrideFor<T>(overrides: ReadonlyMap<number, T> | undefined, sortOrder: number): T | null {
+  return overrides?.get(sortOrder) ?? null;
+}
+
+/** Maliyet derleyicisi (F2): N varyantın atkı değişimleri TEK sorguda — varyant → (sıra → iplik). */
+export async function readWeftOverridesForRecipes(db: Db, recipeIds: string[]): Promise<Map<string, Map<number, YarnRef>>> {
+  const out = new Map<string, Map<number, YarnRef>>();
+  if (!recipeIds.length) return out;
+  const rows = await db.productRecipeWeftYarn.findMany({
+    where: { recipeId: { in: recipeIds } }, select: { recipeId: true, weftSortOrder: true, yarnItem: { select: YARN_SELECT } },
+  });
+  for (const r of rows) out.set(r.recipeId, (out.get(r.recipeId) ?? new Map<number, YarnRef>()).set(r.weftSortOrder, r.yarnItem));
+  return out;
+}
+
 /**
  * Ürünün (varyant verilirse varyant değişimi uygulanmış) etkin yapısı. Varyant başka ürüne aitse 400;
  * ürün/varyant yoksa 404. Maliyet derleyicisi, Dokuma İş Emri ön dolgusu, üretim önerisi ve tablet
@@ -116,7 +132,7 @@ export async function resolveEffectiveConstruction(db: Db, itemId: string, recip
   }
   const ws = item.weftSpec;
   const yarns: EffectiveWeftYarn[] = (ws?.yarns ?? []).map((y) => {
-    const swap = overrides.get(y.sortOrder);
+    const swap = weftOverrideFor(overrides, y.sortOrder);
     return {
       sortOrder: y.sortOrder,
       letter: weftLetter(y.sortOrder),

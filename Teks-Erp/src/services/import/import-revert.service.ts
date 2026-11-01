@@ -53,6 +53,10 @@ export const REVERT_PLAN: Record<string, { model: string; mode: RevertMode; hard
   weftSpec: { model: "weftSpec", mode: "DEACTIVATE" },
   weaveDesign: { model: "weaveDesign", mode: "DEACTIVATE" },
   yarnCostPrice: { model: "yarnCostPrice", mode: "REVOKE_VERSION" },
+  // Toplu açılış aktarımı — devir ve çek TERS KAYITLA kapanır (silinmez); hizmet fiyatı ③a damgalı sürüm.
+  cariOpeningBalance: { model: "cariTransaction", mode: "REVERSE_ENTRY" },
+  chequePortfolio: { model: "cheque", mode: "REVERSE_ENTRY" },
+  customerServicePrice: { model: "itemPrice", mode: "REVOKE_VERSION" },
 };
 
 export type RevertRowAction =
@@ -62,6 +66,7 @@ export type RevertRowAction =
   | "CANCEL_DOCUMENT"
   | "DELETE_PIVOT"
   | "REVOKE_VERSION"
+  | "REVERSE_ENTRY"
   | "SKIP";
 
 export interface RevertPlanRow {
@@ -151,6 +156,10 @@ export class ImportRevertService {
       for (const r of rows) current.set(String(r.id), r);
     }
 
+    // Ters kayıt dalının engelleri adaptörden TOPLU (ters kaydı var mı · belge ilerlemiş mi).
+    const blockers =
+      plan.mode === "REVERSE_ENTRY" && adapter.reverseBlockers ? await adapter.reverseBlockers([...current.values()]) : new Map<string, string>();
+
     const rows: RevertPlanRow[] = lines.map((l) => {
       const row: RevertPlanRow = {
         lineId: l.id,
@@ -177,6 +186,11 @@ export class ImportRevertService {
         return row;
       }
       if (plan.mode === "REVOKE_VERSION") return planVersion(row, rec);
+      if (plan.mode === "REVERSE_ENTRY") {
+        row.action = "REVERSE_ENTRY";
+        row.skipReason = blockers.get(l.recordId);
+        return row;
+      }
       return l.action === "CREATE" ? planCreate(row, rec, { mode: plan.mode, line: l }) : planUpdate(row);
     });
 

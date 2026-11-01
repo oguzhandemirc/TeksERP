@@ -13,13 +13,17 @@ import {
   requireDevereEnabled,
   requireDokumaEnabled,
   requireMaliyetEnabled,
+  requireTicaretEnabled,
 } from "../middlewares/module.middleware";
+import { requireFinanceEnabled } from "../middlewares/finance.middleware";
 
 /** SY-H2: modüle bağlı adaptörün kapısı varlığın KENDİ router middleware'idir (lisans mesajı dahil). */
 const MODULE_GATES: Record<ImportModule, (req: Request, res: Response, next: NextFunction) => Promise<void>> = {
   dokuma: requireDokumaEnabled,
   devere: requireDevereEnabled,
   maliyet: requireMaliyetEnabled,
+  finans: requireFinanceEnabled,
+  ticaret: requireTicaretEnabled,
 };
 
 function passModuleGate(adapter: ImportAdapter, req: Request, res: Response, next: NextFunction): void {

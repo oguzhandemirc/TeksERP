@@ -97,7 +97,7 @@ async function main(): Promise<void> {
   const c = (s: string): string => `${TAG}-${s}`;
 
   console.log("§0 statik: kayıt defteri + ters yol");
-  const gated = listAdapters().filter((a) => a.module).map((a) => `${a.entity}:${a.module}`).sort().join(",");
+  const gated = listAdapters().filter((a) => a.module && ["dokuma", "devere", "maliyet"].includes(a.module)).map((a) => `${a.entity}:${a.module}`).sort().join(",");
   check("§0a dört yeni adaptör modül kapılı", gated === "warpSpec:devere,weaveDesign:dokuma,weftSpec:dokuma,yarnCostPrice:maliyet", gated);
   check("§0b ters yollar: kartlar DEACTIVATE, fiyat REVOKE_VERSION",
     REVERT_PLAN.warpSpec?.mode === "DEACTIVATE" && REVERT_PLAN.weftSpec?.mode === "DEACTIVATE" && REVERT_PLAN.weaveDesign?.mode === "DEACTIVATE" && REVERT_PLAN.yarnCostPrice?.mode === "REVOKE_VERSION");
