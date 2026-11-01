@@ -52,9 +52,9 @@ async function candidates(cariId: string): Promise<ApiResponse<CariMergeCandidat
     select: { ...ACC, balances: { select: { currency: true, balance: true }, orderBy: { currency: "asc" } } },
     orderBy: { createdAt: "asc" },
   });
-  // İki mezar taşı hesabı birbirine birleşmez — ikisinin de hedefi kalan kartın kendi hesabıdır.
+  // Mezar taşı hesabının TEK hedefi kalan kartın kendi hesabıdır (başka mezar taşı ya da eski fason bacağı ara durak olmaz).
   const selfTomb = Boolean(self.customer?.mergedIntoId);
-  const data = rows.filter((r) => !(selfTomb && r.customer?.mergedIntoId)).map((r) => {
+  const data = rows.filter((r) => !selfTomb || r.customerId === card).map((r) => {
     const party = r.customer ?? r.subcontractor;
     // Hedef = kartın KENDİ hesabı (mezar taşı ve eski fason bacağı kaynak olur).
     const otherIsCard = r.customerId === card;

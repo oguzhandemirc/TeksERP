@@ -7,6 +7,7 @@
 // hesapları birleştir" bağlantısının yükünü (hesap + bakiye) kurar; YAZMAZ.
 // =============================================================================
 import prisma from "../../lib/prisma";
+import { findCariAccountForCardTx } from "./finance.helper";
 
 export interface KeptOnSourceRow {
   table: string;
@@ -41,7 +42,7 @@ export async function mergeFollowUps(kept: KeptOnSourceRow[], survivorId?: strin
   });
   const survivorOf = survivorId ?? rows.find((r) => r.customer?.mergedIntoId)?.customer?.mergedIntoId ?? null;
   const target = survivorOf
-    ? await prisma.cariAccount.findUnique({ where: { customerId: survivorOf }, select: { id: true } })
+    ? await findCariAccountForCardTx(prisma, { customerId: survivorOf, subcontractorId: null }, { id: true })
     : null;
   return rows.map((r) => ({
     kind: "CARI_MERGE" as const,

@@ -11,6 +11,7 @@
 // tavanı yükseltmek sınırı anlamsızlaştırırdı.
 // =============================================================================
 import type { MoveRule } from "./merge-map";
+import { ekranYolu } from "./panel-ekran-yolu";
 
 export const CUSTOMER_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "Order", table: "orders", column: "customerId", label: "Sipariş" },
@@ -178,7 +179,7 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
       why:
         "İki kartın da cari hesabı var: birleşen kartın hesabı TAŞINMAZ (`customerId @unique` tek hesaba izin " +
         "verir), birleşen kartta kalır ve o kart üzerinden kalan karta bağlanır; bakiye ve hareketler " +
-        "değişmez. Birleştirmeden sonra Cari Hesaplar → Birleştir ile bu hesabı kalan kartın hesabına " +
+        `değişmez. Birleştirmeden sonra ${ekranYolu("cariHesaplar")} ekranındaki Birleştir ile bu hesabı kalan kartın hesabına ` +
         "aktarın (virman — bakiye korunur). Tek taraflıysa hesap serbestçe taşınır.",
     },
     {

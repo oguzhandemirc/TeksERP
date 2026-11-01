@@ -14,6 +14,7 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { foldColorNameForCompare, foldNameForCompare } from "./name-normalize.helper";
 import { MERGE_ENTITIES, type MergeEntity } from "../../constants/merge-map";
+import { ekranYolu } from "../../constants/panel-ekran-yolu";
 
 export const TABLE_OF: Record<MergeEntity, string> = {
   customer: "customers",
@@ -128,6 +129,24 @@ export async function buildPlan(
       `Bu kayıtlar daha sonra bir kez daha birleştirilmiş (${later.createdAt.toISOString().slice(0, 10)}) — ` +
         "önce o birleştirme geri alınmalı (en yenisi önce).",
     );
+  }
+
+  // LIFO (PR #417): kart birleşince kaynağın hesabı mezar taşında kalır; cari birleştirme onu kalan kartın hesabına
+  // aktardıysa kart dirilip hesabı yabancı kimlikte donmuş kalmasın — önce cari birleştirme geri alınır.
+  // Tek çözücü virmanla kapanmış hesabı bilinçli gizler (`cari-card-where`); burada sorulan tam o hesaptır.
+  if (entity === "customer") {
+    const sourceIds = op.sources.map((src) => src.sourceId);
+    const mergedAway = await db.cariAccount.findMany({
+      where: { mergedIntoId: { not: null }, customerId: { in: sourceIds } },
+      select: { customerId: true, mergedInto: { select: { customerId: true } } },
+    });
+    for (const acc of mergedAway.filter((a) => a.mergedInto?.customerId !== a.customerId)) {
+      const src = op.sources.find((x) => x.sourceId === acc.customerId);
+      blockers.push(
+        `${src?.codeBefore ?? src?.nameBefore ?? "Kaynak"} kartının cari hesabı sonradan başka hesaba birleştirilmiş — önce ` +
+          `${ekranYolu("cariHesaplar")} ekranında o cari birleştirme geri alınmalı (en yenisi önce).`,
+      );
+    }
   }
 
   const liveFolds = await liveNameFolds(db, entity, table, op.sources.map((s) => s.sourceId));

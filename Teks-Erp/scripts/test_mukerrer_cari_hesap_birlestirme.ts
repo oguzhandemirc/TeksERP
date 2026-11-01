@@ -11,6 +11,7 @@
 //      değişmez (yalnız CARI_TRANSFER bacakları eklenir); ters yön engelli
 //   §5 claim seddi: ön izlemeden sonra kart birleşmesi kalkarsa (geri alma) uygula 409 CARI_MERGE_CONFLICT
 //   §6 ana veri geri alma: mezar taşı dirilir, hesabı yerinde kalır
+//   §7 LIFO: cari birleştirmeden SONRA ana veri geri alma 409 UNMERGE_BLOCKED (önce cari birleştirme geri alınır)
 // ⭐ NEGATİF SONDA: bkz. BEKCI-HARITASI satırı.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; temizlik `finally`de.
 // =============================================================================
@@ -187,6 +188,15 @@ async function main(): Promise<void> {
     const dAcc = await prisma.cariAccount.findUnique({ where: { id: D.cari }, select: { customerId: true, isActive: true } });
     const dCard = await prisma.customer.findUnique({ where: { id: D.id }, select: { mergedIntoId: true } });
     check("§6 geri alma: D kartı dirildi, hesabı D'de aktif", !dCard?.mergedIntoId && dAcc?.customerId === D.id && dAcc.isActive === true, JSON.stringify({ dAcc, dCard }));
+
+    // §7 LIFO: cari birleştirme (§4, B → A) yapıldıktan sonra ana veri geri alma engellenir — yoksa B kartı dirilir,
+    // hesabı A'nın hesabına birleşmiş ve donmuş kalır (tek kimlik kuralı delinir).
+    const opAB = await prisma.mergeOperation.findFirstOrThrow({ where: { survivorId: A.id, revertedAt: null }, select: { id: true } });
+    const blocked = await MasterDataUnmergeService.revert(opAB.id, { reason: `${TAG} LIFO sondası geri alma`, userId: admin.id })
+      .then(() => "yazdı", (e: unknown) => (e instanceof AppError ? `${e.statusCode} ${String(e.details?.code)} ${e.message}` : String(e)));
+    const bCardAfter = await prisma.customer.findUnique({ where: { id: B.id }, select: { mergedIntoId: true } });
+    check("§7 ⭐ cari birleştirme sonrası ana veri geri alma → 409 UNMERGE_BLOCKED (önce cari birleştirme), kart B hâlâ A'da",
+      blocked.startsWith("409 UNMERGE_BLOCKED") && blocked.includes("cari birleştirme") && bCardAfter?.mergedIntoId === A.id, blocked);
   } finally {
     server.close();
     await temizle();
