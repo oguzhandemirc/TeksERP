@@ -126,6 +126,7 @@ const PANEL_EXEMPT: Record<string, string> = {
   autoLogoutOnExpiry: "kind:'session' — Oturum section'ı yönetir",
   mobileIdleLockEnabled: "kind:'session' — Oturum section'ı yönetir",
   mobileLockOnBackground: "kind:'session' — Oturum section'ı yönetir",
+  mobileOfflineLockDefer: "kind:'session' — Oturum section'ı yönetir",
   pinLockoutEnabled: "kind:'session' — Oturum section'ı yönetir",
   shortCredentialTotpRequired: "kind:'session' — Oturum section'ı yönetir (giriş yöntemlerinin yanında)",
   nativeSendEnabled: "kind:'label' — Etiket section'ı yönetir",

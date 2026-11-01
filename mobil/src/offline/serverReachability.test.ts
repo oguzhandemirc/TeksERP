@@ -182,9 +182,19 @@ describe('⭐⭐ yoklama CANLI adresi kullanır (kalıcı kilitlenmenin kökü)'
     expect(offlineReason()).toBe('server');
   });
 
-  it('5xx bile ULAŞILABİLİRdir — sunucu cevap vermiştir', async () => {
-    fetchMock.mockResolvedValue({ status: 503 } as Response);
+  it('backend zarflı 5xx ULAŞILABİLİRdir — sunucu cevap vermiştir', async () => {
+    fetchMock.mockResolvedValue({ status: 503, json: async () => ({ success: false, message: 'meşgul' }) } as unknown as Response);
     reportServerUnreachable();
     expect(await revalidateServer()).toBe(true);
+  });
+
+  it('⭐ Y4: vekilin 502/52x HTML yanıtı ulaşılabilirlik DEĞİLDİR — çevrimdışı kalır', async () => {
+    for (const status of [502, 503, 504, 520, 522, 530]) {
+      __resetOnlineSignalForTests();
+      fetchMock.mockResolvedValue({ status, json: async () => { throw new SyntaxError('HTML'); } } as unknown as Response);
+      reportServerUnreachable();
+      expect(await revalidateServer()).toBe(false);
+      expect(offlineReason()).toBe('server');
+    }
   });
 });
