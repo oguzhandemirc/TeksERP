@@ -67,6 +67,7 @@ import {
   priceText,
   removeItemPrice,
   type ItemPriceRow,
+  PRICE_UNIT_LABEL,
 } from "./service";
 import { buildDefaultCells, buildExceptionViews, describeRemoval } from "./prices";
 import { ItemPriceFormDialog, type ItemPriceFormInitial } from "./ItemPriceFormDialog";
@@ -82,11 +83,13 @@ interface Props {
   itemLabel: string;
   /** Kalemin birimi (MT/KG/ADET) — "1 MT fiyatı" cümlesi için. */
   unit?: string | null;
+  /** Hizmet kalemi → fiyat birimi (metre/adet/vuruş) seçilebilir. */
+  isService?: boolean;
   /** Kontrol kartını gizle (dar bir gömüde yer yoksa). Varsayılan: göster. */
   hideResolveCheck?: boolean;
 }
 
-export function ItemPricesPanel({ itemId, itemLabel, unit, hideResolveCheck }: Props) {
+export function ItemPricesPanel({ itemId, itemLabel, unit, isService, hideResolveCheck }: Props) {
   const qc = useQueryClient();
   const access = useItemPricesAccess();
   const [formOpen, setFormOpen] = useState(false);
@@ -205,7 +208,12 @@ export function ItemPricesPanel({ itemId, itemLabel, unit, hideResolveCheck }: P
                     <TableCell>{cell.currency}</TableCell>
                     <TableCell className="tabular-nums">
                       {cell.row ? (
-                        <span className="font-semibold">{priceText(cell.row.price, cell.currency)}</span>
+                        <>
+                          <span className="font-semibold">{priceText(cell.row.price, cell.currency)}</span>
+                          {cell.row.priceUnit && cell.row.priceUnit !== "METER" && (
+                            <span className="ml-1 text-xs text-muted-foreground">/ {PRICE_UNIT_LABEL[cell.row.priceUnit]}</span>
+                          )}
+                        </>
                       ) : (
                         // ⚠️ "0,00" YAZMAZ. Boş = "girilmemiş", sıfır = "bedava".
                         <span className="text-xs text-muted-foreground">Fiyat girilmemiş</span>
@@ -388,6 +396,7 @@ export function ItemPricesPanel({ itemId, itemLabel, unit, hideResolveCheck }: P
           rows={rows}
           row={editRow}
           initial={formInitial}
+          isService={isService}
           onSaved={invalidate}
         />
       )}

@@ -164,6 +164,7 @@ router.post(
  *         source: { type: string, enum: [MACHINE, OPERATOR, SUPERVISOR, SIMULATED] }
  *         peripheralId: { type: string, format: uuid, nullable: true }
  *         rawCounter: { type: number, nullable: true }
+ *         pieceCount: { type: integer, minimum: 1, nullable: true, description: "Brode ADET/VURUŞ fiyatlamasında sayılan adet (yalnız OUT)" }
  *         cardSampleId: { type: string, format: uuid, nullable: true }
  *         clientToken: { type: string, format: uuid }
  * /api/kursun-qc/meter-readings:

@@ -17,6 +17,7 @@ import {
   type ServiceBillingSettings,
 } from "./service-billing.helper";
 import { loadServiceBillingSettings } from "../system-setting.service";
+import { linkBilledQty } from "./service-quantity.helper";
 
 type Tx = Prisma.TransactionClient;
 
@@ -61,7 +62,7 @@ export async function resolveShipmentServiceLinksTx(
     if (trigger === "PERIOD_END") throw servicePreviewStale("bu müşterinin hizmet işleri artık dönem sonu faturasında kesiliyor", itemId);
     const own = fresh.filter((l) => l.serviceItemId === itemId);
     if (own.length === 0) throw servicePreviewStale("işler başka bir faturaya bağlandı", itemId);
-    const sum = own.reduce((a, l) => a.plus(l.billedMeters), new Prisma.Decimal(0));
+    const sum = own.reduce((a, l) => a.plus(linkBilledQty(l)), new Prisma.Decimal(0));
     const drift = sumLineQty(p.lines, itemId).minus(sum).abs().gt(new Prisma.Decimal(0.001).mul(own.length));
     if (drift && state.billed.some((b) => b.serviceItemId === itemId)) throw servicePreviewStale("işlerin bir kısmı önizlemeden sonra değişti ya da başka bir faturaya bağlandı", itemId);
   }

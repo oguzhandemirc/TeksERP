@@ -23,6 +23,8 @@ const meterReadingBodySchema = z.object({
   // Kaynak alanları ortak şemadan (D4-B1): Tambur `measure` ile aynı küme ve mesajlar.
   ...meterSourceSchema.shape,
   clientToken: z.string().uuid("Geçersiz okuma kimliği"),
+  /** Brode ADET/VURUŞ fiyatlamasında çıkışta sayılan adet (yalnız OUT okumasına yazılır); eski APK göndermez. */
+  pieceCount: z.number().int("Adet tam sayı olmalı").positive("Adet 0'dan büyük olmalı").max(10_000_000, "Adet çok büyük").nullish(),
   /** H2 OPERATOR_REASON imzası. Katı: PIN ya da başka alan bu gövdeye (çevrimdışı kuyruğa) giremez. */
   ack: z
     .strictObject({
