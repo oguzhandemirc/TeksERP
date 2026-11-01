@@ -32,3 +32,14 @@ export const isEditable = (s: NoteStatus) => s === "DRAFT";
 export const isApprovable = (s: NoteStatus) => s === "DRAFT" || s === "PARTIAL";
 /** Belgeden iş emri açılabilir mi: yalnız topları doğmuş (APPROVED/PARTIAL) belgede — sunucu aksi halde 409 verir. */
 export const isWorkOrderOpenable = (s: NoteStatus) => s === "APPROVED" || s === "PARTIAL";
+
+/** Silinebilir mi: yalnız DRAFT (deftere hiç yazmamış taslak). Sunucu önizlemesi kesin hükümdür; bu yalnız kutuyu pasifler. */
+export const isDeletable = (s: NoteStatus) => s === "DRAFT";
+/** Pasif seçim kutusu / menü ipucu — neden silinemez. */
+export const DELETE_BLOCK_HINT: Record<NoteStatus, string | null> = {
+  DRAFT: null,
+  APPROVING: "Onay sürüyor; silinemez.",
+  APPROVED: "Onaylanmış belge silinemez (topları doğdu); ancak iptal edilir.",
+  PARTIAL: "Kısmi onaylı belge silinemez (toplarının bir kısmı doğdu).",
+  CANCELLED: "İptal edilmiş belge silinmez; kaydı iz olarak kalır.",
+};

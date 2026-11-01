@@ -20,6 +20,7 @@ import {
   getDeliveryNote, listDeliveryNotes, updateDeliveryNote, updateDeliveryNoteLine,
 } from "../services/gelen-belge-note.service";
 import { approveDeliveryNote } from "../services/gelen-belge-onay.service";
+import { applyBulkDeleteDeliveryNotes, BULK_DELETE_MAX, previewBulkDeleteDeliveryNotes } from "../services/gelen-belge-toplu-sil.service";
 import { getIncomingDocSettings, updateIncomingDocSettings } from "../services/gelen-belge-ayar.service";
 import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
 import { getRollTabletContext } from "../services/roll-tablet.service";
@@ -378,6 +379,34 @@ const ProcessValueQuery = z.object({
  *       400: { description: PROCESS_PROPERTY_INVALID }
  */
 router.get("/islem-degerleri", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await searchProcessChoiceValues(ProcessValueQuery.parse(req.query)) })));
+
+const BulkDeleteBody = z.strictObject({
+  ids: z.array(Id).min(1, "En az bir belge seçin").max(BULK_DELETE_MAX, `Tek seferde en çok ${BULK_DELETE_MAX} belge silinir`),
+});
+/**
+ * @openapi
+ * /api/gelen-belge/irsaliyeler/toplu-sil/onizleme:
+ *   post:
+ *     tags: [Gelen belge]
+ *     summary: Toplu taslak silme ÖNİZLEMESİ — seçilen her belge için silinebilir mi + Türkçe nedeni, satır/sayfa sayısı; YAZMAZ
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody: { content: { application/json: { schema: { type: object, required: [ids], properties: { ids: { type: array, items: { type: string, format: uuid }, maxItems: 200 } } } } } }
+ *     responses:
+ *       200: { description: "items[] (deletable, code, reason, lineCount, scanCount) + summary" }
+ *       400: { description: Boş/200'den uzun ya da geçersiz kimlik }
+ * /api/gelen-belge/irsaliyeler/toplu-sil:
+ *   post:
+ *     tags: [Gelen belge]
+ *     summary: Toplu taslak silme — her kayıt tekil DELETE yolundan (yalnız DRAFT, atomik claim, audit); kayıt başına sonuç, biri düşerse diğerleri sürer
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody: { content: { application/json: { schema: { type: object, required: [ids], properties: { ids: { type: array, items: { type: string, format: uuid }, maxItems: 200 } } } } } }
+ *     responses:
+ *       200: { description: "results[] (ok, status, code, message) + summary {deleted, failed}" }
+ *       400: { description: Boş/200'den uzun ya da geçersiz kimlik }
+ */
+// `/irsaliyeler/:id` uçlarından ÖNCE: aynı derinlikteki POST yolları çakışmasın diye sabit yol önde.
+router.post("/irsaliyeler/toplu-sil/onizleme", requirePermission("gelen-belge:write"), wrap(async (req) => ({ status: 200, data: await previewBulkDeleteDeliveryNotes(BulkDeleteBody.parse(req.body).ids) })));
+router.post("/irsaliyeler/toplu-sil", requirePermission("gelen-belge:write"), wrap(async (req) => ({ status: 200, data: await applyBulkDeleteDeliveryNotes(BulkDeleteBody.parse(req.body).ids, req.user!.userId) })));
 
 router.get("/irsaliyeler", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await listDeliveryNotes(ListQuery.parse(req.query)) })));
 router.post("/irsaliyeler", requirePermission("gelen-belge:write"), wrap(async (req) => ({ status: 201, data: await createDeliveryNote(CreateBody.parse(req.body), req.user!.userId) })));

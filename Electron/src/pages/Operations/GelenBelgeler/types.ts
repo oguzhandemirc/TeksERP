@@ -102,6 +102,37 @@ export interface DeliveryNoteDetail extends DeliveryNoteHeader {
   cariHold?: { sebepEtiketi: string; koyan: string; message: string } | null;
 }
 
+/** Toplu silme önizlemesi (`POST /irsaliyeler/toplu-sil/onizleme`). */
+export interface BulkDeletePreviewItem {
+  id: string;
+  noteNo: string | null;
+  status: NoteStatus | null;
+  deletable: boolean;
+  code: string | null;
+  reason: string | null;
+  lineCount: number;
+  scanCount: number;
+  ownerName: string | null;
+  senderName: string | null;
+  senderDocNo: string | null;
+}
+export interface BulkDeletePreview {
+  items: BulkDeletePreviewItem[];
+  summary: { requested: number; deletable: number; blocked: number; lines: number; scans: number };
+}
+export interface BulkDeleteResultItem {
+  id: string;
+  noteNo: string | null;
+  ok: boolean;
+  status: number;
+  code: string | null;
+  message: string | null;
+}
+export interface BulkDeleteResult {
+  results: BulkDeleteResultItem[];
+  summary: { deleted: number; failed: number };
+}
+
 export interface DeliveryNoteListResponse {
   items: DeliveryNoteHeader[];
   nextCursor: string | null;

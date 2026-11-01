@@ -1,16 +1,17 @@
-// GELEN BELGELER (Gülkesim OCR D5) — müşteri irsaliyesi taslakları: liste + süzgeç + yeni elle taslak.
+// GELEN BELGELER (Gülkesim OCR D5) — müşteri irsaliyesi taslakları: liste + süzgeç + yeni elle taslak + toplu taslak silme.
+// Düzen Kumaş Stoğu ile aynı: başlık → süzgeç şeridi → tam genişlik DataTable (kendi kaydırıcısı + altlığı).
 // Fotoğraf tabletten ya da panelden (Belge yükle) gelir (okuma işi DRAFT yazar); panel gözden geçirir ve onaylar (SoD: `gelen-belge:approve`).
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { FileCog, PackageCheck, Plus, Upload } from "lucide-react";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
-import { AutoLoadMore } from "@/components/data-table/AutoLoadMore";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { createManualNote } from "./service";
 import { SENDER_TEMPLATES_PATH } from "./GonderenSablonlariPage";
@@ -19,7 +20,8 @@ import { UploadDialog } from "./UploadDialog";
 import { ReaderStatusBadge } from "./ReaderStatusBadge";
 import { NoteListFilters } from "./NoteListFilters";
 import { NoteListTable } from "./NoteListTable";
-import { EMPTY_FILTER, useNoteList, type NoteListFilter } from "./useNoteList";
+import { EMPTY_FILTER, toQuery, useNoteList, type NoteListFilter } from "./useNoteList";
+import { useNoteTable } from "./useNoteTable";
 
 export const INCOMING_DOCUMENTS_PATH = "/operations/gelen-belgeler";
 
@@ -46,13 +48,21 @@ function TemplateLinks() {
 export function IncomingDocumentsPage() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<NoteListFilter>(EMPTY_FILTER);
+  const [pageSize, setPageSize] = useState(50);
   const q = useDebouncedValue(filter.q, 250);
-  const { q: list, items, summary } = useNoteList({ ...filter, q });
-  const { rootRef, sentinelRef } = useInfiniteScroll({
+  const { q: list, items, summary } = useNoteList({ ...filter, q }, pageSize);
+  const canDelete = useRoleAccess().hasPermission("gelen-belge:write");
+  const table = useNoteTable(items, canDelete, JSON.stringify(toQuery({ ...filter, q })));
+  const pagination = {
+    loaded: items.length,
+    // Sekmenin toplamı aynı where'den gelen özet şeridinden (liste ile sayaç ayrışmaz).
+    total: summary ? (filter.status ? summary[filter.status] : summary.total) : undefined,
     hasMore: Boolean(list.hasNextPage),
-    isLoading: list.isFetchingNextPage,
-    onLoadMore: () => void list.fetchNextPage(),
-  });
+    isFetchingMore: list.isFetchingNextPage,
+    pageSize,
+    loadMore: () => list.fetchNextPage(),
+    setPageSize,
+  };
   const [uploadOpen, setUploadOpen] = useState(false);
   const attempt = useAttemptToken();
   const create = useMutation({
@@ -88,29 +98,17 @@ export function IncomingDocumentsPage() {
           </div>
         }
       />
-      <NoteListFilters filter={filter} onChange={setFilter} summary={summary} />
-      <PageBody ref={rootRef} className="min-h-0 p-4 sm:p-6">
-        {list.isLoading ? (
-          <div className="text-sm text-muted-foreground">Yükleniyor…</div>
-        ) : list.isError && items.length === 0 ? (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-            <p className="font-medium text-destructive">Liste yüklenemedi.</p>
-            <p className="mt-1 text-muted-foreground">Bu bir “belge yok” cevabı değildir; yeni taslak açmadan önce tekrar deneyin.</p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => void list.refetch()}>
-              Tekrar dene
-            </Button>
-          </div>
-        ) : items.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-            Bu süzgece uyan gelen belge yok. Tabletten irsaliye fotoğrafı çekin, “Belge yükle” ile dosya seçin ya da “Elle taslak” açın.
-          </div>
-        ) : (
-          <>
-            <NoteListTable rows={items} onOpen={(id) => navigate(`${INCOMING_DOCUMENTS_PATH}/${id}`)} />
-            <AutoLoadMore ref={sentinelRef} hasMore={Boolean(list.hasNextPage)} isFetchingMore={list.isFetchingNextPage} count={items.length} />
-          </>
-        )}
-      </PageBody>
+      <NoteListFilters filter={filter} onChange={setFilter} summary={summary} trailing={<DataTableTools table={table} hideExport />} />
+      <NoteListTable
+        table={table}
+        isLoading={list.isLoading}
+        isError={list.isError}
+        onRetry={() => void list.refetch()}
+        pagination={pagination}
+        pathOf={(id) => `${INCOMING_DOCUMENTS_PATH}/${id}`}
+        onOpen={(id) => void navigate(`${INCOMING_DOCUMENTS_PATH}/${id}`)}
+        canDelete={canDelete}
+      />
       {uploadOpen && (
         <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} target={{ kind: "new" }} onDone={(note) => void navigate(`${INCOMING_DOCUMENTS_PATH}/${note.id}`)} />
       )}
