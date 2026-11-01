@@ -14,6 +14,7 @@ import { readPinLockoutConfig } from "../services/system-setting.service";
 import { loadActiveBuckets, pruneIdleBuckets, saveBucket } from "../services/helpers/login-lockout-store.helper";
 import { uyari } from "../lib/logger";
 import { readWebHardeningConfig, resolveClientIp } from "./web-hardening";
+import { isHostedInstallation } from "../services/helpers/install-class.helper";
 import "../types/express-augment";
 
 /** Anahtar başına deneme durumu: ardışık yanlış (fails), toplam ceza turu
@@ -169,6 +170,15 @@ export type LockoutKeySpec = { key: string; budgetMultiplier: number };
  * spray tam da bu sınıra takılır.
  */
 export const WIDE_KEY_BUDGET_MULTIPLIER = 5;
+
+/**
+ * Barındırılanda hızlı PIN'e CİHAZ GENELİ kova (`pin-dev:<cihaz>`, VDS O3): kaynak döndüren saldırgan
+ * onaylı bir tabletin PIN uzayını IP başına kovalarla tarayamasın. Bütçe geniş kovanınki (paylaşılan
+ * tablette operatörler birbirini kilitlemesin); LAN'da kova yok (bayt-aynı).
+ */
+export function pinDeviceLockoutKeys(deviceId: string | null | undefined, hosted = isHostedInstallation()): LockoutKeySpec[] {
+  return hosted && deviceId ? [{ key: `pin-dev:${deviceId}`, budgetMultiplier: WIDE_KEY_BUDGET_MULTIPLIER }] : [];
+}
 
 /** Kimlik parçasını normalize et — anahtar patlamasını ve büyük/küçük harf
  *  ayrışmasını önler ("Admin" ile "admin" AYNI kova olmalı). */

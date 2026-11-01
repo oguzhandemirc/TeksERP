@@ -155,6 +155,17 @@ deviceAdminRouter.post("/merge/:sourceId/undo", verifyToken, requirePermission("
 
 /**
  * @openapi
+ * /api/admin/devices/pending/reject:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Seçili bekleyen cihazları toplu reddet (pasife al; satır silinmez)
+ *     description: "Body { ids: uuid[] (1–200) }. Yalnız hâlâ bekleyen (PENDING + aktif) satırlar reddedilir; dönüş { rejected: id[] }."
+ *     security: [{ bearerAuth: [] }]
+ */
+deviceAdminRouter.post("/pending/reject", verifyToken, requirePermission("admin:settings"), DeviceController.rejectPending);
+
+/**
+ * @openapi
  * /api/admin/devices/{id}:
  *   get: { tags: [Admin], summary: "Cihaz detayı — donanım/etiket profili + son çalışma oturumu", security: [{ bearerAuth: [] }] }
  */

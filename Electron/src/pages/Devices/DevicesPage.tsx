@@ -19,6 +19,7 @@ import { TabletTlsQrButton } from "./TabletTlsQrButton";
 import { RebindRequestsPanel } from "./RebindRequestsPanel";
 import { DuplicateCandidates } from "./DuplicateCandidates";
 import { ProofLostPanel } from "./ProofLostPanel";
+import { PendingBulkReject } from "./PendingBulkReject";
 import { DevicesEmptyState as EmptyState } from "./DevicesEmptyState";
 import { useProofLost } from "./proof";
 import { DeviceRow, deviceKindLabel } from "./DeviceRow";
@@ -151,6 +152,7 @@ export function DevicesPage() {
       <PageBody className="space-y-4 p-6">
         <ProofLostPanel initiallyOpen={kanitLink} />
         <RebindRequestsPanel devices={devices} />
+        <PendingBulkReject devices={devices} onDone={invalidate} />
         <DuplicateCandidates initiallyOpen={params.get("kopya") === "1"} />
         {query.isLoading ? (
           <div className="space-y-2">

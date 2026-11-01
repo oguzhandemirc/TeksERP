@@ -5,6 +5,7 @@ import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnab
 import { featureFlagService, type LoginMethod } from "@/services/featureFlagService";
 import type { SameTypeSessionPolicy } from "@/types/auth";
 import { DEFAULT_SAME_TYPE_SESSION_POLICY, isSameTypeSessionPolicy } from "@/lib/session-auth";
+import { HOSTED_SESSION_LOCK_NOTE, useHostedInstallation } from "@/hooks/useHostedInstallation";
 
 export const DEFAULT_SESSION_MINUTES = 480; // 8 saat
 export const MAX_SESSION_MINUTES = 43200; // 30 gün
@@ -311,8 +312,10 @@ export function useSessionSettingsForm() {
       ...(offlineLockDefer !== currentOfflineLockDefer ? { mobileOfflineLockDefer: offlineLockDefer } : {}),
     });
 
+  const hostedLockNote = useHostedInstallation() ? HOSTED_SESSION_LOCK_NOTE : undefined;
   return {
     isLoading: flagsQ.isLoading,
+    hostedLockNote,
     // düzenlenebilir durum + setter/handler
     sessionMin, setSessionMin,
     autoLogout, setAutoLogout,

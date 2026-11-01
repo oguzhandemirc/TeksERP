@@ -6,6 +6,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { featureFlagService, type DefaultLabelMedia, type FeatureFlags } from "@/services/featureFlagService";
 import { FieldLabel, FlagToggle } from "./SettingRow";
+import { useHostedInstallation } from "@/hooks/useHostedInstallation";
 import {
   DEFAULT_LABEL_COPIES,
   DEFAULT_LABEL_COPIES_SOURCE,
@@ -50,6 +51,7 @@ export function LabelSettingsSection({
   const { hasAnyPermission } = useRoleAccess();
   const canEdit = hasAnyPermission(writePermissions);
   const flagsQ = useFeatureFlags();
+  const hosted = useHostedInstallation();
 
   const currentCopies = flagsQ.data?.data?.labelCopies ?? DEFAULT_LABEL_COPIES;
   const currentSource = flagsQ.data?.data?.labelCopiesSource ?? DEFAULT_LABEL_COPIES_SOURCE;
@@ -201,10 +203,15 @@ export function LabelSettingsSection({
               doğrulanmalı.
             </>
           }
-          checked={native}
-          disabled={mut.isPending}
+          checked={native && !hosted}
+          disabled={mut.isPending || hosted}
           onChange={setNative}
         />
+        {hosted && (
+          <p className="mt-1 text-xs text-muted-foreground" data-testid="hosted-native-lock">
+            Bulut kurulumu: sunucu fabrikadaki yazıcıya ulaşamaz, doğrudan gönderim kapalıdır.
+          </p>
+        )}
       </div>
 
       {/* Mobil raster (BT/HC-06) — Electron raster'ından (cihaz kaydı) BAĞIMSIZ toggle */}

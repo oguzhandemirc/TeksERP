@@ -16,6 +16,7 @@ import {
   releaseLoginAttempt, reserveLoginAttempt, resetLoginLockout, resolveLoginLockoutKeys, resolveRequestSourceKey,
 } from "../middlewares/login-lockout";
 import { AppError } from "../utils/app-error";
+import { rejectPendingDevices } from "../services/helpers/device-pending-guard.helper";
 import "../types/express-augment";
 
 const deviceKindSchema = z.enum(["TABLET", "PHONE", "DESKTOP"]).optional();
@@ -53,6 +54,10 @@ const approveSchema = z.object({
 
 const assignHardwareSchema = z.object({
   peripheralIds: z.array(z.string().uuid("Geçersiz donanım ID")).default([]),
+});
+
+const rejectPendingSchema = z.object({
+  ids: z.array(z.string().uuid("Geçersiz cihaz ID")).min(1, "En az bir cihaz seçin").max(200, "En çok 200 cihaz seçilebilir"),
 });
 
 const renameSchema = z.object({
@@ -125,7 +130,7 @@ export class DeviceController {
   static async announce(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const body = announceSchema.parse(req.body);
-      const data = await DeviceService.announce(body);
+      const data = await DeviceService.announce({ ...body, source: resolveRequestSourceKey(req) });
       res.status(200).json({ success: true, data });
     } catch (error) {
       next(error);
@@ -308,6 +313,17 @@ export class DeviceController {
     try {
       const id = req.params.id as string;
       const data = await DeviceService.deactivate(id, req.user?.userId);
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/admin/devices/pending/reject — seçili bekleyen cihazları toplu reddet (VDS O3). */
+  static async rejectPending(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { ids } = rejectPendingSchema.parse(req.body);
+      const data = await rejectPendingDevices([...new Set(ids)], req.user?.userId);
       res.status(200).json({ success: true, data });
     } catch (error) {
       next(error);

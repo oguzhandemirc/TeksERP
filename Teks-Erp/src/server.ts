@@ -23,6 +23,7 @@ import { startShiftCalendarScheduler } from './jobs/shift-calendar.job';
 import { startShiftCloseScheduler } from './jobs/machine-shift-close.job';
 import { startLoomAlarmScheduler } from './jobs/loom-alarm.job';
 import { startMachineWatchdogScheduler } from './jobs/machine-watchdog.job';
+import { startPendingDeviceExpiryScheduler } from './jobs/pending-device-expiry.job';
 import { startLicensePoll, stopLicensePoll } from './jobs/license-poll.job';
 import { startLicenseDoorbell, stopLicenseDoorbell } from './jobs/license-doorbell.job';
 import { startPatronCloudJobs, stopPatronCloudJobs } from './jobs/patron-cloud.jobs';
@@ -36,7 +37,7 @@ import { AuditService } from './services/audit.service';
 import { flushTelemetryNow } from './lib/telemetry-write-health';
 import { assertBaseServiceGuards } from './services/base.service';
 import { logProcessWarnings } from './lib/process-warnings';
-import { readWebHardeningConfig, isWebHardeningDeclared, trustProxyHostedRefusal } from './middlewares/web-hardening';
+import { readWebHardeningConfig, isWebHardeningDeclared, hostedBootRefusal } from './middlewares/web-hardening';
 import { isHostedInstallation } from './services/helpers/install-class.helper';
 import { hata, uyari, bilgi, satir } from "./lib/logger";
 import type { Server } from "node:http";
@@ -89,14 +90,12 @@ try {
 {
     const tp = readWebHardeningConfig(process.env, () => {}).trustProxy;
     const hosted = isHostedInstallation();
-    const red = trustProxyHostedRefusal(tp, hosted);
+    const red = hostedBootRefusal(tp, hosted); // TRUST_PROXY=true ya da bilinen/zayıf JWT sırrı (D7)
     if (red) {
         hata("boot", red);
         process.exit(1);
     }
-    if (hosted && tp === null) {
-        uyari("web-hardening", "barındırılan kurulumda TRUST_PROXY yok — ters vekil arkasındaysa bütün ziyaretçiler tek giriş-kilidi kovasına düşer (doğru değer genelde TRUST_PROXY=1).");
-    }
+    if (hosted && tp === null) uyari("web-hardening", "barındırılan kurulumda TRUST_PROXY yok — ters vekil arkasındaysa bütün ziyaretçiler tek giriş-kilidi kovasına düşer (doğru değer genelde TRUST_PROXY=1).");
 }
 
 // Node süreç uyarıları YIĞIN İZİYLE log'a düşsün — Node'un kendi çıktısı
@@ -279,6 +278,7 @@ function startLanListener(): Server {
     if (!VERIFYING) startLoomAlarmScheduler();
     // Kart watchdog'u (D4): tezgah ∨ dokuma kapalıyken tur no-op; sessizlik duruş açmaz.
     if (!VERIFYING) startMachineWatchdogScheduler();
+    if (!VERIFYING) startPendingDeviceExpiryScheduler(); // bekleyen cihaz süre aşımı (VDS O3): LAN'da tur no-op
     // Lisans yoklaması + kapı zili: kurulum etkinleşmemişse ya da satıcı adresi kapalıysa
     // (`LICENSE_SERVER_URL=kapali`) DIŞARI HİÇ İSTEK ATILMAZ; motor gözlem kipinde (hiçbir istek engellenmez).
     // Doğrulama kipinde motor yalnız YEREL ölçümü koşar (bütünlük dahil — `/health/yerel`in `lisans`ı), yoklamaz.

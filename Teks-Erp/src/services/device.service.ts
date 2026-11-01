@@ -13,6 +13,7 @@ import { DeviceKind, Prisma } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { p2002Mentions } from "../utils/p2002";
 import { AuditService } from "./audit.service";
+import { assertSourcePendingCapacity } from "./helpers/device-pending-guard.helper";
 import { readDevicePairingRequired, readDeviceUnpairedPasswordLogin } from "./system-setting.service";
 import { ACTOR_SELECT } from "./helpers/system-account.helper";
 import { getShortCredentialKeyRing } from "../lib/short-credential/keyring";
@@ -72,6 +73,12 @@ type DeviceWithMachine = {
   machineId: string | null;
   machine: { id: string; code: string; name: string; station: { id: string; name: string } | null } | null;
 };
+
+/** Doğuş olayı meta'sındaki duyuru kaynağı (IP, IPv6'da /64); yoksa null. */
+function registrationSource(meta: unknown): string | null {
+  const ip = meta && typeof meta === "object" ? (meta as Record<string, unknown>).ip : undefined;
+  return typeof ip === "string" ? ip : null;
+}
 
 /**
  * Cihazın istemciye dönen atama görünümü.
@@ -133,9 +140,10 @@ function normalizeDeviceKind(k?: string | null): DeviceKind {
 export class DeviceService {
   /** Admin: tüm cihazları listele (PENDING'ler önce). */
   static async list() {
-    return prisma.device.findMany({
+    const rows = await prisma.device.findMany({
       orderBy: [{ status: "asc" }, { isActive: "desc" }, { createdAt: "desc" }],
-      include: DEVICE_INCLUDE,
+      // Onay ekranı "nereden geldi": doğuş olayının kaynağı (VDS O3; eski satırda yok → null).
+      include: { ...DEVICE_INCLUDE, bindingEvents: { where: { event: "REGISTERED" }, select: { meta: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 1 } },
       omit: DEVICE_SECRET_OMIT,
       // ⚠️ TAVAN (2026-08-09, F-CORE-GUV-003). Eskiden tavansızdı ve bu, kimlik
       // doğrulamasız `announce` ucuyla birleşince asıl zararı üretiyordu: sahte
@@ -145,6 +153,7 @@ export class DeviceService {
       // bekleyen cihazları KESMEZ; kesilen taraf eski APPROVED kuyruğudur.
       take: DEVICE_LIST_LIMIT,
     });
+    return rows.map(({ bindingEvents, ...d }) => ({ ...d, announcedFrom: registrationSource(bindingEvents[0]?.meta) }));
   }
 
   /**
@@ -257,7 +266,7 @@ export class DeviceService {
    * ettiği) cihaz" farklı şeylerdir; public bir uç bir yönetici kararını geri
    * alamaz (F216'nın aynı gerekçesi).
    */
-  static async announce(input: { deviceId: string; name?: string; kind?: string; hw?: HwClaim; model?: string }) {
+  static async announce(input: { deviceId: string; name?: string; kind?: string; hw?: HwClaim; model?: string; source?: string | null }) {
     const deviceId = (input.deviceId ?? "").trim();
     if (!deviceId) throw AppError.badRequest("deviceId zorunlu");
     const pairingRequired = await readDevicePairingRequired();
@@ -306,10 +315,13 @@ export class DeviceService {
    * `hw` varsa özet doğuşta yazılır; aynı özeti başka canlı satır kaptıysa 409.
    */
   private static async createAnnounced(
-    deviceId: string, input: { name?: string; hw?: HwClaim }, kind: DeviceKind, pairingRequired: boolean,
+    deviceId: string, input: { name?: string; hw?: HwClaim; source?: string | null }, kind: DeviceKind, pairingRequired: boolean,
   ) {
     await assertDeviceRowCapacity(prisma);
     if (pairingRequired) {
+      // Barındırılanda kaynak başına bekleyen tavanı (VDS O3); LAN'da no-op.
+      await assertSourcePendingCapacity(input.source ?? null);
+
       const pendingCount = await countSeatDevices(prisma, { status: "PENDING" });
       if (pendingCount >= MAX_PENDING_DEVICES) {
         throw AppError.tooManyRequests(
@@ -338,7 +350,9 @@ export class DeviceService {
         });
         await writeBindingEventTx(tx, {
           deviceRefId: row.id, localId: deviceId, deviceName: row.name, event: "REGISTERED",
-          hwDigest: input.hw?.ozet ?? null, meta: { status: row.status, kaynak: "ANNOUNCE" },
+          hwDigest: input.hw?.ozet ?? null,
+          // `ip`: kaynak tavanının sayım anahtarı + onay ekranındaki "nereden geldi" bilgisi.
+          meta: { status: row.status, kaynak: "ANNOUNCE", ...(input.source ? { ip: input.source } : {}) },
         });
         return row;
       });

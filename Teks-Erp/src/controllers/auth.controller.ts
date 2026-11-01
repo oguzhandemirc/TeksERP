@@ -31,6 +31,7 @@ import { screenCompanyName } from "../lib/license/licensee-name";
 import { AppError } from "../utils/app-error";
 import {
   resolveLoginLockoutKeys,
+  pinDeviceLockoutKeys,
   reserveLoginAttempt,
   resetLoginLockout,
   releaseLoginAttempt,
@@ -46,6 +47,8 @@ import {
   setSessionCookie,
   setTrustedDeviceCookie,
 } from "../lib/web-session-cookie";
+import { isHostedInstallation } from "../services/helpers/install-class.helper";
+import { redactLoginMethods } from "../services/helpers/hosted-public-surface.helper";
 import "../types/express-augment";
 
 const webTotpSchema = z.strictObject({
@@ -503,7 +506,10 @@ export class AuthController {
     // ⚠️ KİMLİK = CİHAZ, PIN DEĞİL — kart yolundaki gerekçenin aynısı: PIN hem
     // kimlik hem sırdır, anahtara yazılamaz ve her denemede değiştiği için kovayı
     // hiç doldurmazdı.
-    const lockoutKey = resolveLoginLockoutKeys(req, `pin:${resolveLoginDeviceId(req) ?? "-"}`);
+    const lockoutKey = [
+      ...resolveLoginLockoutKeys(req, `pin:${resolveLoginDeviceId(req) ?? "-"}`),
+      ...pinDeviceLockoutKeys(req.device?.deviceId),
+    ];
     // F20: rezervasyon = blok kontrolü + (fail varsayımıyla) sayaç artışı tek atomik çağrıda.
     const lock = await reserveLoginAttempt(lockoutKey);
     await auditLockedOnce(lock, "quick-pin", req);
@@ -577,7 +583,10 @@ export class AuthController {
       const unpairedPasswordOnly = Boolean(req.unapprovedDevice);
       res.status(200).json({
         success: true,
-        data: { ...methods, companyName, lisansDurduruldu, lisansEtkinlesmedi, unpairedPasswordOnly },
+        data: redactLoginMethods(
+          { ...methods, companyName, lisansDurduruldu, lisansEtkinlesmedi, unpairedPasswordOnly },
+          { hosted: isHostedInstallation(), approvedDevice: Boolean(req.device) },
+        ),
       });
     } catch (error) {
       next(error);

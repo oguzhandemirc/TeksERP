@@ -227,7 +227,7 @@ async function main() {
     const r4z = await call("GET", "/api/print-jobs?status=UYDURMA", adminToken);
     check("§4g tanınmayan süzgeç değeri 400", r4z.status === 400, `status=${r4z.status}`);
     check("§6a ⭐ SIMULE başarı sayılmaz (basarili = yalnız ILETILDI)", !!ozet && ozet.basarili === ozet.durum.ILETILDI && ozet.durum.SIMULE >= 1 && ozet.basarili < ozet.toplam - ozet.durum.HATA, JSON.stringify(ozet?.durum));
-    const r6 = await call("POST", "/api/labels/test-native", adminToken, { printerIp: "127.0.0.1", port: 9 });
+    const r6 = await call("POST", "/api/labels/test-native", adminToken, { printerIp: "192.168.250.250", port: 9100 });
     const row6 = (await jobsOf({ subjectKind: "TEST", userId: admin.id })).pop();
     check("§6b sunucu test gönderimi (nativeSend kapalı) → SIMULE + SUNUCU_TCP", r6.status === 200 && row6?.status === "SIMULE" && row6?.transport === "SUNUCU_TCP" && row6?.source === "SUNUCU", `status=${r6.status} satır=${row6?.status}`);
     const o1 = outcomeFromTransport({ delivered: false, simulated: false, error: "Cihaz bağlantısı zaman aşımı" });
