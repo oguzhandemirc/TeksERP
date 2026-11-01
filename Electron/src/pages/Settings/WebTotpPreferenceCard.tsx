@@ -1,6 +1,7 @@
 // Kullanıcı Tercihleri → "İnternetten giriş" kartı (2026-11-01). Politika USER_CHOICE iken kullanıcı
 // KENDİ hesabında web girişi kodunu kapatır (parola + kuruluysa kod) ya da geri açar (serbest).
 // Eski backend (404) ya da sistem hesabı → kart çizilmez; REQUIRED'da yalnız saklı tercih varsa görünür.
+// USER_CHOICE'ta 2FA'yı KURMAK kodu seçmektir: kurulmamışsa kod zaten istenmez, anahtar yerine not çizilir.
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -30,6 +31,7 @@ export function WebTotpPreferenceCard() {
   if (!s || !s.canChange) return null;
   if (s.policy === "REQUIRED" && !s.optOut) return null;
   const asking = !s.optOut;
+  const notEnrolled = s.policy === "USER_CHOICE" && !s.totpEnabled && !s.optOut;
   return (
     <Card data-testid="web-totp-tercih-karti">
       <CardHeader>
@@ -43,18 +45,25 @@ export function WebTotpPreferenceCard() {
       </CardHeader>
       <CardContent className="space-y-3">
         <StateNotes s={s} />
-        <label className="flex items-center justify-between gap-3 text-sm">
-          <span>İnternetten girişte doğrulama kodu iste</span>
-          <Switch
-            checked={asking && !closing}
-            disabled={mut.isPending || (asking && s.policy !== "USER_CHOICE")}
-            onCheckedChange={(on) => {
-              if (!on) setClosing(true);
-              else if (closing) setClosing(false);
-              else mut.mutate({ optOut: false });
-            }}
-          />
-        </label>
+        {notEnrolled ? (
+          <p className="text-sm text-muted-foreground" data-testid="web-totp-kurulmamis">
+            İki adımlı doğrulama kurulu değil — internetten yalnız parolayla girersiniz. Kod istiyorsanız iki adımlı
+            doğrulamayı kurun.
+          </p>
+        ) : (
+          <label className="flex items-center justify-between gap-3 text-sm">
+            <span>İnternetten girişte doğrulama kodu iste</span>
+            <Switch
+              checked={asking && !closing}
+              disabled={mut.isPending || (asking && s.policy !== "USER_CHOICE")}
+              onCheckedChange={(on) => {
+                if (!on) setClosing(true);
+                else if (closing) setClosing(false);
+                else mut.mutate({ optOut: false });
+              }}
+            />
+          </label>
+        )}
         {closing && (
           <CloseForm
             totpEnabled={s.totpEnabled}

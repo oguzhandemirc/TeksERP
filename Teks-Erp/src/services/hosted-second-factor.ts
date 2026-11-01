@@ -24,7 +24,7 @@ function declaresDesktop(clientType: string | undefined): boolean {
 }
 
 export type HostedBearerVerdict =
-  /** Politika USER_CHOICE ∧ kullanıcı kodu kapattı (sistem hesabı hariç). */
+  /** Politika USER_CHOICE ∧ (kullanıcı kodu kapattı ∨ TOTP kurmadı) — sistem hesabı hariç (`webTotpWaived`). */
   | { kind: "WAIVED" }
   /** Onaylı + kanıtlı saha cihazından mobil giriş (sistem hesabı hariç). */
   | { kind: "APPROVED_DEVICE" }

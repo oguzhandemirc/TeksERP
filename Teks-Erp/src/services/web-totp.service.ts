@@ -4,7 +4,8 @@
 // ① Fabrika politikası `auth.webTotpPolicy` (yalnız süperadmin yazar): REQUIRED (varsayılan,
 //    K4) | USER_CHOICE. ② Kullanıcı tercihi `User.webTotpOptOut`: yalnız USER_CHOICE iken
 //    etkili, yalnız KENDİ hesabından (`PUT /api/auth/web-totp`) yazılır; kapatmak parola +
-//    (kuruluysa) kod ister, açmak serbest. Sistem hesabında tercih yok sayılır (CHECK de var).
+//    (kuruluysa) kod ister, açmak serbest. USER_CHOICE'ta TOTP kurmamış hesap kodsuz girer (kurmak =
+//    seçmek). Sistem hesabında tercih yok sayılır (CHECK de var).
 // Kararın TEK tüketicisi `AuthService.assertSecondFactor` → `webTotpWaived`.
 // =============================================================================
 import { verifyPassword } from "./helpers/password-hasher.helper";
@@ -26,14 +27,21 @@ export interface WebTotpOwnState {
   canChange: boolean;
 }
 
-/** Bu kullanıcı web girişinde TOTP'den muaf mı? FAIL-CLOSED: hesap okunamazsa muaf DEĞİL. */
+/**
+ * Bu kullanıcı web/barındırılan girişte TOTP'den muaf mı? FAIL-CLOSED: hesap okunamazsa muaf DEĞİL.
+ * USER_CHOICE'ta sistem-dışı hesap için kod yalnız TOTP KURULU ∧ opt-out YOKSA istenir.
+ */
 export async function webTotpWaived(userId: string): Promise<boolean> {
   if ((await readWebTotpPolicy()) !== "USER_CHOICE") return false;
   const row = await prisma.user.findUnique({
     where: { id: userId },
     select: { webTotpOptOut: true, isSystemAccount: true },
   });
-  return row?.webTotpOptOut === true && row.isSystemAccount !== true;
+  if (!row || row.isSystemAccount === true) return false;
+  if (row.webTotpOptOut === true) return true;
+  // "Herkes kendi seçer" (2026-11-01): kurmak = seçmek. Kurmamış kullanıcı kodu seçmemiştir; 403
+  // vermek taze kurulumu kilitliyordu (opt-out yalnız oturum açıkken yazılabiliyor).
+  return !(await TotpAccountService.getStatus(userId)).enabled;
 }
 
 export class WebTotpService {

@@ -588,7 +588,7 @@ export class AuthService {
     const shortPath = via !== "password";
     let isSystemAccount = false;
     // Bulut web paneli (çerez kipi, K4): giriş yolu ne olursa olsun TOTP zorunlu; kurulmamışsa giriş yok.
-    // USER_CHOICE politikasında kullanıcının kendi opt-out'u kodu kaldırır — süperadmin HARİÇ (opt-out yok sayılır).
+    // USER_CHOICE'ta opt-out ya da KURULMAMIŞ TOTP kodu kaldırır (`webTotpWaived`) — süperadmin HARİÇ.
     const webCookie = cookieLoginApplies(ctx?.clientType);
     // Kod adımında "Bu cihazı hatırla" kutusu çizilebilir mi (web çerez kipi ya da barındırılan masaüstü).
     let rememberable = webCookie && via === "password";
