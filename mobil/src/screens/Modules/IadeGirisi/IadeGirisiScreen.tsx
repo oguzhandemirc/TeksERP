@@ -23,6 +23,8 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MainStackParamList } from '../../../navigation/types';
 import { showScreenError } from '../../../lib/screenToast';
+import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
+import { CustomerCodeMatchNote } from '../../../components/customerCode/CustomerCodeMatchNote';
 import { formatCalendarDay } from '../../../lib/factory-time';
 
 // İade modülü vurgu rengi (amber) — alt bardaki "İade Al" ve geçmiş ekranındaki
@@ -183,11 +185,17 @@ export default function IadeGirisiScreen() {
       signalScan('accept');
     } catch (err) {
       signalScan('reject');
+      // D4-KUC3b: belirsiz müşteri barkodu → aday modalı; seçilen topun İÇ barkoduyla yeniden sorulur.
+      if (ambiguousRef.current?.(err)) return;
       showScreenError(err, 'İade alınamaz');
     } finally {
       setResolving(false);
     }
   }, []);
+
+  const ambiguous = useAmbiguousScanPicker((b) => void lookup(b));
+  const ambiguousRef = useRef(ambiguous.intercept);
+  ambiguousRef.current = ambiguous.intercept;
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -331,6 +339,7 @@ export default function IadeGirisiScreen() {
                     <Text style={styles.rollBarcode} numberOfLines={1}>
                       {roll.barcode ?? roll.id.slice(0, 8)}
                     </Text>
+                    <CustomerCodeMatchNote match={roll} />
                   </View>
                   <View style={styles.qtyChip}>
                     <Text style={styles.qtyChipText}>{roll.currentQty.toFixed(1)} m</Text>
@@ -493,6 +502,7 @@ export default function IadeGirisiScreen() {
         </View>
       </View>
 
+      {ambiguous.modal}
       <BarcodeScannerModal
         visible={scannerOpen}
         title="İade Edilecek Top QR Okut"

@@ -54,6 +54,7 @@ import subcontractorWeavingRoutes from "./routes/subcontractor-weaving.routes";
 import inventoryRoutes from "./routes/inventory.routes";
 import orderRoutes from "./routes/order.routes";
 import productionProposalRoutes from "./routes/production-proposal.routes";
+import loomSuggestionRoutes from "./routes/loom-suggestion.routes";
 import recordInfoRoutes from "./routes/record-info.routes";
 import scanRoutes from "./routes/scan.routes";
 import numberSeriesRoutes from "./routes/number-series.routes";
@@ -553,6 +554,8 @@ app.use("/api/warp-beams", warpBeamRoutes);
 // Dokuma modülü (üç router, tek kapı): verifyToken + requireDokumaEnabled
 // (production → dokuma zinciri kapının içinde) + requirePermission.
 app.use("/api/weaving-orders", weavingOrderRoutes);
+// SY-M2: tezgâh önerisi (salt okuma; kendi kapısı: dokuma modülü + weavingorder:read).
+app.use("/api/loom-suggestions", loomSuggestionRoutes);
 // Tezgah koşumu (aç/kapa/geri al) — loom:run · loom:run-revoke.
 app.use("/api/machine-runs", machineRunRoutes);
 app.use("/api/machine-stops", machineStopRoutes);

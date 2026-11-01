@@ -24,7 +24,7 @@ import {
 } from "./weaving-order.service";
 import { weavingOrderReplay } from "./helpers/weaving-order-replay.helper";
 import { WorkOrderService, type WorkOrderCreateInput } from "./workorder.service";
-import { readDokumaEnabled, readOrderProductionProposal, readProductionEnabled, SETTING_KEYS } from "./system-setting.service";
+import { readDevereEnabled, readDokumaEnabled, readOrderProductionProposal, readProductionEnabled, SETTING_KEYS } from "./system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
 import { settingRowPath } from "../constants/panel-ayar-yolu";
 
@@ -67,7 +67,9 @@ export async function previewProductionProposal(
   orderId: string, access: ProposalAccess,
 ): Promise<ApiResponse<ProductionProposal & { canCreate: { weaving: boolean; workOrder: boolean } }>> {
   const scope = await resolveScope(access);
-  const proposal = await buildProductionProposal(prisma, orderId, scope);
+  // Levent ihtiyacı yalnız önizlemede ve devere açıkken (leventler devere modülünün malı); uygula yolu okumaz.
+  const beamNeeds = scope.weaving && (await readDevereEnabled());
+  const proposal = await buildProductionProposal(prisma, orderId, { ...scope, beamNeeds });
   return { success: true, data: { ...proposal, canCreate: { weaving: scope.weaving && access.writeWeaving, workOrder: access.writeWorkOrder } } };
 }
 

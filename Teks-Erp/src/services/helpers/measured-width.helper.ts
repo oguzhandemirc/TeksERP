@@ -32,6 +32,17 @@ export const WIDTH_TRACE_OPERATION_TYPES: RollOperationType[] = [RollOperationTy
 
 const toNum = (v: Prisma.Decimal | null): number | null => (v == null ? null : Number(v));
 
+/** Ölçülen en sınırı — yazım kapısı ve tablet ön-denetimi (adım özeti `widthLimit`) AYNI hesaptan; en yoksa üst sınır yok. */
+export interface MeasuredWidthLimit {
+  widthBefore: number | null;
+  toleranceCm: number;
+  maxCm: number | null;
+}
+
+export function measuredWidthLimit(widthBefore: number | null, toleranceCm: number): MeasuredWidthLimit {
+  return { widthBefore, toleranceCm, maxCm: widthBefore == null ? null : widthBefore + toleranceCm };
+}
+
 /** Yeteneksiz istasyona en gelirse 400 — tx DIŞINDA, yazımdan önce. */
 export async function assertStationCapturesWidth(client: Pick<Tx, "station">, stationId: string): Promise<void> {
   const st = await client.station.findUnique({ where: { id: stationId }, select: { capturesWidth: true } });
@@ -56,11 +67,12 @@ export async function applyMeasuredWidthTx(
   const { toleranceCm } = await effectiveTamburPlanWidthGate(tx);
   // Decimal(12,3) ile aynı yuvarlama — iz ile kolon bayt-eşit kalsın (ters yol claim'i eşitlikle eşler).
   const after = Math.round(args.measuredWidthCm * 1000) / 1000;
-  if (!(after > 0) || (widthBefore != null && after > widthBefore + toleranceCm)) {
+  const { maxCm } = measuredWidthLimit(widthBefore, toleranceCm);
+  if (!(after > 0) || (maxCm != null && after > maxCm)) {
     throw AppError.badRequest(
-      widthBefore == null
+      maxCm == null
         ? "Ölçülen en sıfırdan büyük olmalı"
-        : `Ölçülen en 0'dan büyük ve en fazla ${widthBefore + toleranceCm} cm olmalı (mevcut en ${widthBefore} cm + eşik ${toleranceCm} cm)`,
+        : `Ölçülen en 0'dan büyük ve en fazla ${maxCm} cm olmalı (mevcut en ${widthBefore} cm + eşik ${toleranceCm} cm)`,
       { code: "WIDTH_OUT_OF_RANGE", widthBefore, toleranceCm },
     );
   }

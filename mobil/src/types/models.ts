@@ -866,6 +866,8 @@ export interface KursunRollSummary {
    * yerel ön-kontrol yapmaz; karar yine sunucuda (OPERATOR_REASON eksikse 409, fail-closed).
    */
   meter?: { declaredIn: number | null; measuredIn: number | null } | null;
+  /** D4-KUC3b: ölçülen en sınırı (yalnız en ölçen adımda; sunucu yazım kapısıyla aynı hesap). Eski backend göndermez → ön-denetim yok. */
+  widthLimit?: { widthBefore: number | null; toleranceCm: number; maxCm: number | null };
 }
 
 /** Önceki adım hatası + künye ("KK Masa 2 · Ayşe · 13:40"). */

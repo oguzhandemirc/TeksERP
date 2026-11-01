@@ -118,6 +118,7 @@ const KAPILI: ReadonlyArray<{ dosya: string; mount: string; kimlik?: string; kap
   { dosya: "routes/weft-spec.routes.ts", mount: "/api/weft-specs" },
   { dosya: "routes/weave-design.routes.ts", mount: "/api/weave-designs" }, // SY-A2 desen kartı
   { dosya: "routes/item-construction.routes.ts", mount: "/api/item-construction" }, // SY-A2 etkin yapı
+  { dosya: "routes/loom-suggestion.routes.ts", mount: "/api/loom-suggestions" }, // SY-M2 tezgâh önerisi
 ];
 
 /** Dokuma-ÖZEL Prisma model erişimcileri ve servisleri — bunlara dokunan router kapılıdır. */

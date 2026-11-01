@@ -32,6 +32,7 @@ import {
   resolveOriginParty,
   warpBeamRemainingM,
 } from "./helpers/warp-beam.helper";
+import { readBeamStockBySpec } from "./helpers/warp-beam-stock.helper";
 import { toWarpBeamDto, toWarpBeamEventDto, type WarpBeamDto, type WarpBeamEventDto } from "./helpers/warp-beam-dto.helper";
 import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";
 import { resolvePartyToCardTx } from "./helpers/party-card.helper";
@@ -326,16 +327,8 @@ export { WARP_BEAM_EVENT_KINDS };
 export async function readReadyBeamRemainingM(warpSpecIds: string[]): Promise<Map<string, { remainingM: Prisma.Decimal; beamCount: number }>> {
   const out = new Map<string, { remainingM: Prisma.Decimal; beamCount: number }>();
   if (warpSpecIds.length === 0) return out;
-  const beams = await prisma.warpBeam.findMany({
-    where: { warpSpecId: { in: warpSpecIds }, status: { in: [WarpBeamStatus.READY, WarpBeamStatus.MOUNTED] } },
-    select: { id: true, warpSpecId: true },
-  });
-  const remaining = await remainingByBeam(prisma, beams.map((b) => b.id));
-  for (const b of beams) {
-    const m = new Prisma.Decimal(remaining.get(b.id) ?? 0);
-    if (m.lte(0)) continue;
-    const acc = out.get(b.warpSpecId) ?? { remainingM: new Prisma.Decimal(0), beamCount: 0 };
-    out.set(b.warpSpecId, { remainingM: acc.remainingM.plus(m), beamCount: acc.beamCount + 1 });
+  for (const [specId, beams] of await readBeamStockBySpec(prisma, warpSpecIds)) {
+    out.set(specId, { remainingM: beams.reduce((s, b) => s.plus(b.remainingM), new Prisma.Decimal(0)), beamCount: beams.length });
   }
   return out;
 }
