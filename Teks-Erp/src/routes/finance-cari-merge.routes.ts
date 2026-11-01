@@ -69,6 +69,18 @@ router.get("/:id/merge-candidates", requirePermission("finance:cari-merge"), asy
  *       200: { description: "{ data: { sourceLabel, targetLabel, blockers[], balances[], items[], termsToCopy, draftInvoices, alreadyMerged, stamp } }" }
  *       400: { description: doğrulama }
  *       404: { description: Cari hesap bulunamadı }
+ */
+router.get("/merge/preview", requirePermission("finance:cari-merge"), async (req, res, next) => {
+  try {
+    res.json(await cariMergeService.preview(uuid(req.query.sourceId, "kaynak hesap"), uuid(req.query.targetId, "hedef hesap")));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/finance/cari/merge:
  *   post:
  *     tags: [Finance]
  *     summary: Cari birleştirmeyi uygula — ön izlemedeki damgayla (D4-K3e)
@@ -91,14 +103,6 @@ router.get("/:id/merge-candidates", requirePermission("finance:cari-merge"), asy
  *       200: { description: "{ data: { alreadyMerged, transferGroupId, legs, movedDrafts } }" }
  *       409: { description: "CARI_MERGE_STALE · CARI_MERGE_BLOCKED · CARI_MERGE_CONFLICT · CARI_MERGE_REVERTED · CLIENT_TOKEN_COLLISION" }
  */
-router.get("/merge/preview", requirePermission("finance:cari-merge"), async (req, res, next) => {
-  try {
-    res.json(await cariMergeService.preview(uuid(req.query.sourceId, "kaynak hesap"), uuid(req.query.targetId, "hedef hesap")));
-  } catch (e) {
-    next(e);
-  }
-});
-
 router.post("/merge", requirePermission("finance:cari-merge"), async (req, res, next) => {
   try {
     res.json(await cariMergeService.apply(applySchema.parse(req.body), actor(req)));
