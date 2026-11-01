@@ -47,6 +47,8 @@ export const fabricPropertyFormSchema = z.object({
         isActive: z.boolean(),
         // Hizmet kalemi eşlemesi (H6) — yalnız DEĞİŞİRSE gövdeye girer (`serviceMapping.ts`).
         serviceItemId: z.string().nullable().default(null),
+        // Desen başına vuruş (brode VURUŞ fiyat birimi); boş = girilmedi.
+        stitchCount: z.number().int("Vuruş tam sayı olmalı").positive("Vuruş 0'dan büyük olmalı").max(10_000_000, "Vuruş çok büyük").nullable().default(null),
       }),
     )
     .default([]),

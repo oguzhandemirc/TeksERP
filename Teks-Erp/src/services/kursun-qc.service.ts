@@ -555,7 +555,7 @@ export class KursunQcService {
       data.meterOut && phaseAllowed(await resolveKursunMeterCapture(), MeterPhase.OUT) ? data.meterOut : null;
     if (meterOut) await assertMeterInputAllowed(MeterPhase.OUT, meterOut);
     const meterReplay = meterOut
-      ? meterReadingReplay({ rollId: data.rollId, stepId: data.stepId, phase: MeterPhase.OUT, meters: meterOut.meters })
+      ? meterReadingReplay({ rollId: data.rollId, stepId: data.stepId, phase: MeterPhase.OUT, meters: meterOut.meters, pieceCount: meterOut.pieceCount ?? null })
       : null;
 
     const caps = await loadStationPropertyCaps(prisma, step.stationId);
@@ -1460,7 +1460,7 @@ export class KursunQcService {
     await assertMeterInputAllowed(data.phase, data.input);
     const step = await prisma.workOrderStep.findUnique({ where: { id: data.stepId }, select: { workOrderId: true } });
     if (!step) throw AppError.notFound("Adım bulunamadı");
-    const replay = meterReadingReplay({ rollId: data.rollId, stepId: data.stepId, phase: data.phase, meters: data.input.meters });
+    const replay = meterReadingReplay({ rollId: data.rollId, stepId: data.stepId, phase: data.phase, meters: data.input.meters, pieceCount: data.input.pieceCount ?? null });
 
     const out = await prisma.$transaction(async (tx) => {
       const prior = await replay.inTx(tx, data.input.clientToken);

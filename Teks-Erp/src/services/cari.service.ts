@@ -574,6 +574,8 @@ export class CariService {
       currency: Currency;
       /** ZORUNLU — storno bir düzeltme kararıdır, gerekçesiz kayda geçmez. */
       reason: string;
+      /** İçe aktarım geri sarması: yalnız BU devir hâlâ aktifse terslenir (sonra girilen devri iptal etmez). */
+      expectedTxnId?: string;
     },
     userId?: string,
   ): Promise<ApiResponse<{ id: string; reversesTxnId: string }>> {
@@ -619,6 +621,9 @@ export class CariService {
           `Bu cari için iptal edilecek ${input.currency} devri yok — devir hiç girilmemiş ya da zaten iptal edilmiş. ` +
             `Yeni devir girmek için "Devir Bakiyesi" ekranını kullanın.`,
         );
+      }
+      if (input.expectedTxnId && original.id !== input.expectedTxnId) {
+        throw AppError.conflict("İçe aktarılan devir sonradan iptal edilip yeniden girilmiş — güncel devir geri sarmayla iptal edilmez.");
       }
 
       // Ters kayıt BUGÜNE düşer — kapanmış dönem fotoğrafı değişmez (yukarıda).

@@ -40,7 +40,7 @@
 // damgası + yeni satır, kaldırma = damga; maliyet/teklif fiyatı "şu tarih
 // itibarıyla" okur. Okuma yüklemi tek kaynak: `helpers/item-price-validity.helper`.
 // =============================================================================
-import { Prisma, PriceKind, Currency } from "@prisma/client";
+import { Prisma, PriceKind, Currency, ItemType, type ServiceQtyUnit } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -48,6 +48,7 @@ import { buildWhereClause, buildTurkishSearch, isEnumMember, readIdCondition } f
 import type { ApiResponse } from "../types/api.types";
 import { assertItemUsable, assertItemUsableTx } from "./helpers/item-usage.helper";
 import { ACTIVE_ITEM_PRICE, ITEM_PRICE_REVOKE_REASON, itemPriceValidAt } from "./helpers/item-price-validity.helper";
+import { logItemPriceVersionWrite, requestedPriceUnit } from "./helpers/item-price-audit.helper";
 
 
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -62,6 +63,8 @@ export interface ResolvedItemPrice {
   source: PriceSource;
   /** İstisna satırının müşterisi; kart varsayılanında `null`. */
   customerId: string | null;
+  /** Hizmet fiyatının birimi; NULL = metre (bugünkü satırlar). Hizmet çözücüsü işin birimiyle karşılaştırır. */
+  priceUnit: ServiceQtyUnit | null;
 }
 
 export interface ResolveItemPriceParams {
@@ -86,6 +89,8 @@ export interface ItemPriceUpsertInput {
   kind: PriceKind;
   currency: Currency;
   price: Prisma.Decimal.Value;
+  /** Hizmet fiyatının birimi (brode: METER/PIECE/STITCH); atlanmış = metre. */
+  priceUnit?: ServiceQtyUnit | null;
 }
 
 /**
@@ -138,6 +143,7 @@ const ROW_SELECT = {
   kind: true,
   currency: true,
   price: true,
+  priceUnit: true,
   revokedAt: true,
   revokeReason: true,
   createdAt: true,
@@ -166,15 +172,15 @@ const ROW_SELECT = {
  *      bekçi 6 kontrolde kırmızı verir.
  */
 function pickPrice(
-  rows: Array<{ id: string; customerId: string | null; price: Prisma.Decimal }>,
+  rows: Array<{ id: string; customerId: string | null; price: Prisma.Decimal; priceUnit: ServiceQtyUnit | null }>,
   customerId: string | null,
 ): ResolvedItemPrice | null {
   if (customerId) {
     const exact = rows.find((r) => r.customerId === customerId);
-    if (exact) return { id: exact.id, price: exact.price, source: "CUSTOMER", customerId: exact.customerId };
+    if (exact) return { id: exact.id, price: exact.price, source: "CUSTOMER", customerId: exact.customerId, priceUnit: exact.priceUnit };
   }
   const fallback = rows.find((r) => r.customerId === null);
-  if (fallback) return { id: fallback.id, price: fallback.price, source: "DEFAULT", customerId: null };
+  if (fallback) return { id: fallback.id, price: fallback.price, source: "DEFAULT", customerId: null, priceUnit: fallback.priceUnit };
   // ⚠️ null: "fiyat bilinmiyor". Sıfır DÖNDÜRME (dosya başlığındaki gerekçe).
   return null;
 }
@@ -239,13 +245,13 @@ export async function resolveItemPricesFor(params: {
         },
       ],
     },
-    select: { id: true, itemId: true, customerId: true, price: true },
+    select: { id: true, itemId: true, customerId: true, price: true, priceUnit: true },
     // As-of penceresinde aynı anahtara birden çok aday düşebilir: en yeni sürüm
     // kazanır (`pickPrice` ilk eşleşeni alır); `id` eşitlik bozucu ŞART.
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
 
-  const byItem = new Map<string, Array<{ id: string; customerId: string | null; price: Prisma.Decimal }>>();
+  const byItem = new Map<string, Array<{ id: string; customerId: string | null; price: Prisma.Decimal; priceUnit: ServiceQtyUnit | null }>>();
   for (const r of rows) {
     const list = byItem.get(r.itemId);
     if (list) list.push(r);
@@ -367,6 +373,8 @@ export class ItemPriceService {
   async upsert(input: ItemPriceUpsertInput, userId?: string): Promise<ApiResponse<ResolvedItemPrice & { created: boolean }>> {
     const price = normalizePrice(input.price);
     const customerId = input.customerId ?? null;
+    const requestedUnit = requestedPriceUnit(input.priceUnit); // undefined = mevcut sürümün birimi korunur
+    let priceUnit: ServiceQtyUnit | null = requestedUnit ?? null;
 
     // ── Dış referanslar: var mı + AKTİF mi ────────────────────────────────
     // Fiyat karta yeni TANIM ekler (B) — "Tükenene kadar"/Pasif kartta kapalı.
@@ -381,7 +389,7 @@ export class ItemPriceService {
     // Eski sürümün damgası ile yeni sürümün doğumu AYNI an: "şu tarih itibarıyla" her
     // anda en çok bir sürüm geçerli kalsın (pencere `[createdAt, revokedAt)`).
     const at = new Date();
-    type Outcome = { row: { id: string; price: Prisma.Decimal }; previous: { id: string; price: Prisma.Decimal } | null; wrote: boolean };
+    type Outcome = { row: { id: string; price: Prisma.Decimal }; previous: { id: string; price: Prisma.Decimal; priceUnit: ServiceQtyUnit | null } | null; wrote: boolean };
     let outcome: Outcome;
     try {
       outcome = await prisma.$transaction(async (tx): Promise<Outcome> => {
@@ -390,10 +398,11 @@ export class ItemPriceService {
         await assertItemUsableTx(tx, input.itemId, "DEFINITION");
         const current = await tx.itemPrice.findFirst({
           where: { itemId: input.itemId, kind: input.kind, currency: input.currency, customerId, ...ACTIVE_ITEM_PRICE },
-          select: { id: true, price: true },
+          select: { id: true, price: true, priceUnit: true },
         });
-        // Aynı fiyat: sürüm yazılmaz (geçmiş anlamsız tekrarla şişmesin).
-        if (current && current.price.equals(price)) return { row: current, previous: current, wrote: false };
+        if (requestedUnit === undefined) priceUnit = current?.priceUnit ?? null;
+        // Aynı fiyat ve birim: sürüm yazılmaz (geçmiş anlamsız tekrarla şişmesin); birim değişimi yeni sürümdür.
+        if (current && current.price.equals(price) && current.priceUnit === priceUnit) return { row: current, previous: current, wrote: false };
         if (current) {
           const claim = await tx.itemPrice.updateMany({
             where: { id: current.id, ...ACTIVE_ITEM_PRICE },
@@ -404,7 +413,7 @@ export class ItemPriceService {
           }
         }
         const row = await tx.itemPrice.create({
-          data: { itemId: input.itemId, customerId, kind: input.kind, currency: input.currency, price, createdAt: at },
+          data: { itemId: input.itemId, customerId, kind: input.kind, currency: input.currency, price, priceUnit, createdAt: at },
           select: { id: true, price: true },
         });
         return { row, previous: current, wrote: true };
@@ -422,28 +431,8 @@ export class ItemPriceService {
 
     const { row, previous, wrote } = outcome;
     const created = previous === null;
-    const priceStr = price.toFixed(4);
     const key = { itemId: input.itemId, customerId, kind: input.kind, currency: input.currency };
-    if (wrote && previous) {
-      void AuditService.log({
-        userId,
-        action: "UPDATE",
-        tableName: "ITEM_PRICE",
-        recordId: previous.id,
-        oldData: { revokeReason: null },
-        newData: { ...key, price: previous.price.toFixed(4), revokeReason: ITEM_PRICE_REVOKE_REASON.CHANGED },
-      });
-    }
-    if (wrote) {
-      void AuditService.log({
-        userId,
-        action: "CREATE",
-        tableName: "ITEM_PRICE",
-        recordId: row.id,
-        oldData: previous ? { price: previous.price.toFixed(4) } : null,
-        newData: { ...key, price: priceStr },
-      });
-    }
+    if (wrote) logItemPriceVersionWrite({ userId, key, rowId: row.id, previous, price, priceUnit });
 
     return {
       success: true,
@@ -452,6 +441,7 @@ export class ItemPriceService {
         price: new Prisma.Decimal(row.price),
         source: customerId ? "CUSTOMER" : "DEFAULT",
         customerId,
+        priceUnit,
         created,
       },
       message: created ? "Fiyat tanımlandı." : wrote ? "Fiyat güncellendi." : "Fiyat zaten bu değerde — değişiklik yapılmadı.",
@@ -495,6 +485,23 @@ export class ItemPriceService {
     });
 
     return { success: true, data: { id }, message: "Fiyat satırı kaldırıldı." };
+  }
+
+  /** Toplu açılış aktarımı okuyucuları — `itemPrice` delegesinin tek sahibi bu dosya (`test_item_price_surum` §7e). */
+  findActiveSale(key: { itemId: string; customerId: string; currency: Currency }) {
+    return prisma.itemPrice.findFirst({ where: { ...key, kind: PriceKind.SALE, ...ACTIVE_ITEM_PRICE }, select: { id: true, price: true } });
+  }
+  listActiveCustomerServicePrices() {
+    const select = { price: true, currency: true, customer: { select: { code: true } }, item: { select: { code: true, unit: true } } };
+    return prisma.itemPrice.findMany({
+      where: { kind: PriceKind.SALE, customerId: { not: null }, item: { itemType: ItemType.SERVICE }, ...ACTIVE_ITEM_PRICE },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select,
+    });
+  }
+  /** Aktif sürüm anahtarı; damgalı (sonradan değişmiş/kaldırılmış) ya da yok → null. */
+  findActiveKey(id: string) {
+    return prisma.itemPrice.findFirst({ where: { id, ...ACTIVE_ITEM_PRICE }, select: { itemId: true, customerId: true, currency: true } });
   }
 }
 

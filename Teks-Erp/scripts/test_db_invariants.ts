@@ -921,6 +921,9 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "customer_barcode_series", name: "customer_barcode_series_shape_ck" },
   { table: "service_billing_links", name: "service_billing_links_meters_ck" },
   { table: "service_billing_links", name: "service_billing_links_revoke_ck" },
+  { table: "service_billing_links", name: "service_billing_links_billed_qty_ck" },
+  { table: "roll_meter_readings", name: "roll_meter_readings_piece_count_ck" },
+  { table: "fabric_property_values", name: "fabric_property_values_stitch_count_ck" },
   // H8b (migration 20261029180000): müşteri hizmet faturası tetiği yalnız fabrika ayarının değerleri. Bekçi `test_hizmet_fatura` §20.
   { table: "cari_accounts", name: "cari_accounts_service_billing_trigger_ck" },
   // H1b (migration 20261029200000): initialQty yükseltmesi yalnız pozitif ve yalnız OVERAGE satırında. Bekçi `test_kursun_metre_stok`.

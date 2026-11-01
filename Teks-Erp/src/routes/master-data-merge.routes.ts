@@ -5,9 +5,11 @@
 // hedef varlığın kendi write izni. Biri "birleştirebilir", diğeri "bu veriye
 // dokunabilir" der; ikisi ayrı sorulardır (`data:import` emsali).
 //
-// ⚠️ İkinci bir varlık→izin listesi TUTULMUYOR: eşleme `import-registry`den
-// okunuyor (dört varlığın hepsi zaten orada `writePermission` + `label` ile
-// duruyor). Kayıt defterinin kendi başlığındaki kural: "ikinci bir liste
+// ⚠️ İkinci bir varlık→izin listesi TUTULMUYOR: izin/etiket içe aktarım
+// adaptörlerinin kendisinden okunuyor (`writePermission` + `label`). Kayıt
+// defteri (`import-registry`) DEĞİL, yalnız dört adaptör import edilir: defter
+// finans/maliyet adaptörlerini de taşır ve rejimsiz bu router'ı onların
+// servislerine bağlardı (rejim kapısı bekçileri, 2026-11-01). Kayıt defterinin kendi başlığındaki kural: "ikinci bir liste
 // tutulmaz — kopyalanan liste zamanla ayrışır."
 //   ⚠️ RENK write izni `property:write`tir; `color:write` diye bir kod YOK.
 //   Elle yazılmış bir allowlist tam da burada sessizce yanlış olurdu.
@@ -21,13 +23,13 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { AppError } from "../utils/app-error";
-import { getImportAdapter } from "../services/import/import-registry";
+import { MERGE_ADAPTERS } from "../services/import/merge-adapters";
 import {
   MasterDataMergeService,
   MAX_MERGE_SOURCES,
 } from "../services/master-data-merge.service";
 import { MasterDataUnmergeService } from "../services/master-data-unmerge.service";
-import { MERGE_ENTITIES } from "../constants/merge-map";
+import { MERGE_ENTITIES, type MergeEntity } from "../constants/merge-map";
 import { DuplicateDetectionService } from "../services/duplicate-detection.service";
 import { DuplicateReviewService } from "../services/duplicate-review.service";
 
@@ -47,12 +49,7 @@ function requireEntityWrite(req: Request, _res: Response, next: NextFunction): v
   if (!(MERGE_ENTITIES as readonly string[]).includes(entity)) {
     return next(AppError.badRequest(`Birleştirme desteklenmiyor: '${entity}'.`));
   }
-  let adapter;
-  try {
-    adapter = getImportAdapter(entity);
-  } catch (e) {
-    return next(e);
-  }
+  const adapter = MERGE_ADAPTERS[entity as MergeEntity];
   if (!matchesPermission(req.user.permissions, adapter.writePermission)) {
     return next(
       AppError.forbidden(

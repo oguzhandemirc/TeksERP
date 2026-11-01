@@ -24,6 +24,7 @@ import prisma from "../lib/prisma";
 import { ItemType } from "@prisma/client";
 import { readServiceItemIdField, withServiceMapping } from "./helpers/service-item-mapping.helper";
 import { AppError } from "../utils/app-error";
+import { extractStationIds, readStitchCountField } from "./helpers/fabric-property-input.helper";
 import { nextSeriesNo } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { deriveCapabilityFlags } from "./station-capability.service";
@@ -63,6 +64,8 @@ export interface PropertyValueInput {
   serviceItemId?: string | null;
   /** Kuşak değeri → sarf kalemi (top başına 1 düşüm). `undefined` = dokunma, `null` = kaldır. */
   consumableItemId?: string | null;
+  /** Brode deseni vuruş sayısı (VURUŞ fiyat birimi). `undefined` = dokunma, `null` = kaldır. */
+  stitchCount?: number | null;
 }
 
 /**
@@ -98,6 +101,7 @@ function extractValues(data: Record<string, unknown>): PropertyValueInput[] | un
       );
     }
     const sid = readServiceItemIdField(row.serviceItemId, `'${code}' değerinin`);
+    const stitch = readStitchCountField(row.stitchCount, code);
     const sortOrder = typeof row.sortOrder === "number" ? row.sortOrder : (i + 1) * 10;
     const isActive = row.isActive === undefined ? true : Boolean(row.isActive);
     const cid = readConsumableItemIdField(row.consumableItemId, code);
@@ -105,22 +109,9 @@ function extractValues(data: Record<string, unknown>): PropertyValueInput[] | un
       code, name, sortOrder, isActive,
       ...(sid === undefined ? {} : { serviceItemId: sid }),
       ...(cid === undefined ? {} : { consumableItemId: cid }),
+      ...(stitch === undefined ? {} : { stitchCount: stitch }),
     };
   });
-}
-
-/**
- * Gövdeden `stationIds`'i ayıklar (tekrarları eler) ve payload'dan siler.
- * `undefined` = alan hiç gönderilmedi (update'te "dokunma" demek).
- */
-function extractStationIds(data: Record<string, unknown>): string[] | undefined {
-  if (!("stationIds" in data)) return undefined;
-  const raw = data.stationIds;
-  delete data.stationIds;
-  if (!Array.isArray(raw) || raw.some((v) => typeof v !== "string")) {
-    throw AppError.badRequest("stationIds bir istasyon id listesi olmalı");
-  }
-  return [...new Set(raw as string[])];
 }
 
 /**
@@ -200,7 +191,10 @@ function assertChoiceHasValues(
 function readConsumableItemIdField(raw: unknown, code: string): string | null | undefined {
   if (raw === undefined) return undefined;
   if (raw === null || raw === "") return null;
-  if (typeof raw !== "string") throw AppError.badRequest(`'${code}' değerinin sarf kalemi geçersiz`, { code: "CONSUMABLE_ITEM_INVALID" });
+  // Uuid kolonuna biçimsiz değer giderse Prisma 500 verir; fail-closed 400.
+  if (typeof raw !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) {
+    throw AppError.badRequest(`'${code}' değerinin sarf kalemi geçersiz`, { code: "CONSUMABLE_ITEM_INVALID" });
+  }
   return raw;
 }
 
@@ -232,6 +226,7 @@ async function replaceValuesTx(
     const svc = {
       ...(v.serviceItemId !== undefined ? { serviceItemId: v.serviceItemId } : {}),
       ...(v.consumableItemId !== undefined ? { consumableItemId: v.consumableItemId } : {}),
+      ...(v.stitchCount !== undefined ? { stitchCount: v.stitchCount } : {}),
     };
     await tx.fabricPropertyValue.upsert({
       where: { propertyId_code: { propertyId, code: v.code } },

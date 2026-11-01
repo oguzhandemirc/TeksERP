@@ -72,6 +72,10 @@ const ROUTE_FILE_FOR_SERVICE_ADAPTERS: Record<string, string> = {
   weftSpec: "weft-spec.routes.ts",
   weaveDesign: "weave-design.routes.ts",
   yarnCostPrice: "cost.routes.ts",
+  // Toplu açılış aktarımı: devir ucu finance router'ında, çek ve hizmet fiyatı kendi router'larında.
+  cariOpeningBalance: "finance.routes.ts",
+  chequePortfolio: "cheque.routes.ts",
+  customerServicePrice: "item-price.routes.ts",
 };
 
 /** Adaptör dosyasından servis kaynağını çöz: routes/<x>.routes veya <x>.service. */

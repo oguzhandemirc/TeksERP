@@ -53,6 +53,23 @@ describe("FasonFinishingCheckLine", () => {
     expect((await screen.findByTestId("fason-kg-kontrol")).textContent).toContain("yalnız bir kısmını kapsıyor");
   });
 
+  it("farklı dövizli faturada kur çevrilmez — 'farklı döviz' uyarısı (#377)", async () => {
+    state.perms = ["cost:read", "finance:read"];
+    state.result = line({ invoice: { docNos: ["AF-4"], hasDraft: false, currency: "TRY", netAmount: "700.00", difference: null, coversOtherDispatches: false, partial: false, currencyMismatch: true } });
+    renderWithProviders(<FasonFinishingCheckLine dispatchId="d8" open />);
+    const text = (await screen.findByTestId("fason-kg-kontrol")).textContent ?? "";
+    expect(text).toContain("Farklı döviz — kur çevrilmez");
+    expect(text).not.toContain("Fark ");
+  });
+
+  it("sevk tarihindeki tarifeyi ve ilk sürüme düşüşü yazar (#377)", async () => {
+    state.result = line({ rateAsOf: "2026-10-05", rateFallback: true });
+    renderWithProviders(<FasonFinishingCheckLine dispatchId="d9" open />);
+    const text = (await screen.findByTestId("fason-kg-kontrol")).textContent ?? "";
+    expect(text).toContain("05.10.2026 sevk tarihindeki tarife");
+    expect(text).toContain("ilk tarife kullanıldı");
+  });
+
   it("finance:read yoksa fatura parçası çizilmez", async () => {
     state.result = line({ invoice: { docNos: ["AF-3"], hasDraft: false, currency: "USD", netAmount: "19.40", difference: "1.40", coversOtherDispatches: false } });
     renderWithProviders(<FasonFinishingCheckLine dispatchId="d7" open />);

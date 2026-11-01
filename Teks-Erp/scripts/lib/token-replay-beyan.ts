@@ -229,7 +229,7 @@ export const TOKENSIZ_UCLAR: Record<string, TokensizUc> = {
  * kural): alanı hem koddan hem beyandan silen değişiklik kapıdan geçer, gözden geçirmede görünür olmalıdır.
  */
 export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
-  [`${S}helpers/kursun-meter.helper.ts::meterReadingReplay`]: ["rollId", "workOrderStepId", "phase", "meters"],
+  [`${S}helpers/kursun-meter.helper.ts::meterReadingReplay`]: ["rollId", "workOrderStepId", "phase", "meters", "pieceCount"],
   [`${S}tambur-meter-correct.service.ts::cutCorrectionReplay`]: ["rollId", "workOrderStepId", "phase", "meters", "source"],
   [`${S}quality-inspection.service.ts::createReplay`]: ["rollId", "phase"],
   [`${S}quality-inspection.service.ts::reviseReplay`]: ["supersedesId"],
@@ -246,6 +246,8 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}roll-customer-code.service.ts::bindReplay`]: ["rollId", "code"],
   [`${S}customer-barcode-series.service.ts::createReplay`]: ["customerId", "prefix", "dateSegment", "digits", "separator", "startValue", "maxValue"],
   [`${S}cari-hold.service.ts::placeReplay`]: ["cariId", "kapsam", "reasonCode"],
+  // D4-K3e: token kaydı virman bacaklarının `transferGroupId`si; kimlik = birleşmenin yönü (kaynak → hedef).
+  [`${S}cari-merge.service.ts::applyReplay`]: ["sourceId", "targetId"],
   [`${S}expense-allocation.service.ts::allocationReplay`]: ["cashTransactionId", "hedef", "sharePct"],
   [`${S}machine-cost-rate.service.ts::rateReplay`]: ["machineId", "hourRateTry"],
   [`${S}consumable-norm.service.ts::normReplay`]: ["serviceItemId", "consumableItemId", "qtyPerM"],

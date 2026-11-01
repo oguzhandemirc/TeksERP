@@ -16,7 +16,7 @@ import type { ImportAdapter } from "./import.types";
 import { fromJson, restoreChildren } from "./import-revert.children";
 
 /** Ters yol sınıfı — §8.2 matrisinin koddaki karşılığı. */
-export type RevertMode = "DEACTIVATE" | "DELETE_PIVOT" | "CANCEL_DOCUMENT" | "REVOKE_VERSION";
+export type RevertMode = "DEACTIVATE" | "DELETE_PIVOT" | "CANCEL_DOCUMENT" | "REVOKE_VERSION" | "REVERSE_ENTRY";
 
 export interface RevertLine {
   id: string;
@@ -89,7 +89,8 @@ export async function revertOneLine(args: {
   }
 
   // ③a damgalı sürüm (SY-H2): adaptörün servis yolu kendi tx'ini ve claim'ini açar.
-  if (plan.mode === "REVOKE_VERSION") {
+  // Ters kayıt (devir/çek) da aynı kanaldan: adaptör servisin storno yolunu çağırır, ileri satır silinmez.
+  if (plan.mode === "REVOKE_VERSION" || plan.mode === "REVERSE_ENTRY") {
     if (!adapter.revertVersion) throw AppError.internal(`'${adapter.entity}' için sürüm ters yolu tanımlı değil.`);
     const blocker = await adapter.revertVersion(line, userId);
     if (blocker) {
@@ -97,7 +98,7 @@ export async function revertOneLine(args: {
       return { reverted: false, skipReason: blocker };
     }
     await stampReverted(line.id, userId);
-    return { reverted: true, audit: auditOf(line, reason, userId, { action: "REVOKE_VERSION" }) };
+    return { reverted: true, audit: auditOf(line, reason, userId, { action: plan.mode }) };
   }
 
   // Çocuk geri yazımı adaptörün SERVİS yolundan geçer (kendi bağlantısı): skaler claim'in tx'i

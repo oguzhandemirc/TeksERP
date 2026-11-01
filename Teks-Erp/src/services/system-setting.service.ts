@@ -188,6 +188,8 @@ export const SETTING_KEYS = {
   FINANCE_SERVICE_BILLING_METER_BASIS: "finance.serviceBilling.meterBasis",
   /** H7: ölçüm yoksa — `DECLARED_WITH_WARNING` (bugün) · `BLOCK_LINE`. */
   FINANCE_SERVICE_BILLING_MISSING_METER: "finance.serviceBilling.missingMeter",
+  /** Brode fiyat birimi — `METER` (bugün, DALGA4 S7) · `PIECE` (adet) · `STITCH` (vuruş = adet × desen vuruşu). */
+  FINANCE_SERVICE_BILLING_BRODE_UNIT: "finance.serviceBilling.brodeUnit",
   /** H7/H8: tetik — `PER_SHIPMENT` (bugün); `PERIOD_END` sevk taslağı hizmet satırı üretmez, iş dönem sonu taslağına kalır. */
   FINANCE_SERVICE_BILLING_TRIGGER: "finance.serviceBilling.trigger",
   /** H7: fiyat tarihi — `SERVICE_DAY` (hizmet anı; bugün) · `DISPATCH_DAY` (sevk anı). */
@@ -1089,6 +1091,11 @@ export const DEFAULT_SERVICE_BILLING_METER_BASIS: ServiceBillingMeterBasis = "OU
 export type ServiceBillingMissingMeter = "DECLARED_WITH_WARNING" | "BLOCK_LINE";
 export const SERVICE_BILLING_MISSING_METER_MODES: ServiceBillingMissingMeter[] = ["DECLARED_WITH_WARNING", "BLOCK_LINE"];
 export const DEFAULT_SERVICE_BILLING_MISSING_METER: ServiceBillingMissingMeter = "DECLARED_WITH_WARNING";
+export type ServiceBillingBrodeUnit = "METER" | "PIECE" | "STITCH";
+export const SERVICE_BILLING_BRODE_UNITS: ServiceBillingBrodeUnit[] = ["METER", "PIECE", "STITCH"];
+export const DEFAULT_SERVICE_BILLING_BRODE_UNIT: ServiceBillingBrodeUnit = "METER";
+/** Panelden YAZILABİLEN birimler — adet kaynağı (tablet brode adet girişi) olmadan PIECE/STITCH çıkışsız kapıdır. */
+export const SERVICE_BILLING_BRODE_UNITS_WRITABLE: ServiceBillingBrodeUnit[] = ["METER"];
 export type ServiceBillingTrigger = "PER_SHIPMENT" | "PERIOD_END";
 export const SERVICE_BILLING_TRIGGERS: ServiceBillingTrigger[] = ["PER_SHIPMENT", "PERIOD_END"];
 export const DEFAULT_SERVICE_BILLING_TRIGGER: ServiceBillingTrigger = "PER_SHIPMENT";
@@ -2021,6 +2028,8 @@ export interface FeatureFlags {
   financeServiceBillingMeterBasis: ServiceBillingMeterBasis;
   /** H7: ölçüm yoksa (default `DECLARED_WITH_WARNING`). */
   financeServiceBillingMissingMeter: ServiceBillingMissingMeter;
+  /** Brode fiyat birimi (default `METER`). */
+  financeServiceBillingBrodeUnit: ServiceBillingBrodeUnit;
   /** H7/H8: tetik (default `PER_SHIPMENT`; `PERIOD_END` → dönem sonu taslağı). */
   financeServiceBillingTrigger: ServiceBillingTrigger;
   /** H7: fiyat tarihi (default `SERVICE_DAY`). */
@@ -2720,6 +2729,7 @@ export class SystemSettingService {
       financeServiceBillingEnabled: await readFinanceServiceBillingEnabled(cacheClient),
       financeServiceBillingMeterBasis: await readFinanceServiceBillingMeterBasis(cacheClient),
       financeServiceBillingMissingMeter: await readFinanceServiceBillingMissingMeter(cacheClient),
+      financeServiceBillingBrodeUnit: await readFinanceServiceBillingBrodeUnit(cacheClient),
       financeServiceBillingTrigger: await readFinanceServiceBillingTrigger(cacheClient),
       financeServiceBillingPriceDate: await readFinanceServiceBillingPriceDate(cacheClient),
       financeExpenseCategorySuggestions: await readFinanceExpenseCategorySuggestions(cacheClient),
@@ -3289,6 +3299,18 @@ export class SystemSettingService {
         throw AppError.badRequest(`financeServiceBillingMissingMeter şunlardan biri olmalı: ${SERVICE_BILLING_MISSING_METER_MODES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_MISSING_METER, v, "Hizmet faturası ölçüm yoksa — bildirilenle uyar · satırı durdur", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeServiceBillingBrodeUnit")) {
+      const v = input.financeServiceBillingBrodeUnit;
+      if (typeof v !== "string" || !SERVICE_BILLING_BRODE_UNITS.includes(v as ServiceBillingBrodeUnit)) {
+        throw AppError.badRequest(`financeServiceBillingBrodeUnit şunlardan biri olmalı: ${SERVICE_BILLING_BRODE_UNITS.join(", ")}`);
+      }
+      // Çıkışsız kapı seddi: tablette brode adedi girilemiyorken ADET/VURUŞ seçilirse iç brode işleri
+      // faturadan düşer. Tablet adet girişi inince bu sed kalkar (okuyucu üç değeri de zaten tanır).
+      if (!SERVICE_BILLING_BRODE_UNITS_WRITABLE.includes(v as ServiceBillingBrodeUnit)) {
+        throw AppError.badRequest("Adet ve vuruş birimi henüz seçilemez: tablette brode adedi girişi yok, brode işleri faturaya giremezdi.", { code: "BRODE_UNIT_NO_PIECE_INPUT" });
+      }
+      await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_BRODE_UNIT, v, "Brode fiyat birimi — metre · adet · vuruş", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "financeServiceBillingTrigger")) {
       const v = input.financeServiceBillingTrigger;
@@ -5745,6 +5767,11 @@ export function readFinanceServiceBillingMissingMeter(tx?: Pick<typeof prisma, "
   return readServiceEnum(SETTING_KEYS.FINANCE_SERVICE_BILLING_MISSING_METER, SERVICE_BILLING_MISSING_METER_MODES, DEFAULT_SERVICE_BILLING_MISSING_METER, tx);
 }
 
+/** Brode fiyat birimi — tanınmayan değer varsayılana (`METER`) düşer. */
+export function readFinanceServiceBillingBrodeUnit(tx?: Pick<typeof prisma, "systemSetting">): Promise<ServiceBillingBrodeUnit> {
+  return readServiceEnum(SETTING_KEYS.FINANCE_SERVICE_BILLING_BRODE_UNIT, SERVICE_BILLING_BRODE_UNITS, DEFAULT_SERVICE_BILLING_BRODE_UNIT, tx);
+}
+
 /** H7: tetik — tanınmayan değer varsayılana (`PER_SHIPMENT`) düşer. */
 export function readFinanceServiceBillingTrigger(tx?: Pick<typeof prisma, "systemSetting">): Promise<ServiceBillingTrigger> {
   return readServiceEnum(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, SERVICE_BILLING_TRIGGERS, DEFAULT_SERVICE_BILLING_TRIGGER, tx);
@@ -5885,6 +5912,7 @@ export async function loadServiceBillingSettings(tx?: Pick<typeof prisma, "syste
   enabled: boolean;
   meterBasis: ServiceBillingMeterBasis;
   missingMeter: ServiceBillingMissingMeter;
+  brodeUnit: ServiceBillingBrodeUnit;
   trigger: ServiceBillingTrigger;
   priceDate: ServiceBillingPriceDate;
 }> {
@@ -5892,6 +5920,7 @@ export async function loadServiceBillingSettings(tx?: Pick<typeof prisma, "syste
     enabled: await resolveServiceBillingEnabled(tx),
     meterBasis: await readFinanceServiceBillingMeterBasis(tx),
     missingMeter: await readFinanceServiceBillingMissingMeter(tx),
+    brodeUnit: await readFinanceServiceBillingBrodeUnit(tx),
     trigger: await readFinanceServiceBillingTrigger(tx),
     priceDate: await readFinanceServiceBillingPriceDate(tx),
   };
