@@ -14,6 +14,7 @@
 import { CustomerCodeSource, type CustomerBarcodeSeries, type Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { AppError } from "../../utils/app-error";
+import { normalizeScanCode } from "../../utils/code-format";
 import { AuditService } from "../audit.service";
 import { formatSeriesCode, seriesPrefix, type NumberSeriesFormat } from "./series-format.helper";
 import { counterScopeKey } from "./series-counter-store.helper";
@@ -111,7 +112,7 @@ async function takeSeqTx(db: Db, seriesId: string, scope: Scope): Promise<number
 /** Kod bizim iç biçimimizle ya da bir top barkoduyla çakışıyor mu (okutmada iç barkod hep önce kazanır). */
 export async function customerCodeCollidesWithOurs(db: Pick<Db, "roll">, code: string): Promise<boolean> {
   if (classifyScannedCode(code)) return true;
-  return (await db.roll.findUnique({ where: { barcode: code }, select: { id: true } })) !== null;
+  return (await db.roll.findUnique({ where: { barcode: normalizeScanCode(code) }, select: { id: true } })) !== null;
 }
 
 /** Önizleme: sayacı TÜKETMEDEN sıradaki sıra (sayaç satırı yoksa tohum hesabı). */

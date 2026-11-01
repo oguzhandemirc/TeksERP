@@ -72,7 +72,7 @@ async function assertFormatUsable(fmt: FormatInput): Promise<string> {
   if (fmt.startValue != null && fmt.maxValue != null && fmt.maxValue < fmt.startValue) {
     throw AppError.badRequest("Üst sınır başlangıçtan küçük olamaz", { code: "VALIDATION_ERROR" });
   }
-  const sample = formatSeriesCode(customerSeriesFormat({ ...fmt, formatChangedAt: null }), fmt.startValue ?? 1);
+  const sample = formatSeriesCode(customerSeriesFormat({ ...fmt, formatChangedAt: null }), fmt.startValue ?? 1, new Date());
   if (sample.length > 64) throw AppError.badRequest("Üretilecek kod 64 karakteri aşıyor", { code: "VALIDATION_ERROR" });
   if (await customerCodeCollidesWithOurs(prisma, sample)) {
     throw AppError.conflict(`"${sample}" bizim barkod biçimimizle çakışıyor — başka bir ön ek seçin.`, {
@@ -210,9 +210,10 @@ export class CustomerBarcodeSeriesService {
       id: current?.id ?? NO_SERIES_ID,
       formatChangedAt: formatChanged ? new Date() : current!.formatChangedAt,
     };
-    const seq = await peekCustomerSeriesSeq(prisma, draft);
+    const now = new Date();
+    const seq = await peekCustomerSeriesSeq(prisma, draft, now);
     const plain = customerSeriesFormat({ ...fmt, formatChangedAt: null });
-    const codes = (formatChanged ? [0, 1, 2] : [0]).map((i) => formatSeriesCode(plain, seq + i));
+    const codes = (formatChanged ? [0, 1, 2] : [0]).map((i) => formatSeriesCode(plain, seq + i, now));
     const collides = await customerCodeCollidesWithOurs(prisma, codes[0]!);
     return { success: true, data: { codes, formatChanged, collides } };
   }
