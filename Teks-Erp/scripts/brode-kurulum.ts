@@ -21,6 +21,7 @@ import { ItemType, Prisma, StationKind, StationPropertyMode, StationType } from 
 import { z } from "zod";
 import { hedefDbAdi } from "./lib/hedef-db-kapisi";
 import { inspectionDefaultForKind } from "../src/services/helpers/quality-station.helper";
+import type prismaClient from "../src/lib/prisma";
 
 type Db = Prisma.TransactionClient;
 interface CodeName { code: string; name: string }
@@ -31,7 +32,8 @@ export interface BrodeSetupInput {
   patternProperty: CodeName;
   /** Desen bazında ücret (S7) için ayrı hizmet kalemleri; desen satırı `serviceItemCode` ile bağlanır. */
   patternServiceItems: CodeName[];
-  patterns: Array<CodeName & { serviceItemCode?: string | null }>;
+  /** `stitchCount`: desen başına vuruş (VURUŞ fiyat birimi, `finance.serviceBilling.brodeUnit`); boş = girilmedi. */
+  patterns: Array<CodeName & { serviceItemCode?: string | null; stitchCount?: number | null }>;
   internalStation: CodeName;
   externalStation: CodeName;
   /** Fason kategorisi (`appliesProperty`): kabulde uygulanan özellik iş emri hedefinden bu kategoriyle çözülür. */
@@ -135,8 +137,17 @@ export async function runBrodeSetup(db: Db, input: BrodeSetupInput, write: boole
       push({ kind: "FABRIC_PROPERTY_VALUE", key, action: "CONFLICT", detail: `desen kalemi bulunamadı: ${p.serviceItemCode}`, id: null, auditTable: "FABRIC_PROPERTY", auditRecordId: patternId });
       continue;
     }
-    const row = patternId ? await db.fabricPropertyValue.findUnique({ where: { propertyId_code: { propertyId: patternId, code: p.code } }, select: { id: true, serviceItemId: true } }) : null;
+    const row = patternId ? await db.fabricPropertyValue.findUnique({ where: { propertyId_code: { propertyId: patternId, code: p.code } }, select: { id: true, serviceItemId: true, stitchCount: true } }) : null;
     const base = { kind: "FABRIC_PROPERTY_VALUE" as const, key, auditTable: "FABRIC_PROPERTY", auditRecordId: patternId };
+    // Vuruş sayısı ayrı kayıt: boşsa doldurulur, farklıysa çakışma (faturadaki vuruş miktarını değiştirir).
+    if (row && p.stitchCount != null && row.stitchCount !== p.stitchCount) {
+      const stitchKey = { ...base, key: `${key}#vurus`, id: row.id };
+      if (row.stitchCount != null) push({ ...stitchKey, action: "CONFLICT", detail: `desenin vuruş sayısı ${row.stitchCount} (girdi ${p.stitchCount})` });
+      else {
+        if (write) await db.fabricPropertyValue.update({ where: { id: row.id }, data: { stitchCount: p.stitchCount } });
+        push({ ...stitchKey, action: "UPDATE", detail: `vuruş sayısı → ${p.stitchCount}` });
+      }
+    }
     if (row && row.serviceItemId && itemId && row.serviceItemId !== itemId) {
       push({ ...base, action: "CONFLICT", detail: "desen başka bir hizmet kalemine bağlı", id: row.id });
     } else if (row && !row.serviceItemId && itemId) {
@@ -145,8 +156,8 @@ export async function runBrodeSetup(db: Db, input: BrodeSetupInput, write: boole
     } else if (row) {
       push({ ...base, action: "SAME", detail: p.name, id: row.id });
     } else {
-      const id = write && patternId ? (await db.fabricPropertyValue.create({ data: { propertyId: patternId, code: p.code, name: p.name, sortOrder: i, serviceItemId: itemId }, select: { id: true } })).id : null;
-      push({ ...base, action: "CREATE", detail: `${p.name}${p.serviceItemCode ? ` (kalem ${p.serviceItemCode})` : ""}`, id });
+      const id = write && patternId ? (await db.fabricPropertyValue.create({ data: { propertyId: patternId, code: p.code, name: p.name, sortOrder: i, serviceItemId: itemId, stitchCount: p.stitchCount ?? null }, select: { id: true } })).id : null;
+      push({ ...base, action: "CREATE", detail: `${p.name}${p.serviceItemCode ? ` (kalem ${p.serviceItemCode})` : ""}${p.stitchCount != null ? ` · ${p.stitchCount} vuruş` : ""}`, id });
     }
   }
 
@@ -285,13 +296,28 @@ const inputSchema = z.object({
   serviceItem: codeName, flag: codeName, patternProperty: codeName, internalStation: codeName, externalStation: codeName,
   externalCategory: codeName, tamburStation: codeName, internalRoute: codeName, externalRoute: codeName,
   patternServiceItems: z.array(codeName),
-  patterns: z.array(codeName.extend({ serviceItemCode: z.string().trim().min(1).max(32).nullish() })),
+  patterns: z.array(codeName.extend({
+    serviceItemCode: z.string().trim().min(1).max(32).nullish(),
+    stitchCount: z.number().int().positive().max(10_000_000).nullish(),
+  })),
 }).partial().strict();
 
 export function parseBrodeSetupInput(raw: unknown): BrodeSetupInput | string {
   const r = inputSchema.safeParse(raw);
   if (!r.success) return r.error.issues.map((i) => `${i.path.join(".") || "(kök)"}: ${i.message}`).join("; ");
   return { ...GULKESIM_BRODE_DEFAULTS, ...r.data } as BrodeSetupInput;
+}
+
+/** Fiyat birimi ayarı + bayrak kodu uyarısı (ayar yalnız `BRODE_PROPERTY_CODE` bayrağına uygulanır). */
+async function brodeUnitNote(db: Pick<typeof prismaClient, "systemSetting">, input: BrodeSetupInput): Promise<string> {
+  const { readFinanceServiceBillingBrodeUnit } = await import("../src/services/system-setting.service");
+  const { BRODE_PROPERTY_CODE } = await import("../src/services/helpers/service-quantity.helper");
+  const unit = await readFinanceServiceBillingBrodeUnit(db);
+  const missing = unit === "STITCH" ? input.patterns.filter((p) => p.stitchCount == null).length : 0;
+  const parts = [`ℹ️  Brode fiyat birimi (ayar): ${unit}`];
+  if (missing > 0) parts.push(`${missing} desenin vuruş sayısı girdide yok — panelden girilmeli`);
+  if (input.flag.code !== BRODE_PROPERTY_CODE) parts.push(`⚠️ bayrak kodu ${input.flag.code} ≠ ${BRODE_PROPERTY_CODE}: fiyat birimi ayarı bu bayrağa UYGULANMAZ (metre)`);
+  return parts.join(" · ");
 }
 
 function readInput(path: string | undefined): BrodeSetupInput | string {
@@ -323,6 +349,7 @@ async function main(): Promise<number> {
     const changes = plan.filter((r) => r.action === "CREATE" || r.action === "UPDATE");
     const conflicts = plan.filter((r) => r.action === "CONFLICT");
     if (conflicts.length > 0) { console.error(`❌ ${conflicts.length} çakışma — hiçbir kayıt yazılmadı; veriyi panelden inceleyin.`); return 1; }
+    console.log(await brodeUnitNote(prisma, input));
     console.log(`ℹ️  Dış brode firmasını panelde '${input.externalCategory.name}' fason kategorisine bağlayın; fiyatlar (müşteri/desen) panelden girilir.`);
     if (!apply) { console.log(`KURU KOŞU — ${changes.length} kayıt yaratılacak/değişecekti; yazılan 0. Uygulamak için --apply --kullanici=<ad>.`); return 0; }
     if (changes.length === 0) { console.log("Yazılacak kayıt yok; yazılan 0."); return 0; }

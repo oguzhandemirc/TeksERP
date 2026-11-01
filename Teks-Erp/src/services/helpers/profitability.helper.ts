@@ -18,6 +18,7 @@
 import { InvoiceStatus, Prisma, ServiceMeterBasis } from "@prisma/client";
 import { factoryDayStartOfKey, factoryYmd } from "../../constants/time";
 import { AppError } from "../../utils/app-error";
+import { linkBilledQty } from "./service-quantity.helper";
 import {
   readCostProfitCategoryClasses,
   readCostProfitConsumablePriceSource,
@@ -35,6 +36,7 @@ import {
 import { loadProfitabilityFinance } from "./maliyet-bridge.helper";
 import { computeWorkCosts, type ProfitMissingCode as CostMissingCode } from "./profitability-cost.helper";
 import type { RevenueInvoiceRow, RevenueLinkRow } from "./profitability-finance.helper";
+export type { RevenueLinkRow };
 import { computeMachineCosts, type IdleMachineDay, type MachineMissingCode } from "./profitability-machine.helper";
 import { attachDirectExpenses, deductFromPools, readMonthAllocations, workOrderOfSteps, type MonthDirectExpenses } from "./profitability-allocation.helper";
 import { buildMonthPools, distributePool, overheadBase, type PoolCategory } from "./profitability-overhead.helper";
@@ -121,14 +123,14 @@ export function factoryMonthOf(at: Date): string {
   return factoryYmd(at).slice(0, 7);
 }
 
-/** Kalem grubunun TL gelirini bağlara metre payıyla böler; son bağ kalanı alır (toplam = satır toplamı, tam). */
-function allocateRevenue(totalTry: Prisma.Decimal, links: RevenueLinkRow[]): Prisma.Decimal[] {
-  const meters = links.reduce((a, l) => a.plus(l.billedMeters), D0());
+/** Kalem grubunun TL gelirini bağlara faturalanan miktar payıyla böler (metre ya da brode adet/vuruş — `linkBilledQty`); son bağ kalanı alır. */
+export function allocateRevenue(totalTry: Prisma.Decimal, links: RevenueLinkRow[]): Prisma.Decimal[] {
+  const meters = links.reduce((a, l) => a.plus(linkBilledQty(l)), D0());
   const out: Prisma.Decimal[] = [];
   let used = D0();
   links.forEach((l, i) => {
     if (i === links.length - 1) { out.push(totalTry.minus(used)); return; }
-    const share = meters.gt(0) ? totalTry.mul(l.billedMeters).div(meters) : totalTry.div(links.length);
+    const share = meters.gt(0) ? totalTry.mul(linkBilledQty(l)).div(meters) : totalTry.div(links.length);
     used = used.plus(share);
     out.push(share);
   });

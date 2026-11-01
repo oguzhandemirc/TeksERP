@@ -15,6 +15,8 @@ export interface RevenueLinkRow {
   workOrderStepId: string | null;
   serviceItemId: string;
   billedMeters: Prisma.Decimal;
+  /** Metre dışı birimde faturalanan miktar (brode adet/vuruş); gelir payı `linkBilledQty`den. */
+  billedQty: Prisma.Decimal | null;
   meterBasis: ServiceMeterBasis;
   serviceAt: Date;
   machineId: string | null;
@@ -82,7 +84,7 @@ export async function readServiceRevenueInvoices(start: Date, end: Date): Promis
       lines: { select: { itemId: true, lineTotal: true } },
       serviceBillingLinks: {
         select: {
-          id: true, rollId: true, workOrderStepId: true, serviceItemId: true, billedMeters: true, meterBasis: true, serviceAt: true, revokedAt: true,
+          id: true, rollId: true, workOrderStepId: true, serviceItemId: true, billedMeters: true, billedQty: true, meterBasis: true, serviceAt: true, revokedAt: true,
           reading: {
             select: {
               machineId: true, createdAt: true, workOrderStepId: true,
@@ -104,7 +106,7 @@ export async function readServiceRevenueInvoices(start: Date, end: Date): Promis
       id: r.id, docNo: r.docNo, status: r.status, exchangeRate: r.exchangeRate, issueDate: r.issueDate, confirmedAt: r.confirmedAt, cancelledAt: r.cancelledAt,
       cariCustomerId: r.cari.customerId, lineTotalByItem,
       links: links.map((l) => ({
-        id: l.id, rollId: l.rollId, workOrderStepId: l.workOrderStepId, serviceItemId: l.serviceItemId, billedMeters: l.billedMeters,
+        id: l.id, rollId: l.rollId, workOrderStepId: l.workOrderStepId, serviceItemId: l.serviceItemId, billedMeters: l.billedMeters, billedQty: l.billedQty,
         meterBasis: l.meterBasis, serviceAt: l.serviceAt, machineId: l.reading?.machineId ?? null, readingAt: l.reading?.createdAt ?? null, ownerCustomerId: l.roll.ownerCustomerId,
         readingStepId: l.reading?.workOrderStepId ?? null, ...readingShare(l.serviceItemId, l.reading?.billingLinks ?? []),
       })),
