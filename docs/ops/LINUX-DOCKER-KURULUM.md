@@ -189,36 +189,42 @@ Yalnız bizim kurup yönettiğimiz sunucular içindir (deneme, demo, bulut kurul
    for ip in $V4 $V6; do ufw allow proto tcp from "$ip" to any port 443 comment cloudflare >/dev/null; done
    ```
    Liste değişince eski ufw kuralları kendiliğinden silinmez (günlük tazeleme tasarımın işidir, §1.3). Betikten sonra `docker compose exec kenar nginx -s reload`.
-4. **nginx** (`kenar/site.conf`). Tanınmayan ad (doğrudan IP, başka alan) el sıkışmada reddedilir. `X-Forwarded-For` Cloudflare'in verdiği gerçek adresle EZİLİR; istemcinin yazdığı başlık API'ye ulaşmaz (`TRUST_PROXY=1`in güvenli olma şartı, §7):
-   ```nginx
-   server { listen 443 ssl default_server; ssl_reject_handshake on; }
-   server {
-       listen 443 ssl;
-       http2 on;
-       server_name <ad>.etkiliyazilim.com;
-       ssl_certificate     /etc/nginx/tls/origin.pem;
-       ssl_certificate_key /etc/nginx/tls/origin.key;
-       ssl_protocols TLSv1.2 TLSv1.3;
-       include /etc/nginx/cloudflare-ips.conf;
-       client_max_body_size 20m;
-       location / {
-           proxy_pass http://127.0.0.1:4000;
-           proxy_set_header Host $host;
-           proxy_set_header X-Forwarded-For $remote_addr;
-           proxy_set_header X-Forwarded-Proto https;
-           proxy_read_timeout 120s;
-           # Web oturum çerezi (tam izin listeli JWT ~3,8 KB) yanıt başlığını 4K varsayılanın üstüne taşır → "upstream sent too big header" 502.
-           proxy_buffer_size 16k;
-           proxy_buffers 8 16k;
-           proxy_busy_buffers_size 32k;
-       }
-   }
+4. **nginx** (`kenar/site.conf`, şablon `deploy/bulut/kenar/site.conf.ornek` — tek kaynak; bekçi `scripts/test_bulut_kenar.mjs`). Tanınmayan ad (doğrudan IP, başka alan) el sıkışmada reddedilir. `X-Forwarded-For` Cloudflare'in verdiği gerçek adresle EZİLİR; istemcinin yazdığı başlık API'ye ulaşmaz (`TRUST_PROXY=1`in güvenli olma şartı, §7). Şablon ayrıca (denetim 2026-11-01 K1-3 · D6 · O7):
+   - **İki hız bölgesi:** `kenar_ip` istemci başına genel tavan (30 r/s, burst 300 — fabrikanın tek NAT adresini boğmaz; IPv6 /64'e indirilir) ve `kenar_giris` giriş uçlarının (`/api/auth/login*`, `onsite-approve`, `announce`; GET/OPTIONS hariç) TOPLAM tavanı (3 r/s, burst 10). Ret 429, gövde backend biçiminde (`success:false`, `details.code: RATE_LIMITED`, `Retry-After`).
+   - **Muaf adresler:** `kenar/muaf/adresler.conf` (BOŞ doğar; yoksa nginx açılmaz). Fabrika/ofisin SABİT çıkış adresi satır başına `<adres|CIDR> 1;` yazılır (örnek `deploy/bulut/kenar/muaf-ornek.conf`); bu adresler toplam giriş tavanından muaftır — saldırı sürerken fabrika giriş yapmaya devam eder. Adres fabrikadan ölçülür (`curl -s https://ifconfig.me`); değişken IP / CGNAT / yedek 4G hattı YAZILMAZ.
+   - **Günlük:** `tekserp_kenar` biçimi sorgu dizesini ve referer'ı yazmaz (`totp/enroll?token=` düz kalmaz); `/api/auth/totp/` yolunda hata günlüğü yalnız kritik.
+   - **AOP:** `ssl_verify_client on` + `tls/cloudflare-origin-pull-ca.pem` — sıra madde 8'de (önce Cloudflare'de AOP açılır).
+   ```sh
+   install -d -m 755 kenar/muaf && install -m 644 /dev/null kenar/muaf/adresler.conf
+   # AOP satırları madde 8'e (Cloudflare'de AOP açılana) kadar kapalı: yoksa madde 6'daki yerel sınama da Cloudflare de reddedilir.
+   sed -e 's/SUNUCU_ADI/<ad>/' -e 's/^\(    ssl_\(client_certificate\|verify_client\) \)/#\1/' <depo>/deploy/bulut/kenar/site.conf.ornek > kenar/site.conf
+   curl -fsS https://developers.cloudflare.com/ssl/static/authenticated_origin_pull_ca.pem -o kenar/tls/cloudflare-origin-pull-ca.pem
    ```
+   HSTS nginx'ten BASILMAZ (çift başlık): bulut örneği backend'e `HTTPS_ENABLED=true` verir, başlığı backend basar. `CORS_ORIGINS` compose'tan geçer (boş = kısıtsız, bugünkü davranış); daraltmadan önce masaüstü panelin kökenini ölçün, yoksa panel kesilir.
    ⚠️ `site.conf` konteynere TEK DOSYA bind mount'tur; `sed -i`/editör dosyayı yeni inode ile yazar, konteyner eskisini görmeye devam eder — değişiklikten sonra `nginx -s reload` yetmez, `docker restart <kenar>` gerekir (2026-10-15 test-musteri'de ölçüldü).
-5. **Aç:** kenar imajı önceden yerelde olmalı (`docker pull nginx:1.27-alpine`; örnekte `pull_policy: never` — güncelleyici düzenine geçişte §11 bunu zorunlu tutar) → `cp docker-compose.bulut-ornek.yml docker-compose.override.yml` → `docker compose config --quiet` → `docker compose up -d` → `docker compose exec kenar nginx -t`. Örnek, backend'e `TRUST_PROXY=1` + `RATE_LIMIT_ENABLED=true` + `TEKSERP_KURULUM_SINIFI=BARINDIRILAN` (bulutta ZORUNLU; fabrika kurulumunda boş kalır — `.env.ornek`) verir ve API portunu `.env`teki `TEKSERP_DINLE` ne olursa olsun yalnız `127.0.0.1`de yayımlar (`ports: !override`, compose v2.24+).
+5. **Aç:** kenar imajı önceden yerelde olmalı (`docker pull nginx:1.27-alpine`; örnekte `pull_policy: never` — güncelleyici düzenine geçişte §11 bunu zorunlu tutar) → `cp docker-compose.bulut-ornek.yml docker-compose.override.yml` → `docker compose config --quiet` → `docker compose up -d` → `docker compose exec kenar nginx -t`. Örnek, backend'e `TRUST_PROXY=1` + `RATE_LIMIT_ENABLED=true` + `HTTPS_ENABLED=true` (HSTS) + `TEKSERP_KURULUM_SINIFI=BARINDIRILAN` (bulutta ZORUNLU; fabrika kurulumunda boş kalır — `.env.ornek`) verir ve API portunu `.env`teki `TEKSERP_DINLE` ne olursa olsun yalnız `127.0.0.1`de yayımlar (`ports: !override`, compose v2.24+).
 6. **Sına:** sunucuda `curl -fsS --resolve <ad>.etkiliyazilim.com:443:127.0.0.1 -k https://<ad>.etkiliyazilim.com/health` UP döner, `curl -sk https://127.0.0.1/health` el sıkışmada reddedilir. Bundan SONRA DNS A kaydı (turuncu) açılır. Dışarıdan: ad üzerinden `/health` UP; `--resolve <ad>…:443:<sunucu IP>` ile doğrudan IP zaman aşımına uğrar (ufw Cloudflare dışını düşürür).
    Mac'teki provada (Docker Desktop) konak ağı Linux sanal makinesinin ağıdır, Mac'in 443'ü DEĞİLDİR: Mac'ten `curl` bağlanamaz. Sınama kenarın içinden yapılır (nginx imajında `curl` var): `docker compose exec kenar curl -fsS --resolve <ad>:443:127.0.0.1 -k https://<ad>/health` UP · `docker compose exec kenar curl -sk https://127.0.0.1/health` çıkış 35 (el sıkışma reddi).
 7. **Güncelleme ve geri alma:** paketteki `docker-compose.yml` güncelleyicili şablondur ve elle kuruluma konmaz. `docker-compose.yml` ile `docker-compose.override.yml` paketin commit'indeki depodan yenilenir (§3 madde 3); `kenar/` ve `.env` yerinde kalır. Geri almada (§6) `kenar` de durdurulur.
+8. **Cloudflare (bölge ayarları; panelden, bir kez):**
+   - SSL/TLS → kip **Full (strict)** (teyit) · Edge Certificates → **Minimum TLS 1.2** · **Always Use HTTPS** açık · **HSTS** 6 ay (`max-age=15552000`, includeSubDomains yalnız bütün alt adlar HTTPS ise) — backend de HSTS basar, ikisi aynı alanı söyler.
+   - **Authenticated Origin Pulls** (SSL/TLS → Origin Server → AOP, bölge düzeyi) AÇ → ardından `kenar/site.conf`taki iki `#ssl_…` satırını aç (`ssl_verify_client on`) ve `docker restart <kenar>`; ters sırada kenar Cloudflare'i de reddeder. Doğrulama: ad üzerinden `/health` UP; sunucudan `curl -sk --resolve <ad>:443:127.0.0.1 https://<ad>/health` el sıkışmada reddedilir (istemci sertifikası yok).
+   - **Hız kuralı** (Security → WAF → Rate limiting): ifade `starts_with(http.request.uri.path, "/api/auth/login") or http.request.uri.path eq "/api/devices/rebind-requests/onsite-approve"`, eylem **Block** (429). **Managed Challenge / JS Challenge / Under Attack KULLANILMAZ:** tablet ve Electron tarayıcı sınamasını çözemez, fabrika girişi kesilir. Ücretsiz planda tek kural vardır; asıl tavan kenardadır (madde 4), Cloudflare kuralı önündeki ek katmandır. Kural ancak AOP açıkken anlamlıdır (yoksa köken IP'sini bilen atlar).
+9. **SSH sertleştirme (D5)** — `/etc/ssh/sshd_config.d/10-tekserp.conf`; önce kabuklu yönetici + sudo + anahtarı açılır ve İKİNCİ oturumda denenir, sonra:
+   ```
+   PermitRootLogin no
+   AllowUsers <yonetici>
+   LoginGraceTime 30
+   MaxAuthTries 3
+   X11Forwarding no
+   AllowTcpForwarding no
+   AllowAgentForwarding no
+   PasswordAuthentication no
+   KbdInteractiveAuthentication no
+   ```
+   `sshd -t && systemctl reload ssh` (açık oturum kapatılmadan yeni oturum denenir). fail2ban'a `recidive` hapsi (`[recidive] enabled = true`); sağlayıcı güvenlik duvarında SSH portu bilinen adreslere daraltılır; VDS başına ayrı anahtar (tercihen FIDO2 `ed25519-sk`).
+10. **Otomatik çekirdek yeniden başlatma (O6)** — `/etc/apt/apt.conf.d/52tekserp-yeniden-baslat`: `Unattended-Upgrade::Automatic-Reboot "true";` + `Unattended-Upgrade::Automatic-Reboot-Time "04:30";` (gece yedeğinden — `YEDEK_SAAT` 03:00 — sonra; vardiya dışı saat fabrikayla teyit edilir). Konteynerler `restart: unless-stopped` ile geri gelir; ilk kurulumda bekleyen yeniden başlatma elle, planlı yapılır. Kenar imajının güncel kararlı sürüme özetle sabitlenmesi ayrı iştir (çevrimdışı imaj taşımayı etkiler).
+11. **Kabul kapısı:** `ssh <sunucu> 'bash -s' -- --ad <ad> --proje <compose projesi> < deploy/bulut/barindirma-kontrol.sh` — SALT OKUR; ağ kenarı, SSH, fail2ban, yeniden başlatma, backend ortamı (yalnız izinli anahtarlar), kaynak sınırları, yedek (.tkenc yaşı, düz döküm), kenar yapılandırması, donanım asgarisi, dış yüz (HSTS, TLS 1.0/1.1 reddi, HTTP→HTTPS). Her madde YEŞİL/KIRMIZI/ÖLÇÜLEMEDİ; çıkış kodu KIRMIZI sayısı. Müşteriye teslim yalnız çıkış 0 ile.
 - Panel ve tablet bu ada internet kipinde bağlanır (genel CA, 443; tablet vc61+ — `docs/kurallar/kesif-cihaz.md`). Web paneli açıksa (§7) tarayıcı da aynı adı açar; kenar `location /`u olduğu gibi geçirir; örnekteki başlık tamponu (oturum çerezi) dışında ek ayar gerekmez.
 
 ## 11. Güncelleyici düzenine geçiş (`gecis`)
