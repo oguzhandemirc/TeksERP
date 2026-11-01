@@ -14,6 +14,7 @@ import { resolveEffectiveConstruction } from "./effective-construction.helper";
 import { mountedBeamViewsTx, type MountedBeamView } from "./warp-beam-mount.helper";
 import { readBeamStockBySpec, type StockBeam } from "./warp-beam-stock.helper";
 import { OPEN_MACHINE_RUN_WHERE } from "./machine-run-open.helper";
+import { readDevereEnabled, readDevereMountTracking } from "../system-setting.service";
 import { fabricFromWarpM, warpRequirements, type WarpRequirement } from "./beam-need.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -24,6 +25,8 @@ export type LoomTier = (typeof LOOM_TIERS)[number];
 export const LOOM_SUGGESTION_WARNING = {
   reedNarrower: "REED_NARROWER_THAN_FABRIC",
   noGroundWarp: "NO_GROUND_WARP",
+  mountTrackingOff: "MOUNT_TRACKING_OFF",
+  orderClosed: "WEAVING_ORDER_CLOSED",
 } as const;
 
 export type LoomSuggestionInput =
@@ -79,7 +82,10 @@ export function classifyLoom(
   const onLoom = reqs.map((r) => ({ r, remainingM: ctx.mounted.filter((b) => b.warpSpecCode === r.warpSpecCode).reduce((s, b) => s + b.remainingM, 0), mounted: ctx.mounted.some((b) => b.warpSpecCode === r.warpSpecCode) }));
   const missing = onLoom.filter((x) => !x.mounted);
   if (missing.length) {
-    const readyBeamNos = missing.flatMap((x) => (stock.get(x.r.warpSpecId) ?? []).filter((b) => b.status === "READY").map((b) => b.beamNo));
+    // Gereken metreye yeten READY levent öne (kısa levent "hazır" diye başa çıkmasın).
+    const readyBeamNos = missing.flatMap((x) => (stock.get(x.r.warpSpecId) ?? []).filter((b) => b.status === "READY")
+      .map((b, i) => ({ b, i, fits: x.r.requiredM == null || b.remainingM >= x.r.requiredM }))
+      .sort((p, q) => Number(q.fits) - Number(p.fits) || p.i - q.i).map((p) => p.b.beamNo));
     return { ...base, tier: "WARP_CHANGE", missingWarpSpecCodes: missing.map((x) => x.r.warpSpecCode), readyBeamNos };
   }
   const short = onLoom.filter((x) => x.r.requiredM != null && x.remainingM < x.r.requiredM);
@@ -111,11 +117,12 @@ export function compareCandidates(a: LoomCandidate, b: LoomCandidate): number {
 
 async function resolveTarget(db: Db, input: LoomSuggestionInput) {
   if ("weavingOrderId" in input) {
-    const wo = await db.weavingOrder.findUnique({ where: { id: input.weavingOrderId }, select: { id: true, itemId: true, recipeId: true, plannedM: true, warpSpecId: true } });
+    const wo = await db.weavingOrder.findUnique({ where: { id: input.weavingOrderId }, select: { id: true, itemId: true, recipeId: true, plannedM: true, warpSpecId: true, weaveDesignId: true, status: true } });
     if (!wo) throw AppError.notFound("Dokuma işi bulunamadı");
-    return { weavingOrderId: wo.id, itemId: wo.itemId, recipeId: wo.recipeId, plannedM: wo.plannedM == null ? null : Number(wo.plannedM), warpSpecId: wo.warpSpecId };
+    const closed = wo.status === "COMPLETED" || wo.status === "CANCELLED";
+    return { weavingOrderId: wo.id, itemId: wo.itemId, recipeId: wo.recipeId, plannedM: wo.plannedM == null ? null : Number(wo.plannedM), warpSpecId: wo.warpSpecId, weaveDesignId: wo.weaveDesignId, closed };
   }
-  return { weavingOrderId: null, itemId: input.itemId, recipeId: input.recipeId ?? null, plannedM: input.plannedM ?? null, warpSpecId: input.warpSpecId ?? null };
+  return { weavingOrderId: null, itemId: input.itemId, recipeId: input.recipeId ?? null, plannedM: input.plannedM ?? null, warpSpecId: input.warpSpecId ?? null, weaveDesignId: null, closed: false };
 }
 
 /** Dokuma işi (ya da taslak) için tezgâh önerisi — salt okuma, kilitsiz. */
@@ -134,6 +141,15 @@ export async function suggestLoomsForWeaving(db: Db, input: LoomSuggestionInput)
   if (widthWarning) {
     out.warnings.push({ code: LOOM_SUGGESTION_WARNING.reedNarrower, message: `Çözgü kartının tarak eni (${ground.reedWidthCm!.toString()} cm) ürün eninden (${c.widthCm!.toString()} cm) dar.` });
   }
+  if (t.closed) {
+    out.warnings.push({ code: LOOM_SUGGESTION_WARNING.orderClosed, message: "Dokuma işi kapalı (tamamlandı/iptal) — tezgâh önerisi yok." });
+    return out;
+  }
+  // Takılı levent kaydı yalnız devere + levent takibi açıkken doğar; kapalıyken sınıflamak her tezgâhı yanlış T3 yapar.
+  if (!(await readDevereEnabled(db)) || !(await readDevereMountTracking(db))) {
+    out.warnings.push({ code: LOOM_SUGGESTION_WARNING.mountTrackingOff, message: "Levent takibi kapalı — tezgâhtaki levent bilinmediği için hazırlık sınıfı çıkarılamaz." });
+    return out;
+  }
   const own = out.requirements.filter((r) => r.ownBeam);
   const looms = await db.machine.findMany({ where: LOOM_MACHINE_WHERE, select: { id: true, code: true, name: true }, orderBy: { code: "asc" } });
   const ids = looms.map((l) => l.id);
@@ -142,7 +158,7 @@ export async function suggestLoomsForWeaving(db: Db, input: LoomSuggestionInput)
   const runs = ids.length
     ? await db.machineRun.findMany({ where: { machineId: { in: ids }, ...OPEN_MACHINE_RUN_WHERE }, select: { machineId: true, itemId: true, weavingOrder: { select: { itemId: true, weaveDesignId: true } } } })
     : [];
-  const target = { itemId: t.itemId, weaveDesignId: c.weaveDesign?.id ?? null, widthWarning };
+  const target = { itemId: t.itemId, weaveDesignId: t.weaveDesignId ?? c.weaveDesign?.id ?? null, widthWarning };
   out.candidates = looms.map((loom) => classifyLoom(own, {
     loom, mounted: mounted.get(loom.id) ?? [],
     openRuns: runs.filter((r) => r.machineId === loom.id).map((r) => ({ itemId: r.weavingOrder?.itemId ?? r.itemId, weaveDesignId: r.weavingOrder?.weaveDesignId ?? null })),

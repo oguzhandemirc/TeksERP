@@ -9,6 +9,7 @@
 //   §3 SHARED_BEAM: döner grup zemin leventinde — ayrı levent aranmaz; zemin ihtiyacı EN HIZLI grubun (%14) take-up'ıyla
 //   §4 CREEL: katman leventsiz — ihtiyaç "levent yok", tezgâh yalnız zeminle T1
 //   §5 dokuma işi kimliğiyle öneri (işin kendi plan metresi) · bilinmeyen iş 404
+//   §5c/§5d kapalı iş ve levent takibi kapalı: aday yok + uyarı.
 //   §6 üretim önerisi levent ihtiyacı: gerekli = ham ÷ (1 − take-up), eksik PLANNED levent boyuna yukarı yuvarlı,
 //      aynı kartı isteyen iki grup stoğu ÇİFT saymaz; CREEL "levent yok"; devere kapalıyken anahtar YOK (bayt-aynı)
 // Negatif sonda: (A) `classifyLoom` kalanı `plannedLengthM`den okuyunca §1c (T2) kırmızı; (B) helper olay
@@ -168,6 +169,13 @@ async function main(): Promise<void> {
   check("§5a dokuma işinin plan metresi okunur, sonuç taslakla aynı", s5.weavingOrderId === wo.id && JSON.stringify(mine(s5.candidates)) === JSON.stringify(c1));
   const nf = await suggestLoomsForWeaving(prisma, { weavingOrderId: randomUUID() }).then(() => "OK", (e: { statusCode?: number }) => String(e.statusCode));
   check("§5b bilinmeyen dokuma işi 404", nf === "404", nf);
+  await prisma.weavingOrder.update({ where: { id: wo.id }, data: { status: "CANCELLED" } });
+  const s5c = await suggestLoomsForWeaving(prisma, { weavingOrderId: wo.id });
+  check("§5c kapalı (iptal) dokuma işi: aday yok + WEAVING_ORDER_CLOSED uyarısı", s5c.candidates.length === 0 && s5c.warnings.some((w) => w.code === "WEAVING_ORDER_CLOSED"));
+  await setSetting(SETTING_KEYS.DEVERE_MOUNT_TRACKING, false);
+  const s5d = await suggestLoomsForWeaving(prisma, { itemId: f.X, plannedM: 1000 });
+  await setSetting(SETTING_KEYS.DEVERE_MOUNT_TRACKING, true);
+  check("§5d ⭐ levent takibi kapalı → sınıflama YOK (yanlış T3 yok), MOUNT_TRACKING_OFF uyarısı", s5d.candidates.length === 0 && s5d.warnings.some((w) => w.code === "MOUNT_TRACKING_OFF"), JSON.stringify(s5d.warnings.map((w) => w.code)));
 
   console.log("\n── §6 Üretim önerisi levent ihtiyacı ──");
   const admin = await ensureTestAdmin();
