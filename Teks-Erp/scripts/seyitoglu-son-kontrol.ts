@@ -53,8 +53,14 @@ async function main(): Promise<number> {
     console.log(`🎯 Hedef veritabanı: ${hedefDbAdi()}`);
     console.log(`  Rota: ${describeRoute(plan.route)}`);
     if (plan.action === "NOT_NEEDED") {
-      console.log("✅ Gerek yok: rotanın son adımı zaten iç istasyon (top orada finalize olur). yazılan 0");
+      console.log("✅ Gerek yok: rotanın son adımı zaten kalite veren iç istasyon (top orada kaliteli finalize olur). yazılan 0");
       return 0;
+    }
+    if (plan.action === "INTERNAL_UNGRADED") {
+      console.error(
+        "❌ Son adım iç ama kalite vermiyor (KK2/Kurşun): top finalize olur, kalite YAZILMAZ. Betik yalnız son adımı fason rotaya ekler — rotayı panelde elle düzenleyin. yazılan 0",
+      );
+      return 1;
     }
     const st = plan.station.id ? "var olan istasyon" : "YARATILACAK istasyon (iç · Tambur türü · muayene açık)";
     console.log(`  Eklenecek adım: sıra ${plan.nextSequence} — ${plan.station.code} · ${plan.station.name} (${st})`);

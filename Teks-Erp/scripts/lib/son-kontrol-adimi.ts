@@ -17,7 +17,8 @@ import { resolveRoute, RouteSwitchError, type RouteRef } from "./rota-gecis";
 export const DEFAULT_FINAL_CHECK_CODE = "SON_KONTROL";
 export const DEFAULT_FINAL_CHECK_NAME = "Son kontrol";
 
-export type FinalCheckAction = "ADD_STEP" | "NOT_NEEDED";
+/** INTERNAL_UNGRADED: son adım iç ama kalite yazmaz (KK2/Kurşun) — elle karar, yazım yok. */
+export type FinalCheckAction = "ADD_STEP" | "NOT_NEEDED" | "INTERNAL_UNGRADED";
 
 export interface FinalCheckPlan {
   route: RouteRef;
@@ -51,6 +52,16 @@ export async function planFinalCheck(routeRef: string, stationCode = DEFAULT_FIN
       `istasyon kalite veremez: ${stationCode} (iç + aktif + Tambur türü + muayene açık olmalı)`,
     );
   }
+  const lastStation = await prisma.routeStep.findFirst({
+    where: { routeId: route.id },
+    orderBy: { sequence: "desc" },
+    select: { station: { select: { type: true, kind: true, isActive: true, inspectionEnabled: true } } },
+  });
+  const action: FinalCheckAction = route.lastStep.external
+    ? "ADD_STEP"
+    : lastStation && stationGradesRolls(lastStation.station)
+      ? "NOT_NEEDED"
+      : "INTERNAL_UNGRADED";
   const maxSeq = await prisma.routeStep.aggregate({ where: { routeId: route.id }, _max: { sequence: true } });
   const openWos = await prisma.workOrder.findMany({
     where: { ...OPEN_WORK_ORDER, routeTemplateId: route.id },
@@ -59,8 +70,8 @@ export async function planFinalCheck(routeRef: string, stationCode = DEFAULT_FIN
   });
   return {
     route,
-    // Son adım zaten iç ise top orada finalize olur — eklenecek bir şey yok (idempotent).
-    action: route.lastStep.external ? "ADD_STEP" : "NOT_NEEDED",
+    // "Gerek yok" yalnız son adım kalite VERİYORSA; iç ama kalitesiz son adım ayrı uyarıdır.
+    action,
     station: existing
       ? { id: existing.id, code: existing.code, name: existing.name }
       : { id: null, code: stationCode, name: DEFAULT_FINAL_CHECK_NAME },
@@ -89,6 +100,14 @@ export async function applyFinalCheck(
       if (!last || last.sequence !== plan.nextSequence - 1 || last.station.type !== StationType.EXTERNAL) return null;
       let stationId = plan.station.id;
       const stationCreated = stationId === null;
+      if (stationId !== null) {
+        // Plan tx dışında denetlendi; istasyon arada pasife/başka türe geçtiyse adım eklenmez.
+        const cur = await tx.station.findUnique({
+          where: { id: stationId },
+          select: { type: true, kind: true, isActive: true, inspectionEnabled: true },
+        });
+        if (!cur || !stationGradesRolls(cur)) return null;
+      }
       if (stationId === null) {
         const s = await tx.station.create({
           data: {

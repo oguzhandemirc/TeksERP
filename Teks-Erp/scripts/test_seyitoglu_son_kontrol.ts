@@ -251,7 +251,12 @@ async function main(): Promise<void> {
   check("§6 adımı eklenmemiş rota dokunulmaz (son adım fason kalır)", untouchedSteps === 1);
   const ic = run([`--rota=${codeOf("IC")}`, ist, "--apply", `--kullanici=${ADMIN_NAME}`]);
   const icSteps = await prisma.routeStep.count({ where: { routeId: internalLast } });
-  check("§6b son adımı iç rota: gerek yok, yazılan 0", ic.code === 0 && ic.out.includes("Gerek yok") && icSteps === 2, ic.out.slice(-200));
+  // Son adım iç ama kalitesiz (KK2) → "gerek yok" DEMEZ; uyarı + çıkış 1, yazılan 0.
+  check(
+    "§6b son adımı iç-kalitesiz (KK2) rota: uyarı, çıkış 1, yazılan 0",
+    ic.code === 1 && ic.out.includes("kalite vermiyor") && !ic.out.includes("Gerek yok") && icSteps === 2,
+    ic.out.slice(-200),
+  );
 }
 
 async function cleanup(): Promise<void> {
