@@ -1,14 +1,20 @@
 // Atkı sırası sekmesi: seçili kumaşın atkı kartını düzenler (sıra kodu · sıklık · program no · A/B/C iplikleri).
 // Kart başka kumaşlarda da kullanılıyorsa "N kumaşta kullanılıyor" bandı — burada yapılan düzeltme ötekileri
-// de değiştirir (tasarım §2.9 risk 1). Sıra kodu doluysa rapordaki adetleri SUNUCU türetir.
+// de değiştirir (tasarım §2.9 risk 1); yazma izniyle "Bu desene özel kopya" kartı yalnız bu kumaşa ayırır (SY-P3).
+// Sıra kodu doluysa rapordaki adetleri SUNUCU türetir.
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Copy } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { countWeftSpecUsers, weftSpecApi } from "../service";
 import type { DesignFabric } from "../types";
 import { WeftSpecEditor } from "./WeftSpecEditor";
+import { WeftSpecForkDialog } from "./WeftSpecForkDialog";
 
 export function WeftTab({ fabric, canWrite }: { fabric: DesignFabric | null; canWrite: boolean }) {
   const weftId = fabric?.weftSpecId ?? null;
+  const [forking, setForking] = useState(false);
   const spec = useQuery({ queryKey: ["weft-specs", "detail", weftId], queryFn: () => weftSpecApi.get(weftId!), enabled: !!weftId });
   const users = useQuery({ queryKey: ["weft-specs", "users", weftId], queryFn: () => countWeftSpecUsers(weftId!), enabled: !!weftId });
   if (!fabric) return <p className="text-sm text-muted-foreground">Önce desene bir kumaş bağlayın.</p>;
@@ -22,8 +28,16 @@ export function WeftTab({ fabric, canWrite }: { fabric: DesignFabric | null; can
       {shared && (
         <Callout tone="warning" title={`Bu atkı kartı ${users.data} kumaşta kullanılıyor`}>
           Burada yapılan değişiklik o kumaşların hepsine uygulanır. Kayıtlı standart maliyet sürümleri donmuştur, değişmez.
+          {canWrite && (
+            <div className="mt-2">
+              <Button size="sm" variant="outline" onClick={() => setForking(true)}>
+                <Copy className="mr-1.5 h-4 w-4" />Bu desene özel kopya
+              </Button>
+            </div>
+          )}
         </Callout>
       )}
+      {forking && shared && <WeftSpecForkDialog spec={spec.data} fabric={fabric} onClose={() => setForking(false)} />}
       <WeftSpecEditor key={spec.dataUpdatedAt} spec={spec.data} fabricId={fabric.id} canWrite={canWrite} />
     </div>
   );
