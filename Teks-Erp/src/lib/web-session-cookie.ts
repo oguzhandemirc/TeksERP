@@ -90,6 +90,23 @@ export function readTrustedDeviceCookie(req: Request): string | null {
   return readNamedCookie(req, TRUSTED_DEVICE_COOKIE);
 }
 
+/** Güvenilir cihaz belirteci istek gövdesinde taşınırken alan adı (çerezsiz kanal; henüz bağlı değil). */
+export const TRUSTED_DEVICE_BODY_FIELD = "trustedDeviceToken";
+const TRUSTED_DEVICE_TOKEN_MAX = 256;
+
+/**
+ * Belirteci KANALDAN BAĞIMSIZ okur: tarayıcı çerezden, çerezsiz istemci gövde alanından.
+ * Doğrulama kaynağa bakmaz (`consumeTrustedDevice`); kaynak yalnız nereden okunacağını seçer.
+ */
+export function readTrustedDeviceToken(req: Request, source: "cookie" | "body"): string | null {
+  let raw: unknown;
+  if (source === "cookie") raw = readTrustedDeviceCookie(req);
+  else raw = (req.body as Record<string, unknown> | undefined)?.[TRUSTED_DEVICE_BODY_FIELD];
+  if (typeof raw !== "string") return null;
+  const t = raw.trim();
+  return t.length > 0 && t.length <= TRUSTED_DEVICE_TOKEN_MAX ? t : null;
+}
+
 export function setTrustedDeviceCookie(res: Response, token: string, maxAgeSeconds: number): void {
   const maxAge = Math.max(0, Math.floor(maxAgeSeconds));
   res.append("Set-Cookie", `${TRUSTED_DEVICE_COOKIE}=${encodeURIComponent(token)}; ${TRUSTED_COOKIE_ATTRS}; Max-Age=${maxAge}`);

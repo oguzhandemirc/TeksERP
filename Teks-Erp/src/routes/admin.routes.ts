@@ -66,6 +66,7 @@ import {
 import { SessionRegistryService } from "../services/session-registry.service";
 import { AppError } from "../utils/app-error";
 import { z } from "zod";
+import { TrustedDeviceService, parseTrustedDeviceIds, emptyBodySchema } from "../services/trusted-device.service";
 import "../types/express-augment";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
@@ -564,6 +565,79 @@ router.post(
         byId: req.user?.userId as string,
       });
       res.status(200).json({ success: true, message: "İki adımlı doğrulama sıfırlandı" });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/users/{id}/trusted-devices:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Kullanıcının web girişinde hatırlanan cihazları (son 50; belirteç/özet dönmez)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/users/:id/trusted-devices",
+  verifyToken,
+  requirePermission("admin:users"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { userId } = parseTrustedDeviceIds(req.params.id as string);
+      res.status(200).json({ success: true, data: await TrustedDeviceService.list(userId) });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/users/{id}/trusted-devices/{deviceId}/revoke:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Kullanıcının hatırlanan bir cihazını kaldır (sonraki girişte kod istenir)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       404: { description: TRUSTED_DEVICE_NOT_FOUND }
+ *       409: { description: TRUSTED_DEVICE_ALREADY_REVOKED }
+ */
+router.post(
+  "/users/:id/trusted-devices/:deviceId/revoke",
+  verifyToken,
+  requirePermission("admin:users"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      emptyBodySchema.parse(req.body ?? {});
+      const { userId, deviceId } = parseTrustedDeviceIds(req.params.id as string, req.params.deviceId as string);
+      await TrustedDeviceService.revoke({ userId, deviceId: deviceId!, actorId: req.user?.userId as string, reason: "ADMIN" });
+      res.status(200).json({ success: true, message: "Cihaz kaldırıldı" });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/users/{id}/trusted-devices/revoke-all:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Kullanıcının hatırlanan bütün cihazlarını kaldır
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post(
+  "/users/:id/trusted-devices/revoke-all",
+  verifyToken,
+  requirePermission("admin:users"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      emptyBodySchema.parse(req.body ?? {});
+      const { userId } = parseTrustedDeviceIds(req.params.id as string);
+      const revoked = await TrustedDeviceService.revokeAll({ userId, actorId: req.user?.userId as string, reason: "ADMIN" });
+      res.status(200).json({ success: true, data: { revoked } });
     } catch (error) {
       next(error);
     }

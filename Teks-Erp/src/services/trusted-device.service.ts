@@ -12,6 +12,7 @@
 // =============================================================================
 import { randomBytes } from "node:crypto";
 import type { Prisma } from "@prisma/client";
+import { z } from "zod";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { uyari } from "../lib/logger";
@@ -266,6 +267,20 @@ function stateOf(
   if (r.tokenVersion !== tv) return "GECERSIZ";
   if (r.expiresAt.getTime() <= now.getTime()) return "SURESI_DOLDU";
   return "GECERLI";
+}
+
+/** Cihaz uçlarının gövdesi boş olmalı (sessiz alan kabulü yok). */
+export const emptyBodySchema = z.strictObject({});
+
+const uuidSchema = z.string().uuid();
+
+/** Yol parametreleri: biçimsiz kimlik 404 (DB'ye uuid olmayan değer gitmez). */
+export function parseTrustedDeviceIds(userId: string, deviceId?: string): { userId: string; deviceId?: string } {
+  if (!uuidSchema.safeParse(userId).success) throw AppError.notFound("Kullanıcı bulunamadı.");
+  if (deviceId !== undefined && !uuidSchema.safeParse(deviceId).success) {
+    throw AppError.notFound("Cihaz bulunamadı.", { code: "TRUSTED_DEVICE_NOT_FOUND" });
+  }
+  return { userId, deviceId };
 }
 
 export class TrustedDeviceService {

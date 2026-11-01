@@ -88,6 +88,7 @@ export const AUDIT_ISIMLERI: Readonly<Record<string, TermCases>> = {
   FACTORY_TIMEZONE_PERIOD: onEkli("saat dilimi", iyelik("dönem", "i", "e", "i")),
   USER_QUICK_PIN: onEkli("hızlı PIN", RECORD_TERM),
   USER_WEB_TOTP: onEkli("internetten giriş 2FA tercihi", RECORD_TERM),
+  TRUSTED_DEVICE: onEkli("hatırlanan cihaz", RECORD_TERM),
   PAYMENT_ALLOCATION: onEkli("fatura kapama", RECORD_TERM),
   LABEL_PRINT_EVENT: onEkli("etiket baskı", RECORD_TERM),
   ITEM_PRICE: onEkli("ürün", iyelik("fiyat", "ı", "a", "ı")),
