@@ -170,7 +170,7 @@ describe('useIdleLock — çevrimdışı kilit ertelemesi (Y5)', () => {
     expect(useLockStore.getState().locked).toBe(true);
   });
 
-  it('⭐ ayar AÇIK + çevrimdışı: hareketsizlik ve arka plan kilidi ERTELENİR', () => {
+  it('⭐ ayar AÇIK + çevrimdışı: hareketsizlik ve arka plan kilidi ERTELENİR; arka plan borcu bağlantı dönünce ödenir', () => {
     mockOfflineDefer = true;
     renderHook(() => useIdleLock());
     act(() => reportServerUnreachable());
@@ -178,7 +178,11 @@ describe('useIdleLock — çevrimdışı kilit ertelemesi (Y5)', () => {
     tick();
     expect(useLockStore.getState().locked).toBe(false);
     emit('background');
+    emit('active');
     expect(useLockStore.getState().locked).toBe(false);
+    // Erteleme sırasındaki gerçek arka plan geçişi borçtur: bağlantı dönünce kilitlenir.
+    act(() => reportServerReachable());
+    expect(useLockStore.getState().locked).toBe(true);
   });
 
   it('⭐ ayar AÇIK: bağlantı dönünce süre BAŞTAN başlar (anında kilit yok), dolunca kilitler', () => {
@@ -192,17 +196,6 @@ describe('useIdleLock — çevrimdışı kilit ertelemesi (Y5)', () => {
     expect(useLockStore.getState().locked).toBe(false);
     advance(IDLE_PAST);
     tick();
-    expect(useLockStore.getState().locked).toBe(true);
-  });
-
-  it('⭐ ayar AÇIK: erteleme sırasında arka plana geçildiyse bağlantı dönünce kilitlenir', () => {
-    mockOfflineDefer = true;
-    renderHook(() => useIdleLock());
-    act(() => reportServerUnreachable());
-    emit('background');
-    emit('active');
-    expect(useLockStore.getState().locked).toBe(false);
-    act(() => reportServerReachable());
     expect(useLockStore.getState().locked).toBe(true);
   });
 

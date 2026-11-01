@@ -65,9 +65,6 @@ export function useIdleLock(): IdleLockUi {
   const deferred = isLockDeferred(deferSetting, reason);
   const deferredRef = useRef(deferred);
   deferredRef.current = deferred;
-  // Erteleme sırasında operatör uygulamadan ayrıldıysa (gerçek arka plan) kilit borçtur:
-  // bağlantı dönünce ödenir — dönen kişi başkası olabilir.
-  const missedBgLockRef = useRef(false);
 
   const activeGuard = enabled && !!user; // idle timeout (hareketsizlik)
   const bgGuard = lockOnBackground && !!user; // arka plana geçince anında kilit (bağımsız)
@@ -78,15 +75,7 @@ export function useIdleLock(): IdleLockUi {
     if (activeGuard) recordActivity();
   }, [activeGuard]);
 
-  // Bağlantı dönünce (erteleme biter) hareketsizlik süresi baştan başlar — anında kilit yok;
-  // erteleme sırasında kaçırılmış arka plan kilidi VARSA şimdi uygulanır.
-  useEffect(() => {
-    if (deferred) return;
-    if (missedBgLockRef.current) {
-      missedBgLockRef.current = false;
-      if (bgGuard) lock();
-    } else if (activeGuard) recordActivity();
-  }, [deferred, activeGuard, bgGuard, lock]);
+  const missedBgLockRef = useDeferEndEffect(deferred, activeGuard, bgGuard, lock);
 
   // Periyodik idle kontrolü (kilitli değilken).
   useEffect(() => {
@@ -138,7 +127,7 @@ export function useIdleLock(): IdleLockUi {
       }
     });
     return () => sub.remove();
-  }, [bgGuard, lock]);
+  }, [bgGuard, lock, missedBgLockRef]);
 
   const dismissWarning = useCallback(() => {
     recordActivity();
@@ -146,4 +135,21 @@ export function useIdleLock(): IdleLockUi {
   }, []);
 
   return { warning: warning && activeGuard && !locked, secondsLeft, dismissWarning };
+}
+
+/**
+ * Y5: bağlantı dönünce (erteleme biter) hareketsizlik süresi baştan başlar — anında kilit yok.
+ * Erteleme sırasında operatör uygulamadan ayrıldıysa (gerçek arka plan) kilit borçtur ve şimdi
+ * ödenir — dönen kişi başkası olabilir. Dönen ref'i arka plan dinleyicisi işaretler.
+ */
+function useDeferEndEffect(deferred: boolean, activeGuard: boolean, bgGuard: boolean, lock: () => void) {
+  const missedBgLockRef = useRef(false);
+  useEffect(() => {
+    if (deferred) return;
+    if (missedBgLockRef.current) {
+      missedBgLockRef.current = false;
+      if (bgGuard) lock();
+    } else if (activeGuard) recordActivity();
+  }, [deferred, activeGuard, bgGuard, lock]);
+  return missedBgLockRef;
 }
