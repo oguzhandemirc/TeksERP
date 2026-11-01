@@ -174,13 +174,12 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
       column: "customerId",
       label: "Cari hesap",
       uniqueOn: ["customerId"],
-      policy: "BLOCK",
+      policy: "KEEP_ON_SOURCE",
       why:
-        "İki cari hesabın birleşmesi DEFTER kararıdır, taşıma değil: bakiye, para birimi ve " +
-        "hareket geçmişi iki ayrı hesapta yaşıyor ve doğru kapanış yalnız muhasebenin bileceği " +
-        "bir mahsup/virman belgesidir. Kısıt kolonun KENDİSİNDE (`customerId @unique`), yani " +
-        "çakışma ancak İKİ tarafın da hesabı varsa doğar; tek taraflıysa satır serbestçe taşınır. " +
-        "Önce cari birleştirme virmanı (K3d `helpers/cari-merge.helper.ts`, `scripts/fix_cari_cift_hesap.ts`).",
+        "İki kartın da cari hesabı var: birleşen kartın hesabı TAŞINMAZ (`customerId @unique` tek hesaba izin " +
+        "verir), birleşen kartta kalır ve o kart üzerinden kalan karta bağlanır; bakiye ve hareketler " +
+        "değişmez. Birleştirmeden sonra Cari Hesaplar → Birleştir ile bu hesabı kalan kartın hesabına " +
+        "aktarın (virman — bakiye korunur). Tek taraflıysa hesap serbestçe taşınır.",
     },
     {
       kind: "CONFLICT",

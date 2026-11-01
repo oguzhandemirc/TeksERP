@@ -36,22 +36,28 @@ export interface CariMergeApplyInput {
   clientToken: string;
 }
 
-const ACC = { id: true, kind: true, isActive: true, mergedIntoId: true, customerId: true, customer: { select: { code: true, name: true } }, subcontractor: { select: { code: true, name: true, customerId: true } } } as const;
+const ACC = { id: true, kind: true, isActive: true, mergedIntoId: true, customerId: true, customer: { select: { code: true, name: true, mergedIntoId: true } }, subcontractor: { select: { code: true, name: true, customerId: true } } } as const;
 
-/** Aynı kartın öbür hesapları — farklı kimlik zaten engeldir (MASTER-VERI), seçici yalnız geçerli adayları listeler. */
+/**
+ * Aynı kartın öbür hesapları — farklı kimlik zaten engeldir (MASTER-VERI), seçici yalnız geçerli adayları listeler.
+ * Ana veri birleştirmesinde mezar taşında kalan hesap (KEEP_ON_SOURCE) survivor kartın hesabı sayılır.
+ */
 async function candidates(cariId: string): Promise<ApiResponse<CariMergeCandidate[]>> {
   const self = await prisma.cariAccount.findUnique({ where: { id: cariId }, select: ACC });
   if (!self) throw AppError.notFound("Cari hesap bulunamadı.", { code: "CARI_ACCOUNT_NOT_FOUND" });
-  const card = self.customerId ?? self.subcontractor?.customerId ?? null;
+  const card = self.customerId ? (self.customer?.mergedIntoId ?? self.customerId) : (self.subcontractor?.customerId ?? null);
   if (!card) return { success: true, data: [] };
   const rows = await prisma.cariAccount.findMany({
-    where: { id: { not: cariId }, mergedIntoId: null, OR: [{ customerId: card }, { subcontractor: { customerId: card } }] },
+    where: { id: { not: cariId }, mergedIntoId: null, OR: [{ customerId: card }, { subcontractor: { customerId: card } }, { customer: { mergedIntoId: card } }] },
     select: { ...ACC, balances: { select: { currency: true, balance: true }, orderBy: { currency: "asc" } } },
     orderBy: { createdAt: "asc" },
   });
-  const data = rows.map((r) => {
+  // İki mezar taşı hesabı birbirine birleşmez — ikisinin de hedefi kalan kartın kendi hesabıdır.
+  const selfTomb = Boolean(self.customer?.mergedIntoId);
+  const data = rows.filter((r) => !(selfTomb && r.customer?.mergedIntoId)).map((r) => {
     const party = r.customer ?? r.subcontractor;
-    const otherIsCard = r.customerId != null;
+    // Hedef = kartın KENDİ hesabı (mezar taşı ve eski fason bacağı kaynak olur).
+    const otherIsCard = r.customerId === card;
     return {
       id: r.id,
       kind: r.kind,
