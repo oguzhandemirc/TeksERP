@@ -18,6 +18,9 @@ export interface QuoteLine {
   colorId: string | null;
   item: Ref | null;
   color: Ref | null;
+  /** Varyant (ürün şablonu) — eski sunucuda yok. */
+  recipeId?: string | null;
+  recipe?: { id: string; code: string; name: string; variantCode?: string | null } | null;
   description: string;
   width: Dec | null;
   quantity: Dec;

@@ -31,4 +31,9 @@ describe("QuoteLinesSection", () => {
     expect(screen.getByTestId("price-source")).toHaveTextContent("≠ elle");
     expect(screen.getByTestId("quote-margin")).toHaveTextContent("Brüt marj 100,00 TL (%12,5)");
   });
+  it("varyantlı kalemde varyant kodu görünür", () => {
+    const l = line({ recipeId: "r1", recipe: { id: "r1", code: "RC-1", name: "Mavi şerit", variantCode: "V2" } });
+    renderWithProviders(<QuoteLinesSection quote={quote([l])} editable={false} />);
+    expect(screen.getByTestId("line-variant")).toHaveTextContent("Varyant: V2 · Mavi şerit");
+  });
 });

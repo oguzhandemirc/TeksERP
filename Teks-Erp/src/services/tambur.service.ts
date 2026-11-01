@@ -2177,7 +2177,8 @@ export class TamburService {
           stationName: s.station.name,
           stationCode: s.station.code,
           openRollCount: s.currentRolls.length,
-          totalCurrentQty: s.currentRolls.reduce((sum, r) => sum + Number(r.currentQty), 0),
+          // Decimal toplam: Number toplamı kayan nokta artığı bırakıyordu (3934.9999999999995).
+          totalCurrentQty: s.currentRolls.reduce((sum, r) => sum.plus(r.currentQty), new Prisma.Decimal(0)).toNumber(),
           itemName: s.workOrder.targetItem?.name ?? null,
           colorName: s.workOrder.targetColor?.name ?? null,
           colorHex: s.workOrder.targetColor?.hex ?? null,

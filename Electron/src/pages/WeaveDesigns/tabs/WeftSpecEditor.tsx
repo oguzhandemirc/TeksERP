@@ -12,6 +12,7 @@ import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
 import { weftSpecApi } from "../service";
 import type { WeftSpecDetail } from "../types";
+import { decimalToFormText } from "@/lib/decimal-form-text";
 
 interface Row { yarnItemId: string; picks: string }
 const MAX_WEFT_LINES = 26;
@@ -30,7 +31,7 @@ export function buildWeftBody(seq: string, picksPerCm: string, program: string, 
 export function WeftSpecEditor({ spec, fabricId, canWrite }: { spec: WeftSpecDetail; fabricId: string; canWrite: boolean }) {
   const qc = useQueryClient();
   const [seq, setSeq] = useState(spec.sequenceCode ?? "");
-  const [picksPerCm, setPicksPerCm] = useState(spec.picksPerCm ?? "");
+  const [picksPerCm, setPicksPerCm] = useState(() => decimalToFormText(spec.picksPerCm));
   const [program, setProgram] = useState(spec.weftProgramNo ?? "");
   const [rows, setRows] = useState<Row[]>(() => spec.yarns.map((y) => ({ yarnItemId: y.yarnItemId, picks: String(y.picksInRepeat) })));
   const derived = seq.trim() !== "";

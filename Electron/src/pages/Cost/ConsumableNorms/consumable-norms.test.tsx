@@ -93,3 +93,19 @@ describe("ConsumableNormDialog — deneme token'ı ve 409", () => {
     expect(tokens[2]).not.toBe(tokens[1]);
   });
 });
+
+describe("ConsumableNormDialog — sıfır norm 'sarf kullanmaz' beyanı", () => {
+  it("0 gönderilebilir (Kaydet açık) ve sunucuya '0' gider", async () => {
+    perms = ["cost:read", "cost:write"];
+    svc.change.mockReset().mockResolvedValueOnce({ success: true, data: norm });
+    const user = userEvent.setup();
+    renderWithProviders(<ConsumableNormDialog current={norm} onClose={vi.fn()} />);
+    expect(screen.getByText(/sarf kullanmaz/)).toBeInTheDocument();
+    const input = screen.getByLabelText("Metre başına miktar");
+    await user.clear(input);
+    await user.type(input, "0");
+    await user.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(svc.change).toHaveBeenCalledTimes(1));
+    expect(svc.change.mock.calls[0]![1]).toMatchObject({ qtyPerM: "0" });
+  });
+});
