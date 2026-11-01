@@ -285,7 +285,10 @@ function patchColumns<T extends Record<string, unknown>>(full: T, patch: Deliver
   return Object.fromEntries(Object.entries(full).filter(([k]) => patch[k as keyof DeliveryNoteHeaderInput] !== undefined)) as Partial<T>;
 }
 
-/** Claim kaybedildi: taze okumayla 404 ya da 409 (hangi durumda olduğunu söyler). */
+/** Silinebilir mi — tekil ve toplu silmenin (önizleme dahil) TEK yüklemi; claim WHERE'i aynı değeri taşır. */
+export const DELETABLE_NOTE_STATUS = "DRAFT" as const satisfies DeliveryNoteStatus;
+export const isDeletableNoteStatus = (s: DeliveryNoteStatus): boolean => s === DELETABLE_NOTE_STATUS;
+
 /**
  * ④ Deftere hiç yazmamış taslak — fiziksel silme (`docs/kurallar/defter.md` § Hard delete).
  * Taramalar silinmez, taslaktan ÇÖZÜLÜR (fotoğraf izi kalır, yeniden kullanılabilir); satırlar Cascade.
@@ -293,11 +296,11 @@ function patchColumns<T extends Record<string, unknown>>(full: T, patch: Deliver
 export async function deleteDeliveryNote(id: string, userId: string): Promise<{ id: string; noteNo: string }> {
   const before = await prisma.customerDeliveryNote.findUnique({ where: { id }, select: { ...PRIOR_SELECT, sourceKind: true, senderText: true, senderDocDate: true, customerBatchNo: true, processText: true, pageCount: true, declaredTopCount: true, senderCustomerId: true } });
   if (!before) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
-  if (before.status !== "DRAFT") await notDraft(id);
+  if (!isDeletableNoteStatus(before.status)) await notDraft(id);
   await prisma.$transaction(async (tx) => {
     // Çözme önce (FK Restrict); claim kaybedilirse tx geri sarar, taramalar bağlı kalır.
     await tx.documentScan.updateMany({ where: { noteId: id }, data: { noteId: null } });
-    const gone = await tx.customerDeliveryNote.deleteMany({ where: { id, status: "DRAFT" } });
+    const gone = await tx.customerDeliveryNote.deleteMany({ where: { id, status: DELETABLE_NOTE_STATUS } });
     if (gone.count === 0) await notDraft(id);
   });
   void AuditService.log({ userId, action: "DELETE", tableName: NOTE_TABLE, recordId: id, oldData: auditHeader(before) });

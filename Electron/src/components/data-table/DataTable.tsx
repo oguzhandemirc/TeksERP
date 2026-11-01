@@ -91,6 +91,11 @@ interface Props<T> {
    * (örn. `ContextMenuItem` / `RowOpenItems`). `null` dönerse o satır menüsüz kalır.
    */
   rowContextMenu?: (row: T) => ReactNode;
+  /**
+   * Seçilemez satırın nedeni. Verilir ve metin dönerse kutu GİZLENMEZ, pasif çizilir ve neden
+   * ipucu olur (ör. "Onaylanmış belge silinemez"); verilmezse bugünkü gibi boş hücre.
+   */
+  selectionBlockedReason?: (row: T) => string | null;
   /** Sayfalama çubuğunun sağına (kalıcı görünür) eklenen aksiyonlar — ör. "Tümünü
    *  İndir" + "Envanter Özeti". pagination verilmezse gösterilmez. */
   paginationActions?: ReactNode;
@@ -110,6 +115,7 @@ export function DataTable<T>({
   exportName = "Liste",
   selectedExportHint,
   rowContextMenu,
+  selectionBlockedReason,
   paginationActions,
 }: Props<T>) {
   const rows = table.getRowModel().rows;
@@ -297,6 +303,7 @@ export function DataTable<T>({
                         selectable={selectable}
                         onRowClick={onRowClick}
                         rowContextMenu={rowContextMenu}
+                        selectionBlockedReason={selectionBlockedReason}
                         openTimer={openTimer}
                         selRef={selRef}
                         visibleColumnIds={visibleColumnIds}
@@ -393,6 +400,7 @@ interface DataTableRowProps<T> {
   selectable: boolean;
   onRowClick?: (row: T) => void;
   rowContextMenu?: (row: T) => ReactNode;
+  selectionBlockedReason?: (row: T) => string | null;
   openTimer: MutableRefObject<ReturnType<typeof setTimeout> | null>;
   selRef: MutableRefObject<string>;
   // Memo geçersizleştirme sinyalleri — gövdede doğrudan kullanılmaz, React.memo
@@ -418,9 +426,11 @@ function DataTableRowInner<T>({
   selectable,
   onRowClick,
   rowContextMenu,
+  selectionBlockedReason,
   openTimer,
   selRef,
 }: DataTableRowProps<T>) {
+  const blocked = selectable && !row.getCanSelect() ? (selectionBlockedReason?.(row.original) ?? null) : null;
   const rowEl = (
     <TableRow
       data-state={isSelected ? "selected" : undefined}
@@ -450,13 +460,17 @@ function DataTableRowInner<T>({
         <TableCell className="w-9" onClick={(e) => e.stopPropagation()}>
           {/* Seçilemez satırlarda (enableRowSelection predicate false —
               ör. sevkteki çuval) checkbox gizlenir; boş hücre hizayı korur. */}
-          {row.getCanSelect() && (
+          {row.getCanSelect() ? (
             <Checkbox
               checked={isSelected}
               onCheckedChange={(v) => row.toggleSelected(!!v)}
               aria-label="Seç"
             />
-          )}
+          ) : blocked ? (
+            <span title={blocked} className="inline-flex">
+              <Checkbox checked={false} disabled aria-label={`Seçilemez: ${blocked}`} />
+            </span>
+          ) : null}
         </TableCell>
       )}
       {row.getVisibleCells().map((cell) => (

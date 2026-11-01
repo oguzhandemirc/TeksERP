@@ -15,7 +15,7 @@ export interface NoteListFilter {
 
 export const EMPTY_FILTER: NoteListFilter = { status: null, ownerCustomerId: null, senderCustomerId: null, q: "", from: "", to: "" };
 
-export function toQuery(f: NoteListFilter): DeliveryNoteListQuery {
+export function toQuery(f: NoteListFilter, limit = 50): DeliveryNoteListQuery {
   return {
     status: f.status ?? undefined,
     ownerCustomerId: f.ownerCustomerId ?? undefined,
@@ -23,12 +23,12 @@ export function toQuery(f: NoteListFilter): DeliveryNoteListQuery {
     q: f.q.trim() || undefined,
     from: f.from || undefined,
     to: f.to || undefined,
-    limit: 50,
+    limit,
   };
 }
 
-export function useNoteList(filter: NoteListFilter) {
-  const base = toQuery(filter);
+export function useNoteList(filter: NoteListFilter, pageSize = 50) {
+  const base = toQuery(filter, pageSize);
   const q = useInfiniteQuery({
     queryKey: [INCOMING_DOCUMENT_QUERY_KEY, "list", base],
     queryFn: ({ pageParam }) => listDeliveryNotes({ ...base, cursor: pageParam ?? undefined }),

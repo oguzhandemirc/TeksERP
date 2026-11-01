@@ -7,6 +7,7 @@ import type {
   ApproveResult, DeliveryNoteDetail, DeliveryNoteLine, DeliveryNoteListQuery, DeliveryNoteListResponse,
   HeaderPatch, IncomingDocumentSettings, LineInput, LinePatch, NoteMatchSuggestions, ReaderStatus, SenderTemplatePatch,
   SenderTemplateView, UnreviewedApproval, CustomerDefaultView, ProcessValuePage, WorkOrderPlan,
+  BulkDeletePreview, BulkDeleteResult,
 } from "./types";
 
 const BASE = "/api/gelen-belge";
@@ -50,6 +51,16 @@ export async function updateNoteHeader(id: string, patch: HeaderPatch): Promise<
 
 export async function deleteDraftNote(id: string): Promise<unknown> {
   return (await apiClient.delete<ApiResponse<unknown>>(`${BASE}/irsaliyeler/${id}`)).data.data;
+}
+
+/** Toplu silme önizlemesi — sunucu YAZMAZ; kayıt başına silinebilir mi + neden, satır/sayfa sayısı. */
+export async function previewBulkDeleteNotes(ids: string[]): Promise<BulkDeletePreview> {
+  return (await apiClient.post<ApiResponse<BulkDeletePreview>>(`${BASE}/irsaliyeler/toplu-sil/onizleme`, { ids })).data.data;
+}
+
+/** Toplu silme — her kayıt tekil silme yolundan; kayıt başına sonuç (biri düşerse diğerleri sürer). */
+export async function applyBulkDeleteNotes(ids: string[]): Promise<BulkDeleteResult> {
+  return (await apiClient.post<ApiResponse<BulkDeleteResult>>(`${BASE}/irsaliyeler/toplu-sil`, { ids })).data.data;
 }
 
 /** Toplu satır: parti `clientToken`ı zaman aşımı tekrarında satırları ikilemez (D2 sözleşmesi). */

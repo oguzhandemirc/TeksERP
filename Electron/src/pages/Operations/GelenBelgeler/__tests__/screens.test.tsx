@@ -47,6 +47,8 @@ vi.mock("../service", () => ({
   createUploadNote: vi.fn(),
   uploadScan: vi.fn(),
   getReaderStatus: vi.fn(() => new Promise(() => {})),
+  previewBulkDeleteNotes: vi.fn(),
+  applyBulkDeleteNotes: vi.fn(),
 }));
 
 const header = (o: Partial<DeliveryNoteHeader>): DeliveryNoteHeader => ({
@@ -77,7 +79,9 @@ describe("liste", () => {
   it("liste hatası 'belge yok' gibi gösterilmez", async () => {
     listDeliveryNotes.mockRejectedValue(new Error("ağ"));
     renderWithProviders(<IncomingDocumentsPage />);
-    expect(await screen.findByText("Liste yüklenemedi.", {}, { timeout: 4000 })).toBeInTheDocument();
+    // Ortak DataTable hata satırı (Kumaş Stoğu ile aynı): boş durum metni basılmaz.
+    expect(await screen.findByText("Liste yüklenemedi", {}, { timeout: 4000 })).toBeInTheDocument();
+    expect(screen.queryByText(/Bu süzgece uyan gelen belge yok/)).toBeNull();
   });
 });
 
