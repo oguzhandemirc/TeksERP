@@ -486,6 +486,9 @@ export interface FeatureFlags {
   /** Web paneli (tarayıcı) girişi 2FA politikası: REQUIRED (varsayılan) | USER_CHOICE (kullanıcı kendi
    *  hesabında kapatabilir). Yalnız süperadmin yazar; eski backend alanı döndürmez → REQUIRED say. */
   webTotpPolicy: "REQUIRED" | "USER_CHOICE";
+  /** Web girişinde "Bu cihazı N gün hatırla" süresi (0 = kapalı, default; 1–90). Yalnız süperadmin
+   *  yazar; eski backend alanı döndürmez → 0 say (kutu çıkmaz). */
+  trustedDeviceDays: number;
   /** Sevk onayı adımı zorunlu mu (false=default). Kapalıyken çuvallar seçilir seçilmez
    *  DOĞRUDAN sevk edilir (createShipment → DISPATCHED, stok o an düşer); açıkken önce
    *  PLANNED sevkiyat kurulur, çıkış ayrıca "Sevk Kapısı" ekranından onaylanır. */
@@ -714,6 +717,10 @@ export interface FeatureFlags {
   /** Mobil uygulama arka plana geçince (operatör çıkınca) anında kilitlensin mi
    *  (default true). Idle kilitten bağımsız. Client ENFORCE (yalnız mobil). */
   mobileLockOnBackground: boolean;
+  /** Çevrimdışıyken tablet hareketsizlik + arka plan kilidi ertelenir (default false). Client ENFORCE (yalnız mobil). */
+  mobileOfflineLockDefer: boolean;
+  /** Masaüstü/web giriş ekranı son kullanıcıyı hatırlar, yalnız parola sorar (default false). Sistem hesabı hatırlanmaz. Client ENFORCE (panel). */
+  rememberLastUser: boolean;
   /** Mutlak oturum tavanı — gün (default 30, 0..365; 0 = 30 gün sert tavan). Zaman aşımı kapalı
    *  olsa bile token en fazla bu kadar gün yaşar (sızan token sonsuza kadar geçerli
    *  kalmasın). Backend ENFORCE eder (issueToken). */

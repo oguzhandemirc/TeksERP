@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { flagOffHint } from "@/lib/flag-setting-path";
 import { staggerContainer } from "@/lib/motion";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { offEntryMode, useCanSeeOffModules } from "@/lib/off-module-visibility";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useMenuOrder } from "@/hooks/useMenuOrder";
 import { ADMIN_PERMISSION_LIST } from "@/types/auth";
@@ -40,6 +41,7 @@ export function Sidebar({ collapsed }: Props) {
   // gözle görülür bir titreme doğurur. Bağlam ayrıca `iplikEnabled`ı ETKİN
   // değeriyle (`ticaret && iplik`) verir; zincir tek yerde çözülür.
   const visibilityCtx = useOperationsVisibilityContext();
+  const canSeeOff = useCanSeeOffModules();
   const { favorites, reorderFavorites } = useFavorites();
   const { orderItems, setGroupOrder } = useMenuOrder();
 
@@ -56,8 +58,10 @@ export function Sidebar({ collapsed }: Props) {
     // Belirsizken düşülecek taraf BAYRAĞA GÖRE değişir ve kararı bağlam verir:
     // "Muhasebe" belirsizken çizilmez (fabrikada bir an belirip kaybolmasın),
     // üretim belirsizken çizilir (fabrikada bir an kaybolup gelmesin).
-    // UX-2 K3: bayrak SONUÇLANINCA kapalı satır gizlenmez, soluk çizilir (`withOffHint`).
-    if (item.featureFlag && !visibilityCtx[item.featureFlag] && !visibilityCtx.flagsReady) return false;
+    // Sonuçlanmış kapalı satır yalnız modülü açabilene soluk çizilir (`withOffHint`), diğerine hiç (2026-11-01).
+    if (item.featureFlag && !visibilityCtx[item.featureFlag]) {
+      if (!visibilityCtx.flagsReady || offEntryMode(true, true, canSeeOff) === "hide") return false;
+    }
     return true;
   };
   const withOffHint = (item: NavItem): NavItem =>

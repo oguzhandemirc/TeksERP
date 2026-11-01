@@ -38,6 +38,10 @@ export const SEYITOGLU_SETTINGS: readonly PaketSatiri[] = [
   // Boyahaneye fason sevk kg'ı topun KK1 tartısından (`Roll.weightKg` → `dispatchedWeight`) gelir; kapalıyken
   // fason kg kontrolü NO_WEIGHT döner (boyahane kg ile faturalar).
   { anahtar: "kk1.weightEntryEnabled", alan: "kk1WeightEntryEnabled", hedef: true, dilim: "kk1" },
+  // Kullanıcı kararı 2026-11-01: fabrikadakiler için her web girişinde kod pratik değil → web girişinde
+  // "Bu cihazı 30 gün hatırla" (süperadmine uygulanmaz). Ayar normalde yalnız süperadmin yazar; paket kurulumcunun işidir.
+  { anahtar: "auth.trustedDeviceDays", alan: "trustedDeviceDays", hedef: 30, dilim: "GUVENILIR-CIHAZ" },  // Kullanıcı isteği 2026-11-01: girişte son kullanıcı hatırlanır, yalnız parola sorulur (sistem hesabı hatırlanmaz).
+  { anahtar: "auth.rememberLastUser", alan: "rememberLastUser", hedef: true, dilim: "GIRIS-SON-KULLANICI" },
 ];
 
 /** TAM profilin Seyitoğlu için şart modülleri; kapalıysa uyarı (profil seçimi kurulumda). */

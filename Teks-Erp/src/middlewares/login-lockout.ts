@@ -124,6 +124,11 @@ export function resolveLoginLockoutKey(
   return "unknown";
 }
 
+/** Yapılandırılmış kenar başlığıyla istemci kaynağı (IPv6 /64'lü) — kilit dışı tavanlar için. */
+export function resolveRequestSourceKey(req: Request, env: NodeJS.ProcessEnv = process.env): string {
+  return resolveLoginLockoutKey(req, readWebHardeningConfig(env, () => {}).clientIpHeader);
+}
+
 // =============================================================================
 // TERS VEKİL ARKASINDA ANAHTAR: iki katman (2026-08-14, internete açma)
 // =============================================================================

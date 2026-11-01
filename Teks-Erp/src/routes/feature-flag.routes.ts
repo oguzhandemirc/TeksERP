@@ -447,6 +447,8 @@ export const updateSchema = z.strictObject({
   shortCredentialTotpRequired: z.boolean().optional(),
   // Web paneli girişi TOTP politikası (REQUIRED=default; yalnız süperadmin yazar — SUPERADMIN_ONLY_FLAG_KEYS).
   webTotpPolicy: z.enum(["REQUIRED", "USER_CHOICE"]).optional(),
+  // auth.trustedDeviceDays — web girişinde "bu cihazı hatırla" günü (0=kapalı, 1–90; yalnız süperadmin yazar).
+  trustedDeviceDays: z.number().int().min(0).max(90).optional(),
   // shipping.confirmationEnabled — sevk onay adımı (UI rehberi).
   shipmentConfirmationEnabled: z.boolean().optional(),
   // shipping.manualSackCountEnabled — "araca yüklenen gerçek çuval adedi" alanı
@@ -661,6 +663,10 @@ export const updateSchema = z.strictObject({
   mobileIdleLockMinutes: z.number().int().min(1).max(120).optional(),
   // auth.mobileLockOnBackground — uygulama arka plana geçince anında kilitle (default true). Client (mobil) ENFORCE.
   mobileLockOnBackground: z.boolean().optional(),
+  // auth.mobileOfflineLockDefer — çevrimdışıyken tablet kilidi ertelenir (default false). Client (mobil) ENFORCE.
+  mobileOfflineLockDefer: z.boolean().optional(),
+  // auth.rememberLastUser — masaüstü/web giriş ekranı son kullanıcıyı hatırlar (default false). Client (panel) ENFORCE.
+  rememberLastUser: z.boolean().optional(),
   // label.mobileRasterEnabled — mobil (HC-06/BT) baskıda raster GW bitmap gönder (default false → komut yolu). Client (mobil) ENFORCE.
   mobileRasterEnabled: z.boolean().optional(),
   // label.scrapGradeLabelEnabled — fire (QualityGrade.skipLabel) kalitede de OTOMATİK etiket bas (default false → fire topa kâğıt çıkmaz). Client (mobil) ENFORCE; elle baskı onayla mümkün.

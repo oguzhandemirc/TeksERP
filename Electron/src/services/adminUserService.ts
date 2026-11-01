@@ -1,6 +1,7 @@
 import apiClient from "./apiClient";
 import type { ApiResponse } from "@/types/api";
 import type { UserPermissionGrant } from "@/types/permissions";
+import type { TrustedDeviceList } from "./authService";
 
 export interface AdminUserListItem {
   id: string;
@@ -236,6 +237,18 @@ export const adminUserService = {
   /** 2FA'yı kaldırır — telefon kaybı / cihaz değişimi. Açık oturumlar düşer. */
   resetTotp: (userId: string): Promise<void> =>
     apiClient.post(`/api/admin/users/${userId}/totp/reset`, {}).then(() => undefined),
+
+  /** Kullanıcının hatırlanan cihazları (admin:users). Eski backend 404 → çağıran kartı gizler. */
+  listTrustedDevices: (userId: string): Promise<ApiResponse<TrustedDeviceList>> =>
+    apiClient
+      .get<ApiResponse<TrustedDeviceList>>(`/api/admin/users/${userId}/trusted-devices`, { suppressErrorToast: true })
+      .then((r) => r.data),
+
+  revokeTrustedDevice: (userId: string, deviceId: string): Promise<void> =>
+    apiClient.post(`/api/admin/users/${userId}/trusted-devices/${deviceId}/revoke`, {}).then(() => undefined),
+
+  revokeAllTrustedDevices: (userId: string): Promise<void> =>
+    apiClient.post(`/api/admin/users/${userId}/trusted-devices/revoke-all`, {}).then(() => undefined),
 
   applyTemplate: (
     userId: string,

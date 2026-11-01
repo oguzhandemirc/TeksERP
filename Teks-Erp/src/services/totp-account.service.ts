@@ -10,8 +10,9 @@
 // (`admin:users`), pencere tek kullanımlık ve kısa ömürlüdür.
 // =============================================================================
 
+import { revokeAllTrustedDevicesTx, auditBulkRevoke } from "./trusted-device.service";
 import prisma from "../lib/prisma";
-import bcrypt from "bcryptjs";
+import { hashPassword, verifyPassword } from "./helpers/password-hasher.helper";
 import { randomUUID } from "crypto";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -219,7 +220,7 @@ export class TotpAccountService {
     }
 
     const plainCodes = generateRecoveryCodes();
-    const hashed = await Promise.all(plainCodes.map((c) => bcrypt.hash(c, RECOVERY_CODE_BCRYPT_COST)));
+    const hashed = await Promise.all(plainCodes.map((c) => hashPassword(c, RECOVERY_CODE_BCRYPT_COST)));
 
     await prisma.$transaction(async (tx) => {
       const claimed = await tx.totpEnrollment.updateMany({
@@ -311,7 +312,7 @@ export class TotpAccountService {
       select: { id: true, codeHash: true },
     });
     for (const row of rows) {
-      if (!(await bcrypt.compare(candidate, row.codeHash))) continue;
+      if (!(await verifyPassword(candidate, row.codeHash))) continue;
       const claimed = await prisma.userRecoveryCode.updateMany({
         where: { id: row.id, usedAt: null },
         data: { usedAt: new Date() },
@@ -338,7 +339,7 @@ export class TotpAccountService {
    * anlamına gelir.
    */
   static async reset(params: { userId: string; byId: string }): Promise<void> {
-    await prisma.$transaction(async (tx) => {
+    const revokedDevices = await prisma.$transaction(async (tx) => {
       const usedCodes = await tx.userRecoveryCode.findMany({
         where: { userId: params.userId, usedAt: { not: null } },
         select: { codeHash: true },
@@ -368,7 +369,10 @@ export class TotpAccountService {
         where: { userId: params.userId, consumedAt: null },
         data: { expiresAt: new Date() },
       });
+      // Doğrulama sıfırlandı → "hatırlanan" tarayıcılar da kodsuz giremez (aynı tx).
+      return revokeAllTrustedDevicesTx(tx, params.userId, "TOTP_RESET", params.byId);
     });
+    await auditBulkRevoke(params.userId, revokedDevices, "TOTP_RESET", params.byId);
     await AuditService.log({
       userId: params.byId,
       action: "UPDATE",

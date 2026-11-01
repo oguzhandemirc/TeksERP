@@ -5,12 +5,13 @@
 // Rol yok; her kullanıcının yetkisi UserPermission tablosunda doğrudan tutulur.
 // =============================================================================
 
+import { revokeAllTrustedDevicesTx, auditBulkRevoke } from "./trusted-device.service";
 import { varsayilanParolaMi } from "./helpers/varsayilan-superadmin.helper";
 import { forgetIssuedCard, forgetIssuedPin } from "./helpers/credential-reveal.helper";
 import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
 import { randomBytes } from "crypto";
-import bcrypt from "bcryptjs";
+import { hashPassword } from "./helpers/password-hasher.helper";
 import { AppError } from "../utils/app-error";
 import { PASSWORD_BCRYPT_COST, passwordPolicyViolation } from "../constants/password-policy";
 import { AuditService } from "./audit.service";
@@ -523,26 +524,31 @@ export class PermissionManagementService {
 
     const requireChange = resetRequiresPasswordChange(user, actorUserId);
     const varsayilanKapaniyor = user.defaultPasswordIssuedAt !== null && user.defaultPasswordChangedAt === null;
-    const passwordHash = await bcrypt.hash(newPassword, PASSWORD_BCRYPT_COST);
+    const passwordHash = await hashPassword(newPassword, PASSWORD_BCRYPT_COST);
     // Parola + bayrak + tokenVersion TEK yazımda; bayrak kararı okunan hesap türüne bağlı
     // olduğu için tür WHERE'de (arada değiştiyse 409).
     const reseal = await credentialReseal(prisma, userId, { passwordHash });
-    const claimed = await prisma.user.updateMany({
-      where: { id: userId, isSystemAccount: user.isSystemAccount, ...reseal.where },
-      data: {
-        passwordHash,
-        ...reseal.data,
-        mustChangePassword: requireChange,
-        tokenVersion: { increment: 1 },
-        // Satıcı hesabı ortak parolayla duruyorduysa artık durmuyor (panel bandı kalkar).
-        ...(varsayilanKapaniyor ? { defaultPasswordChangedAt: new Date() } : {}),
-      },
-    });
-    if (claimed.count === 0) {
-      throw AppError.conflict("Hesap bu sırada değişti. Sayfayı yenileyip tekrar deneyin.", {
-        code: "PASSWORD_RESET_CONFLICT",
+    // Parola + güvenilir cihaz iptali AYNI tx'te (hatırlanan tarayıcı yeni parolayla kodsuz girmesin).
+    const revokedDevices = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.user.updateMany({
+        where: { id: userId, isSystemAccount: user.isSystemAccount, ...reseal.where },
+        data: {
+          passwordHash,
+          ...reseal.data,
+          mustChangePassword: requireChange,
+          tokenVersion: { increment: 1 },
+          // Satıcı hesabı ortak parolayla duruyorduysa artık durmuyor (panel bandı kalkar).
+          ...(varsayilanKapaniyor ? { defaultPasswordChangedAt: new Date() } : {}),
+        },
       });
-    }
+      if (claimed.count === 0) {
+        throw AppError.conflict("Hesap bu sırada değişti. Sayfayı yenileyip tekrar deneyin.", {
+          code: "PASSWORD_RESET_CONFLICT",
+        });
+      }
+      return revokeAllTrustedDevicesTx(tx, userId, "PASSWORD_RESET", actorUserId ?? null);
+    });
+    await auditBulkRevoke(userId, revokedDevices, "PASSWORD_RESET", actorUserId ?? null);
     // Session registry'yi de temizle (tokenVersion ile birlikte — anlık iptalin ikinci
     // katmanı: eski token hem tokenVersion hem revokedAt'ten düşer). Best-effort.
     await SessionRegistryService.revokeAllForUser(userId, "PASSWORD_RESET").catch(
@@ -599,7 +605,7 @@ export class PermissionManagementService {
         })
       : [];
 
-    const passwordHash = await bcrypt.hash(input.password, PASSWORD_BCRYPT_COST);
+    const passwordHash = await hashPassword(input.password, PASSWORD_BCRYPT_COST);
     const user = await prisma.user.create({
       data: {
         // ⚠️ SELF-RELATION: "bu hesabı KİM açtı" — ISO 27001 açısından anlamlı.
@@ -666,7 +672,7 @@ export class PermissionManagementService {
     actorUserId: string | undefined,
   ) {
     const temporaryPassword = geciciParolaUret();
-    const passwordHash = await bcrypt.hash(temporaryPassword, PASSWORD_BCRYPT_COST);
+    const passwordHash = await hashPassword(temporaryPassword, PASSWORD_BCRYPT_COST);
     const { user, permissionCount } = await prisma.$transaction(async (tx) => {
       await PermissionManagementService.acquireAdminGuardLock(tx);
       if (await factoryAdminExists(tx)) {
@@ -948,16 +954,18 @@ export class PermissionManagementService {
     // Son-admin guard'ı + pasifleştirme TEK tx'te, advisory kilit altında (A1).
     // Eskiden guard tx'siz check-then-act'ti: tam 2 aktif admin varken eşzamanlı
     // iki pasifleştirme isteği ikisi de "diğeri hâlâ aktif" görüp geçebiliyordu.
-    const user = await prisma.$transaction(async (tx) => {
+    const { user, revokedDevices } = await prisma.$transaction(async (tx) => {
       await PermissionManagementService.acquireAdminGuardLock(tx);
       await PermissionManagementService.assertNotLastActiveAdmin(tx, id);
-      return tx.user.update({
+      const updated = await tx.user.update({
         where: { id },
         // tokenVersion++ → açık oturumları düşür (pasif kullanıcı çalışmaya devam etmesin).
         data: { isActive: false, tokenVersion: { increment: 1 } },
         select: USER_SELECT,
       });
+      return { user: updated, revokedDevices: await revokeAllTrustedDevicesTx(tx, id, "DEACTIVATED", actorUserId ?? null) };
     });
+    await auditBulkRevoke(id, revokedDevices, "DEACTIVATED", actorUserId ?? null);
     await SessionRegistryService.revokeAllForUser(id, "DEACTIVATED").catch(
       () => undefined,
     );
@@ -1048,6 +1056,7 @@ export class PermissionManagementService {
         where: { userId: id, consumedAt: null },
         data: { expiresAt: new Date() },
       });
+      await revokeAllTrustedDevicesTx(tx, id, "DEACTIVATED", actorUserId ?? null);
       return tx.user.findUniqueOrThrow({ where: { id }, select: USER_SELECT });
     });
     await SessionRegistryService.revokeAllForUser(id, "DELETED").catch(

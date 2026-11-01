@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { TERIM_AD } from "@/lib/terim";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { offEntryMode, useCanSeeOffModules } from "@/lib/off-module-visibility";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { HubSkeleton } from "@/components/hub/HubSkeleton";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
@@ -12,10 +13,11 @@ export function DocumentsHubPage() {
   // Tanımlar hub'ıyla aynı izin kuralı (yönetici kısa devresi dahil) — karolar oradan taşındı, görünürlük değişmez.
   const { isAdmin, hasPermission, hasAnyPermission } = useRoleAccess();
   const ctx = useOperationsVisibilityContext();
+  const canSeeOff = useCanSeeOffModules();
   const permitted = (t: DocumentTile) =>
     isAdmin || (t.permissionAny ? hasAnyPermission(t.permissionAny) : !t.permission || hasPermission(t.permission));
   const isOff = (t: DocumentTile) => Boolean(t.visibleWhen && !t.visibleWhen(ctx));
-  const visible = documentTiles.filter((t) => permitted(t) && (!isOff(t) || Boolean(t.offHint)));
+  const visible = documentTiles.filter((t) => permitted(t) && offEntryMode(isOff(t), Boolean(t.offHint), canSeeOff) !== "hide");
   return (
     <PageShell>
       <PageHeader

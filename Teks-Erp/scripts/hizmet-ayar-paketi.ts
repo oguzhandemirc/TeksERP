@@ -98,6 +98,10 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   { anahtar: "uretim.makineDurusAcikUyarisi", alan: "machineStopOpenWarningEnabled", hedef: true, dilim: "D4-A2b" },
   // DALGA4 §5.5/6 (K8): dış brodeden dönen top iş emrinin hedef desenini taşır (faturada desen kalemi).
   { anahtar: "fason.receiptApplyTargetVariant", alan: "fasonReceiptApplyTargetVariant", hedef: true, dilim: "D4-D3" },
+  // Kullanıcı kararı 2026-11-01: fabrikadakiler için her web girişinde kod pratik değil → web girişinde
+  // "Bu cihazı 30 gün hatırla" (süperadmine uygulanmaz). Ayar normalde yalnız süperadmin yazar; paket kurulumcunun işidir.
+  { anahtar: "auth.trustedDeviceDays", alan: "trustedDeviceDays", hedef: 30, dilim: "GUVENILIR-CIHAZ" },  // Kullanıcı isteği 2026-11-01: girişte son kullanıcı hatırlanır, yalnız parola sorulur (sistem hesabı hatırlanmaz).
+  { anahtar: "auth.rememberLastUser", alan: "rememberLastUser", hedef: true, dilim: "GIRIS-SON-KULLANICI" },
 ];
 
 export type PlanDurumu = "DEGISECEK" | "AYNI" | "ANAHTAR_YOK" | "ALAN_YOK";

@@ -223,6 +223,11 @@ export function useMobileLockOnBackground(): boolean {
   return useFeatureFlags().data?.mobileLockOnBackground ?? true;
 }
 
+/** Çevrimdışıyken kilit ertelensin mi? Default FALSE (eski backend alanı döndürmez → bugünkü davranış). */
+export function useMobileOfflineLockDefer(): boolean {
+  return useFeatureFlags().data?.mobileOfflineLockDefer ?? false;
+}
+
 /** Mobil baskıda raster GW bitmap gönder? Default FALSE (komut yolu). HC-06'da yavaşsa kapalı. */
 export function useMobileRasterEnabled(): boolean {
   return useFeatureFlags().data?.mobileRasterEnabled ?? false;

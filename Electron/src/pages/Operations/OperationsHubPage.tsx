@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { offEntryMode, useCanSeeOffModules } from "@/lib/off-module-visibility";
 import { useOperationsVisibilityContext } from "./useOperationsVisibility";
 import { operationsTiles, type OperationsTile } from "./tile-config";
 import { operationGroups, type OperationGroupKey } from "./groups-config";
@@ -30,12 +31,13 @@ export function OperationsHubPage() {
   // açılışında karoların geç gelmesi/titremesi demekti; eksik kalan karo saniyeler
   // içinde kendiliğinden belirir ve bu, menüde kabul edilebilir tek yönlü hatadır.
   const visibilityCtx = useOperationsVisibilityContext();
+  const canSeeOff = useCanSeeOffModules();
 
-  // `offHint`li karo modül kapalıyken GİZLENMEZ, soluk çizilir (K4P yerleşim kararı); izin yine şart.
+  // Kapalı modül karosu yalnız modülü açabilene soluk çizilir, diğerine hiç (`offEntryMode`, 2026-11-01); izin yine şart.
   const permitted = (t: OperationsTile) =>
     t.permissionAny ? hasAnyPermission(t.permissionAny) : !t.permission || hasPermission(t.permission);
   const isOff = (t: OperationsTile) => Boolean(t.visibleWhen && !t.visibleWhen(visibilityCtx));
-  const visible = operationsTiles.filter((t) => permitted(t) && (!isOff(t) || Boolean(t.offHint)));
+  const visible = operationsTiles.filter((t) => permitted(t) && offEntryMode(isOff(t), Boolean(t.offHint), canSeeOff) !== "hide");
 
   const byGroup = new Map<OperationGroupKey, OperationsTile[]>();
   for (const t of visible) {

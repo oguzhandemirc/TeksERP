@@ -166,6 +166,9 @@ export interface FeatureFlags {
   /** Uygulama arka plana geçince (operatör çıkınca) anında kilitlensin mi (default true).
    *  Idle kilitten bağımsız — kapalıysa arka plana geçince kilitlenmez. */
   mobileLockOnBackground: boolean;
+  /** Sunucuya ulaşılamazken hareketsizlik + arka plan kilidi ertelensin mi (default false = bugünkü
+   *  davranış). Kilit açma sunucu ister; kesintide kilitlenen tablet açılamaz (denetim Y5). */
+  mobileOfflineLockDefer: boolean;
   /** Mobil (HC-06/BT) baskıda raster GW bitmap gönderilsin mi (default false → komut yolu).
    *  Açıkken WYSIWYG ama ~40KB binary HC-06'dan gider; sahada yavaşsa admin kapatır. */
   mobileRasterEnabled: boolean;
@@ -274,6 +277,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   mobileIdleLockEnabled: true,
   mobileIdleLockMinutes: 10,
   mobileLockOnBackground: true,
+  // Fail-closed yön: bayrak okunamazsa erteleme YOK (kilit bugünkü gibi çalışır).
+  mobileOfflineLockDefer: false,
   mobileRasterEnabled: false,
   // Fail-closed yön: bayrak okunamazsa seçici GİZLİ, adet gönderilmez → sunucu kendi çözer (bugünkü ekran).
   labelCopiesSource: 'GLOBAL',

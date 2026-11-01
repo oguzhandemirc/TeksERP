@@ -215,6 +215,8 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   mobileIdleLockEnabled: A(true),
   mobileIdleLockMinutes: V("güvenlik süresi"),
   mobileLockOnBackground: A(true),
+  mobileOfflineLockDefer: A(true),
+  rememberLastUser: A(true),
   absoluteSessionCapDays: V("güvenlik süresi"),
   pinLockoutEnabled: A(true),
   pinLockoutAttempts: V("güvenlik sayısı"),
@@ -227,6 +229,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   shortCredentialApprovedDeviceOnly: A(true),
   shortCredentialTotpRequired: V("adı sır desenine (totp) düşer, profil doğrulayıcısı reddeder; davranışı test_kimlik_kisa_yol_totp ölçer"),
   webTotpPolicy: V("yalnız süperadmin yazar (SUPERADMIN_ONLY_FLAG_KEYS); adı sır desenine (totp) düşer; davranışı test_web_cerez_oturumu ölçer"),
+  trustedDeviceDays: V("yalnız süperadmin yazar (SUPERADMIN_ONLY_FLAG_KEYS); güvenlik gevşetmesi, hepsi-açık profilde açılmaz; davranışı test_guvenilir_cihaz ölçer"),
   backupHour: V("yedek saati; açılacak bir şey değil"),
   // ── etiket ─────────────────────────────────────────────────────────────────
   labelCopies: V("kopya adedi; açılacak bir şey değil"),

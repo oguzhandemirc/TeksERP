@@ -530,6 +530,9 @@ export const SETTING_KEYS = {
    *  | USER_CHOICE (kullanıcı kendi hesabında `webTotpOptOut` ile kapatabilir). Yalnız süperadmin
    *  yazar (`SUPERADMIN_ONLY_FLAG_KEYS`); süperadminde ayardan bağımsız hep sorulur. */
   AUTH_WEB_TOTP_POLICY: "auth.webTotpPolicy",
+  /** Web girişinde "Bu cihazı N gün hatırla" süresi (gün). 0 = kapalı (default, bugünkü davranış:
+   *  her girişte kod), 1–90. Yalnız süperadmin yazar; süperadmin hesabına hiç uygulanmaz. */
+  AUTH_TRUSTED_DEVICE_DAYS: "auth.trustedDeviceDays",
   /** Sevk için ayrı onay adımı zorunlu mu. Default false (KAPALI): çuvalları seç → Sevk Et
    *  → DOĞRUDAN sevk edilir (DISPATCHED). AÇIKKEN: Sevk Et yalnız PLANNED sevkiyat kurar;
    *  çıkış ayrıca "Sevk Kapısı" ekranından dispatch edilir. */
@@ -947,6 +950,9 @@ export const SETTING_KEYS = {
    *  kilitten BAĞIMSIZ — operatör uygulamadan çıkınca (home/başka app) hemen kilit
    *  ekranı gelir (work session AÇIK kalır; kart/PIN ile açılır). Client (mobil) ENFORCE. */
   AUTH_MOBILE_LOCK_ON_BACKGROUND: "auth.mobileLockOnBackground",
+  AUTH_MOBILE_OFFLINE_LOCK_DEFER: "auth.mobileOfflineLockDefer",
+  /** Masaüstü/web giriş ekranı son kullanıcıyı hatırlasın mı. Default false. Client (panel) ENFORCE; sistem hesabı hiç hatırlanmaz. */
+  AUTH_REMEMBER_LAST_USER: "auth.rememberLastUser",
   /** Mutlak oturum tavanı, GÜN. Default 30 (0..365). Zaman aşımı KAPALI iken bile
    *  token en fazla bu kadar gün geçerli olur (sızan token sonsuza kadar yaşamasın).
    *  0 = sert tavan (30 gün, kapatılamaz) — exp'siz token üretilmez. Backend ENFORCE eder (issueToken). */
@@ -1216,6 +1222,9 @@ export type WebTotpPolicy = "REQUIRED" | "USER_CHOICE";
 export const WEB_TOTP_POLICIES: WebTotpPolicy[] = ["REQUIRED", "USER_CHOICE"];
 /** Varsayılan `REQUIRED` — BUGÜNKÜ davranış (K4: web girişinde TOTP herkese zorunlu). */
 export const DEFAULT_WEB_TOTP_POLICY: WebTotpPolicy = "REQUIRED";
+/** Güvenilir cihaz süresi (gün) — 0 = kapalı (BUGÜNKÜ davranış), tavan 90. */
+export const DEFAULT_TRUSTED_DEVICE_DAYS = 0;
+export const MAX_TRUSTED_DEVICE_DAYS = 90;
 
 /** Sevkin fatura izi nereden yazılır. `dis` = bugünkü davranış. */
 export type ShippingInvoiceMode = "dis" | "ic" | "ikisi";
@@ -1498,6 +1507,10 @@ const MAX_MOBILE_IDLE_LOCK_MINUTES = 120;
 /** Mobil arka-plan kilidi varsayılanı — açık (eski davranış: idle kilit açıkken
  *  arka plana geçince de kilitlenirdi; artık bağımsız bayrak, default korunur). */
 export const DEFAULT_MOBILE_LOCK_ON_BACKGROUND = true;
+/** Çevrimdışıyken tablet kilidi ertelensin mi — varsayılan KAPALI (bugünkü davranış: kesintide de kilitlenir). */
+export const DEFAULT_MOBILE_OFFLINE_LOCK_DEFER = false;
+/** Giriş ekranı son kullanıcıyı hatırlasın mı — varsayılan KAPALI (bugünkü davranış: boş form). */
+export const DEFAULT_REMEMBER_LAST_USER = false;
 /** Mutlak oturum tavanı (gün) varsayılanı + aralık. 0 = sert tavan (UNSET_…) — exp'siz token yok. */
 export const DEFAULT_ABSOLUTE_SESSION_CAP_DAYS = 30;
 export const MAX_ABSOLUTE_SESSION_CAP_DAYS = 365;
@@ -2227,6 +2240,8 @@ export interface FeatureFlags {
   shortCredentialTotpRequired: boolean;
   /** Web paneli (tarayıcı) girişi TOTP politikası (default REQUIRED; süperadminde ayardan bağımsız hep). */
   webTotpPolicy: WebTotpPolicy;
+  /** Web girişinde güvenilir cihaz süresi, gün (0 = kapalı, default; 1–90). Yalnız süperadmin yazar. */
+  trustedDeviceDays: number;
   /** Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu (default false). */
   shipmentConfirmationEnabled: boolean;
   shipmentManualSackCountEnabled: boolean;
@@ -2419,6 +2434,12 @@ export interface FeatureFlags {
   /** Mobil "uygulama arka plana geçince anında kilitle" açık mı (default true).
    *  Idle kilitten bağımsız. Client (mobil) ENFORCE. */
   mobileLockOnBackground: boolean;
+  /** İnternet/sunucu yokken tablette hareketsizlik ve arka plan kilidi ertelensin mi (default false).
+   *  Kilit açma sunucu ister; kesintide kilitlenen tablet açılamaz (denetim Y5). Client (mobil) ENFORCE. */
+  mobileOfflineLockDefer: boolean;
+  /** Masaüstü/web giriş ekranı son çıkan kullanıcının adını hatırlasın, yalnız parola sorsun (default false).
+   *  Cihazda yalnız kullanıcı adı + görünen ad tutulur; sistem hesabı hatırlanmaz. Client (panel) ENFORCE. */
+  rememberLastUser: boolean;
   /** Mutlak oturum tavanı — gün (default 30, 0..365; 0 = 30 gün sert tavan). Zaman aşımı kapalı
    *  olsa bile token en fazla bu kadar gün yaşar. Backend ENFORCE (issueToken). */
   absoluteSessionCapDays: number;
@@ -2822,6 +2843,7 @@ export class SystemSettingService {
       shortCredentialApprovedDeviceOnly: await readShortCredentialApprovedDeviceOnly(cacheClient),
       shortCredentialTotpRequired: await readShortCredentialTotpRequired(cacheClient),
       webTotpPolicy: await readWebTotpPolicy(cacheClient),
+      trustedDeviceDays: await readTrustedDeviceDays(cacheClient),
       shipmentConfirmationEnabled: await readShipmentConfirmationEnabled(cacheClient),
       shipmentManualSackCountEnabled: await readShipmentManualSackCountEnabled(cacheClient),
       shipmentUndoSameDayOnly: await readShipmentUndoSameDayOnly(cacheClient),
@@ -2917,6 +2939,8 @@ export class SystemSettingService {
       mobileIdleLockEnabled: await readMobileIdleLockEnabled(cacheClient),
       mobileIdleLockMinutes: await readMobileIdleLockMinutes(cacheClient),
       mobileLockOnBackground: await readMobileLockOnBackground(cacheClient),
+      mobileOfflineLockDefer: await readMobileOfflineLockDefer(cacheClient),
+      rememberLastUser: await readRememberLastUser(cacheClient),
       absoluteSessionCapDays: await readAbsoluteSessionCapDays(cacheClient),
       pinLockoutEnabled: await readPinLockoutEnabled(cacheClient),
       pinLockoutAttempts: await readPinLockoutAttempts(cacheClient),
@@ -4022,6 +4046,20 @@ export class SystemSettingService {
         SETTING_KEYS.AUTH_WEB_TOTP_POLICY,
         v,
         "Web paneli girişinde iki adımlı doğrulama: REQUIRED (herkese zorunlu) / USER_CHOICE (kullanıcı kendi hesabında kapatabilir)",
+        userId
+      );
+    }
+
+    // Yazma kapısı route'ta (`flagWriteGuard` süperadmin dalı); burada yalnız tip/aralık.
+    if (Object.prototype.hasOwnProperty.call(input, "trustedDeviceDays")) {
+      const v = input.trustedDeviceDays;
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > MAX_TRUSTED_DEVICE_DAYS) {
+        throw AppError.badRequest(`Cihazı hatırlama süresi 0–${MAX_TRUSTED_DEVICE_DAYS} gün olmalı (0 = kapalı)`);
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_TRUSTED_DEVICE_DAYS,
+        v,
+        "Web girişinde 'Bu cihazı hatırla' süresi, gün (0 = kapalı; her girişte doğrulama kodu)",
         userId
       );
     }
@@ -5177,6 +5215,30 @@ export class SystemSettingService {
         SETTING_KEYS.AUTH_MOBILE_LOCK_ON_BACKGROUND,
         input.mobileLockOnBackground,
         "Mobil uygulama arka plana geçince (operatör uygulamadan çıkınca) anında kilitlensin",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "mobileOfflineLockDefer")) {
+      if (typeof input.mobileOfflineLockDefer !== "boolean") {
+        throw AppError.badRequest("mobileOfflineLockDefer boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_MOBILE_OFFLINE_LOCK_DEFER,
+        input.mobileOfflineLockDefer,
+        "İnternet/sunucu bağlantısı yokken tablet kilitlenmesin (bağlantı dönünce kilit süresi yeniden başlar)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "rememberLastUser")) {
+      if (typeof input.rememberLastUser !== "boolean") {
+        throw AppError.badRequest("rememberLastUser boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_REMEMBER_LAST_USER,
+        input.rememberLastUser,
+        "Girişte son kullanıcıyı hatırla (yalnız parola sorulur)",
         userId
       );
     }
@@ -6887,6 +6949,25 @@ export async function readWebTotpPolicy(
   const v = setting?.value;
   if (typeof v === "string" && WEB_TOTP_POLICIES.includes(v as WebTotpPolicy)) return v as WebTotpPolicy;
   return DEFAULT_WEB_TOTP_POLICY;
+}
+
+/**
+ * Web girişinde güvenilir cihaz süresi (gün). Default 0 (kapalı, bugünkü davranış).
+ * FAIL-CLOSED: satır yok / çöp / negatif → 0; tavan MAX_TRUSTED_DEVICE_DAYS'e kırpılır.
+ * ENFORCE: `AuthService.assertSecondFactor` (tek boğaz) → `trusted-device.service`.
+ */
+export async function readTrustedDeviceDays(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_TRUSTED_DEVICE_DAYS },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_TRUSTED_DEVICE_DAYS;
+  const parsed = asNumber(setting.value);
+  if (parsed === null || !Number.isFinite(parsed) || parsed < 1) return DEFAULT_TRUSTED_DEVICE_DAYS;
+  return Math.min(Math.floor(parsed), MAX_TRUSTED_DEVICE_DAYS);
 }
 
 /**
@@ -8710,6 +8791,32 @@ export async function readMobileLockOnBackground(
     select: { value: true },
   });
   if (!setting) return DEFAULT_MOBILE_LOCK_ON_BACKGROUND;
+  return asBoolean(setting.value);
+}
+
+/** Çevrimdışıyken tablet kilidi ertelensin mi? Default FALSE (kayıt yoksa). Client (mobil) ENFORCE. */
+export async function readMobileOfflineLockDefer(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_MOBILE_OFFLINE_LOCK_DEFER },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_MOBILE_OFFLINE_LOCK_DEFER;
+  return asBoolean(setting.value);
+}
+
+/** Giriş ekranı son kullanıcıyı hatırlasın mı? Default FALSE (kayıt yoksa). Client (panel) ENFORCE. */
+export async function readRememberLastUser(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_REMEMBER_LAST_USER },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_REMEMBER_LAST_USER;
   return asBoolean(setting.value);
 }
 

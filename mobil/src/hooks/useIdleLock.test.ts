@@ -9,6 +9,11 @@ import {
 } from '../store/lockStore';
 import { SUPPRESSED_BACKGROUND_GRACE_MS } from '../utils/idleLock';
 import type { JwtPayload } from '../types/auth';
+import {
+  __resetOnlineSignalForTests,
+  reportServerReachable,
+  reportServerUnreachable,
+} from '../offline/serverReachability';
 
 // Regresyon: uygulamanın KENDİ açtığı sistem diyaloğu (BT izin/aç/PIN,
 // yazdırma, kamera izni) Android'de activity'yi pause edip AppState
@@ -21,7 +26,9 @@ jest.mock('./useFeatureFlags', () => ({
   useMobileIdleLockEnabled: () => true,
   useMobileIdleLockMinutes: () => 10,
   useMobileLockOnBackground: () => true,
+  useMobileOfflineLockDefer: () => mockOfflineDefer,
 }));
+let mockOfflineDefer = false;
 
 let now = 5_000_000_000;
 const advance = (ms: number) => {
@@ -110,5 +117,96 @@ describe('useIdleLock — AppState kilidi ve sistem diyaloğu muafiyeti', () => 
     renderHook(() => useIdleLock());
     emit('active');
     expect(useLockStore.getState().locked).toBe(false);
+  });
+});
+
+// Y5 — "İnternet yokken tablet kilitlenmesin" (auth.mobileOfflineLockDefer). Kilit açma sunucu
+// ister: kesintide kilitlenen tablet açılamaz. Ayar KAPALIYKEN davranış bugünküyle aynı kalmalı.
+describe('useIdleLock — çevrimdışı kilit ertelemesi (Y5)', () => {
+  let appStateHandler: ((s: AppStateStatus) => void) | undefined;
+  const emit = (s: AppStateStatus) => act(() => appStateHandler!(s));
+  const IDLE_PAST = 11 * 60_000; // varsayılan 10 dk + pay
+  const tick = () => act(() => jest.advanceTimersByTime(600));
+
+  beforeEach(() => {
+    jest.useFakeTimers({ doNotFake: ['Date'] });
+    now += 60 * 60_000;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, fn) => {
+      appStateHandler = fn;
+      return { remove: jest.fn() } as never;
+    });
+    global.fetch = jest.fn().mockRejectedValue(new Error('ağ yok')) as unknown as typeof fetch;
+    __resetOnlineSignalForTests();
+    useAuthStore.setState({ user: { userId: 'u1', username: 'op' } as JwtPayload });
+    useLockStore.setState({ locked: false });
+  });
+
+  afterEach(() => {
+    act(() => {
+      __resetOnlineSignalForTests();
+      useAuthStore.setState({ user: null });
+      useLockStore.setState({ locked: false });
+    });
+    mockOfflineDefer = false;
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it('ayar KAPALI (varsayılan) + çevrimdışı: hareketsizlik kilidi bugünkü gibi kilitler', () => {
+    renderHook(() => useIdleLock());
+    act(() => reportServerUnreachable());
+    advance(IDLE_PAST);
+    tick();
+    expect(useLockStore.getState().locked).toBe(true);
+  });
+
+  it('ayar KAPALI + çevrimdışı: arka plana geçiş bugünkü gibi kilitler', () => {
+    renderHook(() => useIdleLock());
+    act(() => reportServerUnreachable());
+    emit('background');
+    expect(useLockStore.getState().locked).toBe(true);
+  });
+
+  it('⭐ ayar AÇIK + çevrimdışı: hareketsizlik ve arka plan kilidi ERTELENİR', () => {
+    mockOfflineDefer = true;
+    renderHook(() => useIdleLock());
+    act(() => reportServerUnreachable());
+    advance(IDLE_PAST);
+    tick();
+    expect(useLockStore.getState().locked).toBe(false);
+    emit('background');
+    expect(useLockStore.getState().locked).toBe(false);
+  });
+
+  it('⭐ ayar AÇIK: ertelemedeki arka plan geçişi borçtur, bağlantı dönünce kilitler', () => {
+    mockOfflineDefer = true;
+    renderHook(() => useIdleLock());
+    act(() => reportServerUnreachable());
+    emit('background');
+    act(() => reportServerReachable());
+    expect(useLockStore.getState().locked).toBe(true);
+  });
+
+  it('⭐ ayar AÇIK: bağlantı dönünce süre BAŞTAN başlar (anında kilit yok), dolunca kilitler', () => {
+    mockOfflineDefer = true;
+    renderHook(() => useIdleLock());
+    act(() => reportServerUnreachable());
+    advance(IDLE_PAST);
+    tick();
+    act(() => reportServerReachable());
+    tick();
+    expect(useLockStore.getState().locked).toBe(false);
+    advance(IDLE_PAST);
+    tick();
+    expect(useLockStore.getState().locked).toBe(true);
+  });
+
+  it('ayar AÇIK + çevrimiçi: kilit bugünkü gibi çalışır', () => {
+    mockOfflineDefer = true;
+    renderHook(() => useIdleLock());
+    advance(IDLE_PAST);
+    tick();
+    expect(useLockStore.getState().locked).toBe(true);
   });
 });

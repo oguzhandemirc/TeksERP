@@ -7,6 +7,7 @@ import { z } from "zod";
 import { AuthService } from "../services/auth.service";
 import { resolveSystemAccountLock } from "../services/helpers/system-account.registry";
 import { varsayilanParolaBekliyor } from "../services/helpers/varsayilan-superadmin.helper";
+import { isAuthBusyError } from "../services/helpers/password-hasher.helper";
 import { sealBandStatus, sealSummary } from "../services/helpers/system-account-seal.helper";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { factoryAdminExists as factoryAdminExistsCheck } from "../services/helpers/factory-admin.helper";
@@ -16,6 +17,7 @@ import { CURRENT_PASSWORD_INVALID_CODE, type LoginContext } from "../services/au
 import { AuditService } from "../services/audit.service";
 import { TotpAccountService } from "../services/totp-account.service";
 import { WebTotpService } from "../services/web-totp.service";
+import { TrustedDeviceService, emptyBodySchema, parseTrustedDeviceIds } from "../services/trusted-device.service";
 import {
   readDevicePairingRequired,
   readLoginMethods,
@@ -35,7 +37,15 @@ import {
   type LockoutKeySpec,
 } from "../middlewares/login-lockout";
 import { passwordPolicyViolation } from "../constants/password-policy";
-import { clearSessionCookie, cookieLoginApplies, isWebPanelMode, setSessionCookie } from "../lib/web-session-cookie";
+import {
+  clearSessionCookie,
+  cookieLoginApplies,
+  isWebPanelMode,
+  readSessionCookie,
+  readTrustedDeviceToken,
+  setSessionCookie,
+  setTrustedDeviceCookie,
+} from "../lib/web-session-cookie";
 import "../types/express-augment";
 
 const webTotpSchema = z.strictObject({
@@ -73,6 +83,8 @@ const loginSchema = z.object({
   passwordChangeCapable: z.boolean().optional(),
   // Tablet 409 TOTP_REQUIRED'da kod sorabiliyor (yalnız iletiyi seçer).
   totpCapable: z.boolean().optional(),
+  // Web kod adımı: "Bu cihazı N gün hatırla" (yalnız çerez kipinde ve ayar > 0 iken etkili).
+  rememberDevice: z.boolean().optional(),
 });
 
 // PIN/kart girişinde de ikinci faktör (Y-02): süperadminde hep, diğerlerinde ayarla istenir.
@@ -149,19 +161,57 @@ async function auditLockedOnce(
 // oluşturmanın tek yolu POST /api/admin/users (PermissionManagementService).
 
 /**
+ * Web (çerez kipi) giriş bağlamı: güvenilir cihaz belirteci + girişten önceki oturum çerezinin sahibi
+ * (yeni cihaz tanıması). Çerez kipi dışında boş — masaüstü/tablet akışı değişmez.
+ */
+function webLoginContext(req: Request, clientType: string | undefined, ip: string | null): Partial<LoginContext> {
+  if (!cookieLoginApplies(clientType)) return {};
+  let sessionCookieUserId: string | null = null;
+  const prior = readSessionCookie(req);
+  if (prior) {
+    try {
+      sessionCookieUserId = AuthService.verifyToken(prior).userId;
+    } catch {
+      sessionCookieUserId = null;
+    }
+  }
+  const ua = req.headers["user-agent"];
+  return {
+    trustedDeviceToken: readTrustedDeviceToken(req, "cookie"),
+    sessionCookieUserId,
+    userAgent: typeof ua === "string" ? ua.slice(0, 512) : null,
+    ip: ip ?? null,
+  };
+}
+
+/**
  * Giriş cevabı — üç giriş yolunun TEK çıkışı. Bulut web paneli çerez kipinde (panel kipi +
  * `clientType:"web"`) token httpOnly çereze gider, gövdede `token` yerine `cookieSession:true`.
  */
 function respondLogin(
   res: Response,
   clientType: string | undefined,
-  result: { token: string; user: unknown; mustChangePassword: boolean },
+  result: {
+    token: string;
+    user: unknown;
+    mustChangePassword: boolean;
+    trustedDevice?: { token: string; maxAgeSeconds: number } | null;
+    newDevice?: boolean;
+  },
 ): void {
   if (cookieLoginApplies(clientType)) {
     setSessionCookie(res, result.token);
+    // Cihaz belirteci YALNIZ httpOnly çereze gider; gövdeye ve log'a girmez.
+    if (result.trustedDevice) setTrustedDeviceCookie(res, result.trustedDevice.token, result.trustedDevice.maxAgeSeconds);
     res.status(200).json({
       success: true,
-      data: { user: result.user, mustChangePassword: result.mustChangePassword, cookieSession: true },
+      data: {
+        user: result.user,
+        mustChangePassword: result.mustChangePassword,
+        cookieSession: true,
+        newDevice: result.newDevice === true,
+        deviceRemembered: Boolean(result.trustedDevice),
+      },
       message: "Giriş başarılı",
     });
     return;
@@ -206,6 +256,9 @@ export class AuthController {
    *               passwordChangeCapable:
    *                 type: boolean
    *                 description: Tablet zorunlu parola değişimi adımını taşıyor; değişim bekleyen hesap kısıtlı token alır
+   *               rememberDevice:
+   *                 type: boolean
+   *                 description: Web çerez kipi kod adımı — "Bu cihazı N gün hatırla" (auth.trustedDeviceDays > 0); belirteç yalnız httpOnly tekserp_cihaz çerezine yazılır
    *     responses:
    *       200:
    *         description: Başarılı giriş (mustChangePassword true ise token yalnız me/logout/change-password'e geçer)
@@ -284,6 +337,8 @@ export class AuthController {
       totpCapable: body.totpCapable,
       clientVersion: resolveClientVersion(req),
       passwordChangeCapable: body.passwordChangeCapable,
+      rememberDevice: body.rememberDevice === true,
+      ...webLoginContext(req, body.clientType, ipAddress),
     };
 
     try {
@@ -307,16 +362,19 @@ export class AuthController {
       // uyarısını üst üste gören meşru kullanıcı kendini 429'a kilitlerdi.
       const isCredentialError = error instanceof AppError && error.statusCode === 401;
       if (!isCredentialError) releaseLoginAttempt(lockoutKey);
-      void AuditService.logEvent({
-        category: "AUTH",
-        action: isCredentialError ? "LOGIN_FAILED" : "LOGIN_CONFLICT",
-        recordId: body.username,
-        ipAddress,
-        payload: {
-          statusCode: error instanceof AppError ? error.statusCode : 500,
-          reason: error instanceof Error ? error.message : "unknown",
-        },
-      });
+      // 503 AUTH_BUSY saldırı altında saniyede onlarca döner — audit satırı tabloyu şişirirdi.
+      if (!isAuthBusyError(error)) {
+        void AuditService.logEvent({
+          category: "AUTH",
+          action: isCredentialError ? "LOGIN_FAILED" : "LOGIN_CONFLICT",
+          recordId: body.username,
+          ipAddress,
+          payload: {
+            statusCode: error instanceof AppError ? error.statusCode : 500,
+            reason: error instanceof Error ? error.message : "unknown",
+          },
+        });
+      }
       next(error);
     }
   }
@@ -380,6 +438,7 @@ export class AuthController {
       totpCode: body.totpCode,
       totpCapable: body.totpCapable,
       clientVersion: resolveClientVersion(req),
+      ...webLoginContext(req, body.clientType, ipAddress),
     };
     try {
       const result = await AuthService.loginWithCard(body.cardCode, ctx);
@@ -464,6 +523,7 @@ export class AuthController {
       totpCode: body.totpCode,
       totpCapable: body.totpCapable,
       clientVersion: resolveClientVersion(req),
+      ...webLoginContext(req, body.clientType, ipAddress),
     };
     try {
       const result = await AuthService.loginWithQuickPin(body.pin, ctx);
@@ -907,6 +967,65 @@ export class AuthController {
       const code = error instanceof AppError ? error.details?.code : undefined;
       const wrong = code === CURRENT_PASSWORD_INVALID_CODE || code === "TOTP_INVALID";
       if (!wrong) releaseLoginAttempt(lockKeys);
+      next(error);
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/auth/trusted-devices:
+   *   get:
+   *     tags: [Auth]
+   *     summary: Kendi hesabımda web girişinde hatırlanan cihazlar (son 50; belirteç/özet dönmez)
+   *     security: [{ bearerAuth: [] }]
+   */
+  static async trustedDevicesList(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.user?.userId as string;
+      res.status(200).json({ success: true, data: await TrustedDeviceService.list(userId) });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/auth/trusted-devices/{id}/revoke:
+   *   post:
+   *     tags: [Auth]
+   *     summary: Kendi hatırlanan bir cihazımı kaldır (yalnız kendi kaydı; başkasınınki 404)
+   *     security: [{ bearerAuth: [] }]
+   *     responses:
+   *       404: { description: TRUSTED_DEVICE_NOT_FOUND }
+   *       409: { description: TRUSTED_DEVICE_ALREADY_REVOKED }
+   */
+  static async trustedDeviceRevoke(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      emptyBodySchema.parse(req.body ?? {});
+      const userId = req.user?.userId as string;
+      const { deviceId } = parseTrustedDeviceIds(userId, req.params.id as string);
+      await TrustedDeviceService.revoke({ userId, deviceId: deviceId!, actorId: userId, reason: "SELF" });
+      res.status(200).json({ success: true, message: "Cihaz kaldırıldı" });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/auth/trusted-devices/revoke-all:
+   *   post:
+   *     tags: [Auth]
+   *     summary: Kendi hatırlanan bütün cihazlarımı kaldır
+   *     security: [{ bearerAuth: [] }]
+   */
+  static async trustedDevicesRevokeAll(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      emptyBodySchema.parse(req.body ?? {});
+      const userId = req.user?.userId as string;
+      const revoked = await TrustedDeviceService.revokeAll({ userId, actorId: userId, reason: "SELF" });
+      res.status(200).json({ success: true, data: { revoked } });
+    } catch (error) {
       next(error);
     }
   }

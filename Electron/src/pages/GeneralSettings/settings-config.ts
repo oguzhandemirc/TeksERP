@@ -2762,6 +2762,40 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "“Herkese zorunlu” (varsayılan): web paneline girişte iki adımlı doğrulama kurulu olmalı ve kod istenir. “Kullanıcının tercihine bırak”: kodu kendi hesabında kapatan kullanıcı internetten yalnız parolayla girer — önerilmez; yalnız deneme/demo kurulumları için. Sistem hesabı her durumda kod verir; masaüstü ve tablet kuralları değişmez. Bu ayarı yalnız sistem yöneticisi değiştirir.",
       },
     ],
+    numberFlags: [
+      {
+        key: "trustedDeviceDays",
+        title: "Bu cihazı hatırla (gün)",
+        desc: "Web girişinin kod adımında “Bu cihazı N gün hatırla” kutusu çıkar; işaretleyen kullanıcı o tarayıcıdan N gün boyunca kod girmeden (yalnız parolayla) girer. 0 = kapalı (varsayılan): her girişte kod istenir. Parola değişince, doğrulama sıfırlanınca ya da hesap pasife alınınca hatırlanan cihazlar silinir; kullanıcı ve yönetici cihazları tek tek kaldırabilir. Sistem hesabına uygulanmaz. Bu ayarı yalnız sistem yöneticisi değiştirir.",
+        min: 0,
+        max: 90,
+        fallback: 0,
+        unit: "gün",
+        step: 1,
+        audience: ["Yönetim"],
+      },
+    ],
+  },
+  {
+    // Son kullanıcı (2026-11-01): fabrika yöneticisi yazar (`settings:session` kapsamı); sistem hesabı hiç hatırlanmaz.
+    id: "giris-ekrani",
+    label: "Giriş Ekranı",
+    icon: UsersRound,
+    description: "Masaüstü ve web panelinin giriş ekranı en son giren kullanıcıyı hatırlasın mı.",
+    keywords: "giriş ekranı son kullanıcı hatırla kullanıcı adı profil hesap parola şifre login başka hesap unut",
+    kind: "flags",
+    section: "system",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:session"],
+    flags: [
+      {
+        key: "rememberLastUser",
+        title: "Girişte son kullanıcıyı hatırla",
+        summary: "Giriş ekranı en son giren kullanıcıyla açılır; yalnız parola sorulur. “Başka hesapla giriş yap” normal forma döner.",
+        defaultOn: false,
+        audience: ["Yönetim"],
+        desc: "Açıkken masaüstü ve web panelinin giriş ekranı o bilgisayarda en son giren kullanıcının adıyla açılır ve yalnız parola sorar; “Başka hesapla giriş yap” normal giriş formunu açar, “Bu hesabı unut” kaydı cihazdan siler. Cihazda yalnız kullanıcı adı ve görünen ad tutulur (parola tutulmaz). Sistem hesabı hiç hatırlanmaz. Kapalıyken (varsayılan) giriş ekranı boş formla açılır ve bir sonraki girişte cihazdaki kayıt silinir. Tablet girişini etkilemez.",
+      },
+    ],
   },
   {
     id: "support",

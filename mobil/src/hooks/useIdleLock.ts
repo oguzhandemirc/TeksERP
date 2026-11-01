@@ -7,11 +7,12 @@
 //   - idle süresi (feature-flags dk) dolmadan `IDLE_WARNING_MS` önce geri sayım.
 //   - Arka plana geçince (AppState !== 'active') ANINDA kilitlenir — AYRI bayrak
 //     `mobileLockOnBackground` (default açık); kapalıysa arka plana geçince kilit YOK.
+//   - `mobileOfflineLockDefer` (default kapalı) açık + bağlantı yok → iki kilit ertelenir (Y5).
 // Aktivite zaman damgası App.tsx kök responder-capture'ından `recordActivity()`
 // ile güncellenir (bu hook yalnız okur).
 // =============================================================================
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import {
@@ -26,12 +27,15 @@ import {
   useMobileIdleLockEnabled,
   useMobileIdleLockMinutes,
   useMobileLockOnBackground,
+  useMobileOfflineLockDefer,
 } from './useFeatureFlags';
+import { offlineReason, subscribeOfflineReason } from '../offline/serverReachability';
 import {
   computeIdlePhase,
   idleMinutesToMs,
   warningSeconds,
   IDLE_WARNING_MS,
+  isLockDeferred,
   SUPPRESSED_BACKGROUND_GRACE_MS,
 } from '../utils/idleLock';
 
@@ -55,6 +59,13 @@ export function useIdleLock(): IdleLockUi {
   const [warning, setWarning] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
 
+  // Y5: ayar açık + bağlantı yok → kilit ertelenir (ayar kapalıyken her zaman false = bugünkü davranış).
+  const deferSetting = useMobileOfflineLockDefer();
+  const reason = useSyncExternalStore(subscribeOfflineReason, offlineReason);
+  const deferred = isLockDeferred(deferSetting, reason);
+  const deferredRef = useRef(deferred);
+  deferredRef.current = deferred;
+
   const activeGuard = enabled && !!user; // idle timeout (hareketsizlik)
   const bgGuard = lockOnBackground && !!user; // arka plana geçince anında kilit (bağımsız)
   const idleMs = idleMinutesToMs(minutes);
@@ -64,9 +75,11 @@ export function useIdleLock(): IdleLockUi {
     if (activeGuard) recordActivity();
   }, [activeGuard]);
 
+  const missedBgLockRef = useDeferEndEffect(deferred, activeGuard, bgGuard, lock);
+
   // Periyodik idle kontrolü (kilitli değilken).
   useEffect(() => {
-    if (!activeGuard || locked) {
+    if (!activeGuard || locked || deferred) {
       setWarning(false);
       return;
     }
@@ -85,7 +98,7 @@ export function useIdleLock(): IdleLockUi {
     tick();
     const id = setInterval(tick, 500);
     return () => clearInterval(id);
-  }, [activeGuard, locked, idleMs, lock]);
+  }, [activeGuard, locked, deferred, idleMs, lock]);
 
   // Arka plana geçince anında kilitle (mobileLockOnBackground açık + kullanıcı varken).
   // Idle kilitten BAĞIMSIZ: idle kapalı olsa da bu açıksa arka planda kilitlenir;
@@ -101,6 +114,11 @@ export function useIdleLock(): IdleLockUi {
   useEffect(() => {
     if (!bgGuard) return;
     const sub = AppState.addEventListener('change', (s) => {
+      if (deferredRef.current) {
+        // Y5: çevrimdışı erteleme — açılamayacak kilide sokma; gerçek ayrılışı borç olarak tut.
+        if (s !== 'active' && !isSystemDialogPending()) missedBgLockRef.current = true;
+        return;
+      }
       if (s !== 'active') {
         if (isSystemDialogPending()) noteSuppressedBackground();
         else lock();
@@ -109,7 +127,7 @@ export function useIdleLock(): IdleLockUi {
       }
     });
     return () => sub.remove();
-  }, [bgGuard, lock]);
+  }, [bgGuard, lock, missedBgLockRef]);
 
   const dismissWarning = useCallback(() => {
     recordActivity();
@@ -117,4 +135,21 @@ export function useIdleLock(): IdleLockUi {
   }, []);
 
   return { warning: warning && activeGuard && !locked, secondsLeft, dismissWarning };
+}
+
+/**
+ * Y5: bağlantı dönünce (erteleme biter) hareketsizlik süresi baştan başlar — anında kilit yok.
+ * Erteleme sırasında operatör uygulamadan ayrıldıysa (gerçek arka plan) kilit borçtur ve şimdi
+ * ödenir — dönen kişi başkası olabilir. Dönen ref'i arka plan dinleyicisi işaretler.
+ */
+function useDeferEndEffect(deferred: boolean, activeGuard: boolean, bgGuard: boolean, lock: () => void) {
+  const missedBgLockRef = useRef(false);
+  useEffect(() => {
+    if (deferred) return;
+    if (missedBgLockRef.current) {
+      missedBgLockRef.current = false;
+      if (bgGuard) lock();
+    } else if (activeGuard) recordActivity();
+  }, [deferred, activeGuard, bgGuard, lock]);
+  return missedBgLockRef;
 }

@@ -1,7 +1,8 @@
-// Kalite Güvence kökü (UX-2 K1): bayrak kapalıyken karo soluk + mesaj (gezinme yok); izinsizde hiç yok.
+// Kalite Güvence kökü (UX-2 K1): bayrak kapalıyken karo yalnız süperadmine soluk + mesaj (gezinme yok), diğerine hiç; izinsizde hiç yok.
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
+import { useAuthStore } from "@/store/auth";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 
 let flagOn = false;
@@ -28,9 +29,10 @@ import { KALITE_GUVENCE_OFF_HINT } from "@/pages/Quality/tile-config";
 const labCard = () => screen.queryByText("Lab Testleri")?.closest("button") ?? null;
 
 describe("Kalite Güvence karosu", () => {
-  beforeEach(() => { info.mockReset(); window.history.pushState({}, "", "/quality"); });
-  it("bayrak kapalı + izinli → soluk karo + ayar yolu; tık mesaj verir, gezinmez", () => {
+  beforeEach(() => { info.mockReset(); useAuthStore.setState({ isSystemAccount: false, systemAccountExists: true }); window.history.pushState({}, "", "/quality"); });
+  it("bayrak kapalı + izinli + süperadmin → soluk karo + ayar yolu; tık mesaj verir, gezinmez", () => {
     flagOn = false; perms = "all";
+    useAuthStore.setState({ isSystemAccount: true, systemAccountExists: true });
     renderWithProviders(<QualityHubPage />);
     const card = labCard();
     expect(card?.getAttribute("aria-disabled")).toBe("true");
@@ -38,6 +40,11 @@ describe("Kalite Güvence karosu", () => {
     fireEvent.click(card!);
     expect(info).toHaveBeenCalledWith(KALITE_GUVENCE_OFF_HINT);
     expect(window.location.pathname).toBe("/quality");
+  });
+  it("bayrak kapalı + izinli + süperadmin değil → karo hiç çizilmez", () => {
+    flagOn = false; perms = "all";
+    renderWithProviders(<QualityHubPage />);
+    expect(labCard()).toBeNull();
   });
   it("bayrak açık → karo etkin (kapalı işareti yok)", () => {
     flagOn = true; perms = "all";
