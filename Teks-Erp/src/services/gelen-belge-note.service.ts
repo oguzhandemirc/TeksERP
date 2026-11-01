@@ -286,8 +286,8 @@ function patchColumns<T extends Record<string, unknown>>(full: T, patch: Deliver
 }
 
 /** Silinebilir mi — tekil ve toplu silmenin (önizleme dahil) TEK yüklemi; claim WHERE'i aynı değeri taşır. */
-export const DELETABLE_NOTE_STATUS = "DRAFT" as const satisfies DeliveryNoteStatus;
-export const isDeletableNoteStatus = (s: DeliveryNoteStatus): boolean => s === DELETABLE_NOTE_STATUS;
+export const NOTE_DELETE_STATUS = "DRAFT" as const satisfies DeliveryNoteStatus;
+export const isDeletableNoteStatus = (s: DeliveryNoteStatus): boolean => s === NOTE_DELETE_STATUS;
 
 /**
  * ④ Deftere hiç yazmamış taslak — fiziksel silme (`docs/kurallar/defter.md` § Hard delete).
@@ -300,7 +300,7 @@ export async function deleteDeliveryNote(id: string, userId: string): Promise<{ 
   await prisma.$transaction(async (tx) => {
     // Çözme önce (FK Restrict); claim kaybedilirse tx geri sarar, taramalar bağlı kalır.
     await tx.documentScan.updateMany({ where: { noteId: id }, data: { noteId: null } });
-    const gone = await tx.customerDeliveryNote.deleteMany({ where: { id, status: DELETABLE_NOTE_STATUS } });
+    const gone = await tx.customerDeliveryNote.deleteMany({ where: { id, status: NOTE_DELETE_STATUS } });
     if (gone.count === 0) await notDraft(id);
   });
   void AuditService.log({ userId, action: "DELETE", tableName: NOTE_TABLE, recordId: id, oldData: auditHeader(before) });
