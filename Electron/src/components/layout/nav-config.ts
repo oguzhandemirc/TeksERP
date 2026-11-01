@@ -74,7 +74,7 @@ export const navGroups: NavGroup[] = [
       { label: "Anasayfa", to: "/", icon: LayoutDashboard },
       { label: "Operasyon", to: "/operations", icon: ClipboardList },
       {
-        // UX-2: kalite karoları Operasyon'dan ayrı kök; bayrak kapalıyken satır soluk + ayar yolu (K3).
+        // UX-2: kalite karoları Operasyon'dan ayrı kök; bayrak kapalıyken satır yalnız modülü açabilene soluk (`off-module-visibility`).
         label: TERIM_AD.kaliteGuvence,
         to: "/quality",
         icon: BadgeCheck,
