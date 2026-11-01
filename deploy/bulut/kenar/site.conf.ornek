@@ -8,6 +8,8 @@
 # Hız bölgeleri (denetim 2026-11-01 K1-3):
 #   kenar_ip    — istemci başına GENEL tavan; cömert (fabrika tek NAT adresinden çıkar). IPv6 /64'e indirilir:
 #                 Cloudflare istemciyi /128 geçirir, tek bir /64'ün sahibi her istekte yeni "adres" olabilir.
+#                 Muaf adres bu kovaya da sayılmaz.
+#   kenar_giris_ip — IP (/64) başına giriş tavanı; toplamdan önce: tek adres toplam kovayı boşaltamaz.
 #   kenar_giris — giriş uçlarının (parola/PIN/kart girişi, yerinde onay, cihaz duyurusu) TOPLAM tavanı; saldırgan
 #                 adres sayısından bağımsız bcrypt CPU'sunu korur. muaf/adresler.conf'taki fabrika/ofis adresleri
 #                 bu toplamdan muaftır (muaf/adresler.conf): saldırı sürerken fabrika giriş yapmaya devam eder.
@@ -40,8 +42,25 @@ map "$kenar_muaf|$request_method|$uri" $kenar_giris_anahtar {
     "~*^0\|(?!(GET|HEAD|OPTIONS)\|)[A-Z]+\|/api/devices/(announce|rebind-requests/onsite-approve)/?$" giris;
 }
 
-limit_req_zone $kenar_ip_anahtar    zone=kenar_ip:10m    rate=30r/s;
-limit_req_zone $kenar_giris_anahtar zone=kenar_giris:1m  rate=3r/s;
+# Genel kova muaf (fabrika) adreste sayılmaz: tek NAT ardındaki bütün tablet/panel trafiği 429'da yeniden
+# denemediği için (denetim Y4) tavan ölçülmemiş tepeyi boğmasın. Muaf olmayan fabrikada tavan, teslimden önce
+# erişim günlüğünden ölçülen saniyelik tepenin ~3 katına ayarlanır (runbook §10).
+map "$kenar_muaf|$kenar_ip_anahtar" $kenar_ip_kova {
+    default "";
+    "~^0\|(?<ipk>.+)$" $ipk;
+}
+
+# IP başına giriş kovası (toplamdan ÖNCE): tek adres toplam kovayı boşaltıp herkesin girişini 429'a düşüremesin.
+# Hız (1 r/s) toplamın (3 r/s) altında → tek kaynak toplamı tüketemez; nginx önceki bölgede reddedilen isteği
+# sonraki bölgeye saymaz. Backend'in örtük IP giriş kovası (dakikada 60) mertebesinde.
+map "$kenar_giris_anahtar|$kenar_ip_anahtar" $kenar_giris_ip_anahtar {
+    default "";
+    "~^giris\|(?<gik>.+)$" $gik;
+}
+
+limit_req_zone $kenar_ip_kova          zone=kenar_ip:10m       rate=30r/s;
+limit_req_zone $kenar_giris_ip_anahtar zone=kenar_giris_ip:10m rate=60r/m;
+limit_req_zone $kenar_giris_anahtar    zone=kenar_giris:1m     rate=3r/s;
 limit_req_status 429;
 
 # Günlük: sorgu dizesi YAZILMAZ ($request/$args/$request_uri değil, $uri) — `totp/enroll?token=` gibi belirteçli
@@ -74,8 +93,9 @@ server {
     client_max_body_size 20m;
     access_log /var/log/nginx/access.log tekserp_kenar;
 
-    limit_req zone=kenar_ip    burst=300 nodelay;
-    limit_req zone=kenar_giris burst=10  nodelay;
+    limit_req zone=kenar_ip       burst=300 nodelay;
+    limit_req zone=kenar_giris_ip burst=10  nodelay;
+    limit_req zone=kenar_giris    burst=10  nodelay;
     error_page 429 = @kenar_hiz_siniri;
 
     proxy_set_header Host $host;

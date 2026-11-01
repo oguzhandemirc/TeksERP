@@ -159,13 +159,15 @@ else
     DUZ=$(find "$YEDEK_KOK" -maxdepth 2 -type f \( -name '*.dump' -o -name '*.sql' -o -name '*.dump.part' \) 2>/dev/null | wc -l)
     if [ "$DUZ" -eq 0 ]; then yesil "şifresiz döküm yok"; else kirmizi "şifresiz döküm var ($DUZ dosya)"; fi
   fi
+  # Makine dışı kopya (K2) konaktan ölçülemez (hedef sağlayıcıya göre değişir); sessiz geçmesin.
+  olculemedi "makine dışı yedek kopyası (K2) ölçülmedi — hedefteki son dosyanın yaşını elle doğrulayın"
 
   # Kenar nginx yapılandırması (nginx -T yalnız okur).
   [ -n "$KENAR" ] || KENAR=$(docker ps --format '{{.Names}} {{.Image}}' | awk '$2 ~ /nginx/ {print $1; exit}')
   if [ -z "$KENAR" ]; then olculemedi "kenar konteyneri bulunamadı (--kenar verin)"; else
     NT=$(docker exec "$KENAR" nginx -T 2>/dev/null || true)
     if [ -z "$NT" ]; then olculemedi "kenar nginx -T okunamadı"; else
-      if printf '%s\n' "$NT" | grep -q 'zone=kenar_ip:' && printf '%s\n' "$NT" | grep -q 'zone=kenar_giris:'; then yesil "kenar hız bölgeleri (genel + toplam giriş)"; else kirmizi "kenar limit_req bölgeleri yok"; fi
+      if printf '%s\n' "$NT" | grep -q 'zone=kenar_ip:' && printf '%s\n' "$NT" | grep -q 'zone=kenar_giris_ip:' && printf '%s\n' "$NT" | grep -q 'zone=kenar_giris:'; then yesil "kenar hız bölgeleri (genel + IP giriş + toplam giriş)"; else kirmizi "kenar limit_req bölgeleri yok"; fi
       if printf '%s\n' "$NT" | grep -qE '^[[:space:]]*ssl_verify_client[[:space:]]+on;'; then yesil "kenar AOP (ssl_verify_client on)"; else kirmizi "kenar AOP yok (ssl_verify_client)"; fi
       if printf '%s\n' "$NT" | grep -qE '^[[:space:]]*access_log[^;]*tekserp_kenar;'; then yesil "kenar günlüğü sorgu dizesiz biçimde"; else kirmizi "kenar günlüğü varsayılan biçimde (sorgu dizesi düz yazılır)"; fi
       if printf '%s\n' "$NT" | grep -qE '^[[:space:]]*ssl_protocols[[:space:]]+TLSv1\.2 TLSv1\.3;'; then yesil "kenar TLS 1.2+"; else kirmizi "kenar ssl_protocols TLSv1.2 TLSv1.3 değil"; fi
@@ -191,7 +193,13 @@ else
   fi
   # İstemci tarafı (Ubuntu OpenSSL SECLEVEL=2) eski TLS'i kendisi reddeder; düşürülmezse yanlış YEŞİL çıkar.
   for v in 1.0 1.1; do
-    if curl -sS -o /dev/null --max-time 15 --tlsv1.0 --tls-max "$v" --ciphers 'DEFAULT@SECLEVEL=0' "https://$AD/health" 2>/dev/null; then kirmizi "TLS $v kabul ediliyor"; else yesil "TLS $v reddediliyor"; fi
+    # Yalnız el sıkışma reddi (35) YEŞİL; ad çözme/bağlantı/zaman aşımı (6/7/28) ölçüm değildir.
+    TLS_KOD=0; curl -sS -o /dev/null --max-time 15 --tlsv1.0 --tls-max "$v" --ciphers 'DEFAULT@SECLEVEL=0' "https://$AD/health" 2>/dev/null || TLS_KOD=$?
+    case "$TLS_KOD" in
+      0) kirmizi "TLS $v kabul ediliyor" ;;
+      35) yesil "TLS $v reddediliyor" ;;
+      *) olculemedi "TLS $v sınaması sonuçsuz (curl çıkış $TLS_KOD)" ;;
+    esac
   done
   H=$(curl -sS -o /dev/null -D - --max-time 15 "http://$AD/health" 2>/dev/null | tr -d '\r')
   KOD=$(printf '%s\n' "$H" | awk 'NR==1 {print $2}')

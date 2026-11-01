@@ -6,7 +6,7 @@
 //      (elle + güncelleyicili) backend environment bloğunda geçer; geçmeyen yalnız beyanlı İSTİSNA (gerekçeli,
 //      bayat istisna da kırmızı). HTTPS_ENABLED/CORS_ORIGINS boş varsayılanla (fabrika = bugünkü davranış);
 //      bulut örneği HTTPS_ENABLED=true sabitler ve muaf dizinini bağlar.
-//   §2 kenar şablonu (deploy/bulut/kenar/site.conf.ornek): iki limit_req bölgesi (IP başına genel · TOPLAM giriş),
+//   §2 kenar şablonu (deploy/bulut/kenar/site.conf.ornek): üç limit_req bölgesi (IP başına genel · IP başına giriş · TOPLAM giriş),
 //      giriş anahtarı eşlemesi örnek isteklerle (muaf adres, GET/OPTIONS, büyük harf, sondaki "/"), IPv6 /64
 //      anahtarı, 429 gövdesi backend biçiminde (success:false · details.code RATE_LIMITED · Retry-After), günlük
 //      biçimi sorgu dizesi/referer taşımaz, AOP + TLS 1.2+, HSTS kenarda basılmaz (tek kaynak backend).
@@ -110,21 +110,38 @@ function nginxMap(conf, variable) {
   return (input) => {
     for (const { re, value } of rows) {
       const hit = re.exec(input);
-      if (hit) return value.replace(/\$(g\d)/g, (_, g) => hit.groups?.[g] ?? '');
+      if (hit) return value.replace(/\$(\w+)/g, (all, g) => (hit.groups && g in hit.groups ? hit.groups[g] : all));
     }
     return def ?? '';
   };
 }
 function siteFindings(conf) {
   const out = [];
-  const zone = (name, key) => new RegExp(`^limit_req_zone \\$${key}\\s+zone=${name}:\\d+m\\s+rate=(\\d+)r/s;`, 'm').exec(conf);
-  const ipZone = zone('kenar_ip', 'kenar_ip_anahtar');
+  const zone = (name, key) => new RegExp(`^limit_req_zone \\$${key}\\s+zone=${name}:\\d+m\\s+rate=(\\d+)r/(s|m);`, 'm').exec(conf);
+  const perSec = (z) => (z[2] === 'm' ? Number(z[1]) / 60 : Number(z[1]));
+  const ipZone = zone('kenar_ip', 'kenar_ip_kova');
+  const loginIpZone = zone('kenar_giris_ip', 'kenar_giris_ip_anahtar');
   const loginZone = zone('kenar_giris', 'kenar_giris_anahtar');
-  if (!ipZone) out.push('IP başına genel bölge (kenar_ip) yok');
-  else if (Number(ipZone[1]) < 10) out.push(`genel bölge fabrika NAT'ını boğar (${ipZone[1]} r/s < 10)`);
+  if (!ipZone) out.push('IP başına genel bölge (kenar_ip, muafı saymayan $kenar_ip_kova) yok');
+  else if (perSec(ipZone) < 10) out.push(`genel bölge fabrika NAT'ını boğar (${ipZone[1]} r/s < 10)`);
   if (!loginZone) out.push('toplam giriş bölgesi (kenar_giris) yok');
-  for (const z of ['kenar_ip', 'kenar_giris']) {
-    if (!new RegExp(`^ {4}limit_req zone=${z}\\s+burst=\\d+\\s+nodelay;`, 'm').test(conf)) out.push(`${z} sunucu bloğunda uygulanmıyor`);
+  if (!loginIpZone) out.push('IP başına giriş bölgesi (kenar_giris_ip) yok — tek adres toplam kovayı boşaltır');
+  else if (loginZone && perSec(loginIpZone) >= perSec(loginZone)) out.push('IP başına giriş hızı toplamdan küçük değil — tek adres toplam kovayı boşaltır');
+  const order = ['kenar_ip', 'kenar_giris_ip', 'kenar_giris'].map((z) => {
+    const m = new RegExp(`^ {4}limit_req zone=${z}\\s+burst=\\d+\\s+nodelay;`, 'm').exec(conf);
+    if (!m) out.push(`${z} sunucu bloğunda uygulanmıyor`);
+    return m ? m.index : -1;
+  });
+  if (order.every((i) => i >= 0) && !(order[0] < order[1] && order[1] < order[2])) out.push('limit_req sırası kenar_ip → kenar_giris_ip → kenar_giris değil (toplam önce sayılır)');
+  const ipBucket = nginxMap(conf, 'kenar_ip_kova');
+  if (!ipBucket) out.push('genel kova eşlemesi yok');
+  else for (const [input, want] of [['0|192.0.2.4', '192.0.2.4'], ['1|192.0.2.4', ''], ['0|6:2001:db8:1:2', '6:2001:db8:1:2']]) {
+    if (ipBucket(input) !== want) out.push(`genel kova «${input}» → «${ipBucket(input)}» (beklenen «${want}»; muaf sayılmaz)`);
+  }
+  const loginIp = nginxMap(conf, 'kenar_giris_ip_anahtar');
+  if (!loginIp) out.push('IP başına giriş anahtarı eşlemesi yok');
+  else for (const [input, want] of [['giris|192.0.2.4', '192.0.2.4'], ['|192.0.2.4', ''], ['giris|6:2001:db8:1:2', '6:2001:db8:1:2']]) {
+    if (loginIp(input) !== want) out.push(`IP giriş anahtarı «${input}» → «${loginIp(input)}» (beklenen «${want}»)`);
   }
   if (!/^limit_req_status 429;/m.test(conf)) out.push('ret durumu 429 değil');
   if (!/^geo \$kenar_muaf \{\n {4}default 0;\n {4}include \/etc\/nginx\/muaf\/adresler\.conf;\n\}/m.test(conf)) out.push('muaf adresler geo eşlemesi (adresler.conf) yok');
@@ -173,10 +190,14 @@ function siteFindings(conf) {
 {
   const conf = read(SITE);
   const f = siteFindings(conf);
-  check('§2 ⭐ kenar şablonu: iki hız bölgesi + muaf + 429 JSON + sorgusuz günlük + AOP/TLS1.2 + HSTS tek kaynak', f.length === 0, f.join(' | '));
+  check('§2 ⭐ kenar şablonu: üç hız bölgesi (genel · IP giriş · toplam giriş) + muaf + 429 JSON + sorgusuz günlük + AOP/TLS1.2 + HSTS tek kaynak', f.length === 0, f.join(' | '));
   probes('§2', conf, siteFindings, [
     ['toplam giriş bölgesi yok', conf.replace(/^limit_req_zone \$kenar_giris_anahtar.*\n/m, '')],
     ['genel bölge uygulanmıyor', conf.replace(/^ {4}limit_req zone=kenar_ip .*\n/m, '')],
+    ['IP başına giriş bölgesi yok', conf.replace(/^limit_req_zone \$kenar_giris_ip_anahtar.*\n/m, '')],
+    ['IP giriş sırası ters', conf.replace(/^( {4}limit_req zone=kenar_giris_ip .*\n)( {4}limit_req zone=kenar_giris .*\n)/m, '$2$1')],
+    ['IP giriş hızı toplamı boşaltır', conf.replace('zone=kenar_giris_ip:10m rate=60r/m', 'zone=kenar_giris_ip:10m rate=5r/s')],
+    ['muaf genel kovaya sayılıyor', conf.replace('"~^0\\|(?<ipk>.+)$"', '"~^[01]\\|(?<ipk>.+)$"')],
     ['muaf GET de sayılıyor', conf.replace('(?!(GET|HEAD|OPTIONS)\\|)', '')],
     ['muaf adres sayılıyor', conf.replace(/"~\*\^0\\\|/g, '"~*^[01]\\|')],
     ['announce kapsam dışı', conf.replace('(announce|rebind-requests/onsite-approve)', '(rebind-requests/onsite-approve)')],
