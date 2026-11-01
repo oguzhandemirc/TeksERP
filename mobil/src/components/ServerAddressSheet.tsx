@@ -9,7 +9,7 @@
 // =============================================================================
 
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { Text, TextInput, Button, Icon, IconButton, ActivityIndicator, Chip, Surface } from 'react-native-paper';
 import axios from 'axios';
 import * as Haptics from 'expo-haptics';
@@ -60,6 +60,9 @@ function HttpServerAddressSheet({
   visible: boolean;
   onClose: () => void;
 }) {
+  // Genişlik verilmezse kutu içeriği kadar daralır (tablette IP alanı kesiliyordu).
+  const { width: winW } = useWindowDimensions();
+  const sheetWidth = Math.min(560, winW - 32);
   const { baseUrl, customUrl, recentUrls, setCustomUrl, reset } = useBaseUrlStore();
 
   const [scheme, setScheme] = useState<'http' | 'https'>('http');
@@ -148,7 +151,7 @@ function HttpServerAddressSheet({
   };
 
   return (
-    <AppModal visible={visible} onDismiss={onClose}>
+    <AppModal visible={visible} onDismiss={onClose} contentStyle={{ width: sheetWidth }}>
       <Surface style={styles.sheet} elevation={4}>
         <View style={styles.header}>
           <Icon source="server-network" size={22} color={COLORS.accentLight} />
