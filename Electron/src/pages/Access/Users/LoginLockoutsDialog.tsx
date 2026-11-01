@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { safeFormat } from "@/lib/format";
+import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import { LOGIN_LOCKOUT_METHOD_LABELS, loginLockoutService } from "@/services/loginLockoutService";
 
 const QUERY_KEY = ["login-lockouts"] as const;
@@ -16,7 +17,12 @@ const QUERY_KEY = ["login-lockouts"] as const;
  */
 export function LoginLockoutsButton() {
   const [open, setOpen] = useState(false);
-  const query = useQuery({ queryKey: QUERY_KEY, queryFn: loginLockoutService.list, refetchInterval: open ? 15_000 : 60_000 });
+  const tabActive = useIsTabActive();
+  const query = useQuery({
+    queryKey: QUERY_KEY,
+    queryFn: loginLockoutService.list,
+    refetchInterval: tabActive ? (open ? 15_000 : 60_000) : false,
+  });
   const count = query.data?.length ?? 0;
   return (
     <>

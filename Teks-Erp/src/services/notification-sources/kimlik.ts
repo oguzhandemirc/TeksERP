@@ -74,7 +74,7 @@ export async function emitSuspiciousLogin(
 ): Promise<string | null> {
   return emitNotification(
     tx,
-    SUSPICIOUS_LOGIN_KIND,
+    "kimlik.supheli-giris-denemesi", // literal: yayma tarayıcısı türü değişkenden okuyamaz (SUSPICIOUS_LOGIN_KIND)
     { type: "user", id: input.userId, key: input.userId },
     {
       kullaniciId: input.userId,
