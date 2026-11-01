@@ -10,6 +10,7 @@ import { buildTotpEnrollHash, buildTotpEnrollUrl } from "@/lib/totp-enroll-url";
 import { useAuthStore } from "@/store/auth";
 import { factoryLocaleDateString, factoryLocaleTimeString } from "@/lib/factory-time";
 import { CredentialApprovalRequest } from "./CredentialApprovalRequest";
+import { TrustedDevicesCard } from "@/components/auth/TrustedDevicesCard";
 import { TWO_FACTOR_HINT } from "@/lib/totp-auth";
 
 interface Props {
@@ -189,6 +190,14 @@ export function TwoFactorTab({ userId, username }: Props) {
           </Button>
         )}
       </div>
+
+      <TrustedDevicesCard
+        scopeKey={`user:${userId}`}
+        subjectLabel={username}
+        load={() => adminUserService.listTrustedDevices(userId)}
+        revoke={(deviceId) => adminUserService.revokeTrustedDevice(userId, deviceId)}
+        revokeAll={() => adminUserService.revokeAllTrustedDevices(userId)}
+      />
 
       <ConfirmDialog
         open={confirmReset}

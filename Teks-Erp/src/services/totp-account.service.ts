@@ -10,6 +10,7 @@
 // (`admin:users`), pencere tek kullanımlık ve kısa ömürlüdür.
 // =============================================================================
 
+import { revokeAllTrustedDevicesTx, auditBulkRevoke } from "./trusted-device.service";
 import prisma from "../lib/prisma";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
@@ -338,7 +339,7 @@ export class TotpAccountService {
    * anlamına gelir.
    */
   static async reset(params: { userId: string; byId: string }): Promise<void> {
-    await prisma.$transaction(async (tx) => {
+    const revokedDevices = await prisma.$transaction(async (tx) => {
       const usedCodes = await tx.userRecoveryCode.findMany({
         where: { userId: params.userId, usedAt: { not: null } },
         select: { codeHash: true },
@@ -368,7 +369,10 @@ export class TotpAccountService {
         where: { userId: params.userId, consumedAt: null },
         data: { expiresAt: new Date() },
       });
+      // Doğrulama sıfırlandı → "hatırlanan" tarayıcılar da kodsuz giremez (aynı tx).
+      return revokeAllTrustedDevicesTx(tx, params.userId, "TOTP_RESET", params.byId);
     });
+    await auditBulkRevoke(params.userId, revokedDevices, "TOTP_RESET", params.byId);
     await AuditService.log({
       userId: params.byId,
       action: "UPDATE",

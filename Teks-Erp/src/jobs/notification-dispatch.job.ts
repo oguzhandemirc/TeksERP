@@ -19,6 +19,7 @@ import { registerReadyWorkConditionSource, registerWorkConditionSources } from "
 import { registerQualityConditionSources } from "../services/notification-sources/kalite";
 import { registerCariConditionSources } from "../services/notification-sources/cari";
 import { registerLoomAlarmRecipientResolver } from "../services/notification-sources/alarm";
+import { registerIdentityRecipientResolvers } from "../services/notification-sources/kimlik";
 import { createNudgeCoalescer } from "./nudge-coalescer";
 import { reportJobFailure } from "./job-failure";
 import { bilgi, uyari } from "../lib/logger";
@@ -183,6 +184,7 @@ export function startNotificationJobs(): void {
   registerCariConditionSources(); // cari risk limiti (D4-I5)
   registerDeviceConditionSources(); // anahtar halkası kaybı (izlenebilirlik D5)
   registerLoomAlarmRecipientResolver(); // tezgah alarmı donmuş alıcı (N2-ALARM)
+  registerIdentityRecipientResolvers(); // yeni cihazla web girişi: kişinin kendisi + kullanıcı yöneticileri
   firstTimer = setTimeout(() => void reconcileNotificationJobs(), STARTUP_DELAY_MS);
   firstTimer.unref();
   supervisorTimer = setInterval(() => void reconcileNotificationJobs(), NOTIFICATION_SUPERVISOR_MS);

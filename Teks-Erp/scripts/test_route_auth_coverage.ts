@@ -230,7 +230,12 @@ const EXEMPT: Record<string, string> = {
  * kullanıcı KENDİ hesabının web girişi tercihini okur/yazar (satır kapsamı token'daki `userId`, gövde strict:
  * başka kullanıcı alanı 400); izin kodu yazmak kendi güvenlik tercihini yetkiye bağlardı. `test_web_cerez_oturumu` §13 ölçer.
  */
-const BARE_CHAIN_BASELINE = 40;
+/**
+ * ⚠️ 40 → 43 (2026-11-01, güvenilir cihaz, BİLİNÇLİ): `GET /api/auth/trusted-devices` + `POST …/revoke-all` +
+ * `POST …/:id/revoke` yalnız `verifyToken` taşır — kullanıcı KENDİ hatırlanan cihazlarını görür/kaldırır (satır
+ * kapsamı token'daki `userId`; başkasının cihazı 404). Yönetici yolu `admin:users` guard'lı. `test_guvenilir_cihaz` §10 ölçer.
+ */
+const BARE_CHAIN_BASELINE = 43;
 
 /** Körlük zemini: tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın. */
 const MIN_ROUTE_LAYERS = 400;

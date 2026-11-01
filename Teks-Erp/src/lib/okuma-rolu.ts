@@ -29,6 +29,8 @@ export const READ_ONLY_HIDDEN_COLUMNS: Readonly<Record<string, readonly string[]
   device_binding_events: ["hwDigest"],
   device_rebind_requests: ["hwDigest"],
   machine_collectors: ["secretSeed"],
+  // Güvenilir cihaz belirtecinin HMAC özeti — çerezsiz kimlik kanıtı değil ama sızıntı yüzeyi daraltılır.
+  trusted_devices: ["tokenHash"],
 };
 
 /**

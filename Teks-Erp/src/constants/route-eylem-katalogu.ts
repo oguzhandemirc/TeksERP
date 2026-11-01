@@ -24,6 +24,10 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/admin/devices/proof-reset": e("cihazları yeniden bağlamak için kanıtı sıfırladı", "cihaz kanıtını sıfırlamaya çalıştı"),
   // ── Kimlik: web girişi 2FA kullanıcı tercihi
   "PUT /api/auth/web-totp": e("internetten giriş 2FA tercihini değiştirdi", "internetten giriş 2FA tercihini değiştirmeye çalıştı"),
+  "POST /api/auth/trusted-devices/:id/revoke": e("hatırlanan bir cihazını kaldırdı", "hatırlanan bir cihazını kaldırmaya çalıştı"),
+  "POST /api/auth/trusted-devices/revoke-all": e("hatırlanan bütün cihazlarını kaldırdı", "hatırlanan bütün cihazlarını kaldırmaya çalıştı"),
+  "POST /api/admin/users/:id/trusted-devices/:deviceId/revoke": e("kullanıcının hatırlanan bir cihazını kaldırdı", "kullanıcının hatırlanan bir cihazını kaldırmaya çalıştı"),
+  "POST /api/admin/users/:id/trusted-devices/revoke-all": e("kullanıcının hatırlanan bütün cihazlarını kaldırdı", "kullanıcının hatırlanan bütün cihazlarını kaldırmaya çalıştı"),
   // ── Belge tasarımcısı
   "POST /api/document-templates/sistem-onizleme/:docType": e("sistem belge tasarımını önizledi", "sistem belge tasarımını önizlemeye çalıştı"),
   // ── Desen kartı + ürün yapısı (Seyitoğlu SY-A2)

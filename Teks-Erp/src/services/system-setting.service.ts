@@ -530,6 +530,9 @@ export const SETTING_KEYS = {
    *  | USER_CHOICE (kullanıcı kendi hesabında `webTotpOptOut` ile kapatabilir). Yalnız süperadmin
    *  yazar (`SUPERADMIN_ONLY_FLAG_KEYS`); süperadminde ayardan bağımsız hep sorulur. */
   AUTH_WEB_TOTP_POLICY: "auth.webTotpPolicy",
+  /** Web girişinde "Bu cihazı N gün hatırla" süresi (gün). 0 = kapalı (default, bugünkü davranış:
+   *  her girişte kod), 1–90. Yalnız süperadmin yazar; süperadmin hesabına hiç uygulanmaz. */
+  AUTH_TRUSTED_DEVICE_DAYS: "auth.trustedDeviceDays",
   /** Sevk için ayrı onay adımı zorunlu mu. Default false (KAPALI): çuvalları seç → Sevk Et
    *  → DOĞRUDAN sevk edilir (DISPATCHED). AÇIKKEN: Sevk Et yalnız PLANNED sevkiyat kurar;
    *  çıkış ayrıca "Sevk Kapısı" ekranından dispatch edilir. */
@@ -1217,6 +1220,9 @@ export type WebTotpPolicy = "REQUIRED" | "USER_CHOICE";
 export const WEB_TOTP_POLICIES: WebTotpPolicy[] = ["REQUIRED", "USER_CHOICE"];
 /** Varsayılan `REQUIRED` — BUGÜNKÜ davranış (K4: web girişinde TOTP herkese zorunlu). */
 export const DEFAULT_WEB_TOTP_POLICY: WebTotpPolicy = "REQUIRED";
+/** Güvenilir cihaz süresi (gün) — 0 = kapalı (BUGÜNKÜ davranış), tavan 90. */
+export const DEFAULT_TRUSTED_DEVICE_DAYS = 0;
+export const MAX_TRUSTED_DEVICE_DAYS = 90;
 
 /** Sevkin fatura izi nereden yazılır. `dis` = bugünkü davranış. */
 export type ShippingInvoiceMode = "dis" | "ic" | "ikisi";
@@ -2230,6 +2236,8 @@ export interface FeatureFlags {
   shortCredentialTotpRequired: boolean;
   /** Web paneli (tarayıcı) girişi TOTP politikası (default REQUIRED; süperadminde ayardan bağımsız hep). */
   webTotpPolicy: WebTotpPolicy;
+  /** Web girişinde güvenilir cihaz süresi, gün (0 = kapalı, default; 1–90). Yalnız süperadmin yazar. */
+  trustedDeviceDays: number;
   /** Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu (default false). */
   shipmentConfirmationEnabled: boolean;
   shipmentManualSackCountEnabled: boolean;
@@ -2828,6 +2836,7 @@ export class SystemSettingService {
       shortCredentialApprovedDeviceOnly: await readShortCredentialApprovedDeviceOnly(cacheClient),
       shortCredentialTotpRequired: await readShortCredentialTotpRequired(cacheClient),
       webTotpPolicy: await readWebTotpPolicy(cacheClient),
+      trustedDeviceDays: await readTrustedDeviceDays(cacheClient),
       shipmentConfirmationEnabled: await readShipmentConfirmationEnabled(cacheClient),
       shipmentManualSackCountEnabled: await readShipmentManualSackCountEnabled(cacheClient),
       shipmentUndoSameDayOnly: await readShipmentUndoSameDayOnly(cacheClient),
@@ -4029,6 +4038,20 @@ export class SystemSettingService {
         SETTING_KEYS.AUTH_WEB_TOTP_POLICY,
         v,
         "Web paneli girişinde iki adımlı doğrulama: REQUIRED (herkese zorunlu) / USER_CHOICE (kullanıcı kendi hesabında kapatabilir)",
+        userId
+      );
+    }
+
+    // Yazma kapısı route'ta (`flagWriteGuard` süperadmin dalı); burada yalnız tip/aralık.
+    if (Object.prototype.hasOwnProperty.call(input, "trustedDeviceDays")) {
+      const v = input.trustedDeviceDays;
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > MAX_TRUSTED_DEVICE_DAYS) {
+        throw AppError.badRequest(`Cihazı hatırlama süresi 0–${MAX_TRUSTED_DEVICE_DAYS} gün olmalı (0 = kapalı)`);
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_TRUSTED_DEVICE_DAYS,
+        v,
+        "Web girişinde 'Bu cihazı hatırla' süresi, gün (0 = kapalı; her girişte doğrulama kodu)",
         userId
       );
     }
@@ -6906,6 +6929,25 @@ export async function readWebTotpPolicy(
   const v = setting?.value;
   if (typeof v === "string" && WEB_TOTP_POLICIES.includes(v as WebTotpPolicy)) return v as WebTotpPolicy;
   return DEFAULT_WEB_TOTP_POLICY;
+}
+
+/**
+ * Web girişinde güvenilir cihaz süresi (gün). Default 0 (kapalı, bugünkü davranış).
+ * FAIL-CLOSED: satır yok / çöp / negatif → 0; tavan MAX_TRUSTED_DEVICE_DAYS'e kırpılır.
+ * ENFORCE: `AuthService.assertSecondFactor` (tek boğaz) → `trusted-device.service`.
+ */
+export async function readTrustedDeviceDays(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_TRUSTED_DEVICE_DAYS },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_TRUSTED_DEVICE_DAYS;
+  const parsed = asNumber(setting.value);
+  if (parsed === null || !Number.isFinite(parsed) || parsed < 1) return DEFAULT_TRUSTED_DEVICE_DAYS;
+  return Math.min(Math.floor(parsed), MAX_TRUSTED_DEVICE_DAYS);
 }
 
 /**
