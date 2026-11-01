@@ -4,7 +4,7 @@
 // Yalnız internete açık kurulumda etkin (`isInternetFacingInstallation`); LAN'da her fonksiyon bugünkü
 // davranışı verir (kova yok, her hata ayrı LOGIN_FAILED satırı). Çağıranlar: parola girişi ve yerinde onay.
 // =============================================================================
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { uyari } from "../lib/logger";
@@ -21,6 +21,14 @@ import {
 
 /** Bu isteğin tuttuğu hesap yuvası (claimAccountAttempt); isteğin sonucu gelince bırakılır. */
 const heldGates = new WeakMap<Request, { username: string; gateAt: number }>();
+
+/** `accountThrottleError` + Retry-After başlığı: çağıran dönen hatayı `next`e verir; geçerse null. */
+export function applyAccountThrottle(req: Request, res: Response, username: string): AppError | null {
+  const throttled = accountThrottleError(req, username);
+  if (!throttled) return null;
+  res.setHeader("Retry-After", String(throttled.retryAfterSec));
+  return throttled.error;
+}
 
 /** Eşik üstünde tanınmayan kaynaktan deneme → 429 LOGIN_THROTTLED (bcrypt'ten ÖNCE çağrılır); geçerse null. */
 export function accountThrottleError(req: Request, username: string): { error: AppError; retryAfterSec: number } | null {

@@ -38,7 +38,7 @@ import {
 } from "../middlewares/login-lockout";
 import { newPasswordViolation } from "../lib/new-password-policy";
 import {
-  accountThrottleError,
+  applyAccountThrottle,
   recordAccountSuccess,
   releaseAccountAttempt,
   settleAccountAttempt,
@@ -340,11 +340,8 @@ export class AuthController {
     // ⚠️ Kilit KAPATILAMAZ (O-04, 2026-10-12): adı "pin" olsa da ŞİFRE girişini de
     // kapsar; `auth.pinLockout*` yalnız eşik/ceza süresini ayarlar.
     // Y2: hesap başına yumuşak kova (IP'den bağımsız; sert kilit yok) — bcrypt'ten ve kilit sayacından ÖNCE.
-    const throttled = accountThrottleError(req, body.username);
-    if (throttled) {
-      res.setHeader("Retry-After", String(throttled.retryAfterSec));
-      return next(throttled.error);
-    }
+    const throttled = applyAccountThrottle(req, res, body.username);
+    if (throttled) return next(throttled);
     const lockoutKey = resolveLoginLockoutKeys(req, `u:${body.username}`);
     const lock = await reserveLoginAttempt(lockoutKey);
     // ⚠️ DENETİM: kilit YALNIZ KURULDUĞU ANDA yazılır (ayar şifresi kapısıyla

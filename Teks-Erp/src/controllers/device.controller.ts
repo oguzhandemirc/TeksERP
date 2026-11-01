@@ -3,7 +3,7 @@
 // =============================================================================
 
 import {
-  accountThrottleError, recordAccountSuccess, releaseAccountAttempt, settleAccountAttempt, shouldWriteLoginFailure,
+  applyAccountThrottle, recordAccountSuccess, releaseAccountAttempt, settleAccountAttempt, shouldWriteLoginFailure,
 } from "../services/login-attempt-monitor.service";
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
@@ -187,12 +187,8 @@ export class DeviceController {
     }
     const ipAddress = req.ip ?? null;
     // Y2: parola girişiyle aynı hesap başına yumuşak kova (aynı sayaç — yerinde onay yan kapı olmasın).
-    const throttled = accountThrottleError(req, body.username);
-    if (throttled) {
-      res.setHeader("Retry-After", String(throttled.retryAfterSec));
-      next(throttled.error);
-      return;
-    }
+    const throttled = applyAccountThrottle(req, res, body.username);
+    if (throttled) return next(throttled);
     const lockKeys = resolveLoginLockoutKeys(req, `u:${body.username}`);
     const lock = await reserveLoginAttempt(lockKeys);
     if (lock.justLocked) {
