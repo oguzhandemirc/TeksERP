@@ -7,7 +7,8 @@
 //      {token,user,mustChangePassword}; TOTP'li 409 ve gövde belirteci yok sayılır.
 //   §2 barındırılan + REQUIRED: TOTP'siz → 403 TOTP_ENROLLMENT_REQUIRED, TOTP'li → 409 TOTP_REQUIRED (üç kanal);
 //      masaüstünde details.trustDeviceDays, mobilde yok.
-//   §3 USER_CHOICE + webTotpOptOut: kodsuz 200; tercihsiz kullanıcı 409.
+//   §3 USER_CHOICE + webTotpOptOut: kodsuz 200; tercihsiz kullanıcı 409; TOTP KURMAMIŞ kullanıcı kodsuz 200
+//      (kurmak = seçmek, 2026-11-01); TOTP'siz süperadmin yine 403 TOTP_ENROLLMENT_REQUIRED.
 //   §4 onaylı + kanıtlı tablet: mobil/boş kodsuz 200; aynı cihazdan electron beyanı 409; kanıtsız 401;
 //      kanıtlı DESKTOP kaydı + mobile beyanı 409 (muafiyet cihaz türüne bağlı).
 //   §5 süperadmin: üç kanal + onaylı tablet → 409 (opt-out ve cihaz muafiyeti yok).
@@ -126,6 +127,7 @@ async function main(): Promise<void> {
     await prisma.user.update({ where: { id: optOut.id }, data: { webTotpOptOut: true } });
     const sa = await makeUser("sa", true);
     await enrollTotp(sa.id, actor.id);
+    const saBare = await makeUser("sa-kurulumsuz", true);
 
     // Onaylı + kanıt tuzlu tablet (sır DB'de yok, yalnız tuz).
     const ring = getShortCredentialKeyRing();
@@ -172,6 +174,14 @@ async function main(): Promise<void> {
     }
     const noPref = await login(withTotp.username, "electron");
     check("§3b tercihsiz kullanıcı yine 409", codeOf(noPref) === "409:TOTP_REQUIRED", codeOf(noPref));
+    for (const c of CHANNELS) {
+      const r = await login(plain.username, c);
+      check(`§3d ⭐ ${label(c)}: USER_CHOICE ∧ TOTP kurmamış (opt-out yok) → kodsuz 200 (kilitlenme yok)`, r.status === 200 && typeof r.body.data?.token === "string", codeOf(r));
+      const t = await login(withTotp.username, c);
+      check(`§3e ${label(c)}: USER_CHOICE ∧ TOTP kurulu ∧ opt-out yok → 409`, codeOf(t) === "409:TOTP_REQUIRED", codeOf(t));
+      const x = await login(saBare.username, c);
+      check(`§3f ⭐ ${label(c)}: süperadmin USER_CHOICE ∧ TOTP'siz → 403 TOTP_ENROLLMENT_REQUIRED`, codeOf(x) === "403:TOTP_ENROLLMENT_REQUIRED" && x.body.data?.token === undefined, codeOf(x));
+    }
     await setting(SETTING_KEYS.AUTH_WEB_TOTP_POLICY, "REQUIRED");
     const reqAgain = await login(optOut.username, "mobile");
     check("§3c REQUIRED'a dönünce tercih etkisiz (409)", codeOf(reqAgain) === "409:TOTP_REQUIRED", codeOf(reqAgain));
@@ -294,3 +304,6 @@ main().catch(async (e) => {
 //   S3 cihaz muafiyetinden `!systemAccount` çıkarıldı → §5b kırmızı.
 //   S4 hostedBearerLoginContext belirteci çerezden okur → §6c kırmızı.
 //   S5 approvedDeviceProven'dan cihaz türü koşulu çıkarıldı → §4f kırmızı (kanıtlı DESKTOP kaydı mobil beyanıyla 200).
+//   S6 (2026-11-01 kurmak=seçmek) webTotpWaived'den "kurulmamış → muaf" dalı çıkarıldı → §3d (3) kırmızı.
+//   S7 dal webTotpWaived'de sistem hesabı denetiminden ÖNCEYE alındı + decideHostedBearer'dan `!systemAccount`
+//      çıkarıldı → §3f (3) kırmızı (yalnız ilki: çerez bekçisi §13e kırmızı, burası ikinci sedle yeşil).

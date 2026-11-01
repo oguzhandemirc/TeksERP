@@ -19,9 +19,12 @@
 //   §12 çerez JWT'si izin taşımaz (tam katalogla < 4096 bayt), gövde + /auth/me dolu, izinli uç 200 /
 //       izinsiz 403; Bearer (Electron) ve panel kipi kapalı JSON token claim'i bugünkü gibi dolu.
 //   §13 iki katmanlı web 2FA (2026-11-01): politika `auth.webTotpPolicy` REQUIRED'da opt-out etkisiz;
-//       USER_CHOICE ∧ opt-out → kurulumsuz ve kodsuz giriş; opt-out değil → bugünkü; süperadmin hep kod
+//       USER_CHOICE ∧ opt-out → kurulumsuz ve kodsuz giriş; opt-out değil → kod yalnız TOTP kuruluysa
+//       (kurmamış kodsuz girer, 2026-11-01 kurmak = seçmek); süperadmin hep kod
 //       (CHECK + 403); kendi-uç kapatma parolasız/kodsuz 400, REQUIRED'da 409, başkası adına yazma yok,
 //       genel kullanıcı güncelleme ucu alanı yazamaz; politika yalnız süperadmin (403) ve ham uçtan rezerve.
+// Sonda (2026-11-01 kurmak=seçmek): webTotpWaived'den "kurulmamış → muaf" dalı çıkarılınca §13d ❌; dal sistem
+// hesabı denetiminden önceye alınınca §13e ❌; ikisi de geri alındı (md5 eşit).
 // İzolasyon: TEST kullanıcıları + giriş yöntemi ayarı anlık görüntüsü; finally geri yükler/siler. DB GEREKİR.
 // =============================================================================
 import prisma from "../src/lib/prisma"; // İLK import: dotenv.config()
@@ -421,9 +424,11 @@ async function webTotpIkiKatman(o: {
   const uOpt = await kullanici("opt", ["roll:read", "web:access"]);
   const uOptT = await kullanici("optt", ["roll:read", "web:access"]);
   const uNoOpt = await kullanici("noopt", ["roll:read", "web:access"]);
+  const uKurulu = await kullanici("kurulu", ["roll:read", "web:access"]);
   const uKendi = await kullanici("kendi", ["roll:read", "web:access"]);
   const uAdm = await kullanici("adm", ["roll:read", "admin:users", "admin:settings"]);
   const sOptT = await totpKur(uOptT.id, o.aktorId);
+  await totpKur(uKurulu.id, o.aktorId);
   await prisma.user.updateMany({ where: { id: { in: [uOpt.id, uOptT.id] } }, data: { webTotpOptOut: true } });
 
   // REQUIRED (varsayılan): opt-out etkisiz — bugünkü davranış bayt-aynı.
@@ -439,7 +444,13 @@ async function webTotpIkiKatman(o: {
   const b2 = await giris(uOptT.username, "web");
   check("§13c ⭐ USER_CHOICE ∧ opt-out, TOTP kurulu → kod SORULMADAN 200", b2.status === 200 && cerezDegeri(b2.setCookie) !== null, kodu(b2));
   const b3 = await giris(uNoOpt.username, "web");
-  check("§13d USER_CHOICE ∧ opt-out değil → 403 TOTP_ENROLLMENT_REQUIRED (bugünkü)", kodu(b3) === "403:TOTP_ENROLLMENT_REQUIRED", kodu(b3));
+  check("§13d ⭐ USER_CHOICE ∧ opt-out değil ∧ TOTP kurmamış → 200 + çerez (kurmak = seçmek; kilitlenme yok)", b3.status === 200 && cerezDegeri(b3.setCookie) !== null, kodu(b3));
+  const b3k = await giris(uKurulu.username, "web");
+  check("§13d2 USER_CHOICE ∧ opt-out değil ∧ TOTP kurulu → 409 TOTP_REQUIRED", kodu(b3k) === "409:TOTP_REQUIRED", kodu(b3k));
+  await politika("REQUIRED");
+  const b3r = await giris(uNoOpt.username, "web");
+  check("§13d3 REQUIRED ∧ TOTP kurmamış → 403 TOTP_ENROLLMENT_REQUIRED", kodu(b3r) === "403:TOTP_ENROLLMENT_REQUIRED", kodu(b3r));
+  await politika("USER_CHOICE");
   const b4 = await giris(uOptT.username, "electron");
   check("§13d' masaüstü parola girişi tercihten etkilenmez: kurulu TOTP → 409", kodu(b4) === "409:TOTP_REQUIRED", kodu(b4));
   void sOptT;
