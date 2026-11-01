@@ -32,7 +32,8 @@ export function SaveVersionDialog({ itemId, fxRates, variants = [], onClose, onM
     },
     onError: (e) => {
       const m = costMissingFromError(e);
-      if (m) { setMissing(m); onMissing(m); }
+      // Varyant kaydının eksiği varyant girdisindedir; desen geneli alanlarını işaretlemek yanlış yere yollar.
+      if (m) { setMissing(m); if (!recipeId) onMissing(m); }
     },
   });
   return (
@@ -48,13 +49,14 @@ export function SaveVersionDialog({ itemId, fxRates, variants = [], onClose, onM
           <Input className="mt-1" maxLength={STRUCTURE_MAX.reason} value={reason} onChange={(e) => setReason(e.target.value)} /></label>
         {missing.length > 0 && (
           <ul role="alert" className="space-y-1 text-sm text-destructive">
+            {recipeId && <li className="text-xs">Varyant girdisi eksik (varyantın iş emri şablonu / iplik ve tarifesi):</li>}
             {missing.map((c) => {
               const t = missingTarget(c);
               return (
                 <li key={c} data-code={c}>
                   ✕ {missingText(c)}{" "}
                   {t?.kind === "link" && <Link className="underline" to={t.to}>{t.label}</Link>}
-                  {t?.kind === "field" && <span className="text-xs">(işaretli alan)</span>}
+                  {t?.kind === "field" && !recipeId && <span className="text-xs">(işaretli alan)</span>}
                 </li>
               );
             })}

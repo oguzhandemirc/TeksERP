@@ -39,6 +39,8 @@ export function VersionsTab({ itemId, active, variants = [] }: Props) {
     enabled: !!variantActiveId,
   });
   const shownActive = recipeId ? (variantActive.data ?? null) : active;
+  // Pasif varyantın zincirine geri yükleme sunucuda hep 400 RECIPE_INACTIVE — ölü düğme çizilmez.
+  const restoreBlocked = !!recipeId && variants.some((x) => x.id === recipeId && !x.isActive);
   const [restoreOf, setRestoreOf] = useState<CostVersion | null>(null);
   const restore = useMutation({
     mutationFn: (v: CostVersion) => costItemService.restore(itemId, v.id, `v${v.surumNo} geri yüklendi`),
@@ -63,7 +65,8 @@ export function VersionsTab({ itemId, active, variants = [] }: Props) {
               {v.sunumDovizi && <span className="tabular-nums text-muted-foreground"> · {presentationAmount(v, v.standartDovizM)}</span>}
               <span className="text-muted-foreground"> · {fmtFactoryDateTime(v.hesaplananAt)}{v.gerekce ? ` · ${v.gerekce}` : ""}</span>
             </span>
-            {v.durum !== "ACTIVE" && (
+            {v.durum !== "ACTIVE" && restoreBlocked && <span className="text-xs text-muted-foreground">Varyant pasif — geri yüklenemez</span>}
+            {v.durum !== "ACTIVE" && !restoreBlocked && (
               <PermissionGate permission="cost:write">
                 <Button size="sm" variant="outline" onClick={() => setRestoreOf(v)}>Bu sürümden geri yükle</Button>
               </PermissionGate>

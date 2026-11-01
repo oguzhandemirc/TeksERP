@@ -3,6 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { AxiosError, type AxiosResponse } from "axios";
 import { renderWithProviders } from "@/test/render";
 
 const svc = vi.hoisted(() => ({ versions: vi.fn(), version: vi.fn(), saveVersion: vi.fn(), restore: vi.fn() }));
@@ -56,6 +57,23 @@ describe("SaveVersionDialog — varyant kapsamı", () => {
   });
 });
 
+describe("SaveVersionDialog — varyant eksik girdisi", () => {
+  const missingErr = () => new AxiosError("x", "400", undefined, undefined,
+    { status: 400, data: { details: { code: "COST_INPUT_MISSING", missing: ["WARP_YARN"] } } } as AxiosResponse);
+  it("varyant kaydında eksik desen alanlarına İŞARETLENMEZ, varyant notu çıkar; desen genelinde işaretlenir", async () => {
+    svc.saveVersion.mockRejectedValue(missingErr());
+    const onMissing = vi.fn();
+    renderWithProviders(<SaveVersionDialog itemId="i1" fxRates={{}} variants={variants} onClose={() => {}} onMissing={onMissing} />);
+    await userEvent.click(screen.getByRole("button", { name: "V1 · Beyaz" }));
+    await userEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+    expect(await screen.findByText(/Varyant girdisi eksik/)).toBeInTheDocument();
+    expect(onMissing).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Desen geneli" }));
+    await userEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(onMissing).toHaveBeenCalledWith(["WARP_YARN"]));
+  });
+});
+
 describe("VersionsTab — varyant süzgeci", () => {
   it("varsayılan desen geneli; seçici yoksa bugünkü yüzey", async () => {
     renderWithProviders(<VersionsTab itemId="i1" active={null} />);
@@ -70,6 +88,19 @@ describe("VersionsTab — varyant süzgeci", () => {
     await userEvent.click(screen.getByRole("button", { name: "V2 · Krem (pasif)" }));
     expect(await screen.findByText("v7")).toBeInTheDocument();
     expect(svc.versions).toHaveBeenLastCalledWith("i1", "r2");
+    expect(screen.queryByRole("button", { name: "Bu sürümden geri yükle" })).toBeNull();
+    expect(screen.getByText("Varyant pasif — geri yüklenemez")).toBeInTheDocument();
+  });
+  it("varyant seçilince aktif döküm varyant sürümünden okunur (desen geneli değil)", async () => {
+    svc.versions.mockImplementation(async (_i: string, r: string | null) =>
+      (r === "r1" ? [ver("v5", "ACTIVE", 5), ver("v4", "SUPERSEDED", 4)] : [ver("v1", "ACTIVE", 1)]));
+    svc.version.mockResolvedValue({ ...ver("v5", "ACTIVE", 5), satirlar: [] });
+    renderWithProviders(<VersionsTab itemId="i1" active={{ ...ver("v1", "ACTIVE", 1), satirlar: [] } as never} variants={variants} />);
+    expect(await screen.findByText(/Aktif sürüm v1/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "V1 · Beyaz" }));
+    expect(await screen.findByText(/Aktif sürüm v5/)).toBeInTheDocument();
+    expect(svc.version).toHaveBeenCalledWith("i1", "v5");
+    expect(screen.getByRole("button", { name: "Bu sürümden geri yükle" })).toBeInTheDocument();
   });
 });
 
