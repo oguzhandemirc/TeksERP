@@ -227,7 +227,7 @@ export interface NameGuardSpec {
 }
 
 /** İçe aktarım adaptörünün bağlı olduğu modül kapısı (`import-module-gate.ts`). */
-export type ImportModule = "dokuma" | "devere" | "maliyet";
+export type ImportModule = "dokuma" | "devere" | "maliyet" | "finans" | "ticaret";
 
 export interface ImportAdapter {
   /** URL'de görünen kimlik: /api/import/<entity>/preview */
@@ -262,6 +262,18 @@ export interface ImportAdapter {
    * uçları 403 `MODULE_DISABLED` döner — kapı varlığın kendi router'ındaki middleware'dir.
    */
   module?: ImportModule;
+  /**
+   * BİLEŞİK ANAHTAR (toplu açılış aktarımı): satırın anahtarı tek sütun değilse (cari + döviz) değerlerden
+   * türetilir; dosya-içi mükerrer kontrolü bu anahtarla koşar. Yoksa `keyColumns[0]` sütunu.
+   */
+  rowKey?(values: Record<string, unknown>): string | null;
+  /** Audit yüküne GİRMEYEN sütunlar (fiyat — sır/ticari hijyen); defter satırı (`changedFields`) etkilenmez. */
+  auditOmit?: readonly string[];
+  /**
+   * TERS KAYIT dalının (`REVERSE_ENTRY`) önizleme engelleri: kayıt id → atlama gerekçesi. Toplu tek
+   * sorgu (N+1 yok); yazım yine adaptörün `revertVersion` servis yolundan geçer.
+   */
+  reverseBlockers?(records: Array<Record<string, unknown>>): Promise<Map<string, string>>;
 
   /** Anahtar değerine göre mevcut kayıtları toplu getirir (N+1 yok). */
   findExisting(keys: string[]): Promise<Map<string, Record<string, unknown>>>;
