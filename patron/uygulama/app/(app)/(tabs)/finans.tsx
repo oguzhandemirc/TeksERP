@@ -1,5 +1,5 @@
 // Finans: açık alacak + yaşlandırma (fabrikanın `ozet-finans` anlığı), çek vadeleri ve izinli hareket segmentleri
-// (Kasa · Masraf · Çek · Fatura · Tahsilat); Kasa segmentinde kasa hareketleri kategori süzgeciyle (D4-KUC3c). İzinsiz segment HİÇ konmaz; tutarlar fabrikanın, para birimiyle basılır.
+// (Kasa · Masraf · Kârlılık · Çek · Fatura · Tahsilat); Kasa segmentinde kasa hareketleri kategori süzgeciyle (D4-KUC3c). İzinsiz segment HİÇ konmaz; tutarlar fabrikanın, para birimiyle basılır.
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { View } from "react-native";
@@ -12,6 +12,7 @@ import { useRemote } from "../../../src/state/useRemote";
 import { ProjectionList, type ProjectionRowView } from "../../../src/ui/data";
 import { CashTransactions } from "../../../src/ui/finans/CashTransactions";
 import { ExpenseSummary } from "../../../src/ui/finans/ExpenseSummary";
+import { ProfitabilitySummary } from "../../../src/ui/finans/ProfitabilitySummary";
 import { ChequeDue, ReceivableHero } from "../../../src/ui/finans/FinanceSummary";
 import { FINANCE_TABS, FINANCE_TAGS, type FinanceTab } from "../../../src/ui/finans/tabs";
 import { bankaRow, cekRow, faturaRow, kasaRow, tahsilatRow } from "../../../src/ui/finans/rows";
@@ -75,6 +76,7 @@ export default function Finance() {
             </>
           ) : null}
           {tab === "masraf" ? <ExpenseSummary onPickCategory={keyFilter ? pickCategory : undefined} /> : null}
+          {tab === "karlilik" ? <ProfitabilitySummary /> : null}
           {tab === "cek" ? <List projection="cek-senet" row={cekRow} empty="Çek/senet yok" /> : null}
           {tab === "fatura" ? <List projection="fatura" row={faturaRow} empty="Fatura yok" /> : null}
           {tab === "tahsilat" ? <List projection="tahsilat-odeme" row={tahsilatRow} empty="Tahsilat/ödeme yok" /> : null}
