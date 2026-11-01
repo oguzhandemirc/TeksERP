@@ -24,6 +24,7 @@ import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { RECORD_PROJECTIONS, projectionPermissions, subRowPermission, type RecordProjection } from "../src/cloud-sync/projections";
 import { DERIVERS } from "../src/cloud-sync/derived";
 import { buildRecords } from "../src/cloud-sync/record-builder";
+import { mapToRoots } from "../src/cloud-sync/change-scan";
 import { quoteMargin } from "../src/services/helpers/quote-view.helper";
 import { quoteToday } from "../src/services/helpers/sales-quote-state.helper";
 import { factoryDayStart } from "../src/constants/time";
@@ -188,6 +189,8 @@ async function maliyetBolumu(): Promise<void> {
     const sm = byName("standart-maliyet")!;
     const kaynak = sm.sources.find((x) => x.table === "product_recipes");
     check("§6c katalog sürümü 2 (eski kayıtlar TAM yeniden gider) ve varyant adı değişimi kaynaklı", sm.catalogVersion === 2 && !!kaynak, `v${sm.catalogVersion}`);
+    const kokler = kaynak ? await mapToRoots(kaynak.root, [rc.id]) : [];
+    check("§6d varyant değişimi o varyantın sürüm köküne eşlenir (desen geneli sürüm kirlenmez)", kokler.includes(vv.id) && !kokler.includes(v.id), JSON.stringify(kokler));
   } finally {
     for (const id of [versionId, variantVersionId]) {
       if (!id) continue;
