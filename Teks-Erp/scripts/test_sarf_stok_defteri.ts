@@ -5,6 +5,7 @@
 //   §1 Ayar KAPALI (varsayılan): kurşun izi sarf yazmaz; mal kabul sarf satırını bugünkü gibi reddeder;
 //      kuşak ihtiyacı raporu stok sütunu taşımaz (bayt-aynı)
 //   §2 Ayar AÇIK: mal kabul sarf satırı RECEIPT_IN; fiş iptali RECEIPT_CANCEL_OUT (reversesId bağlı)
+//   §2c/§2d Karma fiş: sarf satırı top doğurmaz, defter girişi + yanıt `consumableLineCount`; sarf-only fiş token replay
 //   §3 Kurşun izi → metre × geçerli norm düşer; aynı ize ikinci çağrı no-op; gramaj düzeltmesi eski
 //      tüketimi ters kayıtla geri yazar; iz geri alınınca (revokeRollOperations) ters kayıt — ileri satır silinmez
 //   §4 Eksi bakiye ENGELLEMEZ, uyarı döner
@@ -150,6 +151,36 @@ async function main(): Promise<void> {
   const cancelRow = await prisma.consumableMovement.findFirst({ where: { goodsReceiptId: rec2Id, kind: ConsumableMovementKind.RECEIPT_CANCEL_OUT }, select: { reversesId: true } });
   check("§2b fiş iptali ters kayıt (reversesId bağlı) yazar, bakiye geri döner", !!cancelRow?.reversesId && (await balanceOf(stripId)) === "10.000");
 
+  // §2c KARMA FİŞ (panel sarf satırı, gk-h4s): kumaş satırı top doğurur, sarf satırı DOĞURMAZ — defter girişi + yanıt sayacı.
+  const recMix = await goodsReceiptService.create(
+    { warehouseId: wh, clientToken: randomUUID(), lines: [{ itemId: fabricId, initialQty: 40, lineClass: "FINISHED" }, { itemId: beltId, initialQty: 500, unitPrice: 0.5 }] },
+    adminId,
+  );
+  const mixData = recMix.data as { id: string; totals: { rollCount: number; consumableLineCount?: number } };
+  created.receipts.push(mixData.id);
+  const mixRolls = await prisma.roll.count({ where: { goodsReceiptId: mixData.id } });
+  const mixIn = await prisma.consumableMovement.findMany({ where: { goodsReceiptId: mixData.id, kind: ConsumableMovementKind.RECEIPT_IN }, select: { itemId: true, qty: true } });
+  check(
+    "§2c karma fiş: 1 top (yalnız kumaş) + sarf RECEIPT_IN 500, sarf satırı top doğurmaz, yanıt consumableLineCount=1",
+    mixRolls === 1 && mixData.totals.rollCount === 1 && mixIn.length === 1 && mixIn[0]!.itemId === beltId && mixIn[0]!.qty.toFixed(3) === "500.000" && mixData.totals.consumableLineCount === 1,
+    `rolls=${mixRolls} in=${JSON.stringify(mixIn)} totals=${JSON.stringify(mixData.totals)}`,
+  );
+  // §2d sarf-only fiş + aynı clientToken tekrarı: ikinci giriş YAZILMAZ (fiş replay'i), top yok.
+  const tok = randomUUID();
+  const only1 = await goodsReceiptService.create({ warehouseId: wh, clientToken: tok, lines: [{ itemId: beltId, initialQty: 7 }] }, adminId);
+  const only2 = await goodsReceiptService.create({ warehouseId: wh, clientToken: tok, lines: [{ itemId: beltId, initialQty: 7 }] }, adminId);
+  const onlyId = (only1.data as { id: string }).id;
+  created.receipts.push(onlyId);
+  const onlyIn = await prisma.consumableMovement.count({ where: { goodsReceiptId: onlyId } });
+  check(
+    "§2d sarf-only fiş: top yok, aynı token tekrarı ikinci giriş yazmaz",
+    (only2.data as { id: string }).id === onlyId && onlyIn === 1 && (await prisma.roll.count({ where: { goodsReceiptId: onlyId } })) === 0,
+    `in=${onlyIn}`,
+  );
+  // Sonraki maddeler kuşak bakiyesini sıfırdan ölçer — bu maddenin girişleri ters kayıtla (fiş iptali) kapanır.
+  await goodsReceiptService.cancel(mixData.id, "TEST — bekçi iptali", adminId);
+  await goodsReceiptService.cancel(onlyId, "TEST — bekçi iptali", adminId);
+
   // ── §3 KURŞUN TÜKETİMİ ─────────────────────────────────────────────────
   const roll2 = await mkRoll("R2");
   await kursun(roll2, val("G1"));
@@ -243,6 +274,12 @@ async function cleanup(): Promise<void> {
   await prisma.workOrderToOrderLine.deleteMany({ where: { workOrderId: { in: created.wos } } });
   await prisma.orderLine.deleteMany({ where: { order: { customerId: { in: created.customers } } } });
   await prisma.order.deleteMany({ where: { customerId: { in: created.customers } } });
+  const recRollIds = (await prisma.roll.findMany({ where: { goodsReceiptId: { in: created.receipts } }, select: { id: true } })).map((r) => r.id);
+  if (recRollIds.length > 0) {
+    await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: recRollIds } } });
+    await prisma.rollMovement.deleteMany({ where: { rollId: { in: recRollIds } } });
+    await prisma.printedDocument.deleteMany({ where: { sourceId: { in: created.receipts } } });
+  }
   await prisma.roll.deleteMany({ where: { OR: [{ id: { in: created.rolls } }, { goodsReceiptId: { in: created.receipts } }] } });
   await prisma.goodsReceipt.deleteMany({ where: { id: { in: created.receipts } } });
   await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: created.wos } } });

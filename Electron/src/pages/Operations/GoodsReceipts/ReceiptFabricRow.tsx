@@ -28,6 +28,8 @@ export interface RowProps {
 
 interface FabricProps extends RowProps {
   foldValues: ReadonlyArray<{ code: string; name: string }>;
+  /** Sarf stoğu açıkken kumaş seçici sarf kalemlerini de listeler; seçilen sarf satırı Sarf grubuna geçer (top doğmaz). */
+  consumableEnabled?: boolean;
 }
 
 const CLASS_ACTIVE: Record<ReceiptLineClass, string> = {
@@ -55,10 +57,10 @@ function LineClassToggle({ value, onChange }: { value: ReceiptLineClass; onChang
   );
 }
 
-export function ReceiptFabricRow({ line: l, onPatch, onDuplicate, onRemove, removeDisabled, foldValues }: FabricProps) {
+export function ReceiptFabricRow({ line: l, onPatch, onDuplicate, onRemove, removeDisabled, foldValues, consumableEnabled }: FabricProps) {
   return (
     <div className={`grid ${receiptLineGridCols("FABRIC")} items-center gap-2`} data-testid="receipt-line-fabric">
-      <ItemSelect value={l.itemId || null} onChange={(v) => onPatch({ itemId: v ?? "" })} placeholder="Kumaş ara..." aria-label={L(0)} allowedTypes={["FABRIC"]} />
+      <ItemSelect value={l.itemId || null} onChange={(v, row) => onPatch({ itemId: v ?? "", ...(row?.itemType === "CONSUMABLE" ? { kind: "CONSUMABLE" as const } : {}) })} placeholder="Kumaş ara..." aria-label={L(0)} allowedTypes={consumableEnabled ? ["FABRIC", "CONSUMABLE"] : ["FABRIC"]} />
       <ReferenceSelect<Color> value={l.colorId} onChange={(v) => onPatch({ colorId: v })} service={colorService} queryKey="colors" getLabel={(c) => c.name} placeholder="Renk..." aria-label={L(1)} />
       <Input type="number" min={0} step="0.01" placeholder="0" aria-label={L(2)} title="Top başına metre — adetle çarpılmaz" value={l.initialQty || ""} onChange={(e) => onPatch({ initialQty: Number(e.target.value) })} />
       <Input type="number" min={0} placeholder="—" aria-label={L(3)} value={l.width ?? ""} onChange={(e) => onPatch({ width: e.target.value ? Number(e.target.value) : null })} />

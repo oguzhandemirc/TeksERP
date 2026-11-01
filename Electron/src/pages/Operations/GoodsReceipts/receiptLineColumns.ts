@@ -7,7 +7,8 @@
 // unutulamasın; vitest sıra eşleşmesini ölçer. Satır DOĞDUĞU ANDA tiplidir; tür değiştirmek = satırı silip öbür
 // gruptan açmak. EK 7: "Sınıf" sütunu üç durumlu (Ham · Yarı mamul · Bitmiş) — fiş kutusu kalktı, satır tek yer.
 // =============================================================================
-export type ReceiptLineKind = "FABRIC" | "YARN";
+/** CONSUMABLE: sarf (kuşak/şerit/ip) — yalnız `consumable.stockEnabled` açıkken çizilir; top doğurmaz, sarf defterine giriş. */
+export type ReceiptLineKind = "FABRIC" | "YARN" | "CONSUMABLE";
 
 export interface ReceiptLineColumn {
   /** Alt tablo başlığı. */
@@ -42,7 +43,17 @@ export const YARN_COLUMNS: readonly ReceiptLineColumn[] = [
   { header: "Adet", label: "Adet (doğacak iplik defter satırı sayısı)", align: "center" },
 ];
 
-export const receiptLineColumns = (kind: ReceiptLineKind): readonly ReceiptLineColumn[] => (kind === "YARN" ? YARN_COLUMNS : FABRIC_COLUMNS);
+/** Sarf kalemleri — miktar kalem kartının biriminde; renk/en/kat/özellik/sınıf/adet YOK (top doğmaz). */
+export const CONSUMABLE_COLUMNS: readonly ReceiptLineColumn[] = [
+  { header: "Sarf kalemi", label: "Sarf kalemi" },
+  { header: "Miktar", label: "Miktar (sarf)" },
+  { header: "Birim", label: "Birim (sarf)" },
+  { header: "Birim Fiyat", label: "Birim fiyat (sarf)" },
+];
+
+const COLUMNS: Record<ReceiptLineKind, readonly ReceiptLineColumn[]> = { FABRIC: FABRIC_COLUMNS, YARN: YARN_COLUMNS, CONSUMABLE: CONSUMABLE_COLUMNS };
+
+export const receiptLineColumns = (kind: ReceiptLineKind): readonly ReceiptLineColumn[] => COLUMNS[kind];
 
 /** Alt tablo başlıkları. */
 export function receiptLineHeaders(kind: ReceiptLineKind): string[] {
@@ -58,10 +69,11 @@ export function cellLabel(kind: ReceiptLineKind, index: number): string {
 
 /** Grid şablonu — başlık ve satır AYNI şablonu okur (son sütun işlemler). */
 export function receiptLineGridCols(kind: ReceiptLineKind): string {
+  if (kind === "CONSUMABLE") return "grid-cols-[minmax(0,2fr)_110px_70px_100px_76px]";
   return kind === "YARN"
     ? "grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_90px_80px_100px_64px_76px]"
     : "grid-cols-[minmax(0,2fr)_minmax(0,1fr)_84px_74px_74px_88px_96px_60px_168px_60px_76px]";
 }
 
-export const GROUP_TITLE: Record<ReceiptLineKind, string> = { FABRIC: "Kumaş kalemleri", YARN: "İplik kalemleri" };
-export const ADD_LINE_LABEL: Record<ReceiptLineKind, string> = { FABRIC: "Kumaş satırı ekle", YARN: "İplik satırı ekle" };
+export const GROUP_TITLE: Record<ReceiptLineKind, string> = { FABRIC: "Kumaş kalemleri", YARN: "İplik kalemleri", CONSUMABLE: "Sarf kalemleri" };
+export const ADD_LINE_LABEL: Record<ReceiptLineKind, string> = { FABRIC: "Kumaş satırı ekle", YARN: "İplik satırı ekle", CONSUMABLE: "Sarf satırı ekle" };
