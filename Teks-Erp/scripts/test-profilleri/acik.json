@@ -63,6 +63,7 @@
     "tamburPlanGateWidthToleranceCm": 5,
     "tamburPlanGateWidthCheck": "ENFORCE",
     "tamburChildWidthSource": "MEASURED_FIRST",
+    "labelCustomerCodeAt": "TAMBUR_OUTPUT",
     "tamburListByStationEnabled": true,
     "machineStopTrackingEnabled": true,
     "machineStopOpenWarningEnabled": true,

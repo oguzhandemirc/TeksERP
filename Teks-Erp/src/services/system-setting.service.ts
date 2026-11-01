@@ -886,6 +886,8 @@ export const SETTING_KEYS = {
   LABEL_COPIES_SOURCE: "label.copiesSource",
   /** D4-F3: müşteri barkodu basan şablonda top kodsuzsa — BLOCK (400) | ROLL_BARCODE (iç barkod + uyarı). */
   LABEL_CUSTOMER_CODE_MISSING: "label.customerCodeMissing",
+  /** D4-F2: müşteri kodunun doğduğu yer — NONE (doğmaz) | TAMBUR_OUTPUT (Tambur çıkışında seriden). */
+  LABEL_CUSTOMER_CODE_AT: "label.customerCodeAt",
   /** Sistem VARSAYILAN etiket medyası (Etiket Stüdyosu v2 — "Boyutlar" kataloğu
    *  emekli). Cihazsız baskı/önizleme/kartela bu boyutu kullanır. JSON:
    *  { widthMm, heightMm, dpi, gapMm, marginMm }. */
@@ -1187,6 +1189,11 @@ export type LabelCustomerCodeMissing = "BLOCK" | "ROLL_BARCODE";
 export const LABEL_CUSTOMER_CODE_MISSING_MODES: LabelCustomerCodeMissing[] = ["BLOCK", "ROLL_BARCODE"];
 /** Varsayılan `BLOCK` — bugün CUSTOMER_CODE kaynaklı şablon olmadığından etkisiz (bugünkü davranış değişmez). */
 export const DEFAULT_LABEL_CUSTOMER_CODE_MISSING: LabelCustomerCodeMissing = "BLOCK";
+/** D4-F2: müşteri kodu nerede doğar. */
+export type LabelCustomerCodeAt = "NONE" | "TAMBUR_OUTPUT";
+export const LABEL_CUSTOMER_CODE_AT_MODES: LabelCustomerCodeAt[] = ["NONE", "TAMBUR_OUTPUT"];
+/** Varsayılan `NONE` — BUGÜNKÜ davranış (hiçbir yolda seriden kod doğmuyor; ölçüldü 2026-11-01). */
+export const DEFAULT_LABEL_CUSTOMER_CODE_AT: LabelCustomerCodeAt = "NONE";
 /** D4-B5k: sayaç kalibrasyon kontrolü — UYAR yalnız uyarır (ölçüm engellenmez, kaynak MACHINE kalır). */
 export type TamburCalibrationCheck = "KAPALI" | "UYAR";
 export const TAMBUR_CALIBRATION_CHECK_MODES: TamburCalibrationCheck[] = ["KAPALI", "UYAR"];
@@ -2413,6 +2420,8 @@ export interface FeatureFlags {
   labelCopiesSource: LabelCopiesSource;
   /** D4-F3 (`label.customerCodeMissing`). */
   labelCustomerCodeMissing: LabelCustomerCodeMissing;
+  /** D4-F2 (`label.customerCodeAt`). */
+  labelCustomerCodeAt: LabelCustomerCodeAt;
   /** Faz-2 opt-in: native komutları yazıcıya doğrudan (RAW TCP 9100) gönder (default false). */
   nativeSendEnabled: boolean;
   /** Mobil (HC-06/BT) baskıda raster GW bitmap gönderilsin mi (default false → komut yolu).
@@ -2894,6 +2903,7 @@ export class SystemSettingService {
       labelCopies: await readLabelCopies(cacheClient),
       labelCopiesSource: await readLabelCopiesSource(cacheClient),
       labelCustomerCodeMissing: await readLabelCustomerCodeMissing(cacheClient),
+      labelCustomerCodeAt: await readLabelCustomerCodeAt(cacheClient),
       nativeSendEnabled: await readLabelNativeSendEnabled(cacheClient),
       mobileRasterEnabled: await readMobileRasterEnabled(cacheClient),
       scrapGradeLabelEnabled: await readScrapGradeLabelEnabled(cacheClient),
@@ -5320,6 +5330,19 @@ export class SystemSettingService {
         SETTING_KEYS.LABEL_CUSTOMER_CODE_MISSING,
         v,
         "Müşteri barkodu basan şablonda top kodsuzsa: BLOCK (basma, 400) | ROLL_BARCODE (iç barkod + uyarı)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "labelCustomerCodeAt")) {
+      const v = input.labelCustomerCodeAt;
+      if (typeof v !== "string" || !LABEL_CUSTOMER_CODE_AT_MODES.includes(v as LabelCustomerCodeAt)) {
+        throw AppError.badRequest("Müşteri barkodunun doğduğu yer NONE ya da TAMBUR_OUTPUT olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.LABEL_CUSTOMER_CODE_AT,
+        v,
+        "Müşteri barkodu nerede doğar: NONE (doğmaz) | TAMBUR_OUTPUT (Tambur çıkışında müşterinin serisinden)",
         userId
       );
     }
@@ -8954,6 +8977,11 @@ export const LABEL_COPIES_MAX = 5;
 /** D4-F3: müşteri barkodu yoksa davranışı — tanınmayan değer varsayılana (`BLOCK`) düşer. */
 export function readLabelCustomerCodeMissing(tx?: Pick<typeof prisma, "systemSetting">): Promise<LabelCustomerCodeMissing> {
   return readServiceEnum(SETTING_KEYS.LABEL_CUSTOMER_CODE_MISSING, LABEL_CUSTOMER_CODE_MISSING_MODES, DEFAULT_LABEL_CUSTOMER_CODE_MISSING, tx);
+}
+
+/** D4-F2: müşteri kodunun doğduğu yer — tanınmayan değer varsayılana (`NONE`) düşer. */
+export function readLabelCustomerCodeAt(tx?: Pick<typeof prisma, "systemSetting">): Promise<LabelCustomerCodeAt> {
+  return readServiceEnum(SETTING_KEYS.LABEL_CUSTOMER_CODE_AT, LABEL_CUSTOMER_CODE_AT_MODES, DEFAULT_LABEL_CUSTOMER_CODE_AT, tx);
 }
 
 /** Etiket adedi kaynağı. Çöp değer → varsayılan (`GLOBAL`, bugünkü davranış). */

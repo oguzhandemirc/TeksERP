@@ -106,6 +106,7 @@ import { VARIANCE_SOURCES, type VarianceSource } from "../constants/variance-rea
 import { resolveTamburUndoFullSameDayOnly } from "./system-setting.service";
 import { factoryDayStart } from "../constants/time";
 import { AuditService } from "./audit.service";
+import { auditRevokedCustomerCodes, revokeCustomerCodesOfRollsTx, TAMBUR_UNDO_CODE_REASON } from "./helpers/customer-code-birth.helper";
 import { ApiResponse } from "../types/api.types";
 import { recomputeStepStatus } from "./helpers/roll-step.helper";
 import { reopenWorkOrderTx } from "./helpers/workorder-event.helper";
@@ -1376,6 +1377,7 @@ export class TamburUndoService {
     workOrderId: string | null,
   ): Promise<ApiResponse<unknown>> {
     let cutRevokedIds: string[] = [];
+    let codesRevoked: Awaited<ReturnType<typeof revokeCustomerCodesOfRollsTx>> = [];
     const result = await prisma.$transaction(async (tx) => {
       // ⚠️ TX'İN İLK İŞİ (2026-08-29 / BULGU-T1-003) — gerekçe helper'da.
       await this.lockAndAssertWorkOrderLive(tx, workOrderId);
@@ -1423,6 +1425,8 @@ export class TamburUndoService {
       }
       // D4-B1b TERS YOL: iptal edilen parçanın CUT okuması aynı tx'te damgalanır (defter silinmez).
       cutRevokedIds = await revokeUndoneCutReadingsTx(tx, [childId], userId);
+      // D4-F2 TERS YOL: iptal edilen parçanın müşteri kodu damgalanır (basılı etiket ölü topa çözülmesin).
+      codesRevoked = await revokeCustomerCodesOfRollsTx(tx, { rollIds: [childId], userId: userId ?? null, reason: TAMBUR_UNDO_CODE_REASON });
 
       // DEPO DEFTERİ — çocuğun doğarken yazdığı GİRİŞ satırı terslenir. Yoksa
       // iptal edilen metraj defterde depoda kalır ve her geri alma turu depoya
@@ -1554,6 +1558,7 @@ export class TamburUndoService {
     });
 
     await auditCutReadings(userId, [], { ids: cutRevokedIds, reason: TAMBUR_UNDO_CUT_REASON });
+    await auditRevokedCustomerCodes(userId, codesRevoked, TAMBUR_UNDO_CODE_REASON);
     await AuditService.log({
       userId, action: "UPDATE", tableName: "ROLL", recordId: parentId,
       newData: {
@@ -1605,6 +1610,7 @@ export class TamburUndoService {
     workOrderId: string | null,
   ): Promise<ApiResponse<unknown>> {
     let cutRevokedIds: string[] = [];
+    let codesRevoked: Awaited<ReturnType<typeof revokeCustomerCodesOfRollsTx>> = [];
     const result = await prisma.$transaction(async (tx) => {
       // ⚠️ TX'İN İLK İŞİ (2026-08-29 / BULGU-T1-003) — gerekçe helper'da.
       await this.lockAndAssertWorkOrderLive(tx, workOrderId);
@@ -1676,6 +1682,8 @@ export class TamburUndoService {
       }
       // D4-B1b TERS YOL: iptal edilen parçanın CUT okuması aynı tx'te damgalanır (defter silinmez).
       cutRevokedIds = await revokeUndoneCutReadingsTx(tx, [childId], userId);
+      // D4-F2 TERS YOL: iptal edilen parçanın müşteri kodu damgalanır (basılı etiket ölü topa çözülmesin).
+      codesRevoked = await revokeCustomerCodesOfRollsTx(tx, { rollIds: [childId], userId: userId ?? null, reason: TAMBUR_UNDO_CODE_REASON });
 
       // DEPO DEFTERİ — ÖNCE grup (ebeveyn OUT + çocuk IN), sonra çocuğun kalan
       // ileri satırları. Bu modda metraj ebeveyne DAİMA geri konur (aşağısı),
@@ -1824,6 +1832,7 @@ export class TamburUndoService {
     });
 
     await auditCutReadings(userId, [], { ids: cutRevokedIds, reason: TAMBUR_UNDO_CUT_REASON });
+    await auditRevokedCustomerCodes(userId, codesRevoked, TAMBUR_UNDO_CODE_REASON);
     await AuditService.log({
       userId, action: "UPDATE", tableName: "ROLL", recordId: parentId,
       newData: {
@@ -1864,6 +1873,7 @@ export class TamburUndoService {
     workOrderId: string | null,
   ): Promise<ApiResponse<unknown>> {
     let cutRevokedIds: string[] = [];
+    let codesRevoked: Awaited<ReturnType<typeof revokeCustomerCodesOfRollsTx>> = [];
     const result = await prisma.$transaction(async (tx) => {
       // ⚠️ TX'İN İLK İŞİ (2026-08-29 / BULGU-T1-003) — gerekçe helper'da.
       await this.lockAndAssertWorkOrderLive(tx, workOrderId);
@@ -1950,6 +1960,8 @@ export class TamburUndoService {
       }
       // D4-B1b TERS YOL: iptal edilen bütün parçaların CUT okumaları aynı tx'te damgalanır.
       cutRevokedIds = await revokeUndoneCutReadingsTx(tx, ids, userId);
+      // D4-F2 TERS YOL: iptal edilen parçanın müşteri kodu damgalanır (basılı etiket ölü topa çözülmesin).
+      codesRevoked = await revokeCustomerCodesOfRollsTx(tx, { rollIds: ids, userId: userId ?? null, reason: TAMBUR_UNDO_CODE_REASON });
 
       // DEPO DEFTERİ — TÜM çocukların giriş satırları terslenir. FULL'de öksüz
       // satır sayısı çocuk sayısı kadar olurdu (2026-08-09 vakasında 14 top).
@@ -2211,6 +2223,7 @@ export class TamburUndoService {
     });
 
     await auditCutReadings(userId, [], { ids: cutRevokedIds, reason: TAMBUR_UNDO_CUT_REASON });
+    await auditRevokedCustomerCodes(userId, codesRevoked, TAMBUR_UNDO_CODE_REASON);
     await AuditService.log({
       userId, action: "UPDATE", tableName: "ROLL", recordId: parentId,
       newData: {
