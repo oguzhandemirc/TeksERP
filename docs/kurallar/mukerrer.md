@@ -75,7 +75,7 @@
 
 Backend: `test_color_name_dup`, `test_mukerrer_cari_hesap_birlestirme`, `test_tr_case`, `test_consistency`, `test_data_integrity_gaps`, `test_db_invariants`, `test_duplicate_detection`, `test_duplicate_rolls`, `test_fold_contract`, `test_item_code_case_uniqueness`, `test_master_data_merge`, `test_master_data_merge_conflicts`, `test_master_data_merge_fk_coverage`, `test_master_data_merge_race`, `test_master_data_merge_revert`, `test_master_data_name_dup`, `test_merge_field_picks`, `test_name_normalization`, `test_name_uppercase_storage`, `test_similar_names`, `test_subcontractor_management`, `test_turkish_search_fold`, `test_master_data_kimlik_tekilligi`, `test_item_archive_gate`, `test_master_data_archive_gate`, `test_item_lifecycle_single_writer`, `test_item_usage_single_source`, `test_item_lifecycle_policy`, `test_item_lifecycle_exit_gate`, `test_item_lifecycle_race`, `test_item_lifecycle_migration`, `test_item_archive_db_guard`, `test_master_data_archive_health`, `test_arsiv_seddi_kartela_renk`
 
-İstemci: `SimilarNamesWarning.test.tsx`⚠️, `similar-names-coverage.test.ts`⚠️, `searchFold.test.ts`
+İstemci: `MergeCariFollowUps.test.tsx`, `SimilarNamesWarning.test.tsx`⚠️, `similar-names-coverage.test.ts`⚠️, `searchFold.test.ts`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 

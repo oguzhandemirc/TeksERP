@@ -74,6 +74,8 @@ export interface MergeShadowRow {
 }
 
 export interface MergePreview {
+  /** Birleştirmeden SONRA yapılacak iş (eski backend göndermez). */
+  followUps?: MergeFollowUp[];
   entity: MergeEntity;
   survivor: { id: string; code: string | null; name: string } | null;
   sources: Array<{ id: string; code: string | null; name: string; isActive: boolean }>;
@@ -102,7 +104,18 @@ export interface DuplicateGroup {
   }>;
 }
 
+/** KEEP_ON_SOURCE takibi: birleşen kartta kalan cari hesap → Cari Hesaplar birleştirmesi (eski backend göndermez). */
+export interface MergeFollowUp {
+  kind: "CARI_MERGE";
+  cariId: string;
+  label: string;
+  targetCariId: string | null;
+  balances: Array<{ currency: string; balance: string }>;
+}
+
 export interface MergeResult {
+  /** Birleştirmeden sonra yapılacak cari birleştirmeleri (eski backend göndermez). */
+  followUps?: MergeFollowUp[];
   survivorId: string;
   mergedCount: number;
   movedRows: Array<{ table: string; column: string; count: number }>;
