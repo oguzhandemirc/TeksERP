@@ -248,6 +248,19 @@ export const CARI_LOCK_SCOPE_LABELS: Readonly<Record<string, string>> = { KABUL:
 /** Sebep kodu → görünen ad (fabrika `CARI_HOLD_REASON_LABELS` ile aynı). */
 export const CARI_LOCK_REASON_LABELS: Readonly<Record<string, string>> = { BORC: "Borç", RISK: "Risk", ANLASMAZLIK: "Anlaşmazlık", DIGER: "Diğer" };
 
+// ---------------------------------------------------------------- standart maliyet varyantı (SY-N3)
+
+/**
+ * `standart-maliyet` kaydının varyant alanları (fabrika kolonu + türetir). Aynı ürünün desen geneli ve varyant sürümleri
+ * ayrı zincirdir: anahtar `urunId` + `varyantId`; desen geneli sürümde üçü `null`. Eski fabrika alanları GÖNDERMEZ
+ * (`undefined`) → desen geneli sayılır.
+ */
+export interface StandardCostVariantFields {
+  readonly varyantId?: string | null;
+  readonly varyantAdi?: string | null;
+  readonly varyantKodu?: string | null;
+}
+
 // ---------------------------------------------------------------- iş emri sevke hazırlığı (D4-J5)
 
 /**

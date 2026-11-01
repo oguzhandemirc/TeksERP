@@ -91,6 +91,14 @@ describe("§2 tutar yalnız `.finans`tan; istemci hesaplamaz", () => {
     expect(open.value).toBe("42,5 ₺/m");
     expect(open.groups).toMatch(/^Çözgü .*Atkı /);
   });
+
+  it("standart maliyet varyantı (SY-N3): varyant sürümü başlıkta ayrışır; desen geneli / eski fabrika başlığı aynen", () => {
+    const k = { urunAdi: "Kumaş A", surum: 3, durum: "ACTIVE" };
+    expect(rows.standardCostRowText({ id: U(2), kayit: { ...k, varyantId: U(3), varyantAdi: "Kırık beyaz", varyantKodu: "V01" }, surum: "1" } as never).title).toBe("Kumaş A · V01");
+    expect(rows.standardCostRowText({ id: U(2), kayit: { ...k, varyantId: U(3), varyantAdi: "Kırık beyaz", varyantKodu: null }, surum: "1" } as never).title).toBe("Kumaş A · Kırık beyaz");
+    expect(rows.standardCostRowText({ id: U(2), kayit: { ...k, varyantId: null, varyantAdi: null, varyantKodu: null }, surum: "1" } as never).title).toBe("Kumaş A");
+    expect(rows.standardCostRowText({ id: U(2), kayit: k, surum: "1" } as never).title).toBe("Kumaş A");
+  });
   it("teklif kaynaklarında aritmetik yok", () => {
     for (const f of ["../src/ui/teklif/rows.ts", "../src/ui/teklif/QuoteLines.tsx", "../app/(app)/teklifler.tsx", "../app/(app)/standart-maliyetler.tsx"]) {
       const src = readFileSync(join(__dirname, f), "utf8");
