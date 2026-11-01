@@ -6,7 +6,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Ban, ArrowDownLeft, ArrowUpRight, Printer } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
 import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +25,7 @@ import {
   type PaymentFilterState,
 } from "./paymentFilters";
 import { factoryLocaleDateString } from "@/lib/factory-time";
+import { RefreshButton } from "@/components/RefreshButton";
 
 const PAGE_SIZE = 100;
 
@@ -68,8 +70,9 @@ export function PaymentsPage() {
         title="Tahsilat / Ödeme"
         description="Tahsilat carinin borcunu azaltır, ödeme sizin borcunuzu. İptal, kaydı silmez — ters kayıtla geri alır."
         actions={
-          <PermissionGate permission="finance:payment">
-            <div className="flex gap-2">
+          <div className="flex gap-2">
+            <RefreshButton queryKey={["finance", "payments"]} />
+            <PermissionGate permission="finance:payment">
               <Button onClick={() => openForm("IN")}>
                 <ArrowDownLeft className="mr-1 h-4 w-4" />
                 Tahsilat
@@ -78,114 +81,117 @@ export function PaymentsPage() {
                 <ArrowUpRight className="mr-1 h-4 w-4" />
                 Ödeme
               </Button>
-            </div>
-          </PermissionGate>
+            </PermissionGate>
+          </div>
         }
       />
 
       <PaymentsFilterBar value={filters} onChange={setFilters} />
 
-      <PageBody className="p-6">
+      <ListBody>
         {q.isLoading ? (
-          <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
         ) : q.isError ? (
           /* "HATA" ile "KAYIT YOK" AYRI EKRANLAR: boş diziyi "kayıt yok" diye
              basmak, kullanıcıyı aynı tahsilatı ikinci kez girmeye iter. */
-          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-            <p className="font-medium text-destructive">Tahsilat/ödeme listesi yüklenemedi.</p>
-            <p className="mt-1 text-muted-foreground">
-              Bu bir “kayıt yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi.
-              Kayıtlarınız yerinde duruyor; yeni kayıt girmeden önce tekrar deneyin.
-            </p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-              Tekrar dene
-            </Button>
-          </div>
+          <ListMessage>
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+              <p className="font-medium text-destructive">Tahsilat/ödeme listesi yüklenemedi.</p>
+              <p className="mt-1 text-muted-foreground">
+                Bu bir “kayıt yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi.
+                Kayıtlarınız yerinde duruyor; yeni kayıt girmeden önce tekrar deneyin.
+              </p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+                Tekrar dene
+              </Button>
+            </div>
+          </ListMessage>
         ) : rows.length === 0 ? (
-          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-            {isPaymentFilterDirty(filters)
-              ? "Bu filtreyle kayıt yok. Daraltmayı gevşetin ya da “Filtreleri temizle” deyin."
-              : "Kayıt yok. Tahsilat veya ödeme girmek için üstteki düğmeleri kullanın."}
-          </div>
+          <ListMessage>
+            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+              {isPaymentFilterDirty(filters)
+                ? "Bu filtreyle kayıt yok. Daraltmayı gevşetin ya da “Filtreleri temizle” deyin."
+                : "Kayıt yok. Tahsilat veya ödeme girmek için üstteki düğmeleri kullanın."}
+            </div>
+          </ListMessage>
         ) : (
-          <div className="overflow-hidden rounded-md border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2 text-left">Belge No</th>
-                  <th className="px-3 py-2 text-left">Yön</th>
-                  <th className="px-3 py-2 text-left">Cari</th>
-                  <th className="px-3 py-2 text-left">Yöntem</th>
-                  <th className="px-3 py-2 text-left">Kasa / Banka</th>
-                  <th className="px-3 py-2 text-left">Kasa defteri</th>
-                  <th className="px-3 py-2 text-left">Tarih</th>
-                  <th className="px-3 py-2 text-right">Tutar</th>
-                  <th className="px-3 py-2" />
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 text-left">Belge No</th>
+                <th className="px-3 py-2 text-left">Yön</th>
+                <th className="px-3 py-2 text-left">Cari</th>
+                <th className="px-3 py-2 text-left">Yöntem</th>
+                <th className="px-3 py-2 text-left">Kasa / Banka</th>
+                <th className="px-3 py-2 text-left">Kasa defteri</th>
+                <th className="px-3 py-2 text-left">Tarih</th>
+                <th className="px-3 py-2 text-right">Tutar</th>
+                <th className="px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((p) => (
+                <tr key={p.id} className={`border-t ${p.status === "CANCELLED" ? "opacity-60" : ""}`}>
+                  <td className="px-3 py-2 font-mono text-xs">{p.docNo}</td>
+                  <td className="px-3 py-2">
+                    <Badge variant="outline" className={p.direction === "IN" ? "text-emerald-600" : "text-amber-700"}>
+                      {p.direction === "IN" ? "Tahsilat" : "Ödeme"}
+                    </Badge>
+                  </td>
+                  <td className="px-3 py-2 font-medium">{partyName(p.cari)}</td>
+                  <td className="px-3 py-2">{PAYMENT_METHOD_LABEL[p.method] ?? p.method}</td>
+                  <td className="px-3 py-2 text-muted-foreground">
+                    {p.cashBox?.name ?? p.bankAccount?.name ?? "—"}
+                  </td>
+                  <td className="px-3 py-2">{p.cashTransaction ? <CashLedgerLink docNo={p.cashTransaction.docNo} /> : <span className="text-xs text-muted-foreground" title="Defter satırı yok — geçmiş kayıt (backfill bekliyor) ya da eski sunucu">—</span>}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {factoryLocaleDateString(p.paymentDate, "tr-TR")}
+                  </td>
+                  <td className="px-3 py-2 text-right font-medium">
+                    {p.status === "CANCELLED" ? (
+                      <span className="line-through">{money(p.amount, p.currency)}</span>
+                    ) : (
+                      money(p.amount, p.currency)
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {/* Makbuz KAYIT anında donduğu için her satırda basılabilir
+                        (iptal edilmiş olan İPTAL filigranıyla) — faturadan farkı
+                        budur: makbuzun taslak hâli YOKTUR. */}
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="mr-1"
+                      title="Makbuzu yazdır / önizle"
+                      onClick={() => setPrintTarget(p)}
+                    >
+                      <Printer className="h-4 w-4" />
+                    </Button>
+                    {p.status === "ACTIVE" && (
+                      <PermissionGate permission="finance:payment">
+                        <Button variant="outline" size="sm" onClick={() => setCancelTarget(p)}>
+                          <Ban className="mr-1 h-3.5 w-3.5" />
+                          İptal
+                        </Button>
+                      </PermissionGate>
+                    )}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {rows.map((p) => (
-                  <tr key={p.id} className={`border-t ${p.status === "CANCELLED" ? "opacity-60" : ""}`}>
-                    <td className="px-3 py-2 font-mono text-xs">{p.docNo}</td>
-                    <td className="px-3 py-2">
-                      <Badge variant="outline" className={p.direction === "IN" ? "text-emerald-600" : "text-amber-700"}>
-                        {p.direction === "IN" ? "Tahsilat" : "Ödeme"}
-                      </Badge>
-                    </td>
-                    <td className="px-3 py-2 font-medium">{partyName(p.cari)}</td>
-                    <td className="px-3 py-2">{PAYMENT_METHOD_LABEL[p.method] ?? p.method}</td>
-                    <td className="px-3 py-2 text-muted-foreground">
-                      {p.cashBox?.name ?? p.bankAccount?.name ?? "—"}
-                    </td>
-                    <td className="px-3 py-2">{p.cashTransaction ? <CashLedgerLink docNo={p.cashTransaction.docNo} /> : <span className="text-xs text-muted-foreground" title="Defter satırı yok — geçmiş kayıt (backfill bekliyor) ya da eski sunucu">—</span>}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {factoryLocaleDateString(p.paymentDate, "tr-TR")}
-                    </td>
-                    <td className="px-3 py-2 text-right font-medium">
-                      {p.status === "CANCELLED" ? (
-                        <span className="line-through">{money(p.amount, p.currency)}</span>
-                      ) : (
-                        money(p.amount, p.currency)
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {/* Makbuz KAYIT anında donduğu için her satırda basılabilir
-                          (iptal edilmiş olan İPTAL filigranıyla) — faturadan farkı
-                          budur: makbuzun taslak hâli YOKTUR. */}
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="mr-1"
-                        title="Makbuzu yazdır / önizle"
-                        onClick={() => setPrintTarget(p)}
-                      >
-                        <Printer className="h-4 w-4" />
-                      </Button>
-                      {p.status === "ACTIVE" && (
-                        <PermissionGate permission="finance:payment">
-                          <Button variant="outline" size="sm" onClick={() => setCancelTarget(p)}>
-                            <Ban className="mr-1 h-3.5 w-3.5" />
-                            İptal
-                          </Button>
-                        </PermissionGate>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         )}
         {/* ⚠️ KIRPMA SESSİZ DEĞİL: sunucudaki toplam gösterilen satırı aşarsa
             yazılır. Aksi halde 100. satırdan sonrası "yok" sanılır ve aranan
             tahsilat ikinci kez girilir. */}
         {rows.length > 0 && total > rows.length && (
-          <p className="mt-3 text-xs text-amber-700 dark:text-amber-500">
+          <p className="border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
             {total} kaydın ilk {rows.length} tanesi gösteriliyor. Aradığınızı bulmak için tarih, cari
             ya da yöntem filtresini kullanın.
           </p>
         )}
-      </PageBody>
+      </ListBody>
+      <ListFooter loaded={rows.length} total={q.data ? total : null} />
 
       <PaymentFormDialog
         open={formOpen}

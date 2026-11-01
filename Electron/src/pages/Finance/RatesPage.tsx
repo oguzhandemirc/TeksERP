@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +12,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { listRates, createRate, fetchTcmbRates, type Currency } from "./service";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import { factoryDayKey, fmtDayKey, calendarLocaleDateString } from "@/lib/factory-time";
+import { RefreshButton } from "@/components/RefreshButton";
 
 // TL kur tablosuna GİRMEZ: kendi para birimimizin kendine kuru 1'dir ve backend
 // bunu koda gömer. Listede göstermek "girmeyi unuttum mu" sorusu doğururdu.
@@ -59,12 +61,13 @@ export function RatesPage() {
     <PageShell>
       <PageHeader
         title="Kurlar"
+        actions={<RefreshButton queryKey={["finance", "rates"]} />}
         description="1 birim döviz kaç TL. Fatura ve tahsilatlar belge tarihine en yakın (≤) kuru kullanır ve o kuru belgeye DAMGALAR — sonradan kuru düzeltmek geçmiş belgeleri değiştirmez."
       />
 
-      <PageBody className="space-y-6 p-6">
-        <PermissionGate permission="finance:write">
-          <div className="flex items-end gap-3 rounded-md border bg-muted/30 p-4">
+      <PermissionGate permission="finance:write">
+        <ListToolbar>
+          <div className="flex flex-wrap items-end gap-3">
             <div>
               <Label className="text-xs">Tarih</Label>
               <DatePickerInput aria-label="Tarih" className="mt-1" value={rateDate} onChange={setRateDate} />
@@ -104,39 +107,44 @@ export function RatesPage() {
               {tcmbM.isPending ? "Çekiliyor…" : "TCMB'den Çek"}
             </Button>
           </div>
-        </PermissionGate>
+        </ListToolbar>
+      </PermissionGate>
 
+      <ListBody>
         {q.isLoading ? (
-          <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
         ) : q.isError && rows.length === 0 ? (
           /* ⚠️ BU EKRANDA YANLIŞ BOŞ-DURUM METNİ EYLEME YÖNLENDİRİR: aşağıdaki
              cümle "önce o güne ait kuru girin" diyor. Hata anında basılırsa
              kullanıcı zaten var olan kuru İKİNCİ KEZ girer — mükerrer kur satırı,
              ve fatura hangi satırı damgaladığına göre farklı tutar üretir. */
-          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-            <p className="font-medium text-destructive">Kur listesi yüklenemedi.</p>
-            <p className="mt-1 text-muted-foreground">
-              Bu “kur girilmemiş” anlamına GELMEZ — istek sunucuya ulaşamadı ya da reddedildi.
-              Yeni kur girmeden önce tekrar deneyin; aksi halde aynı güne ikinci bir kur
-              yazabilirsiniz.
-            </p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-              Tekrar dene
-            </Button>
-          </div>
+          <ListMessage>
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+              <p className="font-medium text-destructive">Kur listesi yüklenemedi.</p>
+              <p className="mt-1 text-muted-foreground">
+                Bu “kur girilmemiş” anlamına GELMEZ — istek sunucuya ulaşamadı ya da reddedildi.
+                Yeni kur girmeden önce tekrar deneyin; aksi halde aynı güne ikinci bir kur
+                yazabilirsiniz.
+              </p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+                Tekrar dene
+              </Button>
+            </div>
+          </ListMessage>
         ) : rows.length === 0 ? (
-          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-            Kur girilmemiş. Döviz cinsinden fatura kesmek için önce o güne ait kuru girin.
-          </div>
+          <ListMessage>
+            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+              Kur girilmemiş. Döviz cinsinden fatura kesmek için önce o güne ait kuru girin.
+            </div>
+          </ListMessage>
         ) : (
-          <div className="space-y-3">
+          <>
             {q.isError && (
-              <p className="rounded-md bg-amber-100 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+              <p className="border-b bg-amber-100 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
                 Liste tazelenemedi — aşağıdaki kurlar son başarılı okumaya aittir; bugün girilmiş
                 bir kur burada görünmeyebilir.
               </p>
             )}
-            <div className="overflow-hidden rounded-md border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
                 <tr>
@@ -161,10 +169,10 @@ export function RatesPage() {
                 ))}
               </tbody>
             </table>
-            </div>
-          </div>
+          </>
         )}
-      </PageBody>
+      </ListBody>
+      <ListFooter loaded={rows.length} />
     </PageShell>
   );
 }
