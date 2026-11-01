@@ -14,6 +14,7 @@ import CuvalDuzeltScreen from '../../screens/Modules/TartiPaket/CuvalDuzeltScree
 import IadeGirisiScreen from '../../screens/Modules/IadeGirisi/IadeGirisiScreen';
 
 const mockGet = jest.fn();
+let mockScanCode = '';
 
 /** İç barkod → top; müşteri barkodu → top(lar). MK77 iki müşteride (belirsiz). */
 const ROLLS: Record<string, { id: string; barcode: string; customerName: string }> = {
@@ -21,6 +22,12 @@ const ROLLS: Record<string, { id: string; barcode: string; customerName: string 
   H251030002: { id: 'r2', barcode: 'H251030002', customerName: 'Bora Tekstil' },
 };
 const CUSTOMER_CODES: Record<string, string[]> = { ACR500: ['H251030002'], MK77: ['H251030001', 'H251030002'] };
+/** Çuval Düzelt taşıma dalı (D4-KUC3d) için: iki top iki ayrı çuvalda. */
+const SACKS: Record<string, { id: string; sackNo: string; seq: number }> = {
+  H251030001: { id: 's1', sackNo: 'C-1', seq: 1 },
+  H251030002: { id: 's2', sackNo: 'C-2', seq: 2 },
+};
+let mockWithSacks = false;
 
 function notFound(): never {
   throw { status: 404, message: 'Bu barkodla top bulunamadı', details: {} };
@@ -69,7 +76,7 @@ function fakeBackend(url: string) {
         qualityGrade: 'Q',
         item: { id: 'i1', name: 'Tül' },
         color: null,
-        sack: null,
+        sack: mockWithSacks ? SACKS[roll.barcode] : null,
         shipment: null,
         ...extras,
       },
@@ -111,7 +118,18 @@ jest.mock('../../services/api', () => ({
 }));
 jest.mock('react-native-toast-message', () => ({ __esModule: true, default: { show: jest.fn() } }));
 jest.mock('../ScreenChrome', () => ({ __esModule: true, default: ({ children }: { children: ReactNode }) => children }));
-jest.mock('../BarcodeScannerModal', () => ({ BarcodeScannerModal: () => null }));
+// Görünür tarayıcı başlığıyla bir "okut" düğmesi çizer (taşıma dalının hedef top okutması).
+jest.mock('../BarcodeScannerModal', () => {
+  const RN = jest.requireActual('react-native');
+  return {
+    BarcodeScannerModal: (p: { visible: boolean; title?: string; onScan: (c: string) => void }) =>
+      p.visible ? (
+        <RN.Pressable testID={`fake-scan:${p.title ?? ''}`} onPress={() => p.onScan(mockScanCode)}>
+          <RN.Text>okut</RN.Text>
+        </RN.Pressable>
+      ) : null,
+  };
+});
 jest.mock('../RollPickerModal', () => ({ __esModule: true, default: () => null }));
 jest.mock('../LabelPrinter', () => ({ LabelPrinter: () => null }));
 jest.mock('../../services/scanFeedback', () => ({ signalScan: jest.fn() }));
@@ -127,6 +145,7 @@ jest.mock('../../store/deviceSettingsStore', () => ({
 jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ navigate: jest.fn(), goBack: jest.fn() }) }));
 
 beforeEach(() => {
+  mockWithSacks = false;
   mockGet.mockReset();
   mockGet.mockImplementation(async (url: string) => ({ data: fakeBackend(url) }));
 });
@@ -159,6 +178,22 @@ describe('Çuval Düzelt — müşteri barkodu tek boğazdan', () => {
     await waitFor(() => expect(mockGet).toHaveBeenLastCalledWith('/shipping/locate-roll?barcode=H251030002'));
     await waitFor(() => expect(screen.queryByText(/"MK77" birden çok müşteride/)).toBeNull());
     expect(await screen.findByText('IN_STOCK')).toBeTruthy();
+  });
+});
+
+describe('Çuval Düzelt — taşıma dalı (moveAmbiguous, D4-KUC3d)', () => {
+  it('⭐ hedef topta belirsiz müşteri barkodu → aday modalı; seçim İÇ barkodla yeniden sorulur, taşıma onayı açılır', async () => {
+    mockWithSacks = true;
+    renderWithPaper(<CuvalDuzeltScreen />);
+    fireEvent.changeText(screen.getByTestId('cuval-duzelt-barkod'), 'H251030001');
+    fireEvent(screen.getByTestId('cuval-duzelt-barkod'), 'submitEditing');
+    fireEvent.press(await screen.findByText('Başka Çuvala Taşı'));
+    mockScanCode = 'MK77';
+    fireEvent.press(screen.getByTestId('fake-scan:Hedef Çuvaldaki Bir Topu Okut'));
+    expect(await screen.findByText(/"MK77" birden çok müşteride/)).toBeTruthy();
+    fireEvent.press(screen.getByText('H251030002'));
+    await waitFor(() => expect(mockGet).toHaveBeenLastCalledWith('/shipping/locate-roll?barcode=H251030002'));
+    expect(await screen.findByText('Top taşınsın mı?')).toBeTruthy();
   });
 });
 

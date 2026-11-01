@@ -89,44 +89,46 @@ describe('WorkOrderAddBatchSheet', () => {
     expect(t2).toBe(t1);
     expect(t3).not.toBe(t1);
   });
+});
 
-  describe('D4-KUC3d — müşteri barkodu', () => {
-    beforeEach(() => {
-      mockByBarcode.mockImplementation((b: string) =>
-        b === AMBIGUOUS_CODE
-          ? Promise.reject(ambiguousScanError([{ rollId: 'r1', barcode: 'B-1', customerName: 'Acar Perde' }, { rollId: 'r3', barcode: 'B-3', customerName: 'Bora Tekstil' }]))
-          : Promise.resolve({ data: ROLLS[b] }),
-      );
-    });
+describe('WorkOrderAddBatchSheet — D4-KUC3d müşteri barkodu', () => {
+  beforeEach(() => {
+    (Toast.show as jest.Mock).mockReset();
+    mockAdd.mockReset();
+    mockByBarcode.mockReset().mockImplementation((b: string) =>
+      b === AMBIGUOUS_CODE
+        ? Promise.reject(ambiguousScanError([{ rollId: 'r1', barcode: 'B-1', customerName: 'Acar Perde' }, { rollId: 'r3', barcode: 'B-3', customerName: 'Bora Tekstil' }]))
+        : Promise.resolve({ data: ROLLS[b] }),
+    );
+  });
 
-    it('⭐ belirsiz kod → aday modalı; seçim İÇ barkodla yeniden sorulur ve top listeye girer', async () => {
-      renderWithPaper(<WorkOrderAddBatchSheet wo={WO} onDismiss={() => {}} onDone={() => {}} />);
-      fireEvent.press(screen.getByText('Top Okut'));
-      await act(async () => {});
-      await okut('sonda-okut-MK77');
-      expect(await screen.findByText(ambiguousTitle())).toBeTruthy();
-      fireEvent.press(screen.getByText('B-3'));
-      await waitFor(() => expect(mockByBarcode).toHaveBeenLastCalledWith('B-3'));
-      expect(await screen.findByText('B-3 · 60 m')).toBeTruthy();
-      expect(screen.queryByTestId('musteri-kodu-eslesme')).toBeNull();
-    });
+  it('⭐ belirsiz kod → aday modalı; seçim İÇ barkodla yeniden sorulur ve top listeye girer', async () => {
+    renderWithPaper(<WorkOrderAddBatchSheet wo={WO} onDismiss={() => {}} onDone={() => {}} />);
+    fireEvent.press(screen.getByText('Top Okut'));
+    await act(async () => {});
+    await okut('sonda-okut-MK77');
+    expect(await screen.findByText(ambiguousTitle())).toBeTruthy();
+    fireEvent.press(screen.getByText('B-3'));
+    await waitFor(() => expect(mockByBarcode).toHaveBeenLastCalledWith('B-3'));
+    expect(await screen.findByText('B-3 · 60 m')).toBeTruthy();
+    expect(screen.queryByTestId('musteri-kodu-eslesme')).toBeNull();
+  });
 
-    it('⭐ müşteri koduyla bulunan top → satırda "müşteri barkodu ile bulundu"', async () => {
-      renderWithPaper(<WorkOrderAddBatchSheet wo={WO} onDismiss={() => {}} onDone={() => {}} />);
-      fireEvent.press(screen.getByText('Top Okut'));
-      await act(async () => {});
-      await okut('sonda-okut-ACR500');
-      expect(await screen.findByText('B-3 · 60 m')).toBeTruthy();
-      expect(screen.getByTestId('musteri-kodu-eslesme')).toHaveTextContent('Müşteri barkodu ACR500 ile bulundu');
-    });
+  it('⭐ müşteri koduyla bulunan top → satırda "müşteri barkodu ile bulundu"', async () => {
+    renderWithPaper(<WorkOrderAddBatchSheet wo={WO} onDismiss={() => {}} onDone={() => {}} />);
+    fireEvent.press(screen.getByText('Top Okut'));
+    await act(async () => {});
+    await okut('sonda-okut-ACR500');
+    expect(await screen.findByText('B-3 · 60 m')).toBeTruthy();
+    expect(screen.getByTestId('musteri-kodu-eslesme')).toHaveTextContent('Müşteri barkodu ACR500 ile bulundu');
+  });
 
-    it('başka hata (eski backend 404) → bugünkü "Okunamadı" yolu, modal YOK', async () => {
-      mockByBarcode.mockRejectedValue({ status: 404, message: 'Endpoint bulunamadı', details: {} });
-      renderWithPaper(<WorkOrderAddBatchSheet wo={WO} onDismiss={() => {}} onDone={() => {}} />);
-      fireEvent.press(screen.getByText('Top Okut'));
-      await act(async () => {});
-      await okut('sonda-okut-MK77');
-      expect(screen.queryByText(ambiguousTitle())).toBeNull();
-    });
+  it('başka hata (eski backend 404) → bugünkü "Okunamadı" yolu, modal YOK', async () => {
+    mockByBarcode.mockRejectedValue({ status: 404, message: 'Endpoint bulunamadı', details: {} });
+    renderWithPaper(<WorkOrderAddBatchSheet wo={WO} onDismiss={() => {}} onDone={() => {}} />);
+    fireEvent.press(screen.getByText('Top Okut'));
+    await act(async () => {});
+    await okut('sonda-okut-MK77');
+    expect(screen.queryByText(ambiguousTitle())).toBeNull();
   });
 });

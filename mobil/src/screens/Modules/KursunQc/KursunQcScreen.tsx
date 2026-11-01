@@ -75,6 +75,7 @@ import {
 } from './stationPanels';
 import GramajTapPanel from './GramajTapPanel';
 import { useGramajTap } from './useGramajTap';
+import { widthGatedTap } from './widthGatedTap';
 import { MachineStopBand, MachineStopChip, useMachineStopControl } from '../../../components/machine-stop/MachineStopChip';
 import MeterStrip from './MeterStrip';
 import MeterModals from './MeterModals';
@@ -1031,16 +1032,11 @@ export default function KursunQcScreen() {
     summary: activeJob?.stepSummary ?? null,
     roll: selectedRoll?.barcode && !selectedRoll.qc2Completed ? selectedRoll : null,
     operator: operatorLabel,
-    complete: (vars, opts) => {
-      const withWidth = measuredWidth.attach(vars);
-      if (withWidth) completeQc2Mutation.mutate(withWidth, opts);
-      else opts.onSettled?.();
-    },
+    // D4-KUC3b/3d: en gövdeye eklenir; sınır dışı en sayaç okumadan / istek gitmeden uyarılır.
+    ...widthGatedTap(measuredWidth, (vars, opts) => completeQc2Mutation.mutate(vars, opts)),
     refresh: () => void refetchActiveJob().catch(() => undefined),
     meter,
     stopOpen: machineStop.entryWarning,
-    // D4-KUC3b: sınır dışı en sayaç okumadan / istek gitmeden uyarılır.
-    precheck: (rollId) => measuredWidth.attach({ rollId }) !== null,
   });
   const tapLayout = panels.completion === 'TAP_VALUE';
 
