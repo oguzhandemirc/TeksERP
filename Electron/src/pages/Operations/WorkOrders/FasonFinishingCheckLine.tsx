@@ -12,6 +12,10 @@ export interface FinishingCheckLine {
   rateName: string;
   currency: string;
   pricePerKg: string;
+  /** Tarifenin seçildiği sevk fabrika günü (`YYYY-MM-DD`). Eski sunucu göndermez. */
+  rateAsOf?: string | null;
+  /** Sevk gününde geçerli tarife yoktu → ilk sürüm kullanıldı. Eski sunucu göndermez. */
+  rateFallback?: boolean;
   totalKg: string;
   weighedCount: number;
   unweighedCount: number;
@@ -25,6 +29,8 @@ export interface FinishingCheckLine {
     coversOtherDispatches: boolean;
     /** Faturalı kabul sevkin yalnız bir kısmını kapsıyor → fark null. Eski sunucu alanı göndermez. */
     partial?: boolean;
+    /** Fatura dövizi tarifeninkinden farklı → kur çevrilmez, fark null. Eski sunucu göndermez. */
+    currencyMismatch?: boolean;
   } | null;
 }
 export interface FinishingCheckResult {
@@ -37,19 +43,26 @@ export const fetchDispatchFinishingCheck = (dispatchId: string) =>
     .get<ApiResponse<FinishingCheckResult>>(`/api/cost/subcontractor-dispatches/${dispatchId}/finishing-check`)
     .then((r) => r.data);
 
+/** `YYYY-MM-DD` → `GG.AA.YYYY` (sunucu fabrika gününü hazır verir; dilim çevrimi yok). */
+function dayTr(ymd: string): string {
+  const [y, m, d] = ymd.split("-");
+  return `${d}.${m}.${y}`;
+}
+
 /** Fark metni: pozitif = fatura beklenenden fazla. */
 function differenceText(inv: NonNullable<FinishingCheckLine["invoice"]>, currency: string): string {
   if (inv.difference !== null) {
     const sign = inv.difference.startsWith("-") || /^0(\.0*)?$/.test(inv.difference) ? "" : "+";
     return `Fark ${sign}${fmtDec(inv.difference)} ${currency}`;
   }
+  if (inv.currencyMismatch) return "Farklı döviz — kur çevrilmez, fark hesaplanmadı";
   if (inv.partial) return "Fatura sevkin yalnız bir kısmını kapsıyor — fark hesaplanmadı";
   if (inv.coversOtherDispatches) return "Fatura başka sevkleri de kapsıyor — fark hesaplanmadı";
   return "Para birimi farklı — fark hesaplanmadı";
 }
 
 /**
- * Fason sevk kg kontrolü bilgi satırı — beklenen boyahane tutarı = Σ sevk kg × aktif kg tarifesi.
+ * Fason sevk kg kontrolü bilgi satırı — beklenen boyahane tutarı = Σ sevk kg × sevk tarihindeki kg tarifesi.
  * Maliyet modülü kapalıysa ya da `cost:read` yoksa sorgu atılmaz; tarife yoksa satır çizilmez (0 gösterilmez).
  * Fatura parçası finans kapılı: sunucu `finance:read` ∧ ön muhasebe açık değilse göndermez; panel de izinsiz çizmez.
  */
@@ -79,7 +92,9 @@ export function FasonFinishingCheckLine({ dispatchId, open }: { dispatchId: stri
         </strong>
       </span>
       <span className="text-muted-foreground">
-        {fmtDec(line.totalKg, 3)} kg × {fmtDecFull(line.pricePerKg, 4)} {line.currency}/kg ({line.rateName})
+        {fmtDec(line.totalKg, 3)} kg × {fmtDecFull(line.pricePerKg, 4)} {line.currency}/kg ({line.rateName}
+        {line.rateAsOf ? `, ${dayTr(line.rateAsOf)} sevk tarihindeki tarife` : ""}
+        {line.rateFallback ? " — o gün tarife yoktu, ilk tarife kullanıldı" : ""})
         {line.unweighedCount > 0 ? ` · ${line.unweighedCount} top tartısız, hesaba girmedi` : ""}
       </span>
       {inv && (
