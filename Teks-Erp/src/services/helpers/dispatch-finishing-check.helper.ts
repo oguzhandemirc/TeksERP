@@ -2,11 +2,14 @@
 // FASON SEVK KG KONTROLÜ — saf hesap (SY-E2, tasarım §6.5 "isteğe bağlı kontrol")
 // =============================================================================
 // Boyahane kilo başına faturalar; sevk kaleminde tartılmış kg (`dispatchedWeight`) zaten var.
-// Bilgi satırı: beklenen tutar = Σ kg × aktif KG tarifesi. YALNIZ OKUMA — hiçbir şey yazmaz.
+// Bilgi satırı: beklenen tutar = Σ kg × SEVK TARİHİNDE geçerli KG tarifesi (kullanıcı kararı 2026-11-01,
+// #377; tarih seçimi yalnız `pickFinishingRateAtDispatch`te). YALNIZ OKUMA — hiçbir şey yazmaz.
 // Satır üretilemiyorsa `line: null` + sebep döner; ASLA 0 tutar uydurulmaz (tarife yok ≠ bedava).
 // Fatura farkı yalnız fatura(lar) bu sevke ÖZGÜ, sevkin TÜM kumaş toplarını kapsıyor ve para birimi aynıysa hesaplanır.
 // =============================================================================
 import { Prisma, type Currency, type FinishingBasis } from "@prisma/client";
+import { factoryDayEnd, factoryYmd } from "../../constants/time";
+import { isCostPriceValidAt } from "./cost-price-validity.helper";
 
 /** Satır üretilmeme sebebi — panel bunları göstermez (satır yok), API okuyucusu için açıklayıcı. */
 export type FinishingCheckSkipReason =
@@ -28,6 +31,31 @@ export interface FinishingCheckRate {
   subcontractorId: string | null;
 }
 
+/** Sevk tarihindeki tarife seçimi: hangi fabrika günü ve tarihli sürüm bulunamadığı için ilk sürüme mi düşüldü. */
+export interface FinishingRateAsOf {
+  /** Sevkin FABRİKA günü, `YYYY-MM-DD`. */
+  day: string;
+  /** Sevk gününde geçerli sürüm yok (tarife sevkten sonra girilmiş) → kodun ilk sürümü kullanıldı. */
+  fallback: boolean;
+}
+
+interface RateVersion { id: string; createdAt: Date; revokedAt: Date | null }
+
+/**
+ * TEK KAYNAK — fason fatura karşılaştırmasının tarife sürümü: sevkin fabrika gününün SON anında geçerli sürüm
+ * (fatura gün bazlıdır; aynı gün sonradan girilen tarife sayılır). O gün geçerli sürüm yoksa (tarife sevkten
+ * sonra girilmiş, tarihli geçmiş yok) kodun sevkten sonraki İLK sürümü — tek aktif tarifede sonuç eskisiyle aynı.
+ */
+export function pickFinishingRateAtDispatch<T extends RateVersion>(versions: T[], dispatchedAt: Date): { rate: T; asOf: FinishingRateAsOf } | null {
+  const at = factoryDayEnd(dispatchedAt);
+  const day = factoryYmd(dispatchedAt);
+  const byAge = [...versions].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+  const valid = byAge.filter((v) => isCostPriceValidAt(v, at));
+  if (valid.length) return { rate: valid[valid.length - 1], asOf: { day, fallback: false } };
+  const later = byAge.find((v) => v.createdAt.getTime() > at.getTime());
+  return later ? { rate: later, asOf: { day, fallback: true } } : null;
+}
+
 export interface FinishingCheckInvoice {
   docNo: string;
   status: "DRAFT" | "CONFIRMED";
@@ -45,6 +73,8 @@ export interface FinishingCheckInput {
   /** Her bağlı sipariş satırı/ürün için çözülmüş tarife kodu (`resolveFinishingRateCode` çıktıları). */
   rateCodes: (string | null)[];
   rate: FinishingCheckRate | null;
+  /** `pickFinishingRateAtDispatch` çıktısı; eski çağıran vermezse alanlar null/false döner. */
+  rateAsOf?: FinishingRateAsOf | null;
   invoices: FinishingCheckInvoice[];
   /** Faturalanan fason kabul(ler)i başka sevklerin toplarını da içeriyor mu. */
   invoicesCoverOtherDispatches: boolean;
@@ -57,6 +87,10 @@ export interface FinishingCheckLine {
   rateName: string;
   currency: Currency;
   pricePerKg: string;
+  /** Tarifenin seçildiği sevk fabrika günü (`YYYY-MM-DD`). */
+  rateAsOf: string | null;
+  /** Sevk gününde geçerli tarife yoktu → kodun ilk sürümü kullanıldı. */
+  rateFallback: boolean;
   totalKg: string;
   weighedCount: number;
   unweighedCount: number;
@@ -71,6 +105,8 @@ export interface FinishingCheckLine {
     coversOtherDispatches: boolean;
     /** Faturalı kabul sevkin yalnız bir kısmını kapsıyor (kısmi kabul) → fark null. */
     partial: boolean;
+    /** Fatura dövizi tarifeninkinden farklı (ya da faturalar karışık dövizli) → KUR ÇEVRİLMEZ, fark null. */
+    currencyMismatch: boolean;
   } | null;
 }
 
@@ -108,6 +144,8 @@ export function computeDispatchFinishingCheck(inp: FinishingCheckInput): Finishi
       rateName: rate.name,
       currency: rate.currency,
       pricePerKg: rate.pricePerM.toFixed(4),
+      rateAsOf: inp.rateAsOf?.day ?? null,
+      rateFallback: inp.rateAsOf?.fallback ?? false,
       totalKg: totalKg.toFixed(3),
       weighedCount: weighed.length,
       unweighedCount: inp.fabricWeights.length - weighed.length,
@@ -123,7 +161,8 @@ function invoiceSummary(inp: FinishingCheckInput, expected: Prisma.Decimal, rate
   const currency = currencies.size === 1 ? inp.invoices[0].currency : null;
   const net = currency ? inp.invoices.reduce((a, i) => a.plus(i.net), new Prisma.Decimal(0)) : null;
   const partial = !inp.invoicesCoverWholeDispatch;
-  const comparable = net !== null && currency === rateCurrency && !inp.invoicesCoverOtherDispatches && !partial;
+  const currencyMismatch = currency !== rateCurrency;
+  const comparable = net !== null && !currencyMismatch && !inp.invoicesCoverOtherDispatches && !partial;
   return {
     docNos: inp.invoices.map((i) => i.docNo),
     hasDraft: inp.invoices.some((i) => i.status === "DRAFT"),
@@ -132,5 +171,6 @@ function invoiceSummary(inp: FinishingCheckInput, expected: Prisma.Decimal, rate
     difference: comparable ? money(net.minus(expected.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP))) : null,
     coversOtherDispatches: inp.invoicesCoverOtherDispatches,
     partial,
+    currencyMismatch,
   };
 }

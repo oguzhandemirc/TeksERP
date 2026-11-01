@@ -90,3 +90,6 @@ export interface WeftSpecDetail {
   id: string; code: string; name: string; picksPerCm: string | null; sequenceCode: string | null; weftProgramNo: string | null;
   yarns: WeftSpecYarnRow[];
 }
+
+/** `POST /api/weft-specs/:id/fork` yanıtı — `replayed` = aynı kodlu kopya bu kumaşa zaten bağlıydı. */
+export interface WeftSpecForkResult { weftSpec: WeftSpecDetail; itemId: string; previousWeftSpecId: string; replayed: boolean }
