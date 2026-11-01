@@ -83,6 +83,9 @@ import { useMeterAcks } from './useMeterAcks';
 import { useMeterCapture } from './useMeterCapture';
 import MeasuredWidthField from './MeasuredWidthField';
 import { useMeasuredWidth } from './useMeasuredWidth';
+import BrodePieceField from './BrodePieceField';
+import { pieceInputOf } from './brodePiece';
+import { pieceGatedTap, useBrodePieceCount } from './useBrodePieceCount';
 import { measuredWidthErrorText, widthCaptureEnabled } from './measuredWidth';
 import { kursunFinishRollId, type KursunFinishVars } from '../../../offline/kursunFinishVars';
 import { meterSettingsOf, pendingAcksFromError } from './meterCapture';
@@ -373,6 +376,8 @@ export default function KursunQcScreen() {
     selectedRoll?.rollId ?? null,
     selectedRoll?.widthLimit,
   );
+  // GK-H1b: brode ADET/VURUŞ'ta zorunlu adet; METER/eski backend → alan yok, gövde bayt-aynı.
+  const brodePiece = useBrodePieceCount(pieceInputOf(activeJob?.stepSummary), selectedRoll?.rollId ?? null);
   const nextStation = nextStationLabel(activeJob?.stepSummary.nextStepName);
   const nextStationDative = nextStation ? dativeTr(nextStation) : null;
 
@@ -1033,7 +1038,8 @@ export default function KursunQcScreen() {
     roll: selectedRoll?.barcode && !selectedRoll.qc2Completed ? selectedRoll : null,
     operator: operatorLabel,
     // D4-KUC3b/3d: en gövdeye eklenir; sınır dışı en sayaç okumadan / istek gitmeden uyarılır.
-    ...widthGatedTap(measuredWidth, (vars, opts) => completeQc2Mutation.mutate(vars, opts)),
+    // GK-H1b: brode adedi çıkış okumasına eklenir; boş adet dokunuşu sayaçtan önce durdurur.
+    ...pieceGatedTap(brodePiece, widthGatedTap(measuredWidth, (vars, opts) => completeQc2Mutation.mutate(vars, opts))),
     refresh: () => void refetchActiveJob().catch(() => undefined),
     meter,
     stopOpen: machineStop.entryWarning,
@@ -1409,6 +1415,7 @@ export default function KursunQcScreen() {
               {(() => {
                 const processCard = tapLayout && selectedRoll.barcode ? (
                   <>
+                    {meter.outOn && <BrodePieceField state={brodePiece} hidden={selectedRoll.qc2Completed} />}
                     {meter.outOn && (
                       <MeterStrip meter={meter} acks={meterAcks} roll={selectedRoll} stepId={activeJob.stepSummary.workOrderStepId} />
                     )}

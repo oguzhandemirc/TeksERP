@@ -92,7 +92,8 @@ import {
   assertKursunTabletMayWrite,
   resolveStepBypassEligibility,
 } from "./helpers/kursun-bypass-eligibility.helper";
-import { effectiveTamburPlanWidthGate, resolveKursunBypassEnabled, resolveKursunMeterCapture, type KursunMeterCapture } from "./system-setting.service";
+import { effectiveTamburPlanWidthGate, readFinanceServiceBillingBrodeUnit, resolveKursunBypassEnabled, resolveKursunMeterCapture, type KursunMeterCapture } from "./system-setting.service";
+import { BRODE_PROPERTY_CODE, brodePieceInputOf } from "./helpers/service-quantity.helper";
 import { uyari } from "../lib/logger";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
 import { processMeterNumber, requireProcessMeter } from "./helpers/roll-error-meter.helper";
@@ -236,6 +237,8 @@ interface StepSummary {
   /// H3b: sayaç kipi + sapma politikası (tablet `KursunStepSummary.meter`). OFF'ta anahtar YOK — eski
   /// istemci ve OFF fabrikanın yanıtı bayt-aynı; tablet alan yoksa OFF davranır.
   meter?: { capture: Exclude<KursunMeterCapture, "OFF">; policy: MeterPolicyCopy };
+  /// GK-H1b: brode istasyonunda ADET/VURUŞ fiyatlamasında tablet çıkış okumasına "Adet" ister. METER'de anahtar YOK.
+  pieceInput?: "PIECE" | "STITCH";
   rolls: RollSummary[];
 }
 
@@ -1829,6 +1832,11 @@ export class KursunQcService {
     const meterOn = capture !== "OFF";
     const meterPolicy = meterOn ? await resolveKursunMeterPolicy(prisma) : null;
     const meterBases = meterOn ? await loadRollMeterBases(prisma, stepId, rollIds) : null;
+    // GK-H1b: ayar yalnız sayaç açık brode istasyonunda okunur; diğer adımda sorgu da anahtar da yok.
+    const stationCodes = stationCaps.map((c) => c.code);
+    const pieceInput = meterOn && stationCodes.includes(BRODE_PROPERTY_CODE)
+      ? brodePieceInputOf({ meterOn, stationPropertyCodes: stationCodes, brodeUnit: await readFinanceServiceBillingBrodeUnit() })
+      : null;
     // D4-KUC3b: eşik tek kaynaktan (Tambur en kapısı ayarı); en ölçmeyen istasyonda okunmaz, anahtar eklenmez.
     const widthToleranceCm = step.station.capturesWidth ? (await effectiveTamburPlanWidthGate()).toleranceCm : null;
     const rolls: RollSummary[] = openMovements.map((m) => {
@@ -1897,6 +1905,7 @@ export class KursunQcService {
             ? await this.describeEmptyStep(step.workOrderId, step.stepSequence)
             : null,
         ...(meterOn && meterPolicy ? { meter: { capture, policy: meterPolicy } } : {}),
+        ...(pieceInput ? { pieceInput } : {}),
         rolls,
       },
     };

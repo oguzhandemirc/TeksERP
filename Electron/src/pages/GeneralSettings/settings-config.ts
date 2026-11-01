@@ -2373,13 +2373,14 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         enumKey: "financeServiceBillingBrodeUnit",
         title: "Brode hangi birimle fiyatlansın",
         summary: "Brode işi metreyle mi, adetle mi, vuruşla mı faturalansın.",
-        desc: "Şimdilik yalnız Metre seçilebilir: Adet ve Vuruş, tablette brode adedi girilebildiğinde açılacak (o güne kadar brode işleri faturaya giremezdi). Adet kipinde dış (fason) brode ve okumasız işler faturaya girmez. Fiyat kartındaki satırın birimi bu seçimle aynı olmalı; değilse satır fiyatsız gelir ve uyarı görünür.",
+        desc: "Adet tabletteki brode okumasında girilir; Vuruş = adet × desen vuruşu. Adet ve Vuruş için «Kurşun makinesinde metre ölçülsün» ayarı açık olmalı (adet o okumayla girilir); adedi girilmemiş iş, dış (fason) brode ve okumasız işler faturaya girmez, uyarıda listelenir. Fiyat kartındaki satırın birimi bu seçimle aynı olmalı; değilse satır fiyatsız gelir ve uyarı görünür.",
         defaultValue: "METER",
         display: "radio",
         audience: ["Muhasebeci"],
         options: [
           { value: "METER", label: "Metre (bugünkü)", hint: "İşin ölçülen metresi." },
-          // PIECE/STITCH: tablette brode adet girişi inene kadar gizli (sunucu da 400 BRODE_UNIT_NO_PIECE_INPUT verir).
+          { value: "PIECE", label: "Adet", hint: "Tabletteki brode okumasında girilen adet." },
+          { value: "STITCH", label: "Vuruş", hint: "Adet × desenin vuruş sayısı (Kumaş özellikleri → desen)." },
         ],
       },
       {

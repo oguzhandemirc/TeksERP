@@ -970,6 +970,11 @@ export interface KursunStepSummary {
       approvalMode: 'NONE' | 'OPERATOR_REASON' | 'SUPERVISOR_PIN' | 'OFFICE';
     };
   } | null;
+  /**
+   * GK-H1b: brode ADET/VURUŞ fiyatlamasında çıkış okumasına "Adet" girişi istenir. Yalnız sayaç açık
+   * brode istasyonunda gelir; METER ya da eski backend → alan yok → giriş çizilmez, gövde bayt-aynı.
+   */
+  pieceInput?: 'PIECE' | 'STITCH' | null;
   rolls: KursunRollSummary[];
 }
 
