@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ReorderableTabBar } from "@/components/layout/ReorderableTabBar";
-import { classifyBarcode, matchesFullFormat } from "@/lib/scanner/barcode-kind";
+import { canOpenRollDetail } from "@/lib/scanner/roll-open-gate";
+import { useCustomerCodeChoice } from "@/components/scanner/useCustomerCodeChoice";
 import { useTabOrder } from "@/hooks/useTabOrder";
 import { useDataTable } from "@/hooks/useDataTable";
 import { useMultiWarehouse } from "@/hooks/useWarehouses";
@@ -108,16 +109,18 @@ export function RollsPage() {
   // Barkod → topu getir → detay panelini aç (404 toast'ı interceptor'dan).
   // Not: okut/ara input'u + "okutunca aç" tercihi RollScanBar'a taşındı (perf:
   // tuş vuruşu artık RollsPage'i / tabloyu re-render etmez).
+  // Müşteri kodu belirsizse (409 CUSTOMER_CODE_AMBIGUOUS) aday modalı; seçim iç barkodla tekrarlar.
+  const codeChoice = useCustomerCodeChoice();
   const scanLookup = useMutation({
-    mutationFn: (code: string) => rollService.getByBarcode(code),
-    onSuccess: (res) => setScanRoll(res.data ?? null),
+    mutationFn: (code: string) => codeChoice.resolveScan(code, (c) => rollService.getByBarcode(c)),
+    onSuccess: (res) => { if (res) setScanRoll(res.data ?? null); },
   });
   // Detayı aç (açık niyet: "Aç" butonu / useScanSeed navigasyonu / okutma+toggle-açık).
   // Yalnız TAM-FORMAT top barkodunda dener — gevşek ön ek çapası değil tam
   // biçim ki "TEKSTİL BEYAZ" gibi kumaş adı yanlışlıkla barkod sayılıp 404
   // toast'ı vermesin. Biçim sunucunun seri tablosundan gelir.
   const openDetail = (code: string) => {
-    if (!matchesFullFormat("ROLL", classifyBarcode(code).code)) return;
+    if (!canOpenRollDetail(code, flags?.scanCustomerCodeLookupEnabled === true)) return;
     scanLookup.mutate(code);
   };
   const orderedTabs = ordered.flatMap((k) => {
@@ -319,7 +322,8 @@ export function RollsPage() {
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-2">
         {/* Okut/ara kutusu + "Aç" + toggle — izole alt bileşen (perf: tuş vuruşu
             tabloyu re-render etmesin). */}
-        <RollScanBar openDetail={openDetail} scanPending={scanLookup.isPending} />
+        <RollScanBar openDetail={openDetail} scanPending={scanLookup.isPending} customerCodeLookup={flags?.scanCustomerCodeLookupEnabled === true} />
+        {codeChoice.dialog}
         {/* Tablo araçları (Sütunlar/Görünümler) + "Fire" toggle okut/ara satırında,
             en sağda. KANBAN'da rulo tablosu yok → gizli. */}
         {isTableTab && (
