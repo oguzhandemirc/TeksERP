@@ -168,9 +168,10 @@ async function main(): Promise<void> {
     SUPERADMIN_ONLY_FLAG_KEYS.has("reportsClosedKeys"));
   check("§4b ⭐ modül kümesi KİRLENMEDİ (rapor listesi modül anahtarı DEĞİL)",
     // Modül sayısı sabit DEĞİL (G3 `emanetEnabled` ekledi) — ölçülen şey kümenin İLİŞKİSİ: rapor listesi modül
-    // anahtarı değildir ve süperadmin kümesi = modül kümesi + yalnız o anahtar.
+    // anahtarı değildir ve süperadmin kümesi = modül kümesi + rapor listesi + web 2FA politikası (2026-11-01).
     !MODULE_FLAG_KEYS.has("reportsClosedKeys")
-      && SUPERADMIN_ONLY_FLAG_KEYS.size === MODULE_FLAG_KEYS.size + 1
+      && !MODULE_FLAG_KEYS.has("webTotpPolicy")
+      && SUPERADMIN_ONLY_FLAG_KEYS.size === MODULE_FLAG_KEYS.size + 2
       && [...MODULE_FLAG_KEYS].every((k) => SUPERADMIN_ONLY_FLAG_KEYS.has(k)),
     `MODULE_FLAG_KEYS ${MODULE_FLAG_KEYS.size} · SUPERADMIN_ONLY ${SUPERADMIN_ONLY_FLAG_KEYS.size}`);
   check("§4c ham ayar anahtarı da rezerve (`reports.closedKeys`)",

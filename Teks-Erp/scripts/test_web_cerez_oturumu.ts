@@ -18,6 +18,10 @@
 //   §11 lisans durumu ucu çerezi görür: geçerli çerez ayrinti:true, çöp çerez 401, çerezsiz ayrinti:false.
 //   §12 çerez JWT'si izin taşımaz (tam katalogla < 4096 bayt), gövde + /auth/me dolu, izinli uç 200 /
 //       izinsiz 403; Bearer (Electron) ve panel kipi kapalı JSON token claim'i bugünkü gibi dolu.
+//   §13 iki katmanlı web 2FA (2026-11-01): politika `auth.webTotpPolicy` REQUIRED'da opt-out etkisiz;
+//       USER_CHOICE ∧ opt-out → kurulumsuz ve kodsuz giriş; opt-out değil → bugünkü; süperadmin hep kod
+//       (CHECK + 403); kendi-uç kapatma parolasız/kodsuz 400, REQUIRED'da 409, başkası adına yazma yok,
+//       genel kullanıcı güncelleme ucu alanı yazamaz; politika yalnız süperadmin (403) ve ham uçtan rezerve.
 // İzolasyon: TEST kullanıcıları + giriş yöntemi ayarı anlık görüntüsü; finally geri yükler/siler. DB GEREKİR.
 // =============================================================================
 import prisma from "../src/lib/prisma"; // İLK import: dotenv.config()
@@ -31,6 +35,7 @@ import { AuthService } from "../src/services/auth.service";
 import { TotpAccountService } from "../src/services/totp-account.service";
 import { totpCodeForStep, totpStep } from "../src/services/totp.service";
 import { SETTING_KEYS, invalidateFeatureFlagsCache } from "../src/services/system-setting.service";
+import { WebTotpService } from "../src/services/web-totp.service";
 import { setShortCredentialKeyDirForTests } from "../src/lib/short-credential/keyring";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { reconcilePermissionCatalog } from "../src/jobs/permission-catalog.job";
@@ -154,6 +159,12 @@ async function main(): Promise<void> {
   setShortCredentialKeyDirForTests(mkdtempSync(join(tmpdir(), "ef-a-halka-")));
   const methodsKey = SETTING_KEYS.AUTH_LOGIN_METHODS;
   const methodsOnce = await prisma.systemSetting.findUnique({ where: { key: methodsKey }, select: { value: true } });
+  const policyKey = SETTING_KEYS.AUTH_WEB_TOTP_POLICY;
+  const policyOnce = await prisma.systemSetting.findUnique({ where: { key: policyKey }, select: { value: true } });
+  const politika = async (v: "REQUIRED" | "USER_CHOICE") => {
+    await prisma.systemSetting.upsert({ where: { key: policyKey }, create: { key: policyKey, value: v }, update: { value: v } });
+    invalidateFeatureFlagsCache();
+  };
 
   const app = await sunucuUygulamasi();
   const server = app.listen(0, "127.0.0.1");
@@ -370,11 +381,15 @@ async function main(): Promise<void> {
     const zc2 = await call("POST", "/api/auth/change-password", { cookie: zc, csrf: true, body: yeni });
     check("§9d change-password çerez + CSRF ile 200 + çerez silinir", zc2.status === 200 && silenCerez(zc2.setCookie),
       `status=${zc2.status} code=${String(zc2.body.details?.code)} msg=${zc2.body.message ?? ""}`);
+
+    await webTotpIkiKatman({ giris, call, aktorId: aktor.id, politika, policyKey });
   } finally {
     panelKapat(ozgunEnv);
     await new Promise<void>((r) => server.close(() => r()));
     if (methodsOnce === null) await prisma.systemSetting.deleteMany({ where: { key: methodsKey } }).catch(() => undefined);
     else await prisma.systemSetting.update({ where: { key: methodsKey }, data: { value: methodsOnce.value as never } }).catch((e) => check("ayar geri yükleme", false, String(e)));
+    if (policyOnce === null) await prisma.systemSetting.deleteMany({ where: { key: policyKey } }).catch(() => undefined);
+    else await prisma.systemSetting.update({ where: { key: policyKey }, data: { value: policyOnce.value as never } }).catch((e) => check("politika geri yükleme", false, String(e)));
     invalidateFeatureFlagsCache();
     await prisma.userRecoveryCode.deleteMany({ where: { userId: { in: ids } } }).catch(() => undefined);
     await prisma.totpEnrollment.deleteMany({ where: { OR: [{ userId: { in: ids } }, { openedById: { in: ids } }] } }).catch(() => undefined);
@@ -387,6 +402,107 @@ async function main(): Promise<void> {
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
   process.exitCode = fail > 0 ? 1 : 0;
+}
+
+type Giris = (username: string, clientType: string, ek?: Record<string, unknown>) => Promise<Yanit>;
+type Call = (method: string, p: string, opt?: { bearer?: string; cookie?: string; csrf?: boolean; body?: unknown }) => Promise<Yanit>;
+const kodu = (r: Yanit) => `${r.status}:${r.body.details?.code ?? ""}`;
+async function servisSonuc(fn: () => Promise<unknown>): Promise<string> {
+  try { await fn(); return "200"; }
+  catch (e) { const x = e as { statusCode?: number; details?: { code?: string } }; return `${x.statusCode}:${x.details?.code ?? ""}`; }
+}
+
+async function webTotpIkiKatman(o: {
+  giris: Giris; call: Call; aktorId: string; politika: (v: "REQUIRED" | "USER_CHOICE") => Promise<void>; policyKey: string;
+}): Promise<void> {
+  const { giris, call, politika } = o;
+  console.log("\n=== §13 web 2FA: politika + kullanıcı tercihi ===");
+  panelAc();
+  const uOpt = await kullanici("opt", ["roll:read", "web:access"]);
+  const uOptT = await kullanici("optt", ["roll:read", "web:access"]);
+  const uNoOpt = await kullanici("noopt", ["roll:read", "web:access"]);
+  const uKendi = await kullanici("kendi", ["roll:read", "web:access"]);
+  const uAdm = await kullanici("adm", ["roll:read", "admin:users", "admin:settings"]);
+  const sOptT = await totpKur(uOptT.id, o.aktorId);
+  await prisma.user.updateMany({ where: { id: { in: [uOpt.id, uOptT.id] } }, data: { webTotpOptOut: true } });
+
+  // REQUIRED (varsayılan): opt-out etkisiz — bugünkü davranış bayt-aynı.
+  await politika("REQUIRED");
+  const a1 = await giris(uOpt.username, "web");
+  check("§13a REQUIRED: opt-out'lu ama kurulumsuz → 403 TOTP_ENROLLMENT_REQUIRED (tercih etkisiz)", kodu(a1) === "403:TOTP_ENROLLMENT_REQUIRED", kodu(a1));
+  const a2 = await giris(uOptT.username, "web");
+  check("§13a' REQUIRED: opt-out'lu + kurulu, kodsuz → 409 TOTP_REQUIRED", kodu(a2) === "409:TOTP_REQUIRED", kodu(a2));
+
+  await politika("USER_CHOICE");
+  const b1 = await giris(uOpt.username, "web");
+  check("§13b ⭐ USER_CHOICE ∧ opt-out, TOTP kurulmamış → 200 + çerez", b1.status === 200 && cerezDegeri(b1.setCookie) !== null, kodu(b1));
+  const b2 = await giris(uOptT.username, "web");
+  check("§13c ⭐ USER_CHOICE ∧ opt-out, TOTP kurulu → kod SORULMADAN 200", b2.status === 200 && cerezDegeri(b2.setCookie) !== null, kodu(b2));
+  const b3 = await giris(uNoOpt.username, "web");
+  check("§13d USER_CHOICE ∧ opt-out değil → 403 TOTP_ENROLLMENT_REQUIRED (bugünkü)", kodu(b3) === "403:TOTP_ENROLLMENT_REQUIRED", kodu(b3));
+  const b4 = await giris(uOptT.username, "electron");
+  check("§13d' masaüstü parola girişi tercihten etkilenmez: kurulu TOTP → 409", kodu(b4) === "409:TOTP_REQUIRED", kodu(b4));
+  void sOptT;
+
+  // Süperadmin: tercih yok sayılır ve yazılamaz.
+  const sa = await prisma.user.create({
+    data: { username: `TEST-webc-sa-${Date.now()}`, passwordHash: await AuthService.hashPassword(PAROLA), fullName: "TEST web sa", isSystemAccount: true },
+    select: { id: true, username: true },
+  });
+  ids.push(sa.id);
+  const c1 = await giris(sa.username, "web");
+  check("§13e ⭐ süperadmin USER_CHOICE'ta da kurulumsuz → 403 TOTP_ENROLLMENT_REQUIRED", kodu(c1) === "403:TOTP_ENROLLMENT_REQUIRED", kodu(c1));
+  const dbSed = await prisma.user.update({ where: { id: sa.id }, data: { webTotpOptOut: true } }).then(() => "yazıldı", () => "red");
+  check("§13f süperadminde opt-out DB CHECK'iyle yazılamaz", dbSed === "red", dbSed);
+  const c2 = await servisSonuc(() => WebTotpService.setOwnOptOut(sa.id, { optOut: true, currentPassword: PAROLA }));
+  check("§13g süperadmin kendi ucundan kapatamaz → 403 WEB_TOTP_SYSTEM_ACCOUNT", c2 === "403:WEB_TOTP_SYSTEM_ACCOUNT", c2);
+  await totpKur(sa.id, o.aktorId);
+  const c3 = await giris(sa.username, "web");
+  check("§13h ⭐ süperadmin USER_CHOICE'ta kodsuz → 409 TOTP_REQUIRED", kodu(c3) === "409:TOTP_REQUIRED", kodu(c3));
+
+  // Kendi-uç: kapatmak yeniden doğrulama ister, açmak serbest.
+  const kt = String((await giris(uKendi.username, "electron")).body.data?.token ?? "");
+  const admT = String((await giris(uAdm.username, "electron")).body.data?.token ?? "");
+  check("§13 fikstür: Bearer token'lar alındı", kt.length > 0 && admT.length > 0);
+  const d1 = await call("PUT", "/api/auth/web-totp", { bearer: kt, body: { optOut: true } });
+  check("§13i ⭐ parolasız kapatma → 400 CURRENT_PASSWORD_INVALID", kodu(d1) === "400:CURRENT_PASSWORD_INVALID", kodu(d1));
+  const d2 = await call("PUT", "/api/auth/web-totp", { bearer: kt, body: { optOut: true, currentPassword: "yanlis-parola-1" } });
+  check("§13j yanlış parola → 400 CURRENT_PASSWORD_INVALID", kodu(d2) === "400:CURRENT_PASSWORD_INVALID", kodu(d2));
+  const d3 = await servisSonuc(() => WebTotpService.setOwnOptOut(uNoOpt.id, { optOut: true, currentPassword: PAROLA }));
+  const sNo = await totpKur(uNoOpt.id, o.aktorId);
+  const d4 = await servisSonuc(() => WebTotpService.setOwnOptOut(uNoOpt.id, { optOut: true, currentPassword: PAROLA }));
+  const d5 = await servisSonuc(() => WebTotpService.setOwnOptOut(uNoOpt.id, { optOut: true, currentPassword: PAROLA, totpCode: "000000" }));
+  check("§13k ⭐ TOTP kurulu hesapta kodsuz kapatma 400 TOTP_REQUIRED, yanlış kod 400 TOTP_INVALID",
+    d3 === "200" && d4 === "400:TOTP_REQUIRED" && d5 === "400:TOTP_INVALID", `kurulumsuz=${d3} kodsuz=${d4} yanlış=${d5}`);
+  void sNo;
+  const d6 = await call("PUT", "/api/auth/web-totp", { bearer: kt, body: { optOut: true, currentPassword: PAROLA, userId: uNoOpt.id } });
+  check("§13l başkası adına yazma alanı yok: gövdede userId → 400", d6.status === 400, kodu(d6));
+  const d7 = await call("PUT", "/api/auth/web-totp", { bearer: kt, body: { optOut: true, currentPassword: PAROLA } });
+  const kendiSatir = await prisma.user.findUnique({ where: { id: uKendi.id }, select: { webTotpOptOut: true } });
+  check("§13m doğru parolayla kapatma → 200 + kayıt", d7.status === 200 && kendiSatir?.webTotpOptOut === true && d7.body.data?.effective === true, kodu(d7));
+  const iz = await prisma.systemLog.count({ where: { tableName: "USER_WEB_TOTP", recordId: uKendi.id } });
+  check("§13n değişim audit'e girdi (USER_WEB_TOTP)", iz >= 1, `${iz}`);
+  const d8 = await call("PUT", "/api/auth/web-totp", { bearer: kt, body: { optOut: false } });
+  check("§13o geri açmak serbest (parolasız 200)", d8.status === 200 && d8.body.data?.optOut === false, kodu(d8));
+  await politika("REQUIRED");
+  const d9 = await call("PUT", "/api/auth/web-totp", { bearer: kt, body: { optOut: true, currentPassword: PAROLA } });
+  check("§13p REQUIRED'da kapatma → 409 WEB_TOTP_POLICY_REQUIRED", kodu(d9) === "409:WEB_TOTP_POLICY_REQUIRED", kodu(d9));
+
+  // Yönetici başkasının tercihini değiştiremez; politika yalnız süperadmin.
+  // Hedef uKendi: §13o'da kendi ucundan geri açtı (false) — yönetici gövdesi onu true'ya çeviremez.
+  const e1 = await call("PATCH", `/api/admin/users/${uKendi.id}`, { bearer: admT, body: { fullName: "TEST web kendi", webTotpOptOut: true } });
+  const noOptSatir = await prisma.user.findUnique({ where: { id: uKendi.id }, select: { webTotpOptOut: true } });
+  check("§13q ⭐ genel kullanıcı güncelleme ucu webTotpOptOut YAZAMAZ", e1.status === 200 && noOptSatir?.webTotpOptOut === false, `${kodu(e1)} optOut=${String(noOptSatir?.webTotpOptOut)}`);
+  const e2 = await call("GET", `/api/admin/users/${uOpt.id}/totp`, { bearer: admT });
+  check("§13r yönetici tercihi GÖRÜR (salt okuma)", e2.status === 200 && e2.body.data?.webTotpOptOut === true, kodu(e2));
+  const e3 = await call("PATCH", "/api/feature-flags", { bearer: admT, body: { webTotpPolicy: "USER_CHOICE" } });
+  const polSatir = await prisma.systemSetting.findUnique({ where: { key: o.policyKey }, select: { value: true } });
+  check("§13s ⭐ süperadmin olmayan admin:settings politikayı yazamaz → 403 MODULE_FLAG_SUPERADMIN_ONLY, değer değişmedi",
+    kodu(e3) === "403:MODULE_FLAG_SUPERADMIN_ONLY" && polSatir?.value === "REQUIRED", `${kodu(e3)} değer=${JSON.stringify(polSatir?.value)}`);
+  const e4 = await call("PUT", `/api/admin/settings/${o.policyKey}`, { bearer: admT, body: { value: "USER_CHOICE" } });
+  check("§13t ham ayar ucu ikinci yazma yüzeyi açmaz → 400 MODULE_KEY_RESERVED", kodu(e4) === "400:MODULE_KEY_RESERVED", kodu(e4));
+  const e5 = await call("GET", "/api/admin/web-totp-summary", { bearer: admT });
+  check("§13u özet ucu politika + kapatan sayısı döner", e5.status === 200 && e5.body.data?.policy === "REQUIRED" && Number(e5.body.data?.optedOutCount) >= 2, kodu(e5));
 }
 
 main().catch(async (e) => {

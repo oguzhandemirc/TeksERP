@@ -711,6 +711,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "users", name: "users_default_password_change_order" },
   // G1: mühür yalnız sistem hesabında durabilir (bayrak düşerse mühür de düşer).
   { table: "users", name: "users_system_account_seal_only_system" },
+  // Web 2FA iki katman (2026-11-01): sistem hesabı web girişi kodunu kapatamaz.
+  { table: "users", name: "users_web_totp_opt_out_not_system_check" },
   // K-A3b (2026-09-25): göç satırının kaynağı yalnız preEpoch satırında ve kapalı kümeden.
   { table: "roll_status_events", name: "roll_status_events_pre_epoch_source_check" },
   { table: "rolls", name: "rolls_initialQty_nonneg" },

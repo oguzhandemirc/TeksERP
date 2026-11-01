@@ -32,5 +32,8 @@ router.post("/change-password", verifyTokenAllowPasswordChange, AuthController.c
 // Self-service UI tercihleri (ekstra permission gerekmez — kendi kaydı)
 router.get("/preferences", verifyToken, UserPreferenceController.getMine);
 router.put("/preferences", verifyToken, UserPreferenceController.updateMine);
+// Kendi hesabında web girişi TOTP tercihi (2026-11-01) — yalnız KENDİ kaydı; başkası adına uç yok.
+router.get("/web-totp", verifyToken, AuthController.webTotpGet);
+router.put("/web-totp", verifyToken, AuthController.webTotpSet);
 
 export default router;

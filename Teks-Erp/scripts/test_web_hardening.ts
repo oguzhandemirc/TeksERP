@@ -746,13 +746,14 @@ function sectionWiring(): void {
     /hardening\.swaggerEnabled/.test(srvSrc) && !/NODE_ENV !== "production"[\s\S]{0,80}Swagger/.test(srvSrc),
   );
 
-  // Üç giriş yolu da KİMLİKLİ anahtar çözüyor (iki argümanlı çağrı); parola değişimi ayrı `cp:` kovası.
+  // Üç giriş yolu da KİMLİKLİ anahtar çözüyor (iki argümanlı çağrı); parola değişimi `cp:`, web 2FA kapatma `wt:` ayrı kova.
   const calls = authSrc.match(/resolveLoginLockoutKeys\(\s*req\s*,/g) ?? [];
   const cpCalls = authSrc.match(/resolveLoginLockoutKeys\(\s*req\s*,\s*`cp:/g) ?? [];
+  const wtCalls = authSrc.match(/resolveLoginLockoutKeys\(\s*req\s*,\s*`wt:/g) ?? [];
   check(
-    "üç giriş yolu da resolveLoginLockoutKeys(req, kimlik) çağırıyor (+ parola değişimi ayrı `cp:` kovası)",
-    calls.length - cpCalls.length === 3 && cpCalls.length === 1,
-    `${calls.length} çağrı · cp ${cpCalls.length}`,
+    "üç giriş yolu da resolveLoginLockoutKeys(req, kimlik) çağırıyor (+ parola değişimi `cp:`, web 2FA `wt:` ayrı kova)",
+    calls.length - cpCalls.length - wtCalls.length === 3 && cpCalls.length === 1 && wtCalls.length === 1,
+    `${calls.length} çağrı · cp ${cpCalls.length} · wt ${wtCalls.length}`,
   );
   check(
     "eski tek-argümanlı resolveLoginLockoutKey artık controller'da kullanılmıyor",

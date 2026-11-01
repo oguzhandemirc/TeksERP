@@ -96,6 +96,14 @@ export interface TotpStatus {
   enabledAt: string | null;
   /** Kullanılmamış kurtarma kodu sayısı — "1 kod kaldı" uyarısının kaynağı. */
   remainingRecoveryCodes: number;
+  /** Kullanıcı KENDİ hesabında web girişi kodunu kapattı (salt okuma; yönetici değiştiremez). Eski backend: yok. */
+  webTotpOptOut?: boolean;
+}
+
+/** Sistem sayfası uyarısı: web 2FA politikası + kendi hesabında kapatmış aktif kullanıcı sayısı. */
+export interface WebTotpSummary {
+  policy: "REQUIRED" | "USER_CHOICE";
+  optedOutCount: number;
 }
 
 /** Açılan kurulum penceresi. ⚠️ Sır DÖNMEZ — QR'ı kullanıcı kendi penceresinde okur. */
@@ -212,6 +220,11 @@ export const adminUserService = {
   getTotpStatus: (userId: string): Promise<ApiResponse<TotpStatus>> =>
     apiClient
       .get<ApiResponse<TotpStatus>>(`/api/admin/users/${userId}/totp`)
+      .then((r) => r.data),
+
+  getWebTotpSummary: (): Promise<ApiResponse<WebTotpSummary>> =>
+    apiClient
+      .get<ApiResponse<WebTotpSummary>>("/api/admin/web-totp-summary", { suppressErrorToast: true })
       .then((r) => r.data),
 
   /** 15 dk ömürlü, TEK KULLANIMLIK kurulum penceresi açar. */

@@ -16,7 +16,7 @@
 | Okuma önceliği | `Authorization` başlığı varsa çerez HİÇ okunmaz. |
 | CSRF | Çerezle kimliklenen ve yöntemi `GET/HEAD/OPTIONS` olmayan her istekte `X-TeksERP-CSRF: 1` zorunlu; yoksa 403 `details.code = "CSRF_REQUIRED"`. Aynı origin ⇒ CORS ayarı değişmez, `withCredentials` gerekmez. |
 | Kanal damgası | Mevcut `Session.deviceType = WEB`. Çerezle gelen istek yalnız `deviceType=WEB` oturumla kabul edilir (değilse 401). Migration YOK. |
-| TOTP | Çerez kipinde web girişi TOTP'siz tamamlanmaz: TOTP kurulmamışsa 403 `TOTP_ENROLLMENT_REQUIRED`, kod yoksa 409 `TOTP_REQUIRED`, yanlışsa 401 `TOTP_INVALID` (mevcut kodlar). Dal tek boğazda: `assertSecondFactor`. |
+| TOTP | Çerez kipinde web girişi TOTP'siz tamamlanmaz: TOTP kurulmamışsa 403 `TOTP_ENROLLMENT_REQUIRED`, kod yoksa 409 `TOTP_REQUIRED`, yanlışsa 401 `TOTP_INVALID` (mevcut kodlar). Dal tek boğazda: `assertSecondFactor`. İstisna (2026-11-01): süperadmin politikayı `auth.webTotpPolicy=USER_CHOICE` yaparsa kendi hesabında `webTotpOptOut` açan kullanıcıya ne kurulum ne kod sorulur; sistem hesabı hep kod verir (arşiv `2026-11.md`). |
 | İzin | Çerez kipinde web girişi `web:access` izni olmadan 403 `details.code = "WEB_ACCESS_DENIED"`. İzin `mobile:` önekli DEĞİL; rol şablonlarına varsayılan atanmaz. İstisna: katalogla otomatik eşitlenen "Admin (Tam Yetki)" (`ADMIN_FULL`, `mode:"all"`) izni taşır — tam yetki kabul edildi, TOTP yine zorunlu. |
 | Çıkış | `POST /api/auth/logout` (CSRF başlıklı) oturumu iptal eder + `Set-Cookie: tekserp_oturum=; Max-Age=0`. |
 | Oturum yoklama | Web istemcisi açılışta `GET /api/auth/me` ile oturumu yoklar (JWT çözmez). |
