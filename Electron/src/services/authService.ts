@@ -150,6 +150,8 @@ export const authService = {
   ): Promise<ChangePasswordResponse> =>
     apiClient
       .post<ChangePasswordResponse>("/api/auth/change-password", body, {
+        // Sunucu üç bcrypt + tx yapar; yüklü makinede genel 15 sn'yi aşabilir (yanıt kesilirdi).
+        timeout: 30_000,
         ...config,
         // Çerezli web oturumunda token yok: kısıtlı oturum çerezde, CSRF interceptor'dan.
         ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),

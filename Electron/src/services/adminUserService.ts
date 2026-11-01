@@ -207,8 +207,11 @@ export const adminUserService = {
       })
       .then((r) => r.data),
 
-  resetPassword: (userId: string, password: string): Promise<void> =>
-    apiClient.post(`/api/admin/users/${userId}/reset-password`, { password }).then(() => undefined),
+  /** `requireChange=false` → parola kalıcı (kullanıcı ilk girişte değiştirmek zorunda kalmaz). */
+  resetPassword: (userId: string, password: string, requireChange = true): Promise<void> =>
+    apiClient
+      .post(`/api/admin/users/${userId}/reset-password`, { password, requireChange })
+      .then(() => undefined),
 
   updateFullName: (userId: string, fullName: string): Promise<ApiResponse<AdminUserListItem>> =>
     apiClient

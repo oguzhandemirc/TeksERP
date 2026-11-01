@@ -1,5 +1,5 @@
 import { apiClient } from './api';
-import { BOOTSTRAP_TIMEOUT_MS } from '../constants/api';
+import { BOOTSTRAP_TIMEOUT_MS, CHANGE_PASSWORD_TIMEOUT_MS } from '../constants/api';
 import { DEFAULT_COMPANY_NAME } from './featureFlag.service';
 import type {
   LoginRequest,
@@ -49,7 +49,7 @@ export const authService = {
       .post(
         '/auth/change-password',
         { currentPassword, newPassword },
-        { headers: { Authorization: `Bearer ${token}` } },
+        { headers: { Authorization: `Bearer ${token}` }, timeout: CHANGE_PASSWORD_TIMEOUT_MS },
       )
       .then(() => undefined),
 
