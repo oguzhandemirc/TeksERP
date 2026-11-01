@@ -52,7 +52,7 @@ export const MODULE_FLAG_KEYS: ReadonlySet<string> = new Set([
 
 /**
  * `PATCH /api/feature-flags` gövdesinde SÜPERADMİN şartı doğuran anahtarların TAMAMI:
- * modül anahtarlarının hepsi + rapor görünürlük listesi.
+ * modül anahtarlarının hepsi + rapor görünürlük listesi + web girişi 2FA politikası.
  *
  * ⚠️ NEDEN `MODULE_FLAG_KEYS`i GENİŞLETMEDİK, ÜSTÜNE KÜME KURDUK: `reportsClosedKeys`
  * bir modül anahtarı DEĞİL — bağımlılık tablosuna girmez, profil sabitinde yaşamaz,
@@ -64,6 +64,8 @@ export const MODULE_FLAG_KEYS: ReadonlySet<string> = new Set([
 export const SUPERADMIN_ONLY_FLAG_KEYS: ReadonlySet<string> = new Set([
   ...MODULE_FLAG_KEYS,
   "reportsClosedKeys",
+  // Web girişinde 2FA'yı kullanıcı tercihine açmak kurulum güvenlik kararıdır; fabrika yöneticisi yazamaz (2026-11-01).
+  "webTotpPolicy",
 ]);
 
 /** Aynı modüllerin DB anahtarı (`system_settings.key`). */
@@ -85,12 +87,13 @@ export const MODULE_SETTING_KEYS: ReadonlySet<string> = new Set([
 
 /**
  * Ham ayar ucundan (`PUT /api/admin/settings/:key`) YAZILAMAYAN DB anahtarları:
- * modül anahtarlarının hepsi + `reports.closedKeys`. K7 kalıbı — ikinci bir yazma yüzeyi
+ * modül anahtarlarının hepsi + `reports.closedKeys` + `auth.webTotpPolicy`. K7 kalıbı — ikinci bir yazma yüzeyi
  * açılmaz, yoksa süperadmin kapısı (`flagWriteGuard`) etrafından dolaşılırdı.
  */
 export const SUPERADMIN_ONLY_SETTING_KEYS: ReadonlySet<string> = new Set([
   ...MODULE_SETTING_KEYS,
   "reports.closedKeys",
+  "auth.webTotpPolicy",
 ]);
 
 /**

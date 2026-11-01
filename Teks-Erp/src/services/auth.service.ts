@@ -52,6 +52,7 @@ import {
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { ekranYolu } from "../constants/panel-ekran-yolu";
 import { cookieLoginApplies } from "../lib/web-session-cookie";
+import { webTotpWaived } from "./web-totp.service";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { grantsDesktopPanel } from "../constants/permission-catalog";
 
@@ -539,6 +540,8 @@ export class AuthService {
    *   • PIN/kart, süperadmin (`isSystemAccount`): HER ZAMAN sorulur; 2FA kurulmamışsa giriş
    *     403 TOTP_ENROLLMENT_REQUIRED — PIN tek başına kimlik olduğu için ikinci faktörsüz kısa yol yok.
    *   • PIN/kart, diğerleri: TOTP açık ∧ `auth.shortCredentialTotpRequired` (varsayılan kapalı).
+   *   • Web (çerez kipi): TOTP zorunlu (kurulmamışsa 403). `auth.webTotpPolicy=USER_CHOICE` ∧ kullanıcı
+   *     kendi hesabında `webTotpOptOut` → ne kurulum ne kod istenir. Süperadmin web'de her zaman kod verir.
    * Kodlar giriş kilidine göre seçildi (yalnız 401 kaba kuvvet sayılır):
    *   • 409 TOTP_REQUIRED → kod istendi; kimlik denemesi DEĞİL (istemci kodu ekleyip tekrar POST eder).
    *   • 401 TOTP_INVALID  → yanlış kod; SAYILIR (TOTP uzayı 10^6, kilitsiz tahmin edilirdi).
@@ -548,7 +551,9 @@ export class AuthService {
     const shortPath = via !== "password";
     let isSystemAccount = false;
     // Bulut web paneli (çerez kipi, K4): giriş yolu ne olursa olsun TOTP zorunlu; kurulmamışsa giriş yok.
+    // USER_CHOICE politikasında kullanıcının kendi opt-out'u kodu kaldırır — süperadmin HARİÇ (opt-out yok sayılır).
     if (cookieLoginApplies(ctx?.clientType)) {
+      if (await webTotpWaived(userId)) return;
       if (!status.enabled) {
         throw AppError.forbidden(
           "Web paneline giriş için iki adımlı doğrulama kurulmalı. Yöneticinizden kurulum bağlantısı isteyin.",

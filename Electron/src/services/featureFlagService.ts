@@ -483,6 +483,9 @@ export interface FeatureFlags {
   deviceUnpairedPasswordLogin: boolean;
   /** 2FA'sı açık hesabın PIN/kart girişinde de kod sorulur mu (varsayılan false; süperadminde hep). */
   shortCredentialTotpRequired: boolean;
+  /** Web paneli (tarayıcı) girişi 2FA politikası: REQUIRED (varsayılan) | USER_CHOICE (kullanıcı kendi
+   *  hesabında kapatabilir). Yalnız süperadmin yazar; eski backend alanı döndürmez → REQUIRED say. */
+  webTotpPolicy: "REQUIRED" | "USER_CHOICE";
   /** Sevk onayı adımı zorunlu mu (false=default). Kapalıyken çuvallar seçilir seçilmez
    *  DOĞRUDAN sevk edilir (createShipment → DISPATCHED, stok o an düşer); açıkken önce
    *  PLANNED sevkiyat kurulur, çıkış ayrıca "Sevk Kapısı" ekranından onaylanır. */

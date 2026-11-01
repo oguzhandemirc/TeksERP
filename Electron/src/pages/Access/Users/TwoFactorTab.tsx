@@ -97,6 +97,11 @@ export function TwoFactorTab({ userId, username }: Props) {
           <p className="mt-1 text-muted-foreground">
             {TWO_FACTOR_HINT}
           </p>
+          {status?.webTotpOptOut && (
+            <p className="mt-1 font-medium text-amber-600" data-testid="web-2fa-kendi-tercihi">
+              Web 2FA: kapalı (kendi tercihi) — politika izin verdiği sürece internetten yalnız parolayla girer.
+            </p>
+          )}
           {status?.enabled && (
             <p className="mt-1 text-muted-foreground">
               Kalan kurtarma kodu:{" "}

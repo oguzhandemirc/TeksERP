@@ -10,6 +10,14 @@ import type {
 } from "@/types/auth";
 import { IS_ELECTRON } from "@/lib/runtime-env";
 
+export interface WebTotpOwnState {
+  policy: "REQUIRED" | "USER_CHOICE";
+  optOut: boolean;
+  effective: boolean;
+  totpEnabled: boolean;
+  canChange: boolean;
+}
+
 /**
  * Bu build hangi istemci tipi olarak giriş yapıyor.
  *
@@ -92,6 +100,18 @@ export const authService = {
    * kullanıcının bütün oturumlarını kapatır → çağıran yeni parolayla yeniden girer.
    * Hata UX'ini çağıran yönetir (`suppressErrorToast`, login deseni).
    */
+  /** Kendi hesabımda web (tarayıcı) girişi doğrulama kodu tercihi. Eski backend 404 → çağıran kartı gizler. */
+  getWebTotp: (): Promise<ApiResponse<WebTotpOwnState>> =>
+    apiClient
+      .get<ApiResponse<WebTotpOwnState>>("/api/auth/web-totp", { suppressErrorToast: true })
+      .then((r) => r.data),
+
+  /** Kapatmak parola + (kuruluysa) kod ister; açmak serbest. Hata UX'ini çağıran yönetir. */
+  setWebTotp: (body: { optOut: boolean; currentPassword?: string; totpCode?: string }): Promise<ApiResponse<WebTotpOwnState>> =>
+    apiClient
+      .put<ApiResponse<WebTotpOwnState>>("/api/auth/web-totp", body, { suppressErrorToast: true })
+      .then((r) => r.data),
+
   changePassword: (
     body: ChangePasswordRequest,
     token: string | null,

@@ -127,7 +127,7 @@ export function FeatureFlagSection({
   const lockNotes: string[] = [];
   if (lockedBySuperadmin) {
     lockNotes.push(
-      "Bu anahtarları yalnız sistem yöneticisi değiştirir. Modül açma/kapatma talebiniz için yazılım firmanıza başvurun.",
+      "Bu anahtarları yalnız sistem yöneticisi değiştirir. Değişiklik talebiniz için yazılım firmanıza başvurun.",
     );
   }
   // ⚠️ SUPAP DEVREDE — bilgi bandı (kilit DEĞİL, tersine: kilidin AÇIK olma

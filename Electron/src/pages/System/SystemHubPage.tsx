@@ -8,6 +8,7 @@ import { systemTiles, systemTileSections } from "./tile-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { flagOffHint } from "@/lib/flag-setting-path";
+import { WebTotpWarningBanner } from "./WebTotpWarningBanner";
 
 export function SystemHubPage() {
   const { isAdmin, hasPermission, hasAnyPermission } = useRoleAccess();
@@ -45,6 +46,7 @@ export function SystemHubPage() {
     <PageShell>
       <PageHeader title="Sistem" />
       <PageBody className="space-y-8 p-6">
+        <WebTotpWarningBanner />
         {systemTileSections.map((section) => {
           const tiles = visibleTiles.filter((t) => t.group === section.group);
           if (tiles.length === 0) return null;
