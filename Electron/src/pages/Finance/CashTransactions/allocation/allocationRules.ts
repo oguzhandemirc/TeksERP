@@ -1,15 +1,16 @@
 // =============================================================================
 // MASRAF BAĞI — saf kurallar (D4-H3). Bileşen ve API buradan okur; vitest burayı ölçer.
 // =============================================================================
-// Hedef tam olarak biri (makine · iş emri · hizmet kalemi); pay 0 < x ≤ 100, en çok 2 ondalık — backend
+// Hedef tam olarak biri (makine · terbiye iş emri · hizmet kalemi); pay 0 < x ≤ 100, en çok 2 ondalık — backend
 // `parseSharePct` + DB CHECK ile aynı sınır. Kalan pay sunucudan gelir (`remainingPct`); istemci Σ hesaplamaz.
 // =============================================================================
+import { TERIM } from "@/lib/terim";
 
 export type AllocationTargetType = "MACHINE" | "WORK_ORDER" | "SERVICE_ITEM";
 
 export const TARGET_TYPE_LABEL: Record<AllocationTargetType, string> = {
   MACHINE: "Makine",
-  WORK_ORDER: "İş emri",
+  WORK_ORDER: TERIM.terbiyeIsEmri.tekil,
   SERVICE_ITEM: "Hizmet kalemi",
 };
 

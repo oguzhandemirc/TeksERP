@@ -321,7 +321,7 @@ export const updateSchema = z.strictObject({
   financeExpenseCategorySuggestions: z.enum(["ON", "OFF"]).optional(),
   /** D4-H3: masraf bağı alanı (`EXPENSE_ALLOCATION_FIELD_MODES` ile birebir; REQUIRED serviste 400 — bağ adımı her yüzeyde yok). */
   financeExpenseAllocationField: z.enum(["OFF", "OPTIONAL", "REQUIRED"], { message: "Masraf bağı alanı OFF, OPTIONAL ya da REQUIRED olmalı" }).optional(),
-  financeExpenseAllocationClosedWorkOrder: z.enum(["ALLOW", "DENY"], { message: "Kapanmış iş emrine bağ ALLOW ya da DENY olmalı" }).optional(),
+  financeExpenseAllocationClosedWorkOrder: z.enum(["ALLOW", "DENY"], { message: "Kapanmış terbiye iş emrine bağ ALLOW ya da DENY olmalı" }).optional(),
   // finance.autoAllocateOnPaymentEnabled — tahsilat/ödemede FIFO otomatik kapama.
   // Artan tutar avansta kalır; otomatik tahsis elle silinebilir.
   financeAutoAllocateOnPaymentEnabled: z.boolean().optional(),

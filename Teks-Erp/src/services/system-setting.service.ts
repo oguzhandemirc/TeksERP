@@ -3258,14 +3258,14 @@ export class SystemSettingService {
           code: "EXPENSE_ALLOCATION_REQUIRED_UNAVAILABLE",
         });
       }
-      await this.set(SETTING_KEYS.FINANCE_EXPENSE_ALLOCATION_FIELD, v, "Kasa masraf formunda masraf bağı (makine / iş emri / hizmet kalemi) — kapalı · isteğe bağlı", userId);
+      await this.set(SETTING_KEYS.FINANCE_EXPENSE_ALLOCATION_FIELD, v, "Kasa masraf formunda masraf bağı (makine / terbiye iş emri / hizmet kalemi) — kapalı · isteğe bağlı", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "financeExpenseAllocationClosedWorkOrder")) {
       const v = input.financeExpenseAllocationClosedWorkOrder;
       if (typeof v !== "string" || !EXPENSE_ALLOCATION_CLOSED_WORK_ORDER_MODES.includes(v as ExpenseAllocationClosedWorkOrder)) {
         throw AppError.badRequest(`financeExpenseAllocationClosedWorkOrder şunlardan biri olmalı: ${EXPENSE_ALLOCATION_CLOSED_WORK_ORDER_MODES.join(", ")}`);
       }
-      await this.set(SETTING_KEYS.FINANCE_EXPENSE_ALLOCATION_CLOSED_WORK_ORDER, v, "Kapanmış iş emrine masraf bağı — serbest · engelli", userId);
+      await this.set(SETTING_KEYS.FINANCE_EXPENSE_ALLOCATION_CLOSED_WORK_ORDER, v, "Kapanmış terbiye iş emrine masraf bağı — serbest · engelli", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "financeCariHoldDefaultScope")) {
       const v = input.financeCariHoldDefaultScope;

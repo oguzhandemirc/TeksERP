@@ -2,6 +2,7 @@
 import { Briefcase, Cog, Wrench } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TERIM } from "@/lib/terim";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { machineService } from "@/pages/Machines/service";
 import type { Machine } from "@/pages/Machines/types";
@@ -32,7 +33,7 @@ function TargetPicker({ value, onChange }: Props) {
     return (
       <EntityPickerModal<WorkOrder> value={value.targetId} onChange={set} service={workOrderPickerService} queryKey="expense-alloc-work-orders"
         sortBy="createdAt" getLabel={(w) => w.workOrderNumber} getSubLabel={(w) => w.targetItem?.name ?? null} icon={Briefcase}
-        title="İş emri seç" placeholder="İş emri seç" triggerClassName="w-full" />
+        title={`${TERIM.terbiyeIsEmri.tekil} seç`} placeholder={`${TERIM.terbiyeIsEmri.tekil} seç`} triggerClassName="w-full" />
     );
   }
   return (
@@ -77,7 +78,7 @@ export function ExpenseLinkSection({ value, onChange }: Props) {
   return (
     <fieldset className="rounded-md border px-3 pb-3 pt-1">
       <legend className="px-1 text-xs font-medium">Bağla (isteğe bağlı)</legend>
-      <p className="mb-2 text-xs text-muted-foreground">Masraf bir makineye, iş emrine ya da hizmet kalemine aitse seçin; kârlılıkta doğrudan maliyet olur. Boş bırakılırsa genel giderde kalır.</p>
+      <p className="mb-2 text-xs text-muted-foreground">Masraf bir makineye, {TERIM.terbiyeIsEmri.cekimKucuk.yonelme} ya da hizmet kalemine aitse seçin; kârlılıkta doğrudan maliyet olur. Boş bırakılırsa genel giderde kalır.</p>
       <AllocationFields value={value} onChange={onChange} />
     </fieldset>
   );

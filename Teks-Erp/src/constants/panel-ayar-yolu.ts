@@ -44,6 +44,7 @@ export const PANEL_SETTING_ROW = {
   financeRiskLimitCurrencyMode: { ekran: "finance", baslik: "Risk limiti para birimi" },
   financeYarnOutOnInvoiceEnabled: { ekran: "finance", baslik: "Satış faturası onayında iplik stoktan düşsün" },
   financeFutureDatedDocumentBlockEnabled: { ekran: "finance", baslik: "İleri tarihli mali belgeyi engelle" },
+  financeExpenseAllocationField: { ekran: "finance", baslik: "Masrafı makineye / işe bağlama" },
   financeAutoAllocateOnPaymentEnabled: { ekran: "finance", baslik: "Tahsilat/ödemeyi en eski faturalara otomatik kapat (FIFO)" },
 } as const satisfies Record<string, { ekran: PanelSettingScreen; baslik: string }>;
 

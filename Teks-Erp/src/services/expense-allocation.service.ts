@@ -9,12 +9,15 @@
 import { Prisma, type ExpenseAllocation } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
+import { TERIM } from "../constants/terim";
+import { settingRowPath } from "../constants/panel-ayar-yolu";
 import type { ApiResponse } from "../types/api.types";
 import { AuditService } from "./audit.service";
 import { tokenReplay } from "./helpers/token-replay.helper";
 import { assertCashPeriodOpenTx } from "./helpers/cash-period-guard.helper";
 import {
   activeSharePct,
+  allocationTargetId,
   allocationTargetKey,
   assertAllocationTargetTx,
   assertShareWithinLimitTx,
@@ -67,7 +70,7 @@ export function parseSharePct(v: string | number): Prisma.Decimal {
 
 export async function assertExpenseAllocationEnabled(): Promise<void> {
   if ((await readFinanceExpenseAllocationField()) === "OFF") {
-    throw AppError.conflict("Masraf bağı fabrika ayarında kapalı (Genel Ayarlar › Finans › Masraf bağı).", { code: "EXPENSE_ALLOCATION_DISABLED" });
+    throw AppError.conflict(`Masraf bağı fabrika ayarında kapalı (${settingRowPath("financeExpenseAllocationField")}).`, { code: "EXPENSE_ALLOCATION_DISABLED" });
   }
 }
 
@@ -240,12 +243,12 @@ async function toRows(rows: ExpenseAllocation[]): Promise<ExpenseAllocationRow[]
   const users = userIds.length ? await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, fullName: true, username: true } }) : [];
   const label = new Map<string, string>([
     ...machines.map((m) => [m.id, `Makine: ${m.code} — ${m.name}`] as const),
-    ...wos.map((w) => [w.id, `İş emri: ${w.workOrderNumber}`] as const),
+    ...wos.map((w) => [w.id, `${TERIM.terbiyeIsEmri.tekil}: ${w.workOrderNumber}`] as const),
     ...items.map((i) => [i.id, `Hizmet: ${i.code} — ${i.name}`] as const),
   ]);
   const names = new Map(users.map((u) => [u.id, u.fullName || u.username]));
   return rows.map((r) => {
-    const targetId = (r.machineId ?? r.workOrderId ?? r.serviceItemId) as string;
+    const targetId = allocationTargetId(r);
     return {
       id: r.id,
       cashTransactionId: r.cashTransactionId,

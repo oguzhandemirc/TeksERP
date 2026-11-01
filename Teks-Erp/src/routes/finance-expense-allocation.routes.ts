@@ -33,7 +33,7 @@ const actor = (req: Request): string => {
 /** Hedef + pay — kasa masraf formundaki `allocation` gövdesiyle aynı alanlar (token hariç). */
 export const allocationFieldsSchema = {
   machineId: z.uuid({ error: "Makine geçersiz" }).nullable().optional(),
-  workOrderId: z.uuid({ error: "İş emri geçersiz" }).nullable().optional(),
+  workOrderId: z.uuid({ error: "Terbiye iş emri geçersiz" }).nullable().optional(),
   serviceItemId: z.uuid({ error: "Hizmet kalemi geçersiz" }).nullable().optional(),
   sharePct: z.union([z.string().trim().min(1).max(12), z.number()], { error: "Pay (%) zorunlu" }),
 };
@@ -53,7 +53,7 @@ const revokeSchema = z.strictObject({
  * /api/finance/cash-transactions/{id}/allocations:
  *   get:
  *     tags: [Finance]
- *     summary: Masrafın makine / iş emri / hizmet kalemi bağları + tarihçe (D4-H3)
+ *     summary: Masrafın makine / terbiye iş emri / hizmet kalemi bağları + tarihçe (D4-H3)
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }

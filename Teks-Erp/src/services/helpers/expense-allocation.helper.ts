@@ -7,6 +7,7 @@
 // =============================================================================
 import { CashTxnKind, ItemType, PaymentStatus, Prisma, WorkOrderStatus } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
+import { assertItemUsable } from "./item-usage.helper";
 import type { ExpenseAllocationClosedWorkOrder } from "../system-setting.service";
 
 export const EXPENSE_ALLOCATION_SHARE_MAX = new Prisma.Decimal(100);
@@ -29,12 +30,19 @@ export function normalizeAllocationTarget(input: {
   const t = { machineId: input.machineId || null, workOrderId: input.workOrderId || null, serviceItemId: input.serviceItemId || null };
   const filled = [t.machineId, t.workOrderId, t.serviceItemId].filter(Boolean).length;
   if (filled !== 1) {
-    throw AppError.badRequest("Masraf tam olarak BİR hedefe bağlanır: makine, iş emri ya da hizmet kalemi.", { code: "EXPENSE_ALLOCATION_TARGET" });
+    throw AppError.badRequest("Masraf tam olarak BİR hedefe bağlanır: makine, terbiye iş emri ya da hizmet kalemi.", { code: "EXPENSE_ALLOCATION_TARGET" });
   }
   return t;
 }
 
 /** Replay kimliği ve audit için hedefin tek satırlık anahtarı. */
+/** Bağın hedef kimliği (tam olarak biri dolu — DB CHECK); kalem çözücü değil, hedef seçicidir. */
+export function allocationTargetId(t: ExpenseAllocationTarget): string {
+  if (t.machineId) return t.machineId;
+  if (t.workOrderId) return t.workOrderId;
+  return t.serviceItemId as string;
+}
+
 export function allocationTargetKey(t: ExpenseAllocationTarget): string {
   if (t.machineId) return `machine:${t.machineId}`;
   if (t.workOrderId) return `workOrder:${t.workOrderId}`;
@@ -83,21 +91,20 @@ export async function assertAllocationTargetTx(
   }
   if (t.workOrderId) {
     const wo = await tx.workOrder.findUnique({ where: { id: t.workOrderId }, select: { workOrderNumber: true, status: true } });
-    if (!wo) throw AppError.notFound("İş emri bulunamadı.", { code: "WORK_ORDER_NOT_FOUND" });
+    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı.", { code: "WORK_ORDER_NOT_FOUND" });
     if (closedWorkOrder === "DENY" && CLOSED_WORK_ORDER_STATUSES.includes(wo.status)) {
-      throw AppError.conflict(`${wo.workOrderNumber} kapanmış — fabrika ayarı gereği kapanmış iş emrine masraf bağlanmaz.`, {
+      throw AppError.conflict(`${wo.workOrderNumber} kapanmış — fabrika ayarı gereği kapanmış terbiye iş emrine masraf bağlanmaz.`, {
         code: "WORK_ORDER_CLOSED",
         workOrderNumber: wo.workOrderNumber,
       });
     }
     return;
   }
-  const item = await tx.item.findUnique({ where: { id: t.serviceItemId as string }, select: { name: true, itemType: true, isActive: true } });
-  if (!item) throw AppError.notFound("Hizmet kalemi bulunamadı.", { code: "ITEM_NOT_FOUND" });
+  // Kart kullanım kararı TEK kaynaktan (pasif/birleşmiş → 409); bağ yeni kart referansı doğurmaz → kilitsiz kol.
+  const item = await assertItemUsable(tx, t.serviceItemId as string, "EXISTING_GOODS");
   if (item.itemType !== ItemType.SERVICE) {
     throw AppError.badRequest(`"${item.name}" bir hizmet kalemi değil.`, { code: "EXPENSE_ALLOCATION_NOT_SERVICE_ITEM" });
   }
-  if (!item.isActive) throw AppError.conflict(`"${item.name}" pasif — pasif hizmet kalemine yeni masraf bağlanmaz.`, { code: "ITEM_INACTIVE" });
 }
 
 /** Σ aktif pay + yeni pay ≤ 100. Masraf satırı kilitliyken çağrılır (kilit Σ okumasını serileştirir). */
