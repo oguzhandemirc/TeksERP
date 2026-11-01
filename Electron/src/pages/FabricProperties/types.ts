@@ -10,6 +10,8 @@ export interface FabricPropertyValue {
   isActive: boolean;
   /** Bu değer (gramaj çeşidi) hangi hizmet kalemiyle faturalanır (H6); null = özelliğe düşer. */
   serviceItemId?: string | null;
+  /** Brode deseni: bir adetteki vuruş sayısı (VURUŞ fiyat birimi); null = girilmedi. */
+  stitchCount?: number | null;
 }
 
 export interface FabricProperty {
