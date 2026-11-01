@@ -99,61 +99,59 @@ export function ReadyWorksTable({ rows, unit, unitLabel, onOpen }: { rows: Ready
     }
   };
   return (
-    <div className="overflow-x-auto rounded-md border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{unitLabel}</TableHead>
-            {unit !== "customer" && <TableHead className="hidden sm:table-cell">Müşteri</TableHead>}
-            <TableHead>Durum</TableHead>
-            <TableHead>İlerleme</TableHead>
-            <TableHead className="whitespace-nowrap text-right">Hazır</TableHead>
-            <TableHead className="hidden whitespace-nowrap text-right md:table-cell">İşlemde</TableHead>
-            <TableHead className="hidden whitespace-nowrap text-right lg:table-cell">Sevk edilen</TableHead>
-            <TableHead className="hidden whitespace-nowrap text-right lg:table-cell">Hedef</TableHead>
+    <Table containerClassName="overflow-visible">
+      <TableHeader>
+        <TableRow>
+          <TableHead>{unitLabel}</TableHead>
+          {unit !== "customer" && <TableHead className="hidden sm:table-cell">Müşteri</TableHead>}
+          <TableHead>Durum</TableHead>
+          <TableHead>İlerleme</TableHead>
+          <TableHead className="whitespace-nowrap text-right">Hazır</TableHead>
+          <TableHead className="hidden whitespace-nowrap text-right md:table-cell">İşlemde</TableHead>
+          <TableHead className="hidden whitespace-nowrap text-right lg:table-cell">Sevk edilen</TableHead>
+          <TableHead className="hidden whitespace-nowrap text-right lg:table-cell">Hedef</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((r) => (
+          <TableRow
+            key={`${r.unit}:${r.id}`}
+            role="button"
+            tabIndex={0}
+            className="cursor-pointer"
+            onClick={() => onOpen(r)}
+            onKeyDown={(e) => onKey(e, r)}
+            aria-label={`${r.label} toplarını aç`}
+          >
+            <TableCell className="min-w-[8rem] font-medium">
+              {r.label}
+              {unit === "customer" && <CariHoldBadge view={r.customerHold} />}
+            </TableCell>
+            {unit !== "customer" && (
+              <TableCell className="hidden sm:table-cell">
+                {r.customerName ?? "—"}
+                <CariHoldBadge view={r.customerHold} />
+              </TableCell>
+            )}
+            <TableCell>
+              <Badge variant={r.state === "READY" ? "default" : r.state === "PARTIAL" ? "secondary" : "muted"} className="whitespace-nowrap">
+                {STATE_LABEL[r.state]}
+              </Badge>
+            </TableCell>
+            <TableCell><ProgressCell row={r} /></TableCell>
+            <TableCell className="whitespace-nowrap text-right tabular-nums">
+              {r.readyCount} top
+              <div className="text-xs text-muted-foreground">{fmtM(r.readyMeters)}</div>
+            </TableCell>
+            <TableCell className="hidden whitespace-nowrap text-right tabular-nums md:table-cell">
+              {r.inProcessCount} top
+              <div className="text-xs text-muted-foreground">{fmtM(r.inProcessMeters)}</div>
+            </TableCell>
+            <TableCell className="hidden whitespace-nowrap text-right tabular-nums lg:table-cell">{fmtM(r.shippedMeters)}</TableCell>
+            <TableCell className="hidden whitespace-nowrap text-right tabular-nums lg:table-cell">{r.targetMeters == null ? "—" : fmtM(r.targetMeters)}</TableCell>
           </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((r) => (
-            <TableRow
-              key={`${r.unit}:${r.id}`}
-              role="button"
-              tabIndex={0}
-              className="cursor-pointer"
-              onClick={() => onOpen(r)}
-              onKeyDown={(e) => onKey(e, r)}
-              aria-label={`${r.label} toplarını aç`}
-            >
-              <TableCell className="min-w-[8rem] font-medium">
-                {r.label}
-                {unit === "customer" && <CariHoldBadge view={r.customerHold} />}
-              </TableCell>
-              {unit !== "customer" && (
-                <TableCell className="hidden sm:table-cell">
-                  {r.customerName ?? "—"}
-                  <CariHoldBadge view={r.customerHold} />
-                </TableCell>
-              )}
-              <TableCell>
-                <Badge variant={r.state === "READY" ? "default" : r.state === "PARTIAL" ? "secondary" : "muted"} className="whitespace-nowrap">
-                  {STATE_LABEL[r.state]}
-                </Badge>
-              </TableCell>
-              <TableCell><ProgressCell row={r} /></TableCell>
-              <TableCell className="whitespace-nowrap text-right tabular-nums">
-                {r.readyCount} top
-                <div className="text-xs text-muted-foreground">{fmtM(r.readyMeters)}</div>
-              </TableCell>
-              <TableCell className="hidden whitespace-nowrap text-right tabular-nums md:table-cell">
-                {r.inProcessCount} top
-                <div className="text-xs text-muted-foreground">{fmtM(r.inProcessMeters)}</div>
-              </TableCell>
-              <TableCell className="hidden whitespace-nowrap text-right tabular-nums lg:table-cell">{fmtM(r.shippedMeters)}</TableCell>
-              <TableCell className="hidden whitespace-nowrap text-right tabular-nums lg:table-cell">{r.targetMeters == null ? "—" : fmtM(r.targetMeters)}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+        ))}
+      </TableBody>
+    </Table>
   );
 }

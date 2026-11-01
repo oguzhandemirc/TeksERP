@@ -162,33 +162,31 @@ export function RepairShipmentTable({
   const sorted = [...rows].sort((a, b) => b.onarilabilirMetraj - a.onarilabilirMetraj);
   if (sorted.length === 0) return null;
   return (
-    <div className="overflow-x-auto rounded-md border">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 text-left">
-          <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
-            <th>Sevkiyat</th>
-            <th>Müşteri</th>
-            <th>Sipariş</th>
-            <th className="text-right">Çıkan</th>
-            <th className="text-right">Yazılan</th>
-            <th className="text-right">Eksik</th>
-            <th className="text-right">Onarılabilir</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((s) => (
-            <RepairShipmentRow
-              key={s.shipmentId}
-              s={s}
-              onSelect={onSelect}
-              onOrder={onOrder}
-              onShipment={onShipment}
-              busyId={busyId}
-            />
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <table className="w-full text-sm">
+      <thead className="bg-muted/50 text-left">
+        <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
+          <th>Sevkiyat</th>
+          <th>Müşteri</th>
+          <th>Sipariş</th>
+          <th className="text-right">Çıkan</th>
+          <th className="text-right">Yazılan</th>
+          <th className="text-right">Eksik</th>
+          <th className="text-right">Onarılabilir</th>
+          <th />
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map((s) => (
+          <RepairShipmentRow
+            key={s.shipmentId}
+            s={s}
+            onSelect={onSelect}
+            onOrder={onOrder}
+            onShipment={onShipment}
+            busyId={busyId}
+          />
+        ))}
+      </tbody>
+    </table>
   );
 }

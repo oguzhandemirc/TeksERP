@@ -27,6 +27,7 @@ import { lotQualityOf, qualityFilterParam, YARN_LOT_QUALITY, YARN_LOT_QUALITY_FI
 import { createYarnLot, listYarnLots, updateYarnLot, type YarnLotRow } from "./service";
 import { kg } from "./qty";
 import { factoryLocaleDateString } from "@/lib/factory-time";
+import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 
 const LOTS_KEY = ["yarn", "lots"] as const;
 
@@ -54,8 +55,8 @@ export function YarnLotsPanel() {
   });
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end gap-2">
+    <>
+      <ListToolbar className="flex-row flex-wrap items-end">
         <div className="w-72">
           <ReferenceSelect<Item> value={itemId} onChange={setItemId} service={itemService} queryKey="items-yarn-lots" getLabel={(it) => `${it.code} — ${it.name}`} placeholder="İplik (hepsi)" extraFilters={YARN_ITEM_FILTER} />
         </div>
@@ -69,29 +70,36 @@ export function YarnLotsPanel() {
             <Plus className="mr-1 h-4 w-4" /> Lot Aç
           </Button>
         </PermissionGate>
-      </div>
-      {q.isLoading ? (
-        <p className="text-sm text-muted-foreground">Yükleniyor…</p>
-      ) : q.isError ? (
-        <p className="text-sm text-destructive">Lot listesi yüklenemedi.</p>
-      ) : rows.length === 0 ? (
-        <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">Lot yok — lotlar mal kabulde iplik satırına lot numarası yazılınca kendiliğinden doğar; elle de açılabilir.</div>
-      ) : (
-        <LotTable rows={rows} onToggle={(r) => toggle.mutate(r)} busy={toggle.isPending} onDone={invalidate} />
-      )}
-      {q.hasNextPage && (
-        <Button variant="outline" size="sm" onClick={() => void q.fetchNextPage()} disabled={q.isFetchingNextPage}>
-          Daha fazla
-        </Button>
+      </ListToolbar>
+      <ListBody>
+        {q.isLoading ? (
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
+        ) : q.isError ? (
+          <ListMessage className="text-sm text-destructive">Lot listesi yüklenemedi.</ListMessage>
+        ) : rows.length === 0 ? (
+          <ListMessage>
+            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">Lot yok — lotlar mal kabulde iplik satırına lot numarası yazılınca kendiliğinden doğar; elle de açılabilir.</div>
+          </ListMessage>
+        ) : (
+          <LotTable rows={rows} onToggle={(r) => toggle.mutate(r)} busy={toggle.isPending} onDone={invalidate} />
+        )}
+      </ListBody>
+      {rows.length > 0 && (
+        <ListFooter loaded={rows.length} hasMore={Boolean(q.hasNextPage)} isFetchingMore={q.isFetchingNextPage}>
+          {q.hasNextPage && (
+            <Button variant="outline" size="sm" className="h-7" onClick={() => void q.fetchNextPage()} disabled={q.isFetchingNextPage}>
+              Daha fazla
+            </Button>
+          )}
+        </ListFooter>
       )}
       {creating && <CreateLotDialog defaultItemId={itemId} onClose={() => setCreating(false)} onDone={invalidate} />}
-    </div>
+    </>
   );
 }
 
 function LotTable({ rows, onToggle, busy, onDone }: { rows: YarnLotRow[]; onToggle: (r: YarnLotRow) => void; busy: boolean; onDone: () => void }) {
   return (
-        <div className="overflow-hidden rounded-md border">
       <table className="w-full text-sm">
         <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
           <tr>
@@ -138,7 +146,6 @@ function LotTable({ rows, onToggle, busy, onDone }: { rows: YarnLotRow[]; onTogg
           ))}
         </tbody>
       </table>
-    </div>
   );
 }
 

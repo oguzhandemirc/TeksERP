@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatFactory } from "@/lib/factory-time";
 import { Plus, FileText } from "lucide-react";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { RefreshButton } from "@/components/RefreshButton";
+import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,12 +48,15 @@ export function GoodsReceiptsPage() {
         title="Mal Kabul"
         description="Satın alınan malın depo girişi — fiş açılır, toplar girilir, barkod + etiket üretilir."
         actions={
-          <PermissionGate permission="goods-receipt:write">
-            <Button onClick={() => setFormOpen(true)}>
-              <Plus className="mr-1 h-4 w-4" />
-              Yeni Mal Kabul
-            </Button>
-          </PermissionGate>
+          <div className="flex flex-wrap gap-2">
+            <RefreshButton queryKey="goods-receipts" />
+            <PermissionGate permission="goods-receipt:write">
+              <Button onClick={() => setFormOpen(true)}>
+                <Plus className="mr-1 h-4 w-4" />
+                Yeni Mal Kabul
+              </Button>
+            </PermissionGate>
+          </div>
         }
       />
 
@@ -64,37 +69,40 @@ export function GoodsReceiptsPage() {
         />
       </div>
 
-      <PageBody className="p-6">
+      <ListBody>
         {q.isLoading ? (
-          <div className="text-sm text-muted-foreground">Yükleniyor…</div>
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
         ) : q.isError && rows.length === 0 ? (
           /* ⚠️ HATA, "HENÜZ FİŞ YOK"UN ÖNÜNDE: boş-durum cümlesi doğrudan
              "Yeni Mal Kabul" davetidir. Hata anında basılırsa depocu az önce
              kaydettiği fişi yok sanıp AYNI MALI ikinci kez girer — stok iki
              katına çıkar ve iki fişin de barkodları basılmış olur. */
-          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-            <p className="font-medium text-destructive">Mal kabul listesi yüklenemedi.</p>
-            <p className="mt-1 text-muted-foreground">
-              Bu bir “fiş yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi.
-              Yeni fiş açmadan önce tekrar deneyin; kaydettiğiniz fiş duruyor olabilir.
-            </p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-              Tekrar dene
-            </Button>
-          </div>
+          <ListMessage>
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+              <p className="font-medium text-destructive">Mal kabul listesi yüklenemedi.</p>
+              <p className="mt-1 text-muted-foreground">
+                Bu bir “fiş yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi.
+                Yeni fiş açmadan önce tekrar deneyin; kaydettiğiniz fiş duruyor olabilir.
+              </p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+                Tekrar dene
+              </Button>
+            </div>
+          </ListMessage>
         ) : rows.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-            Henüz mal kabul fişi yok. “Yeni Mal Kabul” ile tedarikçiden gelen malı depoya alın.
-          </div>
+          <ListMessage>
+            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+              Henüz mal kabul fişi yok. “Yeni Mal Kabul” ile tedarikçiden gelen malı depoya alın.
+            </div>
+          </ListMessage>
         ) : (
-          <div className="space-y-3">
+          <>
             {q.isError && (
-              <p className="rounded-md bg-amber-100 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+              <p className="border-b bg-amber-100 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
                 Liste tazelenemedi — aşağıdaki fişler son başarılı okumaya aittir; az önce
                 kaydedilmiş bir fiş burada görünmeyebilir.
               </p>
             )}
-            <div className="overflow-hidden rounded-lg border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                 <tr>
@@ -172,23 +180,24 @@ export function GoodsReceiptsPage() {
                 })}
               </tbody>
             </table>
-            </div>
             {/* KIRPMA SESSİZ DEĞİL (norm: CashTransactionsPage). */}
             {total > rows.length && (
-              <p className="text-xs text-amber-700 dark:text-amber-500">
+              <p className="border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
                 {total} fişin ilk {rows.length} tanesi gösteriliyor (en yeniden geriye).
                 Aradığınızı bulmak için fiş no / irsaliye no aramasını kullanın.
               </p>
             )}
-          </div>
+          </>
         )}
-        {rows.length > 0 && (
-          <p className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
+      </ListBody>
+      {rows.length > 0 && (
+        <ListFooter loaded={rows.length} total={total}>
+          <span className="flex items-center gap-1">
             <FileText className="h-3 w-3" />
             Satıra tıklayarak fişi açın; oradan fiş belgesini basabilir veya fişi iptal edebilirsiniz.
-          </p>
-        )}
-      </PageBody>
+          </span>
+        </ListFooter>
+      )}
 
       <GoodsReceiptFormDialog
         open={formOpen}

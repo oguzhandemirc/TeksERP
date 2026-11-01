@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshButton } from "@/components/RefreshButton";
 import { allocationRepairService, type RepairableShipment } from "./service";
@@ -73,32 +74,33 @@ export function AllocationRepairPage() {
         description="Mal çıkmış ama sipariş defterine işlenmemiş sevkiyatlar — tek tek onarılır."
         actions={<RefreshButton queryKey="allocation-repair" />}
       />
-      {/* p-6: PageBody varsayilan olarak dolgu TASIMAZ (bkz. PageShell basligi) —
-          verilmeyince ozet kutulari basligin dibine yapisiyordu. */}
-      <PageBody className="p-6">
+      {!liste.isLoading && (
+        <ListToolbar>
+          <RepairSummary
+            shipmentCount={satirlar.length}
+            gap={toplamBosluk}
+            repairableCount={onarilabilir.length}
+            gain={toplamKazanc}
+          />
+        </ListToolbar>
+      )}
+      <ListBody>
         {liste.isLoading ? (
-          <div className="space-y-2">
+          <ListMessage className="space-y-2">
             <Skeleton className="h-16 w-full" />
             <Skeleton className="h-40 w-full" />
-          </div>
+          </ListMessage>
         ) : (
-          <div className="space-y-4">
-            <RepairSummary
-              shipmentCount={satirlar.length}
-              gap={toplamBosluk}
-              repairableCount={onarilabilir.length}
-              gain={toplamKazanc}
-            />
-            <RepairShipmentTable
-              rows={satirlar}
-              onSelect={setOnizleme}
-              onOrder={setOrderId}
-              onShipment={setShipmentId}
-              busyId={mut.isPending ? (mut.variables as string | undefined) : undefined}
-            />
-          </div>
+          <RepairShipmentTable
+            rows={satirlar}
+            onSelect={setOnizleme}
+            onOrder={setOrderId}
+            onShipment={setShipmentId}
+            busyId={mut.isPending ? (mut.variables as string | undefined) : undefined}
+          />
         )}
-      </PageBody>
+      </ListBody>
+      {!liste.isLoading && satirlar.length > 0 && <ListFooter loaded={satirlar.length} />}
 
       <RepairPreviewDialog
         satir={onizleme}

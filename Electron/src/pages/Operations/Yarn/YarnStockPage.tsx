@@ -36,7 +36,9 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { RefreshButton } from "@/components/RefreshButton";
+import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useMultiWarehouse } from "@/hooks/useWarehouses";
@@ -62,6 +64,9 @@ interface MovementDraft {
   warehouseId: string | null;
   kind?: YarnMovementKind;
 }
+
+/** Sekme gövdesi: kalan yüksekliği doldurur; içindeki ListBody tek kaydırıcıdır. */
+const TAB_PANE = "mt-0 flex min-h-0 flex-1 flex-col";
 
 export function YarnStockPage() {
   const qc = useQueryClient();
@@ -109,63 +114,59 @@ export function YarnStockPage() {
         title="İplik Stoğu"
         description="İplik kg ile izlenir (top/barkod yok). Defter satırları silinmez — yanlış giriş ters kayıtla (sayım düzeltmesi) kapatılır."
         actions={
-          <PermissionGate permission="yarn:write">
-            <Button onClick={() => setDraft({ itemId: itemId ?? null, warehouseId: warehouseId || null })}>
-              <Plus className="mr-1 h-4 w-4" />
-              Hareket Ekle
-            </Button>
-          </PermissionGate>
+          <div className="flex flex-wrap gap-2">
+            <RefreshButton queryKey="yarn" />
+            <PermissionGate permission="yarn:write">
+              <Button onClick={() => setDraft({ itemId: itemId ?? null, warehouseId: warehouseId || null })}>
+                <Plus className="mr-1 h-4 w-4" />
+                Hareket Ekle
+              </Button>
+            </PermissionGate>
+          </div>
         }
       />
 
       {/* Devere Faz 2: "Lotlar" sekmesi — lot kaydı bayraksız her kurulumda mümkün (sekme hep çizilir). */}
-      <Tabs value={tab} onValueChange={(v) => setTab(v as "stok" | "lotlar")}>
-        <div className="px-6 pt-3">
-          <TabsList>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "stok" | "lotlar")} className="flex min-h-0 flex-1 flex-col">
+        <ListToolbar>
+          <TabsList className="self-start">
             <TabsTrigger value="stok">Stok</TabsTrigger>
             <TabsTrigger value="lotlar">Lotlar</TabsTrigger>
           </TabsList>
-        </div>
-        <TabsContent value="lotlar">
-          <PageBody className="p-6">
-            <YarnLotsPanel />
-          </PageBody>
+        </ListToolbar>
+        <TabsContent value="lotlar" className={TAB_PANE}>
+          <YarnLotsPanel />
         </TabsContent>
-        <TabsContent value="stok">
+        <TabsContent value="stok" className={TAB_PANE}>
       <YarnFilterBar value={filters} onChange={applyFilters} />
 
-      <PageBody className="p-6">
+      <ListBody>
         {q.isLoading ? (
-          <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
         ) : q.isError ? (
-          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-            <p className="font-medium text-destructive">İplik stok listesi yüklenemedi.</p>
-            <p className="mt-1 text-muted-foreground">
-              Bu bir “stok yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi. Defter yerinde
-              duruyor; hareket yazmadan önce tekrar deneyin.
-            </p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-              Tekrar dene
-            </Button>
-          </div>
+          <ListMessage>
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+              <p className="font-medium text-destructive">İplik stok listesi yüklenemedi.</p>
+              <p className="mt-1 text-muted-foreground">
+                Bu bir “stok yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi. Defter yerinde
+                duruyor; hareket yazmadan önce tekrar deneyin.
+              </p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+                Tekrar dene
+              </Button>
+            </div>
+          </ListMessage>
         ) : rows.length === 0 ? (
-          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-            {/* ⚠️ Cümle saf kuraldan gelir: varsayılan süzgeç (“yalnız bakiyesi
-                olanlar”) AÇIK olduğu için boş liste “hiç kayıt yok” DEMEK
-                DEĞİLDİR — bkz. `yarnEmptyStateMessage`. */}
-            {yarnEmptyStateMessage(filters)}
-          </div>
+          <ListMessage>
+            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+              {/* ⚠️ Cümle saf kuraldan gelir: varsayılan süzgeç (“yalnız bakiyesi
+                  olanlar”) AÇIK olduğu için boş liste “hiç kayıt yok” DEMEK
+                  DEĞİLDİR — bkz. `yarnEmptyStateMessage`. */}
+              {yarnEmptyStateMessage(filters)}
+            </div>
+          </ListMessage>
         ) : (
           <>
-            <div className="mb-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
-              <span>
-                Filtre toplamı: <b className="tabular-nums">{kg(q.data?.totals.balanceKg)}</b>
-              </span>
-              <span className="text-muted-foreground">
-                {total} satır{totalPages > 1 ? ` · sayfa ${page}/${totalPages}` : ""}
-              </span>
-            </div>
-
             <YarnStockTable
               rows={rows}
               showWarehouse={multiWarehouse}
@@ -174,7 +175,7 @@ export function YarnStockPage() {
             />
 
             {negativeCount > 0 && (
-              <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+              <div className="m-4 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
                   Bu sayfada <b>{negativeCount}</b> satırın bakiyesi eksi. Bu bir sistem hatası değildir:
@@ -184,33 +185,38 @@ export function YarnStockPage() {
               </div>
             )}
 
-            {totalPages > 1 && (
-              <div className="mt-3 flex items-center justify-end gap-2 text-sm">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1 || q.isFetching}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  Önceki
-                </Button>
-                <span className="text-muted-foreground">
-                  Sayfa {page} / {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= totalPages || q.isFetching}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  Sonraki
-                </Button>
-              </div>
-            )}
           </>
         )}
-      </PageBody>
-
+      </ListBody>
+      {rows.length > 0 && (
+        <ListFooter
+          loaded={rows.length}
+          label={
+            <span className="flex flex-wrap items-center gap-x-6 gap-y-1">
+              <span className="text-foreground">
+                Filtre toplamı: <b className="tabular-nums">{kg(q.data?.totals.balanceKg)}</b>
+              </span>
+              <span>
+                {total} satır{totalPages > 1 ? ` · sayfa ${page}/${totalPages}` : ""}
+              </span>
+            </span>
+          }
+        >
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="h-7" disabled={page <= 1 || q.isFetching} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                Önceki
+              </Button>
+              <span>
+                Sayfa {page} / {totalPages}
+              </span>
+              <Button variant="outline" size="sm" className="h-7" disabled={page >= totalPages || q.isFetching} onClick={() => setPage((p) => p + 1)}>
+                Sonraki
+              </Button>
+            </div>
+          )}
+        </ListFooter>
+      )}
         </TabsContent>
       </Tabs>
 

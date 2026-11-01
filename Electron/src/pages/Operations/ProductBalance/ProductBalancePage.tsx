@@ -3,7 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Input } from "@/components/ui/input";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
@@ -239,60 +240,59 @@ export function ProductBalancePage() {
       </div>
       <FilterBar filters={FILTERS} />
 
-      <PageBody className="flex flex-col p-4">
+      <ListBody>
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">Hesaplanıyor…</p>
+          <ListMessage className="text-sm text-muted-foreground">Hesaplanıyor…</ListMessage>
         ) : groups.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
+          <ListMessage className="text-sm text-muted-foreground">
             Açık talep veya üretimde kumaş yok.
-          </p>
+          </ListMessage>
         ) : filtered.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
+          <ListMessage className="text-sm text-muted-foreground">
             Filtreyle eşleşen kumaş yok.
-          </p>
+          </ListMessage>
         ) : (
-          <div className="min-h-0 flex-1 overflow-auto rounded-md border">
-            <table className="w-full text-sm tabular-nums">
-              <thead className="sticky top-0 z-10 bg-muted text-xs uppercase tracking-wide text-muted-foreground">
-                <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
-                  <th className="text-left">Kumaş</th>
-                  <th className="text-left" title="En (cm)">En</th>
-                  <th className="text-right" title="Açık siparişler (istenen − sevk)">
-                    Talep
-                  </th>
-                  <th className="text-right" title="Depoda hazır (sevksiz)">Depo</th>
-                  <th className="text-right" title="Canlı terbiye iş emirlerinde">Üretimde</th>
-                  <th
-                    className="text-right"
-                    title="İşlenecek ham kumaş — kumaş+renk havuzu (eni önemsiz)"
-                  >
-                    Ham
-                  </th>
-                  <th className="text-right" title="Talep − Depo − Üretimde">Üretilecek</th>
-                  <th className="text-right" />
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((g) => (
-                  <ProductBalanceRow
-                    key={g.key}
-                    group={g}
-                    isOpen={expanded.has(g.key)}
-                    onToggle={toggle}
-                    onOpenWo={openWo}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <table className="w-full text-sm tabular-nums">
+            <thead className="sticky top-0 z-10 bg-muted text-xs uppercase tracking-wide text-muted-foreground">
+              <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
+                <th className="text-left">Kumaş</th>
+                <th className="text-left" title="En (cm)">En</th>
+                <th className="text-right" title="Açık siparişler (istenen − sevk)">
+                  Talep
+                </th>
+                <th className="text-right" title="Depoda hazır (sevksiz)">Depo</th>
+                <th className="text-right" title="Canlı terbiye iş emirlerinde">Üretimde</th>
+                <th
+                  className="text-right"
+                  title="İşlenecek ham kumaş — kumaş+renk havuzu (eni önemsiz)"
+                >
+                  Ham
+                </th>
+                <th className="text-right" title="Talep − Depo − Üretimde">Üretilecek</th>
+                <th className="text-right" />
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((g) => (
+                <ProductBalanceRow
+                  key={g.key}
+                  group={g}
+                  isOpen={expanded.has(g.key)}
+                  onToggle={toggle}
+                  onOpenWo={openWo}
+                />
+              ))}
+            </tbody>
+          </table>
         )}
-        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+        <p className="border-t px-4 py-3 text-xs leading-relaxed text-muted-foreground">
           Üretilecek = Talep − Depo − Üretimde. Fabrika kumaş üretmez, işler —
           ham stok yetmiyorsa "ham açığı" kadar kumaş tedariki gerekir. Ham
           kumaşın eni önemsizdir: ham havuzu kumaş+renk düzeyinde tutulur, en'lere
           bölünmez (renksiz ham boyanacağı için her renge sayılır).
         </p>
-      </PageBody>
+      </ListBody>
+      {!isLoading && <ListFooter loaded={filtered.length} total={groups.length} />}
 
       <ProductBalanceWoDialog
         spec={woTarget}

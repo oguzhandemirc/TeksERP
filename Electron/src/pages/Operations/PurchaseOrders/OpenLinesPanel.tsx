@@ -34,6 +34,7 @@ import {
 import { fmtQty, listOpenLines, type OpenLineRow } from "./service";
 import { FIFO_HINT, fulfillmentOf, remainingText } from "./fulfillment";
 import { EXPECTED_TONE_CLASS, expectedHint, expectedTone, fmtDate } from "./dates";
+import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 
 /** Sunucudan çekilen en fazla kalem — backend tavanı 500. */
 const LIMIT = 200;
@@ -74,8 +75,8 @@ export function OpenLinesPanel({
   const total = q.data?.total ?? 0;
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <>
+      <ListToolbar className="flex-row flex-wrap items-center">
         <div className="w-64">
           <ReferenceSelect<Item>
             value={itemId}
@@ -101,32 +102,36 @@ export function OpenLinesPanel({
             {total} açık kalem{rows.length < total ? ` · ilk ${rows.length} tanesi gösteriliyor` : ""}
           </span>
         )}
-      </div>
+      </ListToolbar>
 
-      {q.isLoading ? (
-        <p className="text-sm text-muted-foreground">Yükleniyor…</p>
-      ) : q.isError ? (
-        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-          <p className="font-medium text-destructive">Açık kalemler yüklenemedi.</p>
-          <p className="mt-1 text-muted-foreground">
-            Bu “bekleyen mal yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi.
-            Siparişleriniz yerinde duruyor.
-          </p>
-          <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-            Tekrar dene
-          </Button>
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-          {overdueOnly
-            ? "Termini geçmiş açık kalem yok. (Beklenen tarihi girilmemiş kalemler bu listeye girmez.)"
-            : supplier || itemId
-              ? "Bu daraltmayla bekleyen kalem yok — filtreleri gevşetip tekrar bakın."
-              : "Bekleyen kalem yok: açık siparişlerin tamamı karşılanmış."}
-        </div>
-      ) : (
-        <>
-          <div className="overflow-hidden rounded-md border">
+      <ListBody>
+        {q.isLoading ? (
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
+        ) : q.isError ? (
+          <ListMessage>
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+              <p className="font-medium text-destructive">Açık kalemler yüklenemedi.</p>
+              <p className="mt-1 text-muted-foreground">
+                Bu “bekleyen mal yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi.
+                Siparişleriniz yerinde duruyor.
+              </p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+                Tekrar dene
+              </Button>
+            </div>
+          </ListMessage>
+        ) : rows.length === 0 ? (
+          <ListMessage>
+            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+              {overdueOnly
+                ? "Termini geçmiş açık kalem yok. (Beklenen tarihi girilmemiş kalemler bu listeye girmez.)"
+                : supplier || itemId
+                  ? "Bu daraltmayla bekleyen kalem yok — filtreleri gevşetip tekrar bakın."
+                  : "Bekleyen kalem yok: açık siparişlerin tamamı karşılanmış."}
+            </div>
+          </ListMessage>
+        ) : (
+          <>
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
                 <tr>
@@ -181,22 +186,23 @@ export function OpenLinesPanel({
                 })}
               </tbody>
             </table>
-          </div>
 
-          <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
-            <Info className="mt-0.5 h-3 w-3 shrink-0" />
-            {FIFO_HINT}
-          </p>
-
-          {rows.length < total && (
-            <p className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-500">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              {total} açık kalemin ilk {rows.length} tanesi gösteriliyor (en yakın termin önce).
-              Aradığınızı bulmak için tedarikçi ya da ürün filtresini kullanın.
+            <p className="flex items-start gap-1.5 border-t px-4 py-2 text-[11px] text-muted-foreground">
+              <Info className="mt-0.5 h-3 w-3 shrink-0" />
+              {FIFO_HINT}
             </p>
-          )}
-        </>
-      )}
-    </div>
+
+            {rows.length < total && (
+              <p className="flex items-start gap-1.5 px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                {total} açık kalemin ilk {rows.length} tanesi gösteriliyor (en yakın termin önce).
+                Aradığınızı bulmak için tedarikçi ya da ürün filtresini kullanın.
+              </p>
+            )}
+          </>
+        )}
+      </ListBody>
+      {rows.length > 0 && <ListFooter loaded={rows.length} total={total} />}
+    </>
   );
 }
