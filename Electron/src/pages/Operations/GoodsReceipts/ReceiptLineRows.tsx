@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { useFoldValues } from "@/hooks/useFoldValues";
 import { ReceiptFabricRow } from "./ReceiptFabricRow";
 import { ReceiptYarnRow } from "./ReceiptYarnRow";
+import { ReceiptConsumableRow } from "./ReceiptConsumableRow";
 import { ADD_LINE_LABEL, GROUP_TITLE, receiptLineGridCols, receiptLineHeaders, type ReceiptLineKind } from "./receiptLineColumns";
 import { DEFAULT_LINE_CLASS, duplicateLine, emptyLine, inheritedLineClass, lineKind, type DraftLine } from "./receiptLineTypes";
 
@@ -32,6 +33,10 @@ interface Props {
   yarnItemIds?: ReadonlySet<string>;
   /** C8: satır anahtarı → hata metni (yerel lot doğrulaması ya da sunucu 400 `details.lines`). */
   lineIssues?: ReadonlyMap<string, string>;
+  /** SARF kalem id'leri (`consumableIdsFrom`) — sarf satırı top doğurmaz, ayrı grupta çizilir. */
+  consumableItemIds?: ReadonlySet<string>;
+  /** `consumable.stockEnabled` — kapalıyken Sarf grubu/düğmesi yok, kumaş seçici yalnız kumaş (bayt-aynı). */
+  consumableEnabled?: boolean;
 }
 
 /** İplik satırının TAŞIYAMAYACAĞI alanlar dolu mu? (backend 400 kümesinin aynası) */
@@ -56,7 +61,7 @@ function GroupHeader({ kind }: { kind: ReceiptLineKind }) {
   );
 }
 
-export function ReceiptLineRows({ lines, onChange, yarnItemIds, lineIssues }: Props) {
+export function ReceiptLineRows({ lines, onChange, yarnItemIds, lineIssues, consumableItemIds, consumableEnabled = false }: Props) {
   const { values: foldValues } = useFoldValues();
 
   // ⚠️ İPLİĞE GEÇEN SATIRIN KUMAŞ ALANLARI SIFIRLANIR (rota editörünün "istasyon değişince hedef sıfırlanır" kuralının
@@ -71,8 +76,11 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds, lineIssues }: Pr
   }, [lines, yarnItemIds]);
 
   const patch = (key: string, p: Partial<DraftLine>) => onChange(lines.map((l) => (l.key === key ? { ...l, ...p } : l)));
-  const groups: Record<ReceiptLineKind, DraftLine[]> = { FABRIC: [], YARN: [] };
-  for (const l of lines) groups[lineKind(l, yarnItemIds)].push(l);
+  const groups: Record<ReceiptLineKind, DraftLine[]> = { FABRIC: [], YARN: [], CONSUMABLE: [] };
+  for (const l of lines) groups[lineKind(l, yarnItemIds, consumableItemIds)].push(l);
+  const kinds: ReceiptLineKind[] = consumableEnabled ? ["FABRIC", "YARN", "CONSUMABLE"] : ["FABRIC", "YARN"];
+  // Ayar sonradan kapandıysa taslaktaki sarf satırı gizlenmez (backend 400 ile söyler); grup yalnız doluysa çizilir.
+  const shown: ReceiptLineKind[] = groups.CONSUMABLE.length > 0 ? ["FABRIC", "YARN", "CONSUMABLE"] : ["FABRIC", "YARN"];
   const rowProps = (l: DraftLine) => ({
     line: l,
     onPatch: (p: Partial<DraftLine>) => patch(l.key, p),
@@ -84,7 +92,7 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds, lineIssues }: Pr
 
   return (
     <div className="space-y-3">
-      {(["FABRIC", "YARN"] as const).map((kind) =>
+      {shown.map((kind) =>
         groups[kind].length === 0 ? null : (
           <section key={kind} className="rounded-md border" data-testid={`receipt-group-${kind}`} aria-label={GROUP_TITLE[kind]}>
             <h4 className="border-b px-3 py-1.5 text-xs font-semibold">{GROUP_TITLE[kind]}</h4>
@@ -93,8 +101,10 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds, lineIssues }: Pr
               {groups[kind].map((l) =>
                 kind === "YARN" ? (
                   <ReceiptYarnRow key={l.key} {...rowProps(l)} issue={lineIssues?.get(l.key)} />
+                ) : kind === "CONSUMABLE" ? (
+                  <ReceiptConsumableRow key={l.key} {...rowProps(l)} />
                 ) : (
-                  <ReceiptFabricRow key={l.key} {...rowProps(l)} foldValues={foldValues} />
+                  <ReceiptFabricRow key={l.key} {...rowProps(l)} foldValues={foldValues} consumableEnabled={consumableEnabled} />
                 ),
               )}
             </div>
@@ -104,8 +114,8 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds, lineIssues }: Pr
       {/* Grup düğmeleri: satır DOĞDUĞU ANDA tiplidir (kumaş satırı → kumaş seçici; iplik satırı → iplik seçici);
           yeni kumaş satırı sınıfını bir önceki kumaş satırından devralır (EK 7). */}
       <div className="flex flex-wrap gap-2">
-        {(["FABRIC", "YARN"] as const).map((kind) => (
-          <Button key={kind} type="button" variant="ghost" size="sm" onClick={() => onChange([...lines, emptyLine(kind, inheritedLineClass(lines, yarnItemIds))])}>
+        {kinds.map((kind) => (
+          <Button key={kind} type="button" variant="ghost" size="sm" onClick={() => onChange([...lines, emptyLine(kind, inheritedLineClass(lines, yarnItemIds, consumableItemIds))])}>
             <Plus className="mr-1 h-4 w-4" />
             {ADD_LINE_LABEL[kind]}
           </Button>
@@ -124,34 +134,43 @@ export interface ReceiptDraftTotals {
   yarnLines: number;
   /** İplik kg toplamı (kg × adet). */
   yarnKg: number;
+  /** Sarf defter satırı sayısı — sarf TOP DEĞİLDİR, `rolls`a/`meters`a girmez; adet çarpanı yok (tek satır). */
+  consumableLines: number;
   /** Para toplamı — kumaş + iplik BİRLİKTE (ikisi de fişin para biriminde). */
   amount: number;
 }
 
 /** Formun canlı özeti — kaç TOP, kaç metre, kaç kg iplik, kaç para. `yarnItemIds` verilmezse satırın grubu/kumaş. */
-export function receiptTotals(lines: DraftLine[], yarnItemIds?: ReadonlySet<string>): ReceiptDraftTotals {
+export function receiptTotals(lines: DraftLine[], yarnItemIds?: ReadonlySet<string>, consumableItemIds?: ReadonlySet<string>): ReceiptDraftTotals {
   const valid = lines.filter((l) => l.itemId && l.initialQty > 0 && l.count > 0);
-  const fabric = valid.filter((l) => lineKind(l, yarnItemIds) !== "YARN");
-  const yarn = valid.filter((l) => lineKind(l, yarnItemIds) === "YARN");
+  const kindOf = (l: DraftLine) => lineKind(l, yarnItemIds, consumableItemIds);
+  const fabric = valid.filter((l) => kindOf(l) === "FABRIC");
+  const yarn = valid.filter((l) => kindOf(l) === "YARN");
+  const consumable = valid.filter((l) => kindOf(l) === "CONSUMABLE");
   return {
     rolls: fabric.reduce((s, l) => s + l.count, 0),
     meters: fabric.reduce((s, l) => s + l.initialQty * l.count, 0),
     yarnLines: yarn.reduce((s, l) => s + l.count, 0),
     yarnKg: yarn.reduce((s, l) => s + l.initialQty * l.count, 0),
+    consumableLines: consumable.length,
     // Fiyat girilmemiş satır tutara 0 katkı verir — "eksik fiyat" uyarısı BİLİNÇLİ olarak yok: fiyat opsiyoneldir ve
     // fatura onayı zaten fiyatsızı reddediyor.
-    amount: valid.reduce((s, l) => s + (l.unitPrice ?? 0) * l.initialQty * l.count, 0),
+    amount: valid.reduce((s, l) => s + (l.unitPrice ?? 0) * l.initialQty * (kindOf(l) === "CONSUMABLE" ? 1 : l.count), 0),
   };
 }
 
 /** Taslak satırları → backend gövdesi. Adet N → N ayrı satır. İplik satırı kumaşa özgü anahtarları HİÇ taşımaz
  *  (backend `addYarnLine` 400 ile reddeder); kumaş satırı `lineClass`ı HER ZAMAN taşır (fiş kutusu yok — satır tek yer).
  *  Satır token'ı çağırandan gelir (`attempt.keyed`): aynı denemenin yeniden gönderiminde aynı satır aynı token'ı taşır. */
-export function expandLines(lines: DraftLine[], yarnItemIds: ReadonlySet<string> | undefined, lineToken: (key: string) => string) {
+export function expandLines(lines: DraftLine[], yarnItemIds: ReadonlySet<string> | undefined, lineToken: (key: string) => string, consumableItemIds?: ReadonlySet<string>) {
   return lines
     .filter((l) => l.itemId && l.initialQty > 0 && l.count > 0)
     .flatMap((l) => {
-      const yarn = lineKind(l, yarnItemIds) === "YARN";
+      const kind = lineKind(l, yarnItemIds, consumableItemIds);
+      // Sarf: TEK satır, yalnız kalem + miktar (kartın biriminde) + fiyat — backend `addConsumableLine` başka alanı 400 ile reddeder.
+      // Satır token'ı YOK (sarf yolu satır token'ı okumaz; koruma fiş token'ında) — anahtar tip birliği için undefined, JSON'a girmez.
+      if (kind === "CONSUMABLE") return [{ itemId: l.itemId, initialQty: l.initialQty, unitPrice: l.unitPrice, clientToken: undefined as string | undefined }];
+      const yarn = kind === "YARN";
       return Array.from({ length: l.count }, (_, i) =>
         yarn
           ? {

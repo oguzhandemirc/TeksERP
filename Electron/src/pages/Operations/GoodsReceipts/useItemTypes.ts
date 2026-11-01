@@ -44,3 +44,10 @@ export function yarnIdsFrom(types: Map<string, ItemType>): Set<string> {
   for (const [id, t] of types) if (t === "YARN") s.add(id);
   return s;
 }
+
+/** Haritadan SARF kalem id kümesi — sarf satırı top doğurmaz (`lineKind` → CONSUMABLE). */
+export function consumableIdsFrom(types: Map<string, ItemType>): Set<string> {
+  const s = new Set<string>();
+  for (const [id, t] of types) if (t === "CONSUMABLE") s.add(id);
+  return s;
+}
