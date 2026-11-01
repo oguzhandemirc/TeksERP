@@ -78,7 +78,8 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
   // maliyet satır sayısıyla sınırlı ve önemsiz).
   const itemTypes = useItemTypes(lines.map((l) => l.itemId));
   const yarnIds = yarnIdsFrom(itemTypes);
-  const consumableIds = consumableIdsFrom(itemTypes);
+  // Ayar kapalıyken boş küme: form bugünkü davranışla bayt-aynı kalır (sarf kumaş gibi gider, backend 400).
+  const consumableIds = consumableEnabled ? consumableIdsFrom(itemTypes) : new Set<string>();
   const totals = receiptTotals(lines, yarnIds, consumableIds);
   // İplik-only / sarf-only fiş MEŞRU — "top yok" diye kilitlemek 500 kg ipliği girilemez yapardı.
   const valid = Boolean(effectiveWarehouseId) && (totals.rolls > 0 || totals.yarnLines > 0 || totals.consumableLines > 0);

@@ -180,6 +180,9 @@ async function main(): Promise<void> {
   // Sonraki maddeler kuşak bakiyesini sıfırdan ölçer — bu maddenin girişleri ters kayıtla (fiş iptali) kapanır.
   await goodsReceiptService.cancel(mixData.id, "TEST — bekçi iptali", adminId);
   await goodsReceiptService.cancel(onlyId, "TEST — bekçi iptali", adminId);
+  // §2e iptal edilen fişte ters kayıt (RECEIPT_CANCEL_OUT) sarf SATIRI sayılmaz — sayaç yalnız RECEIPT_IN.
+  const afterCancel = (await goodsReceiptService.loadDetail(mixData.id)) as { totals: { consumableLineCount?: number } };
+  check("§2e iptal sonrası consumableLineCount ters kaydı saymaz (=1)", afterCancel.totals.consumableLineCount === 1, `got=${afterCancel.totals.consumableLineCount}`);
 
   // ── §3 KURŞUN TÜKETİMİ ─────────────────────────────────────────────────
   const roll2 = await mkRoll("R2");
