@@ -10,7 +10,7 @@
 // ⚠️ `FinishingRate` BURADA OKUNMAZ: o bizim ödediğimiz terbiye/fason MALİYETİDİR,
 // gelir değildir — `test_hizmet_fiyati` AST taraması ikinci kopyayı ve okumayı yasaklar.
 // =============================================================================
-import { Currency, MachineDataSource, MeterPhase, Prisma, PriceKind } from "@prisma/client";
+import { Currency, MachineDataSource, MeterPhase, Prisma, PriceKind, type ServiceQtyUnit } from "@prisma/client";
 import prisma from "../../lib/prisma";
 
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -19,6 +19,7 @@ import { resolveItemPricesFor } from "../item-price.service";
 import { listKursunApplications, readKursunTarget, type KursunApplication } from "./process-summary.helper";
 import { listFlagServiceWorks } from "./service-flag-work.helper";
 import { pickServiceItemId } from "./service-item-pick.helper";
+import { missingQuantityWarning, priceUnitMatches, serviceWorkQuantity, serviceWorkUnit } from "./service-quantity.helper";
 
 /** `kursun-qc.service` reopenStep damga sebebi — yeniden açılan adım yeni hizmettir. */
 const KURSUN_REOPEN_REASON = "KURSUN_REOPEN";
@@ -42,6 +43,9 @@ export interface ServiceRollWork {
   readingId: string | null;
   serviceAt: Date;
   unitPrice: Prisma.Decimal | null;
+  /** Faturalanan birim ve miktar (`service-quantity.helper`); metre işinde `meters`. */
+  qtyUnit: ServiceQtyUnit;
+  quantity: Prisma.Decimal | null;
 }
 
 /** Hizmet kalemi × birim fiyat grubu (taslak satırı). */
@@ -52,6 +56,8 @@ export interface ServiceLine {
   unitPrice: string | null;
   currency: Currency;
   quantity: string;
+  /** Satırın birimi — METER (m) · PIECE (adet) · STITCH (vuruş). */
+  unit: ServiceQtyUnit;
   rollCount: number;
   rollIds: string[];
   /** S6 (D4-KUC2 c): metresi elle (OPERATOR) okumadan gelen iş sayısı — faturalanır ama satır İŞARETLİ (0 = işaretsiz). */
@@ -121,6 +127,8 @@ export interface ServiceResolveOptions {
   billedKeys?: Set<string>;
   /** F1: kümede çocuğu olsa da KENDİSİ sevk edilen toplar — bayrak işinde kalan parçasını kendisi taşır. */
   shippedRollIds?: Set<string>;
+  /** Brode fiyat birimi ayarı; verilmezse METER (bugünkü davranış). */
+  brodeUnit?: ServiceQtyUnit;
 }
 
 /** Bağ anahtarı — kısmi unique (rollId, serviceItemId, workOrderStepId) ile aynı üçlü. */
@@ -160,14 +168,18 @@ function filterBillableWorks(all: ServiceRollWork[], opt: ServiceResolveOptions,
 }
 
 /** Kurşun dışı bayrak işleri (H10) iş satırına; K4 (D4-B2): simüle kesim metresi düşer, uyarı taslakta/önizlemede görünür. */
-async function loadFlagWorks(rollIds: string[], basis: "OUT" | "IN" | "DECLARED", ctx: { shippedRollIds?: Set<string>; db: Db; warnings: string[] }): Promise<ServiceRollWork[]> {
+async function loadFlagWorks(rollIds: string[], basis: "OUT" | "IN" | "DECLARED", ctx: { shippedRollIds?: Set<string>; brodeUnit: ServiceQtyUnit; db: Db; warnings: string[] }): Promise<ServiceRollWork[]> {
   const { db, warnings } = ctx;
   const flag = await listFlagServiceWorks(rollIds, basis, { shippedRollIds: ctx.shippedRollIds, db });
   if (flag.simulatedCutRollIds.length > 0) warnings.push(simulatedCutWarning(flag.simulatedCutRollIds.length));
-  return flag.works.map((f) => ({
-    rollId: f.rollId, workOrderStepId: f.workOrderStepId, source: "PROPERTY", valueId: null, valueName: f.propertyName, gramajFrom: "NONE",
-    serviceItemId: f.serviceItemId, meters: f.meters, meterBasis: f.meterBasis, readingId: f.readingId, serviceAt: f.serviceAt, unitPrice: null,
-  }));
+  return flag.works.map((f) => {
+    const qtyUnit = serviceWorkUnit(f.propertyCode, ctx.brodeUnit);
+    return {
+      rollId: f.rollId, workOrderStepId: f.workOrderStepId, source: "PROPERTY", valueId: null, valueName: f.propertyName, gramajFrom: "NONE",
+      serviceItemId: f.serviceItemId, meters: f.meters, meterBasis: f.meterBasis, readingId: f.readingId, serviceAt: f.serviceAt, unitPrice: null,
+      qtyUnit, quantity: serviceWorkQuantity(f, qtyUnit),
+    };
+  });
 }
 
 /**
@@ -215,10 +227,16 @@ export async function resolveServiceItemsForRolls(params: {
       readingId: picked ? picked.r.id : null,
       serviceAt: firstOut.get(`${a.rollId}:${a.workOrderStepId}`) ?? a.at,
       unitPrice: null,
+      qtyUnit: "METER" as const,
+      quantity: picked ? picked.r.meters : a.meters,
     };
   });
-  const flagWorks = await loadFlagWorks(rollIds, basis, { shippedRollIds: opt.shippedRollIds, db, warnings });
-  const works = filterBillableWorks([...allWorks, ...flagWorks], opt, basis, warnings);
+  const flagWorks = await loadFlagWorks(rollIds, basis, { shippedRollIds: opt.shippedRollIds, brodeUnit: opt.brodeUnit ?? "METER", db, warnings });
+  const billable = filterBillableWorks([...allWorks, ...flagWorks], opt, basis, warnings);
+  // Adet/vuruşu eksik iş faturaya alınmaz (uydurma miktar yok); birim başına tek uyarı.
+  const unknown = billable.filter((w) => w.serviceItemId && w.quantity === null);
+  for (const u of new Set(unknown.map((w) => w.qtyUnit))) warnings.push(missingQuantityWarning(u, unknown.filter((w) => w.qtyUnit === u).length));
+  const works = billable.filter((w) => !unknown.includes(w));
 
   // Fiyat hizmet anına çözülür (geç taslak eski fiyatı korur); aynı an tek sorgu.
   const byAt = new Map<number, ServiceRollWork[]>();
@@ -229,7 +247,11 @@ export async function resolveServiceItemsForRolls(params: {
       itemIds: group.map((w) => w.serviceItemId!), kind: PriceKind.SALE, currency: params.currency,
       customerId: params.customerId, asOf: new Date(at), db,
     });
-    for (const w of group) w.unitPrice = prices.get(w.serviceItemId!)?.price ?? null;
+    for (const w of group) {
+      const hit = prices.get(w.serviceItemId!);
+      // Tarife satırının birimi işin birimiyle aynı değilse fiyat yok sayılır (metre fiyatı adede uygulanmaz).
+      w.unitPrice = hit && priceUnitMatches(hit.priceUnit, w.qtyUnit) ? hit.price : null;
+    }
   }
 
   const items = await db.item.findMany({
@@ -243,13 +265,15 @@ export async function resolveServiceItemsForRolls(params: {
     if (w.gramajFrom === "WO_TARGET") warnings.push(`Gramajı bilinmeyen iş ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedefinden (${w.valueName}) fiyatlandı — topu kontrol edin.`);
     if (!w.serviceItemId) { warnings.push(`"${w.valueName}" için hizmet kalemi eşlenmemiş — top fiyatlanmadı.`); continue; }
     const item = itemById.get(w.serviceItemId)!;
-    if (w.unitPrice === null) warnings.push(`"${item.name}" için ${params.currency} satış fiyatı yok — satır fiyatsız.`);
-    const key = `${w.serviceItemId}:${w.unitPrice?.toString() ?? "-"}`;
+    if (w.unitPrice === null) warnings.push(w.qtyUnit === "METER"
+      ? `"${item.name}" için ${params.currency} satış fiyatı yok — satır fiyatsız.`
+      : `"${item.name}" için ${params.currency} satış fiyatı yok ya da birimi seçilen brode fiyat birimiyle aynı değil — satır fiyatsız.`);
+    const key = `${w.serviceItemId}:${w.unitPrice?.toString() ?? "-"}:${w.qtyUnit}`;
     const g = groups.get(key) ?? {
       serviceItemId: w.serviceItemId, code: item.code, name: item.name, unitPrice: w.unitPrice?.toString() ?? null,
-      currency: params.currency, quantity: "0", rollCount: 0, rollIds: [], manualMeterRollCount: 0, sum: new Prisma.Decimal(0),
+      currency: params.currency, quantity: "0", unit: w.qtyUnit, rollCount: 0, rollIds: [], manualMeterRollCount: 0, sum: new Prisma.Decimal(0),
     };
-    g.sum = g.sum.plus(w.meters);
+    g.sum = g.sum.plus(w.quantity!);
     if (w.readingId && manualReadings.has(w.readingId)) g.manualMeterRollCount += 1;
     g.rollCount += 1;
     g.rollIds.push(w.rollId);

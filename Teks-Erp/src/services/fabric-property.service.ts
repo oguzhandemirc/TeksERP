@@ -60,6 +60,18 @@ export interface PropertyValueInput {
   isActive?: boolean;
   /** Gramaj kademesi → hizmet kalemi (H6). `undefined` = dokunma, `null` = eşlemeyi kaldır. */
   serviceItemId?: string | null;
+  /** Brode deseni vuruş sayısı (VURUŞ fiyat birimi). `undefined` = dokunma, `null` = kaldır. */
+  stitchCount?: number | null;
+}
+
+/** Desen vuruş sayısı: atlanmış = dokunma, null = kaldır, yoksa pozitif tam sayı (bilinmeyen biçim 400). */
+function readStitchCountField(raw: unknown, code: string): number | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  if (typeof raw !== "number" || !Number.isInteger(raw) || raw <= 0 || raw > 10_000_000) {
+    throw AppError.badRequest(`'${code}' değerinin vuruş sayısı 1 ile 10.000.000 arasında tam sayı olmalı`);
+  }
+  return raw;
 }
 
 /**
@@ -95,9 +107,10 @@ function extractValues(data: Record<string, unknown>): PropertyValueInput[] | un
       );
     }
     const sid = readServiceItemIdField(row.serviceItemId, `'${code}' değerinin`);
+    const stitch = readStitchCountField(row.stitchCount, code);
     const sortOrder = typeof row.sortOrder === "number" ? row.sortOrder : (i + 1) * 10;
     const isActive = row.isActive === undefined ? true : Boolean(row.isActive);
-    return { code, name, sortOrder, isActive, ...(sid === undefined ? {} : { serviceItemId: sid }) };
+    return { code, name, sortOrder, isActive, ...(sid === undefined ? {} : { serviceItemId: sid }), ...(stitch === undefined ? {} : { stitchCount: stitch }) };
   });
 }
 
@@ -199,7 +212,10 @@ async function replaceValuesTx(
     data: { isActive: false },
   });
   for (const v of values) {
-    const svc = v.serviceItemId !== undefined ? { serviceItemId: v.serviceItemId } : {};
+    const svc = {
+      ...(v.serviceItemId !== undefined ? { serviceItemId: v.serviceItemId } : {}),
+      ...(v.stitchCount !== undefined ? { stitchCount: v.stitchCount } : {}),
+    };
     await tx.fabricPropertyValue.upsert({
       where: { propertyId_code: { propertyId, code: v.code } },
       create: {

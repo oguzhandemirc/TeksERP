@@ -42,6 +42,8 @@ export interface MeterReadingInput {
   peripheralId?: string | null;
   rawCounter?: number | null;
   cardSampleId?: string | null;
+  /** Brode adet sayısı (yalnız OUT okumasında saklanır). */
+  pieceCount?: number | null;
   clientToken: string;
   /** H2 OPERATOR_REASON imzası — sebep kodu ya da metni. PIN BURADA TAŞINMAZ (kuyruğa girmez, §12-4). */
   ack?: MeterAckReason | null;
@@ -180,6 +182,7 @@ export async function writeMeterReadingTx(tx: Tx, args: WriteMeterReadingArgs): 
     phase: args.phase,
     meters: new Prisma.Decimal(canonicalMeters(args.input.meters)),
     rawCounter: args.input.rawCounter == null ? null : new Prisma.Decimal(args.input.rawCounter),
+    pieceCount: args.phase === MeterPhase.OUT ? args.input.pieceCount ?? null : null,
     source: args.input.source,
     machineId: args.machineId,
     peripheralId: args.input.peripheralId ?? null,
