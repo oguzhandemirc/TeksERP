@@ -32,6 +32,9 @@ export type { Currency };
 
 /** Backend `PriceKind` enum'unun aynası (Electron backend'i import edemez). */
 export type PriceKind = "PURCHASE" | "SALE";
+/** Hizmet fiyatının birimi (brode fiyat birimi ayarı); `null` = metre (bugünkü satırlar). */
+export type PriceUnit = "METER" | "PIECE" | "STITCH";
+export const PRICE_UNIT_LABEL: Record<PriceUnit, string> = { METER: "Metre", PIECE: "Adet", STITCH: "Vuruş" };
 
 /** Fiyatın nereden geldiği — backend `PriceSource`. */
 export type PriceSource = "CUSTOMER" | "DEFAULT";
@@ -67,6 +70,7 @@ export interface ItemPriceRow {
   kind: PriceKind;
   currency: Currency;
   price: DecimalLike;
+  priceUnit?: PriceUnit | null;
   createdAt: string;
   updatedAt: string;
   item?: { id: string; code: string; name: string; unit: string } | null;
@@ -216,6 +220,8 @@ export async function upsertItemPrice(body: {
   kind: PriceKind;
   currency: Currency;
   price: number;
+  /** Yalnız hizmet kaleminde gönderilir; eski backend alanı yok sayar. */
+  priceUnit?: PriceUnit;
 }): Promise<UpsertResult> {
   const res = await apiClient.post("/api/item-prices", body);
   return res.data as UpsertResult;

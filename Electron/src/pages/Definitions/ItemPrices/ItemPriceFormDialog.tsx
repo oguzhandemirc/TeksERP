@@ -54,6 +54,8 @@ import {
   type Currency,
   type ItemPriceRow,
   type PriceKind,
+  type PriceUnit,
+  PRICE_UNIT_LABEL,
 } from "./service";
 import { customerLabelOf, findExisting } from "./prices";
 
@@ -78,6 +80,8 @@ interface Props {
   row?: ItemPriceRow | null;
   /** Yeni kayıt için ön-doldurma (boş hücredeki "Tanımla" düğmesinden). */
   initial?: ItemPriceFormInitial;
+  /** Hizmet kalemi: fiyat birimi seçimi görünür (brode metre/adet/vuruş). */
+  isService?: boolean;
   onSaved: () => void;
 }
 
@@ -89,6 +93,7 @@ export function ItemPriceFormDialog({
   rows,
   row = null,
   initial,
+  isService = false,
   onSaved,
 }: Props) {
   const isEdit = Boolean(row);
@@ -104,6 +109,7 @@ export function ItemPriceFormDialog({
   );
   const [kind, setKind] = useState<PriceKind>(row?.kind ?? initial?.kind ?? "SALE");
   const [currency, setCurrency] = useState<Currency>(row?.currency ?? initial?.currency ?? "TRY");
+  const [priceUnit, setPriceUnit] = useState<PriceUnit>(row?.priceUnit ?? "METER");
   // Düzenlemede mevcut değer; yeni kayıtta BOŞ (sıfır değil — dosya başlığı).
   const [price, setPrice] = useState<string>(row ? String(toNum(row.price)) : "");
 
@@ -143,6 +149,7 @@ export function ItemPriceFormDialog({
         kind,
         currency,
         price: v.price,
+        ...(isService ? { priceUnit } : {}),
       }),
     onSuccess: (r) => {
       toast.success(r.message ?? "Fiyat kaydedildi.");
@@ -272,6 +279,27 @@ export function ItemPriceFormDialog({
           </div>
 
           <p className="text-xs text-muted-foreground">{PRICE_KIND_HINT[kind]}</p>
+
+          {isService && (
+            <div>
+              <Label>Fiyat birimi</Label>
+              <select
+                aria-label="Fiyat birimi"
+                className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
+                value={priceUnit}
+                onChange={(e) => setPriceUnit(e.target.value as PriceUnit)}
+              >
+                {(Object.keys(PRICE_UNIT_LABEL) as PriceUnit[]).map((u) => (
+                  <option key={u} value={u}>
+                    {PRICE_UNIT_LABEL[u]}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Brode işinde fiyat, Ayarlar'daki brode fiyat birimiyle aynı birimde olmalı; değilse fatura satırı fiyatsız gelir.
+              </p>
+            </div>
+          )}
 
           <div>
             <Label>Birim fiyat</Label>

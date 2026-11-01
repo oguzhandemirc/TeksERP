@@ -26,6 +26,13 @@ describe("kalem gövdesi", () => {
     expect(buildLineBody(f)).toEqual({ itemId: "i1", quantity: "5000", colorId: "c1" });
     expect(buildLineBody({ ...f, unitPrice: "2,67" })).toMatchObject({ unitPrice: "2.67" });
   });
+  it("varyant yalnız ürünlü kalemde gider; yeni desende gönderilmez", () => {
+    const f = { ...emptyLineForm(), item: { id: "i1", code: "K1", name: "Kristal" }, quantity: "10", recipeId: "r1" };
+    expect(buildLineBody(f)).toMatchObject({ itemId: "i1", recipeId: "r1" });
+    const adHocBodyOut = buildLineBody({ ...f, mode: "adHoc", adHoc: { ...emptyCalculator().adHoc, endsCount: "5200" }, description: "X" });
+    expect(adHocBodyOut).not.toBeNull();
+    expect(adHocBodyOut).not.toHaveProperty("recipeId");
+  });
   it("yeni desen: elle yapı + ad zorunlu, itemId gönderilmez; miktarsız kalem gönderilmez", () => {
     const adHoc = { ...emptyCalculator().adHoc, endsCount: "5200" };
     const f = { ...emptyLineForm({ mode: "adHoc", adHoc, rateCode: "" }), quantity: "2000" };

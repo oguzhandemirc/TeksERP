@@ -92,11 +92,6 @@ const MODEL_MUAF: ReadonlyArray<{ dosya: string; model: string; neden: string }>
     model: "finishingRate",
     neden: "Varyant tarife kodu (SY-E1) yalnız aktif tarifeye ÇÖZÜLÜYOR MU diye okunur — bilinmeyen kod 400; maliyet kapalıyken tarife doğamaz, kod boş bırakılır (reçete yazımı dokuma/iş emri yüzeyidir).",
   },
-  {
-    dosya: "routes/master-data-merge.routes.ts",
-    model: "yarnCostPrice",
-    neden: "Birleştirme içe aktarım kayıt defterini YALNIZ varlık→yazma izni eşlemesi için okur (MERGE_ENTITIES); iplik maliyet fiyatı adaptörü (SY-H2) zincire bu yüzden girer, birleştirme ona dokunmaz.",
-  },
 ];
 
 const ADLA_BEKLENEN_KAPILI: ReadonlyArray<{ dosya: string; neden: string }> = [

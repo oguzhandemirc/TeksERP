@@ -56,7 +56,8 @@ export interface ConsumableNormResult {
 }
 
 function parseValues(input: ConsumableNormValues): ParsedValues {
-  const qtyPerM = parseDecimalField(input.qtyPerM, { label: "Metre başına sarf miktarı", min: 0, minExclusive: true, scale: 6 });
+  // 0 = "bu hizmet sarf kullanmaz" açık beyanı (kârlılık ölçülmüş 0 sayar); negatif red.
+  const qtyPerM = parseDecimalField(input.qtyPerM, { label: "Metre başına sarf miktarı", min: 0, scale: 6 });
   if (qtyPerM === null || qtyPerM === undefined) throw AppError.badRequest("Metre başına sarf miktarı zorunludur.");
   return { qtyPerM, note: parseTextField(input.note, "Not", 300) ?? null };
 }

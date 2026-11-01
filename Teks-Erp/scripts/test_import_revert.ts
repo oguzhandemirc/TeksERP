@@ -323,8 +323,8 @@ async function main(): Promise<void> {
     if (revert) {
       const plan = revert.REVERT_PLAN as Record<string, { mode: string }>;
       const entities = Object.keys(plan);
-      // SY-H2: 18 + dört dokuma/maliyet varlığı; plan tablosu kayıt defteriyle iki yönlü eşit.
-      check("22 varlığın tamamı plan tablosunda", entities.length === 22, `${entities.length} varlık`);
+      // SY-H2: 18 + dört dokuma/maliyet varlığı + üç toplu açılış varlığı; plan tablosu kayıt defteriyle iki yönlü eşit.
+      check("25 varlığın tamamı plan tablosunda", entities.length === 25, `${entities.length} varlık`);
       check("iplik maliyet fiyatı REVOKE_VERSION (③a damgalı sürüm) ve ters yolunu beyan ediyor",
         plan.yarnCostPrice?.mode === "REVOKE_VERSION" && typeof getImportAdapter("yarnCostPrice").revertVersion === "function");
       const pivots = ["customerItemAlias", "customerColorAlias", "customerItemColorAlias"];

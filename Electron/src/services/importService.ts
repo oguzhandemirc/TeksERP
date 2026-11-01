@@ -176,6 +176,7 @@ export interface ImportRevertPlanRow {
     | "CANCEL_DOCUMENT"
     | "DELETE_PIVOT"
     | "REVOKE_VERSION"
+    | "REVERSE_ENTRY"
     | "SKIP";
   fields: string[];
   children: string[];

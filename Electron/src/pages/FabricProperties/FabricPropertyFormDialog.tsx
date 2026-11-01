@@ -44,7 +44,7 @@ export function FabricPropertyFormDialog({
         valueType: initial.valueType ?? "FLAG",
         // Pasif değerler de forma gelir: gizlenirse kaydetmek onları listeden
         // düşürür ve backend replace'i geri getirilemez şekilde pasif bırakır.
-        values: (initial.values ?? []).map(({ code, name, isActive, serviceItemId }) => ({ code, name, isActive, serviceItemId: serviceItemId ?? null })),
+        values: (initial.values ?? []).map(({ code, name, isActive, serviceItemId, stitchCount }) => ({ code, name, isActive, serviceItemId: serviceItemId ?? null, stitchCount: stitchCount ?? null })),
         variantOfPropertyId: initial.variantOfPropertyId ?? null,
         serviceItemId: initial.serviceItemId ?? null,
         isActive: initial.isActive,
@@ -148,6 +148,8 @@ export function FabricPropertyFormDialog({
                     onChange={field.onChange}
                     existingCodes={savedCodes}
                     service={svc.show ? valueServiceContext(form, svc.items, allProperties) : undefined}
+                    // Bir bayrağın çeşidi (brode deseni) → desen başına vuruş sayısı (VURUŞ fiyat birimi).
+                    showStitch={!!form.watch("variantOfPropertyId")}
                   />
                 )}
               />
