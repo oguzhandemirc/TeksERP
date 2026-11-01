@@ -106,6 +106,7 @@ export const AUDIT_ISIMLERI: Readonly<Record<string, TermCases>> = {
   ROLL_METER_ACK: onEkli("metre sapma", iyelik("onay", "ı", "a", "ı")),
   ROLL_METER_STOCK_APPLY: onEkli("kurşun metre stok", sIyelik("uygulama", "ı", "a")),
   ROLL_CUSTOMER_CODE: onEkli("müşteri", iyelik("barkod", "u", "a", "u")),
+  CUSTOMER_BARCODE_SERIES: onEkli("müşteri barkod", sIyelik("seri", "i", "e")),
   // ── Cari kilidi (D4-I1a, 2026-10-30)
   CARI_HOLD: onEkli("cari", iyelik("kilid", "i", "e", "i")),
   // ── Cari hesap birleştirme virmanı (D4-K3d, 2026-10-31)

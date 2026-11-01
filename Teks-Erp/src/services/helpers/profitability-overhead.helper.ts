@@ -9,7 +9,8 @@
 //   MAKINE_SAATI); `YOK` (varsayılan) → dağıtılmaz, satır payı 0, net = katkı (ay özetinde dağıtılmamış havuz).
 //   ISCILIK havuzu (S14: toplam maaş, kişi adı yok) her zaman makine saatine göre dağıtılır.
 //   Son pay kalanı alır (Σ pay = havuz, kuruşu kuruşuna); taban ≤ 0 ise havuz dağıtılmamış kalır. İptal satırı pay
-//   almaz (gider harcandığı ayda kalır). Masraf bağı (ExpenseAllocation, D4-H3) henüz yok: bütün masraf havuzdadır.
+//   almaz (gider harcandığı ayda kalır). Masraf bağı (D4-G2c): bağlı pay as-of havuzdan düşer, doğrudan masraf olur
+//   (`profitability-allocation.helper`); bağsız masraf burada kalır.
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import type { ProfitCategoryClass, ProfitCategoryClassMap, ProfitOverheadKey } from "../system-setting.service";
