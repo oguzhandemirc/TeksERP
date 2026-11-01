@@ -135,6 +135,29 @@ export const NOTIFICATION_CATALOG = {
     tahminiHaftalik: 0.01, saklama: SAKLAMA,
   },
 
+  "kimlik.yeni-cihaz-girisi": {
+    kod: "kimlik.yeni-cihaz-girisi", ad: "İnternetten yeni cihazla giriş",
+    sinif: "BILDIRIM", altTur: "OLAY", grup: "Sistem",
+    // Alıcı: girişi yapan kişi + kullanıcı yöneticileri (`notification-sources/kimlik.ts` çözücüsü);
+    // web:access sahiplerinin geri kalanı ALMAZ — görme süzgeci kişinin kendi satırını görmesi içindir.
+    izinler: [["admin:users"], ["web:access"]],
+    screenlessViewers: {
+      permissions: ["web:access"],
+      reason: "Girişi yapan kişi kendi hesabına yapılan internet girişini görür; cihazlarını Kullanıcı Tercihleri'nden yönetir.",
+    },
+    modul: "cekirdek:sistem-kimlik-belge",
+    // Aynı kişinin 10 dk içindeki tanınmayan girişleri tek satırda birleşir.
+    tekilKalibi: "{kullaniciId}",
+    pencereSn: 600, varsayilan: "HERKES", kilit: "YOK",
+    kanallar: KANAL_MASAUSTU,
+    varsayilanKanallar: ["UYGULAMA"],
+    baslik: "{kullanici} yeni bir cihazdan internetten giriş yaptı",
+    govde: "{tarayici} · IP {ip} · {saat}",
+    panelEkran: "access/users", panelYol: "/access/users",
+    payloadAlanlari: ["kullaniciId", "kullanici", "tarayici", "ip", "saat"],
+    tahminiHaftalik: 2, saklama: SAKLAMA,
+  },
+
   // ── Sipariş ───────────────────────────────────────────────────────────────
   "siparis.patron-siparisi": {
     kod: "siparis.patron-siparisi", ad: "Yönetim bulutundan sipariş geldi",

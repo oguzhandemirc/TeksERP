@@ -299,6 +299,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   deviceUnpairedPasswordLogin: "cekirdek",
   shortCredentialTotpRequired: "cekirdek",
   webTotpPolicy: "cekirdek",
+  trustedDeviceDays: "cekirdek",
   sessionDurationMinutes: "cekirdek",
   sessionDurationHours: "cekirdek",
   idleTimeoutMinutes: "cekirdek",

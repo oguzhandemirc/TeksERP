@@ -1705,13 +1705,13 @@ router.put(
           { code: "SETTING_KEY_RESERVED", key },
         );
       }
-      // ⚠️ KÜME `SUPERADMIN_ONLY_SETTING_KEYS` (bütün modül anahtarları + `reports.closedKeys` + `auth.webTotpPolicy`):
+      // ⚠️ KÜME `SUPERADMIN_ONLY_SETTING_KEYS` (bütün modül anahtarları + `reports.closedKeys` + `auth.webTotpPolicy` + `auth.trustedDeviceDays`):
       // ham ayar ucu ikinci bir yazma yüzeyi açamaz, yoksa `flagWriteGuard`ın süperadmin
       // dalı buradan dolanılırdı (Raporlar K3/K7).
       if (SUPERADMIN_ONLY_SETTING_KEYS.has(key)) {
         throw AppError.badRequest(
-          key === "auth.webTotpPolicy"
-            ? "Web girişi iki adımlı doğrulama politikası yalnız sistem hesabıyla (PATCH /api/feature-flags) değiştirilir"
+          key === "auth.webTotpPolicy" || key === "auth.trustedDeviceDays"
+            ? "Web girişi iki adımlı doğrulama ayarları yalnız sistem hesabıyla (PATCH /api/feature-flags) değiştirilir"
             : `Modül anahtarları ve rapor görünürlük listesi yalnız ${settingScreenPath("modules")} ekranından (PATCH /api/feature-flags) değiştirilir`,
           { code: "MODULE_KEY_RESERVED", key },
         );

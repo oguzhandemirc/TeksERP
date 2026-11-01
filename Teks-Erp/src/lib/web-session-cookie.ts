@@ -22,12 +22,16 @@ export function cookieLoginApplies(clientType: string | undefined): boolean {
 
 /** `Cookie` başlığından oturum çerezi (ilk eşleşen); yoksa/çözülemezse null. */
 export function readSessionCookie(req: Request): string | null {
+  return readNamedCookie(req, WEB_SESSION_COOKIE);
+}
+
+function readNamedCookie(req: Request, name: string): string | null {
   const header = req.headers.cookie;
   if (typeof header !== "string" || header.length === 0) return null;
   for (const part of header.split(";")) {
     const eq = part.indexOf("=");
     if (eq < 0) continue;
-    if (part.slice(0, eq).trim() !== WEB_SESSION_COOKIE) continue;
+    if (part.slice(0, eq).trim() !== name) continue;
     const raw = part.slice(eq + 1).trim();
     if (!raw) return null;
     try {
@@ -74,4 +78,19 @@ export function setSessionCookie(res: Response, token: string): void {
 
 export function clearSessionCookie(res: Response): void {
   res.append("Set-Cookie", `${WEB_SESSION_COOKIE}=; ${COOKIE_ATTRS}; Max-Age=0`);
+}
+
+// ── Güvenilir cihaz çerezi (web "bu cihazı hatırla", 2026-11-01) ──────────────────────────────
+// Yol YALNIZ parolalı giriş ucu: başka hiçbir istekte tarayıcı göndermez; oturum yerine geçmez.
+export const TRUSTED_DEVICE_COOKIE = "tekserp_cihaz";
+export const TRUSTED_DEVICE_COOKIE_PATH = "/api/auth/login";
+const TRUSTED_COOKIE_ATTRS = `HttpOnly; Secure; SameSite=Strict; Path=${TRUSTED_DEVICE_COOKIE_PATH}`;
+
+export function readTrustedDeviceCookie(req: Request): string | null {
+  return readNamedCookie(req, TRUSTED_DEVICE_COOKIE);
+}
+
+export function setTrustedDeviceCookie(res: Response, token: string, maxAgeSeconds: number): void {
+  const maxAge = Math.max(0, Math.floor(maxAgeSeconds));
+  res.append("Set-Cookie", `${TRUSTED_DEVICE_COOKIE}=${encodeURIComponent(token)}; ${TRUSTED_COOKIE_ATTRS}; Max-Age=${maxAge}`);
 }

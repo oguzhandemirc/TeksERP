@@ -447,6 +447,8 @@ export const updateSchema = z.strictObject({
   shortCredentialTotpRequired: z.boolean().optional(),
   // Web paneli girişi TOTP politikası (REQUIRED=default; yalnız süperadmin yazar — SUPERADMIN_ONLY_FLAG_KEYS).
   webTotpPolicy: z.enum(["REQUIRED", "USER_CHOICE"]).optional(),
+  // auth.trustedDeviceDays — web girişinde "bu cihazı hatırla" günü (0=kapalı, 1–90; yalnız süperadmin yazar).
+  trustedDeviceDays: z.number().int().min(0).max(90).optional(),
   // shipping.confirmationEnabled — sevk onay adımı (UI rehberi).
   shipmentConfirmationEnabled: z.boolean().optional(),
   // shipping.manualSackCountEnabled — "araca yüklenen gerçek çuval adedi" alanı

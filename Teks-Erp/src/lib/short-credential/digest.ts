@@ -22,6 +22,11 @@ export function digestCardSecret(k: RingKey, userId: string, secret: string): st
   return `${k.kid}:${hmacHex(k.key, `card:${userId.toLowerCase()}:${secret.toLowerCase()}`)}`;
 }
 
+/** Güvenilir cihaz belirteci (web "bu cihazı hatırla") — alan ayrımı "trusted-device:". */
+export function digestTrustedDeviceToken(k: RingKey, token: string): string {
+  return `${k.kid}:${hmacHex(k.key, `trusted-device:${token}`)}`;
+}
+
 export function digestKid(stored: string | null | undefined): string | null {
   const m = stored ? DIGEST_RE.exec(stored) : null;
   return m ? m[1]! : null;

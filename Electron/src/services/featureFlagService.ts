@@ -486,6 +486,9 @@ export interface FeatureFlags {
   /** Web paneli (tarayıcı) girişi 2FA politikası: REQUIRED (varsayılan) | USER_CHOICE (kullanıcı kendi
    *  hesabında kapatabilir). Yalnız süperadmin yazar; eski backend alanı döndürmez → REQUIRED say. */
   webTotpPolicy: "REQUIRED" | "USER_CHOICE";
+  /** Web girişinde "Bu cihazı N gün hatırla" süresi (0 = kapalı, default; 1–90). Yalnız süperadmin
+   *  yazar; eski backend alanı döndürmez → 0 say (kutu çıkmaz). */
+  trustedDeviceDays: number;
   /** Sevk onayı adımı zorunlu mu (false=default). Kapalıyken çuvallar seçilir seçilmez
    *  DOĞRUDAN sevk edilir (createShipment → DISPATCHED, stok o an düşer); açıkken önce
    *  PLANNED sevkiyat kurulur, çıkış ayrıca "Sevk Kapısı" ekranından onaylanır. */
