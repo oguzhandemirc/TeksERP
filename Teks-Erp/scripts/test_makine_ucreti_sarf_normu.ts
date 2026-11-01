@@ -270,6 +270,12 @@ async function main(): Promise<void> {
     check("§4g ⭐ norm as-of: değişim öncesi eski, sonrası yeni miktar", gecmis.length === 1 && gecmis[0]!.id === n1.row.id && simdi.length === 1 && simdi[0]!.qtyPerM.equals("0.015"), `${gecmis.map((x) => x.qtyPerM.toString())} / ${simdi.map((x) => x.qtyPerM.toString())}`);
     const e4h = await hata(() => createConsumableNorm(hizmet, sarf, { qtyPerM: "0.03", clientToken: randomUUID() }, uid));
     check("§4h aktif norm varken ikinci yaratma → 409 CONSUMABLE_NORM_ACTIVE_EXISTS", kod(e4h) === "CONSUMABLE_NORM_ACTIVE_EXISTS", kod(e4h));
+    const sarfsiz = await kalem(ItemType.SERVICE);
+    const e4i = await hata(() => createConsumableNorm(sarfsiz, sarf, { qtyPerM: "-0.001", clientToken: randomUUID() }, uid));
+    check("§4i ⭐ negatif norm → 400 (Türkçe)", e4i?.statusCode === 400 && /en az 0/.test(e4i.message), e4i?.message);
+    const n0 = await createConsumableNorm(sarfsiz, sarf, { qtyPerM: "0", clientToken: randomUUID() }, uid);
+    check("§4j ⭐ sıfır norm ('sarf kullanmaz' açık beyanı) kabul, 0 olarak yazılır", n0.row.qtyPerM.isZero(), n0.row.qtyPerM.toString());
+    await revokeConsumableNorm(n0.row.id, null, uid); // §6e/§6f sarfın canlı norm sayısını 1 ölçer
 
     // ── §5 DB seddi ──
     console.log("\n── §5 DB seddi ──");
@@ -284,6 +290,10 @@ async function main(): Promise<void> {
       prisma.$executeRaw`INSERT INTO "service_consumable_norms" ("id","serviceItemId","consumableItemId","qtyPerM","unit","clientToken","createdById","updatedAt")
         VALUES (${randomUUID()}::uuid, ${hizmet}::uuid, ${sarf}::uuid, 0.5, 'KG', ${randomUUID()}::uuid, ${uid}::uuid, now())`;
     check("§5d ⭐ DB'de çift aktif norm insert → 23505", (await pgKodu(hamNorm)) === "23505");
+    const hamNegNorm = () =>
+      prisma.$executeRaw`INSERT INTO "service_consumable_norms" ("id","serviceItemId","consumableItemId","qtyPerM","unit","clientToken","createdById","updatedAt")
+        VALUES (${randomUUID()}::uuid, ${hizmet}::uuid, ${kumas}::uuid, -0.5, 'KG', ${randomUUID()}::uuid, ${uid}::uuid, now())`;
+    check("§5e negatif norm insert → 23514 (CHECK >= 0)", (await pgKodu(hamNegNorm)) === "23514");
 
     // ── §6 pasif + kaldırma ──
     console.log("\n── §6 Pasif kayıt ve kaldırma ──");

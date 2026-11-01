@@ -182,12 +182,14 @@ async function main(): Promise<void> {
     const S3 = await item("S3", ItemType.SERVICE, ItemUnit.MT); // dış brode
     const S4 = await item("S4", ItemType.SERVICE, ItemUnit.MT); // normsuz
     const S5 = await item("S5", ItemType.SERVICE, ItemUnit.MT); // kursuz sarf
+    const S6 = await item("S6", ItemType.SERVICE, ItemUnit.MT); // sıfır norm: "sarf kullanmaz" beyanı
     const C1 = await item("C1", ItemType.CONSUMABLE, ItemUnit.KG);
     const C2 = await item("C2", ItemType.CONSUMABLE, ItemUnit.KG);
     await norm(S1, C1, "0.010000");
     await norm(S2, C1, "0.002000");
     await norm(S3, C1, "0.001000");
     await norm(S5, C2, "0.010000");
+    await norm(S6, C2, "0.000000"); // C2 kursuz: sıfır norm fiyat aramazsa eksik doğmaz
     await prisma.itemPrice.create({ data: { itemId: C1, customerId: null, kind: PriceKind.PURCHASE, currency: Currency.TRY, price: "200.0000", createdAt: BEFORE } });
     // §4b: ortamda 2025-03-01'e kadar kuru OLMAYAN döviz seçilir; yoksa §4b KIRMIZI (sessiz geçmez).
     let noFxCurrency: Currency | null = null;
@@ -283,9 +285,10 @@ async function main(): Promise<void> {
     const R8 = await roll(A.id, 10);
     const R10 = await roll(A.id, 10); // S2 bağı, faturada S2 satırı yok → GELIR_SATIRI
     const R11 = await roll(A.id, 10); // RECEIVED bağ, makbuzu yok → DIS_FASON_MAKBUZU
+    const RZ = await roll(A.id, 10); // S6 sıfır norm → ölçülmüş 0 sarf
     await invoice({ cariId: A.cariId, docNo: "F5", issue: T("2025-03-05"), status: InvoiceStatus.CONFIRMED,
-      lines: [{ item: S4, qty: "10", total: "30.00" }, { item: S5, qty: "10", total: "40.00" }, { item: S3, qty: "10", total: "20.00" }],
-      links: [{ rollId: R7, item: S4, meters: "10", serviceAt: T("2025-03-01") }, { rollId: R8, item: S5, meters: "10", serviceAt: T("2025-03-01") },
+      lines: [{ item: S4, qty: "10", total: "30.00" }, { item: S5, qty: "10", total: "40.00" }, { item: S3, qty: "10", total: "20.00" }, { item: S6, qty: "10", total: "25.00" }],
+      links: [{ rollId: RZ, item: S6, meters: "10", serviceAt: T("2025-03-01") }, { rollId: R7, item: S4, meters: "10", serviceAt: T("2025-03-01") }, { rollId: R8, item: S5, meters: "10", serviceAt: T("2025-03-01") },
         { rollId: R10, item: S2, meters: "10", serviceAt: T("2025-03-01") },
         { rollId: R11, item: S3, meters: "10", basis: ServiceMeterBasis.RECEIVED, serviceAt: T("2025-03-01"), stepId: rc.stepId }] });
     const mar = mine((await report("2025-03")).rows);
@@ -301,6 +304,9 @@ async function main(): Promise<void> {
     const r11 = mar.find((r) => r.rollId === R11);
     check("§4e ⭐ RECEIVED iş, makbuz çözülemez → DIS_FASON_MAKBUZU, dış fason ve katkı null (0 değil)",
       r11?.missing.includes("DIS_FASON_MAKBUZU") === true && r11.subcontractTry === null && r11.contributionTry === null, `${JSON.stringify(r11?.missing)} ${f2(r11?.subcontractTry)}`);
+    const rz = mar.find((r) => r.rollId === RZ);
+    check("§4f ⭐ sıfır norm ('sarf kullanmaz' beyanı) → eksik YOK, sarf 0,00, katkı = gelir 25,00 (normsuz S4 yine SARF_NORMU)",
+      rz?.missing.length === 0 && f2(rz.consumableTry) === "0.00" && f2(rz.contributionTry) === "25.00", `${JSON.stringify(rz?.missing)} ${f2(rz?.consumableTry)} ${f2(rz?.contributionTry)}`);
     check("§4c müşteri özeti katkısı null + eksik satır sayısı 4", (() => { const s = summarizeProfitability(mar, "customer")[0]; return s?.contributionTry === null && s.missingRows === 4; })());
 
     // ── §5 ayarlar ──
