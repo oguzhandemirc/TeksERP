@@ -45,6 +45,12 @@ import { unsavedFlagKeys } from "./flag-save";
  *      sözleşmesinin DIŞINDAKİ ham system-setting satırları; bkz.
  *      `SettingFieldDef` gerekçesi)
  */
+/** Gömülü sayı alanının TEK kodlayıcısı: pozitif sonlu sayı değer, gerisi (0 dahil) "boş" = null.
+ *  Sunucu değeri de bundan geçer — ham 0 ile taslağın null'u karşılaşınca sekme kalıcı kirli kalıyordu. */
+function numberFieldValue(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
+}
+
 export function FeatureFlagSection({
   flags,
   numberFlags = [],
@@ -197,10 +203,9 @@ export function FeatureFlagSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverNumberStr]);
   /** Taslak metni sunucu sözleşmesine çevirir: boş/geçersiz → null (kural inert). */
-  const parseNumberDraft = (raw: string | undefined): number | null => {
-    const n = parseFloat((raw ?? "").replace(",", "."));
-    return Number.isFinite(n) && n > 0 ? n : null;
-  };
+  const parseNumberDraft = (raw: string | undefined): number | null =>
+    numberFieldValue(parseFloat((raw ?? "").replace(",", ".")));
+  const serverNumberOf = (k: NumberFlagKey): number | null => numberFieldValue(server?.[k]);
   useEffect(() => {
     const next: Record<string, boolean> = {};
     for (const k of flagKeys) next[k] = server?.[k] ?? false;
@@ -269,7 +274,7 @@ export function FeatureFlagSection({
 
   const flagsDirty = flagKeys.some((k) => (flagDraft[k] ?? false) !== (server?.[k] ?? false));
   const numbersDirty = numberKeys.some(
-    (k) => parseNumberDraft(numberDraft[k]) !== (server?.[k] ?? null),
+    (k) => parseNumberDraft(numberDraft[k]) !== serverNumberOf(k),
   );
   // Sayısal alan aralık DIŞINDAysa kaydetme kapanır (backend zaten 400 verir —
   // kullanıcıyı sunucuya kadar götürmeden söyle).
@@ -310,7 +315,7 @@ export function FeatureFlagSection({
     // kalıcı olurdu.
     for (const k of numberKeys) {
       const v = parseNumberDraft(numberDraft[k]);
-      if (v !== (server?.[k] ?? null)) (patch as Record<string, number | null>)[k] = v;
+      if (v !== serverNumberOf(k)) (patch as Record<string, number | null>)[k] = v;
     }
     for (const f of numberFlags) {
       const v = numDraft[f.key];
