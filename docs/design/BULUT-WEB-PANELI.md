@@ -6,7 +6,7 @@
 - **K1 açma:** bulut imajı (`Teks-Erp/docker/korumali/Dockerfile`) `/app/dist-web`'i HEP taşır; panel yalnız `WEB_DIST_DIR` doluyken sunulur (varsayılan boş = kapalı = bugünkü davranış). Windows fabrika paketi panel TAŞIMAZ (B6, değişmez).
 - **K2 oturum:** web istemcisinde kimlik httpOnly çerezde; Electron/tablet `Authorization: Bearer` akışı bayt-bayt aynı.
 - **K3 yüzey:** webde ekranlar + Excel + A4 yazdırma + PDF (= tarayıcının "Yazdır → PDF olarak kaydet"i, yeni paket yok) açık. Etiket (HTML dahil) · tartı · Bluetooth · tarayıcı/okuyucu · cihaz testi düğmeleri görünür-soluk, "Bu işlem masaüstü uygulamasından yapılır". Sunucu keşfi · güncelleme · sunucu adresi · LAN TLS · lisans aktarımı webde gizli.
-- **K4 erişim:** web girişinde TOTP zorunlu + `web:access` izni; SoD üçlüsü değişmez.
+- **K4 erişim:** web girişinde TOTP zorunlu + `web:access` izni; SoD üçlüsü değişmez. Kod adımı "bu cihazı N gün hatırla" ile atlanabilir (`auth.trustedDeviceDays`, varsayılan 0 = kapalı; arşiv `2026-11.md` §2026-11-01 güvenilir cihaz).
 
 ## Tel sözleşmesi
 | Konu | Kural |
