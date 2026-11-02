@@ -33,6 +33,7 @@ export const maliyetReportTiles: HubTile[] = [
 ];
 
 /** Karo görünürlüğü — karo kendi iznini taşır (yoksa `report:yarn-need`); dokuma verimliliği ayrıca dokuma açık (SY-D3). */
-export function visibleMaliyetTiles(hasPermission: (code: string) => boolean, weavingOn: boolean): HubTile[] {
-  return maliyetReportTiles.filter((t) => (t.key !== "dokuma-verimlilik" || weavingOn) && hasPermission(t.permission ?? "report:yarn-need"));
+export function visibleMaliyetTiles(hasPermission: (code: string) => boolean, weavingOn: boolean, routeOpen: (to: string) => boolean = () => true): HubTile[] {
+  // K19: bağlı modül (Kârlılık → finans) `ROUTE_ALSO_REQUIRES`ten, route kapısıyla aynı yüklem.
+  return maliyetReportTiles.filter((t) => (t.key !== "dokuma-verimlilik" || weavingOn) && hasPermission(t.permission ?? "report:yarn-need") && routeOpen(t.to));
 }

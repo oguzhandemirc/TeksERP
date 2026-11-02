@@ -115,6 +115,9 @@ export const RESERVED_SETTING_KEYS: ReadonlySet<string> = new Set([
   LICENSE_TRACE_SETTING_KEY,
   LICENSE_REVOCATION_SETTING_KEY,
   ERROR_REPORT_CONSENT_SETTING_KEY,
+  // Menü düzeni (K19): tek yazar doğrulamalı `PUT /api/menu-layout` (bilinmeyen/gizlenemez ekran 400).
+  "ui.menuHiddenScreens",
+  "ui.menuAdvancedGroup",
 ]);
 
 /** `security.` ile başlıyor mu — liste/dışa-aktarım süzgeçlerinin yüklemi. */

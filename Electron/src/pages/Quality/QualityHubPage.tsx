@@ -7,6 +7,8 @@ import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { HubSkeleton } from "@/components/hub/HubSkeleton";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import { qualityTiles, type QualityTile } from "./tile-config";
+import { useMenuLayout } from "@/hooks/useMenuLayout";
+import { isHubTileHidden } from "@/lib/menu-layout";
 
 /** Kalite Güvence kökü (UX-2 K1) — Operasyon hub'ıyla aynı kural: izin şart, kapalı modül karosu yalnız modülü açabilene soluk + ipucu. */
 export function QualityHubPage() {
@@ -16,7 +18,8 @@ export function QualityHubPage() {
   const permitted = (t: QualityTile) =>
     t.permissionAny ? hasAnyPermission(t.permissionAny) : !t.permission || hasPermission(t.permission);
   const isOff = (t: QualityTile) => Boolean(t.visibleWhen && !t.visibleWhen(ctx));
-  const visible = qualityTiles.filter((t) => permitted(t) && offEntryMode(isOff(t), Boolean(t.offHint), canSeeOff) !== "hide");
+  const menu = useMenuLayout();
+  const visible = qualityTiles.filter((t) => !isHubTileHidden(menu, t.to) && permitted(t) && offEntryMode(isOff(t), Boolean(t.offHint), canSeeOff) !== "hide");
   return (
     <PageShell>
       <PageHeader
