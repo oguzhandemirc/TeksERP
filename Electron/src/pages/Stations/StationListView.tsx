@@ -24,23 +24,21 @@ export const STATION_LIST_HEADERS = ["İstasyon", "Görev Türü", "Tip", "Depar
 
 export function StationListView({ rows, canWrite, onEditStation, onAddMachine, machine }: Props) {
   return (
-    <div className="rounded-lg border bg-card" data-testid="station-list-view">
-      <Table>
-        <TableHeader>
-          <TableRow className="hover:bg-transparent">
-            {STATION_LIST_HEADERS.map((h) => (
-              <TableHead key={h} className={h === "İşlemler" ? "text-right" : undefined}>
-                {h}
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((r) => (
-            <StationListRow key={r.machine ? r.machine.id : `st-${r.station.id}`} r={r} canWrite={canWrite} onEditStation={onEditStation} onAddMachine={onAddMachine} machine={machine} />
+    <Table data-testid="station-list-view" containerClassName="overflow-visible">
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          {STATION_LIST_HEADERS.map((h) => (
+            <TableHead key={h} className={h === "İşlemler" ? "text-right" : undefined}>
+              {h}
+            </TableHead>
           ))}
-        </TableBody>
-      </Table>
-    </div>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((r) => (
+          <StationListRow key={r.machine ? r.machine.id : `st-${r.station.id}`} r={r} canWrite={canWrite} onEditStation={onEditStation} onAddMachine={onAddMachine} machine={machine} />
+        ))}
+      </TableBody>
+    </Table>
   );
 }

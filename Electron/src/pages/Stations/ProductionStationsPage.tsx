@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { ListBody, ListFooter } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
@@ -305,50 +306,57 @@ export function ProductionStationsPage() {
         onToggleInactive={() => setShowInactive((v) => !v)}
       />
 
-      <PageBody className="p-6">
-        {loading && <Skeleton className="h-24 w-full" />}
-        {!loading && allStations.length === 0 && (
-          <div className="text-sm text-muted-foreground">Üretim istasyonu yok.</div>
-        )}
-        {!loading && allStations.length > 0 && stations.length === 0 && (
-          <div className="text-sm text-muted-foreground">Filtreye uyan istasyon yok.</div>
-        )}
-        {stations.length > 0 && viewMode === "list" && (
-          <StationListView
-            rows={exportRows}
-            canWrite={canWrite}
-            onEditStation={onEditStation}
-            onAddMachine={onAddMachine}
-            machine={{ onEdit: onEditMachine, onQr: setQrMachine, onPrintLabel: setLabelMachine, onDeactivate: setDeactivateMachine, onReactivate: onReactivateMachine, onDelete: setDeleteMachine }}
-          />
-        )}
-        {stations.length > 0 && viewMode === "cards" && (
-          // Responsive kart grid'i — sütun sayısı mevcut genişliğe göre otomatik
-          // (auto-fill, kart başına min 28rem/448px → makine tablosu rahat sığar).
-          // items-start: kısa kartlar aynı satırdaki uzun karta göre uzamaz.
-          <div className="grid items-start gap-4 [grid-template-columns:repeat(auto-fill,minmax(28rem,1fr))]">
-            {stations.map((s) => (
-              <StationCard
-                key={s.id}
-                station={s}
-                machines={machinesByStation.get(s.id) ?? EMPTY_MACHINES}
-                peripheralsByMachine={peripheralsByMachine}
-                cap={capByStation.get(s.id)}
-                canWrite={canWrite}
-                onEditStation={onEditStation}
-                onAddMachine={onAddMachine}
-                onEditMachine={onEditMachine}
-                onQrMachine={setQrMachine}
-                onPrintLabelMachine={setLabelMachine}
-                onDeactivateMachine={setDeactivateMachine}
-                onReactivateMachine={onReactivateMachine}
-                onDeleteMachine={setDeleteMachine}
-                onEditCap={setCapStation}
-              />
-            ))}
-          </div>
-        )}
-      </PageBody>
+      {/* Liste görünümü liste standardında (kenardan kenara, yapışkan başlık); kart ızgarası dolgulu gövdede kalır. */}
+      {stations.length > 0 && viewMode === "list" ? (
+        <>
+          <ListBody>
+            <StationListView
+              rows={exportRows}
+              canWrite={canWrite}
+              onEditStation={onEditStation}
+              onAddMachine={onAddMachine}
+              machine={{ onEdit: onEditMachine, onQr: setQrMachine, onPrintLabel: setLabelMachine, onDeactivate: setDeactivateMachine, onReactivate: onReactivateMachine, onDelete: setDeleteMachine }}
+            />
+          </ListBody>
+          <ListFooter loaded={exportRows.length} label={`${stations.length} istasyon · ${exportRows.length} satır`} />
+        </>
+      ) : (
+        <PageBody className="p-6">
+          {loading && <Skeleton className="h-24 w-full" />}
+          {!loading && allStations.length === 0 && (
+            <div className="text-sm text-muted-foreground">Üretim istasyonu yok.</div>
+          )}
+          {!loading && allStations.length > 0 && stations.length === 0 && (
+            <div className="text-sm text-muted-foreground">Filtreye uyan istasyon yok.</div>
+          )}
+          {stations.length > 0 && viewMode === "cards" && (
+            // Responsive kart grid'i — sütun sayısı mevcut genişliğe göre otomatik
+            // (auto-fill, kart başına min 28rem/448px → makine tablosu rahat sığar).
+            // items-start: kısa kartlar aynı satırdaki uzun karta göre uzamaz.
+            <div className="grid items-start gap-4 [grid-template-columns:repeat(auto-fill,minmax(28rem,1fr))]">
+              {stations.map((s) => (
+                <StationCard
+                  key={s.id}
+                  station={s}
+                  machines={machinesByStation.get(s.id) ?? EMPTY_MACHINES}
+                  peripheralsByMachine={peripheralsByMachine}
+                  cap={capByStation.get(s.id)}
+                  canWrite={canWrite}
+                  onEditStation={onEditStation}
+                  onAddMachine={onAddMachine}
+                  onEditMachine={onEditMachine}
+                  onQrMachine={setQrMachine}
+                  onPrintLabelMachine={setLabelMachine}
+                  onDeactivateMachine={setDeactivateMachine}
+                  onReactivateMachine={onReactivateMachine}
+                  onDeleteMachine={setDeleteMachine}
+                  onEditCap={setCapStation}
+                />
+              ))}
+            </div>
+          )}
+        </PageBody>
+      )}
 
       <StationFormDialog
         open={stationDlg.open}
