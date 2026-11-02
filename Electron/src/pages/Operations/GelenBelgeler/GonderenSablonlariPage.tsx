@@ -19,7 +19,7 @@ export const SENDER_TEMPLATES_PATH = "/operations/gelen-belgeler/sablonlar";
 const QUERY_KEY = [INCOMING_DOCUMENT_QUERY_KEY, "sablonlar"] as const;
 
 const KIND_LABEL: Record<BatchNoCandidateKind, string> = {
-  BARCODE: "barkod no", DOC: "evrak no", BATCH: "parti no", WORK_ORDER: "iş emri no", ORDER: "sipariş no", FORM: "form no",
+  BARCODE: "barkod no", DOC: "evrak no", BATCH: "parti no", WORK_ORDER: "gönderenin emir no", ORDER: "sipariş no", FORM: "form no",
 };
 
 /** Parti no alanı seçimi — aday düğmeleri (tek tık = PATCH) + temizle; hatırlanan anahtar tanımda yoksa ayrıca gösterilir. */
