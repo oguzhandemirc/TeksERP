@@ -114,6 +114,8 @@ const quickStartSchema = z.object({
   // planlanan firmaya otomatik fason sevki de yapılır (çeki listesi dahil).
   // Mobil "Fasona Gönder" toggle'ı; ilk adım fason değilse/firma yoksa yok sayılır.
   dispatchFirstStep: z.boolean().optional(),
+  // "Belgeden iş emri": kaynak gelen belge. Parti numarası (ayar DOCUMENT ise) sunucuda NOTTAN okunur, gövdeden değil.
+  sourceNoteId: z.string().uuid().optional(),
 }).refine(hasRoute, ROUTE_REFINE_MSG);
 
 const targetPropertiesSchema = z.object({

@@ -35,6 +35,7 @@
 ### Tuzaklar
 
 - **[ÇEKİRDEK]** Sayaç sorgusunun regex'i BİÇİMDEN TÜRETİLİR (`seriesPosixRegex`), elle yazılmaz; gevşerse eski günlük kodlar sızar, parse null döner ve sayaç her seferinde seri başına düşer (canlı P01 dururken ikinci P01 doğar). Sabit yazılan süzgeç ön ek değişince TERS yönde de kırar — bütün satırları eler ve sayaç 1'de takılır (K27). · bekçi: `scripts/test_batch_number_format.ts §1 (sahte tx'ten yakalanan SQL deseni eski günlük kodları ve P00'ı DIŞLAR, P01-P99'u KABUL eder; DB'de yalnız eski kodlar varken P01'den başlar; parse ikinci hattı ayrı — negatif sonda: SQL süzgeci gevşeyince 2 kırmızı)` <sub>(CLAUDE.md:161 · kaynak: batch.service.ts:164 · test:160-189 · arşiv:3236, ölçüldü 2026-09-13)</sub>
+- **[ÇEKİRDEK]** Belgeden doğan partiyi (`numberSource=DOCUMENT`, `gelenBelge.batchNumberSource=DOCUMENT` + taslağın `ourBatchNo`su) seri sayacına sokma: kısa/günlük sayaç okuyucuları ve panel sayımı (`countTable.yalnizSeri`) yalnız `SERIES` satırı okur, DOCUMENT dalı 8022 kilidini almaz; numarayı istemciden değil nottan (`resolveDocumentBatchNo`) oku (`test_batch_number_format §8`, `test_gelen_belge_oto_is_emri §7`).
 
 ## Geçersiz kılınan kurallar — bunlara UYMA
 

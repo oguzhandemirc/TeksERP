@@ -14,7 +14,7 @@ import { matchesPermission } from "../middlewares/rbac.middleware";
 import type { JwtPayload } from "../types/api.types";
 import { buildWorkOrderPlan, WORK_ORDER_PLAN_STATUSES, type PlanGroup } from "./gelen-belge-is-emri.service";
 import type { ApproveResult } from "./gelen-belge-onay.service";
-import { readIncomingDocAutoWorkOrder, readProductionEnabled } from "./system-setting.service";
+import { readAutoWorkOrderPatternless, readIncomingDocAutoWorkOrder, readProductionEnabled } from "./system-setting.service";
 import { WorkOrderService } from "./workorder.service";
 import { TERIM } from "../constants/terim";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
@@ -92,10 +92,12 @@ export async function autoOpenWorkOrders(noteId: string, actor: Pick<JwtPayload,
       return allSkipped(groups, `Rota önerilemedi: ${plan.routeSuggestionNotes.join(" ")} ${IE.cekim.belirtme} plan ekranından rota seçerek açın ya da ${settingScreenPath("gelen-belge")} ekranında fabrika varsayılan rotasını seçin.`);
     }
     const out: AutoWorkOrderGroup[] = [];
+    // OPEN (Gülkesim, §2.7 K5): gramajsız grup hedef değersiz açılır; gramaj makine başında girilir.
+    const patternlessOpen = (await readAutoWorkOrderPatternless()) === "OPEN";
     // SIRAYLA (paralel değil): aynı belgenin topları; bir grubun hatası ötekini durdurmaz.
     for (const g of groups) {
       const base = baseGroup(g);
-      if (g.patternless) {
+      if (g.patternless && !patternlessOpen) {
         out.push({ ...base, outcome: "SKIPPED", reason: "İşlem değeri (desen/gramaj) çözülemedi; grup elle açılmalı." });
         continue;
       }
@@ -111,6 +113,7 @@ export async function autoOpenWorkOrders(noteId: string, actor: Pick<JwtPayload,
           routeTemplateId,
           targetValues: g.targets.map((t) => ({ propertyId: t.propertyId, valueId: t.valueId })),
           targetPropertyIds: [...new Set(g.targets.map((t) => t.flagPropertyId))],
+          sourceNoteId: noteId,
         }, actor.userId);
         const wo = res.data?.workOrder;
         out.push({ ...base, outcome: "OPENED", workOrderId: wo?.id, workOrderNumber: wo?.workOrderNumber, attached: res.data?.attached ?? 0 });

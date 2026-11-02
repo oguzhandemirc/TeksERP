@@ -6,6 +6,7 @@
 // hükmü okur, istemcide ikinci hesap yoktur. DB okumaz, yazmaz (bekçi doğrudan sınar).
 // =============================================================================
 import { DeliveryNoteLineStatus, Prisma } from "@prisma/client";
+import { v5 as uuidv5 } from "uuid";
 import { SUSPECT_MARK } from "../lib/gelen-belge/taslak";
 import { sayiMetni } from "./reports/anlati/sayi-bicim";
 import type { DocumentTotalCheckMode, UnreviewedApprovalMode } from "./system-setting.service";
@@ -15,7 +16,20 @@ export const TOTAL_TOLERANCE = 0.005;
 
 // OCR beyanı sayıları METİN yazar (motor DeclaredTotals: string); elle girilen sayı olabilir — karşılaştırma Number() ile.
 type DeclaredBlock = { blockNo?: number; count?: number | string | null; kg?: number | string | null; m?: number | string | null };
-export type TotalLine = { blockNo: number; meters: Prisma.Decimal | number | string; weightKg: Prisma.Decimal | number | string | null; status: DeliveryNoteLineStatus };
+export type TotalLine = { blockNo: number; meters: Prisma.Decimal | number | string; weightKg: Prisma.Decimal | number | string | null; status: DeliveryNoteLineStatus; id?: string };
+
+/** Belge → özet satırı kimlik uzayı (PER_DOCUMENT; sabit: yarıda kalan onay ikinci özet satırı, dolayısıyla ikinci top doğurmaz). */
+const SUMMARY_LINE_NS = "b3e7c1d4-2a9f-4e6b-8c15-0f9d2e7a4b61";
+/**
+ * Belge başına tek kayıt (`gelenBelge.entryMode=PER_DOCUMENT`) özet satırının kimliği — belirlenimli, satır no'dan bağımsız.
+ * Toplam kıyası belgenin kendi satırlarını sayar: özet satırı (= kurşun metresi) ikinci kez sayılmaz.
+ */
+export const summaryLineId = (noteId: string): string => uuidv5(`${noteId}|TEK`, SUMMARY_LINE_NS);
+/** Toplam/adet kıyasına giren satırlar: atlanmamış ve özet satırı olmayan (INFO satırı belgenin satırıdır, sayılır). */
+function linesForTotals<T extends TotalLine>(noteId: string | undefined, lines: ReadonlyArray<T>): T[] {
+  const sid = noteId ? summaryLineId(noteId) : null;
+  return lines.filter((l) => l.status !== "SKIPPED" && (sid === null || l.id !== sid));
+}
 
 const near = (a: number, b: number) => Math.abs(a - b) <= Math.max(0.001, Math.abs(b) * TOTAL_TOLERANCE);
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
@@ -65,8 +79,8 @@ export interface TotalsCheck {
  * Başlık top adedi ↔ canlı satır sayısı — UYARI (tasarım §4: `declaredTopCount` yalnız uyarı; motor onu blok 1'den
  * okur, çok bloklu belgede sert kapı her onayı 409'a düşürürdü).
  */
-export function totalWarnings(note: { declaredTopCount: number | null }, lines: ReadonlyArray<TotalLine>): string[] {
-  const live = lines.filter((l) => l.status !== "SKIPPED").length;
+export function totalWarnings(note: { id?: string; declaredTopCount: number | null }, lines: ReadonlyArray<TotalLine>): string[] {
+  const live = linesForTotals(note.id, lines).length;
   return note.declaredTopCount != null && note.declaredTopCount !== live ? [`Belgede ${note.declaredTopCount} top yazıyor, satır sayısı ${live}.`] : [];
 }
 
@@ -129,8 +143,8 @@ export interface TotalsCheckOptions {
  * sırasıyla, satırı olup beyanı olmayan bloklar (doğrulanamaz) sonra gelir. `mismatches` boşsa kapı geçer. Belge geneli fark
  * yalnız `documentMode=REQUIRE_REASON`ta kapıdır; INFO'da `warnings`e düşer ve `ok`u bozmaz.
  */
-export function totalsCheck(note: { totalsDeclared: unknown; declaredTopCount: number | null }, lines: ReadonlyArray<TotalLine>, opts: TotalsCheckOptions = {}): TotalsCheck {
-  const live = lines.filter((l) => l.status !== "SKIPPED");
+export function totalsCheck(note: { id?: string; totalsDeclared: unknown; declaredTopCount: number | null }, lines: ReadonlyArray<TotalLine>, opts: TotalsCheckOptions = {}): TotalsCheck {
+  const live = linesForTotals(note.id, lines);
   const blocking = opts.documentMode === "REQUIRE_REASON";
   const mismatches: string[] = [];
   const docNotes: string[] = [];
@@ -219,4 +233,29 @@ export function reviewGate(lines: ReadonlyArray<Parameters<typeof lineProblems>[
   const suspect = mode === "BLOCK_SUSPECT" ? pick("SUSPECT_VALUE") : [];
   if (suspect.length) return { blocked: suspect, code: "DELIVERY_NOTE_SUSPECT_PENDING", warned: [] };
   return { blocked: [], code: null, warned: unreviewed };
+}
+
+// ── Belge başına tek kayıt kapısı (`gelenBelge.entryMode=PER_DOCUMENT`) ─────
+
+/** Kurşun metresinin kaynağı (DB CHECK `customer_delivery_notes_kursun_source_ck` ile aynı küme). */
+export type KursunMetersSource = "OUTPUT" | "TOTAL" | "LINE_SUM" | "MANUAL";
+export interface PerDocumentGate {
+  /** Onayı durduran kod (409); geçerse null. */
+  code: "KURSUN_METERS_REQUIRED" | "KURSUN_METERS_REVIEW_PENDING" | null;
+  /** Geçen ama gözden geçirilmemiş kurşun metresi — onay uyarısı. */
+  warnings: string[];
+  /** Toplam uyuşmazlığı kapı mı (yalnız kaynak Σ satır iken); değilse uyarıdır. */
+  totalsBlocking: boolean;
+}
+
+/**
+ * PER_DOCUMENT onay kapısı — onay ön kontrolü ve detay yanıtı AYNI yüklemi okur. Satır kapıları (ürün/inceleme) bu kipte
+ * uygulanmaz: satırlar bilgidir, kayıt kurşun metresinden doğar. İnceleme kipi `unreviewedApproval`: WARN geçer, ötekiler 409.
+ */
+export function perDocumentGate(note: { kursunMeters: Prisma.Decimal | number | string | null; kursunMetersSource: string | null; kursunMetersReview: boolean }, mode: UnreviewedApprovalMode): PerDocumentGate {
+  const totalsBlocking = note.kursunMetersSource === "LINE_SUM";
+  if (note.kursunMeters == null || !(Number(note.kursunMeters) > 0)) return { code: "KURSUN_METERS_REQUIRED", warnings: [], totalsBlocking };
+  if (!note.kursunMetersReview) return { code: null, warnings: [], totalsBlocking };
+  if (mode !== "WARN") return { code: "KURSUN_METERS_REVIEW_PENDING", warnings: [], totalsBlocking };
+  return { code: null, warnings: [`Kurşun metresi (${sayi(String(note.kursunMeters))} m) gözden geçirilmeden onaylandı.`], totalsBlocking };
 }

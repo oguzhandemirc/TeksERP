@@ -8,8 +8,12 @@
 //   §4 ⭐ ikinci çağrı / yeniden onay ikinci iş emri doğurmaz; aynı token replay → aynı iş emri
 //   §5 ⭐ onaylayanın quick-start izni yok → hepsi SKIPPED + neden, iş emri 0, onay APPROVED
 //   §6 ⭐ bir grup düşer (rota BASKI bayrağını uygulamıyor → 400) → o grup FAILED + neden, öteki açılır, onay APPROVED
+//   §7 ⭐ Gülkesim C: `batchNumberSource=DOCUMENT` → parti adı = taslağın `ourBatchNo`su (numberSource DOCUMENT, seri
+//       panel sayımı değişmez); boş → seri; SERIES → seri; `autoWorkOrderPatternless=OPEN` → desensiz grup hedefsiz
+//       OPENED; SKIP → bugünkü neden; bilinmeyen `sourceNoteId` → 404, iş emri doğmaz; plan `batchNoPreview`.
 // Onay ucunun bileşimi (route ile aynı): onay → otomatik iş emri.
-// Negatif sonda: token `randomUUID()` → §3 token + §4 replay kırmızı; desensiz atlama kaldırılınca §3 "desensiz SKIPPED" kırmızı.
+// Negatif sonda: token `randomUUID()` → §3 token + §4 replay kırmızı; desensiz atlama kaldırılınca §3 "desensiz SKIPPED" kırmızı;
+// OPEN dalı silinince §7 OPEN kırmızı; `sourceNoteId` geçişi silinince §7 DOCUMENT kırmızı.
 // Çalıştır: npx tsx scripts/test_gelen_belge_oto_is_emri.ts
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -26,6 +30,7 @@ import {
 import type { ApproveInput } from "../src/services/gelen-belge-onay.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
+import { seriesImpactCount } from "../src/services/helpers/series-panel.helper";
 import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
 import { testActorId } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
@@ -43,7 +48,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 }
 
 const TAG = `TST-GOI${Date.now().toString(36).toUpperCase()}Z`;
-const SETTINGS = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER];
+const SETTINGS = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER, SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS];
 const made = { notes: [] as string[], items: [] as string[], customers: [] as string[], props: [] as string[], routes: [] as string[], stations: [] as string[] };
 const svc = new WorkOrderService();
 
@@ -65,7 +70,7 @@ async function run(): Promise<void> {
   for (const [k, v] of [[SETTING_KEYS.EMANET_ENABLED, true], [SETTING_KEYS.GELEN_BELGE_ENABLED, true]] as const) {
     await prisma.systemSetting.upsert({ where: { key: k }, create: { key: k, value: v }, update: { value: v } });
   }
-  await prisma.systemSetting.deleteMany({ where: { key: { in: [SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER] } } });
+  await prisma.systemSetting.deleteMany({ where: { key: { in: [SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER, SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS] } } });
 
   console.log("§0 Tek kaynak");
   const woRoutes = readFileSync(path.join(__dirname, "../src/routes/workorder.routes.ts"), "utf8");
@@ -186,6 +191,51 @@ async function run(): Promise<void> {
   check("§6 ⭐ onay APPROVED kalır; 1 açıldı, BASKI grubu FAILED + neden", r6.note.status === "APPROVED" && r6.autoWorkOrders?.opened === 1 && r6.autoWorkOrders.manual === 1 && !!failed && (failed.reason ?? "").length > 0 && failed.targets.includes("Kalip K7") && (await woCount()) === before6 + 1, describe(r6.autoWorkOrders));
   const dbNote = await prisma.customerDeliveryNote.findUnique({ where: { id: n6 }, select: { status: true } });
   check("§6 DB'de başlık APPROVED", dbNote?.status === "APPROVED");
+
+  console.log("§7 Belgeden parti no + gramajsız grup (Gülkesim C)");
+  const batchOf = async (r: { autoWorkOrders?: AutoWorkOrderResult }) => {
+    const id = r.autoWorkOrders?.groups.find((g) => g.outcome === "OPENED")?.workOrderId;
+    return id ? prisma.batch.findFirst({ where: { workOrderId: id }, select: { batchNumber: true, numberSource: true } }) : null;
+  };
+  const setOurNo = (id: string, v: string | null) => prisma.customerDeliveryNote.update({ where: { id }, data: { ourBatchNo: v } });
+  const s7 = await updateIncomingDocSettings({ batchNumberSource: "DOCUMENT" }, actorId);
+  check("§7 ayar DOCUMENT yazıldı", s7.batchNumberSource === "DOCUMENT");
+  // Seri biçimine uyan belge no (P + rakam) — sayaç ve panel sayımı onu görmemeli.
+  const docNo = `P26${String(Date.now()).slice(-5)}`;
+  const n7 = await mkNote(["BRODE DESEN Q10"]);
+  await setOurNo(n7, docNo);
+  const countBefore = [await seriesImpactCount("batchShort"), await seriesImpactCount("batchDaily")];
+  const r7 = await approveAndAutoOpen(n7, {}, full);
+  const b7 = await batchOf(r7);
+  check("§7 ⭐ DOCUMENT: parti adı = ourBatchNo, numberSource DOCUMENT", b7?.batchNumber === docNo && b7.numberSource === "DOCUMENT", `${JSON.stringify(b7)} | ${describe(r7.autoWorkOrders)}`);
+  const countAfter = [await seriesImpactCount("batchShort"), await seriesImpactCount("batchDaily")];
+  check("§7 seri panel sayımı belge no'yu saymaz", JSON.stringify(countBefore) === JSON.stringify(countAfter), `${countBefore} → ${countAfter}`);
+  check("§7 plan önizlemesi batchNoPreview = ourBatchNo", (await buildWorkOrderPlan(n7)).batchNoPreview === docNo);
+  const n7b = await mkNote(["BRODE DESEN Q11"]);
+  const r7b = await approveAndAutoOpen(n7b, {}, full);
+  const b7b = await batchOf(r7b);
+  check("§7 ⭐ ourBatchNo boş (DRN) → parti seriden", b7b?.numberSource === "SERIES" && /^P/.test(b7b.batchNumber) && (await buildWorkOrderPlan(n7b)).batchNoPreview === null, JSON.stringify(b7b));
+  await updateIncomingDocSettings({ batchNumberSource: "SERIES" }, actorId);
+  const n7c = await mkNote(["BRODE DESEN Q12"]);
+  await setOurNo(n7c, `${docNo}X`);
+  const r7c = await approveAndAutoOpen(n7c, {}, full);
+  const b7c = await batchOf(r7c);
+  check("§7 ⭐ ayar SERIES (bugünkü) → ourBatchNo dolu olsa da seri, önizleme null", b7c?.numberSource === "SERIES" && b7c.batchNumber !== `${docNo}X` && (await buildWorkOrderPlan(n7c)).batchNoPreview === null, JSON.stringify(b7c));
+
+  const nSkip = await mkNote(["SADECE ÜTÜ"]);
+  await updateIncomingDocSettings({ autoWorkOrderPatternless: "SKIP" }, actorId);
+  const rSkip = await approveAndAutoOpen(nSkip, {}, full);
+  const gSkip = rSkip.autoWorkOrders?.groups[0];
+  check("§7 ⭐ SKIP (bugünkü): desensiz grup SKIPPED, metin aynı", gSkip?.outcome === "SKIPPED" && gSkip.reason === "İşlem değeri (desen/gramaj) çözülemedi; grup elle açılmalı.", describe(rSkip.autoWorkOrders));
+  await updateIncomingDocSettings({ autoWorkOrderPatternless: "OPEN" }, actorId);
+  const rOpen = await autoOpenWorkOrders(nSkip, full);
+  const gOpen = rOpen?.groups[0];
+  const woOpen = gOpen?.workOrderId ? await prisma.workOrder.findUnique({ where: { id: gOpen.workOrderId }, select: { targetValues: { where: { revokedAt: null }, select: { id: true } } } }) : null;
+  check("§7 ⭐ OPEN: desensiz grup OPENED, hedef değer YOK", gOpen?.outcome === "OPENED" && woOpen?.targetValues.length === 0 && gOpen.attached === 1, describe(rOpen ?? undefined));
+
+  const before7 = await woCount();
+  const ghost = await errorOf(() => svc.quickStart({ rollBarcodes: ["YOK-BARKOD"], routeTemplateId: route.id, sourceNoteId: "00000000-0000-4000-8000-000000000000" }, actorId));
+  check("§7 bilinmeyen sourceNoteId → 404, iş emri doğmaz", ghost?.status === 404 && ghost.code === "DELIVERY_NOTE_NOT_FOUND" && (await woCount()) === before7, JSON.stringify(ghost));
 }
 
 async function cleanup(): Promise<void> {
