@@ -148,3 +148,30 @@ export function emptyRollHint(compact: boolean): string {
     ? "Yukarıdaki «Açık İşler»e dokunup top kuyruğundan birini seçin"
     : 'Sağdaki top kuyruğundan birini seçin';
 }
+
+/** Ekran metinleri istasyon ADINDAN (S4: kurşunsuz Detaylı KK aynı ekranı açar).
+ *  Ad yoksa (oturum/özet henüz yok) bugünkü kurşun metinleri. */
+export interface FlowScreenLabels {
+  title: string;
+  queueTitle: string;
+  emptyQueue: string;
+  noteTitle: string;
+}
+
+export function flowScreenLabels(stationName: string | null | undefined): FlowScreenLabels {
+  const name = stationName?.trim();
+  if (!name) {
+    return {
+      title: 'Kurşun',
+      queueTitle: 'Kurşun · KK2 İşleri',
+      emptyQueue: "Kurşun + KK2'de bekleyen kart yok",
+      noteTitle: 'Kurşun + KK2 Notu',
+    };
+  }
+  return {
+    title: name,
+    queueTitle: `${name} · İşler`,
+    emptyQueue: `${name} istasyonunda bekleyen kart yok`,
+    noteTitle: `${name} Notu`,
+  };
+}

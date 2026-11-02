@@ -792,7 +792,7 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   TAMBUR_CUT: { tur: "BAGLI_TERS", kod: "TAMBUR_UNDO", tersYazan: [{ dosya: "src/services/tambur-undo.service.ts", sembol: "applySingle" }, { dosya: "src/services/tambur-undo.service.ts", sembol: "applySingleRestore" }, { dosya: "src/services/tambur-undo.service.ts", sembol: "applyFull" }] },
   TAMBUR_UNDO: { tur: "TERS_KODU", ileri: ["TAMBUR_FINALIZE", "TAMBUR_CUT", "CUT_SPLIT", "CUT_DISCARD", "SCRAP", "OVERAGE"] },
   ENTRY_RECEIPT: { tur: "KARSI_OLAY", kod: "ROLL_CANCEL", gerekce: "topun doğuşunun tersi kayıttan düşmesidir; ayrı olay, bağ yok",
-    tersYazan: [{ dosya: "src/services/inventory.service.ts", sembol: "softDelete" }] },
+    tersYazan: [{ dosya: "src/services/inventory.service.ts", sembol: "cancelRollRecordTx" }] },
   ROLL_CANCEL: { tur: "BAGLI_TERS", kod: "CANCEL_RESTORE", tersYazan: [{ dosya: "src/services/inventory.service.ts", sembol: "restoreCancelledRoll" }] },
   CANCEL_RESTORE: { tur: "TERS_KODU", ileri: "ROLL_CANCEL" },
   CUSTOMER_RETURN: { tur: "BAGLI_TERS", kod: "RETURN_CANCEL", tersYazan: [{ dosya: "src/services/return.service.ts", sembol: "cancelReturn" }] },
