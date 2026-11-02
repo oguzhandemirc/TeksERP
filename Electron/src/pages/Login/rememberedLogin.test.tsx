@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useForm } from "react-hook-form";
+import { useLayoutEffect } from "react";
+import { useForm, type UseFormReturn } from "react-hook-form";
 
 /**
  * GİRİŞTE SON KULLANICI (ayar `auth.rememberLastUser`, kullanıcı isteği 2026-11-01).
@@ -10,6 +11,9 @@ import { useForm } from "react-hook-form";
  * ⭐ Hatırlanan görünüm yalnız parola alanını çizer; "Başka hesapla giriş yap" normal forma
  * döner; "Bu hesabı unut" kaydı siler.
  * jsdom'da `window.api` yok → depo webStore (localStorage) yoludur.
+ * KIRILGANLIK (2026-11-02): kullanıcı adı ayrı pasif efektte yazılınca görünüm ondan önce
+ * çiziliyordu; CI yükünde gönderim boş adla gitti / "Başka hesap" sıfırlaması ezildi. Aşağıdaki
+ * layout-efekt sondası bu sırayı belirlenimli ölçer.
  * SONDA (2026-11-01): `syncRememberedLogin`deki `isSystemAccount !== false` kapısı kaldırılınca
  * "sistem hesabı yazılmaz" (2) + "eski backend" testleri KIRMIZI — 3 başarısız (geri alındı, md5 eşit).
  */
@@ -125,19 +129,30 @@ describe("girişten sonra kayıt senkronu", () => {
   });
 });
 
+/** Hatırlanan görünümün commit'inde (pasif efektlerden ÖNCE) formdaki kullanıcı adını kaydeder. */
+function CommitProbe({ form, seen }: { form: UseFormReturn<LoginFormValues>; seen: string[] }) {
+  useLayoutEffect(() => {
+    seen.push(form.getValues("username"));
+  }, [form, seen]);
+  return null;
+}
+
 /** LoginPage'in son dalının aynası: hook + iki görünüm. */
-function Harness({ onSubmit }: { onSubmit: (v: LoginFormValues) => void }) {
+function Harness({ onSubmit, seen }: { onSubmit: (v: LoginFormValues) => void; seen?: string[] }) {
   const form = useForm<LoginFormValues>({ defaultValues: { username: "", password: "" } });
   const r = useRememberedLogin(form);
   return r.remembered ? (
-    <RememberedLoginForm
-      account={r.remembered}
-      form={form}
-      submitting={false}
-      onSubmit={onSubmit}
-      onSwitchAccount={r.switchAccount}
-      onForget={() => void r.forget()}
-    />
+    <>
+      {seen ? <CommitProbe form={form} seen={seen} /> : null}
+      <RememberedLoginForm
+        account={r.remembered}
+        form={form}
+        submitting={false}
+        onSubmit={onSubmit}
+        onSwitchAccount={r.switchAccount}
+        onForget={() => void r.forget()}
+      />
+    </>
   ) : (
     <LoginForm form={form} submitting={false} onSubmit={onSubmit} />
   );
@@ -164,6 +179,14 @@ describe("hatırlanan hesap görünümü", () => {
     fireEvent.click(screen.getByRole("button", { name: "Giriş Yap" }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
     expect(onSubmit.mock.calls[0]?.[0]).toEqual({ username: "ayse", password: "parola-1" });
+  });
+
+  it("⭐ kullanıcı adı, hatırlanan görünümün çizildiği commit'te formda (zamanlamaya bağlı değil)", async () => {
+    await writeRememberedLogin({ username: "ayse", displayName: null });
+    const seen: string[] = [];
+    render(<Harness onSubmit={vi.fn()} seen={seen} />);
+    await screen.findByTestId("remembered-login");
+    expect(seen[0]).toBe("ayse");
   });
 
   it("⭐ 'Başka hesapla giriş yap' normal forma döner (boş kullanıcı adı), kayıt kalır", async () => {
