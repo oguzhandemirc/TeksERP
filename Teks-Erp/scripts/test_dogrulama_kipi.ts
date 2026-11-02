@@ -10,18 +10,27 @@
 //
 // NE ÖLÇER:
 //   §1 kip anahtarı: yalnız "1" (boş · "0" · "true" kip değil — normal açılış bugünkü gibi)
-//   §2 ⭐ `server.ts` açılışı: her `start*` çağrısı İKİ listeden BİRİNDE (iki yönlü) · atlananlar `if (!VERIFYING)`
+//   §2 ⭐ `server.ts` açılışı: her `start*` çağrısı İKİ listeden BİRİNDE (iki yönlü) · atlananlar `if (!JOBS_OFF)`
 //      ardında · koşanlar koşulsuz · HOST doğrulamada 127.0.0.1 (`.env` genişletemez)
 //   §3 ⭐ lisans motoru: doğrulamada yerel ölçüm (bütünlük dahil) BİTER, yoklama zamanlanmaz; lisans durumu yalnız
 //      OKUNUR — kip dalı açılış yazımından önce, kapanış yazımı · iptal onarımı · parmak izi önbelleği kipte koşmaz
 //      (davranış: `test_lisans_motoru` §34 dizin + DB izi bayt-eşit)
 //   §4 ⭐ yerel sağlık adres kapısı: döngü adresi ✓ · LAN ✗ · vekil başlığı (döngüden gelse de) ✗
 //   §5 bağlantı: `/health/yerel` önce adres kapısı; public `/health` donmuş kümesine lisans GİRMEZ
+//   §6 ⭐ yardımcı test sunucusu (`TEKSERP_ZAMANLAYICI_KAPALI=1`): yalnız "1" kapatır (bayraksız üretim bugünkü gibi),
+//      aynı atlanan listeyi kullanır, HOST/TLS'e dokunmaz; `bekci-http` + profil matrisi + CI sunucuları bayrağı verir
 // NEGATİF SONDA (elle, geri alındı; commit mesajında).
 // =============================================================================
 import fs from "node:fs";
 import path from "node:path";
-import { VERIFICATION_KEPT_JOBS, VERIFICATION_MODE_ENV, VERIFICATION_SKIPPED_JOBS, isVerificationMode } from "../src/lib/dogrulama-kipi";
+import {
+  SCHEDULED_JOBS_OFF_ENV,
+  VERIFICATION_KEPT_JOBS,
+  VERIFICATION_MODE_ENV,
+  VERIFICATION_SKIPPED_JOBS,
+  isScheduledJobsOff,
+  isVerificationMode,
+} from "../src/lib/dogrulama-kipi";
 import { isDirectLoopback } from "../src/lib/yerel-saglik";
 
 const KOK = path.resolve(__dirname, "..");
@@ -59,9 +68,9 @@ function acilis(): void {
   check("§2b ⭐ her start* çağrısı beyanlı (atlanan ∨ koşan) — yeni iş sınıfsız giremez", beyansiz.length === 0, beyansiz.join(", ") || `${new Set(cagrilar).size} iş`);
   const olu = [...bilinen].filter((c) => !cagrilar.includes(c));
   check("§2c listede olup çağrılmayan iş yok (iki yönlü)", olu.length === 0, olu.join(", ") || "temiz");
-  const korumasiz = VERIFICATION_SKIPPED_JOBS.filter((c) => !new RegExp(`if \\(!VERIFYING\\) (?:void )?${c}\\(`).test(govde));
-  check("§2d ⭐ atlanan işler `if (!VERIFYING)` ardında", korumasiz.length === 0, korumasiz.join(", ") || `${VERIFICATION_SKIPPED_JOBS.length} iş`);
-  const kosulsuzDegil = VERIFICATION_KEPT_JOBS.filter((c) => new RegExp(`if \\([^)]*VERIFYING[^)]*\\)[^\\n]*${c}\\(`).test(govde));
+  const korumasiz = VERIFICATION_SKIPPED_JOBS.filter((c) => !new RegExp(`if \\(!JOBS_OFF\\) (?:void )?${c}\\(`).test(govde));
+  check("§2d ⭐ atlanan işler `if (!JOBS_OFF)` ardında", korumasiz.length === 0, korumasiz.join(", ") || `${VERIFICATION_SKIPPED_JOBS.length} iş`);
+  const kosulsuzDegil = VERIFICATION_KEPT_JOBS.filter((c) => new RegExp(`if \\([^)]*(?:VERIFYING|JOBS_OFF)[^)]*\\)[^\\n]*${c}\\(`).test(govde));
   check("§2e koşan işler koşulsuz (uzlaştırma doğrulamada da ölçülür)", kosulsuzDegil.length === 0, kosulsuzDegil.join(", ") || "temiz");
   check("§2f ⭐ HOST doğrulamada 127.0.0.1 (`.env` genişletemez)", /const LAN_HOST = VERIFYING \? "127\.0\.0\.1" : process\.env\.HOST \|\| "0\.0\.0\.0";/.test(src) && /const HOST = LAN_TLS\.httpHost;/.test(src));
   check("§2g kip tek kaynaktan (`isVerificationMode`)", /const VERIFYING = isVerificationMode\(\);/.test(src));
@@ -139,6 +148,27 @@ function baglanti(): void {
   check("§5d yerel sağlık /health'ten SONRA tanımlı (donmuş küme bekçilerinin çıpası ilk eşleşmeyi okur)", pub < bas);
 }
 
+/** CI HTTP bekçi sunucularının kur turu gerçek TCMB kurunu test DB'ye yazıyordu (arşiv 2026-11-02). */
+function yardimciSunucu(): void {
+  console.log("\n§6 yardımcı test sunucusu (zamanlayıcılar kapalı)");
+  check("§6a \"1\" → zamanlayıcılar kapalı", isScheduledJobsOff({ [SCHEDULED_JOBS_OFF_ENV]: "1" }));
+  check(
+    "§6b ⭐ yok · boş · \"0\" · \"true\" · \"false\" → işler başlar (üretim varsayılanı DEĞİŞMEZ)",
+    [undefined, "", "0", "true", "false", " 1"].every((v) => !isScheduledJobsOff(v === undefined ? {} : { [SCHEDULED_JOBS_OFF_ENV]: v })),
+  );
+  check("§6c bayrak doğrulama kipi DEĞİL (HOST/TLS/lisans motoru normal)", !isVerificationMode({ [SCHEDULED_JOBS_OFF_ENV]: "1" }));
+  const src = oku("src/server.ts");
+  check("§6d ⭐ tek kapı: `JOBS_OFF = VERIFYING || isScheduledJobsOff()`", /const JOBS_OFF = VERIFYING \|\| isScheduledJobsOff\(\);/.test(src));
+  check("§6e açılış gövdesinde çıplak `!VERIFYING` iş kapısı kalmadı", !/if \(!VERIFYING\) (?:void )?start/.test(dinleyiciGovdesi(src)));
+  const baslaticilar = ["scripts/bekci-http.ts", "scripts/lib/test-sunucusu.ts"];
+  const vermeyen = baslaticilar.filter((f) => !new RegExp(`${SCHEDULED_JOBS_OFF_ENV}: "1"`).test(oku(f)));
+  check("§6f bekçi sunucusu başlatıcıları (`bekci-http`, profil matrisi) bayrağı verir", vermeyen.length === 0, vermeyen.join(", ") || `${baslaticilar.length} dosya`);
+  const ci = fs.readFileSync(path.join(KOK, "..", ".github", "workflows", "ci.yml"), "utf8");
+  const ciSunucu = ci.split("\n").filter((l) => /npx tsx src\/server\.ts/.test(l));
+  const ciEksik = ciSunucu.filter((l) => !l.includes(`${SCHEDULED_JOBS_OFF_ENV}=1`));
+  check("§6g ⭐ CI'daki her arka plan sunucusu bayrağı verir", ciSunucu.length > 0 && ciEksik.length === 0, ciEksik.join(" | ").trim() || `${ciSunucu.length} satır`);
+}
+
 function main(): void {
   console.log("=== DOĞRULAMA KİPİ + YEREL SAĞLIK ===");
   kipAnahtari();
@@ -146,6 +176,7 @@ function main(): void {
   lisansMotoru();
   adresKapisi();
   baglanti();
+  yardimciSunucu();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exitCode = fail === 0 ? 0 : 1;
 }

@@ -51,7 +51,7 @@ function check(label: string, ok: boolean, detay = ""): void {
 // ── §1 zamanlayıcı kaydı (statik) ────────────────────────────────────────────
 export function kayitIhlalleri(d: { server: string; job: string; arsiv: string; kip: string }): string[] {
   const ih: string[] = [];
-  if (!/if \(!VERIFYING\) startMaintenanceScheduler\(\)/.test(d.server)) ih.push("server.ts bakım işini doğrulama kipi dışında başlatmıyor");
+  if (!/if \(!JOBS_OFF\) startMaintenanceScheduler\(\)/.test(d.server)) ih.push("server.ts bakım işini doğrulama/yardımcı sunucu kipi dışında başlatmıyor");
   if (/startArchiveScheduler\(\)/.test(d.server)) ih.push("server.ts arşivleyiciyi ayrıca başlatıyor (tek giriş startMaintenanceScheduler)");
   const bas = d.job.slice(d.job.indexOf("export function startMaintenanceScheduler"));
   if (!/startArchiveScheduler\(\)/.test(bas)) ih.push("startMaintenanceScheduler arşivleyiciyi başlatmıyor");
