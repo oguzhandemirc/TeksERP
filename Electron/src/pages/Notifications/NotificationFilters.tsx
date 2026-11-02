@@ -27,7 +27,7 @@ export function NotificationFilters({
   onGrupDegis: (g: NotificationGroup | null) => void;
 }) {
   return (
-    <aside className="flex w-full shrink-0 flex-col gap-4 rounded-lg border border-border/60 bg-card/40 p-3 lg:w-60" aria-label="Süzgeç">
+    <aside className="flex w-full shrink-0 flex-col gap-4 border-b p-3 lg:w-60 lg:overflow-y-auto lg:border-b-0 lg:border-r" aria-label="Süzgeç">
       <fieldset className="flex flex-col gap-1">
         <legend className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Durum</legend>
         <div className="flex flex-wrap gap-1 lg:flex-col">

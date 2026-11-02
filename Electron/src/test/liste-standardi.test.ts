@@ -70,17 +70,6 @@ const EXEMPT: Record<string, string> = {
   "Reports/_v2/ReportTable.tsx": RAPOR,
 };
 
-/** Henüz standarda çekilmemiş liste sayfaları — her parti PR'ı buradan siler; BOŞALINCA kaldırılır. */
-const PENDING = new Set<string>([
-  "Access/Permissions/PermissionsCatalogPage.tsx",
-  "Definitions/DocumentDesigner/assignments/AssignmentsView.tsx",
-  "Notifications/NotificationTable.tsx",
-  "Operations/Orders/OrderPlanView.tsx",
-  "System/Duplicates/DuplicatesPage.tsx",
-  "System/NotificationProfiles/ProfileMatrixTab.tsx",
-  "System/WorkSessions/HistoryTable.tsx",
-]);
-
 const TABLE_TAGS = new Set(["table", "Table", "DataTable"]);
 const CARD_TAGS = new Set(["Card", "CardContent"]);
 const OVERLAY_FILE = /(Dialog|Sheet|Modal)[^/]*\.tsx$/;
@@ -157,18 +146,14 @@ function violations(): Map<string, string[]> {
 describe("liste standardı — tablo kart içinde çizilmez", () => {
   const found = violations();
 
-  it("⭐ yeni kart-içi tablo yok (muaf ya da bekleyen değilse ListBody/DataTable kullan)", () => {
-    const yeni = [...found.keys()].filter((f) => !(f in EXEMPT) && !PENDING.has(f));
+  it("⭐ yeni kart-içi tablo yok (muaf değilse ListBody/DataTable kullan)", () => {
+    const yeni = [...found.keys()].filter((f) => !(f in EXEMPT));
     expect(yeni.map((f) => `${f} ${found.get(f)?.join(",")}`)).toEqual([]);
   });
 
-  it("muaf/bekleyen listesi bayat değil (dönüşen ya da silinen dosya listeden düşer)", () => {
-    const bayat = [...Object.keys(EXEMPT), ...PENDING].filter((f) => !found.has(f));
+  it("muaf listesi bayat değil (dönüşen ya da silinen dosya listeden düşer)", () => {
+    const bayat = Object.keys(EXEMPT).filter((f) => !found.has(f));
     expect(bayat).toEqual([]);
-  });
-
-  it("muaf ile bekleyen kesişmez", () => {
-    expect([...PENDING].filter((f) => f in EXEMPT)).toEqual([]);
   });
 
   it("ölçer kartı tanır (sonda): rounded+border div ve Card içi tablo ihlal, düz tablo değil", () => {

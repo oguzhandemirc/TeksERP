@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { ListBody, ListFooter, ListToolbar } from "@/components/layout/ListPage";
 import { documentTemplateService } from "@/services/documentTemplateService";
 import type { TemplateAccess } from "../templates/useTemplateAccess";
 import { docTypeLabel } from "../useDesignerDraft";
@@ -31,8 +32,8 @@ export function AssignmentsView({ access }: { access: TemplateAccess }) {
   }
   const def = docType ? defaultOf(a, docType) : null;
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 md:flex-row">
-      <nav aria-label="Belge türleri" className="flex shrink-0 gap-1 overflow-x-auto md:w-56 md:flex-col md:overflow-y-auto">
+    <div className="flex h-full min-h-0 flex-1 flex-col border-t md:flex-row">
+      <nav aria-label="Belge türleri" className="flex shrink-0 gap-1 overflow-x-auto border-b p-2 md:w-56 md:flex-col md:overflow-y-auto md:border-b-0 md:border-r">
         {types.map((t) => (
           <button key={t} type="button" aria-current={t === docType} onClick={() => setPicked(t)}
             className={cn("shrink-0 rounded px-2 py-1.5 text-left text-xs", t === docType ? "bg-primary text-primary-foreground" : "hover:bg-muted")}>
@@ -42,18 +43,21 @@ export function AssignmentsView({ access }: { access: TemplateAccess }) {
         ))}
       </nav>
       {docType && (
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto" data-testid="atama-paneli">
-          {a?.note && <Callout tone="info" title="Profil ezmesi">{a.note}</Callout>}
-          <div className="flex flex-wrap items-center gap-2 rounded-md border bg-card px-3 py-2">
-            <span className="text-sm font-medium">Tür varsayılanı:</span>
-            <span className="text-sm">{def?.name ?? "Sistem tasarımı"}</span>
-            <Button size="sm" variant="outline" className="ml-auto h-7 text-xs" disabled={!!block} title={block ?? undefined}
-              onClick={() => setTarget({ docType, profile: null, current: def, candidates, shielded: profilesShieldedFromDefault(catalog, a, docType) })}>
-              Değiştir
-            </Button>
-          </div>
-          <div className="overflow-x-auto rounded-md border">
-            <Table>
+        // Liste standardı: sabit üst bant (not + tür varsayılanı) → kenardan kenara profil tablosu → alt şerit.
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="atama-paneli">
+          <ListToolbar>
+            {a?.note && <Callout tone="info" title="Profil ezmesi">{a.note}</Callout>}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium">Tür varsayılanı:</span>
+              <span className="text-sm">{def?.name ?? "Sistem tasarımı"}</span>
+              <Button size="sm" variant="outline" className="ml-auto h-7 text-xs" disabled={!!block} title={block ?? undefined}
+                onClick={() => setTarget({ docType, profile: null, current: def, candidates, shielded: profilesShieldedFromDefault(catalog, a, docType) })}>
+                Değiştir
+              </Button>
+            </div>
+          </ListToolbar>
+          <ListBody>
+            <Table containerClassName="overflow-visible">
               <TableHeader>
                 <TableRow><TableHead>Profil</TableHead><TableHead>Etkilenen</TableHead><TableHead>Atanan şablon</TableHead><TableHead className="w-24" /></TableRow>
               </TableHeader>
@@ -78,7 +82,8 @@ export function AssignmentsView({ access }: { access: TemplateAccess }) {
                 })}
               </TableBody>
             </Table>
-          </div>
+          </ListBody>
+          <ListFooter loaded={catalog.length} label={`${catalog.length} belge profili`} />
         </div>
       )}
       {target && <AssignDialog target={target} note={a?.note} onClose={() => setTarget(null)} />}

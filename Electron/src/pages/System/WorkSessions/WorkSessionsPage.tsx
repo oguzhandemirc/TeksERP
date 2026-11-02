@@ -25,14 +25,15 @@ export function WorkSessionsPage() {
             <TabsTrigger value="history">Geçmiş</TabsTrigger>
           </TabsList>
         </div>
-        <PageBody className="p-6">
-          <TabsContent value="active" className="mt-0">
+        <TabsContent value="active" className="mt-0 min-h-0 flex-1">
+          <PageBody className="h-full p-6">
             <ActiveSessionsPanel />
-          </TabsContent>
-          <TabsContent value="history" className="mt-0">
-            <HistoryTable />
-          </TabsContent>
-        </PageBody>
+          </PageBody>
+        </TabsContent>
+        {/* Geçmiş liste standardında: sabit süzgeç bandı → kenardan kenara tablo → alt şerit. */}
+        <TabsContent value="history" className="mt-0 flex min-h-0 flex-1 flex-col">
+          <HistoryTable />
+        </TabsContent>
       </Tabs>
     </PageShell>
   );

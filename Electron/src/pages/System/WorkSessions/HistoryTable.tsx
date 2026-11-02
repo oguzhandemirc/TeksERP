@@ -23,6 +23,7 @@ import { stationService } from "@/pages/Stations/service";
 import { adminUserService } from "@/services/adminUserService";
 import { workSessionService } from "./service";
 import { DateRangeInput } from "@/components/forms/DateRangeInput";
+import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import {
   endReasonLabels,
   formatDurationMinutes,
@@ -104,8 +105,8 @@ export function HistoryTable() {
   const resetPage = () => setPage(1);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <>
+      <ListToolbar className="flex-row flex-wrap items-center">
         <select
           className={SELECT_CLS}
           value={userId}
@@ -197,107 +198,107 @@ export function HistoryTable() {
             ]}
           />
         </div>
-      </div>
+      </ListToolbar>
 
-      {q.isLoading ? (
-        <Skeleton className="h-64 w-full" />
-      ) : (
-        <>
-          <div className="rounded-md border">
-            <Table containerClassName="overflow-visible">
-              <TableHeader className="sticky top-0 z-10 bg-card">
+      <ListBody>
+        {q.isLoading ? (
+          <ListMessage>
+            <Skeleton className="h-64 w-full" />
+          </ListMessage>
+        ) : (
+          <Table containerClassName="overflow-visible">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Kullanıcı</TableHead>
+                <TableHead>Yer</TableHead>
+                <TableHead>Cihaz</TableHead>
+                <TableHead>Başlangıç</TableHead>
+                <TableHead>Bitiş</TableHead>
+                <TableHead>Süre</TableHead>
+                <TableHead>Kapanış</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.length === 0 && (
                 <TableRow>
-                  <TableHead>Kullanıcı</TableHead>
-                  <TableHead>Yer</TableHead>
-                  <TableHead>Cihaz</TableHead>
-                  <TableHead>Başlangıç</TableHead>
-                  <TableHead>Bitiş</TableHead>
-                  <TableHead>Süre</TableHead>
-                  <TableHead>Kapanış</TableHead>
+                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                    Filtrelere uyan oturum yok.
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
-                      Filtrelere uyan oturum yok.
-                    </TableCell>
-                  </TableRow>
-                )}
-                {rows.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="font-medium">{s.user.fullName}</TableCell>
-                    <TableCell>
-                      {placeLabel(s)}
-                      {s.machine && (
-                        <span className="ml-1 font-mono text-xs text-muted-foreground">
-                          {s.machine.code}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      <button
-                        type="button"
-                        className="hover:underline"
-                        title="Cihaz işlem dökümü"
-                        onClick={(e) => openTarget(`/access/devices/${s.device.id}`, e)}
-                        onAuxClick={(e) => {
-                          if (e.button === 1) {
-                            e.preventDefault();
-                            openTarget(`/access/devices/${s.device.id}`, e);
-                          }
-                        }}
-                      >
-                        {s.device.name}
-                      </button>
-                    </TableCell>
-                    <TableCell className="text-xs">{safeFormat(s.startedAt, "dd.MM.yyyy HH:mm")}</TableCell>
-                    <TableCell className="text-xs">
-                      {s.endedAt ? safeFormat(s.endedAt, "dd.MM.yyyy HH:mm") : <Badge>Açık</Badge>}
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      {formatDurationMinutes(sessionDurationMinutes(s.startedAt, s.endedAt))}
-                    </TableCell>
-                    <TableCell>
-                      {s.endReason ? (
-                        <Badge variant={s.endReason === "ADMIN" || s.endReason === "TAKEOVER" ? "muted" : "outline"}>
-                          {endReasonLabels[s.endReason]}
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+              )}
+              {rows.map((s) => (
+                <TableRow key={s.id}>
+                  <TableCell className="font-medium">{s.user.fullName}</TableCell>
+                  <TableCell>
+                    {placeLabel(s)}
+                    {s.machine && (
+                      <span className="ml-1 font-mono text-xs text-muted-foreground">
+                        {s.machine.code}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    <button
+                      type="button"
+                      className="hover:underline"
+                      title="Cihaz işlem dökümü"
+                      onClick={(e) => openTarget(`/access/devices/${s.device.id}`, e)}
+                      onAuxClick={(e) => {
+                        if (e.button === 1) {
+                          e.preventDefault();
+                          openTarget(`/access/devices/${s.device.id}`, e);
+                        }
+                      }}
+                    >
+                      {s.device.name}
+                    </button>
+                  </TableCell>
+                  <TableCell className="text-xs">{safeFormat(s.startedAt, "dd.MM.yyyy HH:mm")}</TableCell>
+                  <TableCell className="text-xs">
+                    {s.endedAt ? safeFormat(s.endedAt, "dd.MM.yyyy HH:mm") : <Badge>Açık</Badge>}
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    {formatDurationMinutes(sessionDurationMinutes(s.startedAt, s.endedAt))}
+                  </TableCell>
+                  <TableCell>
+                    {s.endReason ? (
+                      <Badge variant={s.endReason === "ADMIN" || s.endReason === "TAKEOVER" ? "muted" : "outline"}>
+                        {endReasonLabels[s.endReason]}
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </ListBody>
 
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              {pagination ? `${pagination.total} oturum · sayfa ${pagination.page}/${pagination.totalPages}` : ""}
-            </span>
-            <div className="flex gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1 || q.isFetching}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                <ChevronLeft className="h-4 w-4" /> Önceki
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!pagination || page >= pagination.totalPages || q.isFetching}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Sonraki <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
+      <ListFooter
+        loaded={rows.length}
+        label={pagination ? `${pagination.total} oturum · sayfa ${pagination.page}/${pagination.totalPages}` : ""}
+      >
+        <div className="flex gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page <= 1 || q.isFetching}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            <ChevronLeft className="h-4 w-4" /> Önceki
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!pagination || page >= pagination.totalPages || q.isFetching}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Sonraki <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </ListFooter>
+    </>
   );
 }

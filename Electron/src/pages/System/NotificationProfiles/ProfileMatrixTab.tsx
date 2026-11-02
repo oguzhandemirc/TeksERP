@@ -14,6 +14,7 @@ import {
   type ProfileCellState,
 } from "@/services/bildirimProfilService";
 import { cn } from "@/lib/utils";
+import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { LockPreviewDialog } from "./LockPreviewDialog";
 import {
   CELL_LABEL,
@@ -53,13 +54,15 @@ export function ProfileMatrixTab({ profile, kinds }: Props) {
 
   const groups = groupKinds(kinds);
   return (
-    <div className="space-y-3">
+    <>
       {readOnly && (
-        <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">Arşivlenmiş profil — matris salt okunur, çözüme katılmaz.</p>
+        <ListMessage className="shrink-0 border-b py-2 sm:py-2">
+          <p className="text-sm text-muted-foreground">Arşivlenmiş profil — matris salt okunur, çözüme katılmaz.</p>
+        </ListMessage>
       )}
-      <div className="overflow-x-auto rounded-md border">
+      <ListBody>
         <table className="w-full min-w-[520px] text-sm">
-          <thead className="bg-muted/50 text-xs text-muted-foreground">
+          <thead className="text-xs text-muted-foreground">
             <tr>
               <th className="px-3 py-2 text-left font-medium">Tür</th>
               {STATES.map((s) => (
@@ -79,14 +82,15 @@ export function ProfileMatrixTab({ profile, kinds }: Props) {
             </tbody>
           ))}
         </table>
-      </div>
-      {!readOnly && (
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {dirty && <span className="mr-auto text-xs text-muted-foreground">Kaydedilmemiş değişiklik var.</span>}
-          <Button variant="outline" disabled={lookup.isPending} onClick={() => void onPreview()}>Kilit önizlemesi</Button>
-          <Button disabled={!dirty || save.isPending || lookup.isPending} onClick={() => void onSave()}>Kaydet</Button>
-        </div>
-      )}
+      </ListBody>
+      <ListFooter loaded={kinds.length} label={dirty ? "Kaydedilmemiş değişiklik var." : `${kinds.length} bildirim türü`}>
+        {!readOnly && (
+          <>
+            <Button size="sm" variant="outline" disabled={lookup.isPending} onClick={() => void onPreview()}>Kilit önizlemesi</Button>
+            <Button size="sm" disabled={!dirty || save.isPending || lookup.isPending} onClick={() => void onSave()}>Kaydet</Button>
+          </>
+        )}
+      </ListFooter>
       <LockPreviewDialog
         open={preview !== null}
         onOpenChange={(o) => !o && setPreview(null)}
@@ -95,7 +99,7 @@ export function ProfileMatrixTab({ profile, kinds }: Props) {
         pending={save.isPending}
         onConfirm={(kept) => save.mutate(kept)}
       />
-    </div>
+    </>
   );
 }
 
