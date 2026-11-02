@@ -10,6 +10,7 @@ import ModuleSheet, { SheetField } from '../../../components/ModuleSheet';
 import NumpadInput from '../../../components/NumpadInput';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
 import { inboundDocService, type ApproveNoteResult } from '../../../services/inboundDoc.service';
+import { TERIM } from '../../../lib/terim';
 import { colors, radius, spacing, typography } from '../../../theme';
 import { INBOUND_DOC_CONTEXT_KEY } from './DocHeader';
 import { approvalCardView, approveResultView, batchPatch, parseMeters, type ApprovalCardView } from './approvalGate';
@@ -49,7 +50,7 @@ export default function ApprovalCard({ noteId, readDone, onDone }: Props) {
   return (
     <View style={styles.box} testID="onay-karti">
       <View style={styles.head}>
-        <Text style={styles.title}>Onay ve iş emri</Text>
+        <Text style={styles.title}>{`Onay ve ${TERIM.terbiyeIsEmri.tekilKucuk}`}</Text>
         {busy && <ActivityIndicator size="small" />}
       </View>
       <SheetField label="Müşteri" value={ownerName} placeholder="Müşteri seçin" onPress={() => setPicker('owner')} disabled={busy} />
