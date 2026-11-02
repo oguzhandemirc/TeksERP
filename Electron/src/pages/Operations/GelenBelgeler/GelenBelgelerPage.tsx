@@ -102,16 +102,14 @@ export function IncomingDocumentsPage() {
             <RefreshButton queryKey={INCOMING_DOCUMENT_QUERY_KEY} />
             <TemplateLinks />
             <PermissionGate permission="gelen-belge:write">
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={() => openUpload()}>
-                  <Upload className="mr-1 h-4 w-4" />
-                  Belge yükle
-                </Button>
-                <Button variant="outline" onClick={() => create.mutate()} disabled={create.isPending}>
-                  <Plus className="mr-1 h-4 w-4" />
-                  Elle taslak
-                </Button>
-              </div>
+              <Button onClick={() => openUpload()}>
+                <Upload className="mr-1 h-4 w-4" />
+                Belge yükle
+              </Button>
+              <Button variant="outline" onClick={() => create.mutate()} disabled={create.isPending}>
+                <Plus className="mr-1 h-4 w-4" />
+                Elle taslak
+              </Button>
             </PermissionGate>
           </div>
         }
