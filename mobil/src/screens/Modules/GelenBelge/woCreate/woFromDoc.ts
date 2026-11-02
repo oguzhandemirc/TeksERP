@@ -9,6 +9,8 @@ import type {
   InboundDocSettings,
   InboundNoteDetail,
   InboundNotePatch,
+  OwnerSuggestion,
+  ReadSummary,
 } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 
@@ -38,10 +40,33 @@ export function routeHasKursunStep(route: ProductionRoute | null | undefined): b
   return (route?.steps ?? []).some((s) => s.station?.isKursunStation ?? s.station?.kind === 'PROCESS_QC');
 }
 
+/**
+ * Satır kaynağı okuma özetinden (`gelen-belge:write`): tablet `gelen-belge:read` taşımayabilir, detay 403 → form yine dolar.
+ * Özet formun okuduğu bütün alanları taşır (sahip, öneri, parti no + adaylar, kurşun metresi + adaylar).
+ */
+export function detailFromSummary(s: ReadSummary): InboundNoteDetail {
+  return {
+    id: s.noteId,
+    noteNo: s.noteNo,
+    status: s.noteStatus,
+    ownerCustomerId: s.ownerCustomerId ?? null,
+    ourBatchNo: s.ourBatchNo ?? null,
+    ourBatchNoKey: s.ourBatchNoKey ?? null,
+    kursunMeters: s.kursunMeters ?? null,
+    kursunMetersSource: s.kursunMetersSource ?? null,
+    kursunMetersReview: s.kursunMetersReview,
+    batchNoCandidates: s.batchNoCandidates,
+    kursunMeterCandidates: s.kursunMeterCandidates,
+    ownerSuggestion: s.ownerSuggestion ?? null,
+  };
+}
+
 export interface RowForm {
   ownerCustomerId: string | null;
   /** Müşteri belgedeki metinden önerildi (kullanıcı görsün). */
   ownerSuggested: string | null;
+  /** Tam metin eşleşmesi (adres/antet olabilir): alana yazılmaz, "bu müşteri mi?" diye sorulur. */
+  ownerAsk: OwnerSuggestion | null;
   ourBatchNo: string | null;
   ourBatchNoKey: string | null;
   meters: number | null;
@@ -61,10 +86,12 @@ export function initialRowForm(d: InboundNoteDetail, catalog: KursunGramajCatalo
   const candidates = d.batchNoCandidates ?? [];
   const single: BatchNoCandidate | null = !d.ourBatchNo && candidates.length === 1 ? candidates[0] : null;
   const meters = toNumber(d.kursunMeters);
-  const suggestion = !d.ownerCustomerId && d.ownerSuggestion ? d.ownerSuggestion : null;
+  const any = !d.ownerCustomerId && d.ownerSuggestion ? d.ownerSuggestion : null;
+  const suggestion = any && any.source !== 'FULL_TEXT' ? any : null;
   return {
     ownerCustomerId: d.ownerCustomerId ?? suggestion?.customerId ?? null,
     ownerSuggested: suggestion ? suggestion.name : null,
+    ownerAsk: any && any.source === 'FULL_TEXT' ? any : null,
     ourBatchNo: d.ourBatchNo || single?.value || null,
     ourBatchNoKey: d.ourBatchNo ? d.ourBatchNoKey ?? null : single ? single.key ?? single.field ?? null : null,
     meters,
@@ -92,7 +119,8 @@ export function buildCreateBody(
     kursunMeters: String(f.meters),
     routeTemplateId: opts.routeTemplateId,
   };
-  if (f.ourBatchNo) body.ourBatchNo = f.ourBatchNo;
+  // Parti no hep açık: null = formda temizlendi (sunucu okumada yazılan adayı siler).
+  body.ourBatchNo = f.ourBatchNo ?? null;
   if (f.ourBatchNo && f.ourBatchNoKey) body.ourBatchNoKey = f.ourBatchNoKey;
   if (f.gramajValueId && opts.gramajPropertyId) body.targetValues = [{ propertyId: opts.gramajPropertyId, valueId: f.gramajValueId }];
   return body;

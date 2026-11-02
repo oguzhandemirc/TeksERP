@@ -8,7 +8,12 @@ export interface OwnerSuggestion {
   customerId: string;
   name: string;
   matchedText: string;
+  /** OWNER_TEXT: okunan sahip alanı (güçlü, alan dolar) · FULL_TEXT: sayfa metninde geçiyor (yalnız "bu müşteri mi?" sorulur). Eski backend göndermez → alan dolar (bugünkü). */
+  source?: "OWNER_TEXT" | "FULL_TEXT";
 }
+
+/** Öneri sahip alanına doğrudan yazılır mı — tam metin eşleşmesi yazılmaz, onay çipi olarak sorulur. */
+export const suggestionFillsOwner = (s: OwnerSuggestion | null | undefined): boolean => !!s && s.source !== "FULL_TEXT";
 
 export type FormApproval = "SEPARATE" | "WITH_WORK_ORDER";
 
@@ -41,14 +46,21 @@ export function defaultGramajId(options: readonly GramajChoice[]): string | null
   return options.find((o) => o.isDefault === true)?.id ?? null;
 }
 
+/** Rotada kurşun adımı yoksa gramaj kutusu da varsayılan da yok (sunucu kurşunsuz rotada hedefi 400'le reddeder). `undefined` = bilinmiyor (bugünkü). */
+const NO_GRAMAJ: readonly never[] = Object.freeze([]);
+export function routeGramajOptions<T>(options: readonly T[], routeHasKursun: boolean | undefined): readonly T[] {
+  return routeHasKursun === false ? NO_GRAMAJ : options;
+}
+
 function toNumber(v: string | number | null | undefined): number | null {
   if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/** `gramajOptions` rotada kurşun adımı yoksa BOŞ verilir (çağıran: `routeGramajOptions`) → varsayılan ön seçilmez. */
 export function initialDocDraft(note: NoteLike, gramajOptions: readonly GramajChoice[]): DocDraft {
-  const suggested = note.ownerSuggestion?.customerId ?? null;
+  const suggested = suggestionFillsOwner(note.ownerSuggestion) ? note.ownerSuggestion!.customerId : null;
   const owner = note.ownerCustomerId ?? suggested;
   return {
     ownerCustomerId: owner,
@@ -101,7 +113,8 @@ export function noteWorkOrderBody(
   return {
     clientToken: ctx.clientToken,
     ownerCustomerId: d.ownerCustomerId,
-    ...(d.ourBatchNo ? { ourBatchNo: d.ourBatchNo } : {}),
+    // Parti no hep açık gider: null = formda temizlendi (sunucu okumada yazılan adayı silsin).
+    ourBatchNo: d.ourBatchNo ?? null,
     ...(batchKey ? { ourBatchNoKey: batchKey } : {}),
     kursunMeters: String(d.meters),
     routeTemplateId: ctx.routeTemplateId,

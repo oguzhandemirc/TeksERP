@@ -56,8 +56,9 @@ export function useDocScan(opts: { successHint?: string } = {}) {
     else if (r.kind === 'full') Toast.show({ type: 'error', text1: `Bir belgede en çok ${MAX_PAGES} sayfa` });
   };
 
-  // Tarayıcının çok sayfalı sonucu: tek özet bildirimi (sayfa başına toast yağdırmaz).
-  const captureMany = (incoming: ScanPage[]) => {
+  // Tarayıcının çok sayfalı sonucu: tek özet bildirimi (sayfa başına toast yağdırmaz). Dönüş: sayfa eklendiyse yeni liste
+  // (kendiliğinden gönderim aynı listeyi kullanır), yoksa null.
+  const captureMany = (incoming: ScanPage[]): ScanPage[] | null => {
     const r = addPages(pages, incoming);
     setPages(r.pages);
     const notes = [
@@ -66,10 +67,11 @@ export function useDocScan(opts: { successHint?: string } = {}) {
       r.overflow ? `en çok ${MAX_PAGES} sayfa; ${r.overflow} sayfa alınmadı` : '',
     ].filter(Boolean);
     if (notes.length) Toast.show({ type: r.added ? 'info' : 'error', text1: `${r.added} sayfa eklendi`, text2: notes.join(' · ') });
+    return r.added ? r.pages : null;
   };
 
-  const send = async () => {
-    if (sending || !pages.length) return;
+  const send = async (list: ScanPage[] = pages) => {
+    if (sending || !list.length) return;
     if (!onlineManager.isOnline()) {
       Toast.show({ type: 'error', text1: 'Sunucuya bağlantı yok', text2: 'Belge gönderimi çevrimiçi yapılır; bağlantı gelince yeniden deneyin.' });
       return;
@@ -77,7 +79,7 @@ export function useDocScan(opts: { successHint?: string } = {}) {
     setSending(true);
     try {
       const pageBase = continuing && done ? done.pages : 0;
-      const input = { pages, ownerCustomerId: owner?.id ?? null, senderDocNo, barcodeText: barcode, pageBase };
+      const input = { pages: list, ownerCustomerId: owner?.id ?? null, senderDocNo, barcodeText: barcode, pageBase };
       // Deneme nesnesi birimden çıkmaz (test_istemci_token_uretimi): yalnız üç yöntem sarılarak verilir.
       const binding = { token: () => attempt.token(), onFailure: (e: unknown) => attempt.onFailure(e), onSuccess: () => attempt.onSuccess() };
       const r = await submitDocScan(inboundDocService, input, binding, progress);

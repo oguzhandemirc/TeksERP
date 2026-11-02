@@ -70,6 +70,9 @@ export interface ReadSummary {
   kursunMetersReview?: boolean;
   batchNoCandidates?: BatchNoCandidate[];
   kursunMeterCandidates?: Partial<Record<'output' | 'total' | 'input' | 'lineSum', string | number | null>>;
+  /** Taslağın sahibi + müşteri önerisi (OIE): satır formu detay ucu (`gelen-belge:read`) olmadan buradan dolar. Eski sunucu göndermez. */
+  ownerCustomerId?: string | null;
+  ownerSuggestion?: OwnerSuggestion | null;
 }
 
 export type KursunMetersSource = 'OUTPUT' | 'TOTAL' | 'LINE_SUM' | 'MANUAL';
@@ -115,6 +118,8 @@ export interface OwnerSuggestion {
   customerId: string;
   name: string;
   matchedText: string;
+  /** OWNER_TEXT: okunan sahip alanı (alan dolar) · FULL_TEXT: sayfa metninde geçiyor (yalnız sorulur). Eski sunucu göndermez → alan dolar. */
+  source?: 'OWNER_TEXT' | 'FULL_TEXT';
 }
 
 /** Gelen belge ayarı (`GET /gelen-belge/ayarlar`) — tabletin okuduğu alt küme. Eski sunucu `formApproval` göndermez. */
@@ -128,7 +133,8 @@ export interface InboundDocSettings {
 export interface CreateWorkOrderFromNoteBody {
   clientToken: string;
   ownerCustomerId: string;
-  ourBatchNo?: string;
+  /** null = temizle. */
+  ourBatchNo?: string | null;
   ourBatchNoKey?: string;
   /** Decimal string; verilince gözden geçirilmiş sayılır. */
   kursunMeters: string;

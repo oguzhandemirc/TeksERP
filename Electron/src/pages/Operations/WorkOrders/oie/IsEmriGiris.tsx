@@ -10,7 +10,7 @@ export type { OieStart } from "./nav";
 interface Props {
   start: OieStart | null;
   /** Bugünkü Terbiye formu; `belgeOkut=false` iken formun kendi "Belge okut" düğmesi çizilmez (kısayol üst şeridi taşır). */
-  renderManual: (routeTemplateId: string | null, opts?: { belgeOkut?: boolean }) => ReactNode;
+  renderManual: (routeTemplateId: string | null, opts?: { belgeOkut?: boolean; shortcut?: boolean }) => ReactNode;
 }
 
 export function IsEmriGiris({ start, renderManual }: Props) {

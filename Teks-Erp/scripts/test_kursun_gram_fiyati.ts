@@ -10,6 +10,7 @@
 // ÖLÇÜLENLER:
 //   §1 500 m × 40 gr/m × 0,05 = 1000; satır açıklaması "Kurşun 40 gr (40 gr/m)"
 //   §2 Müşteri (cari) özel gram fiyatı istasyonunkini ezer (0,04 → 800)
+//   §1b Gram fiyatı tarihsiz (fatura anındaki değer) → taslak uyarısı; uygulanmayınca uyarı yok
 //   §3 Gram fiyatı yok → eski kalem fiyatı; gramaj sayısı yok → eski kalem fiyatı; para birimi farklı → eski
 //   §4 Tek varsayılan: DB kısmi unique (23505/P2002) + servis 400 PROPERTY_VALUE_MULTIPLE_DEFAULT
 //   §5 İstasyon kurşun ucu: aç → AUTO satırı; gramaj ekle (amount + varsayılan); kapa → satır yok; fiyat para birimsiz 400
@@ -118,6 +119,7 @@ async function main(): Promise<void> {
   const total = l ? Number(l.unitPrice) * Number(l.quantity) : NaN;
   check("birim metre fiyatı 2 (40 × 0,05), miktar 500, tutar 1000", a.lines.length === 1 && Number(l?.unitPrice) === 2 && Number(l?.quantity) === 500 && total === 1000, JSON.stringify(a.lines.map((x) => [x.unitPrice, x.quantity, x.unit])));
   check("birim METER, açıklama 'Kurşun 40 gr (40 gr/m)'", l?.unit === "METER" && l?.label === "Kurşun 40 gr (40 gr/m)", String(l?.label));
+  check("gram fiyatı tarihsiz → taslakta 'BUGÜNKÜ değeriyle' uyarısı (1 iş)", a.warnings.some((w) => w.includes("gram fiyatının BUGÜNKÜ değeriyle") && w.startsWith("1 ")), JSON.stringify(a.warnings));
 
   section("§2 müşteri özel gram fiyatı istasyonunkini ezer");
   const cari = await prisma.cariAccount.create({ data: { kind: "CUSTOMER", customerId: cust.id, kursunGramPrice: "0.04", kursunGramCurrency: "TRY" }, select: { id: true } });
@@ -128,6 +130,7 @@ async function main(): Promise<void> {
   section("§3 fiyat/gramaj yoksa bugünkü kalem fiyatı");
   const c = await resolveServiceItemsForRolls({ rollIds: [rNA], customerId: null, currency: "TRY" });
   check("gramaj sayısı yok → kalem fiyatı 3, açıklamasız", Number(c.lines[0]?.unitPrice) === 3 && c.lines[0]?.label === undefined, JSON.stringify(c.lines.map((x) => [x.unitPrice, x.label])));
+  check("gram fiyatı uygulanmayan taslakta uyarı yok", !c.warnings.some((w) => w.includes("gram fiyatının")), JSON.stringify(c.warnings));
   await prisma.station.update({ where: { id: st.id }, data: { kursunGramPrice: null, kursunGramCurrency: null } });
   const d = await resolveServiceItemsForRolls({ rollIds: [r40], customerId: null, currency: "TRY" });
   check("gram fiyatı yok → kalem fiyatı 3", Number(d.lines[0]?.unitPrice) === 3 && d.lines[0]?.label === undefined, JSON.stringify(d.lines.map((x) => x.unitPrice)));

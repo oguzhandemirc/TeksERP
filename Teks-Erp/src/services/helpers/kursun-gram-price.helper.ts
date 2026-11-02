@@ -5,7 +5,8 @@
 // fiyatı = gramaj (gr/m, `FabricPropertyValue.amount`) × gram fiyatı. Gram fiyatı önce
 // CARİNİN (müşteriye özel), yoksa işin kurşun İSTASYONUNUN; para birimi fatura para birimiyle
 // aynı olmalı. Gramaj sayısı ya da gram fiyatı yoksa null → çağıran bugünkü hizmet kalemi
-// fiyatında kalır (davranış değişmez).
+// fiyatında kalır (davranış değişmez). Gram fiyatı TARİHSİZDİR (fatura anındaki değer; kalem
+// tarifesi gibi iş tarihine çözülmez) → gram fiyatlı her taslak `GRAM_PRICE_CURRENT_WARNING` taşır.
 // =============================================================================
 import { Currency, Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
@@ -72,19 +73,27 @@ export function pickKursunGramPrice(
   return { unitPrice: kursunMeterPrice(amount, gram), amount };
 }
 
-/** Kurşun işinde gram fiyatı (cari > istasyon) × gr/m kalem fiyatını EZER; tanımsızsa kalem fiyatı kalır. Çağıran kalemli işleri verir. */
-export async function applyKursunGramPrices(works: ServiceRollWork[], ctx: { currency: Currency; customerId: string | null; db: Db }): Promise<void> {
+/** Gram fiyatı tarihsiz: fatura anındaki değer kullanıldı (kurşun dışı kalemler iş tarihindeki tarifeden). */
+export function gramPriceCurrentWarning(count: number): string {
+  return `${count} kurşun işi gram fiyatının BUGÜNKÜ değeriyle (müşteri/istasyon) fiyatlandı; iş tarihinden sonra gram fiyatı değiştiyse tutarı kontrol edin.`;
+}
+
+/** Kurşun işinde gram fiyatı (cari > istasyon) × gr/m kalem fiyatını EZER; tanımsızsa kalem fiyatı kalır. Çağıran kalemli işleri verir. Döner: gram fiyatıyla fiyatlanan iş sayısı. */
+export async function applyKursunGramPrices(works: ServiceRollWork[], ctx: { currency: Currency; customerId: string | null; db: Db }): Promise<number> {
   const kursun = works.filter((w) => w.source !== "PROPERTY" && w.valueId && w.qtyUnit === "METER");
-  if (kursun.length === 0) return;
+  if (kursun.length === 0) return 0;
   const pricing = await loadKursunGramPricing({
     valueIds: [...new Set(kursun.map((w) => w.valueId!))],
     stepIds: [...new Set(kursun.map((w) => w.workOrderStepId).filter((v): v is string => v !== null))],
     customerId: ctx.customerId, currency: ctx.currency, db: ctx.db,
   });
+  let priced = 0;
   for (const w of kursun) {
     const hit = pickKursunGramPrice(pricing, w);
     if (!hit) continue;
     w.unitPrice = hit.unitPrice;
     w.gramLabel = kursunGramLineLabel(w.valueName, hit.amount);
+    priced++;
   }
+  return priced;
 }

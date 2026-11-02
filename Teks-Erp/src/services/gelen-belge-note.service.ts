@@ -31,6 +31,7 @@ import { noteNotices } from "../lib/gelen-belge/uyari";
 import { sameBatchNotes } from "./gelen-belge-parti-tekrar.service";
 import { readDocumentTotalCheck, readIncomingDocEntryMode, readUnreviewedApprovalMode } from "./system-setting.service";
 import { noteBatchAndMeters } from "./gelen-belge-parti-metre.service";
+import { getReaderUrl } from "../lib/gelen-belge/url";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const SERIES_KEY = "customerDeliveryNote";
@@ -174,7 +175,9 @@ export async function getDeliveryNote(id: string) {
   const batchMeters = await noteBatchAndMeters(note.id, note.totalsDeclared, note.lines.filter((l) => l.status !== "SKIPPED" && l.status !== "INFO").map((l) => l.meters));
   // Müşteri önerisi (OIE): okunan metinde yazan cari; yalnız sahipsiz taslakta, aksi null. Eski istemci alanı yok sayar.
   const ownerSuggestion = await suggestOwnerForNote(note);
-  return { ...note, lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch, ...batchMeters, ...(perDocument ? { perDocument: perDocument.gate } : {}), ownerSuggestion };
+  // Okuyucu tanımsız kurulumda bekleyen sayfa hiç okunmaz → panel "okunuyor"da beklemez, formu elle doldurtur.
+  const readerConfigured = getReaderUrl().url !== null;
+  return { ...note, lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch, ...batchMeters, ...(perDocument ? { perDocument: perDocument.gate } : {}), ownerSuggestion, readerConfigured };
 }
 
 /** Liste where'i — özet şeridi de BUNDAN türer (durum süzgeci hariç; şerit duruma göre sayar). */

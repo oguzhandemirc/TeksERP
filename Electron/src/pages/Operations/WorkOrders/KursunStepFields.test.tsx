@@ -31,6 +31,15 @@ describe("KursunStepFields", () => {
     expect(isKursunStep(step("PROCESS_QC"))).toBe(true);
   });
 
+  it("⭐ sunucu isKursunStation verirse tür değil o karar verir (kurşun yeteneği kapalı PROCESS_QC → değil)", () => {
+    expect(isKursunStep(step("PROCESS_QC", { isKursunStation: false }))).toBe(false);
+    expect(isKursunStep(step("INTERNAL", { isKursunStation: true }))).toBe(true);
+    renderWithProviders(
+      <KursunStepFields step={step("PROCESS_QC", { isKursunStation: false })} showGramaj gramajOptions={OPTIONS} gramajValue={null} onGramaj={noop} onMachine={noop} />,
+    );
+    expect(screen.queryByTestId("kursun-step-fields")).toBeNull();
+  });
+
   it("kurşun adımında gramaj (seçili değer işaretli) + makine önerisi çizilir", async () => {
     renderWithProviders(
       <KursunStepFields step={step("PROCESS_QC")} showGramaj gramajOptions={OPTIONS} gramajValue="v50" onGramaj={noop} onMachine={noop} />,

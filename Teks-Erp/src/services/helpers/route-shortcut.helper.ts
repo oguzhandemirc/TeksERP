@@ -7,6 +7,7 @@ import prisma from "../../lib/prisma";
 import type { PaginatedResponse } from "../../types/api.types";
 import { AppError } from "../../utils/app-error";
 import { TERIM } from "../../constants/terim";
+import { KURSUN_DISPATCH_STATION_WHERE } from "./quality-station.helper";
 
 /** Kısayol listesinin tavanı (sayfasız döner). */
 export const SHORTCUT_LIST_MAX = 100;
@@ -33,4 +34,24 @@ export function assertShortcutFields(data: Record<string, unknown>): void {
 export async function listShortcutRoutes(where: Record<string, unknown>, include: unknown): Promise<PaginatedResponse<unknown>> {
   const data = await prisma.route.findMany({ where: where as Prisma.RouteWhereInput, orderBy: [...SHORTCUT_ORDER_BY], take: SHORTCUT_LIST_MAX, include: include as Prisma.RouteInclude });
   return { success: true, data, pagination: { page: 1, pageSize: SHORTCUT_LIST_MAX, total: data.length, totalPages: 1 } };
+}
+
+type StepWithStation = { station?: { id?: string; isKursunStation?: boolean } | null };
+
+/**
+ * Rota yanıtındaki her adım istasyonuna `isKursunStation` (kurşun yeteneği = `KURSUN_DISPATCH_STATION_WHERE`, tek sorgu).
+ * İstemci gramaj alanını/varsayılanını buna bağlar; istasyon türünden (PROCESS_QC) yeniden hesaplamaz.
+ */
+export async function markKursunStations(routes: ReadonlyArray<unknown>): Promise<void> {
+  const stations = routes.flatMap((r) => ((r as { steps?: StepWithStation[] } | null)?.steps ?? []).map((s) => s.station).filter((st): st is { id: string } => !!st?.id));
+  if (stations.length === 0) return;
+  const rows = await prisma.station.findMany({ where: { id: { in: [...new Set(stations.map((st) => st.id))] }, ...KURSUN_DISPATCH_STATION_WHERE }, select: { id: true } });
+  const kursun = new Set(rows.map((r) => r.id));
+  for (const st of stations as Array<{ id: string; isKursunStation?: boolean }>) st.isKursunStation = kursun.has(st.id);
+}
+
+/** Yanıt sarmalı: liste (`data` dizi) ya da tekil (`data` nesne) aynı türetmeden geçer; yanıtı aynen döner. */
+export async function withKursunStations<T extends { data?: unknown }>(res: T): Promise<T> {
+  if (res.data) await markKursunStations(Array.isArray(res.data) ? res.data : [res.data]);
+  return res;
 }

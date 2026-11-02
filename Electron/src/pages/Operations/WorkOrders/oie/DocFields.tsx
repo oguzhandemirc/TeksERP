@@ -8,7 +8,8 @@ import type { GramajOption } from "@/lib/kursun-gramaj";
 import { BatchNoPicker } from "@/pages/Operations/GelenBelgeler/BatchNoPicker";
 import { KursunMetersCard } from "@/pages/Operations/GelenBelgeler/KursunMetersCard";
 import type { DeliveryNoteDetail, HeaderPatch } from "@/pages/Operations/GelenBelgeler/types";
-import { applyPatch, type DocDraft, type OwnerSuggestion } from "./docDraft";
+import { Button } from "@/components/ui/button";
+import { applyPatch, suggestionFillsOwner, type DocDraft, type OwnerSuggestion } from "./docDraft";
 
 interface Props {
   note: DeliveryNoteDetail;
@@ -36,6 +37,8 @@ function viewNote(note: DeliveryNoteDetail, d: DocDraft): DeliveryNoteDetail {
 
 function OwnerField({ note, draft, onChange, disabled }: Omit<Props, "gramajOptions">) {
   const suggestion = (note as { ownerSuggestion?: OwnerSuggestion | null }).ownerSuggestion ?? null;
+  // Tam metin eşleşmesi (adres/antet satırı olabilir) alana yazılmaz; operatöre sorulur.
+  const ask = suggestion && !suggestionFillsOwner(suggestion) && draft.ownerCustomerId !== suggestion.customerId ? suggestion : null;
   return (
     <div className="flex flex-col gap-1 rounded-lg border p-3" data-testid="oie-owner">
       <div className="flex items-center gap-2">
@@ -45,6 +48,13 @@ function OwnerField({ note, draft, onChange, disabled }: Omit<Props, "gramajOpti
       <CustomerPickerField value={draft.ownerCustomerId} onChange={(id) => onChange(applyPatch(draft, { ownerCustomerId: id }))} disabled={disabled} placeholder="Müşteri seç" />
       {draft.ownerFromDoc && suggestion && (
         <p className="text-xs text-muted-foreground" data-testid="oie-owner-matched">Belgede okunan: “{suggestion.matchedText}” → {suggestion.name}</p>
+      )}
+      {ask && (
+        <div className="flex flex-wrap items-center gap-2 rounded bg-sky-50 px-2 py-1 text-xs dark:bg-sky-950/40" data-testid="oie-owner-ask">
+          <span>Belgede “{ask.matchedText}” geçiyor — <b>{ask.name}</b> mi?</span>
+          <Button type="button" size="sm" variant="outline" disabled={disabled} data-testid="oie-owner-ask-yes"
+            onClick={() => onChange({ ...applyPatch(draft, { ownerCustomerId: ask.customerId }), ownerFromDoc: true })}>Evet, seç</Button>
+        </div>
       )}
       {!draft.ownerCustomerId && <p className="text-xs text-amber-800 dark:text-amber-300">Belgeden müşteri çıkarılamadı — seçin.</p>}
     </div>

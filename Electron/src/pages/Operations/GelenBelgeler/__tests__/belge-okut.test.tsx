@@ -52,6 +52,11 @@ beforeEach(() => {
 });
 
 describe("belgeOkutStage (saf)", () => {
+  it("⭐ okuyucusuz kurulumda bekleyen sayfa NO_SERVICE (sonsuz okunuyor yok); alan yoksa bugünkü READING", () => {
+    expect(belgeOkutStage({ ...note({ scans: [scan("PENDING")] }), readerConfigured: false })).toBe("NO_SERVICE");
+    expect(belgeOkutStage({ ...note({ scans: [scan("PENDING")] }), readerConfigured: true })).toBe("READING");
+    expect(belgeOkutStage(note({ scans: [scan("PENDING")] }))).toBe("READING");
+  });
   it("okunurken READING, hepsi düştüyse READ_FAILED, PDF okuma beklemez, taslak değilse CLOSED", () => {
     expect(belgeOkutStage(note({ scans: [scan("READ"), scan("READING")] }))).toBe("READING");
     expect(belgeOkutStage(note({ scans: [scan("READ_FAILED")] }))).toBe("READ_FAILED");

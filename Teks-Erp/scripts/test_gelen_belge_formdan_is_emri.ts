@@ -5,13 +5,22 @@
 // `gelenBelge.formApproval` + `production.refakatAutoPrint`, detay `ownerSuggestion`, `GET /api/routes?shortcut=1`. Sınanan:
 //   §1 ayar varsayılanları SEPARATE / false (bugünkü), iki anahtar ham uca kapalı (dedicated küme)
 //   §2 ⭐ izin: yalnız gelen-belge:approve → 403; ⭐ ayar SEPARATE → 403 GELEN_BELGE_FORM_APPROVAL_DISABLED (belge DRAFT)
-//   §3 ⭐ okuması bitmemiş belge → 409 DELIVERY_NOTE_NOT_READ, top 0
+//   §3 ⭐ okuması SÜREN belge (okuyucu var, sayfa bekliyor) → 409 DELIVERY_NOTE_NOT_READ, top 0
+//   §3b ⭐ okuma düştü (READ_FAILED) / okuyucu yok (NO_SERVICE) → elle değerle 201 + "sayfa okunamadı" uyarısı
+//   §8 ⭐ yarım kalan onay aynı token'la devam eder: özet satırı FAILED + başlık PARTIAL → 201 tek top/tek İE;
+//      bayat APPROVING → 201; taze APPROVING → 409 DELIVERY_NOTE_NOT_APPROVABLE (onay claim'i)
 //   §4 ⭐ mutlu yol (gelen-belge:approve OLMADAN): 1 top = kursunMeters, 1 İE, sahip yazıldı, parti no belgeden, rota = seçilen,
 //      hedef değer geçti, adım planı kabul, audit "WITH_WORK_ORDER: <kullanıcı>"
 //   §5 ⭐ aynı clientToken → aynı yanıt, yeni İE/top yok; strict gövde 400
-//   §6 ⭐ ownerSuggestion: tam metinde sahip adı → bulur (gönderen hariç); yalnız gönderen/parçalı ad → null; sahipli taslak null
+//   §6 ⭐ ownerSuggestion: tam metinde sahip adı → bulur (gönderen hariç, source FULL_TEXT); yalnız gönderen/parçalı ad → null;
+//      sahipli taslak null; ⭐ tek çekirdek kelimeli cari adres satırında geçse de null; ⭐ kurulumun kendi firması aday değil;
+//      ⭐ gönderen bağsızken antetteki firma (düzenleyen) ve okunan gönderen alanı (senderText) aday değil (Takva demo bulgusu)
 //   §7 ⭐ kısayol: ?shortcut=1 yalnız işaretliler, shortcutOrder sırası; tip hatası 400
-// Negatif sonda: `assertFormApprovalEnabled` çağrısı kaldırılınca §2 kırmızı; `excludeIds` boş verilince §6 gönderen kırmızı.
+//   §7b ⭐ rota yanıtında adım istasyonu `isKursunStation` (KURSUN_DISPATCH_STATION_WHERE): kurşun AUTO'lu PROCESS_QC true,
+//       yeteneksiz PROCESS_QC false — tekil, liste ve kısayol yanıtında + `GET /api/stations/:id`
+// Negatif sonda: `assertFormApprovalEnabled` çağrısı kaldırılınca §2 kırmızı; `excludeIds` boş verilince §6 gönderen kırmızı; `senderIds`ten antet/senderText
+// çıkarılınca §6 Takva kırmızı;
+// onay yeniden yalnız DRAFT'ta koşturulunca §8 kırmızı; okuma kapısı [READ, PARTIAL] allowlist'ine dönünce §3b kırmızı.
 // =============================================================================
 import { randomUUID, createHash } from "crypto";
 import type { AddressInfo } from "net";
@@ -22,6 +31,10 @@ import app from "../src/app";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { INCOMING_DOC_DEDICATED_SETTING_KEYS } from "../src/services/gelen-belge-ayar.service";
 import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
+import { setReaderUrlForTests } from "../src/lib/gelen-belge/url";
+import { summaryLineId } from "../src/services/gelen-belge-kontrol.service";
+import { updateDeliveryNote } from "../src/services/gelen-belge-note.service";
+import { letterheadLines, namedIn } from "../src/services/gelen-belge-sahip-onerisi.service";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
@@ -44,16 +57,17 @@ const SETTINGS = [
   SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID,
   SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_ENTRY_MODE, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER,
   SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT,
+  SETTING_KEYS.COMPANY_NAME,
 ];
 
-type Resp = { status: number; code?: string; data?: Record<string, unknown> & { [k: string]: unknown } };
+type Resp = { status: number; code?: string; data?: Record<string, unknown> & { [k: string]: unknown }; warnings?: string[] };
 
 async function setSetting(key: string, value: unknown): Promise<void> {
   if (value === null) await prisma.systemSetting.deleteMany({ where: { key } });
   else await prisma.systemSetting.upsert({ where: { key }, create: { key, value: value as never }, update: { value: value as never } });
 }
 
-async function addScan(noteId: string, status: "READ" | "PENDING", text: string): Promise<void> {
+async function addScan(noteId: string, status: "READ" | "PENDING" | "READ_FAILED", text: string): Promise<void> {
   const content = Buffer.from(`${TAG}-${randomUUID()}`);
   const s = await prisma.documentScan.create({
     data: { noteId, sha256: createHash("sha256").update(content).digest("hex"), mimeType: "image/jpeg", sizeBytes: content.length, content, status, ...(status === "READ" ? { ocrResult: { ocr: { text } } } : {}) },
@@ -73,8 +87,8 @@ async function run(url: string): Promise<void> {
   };
   const call = async (method: string, path: string, token: string, body?: unknown): Promise<Resp> => {
     const r = await fetch(`${url}${path}`, { method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: body === undefined ? undefined : JSON.stringify(body) });
-    const j = (await r.json().catch(() => ({}))) as { data?: Resp["data"]; details?: { code?: string } };
-    return { status: r.status, code: j.details?.code, data: j.data };
+    const j = (await r.json().catch(() => ({}))) as { data?: Resp["data"]; details?: { code?: string }; warnings?: string[] };
+    return { status: r.status, code: j.details?.code, data: j.data, warnings: j.warnings };
   };
   const tk = await login(admin.username, admin.password);
   check("admin login", tk.length > 0);
@@ -118,8 +132,8 @@ async function run(url: string): Promise<void> {
   };
   const chosen = await mkRoute("kurşun rotası");
 
-  const mkNote = async (scan: "READ" | "PENDING", text = `${TAG} belge`) => {
-    const r = await call("POST", "/api/gelen-belge/irsaliyeler", tk, { sourceKind: "MANUAL", senderCustomerId: sender, senderText: `${TAG} GÖNDEREN`, lines: [{ senderRollNo: `${TAG}-${made.notes.length}`, meters: 100, itemText: "Kumaş" }] });
+  const mkNote = async (scan: "READ" | "PENDING" | "READ_FAILED", text = `${TAG} belge`, head: { senderCustomerId?: string | null; senderText?: string } = {}) => {
+    const r = await call("POST", "/api/gelen-belge/irsaliyeler", tk, { sourceKind: "MANUAL", senderCustomerId: sender, senderText: `${TAG} GÖNDEREN`, ...head, lines: [{ senderRollNo: `${TAG}-${made.notes.length}`, meters: 100, itemText: "Kumaş" }] });
     const id = (r.data as { id?: string } | undefined)?.id ?? "";
     made.notes.push(id);
     if (id) await addScan(id, scan, text);
@@ -151,18 +165,55 @@ async function run(url: string): Promise<void> {
 
   console.log("§6 müşteri önerisi (sahipsiz taslak)");
   const d6 = await call("GET", `/api/gelen-belge/irsaliyeler/${n}`, tk);
-  const sug = d6.data?.ownerSuggestion as { customerId?: string; matchedText?: string } | null | undefined;
-  check("§6 ⭐ tam metinde sahip adı → öneri = sahip (gönderen hariç)", sug?.customerId === owner && !!sug?.matchedText?.includes("Akdeniz"), JSON.stringify(sug));
+  const sug = d6.data?.ownerSuggestion as { customerId?: string; matchedText?: string; source?: string } | null | undefined;
+  check("§6 ⭐ tam metinde sahip adı → öneri = sahip (gönderen hariç), source FULL_TEXT", sug?.customerId === owner && !!sug?.matchedText?.includes("Akdeniz") && sug?.source === "FULL_TEXT", JSON.stringify(sug));
   const n6 = await mkNote("READ", `${TAG} Marmara Boyahane\nAkdeniz ${TAG}`);
   const d6b = await call("GET", `/api/gelen-belge/irsaliyeler/${n6}`, tk);
   check("§6 ⭐ yalnız gönderen + parçalı ad → null", d6b.status === 200 && d6b.data?.ownerSuggestion === null, JSON.stringify(d6b.data?.ownerSuggestion));
+  const SFX = TAG.replace(/[^A-Z0-9]/g, "");
+  await mkCustomer("CITY", `İstanbul${SFX} Tekstil`);
+  const n6c = await mkNote("READ", `${TAG} Marmara Boyahane\nMerkez Mah. Güngören / İSTANBUL${SFX}`);
+  const d6e = await call("GET", `/api/gelen-belge/irsaliyeler/${n6c}`, tk);
+  check("§6 ⭐ tek çekirdek kelimeli cari (adres satırında) → null", d6e.status === 200 && d6e.data?.ownerSuggestion === null, JSON.stringify(d6e.data?.ownerSuggestion));
+  await setSetting(SETTING_KEYS.COMPANY_NAME, `${SFX} Perde Kurşun`);
+  await mkCustomer("SELF", `${SFX} Perde Kurşun San. Tic. Ltd.`);
+  const n6d = await mkNote("READ", `Alıcı: ${SFX} PERDE KURŞUN SAN TİC\nSayın ${TAG} Akdeniz Perdecilik`);
+  const d6f = await call("GET", `/api/gelen-belge/irsaliyeler/${n6d}`, tk);
+  check("§6 ⭐ kurulumun kendi firması aday değil → öneri = gerçek sahip", (d6f.data?.ownerSuggestion as { customerId?: string } | null)?.customerId === owner, JSON.stringify(d6f.data?.ownerSuggestion));
+  // Demo bulgusu: Takva kesim formunda gönderen bağlı değildi (şablon göndereni boş) → antetteki TAKVA önerildi.
+  await mkCustomer("TKV", `${TAG} Takva Tekstil`);
+  const n6g = await mkNote("READ", `${TAG} TAKVA TEKSTİL\nKESİM TAKİP FORMU\nMÜŞTERİ ADI: ${TAG} Akdeniz Perdecilik`, { senderCustomerId: null, senderText: "" });
+  const d6g = await call("GET", `/api/gelen-belge/irsaliyeler/${n6g}`, tk);
+  check("§6 ⭐ gönderen bağsız: antetteki firma (düzenleyen) aday değil → öneri = sahip", (d6g.data?.ownerSuggestion as { customerId?: string } | null)?.customerId === owner, JSON.stringify(d6g.data?.ownerSuggestion));
+  const n6h = await mkNote("READ", `İRSALİYE\nTarih 15.10.2026\nDüzenleyen: ${TAG} Takva Tekstil\nSayın ${TAG} Akdeniz Perdecilik`, { senderCustomerId: null, senderText: `${TAG} TAKVA TEKS.` });
+  const d6h = await call("GET", `/api/gelen-belge/irsaliyeler/${n6h}`, tk);
+  check("§6 ⭐ okunan gönderen alanı (senderText) cariyi dışlar → öneri = sahip", (d6h.data?.ownerSuggestion as { customerId?: string } | null)?.customerId === owner, JSON.stringify(d6h.data?.ownerSuggestion));
+  const n6i = await mkNote("READ", `${TAG} TAKVA TEKSTİL\nKESİM TAKİP FORMU\nMÜŞTERİ ADI:`, { senderCustomerId: null, senderText: "" });
+  const d6i = await call("GET", `/api/gelen-belge/irsaliyeler/${n6i}`, tk);
+  check("§6 ⭐ yalnız antetteki gönderen geçiyor → null (TAKVA önerilmez)", d6i.status === 200 && d6i.data?.ownerSuggestion === null, JSON.stringify(d6i.data?.ownerSuggestion));
+  const perde = [{ id: "p", code: "P", name: `${TAG} Akdeniz Perde` }];
+  check("§6 antet satırı tek yönlü: kısa satır (\"AKDENİZ PERDE\") daha uzun adlı cariyi düşürmez", namedIn("AKDENIZ PERDE", perde, false).length === 0 && namedIn(`${TAG} AKDENİZ PERDE A.Ş.`, perde, false).length === 1);
+  check("§6 antette muhatap satırı (Sayın/Alıcı) atlanır", letterheadLines([["Sayın X", "TAKVA TEKSTİL", "Form"]]).join("|") === "TAKVA TEKSTİL");
   const ozet = await call("GET", `/api/gelen-belge/irsaliyeler/${n}/okuma-ozeti`, tk);
-  check("§6 okuma özeti aynı öneri", (ozet.data?.ownerSuggestion as { customerId?: string } | null)?.customerId === owner);
+  check("§6 okuma özeti aynı öneri + sahip alanı (tablet formu özetten kurulur)", (ozet.data?.ownerSuggestion as { customerId?: string } | null)?.customerId === owner && ozet.data?.ownerCustomerId === null, JSON.stringify({ o: ozet.data?.ownerCustomerId }));
 
-  console.log("§3 okuması bitmemiş belge");
+  console.log("§3 okuması süren belge");
   const n3 = await mkNote("PENDING");
+  setReaderUrlForTests("http://127.0.0.1:9");
   const r3 = await formWo(n3, woUser.token, body());
+  const d3on = await call("GET", `/api/gelen-belge/irsaliyeler/${n3}`, tk);
+  setReaderUrlForTests(null);
+  const d3off = await call("GET", `/api/gelen-belge/irsaliyeler/${n3}`, tk);
+  check("§3 detay readerConfigured (okuyucu var true / yok false)", d3on.data?.readerConfigured === true && d3off.data?.readerConfigured === false, `${String(d3on.data?.readerConfigured)} ${String(d3off.data?.readerConfigured)}`);
   check("§3 ⭐ 409 DELIVERY_NOTE_NOT_READ, DRAFT, top 0", r3.status === 409 && r3.code === "DELIVERY_NOTE_NOT_READ" && (await statusOf(n3)) === "DRAFT" && (await rollsOf(n3)).length === 0, `${r3.status} ${r3.code ?? ""}`);
+
+  console.log("§3b okuma düşmüş / okuyucusuz belge elle değerle kaydedilir");
+  const n3b = await mkNote("READ_FAILED");
+  const r3b = await formWo(n3b, woUser.token, body({ ourBatchNo: `${TAG}-P3B` }));
+  const w3b = r3b.warnings ?? [];
+  check("§3b ⭐ READ_FAILED → 201, APPROVED, 1 top + uyarı", r3b.status === 201 && (await statusOf(n3b)) === "APPROVED" && (await rollsOf(n3b)).length === 1 && w3b.some((w) => w.includes("sayfa okunamadı")), `${r3b.status} ${r3b.code ?? ""} ${JSON.stringify(w3b).slice(0, 200)}`);
+  const r3c = await formWo(n3, woUser.token, body({ ourBatchNo: `${TAG}-P3C` }));
+  check("§3b ⭐ okuyucusuz (NO_SERVICE) → 201, 1 top + uyarı", r3c.status === 201 && (await rollsOf(n3)).length === 1 && (r3c.warnings ?? []).some((w) => w.includes("sayfa okunamadı")), `${r3c.status} ${r3c.code ?? ""}`);
 
   console.log("§4 mutlu yol");
   const w4 = await woCount();
@@ -191,6 +242,30 @@ async function run(url: string): Promise<void> {
   const d6c = await call("GET", `/api/gelen-belge/irsaliyeler/${n}`, tk);
   check("§6 sahipli/onaylı belgede öneri null", d6c.data?.ownerSuggestion === null);
 
+  console.log("§8 yarım kalan onay aynı token'la devam eder");
+  // Onay ortasında düşmüş belge: sahip + metre yazılmış, özet satırı FAILED/ENTERING, başlık PARTIAL/APPROVING.
+  const halfDone = async (status: "PARTIAL" | "APPROVING", lineStatus: "FAILED" | "ENTERING", staleMin: number) => {
+    const id = await mkNote("READ");
+    await updateDeliveryNote(id, { ownerCustomerId: owner, kursunMeters: 321 }, admin.id);
+    await prisma.customerDeliveryNoteLine.create({ data: { id: summaryLineId(id), noteId: id, lineNo: 99, blockNo: 1, lineKind: "ARABA", meters: 321, status: lineStatus, failReason: lineStatus === "FAILED" ? "geçici DB hatası (test)" : null, confidence: 1 } });
+    // updatedAt ms hassasiyetinde (Prisma yazımı gibi) — onay claim'i ön kontrol görüntüsüne eşitlikle bağlanır.
+    await prisma.$executeRaw`UPDATE "customer_delivery_notes" SET "status" = ${status}::"DeliveryNoteStatus", "updatedAt" = ${new Date(Date.now() - staleMin * 60_000)} WHERE "id" = ${id}::uuid`;
+    return id;
+  };
+  const w8 = await woCount();
+  const n8 = await halfDone("PARTIAL", "FAILED", 0);
+  const b8 = body({ ourBatchNo: `${TAG}-P8` });
+  const r8 = await formWo(n8, woUser.token, b8);
+  check("§8 ⭐ PARTIAL + özet FAILED → 201, APPROVED, 1 top, 1 İE", r8.status === 201 && (await statusOf(n8)) === "APPROVED" && (await rollsOf(n8)).length === 1 && (await woCount()) === w8 + 1, `${r8.status} ${r8.code ?? ""} ${JSON.stringify(r8.data)?.slice(0, 200)}`);
+  const r8r = await formWo(n8, woUser.token, b8);
+  check("§8 ⭐ aynı token tekrar → aynı yanıt, yeni top/İE yok", r8r.status === 201 && JSON.stringify(r8r.data) === JSON.stringify(r8.data) && (await rollsOf(n8)).length === 1 && (await woCount()) === w8 + 1, `${r8r.status}`);
+  const n8b = await halfDone("APPROVING", "ENTERING", 11);
+  const r8b = await formWo(n8b, woUser.token, body({ ourBatchNo: `${TAG}-P8B` }));
+  check("§8 ⭐ bayat APPROVING → 201, APPROVED, 1 top", r8b.status === 201 && (await statusOf(n8b)) === "APPROVED" && (await rollsOf(n8b)).length === 1, `${r8b.status} ${r8b.code ?? ""}`);
+  const n8c = await halfDone("APPROVING", "ENTERING", 0);
+  const r8c = await formWo(n8c, woUser.token, body({ ourBatchNo: `${TAG}-P8C` }));
+  check("§8 taze APPROVING → 409 DELIVERY_NOTE_NOT_APPROVABLE, top 0", r8c.status === 409 && r8c.code === "DELIVERY_NOTE_NOT_APPROVABLE" && (await rollsOf(n8c)).length === 0, `${r8c.status} ${r8c.code ?? ""}`);
+
   console.log("§7 kısayol listesi");
   const a = await mkRoute("kısayol A", { isWorkOrderShortcut: true, shortcutOrder: 2 });
   const b = await mkRoute("kısayol B", { isWorkOrderShortcut: true, shortcutOrder: 1 });
@@ -202,6 +277,32 @@ async function run(url: string): Promise<void> {
   check("§7 ⭐ shortcutOrder sırası (B önce A)", ids.indexOf(b) >= 0 && ids.indexOf(a) > ids.indexOf(b));
   const all = await call("GET", "/api/routes?pageSize=100&search=" + encodeURIComponent(TAG), tk);
   check("§7 bayraksız liste değişmez (kısayolsuz da gelir)", ((all.data as unknown as Array<{ id: string }>) ?? []).some((x) => x.id === c), `${all.status}`);
+  console.log("§7b isKursunStation");
+  // Kurşun özelliği seed'in (prisma/seed.ts) — yoksa ortam eksik, sınama kırmızı.
+  const kprop = await prisma.fabricProperty.findFirst({ where: { code: "KURSUN" }, select: { id: true } });
+  if (!kprop) throw new Error("Fikstür eksik: KURSUN özelliği (npm run seed)");
+  const mkQc = async (suffix: string) => {
+    const id = (await prisma.station.create({ data: { code: `${TAG}-${suffix}`.slice(0, 32), name: `${TAG} ${suffix}`, type: "INTERNAL", kind: "PROCESS_QC" }, select: { id: true } })).id;
+    made.stations.push(id);
+    return id;
+  };
+  const kSt = await mkQc("KQC");
+  await prisma.stationProperty.create({ data: { stationId: kSt, propertyId: kprop.id, mode: "AUTO" } });
+  const qSt = await mkQc("QC");
+  const kr = (await prisma.route.create({ data: { name: `${TAG} kurşun+kk`, isWorkOrderShortcut: true, steps: { create: [{ stationId: kSt, sequence: 1 }, { stationId: qSt, sequence: 2 }] } }, select: { id: true } })).id;
+  made.routes.push(kr);
+  type RStep = { station?: { id: string; isKursunStation?: boolean } };
+  const flagsOf = (steps: RStep[] | undefined) => (steps ?? []).map((x) => x.station?.isKursunStation);
+  const one = await call("GET", `/api/routes/${kr}`, tk);
+  check("§7b ⭐ tekil: kurşun istasyonu true, yeteneksiz PROCESS_QC false", JSON.stringify(flagsOf((one.data as { steps?: RStep[] } | undefined)?.steps)) === "[true,false]", JSON.stringify(flagsOf((one.data as { steps?: RStep[] } | undefined)?.steps)));
+  const sl = ((await call("GET", "/api/routes?shortcut=1", tk)).data as unknown as Array<{ id: string; steps?: RStep[] }>) ?? [];
+  check("§7b ⭐ kısayol listesi aynı", JSON.stringify(flagsOf(sl.find((x) => x.id === kr)?.steps)) === "[true,false]");
+  const fl = ((await call("GET", "/api/routes?pageSize=100&search=" + encodeURIComponent(TAG), tk)).data as unknown as Array<{ id: string; steps?: RStep[] }>) ?? [];
+  check("§7b ⭐ düz liste aynı", JSON.stringify(flagsOf(fl.find((x) => x.id === kr)?.steps)) === "[true,false]");
+  const st1 = await call("GET", `/api/stations/${kSt}`, tk);
+  const st2 = await call("GET", `/api/stations/${qSt}`, tk);
+  check("§7b ⭐ istasyon tekil yanıtı aynı (elle seçilen adım)", st1.data?.isKursunStation === true && st2.data?.isKursunStation === false, `${st1.status} ${String(st1.data?.isKursunStation)} ${String(st2.data?.isKursunStation)}`);
+
   const p7 = await call("PATCH", `/api/routes/${c}`, tk, { shortcutOrder: -1 });
   const p7b = await call("PATCH", `/api/routes/${c}`, tk, { isWorkOrderShortcut: true, shortcutOrder: 3 });
   const cRow = await prisma.route.findUnique({ where: { id: c }, select: { isWorkOrderShortcut: true, shortcutOrder: true } });

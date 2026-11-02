@@ -4,7 +4,8 @@ import { TERIM } from "@/lib/terim";
 export const WORK_ORDER_NEW_PATH = "/operations/work-orders/new";
 export const WEAVING_ORDERS_PATH = "/operations/weaving-orders";
 
-export type RouteRef = { id: string; name: string };
+/** `hasKursun` yoksa (eski sekme durumu) gramaj bugünkü gibi gösterilir. */
+export type RouteRef = { id: string; name: string; hasKursun?: boolean };
 export type OieStart = { kind: "terbiye" } | { kind: "shortcut"; route: RouteRef; noteId?: string };
 
 /** Dokuma iş emirleri sayfası bu durumla açılınca oluşturma diyaloğu kendiliğinden açılır. */
