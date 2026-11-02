@@ -73,10 +73,10 @@ function totalsValue(t: ReadSummary['totals']): { value: string; tone: ReadTone 
   return t.ok ? { value: 'Tutuyor', tone: 'ok' } : { value: 'Tutmuyor', tone: 'error' };
 }
 
-const KURSUN_SOURCE_TEXT: Record<string, string> = { OUTPUT: 'çıkış', TOTAL: 'toplam metre', LINE_SUM: 'satır toplamı', MANUAL: 'elle' };
+export const KURSUN_SOURCE_TEXT: Record<string, string> = { OUTPUT: 'çıkış', TOTAL: 'toplam metre', LINE_SUM: 'satır toplamı', MANUAL: 'elle' };
 
 /** Fabrika metre gösterimi: binlik nokta, en çok 2 ondalık virgüllü (4.521 · 198,1). */
-function fmtKursunMeters(v: string | number): string | null {
+export function fmtKursunMeters(v: string | number): string | null {
   const n = typeof v === 'number' ? v : Number(v);
   if (!Number.isFinite(n)) return null;
   const [int, dec] = (Math.round(n * 100) / 100).toFixed(2).split('.');

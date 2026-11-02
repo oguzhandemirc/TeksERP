@@ -1,8 +1,8 @@
 // =============================================================================
 // Gelen belge (Gülkesim D7) — tablet "Belge Tara" istemcisi
 // =============================================================================
-// Yalnız tarama + başlık: DRAFT irsaliye + sayfa fotoğrafları. Onay panelde (SoD, `gelen-belge:approve`).
-// Uçlar `gelen-belge:write`; modül kapalıyken 403 MODULE_DISABLED (ekran zaten gizli).
+// Tarama + başlık: DRAFT irsaliye + sayfa fotoğrafları. Belge başına tek kayıt kipinde (T2) onay kartı detayı okur,
+// başlığı yamar ve `gelen-belge:approve` izniyle onaylar; kural sunucuda. Tarama uçları `gelen-belge:write`; modül kapalıyken 403 MODULE_DISABLED (ekran zaten gizli).
 // =============================================================================
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
@@ -83,6 +83,63 @@ export interface BatchNoCandidate {
   value: string;
 }
 
+/** Metre kaynağı değeri: A dilimi düz metin/sayı, panel detayı nesne (`{ value }`) verebilir — ikisi de kabul. */
+export type MeterCandidateValue = string | number | { value: string | number } | null;
+
+/** B dilimi: belge başına tek kayıt kapısı — onayla AYNI yüklem; yalnız `entryMode=PER_DOCUMENT` iken gelir. */
+export interface PerDocumentGate {
+  code: 'KURSUN_METERS_REQUIRED' | 'KURSUN_METERS_REVIEW_PENDING' | null;
+  warnings: string[];
+  totalsBlocking?: boolean;
+}
+
+/** `GET /gelen-belge/irsaliyeler/:id` (gelen-belge:read) — onay kartının okuduğu alt küme. Eski sunucu yeni alanları göndermez. */
+export interface InboundNoteDetail {
+  id: string;
+  noteNo: string;
+  status: string;
+  ownerCustomerId: string | null;
+  ourBatchNo?: string | null;
+  ourBatchNoKey?: string | null;
+  kursunMeters?: string | number | null;
+  kursunMetersSource?: KursunMetersSource | null;
+  kursunMetersReview?: boolean;
+  batchNoCandidates?: BatchNoCandidate[];
+  kursunMeterCandidates?: Partial<Record<'output' | 'total' | 'input' | 'lineSum', MeterCandidateValue>>;
+  perDocument?: PerDocumentGate;
+}
+
+/** Başlık PATCH alt kümesi (sunucu `UpdateBody` allowlist'i). */
+export interface InboundNotePatch {
+  ownerCustomerId?: string | null;
+  ourBatchNo?: string | null;
+  ourBatchNoKey?: string | null;
+  kursunMeters?: number | null;
+  kursunMetersReviewed?: true;
+}
+
+/** Onay gövdesi; `routeTemplateId` yalnız seçildiyse gönderilir (P3 rota geçersiz kılma). */
+export interface ApproveNoteBody {
+  routeTemplateId?: string;
+}
+
+export interface AutoWorkOrderGroup {
+  key: string;
+  itemName: string;
+  rollCount: number;
+  outcome: 'OPENED' | 'SKIPPED' | 'FAILED';
+  workOrderId?: string;
+  workOrderNumber?: string;
+  reason?: string;
+}
+
+export interface ApproveNoteResult {
+  note: { id: string; noteNo: string; status: string };
+  summary: { entered: number; failed: number; skipped: number; replayed: number };
+  autoWorkOrders?: { opened: number; manual: number; reason: string | null; groups: AutoWorkOrderGroup[] };
+  warnings: string[];
+}
+
 export const inboundDocService = {
   tabletContext: (): Promise<ApiResponse<InboundDocTabletContext>> =>
     apiClient.get<ApiResponse<InboundDocTabletContext>>('/gelen-belge/tablet-baglam').then((r) => r.data),
@@ -97,6 +154,18 @@ export const inboundDocService = {
 
   readSummary: (noteId: string): Promise<ReadSummary> =>
     apiClient.get<ApiResponse<ReadSummary>>(`/gelen-belge/irsaliyeler/${noteId}/okuma-ozeti`).then((r) => r.data.data),
+
+  noteDetail: (noteId: string): Promise<InboundNoteDetail> =>
+    apiClient.get<ApiResponse<InboundNoteDetail>>(`/gelen-belge/irsaliyeler/${noteId}`).then((r) => r.data.data),
+
+  updateNote: (noteId: string, body: InboundNotePatch): Promise<InboundNoteDetail> =>
+    apiClient.patch<ApiResponse<InboundNoteDetail>>(`/gelen-belge/irsaliyeler/${noteId}`, body).then((r) => r.data.data),
+
+  /** Onay + oto iş emri; uyarılar zarfın `warnings`inden. Onay top doğurur → uzun zaman aşımı. */
+  approveNote: (noteId: string, body: ApproveNoteBody): Promise<ApproveNoteResult> =>
+    apiClient
+      .post<ApiResponse<Omit<ApproveNoteResult, 'warnings'>>>(`/gelen-belge/irsaliyeler/${noteId}/onay`, body, { timeout: UPLOAD_TIMEOUT_MS })
+      .then((r) => ({ ...r.data.data, warnings: r.data.warnings ?? [] })),
 };
 
 export type InboundDocApi = Pick<typeof inboundDocService, 'createDraftNote' | 'uploadScan'>;
