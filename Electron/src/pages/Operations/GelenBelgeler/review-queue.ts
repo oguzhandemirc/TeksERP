@@ -44,13 +44,19 @@ export function lineScanId(line: Pick<DeliveryNoteLine, "scanId">, scans: Readon
   return scans.length === 1 ? (scans[0]?.id ?? null) : null;
 }
 
-type QueueLine = Pick<DeliveryNoteLine, "id" | "lineNo" | "blockNo" | "needsReview" | "status" | "rollId" | "sourceRects">;
+type QueueLine = Pick<DeliveryNoteLine, "id" | "lineNo" | "blockNo" | "needsReview" | "status" | "rollId" | "sourceRects" | "problems">;
 
-/** Kuyruk: açık (topsuz, atlanmamış) ve `needsReview` satırlar; metre her zaman, kg yalnız kutusu varsa. Sıra blok → satır. */
+/** Şüpheli değerli satır (backend `problems` SUSPECT_VALUE; panel şüphe kuralı kurmaz) kuyrukta önce gelir. */
+const suspectRank = (l: QueueLine) => (l.problems?.includes("SUSPECT_VALUE") ? 0 : 1);
+
+/**
+ * Kuyruk: açık (topsuz, atlanmamış) ve `needsReview` satırlar; metre her zaman, kg yalnız kutusu varsa. Sıra: şüpheli
+ * değerli satırlar EN ÖNCE (el yazısında yanlış okuma oradadır), sonra blok → satır.
+ */
 export function buildReviewQueue(lines: readonly QueueLine[]): ReviewItem[] {
   return [...lines]
     .filter((l) => l.needsReview && l.status !== "SKIPPED" && !l.rollId)
-    .sort((a, b) => a.blockNo - b.blockNo || a.lineNo - b.lineNo)
+    .sort((a, b) => suspectRank(a) - suspectRank(b) || a.blockNo - b.blockNo || a.lineNo - b.lineNo)
     .flatMap((l) => {
       const base = { lineId: l.id, lineNo: l.lineNo, blockNo: l.blockNo };
       const items: ReviewItem[] = [{ ...base, field: "meters" }];

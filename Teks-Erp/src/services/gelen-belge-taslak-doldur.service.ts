@@ -15,7 +15,7 @@ import { draftFromExtraction, dropOverlapDuplicates, linesToPhotoFrame, type Dra
 import { OcrResultSchema } from "../lib/gelen-belge/okuma-istemcisi";
 import { AuditService } from "./audit.service";
 import { FALLBACK_TEMPLATE_CODE, bumpTemplateHit, ensureSenderTemplate } from "./gelen-belge-sablon.service";
-import { readHandwritingOutlierFactor } from "./system-setting.service";
+import { readHandwritingOutlierFactor, readHeaderLineMeterSource, readIncomingDocAutoSender } from "./system-setting.service";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const SCAN_TABLE = "DOCUMENT_SCAN";
@@ -32,6 +32,8 @@ export interface BuiltDraft {
   headerCols: {
     ownerText: string | null; senderDocNo: string | null; senderDocDate: Date | null; customerBatchNo: string | null;
     processText: string | null; declaredTopCount: number | null; senderText: string | null; templateId: string | null; templateScore: Prisma.Decimal | null;
+    /** Yalnız `gelenBelge.autoSenderFromTemplate` açıkken: aktif şablonun aktif gönderen carisi; aksi null. */
+    senderCustomerId: string | null;
   };
   totalsDeclared: Prisma.InputJsonValue;
   warnings: Prisma.InputJsonValue;
@@ -46,7 +48,8 @@ export interface BuiltDraft {
 export async function buildDraft(result: OcrResult, userId: string | undefined, opts: { bumpHit: boolean }): Promise<BuiltDraft> {
   // Şüphe oranı her kurulumda o anki fabrika ayarından (saklı zarftan yeniden kurulum da güncel oranla işaretler).
   const outlierFactor = await readHandwritingOutlierFactor();
-  const extracted = draftFromExtraction(extractDocument(result, loadTemplates(), FALLBACK_TEMPLATE_CODE), { outlierFactor });
+  const headerLineSource = await readHeaderLineMeterSource();
+  const extracted = draftFromExtraction(extractDocument(result, loadTemplates(), FALLBACK_TEMPLATE_CODE), { outlierFactor, headerLineSource });
   // Yan dönük sayfa: kutular panelin çizdiği (dönmemiş) fotoğrafın çerçevesine döner.
   const draft = { ...extracted, lines: linesToPhotoFrame(extracted.lines, result) };
   const code = draft.header.regions[0]?.templateId ?? null;
@@ -60,11 +63,22 @@ export async function buildDraft(result: OcrResult, userId: string | undefined, 
       ownerText: header.ownerText, senderDocNo: header.senderDocNo, senderDocDate: header.senderDocDate, customerBatchNo: header.customerBatchNo,
       processText: header.processText, declaredTopCount: header.declaredTopCount, senderText: header.senderText, templateId: template?.id ?? null,
       templateScore: header.templateScore === null ? null : new Prisma.Decimal(header.templateScore),
+      senderCustomerId: template ? await templateSender(template.id) : null,
     },
     totalsDeclared: toJson(header.totalsDeclared),
     warnings: toJson(header.warnings),
     envelope: toJson({ ocr: result, regions: header.regions }),
   };
+}
+
+/**
+ * S3(b): ayar açıksa şablonun bağlı gönderen carisi — şablon ve cari AKTİF olmalı (eşleme önerisinin `TEMPLATE` kaynağıyla
+ * aynı koşul); ayar kapalı (varsayılan) → null = bugünkü (OCR gönderen doldurmaz).
+ */
+async function templateSender(templateId: string): Promise<string | null> {
+  if (!(await readIncomingDocAutoSender())) return null;
+  const t = await prisma.senderTemplate.findUnique({ where: { id: templateId }, select: { isActive: true, senderCustomer: { select: { id: true, isActive: true } } } });
+  return t?.isActive && t.senderCustomer?.isActive ? t.senderCustomer.id : null;
 }
 
 /** Saklı zarftan (`{ ocr, regions }`) yeniden kurulum; zarf yok ya da şema dışı → null (FAIL-CLOSED: çağıran yeniden okumaya döner). */
@@ -109,8 +123,8 @@ async function linesToAppend(tx: Prisma.TransactionClient, noteId: string, scan:
 
 type HeaderFillable = Omit<BuiltDraft["headerCols"], "templateScore">;
 
-/** Bağlı taslakta yalnız BOŞ başlık alanları OCR'dan dolar — operatörün yazdığı ezilmez. */
-function fillEmptyHeader(patch: Prisma.CustomerDeliveryNoteUpdateInput, note: HeaderFillable, headerCols: HeaderFillable): void {
+/** Bağlı taslakta yalnız BOŞ başlık alanları OCR'dan dolar — operatörün yazdığı ezilmez. Şablondan yazılan gönderen döner. */
+function fillEmptyHeader(patch: Prisma.CustomerDeliveryNoteUpdateInput, note: HeaderFillable, headerCols: HeaderFillable): string | null {
   if (!note.ownerText) patch.ownerText = headerCols.ownerText;
   if (!note.senderText) patch.senderText = headerCols.senderText;
   if (!note.templateId && headerCols.templateId) patch.template = { connect: { id: headerCols.templateId } };
@@ -119,6 +133,15 @@ function fillEmptyHeader(patch: Prisma.CustomerDeliveryNoteUpdateInput, note: He
   if (!note.customerBatchNo) patch.customerBatchNo = headerCols.customerBatchNo;
   if (!note.processText) patch.processText = headerCols.processText;
   if (note.declaredTopCount === null) patch.declaredTopCount = headerCols.declaredTopCount;
+  if (note.senderCustomerId || !headerCols.senderCustomerId) return null;
+  patch.senderCustomer = { connect: { id: headerCols.senderCustomerId } };
+  return headerCols.senderCustomerId;
+}
+
+/** Doldurma sonucu: eklenen satır sayısı + şablondan yazılan gönderen (audit künyesi; yoksa null). */
+export interface FillResult {
+  lines: number;
+  autoSenderCustomerId: string | null;
 }
 
 /**
@@ -126,17 +149,17 @@ function fillEmptyHeader(patch: Prisma.CustomerDeliveryNoteUpdateInput, note: He
  * (satır kilidi paralel sayfayı serileştirir; mevcut satırlar claim'in ARDINDAN okunur). Eklenen satır sayısını döner.
  * Çok sayfalı taslak: her sayfanın satırları EKLENİR (blok no kaydırılır, uyarılar birikir).
  */
-export async function fillBoundDraftTx(tx: Prisma.TransactionClient, noteId: string, scan: { id: string; pageNo: number }, built: BuiltDraft): Promise<number> {
+export async function fillBoundDraftTx(tx: Prisma.TransactionClient, noteId: string, scan: { id: string; pageNo: number }, built: BuiltDraft): Promise<FillResult> {
   const { draft, headerCols } = built;
   const { header } = draft;
-  const note = await tx.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteId }, select: { ownerText: true, senderText: true, templateId: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, processText: true, declaredTopCount: true, totalsDeclared: true, warnings: true } });
+  const note = await tx.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteId }, select: { ownerText: true, senderText: true, senderCustomerId: true, templateId: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, processText: true, declaredTopCount: true, totalsDeclared: true, warnings: true } });
   const overlap = await linesToAppend(tx, noteId, scan, draft.lines);
   const agg = await tx.customerDeliveryNoteLine.aggregate({ where: { noteId }, _max: { lineNo: true, blockNo: true } });
   const lineBase = agg._max.lineNo ?? 0;
   const blockBase = agg._max.blockNo ?? 0;
   const prevWarnings = Array.isArray(note.warnings) ? note.warnings : [];
   const patch: Prisma.CustomerDeliveryNoteUpdateInput = { warnings: toJson([...prevWarnings, ...header.warnings, ...overlap.warnings]) };
-  fillEmptyHeader(patch, note, headerCols);
+  const autoSenderCustomerId = fillEmptyHeader(patch, note, headerCols);
   const addLines = overlap.lines.length > 0;
   const prevBlocks = (note.totalsDeclared as { blocks?: unknown[] } | null)?.blocks;
   if (note.totalsDeclared === null || !Array.isArray(prevBlocks)) patch.totalsDeclared = built.totalsDeclared;
@@ -144,7 +167,7 @@ export async function fillBoundDraftTx(tx: Prisma.TransactionClient, noteId: str
   patch.templateScore = headerCols.templateScore;
   if (addLines) patch.lines = { create: lineRows(overlap.lines, scan.id, lineBase, blockBase) };
   await tx.customerDeliveryNote.update({ where: { id: noteId }, data: patch });
-  return addLines ? overlap.lines.length : 0;
+  return { lines: addLines ? overlap.lines.length : 0, autoSenderCustomerId };
 }
 
 // ── Kaynak: fotoğrafla açılan taslak ─────────────────────────────────────────
@@ -173,7 +196,7 @@ export interface StoredReadPlan {
   built: BuiltDraft | null;
 }
 
-export type StoredReadOutcome = { scanId: string; sha256: string; mode: "REBUILT"; lines: number } | { scanId: string; sha256: string; mode: "REQUEUED" };
+export type StoredReadOutcome = { scanId: string; sha256: string; mode: "REBUILT"; lines: number; autoSenderCustomerId: string | null } | { scanId: string; sha256: string; mode: "REQUEUED" };
 
 /**
  * tx DIŞINDA: bağlanacak taramalardan OKUNMUŞ (READ) olanların saklı sonucu hazırlanır (motor + şablon satırı). Serbest READ
@@ -196,7 +219,8 @@ export async function applyStoredReadsTx(tx: Prisma.TransactionClient, noteId: s
   const out: StoredReadOutcome[] = [];
   for (const p of plans) {
     if (p.built) {
-      out.push({ scanId: p.scanId, sha256: p.sha256, mode: "REBUILT", lines: await fillBoundDraftTx(tx, noteId, { id: p.scanId, pageNo: p.pageNo }, p.built) });
+      const filled = await fillBoundDraftTx(tx, noteId, { id: p.scanId, pageNo: p.pageNo }, p.built);
+      out.push({ scanId: p.scanId, sha256: p.sha256, mode: "REBUILT", lines: filled.lines, autoSenderCustomerId: filled.autoSenderCustomerId });
       continue;
     }
     const c = await tx.documentScan.updateMany({ where: { id: p.scanId, noteId, status: "READ" }, data: { status: "PENDING", attempts: 0 } });
@@ -210,7 +234,7 @@ export async function applyStoredReadsTx(tx: Prisma.TransactionClient, noteId: s
 export async function auditStoredReads(noteId: string, outcomes: readonly StoredReadOutcome[], userId: string | undefined): Promise<void> {
   for (const o of outcomes) {
     if (o.mode === "REBUILT") {
-      await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: noteId, newData: { source: "OCR_STORED", scanId: o.scanId, sha256: o.sha256, lineCount: o.lines } });
+      await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: noteId, newData: { source: "OCR_STORED", scanId: o.scanId, sha256: o.sha256, lineCount: o.lines, ...(o.autoSenderCustomerId ? { senderCustomerId: o.autoSenderCustomerId, senderFrom: "TEMPLATE" } : {}) } });
     } else {
       await AuditService.log({ userId, action: "UPDATE", tableName: SCAN_TABLE, recordId: o.scanId, oldData: { status: "READ" }, newData: { status: "PENDING", attempts: 0, noteId, reason: "STORED_RESULT_MISSING" } });
     }

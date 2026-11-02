@@ -25,6 +25,7 @@ import { applyStoredReadsTx, auditPhotoSource, auditStoredReads, markPhotoSource
 import { LINE_SELECT, lineColumns, notDraft, text, type DeliveryNoteLineInput } from "./gelen-belge-line.service";
 import { lineProblems, totalsCheck } from "./gelen-belge-kontrol.service";
 import { noteNotices } from "../lib/gelen-belge/uyari";
+import { sameBatchNotes } from "./gelen-belge-parti-tekrar.service";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const SERIES_KEY = "customerDeliveryNote";
@@ -144,7 +145,9 @@ export async function getDeliveryNote(id: string) {
   // Gözden geçirme: onay kapısının AYNI yüklemleri (satır `problems`, toplam `totalsCheck`) — panel yeniden hesaplamaz.
   const lines = note.lines.map(({ ocrRaw, ...l }) => ({ ...l, problems: lineProblems({ ...l, ocrRaw }) }));
   // Taslak uyarıları (okuma özetiyle AYNI helper): eski istemci alanı yok sayar.
-  return { ...note, lines, totalsCheck: totalsCheck(note, note.lines), notices: noteNotices(note.warnings), cariHold };
+  // Aynı müşteri partisinin başka belgeleri (bilgi, engel değil); eski istemci alanı yok sayar.
+  const sameBatch = await sameBatchNotes(note);
+  return { ...note, lines, totalsCheck: totalsCheck(note, note.lines), notices: noteNotices(note.warnings), cariHold, sameBatch };
 }
 
 /** Liste where'i — özet şeridi de BUNDAN türer (durum süzgeci hariç; şerit duruma göre sayar). */

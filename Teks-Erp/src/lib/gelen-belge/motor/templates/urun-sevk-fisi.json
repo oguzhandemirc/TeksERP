@@ -288,6 +288,14 @@
     "en": [
       "cikisMamulEn",
       "girisMamulEn"
+    ],
+    "inputM": [
+      "girisToplamMt",
+      "toplamMetre"
+    ],
+    "inputKg": [
+      "girisToplamKg",
+      "toplamKg"
     ]
   }
 }

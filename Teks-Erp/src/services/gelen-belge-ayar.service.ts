@@ -1,14 +1,17 @@
 // =============================================================================
 // TeksERP — Gelen belge AYARLARI (hizmet ekseni E3; TASARIM-KARARI §8 HİZMET EKSENİ (1))
 // =============================================================================
-// Altı fabrika ayarı, TEK yazar `PUT /api/gelen-belge/ayarlar` (ham `PUT /api/admin/settings/:key` bu anahtarları
+// Sekiz fabrika ayarı, TEK yazar `PUT /api/gelen-belge/ayarlar` (ham `PUT /api/admin/settings/:key` bu anahtarları
 // REDDEDER — doğrulamasız düz metin yazıp ürün kapısını dolanmasın):
 //   · `gelenBelge.defaultItemId` — ürünü seçilmemiş satır onayda bu ürünle doğar (boş = bugünkü: 400 UNRESOLVED)
-//   · `gelenBelge.unreviewedApproval` — needsReview satır varken onay: WARN (varsayılan, geçer) | BLOCK (409)
+//   · `gelenBelge.unreviewedApproval` — needsReview satır varken onay: WARN (varsayılan, geçer) | BLOCK_SUSPECT (yalnız
+//     şüpheli değerli satır 409) | BLOCK (409)
 //   · `gelenBelge.autoWorkOrder` — onaydan sonra net gruplara iş emri kendiliğinden (boş/false = bugünkü: elle)
 //   · `gelenBelge.defaultRouteTemplateId` — rota önerisinin fabrika varsayılanı (boş = bugünkü: yalnız müşteri kaynakları)
 //   · `gelenBelge.routeSuggestionPriority` — CUSTOMER_FIRST (varsayılan, bugünkü) | FACTORY_FIRST
-//   · `gelenBelge.handwritingOutlierFactor` — el yazısı şüpheli metre oranı K (2–20; boş = 4, yalnız uyarı)
+//   · `gelenBelge.handwritingOutlierFactor` — el yazısı şüpheli metre oranı K (2–20; boş = 4)
+//   · `gelenBelge.headerLineMeterSource` — tablosuz belgede satır metresi: OUTPUT çıkış (varsayılan, bugünkü) | INPUT giriş
+//   · `gelenBelge.autoSenderFromTemplate` — okunan şablonun gönderen carisi boş gönderene yazılır (varsayılan kapalı)
 // Ürün kapısı tek karar: yaşam döngüsü `assertItemUsable(NEW_STOCK)` + top doğurabilen tür ALLOWLIST'i
 // (`ROLL_BEARING_ITEM_TYPES`; yeni tür — ör. SERVICE — eklendiği gün kendiliğinden dışarıda kalır).
 // =============================================================================
@@ -32,6 +35,11 @@ import {
   type RouteSuggestionPriority,
   readIncomingDocDefaultItemId,
   readHandwritingOutlierFactor,
+  readHeaderLineMeterSource,
+  readIncomingDocAutoSender,
+  DEFAULT_HEADER_LINE_METER_SOURCE,
+  HEADER_LINE_METER_SOURCE_VALUES,
+  type HeaderLineMeterSource,
   readUnreviewedApprovalMode,
   systemSettingService,
   type UnreviewedApprovalMode,
@@ -48,6 +56,8 @@ export const INCOMING_DOC_DEDICATED_SETTING_KEYS: ReadonlySet<string> = new Set(
   SETTING_KEYS.GELEN_BELGE_DEFAULT_ROUTE_ID,
   SETTING_KEYS.GELEN_BELGE_ROUTE_PRIORITY,
   SETTING_KEYS.GELEN_BELGE_OUTLIER_FACTOR,
+  SETTING_KEYS.GELEN_BELGE_HEADER_LINE_SOURCE,
+  SETTING_KEYS.GELEN_BELGE_AUTO_SENDER,
 ]);
 
 export interface DefaultItemView {
@@ -72,6 +82,11 @@ export interface IncomingDocSettings {
   handwritingOutlierFactor: number;
   defaultHandwritingOutlierFactor: number;
   handwritingOutlierFactorRange: { min: number; max: number };
+  /** Tablosuz belgede (ürün sevk fişi) satır metresi/kg kaynağı; yeni okumaya uygulanır. */
+  headerLineMeterSource: HeaderLineMeterSource;
+  defaultHeaderLineMeterSource: HeaderLineMeterSource;
+  /** Okunan şablonun gönderen carisi boş gönderen alanına yazılır mı (varsayılan false). */
+  autoSenderFromTemplate: boolean;
 }
 
 /**
@@ -118,6 +133,9 @@ export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
     handwritingOutlierFactor: await readHandwritingOutlierFactor(),
     defaultHandwritingOutlierFactor: DEFAULT_OUTLIER_FACTOR,
     handwritingOutlierFactorRange: { min: OUTLIER_FACTOR_MIN, max: OUTLIER_FACTOR_MAX },
+    headerLineMeterSource: await readHeaderLineMeterSource(),
+    defaultHeaderLineMeterSource: DEFAULT_HEADER_LINE_METER_SOURCE,
+    autoSenderFromTemplate: await readIncomingDocAutoSender(),
   };
 }
 
@@ -131,6 +149,8 @@ export interface IncomingDocSettingsInput {
   routeSuggestionPriority?: RouteSuggestionPriority;
   /** null = temizle (varsayılan oran). */
   handwritingOutlierFactor?: number | null;
+  headerLineMeterSource?: HeaderLineMeterSource;
+  autoSenderFromTemplate?: boolean;
 }
 
 /** Yazım: ürün doğrulaması 400 `GELEN_BELGE_DEFAULT_ITEM_INVALID`; audit `systemSettingService.set` içinde. */
@@ -147,9 +167,9 @@ export async function updateIncomingDocSettings(input: IncomingDocSettingsInput,
   }
   if (input.unreviewedApproval !== undefined) {
     if (!UNREVIEWED_APPROVAL_VALUES.includes(input.unreviewedApproval)) {
-      throw AppError.badRequest("Geçersiz seçenek: WARN ya da BLOCK olmalı.", { code: "VALIDATION_ERROR" });
+      throw AppError.badRequest("Geçersiz seçenek: WARN, BLOCK_SUSPECT ya da BLOCK olmalı.", { code: "VALIDATION_ERROR" });
     }
-    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, input.unreviewedApproval, "Gelen belge: gözden geçirilmemiş hücre varken onay (WARN/BLOCK)", userId);
+    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, input.unreviewedApproval, "Gelen belge: gözden geçirilmemiş hücre varken onay (WARN/BLOCK_SUSPECT/BLOCK)", userId);
   }
   if (input.autoWorkOrder !== undefined) {
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER, input.autoWorkOrder, `Gelen belge: onaydan sonra net desen gruplarına ${TERIM.terbiyeIsEmri.tekilKucuk} kendiliğinden açılır`, userId);
@@ -177,7 +197,21 @@ export async function updateIncomingDocSettings(input: IncomingDocSettingsInput,
     // Temizleme boş metin yazar (okuyucu sayı olmayanı varsayılana düşürür).
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_OUTLIER_FACTOR, k ?? "", "Gelen belge: el yazısı şüpheli metre oranı (medyanın 1/K altı ya da K katı üstü)", userId);
   }
+  await updateReadOptions(input, userId);
   return getIncomingDocSettings();
+}
+
+/** Okuma seçenekleri (S5 metre kaynağı · S3b şablondan gönderen) — yeni okumaya uygulanır, taslağı geriye dönük değiştirmez. */
+async function updateReadOptions(input: IncomingDocSettingsInput, userId: string): Promise<void> {
+  if (input.headerLineMeterSource !== undefined) {
+    if (!HEADER_LINE_METER_SOURCE_VALUES.includes(input.headerLineMeterSource)) {
+      throw AppError.badRequest("Geçersiz seçenek: OUTPUT ya da INPUT olmalı.", { code: "VALIDATION_ERROR" });
+    }
+    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_HEADER_LINE_SOURCE, input.headerLineMeterSource, "Gelen belge: tablosuz belgede satır metresi kaynağı (OUTPUT çıkış / INPUT giriş)", userId);
+  }
+  if (input.autoSenderFromTemplate !== undefined) {
+    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_AUTO_SENDER, input.autoSenderFromTemplate, "Gelen belge: okunan şablonun gönderen carisi boş gönderen alanına yazılır", userId);
+  }
 }
 
 /** Ürünü kaynağıyla etkin varsayılan sayan çözücü (E4) için: fabrika ayarındaki ürün kimliği, boşsa null. */

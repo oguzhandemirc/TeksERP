@@ -13,6 +13,7 @@ import { ScanViewer } from "./ScanViewer";
 import { NoteHeaderForm } from "./NoteHeaderForm";
 import { TotalsStrip } from "./TotalsStrip";
 import { NoticesStrip } from "./NoticesStrip";
+import { SameBatchStrip } from "./SameBatchStrip";
 import { LinesTable } from "./LinesTable";
 import { AddLineForm } from "./AddLineForm";
 import { LineImportButton } from "./LineImportButton";
@@ -130,6 +131,7 @@ export function IncomingDocumentDetailPage() {
               <NoteHeaderForm note={n} suggestions={suggestions.data} editable={editable} onPatch={(p) => header.mutate(p)} />
               <TotalsStrip check={n.totalsCheck} />
               <NoticesStrip notices={n.notices} />
+              <SameBatchStrip sameBatch={n.sameBatch} />
               {n.varianceReason && <p className="text-xs text-muted-foreground">Fark gerekçesi: {n.varianceReason}</p>}
               <ProcessGramajPanel groups={gramaj.groups} options={suggestions.data?.processOptions ?? []} choiceGroups={suggestions.data?.processGroups ?? []} picks={gramaj.picks} onPick={gramaj.onPick} />
             </div>

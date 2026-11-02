@@ -128,6 +128,14 @@ export interface DeliveryNoteDetail extends DeliveryNoteHeader {
   totalsCheck?: TotalsCheck;
   /** Okuma uyarıları (tablet özetiyle aynı backend helper'ı); eski backend göndermez → şerit çizilmez. */
   notices?: NoteNotice[];
+  /** Aynı müşteri partisinin (sahip + parti no) başka belgeleri — bilgi; eski backend göndermez / yoksa null. */
+  sameBatch?: SameBatchNotes | null;
+}
+
+export interface SameBatchNotes {
+  batchNo: string;
+  total: number;
+  notes: Array<{ id: string; noteNo: string; status: NoteStatus; createdAt: string }>;
 }
 
 /** Toplu silme önizlemesi (`POST /irsaliyeler/toplu-sil/onizleme`). */
@@ -289,7 +297,9 @@ export interface HeaderPatch {
 }
 
 /** E3 hizmet ekseni ayarları — backend `gelen-belge-ayar.service.ts` `IncomingDocSettings` aynası. */
-export type UnreviewedApproval = "WARN" | "BLOCK";
+export type UnreviewedApproval = "WARN" | "BLOCK_SUSPECT" | "BLOCK";
+/** Tablosuz belgede satır metresi kaynağı — backend `HeaderLineMeterSource` aynası. */
+export type HeaderLineMeterSource = "OUTPUT" | "INPUT";
 export interface IncomingDocumentSettings {
   /** Ürünü seçilmemiş satırın onayda doğacağı ürün; null = ayar boş (bugünkü: satır ürün ister). */
   defaultItem: { id: string; code: string; name: string; problem: string | null } | null;
@@ -305,6 +315,11 @@ export interface IncomingDocumentSettings {
   handwritingOutlierFactor?: number;
   defaultHandwritingOutlierFactor?: number;
   handwritingOutlierFactorRange?: { min: number; max: number };
+  /** Tablosuz belgede satır metresi kaynağı; eski backend göndermez (undefined = alan çizilmez). */
+  headerLineMeterSource?: HeaderLineMeterSource;
+  defaultHeaderLineMeterSource?: HeaderLineMeterSource;
+  /** Okunan şablonun gönderen carisi boş gönderene yazılır; eski backend göndermez (undefined = alan çizilmez). */
+  autoSenderFromTemplate?: boolean;
 }
 /** Rota önerisi önceliği — backend `RouteSuggestionPriority` aynası. */
 export type RouteSuggestionPriority = "CUSTOMER_FIRST" | "FACTORY_FIRST";

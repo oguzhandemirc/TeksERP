@@ -604,6 +604,16 @@ async function main() {
       file: "Electron/src/pages/GeneralSettings/GelenBelgeOutlierField.tsx",
       needle: "gb-outlier-factor",
     },
+    GELEN_BELGE_HEADER_LINE_SOURCE: {
+      why: "Tablosuz belgede satır metresi kaynağı (OUTPUT varsayılan | INPUT) — aynı doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; okuma işi okur; flag yüküne konmaz",
+      file: "Electron/src/pages/GeneralSettings/GelenBelgeReadOptionsField.tsx",
+      needle: "gb-header-line-source",
+    },
+    GELEN_BELGE_AUTO_SENDER: {
+      why: "Okunan şablonun gönderen carisini boş gönderene yaz (varsayılan kapalı) — aynı doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; okuma işi okur; flag yüküne konmaz",
+      file: "Electron/src/pages/GeneralSettings/GelenBelgeReadOptionsField.tsx",
+      needle: "gb-auto-sender",
+    },
     SYSTEM_INSTALLATION_ID: {
       why: "Feature flag değil, kurulum kimliği — panel yüzeyi YOK (bilinçli); boot işi üretir, /api/discovery/identity okur",
       file: "Teks-Erp/src/jobs/installation-identity.job.ts",

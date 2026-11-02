@@ -18,6 +18,7 @@
 //    kapatılınca §7h düşer. Hepsi git checkout ile geri alındı.
 //    (2026-11-02 §9) blok alanı çıkarımı kapatılınca §9a–c, bölge birleştirme kapatılınca §9d–g, şüpheli ızgara
 //    uyarısı kapatılınca §9j, adet > 1 kapısı kapatılınca §9g düşer.
+//    (S5 2026-11-02) `headerOnlyLine` INPUT dalı kapatılınca §9g3 düşer; validator `inputM` denetimi kapatılınca §9i2 düşer.
 //    (2026-11-02 §10) üst sınır (K katı) kapatılınca §10d, ikinci belge izinin tek bölge dalı kapatılınca §10b,
 //    GRID_EMPTY kapatılınca §10f düşer — ÖLÇÜLDÜ 2026-11-02 (her biri tek başına 70/1; elle geri alındı).
 // =============================================================================
@@ -259,12 +260,23 @@ function kutu(text: string, x: number, y: number, w: number, h: number, angle: n
   const cok = { ...exAlt, regions: exAlt.regions.map((r) => ({ ...r, fields: r.fields && { ...r.fields, fields: { ...r.fields.fields, girisAdet: { ...r.fields.fields.girisAdet!, value: "3" } } } })) };
   const dCok = draftFromExtraction(cok);
   check("§9g adet > 1 (top dökümü yok) → satır YOK + HEADER_LINE_SKIPPED", dCok.lines.length === 0 && dCok.header.warnings.some((w) => w.startsWith("HEADER_LINE_SKIPPED")), JSON.stringify(dCok.header.warnings));
+  // §9g2–g4 (S5, 2026-11-02): metre kaynağı fabrika ayarı — OUTPUT (varsayılan) çıkış toplamı, INPUT giriş toplamı (kg da aynı taraftan).
+  const dOut = draftFromExtraction(exAlt, { headerLineSource: "OUTPUT" });
+  const dIn = draftFromExtraction(exAlt, { headerLineSource: "INPUT" });
+  check("§9g2 OUTPUT ≡ seçeneksiz (bugünkü davranış bayt-aynı)", JSON.stringify(dOut.lines) === JSON.stringify(dAlt.lines));
+  check("§9g3 ⭐ INPUT → giriş toplamı 198,1 m / 35,7 kg (en değişmez 325), needsReview",
+    dIn.lines.length === 1 && dIn.lines[0]!.meters === "198.1" && dIn.lines[0]!.weightKg === "35.7" && dIn.lines[0]!.widthCm === "325" && dIn.lines[0]!.needsReview,
+    JSON.stringify(dIn.lines.map((l) => [l.meters, l.weightKg, l.widthCm])));
+  const girissiz = { ...exAlt, regions: exAlt.regions.map((r) => ({ ...r, fields: r.fields && { ...r.fields, fields: { ...r.fields.fields, girisToplamMt: { ...r.fields.fields.girisToplamMt!, value: null } } } })) };
+  check("§9g4 INPUT ama giriş toplamı okunamadı → çıkış toplamına düşer (satır kaybolmaz)", draftFromExtraction(girissiz, { headerLineSource: "INPUT" }).lines[0]?.meters === "200");
   const d46 = draftFromExtraction(extractDocument(gercek("0246-iki-belge"), sablonlar));
   check("§9h iki belgeli fotoğrafta ikinci bölge aynı taslağa TOP EKLEMEZ (başka sahip); MULTI_REGION sürer; Kömürhan işlemi okunur",
     d46.lines.length === 1 && d46.lines[0]!.meters === "241" && d46.header.warnings.some((w) => w.startsWith("MULTI_REGION")) && !!d46.header.processText,
     JSON.stringify({ n: d46.lines.length, p: d46.header.processText }));
   const sab = sablonlar.find((t) => t.id === "urun-sevk-fisi")!;
   const bozukHL = validateTemplate({ ...sab, headerLine: { count: "yok", m: ["toplamMetre"] } });
+  const bozukIn = validateTemplate({ ...sab, headerLine: { ...sab.headerLine!, inputM: ["yokAlan"] } });
+  check("§9i2 headerLine.inputM bilinmeyen alan anahtarını reddeder; sevk fişi şablonu geçerli", !bozukIn.ok && bozukIn.errors.some((e) => e.includes("headerLine.inputM")) && validateTemplate(sab).ok, bozukIn.errors.join(" | "));
   check("§9i headerLine bilinmeyen alan anahtarını reddeder", !bozukHL.ok && bozukHL.errors.some((e) => e.includes("bilinmeyen alan yok")), bozukHL.errors.join(" | "));
 
   // §9j–k: el yazısı — güven yanlış rakamı ayırmıyor; harf karışımı / medyan altı işareti ayırıyor (0244 gerçek fikstür, ölçüm 2026-11-02).

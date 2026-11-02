@@ -7,6 +7,7 @@
 // =============================================================================
 import { DeliveryNoteLineStatus, Prisma } from "@prisma/client";
 import { SUSPECT_MARK } from "../lib/gelen-belge/taslak";
+import type { UnreviewedApprovalMode } from "./system-setting.service";
 
 /** Beyan edilen kg/m ile satır toplamı arasındaki hoşgörü (OCR ondalık kaybı; adet HOŞGÖRÜSÜZ). */
 export const TOTAL_TOLERANCE = 0.005;
@@ -135,4 +136,30 @@ export function lineProblems(l: { status: DeliveryNoteLineStatus; itemId: string
   if (l.needsReview) out.push("NEEDS_REVIEW");
   if (l.needsReview && suspectMarked(l.ocrRaw)) out.push("SUSPECT_VALUE");
   return out;
+}
+
+// ── İnceleme kapısı (fabrika ayarı `gelenBelge.unreviewedApproval`) ──────────
+
+/** Kapı kipi — ayarın kendi tipi (tek küme `UNREVIEWED_APPROVAL_VALUES`). */
+export type ReviewGateMode = UnreviewedApprovalMode;
+export interface ReviewGate {
+  /** Onayı durduran satır no'ları (boş = geçer). */
+  blocked: number[];
+  /** Kapı kodu (409); geçerse null. */
+  code: "DELIVERY_NOTE_REVIEW_PENDING" | "DELIVERY_NOTE_SUSPECT_PENDING" | null;
+  /** Geçen ama gözden geçirilmemiş satırlar — onay uyarısı. */
+  warned: number[];
+}
+
+/**
+ * Gözden geçirilmemiş satır kapısı — satır kümeleri YALNIZ `lineProblems`ten: WARN hepsi uyarı · BLOCK_SUSPECT yalnız
+ * SUSPECT_VALUE satırları durdurur, kalanı uyarı · BLOCK her NEEDS_REVIEW satırı durdurur. Panel ön kontrolü aynı kümeyi okur.
+ */
+export function reviewGate(lines: ReadonlyArray<Parameters<typeof lineProblems>[0] & { lineNo: number }>, mode: ReviewGateMode): ReviewGate {
+  const pick = (code: LineProblem) => lines.filter((l) => lineProblems(l).includes(code)).map((l) => l.lineNo);
+  const unreviewed = pick("NEEDS_REVIEW");
+  if (mode === "BLOCK" && unreviewed.length) return { blocked: unreviewed, code: "DELIVERY_NOTE_REVIEW_PENDING", warned: [] };
+  const suspect = mode === "BLOCK_SUSPECT" ? pick("SUSPECT_VALUE") : [];
+  if (suspect.length) return { blocked: suspect, code: "DELIVERY_NOTE_SUSPECT_PENDING", warned: [] };
+  return { blocked: [], code: null, warned: unreviewed };
 }

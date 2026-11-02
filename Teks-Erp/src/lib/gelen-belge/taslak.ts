@@ -10,6 +10,8 @@ export { clampOutlierFactor, DEFAULT_OUTLIER_FACTOR, OUTLIER_FACTOR_MAX, OUTLIER
 export interface DraftOptions {
   /** Şüpheli değer oranı; verilmezse `DEFAULT_OUTLIER_FACTOR`. */
   outlierFactor?: number;
+  /** Tablosuz belgede satır metresi/kg kaynağı (fabrika ayarı); verilmezse OUTPUT = bugünkü (şablonun `m`/`kg` sırası). */
+  headerLineSource?: "OUTPUT" | "INPUT";
 }
 
 export interface DraftLine {
@@ -201,13 +203,15 @@ export function foreignDocumentWarning(f: ForeignDocument): string {
  * Tablosuz belge (ürün sevk fişi: tek top başlıkta): şablonun `headerLine` eşlemesiyle TEK satır; metre pozitif olmalı,
  * satır her zaman needsReview. Adet > 1 → satır yok + uyarı (top dökümü yok); adet okunamadı → tek top + uyarı.
  */
-function headerOnlyLine(reg: RegionExtraction, out: DraftLine[], warnings: string[]): void {
+function headerOnlyLine(reg: RegionExtraction, out: DraftLine[], warnings: string[], source: DraftOptions["headerLineSource"]): void {
   const spec = reg.headerLine;
   const f = reg.fields?.fields;
   if (!spec || !f) return;
   const count = f[spec.count]?.value ?? null;
   const first = (keys: string[] | undefined) => (keys ?? []).map((k) => f[k]).find((x) => x?.value && positive(x.value));
-  const m = first(spec.m);
+  // INPUT: şablonun giriş-önce sırası (tanımlıysa); aksi bugünkü çıkış-önce sıra.
+  const input = source === "INPUT";
+  const m = first(input && spec.inputM ? spec.inputM : spec.m);
   if (count !== null && count !== "1") {
     warnings.push(`HEADER_LINE_SKIPPED: belgede ${count} top yazıyor, top dökümü yok — satırları elle girin`);
     return;
@@ -217,7 +221,7 @@ function headerOnlyLine(reg: RegionExtraction, out: DraftLine[], warnings: strin
     warnings.push("HEADER_LINE_SKIPPED: toplam metre okunamadı — satırı elle girin");
     return;
   }
-  const kg = first(spec.kg);
+  const kg = first(input && spec.inputKg ? spec.inputKg : spec.kg);
   const en = first(spec.en);
   const used = [m, kg, en].filter((x): x is FieldResult => !!x);
   const rects: Record<string, OcrRect> = {};
@@ -251,7 +255,7 @@ export function draftFromExtraction(doc: DocumentExtraction, opts: DraftOptions 
     const diff = blockDiffWarning(reg, blockOffset);
     if (diff) regionWarnings.push(diff);
     // Başlıktan satır yalnız İLK bölgede: ikinci bölge başka belgedir (başka sahip) — aynı taslağa top eklenmez.
-    if (reg === first && maxBlock === 0 && !reg.grid) headerOnlyLine(reg, lines, regionWarnings);
+    if (reg === first && maxBlock === 0 && !reg.grid) headerOnlyLine(reg, lines, regionWarnings, opts.headerLineSource);
     if (reg.totals) {
       for (const b of reg.totals.blocks) totalsBlocks.push({ blockNo: blockOffset + b.blockNo, count: b.declared?.count ?? null, kg: b.declared?.kg ?? null, m: b.declared?.m ?? null });
     }

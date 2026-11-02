@@ -334,11 +334,13 @@ router.post("/taramalar/:id/oku", requirePermission("gelen-belge:write"), wrap(a
 // ── E3 hizmet ekseni ayarları (varsayılan ürün + inceleme kapısı) ────────────────────────────────────────────
 const SettingsBody = z.strictObject({
   defaultItemId: Id.nullable().optional(),
-  unreviewedApproval: z.enum(["WARN", "BLOCK"], "Seçenek WARN ya da BLOCK olmalı").optional(),
+  unreviewedApproval: z.enum(["WARN", "BLOCK_SUSPECT", "BLOCK"], "Seçenek WARN, BLOCK_SUSPECT ya da BLOCK olmalı").optional(),
   autoWorkOrder: z.boolean(`Otomatik ${TERIM.terbiyeIsEmri.tekilKucuk} evet/hayır olmalı`).optional(),
   defaultRouteTemplateId: Id.nullable().optional(),
   routeSuggestionPriority: z.enum(["CUSTOMER_FIRST", "FACTORY_FIRST"], "Seçenek CUSTOMER_FIRST ya da FACTORY_FIRST olmalı").optional(),
   handwritingOutlierFactor: z.number("Şüpheli değer oranı sayı olmalı").min(2, "Şüpheli değer oranı en az 2 olmalı").max(20, "Şüpheli değer oranı en çok 20 olmalı").nullable().optional(),
+  headerLineMeterSource: z.enum(["OUTPUT", "INPUT"], "Seçenek OUTPUT ya da INPUT olmalı").optional(),
+  autoSenderFromTemplate: z.boolean("Şablondan gönderen evet/hayır olmalı").optional(),
 });
 /**
  * @openapi
@@ -348,7 +350,7 @@ const SettingsBody = z.strictObject({
  *     summary: Gelen belge ayarları — varsayılan ürün (ad + kullanılabilirlik) ve gözden geçirilmemiş hücreyle onay kipi
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "defaultItem (id, code, name, problem) | null · unreviewedApproval WARN|BLOCK · autoWorkOrder boolean · defaultRoute (id, name, problem) | null · routeSuggestionPriority CUSTOMER_FIRST|FACTORY_FIRST" }
+ *       200: { description: "defaultItem (id, code, name, problem) | null · unreviewedApproval WARN|BLOCK_SUSPECT|BLOCK · autoWorkOrder boolean · defaultRoute (id, name, problem) | null · routeSuggestionPriority CUSTOMER_FIRST|FACTORY_FIRST · headerLineMeterSource OUTPUT|INPUT · autoSenderFromTemplate boolean" }
  *   put:
  *     tags: [GelenBelge]
  *     summary: Gelen belge ayarlarını yaz (yalnız admin:settings + ayar şifresi); pasif/top doğuramayan ürün 400 GELEN_BELGE_DEFAULT_ITEM_INVALID
@@ -360,11 +362,13 @@ const SettingsBody = z.strictObject({
  *             type: object
  *             properties:
  *               defaultItemId: { type: string, format: uuid, nullable: true }
- *               unreviewedApproval: { type: string, enum: [WARN, BLOCK] }
+ *               unreviewedApproval: { type: string, enum: [WARN, BLOCK_SUSPECT, BLOCK], description: "BLOCK_SUSPECT yalnız şüpheli değerli satırda 409 DELIVERY_NOTE_SUSPECT_PENDING" }
  *               autoWorkOrder: { type: boolean, description: "Onaydan sonra net desen gruplarına iş emri kendiliğinden (varsayılan false)" }
  *               defaultRouteTemplateId: { type: string, format: uuid, nullable: true, description: "Rota önerisinin fabrika varsayılanı; pasif/adımsız rota 400 GELEN_BELGE_DEFAULT_ROUTE_INVALID" }
  *               routeSuggestionPriority: { type: string, enum: [CUSTOMER_FIRST, FACTORY_FIRST] }
  *               handwritingOutlierFactor: { type: number, minimum: 2, maximum: 20, nullable: true, description: "El yazısı şüpheli metre oranı K (null = varsayılan 4)" }
+ *               headerLineMeterSource: { type: string, enum: [OUTPUT, INPUT], description: "Tablosuz belgede satır metresi: çıkış (varsayılan) ya da giriş toplamı" }
+ *               autoSenderFromTemplate: { type: boolean, description: "Okunan şablonun gönderen carisi boş gönderene yazılır (varsayılan false)" }
  *     responses:
  *       200: { description: Güncel ayarlar }
  */

@@ -14,8 +14,12 @@
 //      `lineProblems` SUSPECT_VALUE yalnız needsReview + `_suspect` işaretiyle
 //   §7 HTTP: detay `notices` (ikinci okumada birikse de ikilenmez) + satır SUSPECT_VALUE (ocrRaw yanıta çıkmaz) · ayar `handwritingOutlierFactor` (varsayılan 4,
 //      2–20 dışı 400, null temizler) · istemci uyarı METNİ ayrıştırmaz (kaynak taraması)
+//   §8 S4 inceleme kapısı `reviewGate` (saf matris) + HTTP: BLOCK_SUSPECT → 409 DELIVERY_NOTE_SUSPECT_PENDING lineNos ≡ detay
+//      SUSPECT_VALUE satırları; şüpheli düzeltilince kapı geçer (sonraki kapıda durur); WARN şüpheliyle de geçer; ayar ucu üç değer
+//   §9 aynı müşteri partisi (`sameBatch`): aynı sahip + trim'li parti no, iptal ve kendisi hariç; başka sahip/partisiz → null
 // NEGATİF SONDA (2026-11-02): `lineProblems` SUSPECT_VALUE kapatılınca §6e + §7b; `noteNotices` tekrar süzgeci
-//   kapatılınca §6a + §6c + §7a2 (ikinci okuma ikilemesi) düşer.
+//   kapatılınca §6a + §6c + §7a2 (ikinci okuma ikilemesi) düşer. `reviewGate` BLOCK_SUSPECT dalı kapatılınca §8a + §8c;
+//   precheck `ocrRaw` seçimi kaldırılınca §8c; `sameBatchNotes` iptal süzgeci kaldırılınca §9a düşer.
 // Emsal: scripts/test_gelen_belge_onay.ts (app.listen(0) + ensureTestAdmin).
 // =============================================================================
 import type { AddressInfo } from "net";
@@ -26,7 +30,7 @@ import prisma from "../src/lib/prisma";
 import app from "../src/app";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
-import { lineProblems, totalMismatches, totalsCheck, type TotalLine } from "../src/services/gelen-belge-kontrol.service";
+import { lineProblems, reviewGate, totalMismatches, totalsCheck, type TotalLine } from "../src/services/gelen-belge-kontrol.service";
 import { noteNotices } from "../src/lib/gelen-belge/uyari";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
@@ -220,6 +224,8 @@ async function main(): Promise<void> {
     check("§4d FAILED satır problems'te FAILED taşır", d4b.lines.find((l) => l.lineNo === 1)?.problems?.includes("FAILED") === true);
 
     await section7(call, (lines) => mkNote(lines), fabric.id);
+    await section8(call, mkNote, Ln);
+    await section9(call, mkNote, Ln, owner.id);
     section5();
   } finally {
     stopNotificationJobs();
@@ -236,6 +242,64 @@ async function main(): Promise<void> {
   }
 }
 
+type MkNote = (lines: unknown[], header?: Record<string, unknown>) => Promise<string>;
+type MkLine = (n: number, meters: number, extra?: Record<string, unknown>) => Record<string, unknown>;
+
+async function section8(call: (method: string, p: string, body?: unknown) => Promise<Resp>, mkNote: MkNote, mkLine: MkLine): Promise<void> {
+  console.log("§8 S4 inceleme kapısı (BLOCK_SUSPECT)");
+  const row = (lineNo: number, needsReview: boolean, suspect: boolean) => ({ lineNo, status: "PENDING" as const, itemId: "x", needsReview, ocrRaw: suspect ? { metre: "1370", _suspect: "YUKSEK" } : { metre: "137" } });
+  const rows = [row(1, true, true), row(2, true, false), row(3, false, false)];
+  const g = (m: "WARN" | "BLOCK_SUSPECT" | "BLOCK", r = rows) => reviewGate(r, m);
+  check("§8a saf matris: WARN geçer (uyarı 1,2) · BLOCK_SUSPECT yalnız 1 · BLOCK 1,2 · şüphesiz BLOCK_SUSPECT geçer (uyarı 2)",
+    same(g("WARN"), { blocked: [], code: null, warned: [1, 2] }) && same(g("BLOCK_SUSPECT"), { blocked: [1], code: "DELIVERY_NOTE_SUSPECT_PENDING", warned: [] })
+      && same(g("BLOCK"), { blocked: [1, 2], code: "DELIVERY_NOTE_REVIEW_PENDING", warned: [] }) && same(g("BLOCK_SUSPECT", [rows[1]!, rows[2]!]), { blocked: [], code: null, warned: [2] }),
+    JSON.stringify([g("WARN"), g("BLOCK_SUSPECT"), g("BLOCK")]));
+  const put = await call("PUT", "/api/gelen-belge/ayarlar", { unreviewedApproval: "BLOCK_SUSPECT" });
+  const badMode = await call("PUT", "/api/gelen-belge/ayarlar", { unreviewedApproval: "SUSPECT" });
+  check("§8b ayar BLOCK_SUSPECT yazılır, geri okunur; tanınmayan kip 400", put.status === 200 && (put.data as { unreviewedApproval?: string }).unreviewedApproval === "BLOCK_SUSPECT" && badMode.status === 400, `${put.status} ${badMode.status}`);
+  // Toplam beyanı bilerek tutmaz: inceleme kapısını geçen onay bir SONRAKİ kapıda (TOTAL_MISMATCH) durur — top doğmaz.
+  const id = await mkNote([mkLine(1, 1370), mkLine(2, 137), mkLine(3, 140)], { totalsDeclared: { blocks: [{ blockNo: 1, m: "1" }] } });
+  await prisma.customerDeliveryNoteLine.updateMany({ where: { noteId: id, lineNo: 1 }, data: { needsReview: true, ocrRaw: { metre: "1370", _suspect: "YUKSEK" } } });
+  await prisma.customerDeliveryNoteLine.updateMany({ where: { noteId: id, lineNo: 2 }, data: { needsReview: true, ocrRaw: { metre: "137" } } });
+  const d = (await call("GET", `/api/gelen-belge/irsaliyeler/${id}`)).data as Detail;
+  const suspectNos = d.lines.filter((l) => l.problems?.includes("SUSPECT_VALUE")).map((l) => l.lineNo);
+  const a1 = await call("POST", `/api/gelen-belge/irsaliyeler/${id}/onay`, {});
+  check("§8c ⭐ BLOCK_SUSPECT: 409 DELIVERY_NOTE_SUSPECT_PENDING, lineNos ≡ detay SUSPECT_VALUE satırları ([1]); Türkçe metin",
+    a1.status === 409 && a1.code === "DELIVERY_NOTE_SUSPECT_PENDING" && same(a1.details?.lineNos, suspectNos) && same(suspectNos, [1]), `${a1.status} ${a1.code} ${JSON.stringify(a1.details?.lineNos)}`);
+  const l1 = d.lines.find((l) => l.lineNo === 1)!;
+  const fix = await call("PATCH", `/api/gelen-belge/irsaliyeler/${id}/satirlar/${l1.id}`, { meters: 137 });
+  const a2 = await call("POST", `/api/gelen-belge/irsaliyeler/${id}/onay`, {});
+  check("§8d şüpheli düzeltilince (satır 2 hâlâ gözden geçirilmemiş) inceleme kapısı geçer → sonraki kapı TOTAL_MISMATCH", fix.status === 200 && a2.status === 409 && a2.code === "TOTAL_MISMATCH", `${fix.status} ${a2.status} ${a2.code}`);
+  await prisma.customerDeliveryNoteLine.updateMany({ where: { noteId: id, lineNo: 1 }, data: { needsReview: true, ocrRaw: { metre: "1370", _suspect: "YUKSEK" } } });
+  await call("PUT", "/api/gelen-belge/ayarlar", { unreviewedApproval: "WARN" });
+  const a3 = await call("POST", `/api/gelen-belge/irsaliyeler/${id}/onay`, {});
+  check("§8e WARN (varsayılan, bugünkü): şüpheli satırla da inceleme kapısı geçer → TOTAL_MISMATCH", a3.status === 409 && a3.code === "TOTAL_MISMATCH", `${a3.status} ${a3.code}`);
+  await call("PUT", "/api/gelen-belge/ayarlar", { unreviewedApproval: "BLOCK" });
+  const a4 = await call("POST", `/api/gelen-belge/irsaliyeler/${id}/onay`, {});
+  check("§8f BLOCK (bugünkü): gözden geçirilmemiş her satır 409 REVIEW_PENDING [1,2]", a4.status === 409 && a4.code === "DELIVERY_NOTE_REVIEW_PENDING" && same(a4.details?.lineNos, [1, 2]), `${a4.status} ${a4.code} ${JSON.stringify(a4.details?.lineNos)}`);
+}
+
+async function section9(call: (method: string, p: string, body?: unknown) => Promise<Resp>, mkNote: MkNote, mkLine: MkLine, ownerId: string): Promise<void> {
+  console.log("§9 aynı müşteri partisi (sameBatch)");
+  type SB = { batchNo: string; total: number; notes: Array<{ id: string; noteNo: string }> } | null | undefined;
+  const sb = async (id: string) => ((await call("GET", `/api/gelen-belge/irsaliyeler/${id}`)).data as { sameBatch?: SB }).sameBatch;
+  const batch = `${TAG}-P1`;
+  const a = await mkNote([mkLine(91, 10)], { customerBatchNo: batch });
+  const b = await mkNote([mkLine(92, 10)], { customerBatchNo: `  ${batch} ` });
+  const c = await mkNote([mkLine(93, 10)], { customerBatchNo: batch });
+  await prisma.customerDeliveryNote.update({ where: { id: c }, data: { status: "CANCELLED" } });
+  const other = await prisma.customer.create({ data: { code: `${TAG}-OWN2`, name: `${TAG} ikinci sahip` }, select: { id: true } });
+  made.customers.push(other.id);
+  const otherNote = await mkNote([mkLine(94, 10)], { customerBatchNo: batch, ownerCustomerId: other.id });
+  const none = await mkNote([mkLine(95, 10)]);
+  const sa = await sb(a);
+  check("§9a ⭐ aynı sahip + trim'li parti no: 1 başka belge (b); iptal (c), başka sahip ve kendisi sayılmaz", sa?.total === 1 && sa.batchNo === batch && same(sa.notes.map((n) => n.id), [b]), JSON.stringify(sa));
+  check("§9b başka sahibin aynı parti no'lu belgesi kendi partisinde yalnız → null; partisiz belge → null", (await sb(otherNote)) === null && (await sb(none)) === null);
+  const own = await call("PATCH", `/api/gelen-belge/irsaliyeler/${none}`, { customerBatchNo: batch, ownerCustomerId: ownerId });
+  const after = await sb(none);
+  check("§9c sahip/parti girilince detay hemen gösterir (a + b)", own.status === 200 && after?.total === 2, `${own.status} ${JSON.stringify(after)}`);
+}
+
 function section5(): void {
   console.log("§5 kaynak taraması — tek kaynak");
   const root = path.resolve(__dirname, "..", "..");
@@ -245,7 +309,7 @@ function section5(): void {
   check("§5a panel toplam hoşgörüsünü/beyan bloğunu kendisi işlemez", files.length > 10 && offenders.length === 0, offenders.join(", "));
   const onay = fs.readFileSync(path.join(root, "Teks-Erp/src/services/gelen-belge-onay.service.ts"), "utf8");
   check("§5b onay servisinde yerel toplam kapısı/hoşgörü kopyası yok", !/TOTAL_TOLERANCE|function totalMismatches|const near\b/.test(onay));
-  check("§5c onay ön kontrolü sorun kümelerini lineProblems'ten okur", (onay.match(/lineProblems\(l\)\.includes\("(ITEM_UNRESOLVED|NEEDS_REVIEW)"\)/g) ?? []).length === 2);
+  check("§5c onay ön kontrolü sorun kümelerini lineProblems'ten okur, inceleme kapısını `reviewGate`ten", (onay.match(/lineProblems\(l\)\.includes\("(ITEM_UNRESOLVED|NEEDS_REVIEW)"\)/g) ?? []).length === 2 && /reviewGate\(open,/.test(onay) && !/=== "BLOCK"/.test(onay));
 }
 
 async function cleanup(): Promise<void> {
