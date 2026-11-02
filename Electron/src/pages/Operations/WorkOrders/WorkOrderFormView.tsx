@@ -46,6 +46,7 @@ import { useFoldValues } from "@/hooks/useFoldValues";
 import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
 import { GramajChoiceButtons } from "@/components/kursun/GramajChoiceButtons";
 import { useDesignerSteps } from "./useDesignerSteps";
+import { BelgeOkutButton } from "./BelgeOkutButton";
 import type { FasonStepPlan } from "./FasonPlanningDialog";
 import type { CustomRouteStep } from "./RouteDesignerDialog";
 import { useLinkedLinesAutoFill } from "./useLinkedLinesAutoFill";
@@ -199,6 +200,8 @@ export function WorkOrderFormView({
   const [saveRecipeOpen, setSaveRecipeOpen] = useState(false);
   const [recipeName, setRecipeName] = useState("");
   const [seedRouteId, setSeedRouteId] = useState<string | null>(null);
+  // "Belge okut" (P3) rotası: en son seçilen rota şablonu (Rota Seç ya da iş emri şablonunun rotası).
+  const [okutRouteId, setOkutRouteId] = useState<string | null>(null);
   const qc = useQueryClient();
 
   // Rota Tambur içeriyor mu — "Kat Tipi" seçeneği yalnız Tambur'lu rotalarda görünür
@@ -358,7 +361,10 @@ export function WorkOrderFormView({
       );
       if (r.width != null) form.setValue("width", r.width);
     }
-    if (r.routeId) void seedFromRoute(r.routeId);
+    if (r.routeId) {
+      setOkutRouteId(r.routeId);
+      void seedFromRoute(r.routeId);
+    }
     if (r.foldType) form.setValue("foldType", r.foldType);
   };
 
@@ -536,6 +542,10 @@ export function WorkOrderFormView({
                   ? `Sipariş: ${pickedLines.length} kalem`
                   : "Sipariş Bağla"}
               </Button>
+              <BelgeOkutButton
+                routeTemplateId={okutRouteId}
+                className="h-9 min-w-[190px] shrink-0 justify-start gap-2 border-0 bg-teal-600 px-4 text-sm font-semibold text-white shadow-sm shadow-teal-600/30 hover:bg-teal-700 dark:bg-teal-600 dark:hover:bg-teal-500"
+              />
             </div>,
             headerSlot,
           )}
@@ -743,6 +753,7 @@ export function WorkOrderFormView({
                     value={seedRouteId}
                     onChange={(id) => {
                       setSeedRouteId(id);
+                      setOkutRouteId(id);
                       handleSeedRoute(id);
                     }}
                     service={routeService}
