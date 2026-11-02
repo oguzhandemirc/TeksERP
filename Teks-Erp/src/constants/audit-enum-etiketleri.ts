@@ -294,6 +294,9 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   RETURN_DISPATCH: "İade İrsaliyesi",
   // `source` alanının serbest değerleri
   RECEIPT: "Mal kabul",
+  // BatchNumberSource (Gülkesim parti no S0, 2026-11-02; ek dosya satır tavanında)
+  SERIES: "Numara serisinden",
+  DOCUMENT: "Belgeden",
 
 };
 

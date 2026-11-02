@@ -379,9 +379,6 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   // DeliveryNoteLineStatus — INFO ortak ("Bilgi", paylaşım beyanı)
   ENTERING: "Giriş yapılıyor",
   ENTERED: "Girişi yapıldı",
-  // BatchNumberSource (Gülkesim parti no S0, 2026-11-02)
-  SERIES: "Numara serisinden",
-  DOCUMENT: "Belgeden",
   // DocumentScanStatus
   READING: "Okunuyor",
   READ: "Okundu",
