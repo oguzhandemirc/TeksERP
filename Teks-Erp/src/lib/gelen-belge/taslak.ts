@@ -8,6 +8,7 @@ import { blockDiffWarning, FIELD_LABEL, firstBlockValue } from "./blok-alani";
 import { batchNoCandidates, type BatchNoCandidate } from "./parti-no";
 import { resolveKursunMeters, type KursunMeterResult } from "./kursun-metre";
 import { templateByCode } from "./sablon-bul";
+import { pageInfo, sectionDeclaredBlocks, sectionOfRow, type SectionIdentity } from "./taslak-bolum";
 
 // Şüpheli değer kuralı ayrı dosyada (max-lines); çağıranlar buradan alır.
 export { clampOutlierFactor, DEFAULT_OUTLIER_FACTOR, OUTLIER_FACTOR_MAX, OUTLIER_FACTOR_MIN, SUSPECT_MARK, suspectGridReasons, suspectGridSeqs, type SuspectReason } from "./taslak-supheli";
@@ -49,7 +50,11 @@ export interface DraftHeader {
   declaredTopCount: number | null;
   templateScore: number | null;
   /** `document`: başlıktaki belge geneli beyan (şablon `headerTotals`; yalnız ilk bölge, sıfır/okunamayan değer yok sayılır). */
-  totalsDeclared: { blocks: Array<{ blockNo: number; count: string | null; kg: string | null; m: string | null }>; document?: DocumentDeclared };
+  totalsDeclared: { blocks: Array<{ blockNo: number; count: string | null; kg: string | null; m: string | null } & Partial<SectionIdentity>>; document?: DocumentDeclared };
+  /** Sayfa damgası ("1/2"; bölümlü şablonda okunur) — taslağın `pageCount`u boşsa `of` yazılır. */
+  page: { no: number; of: number } | null;
+  /** Sayfa bölüm başlığı olmadan başladı: blok 1 satırları önceki sayfanın SON bölümüne eklenir. */
+  continuesPrevious: boolean;
   warnings: string[];
   /** Bölge başına özet (şablon kimliği, puan, başlık alanları) — scan.ocrResult zarfına; panel "bölgeyi ayır" buradan okur. */
   regions: Array<{ regionNo: number; templateId: string | null; score: number; fields: Record<string, string | null>; blocks?: Array<{ blockNo: number; fields: Record<string, string | null> }> }>;
@@ -94,6 +99,7 @@ function tableLines(reg: RegionExtraction, blockOffset: number, out: DraftLine[]
   let maxBlock = 0;
   // Yalnız ≥ 2 blokta satıra yazılır: tek blokta başlık işlemi zaten aynıdır (bugünkü davranış, satır null).
   const blockProcess = new Map<number, string>();
+  const sectionOf = sectionOfRow(reg);
   if (reg.blockFields.length >= 2) {
     for (const bf of reg.blockFields) {
       const v = clip(bf.fields.islem?.value, 120);
@@ -102,9 +108,11 @@ function tableLines(reg: RegionExtraction, blockOffset: number, out: DraftLine[]
   }
   for (const t of reg.tables) {
     for (const b of t.blocks) {
-      const blockNo = blockOffset + b.blockNo;
-      maxBlock = Math.max(maxBlock, b.blockNo);
       for (const r of b.rows) {
+        // Bölümlü şablonda satırın blok no'su BÖLÜMÜNDEN (parti); bölümsüzde tablo bloğu (bugünkü).
+        const local = sectionOf ? sectionOf(b.blockNo, r.index) : b.blockNo;
+        const blockNo = blockOffset + local;
+        maxBlock = Math.max(maxBlock, local);
         const cells = r.cells;
         const meters = positive(METER_KEYS.map((k) => cells[k]?.value).find((v) => v) ?? null);
         if (!meters) {
@@ -128,7 +136,7 @@ function tableLines(reg: RegionExtraction, blockOffset: number, out: DraftLine[]
           widthCm: positive(widthCell?.value),
           itemText: null,
           colorText: null,
-          processText: blockProcess.get(b.blockNo) ?? null,
+          processText: blockProcess.get(local) ?? null,
           confidence: confs.length ? Math.min(...confs) : 0,
           needsReview: r.needsReview,
           sourceRects: rects,
@@ -249,7 +257,9 @@ export function draftFromExtraction(doc: DocumentExtraction, opts: DraftOptions 
     if (diff) regionWarnings.push(diff);
     // Başlıktan satır yalnız İLK bölgede: ikinci bölge başka belgedir (başka sahip) — aynı taslağa top eklenmez.
     if (reg === first && maxBlock === 0 && !reg.grid) headerOnlyLine(reg, lines, regionWarnings, opts.headerLineSource);
-    if (reg.totals) {
+    const secBlocks = sectionDeclaredBlocks(reg, blockOffset);
+    if (secBlocks) totalsBlocks.push(...secBlocks);
+    else if (reg.totals) {
       for (const b of reg.totals.blocks) totalsBlocks.push({ blockNo: blockOffset + b.blockNo, count: b.declared?.count ?? null, kg: b.declared?.kg ?? null, m: b.declared?.m ?? null });
     }
     const gridBlock = blockOffset + Math.max(1, maxBlock + (maxBlock > 0 ? 1 : 0));
@@ -264,7 +274,9 @@ export function draftFromExtraction(doc: DocumentExtraction, opts: DraftOptions 
     const blocks = reg.blockFields.map((b) => ({ blockNo: blockOffset0 + b.blockNo, fields: Object.fromEntries(Object.entries(b.fields).map(([k, v]) => [k, v.value])) }));
     regions.push({ regionNo: reg.region.regionNo, templateId: reg.templateId, score: reg.classificationScore, fields, ...(blocks.length ? { blocks } : {}) });
   }
-  const topCount = pick(f, TOP_COUNT_KEYS);
+  // Bölümlü şablonda yazan top adedi bölüm başınadır (blocks[].topCount); başlığa tek sayı konmaz.
+  const topCount = first?.sections ? null : pick(f, TOP_COUNT_KEYS);
+  const pg = pageInfo(first);
   const docDecl = documentDeclared(first);
   const tpl = templateByCode(first?.templateId);
   return {
@@ -280,6 +292,8 @@ export function draftFromExtraction(doc: DocumentExtraction, opts: DraftOptions 
       templateScore: first ? Math.round(first.classificationScore * 10000) / 10000 : null,
       totalsDeclared: { blocks: totalsBlocks, ...(docDecl ? { document: docDecl } : {}) },
       warnings,
+      page: pg.page,
+      continuesPrevious: pg.continuesPrevious,
       regions,
       batchNoCandidates: batchNoCandidates(tpl, regions[0]?.fields ?? {}),
       kursun: resolveKursunMeters({ template: tpl, fields: regions[0]?.fields ?? {}, totalsDeclared: { blocks: totalsBlocks }, lineMeters: lines.map((l) => l.meters) }),

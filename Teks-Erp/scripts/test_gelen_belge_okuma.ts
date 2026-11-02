@@ -220,7 +220,7 @@ async function main(): Promise<void> {
     check("§3d 0245: BLOK BAŞINA beyan 5/141,70/586 · 16/819,20/3.935", JSON.stringify(blocks.map((b) => [b.blockNo, b.count, b.kg, b.m])) === JSON.stringify([[1, "5", "141.7", "586"], [2, "16", "819.2", "3935"]]), JSON.stringify(blocks));
     const sumM = (b: number) => n45.lines.filter((l) => l.blockNo === b).reduce((a, l) => a + Math.round(Number(l.meters) * 1000), 0);
     check("§3e 0245: Σ satır = beyan (blok 1 586 m, blok 2 3935 m) · her satırda rect + güven", sumM(1) === 586000 && sumM(2) === 3935000 && n45.lines.every((l) => !!l.sourceRects && Number(l.confidence) > 0), JSON.stringify([n45.lines.filter((l) => l.blockNo === 1).reduce((a, l) => a + Number(l.meters), 0), n45.lines.filter((l) => l.blockNo === 2).reduce((a, l) => a + Number(l.meters), 0), n45.lines.map((l) => Number(l.confidence))]));
-    check("§3f 0245: başlık fiş no, tarih, parti, işlem, '4 TOP' beyanı yalnız uyarı", n45.senderDocNo === "914279" && n45.senderDocDate?.toISOString().slice(0, 10) === "2026-10-19" && n45.customerBatchNo === "P9918733" && n45.processText === "KDK APRE" && n45.declaredTopCount === 4 && (n45.warnings as string[]).some((w) => w.startsWith("DECLARED_TOP_COUNT_DIFF")), JSON.stringify({ no: n45.senderDocNo, p: n45.customerBatchNo, w: n45.warnings }));
+    check("§3f 0245: başlık fiş no, tarih, parti, işlem, '4 TOP' beyanı yalnız uyarı", n45.senderDocNo === "914279" && n45.senderDocDate?.toISOString().slice(0, 10) === "2026-10-19" && n45.customerBatchNo === "P9918733" && n45.processText === "KDK APRE" && n45.declaredTopCount === null && (n45.warnings as string[]).some((w) => w.startsWith("SECTION_COUNT_MISMATCH")), JSON.stringify({ no: n45.senderDocNo, p: n45.customerBatchNo, w: n45.warnings }));
     check("§3f1 S2(b) 0245: müşteri sipariş no başlığa İLK bloğun değeriyle (96967; blok 2'nin 96966'sı uyarıda)", n45.customerOrderNo === "96967", String(n45.customerOrderNo));
     const proc45 = [...new Set(n45.lines.map((l) => `${l.blockNo}:${l.processText}`))].sort();
     check("§3f2 0245: satır işlemi KENDİ bloğundan yazılır (blok 2 YUMUŞAK APRE; iş emri planı iki grubu ayırır) + BLOCK_IDS_DIFFER", JSON.stringify(proc45) === JSON.stringify(["1:KDK APRE", "2:YUMUŞAK APRE"]) && (n45.warnings as string[]).some((w) => w.startsWith("BLOCK_IDS_DIFFER")), JSON.stringify(proc45));
@@ -388,7 +388,7 @@ async function main(): Promise<void> {
     const tb8c = ((n8c.totalsDeclared as { blocks?: { blockNo: number }[] } | null)?.blocks ?? []).map((b) => b.blockNo);
     check("§8c çok sayfalı taslak: 2 sayfanın satırları birlikte (21+1), satır no tekil, blok no çakışmaz, iki sayfanın uyarıları ve blok beyanları korunur",
       n8c.lines.length === 22 && new Set(n8c.lines.map((l) => l.lineNo)).size === 22 && new Set(n8c.lines.map((l) => l.blockNo)).size === 3
-        && w8c.some((w) => w.startsWith("DECLARED_TOP_COUNT_DIFF")) && w8c.some((w) => w.startsWith("MULTI_REGION")) && tb8c.includes(1) && tb8c.includes(2) && new Set(tb8c).size === tb8c.length,
+        && w8c.some((w) => w.startsWith("SECTION_COUNT_MISMATCH")) && w8c.some((w) => w.startsWith("MULTI_REGION")) && tb8c.includes(1) && tb8c.includes(2) && new Set(tb8c).size === tb8c.length,
       JSON.stringify({ l: n8c.lines.length, b: [...new Set(n8c.lines.map((l) => l.blockNo))], w: w8c, tb: tb8c }));
     // §8d E4 satır kaynağı: her satır KENDİ sayfasının taramasını taşır (sayfa no taramadan okunur), elle satır null; detay yanıtı döner.
     const det8d = await call("GET", `/api/gelen-belge/irsaliyeler/${multiId}`);

@@ -1,6 +1,6 @@
 // D3a (2026-10-28): tek giriş noktası — bölgeleme → sınıflandırma → başlık alanları → tablo → ızgara → toplam.
 // DB/route yok; saf fonksiyon. Çağıran (D3b okuma işi) sonucu CustomerDeliveryNote DRAFT'a yazar.
-import type { DocumentTemplate, ExtractionResult, FieldResult, GridResult, HeaderLineSpec, HeaderTotalsSpec, NoteTotalsBlockInput, NoteTotalsResult, OcrBlock, OcrResult, PageRegion, TableResult } from "./types";
+import type { DocumentTemplate, ExtractionResult, FieldResult, GridResult, HeaderLineSpec, HeaderTotalsSpec, NoteTotalsBlockInput, NoteTotalsResult, OcrResult, PageRegion, TableResult } from "./types";
 import { classifyWithFallback, scoreTemplate } from "./classify";
 import { readingOrderText } from "./geometry";
 import { normalizeForMatch } from "./text-normalize";
@@ -9,6 +9,7 @@ import { extractTable } from "./table";
 import { deriveGridCells } from "./grid";
 import { computeNoteTotals } from "./totals";
 import { splitRegions } from "./regions";
+import { extractSections, sliceBand, type SectionsResult } from "./sections";
 
 export interface RegionExtraction {
   region: PageRegion;
@@ -24,6 +25,8 @@ export interface RegionExtraction {
   headerLine: HeaderLineSpec | null;
   /** Şablonun belge geneli beyan alanları + etiketleri (yoksa null) — taslak `totalsDeclared.document`a çevirir. */
   headerTotals: ResolvedHeaderTotals | null;
+  /** Şablon `sections` beyan ettiyse bölümler (parti başına alanlar + satır anahtarları + denetim); aksi null. */
+  sections: SectionsResult | null;
   warnings: string[];
 }
 
@@ -66,19 +69,6 @@ export function tableToTotalsInput(table: TableResult, declaredTopCount: string 
   }));
 }
 
-/** Satır merkezi [top, bottom) bandına düşen OCR satırlarıyla sınırlı sonuç (koordinatlar kaymaz). */
-function sliceBand(ocr: OcrResult, top: number, bottom: number): OcrResult {
-  const blocks: OcrBlock[] = [];
-  for (const b of ocr.blocks) {
-    const lines = b.lines.filter((l) => {
-      const cy = l.rect.y + l.rect.height / 2;
-      return cy >= top && cy < bottom;
-    });
-    if (lines.length > 0) blocks.push({ ...b, text: lines.map((l) => l.text).join("\n"), lines });
-  }
-  return { ...ocr, text: blocks.map((b) => b.text).join("\n"), blocks };
-}
-
 /**
  * Çok bloklu çeki listesinde her bloğun kendi başlık bandı (önceki bloğun son satırından bu bloğun tablo başlığına)
  * `blockFields` alanlarıyla yeniden okunur: başlık alanı ilk eşleşmeyi aldığı için 2. bloğun İşlem/Parti'si aksi kaybolur.
@@ -101,7 +91,7 @@ function extractRegion(region: PageRegion, templates: DocumentTemplate[], fallba
   const template = templates.find((t) => t.id === cls.templateId) ?? null;
   const warnings: string[] = [];
   if (!template) {
-    return { region, templateId: null, classificationScore: cls.score, fields: null, tables: [], grid: null, totals: null, blockFields: [], headerLine: null, headerTotals: null, warnings: ["TEMPLATE_NOT_FOUND: şablon eşleşmedi"] };
+    return { region, templateId: null, classificationScore: cls.score, fields: null, tables: [], grid: null, totals: null, blockFields: [], headerLine: null, headerTotals: null, sections: null, warnings: ["TEMPLATE_NOT_FOUND: şablon eşleşmedi"] };
   }
   if (cls.templateId === fallbackId) warnings.push("TEMPLATE_FALLBACK: gönderen şablonu yok, GENEL sözlük kullanıldı");
   const fields = extractFields(region.ocr, template);
@@ -109,15 +99,19 @@ function extractRegion(region: PageRegion, templates: DocumentTemplate[], fallba
   const grid = template.grid ? deriveGridCells(region.ocr, template.grid) : null;
   let totals: NoteTotalsResult | null = null;
   if (tables.length > 0) {
-    const topCount = fields.fields.topAdet?.value ?? null;
+    // Bölümlü şablonda yazan top adedi bölüm başına denetlenir (SECTION_COUNT_MISMATCH); blok 1'e ikinci kez bağlanmaz.
+    const topCount = template.sections ? null : (fields.fields.topAdet?.value ?? null);
     totals = computeNoteTotals(tables.flatMap((t) => tableToTotalsInput(t, topCount)));
     warnings.push(...totals.warnings);
   }
   for (const t of tables) warnings.push(...t.warnings);
   if (grid) warnings.push(...grid.warnings);
   warnings.push(...fields.warnings);
-  const blockFields = extractBlockFields(region.ocr, template, tables[0]);
-  return { region, templateId: template.id, classificationScore: cls.score, fields, tables, grid, totals, blockFields, headerLine: template.headerLine ?? null, headerTotals: resolveHeaderTotals(template), warnings };
+  const sections = template.sections ? extractSections(region.ocr, template, template.sections, tables) : null;
+  if (sections) warnings.push(...sections.warnings);
+  // Bölümlü şablonda blok alanları bölümlerden gelir (blok no = bölüm no; taslak/BLOCK_IDS_DIFFER aynı sözleşmeyi okur).
+  const blockFields = sections ? sections.sections.map((x) => ({ blockNo: x.sectionNo, fields: x.fields })) : extractBlockFields(region.ocr, template, tables[0]);
+  return { region, templateId: template.id, classificationScore: cls.score, fields, tables, grid, totals, blockFields, headerLine: template.headerLine ?? null, headerTotals: resolveHeaderTotals(template), sections, warnings };
 }
 
 /** Fotoğrafın tamamını işler: bölgeler ayrı belge sayılır, her biri kendi şablonuyla çıkarılır. */

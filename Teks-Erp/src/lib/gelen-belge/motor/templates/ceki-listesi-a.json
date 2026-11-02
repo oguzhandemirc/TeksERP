@@ -1,7 +1,7 @@
 {
   "id": "ceki-listesi-a",
   "name": "Kumaş çeki listesi (fiş no / sipariş bloklu)",
-  "version": 1,
+  "version": 2,
   "identifiers": { "keywords": ["KUMAŞ ÇEKİ LİSTESİ", "Fiş No", "Sıra No", "Top No", "T.Adet", "Ham Parti No"], "minScore": 0.6 },
   "fields": [
     { "key": "fisNo", "label": "Fiş No", "type": "integer", "required": true, "pattern": "^\\d{4,8}$",
@@ -32,7 +32,7 @@
     { "key": "hamGirisMt", "label": "Ham Giriş MT", "type": "decimal",
       "strategies": [ { "kind": "anchor", "labels": ["Ham Giriş MT"], "direction": "right", "minLabelSimilarity": 0.9 } ] }
   ],
-  "blockFields": ["siparisNo", "topAdet", "islem", "isEmriNo", "hamPartiNo"],
+  "sections": { "startLabels": ["Sipariş No"], "fields": ["siparisNo", "topAdet", "islem", "isEmriNo", "hamPartiNo"], "batchField": "hamPartiNo", "orderField": "siparisNo", "countField": "topAdet", "table": "toplar" },
   "tables": [
     { "key": "toplar", "minHeaderMatches": 3,
       "columns": [
