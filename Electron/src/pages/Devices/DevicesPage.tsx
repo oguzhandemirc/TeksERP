@@ -3,7 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
@@ -149,57 +150,56 @@ export function DevicesPage() {
         onClear={clearFilters}
       />
 
-      <PageBody className="space-y-4 p-6">
-        <ProofLostPanel initiallyOpen={kanitLink} />
-        <RebindRequestsPanel devices={devices} />
-        <PendingBulkReject devices={devices} onDone={invalidate} />
-        <DuplicateCandidates initiallyOpen={params.get("kopya") === "1"} />
+      <ListBody>
+        <ListMessage className="space-y-4 empty:hidden">
+          <ProofLostPanel initiallyOpen={kanitLink} />
+          <RebindRequestsPanel devices={devices} />
+          <PendingBulkReject devices={devices} onDone={invalidate} />
+          <DuplicateCandidates initiallyOpen={params.get("kopya") === "1"} />
+        </ListMessage>
         {query.isLoading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
-          </div>
+          <ListMessage className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</ListMessage>
         ) : devices.length === 0 ? (
-          <EmptyState />
+          <ListMessage><EmptyState /></ListMessage>
         ) : (
-          <div className="rounded-md border">
-            <Table containerClassName="overflow-visible">
-              <TableHeader className="sticky top-0 z-10 bg-card">
+          <Table containerClassName="overflow-visible">
+            <TableHeader className="sticky top-0 z-10 bg-card">
+              <TableRow className="hover:bg-transparent">
+                <TableHead>Cihaz</TableHead>
+                <TableHead className="w-24">Tür</TableHead>
+                <TableHead className="w-36">Durum</TableHead>
+                <TableHead className="w-40">Son aktivite</TableHead>
+                <TableHead className="w-40">Kimlik</TableHead>
+                <TableHead className="w-12" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
-                  <TableHead>Cihaz</TableHead>
-                  <TableHead className="w-24">Tür</TableHead>
-                  <TableHead className="w-36">Durum</TableHead>
-                  <TableHead className="w-40">Son aktivite</TableHead>
-                  <TableHead className="w-40">Kimlik</TableHead>
-                  <TableHead className="w-12" />
+                  <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                    Filtreye uyan cihaz yok.
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.length === 0 ? (
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
-                      Filtreye uyan cihaz yok.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filtered.map((d) => (
-                    <DeviceRow
-                      key={d.id}
-                      device={d}
-                      onAssign={() => setAssignTarget(d)}
-                      onRevoke={() => revoke.mutate(d.id)}
-                      onDeactivate={() => deactivate.mutate(d.id)}
-                      onReactivate={() => reactivate.mutate(d.id)}
-                      onDelete={() => setDeleteTarget(d)}
-                      isPending={rowPending}
-                      proofLost={proofLostIds.has(d.id)}
-                    />
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+              ) : (
+                filtered.map((d) => (
+                  <DeviceRow
+                    key={d.id}
+                    device={d}
+                    onAssign={() => setAssignTarget(d)}
+                    onRevoke={() => revoke.mutate(d.id)}
+                    onDeactivate={() => deactivate.mutate(d.id)}
+                    onReactivate={() => reactivate.mutate(d.id)}
+                    onDelete={() => setDeleteTarget(d)}
+                    isPending={rowPending}
+                    proofLost={proofLostIds.has(d.id)}
+                  />
+                ))
+              )}
+            </TableBody>
+          </Table>
         )}
-      </PageBody>
+      </ListBody>
+      <ListFooter loaded={filtered.length} total={devices.length} />
 
       <ApproveAssignDialog
         device={assignTarget}

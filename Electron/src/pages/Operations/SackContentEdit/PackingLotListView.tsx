@@ -5,7 +5,6 @@ import { ArrowDown, ArrowUp, Lock, PackageOpen, Plus, Search, Truck } from "luci
 import { useTabsStore } from "@/store/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PageBody } from "@/components/layout/PageShell";
 import { cn } from "@/lib/utils";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { sackHubService } from "./service";
@@ -17,6 +16,7 @@ import { lotSackLabel } from "./packingLotUi";
 import { DEFAULT_LOT_SORT, filterLots, nextLotSort, sortLots, type LotSort, type LotSortKey } from "./packingLotList";
 import { UNGROUPED_FILTER_VALUE, type PackingGroup, type PackingLotCustomerSummary } from "./types";
 import { factoryLocaleDateString } from "@/lib/factory-time";
+import { ListBody, ListFooter, ListToolbar } from "@/components/layout/ListPage";
 
 const fmtQty = (n: number): string => n.toLocaleString("tr-TR", { maximumFractionDigits: 1 });
 const fmtKg = (n: number | null): string => (n == null ? "—" : n.toLocaleString("tr-TR", { maximumFractionDigits: 1 }));
@@ -75,15 +75,16 @@ export function PackingLotListView({
   const s: PackingLotCustomerSummary | undefined = summary.data?.data;
 
   return (
-    <PageBody className="px-4 pb-4">
-      <PackingLotSummaryCards
-        s={s}
-        openLots={lots.data ? all : undefined}
-        onOpenUnweighed={onOpenUnweighed}
-        onOpenOrders={() => navigateActive(`/operations/orders?filter[customerId]=${encodeURIComponent(customerId)}`)}
-      />
-      {/* Araç çubuğu + tablo TEK KART: kapı ekranıyla aynı dil (havada duran şerit yok). */}
-      <div className="overflow-hidden rounded-lg border">
+    <>
+      <ListToolbar>
+        <PackingLotSummaryCards
+          s={s}
+          openLots={lots.data ? all : undefined}
+          onOpenUnweighed={onOpenUnweighed}
+          onOpenOrders={() => navigateActive(`/operations/orders?filter[customerId]=${encodeURIComponent(customerId)}`)}
+        />
+      </ListToolbar>
+      {/* Liste standardı: arama/oluştur şeridi sabit bant, tablo kenardan kenara (kart yok). */}
       <LotToolbar
         query={query}
         onQuery={setQuery}
@@ -91,25 +92,27 @@ export function PackingLotListView({
         onCreate={() => create.mutate()}
         onShipments={() => navigateActive(`/operations/shipments?filter[customerId]=${encodeURIComponent(customerId)}`)}
       />
-      <table className="w-full text-sm">
-        <LotTableHead sort={sort} onSort={(key) => setSort((c) => nextLotSort(c, key))} />
-        <tbody>
-          {!query && <UngroupedRow s={s} onOpen={() => onOpen(UNGROUPED_FILTER_VALUE)} />}
-          {rows.map((lot) => (
-            <LotRow key={lot.id} lot={lot} onOpen={() => onOpen(lot.id)} onDone={refresh} onAction={setAction} />
-          ))}
-          {!lots.isLoading && rows.length === 0 && (
-            <tr>
-              <td colSpan={8} className="py-6 text-center text-xs text-muted-foreground">
-                {query ? "Aramayla eşleşen parti yok." : 'Bu carinin açık sevk partisi yok — "Sevk Partisi Oluştur" ile başlayın.'}
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-      </div>
+      <ListBody>
+        <table className="w-full text-sm">
+          <LotTableHead sort={sort} onSort={(key) => setSort((c) => nextLotSort(c, key))} />
+          <tbody>
+            {!query && <UngroupedRow s={s} onOpen={() => onOpen(UNGROUPED_FILTER_VALUE)} />}
+            {rows.map((lot) => (
+              <LotRow key={lot.id} lot={lot} onOpen={() => onOpen(lot.id)} onDone={refresh} onAction={setAction} />
+            ))}
+            {!lots.isLoading && rows.length === 0 && (
+              <tr>
+                <td colSpan={8} className="py-6 text-center text-xs text-muted-foreground">
+                  {query ? "Aramayla eşleşen parti yok." : 'Bu carinin açık sevk partisi yok — "Sevk Partisi Oluştur" ile başlayın.'}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </ListBody>
+      <ListFooter loaded={rows.length} label={`${rows.length} açık parti`} />
       <LotActionDialogs action={action} onClose={() => setAction(null)} onDone={refresh} />
-    </PageBody>
+    </>
   );
 }
 
@@ -137,7 +140,7 @@ function LotToolbar(p: {
   onShipments: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-3 py-2">
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-muted/30 px-4 py-2">
       <div className="relative">
         <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input value={p.query} onChange={(e) => p.onQuery(e.target.value)} placeholder="Parti adı / kod / not ara…" className="h-9 w-72 pl-7" />
