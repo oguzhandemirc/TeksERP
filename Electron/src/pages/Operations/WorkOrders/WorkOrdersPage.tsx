@@ -132,7 +132,7 @@ export function WorkOrdersPage() {
         fetchAll={fetchAll}
         search={search}
         onSearchChange={setSearch}
-        placeholder="Terbiye iş emri, parti, kumaş, müşteri veya sipariş no ara..."
+        placeholder={`${TERIM.terbiyeIsEmri.cumleBasi.yalin}, parti, kumaş, müşteri veya sipariş no ara...`}
         table={table}
         exportName={TERIM.terbiyeIsEmri.cogul}
         actions={
@@ -141,13 +141,13 @@ export function WorkOrdersPage() {
               checked={showCompleted}
               onCheckedChange={setShowCompleted}
               label="Tamamlananları göster"
-              title="Tamamlanmış terbiye iş emirleri varsayılan olarak gizlidir. Seçimin hatırlanır."
+              title={`Tamamlanmış ${TERIM.terbiyeIsEmri.cogulKucuk} varsayılan olarak gizlidir. Seçimin hatırlanır.`}
             />
             <ToolbarToggle
               checked={showCancelled}
               onCheckedChange={setShowCancelled}
               label="İptalleri göster"
-              title="İptal edilmiş terbiye iş emirleri varsayılan olarak gizlidir. Seçimin hatırlanır."
+              title={`İptal edilmiş ${TERIM.terbiyeIsEmri.cogulKucuk} varsayılan olarak gizlidir. Seçimin hatırlanır.`}
             />
           </>
         }
@@ -158,7 +158,7 @@ export function WorkOrdersPage() {
         table={table}
         isLoading={query.isLoading}
         pagination={pagination}
-        emptyText="Terbiye iş emri bulunamadı."
+        emptyText={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı.`}
         onRowClick={setSelected}
         exportName={TERIM.terbiyeIsEmri.cogul}
         selectionHint="Toplu belge çıkarmak için satırları seçin (refakat kartı, fason çeki, makbuz…)."

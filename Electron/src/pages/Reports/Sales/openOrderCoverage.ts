@@ -6,6 +6,7 @@ import apiClient from "@/services/apiClient";
 import type { ReportExportSpec } from "../_components/reportExport";
 import type { ReportResponse } from "../_services/types";
 import { calendarLocaleDateString } from "@/lib/factory-time";
+import { TERIM } from "@/lib/terim";
 
 export type CoverageState = "HAZIR" | "KISMI" | "URETIM_GEREKLI";
 
@@ -104,9 +105,9 @@ export function buildCoverageExport(c: OpenOrderCoverage, filterNotes: string[] 
       // Tanımlar rakamla AYNI dosyada dursun — dışa aktarılan tablo bağlamından
       // koparak dolaşır ve "karşılanıyor" herkesin kafasında farklı bir şeydir.
       "AÇIK = istenen − sevk edilen. Rezerv/çuvallanmış düşülmez; düşüş yalnız sevkte olur.",
-      "DEPODAN = elde duran bitmiş mal. ÜRETİMDE = canlı terbiye iş emirlerindeki henüz bitmemiş mal.",
+      `DEPODAN = elde duran bitmiş mal. ÜRETİMDE = canlı ${TERIM.terbiyeIsEmri.cogulCekimKucuk.bulunma}ki henüz bitmemiş mal.`,
       "Bir stok havuzu YALNIZ BİR KEZ dağıtılır: aynı kumaş+renk+en'i isteyen siparişler havuzu PAYLAŞIR, her biri tamamını almaz. Dağıtım sırası termini yakın olandan uzağa; termini olmayan en sona.",
-      "KARŞILANAMAYAN = ne depoda ne üretimde — yeni terbiye iş emri gerekir.",
+      `KARŞILANAMAYAN = ne depoda ne üretimde — yeni ${TERIM.terbiyeIsEmri.tekilKucuk} gerekir.`,
       "MALZEME AÇIĞI = karşılanamayanın ham kumaşı da yok (kumaş tedariki gerekir).",
       "Anlık fotoğraftır: tarih aralığı almaz.",
       c.linesOmitted > 0

@@ -12,6 +12,7 @@ import { formatNumber } from "@/lib/format";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { qualityGradeService } from "@/pages/QualityGrades/service";
 import type { CloseDisposition, CompletePreviewRoll } from "./service";
+import { TERIM } from "@/lib/terim";
 
 /** Dispozisyon seçenekleri — etiket + kısa açıklama (operatör ne seçtiğini bilsin). */
 export const DISPOSITION_OPTIONS: {
@@ -25,13 +26,13 @@ export const DISPOSITION_OPTIONS: {
   {
     value: "STOCK",
     label: "Stoğa geri",
-    hint: "Kumaş geldiği gibi; yeni terbiye iş emrine sokulabilir (Ham Stok / Yarı Mamul)",
+    get hint() { return `Kumaş geldiği gibi; yeni ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} sokulabilir (Ham Stok / Yarı Mamul)`; },
   },
   { value: "WAREHOUSE", label: "Bitmiş depo", hint: "Satışa/sevke hazır sayılır" },
   { value: "A1_STOCK", label: "2. kalite", hint: "A1 satılabilir stok" },
   { value: "SCRAP", label: "Fire", hint: "Mal vardı, çöpe gitti" },
   { value: "CANCELLED", label: "Hatalı kayıt", hint: "Mal hiç yoktu — fire DEĞİL" },
-  { value: "TRANSFER", label: "Yeni terbiye iş emrine devret", hint: "Üretim devam terbiye iş emrinde sürer" },
+  { value: "TRANSFER", get label() { return `Yeni ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} devret`; }, get hint() { return `Üretim devam ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} sürer`; } },
 ];
 
 /** Kalite yalnız bu iki dispozisyonda anlamlı (backend diğerlerinde reddeder). */

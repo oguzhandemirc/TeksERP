@@ -11,6 +11,7 @@ import { toastServerSuccess } from "@/lib/serverNotes";
 import { workOrderService } from "./service";
 import { addBatchError, addBatchPreview, addBatchScopes, slotAfterFailure, tokenFor, type TokenSlot } from "./addBatchModel";
 import type { WorkOrder } from "./types";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   open: boolean;
@@ -43,7 +44,7 @@ export function AddBatchDialog({ open, onOpenChange, wo }: Props) {
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Parti Ekle — {wo.workOrderNumber}</DialogTitle>
-          <DialogDescription>Seçilen toplar bu terbiye iş emrinde YENİ parti olur ve rotanın ilk adımından başlar.</DialogDescription>
+          <DialogDescription>Seçilen toplar bu {TERIM.terbiyeIsEmri.cekimKucuk.bulunma} YENİ parti olur ve rotanın ilk adımından başlar.</DialogDescription>
         </DialogHeader>
         <Button type="button" variant="outline" className="w-fit gap-1" onClick={() => setPickerOpen(true)}>
           <ListChecks className="h-4 w-4" /> Top Seç
@@ -61,7 +62,7 @@ export function AddBatchDialog({ open, onOpenChange, wo }: Props) {
           open={pickerOpen}
           onOpenChange={setPickerOpen}
           title="Top Seç"
-          description="Ham stok ya da bitmiş depodaki serbest toplar — terbiye iş emrinin kumaşında."
+          description={`Ham stok ya da bitmiş depodaki serbest toplar — ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} kumaşında.`}
           scopes={addBatchScopes(wo.targetItemId ?? null)}
           excludeIds={rolls.map((r) => r.id)}
           onConfirm={(picked) => { setRolls((x) => [...x, ...picked]); setRejects([]); }}

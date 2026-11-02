@@ -46,6 +46,7 @@ import {
   type AppliedRollDisposition,
 } from "./helpers/roll-disposition.helper";
 import type { CancelDisposition } from "./workorder.service";
+import { TERIM } from "../constants/terim";
 
 export interface BatchDropInput {
   /** ZORUNLU (min 3) — audit'e ve hareket notuna yazılır. */
@@ -81,7 +82,7 @@ export function resolveBatchDropBlockReason(s: {
     s.workOrderStatus === WorkOrderStatus.CANCELLED ||
     s.workOrderStatus === WorkOrderStatus.SUPERSEDED
   ) {
-    return `Tamamlanmış/iptal edilmiş terbiye iş emrinde parti düşürülemez (durum: ${s.workOrderStatus}).`;
+    return `Tamamlanmış/iptal edilmiş ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} parti düşürülemez (durum: ${s.workOrderStatus}).`;
   }
   if (s.mergedIntoBatchNumber) {
     return `Bu parti ${s.mergedIntoBatchNumber} altına birleştirilmiş — işlem survivor partide yapılmalı.`;
@@ -134,7 +135,7 @@ class WorkOrderBatchDropService {
       where: { id: workOrderId },
       select: { id: true, workOrderNumber: true, status: true, steps: { select: { id: true } } },
     });
-    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
+    if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı`);
 
     const batch = await prisma.batch.findUnique({
       where: { id: batchId },
@@ -147,7 +148,7 @@ class WorkOrderBatchDropService {
     });
     if (!batch) throw AppError.notFound("Parti bulunamadı");
     if (batch.workOrderId !== workOrderId) {
-      throw AppError.badRequest("Parti bu terbiye iş emrine ait değil");
+      throw AppError.badRequest(`Parti bu ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} ait değil`);
     }
 
     const rolls = await prisma.roll.findMany({
@@ -286,7 +287,7 @@ class WorkOrderBatchDropService {
           where: { id: workOrderId },
           select: { workOrderNumber: true, status: true, steps: { select: { id: true } } },
         });
-        if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
+        if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı`);
         const stepIds = wo.steps.map((s) => s.id);
 
         await assertBatchInWorkOrderTx(tx, batchId, workOrderId);
@@ -563,7 +564,7 @@ class WorkOrderBatchDropService {
     return {
       success: true,
       data: result,
-      message: `${result.batchNumber} partisi terbiye iş emrinden düşürüldü (${result.droppedCount} top)`,
+      message: `${result.batchNumber} partisi ${TERIM.terbiyeIsEmri.cekimKucuk.ayrilma} düşürüldü (${result.droppedCount} top)`,
     };
   }
 }

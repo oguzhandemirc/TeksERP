@@ -22,6 +22,7 @@
 import { ReasonPresetKind } from "@prisma/client";
 
 import { SCRAP_REASONS, RECORD_CORRECTION_REASONS } from "./variance-reasons";
+import { TERIM } from "./terim";
 
 /** Tek bir hazır sebep satırının katalog hâli. */
 export type ReasonPresetSeed = {
@@ -102,7 +103,7 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   WARP_BEAM_ADJUST: "Levent kalan düzeltmesi sebepleri",
   WARP_BEAM_SCRAP: "Levent hurda / artık dispozisyonu",
   YARN_SUBCONTRACT_RETURN: "Fasondan iplik dönüş sebepleri",
-  WORK_ORDER_PLAN_CHANGE: "Terbiye iş emri plan düzeltme sebepleri",
+  get WORK_ORDER_PLAN_CHANGE() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} plan düzeltme sebepleri`; },
   INSPECTION_VOID: "Muayene iptal sebepleri",
 };
 
@@ -302,7 +303,7 @@ export const YARN_SUBCONTRACT_RETURN_REASONS: readonly ReasonPresetSeed[] = [
 /** İŞ EMRİ PLAN DÜZELTMESİ — tabletteki "Rengi Değiştir" / "Eni Değiştir" (hareket defteri D5). */
 export const WORK_ORDER_PLAN_CHANGE_REASONS: readonly ReasonPresetSeed[] = [
   { code: "MUSTERI_DEGISTIRDI", label: "Müşteri değiştirdi", fullText: "Müşteri isteği değiştirdi" },
-  { code: "YANLIS_GIRILMIS", label: "Yanlış girilmişti", fullText: "Terbiye iş emri yanlış değerle açılmıştı" },
+  { code: "YANLIS_GIRILMIS", label: "Yanlış girilmişti", get fullText() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} yanlış değerle açılmıştı`; } },
   { code: "OLCUMDE_FARKLI", label: "Ölçümde farklı çıktı", fullText: "Mal ölçüldüğünde plandan farklı çıktı" },
   { code: "SIPARIS_DEGISTI", label: "Sipariş değişti", fullText: "Bağlı sipariş kalemi değişti" },
   { code: "DIGER", label: "Diğer", requiresText: true },

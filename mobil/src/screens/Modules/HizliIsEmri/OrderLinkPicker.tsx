@@ -17,6 +17,7 @@ import OrderLineFilterSheet, {
 import { orderService, type AvailableOrderLine } from '../../../services/order.service';
 import { openQtyText } from '../../../lib/item-unit';
 import { colors, spacing, radius } from '../../../theme';
+import { TERIM } from '../../../lib/terim';
 
 const PAGE_SIZE = 20;
 // Arama gecikmesi — operatör yazmayı bırakınca sorgu atılsın. 300ms yazarken
@@ -187,8 +188,8 @@ export default function OrderLinkPicker({
           type: 'info',
           text1: `Bu kalem ${mismatch} — eklenemez`,
           text2: spec
-            ? `Tek terbiye iş emri tek spec üretir. Seçili: ${anchorLine?.itemName} · ${spec}`
-            : 'Tek terbiye iş emri tek kumaş içindir.',
+            ? `Tek ${TERIM.terbiyeIsEmri.tekilKucuk} tek spec üretir. Seçili: ${anchorLine?.itemName} · ${spec}`
+            : `Tek ${TERIM.terbiyeIsEmri.tekilKucuk} tek kumaş içindir.`,
         });
         return;
       }

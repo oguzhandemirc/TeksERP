@@ -110,6 +110,7 @@ import {
   prepareLineTargetValues,
   targetSetChanged,
 } from "./helpers/order-line-target-value.helper";
+import { TERIM } from "../constants/terim";
 
 // ─── Cancel Akışı Karar Matrisi ─────────────────────────────────────────────
 //
@@ -543,7 +544,7 @@ export class OrderService extends BaseService {
         if (blockedNoTargetItem) {
           blockers.push(
             `${w.workOrderNumber} bu kalemin son bağı ve hedef kumaşı tanımlı değil — ` +
-              "stok üretimine dönemez. Önce terbiye iş emrinde hedef kumaşı seçin.",
+              `stok üretimine dönemez. Önce ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} hedef kumaşı seçin.`,
           );
         }
         return {
@@ -677,7 +678,7 @@ export class OrderService extends BaseService {
       data: fresh.data,
       message:
         affectedWoIds.length > 0
-          ? `Kalem iptal edildi. ${affectedWoIds.length} terbiye iş emri bağı koparıldı.`
+          ? `Kalem iptal edildi. ${affectedWoIds.length} ${TERIM.terbiyeIsEmri.tekilKucuk} bağı koparıldı.`
           : "Kalem iptal edildi.",
     };
   }
@@ -2505,7 +2506,7 @@ export class OrderService extends BaseService {
     for (const r of rolls) {
       if (r.shipmentId) throw AppError.conflict(`Top bir sevkiyatta: ${r.barcode ?? r.id}`);
       if (r.sackId) throw AppError.conflict(`Top bir çuvalda: ${r.barcode ?? r.id}`);
-      if (r.currentStepId) throw AppError.conflict(`Top bir terbiye iş emri adımında: ${r.barcode ?? r.id}`);
+      if (r.currentStepId) throw AppError.conflict(`Top bir ${TERIM.terbiyeIsEmri.tekilKucuk} adımında: ${r.barcode ?? r.id}`);
       if (r.status !== RollStatus.STOCK && r.status !== RollStatus.WAREHOUSE) {
         throw AppError.badRequest(`Top satışa uygun değil (${r.status}): ${r.barcode ?? r.id}`);
       }
@@ -2711,7 +2712,7 @@ export class OrderService extends BaseService {
       );
       if (hasBlockingWO) {
         throw AppError.conflict(
-          "Aktif terbiye iş emrine bağlı sipariş; müşteri veya şube değiştirilemez"
+          `Aktif ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlı sipariş; müşteri veya şube değiştirilemez`
         );
       }
 
@@ -2768,7 +2769,7 @@ export class OrderService extends BaseService {
       );
       if (hasActiveWoLink) {
         throw AppError.conflict(
-          "Terbiye iş emri açılmış siparişin kalemleri değiştirilemez. Önce terbiye iş emrini iptal edin."
+          `${TERIM.terbiyeIsEmri.cumleBasi.yalin} açılmış siparişin kalemleri değiştirilemez. Önce ${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} iptal edin.`
         );
       }
       this.validateLines(incomingLines);
@@ -2809,7 +2810,7 @@ export class OrderService extends BaseService {
         });
         if (activeLink) {
           throw AppError.conflict(
-            "Terbiye iş emri açılmış siparişin kalemleri değiştirilemez. Önce terbiye iş emrini iptal edin.",
+            `${TERIM.terbiyeIsEmri.cumleBasi.yalin} açılmış siparişin kalemleri değiştirilemez. Önce ${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} iptal edin.`,
           );
         }
         // ── İPTAL EDİLMİŞ KALEM DOKUNULMAZ (2026-08-27) ──────────────────
@@ -2863,9 +2864,9 @@ export class OrderService extends BaseService {
               wo.status === WorkOrderStatus.CANCELLED || wo.status === WorkOrderStatus.SUPERSEDED;
             throw AppError.conflict(
               iptalli
-                ? `Bu kalem için ${wo.workOrderNumber} terbiye iş emri açılmış — terbiye iş emri iptal edilse de kayıt duruyor ve silinemez. ` +
+                ? `Bu kalem için ${wo.workOrderNumber} ${TERIM.terbiyeIsEmri.tekilKucuk} açılmış — ${TERIM.terbiyeIsEmri.tekilKucuk} iptal edilse de kayıt duruyor ve silinemez. ` +
                   "Kalemi silmek yerine İPTAL edin; sevk edilmiş metraj ve geçmiş korunur."
-                : "Terbiye iş emri açılmış siparişin kalemleri değiştirilemez. Önce terbiye iş emrini iptal edin.",
+                : `${TERIM.terbiyeIsEmri.cumleBasi.yalin} açılmış siparişin kalemleri değiştirilemez. Önce ${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} iptal edin.`,
             );
           }
           await tx.orderLine.deleteMany({ where: { id: { in: toDelete } } });
@@ -3212,7 +3213,7 @@ export class OrderService extends BaseService {
     if (blockingWOs.length > 0) {
       const workOrderNumbers = [...new Set(blockingWOs.map((w) => w.workOrderNumber))].join(", ");
       throw AppError.conflict(
-        `Bu siparişe bağlı aktif/tamamlanmış terbiye iş emirleri var: ${workOrderNumbers}. Önce onları iptal edin.`
+        `Bu siparişe bağlı aktif/tamamlanmış ${TERIM.terbiyeIsEmri.cogulKucuk} var: ${workOrderNumbers}. Önce onları iptal edin.`
       );
     }
 
@@ -3255,7 +3256,7 @@ export class OrderService extends BaseService {
       if (blocking.length > 0) {
         const workOrderNumbers = [...new Set(blocking.map((w) => w.workOrderNumber))].join(", ");
         throw AppError.conflict(
-          `Bu siparişe bağlı aktif/tamamlanmış terbiye iş emirleri var: ${workOrderNumbers}. Önce onları iptal edin.`,
+          `Bu siparişe bağlı aktif/tamamlanmış ${TERIM.terbiyeIsEmri.cogulKucuk} var: ${workOrderNumbers}. Önce onları iptal edin.`,
         );
       }
       // BU siparişin bağlarını TERMİNAL OLMAYAN her iş emrinden kopar (2026-08-21).
@@ -3319,9 +3320,9 @@ export class OrderService extends BaseService {
       data: updated.order,
       message:
         updated.unlinkedCount > 0
-          ? `Sipariş iptal edildi. ${updated.unlinkedCount} terbiye iş emri bağlantısı koparıldı.` +
+          ? `Sipariş iptal edildi. ${updated.unlinkedCount} ${TERIM.terbiyeIsEmri.tekilKucuk} bağlantısı koparıldı.` +
             (updated.typeChangedWorkOrderIds.length > 0
-              ? ` ${updated.typeChangedWorkOrderIds.length} terbiye iş emri stok üretimine döndü.`
+              ? ` ${updated.typeChangedWorkOrderIds.length} ${TERIM.terbiyeIsEmri.tekilKucuk} stok üretimine döndü.`
               : "")
           : "Sipariş iptal edildi",
     };
@@ -3579,7 +3580,7 @@ export class OrderService extends BaseService {
         // yeniliyor ve aynı duvara çarpıyordu).
         if (!wo.allowedActions.includes(wo.defaultAction)) {
           throw AppError.badRequest(
-            `Terbiye iş emri ${wo.id} için varsayılan aksiyon ('${wo.defaultAction}') izinli değil ` +
+            `${TERIM.terbiyeIsEmri.cumleBasi.yalin} ${wo.id} için varsayılan aksiyon ('${wo.defaultAction}') izinli değil ` +
               `(izinli: ${wo.allowedActions.join(", ")}). Bu bir sunucu tutarsızlığıdır — ` +
               "sipariş iptali için destek ekibine bildirin.",
           );
@@ -3657,11 +3658,11 @@ export class OrderService extends BaseService {
         if (action === "CANCEL_WO") continue; // adım 4'te kendi claim'iyle iptal edilir
         const fs = freshStatus.get(wo.id);
         if (!fs) {
-          throw AppError.conflict("Terbiye iş emri bu sırada kaldırıldı, tekrar deneyin. Sayfayı yenileyin.");
+          throw AppError.conflict(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bu sırada kaldırıldı, tekrar deneyin. Sayfayı yenileyin.`);
         }
         if (!computeAllowedActions(fs, !hasOther.has(wo.id)).includes(action)) {
           throw AppError.conflict(
-            "Terbiye iş emri durumu değişti (önizleme bayatladı). Sayfayı yenileyip iptali tekrar onaylayın.",
+            `${TERIM.terbiyeIsEmri.cumleBasi.yalin} durumu değişti (önizleme bayatladı). Sayfayı yenileyip iptali tekrar onaylayın.`,
           );
         }
       }
@@ -3672,7 +3673,7 @@ export class OrderService extends BaseService {
       });
       if (currentLinks.some((l) => !affectedWoIds.includes(l.workOrderId))) {
         throw AppError.conflict(
-          "Önizleme sonrası bu siparişe yeni terbiye iş emri bağlandı. Sayfayı yenileyip iptali tekrar onaylayın.",
+          `Önizleme sonrası bu siparişe yeni ${TERIM.terbiyeIsEmri.tekilKucuk} bağlandı. Sayfayı yenileyip iptali tekrar onaylayın.`,
         );
       }
 
@@ -3684,7 +3685,7 @@ export class OrderService extends BaseService {
             ctx: { trigger: "ORDER_CANCEL", userId, refType: "ORDER", refId: orderId },
           });
           if (conv === "NO_MATCH") {
-            throw AppError.conflict("Terbiye iş emri bu sırada iptal edildi, stoğa çevrilemedi. Sayfayı yenileyin.");
+            throw AppError.conflict(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bu sırada iptal edildi, stoğa çevrilemedi. Sayfayı yenileyin.`);
           }
         }
         // UNLINK_ONLY / CONVERT_TO_STOCK / CANCEL_WO hepsi bağı KOPARIR — silmez, damgalar (③a).
@@ -3737,7 +3738,7 @@ export class OrderService extends BaseService {
     return {
       success: true,
       data: updated,
-      message: `Sipariş iptal edildi (${preview.affectedWorkOrders.length} terbiye iş emri etkilendi)`,
+      message: `Sipariş iptal edildi (${preview.affectedWorkOrders.length} ${TERIM.terbiyeIsEmri.tekilKucuk} etkilendi)`,
     };
   }
 

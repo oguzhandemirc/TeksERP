@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { orderService } from "./service";
 import { reasonPresetService } from "@/pages/ReasonPresets/service";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   open: boolean;
@@ -126,7 +127,7 @@ export function OrderLineCancelDialog({ open, onOpenChange, orderId, lineId, onC
               <div className="rounded-md border p-3">
                 <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold">
                   <Factory className="h-3.5 w-3.5" />
-                  Bağı koparılacak terbiye iş emirleri ({preview.affectedWorkOrders.length})
+                  Bağı koparılacak {TERIM.terbiyeIsEmri.cogulKucuk} ({preview.affectedWorkOrders.length})
                 </div>
                 <ul className="space-y-1 text-sm">
                   {preview.affectedWorkOrders.map((w) => (
@@ -146,7 +147,7 @@ export function OrderLineCancelDialog({ open, onOpenChange, orderId, lineId, onC
                   ))}
                 </ul>
                 <p className="mt-1.5 text-[11px] text-muted-foreground">
-                  Terbiye iş emirleri iptal edilmez, yalnız bu siparişle bağları kopar.
+                  {TERIM.terbiyeIsEmri.cumleBasiCogul.yalin} iptal edilmez, yalnız bu siparişle bağları kopar.
                 </p>
               </div>
             )}

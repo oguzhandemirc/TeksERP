@@ -18,6 +18,7 @@ import {
 import { summarizeKursunApplications, type KursunSummary } from "./helpers/process-summary.helper";
 import { effectiveIncomingDocsEnabled } from "./system-setting.service";
 import { suggestWorkOrderGramaj, type WorkOrderGramajSuggestion } from "./workorder-gramaj-suggestion.service";
+import { TERIM } from "../constants/terim";
 
 export async function replaceWorkOrderTargetValues(workOrderId: string, items: TargetValueUpdateItem[], userId?: string) {
   await assertTargetValueItems(prisma, items);
@@ -25,7 +26,7 @@ export async function replaceWorkOrderTargetValues(workOrderId: string, items: T
     // İE satır kilidi tx'in İLK ifadesi: aynı İE'ye eşzamanlı iki hedef yazımı serileşir.
     await touchWorkOrderTx(tx, workOrderId);
     const wo = await tx.workOrder.findUnique({ where: { id: workOrderId }, select: { id: true } });
-    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
+    if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı`);
     return setWorkOrderTargetValuesTx(tx, { workOrderId, items, userId: userId ?? null });
   });
   for (const r of change.revoked) {
@@ -64,7 +65,7 @@ type ProcessSummaryData = { kursun: KursunSummary; deliveryNoteGramaj?: WorkOrde
 
 export async function getWorkOrderProcessSummary(workOrderId: string): Promise<{ success: true; data: ProcessSummaryData }> {
   const wo = await prisma.workOrder.findUnique({ where: { id: workOrderId }, select: { id: true } });
-  if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
+  if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı`);
   const kursun = await summarizeKursunApplications({ workOrderId });
   // D4-D2: kurşun dışı hedef yalnız VARSA anahtar olarak eklenir (yanıt bugünkü İE'lerde bayt-aynı).
   const variantTargets: VariantTarget[] = (await readActiveTargetValues(prisma, workOrderId))

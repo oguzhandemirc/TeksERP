@@ -11,6 +11,7 @@ import { usePermissions } from '../hooks/usePermission';
 import type { RollCancelPreview } from '../services/roll.service';
 import type { Roll } from '../types/models';
 import { colors, radius, spacing, typography } from '../theme';
+import { TERIM } from '../lib/terim';
 
 // =============================================================================
 // TOP İPTAL ONAYI — okutulan/seçilen bir topu stoktan düşürmeden önceki tek kapı (tek kart, `ModuleSheet`).
@@ -64,10 +65,10 @@ const KK1_COPY: RollCancelCopy = {
 
 /** "X terbiye iş emrinin Y adımında aktif" gibi okunur cümle. */
 function activeAtText(activeAt: RollCancelPreview['activeAt']): string {
-  if (!activeAt) return 'Bu top bir istasyonda/terbiye iş emrinde aktif.';
+  if (!activeAt) return `Bu top bir istasyonda/${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} aktif.`;
   const wo = activeAt.batchNumber ? `"${activeAt.batchNumber}"` : 'bir';
   const station = activeAt.stationName ?? 'bir istasyon';
-  return `Bu top ${wo} terbiye iş emrinin "${station}" adımında aktif.`;
+  return `Bu top ${wo} ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} "${station}" adımında aktif.`;
 }
 
 /** Kimlik satırı: "ürün · renk · 125 mt · 180 cm" — operatörün karşılaştırdığı şey barkod, gerisi teyit. */

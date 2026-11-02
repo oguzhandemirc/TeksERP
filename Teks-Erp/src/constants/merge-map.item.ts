@@ -11,11 +11,12 @@
 // tavanı yükseltmek sınırı anlamsızlaştırırdı.
 // =============================================================================
 import type { MoveRule } from "./merge-map";
+import { TERIM } from "./terim";
 
 export const ITEM_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "Roll", table: "rolls", column: "itemId", label: "Top" },
     { kind: "MOVE", model: "OrderLine", table: "order_lines", column: "itemId", label: "Sipariş kalemi" },
-    { kind: "MOVE", model: "WorkOrder", table: "work_orders", column: "targetItemId", label: "Terbiye iş emri (hedef kumaş)" },
+    { kind: "MOVE", model: "WorkOrder", table: "work_orders", column: "targetItemId", get label() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} (hedef kumaş)`; } },
     {
       // SEYİTOĞLU MİG-1: `product_recipes_item_variant_uq (itemId, variantCode) WHERE variantCode IS NOT NULL`.
       // Düz `=` NULL'ı eşlemez → varyantsız reçeteler eskisi gibi taşınır; aynı varyant kodu ham 23505 yerine 409.

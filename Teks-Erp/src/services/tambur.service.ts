@@ -126,6 +126,7 @@ import { recordRollDefectTx } from "./helpers/roll-defect.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
 import { customerCodeSearchRollIds } from "./helpers/roll-scan-resolve.helper";
 import { readTargetValueChips, type TargetValueChip } from "./helpers/workorder-target-value.helper";
+import { TERIM } from "../constants/terim";
 
 
 // Kesim etiket NİYETİ (hedef sipariş kalemi / müşteri var-mı + müşteri isActive;
@@ -585,7 +586,7 @@ export class TamburService {
       .catch(() => null);
     if (!reason) return err;
     return AppError.badRequest(
-      `Bu terbiye iş emrinin "Tambur" adımında şu an açık top yok. ${reason}`,
+      `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} "Tambur" adımında şu an açık top yok. ${reason}`,
     );
   }
 
@@ -634,7 +635,7 @@ export class TamburService {
       },
     });
     if (!step) {
-      throw AppError.notFound("Bu terbiye iş emrinde Tambur adımı tanımlı değil");
+      throw AppError.notFound(`Bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} Tambur adımı tanımlı değil`);
     }
 
     // Adıma girmiş ama henüz tamamlanmamış roller (RollMovement.exitedAt = null).
@@ -846,7 +847,7 @@ export class TamburService {
       wo.status === WorkOrderStatus.CANCELLED ||
       wo.status === WorkOrderStatus.SUPERSEDED
     ) {
-      throw AppError.conflict("İptal/devredilmiş terbiye iş emrinin topu finalize edilemez");
+      throw AppError.conflict(`İptal/devredilmiş ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} topu finalize edilemez`);
     }
 
     // Renk kontrolü — Tambur'a gelen rulonun renk kazanmış olması beklenir
@@ -1133,7 +1134,7 @@ export class TamburService {
         freshWo?.status === WorkOrderStatus.CANCELLED ||
         freshWo?.status === WorkOrderStatus.SUPERSEDED
       ) {
-        throw AppError.conflict("İptal/devredilmiş terbiye iş emrinin topu finalize edilemez");
+        throw AppError.conflict(`İptal/devredilmiş ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} topu finalize edilemez`);
       }
       // ATOMIK CLAIM: parent'ı tek hamlede sahiplen. Koşullu updateMany satır
       // kilidi + status guard ile iki eşzamanlı finalize'dan yalnız BİRİNE
@@ -3204,7 +3205,7 @@ export class TamburService {
       parent.currentStep.workOrder?.status === WorkOrderStatus.CANCELLED ||
       parent.currentStep.workOrder?.status === WorkOrderStatus.SUPERSEDED
     ) {
-      throw AppError.conflict("İptal/devredilmiş terbiye iş emrinin açık kumaşı kesilemez");
+      throw AppError.conflict(`İptal/devredilmiş ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} açık kumaşı kesilemez`);
     }
     if (parent.status !== RollStatus.IN_PRODUCTION) {
       throw AppError.badRequest(
@@ -3297,7 +3298,7 @@ export class TamburService {
       freshWo?.status === WorkOrderStatus.CANCELLED ||
       freshWo?.status === WorkOrderStatus.SUPERSEDED
     ) {
-      throw AppError.conflict("İptal/devredilmiş terbiye iş emrinin açık kumaşı kesilemez");
+      throw AppError.conflict(`İptal/devredilmiş ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} açık kumaşı kesilemez`);
     }
     // ── AÇIK KUMAŞ SATIR KİLİDİ + NİYET KORUNUR (2026-09-25, K-KES2) ──
     // Kilit sırası WO → roll (F130). İş emri kilidi eşzamanlı kesimleri zaten SIRALAR:
@@ -3641,7 +3642,7 @@ export class TamburService {
       parent.currentStep.workOrder.status === WorkOrderStatus.CANCELLED ||
       parent.currentStep.workOrder.status === WorkOrderStatus.SUPERSEDED
     ) {
-      throw AppError.conflict("İptal/devredilmiş terbiye iş emrinin açık kumaşı finalize edilemez");
+      throw AppError.conflict(`İptal/devredilmiş ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} açık kumaşı finalize edilemez`);
     }
     // PLAN-GERÇEK SAPMA KAPISI — yalnız kalan kuyruk DEPOYA inerken (keep_*).
     // scrap/discard kapı dışı: fire satılabilir stok üretmez, sormak gürültü.
@@ -3723,7 +3724,7 @@ export class TamburService {
         freshWo?.status === WorkOrderStatus.CANCELLED ||
         freshWo?.status === WorkOrderStatus.SUPERSEDED
       ) {
-        throw AppError.conflict("İptal/devredilmiş terbiye iş emrinin açık kumaşı finalize edilemez");
+        throw AppError.conflict(`İptal/devredilmiş ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} açık kumaşı finalize edilemez`);
       }
       // ATOMİK CLAIM (finalize()'daki desen): idempotency ön-kontrolü tx DIŞINDA
       // check-then-act — eşzamanlı çift çağrı ikisinde de geçer ve kalan child

@@ -1,4 +1,5 @@
 import { apiClient } from './api';
+import { TERIM } from '../lib/terim';
 
 // =============================================================================
 // HAZIR SEBEP KATALOĞU — MOBİL SERVİS (2026-08-19)
@@ -92,7 +93,7 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   WARP_BEAM_ADJUST: 'Levent kalan düzeltmesi sebepleri',
   WARP_BEAM_SCRAP: 'Levent hurda / artık dispozisyonu',
   YARN_SUBCONTRACT_RETURN: 'Fasondan iplik dönüş sebepleri',
-  WORK_ORDER_PLAN_CHANGE: 'Terbiye iş emri plan düzeltme sebepleri',
+  get WORK_ORDER_PLAN_CHANGE() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} plan düzeltme sebepleri`; },
   INSPECTION_VOID: 'Muayene iptal sebepleri',
 };
 

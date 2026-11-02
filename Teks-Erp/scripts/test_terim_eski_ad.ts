@@ -9,6 +9,9 @@
 //      a "dokumaIsi": "Dokuma işi/İşi/işleri/işine…" (ardından "emri" gelmeyen "dokuma iş")
 //      b "isEmri"   : önünde "Terbiye"/"Dokuma" OLMAYAN "iş emri/İş Emri/iş emirleri…" (WorkOrder'ın çıplak adı)
 //      c "sevkMuhasebe": "Sevkiyatlar (Muhasebe)" — KÜÇÜK-F 2026-10-26 ile `TERIM_AD.sevkEdilenler` ("Sevk Edilenler")
+//      d "terbiyeSabit": SABİT yazılmış "Terbiye İş Emri/terbiye iş emrine/TERBİYE İŞ EMRİ…" (K20 2026-11-03: WorkOrder
+//        adı dokuma rejiminden çözülür — dokuma kapalı "İş Emri"; sabit metin rejimi kaçırır → `TERIM.terbiyeIsEmri`)
+//      terim modülünün kendisi (kaynak + aynalar) taranmaz.
 //      Hariç: yorum (AST'de yok) · import/export yolu · tanımlayıcı · test dosyası (*.test/*.spec, __tests__,
 //      test/) · .d.ts · .json (surum-notlari.json dâhil) · migration (src dışında). Taban `terim-eski-ad-baseline.json`
 //      (dosya → {dokumaIsi, isEmri}); ARTIŞ her yerde SERT · ÇÜRÜME `curumeKolu` (commit kapısında ⚠️, CI'da sert).
@@ -20,13 +23,16 @@
 // ⭐ BİR KEZLİK SONDA ✓B (2026-10-11, bu commit): gerçek dosyaya eski ad eklenince §3 artış kırmızı; tabanlı
 //   dosyadan bir geçiş silinince §3 çürüme kırmızı (CI kipi) / ⏭ (TEKSERP_KAPI_ADIMI=commit); ikisi de `cmp` ile geri alındı.
 // GEREKLİ Mİ: doğduğu gün tabanda 2.000+ geçiş — kusur değil, dilim ②–⑤'in çevireceği borç; bekçi yeni borcu durdurur.
+//   §2b çözücü: `terimDokumaAyarla(false)` → "İş Emri" ailesi, `true` → "Terbiye İş Emri" (varsayılan = bugünkü).
+//   §4 DONMA: `src/constants` içinde TERIM okuyan modüller rejim KAPALIYA çevrildikten sonra serileştirilir —
+//      modül düzeyinde bir kez okunup donmuş "Terbiye İş Emri" kalırsa kırmızı (okumayı getter/fonksiyona al).
 // Koşum: npx tsx scripts/test_terim_eski_ad.ts   (DB GEREKMEZ)
 // =============================================================================
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
-import { TERIM, type Term, type TermCases } from "../src/constants/terim";
+import { IS_EMRI_BICIMLERI, TERIM, terimDokumaAyarla, terimDokumaRejimi, type Term, type TermCases } from "../src/constants/terim";
 import { atlamaDefteri } from "./lib/atlama";
 import { curumeKolu } from "./lib/circir-kolu";
 
@@ -52,8 +58,9 @@ const TARAMA: readonly { kok: string; enAz: number }[] = [
   { kok: "patron/uygulama/app", enAz: 5 },
 ];
 
-type Tur = "dokumaIsi" | "isEmri" | "sevkMuhasebe";
-const TURLER: readonly Tur[] = ["dokumaIsi", "isEmri", "sevkMuhasebe"];
+type Tur = "dokumaIsi" | "isEmri" | "sevkMuhasebe" | "terbiyeSabit";
+const TURLER: readonly Tur[] = ["dokumaIsi", "isEmri", "sevkMuhasebe", "terbiyeSabit"];
+const TERIM_DOSYALARI = new Set([KAYNAK, ...AYNALAR]);
 type Sayim = Partial<Record<Tur, number>>;
 type DosyaSayim = Record<string, Sayim>;
 
@@ -77,9 +84,12 @@ const DOKUMA_EKLER = new Set([
 const IS_EMRI = /(?<!\p{L})(?:iş|İş|İŞ|IŞ)\s+(?:emr|Emr|EMR|emir|Emir|EMİR|EMIR)/gu;
 /** Eski karo/katalog adı; parantezli ad kalktı (TERIM_AD.sevkEdilenler). Büyük/küçük biçimleri de ısırır. */
 const SEVK_MUHASEBE = /(?:sevkiyatlar|Sevkiyatlar|SEVKİYATLAR|SEVKIYATLAR)\s*\(\s*(?:muhasebe|Muhasebe|MUHASEBE)\s*\)/gu;
+/** K20: sabit yazılmış WorkOrder adı — rejimden çözülmez (TERIM.terbiyeIsEmri kullanılmalı). */
+const TERBIYE_SABIT = /(?<!\p{L})(?:terbiye|Terbiye|TERBİYE|TERBIYE)\s+(?:iş|İş|İŞ|IŞ)\s+(?:emr|Emr|EMR|emir|Emir|EMİR|EMIR)/gu;
 const ONEK_YENI = /(?<!\p{L})(?:terbiye|Terbiye|TERBİYE|TERBIYE|dokuma|Dokuma|DOKUMA)\s+$/u;
 
 export function eskiAdSay(metin: string): Required<Sayim> {
+  const terbiyeSabit = [...metin.matchAll(TERBIYE_SABIT)].length;
   let dokumaIsi = 0;
   for (const m of metin.matchAll(DOKUMA_IS)) {
     const ek = trKucuk(m[1] ?? "");
@@ -94,7 +104,7 @@ export function eskiAdSay(metin: string): Required<Sayim> {
     isEmri++;
   }
   const sevkMuhasebe = [...metin.matchAll(SEVK_MUHASEBE)].length;
-  return { dokumaIsi, isEmri, sevkMuhasebe };
+  return { dokumaIsi, isEmri, sevkMuhasebe, terbiyeSabit };
 }
 
 /** Kaynak metindeki görünen metin parçaları (dizge · şablon parçası · JSX metni); yorum/tanımlayıcı/modül yolu hariç. */
@@ -116,7 +126,7 @@ export function metinParcalari(kaynak: string, dosyaAdi = "x.tsx"): string[] {
 }
 
 export function dosyaSay(kaynak: string, dosyaAdi: string): Sayim {
-  const s: Required<Sayim> = { dokumaIsi: 0, isEmri: 0, sevkMuhasebe: 0 };
+  const s: Required<Sayim> = { dokumaIsi: 0, isEmri: 0, sevkMuhasebe: 0, terbiyeSabit: 0 };
   for (const p of metinParcalari(kaynak, dosyaAdi)) {
     const c = eskiAdSay(p);
     for (const t of TURLER) s[t] += c[t];
@@ -167,13 +177,17 @@ const ISIRMALI: [string, Tur][] = [
   ["Dokuma işi bulunamadı", "dokumaIsi"], ["DOKUMA İŞİ", "dokumaIsi"], ["dokuma işlerine aktar", "dokumaIsi"],
   ["Dokuma İşleri", "dokumaIsi"], ["bu dokuma işiyle", "dokumaIsi"],
   ["İş emri kapalı", "isEmri"], ["bu iş emrine bağlı", "isEmri"], ["İŞ EMİRLERİ", "isEmri"], ["Hızlı İş Emri", "isEmri"],
+  ["Terbiye İş Emri", "terbiyeSabit"], ["terbiye iş emrine", "terbiyeSabit"], ["TERBİYE İŞ EMİRLERİ", "terbiyeSabit"],
+  ["Terbiye iş emri bulunamadı", "terbiyeSabit"],
   ["Sevkiyatlar (Muhasebe)", "sevkMuhasebe"], ["SEVKİYATLAR (MUHASEBE)", "sevkMuhasebe"], ["Operasyon → Sevkiyatlar ( Muhasebe )", "sevkMuhasebe"],
 ];
 const SUSMALI = [
-  "Terbiye İş Emri", "terbiye iş emrine", "TERBİYE İŞ EMİRLERİ", "Dokuma İş Emri", "dokuma iş emirlerinden",
+  "Terbiye", "terbiye işlemi", "Dokuma İş Emri", "dokuma iş emirlerinden",
   "DOKUMA İŞ EMRİ", "dokuma işlemi", "Dokuma işçiliği", "iş emniyeti", "kiş emri", "Sevk Edilenler", "Sevkiyatlar · Muhasebe",
 ];
 for (const [m, t] of ISIRMALI) check(`K eşleyici ısırır: "${m}" → ${t}`, eskiAdSay(m)[t] === 1);
+check("K ayrık türler: \"Terbiye İş Emri\" yalnız terbiyeSabit sayılır (isEmri değil)",
+  eskiAdSay("Terbiye İş Emri").isEmri === 0 && eskiAdSay("Terbiye İş Emri").terbiyeSabit === 1);
 for (const m of SUSMALI) {
   const c = eskiAdSay(m);
   check(`K eşleyici susar: "${m}"`, TURLER.every((t) => c[t] === 0));
@@ -212,8 +226,12 @@ console.log("\n§2 — terim modülü iç tutarlılığı");
 const EKLER: Record<keyof TermCases, string> = {
   yalin: "", belirtme: "ni", yonelme: "ne", bulunma: "nde", ayrilma: "nden", ilgi: "nin", vasita: "yle",
 };
-const terimler = Object.entries(TERIM) as [string, Term][];
-check("§2 iki terim tanımlı (terbiyeIsEmri · dokumaIsEmri)", terimler.length === 2 && "terbiyeIsEmri" in TERIM && "dokumaIsEmri" in TERIM);
+const terimler: [string, Term][] = [
+  ["terbiyeIsEmri(terbiye)", IS_EMRI_BICIMLERI.terbiye], ["terbiyeIsEmri(yalin)", IS_EMRI_BICIMLERI.yalin],
+  ["dokumaIsEmri", TERIM.dokumaIsEmri],
+];
+check("§2 iki terim tanımlı (terbiyeIsEmri · dokumaIsEmri)", Object.keys(TERIM).length === 2 && "terbiyeIsEmri" in TERIM && "dokumaIsEmri" in TERIM);
+const basBuyuk = (x: string): string => trBuyuk(trKucuk(x).slice(0, 1)) + trKucuk(x).slice(1);
 for (const [ad, t] of terimler) {
   const hatalar: string[] = [];
   if (t.tekilKucuk !== trKucuk(t.tekil)) hatalar.push("tekilKucuk");
@@ -224,15 +242,34 @@ for (const [ad, t] of terimler) {
   for (const [bicimAdi, cekim, yalin] of [
     ["cekim", t.cekim, t.tekil], ["cekimKucuk", t.cekimKucuk, t.tekilKucuk],
     ["cogulCekim", t.cogulCekim, t.cogul], ["cogulCekimKucuk", t.cogulCekimKucuk, t.cogulKucuk],
+    ["cumleBasi", t.cumleBasi, basBuyuk(t.tekil)], ["cumleBasiCogul", t.cumleBasiCogul, basBuyuk(t.cogul)],
   ] as const) {
     for (const [hal, ek] of Object.entries(EKLER) as [keyof TermCases, string][]) {
       if (cekim[hal] !== yalin + ek) hatalar.push(`${bicimAdi}.${hal}="${cekim[hal]}" ≠ "${yalin + ek}"`);
     }
   }
-  const eski = [t.tekil, t.cogul, t.tekilBuyuk, t.cogulBuyuk].map(eskiAdSay).some((c) => c.dokumaIsi + c.isEmri > 0);
+  // yalın biçim ("İş Emri") BİLEREK çıplak addır — yalnız terim modülünde yaşar, §3 taramasının dışında.
+  const eski = [t.tekil, t.cogul, t.tekilBuyuk, t.cogulBuyuk].map(eskiAdSay).some((c) => c.dokumaIsi + (ad.includes("yalin") ? 0 : c.isEmri) > 0);
   if (eski) hatalar.push("terimin kendisi eski ad eşleyicisine takılıyor");
   check(`§2 ${ad}: biçimler ve çekimler tutarlı`, hatalar.length === 0, hatalar.slice(0, 4).join(" · "));
 }
+
+// ---------------------------------------------------------------------------
+// §2b çözücü (K20)
+// ---------------------------------------------------------------------------
+console.log("\n§2b — WorkOrder adı dokuma rejiminden çözülür (K20)");
+check("§2b varsayılan rejim (bildirilmeden) = bugünkü ad \"Terbiye İş Emri\"",
+  terimDokumaRejimi() === true && TERIM.terbiyeIsEmri.tekil === "Terbiye İş Emri");
+terimDokumaAyarla(false);
+const kapali = TERIM.terbiyeIsEmri;
+check("§2b dokuma KAPALI → \"İş Emri\" ailesi",
+  kapali.tekil === "İş Emri" && kapali.cogul === "İş Emirleri" && kapali.cekimKucuk.yonelme === "iş emrine"
+  && kapali.cumleBasi.yalin === "İş emri" && kapali.tekilBuyuk === "İŞ EMRİ", JSON.stringify([kapali.tekil, kapali.cekimKucuk.yonelme]));
+const degisti = terimDokumaAyarla(true);
+check("§2b dokuma AÇIK → \"Terbiye İş Emri\" (değişim bildirilir)",
+  degisti && TERIM.terbiyeIsEmri.tekil === "Terbiye İş Emri" && TERIM.terbiyeIsEmri.cekimKucuk.ilgi === "terbiye iş emrinin");
+check("§2b Dokuma İş Emri rejimden bağımsız", (terimDokumaAyarla(false), TERIM.dokumaIsEmri.tekil === "Dokuma İş Emri"));
+terimDokumaAyarla(true);
 
 // ---------------------------------------------------------------------------
 // §3 eski ad cırcırı
@@ -248,6 +285,7 @@ for (const { kok, enAz } of TARAMA) {
   const dosyalar = walk(dizin);
   check(`§3 körlük zemini: ${kok} ≥ ${enAz} dosya`, dosyalar.length >= enAz, `${dosyalar.length} dosya`);
   for (const f of dosyalar) {
+    if (TERIM_DOSYALARI.has(rel(f))) continue;
     const s = dosyaSay(readFileSync(f, "utf8"), f);
     if (Object.keys(s).length) gercek[rel(f)] = s;
   }
@@ -279,6 +317,64 @@ if (!existsSync(TABAN_DOSYA)) {
   curumeKolu(check, ATLAMA.atla, "§3 taban ÇÜRÜMEMİŞ (gerçek < taban ise `--yaz` ile düşür, aynı commit'te)",
     tabanToplam - curumeAdet, tabanToplam);
   if (curume.length) console.log(`     ↓ ${curume.slice(0, 6).join(" · ")}${curume.length > 6 ? ` (+${curume.length - 6})` : ""}`);
+}
+
+// ---------------------------------------------------------------------------
+// §4 donma (K20): modül düzeyinde okunup saklanan ad rejim değişince donmuş kalır
+// ---------------------------------------------------------------------------
+console.log("\n§4 — sabit kataloglarda donmuş WorkOrder adı yok (rejim KAPALIYA çevrilince)");
+/** Değerdeki dizgeleri gezer (getter'lar okunur; döngü + derinlik sınırlı). */
+export function dizgeTopla(v: unknown, yol: string, out: [string, string][], gorulen = new WeakSet<object>(), derinlik = 0): void {
+  if (typeof v === "string") { out.push([yol, v]); return; }
+  if (!v || typeof v !== "object" || derinlik > 8 || gorulen.has(v)) return;
+  gorulen.add(v);
+  if (v instanceof Map) { for (const [k, x] of v) dizgeTopla(x, `${yol}[${String(k)}]`, out, gorulen, derinlik + 1); return; }
+  if (v instanceof Set) { for (const x of v) dizgeTopla(x, `${yol}{}`, out, gorulen, derinlik + 1); return; }
+  for (const k of Object.keys(v)) {
+    let x: unknown;
+    try { x = (v as Record<string, unknown>)[k]; } catch { continue; }
+    dizgeTopla(x, `${yol}.${k}`, out, gorulen, derinlik + 1);
+  }
+}
+{
+  // sonda: getter'lı katalog donmaz, düz sabit donar
+  terimDokumaAyarla(true);
+  const donan = { ad: TERIM.terbiyeIsEmri.tekil };
+  const canli = { get ad() { return TERIM.terbiyeIsEmri.tekil; } };
+  terimDokumaAyarla(false);
+  const sd: [string, string][] = [];
+  const sc: [string, string][] = [];
+  dizgeTopla(donan, "donan", sd);
+  dizgeTopla(canli, "canli", sc);
+  check("K §4 sonda: düz sabit donar (ısırır), getter donmaz (susar)",
+    sd.some(([, x]) => eskiAdSay(x).terbiyeSabit > 0) && !sc.some(([, x]) => eskiAdSay(x).terbiyeSabit > 0));
+  terimDokumaAyarla(true);
+}
+{
+  const dizinler = ["Teks-Erp/src/constants", "Teks-Erp/src/config"];
+  const adaylar = dizinler.flatMap((d) => walk(path.join(KOK, d)))
+    .filter((f) => !TERIM_DOSYALARI.has(rel(f)) && readFileSync(f, "utf8").includes("TERIM.terbiyeIsEmri"));
+  check("§4 körlük zemini: TERIM okuyan ≥ 10 sabit modülü", adaylar.length >= 10, `${adaylar.length} modül`);
+  terimDokumaAyarla(true);
+  const moduller: [string, Record<string, unknown>][] = [];
+  for (const f of adaylar) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      moduller.push([rel(f), require(f) as Record<string, unknown>]);
+    } catch (e) {
+      check(`§4 ${rel(f)} yüklenebilir`, false, `ÖLÇÜLEMEDİ — ${(e as Error).message.slice(0, 80)}`);
+    }
+  }
+  terimDokumaAyarla(false);
+  const donmus: string[] = [];
+  for (const [r, m] of moduller) {
+    const dizgeler: [string, string][] = [];
+    for (const k of Object.keys(m)) dizgeTopla(m[k], k, dizgeler);
+    for (const [y, x] of dizgeler) if (eskiAdSay(x).terbiyeSabit > 0) donmus.push(`${r} ${y}`);
+  }
+  terimDokumaAyarla(true);
+  check("⭐ §4 DONMA yok — rejim kapalıyken katalogda \"Terbiye İş Emri\" kalmadı (okumayı getter'a al)",
+    donmus.length === 0, donmus.length ? `${donmus.length}: ${donmus.slice(0, 5).join(" · ")}` : `${moduller.length} modül`);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);

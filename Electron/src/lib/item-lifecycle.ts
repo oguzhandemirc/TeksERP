@@ -7,6 +7,7 @@
 // =============================================================================
 import { rollStatusLabels, type RollStatus } from "@/types/enums";
 import type { PhaseOutNewOrder } from "./item-lifecycle-flags";
+import { TERIM } from "@/lib/terim";
 
 export type ItemLifecycleStatus = "ACTIVE" | "PHASE_OUT" | "ARCHIVED";
 
@@ -69,7 +70,7 @@ const PHASE_OUT_CHOICE: LifecycleChoice = {
   to: "PHASE_OUT",
   label: "Tükenene kadar",
   action: "Tükenene kadar'a al",
-  hint: "Eldeki mal terbiye iş emri, fason ve sevkte akmaya devam eder; yeni stok girişi ve alım açılmaz.",
+  get hint() { return `Eldeki mal ${TERIM.terbiyeIsEmri.tekilKucuk}, fason ve sevkte akmaya devam eder; yeni stok girişi ve alım açılmaz.`; },
   blockedBy: null,
 };
 const ACTIVE_CHOICE: LifecycleChoice = {

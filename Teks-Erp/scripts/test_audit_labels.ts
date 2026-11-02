@@ -64,6 +64,7 @@ import fs from "fs";
 import path from "path";
 
 import { AUDIT_FIELD_LABELS } from "../src/constants/audit-field-labels";
+import { TERIM } from "../src/constants/terim";
 
 let pass = 0;
 let fail = 0;
@@ -102,6 +103,12 @@ function readMap(file: string, constName: string): Record<string, string> | null
   const re = /^\s{2}(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*)):\s*"((?:[^"\\]|\\.)*)"/gm;
   let m: RegExpExecArray | null;
   while ((m = re.exec(body)) !== null) out[(m[1] ?? m[2])!] = m[3]!;
+  // K20: iş emri adı getter'ı — `get KEY() { return `…${TERIM.terbiyeIsEmri.x}…`; }` şablonu TERIM ile çözülür.
+  const getter = /^\s{2}get\s+(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))\(\)\s*\{\s*return\s+`((?:[^`\\]|\\.)*)`;\s*\}/gm;
+  while ((m = getter.exec(body)) !== null) {
+    out[(m[1] ?? m[2])!] = m[3]!.replace(/\$\{TERIM\.([A-Za-z.]+)\}/g, (_, yol: string) =>
+      String(yol.split(".").reduce<unknown>((o, k) => (o as Record<string, unknown>)?.[k], TERIM)));
+  }
   return out;
 }
 

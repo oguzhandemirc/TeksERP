@@ -41,6 +41,7 @@ import {
 } from "./kursun-bypass-guard.helper";
 import { STEP_FLOW_SELECT, stepRunsStepFlow } from "./quality-station.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE } from "./roll-error-scope.helper";
+import { TERIM } from "../../constants/terim";
 
 /** Hem havuz client'ı hem transaction client'ı kabul eden okuma tipi (any YOK). */
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -280,6 +281,6 @@ export async function assertKursunTabletMayWrite(
   if (!eligibility?.eligible) return;
 
   throw AppError.conflict(
-    `Kurşun dağıtımı açık — ${actionLabel} kurşun tabletinden yapılamaz. Bu terbiye iş emri Kurşun Planlama ekranından bir kurşun makinesine dağıtılır ve Tambur'da kart okutulduğunda kapanır.`,
+    `Kurşun dağıtımı açık — ${actionLabel} kurşun tabletinden yapılamaz. Bu ${TERIM.terbiyeIsEmri.tekilKucuk} Kurşun Planlama ekranından bir kurşun makinesine dağıtılır ve Tambur'da kart okutulduğunda kapanır.`,
   );
 }

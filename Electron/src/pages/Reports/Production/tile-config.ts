@@ -1,5 +1,6 @@
 import { Gauge, UserCog, ScanBarcode, GitBranch, TimerOff } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
+import { TERIM } from "@/lib/terim";
 
 /**
  * Üretim raporları — 2026-08-09 sadeleştirmesi.
@@ -34,7 +35,7 @@ export const productionReportTiles: HubTile[] = [
   {
     key: "wip",
     title: "Nerede Takıldı (WIP)",
-    description: "İstasyonlarda bekleyen mal, en uzun bekleyen işler, başlamamış terbiye iş emirleri",
+    get description() { return `İstasyonlarda bekleyen mal, en uzun bekleyen işler, başlamamış ${TERIM.terbiyeIsEmri.cogulKucuk}`; },
     icon: Gauge,
     to: "/reports/production/wip",
   },

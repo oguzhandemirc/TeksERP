@@ -349,7 +349,7 @@ router.post("/taramalar/:id/oku", requirePermission("gelen-belge:write"), wrap(a
 const SettingsBody = z.strictObject({
   defaultItemId: Id.nullable().optional(),
   unreviewedApproval: z.enum(["WARN", "BLOCK_SUSPECT", "BLOCK"], "Seçenek WARN, BLOCK_SUSPECT ya da BLOCK olmalı").optional(),
-  autoWorkOrder: z.boolean(`Otomatik ${TERIM.terbiyeIsEmri.tekilKucuk} evet/hayır olmalı`).optional(),
+  get autoWorkOrder() { return z.boolean(`Otomatik ${TERIM.terbiyeIsEmri.tekilKucuk} evet/hayır olmalı`).optional(); },
   defaultRouteTemplateId: Id.nullable().optional(),
   routeSuggestionPriority: z.enum(["CUSTOMER_FIRST", "FACTORY_FIRST"], "Seçenek CUSTOMER_FIRST ya da FACTORY_FIRST olmalı").optional(),
   handwritingOutlierFactor: z.number("Şüpheli değer oranı sayı olmalı").min(2, "Şüpheli değer oranı en az 2 olmalı").max(20, "Şüpheli değer oranı en çok 20 olmalı").nullable().optional(),

@@ -11,6 +11,7 @@
 // tavanı yükseltmek sınırı anlamsızlaştırırdı.
 // =============================================================================
 import type { MoveRule } from "./merge-map";
+import { TERIM } from "./terim";
 
 export const SUBCONTRACTOR_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "SubcontractorDispatch", table: "subcontractor_dispatches", column: "subcontractorId", label: "Fason sevk" },
@@ -26,7 +27,7 @@ export const SUBCONTRACTOR_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "KartelaDispatch", table: "kartela_dispatches", column: "subcontractorId", label: "Kartela sevk" },
     { kind: "MOVE", model: "KartelaReceipt", table: "kartela_receipts", column: "subcontractorId", label: "Kartela kabul" },
     { kind: "MOVE", model: "RouteStep", table: "route_steps", column: "plannedSubcontractorId", label: "Rota adımı (planlanan firma)" },
-    { kind: "MOVE", model: "WorkOrderStep", table: "work_order_steps", column: "plannedSubcontractorId", label: "Terbiye iş emri adımı (planlanan firma)" },
+    { kind: "MOVE", model: "WorkOrderStep", table: "work_order_steps", column: "plannedSubcontractorId", get label() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} adımı (planlanan firma)`; } },
     {
       kind: "CONFLICT",
       model: "SubcontractorToCategory",

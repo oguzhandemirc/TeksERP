@@ -24,7 +24,6 @@ import { assertRouteOverride } from "./gelen-belge-oto-is-emri.service";
 import { readIncomingDocFormApproval } from "./system-setting.service";
 import { WorkOrderService, type WorkOrderCreateInput } from "./workorder.service";
 
-const IE = TERIM.terbiyeIsEmri;
 const workOrders = new WorkOrderService();
 
 /** Yalnız okuma SÜRERKEN kayıt 409; diğer her durumda gövdedeki (operatörün gördüğü) değerle kayıt yapılır. */
@@ -59,7 +58,7 @@ export interface FormWorkOrderResult {
 export async function assertFormApprovalEnabled(): Promise<void> {
   if ((await readIncomingDocFormApproval()) !== "WITH_WORK_ORDER") {
     throw AppError.forbidden(
-      `Belge ${IE.tekilKucuk} formundan kaydedilemez: fabrika ayarı "ayrı onay". Belgeyi gelen belge ekranından onaylayın ya da ${settingScreenPath("gelen-belge")} ekranında "${IE.tekil} ile kaydet" seçin.`,
+      `Belge ${TERIM.terbiyeIsEmri.tekilKucuk} formundan kaydedilemez: fabrika ayarı "ayrı onay". Belgeyi gelen belge ekranından onaylayın ya da ${settingScreenPath("gelen-belge")} ekranında "${TERIM.terbiyeIsEmri.tekil} ile kaydet" seçin.`,
       { code: "GELEN_BELGE_FORM_APPROVAL_DISABLED" },
     );
   }
@@ -98,7 +97,7 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
   const summary = await prisma.customerDeliveryNoteLine.findUnique({ where: { id: summaryLineId(noteId) }, select: { rollId: true } });
   if (!summary?.rollId) {
     if (!APPROVAL_RESUMABLE.includes(note.status)) {
-      throw AppError.conflict(`${note.noteNo} şu an ${IE.tekilKucuk} için kaydedilemez (${note.status}).`, { code: "DELIVERY_NOTE_NOT_APPROVABLE", status: note.status });
+      throw AppError.conflict(`${note.noteNo} şu an ${TERIM.terbiyeIsEmri.tekilKucuk} için kaydedilemez (${note.status}).`, { code: "DELIVERY_NOTE_NOT_APPROVABLE", status: note.status });
     }
     const user = await prisma.user.findUnique({ where: { id: actor.userId }, select: { username: true } });
     const approved = await approveDeliveryNote(noteId, {}, actor.userId, { entryMode: "PER_DOCUMENT", via: `WITH_WORK_ORDER: ${user?.username ?? actor.userId}` });
@@ -123,7 +122,7 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
     sourceNoteId: noteId,
   }, actor.userId);
   const wo = res.data?.workOrder;
-  if (!wo) throw AppError.internal(`${IE.tekil} açılamadı.`);
+  if (!wo) throw AppError.internal(`${TERIM.terbiyeIsEmri.tekil} açılamadı.`);
   if (res.warnings?.length) warnings.push(...res.warnings);
   return { workOrderId: wo.id, workOrderNo: wo.workOrderNumber, batchNumber: res.data?.batch?.batchNumber ?? null, rollId: line.rollId, warnings };
 }

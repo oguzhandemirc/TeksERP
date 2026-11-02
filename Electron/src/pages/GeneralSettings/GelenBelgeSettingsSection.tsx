@@ -46,15 +46,14 @@ export const UNREVIEWED_APPROVAL_OPTIONS: ReadonlyArray<{ value: UnreviewedAppro
   { value: "BLOCK", label: "Engelle", hint: "Gözden geçirilmemiş satır varken onay reddedilir; önce hücreler gözden geçirilir." },
 ];
 
-const IE = TERIM.terbiyeIsEmri;
-const AUTO_WORK_ORDER_DESC = `Onaylanan belgenin topları desen/gramaj ve kumaşa göre gruplanır; işlem değeri net çözülen her grup için ${IE.tekilKucuk}, aşağıdaki rota önerisiyle açılır (plan ekranındaki '${IE.tekilKucuk} aç' ile aynı işlem). Deseni çözülemeyen gruplar, rota önerisi olmayan müşteri ve ${IE.tekilKucuk} açma yetkisi olmayan onaylayan için ${IE.tekilKucuk} açılmaz; onay sonucu hangi grubun elle açılması gerektiğini yazar. Onay bundan etkilenmez. Kapalı (varsayılan) = bugünkü davranış: ${IE.cogulKucuk} plan ekranından elle açılır.`;
+const AUTO_WORK_ORDER_DESC = `Onaylanan belgenin topları desen/gramaj ve kumaşa göre gruplanır; işlem değeri net çözülen her grup için ${TERIM.terbiyeIsEmri.tekilKucuk}, aşağıdaki rota önerisiyle açılır (plan ekranındaki '${TERIM.terbiyeIsEmri.tekilKucuk} aç' ile aynı işlem). Deseni çözülemeyen gruplar, rota önerisi olmayan müşteri ve ${TERIM.terbiyeIsEmri.tekilKucuk} açma yetkisi olmayan onaylayan için ${TERIM.terbiyeIsEmri.tekilKucuk} açılmaz; onay sonucu hangi grubun elle açılması gerektiğini yazar. Onay bundan etkilenmez. Kapalı (varsayılan) = bugünkü davranış: ${TERIM.terbiyeIsEmri.cogulKucuk} plan ekranından elle açılır.`;
 
 function AutoWorkOrderToggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <div data-testid="gb-auto-work-order">
       <FlagToggle
-        title={`Onaydan sonra ${IE.cekimKucuk.belirtme} otomatik aç`}
-        summary={`Belge onaylanınca deseni/gramajı belli her grup için ${IE.tekilKucuk} kendiliğinden açılır.`}
+        title={`Onaydan sonra ${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} otomatik aç`}
+        summary={`Belge onaylanınca deseni/gramajı belli her grup için ${TERIM.terbiyeIsEmri.tekilKucuk} kendiliğinden açılır.`}
         desc={AUTO_WORK_ORDER_DESC}
         defaultOn={false}
         checked={checked}
@@ -65,7 +64,7 @@ function AutoWorkOrderToggle({ checked, onChange }: { checked: boolean; onChange
 }
 
 export const ROUTE_PRIORITY_OPTIONS: ReadonlyArray<{ value: RouteSuggestionPriority; label: string; hint: string }> = [
-  { value: "CUSTOMER_FIRST", label: "Önce müşteri geçmişi", hint: `Önce müşterinin son ${IE.cekimKucuk.bulunma}ki rota, sonra müşteriye tanımlı tek rota şablonu, en son fabrika varsayılanı (bugünkü davranış).` },
+  { value: "CUSTOMER_FIRST", label: "Önce müşteri geçmişi", hint: `Önce müşterinin son ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma}ki rota, sonra müşteriye tanımlı tek rota şablonu, en son fabrika varsayılanı (bugünkü davranış).` },
   { value: "FACTORY_FIRST", label: "Her zaman fabrika varsayılanı", hint: "Fabrika varsayılan rotası seçiliyse hep o önerilir; boşsa müşteri geçmişine bakılır." },
 ];
 
@@ -88,7 +87,7 @@ function RouteSuggestionFields({ routeId, onRouteChange, priority, onPriorityCha
         <FieldLabel
           htmlFor="gb-default-route-picker"
           label="Fabrika varsayılan rotası"
-          desc={`Belgeden ${IE.tekilKucuk} açarken müşteri için rota bulunamazsa önerilen rota şablonu; otomatik ${IE.tekilKucuk} ve plan ekranındaki ön seçim aynı öneriyi kullanır. Boş (varsayılan) = bugünkü davranış: rota yalnız müşteri kaynaklarından önerilir.`}
+          desc={`Belgeden ${TERIM.terbiyeIsEmri.tekilKucuk} açarken müşteri için rota bulunamazsa önerilen rota şablonu; otomatik ${TERIM.terbiyeIsEmri.tekilKucuk} ve plan ekranındaki ön seçim aynı öneriyi kullanır. Boş (varsayılan) = bugünkü davranış: rota yalnız müşteri kaynaklarından önerilir.`}
         />
         <div id="gb-default-route-picker" className="mt-2">
           <EntityPickerModal<ProductionRoute>
@@ -115,7 +114,7 @@ function RouteSuggestionFields({ routeId, onRouteChange, priority, onPriorityCha
         )}
       </div>
       <div>
-        <FieldLabel htmlFor="gb-route-priority" label="Rota önerisi önceliği" desc={`Belgeden ${IE.tekilKucuk} açarken önerilen rotanın hangi kaynaktan önce alınacağı.`} />
+        <FieldLabel htmlFor="gb-route-priority" label="Rota önerisi önceliği" desc={`Belgeden ${TERIM.terbiyeIsEmri.tekilKucuk} açarken önerilen rotanın hangi kaynaktan önce alınacağı.`} />
         <div id="gb-route-priority" className="mt-2">
           <EnumRadioOptions name="Rota önerisi önceliği" value={priority} options={ROUTE_PRIORITY_OPTIONS} onChange={(v) => onPriorityChange(v as RouteSuggestionPriority)} />
         </div>

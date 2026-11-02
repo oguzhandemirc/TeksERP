@@ -78,7 +78,8 @@ const variants: EquivalenceVariant[] = [
   },
 ];
 
-const html = String.raw`<div class="sheet">
+// K20: iş emri adı rejimden çözülür — HTML okuma anında kurulur (modül düzeyinde donmaz).
+const htmlKur = (): string => String.raw`<div class="sheet">
 <header>
 <div class="hl">
 ${LOGO_ASSIGN}
@@ -163,7 +164,7 @@ ${STAMPS}
 export const subcontractorReceiptSystem: SystemEquivalent = {
   docType: "SUBCONTRACTOR_RECEIPT",
   editMode: "CODE",
-  html,
+  get html() { return htmlKur(); },
   css: (settings) => chromeDocCss(settings, 64, "fasonKabul"),
   pageSettings: (settings) => pageSettingsFor(settings, 9),
   tableBindings: {},

@@ -12,7 +12,6 @@ import { EnumRadioOptions } from "./EnumRadioOptions";
 import { TERIM } from "@/lib/terim";
 import type { AutoWorkOrderPatternlessMode, BatchNumberSourceMode, IncomingDocEntryMode, IncomingDocFormApproval, IncomingDocumentSettings } from "@/pages/Operations/GelenBelgeler/types";
 
-const IE = TERIM.terbiyeIsEmri;
 
 type Option<T extends string> = { value: T; label: string; hint: string };
 
@@ -27,13 +26,13 @@ export const ENTRY_MODE_OPTIONS: ReadonlyArray<Option<IncomingDocEntryMode>> = [
 ];
 
 export const AUTO_WORK_ORDER_PATTERNLESS_OPTIONS: ReadonlyArray<Option<AutoWorkOrderPatternlessMode>> = [
-  { value: "SKIP", label: "Atla", hint: `İşlem değeri (desen/gramaj) çözülemeyen grup için ${IE.tekilKucuk} açılmaz; onay sonucu elle açılmasını söyler (bugünkü davranış).` },
-  { value: "OPEN", label: "Hedef değersiz aç", hint: `İşlem değeri çözülemeyen grup için de ${IE.tekilKucuk} açılır; hedef değer boş kalır.` },
+  { value: "SKIP", label: "Atla", hint: `İşlem değeri (desen/gramaj) çözülemeyen grup için ${TERIM.terbiyeIsEmri.tekilKucuk} açılmaz; onay sonucu elle açılmasını söyler (bugünkü davranış).` },
+  { value: "OPEN", label: "Hedef değersiz aç", hint: `İşlem değeri çözülemeyen grup için de ${TERIM.terbiyeIsEmri.tekilKucuk} açılır; hedef değer boş kalır.` },
 ];
 
 export const FORM_APPROVAL_OPTIONS: ReadonlyArray<Option<IncomingDocFormApproval>> = [
-  { value: "SEPARATE", label: "Ayrı onay", hint: `${IE.tekil} formundan okutulan belge taslak kalır; Gelen Belgeler'den onaylanınca ${IE.tekilKucuk} açılır (bugünkü davranış).` },
-  { value: "WITH_WORK_ORDER", label: `${IE.tekil} ile birlikte`, hint: `Formdan okutulan belgeyi ${IE.tekilKucuk} açma izni olan kaydeder: belge, müşteri malı top ve ${IE.tekilKucuk} tek seferde açılır; ayrı onay adımı yok.` },
+  { value: "SEPARATE", label: "Ayrı onay", hint: `${TERIM.terbiyeIsEmri.tekil} formundan okutulan belge taslak kalır; Gelen Belgeler'den onaylanınca ${TERIM.terbiyeIsEmri.tekilKucuk} açılır (bugünkü davranış).` },
+  { value: "WITH_WORK_ORDER", label: `${TERIM.terbiyeIsEmri.tekil} ile birlikte`, hint: `Formdan okutulan belgeyi ${TERIM.terbiyeIsEmri.tekilKucuk} açma izni olan kaydeder: belge, müşteri malı top ve ${TERIM.terbiyeIsEmri.tekilKucuk} tek seferde açılır; ayrı onay adımı yok.` },
 ];
 
 type Pair<T extends string> = { server: T | undefined; value: T | undefined; set: (v: T) => void; fallback: T | undefined; dirty: boolean };
@@ -104,21 +103,21 @@ export function EntryModeFields({ draft, hasDefaultItem }: { draft: ReturnType<t
       <EnumField
         id="gb-batch-number-source"
         label="Parti numarası"
-        desc={`Belgeden açılan ${IE.cekimKucuk.bulunma}ki partinin numarası nereden gelsin. Belgeden alınırsa taslakta seçilen parti no kullanılır.`}
+        desc={`Belgeden açılan ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma}ki partinin numarası nereden gelsin. Belgeden alınırsa taslakta seçilen parti no kullanılır.`}
         pair={draft.batch}
         options={BATCH_NUMBER_SOURCE_OPTIONS}
       />
       <EnumField
         id="gb-auto-work-order-patternless"
-        label={`Gramajı çözülemeyen grupta otomatik ${IE.tekilKucuk}`}
-        desc={`Onaydan sonra otomatik ${IE.tekilKucuk} açılırken işlem değeri (desen/gramaj) belgeden çözülemeyen grup ne olsun. Otomatik ${IE.tekilKucuk} kapalıysa etkisizdir.`}
+        label={`Gramajı çözülemeyen grupta otomatik ${TERIM.terbiyeIsEmri.tekilKucuk}`}
+        desc={`Onaydan sonra otomatik ${TERIM.terbiyeIsEmri.tekilKucuk} açılırken işlem değeri (desen/gramaj) belgeden çözülemeyen grup ne olsun. Otomatik ${TERIM.terbiyeIsEmri.tekilKucuk} kapalıysa etkisizdir.`}
         pair={draft.patternless}
         options={AUTO_WORK_ORDER_PATTERNLESS_OPTIONS}
       />
       <EnumField
         id="gb-form-approval"
-        label={`${IE.tekil} formundan okutulan belge`}
-        desc={`${IE.tekil} oluşturma ekranında okutulan belge nasıl kaydedilsin. "${IE.tekil} ile birlikte" seçilirse ayrı onay (gelen-belge:approve) aranmaz; ${IE.tekilKucuk} açma izni yeter.`}
+        label={`${TERIM.terbiyeIsEmri.tekil} formundan okutulan belge`}
+        desc={`${TERIM.terbiyeIsEmri.tekil} oluşturma ekranında okutulan belge nasıl kaydedilsin. "${TERIM.terbiyeIsEmri.tekil} ile birlikte" seçilirse ayrı onay (gelen-belge:approve) aranmaz; ${TERIM.terbiyeIsEmri.tekilKucuk} açma izni yeter.`}
         pair={draft.approval}
         options={FORM_APPROVAL_OPTIONS}
       />
@@ -126,8 +125,8 @@ export function EntryModeFields({ draft, hasDefaultItem }: { draft: ReturnType<t
         <div data-testid="gb-refakat-auto-print">
           <FlagToggle
             title="Refakat kartını kendiliğinden yazdır"
-            summary={`Belgeden ${IE.tekilKucuk} açılınca refakat kartı hemen yazıcıya gönderilir.`}
-            desc={`Kapalı (varsayılan) = bugünkü davranış: kart ${IE.tekilKucuk} detayından elle basılır. Açıkken yazdırma penceresi iptal edilirse kart basılmamış sayılır.`}
+            summary={`Belgeden ${TERIM.terbiyeIsEmri.tekilKucuk} açılınca refakat kartı hemen yazıcıya gönderilir.`}
+            desc={`Kapalı (varsayılan) = bugünkü davranış: kart ${TERIM.terbiyeIsEmri.tekilKucuk} detayından elle basılır. Açıkken yazdırma penceresi iptal edilirse kart basılmamış sayılır.`}
             defaultOn={false}
             checked={draft.print.value === true}
             onChange={draft.print.set}

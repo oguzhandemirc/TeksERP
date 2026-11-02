@@ -64,9 +64,9 @@ const FILTERS: FilterDef[] = [
     // filter[woState]); rozet kolonuyla aynı semantik (work-order-rollup.ts).
     kind: "multi-select",
     key: "woState",
-    label: TERIM.terbiyeIsEmri.tekil,
+    get label() { return TERIM.terbiyeIsEmri.tekil; },
     options: [
-      { value: "NONE", label: "Terbiye iş emri yok" },
+      { value: "NONE", get label() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} yok`; } },
       { value: "PLANNED", label: "Planlandı" },
       { value: "IN_PROGRESS", label: "Üretimde" },
       { value: "COMPLETED", label: "Üretildi" },
@@ -320,7 +320,7 @@ export function OrdersPage() {
         fetchAll={fetchAll}
         search={search}
         onSearchChange={setSearch}
-        placeholder="Sipariş no, terbiye iş emri no, firma veya kumaş ara..."
+        placeholder={`Sipariş no, ${TERIM.terbiyeIsEmri.tekilKucuk} no, firma veya kumaş ara...`}
         table={table}
         exportName="Siparişler"
         actions={
@@ -388,7 +388,7 @@ export function OrdersPage() {
         )}
         selectionHint={
           canBulkCreateWorkOrder(productionEnabled)
-            ? "Terbiye iş emri açmak için bir veya daha fazla sipariş seçin."
+            ? `${TERIM.terbiyeIsEmri.cumleBasi.yalin} açmak için bir veya daha fazla sipariş seçin.`
             : null
         }
         bulkActions={

@@ -14,6 +14,7 @@ import { resolveReferenceList } from "../import-lookup";
 import { splitList } from "../import-coerce";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
 import { importKey } from "../import-key";
+import { TERIM } from "../../../constants/terim";
 
 const COLUMNS: ImportColumn[] = [
   {
@@ -72,12 +73,12 @@ export const fabricPropertyImportAdapter: ImportAdapter = {
   // Ad çakışması ÖNİZLEMEDE yakalanır (servisteki guard'ın ikizi) —
   // yoksa önizleme 'Yeni' der, uygulama 409 ile patlardı.
   nameGuard: { model: "fabricProperty", field: "name", label: "özellik", codeField: "code" },
-  notes: [
+  get notes() { return [
     "Özellik kodunu sistem üretir — YENİ özellik eklerken kod sütununu BOŞ bırakın.",
-    "İstasyon listesi YENİ kayıtta zorunludur: hiçbir istasyona bağlı olmayan özellik terbiye iş emri ekranlarında GÖRÜNMEZ.",
+    `İstasyon listesi YENİ kayıtta zorunludur: hiçbir istasyona bağlı olmayan özellik ${TERIM.terbiyeIsEmri.tekilKucuk} ekranlarında GÖRÜNMEZ.`,
     "Seçim tipli özellik en az bir değer ister; bayrak tipli değer listesi taşıyamaz.",
     "Değer listesi replace'tir — listede olmayan değer SİLİNMEZ, PASİFLEŞİR (geçmiş kayıtlar bozulmasın).",
-  ],
+  ]; },
 
   async findExisting(keys) {
     const rows = await prisma.fabricProperty.findMany({

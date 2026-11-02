@@ -2,6 +2,7 @@
 import type { ArchiveSpec } from "../master-data-archive.helper";
 import { LIVE_ROLL, LIVE_SWATCH, OPEN_MACHINE_RUN, OPEN_WEAVING_ORDER, OPEN_WORK_ORDER, openDemandLineWhere } from "../live-ref-where.helper";
 import { plannedColorStep } from "./route-plan-refs.helper";
+import { TERIM } from "../../../constants/terim";
 
 const NOT_ARCHIVED_ITEM = { lifecycleStatus: { not: "ARCHIVED" as const } };
 
@@ -38,7 +39,7 @@ export const COLOR_ARCHIVE: ArchiveSpec = {
     },
     {
       kind: "WORK_ORDER",
-      label: "Açık terbiye iş emri",
+      get label() { return `Açık ${TERIM.terbiyeIsEmri.tekilKucuk}`; },
       count: (db, id) => db.workOrder.count({ where: { targetColorId: id, ...OPEN_WORK_ORDER } }),
       list: async (db, id, take) =>
         (await db.workOrder.findMany({ where: { targetColorId: id, ...OPEN_WORK_ORDER }, take, select: { id: true, workOrderNumber: true, status: true } }))

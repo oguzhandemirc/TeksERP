@@ -32,6 +32,7 @@ import { OrderStatus, Prisma, RollStatus, WeavingOrderStatus } from "@prisma/cli
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { assertReplayPayloadMatches, type ReplayAlani } from "./idempotent-replay.helper";
+import { TERIM } from "../../constants/terim";
 
 /**
  * Token başına replay serileştirmesinin advisory uzayı (2 argümanlı form).
@@ -212,7 +213,7 @@ export function assertOrderReplayAlive(existing: {
 export function assertWorkOrderReplayAlive(existing: { workOrderNumber: string; isActive: boolean; status: string }): void {
   if (existing.isActive && existing.status !== "CANCELLED") return;
   throw AppError.conflict(
-    `Bu form daha önce kaydedilmiş ama terbiye iş emri (${existing.workOrderNumber}) İPTAL edilmiş ya da arşivlenmiş — aynı gönderim tekrar edilemez. Yeni terbiye iş emri için formu kapatıp yeniden açın.`,
+    `Bu form daha önce kaydedilmiş ama ${TERIM.terbiyeIsEmri.tekilKucuk} (${existing.workOrderNumber}) İPTAL edilmiş ya da arşivlenmiş — aynı gönderim tekrar edilemez. Yeni ${TERIM.terbiyeIsEmri.tekilKucuk} için formu kapatıp yeniden açın.`,
     { code: "WORK_ORDER_CANCELLED", workOrderNumber: existing.workOrderNumber },
   );
 }

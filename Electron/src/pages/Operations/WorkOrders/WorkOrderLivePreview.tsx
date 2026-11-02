@@ -22,6 +22,7 @@ import type { DesignerStep } from "./RouteDesignerDialog";
 import { LastBatchBadge } from "./LastBatchBadge";
 import type { PickedOrderLine } from "./OrderPickerDialog";
 import { loadAllForPicker } from "@/lib/picker-loader";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   control: Control<WorkOrderFormValues>;
@@ -129,7 +130,7 @@ export function WorkOrderLivePreview({
       <div className="flex shrink-0 items-center gap-2 border-b bg-muted/40 px-3 py-2.5">
         <ClipboardList className="h-4 w-4 shrink-0 text-muted-foreground" />
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Önizleme · Terbiye İş Emri
+          Önizleme · {TERIM.terbiyeIsEmri.tekil}
         </span>
         <Badge variant="muted" className="ml-auto text-[10px]">
           {isEdit ? "Düzenleniyor" : "Yeni"}

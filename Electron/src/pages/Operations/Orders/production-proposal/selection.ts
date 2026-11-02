@@ -1,5 +1,6 @@
 // Üretim önerisi diyaloğunun saf mantığı (SY-M3): per-kayıt seçim, uygula gövdesi, dışlanan satır cümleleri.
 import type { ProductionProposal, ProposalApplyBody } from "./types";
+import { TERIM } from "@/lib/terim";
 
 export interface ProposalSelection {
   weaving: ReadonlySet<string>;
@@ -54,7 +55,7 @@ const EXCLUDED_REASON: Record<string, string> = {
   ORDER_LINE_ALREADY_PLANNED: "zaten planlanmış",
   ORDER_LINE_CLOSED: "açık metresi kalmamış",
   ITEM_NOT_WOVEN: "dokunan ürün değil (çözgü/atkı tanımı yok)",
-  ROUTE_MISSING: "rota çözülemedi — terbiye iş emrini formdan açın",
+  get ROUTE_MISSING() { return `rota çözülemedi — ${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} formdan açın`; },
 };
 
 export function excludedReason(code: string): string {

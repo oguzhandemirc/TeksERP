@@ -115,7 +115,7 @@ export function WorkOrderFormPage() {
       // ⚠️ Tercih KAPALIYKEN de yazılır — anahtarı sonra çeviren kullanıcı boş
       // bir hafızayla karşılaşmasın. Okuma tarafı `pickDefaultFirmId`.
       rememberLastSubcontractors(payload);
-      toastServerSuccess(res, "Terbiye iş emri oluşturuldu.");
+      toastServerSuccess(res, `${TERIM.terbiyeIsEmri.cumleBasi.yalin} oluşturuldu.`);
       fireConfetti();
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
       // Siparişten üretim emri açıldı → sipariş listesindeki "İş Emri" rollup
@@ -132,7 +132,7 @@ export function WorkOrderFormPage() {
     mutationFn: (payload: CreatePayload) =>
       workOrderService.replace(id!, payload as unknown as Partial<WorkOrder>),
     onSuccess: (res) => {
-      toastServerSuccess(res, "Terbiye iş emri güncellendi.");
+      toastServerSuccess(res, `${TERIM.terbiyeIsEmri.cumleBasi.yalin} güncellendi.`);
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
       void qc.invalidateQueries({ queryKey: ["work-order-detail", id] });
       // Tebdil/güncelleme bağları değiştirebilir → sipariş rollup rozetini tazele.
@@ -175,7 +175,7 @@ export function WorkOrderFormPage() {
         )}
         {notFound && (
           <div className="py-16 text-center text-sm text-muted-foreground">
-            Terbiye iş emri bulunamadı.
+            {TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı.
           </div>
         )}
         {withEntry && <IsEmriGiris key={location.key} start={seed?.oie ?? null} renderManual={renderForm} />}

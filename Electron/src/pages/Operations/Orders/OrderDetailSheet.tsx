@@ -41,6 +41,7 @@ import { OrderShipmentsCard } from "./OrderShipmentsCard";
 import { ProductionProposalButton } from "./production-proposal/ProductionProposalButton";
 import type { Order, OrderLine } from "./types";
 import { useOrderLineCustomerNames } from "./useOrderLineCustomerNames";
+import { TERIM } from "@/lib/terim";
 
 /** Tek iş emri = tek kumaş+renk+en. Kalem imzası bu üçlüden türer. */
 const lineSig = (l: OrderLine) => `${l.itemId}::${l.colorId ?? ""}::${l.width ?? ""}`;
@@ -322,7 +323,7 @@ export function OrderDetailSheet({
                   <p>
                     Aynı <span className="font-medium">kumaş · renk · en</span> kombinasyonundaki
                     kalemleri işaretle, ardından{" "}
-                    <span className="font-medium">Terbiye iş emri oluştur</span>. Uyumsuz kalemler
+                    <span className="font-medium">{TERIM.terbiyeIsEmri.cumleBasi.yalin} oluştur</span>. Uyumsuz kalemler
                     otomatik gri olur.
                   </p>
                 </div>
@@ -367,7 +368,7 @@ export function OrderDetailSheet({
                             disabled={dimmed}
                             onCheckedChange={() => toggleLine(line.id)}
                             className="mt-0.5 shrink-0"
-                            aria-label="Kalemi terbiye iş emri için seç"
+                            aria-label={`Kalemi ${TERIM.terbiyeIsEmri.tekilKucuk} için seç`}
                             title={dimmed ? reason ?? undefined : undefined}
                           />
                         )}
@@ -503,7 +504,7 @@ export function OrderDetailSheet({
                         className="gap-1.5 bg-success text-success-foreground shadow-sm transition-all duration-150 hover:bg-success/85 hover:shadow-md hover:shadow-success/40 hover:-translate-y-0.5 active:translate-y-0"
                       >
                         <Factory className="h-3.5 w-3.5" />
-                        Terbiye iş emri oluştur{selectedCount > 0 ? ` (${selectedCount})` : ""}
+                        {TERIM.terbiyeIsEmri.cumleBasi.yalin} oluştur{selectedCount > 0 ? ` (${selectedCount})` : ""}
                       </Button>
                     </PermissionGate>
                   )}

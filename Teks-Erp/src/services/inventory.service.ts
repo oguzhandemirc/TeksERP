@@ -216,6 +216,7 @@ import { assertEmanetWritableTx, resolveOwnerFromReceiptTx } from "./helpers/ema
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
 import { assertCariNotHeldTx } from "./helpers/cari-hold.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
+import { TERIM } from "../constants/terim";
 
 export interface RollStats {
   totalCount: number;
@@ -3619,7 +3620,7 @@ export class InventoryService {
       }
       if (activeAtStation) {
         throw AppError.conflict(
-          "Bu top bir istasyonda/terbiye iş emrinde aktif — iptal için önizlemeyi onaylamanız gerekiyor.",
+          `Bu top bir istasyonda/${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} aktif — iptal için önizlemeyi onaylamanız gerekiyor.`,
         );
       }
     }
@@ -4864,7 +4865,7 @@ export class InventoryService {
       // FREE_STOCK statüsüyle bir iş emri adımında duran top (ham kesim devamı
       // gibi) yine istasyon akışının malıdır — prepareRawForSale ile aynı guard.
       throw AppError.conflict(
-        "Bu top bir terbiye iş emri adımına bağlı — metrajı istasyon akışı belirler; önce üretimden ayırın.",
+        `Bu top bir ${TERIM.terbiyeIsEmri.tekilKucuk} adımına bağlı — metrajı istasyon akışı belirler; önce üretimden ayırın.`,
       );
     }
 
@@ -4920,7 +4921,7 @@ export class InventoryService {
           throw AppError.conflict("Top bu sırada bir sevkiyata atandı — önce sevkiyattan çıkarın.");
         }
         if (fresh.currentStepId) {
-          throw AppError.conflict("Top bu sırada bir terbiye iş emrine bağlandı — önce üretimden ayırın.");
+          throw AppError.conflict(`Top bu sırada bir ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlandı — önce üretimden ayırın.`);
         }
         throw AppError.conflict(
           "Topun metrajı bu sırada değişti (eşzamanlı düzeltme/işlem) — güncel değeri kontrol edip tekrar deneyin.",
@@ -5014,7 +5015,7 @@ export class InventoryService {
       throw AppError.badRequest(`Yalnız STOCK topu satışa hazırlanabilir (bu top: ${roll.status})`);
     }
     if (roll.shipmentId) throw AppError.conflict("Top bir sevkiyatta — önce çıkarın");
-    if (roll.currentStepId) throw AppError.conflict("Top bir terbiye iş emri adımında — önce üretimden çıkarın");
+    if (roll.currentStepId) throw AppError.conflict(`Top bir ${TERIM.terbiyeIsEmri.tekilKucuk} adımında — önce üretimden çıkarın`);
     const openDispatch = await prisma.subcontractorDispatchItem.findFirst({
       where: { rollId, dispatch: { cancelledAt: null } },
       select: { id: true },
@@ -5108,10 +5109,10 @@ export class InventoryService {
       throw AppError.badRequest("İptal edilmiş mal kabul üzerinden yeni kumaş açılamaz");
     }
     if (receipt.workOrder.status === WorkOrderStatus.COMPLETED) {
-      throw AppError.conflict("Terbiye iş emri tamamlanmış");
+      throw AppError.conflict(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} tamamlanmış`);
     }
     if (!receipt.workOrder.targetItemId) {
-      throw AppError.badRequest("Terbiye iş emrinde hedef ürün (targetItem) tanımlı değil");
+      throw AppError.badRequest(`${TERIM.terbiyeIsEmri.cumleBasi.bulunma} hedef ürün (targetItem) tanımlı değil`);
     }
 
     const step = await prisma.workOrderStep.findUnique({
@@ -5120,9 +5121,9 @@ export class InventoryService {
         station: { select: STEP_FLOW_SELECT },
       },
     });
-    if (!step) throw AppError.notFound("Terbiye iş emri adımı bulunamadı");
+    if (!step) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} adımı bulunamadı`);
     if (step.workOrderId !== receipt.workOrderId) {
-      throw AppError.badRequest("Adım bu terbiye iş emrine ait değil");
+      throw AppError.badRequest(`Adım bu ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} ait değil`);
     }
     if (!stepRunsStepFlow(step.station)) {
       throw AppError.badRequest(
@@ -5162,16 +5163,16 @@ export class InventoryService {
         throw AppError.conflict("Mal kabul bu sırada iptal edildi — açık kumaş açılamaz");
       }
       if (fr.workOrder.status === WorkOrderStatus.COMPLETED) {
-        throw AppError.conflict("Terbiye iş emri bu sırada tamamlandı — açık kumaş açılamaz");
+        throw AppError.conflict(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bu sırada tamamlandı — açık kumaş açılamaz`);
       }
       if (!fr.workOrder.targetItemId) {
-        throw AppError.badRequest("Terbiye iş emrinde hedef ürün (targetItem) tanımlı değil");
+        throw AppError.badRequest(`${TERIM.terbiyeIsEmri.cumleBasi.bulunma} hedef ürün (targetItem) tanımlı değil`);
       }
       const fs = await tx.workOrderStep.findUnique({
         where: { id: data.stepId },
         select: { status: true },
       });
-      if (!fs) throw AppError.notFound("Terbiye iş emri adımı bulunamadı");
+      if (!fs) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} adımı bulunamadı`);
       if (fs.status === StepStatus.COMPLETED || fs.status === StepStatus.SKIPPED) {
         throw AppError.conflict(`Adım bu sırada kapandı (${fs.status}) — açık kumaş açılamaz`);
       }

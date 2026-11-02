@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { listAvailableOrderLines, num, type AvailableOrderLine } from "@/pages/Operations/Orders/availableLines";
 import { formatDay } from "./types";
+import { TERIM } from "@/lib/terim";
 
 const fmt = (n: number | null) => (n === null ? "ölçülmüyor" : `${n.toLocaleString("tr-TR", { maximumFractionDigits: 0 })} m`);
 
@@ -49,7 +50,7 @@ function LineRow({ l, checked, onToggle, disabled = false }: { l: AvailableOrder
       <td className="p-2 text-right tabular-nums">
         <div className="font-medium">{fmt(num(l.netOpenQty ?? l.openQty))}</div>
         <div className="text-[11px] text-muted-foreground">{fmt(num(l.quantity))} istendi</div>
-        {l.hasWorkOrder && <Badge variant="muted" className="mt-0.5 text-[10px]">terbiye iş emri var</Badge>}
+        {l.hasWorkOrder && <Badge variant="muted" className="mt-0.5 text-[10px]">{TERIM.terbiyeIsEmri.tekilKucuk} var</Badge>}
       </td>
       <td className="p-2 text-xs">{formatDay(l.deadline)}</td>
     </tr>

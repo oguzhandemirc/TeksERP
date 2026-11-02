@@ -2,6 +2,7 @@
 // ortak zaman çizelgesidir (`EventTimelinePanel`: grup çipleri, tablo, "daha fazla", altbilgi, Excel).
 import { EventTimelinePanel } from "@/components/timeline/EventTimeline";
 import { EVENT_COLUMNS, getWorkOrderEvents, type TimelineGroup } from "./events";
+import { TERIM } from "@/lib/terim";
 
 export function WorkOrderEventsPanel({ workOrder }: { workOrder: { id: string; workOrderNumber: string } }) {
   return (
@@ -12,7 +13,7 @@ export function WorkOrderEventsPanel({ workOrder }: { workOrder: { id: string; w
       columns={EVENT_COLUMNS}
       testId="is-emri-hareketleri"
       fileName={`${workOrder.workOrderNumber}-hareketler`}
-      emptyText="Bu terbiye iş emrinde henüz kayıtlı hareket yok."
+      emptyText={`Bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} henüz kayıtlı hareket yok.`}
     />
   );
 }

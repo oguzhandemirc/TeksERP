@@ -6,6 +6,7 @@ import {
   DEFAULT_COMPANY_LETTERHEAD,
 } from './documentConfig';
 import { applyServerFactoryTimezone } from '../lib/factory-time';
+import { applyTermRegime } from '../lib/terim-rejim';
 
 // =============================================================================
 // Public feature flag'ler — backend: GET /api/feature-flags (auth-only, özel
@@ -314,6 +315,7 @@ export const featureFlagService = {
       .then((r) => {
         const flags = r.data.data ?? DEFAULT_FEATURE_FLAGS;
         applyServerFactoryTimezone(flags);
+        applyTermRegime(r.data.data);
         return flags;
       }),
 };

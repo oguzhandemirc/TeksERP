@@ -166,8 +166,8 @@ export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; m
   },
   {
     kind: "WORK_ORDER_PLAN_CHANGE",
-    title: `${TERIM.terbiyeIsEmri.tekil} Plan Düzeltmesi`,
-    hint: "Tablette terbiye iş emrinin rengi ya da eni değiştirilirken seçilen sebep. Seçilen metin terbiye iş emrinin Hareketler listesinde görünür.",
+    get title() { return `${TERIM.terbiyeIsEmri.tekil} Plan Düzeltmesi`; },
+    get hint() { return `Tablette ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} rengi ya da eni değiştirilirken seçilen sebep. Seçilen metin ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} Hareketler listesinde görünür.`; },
   },
   {
     kind: "INSPECTION_VOID",

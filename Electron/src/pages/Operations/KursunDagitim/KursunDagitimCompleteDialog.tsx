@@ -17,6 +17,7 @@ import { GramajChoiceButtons } from "@/components/kursun/GramajChoiceButtons";
 import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
 import { kursunDagitimService } from "./service";
 import type { KursunDistributionAssignedRow } from "./types";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   open: boolean;
@@ -92,7 +93,7 @@ export function KursunDagitimCompleteDialog({
             İşi bitir — kurşun son adım
           </DialogTitle>
           <DialogDescription>
-            <span className="font-mono">{row?.workOrderNumber ?? "Terbiye iş emri"}</span> ·{" "}
+            <span className="font-mono">{row?.workOrderNumber ?? `${TERIM.terbiyeIsEmri.cumleBasi.yalin}`}</span> ·{" "}
             {preview?.machineName ?? row?.machineName ?? "—"} makinesi
           </DialogDescription>
         </DialogHeader>
@@ -192,8 +193,8 @@ export function KursunDagitimCompleteDialog({
                   )}
                   <li>
                     {preview.workOrderWillComplete
-                      ? "Terbiye iş emri KAPANACAK (Tamamlandı)."
-                      : "Terbiye iş emrinde başka açık adım var — terbiye iş emri açık kalır."}
+                      ? `${TERIM.terbiyeIsEmri.cumleBasi.yalin} KAPANACAK (Tamamlandı).`
+                      : `${TERIM.terbiyeIsEmri.cumleBasi.bulunma} başka açık adım var — ${TERIM.terbiyeIsEmri.tekilKucuk} açık kalır.`}
                   </li>
                 </ul>
               </div>

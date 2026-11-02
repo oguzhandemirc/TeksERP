@@ -49,7 +49,7 @@ export function UpcomingWorkOrders() {
         ) : isError ? (
           <EmptyState message="Veri alınamadı." />
         ) : !data || data.length === 0 ? (
-          <EmptyState message="Önümüzdeki 7 gün için planlanan terbiye iş emri yok." />
+          <EmptyState message={`Önümüzdeki 7 gün için planlanan ${TERIM.terbiyeIsEmri.tekilKucuk} yok.`} />
         ) : (
           <ul className="divide-y divide-border/40">
             {data.map((wo) => (

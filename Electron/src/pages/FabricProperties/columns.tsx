@@ -2,6 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import type { FabricProperty } from "./types";
+import { TERIM } from "@/lib/terim";
 
 export const fabricPropertyColumns: ColumnDef<FabricProperty>[] = [
   {
@@ -73,7 +74,7 @@ export const fabricPropertyColumns: ColumnDef<FabricProperty>[] = [
           <Badge
             variant="outline"
             className="border-warning/60 text-warning"
-            title="Bu özellik hiçbir istasyona bağlı değil — hiçbir terbiye iş emrinde seçilemez. Düzenle'den istasyon ata."
+            title={`Bu özellik hiçbir istasyona bağlı değil — hiçbir ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} seçilemez. Düzenle'den istasyon ata.`}
           >
             İstasyon atanmamış
           </Badge>

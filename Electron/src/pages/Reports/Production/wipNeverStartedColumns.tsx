@@ -2,11 +2,12 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { fmtNum } from "../_components/formatters";
 import type { WipScorecard } from "./wipScorecard";
+import { TERIM } from "@/lib/terim";
 
 const ageTone = (d: number | null) => (d === null ? "" : d > 7 ? "text-destructive" : d > 3 ? "text-warning" : "");
 
 export const woColumns: ColumnDef<WipScorecard["neverStarted"][number], unknown>[] = [
-  { accessorKey: "workOrderNumber", header: "Terbiye İş Emri" },
+  { accessorKey: "workOrderNumber", get header() { return `${TERIM.terbiyeIsEmri.tekil}`; } },
   { accessorKey: "status", header: "Durum" },
   {
     accessorKey: "daysOpen",

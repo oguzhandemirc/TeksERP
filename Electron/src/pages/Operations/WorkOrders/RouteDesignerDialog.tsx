@@ -19,6 +19,7 @@ import { RouteDesignerStepRow } from "./RouteDesignerStepRow";
 import { RouteDesignerTemplatePanel } from "./RouteDesignerTemplatePanel";
 import { useDesignerSteps } from "./useDesignerSteps";
 import type { FasonStepPlan } from "./FasonPlanningDialog";
+import { TERIM } from "@/lib/terim";
 
 export interface DesignerStep {
   clientId: string;
@@ -217,7 +218,7 @@ export function RouteDesignerDialog({
           <DialogHeader>
             <DialogTitle>Özel Rota Tasarla</DialogTitle>
             <DialogDescription>
-              Bu terbiye iş emrine özel rota tasarla. İstersen var olan bir şablondan başla,
+              Bu {TERIM.terbiyeIsEmri.cekimKucuk.yonelme} özel rota tasarla. İstersen var olan bir şablondan başla,
               istersen sıfırdan. Sonunda yeni şablon olarak da kaydedebilirsin.
             </DialogDescription>
           </DialogHeader>

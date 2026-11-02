@@ -12,6 +12,7 @@ import { ReportErrorCard } from "../Finance/ReportErrorCard";
 import { chainColumns } from "./productionChainColumns";
 import { ChainBucketsPanel } from "./ChainBucketsPanel";
 import { buildChainExport, CHAIN_STATUS_ALL, CHAIN_STATUS_OPTIONS, chainFilterNotes, chainParams, productionChainApi, type ChainRow } from "./productionChain";
+import { TERIM } from "@/lib/terim";
 
 // Müşteri ekseni sunucudan (`meta.secenekler.customerId`, süzgeçten bağımsız); statusFilter + gecikmiş satır düzeyinde sunucuda süzülür.
 const AXIS_KEYS = ["customerId"] as const;
@@ -39,7 +40,7 @@ export function ProductionChainPage() {
     <ReportPageLayout
       reportKey="dokuma/zincir"
       title="Üretim Zinciri"
-      description="Her satır bir sipariş kalemi: terbiye iş emri → dokuma iş emri → levent. Hücreye tıklamak o belgeyi açar."
+      description={`Her satır bir sipariş kalemi: ${TERIM.terbiyeIsEmri.tekilKucuk} → dokuma iş emri → levent. Hücreye tıklamak o belgeyi açar.`}
       filters={
         <div className="flex flex-wrap items-end gap-2">
           <ReportAxisBar reportKey="dokuma/zincir" axes={axes} secenekler={secenekler} eksenler={AXIS_KEYS} />

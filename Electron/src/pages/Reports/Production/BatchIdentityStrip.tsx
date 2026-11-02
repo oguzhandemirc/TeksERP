@@ -2,6 +2,7 @@ import { AlertTriangle } from "lucide-react";
 import { TraceLink } from "@/components/audit/TraceLink";
 import { fmtDate } from "../_components/formatters";
 import type { BatchTrace } from "./batchTrace";
+import { TERIM } from "@/lib/terim";
 
 /**
  * Parti kartı (kimlik şeridi). Numaranın benzersiz olmadığı ekranda da yazılı:
@@ -14,14 +15,14 @@ export function BatchIdentityStrip({ batch }: { batch: BatchTrace["batch"] }) {
     <div className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
       <span>
-        <strong>{batch.batchNumber}</strong> · {wo ? `Terbiye İş Emri ${wo}` : "terbiye iş emri bağı yok"} ·{" "}
+        <strong>{batch.batchNumber}</strong> · {wo ? `${TERIM.terbiyeIsEmri.tekil} ${wo}` : `${TERIM.terbiyeIsEmri.tekilKucuk} bağı yok`} ·{" "}
         {fmtDate(batch.createdAt)}. Parti numarası benzersiz değildir; bu döküm{" "}
         <strong>seçtiğiniz partiye</strong> aittir.
       </span>
       <TraceLink
         className="ml-auto shrink-0"
         recordNo={wo}
-        title={`Terbiye İş Emri ${wo ?? ""} için işlem geçmişi (Etkinlik → İşlemler)`}
+        title={`${TERIM.terbiyeIsEmri.tekil} ${wo ?? ""} için işlem geçmişi (Etkinlik → İşlemler)`}
       />
     </div>
   );

@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   remainingSteps: { stepId: string; stationName: string; stepSequence: number }[];
@@ -30,7 +31,7 @@ export function WorkOrderCompleteEffects({ remainingSteps, dispositionCount }: P
           </li>
         )}
         <li>
-          Terbiye iş emri durumu{" "}
+          {TERIM.terbiyeIsEmri.cumleBasi.yalin} durumu{" "}
           <Badge variant="muted" className="text-[10px]">
             TAMAMLANDI
           </Badge>{" "}

@@ -2,6 +2,7 @@
 // satırın başlığını sunucudan hazır alır; istemcide ikinci sözlük tutulmaz).
 
 import type { WorkOrderTrackedField } from "./workorder-event-fields";
+import { TERIM } from "./terim";
 
 /** Olay grupları — süzgeç çipleri bu sırayla basılır. */
 export const TIMELINE_GROUPS = ["DURUM", "PLAN", "SIPARIS", "PARTI", "FASON", "TAMBUR", "KAPANIS"] as const;
@@ -28,7 +29,7 @@ export const WORK_ORDER_FIELD_LABEL: Record<WorkOrderTrackedField, string> = {
   plannedStartDate: "Planlanan başlangıç",
   plannedEndDate: "Planlanan bitiş",
   routeTemplateId: "Rota",
-  type: "Terbiye iş emri tipi",
+  get type() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} tipi`; },
   isActive: "Arşiv",
 };
 
@@ -49,13 +50,13 @@ export const WORK_ORDER_ROLL_ATTRIBUTE_LABEL: Record<string, string> = {
 
 /** Olayı tetikleyen işlem (`WorkOrderEvent.trigger`) → okunur ad. */
 export const WORK_ORDER_TRIGGER_LABEL: Record<string, string> = {
-  WO_CREATE: "Terbiye iş emri açılışı",
+  get WO_CREATE() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} açılışı`; },
   WO_SPLIT_CLONE: "Parti ayırma / devir",
   WO_LOCK: "Kilitle / başlat",
   AUTO_START: "İlk adım başladı",
   STEP_ACTIVE: "Adım başladı",
   MANUAL_COMPLETE: "Elle kapatma",
-  WO_CANCEL: "Terbiye iş emri iptali",
+  get WO_CANCEL() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} iptali`; },
   ORDER_CANCEL: "Sipariş iptali",
   WO_SPLIT_SUPERSEDE: "Tüm partiler devredildi",
   WO_ARCHIVE: "Arşive kaldırma",

@@ -99,6 +99,7 @@ import { assertRollsRevivable } from "./helpers/item-usage.helper";
 import { processMeterNumber, requireProcessMeter } from "./helpers/roll-error-meter.helper";
 import { recordRollDefectTx } from "./helpers/roll-defect.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE, isActionableRollError } from "./helpers/roll-error-scope.helper";
+import { TERIM } from "../constants/terim";
 
 /** Muayene satırı KK2/Tambur silme ucundan silinemez (belge parçası; düzeltme revizyondur). */
 const INSPECTION_ERROR_IMMUTABLE_MESSAGE = "Muayene hatası buradan silinemez; muayeneyi panelden düzeltin";
@@ -985,7 +986,7 @@ export class KursunQcService {
         },
       },
     });
-    if (!step) throw AppError.notFound("Terbiye iş emri adımı bulunamadı");
+    if (!step) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} adımı bulunamadı`);
     if (!stepRunsStepFlow(step.station)) {
       throw AppError.badRequest(STEP_FLOW_ERROR);
     }
@@ -1977,7 +1978,7 @@ export class KursunQcService {
 
     return {
       reason:
-        "Kurşun dağıtımı açık — bu terbiye iş emri Kurşun Planlama ekranından bir kurşun makinesine dağıtılacak. Tablette işlem yapılmaz.",
+        `Kurşun dağıtımı açık — bu ${TERIM.terbiyeIsEmri.tekilKucuk} Kurşun Planlama ekranından bir kurşun makinesine dağıtılacak. Tablette işlem yapılmaz.`,
     };
   }
 

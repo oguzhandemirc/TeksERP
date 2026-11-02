@@ -34,6 +34,7 @@ import {
 } from "./live-ref-where.helper";
 import { AuditService } from "../audit.service";
 import { ACTIVE_ITEM_PRICE } from "./item-price-validity.helper";
+import { TERIM } from "../../constants/terim";
 
 export { ITEM_LIFECYCLE_LABEL, itemLifecycleWriteData } from "./item-lifecycle-data.helper";
 
@@ -49,7 +50,7 @@ export type ItemLiveRefKind =
 
 export const ITEM_LIVE_REF_KINDS: ReadonlyArray<{ kind: ItemLiveRefKind; label: string }> = [
   { kind: "ROLL", label: "Canlı top" },
-  { kind: "WORK_ORDER", label: "Açık terbiye iş emri" },
+  { kind: "WORK_ORDER", get label() { return `Açık ${TERIM.terbiyeIsEmri.tekilKucuk}`; } },
   { kind: "ORDER_LINE", label: "Açık sipariş kalemi" },
   { kind: "PURCHASE_ORDER_LINE", label: "Açık alış siparişi kalemi" },
   { kind: "WEAVING_ORDER", label: "Açık dokuma iş emri" },

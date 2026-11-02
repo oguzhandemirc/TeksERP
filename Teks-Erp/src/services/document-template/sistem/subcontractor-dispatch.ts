@@ -185,7 +185,8 @@ const metreDot = (path: string) =>
 const cmdRow = (label: string, value: string) =>
   `<div class="cmd-lbl">${label}</div><div class="cmd-sep">:</div><div class="cmd-val">${value}</div>`;
 
-const html = String.raw`<div class="sheet">
+// K20: iş emri adı rejimden çözülür — HTML okuma anında kurulur (modül düzeyinde donmaz).
+const htmlKur = (): string => String.raw`<div class="sheet">
 {%- assign parti_html = "" -%}
 {%- if ayar.sections.batchInfo and ${filled("belge.parti_no")} -%}{%- capture parti_html -%}<div class="ln ln-batch">Parti No: <b>{{ belge.parti_no }}</b></div>{%- endcapture -%}{%- endif -%}
 {%- assign kumas_sayisi = tablolar.kumaslar | size -%}
@@ -292,7 +293,7 @@ ${STAMPS}
 export const subcontractorDispatchSystem: SystemEquivalent = {
   docType: "SUBCONTRACTOR_DISPATCH",
   editMode: "CODE",
-  html,
+  get html() { return htmlKur(); },
   css,
   pageSettings: (settings) => pageSettingsFor(settings, marginOf(settings)),
   tableBindings: {},

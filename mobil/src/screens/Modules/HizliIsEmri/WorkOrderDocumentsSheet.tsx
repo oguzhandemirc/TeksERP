@@ -14,6 +14,7 @@ import { colors, spacing, radius } from '../../../theme';
 import { useDeviceSettingsStore, type DocPageSize } from '../../../store/deviceSettingsStore';
 import { upperTr } from '../../../utils/trCase';
 import { formatFactory } from '../../../lib/factory-time';
+import { TERIM } from '../../../lib/terim';
 
 // =============================================================================
 // İŞ EMRİ BELGELERİ — sahadaki operatör iş emrine basınca TÜM belgelerine
@@ -190,8 +191,8 @@ export default function WorkOrderDocumentsSheet({
       keyExtractor={(r) => r.key}
       renderItem={renderItem}
       emptyIcon="file-document-outline"
-      emptyText="Bu terbiye iş emrine ait belge yok"
-      emptyHint="Refakat kartı terbiye iş emri açılışında doğar; fason belgeleri sevk/kabul yapıldıkça listelenir."
+      emptyText={`Bu ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} ait belge yok`}
+      emptyHint={`Refakat kartı ${TERIM.terbiyeIsEmri.tekilKucuk} açılışında doğar; fason belgeleri sevk/kabul yapıldıkça listelenir.`}
       hint={{
         text: 'Satıra dokun → yazdırılır. Kâğıt boyu için sağdaki kutuya dokun (bu cihazda hatırlanır).',
         icon: 'printer',

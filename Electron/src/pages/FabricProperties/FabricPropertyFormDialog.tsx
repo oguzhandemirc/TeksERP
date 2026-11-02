@@ -16,6 +16,7 @@ import {
 import type { FabricProperty } from "./types";
 
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
+import { TERIM } from "@/lib/terim";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -179,7 +180,7 @@ export function FabricPropertyFormDialog({
             label="Bu özelliği uygulayan istasyonlar"
             error={form.formState.errors.stationIds}
             required
-            hint="Terbiye iş emri rotasında bu istasyonlardan biri varsa özellik seçilebilir. Boş bırakılamaz — istasyonsuz özellik hiçbir terbiye iş emrinde görünmez."
+            hint={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} rotasında bu istasyonlardan biri varsa özellik seçilebilir. Boş bırakılamaz — istasyonsuz özellik hiçbir ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} görünmez.`}
           >
             <Controller
               control={form.control}

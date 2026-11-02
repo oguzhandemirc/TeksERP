@@ -107,8 +107,8 @@ export const productionTiles: DefinitionTile[] = [
   },
   {
     key: "product-recipes",
-    title: `${TERIM.terbiyeIsEmri.tekil} Şablonları`,
-    description: "Kumaş + renk + özellik + en + rota — hazır terbiye iş emri şablonları",
+    get title() { return `${TERIM.terbiyeIsEmri.tekil} Şablonları`; },
+    get description() { return `Kumaş + renk + özellik + en + rota — hazır ${TERIM.terbiyeIsEmri.tekilKucuk} şablonları`; },
     icon: FlaskConical,
     to: "/definitions/product-recipes",
     group: "production",
