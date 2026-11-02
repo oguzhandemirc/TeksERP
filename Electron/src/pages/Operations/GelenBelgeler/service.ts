@@ -84,11 +84,21 @@ export async function getSuggestions(noteId: string): Promise<NoteMatchSuggestio
  * Onay. 409 `TOTAL_MISMATCH`/`DELIVERY_NOTE_PAGES_MISSING` diyalogda gerekçe ister — toast'u
  * diyalog yazar, apiClient'ınki bastırılır (tek hata yüzeyi).
  */
-export async function approveNote(id: string, varianceReason: string | null, processChoices: readonly ProcessChoice[] = []): Promise<{ result: ApproveResult; warnings: string[] }> {
+export async function approveNote(
+  id: string,
+  varianceReason: string | null,
+  processChoices: readonly ProcessChoice[] = [],
+  opts: { routeTemplateId?: string | null } = {},
+): Promise<{ result: ApproveResult; warnings: string[] }> {
   // Boş seçimde alan gönderilmez: gövde eski backend'in katı şemasıyla da (strictObject) aynı kalır.
+  // `routeTemplateId` (P3 "Belge okut"): onaydan sonra iş emri SEÇİLEN rotayla açılır (öneri zinciri yerine).
   const r = await apiClient.post<ApiResponse<ApproveResult>>(
     `${BASE}/irsaliyeler/${id}/onay`,
-    { ...(varianceReason ? { varianceReason } : {}), ...(processChoices.length ? { processChoices } : {}) },
+    {
+      ...(varianceReason ? { varianceReason } : {}),
+      ...(processChoices.length ? { processChoices } : {}),
+      ...(opts.routeTemplateId ? { routeTemplateId: opts.routeTemplateId } : {}),
+    },
     { suppressErrorToast: true },
   );
   return { result: r.data.data, warnings: r.data.warnings ?? [] };

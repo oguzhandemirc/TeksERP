@@ -5,6 +5,8 @@
 // panelin kullandığı girdiyle MEVCUT `WorkOrderService.quickStart`ı çağırır (rota = planın `suggestRoute` önerisi, hedef =
 // `targetValues` + bayrakları). Denetim noktası ONAY kalır: bu dosya yalnız onay APPROVED/PARTIAL doğurduktan SONRA
 // koşar, best-effort'tur — düşen grup onayı geri sarmaz, sonuç grup başına Türkçe nedenle döner.
+// Açık rota isteği (onay gövdesi `routeTemplateId`, iş emri ekranından "Belge okut"): ayardan bağımsız koşar, rota = istenen;
+// istek onaydan ÖNCE `assertRouteOverride` ile doğrulanır.
 // Token belirlenimlidir: `uuidv5(noteId | grup anahtarı | bağlanacak top kümesi)` — aynı topları ikinci kez gönderen
 // koşum (yeniden onay, yarıda kalma) aynı iş emrini replay eder; PARTIAL yeniden onayında yeni doğan toplar yeni kümedir.
 // =============================================================================
@@ -16,6 +18,8 @@ import { buildWorkOrderPlan, WORK_ORDER_PLAN_STATUSES, type PlanGroup } from "./
 import type { ApproveResult } from "./gelen-belge-onay.service";
 import { readAutoWorkOrderPatternless, readIncomingDocAutoWorkOrder, readProductionEnabled } from "./system-setting.service";
 import { WorkOrderService } from "./workorder.service";
+import { factoryRouteProblem } from "./gelen-belge-rota-onerisi.service";
+import { AppError } from "../utils/app-error";
 import { TERIM } from "../constants/terim";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
@@ -57,6 +61,28 @@ export interface AutoWorkOrderResult {
   groups: AutoWorkOrderGroup[];
 }
 
+/** Açık rota isteği (P3 iş emri ekranından "Belge okut"): öneri zinciri ve ayar kapısı yerine bu rota. */
+export interface AutoWorkOrderOptions {
+  routeTemplateId?: string;
+}
+
+const hasWorkOrderPermission = (actor: Pick<JwtPayload, "permissions">) => AUTO_WORK_ORDER_PERMISSIONS.some((p) => matchesPermission(actor.permissions, p));
+
+/**
+ * Onaydan ÖNCE (yazmaz): açık rota isteği yerine getirilemeyecekse onay HİÇ koşmaz (fail-closed) — onaylanıp iş emri
+ * sessizce atlanmaz. İzin = quick-start kümesi (403), üretim modülü (403 MODULE_DISABLED), rota = varsayılan rotanın tek kapısı (400).
+ */
+export async function assertRouteOverride(routeTemplateId: string | undefined, actor: Pick<JwtPayload, "permissions">): Promise<AutoWorkOrderOptions> {
+  if (!routeTemplateId) return {};
+  if (!hasWorkOrderPermission(actor)) {
+    throw AppError.forbidden(`Seçilen rotayla ${IE.tekilKucuk} açma yetkiniz yok (workorder:write ya da mobile:hizli-is-emri); belge onaylanmadı.`, { code: "GELEN_BELGE_ROUTE_OVERRIDE_FORBIDDEN" });
+  }
+  if (!(await readProductionEnabled())) throw AppError.forbidden(`Üretim modülü kapalı; ${IE.tekilKucuk} açılamaz, belge onaylanmadı.`, { code: "MODULE_DISABLED", module: "production" });
+  const r = await factoryRouteProblem(routeTemplateId);
+  if (r.problem) throw AppError.badRequest(`Seçilen rota şablonu (${r.name ?? "silinmiş"}) kullanılamıyor: ${r.problem}; belge onaylanmadı.`, { code: "GELEN_BELGE_ROUTE_OVERRIDE_INVALID" });
+  return { routeTemplateId };
+}
+
 /** Saf: grup token'ı — belge + grup + top kümesi (sıra bağımsız). */
 export function autoWorkOrderToken(noteId: string, groupKey: string, rollIds: readonly string[]): string {
   return uuidv5(`${noteId}|${groupKey}|${[...rollIds].sort().join(",")}`, AUTO_WO_TOKEN_NS);
@@ -76,18 +102,19 @@ function allSkipped(groups: readonly PlanGroup[], reason: string): AutoWorkOrder
  * Onaydan sonra otomatik iş emri. Ayar kapalıysa `null` (çağıran yanıta anahtar koymaz = bugünkü yanıt).
  * ASLA fırlatmaz: her hata sonuçta nedendir — onay çoktan tamamlanmıştır.
  */
-export async function autoOpenWorkOrders(noteId: string, actor: Pick<JwtPayload, "userId" | "permissions">): Promise<AutoWorkOrderResult | null> {
-  if (!(await readIncomingDocAutoWorkOrder())) return null;
+export async function autoOpenWorkOrders(noteId: string, actor: Pick<JwtPayload, "userId" | "permissions">, opts: AutoWorkOrderOptions = {}): Promise<AutoWorkOrderResult | null> {
+  // Açık rota isteği ayardan bağımsızdır (operatör iş emrini istedi); istek yoksa bugünkü ayar kapısı aynen.
+  if (!opts.routeTemplateId && !(await readIncomingDocAutoWorkOrder())) return null;
   let groups: readonly PlanGroup[] = [];
   try {
     const plan = await buildWorkOrderPlan(noteId);
     groups = plan.groups;
     if (groups.length === 0) return { opened: 0, manual: 0, reason: null, groups: [] };
-    if (!AUTO_WORK_ORDER_PERMISSIONS.some((p) => matchesPermission(actor.permissions, p))) {
+    if (!hasWorkOrderPermission(actor)) {
       return allSkipped(groups, `Onaylayanın ${IE.tekilKucuk} açma yetkisi yok (workorder:write ya da mobile:hizli-is-emri); yetkili kişi plan ekranından açmalı.`);
     }
     if (!(await readProductionEnabled())) return allSkipped(groups, `Üretim modülü kapalı; ${IE.tekilKucuk} açılamaz.`);
-    const routeTemplateId = plan.suggestedRouteTemplateId;
+    const routeTemplateId = opts.routeTemplateId ?? plan.suggestedRouteTemplateId;
     if (!routeTemplateId) {
       return allSkipped(groups, `Rota önerilemedi: ${plan.routeSuggestionNotes.join(" ")} ${IE.cekim.belirtme} plan ekranından rota seçerek açın ya da ${settingScreenPath("gelen-belge")} ekranında fabrika varsayılan rotasını seçin.`);
     }
@@ -135,8 +162,9 @@ export async function autoOpenWorkOrders(noteId: string, actor: Pick<JwtPayload,
 export async function withAutoWorkOrders<T extends Pick<ApproveResult, "note">>(
   approved: T,
   actor: Pick<JwtPayload, "userId" | "permissions">,
+  opts: AutoWorkOrderOptions = {},
 ): Promise<T & { autoWorkOrders?: AutoWorkOrderResult }> {
   if (!WORK_ORDER_PLAN_STATUSES.includes(approved.note.status as DeliveryNoteStatus)) return approved;
-  const auto = await autoOpenWorkOrders(approved.note.id, actor);
+  const auto = await autoOpenWorkOrders(approved.note.id, actor, opts);
   return auto ? { ...approved, autoWorkOrders: auto } : approved;
 }
