@@ -20,7 +20,7 @@ import {
   getDeliveryNote, listDeliveryNotes, updateDeliveryNote, updateDeliveryNoteLine,
 } from "../services/gelen-belge-note.service";
 import { approveDeliveryNote } from "../services/gelen-belge-onay.service";
-import { withAutoWorkOrders } from "../services/gelen-belge-oto-is-emri.service";
+import { assertRouteOverride, withAutoWorkOrders } from "../services/gelen-belge-oto-is-emri.service";
 import { applyBulkDeleteDeliveryNotes, BULK_DELETE_MAX, previewBulkDeleteDeliveryNotes } from "../services/gelen-belge-toplu-sil.service";
 import { getIncomingDocSettings, updateIncomingDocSettings } from "../services/gelen-belge-ayar.service";
 import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
@@ -128,6 +128,8 @@ const LinePatch = LineBody.partial().extend({ skip: z.literal(true).optional() }
 const ApproveBody = z.strictObject({
   varianceReason: optText(500),
   processChoices: z.array(z.strictObject({ lineId: Id.nullable(), valueId: Id }), "Geçersiz işlem seçimi").max(500, "En çok 500 işlem seçimi").optional(),
+  // P3 "Belge okut": onaydan sonra iş emri bu rotayla (öneri zinciri ve `autoWorkOrder` ayarı yerine); onay servisine gitmez.
+  routeTemplateId: Id.optional(),
 });
 const ListQuery = z.object({
   status: z.enum(DeliveryNoteStatus, "Tanınmayan durum süzgeci").optional(),
@@ -493,16 +495,21 @@ router.delete("/irsaliyeler/:id/satirlar/:lineId", requirePermission("gelen-belg
  *             properties:
  *               varianceReason: { type: string, maxLength: 500 }
  *               processChoices: { type: array, description: "Kabul edilen işlem önerileri (H9 gramaj, D4-D1 her çeşit değeri; metin başına tek) → PROCESS sözlüğü; değer yazmaz", items: { type: object, properties: { lineId: { type: string, format: uuid, nullable: true }, valueId: { type: string, format: uuid } } } }
+ *               routeTemplateId: { type: string, format: uuid, description: "İş emri ekranından \"Belge okut\": onaydan sonra iş emri bu rotayla açılır (öneri zinciri ve autoWorkOrder ayarı yerine); onaydan ÖNCE doğrulanır" }
  *     responses:
  *       200: { description: "{ note, summary: { entered, failed, skipped, replayed, rollIds }, autoWorkOrders? } + üst düzey warnings (başlık top adedi ↔ satır; gerekçeyle geçilen sayfa). autoWorkOrders yalnız `gelenBelge.autoWorkOrder` açıkken: { opened, manual, reason, groups: [{ key, itemName, targets, rollCount, outcome OPENED|SKIPPED|FAILED, workOrderNumber?, attached?, reason? }] }" }
- *       400: { description: "DELIVERY_NOTE_OWNER_REQUIRED · OWNER_CUSTOMER_INVALID (sahip pasif/bulunamadı) · DELIVERY_NOTE_LINE_UNRESOLVED · PROCESS_VALUE_INVALID (değer aktif işlem çeşidi değil) · PROCESS_CHOICE_CONFLICT · PROCESS_CHOICE_LINE_INVALID · PROCESS_CHOICE_TEXT_EMPTY" }
- *       403: { description: "MODULE_DISABLED (emanet) ya da izin yok" }
+ *       400: { description: "DELIVERY_NOTE_OWNER_REQUIRED · OWNER_CUSTOMER_INVALID (sahip pasif/bulunamadı) · DELIVERY_NOTE_LINE_UNRESOLVED · PROCESS_VALUE_INVALID (değer aktif işlem çeşidi değil) · PROCESS_CHOICE_CONFLICT · PROCESS_CHOICE_LINE_INVALID · PROCESS_CHOICE_TEXT_EMPTY · GELEN_BELGE_ROUTE_OVERRIDE_INVALID (routeTemplateId pasif/adımsız/bulunamadı — onay koşmaz)" }
+ *       403: { description: "MODULE_DISABLED (emanet; routeTemplateId varken üretim) · GELEN_BELGE_ROUTE_OVERRIDE_FORBIDDEN (routeTemplateId var, iş emri açma izni yok — onay koşmaz) ya da izin yok" }
  *       409: { description: "KURSUN_METERS_REQUIRED · KURSUN_METERS_REVIEW_PENDING · DELIVERY_NOTE_ENTRY_MODE_MIXED (PER_DOCUMENT) · TOTAL_MISMATCH (blok adet/kg/m; varianceReason ile geçilir) · DELIVERY_NOTE_PAGES_MISSING (varianceReason ile geçilir) · DELIVERY_NOTE_CHANGED (ön kontrolden sonra düzenlendi) · DELIVERY_NOTE_NOT_APPROVABLE · DELIVERY_NOTE_NO_OPEN_LINES" }
  */
-router.post("/irsaliyeler/:id/onay", requirePermission("gelen-belge:approve"), wrap(async (req) => ({
-  // Onay önce ve aynen; otomatik iş emri (ayar açıksa) onaydan SONRA, best-effort — `autoWorkOrders` yalnız ayar açıkken.
-  ...(await approveDeliveryNote(Id.parse(req.params.id), ApproveBody.parse(req.body ?? {}), req.user!.userId).then((r) => withAutoWorkOrders(r, req.user!)).then(({ warnings, ...data }) => ({ status: 200, data, warnings }))),
-})));
+router.post("/irsaliyeler/:id/onay", requirePermission("gelen-belge:approve"), wrap(async (req) => {
+  const id = Id.parse(req.params.id);
+  const { routeTemplateId, ...body } = ApproveBody.parse(req.body ?? {});
+  // Açık rota isteği onaydan ÖNCE doğrulanır (fail-closed: yerine getirilemiyorsa onay yok); istek yoksa `{}` = bugünkü yol.
+  const opts = await assertRouteOverride(routeTemplateId, req.user!);
+  // Onay önce ve aynen; otomatik iş emri (ayar açıksa ya da rota istendiyse) onaydan SONRA, best-effort.
+  return approveDeliveryNote(id, body, req.user!.userId).then((r) => withAutoWorkOrders(r, req.user!, opts)).then(({ warnings, ...data }) => ({ status: 200, data, warnings }));
+}));
 
 // ── E2 gönderen şablonları (`gelen-belge:template`) ───────────────────────────
 const TemplateCode = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/, "Geçersiz şablon kodu");
