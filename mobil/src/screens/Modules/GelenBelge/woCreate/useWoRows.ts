@@ -5,7 +5,6 @@ import { onlineManager, useQuery } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { useAttemptToken } from '../../../../offline/attemptToken';
 import { isAmbiguousFailure } from '../../../../offline/entryAttempt';
-import { useRefakatAutoPrint } from '../../../../hooks/useFeatureFlags';
 import { fabricPropertyService, type KursunGramajCatalog } from '../../../../services/fabricProperty.service';
 import { inboundDocService, type InboundNoteDetail } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
@@ -117,8 +116,9 @@ function useGramajCatalog(route: ProductionRoute): { showGramaj: boolean; catalo
 
 export function useWoRows(route: ProductionRoute) {
   const attempt = useAttemptToken();
-  const autoPrint = useRefakatAutoPrint();
   const settings = useQuery({ queryKey: INBOUND_DOC_SETTINGS_KEY, queryFn: inboundDocService.settings, retry: false, staleTime: 60_000 });
+  // `production.refakatAutoPrint` yalnız gelen belge ayar ucunda döner (bayrak yükünde yok); okunamazsa kapalı = elle basım.
+  const autoPrint = settings.data?.refakatAutoPrint === true;
   const mode = resolveFormApproval(settings.data, settings.isError);
   const { showGramaj, catalog } = useGramajCatalog(route);
   const [rows, setRows] = useState<DocRow[]>([]);

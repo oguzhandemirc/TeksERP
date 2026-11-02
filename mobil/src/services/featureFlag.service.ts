@@ -190,9 +190,6 @@ export interface FeatureFlags {
    *  TABLETİNİ salt-okunur yapar; kararı adım adım backend bildirir
    *  (`KursunStepSummary.tabletReadOnly`). */
   kursunBypassEnabled: boolean;
-  /** Sözleşme 2: terbiye iş emri açılınca refakat kartı otomatik basılsın mı (`production.refakatAutoPrint`).
-   *  Opsiyonel: eski sunucu göndermez → kapalı (bugün: elle "Çıktı Al"). */
-  refakatAutoPrint?: boolean;
   /** Sevk öncesi TÜM çuvallar tartılmış olsun mu (default false → yalnız yurtdışı
    *  sevk tartı ister). Backend ENFORCE eder; ekran yalnız "Sevk Et"i erken
    *  kapatıp sebebini yazar. ⚠️ Tartılı çuvala sonradan top eklenirse kg SIFIRLANIR

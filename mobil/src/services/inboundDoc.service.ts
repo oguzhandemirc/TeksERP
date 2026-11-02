@@ -120,6 +120,8 @@ export interface OwnerSuggestion {
 /** Gelen belge ayarı (`GET /gelen-belge/ayarlar`) — tabletin okuduğu alt küme. Eski sunucu `formApproval` göndermez. */
 export interface InboundDocSettings {
   formApproval?: 'SEPARATE' | 'WITH_WORK_ORDER';
+  /** Sözleşme 2 (`production.refakatAutoPrint`); eski sunucu göndermez → kapalı (bugün: elle "Çıktı Al"). */
+  refakatAutoPrint?: boolean;
 }
 
 /** Sözleşme 3: belgeden tek seferde terbiye iş emri (`POST /gelen-belge/irsaliyeler/:id/is-emri`). */

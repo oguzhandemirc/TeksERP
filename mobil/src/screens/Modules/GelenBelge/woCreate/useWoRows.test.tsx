@@ -10,7 +10,6 @@ const mockSettings = jest.fn();
 const mockCreate = jest.fn();
 const mockUpdate = jest.fn();
 const mockPrint = jest.fn();
-let mockAutoPrint = false;
 
 jest.mock('../../../../services/inboundDoc.service', () => ({
   inboundDocService: {
@@ -20,7 +19,6 @@ jest.mock('../../../../services/inboundDoc.service', () => ({
   },
 }));
 jest.mock('../../../../services/fabricProperty.service', () => ({ fabricPropertyService: { getKursunGramajCatalog: async () => ({ propertyId: null, options: [] }) } }));
-jest.mock('../../../../hooks/useFeatureFlags', () => ({ useRefakatAutoPrint: () => mockAutoPrint }));
 jest.mock('../../../../services/travelerCardPrint', () => ({ printTravelerCardForWorkOrder: (id: string) => mockPrint(id) }));
 jest.mock('./recentOwners', () => ({ loadRecentOwners: async () => [], rememberOwner: async (l: string[], id: string) => [id, ...l] }));
 jest.mock('react-native-toast-message', () => ({ __esModule: true, default: { show: jest.fn() } }));
@@ -46,7 +44,6 @@ async function withRows(h: ReturnType<typeof setup>, details: InboundNoteDetail[
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockAutoPrint = false;
 });
 
 describe('useWoRows', () => {
@@ -93,10 +90,10 @@ describe('useWoRows', () => {
   });
 
   it('refakatAutoPrint açık → açılan iş emri için kart basılır; kapalıyken basılmaz', async () => {
-    mockSettings.mockResolvedValue({ formApproval: 'WITH_WORK_ORDER' });
+    // Ayar gelen belge ayar ucundan gelir (bayrak yükünde yok).
+    mockSettings.mockResolvedValue({ formApproval: 'WITH_WORK_ORDER', refakatAutoPrint: true });
     mockCreate.mockResolvedValue({ workOrderId: 'wo-1', workOrderNo: 'IE-1', batchNumber: 'P', rollId: 'x' });
     mockPrint.mockResolvedValue(undefined);
-    mockAutoPrint = true;
     const h = setup();
     await waitFor(() => expect(h.result.current.mode).toBe('WITH_WORK_ORDER'));
     await withRows(h, [detail('n1')]);
