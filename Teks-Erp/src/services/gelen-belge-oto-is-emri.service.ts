@@ -2,7 +2,7 @@
 // GELEN BELGE → ONAYDAN SONRA OTOMATİK İŞ EMRİ (fabrika ayarı `gelenBelge.autoWorkOrder`, varsayılan KAPALI)
 // =============================================================================
 // İkinci iş emri yaratıcısı DEĞİLDİR: plan servisinin (`buildWorkOrderPlan`) NET gruplarını alır ve her biri için
-// panelin kullandığı girdiyle MEVCUT `WorkOrderService.quickStart`ı çağırır (rota = planın önerisi, hedef =
+// panelin kullandığı girdiyle MEVCUT `WorkOrderService.quickStart`ı çağırır (rota = planın `suggestRoute` önerisi, hedef =
 // `targetValues` + bayrakları). Denetim noktası ONAY kalır: bu dosya yalnız onay APPROVED/PARTIAL doğurduktan SONRA
 // koşar, best-effort'tur — düşen grup onayı geri sarmaz, sonuç grup başına Türkçe nedenle döner.
 // Token belirlenimlidir: `uuidv5(noteId | grup anahtarı | bağlanacak top kümesi)` — aynı topları ikinci kez gönderen
@@ -17,6 +17,7 @@ import type { ApproveResult } from "./gelen-belge-onay.service";
 import { readIncomingDocAutoWorkOrder, readProductionEnabled } from "./system-setting.service";
 import { WorkOrderService } from "./workorder.service";
 import { TERIM } from "../constants/terim";
+import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
 const IE = TERIM.terbiyeIsEmri;
 
@@ -88,7 +89,7 @@ export async function autoOpenWorkOrders(noteId: string, actor: Pick<JwtPayload,
     if (!(await readProductionEnabled())) return allSkipped(groups, `Üretim modülü kapalı; ${IE.tekilKucuk} açılamaz.`);
     const routeTemplateId = plan.suggestedRouteTemplateId;
     if (!routeTemplateId) {
-      return allSkipped(groups, `Bu müşterinin rotalı önceki ${IE.tekilKucuk} yok, rota önerilemedi; ilk ${IE.cekimKucuk.belirtme} plan ekranından rota seçerek açın.`);
+      return allSkipped(groups, `Rota önerilemedi: ${plan.routeSuggestionNotes.join(" ")} ${IE.cekim.belirtme} plan ekranından rota seçerek açın ya da ${settingScreenPath("gelen-belge")} ekranında fabrika varsayılan rotasını seçin.`);
     }
     const out: AutoWorkOrderGroup[] = [];
     // SIRAYLA (paralel değil): aynı belgenin topları; bir grubun hatası ötekini durdurmaz.
