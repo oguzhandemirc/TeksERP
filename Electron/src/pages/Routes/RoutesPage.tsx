@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { useLocation } from "react-router-dom";
 import { shortcutBody } from "./RouteShortcutFields";
 import { CrudPage } from "@/components/layout/CrudPage";
 import { routeColumns } from "./columns";
@@ -5,6 +7,7 @@ import { routeService } from "./service";
 import { RouteFormDialog } from "./RouteFormDialog";
 import type { ProductionRoute } from "./types";
 import { type RouteFormValues } from "./schema";
+import type { RoutesNavState } from "@/pages/Operations/WorkOrders/oie/nav";
 
 interface StepCreate {
   stationId: string;
@@ -64,6 +67,9 @@ function buildPayload(v: RouteFormValues, isEdit: boolean): CreatePayload {
 }
 
 export function RoutesPage() {
+  // "Yeni özel iş emri" kartı (K20): diyalog açık + kısayol işaretli doğar; ilk kapanışta tohum söner (sonraki "Yeni" düz).
+  const navState = useLocation().state as RoutesNavState | null;
+  const [shortcutSeed, setShortcutSeed] = useState(navState?.newShortcut === true);
   return (
     <CrudPage<ProductionRoute>
       title="Üretim Rotaları"
@@ -75,16 +81,21 @@ export function RoutesPage() {
       columns={routeColumns}
       writePermission="station:write"
       searchPlaceholder="Rota adı ara..."
+      openCreateOnMount={shortcutSeed}
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
         <RouteFormDialog
           open={open}
-          onOpenChange={onOpenChange}
+          onOpenChange={(o) => {
+            if (!o) setShortcutSeed(false);
+            onOpenChange(o);
+          }}
           initial={initial}
+          newAsShortcut={shortcutSeed}
           isSubmitting={isSubmitting}
           onSubmit={(values) =>
             onSubmit(
               buildPayload(values, Boolean(initial)) as unknown as Partial<ProductionRoute>,
-            )
+            ).then(() => setShortcutSeed(false))
           }
         />
       )}
