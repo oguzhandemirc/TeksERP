@@ -23,7 +23,7 @@ import { ApiResponse } from "../types/api.types";
 import prisma from "../lib/prisma";
 import { readServiceItemIdField, withServiceMapping } from "./helpers/service-item-mapping.helper";
 import { AppError } from "../utils/app-error";
-import { assertSingleDefaultValue, type ConsumableItemField, consumableItemPatch, extractStationIds, readGramAmountField, readStitchCountField } from "./helpers/fabric-property-input.helper";
+import { assertChoiceHasValues, assertSingleDefaultValue, type ConsumableItemField, consumableItemPatch, extractStationIds, readGramAmountField, readStitchCountField } from "./helpers/fabric-property-input.helper";
 import { assertConsumableItemsTx } from "./helpers/consumable-item-link.helper";
 import { nextSeriesNo } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -150,30 +150,6 @@ async function assertStationsCanApplyProperty(stationIds: string[]): Promise<voi
   if (incapable) {
     throw AppError.badRequest(
       `'${incapable.name}' istasyonu özellik kazandıramaz — atanmış kategorisi 'özellik veren' (appliesProperty=true) değil`,
-    );
-  }
-}
-
-/**
- * SEÇİM tipli özellik en az bir AKTİF değer taşımalı. Değersiz bir SEÇİM
- * özelliği, `stationIds`siz doğan özelliğin ikizidir: tanımlı ama seçilemez —
- * Tambur ekranında hiç tuş çıkmaz ve sebebi hiçbir yerde yazmaz.
- */
-function assertChoiceHasValues(
-  valueType: string,
-  values: PropertyValueInput[] | undefined,
-  existingActiveCount: number,
-): void {
-  if (valueType !== "CHOICE") return;
-  // `isActive` verilmemişse yazma yolu `?? true` ile AKTİF yazar — sayaç da aynı
-  // varsayımı yapmalı, yoksa isActive'siz gönderen istemci "0 aktif değer" diye
-  // sahte 400 yer (yazılacak satırlar gerçekte aktif olacakken).
-  const incomingActive = values?.filter((v) => v.isActive !== false).length;
-  const effective = incomingActive === undefined ? existingActiveCount : incomingActive;
-  if (effective === 0) {
-    throw AppError.badRequest(
-      "Seçim tipli özellik en az bir AKTİF değer taşımalı — değersiz bir seçim listesi " +
-        "hiçbir ekranda seçilemez.",
     );
   }
 }

@@ -125,7 +125,8 @@ async function setEnabled(stationId: string, enabled: boolean, flagId: string, v
 }
 
 /** Gramaj listesi replace'i: çeşit yoksa doğar (bu istasyona bağlı), varsa `values` replace (eksik kod pasife). */
-async function writeValues(stationId: string, input: NonNullable<KursunStationInput["values"]>, flagId: string, variantId: string | null, userId?: string): Promise<void> {
+async function writeValues(p: { stationId: string; input: NonNullable<KursunStationInput["values"]>; flagId: string; variantId: string | null; userId?: string }): Promise<void> {
+  const { stationId, input, flagId, variantId, userId } = p;
   const existing = variantId
     ? await prisma.fabricPropertyValue.findMany({ where: { propertyId: variantId }, select: { code: true } })
     : [];
@@ -164,7 +165,7 @@ export async function setKursunStation(stationId: string, input: KursunStationIn
   const price = input.gramPrice !== undefined ? readKursunGramPrice(input.gramPrice, input.gramCurrency ?? null) : undefined;
 
   if (flag && input.enabled === true) await setEnabled(stationId, true, flag.id, variant?.id ?? null);
-  if (flag && input.values !== undefined) await writeValues(stationId, input.values, flag.id, variant?.id ?? null, userId);
+  if (flag && input.values !== undefined) await writeValues({ stationId, input: input.values, flagId: flag.id, variantId: variant?.id ?? null, userId });
   if (flag && input.enabled === false) await setEnabled(stationId, false, flag.id, variant?.id ?? null);
   if (price !== undefined) {
     await prisma.station.update({ where: { id: stationId }, data: { kursunGramPrice: price.price, kursunGramCurrency: price.currency } });

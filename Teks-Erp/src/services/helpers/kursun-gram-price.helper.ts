@@ -11,6 +11,7 @@ import { Currency, Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { findCariAccountForCardTx } from "./finance.helper";
+import type { ServiceRollWork } from "./service-pricing.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -83,4 +84,21 @@ export function pickKursunGramPrice(
   const gram = p.customerPrice ?? (work.workOrderStepId ? p.stationPriceByStep.get(work.workOrderStepId) : undefined) ?? null;
   if (gram === null) return null;
   return { unitPrice: kursunMeterPrice(amount, gram), amount };
+}
+
+/** Kurşun işinde gram fiyatı (cari > istasyon) × gr/m kalem fiyatını EZER; tanımsızsa kalem fiyatı kalır. Çağıran kalemli işleri verir. */
+export async function applyKursunGramPrices(works: ServiceRollWork[], ctx: { currency: Currency; customerId: string | null; db: Db }): Promise<void> {
+  const kursun = works.filter((w) => w.source !== "PROPERTY" && w.valueId && w.qtyUnit === "METER");
+  if (kursun.length === 0) return;
+  const pricing = await loadKursunGramPricing({
+    valueIds: [...new Set(kursun.map((w) => w.valueId!))],
+    stepIds: [...new Set(kursun.map((w) => w.workOrderStepId).filter((v): v is string => v !== null))],
+    customerId: ctx.customerId, currency: ctx.currency, db: ctx.db,
+  });
+  for (const w of kursun) {
+    const hit = pickKursunGramPrice(pricing, w);
+    if (!hit) continue;
+    w.unitPrice = hit.unitPrice;
+    w.gramLabel = kursunGramLineLabel(w.valueName, hit.amount);
+  }
 }

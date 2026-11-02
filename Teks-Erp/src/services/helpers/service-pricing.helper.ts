@@ -19,7 +19,7 @@ import { resolveItemPricesFor } from "../item-price.service";
 import { listKursunApplications, readKursunTarget, type KursunApplication } from "./process-summary.helper";
 import { listFlagServiceWorks } from "./service-flag-work.helper";
 import { pickServiceItemId } from "./service-item-pick.helper";
-import { kursunGramLineLabel, loadKursunGramPricing, pickKursunGramPrice } from "./kursun-gram-price.helper";
+import { applyKursunGramPrices } from "./kursun-gram-price.helper";
 import { missingQuantityWarning, priceUnitMatches, serviceWorkQuantity, serviceWorkUnit } from "./service-quantity.helper";
 
 /** `kursun-qc.service` reopenStep damga sebebi — yeniden açılan adım yeni hizmettir. */
@@ -205,23 +205,6 @@ async function applyAsOfPrices(works: ServiceRollWork[], ctx: { opt: ServiceReso
   }
 }
 
-/** Kurşun işinde gram fiyatı (cari > istasyon) × gr/m kalem fiyatını EZER; tanımsızsa kalem fiyatı kalır (oie-a). */
-async function applyKursunGramPrices(works: ServiceRollWork[], ctx: { currency: Currency; customerId: string | null; db: Db }): Promise<void> {
-  const kursun = works.filter((w) => w.source !== "PROPERTY" && w.serviceItemId && w.valueId && w.qtyUnit === "METER");
-  if (kursun.length === 0) return;
-  const pricing = await loadKursunGramPricing({
-    valueIds: [...new Set(kursun.map((w) => w.valueId!))],
-    stepIds: [...new Set(kursun.map((w) => w.workOrderStepId).filter((v): v is string => v !== null))],
-    customerId: ctx.customerId, currency: ctx.currency, db: ctx.db,
-  });
-  for (const w of kursun) {
-    const hit = pickKursunGramPrice(pricing, w);
-    if (!hit) continue;
-    w.unitPrice = hit.unitPrice;
-    w.gramLabel = kursunGramLineLabel(w.valueName, hit.amount);
-  }
-}
-
 /**
  * Toplara yapılan kurşun ve bayrak tipi (H10) işleri hizmet kalemine ve müşteri fiyatına çözer.
  * Yazmaz; eşleşmeyen top ve fiyatsız kalem `warnings`te görünür (sessiz düşmez).
@@ -279,7 +262,7 @@ export async function resolveServiceItemsForRolls(params: {
   const works = billable.filter((w) => !unknown.includes(w));
 
   await applyAsOfPrices(works, { opt, currency: params.currency, customerId: params.customerId, db });
-  await applyKursunGramPrices(works, { currency: params.currency, customerId: params.customerId, db });
+  await applyKursunGramPrices(works.filter((w) => w.serviceItemId !== null), { currency: params.currency, customerId: params.customerId, db });
 
   const items = await db.item.findMany({
     where: { id: { in: [...new Set(works.map((w) => w.serviceItemId).filter((v): v is string => v !== null))] } },
