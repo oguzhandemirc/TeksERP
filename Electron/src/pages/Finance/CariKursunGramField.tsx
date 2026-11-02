@@ -3,9 +3,10 @@ import { Label } from "@/components/ui/label";
 import { FINANCE_CURRENCIES as CURRENCIES } from "@/pages/Customers/customerFinance";
 import type { Currency } from "./service";
 import type { KursunGramForm } from "./cariKursunGram";
+import { KursunGramPriceHistory } from "@/components/kursun/KursunGramPriceHistory";
 
 /** oie-a: müşteriye özel kurşun gram fiyatı; `null` (fason / eski backend) → çizilmez. */
-export function CariKursunGramField({ value, onChange, error }: { value: KursunGramForm | null; onChange: (v: KursunGramForm) => void; error?: string }) {
+export function CariKursunGramField({ value, onChange, error, cariId }: { value: KursunGramForm | null; onChange: (v: KursunGramForm) => void; error?: string; cariId?: string }) {
   if (!value) return null;
   return (
     <div className="col-span-2" data-testid="cari-kursun-gram">
@@ -38,6 +39,7 @@ export function CariKursunGramField({ value, onChange, error }: { value: KursunG
         Boş bırakılırsa kurşun istasyonunun gram fiyatı kullanılır. Metre fiyatı = gramaj (gr/m) × gram fiyatı.
       </p>
       {error && <p className="mt-1 text-xs font-medium text-destructive">{error}</p>}
+      {cariId && <KursunGramPriceHistory owner={{ kind: "cari", id: cariId }} />}
     </div>
   );
 }

@@ -331,7 +331,7 @@ export function CariEditDialog({ cari, open, onOpenChange }: Props) {
 
           <CariServiceBillingTriggerField value={form.serviceBillingTrigger} onChange={(v) => patch({ serviceBillingTrigger: v })} />
 
-          <CariKursunGramField value={form.kursunGram ?? null} onChange={(v) => patch({ kursunGram: v })} error={errors.kursunGram} />
+          <CariKursunGramField value={form.kursunGram ?? null} onChange={(v) => patch({ kursunGram: v })} error={errors.kursunGram} cariId={cari.id} />
 
           <CariTaxOverrideFields value={form.tax} onChange={(v) => patch({ tax: v })} error={errors.tax} />
 

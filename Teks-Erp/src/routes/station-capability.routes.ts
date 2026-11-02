@@ -13,7 +13,7 @@ import { requireProductionEnabled } from "../middlewares/module.middleware";
 import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { MOBILE_SESSION_PERMS } from "../services/work-session.service";
-import { getKursunStation, setKursunStation } from "../services/kursun-station.service";
+import { getKursunStation, getKursunStationPriceHistory, setKursunStation } from "../services/kursun-station.service";
 
 const service = new StationCapabilityService();
 const router = Router();
@@ -272,6 +272,38 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       res.status(200).json({ success: true, data: await getKursunStation(req.params.stationId as string) });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/** K14 geçmiş listesi sorgusu — yalnız cursor + limit (süzgeç yok). */
+const priceHistoryQuery = z.object({ cursor: z.string().max(500).optional(), limit: z.coerce.number().int().min(1).max(100).optional() }).strict();
+
+/**
+ * @swagger
+ * /api/station-capabilities/{stationId}/kursun/price-history:
+ *   get:
+ *     summary: İstasyonun kurşun gram fiyatı geçmişi (K14; en yeni önce, cursor)
+ *     tags: [StationCapabilities]
+ *     parameters:
+ *       - { in: path, name: stationId, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: cursor, schema: { type: string } }
+ *       - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100 } }
+ *     responses:
+ *       200: { description: "{ items, nextCursor }" }
+ *       400: { description: Geçersiz cursor/limit }
+ *       404: { description: İstasyon yok }
+ */
+router.get(
+  "/:stationId/kursun/price-history",
+  verifyToken,
+  requirePermission("station:read"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const q = priceHistoryQuery.parse(req.query);
+      res.status(200).json({ success: true, data: await getKursunStationPriceHistory(req.params.stationId as string, q) });
     } catch (e) {
       next(e);
     }

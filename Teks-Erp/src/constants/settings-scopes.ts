@@ -176,6 +176,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "costProfitMachineTime",
       "costProfitOverheadKey",
       "financeServiceBillingPriceDate",
+      "financeKursunGramPriceBasis",
       "financeExpenseCategorySuggestions",
       "financeExpenseAllocationField",
       "financeExpenseAllocationClosedWorkOrder",

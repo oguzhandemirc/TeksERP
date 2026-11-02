@@ -14,6 +14,7 @@ import { AuditService } from "./audit.service";
 import { deriveCapabilityFlags } from "./station-capability.service";
 import { KURSUN_PROPERTY_CODE } from "./helpers/quality-station.helper";
 import { readKursunGramPrice } from "./helpers/kursun-gram-price-input.helper";
+import { listKursunGramPriceHistory, recordKursunGramPriceVersionTx } from "./helpers/kursun-gram-price-version.helper";
 import { fabricPropertyService } from "../routes/fabric-property.routes";
 
 export interface KursunStationValue {
@@ -95,6 +96,13 @@ export async function getKursunStation(stationId: string): Promise<KursunStation
   };
 }
 
+/** K14: istasyon gram fiyatı geçmişi (salt okunur, en yeni önce, cursor). */
+export async function getKursunStationPriceHistory(stationId: string, opt: { cursor?: string; limit?: number }) {
+  const station = await prisma.station.findUnique({ where: { id: stationId }, select: { id: true } });
+  if (!station) throw AppError.notFound("İstasyon bulunamadı");
+  return listKursunGramPriceHistory({ stationId }, opt);
+}
+
 async function assertStationCanTakeKursun(stationId: string) {
   const station = await prisma.station.findUnique({
     where: { id: stationId },
@@ -168,7 +176,11 @@ export async function setKursunStation(stationId: string, input: KursunStationIn
   if (flag && input.values !== undefined) await writeValues({ stationId, input: input.values, flagId: flag.id, variantId: variant?.id ?? null, userId });
   if (flag && input.enabled === false) await setEnabled(stationId, false, flag.id, variant?.id ?? null);
   if (price !== undefined) {
-    await prisma.station.update({ where: { id: stationId }, data: { kursunGramPrice: price.price, kursunGramCurrency: price.currency } });
+    // K14: kolon + sürüm aynı tx'te (değer değişmediyse sürüm yazılmaz).
+    await prisma.$transaction(async (tx) => {
+      await tx.station.update({ where: { id: stationId }, data: { kursunGramPrice: price.price, kursunGramCurrency: price.currency } });
+      await recordKursunGramPriceVersionTx(tx, { stationId }, price, userId);
+    });
   }
   const after = await getKursunStation(stationId);
   await AuditService.log({

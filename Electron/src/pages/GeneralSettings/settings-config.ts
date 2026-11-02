@@ -2411,6 +2411,20 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         ],
       },
       {
+        // K14 (kullanıcı kararı 2026-11-02): varsayılan iş anındaki fiyat; `defaultValue` backend `DEFAULT_KURSUN_GRAM_PRICE_BASIS` ile birebir.
+        enumKey: "financeKursunGramPriceBasis",
+        title: "Gram fiyatı",
+        summary: "Kurşun gram fiyatı değiştiyse faturada hangi günün fiyatı kullanılsın.",
+        desc: "İşin yapıldığı gün: istasyon ve müşteri kartındaki gram fiyatı geçmişinden, işin yapıldığı gündeki fiyat alınır (eski iş eski fiyattan; hizmet fiyatıyla aynı gün kuralı). Faturanın kesildiği gün: o anki gram fiyatı bütün işlere uygulanır. Kesilmiş faturalar değişmez.",
+        defaultValue: "SERVICE_DATE",
+        display: "radio",
+        audience: ["Muhasebeci"],
+        options: [
+          { value: "SERVICE_DATE", label: "İşin yapıldığı gündeki fiyat (önerilen)", hint: "Fiyat geçmişinden iş gününe çözülür." },
+          { value: "INVOICE_DATE", label: "Faturanın kesildiği gündeki fiyat", hint: "Güncel gram fiyatı kullanılır." },
+        ],
+      },
+      {
         // D4-H1: `defaultValue` backend `DEFAULT_EXPENSE_CATEGORY_SUGGESTIONS` ile birebir (bekçi §16).
         enumKey: "financeExpenseCategorySuggestions",
         title: "Masraf girerken kategori önerilsin",

@@ -324,6 +324,7 @@ export const updateSchema = z.strictObject({
     .refine((m) => Object.keys(m).length <= 200, { message: "En çok 200 kategori sınıflanabilir" })
     .optional(),
   financeServiceBillingPriceDate: z.enum(["SERVICE_DAY", "DISPATCH_DAY"]).optional(),
+  financeKursunGramPriceBasis: z.enum(["SERVICE_DATE", "INVOICE_DATE"]).optional(),
   /** D4-H1: masraf kategorisi önerisi (`EXPENSE_CATEGORY_SUGGESTION_MODES` ile birebir). */
   financeExpenseCategorySuggestions: z.enum(["ON", "OFF"]).optional(),
   /** D4-H3: masraf bağı alanı (`EXPENSE_ALLOCATION_FIELD_MODES` ile birebir; REQUIRED serviste 400 — bağ adımı her yüzeyde yok). */

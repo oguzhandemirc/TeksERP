@@ -295,6 +295,8 @@ export interface FeatureFlags {
   financeServiceBillingBrodeUnit: "METER" | "PIECE" | "STITCH";
   financeServiceBillingTrigger: "PER_SHIPMENT" | "PERIOD_END";
   financeServiceBillingPriceDate: "SERVICE_DAY" | "DISPATCH_DAY";
+  /** K14: kurşun gram fiyatı — işin anındaki sürüm (varsayılan) · fatura anındaki değer. */
+  financeKursunGramPriceBasis: "SERVICE_DATE" | "INVOICE_DATE";
   /** D4-H1: kasa masraf formunda kategori önerisi (varsayılan ON). */
   financeExpenseCategorySuggestions: "ON" | "OFF";
   /** D4-H3: kasa masraf formunda "Bağla" (varsayılan OFF; REQUIRED backend'de henüz seçilemez → 400). */

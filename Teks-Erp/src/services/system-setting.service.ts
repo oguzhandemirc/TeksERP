@@ -195,6 +195,8 @@ export const SETTING_KEYS = {
   FINANCE_SERVICE_BILLING_TRIGGER: "finance.serviceBilling.trigger",
   /** H7: fiyat tarihi — `SERVICE_DAY` (hizmet anı; bugün) · `DISPATCH_DAY` (sevk anı). */
   FINANCE_SERVICE_BILLING_PRICE_DATE: "finance.serviceBilling.priceDate",
+  /** K14: kurşun gram fiyatı — `SERVICE_DATE` (işin anındaki sürüm; VARSAYILAN, kullanıcı kararı) · `INVOICE_DATE` (faturadaki güncel değer). */
+  FINANCE_KURSUN_GRAM_PRICE_BASIS: "finance.serviceBilling.kursunGramPriceBasis",
   /** D4-H1: kasa masraf formunda "son kullanılan kategoriler" önerisi — `ON` (varsayılan) · `OFF`; katalog DEĞİL. */
   FINANCE_EXPENSE_CATEGORY_SUGGESTIONS: "finance.masraf.kategoriOnerisi",
   FINANCE_EXPENSE_ALLOCATION_FIELD: "finance.masraf.bagAlani",
@@ -1146,6 +1148,10 @@ export const DEFAULT_SERVICE_BILLING_TRIGGER: ServiceBillingTrigger = "PER_SHIPM
 export type ServiceBillingPriceDate = "SERVICE_DAY" | "DISPATCH_DAY";
 export const SERVICE_BILLING_PRICE_DATES: ServiceBillingPriceDate[] = ["SERVICE_DAY", "DISPATCH_DAY"];
 export const DEFAULT_SERVICE_BILLING_PRICE_DATE: ServiceBillingPriceDate = "SERVICE_DAY";
+/** K14: gram fiyatı hangi andan — varsayılan SERVICE_DATE KULLANICI KARARIDIR (gram fiyatı yayınlanmış sürümde yok, sahada davranış değişmez). */
+export type KursunGramPriceBasis = "SERVICE_DATE" | "INVOICE_DATE";
+export const KURSUN_GRAM_PRICE_BASES: KursunGramPriceBasis[] = ["SERVICE_DATE", "INVOICE_DATE"];
+export const DEFAULT_KURSUN_GRAM_PRICE_BASIS: KursunGramPriceBasis = "SERVICE_DATE";
 /** D4-H1: masraf kategorisi önerisi (yalnız öneri listesi; kategori serbest metin kalır). */
 export type ExpenseCategorySuggestions = "ON" | "OFF";
 export const EXPENSE_CATEGORY_SUGGESTION_MODES: ExpenseCategorySuggestions[] = ["ON", "OFF"];
@@ -2091,6 +2097,7 @@ export interface FeatureFlags {
   financeServiceBillingTrigger: ServiceBillingTrigger;
   /** H7: fiyat tarihi (default `SERVICE_DAY`). */
   financeServiceBillingPriceDate: ServiceBillingPriceDate;
+  financeKursunGramPriceBasis: KursunGramPriceBasis;
   /** D4-H1: kasa masraf formunda kategori önerisi (varsayılan `ON`). */
   financeExpenseCategorySuggestions: ExpenseCategorySuggestions;
   financeExpenseAllocationField: ExpenseAllocationField;
@@ -2799,6 +2806,7 @@ export class SystemSettingService {
       financeServiceBillingBrodeUnit: await readFinanceServiceBillingBrodeUnit(cacheClient),
       financeServiceBillingTrigger: await readFinanceServiceBillingTrigger(cacheClient),
       financeServiceBillingPriceDate: await readFinanceServiceBillingPriceDate(cacheClient),
+      financeKursunGramPriceBasis: await readFinanceKursunGramPriceBasis(cacheClient),
       financeExpenseCategorySuggestions: await readFinanceExpenseCategorySuggestions(cacheClient),
       financeExpenseAllocationField: await readFinanceExpenseAllocationField(cacheClient),
       financeExpenseAllocationClosedWorkOrder: await readFinanceExpenseAllocationClosedWorkOrder(cacheClient),
@@ -3394,6 +3402,13 @@ export class SystemSettingService {
         throw AppError.badRequest(`financeServiceBillingPriceDate şunlardan biri olmalı: ${SERVICE_BILLING_PRICE_DATES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_PRICE_DATE, v, "Hizmet faturası fiyat tarihi — hizmet günü · sevk günü", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeKursunGramPriceBasis")) {
+      const v = input.financeKursunGramPriceBasis;
+      if (typeof v !== "string" || !KURSUN_GRAM_PRICE_BASES.includes(v as KursunGramPriceBasis)) {
+        throw AppError.badRequest(`financeKursunGramPriceBasis şunlardan biri olmalı: ${KURSUN_GRAM_PRICE_BASES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.FINANCE_KURSUN_GRAM_PRICE_BASIS, v, "Kurşun gram fiyatı — işin yapıldığı gündeki · faturanın kesildiği gündeki", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "financeExpenseCategorySuggestions")) {
       const v = input.financeExpenseCategorySuggestions;
@@ -5925,6 +5940,11 @@ export function readFinanceServiceBillingPriceDate(tx?: Pick<typeof prisma, "sys
   return readServiceEnum(SETTING_KEYS.FINANCE_SERVICE_BILLING_PRICE_DATE, SERVICE_BILLING_PRICE_DATES, DEFAULT_SERVICE_BILLING_PRICE_DATE, tx);
 }
 
+/** K14: gram fiyatı tabanı — tanınmayan değer varsayılana (`SERVICE_DATE`) düşer. */
+export function readFinanceKursunGramPriceBasis(tx?: Pick<typeof prisma, "systemSetting">): Promise<KursunGramPriceBasis> {
+  return readServiceEnum(SETTING_KEYS.FINANCE_KURSUN_GRAM_PRICE_BASIS, KURSUN_GRAM_PRICE_BASES, DEFAULT_KURSUN_GRAM_PRICE_BASIS, tx);
+}
+
 /** D4-H1: masraf kategorisi önerisi — tanınmayan değer varsayılana (`ON`) düşer. */
 /** D4-H3: masraf bağı alanı — tanınmayan değer varsayılana (`OFF`) düşer. */
 export function readFinanceExpenseAllocationField(tx?: Pick<typeof prisma, "systemSetting">): Promise<ExpenseAllocationField> {
@@ -6058,6 +6078,7 @@ export async function loadServiceBillingSettings(tx?: Pick<typeof prisma, "syste
   brodeUnit: ServiceBillingBrodeUnit;
   trigger: ServiceBillingTrigger;
   priceDate: ServiceBillingPriceDate;
+  gramPriceBasis: KursunGramPriceBasis;
 }> {
   return {
     enabled: await resolveServiceBillingEnabled(tx),
@@ -6066,6 +6087,7 @@ export async function loadServiceBillingSettings(tx?: Pick<typeof prisma, "syste
     brodeUnit: await readFinanceServiceBillingBrodeUnit(tx),
     trigger: await readFinanceServiceBillingTrigger(tx),
     priceDate: await readFinanceServiceBillingPriceDate(tx),
+    gramPriceBasis: await readFinanceKursunGramPriceBasis(tx),
   };
 }
 

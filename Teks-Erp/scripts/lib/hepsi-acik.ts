@@ -86,6 +86,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   costPresentationCurrency: A("USD"), // sunum alanlarını (kur + döviz tutarı) yanıta yazdırır
   costFinishingKgBasis: V("yalnız KG tabanlı terbiye tarifesinin kg kaynağı; hiçbir kapıyı açıp kapamaz"),
   financeServiceBillingPriceDate: V("fiyat tarihi; iki değer de geçerli, varsayılan hizmet anı"),
+  financeKursunGramPriceBasis: V("gram fiyatı anı; iki değer de geçerli, varsayılan iş anı (K14 kullanıcı kararı)"),
   financeAutoAllocateOnPaymentEnabled: A(true),
   financeAllowZeroPriceLineEnabled: A(true),
   financeFutureDatedDocumentBlockEnabled: A(true),

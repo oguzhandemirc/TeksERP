@@ -18,6 +18,7 @@ import { factoryDayStart } from "../../constants/time";
 import { D, D0, applyCariBalanceTx } from "./finance.helper";
 import { activeHoldByCari } from "./cari-hold.helper";
 import { assertPeriodsOpenTx, periodDayKey } from "./period-guard.helper";
+import { recordKursunGramPriceVersionTx } from "./kursun-gram-price-version.helper";
 
 /** İki hesapta FARKLI dolu ise birleştirme DURUR (K3a kuralı); hedefte boşsa kaynaktan taşınır. */
 const TERM_FIELDS = ["paymentTermDays", "taxOffice", "riskLimit", "serviceBillingTrigger", "notes", "vatRate", "withholdingEnabled", "withholdingNumerator", "withholdingDenominator", "kursunGramPrice", "kursunGramCurrency"] as const;
@@ -246,6 +247,11 @@ export async function applyCariMergeTx(tx: Prisma.TransactionClient, plan: CariM
   if (claim.count === 0) throw AppError.conflict("Kaynak hesap bu sırada birleştirildi ya da pasife alındı.", { code: "CARI_MERGE_CONFLICT" });
   const target = await tx.cariAccount.updateMany({ where: { id: plan.targetId, isActive: true, mergedIntoId: null }, data: plan.termsToCopy as Prisma.CariAccountUpdateManyMutationInput });
   if (target.count === 0) throw AppError.conflict("Hedef hesap bu sırada pasife alındı ya da birleşti.", { code: "CARI_MERGE_CONFLICT" });
+  // K14: hedefe taşınan gram fiyatı hedefin fiyat geçmişine sürüm olarak girer (kolonla aynı tx).
+  const gramTerm = plan.termsToCopy.kursunGramPrice;
+  if (gramTerm != null) {
+    await recordKursunGramPriceVersionTx(tx, { cariAccountId: plan.targetId }, { price: String(gramTerm), currency: (plan.termsToCopy.kursunGramCurrency ?? null) as Currency | null }, userId);
+  }
 
   const description = `Birleştirme virmanı: ${plan.sourceLabel} → ${plan.targetLabel}`;
   const legs: Prisma.CariTransactionCreateManyInput[] = [];
