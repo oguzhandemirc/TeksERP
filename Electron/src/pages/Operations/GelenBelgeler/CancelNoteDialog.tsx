@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { cancelNote, getNoteCancelPreview, INCOMING_DOCUMENT_QUERY_KEY } from "./service";
 import type { CancelPreviewRoll, CancelPreviewWorkOrder, NoteCancelPreview } from "./cancelTypes";
+import { TERIM } from "@/lib/terim";
 
 const OUTCOME_LABEL: Record<CancelPreviewRoll["outcome"], string> = { CANCEL: "Ters kayıtla düşer", SKIP: "Zaten iptal", BLOCKED: "Engel" };
 export const MIN_REASON = 3;
@@ -36,7 +37,7 @@ function WorkOrderList({ items, chosen, toggle }: { items: CancelPreviewWorkOrde
   if (items.length === 0) return null;
   return (
     <div className="space-y-1 rounded-md border p-2 text-sm" data-testid="cancel-work-orders">
-      <p className="px-1 text-xs font-medium text-muted-foreground">Bağlı iş emirleri</p>
+      <p className="px-1 text-xs font-medium text-muted-foreground">Bağlı {TERIM.terbiyeIsEmri.cogulKucuk}</p>
       {items.map((w) => (
         <label key={w.id} className={`flex items-start gap-2 rounded px-1 py-1 ${w.selectable ? "cursor-pointer hover:bg-muted/40" : "text-destructive"}`}>
           <Checkbox checked={chosen.has(w.id)} disabled={!w.selectable} onCheckedChange={() => toggle(w.id)} aria-label={`${w.workOrderNumber} birlikte iptal edilsin`} />
@@ -56,7 +57,7 @@ function PreviewBody({ data, chosen, toggle }: { data: NoteCancelPreview; chosen
     <div className="min-w-0 space-y-3">
       <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm" data-testid="cancel-summary">
         <strong>{data.summary.cancelRollCount}</strong> / {data.summary.rollCount} top ters kayıtla düşecek ({data.summary.cancelMeters} m)
-        {data.summary.workOrderCount > 0 ? <> · <strong>{data.summary.workOrderCount}</strong> iş emri bağlı</> : null}
+        {data.summary.workOrderCount > 0 ? <> · <strong>{data.summary.workOrderCount}</strong> {TERIM.terbiyeIsEmri.tekilKucuk} bağlı</> : null}
       </div>
       <RollList rolls={data.rolls} />
       <WorkOrderList items={data.workOrders} chosen={chosen} toggle={toggle} />
@@ -89,7 +90,7 @@ export function CancelNoteDialog({ note, open, onOpenChange }: Props) {
     mutationFn: () => cancelNote(note.id, { clientToken: attempt.token(), reason: reason.trim(), workOrderIds: [...chosen] }),
     onSuccess: (res) => {
       attempt.onSuccess();
-      toast.success(`${res.note.noteNo} iptal edildi: ${res.cancelledRollCount} top düştü${res.cancelledWorkOrders.length ? `, ${res.cancelledWorkOrders.length} iş emri iptal` : ""}.`);
+      toast.success(`${res.note.noteNo} iptal edildi: ${res.cancelledRollCount} top düştü${res.cancelledWorkOrders.length ? `, ${res.cancelledWorkOrders.length} ${TERIM.terbiyeIsEmri.tekilKucuk} iptal` : ""}.`);
       void qc.invalidateQueries({ queryKey: [INCOMING_DOCUMENT_QUERY_KEY] });
       onOpenChange(false);
     },
@@ -105,7 +106,7 @@ export function CancelNoteDialog({ note, open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Ban className="h-5 w-5" /> {note.noteNo} iptal edilsin mi?</DialogTitle>
           <DialogDescription>
-            Belge ve satırları silinmez, "İptal edildi" olur; toplar ters kayıtla stoktan düşer. İşaretlediğiniz iş emirleri birlikte iptal edilir.
+            Belge ve satırları silinmez, "İptal edildi" olur; toplar ters kayıtla stoktan düşer. İşaretlediğiniz {TERIM.terbiyeIsEmri.cogulKucuk} birlikte iptal edilir.
             İptal edilen belgenin kağıdı yeniden girilebilir.
           </DialogDescription>
         </DialogHeader>

@@ -9,7 +9,9 @@ import { DeliveryNoteStatus, type Prisma, RollStatus, WorkOrderStatus } from "@p
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
+import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import { isWorkOrderUnprocessed } from "./helpers/workorder-locks.helper";
+import { TERIM } from "../constants/terim";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -75,7 +77,7 @@ const ROLL_SELECT = {
   movements: { where: { ...ACTIVE_MOVEMENT }, select: { step: { select: { workOrderId: true, workOrder: { select: { status: true } } } } } },
   _count: {
     select: {
-      operations: { where: { revokedAt: null } },
+      operations: { where: ACTIVE_OPERATION },
       meterReadings: { where: { revokedAt: null } },
       serviceBillingLinks: { where: { revokedAt: null } },
       dispatchItems: { where: { dispatch: { cancelledAt: null } } },
@@ -126,7 +128,7 @@ function rollBlockers(r: RollRow): CancelBlocker[] {
   if (c.returns > 0) add("ROLL_RETURN", "topun iade kaydı var — önce iadeyi iptal edin.");
   if (c.children > 0) add("ROLL_CHILDREN", "toptan yeni top doğmuş (bölme/fason dönüşü) — önce o işlemi geri alın.");
   if (r.movements.some((m) => m.step && CLOSED_WO.includes(m.step.workOrder.status))) {
-    add("ROLL_PROCESSED", "top tamamlanmış/devredilmiş bir iş emrinde işlem görmüş — belgeyle düşürülemez.");
+    add("ROLL_PROCESSED", `top tamamlanmış/devredilmiş bir ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} işlem görmüş — belgeyle düşürülemez.`);
   }
   return b;
 }
@@ -159,8 +161,8 @@ async function loadWorkOrders(db: Db, ids: string[], noteRollIds: Set<string>): 
     const otherRollCount = rollIds.size - noteRollCount;
     const selectable = await isWorkOrderUnprocessed(db, w.id, w.status);
     const effect = selectable
-      ? `Birlikte iptal edilir${otherRollCount > 0 ? `; bu iş emrindeki başka ${otherRollCount} top ham stoka döner` : ""}.`
-      : "İş emrinde işlem başlamış — belge iptal edilemez; önce işlemi geri alın ya da iş emrini kapatın.";
+      ? `Birlikte iptal edilir${otherRollCount > 0 ? `; bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma}ki başka ${otherRollCount} top ham stoka döner` : ""}.`
+      : `${TERIM.terbiyeIsEmri.cekim.bulunma} işlem başlamış — belge iptal edilemez; önce işlemi geri alın ya da ${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} kapatın.`;
     out.push({ id: w.id, workOrderNumber: w.workOrderNumber, status: w.status, selectable, noteRollCount, otherRollCount, effect });
   }
   return out;
@@ -180,7 +182,7 @@ export async function evaluateNoteCancel(db: Db, ctx: NoteCancelContext, selecte
   for (const w of workOrders) {
     if (!w.selectable) blockers.push({ code: "WORK_ORDER_STARTED", message: `${w.workOrderNumber}: ${w.effect}`, workOrderId: w.id });
     else if (selected && !selected.has(w.id)) {
-      blockers.push({ code: "WORK_ORDER_NOT_SELECTED", message: `${w.workOrderNumber}: belgenin topları bu açık iş emrinde — iptal için iş emrini de seçin.`, workOrderId: w.id });
+      blockers.push({ code: "WORK_ORDER_NOT_SELECTED", message: `${w.workOrderNumber}: belgenin topları bu açık ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} — iptal için ${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} de seçin.`, workOrderId: w.id });
     }
   }
   let cancelMeters = 0;
@@ -190,7 +192,7 @@ export async function evaluateNoteCancel(db: Db, ctx: NoteCancelContext, selecte
     if (r.status === RollStatus.CANCELLED) return { ...base, outcome: "SKIP" as const, blockers: [] };
     const own = rollBlockers(r);
     if (r.status === RollStatus.IN_PRODUCTION && liveWorkOrderIds(r).every((id) => !woById.get(id)?.selectable)) {
-      own.push({ code: "ROLL_STATUS", message: `${tag(r)}: top işlem görmüş bir iş emrinde — önce iş emrindeki işlemi geri alın ya da topu iş emrinden çıkarın.`, rollId: r.id });
+      own.push({ code: "ROLL_STATUS", message: `${tag(r)}: top işlem görmüş bir ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} — önce ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma}ki işlemi geri alın ya da topu ${TERIM.terbiyeIsEmri.cekimKucuk.ayrilma} çıkarın.`, rollId: r.id });
     }
     blockers.push(...own);
     if (own.length === 0) cancelMeters += Number(r.currentQty);

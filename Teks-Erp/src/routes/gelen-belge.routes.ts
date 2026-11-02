@@ -522,7 +522,7 @@ router.post("/irsaliyeler/:id/onay", requirePermission("gelen-belge:approve"), w
 const CancelBody = z.strictObject({
   clientToken: z.uuid("İşlem kimliği geçersiz"),
   reason: z.string("İptal sebebi zorunludur").trim().min(3, "İptal sebebi en az 3 karakter olmalı").max(300, "İptal sebebi en fazla 300 karakter"),
-  workOrderIds: z.array(Id, "Geçersiz iş emri listesi").max(50, "Tek iptalde en fazla 50 iş emri").optional(),
+  workOrderIds: z.array(Id, `Geçersiz ${TERIM.terbiyeIsEmri.tekilKucuk} listesi`).max(50, `Tek iptalde en fazla 50 ${TERIM.terbiyeIsEmri.tekilKucuk}`).optional(),
 });
 /**
  * @openapi

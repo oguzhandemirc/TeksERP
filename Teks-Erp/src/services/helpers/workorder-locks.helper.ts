@@ -36,6 +36,8 @@
 import type { Prisma, PrismaClient, StepStatus } from "@prisma/client";
 import { STEP_CAPABILITY_SELECT, stepCanApplyColor } from "./step-capability.helper";
 import { ACTIVE_TARGET_PROPERTY } from "./property-revoke.helper";
+import { ACTIVE_MOVEMENT } from "./roll-movement.helper";
+import { ACTIVE_OPERATION } from "./roll-operation.helper";
 
 /**
  * WorkOrder satırını write-kilitle — fason completion yollarını serileştirir.
@@ -79,8 +81,8 @@ export async function isWorkOrderUnprocessed(db: Db, workOrderId: string, status
       status: true,
       _count: {
         select: {
-          movements: { where: { revokedAt: null, exitedAt: { not: null } } },
-          operations: { where: { revokedAt: null } },
+          movements: { where: { ...ACTIVE_MOVEMENT, exitedAt: { not: null } } },
+          operations: { where: ACTIVE_OPERATION },
           meterReadings: { where: { revokedAt: null } },
           serviceBillingLinks: { where: { revokedAt: null } },
           variances: true,

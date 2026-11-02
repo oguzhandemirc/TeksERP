@@ -104,7 +104,7 @@ export const PERMISSION_CATALOG = [
   { code: "gelen-belge:read", module: "INCOMING_DOC", category: "web", description: "Gelen belge taslaklarını (OCR/Excel/elle) ve eşleme sonucunu görüntüleme" },
   { code: "gelen-belge:write", module: "INCOMING_DOC", category: "web", description: "Gelen belge taslağı oluşturma, satır düzenleme, eşleme, taslak silme" },
   { code: "gelen-belge:approve", module: "INCOMING_DOC", category: "web", description: "Gelen belge taslağını onaylayıp emanet top girişine işleme (deftere yazar; görev ayrılığı)" },
-  { code: "gelen-belge:cancel", module: "INCOMING_DOC", category: "web", description: "Onaylı gelen belgeyi iptal etme — toplar ters kayıtla düşer, başlamamış iş emirleri birlikte iptal (görev ayrılığı)" },
+  { code: "gelen-belge:cancel", module: "INCOMING_DOC", category: "web", description: "Onaylı gelen belgeyi iptal etme — toplar ters kayıtla düşer, başlamamış terbiye iş emirleri birlikte iptal (görev ayrılığı)" },
   { code: "gelen-belge:template", module: "INCOMING_DOC", category: "web", description: "Gönderen belge şablonlarını (yerleşim · alias) tanımlama ve düzenleme" },
   // ── Levent (devere Faz 1b, 2026-09-14): plan/sar yazma, sarım iptali AYRI yetenek (defterden net iplik döner).
   { code: "warpbeam:read", module: "PRODUCTION", category: "web", description: "Levent listesi/detayı (plan · sarım · kalan metre · iplik satırları)" },

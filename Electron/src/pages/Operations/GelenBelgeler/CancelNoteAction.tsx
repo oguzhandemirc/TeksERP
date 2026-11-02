@@ -20,3 +20,9 @@ export function CancelNoteAction({ note }: { note: { id: string; noteNo: string;
     </PermissionGate>
   );
 }
+
+/** İptal edilmiş belgenin sebebi (K15). `cancelReason` alanı yalnız iptal yüzeyinin sözleşmesidir; eski sunucu göndermez. */
+export function CancelReasonLine({ note }: { note: { status: NoteStatus; cancelReason?: string | null } }) {
+  if (note.status !== "CANCELLED" || !note.cancelReason) return null;
+  return <p className="text-xs text-destructive" data-testid="note-cancel-reason">İptal sebebi: {note.cancelReason}</p>;
+}
