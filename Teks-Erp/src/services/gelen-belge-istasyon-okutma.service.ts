@@ -7,42 +7,23 @@
 // Aynı fotoğraf (sha256) zaten taranmışsa OCR koşmaz: o taramanın belgesi ya da saklı okuması kullanılır.
 // Elle arama (`q`) ve istasyon/panel liste araması aynı helper'dan (`workOrderDocSearchWhere`) beslenir.
 // =============================================================================
-import { DeliveryNoteStatus, type Prisma, WorkOrderStatus } from "@prisma/client";
+import { type Prisma, WorkOrderStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
-import { buildTextSearch } from "../utils/query-parser";
 import { TERIM } from "../constants/terim";
 import { getReaderUrl } from "../lib/gelen-belge/url";
 import { readerOcr } from "../lib/gelen-belge/okuma-istemcisi";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import { whereRollsOfWorkOrder, whereWorkOrdersOfRolls } from "./helpers/workorder-rolls.helper";
+import { LOOKUP_NOTE_STATUSES, stationWorkSearchWhere } from "./helpers/workorder-doc-search.helper";
 import { decodeScanUpload, PDF_MIME } from "./gelen-belge-scan.service";
 import { extractDraft, ocrFromEnvelope } from "./gelen-belge-taslak-doldur.service";
 import { readIncomingDocStationLookup, readProductionEnabled } from "./system-setting.service";
 
 const IE = TERIM.terbiyeIsEmri;
 
-/** Topu doğmuş (onaylı) belgeler — taslakta top yok, iptal edilen belge mükerrerden de eşlemeden de çıkar (K15). */
-export const LOOKUP_NOTE_STATUSES: readonly DeliveryNoteStatus[] = [DeliveryNoteStatus.APPROVED, DeliveryNoteStatus.PARTIAL];
-/** Belgede aranan KOD alanları: fiş/evrak no (gönderen belge no) · GB no · müşteri parti no · bizim parti no · sipariş no. */
-export const NOTE_SEARCH_CODE_FIELDS = ["senderDocNo", "noteNo", "customerBatchNo", "ourBatchNo", "customerOrderNo"] as const;
 /** Yanıt tavanı — tablet listesi; daha fazlası belge no'nun yanlış okunduğunu gösterir. */
 const MAX_WORK_ORDERS = 20;
-
-/** "Bu belge alanlarından birini taşıyan canlı belgenin topu bu iş emrinde" — liste aramasının belge dalı. */
-export function workOrderDocSearchWhere(q: string): Prisma.WorkOrderWhereInput | null {
-  const leaves = buildTextSearch<Prisma.CustomerDeliveryNoteWhereInput>(q, { code: NOTE_SEARCH_CODE_FIELDS });
-  if (leaves.length === 0) return null;
-  return whereWorkOrdersOfRolls({ deliveryNoteLine: { note: { status: { in: [...LOOKUP_NOTE_STATUSES] }, OR: leaves } } });
-}
-
-/** İstasyon iş listesi araması: İE no · parti no · belge alanları (kurşun + tambur açık kartları, elle arama). */
-export function stationWorkSearchWhere(q: string): Prisma.WorkOrderWhereInput | null {
-  const own = buildTextSearch<Prisma.WorkOrderWhereInput>(q, { code: ["workOrderNumber", "batches.some.batchNumber"] });
-  const doc = workOrderDocSearchWhere(q);
-  const ors = doc ? [...own, doc] : own;
-  return ors.length > 0 ? { OR: ors } : null;
-}
 
 export type StationLookupOutcome = "SINGLE" | "MULTIPLE" | "NO_WORK_ORDER" | "NO_DOCUMENT" | "NO_DOC_NO" | "UNREADABLE";
 export type StationLookupSource = "SAME_PHOTO" | "STORED_READ" | "OCR" | "SEARCH";

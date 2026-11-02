@@ -9,6 +9,7 @@
 //   - Rolls attached to a WO change status from STOCK → IN_PRODUCTION.
 // =============================================================================
 
+import { workOrderDocSearchWhere } from "./helpers/workorder-doc-search.helper";
 import { randomUUID } from "crypto";
 import { ROLL_DISPLAY_ORDER } from "../constants/roll-order";
 import { ACTIVE_OPERATION, OWN_OPERATION } from "./helpers/roll-operation.helper";
@@ -1775,6 +1776,12 @@ export class WorkOrderService {
         "orderLinks.some.orderLine.order.orderNumber",
       ]
     ));
+    // K17: arama gelen belgenin fiş/evrak no'sunu, GB no'sunu ve parti no'larını da tarar (istasyonla tek yüklem).
+    const docSearch = params.search ? workOrderDocSearchWhere(params.search) : null;
+    if (docSearch) {
+      const w = where as { OR?: Prisma.WorkOrderWhereInput[] };
+      w.OR = [...(w.OR ?? []), docSearch];
+    }
     applyDateRange(where, params, WORKORDER_DATE_FIELDS);
     if (hideCancelledWhere) Object.assign(where, hideCancelledWhere);
     if (customerCond) {

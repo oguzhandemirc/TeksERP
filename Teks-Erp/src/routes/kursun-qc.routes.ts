@@ -85,6 +85,8 @@ router.get(
  *       olmamış, en az bir açık top mevcut, WO'nun ACTIVE refakat kartı var.
  *       Cihazın aktif çalışma oturumu varsa yalnız oturum istasyonunun adımları döner.
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: q, schema: { type: string, maxLength: 64 }, description: "İE no / parti no / fiş-evrak no / GB no araması (K17); boş = tüm liste" }
  *     responses:
  *       200: { description: Açık kart listesi }
  *       500: { description: Sunucu hatası }
