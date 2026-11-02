@@ -8,6 +8,7 @@
 // `noteNo` DOĞUŞTA `GB` serisinden materyalize edilir (`numaralandirma.md`); replay dört durumlu
 // `tokenReplay` boğazından. Liste + cursor + özet şeridi TEK where'den türer (`filtre-liste.md`).
 // =============================================================================
+import { suggestOwnerForNote } from "./gelen-belge-sahip-onerisi.service";
 import { cariHoldNotice } from "./helpers/cari-hold.helper";
 import { DeliveryNoteSourceKind, DeliveryNoteStatus, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
@@ -171,7 +172,9 @@ export async function getDeliveryNote(id: string) {
     : null;
   // Parti no adayları + kurşun metre adayları CANLI (saklanmaz); eski istemci alanları yok sayar.
   const batchMeters = await noteBatchAndMeters(note.id, note.totalsDeclared, note.lines.filter((l) => l.status !== "SKIPPED" && l.status !== "INFO").map((l) => l.meters));
-  return { ...note, lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch, ...batchMeters, ...(perDocument ? { perDocument: perDocument.gate } : {}) };
+  // Müşteri önerisi (OIE): okunan metinde yazan cari; yalnız sahipsiz taslakta, aksi null. Eski istemci alanı yok sayar.
+  const ownerSuggestion = await suggestOwnerForNote(note);
+  return { ...note, lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch, ...batchMeters, ...(perDocument ? { perDocument: perDocument.gate } : {}), ownerSuggestion };
 }
 
 /** Liste where'i — özet şeridi de BUNDAN türer (durum süzgeci hariç; şerit duruma göre sayar). */

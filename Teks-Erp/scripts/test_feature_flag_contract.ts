@@ -636,6 +636,17 @@ async function main() {
       file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
       needle: "autoWorkOrderPatternless: z.enum(",
     },
+    // Gülkesim OIE (2026-11-02): ayarlar tanımlı + uçtaki Zod alanı; panel yüzeyi C dilimi.
+    GELEN_BELGE_FORM_APPROVAL: {
+      why: "Formdan okutulan belgenin kaydı (SEPARATE varsayılan | WITH_WORK_ORDER) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; kapıyı `POST /irsaliyeler/:id/is-emri` okur",
+      file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
+      needle: "formApproval: z.enum(",
+    },
+    PRODUCTION_REFAKAT_AUTO_PRINT: {
+      why: "İş emri açılınca refakat kartı otomatik yazdırma (varsayılan false) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; istemci okur",
+      file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
+      needle: "refakatAutoPrint: z.boolean(",
+    },
     SYSTEM_INSTALLATION_ID: {
       why: "Feature flag değil, kurulum kimliği — panel yüzeyi YOK (bilinçli); boot işi üretir, /api/discovery/identity okur",
       file: "Teks-Erp/src/jobs/installation-identity.job.ts",

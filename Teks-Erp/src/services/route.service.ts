@@ -16,6 +16,9 @@ import { assertTargetablePropertyIds } from "./helpers/targetable-property.helpe
 import { AppError } from "../utils/app-error";
 import { assertStationsRoutable } from "./helpers/station-routable.helper";
 import type { ApiResponse } from "../types/api.types";
+import type { Request } from "express";
+import { parseQueryParams } from "../utils/query-parser";
+import { assertShortcutFields, isShortcutQuery, listShortcutRoutes } from "./helpers/route-shortcut.helper";
 
 /**
  * Route servis konfigürasyonu — TEK KAYNAK. Hem canlı wiring (route.routes.ts)
@@ -126,6 +129,7 @@ export class RouteService extends BaseService {
   }
 
   private async validateSteps(data: Record<string, unknown>): Promise<void> {
+    assertShortcutFields(data); // kısayol kolonları da gövde doğrulamasıdır (create + update tek giriş)
     if (!("steps" in data) || data.steps == null) return;
     const steps = this.extractSteps(data.steps);
     if (steps === null) {
@@ -395,6 +399,13 @@ export class RouteService extends BaseService {
         s.plannedProperties = { create: unique.map((propertyId) => ({ propertyId })) };
       }
     }
+  }
+
+  /** `?shortcut=1`: yalnız iş emri kısayolları, sıralı + sayfasız (helper); where yine `buildListWhere`ten. Parametresiz istek bugünkü liste. */
+  async findAll(req: Request) {
+    if (!isShortcutQuery(req)) return super.findAll(req);
+    this.assertListQueryShape(req);
+    return listShortcutRoutes({ ...this.buildListWhere(parseQueryParams(req), req), isWorkOrderShortcut: true }, ROUTE_SERVICE_CONFIG.defaultInclude);
   }
 
   // Tambursuz rota (KQ-D8): kalite adımından sonra karar adımı yoksa UYARI, red değil.

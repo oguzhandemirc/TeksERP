@@ -1644,6 +1644,11 @@ model Route {
   isFavorite  Boolean @default(false) // Sık kullanılan şablon
   customerId  String? @db.Uuid // Müşteriye özel default rota (opsiyonel)
   isActive    Boolean @default(true)
+  /// "İş emri oluştur" kısayol listesinde görünür mü (Gülkesim K6; varsayılan false = bugünkü: kısayol yok).
+  /// Liste `GET /api/routes?shortcut=1` — yalnız işaretliler, `shortcutOrder` sırasıyla.
+  isWorkOrderShortcut Boolean @default(false)
+  /// Kısayol listesindeki sıra (küçük önce; eşitlikte ad).
+  shortcutOrder       Int     @default(0)
 
   // Relations
   customer       Customer?       @relation("CustomerDefaultRoutes", fields: [customerId], references: [id])
