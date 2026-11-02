@@ -58,6 +58,14 @@ export async function touchWorkOrderTx(
   });
 }
 
+/**
+ * "Başlamamış" iş emri yüklemi — TEK kaynak: tablet iptal kapısı (`assertWorkOrderUntouched`) ve gelen belge
+ * iptali (K15) aynı soruyu sorar. PLANNED + hiçbir adım başlamamış + açık fason sevki yok.
+ */
+export async function isWorkOrderUntouched(db: Db, workOrderId: string, status: string): Promise<boolean> {
+  return status === "PLANNED" && !(await computeWorkOrderLocks(db, workOrderId)).materialCommitted;
+}
+
 export interface WorkOrderLocks {
   /** Rota+sevk durumuna göre fiziksel taahhüt var mı. */
   materialCommitted: boolean;
