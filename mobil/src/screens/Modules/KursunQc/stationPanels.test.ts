@@ -6,6 +6,7 @@ import {
   dativeTr,
   emptyRollHint,
   finishStepLabel,
+  flowScreenLabels,
 } from './stationPanels';
 
 const KURSUN = { mode: 'REQUIRED' as const };
@@ -132,5 +133,35 @@ describe('iç brode istasyonu (D4-D4 kurulum şekli)', () => {
     const kursun = { propertyId: 'kursun', valueType: 'FLAG' as const, mode: 'AUTO' as const };
     const gramaj = { propertyId: 'gramaj', valueType: 'CHOICE' as const, mode: 'REQUIRED' as const, variantOfPropertyId: 'kursun', values: [{ code: '25GR', name: '25 gr' }] };
     expect(composeStationPanels({ inspectionEnabled: false, properties: [brode, desen, kursun, gramaj] }).completion).toBe('BUTTON');
+  });
+});
+
+// S4 (Gülkesim Detaylı KK): kurşunsuz kalite istasyonu aynı ekranı açar; metinler
+// istasyon adından. Negatif sonda: ad yok sayılıp hep kurşun metni dönerse kırmızı.
+describe('flowScreenLabels — Detaylı KK ekran metinleri', () => {
+  it('kurşunsuz istasyon adı: hiçbir metinde "Kurşun" geçmez', () => {
+    const l = flowScreenLabels('DETAYLI KK');
+    expect(l).toEqual({
+      title: 'DETAYLI KK',
+      queueTitle: 'DETAYLI KK · İşler',
+      emptyQueue: 'DETAYLI KK istasyonunda bekleyen kart yok',
+      noteTitle: 'DETAYLI KK Notu',
+    });
+    expect(Object.values(l).some((t) => /Kurşun/i.test(t))).toBe(false);
+  });
+
+  it('kurşun istasyonu kendi adını taşır', () => {
+    expect(flowScreenLabels('Kurşun + KK2').queueTitle).toBe('Kurşun + KK2 · İşler');
+  });
+
+  it('ad yok (oturum/özet gelmedi) → bugünkü kurşun metinleri', () => {
+    for (const n of [undefined, null, '  ']) {
+      expect(flowScreenLabels(n)).toEqual({
+        title: 'Kurşun',
+        queueTitle: 'Kurşun · KK2 İşleri',
+        emptyQueue: "Kurşun + KK2'de bekleyen kart yok",
+        noteTitle: 'Kurşun + KK2 Notu',
+      });
+    }
   });
 });
