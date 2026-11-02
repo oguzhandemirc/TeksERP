@@ -45,6 +45,7 @@ export interface DeliveryNoteHeaderInput {
   /** YYYY-AA-GG — takvim günü. */
   senderDocDate?: string | null;
   customerBatchNo?: string | null;
+  customerOrderNo?: string | null;
   processText?: string | null;
   pageCount?: number | null;
   declaredTopCount?: number | null;
@@ -73,7 +74,7 @@ export interface DeliveryNoteListQuery {
 // ── Seçimler ────────────────────────────────────────────────────────────────
 const HEADER_SELECT = {
   id: true, noteNo: true, status: true, sourceKind: true, ownerCustomerId: true, senderCustomerId: true, senderText: true,
-  senderDocNo: true, senderDocDate: true, customerBatchNo: true, processText: true, templateId: true, templateScore: true,
+  senderDocNo: true, senderDocDate: true, customerBatchNo: true, customerOrderNo: true, processText: true, templateId: true, templateScore: true,
   pageCount: true, declaredTopCount: true, totalsDeclared: true, varianceReason: true, warnings: true, approvedAt: true,
   approvedById: true, cancelledAt: true, cancelledById: true, cancelReason: true, clientToken: true, createdAt: true,
   updatedAt: true, createdById: true, updatedById: true,
@@ -89,11 +90,11 @@ const DETAIL_SELECT = {
 } satisfies Prisma.CustomerDeliveryNoteSelect;
 
 /** Audit yükü: yalnız başlık künyesi (JSON beyan/uyarı alanları hariç; fotoğraf/OCR zaten burada yok). */
-function auditHeader(n: { noteNo: string; status: string; sourceKind: string; ownerCustomerId: string | null; senderCustomerId: string | null; senderText: string | null; senderDocNo: string | null; senderDocDate: Date | null; customerBatchNo: string | null; processText: string | null; pageCount: number | null; declaredTopCount: number | null }) {
+function auditHeader(n: { noteNo: string; status: string; sourceKind: string; ownerCustomerId: string | null; senderCustomerId: string | null; senderText: string | null; senderDocNo: string | null; senderDocDate: Date | null; customerBatchNo: string | null; customerOrderNo: string | null; processText: string | null; pageCount: number | null; declaredTopCount: number | null }) {
   return {
     noteNo: n.noteNo, status: n.status, sourceKind: n.sourceKind, ownerCustomerId: n.ownerCustomerId, senderCustomerId: n.senderCustomerId,
     senderText: n.senderText, senderDocNo: n.senderDocNo, senderDocDate: n.senderDocDate ? n.senderDocDate.toISOString().slice(0, 10) : null,
-    customerBatchNo: n.customerBatchNo, processText: n.processText, pageCount: n.pageCount, declaredTopCount: n.declaredTopCount,
+    customerBatchNo: n.customerBatchNo, customerOrderNo: n.customerOrderNo, processText: n.processText, pageCount: n.pageCount, declaredTopCount: n.declaredTopCount,
   };
 }
 function parseDay(v: string | null | undefined): Date | null {
@@ -122,6 +123,7 @@ async function headerColumns(input: DeliveryNoteHeaderInput) {
     senderDocNo: text(input.senderDocNo),
     senderDocDate: parseDay(input.senderDocDate),
     customerBatchNo: text(input.customerBatchNo),
+    customerOrderNo: text(input.customerOrderNo),
     processText: text(input.processText),
     pageCount: input.pageCount ?? null,
     declaredTopCount: input.declaredTopCount ?? null,
@@ -181,6 +183,7 @@ export function buildDeliveryNoteBaseWhere(q: DeliveryNoteListQuery): Prisma.Cus
       { senderDocNo: { contains: term, mode: "insensitive" } },
       { senderText: { contains: term, mode: "insensitive" } },
       { customerBatchNo: { contains: term, mode: "insensitive" } },
+      { customerOrderNo: { contains: term, mode: "insensitive" } },
     ];
   }
   return where;
@@ -268,7 +271,7 @@ export async function createDeliveryNote(input: DeliveryNoteCreateInput, userId:
             createdById: userId, updatedById: userId,
             lines: lines.length ? { create: lines } : undefined,
           },
-          select: { ...PRIOR_SELECT, sourceKind: true, senderText: true, senderDocDate: true, customerBatchNo: true, processText: true, pageCount: true, declaredTopCount: true, senderCustomerId: true },
+          select: { ...PRIOR_SELECT, sourceKind: true, senderText: true, senderDocDate: true, customerBatchNo: true, customerOrderNo: true, processText: true, pageCount: true, declaredTopCount: true, senderCustomerId: true },
         });
         if (scanIds.length) {
           const bound = await tx.documentScan.updateMany({ where: { id: { in: scanIds }, noteId: null }, data: { noteId: row.id } });
@@ -303,7 +306,7 @@ export async function updateDeliveryNote(id: string, patch: DeliveryNoteHeaderIn
   return getDeliveryNote(id);
 }
 
-const HEADER_AUDIT_SELECT = { ...PRIOR_SELECT, sourceKind: true, senderText: true, senderDocDate: true, customerBatchNo: true, processText: true, pageCount: true, declaredTopCount: true, senderCustomerId: true } as const;
+const HEADER_AUDIT_SELECT = { ...PRIOR_SELECT, sourceKind: true, senderText: true, senderDocDate: true, customerBatchNo: true, customerOrderNo: true, processText: true, pageCount: true, declaredTopCount: true, senderCustomerId: true } as const;
 
 /** Tam kolon kümesinden yalnız patch'te tanımlı anahtarları bırakır (kısmi güncelleme; kayıp güncelleme yok). */
 function patchColumns<T extends Record<string, unknown>>(full: T, patch: DeliveryNoteHeaderInput): Partial<T> {
@@ -319,7 +322,7 @@ export const isDeletableNoteStatus = (s: DeliveryNoteStatus): boolean => s === N
  * Taramalar silinmez, taslaktan ÇÖZÜLÜR (fotoğraf izi kalır, yeniden kullanılabilir); satırlar Cascade.
  */
 export async function deleteDeliveryNote(id: string, userId: string): Promise<{ id: string; noteNo: string }> {
-  const before = await prisma.customerDeliveryNote.findUnique({ where: { id }, select: { ...PRIOR_SELECT, sourceKind: true, senderText: true, senderDocDate: true, customerBatchNo: true, processText: true, pageCount: true, declaredTopCount: true, senderCustomerId: true } });
+  const before = await prisma.customerDeliveryNote.findUnique({ where: { id }, select: { ...PRIOR_SELECT, sourceKind: true, senderText: true, senderDocDate: true, customerBatchNo: true, customerOrderNo: true, processText: true, pageCount: true, declaredTopCount: true, senderCustomerId: true } });
   if (!before) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
   if (!isDeletableNoteStatus(before.status)) await notDraft(id);
   await prisma.$transaction(async (tx) => {

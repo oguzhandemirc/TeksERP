@@ -20,7 +20,18 @@ export const NOTE_COLUMNS: ColumnDef<DeliveryNoteHeader>[] = [
     cell: ({ row }) => row.original.ownerCustomer?.name ?? <span className="text-amber-700 dark:text-amber-400">Sahip seçilmedi</span>,
   },
   { id: "sender", header: "Gönderen", accessorFn: (r) => r.senderCustomer?.name ?? r.senderText ?? "—" },
-  { id: "senderDocNo", header: "Belge No", accessorFn: (r) => r.senderDocNo ?? "—", cell: ({ getValue }) => <span className="text-xs text-muted-foreground">{String(getValue())}</span> },
+  {
+    id: "senderDocNo",
+    header: "Belge No",
+    accessorFn: (r) => r.senderDocNo ?? "—",
+    // Sipariş no ayrı kolon değil (genişlik): aramayla bulunan satırda neden eşleştiği görünsün diye ikinci satırda.
+    cell: ({ row }) => (
+      <span className="flex flex-col text-xs text-muted-foreground">
+        <span>{row.original.senderDocNo ?? "—"}</span>
+        {row.original.customerOrderNo && <span data-testid="note-order-no">Sip. {row.original.customerOrderNo}</span>}
+      </span>
+    ),
+  },
   { id: "lines", header: "Satır", accessorFn: (r) => r._count.lines, cell: ({ getValue }) => <span className="tabular-nums">{String(getValue())}</span> },
   { id: "sourceKind", header: "Kaynak", accessorFn: (r) => SOURCE_LABEL[r.sourceKind], cell: ({ getValue }) => <span className="text-xs">{String(getValue())}</span> },
   {
