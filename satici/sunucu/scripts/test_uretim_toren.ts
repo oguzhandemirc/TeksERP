@@ -49,7 +49,8 @@ import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readd
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { LICENSE_CLASSES, parseModuleKeyFile } from "../src/lisans-protokol";
+import { LICENSE_CLASSES, parseModuleKeyFile, type LicenseClass } from "../src/lisans-protokol";
+import { intermediateDefaultClasses } from "../src/keys/intermediate-classes";
 import { KeyFileError, passwordBuffer, readWrappedKeyFile, unwrapPrivateKey } from "../src/keys/key-files";
 import { KeyStore } from "../src/keys/key-store";
 import { loadServerSecrets } from "../src/keys/server-secrets";
@@ -1122,11 +1123,11 @@ async function main(): Promise<void> {
     const pks = KeyStore.load({ ANAHTAR_DIZINI: path.join(P, "anahtarlar"), GUVEN_CAPASI_DOSYASI: capaYolu });
     const simdi = Date.now();
     const gunSay = (x: { baslangic: string; bitis: string }) => Math.round((Date.parse(x.bitis) - Date.parse(x.baslangic)) / 86_400_000);
-    kontrol("§6f paketin anahtarları KÖKE karşı geçerli: kira ALT · İNDİRME · ARA (URETIM) seçilir, üçü de 395 gün (yıllık tören + 30 örtüşme), ara sınıfları URETIM·DR·DEMO·TEST, uyarı yok",
+    kontrol("§6f paketin anahtarları KÖKE karşı geçerli: kira ALT · İNDİRME · ARA (URETIM) seçilir, üçü de 395 gün (yıllık tören + 30 örtüşme), ara sınıfları tek kaynaktan (kökün sınıfları ∩ BAYI dışı — BARINDIRILAN dahil), uyarı yok",
       pks.leaseKeyFor("URETIM", simdi)?.kid === `alt-${YIL}-2` && pks.downloadKey(simdi)?.kid === `ind-${YIL}-2` && pks.intermediateFor("URETIM", simdi)?.kid === `ara-${YIL}-1` &&
-        [dk.yeni.alt, dk.yeni.ara, dk.yeni.indirme].every((x) => gunSay(x) === 395) && JSON.stringify([...dk.yeni.ara.siniflar].sort()) === JSON.stringify(["DEMO", "DR", "TEST", "URETIM"]) &&
+        [dk.yeni.alt, dk.yeni.ara, dk.yeni.indirme].every((x) => gunSay(x) === 395) && JSON.stringify([...dk.yeni.ara.siniflar].sort()) === JSON.stringify(intermediateDefaultClasses(kok.siniflar as LicenseClass[]).sort()) && dk.yeni.ara.siniflar.includes("BARINDIRILAN") &&
         pks.warnings.filter((w) => !w.startsWith("Güven çapası DOSYADAN")).length === 0,
-      pks.warnings.join(" | "));
+      `${pks.warnings.join(" | ")} · ara ${dk.yeni.ara.siniflar.join(",")}`);
     const enErken = Math.min(...[dk.yeni.alt, dk.yeni.ara, dk.yeni.indirme].map((x) => Date.parse(x.bitis)));
     const sonrakiToren = new Date(enErken - 30 * 86_400_000).toISOString().slice(0, 10);
     const sonrakiSatir = /SONRAKİ\s+dönem töreni (\d{4}-\d{2}-\d{2})/.exec(d1.cikti)?.[1];

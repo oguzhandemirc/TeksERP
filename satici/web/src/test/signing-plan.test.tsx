@@ -5,6 +5,8 @@
 // DEMO/TEST ≤ 45. Kuyruk yanıtı (202) kuyruk ekranına yönlendirir. İlk lisans (plan ARA + `yetenekKaynagi: BEKLENEN`) bilgi
 // satırı taşır; alan yoksa (eski sunucu) çizilmez. Negatif sonda (2026-10-10, geri alındı): yüklem kaynağı yok sayınca
 // "çizilmez" testi, hep false olunca "bilgi satırı" testi kırmızı.
+// KUYRUK planında gönderimden ÖNCE uyarı (neden + yapılacak iş). Negatif sonda (2026-11-02, geri alındı): uyarı satırı
+// kaldırılınca "⭐ kuyruk uyarısı" testi kırmızı.
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -108,6 +110,25 @@ describe("plana göre sürüm formu", () => {
     expect(w[0]!.body).toMatchObject({ imzaci: "ARA", imzaParolasi: "ara-parola", sebep: "bakım uzatma" });
     expect(w[0]!.body).not.toHaveProperty("kokParolasi");
     expect(w[0]!.body).not.toHaveProperty("cevrimdisiUfukGun");
+  });
+
+  it("⭐ kuyruk uyarısı GÖNDERİMDEN ÖNCE: 'kök kuyruğuna düşer' + neden + yapılacak iş (ara imzacı sınıfı kapsamıyor)", async () => {
+    const user = userEvent.setup();
+    const { calls } = open({ plans: [{ ...KUYRUK, neden: "ARA_IMZACI_YOK" }] });
+    const dialog = await openForm(user);
+    const warn = within(dialog).getByTestId("kuyruk-uyarisi");
+    expect(warn).toHaveAttribute("role", "alert");
+    expect(warn).toHaveTextContent(/kök imzası kuyruğuna düşer/);
+    expect(warn).toHaveTextContent(/geçerli ara imzacı yüklü değil/);
+    expect(warn).toHaveTextContent(/yeni ara imzacı çıkarın/);
+    expect(writes(calls)).toHaveLength(0);
+  });
+
+  it("ara imzacı planında kuyruk uyarısı YOK", async () => {
+    const user = userEvent.setup();
+    open({ plans: [ARA] });
+    const dialog = await openForm(user);
+    expect(within(dialog).queryByTestId("kuyruk-uyarisi")).toBeNull();
   });
 
   it("⭐ kök kuyruğu: parola alanı YOK, gövde parolasız; 202 yanıtı kuyruk ekranına yönlendirir", async () => {

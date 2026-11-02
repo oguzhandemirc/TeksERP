@@ -1,5 +1,5 @@
-// KÖK İMZASI KUYRUĞU (lisans v2 · G4): yetenek bildirmeyen derlemenin HAK değişikliği kök imzası bekler; dönem töreninde
-// Mac'te imzalanır (`kuyruk-disa-aktar` → `kuyruk-imzala` → `donem-ice-aktar`). ACİL talep: yetenek düşüşünde fabrika kira
+// KÖK İMZASI KUYRUĞU (lisans v2 · G4): ara imzacının imzalayamadığı HAK değişikliği (eski derleme YA DA sınıfı kapsayan ara
+// imzacı yok — neden talebe doğuşta yazılır) Mac'te `uretim-toren.mjs kuyruk` tek komutuyla kökle imzalanır. ACİL talep: yetenek düşüşünde fabrika kira
 // alamadı (genişlik kapısı) — yıllık tören beklenmeden imzalanmalı; liste ACİL olanları ayrıca en üstte gösterir.
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -7,28 +7,26 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ConfirmAction } from "../../shared/ConfirmAction";
 import { fmtDateTime } from "../../shared/format";
 import { usePaged } from "../../shared/hooks";
-import { ROOT_REQUEST_STATUS_LABEL, label } from "../../shared/labels";
+import { ROOT_QUEUE_REASON_ACTION, ROOT_REQUEST_STATUS_LABEL, SIGNER_PLAN_REASON_LABEL, label } from "../../shared/labels";
 import { useApi, useCan } from "../../shared/session";
 import type { RootRequest } from "../../shared/types";
 import { Badge, Button, LoadMore, PageTitle, QueryState, Section, Table } from "../../shared/ui";
 
 /** Dönem töreninin runbook'u (repoda; portal dosyayı sunmaz — yol gösterilir). */
-export const CEREMONY_RUNBOOK = "docs/ops/URETIM-SATICI-TOREN.md §8";
+export const CEREMONY_RUNBOOK = "docs/ops/URETIM-SATICI-TOREN.md §8a";
 
-/** Töreni anlatan kısa yönerge: kuyruk VDS'ten Mac'e, kök imzası Mac'te, sonuç geri VDS'e. */
+/** Tek komut: kuyruk VDS'ten okunur, her talebin farkı gösterilir, onayla kökle imzalanır, sonuç VDS'e yazılır. */
 function CeremonyGuide() {
   return (
-    <Section title="Tören nasıl işler">
+    <Section title="Kuyruk nasıl imzalanır">
       <ol className="small">
         <li>
-          VDS: bekleyen talepler dışa aktarılır (<code>anahtar.js kuyruk-disa-aktar</code>) — ACİL olanlar önce.
+          Mac: <code>node deploy/satici/uretim-toren.mjs kuyruk</code> — kuru koşum: her talebin müşterisi, nedeni ve önceki imzalı HAK'a göre farkı (modül · bakım
+          · ufuk) listelenir; şüpheli talep işaretlenir. Parola sorulmaz, hiçbir şey yazılmaz.
         </li>
         <li>
-          Mac: dönem töreni kökle imzalar (<code>uretim-toren.mjs donem --kuyruk=…</code>); kök parolası yalnız orada yazılır, VDS'e gelmez.
-        </li>
-        <li>
-          VDS: paket içe aktarılır (<code>anahtar.js donem-ice-aktar</code>) — talep İmzalandı olur, fabrika sonraki yoklamada yeni sürümü alır. HAK arada başka
-          sürüme geçtiyse talep Eskidi olur (imza yazılmaz).
+          Mac: <code>… kuyruk --uygula</code> (tek talep için <code>--talep=&lt;id&gt;</code>) — onay, kök parolası (yalnız Mac'te), imza ve VDS'e içe aktarma tek
+          adımda. Talep İmzalandı olur, fabrika sonraki yoklamada yeni sürümü alır. Şüpheli talep imzalanmaz; HAK arada başka sürüme geçtiyse talep Eskidi olur.
         </li>
       </ol>
       <p className="muted small">
@@ -60,6 +58,19 @@ export function RootQueuePage() {
     { header: "Lisans", render: (r: RootRequest) => r.lisansNo },
     { header: "Sürüm", render: (r: RootRequest) => `${r.tabanSurum} → ${r.surum}`, className: "num-col" },
     { header: "Öncelik", render: (r: RootRequest) => (r.acil ? <Badge tone="danger">ACİL — fabrika kira alamıyor</Badge> : r.uzunUfuk ? <Badge tone="warn">Uzun ufuk</Badge> : "—") },
+    {
+      header: "Neden",
+      render: (r: RootRequest) =>
+        r.planNedeni ? (
+          <span data-testid="kuyruk-nedeni">
+            {label(SIGNER_PLAN_REASON_LABEL, r.planNedeni)}
+            <br />
+            <span className="muted small">{label(ROOT_QUEUE_REASON_ACTION, r.planNedeni)}</span>
+          </span>
+        ) : (
+          "—"
+        ),
+    },
     { header: "Sebep", render: (r: RootRequest) => r.sebep },
     { header: "Durum", render: (r: RootRequest) => label(ROOT_REQUEST_STATUS_LABEL, r.durum) },
     {
@@ -71,7 +82,7 @@ export function RootQueuePage() {
     <>
       <PageTitle
         title="Kök imzası kuyruğu"
-        sub="Yetenek bildirmeyen derlemenin HAK değişikliği dönem töreninde Mac'te kökle imzalanır. ACİL talepte fabrika kira alamıyor: töreni beklemeden imzalayın."
+        sub="Ara imzacının imzalayamadığı HAK değişiklikleri burada bekler. İki neden var: kurulumun derlemesi eski (kurulumu güncelleyin) ya da bu sınıfı kapsayan ara imzacı yok (yeni ara imzacı çıkarın). Bekleyen talepler Mac'te tek komutla kökle imzalanır; ACİL talepte fabrika kira alamıyor, beklemeden imzalayın."
       />
       <CeremonyGuide />
       <Section title="Acil kök imzası gerekiyor">

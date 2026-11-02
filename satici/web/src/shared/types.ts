@@ -261,6 +261,8 @@ export interface RootRequest {
   readonly uzunUfuk: boolean;
   readonly acil: boolean;
   readonly durum: "BEKLIYOR" | "IMZALANDI" | "IPTAL" | "ESKIDI";
+  /** Kuyruğa NEDEN düştü (talebe doğuşta yazılır); eski sunucu göndermez. */
+  readonly planNedeni?: "YETENEK_YOK" | "ARA_IMZACI_YOK";
   readonly sebep: string;
   readonly yapan: string;
   readonly kapanisZamani: string | null;

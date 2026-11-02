@@ -90,10 +90,14 @@ export type EmbeddedSigner =
 
 export type SignerPlanKind = "ARA" | "KOK" | "KUYRUK";
 
+/** KUYRUK nedeni — Prisma `HakKokTalebiNedeni` ile aynı küme (talebe doğuşta yazılır; portal etiketi aynası). */
+export const QUEUE_REASONS = ["YETENEK_YOK", "ARA_IMZACI_YOK"] as const;
+export type QueueReason = (typeof QUEUE_REASONS)[number];
+
 export type EntitlementSignerPlan =
   | { readonly kind: "ARA"; readonly kid: string; readonly keyFile: string; readonly certificate: string }
   | { readonly kind: "KOK"; readonly kid: string; readonly keyFile: string }
-  | { readonly kind: "KUYRUK"; readonly reason: "YETENEK_YOK" | "ARA_IMZACI_YOK" };
+  | { readonly kind: "KUYRUK"; readonly reason: QueueReason };
 
 /**
  * Kurulumun bildirdiği yetenekler — TEK okuma yeri: `Kurulum.yetenekler` kolonu (zincir sahibinin yoklaması ve
