@@ -8,6 +8,7 @@ import { FINANCE_CURRENCIES as CURRENCIES } from "@/pages/Customers/customerFina
 import type { Currency } from "@/pages/Finance/service";
 import { KURSUN_GRAMAJ_CATALOG_KEY } from "@/lib/kursun-gramaj";
 import { KursunGramajTable } from "./KursunGramajTable";
+import { KursunGramPriceHistory } from "@/components/kursun/KursunGramPriceHistory";
 import {
   buildKursunBody, fetchKursunStation, kursunStationKey, saveKursunStation, stateFromDto,
   type KursunStationState,
@@ -60,6 +61,7 @@ export function StationKursunSection({ stationId }: { stationId: string }) {
         </select>
       </div>
       <p className="text-xs text-muted-foreground">Boşsa fatura hizmet kalemi fiyatıyla kesilir. Müşteri kartındaki gram fiyatı bunu ezer.</p>
+      <KursunGramPriceHistory owner={{ kind: "station", id: stationId }} />
       {error && <p className="text-xs font-medium text-destructive">{error}</p>}
       <Button type="button" size="sm" onClick={submit} disabled={save.isPending} data-testid="kursun-save">Kurşun ayarını kaydet</Button>
     </section>

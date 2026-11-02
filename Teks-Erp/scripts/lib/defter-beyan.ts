@@ -698,6 +698,12 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     gerekce: "patron bulutu mesajının TEK KULLANIMLIK tüketim kaydı (idempotency makbuzu): iş sonucu varlığın KENDİ defterinde (sipariş/cari), ters yolu da onun ters yoludur (sipariş iptali · kart arşivi); makbuz silinmez, güncellenmez, geri alınmaz — silinse raporlanan sayı değişmez ama aynı mesaj ikinci varlık doğururdu" },
   { model: "ReportDefinitionVersion", sinif: "DURUM",
     gerekce: "rapor tanımı gövdesinin DEĞİŞMEZ sürümü (rapor v2 R1-SEMA, append-only): rapor sayıları canlı veriden hesaplanır, sürüm satırı silinse raporlanan hiçbir sayı değişmez ⇒ defter değil; ters mekanizması = YENİ SÜRÜM SATIRI (düzenleme de geri alma da yeni satırdır), yürürlükteki = `ReportDefinition.activeVersionId` (atomik claim) — satır güncellenmez, silinmez" },
+  // K14 (2026-11-02): silinirse eski işin taslak fiyatı değişir ⇒ ③a ticari pivot; damga yok — append-only
+  // (updatedAt yok), değişim de kaldırma da YENİ SÜRÜM SATIRI (kaldırma = price NULL). Tek yazar helper;
+  // §5 yazıcı kümesini, §10 silmeyi, `test_kursun_gram_gecmisi` §6 güncellemeyi ölçer.
+  { model: "KursunGramPriceVersion", sinif: "PIVOT_TICARI",
+    gerekce: "kurşun gram fiyatı sürümü (istasyon XOR cari): fatura işin anındaki sürümü okur; satır güncellenmez/silinmez, ters mekanizması = YENİ SÜRÜM SATIRI (kaldırma = fiyatsız sürüm), kesilmiş fatura snapshot'la donar",
+    yazan: ["src/services/helpers/kursun-gram-price-version.helper.ts"] },
   { model: "DocumentTemplateVersion", sinif: "DURUM",
     gerekce: "belge şablonu gövdesinin DEĞİŞMEZ sürümü (belge tasarımcısı T1B, append-only + trigger `document_template_versions_block_tamper`): basım sayıları `PrintedDocument` defterinden okunur, sürüm satırı silinse raporlanan hiçbir sayı değişmez ⇒ defter değil; ters mekanizması = YENİ SÜRÜM SATIRI, yürürlükteki = `DocumentTemplate.publishedVersionId` (atomik claim) — içerik güncellenmez, yayın damgası bir kez yazılır, yayınlanmış satır silinmez" },
 ];

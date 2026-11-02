@@ -115,6 +115,45 @@ async function main() {
   }
 
   // ---------------------------------------------------------------------------
+  // K14: gram fiyatı sürümü (FK RESTRICT) istasyon kalıcı silmesini 409 ile engeller;
+  // guard olmadan P2003 → yanıltıcı 400 "Geçersiz referans" düşüyordu. Sürüm silinmez.
+  const gStation = await prisma.station.create({
+    data: {
+      name: `TEST-GHR-GRAM-${suffix}`,
+      code: `TEST-GHRG-${suffix}`.toUpperCase().slice(0, 32),
+      type: "INTERNAL",
+      kind: "RAW_QC",
+      isActive: true,
+    },
+  });
+  try {
+    await prisma.kursunGramPriceVersion.create({
+      data: { stationId: gStation.id, price: "1.2500", currency: "TRY", validFrom: new Date() },
+    });
+    let g: Captured | null = null;
+    let gErr: unknown = null;
+    try {
+      g = await invoke(stationHardRemove, gStation.id);
+    } catch (e) {
+      gErr = e;
+    }
+    check(
+      "Yalnız gram fiyatı sürümü olan istasyon → 409 + kursunGramPriceVersionCount=1",
+      g !== null &&
+        g.status === 409 &&
+        (g.body.data as { kursunGramPriceVersionCount?: number }).kursunGramPriceVersionCount === 1,
+      g ? g.body.message : `next(): ${(gErr as Error)?.message ?? String(gErr)}`
+    );
+    check("409 mesajı gram fiyatını adlandırır", !!g && /gram fiyatı/.test(g.body.message));
+    const vLeft = await prisma.kursunGramPriceVersion.count({ where: { stationId: gStation.id } });
+    const sLeft = await prisma.station.count({ where: { id: gStation.id } });
+    check("Sürüm ve istasyon yerinde (silme/cascade yok)", vLeft === 1 && sLeft === 1);
+  } finally {
+    await prisma.kursunGramPriceVersion.deleteMany({ where: { stationId: gStation.id } });
+    await prisma.station.deleteMany({ where: { id: gStation.id } });
+  }
+
+  // ---------------------------------------------------------------------------
   // Machine hard-delete guard (yanlışlıkla makine olarak eklenmiş donanım senaryosu)
   // ---------------------------------------------------------------------------
   const mStation = await prisma.station.create({

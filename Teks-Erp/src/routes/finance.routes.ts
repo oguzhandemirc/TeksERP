@@ -168,6 +168,31 @@ router.get("/cari/:id", requirePermission("finance:read"), async (req, res, next
   }
 });
 
+/** K14 geçmiş listesi sorgusu — yalnız cursor + limit (süzgeç yok). */
+const kursunGramHistoryQuery = z.object({ cursor: z.string().max(500).optional(), limit: z.coerce.number().int().min(1).max(100).optional() }).strict();
+
+/**
+ * @swagger
+ * /api/finance/cari/{id}/kursun-gram-history:
+ *   get:
+ *     summary: Carinin müşteriye özel kurşun gram fiyatı geçmişi (K14; en yeni önce, cursor)
+ *     tags: [Finance]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: cursor, schema: { type: string } }
+ *       - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100 } }
+ *     responses:
+ *       200: { description: "{ items, nextCursor }" }
+ *       404: { description: Cari yok }
+ */
+router.get("/cari/:id/kursun-gram-history", requirePermission("finance:read"), async (req, res, next) => {
+  try {
+    res.json(await cariService.kursunGramHistory(req.params.id as string, kursunGramHistoryQuery.parse(req.query)));
+  } catch (e) {
+    next(e);
+  }
+});
+
 /**
  * CARİ EKSTRE — para birimi ZORUNLU.
  *
