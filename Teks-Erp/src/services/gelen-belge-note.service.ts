@@ -24,6 +24,7 @@ import { PDF_MIME, SCAN_SELECT } from "./gelen-belge-scan.service";
 import { applyStoredReadsTx, auditPhotoSource, auditStoredReads, markPhotoSourceTx, prepareStoredReads, type StoredReadOutcome } from "./gelen-belge-taslak-doldur.service";
 import { LINE_SELECT, lineColumns, notDraft, text, type DeliveryNoteLineInput } from "./gelen-belge-line.service";
 import { lineProblems, totalsCheck } from "./gelen-belge-kontrol.service";
+import { noteNotices } from "../lib/gelen-belge/uyari";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const SERIES_KEY = "customerDeliveryNote";
@@ -79,7 +80,8 @@ const HEADER_SELECT = {
 } as const;
 const DETAIL_SELECT = {
   ...HEADER_SELECT,
-  lines: { select: LINE_SELECT, orderBy: [{ blockNo: "asc" }, { lineNo: "asc" }] },
+  // ocrRaw yalnız şüpheli işareti (`lineProblems` SUSPECT_VALUE) için okunur; yanıta konmaz.
+  lines: { select: { ...LINE_SELECT, ocrRaw: true }, orderBy: [{ blockNo: "asc" }, { lineNo: "asc" }] },
   scans: { select: SCAN_SELECT, orderBy: [{ pageNo: "asc" }, { regionNo: "asc" }] },
 } satisfies Prisma.CustomerDeliveryNoteSelect;
 
@@ -140,8 +142,9 @@ export async function getDeliveryNote(id: string) {
   // Cari kilidi önizlemesi (D4-I1, INTAKE): onay kapısıyla aynı helper; kilit yoksa null. Eski istemci alanı yok sayar.
   const cariHold = note.ownerCustomerId ? await cariHoldNotice(prisma, note.ownerCustomerId, "INTAKE") : null;
   // Gözden geçirme: onay kapısının AYNI yüklemleri (satır `problems`, toplam `totalsCheck`) — panel yeniden hesaplamaz.
-  const lines = note.lines.map((l) => ({ ...l, problems: lineProblems(l) }));
-  return { ...note, lines, totalsCheck: totalsCheck(note, note.lines), cariHold };
+  const lines = note.lines.map(({ ocrRaw, ...l }) => ({ ...l, problems: lineProblems({ ...l, ocrRaw }) }));
+  // Taslak uyarıları (okuma özetiyle AYNI helper): eski istemci alanı yok sayar.
+  return { ...note, lines, totalsCheck: totalsCheck(note, note.lines), notices: noteNotices(note.warnings), cariHold };
 }
 
 /** Liste where'i — özet şeridi de BUNDAN türer (durum süzgeci hariç; şerit duruma göre sayar). */

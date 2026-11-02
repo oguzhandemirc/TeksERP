@@ -11,6 +11,7 @@ import { getReaderUrl } from "../lib/gelen-belge/url";
 import { PDF_MIME } from "./gelen-belge-scan.service";
 import { READ_MAX_ATTEMPTS } from "./gelen-belge-okuma.service";
 import { totalMismatches, totalWarnings } from "./gelen-belge-onay.service";
+import { noteNotices } from "../lib/gelen-belge/uyari";
 
 export type ReadSummaryState = "NO_PAGES" | "READING" | "NO_SERVICE" | "READ" | "PARTIAL" | "FAILED";
 
@@ -68,7 +69,7 @@ export async function getReadSummary(noteId: string) {
   const note = await prisma.customerDeliveryNote.findUnique({
     where: { id: noteId },
     select: {
-      id: true, noteNo: true, status: true, declaredTopCount: true, totalsDeclared: true,
+      id: true, noteNo: true, status: true, declaredTopCount: true, totalsDeclared: true, warnings: true,
       lines: { select: { blockNo: true, meters: true, weightKg: true, status: true, needsReview: true } },
       scans: { select: { status: true, attempts: true, mimeType: true } },
     },
@@ -91,5 +92,7 @@ export async function getReadSummary(noteId: string) {
     // ok: null = belgede toplam beyanı yok (kıyas yapılamaz); true/false onay kapısının cevabı.
     totals: { declared, ok: declared ? mismatches.length === 0 : null, mismatches },
     warnings: totalWarnings(note, note.lines),
+    // Okuma uyarıları — panel detayıyla AYNI helper (`noteNotices`); eski tablet alanı yok sayar.
+    notices: noteNotices(note.warnings),
   };
 }

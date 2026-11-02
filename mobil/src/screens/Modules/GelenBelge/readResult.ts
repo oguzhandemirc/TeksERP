@@ -55,7 +55,7 @@ export interface ReadResultView {
   title: string;
   reason: string | null;
   rows: { key: string; label: string; value: string; tone?: ReadTone }[];
-  /** Toplam uyuşmazlığı ve başlık uyarıları (sunucu metni). */
+  /** Toplam uyuşmazlığı, başlık uyarıları ve okuma uyarıları (sunucu metni; istemci ayrıştırmaz). */
   notes: string[];
 }
 
@@ -93,7 +93,10 @@ function summaryRows(s: ReadSummary, noteNo: string): ReadResultView['rows'] {
 export function readResultView(w: ReadWatch, noteNo: string): ReadResultView {
   const s = w.summary;
   const rows = s ? summaryRows(s, noteNo) : [{ key: 'no', label: 'Taslak', value: noteNo }];
-  const notes = s && (s.state === 'READ' || s.state === 'PARTIAL') ? [...s.totals.mismatches, ...s.warnings] : [];
+  const notices = s?.notices ?? [];
+  const notes = s && (s.state === 'READ' || s.state === 'PARTIAL')
+    ? [...s.totals.mismatches, ...s.warnings, ...notices.map((n) => `${n.title}: ${n.detail}`)]
+    : [];
   if (w.phase === 'error') return { tone: 'error', title: 'Okuma durumu alınamadı', reason: w.message, rows, notes };
   if (w.phase === 'timeout') {
     return { tone: 'warn', title: 'Okuma uzun sürüyor', reason: 'Sonuç birkaç dakikadır gelmedi; panelde görünecek. "Yeniden bak" ile tekrar sorabilirsiniz.', rows, notes };
@@ -101,6 +104,6 @@ export function readResultView(w: ReadWatch, noteNo: string): ReadResultView {
   if (!s) return { tone: 'busy', title: 'Okunuyor…', reason: null, rows, notes };
   const head = STATE_TITLE[s.state];
   // Okundu ama gözden geçirme/toplam/neden varsa yeşil değil: operatör panele haber vermeli.
-  const tone = head.tone === 'ok' && (s.reason || s.reviewCount > 0 || s.totals.ok !== true || s.warnings.length) ? 'warn' : head.tone;
+  const tone = head.tone === 'ok' && (s.reason || s.reviewCount > 0 || s.totals.ok !== true || s.warnings.length || notices.length) ? 'warn' : head.tone;
   return { tone, title: head.title, reason: s.reason, rows, notes };
 }

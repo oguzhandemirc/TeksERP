@@ -18,6 +18,9 @@
 //      yazılır + needsReview; aynı taramanın eşit satırları ikisi de yazılır; paralel iki sayfa ortak satırı TEK kez yazar
 //   §10 K6 PDF: yükleme READ_FAILED (deneme 0) doğar · eski PENDING PDF bile claim EDİLMEZ · sidecar'a 0 PDF isteği ·
 //       okut → 400 DOCUMENT_SCAN_PDF_NOT_READABLE (servis yokken de 503'ten önce) · kuyruk sayaçlarına girmez
+//   §3l–§3n okuma uyarıları: 0246 ikinci belge izi (SECOND_DOCUMENT_TRACE) detay `notices` ≡ okuma özeti `notices`;
+//       0244 şüpheli satırlar `ocrRaw._suspect` + detay `problems` SUSPECT_VALUE (ocrRaw yanıta çıkmaz); oran ayarı okumaya uygulanır
+//       NEGATİF SONDA (2026-11-02): `lineProblems` SUSPECT_VALUE satırı kapatılınca §3m + §3m2 düşer (90/2).
 //   §14 tablet okuma özeti: NO_PAGES · NO_SERVICE · READING (+ yeniden deneme nedeni) · READ (satır/gözden geçirme/toplam
 //       onay helper'ından) · toplam sapınca ok:false · FAILED · PARTIAL · izin write (read-only 403) · 404 · 400
 //   §9 İSTEĞE BAĞLI (OKUMA_GERCEK_URL=http://127.0.0.1:8765): GERÇEK okuma servisi (okuma/, D6) — sağlık + sentetik PNG → READ +
@@ -64,7 +67,7 @@ const jpeg = (no: string, salt = "") => Buffer.concat([Buffer.from([0xff, 0xd8, 
 const made = { customers: [] as string[], users: [] as string[], notes: [] as string[], scans: [] as string[], aliases: [] as string[] };
 type Resp = { status: number; code?: string; data?: Record<string, unknown> & { scan?: { id: string }; id?: string } };
 
-async function ayar(key: string, v: boolean): Promise<void> {
+async function ayar(key: string, v: boolean | number): Promise<void> {
   await prisma.systemSetting.upsert({ where: { key }, create: { key, value: v }, update: { value: v } });
 }
 
@@ -133,7 +136,7 @@ async function main(): Promise<void> {
     && !OcrResultSchema.safeParse({ text: "", blocks: [], imageWidth: 1, imageHeight: 1, rotation: 1.5 }).success);
   __clearPlainHttpServiceHostsForTests();
 
-  const keys = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED];
+  const keys = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.GELEN_BELGE_OUTLIER_FACTOR];
   const prior = await prisma.systemSetting.findMany({ where: { key: { in: keys } }, select: { key: true, value: true } });
   const admin = await ensureTestAdmin({ password: kosumaOzguParola() });
   const server = await new Promise<Server>((resolve) => { const s = app.listen(0, "127.0.0.1", () => resolve(s)); });
@@ -229,6 +232,41 @@ async function main(): Promise<void> {
     const logs = await prisma.systemLog.findMany({ where: { tableName: "CUSTOMER_DELIVERY_NOTE", recordId: { in: made.notes } }, select: { newData: true } });
     const dump = JSON.stringify(logs);
     check("§3k audit'te ham OCR yok (blocks/imageBase64/ÖRNEK metni yok), künye var", logs.length >= 4 && !dump.includes("imageBase64") && !/"blocks"/.test(dump) && !dump.includes("ÖRNEK") && dump.includes("lineCount"));
+
+    // ── §3l–§3n okuma uyarıları kullanıcıya: detay + okuma özeti TEK helper (`noteNotices`) ─────────────
+    type Notice = { code: string; title: string; detail: string };
+    type DetLine = { lineNo: number; senderRollNo: string | null; problems: string[]; ocrRaw?: unknown };
+    const det = async (id: string) => (await call("GET", `/api/gelen-belge/irsaliyeler/${id}`)).data as unknown as { notices: Notice[]; lines: DetLine[] };
+    const oz = async (id: string) => (await call("GET", `/api/gelen-belge/irsaliyeler/${id}/okuma-ozeti`)).data as unknown as { notices: Notice[] };
+    const n46id = all[1]!.noteId!;
+    const d46 = await det(n46id);
+    const trace = d46.notices.find((x) => x.code === "SECOND_DOCUMENT_TRACE");
+    check("§3l ⭐ 0246: ikinci belge izi uyarısı (Ürün sevk fişi, Sevk No 96399, 'ayrı fotoğrafla yükleyin') detayda; satır yine yalnız 241 m",
+      !!trace && /Ürün sevk fişi \(Sevk No 96399\)/.test(trace.detail) && /ayrı fotoğrafla yükleyin/.test(trace.detail) && trace.title === "Sayfada ikinci belge var" && n46.lines.length === 1, JSON.stringify(d46.notices));
+    check("§3l2 okuma özeti notices ≡ detay notices (aynı helper)", JSON.stringify((await oz(n46id)).notices) === JSON.stringify(d46.notices));
+    const n44id = all[2]!.noteId!;
+    const d44 = await det(n44id);
+    const db44 = await prisma.customerDeliveryNoteLine.findMany({ where: { noteId: n44id }, select: { senderRollNo: true, ocrRaw: true } });
+    const marked = db44.filter((l) => typeof (l.ocrRaw as Record<string, unknown>)?._suspect === "string").map((l) => l.senderRollNo).sort();
+    const tagged = d44.lines.filter((l) => l.problems.includes("SUSPECT_VALUE")).map((l) => l.senderRollNo).sort();
+    check("§3m ⭐ 0244: şüpheli hücreler DB'de işaretli ve detayda SUSPECT_VALUE (1,4,8,10,42,44,60); ocrRaw yanıtta yok; uyarı şeridinde GRID_SUSPECT_VALUES",
+      JSON.stringify(marked) === JSON.stringify(["1", "10", "4", "42", "44", "60", "8"]) && JSON.stringify(tagged) === JSON.stringify(marked)
+        && d44.lines.every((l) => !("ocrRaw" in l)) && d44.notices.some((x) => x.code === "GRID_SUSPECT_VALUES") && d44.notices.some((x) => x.code === "TOTAL_UNVERIFIED"),
+      JSON.stringify({ marked, tagged, codes: d44.notices.map((x) => x.code) }));
+    const sus1 = d44.lines.find((l) => l.senderRollNo === "1")!;
+    const line1 = await prisma.customerDeliveryNoteLine.findFirstOrThrow({ where: { noteId: n44id, senderRollNo: "1" }, select: { id: true } });
+    await call("PATCH", `/api/gelen-belge/irsaliyeler/${n44id}/satirlar/${line1.id}`, { meters: 137 });
+    const after = (await det(n44id)).lines.find((l) => l.senderRollNo === "1");
+    check("§3m2 şüpheli satırın metresi düzeltilince SUSPECT_VALUE (ve NEEDS_REVIEW) düşer", sus1.problems.includes("SUSPECT_VALUE") && !!after && !after.problems.includes("SUSPECT_VALUE") && !after.problems.includes("NEEDS_REVIEW"), JSON.stringify(after?.problems));
+    await ayar(SETTING_KEYS.GELEN_BELGE_OUTLIER_FACTOR, 20);
+    const s44k = await up("0244", {}, "oran-20");
+    await runReaderOnce();
+    const k20 = (await scan(s44k)).noteId;
+    if (k20) made.notes.push(k20);
+    const sus20 = k20 ? (await prisma.customerDeliveryNoteLine.findMany({ where: { noteId: k20 }, select: { senderRollNo: true, ocrRaw: true } })).filter((l) => (l.ocrRaw as Record<string, unknown>)?._suspect).map((l) => l.senderRollNo).sort() : [];
+    check("§3n oran ayarı okumaya uygulanır: K=20 → 42 (16 m, medyan 100'ün 1/20'si üstü) artık şüpheli değil; harfli/çok küçükler kalır",
+      !!k20 && !sus20.includes("42") && sus20.includes("1") && sus20.length < marked.length, JSON.stringify(sus20));
+    await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.GELEN_BELGE_OUTLIER_FACTOR } });
 
     // ── §4 5xx → PENDING kalır, 3. denemede READ_FAILED ─────────────────────
     fake.mode = "500";

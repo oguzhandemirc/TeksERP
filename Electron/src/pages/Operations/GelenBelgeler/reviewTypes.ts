@@ -1,5 +1,5 @@
 // Gözden geçirme yüzeyinin tel tipleri — backend `gelen-belge-kontrol.service.ts` aynası (detay yanıtı).
-export type LineProblem = "FAILED" | "ITEM_UNRESOLVED" | "NEEDS_REVIEW";
+export type LineProblem = "FAILED" | "ITEM_UNRESOLVED" | "NEEDS_REVIEW" | "SUSPECT_VALUE";
 
 /** Onay toplam kapısının (`totalsCheck`) hükmü — backend hesaplar, panel yalnız gösterir. */
 export interface TotalDiff {

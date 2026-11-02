@@ -110,7 +110,7 @@ export async function getIncomingDocumentSettings(): Promise<IncomingDocumentSet
 }
 
 /** Yazım `admin:settings` + ayar şifresi (tanımlıysa diyalog `withSettingsPassword`ten). */
-export function updateIncomingDocumentSettings(body: { defaultItemId?: string | null; unreviewedApproval?: UnreviewedApproval; autoWorkOrder?: boolean; defaultRouteTemplateId?: string | null; routeSuggestionPriority?: RouteSuggestionPriority }): Promise<IncomingDocumentSettings> {
+export function updateIncomingDocumentSettings(body: { defaultItemId?: string | null; unreviewedApproval?: UnreviewedApproval; autoWorkOrder?: boolean; defaultRouteTemplateId?: string | null; routeSuggestionPriority?: RouteSuggestionPriority; handwritingOutlierFactor?: number | null }): Promise<IncomingDocumentSettings> {
   return withSettingsPassword((headers) =>
     apiClient.put<ApiResponse<IncomingDocumentSettings>>(`${BASE}/ayarlar`, body, { headers }).then((r) => r.data.data),
   );

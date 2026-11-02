@@ -10,6 +10,12 @@
 //      sonrası detay tutuyor (ok=true) ↔ onay toplam kapısından geçer; GET YAZMAZ (updatedAt + audit sayısı sabit)
 //   §4 ⭐ HTTP: satır `problems` ↔ onayın 400 UNRESOLVED / 409 REVIEW_PENDING `lineNos` kümesi birebir
 //   §5 kaynak taraması: panelde toplam hoşgörüsü/yeniden hesap yok; onay servisinde yerel kapı kopyası yok
+//   §6 saf okuma uyarıları (`noteNotices`): kod/bölge ayrıştırma, canlı toplam kodları gizli, tekrar tek, kodsuz → OTHER;
+//      `lineProblems` SUSPECT_VALUE yalnız needsReview + `_suspect` işaretiyle
+//   §7 HTTP: detay `notices` (ikinci okumada birikse de ikilenmez) + satır SUSPECT_VALUE (ocrRaw yanıta çıkmaz) · ayar `handwritingOutlierFactor` (varsayılan 4,
+//      2–20 dışı 400, null temizler) · istemci uyarı METNİ ayrıştırmaz (kaynak taraması)
+// NEGATİF SONDA (2026-11-02): `lineProblems` SUSPECT_VALUE kapatılınca §6e + §7b; `noteNotices` tekrar süzgeci
+//   kapatılınca §6a + §6c + §7a2 (ikinci okuma ikilemesi) düşer.
 // Emsal: scripts/test_gelen_belge_onay.ts (app.listen(0) + ensureTestAdmin).
 // =============================================================================
 import type { AddressInfo } from "net";
@@ -21,6 +27,7 @@ import app from "../src/app";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
 import { lineProblems, totalMismatches, totalsCheck, type TotalLine } from "../src/services/gelen-belge-kontrol.service";
+import { noteNotices } from "../src/lib/gelen-belge/uyari";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
@@ -85,11 +92,67 @@ function section2(): void {
   check("§2e girilmiş/atlanmış satır sorunsuz (açık değil)", same(p("ENTERED", null, true), []) && same(p("SKIPPED", null, true), []));
 }
 
+function section6(): void {
+  console.log("§6 saf noteNotices + SUSPECT_VALUE");
+  const n = noteNotices([
+    "GRID_SUSPECT_VALUES: 1, 4 numaralı hücre(ler)in metresi şüpheli",
+    "R2: TABLE_TOTALS_AMBIGUOUS blok 3: 2 toplam satırı, ilki alındı",
+    "DECLARED_TOP_COUNT_DIFF blok 1: başlıkta 4 top yazıyor, 5 satır okundu",
+    "TOTAL_MISMATCH blok 1: m 500 ≠ 426",
+    "GRID_SUSPECT_VALUES: 1, 4 numaralı hücre(ler)in metresi şüpheli",
+    "islem: regex derlenemedi (x)",
+    "YENI_BIR_KOD: ileride eklenen uyarı",
+    42,
+  ]);
+  check("§6a sıra korunur, tekrar tek, canlı toplam kodları (TOTAL_MISMATCH/DECLARED_TOP_COUNT_DIFF) gizli", same(n.map((x) => x.code), ["GRID_SUSPECT_VALUES", "TABLE_TOTALS_AMBIGUOUS", "OTHER", "YENI_BIR_KOD"]), JSON.stringify(n));
+  check("§6b başlık Türkçe, ayrıntı kod sonrası + büyük harf; bölge öneki 'Bölge 2:'", n[0]?.title === "Şüpheli el yazısı değerler" && n[0]?.detail.startsWith("1, 4 numaralı") && n[1]?.detail === "Bölge 2: Blok 3: 2 toplam satırı, ilki alındı", JSON.stringify(n.slice(0, 2)));
+  check("§6c kodsuz metin → OTHER + tam metin; tanınmayan kod → genel başlık", n[2]?.detail === "islem: regex derlenemedi (x)" && n[3]?.title === "Okuma uyarısı");
+  check("§6d JSON dizisi değilse boş", noteNotices(null).length === 0 && noteNotices({ a: 1 }).length === 0);
+  const p = (needsReview: boolean, ocrRaw: unknown) => lineProblems({ status: "PENDING", itemId: "x", needsReview, ocrRaw });
+  check("§6e SUSPECT_VALUE yalnız needsReview + `_suspect` metni ile; işaretsiz/gözden geçirilmiş/elle satır temiz",
+    same(p(true, { metre: "1370", _suspect: "YUKSEK" }), ["NEEDS_REVIEW", "SUSPECT_VALUE"]) && same(p(false, { _suspect: "YUKSEK" }), []) && same(p(true, { metre: "137" }), ["NEEDS_REVIEW"]) && same(p(true, null), ["NEEDS_REVIEW"]) && same(p(true, ["_suspect"]), ["NEEDS_REVIEW"]));
+}
+
+async function section7(call: (method: string, p: string, body?: unknown) => Promise<Resp>, mkNote: (lines: unknown[]) => Promise<string>, fabricId: string): Promise<void> {
+  console.log("§7 detay notices + SUSPECT_VALUE + oran ayarı");
+  const id = await mkNote([{ senderRollNo: `${TAG}-S1`, meters: 1370, itemText: "x", itemId: fabricId }, { senderRollNo: `${TAG}-S2`, meters: 137, itemText: "x", itemId: fabricId }]);
+  await prisma.customerDeliveryNote.update({ where: { id }, data: { warnings: ["GRID_SUSPECT_VALUES: 1 numaralı hücre şüpheli", "SECOND_DOCUMENT_TRACE: bu sayfada ikinci bir belge izi var: Ürün sevk fişi (Sevk No 1) — ayrı fotoğrafla yükleyin", "TOTAL_MISMATCH blok 1: eski"] } });
+  await prisma.customerDeliveryNoteLine.updateMany({ where: { noteId: id, lineNo: 1 }, data: { needsReview: true, ocrRaw: { metre: "1370", _suspect: "YUKSEK" } } });
+  await prisma.customerDeliveryNoteLine.updateMany({ where: { noteId: id, lineNo: 2 }, data: { needsReview: true, ocrRaw: { metre: "137" } } });
+  const d = (await call("GET", `/api/gelen-belge/irsaliyeler/${id}`)).data as { notices?: Array<{ code: string }>; lines: Array<{ lineNo: number; problems: string[] } & Record<string, unknown>> };
+  check("§7a ⭐ detay notices ≡ noteNotices(warnings) (canlı toplam kodu gizli)", same(d.notices?.map((x) => x.code), ["GRID_SUSPECT_VALUES", "SECOND_DOCUMENT_TRACE"]), JSON.stringify(d.notices));
+  check("§7b satır 1 SUSPECT_VALUE, satır 2 yalnız NEEDS_REVIEW; ocrRaw yanıtta yok", same(d.lines.find((l) => l.lineNo === 1)?.problems, ["NEEDS_REVIEW", "SUSPECT_VALUE"]) && same(d.lines.find((l) => l.lineNo === 2)?.problems, ["NEEDS_REVIEW"]) && d.lines.every((l) => !("ocrRaw" in l)), JSON.stringify(d.lines.map((l) => l.problems)));
+  // İkinci okuma (yeniden okuma / aynı sayfa tekrar) okuma işinde `[...önceki, ...yeni]` diye EKLER; şerit ikilenmemeli.
+  const w0 = (await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id }, select: { warnings: true } })).warnings as string[];
+  await prisma.customerDeliveryNote.update({ where: { id }, data: { warnings: [...w0, ...w0] } });
+  const twice = (await call("GET", `/api/gelen-belge/irsaliyeler/${id}`)).data as { notices?: unknown[] };
+  const twiceOz = (await call("GET", `/api/gelen-belge/irsaliyeler/${id}/okuma-ozeti`)).data as { notices?: unknown[] };
+  check("§7a2 ⭐ ikinci okuma uyarıları ikilemez: warnings iki kez birikse de detay + okuma özeti notices bir kez", JSON.stringify(twice.notices) === JSON.stringify(d.notices) && JSON.stringify(twiceOz.notices) === JSON.stringify(d.notices), JSON.stringify({ twice: twice.notices, oz: twiceOz.notices }));
+  const g0 = (await call("GET", "/api/gelen-belge/ayarlar")).data as { handwritingOutlierFactor?: number; defaultHandwritingOutlierFactor?: number };
+  check("§7c ayar boşken oran = varsayılan 4", g0.handwritingOutlierFactor === 4 && g0.defaultHandwritingOutlierFactor === 4, JSON.stringify(g0));
+  const bad = await Promise.all([1, 25, "5"].map((v) => call("PUT", "/api/gelen-belge/ayarlar", { handwritingOutlierFactor: v })));
+  check("§7d aralık dışı / sayı olmayan oran 400 (1, 25, \"5\")", bad.every((r) => r.status === 400), bad.map((r) => `${r.status}`).join(","));
+  const okSet = await call("PUT", "/api/gelen-belge/ayarlar", { handwritingOutlierFactor: 6 });
+  const raw = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEYS.GELEN_BELGE_OUTLIER_FACTOR }, select: { value: true } });
+  check("§7e oran 6 yazılır, geri okunur", okSet.status === 200 && (okSet.data as { handwritingOutlierFactor?: number }).handwritingOutlierFactor === 6 && raw?.value === 6, `${okSet.status} ${JSON.stringify(raw)}`);
+  const clr = await call("PUT", "/api/gelen-belge/ayarlar", { handwritingOutlierFactor: null });
+  check("§7f null temizler → varsayılan 4", clr.status === 200 && (clr.data as { handwritingOutlierFactor?: number }).handwritingOutlierFactor === 4);
+  await prisma.systemSetting.update({ where: { key: SETTING_KEYS.GELEN_BELGE_OUTLIER_FACTOR }, data: { value: "çöp" } });
+  check("§7g çöp kayıt varsayılana düşer", ((await call("GET", "/api/gelen-belge/ayarlar")).data as { handwritingOutlierFactor?: number }).handwritingOutlierFactor === 4);
+  const raw2 = await call("PUT", `/api/admin/settings/${SETTING_KEYS.GELEN_BELGE_OUTLIER_FACTOR}`, { value: 3 });
+  check("§7h ham ayar ucu bu anahtarı yazamaz (400 SETTING_KEY_RESERVED)", raw2.status === 400 && raw2.code === "SETTING_KEY_RESERVED", `${raw2.status} ${raw2.code}`);
+  const root = path.resolve(__dirname, "..", "..");
+  const clientDirs = ["Electron/src/pages/Operations/GelenBelgeler", "mobil/src/screens/Modules/GelenBelge"].map((d) => path.join(root, d));
+  const parsers = clientDirs.flatMap((dir) => fs.readdirSync(dir).filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\./.test(f)).filter((f) => /GRID_SUSPECT_VALUES|SECOND_DOCUMENT_TRACE|note\.warnings|\.warnings\s+as\s+string/.test(fs.readFileSync(path.join(dir, f), "utf8"))).map((f) => f));
+  check("§7i istemci (panel + tablet) uyarı metni/kodunu ayrıştırmaz — yalnız `notices`", parsers.length === 0, parsers.join(", "));
+}
+
 async function main(): Promise<void> {
   console.log("=== Gelen belge gözden geçirme bekçisi ===\n");
   section1();
   section2();
-  const keys = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL];
+  section6();
+  const keys = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_OUTLIER_FACTOR];
   const prior = await prisma.systemSetting.findMany({ where: { key: { in: keys } }, select: { key: true, value: true } });
   const admin = await ensureTestAdmin({ password: kosumaOzguParola() });
   const server = await new Promise<Server>((resolve) => { const s = app.listen(0, "127.0.0.1", () => resolve(s)); });
@@ -156,6 +219,7 @@ async function main(): Promise<void> {
     const d4b = await detail(n4);
     check("§4d FAILED satır problems'te FAILED taşır", d4b.lines.find((l) => l.lineNo === 1)?.problems?.includes("FAILED") === true);
 
+    await section7(call, (lines) => mkNote(lines), fabric.id);
     section5();
   } finally {
     stopNotificationJobs();

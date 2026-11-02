@@ -6,6 +6,7 @@
 // hükmü okur, istemcide ikinci hesap yoktur. DB okumaz, yazmaz (bekçi doğrudan sınar).
 // =============================================================================
 import { DeliveryNoteLineStatus, Prisma } from "@prisma/client";
+import { SUSPECT_MARK } from "../lib/gelen-belge/taslak";
 
 /** Beyan edilen kg/m ile satır toplamı arasındaki hoşgörü (OCR ondalık kaybı; adet HOŞGÖRÜSÜZ). */
 export const TOTAL_TOLERANCE = 0.005;
@@ -115,15 +116,23 @@ export function totalMismatches(note: { totalsDeclared: unknown }, lines: Readon
 const OPEN_FOR_APPROVAL: ReadonlySet<DeliveryNoteLineStatus> = new Set([DeliveryNoteLineStatus.PENDING, DeliveryNoteLineStatus.FAILED, DeliveryNoteLineStatus.ENTERING]);
 export const isOpenForApproval = (l: { status: DeliveryNoteLineStatus }): boolean => OPEN_FOR_APPROVAL.has(l.status);
 
-/** Satır sorun kodu: FAILED girişi düşmüş · ITEM_UNRESOLVED ürün eşlenmemiş · NEEDS_REVIEW hücre gözden geçirilmemiş (düşük güven). */
-export type LineProblem = "FAILED" | "ITEM_UNRESOLVED" | "NEEDS_REVIEW";
+/**
+ * Satır sorun kodu: FAILED girişi düşmüş · ITEM_UNRESOLVED ürün eşlenmemiş · NEEDS_REVIEW hücre gözden geçirilmemiş
+ * (düşük güven) · SUSPECT_VALUE el yazısı metresi şüpheli (harf / medyandan çok küçük-büyük; yalnız etiket, kapı değil).
+ */
+export type LineProblem = "FAILED" | "ITEM_UNRESOLVED" | "NEEDS_REVIEW" | "SUSPECT_VALUE";
+
+/** Okuma işinin şüpheli işareti (`ocrRaw._suspect`) — metre düzeltilince/gözden geçirilince needsReview ile birlikte düşer. */
+const suspectMarked = (ocrRaw: unknown): boolean =>
+  !!ocrRaw && typeof ocrRaw === "object" && !Array.isArray(ocrRaw) && typeof (ocrRaw as Record<string, unknown>)[SUSPECT_MARK] === "string";
 
 /** Gözden geçirmenin "sorunlu satır" yüklemi — onay ön kontrolünün ürünsüz/gözden geçirilmemiş kümesi de BUNDAN. */
-export function lineProblems(l: { status: DeliveryNoteLineStatus; itemId: string | null; needsReview: boolean }): LineProblem[] {
+export function lineProblems(l: { status: DeliveryNoteLineStatus; itemId: string | null; needsReview: boolean; ocrRaw?: unknown }): LineProblem[] {
   const out: LineProblem[] = [];
   if (l.status === DeliveryNoteLineStatus.FAILED) out.push("FAILED");
   if (!isOpenForApproval(l)) return out;
   if (!l.itemId) out.push("ITEM_UNRESOLVED");
   if (l.needsReview) out.push("NEEDS_REVIEW");
+  if (l.needsReview && suspectMarked(l.ocrRaw)) out.push("SUSPECT_VALUE");
   return out;
 }

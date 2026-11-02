@@ -15,6 +15,7 @@ import { draftFromExtraction, dropOverlapDuplicates, linesToPhotoFrame, type Dra
 import { OcrResultSchema } from "../lib/gelen-belge/okuma-istemcisi";
 import { AuditService } from "./audit.service";
 import { FALLBACK_TEMPLATE_CODE, bumpTemplateHit, ensureSenderTemplate } from "./gelen-belge-sablon.service";
+import { readHandwritingOutlierFactor } from "./system-setting.service";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const SCAN_TABLE = "DOCUMENT_SCAN";
@@ -43,7 +44,9 @@ export interface BuiltDraft {
  * yalnız GERÇEK okumada (saklı zarftan yeniden kurulum yeni bir okuma değildir, isabet sayılmaz).
  */
 export async function buildDraft(result: OcrResult, userId: string | undefined, opts: { bumpHit: boolean }): Promise<BuiltDraft> {
-  const extracted = draftFromExtraction(extractDocument(result, loadTemplates(), FALLBACK_TEMPLATE_CODE));
+  // Şüphe oranı her kurulumda o anki fabrika ayarından (saklı zarftan yeniden kurulum da güncel oranla işaretler).
+  const outlierFactor = await readHandwritingOutlierFactor();
+  const extracted = draftFromExtraction(extractDocument(result, loadTemplates(), FALLBACK_TEMPLATE_CODE), { outlierFactor });
   // Yan dönük sayfa: kutular panelin çizdiği (dönmemiş) fotoğrafın çerçevesine döner.
   const draft = { ...extracted, lines: linesToPhotoFrame(extracted.lines, result) };
   const code = draft.header.regions[0]?.templateId ?? null;

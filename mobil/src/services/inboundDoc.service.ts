@@ -59,6 +59,8 @@ export interface ReadSummary {
   /** ok: null = belgede toplam beyanı yok; true/false onay kapısının cevabı. */
   totals: { declared: boolean; ok: boolean | null; mismatches: string[] };
   warnings: string[];
+  /** Okuma uyarıları (sunucu `noteNotices`, panel şeridiyle aynı liste). Eski sunucu göndermez → yok sayılır. */
+  notices?: { code: string; title: string; detail: string }[];
 }
 
 export const inboundDocService = {

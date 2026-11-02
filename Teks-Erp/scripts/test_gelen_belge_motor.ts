@@ -18,6 +18,8 @@
 //    kapatılınca §7h düşer. Hepsi git checkout ile geri alındı.
 //    (2026-11-02 §9) blok alanı çıkarımı kapatılınca §9a–c, bölge birleştirme kapatılınca §9d–g, şüpheli ızgara
 //    uyarısı kapatılınca §9j, adet > 1 kapısı kapatılınca §9g düşer.
+//    (2026-11-02 §10) üst sınır (K katı) kapatılınca §10d, ikinci belge izinin tek bölge dalı kapatılınca §10b,
+//    GRID_EMPTY kapatılınca §10f düşer — ÖLÇÜLDÜ 2026-11-02 (her biri tek başına 70/1; elle geri alındı).
 // =============================================================================
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -27,6 +29,7 @@ import {
   computeNoteTotals,
   extractDocument,
   extractFields,
+  foreignDocuments,
   loadTemplates,
   pageMedianAngle,
   splitRegions,
@@ -36,7 +39,7 @@ import {
   type OcrLine,
   type OcrResult,
 } from "../src/lib/gelen-belge/motor";
-import { draftFromExtraction, suspectGridSeqs } from "../src/lib/gelen-belge/taslak";
+import { DEFAULT_OUTLIER_FACTOR, draftFromExtraction, suspectGridReasons, suspectGridSeqs } from "../src/lib/gelen-belge/taslak";
 
 let pass = 0;
 let fail = 0;
@@ -272,6 +275,51 @@ function kutu(text: string, x: number, y: number, w: number, h: number, angle: n
   check("§9k suspectGridSeqs: temiz sütunda işaret yok, harfli ham metin işaretlenir",
     suspectGridSeqs([{ senderRollNo: "1", meters: "120", ocrRaw: { metre: "120" } }, { senderRollNo: "2", meters: "130", ocrRaw: { metre: "130" } }, { senderRollNo: "3", meters: "140", ocrRaw: { metre: "140" } }]).length === 0
       && suspectGridSeqs([{ senderRollNo: "7", meters: "16", ocrRaw: { metre: "1G" } }]).join() === "7");
+}
+
+// ── §10 okuma uyarıları: ikinci belge izi · el yazısı büyük sapma · boş ızgara (2026-11-02 demo denemesi) ──
+{
+  const ocr46 = gercek("0246-iki-belge");
+  const d46 = draftFromExtraction(extractDocument(ocr46, sablonlar, "genel"));
+  const tr46 = d46.header.warnings.filter((w) => w.startsWith("SECOND_DOCUMENT_TRACE"));
+  check("§10a 0246 iki bölge → TEK ikinci belge izi (Ürün sevk fişi, Sevk No 96399); satır yine yalnız 241 m",
+    tr46.length === 1 && tr46[0]!.includes("Ürün sevk fişi (Sevk No 96399)") && d46.lines.length === 1, tr46.join(" | "));
+  // Demo (rapidocr) sayfayı TEK bölge okudu: ilk bölge tüm sayfa + çıkış çeki listesi → metin izinden yakalanmalı.
+  const r1 = extractDocument(ocr46, sablonlar, "genel").regions[0]!;
+  const whole = { ...r1, region: { regionNo: 1, rect: { x: 0, y: 0, width: ocr46.imageWidth, height: ocr46.imageHeight }, ocr: ocr46, lineCount: 0 } };
+  const f1 = foreignDocuments(ocr46, [whole], sablonlar, "genel");
+  const tek = draftFromExtraction({ regions: [whole], warnings: [], foreignDocuments: f1 });
+  check("§10b ⭐ tek bölgeli sayfa (demo durumu): metin izinden ürün sevk fişi + Sevk No 96399 → uyarı",
+    f1.length === 1 && f1[0]!.templateId === "urun-sevk-fisi" && f1[0]!.regionNo === null && tek.header.warnings.some((w) => w.startsWith("SECOND_DOCUMENT_TRACE") && w.includes("Sevk No 96399")),
+    JSON.stringify(f1.map((x) => [x.templateId, x.regionNo])));
+  const tekler = ["0243-kesim-takip-formu", "0244-kumas-irsaliyesi", "0245-ceki-listesi-a"].map((ad) => extractDocument(gercek(ad), sablonlar, "genel").foreignDocuments.length);
+  const altTek = extractDocument(splitRegions(ocr46)[1]!.ocr, sablonlar, "genel").foreignDocuments.length;
+  const sentetikDir = join(FIKSTUR, "sentetik");
+  const sentetik = readdirSync(sentetikDir).filter((f) => f.endsWith(".ocr.json"));
+  const yanlis = sentetik.filter((f) => extractDocument(JSON.parse(readFileSync(join(sentetikDir, f), "utf8")) as OcrResult, sablonlar, "genel").foreignDocuments.length > 0);
+  check("§10c tek belgeli sayfada iz YOK (0243/0244/0245, sevk fişi tek başına, sentetik 63 sayfa)",
+    tekler.every((n) => n === 0) && altTek === 0 && sentetik.length >= 60 && yanlis.length === 0, JSON.stringify({ tekler, altTek, yanlis }));
+  const L = (n: string, m: string, raw = m) => ({ senderRollNo: n, meters: m, ocrRaw: { metre: raw } });
+  const grid = [L("1", "137"), L("2", "140"), L("3", "1370"), L("4", "150"), L("5", "12")];
+  check("§10d ⭐ K=4 (varsayılan): 1370 (10×) YUKSEK, 12 DUSUK; K=20 ikisi de temiz; harf her K'da HARF",
+    JSON.stringify(suspectGridReasons(grid)) === JSON.stringify([null, null, "YUKSEK", null, "DUSUK"]) && DEFAULT_OUTLIER_FACTOR === 4
+      && suspectGridSeqs(grid, 20).length === 0 && JSON.stringify(suspectGridReasons([L("9", "16", "1G")], 20)) === JSON.stringify(["HARF"]),
+    JSON.stringify(suspectGridReasons(grid)));
+  check("§10e geçersiz oran (1, NaN, 50) varsayılana düşer",
+    [1, Number.NaN, 50].every((k) => JSON.stringify(suspectGridReasons(grid, k)) === JSON.stringify(suspectGridReasons(grid))));
+  const d44 = draftFromExtraction(extractDocument(gercek("0244-kumas-irsaliyesi"), sablonlar));
+  check("§10e2 0244 şüpheli satırlar `_suspect` taşır (uyarı listesiyle aynı küme)",
+    d44.lines.filter((l) => l.ocrRaw._suspect).map((l) => l.senderRollNo).join() === "1,4,8,10,42,44,60");
+  const ex43 = extractDocument(gercek("0243-kesim-takip-formu"), sablonlar);
+  const bos = { ...ex43, regions: ex43.regions.map((r) => ({ ...r, grid: r.grid && { ...r.grid, cells: r.grid.cells.map((c) => ({ ...c, candidates: [] })) } })) };
+  const d43bos = draftFromExtraction(bos);
+  check("§10f ⭐ el yazısı ızgaralı sayfa 0 satır → GRID_EMPTY ('satırları ... elle girin'); satır çıkınca yok",
+    d43bos.lines.length === 0 && d43bos.header.warnings.some((w) => w.startsWith("GRID_EMPTY") && w.includes("elle girin"))
+      && !draftFromExtraction(ex43).header.warnings.some((w) => w.startsWith("GRID_EMPTY")),
+    JSON.stringify(d43bos.header.warnings));
+  const d45 = draftFromExtraction(extractDocument(gercek("0245-ceki-listesi-a"), sablonlar));
+  check("§10g BLOCK_IDS_DIFFER Türkçe alan adlarıyla (sipariş/parti/iş emri/işlem), ham anahtar yok",
+    d45.header.warnings.some((w) => w.startsWith("BLOCK_IDS_DIFFER") && w.includes("sipariş 96967") && !w.includes("siparisNo=")));
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

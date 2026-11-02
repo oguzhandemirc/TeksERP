@@ -65,6 +65,7 @@ import { isShiftDefined } from "./helpers/loom-alarm-shift.helper";
 import { resetNotificationBaseline, resetNotificationBaselines } from "./helpers/notification-baseline.helper";
 import { READY_WORK_KIND } from "../constants/notification-catalog-sevkiyat";
 import { notifyUnitNeedsIncomingDoc } from "../constants/ready-work-units";
+import { clampOutlierFactor } from "../lib/gelen-belge/taslak";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { TAMBUR_PLAN_WIDTH_TOLERANCE_CM } from "../constants/tambur-plan-gate";
 import { FINISHING_KG_BASES, type FinishingKgBasis } from "./helpers/fabric-cost-kg.helper";
@@ -400,6 +401,9 @@ export const SETTING_KEYS = {
   GELEN_BELGE_DEFAULT_ROUTE_ID: "gelenBelge.defaultRouteTemplateId",
   /** Rota önerisi önceliği: CUSTOMER_FIRST (varsayılan = bugünkü zincir) | FACTORY_FIRST (fabrika varsayılanı önce). */
   GELEN_BELGE_ROUTE_PRIORITY: "gelenBelge.routeSuggestionPriority",
+  /** El yazısı ızgarasında şüpheli metre oranı K (blok medyanının 1/K altı ya da K katı üstü → uyarı + satır etiketi).
+   *  Boş = 4 (bugünkü alt sınır %25; üst sınır yeni, yalnız uyarı). Aralık 2–20; tek yazar `PUT /api/gelen-belge/ayarlar`. */
+  GELEN_BELGE_OUTLIER_FACTOR: "gelenBelge.handwritingOutlierFactor",
   /** Z1 ÜRETİM BELGE ZİNCİRİ (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bugünkü davranış (bağ opsiyonel). */
   DEVERE_BEAM_WEAVING_LINK_REQUIRED: "devere.beamWeavingLinkRequired",
   DOKUMA_RUN_WEAVING_ORDER_REQUIRED: "dokuma.runWeavingOrderRequired",
@@ -6589,6 +6593,16 @@ export async function readRouteSuggestionPriority(tx?: Pick<typeof prisma, "syst
   return typeof v === "string" && (ROUTE_SUGGESTION_PRIORITY_VALUES as readonly string[]).includes(v)
     ? (v as RouteSuggestionPriority)
     : DEFAULT_ROUTE_SUGGESTION_PRIORITY;
+}
+
+/** El yazısı şüpheli değer oranı; kayıt yok / aralık dışı / çöp → varsayılan (`clampOutlierFactor`). */
+export async function readHandwritingOutlierFactor(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.GELEN_BELGE_OUTLIER_FACTOR },
+    select: { value: true },
+  });
+  return clampOutlierFactor(asNumber(setting?.value) ?? undefined);
 }
 
 /** Enforcement okuyucusu: ham değer ∧ lisans modül tavanı. `readGelenBelgeEnabledRaw` yalnız panel geri-okuması ve
