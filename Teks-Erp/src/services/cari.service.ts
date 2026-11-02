@@ -28,6 +28,7 @@ import { SERVICE_BILLING_TRIGGERS, type ServiceBillingTrigger } from "./system-s
 import { ACTIVE_HOLD_INCLUDE, HELD_CARI_ACCOUNT_WHERE, holdScopes, reasonLabel, type CariHoldScope } from "./helpers/cari-hold.helper";
 import { CARI_TAX_SELECT } from "./helpers/invoice-tax-defaults.helper";
 import { readKursunGramPrice } from "./helpers/kursun-gram-price-input.helper";
+import { listKursunGramPriceHistory, recordKursunGramPriceVersionTx } from "./helpers/kursun-gram-price-version.helper";
 import { cariTaxOverrideData, taxOverrideOf, type CariTaxOverrideInput } from "./helpers/cari-tax-override.helper";
 
 /**
@@ -360,6 +361,13 @@ export class CariService {
     return { success: true, data: created, message: "Cari hesap oluşturuldu." };
   }
 
+  /** K14: müşteriye özel gram fiyatı geçmişi (salt okunur, en yeni önce, cursor). */
+  async kursunGramHistory(id: string, opt: { cursor?: string; limit?: number }) {
+    const row = await prisma.cariAccount.findUnique({ where: { id }, select: { id: true } });
+    if (!row) throw AppError.notFound("Cari hesap bulunamadı.");
+    return { success: true, data: await listKursunGramPriceHistory({ cariAccountId: id }, opt) };
+  }
+
   async update(
     id: string,
     input: {
@@ -399,7 +407,9 @@ export class CariService {
       }
     }
 
-    const updated = await prisma.cariAccount.update({
+    // K14: gram fiyatı değişince kolon + sürüm aynı tx'te (değer değişmediyse sürüm yazılmaz).
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = await tx.cariAccount.update({
       where: { id },
       data: {
         ...(input.taxOffice !== undefined ? { taxOffice: input.taxOffice } : {}),
@@ -413,6 +423,9 @@ export class CariService {
         ...taxData,
       },
       select: { id: true },
+      });
+      if (gram !== undefined) await recordKursunGramPriceVersionTx(tx, { cariAccountId: id }, gram, userId);
+      return row;
     });
 
     void AuditService.log({

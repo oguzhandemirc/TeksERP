@@ -19,8 +19,9 @@ import { resolveItemPricesFor } from "../item-price.service";
 import { listKursunApplications, readKursunTarget, type KursunApplication } from "./process-summary.helper";
 import { listFlagServiceWorks } from "./service-flag-work.helper";
 import { pickServiceItemId } from "./service-item-pick.helper";
-import { applyKursunGramPrices, gramPriceCurrentWarning } from "./kursun-gram-price.helper";
+import { applyKursunGramPrices, gramPriceCurrentWarning, gramPriceEnteredLaterWarning } from "./kursun-gram-price.helper";
 import { missingQuantityWarning, priceUnitMatches, serviceWorkQuantity, serviceWorkUnit } from "./service-quantity.helper";
+import { readFinanceKursunGramPriceBasis, type KursunGramPriceBasis } from "../system-setting.service";
 
 /** `kursun-qc.service` reopenStep damga sebebi — yeniden açılan adım yeni hizmettir. */
 const KURSUN_REOPEN_REASON = "KURSUN_REOPEN";
@@ -126,6 +127,8 @@ export interface ServiceResolveOptions {
   missingMeter?: "DECLARED_WITH_WARNING" | "BLOCK_LINE";
   /** Verilirse bütün fiyatlar bu ana çözülür (priceDate = DISPATCH_DAY). */
   priceAsOf?: Date;
+  /** K14: gram fiyatı tabanı; verilmezse fabrika ayarı okunur (`readFinanceKursunGramPriceBasis`). */
+  gramPriceBasis?: KursunGramPriceBasis;
   /** H8b dönem taslağı (DISPATCH_DAY): işin topu → kendi sevk anı; `priceAsOf`tan önce gelir. */
   priceAsOfByRoll?: Map<string, Date>;
   /** Zaten faturalanmış iş — `${rollId}:${serviceItemId}:${workOrderStepId}`; satıra ve bağa girmez. */
@@ -188,9 +191,14 @@ async function loadFlagWorks(rollIds: string[], basis: "OUT" | "IN" | "DECLARED"
 }
 
 /** Fiyat hizmet anına çözülür (geç taslak eski fiyatı korur); aynı an tek sorgu. Birim uyuşmazsa fiyat yok. */
+/** İşin fiyat anı — kalem tarifesi ve (K14 SERVICE_DATE) gram fiyatı sürümü AYNI anı okur. */
+function servicePriceAt(opt: ServiceResolveOptions): (w: ServiceRollWork) => number {
+  return (w) => (opt.priceAsOfByRoll?.get(w.rollId) ?? opt.priceAsOf ?? w.serviceAt).getTime();
+}
+
 async function applyAsOfPrices(works: ServiceRollWork[], ctx: { opt: ServiceResolveOptions; currency: Currency; customerId: string | null; db: Db }): Promise<void> {
   const byAt = new Map<number, ServiceRollWork[]>();
-  const priceAt = (w: ServiceRollWork) => (ctx.opt.priceAsOfByRoll?.get(w.rollId) ?? ctx.opt.priceAsOf ?? w.serviceAt).getTime();
+  const priceAt = servicePriceAt(ctx.opt);
   for (const w of works) if (w.serviceItemId) byAt.set(priceAt(w), [...(byAt.get(priceAt(w)) ?? []), w]);
   for (const [at, group] of byAt) {
     const prices = await resolveItemPricesFor({
@@ -262,8 +270,12 @@ export async function resolveServiceItemsForRolls(params: {
   const works = billable.filter((w) => !unknown.includes(w));
 
   await applyAsOfPrices(works, { opt, currency: params.currency, customerId: params.customerId, db });
-  const gramPriced = await applyKursunGramPrices(works.filter((w) => w.serviceItemId !== null), { currency: params.currency, customerId: params.customerId, db });
-  if (gramPriced > 0) warnings.push(gramPriceCurrentWarning(gramPriced));
+  const gramBasis = opt.gramPriceBasis ?? await readFinanceKursunGramPriceBasis(db);
+  const gram = await applyKursunGramPrices(works.filter((w) => w.serviceItemId !== null), {
+    currency: params.currency, customerId: params.customerId, db, basis: gramBasis, priceAt: servicePriceAt(opt),
+  });
+  if (gramBasis === "INVOICE_DATE" && gram.priced > 0) warnings.push(gramPriceCurrentWarning(gram.priced));
+  if (gram.late > 0) warnings.push(gramPriceEnteredLaterWarning(gram.late));
 
   const items = await db.item.findMany({
     where: { id: { in: [...new Set(works.map((w) => w.serviceItemId).filter((v): v is string => v !== null))] } },

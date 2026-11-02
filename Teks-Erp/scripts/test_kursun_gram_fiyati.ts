@@ -10,7 +10,7 @@
 // ÖLÇÜLENLER:
 //   §1 500 m × 40 gr/m × 0,05 = 1000; satır açıklaması "Kurşun 40 gr (40 gr/m)"
 //   §2 Müşteri (cari) özel gram fiyatı istasyonunkini ezer (0,04 → 800)
-//   §1b Gram fiyatı tarihsiz (fatura anındaki değer) → taslak uyarısı; uygulanmayınca uyarı yok
+//   §1b INVOICE_DATE (fatura anındaki değer) → taslak uyarısı; uygulanmayınca uyarı yok (K14 sürüm yolu ayrı bekçide)
 //   §3 Gram fiyatı yok → eski kalem fiyatı; gramaj sayısı yok → eski kalem fiyatı; para birimi farklı → eski
 //   §4 Tek varsayılan: DB kısmi unique (23505/P2002) + servis 400 PROPERTY_VALUE_MULTIPLE_DEFAULT
 //   §5 İstasyon kurşun ucu: aç → AUTO satırı; gramaj ekle (amount + varsayılan); kapa → satır yok; fiyat para birimsiz 400
@@ -42,6 +42,8 @@ async function errOf(fn: () => Promise<unknown>): Promise<{ status: number; code
   }
 }
 
+// K14: bu bekçi kolon değerini (fatura anı, INVOICE_DATE) ölçer; sürüm yolu `test_kursun_gram_gecmisi`nde.
+const INVOICE = { gramPriceBasis: "INVOICE_DATE" as const };
 const STAMP = randomUUID().slice(0, 8);
 const P = `TEST-KGF-${STAMP}`;
 const fx = {
@@ -114,7 +116,7 @@ async function main(): Promise<void> {
   const rNA = await mkPressed(200, VNA);
 
   section("§1 500 m × 40 gr/m × 0,05 = 1000");
-  const a = await resolveServiceItemsForRolls({ rollIds: [r40], customerId: null, currency: "TRY" });
+  const a = await resolveServiceItemsForRolls({ rollIds: [r40], customerId: null, currency: "TRY", options: INVOICE });
   const l = a.lines[0];
   const total = l ? Number(l.unitPrice) * Number(l.quantity) : NaN;
   check("birim metre fiyatı 2 (40 × 0,05), miktar 500, tutar 1000", a.lines.length === 1 && Number(l?.unitPrice) === 2 && Number(l?.quantity) === 500 && total === 1000, JSON.stringify(a.lines.map((x) => [x.unitPrice, x.quantity, x.unit])));
@@ -124,18 +126,18 @@ async function main(): Promise<void> {
   section("§2 müşteri özel gram fiyatı istasyonunkini ezer");
   const cari = await prisma.cariAccount.create({ data: { kind: "CUSTOMER", customerId: cust.id, kursunGramPrice: "0.04", kursunGramCurrency: "TRY" }, select: { id: true } });
   fx.cariIds.push(cari.id);
-  const b = await resolveServiceItemsForRolls({ rollIds: [r40], customerId: cust.id, currency: "TRY" });
+  const b = await resolveServiceItemsForRolls({ rollIds: [r40], customerId: cust.id, currency: "TRY", options: INVOICE });
   check("cari 0,04 → birim 1,6, tutar 800", Number(b.lines[0]?.unitPrice) === 1.6 && Number(b.lines[0]?.unitPrice) * Number(b.lines[0]?.quantity) === 800, JSON.stringify(b.lines.map((x) => x.unitPrice)));
 
   section("§3 fiyat/gramaj yoksa bugünkü kalem fiyatı");
-  const c = await resolveServiceItemsForRolls({ rollIds: [rNA], customerId: null, currency: "TRY" });
+  const c = await resolveServiceItemsForRolls({ rollIds: [rNA], customerId: null, currency: "TRY", options: INVOICE });
   check("gramaj sayısı yok → kalem fiyatı 3, açıklamasız", Number(c.lines[0]?.unitPrice) === 3 && c.lines[0]?.label === undefined, JSON.stringify(c.lines.map((x) => [x.unitPrice, x.label])));
   check("gram fiyatı uygulanmayan taslakta uyarı yok", !c.warnings.some((w) => w.includes("gram fiyatının")), JSON.stringify(c.warnings));
   await prisma.station.update({ where: { id: st.id }, data: { kursunGramPrice: null, kursunGramCurrency: null } });
-  const d = await resolveServiceItemsForRolls({ rollIds: [r40], customerId: null, currency: "TRY" });
+  const d = await resolveServiceItemsForRolls({ rollIds: [r40], customerId: null, currency: "TRY", options: INVOICE });
   check("gram fiyatı yok → kalem fiyatı 3", Number(d.lines[0]?.unitPrice) === 3 && d.lines[0]?.label === undefined, JSON.stringify(d.lines.map((x) => x.unitPrice)));
   await prisma.station.update({ where: { id: st.id }, data: { kursunGramPrice: "0.05", kursunGramCurrency: "USD" } });
-  const e = await resolveServiceItemsForRolls({ rollIds: [r40], customerId: null, currency: "TRY" });
+  const e = await resolveServiceItemsForRolls({ rollIds: [r40], customerId: null, currency: "TRY", options: INVOICE });
   check("istasyon fiyatı farklı para biriminde → kalem fiyatı 3", Number(e.lines[0]?.unitPrice) === 3, JSON.stringify(e.lines.map((x) => x.unitPrice)));
 
   section("§4 çeşit başına tek varsayılan");
@@ -188,6 +190,8 @@ async function cleanup(): Promise<void> {
   await del("workOrder", () => prisma.workOrder.deleteMany({ where: { id: { in: fx.woIds } } }));
   await del("machine", () => prisma.machine.deleteMany({ where: { id: { in: fx.machineIds } } }));
   await del("stationProperty", () => prisma.stationProperty.deleteMany({ where: { stationId: { in: fx.stationIds } } }));
+  // Bekçi kendi fikstür sürümlerini kaldırır (src'de sürüm silinmez — defter-beyan §10).
+  await del("gramSürüm", () => prisma.kursunGramPriceVersion.deleteMany({ where: { OR: [{ stationId: { in: fx.stationIds } }, { cariAccountId: { in: fx.cariIds } }] } }));
   await del("station", () => prisma.station.deleteMany({ where: { id: { in: fx.stationIds } } }));
   await del("value", () => prisma.fabricPropertyValue.deleteMany({ where: { OR: [{ id: { in: fx.valueIds } }, { propertyId: { in: fx.propIds } }] } }));
   if (fx.variantRestore) { const r = fx.variantRestore; await del("variant geri", () => prisma.fabricProperty.update({ where: { id: r.id }, data: { serviceItemId: r.serviceItemId } })); }

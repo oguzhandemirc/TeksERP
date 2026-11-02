@@ -103,6 +103,7 @@ export async function collectServiceBillingDraft(params: {
       brodeUnit: params.settings.brodeUnit,
       priceAsOf: dispatchDay ? params.dispatchedAt ?? new Date() : undefined,
       priceAsOfByRoll: dispatchDay ? params.dispatchedAtByRoll : undefined,
+      gramPriceBasis: params.settings.gramPriceBasis,
       billedKeys: await loadBilledKeys(lineage, db),
       shippedRollIds: new Set(params.rollIds),
     },
