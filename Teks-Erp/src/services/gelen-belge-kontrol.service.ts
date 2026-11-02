@@ -7,6 +7,7 @@
 // =============================================================================
 import { DeliveryNoteLineStatus, Prisma } from "@prisma/client";
 import { SUSPECT_MARK } from "../lib/gelen-belge/taslak";
+import { sayiMetni } from "./reports/anlati/sayi-bicim";
 import type { DocumentTotalCheckMode, UnreviewedApprovalMode } from "./system-setting.service";
 
 /** Beyan edilen kg/m ile satır toplamı arasındaki hoşgörü (OCR ondalık kaybı; adet HOŞGÖRÜSÜZ). */
@@ -19,6 +20,9 @@ export type TotalLine = { blockNo: number; meters: Prisma.Decimal | number | str
 const near = (a: number, b: number) => Math.abs(a - b) <= Math.max(0.001, Math.abs(b) * TOTAL_TOLERANCE);
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 const finite = (n: number): number | null => (Number.isFinite(n) ? n : null);
+// Operatör metni Türkçe sayı yazar ("241", "241,5", "1.234,25"); `toFixed(3)` "241.000" basıp "241 bin" okunuyordu.
+// Sayıya çevrilemeyen OCR beyanı olduğu gibi kalır. Yalnız metin içindir — JSON alanları (`diffs`, `lines`) ham sayıdır.
+const sayi = (v: number | string): string => (v !== "" && Number.isFinite(Number(v)) ? sayiMetni(Number(v), 3) : String(v));
 
 export type TotalField = "count" | "m" | "kg";
 export interface TotalDiff {
@@ -78,15 +82,15 @@ function compareDeclared(b: DeclaredBlock, s: { count: number; m: number; kg: nu
   const diffs: TotalDiff[] = [];
   const add = (field: TotalField, actual: number, d: number | null) => diffs.push({ field, declared: d, actual: round3(actual), diff: d === null ? null : round3(actual - d) });
   if (hasCount && Number(b.count) !== s.count) {
-    out.push(`${head("count")}: beyan ${b.count} top, satır ${s.count}.`);
+    out.push(`${head("count")}: beyan ${sayi(b.count!)} top, satır ${sayi(s.count)}.`);
     add("count", s.count, declared.count);
   }
   if (b.m != null && !near(s.m, Number(b.m))) {
-    out.push(`${head("m")}: beyan ${b.m} m, satır toplamı ${s.m.toFixed(3)} m.`);
+    out.push(`${head("m")}: beyan ${sayi(b.m)} m, satır toplamı ${sayi(s.m)} m.`);
     add("m", s.m, declared.m);
   }
   if (b.kg != null && !near(s.kg, Number(b.kg))) {
-    out.push(`${head("kg")}: beyan ${b.kg} kg, satır toplamı ${s.kg.toFixed(3)} kg.`);
+    out.push(`${head("kg")}: beyan ${sayi(b.kg)} kg, satır toplamı ${sayi(s.kg)} kg.`);
     add("kg", s.kg, declared.kg);
   }
   const any = hasCount || b.m != null || b.kg != null;

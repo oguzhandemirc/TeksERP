@@ -4,7 +4,7 @@
 // Panel şeridi/süzgeci onay kapısının hükmünü OKUR, yeniden hesaplamaz: detay yanıtı `totalsCheck` + satır
 // `problems` alanlarını onay ön kontrolüyle AYNI yüklemlerden (`gelen-belge-kontrol.service.ts`) üretir.
 //   §1 saf `totalsCheck`: `mismatches` ≡ `totalMismatches` (SKIPPED, %0,5, adet hoşgörüsüz, OCR metni, okunamaz beyan),
-//      blok yapısı (beyanlı/beyansız, fark işareti), ok üç değerli
+//      blok yapısı (beyanlı/beyansız, fark işareti), ok üç değerli; §1h mesaj sayısı Türkçe ("241", "241,5", "1.234,25")
 //   §2 saf `lineProblems`: FAILED · ITEM_UNRESOLVED · NEEDS_REVIEW; ENTERED/SKIPPED açık değildir
 //   §3 ⭐ HTTP: detay `totalsCheck.ok=false` ↔ onay 409 TOTAL_MISMATCH ve `details.mismatches` bayt-aynı; satır PATCH'i
 //      sonrası detay tutuyor (ok=true) ↔ onay toplam kapısından geçer; GET YAZMAZ (updatedAt + audit sayısı sabit)
@@ -91,6 +91,15 @@ function section1(): void {
   check("§1f beyansız → ok=null, satırlı bloklar doğrulanamaz", none.ok === null && same(none.blocks.map((b) => [b.blockNo, b.ok, b.declared]), [[1, null, null], [3, null, null]]));
   const nan = totalsCheck({ totalsDeclared: cases[4]!.declared, declaredTopCount: null }, cases[4]!.lines);
   check("§1g okunamaz beyan → uyuşmazlık, beyan/fark null", nan.ok === false && nan.blocks[0]?.diffs[0]?.declared === null && nan.blocks[0]?.diffs[0]?.diff === null);
+  // Operatör metni Türkçe sayı: "241.000" (toFixed) "241 bin" okunur → tam sayı sıfırsız, ondalık virgül, binlik nokta
+  const msg = (m: number | string, kg: number | null, meters: number[]) => totalMismatches({ totalsDeclared: { blocks: [{ blockNo: 1, m, ...(kg === null ? {} : { kg }) }] } }, meters.map((x) => L(1, x, "PENDING", kg === null ? null : 1)));
+  check("§1h ⭐ Türkçe sayı: 241 → \"241\", 241.5 → \"241,5\", 1234.25 → \"1.234,25\" (ondalık virgül, gereksiz sıfır yok)",
+    same(msg(200, null, [241]), ["Blok 1: beyan 200 m, satır toplamı 241 m."])
+      && same(msg("238", null, [120, 121.5]), ["Blok 1: beyan 238 m, satır toplamı 241,5 m."])
+      && same(msg(1000.5, null, [1234.25]), ["Blok 1: beyan 1.000,5 m, satır toplamı 1.234,25 m."])
+      && same(msg(1, 2000.75, [1, 1]), ["Blok 1: beyan 1 m, satır toplamı 2 m.", "Blok 1: beyan 2.000,75 kg, satır toplamı 2 kg."])
+      && same(msg("abc", null, [10]), ["Blok 1: beyan abc m, satır toplamı 10 m."]),
+    JSON.stringify([msg(200, null, [241]), msg("238", null, [120, 121.5]), msg(1000.5, null, [1234.25]), msg(1, 2000.75, [1, 1])]));
 }
 
 function section2(): void {
@@ -368,7 +377,7 @@ async function section11(call: (method: string, p: string, body?: unknown) => Pr
   console.log("§11 belge geneli beyan (Müşteri MT) ↔ toplam kapısı — fabrika ayarı documentTotalCheck");
   const doc = (m: string) => ({ blocks: [{ blockNo: 1, m: "241", kg: "734" }], document: { count: null, m, kg: null, labels: { m: "Müşteri MT" } } });
   const lines = [L(1, 241, "PENDING", 734)];
-  const MSG = "Belge geneli (Müşteri MT): beyan 238 m, satır toplamı 241.000 m.";
+  const MSG = "Belge geneli (Müşteri MT): beyan 238 m, satır toplamı 241 m.";
   const t = totalsCheck({ totalsDeclared: doc("238"), declaredTopCount: null }, lines, { documentMode: "REQUIRE_REASON" });
   check("§11a ⭐ saf REQUIRE_REASON: 238 ↔ 241 → ok=false, blok 1 tutuyor, belge farkı +3, blocking, mesaj etiketli; totalMismatches ≡",
     t.ok === false && t.blocks[0]?.ok === true && t.document?.diffs[0]?.diff === 3 && t.document.blocking === true && same(t.mismatches, [MSG])
