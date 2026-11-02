@@ -1,7 +1,9 @@
 // D3a (2026-10-28): tek giriş noktası — bölgeleme → sınıflandırma → başlık alanları → tablo → ızgara → toplam.
 // DB/route yok; saf fonksiyon. Çağıran (D3b okuma işi) sonucu CustomerDeliveryNote DRAFT'a yazar.
 import type { DocumentTemplate, ExtractionResult, FieldResult, GridResult, HeaderLineSpec, NoteTotalsBlockInput, NoteTotalsResult, OcrBlock, OcrResult, PageRegion, TableResult } from "./types";
-import { classifyWithFallback } from "./classify";
+import { classifyWithFallback, scoreTemplate } from "./classify";
+import { readingOrderText } from "./geometry";
+import { normalizeForMatch } from "./text-normalize";
 import { extractFields } from "./extract";
 import { extractTable } from "./table";
 import { deriveGridCells } from "./grid";
@@ -23,9 +25,20 @@ export interface RegionExtraction {
   warnings: string[];
 }
 
+/** İlk bölgenin belgesi dışında sayfada izi görülen tanınmış belge (sayfa BÖLÜNMEZ; yalnız uyarı kaynağı). */
+export interface ForeignDocument {
+  templateId: string;
+  templateName: string;
+  /** İkinci bölge olarak ayrıldıysa bölge no; tek bölgeli sayfada yalnız metin izi → null. */
+  regionNo: number | null;
+  fields: Record<string, FieldResult>;
+}
+
 export interface DocumentExtraction {
   regions: RegionExtraction[];
   warnings: string[];
+  /** İkinci belge izleri (çağıran uyarıya çevirir); yoksa boş. */
+  foreignDocuments: ForeignDocument[];
 }
 
 /** Tablo bloklarını computeNoteTotals girdisine çevirir (kolon anahtarı sözleşmesi: "kg" ve "m"). */
@@ -108,5 +121,30 @@ export function extractDocument(ocr: OcrResult, templates: DocumentTemplate[], f
   }
   const out = regions.map((r) => extractRegion(r, templates, fallbackId));
   const warnings = regions.length > 1 ? [`MULTI_REGION: fotoğrafta ${regions.length} belge bölgesi ayrıldı`] : [];
-  return { regions: out, warnings };
+  return { regions: out, warnings, foreignDocuments: foreignDocuments(ocr, out, templates, fallbackId) };
+}
+
+/**
+ * İkinci belge izi (iki belgeli fotokopi): ikinci+ bölgenin tanınmış şablonu ya da — sayfa tek bölge kaldıysa — ilk
+ * bölgenin şablonu DIŞINDA tam sayfa metninde kendi eşiğini geçen gönderen şablonu. Sayfa bölünmez, satır doğmaz;
+ * çağıran "ayrı fotoğrafla yükleyin" uyarısı yazar. GENEL yedek sözlük iz sayılmaz.
+ */
+export function foreignDocuments(ocr: OcrResult, regions: RegionExtraction[], templates: DocumentTemplate[], fallbackId: string | null): ForeignDocument[] {
+  const first = regions[0];
+  if (!first) return [];
+  const known = (id: string | null): id is string => id !== null && id !== fallbackId;
+  const out: ForeignDocument[] = [];
+  for (const r of regions.slice(1)) {
+    const t = templates.find((x) => x.id === r.templateId);
+    if (t && known(r.templateId)) out.push({ templateId: t.id, templateName: t.name, regionNo: r.region.regionNo, fields: r.fields?.fields ?? {} });
+  }
+  if (regions.length > 1) return out;
+  const text = readingOrderText(ocr);
+  const norm = normalizeForMatch(text);
+  for (const t of templates) {
+    if (!known(t.id) || t.id === first.templateId) continue;
+    if (scoreTemplate(text, norm, t) < (t.identifiers.minScore ?? 0.5)) continue;
+    out.push({ templateId: t.id, templateName: t.name, regionNo: null, fields: extractFields(ocr, t).fields });
+  }
+  return out;
 }
