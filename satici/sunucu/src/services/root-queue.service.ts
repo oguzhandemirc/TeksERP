@@ -3,7 +3,7 @@
 // imzalanır (`anahtar.ts kuyruk-imzala`) → içe aktarılır (`donem-ice-aktar`). İçe aktarmada imzalı belgenin yükü
 // kuyruktaki yükle BİREBİR aynı olmalıdır ve HAK hâlâ talebin taban sürümünde durmalıdır; değilse talep ESKİDİ olur
 // (yeni sürüm yazılmaz). Durum geçişleri atomik claim (`updateMany WHERE {id, durum: BEKLIYOR}`).
-import type { HakKokTalebi, HakSurumu, Prisma } from "@prisma/client";
+import type { HakKokTalebi, HakKokTalebiNedeni, HakSurumu, Prisma } from "@prisma/client";
 import { TYP, parseJws, verifyEntitlement, type EntitlementDoc } from "../lisans-protokol";
 import { recordAudit } from "../lib/audit";
 import { VendorError, notFoundError, retryConflict, stateConflict } from "../lib/errors";
@@ -18,11 +18,30 @@ import { requireReason } from "./sanction.service";
 export const ROOT_QUEUE_EXPORT_TYPE = "tekserp-kok-kuyrugu";
 export const ROOT_SIGNED_TYPE = "tekserp-kok-imzali-haklar";
 
+/** Taban sürümün İMZALI belgesi: tören (Mac) onu köke karşı doğrular ve yeni yükü ona göre FARK olarak gösterir. */
+export interface RootQueuePrevious {
+  readonly surum: number;
+  readonly belge: string;
+  readonly imzalayanKid: string;
+}
+
 export interface RootQueueExport {
   readonly v: 1;
   readonly tur: typeof ROOT_QUEUE_EXPORT_TYPE;
   readonly uretim: string;
-  readonly talepler: readonly { readonly talepId: string; readonly hakId: string; readonly lisansNo: string; readonly tabanSurum: number; readonly surum: number; readonly yuk: EntitlementDoc }[];
+  readonly talepler: readonly {
+    readonly talepId: string;
+    readonly hakId: string;
+    readonly lisansNo: string;
+    readonly tabanSurum: number;
+    readonly surum: number;
+    readonly acil: boolean;
+    readonly planNedeni: HakKokTalebiNedeni;
+    readonly sebep: string;
+    /** Taban sürüm 0 (ilk HAK) → null; aksi hâlde defterdeki satır (yoksa null — tören bunu açıkça yazar). */
+    readonly onceki: RootQueuePrevious | null;
+    readonly yuk: EntitlementDoc;
+  }[];
 }
 
 /** Anahtar sırası bağımsız kanonik JSON — kuyruktaki yük ile imzalı belgenin yükü bununla karşılaştırılır. */
@@ -38,11 +57,30 @@ export function canonicalJson(value: unknown): string {
 /** Bekleyen talepler (tören girdisi; ACİL olanlar önce). Yükler açık belgedir (sır taşımaz); dosya yalnız VDS → Mac yolunda durur. */
 export async function exportRootQueue(db: Db, nowMs: number = Date.now()): Promise<RootQueueExport> {
   const rows = await db.hakKokTalebi.findMany({ where: { durum: "BEKLIYOR" }, orderBy: [{ acil: "desc" }, { createdAt: "asc" }, { id: "asc" }], include: { hak: { select: { lisansNo: true } } } });
+  const bases = rows.filter((r) => r.tabanSurum > 0);
+  const previous = bases.length
+    ? await db.hakSurumu.findMany({ where: { OR: bases.map((r) => ({ hakId: r.hakId, surum: r.tabanSurum })) }, select: { hakId: true, surum: true, belge: true, imzalayanKid: true } })
+    : [];
+  const previousOf = (hakId: string, surum: number): RootQueuePrevious | null => {
+    const p = previous.find((x) => x.hakId === hakId && x.surum === surum);
+    return p ? { surum: p.surum, belge: p.belge, imzalayanKid: p.imzalayanKid } : null;
+  };
   return {
     v: 1,
     tur: ROOT_QUEUE_EXPORT_TYPE,
     uretim: new Date(nowMs).toISOString(),
-    talepler: rows.map((r) => ({ talepId: r.id, hakId: r.hakId, lisansNo: r.hak.lisansNo, tabanSurum: r.tabanSurum, surum: r.surum, yuk: r.yuk as unknown as EntitlementDoc })),
+    talepler: rows.map((r) => ({
+      talepId: r.id,
+      hakId: r.hakId,
+      lisansNo: r.hak.lisansNo,
+      tabanSurum: r.tabanSurum,
+      surum: r.surum,
+      acil: r.acil,
+      planNedeni: r.planNedeni,
+      sebep: r.sebep,
+      onceki: r.tabanSurum > 0 ? previousOf(r.hakId, r.tabanSurum) : null,
+      yuk: r.yuk as unknown as EntitlementDoc,
+    })),
   };
 }
 
@@ -73,6 +111,8 @@ export async function queueCurrentTermsUnderLock(
         yuk: built.payload as unknown as Prisma.InputJsonObject,
         uzunUfuk: built.fields.longHorizon,
         acil: g.urgent,
+        // Yeteneksiz alıcının güncel şartları: ara imzalı HAK'ı tanımayan derleme (kurulum güncellenince kalkar).
+        planNedeni: "YETENEK_YOK",
         sebep: "Yetenek düşüşü: güncel şartların kök imzası (yeteneksiz derleme güncel ara imzalı HAK'ı tanımaz, eski kök sürüm güncelden geniş)",
         yapan: CAPABILITY_DOWNGRADE_ACTOR,
       },
@@ -223,12 +263,14 @@ export async function listRootRequests(db: Db, g: { status?: HakKokTalebi["durum
       id: r.id,
       hakId: r.hakId,
       lisansNo: r.hak.lisansNo,
+      kurulumId: r.kurulumId,
       kurulum: r.kurulum,
       tabanSurum: r.tabanSurum,
       surum: r.surum,
       uzunUfuk: r.uzunUfuk,
       acil: r.acil,
       durum: r.durum,
+      planNedeni: r.planNedeni,
       sebep: r.sebep,
       yapan: r.yapan,
       kapanisZamani: r.kapanisZamani,

@@ -28,7 +28,9 @@
 //   node deploy/satici/uretim-toren.mjs dogrula [--dizin=…]
 //       Salt okuma: izinler (dizin 700 · dosya 600) + dosya özetleri künyeyle aynı mı.
 //   node deploy/satici/uretim-toren.mjs donem [--dizin=…] [--etiket=<ad>] [--kuyruk=<kuyruk.json>] [--iptal=<kid>[,…]]
-//                                            [--neden=<metin>] [--ara-siniflar=URETIM,DR,DEMO,TEST] [--yil=<YYYY>] [--kok=<kid>]
+//                                            [--neden=<metin>] [--ara-siniflar=<s,…>] [--yil=<YYYY>] [--kok=<kid>]
+//       Ara imzacının sınıfları: `--ara-siniflar` verilmezse `anahtar.ts ara-uret` varsayılanı (tek kaynak
+//       `satici/sunucu/src/keys/intermediate-classes.ts`: BAYI dışı bütün sınıflar ∩ kök — BARINDIRILAN dahil).
 //       YILLIK DÖNEM TÖRENİ (G4 §2.4, K4): kök parolası BİR kez + YENİ ara imzacı parolası (iki kez, kökten FARKLI) →
 //       yeni ALT · HAK ara imzacısı · İNDİRME (her biri 395 gün = 365 + 30 örtüşme) · iptal belgesi (ilk törende sıra 1;
 //       `--iptal` verilirse sıra + 1, önceki satırlar taşınır; yoksa önceki belge AYNEN) · kuyruktaki kök imzası bekleyen
@@ -39,6 +41,13 @@
 //       (3.9 D6): PAKET birincil `pkt-<yıl>-<n>` (Mac, paket parolası) + yedek `pkt-<yıl>-<n+1>` (yedek birimi, yedek parolası;
 //       `--istemci` ile ortak) + kök imzalı sertifikaları (395 gün) + dağıtım iptali (`paket-iptal.json`) + yayındaki backend
 //       sürümleri/PG künyelerinin yeniden imzası. `paket-yedek-dogrula --yedek-usb=…`: yedek açılıyor mu (yıllık ara denetim).
+//   node deploy/satici/uretim-toren.mjs kuyruk [--talep=<id>[,…]] [--uygula] [--kuyruk=<kuyruk.json>] [--dizin=…] [--kok=<kid>]
+//       DÖNEM DIŞI KÖK KUYRUĞU İMZASI (runbook §8a) — tek komut: VDS'ten `kuyruk-disa-aktar` (salt okuma, ssh; `--kuyruk`
+//       verilirse ağa çıkmaz) → her talep insan okunur: müşteri · kurulum · sınıf · sürüm a→b · kuyruk nedeni · önceki
+//       İMZALI HAK'a (köke karşı doğrulanır) göre modül/bakım/ufuk farkı; şüpheli talep (taban doğrulanamıyor, kimlik
+//       tutmuyor) İMZALANMAZ. Varsayılan KURU (parola yok, imza yok, VDS'e yazım yok). `--uygula`: talep başına onay →
+//       kök parolası (Anahtar Zinciri `tekserp/kok`) → `kuyruk-imzala` → `donem-ice-aktar` stdin'den VDS'e. Arşiv
+//       `<dizin>/kok-kuyrugu/<damga>/`. Bu komut dışında tören ağa ÇIKMAZ.
 // Çıkış: 0 tamam · 1 hata (hedefe hiçbir şey yazılmadı) · 2 kullanım/önkoşul.
 // =============================================================================
 import { spawn, spawnSync } from "node:child_process";
@@ -82,6 +91,7 @@ const KOMUTLAR = {
   donem: ["dizin", "etiket", "kuyruk", "iptal", "neden", "ara-siniflar", "yil", "kok", "kok-parola-dosyasi", "ara-parola-dosyasi", ...ISTEMCI_BAYRAKLARI, ...PAKET_BAYRAKLARI],
   "istemci-yedek-dogrula": ["dizin", "yedek-usb", "yedek-parola-dosyasi"],
   "paket-yedek-dogrula": ["dizin", "yedek-usb", "yedek-parola-dosyasi"],
+  kuyruk: ["dizin", "kok", "kuyruk", "talep", "uygula", "etiket", "vds", "kok-parola-dosyasi"],
   "usb-kopyala": ["dizin", "usb"],
   dogrula: ["dizin"],
 };
@@ -103,7 +113,7 @@ function argumanlar(argv) {
   const bayraklar = new Map();
   for (const a0 of kalan) {
     // Değersiz anahtar bayraklar (`--istemci`, `--yayinda-yok`) `=1` sayılır.
-    const a = /^--(istemci|yayinda-yok|paket|paket-yayinda-yok)$/.test(a0) ? `${a0}=1` : a0;
+    const a = /^--(istemci|yayinda-yok|paket|paket-yayinda-yok|uygula)$/.test(a0) ? `${a0}=1` : a0;
     const m = /^--([a-z-]+)=(.*)$/.exec(a);
     if (!m || !KOMUTLAR[komut].includes(m[1])) throw new TorenHatasi(`Tanınmayan argüman: ${a.split("=")[0]} (${komut}: ${KOMUTLAR[komut].map((b) => `--${b}`).join(" ")})`, 2);
     bayraklar.set(m[1], m[2]);
@@ -905,7 +915,9 @@ function dogrula(hedef) {
 const DONEM_ORTUSME_GUN = 30;
 const DONEM_GUN = 365 + DONEM_ORTUSME_GUN;
 const DONEM_KUNYE = "DONEM-KUNYE.json";
+/** `--ara-siniflar` doğrulaması: protokol `LICENSE_CLASSES` aynası (bekçi `test_kok_kuyrugu_sade` ölçer). */
 const DONEM_SINIFLAR = ["URETIM", "TEST", "DR", "DEMO", "BAYI", "BARINDIRILAN"];
+const ARA_VARSAYILAN_ACIKLAMA = "varsayılan — BAYI dışı bütün sınıflar ∩ kök (satici/sunucu/src/keys/intermediate-classes.ts)";
 
 /** Tören dizininde kid aranan yerler: kökün yanındaki ilk anahtarlar + önceki dönem paketlerinin anahtarları. */
 function anahtarDizinleri(kok) {
@@ -1403,6 +1415,170 @@ function ozelSizdiMi(paket) {
   });
 }
 
+// ---------------------------------------------------------------- dönem dışı kök kuyruğu (§8a)
+/** Satıcı üretim VDS'i (runbook §8 "tören öncesi değişkenler"); `--vds=kullanici@makine[:port]` ile ezilir. */
+const VDS_HEDEF = "oguzhan@80.253.255.188";
+const VDS_PORT = "2222";
+const VDS_SATICI_DIZINI = "/opt/stack/apps/tekserp-satici-uretim";
+const VDS_ANAHTAR_CLI = "docker compose exec -T satici satici-baslat node dist-cli/scripts/anahtar.js";
+
+function vdsHedefi(deger) {
+  if (deger === undefined) return { hedef: VDS_HEDEF, port: VDS_PORT };
+  const m = /^([a-z_][a-z0-9_-]{0,31}@[A-Za-z0-9.-]{1,253})(?::(\d{1,5}))?$/.exec(deger);
+  if (!m) throw new TorenHatasi("--vds biçimi: kullanici@makine[:port]", 2);
+  return { hedef: m[1], port: m[2] ?? "22" };
+}
+
+/** Uzak komut YALNIZ satıcı CLI'ının iki alt komutu; kabuk metni sabittir (kullanıcı girdisi girmez). */
+function vdsKos(vds, altKomut, girdi) {
+  const uzak = `cd ${VDS_SATICI_DIZINI} && ${VDS_ANAHTAR_CLI} ${altKomut}`;
+  return spawnSync("ssh", ["-p", vds.port, "-o", "BatchMode=yes", vds.hedef, uzak], { encoding: "utf8", input: girdi, env: altOrtam(), timeout: ALT_SURE_MS, maxBuffer: 64 * 1024 * 1024 });
+}
+
+/** Evet/hayır: TTY'de satır, değilse stdin satırları (parolalarla aynı kuyruk — onaylar parola sorusundan ÖNCE gelir). */
+async function evetMi(soru) {
+  let cevap;
+  if (process.stdin.isTTY) {
+    const { createInterface } = await import("node:readline/promises");
+    const rl = createInterface({ input: process.stdin, output: process.stderr });
+    try {
+      cevap = await rl.question(soru);
+    } finally {
+      rl.close();
+    }
+  } else {
+    stdinSatirlari ??= await stdinOku();
+    const ham = stdinSatirlari.shift();
+    if (!ham) throw new TorenHatasi(`Onay bekleniyordu, stdin bitti (${soru.trim()})`, 2);
+    cevap = ham.toString("utf8");
+    ham.fill(0);
+  }
+  return /^(e|evet|y|yes)$/i.test(cevap.trim());
+}
+
+async function kuyrukKomutu(bayraklar) {
+  if (Number(process.versions.node.split(".")[0]) < 22) throw new TorenHatasi(`Node ≥ 22 gerekli (${process.versions.node})`, 2);
+  if (!fs.existsSync(path.join(SATICI, "node_modules", "tsx", "package.json"))) throw new TorenHatasi("Önkoşul: satici/sunucu bağımlılıkları yok — (cd satici/sunucu && npm ci)", 2);
+  const uygula = bayraklar.has("uygula");
+  // Kök parolası yalnız --uygula'da yazılır: o zaman kod donmuş kaynaktan koşmalı (donem ile aynı kapı).
+  const kay = uygula ? kaynakDenetle(bayraklar.get("etiket")) : null;
+  const hedef = evYolu(bayraklar.get("dizin") || VARSAYILAN_DIZIN);
+  yolDenetle(hedef);
+  const st = lstatYa(hedef);
+  if (!st?.isDirectory()) throw new TorenHatasi(`Tören dizini yok: ${hedef}`, 2);
+  if (typeof process.getuid === "function" && st.uid !== process.getuid()) throw new TorenHatasi(`Tören dizini başka kullanıcının: ${hedef}`, 2);
+  if ((st.mode & 0o077) !== 0) throw new TorenHatasi(`Tören dizini grup/başkalarına açık (${(st.mode & 0o777).toString(8)}): ${hedef} — chmod 700`, 2);
+  const kunyeYolu = path.join(hedef, KUNYE);
+  const kokKid = bayraklar.get("kok") ?? (fs.existsSync(kunyeYolu) ? jsonOku(kunyeYolu).kok?.kid : undefined);
+  if (typeof kokKid !== "string") throw new TorenHatasi("Kök kimliği belirsiz: künyede yok — --kok=<kid> ver", 2);
+  if (!KOK_KID.test(kokKid)) throw new TorenHatasi(`Kök ${kokKid} kök ailesinde değil (kok-*)`, 2);
+  const K = path.join(hedef, "anahtarlar");
+  const kokDosya = path.join(K, `${kokKid}.kok.json`);
+  if (!fs.existsSync(kokDosya)) throw new TorenHatasi(`Kök dosyası yok: ${kokDosya}`, 2);
+  kokDenetle(kokDosya, kokKid);
+  const vds = vdsHedefi(bayraklar.get("vds"));
+  const talepFiltre = bayraklar.has("talep") ? new Set(bayraklar.get("talep").split(",").map((x) => x.trim()).filter(Boolean)) : null;
+  if (talepFiltre && talepFiltre.size === 0) throw new TorenHatasi("--talep boş", 2);
+
+  // 1. Kuyruk: VDS'ten salt okuma (ya da yerel dosya — ağsız).
+  let ham;
+  let kaynak;
+  if (bayraklar.has("kuyruk")) {
+    const yol = evYolu(bayraklar.get("kuyruk"));
+    if (!fs.existsSync(yol)) throw new TorenHatasi(`--kuyruk dosyası yok: ${yol}`, 2);
+    ham = fs.readFileSync(yol, "utf8");
+    kaynak = `dosya ${yol}`;
+  } else {
+    const r = vdsKos(vds, "kuyruk-disa-aktar");
+    if (r.error || r.status !== 0) throw new TorenHatasi(`VDS'ten kuyruk alınamadı (${r.error?.message ?? `çıkış ${r.status}`}): ${(r.stderr || "").trim().slice(-300)}`, 1);
+    ham = r.stdout;
+    kaynak = `VDS ${vds.hedef}:${vds.port} (kuyruk-disa-aktar)`;
+  }
+  let kuyruk;
+  try {
+    kuyruk = JSON.parse(ham);
+  } catch {
+    throw new TorenHatasi(`Kuyruk JSON değil (${kaynak})`, 1);
+  }
+  if (!kuyruk || kuyruk.v !== 1 || kuyruk.tur !== "tekserp-kok-kuyrugu" || !Array.isArray(kuyruk.talepler)) throw new TorenHatasi(`Kuyruk tanınmıyor (tekserp-kok-kuyrugu): ${kaynak}`, 1);
+
+  // 2. Arşiv (açık belgeler; sır yok) + inceleme (kökün açık yarısına karşı, parolasız).
+  const damga = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+  const ust = path.join(hedef, "kok-kuyrugu");
+  ustHazirla(ust);
+  // Aynı saniyede ikinci koşum (ör. önce kuru, hemen --talep) ayrı dizin alır; var olan arşive yazılmaz.
+  const ad = `${damga}${uygula ? "" : "-kuru"}`;
+  let arsiv = path.join(ust, ad);
+  for (let n = 2; lstatYa(arsiv) !== null; n++) arsiv = path.join(ust, `${ad}-${n}`);
+  ozelDizin(arsiv);
+  const kuyrukYolu = path.join(arsiv, "kuyruk.json");
+  dosyaYaz(kuyrukYolu, ham.endsWith("\n") ? ham : `${ham}\n`);
+  const inc = await kosVeDenetle("kuyruk incelemesi", SATICI, "scripts/anahtar.ts", ["kuyruk-incele", `--kok=${kokKid}`, `--kok-dizin=${K}`, `--kuyruk=${kuyrukYolu}`], [], []);
+  const inceleme = JSON.parse(inc.stdout.toString("utf8"));
+  dosyaYaz(path.join(arsiv, "inceleme.json"), `${JSON.stringify(inceleme, null, 2)}\n`);
+  if (talepFiltre) {
+    const bilinmeyen = [...talepFiltre].filter((id) => !inceleme.talepler.some((t) => t.talepId === id));
+    if (bilinmeyen.length) throw new TorenHatasi(`--talep kuyrukta yok: ${bilinmeyen.join(", ")} (arşiv ${arsiv})`, 2);
+  }
+  const secili = inceleme.talepler.filter((t) => !talepFiltre || talepFiltre.has(t.talepId));
+  const supheli = secili.filter((t) => t.supheler.length > 0);
+
+  console.log("TeksERP satıcısı — kök kuyruğu imzası (dönem dışı, §8a)");
+  if (kay) console.log(`  kaynak : ${kay.commit} (temiz · ${kay.dayanak})`);
+  console.log(`  kuyruk : ${kaynak} · ${kuyruk.talepler.length} talep${talepFiltre ? ` · seçilen ${secili.length}` : ""} · kök ${kokKid}`);
+  console.log(`  arşiv  : ${arsiv}`);
+  console.log(`  kip    : ${uygula ? "UYGULA (onay → kök imzası → VDS'e içe aktarma)" : "KURU (parola yok · imza yok · VDS'e yazım yok)"}\n`);
+  for (const t of secili) console.log(`${t.satirlar.join("\n")}\n`);
+  console.log(`Özet: ${secili.length} talep · ${supheli.length} ŞÜPHELİ${supheli.length ? ` (${supheli.map((t) => t.talepId).join(", ")}) — imzalanmaz` : ""}`);
+  if (!uygula) {
+    console.log(`KURU koşum — hiçbir şey imzalanmadı, VDS'e gönderilmedi. Uygulamak için: node deploy/satici/uretim-toren.mjs kuyruk --uygula${talepFiltre ? ` --talep=${[...talepFiltre].join(",")}` : ""}`);
+    return;
+  }
+  if (secili.length === 0) {
+    console.log("İmzalanacak talep yok.");
+    return;
+  }
+
+  // 3. Talep başına onay (şüpheli olan sorulmaz bile).
+  const onayli = new Set();
+  for (const t of secili) {
+    if (t.supheler.length) {
+      console.log(`  ⛔ ${t.talepId}: ŞÜPHELİ — atlandı`);
+      continue;
+    }
+    if (await evetMi(`Talep ${t.talepId} (${t.lisansNo} · ${t.sinif} · sürüm ${t.tabanSurum} → ${t.surum}) kökle imzalansın mı? [e/H]: `)) onayli.add(t.talepId);
+  }
+  if (onayli.size === 0) {
+    console.log("Onaylanan talep yok — hiçbir şey imzalanmadı.");
+    return;
+  }
+  const imzalanacak = path.join(arsiv, "imzalanacak.json");
+  dosyaYaz(imzalanacak, `${JSON.stringify({ ...kuyruk, talepler: kuyruk.talepler.filter((t) => onayli.has(t.talepId)) })}\n`);
+
+  // 4. Kök imzası (parola Anahtar Zinciri `tekserp/kok`; yalnız alt sürecin stdin'ine).
+  const imzaliYolu = path.join(arsiv, "kok-imzali-haklar.json");
+  const kokParola = await parolaAl(bayraklar, "kok", `Kök (${kokKid}) parolası: `);
+  try {
+    await kosVeDenetle("kuyruk imzası", SATICI, "scripts/anahtar.ts", ["kuyruk-imzala", `--kok=${kokKid}`, `--kok-dizin=${K}`, `--kuyruk=${imzalanacak}`, `--cikti=${imzaliYolu}`], [kokParola], [kokParola]);
+  } finally {
+    kokParola.fill(0);
+  }
+  const haklar = jsonOku(imzaliYolu).haklar.filter((h) => onayli.has(h.talepId)).map((h) => ({ talepId: h.talepId, belge: h.belge }));
+  if (haklar.length !== onayli.size) throw new TorenHatasi(`İmzalı belge sayısı (${haklar.length}) onaylanan talep sayısıyla (${onayli.size}) aynı değil — VDS'e gönderilmedi`);
+  const govde = `${JSON.stringify({ v: 1, tur: "tekserp-donem-ice-aktar", haklar })}\n`;
+  dosyaYaz(path.join(arsiv, "ice-aktar.json"), govde);
+
+  // 5. İçe aktarma: gövde stdin'den, VDS'e dosya bırakılmaz.
+  const r = vdsKos(vds, "donem-ice-aktar", govde);
+  const cikti = `${r.stdout ?? ""}${r.stderr ?? ""}`;
+  dosyaYaz(path.join(arsiv, "ice-aktar-sonuc.txt"), cikti);
+  process.stdout.write(cikti);
+  if (r.error || r.status !== 0) {
+    throw new TorenHatasi(`donem-ice-aktar başarısız (${r.error?.message ?? `çıkış ${r.status}`}) — gövde ${path.join(arsiv, "ice-aktar.json")}; yeniden göndermek güvenlidir (aynı belge VARDI döner)`);
+  }
+  console.log(`\n✅ ${haklar.length} talep kökle imzalandı ve içe aktarıldı · arşiv ${arsiv}`);
+}
+
 async function donem(bayraklar) {
   if (Number(process.versions.node.split(".")[0]) < 22) throw new TorenHatasi(`Node ≥ 22 gerekli (${process.versions.node})`, 2);
   if (!fs.existsSync(path.join(SATICI, "node_modules", "tsx", "package.json"))) throw new TorenHatasi("Önkoşul: satici/sunucu bağımlılıkları yok — (cd satici/sunucu && npm ci)", 2);
@@ -1466,6 +1642,7 @@ async function donem(bayraklar) {
   console.log(`  kaynak : ${kay.commit} (temiz · ${kay.dayanak} · npm ls ${kay.npmLs})`);
   console.log(`  dizin  : ${hedef} · kök ${kokKid}`);
   console.log(`  yeni   : ${kid.alt} · ${kid.ara} · ${kid.ind} (${DONEM_GUN} gün = 365 + ${DONEM_ORTUSME_GUN} örtüşme)`);
+  console.log(`  ara sın: ${araSiniflar ?? ARA_VARSAYILAN_ACIKLAMA}`);
   console.log(`  iptal  : ${yeniIptal ? `YENİ belge, sıra ${(onceki?.sira ?? 0) + 1}${iptalKidleri.length ? ` — iptal: ${iptalKidleri.join(", ")}` : ""}` : `önceki belge aynen (sıra ${onceki.sira})`}`);
   console.log(`  kuyruk : ${kuyruk ? `${kuyruk.adet} HAK kökle imzalanacak (${kuyruk.yol})` : "verilmedi"}`);
   console.log(`  Worker : indirmeListesi.${worker.liste} · kanallar ${worker.kanallar.join(", ")}`);
@@ -1780,6 +1957,7 @@ async function main() {
   const hedef = evYolu(bayraklar.get("dizin") || VARSAYILAN_DIZIN);
   if (komut === "toren") return toren(bayraklar);
   if (komut === "donem") return donem(bayraklar);
+  if (komut === "kuyruk") return kuyrukKomutu(bayraklar);
   if (komut === "istemci-yedek-dogrula") return istemciYedekDogrula(hedef, bayraklar);
   if (komut === "paket-yedek-dogrula") return paketYedekDogrula(hedef, bayraklar);
   if (komut === "dogrula") return dogrula(hedef);
