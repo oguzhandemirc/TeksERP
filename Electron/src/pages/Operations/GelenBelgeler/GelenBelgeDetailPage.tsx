@@ -30,7 +30,7 @@ import { useProcessGramaj } from "./processChoices";
 import { WorkOrderFromNoteDialog } from "./WorkOrderFromNoteDialog";
 import { BatchNoPicker } from "./BatchNoPicker";
 import { KursunMetersCard } from "./KursunMetersCard";
-import { showsPerDocument, useEntryMode } from "./useEntryMode";
+import { showsPerDocument } from "./partiMetre";
 import type { DeliveryNoteDetail } from "./types";
 import { TERIM } from "@/lib/terim";
 
@@ -101,13 +101,12 @@ export function IncomingDocumentDetailPage() {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const n = note.data;
-  const entryMode = useEntryMode();
   const gramaj = useProcessGramaj(n, suggestions.data, !!n && isApprovable(n.status) && hasPermission("gelen-belge:approve"));
   if (!n) return <DetailLoading failed={note.isError} />;
   const editable = isEditable(n.status) && hasPermission("gelen-belge:write");
   const reviewCount = buildReviewQueue(n.lines).length;
   const sel = n.lines.find((l) => l.id === selected) ?? null;
-  const perDoc = showsPerDocument(entryMode, n);
+  const perDoc = showsPerDocument(n);
   const maxBlock = Math.max(1, ...n.lines.map((l) => l.blockNo));
   return (
     <PageShell>
@@ -170,7 +169,7 @@ export function IncomingDocumentDetailPage() {
         scans={n.scans}
         onSave={(item, patch) => line.mutateAsync({ lineId: item.lineId, patch })}
       />
-      <ApproveDialog noteId={n.id} lines={n.lines} perDocument={perDoc ? n : null} processChoices={gramaj.choices} choiceNoun={suggestions.data?.processGroups?.length ? "işlem seçimi" : undefined} open={approveOpen} onOpenChange={setApproveOpen} onDone={() => void invalidate()} />
+      <ApproveDialog noteId={n.id} lines={n.lines} perDocument={perDoc && n.perDocument ? { note: n, gate: n.perDocument } : null} processChoices={gramaj.choices} choiceNoun={suggestions.data?.processGroups?.length ? "işlem seçimi" : undefined} open={approveOpen} onOpenChange={setApproveOpen} onDone={() => void invalidate()} />
     </PageShell>
   );
 }

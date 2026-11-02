@@ -5,7 +5,7 @@
 import type { AutoWorkOrderResult } from "./workOrderTypes";
 import type { DocumentTotalCheckSettings, LineProblem, TotalsCheck } from "./reviewTypes";
 import type { PartiMetreDetailFields, PartiMetrePatch, PartiMetreHeaderFields } from "./partiMetreTypes";
-export type { BatchNoCandidate, BatchNoCandidateKind, EntryMode, KursunMeterCandidate, KursunMeterCandidates, KursunMetersSource } from "./partiMetreTypes";
+export type { BatchNoCandidate, BatchNoCandidateKind, KursunMeterCandidates, KursunMetersSource, PerDocumentGate } from "./partiMetreTypes";
 export type { DocumentTotalCheckMode, LineProblem, TotalsCheck } from "./reviewTypes";
 
 export type {
@@ -296,7 +296,6 @@ export type HeaderPatch = Partial<
     DeliveryNoteHeader,
     | "ownerCustomerId" | "senderCustomerId" | "senderText" | "senderDocNo" | "senderDocDate"
     | "customerBatchNo" | "customerOrderNo" | "processText" | "pageCount" | "declaredTopCount"
-    | "ourBatchNo" | "ourBatchNoKey"
   >
 > & PartiMetrePatch;
 

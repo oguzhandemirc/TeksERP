@@ -1,6 +1,6 @@
 // Gülkesim P2: belge başına tek kayıt (PER_DOCUMENT) gözden geçirme yüzeyi — parti no seçici, kurşun metresi kartı,
-// bilgi satırları (INFO), onay özeti. Kip ayardan (`entryMode`), değerler sunucudan; panel öncelik kuralı kurmaz.
-// Negatif sonda: `showsPerDocument` PER_LINE'da da true dönerse "PER_LINE'da kart yok" kırmızı.
+// bilgi satırları (INFO), onay özeti. Kip ve kapı hükmü sunucunun `perDocument` alanından (yalnız PER_DOCUMENT'ta doğar),
+// değerler sunucudan; panel öncelik kuralı kurmaz. Negatif sonda: `showsPerDocument` hep true → §6 kırmızı.
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
@@ -35,7 +35,6 @@ vi.mock("../CellReviewDialog", () => ({ CellReviewDialog: () => null }));
 vi.mock("../ScanReadBanner", () => ({ ScanReadBanner: () => null }));
 vi.mock("../AddPagesAction", () => ({ AddPagesAction: () => null }));
 vi.mock("../ProcessGramajPanel", () => ({ ProcessGramajPanel: () => null }));
-vi.mock("../CellCrop", () => ({ CellCrop: ({ rect }: { rect: unknown }) => <div data-testid="crop" data-has={rect ? "1" : "0"} /> }));
 
 const line = (id: string, lineNo: number, o: Partial<DeliveryNoteLine> = {}): DeliveryNoteLine =>
   ({
@@ -45,13 +44,14 @@ const line = (id: string, lineNo: number, o: Partial<DeliveryNoteLine> = {}): De
   }) as DeliveryNoteLine;
 
 const GULECSOY: Partial<DeliveryNoteDetail> = {
+  perDocument: { code: null, warnings: [], totalsBlocking: false },
   ourBatchNo: "214279", ourBatchNoKey: "fisNo", kursunMeters: "4521", kursunMetersSource: "OUTPUT", kursunMetersReview: false,
   batchNoCandidates: [
     { key: "fisNo", kind: "DOC", label: "FİŞ NO", value: "214279" },
-    { key: "hamPartiNo", kind: "BATCH", label: "Ham PartiNo", value: "P2618733", remembered: true },
+    { key: "hamPartiNo", kind: "BATCH", label: "Ham PartiNo", value: "P2618733" },
     { key: "isEmriNo", kind: "WORK_ORDER", label: "İş Emri No", value: "26K-24749" },
   ],
-  kursunMeterCandidates: { output: { value: "4521", key: "$tableTotal" }, total: null, input: null, lineSum: 4521 },
+  kursunMeterCandidates: { output: "4521", total: null, input: null, lineSum: "4521" },
 };
 
 let current: DeliveryNoteDetail;
@@ -71,29 +71,29 @@ const settings = (o: object = {}) => ({ defaultItem: null, unreviewedApproval: "
 beforeEach(() => {
   header.mutate.mockReset();
   header.mutateAsync.mockReset().mockResolvedValue(undefined);
-  getSettings.mockReset().mockResolvedValue(settings({ entryMode: "PER_DOCUMENT" }));
+  getSettings.mockReset().mockResolvedValue(settings());
 });
 
 describe("PER_DOCUMENT detay", () => {
-  it("§1 parti no kartı: adaylar radyo + hatırlanan rozeti; aday seçimi {ourBatchNo, ourBatchNoKey} PATCH'ler", async () => {
+  it("§1 parti no kartı: adaylar radyo + tür; aday seçimi {ourBatchNo, ourBatchNoKey} PATCH'ler", async () => {
     current = noteOf(GULECSOY);
     renderWithProviders(<IncomingDocumentDetailPage />);
     const card = await screen.findByTestId("batch-no-card");
     expect(within(card).getAllByTestId("batch-candidate")).toHaveLength(3);
     expect(within(card).getByRole("radio", { name: "FİŞ NO: 214279" })).toBeChecked();
-    expect(within(card).getByTestId("batch-remembered").closest("[data-key]")?.getAttribute("data-key")).toBe("hamPartiNo");
+    expect(within(card).getAllByTestId("batch-candidate")[2]).toHaveTextContent("İş emri");
     await userEvent.click(within(card).getByRole("radio", { name: "Ham PartiNo: P2618733" }));
     expect(header.mutate).toHaveBeenCalledWith({ ourBatchNo: "P2618733", ourBatchNoKey: "hamPartiNo" });
   });
 
-  it("§2 elle yaz → MANUAL; boşaltınca ikisi de null; seçim yoksa 'seriden doğar' uyarısı", async () => {
+  it("§2 elle yaz → anahtarsız PATCH (sunucu MANUAL yazar), boşaltma null; seçim yoksa 'seriden doğar' uyarısı", async () => {
     current = noteOf({ ...GULECSOY, ourBatchNo: null, ourBatchNoKey: null });
     renderWithProviders(<IncomingDocumentDetailPage />);
     await screen.findByTestId("batch-no-empty");
     const input = screen.getByLabelText("Parti no (elle)");
     expect(input).toHaveAttribute("maxLength", "64");
     fireEvent.blur(input, { target: { value: " ELLE-1 " } });
-    expect(header.mutate).toHaveBeenLastCalledWith({ ourBatchNo: "ELLE-1", ourBatchNoKey: "MANUAL" });
+    expect(header.mutate).toHaveBeenLastCalledWith({ ourBatchNo: "ELLE-1" });
   });
 
   it("§3 kurşun metresi kartı: değer + kaynak + diğer kaynaklar", async () => {
@@ -107,13 +107,12 @@ describe("PER_DOCUMENT detay", () => {
   });
 
   it("§4 review açık (Takva): kılavuzlu giriş — aynı değer reviewed, farklı değer kursunMeters", async () => {
-    current = noteOf({ ...GULECSOY, kursunMeters: "1775", kursunMetersReview: true, kursunMeterCandidates: { output: { value: "1775", key: "cikisMt", rect: { x: 1, y: 2, width: 30, height: 10 }, scanId: "s1" }, input: { value: "1375" }, lineSum: "1775" } });
+    current = noteOf({ ...GULECSOY, kursunMeters: "1775", kursunMetersReview: true, kursunMeterCandidates: { output: "1775", total: null, input: "1375", lineSum: "1775" } });
     renderWithProviders(<IncomingDocumentDetailPage />);
     const card = await screen.findByTestId("kursun-meters-card");
     expect(card.dataset.review).toBe("1");
     expect(within(card).getByTestId("kursun-sources")).toHaveTextContent("Giriş metresi (yalnız bilgi): 1375 m");
     await userEvent.click(within(card).getByTestId("kursun-meters-edit"));
-    expect(screen.getByTestId("crop").dataset.has).toBe("1");
     await userEvent.click(screen.getByRole("button", { name: "Onayla ve sonraki" }));
     await waitFor(() => expect(header.mutateAsync).toHaveBeenCalledWith({ kursunMetersReviewed: true }));
     await userEvent.click(within(card).getByTestId("kursun-meters-edit"));
@@ -135,43 +134,42 @@ describe("PER_DOCUMENT detay", () => {
 });
 
 describe("PER_LINE / eski backend — bugünkü görünüm", () => {
-  it("§6 PER_LINE'da kart yok; sütunlar ve süzgeç yerinde", async () => {
-    getSettings.mockResolvedValue(settings({ entryMode: "PER_LINE" }));
-    current = noteOf(GULECSOY);
+  it("§6 PER_LINE (sunucu `perDocument` göndermez) — kolonlar dolu olsa da kart yok; sütunlar ve süzgeç yerinde", async () => {
+    current = noteOf({ ...GULECSOY, perDocument: undefined });
     renderWithProviders(<IncomingDocumentDetailPage />);
     expect(await screen.findByTestId("problem-filter")).toBeInTheDocument();
-    await waitFor(() => expect(getSettings).toHaveBeenCalled());
     expect(screen.queryByTestId("batch-no-card")).toBeNull();
     expect(screen.queryByTestId("kursun-meters-card")).toBeNull();
     expect(screen.getByRole("columnheader", { name: "Kumaş" })).toBeInTheDocument();
   });
 
-  it("§7 ayar PER_DOCUMENT ama sunucu alanları göndermiyor (eski backend) → kart yok", async () => {
+  it("§7 eski backend (hiçbir yeni alan yok) → kart yok", async () => {
     current = noteOf({});
     renderWithProviders(<IncomingDocumentDetailPage />);
-    await waitFor(() => expect(getSettings).toHaveBeenCalled());
     await screen.findByTestId("problem-filter");
     expect(screen.queryByTestId("batch-no-card")).toBeNull();
   });
 });
 
 describe("onay diyaloğu PER_DOCUMENT", () => {
-  it("§8 özet '1 kayıt · 4521 m · parti 214279'; satır kapısı sayılmaz", async () => {
-    getSettings.mockResolvedValue(settings({ unreviewedApproval: "BLOCK", entryMode: "PER_DOCUMENT" }));
-    renderWithProviders(<ApproveDialog noteId="n1" lines={[line("a", 1, { needsReview: true })]} perDocument={{ kursunMeters: "4521", kursunMetersReview: false, ourBatchNo: "214279" }} open onOpenChange={() => {}} onDone={() => {}} />);
+  it("§8 özet '1 kayıt · 4521 m · parti 214279'; satır kapısı sayılmaz (BLOCK ayarında needsReview satır olsa da)", async () => {
+    getSettings.mockResolvedValue(settings({ unreviewedApproval: "BLOCK" }));
+    renderWithProviders(<ApproveDialog noteId="n1" lines={[line("a", 1, { needsReview: true })]} perDocument={{ note: { kursunMeters: "4521", ourBatchNo: "214279" }, gate: { code: null, warnings: [], totalsBlocking: false } }} open onOpenChange={() => {}} onDone={() => {}} />);
     expect(await screen.findByTestId("approve-per-document")).toHaveTextContent("1 kayıt · 4521 m · parti 214279");
     await waitFor(() => expect(getSettings).toHaveBeenCalled());
     expect(screen.queryByTestId("approve-precheck")).toBeNull();
     expect(screen.getByRole("button", { name: "Onayla" })).toBeEnabled();
   });
 
-  it("§9 ön kontrol aynası: metre yok → engel; review + BLOCK → engel, WARN → uyarı; parti boş → seri bilgisi", () => {
-    expect(perDocumentPrecheck({ kursunMeters: null, kursunMetersReview: false, ourBatchNo: "X" }, undefined).blocked).toBe(true);
-    const s = (m: string) => settings({ unreviewedApproval: m }) as never;
-    expect(perDocumentPrecheck({ kursunMeters: "1775", kursunMetersReview: true, ourBatchNo: "X" }, s("BLOCK")).blocked).toBe(true);
-    const warn = perDocumentPrecheck({ kursunMeters: "1775", kursunMetersReview: true, ourBatchNo: null }, s("WARN"));
+  it("§9 ön kontrol sunucu kapısından: code → engel, warnings → uyarı, parti boş → seri bilgisi", async () => {
+    const gate = { code: "KURSUN_METERS_REVIEW_PENDING" as const, warnings: [], totalsBlocking: false };
+    expect(perDocumentPrecheck({ kursunMeters: "1775", ourBatchNo: "X" }, gate).blocked).toBe(true);
+    const warn = perDocumentPrecheck({ kursunMeters: "1775", ourBatchNo: null }, { code: null, warnings: ["Kurşun metresi (1775 m) gözden geçirilmeden onaylandı."], totalsBlocking: false });
     expect(warn.blocked).toBe(false);
     expect(warn.messages.map((m) => m.tone)).toEqual(["warn", "info"]);
     expect(perDocumentSummary({ kursunMeters: "2157", ourBatchNo: null })).toBe("1 kayıt · 2157 m · parti numarası seriden doğacak");
+    renderWithProviders(<ApproveDialog noteId="n1" lines={[]} perDocument={{ note: { kursunMeters: null, ourBatchNo: "X" }, gate: { code: "KURSUN_METERS_REQUIRED", warnings: [], totalsBlocking: false } }} open onOpenChange={() => {}} onDone={() => {}} />);
+    expect((await screen.findByTestId("approve-precheck")).dataset.blocked).toBe("1");
+    expect(screen.getByRole("button", { name: "Onayla" })).toBeDisabled();
   });
 });

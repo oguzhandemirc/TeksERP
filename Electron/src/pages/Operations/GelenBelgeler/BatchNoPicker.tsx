@@ -1,9 +1,8 @@
-// "Parti no" kartı (PER_DOCUMENT): belgedeki adaylar radyo (etiket + değer + tür + kırpık), hatırlanan rozeti, elle yaz.
-// Aday listesi ve önerilen seçim sunucudan (A); seçim başlık PATCH'iyle yazılır, hatırlama onayda sunucuda öğrenilir (B).
+// "Parti no" kartı (PER_DOCUMENT): belgedeki adaylar radyo (etiket + değer + tür), elle yaz. Aday listesi ve ilk seçim
+// sunucudan (A; hatırlanan anahtar orada önce gelir); seçim başlık PATCH'iyle yazılır, hatırlama onayda öğrenilir (B).
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CellCrop } from "./CellCrop";
 import { BATCH_KIND_LABEL } from "./partiMetre";
 import type { BatchNoCandidate, DeliveryNoteDetail, HeaderPatch } from "./types";
 
@@ -20,13 +19,11 @@ function CandidateRow({ c, checked, editable, onPick }: { c: BatchNoCandidate; c
   return (
     <label className={`flex cursor-pointer flex-col gap-1 rounded border p-2 text-sm ${checked ? "border-primary bg-primary/5" : ""}`} data-testid="batch-candidate" data-key={c.key}>
       <span className="flex flex-wrap items-center gap-2">
-        <input type="radio" name="batch-no" checked={checked} disabled={!editable} onChange={onPick} aria-label={`${c.label ?? c.key}: ${c.value}`} />
-        <span className="text-muted-foreground">{c.label ?? c.key}</span>
+        <input type="radio" name="batch-no" checked={checked} disabled={!editable} onChange={onPick} aria-label={`${c.label}: ${c.value}`} />
+        <span className="text-muted-foreground">{c.label}</span>
         <span className="font-semibold tabular-nums">{c.value}</span>
         <Badge variant="muted">{BATCH_KIND_LABEL[c.kind] ?? c.kind}</Badge>
-        {c.remembered && <Badge variant="default" data-testid="batch-remembered">Hatırlanan</Badge>}
       </span>
-      {c.rect && c.scanId && <CellCrop scanId={c.scanId} rect={c.rect} />}
     </label>
   );
 }
@@ -37,7 +34,8 @@ export function BatchNoPicker({ note, editable, onPatch }: Props) {
   const blurManual = (v: string) => {
     const next = v.trim() || null;
     if (next === (manual ? (note.ourBatchNo ?? null) : null)) return;
-    onPatch({ ourBatchNo: next, ourBatchNoKey: next ? "MANUAL" : null });
+    // Anahtarsız gönderim = elle (sunucu `MANUAL` yazar; `MANUAL` istemciden gönderilemez); null temizler.
+    onPatch({ ourBatchNo: next });
   };
   return (
     <div className="flex flex-col gap-2 rounded-lg border p-3" data-testid="batch-no-card">

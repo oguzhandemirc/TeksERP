@@ -11,7 +11,7 @@ import { approveNote, getIncomingDocumentSettings, getSuggestions, INCOMING_DOCU
 import { approveErrorText, approvePrecheck, needsVarianceReason, summarizeApprove, summarizeAutoWorkOrders, unusableDefaultSource, type ApproveOutcome, type AutoWorkOrderSummary } from "./approveFlow";
 import { CUSTOMER_DEFAULTS_PATH } from "./paths";
 import { perDocumentPrecheck, perDocumentSummary } from "./partiMetre";
-import type { DeliveryNoteHeader, DeliveryNoteLine, ProcessChoice } from "./types";
+import type { DeliveryNoteHeader, DeliveryNoteLine, PerDocumentGate, ProcessChoice } from "./types";
 
 interface Props {
   noteId: string;
@@ -25,7 +25,7 @@ interface Props {
   onOpenChange: (o: boolean) => void;
   onDone: () => void;
   /** Belge başına tek kayıt (PER_DOCUMENT): satır kapıları yerine metre/parti özeti; null/undefined = bugünkü diyalog. */
-  perDocument?: Pick<DeliveryNoteHeader, "kursunMeters" | "kursunMetersReview" | "ourBatchNo"> | null;
+  perDocument?: { note: Pick<DeliveryNoteHeader, "kursunMeters" | "ourBatchNo">; gate: PerDocumentGate } | null;
 }
 
 const TONE_CLASS = {
@@ -46,7 +46,7 @@ function ProcessChoicesNote({ count, noun }: { count: number; noun: string }) {
 function useApprovePrecheck(noteId: string, lines: readonly DeliveryNoteLine[], open: boolean, perDocument: Props["perDocument"]) {
   const settings = useQuery({ queryKey: INCOMING_DOCUMENT_SETTINGS_QUERY_KEY, queryFn: getIncomingDocumentSettings, enabled: open, refetchOnMount: "always", staleTime: 0 });
   const match = useQuery({ queryKey: [INCOMING_DOCUMENT_QUERY_KEY, "eslestirme", noteId], queryFn: () => getSuggestions(noteId), enabled: open, refetchOnMount: "always", staleTime: 0 });
-  return perDocument ? perDocumentPrecheck(perDocument, settings.data) : approvePrecheck(lines, settings.data, match.data?.defaultItem);
+  return perDocument ? perDocumentPrecheck(perDocument.note, perDocument.gate) : approvePrecheck(lines, settings.data, match.data?.defaultItem);
 }
 
 /** Hata metni; kullanılamaz MÜŞTERİ varsayılanında (E4) yetkiliye yönetim ekranı bağlantısı (fabrika yolu backend mesajında). */
@@ -134,7 +134,7 @@ export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun =
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {perDocument && <p className="rounded border px-2 py-1 text-sm font-medium" data-testid="approve-per-document">{perDocumentSummary(perDocument)}</p>}
+            {perDocument && <p className="rounded border px-2 py-1 text-sm font-medium" data-testid="approve-per-document">{perDocumentSummary(perDocument.note)}</p>}
             {pre.messages.length > 0 && (
               <ul className="flex flex-col gap-1" data-testid="approve-precheck" data-blocked={pre.blocked ? "1" : "0"}>
                 {pre.messages.map((m) => (

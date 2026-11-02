@@ -1,14 +1,13 @@
 // "Kurşun metresi" kartı (PER_DOCUMENT): değer + kaynak, diğer kaynaklar ve giriş metresi bilgi; gözden geçirme açıksa
-// kılavuzlu giriş (alan kırpığı + sayısal klavye). Değer ve kaynak sunucudan (A); panel öncelik kuralı kurmaz.
+// kılavuzlu giriş (büyük sayısal klavye; belge görüntüsü solda). Değer ve kaynak sunucudan (A); panel öncelik kuralı kurmaz.
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CellCrop } from "./CellCrop";
 import { NumericKeypad } from "./NumericKeypad";
 import { parseTrNumber } from "./review-queue";
-import { fmtMeters, KURSUN_SOURCE_LABEL, meterValue, sourceCandidate } from "./partiMetre";
+import { fmtMeters, KURSUN_SOURCE_LABEL, meterValue } from "./partiMetre";
 import type { DeliveryNoteDetail, HeaderPatch } from "./types";
 
 interface Props {
@@ -41,13 +40,12 @@ function ReviewDialog({ note, open, onOpenChange, onPatch }: Props & { open: boo
   const current = meterValue(note.kursunMeters ?? null);
   const [value, setValue] = useState(toTr(current));
   const [busy, setBusy] = useState(false);
-  const src = sourceCandidate(note.kursunMetersSource, note.kursunMeterCandidates);
   const parsed = parseTrNumber(value);
   const submit = async () => {
     if (parsed === null || busy) return;
     setBusy(true);
     try {
-      // Aynı değer = okunanı onayla (kaynak korunur); farklı değer = elle (kaynak MANUAL) — ikisi de review'ı düşürür.
+      // Aynı değer = okunanı onayla, farklı değer = elle yaz — ikisi de sunucuda MANUAL + review düşer.
       await onPatch(parsed === current ? { kursunMetersReviewed: true } : { kursunMeters: parsed });
       onOpenChange(false);
     } catch {
@@ -64,7 +62,6 @@ function ReviewDialog({ note, open, onOpenChange, onPatch }: Props & { open: boo
           <DialogDescription>Belgedeki değerle karşılaştırın; doğruysa onaylayın, değilse düzeltin.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
-          <CellCrop scanId={src?.scanId ?? null} rect={src?.rect ?? null} />
           <Input autoFocus inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void submit()} className="h-14 text-center text-3xl tabular-nums" aria-label="Kurşun metresi" aria-invalid={value !== "" && parsed === null} />
           {value !== "" && parsed === null && <p className="text-xs text-destructive">Sıfırdan büyük bir sayı girin (ondalık virgülle).</p>}
           <NumericKeypad value={value} onChange={setValue} onSubmit={() => void submit()} disabled={busy} />
