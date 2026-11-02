@@ -196,12 +196,25 @@ describe("Genel Ayarlar → Gelen Belge: kayıt kipi (parti no + kurşun metresi
     expect(updateSettings.mock.calls[0]![0]).toStrictEqual({ formApproval: "WITH_WORK_ORDER", refakatAutoPrint: true });
   });
 
+  it("⭐ K17: istasyonda belge okutma varsayılan kapalı; açılınca YALNIZ bu alan gider", async () => {
+    const server = { ...KIP, stationDocLookup: false };
+    getSettings.mockResolvedValue(server);
+    updateSettings.mockResolvedValue(server);
+    renderWithProviders(<IncomingDocumentSettingsSection />);
+    const toggle = await screen.findByRole("switch", { name: "İstasyonda belge okutarak iş bul" });
+    expect(toggle).not.toBeChecked();
+    await userEvent.click(toggle);
+    await userEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(updateSettings.mock.calls[0]![0]).toStrictEqual({ stationDocLookup: true });
+  });
+
   it("eski backend alanları göndermez → üç alan çizilmez, gövdeye girmez", async () => {
     getSettings.mockResolvedValue(BASE);
     updateSettings.mockResolvedValue(BASE);
     renderWithProviders(<IncomingDocumentSettingsSection />);
     await userEvent.click(await screen.findByRole("radio", { name: /Yalnız şüpheli değeri engelle/ }));
-    for (const id of ["gb-entry-mode", "gb-batch-number-source", "gb-auto-work-order-patternless", "gb-form-approval", "gb-refakat-auto-print"]) expect(screen.queryByTestId(id)).toBeNull();
+    for (const id of ["gb-entry-mode", "gb-batch-number-source", "gb-auto-work-order-patternless", "gb-form-approval", "gb-refakat-auto-print", "gb-station-doc-lookup"]) expect(screen.queryByTestId(id)).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Kaydet" }));
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings.mock.calls[0]![0]).toStrictEqual({ unreviewedApproval: "BLOCK_SUSPECT" });

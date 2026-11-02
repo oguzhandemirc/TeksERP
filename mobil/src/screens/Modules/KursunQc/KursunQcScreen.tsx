@@ -94,6 +94,10 @@ import { findTarget, targetChipText } from './gramajTap';
 import { useAuthStore } from '../../../store/authStore';
 import { palette } from '../../../theme/tokens';
 import PlannedMachineBadge from './PlannedMachineBadge';
+import StationDocLookupSheet from '../../../components/stationDocLookup/StationDocLookupSheet';
+import OpenCardSearchBar from '../../../components/stationDocLookup/OpenCardSearchBar';
+import { useStationDocLookup } from '../../../components/stationDocLookup/useStationDocLookup';
+import { useOpenCardSearch } from '../../../components/stationDocLookup/useOpenCardSearch';
 
 // =============================================================================
 // Multi-job state — operatör birden fazla refakat kartını paralel açabilir.
@@ -207,6 +211,9 @@ export default function KursunQcScreen() {
   const [reopening, setReopening] = useState(false);
   const [startMeter, setStartMeter] = useState('');
   const [listModalOpen, setListModalOpen] = useState(false);
+  // K17: boyahane belgesinden iş emri bulma + açık kart listesinde fiş/parti no araması (süzme sunucuda).
+  const docLookup = useStationDocLookup();
+  const cardSearch = useOpenCardSearch(['kursun-qc', 'open-cards'], (q) => kursunQcService.listOpenCards(q));
   const [scannerOpen, setScannerOpen] = useState(false);
   /** İş emri adım notu (WorkOrderStep.notes) tam metin modal'ı. */
   const [noteModalOpen, setNoteModalOpen] = useState(false);
@@ -554,6 +561,11 @@ export default function KursunQcScreen() {
   const handleScannerResult = (data: string) => {
     setScannerOpen(false);
     resolveCard(data.trim(), false);
+  };
+
+  const handleDocLookupOpen = (workOrder: { cardBarcode: string }) => {
+    docLookup.setOpen(false);
+    resolveCard(workOrder.cardBarcode, false);
   };
 
   const closeJob = (cardId: string) => {
@@ -1279,6 +1291,14 @@ export default function KursunQcScreen() {
         onPress={() => drawerQueue.run(() => setScannerOpen(true))}
         fill
       />
+      {docLookup.enabled && (
+        <HeaderChip
+          icon="file-document-outline"
+          label="Belge"
+          onPress={() => drawerQueue.run(() => docLookup.setOpen(true))}
+          fill
+        />
+      )}
     </>
   );
 
@@ -1301,6 +1321,13 @@ export default function KursunQcScreen() {
             onPress={() => drawerQueue.run(() => setListModalOpen(true))}
             badge={<UrgentBadge count={urgentCount} />}
           />
+          {docLookup.enabled && (
+            <HeaderChip
+              icon="file-document-outline"
+              label="Belge okut"
+              onPress={() => drawerQueue.run(() => docLookup.setOpen(true))}
+            />
+          )}
           <RefreshButton
             headerStyle
             label="Yenile"
@@ -1670,14 +1697,23 @@ export default function KursunQcScreen() {
       {/* Açık kart listesi — hızlı seçim için */}
       <CameraScanModal
         visible={listModalOpen}
-        loading={openCardsQuery.isLoading}
-        cards={openCardsQuery.data?.data ?? []}
+        loading={openCardsQuery.isLoading || cardSearch.loading}
+        cards={cardSearch.cards ?? openCardsQuery.data?.data ?? []}
+        searchBar={<OpenCardSearchBar value={cardSearch.text} onChange={cardSearch.setText} />}
+        searching={cardSearch.active}
         onDismiss={() => setListModalOpen(false)}
         onSelect={handleCameraSelect}
         refreshIntervalMs={OPEN_CARDS_REFETCH_MS}
         dataUpdatedAt={openCardsQuery.dataUpdatedAt}
         isFetching={openCardsQuery.isFetching}
         refresh={openCardsRefresh}
+      />
+
+      <StationDocLookupSheet
+        visible={docLookup.open}
+        onDismiss={() => docLookup.setOpen(false)}
+        onOpen={handleDocLookupOpen}
+        readerConfigured={docLookup.readerConfigured}
       />
 
       {/* Refakat kartı QR/barkod okuma — gerçek kamera */}
@@ -1742,10 +1778,16 @@ function CameraScanModal({
   dataUpdatedAt,
   isFetching,
   refresh,
+  searchBar,
+  searching,
 }: {
   visible: boolean;
   loading: boolean;
   cards: KursunOpenCard[];
+  /** K17: fiş / evrak / parti / İE no arama kutusu (süzme sunucuda). */
+  searchBar?: React.ReactNode;
+  /** Arama sonucu gösteriliyor mu (boş liste metni değişir). */
+  searching?: boolean;
   onDismiss: () => void;
   onSelect: (card: KursunOpenCard) => void;
   /** Otomatik yenileme periyodu (ms) — başlıkta saniye olarak gösterilir. */
@@ -1799,6 +1841,7 @@ function CameraScanModal({
           <IconButton icon="close" size={22} onPress={onDismiss} style={{ margin: 0 }} />
         </View>
 
+        {searchBar}
         <View style={cameraStyles.listBox}>
           {loading ? (
             <SkeletonList count={6} />
@@ -1806,7 +1849,7 @@ function CameraScanModal({
             <View style={cameraStyles.empty}>
               <Icon source="package-variant" size={48} color="#cbd5e1" />
               <Text style={cameraStyles.emptyText}>
-                Kurşun + KK2'de bekleyen kart yok
+                {searching ? 'Aramaya uyan kart yok' : "Kurşun + KK2'de bekleyen kart yok"}
               </Text>
             </View>
           ) : (
