@@ -96,7 +96,7 @@ export default function EligibleList({
         </View>
       );
     },
-    [globallyBlocked, onPickMachine, onToggleUrgent, urgentBusyStepId]
+    [globallyBlocked, onPickMachine, onPickPlanned, onToggleUrgent, urgentBusyStepId]
   );
 
   return (

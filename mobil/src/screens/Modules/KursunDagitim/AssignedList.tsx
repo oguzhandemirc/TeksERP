@@ -165,7 +165,7 @@ export default function AssignedList({
         </View>
       );
     },
-    [busyAssignmentId, onComplete, onToggleUrgent, onUnassign, urgentBusyStepId]
+    [busyAssignmentId, onComplete, onPickPlanned, onToggleUrgent, onUnassign, urgentBusyStepId]
   );
 
   return (

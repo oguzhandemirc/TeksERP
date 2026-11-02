@@ -24,7 +24,7 @@ interface RouteRow {
   steps?: Array<{ sequence: number; station?: { name: string } | null }>;
 }
 
-/** Yanıttan kısayolları süzer: sunucu süzgeci tanımıyorsa (eski backend) bütün rotalar gelir — işaretsizler atılır. */
+/** `?shortcut=1` sunucuda sayfasız döner (en çok 100). Yanıttan kısayolları süzer: sunucu süzgeci tanımıyorsa (eski backend) bütün rotalar gelir — işaretsizler atılır. */
 export function toShortcuts(rows: readonly RouteRow[]): WorkOrderShortcut[] {
   return rows
     .filter((r) => r.isWorkOrderShortcut === true && r.isActive !== false)
@@ -41,7 +41,7 @@ export function toShortcuts(rows: readonly RouteRow[]): WorkOrderShortcut[] {
 export const WORK_ORDER_SHORTCUTS_KEY = ["routes", "work-order-shortcuts"] as const;
 
 export async function listWorkOrderShortcuts(): Promise<WorkOrderShortcut[]> {
-  const r = await apiClient.get<{ data?: RouteRow[] } | RouteRow[]>("/api/routes", { params: { shortcut: 1, pageSize: 100 } });
+  const r = await apiClient.get<{ data?: RouteRow[] } | RouteRow[]>("/api/routes", { params: { shortcut: 1 } });
   const body = r.data;
   return toShortcuts(Array.isArray(body) ? body : (body.data ?? []));
 }

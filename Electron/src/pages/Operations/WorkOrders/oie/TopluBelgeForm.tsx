@@ -9,6 +9,7 @@ import { apiErrorText } from "@/lib/api-error";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { batchFailure } from "./batchToken";
 import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
+import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import { belgeOkutStage } from "@/pages/Operations/GelenBelgeler/belgeOkut";
 import { getDeliveryNote, INCOMING_DOCUMENT_QUERY_KEY } from "@/pages/Operations/GelenBelgeler/service";
 import type { DeliveryNoteDetail } from "@/pages/Operations/GelenBelgeler/types";
@@ -26,11 +27,12 @@ interface Props {
 const isReading = (n: DeliveryNoteDetail | undefined) => !n || belgeOkutStage(n) === "READING";
 
 function useNotes(noteIds: string[]) {
+  const tabActive = useIsTabActive();
   return useQueries({
     queries: noteIds.map((id) => ({
       queryKey: [INCOMING_DOCUMENT_QUERY_KEY, "detail", id],
       queryFn: () => getDeliveryNote(id),
-      refetchInterval: (q: { state: { data?: DeliveryNoteDetail } }) => (isReading(q.state.data) ? 5000 : false),
+      refetchInterval: (q: { state: { data?: DeliveryNoteDetail } }) => (tabActive && isReading(q.state.data) ? 5000 : false),
     })),
   });
 }

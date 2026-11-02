@@ -17,6 +17,13 @@ export interface PlannedMachinePair {
 export const PLANNED_MACHINE_STATION_MISMATCH = "PLANNED_MACHINE_STATION_MISMATCH";
 export const PLANNED_MACHINE_INACTIVE = "PLANNED_MACHINE_INACTIVE";
 
+/** Gövde adımlarından (istasyonu belli olanlar) doğrulanacak çiftler. */
+export function plannedPairsOf(steps: ReadonlyArray<{ stationId?: unknown; plannedMachineId?: string | null }>): PlannedMachinePair[] {
+  return steps
+    .filter((st): st is { stationId: string; plannedMachineId?: string | null } => typeof st.stationId === "string")
+    .map((st) => ({ stationId: st.stationId, plannedMachineId: st.plannedMachineId ?? null }));
+}
+
 /** Verilen (istasyon, makine) çiftlerini doğrular; ihlalde 400 (details.code). */
 export async function assertPlannedMachines(db: Db, pairs: PlannedMachinePair[]): Promise<void> {
   const wanted = pairs.filter((p): p is { stationId: string; plannedMachineId: string } => !!p.plannedMachineId);

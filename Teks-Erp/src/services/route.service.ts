@@ -15,7 +15,7 @@ import { stepCanApplyColor, stepCanApplyProperty } from "./helpers/step-capabili
 import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 import { AppError } from "../utils/app-error";
 import { assertStationsRoutable } from "./helpers/station-routable.helper";
-import { assertPlannedMachines } from "./helpers/planned-machine.helper";
+import { assertPlannedMachines, plannedPairsOf } from "./helpers/planned-machine.helper";
 import type { ApiResponse } from "../types/api.types";
 import type { Request } from "express";
 import { parseQueryParams } from "../utils/query-parser";
@@ -140,9 +140,7 @@ export class RouteService extends BaseService {
     if (!("steps" in data) || data.steps == null) return;
     const steps = this.extractSteps(data.steps);
     if (steps === null) {
-      throw AppError.badRequest(
-        "Rota adımları geçersiz biçimde (dizi veya { create: [...] } bekleniyor)",
-      );
+      throw AppError.badRequest("Rota adımları geçersiz biçimde (dizi veya { create: [...] } bekleniyor)");
     }
     if (steps.length === 0) return;
 
@@ -189,9 +187,7 @@ export class RouteService extends BaseService {
         where: { id: { in: categoryIds }, isActive: true },
         select: { id: true },
       });
-      if (found.length !== categoryIds.length) {
-        throw AppError.badRequest("Rota adımında bulunmayan veya pasif kategori var");
-      }
+      if (found.length !== categoryIds.length) throw AppError.badRequest("Rota adımında bulunmayan veya pasif kategori var");
     }
 
     const subcontractorIds = pick("plannedSubcontractorId");
@@ -200,9 +196,7 @@ export class RouteService extends BaseService {
         where: { id: { in: subcontractorIds }, isActive: true },
         select: { id: true },
       });
-      if (found.length !== subcontractorIds.length) {
-        throw AppError.badRequest("Rota adımında bulunmayan veya pasif fason firma var");
-      }
+      if (found.length !== subcontractorIds.length) throw AppError.badRequest("Rota adımında bulunmayan veya pasif fason firma var");
     }
 
     // Planlanan fason firma, adımın gerektirdiği kategoride hizmet vermeli —
@@ -222,19 +216,12 @@ export class RouteService extends BaseService {
       });
       const have = new Set(links.map((l) => `${l.subcontractorId}:${l.categoryId}`));
       if (catPairs.some((p) => !have.has(`${p.sub}:${p.cat}`))) {
-        throw AppError.badRequest(
-          "Rota adımında seçilen fason firma, adımın gerektirdiği kategoride hizmet vermiyor",
-        );
+        throw AppError.badRequest("Rota adımında seçilen fason firma, adımın gerektirdiği kategoride hizmet vermiyor");
       }
     }
 
     // Makine önerisi adımın istasyonuna ait + aktif olmalı (İE yazımıyla aynı kural).
-    await assertPlannedMachines(
-      prisma,
-      steps
-        .filter((st) => typeof st.stationId === "string")
-        .map((st) => ({ stationId: st.stationId as string, plannedMachineId: st.plannedMachineId ?? null })),
-    );
+    await assertPlannedMachines(prisma, plannedPairsOf(steps));
 
     await this.applyStepTargets(steps);
   }

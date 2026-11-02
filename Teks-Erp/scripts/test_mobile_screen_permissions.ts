@@ -333,6 +333,11 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
     why: "Belgeden iş emri kayıt kipi (`formApproval`) okunamazsa (gelen-belge:read yok → 403) kip UNKNOWN: kayıt denenir, sunucu kapıyı kendisi uygular (403 `GELEN_BELGE_FORM_APPROVAL_DISABLED` → taslak; `useWoRows`).",
   },
   {
+    screen: "gelen-belge:write",
+    path: "POST /gelen-belge/irsaliyeler/:p/is-emri",
+    why: "Belgeden iş emri (OIE sözleşme 3) iş emri açma iznini ister (`AUTO_WORK_ORDER_PERMISSIONS`: `workorder:write` | `mobile:hizli-is-emri`; içe aktarılan sabit, bekçi çözemez). İzinsiz kullanıcıda 403 satır sonucu FAILED olur, okunmuş belge taslak kalır (`useWoRows.saveRowOnce`); ayrı onay kipinde uç hiç çağrılmaz.",
+  },
+  {
     screen: "mobile:kk1",
     path: "GET /colors",
     why: "Renk listesi YALNIZ yarı mamul modunda çağrılır; o mod ayrı bir yetenek yetkisine bağlı (`mobile:kk1-yari-mamul`). Yetkisiz operatörde renk seçici hiç çizilmez, uç de çağrılmaz.",
