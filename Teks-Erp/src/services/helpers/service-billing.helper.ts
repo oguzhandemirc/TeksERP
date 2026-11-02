@@ -109,7 +109,7 @@ export async function collectServiceBillingDraft(params: {
   });
   const lines = res.lines.map((l) => ({
     itemId: l.serviceItemId,
-    description: `${l.name} (${l.rollCount} top)`,
+    description: `${l.label ?? l.name} (${l.rollCount} top)`,
     qty: new Prisma.Decimal(l.quantity),
     unit: SERVICE_QTY_UNIT_LABEL[l.unit],
     unitPrice: new Prisma.Decimal(l.unitPrice ?? 0),

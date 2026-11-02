@@ -11,6 +11,27 @@ export function readStitchCountField(raw: unknown, code: string): number | null 
   return raw;
 }
 
+/** Kurşun gramajı gr/m (oie-a): `undefined` = dokunma, `null` = kaldır; > 0, en fazla 3 ondalık. Sayı ya da ondalık metin. */
+export function readGramAmountField(raw: unknown, code: string): string | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === "") return null;
+  const txt = typeof raw === "number" ? String(raw) : typeof raw === "string" ? raw.trim().replace(",", ".") : "";
+  if (!/^\d{1,7}(\.\d{1,3})?$/.test(txt) || Number(txt) <= 0) {
+    throw AppError.badRequest(`'${code}' değerinin gramajı (gr/m) 0'dan büyük, en fazla 3 ondalıklı sayı olmalı`);
+  }
+  return txt;
+}
+
+/** Varsayılan değer seçimi: ÇEŞİT başına tek varsayılan, pasif değer varsayılan olamaz (DB: kısmi unique + CHECK). */
+export function assertSingleDefaultValue(values: ReadonlyArray<{ code: string; isActive?: boolean; isDefault?: boolean }>): void {
+  const defs = values.filter((v) => v.isDefault === true);
+  if (defs.length > 1) {
+    throw AppError.badRequest(`Yalnız bir değer varsayılan olabilir (${defs.map((d) => d.code).join(", ")})`, { code: "PROPERTY_VALUE_MULTIPLE_DEFAULT" });
+  }
+  const passive = defs.find((d) => d.isActive === false);
+  if (passive) throw AppError.badRequest(`'${passive.code}' pasif — pasif değer varsayılan olamaz`);
+}
+
 /**
  * Gövdeden `stationIds`'i ayıklar (tekrarları eler) ve payload'dan siler.
  * `undefined` = alan hiç gönderilmedi (update'te "dokunma" demek).

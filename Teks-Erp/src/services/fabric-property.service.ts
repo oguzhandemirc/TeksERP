@@ -23,7 +23,7 @@ import { ApiResponse } from "../types/api.types";
 import prisma from "../lib/prisma";
 import { readServiceItemIdField, withServiceMapping } from "./helpers/service-item-mapping.helper";
 import { AppError } from "../utils/app-error";
-import { type ConsumableItemField, consumableItemPatch, extractStationIds, readStitchCountField } from "./helpers/fabric-property-input.helper";
+import { assertSingleDefaultValue, type ConsumableItemField, consumableItemPatch, extractStationIds, readGramAmountField, readStitchCountField } from "./helpers/fabric-property-input.helper";
 import { assertConsumableItemsTx } from "./helpers/consumable-item-link.helper";
 import { nextSeriesNo } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -64,6 +64,10 @@ export interface PropertyValueInput extends ConsumableItemField {
   serviceItemId?: string | null;
   /** Brode deseni vuruş sayısı (VURUŞ fiyat birimi). `undefined` = dokunma, `null` = kaldır. */
   stitchCount?: number | null;
+  /** Kurşun gramajı gr/m (ondalık metin). `undefined` = dokunma, `null` = kaldır. */
+  amount?: string | null;
+  /** Çeşit başına tek varsayılan. `undefined` = dokunma. */
+  isDefault?: boolean;
 }
 
 /**
@@ -80,7 +84,7 @@ function extractValues(data: Record<string, unknown>): PropertyValueInput[] | un
   if (!Array.isArray(raw)) {
     throw AppError.badRequest("values bir değer listesi olmalı");
   }
-  return raw.map((v, i) => {
+  const parsed: PropertyValueInput[] = raw.map((v, i) => {
     if (!v || typeof v !== "object") {
       throw AppError.badRequest(`${i + 1}. değer satırı geçersiz`);
     }
@@ -100,10 +104,14 @@ function extractValues(data: Record<string, unknown>): PropertyValueInput[] | un
     }
     const sid = readServiceItemIdField(row.serviceItemId, `'${code}' değerinin`);
     const stitch = readStitchCountField(row.stitchCount, code);
+    const amount = readGramAmountField(row.amount, code);
+    const isDefault = row.isDefault === undefined ? undefined : row.isDefault === true;
     const sortOrder = typeof row.sortOrder === "number" ? row.sortOrder : (i + 1) * 10;
     const isActive = row.isActive === undefined ? true : Boolean(row.isActive);
-    return { code, name, sortOrder, isActive, ...(sid === undefined ? {} : { serviceItemId: sid }), ...consumableItemPatch(row.consumableItemId, code), ...(stitch === undefined ? {} : { stitchCount: stitch }) };
+    return { code, name, sortOrder, isActive, ...(sid === undefined ? {} : { serviceItemId: sid }), ...consumableItemPatch(row.consumableItemId, code), ...(stitch === undefined ? {} : { stitchCount: stitch }), ...(amount === undefined ? {} : { amount }), ...(isDefault === undefined ? {} : { isDefault }) };
   });
+  assertSingleDefaultValue(parsed);
+  return parsed;
 }
 
 /**
@@ -187,14 +195,22 @@ async function replaceValuesTx(
   const keep = values.map((v) => v.code);
   await tx.fabricPropertyValue.updateMany({
     where: { propertyId, code: { notIn: keep } },
-    data: { isActive: false },
+    data: { isActive: false, isDefault: false },
   });
   await assertConsumableItemsTx(tx, values);
+  // Tek varsayılan (kısmi unique): yeni varsayılan yazılmadan ÖNCE eskisi düşer; pasife alınan da düşer.
+  const nextDefault = values.find((v) => v.isDefault === true)?.code;
+  if (values.some((v) => v.isDefault !== undefined)) {
+    await tx.fabricPropertyValue.updateMany({ where: { propertyId, isDefault: true, ...(nextDefault ? { code: { not: nextDefault } } : {}) }, data: { isDefault: false } });
+  }
+  await tx.fabricPropertyValue.updateMany({ where: { propertyId, isDefault: true, code: { in: values.filter((v) => v.isActive === false).map((v) => v.code) } }, data: { isDefault: false } });
   for (const v of values) {
     const svc = {
       ...(v.serviceItemId !== undefined ? { serviceItemId: v.serviceItemId } : {}),
       ...(v.consumableItemId !== undefined ? { consumableItemId: v.consumableItemId } : {}),
       ...(v.stitchCount !== undefined ? { stitchCount: v.stitchCount } : {}),
+      ...(v.amount !== undefined ? { amount: v.amount } : {}),
+      ...(v.isDefault !== undefined ? { isDefault: v.isDefault } : {}),
     };
     await tx.fabricPropertyValue.upsert({
       where: { propertyId_code: { propertyId, code: v.code } },
