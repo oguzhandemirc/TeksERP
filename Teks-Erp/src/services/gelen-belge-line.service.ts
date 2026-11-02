@@ -128,6 +128,8 @@ export async function addDeliveryNoteLines(noteId: string, inputs: DeliveryNoteL
 export async function updateDeliveryNoteLine(noteId: string, lineId: string, patch: Partial<DeliveryNoteLineInput> & { skip?: true }, userId: string) {
   const before = await prisma.customerDeliveryNoteLine.findUnique({ where: { id: lineId }, select: LINE_SELECT });
   if (!before || before.noteId !== noteId) throw AppError.notFound("Satır bulunamadı.", { code: "DELIVERY_NOTE_LINE_NOT_FOUND" });
+  // INFO (belge başına tek kayıt kipinin bilgi satırı) topsuzdur ve kayıt doğurmaz: düzeltmek/atlamak anlamsız → 409.
+  if (before.status === "INFO") throw AppError.conflict("Bu satır bilgi satırıdır (belge tek kayıtla girildi); düzeltilemez.", { code: "DELIVERY_NOTE_LINE_INFO" });
   // Yalnız patch'te TANIMLI anahtarlar yazılır: iki yazar farklı alanı düzeltirse ikisi de korunur (kayıp güncelleme yok).
   // `meters` yalnız gelirse sınanır; `lineColumns` tam küme kurar, tanımsızlar aşağıda elenir.
   const full = lineColumns({ ...patch, meters: patch.meters ?? Number(before.meters) });
@@ -153,7 +155,7 @@ export async function updateDeliveryNoteLine(noteId: string, lineId: string, pat
     });
     if (c.count === 0) throw AppError.conflict("Satır artık düzeltilemez (girilmiş ya da değişmiş); belgeyi yenileyin.", { code: "DELIVERY_NOTE_LINE_NOT_EDITABLE" });
     // Atlamayla topsuz canlı satır kalmadıysa belge kapanır (yeniden onaya "açık satır yok" ile takılmasın).
-    if (patch.skip && (await tx.customerDeliveryNoteLine.count({ where: { noteId, rollId: null, status: { not: "SKIPPED" } } })) === 0) {
+    if (patch.skip && (await tx.customerDeliveryNoteLine.count({ where: { noteId, rollId: null, status: { notIn: ["SKIPPED", "INFO"] } } })) === 0) {
       const closed = await tx.customerDeliveryNote.updateMany({ where: { id: noteId, status: "PARTIAL" }, data: { status: "APPROVED", approvedAt: new Date(), approvedById: userId, updatedById: userId } });
       if (closed.count === 1) closedNoteNo = (await tx.customerDeliveryNote.findUnique({ where: { id: noteId }, select: { noteNo: true } }))?.noteNo ?? noteId;
     }

@@ -29,7 +29,7 @@ import { getDocumentScan, readDocumentScanContent, uploadDocumentScan } from "..
 import { suggestForNote } from "../services/gelen-belge-eslestirme.service";
 import { buildWorkOrderPlan } from "../services/gelen-belge-is-emri.service";
 import { searchProcessChoiceValues } from "../services/helpers/process-choice-catalog.helper";
-import { listSenderTemplates, updateSenderTemplate } from "../services/gelen-belge-sablon.service";
+import { BATCH_NO_KEY_RE, listSenderTemplates, MANUAL_BATCH_NO_KEY, updateSenderTemplate } from "../services/gelen-belge-sablon.service";
 import { listCustomerDefaults, removeCustomerDefault, setCustomerDefault } from "../services/gelen-belge-varsayilan.service";
 import { assertScanReadable, readerQueueCounts, requeueScanForReading } from "../services/gelen-belge-okuma.service";
 import { getReadSummary } from "../services/gelen-belge-okuma-ozeti.service";
@@ -107,7 +107,16 @@ const CreateBody = z.strictObject({
   lines: z.array(LineBody).max(500, "Tek seferde en çok 500 satır").optional(),
   ...Header,
 });
-const UpdateBody = z.strictObject(Header);
+// Parti no aday anahtarı (şablon alan anahtarı) — biçim tek kaynaktan; `MANUAL` yalnız sunucunun yazdığı işarettir.
+const BatchNoKey = z.string().regex(BATCH_NO_KEY_RE, "Geçersiz parti no anahtarı").refine((v) => v !== MANUAL_BATCH_NO_KEY, "MANUAL anahtarı seçilemez (elle yazılan parti no anahtarsız gönderilir)");
+// Gülkesim B: parti no + kurşun metresi yalnız başlık PATCH'inde (yaratma gövdesi değişmez; okuma katmanı doldurur).
+const UpdateBody = z.strictObject({
+  ...Header,
+  ourBatchNo: optText(64),
+  ourBatchNoKey: BatchNoKey.nullable().optional(),
+  kursunMeters: Money("Kurşun metresi").nullable().optional(),
+  kursunMetersReviewed: z.literal(true, "Gözden geçirme işareti yalnız true olabilir").optional(),
+});
 const LinesBody = z.strictObject({
   // Parti kimliği: zaman aşımı tekrarı aynı token'la gelir, satırlar ikilenmez (`lineBatchReplay`).
   clientToken: z.uuid("İşlem kimliği geçersiz").nullable().optional(),
@@ -210,10 +219,10 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
- *       200: { description: "Taslak + satır problems[] (FAILED|ITEM_UNRESOLVED|NEEDS_REVIEW|SUSPECT_VALUE) + satır itemFallback (id, name, source) | null + totalsCheck (+ document) + notices[] (code, title, detail)" }
+ *       200: { description: "Taslak + satır problems[] (FAILED|ITEM_UNRESOLVED|NEEDS_REVIEW|SUSPECT_VALUE) + satır itemFallback (id, name, source) | null + totalsCheck (+ document) + notices[] (code, title, detail) + perDocument { gate: code KURSUN_METERS_REQUIRED|KURSUN_METERS_REVIEW_PENDING|null, warnings, totalsBlocking } (yalnız gelenBelge.entryMode=PER_DOCUMENT iken)" }
  *   patch:
  *     tags: [Gelen belge]
- *     summary: Başlık düzelt — yalnız DRAFT (aksi 409 DELIVERY_NOTE_NOT_DRAFT); gövde yalnız tanımlı anahtarları yazar (customerOrderNo ≤ 64 dahil)
+ *     summary: Başlık düzelt — yalnız DRAFT (aksi 409 DELIVERY_NOTE_NOT_DRAFT); gövde yalnız tanımlı anahtarları yazar (customerOrderNo ≤ 64 dahil). ourBatchNo (+ ourBatchNoKey aday anahtarı; yoksa MANUAL; anahtar tek başına 400 DELIVERY_NOTE_BATCH_NO_KEY_WITHOUT_VALUE) · kursunMeters (> 0 → kaynak MANUAL, gözden geçirildi; null temizler) · kursunMetersReviewed true (değeri onaylar → MANUAL; metre yoksa 400 KURSUN_METERS_REQUIRED)
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
@@ -488,7 +497,7 @@ router.delete("/irsaliyeler/:id/satirlar/:lineId", requirePermission("gelen-belg
  *       200: { description: "{ note, summary: { entered, failed, skipped, replayed, rollIds }, autoWorkOrders? } + üst düzey warnings (başlık top adedi ↔ satır; gerekçeyle geçilen sayfa). autoWorkOrders yalnız `gelenBelge.autoWorkOrder` açıkken: { opened, manual, reason, groups: [{ key, itemName, targets, rollCount, outcome OPENED|SKIPPED|FAILED, workOrderNumber?, attached?, reason? }] }" }
  *       400: { description: "DELIVERY_NOTE_OWNER_REQUIRED · OWNER_CUSTOMER_INVALID (sahip pasif/bulunamadı) · DELIVERY_NOTE_LINE_UNRESOLVED · PROCESS_VALUE_INVALID (değer aktif işlem çeşidi değil) · PROCESS_CHOICE_CONFLICT · PROCESS_CHOICE_LINE_INVALID · PROCESS_CHOICE_TEXT_EMPTY" }
  *       403: { description: "MODULE_DISABLED (emanet) ya da izin yok" }
- *       409: { description: "TOTAL_MISMATCH (blok adet/kg/m; varianceReason ile geçilir) · DELIVERY_NOTE_PAGES_MISSING (varianceReason ile geçilir) · DELIVERY_NOTE_CHANGED (ön kontrolden sonra düzenlendi) · DELIVERY_NOTE_NOT_APPROVABLE · DELIVERY_NOTE_NO_OPEN_LINES" }
+ *       409: { description: "KURSUN_METERS_REQUIRED · KURSUN_METERS_REVIEW_PENDING · DELIVERY_NOTE_ENTRY_MODE_MIXED (PER_DOCUMENT) · TOTAL_MISMATCH (blok adet/kg/m; varianceReason ile geçilir) · DELIVERY_NOTE_PAGES_MISSING (varianceReason ile geçilir) · DELIVERY_NOTE_CHANGED (ön kontrolden sonra düzenlendi) · DELIVERY_NOTE_NOT_APPROVABLE · DELIVERY_NOTE_NO_OPEN_LINES" }
  */
 router.post("/irsaliyeler/:id/onay", requirePermission("gelen-belge:approve"), wrap(async (req) => ({
   // Onay önce ve aynen; otomatik iş emri (ayar açıksa) onaydan SONRA, best-effort — `autoWorkOrders` yalnız ayar açıkken.
@@ -501,6 +510,7 @@ const TemplatePatch = z.strictObject({
   isActive: z.boolean("Aktiflik evet/hayır olmalı").optional(),
   senderCustomerId: Id.nullable().optional(),
   defaultOwnerCustomerId: Id.nullable().optional(),
+  batchNoKey: BatchNoKey.nullable().optional(),
 }).refine((v) => Object.keys(v).length > 0, "Değiştirilecek alan yok");
 /**
  * @openapi
@@ -515,7 +525,7 @@ const TemplatePatch = z.strictObject({
  * /api/gelen-belge/sablonlar/{code}:
  *   patch:
  *     tags: [Gelen belge]
- *     summary: Şablon bağını güncelle (isActive, senderCustomerId, defaultOwnerCustomerId); satır yoksa doğar
+ *     summary: Şablon bağını güncelle (isActive, senderCustomerId, defaultOwnerCustomerId, batchNoKey — parti no aday anahtarı, null temizler); satır yoksa doğar
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: code, required: true, schema: { type: string } }
