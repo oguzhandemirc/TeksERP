@@ -2,7 +2,9 @@
 import { useState } from "react";
 import { ItemPickerModal } from "@/components/forms/ItemPickerModal";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
+import { Switch } from "@/components/ui/switch";
 import { LineRow } from "./LineRow";
+import { visibleLines } from "./reviewView";
 import type { DeliveryNoteDetail, LinePatch, NoteMatchSuggestions } from "./types";
 
 interface Props {
@@ -25,7 +27,12 @@ export function LinesTable({ note, suggestions, editable, canWrite, selectedId, 
   const defaultItem = suggestions?.defaultItem;
   const partial = note.status === "PARTIAL";
   const openLines = note.lines.filter((x) => !x.rollId && x.status !== "SKIPPED").length;
+  // "Sorunlu" hükmü backend `problems`ten (onay ön kontrolüyle aynı yüklem); burada yalnız gösterim süzgeci.
+  const [onlyProblems, setOnlyProblems] = useState(false);
+  const view = visibleLines(note.lines, onlyProblems);
   return (
+    <div className="flex flex-col gap-2">
+      <ProblemFilter on={onlyProblems} onChange={setOnlyProblems} shown={view.rows.length} total={view.total} problems={view.problemCount} />
     <div className="overflow-x-auto rounded-lg border">
       <table className="w-full min-w-[900px] text-sm">
         <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
@@ -42,14 +49,8 @@ export function LinesTable({ note, suggestions, editable, canWrite, selectedId, 
           </tr>
         </thead>
         <tbody>
-          {note.lines.length === 0 && (
-            <tr>
-              <td colSpan={9} className="p-6 text-center text-sm text-muted-foreground">
-                Satır yok. Elle ekleyin ya da Excel'den yükleyin.
-              </td>
-            </tr>
-          )}
-          {note.lines.map((l) => (
+          <EmptyRows noLines={note.lines.length === 0} noProblems={onlyProblems && view.rows.length === 0} />
+          {view.rows.map((l) => (
             <LineRow
               key={l.id}
               line={l}
@@ -91,6 +92,34 @@ export function LinesTable({ note, suggestions, editable, canWrite, selectedId, 
         allowedTypes={["FABRIC"]}
         onPick={(row) => pickFor && onPatch(pickFor, { itemId: row.id })}
       />
+    </div>
+    </div>
+  );
+}
+
+function EmptyRows({ noLines, noProblems }: { noLines: boolean; noProblems: boolean }) {
+  if (!noLines && !noProblems) return null;
+  return (
+    <tr>
+      <td colSpan={9} className="p-6 text-center text-sm text-muted-foreground" data-testid={noLines ? undefined : "no-problem-lines"}>
+        {noLines ? "Satır yok. Elle ekleyin ya da Excel'den yükleyin." : "Sorunlu satır yok — bütün satırlar temiz."}
+      </td>
+    </tr>
+  );
+}
+
+function ProblemFilter({ on, onChange, shown, total, problems }: { on: boolean; onChange: (v: boolean) => void; shown: number; total: number; problems: number }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <Switch checked={on} onCheckedChange={onChange} aria-label="Yalnız sorunlu satırlar" data-testid="problem-filter" />
+      <span className="cursor-pointer select-none" onClick={() => onChange(!on)}>
+        Yalnız sorunlu satırlar ({problems})
+      </span>
+      {on && (
+        <span className="tabular-nums text-muted-foreground" data-testid="problem-filter-count">
+          {shown} / {total} satır
+        </span>
+      )}
     </div>
   );
 }

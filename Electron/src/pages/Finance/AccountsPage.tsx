@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Wallet, Landmark } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +12,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { PermissionGate } from "@/components/PermissionGate";
+import { RefreshButton } from "@/components/RefreshButton";
 import {
   listCashBoxes, listBankAccounts, createCashBox, createBankAccount, money, type Currency,
 } from "./service";
@@ -47,11 +49,12 @@ export function AccountsPage() {
     <PageShell>
       <PageHeader
         title="Kasa & Banka"
+        actions={<RefreshButton queryKey={["finance", "cash-boxes"]} extraKeys={[["finance", "bank-accounts"]]} />}
         description="Her kasa/hesap TEK para birimlidir — dövizli işlem için ayrı kart açılır. Bakiye elle yazılmaz; tahsilat ve ödemelerden türetilir."
       />
-      <PageBody className="space-y-8 p-6">
+      <ListBody>
         <section>
-          <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center justify-between border-b px-4 py-2">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <Wallet className="h-4 w-4 text-muted-foreground" />
               Kasalar
@@ -73,8 +76,8 @@ export function AccountsPage() {
           />
         </section>
 
-        <section>
-          <div className="mb-3 flex items-center justify-between">
+        <section className="border-t">
+          <div className="flex items-center justify-between border-b px-4 py-2">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <Landmark className="h-4 w-4 text-muted-foreground" />
               Banka Hesapları
@@ -96,7 +99,11 @@ export function AccountsPage() {
             showBank
           />
         </section>
-      </PageBody>
+      </ListBody>
+      <ListFooter
+        loaded={(cashQ.data?.data.length ?? 0) + (bankQ.data?.data.length ?? 0)}
+        label={`${cashQ.data?.data.length ?? 0} kasa · ${bankQ.data?.data.length ?? 0} banka hesabı`}
+      />
 
       <Dialog open={open !== null} onOpenChange={(v) => !v && setOpen(null)}>
         <DialogContent className="max-w-md">
@@ -170,7 +177,7 @@ function AccountTable({
   errorTitle: string;
   showBank?: boolean;
 }) {
-  if (loading) return <p className="text-sm text-muted-foreground">Yükleniyor…</p>;
+  if (loading) return <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>;
   // ⚠️ "TANIM YOK" ZİNCİRİNİN KÖKÜ. Tahsilat formu kasa listesini okuyamayınca
   // "Önce Muhasebe → Kasa & Banka ekranından ekleyin" der; kullanıcı buraya gelir
   // ve burası da aynı sebeple "Kasa tanımı yok." derse MÜKERRER KASA açar —
@@ -178,6 +185,7 @@ function AccountTable({
   // kalır. Hata dalı boş dalın ÖNÜNDE olmak zorunda.
   if (isError && rows.length === 0) {
     return (
+      <ListMessage>
       <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
         <p className="font-medium text-destructive">{errorTitle}</p>
         <p className="mt-1 text-muted-foreground">
@@ -190,21 +198,23 @@ function AccountTable({
           </Button>
         ) : null}
       </div>
+      </ListMessage>
     );
   }
   if (rows.length === 0) {
     return (
-      <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">{empty}</div>
+      <ListMessage>
+        <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">{empty}</div>
+      </ListMessage>
     );
   }
   return (
-    <div className="space-y-2">
+    <>
       {isError && (
-        <p className="rounded-md bg-amber-100 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+        <p className="border-b bg-amber-100 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
           Liste tazelenemedi — aşağıdaki hesaplar ve bakiyeler son başarılı okumaya aittir.
         </p>
       )}
-      <div className="overflow-hidden rounded-md border">
       <table className="w-full text-sm">
         <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
           <tr>
@@ -232,7 +242,6 @@ function AccountTable({
           ))}
         </tbody>
       </table>
-      </div>
-    </div>
+    </>
   );
 }

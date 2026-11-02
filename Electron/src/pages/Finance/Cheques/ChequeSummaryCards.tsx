@@ -150,11 +150,11 @@ export function ChequeSummaryCards({
   });
 
   if (isLoading) {
-    return <p className="mb-4 text-sm text-muted-foreground">Portföy özeti yükleniyor…</p>;
+    return <p className="text-sm text-muted-foreground">Portföy özeti yükleniyor…</p>;
   }
   if (isError) {
     return (
-      <div className="mb-5 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+      <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
         Portföy özeti yüklenemedi — kovalardaki adet ve tutarlar bu yüzden gösterilmiyor (sıfır oldukları
         anlamına GELMEZ).
       </div>
@@ -162,7 +162,7 @@ export function ChequeSummaryCards({
   }
 
   return (
-    <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
       {BUCKETS.map((b) => {
         const lines = rows.filter((r) => r.kind === b.kind && r.status === b.status);
         const count = lines.reduce((sum, r) => sum + r.count, 0); // adet — para değil, toplanır

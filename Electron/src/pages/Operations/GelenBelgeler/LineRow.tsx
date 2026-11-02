@@ -8,6 +8,7 @@ import { SuggestionChips } from "./SuggestionChips";
 import { LINE_STATUS_LABEL } from "./noteStatus";
 import { parseTrNumber } from "./review-queue";
 import { defaultItemHint } from "./approveFlow";
+import { PROBLEM_LABEL } from "./reviewView";
 import type { DeliveryNoteLine, EffectiveDefaultItem, LinePatch, NoteMatchSuggestions } from "./types";
 
 interface Props {
@@ -86,6 +87,9 @@ export function LineRow(p: Props) {
       </td>
       <td className="p-2">
         <Badge variant={line.status === "FAILED" ? "destructive" : line.status === "ENTERED" ? "default" : "muted"}>{LINE_STATUS_LABEL[line.status]}</Badge>
+        {line.problems?.filter((c) => c !== "FAILED").map((c) => (
+          <div key={c} className="mt-0.5 text-[10px] text-amber-700 dark:text-amber-400" data-testid="line-problem" data-code={c}>{PROBLEM_LABEL[c]}</div>
+        ))}
         {line.failReason && <div className="mt-0.5 max-w-[200px] text-[10px] text-destructive" data-testid="fail-reason">{line.failReason}</div>}
       </td>
       <td className="p-2">

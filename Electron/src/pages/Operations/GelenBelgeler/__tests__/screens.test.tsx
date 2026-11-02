@@ -1,4 +1,4 @@
-// Gelen belge ekranları: liste (süzgeç sunucuya), toplam şeridi (blok başına), eşleme önerisi, onay sonucu,
+// Gelen belge ekranları: liste (süzgeç sunucuya), eşleme önerisi, onay sonucu,
 // rejim (modül kapalı → karo ve palet girişi gizli).
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,7 +10,6 @@ import { operationsTiles } from "@/pages/Operations/tile-config";
 import { allCommandEntries } from "@/components/layout/command-entries";
 import { ROUTE_MODULE } from "@/lib/route-modules";
 import { IncomingDocumentsPage } from "../GelenBelgelerPage";
-import { TotalsStrip } from "../TotalsStrip";
 import { SuggestionChips } from "../SuggestionChips";
 import { ApproveDialog } from "../ApproveDialog";
 import { LineRow } from "../LineRow";
@@ -97,26 +96,7 @@ describe("liste", () => {
   });
 });
 
-const ln = (o: Partial<DeliveryNoteLine>) => ({ blockNo: 1, meters: "100", weightKg: null, status: "PENDING", ...o }) as DeliveryNoteLine;
-
-describe("toplam şeridi", () => {
-  it("blok başına beyan: tutan yeşil, tutmayan kırmızı + sebep, beyansız doğrulanamaz", () => {
-    renderWithProviders(
-      <TotalsStrip
-        note={{
-          lines: [ln({ blockNo: 1 }), ln({ blockNo: 1 }), ln({ blockNo: 2, meters: "50" }), ln({ blockNo: 3 })],
-          totalsDeclared: { blocks: [{ blockNo: 1, count: "2", m: "200", kg: null }, { blockNo: 2, count: null, m: "60", kg: null }] },
-          declaredTopCount: 5,
-        }}
-      />,
-    );
-    expect(screen.getByTestId("block-1").dataset.ok).toBe("true");
-    expect(screen.getByTestId("block-2").dataset.ok).toBe("false");
-    expect(within(screen.getByTestId("block-2")).getByText("beyan 60 m, satır 50 m")).toBeInTheDocument();
-    expect(screen.getByTestId("block-3").dataset.ok).toBe("unknown");
-    expect(screen.getByText("Belgede 5 top yazıyor, satır 4 (uyarı)")).toBeInTheDocument();
-  });
-});
+// Toplam şeridi: `gozden-gecirme.test.tsx` (backend `totalsCheck` hükmünü gösterir).
 
 describe("eşleme önerisi", () => {
   it("öğrenilmiş öneri önce; mevcut seçim tekrar önerilmez; tık seçimi uygular", async () => {

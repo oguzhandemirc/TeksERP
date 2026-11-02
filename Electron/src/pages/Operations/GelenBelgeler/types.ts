@@ -1,8 +1,11 @@
 // Gelen belge (Gülkesim OCR D5) — backend `/api/gelen-belge/*` sözleşmesinin AYNASI.
 // Kaynak: `Teks-Erp/src/services/gelen-belge-{note,line,scan,eslestirme,onay}.service.ts` select/dönüş şekilleri.
-// Prisma Decimal JSON'da metindir (`meters`/`weightKg`/`widthCm`); hesap `totals.ts`te sayıya çevrilir.
+// Prisma Decimal JSON'da metindir (`meters`/`weightKg`/`widthCm`); toplam kapısının hükmü backend `totalsCheck`ten okunur.
 
 import type { AutoWorkOrderResult } from "./workOrderTypes";
+import type { LineProblem, TotalsCheck } from "./reviewTypes";
+export type { LineProblem, TotalsCheck } from "./reviewTypes";
+
 export type {
   AutoWorkOrderGroup,
   AutoWorkOrderResult,
@@ -94,6 +97,8 @@ export interface DeliveryNoteLine {
   rollId: string | null;
   item: NamedRef | null;
   color: NamedRef | null;
+  /** Gözden geçirme sorunları — onay ön kontrolüyle AYNI backend yüklemi (`lineProblems`); panel kural kurmaz. */
+  problems?: LineProblem[];
 }
 
 export interface DocumentScanInfo {
@@ -112,6 +117,8 @@ export interface DeliveryNoteDetail extends DeliveryNoteHeader {
   scans: DocumentScanInfo[];
   /** D4-I3: sahibin İŞ KABULÜ kapsamlı aktif cari kilidi (metin sunucudan); eski backend göndermez. */
   cariHold?: { sebepEtiketi: string; koyan: string; message: string } | null;
+  /** Toplam kapısının canlı hükmü (detay yanıtı; yazmaz). */
+  totalsCheck?: TotalsCheck;
 }
 
 /** Toplu silme önizlemesi (`POST /irsaliyeler/toplu-sil/onizleme`). */
