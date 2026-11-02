@@ -269,3 +269,8 @@ export function useCustomerBranchesEnabled(): boolean {
 export function usePackingGroupsEnabled(): boolean {
   return useFeatureFlags().data?.packingGroupsEnabled ?? false;
 }
+
+/** İş emri açılınca refakat kartı otomatik basım — yalnız gerçek `true` (eski sunucu: kapalı = bugünkü elle basım). */
+export function useRefakatAutoPrint(): boolean {
+  return useFeatureFlags().data?.refakatAutoPrint === true;
+}

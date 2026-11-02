@@ -107,6 +107,40 @@ export interface InboundNoteDetail {
   batchNoCandidates?: BatchNoCandidate[];
   kursunMeterCandidates?: Partial<Record<'output' | 'total' | 'input' | 'lineSum', MeterCandidateValue>>;
   perDocument?: PerDocumentGate;
+  /** Sözleşme 4: belgede okunan metinde güçlü eşleşen müşteri; zayıfsa/eski sunucuda yok → istemci boş bırakır. */
+  ownerSuggestion?: OwnerSuggestion | null;
+}
+
+export interface OwnerSuggestion {
+  customerId: string;
+  name: string;
+  matchedText: string;
+}
+
+/** Gelen belge ayarı (`GET /gelen-belge/ayarlar`) — tabletin okuduğu alt küme. Eski sunucu `formApproval` göndermez. */
+export interface InboundDocSettings {
+  formApproval?: 'SEPARATE' | 'WITH_WORK_ORDER';
+}
+
+/** Sözleşme 3: belgeden tek seferde terbiye iş emri (`POST /gelen-belge/irsaliyeler/:id/is-emri`). */
+export interface CreateWorkOrderFromNoteBody {
+  clientToken: string;
+  ownerCustomerId: string;
+  ourBatchNo?: string;
+  ourBatchNoKey?: string;
+  /** Decimal string; verilince gözden geçirilmiş sayılır. */
+  kursunMeters: string;
+  routeTemplateId: string;
+  stepPlanning?: { sequence: number; plannedMachineId?: string }[];
+  targetValues?: { propertyId: string; valueId: string }[];
+  notes?: string;
+}
+
+export interface CreateWorkOrderFromNoteResult {
+  workOrderId: string;
+  workOrderNo: string;
+  batchNumber: string;
+  rollId: string;
 }
 
 /** Başlık PATCH alt kümesi (sunucu `UpdateBody` allowlist'i). */
@@ -141,6 +175,15 @@ export interface ApproveNoteResult {
 }
 
 export const inboundDocService = {
+  settings: (): Promise<InboundDocSettings> =>
+    apiClient.get<ApiResponse<InboundDocSettings>>('/gelen-belge/ayarlar').then((r) => r.data.data),
+
+  /** Kayıt + top + iş emri tek tx; top doğurur → uzun zaman aşımı. */
+  createWorkOrder: (noteId: string, body: CreateWorkOrderFromNoteBody): Promise<CreateWorkOrderFromNoteResult> =>
+    apiClient
+      .post<ApiResponse<CreateWorkOrderFromNoteResult>>(`/gelen-belge/irsaliyeler/${noteId}/is-emri`, body, { timeout: UPLOAD_TIMEOUT_MS })
+      .then((r) => r.data.data),
+
   tabletContext: (): Promise<ApiResponse<InboundDocTabletContext>> =>
     apiClient.get<ApiResponse<InboundDocTabletContext>>('/gelen-belge/tablet-baglam').then((r) => r.data),
 

@@ -325,7 +325,12 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
   {
     screen: "gelen-belge:write",
     path: "GET /routes",
-    why: "Onay kartının rota seçicisi yalnız onaylayana açılır; liste okunamazsa seçici boş kalır, onay \"Fabrika varsayılanı\" (alan yok) ile sürer.",
+    why: "Onay kartının rota seçicisi yalnız onaylayana açılır; liste okunamazsa seçici boş kalır, onay \"Fabrika varsayılanı\" (alan yok) ile sürer. \"İş emri oluştur\" kısayol listesi (`?shortcut=1`) okunamazsa 2. satır çizilmez, bugünkü yollar kalır.",
+  },
+  {
+    screen: "gelen-belge:write",
+    path: "GET /gelen-belge/ayarlar",
+    why: "Belgeden iş emri kayıt kipi (`formApproval`) okunamazsa (gelen-belge:read yok → 403) kip UNKNOWN: kayıt denenir, sunucu kapıyı kendisi uygular (403 `GELEN_BELGE_FORM_APPROVAL_DISABLED` → taslak; `useWoRows`).",
   },
   {
     screen: "mobile:kk1",

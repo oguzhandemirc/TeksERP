@@ -35,6 +35,8 @@ interface NewWorkOrderViewProps {
    * (b) listeye dönüşte tazeleme + başa sarma tetiklenir.
    */
   onResultChange?: (hasResult: boolean) => void;
+  /** Kısayoldan "Manuel" açılış: rota ön seçili (gelen belge iş emri oluştur akışı). */
+  initialRouteTemplateId?: string | null;
 }
 
 /**
@@ -48,8 +50,9 @@ export default function NewWorkOrderView({
   step,
   onStepChange,
   onResultChange,
+  initialRouteTemplateId,
 }: NewWorkOrderViewProps) {
-  const wo = useQuickWorkOrder();
+  const wo = useQuickWorkOrder({ initialRouteTemplateId });
   const [scannerOpen, setScannerOpen] = useState(false);
   const [rollListOpen, setRollListOpen] = useState(false);
   // Tarayıcıdan "Listeden Seç"e geçiş: RollPicker'ı tarayıcı modalı TAMAMEN
