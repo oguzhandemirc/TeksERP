@@ -631,6 +631,8 @@ export interface QuickStartPayload {
   targetValues?: { propertyId: string; valueId: string }[];
   /** Hedef özellikler (çeşidin bayrağı) — rota kapsaması bunlardan ölçülür. */
   targetPropertyIds?: string[];
+  /** Kaynak gelen belge — sunucu parti numarasını (ayar DOCUMENT ise) bu nottan okur. Eski backend alanı yok sayar. */
+  sourceNoteId?: string;
 }
 
 export interface QuickStartResult {

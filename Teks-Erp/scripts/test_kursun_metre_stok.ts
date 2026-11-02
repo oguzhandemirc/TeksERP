@@ -15,6 +15,7 @@
 // §11 ⭐ imza bekleyen okuma, top elle İLERİ taşındıktan sonra imzalanırsa 409 (metraj başka adımda değişmez).
 // §12 ⭐ IN düzeltmesiyle imza beklentisi kalkan okuma adım kapanışında uygulanır; sonraki qtyIn = taze metraj.
 // §10 ayar: geçersiz değer 400 (Türkçe), APPLY/RECORD yazılır; okuma kopyası ayar değişiminden etkilenmez.
+// §14 ⭐ Gülkesim tek büyük top (belge başına tek kayıt): 4.521 m / 960 kg APPLY + bitir; Σ defter = durum.
 // Negatif sondalar (elle, PR gövdesinde): initialQty yükseltmesi kaldırılınca §4 ❌ · ters çağrısı
 // (`reverseExitMeterStockTx`) kaldırılınca §3/§5/§7/§8 ❌ (defter ≠ durum).
 // =============================================================================
@@ -255,6 +256,24 @@ async function main(): Promise<void> {
       const r2 = await rollOf(a.rollId);
       const net2 = await ledgerNet(a.rollId);
       check("§7b ⭐ yeniden açma: üretimde, metraj 100, stok defteri Σ 0", r2.status === RollStatus.IN_PRODUCTION && n(r2.currentQty) === 100 && net2 === 0, `durum=${r2.status} qty=${n(r2.currentQty)} Σ=${net2}`);
+    }
+
+    // ── §14 Gülkesim belge başına tek top (PER_DOCUMENT): 4.521 m / 960 kg tek büyük top ──
+    {
+      const a = await mkActive("single", 4521);
+      await prisma.roll.update({ where: { id: a.rollId }, data: { weightKg: 960 } });
+      await qc2(a.rollId, a.stepId, 4519.5);
+      const r = await rollOf(a.rollId);
+      const v = await variances(a.rollId);
+      check("§14a ⭐ tek büyük top 4.521 m APPLY → 4.519,5 + RECORD_CORRECTION 1,5 (metre sapması top başına)",
+        n(r.currentQty) === 4519.5 && n(r.initialQty) === 4521 && v.length === 1 && v[0]!.kind === RollVarianceKind.RECORD_CORRECTION && n(v[0]!.qty) === 1.5,
+        `qty=${n(r.currentQty)}/${n(r.initialQty)} sapma=${v.map((x) => `${x.kind}:${n(x.qty)}`).join(",")}`);
+      await svc.finishStep({ stepId: a.stepId }, admin.id, null);
+      const r2 = await prisma.roll.findUniqueOrThrow({ where: { id: a.rollId }, select: { currentQty: true, status: true, weightKg: true } });
+      const net = await ledgerNet(a.rollId);
+      check("§14b ⭐ bitir: depoya 4.519,5 ile girer, stok defteri Σ = durum, ağırlık (960 kg) dokunulmaz",
+        r2.status !== RollStatus.IN_PRODUCTION && n(r2.currentQty) === 4519.5 && net === 4519.5 && n(r2.weightKg) === 960,
+        `durum=${r2.status} qty=${n(r2.currentQty)} Σ=${net} kg=${n(r2.weightKg)}`);
     }
 
     // ── §8 elle geri taşıma ───────────────────────────────────────────────────

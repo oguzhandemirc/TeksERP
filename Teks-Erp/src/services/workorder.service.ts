@@ -153,6 +153,7 @@ import {
   K18_DEAD_STATUSES,
 } from "./batch.service";
 import { addBatchToWorkOrderTx, ATTACHABLE_ROLL_STATUSES, auditBatchAdd } from "./workorder-batch-add.service";
+import { resolveDocumentBatchNo } from "./helpers/document-batch-no.helper";
 import { WorkOrderSplitService } from "./workorder-split.service";
 import { WorkOrderManualMoveService, type PartyMode } from "./workorder-manual-move.service";
 import { cloneWorkOrderTx, repointRollsTx } from "./helpers/workorder-clone.helper";
@@ -1471,7 +1472,7 @@ export class WorkOrderService {
   }
 
   private async quickStartFresh(
-    data: WorkOrderCreateInput & { rollBarcodes: string[]; dispatchFirstStep?: boolean },
+    data: WorkOrderCreateInput & { rollBarcodes: string[]; dispatchFirstStep?: boolean; sourceNoteId?: string | null },
     userId?: string,
   ): Promise<
     ApiResponse<{
@@ -1483,7 +1484,11 @@ export class WorkOrderService {
       batch: { id: string; batchNumber: string } | null;
     }>
   > {
-    const { rollBarcodes, dispatchFirstStep, ...woInput } = data;
+    const { rollBarcodes, dispatchFirstStep, sourceNoteId, ...woInput } = data;
+    // Kaynak belge iş emri açılmadan ÖNCE doğrulanır (bilinmeyen not 404; yetim WO bırakmaz). Numara nottan okunur.
+    if (sourceNoteId && !(await prisma.customerDeliveryNote.findUnique({ where: { id: sourceNoteId }, select: { id: true } }))) {
+      throw AppError.notFound("Gelen belge bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
+    }
     // Okutulan kod DEPOLANMIŞ biçime çekilir (bkz. normalizeScanCode) — büyütme
     // TEKİLLEŞTİRMEDEN ÖNCE yapılır, yoksa "T1" ve "t1" iki ayrı kod sayılırdı.
     const barcodes = [...new Set(rollBarcodes.map(normalizeScanCode).filter(Boolean))];
@@ -1602,7 +1607,7 @@ export class WorkOrderService {
     };
 
     try {
-      const attachRes = await this.attachRolls(workOrder.id, barcodes, userId);
+      const attachRes = await this.attachRolls(workOrder.id, barcodes, userId, { sourceNoteId });
       attached = attachRes.data?.attached ?? 0;
       errors = attachRes.data?.errors ?? [];
       batch = attachRes.data?.batch ?? null;
@@ -4923,11 +4928,14 @@ export class WorkOrderService {
   async attachRolls(
     workOrderId: string,
     rawBarcodes: string[],
-    userId?: string
+    userId?: string,
+    opts: { sourceNoteId?: string | null } = {},
   ): Promise<ApiResponse<{ attached: number; errors: string[]; batch: { id: string; batchNumber: string } | null }>> {
     const barcodes = rawBarcodes.map(normalizeScanCode).filter(Boolean);
-    const res = await withBarcodeRetry(() => prisma.$transaction((tx) =>
-      addBatchToWorkOrderTx(tx, { workOrderId, barcodes, userId, mode: "LENIENT", recordEvent: false })));
+    const res = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
+      const documentBatchNo = await resolveDocumentBatchNo(tx, opts.sourceNoteId);
+      return addBatchToWorkOrderTx(tx, { workOrderId, barcodes, userId, mode: "LENIENT", recordEvent: false, documentBatchNo });
+    }));
     await auditBatchAdd(workOrderId, res, userId);
     return {
       success: true,

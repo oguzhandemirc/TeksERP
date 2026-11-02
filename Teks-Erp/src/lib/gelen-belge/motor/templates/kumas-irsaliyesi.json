@@ -11,5 +11,6 @@
     { "key": "tarih", "label": "Tarih", "type": "date",
       "strategies": [ { "kind": "anchor", "labels": ["Tarih"], "direction": "right" }, { "kind": "regex", "pattern": "\\b(\\d{2}[./-]\\d{2}[./-]\\d{4})\\b" } ] }
   ],
-  "grid": { "seqHeaders": ["Top"], "valueColumns": [ { "key": "metre", "headers": ["Metre"] }, { "key": "cm", "headers": ["Cm"] } ], "totalsLabels": ["TOPLAM"] }
+  "grid": { "seqHeaders": ["Top"], "valueColumns": [ { "key": "metre", "headers": ["Metre"] }, { "key": "cm", "headers": ["Cm"] } ], "totalsLabels": ["TOPLAM"] },
+  "batchNoCandidates": [ { "field": "irsaliyeNo", "kind": "DOC" } ]
 }

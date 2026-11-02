@@ -54,7 +54,7 @@ export async function bumpTemplateHit(id: string): Promise<void> {
 const CUSTOMER_REF = { select: { id: true, code: true, name: true, isActive: true } } as const;
 const ROW_SELECT = {
   id: true, code: true, version: true, isActive: true, hitCount: true, updatedAt: true,
-  senderCustomerId: true, defaultOwnerCustomerId: true,
+  senderCustomerId: true, defaultOwnerCustomerId: true, batchNoKey: true,
   senderCustomer: CUSTOMER_REF, defaultOwnerCustomer: CUSTOMER_REF,
 } as const;
 type Row = Prisma.SenderTemplateGetPayload<{ select: typeof ROW_SELECT }>;
@@ -72,6 +72,8 @@ export interface SenderTemplateView {
   hitCount: number;
   senderCustomer: Row["senderCustomer"];
   defaultOwnerCustomer: Row["defaultOwnerCustomer"];
+  /** "Bu formda parti no hangi alan" — onayda öğrenilen ya da elle seçilen aday anahtarı; null = hatırlanan yok. */
+  batchNoKey: string | null;
   updatedAt: Date | null;
 }
 
@@ -86,6 +88,7 @@ function view(t: { code: string; name: string; version: number; inEngine: boolea
     hitCount: row?.hitCount ?? 0,
     senderCustomer: row?.senderCustomer ?? null,
     defaultOwnerCustomer: row?.defaultOwnerCustomer ?? null,
+    batchNoKey: row?.batchNoKey ?? null,
     updatedAt: row?.updatedAt ?? null,
   };
 }
@@ -104,6 +107,7 @@ export interface SenderTemplatePatch {
   isActive?: boolean;
   senderCustomerId?: string | null;
   defaultOwnerCustomerId?: string | null;
+  batchNoKey?: string | null;
 }
 
 async function assertActiveCustomer(id: string, role: "gönderen" | "varsayılan sahip"): Promise<void> {
@@ -112,9 +116,26 @@ async function assertActiveCustomer(id: string, role: "gönderen" | "varsayılan
   if (!c.isActive) throw AppError.badRequest(`Seçilen ${role} cari pasif; şablona bağlanamaz.`, { code: "SENDER_TEMPLATE_CUSTOMER_INACTIVE" });
 }
 
-const auditOf = (r: { isActive: boolean; senderCustomerId: string | null; defaultOwnerCustomerId: string | null }) => ({
-  isActive: r.isActive, senderCustomerId: r.senderCustomerId, defaultOwnerCustomerId: r.defaultOwnerCustomerId,
+const auditOf = (r: { isActive: boolean; senderCustomerId: string | null; defaultOwnerCustomerId: string | null; batchNoKey: string | null }) => ({
+  isActive: r.isActive, senderCustomerId: r.senderCustomerId, defaultOwnerCustomerId: r.defaultOwnerCustomerId, batchNoKey: r.batchNoKey,
 });
+
+/** Parti no aday anahtarı biçimi — şablon alan anahtarı (`isEmriNo`…); `MANUAL` aday değildir, hatırlanmaz. */
+export const BATCH_NO_KEY_RE = /^[A-Za-z][A-Za-z0-9_]{0,31}$/;
+export const MANUAL_BATCH_NO_KEY = "MANUAL";
+
+/**
+ * Hatırlama (tasarım §2.4) — onayda giren belgenin parti no anahtarı aday anahtarıysa ve şablonunkinden farklıysa TEK koşullu
+ * `updateMany` (alias emsali; eşzamanlı iki onayda son yazan kazanır, çift yazım yok). Best-effort çağrılır; audit'li.
+ */
+export async function learnBatchNoKey(templateId: string, ourBatchNo: string | null, key: string | null, userId: string): Promise<boolean> {
+  if (!ourBatchNo?.trim() || !key || key === MANUAL_BATCH_NO_KEY || !BATCH_NO_KEY_RE.test(key)) return false;
+  const before = await prisma.senderTemplate.findUnique({ where: { id: templateId }, select: { code: true, batchNoKey: true } });
+  const c = await prisma.senderTemplate.updateMany({ where: { id: templateId, OR: [{ batchNoKey: null }, { batchNoKey: { not: key } }] }, data: { batchNoKey: key } });
+  if (c.count === 0) return false;
+  await AuditService.log({ userId, action: "UPDATE", tableName: TABLE, recordId: templateId, oldData: { code: before?.code ?? null, batchNoKey: before?.batchNoKey ?? null }, newData: { code: before?.code ?? null, batchNoKey: key, source: "APPROVAL" } });
+  return true;
+}
 
 /**
  * Güncelleme: yalnız patch'te TANIMLI alanlar yazılır. Satır yoksa idempotent doğar (motor şablonu olmalı).
@@ -130,13 +151,14 @@ export async function updateSenderTemplate(code: string, patch: SenderTemplatePa
   if (patch.senderCustomerId) await assertActiveCustomer(patch.senderCustomerId, "gönderen");
   if (patch.defaultOwnerCustomerId) await assertActiveCustomer(patch.defaultOwnerCustomerId, "varsayılan sahip");
   const id = existing?.id ?? (await ensureSenderTemplate(code, userId, "PANEL"))!.id;
-  const before = await prisma.senderTemplate.findUniqueOrThrow({ where: { id }, select: { isActive: true, senderCustomerId: true, defaultOwnerCustomerId: true } });
+  const before = await prisma.senderTemplate.findUniqueOrThrow({ where: { id }, select: { isActive: true, senderCustomerId: true, defaultOwnerCustomerId: true, batchNoKey: true } });
   const data: Prisma.SenderTemplateUncheckedUpdateManyInput = {};
   if (patch.isActive !== undefined) data.isActive = patch.isActive;
   if (patch.senderCustomerId !== undefined) data.senderCustomerId = patch.senderCustomerId;
   if (patch.defaultOwnerCustomerId !== undefined) data.defaultOwnerCustomerId = patch.defaultOwnerCustomerId;
+  if (patch.batchNoKey !== undefined) data.batchNoKey = patch.batchNoKey;
   const c = await prisma.senderTemplate.updateMany({
-    where: { id, isActive: before.isActive, senderCustomerId: before.senderCustomerId, defaultOwnerCustomerId: before.defaultOwnerCustomerId },
+    where: { id, isActive: before.isActive, senderCustomerId: before.senderCustomerId, defaultOwnerCustomerId: before.defaultOwnerCustomerId, batchNoKey: before.batchNoKey },
     data,
   });
   if (c.count === 0) throw AppError.conflict("Şablon bu arada değişti; yenileyip tekrar deneyin.", { code: "SENDER_TEMPLATE_CHANGED" });

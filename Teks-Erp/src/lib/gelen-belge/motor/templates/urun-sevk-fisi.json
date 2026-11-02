@@ -297,5 +297,12 @@
       "girisToplamKg",
       "toplamKg"
     ]
-  }
+  },
+  "batchNoCandidates": [
+    { "field": "sevkNo", "kind": "BARCODE" },
+    { "field": "partiNo", "kind": "BATCH" },
+    { "field": "cikisIrsNo", "kind": "DOC" },
+    { "field": "girisIrsNo", "kind": "DOC" }
+  ],
+  "meterSources": { "output": ["toplamMetre"], "input": ["girisToplamMt"] }
 }

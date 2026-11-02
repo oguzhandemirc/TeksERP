@@ -11,6 +11,8 @@ export interface AutoWorkOrderGroup {
   workOrderId?: string;
   workOrderNumber?: string;
   attached?: number;
+  /** Açılan partinin numarası (belgeden ya da seriden; C); eski backend göndermez. */
+  batchNumber?: string | null;
   reason?: string;
 }
 export interface AutoWorkOrderResult {
@@ -65,6 +67,8 @@ export interface WorkOrderPlan {
   status: NoteStatus;
   owner: { id: string; name: string } | null;
   customerBatch: { key: string; batchNo: string } | null;
+  /** Belgeden alınacak parti no (ayar DOCUMENT + taslakta parti no); null/yok = seriden. Eski backend göndermez. */
+  batchNoPreview?: string | null;
   suggestedRouteTemplateId: string | null;
   /** Önerinin kaynağı (backend `suggestRoute`); eski backend göndermez → LAST_WORK_ORDER sayılır. */
   suggestedRouteSource?: RouteSuggestionSource | null;

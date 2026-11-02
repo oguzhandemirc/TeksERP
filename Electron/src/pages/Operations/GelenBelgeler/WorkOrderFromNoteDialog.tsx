@@ -37,16 +37,7 @@ export function WorkOrderFromNoteDialog({ noteId, open, onOpenChange }: Props) {
         {s.plan.isError && <p className="text-sm text-destructive">Plan yüklenemedi.</p>}
         {p && (
           <div className="flex flex-col gap-3">
-            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-              <span>
-                <span className="text-muted-foreground">Sahip: </span>
-                {p.owner?.name ?? "—"}
-              </span>
-              <span data-testid="plan-customer-batch">
-                <span className="text-muted-foreground">Müşteri partisi: </span>
-                {p.customerBatch?.batchNo ?? "yok"}
-              </span>
-            </div>
+            <PlanHeaderInfo plan={p} />
             <PlanRouteFields s={s} plan={p} busy={busy} />
             {p.groups.length === 0 && <p className="text-sm text-muted-foreground">Bu belgeden doğmuş top yok.</p>}
             {p.groups.map((g) => (
@@ -145,6 +136,28 @@ function RouteAndFoldFields({ s, busy, suffix }: { s: ReturnType<typeof useWorkO
             ))}
           </select>
         </label>
+      )}
+    </div>
+  );
+}
+
+/** Sahip · müşteri partisi · (varsa) belgeden alınacak parti no. */
+function PlanHeaderInfo({ plan: p }: { plan: WorkOrderPlan }) {
+  return (
+    <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+      <span>
+        <span className="text-muted-foreground">Sahip: </span>
+        {p.owner?.name ?? "—"}
+      </span>
+      <span data-testid="plan-customer-batch">
+        <span className="text-muted-foreground">Müşteri partisi: </span>
+        {p.customerBatch?.batchNo ?? "yok"}
+      </span>
+      {p.batchNoPreview && (
+        <span data-testid="plan-batch-no-preview">
+          <span className="text-muted-foreground">Parti no (belgeden): </span>
+          {p.batchNoPreview}
+        </span>
       )}
     </div>
   );

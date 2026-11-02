@@ -22,6 +22,7 @@
 //    (2026-11-02 §10) üst sınır (K katı) kapatılınca §10d, ikinci belge izinin tek bölge dalı kapatılınca §10b,
 //    GRID_EMPTY kapatılınca §10f düşer — ÖLÇÜLDÜ 2026-11-02 (her biri tek başına 70/1; elle geri alındı).
 //    (demo 2. tur 2026-11-02) taslakta `documentDeclared` kapatılınca §9h2, validator headerTotals dalı kapatılınca §9h3 düşer.
+//    (Gülkesim A 2026-11-02 §11) kurşun önceliği ters (giriş önce) → §11a/§11c ❌; yıldız soyma kapatılınca §11f ❌.
 // =============================================================================
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -42,6 +43,7 @@ import {
   type OcrResult,
 } from "../src/lib/gelen-belge/motor";
 import { DEFAULT_OUTLIER_FACTOR, draftFromExtraction, suspectGridReasons, suspectGridSeqs } from "../src/lib/gelen-belge/taslak";
+import { gulkesimPartiMetre } from "./lib/gelen-belge-motor-parti-metre";
 
 let pass = 0;
 let fail = 0;
@@ -356,6 +358,9 @@ function kutu(text: string, x: number, y: number, w: number, h: number, angle: n
   check("§10g BLOCK_IDS_DIFFER Türkçe alan adlarıyla (sipariş/parti/iş emri/işlem), ham anahtar yok",
     d45.header.warnings.some((w) => w.startsWith("BLOCK_IDS_DIFFER") && w.includes("sipariş 96967") && !w.includes("siparisNo=")));
 }
+
+// ── §11 Gülkesim: parti no adayları + kurşun metresi (gövde `lib/gelen-belge-motor-parti-metre.ts`; dosya boyu) ──
+gulkesimPartiMetre(check, gercek, sablonlar);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exitCode = fail > 0 ? 1 : 0;

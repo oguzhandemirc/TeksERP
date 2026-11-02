@@ -19,5 +19,7 @@
     { "key": "cikisMt", "label": "Çıkış MT", "type": "decimal",
       "strategies": [ { "kind": "anchor", "labels": ["ÇIKIŞ MT."], "direction": "below", "maxDistance": 2 } ] }
   ],
-  "grid": { "seqHeaders": ["TOP. NO.", "TOP NO"], "valueColumns": [ { "key": "metre", "headers": ["METRE"] } ] }
+  "grid": { "seqHeaders": ["TOP. NO.", "TOP NO"], "valueColumns": [ { "key": "metre", "headers": ["METRE"] } ] },
+  "batchNoCandidates": [ { "field": "evrakNo", "kind": "DOC" }, { "field": "siraNo", "kind": "FORM" }, { "field": "irsaliyeNo", "kind": "DOC" } ],
+  "meterSources": { "output": ["cikisMt"], "input": ["girisMt"] }
 }

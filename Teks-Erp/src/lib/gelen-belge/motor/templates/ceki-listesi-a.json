@@ -28,7 +28,9 @@
       "strategies": [
         { "kind": "anchor", "labels": ["Ham PartiNo", "Ham Parti No"], "direction": "right" },
         { "kind": "regex", "pattern": "\\b(P\\d{7})\\b" }
-      ] }
+      ] },
+    { "key": "hamGirisMt", "label": "Ham Giriş MT", "type": "decimal",
+      "strategies": [ { "kind": "anchor", "labels": ["Ham Giriş MT"], "direction": "right", "minLabelSimilarity": 0.9 } ] }
   ],
   "blockFields": ["siparisNo", "topAdet", "islem", "isEmriNo", "hamPartiNo"],
   "tables": [
@@ -40,5 +42,7 @@
         { "key": "m", "label": "Metre", "type": "decimal", "headers": ["Metre"], "required": true }
       ],
       "totals": { "labels": ["T.Adet"] } }
-  ]
+  ],
+  "batchNoCandidates": [ { "field": "fisNo", "kind": "DOC" }, { "field": "hamPartiNo", "kind": "BATCH" }, { "field": "isEmriNo", "kind": "WORK_ORDER" } ],
+  "meterSources": { "output": ["$tableTotal"], "input": ["hamGirisMt"] }
 }

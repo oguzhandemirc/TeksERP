@@ -21,8 +21,13 @@ export interface GroupStartOutcome {
 }
 
 /** Saf: grubun quick-start gövdesi — yalnız bağlanabilir toplar; hedef = değerler + bayrakları. */
-export function buildGroupPayload(input: GroupStartInput, routeTemplateId: string, clientToken: string, foldType: string | null): QuickStartPayload {
+export function buildGroupPayload(
+  input: GroupStartInput,
+  o: { routeTemplateId: string; clientToken: string; foldType: string | null; sourceNoteId?: string },
+): QuickStartPayload {
+  const { routeTemplateId, clientToken, foldType, sourceNoteId } = o;
   return {
+    ...(sourceNoteId ? { sourceNoteId } : {}),
     clientToken,
     rollBarcodes: input.group.rolls.filter((r) => r.attachable && r.barcode).map((r) => r.barcode as string),
     routeTemplateId,
@@ -41,6 +46,8 @@ export async function startGroupWorkOrders(
   deps: {
     routeTemplateId: string;
     foldType: string | null;
+    /** Kaynak belge (parti no belgeden doğabilsin diye sunucuya iletilir). */
+    sourceNoteId?: string;
     tokenFor: (key: string) => string;
     quickStart: (p: QuickStartPayload) => Promise<ApiResponse<QuickStartResult>>;
   },
@@ -49,7 +56,7 @@ export async function startGroupWorkOrders(
   for (const input of inputs) {
     const key = input.group.key;
     try {
-      const res = await deps.quickStart(buildGroupPayload(input, deps.routeTemplateId, deps.tokenFor(key), deps.foldType));
+      const res = await deps.quickStart(buildGroupPayload(input, { routeTemplateId: deps.routeTemplateId, clientToken: deps.tokenFor(key), foldType: deps.foldType, sourceNoteId: deps.sourceNoteId }));
       out.push({ key, ok: true, workOrderNumber: res.data?.workOrder.workOrderNumber, attached: res.data?.attached });
     } catch (error) {
       out.push({ key, ok: false, error });

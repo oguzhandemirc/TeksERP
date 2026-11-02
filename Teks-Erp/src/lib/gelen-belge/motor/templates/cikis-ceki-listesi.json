@@ -38,5 +38,7 @@
       ],
       "totals": { "labels": ["TOPLAM"] } }
   ],
-  "headerTotals": { "m": "musteriMt", "kg": "musteriKg" }
+  "headerTotals": { "m": "musteriMt", "kg": "musteriKg" },
+  "batchNoCandidates": [ { "field": "isEmriNo", "kind": "BARCODE" }, { "field": "musteriPartiNo", "kind": "BATCH" } ],
+  "meterSources": { "output": ["$tableTotal"], "input": ["musteriMt"] }
 }

@@ -5,6 +5,9 @@ import { parseNumber, type DocumentExtraction, type FieldResult, type ForeignDoc
 import { documentDeclared, positive, type DocumentDeclared } from "./taslak-belge-beyan";
 import { clampOutlierFactor, markGridSuspects, METER_KEYS } from "./taslak-supheli";
 import { blockDiffWarning, FIELD_LABEL, firstBlockValue } from "./blok-alani";
+import { batchNoCandidates, type BatchNoCandidate } from "./parti-no";
+import { resolveKursunMeters, type KursunMeterResult } from "./kursun-metre";
+import { templateByCode } from "./sablon-bul";
 
 // Şüpheli değer kuralı ayrı dosyada (max-lines); çağıranlar buradan alır.
 export { clampOutlierFactor, DEFAULT_OUTLIER_FACTOR, OUTLIER_FACTOR_MAX, OUTLIER_FACTOR_MIN, SUSPECT_MARK, suspectGridReasons, suspectGridSeqs, type SuspectReason } from "./taslak-supheli";
@@ -50,6 +53,10 @@ export interface DraftHeader {
   warnings: string[];
   /** Bölge başına özet (şablon kimliği, puan, başlık alanları) — scan.ocrResult zarfına; panel "bölgeyi ayır" buradan okur. */
   regions: Array<{ regionNo: number; templateId: string | null; score: number; fields: Record<string, string | null>; blocks?: Array<{ blockNo: number; fields: Record<string, string | null> }> }>;
+  /** İlk bölgenin parti no adayları (şablon sırası); seçim taslak doldurmada (hatırlanan anahtar DB'de). */
+  batchNoCandidates: BatchNoCandidate[];
+  /** İlk bölgenin kurşun metresi (ÇIKIŞ → TOPLAM → Σ satır). */
+  kursun: KursunMeterResult;
 }
 
 export interface DraftFromOcr {
@@ -259,6 +266,7 @@ export function draftFromExtraction(doc: DocumentExtraction, opts: DraftOptions 
   }
   const topCount = pick(f, TOP_COUNT_KEYS);
   const docDecl = documentDeclared(first);
+  const tpl = templateByCode(first?.templateId);
   return {
     header: {
       ownerText: clip(pick(f, OWNER_KEYS), 160),
@@ -273,6 +281,8 @@ export function draftFromExtraction(doc: DocumentExtraction, opts: DraftOptions 
       totalsDeclared: { blocks: totalsBlocks, ...(docDecl ? { document: docDecl } : {}) },
       warnings,
       regions,
+      batchNoCandidates: batchNoCandidates(tpl, regions[0]?.fields ?? {}),
+      kursun: resolveKursunMeters({ template: tpl, fields: regions[0]?.fields ?? {}, totalsDeclared: { blocks: totalsBlocks }, lineMeters: lines.map((l) => l.meters) }),
     },
     lines,
   };

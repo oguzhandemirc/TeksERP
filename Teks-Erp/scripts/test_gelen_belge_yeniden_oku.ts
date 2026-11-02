@@ -7,6 +7,7 @@
 //      boş başlık dolar, satırlar o taramayı taşır, yanıt `restored` REBUILT, audit `OCR_STORED` ham OCR taşımaz
 //   §2 satırı taslakta olan okunmuş sayfa yeniden okunmaz → 409 DOCUMENT_SCAN_ALREADY_READ
 //   §3 ⭐ eski sürümün bıraktığı boş taslak (okunmuş sayfa bağlı, satır yok): okuma özeti yeniden okutmayı söyler; okut → 202
+//      (§3e Gülkesim A: kayıtlı parti no / kurşun metresi yeniden okumayla ezilmez)
 //      PENDING/0, okuma işi 21 satırı ekler; ikinci okut 409
 //   §4 ⭐ eşzamanlı iki okut → tek geçiş, satırlar İKİLENMEZ (21), sidecar tek isabet
 //   §5 serbest okunmuş tarama okut → 409 ALREADY_READ · bağlı taslak DRAFT değil → 409 DELIVERY_NOTE_NOT_DRAFT · yalnız read → 403
@@ -164,6 +165,8 @@ async function main(): Promise<void> {
     await prisma.documentScan.update({ where: { id: s45 }, data: { noteId: noteC } });
     const oz = await call("GET", `/api/gelen-belge/irsaliyeler/${noteC}/okuma-ozeti`);
     check("§3a okuma özeti: READ + 0 satır → neden yeniden okutmayı söyler", oz.data?.state === "READ" && oz.data?.lineCount === 0 && /yeniden okutun/.test(String(oz.data?.reason)), JSON.stringify(oz.data?.reason));
+    // §3e (Gülkesim A): taslakta zaten kayıtlı makine değeri (kurşun 111 OUTPUT, parti no) yeniden okumayla EZİLMEZ.
+    await prisma.customerDeliveryNote.update({ where: { id: noteC }, data: { ourBatchNo: "ESKI-P", ourBatchNoKey: "fisNo", kursunMeters: new Prisma.Decimal(111), kursunMetersSource: "OUTPUT" } });
     const o3 = await okut(s45);
     const q3 = await scanRow(s45);
     check("§3b ⭐ okut → 202, tarama PENDING / deneme 0, aynı taslağa bağlı", o3.status === 202 && q3.status === "PENDING" && q3.attempts === 0 && q3.noteId === noteC, `${o3.status} ${o3.code} ${JSON.stringify(q3)}`);
@@ -171,6 +174,9 @@ async function main(): Promise<void> {
     await runReaderOnce();
     const nC = await noteRow(noteC);
     check("§3c okuma işi satırları boş taslağa yazar (21) + tarama READ", nC.lines.length === 21 && (await scanRow(s45)).status === "READ" && fake.hits === h3 + 1, `${nC.lines.length}`);
+    const k3e = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteC }, select: { ourBatchNo: true, ourBatchNoKey: true, kursunMeters: true, kursunMetersSource: true } });
+    check("§3e ⭐ yeniden okuma kayıtlı parti no ve kurşun metresini EZMEZ (satırlar yine gelir)",
+      k3e.ourBatchNo === "ESKI-P" && k3e.ourBatchNoKey === "fisNo" && Number(k3e.kursunMeters) === 111 && k3e.kursunMetersSource === "OUTPUT", JSON.stringify(k3e));
     const o3d = await okut(s45);
     check("§3d satırlar geldikten sonra ikinci okut → 409 ALREADY_READ", o3d.status === 409 && o3d.code === "DOCUMENT_SCAN_ALREADY_READ", `${o3d.status} ${o3d.code}`);
 

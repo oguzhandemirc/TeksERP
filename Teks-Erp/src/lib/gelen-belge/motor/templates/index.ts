@@ -3,7 +3,7 @@
 /**
  * Şablon yükleyici ve şablon doğrulayıcı. JSON dosyaları statik import ile yüklenir.
  */
-import type { DocumentTemplate } from "../types";
+import { BATCH_NO_CANDIDATE_KINDS, TABLE_TOTAL_SOURCE, type DocumentTemplate } from "../types";
 import genel from "./genel.json";
 import cekiListesiA from "./ceki-listesi-a.json";
 import cikisCekiListesi from "./cikis-ceki-listesi.json";
@@ -77,6 +77,7 @@ function validateBlockAndHeaderLine(t: Record<string, unknown>, errors: string[]
     if (!isObj(ht) || !["m", "kg", "count"].some((k) => ht[k] !== undefined)) errors.push("headerTotals en az bir alan (m/kg/count) ister");
     else for (const k of ["m", "kg", "count"]) if (ht[k] !== undefined) known([ht[k]], `headerTotals.${k}`);
   }
+  validateBatchAndMeters(t, keys, errors);
   const h = t.headerLine;
   if (h === undefined) return;
   if (!isObj(h)) { errors.push("headerLine nesne olmalı"); return; }
@@ -87,6 +88,29 @@ function validateBlockAndHeaderLine(t: Record<string, unknown>, errors: string[]
   if (h.en !== undefined) known(h.en, "headerLine.en");
   if (h.inputM !== undefined) known(h.inputM, "headerLine.inputM");
   if (h.inputKg !== undefined) known(h.inputKg, "headerLine.inputKg");
+}
+
+/** `batchNoCandidates` ve `meterSources` yalnız TANIMLI alanı (metrede ek olarak `$tableTotal`, tablo ister) gösterir. */
+function validateBatchAndMeters(t: Record<string, unknown>, keys: Set<unknown>, errors: string[]): void {
+  const c = t.batchNoCandidates;
+  if (c !== undefined) {
+    if (!Array.isArray(c) || c.length === 0) errors.push("batchNoCandidates boş olmayan dizi olmalı");
+    else c.forEach((x, i) => {
+      if (!isObj(x) || typeof x.field !== "string" || !keys.has(x.field)) errors.push(`batchNoCandidates[${i}]: bilinmeyen alan`);
+      else if (typeof x.kind !== "string" || !(BATCH_NO_CANDIDATE_KINDS as readonly string[]).includes(x.kind)) errors.push(`batchNoCandidates[${i}].kind bilinmiyor`);
+    });
+  }
+  const m = t.meterSources;
+  if (m === undefined) return;
+  if (!isObj(m)) { errors.push("meterSources nesne olmalı"); return; }
+  for (const [role, list] of Object.entries(m)) {
+    if (!["output", "total", "input"].includes(role)) { errors.push(`meterSources.${role} bilinmiyor`); continue; }
+    if (!Array.isArray(list)) { errors.push(`meterSources.${role} dizi olmalı`); continue; }
+    for (const k of list) {
+      if (k === TABLE_TOTAL_SOURCE) { if (t.tables === undefined) errors.push(`meterSources.${role}: ${TABLE_TOTAL_SOURCE} tablo ister`); }
+      else if (typeof k !== "string" || !keys.has(k)) errors.push(`meterSources.${role}: bilinmeyen alan ${String(k)}`);
+    }
+  }
 }
 
 function isObj(v: unknown): v is Record<string, unknown> {
