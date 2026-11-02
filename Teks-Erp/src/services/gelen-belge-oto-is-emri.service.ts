@@ -16,7 +16,8 @@ import { matchesPermission } from "../middlewares/rbac.middleware";
 import type { JwtPayload } from "../types/api.types";
 import { buildWorkOrderPlan, WORK_ORDER_PLAN_STATUSES, type PlanGroup } from "./gelen-belge-is-emri.service";
 import type { ApproveResult } from "./gelen-belge-onay.service";
-import { readAutoWorkOrderPatternless, readIncomingDocAutoWorkOrder, readProductionEnabled } from "./system-setting.service";
+import { readAutoWorkOrderPatternless, readIncomingDocAutoWorkOrder, readProductionEnabled, SETTING_KEYS } from "./system-setting.service";
+import { licenseModuleError } from "../lib/license/module-ceiling";
 import { WorkOrderService } from "./workorder.service";
 import { factoryRouteProblem } from "./gelen-belge-rota-onerisi.service";
 import { AppError } from "../utils/app-error";
@@ -77,7 +78,10 @@ export async function assertRouteOverride(routeTemplateId: string | undefined, a
   if (!hasWorkOrderPermission(actor)) {
     throw AppError.forbidden(`Seçilen rotayla ${IE.tekilKucuk} açma yetkiniz yok (workorder:write ya da mobile:hizli-is-emri); belge onaylanmadı.`, { code: "GELEN_BELGE_ROUTE_OVERRIDE_FORBIDDEN" });
   }
-  if (!(await readProductionEnabled())) throw AppError.forbidden(`Üretim modülü kapalı; ${IE.tekilKucuk} açılamaz, belge onaylanmadı.`, { code: "MODULE_DISABLED", module: "production" });
+  if (!(await readProductionEnabled())) {
+    throw licenseModuleError(SETTING_KEYS.PRODUCTION_ENABLED, "Üretim")
+      ?? AppError.forbidden(`Üretim modülü kapalı; ${IE.tekilKucuk} açılamaz, belge onaylanmadı.`, { code: "MODULE_DISABLED", module: "production" });
+  }
   const r = await factoryRouteProblem(routeTemplateId);
   if (r.problem) throw AppError.badRequest(`Seçilen rota şablonu (${r.name ?? "silinmiş"}) kullanılamıyor: ${r.problem}; belge onaylanmadı.`, { code: "GELEN_BELGE_ROUTE_OVERRIDE_INVALID" });
   return { routeTemplateId };
