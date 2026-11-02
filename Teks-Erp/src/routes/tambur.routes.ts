@@ -10,6 +10,7 @@ import { requireProductionEnabled } from "../middlewares/module.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { z } from "zod";
 import { correctCutReading } from "../services/tambur-meter-correct.service";
+import { getTamburLabelSettings } from "../services/helpers/tambur-customer-settings.helper";
 
 const controller = new TamburController();
 /** Saha düzeltmesi uçları (`/manual/*`) — ayrı controller, aynı router. */
@@ -954,6 +955,46 @@ router.post(
       const id = z.string().uuid("Geçersiz okuma ID").parse(req.params.id);
       const body = cutCorrectionSchema.parse(req.body);
       res.json(await correctCutReading(id, body, req.user?.userId));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/tambur/label-settings:
+ *   get:
+ *     tags: [Tambur]
+ *     summary: Kesim ekranı için müşteri tambur/etiket ayarları + basım zamanı
+ *     description: |
+ *       Müşteri = `customerId` (Kime?) verildiyse o, yoksa `rollId`'nin sahibi. Döner:
+ *       en kaynağı (null = güncel en), tartım zorunlu mu, bölme ölçüsü önerisi (m), fabrika
+ *       ayarı `tambur.labelPrintTiming` (EACH | END). Gülkesim S5.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: rollId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: customerId
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ customerId, widthSource, weighRequired, splitLengthM, printTiming }" }
+ *       404: { description: Top bulunamadı }
+ */
+const labelSettingsQuery = z.object({
+  rollId: z.string().uuid("Geçersiz top ID").optional(),
+  customerId: z.string().uuid("Geçersiz müşteri ID").optional(),
+});
+router.get(
+  "/label-settings",
+  verifyToken,
+  requireAnyPermission("quality:read", "mobile:tambur"),
+  async (req, res, next) => {
+    try {
+      const q = labelSettingsQuery.parse(req.query);
+      res.json({ success: true, data: await getTamburLabelSettings(q) });
     } catch (err) {
       next(err);
     }

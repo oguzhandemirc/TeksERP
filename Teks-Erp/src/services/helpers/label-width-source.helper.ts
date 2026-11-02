@@ -7,7 +7,7 @@
 // kartındadır; müşteri = etiketin müşterisi (Kime?), yoksa malın sahibi.
 // =============================================================================
 import type { Prisma } from "@prisma/client";
-import { prisma } from "../../lib/prisma";
+import prisma from "../../lib/prisma";
 import { readWidthTrace, WIDTH_TRACE_OPERATION_TYPES } from "./measured-width.helper";
 import { ACTIVE_OPERATION } from "./roll-operation.helper";
 

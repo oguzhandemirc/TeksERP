@@ -117,6 +117,9 @@ export const cutOpenFabricSchema = z.object({
   clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
   // D4-B1: kesim metresinin ölçüm kaynağı (eski APK göndermez → sapma kaynağı NULL).
   measure: meterSourceSchema.nullish(),
+  // Tamburda tartım (Gülkesim S5) — müşteri ayarı açıksa zorunlu (servis 400 TAMBUR_WEIGHT_REQUIRED).
+  // ⚠️ Zod tanımadığı anahtarı sessizce siler: bu satır düşerse kg hiç yazılmaz.
+  weightKg: z.number().positive("Tartım kg pozitif olmalı").max(100_000).nullish(),
   // Plan-gerçek sapma onayı — ⚠️ Zod tanımadığı anahtarı SESSİZCE SİLER: bu satır
   // düşerse mobil onayı gönderir, backend hiç görmez ve operatör onayladığı hâlde
   // 409'a çarpar (varianceReason dersinin aynısı).
@@ -175,6 +178,9 @@ export const cutWarehouseRollSchema = z.object({
   clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
   // D4-B1: kesim metresinin ölçüm kaynağı (eski APK göndermez → sapma kaynağı NULL).
   measure: meterSourceSchema.nullish(),
+  // Tamburda tartım (Gülkesim S5) — müşteri ayarı açıksa zorunlu (servis 400 TAMBUR_WEIGHT_REQUIRED).
+  // ⚠️ Zod tanımadığı anahtarı sessizce siler: bu satır düşerse kg hiç yazılmaz.
+  weightKg: z.number().positive("Tartım kg pozitif olmalı").max(100_000).nullish(),
 });
 
 // Kurşun Dağıtım (bypass) kapanışı — Tambur tabletinde refakat kartı okutulur,
