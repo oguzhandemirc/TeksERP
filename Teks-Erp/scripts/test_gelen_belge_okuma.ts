@@ -7,7 +7,7 @@
 //      (beyanla) http://okuma:8765 geçer; `allowPlainHttpServiceHost` tek çağıran `lib/gelen-belge/url.ts` (AST/grep)
 //   §2 servis yok: /okuma/durum "yok" · POST /taramalar/:id/oku → 503 OCR_SERVICE_UNAVAILABLE · iş ADRES_YOK, dış istek yok
 //   §3 4 altın fikstür → 4 DRAFT: 0245 2 blok 21 satır + BLOK BAŞINA beyan (5/141,70/586 · 16/819,20/3.935) ·
-//      0246 2 bölge (zarf) · 0244 needsReview satırlar · 0243 başlık (evrak 90779, 2026-10-15) · top doğmaz · audit'te ham OCR yok
+//      0245 satır işlemi kendi bloğundan (§3f2) · 0246 2 bölge (zarf) · 0244 needsReview satırlar · 0243 başlık (evrak 90779, 2026-10-15) · top doğmaz · audit'te ham OCR yok
 //   §4 sahte servis 5xx → tarama PENDING kalır (deneme sayacı artar), 3. denemede READ_FAILED, taslak doğmaz; okut → PENDING
 //   §5 Zod fail-closed: şema dışı gövde / 4xx → KALICI okunamadı (doğrudan READ_FAILED); okut + düzelince READ
 //   §6 iki iş aynı anda → tek okuma: `runReaderOnce` ikincisi MESGUL; iki eşzamanlı `claimNextScan` → tek CLAIMED; sidecar 1 isabet
@@ -206,7 +206,7 @@ async function main(): Promise<void> {
     const all = await Promise.all([s0, s46, s44, s43].map(scan));
     check("§3b 4 tarama READ + motor adı OcrResult.engine'den, sürüm başlıktan, süre + ocrResult zarfı (sidecar'sız yeniden çıkarım)", all.every((s) => s.status === "READ" && s.noteId && s.ocrEngine === "paddle" && s.ocrVersion === "0.0-test" && typeof s.ocrDurationMs === "number" && !!s.ocrResult), JSON.stringify(all.map((s) => [s.status, s.ocrEngine, s.ocrVersion, s.ocrDurationMs, !!s.ocrResult])));
     for (const s of all) if (s.noteId) made.notes.push(s.noteId);
-    const note = (id: string) => prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id }, select: { noteNo: true, status: true, sourceKind: true, ownerText: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, processText: true, declaredTopCount: true, totalsDeclared: true, warnings: true, lines: { select: { lineNo: true, blockNo: true, meters: true, weightKg: true, needsReview: true, confidence: true, sourceRects: true, senderRollNo: true }, orderBy: { lineNo: "asc" } } } });
+    const note = (id: string) => prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id }, select: { noteNo: true, status: true, sourceKind: true, ownerText: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, processText: true, declaredTopCount: true, totalsDeclared: true, warnings: true, lines: { select: { lineNo: true, blockNo: true, processText: true, meters: true, weightKg: true, needsReview: true, confidence: true, sourceRects: true, senderRollNo: true }, orderBy: { lineNo: "asc" } } } });
     const n45 = await note(all[0]!.noteId!);
     const blocks = (n45.totalsDeclared as { blocks: Array<{ blockNo: number; count: string; kg: string; m: string }> }).blocks;
     check("§3c 0245: DRAFT/OCR, GB numarası, 21 satır, 2 blok", n45.status === "DRAFT" && n45.sourceKind === "OCR" && /^GB/.test(n45.noteNo) && n45.lines.length === 21 && new Set(n45.lines.map((l) => l.blockNo)).size === 2, `${n45.noteNo} ${n45.lines.length}`);
@@ -214,6 +214,8 @@ async function main(): Promise<void> {
     const sumM = (b: number) => n45.lines.filter((l) => l.blockNo === b).reduce((a, l) => a + Math.round(Number(l.meters) * 1000), 0);
     check("§3e 0245: Σ satır = beyan (blok 1 586 m, blok 2 3935 m) · her satırda rect + güven", sumM(1) === 586000 && sumM(2) === 3935000 && n45.lines.every((l) => !!l.sourceRects && Number(l.confidence) > 0), JSON.stringify([n45.lines.filter((l) => l.blockNo === 1).reduce((a, l) => a + Number(l.meters), 0), n45.lines.filter((l) => l.blockNo === 2).reduce((a, l) => a + Number(l.meters), 0), n45.lines.map((l) => Number(l.confidence))]));
     check("§3f 0245: başlık fiş no, tarih, parti, işlem, '4 TOP' beyanı yalnız uyarı", n45.senderDocNo === "914279" && n45.senderDocDate?.toISOString().slice(0, 10) === "2026-10-19" && n45.customerBatchNo === "P9918733" && n45.processText === "KDK APRE" && n45.declaredTopCount === 4 && (n45.warnings as string[]).some((w) => w.startsWith("DECLARED_TOP_COUNT_DIFF")), JSON.stringify({ no: n45.senderDocNo, p: n45.customerBatchNo, w: n45.warnings }));
+    const proc45 = [...new Set(n45.lines.map((l) => `${l.blockNo}:${l.processText}`))].sort();
+    check("§3f2 0245: satır işlemi KENDİ bloğundan yazılır (blok 2 YUMUŞAK APRE; iş emri planı iki grubu ayırır) + BLOCK_IDS_DIFFER", JSON.stringify(proc45) === JSON.stringify(["1:KDK APRE", "2:YUMUŞAK APRE"]) && (n45.warnings as string[]).some((w) => w.startsWith("BLOCK_IDS_DIFFER")), JSON.stringify(proc45));
     const n46 = await note(all[1]!.noteId!);
     const env46 = all[1]!.ocrResult as { regions: Array<{ regionNo: number; templateId: string }> };
     check("§3g 0246: 2 bölge zarfta (cikis-ceki-listesi + urun-sevk-fisi), MULTI_REGION uyarısı, ARABA 241 m satırı", env46.regions.length === 2 && env46.regions[1]!.templateId === "urun-sevk-fisi" && (n46.warnings as string[]).some((w) => w.startsWith("MULTI_REGION")) && n46.lines.length === 1 && Number(n46.lines[0]!.meters) === 241, JSON.stringify(env46.regions));
@@ -356,7 +358,7 @@ async function main(): Promise<void> {
 
     // ── §8e–§8h üst üste binen çekim: aynı kâğıt iki parça çekilince ortak satır ikilenmez ──
     // §8e saf: aynı taramanın eşit iki satırı birbirini ELEMEZ; mevcut tek eşi yalnız BİR yeni satırı yutar; sıra no anahtar değildir.
-    const dl = (topNo: string | null, m: string, kg: string | null, siraNo?: string) => ({ blockNo: 1, lineKind: "TOP" as const, senderRollNo: topNo ?? siraNo ?? null, meters: m, weightKg: kg, widthCm: null, itemText: null, colorText: null, confidence: 1, needsReview: false, sourceRects: {}, ocrRaw: (topNo ? { topNo } : { siraNo: siraNo ?? null }) as Record<string, string | null> });
+    const dl = (topNo: string | null, m: string, kg: string | null, siraNo?: string) => ({ blockNo: 1, lineKind: "TOP" as const, senderRollNo: topNo ?? siraNo ?? null, meters: m, weightKg: kg, widthCm: null, itemText: null, colorText: null, processText: null, confidence: 1, needsReview: false, sourceRects: {}, ocrRaw: (topNo ? { topNo } : { siraNo: siraNo ?? null }) as Record<string, string | null> });
     const ex = (topNo: string, m: string, kg: string | null) => ({ senderRollNo: topNo, meters: m, weightKg: kg, ocrRaw: { topNo } });
     const o1 = dropOverlapDuplicates([dl("T1", "100", "20"), dl("T1", "100", "20")], [], 2);
     const o2 = dropOverlapDuplicates([dl("t 1", "100.00", "20.0"), dl("T1", "100", "20")], [ex("T1", "100", "20")], 2);

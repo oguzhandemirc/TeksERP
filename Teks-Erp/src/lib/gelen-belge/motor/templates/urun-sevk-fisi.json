@@ -122,6 +122,26 @@
       ]
     },
     {
+      "key": "girisAdet",
+      "label": "Giriş Adet",
+      "type": "integer",
+      "pattern": "^\\d{1,4}$",
+      "strategies": [
+        {
+          "kind": "anchor",
+          "labels": [
+            "GİRİŞ ADET"
+          ],
+          "direction": "right"
+        },
+        {
+          "kind": "regex",
+          "pattern": "G[İI]R[İI][ŞS]\\s*ADET\\s*:?\\s*(\\d{1,4})\\s*TOP",
+          "flags": "i"
+        }
+      ]
+    },
+    {
       "key": "girisToplamMt",
       "label": "Giriş Toplam MT",
       "type": "decimal",
@@ -254,5 +274,20 @@
         }
       ]
     }
-  ]
+  ],
+  "headerLine": {
+    "count": "girisAdet",
+    "m": [
+      "toplamMetre",
+      "girisToplamMt"
+    ],
+    "kg": [
+      "toplamKg",
+      "girisToplamKg"
+    ],
+    "en": [
+      "cikisMamulEn",
+      "girisMamulEn"
+    ]
+  }
 }

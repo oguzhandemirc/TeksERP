@@ -16,6 +16,8 @@
 //    −3°/375 px) düşer — gerçek fikstürlerde bağlantı tabanlı gruplama tan=0 ile de 21/21 verir, eğim payı D9'da
 //    ölçülür; totals.ts'te MISMATCH dalı kapatılınca §7b+§7g düşer; table.ts'te konumsal yedek (nearestBlock)
 //    kapatılınca §7h düşer. Hepsi git checkout ile geri alındı.
+//    (2026-11-02 §9) blok alanı çıkarımı kapatılınca §9a–c, bölge birleştirme kapatılınca §9d–g, şüpheli ızgara
+//    uyarısı kapatılınca §9j, adet > 1 kapısı kapatılınca §9g düşer.
 // =============================================================================
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -34,6 +36,7 @@ import {
   type OcrLine,
   type OcrResult,
 } from "../src/lib/gelen-belge/motor";
+import { draftFromExtraction, suspectGridSeqs } from "../src/lib/gelen-belge/taslak";
 
 let pass = 0;
 let fail = 0;
@@ -219,6 +222,56 @@ function kutu(text: string, x: number, y: number, w: number, h: number, angle: n
   check("§8a sentetik alt küme ≥ 60 belge", docs >= 60, String(docs));
   check("§8b sınıflandırma ≥ %95", clsOk / docs >= 0.95, `${clsOk}/${docs}`);
   check("§8c alan doğruluğu ≥ %93 (kabul eşiği)", dogruluk >= 0.93, `${okCount}/${total} = %${(dogruluk * 100).toFixed(1)}${kacaklar.length ? " | " + kacaklar.slice(0, 8).join(" | ") : ""}`);
+}
+
+// ── §9 Kurşun öncelikli OCR (2026-11-02): blok iş kimliği · tablosuz sevk fişi · el yazısı şüphe ──────
+{
+  // §9a–c: çeki listesinde her sipariş bloğu kendi İşlem/Parti/İş emri'ni taşır; başlık yalnız ilkini alıyordu.
+  const d45 = draftFromExtraction(extractDocument(gercek("0245-ceki-listesi-a"), sablonlar));
+  const bl = d45.header.regions[0]!.blocks ?? [];
+  check("§9a 0245 blok 2 kendi alanlarıyla okunur (sipariş 96966 · YUMUŞAK APRE · P9918734 · 99K-24750)",
+    bl.length === 2 && bl[0]!.fields.islem === "KDK APRE" && bl[1]!.fields.siparisNo === "96966" && bl[1]!.fields.islem === "YUMUŞAK APRE"
+      && bl[1]!.fields.hamPartiNo === "P9918734" && bl[1]!.fields.isEmriNo === "99K-24750", JSON.stringify(bl));
+  const proc = [...new Set(d45.lines.map((l) => `${l.blockNo}:${l.processText}`))];
+  check("§9b 0245 satır işlemi kendi bloğundan (iş emri planı iki grubu ayırır); başlık blok 1'de kalır",
+    JSON.stringify(proc) === JSON.stringify(["1:KDK APRE", "2:YUMUŞAK APRE"]) && d45.header.processText === "KDK APRE" && d45.header.customerBatchNo === "P9918733", JSON.stringify(proc));
+  check("§9c 0245 bloklar farklı iş kimliği → TEK BLOCK_IDS_DIFFER uyarısı",
+    d45.header.warnings.filter((w) => w.startsWith("BLOCK_IDS_DIFFER")).length === 1, d45.header.warnings.join(" | "));
+  const d43 = draftFromExtraction(extractDocument(gercek("0243-kesim-takip-formu"), sablonlar));
+  check("§9c2 tek bloklu/ızgaralı belgede satır işlemi null (bugünkü davranış)", d43.lines.every((l) => l.processText === null) && !d43.header.regions[0]!.blocks);
+
+  // §9d–g: ürün sevk fişi tek başına (0246'nın alt bölgesi = ayrı fotoğraf eşdeğeri).
+  const alt = splitRegions(gercek("0246-iki-belge"))[1]!.ocr;
+  const exAlt = extractDocument(alt, sablonlar);
+  check("§9d sevk fişindeki giriş/çıkış boşluğu ikinci belge sayılmaz (tek bölge, MULTI_REGION yok)",
+    exAlt.regions.length === 1 && exAlt.regions[0]!.templateId === "urun-sevk-fisi" && exAlt.warnings.length === 0, exAlt.regions.map((r) => r.templateId).join(","));
+  const dAlt = draftFromExtraction(exAlt);
+  const l0 = dAlt.lines[0];
+  check("§9e tablosuz sevk fişi → başlıktan TEK satır (çıkış toplamı 200 m / 36 kg / 325 cm), needsReview",
+    dAlt.lines.length === 1 && l0!.meters === "200" && l0!.weightKg === "36" && l0!.widthCm === "325" && l0!.needsReview,
+    JSON.stringify(dAlt.lines.map((l) => [l.meters, l.weightKg, l.widthCm])));
+  check("§9f iş kimliği başlıkta: sevk no 96399 · parti 167 · işlem '55 OPTIK BEYAZ'; adet okunamadı uyarısı",
+    dAlt.header.senderDocNo === "96399" && dAlt.header.customerBatchNo === "167" && dAlt.header.processText === "55 OPTIK BEYAZ"
+      && dAlt.header.warnings.some((w) => w.startsWith("HEADER_LINE_COUNT_UNREAD")), JSON.stringify(dAlt.header.warnings));
+  const cok = { ...exAlt, regions: exAlt.regions.map((r) => ({ ...r, fields: r.fields && { ...r.fields, fields: { ...r.fields.fields, girisAdet: { ...r.fields.fields.girisAdet!, value: "3" } } } })) };
+  const dCok = draftFromExtraction(cok);
+  check("§9g adet > 1 (top dökümü yok) → satır YOK + HEADER_LINE_SKIPPED", dCok.lines.length === 0 && dCok.header.warnings.some((w) => w.startsWith("HEADER_LINE_SKIPPED")), JSON.stringify(dCok.header.warnings));
+  const d46 = draftFromExtraction(extractDocument(gercek("0246-iki-belge"), sablonlar));
+  check("§9h iki belgeli fotoğrafta ikinci bölge aynı taslağa TOP EKLEMEZ (başka sahip); MULTI_REGION sürer; Kömürhan işlemi okunur",
+    d46.lines.length === 1 && d46.lines[0]!.meters === "241" && d46.header.warnings.some((w) => w.startsWith("MULTI_REGION")) && !!d46.header.processText,
+    JSON.stringify({ n: d46.lines.length, p: d46.header.processText }));
+  const sab = sablonlar.find((t) => t.id === "urun-sevk-fisi")!;
+  const bozukHL = validateTemplate({ ...sab, headerLine: { count: "yok", m: ["toplamMetre"] } });
+  check("§9i headerLine bilinmeyen alan anahtarını reddeder", !bozukHL.ok && bozukHL.errors.some((e) => e.includes("bilinmeyen alan yok")), bozukHL.errors.join(" | "));
+
+  // §9j–k: el yazısı — güven yanlış rakamı ayırmıyor; harf karışımı / medyan altı işareti ayırıyor (0244 gerçek fikstür, ölçüm 2026-11-02).
+  const d44 = draftFromExtraction(extractDocument(gercek("0244-kumas-irsaliyesi"), sablonlar));
+  const sus = d44.header.warnings.find((w) => w.startsWith("GRID_SUSPECT_VALUES")) ?? "";
+  check("§9j 0244 şüpheli hücreler = yanlış okunan 6 + sahte 1 (1,4,8,10,42,44,60); doğru okunan hiçbiri yok",
+    sus.startsWith("GRID_SUSPECT_VALUES: 1, 4, 8, 10, 42, 44, 60 "), sus);
+  check("§9k suspectGridSeqs: temiz sütunda işaret yok, harfli ham metin işaretlenir",
+    suspectGridSeqs([{ senderRollNo: "1", meters: "120", ocrRaw: { metre: "120" } }, { senderRollNo: "2", meters: "130", ocrRaw: { metre: "130" } }, { senderRollNo: "3", meters: "140", ocrRaw: { metre: "140" } }]).length === 0
+      && suspectGridSeqs([{ senderRollNo: "7", meters: "16", ocrRaw: { metre: "1G" } }]).join() === "7");
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

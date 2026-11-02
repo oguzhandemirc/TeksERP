@@ -15,6 +15,8 @@
       "strategies": [ { "kind": "anchor", "labels": ["Müşteri"], "direction": "right", "minLabelSimilarity": 0.9 } ] },
     { "key": "musteriPartiNo", "label": "Müşteri Parti No", "type": "text", "maxLength": 60, "postProcess": ["collapseSpaces", "trimPunct"],
       "strategies": [ { "kind": "anchor", "labels": ["Müş. Parti NO", "Müşteri Parti No"], "direction": "right" } ] },
+    { "key": "islem", "label": "İşlem", "type": "text", "maxLength": 60, "postProcess": ["collapseSpaces", "trimPunct"],
+      "strategies": [ { "kind": "anchor", "labels": ["İşlem"], "direction": "right", "minLabelSimilarity": 0.9 } ] },
     { "key": "musteriMt", "label": "Müşteri MT", "type": "decimal",
       "strategies": [ { "kind": "anchor", "labels": ["Müşteri MT"], "direction": "right" } ] },
     { "key": "musteriKg", "label": "Müşteri KG", "type": "decimal",
