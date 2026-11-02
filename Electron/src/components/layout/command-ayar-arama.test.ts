@@ -43,4 +43,8 @@ describe("palet: ayar araması", () => {
   it.each(["gelen belge ayar", "gelen belge ayarları", "Gelen Belge Ayarları"])('"%s" → Gelen Belge ayar bölümü ilk sırada', (q) => {
     expect(top(q).to).toBe("/system/feature-flags?tab=gelen-belge");
   });
+
+  it.each(["belge geneli", "müşteri mt"])('"%s" → Gelen Belge ayar bölümü ilk sırada (belge geneli beyan kipi)', (q) => {
+    expect(top(q).to).toBe("/system/feature-flags?tab=gelen-belge");
+  });
 });

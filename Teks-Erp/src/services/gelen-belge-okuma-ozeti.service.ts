@@ -3,14 +3,15 @@
 // =============================================================================
 // Tablet (Belge Tara, `gelen-belge:write`) taslağı doğurup sayfaları yükler ama `gelen-belge:read` taşımaz; okumanın
 // bittiğini bu özetten izler. Durum + Türkçe neden SUNUCUDA türetilir (istemci kural yazmaz); toplam kapısı onayın
-// AYNI saf helper'ından (`totalMismatches`/`totalWarnings`) — ikinci toplam mantığı yok. Yazmaz, audit'e düşmez.
+// AYNI saf helper'ından (`totalsCheck`, aynı belge geneli kipiyle) — ikinci toplam mantığı yok. Yazmaz, audit'e düşmez.
 // =============================================================================
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { getReaderUrl } from "../lib/gelen-belge/url";
 import { PDF_MIME } from "./gelen-belge-scan.service";
 import { READ_MAX_ATTEMPTS } from "./gelen-belge-okuma.service";
-import { totalMismatches, totalWarnings } from "./gelen-belge-onay.service";
+import { hasDocumentDeclared, totalsCheck } from "./gelen-belge-kontrol.service";
+import { readDocumentTotalCheck } from "./system-setting.service";
 import { noteNotices } from "../lib/gelen-belge/uyari";
 
 export type ReadSummaryState = "NO_PAGES" | "READING" | "NO_SERVICE" | "READ" | "PARTIAL" | "FAILED";
@@ -80,7 +81,8 @@ export async function getReadSummary(noteId: string) {
   const decl = note.totalsDeclared as { blocks?: unknown[]; document?: unknown } | null;
   // Belge geneli başlık beyanı (ör. "Müşteri MT") da beyandır — kapı onu da kıyaslar.
   const declared = (Array.isArray(decl?.blocks) && decl.blocks.length > 0) || !!decl?.document;
-  const mismatches = declared ? totalMismatches(note, note.lines) : [];
+  // Kip onayla AYNI: INFO'da belge geneli fark `warnings`e düşer, `ok`u bozmaz.
+  const tc = totalsCheck(note, note.lines, { documentMode: hasDocumentDeclared(note.totalsDeclared) ? await readDocumentTotalCheck() : "INFO" });
   return {
     noteId: note.id,
     noteNo: note.noteNo,
@@ -91,8 +93,8 @@ export async function getReadSummary(noteId: string) {
     lineCount: live.length,
     reviewCount: live.filter((l) => l.needsReview).length,
     // ok: null = belgede toplam beyanı yok (kıyas yapılamaz); true/false onay kapısının cevabı.
-    totals: { declared, ok: declared ? mismatches.length === 0 : null, mismatches },
-    warnings: totalWarnings(note, note.lines),
+    totals: { declared, ok: declared ? tc.mismatches.length === 0 : null, mismatches: declared ? tc.mismatches : [] },
+    warnings: tc.warnings,
     // Okuma uyarıları — panel detayıyla AYNI helper (`noteNotices`); eski tablet alanı yok sayar.
     notices: noteNotices(note.warnings),
   };

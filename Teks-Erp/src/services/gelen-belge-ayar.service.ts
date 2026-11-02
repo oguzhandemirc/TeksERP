@@ -1,7 +1,7 @@
 // =============================================================================
 // TeksERP — Gelen belge AYARLARI (hizmet ekseni E3; TASARIM-KARARI §8 HİZMET EKSENİ (1))
 // =============================================================================
-// Sekiz fabrika ayarı, TEK yazar `PUT /api/gelen-belge/ayarlar` (ham `PUT /api/admin/settings/:key` bu anahtarları
+// Dokuz fabrika ayarı, TEK yazar `PUT /api/gelen-belge/ayarlar` (ham `PUT /api/admin/settings/:key` bu anahtarları
 // REDDEDER — doğrulamasız düz metin yazıp ürün kapısını dolanmasın):
 //   · `gelenBelge.defaultItemId` — ürünü seçilmemiş satır onayda bu ürünle doğar (boş = bugünkü: 400 UNRESOLVED)
 //   · `gelenBelge.unreviewedApproval` — needsReview satır varken onay: WARN (varsayılan, geçer) | BLOCK_SUSPECT (yalnız
@@ -12,6 +12,7 @@
 //   · `gelenBelge.handwritingOutlierFactor` — el yazısı şüpheli metre oranı K (2–20; boş = 4)
 //   · `gelenBelge.headerLineMeterSource` — tablosuz belgede satır metresi: OUTPUT çıkış (varsayılan, bugünkü) | INPUT giriş
 //   · `gelenBelge.autoSenderFromTemplate` — okunan şablonun gönderen carisi boş gönderene yazılır (varsayılan kapalı)
+//   · `gelenBelge.documentTotalCheck` — belge geneli beyan farkı: INFO (varsayılan, bilgi + uyarı) | REQUIRE_REASON (gerekçesiz 409)
 // Ürün kapısı tek karar: yaşam döngüsü `assertItemUsable(NEW_STOCK)` + top doğurabilen tür ALLOWLIST'i
 // (`ROLL_BEARING_ITEM_TYPES`; yeni tür — ör. SERVICE — eklendiği gün kendiliğinden dışarıda kalır).
 // =============================================================================
@@ -40,6 +41,10 @@ import {
   DEFAULT_HEADER_LINE_METER_SOURCE,
   HEADER_LINE_METER_SOURCE_VALUES,
   type HeaderLineMeterSource,
+  readDocumentTotalCheck,
+  DEFAULT_DOCUMENT_TOTAL_CHECK,
+  DOCUMENT_TOTAL_CHECK_VALUES,
+  type DocumentTotalCheckMode,
   readUnreviewedApprovalMode,
   systemSettingService,
   type UnreviewedApprovalMode,
@@ -58,6 +63,7 @@ export const INCOMING_DOC_DEDICATED_SETTING_KEYS: ReadonlySet<string> = new Set(
   SETTING_KEYS.GELEN_BELGE_OUTLIER_FACTOR,
   SETTING_KEYS.GELEN_BELGE_HEADER_LINE_SOURCE,
   SETTING_KEYS.GELEN_BELGE_AUTO_SENDER,
+  SETTING_KEYS.GELEN_BELGE_DOCUMENT_TOTAL_CHECK,
 ]);
 
 export interface DefaultItemView {
@@ -87,6 +93,9 @@ export interface IncomingDocSettings {
   defaultHeaderLineMeterSource: HeaderLineMeterSource;
   /** Okunan şablonun gönderen carisi boş gönderen alanına yazılır mı (varsayılan false). */
   autoSenderFromTemplate: boolean;
+  /** Belge geneli beyan (Müşteri MT) farkı: INFO bilgi (onay geçer) | REQUIRE_REASON gerekçe ister. */
+  documentTotalCheck: DocumentTotalCheckMode;
+  defaultDocumentTotalCheck: DocumentTotalCheckMode;
 }
 
 /**
@@ -136,6 +145,8 @@ export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
     headerLineMeterSource: await readHeaderLineMeterSource(),
     defaultHeaderLineMeterSource: DEFAULT_HEADER_LINE_METER_SOURCE,
     autoSenderFromTemplate: await readIncomingDocAutoSender(),
+    documentTotalCheck: await readDocumentTotalCheck(),
+    defaultDocumentTotalCheck: DEFAULT_DOCUMENT_TOTAL_CHECK,
   };
 }
 
@@ -151,6 +162,7 @@ export interface IncomingDocSettingsInput {
   handwritingOutlierFactor?: number | null;
   headerLineMeterSource?: HeaderLineMeterSource;
   autoSenderFromTemplate?: boolean;
+  documentTotalCheck?: DocumentTotalCheckMode;
 }
 
 /** Yazım: ürün doğrulaması 400 `GELEN_BELGE_DEFAULT_ITEM_INVALID`; audit `systemSettingService.set` içinde. */
@@ -201,7 +213,7 @@ export async function updateIncomingDocSettings(input: IncomingDocSettingsInput,
   return getIncomingDocSettings();
 }
 
-/** Okuma seçenekleri (S5 metre kaynağı · S3b şablondan gönderen) — yeni okumaya uygulanır, taslağı geriye dönük değiştirmez. */
+/** Okuma seçenekleri (S5 metre kaynağı · S3b şablondan gönderen · belge geneli beyan kipi) — yeni okumaya uygulanır, taslağı geriye dönük değiştirmez. */
 async function updateReadOptions(input: IncomingDocSettingsInput, userId: string): Promise<void> {
   if (input.headerLineMeterSource !== undefined) {
     if (!HEADER_LINE_METER_SOURCE_VALUES.includes(input.headerLineMeterSource)) {
@@ -211,6 +223,12 @@ async function updateReadOptions(input: IncomingDocSettingsInput, userId: string
   }
   if (input.autoSenderFromTemplate !== undefined) {
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_AUTO_SENDER, input.autoSenderFromTemplate, "Gelen belge: okunan şablonun gönderen carisi boş gönderen alanına yazılır", userId);
+  }
+  if (input.documentTotalCheck !== undefined) {
+    if (!DOCUMENT_TOTAL_CHECK_VALUES.includes(input.documentTotalCheck)) {
+      throw AppError.badRequest("Geçersiz seçenek: INFO ya da REQUIRE_REASON olmalı.", { code: "VALIDATION_ERROR" });
+    }
+    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_DOCUMENT_TOTAL_CHECK, input.documentTotalCheck, "Gelen belge: belge geneli beyan (Müşteri MT) farkı (INFO bilgi / REQUIRE_REASON gerekçe ister)", userId);
   }
 }
 

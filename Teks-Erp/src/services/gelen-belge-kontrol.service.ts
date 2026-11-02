@@ -7,7 +7,7 @@
 // =============================================================================
 import { DeliveryNoteLineStatus, Prisma } from "@prisma/client";
 import { SUSPECT_MARK } from "../lib/gelen-belge/taslak";
-import type { UnreviewedApprovalMode } from "./system-setting.service";
+import type { DocumentTotalCheckMode, UnreviewedApprovalMode } from "./system-setting.service";
 
 /** Beyan edilen kg/m ile satır toplamı arasındaki hoşgörü (OCR ondalık kaybı; adet HOŞGÖRÜSÜZ). */
 export const TOTAL_TOLERANCE = 0.005;
@@ -41,6 +41,8 @@ export interface BlockCheck {
 /** Başlıktaki belge geneli beyan (ör. "Müşteri MT") ↔ Σ bütün canlı satırlar; etiket alan başına belgedeki addır. */
 export interface DocumentCheck extends Omit<BlockCheck, "blockNo"> {
   labels: Partial<Record<TotalField, string>>;
+  /** Fark onayı engeller mi — `gelenBelge.documentTotalCheck=REQUIRE_REASON`ta true; INFO (varsayılan) farkı yalnız uyarıdır. */
+  blocking: boolean;
 }
 export interface TotalsCheck {
   /** null = hiç beyan yok; false = kapı TOTAL_MISMATCH verir (gerekçesiz). */
@@ -51,7 +53,7 @@ export interface TotalsCheck {
   document: DocumentCheck | null;
   /** Kapının 409 `TOTAL_MISMATCH` metinleri (bayt-aynı). */
   mismatches: string[];
-  /** Başlık top adedi ↔ satır sayısı — yalnız uyarı. */
+  /** Başlık top adedi ↔ satır sayısı + INFO kipinde belge geneli fark — yalnız uyarı. */
   warnings: string[];
 }
 
@@ -98,41 +100,57 @@ function checkDeclaredBlock(b: DeclaredBlock, live: ReadonlyArray<TotalLine>, ou
 
 type DeclaredDocument = DeclaredBlock & { labels?: Partial<Record<TotalField, string>> };
 
-/** Belge geneli beyan ↔ Σ BÜTÜN canlı satırlar (bloklardan bağımsız); beyan yoksa null. */
-function checkDocument(d: DeclaredDocument | null | undefined, live: ReadonlyArray<TotalLine>, out: string[]): DocumentCheck | null {
+/** Belge geneli beyan ↔ Σ BÜTÜN canlı satırlar (bloklardan bağımsız); beyan yoksa null. Fark metni `out`a (kipe göre mismatches ya da warnings). */
+function checkDocument(d: DeclaredDocument | null | undefined, live: ReadonlyArray<TotalLine>, out: string[], blocking: boolean): DocumentCheck | null {
   if (!d || typeof d !== "object") return null;
   const labels = d.labels && typeof d.labels === "object" ? d.labels : {};
   const s = { count: live.length, m: live.reduce((a, l) => a + Number(l.meters), 0), kg: live.reduce((a, l) => a + Number(l.weightKg ?? 0), 0) };
   const r = compareDeclared(d, s, (f) => `Belge geneli${labels[f] ? ` (${labels[f]})` : ""}`, out);
-  return r.declared ? { ...r, labels } : null;
+  return r.declared ? { ...r, labels, blocking } : null;
+}
+
+/** Belge geneli beyan var mı — çağıran kip ayarını YALNIZ o zaman okur (beyansız belgede DB turu yok). */
+export function hasDocumentDeclared(totalsDeclared: unknown): boolean {
+  const d = (totalsDeclared as { document?: unknown } | null)?.document;
+  return !!d && typeof d === "object";
+}
+
+export interface TotalsCheckOptions {
+  /** Belge geneli beyan farkı: INFO (varsayılan = bugünkü; uyarı, kapı geçer) | REQUIRE_REASON (mismatches → 409). */
+  documentMode?: DocumentTotalCheckMode;
 }
 
 /**
  * Toplam kapısı (SERT) — Σ satır ↔ blok başına beyan (T.Adet/kg/m) + belge geneli başlık beyanı (`document`), SKIPPED sayılmaz. Beyanlı bloklar beyan
- * sırasıyla, satırı olup beyanı olmayan bloklar (doğrulanamaz) sonra gelir. `mismatches` boşsa kapı geçer.
+ * sırasıyla, satırı olup beyanı olmayan bloklar (doğrulanamaz) sonra gelir. `mismatches` boşsa kapı geçer. Belge geneli fark
+ * yalnız `documentMode=REQUIRE_REASON`ta kapıdır; INFO'da `warnings`e düşer ve `ok`u bozmaz.
  */
-export function totalsCheck(note: { totalsDeclared: unknown; declaredTopCount: number | null }, lines: ReadonlyArray<TotalLine>): TotalsCheck {
+export function totalsCheck(note: { totalsDeclared: unknown; declaredTopCount: number | null }, lines: ReadonlyArray<TotalLine>, opts: TotalsCheckOptions = {}): TotalsCheck {
   const live = lines.filter((l) => l.status !== "SKIPPED");
+  const blocking = opts.documentMode === "REQUIRE_REASON";
   const mismatches: string[] = [];
+  const docNotes: string[] = [];
   const decl = note.totalsDeclared as { blocks?: DeclaredBlock[]; document?: DeclaredDocument } | null;
   const raw = decl?.blocks;
   const declaredBlocks = Array.isArray(raw) ? raw : [];
   const blocks = declaredBlocks.map((b) => checkDeclaredBlock(b, live, mismatches));
-  const document = checkDocument(decl?.document, live, mismatches);
+  const document = checkDocument(decl?.document, live, blocking ? mismatches : docNotes, blocking);
   const seen = new Set(blocks.map((b) => b.blockNo));
   for (const blockNo of [...new Set(live.map((l) => l.blockNo))].sort((a, b) => a - b)) {
     if (seen.has(blockNo)) continue;
     const s = sumBlock(live, blockNo);
     blocks.push({ blockNo, lines: { count: s.count, m: round3(s.m), kg: round3(s.kg) }, declared: null, diffs: [], ok: null });
   }
-  const all = document ? [...blocks, document] : blocks;
+  // INFO'da belge beyanı kapı hükmüne yalnız "beyan var, geçer" olarak girer (ok=null "beyan yok" demesin).
+  const docGate = document && !blocking && document.ok === false ? { ...document, ok: true } : document;
+  const all = docGate ? [...blocks, docGate] : blocks;
   const ok = all.some((b) => b.ok === false) ? false : all.some((b) => b.ok === true) ? true : null;
-  return { ok, tolerance: TOTAL_TOLERANCE, blocks, document, mismatches, warnings: totalWarnings(note, lines) };
+  return { ok, tolerance: TOTAL_TOLERANCE, blocks, document, mismatches, warnings: [...totalWarnings(note, lines), ...docNotes] };
 }
 
 /** Kapının uyuşmazlık listesi — `totalsCheck`ten türer (ikinci hesap yok). */
-export function totalMismatches(note: { totalsDeclared: unknown }, lines: ReadonlyArray<TotalLine>): string[] {
-  return totalsCheck({ totalsDeclared: note.totalsDeclared, declaredTopCount: null }, lines).mismatches;
+export function totalMismatches(note: { totalsDeclared: unknown }, lines: ReadonlyArray<TotalLine>, opts: TotalsCheckOptions = {}): string[] {
+  return totalsCheck({ totalsDeclared: note.totalsDeclared, declaredTopCount: null }, lines, opts).mismatches;
 }
 
 // ── Satır sorunları ─────────────────────────────────────────────────────────

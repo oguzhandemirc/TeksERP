@@ -79,13 +79,33 @@ describe("şüpheli metre hücresi", () => {
 describe("belge geneli beyan kartı", () => {
   const base: TotalsCheck = { ok: false, tolerance: 0.005, blocks: [{ blockNo: 1, lines: { count: 1, m: 241, kg: 734 }, declared: { count: null, m: 241, kg: 734 }, diffs: [], ok: true }], mismatches: ["Belge geneli (Müşteri MT): beyan 238 m, satır toplamı 241.000 m."], warnings: [] };
 
-  it("⭐ 'Müşteri MT 238' ↔ satır 241 → kırmızı kart, etiket ve fark", () => {
-    renderWithProviders(<TotalsStrip check={{ ...base, document: { lines: { count: 1, m: 241, kg: 734 }, declared: { count: null, m: 238, kg: null }, diffs: [{ field: "m", declared: 238, actual: 241, diff: 3 }], ok: false, labels: { m: "Müşteri MT" } } }} />);
+  const doc = (blocking?: boolean): NonNullable<TotalsCheck["document"]> => ({ lines: { count: 1, m: 241, kg: 734 }, declared: { count: null, m: 238, kg: null }, diffs: [{ field: "m", declared: 238, actual: 241, diff: 3 }], ok: false, labels: { m: "Müşteri MT" }, blocking });
+
+  it("⭐ REQUIRE_REASON (blocking) 'Müşteri MT 238' ↔ satır 241 → kırmızı kart, etiket ve fark", () => {
+    renderWithProviders(<TotalsStrip check={{ ...base, document: doc(true) }} />);
     expect(screen.getByTestId("totals-verdict")).toHaveTextContent("Toplamlar tutmuyor");
     const card = screen.getByTestId("block-document");
     expect(card.dataset.ok).toBe("false");
+    expect(card.className).toContain("border-destructive");
     expect(card).toHaveTextContent("Belge geneli (Müşteri MT)");
+    expect(card).not.toHaveTextContent("onayı engellemez");
     expect(within(card).getByText("Metre: beyan 238 m, satırlar 241 m (fark +3 m)")).toBeInTheDocument();
+  });
+
+  it("⭐ INFO (varsayılan, blocking=false) → amber bilgi kartı 'onayı engellemez', şerit tutuyor", () => {
+    const warn = "Belge geneli (Müşteri MT): beyan 238 m, satır toplamı 241.000 m.";
+    renderWithProviders(<TotalsStrip check={{ ...base, ok: true, mismatches: [], warnings: [warn], document: doc(false) }} />);
+    expect(screen.getByTestId("totals-verdict")).toHaveTextContent("Toplamlar tutuyor");
+    const card = screen.getByTestId("block-document");
+    expect(card.className).toContain("border-amber-500");
+    expect(card.className).not.toContain("border-destructive");
+    expect(card).toHaveTextContent("Bilgi — onayı engellemez");
+    expect(screen.getByText(`${warn} (uyarı)`)).toBeInTheDocument();
+  });
+
+  it("eski backend (blocking yok) farkı kırmızı gösterir", () => {
+    renderWithProviders(<TotalsStrip check={{ ...base, document: doc(undefined) }} />);
+    expect(screen.getByTestId("block-document").className).toContain("border-destructive");
   });
 
   it("eski backend (document yok) → kart çizilmez", () => {

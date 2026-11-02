@@ -23,10 +23,11 @@ import { reserveSeriesNo } from "./helpers/series-counter-store.helper";
 import { PDF_MIME, SCAN_SELECT } from "./gelen-belge-scan.service";
 import { applyStoredReadsTx, auditPhotoSource, auditStoredReads, markPhotoSourceTx, prepareStoredReads, type StoredReadOutcome } from "./gelen-belge-taslak-doldur.service";
 import { LINE_SELECT, lineColumns, notDraft, text, type DeliveryNoteLineInput } from "./gelen-belge-line.service";
-import { lineItemFallback, lineProblems, totalsCheck } from "./gelen-belge-kontrol.service";
+import { hasDocumentDeclared, lineItemFallback, lineProblems, totalsCheck } from "./gelen-belge-kontrol.service";
 import { resolveEffectiveDefaultItem, usableDefaultItem } from "./gelen-belge-varsayilan.service";
 import { noteNotices } from "../lib/gelen-belge/uyari";
 import { sameBatchNotes } from "./gelen-belge-parti-tekrar.service";
+import { readDocumentTotalCheck } from "./system-setting.service";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const SERIES_KEY = "customerDeliveryNote";
@@ -150,7 +151,9 @@ export async function getDeliveryNote(id: string) {
   // Taslak uyarıları (okuma özetiyle AYNI helper): eski istemci alanı yok sayar.
   // Aynı müşteri partisinin başka belgeleri (bilgi, engel değil); eski istemci alanı yok sayar.
   const sameBatch = await sameBatchNotes(note);
-  return { ...note, lines, totalsCheck: totalsCheck(note, note.lines), notices: noteNotices(note.warnings), cariHold, sameBatch };
+  // Belge geneli kip onayla AYNI okuyucudan; beyansız belgede ayar okunmaz.
+  const documentMode = hasDocumentDeclared(note.totalsDeclared) ? await readDocumentTotalCheck() : "INFO";
+  return { ...note, lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch };
 }
 
 /** Liste where'i — özet şeridi de BUNDAN türer (durum süzgeci hariç; şerit duruma göre sayar). */

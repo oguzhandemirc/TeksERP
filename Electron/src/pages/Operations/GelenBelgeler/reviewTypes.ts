@@ -16,8 +16,17 @@ export interface BlockCheck {
   ok: boolean | null;
 }
 /** Başlıktaki belge geneli beyan (ör. "Müşteri MT") ↔ bütün satırlar; etiket alan başına. */
+/** Belge geneli beyan farkı kipi (fabrika ayarı) — backend `DocumentTotalCheckMode` aynası. */
+export type DocumentTotalCheckMode = "INFO" | "REQUIRE_REASON";
+/** `IncomingDocumentSettings` parçası (types.ts boyut tavanı); eski backend göndermez → ayar alanı çizilmez. */
+export interface DocumentTotalCheckSettings {
+  documentTotalCheck?: DocumentTotalCheckMode;
+  defaultDocumentTotalCheck?: DocumentTotalCheckMode;
+}
 export interface DocumentCheck extends Omit<BlockCheck, "blockNo"> {
   labels: Partial<Record<TotalDiff["field"], string>>;
+  /** false = fabrika ayarı INFO: fark yalnız bilgi, onayı engellemez. Eski backend göndermez (undefined = engeller). */
+  blocking?: boolean;
 }
 export interface TotalsCheck {
   ok: boolean | null;

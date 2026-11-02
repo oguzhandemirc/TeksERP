@@ -50,17 +50,17 @@ export function TotalsStrip({ check }: { check: TotalsCheck | undefined }) {
 /** Başlıktaki belge geneli beyan (ör. "Müşteri MT 238") ↔ bütün satırlar — hüküm backend `totalsCheck.document`. */
 function DocumentCard({ doc }: { doc: DocumentCheck }) {
   const names = Object.values(doc.labels).filter(Boolean).join(" · ");
+  // Fabrika ayarı INFO (varsayılan): fark bilgi tonunda, onayı engellemez; eski backend `blocking` göndermez → kırmızı.
+  const info = doc.ok === false && doc.blocking === false;
+  const tone = info ? "border-amber-500 bg-amber-500/10" : doc.ok === false ? "border-destructive bg-destructive/10" : doc.ok ? "border-emerald-500 bg-emerald-500/10" : "bg-muted/40";
   return (
-    <div
-      data-testid="block-document"
-      data-ok={doc.ok === null ? "unknown" : String(doc.ok)}
-      className={`rounded-md border px-3 py-2 text-xs ${doc.ok === false ? "border-destructive bg-destructive/10" : doc.ok ? "border-emerald-500 bg-emerald-500/10" : "bg-muted/40"}`}
-    >
+    <div data-testid="block-document" data-ok={doc.ok === null ? "unknown" : String(doc.ok)} data-blocking={String(doc.blocking !== false)} className={`rounded-md border px-3 py-2 text-xs ${tone}`}>
       <div className="font-medium">Belge geneli{names ? ` (${names})` : ""}</div>
       <div className="tabular-nums">{blockSummary({ blockNo: 0, ...doc })}</div>
       {doc.ok === true && <div className="text-emerald-700 dark:text-emerald-400">Beyanla tutuyor</div>}
+      {info && <div className="text-amber-800 dark:text-amber-300">Bilgi — onayı engellemez</div>}
       {doc.diffs.map((d) => (
-        <div key={d.field} className="text-destructive tabular-nums">
+        <div key={d.field} className={`${info ? "text-amber-800 dark:text-amber-300" : "text-destructive"} tabular-nums`}>
           {describeDiff(d)}
         </div>
       ))}

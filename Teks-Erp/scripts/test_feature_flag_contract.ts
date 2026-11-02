@@ -614,6 +614,11 @@ async function main() {
       file: "Electron/src/pages/GeneralSettings/GelenBelgeReadOptionsField.tsx",
       needle: "gb-auto-sender",
     },
+    GELEN_BELGE_DOCUMENT_TOTAL_CHECK: {
+      why: "Belge geneli beyan farkı kipi (INFO varsayılan | REQUIRE_REASON) — aynı doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; onay/detay/okuma özeti okur; flag yüküne konmaz",
+      file: "Electron/src/pages/GeneralSettings/GelenBelgeReadOptionsField.tsx",
+      needle: "gb-document-total-check",
+    },
     SYSTEM_INSTALLATION_ID: {
       why: "Feature flag değil, kurulum kimliği — panel yüzeyi YOK (bilinçli); boot işi üretir, /api/discovery/identity okur",
       file: "Teks-Erp/src/jobs/installation-identity.job.ts",

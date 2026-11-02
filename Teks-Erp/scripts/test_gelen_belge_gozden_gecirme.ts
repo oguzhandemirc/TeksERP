@@ -19,12 +19,14 @@
 //   §9 aynı müşteri partisi (`sameBatch`): aynı sahip + trim'li parti no, iptal ve kendisi hariç; başka sahip/partisiz → null
 //   §10 demo 2. tur: varsayılan ürünle girecek satır ITEM_UNRESOLVED DEĞİL (saf + HTTP; `itemFallback` bilgisi; kullanılamaz
 //      varsayılan / varsayılansız → sorunlu kalır; müşteri varsayılanı fabrikayı ezer; onay kapısı aynı kümeyle geçer)
-//   §11 demo 2. tur: belge geneli başlık beyanı ("Müşteri MT 238" ↔ satır 241) toplam kapısına bağlı (saf + HTTP + okuma özeti)
+//   §11 demo 2. tur: belge geneli başlık beyanı ("Müşteri MT 238" ↔ satır 241), kip `gelenBelge.documentTotalCheck`: INFO (varsayılan)
+//      fark uyarı + gerekçesiz onay geçer (gerçek top doğar); REQUIRE_REASON 409 TOTAL_MISMATCH (saf + HTTP + okuma özeti + ayar ucu)
 // NEGATİF SONDA (2026-11-02): `lineProblems` SUSPECT_VALUE kapatılınca §6e + §7b; `noteNotices` tekrar süzgeci
 //   kapatılınca §6a + §6c + §7a2 (ikinci okuma ikilemesi) düşer. `reviewGate` BLOCK_SUSPECT dalı kapatılınca §8a + §8c;
 //   precheck `ocrRaw` seçimi kaldırılınca §8c; `sameBatchNotes` iptal süzgeci kaldırılınca §9a düşer.
 //   (demo 2. tur 2026-11-02) `lineProblems` varsayılan dalı kapatılınca §10a–c + §10e; `checkDocument` kapatılınca §11a–d;
-//   okuma özetinde belge beyanı sayılmayınca §11d düşer — ÖLÇÜLDÜ, geri alındı.
+//   okuma özetinde belge beyanı sayılmayınca §11d düşer — ÖLÇÜLDÜ, geri alındı. (ayar) `readDocumentTotalCheck` sabit "INFO"
+//   dönünce §11f–h; precheck kip okumayı kaldırınca §11f + §11h — ÖLÇÜLDÜ, geri alındı.
 // Emsal: scripts/test_gelen_belge_onay.ts (app.listen(0) + ensureTestAdmin).
 // =============================================================================
 import type { AddressInfo } from "net";
@@ -59,7 +61,7 @@ const made = { customers: [] as string[], notes: [] as string[], items: [] as st
 type DLine = { id: string; lineNo: number; problems?: string[] };
 type TC = { ok: boolean | null; mismatches: string[]; blocks: Array<{ blockNo: number; ok: boolean | null; diffs: Array<{ field: string; diff: number | null }> }> };
 type Detail = { id: string; updatedAt: string; lines: DLine[]; totalsCheck?: TC };
-type Resp = { status: number; code?: string; details?: Record<string, unknown>; data?: unknown };
+type Resp = { status: number; code?: string; details?: Record<string, unknown>; data?: unknown; warnings?: string[] };
 
 const L = (blockNo: number, meters: number, status: TotalLine["status"] = "PENDING", weightKg: number | null = null): TotalLine => ({ blockNo, meters, weightKg, status });
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -161,21 +163,21 @@ async function main(): Promise<void> {
   section1();
   section2();
   section6();
-  const keys = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_OUTLIER_FACTOR];
+  const keys = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_OUTLIER_FACTOR, SETTING_KEYS.GELEN_BELGE_DOCUMENT_TOTAL_CHECK];
   const prior = await prisma.systemSetting.findMany({ where: { key: { in: keys } }, select: { key: true, value: true } });
   const admin = await ensureTestAdmin({ password: kosumaOzguParola() });
   const server = await new Promise<Server>((resolve) => { const s = app.listen(0, "127.0.0.1", () => resolve(s)); });
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   try {
     for (const k of [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED]) await prisma.systemSetting.upsert({ where: { key: k }, create: { key: k, value: true }, update: { value: true } });
-    await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID } });
+    await prisma.systemSetting.deleteMany({ where: { key: { in: [SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_DOCUMENT_TOTAL_CHECK] } } });
     const r0 = await fetch(`${url}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: admin.username, password: admin.password, clientType: "electron" }) });
     const tk = ((await r0.json()) as { data?: { token?: string } }).data?.token ?? "";
     check("admin login", tk.length > 0);
     const call = async (method: string, p: string, body?: unknown): Promise<Resp> => {
       const r = await fetch(`${url}${p}`, { method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${tk}` }, body: body === undefined ? undefined : JSON.stringify(body) });
-      const j = (await r.json().catch(() => ({}))) as { data?: unknown; details?: { code?: string } & Record<string, unknown> };
-      return { status: r.status, code: j.details?.code, details: j.details, data: j.data };
+      const j = (await r.json().catch(() => ({}))) as { data?: unknown; warnings?: string[]; details?: { code?: string } & Record<string, unknown> };
+      return { status: r.status, code: j.details?.code, details: j.details, data: j.data, warnings: j.warnings };
     };
     const owner = await prisma.customer.create({ data: { code: `${TAG}-OWN`, name: `${TAG} sahip` }, select: { id: true } });
     made.customers.push(owner.id);
@@ -363,29 +365,72 @@ async function section10(call: (method: string, p: string, body?: unknown) => Pr
 }
 
 async function section11(call: (method: string, p: string, body?: unknown) => Promise<Resp>, mkNote: MkNote, mkLine: MkLine): Promise<void> {
-  console.log("§11 belge geneli beyan (Müşteri MT) ↔ toplam kapısı");
+  console.log("§11 belge geneli beyan (Müşteri MT) ↔ toplam kapısı — fabrika ayarı documentTotalCheck");
   const doc = (m: string) => ({ blocks: [{ blockNo: 1, m: "241", kg: "734" }], document: { count: null, m, kg: null, labels: { m: "Müşteri MT" } } });
   const lines = [L(1, 241, "PENDING", 734)];
-  const t = totalsCheck({ totalsDeclared: doc("238"), declaredTopCount: null }, lines);
-  check("§11a ⭐ saf: 238 ↔ 241 → ok=false, blok 1 tutuyor, belge farkı +3, mesaj etiketli; totalMismatches ≡",
-    t.ok === false && t.blocks[0]?.ok === true && t.document?.diffs[0]?.diff === 3 && same(t.mismatches, ["Belge geneli (Müşteri MT): beyan 238 m, satır toplamı 241.000 m."]) && same(t.mismatches, totalMismatches({ totalsDeclared: doc("238") }, lines)), JSON.stringify(t));
-  const ok = totalsCheck({ totalsDeclared: doc("240"), declaredTopCount: null }, lines);
+  const MSG = "Belge geneli (Müşteri MT): beyan 238 m, satır toplamı 241.000 m.";
+  const t = totalsCheck({ totalsDeclared: doc("238"), declaredTopCount: null }, lines, { documentMode: "REQUIRE_REASON" });
+  check("§11a ⭐ saf REQUIRE_REASON: 238 ↔ 241 → ok=false, blok 1 tutuyor, belge farkı +3, blocking, mesaj etiketli; totalMismatches ≡",
+    t.ok === false && t.blocks[0]?.ok === true && t.document?.diffs[0]?.diff === 3 && t.document.blocking === true && same(t.mismatches, [MSG])
+      && same(t.mismatches, totalMismatches({ totalsDeclared: doc("238") }, lines, { documentMode: "REQUIRE_REASON" })), JSON.stringify(t));
+  const info = totalsCheck({ totalsDeclared: doc("238"), declaredTopCount: null }, lines);
+  check("§11a2 ⭐ saf INFO (varsayılan): fark uyarıda, mismatches boş, ok=true (kapı geçer), document.ok=false + blocking=false",
+    info.ok === true && same(info.mismatches, []) && same(info.warnings, [MSG]) && info.document?.ok === false && info.document.blocking === false && same(totalMismatches({ totalsDeclared: doc("238") }, lines), []), JSON.stringify(info));
+  const onlyDoc = totalsCheck({ totalsDeclared: { document: doc("238").document }, declaredTopCount: null }, lines);
+  check("§11a3 INFO yalnız belge beyanı: ok=true (beyan var, geçer; null 'beyan yok' DEĞİL)", onlyDoc.ok === true && same(onlyDoc.warnings, [MSG]), JSON.stringify(onlyDoc));
+  const ok = totalsCheck({ totalsDeclared: doc("240"), declaredTopCount: null }, lines, { documentMode: "REQUIRE_REASON" });
   const none = totalsCheck({ totalsDeclared: { blocks: [] }, declaredTopCount: null }, lines);
   check("§11b %0,5 içinde (240 ↔ 241) geçer; beyansız belge document=null (bugünkü)", ok.ok === true && ok.document?.ok === true && none.document === null && none.ok === null);
+  await section11Settings(call);
+  type DocTC = TC & { warnings?: string[]; document?: { ok: boolean | null; blocking?: boolean } | null };
+  type Oz = { totals?: { declared: boolean; ok: boolean | null; mismatches: string[] }; warnings?: string[] };
   const id = await mkNote([mkLine(1, 241, { weightKg: 734 })], { totalsDeclared: { document: { count: null, m: "238", kg: null, labels: { m: "Müşteri MT" } } } });
-  const d = (await call("GET", `/api/gelen-belge/irsaliyeler/${id}`)).data as Detail & { totalsCheck?: TC & { document?: { ok: boolean | null } | null } };
+  const detail = async () => ((await call("GET", `/api/gelen-belge/irsaliyeler/${id}`)).data as { totalsCheck?: DocTC }).totalsCheck;
+  const ozet = async () => (await call("GET", `/api/gelen-belge/irsaliyeler/${id}/okuma-ozeti`)).data as Oz;
+  const di = await detail();
+  const oi = await ozet();
+  check("§11c ⭐ HTTP INFO (ayar yok): detay document.ok=false blocking=false, şerit ok=true, mismatches boş, uyarıda fark",
+    di?.document?.ok === false && di.document.blocking === false && di.ok === true && same(di.mismatches, []) && same(di.warnings, [MSG]), JSON.stringify(di));
+  check("§11d INFO tablet okuma özeti: beyan var, ok=true, fark uyarıda", oi?.totals?.declared === true && oi.totals.ok === true && same(oi.totals.mismatches, []) && same(oi.warnings, [MSG]), JSON.stringify(oi));
+  check("§11e ayar REQUIRE_REASON yazılır", (await call("PUT", "/api/gelen-belge/ayarlar", { documentTotalCheck: "REQUIRE_REASON" })).status === 200);
+  const dr = await detail();
   const a = await call("POST", `/api/gelen-belge/irsaliyeler/${id}/onay`, {});
-  check("§11c ⭐ HTTP: detay document.ok=false ↔ onay 409 TOTAL_MISMATCH, mismatches bayt-aynı", d.totalsCheck?.document?.ok === false && a.status === 409 && a.code === "TOTAL_MISMATCH" && same(a.details?.mismatches, d.totalsCheck?.mismatches), `${a.status} ${a.code} ${JSON.stringify(a.details?.mismatches)}`);
-  const oz = (await call("GET", `/api/gelen-belge/irsaliyeler/${id}/okuma-ozeti`)).data as { totals?: { declared: boolean; ok: boolean | null } };
-  check("§11d tablet okuma özeti belge geneli beyanı beyan sayar (declared, ok=false)", oz?.totals?.declared === true && oz.totals.ok === false, JSON.stringify(oz?.totals));
+  check("§11f ⭐ HTTP REQUIRE_REASON: detay document blocking ↔ onay 409 TOTAL_MISMATCH, mismatches bayt-aynı", dr?.document?.ok === false && dr.document.blocking === true && dr.ok === false && a.status === 409 && a.code === "TOTAL_MISMATCH" && same(a.details?.mismatches, dr.mismatches) && same(dr.mismatches, [MSG]), `${a.status} ${a.code} ${JSON.stringify(a.details?.mismatches)}`);
+  const or = await ozet();
+  check("§11g REQUIRE_REASON tablet okuma özeti: ok=false, fark mismatches'te", or?.totals?.declared === true && or.totals.ok === false && same(or.totals.mismatches, [MSG]), JSON.stringify(or?.totals));
+  await call("PUT", "/api/gelen-belge/ayarlar", { documentTotalCheck: "INFO" });
+  const ai = await call("POST", `/api/gelen-belge/irsaliyeler/${id}/onay`, {});
+  check("§11h ⭐ HTTP INFO: gerekçesiz onay GEÇER (200), fark onay uyarısında", ai.status === 200 && (ai.warnings ?? []).includes(MSG), `${ai.status} ${ai.code} ${JSON.stringify(ai.warnings)}`);
+}
+
+/** Ayar ucu: varsayılan INFO; çöp 400; ham uç SETTING_KEY_RESERVED; çöp DB kaydı INFO'ya düşer. */
+async function section11Settings(call: (method: string, p: string, body?: unknown) => Promise<Resp>): Promise<void> {
+  const g = (await call("GET", "/api/gelen-belge/ayarlar")).data as { documentTotalCheck?: string; defaultDocumentTotalCheck?: string };
+  check("§11i ayar yokken documentTotalCheck = varsayılan INFO", g.documentTotalCheck === "INFO" && g.defaultDocumentTotalCheck === "INFO", JSON.stringify(g));
+  const bad = await call("PUT", "/api/gelen-belge/ayarlar", { documentTotalCheck: "BLOCK" });
+  const raw = await call("PUT", `/api/admin/settings/${SETTING_KEYS.GELEN_BELGE_DOCUMENT_TOTAL_CHECK}`, { value: "REQUIRE_REASON" });
+  check("§11j geçersiz seçenek 400; ham ayar ucu yazamaz (400 SETTING_KEY_RESERVED)", bad.status === 400 && raw.status === 400 && raw.code === "SETTING_KEY_RESERVED", `${bad.status} ${raw.status} ${raw.code}`);
+  const key = SETTING_KEYS.GELEN_BELGE_DOCUMENT_TOTAL_CHECK;
+  await prisma.systemSetting.upsert({ where: { key }, create: { key, value: "çöp" }, update: { value: "çöp" } });
+  check("§11k çöp kayıt INFO'ya düşer", ((await call("GET", "/api/gelen-belge/ayarlar")).data as { documentTotalCheck?: string }).documentTotalCheck === "INFO");
+  await prisma.systemSetting.deleteMany({ where: { key } });
 }
 
 async function cleanup(): Promise<void> {
+  // §11h onayı gerçek top doğurur — `test_gelen_belge_onay.ts` temizlik deseni.
+  const rollIds = (await prisma.customerDeliveryNoteLine.findMany({ where: { noteId: { in: made.notes }, rollId: { not: null } }, select: { rollId: true } })).map((x) => x.rollId!);
+  await prisma.documentScan.updateMany({ where: { noteId: { in: made.notes } }, data: { noteId: null } });
   await prisma.deliveryNoteCustomerDefault.deleteMany({ where: { OR: [{ customerId: { in: made.customers } }, { defaultItemId: { in: made.items } }] } });
   await prisma.customerDeliveryNote.deleteMany({ where: { id: { in: made.notes } } });
+  await prisma.rollProperty.deleteMany({ where: { rollId: { in: rollIds } } });
+  await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
+  await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
+  await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: rollIds } } });
+  await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
+  await prisma.deliveryNoteAlias.deleteMany({ where: { targetId: { in: [...made.items, ...made.customers] } } });
   await prisma.item.deleteMany({ where: { id: { in: made.items } } });
   await prisma.customer.deleteMany({ where: { id: { in: made.customers } } });
-  await prisma.systemLog.deleteMany({ where: { recordId: { in: made.notes } } });
+  await prisma.systemLog.deleteMany({ where: { recordId: { in: [...made.notes, ...rollIds] } } });
 }
 
 if (!engel) void main();
