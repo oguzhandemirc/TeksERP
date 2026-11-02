@@ -14573,6 +14573,8 @@ model SenderTemplate {
   batchNoKey             String?  @db.VarChar(32)
   isActive               Boolean  @default(true)
   hitCount               Int      @default(0)
+  /// S1 kullanıcı şablonu (`u-…`) oluşturma denemesinin idempotency token'ı; dosya şablonu satırında NULL.
+  clientToken            String?  @unique @db.Uuid
   createdAt              DateTime @default(now()) @db.Timestamptz
   updatedAt              DateTime @updatedAt @db.Timestamptz
 

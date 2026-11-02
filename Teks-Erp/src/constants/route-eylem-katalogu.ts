@@ -118,6 +118,9 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/gelen-belge/irsaliyeler/:id/onay": e("gelen belgeyi onayladı (emanet top girişi)", "gelen belgeyi onaylamaya çalıştı"),
   "POST /api/gelen-belge/irsaliyeler/:id/is-emri": e("gelen belgeden terbiye iş emri açtı", "gelen belgeden terbiye iş emri açmaya çalıştı"),
   "PATCH /api/gelen-belge/sablonlar/:code": e("gönderen şablonunu düzenledi", "gönderen şablonunu düzenlemeye çalıştı"),
+  "POST /api/gelen-belge/sablonlar/ozel": e("gelen belge tipi tanıttı (kullanıcı şablonu)", "gelen belge tipi tanıtmaya çalıştı"),
+  "PUT /api/gelen-belge/sablonlar/ozel/:code": e("kullanıcı belge şablonunu güncelledi", "kullanıcı belge şablonunu güncellemeye çalıştı"),
+  "POST /api/gelen-belge/sablonlar/oneri": e("belge tipi için şablon önerisi aldı", "belge tipi için şablon önerisi almaya çalıştı"),
   "PUT /api/gelen-belge/varsayilan-urunler/:customerId": e("müşterinin gelen belge varsayılan ürününü yazdı", "müşterinin gelen belge varsayılan ürününü yazmaya çalıştı"),
   "DELETE /api/gelen-belge/varsayilan-urunler/:customerId": e("müşterinin gelen belge varsayılan ürününü kaldırdı", "müşterinin gelen belge varsayılan ürününü kaldırmaya çalıştı"),
 };

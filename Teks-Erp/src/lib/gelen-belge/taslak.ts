@@ -1,7 +1,7 @@
 // Çıkarım → taslak eşlemesi (D3b, saf; DB yok): motor çıktısı (`DocumentExtraction`) → DRAFT başlık + satır girdisi.
 // Bölge ≥ 2 satırları blok numarasını SÜRDÜRÜR (tek taslak; panel "bölgeyi ayır"). Metrajı okunamayan satır
 // yazılmaz (`meters > 0` CHECK), uyarıya düşer; el yazısı ızgarasında her satır needsReview.
-import { parseNumber, type DocumentExtraction, type FieldResult, type ForeignDocument, type OcrRect, type RegionExtraction } from "./motor";
+import { parseNumber, type DocumentExtraction, type DocumentTemplate, type FieldResult, type ForeignDocument, type OcrRect, type RegionExtraction } from "./motor";
 import { documentDeclared, positive, type DocumentDeclared } from "./taslak-belge-beyan";
 import { clampOutlierFactor, markGridSuspects, METER_KEYS } from "./taslak-supheli";
 import { blockDiffWarning, FIELD_LABEL, firstBlockValue } from "./blok-alani";
@@ -18,6 +18,8 @@ export interface DraftOptions {
   outlierFactor?: number;
   /** Tablosuz belgede satır metresi/kg kaynağı (fabrika ayarı); verilmezse OUTPUT = bugünkü (şablonun `m`/`kg` sırası). */
   headerLineSource?: "OUTPUT" | "INPUT";
+  /** Sınıflandırmada kullanılan şablon kümesi (dosya + kullanıcı); aday/metre kaynağı buradan, yoksa dosya şablonları. */
+  templates?: readonly DocumentTemplate[];
 }
 
 export interface DraftLine {
@@ -278,7 +280,7 @@ export function draftFromExtraction(doc: DocumentExtraction, opts: DraftOptions 
   const topCount = first?.sections ? null : pick(f, TOP_COUNT_KEYS);
   const pg = pageInfo(first);
   const docDecl = documentDeclared(first);
-  const tpl = templateByCode(first?.templateId);
+  const tpl = opts.templates?.find((t) => t.id === first?.templateId) ?? templateByCode(first?.templateId);
   return {
     header: {
       ownerText: clip(pick(f, OWNER_KEYS), 160),

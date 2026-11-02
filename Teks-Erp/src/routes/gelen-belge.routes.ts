@@ -39,11 +39,14 @@ import { getReaderUrl } from "../lib/gelen-belge/url";
 import { readerHealth } from "../lib/gelen-belge/okuma-istemcisi";
 import { AppError } from "../utils/app-error";
 import { TERIM } from "../constants/terim";
+import gelenBelgeSablonRoutes from "./gelen-belge-sablon.routes";
 
 const router = Router();
 router.use(verifyToken, requireGelenBelgeEnabled);
 // Gövde katmanı kapıdan SONRA ayrı satırda: `test_module_flag_off §2a` kapıyı `use(verifyToken, <kapı>)` olarak ölçer.
 router.use(express.json({ limit: BUYUK_GOVDE_LIMITI }));
+// S1 kullanıcı şablonu + belge tipi tanıtma uçları — kapı ve gövde katmanı bu router'dan miras.
+router.use(gelenBelgeSablonRoutes);
 
 type Handler = (req: Request) => Promise<{ status: number; data: unknown; warnings?: string[] }>;
 const wrap = (fn: Handler) => async (req: Request, res: Response, next: NextFunction) => {
