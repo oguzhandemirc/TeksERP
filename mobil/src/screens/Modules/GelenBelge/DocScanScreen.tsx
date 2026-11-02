@@ -1,9 +1,9 @@
 // =============================================================================
 // Belge Tara (Gülkesim D7) — müşteri irsaliyesini fotoğrafla → DRAFT taslak
 // =============================================================================
-// Tablet YALNIZ tarama + başlık yapar (sahip, gönderen belge no, sayfalar); satır gözden geçirme
-// ve onay panelde (SoD, `gelen-belge:approve`). Okuma servisi fotoğrafı arka planda okuyup aynı
-// taslağı doldurur. ONLINE-ONLY: çevrimdışı kuyruk yok; yarıda düşen gönderim ekranda kalır ve
+// Tablet tarama + başlık yapar (sahip, gönderen belge no, sayfalar); satır gözden geçirme panelde. Belge başına tek
+// kayıt kipinde okuma bitince onay kartı çıkar (`ApprovalCard`): `gelen-belge:approve` varsa onay + iş emri, yoksa taslak.
+// Okuma servisi fotoğrafı arka planda okuyup aynı taslağı doldurur. ONLINE-ONLY: çevrimdışı kuyruk yok; yarıda düşen gönderim ekranda kalır ve
 // "Yeniden dene" aynı taslağa kalan sayfaları yükler (`submitDocScan` ilerlemesi). Gönderimden sonra okuma
 // sonucu kartta izlenir (`useReadResult`); "Yeni sayfa çek" aynı taslağa sayfa ekler, "Bitti" yeni belgeye hazırlar.
 // =============================================================================
@@ -17,11 +17,14 @@ import DocHeader from './DocHeader';
 import PageCameraModal from './PageCameraModal';
 import PageList from './PageList';
 import PagePreviewModal from './PagePreviewModal';
+import ApprovalCard from './ApprovalCard';
 import ReadResultCard from './ReadResultCard';
 import { removePage } from './docScan';
 import { usePageSource } from './usePageSource';
 import { useDocScan } from './useDocScan';
 import { useReadResult } from './useReadResult';
+import { showsApprovalCard } from './approvalGate';
+import { useApprovalDetail } from './useApprovalCard';
 
 export default function DocScanScreen() {
   const b = useDocScan();
@@ -29,6 +32,9 @@ export default function DocScanScreen() {
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const source = usePageSource(b.pages.length, b.captureMany, () => setCameraOpen(true));
   const read = useReadResult(b.done?.note.id ?? null, b.done?.runKey ?? 0);
+  // Okuma sonuçlandı → onay kartı detayı çeker (kip ve kapı sunucudan; kart yoksa bugünkü yol).
+  const readDone = read.watch?.phase === 'done' && (read.watch.summary.state === 'READ' || read.watch.summary.state === 'PARTIAL');
+  const approvalOpen = showsApprovalCard(useApprovalDetail(b.done?.note.id ?? null, readDone).data);
   const addPageToNote = () => {
     b.addToNote();
     source.add();
@@ -49,8 +55,9 @@ export default function DocScanScreen() {
     <ScreenChrome title="Belge Tara" subtitle="Müşteri irsaliyesi → taslak">
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         {b.done && read.watch && (
-          <ReadResultCard watch={read.watch} noteNo={b.done.note.noteNo} actions={{ onAddPage: addPageToNote, onDone: b.finish, onRecheck: read.recheck }} />
+          <ReadResultCard watch={read.watch} noteNo={b.done.note.noteNo} actions={{ onAddPage: addPageToNote, onDone: b.finish, onRecheck: read.recheck }} tabletApproval={approvalOpen} />
         )}
+        {b.done && <ApprovalCard key={`${b.done.note.id}:${b.done.runKey}`} noteId={b.done.note.id} readDone={readDone} onDone={b.finish} />}
         <DocHeader owner={b.owner} onOwner={b.setOwner} senderDocNo={b.senderDocNo} onBarcode={b.setBarcode} locked={b.headerLocked} />
         <PageList
           pages={b.pages}

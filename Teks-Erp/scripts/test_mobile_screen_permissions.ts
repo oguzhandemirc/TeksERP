@@ -313,6 +313,21 @@ function collectUsages(screens: Screen[]): { usages: Usage[]; unresolved: number
  */
 const EXEMPT: { screen: string; path: string; why: string }[] = [
   {
+    screen: "gelen-belge:write",
+    path: "GET /gelen-belge/irsaliyeler/:p",
+    why: "Belge Tara onay kartı (T2) detayı okur; okunamazsa (gelen-belge:read yok → 403) kart çizilmez, tarama yolu aynen çalışır (fail-closed, `useApprovalDetail`).",
+  },
+  {
+    screen: "gelen-belge:write",
+    path: "POST /gelen-belge/irsaliyeler/:p/onay",
+    why: "Onay ayrı SoD yetkisi (`gelen-belge:approve`); izinsiz kullanıcıda düğme \"Taslak olarak bırak\" olur ve uç çağrılmaz (`useApprovalCard.approve` + `approvalGate`).",
+  },
+  {
+    screen: "gelen-belge:write",
+    path: "GET /routes",
+    why: "Onay kartının rota seçicisi yalnız onaylayana açılır; liste okunamazsa seçici boş kalır, onay \"Fabrika varsayılanı\" (alan yok) ile sürer.",
+  },
+  {
     screen: "mobile:kk1",
     path: "GET /colors",
     why: "Renk listesi YALNIZ yarı mamul modunda çağrılır; o mod ayrı bir yetenek yetkisine bağlı (`mobile:kk1-yari-mamul`). Yetkisiz operatörde renk seçici hiç çizilmez, uç de çağrılmaz.",

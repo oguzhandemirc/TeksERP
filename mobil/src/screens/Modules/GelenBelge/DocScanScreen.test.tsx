@@ -8,6 +8,7 @@ import DocScanScreen from './DocScanScreen';
 const mockCreate = jest.fn();
 const mockUpload = jest.fn();
 const mockSummary = jest.fn();
+const mockDetail = jest.fn();
 // Sahte JPEG (sihirli bayt) — her çekimde aynı içerik: ikinci çekim aynı fotoğraftır.
 const mockB64 = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from('sayfa-1'.repeat(40))]).toString('base64');
 const mockB64b = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from('sayfa-2'.repeat(40))]).toString('base64');
@@ -18,6 +19,7 @@ jest.mock('../../../services/inboundDoc.service', () => ({
     createDraftNote: (b: unknown) => mockCreate(b),
     uploadScan: (b: unknown) => mockUpload(b),
     readSummary: (id: string) => mockSummary(id),
+    noteDetail: (id: string) => mockDetail(id),
   },
 }));
 const mockScanner = jest.fn();
@@ -75,6 +77,8 @@ function resetMocks() {
   mockCreate.mockReset().mockResolvedValue({ id: 'n1', noteNo: 'GB-0001', status: 'DRAFT' });
   mockUpload.mockReset().mockResolvedValue({ scan: { id: 's1', sha256: 'x', noteId: 'n1' }, duplicate: false, boundTo: 'n1' });
   mockSummary.mockReset().mockResolvedValue(summary({ state: 'READING' }));
+  // Varsayılan: detay okunamaz (gelen-belge:read yok) → onay kartı yok, bugünkü yol.
+  mockDetail.mockReset().mockRejectedValue(Object.assign(new Error('Yetkiniz yok'), { status: 403 }));
 }
 
 function summary(p: Record<string, unknown>) {
@@ -216,14 +220,14 @@ describe('DocScanScreen — ML Kit belge tarayıcısı', () => {
   });
 });
 
+async function sendOnePage(r: ReturnType<typeof renderWithPaper>) {
+  await addViaCamera(r, 'sayfa-kamera');
+  fireEvent.press(r.getByTestId('belge-tara-gonder'));
+  await waitFor(() => expect(r.getByTestId('belge-tara-sonuc')).toBeTruthy());
+}
+
 describe('DocScanScreen — okuma sonucu', () => {
   beforeEach(resetMocks);
-
-  async function sendOnePage(r: ReturnType<typeof renderWithPaper>) {
-    await addViaCamera(r, 'sayfa-kamera');
-    fireEvent.press(r.getByTestId('belge-tara-gonder'));
-    await waitFor(() => expect(r.getByTestId('belge-tara-sonuc')).toBeTruthy());
-  }
 
   it('⭐ gönderim → "Okunuyor…" → okundu: taslak no, satır, gözden geçirilecek, toplam', async () => {
     mockSummary
@@ -298,5 +302,32 @@ describe('DocScanScreen — okuma sonucu', () => {
     expect(r.getByTestId('belge-tara-gonder')).toHaveTextContent(/Taslak oluştur ve gönder/);
     await sendOnePage(r);
     expect(mockCreate).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('DocScanScreen — onay kartı (T2)', () => {
+  beforeEach(resetMocks);
+
+  it('T2: okundu + PER_DOCUMENT detayı → onay kartı çıkar, okuma kartı "panelde" demez; izinsiz → taslak düğmesi', async () => {
+    const fields = { ourBatchNo: null, kursunMeters: '241', kursunMetersSource: 'OUTPUT', kursunMetersReview: true, batchNoCandidates: [{ key: 'a', value: 'ISM1' }, { key: 'b', value: '70779' }] };
+    mockSummary.mockResolvedValue(summary({ state: 'READ', lineCount: 1, totals: { declared: true, ok: true, mismatches: [] }, ...fields }));
+    mockDetail.mockReset().mockResolvedValue({ id: 'n1', noteNo: 'GB-0001', status: 'DRAFT', ownerCustomerId: 'c1', ...fields, perDocument: { code: null, warnings: [] } });
+    const r = renderWithPaper(<DocScanScreen />);
+    await sendOnePage(r);
+    expect(await r.findByTestId('onay-karti')).toBeTruthy();
+    expect(mockDetail).toHaveBeenCalledWith('n1');
+    expect(r.getByTestId('onay-karti-birincil')).toHaveTextContent(/Taslak olarak bırak$/);
+    expect(r.queryByText(/panelde doğrulanacak/)).toBeNull();
+    expect(r.getByTestId('belge-tara-sonuc-parti')).toHaveTextContent(/Aşağıda seçin/);
+  });
+
+  it('okunurken detay İSTENMEZ; detay okunamazsa kart yok', async () => {
+    const r = renderWithPaper(<DocScanScreen />);
+    await sendOnePage(r);
+    expect(mockDetail).not.toHaveBeenCalled();
+    mockSummary.mockResolvedValue(summary({ state: 'READ', lineCount: 1 }));
+    await waitFor(() => expect(r.getByTestId('belge-tara-sonuc-baslik')).toHaveTextContent('Okundu'), { timeout: 4000 });
+    await waitFor(() => expect(mockDetail).toHaveBeenCalled());
+    expect(r.queryByTestId('onay-karti')).toBeNull();
   });
 });

@@ -282,7 +282,7 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     permission: 'gelen-belge:write',
     label: 'Belge Tara',
     icon: 'file-document-outline',
-    description: 'Müşteri irsaliyesini fotoğrafla, taslak oluştur (onay panelde)',
+    description: `Müşteri irsaliyesini fotoğrafla; taslak oluştur ya da onaylayıp ${TERIM.terbiyeIsEmri.tekilKucuk} aç`,
   },
 ];
 

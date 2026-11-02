@@ -10,6 +10,8 @@ interface Props {
   watch: ReadWatch;
   noteNo: string;
   actions: { onAddPage: () => void; onDone: () => void; onRecheck: () => void };
+  /** Onay kartı tablette açık (T2) → "panelde seçilecek/doğrulanacak" notları basılmaz. */
+  tabletApproval?: boolean;
 }
 
 const TONE: Record<ReadTone, { bg: string; fg: string }> = {
@@ -19,8 +21,8 @@ const TONE: Record<ReadTone, { bg: string; fg: string }> = {
   error: { bg: colors.dangerContainer, fg: colors.dangerText },
 };
 
-export default function ReadResultCard({ watch, noteNo, actions }: Props) {
-  const v = readResultView(watch, noteNo);
+export default function ReadResultCard({ watch, noteNo, actions, tabletApproval }: Props) {
+  const v = readResultView(watch, noteNo, { tabletApproval });
   const tone = TONE[v.tone];
   const canRecheck = watch.phase === 'timeout' || watch.phase === 'error';
   return (

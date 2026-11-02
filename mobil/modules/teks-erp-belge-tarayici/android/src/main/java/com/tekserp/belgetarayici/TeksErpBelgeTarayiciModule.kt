@@ -134,7 +134,9 @@ class TeksErpBelgeTarayiciModule : Module() {
   private fun verdict(available: Boolean, reason: String) = mapOf("available" to available, "reason" to reason)
 
   private fun scannerOptions(pageLimit: Int) = GmsDocumentScannerOptions.Builder()
-    .setGalleryImportAllowed(false) // yalnız kâğıt belge; galeriden eski fotoğraf girmez
+    // Kullanıcı kararı 2026-11-02: galeriden içe aktarma açık. Sayfa özeti (sha256) aynı fotoğrafı
+    // ikinci kez almaz; sunucudaki ikinci belge izi uyarısı sürer.
+    .setGalleryImportAllowed(true)
     .setPageLimit(pageLimit)
     .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
     .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)

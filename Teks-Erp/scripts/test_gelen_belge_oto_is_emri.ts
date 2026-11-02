@@ -78,7 +78,7 @@ async function run(): Promise<void> {
   const literal = `requireAnyPermission(${AUTO_WORK_ORDER_PERMISSIONS.map((p) => `"${p}"`).join(", ")})`;
   check("§0 quick-start kapısı = AUTO_WORK_ORDER_PERMISSIONS (sıra dahil)", qs.includes(literal), qs.replace(/\s+/g, " ").slice(0, 120));
   const gbRoutes = readFileSync(path.join(__dirname, "../src/routes/gelen-belge.routes.ts"), "utf8");
-  check("§0 onay ucu: approveDeliveryNote → withAutoWorkOrders (onaydan SONRA)", /approveDeliveryNote\([^\n]*\)\.then\(\(r\) => withAutoWorkOrders\(r, req\.user!\)\)/.test(gbRoutes));
+  check("§0 onay ucu: approveDeliveryNote → withAutoWorkOrders (onaydan SONRA)", /approveDeliveryNote\([^\n]*\)\.then\(\(r\) => withAutoWorkOrders\(r, req\.user!, opts\)\)/.test(gbRoutes));
 
   // Katalog: BRODE bayrağı + desen çeşidi; BASKI bayrağı + çeşidi (rota uygulamaz → §6).
   const flag = await prisma.fabricProperty.create({ data: { code: `${TAG}-BR`.slice(0, 32), name: `TEST Brode ${TAG}`, valueType: "FLAG" }, select: { id: true } });
