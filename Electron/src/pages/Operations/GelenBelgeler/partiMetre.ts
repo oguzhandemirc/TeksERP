@@ -18,7 +18,7 @@ export const BATCH_KIND_LABEL: Record<BatchNoCandidateKind, string> = {
   BARCODE: "Barkod",
   DOC: "Evrak no",
   BATCH: "Parti no",
-  WORK_ORDER: "İş emri",
+  WORK_ORDER: "Gönderenin emir no",
   ORDER: "Sipariş",
   FORM: "Form sıra no",
 };

@@ -81,7 +81,7 @@ describe("PER_DOCUMENT detay", () => {
     const card = await screen.findByTestId("batch-no-card");
     expect(within(card).getAllByTestId("batch-candidate")).toHaveLength(3);
     expect(within(card).getByRole("radio", { name: "FİŞ NO: 214279" })).toBeChecked();
-    expect(within(card).getAllByTestId("batch-candidate")[2]).toHaveTextContent("İş emri");
+    expect(within(card).getAllByTestId("batch-candidate")[2]).toHaveTextContent("Gönderenin emir no");
     await userEvent.click(within(card).getByRole("radio", { name: "Ham PartiNo: P2618733" }));
     expect(header.mutate).toHaveBeenCalledWith({ ourBatchNo: "P2618733", ourBatchNoKey: "hamPartiNo" });
   });
