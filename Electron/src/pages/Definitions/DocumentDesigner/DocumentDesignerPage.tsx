@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Loader2, PenTool } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
+import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
@@ -41,7 +42,7 @@ function ListFace() {
       <TabsContent value="templates" className="min-h-0 flex-1">
         <TemplateListView />
       </TabsContent>
-      <TabsContent value="assignments" className="min-h-0 flex-1">
+      <TabsContent value="assignments" className="flex min-h-0 flex-1 flex-col">
         <AssignmentsView access={access} />
       </TabsContent>
     </Tabs>
@@ -66,6 +67,7 @@ export function DocumentDesignerPage() {
       <PageHeader
         title={DOCUMENT_DESIGNER_TITLE}
         description={isList ? "Belge şablonları: Sistem tasarımını kopyalayıp düzenleyin, sürümleri karşılaştırın, yayınlayın ve atayın." : "Belgeyi sürükle-bırak bloklar ve stil paneliyle sayfa üzerinde tasarlayın."}
+        actions={isList && enabled ? <RefreshButton queryKey={["document-templates"]} /> : undefined}
       />
       {flagsQuery.isLoading ? (
         <Loading />

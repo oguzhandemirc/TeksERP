@@ -1,4 +1,4 @@
-// Bildirimler sayfasının tablosu — geçmiş günlüğü satırları; yatay kaydırılabilir sarmalayıcıda (dar ekran).
+// Bildirimler sayfasının tablosu — geçmiş günlüğü satırları; kaydırıcı sayfanın ListBody'sidir (kart yok).
 import { CircleCheck, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -111,30 +111,28 @@ export function NotificationTable({ items, secili, setSecili, onAc, eylemler }: 
     setSecili(y);
   };
   return (
-    <div className="overflow-x-auto rounded-lg border border-border/60">
-      <table className="w-full min-w-[640px] text-sm">
-        <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
-          <tr>
-            <th className="w-10 px-3 py-2">
-              <Checkbox
-                aria-label="Tümünü seç"
-                checked={tumuSecili}
-                onCheckedChange={(v) => setSecili(v ? new Set(items.map((b) => b.id)) : new Set())}
-              />
-            </th>
-            <th className="whitespace-nowrap px-3 py-2 font-medium">Zaman</th>
-            <th className="px-3 py-2 font-medium">Alan</th>
-            <th className="px-3 py-2 font-medium">Bildirim</th>
-            <th className="px-3 py-2 font-medium">Durum</th>
-            <th className="whitespace-nowrap px-3 py-2 text-right font-medium">İşlem</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((b) => (
-            <NotificationTableRow key={b.id} b={b} secili={secili.has(b.id)} onSec={(v) => sec(b.id, v)} onAc={onAc} eylemler={eylemler} />
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <table className="w-full min-w-[640px] text-sm">
+      <thead className="text-left text-xs text-muted-foreground">
+        <tr>
+          <th className="w-10 px-3 py-2">
+            <Checkbox
+              aria-label="Tümünü seç"
+              checked={tumuSecili}
+              onCheckedChange={(v) => setSecili(v ? new Set(items.map((b) => b.id)) : new Set())}
+            />
+          </th>
+          <th className="whitespace-nowrap px-3 py-2 font-medium">Zaman</th>
+          <th className="px-3 py-2 font-medium">Alan</th>
+          <th className="px-3 py-2 font-medium">Bildirim</th>
+          <th className="px-3 py-2 font-medium">Durum</th>
+          <th className="whitespace-nowrap px-3 py-2 text-right font-medium">İşlem</th>
+        </tr>
+      </thead>
+      <tbody>
+        {items.map((b) => (
+          <NotificationTableRow key={b.id} b={b} secili={secili.has(b.id)} onSec={(v) => sec(b.id, v)} onAc={onAc} eylemler={eylemler} />
+        ))}
+      </tbody>
+    </table>
   );
 }

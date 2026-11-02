@@ -11,6 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Archive, BellRing, Pencil, Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
+import { ListToolbar } from "@/components/layout/ListPage";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -52,6 +53,9 @@ function ProfileListItem({ p, active, onClick }: { p: NotificationProfile; activ
   );
 }
 
+/** Matris dışındaki sekmeler (üyeler, fabrika varsayılanı) form gövdesidir: dolgulu, kendi kaydırıcısı. */
+const TAB_PAD = "mt-0 min-h-0 flex-1 overflow-auto p-4 md:p-6";
+
 export function NotificationProfilesPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -84,41 +88,42 @@ export function NotificationProfilesPage() {
           </div>
         }
       />
-      <PageBody className="p-4 md:p-6">
-        {blocked ? (
+      {blocked ? (
+        <PageBody className="p-4 md:p-6">
           <EmptyState icon={BellRing} title="Bildirim profilleri kullanılamıyor" description={blocked} />
-        ) : (
-          <div className="grid gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
-            <ProfileListPanel
-              loading={list.isLoading}
-              profiles={profiles}
-              selectedId={selected?.id ?? null}
-              onSelect={setSelectedId}
-              showArchived={showArchived}
-              onShowArchived={setShowArchived}
-            />
-            <section className="min-w-0 space-y-3">
+        </PageBody>
+      ) : (
+        // Liste standardı: solda profil listesi (kendi kaydırıcısı), sağda sabit bant (başlık + sekmeler) → kenardan kenara matris.
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+          <ProfileListPanel
+            loading={list.isLoading}
+            profiles={profiles}
+            selectedId={selected?.id ?? null}
+            onSelect={setSelectedId}
+            showArchived={showArchived}
+            onShowArchived={setShowArchived}
+          />
+          <Tabs value={activeTab} onValueChange={setTab} className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <ListToolbar>
               {selected && <SelectedHeader p={selected} onRename={() => setForm({ profile: selected })} onArchive={() => setArchiving(selected)} />}
-              <Tabs value={activeTab} onValueChange={setTab}>
-                <TabsList className="flex-wrap">
-                  <TabsTrigger value="matris" disabled={!selected}>Matris</TabsTrigger>
-                  <TabsTrigger value="uyeler" disabled={!selected}>Üyeler</TabsTrigger>
-                  <TabsTrigger value="fabrika">Fabrika varsayılanı</TabsTrigger>
-                </TabsList>
-                <TabsContent value="matris">
-                  {selected ? <ProfileMatrixTab profile={selected} kinds={kinds} /> : <NoProfile />}
-                </TabsContent>
-                <TabsContent value="uyeler">
-                  {selected ? <ProfileMembersTab profile={selected} /> : <NoProfile />}
-                </TabsContent>
-                <TabsContent value="fabrika">
-                  {factory.isLoading ? <Skeleton className="h-40 w-full" /> : <FactoryDefaultsTab kinds={kinds} />}
-                </TabsContent>
-              </Tabs>
-            </section>
-          </div>
-        )}
-      </PageBody>
+              <TabsList className="flex-wrap self-start">
+                <TabsTrigger value="matris" disabled={!selected}>Matris</TabsTrigger>
+                <TabsTrigger value="uyeler" disabled={!selected}>Üyeler</TabsTrigger>
+                <TabsTrigger value="fabrika">Fabrika varsayılanı</TabsTrigger>
+              </TabsList>
+            </ListToolbar>
+            <TabsContent value="matris" className="mt-0 flex min-h-0 flex-1 flex-col">
+              {selected ? <ProfileMatrixTab profile={selected} kinds={kinds} /> : <NoProfile />}
+            </TabsContent>
+            <TabsContent value="uyeler" className={TAB_PAD}>
+              {selected ? <ProfileMembersTab profile={selected} /> : <NoProfile />}
+            </TabsContent>
+            <TabsContent value="fabrika" className={TAB_PAD}>
+              {factory.isLoading ? <Skeleton className="h-40 w-full" /> : <FactoryDefaultsTab kinds={kinds} />}
+            </TabsContent>
+          </Tabs>
+        </div>
+      )}
       <ProfileFormDialog
         open={form !== null}
         onOpenChange={(o) => !o && setForm(null)}
@@ -148,8 +153,8 @@ interface ListPanelProps {
 
 function ProfileListPanel({ loading, profiles, selectedId, onSelect, showArchived, onShowArchived }: ListPanelProps) {
   return (
-    <aside className="space-y-2" aria-label="Profiller">
-      <div className="rounded-md border p-1">
+    <aside className="max-h-60 shrink-0 space-y-2 overflow-y-auto border-b p-2 lg:max-h-none lg:w-64 lg:border-b-0 lg:border-r" aria-label="Profiller">
+      <div>
         {loading && <Skeleton className="h-24 w-full" />}
         {!loading && profiles.length === 0 && (
           <p className="px-3 py-6 text-center text-sm text-muted-foreground">

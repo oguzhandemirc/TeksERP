@@ -63,7 +63,7 @@ export function SummaryStrip({ toplam, okunmamis, seciliSayi, topluAcik, onToplu
   onToplu: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border/60 bg-card/40 px-3 py-2 text-sm">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
       <span>
         <span className="font-semibold tabular-nums">{toplam}</span> <span className="text-muted-foreground">kayıt</span>
       </span>
