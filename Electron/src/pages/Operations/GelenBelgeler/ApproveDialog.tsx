@@ -10,7 +10,8 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { approveNote, getIncomingDocumentSettings, getSuggestions, INCOMING_DOCUMENT_QUERY_KEY, INCOMING_DOCUMENT_SETTINGS_QUERY_KEY } from "./service";
 import { approveErrorText, approvePrecheck, needsVarianceReason, summarizeApprove, summarizeAutoWorkOrders, unusableDefaultSource, type ApproveOutcome, type AutoWorkOrderSummary } from "./approveFlow";
 import { CUSTOMER_DEFAULTS_PATH } from "./paths";
-import type { DeliveryNoteLine, ProcessChoice } from "./types";
+import { perDocumentPrecheck, perDocumentSummary } from "./partiMetre";
+import type { DeliveryNoteHeader, DeliveryNoteLine, ProcessChoice } from "./types";
 
 interface Props {
   noteId: string;
@@ -23,6 +24,8 @@ interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onDone: () => void;
+  /** Belge başına tek kayıt (PER_DOCUMENT): satır kapıları yerine metre/parti özeti; null/undefined = bugünkü diyalog. */
+  perDocument?: Pick<DeliveryNoteHeader, "kursunMeters" | "kursunMetersReview" | "ourBatchNo"> | null;
 }
 
 const TONE_CLASS = {
@@ -40,10 +43,10 @@ function ProcessChoicesNote({ count, noun }: { count: number; noun: string }) {
  * Diyalog her açılışta ayarı ve etkin varsayılanı (E4: eşleşme yanıtı, müşteri > fabrika) tazeler: sayaç onay anındaki
  * kipe/ürüne göre konuşur; hüküm yine backend'de. Aynı anahtar → detay sayfasının önbelleği de tazelenir.
  */
-function useApprovePrecheck(noteId: string, lines: readonly DeliveryNoteLine[], open: boolean) {
+function useApprovePrecheck(noteId: string, lines: readonly DeliveryNoteLine[], open: boolean, perDocument: Props["perDocument"]) {
   const settings = useQuery({ queryKey: INCOMING_DOCUMENT_SETTINGS_QUERY_KEY, queryFn: getIncomingDocumentSettings, enabled: open, refetchOnMount: "always", staleTime: 0 });
   const match = useQuery({ queryKey: [INCOMING_DOCUMENT_QUERY_KEY, "eslestirme", noteId], queryFn: () => getSuggestions(noteId), enabled: open, refetchOnMount: "always", staleTime: 0 });
-  return approvePrecheck(lines, settings.data, match.data?.defaultItem);
+  return perDocument ? perDocumentPrecheck(perDocument, settings.data) : approvePrecheck(lines, settings.data, match.data?.defaultItem);
 }
 
 /** Hata metni; kullanılamaz MÜŞTERİ varsayılanında (E4) yetkiliye yönetim ekranı bağlantısı (fabrika yolu backend mesajında). */
@@ -78,13 +81,13 @@ function AutoWorkOrderBox({ auto }: { auto: AutoWorkOrderSummary | null }) {
   );
 }
 
-export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun = "kurşun gramajı", open, onOpenChange, onDone }: Props) {
+export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun = "kurşun gramajı", open, onOpenChange, onDone, perDocument }: Props) {
   const [reason, setReason] = useState("");
   const [askReason, setAskReason] = useState(false);
   // Hata metni + kullanılamaz varsayılanın kaynağı (E4; müşteri ise yönetim ekranı bağlantısı çıkar).
   const [error, setError] = useState<{ text: string; source: "CUSTOMER" | "FACTORY" | null } | null>(null);
   const [outcome, setOutcome] = useState<{ o: ApproveOutcome; warnings: string[]; auto: AutoWorkOrderSummary | null } | null>(null);
-  const pre = useApprovePrecheck(noteId, lines, open);
+  const pre = useApprovePrecheck(noteId, lines, open, perDocument);
   const run = useMutation({
     mutationFn: () => approveNote(noteId, askReason ? reason.trim() : null, processChoices),
     onSuccess: ({ result, warnings }) => {
@@ -111,7 +114,7 @@ export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun =
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{outcome ? "Onay sonucu" : "Belgeyi onayla"}</DialogTitle>
-          <DialogDescription>{outcome ? outcome.o.title : "Her açık satır sahibin emanet topu olarak stoğa girer. Bu işlem geri alınmaz; düşen satır ayrı listelenir."}</DialogDescription>
+          <DialogDescription>{outcome ? outcome.o.title : perDocument ? "Belge tek kayıt olarak sahibin emanet topu olur; satırlar bilgi olarak kalır. Bu işlem geri alınmaz." : "Her açık satır sahibin emanet topu olarak stoğa girer. Bu işlem geri alınmaz; düşen satır ayrı listelenir."}</DialogDescription>
         </DialogHeader>
         {outcome ? (
           <div className="flex flex-col gap-2 text-sm" data-testid="approve-result" data-status={outcome.o.status}>
@@ -131,6 +134,7 @@ export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun =
           </div>
         ) : (
           <div className="flex flex-col gap-2">
+            {perDocument && <p className="rounded border px-2 py-1 text-sm font-medium" data-testid="approve-per-document">{perDocumentSummary(perDocument)}</p>}
             {pre.messages.length > 0 && (
               <ul className="flex flex-col gap-1" data-testid="approve-precheck" data-blocked={pre.blocked ? "1" : "0"}>
                 {pre.messages.map((m) => (

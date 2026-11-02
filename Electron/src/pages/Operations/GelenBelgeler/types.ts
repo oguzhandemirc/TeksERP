@@ -4,6 +4,8 @@
 
 import type { AutoWorkOrderResult } from "./workOrderTypes";
 import type { DocumentTotalCheckSettings, LineProblem, TotalsCheck } from "./reviewTypes";
+import type { PartiMetreDetailFields, PartiMetrePatch, PartiMetreHeaderFields } from "./partiMetreTypes";
+export type { BatchNoCandidate, BatchNoCandidateKind, EntryMode, KursunMeterCandidate, KursunMeterCandidates, KursunMetersSource } from "./partiMetreTypes";
 export type { DocumentTotalCheckMode, LineProblem, TotalsCheck } from "./reviewTypes";
 
 export type {
@@ -20,7 +22,8 @@ export type {
 export const NOTE_STATUSES = ["DRAFT", "APPROVING", "APPROVED", "PARTIAL", "CANCELLED"] as const;
 export type NoteStatus = (typeof NOTE_STATUSES)[number];
 export type NoteSourceKind = "OCR" | "MANUAL" | "IMPORT";
-export type LineStatus = "PENDING" | "ENTERING" | "ENTERED" | "FAILED" | "SKIPPED";
+/** INFO: belge başına tek kayıt kipinde topsuz bilgi satırı (B); eski backend göndermez. */
+export type LineStatus = "PENDING" | "ENTERING" | "ENTERED" | "FAILED" | "SKIPPED" | "INFO";
 export type ScanStatus = "PENDING" | "READING" | "READ" | "READ_FAILED";
 
 export interface NamedRef {
@@ -44,7 +47,7 @@ export interface DeclaredBlock {
   m: string | null;
 }
 
-export interface DeliveryNoteHeader {
+export interface DeliveryNoteHeader extends PartiMetreHeaderFields {
   id: string;
   noteNo: string;
   status: NoteStatus;
@@ -123,7 +126,7 @@ export interface DocumentScanInfo {
   attempts: number;
 }
 
-export interface DeliveryNoteDetail extends DeliveryNoteHeader {
+export interface DeliveryNoteDetail extends DeliveryNoteHeader, PartiMetreDetailFields {
   lines: DeliveryNoteLine[];
   scans: DocumentScanInfo[];
   /** D4-I3: sahibin İŞ KABULÜ kapsamlı aktif cari kilidi (metin sunucudan); eski backend göndermez. */
@@ -293,8 +296,9 @@ export type HeaderPatch = Partial<
     DeliveryNoteHeader,
     | "ownerCustomerId" | "senderCustomerId" | "senderText" | "senderDocNo" | "senderDocDate"
     | "customerBatchNo" | "customerOrderNo" | "processText" | "pageCount" | "declaredTopCount"
+    | "ourBatchNo" | "ourBatchNoKey"
   >
->;
+> & PartiMetrePatch;
 
 /** E3 hizmet ekseni ayarları — backend `gelen-belge-ayar.service.ts` `IncomingDocSettings` aynası. */
 export type UnreviewedApproval = "WARN" | "BLOCK_SUSPECT" | "BLOCK";

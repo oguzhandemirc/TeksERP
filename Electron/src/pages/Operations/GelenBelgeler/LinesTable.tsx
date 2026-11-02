@@ -17,9 +17,11 @@ interface Props {
   onSelect: (id: string) => void;
   onPatch: (lineId: string, p: LinePatch) => void;
   onDelete: (lineId: string) => void;
+  /** Belge başına tek kayıt (PER_DOCUMENT): satırlar bilgi — eşleme sütunları ve "yalnız sorunlu" süzgeci gizli. */
+  perDocument?: boolean;
 }
 
-export function LinesTable({ note, suggestions, editable, canWrite, selectedId, onSelect, onPatch, onDelete }: Props) {
+export function LinesTable({ note, suggestions, editable, canWrite, selectedId, onSelect, onPatch, onDelete, perDocument = false }: Props) {
   const [pickFor, setPickFor] = useState<string | null>(null);
   // Sil ve atla geri alınamaz → kısa onay; atlanan son açık satırsa belge kapanır.
   const [confirm, setConfirm] = useState<{ kind: "delete" | "skip"; lineId: string } | null>(null);
@@ -29,10 +31,14 @@ export function LinesTable({ note, suggestions, editable, canWrite, selectedId, 
   const openLines = note.lines.filter((x) => !x.rollId && x.status !== "SKIPPED").length;
   // "Sorunlu" hükmü backend `problems`ten (onay ön kontrolüyle aynı yüklem); burada yalnız gösterim süzgeci.
   const [onlyProblems, setOnlyProblems] = useState(false);
-  const view = visibleLines(note.lines, onlyProblems);
+  const view = visibleLines(note.lines, onlyProblems && !perDocument);
   return (
     <div className="flex flex-col gap-2">
+      {perDocument ? (
+        <p className="text-sm font-medium" data-testid="info-lines-title">Belgedeki satırlar (bilgi)</p>
+      ) : (
       <ProblemFilter on={onlyProblems} onChange={setOnlyProblems} shown={view.rows.length} total={view.total} problems={view.problemCount} />
+      )}
     <div className="overflow-x-auto rounded-lg border">
       <table className="w-full min-w-[900px] text-sm">
         <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
@@ -42,14 +48,14 @@ export function LinesTable({ note, suggestions, editable, canWrite, selectedId, 
             <th className="p-2 text-left">Metre</th>
             <th className="p-2 text-left">Kilo</th>
             <th className="p-2 text-left">En</th>
-            <th className="p-2 text-left">Kumaş</th>
-            <th className="p-2 text-left">Renk</th>
+            {!perDocument && <th className="p-2 text-left">Kumaş</th>}
+            {!perDocument && <th className="p-2 text-left">Renk</th>}
             <th className="p-2 text-left">Durum</th>
             <th className="p-2" />
           </tr>
         </thead>
         <tbody>
-          <EmptyRows noLines={note.lines.length === 0} noProblems={onlyProblems && view.rows.length === 0} />
+          <EmptyRows noLines={note.lines.length === 0} noProblems={onlyProblems && !perDocument && view.rows.length === 0} cols={perDocument ? 7 : 9} />
           {view.rows.map((l) => (
             <LineRow
               key={l.id}
@@ -64,6 +70,7 @@ export function LinesTable({ note, suggestions, editable, canWrite, selectedId, 
               onPatch={(p) => (p.skip ? setConfirm({ kind: "skip", lineId: l.id }) : onPatch(l.id, p))}
               onDelete={() => setConfirm({ kind: "delete", lineId: l.id })}
               onPickItem={() => setPickFor(l.id)}
+              infoOnly={perDocument}
             />
           ))}
         </tbody>
@@ -97,11 +104,11 @@ export function LinesTable({ note, suggestions, editable, canWrite, selectedId, 
   );
 }
 
-function EmptyRows({ noLines, noProblems }: { noLines: boolean; noProblems: boolean }) {
+function EmptyRows({ noLines, noProblems, cols }: { noLines: boolean; noProblems: boolean; cols: number }) {
   if (!noLines && !noProblems) return null;
   return (
     <tr>
-      <td colSpan={9} className="p-6 text-center text-sm text-muted-foreground" data-testid={noLines ? undefined : "no-problem-lines"}>
+      <td colSpan={cols} className="p-6 text-center text-sm text-muted-foreground" data-testid={noLines ? undefined : "no-problem-lines"}>
         {noLines ? "Satır yok. Elle ekleyin ya da Excel'den yükleyin." : "Sorunlu satır yok — bütün satırlar temiz."}
       </td>
     </tr>
