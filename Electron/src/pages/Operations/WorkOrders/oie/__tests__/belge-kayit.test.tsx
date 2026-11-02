@@ -24,7 +24,7 @@ vi.mock("@/lib/kursun-gramaj", () => ({ useKursunGramajCatalog: () => ({ catalog
 const approval = { value: "WITH_WORK_ORDER" as "WITH_WORK_ORDER" | "SEPARATE" };
 vi.mock("../useFormApproval", () => ({ useFormApproval: () => ({ value: approval.value, isLoading: false }) }));
 const autoPrint = { on: false };
-const printCard = vi.fn(() => Promise.resolve("PRINTED"));
+const printCard = vi.fn((_id: string) => Promise.resolve("PRINTED"));
 vi.mock("../refakatPrint", () => ({
   useRefakatAutoPrint: () => autoPrint.on,
   printRefakatCard: (id: string) => printCard(id),
