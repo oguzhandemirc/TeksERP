@@ -38,6 +38,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Lock, ShieldCheck, Unlock } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -49,6 +50,7 @@ import { ClosePeriodDialog } from "./ClosePeriodDialog";
 import { LockStatusCard } from "./LockStatusCard";
 import { ReopenPeriodDialog } from "./ReopenPeriodDialog";
 import { VerifyPeriodDialog } from "./VerifyPeriodDialog";
+import { RefreshButton } from "@/components/RefreshButton";
 import {
   PERIOD_CURRENCIES,
   formatDayKey,
@@ -101,13 +103,19 @@ export function PeriodClosePage() {
             : "Kapanış deftere satır yazmaz — hesabın seçilen tarihteki bakiyesinin fotoğrafını çeker ve o dönemi mühürler. Mühürlü döneme tahsilat/ödeme, kasa hareketi ve çek tahsilatı girilemez."
         }
         actions={
-          <PermissionGate permission="finance:close">
-            {/* Tek düğme, AKTİF sekmenin diyaloğunu açar — dosya başındaki not. */}
-            <Button onClick={() => (tab === "cari" ? setFormOpen(true) : setCashFormOpen(true))}>
-              <Lock className="mr-1 h-4 w-4" />
-              Dönem Kapat
-            </Button>
-          </PermissionGate>
+          <div className="flex gap-2">
+            <RefreshButton
+              queryKey={tab === "cari" ? ["finance", "period-closes"] : ["finance", "cash-period-closes"]}
+              extraKeys={[tab === "cari" ? ["finance", "period-status"] : ["finance", "cash-period-status"]]}
+            />
+            <PermissionGate permission="finance:close">
+              {/* Tek düğme, AKTİF sekmenin diyaloğunu açar — dosya başındaki not. */}
+              <Button onClick={() => (tab === "cari" ? setFormOpen(true) : setCashFormOpen(true))}>
+                <Lock className="mr-1 h-4 w-4" />
+                Dönem Kapat
+              </Button>
+            </PermissionGate>
+          </div>
         }
       />
 
@@ -149,129 +157,134 @@ export function PeriodClosePage() {
             </Button>
           </div>
 
-          <PageBody className="space-y-6 p-6">
+          <ListBody>
         {cari && currency ? (
-          <LockStatusCard cariId={cari.id} cariLabel={`${cari.code} — ${cari.name}`} currency={currency} />
+          <ListMessage className="border-b">
+            <LockStatusCard cariId={cari.id} cariLabel={`${cari.code} — ${cari.name}`} currency={currency} />
+          </ListMessage>
         ) : null}
 
         {q.isLoading ? (
-          <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
         ) : q.isError && rows.length === 0 ? (
           /* Sessiz boş liste YASAK — dosya başındaki nota bak. Şart `rows.length
              === 0` ile daraltıldı: başarılı ilk yüklemeden SONRA düşen bir
              tazeleme de `isError` yakar ve koşulsuz kurgu, çalışan bir ekranı
              tek geçici hatada tamamen silerdi. Elde veri varsa liste KALIR,
              üstüne "eski olabilir" bandı basılır (aşağıda). */
-          <div className="flex items-start gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <div>
-              <p className="font-medium">Kapanış listesi alınamadı.</p>
-              <p className="mt-0.5 text-xs">
-                Bu ekran şu an dönemlerin açık olduğunu SÖYLEMİYOR — bilinmiyor. Kayıt girmeden önce
-                listeyi yenileyin.
-              </p>
-              <Button variant="outline" size="sm" className="mt-2" onClick={() => void q.refetch()}>
-                Tekrar dene
-              </Button>
+          <ListMessage>
+            <div className="flex items-start gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <p className="font-medium">Kapanış listesi alınamadı.</p>
+                <p className="mt-0.5 text-xs">
+                  Bu ekran şu an dönemlerin açık olduğunu SÖYLEMİYOR — bilinmiyor. Kayıt girmeden önce
+                  listeyi yenileyin.
+                </p>
+                <Button variant="outline" size="sm" className="mt-2" onClick={() => void q.refetch()}>
+                  Tekrar dene
+                </Button>
+              </div>
             </div>
-          </div>
+          </ListMessage>
         ) : rows.length === 0 ? (
-          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-            {includeReopened
-              ? "Bu filtreyle kapanış kaydı yok."
-              : "Aktif kapanış yok — seçili kapsamda tüm dönemler açık. Yeniden açılmış eski kapanışlar için “Yeniden açılanlar” düğmesine basın."}
-          </div>
+          <ListMessage>
+            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+              {includeReopened
+                ? "Bu filtreyle kapanış kaydı yok."
+                : "Aktif kapanış yok — seçili kapsamda tüm dönemler açık. Yeniden açılmış eski kapanışlar için “Yeniden açılanlar” düğmesine basın."}
+            </div>
+          </ListMessage>
         ) : (
-          <div className="space-y-2">
+          <>
             {q.isError && (
-              <p className="flex items-start gap-2 rounded-md bg-amber-100 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+              <p className="flex items-start gap-2 border-b bg-amber-100 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 Liste tazelenemedi — aşağıdaki kayıtlar son başarılı okumaya aittir ve eski olabilir.
                 Bu arada yapılmış bir kapanış burada görünmeyebilir.
               </p>
             )}
             {total > rows.length && (
-              <p className="text-xs text-muted-foreground">
+              <p className="border-b px-4 py-2 text-xs text-muted-foreground">
                 Toplam {total} kapanış var, ilk {rows.length} tanesi gösteriliyor. Aradığınızı görmüyorsanız
                 cari ya da para birimi seçerek daraltın.
               </p>
             )}
-            <div className="overflow-hidden rounded-md border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Cari</th>
-                    <th className="px-3 py-2 text-left">Para</th>
-                    <th className="px-3 py-2 text-left">Dönem Sonu</th>
-                    <th className="px-3 py-2 text-right">Mühürlü Bakiye</th>
-                    <th className="px-3 py-2 text-right">Hareket</th>
-                    <th className="px-3 py-2 text-left">Kapatıldı</th>
-                    <th className="px-3 py-2 text-left">Not</th>
-                    <th className="px-3 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => {
-                    const reopened = Boolean(r.reopenedAt);
-                    return (
-                      <tr key={r.id} className={`border-t ${reopened ? "opacity-60" : ""}`}>
-                        <td className="px-3 py-2">
-                          <div className="font-medium">{r.cariName}</div>
-                          <div className="font-mono text-xs text-muted-foreground">{r.cariCode}</div>
-                        </td>
-                        <td className="px-3 py-2 font-medium">{r.currency}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          {formatDayKey(r.periodEnd)}
-                          {reopened && (
-                            <Badge className="ml-2 bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                              Yeniden açıldı
-                            </Badge>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-right font-medium">{moneyOf(r.closingBalance, r.currency)}</td>
-                        <td className="px-3 py-2 text-right">{r.txnCount}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
-                          {formatInstant(r.createdAt)}
-                        </td>
-                        <td className="px-3 py-2 text-muted-foreground">
-                          {r.notes ?? "—"}
-                          {reopened && (
-                            <div className="mt-0.5 text-xs text-amber-700 dark:text-amber-500">
-                              Açılma: {formatInstant(r.reopenedAt)} — {r.reopenReason ?? "gerekçe yok"}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="flex items-center justify-end gap-1">
-                            {!reopened && (
-                              <>
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  title="Mühürlü rakamı bugünkü defterle karşılaştır (salt okuma)"
-                                  onClick={() => setVerifyTarget(r)}
-                                >
-                                  <ShieldCheck className="h-4 w-4" />
-                                </Button>
-                                <PermissionGate permission="finance:close">
-                                  <Button variant="outline" size="sm" onClick={() => setReopenTarget(r)}>
-                                    <Unlock className="mr-1 h-3.5 w-3.5" />
-                                    Yeniden Aç
-                                  </Button>
-                                </PermissionGate>
-                              </>
-                            )}
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 text-left">Cari</th>
+                  <th className="px-3 py-2 text-left">Para</th>
+                  <th className="px-3 py-2 text-left">Dönem Sonu</th>
+                  <th className="px-3 py-2 text-right">Mühürlü Bakiye</th>
+                  <th className="px-3 py-2 text-right">Hareket</th>
+                  <th className="px-3 py-2 text-left">Kapatıldı</th>
+                  <th className="px-3 py-2 text-left">Not</th>
+                  <th className="px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const reopened = Boolean(r.reopenedAt);
+                  return (
+                    <tr key={r.id} className={`border-t ${reopened ? "opacity-60" : ""}`}>
+                      <td className="px-3 py-2">
+                        <div className="font-medium">{r.cariName}</div>
+                        <div className="font-mono text-xs text-muted-foreground">{r.cariCode}</div>
+                      </td>
+                      <td className="px-3 py-2 font-medium">{r.currency}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {formatDayKey(r.periodEnd)}
+                        {reopened && (
+                          <Badge className="ml-2 bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                            Yeniden açıldı
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right font-medium">{moneyOf(r.closingBalance, r.currency)}</td>
+                      <td className="px-3 py-2 text-right">{r.txnCount}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
+                        {formatInstant(r.createdAt)}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {r.notes ?? "—"}
+                        {reopened && (
+                          <div className="mt-0.5 text-xs text-amber-700 dark:text-amber-500">
+                            Açılma: {formatInstant(r.reopenedAt)} — {r.reopenReason ?? "gerekçe yok"}
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center justify-end gap-1">
+                          {!reopened && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                title="Mühürlü rakamı bugünkü defterle karşılaştır (salt okuma)"
+                                onClick={() => setVerifyTarget(r)}
+                              >
+                                <ShieldCheck className="h-4 w-4" />
+                              </Button>
+                              <PermissionGate permission="finance:close">
+                                <Button variant="outline" size="sm" onClick={() => setReopenTarget(r)}>
+                                  <Unlock className="mr-1 h-3.5 w-3.5" />
+                                  Yeniden Aç
+                                </Button>
+                              </PermissionGate>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </>
         )}
-          </PageBody>
+          </ListBody>
+          <ListFooter loaded={rows.length} total={q.data ? total : null} />
         </TabsContent>
 
         <TabsContent value="cash" className="mt-0 flex min-h-0 flex-1 flex-col">

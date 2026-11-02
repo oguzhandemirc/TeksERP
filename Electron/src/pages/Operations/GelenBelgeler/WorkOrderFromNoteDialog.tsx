@@ -8,6 +8,7 @@ import { ProcessValueSearchDialog } from "./ProcessValueSearchDialog";
 import { WorkOrderPlanGroupCard } from "./WorkOrderPlanGroupCard";
 import { useWorkOrderPlan } from "./useWorkOrderPlan";
 import type { ChoiceProperty } from "./types";
+import type { RouteSuggestionSource, WorkOrderPlan } from "./workOrderTypes";
 import { TERIM } from "@/lib/terim";
 
 interface Props {
@@ -46,8 +47,7 @@ export function WorkOrderFromNoteDialog({ noteId, open, onOpenChange }: Props) {
                 {p.customerBatch?.batchNo ?? "yok"}
               </span>
             </div>
-            <PlanRouteFields s={s} suggestedRouteTemplateId={p.suggestedRouteTemplateId} busy={busy} />
-            {s.route && <p className="text-[11px] text-muted-foreground">{s.route.steps?.map((st) => st.station?.name ?? "—").join(" → ")}</p>}
+            <PlanRouteFields s={s} plan={p} busy={busy} />
             {p.groups.length === 0 && <p className="text-sm text-muted-foreground">Bu belgeden doğmuş top yok.</p>}
             {p.groups.map((g) => (
               <WorkOrderPlanGroupCard
@@ -97,12 +97,34 @@ export function WorkOrderFromNoteDialog({ noteId, open, onOpenChange }: Props) {
   );
 }
 
+/** Önerinin kaynak etiketi — backend `RouteSuggestionSource` sözlüğü. */
+export const ROUTE_SOURCE_LABEL: Record<RouteSuggestionSource, string> = {
+  LAST_WORK_ORDER: "bu sahibin son kullandığı",
+  CUSTOMER_ROUTE: "müşteriye tanımlı rota",
+  FACTORY_DEFAULT: "fabrika varsayılanı",
+};
+
+/** Rota şablonu (önerilen ön dolu + kaynağı) + rota adımları + öneri yoksa nedeni. */
+function PlanRouteFields({ s, plan, busy }: { s: ReturnType<typeof useWorkOrderPlan>; plan: WorkOrderPlan; busy: boolean }) {
+  const suggested = plan.suggestedRouteTemplateId;
+  // Eski backend kaynak göndermez → bugünkü tek kaynak.
+  const source = plan.suggestedRouteSource ?? "LAST_WORK_ORDER";
+  const notes = plan.routeSuggestionNotes ?? [];
+  return (
+    <>
+      <RouteAndFoldFields s={s} busy={busy} suffix={suggested && s.routeId === suggested ? ` (${ROUTE_SOURCE_LABEL[source]})` : ""} />
+      {!suggested && notes.length > 0 && <p className="text-[11px] text-muted-foreground" data-testid="plan-route-notes">Rota önerilemedi: {notes.join(" ")}</p>}
+      {s.route && <p className="text-[11px] text-muted-foreground">{s.route.steps?.map((st) => st.station?.name ?? "—").join(" → ")}</p>}
+    </>
+  );
+}
+
 /** Rota şablonu + (tamburlu rotada) kat tipi seçimi — ReworkRollsDialog emsali yerel seçim. */
-function PlanRouteFields({ s, suggestedRouteTemplateId, busy }: { s: ReturnType<typeof useWorkOrderPlan>; suggestedRouteTemplateId: string | null; busy: boolean }) {
+function RouteAndFoldFields({ s, busy, suffix }: { s: ReturnType<typeof useWorkOrderPlan>; busy: boolean; suffix: string }) {
   return (
     <div className="grid gap-1 sm:grid-cols-2 sm:gap-3">
       <label className="grid gap-1 text-xs text-muted-foreground">
-        Rota şablonu{suggestedRouteTemplateId && s.routeId === suggestedRouteTemplateId ? " (bu sahibin son kullandığı)" : ""}
+        Rota şablonu{suffix}
         <select className="h-9 rounded-md border bg-background px-2 text-sm text-foreground" value={s.routeId ?? ""} disabled={busy} onChange={(e) => s.setRouteId(e.target.value || null)} aria-label="Rota şablonu">
           <option value="">— Rota seç</option>
           {s.routeList.map((r) => (

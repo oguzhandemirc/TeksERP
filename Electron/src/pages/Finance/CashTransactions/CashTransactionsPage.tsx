@@ -23,9 +23,11 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeftRight, BookOpen, PieChart, Receipt } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
+import { RefreshButton } from "@/components/RefreshButton";
 import type { CashAccountOption } from "../PeriodClose/CashAccountPicker";
 import { CashTxnFilterBar } from "./CashTxnFilterBar";
 import { CashTxnTable } from "./CashTxnTable";
@@ -86,6 +88,7 @@ export function CashTransactionsPage() {
         description="Carisi olmayan para hareketleri: masraf, gelir, hesaplar arası virman ve açılış bakiyesi. Tahsilat/ödeme buraya girilmez — onlar cari defterine de yazar."
         actions={
           <div className="flex gap-2">
+            <RefreshButton queryKey={["finance", "cash-transactions"]} />
             {/* Rapor bağlantısı KAPI DIŞINDA: defteri okumak finance:read işidir
                 (F3 dikişi — iki ekran birbirini tanısın). */}
             <Button variant="ghost" onClick={() => navigate("/reports/finance/cash-book")}>
@@ -122,38 +125,43 @@ export function CashTransactionsPage() {
         onChange={setFilters}
       />
 
-      <PageBody className="p-6">
+      <ListBody>
         {q.isLoading ? (
-          <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
         ) : q.isError ? (
-          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-            <p className="font-medium text-destructive">Hareket listesi yüklenemedi.</p>
-            <p className="mt-1 text-muted-foreground">
-              Bu bir “kayıt yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi. Kayıtlarınız
-              yerinde duruyor; yeni fiş girmeden önce tekrar deneyin.
-            </p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-              Tekrar dene
-            </Button>
-          </div>
+          <ListMessage>
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+              <p className="font-medium text-destructive">Hareket listesi yüklenemedi.</p>
+              <p className="mt-1 text-muted-foreground">
+                Bu bir “kayıt yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi. Kayıtlarınız
+                yerinde duruyor; yeni fiş girmeden önce tekrar deneyin.
+              </p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+                Tekrar dene
+              </Button>
+            </div>
+          </ListMessage>
         ) : rows.length === 0 ? (
-          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-            {isFilterDirty(filters)
-              ? "Bu filtreyle hareket yok. Filtreleri temizleyip tekrar bakın."
-              : "Kasa hareketi yok. “Kasa Fişi” ile masraf/gelir, “Virman” ile hesaplar arası aktarım girebilirsiniz."}
-          </div>
+          <ListMessage>
+            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+              {isFilterDirty(filters)
+                ? "Bu filtreyle hareket yok. Filtreleri temizleyip tekrar bakın."
+                : "Kasa hareketi yok. “Kasa Fişi” ile masraf/gelir, “Virman” ile hesaplar arası aktarım girebilirsiniz."}
+            </div>
+          </ListMessage>
         ) : (
           <>
             <CashTxnTable rows={rows} onCancel={setCancelTarget} onAllocations={allocOn ? setAllocTarget : undefined} />
             {total > rows.length && (
-              <p className="mt-3 text-xs text-amber-700 dark:text-amber-500">
+              <p className="border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
                 {total} kaydın ilk {rows.length} tanesi gösteriliyor (en yeni tarihten geriye). Aradığınızı
                 bulmak için hesap, tür ya da tarih filtresini kullanın.
               </p>
             )}
           </>
         )}
-      </PageBody>
+      </ListBody>
+      <ListFooter loaded={rows.length} total={q.data ? total : null} />
 
       {/* Diyaloglar KOŞULLU mount: her açılış taze bileşen — ve `clientToken`
           da tazelenir (tek mount = tek mantıksal deneme). */}

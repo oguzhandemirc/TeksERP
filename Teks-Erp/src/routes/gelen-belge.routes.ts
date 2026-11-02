@@ -335,6 +335,8 @@ const SettingsBody = z.strictObject({
   defaultItemId: Id.nullable().optional(),
   unreviewedApproval: z.enum(["WARN", "BLOCK"], "Seçenek WARN ya da BLOCK olmalı").optional(),
   autoWorkOrder: z.boolean(`Otomatik ${TERIM.terbiyeIsEmri.tekilKucuk} evet/hayır olmalı`).optional(),
+  defaultRouteTemplateId: Id.nullable().optional(),
+  routeSuggestionPriority: z.enum(["CUSTOMER_FIRST", "FACTORY_FIRST"], "Seçenek CUSTOMER_FIRST ya da FACTORY_FIRST olmalı").optional(),
 });
 /**
  * @openapi
@@ -344,7 +346,7 @@ const SettingsBody = z.strictObject({
  *     summary: Gelen belge ayarları — varsayılan ürün (ad + kullanılabilirlik) ve gözden geçirilmemiş hücreyle onay kipi
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "defaultItem (id, code, name, problem) | null · unreviewedApproval WARN|BLOCK · autoWorkOrder boolean" }
+ *       200: { description: "defaultItem (id, code, name, problem) | null · unreviewedApproval WARN|BLOCK · autoWorkOrder boolean · defaultRoute (id, name, problem) | null · routeSuggestionPriority CUSTOMER_FIRST|FACTORY_FIRST" }
  *   put:
  *     tags: [GelenBelge]
  *     summary: Gelen belge ayarlarını yaz (yalnız admin:settings + ayar şifresi); pasif/top doğuramayan ürün 400 GELEN_BELGE_DEFAULT_ITEM_INVALID
@@ -358,6 +360,8 @@ const SettingsBody = z.strictObject({
  *               defaultItemId: { type: string, format: uuid, nullable: true }
  *               unreviewedApproval: { type: string, enum: [WARN, BLOCK] }
  *               autoWorkOrder: { type: boolean, description: "Onaydan sonra net desen gruplarına iş emri kendiliğinden (varsayılan false)" }
+ *               defaultRouteTemplateId: { type: string, format: uuid, nullable: true, description: "Rota önerisinin fabrika varsayılanı; pasif/adımsız rota 400 GELEN_BELGE_DEFAULT_ROUTE_INVALID" }
+ *               routeSuggestionPriority: { type: string, enum: [CUSTOMER_FIRST, FACTORY_FIRST] }
  *     responses:
  *       200: { description: Güncel ayarlar }
  */
@@ -376,7 +380,7 @@ router.get("/irsaliyeler/:id/eslestirme", requirePermission("gelen-belge:read"),
  *     description: İş emri panelden grup başına mevcut `POST /api/work-orders/quick-start` ile açılır (grup başına clientToken).
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: Plan (gruplar, müşteri partisi, rota şablonu önerisi) }
+ *       200: { description: "Plan (gruplar, müşteri partisi, rota önerisi: suggestedRouteTemplateId + suggestedRouteSource LAST_WORK_ORDER|CUSTOMER_ROUTE|FACTORY_DEFAULT + routeSuggestionNotes)" }
  *       404: { description: DELIVERY_NOTE_NOT_FOUND }
  *       409: { description: DELIVERY_NOTE_NOT_APPROVED (yalnız APPROVED/PARTIAL) }
  */

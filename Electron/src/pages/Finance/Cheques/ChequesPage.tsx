@@ -37,7 +37,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileClock, FileText, Plus, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ReportExportBar } from "@/pages/Reports/_components";
@@ -62,6 +63,7 @@ import {
 } from "./ChequeFilterBar";
 import { dayEndIso, dayStartIso } from "./dates";
 import type { ChequeActionDef } from "./transitions";
+import { RefreshButton } from "@/components/RefreshButton";
 
 const PAGE_SIZE = 100;
 
@@ -191,6 +193,7 @@ export function ChequesPage() {
         description="Alınan çek kaydedildiği AN carinin borcunu azaltır; tahsil edildiğinde kasa/banka bakiyesi artar. Her adım defterde iz bırakır."
         actions={
           <div className="flex items-center gap-2">
+            <RefreshButton queryKey={["finance", "cheques"]} />
             {/* Dışa aktarım YAZMA İZNİ İSTEMEZ (`finance:cheque` gate'inin
                 DIŞINDA): dosya, ekranı zaten açabilen kişinin gördüğü listenin
                 taşınabilir hâlidir — okuma ile yazmayı aynı kapıya bağlamak,
@@ -248,9 +251,7 @@ export function ChequesPage() {
         }
       />
 
-      <ChequeFilterBar value={filters} onChange={setFilters} />
-
-      <PageBody className="p-6">
+      <ListToolbar>
         <ChequeSummaryCards
           rows={summaryQ.data ?? []}
           isLoading={summaryQ.isLoading}
@@ -260,33 +261,41 @@ export function ChequesPage() {
           onSelectDue={selectDue}
           activeDueKey={activeDueKey}
         />
+      </ListToolbar>
 
+      <ChequeFilterBar value={filters} onChange={setFilters} />
+
+      <ListBody>
         {q.isLoading ? (
-          <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
         ) : q.isError ? (
-          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-            <p className="font-medium text-destructive">Portföy listesi yüklenemedi.</p>
-            <p className="mt-1 text-muted-foreground">
-              Bu bir “kayıt yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi. Kayıtlarınız
-              yerinde duruyor; yeni giriş yapmadan önce tekrar deneyin.
-            </p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-              Tekrar dene
-            </Button>
-          </div>
+          <ListMessage>
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+              <p className="font-medium text-destructive">Portföy listesi yüklenemedi.</p>
+              <p className="mt-1 text-muted-foreground">
+                Bu bir “kayıt yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi. Kayıtlarınız
+                yerinde duruyor; yeni giriş yapmadan önce tekrar deneyin.
+              </p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+                Tekrar dene
+              </Button>
+            </div>
+          </ListMessage>
         ) : rows.length === 0 ? (
-          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-            {dirty
-              ? "Bu filtreyle kayıt yok. Geçmiş kayıtlar için durum filtresini “Tümü” yapın."
-              : "Portföyde canlı çek/senet yok. “Çek Girişi” ile müşteriden aldığınız çeki kaydedebilirsiniz."}
-          </div>
+          <ListMessage>
+            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+              {dirty
+                ? "Bu filtreyle kayıt yok. Geçmiş kayıtlar için durum filtresini “Tümü” yapın."
+                : "Portföyde canlı çek/senet yok. “Çek Girişi” ile müşteriden aldığınız çeki kaydedebilirsiniz."}
+            </div>
+          </ListMessage>
         ) : (
           <>
             {selectedRows.length > 0 && (
               // SEÇİM ŞERİDİ — ne seçildiği, hangi yönde ve ne kadar. Sayıyı
               // burada göstermezsek kullanıcı bordroyu basana kadar seçiminin
               // ne olduğunu göremez.
-              <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-muted/40 px-3 py-2 text-xs">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b bg-muted/40 px-4 py-2 text-xs">
                 <strong>{selectedRows.length} kayıt seçili</strong>
                 {lockedKind && <span className="text-muted-foreground">{KIND_LABEL[lockedKind]}</span>}
                 {selectedTotals.map((b) => (
@@ -327,14 +336,15 @@ export function ChequesPage() {
               }}
             />
             {total > rows.length && (
-              <p className="mt-3 text-xs text-amber-700 dark:text-amber-500">
+              <p className="border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
                 {total} kaydın ilk {rows.length} tanesi gösteriliyor (vade sırasına göre). Aradığınızı bulmak
                 için arama ya da vade aralığı filtresini kullanın.
               </p>
             )}
           </>
         )}
-      </PageBody>
+      </ListBody>
+      <ListFooter loaded={rows.length} total={q.data ? total : null} />
 
       {/* Diyaloglar KOŞULLU mount edilir: her açılış taze bileşen demektir ve
           ön-doldurma yalnız başlangıç değeri olarak kalır. */}

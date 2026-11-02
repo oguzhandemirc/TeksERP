@@ -58,6 +58,7 @@ export interface ChoiceProperty {
   flagPropertyId: string;
   optionCount: number;
 }
+export type RouteSuggestionSource = "LAST_WORK_ORDER" | "CUSTOMER_ROUTE" | "FACTORY_DEFAULT";
 export interface WorkOrderPlan {
   noteId: string;
   noteNo: string;
@@ -65,6 +66,10 @@ export interface WorkOrderPlan {
   owner: { id: string; name: string } | null;
   customerBatch: { key: string; batchNo: string } | null;
   suggestedRouteTemplateId: string | null;
+  /** Önerinin kaynağı (backend `suggestRoute`); eski backend göndermez → LAST_WORK_ORDER sayılır. */
+  suggestedRouteSource?: RouteSuggestionSource | null;
+  /** Kullanılamayan kaynakların Türkçe nedenleri. */
+  routeSuggestionNotes?: string[];
   choiceProperties: ChoiceProperty[];
   groups: PlanGroup[];
 }

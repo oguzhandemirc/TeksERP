@@ -589,6 +589,16 @@ async function main() {
       file: "Electron/src/pages/GeneralSettings/GelenBelgeSettingsSection.tsx",
       needle: "gb-auto-work-order",
     },
+    GELEN_BELGE_DEFAULT_ROUTE_ID: {
+      why: "Rota şablonu kimliği (UUID) — flag yüküne konmaz; tek yazar doğrulamalı `PUT /api/gelen-belge/ayarlar` (pasif/adımsız rota 400); aynı panel kartı",
+      file: "Electron/src/pages/GeneralSettings/GelenBelgeSettingsSection.tsx",
+      needle: "gb-default-route",
+    },
+    GELEN_BELGE_ROUTE_PRIORITY: {
+      why: "Rota önerisi önceliği (CUSTOMER_FIRST/FACTORY_FIRST) — aynı doğrulamalı uç ve aynı panel kartı; flag yüküne konmaz",
+      file: "Electron/src/pages/GeneralSettings/GelenBelgeSettingsSection.tsx",
+      needle: "ROUTE_PRIORITY_OPTIONS",
+    },
     SYSTEM_INSTALLATION_ID: {
       why: "Feature flag değil, kurulum kimliği — panel yüzeyi YOK (bilinçli); boot işi üretir, /api/discovery/identity okur",
       file: "Teks-Erp/src/jobs/installation-identity.job.ts",
