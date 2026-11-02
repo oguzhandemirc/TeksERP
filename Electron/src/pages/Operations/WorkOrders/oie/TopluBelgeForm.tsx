@@ -9,12 +9,12 @@ import { Button } from "@/components/ui/button";
 import { apiErrorText } from "@/lib/api-error";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { batchFailure } from "./batchToken";
-import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
+import { useKursunCustomerDefaults, useKursunGramajCatalog } from "@/lib/kursun-gramaj";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import { belgeOkutStage } from "@/pages/Operations/GelenBelgeler/belgeOkut";
 import { getDeliveryNote, INCOMING_DOCUMENT_QUERY_KEY } from "@/pages/Operations/GelenBelgeler/service";
 import type { DeliveryNoteDetail } from "@/pages/Operations/GelenBelgeler/types";
-import { initialDocDraft, routeGramajOptions, type DocDraft } from "./docDraft";
+import { initialDocDraft, reseedOwnerGramaj, routeGramajOptions, type DocDraft } from "./docDraft";
 import { AUTO_PRINT_TEXT, printRefakatCard, useRefakatAutoPrint } from "./refakatPrint";
 import { saveDoc, saveErrorHint } from "./saveDoc";
 import { BulkRow, type RowResult } from "./BulkRow";
@@ -43,6 +43,7 @@ export function TopluBelgeForm({ noteIds, route }: Props) {
   const notes = useNotes(noteIds);
   const { catalog, isLoading: catalogLoading } = useKursunGramajCatalog();
   const gramajOptions = routeGramajOptions(catalog.options, route.hasKursun);
+  const { defaults: customerDefaults, isLoading: defaultsLoading } = useKursunCustomerDefaults();
   const approval = useFormApproval();
   const autoPrint = useRefakatAutoPrint();
   const qc = useQueryClient();
@@ -53,11 +54,11 @@ export function TopluBelgeForm({ noteIds, route }: Props) {
   // Satır taslağı belge okununca ve gramaj kataloğu gelince bir kez dolar.
   const loaded = notes.map((q) => q.data);
   useEffect(() => {
-    if (catalogLoading) return;
+    if (catalogLoading || defaultsLoading) return;
     const add: Record<string, DocDraft> = {};
-    for (const n of loaded) if (n && !isReading(n) && !drafts[n.id]) add[n.id] = initialDocDraft(n, gramajOptions);
+    for (const n of loaded) if (n && !isReading(n) && !drafts[n.id]) add[n.id] = initialDocDraft(n, gramajOptions, customerDefaults);
     if (Object.keys(add).length) setDrafts((d) => ({ ...d, ...add }));
-  }, [loaded, catalogLoading, gramajOptions, drafts]);
+  }, [loaded, catalogLoading, defaultsLoading, gramajOptions, customerDefaults, drafts]);
 
   const saveAll = async () => {
     setBusy(true);
@@ -91,7 +92,7 @@ export function TopluBelgeForm({ noteIds, route }: Props) {
         <div className="flex flex-col gap-2">
           {noteIds.map((id, i) => (
             <BulkRow key={id} note={loaded[i]} draft={drafts[id]} result={results[id]} gramajOptions={gramajOptions} disabled={busy}
-              onChange={(d) => setDrafts((all) => ({ ...all, [id]: d }))} />
+              onChange={(d) => setDrafts((all) => ({ ...all, [id]: all[id] ? reseedOwnerGramaj(all[id], d, gramajOptions, customerDefaults) : d }))} />
           ))}
         </div>
       </div>

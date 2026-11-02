@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { fetchKursunGramHistory, historyRowText, kursunGramHistoryKey, type KursunGramHistoryOwner } from "./kursunGramHistoryApi";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { fetchKursunGramHistory, gramPriceBasisNote, historyRowText, kursunGramHistoryKey, type KursunGramHistoryOwner } from "./kursunGramHistoryApi";
 
 /**
  * K14: gram fiyatı alanının yanındaki salt-okunur "Fiyat geçmişi". Açılınca okunur (kapalıyken istek yok);
@@ -9,6 +10,7 @@ import { fetchKursunGramHistory, historyRowText, kursunGramHistoryKey, type Kurs
  */
 export function KursunGramPriceHistory({ owner }: { owner: KursunGramHistoryOwner }) {
   const [open, setOpen] = useState(false);
+  const basis = useFeatureFlags().data?.data?.financeKursunGramPriceBasis;
   const q = useInfiniteQuery({
     queryKey: kursunGramHistoryKey(owner),
     queryFn: ({ pageParam }) => fetchKursunGramHistory(owner, pageParam),
@@ -55,7 +57,7 @@ export function KursunGramPriceHistory({ owner }: { owner: KursunGramHistoryOwne
               Daha fazla
             </Button>
           )}
-          <p className="mt-1 text-muted-foreground">Fatura, işin yapıldığı gündeki fiyatı kullanır (Genel Ayarlar → Gram fiyatı).</p>
+          <p className="mt-1 text-muted-foreground" data-testid="kursun-gram-basis-note">{gramPriceBasisNote(basis)}</p>
         </div>
       )}
     </div>

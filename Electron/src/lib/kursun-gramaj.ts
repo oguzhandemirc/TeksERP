@@ -54,6 +54,41 @@ export function useKursunGramajCatalog() {
   return { catalog: q.data ?? { propertyId: null, options: [] }, isLoading: q.isLoading };
 }
 
+// ── Müşteriye özel varsayılan gramaj (S3, fabrika cevabı 14) ───────────────
+// Cari kartındaki "Varsayılan kurşun gramajı"; İE formu müşteri seçilince ön seçer. Yalnız ÖN SEÇİM.
+
+/** customerId → gramaj değeri kimliği. Eski backend (uç yok) → boş: istasyon varsayılanı (bugünkü). */
+export type KursunCustomerDefaults = Readonly<Record<string, string>>;
+
+export const KURSUN_CUSTOMER_DEFAULTS_KEY = ["work-orders", "kursun-customer-defaults"] as const;
+
+export async function fetchKursunCustomerDefaults(): Promise<KursunCustomerDefaults> {
+  try {
+    const res = await apiClient.get<{ success: true; data: Array<{ customerId: string; valueId: string }> }>("/api/work-orders/kursun-customer-defaults");
+    return Object.fromEntries((res.data.data ?? []).map((r) => [r.customerId, r.valueId]));
+  } catch {
+    return {};
+  }
+}
+
+const NO_CUSTOMER_DEFAULTS: KursunCustomerDefaults = Object.freeze({});
+
+export function useKursunCustomerDefaults(enabled = true): { defaults: KursunCustomerDefaults; isLoading: boolean } {
+  const q = useQuery({ queryKey: KURSUN_CUSTOMER_DEFAULTS_KEY, queryFn: fetchKursunCustomerDefaults, staleTime: 60_000, enabled, retry: false });
+  return { defaults: q.data ?? NO_CUSTOMER_DEFAULTS, isLoading: enabled && q.isLoading };
+}
+
+/** Ön seçim: müşterinin varsayılanı listede (aktif) ise o; yoksa istasyonun varsayılanı; o da yoksa null. */
+export function customerGramajId(
+  options: readonly Pick<GramajOption, "id" | "isDefault">[],
+  defaults: KursunCustomerDefaults,
+  customerId: string | null | undefined,
+): string | null {
+  const own = customerId ? defaults[customerId] : undefined;
+  if (own && options.some((o) => o.id === own)) return own;
+  return options.find((o) => o.isDefault === true)?.id ?? null;
+}
+
 // ── Gramaj özeti (İE kartı + parti izi) ─────────────────────────────────────
 
 export type KursunSource = "TABLET" | "KAGIT";

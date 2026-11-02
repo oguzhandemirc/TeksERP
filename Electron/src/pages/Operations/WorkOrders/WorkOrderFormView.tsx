@@ -43,7 +43,7 @@ import { useNumberSourceState } from "@/lib/number-source";
 import { RouteEditor } from "./RouteEditor";
 import { TargetItemPicker } from "./TargetItemPicker";
 import { useFoldValues } from "@/hooks/useFoldValues";
-import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
+import { useKursunCustomerDefaults, useKursunGramajCatalog } from "@/lib/kursun-gramaj";
 import { KursunStepFields, isKursunStep, useKursunGramajBinding } from "./KursunStepFields";
 import { useDesignerSteps } from "./useDesignerSteps";
 import { BelgeOkutButton } from "./BelgeOkutButton";
@@ -221,13 +221,16 @@ export function WorkOrderFormView({
   // 60 sn cache'li tek küçük istek.
   const { values: foldValues, isEmpty: foldNotConfigured } = useFoldValues();
   const { catalog: kursunCatalog } = useKursunGramajCatalog();
-  // Gramaj kurşun adımının kartında: adım girince varsayılan, çıkınca temizlenir.
+  const { defaults: kursunCustomerDefaults } = useKursunCustomerDefaults(!isEdit && hasKursun);
+  // Gramaj kurşun adımının kartında: adım girince varsayılan (müşterininki, yoksa istasyonunki), çıkınca temizlenir.
   useKursunGramajBinding({
     enabled: !isEdit,
     hasKursun,
     options: kursunCatalog.options,
     value: form.watch("kursunTargetValueId") ?? null,
     setValue: (id) => form.setValue("kursunTargetValueId", id),
+    customerId: pickedLines[0]?.customerId ?? null,
+    customerDefaults: kursunCustomerDefaults,
   });
 
   // Ön-seçim: yeni iş emrinde katalogun İLK değeri seçili gelsin (eski davranış

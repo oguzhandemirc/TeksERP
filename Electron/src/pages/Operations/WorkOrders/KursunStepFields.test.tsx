@@ -85,6 +85,38 @@ describe("useKursunGramajBinding", () => {
   });
 });
 
+function useCustomerHarness(defaults: Record<string, string>) {
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [value, setValue] = useState<string | null>(null);
+  useKursunGramajBinding({ enabled: true, hasKursun: true, options: OPTIONS, value, setValue, customerId, customerDefaults: defaults });
+  return { value, setValue, setCustomerId };
+}
+
+describe("S3: müşterinin varsayılan gramajı", () => {
+  it("müşteri seçilince müşterinin gramajı; varsayılanı olmayan müşteride istasyonunki", () => {
+    const { result, rerender } = renderHook(() => useCustomerHarness({ k1: "v25" }));
+    expect(result.current.value).toBe("v50");
+    act(() => result.current.setCustomerId("k1"));
+    rerender();
+    expect(result.current.value).toBe("v25");
+    act(() => result.current.setCustomerId("k2"));
+    rerender();
+    expect(result.current.value).toBe("v50");
+  });
+  it("elle seçim müşteri değişince EZİLMEZ; listede olmayan (pasif) müşteri değeri istasyonunkine düşer", () => {
+    const { result, rerender } = renderHook(() => useCustomerHarness({ k1: "v25", k2: "pasif" }));
+    act(() => result.current.setValue("v25"));
+    rerender();
+    act(() => result.current.setCustomerId("k2"));
+    rerender();
+    expect(result.current.value).toBe("v25");
+    const h2 = renderHook(() => useCustomerHarness({ k2: "pasif" }));
+    act(() => h2.result.current.setCustomerId("k2"));
+    h2.rerender();
+    expect(h2.result.current.value).toBe("v50");
+  });
+});
+
 describe("stepsToCustom", () => {
   it("öneri biliniyorsa gönderilir; bilinmiyorsa (undefined) gövdeye girmez", () => {
     const out = stepsToCustom([step("PROCESS_QC", { plannedMachineId: "m1" }), step("TAMBUR")]);
