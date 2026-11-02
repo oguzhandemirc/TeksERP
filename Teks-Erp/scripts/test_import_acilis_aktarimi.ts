@@ -125,14 +125,21 @@ async function main(): Promise<void> {
     const c = await customer("C");
     const d = await customer("D");
     const ch = (n: number, x: Record<string, string>) => row(n, { kind: "Alınan", cariType: "Müşteri", amount: "5000", currency: "TRY", dueDate: "15.03.2027", bankName: "Ziraat", drawerName: "Keşideci A", ...x });
+    // "Kur yok" koşulunu bekçi KENDİ kurar: çözümleyici o tarihe kadarki EN SON kuru alır ve CI'daki arka plan
+    // sunucusunun TCMB turu bugüne yakın GBP kuru yazabilir → işlem tarihi kimsenin kur yazmadığı eski bir gün.
+    const noRateDay = "02.01.1985";
+    const gbpUpTo = await prisma.exchangeRate.count({ where: { currency: "GBP", rateDate: { lte: parseDateCell(noRateDay)! } } });
+    check("§2a0 ön koşul: işlem gününe kadar GBP kuru yok", gbpUpTo === 0, `${gbpUpTo} satır`);
     const chBad = await ImportService.preview("chequePortfolio", [
       ch(2, { cariCode: c.code, serialNo: "S-1" }),
       ch(3, { cariCode: c.code, serialNo: "s-1" }),
       ch(4, { cariCode: c.code, serialNo: "S-2", dueDate: "" }),
-      ch(5, { cariCode: c.code, serialNo: "S-3", currency: "GBP", exchangeRate: "" }),
+      ch(5, { cariCode: c.code, serialNo: "S-3", currency: "GBP", exchangeRate: "", postingDate: noRateDay }),
     ], {}, { userId: adminId, permissions: ALL });
     const chAct = chBad.rows.map((r) => r.action).join(",");
-    check("§2a geçerli CREATE; çift seri · vadesiz · kursuz döviz HATA", chAct === "CREATE,ERROR,ERROR,ERROR", chAct);
+    const noRateCols = (chBad.rows[3]?.errors ?? []).map((e) => e.column).join(",");
+    check("§2a geçerli CREATE; çift seri · vadesiz · kursuz döviz HATA (kur sütunu)",
+      chAct === "CREATE,ERROR,ERROR,ERROR" && noRateCols === "exchangeRate", `${chAct} · ${noRateCols}`);
     const chOk = [ch(2, { cariCode: c.code, serialNo: "S-1" }), ch(3, { cariCode: c.code, serialNo: "S-9", docType: "Senet", kind: "Verilen", amount: "750" })];
     const chPv = await ImportService.preview("chequePortfolio", chOk, {}, { userId: adminId, permissions: ALL });
     const chTok = crypto.randomUUID();
