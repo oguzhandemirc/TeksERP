@@ -23,15 +23,17 @@ import { reserveSeriesNo } from "./helpers/series-counter-store.helper";
 import { PDF_MIME, SCAN_SELECT } from "./gelen-belge-scan.service";
 import { applyStoredReadsTx, auditPhotoSource, auditStoredReads, markPhotoSourceTx, prepareStoredReads, type StoredReadOutcome } from "./gelen-belge-taslak-doldur.service";
 import { LINE_SELECT, lineColumns, notDraft, text, type DeliveryNoteLineInput } from "./gelen-belge-line.service";
-import { hasDocumentDeclared, lineItemFallback, lineProblems, totalsCheck } from "./gelen-belge-kontrol.service";
+import { hasDocumentDeclared, lineItemFallback, lineProblems, perDocumentGate, totalsCheck } from "./gelen-belge-kontrol.service";
+import { batchAndMeterColumns, type DeliveryNoteHeaderPatch } from "./gelen-belge-baslik-alan.service";
 import { resolveEffectiveDefaultItem, usableDefaultItem } from "./gelen-belge-varsayilan.service";
 import { noteNotices } from "../lib/gelen-belge/uyari";
 import { sameBatchNotes } from "./gelen-belge-parti-tekrar.service";
-import { readDocumentTotalCheck } from "./system-setting.service";
+import { readDocumentTotalCheck, readIncomingDocEntryMode, readUnreviewedApprovalMode } from "./system-setting.service";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const SERIES_KEY = "customerDeliveryNote";
 
+export type { DeliveryNoteHeaderPatch } from "./gelen-belge-baslik-alan.service";
 export { addDeliveryNoteLines, deleteDeliveryNoteLine, updateDeliveryNoteLine, type DeliveryNoteLineInput } from "./gelen-belge-line.service";
 // Durum kümesi Prisma enum'undan TÜRETİLİR (elle kopya bayatlar; D4 yeni değer eklerse tek yer).
 export const DELIVERY_NOTE_STATUSES = Object.values(DeliveryNoteStatus) as readonly DeliveryNoteStatus[];
@@ -75,6 +77,7 @@ export interface DeliveryNoteListQuery {
 const HEADER_SELECT = {
   id: true, noteNo: true, status: true, sourceKind: true, ownerCustomerId: true, senderCustomerId: true, senderText: true,
   senderDocNo: true, senderDocDate: true, customerBatchNo: true, customerOrderNo: true, processText: true, templateId: true, templateScore: true,
+  ourBatchNo: true, ourBatchNoKey: true, kursunMeters: true, kursunMetersSource: true, kursunMetersReview: true,
   pageCount: true, declaredTopCount: true, totalsDeclared: true, varianceReason: true, warnings: true, approvedAt: true,
   approvedById: true, cancelledAt: true, cancelledById: true, cancelReason: true, clientToken: true, createdAt: true,
   updatedAt: true, createdById: true, updatedById: true,
@@ -90,8 +93,14 @@ const DETAIL_SELECT = {
 } satisfies Prisma.CustomerDeliveryNoteSelect;
 
 /** Audit yükü: yalnız başlık künyesi (JSON beyan/uyarı alanları hariç; fotoğraf/OCR zaten burada yok). */
-function auditHeader(n: { noteNo: string; status: string; sourceKind: string; ownerCustomerId: string | null; senderCustomerId: string | null; senderText: string | null; senderDocNo: string | null; senderDocDate: Date | null; customerBatchNo: string | null; customerOrderNo: string | null; processText: string | null; pageCount: number | null; declaredTopCount: number | null }) {
+function auditHeader(n: { noteNo: string; status: string; sourceKind: string; ownerCustomerId: string | null; senderCustomerId: string | null; senderText: string | null; senderDocNo: string | null; senderDocDate: Date | null; customerBatchNo: string | null; customerOrderNo: string | null; processText: string | null; pageCount: number | null; declaredTopCount: number | null; ourBatchNo?: string | null; ourBatchNoKey?: string | null; kursunMeters?: Prisma.Decimal | null; kursunMetersSource?: string | null; kursunMetersReview?: boolean }) {
+  // Parti no / kurşun metresi yalnız PATCH görüntüsünde seçilir (yaratma yükü bugünkü gibi kalır).
+  const extra = n.kursunMetersReview === undefined ? {} : {
+    ourBatchNo: n.ourBatchNo ?? null, ourBatchNoKey: n.ourBatchNoKey ?? null, kursunMeters: n.kursunMeters?.toString() ?? null,
+    kursunMetersSource: n.kursunMetersSource ?? null, kursunMetersReview: n.kursunMetersReview,
+  };
   return {
+    ...extra,
     noteNo: n.noteNo, status: n.status, sourceKind: n.sourceKind, ownerCustomerId: n.ownerCustomerId, senderCustomerId: n.senderCustomerId,
     senderText: n.senderText, senderDocNo: n.senderDocNo, senderDocDate: n.senderDocDate ? n.senderDocDate.toISOString().slice(0, 10) : null,
     customerBatchNo: n.customerBatchNo, customerOrderNo: n.customerOrderNo, processText: n.processText, pageCount: n.pageCount, declaredTopCount: n.declaredTopCount,
@@ -155,7 +164,11 @@ export async function getDeliveryNote(id: string) {
   const sameBatch = await sameBatchNotes(note);
   // Belge geneli kip onayla AYNI okuyucudan; beyansız belgede ayar okunmaz.
   const documentMode = hasDocumentDeclared(note.totalsDeclared) ? await readDocumentTotalCheck() : "INFO";
-  return { ...note, lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch };
+  // Belge başına tek kayıt kipi: onayın AYNI kapı yüklemi (yalnız kip açıkken anahtar doğar — PER_LINE yanıtı bugünkü gibi).
+  const perDocument = (await readIncomingDocEntryMode()) === "PER_DOCUMENT"
+    ? { gate: perDocumentGate(note, note.kursunMetersReview ? await readUnreviewedApprovalMode() : "WARN") }
+    : null;
+  return { ...note, lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch, ...(perDocument ? { perDocument: perDocument.gate } : {}) };
 }
 
 /** Liste where'i — özet şeridi de BUNDAN türer (durum süzgeci hariç; şerit duruma göre sayar). */
@@ -292,21 +305,24 @@ export async function createDeliveryNote(input: DeliveryNoteCreateInput, userId:
 }
 
 /** Başlık düzeltme — yalnız DRAFT; atomik claim (count 0 → 404/409). */
-export async function updateDeliveryNote(id: string, patch: DeliveryNoteHeaderInput, userId: string) {
+export async function updateDeliveryNote(id: string, patch: DeliveryNoteHeaderPatch, userId: string) {
   const before = await prisma.customerDeliveryNote.findUnique({ where: { id }, select: HEADER_AUDIT_SELECT });
   if (!before) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
   // Yalnız patch'te TANIMLI anahtarlar yazılır (undefined → dokunma): farklı alanları düzenleyen iki yazar
   // (tablet başlık · panel gözden geçirme) birbirini bayat anlık görüntüyle EZMEZ; sahip/gönderen doğrulaması
   // da yalnız anahtar patch'teyse koşar (pasifleşmiş sahip ilgisiz düzeltmeyi 400'e düşürmez).
   const cols = patchColumns(await headerColumns(patch), patch);
-  const res = await prisma.customerDeliveryNote.updateMany({ where: { id, status: "DRAFT" }, data: { ...cols, updatedById: userId } }).catch(translateUnique);
+  const extra = batchAndMeterColumns(patch, before);
+  // Onay-yalnız metre işareti (değer değişmeden) yarışta başka metreyi onaylamasın: claim mevcut metreye bağlanır.
+  const meterGuard = patch.kursunMetersReviewed && patch.kursunMeters === undefined ? { kursunMeters: before.kursunMeters } : {};
+  const res = await prisma.customerDeliveryNote.updateMany({ where: { id, status: "DRAFT", ...meterGuard }, data: { ...cols, ...extra, updatedById: userId } }).catch(translateUnique);
   if (res.count === 0) await notDraft(id);
   const after = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id }, select: HEADER_AUDIT_SELECT });
   await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: id, oldData: auditHeader(before), newData: auditHeader(after) });
   return getDeliveryNote(id);
 }
 
-const HEADER_AUDIT_SELECT = { ...PRIOR_SELECT, sourceKind: true, senderText: true, senderDocDate: true, customerBatchNo: true, customerOrderNo: true, processText: true, pageCount: true, declaredTopCount: true, senderCustomerId: true } as const;
+const HEADER_AUDIT_SELECT = { ...PRIOR_SELECT, sourceKind: true, senderText: true, senderDocDate: true, customerBatchNo: true, customerOrderNo: true, processText: true, pageCount: true, declaredTopCount: true, senderCustomerId: true, ourBatchNo: true, ourBatchNoKey: true, kursunMeters: true, kursunMetersSource: true, kursunMetersReview: true } as const;
 
 /** Tam kolon kümesinden yalnız patch'te tanımlı anahtarları bırakır (kısmi güncelleme; kayıp güncelleme yok). */
 function patchColumns<T extends Record<string, unknown>>(full: T, patch: DeliveryNoteHeaderInput): Partial<T> {

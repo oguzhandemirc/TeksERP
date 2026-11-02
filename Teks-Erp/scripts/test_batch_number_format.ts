@@ -27,15 +27,21 @@
 //      sarma ilk tekrarda 500 verir ve üretim durur.
 //      S0 (2026-11-02): `numberSource=DOCUMENT` belge no'su da tekrar edebilir — hiçbir
 //      UNIQUE index `batchNumber`/`numberSource` kolonunu kapsamaz.
+//   8) BELGE NO SAYACI SÜRÜKLERSE (Gülkesim parti/metre C, 2026-11-02) — gelen belgeden doğan
+//      parti (`numberSource=DOCUMENT`) seri biçimine uyabilir (`P2618733` günlük kalıba, `P05` kısa
+//      kalıba); okuyucular onu sayarsa sonraki seri partisi sessizce ileri atlar. DOCUMENT dalında
+//      8022 kilidi alınmaz; SERIES dalında kilit hâlâ İLK. Negatif sonda: `readWrapRowsTx`ten
+//      `numberSource` süzgeci silinince §8 kısa rejim ❌.
 //
-// 0-5 sahte tx ile saf (DB'ye YAZMAZ), 6-7 canlı veriyi SALT-OKUR.
+// 0-5 sahte tx ile saf (DB'ye YAZMAZ), 6-7 canlı veriyi SALT-OKUR, 8 GERİ SARILAN tx'te yazar (iz bırakmaz).
 // =============================================================================
 
 import { readdirSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 import type { Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
-import { generateBatchNumberTx, BATCH_NUMBER_LOCK_NS } from "../src/services/batch.service";
+import { createBatchTx, generateBatchNumberTx, BATCH_NUMBER_LOCK_NS } from "../src/services/batch.service";
+import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { DUPLICATE_GUARD_LOCK_NS } from "../src/services/helpers/duplicate-guard.helper";
 import { buildDailyCode, dailyCodePrefix } from "../src/utils/code-format";
 import { numberSeriesCatalogEntry } from "../src/constants/number-series-catalog";
@@ -451,8 +457,9 @@ async function main(): Promise<void> {
 
   // ── 7) Canlı veri (salt-okunur) ──────────────────────────────────────────
   console.log("\n── 7) Canlı veri (salt-okunur) ──");
-  const live = await prisma.batch.findMany({ select: { batchNumber: true } });
-  const daily = live.filter((b) => /^P\d{6}\d+$/.test(b.batchNumber));
+  const live = await prisma.batch.findMany({ select: { batchNumber: true, numberSource: true } });
+  // Belgeden gelen numara (DOCUMENT) seri değildir — `P2618733` günlük kalıba uysa da tekrar denetimine girmez.
+  const daily = live.filter((b) => b.numberSource === "SERIES" && /^P\d{6}\d+$/.test(b.batchNumber));
   const short = live.filter((b) => seriesCodeSeq(kisa, b.batchNumber) !== null);
   // ⚠️ İKİ FARKLI "SIFIR" — karıştırmak bu testi TEMİZ KURULUMDA kırıyordu
   // (CI, 2026-08-09: `günlük 0 · kısa 0 / toplam 0`). Ayrım şu:
@@ -513,7 +520,63 @@ async function main(): Promise<void> {
     );
   }
 
+  await section8();
+
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+}
+
+// ── 8) Belgeden parti no (DOCUMENT) ────────────────────────────────────────
+async function section8(): Promise<void> {
+  console.log("\n── 8) Belgeden parti no (DOCUMENT) ──");
+  check("§8 `P2618733` günlük kalıba UYAR (süzgeç şart, kalıp yetmez)", /^P\d{6}\d+$/.test("P2618733"));
+
+  // 8a — sahte tx: DOCUMENT dalı kilit/bayrak/sayaç okumaz; SERIES dalında kilit İLK.
+  const calls: string[] = [];
+  let created: { batchNumber?: string; numberSource?: string } = {};
+  const stub = {
+    $executeRaw: async (strings: TemplateStringsArray) => { calls.push(/pg_advisory_xact_lock/.test(strings.join("?")) ? "lock" : "exec"); return 1; },
+    $queryRaw: async () => { calls.push("queryLastShort"); return []; },
+    batch: {
+      create: async (a: { data: { batchNumber: string; numberSource: string } }) => { calls.push("create"); created = a.data; return { id: "b", batchNumber: a.data.batchNumber, workOrderId: "w", splitFromId: null }; },
+      findMany: async () => { calls.push("findMany"); return []; },
+    },
+    roll: { updateMany: async () => ({ count: 0 }) },
+    travelerCard: { updateMany: async () => ({ count: 0 }) },
+    systemSetting: { findUnique: async () => { calls.push("readFlag"); return { value: true }; } },
+  } as unknown as Prisma.TransactionClient;
+  await createBatchTx(stub, { workOrderId: "w", rollIds: [], documentBatchNo: " ISM1439770 " });
+  check("§8a DOCUMENT: numara = belge no (kırpılmış), numberSource=DOCUMENT", created.batchNumber === "ISM1439770" && created.numberSource === "DOCUMENT", JSON.stringify(created));
+  check("§8a DOCUMENT dalında 8022 kilidi ve sayaç okuması YOK", !calls.includes("lock") && !calls.includes("queryLastShort") && !calls.includes("readFlag"), calls.join(","));
+  calls.length = 0;
+  await createBatchTx(stub, { workOrderId: "w", rollIds: [], documentBatchNo: "  " });
+  check("§8a boş belge no → SERIES dalı, kilit İLK ifade", calls[0] === "lock" && created.numberSource === "SERIES", calls.join(","));
+
+  // 8b — canlı, GERİ SARILAN tx: belge no'su sıradaki seri koduyla AYNI ve en yeni olsa da sayaç onu görmez.
+  class GeriSar extends Error {}
+  const sonuc: string[] = [];
+  try {
+    await prisma.$transaction(async (tx) => {
+      const tag = `TST-B8-${Date.now().toString(36)}`;
+      const woA = await tx.workOrder.create({ data: { workOrderNumber: `${tag}-A` }, select: { id: true } });
+      const woB = await tx.workOrder.create({ data: { workOrderNumber: `${tag}-B` }, select: { id: true } });
+      for (const kisaAcik of [true, false]) {
+        await tx.systemSetting.upsert({ where: { key: SETTING_KEYS.BATCH_SHORT_NUMBER_ENABLED }, create: { key: SETTING_KEYS.BATCH_SHORT_NUMBER_ENABLED, value: kisaAcik }, update: { value: kisaAcik } });
+        await tx.$executeRawUnsafe("SAVEPOINT b8");
+        const probe = (await createBatchTx(tx, { workOrderId: woA.id, rollIds: [] })).batch.batchNumber;
+        await tx.$executeRawUnsafe("ROLLBACK TO SAVEPOINT b8");
+        // Belge no = sayacın vereceği kod; başka iş emrinde (aynı-WO atlaması karışmasın) ve EN YENİ doğan.
+        const doc = (await createBatchTx(tx, { workOrderId: woB.id, rollIds: [], documentBatchNo: probe })).batch;
+        await tx.batch.update({ where: { id: doc.id }, data: { createdAt: new Date(Date.now() + 3_600_000) } });
+        const next = (await createBatchTx(tx, { workOrderId: woA.id, rollIds: [] })).batch.batchNumber;
+        sonuc.push(`${kisaAcik ? "kısa" : "günlük"}:${probe}→${next}`);
+        check(`§8b ${kisaAcik ? "kısa" : "günlük"} rejim: DOCUMENT satırı sayacı sürüklemez (sıradaki seri = belge no'dan önceki tahmin)`, next === probe, `tahmin ${probe} · gerçek ${next}`);
+      }
+      throw new GeriSar();
+    }, { timeout: 30_000 });
+  } catch (e) {
+    if (!(e instanceof GeriSar)) throw e;
+  }
+  console.log(`   (geri sarıldı: ${sonuc.join(" · ")})`);
 }
 
 main()

@@ -63,6 +63,7 @@ export function useWorkOrderPlan(noteId: string, open: boolean) {
       startGroupWorkOrders(selected.map((g) => ({ group: g, targets: targetsOf(g.key) })), {
         routeTemplateId: routeId as string,
         foldType,
+        sourceNoteId: noteId,
         tokenFor: (key) => attempt.keyed(key),
         quickStart: workOrderService.quickStart,
       }),

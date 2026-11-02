@@ -200,6 +200,11 @@ export interface NumberSeriesCatalogEntry {
      *   `test_number_series_panel §4`) paylaşım varsa beyan ZORUNLUDUR.
      */
     kapsam?: "belge-capasi" | "seri-onekli";
+    /**
+     * Tablo seri DIŞI numara da taşıyor (`Batch.numberSource = DOCUMENT`, gelen belgeden parti no) — sayım yalnız
+     * `numberSource = SERIES` satırları. Beyansız kalsaydı belge no'su ön eke uyduğunda serinin sayısını şişirirdi.
+     */
+    yalnizSeri?: true;
   };
   /**
    * AYNI KOLONU PAYLAŞAN AMA BİRBİRİNİ DIŞLAYAN İKİZ SERİ (2026-09-23).
