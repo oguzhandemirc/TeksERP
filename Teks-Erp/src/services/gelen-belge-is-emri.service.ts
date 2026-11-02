@@ -16,6 +16,7 @@ import { loadKursunGramajOptions } from "./helpers/kursun-bypass-gramaj.helper";
 import { loadProcessChoiceGroups, PROCESS_CHOICE_VALUE_WHERE } from "./helpers/process-choice-catalog.helper";
 import { customerBatchKeyOf } from "./helpers/ship-readiness.helper";
 import { ATTACHABLE_ROLL_STATUSES } from "./workorder-batch-add.service";
+import { resolveDocumentBatchNo } from "./helpers/document-batch-no.helper";
 import { TERIM } from "../constants/terim";
 
 /** İş emri planı yalnız top doğurmuş belgede anlamlıdır. */
@@ -65,6 +66,8 @@ export interface WorkOrderPlan {
   readonly owner: { readonly id: string; readonly name: string } | null;
   /** Müşteri partisi (sahip + belge parti no; `customerBatchKeyOf`) — parti nosu yoksa null. */
   readonly customerBatch: { readonly key: string; readonly batchNo: string } | null;
+  /** Açılacak partinin belgeden alınacak numarası (`batchNumberSource=DOCUMENT` + `ourBatchNo` dolu); null = seriden. */
+  readonly batchNoPreview: string | null;
   /** Rota önerisi (`suggestRoute` zinciri) — yalnız ÖNERİ, seçim kullanıcıda; otomatik iş emri de bunu kullanır. */
   readonly suggestedRouteTemplateId: string | null;
   /** Önerinin kaynağı; öneri yoksa null. */
@@ -170,6 +173,7 @@ export async function buildWorkOrderPlan(noteId: string): Promise<WorkOrderPlan>
     status: note.status,
     owner: note.ownerCustomer,
     customerBatch: batchKey ? { key: batchKey, batchNo: note.customerBatchNo!.trim() } : null,
+    batchNoPreview: await resolveDocumentBatchNo(prisma, note.id),
     suggestedRouteTemplateId: route.routeTemplateId,
     suggestedRouteSource: route.source,
     routeSuggestionNotes: route.notes,

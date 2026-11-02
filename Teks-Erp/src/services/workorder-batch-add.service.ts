@@ -42,6 +42,8 @@ export interface AddBatchInput {
   /** Hareket defterine BATCH_ADDED yazılsın mı (ilk parti açılışın parçasıdır, yazılmaz). */
   recordEvent: boolean;
   reason?: string | null;
+  /** Belgeden çözülmüş parti no (`resolveDocumentBatchNo`); boşsa seri. */
+  documentBatchNo?: string | null;
 }
 
 export interface AddBatchResult {
@@ -176,7 +178,7 @@ export async function addBatchToWorkOrderTx(tx: Tx, input: AddBatchInput): Promi
   if (input.mode === "STRICT" && lost.length > 0) throw AppError.conflict("Toplardan biri bu sırada değişti — tekrar deneyin.", { code: "BATCH_ADD_RACE" });
   const errors = [...rejects.map((r) => `${r.barcode}: ${r.reason}`), ...lost.map((r) => `${r.barcode}: Top başka bir işlemde değişti, tekrar deneyin`)];
   if (claimed.length === 0) return { attached: [], errors, batch: null, firstStepId: wo.steps[0].id, warnings: [] };
-  const { batch } = await createBatchTx(tx, { workOrderId: wo.id, rollIds: claimed.map((r) => r.id), userId: input.userId, clientToken: input.clientToken });
+  const { batch } = await createBatchTx(tx, { workOrderId: wo.id, rollIds: claimed.map((r) => r.id), userId: input.userId, clientToken: input.clientToken, documentBatchNo: input.documentBatchNo });
   for (const s of wo.steps) await recomputeStepStatus(tx, s.id);
   if (wo.steps[0].station.type !== "EXTERNAL") await ensureWorkOrderInProgress(tx, wo.id);
   const totalQty = claimed.reduce((acc, r) => acc + Number(r.currentQty), 0);

@@ -274,7 +274,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     // ⚠️ `batch.batchNumber` İKİ seri tarafından paylaşılıyor (`batchShort`) —
     // kapsam beyansız kalsaydı panel iki rejimin TOPLAMINI tek serinin sayısı
     // diye basardı.
-    countTable: { model: "batch", field: "batchNumber", birim: "kayıt", kapsam: "seri-onekli" },
+    countTable: { model: "batch", field: "batchNumber", birim: "kayıt", kapsam: "seri-onekli", yalnizSeri: true },
     label: "Parti no (günlük biçim)",
     seedPrefix: "P",
     // ⚠️ 1 = DOLGU YOK. Eski kodlar (`P0508260019`) dolgusuz doğdu; tohumu
@@ -295,7 +295,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
       uretec: "services/batch.service.ts",
     },
     panelGroup: "uretim",
-    countTable: { model: "batch", field: "batchNumber", birim: "kayıt", kapsam: "seri-onekli" },
+    countTable: { model: "batch", field: "batchNumber", birim: "kayıt", kapsam: "seri-onekli", yalnizSeri: true },
     label: "Parti no (kısa, dönen)",
     seedPrefix: "P",
     // Tarih YOK: sayaç gün başında sıfırlanmaz, plaka seti gibi sürekli döner.
