@@ -140,6 +140,11 @@ export const SIGNER_PLAN_REASON_LABEL: Record<string, string> = {
   YETENEK_YOK: "kurulumun derlemesi ara imzalı HAK'ı tanımıyor (hak-ara yeteneği bildirmedi)",
   ARA_IMZACI_YOK: "bu sınıf için geçerli ara imzacı yüklü değil",
 };
+/** KUYRUK nedeninde yapılacak iş — aynı küme (sunucu `QUEUE_REASONS`; mirrors.test.ts, iki yönlü). */
+export const ROOT_QUEUE_REASON_ACTION: Record<string, string> = {
+  YETENEK_YOK: "eski derleme → kurulumu güncelleyin (güncel sürüm ara imzalı HAK'ı tanır); bekleyen talep kökle imzalanır",
+  ARA_IMZACI_YOK: "ara imzacı bu sınıfı kapsamıyor → bu sınıfı kapsayan yeni ara imzacı çıkarın; bekleyen talep kökle imzalanır",
+};
 /** Satıcı imza anahtarının türü / künye durumu — Prisma `AnahtarTuru` / `AnahtarDurumu` aynası. */
 export const KEY_KIND_LABEL: Record<string, string> = {
   KOK: "Kök",

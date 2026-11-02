@@ -11,7 +11,7 @@ import { useWrite } from "../../shared/attempt";
 import { ModulePicker, modulesReady } from "../../shared/forms";
 import { dateInputToIso, fmtDate, isoToDateInput } from "../../shared/format";
 import { useGet } from "../../shared/hooks";
-import { PRODUCTION_MODULE_KEY, SIGNER_PLAN_LABEL, SIGNER_PLAN_REASON_LABEL, label } from "../../shared/labels";
+import { PRODUCTION_MODULE_KEY, ROOT_QUEUE_REASON_ACTION, SIGNER_PLAN_LABEL, SIGNER_PLAN_REASON_LABEL, label } from "../../shared/labels";
 import { useApi, useCan } from "../../shared/session";
 import { isValidityEndRequired } from "../../shared/validity";
 import type { EntitlementSummary, EntitlementVersionResult, SigningPlan } from "../../shared/types";
@@ -70,7 +70,7 @@ export const PLAN_CHANGED_TEXT: Record<SigningPlan["imzaci"], string> = {
   ARA: "İmza planı değişti: kök anahtarı satıcı sunucusunda değil, bu HAK artık ARA İMZACIYLA imzalanır. Form yenilendi — ara imzacı parolasıyla yeniden imzalayın (girilen parola kullanılmadı).",
   KOK: "İmza planı değişti: bu HAK kök anahtarla imzalanır. Form yenilendi — kök anahtar parolasıyla yeniden imzalayın (girilen parola kullanılmadı).",
   KUYRUK:
-    "İmza planı değişti: kök anahtarı satıcı sunucusunda değil ve kurulumun derlemesi ara imzalı HAK'ı tanımıyor. Değişiklik kök imzası kuyruğuna girer ve dönem töreninde imzalanır — parola istenmez, formu yeniden gönderin.",
+    "İmza planı değişti: bu HAK artık ara imzacıyla imzalanamıyor (nedeni yukarıdaki planda). Değişiklik kök imzası kuyruğuna girer ve Mac'te kökle imzalanır — parola istenmez, formu yeniden gönderin.",
 };
 
 export function useSigningPlan(entitlementId: string) {
@@ -89,6 +89,16 @@ function planSummary(plan: SigningPlan): string {
   if (plan.imzaci === "KUYRUK") return `${SIGNER_PLAN_LABEL.KUYRUK} — ${label(SIGNER_PLAN_REASON_LABEL, plan.neden)}; değişiklik dönem töreninde Mac'te kökle imzalanır`;
   const why = plan.imzaci === "KOK" ? "kök bu sunucuda yüklü" : isExpectedFirstEntitlement(plan) ? "kurulum henüz etkinleşmedi" : "kurulum ara imzalı HAK'ı tanıyor";
   return `${label(SIGNER_PLAN_LABEL, plan.imzaci)} (${plan.kid ?? "—"}) — ${why}`;
+}
+
+/** Gönderimden ÖNCE: bu talep kök kuyruğuna düşecek — neden ve yapılacak iş (kuyruk sessizce dolmasın). */
+function QueueWarning({ neden }: { neden: string | null }) {
+  return (
+    <p className="warn-box" role="alert" data-testid="kuyruk-uyarisi">
+      Bu değişiklik imzalanmaz, <strong>kök imzası kuyruğuna düşer</strong>: {label(SIGNER_PLAN_REASON_LABEL, neden)}. Yapılacak: {label(ROOT_QUEUE_REASON_ACTION, neden)}{" "}
+      (Mac'te <code>uretim-toren.mjs kuyruk</code>). Parola istenmez.
+    </p>
+  );
 }
 
 function PendingRootRequest() {
@@ -349,7 +359,7 @@ export function VendorEntitlementVersionModal({
           <input type="password" autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} />
         </Field>
       ) : null}
-      {queue ? <p className="muted small">Parola istenmez: değişiklik kök imzası kuyruğuna girer.</p> : null}
+      {plan && queue ? <QueueWarning neden={plan.neden} /> : null}
       {changedPlan ? (
         <p className="error" role="alert">
           {PLAN_CHANGED_TEXT[changedPlan]}

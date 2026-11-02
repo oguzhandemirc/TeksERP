@@ -132,7 +132,7 @@ P, güvenilir saat T ile karşılaştırılır (`Teks-Erp/src/lib/license/saat.t
 Yapı bugünkü `CertificateSchema`dır. Yeni olan yalnız kullanım değeridir:
 
 - `kullanim: "HAK"`, `kid` öneki `ara-`.
-- `siniflar` tören parametresidir. Varsayılan: URETIM · DR · DEMO · TEST. Kökün sınıf yetkisini aşamaz.
+- `siniflar` tören parametresidir. Varsayılan: protokolün BAYI dışı bütün sınıfları (URETIM · DR · DEMO · TEST · BARINDIRILAN; 2026-11-02'ye dek BARINDIRILAN eksikti, o sınıfın HAK'ları kök kuyruğuna düşüyordu). Tek kaynak `satici/sunucu/src/keys/intermediate-classes.ts`; yeni sınıf kendiliğinden girer. Kökün sınıf yetkisini aşamaz.
 - Veriliş kuralı aynen geçerlidir: `baslangic − tol ≤ hak.verilis ≤ bitis + tol`.
 
 HAK, sertifikayı `imzaciSertifikasi` alanında gömülü taşır (bayi yolundaki `bayiSertifikasi` gibi). JWS başlığı değişmez.

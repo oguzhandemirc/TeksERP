@@ -23,6 +23,7 @@ import {
   NOTIFICATION_EVENT_LABEL,
   NOTIFICATION_STATUS_LABEL,
   PAID_THROUGH_KIND_LABEL,
+  ROOT_QUEUE_REASON_ACTION,
   ROOT_REQUEST_STATUS_LABEL,
   FACTOR_STATE_LABEL,
   FINGERPRINT_FACTOR_LABEL,
@@ -339,11 +340,14 @@ describe("lisans v2 — enum ve küme ekran adları (sunucu kaynağı, iki yönl
   it("imza planı ve KUYRUK nedeni = SignerPlanKind · EntitlementSignerPlan reason (entitlement-policy.ts)", () => {
     const src = read("services/entitlement-policy.ts");
     const kinds = /export type SignerPlanKind = ([^;]+);/.exec(src);
-    const reasons = /readonly reason: ([^}]+) \}/.exec(src);
+    const reasons = listStrings(src, "export const QUEUE_REASONS");
     expect(kinds, "SignerPlanKind bulunamadı").not.toBeNull();
-    expect(reasons, "KUYRUK reason bulunamadı").not.toBeNull();
+    expect(/readonly kind: "KUYRUK"; readonly reason: QueueReason \}/.test(src), "KUYRUK reason QueueReason değil").toBe(true);
     twoWay([...kinds![1]!.matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]!), SIGNER_PLAN_LABEL);
-    twoWay([...reasons![1]!.matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]!), SIGNER_PLAN_REASON_LABEL);
+    twoWay(reasons, SIGNER_PLAN_REASON_LABEL);
+    twoWay(reasons, ROOT_QUEUE_REASON_ACTION);
+    // Talebe doğuşta yazılan neden (Prisma) ile plan nedeni aynı küme — iki yönde.
+    expect([...prismaEnum("HakKokTalebiNedeni")].sort()).toEqual([...reasons].sort());
   });
 
   it("imza planının yetenek kaynağı = SigningCapabilitySource (entitlement-policy.ts) — iki yönde aynı küme", () => {

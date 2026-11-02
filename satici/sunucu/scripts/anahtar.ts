@@ -12,8 +12,9 @@
 //   npx tsx scripts/anahtar.ts indirme-uret --kid=ind-2026 --kok=kok-2026-1 [--gun=365]
 //   npx tsx scripts/anahtar.ts bayi-uret --kid=bayi-ornek --bayi-id=<uuid> --moduller=a.enabled,b.enabled
 //                                        --siniflar=URETIM --kok=kok-2026-1 [--gun=365]
-//   npx tsx scripts/anahtar.ts ara-uret --kid=ara-2026-1 --kok=kok-2026-1 [--siniflar=URETIM,DR,DEMO,TEST] [--gun=395]
-//       HAK ARA İMZACISI (G4): kök imzalı `HAK` sertifikası + ara parolasıyla sarılı dosya (<kid>.ara.json). Stdin: kök
+//   npx tsx scripts/anahtar.ts ara-uret --kid=ara-2026-1 --kok=kok-2026-1 [--siniflar=…] [--gun=395]
+//       HAK ARA İMZACISI (G4): varsayılan sınıflar `src/keys/intermediate-classes.ts` (BAYI dışı bütün sınıflar ∩ kök);
+//       kök imzalı `HAK` sertifikası + ara parolasıyla sarılı dosya (<kid>.ara.json). Stdin: kök
 //       parolası, sonra ara parolası (yeni + tekrar; kökten FARKLI olmalı — ara parolası portalda VDS'te yazılır).
 //   npx tsx scripts/anahtar.ts istemci-sertifika-uret --x=<açık anahtar> --kid=ist-<yıl>-<n> --kok=kok-2026-1 [--kok-dizin=…] [--gun=395] --cikti=<dosya>
 //       ISTEMCI sertifikası (panel/tablet güncelleme imzacısı; ISTEMCI-ANAHTARI-KOK-ALTINDA §3.1): özel yarı satıcıya GELMEZ,
@@ -31,7 +32,10 @@
 //                                        [--iptal=<anahtar/sertifika dosyası>[,…]] [--neden=<metin>]
 //       Sertifika İPTAL belgesi (`tekserp-iptal`, yalnız kök): önceki belgenin bütün satırları taşınır, sıra +1.
 //   npx tsx scripts/anahtar.ts kuyruk-imzala --kok=kok-2026-1 --kok-dizin=<kökün dizini> --kuyruk=<kuyruk.json> --cikti=<dosya>
-//       Kök imzası bekleyen HAK'ları (VDS'ten `kuyruk-disa-aktar`) kökle imzalar; yük AYNEN imzalanır.
+//       Kök imzası bekleyen HAK'ları (VDS'ten `kuyruk-disa-aktar`) kökle imzalar; yük AYNEN imzalanır. Şüpheli talep
+//       (taban sürümü köke karşı doğrulanamıyor / kimlik tutmuyor; `src/services/root-queue-review.ts`) varsa parola sorulmadan RED.
+//   npx tsx scripts/anahtar.ts kuyruk-incele --kok=kok-2026-1 --kok-dizin=<kökün dizini> --kuyruk=<kuyruk.json>
+//       Parolasız inceleme: her talep için önceki imzalı HAK'a göre fark + şüpheler → stdout JSON (tören `kuyruk` komutu basar).
 //   VDS (konteyner içinde, DB'li): `kuyruk-disa-aktar` (stdout'a kuyruk JSON'u) · `donem-ice-aktar [--dosya=<yol>]`
 //       (stdin ya da dosyadan tören paketinin ice-aktar.json'u: iptal belgesi + isteğe bağlı dağıtım iptali `paketIptal`
 //       (`tekserp-paketiptal`) + kök imzalı HAK'lar).
@@ -91,6 +95,8 @@ import { runAsCli } from "../src/lib/request-scope";
 import { KeyStore, anchorModeOfKeyDir } from "../src/keys/key-store";
 import { PUBLISHER_DEFAULT_MINUTES, PublisherTokenError, publisherTokens } from "../src/keys/publisher-token";
 import { generateServerSecrets } from "../src/keys/server-secrets";
+import { intermediateDefaultClasses } from "../src/keys/intermediate-classes";
+import { reviewRootQueue } from "../src/services/root-queue-review";
 import { CliError, args, askPassword, kasaAdiKid } from "./lib/cli-girdi";
 
 // ---------------------------------------------------------------- yardımcılar
@@ -297,8 +303,6 @@ async function generateDealer(flags: Map<string, string>): Promise<void> {
   process.stdout.write(`Bayi anahtarı yazıldı: ${target}\n`);
 }
 
-/** Ara imzacının varsayılan sınıfları (tören parametresi); kökün yetkisiyle kesişir. */
-const INTERMEDIATE_DEFAULT_CLASSES: readonly LicenseClass[] = ["URETIM", "DR", "DEMO", "TEST"];
 /** Ara imzacı · ALT · İNDİRME dönem ömrü: yılda bir tören (365) + 30 gün örtüşme; `uretim-toren.mjs` DONEM_GUN ile aynı. */
 const PERIOD_DAYS = 395;
 
@@ -315,7 +319,7 @@ async function generateIntermediate(flags: Map<string, string>): Promise<void> {
   const target = path.join(dir, `${kid}.ara.json`);
   if (existsSync(target)) throw new CliError(`${target} zaten var — rotasyon yeni kid ile yapılır`);
   const root = rootAnchorOf(rootDir(flags, dir), rootKid);
-  const fallback = INTERMEDIATE_DEFAULT_CLASSES.filter((c) => root.classes.includes(c));
+  const fallback = intermediateDefaultClasses(root.classes);
   const classes = classList(flags.get("siniflar"), fallback);
   if (classes.length === 0) throw new CliError(`Kök ${rootKid} ara imzacıya verilebilecek sınıf taşımıyor`);
   const outside = classes.filter((c) => !root.classes.includes(c));
@@ -520,6 +524,11 @@ async function signRootQueue(flags: Map<string, string>): Promise<void> {
     if (!root.classes.includes(decoded.value.sinif)) throw new CliError(`Talep ${r.talepId}: kök ${rootKid} ${decoded.value.sinif} sınıfına yetkili değil`);
     if (decoded.value.hakId !== r.hakId || decoded.value.surum !== r.surum) throw new CliError(`Talep ${r.talepId}: yükün hakId/sürümü talep satırıyla uyuşmuyor`);
   }
+  // Sahte talep seddi: taban sürümü doğrulanamayan ya da kimliği tutmayan talep varsa HİÇBİRİ imzalanmaz (parola sorulmadan).
+  const suspicious = reviewRootQueue(input, root.anchor).talepler.filter((t) => t.supheler.length > 0);
+  if (suspicious.length > 0) {
+    throw new CliError(`Şüpheli talep: ${suspicious.map((t) => `${t.talepId} (${t.supheler.join("; ")})`).join(" · ")} — hiçbiri imzalanmadı; kuyruğu \`uretim-toren.mjs kuyruk\` ile inceleyin`);
+  }
   const password = await askPassword(`Kök (${rootKid}) parolası: `, kasaAdiKid(rootKid));
   const signed: { talepId: string; hakId: string; surum: number; belge: string }[] = [];
   try {
@@ -543,6 +552,26 @@ function canonical(value: unknown): string {
     return v;
   };
   return JSON.stringify(walk(value));
+}
+
+/**
+ * Kök kuyruğunu İNCELER (Mac, parolasız, DB'siz): her talebin yükünü VDS'in gönderdiği taban sürümün imzalı belgesiyle
+ * (kökün açık yarısına karşı doğrulanır) karşılaştırır; stdout'a JSON (`tekserp-kok-kuyrugu-inceleme`).
+ */
+function reviewQueueCli(flags: Map<string, string>): void {
+  const rootKid = required(flags, "kok");
+  const root = rootAnchorOf(path.resolve(required(flags, "kok-dizin")), rootKid);
+  let input: unknown;
+  try {
+    input = JSON.parse(readFileSync(path.resolve(required(flags, "kuyruk")), "utf8"));
+  } catch (err) {
+    throw new CliError(`Kuyruk dosyası okunamadı: ${(err as Error).message}`);
+  }
+  try {
+    process.stdout.write(`${JSON.stringify(reviewRootQueue(input, root.anchor))}\n`);
+  } catch (err) {
+    throw new CliError((err as Error).message);
+  }
 }
 
 /** Ortamdan yapılandırma + anahtar deposu (konteyner içi; çapa ortamın kipinden). */
@@ -753,6 +782,8 @@ async function main(): Promise<void> {
       return generatePackageRevocation(flags);
     case "kuyruk-imzala":
       return signRootQueue(flags);
+    case "kuyruk-incele":
+      return reviewQueueCli(flags);
     case "kuyruk-disa-aktar":
       return exportQueue();
     case "donem-ice-aktar":
@@ -761,7 +792,7 @@ async function main(): Promise<void> {
       return retireKeys(flags);
     default:
       throw new CliError(
-        "Komut: kok-uret | alt-uret | indirme-uret | bayi-uret | ara-uret | istemci-sertifika-uret | paket-sertifika-uret | iptal-uret | paket-iptal-uret | kuyruk-imzala | kuyruk-disa-aktar | donem-ice-aktar | emekliye-ayir | sirlar-uret | indirme-belirteci (ayrıntı dosya başında)",
+        "Komut: kok-uret | alt-uret | indirme-uret | bayi-uret | ara-uret | istemci-sertifika-uret | paket-sertifika-uret | iptal-uret | paket-iptal-uret | kuyruk-imzala | kuyruk-incele | kuyruk-disa-aktar | donem-ice-aktar | emekliye-ayir | sirlar-uret | indirme-belirteci (ayrıntı dosya başında)",
       );
   }
 }

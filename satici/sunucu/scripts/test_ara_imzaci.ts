@@ -32,6 +32,8 @@
 //   isteklerine Access JWT'si eklemedi → §7a–§7i ❌ (taşıma ERİŞİM'den gerçekten geçiyor); cp + shasum ile geri alındı.
 // NEGATİF SONDA (2026-10-10, dosya DIŞI, cp + shasum ile geri alındı): `signingCapabilitySource` ETKINLESMEDI'yi de YOK
 //   sayar (eski davranış) → §10a · §10b ❌, §10c çöker (kuyruk); test_genislik_kapisi §6c ve test_teslim_bagi §6 fikstürü çöker.
+// NEGATİF SONDA (2026-11-02, dosya DIŞI, cp + shasum ile geri alındı): kök kuyruğu listesinden `planNedeni` çıkar → §7f ❌;
+//   dışa aktarmadan çıkar → §6a' ❌.
 // Koşum: node ../../scripts/agir-is.mjs -- npx tsx scripts/test_ara_imzaci.ts   (kendi _test DB'si)
 // =============================================================================
 import type { Socket } from "node:net";
@@ -319,8 +321,8 @@ async function main(): Promise<void> {
       hakSvc.issueEntitlementVersion(ctxKoksuz, { entitlementId: kP.hakId, changes: { modules: ["production.enabled", "ticaret.enabled"] }, password: passwordBuffer("parola-kullanilmaz-1"), reason: "kök yokken değişiklik", actor: "bekci", allowQueue: true }),
     );
     const sonra = await prisma.hak.findUniqueOrThrow({ where: { id: kP.hakId } });
-    kontrol("§5b yeteneksiz kurulumun değişikliği KUYRUĞA düştü; HAK alanları ve sürümü DEĞİŞMEDİ",
-      kuyrugaGirdi.mode === "QUEUED" && kuyrugaGirdi.row.durum === "BEKLIYOR" && kuyrugaGirdi.row.surum === 2 && sonra.guncelSurum === once.guncelSurum && JSON.stringify(sonra.moduller) === JSON.stringify(once.moduller));
+    kontrol("§5b yeteneksiz kurulumun değişikliği KUYRUĞA düştü (neden YETENEK_YOK doğuşta yazıldı); HAK alanları ve sürümü DEĞİŞMEDİ",
+      kuyrugaGirdi.mode === "QUEUED" && kuyrugaGirdi.row.durum === "BEKLIYOR" && kuyrugaGirdi.row.planNedeni === "YETENEK_YOK" && kuyrugaGirdi.row.surum === 2 && sonra.guncelSurum === once.guncelSurum && JSON.stringify(sonra.moduller) === JSON.stringify(once.moduller));
     const ikinci = await dene(() => hakSvc.prepareRootRequest(ctxKoksuz, { entitlementId: kP.hakId, changes: { perpetual: false }, reason: "ikinci talep", actor: "bekci" }));
     const kokluImza = await dene(() => runAsCli(() => hakSvc.issueEntitlementVersion(ctx, { entitlementId: kP.hakId, password: passwordBuffer(TEST_KOK_PAROLASI), reason: "bekleyen varken", actor: "bekci" })));
     kontrol("§5c bekleyen kök talebi varken ikinci talep de imzalı sürüm de 409 (kuyruk sessizce ezilmez)", !ikinci.ok && ikinci.kod === "409 DURUM_CAKISMASI" && !kokluImza.ok && kokluImza.kod === "409 DURUM_CAKISMASI", `${ikinci.ok ? "GECTI" : ikinci.kod} / ${kokluImza.ok ? "GECTI" : kokluImza.kod}`);
@@ -345,6 +347,10 @@ async function main(): Promise<void> {
     const disari = await kuyrukSvc.exportRootQueue(prisma);
     const talep = disari.talepler.find((t) => t.hakId === kP.hakId);
     kontrol("§6a dışa aktarma: bekleyen talep tam yüküyle (tür tekserp-kok-kuyrugu), imzacı sertifikası YOK", disari.tur === "tekserp-kok-kuyrugu" && !!talep && talep.yuk.surum === 2 && talep.yuk.imzaciSertifikasi === undefined && JSON.stringify(talep.yuk.moduller) === JSON.stringify(["production.enabled", "ticaret.enabled"]));
+    const onceki = talep?.onceki ?? null;
+    kontrol("§6a' dışa aktarma neden + taban sürümün İMZALI belgesini taşır (tören farkı ona göre gösterir; köke karşı doğrulanır)",
+      !!talep && talep.planNedeni === "YETENEK_YOK" && onceki?.surum === 1 && verifyEntitlement(onceki.belge, f.kokler).ok && talep.acil === false,
+      JSON.stringify({ neden: talep?.planNedeni, onceki: onceki?.surum }));
     const tdizin = mkdtempSync(path.join(os.tmpdir(), "satici-kuyruk-"));
     geciciDizinler.push(tdizin);
     const kuyrukDosyasi = path.join(tdizin, "kuyruk.json");
@@ -410,8 +416,10 @@ async function main(): Promise<void> {
     const kuyruk202 = await surum(portalKoksuz.portal, cYk, { imzaci: "KUYRUK", moduller: ["production.enabled", "finance.enabled", "ticaret.enabled"] });
     kontrol("§7e köksüz: KUYRUK parola taşıyamaz (400); parolasız 202 + talep", parolali.status === 400 && kuyruk202.status === 202 && kuyruk202.veri.kuyruk === true && typeof kuyruk202.veri.talepId === "string", `${parolali.status} / ${kuyruk202.status} ${kuyruk202.kod ?? ""}`);
     const liste = await portalIstek(portal.portal, "/portal/api/kok-kuyrugu?durum=BEKLIYOR", { cerez: cO });
-    const items = (liste.veri.items ?? []) as { id: string; lisansNo: string }[];
-    kontrol("§7f GET kok-kuyrugu: bekleyen talep lisans numarasıyla listede", liste.status === 200 && items.some((i) => i.id === kuyruk202.veri.talepId && i.lisansNo === kW.lisansNo));
+    const items = (liste.veri.items ?? []) as { id: string; lisansNo: string; planNedeni?: string; kurulumId?: string }[];
+    kontrol("§7f GET kok-kuyrugu: bekleyen talep lisans numarası, kuyruk NEDENİ (YETENEK_YOK) ve kurulumun kimliğiyle listede",
+      liste.status === 200 && items.some((i) => i.id === kuyruk202.veri.talepId && i.lisansNo === kW.lisansNo && i.planNedeni === "YETENEK_YOK" && i.kurulumId === kW.kurulumDbId),
+      JSON.stringify(items.find((i) => i.id === kuyruk202.veri.talepId) ?? null));
     const pIptal = await portalIstek(portal.portal, `/portal/api/kok-kuyrugu/${String(kuyruk202.veri.talepId)}/iptal`, { cerez: cO, govde: { clientToken: randomUUID(), sebep: "portal iptali" } });
     kontrol("§7g POST kok-kuyrugu/:id/iptal → IPTAL", pIptal.status === 200 && pIptal.veri.durum === "IPTAL", `${pIptal.status} ${pIptal.kod ?? ""}`);
     const opUzun = await surum(portal.portal, cO, { imzaci: "KOK", imzaParolasi: TEST_KOK_PAROLASI, cevrimdisiUfukGun: null, onay: kW.lisansNo });
@@ -464,6 +472,13 @@ async function main(): Promise<void> {
     kontrol("§10b plan: ETKINLESMEDI + kök VDS'te → ARA (kök değil) · ETKINLESMEDI köksüz → ARA · ETKIN + boş köksüz → KUYRUK YETENEK_YOK (bugünkü) · ETKINLESMEDI + ara yok → KUYRUK ARA_IMZACI_YOK",
       pKokVar.kind === "ARA" && planOf(koksuz, "ETKINLESMEDI").kind === "ARA" && pEtkinKoksuz.kind === "KUYRUK" && pEtkinKoksuz.reason === "YETENEK_YOK" && pAraYok.kind === "KUYRUK" && pAraYok.reason === "ARA_IMZACI_YOK",
       `${pKokVar.kind} ${pEtkinKoksuz.kind}/${pEtkinKoksuz.kind === "KUYRUK" ? pEtkinKoksuz.reason : ""} ${pAraYok.kind}/${pAraYok.kind === "KUYRUK" ? pAraYok.reason : ""}`);
+    const kA = await kurulumFiksturu(ctx);
+    temizlenecek.push(kA.kurulumDbId);
+    const araYokTalep = await runAsCli(() =>
+      hakSvc.issueEntitlementVersion({ ...ctx, keys: hicbiri }, { entitlementId: kA.hakId, changes: { perpetual: false }, password: passwordBuffer("parola-kullanilmaz-5"), reason: "ara imzacı yok", actor: "bekci", allowQueue: true }),
+    );
+    kontrol("§10b' ara imzacı sınıfı kapsamıyor/yok → talep KUYRUĞA, neden ARA_IMZACI_YOK doğuşta yazıldı (portal 'yeni ara imzacı' der)",
+      araYokTalep.mode === "QUEUED" && araYokTalep.row.planNedeni === "ARA_IMZACI_YOK", araYokTalep.mode === "QUEUED" ? araYokTalep.row.planNedeni : araYokTalep.mode);
     const kN = await kurulumFiksturu(ctxKoksuz, { ilkImzaParolasi: ARA_PAROLASI });
     temizlenecek.push(kN.kurulumDbId);
     const nV1 = await prisma.hakSurumu.findUniqueOrThrow({ where: { hakId_surum: { hakId: kN.hakId, surum: 1 } } });

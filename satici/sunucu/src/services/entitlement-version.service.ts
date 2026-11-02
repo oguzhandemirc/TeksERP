@@ -22,6 +22,7 @@ import {
   resolveOfflineHorizon,
   type EmbeddedSigner,
   type LongHorizonApproval,
+  type QueueReason,
   type SignerPlanKind,
 } from "./entitlement-policy";
 import { requireReason, setValidityUnderLock } from "./sanction.service";
@@ -78,6 +79,8 @@ export interface PreparedRootRequest {
   readonly payload: EntitlementDoc;
   readonly fields: EntitlementFields;
   readonly longHorizonGranted: boolean;
+  /** İmza planının KUYRUK nedeni — talebe doğuşta yazılır (portal kuyruğu ve tören listesi gösterir). */
+  readonly queueReason: QueueReason;
   readonly reason: string;
   readonly actor: string;
 }
@@ -232,6 +235,7 @@ export async function prepareRootRequest(ctx: VendorContext, g: ChangeInput): Pr
     payload: c.payload,
     fields: c.fields,
     longHorizonGranted: c.longHorizonGranted,
+    queueReason: c.plan.reason,
     reason: c.reason,
     actor: g.actor,
   };
@@ -311,6 +315,7 @@ export async function queueRootRequestUnderLock(tx: Tx, p: PreparedRootRequest):
       surum: p.version,
       yuk: p.payload as unknown as Prisma.InputJsonObject,
       uzunUfuk: p.fields.longHorizon,
+      planNedeni: p.queueReason,
       sebep: p.reason,
       yapan: p.actor,
     },

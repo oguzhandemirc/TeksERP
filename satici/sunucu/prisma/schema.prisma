@@ -170,6 +170,13 @@ enum HakKokTalebiDurumu {
   ESKIDI
 }
 
+/// Talebin kök kuyruğuna düşme NEDENİ (imza planının KUYRUK nedeni, doğuşta yazılır): eski derleme ara imzalı HAK'ı
+/// tanımıyor → kurulum güncellenmeli · ara imzacı bu sınıfı kapsamıyor/geçersiz → yeni ara imzacı.
+enum HakKokTalebiNedeni {
+  YETENEK_YOK
+  ARA_IMZACI_YOK
+}
+
 enum AnahtarDurumu {
   AKTIF
   EMEKLI
@@ -480,6 +487,7 @@ model HakKokTalebi {
   /// Yetenek düşüşünde fabrika kira ALAMADI (elinde güncelden geniş olmayan HAK yok): tören beklenmeden imzalanmalı.
   acil          Boolean            @default(false)
   durum         HakKokTalebiDurumu @default(BEKLIYOR)
+  planNedeni    HakKokTalebiNedeni
   sebep         String             @db.VarChar(500)
   yapan         String             @db.VarChar(120)
   kapanisZamani DateTime?          @db.Timestamptz
