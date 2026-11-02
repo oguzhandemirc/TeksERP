@@ -49,6 +49,9 @@ export interface ProductionRoute {
   name: string;
   description: string | null;
   isFavorite: boolean;
+  /** İş emri kısayolu (K6); eski backend göndermez. */
+  isWorkOrderShortcut?: boolean;
+  shortcutOrder?: number;
   customerId: string | null;
   isActive: boolean;
   steps: RouteStep[];

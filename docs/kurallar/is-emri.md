@@ -81,6 +81,7 @@
 
 ### Kararlar
 
+- **[ÇEKİRDEK]** Yeni iş emri TEK girişten açılır: Operasyon › "İş emri oluştur" (karo + palet; liste "Yeni" düğmesi aynı adres) → seçici 1. satır Standart (Terbiye · Dokuma, modül/izinle), 2. satır Özel = `isWorkOrderShortcut` rota şablonları (`shortcutOrder`); kısayol rota UYGULANMIŞ Terbiye formunu açar, "Belge okut" formun üstündedir (ayrı mod ekranı yok), kayıt `formApproval`a göre (WITH_WORK_ORDER → `POST /irsaliyeler/:id/is-emri`, değilse taslak + ayrı onay); tek seçenek kalırsa seçici atlanır. · test: `oie/__tests__/giris.test`, `belge-kayit.test` <sub>(arşiv:2026-11-02 OIE-C)</sub>
 - **[ÇEKİRDEK]** Masaüstü 'Üretime Al / Yeniden Üretime Al' ÜÇ sekmede (RAW_STOCK · SEMI_FINISHED · FINISHED_STOCK; fark yalnız başlık/toast, `reworkMode`). 'Ham Stok'ta gösterilmez' kararı 2026-08-26'da DÖNDÜ — gizlenen buton olmayan bir yolu taklit ediyordu (form top almaz, attach ucu yok). · bekçi: `ReworkRollsDialog.test.tsx (7)` <sub>(arşiv:756, arşiv:1011)</sub>
 
 ## Tablet (mobil)

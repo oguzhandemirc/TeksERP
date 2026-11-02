@@ -1,3 +1,4 @@
+import { shortcutBody } from "./RouteShortcutFields";
 import { CrudPage } from "@/components/layout/CrudPage";
 import { routeColumns } from "./columns";
 import { routeService } from "./service";
@@ -24,6 +25,8 @@ interface CreatePayload {
   customerId?: string | null;
   isFavorite: boolean;
   isActive: boolean;
+  isWorkOrderShortcut?: boolean;
+  shortcutOrder?: number;
   steps:
     | { create: StepCreate[] }
     | { deleteMany: Record<string, never>; create: StepCreate[] };
@@ -47,6 +50,7 @@ function buildPayload(v: RouteFormValues, isEdit: boolean): CreatePayload {
     customerId: v.customerId ?? null,
     isFavorite: v.isFavorite,
     isActive: v.isActive,
+    ...shortcutBody(v),
     steps: isEdit
       ? { deleteMany: {} as Record<string, never>, create: stepCreates }
       : { create: stepCreates },

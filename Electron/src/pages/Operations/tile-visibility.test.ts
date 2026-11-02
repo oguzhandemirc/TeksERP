@@ -193,6 +193,7 @@ describe("karo bağlantıları", () => {
     // 2026-10-29: `gelen-belge-sablonlari` (E2) — aynı kapı.
     // 2026-10-29: `gelen-belge-varsayilan-urunler` (E4b) — aynı kapı.
     // 2026-10-29: `icerideki-isler` (P1a, ister 3.2) — emanet kapalıyken GİZLİ.
+    // 2026-11-02: `work-order-create` (K6 İş emri oluştur) — üretim modülü kapısı (İş Emirleri ile aynı yüklem).
     expect(conditional.sort()).toEqual([
       "gelen-belge-sablonlari",
       "gelen-belge-varsayilan-urunler",
@@ -212,6 +213,7 @@ describe("karo bağlantıları", () => {
       "warp-beams",
       "weaving-floor",
       "weaving-orders",
+      "work-order-create",
       "work-order-events",
       "work-orders",
       "yarn-stock",

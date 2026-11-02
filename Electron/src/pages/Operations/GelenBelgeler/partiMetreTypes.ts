@@ -25,6 +25,8 @@ export interface EntryModeSettings {
   defaultAutoWorkOrderPatternless?: AutoWorkOrderPatternlessMode;
   formApproval?: IncomingDocFormApproval;
   defaultFormApproval?: IncomingDocFormApproval;
+  /** İş emri açılınca refakat kartı kendiliğinden yazdırılır (K9; üretim ayarı, gelen belge ucunda döner; vars. false). */
+  refakatAutoPrint?: boolean;
 }
 /** Gönderen şablonu satırının parti no alanı (§2.4). */
 export interface SenderTemplateBatchNoFields {

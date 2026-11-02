@@ -74,10 +74,14 @@ function HeaderActions({ onNew }: { onNew: () => void }) {
   );
 }
 
-export function WeavingOrdersPage() {
-  // "İş emri oluştur" seçicisinden (K6) gelince oluşturma diyaloğu açık doğar.
+/** "İş emri oluştur" seçicisinden (K6) gelince oluşturma diyaloğu açık doğar. */
+function useFormTarget() {
   const openNew = (useLocation().state as WeavingNavState | null)?.openNew === true;
-  const [formTarget, setFormTarget] = useState<FormTarget>(openNew ? "new" : null);
+  return useState<FormTarget>(openNew ? "new" : null);
+}
+
+export function WeavingOrdersPage() {
+  const [formTarget, setFormTarget] = useFormTarget();
   const [closing, setClosing] = useState<WeavingOrder | null>(null);
   const [cancelling, setCancelling] = useState<WeavingOrder | null>(null);
   const [fason, setFason] = useState<WeavingOrder | null>(null);
