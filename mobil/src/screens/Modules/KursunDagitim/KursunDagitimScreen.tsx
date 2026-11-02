@@ -15,6 +15,7 @@ import {
   kursunBypassService,
   type KursunDistributionWaitingRow,
   type KursunDistributionAssignedRow,
+  type KursunDistributionRowBase,
 } from '../../../services/kursunBypass.service';
 import EligibleList from './EligibleList';
 import AssignedList from './AssignedList';
@@ -53,6 +54,9 @@ import { showScreenError } from '../../../lib/screenToast';
 
 type Tab = 'waiting' | 'assigned';
 
+/** Öneri kaldırma seçeneğinin değeri (makine kimliği UUID'dir, çakışmaz). */
+const NO_PLAN = '__no_plan__';
+
 export default function KursunDagitimScreen() {
   const qc = useQueryClient();
   const isTablet = useDeviceType() === 'tablet';
@@ -61,6 +65,7 @@ export default function KursunDagitimScreen() {
   const [assignTarget, setAssignTarget] = useState<KursunDistributionWaitingRow | null>(null);
   const [cancelTarget, setCancelTarget] = useState<KursunDistributionAssignedRow | null>(null);
   const [completeTarget, setCompleteTarget] = useState<KursunDistributionAssignedRow | null>(null);
+  const [planTarget, setPlanTarget] = useState<KursunDistributionRowBase | null>(null);
 
   const distQ = useQuery({
     queryKey: ['kursun-bypass', 'distribution'],
@@ -138,6 +143,20 @@ export default function KursunDagitimScreen() {
     },
   });
 
+  // Plan makinesi (Gülkesim 2026-11-02): yalnız öneri — dağıtımı engellemez, uyarı yok.
+  const planMut = useMutation({
+    mutationFn: (v: { row: KursunDistributionRowBase; machineId: string | null }) =>
+      kursunBypassService.setPlannedMachine(v.row.workOrderId, v.row.workOrderStepId, v.machineId),
+    onSuccess: (res) => {
+      Toast.show({ type: 'success', text1: res.message ?? 'Makine önerisi kaydedildi' });
+      void refresh();
+    },
+    onError: (e: Error) => {
+      showScreenError(e, 'Makine önerisi kaydedilemedi');
+      void refresh();
+    },
+  });
+
   const urgentBusyStepId = urgentMut.isPending ? urgentMut.variables?.stepId ?? null : null;
   const busyAssignmentId = cancelMut.isPending ? cancelMut.variables?.assignmentId ?? null : null;
 
@@ -164,6 +183,7 @@ export default function KursunDagitimScreen() {
       onPickMachine={setAssignTarget}
       onToggleUrgent={toggleUrgent}
       urgentBusyStepId={urgentBusyStepId}
+      onPickPlanned={setPlanTarget}
     />
   );
 
@@ -178,6 +198,7 @@ export default function KursunDagitimScreen() {
       onUnassign={setCancelTarget}
       onComplete={setCompleteTarget}
       busyAssignmentId={busyAssignmentId}
+      onPickPlanned={setPlanTarget}
     />
   );
 
@@ -254,6 +275,20 @@ export default function KursunDagitimScreen() {
           if (target) assignMut.mutate({ workOrderId: target.workOrderId, machineId });
         }}
         onDismiss={() => setAssignTarget(null)}
+      />
+
+      {/* PLAN MAKİNESİ — yalnız öneri; "Öneri yok" kaldırır. */}
+      <PickerModal
+        visible={planTarget !== null}
+        title={planTarget ? `${planTarget.workOrderNumber} → Önerilen makine` : 'Önerilen makine'}
+        options={[{ value: NO_PLAN, label: 'Öneri yok' }, ...machineOptions]}
+        emptyText="Kurşun istasyonuna bağlı MAKİNE tanımlı değil."
+        onSelect={(value) => {
+          const row = planTarget;
+          setPlanTarget(null);
+          if (row) planMut.mutate({ row, machineId: value === NO_PLAN ? null : value });
+        }}
+        onDismiss={() => setPlanTarget(null)}
       />
 
       {/* ATAMAYI KALDIR — yıkıcı işlem: etkilenen kayıt SOMUT yazılır. */}

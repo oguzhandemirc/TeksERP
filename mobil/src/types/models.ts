@@ -994,6 +994,8 @@ export interface KursunOpenCard {
   /// Liste backend tarafında bu alanlara göre sıralanmış gelir.
   priority: number;
   isUrgent: boolean;
+  /** Gülkesim 2026-11-02: planlamacının önerdiği makine (yalnız rozet). Eski backend göndermez. */
+  plannedMachineName?: string | null;
   /** Kurşun adımına ilk roll'un giriş tarihi (en eski açık RollMovement.enteredAt) —
    *  liste ekranında "ne zamandır bekliyor" göstergesi için. */
   oldestEnteredAt?: string | null;

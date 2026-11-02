@@ -93,6 +93,7 @@ import { primaryMeterFor, useMachinePeripherals } from '../../../hooks/useMachin
 import { findTarget } from './gramajTap';
 import { useAuthStore } from '../../../store/authStore';
 import { palette } from '../../../theme/tokens';
+import PlannedMachineBadge from './PlannedMachineBadge';
 
 // =============================================================================
 // Multi-job state — operatör birden fazla refakat kartını paralel açabilir.
@@ -1839,6 +1840,7 @@ function CameraScanModal({
                         {item.cardNumber}
                       </Text>
                       <PriorErrorBadge count={item.openErrorCount} testID="card-error-badge" />
+                      <PlannedMachineBadge name={item.plannedMachineName} testID="card-planned-machine" />
                       <Text style={cameraStyles.rowMetaInline} numberOfLines={1}>
                         {item.batchNumber} · {item.stationName} · {item.openRollCount} top
                         {item.oldestEnteredAt
