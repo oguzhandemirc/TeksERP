@@ -22,6 +22,7 @@ import { ApproveDialog } from "./ApproveDialog";
 import { ScanReadBanner } from "./ScanReadBanner";
 import { AddPagesAction } from "./AddPagesAction";
 import { DeleteDraftNoteAction } from "./DeleteDraftNoteAction";
+import { CancelNoteAction } from "./CancelNoteAction";
 import { buildReviewQueue, lineRect } from "./review-queue";
 import { isApprovable, isEditable, isWorkOrderOpenable, NOTE_STATUS_LABEL, NOTE_STATUS_VARIANT, SOURCE_LABEL } from "./noteStatus";
 import { useNoteDetail } from "./useNoteDetail";
@@ -73,6 +74,8 @@ function DetailActions({ note, reviewCount, addPages, onReview, onApprove }: Det
           {workOrderOpen && <WorkOrderFromNoteDialog noteId={note.id} open onOpenChange={setWorkOrderOpen} />}
         </PermissionGate>
       )}
+      {/* Onaylı belge iptali (K15): önizleme + ters kayıt; bileşen durum ve izni kendisi süzer. */}
+      <CancelNoteAction note={note} />
       {/* Taslak silme: yalnız DRAFT (bileşen kendisi de süzer); backend aynı izin + DRAFT claim'i. */}
       {note.status === "DRAFT" && (
         <PermissionGate permission="gelen-belge:write">
@@ -139,6 +142,7 @@ export function IncomingDocumentDetailPage() {
               <NoticesStrip notices={n.notices} />
               <SameBatchStrip sameBatch={n.sameBatch} />
               {n.varianceReason && <p className="text-xs text-muted-foreground">Fark gerekçesi: {n.varianceReason}</p>}
+              {n.status === "CANCELLED" && n.cancelReason && <p className="text-xs text-destructive" data-testid="note-cancel-reason">İptal sebebi: {n.cancelReason}</p>}
               <ProcessGramajPanel groups={gramaj.groups} options={suggestions.data?.processOptions ?? []} choiceGroups={suggestions.data?.processGroups ?? []} picks={gramaj.picks} onPick={gramaj.onPick} />
             </div>
           </div>

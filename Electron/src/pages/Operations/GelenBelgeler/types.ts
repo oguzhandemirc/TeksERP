@@ -70,6 +70,8 @@ export interface DeliveryNoteHeader extends PartiMetreHeaderFields {
   warnings: unknown;
   approvedAt: string | null;
   cancelledAt: string | null;
+  /** İptal sebebi (taslak silme değil, onaylı belge iptali K15); eski sunucu da gönderir. */
+  cancelReason?: string | null;
   createdAt: string;
   updatedAt: string;
   ownerCustomer: NamedRef | null;
