@@ -15,10 +15,16 @@ export interface BlockCheck {
   diffs: TotalDiff[];
   ok: boolean | null;
 }
+/** Başlıktaki belge geneli beyan (ör. "Müşteri MT") ↔ bütün satırlar; etiket alan başına. */
+export interface DocumentCheck extends Omit<BlockCheck, "blockNo"> {
+  labels: Partial<Record<TotalDiff["field"], string>>;
+}
 export interface TotalsCheck {
   ok: boolean | null;
   tolerance: number;
   blocks: BlockCheck[];
+  /** Eski backend göndermez (undefined) → kart çizilmez. */
+  document?: DocumentCheck | null;
   mismatches: string[];
   warnings: string[];
 }

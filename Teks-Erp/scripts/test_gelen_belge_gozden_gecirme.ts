@@ -17,9 +17,14 @@
 //   §8 S4 inceleme kapısı `reviewGate` (saf matris) + HTTP: BLOCK_SUSPECT → 409 DELIVERY_NOTE_SUSPECT_PENDING lineNos ≡ detay
 //      SUSPECT_VALUE satırları; şüpheli düzeltilince kapı geçer (sonraki kapıda durur); WARN şüpheliyle de geçer; ayar ucu üç değer
 //   §9 aynı müşteri partisi (`sameBatch`): aynı sahip + trim'li parti no, iptal ve kendisi hariç; başka sahip/partisiz → null
+//   §10 demo 2. tur: varsayılan ürünle girecek satır ITEM_UNRESOLVED DEĞİL (saf + HTTP; `itemFallback` bilgisi; kullanılamaz
+//      varsayılan / varsayılansız → sorunlu kalır; müşteri varsayılanı fabrikayı ezer; onay kapısı aynı kümeyle geçer)
+//   §11 demo 2. tur: belge geneli başlık beyanı ("Müşteri MT 238" ↔ satır 241) toplam kapısına bağlı (saf + HTTP + okuma özeti)
 // NEGATİF SONDA (2026-11-02): `lineProblems` SUSPECT_VALUE kapatılınca §6e + §7b; `noteNotices` tekrar süzgeci
 //   kapatılınca §6a + §6c + §7a2 (ikinci okuma ikilemesi) düşer. `reviewGate` BLOCK_SUSPECT dalı kapatılınca §8a + §8c;
 //   precheck `ocrRaw` seçimi kaldırılınca §8c; `sameBatchNotes` iptal süzgeci kaldırılınca §9a düşer.
+//   (demo 2. tur 2026-11-02) `lineProblems` varsayılan dalı kapatılınca §10a–c + §10e; `checkDocument` kapatılınca §11a–d;
+//   okuma özetinde belge beyanı sayılmayınca §11d düşer — ÖLÇÜLDÜ, geri alındı.
 // Emsal: scripts/test_gelen_belge_onay.ts (app.listen(0) + ensureTestAdmin).
 // =============================================================================
 import type { AddressInfo } from "net";
@@ -30,7 +35,7 @@ import prisma from "../src/lib/prisma";
 import app from "../src/app";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
-import { lineProblems, reviewGate, totalMismatches, totalsCheck, type TotalLine } from "../src/services/gelen-belge-kontrol.service";
+import { lineItemFallback, lineProblems, reviewGate, totalMismatches, totalsCheck, type ItemFallback, type TotalLine } from "../src/services/gelen-belge-kontrol.service";
 import { noteNotices } from "../src/lib/gelen-belge/uyari";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
@@ -226,6 +231,8 @@ async function main(): Promise<void> {
     await section7(call, (lines) => mkNote(lines), fabric.id);
     await section8(call, mkNote, Ln);
     await section9(call, mkNote, Ln, owner.id);
+    await section10(call, mkNote, Ln, owner.id);
+    await section11(call, mkNote, Ln);
     section5();
   } finally {
     stopNotificationJobs();
@@ -310,9 +317,71 @@ function section5(): void {
   const onay = fs.readFileSync(path.join(root, "Teks-Erp/src/services/gelen-belge-onay.service.ts"), "utf8");
   check("§5b onay servisinde yerel toplam kapısı/hoşgörü kopyası yok", !/TOTAL_TOLERANCE|function totalMismatches|const near\b/.test(onay));
   check("§5c onay ön kontrolü sorun kümelerini lineProblems'ten okur, inceleme kapısını `reviewGate`ten", (onay.match(/lineProblems\(l\)\.includes\("(ITEM_UNRESOLVED|NEEDS_REVIEW)"\)/g) ?? []).length === 2 && /reviewGate\(open,/.test(onay) && !/=== "BLOCK"/.test(onay));
+  const note = fs.readFileSync(path.join(root, "Teks-Erp/src/services/gelen-belge-note.service.ts"), "utf8");
+  check("§5d varsayılan ürün aynası: onay ve detay `lineProblems(l, <varsayılan>)` + `usableDefaultItem`; yerel `!l.itemId` kapısı yok",
+    /lineProblems\(l, defaultItem\)\.includes\("ITEM_UNRESOLVED"\)/.test(onay) && /usableDefaultItem\(await resolveEffectiveDefaultItem/.test(note) && /lineProblems\(\{ \.\.\.l, ocrRaw \}, fallback\)/.test(note) && !/!l\.itemId/.test(onay));
+}
+
+async function section10(call: (method: string, p: string, body?: unknown) => Promise<Resp>, mkNote: MkNote, mkLine: MkLine, ownerId: string): Promise<void> {
+  console.log("§10 varsayılan ürün ↔ ITEM_UNRESOLVED (gözden geçirme onay kapısını aynalar)");
+  const fb: ItemFallback = { id: "x", name: "MK", source: "FACTORY" };
+  const p = (status: "PENDING" | "FAILED" | "ENTERED", itemId: string | null) => ({ status, itemId, needsReview: false });
+  check("§10a saf: ürünsüz açık satır + kullanılabilir varsayılan → [] ve itemFallback; varsayılansız ITEM_UNRESOLVED; FAILED yalnız FAILED; girilmiş satıra fallback yok",
+    same(lineProblems(p("PENDING", null), fb), []) && lineItemFallback(p("PENDING", null), fb) === fb && same(lineProblems(p("PENDING", null), null), ["ITEM_UNRESOLVED"])
+      && same(lineProblems(p("FAILED", null), fb), ["FAILED"]) && lineItemFallback(p("ENTERED", null), fb) === null && lineItemFallback(p("PENDING", "i"), fb) === null);
+  const svc = await prisma.item.create({ data: { code: `${TAG}-HIZ`, name: `${TAG} kurşun hizmeti`, itemType: "SERVICE", unit: "MT" }, select: { id: true } });
+  made.items.push(svc.id);
+  const mk = await prisma.item.create({ data: { code: `${TAG}-MK`, name: `${TAG} MÜŞTERİ KUMAŞI`, itemType: "FABRIC", unit: "MT" }, select: { id: true } });
+  made.items.push(mk.id);
+  const setFactory = (v: string | null) => v === null
+    ? prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID } })
+    : prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID }, create: { key: SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, value: v }, update: { value: v } });
+  type FL = DLine & { itemFallback?: { id: string; name: string; source: string } | null };
+  const get = async (id: string) => ((await call("GET", `/api/gelen-belge/irsaliyeler/${id}`)).data as { lines: FL[] }).lines.sort((a, b) => a.lineNo - b.lineNo);
+  const id = await mkNote([mkLine(1, 100, { itemId: null }), mkLine(2, 100, { itemId: null }), mkLine(3, 100)], { totalsDeclared: { blocks: [{ blockNo: 1, m: "1" }] } });
+  await setFactory(mk.id);
+  const d1 = await get(id);
+  check("§10b ⭐ fabrika varsayılanı: ürünsüz 1,2 sorunsuz + itemFallback (FACTORY, ad); ürünlü 3'te fallback yok",
+    d1.every((l) => same(l.problems, [])) && d1[0]?.itemFallback?.id === mk.id && d1[0]?.itemFallback?.source === "FACTORY" && d1[0]?.itemFallback?.name === `${TAG} MÜŞTERİ KUMAŞI` && d1[2]?.itemFallback === null,
+    JSON.stringify(d1.map((l) => [l.lineNo, l.problems, l.itemFallback?.source ?? null])));
+  const a1 = await call("POST", `/api/gelen-belge/irsaliyeler/${id}/onay`, {});
+  check("§10c ⭐ onay ürün kapısını AYNI kümeyle geçer (sonraki kapı TOTAL_MISMATCH; top doğmaz)", a1.status === 409 && a1.code === "TOTAL_MISMATCH", `${a1.status} ${a1.code}`);
+  await setFactory(svc.id);
+  const d2 = await get(id);
+  const a2 = await call("POST", `/api/gelen-belge/irsaliyeler/${id}/onay`, {});
+  check("§10d kullanılamaz fabrika varsayılanı: satır yine ITEM_UNRESOLVED, fallback yok ↔ onay 409 DEFAULT_ITEM_UNUSABLE",
+    same(d2.filter((l) => l.problems?.includes("ITEM_UNRESOLVED")).map((l) => l.lineNo), [1, 2]) && d2.every((l) => !l.itemFallback) && a2.status === 409 && a2.code === "GELEN_BELGE_DEFAULT_ITEM_UNUSABLE",
+    `${a2.status} ${a2.code} ${JSON.stringify(d2.map((l) => l.problems))}`);
+  await prisma.deliveryNoteCustomerDefault.create({ data: { customerId: ownerId, defaultItemId: mk.id } });
+  const d3 = await get(id);
+  check("§10e müşteri varsayılanı fabrikayı ezer: sorunsuz + itemFallback CUSTOMER", d3[0]?.itemFallback?.source === "CUSTOMER" && same(d3[0]?.problems, []), JSON.stringify([d3[0]?.problems, d3[0]?.itemFallback?.source]));
+  await prisma.deliveryNoteCustomerDefault.deleteMany({ where: { customerId: ownerId } });
+  await setFactory(null);
+  const d4 = await get(id);
+  const a4 = await call("POST", `/api/gelen-belge/irsaliyeler/${id}/onay`, {});
+  check("§10f varsayılansız (bugünkü): ITEM_UNRESOLVED [1,2] ≡ onay 400 lineNos", same(d4.filter((l) => l.problems?.includes("ITEM_UNRESOLVED")).map((l) => l.lineNo), [1, 2]) && a4.status === 400 && same(a4.details?.lineNos, [1, 2]), `${a4.status} ${JSON.stringify(a4.details?.lineNos)}`);
+}
+
+async function section11(call: (method: string, p: string, body?: unknown) => Promise<Resp>, mkNote: MkNote, mkLine: MkLine): Promise<void> {
+  console.log("§11 belge geneli beyan (Müşteri MT) ↔ toplam kapısı");
+  const doc = (m: string) => ({ blocks: [{ blockNo: 1, m: "241", kg: "734" }], document: { count: null, m, kg: null, labels: { m: "Müşteri MT" } } });
+  const lines = [L(1, 241, "PENDING", 734)];
+  const t = totalsCheck({ totalsDeclared: doc("238"), declaredTopCount: null }, lines);
+  check("§11a ⭐ saf: 238 ↔ 241 → ok=false, blok 1 tutuyor, belge farkı +3, mesaj etiketli; totalMismatches ≡",
+    t.ok === false && t.blocks[0]?.ok === true && t.document?.diffs[0]?.diff === 3 && same(t.mismatches, ["Belge geneli (Müşteri MT): beyan 238 m, satır toplamı 241.000 m."]) && same(t.mismatches, totalMismatches({ totalsDeclared: doc("238") }, lines)), JSON.stringify(t));
+  const ok = totalsCheck({ totalsDeclared: doc("240"), declaredTopCount: null }, lines);
+  const none = totalsCheck({ totalsDeclared: { blocks: [] }, declaredTopCount: null }, lines);
+  check("§11b %0,5 içinde (240 ↔ 241) geçer; beyansız belge document=null (bugünkü)", ok.ok === true && ok.document?.ok === true && none.document === null && none.ok === null);
+  const id = await mkNote([mkLine(1, 241, { weightKg: 734 })], { totalsDeclared: { document: { count: null, m: "238", kg: null, labels: { m: "Müşteri MT" } } } });
+  const d = (await call("GET", `/api/gelen-belge/irsaliyeler/${id}`)).data as Detail & { totalsCheck?: TC & { document?: { ok: boolean | null } | null } };
+  const a = await call("POST", `/api/gelen-belge/irsaliyeler/${id}/onay`, {});
+  check("§11c ⭐ HTTP: detay document.ok=false ↔ onay 409 TOTAL_MISMATCH, mismatches bayt-aynı", d.totalsCheck?.document?.ok === false && a.status === 409 && a.code === "TOTAL_MISMATCH" && same(a.details?.mismatches, d.totalsCheck?.mismatches), `${a.status} ${a.code} ${JSON.stringify(a.details?.mismatches)}`);
+  const oz = (await call("GET", `/api/gelen-belge/irsaliyeler/${id}/okuma-ozeti`)).data as { totals?: { declared: boolean; ok: boolean | null } };
+  check("§11d tablet okuma özeti belge geneli beyanı beyan sayar (declared, ok=false)", oz?.totals?.declared === true && oz.totals.ok === false, JSON.stringify(oz?.totals));
 }
 
 async function cleanup(): Promise<void> {
+  await prisma.deliveryNoteCustomerDefault.deleteMany({ where: { OR: [{ customerId: { in: made.customers } }, { defaultItemId: { in: made.items } }] } });
   await prisma.customerDeliveryNote.deleteMany({ where: { id: { in: made.notes } } });
   await prisma.item.deleteMany({ where: { id: { in: made.items } } });
   await prisma.customer.deleteMany({ where: { id: { in: made.customers } } });

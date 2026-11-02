@@ -21,6 +21,7 @@
 //    (S5 2026-11-02) `headerOnlyLine` INPUT dalı kapatılınca §9g3 düşer; validator `inputM` denetimi kapatılınca §9i2 düşer.
 //    (2026-11-02 §10) üst sınır (K katı) kapatılınca §10d, ikinci belge izinin tek bölge dalı kapatılınca §10b,
 //    GRID_EMPTY kapatılınca §10f düşer — ÖLÇÜLDÜ 2026-11-02 (her biri tek başına 70/1; elle geri alındı).
+//    (demo 2. tur 2026-11-02) taslakta `documentDeclared` kapatılınca §9h2, validator headerTotals dalı kapatılınca §9h3 düşer.
 // =============================================================================
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -273,6 +274,20 @@ function kutu(text: string, x: number, y: number, w: number, h: number, angle: n
   check("§9h iki belgeli fotoğrafta ikinci bölge aynı taslağa TOP EKLEMEZ (başka sahip); MULTI_REGION sürer; Kömürhan işlemi okunur",
     d46.lines.length === 1 && d46.lines[0]!.meters === "241" && d46.header.warnings.some((w) => w.startsWith("MULTI_REGION")) && !!d46.header.processText,
     JSON.stringify({ n: d46.lines.length, p: d46.header.processText }));
+  // §9h2–h3 (demo 2. tur 2026-11-02): Kömürhan başlığındaki "Müşteri MT 238" belge geneli beyandır (şablon `headerTotals`);
+  // "Müşteri KG 0,00" beyan sayılmaz. Kapının kıyası `test_gelen_belge_gozden_gecirme §11`.
+  const doc46 = d46.header.totalsDeclared.document;
+  check("§9h2 ⭐ 0246 Kömürhan: taslak belge geneli beyan m=238 (etiket 'Müşteri MT'), kg 0 → yok; blok beyanı 241/734 aynen",
+    doc46?.m === "238" && doc46.kg === null && doc46.labels.m === "Müşteri MT" && doc46.labels.kg === undefined && d46.header.totalsDeclared.blocks[0]?.m === "241",
+    JSON.stringify(d46.header.totalsDeclared));
+  const cks = sablonlar.find((t) => t.id === "cikis-ceki-listesi")!;
+  const bozukHT = validateTemplate({ ...cks, headerTotals: { m: "yokAlan" } });
+  const bosHT = validateTemplate({ ...cks, headerTotals: {} });
+  check("§9h3 headerTotals bilinmeyen alanı ve boş eşlemeyi reddeder; 0245/0244 taslağında belge geneli beyan YOK (bugünkü)",
+    !bozukHT.ok && bozukHT.errors.some((e) => e.includes("headerTotals.m")) && !bosHT.ok && validateTemplate(cks).ok
+      && draftFromExtraction(extractDocument(gercek("0245-ceki-listesi-a"), sablonlar)).header.totalsDeclared.document === undefined
+      && draftFromExtraction(extractDocument(gercek("0244-kumas-irsaliyesi"), sablonlar)).header.totalsDeclared.document === undefined,
+    [...bozukHT.errors, ...bosHT.errors].join(" | "));
   const sab = sablonlar.find((t) => t.id === "urun-sevk-fisi")!;
   const bozukHL = validateTemplate({ ...sab, headerLine: { count: "yok", m: ["toplamMetre"] } });
   const bozukIn = validateTemplate({ ...sab, headerLine: { ...sab.headerLine!, inputM: ["yokAlan"] } });

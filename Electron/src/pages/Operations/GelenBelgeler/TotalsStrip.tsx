@@ -1,7 +1,7 @@
 // Toplam fark şeridi (canlı): onay kapısının hükmü backend `totalsCheck`ten — panel yeniden hesaplamaz; satır yazımı
 // detay sorgusunu tazeler, şerit onunla değişir. Eski backend alanı göndermezse şerit çizilmez.
 import { blockSummary, describeDiff } from "./reviewView";
-import type { TotalsCheck } from "./reviewTypes";
+import type { DocumentCheck, TotalsCheck } from "./reviewTypes";
 
 const HEAD = {
   ok: { cls: "border-emerald-500 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300", text: "Toplamlar tutuyor" },
@@ -36,12 +36,34 @@ export function TotalsStrip({ check }: { check: TotalsCheck | undefined }) {
             ))}
           </div>
         ))}
+        {check.document && <DocumentCard doc={check.document} />}
         {check.warnings.map((w) => (
           <div key={w} className="rounded-md border border-amber-500 bg-amber-500/10 px-3 py-2 text-xs">
             {w} (uyarı)
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** Başlıktaki belge geneli beyan (ör. "Müşteri MT 238") ↔ bütün satırlar — hüküm backend `totalsCheck.document`. */
+function DocumentCard({ doc }: { doc: DocumentCheck }) {
+  const names = Object.values(doc.labels).filter(Boolean).join(" · ");
+  return (
+    <div
+      data-testid="block-document"
+      data-ok={doc.ok === null ? "unknown" : String(doc.ok)}
+      className={`rounded-md border px-3 py-2 text-xs ${doc.ok === false ? "border-destructive bg-destructive/10" : doc.ok ? "border-emerald-500 bg-emerald-500/10" : "bg-muted/40"}`}
+    >
+      <div className="font-medium">Belge geneli{names ? ` (${names})` : ""}</div>
+      <div className="tabular-nums">{blockSummary({ blockNo: 0, ...doc })}</div>
+      {doc.ok === true && <div className="text-emerald-700 dark:text-emerald-400">Beyanla tutuyor</div>}
+      {doc.diffs.map((d) => (
+        <div key={d.field} className="text-destructive tabular-nums">
+          {describeDiff(d)}
+        </div>
+      ))}
     </div>
   );
 }

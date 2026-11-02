@@ -99,6 +99,8 @@ export interface DeliveryNoteLine {
   color: NamedRef | null;
   /** Gözden geçirme sorunları — onay ön kontrolüyle AYNI backend yüklemi (`lineProblems`); panel kural kurmaz. */
   problems?: LineProblem[];
+  /** Onayın bu ürünsüz satıra uygulayacağı varsayılan ürün (backend `lineItemFallback`); eski backend alanı göndermez. */
+  itemFallback?: { id: string; name: string; source: DefaultItemSource } | null;
 }
 
 /** Taslak okuma uyarısı — backend `lib/gelen-belge/uyari.ts` `NoteNotice` aynası (panel metin ayrıştırmaz). */

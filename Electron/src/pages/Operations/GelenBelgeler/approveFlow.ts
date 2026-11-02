@@ -60,6 +60,11 @@ export function defaultItemHint(eff: EffectiveDefaultItem | null | undefined): {
   return { tone: "info", source: eff.source, text: `${SOURCE_PHRASE[eff.source]} girecek: ${eff.name ?? ""}` };
 }
 
+/** Sunucunun `itemFallback`i (onay bu satıra varsayılanı uygulayacak) — bilgi etiketi, sorun değil. */
+export function fallbackText(fb: { name: string; source: DefaultItemSource }): string {
+  return `Varsayılan ürünle girecek: ${fb.name} (${SOURCE_NOUN[fb.source]})`;
+}
+
 /** Backend precheck'inin "açık satır" tanımı (`gelen-belge-onay.service.ts`): topsuz PENDING/FAILED/ENTERING. */
 type PrecheckLine = Pick<DeliveryNoteLine, "status" | "rollId" | "itemId" | "needsReview" | "problems">;
 const isOpenLine = (l: PrecheckLine) => !l.rollId && (l.status === "PENDING" || l.status === "FAILED" || l.status === "ENTERING");

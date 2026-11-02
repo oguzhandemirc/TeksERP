@@ -77,8 +77,9 @@ export async function getReadSummary(noteId: string) {
   if (!note) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
   const live = note.lines.filter((l) => l.status !== "SKIPPED");
   const { state, reason, pages } = readSummaryState(note.scans, getReaderUrl().url !== null, live.length);
-  const blocks = (note.totalsDeclared as { blocks?: unknown[] } | null)?.blocks;
-  const declared = Array.isArray(blocks) && blocks.length > 0;
+  const decl = note.totalsDeclared as { blocks?: unknown[]; document?: unknown } | null;
+  // Belge geneli başlık beyanı (ör. "Müşteri MT") da beyandır — kapı onu da kıyaslar.
+  const declared = (Array.isArray(decl?.blocks) && decl.blocks.length > 0) || !!decl?.document;
   const mismatches = declared ? totalMismatches(note, note.lines) : [];
   return {
     noteId: note.id,

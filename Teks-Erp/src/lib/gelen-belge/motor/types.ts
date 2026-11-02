@@ -193,6 +193,15 @@ export interface DocumentTemplate {
   blockFields?: string[];
   /** Tablosuz belge (tek top bilgisi başlıkta): başlık alanlarından tek satır türetme eşlemesi; her anahtar sırayla denenen alan listesi. */
   headerLine?: HeaderLineSpec;
+  /** Başlıktaki BELGE GENELİ toplam beyanı (çıkış çeki listesinde "Müşteri MT"): her anahtar tek alan; onay toplam kapısı Σ satırı bununla da kıyaslar. */
+  headerTotals?: HeaderTotalsSpec;
+}
+
+/** Belge geneli beyan alanları (alan anahtarı); sıfır/okunamayan değer beyan sayılmaz. */
+export interface HeaderTotalsSpec {
+  m?: string;
+  kg?: string;
+  count?: string;
 }
 
 /** Tablosuz belgenin başlığından tek satır: yalnız `count` alanı 1 okunduğunda (aksi uyarı) ve metre pozitifse. */

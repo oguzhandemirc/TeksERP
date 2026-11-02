@@ -11,6 +11,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { defaultItemUnusable, itemProblem, readFactoryDefaultItemId } from "./gelen-belge-ayar.service";
+import type { ItemFallback } from "./gelen-belge-kontrol.service";
 
 const TABLE = "DELIVERY_NOTE_CUSTOMER_DEFAULT";
 
@@ -108,9 +109,18 @@ export async function resolveEffectiveDefaultItem(ownerCustomerId: string | null
  * Onay ön kontrolü: etkin varsayılan yoksa null; varsa o AN top doğurabilmeli — kullanılamayan ürün 409
  * `GELEN_BELGE_DEFAULT_ITEM_UNUSABLE` (details.source), sahibin bozuk varsayılanı fabrikaya sessizce DÜŞMEZ.
  */
-export async function resolveDefaultItemForApproval(ownerCustomerId: string | null): Promise<{ id: string; name: string; source: DefaultItemSource } | null> {
+export async function resolveDefaultItemForApproval(ownerCustomerId: string | null): Promise<ItemFallback | null> {
   const eff = await resolveEffectiveDefaultItem(ownerCustomerId);
   if (!eff.itemId || !eff.source) return null;
-  if (!eff.usable || !eff.name) throw defaultItemUnusable(eff.source, eff.itemId, eff.problem);
-  return { id: eff.itemId, name: eff.name, source: eff.source };
+  const usable = usableDefaultItem(eff);
+  if (!usable) throw defaultItemUnusable(eff.source, eff.itemId, eff.problem);
+  return usable;
+}
+
+/**
+ * Onayın ürünsüz satıra UYGULAYACAĞI varsayılan (yoksa/kullanılamıyorsa null) — onay ön kontrolü ve detay yanıtının
+ * `lineProblems` girdisi bu TEK yüklemden: gözden geçirme kapının hükmünü aynalar (kullanılamaz varsayılan → satır sorunlu kalır).
+ */
+export function usableDefaultItem(eff: EffectiveDefaultItem): ItemFallback | null {
+  return eff.itemId && eff.source && eff.usable && eff.name ? { id: eff.itemId, name: eff.name, source: eff.source } : null;
 }

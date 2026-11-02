@@ -7,7 +7,7 @@ import { ColorPickerModal } from "@/components/forms/color-picker/ColorPickerMod
 import { SuggestionChips } from "./SuggestionChips";
 import { LINE_STATUS_LABEL } from "./noteStatus";
 import { parseTrNumber } from "./review-queue";
-import { defaultItemHint } from "./approveFlow";
+import { defaultItemHint, fallbackText } from "./approveFlow";
 import { PROBLEM_LABEL } from "./reviewView";
 import type { DeliveryNoteLine, EffectiveDefaultItem, LinePatch, NoteMatchSuggestions } from "./types";
 
@@ -29,15 +29,18 @@ interface Props {
 
 const tr = (v: string | null) => (v == null ? "" : String(Number(v)).replace(".", ","));
 
-function NumCell({ value, onCommit, disabled, label }: { value: string | null; onCommit: (n: number | null) => void; disabled: boolean; label: string }) {
+function NumCell({ value, onCommit, disabled, label, suspect = false }: { value: string | null; onCommit: (n: number | null) => void; disabled: boolean; label: string; suspect?: boolean }) {
   return (
     <Input
       key={value ?? ""}
       aria-label={label}
+      aria-invalid={suspect || undefined}
+      data-suspect={suspect ? "true" : undefined}
+      title={suspect ? "Şüpheli el yazısı değeri — belgeyle karşılaştırın" : undefined}
       inputMode="decimal"
       defaultValue={tr(value)}
       disabled={disabled}
-      className="h-8 w-24 text-right tabular-nums"
+      className={`h-8 w-24 text-right tabular-nums ${suspect ? "border-2 border-destructive bg-destructive/10 font-semibold text-destructive" : ""}`}
       onBlur={(e) => {
         const raw = e.target.value.trim();
         const n = raw ? parseTrNumber(raw) : null;
@@ -51,7 +54,10 @@ function NumCell({ value, onCommit, disabled, label }: { value: string | null; o
 export function LineRow(p: Props) {
   const { line, editable } = p;
   const canEdit = editable || p.fixable;
-  const hint = defaultItemHint(p.defaultItem);
+  // Varsayılanla doğacak satırın bilgisi sunucudan (`itemFallback`, onayla aynı yüklem); eski backend → eşleşme yanıtının ipucu.
+  const fb = line.itemFallback;
+  const hint = fb ? null : defaultItemHint(p.defaultItem);
+  const suspect = line.problems?.includes("SUSPECT_VALUE") ?? false;
   return (
     <tr className={`border-t align-top ${p.selected ? "bg-amber-50 dark:bg-amber-950/30" : ""} ${line.needsReview ? "border-l-4 border-l-amber-500" : ""}`} onClick={p.onSelect} data-testid="line-row">
       <td className="p-2 text-xs tabular-nums">
@@ -60,7 +66,7 @@ export function LineRow(p: Props) {
       </td>
       <td className="p-2 text-xs">{line.senderRollNo ?? "—"}</td>
       <td className="p-2">
-        <NumCell label="Metre" value={line.meters} disabled={!canEdit} onCommit={(n) => n !== null && p.onPatch({ meters: n })} />
+        <NumCell label="Metre" value={line.meters} disabled={!canEdit} suspect={suspect} onCommit={(n) => n !== null && p.onPatch({ meters: n })} />
         {line.needsReview && <div className="mt-0.5 text-[10px] text-amber-700 dark:text-amber-400">Gözden geçir</div>}
       </td>
       <td className="p-2">
@@ -90,6 +96,11 @@ export function LineRow(p: Props) {
         {line.problems?.filter((c) => c !== "FAILED").map((c) => (
           <div key={c} className={`mt-0.5 text-[10px] ${c === "SUSPECT_VALUE" ? "font-semibold text-destructive" : "text-amber-700 dark:text-amber-400"}`} data-testid="line-problem" data-code={c}>{PROBLEM_LABEL[c] ?? c}</div>
         ))}
+        {fb && (
+          <div className="mt-0.5 max-w-[200px] text-[10px] text-sky-700 dark:text-sky-400" data-testid="line-item-fallback" data-source={fb.source}>
+            {fallbackText(fb)}
+          </div>
+        )}
         {line.failReason && <div className="mt-0.5 max-w-[200px] text-[10px] text-destructive" data-testid="fail-reason">{line.failReason}</div>}
       </td>
       <td className="p-2">

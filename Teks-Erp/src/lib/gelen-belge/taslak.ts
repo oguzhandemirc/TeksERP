@@ -2,6 +2,7 @@
 // Bölge ≥ 2 satırları blok numarasını SÜRDÜRÜR (tek taslak; panel "bölgeyi ayır"). Metrajı okunamayan satır
 // yazılmaz (`meters > 0` CHECK), uyarıya düşer; el yazısı ızgarasında her satır needsReview.
 import { parseNumber, type DocumentExtraction, type FieldResult, type ForeignDocument, type OcrRect, type RegionExtraction } from "./motor";
+import { documentDeclared, positive, type DocumentDeclared } from "./taslak-belge-beyan";
 import { clampOutlierFactor, markGridSuspects, METER_KEYS } from "./taslak-supheli";
 
 // Şüpheli değer kuralı ayrı dosyada (max-lines); çağıranlar buradan alır.
@@ -41,7 +42,8 @@ export interface DraftHeader {
   processText: string | null;
   declaredTopCount: number | null;
   templateScore: number | null;
-  totalsDeclared: { blocks: Array<{ blockNo: number; count: string | null; kg: string | null; m: string | null }> };
+  /** `document`: başlıktaki belge geneli beyan (şablon `headerTotals`; yalnız ilk bölge, sıfır/okunamayan değer yok sayılır). */
+  totalsDeclared: { blocks: Array<{ blockNo: number; count: string | null; kg: string | null; m: string | null }>; document?: DocumentDeclared };
   warnings: string[];
   /** Bölge başına özet (şablon kimliği, puan, başlık alanları) — scan.ocrResult zarfına; panel "bölgeyi ayır" buradan okur. */
   regions: Array<{ regionNo: number; templateId: string | null; score: number; fields: Record<string, string | null>; blocks?: Array<{ blockNo: number; fields: Record<string, string | null> }> }>;
@@ -84,7 +86,6 @@ const dayOf = (v: string | null): Date | null => {
   const d = new Date(`${v}T00:00:00.000Z`);
   return Number.isNaN(d.getTime()) ? null : d;
 };
-const positive = (v: string | null | undefined): string | null => (v && Number(v) > 0 && Number.isFinite(Number(v)) ? v : null);
 
 function tableLines(reg: RegionExtraction, blockOffset: number, out: DraftLine[], warnings: string[]): number {
   let maxBlock = 0;
@@ -272,6 +273,7 @@ export function draftFromExtraction(doc: DocumentExtraction, opts: DraftOptions 
     regions.push({ regionNo: reg.region.regionNo, templateId: reg.templateId, score: reg.classificationScore, fields, ...(blocks.length ? { blocks } : {}) });
   }
   const topCount = pick(f, TOP_COUNT_KEYS);
+  const docDecl = documentDeclared(first);
   return {
     header: {
       ownerText: clip(pick(f, OWNER_KEYS), 160),
@@ -282,7 +284,7 @@ export function draftFromExtraction(doc: DocumentExtraction, opts: DraftOptions 
       processText: clip(pick(f, PROCESS_KEYS), 120),
       declaredTopCount: topCount && /^\d{1,4}$/.test(topCount) ? Number(topCount) : null,
       templateScore: first ? Math.round(first.classificationScore * 10000) / 10000 : null,
-      totalsDeclared: { blocks: totalsBlocks },
+      totalsDeclared: { blocks: totalsBlocks, ...(docDecl ? { document: docDecl } : {}) },
       warnings,
       regions,
     },

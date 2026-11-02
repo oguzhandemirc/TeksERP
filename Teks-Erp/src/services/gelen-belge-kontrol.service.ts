@@ -38,11 +38,17 @@ export interface BlockCheck {
   /** null = beyan yok; true/false = kapı bu blokta geçer/geçmez. */
   ok: boolean | null;
 }
+/** Başlıktaki belge geneli beyan (ör. "Müşteri MT") ↔ Σ bütün canlı satırlar; etiket alan başına belgedeki addır. */
+export interface DocumentCheck extends Omit<BlockCheck, "blockNo"> {
+  labels: Partial<Record<TotalField, string>>;
+}
 export interface TotalsCheck {
   /** null = hiç beyan yok; false = kapı TOTAL_MISMATCH verir (gerekçesiz). */
   ok: boolean | null;
   tolerance: number;
   blocks: BlockCheck[];
+  /** Belge geneli beyan kıyası (şablon `headerTotals`); beyan yoksa null. */
+  document: DocumentCheck | null;
   /** Kapının 409 `TOTAL_MISMATCH` metinleri (bayt-aynı). */
   mismatches: string[];
   /** Başlık top adedi ↔ satır sayısı — yalnız uyarı. */
@@ -63,47 +69,65 @@ function sumBlock(live: ReadonlyArray<TotalLine>, blockNo: number) {
   return { count: bl.length, m: bl.reduce((s, l) => s + Number(l.meters), 0), kg: bl.reduce((s, l) => s + Number(l.weightKg ?? 0), 0) };
 }
 
-function checkDeclaredBlock(b: DeclaredBlock, live: ReadonlyArray<TotalLine>, out: string[]): BlockCheck {
-  const blockNo = b.blockNo ?? 1;
-  const s = sumBlock(live, blockNo);
+/** Bir beyanı (blok ya da belge geneli) satır toplamıyla kıyaslar; `head(alan)` mesaj öneki ("Blok 1" · "Belge geneli (Müşteri MT)"). */
+function compareDeclared(b: DeclaredBlock, s: { count: number; m: number; kg: number }, head: (f: TotalField) => string, out: string[]): Omit<BlockCheck, "blockNo"> {
   const hasCount = b.count != null && b.count !== "";
   const declared = { count: hasCount ? finite(Number(b.count)) : null, m: b.m != null ? finite(Number(b.m)) : null, kg: b.kg != null ? finite(Number(b.kg)) : null };
   const diffs: TotalDiff[] = [];
   const add = (field: TotalField, actual: number, d: number | null) => diffs.push({ field, declared: d, actual: round3(actual), diff: d === null ? null : round3(actual - d) });
   if (hasCount && Number(b.count) !== s.count) {
-    out.push(`Blok ${blockNo}: beyan ${b.count} top, satır ${s.count}.`);
+    out.push(`${head("count")}: beyan ${b.count} top, satır ${s.count}.`);
     add("count", s.count, declared.count);
   }
   if (b.m != null && !near(s.m, Number(b.m))) {
-    out.push(`Blok ${blockNo}: beyan ${b.m} m, satır toplamı ${s.m.toFixed(3)} m.`);
+    out.push(`${head("m")}: beyan ${b.m} m, satır toplamı ${s.m.toFixed(3)} m.`);
     add("m", s.m, declared.m);
   }
   if (b.kg != null && !near(s.kg, Number(b.kg))) {
-    out.push(`Blok ${blockNo}: beyan ${b.kg} kg, satır toplamı ${s.kg.toFixed(3)} kg.`);
+    out.push(`${head("kg")}: beyan ${b.kg} kg, satır toplamı ${s.kg.toFixed(3)} kg.`);
     add("kg", s.kg, declared.kg);
   }
   const any = hasCount || b.m != null || b.kg != null;
-  return { blockNo, lines: { count: s.count, m: round3(s.m), kg: round3(s.kg) }, declared: any ? declared : null, diffs, ok: any ? diffs.length === 0 : null };
+  return { lines: { count: s.count, m: round3(s.m), kg: round3(s.kg) }, declared: any ? declared : null, diffs, ok: any ? diffs.length === 0 : null };
+}
+
+function checkDeclaredBlock(b: DeclaredBlock, live: ReadonlyArray<TotalLine>, out: string[]): BlockCheck {
+  const blockNo = b.blockNo ?? 1;
+  return { blockNo, ...compareDeclared(b, sumBlock(live, blockNo), () => `Blok ${blockNo}`, out) };
+}
+
+type DeclaredDocument = DeclaredBlock & { labels?: Partial<Record<TotalField, string>> };
+
+/** Belge geneli beyan ↔ Σ BÜTÜN canlı satırlar (bloklardan bağımsız); beyan yoksa null. */
+function checkDocument(d: DeclaredDocument | null | undefined, live: ReadonlyArray<TotalLine>, out: string[]): DocumentCheck | null {
+  if (!d || typeof d !== "object") return null;
+  const labels = d.labels && typeof d.labels === "object" ? d.labels : {};
+  const s = { count: live.length, m: live.reduce((a, l) => a + Number(l.meters), 0), kg: live.reduce((a, l) => a + Number(l.weightKg ?? 0), 0) };
+  const r = compareDeclared(d, s, (f) => `Belge geneli${labels[f] ? ` (${labels[f]})` : ""}`, out);
+  return r.declared ? { ...r, labels } : null;
 }
 
 /**
- * Toplam kapısı (SERT) — Σ satır ↔ blok başına beyan (T.Adet/kg/m), SKIPPED sayılmaz. Beyanlı bloklar beyan
+ * Toplam kapısı (SERT) — Σ satır ↔ blok başına beyan (T.Adet/kg/m) + belge geneli başlık beyanı (`document`), SKIPPED sayılmaz. Beyanlı bloklar beyan
  * sırasıyla, satırı olup beyanı olmayan bloklar (doğrulanamaz) sonra gelir. `mismatches` boşsa kapı geçer.
  */
 export function totalsCheck(note: { totalsDeclared: unknown; declaredTopCount: number | null }, lines: ReadonlyArray<TotalLine>): TotalsCheck {
   const live = lines.filter((l) => l.status !== "SKIPPED");
   const mismatches: string[] = [];
-  const raw = (note.totalsDeclared as { blocks?: DeclaredBlock[] } | null)?.blocks;
+  const decl = note.totalsDeclared as { blocks?: DeclaredBlock[]; document?: DeclaredDocument } | null;
+  const raw = decl?.blocks;
   const declaredBlocks = Array.isArray(raw) ? raw : [];
   const blocks = declaredBlocks.map((b) => checkDeclaredBlock(b, live, mismatches));
+  const document = checkDocument(decl?.document, live, mismatches);
   const seen = new Set(blocks.map((b) => b.blockNo));
   for (const blockNo of [...new Set(live.map((l) => l.blockNo))].sort((a, b) => a - b)) {
     if (seen.has(blockNo)) continue;
     const s = sumBlock(live, blockNo);
     blocks.push({ blockNo, lines: { count: s.count, m: round3(s.m), kg: round3(s.kg) }, declared: null, diffs: [], ok: null });
   }
-  const ok = blocks.some((b) => b.ok === false) ? false : blocks.some((b) => b.ok === true) ? true : null;
-  return { ok, tolerance: TOTAL_TOLERANCE, blocks, mismatches, warnings: totalWarnings(note, lines) };
+  const all = document ? [...blocks, document] : blocks;
+  const ok = all.some((b) => b.ok === false) ? false : all.some((b) => b.ok === true) ? true : null;
+  return { ok, tolerance: TOTAL_TOLERANCE, blocks, document, mismatches, warnings: totalWarnings(note, lines) };
 }
 
 /** Kapının uyuşmazlık listesi — `totalsCheck`ten türer (ikinci hesap yok). */
@@ -127,12 +151,23 @@ export type LineProblem = "FAILED" | "ITEM_UNRESOLVED" | "NEEDS_REVIEW" | "SUSPE
 const suspectMarked = (ocrRaw: unknown): boolean =>
   !!ocrRaw && typeof ocrRaw === "object" && !Array.isArray(ocrRaw) && typeof (ocrRaw as Record<string, unknown>)[SUSPECT_MARK] === "string";
 
-/** Gözden geçirmenin "sorunlu satır" yüklemi — onay ön kontrolünün ürünsüz/gözden geçirilmemiş kümesi de BUNDAN. */
-export function lineProblems(l: { status: DeliveryNoteLineStatus; itemId: string | null; needsReview: boolean; ocrRaw?: unknown }): LineProblem[] {
+/** Onayın ürünsüz satıra uygulayacağı KULLANILABİLİR varsayılan (müşteri > fabrika; `usableDefaultItem`ten). */
+export interface ItemFallback { id: string; name: string; source: "CUSTOMER" | "FACTORY" }
+type ProblemLineInput = { status: DeliveryNoteLineStatus; itemId: string | null; needsReview: boolean; ocrRaw?: unknown };
+
+/** Bu satır onayda varsayılan ürünle mi doğacak? Açık + ürünsüz + kullanılabilir varsayılan → o ürün; aksi null. */
+export const lineItemFallback = (l: ProblemLineInput, fallback: ItemFallback | null | undefined): ItemFallback | null =>
+  fallback && !l.itemId && isOpenForApproval(l) ? fallback : null;
+
+/**
+ * Gözden geçirmenin "sorunlu satır" yüklemi — onay ön kontrolünün ürünsüz/gözden geçirilmemiş kümesi de BUNDAN.
+ * `fallback`: onayın uygulayacağı kullanılabilir varsayılan ürün — onunla doğacak satır ITEM_UNRESOLVED DEĞİLDİR (kapı geçer).
+ */
+export function lineProblems(l: ProblemLineInput, fallback?: ItemFallback | null): LineProblem[] {
   const out: LineProblem[] = [];
   if (l.status === DeliveryNoteLineStatus.FAILED) out.push("FAILED");
   if (!isOpenForApproval(l)) return out;
-  if (!l.itemId) out.push("ITEM_UNRESOLVED");
+  if (!l.itemId && !lineItemFallback(l, fallback)) out.push("ITEM_UNRESOLVED");
   if (l.needsReview) out.push("NEEDS_REVIEW");
   if (l.needsReview && suspectMarked(l.ocrRaw)) out.push("SUSPECT_VALUE");
   return out;

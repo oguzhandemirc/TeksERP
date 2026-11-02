@@ -2898,7 +2898,9 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     icon: FileScan,
     description: "Gelen müşteri irsaliyesi onayı: kumaşı seçilmemiş satırın varsayılan ürünü ve gözden geçirilmemiş hücre kuralı.",
     keywords:
-      "gelen belge irsaliye ocr müşteri emanet fason varsayılan ürün kumaş hizmet metre gözden geçir inceleme onay engelle uyar el yazısı",
+      // "genel" BAŞTA: saha bu bölümü ekranın eski adıyla ("genel ayarlar") arıyor (2026-11-02 demo 2. tur); "ayarlar" "<ad> ayarları"ndan
+      // eşleşir. Sona yazılsa bölüm başlığı "Ayarlar"la bitişik "genel ayarlar" olur, karoyla berabere kalır ve ilk sıra kayar.
+      "genel gelen belge irsaliye ocr müşteri emanet fason varsayılan ürün kumaş hizmet metre gözden geçir inceleme onay engelle uyar el yazısı",
     kind: "gelenBelge",
     section: "trade",
     permissionAny: [SETTINGS_ADMIN_PERMISSION],

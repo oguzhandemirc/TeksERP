@@ -1,6 +1,6 @@
 // D3a (2026-10-28): tek giriş noktası — bölgeleme → sınıflandırma → başlık alanları → tablo → ızgara → toplam.
 // DB/route yok; saf fonksiyon. Çağıran (D3b okuma işi) sonucu CustomerDeliveryNote DRAFT'a yazar.
-import type { DocumentTemplate, ExtractionResult, FieldResult, GridResult, HeaderLineSpec, NoteTotalsBlockInput, NoteTotalsResult, OcrBlock, OcrResult, PageRegion, TableResult } from "./types";
+import type { DocumentTemplate, ExtractionResult, FieldResult, GridResult, HeaderLineSpec, HeaderTotalsSpec, NoteTotalsBlockInput, NoteTotalsResult, OcrBlock, OcrResult, PageRegion, TableResult } from "./types";
 import { classifyWithFallback, scoreTemplate } from "./classify";
 import { readingOrderText } from "./geometry";
 import { normalizeForMatch } from "./text-normalize";
@@ -22,7 +22,22 @@ export interface RegionExtraction {
   blockFields: Array<{ blockNo: number; fields: Record<string, FieldResult> }>;
   /** Tablosuz şablonun başlıktan tek satır eşlemesi (yoksa null). */
   headerLine: HeaderLineSpec | null;
+  /** Şablonun belge geneli beyan alanları + etiketleri (yoksa null) — taslak `totalsDeclared.document`a çevirir. */
+  headerTotals: ResolvedHeaderTotals | null;
   warnings: string[];
+}
+
+export type ResolvedHeaderTotals = Partial<Record<keyof HeaderTotalsSpec, { key: string; label: string }>>;
+
+function resolveHeaderTotals(template: DocumentTemplate): ResolvedHeaderTotals | null {
+  const spec = template.headerTotals;
+  if (!spec) return null;
+  const out: ResolvedHeaderTotals = {};
+  for (const k of ["count", "m", "kg"] as const) {
+    const key = spec[k];
+    if (key) out[k] = { key, label: template.fields.find((f) => f.key === key)?.label ?? key };
+  }
+  return out;
 }
 
 /** İlk bölgenin belgesi dışında sayfada izi görülen tanınmış belge (sayfa BÖLÜNMEZ; yalnız uyarı kaynağı). */
@@ -86,7 +101,7 @@ function extractRegion(region: PageRegion, templates: DocumentTemplate[], fallba
   const template = templates.find((t) => t.id === cls.templateId) ?? null;
   const warnings: string[] = [];
   if (!template) {
-    return { region, templateId: null, classificationScore: cls.score, fields: null, tables: [], grid: null, totals: null, blockFields: [], headerLine: null, warnings: ["TEMPLATE_NOT_FOUND: şablon eşleşmedi"] };
+    return { region, templateId: null, classificationScore: cls.score, fields: null, tables: [], grid: null, totals: null, blockFields: [], headerLine: null, headerTotals: null, warnings: ["TEMPLATE_NOT_FOUND: şablon eşleşmedi"] };
   }
   if (cls.templateId === fallbackId) warnings.push("TEMPLATE_FALLBACK: gönderen şablonu yok, GENEL sözlük kullanıldı");
   const fields = extractFields(region.ocr, template);
@@ -102,7 +117,7 @@ function extractRegion(region: PageRegion, templates: DocumentTemplate[], fallba
   if (grid) warnings.push(...grid.warnings);
   warnings.push(...fields.warnings);
   const blockFields = extractBlockFields(region.ocr, template, tables[0]);
-  return { region, templateId: template.id, classificationScore: cls.score, fields, tables, grid, totals, blockFields, headerLine: template.headerLine ?? null, warnings };
+  return { region, templateId: template.id, classificationScore: cls.score, fields, tables, grid, totals, blockFields, headerLine: template.headerLine ?? null, headerTotals: resolveHeaderTotals(template), warnings };
 }
 
 /** Fotoğrafın tamamını işler: bölgeler ayrı belge sayılır, her biri kendi şablonuyla çıkarılır. */
