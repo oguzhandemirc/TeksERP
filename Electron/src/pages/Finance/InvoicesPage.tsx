@@ -5,7 +5,8 @@ import { Plus, Check, Ban, Trash2, Printer, Eye, Pencil, CalendarRange } from "l
 import { useSearchParams } from "react-router-dom";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
 import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +42,7 @@ import { GoodsReceiptDetailSheet } from "@/pages/Operations/GoodsReceipts/GoodsR
 import { ShipmentDetailSheet } from "@/pages/Operations/Shipments/ShipmentDetailSheet";
 import { DirectShipmentDetailSheet } from "@/pages/Operations/Shipments/DirectShipmentDetailSheet";
 import { factoryLocaleDateString } from "@/lib/factory-time";
+import { RefreshButton } from "@/components/RefreshButton";
 
 // ⚠️ Rozet sözlükleri 2026-08-14'te `service.ts`'e TAŞINDI (buradan kopyalanmadı,
 // taşındı): detay yüzeyi ikinci tüketici oldu ve iki kopya, aynı faturayı iki
@@ -143,6 +145,7 @@ export function InvoicesPage() {
         description="Taslak serbestçe düzenlenir. Onaylanan fatura cari deftere işler ve bir daha DEĞİŞTİRİLEMEZ — düzeltme iptal (storno) + yeni fatura ile yapılır."
         actions={
           <div className="flex items-center gap-2">
+            <RefreshButton queryKey={["finance", "invoices"]} />
             {/* ⭐ "N TASLAK" — sevkten/mal kabulden OTOMATİK doğan taslakların
                 tek görünür işareti. O taslaklar yalnız geçici bir toast ile
                 duyuruluyor (üstelik çoğu sevk mobilden yapılıyor ve orada
@@ -207,37 +210,41 @@ export function InvoicesPage() {
         </select>
       </div>
 
-      <PageBody className="p-6">
+      <ListBody>
         {q.isLoading ? (
-          <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
         ) : q.isError ? (
           /* ⚠️ "HATA" ile "KAYIT YOK" AYRI EKRANLAR: boş diziyi "fatura yok"
              diye basmak, kullanıcıyı AYNI FATURAYI İKİNCİ KEZ kesmeye iter —
              ve fatura, iki kez kesilmesi en pahalı belgedir. Interceptor'ın
              toast'ı birkaç saniyede kaybolur; ekranda kalan cümle doğruyu
              söylemek zorunda (emsal: PurchaseOrdersPage). */
-          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-            <p className="font-medium text-destructive">Fatura listesi yüklenemedi.</p>
-            {/* Backend'in KENDİ cümlesi ("Ön muhasebe modülü kapalı" gibi) ortak
-                çıkarıcıdan gelir ve yeniden yazılmaz; altındaki satır ise bu
-                ekrana özel sonucu söyler. */}
-            <p className="mt-1 text-muted-foreground">
-              {apiErrorText(q.error, "İstek sunucuya ulaşamadı ya da reddedildi.")}
-            </p>
-            <p className="mt-1 text-muted-foreground">
-              Bu bir “fatura yok” cevabı DEĞİLDİR. Kayıtlarınız yerinde duruyor; yeni fatura
-              kesmeden önce tekrar deneyin.
-            </p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-              Tekrar dene
-            </Button>
-          </div>
+          <ListMessage>
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+              <p className="font-medium text-destructive">Fatura listesi yüklenemedi.</p>
+              {/* Backend'in KENDİ cümlesi ("Ön muhasebe modülü kapalı" gibi) ortak
+                  çıkarıcıdan gelir ve yeniden yazılmaz; altındaki satır ise bu
+                  ekrana özel sonucu söyler. */}
+              <p className="mt-1 text-muted-foreground">
+                {apiErrorText(q.error, "İstek sunucuya ulaşamadı ya da reddedildi.")}
+              </p>
+              <p className="mt-1 text-muted-foreground">
+                Bu bir “fatura yok” cevabı DEĞİLDİR. Kayıtlarınız yerinde duruyor; yeni fatura
+                kesmeden önce tekrar deneyin.
+              </p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+                Tekrar dene
+              </Button>
+            </div>
+          </ListMessage>
         ) : rows.length === 0 ? (
-          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-            Fatura yok. "Yeni Fatura" ile taslak oluşturabilirsiniz.
-          </div>
+          <ListMessage>
+            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+              Fatura yok. "Yeni Fatura" ile taslak oluşturabilirsiniz.
+            </div>
+          </ListMessage>
         ) : (
-          <div className="overflow-hidden rounded-md border">
+          <>
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
                 <tr>
@@ -388,13 +395,14 @@ export function InvoicesPage() {
             {/* ⚠️ SESSİZ KIRPMA YOK: sunucu sayfası (100) dolduğunda kullanıcı
                 bulamadığı faturayı "yok" sayıp ikinci kez kesebilir. */}
             {trimBand && (
-              <p className="border-t bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+              <p className="border-t bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
                 {trimBand}
               </p>
             )}
-          </div>
+          </>
         )}
-      </PageBody>
+      </ListBody>
+      <ListFooter loaded={rows.length} total={q.data?.pagination?.total ?? null} />
 
       <ServicePeriodDraftDialog open={servicePeriodOpen} onOpenChange={setServicePeriodOpen} onCreated={(id) => { invalidate(); setDetailId(id); }} />
       <InvoiceFormDialog open={formOpen} onOpenChange={setFormOpen} onCreated={invalidate} onDraftCreated={(id) => { setFormOpen(false); setEditId(id); }} />
