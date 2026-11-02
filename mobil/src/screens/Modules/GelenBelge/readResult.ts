@@ -73,6 +73,40 @@ function totalsValue(t: ReadSummary['totals']): { value: string; tone: ReadTone 
   return t.ok ? { value: 'Tutuyor', tone: 'ok' } : { value: 'Tutmuyor', tone: 'error' };
 }
 
+const KURSUN_SOURCE_TEXT: Record<string, string> = { OUTPUT: 'çıkış', TOTAL: 'toplam metre', LINE_SUM: 'satır toplamı', MANUAL: 'elle' };
+
+/** Fabrika metre gösterimi: binlik nokta, en çok 2 ondalık virgüllü (4.521 · 198,1). */
+function fmtKursunMeters(v: string | number): string | null {
+  const n = typeof v === 'number' ? v : Number(v);
+  if (!Number.isFinite(n)) return null;
+  const [int, dec] = (Math.round(n * 100) / 100).toFixed(2).split('.');
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const frac = dec.replace(/0+$/, '');
+  return frac ? `${grouped},${frac}` : grouped;
+}
+
+/** Parti no + kurşun metresi satırları — değerler sunucudan; alan yoksa (eski sunucu) satır yok. */
+function batchKursunRows(s: ReadSummary): ReadResultView['rows'] {
+  const rows: ReadResultView['rows'] = [];
+  const candidates = s.batchNoCandidates ?? [];
+  if (s.ourBatchNo) rows.push({ key: 'parti', label: 'Parti no', value: s.ourBatchNo });
+  else if (candidates.length > 1) rows.push({ key: 'parti', label: 'Parti no', value: `Panelde seçilecek (${candidates.length} aday)`, tone: 'warn' });
+  const m = s.kursunMeters != null ? fmtKursunMeters(s.kursunMeters) : null;
+  if (m !== null) {
+    const src = s.kursunMetersSource ? KURSUN_SOURCE_TEXT[s.kursunMetersSource] : undefined;
+    rows.push({ key: 'kursun', label: 'Kurşun', value: src ? `${m} m (${src})` : `${m} m`, tone: s.kursunMetersReview ? 'warn' : undefined });
+  }
+  return rows;
+}
+
+/** Operatöre panel işi notları: parti no seçimi ve kurşun metresi doğrulaması. */
+function batchKursunNotes(s: ReadSummary): string[] {
+  const notes: string[] = [];
+  if (!s.ourBatchNo && (s.batchNoCandidates?.length ?? 0) > 1) notes.push('Parti no panelde seçilecek.');
+  if (s.kursunMeters != null && s.kursunMetersReview) notes.push('Kurşun metresi panelde doğrulanacak.');
+  return notes;
+}
+
 function summaryRows(s: ReadSummary, noteNo: string): ReadResultView['rows'] {
   const rows: ReadResultView['rows'] = [{ key: 'no', label: 'Taslak', value: noteNo }];
   if (s.state === 'READING') {
@@ -85,6 +119,7 @@ function summaryRows(s: ReadSummary, noteNo: string): ReadResultView['rows'] {
     { key: 'satir', label: 'Satır', value: String(s.lineCount) },
     { key: 'gozden', label: 'Gözden geçirilecek', value: String(s.reviewCount), tone: s.reviewCount > 0 ? 'warn' : 'ok' },
     { key: 'toplam', label: 'Toplam', value: t.value, tone: t.tone },
+    ...batchKursunRows(s),
   );
   return rows;
 }
@@ -95,7 +130,7 @@ export function readResultView(w: ReadWatch, noteNo: string): ReadResultView {
   const rows = s ? summaryRows(s, noteNo) : [{ key: 'no', label: 'Taslak', value: noteNo }];
   const notices = s?.notices ?? [];
   const notes = s && (s.state === 'READ' || s.state === 'PARTIAL')
-    ? [...s.totals.mismatches, ...s.warnings, ...notices.map((n) => `${n.title}: ${n.detail}`)]
+    ? [...s.totals.mismatches, ...s.warnings, ...notices.map((n) => `${n.title}: ${n.detail}`), ...batchKursunNotes(s)]
     : [];
   if (w.phase === 'error') return { tone: 'error', title: 'Okuma durumu alınamadı', reason: w.message, rows, notes };
   if (w.phase === 'timeout') {
@@ -104,6 +139,6 @@ export function readResultView(w: ReadWatch, noteNo: string): ReadResultView {
   if (!s) return { tone: 'busy', title: 'Okunuyor…', reason: null, rows, notes };
   const head = STATE_TITLE[s.state];
   // Okundu ama gözden geçirme/toplam/neden varsa yeşil değil: operatör panele haber vermeli.
-  const tone = head.tone === 'ok' && (s.reason || s.reviewCount > 0 || s.totals.ok !== true || s.warnings.length || notices.length) ? 'warn' : head.tone;
+  const tone = head.tone === 'ok' && (s.reason || s.reviewCount > 0 || s.totals.ok !== true || s.warnings.length || notices.length || notes.length) ? 'warn' : head.tone;
   return { tone, title: head.title, reason: s.reason, rows, notes };
 }

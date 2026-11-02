@@ -61,6 +61,26 @@ export interface ReadSummary {
   warnings: string[];
   /** Okuma uyarıları (sunucu `noteNotices`, panel şeridiyle aynı liste). Eski sunucu göndermez → yok sayılır. */
   notices?: { code: string; title: string; detail: string }[];
+  // Parti no + kurşun metresi (taslak başlığı, sunucu çözer). Eski sunucu göndermez → kartta satır yok.
+  ourBatchNo?: string | null;
+  ourBatchNoKey?: string | null;
+  /** Prisma Decimal → JSON'da string gelir; sayı da kabul. */
+  kursunMeters?: string | number | null;
+  kursunMetersSource?: KursunMetersSource | null;
+  kursunMetersReview?: boolean;
+  batchNoCandidates?: BatchNoCandidate[];
+  kursunMeterCandidates?: Partial<Record<'output' | 'total' | 'input' | 'lineSum', string | number | null>>;
+}
+
+export type KursunMetersSource = 'OUTPUT' | 'TOTAL' | 'LINE_SUM' | 'MANUAL';
+
+/** Belgedeki parti no adayı (şablon `batchNoCandidates` sırası). Tablet yalnız sayar/gösterir. */
+export interface BatchNoCandidate {
+  key?: string;
+  field?: string;
+  kind?: string;
+  label?: string;
+  value: string;
 }
 
 export const inboundDocService = {
