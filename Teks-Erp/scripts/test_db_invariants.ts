@@ -463,6 +463,8 @@ const PARTIAL_INDEXES: Array<{
   // defect_types — şema-DIŞI partial unique (migration 20260914096000): kurulumda TEK varsayılan hata tipi;
   // tipsiz hata girişi ona düşer, düz unique olsaydı `false` satırları çakışırdı (karar A, 2026-09-14).
   { table: "defect_types", index: "defect_types_one_default", uniq: true, predicate: `("isDefault" = true)`, why: "kurulumda TEK varsayılan hata tipi" },
+  // fabric_property_values — oie-a (2026-11-02): kurşun gramaj tablosunda çeşit başına TEK varsayılan.
+  { table: "fabric_property_values", index: "fabric_property_values_default_uq", uniq: true, predicate: `"isDefault"`, why: "çeşit başına TEK varsayılan değer" },
   // traveler_card_templates — şema-DIŞI unique. PARTIAL olması ZORUNLU: düz unique
   // olsaydı `isDefault=false` de benzersiz sayılır, sistemde toplam iki şablon tutulabilirdi.
   { table: "traveler_card_templates", index: "traveler_card_templates_isDefault_key", uniq: true, predicate: `("isDefault" = true)`, why: "sistemde TEK varsayılan refakat kartı şablonu" },
@@ -763,6 +765,11 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "warp_beam_events", name: "warp_beam_events_setup_minutes_nonneg" },
   // Faz 4 (2026-09-15, migration 20260915030000): take-up 0 ≤ x < 100 (çözgü = kumaş ÷ (1 − x/100) bölen sıfırlanamaz).
   { table: "warp_specs", name: "warp_specs_take_up_pct_range" },
+  // oie-a (2026-11-02): kurşun gram fiyatı para birimiyle birlikte, >= 0; gramaj > 0; varsayılan değer aktif.
+  { table: "cari_accounts", name: "cari_accounts_kursun_gram_price_ck" },
+  { table: "stations", name: "stations_kursun_gram_price_ck" },
+  { table: "fabric_property_values", name: "fabric_property_values_amount_ck" },
+  { table: "fabric_property_values", name: "fabric_property_values_default_active_ck" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_kind_ref_ck" },
   // G2 fason dokuma (2026-09-14): başlık iş emri adımı XOR dokuma işi — birincil kapı serviste
   { table: "subcontractor_dispatches", name: "subcontractor_dispatches_header_ck" },
