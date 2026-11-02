@@ -26,7 +26,7 @@ import { ApiResponse } from "../types/api.types";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { assertStationDefaultLabelCopies } from "./helpers/label-copies.helper";
-import { inspectionDefaultForKind, stationLayoutWarning } from "./helpers/quality-station.helper";
+import { inspectionDefaultForKind, KURSUN_DISPATCH_STATION_WHERE, stationLayoutWarning } from "./helpers/quality-station.helper";
 import type { StationKind } from "@prisma/client";
 
 /**
@@ -70,6 +70,16 @@ async function seedCapabilityFromCategory(data: Record<string, unknown>): Promis
 }
 
 export class StationService extends BaseService {
+  /** `isKursunStation` (rota yanıtıyla aynı yüklem): iş emri formu elle seçilen adımda gramajı buna bağlar. */
+  async findById(id: string): Promise<ApiResponse<unknown>> {
+    const res = await super.findById(id);
+    if (res.data) {
+      const n = await prisma.station.count({ where: { id, ...KURSUN_DISPATCH_STATION_WHERE } });
+      (res.data as { isKursunStation?: boolean }).isKursunStation = n > 0;
+    }
+    return res;
+  }
+
   async create(
     data: Record<string, unknown>,
     userId?: string,

@@ -19,7 +19,7 @@ import { assertPlannedMachines, plannedPairsOf } from "./helpers/planned-machine
 import type { ApiResponse } from "../types/api.types";
 import type { Request } from "express";
 import { parseQueryParams } from "../utils/query-parser";
-import { assertShortcutFields, isShortcutQuery, listShortcutRoutes } from "./helpers/route-shortcut.helper";
+import { assertShortcutFields, isShortcutQuery, listShortcutRoutes, markKursunStations } from "./helpers/route-shortcut.helper";
 
 /**
  * Route servis konfigürasyonu — TEK KAYNAK. Hem canlı wiring (route.routes.ts)
@@ -405,9 +405,21 @@ export class RouteService extends BaseService {
 
   /** `?shortcut=1`: yalnız iş emri kısayolları, sıralı + sayfasız (helper); where yine `buildListWhere`ten. Parametresiz istek bugünkü liste. */
   async findAll(req: Request) {
-    if (!isShortcutQuery(req)) return super.findAll(req);
-    this.assertListQueryShape(req);
-    return listShortcutRoutes({ ...this.buildListWhere(parseQueryParams(req), req), isWorkOrderShortcut: true }, ROUTE_SERVICE_CONFIG.defaultInclude);
+    let res;
+    if (!isShortcutQuery(req)) res = await super.findAll(req);
+    else {
+      this.assertListQueryShape(req);
+      res = await listShortcutRoutes({ ...this.buildListWhere(parseQueryParams(req), req), isWorkOrderShortcut: true }, ROUTE_SERVICE_CONFIG.defaultInclude);
+    }
+    await markKursunStations(res.data);
+    return res;
+  }
+
+  /** Adım istasyonlarında `isKursunStation` (liste ile aynı türetme). */
+  async findById(id: string): Promise<ApiResponse<unknown>> {
+    const res = await super.findById(id);
+    if (res.data) await markKursunStations([res.data]);
+    return res;
   }
 
   // Tambursuz rota (KQ-D8): kalite adımından sonra karar adımı yoksa UYARI, red değil.

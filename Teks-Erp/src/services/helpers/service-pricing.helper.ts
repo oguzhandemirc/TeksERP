@@ -19,7 +19,7 @@ import { resolveItemPricesFor } from "../item-price.service";
 import { listKursunApplications, readKursunTarget, type KursunApplication } from "./process-summary.helper";
 import { listFlagServiceWorks } from "./service-flag-work.helper";
 import { pickServiceItemId } from "./service-item-pick.helper";
-import { applyKursunGramPrices } from "./kursun-gram-price.helper";
+import { applyKursunGramPrices, gramPriceCurrentWarning } from "./kursun-gram-price.helper";
 import { missingQuantityWarning, priceUnitMatches, serviceWorkQuantity, serviceWorkUnit } from "./service-quantity.helper";
 
 /** `kursun-qc.service` reopenStep damga sebebi — yeniden açılan adım yeni hizmettir. */
@@ -262,7 +262,8 @@ export async function resolveServiceItemsForRolls(params: {
   const works = billable.filter((w) => !unknown.includes(w));
 
   await applyAsOfPrices(works, { opt, currency: params.currency, customerId: params.customerId, db });
-  await applyKursunGramPrices(works.filter((w) => w.serviceItemId !== null), { currency: params.currency, customerId: params.customerId, db });
+  const gramPriced = await applyKursunGramPrices(works.filter((w) => w.serviceItemId !== null), { currency: params.currency, customerId: params.customerId, db });
+  if (gramPriced > 0) warnings.push(gramPriceCurrentWarning(gramPriced));
 
   const items = await db.item.findMany({
     where: { id: { in: [...new Set(works.map((w) => w.serviceItemId).filter((v): v is string => v !== null))] } },

@@ -5,8 +5,10 @@
 // (kaynak not, seçilen rota, hedef değerler, adım planı). Yalnız `gelenBelge.formApproval = WITH_WORK_ORDER` iken açılır;
 // izin iş emri açma kümesidir (`gelen-belge:approve` ARANMAZ — ayar bu SoD'yi bilerek fabrikaya bırakır), ayak izine
 // "WITH_WORK_ORDER: <kullanıcı>" düşer. Üç adım üç ayrı mevcut yazıcıdır (onay kendi claim/kurtarma döngüsüyle, quickStart
-// kendi tx'iyle); tek tx yerine DEVAM EDİLEBİLİRLİK: onaylanmış not yeniden onaylanmaz, top belirlenimli token'la, iş emri
-// `clientToken`la replay olur — yarıda kalan istek aynı token'la tekrarlanınca kaldığı yerden tamamlar, ikinci top/İE doğmaz.
+// kendi tx'iyle); tek tx yerine DEVAM EDİLEBİLİRLİK: onay "özet satırının topu var mı"ya bağlıdır (başlık durumuna değil) —
+// yarım kalan onay (PARTIAL, bayat APPROVING) aynı token'la yeniden koşar, top belirlenimli token'la, iş emri `clientToken`la
+// replay olur; ikinci top/İE doğmaz. Okuma kapısı yalnız SÜREN okumadır: düşen/okuyucusuz belgede operatörün elle girdiği
+// değerlerle kayıt yapılır (uyarıyla).
 // =============================================================================
 import { DeliveryNoteStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
@@ -25,8 +27,12 @@ import { WorkOrderService, type WorkOrderCreateInput } from "./workorder.service
 const IE = TERIM.terbiyeIsEmri;
 const workOrders = new WorkOrderService();
 
-/** Okuma bu durumlardaysa formdan kayıt yapılabilir (okunmamış/okunuyor belge 409). */
-export const FORM_WORK_ORDER_READ_STATES: readonly ReadSummaryState[] = ["READ", "PARTIAL"];
+/** Yalnız okuma SÜRERKEN kayıt 409; diğer her durumda gövdedeki (operatörün gördüğü) değerle kayıt yapılır. */
+export const FORM_WORK_ORDER_BLOCKING_READ_STATES: readonly ReadSummaryState[] = ["READING"];
+/** Okumanın değer üretmediği durumlar → kayıt yapılır ama "elle girildi" uyarısı düşer. */
+const MANUAL_READ_STATES: readonly ReadSummaryState[] = ["FAILED", "NO_PAGES", "NO_SERVICE"];
+/** Onayın (yeniden) koşabileceği başlık durumları; taze APPROVING'i onay claim'i kendisi 409'la reddeder. */
+const APPROVAL_RESUMABLE: readonly DeliveryNoteStatus[] = [DeliveryNoteStatus.DRAFT, DeliveryNoteStatus.PARTIAL, DeliveryNoteStatus.APPROVING];
 
 export interface FormWorkOrderInput {
   clientToken: string;
@@ -74,23 +80,29 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
   if (!note) throw AppError.notFound("Gelen belge bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
 
   const warnings: string[] = [];
-  // Taslak: okuma bitmiş olmalı → not alanları → sistem onayı. Onaylanmış not (yarıda kalan/tekrar) bu adımı atlar.
+  // Taslak: okuma sürmüyor olmalı → not alanları (yalnız DRAFT'ta yazılır).
   if (note.status === DeliveryNoteStatus.DRAFT) {
     const read = await getReadSummary(noteId);
-    if (!FORM_WORK_ORDER_READ_STATES.includes(read.state)) {
-      throw AppError.conflict(`${note.noteNo} henüz okunmadı (${read.state}); okuma bitince yeniden deneyin.`, { code: "DELIVERY_NOTE_NOT_READ", state: read.state });
+    if (FORM_WORK_ORDER_BLOCKING_READ_STATES.includes(read.state)) {
+      throw AppError.conflict(`${note.noteNo} henüz okunuyor; okuma bitince yeniden deneyin.`, { code: "DELIVERY_NOTE_NOT_READ", state: read.state });
     }
+    if (MANUAL_READ_STATES.includes(read.state)) warnings.push(`${note.noteNo}: sayfa okunamadı; müşteri ve metre elle girilen değerlerle kaydedildi.`);
     await updateDeliveryNote(noteId, {
       ownerCustomerId: input.ownerCustomerId,
       ...(input.ourBatchNo !== undefined ? { ourBatchNo: input.ourBatchNo, ourBatchNoKey: input.ourBatchNo ? (input.ourBatchNoKey ?? null) : null } : {}),
       // Gövdedeki metre operatörün gördüğü değerdir → gözden geçirilmiş sayılır (MANUAL).
       kursunMeters: input.kursunMeters,
     }, actor.userId);
+  }
+  // Onay "özet satırının topu var mı"ya bağlı: yarım kalan onay (PARTIAL / bayat APPROVING) aynı token'la yeniden koşar.
+  const summary = await prisma.customerDeliveryNoteLine.findUnique({ where: { id: summaryLineId(noteId) }, select: { rollId: true } });
+  if (!summary?.rollId) {
+    if (!APPROVAL_RESUMABLE.includes(note.status)) {
+      throw AppError.conflict(`${note.noteNo} şu an ${IE.tekilKucuk} için kaydedilemez (${note.status}).`, { code: "DELIVERY_NOTE_NOT_APPROVABLE", status: note.status });
+    }
     const user = await prisma.user.findUnique({ where: { id: actor.userId }, select: { username: true } });
     const approved = await approveDeliveryNote(noteId, {}, actor.userId, { entryMode: "PER_DOCUMENT", via: `WITH_WORK_ORDER: ${user?.username ?? actor.userId}` });
     warnings.push(...approved.warnings);
-  } else if (note.status !== DeliveryNoteStatus.APPROVED && note.status !== DeliveryNoteStatus.PARTIAL) {
-    throw AppError.conflict(`${note.noteNo} şu an ${IE.tekilKucuk} için kaydedilemez (${note.status}).`, { code: "DELIVERY_NOTE_NOT_APPROVABLE", status: note.status });
   }
 
   const line = await prisma.customerDeliveryNoteLine.findUnique({ where: { id: summaryLineId(noteId) }, select: { rollId: true, failReason: true, roll: { select: { barcode: true } } } });
