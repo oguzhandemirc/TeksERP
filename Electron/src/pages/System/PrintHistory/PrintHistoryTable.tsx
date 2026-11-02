@@ -43,10 +43,10 @@ export function PrintHistoryTable({ items, loading, onSelect, onQuickFilter }: P
   }
   const today = factoryDayKey();
   return (
-    // Dar ekranda tablo yatay kayar; sütunlar sabit piksel taşımaz.
-    <div className="overflow-x-auto">
+    // Dar ekranda tablo üst ListBody içinde yatay kayar (iç kaydırıcı yok → başlık yapışık kalır).
+    <div>
       <table className="w-full min-w-[56rem] text-sm">
-        <thead className="bg-card/80">
+        <thead>
           <tr className="border-b text-left text-[11px] uppercase tracking-wider text-muted-foreground">
             <th className="px-4 py-2 font-medium sm:px-6">Zaman</th>
             <th className="px-3 py-2 font-medium">Kişi</th>

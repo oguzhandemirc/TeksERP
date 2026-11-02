@@ -10,7 +10,8 @@ import { TERIM_AD } from "@/lib/terim";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageBody, PageShell } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
@@ -48,18 +49,21 @@ export function MachineCollectorsPage() {
           </div>
         }
       />
-      <PageBody className="space-y-4 p-4">
+      <ListBody>
         {warning && (
-          <p role="alert" className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {warning}
-          </p>
+          <ListMessage>
+            <p role="alert" className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {warning}
+            </p>
+          </ListMessage>
         )}
         {list.data ? (
           <CollectorTable rows={list.data} busy={actions.busy} onEdit={(row) => setForm({ mode: "edit", row })} onRotate={setRotating} onRevoke={setRevoking} />
         ) : (
           <p className="py-16 text-center text-muted-foreground">{list.isError ? "Okunamadı — bağlantıyı kontrol edip yenileyin." : "Yükleniyor…"}</p>
         )}
-      </PageBody>
+      </ListBody>
+      <ListFooter loaded={list.data?.length ?? 0} />
       <CollectorFormDialog
         open={form !== null}
         onOpenChange={(o) => !o && setForm(null)}

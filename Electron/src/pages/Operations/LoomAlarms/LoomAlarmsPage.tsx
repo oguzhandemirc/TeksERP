@@ -10,9 +10,9 @@ import { useMemo, useState } from "react";
 import { TERIM_AD } from "@/lib/terim";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { AutoLoadMore } from "@/components/data-table/AutoLoadMore";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageBody, PageShell } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListSentinel, ListToolbar } from "@/components/layout/ListPage";
 import { RefreshButton } from "@/components/RefreshButton";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { isAlarmClosedError, useServerNow } from "./alarm-access";
@@ -61,11 +61,11 @@ export function LoomAlarmsPage() {
         description="Hedef süreyi aşan duruşlar: kim üstlendi, ne kadar sürdü, patrona iletildi mi"
         actions={<RefreshButton queryKey={LIST_KEY} />}
       />
-      <div className="space-y-3 px-4 pb-3">
+      <ListToolbar>
         <LoomAlarmsFilters value={filters} onChange={setFilters} />
         {summary && <AlarmSummaryStrip summary={summary} scope={filters.scope} />}
-      </div>
-      <PageBody ref={rootRef} className="px-4">
+      </ListToolbar>
+      <ListBody ref={rootRef}>
         {q.isError ? (
           isAlarmClosedError(q.error) ? (
             <AlarmClosedNotice error={q.error} />
@@ -79,10 +79,11 @@ export function LoomAlarmsPage() {
         ) : (
           <>
             <LoomAlarmsTable items={items} now={now} onOpen={(id) => navigate(`/operations/loom-alarms/${id}`)} />
-            <AutoLoadMore ref={sentinelRef} hasMore={q.hasNextPage} isFetchingMore={q.isFetchingNextPage} count={items.length} />
+            <ListSentinel ref={sentinelRef} />
           </>
         )}
-      </PageBody>
+      </ListBody>
+      <ListFooter loaded={items.length} total={summary?.total} hasMore={q.hasNextPage} isFetchingMore={q.isFetchingNextPage} />
     </PageShell>
   );
 }

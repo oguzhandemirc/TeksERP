@@ -2,8 +2,8 @@ import { useCallback, useMemo, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RelocatedToolStrip } from "@/pages/Reports/_v2/RelocatedTools";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
-import { AutoLoadMore } from "@/components/data-table/AutoLoadMore";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListSentinel } from "@/components/layout/ListPage";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { RefreshButton } from "@/components/RefreshButton";
 import { systemLogService } from "@/services/systemLogService";
@@ -67,17 +67,11 @@ export function SystemEventsPage() {
       <RelocatedToolStrip host="/system/logs" />
       <SystemEventsFilters value={filters} onChange={setFilters} />
 
-      <PageBody ref={rootRef}>
+      <ListBody ref={rootRef}>
         <SystemEventsList items={items} loading={query.isLoading} onSelect={handleSelect} />
-        {items.length > 0 && (
-          <AutoLoadMore
-            ref={sentinelRef}
-            hasMore={query.hasNextPage}
-            isFetchingMore={query.isFetchingNextPage}
-            count={items.length}
-          />
-        )}
-      </PageBody>
+        {items.length > 0 && <ListSentinel ref={sentinelRef} />}
+      </ListBody>
+      <ListFooter loaded={items.length} hasMore={query.hasNextPage} isFetchingMore={query.isFetchingNextPage} />
 
       <SystemEventDetailSheet logId={detailId} onClose={() => setDetailId(null)} />
     </PageShell>
