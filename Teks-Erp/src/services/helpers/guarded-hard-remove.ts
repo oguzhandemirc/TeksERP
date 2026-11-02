@@ -181,6 +181,13 @@ export const stationHardRemove = makeGuardedHardRemove({
         `İstasyonda/makinelerinde ${n} çalışma oturumu kaydı var — kalıcı silinemez. İstasyonu pasife alın.`,
     },
     {
+      // K14: gram fiyatı sürümü defterdir (FK RESTRICT) — sayılmazsa P2003 yanıltıcı 400 düşürür.
+      key: "kursunGramPriceVersionCount",
+      count: (id) => prisma.kursunGramPriceVersion.count({ where: { stationId: id } }),
+      message: (n) =>
+        `İstasyonun ${n} gram fiyatı sürümü var — kalıcı silinemez. Pasife alın.`,
+    },
+    {
       key: "peripheralCount",
       count: (id) =>
         prisma.peripheralDevice.count({
