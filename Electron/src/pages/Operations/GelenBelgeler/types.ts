@@ -5,6 +5,8 @@
 import type { AutoWorkOrderResult } from "./workOrderTypes";
 import type { DocumentTotalCheckSettings, LineProblem, TotalsCheck } from "./reviewTypes";
 export type { DocumentTotalCheckMode, LineProblem, TotalsCheck } from "./reviewTypes";
+import type { EntryModeSettings, SenderTemplateBatchNoFields } from "./partiMetreTypes";
+export type { AutoWorkOrderPatternlessMode, BatchNoCandidateKind, BatchNumberSourceMode, IncomingDocEntryMode, SenderTemplateBatchNoCandidate } from "./partiMetreTypes";
 
 export type {
   AutoWorkOrderGroup,
@@ -300,7 +302,7 @@ export type HeaderPatch = Partial<
 export type UnreviewedApproval = "WARN" | "BLOCK_SUSPECT" | "BLOCK";
 /** Tablosuz belgede satır metresi kaynağı — backend `HeaderLineMeterSource` aynası. */
 export type HeaderLineMeterSource = "OUTPUT" | "INPUT";
-export interface IncomingDocumentSettings extends DocumentTotalCheckSettings {
+export interface IncomingDocumentSettings extends DocumentTotalCheckSettings, EntryModeSettings {
   /** Ürünü seçilmemiş satırın onayda doğacağı ürün; null = ayar boş (bugünkü: satır ürün ister). */
   defaultItem: { id: string; code: string; name: string; problem: string | null } | null;
   unreviewedApproval: UnreviewedApproval;
@@ -331,7 +333,7 @@ export interface SenderTemplateCustomer {
   name: string;
   isActive: boolean;
 }
-export interface SenderTemplateView {
+export interface SenderTemplateView extends SenderTemplateBatchNoFields {
   code: string;
   name: string;
   version: number;
@@ -348,6 +350,7 @@ export interface SenderTemplatePatch {
   isActive?: boolean;
   senderCustomerId?: string | null;
   defaultOwnerCustomerId?: string | null;
+  batchNoKey?: string | null;
 }
 
 /** Sahibe özel varsayılan ürün (E4, `gelen-belge:template`) — backend `CustomerDefaultView` aynası. */

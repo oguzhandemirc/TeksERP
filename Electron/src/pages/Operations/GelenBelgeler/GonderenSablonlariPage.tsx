@@ -1,9 +1,11 @@
 // GÖNDEREN ŞABLONLARI (Gülkesim OCR E2) — motorun tanıdığı belge yerleşimleri + fabrikaya özgü bağ.
 // Şablonun gönderen carisi taslakta gönderen önerisinin EN ÖNCESİDİR; varsayılan sahip yalnız belgedeki sahip
 // adı bir öneriye varmazsa önerilir. Pasif şablon öneri vermez (okuma yine sürer). İzin `gelen-belge:template`.
+// "Parti no alanı": formda parti no'nun hangi alan olduğu (onayda öğrenilir; burada değişir/temizlenir). Adaylar
+// şablon tanımından gelir; eski backend alanları göndermez → bölüm çizilmez.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, X } from "lucide-react";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -11,10 +13,52 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { INCOMING_DOCUMENT_QUERY_KEY, listSenderTemplates, updateSenderTemplate } from "./service";
-import type { SenderTemplatePatch, SenderTemplateView } from "./types";
+import type { BatchNoCandidateKind, SenderTemplatePatch, SenderTemplateView } from "./types";
 
 export const SENDER_TEMPLATES_PATH = "/operations/gelen-belgeler/sablonlar";
 const QUERY_KEY = [INCOMING_DOCUMENT_QUERY_KEY, "sablonlar"] as const;
+
+const KIND_LABEL: Record<BatchNoCandidateKind, string> = {
+  BARCODE: "barkod no", DOC: "evrak no", BATCH: "parti no", WORK_ORDER: "iş emri no", ORDER: "sipariş no", FORM: "form no",
+};
+
+/** Parti no alanı seçimi — aday düğmeleri (tek tık = PATCH) + temizle; hatırlanan anahtar tanımda yoksa ayrıca gösterilir. */
+function BatchNoKeyField({ row, onPatch, busy }: { row: SenderTemplateView; onPatch: (p: SenderTemplatePatch) => void; busy: boolean }) {
+  const candidates = row.batchNoCandidates;
+  if (candidates === undefined || row.batchNoKey === undefined) return null;
+  const current = row.batchNoKey;
+  const orphan = current !== null && !candidates.some((c) => c.field === current);
+  return (
+    <div className="mt-3 min-w-0 space-y-1" data-testid={`batch-no-key-${row.code}`}>
+      <div className="text-xs font-medium text-muted-foreground">Parti no alanı (onayda seçilen alan hatırlanır)</div>
+      {candidates.length === 0 && <div className="text-xs text-muted-foreground">Bu şablonda parti no adayı tanımlı değil.</div>}
+      {(candidates.length > 0 || current !== null) && (
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label={`${row.name} parti no alanı`}>
+          {candidates.map((c) => (
+            <Button
+              key={c.field}
+              type="button"
+              size="sm"
+              variant={current === c.field ? "default" : "outline"}
+              aria-pressed={current === c.field}
+              disabled={busy}
+              onClick={() => current !== c.field && onPatch({ batchNoKey: c.field })}
+            >
+              {c.label ?? c.field} <span className="ml-1 text-xs opacity-70">({KIND_LABEL[c.kind] ?? c.kind})</span>
+            </Button>
+          ))}
+          {current !== null && (
+            <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => onPatch({ batchNoKey: null })} aria-label={`${row.name} parti no alanını temizle`}>
+              <X className="mr-1 h-3.5 w-3.5" /> Temizle
+            </Button>
+          )}
+        </div>
+      )}
+      {orphan && <div className="text-xs text-amber-700 dark:text-amber-300">Hatırlanan alan ({current}) şablon tanımında artık yok; temizleyin ya da başka alan seçin.</div>}
+      {current === null && candidates.length > 0 && <div className="text-xs text-muted-foreground">Seçili değil: aday tekse o, değilse parti no taslakta seçilir.</div>}
+    </div>
+  );
+}
 
 function TemplateCard({ row, onPatch, busy }: { row: SenderTemplateView; onPatch: (p: SenderTemplatePatch) => void; busy: boolean }) {
   return (
@@ -59,6 +103,7 @@ function TemplateCard({ row, onPatch, busy }: { row: SenderTemplateView; onPatch
           />
         </div>
       </div>
+      <BatchNoKeyField row={row} onPatch={onPatch} busy={busy} />
     </div>
   );
 }

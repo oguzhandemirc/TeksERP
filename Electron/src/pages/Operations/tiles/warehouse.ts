@@ -94,7 +94,7 @@ export const warehouseTiles: OperationsTile[] = [
     // E2: gönderen şablonu ↔ cari bağı (gönderen önerisinin en öncesi). Modül kapalıyken GİZLİ (üst karo gibi).
     key: "gelen-belge-sablonlari",
     title: "Gönderen Şablonları",
-    description: "Okunan belge yerleşimini gönderen cariye ve varsayılan sahibe bağla",
+    description: "Okunan belge yerleşimini gönderen cariye ve varsayılan sahibe bağla; parti no alanını seç",
     icon: FileCog,
     to: "/operations/gelen-belgeler/sablonlar",
     group: "warehouse",
