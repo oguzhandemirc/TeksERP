@@ -163,7 +163,11 @@ export async function fillBoundDraftTx(tx: Prisma.TransactionClient, noteId: str
   const addLines = overlap.lines.length > 0;
   const prevBlocks = (note.totalsDeclared as { blocks?: unknown[] } | null)?.blocks;
   if (note.totalsDeclared === null || !Array.isArray(prevBlocks)) patch.totalsDeclared = built.totalsDeclared;
-  else if (addLines && blockBase > 0) patch.totalsDeclared = toJson({ blocks: [...prevBlocks, ...header.totalsDeclared.blocks.map((b) => ({ ...b, blockNo: blockBase + b.blockNo }))] });
+  else if (addLines && blockBase > 0) {
+    // Belge geneli beyan (ilk sayfanın başlığı) sonraki sayfada KORUNUR; ilk sayfada yoksa yeni sayfanınki alınır.
+    const prevDoc = (note.totalsDeclared as { document?: unknown }).document ?? header.totalsDeclared.document;
+    patch.totalsDeclared = toJson({ blocks: [...prevBlocks, ...header.totalsDeclared.blocks.map((b) => ({ ...b, blockNo: blockBase + b.blockNo }))], ...(prevDoc ? { document: prevDoc } : {}) });
+  }
   patch.templateScore = headerCols.templateScore;
   if (addLines) patch.lines = { create: lineRows(overlap.lines, scan.id, lineBase, blockBase) };
   await tx.customerDeliveryNote.update({ where: { id: noteId }, data: patch });

@@ -30,10 +30,10 @@ import { assertCustomerRiskLimitTx } from "./helpers/risk-exposure.helper";
 import { getDeliveryNote } from "./gelen-belge-note.service";
 import { auditLine } from "./gelen-belge-line.service";
 import { resolveDefaultItemForApproval, type DefaultItemSource } from "./gelen-belge-varsayilan.service";
-import { readUnreviewedApprovalMode } from "./system-setting.service";
+import { readDocumentTotalCheck, readUnreviewedApprovalMode } from "./system-setting.service";
 import { assertProcessChoiceValue } from "./helpers/process-choice-catalog.helper";
 import { aliasKey } from "./gelen-belge-eslestirme.service";
-import { isOpenForApproval, lineProblems, reviewGate, totalMismatches, totalWarnings, type ReviewGate } from "./gelen-belge-kontrol.service";
+import { hasDocumentDeclared, isOpenForApproval, lineProblems, reviewGate, totalMismatches, totalsCheck, totalWarnings, type ReviewGate } from "./gelen-belge-kontrol.service";
 
 // Kapı yüklemleri tek kaynakta (detay yanıtı da aynılarını okur); eski içe aktaranlar için yeniden dışa aktarılır.
 export { totalMismatches, totalWarnings };
@@ -102,11 +102,13 @@ async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: ty
   await assertCustomerRiskLimitTx(prisma, note.ownerCustomerId, "INTAKE");
   const open = note.lines.filter(isOpenForApproval);
   if (open.length === 0) throw AppError.conflict(`${note.noteNo} için işlenecek satır yok (hepsi girilmiş ya da atlanmış).`, { code: "DELIVERY_NOTE_NO_OPEN_LINES" });
-  const unresolved = open.filter((l) => lineProblems(l).includes("ITEM_UNRESOLVED")).map((l) => l.lineNo);
+  const itemless = open.filter((l) => lineProblems(l).includes("ITEM_UNRESOLVED")).length;
   // Hizmet ekseni (E3/E4): ürünsüz satır sahibin varsayılanıyla, yoksa fabrika ayarıyla girer; ikisi de boşsa bugünkü 400.
   // Varsayılan top doğuramıyorsa (pasif/birleşmiş/silinmiş) sessizce düşmez → 409 GELEN_BELGE_DEFAULT_ITEM_UNUSABLE.
-  const defaultItem = unresolved.length ? await resolveDefaultItemForApproval(note.ownerCustomerId) : null;
-  if (unresolved.length && !defaultItem) {
+  const defaultItem = itemless ? await resolveDefaultItemForApproval(note.ownerCustomerId) : null;
+  // Çözülmemiş küme detayın `problems`ıyla AYNI yüklemden (varsayılanla doğacak satır sorunlu değil).
+  const unresolved = open.filter((l) => lineProblems(l, defaultItem).includes("ITEM_UNRESOLVED")).map((l) => l.lineNo);
+  if (unresolved.length) {
     throw AppError.badRequest(`Ürünü çözülmemiş satır var: ${unresolved.join(", ")}. Her satırda ürün eşlenmeden onaylanamaz.`, { code: "DELIVERY_NOTE_LINE_UNRESOLVED", lineNos: unresolved });
   }
   // İnceleme kapısı (E3; S4 2026-11-02): karar `reviewGate` (WARN uyarı · BLOCK_SUSPECT yalnız şüpheli değer · BLOCK hepsi 409).
@@ -116,9 +118,11 @@ async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: ty
   const unreviewed = gate.warned;
   // Kapılar YALNIZ bu istekteki gerekçeyle açılır: başlıkta kalmış eski gerekçe sonraki onayın yeni uyuşmazlığını örtmez.
   const reason = input.varianceReason?.trim();
-  const warnings = totalWarnings(note, note.lines);
+  // Belge geneli beyan farkı fabrika ayarına bağlı: INFO (varsayılan) uyarı, REQUIRE_REASON kapı (aşağıda TOTAL_MISMATCH).
+  const tc = totalsCheck(note, note.lines, { documentMode: hasDocumentDeclared(note.totalsDeclared) ? await readDocumentTotalCheck() : "INFO" });
+  const warnings = [...tc.warnings];
   if (unreviewed.length) warnings.push(`Gözden geçirilmemiş satırla onaylandı: ${unreviewed.join(", ")}.`);
-  if (defaultItem) warnings.push(`Ürünü seçilmemiş ${unresolved.length} satır varsayılan ürünle (${defaultItem.name}; ${defaultItem.source === "CUSTOMER" ? "müşteri varsayılanı" : "fabrika varsayılanı"}) girildi.`);
+  if (defaultItem) warnings.push(`Ürünü seçilmemiş ${itemless} satır varsayılan ürünle (${defaultItem.name}; ${defaultItem.source === "CUSTOMER" ? "müşteri varsayılanı" : "fabrika varsayılanı"}) girildi.`);
   // Sayfa kapısı: "1/2" beyanı varsa her sayfanın taraması olmalı (yalnız taramalı belgede; elle/Excel'de tarama yok). Gerekçeyle aşılır (tasarım §4).
   if (note.pageCount != null && note.scans.length > 0) {
     const have = new Set(note.scans.map((s) => s.pageNo));
@@ -126,7 +130,7 @@ async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: ty
     if (missing.length && !reason) throw AppError.conflict(`Belge ${note.pageCount} sayfa beyan ediyor; eksik sayfa: ${missing.join(", ")}. Eksik sayfayı tarayın ya da gerekçe (varianceReason) verin.`, { code: "DELIVERY_NOTE_PAGES_MISSING", missing });
     if (missing.length) warnings.push(`Eksik sayfa gerekçeyle geçildi: ${missing.join(", ")}.`);
   }
-  const mismatches = totalMismatches(note, note.lines);
+  const mismatches = tc.mismatches;
   if (mismatches.length && !reason) {
     throw AppError.conflict(`Toplam uyuşmuyor: ${mismatches.join(" ")} Geçmek için fark gerekçesi (varianceReason) verin.`, { code: "TOTAL_MISMATCH", mismatches });
   }

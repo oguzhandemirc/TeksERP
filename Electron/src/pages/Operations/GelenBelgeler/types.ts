@@ -3,8 +3,8 @@
 // Prisma Decimal JSON'da metindir (`meters`/`weightKg`/`widthCm`); toplam kapısının hükmü backend `totalsCheck`ten okunur.
 
 import type { AutoWorkOrderResult } from "./workOrderTypes";
-import type { LineProblem, TotalsCheck } from "./reviewTypes";
-export type { LineProblem, TotalsCheck } from "./reviewTypes";
+import type { DocumentTotalCheckSettings, LineProblem, TotalsCheck } from "./reviewTypes";
+export type { DocumentTotalCheckMode, LineProblem, TotalsCheck } from "./reviewTypes";
 
 export type {
   AutoWorkOrderGroup,
@@ -99,6 +99,8 @@ export interface DeliveryNoteLine {
   color: NamedRef | null;
   /** Gözden geçirme sorunları — onay ön kontrolüyle AYNI backend yüklemi (`lineProblems`); panel kural kurmaz. */
   problems?: LineProblem[];
+  /** Onayın bu ürünsüz satıra uygulayacağı varsayılan ürün (backend `lineItemFallback`); eski backend alanı göndermez. */
+  itemFallback?: { id: string; name: string; source: DefaultItemSource } | null;
 }
 
 /** Taslak okuma uyarısı — backend `lib/gelen-belge/uyari.ts` `NoteNotice` aynası (panel metin ayrıştırmaz). */
@@ -300,7 +302,7 @@ export interface HeaderPatch {
 export type UnreviewedApproval = "WARN" | "BLOCK_SUSPECT" | "BLOCK";
 /** Tablosuz belgede satır metresi kaynağı — backend `HeaderLineMeterSource` aynası. */
 export type HeaderLineMeterSource = "OUTPUT" | "INPUT";
-export interface IncomingDocumentSettings {
+export interface IncomingDocumentSettings extends DocumentTotalCheckSettings {
   /** Ürünü seçilmemiş satırın onayda doğacağı ürün; null = ayar boş (bugünkü: satır ürün ister). */
   defaultItem: { id: string; code: string; name: string; problem: string | null } | null;
   unreviewedApproval: UnreviewedApproval;

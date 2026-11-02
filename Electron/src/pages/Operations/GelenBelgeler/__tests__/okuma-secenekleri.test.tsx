@@ -1,5 +1,5 @@
 // Gelen belge OCR seçenekleri (2026-11-02): S4 "yalnız şüpheli değeri engelle" (precheck + 409 metni), kılavuzlu girişte
-// şüpheli satır önce, aynı müşteri partisi bilgi bandı, okuma seçenekleri ayarları (S5 metre kaynağı · S3b şablondan gönderen).
+// şüpheli satır önce, aynı müşteri partisi bilgi bandı, okuma seçenekleri ayarları (S5 metre kaynağı · S3b şablondan gönderen · belge geneli beyan kipi).
 // Eski backend yeni alanları göndermez → alan/bant çizilmez, gövdeye girmez.
 // Negatif sonda: `suspectRank` sıralamadan çıkarılınca "şüpheli önce" kırmızı; precheck BLOCK_SUSPECT dalı kapatılınca
 // "BLOCK_SUSPECT engeller" kırmızı; `useReadOptionsDraft` gövdesi koşulsuz kurulunca "eski backend … yalnız o gider" kırmızı.
@@ -120,5 +120,23 @@ describe("Genel Ayarlar → Gelen Belge: okuma seçenekleri", () => {
     await userEvent.click(screen.getByRole("button", { name: "Kaydet" }));
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings.mock.calls[0]![0]).toEqual({ headerLineMeterSource: "INPUT", autoSenderFromTemplate: true });
+  });
+
+  it("⭐ belge geneli beyan: varsayılan 'Bilgi' seçili; 'Fark gerekçesi iste' seçilince YALNIZ documentTotalCheck gider; eski backend çizilmez", async () => {
+    const server = { ...BASE, documentTotalCheck: "INFO", defaultDocumentTotalCheck: "INFO" };
+    getSettings.mockResolvedValue(server);
+    updateSettings.mockResolvedValue({ ...server, documentTotalCheck: "REQUIRE_REASON" });
+    const { unmount } = renderWithProviders(<IncomingDocumentSettingsSection />);
+    expect(await screen.findByRole("radio", { name: /Bilgi olarak göster/ })).toBeChecked();
+    expect(screen.getByTestId("gb-document-total-check")).toHaveTextContent("Varsayılan: Bilgi olarak göster");
+    await userEvent.click(screen.getByRole("radio", { name: /Fark gerekçesi iste/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(updateSettings.mock.calls[0]![0]).toStrictEqual({ documentTotalCheck: "REQUIRE_REASON" });
+    unmount();
+    getSettings.mockResolvedValue(BASE);
+    renderWithProviders(<IncomingDocumentSettingsSection />);
+    await screen.findByRole("radio", { name: /Yalnız şüpheli değeri engelle/ });
+    expect(screen.queryByTestId("gb-document-total-check")).toBeNull();
   });
 });

@@ -72,6 +72,11 @@ function validateBlockAndHeaderLine(t: Record<string, unknown>, errors: string[]
     known(t.blockFields, "blockFields");
     if (t.tables === undefined) errors.push("blockFields tablo ister");
   }
+  const ht = t.headerTotals;
+  if (ht !== undefined) {
+    if (!isObj(ht) || !["m", "kg", "count"].some((k) => ht[k] !== undefined)) errors.push("headerTotals en az bir alan (m/kg/count) ister");
+    else for (const k of ["m", "kg", "count"]) if (ht[k] !== undefined) known([ht[k]], `headerTotals.${k}`);
+  }
   const h = t.headerLine;
   if (h === undefined) return;
   if (!isObj(h)) { errors.push("headerLine nesne olmalı"); return; }

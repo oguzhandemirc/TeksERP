@@ -49,6 +49,10 @@ interface Props {
   onShowHelp?: () => void;
 }
 
+// Etiket kesilmez (saha 2026-11-02: "Özellik Anaht…"); çok uzunsa satırın %70'inde kesilir, açıklama kalan yeri alır.
+const LABEL_CLS = "max-w-[70%] shrink-0 truncate";
+const DESC_CLS = "ml-2 min-w-0 truncate text-xs text-muted-foreground";
+
 export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
   const openTarget = useOpenTopLevel();
   const { isAdmin, hasPermission, hasAnyPermission } = useRoleAccess();
@@ -250,9 +254,9 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
                   onSelect={() => goRow(g.entity, row)}
                 >
                   <Icon className="mr-2 h-4 w-4 shrink-0" />
-                  <span className="truncate">{row.title}</span>
+                  <span className={LABEL_CLS}>{row.title}</span>
                   {row.subtitle && (
-                    <span className="ml-2 truncate text-xs text-muted-foreground">
+                    <span className={DESC_CLS}>
                       {row.subtitle}
                     </span>
                   )}
@@ -371,9 +375,9 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
                 return (
                   <CommandItem key={entry.key} value={value} onSelect={() => go(entry.to)}>
                     <Icon className="mr-2 h-4 w-4 shrink-0" />
-                    <span className="truncate">{labelOf(entry)}</span>
+                    <span className={LABEL_CLS}>{labelOf(entry)}</span>
                     {entry.description && (
-                      <span className="ml-2 truncate text-xs text-muted-foreground">
+                      <span className={DESC_CLS}>
                         {entry.description}
                       </span>
                     )}

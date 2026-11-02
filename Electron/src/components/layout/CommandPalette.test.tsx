@@ -185,3 +185,15 @@ describe("CommandPalette", () => {
     expect(openTab).toHaveBeenCalledWith("/reports/production/wip");
   });
 });
+
+// 2026-11-02 demo 2. tur: etiket açıklamayla paylaşılan satırda kesiliyordu ("Özellik Anaht…").
+describe("CommandPalette satır düzeni", () => {
+  it("statik giriş etiketi kesilmez (shrink-0), açıklama kalan yeri alır (min-w-0)", () => {
+    permissions = ["report:production", "roll:read", "workorder:read", "admin:settings", "admin:users"];
+    open();
+    const label = screen.getByText("Nerede Takıldı (WIP)");
+    expect(label.className).toContain("shrink-0");
+    const desc = label.nextElementSibling as HTMLElement | null;
+    if (desc) expect(desc.className).toContain("min-w-0");
+  });
+});

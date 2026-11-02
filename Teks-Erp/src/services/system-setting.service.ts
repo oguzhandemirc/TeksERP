@@ -407,6 +407,9 @@ export const SETTING_KEYS = {
   /** Tablosuz belgede (ürün sevk fişi `headerLine`) satır metresi/kg'si: OUTPUT çıkış toplamı (varsayılan = bugünkü) | INPUT giriş toplamı.
    *  Tek yazar `PUT /api/gelen-belge/ayarlar`; yeni okumaya uygulanır. */
   GELEN_BELGE_HEADER_LINE_SOURCE: "gelenBelge.headerLineMeterSource",
+  /** Belge geneli beyan (Müşteri MT) satır toplamını tutmazsa: INFO bilgi + uyarı, onay geçer (varsayılan = bugünkü) |
+   *  REQUIRE_REASON gerekçesiz onay 409 TOTAL_MISMATCH. Tek yazar `PUT /api/gelen-belge/ayarlar`. */
+  GELEN_BELGE_DOCUMENT_TOTAL_CHECK: "gelenBelge.documentTotalCheck",
   /** Okunan şablonun bağlı gönderen carisi boş gönderen alanına yazılsın mı. Varsayılan KAPALI = bugünkü (OCR gönderen doldurmaz).
    *  Tek yazar `PUT /api/gelen-belge/ayarlar`. */
   GELEN_BELGE_AUTO_SENDER: "gelenBelge.autoSenderFromTemplate",
@@ -6599,6 +6602,24 @@ export async function readHeaderLineMeterSource(tx?: Pick<typeof prisma, "system
   return typeof v === "string" && (HEADER_LINE_METER_SOURCE_VALUES as readonly string[]).includes(v)
     ? (v as HeaderLineMeterSource)
     : DEFAULT_HEADER_LINE_METER_SOURCE;
+}
+
+export type DocumentTotalCheckMode = "INFO" | "REQUIRE_REASON";
+export const DOCUMENT_TOTAL_CHECK_VALUES: readonly DocumentTotalCheckMode[] = ["INFO", "REQUIRE_REASON"];
+/** Varsayılan INFO = bugünkü davranış (belge geneli fark onayı engellemez). */
+export const DEFAULT_DOCUMENT_TOTAL_CHECK: DocumentTotalCheckMode = "INFO";
+
+/** Belge geneli beyan farkının kipi; çöp değer varsayılana düşer (`includes` sigortası). */
+export async function readDocumentTotalCheck(tx?: Pick<typeof prisma, "systemSetting">): Promise<DocumentTotalCheckMode> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.GELEN_BELGE_DOCUMENT_TOTAL_CHECK },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  return typeof v === "string" && (DOCUMENT_TOTAL_CHECK_VALUES as readonly string[]).includes(v)
+    ? (v as DocumentTotalCheckMode)
+    : DEFAULT_DOCUMENT_TOTAL_CHECK;
 }
 
 /** Rota önerisinin fabrika varsayılanı; kayıt yok / boş / UUID değil → null (bugünkü: fabrika kaynağı yok). */

@@ -208,7 +208,7 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
- *       200: { description: "Taslak + satır problems[] (FAILED|ITEM_UNRESOLVED|NEEDS_REVIEW|SUSPECT_VALUE) + totalsCheck + notices[] (code, title, detail)" }
+ *       200: { description: "Taslak + satır problems[] (FAILED|ITEM_UNRESOLVED|NEEDS_REVIEW|SUSPECT_VALUE) + satır itemFallback (id, name, source) | null + totalsCheck (+ document) + notices[] (code, title, detail)" }
  *   patch:
  *     tags: [Gelen belge]
  *     summary: Başlık düzelt — yalnız DRAFT (aksi 409 DELIVERY_NOTE_NOT_DRAFT)
@@ -341,6 +341,7 @@ const SettingsBody = z.strictObject({
   handwritingOutlierFactor: z.number("Şüpheli değer oranı sayı olmalı").min(2, "Şüpheli değer oranı en az 2 olmalı").max(20, "Şüpheli değer oranı en çok 20 olmalı").nullable().optional(),
   headerLineMeterSource: z.enum(["OUTPUT", "INPUT"], "Seçenek OUTPUT ya da INPUT olmalı").optional(),
   autoSenderFromTemplate: z.boolean("Şablondan gönderen evet/hayır olmalı").optional(),
+  documentTotalCheck: z.enum(["INFO", "REQUIRE_REASON"], "Seçenek INFO ya da REQUIRE_REASON olmalı").optional(),
 });
 /**
  * @openapi
@@ -350,7 +351,7 @@ const SettingsBody = z.strictObject({
  *     summary: Gelen belge ayarları — varsayılan ürün (ad + kullanılabilirlik) ve gözden geçirilmemiş hücreyle onay kipi
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "defaultItem (id, code, name, problem) | null · unreviewedApproval WARN|BLOCK_SUSPECT|BLOCK · autoWorkOrder boolean · defaultRoute (id, name, problem) | null · routeSuggestionPriority CUSTOMER_FIRST|FACTORY_FIRST · headerLineMeterSource OUTPUT|INPUT · autoSenderFromTemplate boolean" }
+ *       200: { description: "defaultItem (id, code, name, problem) | null · unreviewedApproval WARN|BLOCK_SUSPECT|BLOCK · autoWorkOrder boolean · defaultRoute (id, name, problem) | null · routeSuggestionPriority CUSTOMER_FIRST|FACTORY_FIRST · headerLineMeterSource OUTPUT|INPUT · autoSenderFromTemplate boolean · documentTotalCheck INFO|REQUIRE_REASON" }
  *   put:
  *     tags: [GelenBelge]
  *     summary: Gelen belge ayarlarını yaz (yalnız admin:settings + ayar şifresi); pasif/top doğuramayan ürün 400 GELEN_BELGE_DEFAULT_ITEM_INVALID
@@ -369,6 +370,7 @@ const SettingsBody = z.strictObject({
  *               handwritingOutlierFactor: { type: number, minimum: 2, maximum: 20, nullable: true, description: "El yazısı şüpheli metre oranı K (null = varsayılan 4)" }
  *               headerLineMeterSource: { type: string, enum: [OUTPUT, INPUT], description: "Tablosuz belgede satır metresi: çıkış (varsayılan) ya da giriş toplamı" }
  *               autoSenderFromTemplate: { type: boolean, description: "Okunan şablonun gönderen carisi boş gönderene yazılır (varsayılan false)" }
+ *               documentTotalCheck: { type: string, enum: [INFO, REQUIRE_REASON], description: "Belge geneli beyan (Müşteri MT) farkı: INFO bilgi, onay geçer (varsayılan) · REQUIRE_REASON gerekçesiz 409 TOTAL_MISMATCH" }
  *     responses:
  *       200: { description: Güncel ayarlar }
  */

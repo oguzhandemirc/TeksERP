@@ -33,7 +33,18 @@ describe("palet: ayar araması", () => {
     expect(top("genel ayarlar").to).toBe("/system/feature-flags");
   });
 
+  // 2026-11-02 demo 2. tur: "genel ayarlar" 5 sonuç veriyordu, Gelen Belge ayarı yoktu (ekranın eski adı).
+  it('"genel ayarlar" sonuçlarında Gelen Belge ayar bölümü de var; ilk sıra yine Özellik Anahtarları', () => {
+    const r = ranked("genel ayarlar");
+    expect(r.map((x) => x.to)).toContain("/system/feature-flags?tab=gelen-belge");
+    expect(r[0]!.to).toBe("/system/feature-flags");
+  });
+
   it.each(["gelen belge ayar", "gelen belge ayarları", "Gelen Belge Ayarları"])('"%s" → Gelen Belge ayar bölümü ilk sırada', (q) => {
+    expect(top(q).to).toBe("/system/feature-flags?tab=gelen-belge");
+  });
+
+  it.each(["belge geneli", "müşteri mt"])('"%s" → Gelen Belge ayar bölümü ilk sırada (belge geneli beyan kipi)', (q) => {
     expect(top(q).to).toBe("/system/feature-flags?tab=gelen-belge");
   });
 });
