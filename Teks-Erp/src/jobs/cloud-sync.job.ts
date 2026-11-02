@@ -23,6 +23,7 @@ import { pruneSyncMarks } from "../cloud-sync/marks-pruning";
 import { loadWatermarks, saveWatermarks, wmKey } from "../cloud-sync/watermarks";
 import type { SnapshotCadence } from "../cloud-sync/projections";
 import { onDirty, peekDirty, takeDirty } from "../cloud-sync/dirty-flag";
+import { DAILY_SNAPSHOT_NAMES, RepeatGate, ageDailyRetry, describeRoundProblem, dueDailyRetries, retryNotice, settleDailyRetry, type DailyRetryEntry } from "../cloud-sync/daily-retry";
 import { readPatronBulutOlayGudumluEnabled } from "../services/system-setting.service";
 
 const TICK_MS = 60 * 1000;
@@ -67,6 +68,10 @@ let transport: CloudTransport = egressCloudTransport;
 let lastRoundAt = 0;
 let lastHourlyAt = 0;
 let lastDailyYmd: string | null = null;
+/** Bugün ret alan günlük anlıklar → geri çekilmeli yeniden deneme (gün dönünce sıfırlanır). */
+const dailyRetry = new Map<string, DailyRetryEntry>();
+/** Aynı KISMI (ret) satırı 6 sa içinde yeniden yazılmaz. */
+const partialWarn = new RepeatGate(6 * HOUR_MS);
 let lastSnapshotRoundAt = 0;
 let pendingSnapshot = false;
 let pendingReports = false;
@@ -96,8 +101,11 @@ export function getCloudSyncStatus(): CloudSyncStatus {
 
 function remember(o: RoundOutcome, at: number, trigger: CloudSyncTrigger): void {
   status = { ...status, lastRoundAt: at, lastTrigger: trigger, lastOutcome: { status: o.status, reason: o.reason, packets: o.packets, horizon: o.horizon, contractWarning: o.contractWarning } };
-  if (o.status === "HATA" || o.status === "KISMI") uyari("patron-bulut", `eşitleme turu ${o.status} (${o.reason ?? "ret"}) — sonraki turda tekrar`);
+  if (o.status !== "HATA" && o.status !== "KISMI") return;
+  const text = `eşitleme turu ${o.status} (${describeRoundProblem(o)}) — sonraki turda tekrar`;
+  if (o.status === "HATA" || partialWarn.pass(text, at)) uyari("patron-bulut", text);
 }
+
 
 async function exclusive(fn: () => Promise<void>): Promise<void> {
   if (running) return;
@@ -151,19 +159,23 @@ export async function runCloudSyncTick(nowMs: number = Date.now()): Promise<void
     const ymd = factoryYmd(now);
     const due = nowMs - lastRoundAt >= clampInterval(elig.intervalMinutes) * 60_000;
     if (due) {
-      const cadences = new Set<SnapshotCadence>(["HER_TUR"]);
+      const newDay = lastDailyYmd !== ymd;
+      const cadences = new Set<SnapshotCadence>(newDay ? ["HER_TUR", "GUNLUK"] : ["HER_TUR"]);
       const hourly = nowMs - lastHourlyAt >= HOUR_MS;
       if (hourly) cadences.add("SAATLIK");
-      if (lastDailyYmd !== ymd) cadences.add("GUNLUK");
+      if (newDay) dailyRetry.clear();
+      const retry = newDay ? [] : dueDailyRetries(dailyRetry, nowMs);
       // Emniyet turu her değişikliği zaten kapsar: kirli küme tüketilir (olay turu boşuna koşmaz).
       takeDirty();
-      const o = await runSyncRound({ kind: "ARTIMLI", cadences }, { transport, nowMs: () => nowMs });
+      const o = await runSyncRound({ kind: "ARTIMLI", cadences, extraSnapshots: new Set(retry) }, { transport, nowMs: () => nowMs });
       remember(o, nowMs, "periyodik");
       // Tavana takılan kaynak varsa bir sonraki tık beklemeden devam eder.
       lastRoundAt = o.status !== "HATA" && o.more ? 0 : nowMs;
       if (o.status !== "HATA") {
         if (hourly) lastHourlyAt = nowMs;
-        if (cadences.has("GUNLUK")) lastDailyYmd = ymd;
+        if (newDay) lastDailyYmd = ymd;
+        // Ret alan günlük anlık günü "tamam" saymaz: yalnız o ad geri çekilmeyle yeniden denenir.
+        for (const r of settleDailyRetry(dailyRetry, newDay ? DAILY_SNAPSHOT_NAMES : retry, o, nowMs)) bilgi("patron-bulut", retryNotice(r));
       }
       // Zil kaçarsa her tur rapor isteklerini de yoklar (§7).
       await runReportClaims(nowMs);
@@ -318,6 +330,19 @@ export function __forceNextCloudSyncRoundForTests(opts: { reconcile?: boolean } 
   }
 }
 
+/**
+ * Test-only: bellek durumunu `ms` kadar yaşlandırır (saat ilerlemiş gibi) — lisansın saat seddi
+ * duvar saatinin ileri sıçramasını reddettiği için senaryo saati değil durumu kaydırır.
+ */
+export function __ageCloudSyncStateForTests(ms: number, opts: { newDay?: boolean } = {}): void {
+  lastRoundAt -= ms;
+  lastHourlyAt -= ms;
+  lastReconcileAttemptAt -= ms;
+  ageDailyRetry(dailyRetry, ms);
+  partialWarn.age(ms);
+  if (opts.newDay) lastDailyYmd = null;
+}
+
 /** Test-only: sahte bulut taşıması + bellek durumu sıfırlama. */
 export function __configureCloudSyncForTests(p: { transport?: CloudTransport; reset?: boolean; now?: () => number; eventTimer?: EventTimerFactory | null }): void {
   if (p.transport) transport = p.transport;
@@ -328,6 +353,8 @@ export function __configureCloudSyncForTests(p: { transport?: CloudTransport; re
     lastRoundAt = 0;
     lastHourlyAt = 0;
     lastDailyYmd = null;
+    dailyRetry.clear();
+    partialWarn.reset();
     lastSnapshotRoundAt = 0;
     pendingSnapshot = false;
     pendingReports = false;

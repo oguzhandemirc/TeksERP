@@ -104,6 +104,8 @@ export interface SahteBulut {
   /** Davranış anahtarları (her bekçi kendi senaryosunu kurar). */
   readonly mod: {
     ret: Set<string>;
+    /** Anlık adı → ret kodu (eski katalog sondası: bulut anlığı tanımıyorsa `PROJEKSIYON_BILINMIYOR`). */
+    anlikRet: Map<string, string>;
     istenenTam: Set<string>;
     /** >0: sıradaki N `/v1/esitle` isteği 500 döner (ağ tekrarı sondası). */
     hata500: number;
@@ -152,7 +154,7 @@ export async function sahteBulutBaslat(x: string): Promise<SahteBulut> {
   const satirlar = new Map<string, Map<string, BulutSatiri>>();
   const tamTarama = new Map<string, string>();
   const gorulenPaket = new Map<string, unknown>();
-  const mod: SahteBulut["mod"] = { ret: new Set(), istenenTam: new Set(), hata500: 0, bekleyenRaporlar: [], ufukTarihi: {}, saatFarkiMs: 0, bildirilenSaatFarkiMs: null };
+  const mod: SahteBulut["mod"] = { ret: new Set(), anlikRet: new Map(), istenenTam: new Set(), hata500: 0, bekleyenRaporlar: [], ufukTarihi: {}, saatFarkiMs: 0, bildirilenSaatFarkiMs: null };
 
   /**
    * null = imza geçerli; aksi hâlde protokol kodu (bulut `ISTEK_*` kodunu olduğu gibi geçirir). `yol`: isteği alan uç —
@@ -202,6 +204,10 @@ export async function sahteBulutBaslat(x: string): Promise<SahteBulut> {
       }
       if (!sakli || zincirKarsilastir(k.filigran.yeni, sakli) > 0) zincir.set(k.projeksiyon, k.filigran.yeni);
       kabul.push({ projeksiyon: k.projeksiyon, filigran: k.filigran.yeni });
+    }
+    for (const a of paket.anliklar) {
+      const kod = mod.anlikRet.get(a.projeksiyon);
+      if (kod) ret.push({ projeksiyon: a.projeksiyon, kod });
     }
     // Sözleşmenin uzlaştırma kuralı (saklama hariç): canlı ∧ (kalemse) üst belge canlı − bekleyen.
     for (const u of paket.uzlastirma) {

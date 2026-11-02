@@ -38,6 +38,8 @@ export interface RoundOptions {
   readonly cadences: ReadonlySet<SnapshotCadence>;
   /** Yalnız anlık kayıtlar (zil `ozet`): kayıt projeksiyonları taranmaz. */
   readonly snapshotsOnly?: boolean;
+  /** Sıklığı bu tura düşmese de kurulacak anlıklar (ret almış günlük anlığın yeniden denemesi). */
+  readonly extraSnapshots?: ReadonlySet<string>;
 }
 
 export interface RoundDeps {
@@ -51,6 +53,8 @@ export interface RoundOutcome {
   readonly packets: number;
   readonly accepted: string[];
   readonly rejected: Array<{ projection: string; code: string }>;
+  /** Bulutun ne kabul ne ret listesine koyduğu kayıt projeksiyonları (log özeti için). */
+  readonly unaccepted: string[];
   readonly fullRequested: string[];
   readonly horizon: string | null;
   /** Tavana takılan kaynak var — iş beklemeden bir tur daha koşmalı. */
@@ -233,7 +237,7 @@ async function sendDrafts(queue: PacketDraft[], st: SendState): Promise<{ status
 export async function runSyncRound(opts: RoundOptions, deps: RoundDeps): Promise<RoundOutcome> {
   const now = deps.nowMs ?? Date.now;
   const elig = cloudEligibility(now());
-  const empty = { packets: 0, accepted: [], rejected: [], fullRequested: [], more: false, contractWarning: null, reconcileSkipped: [] };
+  const empty = { packets: 0, accepted: [], rejected: [], unaccepted: [], fullRequested: [], more: false, contractWarning: null, reconcileSkipped: [] };
   if (!elig.ok) return { ...empty, status: "GONDERILMEDI", reason: elig.reason, horizon: null };
 
   const ctx: CloudCallContext = { baseUrl: elig.baseUrl, installationId: elig.installationId, transport: deps.transport };
@@ -247,7 +251,7 @@ export async function runSyncRound(opts: RoundOptions, deps: RoundDeps): Promise
   await saveWatermarks(plan.idle);
   const snapshots =
     opts.kind === "ARTIMLI"
-      ? (await buildSnapshots({ now: new Date(now()), productionOn: flags.production, financeOn: flags.finance, maliyetOn: flags.maliyet, cadences: opts.cadences })).filter(
+      ? (await buildSnapshots({ now: new Date(now()), productionOn: flags.production, financeOn: flags.finance, maliyetOn: flags.maliyet, cadences: opts.cadences, extra: opts.extraSnapshots })).filter(
           (s) => stored.get(wmKey.snapshot(s.projection))?.digest !== s.digest,
         )
       : [];
@@ -264,5 +268,7 @@ export async function runSyncRound(opts: RoundOptions, deps: RoundDeps): Promise
   };
   const sent = await sendDrafts(packDrafts(plan.units, snapshots, reconcile.entries), st);
   const status = sent.status === "TAMAM" && (st.failed.size > 0 || st.outcome.rejected.length > 0) ? "KISMI" : sent.status;
-  return { ...st.outcome, more: plan.more, status, reason: sent.reason, horizon: horizon.toISOString(), reconcileSkipped: reconcile.skipped };
+  const rejectedRoots = new Set(st.outcome.rejected.map((r) => r.projection.split(".")[0]!));
+  const unaccepted = [...st.failed].filter((n) => !rejectedRoots.has(n));
+  return { ...st.outcome, unaccepted, more: plan.more, status, reason: sent.reason, horizon: horizon.toISOString(), reconcileSkipped: reconcile.skipped };
 }
