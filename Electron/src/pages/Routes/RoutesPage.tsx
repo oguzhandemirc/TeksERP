@@ -1,3 +1,4 @@
+import { shortcutBody } from "./RouteShortcutFields";
 import { CrudPage } from "@/components/layout/CrudPage";
 import { routeColumns } from "./columns";
 import { routeService } from "./service";
@@ -11,6 +12,8 @@ interface StepCreate {
   defaultNotes: string | null;
   requiredCategoryId: string | null;
   plannedSubcontractorId: string | null;
+  /** Önerilen makine (yalnız öneri) — backend adımın istasyonuna ait olmasını doğrular. */
+  plannedMachineId: string | null;
   /** Şablon hedefi. Backend `plannedPropertyIds`'i pivot nested write'ına ÇEVİRİR
    *  — istemci ham Prisma yazımı göndermez (mass-assignment allowlist'i). */
   plannedColorId: string | null;
@@ -24,6 +27,8 @@ interface CreatePayload {
   customerId?: string | null;
   isFavorite: boolean;
   isActive: boolean;
+  isWorkOrderShortcut?: boolean;
+  shortcutOrder?: number;
   steps:
     | { create: StepCreate[] }
     | { deleteMany: Record<string, never>; create: StepCreate[] };
@@ -37,6 +42,7 @@ function buildPayload(v: RouteFormValues, isEdit: boolean): CreatePayload {
     // Fason planlaması (INTERNAL adımda buildDefaults/handleStationPick null tutar).
     requiredCategoryId: s.requiredCategoryId ?? null,
     plannedSubcontractorId: s.plannedSubcontractorId ?? null,
+    plannedMachineId: s.plannedMachineId ?? null,
     plannedColorId: s.plannedColorId ?? null,
     plannedPropertyIds: s.plannedPropertyIds ?? [],
   }));
@@ -47,6 +53,7 @@ function buildPayload(v: RouteFormValues, isEdit: boolean): CreatePayload {
     customerId: v.customerId ?? null,
     isFavorite: v.isFavorite,
     isActive: v.isActive,
+    ...shortcutBody(v),
     steps: isEdit
       ? { deleteMany: {} as Record<string, never>, create: stepCreates }
       : { create: stepCreates },

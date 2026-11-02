@@ -14,13 +14,14 @@ import { z } from "zod";
 import { BUYUK_GOVDE_LIMITI } from "../constants/body-limits";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireGelenBelgeEnabled } from "../middlewares/module.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import {
   addDeliveryNoteLines, createDeliveryNote, deleteDeliveryNote, deleteDeliveryNoteLine,
   getDeliveryNote, listDeliveryNotes, updateDeliveryNote, updateDeliveryNoteLine,
 } from "../services/gelen-belge-note.service";
 import { approveDeliveryNote } from "../services/gelen-belge-onay.service";
-import { assertRouteOverride, withAutoWorkOrders } from "../services/gelen-belge-oto-is-emri.service";
+import { AUTO_WORK_ORDER_PERMISSIONS, assertRouteOverride, withAutoWorkOrders } from "../services/gelen-belge-oto-is-emri.service";
+import { createWorkOrderFromNote } from "../services/gelen-belge-form-is-emri.service";
 import { applyBulkDeleteDeliveryNotes, BULK_DELETE_MAX, previewBulkDeleteDeliveryNotes } from "../services/gelen-belge-toplu-sil.service";
 import { getIncomingDocSettings, updateIncomingDocSettings } from "../services/gelen-belge-ayar.service";
 import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
@@ -358,6 +359,8 @@ const SettingsBody = z.strictObject({
   batchNumberSource: z.enum(["SERIES", "DOCUMENT"], "Seçenek SERIES ya da DOCUMENT olmalı").optional(),
   entryMode: z.enum(["PER_LINE", "PER_DOCUMENT"], "Seçenek PER_LINE ya da PER_DOCUMENT olmalı").optional(),
   autoWorkOrderPatternless: z.enum(["SKIP", "OPEN"], "Seçenek SKIP ya da OPEN olmalı").optional(),
+  formApproval: z.enum(["SEPARATE", "WITH_WORK_ORDER"], "Seçenek SEPARATE ya da WITH_WORK_ORDER olmalı").optional(),
+  refakatAutoPrint: z.boolean("Refakat kartı otomatik yazdırma evet/hayır olmalı").optional(),
 });
 /**
  * @openapi
@@ -367,7 +370,7 @@ const SettingsBody = z.strictObject({
  *     summary: Gelen belge ayarları — varsayılan ürün (ad + kullanılabilirlik) ve gözden geçirilmemiş hücreyle onay kipi
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "defaultItem (id, code, name, problem) | null · unreviewedApproval WARN|BLOCK_SUSPECT|BLOCK · autoWorkOrder boolean · defaultRoute (id, name, problem) | null · routeSuggestionPriority CUSTOMER_FIRST|FACTORY_FIRST · headerLineMeterSource OUTPUT|INPUT · autoSenderFromTemplate boolean · documentTotalCheck INFO|REQUIRE_REASON · batchNumberSource SERIES|DOCUMENT · entryMode PER_LINE|PER_DOCUMENT · autoWorkOrderPatternless SKIP|OPEN (her biri default* alanıyla)" }
+ *       200: { description: "defaultItem (id, code, name, problem) | null · unreviewedApproval WARN|BLOCK_SUSPECT|BLOCK · autoWorkOrder boolean · defaultRoute (id, name, problem) | null · routeSuggestionPriority CUSTOMER_FIRST|FACTORY_FIRST · headerLineMeterSource OUTPUT|INPUT · autoSenderFromTemplate boolean · documentTotalCheck INFO|REQUIRE_REASON · batchNumberSource SERIES|DOCUMENT · entryMode PER_LINE|PER_DOCUMENT · autoWorkOrderPatternless SKIP|OPEN · formApproval SEPARATE|WITH_WORK_ORDER (her biri default* alanıyla) · refakatAutoPrint boolean" }
  *   put:
  *     tags: [GelenBelge]
  *     summary: Gelen belge ayarlarını yaz (yalnız admin:settings + ayar şifresi); pasif/top doğuramayan ürün 400 GELEN_BELGE_DEFAULT_ITEM_INVALID
@@ -390,6 +393,8 @@ const SettingsBody = z.strictObject({
  *               batchNumberSource: { type: string, enum: [SERIES, DOCUMENT], description: "Gelen belgeden doğan partinin numarası: seriden (varsayılan) ya da belgedeki parti no'dan" }
  *               entryMode: { type: string, enum: [PER_LINE, PER_DOCUMENT], description: "Onay kipi: her satır bir top (varsayılan) ya da belge başına tek kayıt; PER_DOCUMENT varsayılan ürünsüz 400 GELEN_BELGE_PER_DOCUMENT_NEEDS_DEFAULT_ITEM" }
  *               autoWorkOrderPatternless: { type: string, enum: [SKIP, OPEN], description: "İşlem değeri çözülemeyen grupta otomatik iş emri: atla (varsayılan) ya da hedef değersiz aç" }
+ *               formApproval: { type: string, enum: [SEPARATE, WITH_WORK_ORDER], description: "İş emri formundan okutulan belge: ayrı onay (varsayılan) ya da iş emri açan kaydeder (POST /irsaliyeler/{id}/is-emri)" }
+ *               refakatAutoPrint: { type: boolean, description: "İş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır (varsayılan false)" }
  *     responses:
  *       200: { description: Güncel ayarlar }
  */
@@ -509,6 +514,55 @@ router.post("/irsaliyeler/:id/onay", requirePermission("gelen-belge:approve"), w
   const opts = await assertRouteOverride(routeTemplateId, req.user!);
   // Onay önce ve aynen; otomatik iş emri (ayar açıksa ya da rota istendiyse) onaydan SONRA, best-effort.
   return approveDeliveryNote(id, body, req.user!.userId).then((r) => withAutoWorkOrders(r, req.user!, opts)).then(({ warnings, ...data }) => ({ status: 200, data, warnings }));
+}));
+
+// ── OIE: iş emri formundan okutulan belge → kayıt + iş emri tek istekte (`gelenBelge.formApproval = WITH_WORK_ORDER`) ──
+const FormWorkOrderBody = z.strictObject({
+  clientToken: z.uuid("İşlem kimliği geçersiz"),
+  ownerCustomerId: Id,
+  ourBatchNo: optText(64),
+  ourBatchNoKey: BatchNoKey.nullable().optional(),
+  kursunMeters: Money("Kurşun metresi"),
+  routeTemplateId: Id,
+  stepPlanning: z.array(z.strictObject({ sequence: z.number().int().min(1).max(200), plannedMachineId: Id.nullable().optional() }), "Geçersiz adım planı").max(200).optional(),
+  targetValues: z.array(z.strictObject({ propertyId: Id, valueId: Id }), "Geçersiz hedef değer").max(50).optional(),
+  notes: optText(1000),
+});
+/**
+ * @openapi
+ * /api/gelen-belge/irsaliyeler/{id}/is-emri:
+ *   post:
+ *     tags: [Gelen belge]
+ *     summary: "İş emri formundan kayıt: not alanları → sistem onayı (PER_DOCUMENT, tek top = kursunMeters) → iş emri (seçilen rota, hedef değer, adım planı). Yalnız gelenBelge.formApproval=WITH_WORK_ORDER; gelen-belge:approve aranmaz. clientToken ile idempotent (yarıda kalan istek aynı token'la tamamlanır)."
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [clientToken, ownerCustomerId, kursunMeters, routeTemplateId]
+ *             properties:
+ *               clientToken: { type: string, format: uuid }
+ *               ownerCustomerId: { type: string, format: uuid }
+ *               ourBatchNo: { type: string, maxLength: 64, nullable: true }
+ *               ourBatchNoKey: { type: string, nullable: true }
+ *               kursunMeters: { type: string, description: "Ondalık metre (operatörün gördüğü → gözden geçirilmiş sayılır)" }
+ *               routeTemplateId: { type: string, format: uuid }
+ *               stepPlanning: { type: array, items: { type: object, properties: { sequence: { type: integer }, plannedMachineId: { type: string, format: uuid, nullable: true } } } }
+ *               targetValues: { type: array, items: { type: object, properties: { propertyId: { type: string, format: uuid }, valueId: { type: string, format: uuid } } } }
+ *               notes: { type: string, maxLength: 1000, nullable: true }
+ *     responses:
+ *       201: { description: "{ workOrderId, workOrderNo, batchNumber, rollId } (+ warnings)" }
+ *       400: { description: "Doğrulama · GELEN_BELGE_ROUTE_OVERRIDE_INVALID · GELEN_BELGE_PER_DOCUMENT_NEEDS_DEFAULT_ITEM · OWNER_CUSTOMER_INVALID" }
+ *       403: { description: "GELEN_BELGE_FORM_APPROVAL_DISABLED (ayar ayrı onay) · MODULE_DISABLED (üretim) · iş emri açma izni yok" }
+ *       409: { description: "DELIVERY_NOTE_NOT_READ (okuma READ/PARTIAL değil) · DELIVERY_NOTE_NOT_APPROVABLE · DELIVERY_NOTE_ROLL_MISSING · onay kapıları · token çakışması" }
+ */
+router.post("/irsaliyeler/:id/is-emri", requireAnyPermission(...AUTO_WORK_ORDER_PERMISSIONS), wrap(async (req) => {
+  const { warnings, ...data } = await createWorkOrderFromNote(Id.parse(req.params.id), FormWorkOrderBody.parse(req.body ?? {}), req.user!);
+  return { status: 201, data, warnings };
 }));
 
 // ── E2 gönderen şablonları (`gelen-belge:template`) ───────────────────────────

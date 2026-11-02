@@ -14,6 +14,10 @@ export const routeStepSchema = z.object({
   stationType: z.enum(["INTERNAL", "EXTERNAL"]).optional(),
   requiredCategoryId: z.string().nullable().optional(),
   plannedSubcontractorId: z.string().nullable().optional(),
+  // Gülkesim 2026-11-02: kurşun adımına makine ÖNERİSİ (İE adımına klonlanır).
+  // stationKind yalnız UI koşuludur (payload'a girmez).
+  stationKind: z.string().nullable().optional(),
+  plannedMachineId: z.string().nullable().optional(),
   // 2026-08-06: adımın şablon HEDEFİ. Rota iş emrine uygulanınca hedef renk /
   // özellik alanlarını ön-doldurur; boş bırakmak meşru (renksiz rota her renkte
   // yeniden kullanılır). İstasyonun gerçekten uygulayıp uygulayamadığı
@@ -38,6 +42,10 @@ export const routeFormSchema = z.object({
   customerId: z.string().nullable().optional(),
   isFavorite: z.boolean(),
   isActive: z.boolean(),
+  // İş emri kısayolu (K6); `shortcutKnown` gövdeye girmez — sunucu alanı tanıyor mu (eski backend).
+  isWorkOrderShortcut: z.boolean(),
+  shortcutOrder: z.number("Sıra sayı olmalı").int("Sıra tam sayı olmalı").min(0, "Sıra 0 ya da büyük olmalı").max(9999, "Sıra en çok 9999"),
+  shortcutKnown: z.boolean(),
   steps: z
     .array(routeStepSchema)
     .min(1, "Rota en az bir adım içermeli"),
@@ -52,6 +60,9 @@ export const routeFormDefaults: RouteFormValues = {
   customerId: null,
   isFavorite: false,
   isActive: true,
+  isWorkOrderShortcut: false,
+  shortcutOrder: 0,
+  shortcutKnown: false,
   steps: [],
 };
 

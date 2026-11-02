@@ -17,7 +17,7 @@ export const YAZILABILIR_ALAN_BEYANI: Readonly<Record<string, readonly string[]>
   productRecipe: ["code", "colorId", "createdById", "finishingRateCode", "foldType", "isActive", "itemId", "name", "routeId", "updatedById", "variantCode", "width"],
   qualityGrade: ["code", "color", "createdById", "description", "isActive", "name", "returnTargetStatus", "role", "skipCustomerName", "skipLabel", "sortOrder", "targetStatus", "updatedById"],
   returnReason: ["code", "color", "createdById", "description", "isActive", "name", "sortOrder", "updatedById"],
-  route: ["code", "createdById", "customerId", "description", "isActive", "isFavorite", "name", "updatedById"],
+  route: ["code", "createdById", "customerId", "description", "isActive", "isFavorite", "isWorkOrderShortcut", "name", "shortcutOrder", "updatedById"],
   station: ["allowAsWorkOrderStep", "appliesColor", "appliesProperty", "appliesQuality", "capturesWidth", "code", "consumesWarpBeam", "createdById", "defaultCategoryId", "defaultLabelCopies", "department", "inspectionEnabled", "isActive", "kind", "name", "producesWarpBeam", "type", "updatedById"],
   warehouse: ["address", "code", "isActive", "name", "notes"],
   warpSpec: ["code", "createdById", "endsCount", "endsPerDent", "isActive", "name", "notes", "reedNo", "reedWidthCm", "selvedgeEnds", "takeUpPct", "updatedById", "wastePct", "yarnItemId"],

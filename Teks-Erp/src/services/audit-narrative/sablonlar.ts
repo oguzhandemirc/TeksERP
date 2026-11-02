@@ -165,6 +165,8 @@ const OLAY_SABLONLARI: Record<string, Sablon> = {
   "PRINTED_DOCUMENT:SYSTEM_TEMPLATE_PRINT": olay("belirtme", "sistem şablonuyla bastı"),
   // Sarf stok defteri: yalnız mal kabul girişi audit'lenir (defter satırı düzenlenmez/silinmez)
   "CONSUMABLE_MOVEMENT:CREATE": olusturdu,
+  // Kurşun istasyonu gramaj düğmeleri + gram fiyatı (OIE 2026-11): kayıt istasyondur
+  "STATION_KURSUN:UPDATE": duzenledi,
 };
 
 function katalogKur(): Readonly<Record<string, Sablon>> {

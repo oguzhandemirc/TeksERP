@@ -29,6 +29,7 @@ import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 import { RouteStepTargets } from "./RouteStepTargets";
 import { newClientId, type RouteStepFormValues } from "./schema";
+import { PlannedMachineButtons } from "@/components/kursun/PlannedMachineButtons";
 import { loadAllForPicker } from "@/lib/picker-loader";
 
 interface Props {
@@ -111,11 +112,14 @@ export function RouteStepEditor({ value, onChange, error }: Props) {
         stationType: undefined,
         requiredCategoryId: null,
         plannedSubcontractorId: null,
+        stationKind: null,
+        plannedMachineId: null,
         ...clearTargets,
       });
       return;
     }
-    updateStep(clientId, { stationId, ...clearTargets }); // seçimi anında yansıt
+    // Makine önerisi istasyona bağlı → istasyon değişince düşer.
+    updateStep(clientId, { stationId, plannedMachineId: null, ...clearTargets }); // seçimi anında yansıt
     try {
       const res = await qc.fetchQuery({
         queryKey: ["station", stationId, "route-step"],
@@ -131,7 +135,7 @@ export function RouteStepEditor({ value, onChange, error }: Props) {
       if (isExternal && requiredCategoryId) {
         plannedSubcontractorId = pickFavoriteFirmId(await fetchFavoriteFirms(qc), requiredCategoryId);
       }
-      updateStep(clientId, { stationType: station.type, requiredCategoryId, plannedSubcontractorId });
+      updateStep(clientId, { stationType: station.type, stationKind: station.kind ?? null, requiredCategoryId, plannedSubcontractorId });
     } catch {
       toast.error("İstasyon bilgisi yüklenemedi.");
     }
@@ -250,6 +254,18 @@ function StepRow({ step, index, onStationPick, onUpdate, onRemove }: RowProps) {
               nullable
               noneLabel="— Seçilmedi"
               extraFilters={step.requiredCategoryId ? { categoryId: step.requiredCategoryId } : undefined}
+            />
+          </div>
+        )}
+
+        {/* Kurşun adımının makine önerisi (Gülkesim 2026-11-02) — yalnız öneri. */}
+        {step.stationId && step.stationKind === "PROCESS_QC" && (
+          <div className="space-y-1 sm:col-span-2">
+            <label className="text-xs text-muted-foreground">Makine (öneri)</label>
+            <PlannedMachineButtons
+              stationId={step.stationId}
+              value={step.plannedMachineId ?? null}
+              onChange={(v) => onUpdate({ plannedMachineId: v })}
             />
           </div>
         )}

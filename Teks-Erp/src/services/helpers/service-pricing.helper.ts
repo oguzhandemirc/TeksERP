@@ -19,6 +19,7 @@ import { resolveItemPricesFor } from "../item-price.service";
 import { listKursunApplications, readKursunTarget, type KursunApplication } from "./process-summary.helper";
 import { listFlagServiceWorks } from "./service-flag-work.helper";
 import { pickServiceItemId } from "./service-item-pick.helper";
+import { applyKursunGramPrices } from "./kursun-gram-price.helper";
 import { missingQuantityWarning, priceUnitMatches, serviceWorkQuantity, serviceWorkUnit } from "./service-quantity.helper";
 
 /** `kursun-qc.service` reopenStep damga sebebi — yeniden açılan adım yeni hizmettir. */
@@ -46,6 +47,8 @@ export interface ServiceRollWork {
   /** Faturalanan birim ve miktar (`service-quantity.helper`); metre işinde `meters`. */
   qtyUnit: ServiceQtyUnit;
   quantity: Prisma.Decimal | null;
+  /** Kurşun gram fiyatından çözüldüyse fatura satırı açıklaması ("Kurşun 40 gr (40 gr/m)"); yoksa yok (bugün). */
+  gramLabel?: string;
 }
 
 /** Hizmet kalemi × birim fiyat grubu (taslak satırı). */
@@ -60,6 +63,8 @@ export interface ServiceLine {
   unit: ServiceQtyUnit;
   rollCount: number;
   rollIds: string[];
+  /** Kurşun gram fiyatlı satırın açıklaması (oie-a); yoksa anahtar yok → kalem adı (bugün). */
+  label?: string;
   /** S6 (D4-KUC2 c): metresi elle (OPERATOR) okumadan gelen iş sayısı — faturalanır ama satır İŞARETLİ (0 = işaretsiz). */
   manualMeterRollCount: number;
 }
@@ -257,6 +262,7 @@ export async function resolveServiceItemsForRolls(params: {
   const works = billable.filter((w) => !unknown.includes(w));
 
   await applyAsOfPrices(works, { opt, currency: params.currency, customerId: params.customerId, db });
+  await applyKursunGramPrices(works.filter((w) => w.serviceItemId !== null), { currency: params.currency, customerId: params.customerId, db });
 
   const items = await db.item.findMany({
     where: { id: { in: [...new Set(works.map((w) => w.serviceItemId).filter((v): v is string => v !== null))] } },
@@ -272,9 +278,9 @@ export async function resolveServiceItemsForRolls(params: {
     if (w.unitPrice === null) warnings.push(w.qtyUnit === "METER"
       ? `"${item.name}" için ${params.currency} satış fiyatı yok — satır fiyatsız.`
       : `"${item.name}" için ${params.currency} satış fiyatı yok ya da birimi seçilen brode fiyat birimiyle aynı değil — satır fiyatsız.`);
-    const key = `${w.serviceItemId}:${w.unitPrice?.toString() ?? "-"}:${w.qtyUnit}`;
+    const key = `${w.serviceItemId}:${w.unitPrice?.toString() ?? "-"}:${w.qtyUnit}:${w.gramLabel ?? ""}`;
     const g = groups.get(key) ?? {
-      serviceItemId: w.serviceItemId, code: item.code, name: item.name, unitPrice: w.unitPrice?.toString() ?? null,
+      serviceItemId: w.serviceItemId, code: item.code, name: item.name, ...(w.gramLabel ? { label: w.gramLabel } : {}), unitPrice: w.unitPrice?.toString() ?? null,
       currency: params.currency, quantity: "0", unit: w.qtyUnit, rollCount: 0, rollIds: [], manualMeterRollCount: 0, sum: new Prisma.Decimal(0),
     };
     g.sum = g.sum.plus(w.quantity!);

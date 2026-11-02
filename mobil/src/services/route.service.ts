@@ -10,6 +10,9 @@ export interface ProductionRoute {
   description?: string | null;
   isFavorite?: boolean;
   isActive?: boolean;
+  /** Sözleşme 1: "İş emri oluştur" kısayolu. Eski sunucu göndermez → kısayol değil. */
+  isWorkOrderShortcut?: boolean;
+  shortcutOrder?: number;
   steps?: {
     id: string;
     stationId: string;
@@ -44,6 +47,8 @@ export interface ProductionRoute {
        *  (kat tipi yalnız Tambur'lu rotada sorulur). Backend `include` ile tüm
        *  skaler alanları döndürüyor; eski backend'de undefined kalır. */
       kind?: string;
+      /** Kurşun yetenekli istasyon (sunucu türetir); eski sunucu göndermez → `kind` yedeği. */
+      isKursunStation?: boolean;
       /** İSTASYONUN KENDİ yetenekleri (2026-08-10) — kategoriden bağımsız.
        *  Adım renk/özellik verebilir ⇔ istasyon verir VEYA kategori verir. */
       appliesColor?: boolean;
@@ -68,6 +73,10 @@ export const routeService = {
     apiClient
       .get<PaginatedResponse<ProductionRoute>>(`/routes${buildQueryString(params)}`)
       .then((r) => r.data),
+
+  /** Kısayol rota şablonları (`?shortcut=1`); süzme sunucuda, istemci yalnız alanı doğrular (eski sunucu yok sayar). */
+  getShortcuts: (): Promise<PaginatedResponse<ProductionRoute>> =>
+    apiClient.get<PaginatedResponse<ProductionRoute>>('/routes?shortcut=1&page=1&pageSize=50').then((r) => r.data),
 
   getById: (id: string): Promise<ApiResponse<ProductionRoute>> =>
     apiClient.get<ApiResponse<ProductionRoute>>(`/routes/${id}`).then((r) => r.data),

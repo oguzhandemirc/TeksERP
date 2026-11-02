@@ -914,7 +914,8 @@ export interface KursunStepSummary {
     valueType?: 'FLAG' | 'CHOICE';
     /** SEÇİM tipliyse operatöre sunulacak AKTİF değerler. Tuşlar BURADAN
      *  çizilir — kodda sabit liste YOK (25GR/50GR/75GR panelden tanımlanır). */
-    values?: { code: string; name: string }[];
+    /** `isDefault` (oie-a): çeşidin tek varsayılanı — hedef yoksa vurgulanır. Eski backend göndermez. */
+    values?: { code: string; name: string; isDefault?: boolean }[];
     /** Bu SEÇİM hangi BAYRAĞIN çeşidi (KQ-D4; gramaj → Kurşun). Eski backend göndermez. */
     variantOfPropertyId?: string | null;
   }[];
@@ -994,6 +995,8 @@ export interface KursunOpenCard {
   /// Liste backend tarafında bu alanlara göre sıralanmış gelir.
   priority: number;
   isUrgent: boolean;
+  /** Gülkesim 2026-11-02: planlamacının önerdiği makine (yalnız rozet). Eski backend göndermez. */
+  plannedMachineName?: string | null;
   /** Kurşun adımına ilk roll'un giriş tarihi (en eski açık RollMovement.enteredAt) —
    *  liste ekranında "ne zamandır bekliyor" göstergesi için. */
   oldestEnteredAt?: string | null;

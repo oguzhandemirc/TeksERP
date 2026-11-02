@@ -5,7 +5,7 @@
 import type { AutoWorkOrderResult } from "./workOrderTypes";
 import type { DocumentTotalCheckSettings, LineProblem, TotalsCheck } from "./reviewTypes";
 import type { EntryModeSettings, PartiMetreDetailFields, PartiMetrePatch, PartiMetreHeaderFields, SenderTemplateBatchNoFields } from "./partiMetreTypes";
-export type { AutoWorkOrderPatternlessMode, BatchNoCandidate, BatchNoCandidateKind, BatchNumberSourceMode, IncomingDocEntryMode, KursunMeterCandidates, KursunMetersSource, PerDocumentGate, SenderTemplateBatchNoCandidate } from "./partiMetreTypes";
+export type { AutoWorkOrderPatternlessMode, IncomingDocFormApproval, BatchNoCandidate, BatchNoCandidateKind, BatchNumberSourceMode, IncomingDocEntryMode, KursunMeterCandidates, KursunMetersSource, PerDocumentGate, SenderTemplateBatchNoCandidate } from "./partiMetreTypes";
 export type { DocumentTotalCheckMode, LineProblem, TotalsCheck } from "./reviewTypes";
 
 export type {

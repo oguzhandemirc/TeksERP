@@ -47,8 +47,8 @@ export interface StationPropertyCap {
   code: string;
   name: string;
   valueType: FabricPropertyValueType;
-  /** SEÇİM tipliyse AKTİF değerler (BAYRAK'ta boş dizi). */
-  values: { id: string; code: string; name: string }[];
+  /** SEÇİM tipliyse AKTİF değerler (BAYRAK'ta boş dizi). `isDefault`: çeşidin tek varsayılanı (oie-a). */
+  values: { id: string; code: string; name: string; isDefault?: boolean }[];
   /** Bu SEÇİM özelliği hangi BAYRAĞIN çeşidi? (KQ-D4; çeşit değilse null) */
   variantOfPropertyId: string | null;
   /**
@@ -100,7 +100,7 @@ export async function loadStationPropertyCaps(
           // Pasif değer yeni seçimde SUNULMAZ (aşağıda `values`'tan ayrılır) ama
           // çeşit özelliğinde kabul edilir (V9) — o yüzden hepsi okunur.
           values: {
-            select: { id: true, code: true, name: true, isActive: true },
+            select: { id: true, code: true, name: true, isActive: true, isDefault: true },
             orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
           },
         },
@@ -114,7 +114,7 @@ export async function loadStationPropertyCaps(
     code: r.property.code,
     name: r.property.name,
     valueType: r.property.valueType,
-    values: r.property.values.filter((v) => v.isActive).map(({ id, code, name }) => ({ id, code, name })),
+    values: r.property.values.filter((v) => v.isActive).map(({ id, code, name, isDefault }) => ({ id, code, name, isDefault })),
     variantOfPropertyId: r.property.variantOfPropertyId,
     retiredValues: r.property.values
       .filter((v) => !v.isActive)

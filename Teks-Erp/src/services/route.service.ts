@@ -15,7 +15,11 @@ import { stepCanApplyColor, stepCanApplyProperty } from "./helpers/step-capabili
 import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 import { AppError } from "../utils/app-error";
 import { assertStationsRoutable } from "./helpers/station-routable.helper";
+import { assertPlannedMachines, plannedPairsOf } from "./helpers/planned-machine.helper";
 import type { ApiResponse } from "../types/api.types";
+import type { Request } from "express";
+import { parseQueryParams } from "../utils/query-parser";
+import { assertShortcutFields, isShortcutQuery, listShortcutRoutes } from "./helpers/route-shortcut.helper";
 
 /**
  * Route servis konfigürasyonu — TEK KAYNAK. Hem canlı wiring (route.routes.ts)
@@ -52,6 +56,8 @@ export const ROUTE_SERVICE_CONFIG: BaseServiceConfig = {
         // adını ayrı sorgu olmadan gösterebilsin. (Scalar plannedSubcontractorId
         // zaten include ile dönüyor; bu yalnız adı ekler.)
         plannedSubcontractor: { select: { id: true, name: true } },
+        // Gülkesim 2026-11-02: adımın önerilen makinesi (yalnız öneri) — adı tek sorguda.
+        plannedMachine: { select: { id: true, code: true, name: true } },
         // 2026-08-06: adımın şablon hedefi (renk + özellikler). İstemci rotayı
         // iş emrine uygularken bu iki alanı hedef alanlara kopyalar; ADI da
         // dönmeli, yoksa panel her adım için ayrı renk/özellik sorgusu atardı.
@@ -80,6 +86,8 @@ interface IncomingStep {
   stationId?: string;
   requiredCategoryId?: string | null;
   plannedSubcontractorId?: string | null;
+  /** Önerilen makine — adımın istasyonuna ait ve aktif olmalı (yalnız öneri). */
+  plannedMachineId?: string | null;
   sequence?: number;
   defaultNotes?: string | null;
   /** "Fasona renksiz git" — iş emri açılışında WorkOrderStep'e klonlanır. */
@@ -112,6 +120,8 @@ export class RouteService extends BaseService {
     // iş emri açılışında WorkOrderStep'e klonlanır. 2026-08-25'e kadar allowlist'te
     // YOKTU: şablona kaydetmek 400 verirdi, dolayısıyla miras yolu da hiç kurulamadı.
     "dispatchWithoutColor",
+    // Gülkesim 2026-11-02: kurşun makinesi önerisi — İE adımına klonlanır.
+    "plannedMachineId",
   ]);
 
   /** Dizi-form VE nested-write ({create:[...]}) formundan step nesnelerini çıkarır. */
@@ -126,12 +136,11 @@ export class RouteService extends BaseService {
   }
 
   private async validateSteps(data: Record<string, unknown>): Promise<void> {
+    assertShortcutFields(data); // kısayol kolonları da gövde doğrulamasıdır (create + update tek giriş)
     if (!("steps" in data) || data.steps == null) return;
     const steps = this.extractSteps(data.steps);
     if (steps === null) {
-      throw AppError.badRequest(
-        "Rota adımları geçersiz biçimde (dizi veya { create: [...] } bekleniyor)",
-      );
+      throw AppError.badRequest("Rota adımları geçersiz biçimde (dizi veya { create: [...] } bekleniyor)");
     }
     if (steps.length === 0) return;
 
@@ -178,9 +187,7 @@ export class RouteService extends BaseService {
         where: { id: { in: categoryIds }, isActive: true },
         select: { id: true },
       });
-      if (found.length !== categoryIds.length) {
-        throw AppError.badRequest("Rota adımında bulunmayan veya pasif kategori var");
-      }
+      if (found.length !== categoryIds.length) throw AppError.badRequest("Rota adımında bulunmayan veya pasif kategori var");
     }
 
     const subcontractorIds = pick("plannedSubcontractorId");
@@ -189,9 +196,7 @@ export class RouteService extends BaseService {
         where: { id: { in: subcontractorIds }, isActive: true },
         select: { id: true },
       });
-      if (found.length !== subcontractorIds.length) {
-        throw AppError.badRequest("Rota adımında bulunmayan veya pasif fason firma var");
-      }
+      if (found.length !== subcontractorIds.length) throw AppError.badRequest("Rota adımında bulunmayan veya pasif fason firma var");
     }
 
     // Planlanan fason firma, adımın gerektirdiği kategoride hizmet vermeli —
@@ -211,11 +216,12 @@ export class RouteService extends BaseService {
       });
       const have = new Set(links.map((l) => `${l.subcontractorId}:${l.categoryId}`));
       if (catPairs.some((p) => !have.has(`${p.sub}:${p.cat}`))) {
-        throw AppError.badRequest(
-          "Rota adımında seçilen fason firma, adımın gerektirdiği kategoride hizmet vermiyor",
-        );
+        throw AppError.badRequest("Rota adımında seçilen fason firma, adımın gerektirdiği kategoride hizmet vermiyor");
       }
     }
+
+    // Makine önerisi adımın istasyonuna ait + aktif olmalı (İE yazımıyla aynı kural).
+    await assertPlannedMachines(prisma, plannedPairsOf(steps));
 
     await this.applyStepTargets(steps);
   }
@@ -395,6 +401,13 @@ export class RouteService extends BaseService {
         s.plannedProperties = { create: unique.map((propertyId) => ({ propertyId })) };
       }
     }
+  }
+
+  /** `?shortcut=1`: yalnız iş emri kısayolları, sıralı + sayfasız (helper); where yine `buildListWhere`ten. Parametresiz istek bugünkü liste. */
+  async findAll(req: Request) {
+    if (!isShortcutQuery(req)) return super.findAll(req);
+    this.assertListQueryShape(req);
+    return listShortcutRoutes({ ...this.buildListWhere(parseQueryParams(req), req), isWorkOrderShortcut: true }, ROUTE_SERVICE_CONFIG.defaultInclude);
   }
 
   // Tambursuz rota (KQ-D8): kalite adımından sonra karar adımı yoksa UYARI, red değil.

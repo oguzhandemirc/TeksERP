@@ -47,6 +47,9 @@ export interface CariRow {
   isActive: boolean;
   /** H8b: müşterinin hizmet faturası tetiği; null = fabrika ayarı. Eski backend göndermez (undefined). */
   serviceBillingTrigger?: ServiceBillingTrigger | null;
+  /** oie-a: müşteriye özel kurşun gram fiyatı; null = istasyonunki. Eski backend göndermez (undefined → alan çizilmez). */
+  kursunGramPrice?: string | number | null;
+  kursunGramCurrency?: Currency | null;
   /** D4-V1k: KDV / tevkifat geçersiz kılması; null = genel ayar. Eski backend göndermez (undefined → alan çizilmez). */
   vatRate?: string | number | null;
   withholdingEnabled?: boolean | null;
@@ -437,6 +440,9 @@ export interface CariUpdateInput {
   isActive?: boolean;
   /** H8b: `null` → fabrika ayarı. Yalnız müşteri carisinde ve backend alanı okuyorsa gönderilir. */
   serviceBillingTrigger?: ServiceBillingTrigger | null;
+  /** oie-a: müşteriye özel kurşun gram fiyatı (ondalık STRING) + para birimi; ikisi birlikte, `null` = istasyonunki. */
+  kursunGramPrice?: string | null;
+  kursunGramCurrency?: Currency | null;
   vatRate?: string | null;
   withholdingEnabled?: boolean | null;
   withholdingNumerator?: number | null;

@@ -182,6 +182,7 @@ export function designerStepsFromWorkOrder(wo: WorkOrder): DesignerStep[] {
       requiredCategoryId: s.requiredCategoryId ?? null,
       plannedSubcontractorId: s.plannedSubcontractorId ?? null,
       dispatchWithoutColor: s.dispatchWithoutColor ?? false,
+      plannedMachineId: s.plannedMachineId,
     }));
 }
 
@@ -197,6 +198,8 @@ export function stepsToCustom(steps: DesignerStep[]): CustomRouteStep[] {
     // buraya yazılmazsa panelde seçilir, kaydedilir gibi görünür ve sunucuya
     // HİÇ gitmez (2026-08-13 "kesimde kat sessizce düşüyordu" dersi).
     dispatchWithoutColor: s.dispatchWithoutColor ?? false,
+    // Yalnız biliniyorsa gönderilir: undefined = sunucu planlamacının sonradan seçimini korur.
+    ...(s.plannedMachineId !== undefined ? { plannedMachineId: s.plannedMachineId } : {}),
   }));
 }
 
@@ -270,6 +273,7 @@ export function routeStepsToCreatePayload(
   requiredCategoryId: string | null;
   plannedSubcontractorId: string | null;
   dispatchWithoutColor: boolean;
+  plannedMachineId?: string | null;
   plannedColorId?: string | null;
   plannedPropertyIds?: string[];
 }[] {
@@ -282,6 +286,8 @@ export function routeStepsToCreatePayload(
       requiredCategoryId: s.requiredCategoryId,
       plannedSubcontractorId: s.plannedSubcontractorId,
       dispatchWithoutColor: s.dispatchWithoutColor ?? false,
+      // Öneri yoksa gövde eskisiyle bayt-aynı (yeni şablonda yokluk = öneri yok).
+      ...(s.plannedMachineId ? { plannedMachineId: s.plannedMachineId } : {}),
       ...(plan
         ? {
             plannedColorId: plan.plannedColorId,

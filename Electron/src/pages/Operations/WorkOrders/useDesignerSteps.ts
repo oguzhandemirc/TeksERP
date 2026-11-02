@@ -171,6 +171,7 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
           ...base,
           requiredCategoryId: s.requiredCategoryId ?? base.requiredCategoryId,
           plannedSubcontractorId: s.plannedSubcontractorId ?? null,
+          plannedMachineId: s.plannedMachineId ?? null,
         };
       });
       // Fason adımlarına (şablonda firma kayıtlı DEĞİLSE) kategorinin favori
@@ -232,6 +233,7 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
         stationKind: null,
         requiredCategoryId: null,
         plannedSubcontractorId: null,
+        plannedMachineId: null,
       });
       return;
     }
@@ -250,7 +252,8 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
         const favs = await fetchFavoriteFirms();
         plannedSubcontractorId = pickDefaultFirmId(firmMode, favs, lastByCategory, designer.requiredCategoryId);
       }
-      updateStep(clientId, { ...designer, plannedSubcontractorId });
+      // İstasyon değişince eski istasyonun makine önerisi anlamsız → düşer.
+      updateStep(clientId, { ...designer, plannedSubcontractorId, plannedMachineId: null });
     } catch {
       toast.error("İstasyon bilgisi yüklenemedi.");
     }

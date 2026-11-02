@@ -12,6 +12,7 @@ import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { customerService } from "@/pages/Customers/service";
 import type { Customer } from "@/pages/Customers/types";
 import { RouteStepEditor } from "./RouteStepEditor";
+import { RouteShortcutFields } from "./RouteShortcutFields";
 import { routeService } from "./service";
 import {
   newClientId,
@@ -43,6 +44,8 @@ function stepToForm(s: ProductionRoute["steps"][number]) {
       ? s.requiredCategoryId ?? s.station?.defaultCategoryId ?? null
       : null,
     plannedSubcontractorId: isExternal ? s.plannedSubcontractorId ?? null : null,
+    stationKind: s.station?.kind ?? null,
+    plannedMachineId: s.plannedMachineId ?? null,
     // Şablon hedefi — fason planlamasının aksine istasyon TİPİNE bağlı değil:
     // iç istasyon (zımpara, tambur) da özellik kazandırır.
     plannedColorId: s.plannedColorId ?? null,
@@ -58,6 +61,9 @@ function buildDefaults(initial?: ProductionRoute | null): RouteFormValues {
     customerId: initial.customerId,
     isFavorite: initial.isFavorite,
     isActive: initial.isActive,
+    isWorkOrderShortcut: initial.isWorkOrderShortcut ?? false,
+    shortcutOrder: initial.shortcutOrder ?? 0,
+    shortcutKnown: initial.isWorkOrderShortcut !== undefined,
     steps: [...initial.steps].sort((a, b) => a.sequence - b.sequence).map(stepToForm),
   };
 }
@@ -69,6 +75,9 @@ function buildCopyValues(source: ProductionRoute): RouteFormValues {
     customerId: source.customerId,
     isFavorite: false,
     isActive: true,
+    isWorkOrderShortcut: false,
+    shortcutOrder: 0,
+    shortcutKnown: source.isWorkOrderShortcut !== undefined,
     steps: [...source.steps].sort((a, b) => a.sequence - b.sequence).map(stepToForm),
   };
 }
@@ -233,6 +242,7 @@ export function RouteFormDialog({
                 </label>
               </div>
             </FormField>
+            <RouteShortcutFields control={form.control} register={form.register} />
           </div>
 
           <div className="border-t pt-4">

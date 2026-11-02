@@ -85,6 +85,8 @@ export interface WorkOrderStepLite {
   plannedSubcontractorId?: string | null;
   /** Fasona renksiz git (2026-08-17 "ekru" kuralı) — çekide renk satırı basılmaz. */
   dispatchWithoutColor?: boolean;
+  /** Önerilen makine (Gülkesim 2026-11-02, yalnız öneri). */
+  plannedMachineId?: string | null;
   /** Sadece findById response'unda — şu an bu adımda bekleyen rulolar (özet). */
   currentRolls?: StepRollSummary;
   /** Sadece findById response'unda — bekleyen rullaların tek tek listesi. */

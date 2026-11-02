@@ -90,9 +90,10 @@ import { measuredWidthErrorText, widthCaptureEnabled } from './measuredWidth';
 import { kursunFinishRollId, type KursunFinishVars } from '../../../offline/kursunFinishVars';
 import { meterSettingsOf, pendingAcksFromError } from './meterCapture';
 import { primaryMeterFor, useMachinePeripherals } from '../../../hooks/useMachinePeripherals';
-import { findTarget } from './gramajTap';
+import { findTarget, targetChipText } from './gramajTap';
 import { useAuthStore } from '../../../store/authStore';
 import { palette } from '../../../theme/tokens';
+import PlannedMachineBadge from './PlannedMachineBadge';
 
 // =============================================================================
 // Multi-job state — operatör birden fazla refakat kartını paralel açabilir.
@@ -1448,14 +1449,14 @@ export default function KursunQcScreen() {
                           ? findTarget(
                               activeJob.stepSummary.targetValues,
                               p.propertyId,
-                              (p.values ?? []).map((v) => ({ code: v.code, label: v.name })),
+                              (p.values ?? []).map((v) => ({ code: v.code, label: v.name, isDefault: v.isDefault })),
                             )
                           : null;
                         return (
                           <View key={p.propertyId} style={styles.propChoiceBlock}>
                             <Text style={styles.propChoiceLabel}>
                               {p.mode === 'REQUIRED' ? `${p.name} *` : p.name}
-                              {target ? `  ·  HEDEF ${target.label}` : ''}
+                              {target ? `  ·  ${targetChipText(target)}` : ''}
                             </Text>
                             {(p.values ?? []).length === 0 ? (
                               // Değersiz SEÇİM özelliği: backend bunu doğduğu anda
@@ -1839,6 +1840,7 @@ function CameraScanModal({
                         {item.cardNumber}
                       </Text>
                       <PriorErrorBadge count={item.openErrorCount} testID="card-error-badge" />
+                      <PlannedMachineBadge name={item.plannedMachineName} testID="card-planned-machine" />
                       <Text style={cameraStyles.rowMetaInline} numberOfLines={1}>
                         {item.batchNumber} · {item.stationName} · {item.openRollCount} top
                         {item.oldestEnteredAt

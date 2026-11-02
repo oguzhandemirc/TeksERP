@@ -191,6 +191,9 @@ export interface KursunDistributionRowBase {
   urgentMarkedAt: Date | null;
   /** Kurşun rotanın son (non-SKIPPED) adımı mı → "İşi Bitir" butonu bu satırda çıkar. */
   isLastStep: boolean;
+  /** Planlanan (önerilen) makine — yalnız öneri, atama değil; eski panel yok sayar. */
+  plannedMachineId: string | null;
+  plannedMachineName: string | null;
 }
 
 export interface KursunDistributionWaitingRow extends KursunDistributionRowBase {
@@ -397,6 +400,8 @@ async function loadDistributionSteps(
       stationId: true,
       isUrgent: true,
       urgentMarkedAt: true,
+      plannedMachineId: true,
+      plannedMachine: { select: { name: true } },
       // Planlama sırası. `waiting` bunu `orderBy` ile kullanıyor; `assigned`
       // MAKİNE İÇİ sıralama için JS'te sıralanıyor (aşağıdaki `sortByPlanOrder`)
       // — atamalar `assignedAt asc` ile yüklendiği için orderBy yetmez.
@@ -783,6 +788,8 @@ export class KursunBypassService {
       isUrgent: step.isUrgent,
       urgentMarkedAt: step.urgentMarkedAt,
       isLastStep: next === null,
+      plannedMachineId: step.plannedMachineId,
+      plannedMachineName: step.plannedMachine?.name ?? null,
     };
   }
 

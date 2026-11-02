@@ -16,6 +16,10 @@ export interface TapSelection {
 export interface GramajValue {
   code: string;
   label: string;
+  /** Çeşidin tek varsayılanı (oie-a); eski backend göndermez. */
+  isDefault?: boolean;
+  /** findTarget: İE hedefi yoktu, varsayılandan geldi — sapma sayılmaz, "VARSAYILAN" yazılır. */
+  fromDefault?: boolean;
 }
 
 /** Dokunuş gövdesi: çeşit değeri + bayrak AUTO değilse işaret (backend AUTO'yu kendi yazar). */
@@ -33,19 +37,27 @@ export function canSkipFlag(cfg: TapValueConfig): boolean {
   return cfg.flagMode === 'OPTIONAL' && cfg.variantMode !== 'REQUIRED';
 }
 
-/** İş emrinin bu çeşit için hedef değeri (yoksa null → vurgu yok). */
+/** İş emrinin bu çeşit için hedef değeri; hedef yoksa varsayılan gramaj (`fromDefault`), o da yoksa null → vurgu yok. */
 export function findTarget(
   targets: readonly { propertyId: string; valueCode: string }[] | undefined,
   variantPropertyId: string,
   values: readonly GramajValue[],
 ): GramajValue | null {
   const t = (targets ?? []).find((x) => x.propertyId === variantPropertyId);
-  if (!t) return null;
+  if (!t) {
+    const def = values.find((v) => v.isDefault === true);
+    return def ? { ...def, fromDefault: true } : null;
+  }
   return values.find((v) => v.code === t.valueCode) ?? { code: t.valueCode, label: t.valueCode };
 }
 
+/** Vurgu çipi metni: İE hedefi "HEDEF", varsayılan "VARSAYILAN". */
+export function targetChipText(target: GramajValue): string {
+  return `${target.fromDefault ? 'VARSAYILAN' : 'HEDEF'} ${target.label}`;
+}
+
 export function deviationText(target: GramajValue | null, picked: GramajValue | null): string | null {
-  if (!target || !picked || target.code === picked.code) return null;
+  if (!target || target.fromDefault || !picked || target.code === picked.code) return null;
   return `Hedef ${target.label}, ${picked.label} işlendi`;
 }
 

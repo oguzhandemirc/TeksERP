@@ -280,3 +280,17 @@ describe("D4-V1k KDV / tevkifat geçersiz kılması", () => {
     if (!r.ok) expect(r.errors.tax).toMatch(/pay\/payda/);
   });
 });
+
+describe("oie-a: müşteriye özel kurşun gram fiyatı", () => {
+  it("dolu fiyat noktaya çevrilir, para birimiyle gider; boş → ikisi de null", () => {
+    const full = buildCariUpdatePayload({ ...baseForm, kursunGram: { price: "0,04", currency: "USD" } });
+    expect(full.ok && [full.body.kursunGramPrice, full.body.kursunGramCurrency]).toEqual(["0.04", "USD"]);
+    const empty = buildCariUpdatePayload({ ...baseForm, kursunGram: { price: "", currency: "USD" } });
+    expect(empty.ok && [empty.body.kursunGramPrice, empty.body.kursunGramCurrency]).toEqual([null, null]);
+  });
+  it("alan yoksa (fason / eski backend) gövdeye girmez; geçersiz fiyat istek kurmaz", () => {
+    const none = buildCariUpdatePayload({ ...baseForm, kursunGram: null });
+    expect(none.ok && "kursunGramPrice" in none.body).toBe(false);
+    expect(buildCariUpdatePayload({ ...baseForm, kursunGram: { price: "0,00001", currency: "TRY" } }).ok).toBe(false);
+  });
+});

@@ -12,9 +12,12 @@
 
 - **[ÇEKİRDEK]** Dağıtımsız kapanışın kapsamı 'her dağıtılmamış adım' DEĞİL: bayrak AÇIK **ve** adım bypass'a UYGUN. Tek kapı `resolveUnassignedTamburClosure`, `assertKursunTabletMayWrite` ile AYNI kaynaktan beslenir — ayrışırsa 'tablet yazamıyor, Tambur da kapatamıyor' çıkmazı döner. Bayrak koşulu load-bearing. · bekçi: `scripts/test_kursun_unassigned_close.ts (bayrak koşulu düşünce 4 kırmızı)` <sub>(CLAUDE.md:52)</sub>
 
+- **[ÇEKİRDEK]** Plan makinesi (`RouteStep/WorkOrderStep.plannedMachineId`) yalnız ÖNERİdir: dağıtımı, tablet yazmayı ya da kapanışı ENGELLEME, uyarı üretme ve fiilî atıf (`RollMovement.machineId`) için KULLANMA; makine adımın istasyonuna ait + aktif olmalı (tek doğrulayıcı `helpers/planned-machine.helper.ts`), sonradan değişim atomik claim (açık adım + canlı İE). · bekçi: `scripts/test_kursun_planned_machine.ts` <sub>(2026-11-02)</sub>
+
 ### Yasaklar
 
 - **[ÇEKİRDEK]** Atıf UYDURULMAZ: dağıtımsız kapanışta `RollMovement.machineId` NULL kalır — varsayılan makineye yazmak makine bazlı hacim raporunu sistematik yanlışlar. Boşluk GÖRÜNÜR kılınır: `listDistribution.unassignedClosures` → amber bant ('son 7 günde N iş dağıtılmadan kapandı'). · bekçi: `scripts/test_kursun_unassigned_close.ts (atıf uydurulunca 1 kırmızı)` <sub>(CLAUDE.md:52)</sub>
+- **[ÇEKİRDEK]** Kurşun istasyonunun gramaj tablosunu (gr/m `amount`, TEK varsayılan, silme yok → pasif) ve gram fiyatını YALNIZ `/api/station-capabilities/:id/kursun` (`kursun-station.service`) yazar; "Kurşun uygular" = `StationProperty(KURSUN, AUTO)` satırı. İE hedefi yoksa istemciler varsayılan gramajı ön seçer ve bunu sapma saymaz; alan yoksa hiçbirini seçmez. · bekçi: `test_kursun_gram_fiyati`, mobil `GramajTapPanel.test.tsx`, Electron `pages/Stations/kursun-station.test.ts`
 
 ## Backend
 
@@ -116,7 +119,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_audit_followups`, `test_consistency_derived`, `test_e2e_full_flow`, `test_kursun_bulk`, `test_kursun_bypass`, `test_kursun_bypass_repoint`, `test_kursun_gramaj`, `test_kursun_metre`, `test_sarf_stok_defteri`, `test_kursun_metre_stok`, `test_en_olcen_istasyon`, `test_kursun_sapma`, `test_kursun_adim_sayac`, `test_process_summary`, `test_kursun_machine_order`, `test_kursun_regime_lock`, `test_kursun_unassigned_close`, `test_manual_move_field_continuity`, `test_manual_move_qc_reversal`, `test_p2_kk2reopen`, `test_property_value_selection`, `test_qc2_idempotency`⚠️, `test_station_property_mode`, `test_wo_target_color_guard`, `test_hizmet_fatura`
+Backend: `test_audit_followups`, `test_consistency_derived`, `test_e2e_full_flow`, `test_kursun_bulk`, `test_kursun_bypass`, `test_kursun_bypass_repoint`, `test_kursun_gramaj`, `test_kursun_gram_fiyati`, `test_kursun_metre`, `test_sarf_stok_defteri`, `test_kursun_metre_stok`, `test_en_olcen_istasyon`, `test_kursun_sapma`, `test_kursun_adim_sayac`, `test_process_summary`, `test_kursun_machine_order`, `test_kursun_planned_machine`, `test_kursun_regime_lock`, `test_kursun_unassigned_close`, `test_manual_move_field_continuity`, `test_manual_move_qc_reversal`, `test_p2_kk2reopen`, `test_property_value_selection`, `test_qc2_idempotency`⚠️, `test_station_property_mode`, `test_wo_target_color_guard`, `test_hizmet_fatura`
 
 İstemci: `machine-tabs.test.ts`, `queue-reorder.test.ts`, `selection.test.ts`, `production-regime.test.ts`, `tile-visibility.test.ts`
 

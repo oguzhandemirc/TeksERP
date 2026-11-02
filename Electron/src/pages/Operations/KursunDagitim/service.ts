@@ -19,6 +19,19 @@ export const kursunDagitimService = {
   // hale geldi (yalnız izinle süzülüyor) → onu tüketen `useKursunVisibility`
   // hook'u ile birlikte silindi. Backend ucu duruyor (eski APK uyumluluğu).
 
+  /** Gülkesim 2026-11-02: adımın önerilen makinesi (yalnız öneri); null kaldırır. */
+  setPlannedMachine: (
+    workOrderId: string,
+    stepId: string,
+    plannedMachineId: string | null,
+  ): Promise<ApiResponse<{ stepId: string; plannedMachineId: string | null; plannedMachineName: string | null }>> =>
+    apiClient
+      .patch<ApiResponse<{ stepId: string; plannedMachineId: string | null; plannedMachineName: string | null }>>(
+        `/api/work-orders/${workOrderId}/steps/${stepId}/planned-machine`,
+        { plannedMachineId },
+      )
+      .then((r) => r.data),
+
   /** Ekranın TEK payload'ı: bayrak + makineler + bekleyen + dağıtılmış. */
   getDistribution: (): Promise<ApiResponse<KursunDistributionPayload>> =>
     apiClient

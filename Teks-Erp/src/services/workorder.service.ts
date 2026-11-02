@@ -13,6 +13,7 @@ import { randomUUID } from "crypto";
 import { ROLL_DISPLAY_ORDER } from "../constants/roll-order";
 import { ACTIVE_OPERATION, OWN_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
+import { assertPlannedMachines, filterTemplatePlannedMachines } from "./helpers/planned-machine.helper";
 import {
   ACTIVE_ROLL_PROPERTY,
   ACTIVE_TARGET_PROPERTY,
@@ -550,6 +551,8 @@ export interface WorkOrderCreateInput {
     plannedSubcontractorId?: string | null;
     /** Fasona renksiz git (2026-08-17 "ekru" kuralı) — bkz. schema.prisma. */
     dispatchWithoutColor?: boolean;
+    /** Önerilen makine (yalnız öneri) — adımın istasyonuna ait olmalı. */
+    plannedMachineId?: string | null;
   }[];
   /**
    * routeTemplateId ile birlikte verilebilir: şablondan klonlanan adımların fason
@@ -561,6 +564,8 @@ export interface WorkOrderCreateInput {
     plannedSubcontractorId?: string | null;
     notes?: string | null;
     dispatchWithoutColor?: boolean;
+    /** Önerilen makine: verilirse şablon değerini ezer, null temizler. */
+    plannedMachineId?: string | null;
   }[];
   /**
    * Tercih edilen: her satıra tahsis miktarı.
@@ -939,6 +944,7 @@ export class WorkOrderService {
       requiredCategoryId?: string | null;
       plannedSubcontractorId?: string | null;
       dispatchWithoutColor?: boolean;
+      plannedMachineId?: string | null;
     }[] = [];
 
     // Eski veride aktif rota pasif renk/özellik planlıyor olabilir — engel değil UYARI.
@@ -984,7 +990,15 @@ export class WorkOrderService {
           plannedSubcontractorId: overlay?.plannedSubcontractorId ?? s.plannedSubcontractorId ?? null,
           // 2026-08-17: "fasona renksiz git" işareti de şablondan klonlanır.
           dispatchWithoutColor:   overlay?.dispatchWithoutColor ?? s.dispatchWithoutColor ?? false,
+          plannedMachineId:       s.plannedMachineId ?? null,
         };
+      });
+      // Şablondaki öneri bayatsa (pasif/başka istasyon) açılış durmaz: öneri düşer + uyarı.
+      const filtered = await filterTemplatePlannedMachines(prisma, finalSteps);
+      planWarnings.push(...filtered.warnings);
+      finalSteps = filtered.steps.map((st, i) => {
+        const overlay = planBySeq.get(template.steps[i].sequence);
+        return overlay && overlay.plannedMachineId !== undefined ? { ...st, plannedMachineId: overlay.plannedMachineId } : st;
       });
     } else {
       if (!data.steps || data.steps.length === 0) {
@@ -998,8 +1012,12 @@ export class WorkOrderService {
         requiredCategoryId:     s.requiredCategoryId ?? null,
         plannedSubcontractorId: s.plannedSubcontractorId ?? null,
         dispatchWithoutColor:   s.dispatchWithoutColor ?? false,
+        plannedMachineId:       s.plannedMachineId ?? null,
       }));
     }
+
+    // Açık verilen öneri (overlay/özel rota) sert doğrulanır: makine adımın istasyonunda + aktif.
+    await assertPlannedMachines(prisma, finalSteps);
 
     // ── Soft-delete guard (SEC-3): rotadaki istasyon/kategori/firma referansları
     // var + aktif olmalı. Custom rota VE şablon yolunu birlikte kapsar (şablon
@@ -1316,6 +1334,7 @@ export class WorkOrderService {
             notes:                  step.notes,
             requiredCategoryId:     step.requiredCategoryId ?? null,
             plannedSubcontractorId: step.plannedSubcontractorId ?? null,
+            plannedMachineId:       step.plannedMachineId ?? null,
             // "Fasona renksiz git" (2026-08-17 ekru kuralı). Bu satır 2026-08-25'e
             // kadar YOKTU: finalSteps alanı taşıyordu ama yazıma girmiyordu, yani
             // şablondan miras da form overlay'i de sessizce düşüyordu.
@@ -5297,6 +5316,10 @@ export class WorkOrderService {
       requiredCategoryId?: string | null;
       plannedSubcontractorId?: string | null;
       dispatchWithoutColor?: boolean;
+      /** Açık verilen öneri; undefined = mevcut adımda KORU (planlamacının sonradan seçimi ezilmez). */
+      plannedMachineId?: string | null;
+      /** Yalnız YENİ doğan adımda kullanılan şablon önerisi. */
+      templateMachineId?: string | null;
     }[] = [];
 
     if (data.routeTemplateId) {
@@ -5339,8 +5362,15 @@ export class WorkOrderService {
           requiredCategoryId: overlay?.requiredCategoryId ?? s.requiredCategoryId ?? null,
           plannedSubcontractorId: overlay?.plannedSubcontractorId ?? s.plannedSubcontractorId ?? null,
           dispatchWithoutColor: overlay?.dispatchWithoutColor ?? s.dispatchWithoutColor ?? false,
+          plannedMachineId: overlay?.plannedMachineId,
+          templateMachineId: s.plannedMachineId ?? null,
         };
       });
+      const tplFiltered = await filterTemplatePlannedMachines(
+        prisma,
+        finalSteps.map((st) => ({ stationId: st.stationId, plannedMachineId: st.templateMachineId })),
+      );
+      finalSteps = finalSteps.map((st, i) => ({ ...st, templateMachineId: tplFiltered.steps[i].plannedMachineId ?? null }));
     } else {
       if (!data.steps || data.steps.length === 0) {
         throw AppError.badRequest(
@@ -5354,8 +5384,11 @@ export class WorkOrderService {
         requiredCategoryId: s.requiredCategoryId ?? null,
         plannedSubcontractorId: s.plannedSubcontractorId ?? null,
         dispatchWithoutColor: s.dispatchWithoutColor ?? false,
+        plannedMachineId: s.plannedMachineId,
       }));
     }
+
+    await assertPlannedMachines(prisma, finalSteps);
 
     // ── Soft-delete guard (SEC-3, create() ile ortak helper) ────────────────
     await assertRouteRefsActive(finalSteps);
@@ -5815,6 +5848,10 @@ export class WorkOrderService {
               requiredCategoryId: incoming.requiredCategoryId ?? null,
               plannedSubcontractorId: incoming.plannedSubcontractorId ?? null,
               dispatchWithoutColor: incoming.dispatchWithoutColor ?? false,
+              // Öneri verilmediyse korunur; istasyon değiştiyse eski istasyonun makinesi anlamsız → düşer.
+              ...(incoming.plannedMachineId !== undefined
+                ? { plannedMachineId: incoming.plannedMachineId }
+                : old.stationId !== incoming.stationId ? { plannedMachineId: null } : {}),
             },
           });
         } else {
@@ -5827,6 +5864,7 @@ export class WorkOrderService {
               requiredCategoryId: incoming.requiredCategoryId ?? null,
               plannedSubcontractorId: incoming.plannedSubcontractorId ?? null,
               dispatchWithoutColor: incoming.dispatchWithoutColor ?? false,
+              plannedMachineId: incoming.plannedMachineId ?? incoming.templateMachineId ?? null,
             },
           });
         }

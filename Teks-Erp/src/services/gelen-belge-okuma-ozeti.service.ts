@@ -14,6 +14,7 @@ import { hasDocumentDeclared, totalsCheck } from "./gelen-belge-kontrol.service"
 import { readDocumentTotalCheck } from "./system-setting.service";
 import { noteNotices } from "../lib/gelen-belge/uyari";
 import { noteBatchAndMeters } from "./gelen-belge-parti-metre.service";
+import { suggestOwnerForNote } from "./gelen-belge-sahip-onerisi.service";
 
 export type ReadSummaryState = "NO_PAGES" | "READING" | "NO_SERVICE" | "READ" | "PARTIAL" | "FAILED";
 
@@ -71,7 +72,7 @@ export async function getReadSummary(noteId: string) {
   const note = await prisma.customerDeliveryNote.findUnique({
     where: { id: noteId },
     select: {
-      id: true, noteNo: true, status: true, declaredTopCount: true, totalsDeclared: true, warnings: true,
+      id: true, noteNo: true, status: true, ownerCustomerId: true, declaredTopCount: true, totalsDeclared: true, warnings: true,
       ourBatchNo: true, ourBatchNoKey: true, kursunMeters: true, kursunMetersSource: true, kursunMetersReview: true,
       lines: { select: { blockNo: true, meters: true, weightKg: true, status: true, needsReview: true } },
       scans: { select: { status: true, attempts: true, mimeType: true } },
@@ -106,5 +107,7 @@ export async function getReadSummary(noteId: string) {
     kursunMetersSource: note.kursunMetersSource,
     kursunMetersReview: note.kursunMetersReview,
     ...(await noteBatchAndMeters(note.id, note.totalsDeclared, live.filter((l) => l.status !== "INFO").map((l) => l.meters))),
+    // Müşteri önerisi (OIE) — detayla AYNI helper; tablet `gelen-belge:read` taşımaz. Eski tablet alanı yok sayar.
+    ownerSuggestion: await suggestOwnerForNote({ id: note.id, status: note.status, ownerCustomerId: note.ownerCustomerId }),
   };
 }

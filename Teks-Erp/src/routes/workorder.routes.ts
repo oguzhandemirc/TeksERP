@@ -9,7 +9,7 @@ import { requireProductionEnabled } from "../middlewares/module.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { workOrderTravelerRouter } from "./traveler-card.routes";
 import { requireQuickWorkOrderOwnership } from "../services/helpers/scope-narrowing.helper";
-import { getWorkOrderSummary, putTargetValues } from "../controllers/workorder-process.controller";
+import { getWorkOrderSummary, patchStepPlannedMachine, putTargetValues } from "../controllers/workorder-process.controller";
 
 const controller = new WorkOrderController();
 const router = Router();
@@ -527,6 +527,44 @@ router.patch(
   verifyToken,
   requirePermission("workorder:write"),
   controller.updateStepPlanning
+);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/steps/{stepId}/planned-machine:
+ *   patch:
+ *     summary: Adımın önerilen makinesini değiştir (yalnız öneri; fiilî makine tablet oturumundan)
+ *     tags: [WorkOrders]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: stepId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [plannedMachineId]
+ *             properties:
+ *               plannedMachineId: { type: string, format: uuid, nullable: true }
+ *     responses:
+ *       200: { description: Öneri kaydedildi }
+ *       400: { description: Makine adımın istasyonuna ait değil ya da pasif (details.code PLANNED_MACHINE_STATION_MISMATCH / PLANNED_MACHINE_INACTIVE) }
+ *       409: { description: Adım kapanmış ya da iş emri sonlanmış (details.code STEP_NOT_OPEN) }
+ */
+router.patch(
+  "/:id/steps/:stepId/planned-machine",
+  verifyToken,
+  // Planlama kararı: iş emri yazan ya da kurşun dağıtımı yapan (panel/tablet) değiştirebilir.
+  requireAnyPermission("workorder:write", "workorder:distribute", "mobile:kursun-dagitim"),
+  patchStepPlannedMachine,
 );
 
 /**

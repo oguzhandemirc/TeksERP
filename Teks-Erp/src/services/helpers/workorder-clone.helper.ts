@@ -106,6 +106,7 @@ export async function cloneWorkOrderTx(
           stepData: true,
           requiredCategoryId: true,
           plannedSubcontractorId: true,
+          plannedMachineId: true,
         },
       },
       // Aktif süzgeç: damgalı hedef klonlanırsa nested create aynı propertyId'yi iki kez
@@ -149,6 +150,7 @@ export async function cloneWorkOrderTx(
           stepData: (s.stepData as Prisma.InputJsonValue) ?? undefined,
           requiredCategoryId: s.requiredCategoryId ?? null,
           plannedSubcontractorId: s.plannedSubcontractorId ?? null,
+          plannedMachineId: s.plannedMachineId ?? null,
           status:
             s.stepSequence < S
               ? StepStatus.COMPLETED

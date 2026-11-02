@@ -84,6 +84,9 @@ const cariCreateSchema = z
     withholdingEnabled: z.boolean().nullable().optional(),
     withholdingNumerator: z.number().int().nullable().optional(),
     withholdingDenominator: z.number().int().nullable().optional(),
+    // oie-a: müşteriye özel kurşun gram fiyatı (1 gr/m başına metre fiyatı); null = istasyonunki. Para birimiyle birlikte.
+    kursunGramPrice: z.union([z.string().max(20), z.number()]).nullable().optional(),
+    kursunGramCurrency: z.enum(["TRY", "USD", "EUR", "GBP", "RUB"]).nullable().optional(),
   })
   .strict();
 

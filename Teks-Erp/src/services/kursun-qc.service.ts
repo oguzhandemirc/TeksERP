@@ -186,7 +186,8 @@ interface StepSummary {
     valueType: FabricPropertyValueType;
     /// SEÇİM tipliyse operatöre sunulacak AKTİF değerler (BAYRAK'ta boş).
     /// Tablet tuşlarını BURADAN çizer — kodda sabit liste YOK.
-    values: { code: string; name: string }[];
+    /// `isDefault` (oie-a): çeşidin tek varsayılanı — hedef yoksa tablet bunu vurgular. Eski APK yok sayar.
+    values: { code: string; name: string; isDefault: boolean }[];
     /// Bu SEÇİM hangi BAYRAĞIN çeşidi (KQ-D4; çeşit değilse null).
     variantOfPropertyId: string | null;
   }[];
@@ -385,6 +386,8 @@ export class KursunQcService {
         openErrorCount: number;
         priority: number;
         isUrgent: boolean;
+        /** Gülkesim 2026-11-02: planlanan makine adı (yalnız öneri rozeti). Eski APK yok sayar. */
+        plannedMachineName: string | null;
       }>
     >
   > {
@@ -423,6 +426,7 @@ export class KursunQcService {
         priority: true,
         isUrgent: true,
         urgentMarkedAt: true,
+        plannedMachine: { select: { name: true } },
         station: { select: { name: true, code: true } },
         workOrder: {
           select: {
@@ -478,6 +482,7 @@ export class KursunQcService {
           openErrorCount: openErrorsByStep.get(s.id) ?? 0,
           priority: s.priority,
           isUrgent: s.isUrgent,
+          plannedMachineName: s.plannedMachine?.name ?? null,
         };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
@@ -1880,7 +1885,7 @@ export class KursunQcService {
           name: c.name,
           mode: c.mode,
           valueType: c.valueType,
-          values: c.values.map((v) => ({ code: v.code, name: v.name })),
+          values: c.values.map((v) => ({ code: v.code, name: v.name, isDefault: v.isDefault === true })),
           // KQ-D4: bu SEÇİM hangi BAYRAĞIN çeşidi (gramaj → Kurşunlu). Eski APK yok sayar.
           variantOfPropertyId: c.variantOfPropertyId,
         })),

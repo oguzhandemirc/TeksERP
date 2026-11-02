@@ -12,6 +12,10 @@ export interface FabricPropertyValue {
   serviceItemId?: string | null;
   /** Brode deseni: bir adetteki vuruş sayısı (VURUŞ fiyat birimi); null = girilmedi. */
   stitchCount?: number | null;
+  /** Kurşun gramajı gr/m (ondalık metin, oie-a); null = sayısız. Eski backend göndermez. */
+  amount?: string | null;
+  /** Çeşidin TEK varsayılanı (oie-a). Eski backend göndermez → hiçbiri seçilmez. */
+  isDefault?: boolean;
 }
 
 export interface FabricProperty {

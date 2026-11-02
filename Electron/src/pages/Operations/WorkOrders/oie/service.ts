@@ -1,0 +1,83 @@
+// "İş emri oluştur" (Gülkesim K6–K9) panel servisi — backend sözleşmesi (B): kısayol listesi `GET /api/routes?shortcut=1`,
+// belgeden tek seferde iş emri `POST /api/gelen-belge/irsaliyeler/:id/is-emri`. Eski backend alanları göndermez →
+// kısayol listesi boş sayılır (bugünkü form), uç yoksa 404 satır sonucuna düşer.
+import axios from "axios";
+import apiClient from "@/services/apiClient";
+import type { ApiResponse } from "@/types/api";
+
+/** İş emri kısayolu = `isWorkOrderShortcut` işaretli rota şablonu (sıra `shortcutOrder`). */
+export interface WorkOrderShortcut {
+  id: string;
+  name: string;
+  description: string | null;
+  shortcutOrder: number;
+  stepNames: string[];
+}
+
+interface RouteRow {
+  id: string;
+  name: string;
+  description?: string | null;
+  isActive?: boolean;
+  isWorkOrderShortcut?: boolean;
+  shortcutOrder?: number;
+  steps?: Array<{ sequence: number; station?: { name: string } | null }>;
+}
+
+/** `?shortcut=1` sunucuda sayfasız döner (en çok 100). Yanıttan kısayolları süzer: sunucu süzgeci tanımıyorsa (eski backend) bütün rotalar gelir — işaretsizler atılır. */
+export function toShortcuts(rows: readonly RouteRow[]): WorkOrderShortcut[] {
+  return rows
+    .filter((r) => r.isWorkOrderShortcut === true && r.isActive !== false)
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      description: r.description ?? null,
+      shortcutOrder: r.shortcutOrder ?? 0,
+      stepNames: [...(r.steps ?? [])].sort((a, b) => a.sequence - b.sequence).map((s) => s.station?.name ?? "?"),
+    }))
+    .sort((a, b) => a.shortcutOrder - b.shortcutOrder || a.name.localeCompare(b.name, "tr"));
+}
+
+export const WORK_ORDER_SHORTCUTS_KEY = ["routes", "work-order-shortcuts"] as const;
+
+export async function listWorkOrderShortcuts(): Promise<WorkOrderShortcut[]> {
+  const r = await apiClient.get<{ data?: RouteRow[] } | RouteRow[]>("/api/routes", { params: { shortcut: 1 } });
+  const body = r.data;
+  return toShortcuts(Array.isArray(body) ? body : (body.data ?? []));
+}
+
+/** Sözleşme 3 gövdesi. `kursunMeters` Decimal metni ("4521.5"). */
+export interface NoteWorkOrderBody {
+  clientToken: string;
+  ownerCustomerId: string;
+  ourBatchNo?: string;
+  ourBatchNoKey?: string;
+  kursunMeters: string;
+  routeTemplateId: string;
+  stepPlanning?: Array<{ sequence: number; plannedMachineId?: string | null }>;
+  targetValues?: Array<{ propertyId: string; valueId: string }>;
+  notes?: string;
+}
+
+export interface NoteWorkOrderResult {
+  workOrderId: string;
+  workOrderNo: string;
+  batchNumber: string | null;
+  rollId: string | null;
+}
+
+/** Hata toast'unu çağıran yazar (satır/ekran sonucu tek yüzey). */
+export async function createWorkOrderFromNote(noteId: string, body: NoteWorkOrderBody): Promise<NoteWorkOrderResult> {
+  const r = await apiClient.post<ApiResponse<NoteWorkOrderResult>>(`/api/gelen-belge/irsaliyeler/${noteId}/is-emri`, body, { suppressErrorToast: true });
+  return r.data.data;
+}
+
+/** Ayar kapalıyken sunucunun 403 kodu (sözleşme 3). */
+export const FORM_APPROVAL_DISABLED = "GELEN_BELGE_FORM_APPROVAL_DISABLED";
+
+/** `details.code` (backend AppError sözleşmesi; `body.code` okunmaz). */
+export function errorCode(e: unknown): string | null {
+  if (!axios.isAxiosError(e)) return null;
+  const c = (e.response?.data as { details?: { code?: unknown } } | undefined)?.details?.code;
+  return typeof c === "string" ? c : null;
+}

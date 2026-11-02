@@ -15,6 +15,7 @@
 // ⚠️ SÜZME SUNUCUDA (`status` CSV · `itemId` CSV · `subcontractorId` · arama).
 // =============================================================================
 import { useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
@@ -39,6 +40,7 @@ import { WeavingOrderDetailSheet } from "./WeavingOrderDetailSheet";
 import { WEAVING_ORDERS_QUERY_KEY, WEAVING_ORDER_OVERVIEW_QUERY_KEY, useWeavingOrderMutations } from "./useWeavingOrderMutations";
 import { WEAVING_STATUSES, WEAVING_STATUS_META, type WeavingOrder } from "./types";
 import { TERIM } from "@/lib/terim";
+import type { WeavingNavState } from "@/pages/Operations/WorkOrders/oie/nav";
 
 const FILTERS: FilterDef[] = [
   {
@@ -72,8 +74,14 @@ function HeaderActions({ onNew }: { onNew: () => void }) {
   );
 }
 
+/** "İş emri oluştur" seçicisinden (K6) gelince oluşturma diyaloğu açık doğar. */
+function useFormTarget() {
+  const openNew = (useLocation().state as WeavingNavState | null)?.openNew === true;
+  return useState<FormTarget>(openNew ? "new" : null);
+}
+
 export function WeavingOrdersPage() {
-  const [formTarget, setFormTarget] = useState<FormTarget>(null);
+  const [formTarget, setFormTarget] = useFormTarget();
   const [closing, setClosing] = useState<WeavingOrder | null>(null);
   const [cancelling, setCancelling] = useState<WeavingOrder | null>(null);
   const [fason, setFason] = useState<WeavingOrder | null>(null);

@@ -10,6 +10,8 @@ export interface RouteStep {
   /** "Fasona renksiz git" (2026-08-17 ekru kuralı) — şablonda saklanır, WO
    *  açılışında `WorkOrderStep.dispatchWithoutColor`a klonlanır. */
   dispatchWithoutColor?: boolean;
+  /** Önerilen makine (Gülkesim 2026-11-02, yalnız öneri) — İE adımına klonlanır. */
+  plannedMachineId?: string | null;
   /** 2026-08-06: adımın şablon hedefi — WO açılışında hedef alanlara kopyalanır. */
   plannedColorId?: string | null;
   plannedColor?: { id: string; code: string; name: string; hex: string | null } | null;
@@ -49,6 +51,9 @@ export interface ProductionRoute {
   name: string;
   description: string | null;
   isFavorite: boolean;
+  /** İş emri kısayolu (K6); eski backend göndermez. */
+  isWorkOrderShortcut?: boolean;
+  shortcutOrder?: number;
   customerId: string | null;
   isActive: boolean;
   steps: RouteStep[];
