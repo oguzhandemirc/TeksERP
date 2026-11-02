@@ -84,7 +84,7 @@ beforeEach(() => {
 });
 afterEach(() => act(() => useAuthStore.setState({ user: null })));
 
-describe('ApprovalCard', () => {
+describe('ApprovalCard — onaylayan kullanıcı', () => {
   it('⭐ onay izni: aday seçimi PATCH, varsayılan rota → gövdede routeTemplateId YOK, sonuçta iş emri no', async () => {
     const { r, onDone } = render();
     expect(await r.findByTestId('onay-karti')).toBeTruthy();
@@ -151,6 +151,9 @@ describe('ApprovalCard', () => {
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith('n1', { kursunMeters: 4521 }));
   });
 
+});
+
+describe('ApprovalCard — izin, sunucu sinyali ve hata', () => {
   it('izin yok → "Taslak olarak bırak": onay ÇAĞRILMAZ, rota sorulmaz, ekran yeni belgeye döner', async () => {
     setPerms(['gelen-belge:write', 'gelen-belge:read']);
     const { r, onDone } = render();

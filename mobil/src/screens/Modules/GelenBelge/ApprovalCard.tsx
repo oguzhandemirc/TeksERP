@@ -9,11 +9,11 @@ import Toast from 'react-native-toast-message';
 import ModuleSheet, { SheetField } from '../../../components/ModuleSheet';
 import NumpadInput from '../../../components/NumpadInput';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
-import { inboundDocService } from '../../../services/inboundDoc.service';
+import { inboundDocService, type ApproveNoteResult } from '../../../services/inboundDoc.service';
 import { colors, radius, spacing, typography } from '../../../theme';
 import { INBOUND_DOC_CONTEXT_KEY } from './DocHeader';
-import { approvalCardView, approveResultView, batchPatch, parseMeters } from './approvalGate';
-import { useApprovalCard } from './useApprovalCard';
+import { approvalCardView, approveResultView, batchPatch, parseMeters, type ApprovalCardView } from './approvalGate';
+import { useApprovalCard, type ApprovalCardState } from './useApprovalCard';
 
 interface Props {
   noteId: string;
@@ -28,29 +28,11 @@ export default function ApprovalCard({ noteId, readDone, onDone }: Props) {
   const c = useApprovalCard(noteId, readDone);
   const [picker, setPicker] = useState<Picker>(null);
   const [meterOpen, setMeterOpen] = useState(false);
-  const [meterText, setMeterText] = useState('');
   const ctx = useQuery({ queryKey: INBOUND_DOC_CONTEXT_KEY, queryFn: inboundDocService.tabletContext, staleTime: 60_000, enabled: !!c.detail });
   const customers: PickerOption[] = useMemo(() => (ctx.data?.data.customers ?? []).map((x) => ({ value: x.id, label: x.name })), [ctx.data]);
   const routeOptions: PickerOption[] = useMemo(() => c.routes.map((r) => ({ value: r.id, label: r.name, sublabel: r.code ?? undefined })), [c.routes]);
 
-  if (c.result) {
-    const r = approveResultView(c.result);
-    return (
-      <View style={[styles.box, r.tone === 'ok' ? styles.ok : styles.warn]} testID="onay-karti-sonuc">
-        <Text style={styles.title}>{r.title}</Text>
-        {r.lines.map((l) => (
-          <Text key={l} style={styles.note}>
-            • {l}
-          </Text>
-        ))}
-        <View style={styles.actions}>
-          <Button mode="contained" icon="check" onPress={onDone} contentStyle={styles.btn} testID="onay-karti-bitti">
-            Bitti
-          </Button>
-        </View>
-      </View>
-    );
-  }
+  if (c.result) return <ApprovalResult result={c.result} onDone={onDone} />;
   if (!c.detail) return null;
 
   const d = c.detail;
@@ -58,16 +40,10 @@ export default function ApprovalCard({ noteId, readDone, onDone }: Props) {
   const busy = c.busy !== null;
   const ownerName = customers.find((o) => o.value === d.ownerCustomerId)?.label ?? (d.ownerCustomerId ? 'Seçili müşteri' : '');
   const routeName = c.routeTemplateId ? routeOptions.find((o) => o.value === c.routeTemplateId)?.label ?? 'Seçili rota' : 'Fabrika varsayılanı';
-  const enteredMeters = parseMeters(meterText);
-
   const primary = () => {
     if (v.action === 'APPROVE') return void c.approve();
     Toast.show({ type: 'info', text1: `${d.noteNo} taslak olarak bırakıldı`, text2: 'Onay panelden (Gelen Belgeler) yetkili kişi tarafından verilir.' });
     onDone();
-  };
-  const saveMeters = async (value: number) => {
-    setMeterOpen(false);
-    await c.patch({ kursunMeters: value });
   };
 
   return (
@@ -76,9 +52,7 @@ export default function ApprovalCard({ noteId, readDone, onDone }: Props) {
         <Text style={styles.title}>Onay ve iş emri</Text>
         {busy && <ActivityIndicator size="small" />}
       </View>
-
       <SheetField label="Müşteri" value={ownerName} placeholder="Müşteri seçin" onPress={() => setPicker('owner')} disabled={busy} />
-
       <View testID="onay-karti-parti">
         <SheetField
           label="Parti no"
@@ -89,45 +63,15 @@ export default function ApprovalCard({ noteId, readDone, onDone }: Props) {
           hint={v.batch.value && v.batch.candidates.length > 1 ? `${v.batch.candidates.length} aday — değiştirmek için dokunun` : undefined}
         />
       </View>
-
-      <View testID="onay-karti-metre">
-        <Text style={styles.label}>Kurşun metresi</Text>
-        <View style={styles.row}>
-          <Text style={[styles.meters, v.meters.review && styles.warnText, !v.meters.text && styles.muted]}>
-            {v.meters.text ?? 'Metre okunamadı'}
-          </Text>
-          {v.canVerify && (
-            <Button mode="contained-tonal" icon="check" onPress={() => void c.patch({ kursunMetersReviewed: true })} disabled={busy} contentStyle={styles.btn} testID="onay-karti-dogrula">
-              Doğrula
-            </Button>
-          )}
-          <Button
-            mode="outlined"
-            icon="pencil"
-            onPress={() => {
-              setMeterText('');
-              setMeterOpen(true);
-            }}
-            disabled={busy}
-            contentStyle={styles.btn}
-            testID="onay-karti-duzelt"
-          >
-            {v.meters.text ? 'Düzelt' : 'Metre gir'}
-          </Button>
-        </View>
-        {v.meters.review && <Text style={styles.warnText}>Metre doğrulama bekliyor: belgedeki değeri kontrol edin.</Text>}
-      </View>
-
+      <MeterRow v={v} busy={busy} onVerify={() => void c.patch({ kursunMetersReviewed: true })} onEdit={() => setMeterOpen(true)} />
       {v.action === 'APPROVE' && (
         <SheetField label="Rota şablonu" value={routeName} placeholder="Fabrika varsayılanı" onPress={() => setPicker('route')} disabled={busy} />
       )}
-
       {[...v.reasons, ...v.warnings].map((n) => (
         <Text key={n} style={styles.note}>
           • {n}
         </Text>
       ))}
-
       <View style={styles.actions}>
         <Button
           mode="contained"
@@ -141,20 +85,78 @@ export default function ApprovalCard({ noteId, readDone, onDone }: Props) {
           {v.label}
         </Button>
       </View>
+      <ApprovalPickers c={c} v={v} picker={picker} onClose={() => setPicker(null)} customers={customers} customersQuery={ctx} routeOptions={routeOptions} />
+      {meterOpen && <MeterSheet visible v={v} onDismiss={() => setMeterOpen(false)} onSave={(m) => { setMeterOpen(false); void c.patch({ kursunMeters: m }); }} />}
+    </View>
+  );
+}
 
+function ApprovalResult({ result, onDone }: { result: ApproveNoteResult; onDone: () => void }) {
+  const r = approveResultView(result);
+  return (
+    <View style={[styles.box, r.tone === 'ok' ? styles.ok : styles.warn]} testID="onay-karti-sonuc">
+      <Text style={styles.title}>{r.title}</Text>
+      {r.lines.map((l) => (
+        <Text key={l} style={styles.note}>
+          • {l}
+        </Text>
+      ))}
+      <View style={styles.actions}>
+        <Button mode="contained" icon="check" onPress={onDone} contentStyle={styles.btn} testID="onay-karti-bitti">
+          Bitti
+        </Button>
+      </View>
+    </View>
+  );
+}
+
+function MeterRow({ v, busy, onVerify, onEdit }: { v: ApprovalCardView; busy: boolean; onVerify: () => void; onEdit: () => void }) {
+  return (
+    <View testID="onay-karti-metre">
+      <Text style={styles.label}>Kurşun metresi</Text>
+      <View style={styles.row}>
+        <Text style={[styles.meters, v.meters.review && styles.warnText, !v.meters.text && styles.muted]}>{v.meters.text ?? 'Metre okunamadı'}</Text>
+        {v.canVerify && (
+          <Button mode="contained-tonal" icon="check" onPress={onVerify} disabled={busy} contentStyle={styles.btn} testID="onay-karti-dogrula">
+            Doğrula
+          </Button>
+        )}
+        <Button mode="outlined" icon="pencil" onPress={onEdit} disabled={busy} contentStyle={styles.btn} testID="onay-karti-duzelt">
+          {v.meters.text ? 'Düzelt' : 'Metre gir'}
+        </Button>
+      </View>
+      {v.meters.review && <Text style={styles.warnText}>Metre doğrulama bekliyor: belgedeki değeri kontrol edin.</Text>}
+    </View>
+  );
+}
+
+interface PickersProps {
+  c: ApprovalCardState;
+  v: ApprovalCardView;
+  picker: Picker;
+  onClose: () => void;
+  customers: PickerOption[];
+  customersQuery: { isLoading: boolean; isError: boolean; refetch: () => unknown };
+  routeOptions: PickerOption[];
+}
+
+function ApprovalPickers({ c, v, picker, onClose, customers, customersQuery, routeOptions }: PickersProps) {
+  const ownerId = c.detail?.ownerCustomerId ?? null;
+  return (
+    <>
       <PickerModal
         visible={picker === 'owner'}
         title="Belgenin sahibi"
         options={customers}
-        selectedValue={d.ownerCustomerId}
+        selectedValue={ownerId}
         onSelect={(id) => {
-          setPicker(null);
-          if (id !== d.ownerCustomerId) void c.patch({ ownerCustomerId: id });
+          onClose();
+          if (id !== ownerId) void c.patch({ ownerCustomerId: id });
         }}
-        onDismiss={() => setPicker(null)}
-        loading={ctx.isLoading}
-        onRefresh={ctx.refetch}
-        emptyText={ctx.isError ? 'Liste yüklenemedi — bu bir "müşteri yok" cevabı DEĞİLDİR.' : 'Aktif müşteri yok.'}
+        onDismiss={onClose}
+        loading={customersQuery.isLoading}
+        onRefresh={() => void customersQuery.refetch()}
+        emptyText={customersQuery.isError ? 'Liste yüklenemedi — bu bir "müşteri yok" cevabı DEĞİLDİR.' : 'Aktif müşteri yok.'}
       />
       <PickerModal
         visible={picker === 'batch'}
@@ -163,11 +165,11 @@ export default function ApprovalCard({ noteId, readDone, onDone }: Props) {
         selectedValue={String(v.batch.candidates.findIndex((x) => x.value === v.batch.value))}
         disableSort
         onSelect={(i) => {
-          setPicker(null);
+          onClose();
           const cand = v.batch.candidates[Number(i)];
           if (cand && cand.value !== v.batch.value) void c.patch(batchPatch(cand));
         }}
-        onDismiss={() => setPicker(null)}
+        onDismiss={onClose}
         emptyText="Belgede parti no adayı yok."
       />
       <PickerModal
@@ -182,52 +184,51 @@ export default function ApprovalCard({ noteId, readDone, onDone }: Props) {
           icon: 'factory',
           onPress: () => {
             c.setRouteTemplateId(null);
-            setPicker(null);
+            onClose();
           },
         }}
         onSelect={(id) => {
           c.setRouteTemplateId(id);
-          setPicker(null);
+          onClose();
         }}
-        onDismiss={() => setPicker(null)}
+        onDismiss={onClose}
         emptyText="Rota listesi okunamadı — fabrika varsayılanı kullanılır."
       />
-      <ModuleSheet
-        visible={meterOpen}
-        onDismiss={() => setMeterOpen(false)}
-        title="Kurşun metresi"
-        subtitle={v.meters.text ? `Okunan: ${v.meters.text}` : 'Belgeden okunamadı'}
-        size="sm"
-        footer={
-          <View style={styles.actions}>
-            <Button onPress={() => setMeterOpen(false)} contentStyle={styles.btn}>
-              Vazgeç
-            </Button>
-            <Button mode="contained" disabled={enteredMeters === null} onPress={() => enteredMeters !== null && void saveMeters(enteredMeters)} contentStyle={styles.btn} testID="onay-karti-metre-kaydet">
-              Kaydet
-            </Button>
-          </View>
-        }
-      >
-        {v.meters.choices.length > 0 && <Text style={styles.label}>Belgedeki değerler</Text>}
-        <View style={styles.chips}>
-          {v.meters.choices.map((m) => (
-            <Chip key={m.role} onPress={() => void saveMeters(m.value)} style={styles.chip} testID={`onay-karti-metre-${m.role}`}>
-              {`${m.label}: ${m.text}`}
-            </Chip>
-          ))}
+    </>
+  );
+}
+
+function MeterSheet({ visible, v, onDismiss, onSave }: { visible: boolean; v: ApprovalCardView; onDismiss: () => void; onSave: (m: number) => void }) {
+  const [text, setText] = useState('');
+  const entered = parseMeters(text);
+  return (
+    <ModuleSheet
+      visible={visible}
+      onDismiss={onDismiss}
+      title="Kurşun metresi"
+      subtitle={v.meters.text ? `Okunan: ${v.meters.text}` : 'Belgeden okunamadı'}
+      size="sm"
+      footer={
+        <View style={styles.actions}>
+          <Button onPress={onDismiss} contentStyle={styles.btn}>
+            Vazgeç
+          </Button>
+          <Button mode="contained" disabled={entered === null} onPress={() => entered !== null && onSave(entered)} contentStyle={styles.btn} testID="onay-karti-metre-kaydet">
+            Kaydet
+          </Button>
         </View>
-        <NumpadInput
-          value={meterText}
-          onChangeText={setMeterText}
-          label="Metre"
-          mode="outlined"
-          useNativeKeyboard
-          allowDecimal
-          testID="onay-karti-metre-giris"
-        />
-      </ModuleSheet>
-    </View>
+      }
+    >
+      {v.meters.choices.length > 0 && <Text style={styles.label}>Belgedeki değerler</Text>}
+      <View style={styles.chips}>
+        {v.meters.choices.map((m) => (
+          <Chip key={m.role} onPress={() => onSave(m.value)} style={styles.chip} testID={`onay-karti-metre-${m.role}`}>
+            {`${m.label}: ${m.text}`}
+          </Chip>
+        ))}
+      </View>
+      <NumpadInput value={text} onChangeText={setText} label="Metre" mode="outlined" useNativeKeyboard allowDecimal testID="onay-karti-metre-giris" />
+    </ModuleSheet>
   );
 }
 
