@@ -3,6 +3,7 @@
 // Eski backend yeni alanları göndermez → alan/bant çizilmez, gövdeye girmez.
 // Negatif sonda: `suspectRank` sıralamadan çıkarılınca "şüpheli önce" kırmızı; precheck BLOCK_SUSPECT dalı kapatılınca
 // "BLOCK_SUSPECT engeller" kırmızı; `useReadOptionsDraft` gövdesi koşulsuz kurulunca "eski backend … yalnız o gider" kırmızı.
+// Kayıt kipi (Gülkesim parti/metre P1): `useEntryModeDraft` gövdesinden `entryMode` çıkarılınca "yalnız değişen üç alan" kırmızı.
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
@@ -138,5 +139,56 @@ describe("Genel Ayarlar → Gelen Belge: okuma seçenekleri", () => {
     renderWithProviders(<IncomingDocumentSettingsSection />);
     await screen.findByRole("radio", { name: /Yalnız şüpheli değeri engelle/ });
     expect(screen.queryByTestId("gb-document-total-check")).toBeNull();
+  });
+});
+
+describe("Genel Ayarlar → Gelen Belge: kayıt kipi (parti no + kurşun metresi)", () => {
+  const KIP = {
+    ...BASE,
+    batchNumberSource: "SERIES", defaultBatchNumberSource: "SERIES",
+    entryMode: "PER_LINE", defaultEntryMode: "PER_LINE",
+    autoWorkOrderPatternless: "SKIP", defaultAutoWorkOrderPatternless: "SKIP",
+  };
+  beforeEach(() => {
+    getSettings.mockReset();
+    updateSettings.mockReset();
+  });
+
+  it("⭐ varsayılanlar (bugünkü) seçili; üçü değişince YALNIZ bu üç alan gider", async () => {
+    getSettings.mockResolvedValue({ ...KIP, defaultItem: { id: "i1", code: "MM", name: "Müşteri malı", problem: null } });
+    updateSettings.mockResolvedValue(KIP);
+    renderWithProviders(<IncomingDocumentSettingsSection />);
+    expect(await screen.findByRole("radio", { name: /Her satır bir top/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Numara serisinden/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /^Atla/ })).toBeChecked();
+    expect(screen.getByTestId("gb-entry-mode")).toHaveTextContent("Varsayılan: Her satır bir top");
+    await userEvent.click(screen.getByRole("radio", { name: /Belge başına tek kayıt/ }));
+    expect(screen.queryByTestId("gb-entry-mode-needs-item")).toBeNull();
+    await userEvent.click(screen.getByRole("radio", { name: /Belgedeki parti no/ }));
+    await userEvent.click(screen.getByRole("radio", { name: /Hedef değersiz aç/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(updateSettings.mock.calls[0]![0]).toStrictEqual({ entryMode: "PER_DOCUMENT", batchNumberSource: "DOCUMENT", autoWorkOrderPatternless: "OPEN" });
+  });
+
+  it("belge başına tek kayıt + varsayılan ürün boş → uyarı; kayıt yine sunucuya gider (kapı sunucuda)", async () => {
+    getSettings.mockResolvedValue(KIP);
+    updateSettings.mockRejectedValue(new AxiosError("400"));
+    renderWithProviders(<IncomingDocumentSettingsSection />);
+    await userEvent.click(await screen.findByRole("radio", { name: /Belge başına tek kayıt/ }));
+    expect(screen.getByTestId("gb-entry-mode-needs-item")).toHaveTextContent("varsayılan ürünü ister");
+    await userEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ entryMode: "PER_DOCUMENT" }));
+  });
+
+  it("eski backend alanları göndermez → üç alan çizilmez, gövdeye girmez", async () => {
+    getSettings.mockResolvedValue(BASE);
+    updateSettings.mockResolvedValue(BASE);
+    renderWithProviders(<IncomingDocumentSettingsSection />);
+    await userEvent.click(await screen.findByRole("radio", { name: /Yalnız şüpheli değeri engelle/ }));
+    for (const id of ["gb-entry-mode", "gb-batch-number-source", "gb-auto-work-order-patternless"]) expect(screen.queryByTestId(id)).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(updateSettings.mock.calls[0]![0]).toStrictEqual({ unreviewedApproval: "BLOCK_SUSPECT" });
   });
 });

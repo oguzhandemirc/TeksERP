@@ -44,6 +44,10 @@ describe("palet: ayar araması", () => {
     expect(top(q).to).toBe("/system/feature-flags?tab=gelen-belge");
   });
 
+  it.each(["belge başına tek kayıt", "onay kipi"])('"%s" → Gelen Belge ayar bölümü ilk sırada (Gülkesim kayıt kipi)', (q) => {
+    expect(top(q).to).toBe("/system/feature-flags?tab=gelen-belge");
+  });
+
   it.each(["belge geneli", "müşteri mt"])('"%s" → Gelen Belge ayar bölümü ilk sırada (belge geneli beyan kipi)', (q) => {
     expect(top(q).to).toBe("/system/feature-flags?tab=gelen-belge");
   });
