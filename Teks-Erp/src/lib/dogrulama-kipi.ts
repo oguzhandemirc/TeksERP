@@ -16,6 +16,18 @@ export function isVerificationMode(env: NodeJS.ProcessEnv = process.env): boolea
   return env[VERIFICATION_MODE_ENV] === "1";
 }
 
+/**
+ * Yardımcı test sunucusu kipi (CI HTTP bekçi sunucuları, `scripts/bekci-http.ts`): `SKIPPED` listesindeki işler
+ * başlamaz, başka hiçbir şey değişmez (HOST/TLS/lisans motoru normal). Gerekçe: test DB'ye paylaşılan bu sunucuların
+ * kur turu gerçek TCMB kurunu yazıp "kur yok" varsayan bekçileri sıraya bağlı kırıyordu (arşiv 2026-11-02).
+ */
+export const SCHEDULED_JOBS_OFF_ENV = "TEKSERP_ZAMANLAYICI_KAPALI";
+
+/** Yalnız "1" kapatır; bayrak yoksa (üretim) işler bugünkü gibi başlar. */
+export function isScheduledJobsOff(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[SCHEDULED_JOBS_OFF_ENV] === "1";
+}
+
 /** Doğrulama kipinde BAŞLAMAYAN açılış işleri (zamanlayıcı ya da dış bağlantı) — `server.ts`teki çağrı adı. */
 export const VERIFICATION_SKIPPED_JOBS = [
   "startMaintenanceScheduler", // gece bakımı: audit arşivi + budama + yedek rotasyonu (zamanlayıcı, DB/dosya yazar)

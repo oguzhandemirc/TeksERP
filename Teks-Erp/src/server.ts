@@ -44,7 +44,7 @@ import type { Server } from "node:http";
 import { bootFactoryTimezone } from "./services/factory-timezone.service";
 import { shutdownChannel } from "./lib/hizmet-duzeni";
 import { listenShutdownChannel } from "./lib/kapanis-kanali";
-import { isVerificationMode } from "./lib/dogrulama-kipi";
+import { isScheduledJobsOff, isVerificationMode } from "./lib/dogrulama-kipi";
 import { readLanTlsConfig } from "./lib/lan-tls/config";
 import { startLanTlsListener, stopLanTlsListener } from "./lib/lan-tls/listener";
 
@@ -53,6 +53,8 @@ const PORT = process.env.PORT || 4000;
 // HOST env ile override edilebilir (örn. sadece localhost'a kısıtlamak için 127.0.0.1).
 // Doğrulama kipinde (güncelleyicinin `--dogrulama` başlatması) yalnız döngü adresi — `.env` bunu genişletemez.
 const VERIFYING = isVerificationMode();
+// Zamanlayıcılı/dışarı konuşan işler doğrulama kipinde ve yardımcı test sunucusunda (`TEKSERP_ZAMANLAYICI_KAPALI=1`) başlamaz.
+const JOBS_OFF = VERIFYING || isScheduledJobsOff();
 const LAN_HOST = VERIFYING ? "127.0.0.1" : process.env.HOST || "0.0.0.0";
 // LAN TLS (docs/design/LAN-TLS.md): varsayılan `off` = yalnız HTTP. `required`da HTTP yalnız döngü adresinde.
 // Doğrulama kipinde TLS dinleyicisi açılmaz (yalnız 127.0.0.1 HTTP).
@@ -208,20 +210,20 @@ function startLanListener(): Server {
             : "kapalı"}`);
     }
     lanTlsBanner();
-    if (VERIFYING) {
+    if (JOBS_OFF) {
         satir("--------------------------------------------------------");
-        satir("  DOĞRULAMA KİPİ: yalnız 127.0.0.1 — zamanlayıcılar ve dış bağlantılar başlatılmadı");
+        satir(`  ${VERIFYING ? "DOĞRULAMA KİPİ: yalnız 127.0.0.1 —" : "YARDIMCI TEST SUNUCUSU:"} zamanlayıcılar ve dış bağlantılar başlatılmadı`);
     }
     satir("========================================================");
     satir("");
 
-    // ⚠️ Doğrulama kipinde zamanlayıcıyla tekrarlayan ya da dışarı konuşan işler BAŞLAMAZ (`lib/dogrulama-kipi.ts`).
-    if (!VERIFYING) startMaintenanceScheduler(); // gece bakımı: audit arşivi + günlük budama/rotasyon
-    if (!VERIFYING) startBackupScheduler();
+    // ⚠️ Doğrulama kipinde ve yardımcı test sunucusunda zamanlayıcıyla tekrarlayan ya da dışarı konuşan işler BAŞLAMAZ (`lib/dogrulama-kipi.ts`).
+    if (!JOBS_OFF) startMaintenanceScheduler(); // gece bakımı: audit arşivi + günlük budama/rotasyon
+    if (!JOBS_OFF) startBackupScheduler();
     // ⚠️ AYRI ÇAĞRI — `startBackupScheduler` sahada erken döner
     // (BACKUP_SCHEDULE_ENABLED=false: gece yedeğini harici görev alıyor).
     // Süpürme oraya gömülseydi ihtiyaç duyulan tek ortamda hiç koşmazdı.
-    if (!VERIFYING) startOffsiteSweeper();
+    if (!JOBS_OFF) startOffsiteSweeper();
     // İzin kataloğu uzlaştırması BOOT-TIME'dır çünkü tek alternatifi olan "elle SQL
     // / veri migration'ı yaz" adımı UNUTULABİLİR bir adımdır ve 2026-08-01'de fiilen
     // unutuldu (kurşun bypass ekranı canlıya çıktı, izin satırı olmadığı için Admin
@@ -260,7 +262,7 @@ function startLanListener(): Server {
     refreshDiscoveryCache(Number(PORT));
     // Servis ilanı — "ben buradayım". Her arızada sessizce kapanır (ilanın
     // kendisi de fail-open); istemcide alt ağ taraması yedeği var.
-    if (!VERIFYING) void startMdnsAdvertiser({ port: Number(PORT) });
+    if (!JOBS_OFF) void startMdnsAdvertiser({ port: Number(PORT) });
     void warnIfAuditGuardDisabled();
     // Varsayılan depo da aynı gerekçeyle boot-time uzlaştırılır (migration'a INSERT
     // gömmek uuid/adı taşa yazar). Bu satır olmadan `resolveTargetWarehouseId`
@@ -268,32 +270,32 @@ function startLanListener(): Server {
     startDefaultWarehouseReconciler();
     // TCMB kur çekme: `finance.enabled` KAPALIYKEN tam no-op (dış HTTP denemesi
     // bile atmaz — üretici fabrika internetsiz; gerekçe jobs/exchange-rate.job.ts).
-    if (!VERIFYING) startExchangeRateScheduler();
+    if (!JOBS_OFF) startExchangeRateScheduler();
     // Vardiya takvimi: `dokuma.enabled` KAPALIYKEN tam no-op — referans fabrikada
     // `shift_instances` satırı doğmaz (gerekçe jobs/shift-calendar.job.ts).
-    if (!VERIFYING) startShiftCalendarScheduler();
+    if (!JOBS_OFF) startShiftCalendarScheduler();
     // Kapanan vardiya × tezgah karnesi (M2) — aynı bayrak, aynı sıfır fark.
-    if (!VERIFYING) startShiftCloseScheduler();
+    if (!JOBS_OFF) startShiftCloseScheduler();
     // Dokuma alarm motoru: `tezgah.alarmEnabled` KAPALIYKEN tur no-op — alarm satırı doğmaz.
-    if (!VERIFYING) startLoomAlarmScheduler();
+    if (!JOBS_OFF) startLoomAlarmScheduler();
     // Kart watchdog'u (D4): tezgah ∨ dokuma kapalıyken tur no-op; sessizlik duruş açmaz.
-    if (!VERIFYING) startMachineWatchdogScheduler();
-    if (!VERIFYING) startPendingDeviceExpiryScheduler(); // bekleyen cihaz süre aşımı (VDS O3): LAN'da tur no-op
+    if (!JOBS_OFF) startMachineWatchdogScheduler();
+    if (!JOBS_OFF) startPendingDeviceExpiryScheduler(); // bekleyen cihaz süre aşımı (VDS O3): LAN'da tur no-op
     // Lisans yoklaması + kapı zili: kurulum etkinleşmemişse ya da satıcı adresi kapalıysa
     // (`LICENSE_SERVER_URL=kapali`) DIŞARI HİÇ İSTEK ATILMAZ; motor gözlem kipinde (hiçbir istek engellenmez).
     // Doğrulama kipinde motor yalnız YEREL ölçümü koşar (bütünlük dahil — `/health/yerel`in `lisans`ı), yoklamaz.
     startLicensePoll();
-    if (!VERIFYING) startLicenseDoorbell();
+    if (!JOBS_OFF) startLicenseDoorbell();
     // Patron bulutu (eşitleme + gelen kutusu): yalnız ÜRETİM sınıfı + `patron-bulut` hakkı + kiradaki
     // aralık varken dışarı çıkar (fail-closed); aksi hâlde tek işi günlük işaret budamasıdır.
     // Gelen belge okuma: DB kuyruğundaki taramaları sidecar'a okutur (modül + adres yoksa hiç çıkmaz, fail-closed).
     // Hata raporları: varsayılan KAPALI (onay yoksa toplanmaz/gönderilmez); doğrulama kipinde gönderim de yok.
-    if (!VERIFYING) startPatronCloudJobs();
-    if (!VERIFYING) startDocumentReader();
-    if (!VERIFYING) startErrorReportJob();
+    if (!JOBS_OFF) startPatronCloudJobs();
+    if (!JOBS_OFF) startDocumentReader();
+    if (!JOBS_OFF) startErrorReportJob();
     // Bildirim dağıtıcısı + koşul tarayıcısı: gözetmen `bildirim.gelenKutusuEnabled` açıkken başlatır,
     // kapanınca durdurur (yeniden başlatma gerekmez); kapalıyken satır yazılmaz.
-    if (!VERIFYING) startNotificationJobs();
+    if (!JOBS_OFF) startNotificationJobs();
 
     void AuditService.logEvent({
         category: "SYSTEM", action: "STARTUP",
