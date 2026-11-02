@@ -123,7 +123,7 @@ async function main(): Promise<void> {
       return id;
     };
     const scanRow = (id: string) => prisma.documentScan.findUniqueOrThrow({ where: { id }, select: { status: true, attempts: true, noteId: true } });
-    const noteRow = (id: string) => prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id }, select: { sourceKind: true, ownerText: true, customerBatchNo: true, senderDocNo: true, totalsDeclared: true, lines: { select: { scanId: true, meters: true, ocrRaw: true } } } });
+    const noteRow = (id: string) => prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id }, select: { sourceKind: true, ownerText: true, customerBatchNo: true, customerOrderNo: true, senderDocNo: true, totalsDeclared: true, lines: { select: { scanId: true, meters: true, ocrRaw: true } } } });
     const okut = (scanId: string, token = tk) => callAs(token, "POST", `/api/gelen-belge/taramalar/${scanId}/oku`);
     const del = (noteId: string) => call("DELETE", `/api/gelen-belge/irsaliyeler/${noteId}`);
 
@@ -148,6 +148,7 @@ async function main(): Promise<void> {
     check("§1d ⭐ satırlar saklı zarftan: 21 satır, hepsi bu taramayı taşır, sidecar isabeti YOK", nB.lines.length === 21 && nB.lines.every((l) => l.scanId === s45 && l.ocrRaw !== null) && fake.hits === hitsBefore, `${nB.lines.length} hits ${hitsBefore}→${fake.hits}`);
     const blocksB = (nB.totalsDeclared as { blocks?: unknown[] } | null)?.blocks ?? [];
     check("§1e boş başlık dolar, operatörün yazdığı korunur; blok beyanı gelir; kaynak OCR; tarama READ", nB.senderDocNo === `${TAG}-B` && nB.ownerText === "ÖRNEK TEKSTİL A" && nB.customerBatchNo === "P9918733" && blocksB.length === 2 && nB.sourceKind === "OCR" && (await scanRow(s45)).status === "READ", JSON.stringify({ o: nB.ownerText, p: nB.customerBatchNo, b: blocksB.length, k: nB.sourceKind }));
+    check("§1e2 S2(b) saklı zarftan doldurma müşteri sipariş no'yu da yazar (ilk blok 96967)", nB.customerOrderNo === "96967", String(nB.customerOrderNo));
     const logs = await prisma.systemLog.findMany({ where: { tableName: "CUSTOMER_DELIVERY_NOTE", recordId: noteB }, select: { newData: true } });
     const stored = logs.map((l) => JSON.stringify(l.newData)).filter((t) => t.includes("OCR_STORED"));
     check("§1f audit `OCR_STORED` künye (satır sayısı) — ham OCR/blok/metin yok", stored.length === 1 && stored[0]!.includes("\"lineCount\":21") && !stored[0]!.includes("blocks") && !stored[0]!.includes("\"text\""), stored.join(" | "));

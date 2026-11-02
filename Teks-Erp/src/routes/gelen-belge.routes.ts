@@ -79,6 +79,8 @@ const Header = {
   senderDocNo: optText(64),
   senderDocDate: Day.nullable().optional(),
   customerBatchNo: optText(64),
+  // Müşterinin basılı "Sipariş No"su (S2b); sınır kolonun VarChar(64)'ü.
+  customerOrderNo: optText(64),
   processText: optText(120),
   pageCount: z.coerce.number().int().min(1).max(99).nullable().optional(),
   declaredTopCount: z.coerce.number().int().min(1).max(9999).nullable().optional(),
@@ -188,7 +190,7 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  * /api/gelen-belge/irsaliyeler:
  *   get:
  *     tags: [Gelen belge]
- *     summary: Taslaklar — liste + cursor + özet şeridi (durum/kaynak/sahip/gönderen/q/from–to süzgeci; tek where)
+ *     summary: Taslaklar — liste + cursor + özet şeridi (durum/kaynak/sahip/gönderen/q/from–to süzgeci; tek where; q = numara · gönderen belge no · gönderen · müşteri parti no · müşteri sipariş no)
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: "items, nextCursor, summary" }
@@ -211,7 +213,7 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  *       200: { description: "Taslak + satır problems[] (FAILED|ITEM_UNRESOLVED|NEEDS_REVIEW|SUSPECT_VALUE) + satır itemFallback (id, name, source) | null + totalsCheck (+ document) + notices[] (code, title, detail)" }
  *   patch:
  *     tags: [Gelen belge]
- *     summary: Başlık düzelt — yalnız DRAFT (aksi 409 DELIVERY_NOTE_NOT_DRAFT)
+ *     summary: Başlık düzelt — yalnız DRAFT (aksi 409 DELIVERY_NOTE_NOT_DRAFT); gövde yalnız tanımlı anahtarları yazar (customerOrderNo ≤ 64 dahil)
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }

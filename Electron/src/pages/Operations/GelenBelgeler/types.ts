@@ -55,6 +55,8 @@ export interface DeliveryNoteHeader {
   senderDocNo: string | null;
   senderDocDate: string | null;
   customerBatchNo: string | null;
+  /** Müşterinin basılı "Sipariş No"su (S2b); eski sunucu göndermez → undefined. */
+  customerOrderNo?: string | null;
   processText: string | null;
   templateId: string | null;
   templateScore: number | null;
@@ -285,18 +287,14 @@ export interface LineInput {
 }
 export type LinePatch = Partial<LineInput> & { skip?: true };
 
-/** Başlık yazımı (backend `Header`). */
-export interface HeaderPatch {
-  ownerCustomerId?: string | null;
-  senderCustomerId?: string | null;
-  senderText?: string | null;
-  senderDocNo?: string | null;
-  senderDocDate?: string | null;
-  customerBatchNo?: string | null;
-  processText?: string | null;
-  pageCount?: number | null;
-  declaredTopCount?: number | null;
-}
+/** Başlık yazımı (backend `Header`) — okunan başlığın yazılabilir alt kümesi (alan iki uçta aynı tipte). */
+export type HeaderPatch = Partial<
+  Pick<
+    DeliveryNoteHeader,
+    | "ownerCustomerId" | "senderCustomerId" | "senderText" | "senderDocNo" | "senderDocDate"
+    | "customerBatchNo" | "customerOrderNo" | "processText" | "pageCount" | "declaredTopCount"
+  >
+>;
 
 /** E3 hizmet ekseni ayarları — backend `gelen-belge-ayar.service.ts` `IncomingDocSettings` aynası. */
 export type UnreviewedApproval = "WARN" | "BLOCK_SUSPECT" | "BLOCK";

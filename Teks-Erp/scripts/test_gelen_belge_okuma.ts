@@ -211,7 +211,7 @@ async function main(): Promise<void> {
     const all = await Promise.all([s0, s46, s44, s43].map(scan));
     check("§3b 4 tarama READ + motor adı OcrResult.engine'den, sürüm başlıktan, süre + ocrResult zarfı (sidecar'sız yeniden çıkarım)", all.every((s) => s.status === "READ" && s.noteId && s.ocrEngine === "paddle" && s.ocrVersion === "0.0-test" && typeof s.ocrDurationMs === "number" && !!s.ocrResult), JSON.stringify(all.map((s) => [s.status, s.ocrEngine, s.ocrVersion, s.ocrDurationMs, !!s.ocrResult])));
     for (const s of all) if (s.noteId) made.notes.push(s.noteId);
-    const note = (id: string) => prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id }, select: { noteNo: true, status: true, sourceKind: true, ownerText: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, processText: true, declaredTopCount: true, totalsDeclared: true, warnings: true, lines: { select: { lineNo: true, blockNo: true, processText: true, meters: true, weightKg: true, needsReview: true, confidence: true, sourceRects: true, senderRollNo: true }, orderBy: { lineNo: "asc" } } } });
+    const note = (id: string) => prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id }, select: { noteNo: true, status: true, sourceKind: true, ownerText: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, customerOrderNo: true, processText: true, declaredTopCount: true, totalsDeclared: true, warnings: true, lines: { select: { lineNo: true, blockNo: true, processText: true, meters: true, weightKg: true, needsReview: true, confidence: true, sourceRects: true, senderRollNo: true }, orderBy: { lineNo: "asc" } } } });
     const n45 = await note(all[0]!.noteId!);
     const blocks = (n45.totalsDeclared as { blocks: Array<{ blockNo: number; count: string; kg: string; m: string }> }).blocks;
     check("§3c 0245: DRAFT/OCR, GB numarası, 21 satır, 2 blok", n45.status === "DRAFT" && n45.sourceKind === "OCR" && /^GB/.test(n45.noteNo) && n45.lines.length === 21 && new Set(n45.lines.map((l) => l.blockNo)).size === 2, `${n45.noteNo} ${n45.lines.length}`);
@@ -219,6 +219,7 @@ async function main(): Promise<void> {
     const sumM = (b: number) => n45.lines.filter((l) => l.blockNo === b).reduce((a, l) => a + Math.round(Number(l.meters) * 1000), 0);
     check("§3e 0245: Σ satır = beyan (blok 1 586 m, blok 2 3935 m) · her satırda rect + güven", sumM(1) === 586000 && sumM(2) === 3935000 && n45.lines.every((l) => !!l.sourceRects && Number(l.confidence) > 0), JSON.stringify([n45.lines.filter((l) => l.blockNo === 1).reduce((a, l) => a + Number(l.meters), 0), n45.lines.filter((l) => l.blockNo === 2).reduce((a, l) => a + Number(l.meters), 0), n45.lines.map((l) => Number(l.confidence))]));
     check("§3f 0245: başlık fiş no, tarih, parti, işlem, '4 TOP' beyanı yalnız uyarı", n45.senderDocNo === "914279" && n45.senderDocDate?.toISOString().slice(0, 10) === "2026-10-19" && n45.customerBatchNo === "P9918733" && n45.processText === "KDK APRE" && n45.declaredTopCount === 4 && (n45.warnings as string[]).some((w) => w.startsWith("DECLARED_TOP_COUNT_DIFF")), JSON.stringify({ no: n45.senderDocNo, p: n45.customerBatchNo, w: n45.warnings }));
+    check("§3f1 S2(b) 0245: müşteri sipariş no başlığa İLK bloğun değeriyle (96967; blok 2'nin 96966'sı uyarıda)", n45.customerOrderNo === "96967", String(n45.customerOrderNo));
     const proc45 = [...new Set(n45.lines.map((l) => `${l.blockNo}:${l.processText}`))].sort();
     check("§3f2 0245: satır işlemi KENDİ bloğundan yazılır (blok 2 YUMUŞAK APRE; iş emri planı iki grubu ayırır) + BLOCK_IDS_DIFFER", JSON.stringify(proc45) === JSON.stringify(["1:KDK APRE", "2:YUMUŞAK APRE"]) && (n45.warnings as string[]).some((w) => w.startsWith("BLOCK_IDS_DIFFER")), JSON.stringify(proc45));
     const n46 = await note(all[1]!.noteId!);
@@ -355,13 +356,14 @@ async function main(): Promise<void> {
     check("§7f /eslestirme: olmayan irsaliye → 404 DELIVERY_NOTE_NOT_FOUND (fail-closed)", es404.status === 404 && es404.code === "DELIVERY_NOTE_NOT_FOUND", `${es404.status} ${es404.code}`);
 
     // ── §8 bağlı taslak: operatör verisi ezilmez ───────────────────────────
-    const cr = await call("POST", "/api/gelen-belge/irsaliyeler", { sourceKind: "MANUAL", senderDocNo: `${TAG}-ELLE`, lines: [{ senderRollNo: "EL-1", meters: 50 }] });
+    const cr = await call("POST", "/api/gelen-belge/irsaliyeler", { sourceKind: "MANUAL", senderDocNo: `${TAG}-ELLE`, customerOrderNo: `${TAG}-SIP`, lines: [{ senderRollNo: "EL-1", meters: 50 }] });
     const manualId = cr.data?.id as string;
     made.notes.push(manualId);
     const s8 = await up("0245", { noteId: manualId }, "bagli");
     await runReaderOnce();
-    const n8 = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: manualId }, select: { senderDocNo: true, ownerText: true, customerBatchNo: true, lines: { select: { meters: true } } } });
+    const n8 = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: manualId }, select: { senderDocNo: true, ownerText: true, customerBatchNo: true, customerOrderNo: true, lines: { select: { meters: true } } } });
     check("§8a bağlı taslak: senderDocNo ve operatör satırı korunur; boş ownerText/parti OCR'dan dolar; tarama READ", n8.senderDocNo === `${TAG}-ELLE` && n8.lines.length === 1 && Number(n8.lines[0]!.meters) === 50 && n8.ownerText === "ÖRNEK TEKSTİL A" && n8.customerBatchNo === "P9918733" && (await scan(s8)).status === "READ", JSON.stringify(n8));
+    check("§8a2 bağlı taslak: operatörün yazdığı müşteri sipariş no OCR'la EZİLMEZ", n8.customerOrderNo === `${TAG}-SIP`, String(n8.customerOrderNo));
     // §8b bağlı taslak DRAFT değil (onay sürüyor): taslağa dokunulmaz, tarama READ'e kapanır (READING'de kalıp bayat döngüye girmez)
     const cr2 = await call("POST", "/api/gelen-belge/irsaliyeler", { sourceKind: "MANUAL", senderDocNo: `${TAG}-KILIT` });
     const lockedId = cr2.data?.id as string;

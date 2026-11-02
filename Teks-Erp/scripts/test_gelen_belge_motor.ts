@@ -242,6 +242,14 @@ function kutu(text: string, x: number, y: number, w: number, h: number, angle: n
     JSON.stringify(proc) === JSON.stringify(["1:KDK APRE", "2:YUMUŞAK APRE"]) && d45.header.processText === "KDK APRE" && d45.header.customerBatchNo === "P9918733", JSON.stringify(proc));
   check("§9c 0245 bloklar farklı iş kimliği → TEK BLOCK_IDS_DIFFER uyarısı",
     d45.header.warnings.filter((w) => w.startsWith("BLOCK_IDS_DIFFER")).length === 1, d45.header.warnings.join(" | "));
+  // §9c1 S2(b): müşteri sipariş no başlığa İLK bloğun değeriyle (blok sırası/başlık alanı ne olursa olsun); fark uyarısı §9c'de.
+  const ex45 = extractDocument(gercek("0245-ceki-listesi-a"), sablonlar);
+  const r45 = ex45.regions[0]!;
+  const karisik = { ...ex45, regions: [{ ...r45, blockFields: [...r45.blockFields].reverse(), fields: r45.fields && { ...r45.fields, fields: { ...r45.fields.fields, siparisNo: { ...r45.fields.fields.siparisNo!, value: "11111" } } } }] };
+  const dTek = draftFromExtraction({ ...ex45, regions: [{ ...r45, blockFields: [] }] });
+  check("§9c1 0245 başlık sipariş no = blok 1 (96967), blok sırası ters/başlık alanı farklı olsa da; blok bandı yoksa başlık alanı",
+    d45.header.customerOrderNo === "96967" && draftFromExtraction(karisik).header.customerOrderNo === "96967" && dTek.header.customerOrderNo === "96967",
+    `${d45.header.customerOrderNo} · ${draftFromExtraction(karisik).header.customerOrderNo} · ${dTek.header.customerOrderNo}`);
   const d43 = draftFromExtraction(extractDocument(gercek("0243-kesim-takip-formu"), sablonlar));
   check("§9c2 tek bloklu/ızgaralı belgede satır işlemi null (bugünkü davranış)", d43.lines.every((l) => l.processText === null) && !d43.header.regions[0]!.blocks);
 

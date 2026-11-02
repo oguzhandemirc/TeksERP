@@ -14345,6 +14345,8 @@ model CustomerDeliveryNote {
   /// Takvim günü (belge üstündeki tarih) — an değil gün anlatır.
   senderDocDate    DateTime?              @db.Date
   customerBatchNo  String?                @db.VarChar(64)
+  /// Müşterinin basılı "Sipariş No"su (OCR'da ilk bloğun değeri; bloklar farklıysa BLOCK_IDS_DIFFER uyarısı) — yalnız arama/künye.
+  customerOrderNo  String?                @db.VarChar(64)
   processText      String?                @db.VarChar(120)
   templateId       String?                @db.Uuid
   templateScore    Decimal?               @db.Decimal(5, 4)

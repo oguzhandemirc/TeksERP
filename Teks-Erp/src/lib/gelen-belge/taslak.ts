@@ -4,6 +4,7 @@
 import { parseNumber, type DocumentExtraction, type FieldResult, type ForeignDocument, type OcrRect, type RegionExtraction } from "./motor";
 import { documentDeclared, positive, type DocumentDeclared } from "./taslak-belge-beyan";
 import { clampOutlierFactor, markGridSuspects, METER_KEYS } from "./taslak-supheli";
+import { blockDiffWarning, FIELD_LABEL, firstBlockValue } from "./blok-alani";
 
 // Şüpheli değer kuralı ayrı dosyada (max-lines); çağıranlar buradan alır.
 export { clampOutlierFactor, DEFAULT_OUTLIER_FACTOR, OUTLIER_FACTOR_MAX, OUTLIER_FACTOR_MIN, SUSPECT_MARK, suspectGridReasons, suspectGridSeqs, type SuspectReason } from "./taslak-supheli";
@@ -39,6 +40,8 @@ export interface DraftHeader {
   senderDocNo: string | null;
   senderDocDate: Date | null;
   customerBatchNo: string | null;
+  /** Müşterinin basılı "Sipariş No"su — çok bloklu belgede İLK bloğun değeri (fark `BLOCK_IDS_DIFFER` uyarısıyla). */
+  customerOrderNo: string | null;
   processText: string | null;
   declaredTopCount: number | null;
   templateScore: number | null;
@@ -61,13 +64,6 @@ const DATE_KEYS = ["tarih", "sevkTarihi"];
 const BATCH_KEYS = ["hamPartiNo", "partiNo", "musteriPartiNo"];
 const PROCESS_KEYS = ["islem", "yapilanIslem"];
 const TOP_COUNT_KEYS = ["topAdet", "girisAdet", "cikisAdet"];
-/** Blok başına okunup bloklar arasında farkı uyarılan iş kimliği alanları (sipariş · parti · boyahane iş emri · işlem). */
-const BLOCK_ID_KEYS = ["siparisNo", "hamPartiNo", "isEmriNo", "islem"];
-// Gönderenin (boyahane) iş emri numarası belgedeki adıyla "İE No"; bizim terbiye iş emrimizle karışmasın.
-const FIELD_LABEL: Record<string, string> = {
-  siparisNo: "sipariş", hamPartiNo: "parti", isEmriNo: "İE No", islem: "işlem",
-  fisNo: "Fiş No", irsaliyeNo: "İrsaliye No", evrakNo: "Evrak No", sevkNo: "Sevk No", belgeNo: "Belge No",
-};
 const WIDTH_KEYS = ["en", "cm"];
 
 export const clip = (v: string | null | undefined, max: number): string | null => {
@@ -181,17 +177,6 @@ function gridLines(reg: RegionExtraction, blockNo: number, out: DraftLine[], ctx
   if (suspect) warnings.push(suspect);
 }
 
-/** Bloklar farklı sipariş/parti/iş emri/işlem taşıyorsa TEK uyarı (başlık yalnız blok 1'i taşır). */
-function blockDiffWarning(reg: RegionExtraction, blockOffset: number): string | null {
-  if (reg.blockFields.length < 2) return null;
-  const differing = BLOCK_ID_KEYS.filter((k) => new Set(reg.blockFields.map((b) => b.fields[k]?.value ?? null).filter((v) => v !== null)).size > 1);
-  if (differing.length === 0) return null;
-  const desc = reg.blockFields
-    .map((b) => `blok ${blockOffset + b.blockNo}: ${differing.map((k) => `${FIELD_LABEL[k] ?? k} ${b.fields[k]?.value ?? "?"}`).join(", ")}`)
-    .join(" · ");
-  return `BLOCK_IDS_DIFFER: belgede ${reg.blockFields.length} blok farklı iş kimliği taşıyor (${desc}) — başlık yalnız ilk bloğu gösterir; satır işlemi kendi bloğundan`;
-}
-
 /** "Ürün sevk fişi (giriş/çıkış toplamlı)" → "Ürün sevk fişi"; belge no varsa etiketiyle. */
 export function foreignDocumentWarning(f: ForeignDocument): string {
   const name = f.templateName.replace(/\s*\(.*\)\s*$/, "").trim() || f.templateId;
@@ -281,6 +266,7 @@ export function draftFromExtraction(doc: DocumentExtraction, opts: DraftOptions 
       senderDocNo: clip(pick(f, DOC_NO_KEYS), 64),
       senderDocDate: dayOf(pick(f, DATE_KEYS)),
       customerBatchNo: clip(pick(f, BATCH_KEYS), 64),
+      customerOrderNo: clip(firstBlockValue(first, "siparisNo"), 64),
       processText: clip(pick(f, PROCESS_KEYS), 120),
       declaredTopCount: topCount && /^\d{1,4}$/.test(topCount) ? Number(topCount) : null,
       templateScore: first ? Math.round(first.classificationScore * 10000) / 10000 : null,

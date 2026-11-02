@@ -31,7 +31,7 @@ export interface BuiltDraft {
   firstTemplate: string | null;
   headerCols: {
     ownerText: string | null; senderDocNo: string | null; senderDocDate: Date | null; customerBatchNo: string | null;
-    processText: string | null; declaredTopCount: number | null; senderText: string | null; templateId: string | null; templateScore: Prisma.Decimal | null;
+    customerOrderNo: string | null; processText: string | null; declaredTopCount: number | null; senderText: string | null; templateId: string | null; templateScore: Prisma.Decimal | null;
     /** Yalnız `gelenBelge.autoSenderFromTemplate` açıkken: aktif şablonun aktif gönderen carisi; aksi null. */
     senderCustomerId: string | null;
   };
@@ -61,7 +61,7 @@ export async function buildDraft(result: OcrResult, userId: string | undefined, 
     firstTemplate: code,
     headerCols: {
       ownerText: header.ownerText, senderDocNo: header.senderDocNo, senderDocDate: header.senderDocDate, customerBatchNo: header.customerBatchNo,
-      processText: header.processText, declaredTopCount: header.declaredTopCount, senderText: header.senderText, templateId: template?.id ?? null,
+      customerOrderNo: header.customerOrderNo, processText: header.processText, declaredTopCount: header.declaredTopCount, senderText: header.senderText, templateId: template?.id ?? null,
       templateScore: header.templateScore === null ? null : new Prisma.Decimal(header.templateScore),
       senderCustomerId: template ? await templateSender(template.id) : null,
     },
@@ -131,6 +131,7 @@ function fillEmptyHeader(patch: Prisma.CustomerDeliveryNoteUpdateInput, note: He
   if (!note.senderDocNo) patch.senderDocNo = headerCols.senderDocNo;
   if (!note.senderDocDate) patch.senderDocDate = headerCols.senderDocDate;
   if (!note.customerBatchNo) patch.customerBatchNo = headerCols.customerBatchNo;
+  if (!note.customerOrderNo) patch.customerOrderNo = headerCols.customerOrderNo;
   if (!note.processText) patch.processText = headerCols.processText;
   if (note.declaredTopCount === null) patch.declaredTopCount = headerCols.declaredTopCount;
   if (note.senderCustomerId || !headerCols.senderCustomerId) return null;
@@ -152,7 +153,7 @@ export interface FillResult {
 export async function fillBoundDraftTx(tx: Prisma.TransactionClient, noteId: string, scan: { id: string; pageNo: number }, built: BuiltDraft): Promise<FillResult> {
   const { draft, headerCols } = built;
   const { header } = draft;
-  const note = await tx.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteId }, select: { ownerText: true, senderText: true, senderCustomerId: true, templateId: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, processText: true, declaredTopCount: true, totalsDeclared: true, warnings: true } });
+  const note = await tx.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteId }, select: { ownerText: true, senderText: true, senderCustomerId: true, templateId: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, customerOrderNo: true, processText: true, declaredTopCount: true, totalsDeclared: true, warnings: true } });
   const overlap = await linesToAppend(tx, noteId, scan, draft.lines);
   const agg = await tx.customerDeliveryNoteLine.aggregate({ where: { noteId }, _max: { lineNo: true, blockNo: true } });
   const lineBase = agg._max.lineNo ?? 0;
