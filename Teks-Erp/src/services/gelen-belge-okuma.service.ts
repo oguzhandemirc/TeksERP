@@ -5,27 +5,21 @@
 // Claim atomik: `updateMany WHERE {id, status: PENDING}` (READING'de takılı kalan 10 dk sonra yeniden alınır);
 // 3 denemede (4xx / şema dışı gövdede hemen) READ_FAILED. Audit yükü: künye (noteNo, satır sayısı, motor adı) — ham OCR metni / bayt GİRMEZ.
 // =============================================================================
-import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { bilgi, uyari } from "../lib/logger";
 import { p2002TargetsCode, withBarcodeRetry } from "../utils/barcode-retry";
-import { extractDocument, loadTemplates } from "../lib/gelen-belge/motor";
-import { clip, draftFromExtraction, dropOverlapDuplicates, linesToPhotoFrame, type DraftLine } from "../lib/gelen-belge/taslak";
+import { clip } from "../lib/gelen-belge/taslak";
 import { readerOcr, type ReaderResult } from "../lib/gelen-belge/okuma-istemcisi";
 import { AuditService } from "./audit.service";
 import { nextNoteNo, translateUnique } from "./gelen-belge-note.service";
-import { FALLBACK_TEMPLATE_CODE, bumpTemplateHit, ensureSenderTemplate } from "./gelen-belge-sablon.service";
+import { buildDraft, fillBoundDraftTx, lineRows } from "./gelen-belge-taslak-doldur.service";
 import { PDF_MIME } from "./gelen-belge-scan.service";
 
 export const READ_MAX_ATTEMPTS = 3;
 /** READING'de bu kadar kalan tarama (süreç düşmüş) yeniden PENDING sayılır. */
 export const READING_STALE_MS = 10 * 60 * 1000;
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
-/** Düz nesneyi Prisma Json girdisine çevirir (tip zorlaması yok: JSON gidiş-dönüş; rect/raw/uyarı zaten düz veridir). */
-function toJson(v: unknown): Prisma.InputJsonValue {
-  return JSON.parse(JSON.stringify(v));
-}
 const SCAN_TABLE = "DOCUMENT_SCAN";
 
 // ── Claim ────────────────────────────────────────────────────────────────────
@@ -68,61 +62,6 @@ async function release(id: string, attempts: number, code: string, opts: { perma
   return failed ? "READ_FAILED" : "RETRY";
 }
 
-/** `scanId`: satırı doğuran tarama (E4) — çok sayfalı taslakta her sayfanın satırı KENDİ taramasını taşır. */
-function lineRows(lines: DraftLine[], scanId: string, lineBase = 0, blockBase = 0) {
-  return lines.map((l, i) => ({
-    scanId,
-    lineNo: lineBase + i + 1,
-    blockNo: blockBase + l.blockNo,
-    lineKind: l.lineKind,
-    senderRollNo: l.senderRollNo,
-    meters: new Prisma.Decimal(l.meters),
-    weightKg: l.weightKg ? new Prisma.Decimal(l.weightKg) : null,
-    widthCm: l.widthCm ? new Prisma.Decimal(l.widthCm) : null,
-    itemText: l.itemText,
-    colorText: l.colorText,
-    processText: l.processText,
-    confidence: new Prisma.Decimal(l.confidence.toFixed(4)),
-    needsReview: l.needsReview,
-    sourceRects: toJson(l.sourceRects),
-    ocrRaw: toJson(l.ocrRaw),
-  }));
-}
-
-/**
- * Bağlı taslağa eklenecek OCR satırları. Elle girilmiş satır (ocrRaw yok) varsa hiç satır eklenmez — panelin elle işi
- * ezilmez/ikizlenmez; yoksa BAŞKA taramalardan gelmiş satırlara karşı üst üste binen çekim süzgeci (`dropOverlapDuplicates`).
- */
-async function linesToAppend(tx: Prisma.TransactionClient, noteId: string, scan: { id: string; pageNo: number }, lines: DraftLine[]) {
-  const rows = await tx.customerDeliveryNoteLine.findMany({ where: { noteId }, select: { scanId: true, senderRollNo: true, meters: true, weightKg: true, ocrRaw: true } });
-  if (rows.some((r) => r.ocrRaw === null)) return { lines: [], warnings: [] };
-  const existing = rows.filter((r) => r.scanId !== scan.id).map((r) => ({ senderRollNo: r.senderRollNo, meters: r.meters.toString(), weightKg: r.weightKg?.toString() ?? null, ocrRaw: r.ocrRaw }));
-  return dropOverlapDuplicates(lines, existing, scan.pageNo);
-}
-
-/** Bağlı taslakta yalnız BOŞ başlık alanları OCR'dan dolar — operatörün yazdığı ezilmez. */
-function fillEmptyHeader(
-  patch: Prisma.CustomerDeliveryNoteUpdateInput,
-  note: { ownerText: string | null; senderText: string | null; templateId: string | null; senderDocNo: string | null; senderDocDate: Date | null; customerBatchNo: string | null; processText: string | null; declaredTopCount: number | null },
-  headerCols: { ownerText: string | null; senderText: string | null; templateId: string | null; senderDocNo: string | null; senderDocDate: Date | null; customerBatchNo: string | null; processText: string | null; declaredTopCount: number | null },
-): void {
-  if (!note.ownerText) patch.ownerText = headerCols.ownerText;
-  if (!note.senderText) patch.senderText = headerCols.senderText;
-  if (!note.templateId && headerCols.templateId) patch.template = { connect: { id: headerCols.templateId } };
-  if (!note.senderDocNo) patch.senderDocNo = headerCols.senderDocNo;
-  if (!note.senderDocDate) patch.senderDocDate = headerCols.senderDocDate;
-  if (!note.customerBatchNo) patch.customerBatchNo = headerCols.customerBatchNo;
-  if (!note.processText) patch.processText = headerCols.processText;
-  if (note.declaredTopCount === null) patch.declaredTopCount = headerCols.declaredTopCount;
-}
-
-/** E2: eşleşen motor şablonunun DB satırı (yoksa idempotent doğar) taslağa bağlanır — gönderen önerisi buradan; isabet best-effort. */
-async function bindDraftTemplate(code: string | null, userId: string | undefined) {
-  const template = code ? await ensureSenderTemplate(code, userId) : null;
-  if (template) await bumpTemplateHit(template.id);
-  return { code, template };
-}
-
 /**
  * READING'deki taramayı sidecar'a okutur, motorla çıkarır, DRAFT'a yazar. Tarama bir taslağa bağlıysa
  * yalnız BOŞ alanlar dolar ve satırsız taslağa satırlar eklenir (operatörün yazdığı ezilmez); bağlı değilse yeni taslak.
@@ -137,20 +76,11 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
     return release(id, scan.attempts, `PROGRAM_HATASI:${(err as Error).name}`, { userId: scan.capturedById ?? undefined });
   }
   if (!r.ok) return release(id, scan.attempts, r.code, { permanent: r.kind === "HTTP" || r.kind === "INVALID", userId: scan.capturedById ?? undefined });
-  const extracted = draftFromExtraction(extractDocument(r.result, loadTemplates(), FALLBACK_TEMPLATE_CODE));
-  // Yan dönük sayfa: kutular panelin çizdiği (dönmemiş) fotoğrafın çerçevesine döner.
-  const draft = { ...extracted, lines: linesToPhotoFrame(extracted.lines, r.result) };
-  const { code: firstTemplate, template } = await bindDraftTemplate(draft.header.regions[0]?.templateId ?? null, scan.capturedById ?? undefined);
-  const envelope = toJson({ ocr: r.result, regions: draft.header.regions });
-  const scanData = { status: "READ" as const, ocrResult: envelope, ocrEngine: clip(r.engine, 32), ocrVersion: clip(r.version, 32), ocrDurationMs: r.durationMs };
   const userId = scan.capturedById ?? undefined;
+  const built = await buildDraft(r.result, userId, { bumpHit: true });
+  const { draft, firstTemplate, headerCols, totalsDeclared, warnings } = built;
   const { header } = draft;
-  const headerCols = {
-    ownerText: header.ownerText, senderDocNo: header.senderDocNo, senderDocDate: header.senderDocDate, customerBatchNo: header.customerBatchNo,
-    processText: header.processText, declaredTopCount: header.declaredTopCount, senderText: header.senderText, templateId: template?.id ?? null, templateScore: header.templateScore === null ? null : new Prisma.Decimal(header.templateScore),
-  };
-  const totalsDeclared = toJson(header.totalsDeclared);
-  const warnings = toJson(header.warnings);
+  const scanData = { status: "READ" as const, ocrResult: built.envelope, ocrEngine: clip(r.engine, 32), ocrVersion: clip(r.version, 32), ocrDurationMs: r.durationMs };
 
   if (scan.noteId) {
     const noteId = scan.noteId;
@@ -162,27 +92,12 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
         if (s0.count === 0) throw new Error("SCAN_LOST");
         return { noteId, lines: 0, filled: false };
       }
-      const note = await tx.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteId }, select: { ownerText: true, senderText: true, templateId: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, processText: true, declaredTopCount: true, totalsDeclared: true, warnings: true } });
-      // Çok sayfalı taslak: her sayfanın taraması satırlarını EKLER (blok no kaydırılır, uyarılar birikir);
-      // elle satır varsa OCR satır eklemez; başka sayfada birebir olan satır (üst üste binen çekim) atlanır. Okuma DRAFT
-      // claim'inin satır kilidinin ARDINDAN: paralel ikinci sayfa claim'de bekler, READ COMMITTED ile birincinin satırlarını görür.
-      const overlap = await linesToAppend(tx, noteId, scan, draft.lines);
-      const agg = await tx.customerDeliveryNoteLine.aggregate({ where: { noteId }, _max: { lineNo: true, blockNo: true } });
-      const lineBase = agg._max.lineNo ?? 0;
-      const blockBase = agg._max.blockNo ?? 0;
-      const prevWarnings = Array.isArray(note.warnings) ? note.warnings : [];
-      const patch: Prisma.CustomerDeliveryNoteUpdateInput = { warnings: toJson([...prevWarnings, ...header.warnings, ...overlap.warnings]) };
-      fillEmptyHeader(patch, note, headerCols);
-      const addLines = overlap.lines.length > 0;
-      const prevBlocks = (note.totalsDeclared as { blocks?: unknown[] } | null)?.blocks;
-      if (note.totalsDeclared === null || !Array.isArray(prevBlocks)) patch.totalsDeclared = totalsDeclared;
-      else if (addLines && blockBase > 0) patch.totalsDeclared = toJson({ blocks: [...prevBlocks, ...header.totalsDeclared.blocks.map((b) => ({ ...b, blockNo: blockBase + b.blockNo }))] });
-      patch.templateScore = headerCols.templateScore;
-      if (addLines) patch.lines = { create: lineRows(overlap.lines, id, lineBase, blockBase) };
-      await tx.customerDeliveryNote.update({ where: { id: noteId }, data: patch });
+      // Çok sayfalı taslak: sayfanın satırları EKLENİR, elle satırlı taslağa eklenmez, üst üste binen satır atlanır
+      // (ortak katman `fillBoundDraftTx`; satırlar DRAFT claim'inin satır kilidinin ARDINDAN okunur).
+      const lines = await fillBoundDraftTx(tx, noteId, scan, built);
       const s = await tx.documentScan.updateMany({ where: { id, status: "READING" }, data: scanData });
       if (s.count === 0) throw new Error("SCAN_LOST");
-      return { noteId, lines: addLines ? overlap.lines.length : 0, filled: true };
+      return { noteId, lines, filled: true };
     }).catch((err) => (err instanceof Error && err.message === "SCAN_LOST" ? null : Promise.reject(err)));
     if (!res) return "LOST";
     if (res.filled) await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: noteId, newData: { source: "OCR", scanId: id, sha256: scan.sha256, lineCount: res.lines, engine: scanData.ocrEngine, warnings: header.warnings.length } });
@@ -226,10 +141,31 @@ export async function assertScanReadable(id: string): Promise<{ id: string; stat
   return scan;
 }
 
-/** Okut ucu: READ_FAILED → PENDING (deneme sayacı sıfır; atomik claim); PENDING/READING ise dokunmaz; READ ise 409; PDF 400. */
+/**
+ * Okunmuş ama taslağa satır vermemiş sayfa (ör. silinen taslağın fotoğrafı eski sürümde yeniden bağlandı): bağlı taslak DRAFT
+ * ve bu taramadan doğmuş satır YOKSA READ → PENDING/0. Taslak claim'i (satır kilidi) satır sayımını ve okuma işinin satır
+ * yazımını serileştirir; satırı olan sayfa yeniden okunmaz (satırlar ikilenirdi) → 409.
+ */
+async function rereadEmptyScan(id: string, noteId: string | null, userId: string): Promise<void> {
+  if (!noteId) throw AppError.conflict("Tarama okunmuş ve bir taslağa bağlı değil; fotoğrafı bir taslağa yükleyin.", { code: "DOCUMENT_SCAN_ALREADY_READ" });
+  await prisma.$transaction(async (tx) => {
+    const claimed = await tx.customerDeliveryNote.updateMany({ where: { id: noteId, status: "DRAFT" }, data: { updatedById: userId } });
+    if (claimed.count === 0) throw AppError.conflict("Taslak değil; okunmuş sayfa yalnız taslakta yeniden okunur.", { code: "DELIVERY_NOTE_NOT_DRAFT" });
+    const own = await tx.customerDeliveryNoteLine.count({ where: { noteId, scanId: id } });
+    if (own > 0) throw AppError.conflict("Bu sayfanın satırları taslakta; yeniden okumak satırları ikilerdi. Satırları düzenleyin.", { code: "DOCUMENT_SCAN_ALREADY_READ", lineCount: own });
+    const c = await tx.documentScan.updateMany({ where: { id, noteId, status: "READ", mimeType: { not: PDF_MIME } }, data: { status: "PENDING", attempts: 0 } });
+    if (c.count === 0) throw AppError.conflict("Tarama bu arada başka durumda; yenileyin.", { code: "DOCUMENT_SCAN_STATE_CHANGED" });
+  });
+  await AuditService.log({ userId, action: "UPDATE", tableName: SCAN_TABLE, recordId: id, oldData: { status: "READ" }, newData: { status: "PENDING", attempts: 0, noteId, reason: "REREAD_NO_LINES" } });
+}
+
+/**
+ * Okut ucu: READ_FAILED → PENDING (deneme sayacı sıfır; atomik claim); PENDING/READING ise dokunmaz; READ ise yalnız
+ * bağlı taslakta satırsız sayfa yeniden okunur (`rereadEmptyScan`), aksi 409; PDF 400.
+ */
 export async function requeueScanForReading(id: string, userId: string) {
   const scan = await assertScanReadable(id);
-  if (scan.status === "READ") throw AppError.conflict("Tarama zaten okunmuş; taslağı düzenleyin.", { code: "DOCUMENT_SCAN_ALREADY_READ" });
+  if (scan.status === "READ") await rereadEmptyScan(id, scan.noteId, userId);
   if (scan.status === "READ_FAILED") {
     const c = await prisma.documentScan.updateMany({ where: { id, status: "READ_FAILED", mimeType: { not: PDF_MIME } }, data: { status: "PENDING", attempts: 0 } });
     if (c.count === 0) throw AppError.conflict("Tarama bu arada başka durumda; yenileyin.", { code: "DOCUMENT_SCAN_STATE_CHANGED" });

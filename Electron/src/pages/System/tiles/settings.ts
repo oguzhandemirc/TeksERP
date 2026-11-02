@@ -47,6 +47,8 @@ export const settingsTiles: SystemTile[] = [
     to: "/system/feature-flags",
     group: "settings",
     permissionAny: SETTINGS_FLAGS_ACCESS,
+    // Eski ad: kullanıcı hâlâ "genel ayarlar" diye arar; eşleşme yoksa paleti açıklamadaki "Org-geneli" kapıyordu.
+    keywords: "genel ayarlar genel ayar fabrika ayarları ayarlar",
   },
   {
     key: "printing",
