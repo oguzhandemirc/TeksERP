@@ -57,6 +57,7 @@ export const WORK_ORDER_TRIGGER_LABEL: Record<string, string> = {
   MANUAL_COMPLETE: "Elle kapatma",
   WO_CANCEL: "Terbiye iş emri iptali",
   ORDER_CANCEL: "Sipariş iptali",
+  DELIVERY_NOTE_CANCEL: "Gelen belge iptali",
   WO_SPLIT_SUPERSEDE: "Tüm partiler devredildi",
   WO_ARCHIVE: "Arşive kaldırma",
   TAMBUR_FINALIZE: "Tambur son kesimi",
