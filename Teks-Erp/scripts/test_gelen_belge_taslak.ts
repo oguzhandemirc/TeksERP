@@ -10,6 +10,7 @@
 //   §6 liste + cursor + özet TEK where'den: iki sayfa ∪ = kayıtlar, summary.total = sayfa toplamı
 //   §6b tarih aralığı (createdAt): liste ∪ cursor ve özet şeridi AYNI sayıyı verir; gün sınırı FABRİKA günü
 //       (gün başından 1 ms önce = önceki gün; UTC gece yarısı DEĞİL) · bozuk gün → 400
+//   §6c S2(b) müşteri sipariş no: PATCH yalnız o anahtar + audit · serbest arama bulur (liste ∪ cursor = özet) · 65 karakter 400 · açılışta da
 //   §7 DRAFT dışı: status DB'den APPROVED'a çekilince DELETE/PATCH/satır ekle → 409 DELIVERY_NOTE_NOT_DRAFT
 //   §8 audit yükü: DOCUMENT_SCAN ve CUSTOMER_DELIVERY_NOTE satırlarında fotoğraf baytı / "content" yok
 //   §10 yarış: iki PATCH farklı alan → ikisi de korunur (kayıp güncelleme yok) · aynı clientToken iki POST → tek kayıt · aynı parti kimliğiyle iki toplu satır ekleme → satırlar ikilenmez · aynı tarama iki taslak → biri 409 · aynı sha256 + noteId → mevcut kayıt bağlanır / başka taslağa bağlıysa 409
@@ -221,6 +222,37 @@ async function main(): Promise<void> {
     const dSame = await rq("from=2026-03-10&to=2026-03-10");
     check("§6b-5 ters aralık (from > to) → 400 · aynı gün → 200", dRev.status === 400 && dSame.status === 200, `${dRev.status}/${dSame.status}`);
 
+    // §6c S2(b) müşteri sipariş no: PATCH (yalnız bu anahtar) + audit + liste araması (liste ∪ cursor = özet) + uzun değer 400
+    console.log("§6c müşteri sipariş no");
+    const otherId = made.notes[2]!;
+    const ord = `ORD-${TAG}`;
+    const pOrd = await call("PATCH", `/api/gelen-belge/irsaliyeler/${noteId}`, tk, { customerOrderNo: ` ${ord}-77 ` });
+    await call("PATCH", `/api/gelen-belge/irsaliyeler/${otherId}`, tk, { customerOrderNo: `${ord}-78` });
+    const hOrd = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteId }, select: { customerOrderNo: true, senderDocNo: true, senderText: true } });
+    check("§6c-1 ⭐ PATCH customerOrderNo → 200, kırpılmış yazılır, yanıtta görünür; diğer başlık alanları dokunulmadı",
+      pOrd.status === 200 && pOrd.data?.customerOrderNo === `${ord}-77` && hOrd.customerOrderNo === `${ord}-77` && hOrd.senderDocNo === `${TAG}-1` && hOrd.senderText === `${TAG} gönderen`,
+      `${pOrd.status} ${pOrd.code ?? ""} ${JSON.stringify(hOrd)}`);
+    const auOrd = await prisma.systemLog.findFirst({ where: { tableName: "CUSTOMER_DELIVERY_NOTE", recordId: noteId, action: "UPDATE" }, orderBy: { createdAt: "desc" }, select: { oldData: true, newData: true } });
+    check("§6c-2 audit UPDATE künyesi eski/yeni sipariş no taşır", (auOrd?.oldData as { customerOrderNo?: unknown } | null)?.customerOrderNo === null && (auOrd?.newData as { customerOrderNo?: unknown } | null)?.customerOrderNo === `${ord}-77`, JSON.stringify(auOrd));
+    const q1 = await call("GET", `/api/gelen-belge/irsaliyeler?q=${encodeURIComponent(ord)}&limit=1`, tk);
+    const q2 = await call("GET", `/api/gelen-belge/irsaliyeler?q=${encodeURIComponent(ord)}&limit=1&cursor=${encodeURIComponent(q1.data?.nextCursor ?? "")}`, tk);
+    const qIds = new Set([...(q1.data?.items ?? []), ...(q2.data?.items ?? [])].map((i) => i.id));
+    check("§6c-3 ⭐ serbest arama sipariş no'yu bulur: liste ∪ cursor = {iki taslak} = özet total (aynı where)",
+      qIds.size === 2 && qIds.has(noteId) && qIds.has(otherId) && q2.data?.nextCursor === null && q1.data?.summary?.total === 2, `∪${qIds.size} özet ${JSON.stringify(q1.data?.summary)}`);
+    const qOne = await call("GET", `/api/gelen-belge/irsaliyeler?q=${encodeURIComponent(`${ord}-77`.toLowerCase())}`, tk);
+    check("§6c-4 arama büyük/küçük harf duyarsız ve daraltır (yalnız -77)", qOne.data?.items?.length === 1 && qOne.data?.items?.[0]?.id === noteId && qOne.data?.summary?.total === 1, `${qOne.data?.items?.length}`);
+    // Ham gövde: 400'ü DB'nin VarChar'ı (P2000) değil Zod sınırı vermeli — alan adı + Türkçe mesaj ölçülür.
+    const tlRes = await fetch(`${url}/api/gelen-belge/irsaliyeler/${noteId}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tk}` }, body: JSON.stringify({ customerOrderNo: "9".repeat(65) }) });
+    const tlBody = (await tlRes.json().catch(() => ({}))) as { errors?: Array<{ field: string; message: string }> };
+    const tooLong = { status: tlRes.status, code: tlBody.errors?.map((e) => `${e.field}:${e.message}`).join(",") };
+    const keep = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteId }, select: { customerOrderNo: true } });
+    const atMax = await call("PATCH", `/api/gelen-belge/irsaliyeler/${otherId}`, tk, { customerOrderNo: `${ord}-78`.padEnd(64, "X") });
+    check("§6c-5 ⭐ 65 karakter → 400 (VarChar(64) sınırı Zod'da), kayıt değişmez; tam 64 → 200",
+      tooLong.status === 400 && tooLong.code === "customerOrderNo:En çok 64 karakter" && keep.customerOrderNo === `${ord}-77` && atMax.status === 200, `${tooLong.status} ${tooLong.code ?? ""} / ${atMax.status}`);
+    const cOrd = await call("POST", "/api/gelen-belge/irsaliyeler", tk, { sourceKind: "MANUAL", ownerCustomerId: owner, customerOrderNo: `${ord}-79` });
+    if (cOrd.data?.id) made.notes.push(String(cOrd.data.id));
+    check("§6c-6 taslak açılışında da yazılır (iki uçta aynı Header)", cOrd.status === 201 && cOrd.data?.customerOrderNo === `${ord}-79`, `${cOrd.status} ${cOrd.code ?? ""}`);
+
     // §7 DRAFT dışı
     console.log("§7 DRAFT dışı");
     const approvedId = made.notes[1]!;
@@ -229,6 +261,9 @@ async function main(): Promise<void> {
     check("⭐ APPROVED silme → 409 DELIVERY_NOTE_NOT_DRAFT", delNo.status === 409 && delNo.code === "DELIVERY_NOTE_NOT_DRAFT", `${delNo.status} ${delNo.code}`);
     const patchNo = await call("PATCH", `/api/gelen-belge/irsaliyeler/${approvedId}`, tk, { senderText: "x" });
     check("APPROVED başlık düzeltme → 409", patchNo.status === 409 && patchNo.code === "DELIVERY_NOTE_NOT_DRAFT");
+    const patchOrdNo = await call("PATCH", `/api/gelen-belge/irsaliyeler/${approvedId}`, tk, { customerOrderNo: "123" });
+    const apOrd = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: approvedId }, select: { customerOrderNo: true } });
+    check("APPROVED sipariş no düzeltme → 409, değer yazılmaz (başlık kuralıyla aynı)", patchOrdNo.status === 409 && patchOrdNo.code === "DELIVERY_NOTE_NOT_DRAFT" && apOrd.customerOrderNo === null, `${patchOrdNo.status} ${apOrd.customerOrderNo}`);
     const lineNo = await call("POST", `/api/gelen-belge/irsaliyeler/${approvedId}/satirlar`, tk, line(9));
     check("APPROVED satır ekleme → 409", lineNo.status === 409 && lineNo.code === "DELIVERY_NOTE_NOT_DRAFT");
     const scanNo = await up(Buffer.concat([PNG, Buffer.from("v2")]), { noteId: approvedId });

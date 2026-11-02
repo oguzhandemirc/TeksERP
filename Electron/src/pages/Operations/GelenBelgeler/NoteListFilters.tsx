@@ -35,7 +35,7 @@ export function NoteListFilters({ filter, onChange, summary, trailing }: Props) 
         <Input
           value={filter.q}
           onChange={(e) => set({ q: e.target.value })}
-          placeholder="No, belge no, gönderen ara…"
+          placeholder="No, belge no, gönderen, parti/sipariş no ara…"
           className="w-full sm:max-w-xs"
           aria-label="Ara"
         />

@@ -13,12 +13,14 @@ interface Props {
   onPatch: (p: HeaderPatch) => void;
 }
 
-type TextKey = "senderDocNo" | "customerBatchNo" | "processText" | "senderText";
-const TEXT_FIELDS: Array<{ key: TextKey; label: string }> = [
-  { key: "senderText", label: "Gönderen (belgedeki ad)" },
-  { key: "senderDocNo", label: "Belge no" },
-  { key: "customerBatchNo", label: "Müşteri parti no" },
-  { key: "processText", label: "İşlem" },
+type TextKey = "senderDocNo" | "customerBatchNo" | "customerOrderNo" | "processText" | "senderText";
+// `max` = backend Zod sınırı = kolon VarChar'ı (taşan değer sunucuda 400 olurdu; giriş baştan keser).
+const TEXT_FIELDS: Array<{ key: TextKey; label: string; max: number }> = [
+  { key: "senderText", label: "Gönderen (belgedeki ad)", max: 160 },
+  { key: "senderDocNo", label: "Belge no", max: 64 },
+  { key: "customerBatchNo", label: "Müşteri parti no", max: 64 },
+  { key: "customerOrderNo", label: "Müşteri sipariş no", max: 64 },
+  { key: "processText", label: "İşlem", max: 120 },
 ];
 
 export function NoteHeaderForm({ note, suggestions, editable, onPatch }: Props) {
@@ -46,7 +48,7 @@ export function NoteHeaderForm({ note, suggestions, editable, onPatch }: Props) 
       {TEXT_FIELDS.map((f) => (
         <div key={`${f.key}:${note.updatedAt}`} className="flex min-w-0 flex-col gap-1">
           <Label>{f.label}</Label>
-          <Input defaultValue={note[f.key] ?? ""} disabled={!editable} onBlur={(e) => blurText(f.key, e.target.value)} />
+          <Input defaultValue={note[f.key] ?? ""} maxLength={f.max} aria-label={f.label} disabled={!editable} onBlur={(e) => blurText(f.key, e.target.value)} />
         </div>
       ))}
       <div key={`date:${note.updatedAt}`} className="flex min-w-0 flex-col gap-1">
