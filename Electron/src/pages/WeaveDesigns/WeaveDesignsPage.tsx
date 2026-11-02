@@ -4,7 +4,9 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Plus } from "lucide-react";
-import { PageBody, PageShell } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { RefreshButton } from "@/components/RefreshButton";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,24 +38,29 @@ export function WeaveDesignsPage() {
       <PageHeader
         title="Desen Kartları"
         description="Örgü türü · armür planı · atkı sırası · varyantlar. Bir desen birden çok kumaşı besler."
-        actions={hasPermission("warpspec:write") && (
-          <Button size="sm" onClick={() => setCreateOpen(true)}><Plus className="mr-1 h-4 w-4" />Yeni desen</Button>
-        )}
+        actions={
+          <div className="flex items-center gap-2">
+            <RefreshButton queryKey={WEAVE_DESIGNS_QUERY_KEY} />
+            {hasPermission("warpspec:write") && (
+              <Button size="sm" onClick={() => setCreateOpen(true)}><Plus className="mr-1 h-4 w-4" />Yeni desen</Button>
+            )}
+          </div>
+        }
       />
-      <div className="flex flex-wrap items-center gap-3 border-b px-4 py-2 sm:px-6">
+      <ListToolbar className="flex-row flex-wrap items-center gap-3">
         <Input className="max-w-xs" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Desen kodu veya adı ara..." aria-label="Desen ara" />
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
           <Switch checked={includeInactive} onCheckedChange={setIncludeInactive} aria-label="Pasifleri göster" />
           Pasifleri göster
         </label>
-      </div>
-      <PageBody className="min-h-0 p-4 sm:p-6">
+      </ListToolbar>
+      <ListBody>
         {list.isLoading ? (
-          <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
         ) : rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{q ? "Aramaya uyan desen yok." : "Henüz desen kartı yok."}</p>
+          <ListMessage className="text-sm text-muted-foreground">{q ? "Aramaya uyan desen yok." : "Henüz desen kartı yok."}</ListMessage>
         ) : (
-          <Table>
+          <Table containerClassName="overflow-visible">
             <TableHeader>
               <TableRow>
                 <TableHead>Kod</TableHead>
@@ -80,7 +87,8 @@ export function WeaveDesignsPage() {
             </TableBody>
           </Table>
         )}
-      </PageBody>
+      </ListBody>
+      <ListFooter loaded={rows.length} />
       {createOpen && (
         <WeaveDesignCreateDialog
           onClose={() => setCreateOpen(false)}

@@ -42,7 +42,7 @@ interface TableProps {
 export function LoomAlarmsTable({ items, now, onOpen }: TableProps) {
   return (
     <table className="w-full text-sm">
-      <thead className="sticky top-0 z-10 bg-background">
+      <thead>
         <tr className="border-b text-left text-xs text-muted-foreground">
           <th className="px-3 py-2 font-medium">Tezgah</th>
           <th className="px-3 py-2 font-medium">Sebep</th>

@@ -2,8 +2,8 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
-import { AutoLoadMore } from "@/components/data-table/AutoLoadMore";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListSentinel } from "@/components/layout/ListPage";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { RefreshButton } from "@/components/RefreshButton";
 import { isUuid, fromSearchParams, toQueryParams, toSearchParams, dayChipLabel, type PrintHistoryFilterState } from "@/lib/print-history-query";
@@ -67,7 +67,7 @@ export function PrintHistoryPage() {
       />
       {summary && <SummaryStrip summary={summary} prefix={dayChipLabel(filters)} items={items} />}
 
-      <PageBody ref={rootRef}>
+      <ListBody ref={rootRef}>
         {unsupported ? (
           <EmptyState text="Bu sunucu sürümü yazdırma geçmişini desteklemiyor. Sunucu güncellendiğinde kayıtlar burada görünür." />
         ) : query.isError ? (
@@ -80,17 +80,16 @@ export function PrintHistoryPage() {
               onSelect={handleSelect}
               onQuickFilter={handleQuickFilter}
             />
-            {items.length > 0 && (
-              <AutoLoadMore
-                ref={sentinelRef}
-                hasMore={query.hasNextPage}
-                isFetchingMore={query.isFetchingNextPage}
-                count={items.length}
-              />
-            )}
+            {items.length > 0 && <ListSentinel ref={sentinelRef} />}
           </>
         )}
-      </PageBody>
+      </ListBody>
+      <ListFooter
+        loaded={items.length}
+        total={summary?.toplam ?? null}
+        hasMore={query.hasNextPage}
+        isFetchingMore={query.isFetchingNextPage}
+      />
 
       <PrintJobDetailSheet jobId={detailId} onClose={() => setDetailId(null)} />
     </PageShell>
