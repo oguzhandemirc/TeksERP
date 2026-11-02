@@ -4,27 +4,38 @@
 // Tablet YALNIZ tarama + başlık yapar (sahip, gönderen belge no, sayfalar); satır gözden geçirme
 // ve onay panelde (SoD, `gelen-belge:approve`). Okuma servisi fotoğrafı arka planda okuyup aynı
 // taslağı doldurur. ONLINE-ONLY: çevrimdışı kuyruk yok; yarıda düşen gönderim ekranda kalır ve
-// "Yeniden dene" aynı taslağa kalan sayfaları yükler (`submitDocScan` ilerlemesi).
+// "Yeniden dene" aynı taslağa kalan sayfaları yükler (`submitDocScan` ilerlemesi). Gönderimden sonra okuma
+// sonucu kartta izlenir (`useReadResult`); "Yeni sayfa çek" aynı taslağa sayfa ekler, "Bitti" yeni belgeye hazırlar.
 // =============================================================================
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Text } from 'react-native-paper';
+import { Button } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
 import ScreenChrome from '../../../components/ScreenChrome';
-import { colors, spacing, typography } from '../../../theme';
+import { spacing } from '../../../theme';
 import DocHeader from './DocHeader';
 import PageCameraModal from './PageCameraModal';
 import PageList from './PageList';
 import PagePreviewModal from './PagePreviewModal';
+import ReadResultCard from './ReadResultCard';
 import { removePage } from './docScan';
 import { usePageSource } from './usePageSource';
 import { useDocScan } from './useDocScan';
+import { useReadResult } from './useReadResult';
 
 export default function DocScanScreen() {
   const b = useDocScan();
   const [cameraOpen, setCameraOpen] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const source = usePageSource(b.pages.length, b.captureMany, () => setCameraOpen(true));
+  const read = useReadResult(b.done?.note.id ?? null, b.done?.runKey ?? 0);
+  const addPageToNote = () => {
+    b.addToNote();
+    source.add();
+  };
+  const sendLabel = b.continuing && b.done
+    ? b.progress.uploaded.size ? `Yeniden dene (${b.remaining} sayfa)` : `${b.done.note.noteNo} taslağına ekle`
+    : b.headerLocked ? `Yeniden dene (${b.remaining} sayfa)` : 'Taslak oluştur ve gönder';
 
   const remove = (i: number) => b.setPages(removePage(b.pages, i));
   // Önizlemeden silince komşu sayfada kalınır; son sayfa da gidince önizleme kapanır.
@@ -37,10 +48,8 @@ export default function DocScanScreen() {
   return (
     <ScreenChrome title="Belge Tara" subtitle="Müşteri irsaliyesi → taslak">
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        {b.done && (
-          <View style={styles.doneBox} testID="belge-tara-sonuc">
-            <Text style={styles.doneText}>Son gönderilen: {b.done.noteNo} · {b.done.pages} sayfa. Onay panelde.</Text>
-          </View>
+        {b.done && read.watch && (
+          <ReadResultCard watch={read.watch} noteNo={b.done.note.noteNo} actions={{ onAddPage: addPageToNote, onDone: b.finish, onRecheck: read.recheck }} />
         )}
         <DocHeader owner={b.owner} onOwner={b.setOwner} senderDocNo={b.senderDocNo} onBarcode={b.setBarcode} locked={b.headerLocked} />
         <PageList
@@ -67,7 +76,7 @@ export default function DocScanScreen() {
             contentStyle={styles.btn}
             testID="belge-tara-gonder"
           >
-            {b.headerLocked ? `Yeniden dene (${b.remaining} sayfa)` : 'Taslak oluştur ve gönder'}
+            {sendLabel}
           </Button>
         </View>
       </ScrollView>
@@ -97,6 +106,4 @@ const styles = StyleSheet.create({
   body: { padding: spacing.lg, gap: spacing.sm },
   btn: { minHeight: 56 },
   footer: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.md, marginTop: spacing.lg },
-  doneBox: { padding: spacing.md, borderRadius: 8, backgroundColor: colors.surfaceMuted },
-  doneText: { fontSize: typography.size.base, color: colors.text },
 });

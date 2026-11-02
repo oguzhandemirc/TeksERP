@@ -42,6 +42,25 @@ export interface UploadScanResult {
   boundTo: string | null;
 }
 
+/** Okuma durumu — SUNUCU türetir (`readSummaryState`); istemci yalnız gösterir. */
+export type ReadSummaryState = 'NO_PAGES' | 'READING' | 'NO_SERVICE' | 'READ' | 'PARTIAL' | 'FAILED';
+
+/** `GET /gelen-belge/irsaliyeler/:id/okuma-ozeti` (tablet izni `gelen-belge:write`). */
+export interface ReadSummary {
+  noteId: string;
+  noteNo: string;
+  noteStatus: string;
+  state: ReadSummaryState;
+  /** Türkçe neden (okunamadı / servis yok / yeniden deneniyor / satır çıkmadı); yoksa null. */
+  reason: string | null;
+  pages: { total: number; waiting: number; read: number; failed: number };
+  lineCount: number;
+  reviewCount: number;
+  /** ok: null = belgede toplam beyanı yok; true/false onay kapısının cevabı. */
+  totals: { declared: boolean; ok: boolean | null; mismatches: string[] };
+  warnings: string[];
+}
+
 export const inboundDocService = {
   tabletContext: (): Promise<ApiResponse<InboundDocTabletContext>> =>
     apiClient.get<ApiResponse<InboundDocTabletContext>>('/gelen-belge/tablet-baglam').then((r) => r.data),
@@ -53,6 +72,9 @@ export const inboundDocService = {
     apiClient
       .post<ApiResponse<UploadScanResult>>('/gelen-belge/taramalar', body, { timeout: UPLOAD_TIMEOUT_MS })
       .then((r) => r.data.data),
+
+  readSummary: (noteId: string): Promise<ReadSummary> =>
+    apiClient.get<ApiResponse<ReadSummary>>(`/gelen-belge/irsaliyeler/${noteId}/okuma-ozeti`).then((r) => r.data.data),
 };
 
 export type InboundDocApi = Pick<typeof inboundDocService, 'createDraftNote' | 'uploadScan'>;

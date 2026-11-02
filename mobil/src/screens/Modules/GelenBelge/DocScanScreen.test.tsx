@@ -7,6 +7,7 @@ import DocScanScreen from './DocScanScreen';
 
 const mockCreate = jest.fn();
 const mockUpload = jest.fn();
+const mockSummary = jest.fn();
 // Sahte JPEG (sihirli bayt) — her çekimde aynı içerik: ikinci çekim aynı fotoğraftır.
 const mockB64 = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from('sayfa-1'.repeat(40))]).toString('base64');
 const mockB64b = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from('sayfa-2'.repeat(40))]).toString('base64');
@@ -16,6 +17,7 @@ jest.mock('../../../services/inboundDoc.service', () => ({
     tabletContext: async () => ({ success: true, data: { customers: [{ id: 'c1', name: 'Müşteri A' }] } }),
     createDraftNote: (b: unknown) => mockCreate(b),
     uploadScan: (b: unknown) => mockUpload(b),
+    readSummary: (id: string) => mockSummary(id),
   },
 }));
 const mockScanner = jest.fn();
@@ -72,6 +74,15 @@ function resetMocks() {
   (Toast.show as jest.Mock).mockClear();
   mockCreate.mockReset().mockResolvedValue({ id: 'n1', noteNo: 'GB-0001', status: 'DRAFT' });
   mockUpload.mockReset().mockResolvedValue({ scan: { id: 's1', sha256: 'x', noteId: 'n1' }, duplicate: false, boundTo: 'n1' });
+  mockSummary.mockReset().mockResolvedValue(summary({ state: 'READING' }));
+}
+
+function summary(p: Record<string, unknown>) {
+  return {
+    noteId: 'n1', noteNo: 'GB-0001', noteStatus: 'DRAFT', state: 'READING', reason: null,
+    pages: { total: 1, waiting: 0, read: 1, failed: 0 }, lineCount: 0, reviewCount: 0,
+    totals: { declared: false, ok: null, mismatches: [] }, warnings: [], ...p,
+  };
 }
 
 describe('DocScanScreen', () => {
@@ -202,5 +213,67 @@ describe('DocScanScreen — ML Kit belge tarayıcısı', () => {
     fireEvent.press(r.getByTestId('belge-tara-klasik-kamera'));
     expect(await r.findByTestId('sayfa-kamera')).toBeTruthy();
     expect(mockScanner).not.toHaveBeenCalled();
+  });
+});
+
+describe('DocScanScreen — okuma sonucu', () => {
+  beforeEach(resetMocks);
+
+  async function sendOnePage(r: ReturnType<typeof renderWithPaper>) {
+    await addViaCamera(r, 'sayfa-kamera');
+    fireEvent.press(r.getByTestId('belge-tara-gonder'));
+    await waitFor(() => expect(r.getByTestId('belge-tara-sonuc')).toBeTruthy());
+  }
+
+  it('⭐ gönderim → "Okunuyor…" → okundu: taslak no, satır, gözden geçirilecek, toplam', async () => {
+    mockSummary
+      .mockResolvedValueOnce(summary({ state: 'READING' }))
+      .mockResolvedValue(summary({ state: 'READ', lineCount: 21, reviewCount: 3, totals: { declared: true, ok: true, mismatches: [] } }));
+    const r = renderWithPaper(<DocScanScreen />);
+    await sendOnePage(r);
+    expect(r.getByTestId('belge-tara-sonuc-baslik')).toHaveTextContent('Okunuyor…');
+    expect(r.getByTestId('belge-tara-sonuc-no')).toHaveTextContent(/GB-0001/);
+    expect(mockSummary).toHaveBeenCalledWith('n1');
+    await waitFor(() => expect(r.getByTestId('belge-tara-sonuc-baslik')).toHaveTextContent('Okundu'), { timeout: 4000 });
+    expect(r.getByTestId('belge-tara-sonuc-satir')).toHaveTextContent(/21/);
+    expect(r.getByTestId('belge-tara-sonuc-gozden')).toHaveTextContent(/3/);
+    expect(r.getByTestId('belge-tara-sonuc-toplam')).toHaveTextContent(/Tutuyor/);
+  });
+
+  it('okunamadı → başlık + sunucunun Türkçe nedeni', async () => {
+    mockSummary.mockResolvedValue(summary({ state: 'FAILED', reason: 'Okuma servisi sayfayı okuyamadı. Panelden yeniden okutun ya da satırları elle girin.' }));
+    const r = renderWithPaper(<DocScanScreen />);
+    await sendOnePage(r);
+    await waitFor(() => expect(r.getByTestId('belge-tara-sonuc-baslik')).toHaveTextContent('Okunamadı'));
+    expect(r.getByTestId('belge-tara-sonuc-neden')).toHaveTextContent(/okuyamadı/);
+  });
+
+  it('⭐ "Yeni sayfa çek" → aynı taslağa yükler (taslak YENİDEN açılmaz, sayfa no 2), izleme baştan', async () => {
+    mockSummary.mockResolvedValue(summary({ state: 'READ', lineCount: 4 }));
+    const r = renderWithPaper(<DocScanScreen />);
+    await sendOnePage(r);
+    await waitFor(() => expect(r.getByTestId('belge-tara-sonuc-baslik')).toHaveTextContent('Okundu'));
+    fireEvent.press(r.getByTestId('belge-tara-sonuc-sayfa'));
+    fireEvent.press(await r.findByTestId('sayfa-kamera-2'));
+    await act(async () => {});
+    expect(r.getByTestId('belge-tara-gonder')).toHaveTextContent(/GB-0001 taslağına ekle/);
+    const calls = mockSummary.mock.calls.length;
+    fireEvent.press(r.getByTestId('belge-tara-gonder'));
+    await waitFor(() => expect(mockUpload).toHaveBeenCalledTimes(2));
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    expect(mockUpload.mock.calls[1][0]).toMatchObject({ noteId: 'n1', pageNo: 2, contentBase64: mockB64b });
+    await waitFor(() => expect(mockSummary.mock.calls.length).toBeGreaterThan(calls));
+  });
+
+  it('"Bitti" → kart kalkar, sonraki gönderim YENİ taslak açar', async () => {
+    mockSummary.mockResolvedValue(summary({ state: 'READ', lineCount: 4 }));
+    const r = renderWithPaper(<DocScanScreen />);
+    await sendOnePage(r);
+    await waitFor(() => expect(r.getByTestId('belge-tara-sonuc-baslik')).toHaveTextContent('Okundu'));
+    fireEvent.press(r.getByTestId('belge-tara-sonuc-bitti'));
+    expect(r.queryByTestId('belge-tara-sonuc')).toBeNull();
+    expect(r.getByTestId('belge-tara-gonder')).toHaveTextContent(/Taslak oluştur ve gönder/);
+    await sendOnePage(r);
+    expect(mockCreate).toHaveBeenCalledTimes(2);
   });
 });

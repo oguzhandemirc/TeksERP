@@ -18,6 +18,8 @@
 //      yazılır + needsReview; aynı taramanın eşit satırları ikisi de yazılır; paralel iki sayfa ortak satırı TEK kez yazar
 //   §10 K6 PDF: yükleme READ_FAILED (deneme 0) doğar · eski PENDING PDF bile claim EDİLMEZ · sidecar'a 0 PDF isteği ·
 //       okut → 400 DOCUMENT_SCAN_PDF_NOT_READABLE (servis yokken de 503'ten önce) · kuyruk sayaçlarına girmez
+//   §14 tablet okuma özeti: NO_PAGES · NO_SERVICE · READING (+ yeniden deneme nedeni) · READ (satır/gözden geçirme/toplam
+//       onay helper'ından) · toplam sapınca ok:false · FAILED · PARTIAL · izin write (read-only 403) · 404 · 400
 //   §9 İSTEĞE BAĞLI (OKUMA_GERCEK_URL=http://127.0.0.1:8765): GERÇEK okuma servisi (okuma/, D6) — sağlık + sentetik PNG → READ +
 //      Zod geçer + taslak · bozuk JPEG → servis 400 → KALICI READ_FAILED. Değişken yoksa atlanır (varsayılan sahte sunucu).
 // Emsal: scripts/test_gelen_belge_taslak.ts (app.listen(0) + ensureTestAdmin + ayar()).
@@ -511,6 +513,63 @@ async function main(): Promise<void> {
     const before13h = await prisma.senderTemplate.count();
     const l13h = await call("GET", "/api/gelen-belge/sablonlar");
     check("§13h GET gizli yazım yapmaz (satır sayısı değişmedi)", l13h.status === 200 && (await prisma.senderTemplate.count()) === before13h);
+
+    // ── §14 tablet okuma özeti (`/irsaliyeler/:id/okuma-ozeti`, `gelen-belge:write`) ─────────────
+    type Ozet = { noteNo: string; state: string; reason: string | null; pages: { total: number; waiting: number; read: number; failed: number }; lineCount: number; reviewCount: number; totals: { declared: boolean; ok: boolean | null; mismatches: string[] }; warnings: string[] };
+    const tabletTk = await mkUser("tablet", ["gelen-belge:write"]);
+    const ozet = async (id: string, token = tabletTk) => {
+      const r = await callAs(token, "GET", `/api/gelen-belge/irsaliyeler/${id}/okuma-ozeti`);
+      return { status: r.status, code: r.code, o: r.data as unknown as Ozet };
+    };
+    const tabletNote = async (suffix: string): Promise<string> => {
+      const r = await callAs(tabletTk, "POST", "/api/gelen-belge/irsaliyeler", { sourceKind: "MANUAL", senderDocNo: `${TAG}-${suffix}` });
+      made.notes.push(r.data?.id as string);
+      return r.data?.id as string;
+    };
+    fake.mode = "ok";
+    const n14 = await tabletNote("OZ1");
+    const e14 = await ozet(n14);
+    check("§14a sayfasız taslak → NO_PAGES + Türkçe neden; tablet izniyle 200", e14.status === 200 && e14.o.state === "NO_PAGES" && /fotoğraf/.test(e14.o.reason ?? "") && e14.o.lineCount === 0, JSON.stringify(e14));
+    await up("0245", { noteId: n14 }, "ozet");
+    setReaderUrlForTests(null);
+    const ns14 = await ozet(n14);
+    setReaderUrlForTests(sidecar.url);
+    check("§14b bekleyen sayfa + servis adresi yok → NO_SERVICE (sonsuz 'okunuyor' yok)", ns14.o.state === "NO_SERVICE" && /okuma servisi yok/.test(ns14.o.reason ?? "") && ns14.o.pages.waiting === 1, JSON.stringify(ns14.o));
+    const rd14 = await ozet(n14);
+    check("§14c bekleyen sayfa + servis var → READING, neden yok", rd14.o.state === "READING" && rd14.o.reason === null && rd14.o.pages.total === 1, JSON.stringify(rd14.o));
+    await runReaderOnce();
+    const ok14 = await ozet(n14);
+    const dbLines = await prisma.customerDeliveryNoteLine.findMany({ where: { noteId: n14 }, select: { needsReview: true } });
+    check("§14d okundu → READ: satır 21, gözden geçirme = DB needsReview sayısı, 2 blok beyanı TUTUYOR, no GB", ok14.o.state === "READ" && ok14.o.reason === null && ok14.o.lineCount === 21 && ok14.o.reviewCount === dbLines.filter((l) => l.needsReview).length && ok14.o.totals.declared && ok14.o.totals.ok === true && ok14.o.totals.mismatches.length === 0 && /^GB/.test(ok14.o.noteNo) && ok14.o.pages.read === 1, JSON.stringify(ok14.o));
+    // Toplam kapısı onayınkiyle aynı helper: bir satırın metresi bozulunca "tutmuyor" + onay kapısının metni.
+    const firstLine = await prisma.customerDeliveryNoteLine.findFirstOrThrow({ where: { noteId: n14 }, orderBy: { lineNo: "asc" }, select: { id: true, meters: true } });
+    await prisma.customerDeliveryNoteLine.update({ where: { id: firstLine.id }, data: { meters: firstLine.meters.plus(100) } });
+    const mm14 = await ozet(n14);
+    check("§14e satır toplamı beyandan saptı → totals.ok false + blok mesajı (onay `totalMismatches` metni)", mm14.o.totals.ok === false && mm14.o.totals.mismatches.some((m) => /^Blok 1: beyan .* m, satır toplamı/.test(m)), JSON.stringify(mm14.o.totals));
+    fake.mode = "400";
+    const n14f = await tabletNote("OZ2");
+    await up("0243", { noteId: n14f }, "ozet-f");
+    await runReaderOnce();
+    const f14 = await ozet(n14f);
+    check("§14f tek sayfa kalıcı okunamadı → FAILED + Türkçe neden", f14.o.state === "FAILED" && /okuyamadı/.test(f14.o.reason ?? "") && f14.o.pages.failed === 1, JSON.stringify(f14.o));
+    fake.mode = "ok";
+    await up("0243", { noteId: n14f, pageNo: 2 }, "ozet-f2");
+    await runReaderOnce();
+    const p14 = await ozet(n14f);
+    check("§14g bir sayfa okundu bir sayfa düştü → PARTIAL ('1 sayfa okunamadı')", p14.o.state === "PARTIAL" && /^1 sayfa okunamadı/.test(p14.o.reason ?? "") && p14.o.pages.read === 1 && p14.o.pages.failed === 1, JSON.stringify(p14.o));
+    fake.mode = "500";
+    const n14r = await tabletNote("OZ3");
+    await up("0244", { noteId: n14r }, "ozet-r");
+    await runReaderOnce();
+    const r14 = await ozet(n14r);
+    check("§14h 5xx sonrası bekleyen sayfa → READING + 'yeniden deneniyor (deneme 2/3)'", r14.o.state === "READING" && /yeniden deneniyor \(deneme 2\/3\)/.test(r14.o.reason ?? ""), JSON.stringify(r14.o));
+    fake.mode = "ok";
+    await runReaderOnce();
+    const okurTk = await mkUser("ozet-okur", ["gelen-belge:read"]);
+    const d14 = await ozet(n14, okurTk);
+    const nf14 = await ozet("00000000-0000-4000-8000-000000000000");
+    const bad14 = await ozet("abc");
+    check("§14i izin `gelen-belge:write` (yalnız read → 403) · yok id → 404 DELIVERY_NOTE_NOT_FOUND · bozuk id → 400", d14.status === 403 && nf14.status === 404 && nf14.code === "DELIVERY_NOTE_NOT_FOUND" && bad14.status === 400, `${d14.status} ${nf14.status} ${nf14.code} ${bad14.status}`);
 
     // ── §9 İSTEĞE BAĞLI: gerçek okuma servisi (okuma/) ─────────────────────
     const gercek = process.env.OKUMA_GERCEK_URL?.trim();
