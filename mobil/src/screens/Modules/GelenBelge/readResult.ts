@@ -86,11 +86,11 @@ export function fmtKursunMeters(v: string | number): string | null {
 }
 
 /** Parti no + kurşun metresi satırları — değerler sunucudan; alan yoksa (eski sunucu) satır yok. */
-function batchKursunRows(s: ReadSummary): ReadResultView['rows'] {
+function batchKursunRows(s: ReadSummary, tabletApproval: boolean): ReadResultView['rows'] {
   const rows: ReadResultView['rows'] = [];
   const candidates = s.batchNoCandidates ?? [];
   if (s.ourBatchNo) rows.push({ key: 'parti', label: 'Parti no', value: s.ourBatchNo });
-  else if (candidates.length > 1) rows.push({ key: 'parti', label: 'Parti no', value: `Panelde seçilecek (${candidates.length} aday)`, tone: 'warn' });
+  else if (candidates.length > 1) rows.push({ key: 'parti', label: 'Parti no', value: `${tabletApproval ? 'Aşağıda seçin' : 'Panelde seçilecek'} (${candidates.length} aday)`, tone: 'warn' });
   const m = s.kursunMeters != null ? fmtKursunMeters(s.kursunMeters) : null;
   if (m !== null) {
     const src = s.kursunMetersSource ? KURSUN_SOURCE_TEXT[s.kursunMetersSource] : undefined;
@@ -107,7 +107,7 @@ function batchKursunNotes(s: ReadSummary): string[] {
   return notes;
 }
 
-function summaryRows(s: ReadSummary, noteNo: string): ReadResultView['rows'] {
+function summaryRows(s: ReadSummary, noteNo: string, tabletApproval: boolean): ReadResultView['rows'] {
   const rows: ReadResultView['rows'] = [{ key: 'no', label: 'Taslak', value: noteNo }];
   if (s.state === 'READING') {
     if (s.pages.total > 1) rows.push({ key: 'sayfa', label: 'Sayfa', value: `${s.pages.read + s.pages.failed}/${s.pages.total} bitti` });
@@ -119,18 +119,21 @@ function summaryRows(s: ReadSummary, noteNo: string): ReadResultView['rows'] {
     { key: 'satir', label: 'Satır', value: String(s.lineCount) },
     { key: 'gozden', label: 'Gözden geçirilecek', value: String(s.reviewCount), tone: s.reviewCount > 0 ? 'warn' : 'ok' },
     { key: 'toplam', label: 'Toplam', value: t.value, tone: t.tone },
-    ...batchKursunRows(s),
+    ...batchKursunRows(s, tabletApproval),
   );
   return rows;
 }
 
-/** Operatöre basılacak kart içeriği. `noteNo` gönderimden bilinir (özet gelmeden de gösterilir). */
-export function readResultView(w: ReadWatch, noteNo: string): ReadResultView {
+/**
+ * Operatöre basılacak kart içeriği. `noteNo` gönderimden bilinir (özet gelmeden de gösterilir).
+ * `tabletApproval`: onay kartı (T2) tablette açık — parti no/metre işi orada; "panelde" notları basılmaz.
+ */
+export function readResultView(w: ReadWatch, noteNo: string, opts: { tabletApproval?: boolean } = {}): ReadResultView {
   const s = w.summary;
-  const rows = s ? summaryRows(s, noteNo) : [{ key: 'no', label: 'Taslak', value: noteNo }];
+  const rows = s ? summaryRows(s, noteNo, !!opts.tabletApproval) : [{ key: 'no', label: 'Taslak', value: noteNo }];
   const notices = s?.notices ?? [];
   const notes = s && (s.state === 'READ' || s.state === 'PARTIAL')
-    ? [...s.totals.mismatches, ...s.warnings, ...notices.map((n) => `${n.title}: ${n.detail}`), ...batchKursunNotes(s)]
+    ? [...s.totals.mismatches, ...s.warnings, ...notices.map((n) => `${n.title}: ${n.detail}`), ...(opts.tabletApproval ? [] : batchKursunNotes(s))]
     : [];
   if (w.phase === 'error') return { tone: 'error', title: 'Okuma durumu alınamadı', reason: w.message, rows, notes };
   if (w.phase === 'timeout') {

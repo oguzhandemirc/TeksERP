@@ -14,6 +14,17 @@ import { showsApprovalCard } from './approvalGate';
 
 export const approvalDetailKey = (noteId: string | null) => ['gelen-belge', 'onay-karti', noteId] as const;
 
+/** Onay kartı detayı — ekran (okuma kartı notları) ve kart aynı anahtarla okur; tek istek. */
+export function useApprovalDetail(noteId: string | null, readDone: boolean) {
+  return useQuery({
+    queryKey: approvalDetailKey(noteId),
+    queryFn: () => inboundDocService.noteDetail(noteId!),
+    enabled: !!noteId && readDone,
+    retry: false,
+    staleTime: 0,
+  });
+}
+
 export function useApprovalCard(noteId: string | null, readDone: boolean) {
   const qc = useQueryClient();
   const { has } = usePermissions();
@@ -22,13 +33,7 @@ export function useApprovalCard(noteId: string | null, readDone: boolean) {
   const [result, setResult] = useState<ApproveNoteResult | null>(null);
   const [routeTemplateId, setRouteTemplateId] = useState<string | null>(null);
 
-  const detail = useQuery({
-    queryKey: approvalDetailKey(noteId),
-    queryFn: () => inboundDocService.noteDetail(noteId!),
-    enabled: !!noteId && readDone,
-    retry: false,
-    staleTime: 0,
-  });
+  const detail = useApprovalDetail(noteId, readDone);
   const visible = showsApprovalCard(detail.data);
   // Rota listesi yalnız onaylayacak kullanıcıya; okunamazsa seçici yok → sunucunun öneri zinciri.
   const routes = useQuery({

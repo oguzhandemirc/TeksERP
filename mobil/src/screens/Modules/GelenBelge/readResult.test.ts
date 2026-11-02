@@ -190,6 +190,16 @@ describe('readResult — parti no + kurşun metresi (Gülkesim; sunucu alanları
     expect(row(read({ kursunMeters: '198.1', kursunMetersSource: 'MANUAL' }), 'kursun')?.value).toBe('198,1 m (elle)');
   });
 
+  it('T2 onay kartı tablette açık → "panelde" notları basılmaz, parti satırı "Aşağıda seçin" der', () => {
+    const p = { ourBatchNo: null, kursunMeters: 2157, kursunMetersSource: 'LINE_SUM' as const, kursunMetersReview: true, batchNoCandidates: [{ key: 'a', value: '1' }, { key: 'b', value: '2' }] };
+    const w = onSummary(startWatch(T0), sum({ state: 'READ', lineCount: 1, totals: { declared: true, ok: true, mismatches: [] }, ...p }), T0 + 1);
+    const v = readResultView(w, 'GB-0001', { tabletApproval: true });
+    expect(v.notes).toEqual([]);
+    expect(row(v, 'parti')?.value).toBe('Aşağıda seçin (2 aday)');
+    expect(row(v, 'kursun')?.tone).toBe('warn');
+    expect(readResultView(w, 'GB-0001').notes).toEqual(['Parti no panelde seçilecek.', 'Kurşun metresi panelde doğrulanacak.']);
+  });
+
   it('eski backend: alanlar yok → parti/kurşun satırı yok, kart bugünkü gibi', () => {
     const v = read({});
     expect(v.rows.map((r) => r.key)).toEqual(['no', 'satir', 'gozden', 'toplam']);

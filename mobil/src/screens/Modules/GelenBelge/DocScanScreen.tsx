@@ -23,6 +23,8 @@ import { removePage } from './docScan';
 import { usePageSource } from './usePageSource';
 import { useDocScan } from './useDocScan';
 import { useReadResult } from './useReadResult';
+import { showsApprovalCard } from './approvalGate';
+import { useApprovalDetail } from './useApprovalCard';
 
 export default function DocScanScreen() {
   const b = useDocScan();
@@ -32,6 +34,7 @@ export default function DocScanScreen() {
   const read = useReadResult(b.done?.note.id ?? null, b.done?.runKey ?? 0);
   // Okuma sonuçlandı → onay kartı detayı çeker (kip ve kapı sunucudan; kart yoksa bugünkü yol).
   const readDone = read.watch?.phase === 'done' && (read.watch.summary.state === 'READ' || read.watch.summary.state === 'PARTIAL');
+  const approvalOpen = showsApprovalCard(useApprovalDetail(b.done?.note.id ?? null, readDone).data);
   const addPageToNote = () => {
     b.addToNote();
     source.add();
@@ -52,7 +55,7 @@ export default function DocScanScreen() {
     <ScreenChrome title="Belge Tara" subtitle="Müşteri irsaliyesi → taslak">
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         {b.done && read.watch && (
-          <ReadResultCard watch={read.watch} noteNo={b.done.note.noteNo} actions={{ onAddPage: addPageToNote, onDone: b.finish, onRecheck: read.recheck }} />
+          <ReadResultCard watch={read.watch} noteNo={b.done.note.noteNo} actions={{ onAddPage: addPageToNote, onDone: b.finish, onRecheck: read.recheck }} tabletApproval={approvalOpen} />
         )}
         {b.done && <ApprovalCard key={`${b.done.note.id}:${b.done.runKey}`} noteId={b.done.note.id} readDone={readDone} onDone={b.finish} />}
         <DocHeader owner={b.owner} onOwner={b.setOwner} senderDocNo={b.senderDocNo} onBarcode={b.setBarcode} locked={b.headerLocked} />
