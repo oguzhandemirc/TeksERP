@@ -156,11 +156,15 @@ async function section4Schema(call: Call): Promise<void> {
   const r = await call("POST", "/api/gelen-belge/irsaliyeler", { sourceKind: "MANUAL", senderDocNo: `${TAG}-S0` });
   const id = (r.data?.id as string) ?? "";
   if (id) made.notes.push(id);
-  const patch = await call("PATCH", `/api/gelen-belge/irsaliyeler/${id}`, { ourBatchNo: "ISM1439770" });
-  const tpl = await call("PATCH", `/api/gelen-belge/sablonlar/${TPL}`, { batchNoKey: "isEmriNo" });
-  check("§4h yeni kolonlar yazım yüzeyine KAPALI (başlık PATCH ourBatchNo · şablon PATCH batchNoKey → 400; B açar)", patch.status === 400 && tpl.status === 400, `${patch.status} ${tpl.status}`);
   const n = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id }, select: { ourBatchNo: true, ourBatchNoKey: true, kursunMeters: true, kursunMetersSource: true, kursunMetersReview: true } });
   check("§4i yeni taslak: dört kolon NULL, kursunMetersReview=false (bugünkü)", n.ourBatchNo === null && n.ourBatchNoKey === null && n.kursunMeters === null && n.kursunMetersSource === null && n.kursunMetersReview === false, JSON.stringify(n));
+  // Yazım yüzeyi: yaratma gövdesi KAPALI kalır (okuma katmanı doldurur); başlık PATCH + şablon PATCH B dilimiyle açıldı (test_gelen_belge_belge_basina §2/§7).
+  const create = await call("POST", "/api/gelen-belge/irsaliyeler", { sourceKind: "MANUAL", senderDocNo: `${TAG}-S0b`, ourBatchNo: "ISM1439770" });
+  if ((create.data?.id as string | undefined)) made.notes.push(create.data!.id as string);
+  const patch = await call("PATCH", `/api/gelen-belge/irsaliyeler/${id}`, { ourBatchNo: "ISM1439770" });
+  const tpl = await call("PATCH", `/api/gelen-belge/sablonlar/${TPL}`, { batchNoKey: "isEmriNo" });
+  await call("PATCH", `/api/gelen-belge/sablonlar/${TPL}`, { batchNoKey: null });
+  check("§4h yaratma gövdesi yeni kolona KAPALI (400); başlık PATCH ourBatchNo · şablon PATCH batchNoKey AÇIK (200, B)", create.status === 400 && patch.status === 200 && tpl.status === 200, `${create.status} ${patch.status} ${tpl.status}`);
   const col = await prisma.$queryRaw<Array<{ is_nullable: string; column_default: string | null }>>`
     SELECT is_nullable, column_default FROM information_schema.columns WHERE table_name = 'batches' AND column_name = 'numberSource'`;
   check("§4i2 batches.numberSource NOT NULL DEFAULT SERIES (mevcut partiler seriden)", col[0]?.is_nullable === "NO" && (col[0]?.column_default ?? "").startsWith("'SERIES'"), JSON.stringify(col));
