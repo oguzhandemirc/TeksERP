@@ -198,9 +198,13 @@ export interface DocumentTemplate {
 /** Tablosuz belgenin başlığından tek satır: yalnız `count` alanı 1 okunduğunda (aksi uyarı) ve metre pozitifse. */
 export interface HeaderLineSpec {
   count: string;
+  /** Varsayılan (çıkış) sırası: ilk pozitif değer. */
   m: string[];
   kg?: string[];
   en?: string[];
+  /** Fabrika ayarı `gelenBelge.headerLineMeterSource = INPUT` iken kullanılan giriş-önce sıra (yoksa `m`/`kg`). */
+  inputM?: string[];
+  inputKg?: string[];
 }
 
 // ---------------------------------------------------------------------------

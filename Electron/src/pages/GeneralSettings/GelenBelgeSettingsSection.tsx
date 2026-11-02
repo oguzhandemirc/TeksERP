@@ -3,10 +3,11 @@
 // =============================================================================
 // Üç ayar, tek uç (`PUT /api/gelen-belge/ayarlar`; ham ayar ucu bu anahtarları reddeder):
 //   · varsayılan ürün — ürünü seçilmemiş satır onayda bu ürünle girer (boş = bugünkü: ürün seçilmeli)
-//   · gözden geçirilmemiş hücre varken onay — Uyar (varsayılan, bugünkü) | Engelle
+//   · gözden geçirilmemiş hücre varken onay — Uyar (varsayılan, bugünkü) | Yalnız şüpheli değeri engelle | Engelle
 //   · onaydan sonra otomatik iş emri — kapalı (varsayılan, bugünkü: iş emri plan ekranından elle)
 //   · fabrika varsayılan rotası + rota önerisi önceliği — boş / "önce müşteri geçmişi" (varsayılan, bugünkü)
-//   · el yazısı şüpheli değer oranı K — 4 (varsayılan; alt sınır bugünkü %25, üst sınır yeni, yalnız uyarı)
+//   · el yazısı şüpheli değer oranı K — 4 (varsayılan; alt sınır bugünkü %25, üst sınır yeni)
+//   · okuma seçenekleri (tablosuz fişte metre kaynağı, şablondan gönderen) — `GelenBelgeReadOptionsField.tsx`
 // Ürün seçici DOĞRUDAN modal açar (combobox yok); yalnız aktif kumaş listelenir, sunucu ikinci kapıdır.
 // =============================================================================
 import { useEffect, useState } from "react";
@@ -25,6 +26,7 @@ import { TERIM } from "@/lib/terim";
 import { FieldLabel, FlagToggle } from "./SettingRow";
 import { EnumRadioOptions } from "./EnumRadioOptions";
 import { OutlierFactorField, useOutlierDraft } from "./GelenBelgeOutlierField";
+import { ReadOptionsFields, useReadOptionsDraft } from "./GelenBelgeReadOptionsField";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { useRegisterSettingsDirty } from "./settings-dirty";
 import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
@@ -38,6 +40,7 @@ import type { IncomingDocumentSettings, RouteSuggestionPriority, UnreviewedAppro
 
 export const UNREVIEWED_APPROVAL_OPTIONS: ReadonlyArray<{ value: UnreviewedApproval; label: string; hint: string }> = [
   { value: "WARN", label: "Uyar, onaya izin ver", hint: "Gözden geçirilmemiş satır varken onay geçer; sonuçta uyarı gösterilir (bugünkü davranış)." },
+  { value: "BLOCK_SUSPECT", label: "Yalnız şüpheli değeri engelle", hint: "\"Şüpheli değer\" işaretli (el yazısında harf karışmış ya da diğerlerinden çok küçük/büyük) satır gözden geçirilmeden onay reddedilir; diğer gözden geçirilmemiş satırlar uyarıyla geçer." },
   { value: "BLOCK", label: "Engelle", hint: "Gözden geçirilmemiş satır varken onay reddedilir; önce hücreler gözden geçirilir." },
 ];
 
@@ -164,18 +167,19 @@ export function IncomingDocumentSettingsSection({ writePermissions = [SETTINGS_A
   const [auto, setAuto] = useState(serverAuto);
   const rd = useRouteDraft(server);
   const od = useOutlierDraft(server);
+  const ro = useReadOptionsDraft(server);
   const [picking, setPicking] = useState(false);
-  const resetAll = () => { setItem(serverItem); setMode(server?.unreviewedApproval ?? "WARN"); setAuto(serverAuto); rd.reset(); od.reset(); };
+  const resetAll = () => { setItem(serverItem); setMode(server?.unreviewedApproval ?? "WARN"); setAuto(serverAuto); rd.reset(); od.reset(); ro.reset(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(resetAll, [server?.defaultItem?.id, server?.unreviewedApproval, serverAuto, rd.serverRouteId, rd.serverPriority, od.serverValue]);
+  useEffect(resetAll, [server?.defaultItem?.id, server?.unreviewedApproval, serverAuto, rd.serverRouteId, rd.serverPriority, od.serverValue, ro.serverSource, ro.serverAutoSender]);
 
   const itemDirty = (item?.id ?? null) !== (server?.defaultItem?.id ?? null);
   const modeDirty = mode !== (server?.unreviewedApproval ?? "WARN");
   const autoDirty = auto !== serverAuto;
-  const dirty = itemDirty || modeDirty || autoDirty || rd.routeDirty || rd.priorityDirty || od.dirty;
+  const dirty = itemDirty || modeDirty || autoDirty || rd.routeDirty || rd.priorityDirty || od.dirty || ro.dirty;
   useRegisterSettingsDirty(dirty);
 
-  const body = { ...(itemDirty ? { defaultItemId: item?.id ?? null } : {}), ...(modeDirty ? { unreviewedApproval: mode } : {}), ...(autoDirty ? { autoWorkOrder: auto } : {}), ...rd.body, ...od.body };
+  const body = { ...(itemDirty ? { defaultItemId: item?.id ?? null } : {}), ...(modeDirty ? { unreviewedApproval: mode } : {}), ...(autoDirty ? { autoWorkOrder: auto } : {}), ...rd.body, ...od.body, ...ro.body };
   const mut = useMutation({
     mutationFn: () => updateIncomingDocumentSettings(body),
     onSuccess: (saved) => {
@@ -221,6 +225,7 @@ export function IncomingDocumentSettingsSection({ writePermissions = [SETTINGS_A
         <AutoWorkOrderToggle checked={auto} onChange={setAuto} />
         <RouteSuggestionFields routeId={rd.routeId} onRouteChange={rd.setRouteId} priority={rd.priority} onPriorityChange={rd.setPriority} saved={server} routeDirty={rd.routeDirty} />
         <OutlierFactorField draft={od} defaultValue={server?.defaultHandwritingOutlierFactor} />
+        <ReadOptionsFields draft={ro} />
 
         <SettingsSaveBar dirty={dirty} saving={mut.isPending} onSave={() => mut.mutate()} onReset={resetAll} />
         <ItemPickerModal

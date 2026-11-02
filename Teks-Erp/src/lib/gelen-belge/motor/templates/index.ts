@@ -80,6 +80,8 @@ function validateBlockAndHeaderLine(t: Record<string, unknown>, errors: string[]
   known(h.m, "headerLine.m");
   if (h.kg !== undefined) known(h.kg, "headerLine.kg");
   if (h.en !== undefined) known(h.en, "headerLine.en");
+  if (h.inputM !== undefined) known(h.inputM, "headerLine.inputM");
+  if (h.inputKg !== undefined) known(h.inputKg, "headerLine.inputKg");
 }
 
 function isObj(v: unknown): v is Record<string, unknown> {

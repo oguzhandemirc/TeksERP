@@ -21,6 +21,7 @@ export function needsVarianceReason(error: unknown): boolean {
 /** E3 kapıları için diyalog dili — backend mesajı satır no listesi taşır, bu cümle operatöre ne yapacağını söyler. */
 export const APPROVE_ERROR_TEXT: Record<string, string> = {
   DELIVERY_NOTE_REVIEW_PENDING: "Gözden geçirilmemiş satır var ve fabrika ayarı bu durumda onayı engelliyor. Sarı işaretli hücreleri gözden geçirip yeniden onaylayın.",
+  DELIVERY_NOTE_SUSPECT_PENDING: "Şüpheli değerli satır gözden geçirilmedi ve fabrika ayarı bu durumda onayı engelliyor. \"Şüpheli değer\" işaretli hücreleri belgeyle karşılaştırıp yeniden onaylayın.",
   GELEN_BELGE_DEFAULT_ITEM_UNUSABLE: "Ürünü seçilmemiş satırların gireceği varsayılan ürün artık kullanılamıyor; hiç top girilmedi. Satırlara ürün seçin ya da varsayılan ürünü düzeltin.",
 };
 
@@ -60,7 +61,7 @@ export function defaultItemHint(eff: EffectiveDefaultItem | null | undefined): {
 }
 
 /** Backend precheck'inin "açık satır" tanımı (`gelen-belge-onay.service.ts`): topsuz PENDING/FAILED/ENTERING. */
-type PrecheckLine = Pick<DeliveryNoteLine, "status" | "rollId" | "itemId" | "needsReview">;
+type PrecheckLine = Pick<DeliveryNoteLine, "status" | "rollId" | "itemId" | "needsReview" | "problems">;
 const isOpenLine = (l: PrecheckLine) => !l.rollId && (l.status === "PENDING" || l.status === "FAILED" || l.status === "ENTERING");
 
 export interface ApprovePrecheck {
@@ -68,6 +69,8 @@ export interface ApprovePrecheck {
   unresolved: number;
   /** needsReview açık satır sayısı. */
   unreviewed: number;
+  /** Şüpheli değerli (backend `problems` SUSPECT_VALUE) açık satır sayısı. */
+  suspect: number;
   /** Onay engellenir mi (BLOCK + gözden geçirilmemiş · ürünsüz + etkin varsayılan yok · varsayılan ürün kullanılamaz). */
   blocked: boolean;
   messages: Array<{ tone: "info" | "warn" | "block"; text: string }>;
@@ -81,6 +84,8 @@ export function approvePrecheck(lines: readonly PrecheckLine[], settings: Incomi
   const open = lines.filter(isOpenLine);
   const unresolved = open.filter((l) => !l.itemId).length;
   const unreviewed = open.filter((l) => l.needsReview).length;
+  // Şüpheli kümesi sunucunun `problems`ından (panel şüphe kuralı kurmaz); eski backend alanı göndermezse 0.
+  const suspect = open.filter((l) => l.needsReview && l.problems?.includes("SUSPECT_VALUE")).length;
   const messages: ApprovePrecheck["messages"] = [];
   let blocked = false;
   if (unresolved > 0) {
@@ -100,11 +105,14 @@ export function approvePrecheck(lines: readonly PrecheckLine[], settings: Incomi
     if (settings.unreviewedApproval === "BLOCK") {
       blocked = true;
       messages.push({ tone: "block", text: `${unreviewed} satır gözden geçirilmeli — onay engellenir.` });
+    } else if (settings.unreviewedApproval === "BLOCK_SUSPECT" && suspect > 0) {
+      blocked = true;
+      messages.push({ tone: "block", text: `${suspect} şüpheli değerli satır gözden geçirilmeli — onay engellenir.` });
     } else {
       messages.push({ tone: "warn", text: `${unreviewed} satır gözden geçirilmedi — onay uyarıyla geçer.` });
     }
   }
-  return { unresolved, unreviewed, blocked, messages };
+  return { unresolved, unreviewed, suspect, blocked, messages };
 }
 
 export interface ApproveOutcome {

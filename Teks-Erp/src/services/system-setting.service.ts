@@ -404,6 +404,12 @@ export const SETTING_KEYS = {
   /** El yazısı ızgarasında şüpheli metre oranı K (blok medyanının 1/K altı ya da K katı üstü → uyarı + satır etiketi).
    *  Boş = 4 (bugünkü alt sınır %25; üst sınır yeni, yalnız uyarı). Aralık 2–20; tek yazar `PUT /api/gelen-belge/ayarlar`. */
   GELEN_BELGE_OUTLIER_FACTOR: "gelenBelge.handwritingOutlierFactor",
+  /** Tablosuz belgede (ürün sevk fişi `headerLine`) satır metresi/kg'si: OUTPUT çıkış toplamı (varsayılan = bugünkü) | INPUT giriş toplamı.
+   *  Tek yazar `PUT /api/gelen-belge/ayarlar`; yeni okumaya uygulanır. */
+  GELEN_BELGE_HEADER_LINE_SOURCE: "gelenBelge.headerLineMeterSource",
+  /** Okunan şablonun bağlı gönderen carisi boş gönderen alanına yazılsın mı. Varsayılan KAPALI = bugünkü (OCR gönderen doldurmaz).
+   *  Tek yazar `PUT /api/gelen-belge/ayarlar`. */
+  GELEN_BELGE_AUTO_SENDER: "gelenBelge.autoSenderFromTemplate",
   /** Z1 ÜRETİM BELGE ZİNCİRİ (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bugünkü davranış (bağ opsiyonel). */
   DEVERE_BEAM_WEAVING_LINK_REQUIRED: "devere.beamWeavingLinkRequired",
   DOKUMA_RUN_WEAVING_ORDER_REQUIRED: "dokuma.runWeavingOrderRequired",
@@ -6536,8 +6542,9 @@ export async function readIncomingDocDefaultItemId(tx?: Pick<typeof prisma, "sys
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v) ? v : null;
 }
 
-export type UnreviewedApprovalMode = "WARN" | "BLOCK";
-export const UNREVIEWED_APPROVAL_VALUES: readonly UnreviewedApprovalMode[] = ["WARN", "BLOCK"];
+/** WARN uyarıyla geçer · BLOCK_SUSPECT yalnız şüpheli değerli (SUSPECT_VALUE) satır engeller · BLOCK her gözden geçirilmemiş satır engeller. */
+export type UnreviewedApprovalMode = "WARN" | "BLOCK_SUSPECT" | "BLOCK";
+export const UNREVIEWED_APPROVAL_VALUES: readonly UnreviewedApprovalMode[] = ["WARN", "BLOCK_SUSPECT", "BLOCK"];
 /** Varsayılan WARN = bugünkü davranış (needsReview satır onayı durdurmaz). */
 export const DEFAULT_UNREVIEWED_APPROVAL: UnreviewedApprovalMode = "WARN";
 
@@ -6564,6 +6571,34 @@ export async function readIncomingDocAutoWorkOrder(tx?: Pick<typeof prisma, "sys
     select: { value: true },
   });
   return asBoolean(setting?.value);
+}
+
+/** Okunan şablonun gönderen carisiyle boş gönderen alanını doldur; kayıt yok / bozuk → false (bugünkü: OCR gönderen doldurmaz). */
+export async function readIncomingDocAutoSender(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.GELEN_BELGE_AUTO_SENDER },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+export type HeaderLineMeterSource = "OUTPUT" | "INPUT";
+export const HEADER_LINE_METER_SOURCE_VALUES: readonly HeaderLineMeterSource[] = ["OUTPUT", "INPUT"];
+/** Varsayılan OUTPUT = bugünkü davranış (ürün sevk fişinde çıkış toplamı, yoksa giriş). */
+export const DEFAULT_HEADER_LINE_METER_SOURCE: HeaderLineMeterSource = "OUTPUT";
+
+/** Tablosuz belgede satır metresi kaynağı; çöp değer varsayılana düşer (`includes` sigortası). */
+export async function readHeaderLineMeterSource(tx?: Pick<typeof prisma, "systemSetting">): Promise<HeaderLineMeterSource> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.GELEN_BELGE_HEADER_LINE_SOURCE },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  return typeof v === "string" && (HEADER_LINE_METER_SOURCE_VALUES as readonly string[]).includes(v)
+    ? (v as HeaderLineMeterSource)
+    : DEFAULT_HEADER_LINE_METER_SOURCE;
 }
 
 /** Rota önerisinin fabrika varsayılanı; kayıt yok / boş / UUID değil → null (bugünkü: fabrika kaynağı yok). */

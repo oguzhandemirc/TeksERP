@@ -27,7 +27,7 @@ export function OutlierFactorField({ draft, defaultValue }: { draft: ReturnType<
       <FieldLabel
         htmlFor="gb-outlier-factor-input"
         label="El yazısı şüpheli değer oranı"
-        desc={`El yazısı belgede bir satırın metresi, aynı bloktaki değerlerin ortancasının ${k} katından büyük ya da ${k}'te birinden küçükse satır "Şüpheli değer" olarak işaretlenir ve taslakta uyarı çıkar (ör. 137 yerine 1370 okunması). Yalnız uyarıdır, onayı engellemez; yeni okunan sayfalara uygulanır. Küçük oran daha çok satırı işaretler.`}
+        desc={`El yazısı belgede bir satırın metresi, aynı bloktaki değerlerin ortancasının ${k} katından büyük ya da ${k}'te birinden küçükse satır "Şüpheli değer" olarak işaretlenir ve taslakta uyarı çıkar (ör. 137 yerine 1370 okunması). Onayı yalnız "Yalnız şüpheli değeri engelle" seçiliyse engeller; yeni okunan sayfalara uygulanır. Küçük oran daha çok satırı işaretler.`}
       />
       <Input
         id="gb-outlier-factor-input"

@@ -33,7 +33,7 @@ import { resolveDefaultItemForApproval, type DefaultItemSource } from "./gelen-b
 import { readUnreviewedApprovalMode } from "./system-setting.service";
 import { assertProcessChoiceValue } from "./helpers/process-choice-catalog.helper";
 import { aliasKey } from "./gelen-belge-eslestirme.service";
-import { isOpenForApproval, lineProblems, totalMismatches, totalWarnings } from "./gelen-belge-kontrol.service";
+import { isOpenForApproval, lineProblems, reviewGate, totalMismatches, totalWarnings, type ReviewGate } from "./gelen-belge-kontrol.service";
 
 // Kapı yüklemleri tek kaynakta (detay yanıtı da aynılarını okur); eski içe aktaranlar için yeniden dışa aktarılır.
 export { totalMismatches, totalWarnings };
@@ -72,12 +72,12 @@ export interface ApproveResult {
   warnings: string[];
 }
 
-type LineRow = { id: string; lineNo: number; blockNo: number; status: DeliveryNoteLineStatus; meters: Prisma.Decimal; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; itemId: string | null; colorId: string | null; itemText: string | null; colorText: string | null; processText: string | null; rollId: string | null; needsReview: boolean };
+type LineRow = { id: string; lineNo: number; blockNo: number; status: DeliveryNoteLineStatus; meters: Prisma.Decimal; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; itemId: string | null; colorId: string | null; itemText: string | null; colorText: string | null; processText: string | null; rollId: string | null; needsReview: boolean; ocrRaw?: Prisma.JsonValue };
 
 const PRE_SELECT = {
   id: true, noteNo: true, status: true, ownerCustomerId: true, senderCustomerId: true, senderText: true, processText: true, pageCount: true,
   declaredTopCount: true, totalsDeclared: true, varianceReason: true, updatedAt: true,
-  lines: { select: { id: true, lineNo: true, blockNo: true, status: true, meters: true, weightKg: true, widthCm: true, itemId: true, colorId: true, itemText: true, colorText: true, processText: true, rollId: true, needsReview: true }, orderBy: [{ blockNo: "asc" }, { lineNo: "asc" }] },
+  lines: { select: { id: true, lineNo: true, blockNo: true, status: true, meters: true, weightKg: true, widthCm: true, itemId: true, colorId: true, itemText: true, colorText: true, processText: true, rollId: true, needsReview: true, ocrRaw: true }, orderBy: [{ blockNo: "asc" }, { lineNo: "asc" }] },
   scans: { select: { pageNo: true } },
 } satisfies Prisma.CustomerDeliveryNoteSelect;
 
@@ -109,12 +109,11 @@ async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: ty
   if (unresolved.length && !defaultItem) {
     throw AppError.badRequest(`Ürünü çözülmemiş satır var: ${unresolved.join(", ")}. Her satırda ürün eşlenmeden onaylanamaz.`, { code: "DELIVERY_NOTE_LINE_UNRESOLVED", lineNos: unresolved });
   }
-  // İnceleme kapısı (E3, D5'ten kalan karar): needsReview açık satır — BLOCK'ta 409, WARN'da (varsayılan) uyarıyla geçer.
-  const unreviewed = open.filter((l) => lineProblems(l).includes("NEEDS_REVIEW")).map((l) => l.lineNo);
-  const reviewMode = unreviewed.length ? await readUnreviewedApprovalMode() : "WARN";
-  if (unreviewed.length && reviewMode === "BLOCK") {
-    throw AppError.conflict(`Gözden geçirilmemiş satır var: ${unreviewed.join(", ")}. Hücreleri gözden geçirip onaylayın (fabrika ayarı: gözden geçirilmemiş hücreyle onay engelli).`, { code: "DELIVERY_NOTE_REVIEW_PENDING", lineNos: unreviewed });
-  }
+  // İnceleme kapısı (E3; S4 2026-11-02): karar `reviewGate` (WARN uyarı · BLOCK_SUSPECT yalnız şüpheli değer · BLOCK hepsi 409).
+  const needsGate = open.some((l) => lineProblems(l).includes("NEEDS_REVIEW"));
+  const gate = reviewGate(open, needsGate ? await readUnreviewedApprovalMode() : "WARN");
+  if (gate.code) throw AppError.conflict(REVIEW_GATE_TEXT[gate.code](gate.blocked), { code: gate.code, lineNos: gate.blocked });
+  const unreviewed = gate.warned;
   // Kapılar YALNIZ bu istekteki gerekçeyle açılır: başlıkta kalmış eski gerekçe sonraki onayın yeni uyuşmazlığını örtmez.
   const reason = input.varianceReason?.trim();
   const warnings = totalWarnings(note, note.lines);
@@ -133,6 +132,11 @@ async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: ty
   }
   return { warnings, defaultItem };
 }
+
+const REVIEW_GATE_TEXT: Record<NonNullable<ReviewGate["code"]>, (lineNos: number[]) => string> = {
+  DELIVERY_NOTE_REVIEW_PENDING: (n) => `Gözden geçirilmemiş satır var: ${n.join(", ")}. Hücreleri gözden geçirip onaylayın (fabrika ayarı: gözden geçirilmemiş hücreyle onay engelli).`,
+  DELIVERY_NOTE_SUSPECT_PENDING: (n) => `Şüpheli değerli satır gözden geçirilmedi: ${n.join(", ")}. Kırmızı "Şüpheli değer" işaretli hücreleri belgeyle karşılaştırıp onaylayın (fabrika ayarı: şüpheli değerle onay engelli).`,
+};
 
 type ProcessChoice = { text: string; valueId: string };
 
