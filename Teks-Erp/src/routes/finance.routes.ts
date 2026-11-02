@@ -87,6 +87,8 @@ const cariCreateSchema = z
     // oie-a: müşteriye özel kurşun gram fiyatı (1 gr/m başına metre fiyatı); null = istasyonunki. Para birimiyle birlikte.
     kursunGramPrice: z.union([z.string().max(20), z.number()]).nullable().optional(),
     kursunGramCurrency: z.enum(["TRY", "USD", "EUR", "GBP", "RUB"]).nullable().optional(),
+    // S3: müşteriye özel varsayılan kurşun gramajı; null = istasyon varsayılanı.
+    kursunDefaultValueId: z.string().uuid("Geçersiz gramaj ID").nullable().optional(),
   })
   .strict();
 

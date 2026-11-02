@@ -878,6 +878,8 @@ export const SETTING_KEYS = {
   KURSUN_METER_VARIANCE_APPROVAL: "kursun.meterVarianceApproval",
   /** H1b: çıkış metresi stoğa uygulansın mı — `RECORD` (bugün; okuma stoğu değiştirmez) · `APPLY`. */
   KURSUN_METER_STOCK_MODE: "kursun.meterStockMode",
+  /** K16 (Gülkesim 2026-11-03): atanan makine — `SUGGEST` (bugün; yalnız öneri) · `ASSIGNED_ONLY_WARN` (liste süzülür, başka makine uyarıyla alır). */
+  KURSUN_MACHINE_ASSIGN_MODE: "kursun.machineAssignMode",
   /** D4-F1: okutmada iç barkod bulunamazsa topun aktif MÜŞTERİ KODUNA da bakılsın mı (varsayılan KAPALI = bugün). */
   SCAN_CUSTOMER_CODE_LOOKUP: "scan.customerCodeLookup",
   /** Parti no KISA ve DÖNEN mi olsun (P01…P99, 99'dan sonra P01)? Default TRUE/AÇIK.
@@ -1129,6 +1131,10 @@ export const DEFAULT_KURSUN_METER_VARIANCE_APPROVAL: KursunMeterVarianceApproval
 export type KursunMeterStockMode = "RECORD" | "APPLY";
 export const KURSUN_METER_STOCK_MODES: KursunMeterStockMode[] = ["RECORD", "APPLY"];
 export const DEFAULT_KURSUN_METER_STOCK_MODE: KursunMeterStockMode = "RECORD";
+/** K16: atanan kurşun makinesi bağlayıcılığı; `SUGGEST` = bugünkü davranış (planlı makine yalnız öneri, K5). */
+export type KursunMachineAssignMode = "SUGGEST" | "ASSIGNED_ONLY_WARN";
+export const KURSUN_MACHINE_ASSIGN_MODES: KursunMachineAssignMode[] = ["SUGGEST", "ASSIGNED_ONLY_WARN"];
+export const DEFAULT_KURSUN_MACHINE_ASSIGN_MODE: KursunMachineAssignMode = "SUGGEST";
 /** OFFICE'in çıkış yüzeyi panel "Metre Sapmaları" ekranıdır (H4, 2026-10-29) — artık seçilebilir. */
 export const KURSUN_METER_OFFICE_APPROVAL_SELECTABLE: boolean = true;
 
@@ -2440,6 +2446,8 @@ export interface FeatureFlags {
   kursunMeterVarianceApproval: KursunMeterVarianceApproval;
   /** H1b: çıkış metresi stok kipi (varsayılan `RECORD` = bugün). */
   kursunMeterStockMode: KursunMeterStockMode;
+  /** K16: atanan kurşun makinesi (varsayılan `SUGGEST` = bugün). */
+  kursunMachineAssignMode: KursunMachineAssignMode;
   /** D4-F1: okutma müşteri koduna düşsün mü (varsayılan `false` = bugün; iç barkod her zaman önce). */
   scanCustomerCodeLookupEnabled: boolean;
   /** Parti no kısa ve dönen mi (P01…P99)? Default TRUE/açık. Backend ENFORCE eder.
@@ -2969,6 +2977,7 @@ export class SystemSettingService {
       kursunMeterVarianceBasis: await readKursunMeterVarianceBasis(cacheClient),
       kursunMeterVarianceApproval: await readKursunMeterVarianceApproval(cacheClient),
       kursunMeterStockMode: await readKursunMeterStockMode(cacheClient),
+      kursunMachineAssignMode: await readKursunMachineAssignMode(cacheClient),
       scanCustomerCodeLookupEnabled: await readScanCustomerCodeLookupEnabled(cacheClient),
       batchShortNumberEnabled: await readBatchShortNumberEnabled(cacheClient),
       batchLastNumberHintEnabled: await readBatchLastNumberHintEnabled(cacheClient),
@@ -4713,6 +4722,13 @@ export class SystemSettingService {
         throw AppError.badRequest(`kursunMeterStockMode şunlardan biri olmalı: ${KURSUN_METER_STOCK_MODES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.KURSUN_METER_STOCK_MODE, v, "Kurşun çıkış metresi stoğu — yalnız kaydet · stoğa uygula", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "kursunMachineAssignMode")) {
+      const v = input.kursunMachineAssignMode;
+      if (typeof v !== "string" || !KURSUN_MACHINE_ASSIGN_MODES.includes(v as KursunMachineAssignMode)) {
+        throw AppError.badRequest(`kursunMachineAssignMode şunlardan biri olmalı: ${KURSUN_MACHINE_ASSIGN_MODES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.KURSUN_MACHINE_ASSIGN_MODE, v, "Kurşun makinesi ataması — öneri · yalnız atanan makinede (uyarıyla alınır)", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "scanCustomerCodeLookupEnabled")) {
       if (typeof input.scanCustomerCodeLookupEnabled !== "boolean") {
@@ -7833,6 +7849,13 @@ export async function readKursunMeterVarianceApproval(tx?: Pick<typeof prisma, "
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.KURSUN_METER_VARIANCE_APPROVAL }, select: { value: true } });
   const v = setting?.value;
   return typeof v === "string" && KURSUN_METER_VARIANCE_APPROVALS.includes(v as KursunMeterVarianceApproval) ? (v as KursunMeterVarianceApproval) : DEFAULT_KURSUN_METER_VARIANCE_APPROVAL;
+}
+
+/** K16: atanan kurşun makinesi kipi — tanınmayan değer varsayılana (`SUGGEST` = bugün) düşer. */
+export async function readKursunMachineAssignMode(tx?: Pick<typeof prisma, "systemSetting">): Promise<KursunMachineAssignMode> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.KURSUN_MACHINE_ASSIGN_MODE }, select: { value: true } });
+  const v = setting?.value;
+  return typeof v === "string" && KURSUN_MACHINE_ASSIGN_MODES.includes(v as KursunMachineAssignMode) ? (v as KursunMachineAssignMode) : DEFAULT_KURSUN_MACHINE_ASSIGN_MODE;
 }
 
 /** H1b: çıkış metresi stok kipi — tanınmayan değer varsayılana (`RECORD` = bugün) düşer. */

@@ -1669,6 +1669,20 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         ],
       },
       {
+        // K16 (2026-11-03): `defaultValue` backend `DEFAULT_KURSUN_MACHINE_ASSIGN_MODE` ile birebir.
+        enumKey: "kursunMachineAssignMode",
+        title: "Atanan kurşun makinesi",
+        summary: "İş emrinde seçilen kurşun makinesi yalnız öneri mi, yoksa iş yalnız o makinenin listesinde mi görünsün.",
+        desc: "Öneri (varsayılan): iş her kurşun tabletinin listesinde görünür; seçilen makine yalnız rozettir. Yalnız atanan makine: tablet listesinde iş yalnız atandığı makinede (makine atanmamış iş herkeste) görünür; başka makinenin tableti işi okutursa \"Bu iş X makinesine atanmış\" uyarısı çıkar, operatör \"Yine de al\" diyerek işleyebilir ve bu iz kaydına yazılır. Atamayı planlamacı Kurşun Dağıtım ekranından değiştirir.",
+        defaultValue: "SUGGEST",
+        display: "radio",
+        audience: ["Operatör", "Planlamacı"],
+        options: [
+          { value: "SUGGEST", label: "Öneri (bugünkü)", hint: "Liste süzülmez, uyarı çıkmaz." },
+          { value: "ASSIGNED_ONLY_WARN", label: "Yalnız atanan makine", hint: "Başka makine işi uyarıyla alabilir. Tablet güncellemesi gelmeden açılırsa eski tablet uyarıyı göstermez; liste yine süzülür." },
+        ],
+      },
+      {
         // D4-E1 (2026-10-29): `defaultValue` backend `DEFAULT_TAMBUR_PLAN_WIDTH_CHECK` ile birebir.
         enumKey: "tamburPlanGateWidthCheck",
         group: "Tambur",

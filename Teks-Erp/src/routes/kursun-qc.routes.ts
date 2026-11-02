@@ -98,6 +98,34 @@ router.get(
 
 /**
  * @openapi
+ * /api/kursun-qc/step/{stepId}/foreign-machine-take:
+ *   post:
+ *     tags: [KursunQc]
+ *     summary: Başka kurşun makinesine atanmış işi bu makinede al (K16 "Yine de al" izi)
+ *     description: |
+ *       `kursun.machineAssignMode` = ASSIGNED_ONLY_WARN iken oturum makinesi adımın planlı makinesinden farklıysa
+ *       iz kaydı (SystemLog, event KURSUN_FOREIGN_MACHINE_TAKE) yazar. Engel değildir; atama değişmez.
+ *       Süzgeç kapalıysa ya da iş zaten bu makinedeyse `logged: false` döner.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: stepId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ logged: boolean }" }
+ *       400: { description: Adım kart akışında değil / geçersiz ID }
+ *       404: { description: Adım bulunamadı }
+ */
+router.post(
+  "/step/:stepId/foreign-machine-take",
+  verifyToken,
+  requireAnyPermission("quality:write", "mobile:kk2-kursun"),
+  controller.takeForeignMachine
+);
+
+/**
+ * @openapi
  * /api/kursun-qc/complete-qc2:
  *   post:
  *     tags: [KursunQc]

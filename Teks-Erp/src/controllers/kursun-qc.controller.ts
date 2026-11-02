@@ -126,6 +126,7 @@ export class KursunQcController {
     this.getByCardBarcode = this.getByCardBarcode.bind(this);
     this.getStep = this.getStep.bind(this);
     this.listOpenCards = this.listOpenCards.bind(this);
+    this.takeForeignMachine = this.takeForeignMachine.bind(this);
     this.completeQc2 = this.completeQc2.bind(this);
     this.reportError = this.reportError.bind(this);
     this.deleteError = this.deleteError.bind(this);
@@ -150,6 +151,7 @@ export class KursunQcController {
       const result = await this.service.getByCardBarcode(
         req.params.barcode as string,
         stamp?.stationId ?? null,
+        stamp?.machineId ?? null,
       );
       res.status(200).json(result);
     } catch (err) {
@@ -166,7 +168,9 @@ export class KursunQcController {
         .enum(["0", "1"], { message: "includeInspection yalnız 0 ya da 1 olabilir" })
         .optional()
         .parse(req.query.includeInspection);
-      const result = await this.service.getStep(stepId, { includeInspection: includeInspection === "1" });
+      // K16: oturum makinesi (varsa) başka makineye atanmış iş uyarısı için; enforce YOK.
+      const stamp = await getStampContext(req);
+      const result = await this.service.getStep(stepId, { includeInspection: includeInspection === "1", sessionMachineId: stamp?.machineId ?? null });
       res.status(200).json(result);
     } catch (err) {
       next(err);
@@ -178,7 +182,19 @@ export class KursunQcController {
     try {
       // Oturum istasyonu varsa yalnız o istasyonun kartları (KQ-D2); enforce YOK.
       const stamp = await getStampContext(req);
-      const result = await this.service.listOpenCards(stamp?.stationId ?? null);
+      const result = await this.service.listOpenCards(stamp?.stationId ?? null, stamp?.machineId ?? null);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/kursun-qc/step/:stepId/foreign-machine-take — K16 "Yine de al" izi. */
+  async takeForeignMachine(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const stepId = z.string().uuid("Geçersiz adım ID").parse(req.params.stepId);
+      const stamp = await getStampContext(req, { enforceForMobile: true });
+      const result = await this.service.takeForeignMachine(stepId, stamp?.machineId ?? null, req.user?.userId);
       res.status(200).json(result);
     } catch (err) {
       next(err);
