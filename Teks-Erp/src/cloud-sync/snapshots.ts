@@ -228,13 +228,15 @@ export interface SnapshotContext {
   readonly maliyetOn?: boolean;
   /** Bu tura düşen sıklıklar (HER_TUR her turda; SAATLIK/GUNLUK zamanı gelince). */
   readonly cadences: ReadonlySet<SnapshotProjection["cadence"]>;
+  /** Sıklığından bağımsız kurulacak anlık adları (günlük anlığın yeniden denemesi). */
+  readonly extra?: ReadonlySet<string>;
 }
 
 /** Turun anlık kayıtları — modülü kapalı projeksiyon ÜRETİLMEZ (§4.6). */
 export async function buildSnapshots(ctx: SnapshotContext): Promise<BuiltSnapshot[]> {
   const out: BuiltSnapshot[] = [];
   for (const p of SNAPSHOT_PROJECTIONS) {
-    if (!ctx.cadences.has(p.cadence)) continue;
+    if (!ctx.cadences.has(p.cadence) && !ctx.extra?.has(p.name)) continue;
     if (p.module === "production.enabled" && !ctx.productionOn) continue;
     if (p.module === "finance.enabled" && !ctx.financeOn) continue;
     if (p.module === "maliyet.enabled" && ctx.maliyetOn !== true) continue;
