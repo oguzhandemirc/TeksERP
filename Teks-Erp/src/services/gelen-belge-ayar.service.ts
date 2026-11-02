@@ -1,11 +1,13 @@
 // =============================================================================
 // TeksERP — Gelen belge AYARLARI (hizmet ekseni E3; TASARIM-KARARI §8 HİZMET EKSENİ (1))
 // =============================================================================
-// Üç fabrika ayarı, TEK yazar `PUT /api/gelen-belge/ayarlar` (ham `PUT /api/admin/settings/:key` bu anahtarları
+// Beş fabrika ayarı, TEK yazar `PUT /api/gelen-belge/ayarlar` (ham `PUT /api/admin/settings/:key` bu anahtarları
 // REDDEDER — doğrulamasız düz metin yazıp ürün kapısını dolanmasın):
 //   · `gelenBelge.defaultItemId` — ürünü seçilmemiş satır onayda bu ürünle doğar (boş = bugünkü: 400 UNRESOLVED)
 //   · `gelenBelge.unreviewedApproval` — needsReview satır varken onay: WARN (varsayılan, geçer) | BLOCK (409)
 //   · `gelenBelge.autoWorkOrder` — onaydan sonra net gruplara iş emri kendiliğinden (boş/false = bugünkü: elle)
+//   · `gelenBelge.defaultRouteTemplateId` — rota önerisinin fabrika varsayılanı (boş = bugünkü: yalnız müşteri kaynakları)
+//   · `gelenBelge.routeSuggestionPriority` — CUSTOMER_FIRST (varsayılan, bugünkü) | FACTORY_FIRST
 // Ürün kapısı tek karar: yaşam döngüsü `assertItemUsable(NEW_STOCK)` + top doğurabilen tür ALLOWLIST'i
 // (`ROLL_BEARING_ITEM_TYPES`; yeni tür — ör. SERVICE — eklendiği gün kendiliğinden dışarıda kalır).
 // =============================================================================
@@ -15,11 +17,17 @@ import { AppError } from "../utils/app-error";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { TERIM } from "../constants/terim";
 import { assertItemUsable } from "./helpers/item-usage.helper";
+import { factoryRouteProblem } from "./gelen-belge-rota-onerisi.service";
 import {
   DEFAULT_UNREVIEWED_APPROVAL,
   UNREVIEWED_APPROVAL_VALUES,
   SETTING_KEYS,
   readIncomingDocAutoWorkOrder,
+  readIncomingDocDefaultRouteId,
+  readRouteSuggestionPriority,
+  DEFAULT_ROUTE_SUGGESTION_PRIORITY,
+  ROUTE_SUGGESTION_PRIORITY_VALUES,
+  type RouteSuggestionPriority,
   readIncomingDocDefaultItemId,
   readUnreviewedApprovalMode,
   systemSettingService,
@@ -34,6 +42,8 @@ export const INCOMING_DOC_DEDICATED_SETTING_KEYS: ReadonlySet<string> = new Set(
   SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID,
   SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL,
   SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER,
+  SETTING_KEYS.GELEN_BELGE_DEFAULT_ROUTE_ID,
+  SETTING_KEYS.GELEN_BELGE_ROUTE_PRIORITY,
 ]);
 
 export interface DefaultItemView {
@@ -50,6 +60,10 @@ export interface IncomingDocSettings {
   defaultUnreviewedApproval: UnreviewedApprovalMode;
   /** Onaydan sonra net desen gruplarına iş emri kendiliğinden açılır mı (varsayılan false). */
   autoWorkOrder: boolean;
+  /** Rota önerisinin fabrika varsayılanı; null = ayar boş. `problem` dolu = onay anında kullanılmaz (atlanır + neden). */
+  defaultRoute: { id: string; name: string; problem: string | null } | null;
+  routeSuggestionPriority: RouteSuggestionPriority;
+  defaultRouteSuggestionPriority: RouteSuggestionPriority;
 }
 
 /**
@@ -71,6 +85,13 @@ export async function itemProblem(itemId: string): Promise<{ row: { code: string
   return { row, problem: null };
 }
 
+async function defaultRouteView(): Promise<IncomingDocSettings["defaultRoute"]> {
+  const id = await readIncomingDocDefaultRouteId();
+  if (!id) return null;
+  const { name, problem } = await factoryRouteProblem(id);
+  return { id, name: name ?? "(silinmiş rota)", problem };
+}
+
 export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
   const id = await readIncomingDocDefaultItemId();
   let defaultItem: DefaultItemView | null = null;
@@ -83,6 +104,9 @@ export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
     unreviewedApproval: await readUnreviewedApprovalMode(),
     defaultUnreviewedApproval: DEFAULT_UNREVIEWED_APPROVAL,
     autoWorkOrder: await readIncomingDocAutoWorkOrder(),
+    defaultRoute: await defaultRouteView(),
+    routeSuggestionPriority: await readRouteSuggestionPriority(),
+    defaultRouteSuggestionPriority: DEFAULT_ROUTE_SUGGESTION_PRIORITY,
   };
 }
 
@@ -91,6 +115,9 @@ export interface IncomingDocSettingsInput {
   defaultItemId?: string | null;
   unreviewedApproval?: UnreviewedApprovalMode;
   autoWorkOrder?: boolean;
+  /** null = temizle (bugünkü davranış). */
+  defaultRouteTemplateId?: string | null;
+  routeSuggestionPriority?: RouteSuggestionPriority;
 }
 
 /** Yazım: ürün doğrulaması 400 `GELEN_BELGE_DEFAULT_ITEM_INVALID`; audit `systemSettingService.set` içinde. */
@@ -113,6 +140,21 @@ export async function updateIncomingDocSettings(input: IncomingDocSettingsInput,
   }
   if (input.autoWorkOrder !== undefined) {
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER, input.autoWorkOrder, `Gelen belge: onaydan sonra net desen gruplarına ${TERIM.terbiyeIsEmri.tekilKucuk} kendiliğinden açılır`, userId);
+  }
+  if (input.defaultRouteTemplateId !== undefined) {
+    if (input.defaultRouteTemplateId !== null) {
+      const { problem } = await factoryRouteProblem(input.defaultRouteTemplateId);
+      if (problem) {
+        throw AppError.badRequest(`Fabrika varsayılan rotası olarak kaydedilemez: ${problem}.`, { code: "GELEN_BELGE_DEFAULT_ROUTE_INVALID" });
+      }
+    }
+    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_DEFAULT_ROUTE_ID, input.defaultRouteTemplateId ?? "", `Gelen belge: ${TERIM.terbiyeIsEmri.tekilKucuk} rota önerisinin fabrika varsayılanı`, userId);
+  }
+  if (input.routeSuggestionPriority !== undefined) {
+    if (!ROUTE_SUGGESTION_PRIORITY_VALUES.includes(input.routeSuggestionPriority)) {
+      throw AppError.badRequest("Geçersiz seçenek: CUSTOMER_FIRST ya da FACTORY_FIRST olmalı.", { code: "VALIDATION_ERROR" });
+    }
+    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_ROUTE_PRIORITY, input.routeSuggestionPriority, "Gelen belge: rota önerisi önceliği (CUSTOMER_FIRST/FACTORY_FIRST)", userId);
   }
   return getIncomingDocSettings();
 }

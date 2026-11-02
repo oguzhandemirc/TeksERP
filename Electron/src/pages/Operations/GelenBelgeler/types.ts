@@ -281,7 +281,13 @@ export interface IncomingDocumentSettings {
   defaultUnreviewedApproval: UnreviewedApproval;
   /** Onaydan sonra net gruplara iş emri kendiliğinden; eski backend göndermez (undefined = kapalı). */
   autoWorkOrder?: boolean;
+  /** Rota önerisinin fabrika varsayılanı; eski backend göndermez (undefined = boş). */
+  defaultRoute?: { id: string; name: string; problem: string | null } | null;
+  routeSuggestionPriority?: RouteSuggestionPriority;
+  defaultRouteSuggestionPriority?: RouteSuggestionPriority;
 }
+/** Rota önerisi önceliği — backend `RouteSuggestionPriority` aynası. */
+export type RouteSuggestionPriority = "CUSTOMER_FIRST" | "FACTORY_FIRST";
 
 /** Gönderen şablonu (E2): dosyadaki motor şablonu + fabrikaya özgü bağ (`GET /sablonlar`). */
 export interface SenderTemplateCustomer {

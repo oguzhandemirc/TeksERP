@@ -395,6 +395,11 @@ export const SETTING_KEYS = {
   /** Onaydan SONRA net desen grupları için iş emrini kendiliğinden aç (MEVCUT quickStart; best-effort). Varsayılan
    *  KAPALI = bugünkü davranış (iş emri panelden elle). Feature-flag yükünde DÖNMEZ; tek yazar aynı uç. */
   GELEN_BELGE_AUTO_WORK_ORDER: "gelenBelge.autoWorkOrder",
+  /** Rota önerisinin fabrika varsayılanı (Route.id). Boş = bugünkü davranış (öneri yalnız müşteri kaynaklarından).
+   *  Feature-flag yükünde DÖNMEZ; tek yazar `PUT /api/gelen-belge/ayarlar` (pasif/adımsız rota 400). */
+  GELEN_BELGE_DEFAULT_ROUTE_ID: "gelenBelge.defaultRouteTemplateId",
+  /** Rota önerisi önceliği: CUSTOMER_FIRST (varsayılan = bugünkü zincir) | FACTORY_FIRST (fabrika varsayılanı önce). */
+  GELEN_BELGE_ROUTE_PRIORITY: "gelenBelge.routeSuggestionPriority",
   /** Z1 ÜRETİM BELGE ZİNCİRİ (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bugünkü davranış (bağ opsiyonel). */
   DEVERE_BEAM_WEAVING_LINK_REQUIRED: "devere.beamWeavingLinkRequired",
   DOKUMA_RUN_WEAVING_ORDER_REQUIRED: "dokuma.runWeavingOrderRequired",
@@ -6555,6 +6560,35 @@ export async function readIncomingDocAutoWorkOrder(tx?: Pick<typeof prisma, "sys
     select: { value: true },
   });
   return asBoolean(setting?.value);
+}
+
+/** Rota önerisinin fabrika varsayılanı; kayıt yok / boş / UUID değil → null (bugünkü: fabrika kaynağı yok). */
+export async function readIncomingDocDefaultRouteId(tx?: Pick<typeof prisma, "systemSetting">): Promise<string | null> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.GELEN_BELGE_DEFAULT_ROUTE_ID },
+    select: { value: true },
+  });
+  const v = typeof setting?.value === "string" ? setting.value.trim() : "";
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v) ? v : null;
+}
+
+export type RouteSuggestionPriority = "CUSTOMER_FIRST" | "FACTORY_FIRST";
+export const ROUTE_SUGGESTION_PRIORITY_VALUES: readonly RouteSuggestionPriority[] = ["CUSTOMER_FIRST", "FACTORY_FIRST"];
+/** Varsayılan CUSTOMER_FIRST = bugünkü davranış (önce müşterinin önceki iş emri). */
+export const DEFAULT_ROUTE_SUGGESTION_PRIORITY: RouteSuggestionPriority = "CUSTOMER_FIRST";
+
+/** Rota önerisi önceliği; çöp değer varsayılana düşer (`includes` sigortası). */
+export async function readRouteSuggestionPriority(tx?: Pick<typeof prisma, "systemSetting">): Promise<RouteSuggestionPriority> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.GELEN_BELGE_ROUTE_PRIORITY },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  return typeof v === "string" && (ROUTE_SUGGESTION_PRIORITY_VALUES as readonly string[]).includes(v)
+    ? (v as RouteSuggestionPriority)
+    : DEFAULT_ROUTE_SUGGESTION_PRIORITY;
 }
 
 /** Enforcement okuyucusu: ham değer ∧ lisans modül tavanı. `readGelenBelgeEnabledRaw` yalnız panel geri-okuması ve
