@@ -716,6 +716,55 @@ async function entryStationCapableForInspection(stationId: string | null | undef
   return st ? stepCanApplyQuality(st) : null;
 }
 
+/** Top iptalinde açık hareketleri kapatır — `cancelRollRecordTx`in parçası (aynı tx, aynı sıra). */
+async function closeOpenMovementsOnCancelTx(tx: Prisma.TransactionClient, existing: Roll, isScrap: boolean): Promise<void> {
+  const id = existing.id;
+  // Açık RollMovement'ları topla — kapatmak için (kapsam yukarıda çözüldü).
+  const openMovements = await tx.rollMovement.findMany({
+    where: { ...ACTIVE_MOVEMENT, rollId: id, exitedAt: null },
+    select: {
+      id: true,
+      workOrderStepId: true,
+      notes: true,
+      qtyIn: true,
+      weightIn: true,
+    },
+  });
+
+  // Açık movement'ları kapat.
+  //
+  // qtyOut = 0 LOAD-BEARING: "mal bu istasyondan HİÇ geçmedi" (storno).
+  // Kurtarma/dispozisyonun qtyOut = qtyIn semantiğinden bilinçli farklıdır —
+  // orada mal gerçekten vardı ve çıktı, burada kayıt baştan hatalıydı.
+  //
+  // ⚠️ NOT EZİLMİYOR (2026-08-04): eskiden notes körlemesine "CANCELLED"
+  // yazılıyordu ve elle eklenen topun hareketindeki "TAMBUR_MANUAL_ROLL:
+  // <sebep>" izi SİLİNİYORDU. Topun entryReason kolonu ve audit'i kalsa da
+  // hareket geçmişi "neden vardı" sorusunu cevaplayamaz hâle geliyordu —
+  // tam da iptal edilen bir kaydı sonradan incelerken en çok gereken bilgi.
+  // Artık eski not parantez içinde korunur.
+  //
+  // ⚠️ FİRE'DE STORNO YOK: `qtyOut = qtyIn` — mal o istasyondan GERÇEKTEN
+  // geçti, sonra fire oldu. 0 yazmak istasyonun iş hacminden metrajı geriye
+  // dönük siler ve üretim raporunda hayalet kayıp yaratır. Dispozisyon
+  // motorunun SCRAP dalıyla birebir aynı sözleşme (`applyRollDispositionsTx`).
+  const closeNote = isScrap ? "SCRAPPED" : "CANCELLED";
+  for (const m of openMovements) {
+    await tx.rollMovement.update({
+      // Geri alınmış satır kapatılmaz; araya giren geri alma P2025 verir (silinmiş satırla aynı).
+      where: { id: m.id, ...ACTIVE_MOVEMENT },
+      data: {
+        exitedAt: new Date(),
+        qtyOut: isScrap ? m.qtyIn ?? existing.currentQty : 0,
+        weightOut: isScrap ? m.weightIn ?? existing.weightKg : 0,
+        notes: m.notes?.trim()
+          ? `${closeNote} (${m.notes.trim()})`.slice(0, 500)
+          : closeNote,
+      },
+    });
+  }
+}
+
 /**
  * Top iptalinin (CANCEL "hiç yoktu" / SCRAP "vardı, gitti") TX GÖVDESİ — tek yazar: `softDelete` ve gelen belge
  * iptali (K15) aynı fonksiyondan geçer. Guard'lar, sebep çözümü ve audit ÇAĞIRANINDIR; claim gözlenen statüyle atomiktir.
@@ -761,50 +810,7 @@ export async function cancelRollRecordTx(tx: Prisma.TransactionClient, p: RollCa
   // `completeWorkOrderIfStepsDone` docstring'i de bu kilidi şart koşuyor.
   for (const woId of scope.workOrderIds) await touchWorkOrderTx(tx, woId);
 
-  // Açık RollMovement'ları topla — kapatmak için (kapsam yukarıda çözüldü).
-  const openMovements = await tx.rollMovement.findMany({
-    where: { ...ACTIVE_MOVEMENT, rollId: id, exitedAt: null },
-    select: {
-      id: true,
-      workOrderStepId: true,
-      notes: true,
-      qtyIn: true,
-      weightIn: true,
-    },
-  });
-
-  // Açık movement'ları kapat.
-  //
-  // qtyOut = 0 LOAD-BEARING: "mal bu istasyondan HİÇ geçmedi" (storno).
-  // Kurtarma/dispozisyonun qtyOut = qtyIn semantiğinden bilinçli farklıdır —
-  // orada mal gerçekten vardı ve çıktı, burada kayıt baştan hatalıydı.
-  //
-  // ⚠️ NOT EZİLMİYOR (2026-08-04): eskiden notes körlemesine "CANCELLED"
-  // yazılıyordu ve elle eklenen topun hareketindeki "TAMBUR_MANUAL_ROLL:
-  // <sebep>" izi SİLİNİYORDU. Topun entryReason kolonu ve audit'i kalsa da
-  // hareket geçmişi "neden vardı" sorusunu cevaplayamaz hâle geliyordu —
-  // tam da iptal edilen bir kaydı sonradan incelerken en çok gereken bilgi.
-  // Artık eski not parantez içinde korunur.
-  //
-  // ⚠️ FİRE'DE STORNO YOK: `qtyOut = qtyIn` — mal o istasyondan GERÇEKTEN
-  // geçti, sonra fire oldu. 0 yazmak istasyonun iş hacminden metrajı geriye
-  // dönük siler ve üretim raporunda hayalet kayıp yaratır. Dispozisyon
-  // motorunun SCRAP dalıyla birebir aynı sözleşme (`applyRollDispositionsTx`).
-  const closeNote = isScrap ? "SCRAPPED" : "CANCELLED";
-  for (const m of openMovements) {
-    await tx.rollMovement.update({
-      // Geri alınmış satır kapatılmaz; araya giren geri alma P2025 verir (silinmiş satırla aynı).
-      where: { id: m.id, ...ACTIVE_MOVEMENT },
-      data: {
-        exitedAt: new Date(),
-        qtyOut: isScrap ? m.qtyIn ?? existing.currentQty : 0,
-        weightOut: isScrap ? m.weightIn ?? existing.weightKg : 0,
-        notes: m.notes?.trim()
-          ? `${closeNote} (${m.notes.trim()})`.slice(0, 500)
-          : closeNote,
-      },
-    });
-  }
+  await closeOpenMovementsOnCancelTx(tx, existing, isScrap);
 
   // Top: CANCELLED + currentStepId temizle — ATOMİK CLAIM (M-30): tüm
   // guard'lar (fason/açık sevk/aktif sevkiyat) tx DIŞINDA okundu; pencerede
