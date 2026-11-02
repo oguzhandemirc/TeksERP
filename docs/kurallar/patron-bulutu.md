@@ -194,6 +194,7 @@ Bulutta BAĞIMSIZ (fabrika kullanıcısına bağlanmaz). TEK KİMLİK, ÇOK TES�
 
 - **[ÇEKİRDEK]** Dış çıkış yalnız bildirim için ve yalnız sunucuya açılır: compose'un kurduğu internal OLMAYAN tek ağ `cikis`tir, ona yalnız `patron` katılır ve orada dinlemez; DB · göç · yedek internal ağlarda kalır. · bekçi: `deploy/patron/compose-denetle.mjs (④)` <sub>(arşiv:2026-09-30 I6)</sub>
 - **[ÇEKİRDEK]** Salt okunur anahtar birimindeki sır dosyası (VAPID) konteyner dışında ÖNCEDEN üretilir; sunucu izni zaten dar dosyaya chmod çağırmaz, boş `BILDIRIM_VAPID_KONU` verilmemiş sayılır. · bekçi: `test_bildirim_gonderim (§3)` <sub>(arşiv:2026-09-30 I6)</sub>
+- **[ÇEKİRDEK]** Yeni projeksiyon/tel şeması taşıyan fabrika backend sürümünden ÖNCE bulutu yükselt — kural `surum-yayin.md` § Backend. <sub>(arşiv:2026-11-02 bulut önce)</sub>
 
 ### Kararlar
 
