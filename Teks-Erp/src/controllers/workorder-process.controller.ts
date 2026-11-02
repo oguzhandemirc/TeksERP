@@ -10,6 +10,7 @@ import {
   getWorkOrderProcessSummary,
   replaceWorkOrderTargetValues,
 } from "../services/workorder-target-value.service";
+import { updateStepPlannedMachine } from "../services/step-planned-machine.service";
 
 /** Yalnız gövdedeki özellikler değişir; `valueId: null` = o özelliğin hedefini kaldır.
  *  Boş liste = eski istemci "hepsini kaldır" sözleşmesi. Tanınmayan anahtar 400 (fail-closed). */
@@ -42,6 +43,21 @@ export async function getWorkOrderSummary(req: Request, res: Response, next: Nex
 export async function getBatchSummary(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     res.status(200).json(await getBatchProcessSummary(assertValidUuid(req.params.id, "id")));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Gülkesim 2026-11-02: önerilen makine — `null` öneriyi kaldırır; tanınmayan anahtar 400. */
+export const plannedMachineBodySchema = z.object({ plannedMachineId: z.string().uuid("Geçersiz makine ID").nullable() }).strict();
+
+/** PATCH /api/work-orders/:id/steps/:stepId/planned-machine */
+export async function patchStepPlannedMachine(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const id = assertValidUuid(req.params.id, "id");
+    const stepId = assertValidUuid(req.params.stepId, "stepId");
+    const body = plannedMachineBodySchema.parse(req.body);
+    res.status(200).json(await updateStepPlannedMachine(id, stepId, body.plannedMachineId, req.user?.userId));
   } catch (err) {
     next(err);
   }

@@ -15,6 +15,7 @@ import { stepCanApplyColor, stepCanApplyProperty } from "./helpers/step-capabili
 import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 import { AppError } from "../utils/app-error";
 import { assertStationsRoutable } from "./helpers/station-routable.helper";
+import { assertPlannedMachines } from "./helpers/planned-machine.helper";
 import type { ApiResponse } from "../types/api.types";
 import type { Request } from "express";
 import { parseQueryParams } from "../utils/query-parser";
@@ -55,6 +56,8 @@ export const ROUTE_SERVICE_CONFIG: BaseServiceConfig = {
         // adını ayrı sorgu olmadan gösterebilsin. (Scalar plannedSubcontractorId
         // zaten include ile dönüyor; bu yalnız adı ekler.)
         plannedSubcontractor: { select: { id: true, name: true } },
+        // Gülkesim 2026-11-02: adımın önerilen makinesi (yalnız öneri) — adı tek sorguda.
+        plannedMachine: { select: { id: true, code: true, name: true } },
         // 2026-08-06: adımın şablon hedefi (renk + özellikler). İstemci rotayı
         // iş emrine uygularken bu iki alanı hedef alanlara kopyalar; ADI da
         // dönmeli, yoksa panel her adım için ayrı renk/özellik sorgusu atardı.
@@ -83,6 +86,8 @@ interface IncomingStep {
   stationId?: string;
   requiredCategoryId?: string | null;
   plannedSubcontractorId?: string | null;
+  /** Önerilen makine — adımın istasyonuna ait ve aktif olmalı (yalnız öneri). */
+  plannedMachineId?: string | null;
   sequence?: number;
   defaultNotes?: string | null;
   /** "Fasona renksiz git" — iş emri açılışında WorkOrderStep'e klonlanır. */
@@ -115,6 +120,8 @@ export class RouteService extends BaseService {
     // iş emri açılışında WorkOrderStep'e klonlanır. 2026-08-25'e kadar allowlist'te
     // YOKTU: şablona kaydetmek 400 verirdi, dolayısıyla miras yolu da hiç kurulamadı.
     "dispatchWithoutColor",
+    // Gülkesim 2026-11-02: kurşun makinesi önerisi — İE adımına klonlanır.
+    "plannedMachineId",
   ]);
 
   /** Dizi-form VE nested-write ({create:[...]}) formundan step nesnelerini çıkarır. */
@@ -220,6 +227,14 @@ export class RouteService extends BaseService {
         );
       }
     }
+
+    // Makine önerisi adımın istasyonuna ait + aktif olmalı (İE yazımıyla aynı kural).
+    await assertPlannedMachines(
+      prisma,
+      steps
+        .filter((st) => typeof st.stationId === "string")
+        .map((st) => ({ stationId: st.stationId as string, plannedMachineId: st.plannedMachineId ?? null })),
+    );
 
     await this.applyStepTargets(steps);
   }

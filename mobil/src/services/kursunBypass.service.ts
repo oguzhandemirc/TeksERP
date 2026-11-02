@@ -64,6 +64,9 @@ export interface KursunDistributionRowBase {
   urgentMarkedAt: string | null;
   /** Kurşun rotanın son (non-SKIPPED) adımı mı → "İşi Bitir" bu satırda çıkar. */
   isLastStep: boolean;
+  /** Gülkesim 2026-11-02: planlanan (önerilen) makine — yalnız öneri; eski backend göndermez. */
+  plannedMachineId?: string | null;
+  plannedMachineName?: string | null;
 }
 
 export interface KursunDistributionWaitingRow extends KursunDistributionRowBase {
@@ -227,6 +230,19 @@ export const kursunBypassService = {
       .post<ApiResponse<KursunBypassCompleteResult>>(
         `/kursun-bypass/${assignmentId}/complete`,
         data
+      )
+      .then((r) => r.data),
+
+  /** Gülkesim 2026-11-02: adımın önerilen makinesi (yalnız öneri); null kaldırır. */
+  setPlannedMachine: (
+    workOrderId: string,
+    stepId: string,
+    plannedMachineId: string | null
+  ): Promise<ApiResponse<{ stepId: string; plannedMachineId: string | null; plannedMachineName: string | null }>> =>
+    apiClient
+      .patch<ApiResponse<{ stepId: string; plannedMachineId: string | null; plannedMachineName: string | null }>>(
+        `/work-orders/${workOrderId}/steps/${stepId}/planned-machine`,
+        { plannedMachineId }
       )
       .then((r) => r.data),
 

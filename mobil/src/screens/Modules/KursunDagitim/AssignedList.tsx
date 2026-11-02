@@ -52,6 +52,8 @@ interface Props {
   onComplete: (row: KursunDistributionAssignedRow) => void;
   /** İptal mutasyonu süren atama (butonlar o kartta kilitlenir). */
   busyAssignmentId: string | null;
+  /** Plan makinesi çipi — parent öneri seçiciyi açar. */
+  onPickPlanned?: (row: KursunDistributionAssignedRow) => void;
 }
 
 export default function AssignedList({
@@ -64,6 +66,7 @@ export default function AssignedList({
   onUnassign,
   onComplete,
   busyAssignmentId,
+  onPickPlanned,
 }: Props) {
   // MAKİNEYE göre grupla — grup sırası makine adına göre, grup içi sıra
   // backend'den geldiği gibi (atama zamanı artan) korunur.
@@ -116,6 +119,7 @@ export default function AssignedList({
               row={row}
               urgentBusy={urgentBusyStepId === row.workOrderStepId}
               onToggleUrgent={() => onToggleUrgent(row)}
+              onPlannedMachinePress={onPickPlanned ? () => onPickPlanned(row) : undefined}
             />
 
             <View style={styles.assignInfo}>

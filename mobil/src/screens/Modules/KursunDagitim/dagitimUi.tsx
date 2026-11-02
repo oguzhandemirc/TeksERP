@@ -80,10 +80,13 @@ export function WorkOrderSummary({
   row,
   urgentBusy,
   onToggleUrgent,
+  onPlannedMachinePress,
 }: {
   row: KursunDistributionRowBase;
   urgentBusy: boolean;
   onToggleUrgent: () => void;
+  /** Plan makinesi çipine dokunma — parent öneri seçiciyi açar (yalnız öneri). */
+  onPlannedMachinePress?: () => void;
 }) {
   const wait = waitText(row.oldestEnteredAt);
   return (
@@ -99,6 +102,8 @@ export function WorkOrderSummary({
         )}
         <UrgentToggle isUrgent={row.isUrgent} busy={urgentBusy} onPress={onToggleUrgent} />
       </View>
+
+      <PlannedMachineChip name={row.plannedMachineName ?? null} onPress={onPlannedMachinePress} />
 
       {/* Parti no'lar — planlamacının "hangi iş emri, hangi partiler" sorusu. */}
       <Text style={styles.batchLine} numberOfLines={2}>
@@ -124,6 +129,27 @@ export function WorkOrderSummary({
         {wait ? <Text style={styles.waitText}>⏳ {wait}</Text> : null}
       </View>
     </View>
+  );
+}
+
+/**
+ * Plan makinesi çipi (Gülkesim 2026-11-02) — yalnız ÖNERİ; dağıtımı engellemez.
+ * Dokunulabilirse öneri yokken de "Plan makinesi seç" görünür; değilse yalnız öneri varken.
+ */
+export function PlannedMachineChip({ name, onPress }: { name: string | null; onPress?: () => void }) {
+  if (!onPress && !name) return null;
+  const body = (
+    <View style={styles.planChip}>
+      <Text style={styles.planChipText} numberOfLines={1}>
+        {name ? `Plan: ${name}` : 'Plan makinesi seç'}
+      </Text>
+    </View>
+  );
+  if (!onPress) return <View testID="planned-machine-chip">{body}</View>;
+  return (
+    <TouchableRipple testID="planned-machine-chip" onPress={onPress} accessibilityLabel="Önerilen makineyi değiştir" style={styles.planChipWrap}>
+      {body}
+    </TouchableRipple>
   );
 }
 
@@ -182,6 +208,16 @@ const styles = StyleSheet.create({
   summary: { gap: 4 },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   woNo: { flex: 1, fontSize: 17, fontWeight: '800', color: colors.text },
+  planChipWrap: { alignSelf: 'flex-start', borderRadius: radius.sm },
+  planChip: {
+    alignSelf: 'flex-start',
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.brand,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  planChipText: { fontSize: 12, fontWeight: '700', color: colors.brand },
   lastStepChip: {
     backgroundColor: colors.infoContainer,
     borderRadius: radius.sm,

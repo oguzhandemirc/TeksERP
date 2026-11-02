@@ -31,6 +31,8 @@ interface Props {
   onToggleUrgent: (row: KursunDistributionWaitingRow) => void;
   /** Acil mutasyonu süren adım (spinner yalnız o kartta). */
   urgentBusyStepId: string | null;
+  /** Plan makinesi çipi — parent öneri seçiciyi açar. */
+  onPickPlanned?: (row: KursunDistributionWaitingRow) => void;
 }
 
 export default function EligibleList({
@@ -43,6 +45,7 @@ export default function EligibleList({
   onPickMachine,
   onToggleUrgent,
   urgentBusyStepId,
+  onPickPlanned,
 }: Props) {
   // Dağıtımı topyekûn engelleyen iki durum — kart bazlı `eligible`'dan bağımsız.
   const globallyBlocked = machinesEmpty || !flagEnabled;
@@ -69,6 +72,7 @@ export default function EligibleList({
                 row={item}
                 urgentBusy={urgentBusyStepId === item.workOrderStepId}
                 onToggleUrgent={() => onToggleUrgent(item)}
+                onPlannedMachinePress={onPickPlanned ? () => onPickPlanned(item) : undefined}
               />
 
               {item.blockReason ? (

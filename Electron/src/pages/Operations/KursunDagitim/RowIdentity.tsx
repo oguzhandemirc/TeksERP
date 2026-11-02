@@ -2,6 +2,7 @@ import { AlertOctagon, Package } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatNumber, safeFormat } from "@/lib/format";
 import type { KursunDistributionRowBase } from "./types";
+import { PlannedMachineChip } from "./PlannedMachineChip";
 
 interface Props {
   row: KursunDistributionRowBase;
@@ -44,6 +45,8 @@ export function RowIdentity({ row }: Props) {
             Renk —
           </Badge>
         )}
+
+        <PlannedMachineChip row={row} />
 
         {row.isLastStep && (
           <Badge variant="outline" className="text-[10px]">

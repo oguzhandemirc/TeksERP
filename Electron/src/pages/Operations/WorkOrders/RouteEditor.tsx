@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
@@ -84,6 +84,8 @@ interface Props {
   customerId: string | null;
   target: RouteTargetBinding;
   error?: string;
+  /** Seçili adım kartına eklenecek alanlar (İE formu: kurşun adımında gramaj + makine). */
+  renderStepExtra?: (step: DesignerStep) => ReactNode;
 }
 
 export function RouteEditor({
@@ -105,6 +107,7 @@ export function RouteEditor({
   customerId,
   target,
   error,
+  renderStepExtra,
 }: Props) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -366,6 +369,7 @@ export function RouteEditor({
             onMove={(dir) => onMove(selected.clientId, dir)}
             onRemove={() => onRemove(selected.clientId)}
             target={target}
+            extra={renderStepExtra?.(selected)}
           />
         </div>
       ) : steps.length === 0 ? (

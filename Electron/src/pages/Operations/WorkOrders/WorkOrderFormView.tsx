@@ -44,7 +44,7 @@ import { RouteEditor } from "./RouteEditor";
 import { TargetItemPicker } from "./TargetItemPicker";
 import { useFoldValues } from "@/hooks/useFoldValues";
 import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
-import { GramajChoiceButtons } from "@/components/kursun/GramajChoiceButtons";
+import { KursunStepFields, isKursunStep, useKursunGramajBinding } from "./KursunStepFields";
 import { useDesignerSteps } from "./useDesignerSteps";
 import { BelgeOkutButton } from "./BelgeOkutButton";
 import type { FasonStepPlan } from "./FasonPlanningDialog";
@@ -207,6 +207,7 @@ export function WorkOrderFormView({
   // Rota Tambur içeriyor mu — "Kat Tipi" seçeneği yalnız Tambur'lu rotalarda görünür
   // ve zorunlu olur (kat tipi Tambur operatörüne yönelik bir üretim spec'idir).
   const hasTambur = routeSteps.some((s) => s.stationKind === "TAMBUR");
+  const hasKursun = routeSteps.some(isKursunStep);
 
   // Kat seçenekleri KATALOGDAN (2026-08-10) — eskiden ["2-KAT","4-KAT"] literaldi
   // ve fabrika 6-KAT ekleyemiyordu. Sorgu yalnız Tambur'lu rotada anlamlı ama
@@ -214,6 +215,14 @@ export function WorkOrderFormView({
   // 60 sn cache'li tek küçük istek.
   const { values: foldValues, isEmpty: foldNotConfigured } = useFoldValues();
   const { catalog: kursunCatalog } = useKursunGramajCatalog();
+  // Gramaj kurşun adımının kartında: adım girince varsayılan, çıkınca temizlenir.
+  useKursunGramajBinding({
+    enabled: !isEdit,
+    hasKursun,
+    options: kursunCatalog.options,
+    value: form.watch("kursunTargetValueId") ?? null,
+    setValue: (id) => form.setValue("kursunTargetValueId", id),
+  });
 
   // Ön-seçim: yeni iş emrinde katalogun İLK değeri seçili gelsin (eski davranış
   // "2-KAT sabit ön-seçili" idi). Katalogdan okunduğu için 2-KAT'ı olmayan bir
@@ -798,6 +807,16 @@ export function WorkOrderFormView({
                 onPickStation={(clientId, id) => void handleStationPick(clientId, id)}
                 onSetNotes={(clientId, notes) => updateStep(clientId, { notes })}
                 onSetFirm={(clientId, patch) => updateStep(clientId, patch)}
+                renderStepExtra={(step) => (
+                  <KursunStepFields
+                    step={step}
+                    showGramaj={!isEdit && Boolean(kursunCatalog.propertyId)}
+                    gramajOptions={kursunCatalog.options}
+                    gramajValue={form.watch("kursunTargetValueId") ?? null}
+                    onGramaj={(id) => form.setValue("kursunTargetValueId", id)}
+                    onMachine={(machineId) => updateStep(step.clientId, { plannedMachineId: machineId })}
+                  />
+                )}
                 onSeed={handleSeedRoute}
                 onSaveTemplate={(name, forCustomer, stepTargets) =>
                   saveTemplateMut.mutate({ name, forCustomer, stepTargets })
@@ -871,27 +890,6 @@ export function WorkOrderFormView({
                             </p>
                           )}
                       </div>
-                    )}
-                  />
-                </FormField>
-              )}
-              {/* KQ-D6 hedef kurşun gramajı — yalnız yeni İE'de ve kurşun çeşidi tanımlıysa.
-                  Düzenlemede detaydaki "Kurşun Gramajı" kartından değişir (ayrı uç). */}
-              {!isEdit && kursunCatalog.propertyId && kursunCatalog.options.length > 0 && (
-                <FormField
-                  label="Hedef kurşun gramajı"
-                  hint="İsteğe bağlı. Basılan gramaj farklıysa terbiye iş emri kartında turuncu görünür; üretim durmaz."
-                >
-                  <Controller
-                    control={form.control}
-                    name="kursunTargetValueId"
-                    render={({ field }) => (
-                      <GramajChoiceButtons
-                        options={kursunCatalog.options}
-                        value={field.value ?? null}
-                        onChange={field.onChange}
-                        emptyLabel="Hedef yok"
-                      />
                     )}
                   />
                 </FormField>

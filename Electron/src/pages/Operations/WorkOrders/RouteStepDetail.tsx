@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, Factory, Trash2, Truck } from "lucide-react";
@@ -50,6 +50,8 @@ interface Props {
   onMove: (dir: -1 | 1) => void;
   onRemove: () => void;
   target: RouteTargetBinding;
+  /** Adıma özel ek alanlar (ör. kurşun adımında gramaj + makine önerisi). */
+  extra?: ReactNode;
 }
 
 export function RouteStepDetail({
@@ -63,6 +65,7 @@ export function RouteStepDetail({
   onMove,
   onRemove,
   target,
+  extra,
 }: Props) {
   const isExternal = step.stationType === "EXTERNAL";
   const tone = toneFor(step.stationType, step.stationKind);
@@ -317,6 +320,7 @@ export function RouteStepDetail({
           className="h-8 text-xs"
         />
       </div>
+      {extra}
     </motion.div>
   );
 }

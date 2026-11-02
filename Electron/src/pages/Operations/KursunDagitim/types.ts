@@ -41,6 +41,9 @@ export interface KursunDistributionRowBase {
   urgentMarkedAt: string | null;
   /** Kurşun rotanın son (non-SKIPPED) adımı mı → "İşi Bitir" bu satırda çıkar. */
   isLastStep: boolean;
+  /** Planlanan (önerilen) makine — yalnız öneri; eski backend göndermez. */
+  plannedMachineId?: string | null;
+  plannedMachineName?: string | null;
 }
 
 export interface KursunDistributionWaitingRow extends KursunDistributionRowBase {
