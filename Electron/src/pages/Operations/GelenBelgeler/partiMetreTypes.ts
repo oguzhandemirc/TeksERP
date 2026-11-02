@@ -7,6 +7,8 @@ export type IncomingDocEntryMode = "PER_LINE" | "PER_DOCUMENT";
 export type AutoWorkOrderPatternlessMode = "SKIP" | "OPEN";
 /** Belge kaydı kipi (K7) — SEPARATE: ayrı onay (bugünkü) · WITH_WORK_ORDER: iş emri formundan tek seferde. */
 export type IncomingDocFormApproval = "SEPARATE" | "WITH_WORK_ORDER";
+/** Çok partili belgeden iş emri (S1) — SINGLE: tek iş emri (bugünkü) · PER_PARTY: her parti ayrı. */
+export type MultiPartyWorkOrderMode = "SINGLE" | "PER_PARTY";
 /** Parti no adayı türü — motor `batchNoCandidates[].kind` aynası. */
 export type BatchNoCandidateKind = "BARCODE" | "DOC" | "BATCH" | "WORK_ORDER" | "ORDER" | "FORM";
 export interface SenderTemplateBatchNoCandidate {
@@ -25,6 +27,8 @@ export interface EntryModeSettings {
   defaultAutoWorkOrderPatternless?: AutoWorkOrderPatternlessMode;
   formApproval?: IncomingDocFormApproval;
   defaultFormApproval?: IncomingDocFormApproval;
+  multiPartyWorkOrder?: MultiPartyWorkOrderMode;
+  defaultMultiPartyWorkOrder?: MultiPartyWorkOrderMode;
   /** İş emri açılınca refakat kartı kendiliğinden yazdırılır (K9; üretim ayarı, gelen belge ucunda döner; vars. false). */
   refakatAutoPrint?: boolean;
 }

@@ -2,6 +2,7 @@
 // ayrı onay kipinde (SEPARATE) taslağa yazılacak başlık yaması. Kural sunucudadır; kapı yalnız düğmeyi ve nedeni seçer.
 import type { DeliveryNoteDetail, HeaderPatch, KursunMetersSource } from "@/pages/Operations/GelenBelgeler/types";
 import type { NoteWorkOrderBody } from "./service";
+import { multiPartyBody, multiPartyReasons, multiPartyTotal, type MultiPartyDraft } from "./partyDraft";
 
 /** Sözleşme 4: belgede okunan metinden müşteri önerisi (eski backend göndermez). */
 export interface OwnerSuggestion {
@@ -75,11 +76,12 @@ export function initialDocDraft(note: NoteLike, gramajOptions: readonly GramajCh
   };
 }
 
-/** Kaydı bekleten nedenler (boş = kaydedilebilir). Review'lı metre DAİMA doğrulama ister. */
-export function docDraftReasons(d: DocDraft): string[] {
+/** Kaydı bekleten nedenler (boş = kaydedilebilir). Review'lı metre DAİMA doğrulama ister. Çok partide metre parti satırlarındandır. */
+export function docDraftReasons(d: DocDraft, multi?: MultiPartyDraft | null): string[] {
   const out: string[] = [];
   if (!d.ownerCustomerId) out.push("Müşteriyi seçin.");
-  if (d.meters === null) out.push("Kurşun metresi yok — metreyi girin.");
+  if (multi) out.push(...multiPartyReasons(multi));
+  else if (d.meters === null) out.push("Kurşun metresi yok — metreyi girin.");
   else if (d.metersReview) out.push("Kurşun metresini doğrulayın (Gözden geçir).");
   return out;
 }
@@ -107,8 +109,10 @@ export function applyPatch(d: DocDraft, p: HeaderPatch): DocDraft {
 export function noteWorkOrderBody(
   d: DocDraft,
   ctx: { clientToken: string; routeTemplateId: string; gramajPropertyId: string | null },
+  multi?: MultiPartyDraft | null,
 ): NoteWorkOrderBody {
-  if (!d.ownerCustomerId || d.meters === null) throw new Error("Eksik alan");
+  const meters = multi ? multiPartyTotal(multi) : d.meters;
+  if (!d.ownerCustomerId || meters === null) throw new Error("Eksik alan");
   const batchKey = d.ourBatchNo && d.ourBatchNoKey && d.ourBatchNoKey !== "MANUAL" ? d.ourBatchNoKey : undefined;
   return {
     clientToken: ctx.clientToken,
@@ -116,8 +120,9 @@ export function noteWorkOrderBody(
     // Parti no hep açık gider: null = formda temizlendi (sunucu okumada yazılan adayı silsin).
     ourBatchNo: d.ourBatchNo ?? null,
     ...(batchKey ? { ourBatchNoKey: batchKey } : {}),
-    kursunMeters: String(d.meters),
+    kursunMeters: String(meters),
     routeTemplateId: ctx.routeTemplateId,
+    ...(multi ? multiPartyBody(multi) : {}),
     ...(d.gramajId && ctx.gramajPropertyId ? { targetValues: [{ propertyId: ctx.gramajPropertyId, valueId: d.gramajId }] } : {}),
     ...(d.notes.trim() ? { notes: d.notes.trim() } : {}),
   };
