@@ -14,7 +14,7 @@ import { AuditService } from "./audit.service";
 import { tokenReplay } from "./helpers/token-replay.helper";
 import { cancelRollRecordTx } from "./inventory.service";
 import { WorkOrderService } from "./workorder.service";
-import { isWorkOrderUntouched } from "./helpers/workorder-locks.helper";
+import { isWorkOrderUnprocessed, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { CANCELLABLE_NOTE_STATUSES, evaluateNoteCancel, loadNoteCancelContext, type CancelBlocker } from "./gelen-belge-iptal-onizleme.service";
 
 /** Belge iptali serileştirmesi (belge başına anahtar `hashtext(noteId)`). Envanter: `period-guard.helper.ts` — **8043**. */
@@ -109,9 +109,10 @@ async function cancelTx(tx: Prisma.TransactionClient, noteId: string, input: Not
   const woService = new WorkOrderService();
   for (const w of wos) {
     // Seçim → iptal arasında iş emri başlamış olabilir: yüklem tx içinde, satır kilidinden sonra yeniden sorulur.
+    await touchWorkOrderTx(tx, w.id);
     const fresh = await tx.workOrder.findUniqueOrThrow({ where: { id: w.id }, select: { status: true, steps: { select: { id: true } } } });
-    if (!(await isWorkOrderUntouched(tx, w.id, fresh.status))) {
-      throw blockedError([{ code: "WORK_ORDER_STARTED", message: `${w.workOrderNumber}: iş emri bu sırada başladı — önizlemeyi yenileyin.`, workOrderId: w.id }]);
+    if (!(await isWorkOrderUnprocessed(tx, w.id, fresh.status))) {
+      throw blockedError([{ code: "WORK_ORDER_STARTED", message: `${w.workOrderNumber}: iş emrinde bu sırada işlem başladı — önizlemeyi yenileyin.`, workOrderId: w.id }]);
     }
     await woService.cancelWorkOrderTx(tx, {
       id: w.id, workOrderNumber: w.workOrderNumber, stepIds: fresh.steps.map((s) => s.id), trigger: TRIGGER, refType: REF_TYPE, refId: noteId,

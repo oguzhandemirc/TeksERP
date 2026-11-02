@@ -9,7 +9,7 @@ import { DeliveryNoteStatus, type Prisma, RollStatus, WorkOrderStatus } from "@p
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
-import { isWorkOrderUntouched } from "./helpers/workorder-locks.helper";
+import { isWorkOrderUnprocessed } from "./helpers/workorder-locks.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -49,7 +49,7 @@ export interface CancelPreviewWorkOrder {
   readonly id: string;
   readonly workOrderNumber: string;
   readonly status: WorkOrderStatus;
-  /** Başlamamış (PLANNED, adım başlamamış, açık fason yok) — belgeyle birlikte iptal için SEÇİLEBİLİR. */
+  /** İşlem görmemiş (`isWorkOrderUnprocessed`: top bağlı olabilir, işlem izi yok) — belgeyle birlikte iptal için SEÇİLEBİLİR. */
   readonly selectable: boolean;
   readonly noteRollCount: number;
   /** Bu iş emrindeki BAŞKA kaynaklı top sayısı — iş emri iptal edilirse onlar ham stoka döner. */
@@ -157,10 +157,10 @@ async function loadWorkOrders(db: Db, ids: string[], noteRollIds: Set<string>): 
     const rollIds = new Set(w.steps.flatMap((s) => s.currentRolls.map((r) => r.id)));
     const noteRollCount = [...rollIds].filter((id) => noteRollIds.has(id)).length;
     const otherRollCount = rollIds.size - noteRollCount;
-    const selectable = await isWorkOrderUntouched(db, w.id, w.status);
+    const selectable = await isWorkOrderUnprocessed(db, w.id, w.status);
     const effect = selectable
       ? `Birlikte iptal edilir${otherRollCount > 0 ? `; bu iş emrindeki başka ${otherRollCount} top ham stoka döner` : ""}.`
-      : "İş emri başlamış — belge iptal edilemez; önce iş emrini kapatın/iptal edin ya da topları iş emrinden çıkarın.";
+      : "İş emrinde işlem başlamış — belge iptal edilemez; önce işlemi geri alın ya da iş emrini kapatın.";
     out.push({ id: w.id, workOrderNumber: w.workOrderNumber, status: w.status, selectable, noteRollCount, otherRollCount, effect });
   }
   return out;
@@ -190,7 +190,7 @@ export async function evaluateNoteCancel(db: Db, ctx: NoteCancelContext, selecte
     if (r.status === RollStatus.CANCELLED) return { ...base, outcome: "SKIP" as const, blockers: [] };
     const own = rollBlockers(r);
     if (r.status === RollStatus.IN_PRODUCTION && liveWorkOrderIds(r).every((id) => !woById.get(id)?.selectable)) {
-      own.push({ code: "ROLL_STATUS", message: `${tag(r)}: top üretimde ve iş emri belgeyle iptal edilemiyor.`, rollId: r.id });
+      own.push({ code: "ROLL_STATUS", message: `${tag(r)}: top işlem görmüş bir iş emrinde — önce iş emrindeki işlemi geri alın ya da topu iş emrinden çıkarın.`, rollId: r.id });
     }
     blockers.push(...own);
     if (own.length === 0) cancelMeters += Number(r.currentQty);
