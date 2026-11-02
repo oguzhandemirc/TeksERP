@@ -9,7 +9,7 @@ import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { ClipboardPlus } from "lucide-react";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -18,6 +18,7 @@ import { InspectionDetailSheet } from "./InspectionDetailSheet";
 import { PaperInspectionDialog } from "./PaperInspectionDialog";
 import { InspectionReportPicker } from "./InspectionReportPicker";
 import { filtersFromSearch, type InspectionFilterState } from "./inspectionRules";
+import { RefreshButton } from "@/components/RefreshButton";
 
 export function InspectionsPage() {
   const qc = useQueryClient();
@@ -34,6 +35,7 @@ export function InspectionsPage() {
         description="4 puan muayeneleri — puan / 100 m², önerilen derece, uyumsuzluk. Düzeltme yeni revizyon yazar; iptal gerekçeyle saklanır."
         actions={
           <>
+            <RefreshButton queryKey={["quality-inspections"]} />
             <InspectionReportPicker defaultOpen={sp.get("report") === "1"} />
             <PermissionGate permission="inspection:write">
               <Button onClick={() => setPaperOpen(true)}><ClipboardPlus className="mr-1 h-4 w-4" />Kâğıttan muayene</Button>
@@ -41,9 +43,7 @@ export function InspectionsPage() {
           </>
         }
       />
-      <PageBody className="p-4 sm:p-6">
-        <InspectionList f={filters} onFilters={setFilters} onOpen={setOpenId} />
-      </PageBody>
+      <InspectionList f={filters} onFilters={setFilters} onOpen={setOpenId} />
       {paperOpen && (
         <PaperInspectionDialog onOpenChange={setPaperOpen} onCreated={(id) => { setPaperOpen(false); void qc.invalidateQueries({ queryKey: ["quality-inspections"] }); setOpenId(id); }} />
       )}

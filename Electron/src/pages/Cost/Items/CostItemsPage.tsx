@@ -6,7 +6,8 @@ import { useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Calculator, Search } from "lucide-react";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ import { CostQueryError } from "../shared/CostQueryState";
 import { CostItemsTable } from "./CostItemsTable";
 import { CostItemsSummary } from "./CostItemsSummary";
 import { costItemService, type CostItemFilter } from "./service";
+import { RefreshButton } from "@/components/RefreshButton";
 
 const PAGE = 50;
 const EMPTY: CostItemFilter = { q: "", durum: "", girdiDegisti: false };
@@ -37,35 +39,45 @@ export function CostItemsPage() {
       <PageHeader
         title="Maliyet Kartları"
         description="Her kumaşın yapı durumu ve kayıtlı standart metre maliyeti. 'Girdi değişti' = kayıttan sonra fiyat/parametre/yapı değişti; kayıtlı sayı değişmez."
-        actions={<Button variant="outline" onClick={() => nav("/cost/calculator")}><Calculator className="mr-1 h-4 w-4" />Hızlı hesapla</Button>}
+        actions={
+          <div className="flex gap-2">
+            <RefreshButton queryKey={["cost-items", "list"]} />
+            <Button variant="outline" onClick={() => nav("/cost/calculator")}><Calculator className="mr-1 h-4 w-4" />Hızlı hesapla</Button>
+          </div>
+        }
       />
-      <PageBody className="space-y-3 p-4 sm:p-6">
+      <ListToolbar>
+        {summary && <CostItemsSummary summary={summary} filter={f} onChange={setF} />}
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input className="pl-8" placeholder="Ürün kodu ya da adı…" value={f.q} onChange={(e) => setF((x) => ({ ...x, q: e.target.value }))} />
         </div>
-        {summary && <CostItemsSummary summary={summary} filter={f} onChange={setF} />}
+      </ListToolbar>
+      <ListBody>
         {q.isLoading ? (
-          <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
         ) : q.isError ? (
-          <CostQueryError error={q.error} what="Maliyet kartları" onRetry={() => void q.refetch()} />
+          <ListMessage>
+            <CostQueryError error={q.error} what="Maliyet kartları" onRetry={() => void q.refetch()} />
+          </ListMessage>
         ) : rows.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-            {filtered ? "Süzgece uyan kumaş yok." : "Aktif kumaş kartı yok — maliyet kartı kumaş (FABRIC) ürünleri için açılır."}
-          </div>
+          <ListMessage>
+            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+              {filtered ? "Süzgece uyan kumaş yok." : "Aktif kumaş kartı yok — maliyet kartı kumaş (FABRIC) ürünleri için açılır."}
+            </div>
+          </ListMessage>
         ) : (
-          <>
-            <CostItemsTable rows={rows} onOpen={(id) => nav(`/cost/items/${id}`)} />
-            {q.hasNextPage && (
-              <div className="flex justify-center">
-                <Button variant="outline" size="sm" disabled={q.isFetchingNextPage} onClick={() => void q.fetchNextPage()}>
-                  {q.isFetchingNextPage ? "Yükleniyor…" : "Daha fazla yükle"}
-                </Button>
-              </div>
-            )}
-          </>
+          <CostItemsTable rows={rows} onOpen={(id) => nav(`/cost/items/${id}`)} />
         )}
-      </PageBody>
+      </ListBody>
+      {/* [EL-09] sapması devralındı: elle "Daha fazla yükle" (davranış korunarak alt şeride taşındı). */}
+      <ListFooter loaded={rows.length}>
+        {q.hasNextPage && (
+          <Button variant="outline" size="sm" disabled={q.isFetchingNextPage} onClick={() => void q.fetchNextPage()}>
+            {q.isFetchingNextPage ? "Yükleniyor…" : "Daha fazla yükle"}
+          </Button>
+        )}
+      </ListFooter>
     </PageShell>
   );
 }

@@ -6,7 +6,8 @@ import { useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Plus } from "lucide-react";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PermissionGate } from "@/components/PermissionGate";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import { QuoteSummaryStrip } from "./QuoteSummaryStrip";
 import { QuotesTable } from "./QuotesTable";
 import { quoteService } from "./service";
 import { EMPTY_QUOTE_FILTER, type QuoteFilter } from "./quote-types";
+import { RefreshButton } from "@/components/RefreshButton";
 
 const PAGE = 50;
 
@@ -40,35 +42,43 @@ export function QuotesPage() {
         title="Teklifler"
         description="Müşteriye verilen fiyat teklifleri. Gönderilen teklif değişmez — değişiklik revizyondur; kabul edilen teklif tek tıkla siparişe dönüşür."
         actions={
-          <PermissionGate permission="quote:write">
-            <Button onClick={() => nav("/cost/quotes/new")}><Plus className="mr-1 h-4 w-4" />Yeni teklif</Button>
-          </PermissionGate>
+          <div className="flex gap-2">
+            <RefreshButton queryKey={["quotes", "list"]} />
+            <PermissionGate permission="quote:write">
+              <Button onClick={() => nav("/cost/quotes/new")}><Plus className="mr-1 h-4 w-4" />Yeni teklif</Button>
+            </PermissionGate>
+          </div>
         }
       />
-      <PageBody className="space-y-3 p-4 sm:p-6">
-        <QuoteFilters value={f} onChange={setF} />
+      <ListToolbar>
         {summary && <QuoteSummaryStrip summary={summary} filter={f} onChange={setF} />}
+        <QuoteFilters value={f} onChange={setF} />
+      </ListToolbar>
+      <ListBody>
         {q.isLoading ? (
-          <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
         ) : q.isError ? (
-          <CostQueryError error={q.error} what="Teklifler" onRetry={() => void q.refetch()} />
+          <ListMessage>
+            <CostQueryError error={q.error} what="Teklifler" onRetry={() => void q.refetch()} />
+          </ListMessage>
         ) : rows.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground" data-testid="quotes-empty">
-            {filtered ? "Süzgece uyan teklif yok." : "Henüz teklif yok — \"Yeni teklif\" ile başlayın ya da Hızlı Hesaplayıcı'dan \"Teklife ekle\" deyin."}
-          </div>
+          <ListMessage>
+            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground" data-testid="quotes-empty">
+              {filtered ? "Süzgece uyan teklif yok." : "Henüz teklif yok — \"Yeni teklif\" ile başlayın ya da Hızlı Hesaplayıcı'dan \"Teklife ekle\" deyin."}
+            </div>
+          </ListMessage>
         ) : (
-          <>
-            <QuotesTable rows={rows} onOpen={(id) => nav(`/cost/quotes/${id}`)} />
-            {q.hasNextPage && (
-              <div className="flex justify-center">
-                <Button variant="outline" size="sm" disabled={q.isFetchingNextPage} onClick={() => void q.fetchNextPage()}>
-                  {q.isFetchingNextPage ? "Yükleniyor…" : "Daha fazla yükle"}
-                </Button>
-              </div>
-            )}
-          </>
+          <QuotesTable rows={rows} onOpen={(id) => nav(`/cost/quotes/${id}`)} />
         )}
-      </PageBody>
+      </ListBody>
+      {/* [EL-09] sapması devralındı: elle "Daha fazla yükle" (davranış korunarak alt şeride taşındı). */}
+      <ListFooter loaded={rows.length}>
+        {q.hasNextPage && (
+          <Button variant="outline" size="sm" disabled={q.isFetchingNextPage} onClick={() => void q.fetchNextPage()}>
+            {q.isFetchingNextPage ? "Yükleniyor…" : "Daha fazla yükle"}
+          </Button>
+        )}
+      </ListFooter>
     </PageShell>
   );
 }

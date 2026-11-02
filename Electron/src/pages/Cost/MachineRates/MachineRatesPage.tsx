@@ -6,7 +6,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { History, Plus } from "lucide-react";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -19,6 +20,7 @@ import { fmtDecFull } from "../shared/format";
 import { MachineRateDialog } from "./MachineRateDialog";
 import { MachineRateHistorySheet } from "./MachineRateHistorySheet";
 import { machineRateService, type MachineCostRate } from "./service";
+import { RefreshButton } from "@/components/RefreshButton";
 
 type MachineBrief = { id: string; code: string; name: string };
 export interface MachineRateRow { machine: MachineBrief; rate: MachineCostRate | null }
@@ -51,45 +53,51 @@ export function MachineRatesPage() {
         title="Makine Saat Ücretleri"
         description="Kârlılıkta makineye giden maliyet: saat ücreti (TL) ve beklenen metre/saat. Değişiklik şu andan itibaren geçerli yeni sürümdür; eski ücret damgalı kalır."
         actions={
-          canListMachines ? (
-            <PermissionGate permission="cost:write">
-              <Button onClick={() => setEdit({ current: null, machine: null })}><Plus className="mr-1 h-4 w-4" />Ücret gir</Button>
-            </PermissionGate>
-          ) : null
+          <div className="flex gap-2">
+            <RefreshButton queryKey={["cost-machine-rates"]} extraKeys={[["machines", "cost-rate-list"]]} />
+            {canListMachines ? (
+              <PermissionGate permission="cost:write">
+                <Button onClick={() => setEdit({ current: null, machine: null })}><Plus className="mr-1 h-4 w-4" />Ücret gir</Button>
+              </PermissionGate>
+            ) : null}
+          </div>
         }
       />
-      <PageBody className="p-4 sm:p-6">
+      <ListBody>
         {q.isLoading ? (
-          <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
         ) : q.isError ? (
-          <CostQueryError error={q.error} what="Makine saat ücretleri" onRetry={() => void q.refetch()} />
+          <ListMessage>
+            <CostQueryError error={q.error} what="Makine saat ücretleri" onRetry={() => void q.refetch()} />
+          </ListMessage>
         ) : rows.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-            Henüz makine saat ücreti yok — ücreti olmayan makinenin çalışması kârlılıkta "ücret eksik" sayılır.
-          </div>
+          <ListMessage>
+            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+              Henüz makine saat ücreti yok — ücreti olmayan makinenin çalışması kârlılıkta "ücret eksik" sayılır.
+            </div>
+          </ListMessage>
         ) : (
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full min-w-[36rem] text-sm">
-              <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2">Makine</th>
-                  <th className="px-3 py-2 text-right">Saat ücreti</th>
-                  <th className="px-3 py-2 text-right">Beklenen m/saat</th>
-                  <th className="px-3 py-2">Geçerli olduğu an</th>
-                  <th className="px-3 py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <RateRow key={r.machine.id} r={r}
-                    onEdit={() => setEdit({ current: r.rate, machine: r.machine })}
-                    onHistory={r.rate ? () => setHistory(r.rate) : undefined} />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <table className="w-full min-w-[36rem] text-sm">
+            <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2">Makine</th>
+                <th className="px-3 py-2 text-right">Saat ücreti</th>
+                <th className="px-3 py-2 text-right">Beklenen m/saat</th>
+                <th className="px-3 py-2">Geçerli olduğu an</th>
+                <th className="px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <RateRow key={r.machine.id} r={r}
+                  onEdit={() => setEdit({ current: r.rate, machine: r.machine })}
+                  onHistory={r.rate ? () => setHistory(r.rate) : undefined} />
+              ))}
+            </tbody>
+          </table>
         )}
-      </PageBody>
+      </ListBody>
+      <ListFooter loaded={rows.length} />
       {edit && <MachineRateDialog onClose={() => setEdit(null)} current={edit.current} machine={edit.machine} />}
       {history && <MachineRateHistorySheet row={history} onClose={() => setHistory(null)} />}
     </PageShell>

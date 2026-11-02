@@ -7,7 +7,8 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Plus } from "lucide-react";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListToolbar } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,6 +19,9 @@ import { CertificateDetailDialog } from "./CertificateDetailDialog";
 import { CertificateFormDialog, type CertificateFormMode } from "./CertificateFormDialog";
 import { CertificateRevokeDialog } from "./CertificateRevokeDialog";
 import { CustomerSpecsPanel } from "./CustomerSpecsPanel";
+import { RefreshButton } from "@/components/RefreshButton";
+
+const TAB_PANE = "mt-0 flex min-h-0 flex-1 flex-col";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -40,23 +44,30 @@ export function CertificatesPage() {
         title="Sertifikalar"
         description="OEKO-TEX, GOTS gibi sertifikalar ve bitiş tarihleri — süresi yaklaşınca Bildirimler'de uyarı açılır."
         actions={
-          tab === "certificates" && (
-            <PermissionGate permission="certificate:write">
-              <Button onClick={() => setForm({ kind: "create" })}><Plus className="mr-1 h-4 w-4" />Yeni Sertifika</Button>
-            </PermissionGate>
-          )
+          <div className="flex gap-2">
+            <RefreshButton queryKey={tab === "certificates" ? ["certificates", "list"] : ["customer-lab-specs"]} />
+            {tab === "certificates" && (
+              <PermissionGate permission="certificate:write">
+                <Button onClick={() => setForm({ kind: "create" })}><Plus className="mr-1 h-4 w-4" />Yeni Sertifika</Button>
+              </PermissionGate>
+            )}
+          </div>
         }
       />
-      <PageBody className="p-4 sm:p-6">
-        <Tabs value={tab} onValueChange={(v) => { const p = new URLSearchParams(params); if (v === "specs") p.set("tab", "specs"); else p.delete("tab"); setParams(p, { replace: true }); }}>
-          <TabsList>
+      <Tabs
+        value={tab}
+        onValueChange={(v) => { const p = new URLSearchParams(params); if (v === "specs") p.set("tab", "specs"); else p.delete("tab"); setParams(p, { replace: true }); }}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <ListToolbar>
+          <TabsList className="self-start">
             <TabsTrigger value="certificates">Sertifikalar</TabsTrigger>
             {hasPermission("labtest:read") && <TabsTrigger value="specs">Müşteri spesifikasyonları</TabsTrigger>}
           </TabsList>
-          <TabsContent value="certificates" className="mt-4"><CertificateList onOpen={setOpenId} /></TabsContent>
-          {hasPermission("labtest:read") && <TabsContent value="specs" className="mt-4"><CustomerSpecsPanel /></TabsContent>}
-        </Tabs>
-      </PageBody>
+        </ListToolbar>
+        <TabsContent value="certificates" className={TAB_PANE}><CertificateList onOpen={setOpenId} /></TabsContent>
+        {hasPermission("labtest:read") && <TabsContent value="specs" className={TAB_PANE}><CustomerSpecsPanel /></TabsContent>}
+      </Tabs>
       {openId && (
         <CertificateDetailDialog certificateId={openId} soonDays={30} onClose={() => setOpenId(null)}
           onEdit={(c) => setForm({ kind: "edit", cert: c })} onRenew={(c) => setForm({ kind: "renew", cert: c })} onRevoke={setRevokeId} />
