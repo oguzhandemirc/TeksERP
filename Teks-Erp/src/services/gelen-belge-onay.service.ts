@@ -68,6 +68,9 @@ export interface ApproveInput {
   processChoices?: ReadonlyArray<{ lineId: string | null; valueId: string }> | null;
 }
 
+/** Sistem onayı (OIE, iş emri formundan kayıt): kip zorlanır, ayak izine onaylatan yol yazılır. Ayrı onay ucu vermez. */
+export type ApproveOptions = { entryMode?: IncomingDocEntryMode; /** Audit yolu ("WITH_WORK_ORDER: <kullanıcı>"). */ via?: string };
+
 export interface ApproveResult {
   note: Awaited<ReturnType<typeof getDeliveryNote>>;
   summary: { entered: number; failed: number; skipped: number; replayed: number; rollIds: string[] };
@@ -330,16 +333,16 @@ async function claimHeader(id: string, snap: { status: DeliveryNoteStatus; updat
  * Sıra: ön kontrol (yazmaz) → başlık claim DRAFT|PARTIAL → APPROVING → satır claim PENDING|FAILED → ENTERING →
  * satır satır `createInitialEntry` → satır ENTERED/FAILED → başlık APPROVED|PARTIAL → alias öğrenme → audit.
  */
-export async function approveDeliveryNote(id: string, input: ApproveInput, userId: string): Promise<ApproveResult> {
+export async function approveDeliveryNote(id: string, input: ApproveInput, userId: string, opts: ApproveOptions = {}): Promise<ApproveResult> {
   const note = await prisma.customerDeliveryNote.findUnique({ where: { id }, select: PRE_SELECT });
   if (!note) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
-  const mode = await readIncomingDocEntryMode();
+  const mode = opts.entryMode ?? (await readIncomingDocEntryMode());
   const { warnings, defaultItem } = await precheck(note, input, mode);
   const processChoices = await resolveProcessChoices(note, input.processChoices);
   const varianceReason = input.varianceReason?.trim() || undefined;
 
   await claimHeader(id, note, userId, varianceReason);
-  await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: id, oldData: { status: note.status }, newData: { status: "APPROVING", noteNo: note.noteNo, ...(varianceReason ? { varianceReason } : {}), ...(mode === "PER_DOCUMENT" ? { entryMode: mode } : {}) } });
+  await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: id, oldData: { status: note.status }, newData: { status: "APPROVING", noteNo: note.noteNo, ...(varianceReason ? { varianceReason } : {}), ...(mode === "PER_DOCUMENT" ? { entryMode: mode } : {}), ...(opts.via ? { via: opts.via } : {}) } });
   if (mode === "PER_DOCUMENT") await preparePerDocument(note, userId);
 
   // ── Satır claim: yalnız topsuz satır (PENDING|FAILED; bayat ENTERING de alınır — token replay korur).
