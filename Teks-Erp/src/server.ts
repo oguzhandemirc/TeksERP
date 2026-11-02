@@ -210,12 +210,9 @@ function startLanListener(): Server {
             : "kapalı"}`);
     }
     lanTlsBanner();
-    if (VERIFYING) {
+    if (JOBS_OFF) {
         satir("--------------------------------------------------------");
-        satir("  DOĞRULAMA KİPİ: yalnız 127.0.0.1 — zamanlayıcılar ve dış bağlantılar başlatılmadı");
-    } else if (JOBS_OFF) {
-        satir("--------------------------------------------------------");
-        satir("  YARDIMCI TEST SUNUCUSU: zamanlayıcılar ve dış bağlantılar başlatılmadı (TEKSERP_ZAMANLAYICI_KAPALI=1)");
+        satir(`  ${VERIFYING ? "DOĞRULAMA KİPİ: yalnız 127.0.0.1 —" : "YARDIMCI TEST SUNUCUSU:"} zamanlayıcılar ve dış bağlantılar başlatılmadı`);
     }
     satir("========================================================");
     satir("");
