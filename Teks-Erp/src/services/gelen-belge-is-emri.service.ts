@@ -11,6 +11,7 @@ import prisma from "../lib/prisma";
 import { effectiveProcessText } from "../lib/gelen-belge/gramaj-oneri";
 import { AppError } from "../utils/app-error";
 import { suggestProcess, type ProcessSuggestion } from "./gelen-belge-eslestirme.service";
+import { suggestRoute, type RouteSuggestionSource } from "./gelen-belge-rota-onerisi.service";
 import { loadKursunGramajOptions } from "./helpers/kursun-bypass-gramaj.helper";
 import { loadProcessChoiceGroups, PROCESS_CHOICE_VALUE_WHERE } from "./helpers/process-choice-catalog.helper";
 import { customerBatchKeyOf } from "./helpers/ship-readiness.helper";
@@ -64,8 +65,12 @@ export interface WorkOrderPlan {
   readonly owner: { readonly id: string; readonly name: string } | null;
   /** Müşteri partisi (sahip + belge parti no; `customerBatchKeyOf`) — parti nosu yoksa null. */
   readonly customerBatch: { readonly key: string; readonly batchNo: string } | null;
-  /** Aynı sahibin son iş emrindeki (aktif) rota şablonu — yalnız ÖNERİ, seçim kullanıcıda. */
+  /** Rota önerisi (`suggestRoute` zinciri) — yalnız ÖNERİ, seçim kullanıcıda; otomatik iş emri de bunu kullanır. */
   readonly suggestedRouteTemplateId: string | null;
+  /** Önerinin kaynağı; öneri yoksa null. */
+  readonly suggestedRouteSource: RouteSuggestionSource | null;
+  /** Kullanılamayan kaynakların Türkçe nedenleri (deneme sırasıyla). */
+  readonly routeSuggestionNotes: readonly string[];
   /** Değer seçilebilecek çeşit özellikleri (kurşun gramajı dahil); büyük katalog panelde sunucu aramasıyla. */
   readonly choiceProperties: ReadonlyArray<{ readonly propertyId: string; readonly propertyName: string; readonly flagPropertyId: string; readonly optionCount: number }>;
   readonly groups: ReadonlyArray<PlanGroup>;
@@ -84,16 +89,6 @@ function pickedValues(s: ProcessSuggestion): Picked[] {
 /** Saf: grup anahtarı — ürün + sıralı değerler; değersiz grup `-`. */
 export function planGroupKey(itemId: string, valueIds: readonly string[]): string {
   return `${itemId}|${valueIds.length > 0 ? [...valueIds].sort().join(",") : "-"}`;
-}
-
-async function suggestRouteTemplate(ownerCustomerId: string | null): Promise<string | null> {
-  if (!ownerCustomerId) return null;
-  const last = await prisma.workOrder.findFirst({
-    where: { routeTemplateId: { not: null }, routeTemplate: { isActive: true }, batches: { some: { rolls: { some: { ownerCustomerId } } } } },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: { routeTemplateId: true },
-  });
-  return last?.routeTemplateId ?? null;
 }
 
 const PLAN_NOTE_SELECT = {
@@ -168,13 +163,16 @@ export async function buildWorkOrderPlan(noteId: string): Promise<WorkOrderPlan>
     }
   }
   const batchKey = customerBatchKeyOf(note.ownerCustomerId, note.customerBatchNo);
+  const route = await suggestRoute({ ownerCustomerId: note.ownerCustomerId });
   return {
     noteId: note.id,
     noteNo: note.noteNo,
     status: note.status,
     owner: note.ownerCustomer,
     customerBatch: batchKey ? { key: batchKey, batchNo: note.customerBatchNo!.trim() } : null,
-    suggestedRouteTemplateId: await suggestRouteTemplate(note.ownerCustomerId),
+    suggestedRouteTemplateId: route.routeTemplateId,
+    suggestedRouteSource: route.source,
+    routeSuggestionNotes: route.notes,
     choiceProperties: await loadChoiceProperties(),
     // Desenli gruplar önce (belge sırası korunur), desensiz grup(lar) en sonda ayrı.
     groups: [...groups.entries()]

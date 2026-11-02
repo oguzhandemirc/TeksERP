@@ -139,6 +139,7 @@ import {
   repointPendingBypassAssignmentsTx,
 } from "./helpers/kursun-bypass-guard.helper";
 import { computeWoInput } from "./helpers/coverage.helper";
+import { routeTemplateProblem } from "./helpers/route-template-usable.helper";
 import { readWorkOrderLocationFilters, withWorkOrderLocation } from "./helpers/workorder-location.helper";
 import {
   buildHiddenStatusWhere,
@@ -963,12 +964,8 @@ export class WorkOrderService {
         throw AppError.notFound("Rota şablonu bulunamadı");
       }
       planWarnings.push(...passivePlanWarnings(template));
-      if (!template.isActive) {
-        throw AppError.badRequest("Pasif bir rota şablonu kullanılamaz");
-      }
-      if (template.steps.length === 0) {
-        throw AppError.badRequest("Rota şablonunda adım yok");
-      }
+      const templateProblem = routeTemplateProblem({ isActive: template.isActive, stepCount: template.steps.length });
+      if (templateProblem) throw AppError.badRequest(templateProblem);
 
       // Fason planlama overlay'i: sequence'e göre eşleştir.
       const planBySeq = new Map<number, NonNullable<WorkOrderCreateInput["stepPlanning"]>[number]>();
@@ -5305,8 +5302,8 @@ export class WorkOrderService {
         include: { steps: { orderBy: { sequence: "asc" } } },
       });
       if (!template) throw AppError.notFound("Rota şablonu bulunamadı");
-      if (!template.isActive) throw AppError.badRequest("Pasif bir rota şablonu kullanılamaz");
-      if (template.steps.length === 0) throw AppError.badRequest("Rota şablonunda adım yok");
+      const templateProblem = routeTemplateProblem({ isActive: template.isActive, stepCount: template.steps.length });
+      if (templateProblem) throw AppError.badRequest(templateProblem);
 
       const planBySeq = new Map<number, NonNullable<WorkOrderCreateInput["stepPlanning"]>[number]>();
       for (const p of data.stepPlanning ?? []) planBySeq.set(p.sequence, p);
