@@ -211,6 +211,7 @@ export const commandSections: CommandSection[] = [
       // gizlenme SEBEBİ (keşfe davet etmemek) o üçüncü kapıdan sızardı.
       superadminOnly: tile.superadminOnly,
       licenseObservationGate: tile.licenseObservationGate,
+      keywords: tile.keywords,
     })),
   },
   {
@@ -238,7 +239,8 @@ export const commandSections: CommandSection[] = [
       // Rejim yüklemi ayar ekranından TAŞINIR (kopyalanmaz): fabrikada gizli
       // olan "Muhasebe" sekmesine palet derin bağlantı vermemeli.
       visibleWhen: settingsCategoryVisibleWhen(cat),
-      keywords: cat.keywords,
+      // "<ad> ayarları"/"<ad> ayar" bitişik eşleşsin: Türkçe ek yüzünden "gelen belge ayarları" hiç sonuç vermiyordu.
+      keywords: [`${cat.label} ayarları`, `${cat.label} ayar`, cat.keywords].filter(Boolean).join(" "),
     })),
   },
   {

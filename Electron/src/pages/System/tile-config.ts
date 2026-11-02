@@ -52,6 +52,8 @@ export interface SystemTile {
    * modüllerini bir daha yapılandıramaz.
    */
   superadminOnly?: boolean;
+  /** Görünmeyen palet arama anahtarları (ör. eski ad "genel ayarlar") — `CommandEntry.keywords`e taşınır. */
+  keywords?: string;
   /**
    * Karo bu bayrak KAPALIYKEN de görünür, açıklaması "kapalı — Genel Ayarlar'dan açılır" olur
    * (bulunabilirlik şartı: kapalı özellik sessizce kaybolmaz).
