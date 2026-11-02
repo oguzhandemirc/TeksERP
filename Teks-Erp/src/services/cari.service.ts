@@ -27,6 +27,7 @@ import { factoryDateTr } from "../constants/time";
 import { SERVICE_BILLING_TRIGGERS, type ServiceBillingTrigger } from "./system-setting.service";
 import { ACTIVE_HOLD_INCLUDE, HELD_CARI_ACCOUNT_WHERE, holdScopes, reasonLabel, type CariHoldScope } from "./helpers/cari-hold.helper";
 import { CARI_TAX_SELECT } from "./helpers/invoice-tax-defaults.helper";
+import { readKursunGramPrice } from "./helpers/kursun-gram-price.helper";
 import { cariTaxOverrideData, taxOverrideOf, type CariTaxOverrideInput } from "./helpers/cari-tax-override.helper";
 
 /**
@@ -60,6 +61,9 @@ export interface CariListRow {
   isActive: boolean;
   /** H8b: müşterinin hizmet faturası tetiği; null = fabrika ayarı. */
   serviceBillingTrigger: ServiceBillingTrigger | null;
+  /** oie-a: müşteriye özel kurşun gram fiyatı; null = istasyonunki. */
+  kursunGramPrice: Prisma.Decimal | null;
+  kursunGramCurrency: Currency | null;
   /** D4-V1k: KDV / tevkifat geçersiz kılması; null = genel ayar (çözüm `invoice-tax-defaults.helper`). */
   vatRate: Prisma.Decimal | null;
   withholdingEnabled: boolean | null;
@@ -230,6 +234,8 @@ export class CariService {
           notes: r.notes,
           isActive: r.isActive,
           serviceBillingTrigger: r.serviceBillingTrigger as ServiceBillingTrigger | null,
+          kursunGramPrice: r.kursunGramPrice,
+          kursunGramCurrency: r.kursunGramCurrency,
           hold: holdOf(r),
           ...taxOverrideOf(r),
           // Sıfır bakiyeli para birimi satırları gürültüdür; ekranda yer kaplar.
@@ -285,6 +291,8 @@ export class CariService {
       notes: row.notes,
       isActive: row.isActive,
       serviceBillingTrigger: row.serviceBillingTrigger as ServiceBillingTrigger | null,
+      kursunGramPrice: row.kursunGramPrice,
+      kursunGramCurrency: row.kursunGramCurrency,
       hold: holdOf(row),
       ...taxOverrideOf(row),
       balances: row.balances,
@@ -362,6 +370,8 @@ export class CariService {
       notes?: string | null;
       isActive?: boolean;
       serviceBillingTrigger?: string | null;
+      kursunGramPrice?: string | number | null;
+      kursunGramCurrency?: Currency | null;
     } & CariTaxOverrideInput,
     userId?: string,
   ): Promise<ApiResponse<{ id: string }>> {
@@ -372,6 +382,7 @@ export class CariService {
     if (!existing) throw AppError.notFound("Cari hesap bulunamadı.");
     assertServiceBillingTriggerInput(input.serviceBillingTrigger, existing.kind);
     const taxData = cariTaxOverrideData(input, existing);
+    const gram = input.kursunGramPrice !== undefined ? readKursunGramPrice(input.kursunGramPrice, input.kursunGramCurrency ?? null) : undefined;
 
     // ⚠️ Bakiyesi olan cari PASİFLEŞTİRİLEMEZ: pasif cari listelerden düşer ve
     // açık bakiye görünmez olur — muhasebede "kapatılmamış hesabı gizlemek"
@@ -398,6 +409,7 @@ export class CariService {
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
         ...(input.serviceBillingTrigger !== undefined ? { serviceBillingTrigger: input.serviceBillingTrigger } : {}),
+        ...(gram !== undefined ? { kursunGramPrice: gram.price, kursunGramCurrency: gram.currency } : {}),
         ...taxData,
       },
       select: { id: true },

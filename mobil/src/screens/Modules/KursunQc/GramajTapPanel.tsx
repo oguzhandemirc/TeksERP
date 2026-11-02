@@ -10,7 +10,7 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Surface, Text, TouchableRipple } from 'react-native-paper';
 import { colors, palette } from '../../../theme/tokens';
-import { lastTapText, type GramajValue } from './gramajTap';
+import { lastTapText, targetChipText, type GramajValue } from './gramajTap';
 import type { GramajTapState } from './useGramajTap';
 
 interface Props {
@@ -92,7 +92,7 @@ export default function GramajTapPanel({ state, hasRoll }: Props) {
           <View style={s.head}>
             <Text style={s.title}>{state.correcting ? `DÜZELT — top ${tail}` : state.title}</Text>
             {!!state.target && (
-              <Text style={s.targetChip} testID="gramaj-hedef">{`HEDEF ${state.target.label}`}</Text>
+              <Text style={s.targetChip} testID="gramaj-hedef">{targetChipText(state.target)}</Text>
             )}
           </View>
           {!state.correcting && !!state.rollTail && hasRoll && (

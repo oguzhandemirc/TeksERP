@@ -6,12 +6,14 @@
 
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
+import { Currency } from "@prisma/client";
 import { StationCapabilityService } from "../services/station-capability.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireProductionEnabled } from "../middlewares/module.middleware";
 import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { MOBILE_SESSION_PERMS } from "../services/work-session.service";
+import { getKursunStation, setKursunStation } from "../services/kursun-station.service";
 
 const service = new StationCapabilityService();
 const router = Router();
@@ -201,6 +203,89 @@ router.put(
         req.user?.userId,
       );
       res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+// Kurşun istasyonu (oie-a): "Kurşun uygular" + gramaj tablosu + gram fiyatı — tek boğaz.
+const kursunStationSchema = z.object({
+  enabled: z.boolean().optional(),
+  values: z.array(z.object({
+    code: z.string().trim().max(32).optional(),
+    name: z.string().trim().min(1).max(100),
+    amount: z.union([z.string().max(20), z.number()]).nullable().optional(),
+    isActive: z.boolean().optional(),
+    isDefault: z.boolean().optional(),
+  }).strict()).max(100).optional(),
+  gramPrice: z.union([z.string().max(20), z.number()]).nullable().optional(),
+  gramCurrency: z.nativeEnum(Currency).nullable().optional(),
+}).strict();
+
+/**
+ * @openapi
+ * /api/station-capabilities/{stationId}/kursun:
+ *   get:
+ *     tags: [StationCapabilities]
+ *     summary: İstasyonun kurşun ayarı (Kurşun uygular, gramajlar gr/m, gram fiyatı)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: stationId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ enabled, values[{code,name,amount,isDefault,isActive}], gramPrice, gramCurrency }" }
+ *       404: { description: İstasyon bulunamadı }
+ *   put:
+ *     tags: [StationCapabilities]
+ *     summary: İstasyonun kurşun ayarını değiştir
+ *     description: |
+ *       `enabled` = StationProperty(KURSUN, AUTO) satırı. `values` gramaj listesinin TAMAMI (eksik kod pasife düşer,
+ *       silinmez; tek varsayılan). Çeşit yoksa ilk eklemede doğar. `gramPrice` + `gramCurrency` birlikte (null = kaldır).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: stationId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               enabled: { type: boolean }
+ *               values: { type: array, items: { type: object } }
+ *               gramPrice: { type: string, nullable: true }
+ *               gramCurrency: { type: string, nullable: true }
+ *     responses:
+ *       200: { description: Güncel kurşun ayarı }
+ *       400: { description: Geçersiz gramaj/fiyat, iki varsayılan, KURSUN özelliği yok }
+ */
+router.get(
+  "/:stationId/kursun",
+  verifyToken,
+  requirePermission("station:read"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({ success: true, data: await getKursunStation(req.params.stationId as string) });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.put(
+  "/:stationId/kursun",
+  verifyToken,
+  requirePermission("station:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = kursunStationSchema.parse(req.body);
+      res.status(200).json({ success: true, data: await setKursunStation(req.params.stationId as string, body, req.user?.userId) });
     } catch (e) {
       next(e);
     }

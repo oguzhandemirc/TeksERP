@@ -10,6 +10,8 @@ export const BASE_WRITE_CLOSED_FIELDS: Readonly<Record<string, readonly string[]
   peripheralDevice: ["lastSeenAt", "deletedAt", "calibratedAt", "calibrationDueAt", "calibrationNote"],
   // Künye yalnız oturumdan (`withActor`); gövde ayrıca Zod `.strict()` allowlist'inden geçer.
   machineStopCodeMap: ["createdById", "updatedById"],
+  // Kurşun gram fiyatı yalnız `PUT /station-capabilities/:id/kursun` boğazından (para birimi + CHECK doğrulaması orada).
+  station: ["kursunGramPrice", "kursunGramCurrency"],
 };
 
 export function baseWriteClosedFields(modelName: string): readonly string[] {

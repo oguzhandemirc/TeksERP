@@ -12,6 +12,7 @@ import { stationFormDefaults, stationFormSchema, type StationFormValues } from "
 import { visibleStationKindLabels } from "./stationKindVisibility";
 import { inspectionHintForKind, suggestedCapabilities, valuesAfterKindChange } from "./stationKindDefaults";
 import { StationLabelCopiesField } from "./StationLabelCopiesField";
+import { StationKursunSection } from "./StationKursunSection";
 
 const CAPABILITY_FIELDS = ["appliesColor", "appliesProperty", "appliesQuality", "inspectionEnabled", "producesWarpBeam", "consumesWarpBeam"] as const;
 import type { Station } from "./types";
@@ -186,6 +187,8 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
             </div>
           </FormField>
           <StationLabelCopiesField form={form} />
+          {/* oie-a: kurşun ayarı yalnız kayıtlı istasyonda (kendi kaydıyla). */}
+          {initial?.id && <StationKursunSection stationId={initial.id} />}
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" {...form.register("isActive")} /> Aktif
           </label>

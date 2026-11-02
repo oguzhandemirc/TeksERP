@@ -50,7 +50,7 @@ const FLASH_MS = 1500;
 function useTapValues(cfg: TapValueConfig | null, summary: KursunStepSummary | null) {
   return useMemo(() => {
     const prop = cfg ? summary?.properties?.find((p) => p.propertyId === cfg.variantPropertyId) : undefined;
-    const values: GramajValue[] = (prop?.values ?? []).map((v) => ({ code: v.code, label: v.name }));
+    const values: GramajValue[] = (prop?.values ?? []).map((v) => ({ code: v.code, label: v.name, isDefault: v.isDefault }));
     const target = cfg ? findTarget(summary?.targetValues, cfg.variantPropertyId, values) : null;
     return { title: prop?.name ?? '', values, target };
   }, [cfg, summary]);

@@ -1079,6 +1079,12 @@ model Station {
   defaultCategoryId String?                @db.Uuid
   defaultCategory   SubcontractorCategory? @relation("StationDefaultCategory", fields: [defaultCategoryId], references: [id])
 
+  /// Kurşun gram fiyatı (oie-a): 1 gr/m başına METRE fiyatı — istasyonun varsayılanı (cari kartı ezer).
+  /// NULL = gram fiyatı yok (hizmet kalemi fiyatı, bugün). Yazımı yalnız `PUT /station-capabilities/:id/kursun`
+  /// (genel CRUD'da kapalı, `write-guard`); CHECK >= 0 ve para birimiyle birlikte.
+  kursunGramPrice    Decimal?  @db.Decimal(12, 4)
+  kursunGramCurrency Currency?
+
   /// Bu istasyon RENK uygulayabilir mi? (2026-08-10)
   ///
   /// Eskiden bu soru YALNIZ `defaultCategory.appliesColor`'dan türetiliyordu ve
@@ -9354,6 +9360,11 @@ model FabricPropertyValue {
   consumableItem          Item?                    @relation("FabricPropertyValueConsumableItem", fields: [consumableItemId], references: [id], onDelete: Restrict)
   /// Brode deseni: bir adetteki vuruş (dikiş) sayısı — VURUŞ fiyat biriminde miktar = adet × bu (CHECK > 0).
   stitchCount             Int?
+  /// Kurşun gramajı (oie-a): metre başına gram (gr/m). NULL = yalnız etiket (bugün); CHECK > 0.
+  /// Fatura birim metre fiyatı = amount × gram fiyatı (`kursun-gram-price.helper`).
+  amount                  Decimal?                 @db.Decimal(10, 3)
+  /// Çeşit başına TEK varsayılan (kısmi unique `fabric_property_values_default_uq`); tablet hedef yoksa bunu vurgular.
+  isDefault               Boolean                  @default(false)
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -10880,6 +10891,10 @@ model CariAccount {
 
   notes    String? @db.VarChar(500)
   isActive Boolean @default(true)
+
+  /// Müşteriye özel kurşun gram fiyatı (oie-a) — NULL = istasyonunki. Para birimiyle birlikte, CHECK >= 0.
+  kursunGramPrice    Decimal?  @db.Decimal(12, 4)
+  kursunGramCurrency Currency?
 
   /// H8b: müşterinin hizmet faturası tetiği — NULL = fabrika ayarı `finance.serviceBilling.trigger`;
   /// `PER_SHIPMENT` | `PERIOD_END` (DB CHECK). Tek çözücü `resolveCustomerServiceBillingTrigger`.
