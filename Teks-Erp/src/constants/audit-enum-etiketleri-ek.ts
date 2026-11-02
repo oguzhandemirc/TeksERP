@@ -380,8 +380,7 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   ENTERING: "Giriş yapılıyor",
   ENTERED: "Girişi yapıldı",
   // BatchNumberSource (Gülkesim parti no S0, 2026-11-02)
-  SERIES: "Numara serisinden",
-  DOCUMENT: "Belgeden",
+  SERIES: "Numara serisinden", DOCUMENT: "Belgeden",
   // DocumentScanStatus
   READING: "Okunuyor",
   READ: "Okundu",
