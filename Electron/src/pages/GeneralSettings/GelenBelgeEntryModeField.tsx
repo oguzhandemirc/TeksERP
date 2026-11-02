@@ -2,14 +2,15 @@
 //   · parti numarası kaynağı — seriden (varsayılan, bugünkü) | belgedeki parti no'dan
 //   · onay kipi — her satır bir top (varsayılan, bugünkü) | belge başına tek kayıt (kurşun metresiyle tek top)
 //   · işlem değeri çözülemeyen grupta otomatik iş emri — atla (varsayılan, bugünkü) | hedef değersiz aç
+//   · iş emri formundan okutulan belge — ayrı onay (varsayılan, bugünkü) | iş emri açan kaydeder (K7) · refakat oto baskı (K9)
 // Eski backend alanı göndermez → alan çizilmez, gövdeye girmez. Kip kuralı istemciye kopyalanmaz: tek kayıt kipinin
 // varsayılan ürün ön koşulunu sunucu 400 ile söyler; burada yalnız önceden görünür bir uyarı var.
 import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
-import { FieldLabel } from "./SettingRow";
+import { FieldLabel, FlagToggle } from "./SettingRow";
 import { EnumRadioOptions } from "./EnumRadioOptions";
 import { TERIM } from "@/lib/terim";
-import type { AutoWorkOrderPatternlessMode, BatchNumberSourceMode, IncomingDocEntryMode, IncomingDocumentSettings } from "@/pages/Operations/GelenBelgeler/types";
+import type { AutoWorkOrderPatternlessMode, BatchNumberSourceMode, IncomingDocEntryMode, IncomingDocFormApproval, IncomingDocumentSettings } from "@/pages/Operations/GelenBelgeler/types";
 
 const IE = TERIM.terbiyeIsEmri;
 
@@ -30,6 +31,11 @@ export const AUTO_WORK_ORDER_PATTERNLESS_OPTIONS: ReadonlyArray<Option<AutoWorkO
   { value: "OPEN", label: "Hedef değersiz aç", hint: `İşlem değeri çözülemeyen grup için de ${IE.tekilKucuk} açılır; hedef değer boş kalır.` },
 ];
 
+export const FORM_APPROVAL_OPTIONS: ReadonlyArray<Option<IncomingDocFormApproval>> = [
+  { value: "SEPARATE", label: "Ayrı onay", hint: `${IE.tekil} formundan okutulan belge taslak kalır; Gelen Belgeler'den onaylanınca ${IE.tekilKucuk} açılır (bugünkü davranış).` },
+  { value: "WITH_WORK_ORDER", label: `${IE.tekil} ile birlikte`, hint: `Formdan okutulan belgeyi ${IE.tekilKucuk} açma izni olan kaydeder: belge, müşteri malı top ve ${IE.tekilKucuk} tek seferde açılır; ayrı onay adımı yok.` },
+];
+
 type Pair<T extends string> = { server: T | undefined; value: T | undefined; set: (v: T) => void; fallback: T | undefined; dirty: boolean };
 
 function usePair<T extends string>(server: T | undefined, fallback: T | undefined): Pair<T> {
@@ -42,14 +48,24 @@ export function useEntryModeDraft(server: IncomingDocumentSettings | undefined) 
   const batch = usePair(server?.batchNumberSource, server?.defaultBatchNumberSource);
   const entry = usePair(server?.entryMode, server?.defaultEntryMode);
   const patternless = usePair(server?.autoWorkOrderPatternless, server?.defaultAutoWorkOrderPatternless);
-  const reset = () => { batch.set(batch.server as BatchNumberSourceMode); entry.set(entry.server as IncomingDocEntryMode); patternless.set(patternless.server as AutoWorkOrderPatternlessMode); };
+  const approval = usePair(server?.formApproval, server?.defaultFormApproval);
+  const serverPrint = server?.refakatAutoPrint;
+  const [autoPrint, setAutoPrint] = useState<boolean | undefined>(serverPrint);
+  const printDirty = serverPrint !== undefined && autoPrint !== undefined && autoPrint !== serverPrint;
+  const reset = () => {
+    batch.set(batch.server as BatchNumberSourceMode); entry.set(entry.server as IncomingDocEntryMode); patternless.set(patternless.server as AutoWorkOrderPatternlessMode);
+    approval.set(approval.server as IncomingDocFormApproval); setAutoPrint(serverPrint);
+  };
   const body = {
     ...(batch.dirty ? { batchNumberSource: batch.value } : {}),
     ...(entry.dirty ? { entryMode: entry.value } : {}),
     ...(patternless.dirty ? { autoWorkOrderPatternless: patternless.value } : {}),
+    ...(approval.dirty ? { formApproval: approval.value } : {}),
+    ...(printDirty ? { refakatAutoPrint: autoPrint } : {}),
   };
-  const serverKey = `${batch.server ?? ""}|${entry.server ?? ""}|${patternless.server ?? ""}`;
-  return { batch, entry, patternless, dirty: batch.dirty || entry.dirty || patternless.dirty, body, reset, serverKey };
+  const serverKey = `${batch.server ?? ""}|${entry.server ?? ""}|${patternless.server ?? ""}|${approval.server ?? ""}|${String(serverPrint ?? "")}`;
+  const print = { server: serverPrint, value: autoPrint, set: setAutoPrint };
+  return { batch, entry, patternless, approval, print, dirty: batch.dirty || entry.dirty || patternless.dirty || approval.dirty || printDirty, body, reset, serverKey };
 }
 
 function EnumField<T extends string>({ id, label, desc, pair, options, children }: { id: string; label: string; desc: string; pair: Pair<T>; options: ReadonlyArray<Option<T>>; children?: React.ReactNode }) {
@@ -99,6 +115,25 @@ export function EntryModeFields({ draft, hasDefaultItem }: { draft: ReturnType<t
         pair={draft.patternless}
         options={AUTO_WORK_ORDER_PATTERNLESS_OPTIONS}
       />
+      <EnumField
+        id="gb-form-approval"
+        label={`${IE.tekil} formundan okutulan belge`}
+        desc={`"İş emri oluştur" ekranında okutulan belge nasıl kaydedilsin. "${IE.tekil} ile birlikte" seçilirse ayrı onay (gelen-belge:approve) aranmaz; ${IE.tekilKucuk} açma izni yeter.`}
+        pair={draft.approval}
+        options={FORM_APPROVAL_OPTIONS}
+      />
+      {draft.print.server !== undefined && (
+        <div data-testid="gb-refakat-auto-print">
+          <FlagToggle
+            title="Refakat kartını kendiliğinden yazdır"
+            summary={`Belgeden ${IE.tekilKucuk} açılınca refakat kartı hemen yazıcıya gönderilir.`}
+            desc={`Kapalı (varsayılan) = bugünkü davranış: kart ${IE.tekilKucuk} detayından elle basılır. Açıkken yazdırma penceresi iptal edilirse kart basılmamış sayılır.`}
+            defaultOn={false}
+            checked={draft.print.value === true}
+            onChange={draft.print.set}
+          />
+        </div>
+      )}
     </>
   );
 }

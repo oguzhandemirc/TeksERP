@@ -5,6 +5,8 @@ export type BatchNumberSourceMode = "SERIES" | "DOCUMENT";
 export type IncomingDocEntryMode = "PER_LINE" | "PER_DOCUMENT";
 /** İşlem değeri çözülemeyen grupta oto iş emri — backend `AutoWorkOrderPatternlessMode` aynası. */
 export type AutoWorkOrderPatternlessMode = "SKIP" | "OPEN";
+/** Belge kaydı kipi (K7) — SEPARATE: ayrı onay (bugünkü) · WITH_WORK_ORDER: iş emri formundan tek seferde. */
+export type IncomingDocFormApproval = "SEPARATE" | "WITH_WORK_ORDER";
 /** Parti no adayı türü — motor `batchNoCandidates[].kind` aynası. */
 export type BatchNoCandidateKind = "BARCODE" | "DOC" | "BATCH" | "WORK_ORDER" | "ORDER" | "FORM";
 export interface SenderTemplateBatchNoCandidate {
@@ -21,6 +23,10 @@ export interface EntryModeSettings {
   defaultEntryMode?: IncomingDocEntryMode;
   autoWorkOrderPatternless?: AutoWorkOrderPatternlessMode;
   defaultAutoWorkOrderPatternless?: AutoWorkOrderPatternlessMode;
+  formApproval?: IncomingDocFormApproval;
+  defaultFormApproval?: IncomingDocFormApproval;
+  /** İş emri açılınca refakat kartı kendiliğinden yazdırılır (K9; üretim ayarı, gelen belge ucunda döner; vars. false). */
+  refakatAutoPrint?: boolean;
 }
 /** Gönderen şablonu satırının parti no alanı (§2.4). */
 export interface SenderTemplateBatchNoFields {

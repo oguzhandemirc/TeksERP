@@ -42,6 +42,10 @@ export const routeFormSchema = z.object({
   customerId: z.string().nullable().optional(),
   isFavorite: z.boolean(),
   isActive: z.boolean(),
+  // İş emri kısayolu (K6); `shortcutKnown` gövdeye girmez — sunucu alanı tanıyor mu (eski backend).
+  isWorkOrderShortcut: z.boolean(),
+  shortcutOrder: z.number("Sıra sayı olmalı").int("Sıra tam sayı olmalı").min(0, "Sıra 0 ya da büyük olmalı").max(9999, "Sıra en çok 9999"),
+  shortcutKnown: z.boolean(),
   steps: z
     .array(routeStepSchema)
     .min(1, "Rota en az bir adım içermeli"),
@@ -56,6 +60,9 @@ export const routeFormDefaults: RouteFormValues = {
   customerId: null,
   isFavorite: false,
   isActive: true,
+  isWorkOrderShortcut: false,
+  shortcutOrder: 0,
+  shortcutKnown: false,
   steps: [],
 };
 

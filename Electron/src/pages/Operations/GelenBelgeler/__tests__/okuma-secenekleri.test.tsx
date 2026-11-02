@@ -181,12 +181,27 @@ describe("Genel Ayarlar → Gelen Belge: kayıt kipi (parti no + kurşun metresi
     await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ entryMode: "PER_DOCUMENT" }));
   });
 
+  it("⭐ K7/K9: varsayılan Ayrı onay + oto baskı kapalı; ikisi değişince YALNIZ bu iki alan gider; eski backend çizilmez", async () => {
+    const server = { ...KIP, formApproval: "SEPARATE", defaultFormApproval: "SEPARATE", refakatAutoPrint: false };
+    getSettings.mockResolvedValue(server);
+    updateSettings.mockResolvedValue(server);
+    renderWithProviders(<IncomingDocumentSettingsSection />);
+    expect(await screen.findByRole("radio", { name: /Ayrı onay/ })).toBeChecked();
+    const toggle = screen.getByRole("switch", { name: "Refakat kartını kendiliğinden yazdır" });
+    expect(toggle).not.toBeChecked();
+    await userEvent.click(screen.getByRole("radio", { name: /ile birlikte/ }));
+    await userEvent.click(toggle);
+    await userEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(updateSettings.mock.calls[0]![0]).toStrictEqual({ formApproval: "WITH_WORK_ORDER", refakatAutoPrint: true });
+  });
+
   it("eski backend alanları göndermez → üç alan çizilmez, gövdeye girmez", async () => {
     getSettings.mockResolvedValue(BASE);
     updateSettings.mockResolvedValue(BASE);
     renderWithProviders(<IncomingDocumentSettingsSection />);
     await userEvent.click(await screen.findByRole("radio", { name: /Yalnız şüpheli değeri engelle/ }));
-    for (const id of ["gb-entry-mode", "gb-batch-number-source", "gb-auto-work-order-patternless"]) expect(screen.queryByTestId(id)).toBeNull();
+    for (const id of ["gb-entry-mode", "gb-batch-number-source", "gb-auto-work-order-patternless", "gb-form-approval", "gb-refakat-auto-print"]) expect(screen.queryByTestId(id)).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Kaydet" }));
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings.mock.calls[0]![0]).toStrictEqual({ unreviewedApproval: "BLOCK_SUSPECT" });

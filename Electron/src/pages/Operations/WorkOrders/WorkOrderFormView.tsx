@@ -109,6 +109,10 @@ interface Props {
   onCancel: () => void;
   /** Sayfa başlığı satırındaki sağ slot — "Şablon seç" butonu buraya portal'lanır (yalnız yeni kayıt). */
   headerSlot?: HTMLElement | null;
+  /** İş emri kısayolu (K6): yeni kayıtta bu rota şablonu baştan uygulanır. */
+  initialRouteTemplateId?: string | null;
+  /** false → başlıktaki "Belge okut" çizilmez (kısayol formu kendi üst şeridinde taşır). */
+  belgeOkut?: boolean;
 }
 
 /**
@@ -126,6 +130,8 @@ export function WorkOrderFormView({
   isSubmitting,
   onCancel,
   headerSlot,
+  initialRouteTemplateId = null,
+  belgeOkut = true,
 }: Props) {
   const isEdit = Boolean(workOrder);
   const targetQuantityEnabled = useTargetQuantityEnabled();
@@ -346,6 +352,15 @@ export function WorkOrderFormView({
     else resetRouteSteps([]);
   };
 
+  // Kısayolun rotası (yalnız yeni kayıtta, mount'ta bir kez): "Rota Seç"le seçilmiş gibi uygulanır.
+  useEffect(() => {
+    if (isEdit || !initialRouteTemplateId) return;
+    setSeedRouteId(initialRouteTemplateId);
+    setOkutRouteId(initialRouteTemplateId);
+    handleSeedRoute(initialRouteTemplateId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialRouteTemplateId]);
+
   // Akış değişince rota validasyon hatasını temizle.
   useEffect(() => {
     setRouteError(null);
@@ -551,10 +566,10 @@ export function WorkOrderFormView({
                   ? `Sipariş: ${pickedLines.length} kalem`
                   : "Sipariş Bağla"}
               </Button>
-              <BelgeOkutButton
+              {belgeOkut && <BelgeOkutButton
                 routeTemplateId={okutRouteId}
                 className="h-9 min-w-[190px] shrink-0 justify-start gap-2 border-0 bg-teal-600 px-4 text-sm font-semibold text-white shadow-sm shadow-teal-600/30 hover:bg-teal-700 dark:bg-teal-600 dark:hover:bg-teal-500"
-              />
+              />}
             </div>,
             headerSlot,
           )}
