@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
 import AppModal from '../../../components/AppModal';
+import ForeignMachinePrompt, { type ForeignMachinePromptState } from './ForeignMachinePrompt';
 import {
   Text,
   Button,
@@ -205,6 +206,9 @@ export default function KursunQcScreen() {
     preview: ReopenPreview;
   } | null>(null);
   const [reopening, setReopening] = useState(false);
+  /** K16: okutulan iş başka makineye atanmış — "Yine de al" onayı bekleyen istem. */
+  const [foreignPrompt, setForeignPrompt] = useState<(ForeignMachinePromptState & { step: KursunStepSummary }) | null>(null);
+  const [takingForeign, setTakingForeign] = useState(false);
   const [startMeter, setStartMeter] = useState('');
   const [listModalOpen, setListModalOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -467,6 +471,12 @@ export default function KursunQcScreen() {
         return; // iş, onay sonrası confirmReopen ile açılır
       }
 
+      // K16: başka makineye atanmış iş — engel değil, sorulur (sonuç sinyali onaydan sonra).
+      if (step.foreignMachine) {
+        setForeignPrompt({ barcode, fromInput, batchNumber: step.batchNumber, plannedMachineName: step.foreignMachine.plannedMachineName, step });
+        return;
+      }
+
       openResolvedStep(barcode, step, fromInput, false);
     } catch (err) {
       signalScan('reject');
@@ -536,6 +546,28 @@ export default function KursunQcScreen() {
     } finally {
       setReopening(false);
     }
+  };
+
+  // K16 "Yine de al": iz yazılır, sonra iş açılır; iz yazılamazsa iş açılmaz (tekrar denenir).
+  const confirmForeign = async () => {
+    if (!foreignPrompt || takingForeign) return;
+    setTakingForeign(true);
+    try {
+      await kursunQcService.takeForeignMachine(foreignPrompt.step.workOrderStepId);
+      openResolvedStep(foreignPrompt.barcode, foreignPrompt.step, foreignPrompt.fromInput, false);
+      setForeignPrompt(null);
+    } catch (err) {
+      signalScan('reject');
+      Toast.show({ type: 'error', text1: 'İş alınamadı', text2: (err as Error).message });
+    } finally {
+      setTakingForeign(false);
+    }
+  };
+
+  const cancelForeign = () => {
+    if (takingForeign) return;
+    setForeignPrompt(null);
+    Toast.show({ type: 'info', text1: 'Kart açılmadı', text2: 'İş atanan makinesinde kaldı' });
   };
 
   const cancelReopen = () => {
@@ -1696,6 +1728,8 @@ export default function KursunQcScreen() {
       />
 
       <MeterModals meter={meter} acks={meterAcks} rolls={activeJob?.stepSummary.rolls ?? []} />
+
+      <ForeignMachinePrompt prompt={foreignPrompt} busy={takingForeign} onConfirm={confirmForeign} onCancel={cancelForeign} />
 
       {/* Kapalı kart okutulunca: reopen onay modalı (toplar Tambur'dan geri çekilir) */}
       <ReopenConfirmModal

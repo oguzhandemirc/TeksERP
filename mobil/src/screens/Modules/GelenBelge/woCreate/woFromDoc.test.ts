@@ -5,6 +5,7 @@ import {
   buildCreateBody,
   buildDraftPatch,
   detailFromSummary,
+  customerGramajId,
   initialRowForm,
   isFormApprovalDisabled,
   pinRecent,
@@ -136,5 +137,17 @@ describe('routeHasKursunStep', () => {
     expect(routeHasKursunStep(r('a', { steps: [{ station: { isKursunStation: true } }] } as unknown as Partial<ProductionRoute>))).toBe(true);
     expect(routeHasKursunStep(r('a', { steps: [{ station: { kind: 'PROCESS_QC' } }] } as unknown as Partial<ProductionRoute>))).toBe(true);
     expect(routeHasKursunStep(r('a'))).toBe(false);
+  });
+});
+
+describe('S3 — müşterinin varsayılan kurşun gramajı (fabrika cevabı 14)', () => {
+  it('⭐ müşterili belge: müşterinin gramajı; varsayılansız müşteri / müşterisiz: istasyonunki', () => {
+    expect(initialRowForm(detail({ ownerCustomerId: 'k1' }), catalog, true, { k1: 'g1' }).gramajValueId).toBe('g1');
+    expect(initialRowForm(detail({ ownerCustomerId: 'k2' }), catalog, true, { k1: 'g1' }).gramajValueId).toBe('g2');
+    expect(initialRowForm(detail(), catalog, true, { k1: 'g1' }).gramajValueId).toBe('g2');
+  });
+  it('katalogda olmayan (pasif) değer istasyonunkine düşer; kurşunsuz rotada gramaj yok', () => {
+    expect(customerGramajId(catalog, { k1: 'pasif' }, 'k1')).toBe('g2');
+    expect(initialRowForm(detail({ ownerCustomerId: 'k1' }), catalog, false, { k1: 'g1' }).gramajValueId).toBeNull();
   });
 });

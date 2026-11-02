@@ -18,7 +18,11 @@ jest.mock('../../../../services/inboundDoc.service', () => ({
     updateNote: (id: string, b: unknown) => mockUpdate(id, b),
   },
 }));
-jest.mock('../../../../services/fabricProperty.service', () => ({ fabricPropertyService: { getKursunGramajCatalog: async () => ({ propertyId: null, options: [] }) } }));
+const mockCatalog = jest.fn(async () => ({ propertyId: null as string | null, options: [] as Array<{ id: string; name: string; isDefault: boolean }> }));
+const mockDefaults = jest.fn(async () => ({}) as Record<string, string>);
+jest.mock('../../../../services/fabricProperty.service', () => ({
+  fabricPropertyService: { getKursunGramajCatalog: () => mockCatalog(), getKursunCustomerDefaults: () => mockDefaults() },
+}));
 jest.mock('../../../../services/travelerCardPrint', () => ({ printTravelerCardForWorkOrder: (id: string) => mockPrint(id) }));
 jest.mock('./recentOwners', () => ({ loadRecentOwners: async () => [], rememberOwner: async (l: string[], id: string) => [id, ...l] }));
 jest.mock('react-native-toast-message', () => ({ __esModule: true, default: { show: jest.fn() } }));
@@ -27,10 +31,10 @@ const route = { id: 'r1', name: 'Kurşun&Tambur', steps: [] } as unknown as Prod
 const detail = (id: string, x: Partial<InboundNoteDetail> = {}) =>
   ({ id, noteNo: `GB-${id}`, ownerCustomerId: 'c1', kursunMeters: '100', kursunMetersReview: false, ...x }) as InboundNoteDetail;
 
-function setup() {
+function setup(r: ProductionRoute = route) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
-  return renderHook(() => useWoRows(route), { wrapper });
+  return renderHook(() => useWoRows(r), { wrapper });
 }
 
 async function withRows(h: ReturnType<typeof setup>, details: InboundNoteDetail[]) {
@@ -100,5 +104,22 @@ describe('useWoRows', () => {
     await act(async () => h.result.current.saveAll());
     expect(mockPrint).toHaveBeenCalledWith('wo-1');
     expect(h.result.current.rows[0].result).toMatchObject({ kind: 'OPENED', print: 'PRINTED' });
+  });
+
+  it('⭐ S3: müşteri varsayılan gramajı ön seçilir; müşteri değişince yeniden; elle seçim ezilmez', async () => {
+    mockSettings.mockResolvedValue({});
+    mockCatalog.mockResolvedValue({ propertyId: 'p-gr', options: [{ id: 'g1', name: '60 gr', isDefault: false }, { id: 'g2', name: '80 gr', isDefault: true }] });
+    mockDefaults.mockResolvedValue({ c1: 'g1' });
+    const kursunRoute = { id: 'r2', name: 'Kurşun', steps: [{ station: { isKursunStation: true } }] } as unknown as ProductionRoute;
+    const h = setup(kursunRoute);
+    await withRows(h, [detail('n1'), detail('n2', { ownerCustomerId: 'c2' })]);
+    await waitFor(() => expect(h.result.current.rows.find((r) => r.noteId === 'n1')?.form?.gramajValueId).toBe('g1'));
+    expect(h.result.current.rows.find((r) => r.noteId === 'n2')?.form?.gramajValueId).toBe('g2');
+    act(() => h.result.current.updateForm('n2', { ownerCustomerId: 'c1' }));
+    expect(h.result.current.rows.find((r) => r.noteId === 'n2')?.form?.gramajValueId).toBe('g1');
+    act(() => h.result.current.updateForm('n1', { gramajValueId: 'g2' }));
+    act(() => h.result.current.updateForm('n1', { ownerCustomerId: 'c3' }));
+    act(() => h.result.current.updateForm('n1', { ownerCustomerId: 'c1' }));
+    expect(h.result.current.rows.find((r) => r.noteId === 'n1')?.form?.gramajValueId).toBe('g2');
   });
 });
