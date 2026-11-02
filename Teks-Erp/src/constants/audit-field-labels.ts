@@ -325,6 +325,11 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   standalone: "Bağımsız (kayıtsız)",
   rawCode: "Ham yazıcı kodu",
   lengthBanner: "Metraj bandı",
+  unitSettings: "Birim sistemi",
+  labelOverrides: "Etiket bilgisi",
+  labelWidthSource: "Etiketteki en kaynağı",
+  tamburWeighRequired: "Tamburda tartım",
+  tamburSplitLengthM: "Tambur bölme ölçüsü (m)",
   wasDirty: "Bayat kopya idi",
   event: "Olay",
 

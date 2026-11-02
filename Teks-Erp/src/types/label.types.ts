@@ -31,6 +31,8 @@ import type { ColorNameScope, NameSource } from "../services/helpers/customer-na
 
 export type { ColorNameScope, NameSource };
 
+import type { LabelUnitSettings } from "../config/label-units";
+
 export interface LabelPayload {
   // Roll core
   rollId: string;
@@ -85,6 +87,8 @@ export interface LabelPayload {
   deliveryNoteRollNo?: string | null;
   /** Topa bağlı AKTİF müşteri barkodu (D4-F1 `RollCustomerCode`, revokedAt null). Kodsuz topta ALAN YOK (payload bayt-aynı). */
   customerCode?: string | null;
+  /** Şablonun birim sistemi (Gülkesim S5) — `renderLabel` şablondan taşır; yok = bugünkü metrik biçim. */
+  unitSettings?: LabelUnitSettings | null;
 
   // --- SWATCH (kartela) için opsiyonel alanlar — roll payload'unda undefined.
   //     Builder'lar yalnız `kind === SWATCH` iken basar; roll çağrıları dokunmaz. ---

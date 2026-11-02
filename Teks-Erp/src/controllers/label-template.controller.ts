@@ -33,6 +33,15 @@ const rawCodeSchema = z
 const lineStepMmSchema = z.number().min(0).max(20).nullable().optional();
 const qrScaleSchema = z.number().int().min(2).max(15).nullable().optional();
 const lengthBannerSchema = z.boolean().nullable().optional();
+// Birim sistemi (Gülkesim S5) — null = bugünkü metrik biçim.
+const unitSettingsSchema = z
+  .object({
+    system: z.enum(["METRIC", "US", "BOTH"], { message: "Birim sistemi METRIC, US ya da BOTH olmalı" }),
+    decimals: z.number().int().min(0, "Ondalık 0-3 olmalı").max(3, "Ondalık 0-3 olmalı").nullable().optional(),
+    decimalSep: z.enum([",", "."], { message: "Ondalık ayırıcı virgül ya da nokta olmalı" }).nullable().optional(),
+  })
+  .nullable()
+  .optional();
 
 /** Test edilebilirlik için dışa açık (controller Zod katmanı = HTTP kontrat sınırı). */
 export const createSchema = z.object({
@@ -49,6 +58,7 @@ export const createSchema = z.object({
   lineStepMm: lineStepMmSchema,
   qrScale:    qrScaleSchema,
   lengthBanner: lengthBannerSchema,
+  unitSettings: unitSettingsSchema,
 });
 
 const updateSchema = z.object({
@@ -61,6 +71,7 @@ const updateSchema = z.object({
   lineStepMm: lineStepMmSchema,
   qrScale:    qrScaleSchema,
   lengthBanner: lengthBannerSchema,
+  unitSettings: unitSettingsSchema,
 });
 
 const previewRawSchema = z.object({
@@ -90,6 +101,8 @@ const canvasPreviewSchema = z.object({
   // davrandığını görmek için. Boş metin = "kalitesi belirsiz top" senaryosu
   // (koşullu eleman basılmaz) → `.optional()` ile "gönderilmedi"den ayrılır.
   qualityGrade: z.string().max(32).optional(),
+  // Stüdyodaki kaydedilmemiş birim sistemi — önizleme baskıyla aynı biçimi göstersin.
+  unitSettings: unitSettingsSchema,
 });
 
 // Boyut varyantı gövdeleri — eleman-düzeyi doğrulama serviste (validateCanvasLayout).
@@ -126,6 +139,7 @@ const importSchema = z.object({
     lineStepMm: lineStepMmSchema,
     qrScale: qrScaleSchema,
     lengthBanner: lengthBannerSchema,
+    unitSettings: unitSettingsSchema,
   }),
   variants: z.array(
     z.object({
@@ -231,6 +245,7 @@ export class LabelTemplateController {
           peripheralId: body.peripheralId,
           copies: body.copies,
           qualityGrade: body.qualityGrade,
+          unitSettings: body.unitSettings,
         });
         res.status(200).json(result);
         return;
