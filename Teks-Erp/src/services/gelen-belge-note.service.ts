@@ -24,7 +24,7 @@ import { PDF_MIME, SCAN_SELECT } from "./gelen-belge-scan.service";
 import { applyStoredReadsTx, auditPhotoSource, auditStoredReads, markPhotoSourceTx, prepareStoredReads, type StoredReadOutcome } from "./gelen-belge-taslak-doldur.service";
 import { LINE_SELECT, lineColumns, notDraft, text, type DeliveryNoteLineInput } from "./gelen-belge-line.service";
 import { hasDocumentDeclared, lineItemFallback, lineProblems, perDocumentGate, totalsCheck } from "./gelen-belge-kontrol.service";
-import { MANUAL_BATCH_NO_KEY } from "./gelen-belge-sablon.service";
+import { batchAndMeterColumns, type DeliveryNoteHeaderPatch } from "./gelen-belge-baslik-alan.service";
 import { resolveEffectiveDefaultItem, usableDefaultItem } from "./gelen-belge-varsayilan.service";
 import { noteNotices } from "../lib/gelen-belge/uyari";
 import { sameBatchNotes } from "./gelen-belge-parti-tekrar.service";
@@ -33,6 +33,7 @@ import { readDocumentTotalCheck, readIncomingDocEntryMode, readUnreviewedApprova
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const SERIES_KEY = "customerDeliveryNote";
 
+export type { DeliveryNoteHeaderPatch } from "./gelen-belge-baslik-alan.service";
 export { addDeliveryNoteLines, deleteDeliveryNoteLine, updateDeliveryNoteLine, type DeliveryNoteLineInput } from "./gelen-belge-line.service";
 // Durum kümesi Prisma enum'undan TÜRETİLİR (elle kopya bayatlar; D4 yeni değer eklerse tek yer).
 export const DELIVERY_NOTE_STATUSES = Object.values(DeliveryNoteStatus) as readonly DeliveryNoteStatus[];
@@ -51,16 +52,6 @@ export interface DeliveryNoteHeaderInput {
   pageCount?: number | null;
   declaredTopCount?: number | null;
   totalsDeclared?: Record<string, unknown> | null;
-}
-/** Başlık PATCH'inin ek alanları (Gülkesim B; yaratma gövdesinde YOK — okuma katmanı doldurur, operatör düzeltir). */
-export interface DeliveryNoteHeaderPatch extends DeliveryNoteHeaderInput {
-  ourBatchNo?: string | null;
-  /** Seçilen adayın şablon alan anahtarı; verilmezse elle yazılmış sayılır (`MANUAL`). */
-  ourBatchNoKey?: string | null;
-  /** > 0 → kaynak MANUAL + gözden geçirildi; null temizler. */
-  kursunMeters?: number | null;
-  /** Mevcut değeri olduğu gibi onaylar → MANUAL + gözden geçirildi. */
-  kursunMetersReviewed?: true;
 }
 export interface DeliveryNoteCreateInput extends DeliveryNoteHeaderInput {
   clientToken?: string | null;
@@ -311,32 +302,6 @@ export async function createDeliveryNote(input: DeliveryNoteCreateInput, userId:
     await auditStoredReads(created.id, restored, userId);
     return getDeliveryNote(created.id);
   });
-}
-
-/**
- * Parti no + kurşun metresi PATCH kolonları (tasarım §2.3): operatörün yazdığı/onayladığı metre MANUAL kaynaklı ve gözden geçirilmiş
- * sayılır; parti no anahtarsızsa MANUAL (hatırlanmaz). Kolon çifti (metre ↔ kaynak) DB CHECK'iyle birlikte dolu/boş.
- */
-function batchAndMeterColumns(patch: DeliveryNoteHeaderPatch, current: { kursunMeters: Prisma.Decimal | null }): Prisma.CustomerDeliveryNoteUncheckedUpdateManyInput {
-  const out: Prisma.CustomerDeliveryNoteUncheckedUpdateManyInput = {};
-  if (patch.ourBatchNoKey !== undefined && patch.ourBatchNo === undefined) {
-    throw AppError.badRequest("Parti no anahtarı parti no'yla birlikte gönderilir.", { code: "DELIVERY_NOTE_BATCH_NO_KEY_WITHOUT_VALUE" });
-  }
-  if (patch.ourBatchNo !== undefined) {
-    const v = text(patch.ourBatchNo);
-    out.ourBatchNo = v;
-    out.ourBatchNoKey = v === null ? null : (patch.ourBatchNoKey ?? MANUAL_BATCH_NO_KEY);
-  }
-  if (patch.kursunMeters !== undefined) {
-    out.kursunMeters = patch.kursunMeters === null ? null : new Prisma.Decimal(patch.kursunMeters);
-    out.kursunMetersSource = patch.kursunMeters === null ? null : "MANUAL";
-    out.kursunMetersReview = false;
-  } else if (patch.kursunMetersReviewed) {
-    if (current.kursunMeters === null) throw AppError.badRequest("Onaylanacak kurşun metresi yok; önce metreyi girin.", { code: "KURSUN_METERS_REQUIRED" });
-    out.kursunMetersSource = "MANUAL";
-    out.kursunMetersReview = false;
-  }
-  return out;
 }
 
 /** Başlık düzeltme — yalnız DRAFT; atomik claim (count 0 → 404/409). */
