@@ -59,8 +59,9 @@ const PROCESS_KEYS = ["islem", "yapilanIslem"];
 const TOP_COUNT_KEYS = ["topAdet", "girisAdet", "cikisAdet"];
 /** Blok başına okunup bloklar arasında farkı uyarılan iş kimliği alanları (sipariş · parti · boyahane iş emri · işlem). */
 const BLOCK_ID_KEYS = ["siparisNo", "hamPartiNo", "isEmriNo", "islem"];
+// Gönderenin (boyahane) iş emri numarası belgedeki adıyla "İE No"; bizim terbiye iş emrimizle karışmasın.
 const FIELD_LABEL: Record<string, string> = {
-  siparisNo: "sipariş", hamPartiNo: "parti", isEmriNo: "iş emri", islem: "işlem",
+  siparisNo: "sipariş", hamPartiNo: "parti", isEmriNo: "İE No", islem: "işlem",
   fisNo: "Fiş No", irsaliyeNo: "İrsaliye No", evrakNo: "Evrak No", sevkNo: "Sevk No", belgeNo: "Belge No",
 };
 const WIDTH_KEYS = ["en", "cm"];
