@@ -344,8 +344,8 @@ const SettingsBody = z.strictObject({
  *               defaultItemId: { type: string, format: uuid, nullable: true }
  *               unreviewedApproval: { type: string, enum: [WARN, BLOCK] }
  *               autoWorkOrder: { type: boolean, description: "Onaydan sonra net desen gruplarına iş emri kendiliğinden (varsayılan false)" }
-               defaultRouteTemplateId: { type: string, format: uuid, nullable: true, description: "Rota önerisinin fabrika varsayılanı; pasif/adımsız rota 400 GELEN_BELGE_DEFAULT_ROUTE_INVALID" }
-               routeSuggestionPriority: { type: string, enum: [CUSTOMER_FIRST, FACTORY_FIRST] }
+ *               defaultRouteTemplateId: { type: string, format: uuid, nullable: true, description: "Rota önerisinin fabrika varsayılanı; pasif/adımsız rota 400 GELEN_BELGE_DEFAULT_ROUTE_INVALID" }
+ *               routeSuggestionPriority: { type: string, enum: [CUSTOMER_FIRST, FACTORY_FIRST] }
  *     responses:
  *       200: { description: Güncel ayarlar }
  */
