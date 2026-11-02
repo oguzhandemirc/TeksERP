@@ -20,7 +20,7 @@ import prisma from "../src/lib/prisma";
 import app from "../src/app";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
-import { buildWorkOrderPlan } from "../src/services/gelen-belge-is-emri.service";
+import { suggestRoute } from "../src/services/gelen-belge-rota-onerisi.service";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
@@ -136,8 +136,8 @@ async function run(url: string): Promise<void> {
   check("§4 ⭐ yalnız yazma izni → 403, belge DRAFT", r4.status === 403 && (await statusOf(n2)) === "DRAFT", `${r4.status} ${r4.code ?? ""}`);
 
   console.log("§5 seçilen rotayla onay");
-  const plan = await buildWorkOrderPlan(n2).catch(() => null);
-  check("§5 ön koşul: öneri zinciri BAŞKA rotayı önerir (müşteri rotası)", plan === null || plan.suggestedRouteTemplateId === null || plan.suggestedRouteTemplateId === suggested, String(plan?.suggestedRouteTemplateId));
+  const sug = await suggestRoute({ ownerCustomerId: owner });
+  check("§5 ön koşul: öneri zinciri BAŞKA rotayı önerir (müşteri rotası)", sug.routeTemplateId === suggested && suggested !== chosen, `${sug.source} ${sug.routeTemplateId}`);
   const w5 = await woCount();
   const r5 = await onay(n2, tk, { routeTemplateId: chosen });
   const auto = r5.data?.autoWorkOrders as AutoWo | undefined;
