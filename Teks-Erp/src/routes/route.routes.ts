@@ -43,9 +43,13 @@ router.use(verifyToken, requireProductionEnabled);
  *       - in: query
  *         name: filter[isActive]
  *         schema: { type: string, enum: [true, false] }
+ *       - in: query
+ *         name: shortcut
+ *         description: "1 → yalnız iş emri kısayolları (isWorkOrderShortcut), shortcutOrder ↑ · ad ↑ sırasıyla, sayfasız (en çok 100)"
+ *         schema: { type: string, enum: ["1"] }
  *     responses:
  *       200:
- *         description: Rota listesi (adımlar dahil)
+ *         description: Rota listesi (adımlar dahil; isWorkOrderShortcut + shortcutOrder alanlarıyla)
  */
 router.get("/", verifyToken, requireAnyPermission("station:read", "mobile:hizli-is-emri"), controller.findAll);
 

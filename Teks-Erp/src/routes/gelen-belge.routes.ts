@@ -358,6 +358,8 @@ const SettingsBody = z.strictObject({
   batchNumberSource: z.enum(["SERIES", "DOCUMENT"], "Seçenek SERIES ya da DOCUMENT olmalı").optional(),
   entryMode: z.enum(["PER_LINE", "PER_DOCUMENT"], "Seçenek PER_LINE ya da PER_DOCUMENT olmalı").optional(),
   autoWorkOrderPatternless: z.enum(["SKIP", "OPEN"], "Seçenek SKIP ya da OPEN olmalı").optional(),
+  formApproval: z.enum(["SEPARATE", "WITH_WORK_ORDER"], "Seçenek SEPARATE ya da WITH_WORK_ORDER olmalı").optional(),
+  refakatAutoPrint: z.boolean("Refakat kartı otomatik yazdırma evet/hayır olmalı").optional(),
 });
 /**
  * @openapi
@@ -367,7 +369,7 @@ const SettingsBody = z.strictObject({
  *     summary: Gelen belge ayarları — varsayılan ürün (ad + kullanılabilirlik) ve gözden geçirilmemiş hücreyle onay kipi
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "defaultItem (id, code, name, problem) | null · unreviewedApproval WARN|BLOCK_SUSPECT|BLOCK · autoWorkOrder boolean · defaultRoute (id, name, problem) | null · routeSuggestionPriority CUSTOMER_FIRST|FACTORY_FIRST · headerLineMeterSource OUTPUT|INPUT · autoSenderFromTemplate boolean · documentTotalCheck INFO|REQUIRE_REASON · batchNumberSource SERIES|DOCUMENT · entryMode PER_LINE|PER_DOCUMENT · autoWorkOrderPatternless SKIP|OPEN (her biri default* alanıyla)" }
+ *       200: { description: "defaultItem (id, code, name, problem) | null · unreviewedApproval WARN|BLOCK_SUSPECT|BLOCK · autoWorkOrder boolean · defaultRoute (id, name, problem) | null · routeSuggestionPriority CUSTOMER_FIRST|FACTORY_FIRST · headerLineMeterSource OUTPUT|INPUT · autoSenderFromTemplate boolean · documentTotalCheck INFO|REQUIRE_REASON · batchNumberSource SERIES|DOCUMENT · entryMode PER_LINE|PER_DOCUMENT · autoWorkOrderPatternless SKIP|OPEN · formApproval SEPARATE|WITH_WORK_ORDER (her biri default* alanıyla) · refakatAutoPrint boolean" }
  *   put:
  *     tags: [GelenBelge]
  *     summary: Gelen belge ayarlarını yaz (yalnız admin:settings + ayar şifresi); pasif/top doğuramayan ürün 400 GELEN_BELGE_DEFAULT_ITEM_INVALID
@@ -390,6 +392,8 @@ const SettingsBody = z.strictObject({
  *               batchNumberSource: { type: string, enum: [SERIES, DOCUMENT], description: "Gelen belgeden doğan partinin numarası: seriden (varsayılan) ya da belgedeki parti no'dan" }
  *               entryMode: { type: string, enum: [PER_LINE, PER_DOCUMENT], description: "Onay kipi: her satır bir top (varsayılan) ya da belge başına tek kayıt; PER_DOCUMENT varsayılan ürünsüz 400 GELEN_BELGE_PER_DOCUMENT_NEEDS_DEFAULT_ITEM" }
  *               autoWorkOrderPatternless: { type: string, enum: [SKIP, OPEN], description: "İşlem değeri çözülemeyen grupta otomatik iş emri: atla (varsayılan) ya da hedef değersiz aç" }
+ *               formApproval: { type: string, enum: [SEPARATE, WITH_WORK_ORDER], description: "İş emri formundan okutulan belge: ayrı onay (varsayılan) ya da iş emri açan kaydeder (POST /irsaliyeler/{id}/is-emri)" }
+ *               refakatAutoPrint: { type: boolean, description: "İş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır (varsayılan false)" }
  *     responses:
  *       200: { description: Güncel ayarlar }
  */

@@ -422,6 +422,12 @@ export const SETTING_KEYS = {
   /** İşlem değeri (gramaj/desen) çözülemeyen grupta oto iş emri: SKIP atla (varsayılan = bugünkü) | OPEN hedef
    *  değersiz aç. Tek yazar `PUT /api/gelen-belge/ayarlar`. */
   GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS: "gelenBelge.autoWorkOrderPatternless",
+  /** İş emri formundan okutulan belgenin kaydı: SEPARATE ayrı onay (varsayılan = bugünkü, `gelen-belge:approve`) |
+   *  WITH_WORK_ORDER iş emri açan kaydeder (belge + top + iş emri tek istekte). Tek yazar `PUT /api/gelen-belge/ayarlar`. */
+  GELEN_BELGE_FORM_APPROVAL: "gelenBelge.formApproval",
+  /** İş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır mı (varsayılan false = bugünkü: elle).
+   *  Tek yazar `PUT /api/gelen-belge/ayarlar`; flag yüküne konmaz. */
+  PRODUCTION_REFAKAT_AUTO_PRINT: "production.refakatAutoPrint",
   /** Z1 ÜRETİM BELGE ZİNCİRİ (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bugünkü davranış (bağ opsiyonel). */
   DEVERE_BEAM_WEAVING_LINK_REQUIRED: "devere.beamWeavingLinkRequired",
   DOKUMA_RUN_WEAVING_ORDER_REQUIRED: "dokuma.runWeavingOrderRequired",
@@ -6659,6 +6665,20 @@ export const AUTO_WORK_ORDER_PATTERNLESS_VALUES: readonly AutoWorkOrderPatternle
 export const DEFAULT_AUTO_WORK_ORDER_PATTERNLESS: AutoWorkOrderPatternlessMode = "SKIP";
 export const readAutoWorkOrderPatternless = (tx?: Pick<typeof prisma, "systemSetting">): Promise<AutoWorkOrderPatternlessMode> =>
   readClosedSetting(SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS, AUTO_WORK_ORDER_PATTERNLESS_VALUES, DEFAULT_AUTO_WORK_ORDER_PATTERNLESS, tx);
+
+export type IncomingDocFormApprovalMode = "SEPARATE" | "WITH_WORK_ORDER";
+export const FORM_APPROVAL_VALUES: readonly IncomingDocFormApprovalMode[] = ["SEPARATE", "WITH_WORK_ORDER"];
+/** Varsayılan SEPARATE = bugünkü davranış (belge ayrı onaylanır, `gelen-belge:approve`). */
+export const DEFAULT_FORM_APPROVAL: IncomingDocFormApprovalMode = "SEPARATE";
+export const readIncomingDocFormApproval = (tx?: Pick<typeof prisma, "systemSetting">): Promise<IncomingDocFormApprovalMode> =>
+  readClosedSetting(SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, FORM_APPROVAL_VALUES, DEFAULT_FORM_APPROVAL, tx);
+
+/** İş emri açılınca refakat kartı kendiliğinden yazdırılsın mı (kayıt yok/çöp = false, bugünkü). */
+export async function readRefakatAutoPrint(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({ where: { key: SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
 
 /** Rota önerisinin fabrika varsayılanı; kayıt yok / boş / UUID değil → null (bugünkü: fabrika kaynağı yok). */
 export async function readIncomingDocDefaultRouteId(tx?: Pick<typeof prisma, "systemSetting">): Promise<string | null> {

@@ -16,6 +16,8 @@
 //   · `gelenBelge.batchNumberSource` — SERIES (varsayılan) | DOCUMENT (parti no belgeden) — Gülkesim parti/metre §2.1
 //   · `gelenBelge.entryMode` — PER_LINE (varsayılan) | PER_DOCUMENT (belge başına tek kayıt; fabrika varsayılan ürünü ŞART)
 //   · `gelenBelge.autoWorkOrderPatternless` — SKIP (varsayılan) | OPEN (işlem değeri çözülemeyen grupta hedefsiz iş emri)
+//   · `gelenBelge.formApproval` — SEPARATE (varsayılan, ayrı onay) | WITH_WORK_ORDER (iş emri formundan okutulan belgeyi iş emri açan kaydeder)
+//   · `production.refakatAutoPrint` — iş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır (varsayılan false)
 // Ürün kapısı tek karar: yaşam döngüsü `assertItemUsable(NEW_STOCK)` + top doğurabilen tür ALLOWLIST'i
 // (`ROLL_BEARING_ITEM_TYPES`; yeni tür — ör. SERVICE — eklendiği gün kendiliğinden dışarıda kalır).
 // =============================================================================
@@ -63,6 +65,11 @@ import {
   DEFAULT_AUTO_WORK_ORDER_PATTERNLESS,
   AUTO_WORK_ORDER_PATTERNLESS_VALUES,
   type AutoWorkOrderPatternlessMode,
+  readIncomingDocFormApproval,
+  DEFAULT_FORM_APPROVAL,
+  FORM_APPROVAL_VALUES,
+  type IncomingDocFormApprovalMode,
+  readRefakatAutoPrint,
 } from "./system-setting.service";
 
 /** Top doğurabilen ürün türleri — `InventoryService.createInitialEntry` kapısıyla aynı küme (yalnız kumaş). */
@@ -82,6 +89,8 @@ export const INCOMING_DOC_DEDICATED_SETTING_KEYS: ReadonlySet<string> = new Set(
   SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE,
   SETTING_KEYS.GELEN_BELGE_ENTRY_MODE,
   SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS,
+  SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL,
+  SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT,
 ]);
 
 export interface DefaultItemView {
@@ -123,6 +132,11 @@ export interface IncomingDocSettings {
   /** İşlem değeri çözülemeyen grupta oto iş emri: SKIP atla (varsayılan) | OPEN hedef değersiz aç. */
   autoWorkOrderPatternless: AutoWorkOrderPatternlessMode;
   defaultAutoWorkOrderPatternless: AutoWorkOrderPatternlessMode;
+  /** İş emri formundan okutulan belge: SEPARATE ayrı onay (varsayılan) | WITH_WORK_ORDER iş emri açan kaydeder. */
+  formApproval: IncomingDocFormApprovalMode;
+  defaultFormApproval: IncomingDocFormApprovalMode;
+  /** İş emri açılınca refakat kartı kendiliğinden yazdırılır mı (varsayılan false). */
+  refakatAutoPrint: boolean;
 }
 
 /**
@@ -180,6 +194,9 @@ export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
     defaultEntryMode: DEFAULT_ENTRY_MODE,
     autoWorkOrderPatternless: await readAutoWorkOrderPatternless(),
     defaultAutoWorkOrderPatternless: DEFAULT_AUTO_WORK_ORDER_PATTERNLESS,
+    formApproval: await readIncomingDocFormApproval(),
+    defaultFormApproval: DEFAULT_FORM_APPROVAL,
+    refakatAutoPrint: await readRefakatAutoPrint(),
   };
 }
 
@@ -199,6 +216,8 @@ export interface IncomingDocSettingsInput {
   batchNumberSource?: BatchNumberSourceMode;
   entryMode?: IncomingDocEntryMode;
   autoWorkOrderPatternless?: AutoWorkOrderPatternlessMode;
+  formApproval?: IncomingDocFormApprovalMode;
+  refakatAutoPrint?: boolean;
 }
 
 /**
@@ -285,6 +304,15 @@ async function updateEntryOptions(input: IncomingDocSettingsInput, userId: strin
       throw AppError.badRequest("Geçersiz seçenek: SKIP ya da OPEN olmalı.", { code: "VALIDATION_ERROR" });
     }
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS, input.autoWorkOrderPatternless, `Gelen belge: işlem değeri çözülemeyen grupta ${TERIM.terbiyeIsEmri.tekilKucuk} (SKIP atla / OPEN hedefsiz aç)`, userId);
+  }
+  if (input.formApproval !== undefined) {
+    if (!FORM_APPROVAL_VALUES.includes(input.formApproval)) {
+      throw AppError.badRequest("Geçersiz seçenek: SEPARATE ya da WITH_WORK_ORDER olmalı.", { code: "VALIDATION_ERROR" });
+    }
+    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, input.formApproval, `Gelen belge: ${TERIM.terbiyeIsEmri.tekilKucuk} formundan okutulan belgenin kaydı (SEPARATE ayrı onay / WITH_WORK_ORDER ${TERIM.terbiyeIsEmri.tekilKucuk} açan kaydeder)`, userId);
+  }
+  if (input.refakatAutoPrint !== undefined) {
+    await systemSettingService.set(SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT, input.refakatAutoPrint, `${TERIM.terbiyeIsEmri.tekil} açılınca refakat kartı kendiliğinden yazdırılır`, userId);
   }
 }
 

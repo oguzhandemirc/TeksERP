@@ -15,7 +15,9 @@ import { stepCanApplyColor, stepCanApplyProperty } from "./helpers/step-capabili
 import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 import { AppError } from "../utils/app-error";
 import { assertStationsRoutable } from "./helpers/station-routable.helper";
-import type { ApiResponse } from "../types/api.types";
+import type { ApiResponse, PaginatedResponse } from "../types/api.types";
+import type { Request } from "express";
+import { parseQueryParams } from "../utils/query-parser";
 
 /**
  * Route servis konfigürasyonu — TEK KAYNAK. Hem canlı wiring (route.routes.ts)
@@ -75,6 +77,10 @@ export const ROUTE_SERVICE_CONFIG: BaseServiceConfig = {
   // Kod backend-authoritative: `ROT+GGAAYY+NNNN` günlük sıralı (istemci kodu yok sayılır).
   autoCode: { series: "routeTemplate" },
 };
+
+/** Kısayol listesinin tavanı (sayfasız döner). */
+export const SHORTCUT_LIST_MAX = 100;
+const isShortcutQuery = (req: Request): boolean => req.query.shortcut === "1";
 
 interface IncomingStep {
   stationId?: string;
@@ -397,14 +403,55 @@ export class RouteService extends BaseService {
     }
   }
 
+  /**
+   * İş emri kısayolu (Gülkesim K6) alanları: genel gövdeden yazılır (skaler kolon), tip burada kapanır —
+   * Prisma'nın tip hatası 500 değil Türkçe 400 olsun. Sıra 0–9999 tam sayı.
+   */
+  private validateShortcut(data: Record<string, unknown>): void {
+    if ("isWorkOrderShortcut" in data && typeof data.isWorkOrderShortcut !== "boolean") {
+      throw AppError.badRequest("İş emri kısayolu evet/hayır olmalı", { code: "VALIDATION_ERROR" });
+    }
+    if ("shortcutOrder" in data) {
+      const v = data.shortcutOrder;
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > 9999) {
+        throw AppError.badRequest("Kısayol sırası 0 ile 9999 arasında tam sayı olmalı", { code: "VALIDATION_ERROR" });
+      }
+    }
+  }
+
+  /** `?shortcut=1`: yalnız iş emri kısayolları (diğer süzgeçler aynen). Değer yalnız "1"; başka değer süzmez (bugünkü liste). */
+  protected extraWhere(req: Request): Record<string, unknown> | undefined {
+    return isShortcutQuery(req) ? { isWorkOrderShortcut: true } : undefined;
+  }
+
+  /**
+   * Kısayol listesi sunucuda sıralı döner: `shortcutOrder` ↑, ad ↑, id (eşitlik bozucu). Kısayol az sayıdadır (tavan 100),
+   * sayfalanmaz; where TEK kaynaktan (`buildListWhere` → `extraWhere`). Kısayolsuz istek bugünkü listedir.
+   */
+  async findAll(req: Request) {
+    if (!isShortcutQuery(req)) return super.findAll(req);
+    this.assertListQueryShape(req);
+    const where = this.buildListWhere(parseQueryParams(req), req);
+    const data = await prisma.route.findMany({
+      where,
+      orderBy: [{ shortcutOrder: "asc" }, { name: "asc" }, { id: "asc" }],
+      take: SHORTCUT_LIST_MAX,
+      include: ROUTE_SERVICE_CONFIG.defaultInclude,
+    });
+    const out: PaginatedResponse<unknown> = { success: true, data, pagination: { page: 1, pageSize: SHORTCUT_LIST_MAX, total: data.length, totalPages: 1 } };
+    return out;
+  }
+
   // Tambursuz rota (KQ-D8): kalite adımından sonra karar adımı yoksa UYARI, red değil.
   async create(data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
+    this.validateShortcut(data);
     const warnings = await routeDecisionWarnings(data.steps == null ? null : this.extractSteps(data.steps));
     await this.validateSteps(data);
     return withWarnings(await super.create(data, userId), warnings);
   }
 
   async update(id: string, data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
+    this.validateShortcut(data);
     const warnings = await routeDecisionWarnings(data.steps == null ? null : this.extractSteps(data.steps));
     await this.validateSteps(data);
     return withWarnings(await super.update(id, data, userId), warnings);
