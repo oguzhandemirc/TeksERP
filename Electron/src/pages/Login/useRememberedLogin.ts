@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { onApiBaseUrlApplied } from "@/lib/api-config";
 import { forgetRememberedLogin, readRememberedLogin, type RememberedLogin } from "@/lib/remembered-login";
@@ -14,12 +14,17 @@ const EMPTY: LoginFormValues = { username: "", password: "" };
 export function useRememberedLogin(form: UseFormReturn<LoginFormValues>) {
   const [stored, setStored] = useState<RememberedLogin | null>(null);
   const [otherAccount, setOtherAccount] = useState(false);
+  const otherAccountRef = useRef(false);
 
   useEffect(() => {
     let alive = true;
     const load = () => {
       void readRememberedLogin().then((r) => {
-        if (alive) setStored(r);
+        if (!alive) return;
+        // Kullanıcı adı görünümle AYNI anda forma yazılır: ayrı pasif efekt, görünüm çizildikten
+        // sonra koşup erken gönderimi boş adla bırakıyor ya da "Başka hesap" sıfırlamasını eziyordu.
+        if (r && !otherAccountRef.current) form.setValue("username", r.username);
+        setStored(r);
       });
     };
     load();
@@ -28,16 +33,12 @@ export function useRememberedLogin(form: UseFormReturn<LoginFormValues>) {
       alive = false;
       off();
     };
-  }, []);
+  }, [form]);
 
   const remembered = stored && !otherAccount ? stored : null;
-  const rememberedUsername = remembered?.username ?? null;
-
-  useEffect(() => {
-    if (rememberedUsername) form.setValue("username", rememberedUsername);
-  }, [form, rememberedUsername]);
 
   const switchAccount = useCallback(() => {
+    otherAccountRef.current = true;
     setOtherAccount(true);
     form.reset(EMPTY);
   }, [form]);
