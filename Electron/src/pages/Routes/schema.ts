@@ -14,6 +14,10 @@ export const routeStepSchema = z.object({
   stationType: z.enum(["INTERNAL", "EXTERNAL"]).optional(),
   requiredCategoryId: z.string().nullable().optional(),
   plannedSubcontractorId: z.string().nullable().optional(),
+  // Gülkesim 2026-11-02: kurşun adımına makine ÖNERİSİ (İE adımına klonlanır).
+  // stationKind yalnız UI koşuludur (payload'a girmez).
+  stationKind: z.string().nullable().optional(),
+  plannedMachineId: z.string().nullable().optional(),
   // 2026-08-06: adımın şablon HEDEFİ. Rota iş emrine uygulanınca hedef renk /
   // özellik alanlarını ön-doldurur; boş bırakmak meşru (renksiz rota her renkte
   // yeniden kullanılır). İstasyonun gerçekten uygulayıp uygulayamadığı

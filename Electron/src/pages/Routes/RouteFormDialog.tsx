@@ -43,6 +43,8 @@ function stepToForm(s: ProductionRoute["steps"][number]) {
       ? s.requiredCategoryId ?? s.station?.defaultCategoryId ?? null
       : null,
     plannedSubcontractorId: isExternal ? s.plannedSubcontractorId ?? null : null,
+    stationKind: s.station?.kind ?? null,
+    plannedMachineId: s.plannedMachineId ?? null,
     // Şablon hedefi — fason planlamasının aksine istasyon TİPİNE bağlı değil:
     // iç istasyon (zımpara, tambur) da özellik kazandırır.
     plannedColorId: s.plannedColorId ?? null,

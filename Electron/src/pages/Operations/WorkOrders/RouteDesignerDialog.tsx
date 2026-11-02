@@ -35,6 +35,8 @@ export interface DesignerStep {
   plannedSubcontractorId: string | null;
   /** Fasona renksiz git (2026-08-17 "ekru" kuralı) — yalnız EXTERNAL adımda. */
   dispatchWithoutColor?: boolean;
+  /** Önerilen makine (Gülkesim 2026-11-02, yalnız öneri) — kurşun adımı kartında seçilir. */
+  plannedMachineId?: string | null;
 }
 
 export interface CustomRouteStep {
@@ -45,6 +47,8 @@ export interface CustomRouteStep {
   requiredCategoryId: string | null;
   plannedSubcontractorId: string | null;
   dispatchWithoutColor?: boolean;
+  /** undefined = gönderme (sunucu mevcut öneriyi korur); null = temizle. */
+  plannedMachineId?: string | null;
 }
 
 export type RouteDesignerResult =

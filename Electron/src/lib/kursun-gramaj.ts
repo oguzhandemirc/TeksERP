@@ -17,6 +17,13 @@ export const KURSUN_PROPERTY_CODE = "KURSUN";
 export interface GramajOption {
   id: string;
   name: string;
+  /** Sözleşme 5 (Gülkesim 2026-11-02): fabrikanın varsayılan gramajı; alan gelmezse hiçbiri. */
+  isDefault?: boolean;
+}
+
+/** Ön seçilecek gramaj: tek varsayılan değer; yoksa null (hiçbiri seçilmez). */
+export function defaultGramajId(options: readonly GramajOption[]): string | null {
+  return options.find((o) => o.isDefault === true)?.id ?? null;
 }
 
 export interface KursunGramajCatalog {
@@ -34,7 +41,7 @@ export async function loadKursunGramajCatalog(): Promise<KursunGramajCatalog> {
   const options = (variant.values ?? [])
     .filter((v) => v.isActive)
     .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((v) => ({ id: v.id, name: v.name }));
+    .map((v) => ({ id: v.id, name: v.name, isDefault: (v as { isDefault?: boolean }).isDefault === true }));
   return { propertyId: variant.id, options };
 }
 

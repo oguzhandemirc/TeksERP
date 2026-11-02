@@ -11,6 +11,8 @@ interface StepCreate {
   defaultNotes: string | null;
   requiredCategoryId: string | null;
   plannedSubcontractorId: string | null;
+  /** Önerilen makine (yalnız öneri) — backend adımın istasyonuna ait olmasını doğrular. */
+  plannedMachineId: string | null;
   /** Şablon hedefi. Backend `plannedPropertyIds`'i pivot nested write'ına ÇEVİRİR
    *  — istemci ham Prisma yazımı göndermez (mass-assignment allowlist'i). */
   plannedColorId: string | null;
@@ -37,6 +39,7 @@ function buildPayload(v: RouteFormValues, isEdit: boolean): CreatePayload {
     // Fason planlaması (INTERNAL adımda buildDefaults/handleStationPick null tutar).
     requiredCategoryId: s.requiredCategoryId ?? null,
     plannedSubcontractorId: s.plannedSubcontractorId ?? null,
+    plannedMachineId: s.plannedMachineId ?? null,
     plannedColorId: s.plannedColorId ?? null,
     plannedPropertyIds: s.plannedPropertyIds ?? [],
   }));
