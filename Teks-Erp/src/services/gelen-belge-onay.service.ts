@@ -33,6 +33,10 @@ import { resolveDefaultItemForApproval, type DefaultItemSource } from "./gelen-b
 import { readUnreviewedApprovalMode } from "./system-setting.service";
 import { assertProcessChoiceValue } from "./helpers/process-choice-catalog.helper";
 import { aliasKey } from "./gelen-belge-eslestirme.service";
+import { isOpenForApproval, lineProblems, totalMismatches, totalWarnings } from "./gelen-belge-kontrol.service";
+
+// Kapı yüklemleri tek kaynakta (detay yanıtı da aynılarını okur); eski içe aktaranlar için yeniden dışa aktarılır.
+export { totalMismatches, totalWarnings };
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const LINE_TABLE = "CUSTOMER_DELIVERY_NOTE_LINE";
@@ -48,8 +52,6 @@ export const INCOMING_DOC_REASON_CODE = "GELEN_BELGE";
 const STALE_APPROVING_MS = 10 * 60 * 1000;
 /** Uzun koşumda başlığın `updatedAt`'i bu aralıkla tazelenir (kalp atışı): meşru koşum bayat sayılıp devralınmasın. */
 const HEARTBEAT_MS = 60 * 1000;
-/** Beyan edilen kg/m ile satır toplamı arasındaki hoşgörü (OCR ondalık kaybı; adet HOŞGÖRÜSÜZ). */
-const TOTAL_TOLERANCE = 0.005;
 
 const inventory = new InventoryService();
 
@@ -70,8 +72,6 @@ export interface ApproveResult {
   warnings: string[];
 }
 
-// OCR beyanı sayıları METİN yazar (motor DeclaredTotals: string); elle girilen sayı olabilir — karşılaştırma Number() ile.
-type DeclaredBlock = { blockNo?: number; count?: number | string | null; kg?: number | string | null; m?: number | string | null };
 type LineRow = { id: string; lineNo: number; blockNo: number; status: DeliveryNoteLineStatus; meters: Prisma.Decimal; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; itemId: string | null; colorId: string | null; itemText: string | null; colorText: string | null; processText: string | null; rollId: string | null; needsReview: boolean };
 
 const PRE_SELECT = {
@@ -80,39 +80,6 @@ const PRE_SELECT = {
   lines: { select: { id: true, lineNo: true, blockNo: true, status: true, meters: true, weightKg: true, widthCm: true, itemId: true, colorId: true, itemText: true, colorText: true, processText: true, rollId: true, needsReview: true }, orderBy: [{ blockNo: "asc" }, { lineNo: "asc" }] },
   scans: { select: { pageNo: true } },
 } satisfies Prisma.CustomerDeliveryNoteSelect;
-
-const near = (a: number, b: number) => Math.abs(a - b) <= Math.max(0.001, Math.abs(b) * TOTAL_TOLERANCE);
-
-type TotalLine = { blockNo: number; meters: Prisma.Decimal | number; weightKg: Prisma.Decimal | number | null; status: DeliveryNoteLineStatus };
-
-/**
- * Başlık top adedi ↔ canlı satır sayısı — UYARI (tasarım §4: `declaredTopCount` yalnız uyarı; motor onu blok 1'den
- * okur, çok bloklu belgede sert kapı her onayı 409'a düşürürdü). Saf.
- */
-export function totalWarnings(note: { declaredTopCount: number | null }, lines: ReadonlyArray<TotalLine>): string[] {
-  const live = lines.filter((l) => l.status !== "SKIPPED").length;
-  return note.declaredTopCount != null && note.declaredTopCount !== live ? [`Belgede ${note.declaredTopCount} top yazıyor, satır sayısı ${live}.`] : [];
-}
-
-/**
- * Toplam kapısı (SERT) — Σ satır ↔ blok başına beyan (T.Adet/kg/m). Uyuşmazlık listesi boşsa geçer.
- * Saf: DB okumaz (bekçi doğrudan sınar).
- */
-export function totalMismatches(note: { totalsDeclared: unknown }, lines: ReadonlyArray<TotalLine>): string[] {
-  const live = lines.filter((l) => l.status !== "SKIPPED");
-  const out: string[] = [];
-  const blocks = (note.totalsDeclared as { blocks?: DeclaredBlock[] } | null)?.blocks;
-  if (!Array.isArray(blocks)) return out;
-  for (const b of blocks) {
-    const bl = live.filter((l) => l.blockNo === (b.blockNo ?? 1));
-    const m = bl.reduce((s, l) => s + Number(l.meters), 0);
-    const kg = bl.reduce((s, l) => s + Number(l.weightKg ?? 0), 0);
-    if (b.count != null && b.count !== "" && Number(b.count) !== bl.length) out.push(`Blok ${b.blockNo ?? 1}: beyan ${b.count} top, satır ${bl.length}.`);
-    if (b.m != null && !near(m, Number(b.m))) out.push(`Blok ${b.blockNo ?? 1}: beyan ${b.m} m, satır toplamı ${m.toFixed(3)} m.`);
-    if (b.kg != null && !near(kg, Number(b.kg))) out.push(`Blok ${b.blockNo ?? 1}: beyan ${b.kg} kg, satır toplamı ${kg.toFixed(3)} kg.`);
-  }
-  return out;
-}
 
 /**
  * Ön kontrol — DB YAZMAZ; claim'den önce koşar, hata operatöre tek seferde listelenir. Okuduğu anlık görüntü claim
@@ -133,9 +100,9 @@ async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: ty
   await assertCariNotHeldTx(prisma, note.ownerCustomerId, "INTAKE");
   // Risk limiti (D4-I2, finance.riskLimitBlock.intake): kilidin yanında; kabul bakiyeyi değiştirmez, satır tx'i sormaz.
   await assertCustomerRiskLimitTx(prisma, note.ownerCustomerId, "INTAKE");
-  const open = note.lines.filter((l) => l.status === "PENDING" || l.status === "FAILED" || l.status === "ENTERING");
+  const open = note.lines.filter(isOpenForApproval);
   if (open.length === 0) throw AppError.conflict(`${note.noteNo} için işlenecek satır yok (hepsi girilmiş ya da atlanmış).`, { code: "DELIVERY_NOTE_NO_OPEN_LINES" });
-  const unresolved = open.filter((l) => !l.itemId).map((l) => l.lineNo);
+  const unresolved = open.filter((l) => lineProblems(l).includes("ITEM_UNRESOLVED")).map((l) => l.lineNo);
   // Hizmet ekseni (E3/E4): ürünsüz satır sahibin varsayılanıyla, yoksa fabrika ayarıyla girer; ikisi de boşsa bugünkü 400.
   // Varsayılan top doğuramıyorsa (pasif/birleşmiş/silinmiş) sessizce düşmez → 409 GELEN_BELGE_DEFAULT_ITEM_UNUSABLE.
   const defaultItem = unresolved.length ? await resolveDefaultItemForApproval(note.ownerCustomerId) : null;
@@ -143,7 +110,7 @@ async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: ty
     throw AppError.badRequest(`Ürünü çözülmemiş satır var: ${unresolved.join(", ")}. Her satırda ürün eşlenmeden onaylanamaz.`, { code: "DELIVERY_NOTE_LINE_UNRESOLVED", lineNos: unresolved });
   }
   // İnceleme kapısı (E3, D5'ten kalan karar): needsReview açık satır — BLOCK'ta 409, WARN'da (varsayılan) uyarıyla geçer.
-  const unreviewed = open.filter((l) => l.needsReview).map((l) => l.lineNo);
+  const unreviewed = open.filter((l) => lineProblems(l).includes("NEEDS_REVIEW")).map((l) => l.lineNo);
   const reviewMode = unreviewed.length ? await readUnreviewedApprovalMode() : "WARN";
   if (unreviewed.length && reviewMode === "BLOCK") {
     throw AppError.conflict(`Gözden geçirilmemiş satır var: ${unreviewed.join(", ")}. Hücreleri gözden geçirip onaylayın (fabrika ayarı: gözden geçirilmemiş hücreyle onay engelli).`, { code: "DELIVERY_NOTE_REVIEW_PENDING", lineNos: unreviewed });
