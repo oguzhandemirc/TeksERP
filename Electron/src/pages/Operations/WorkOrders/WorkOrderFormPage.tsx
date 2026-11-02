@@ -17,6 +17,8 @@ import type { WorkOrder } from "./types";
 import { toastServerSuccess } from "@/lib/serverNotes";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { TERIM } from "@/lib/terim";
+import { IsEmriGiris, type OieStart } from "./oie/IsEmriGiris";
+import { newWorkOrderTitle } from "./oie/nav";
 
 const LIST_PATH = "/operations/work-orders";
 
@@ -66,12 +68,14 @@ export function WorkOrderFormPage() {
   // tekrar basış aynı token'ı taşır → backend cached WO döner (mükerrer İE + refakat
   // kartı önlenir), kesin 4xx'te yenilenir. Yalnız create yolunda kullanılır.
   const createAttempt = useAttemptToken();
-
   // Create: seed gezinme state'inden (siparişten WO / Denge "stoğa üret").
   const seed = location.state as {
     seedPickedLines?: PickedOrderLine[];
     seedTarget?: WoSeedTarget;
+    oie?: OieStart;
   } | null;
+  // Tohumsuz yeni kayıt → iş emri türü seçici (K6); siparişten/Denge'den gelen tohum bugünkü forma.
+  const withEntry = !isEdit && !seed?.seedPickedLines?.length && !seed?.seedTarget;
 
   // Edit: WO'yu (locks dahil) çek. Form WO yüklenmeden tohumlanamaz.
   const detail = useQuery({
@@ -143,7 +147,7 @@ export function WorkOrderFormPage() {
   return (
     <PageShell>
       <PageHeader
-        title={isEdit ? `${TERIM.terbiyeIsEmri.cekim.belirtme} Düzenle` : `Yeni ${TERIM.terbiyeIsEmri.tekil}`}
+        title={isEdit ? `${TERIM.terbiyeIsEmri.cekim.belirtme} Düzenle` : newWorkOrderTitle(seed?.oie)}
         description={
           isEdit
             ? wo?.workOrderNumber
@@ -168,22 +172,29 @@ export function WorkOrderFormPage() {
             Terbiye iş emri bulunamadı.
           </div>
         )}
-        {(!isEdit || wo) && (
-          <WorkOrderFormView
-            workOrder={wo}
-            initialPickedLines={isEdit ? undefined : seed?.seedPickedLines}
-            initialTarget={isEdit ? undefined : seed?.seedTarget ?? undefined}
-            onSubmit={async (v, meta) => {
-              const payload = buildPayload(v, meta, targetQuantityEnabled);
-              if (isEdit) await replaceMut.mutateAsync(payload);
-              else await createMut.mutateAsync({ ...payload, clientToken: createAttempt.token() });
-            }}
-            isSubmitting={isEdit ? replaceMut.isPending : createMut.isPending}
-            onCancel={handleCancel}
-            headerSlot={headerSlot}
-          />
-        )}
+        {withEntry && <IsEmriGiris key={location.key} start={seed?.oie ?? null} renderManual={renderForm} />}
+        {!withEntry && (!isEdit || wo) && renderForm(null)}
       </div>
     </PageShell>
   );
+
+  function renderForm(initialRouteTemplateId: string | null, opts?: { belgeOkut?: boolean }) {
+    return (
+      <WorkOrderFormView
+        initialRouteTemplateId={initialRouteTemplateId}
+        belgeOkut={opts?.belgeOkut ?? true}
+        workOrder={wo}
+        initialPickedLines={isEdit ? undefined : seed?.seedPickedLines}
+        initialTarget={isEdit ? undefined : seed?.seedTarget ?? undefined}
+        onSubmit={async (v, meta) => {
+          const payload = buildPayload(v, meta, targetQuantityEnabled);
+          if (isEdit) await replaceMut.mutateAsync(payload);
+          else await createMut.mutateAsync({ ...payload, clientToken: createAttempt.token() });
+        }}
+        isSubmitting={isEdit ? replaceMut.isPending : createMut.isPending}
+        onCancel={handleCancel}
+        headerSlot={headerSlot}
+      />
+    );
+  }
 }

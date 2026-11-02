@@ -1,5 +1,5 @@
 // Operasyon › Üretim & Fason karoları (sıra = hub sırası).
-import { Factory, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers } from "lucide-react";
+import { Factory, FilePlus2, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers } from "lucide-react";
 import { isKursunPlanningVisible, isMeterDeviationsVisible, isWorkOrdersVisible } from "../production-regime";
 import { isWeavingOrdersVisible } from "../WeavingOrders/weaving-regime";
 import { isMachineStopsVisible, machineStopsTitle } from "../MachineStops/stop-regime";
@@ -23,6 +23,19 @@ export const productionTiles: OperationsTile[] = [
     // `requireProductionEnabled` taşıyordu; karo bayraksızdı → modül kapalı bir
     // kurulumda kart görünür, tıklayınca 403. Yüklem SAF modülden DOĞRUDAN
     // geçirilir (sarmalayan ok fonksiyonu YAZILMAZ — palet kimlik testi).
+    visibleWhen: isWorkOrdersVisible,
+    offHint: flagOffHint("productionEnabled"),
+  },
+  {
+    // K6 (Gülkesim 2026-11-02): tek giriş — seçici (Standart: Terbiye · Dokuma / Özel: kısayol rotaları). Adres ve izin
+    // yeni kayıt route'uyla birebir; eski karosuz palet girişinin yerini aldı.
+    key: "work-order-create",
+    title: "İş emri oluştur",
+    description: "Terbiye, dokuma ya da özel (ör. Kurşun & Tambur) iş emri — belge okutarak da",
+    icon: FilePlus2,
+    to: "/operations/work-orders/new",
+    group: "production",
+    permission: "workorder:write",
     visibleWhen: isWorkOrdersVisible,
     offHint: flagOffHint("productionEnabled"),
   },

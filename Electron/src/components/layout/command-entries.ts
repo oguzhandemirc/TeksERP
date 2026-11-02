@@ -21,8 +21,7 @@ import { regimePredicate } from "@/lib/regime-predicate";
 import { reportCommandSections } from "./command-entries.reports";
 import { deepCommandSections } from "./command-entries.deep";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
-import { isWorkOrdersVisible } from "@/pages/Operations/production-regime";
-import { TERIM, TERIM_AD } from "@/lib/terim";
+import { TERIM_AD } from "@/lib/terim";
 
 export type { CommandEntry, CommandSection } from "./command-entries.types";
 
@@ -74,23 +73,6 @@ export const commandSections: CommandSection[] = [
         visibleWhen: tile.visibleWhen,
         labelWhen: tile.titleWhen,
       })),
-      {
-        // Karosu yok (hub'da "İş Emirleri"nin içinden açılır) ama en sık
-        // yapılan işlerden biri — paletten tek adımda açılabilmeli.
-        key: "ops:work-order-new",
-        label: `Yeni ${TERIM.terbiyeIsEmri.tekil}`,
-        description: "Boş terbiye iş emri formunu aç",
-        icon: FilePlus2,
-        to: "/operations/work-orders/new",
-        permission: "workorder:write",
-        keywords: "terbiye iş emri oluştur ekle yeni üretim aç",
-        // ⚠️ KARO İLE AYNI YÜKLEM NESNESİ — karosuz girdiler kapıyı ELLE taşır.
-        // Yukarıdaki `operationsTiles` döngüsü yüklemi otomatik taşıyor; bu
-        // girdi o döngünün DIŞINDA olduğu için üretim modülü kapalıyken
-        // palette kalıyordu (karo gizli, giriş açık → form açılır, her istek
-        // `requireProductionEnabled` 403'ü alır). P5 doğrulaması ölçtü.
-        visibleWhen: isWorkOrdersVisible,
-      },
     ],
   },
   {

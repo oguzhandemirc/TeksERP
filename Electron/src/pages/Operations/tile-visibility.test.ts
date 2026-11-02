@@ -338,7 +338,7 @@ describe("komut paleti — karo yüklemi taşınıyor", () => {
     const extra = opsEntries
       .filter((e) => !operationsTiles.some((t) => `ops:${t.key}` === e.key))
       .map((e) => e.key);
-    expect(extra).toEqual(["ops:work-order-new"]);
+    expect(extra).toEqual([]);
   });
 
   it("her operasyon girişi karosunun yüklemini AYNEN taşır", () => {

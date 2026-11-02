@@ -1,13 +1,9 @@
-// P3 "Belge okut" (iş emri ekranı): okuma sürerken bekler; okununca tek kart; review'lı kurşun metresi onayı DAİMA bekletir;
-// onay gövdesi SEÇİLEN rotayı taşır; onay izni yoksa "Taslak olarak kaydet" — onay ucu hiç çağrılmaz.
-// Negatif sonda: `belgeOkutGate`ten review şartını kaldır → "review'lı metre" vakaları kırmızı.
+// P3 "Belge okut" saf parçaları + formdaki düğme (eski ayrı onay kartı K6'da kalktı; belgeden form `oie/__tests__`).
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
-import { belgeOkutGate, belgeOkutStage, openedWorkOrderId } from "../belgeOkut";
-import { BelgeOkutDialog } from "../BelgeOkutDialog";
+import { belgeOkutStage } from "../belgeOkut";
 import { BelgeOkutButton, BELGE_OKUT_NO_ROUTE } from "@/pages/Operations/WorkOrders/BelgeOkutButton";
 
 const getNote = vi.fn();
@@ -55,76 +51,15 @@ beforeEach(() => {
   settings.entryMode = "PER_DOCUMENT";
 });
 
-describe("belgeOkutStage / belgeOkutGate / openedWorkOrderId (saf)", () => {
+describe("belgeOkutStage (saf)", () => {
   it("okunurken READING, hepsi düştüyse READ_FAILED, PDF okuma beklemez, taslak değilse CLOSED", () => {
     expect(belgeOkutStage(note({ scans: [scan("READ"), scan("READING")] }))).toBe("READING");
     expect(belgeOkutStage(note({ scans: [scan("READ_FAILED")] }))).toBe("READ_FAILED");
     expect(belgeOkutStage(note({ scans: [scan("PENDING", "application/pdf")] }))).toBe("READY");
     expect(belgeOkutStage(note({ status: "APPROVED" }))).toBe("CLOSED");
   });
-  it("⭐ review'lı metre WARN ayarında bile onayı bekletir; müşteri ve metre şart", () => {
-    expect(belgeOkutGate(note({ kursunMetersReview: true }), { canApprove: true, entryMode: "PER_DOCUMENT" }).blocked).toBe(true);
-    expect(belgeOkutGate(note({ ownerCustomerId: null }), { canApprove: true, entryMode: "PER_DOCUMENT" }).reasons).toContain("Müşteriyi seçin.");
-    expect(belgeOkutGate(note({ kursunMeters: null }), { canApprove: true, entryMode: "PER_DOCUMENT" }).blocked).toBe(true);
-    expect(belgeOkutGate(note(), { canApprove: true, entryMode: "PER_DOCUMENT" })).toEqual({ action: "APPROVE", blocked: false, reasons: [] });
-  });
-  it("izinsiz → SAVE_DRAFT; PER_LINE → OPEN_IN_LIST", () => {
-    expect(belgeOkutGate(note(), { canApprove: false, entryMode: "PER_DOCUMENT" }).action).toBe("SAVE_DRAFT");
-    expect(belgeOkutGate(note(), { canApprove: true, entryMode: "PER_LINE" }).action).toBe("OPEN_IN_LIST");
-  });
-  it("iş emrine geçiş yalnız TEK açılan varsa", () => {
-    const g = (id: string, outcome: "OPENED" | "SKIPPED") => ({ key: id, itemName: "x", targets: [], rollCount: 1, outcome, workOrderId: id });
-    expect(openedWorkOrderId({ opened: 1, manual: 0, reason: null, groups: [g("w1", "OPENED")] })).toBe("w1");
-    expect(openedWorkOrderId({ opened: 2, manual: 0, reason: null, groups: [g("w1", "OPENED"), g("w2", "OPENED")] })).toBeNull();
-    expect(openedWorkOrderId(undefined)).toBeNull();
-  });
 });
 
-const renderDialog = () => renderWithProviders(<BelgeOkutDialog open noteId="n1" routeTemplateId="rt1" routeName="Kurşun → Tambur" onOpenChange={() => {}} />);
-
-describe("BelgeOkutDialog", () => {
-  it("okuma sürerken 'okunuyor', onay düğmesi pasif", async () => {
-    getNote.mockResolvedValue(note({ scans: [scan("READING")] }));
-    renderDialog();
-    expect(await screen.findByTestId("belge-okut-reading")).toBeInTheDocument();
-    expect(screen.getByTestId("belge-okut-approve")).toBeDisabled();
-  });
-  it("⭐ review'lı kurşun metresi → Onayla pasif + neden", async () => {
-    getNote.mockResolvedValue(note({ kursunMetersReview: true }));
-    renderDialog();
-    expect(await screen.findByText("Kurşun metresini doğrulayın (kılavuzlu giriş).")).toBeInTheDocument();
-    expect(screen.getByTestId("belge-okut-approve")).toBeDisabled();
-  });
-  it("⭐ Onayla → gövde SEÇİLEN rotayı taşır; tek iş emri açıldıysa 'İş Emrine git'", async () => {
-    getNote.mockResolvedValue(note());
-    approveNote.mockResolvedValue({
-      result: { note: { ...note(), status: "APPROVED" }, summary: { entered: 1, failed: 0, skipped: 0, replayed: 0, rollIds: ["r1"] },
-        autoWorkOrders: { opened: 1, manual: 0, reason: null, groups: [{ key: "g", itemName: "Tül", targets: [], rollCount: 1, outcome: "OPENED", workOrderId: "w1", workOrderNumber: "IE-1", attached: 1 }] } },
-      warnings: [],
-    });
-    renderDialog();
-    const btn = await screen.findByTestId("belge-okut-approve");
-    await waitFor(() => expect(btn).toBeEnabled());
-    await userEvent.click(btn);
-    await waitFor(() => expect(approveNote).toHaveBeenCalledWith("n1", null, [], { routeTemplateId: "rt1" }));
-    expect(await screen.findByTestId("belge-okut-go-wo")).toHaveTextContent("Terbiye İş Emrine git");
-  });
-  it("⭐ onay izni yok → 'Taslak olarak kaydet', onay ucu çağrılmaz", async () => {
-    perms.list = ["gelen-belge:write"];
-    getNote.mockResolvedValue(note());
-    renderDialog();
-    await userEvent.click(await screen.findByTestId("belge-okut-save-draft"));
-    expect(screen.queryByTestId("belge-okut-approve")).toBeNull();
-    expect(approveNote).not.toHaveBeenCalled();
-  });
-  it("PER_LINE kipinde onay yok, Gelen Belgeler'e yönlendirir", async () => {
-    settings.entryMode = "PER_LINE";
-    getNote.mockResolvedValue(note());
-    renderDialog();
-    expect(await screen.findByTestId("belge-okut-open-list")).toBeInTheDocument();
-    expect(screen.queryByTestId("belge-okut-approve")).toBeNull();
-  });
-});
 
 describe("BelgeOkutButton (iş emri formu)", () => {
   it("rota seçilmeden pasif + neden", () => {

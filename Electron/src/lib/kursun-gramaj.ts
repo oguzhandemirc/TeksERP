@@ -17,6 +17,8 @@ export const KURSUN_PROPERTY_CODE = "KURSUN";
 export interface GramajOption {
   id: string;
   name: string;
+  /** İstasyonun tek varsayılan gramajı (sözleşme 5); eski backend göndermez → yok. */
+  isDefault?: boolean;
 }
 
 export interface KursunGramajCatalog {
@@ -34,7 +36,7 @@ export async function loadKursunGramajCatalog(): Promise<KursunGramajCatalog> {
   const options = (variant.values ?? [])
     .filter((v) => v.isActive)
     .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((v) => ({ id: v.id, name: v.name }));
+    .map((v) => ({ id: v.id, name: v.name, ...((v as { isDefault?: boolean }).isDefault ? { isDefault: true } : {}) }));
   return { propertyId: variant.id, options };
 }
 
