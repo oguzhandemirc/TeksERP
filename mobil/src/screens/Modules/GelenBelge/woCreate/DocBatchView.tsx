@@ -6,6 +6,7 @@ import { Button, Text } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import type { PickerOption } from '../../../../components/PickerModal';
+import TruncatedText from '../../../../components/TruncatedText';
 import { inboundDocService } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { TERIM } from '../../../../lib/terim';
@@ -18,8 +19,8 @@ import { removePage } from '../docScan';
 import { useDocScan } from '../useDocScan';
 import { usePageSource } from '../usePageSource';
 import DocRowCard from './DocRowCard';
-import { useWoRows } from './useWoRows';
-import type { FormApproval } from './woFromDoc';
+import { useWoRows, type WoRowsState } from './useWoRows';
+import { shortcutTitle, type FormApproval } from './woFromDoc';
 
 const MODE_TEXT: Record<FormApproval, string> = {
   WITH_WORK_ORDER: `Kaydet: belge + müşteri malı top + ${TERIM.terbiyeIsEmri.tekilKucuk} tek seferde.`,
@@ -69,7 +70,7 @@ export default function DocBatchView({ route, multi = true, autoStart = false }:
     <>
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <View style={styles.banner} testID="belge-ie-kip">
-          <Text style={styles.bannerTitle}>{route.name}</Text>
+          <TruncatedText style={styles.bannerTitle}>{shortcutTitle(route)}</TruncatedText>
           <Text style={styles.bannerText}>{MODE_TEXT[wo.mode]}</Text>
           {wo.autoPrint && <Text style={styles.bannerText}>Refakat kartı her açılan {TERIM.terbiyeIsEmri.tekilKucuk} için otomatik yazdırılır.</Text>}
         </View>
@@ -77,58 +78,10 @@ export default function DocBatchView({ route, multi = true, autoStart = false }:
           <DocRowCard key={r.noteId} row={r} wo={wo} customers={customers} customersLoading={ctx.isLoading} />
         ))}
         {showScanner && (
-        <>
-        <Text style={styles.section}>{wo.rows.length ? 'Sıradaki belge' : 'Belgeyi okutun'}</Text>
-        <PageList
-          pages={b.pages}
-          uploaded={b.progress.uploaded}
-          onRemove={remove}
-          onAdd={source.add}
-          onAddClassic={() => setCameraOpen(true)}
-          busy={source.busy}
-          onOpen={setPreviewIndex}
-        />
-        <View style={styles.footer}>
-          {(b.pages.length > 0 || b.headerLocked) && (
-            <Button mode="text" onPress={b.reset} disabled={b.sending}>
-              Vazgeç
-            </Button>
-          )}
-          <Button
-            mode="outlined"
-            icon="send"
-            onPress={() => void b.send()}
-            loading={b.sending}
-            disabled={b.sending || b.remaining === 0}
-            contentStyle={styles.btn}
-            testID="belge-ie-gonder"
-          >
-            {b.headerLocked ? `Yeniden dene (${b.remaining} sayfa)` : 'Belgeyi gönder ve oku'}
-          </Button>
-        </View>
-        </>
+          <ScannerSection b={b} hasRows={wo.rows.length > 0} onAdd={source.add} busy={source.busy} onClassic={() => setCameraOpen(true)} onRemove={remove} onOpen={setPreviewIndex} />
         )}
       </ScrollView>
-      {wo.rows.length > 0 && (
-        <View style={styles.bar}>
-          <Text style={styles.barText}>
-            {[`${c.total} belge`, c.reading ? `${c.reading} okunuyor` : '', c.opened ? `${c.opened} açıldı` : '', c.drafts ? `${c.drafts} taslak` : '', c.failed ? `${c.failed} hata` : '']
-              .filter(Boolean)
-              .join(' · ')}
-          </Text>
-          <Button
-            mode="contained"
-            icon="content-save-all"
-            onPress={() => void wo.saveAll()}
-            loading={wo.saving}
-            disabled={wo.saving || c.ready === 0}
-            contentStyle={styles.btn}
-            testID="belge-ie-hepsini-kaydet"
-          >
-            {saveLabel}
-          </Button>
-        </View>
-      )}
+      {wo.rows.length > 0 && <SaveBar wo={wo} label={saveLabel} />}
       <PagePreviewModal
         pages={b.pages}
         index={previewIndex}
@@ -147,6 +100,65 @@ export default function DocBatchView({ route, multi = true, autoStart = false }:
         }}
         onError={(m) => Toast.show({ type: 'error', text1: m })}
       />
+    </>
+  );
+}
+
+function SaveBar({ wo, label }: { wo: WoRowsState; label: string }) {
+  const c = wo.counts;
+  const parts = [`${c.total} belge`, c.reading ? `${c.reading} okunuyor` : '', c.opened ? `${c.opened} açıldı` : '', c.drafts ? `${c.drafts} taslak` : '', c.failed ? `${c.failed} hata` : ''];
+  return (
+    <View style={styles.bar}>
+      <Text style={styles.barText}>{parts.filter(Boolean).join(' · ')}</Text>
+      <Button
+        mode="contained"
+        icon="content-save-all"
+        onPress={() => void wo.saveAll()}
+        loading={wo.saving}
+        disabled={wo.saving || c.ready === 0}
+        contentStyle={styles.btn}
+        testID="belge-ie-hepsini-kaydet"
+      >
+        {label}
+      </Button>
+    </View>
+  );
+}
+
+interface ScannerProps {
+  b: ReturnType<typeof useDocScan>;
+  hasRows: boolean;
+  onAdd: () => void;
+  busy: boolean;
+  onClassic: () => void;
+  onRemove: (i: number) => void;
+  onOpen: (i: number) => void;
+}
+
+/** Sıradaki belgenin sayfaları + gönder (mevcut Belge Tara bileşenleri). */
+function ScannerSection({ b, hasRows, onAdd, busy, onClassic, onRemove, onOpen }: ScannerProps) {
+  return (
+    <>
+      <Text style={styles.section}>{hasRows ? 'Sıradaki belge' : 'Belgeyi okutun'}</Text>
+      <PageList pages={b.pages} uploaded={b.progress.uploaded} onRemove={onRemove} onAdd={onAdd} onAddClassic={onClassic} busy={busy} onOpen={onOpen} />
+      <View style={styles.footer}>
+        {(b.pages.length > 0 || b.headerLocked) && (
+          <Button mode="text" onPress={b.reset} disabled={b.sending}>
+            Vazgeç
+          </Button>
+        )}
+        <Button
+          mode="outlined"
+          icon="send"
+          onPress={() => void b.send()}
+          loading={b.sending}
+          disabled={b.sending || b.remaining === 0}
+          contentStyle={styles.btn}
+          testID="belge-ie-gonder"
+        >
+          {b.headerLocked ? `Yeniden dene (${b.remaining} sayfa)` : 'Belgeyi gönder ve oku'}
+        </Button>
+      </View>
     </>
   );
 }

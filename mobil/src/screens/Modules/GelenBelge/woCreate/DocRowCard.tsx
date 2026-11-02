@@ -80,76 +80,13 @@ export default function DocRowCard({ row, wo, customers, customersLoading }: Pro
             onPress={() => setPicker('batch')}
             disabled={locked || candidates.length === 0}
           />
-          <View testID={`belge-satir-metre-${row.noteNo}`}>
-            <Text style={styles.label}>Kurşun metresi</Text>
-            <View style={styles.row}>
-              <Text style={[styles.meters, f.metersReview && styles.warnText, !meterText && styles.muted]}>{meterText ?? 'Metre okunamadı'}</Text>
-              {f.metersReview && (
-                <Button mode="contained-tonal" icon="check" onPress={() => wo.updateForm(row.noteId, { metersReview: false })} disabled={locked} contentStyle={styles.btn} testID={`belge-satir-dogrula-${row.noteNo}`}>
-                  Doğrula
-                </Button>
-              )}
-              <Button mode="outlined" icon="pencil" onPress={() => setMeterOpen(true)} disabled={locked} contentStyle={styles.btn} testID={`belge-satir-duzelt-${row.noteNo}`}>
-                {meterText ? 'Düzelt' : 'Metre gir'}
-              </Button>
-            </View>
-            {f.metersReview && <Text style={styles.warnText}>Metre doğrulama bekliyor: belgedeki değeri kontrol edin.</Text>}
-          </View>
-          {wo.showGramaj && wo.catalog.options.length > 0 && (
-            <View>
-              <Text style={styles.label}>Kurşun gramajı</Text>
-              <View style={styles.chips}>
-                {wo.catalog.options.map((o) => (
-                  <Chip
-                    key={o.id}
-                    selected={f.gramajValueId === o.id}
-                    onPress={() => wo.updateForm(row.noteId, { gramajValueId: f.gramajValueId === o.id ? null : o.id })}
-                    disabled={locked}
-                    style={styles.chip}
-                    testID={`belge-satir-gramaj-${row.noteNo}-${o.name}`}
-                  >
-                    {o.isDefault ? `${o.name} (varsayılan)` : o.name}
-                  </Chip>
-                ))}
-              </View>
-            </View>
-          )}
+          <MeterField row={row} wo={wo} meterText={meterText} locked={locked} onEdit={() => setMeterOpen(true)} />
+          <GramajField row={row} wo={wo} locked={locked} />
           {!done && issues.map((n) => <Text key={n} style={styles.note}>• {n}</Text>)}
         </>
       )}
       <RowResultView row={row} wo={wo} />
-      <PickerModal
-        visible={picker === 'owner'}
-        title="Belgenin sahibi"
-        options={owners.rest}
-        pinnedOptions={owners.pinned}
-        pinnedLabel="Son kullanılanlar"
-        selectedValue={f?.ownerCustomerId ?? null}
-        loading={customersLoading}
-        onSelect={(id) => {
-          setPicker(null);
-          wo.updateForm(row.noteId, { ownerCustomerId: id, ownerSuggested: null });
-        }}
-        onDismiss={() => setPicker(null)}
-        emptyText="Aktif müşteri yok."
-      />
-      <PickerModal
-        visible={picker === 'batch'}
-        title="Parti no"
-        options={candidates.map((x, i) => ({ value: String(i), label: x.value, sublabel: x.label ?? x.key ?? undefined }))}
-        selectedValue={String(candidates.findIndex((x) => x.value === f?.ourBatchNo))}
-        disableSort
-        onSelect={(i) => {
-          setPicker(null);
-          const c = candidates[Number(i)];
-          if (c) {
-            const p = batchPatch(c);
-            wo.updateForm(row.noteId, { ourBatchNo: p.ourBatchNo ?? null, ourBatchNoKey: p.ourBatchNoKey ?? null });
-          }
-        }}
-        onDismiss={() => setPicker(null)}
-        emptyText="Belgede parti no adayı yok."
-      />
+      <RowPickers row={row} wo={wo} picker={picker} setPicker={setPicker} owners={owners} customersLoading={customersLoading} />
       {meterOpen && row.detail && (
         <MeterSheet
           choices={meterChoices(row.detail)}
@@ -162,6 +99,101 @@ export default function DocRowCard({ row, wo, customers, customersLoading }: Pro
         />
       )}
     </View>
+  );
+}
+
+function MeterField({ row, wo, meterText, locked, onEdit }: { row: DocRow; wo: WoRowsState; meterText: string | null; locked: boolean; onEdit: () => void }) {
+  const f = row.form!;
+  return (
+    <View testID={`belge-satir-metre-${row.noteNo}`}>
+      <Text style={styles.label}>Kurşun metresi</Text>
+      <View style={styles.row}>
+        <Text style={[styles.meters, f.metersReview && styles.warnText, !meterText && styles.muted]}>{meterText ?? 'Metre okunamadı'}</Text>
+        {f.metersReview && (
+          <Button mode="contained-tonal" icon="check" onPress={() => wo.updateForm(row.noteId, { metersReview: false })} disabled={locked} contentStyle={styles.btn} testID={`belge-satir-dogrula-${row.noteNo}`}>
+            Doğrula
+          </Button>
+        )}
+        <Button mode="outlined" icon="pencil" onPress={onEdit} disabled={locked} contentStyle={styles.btn} testID={`belge-satir-duzelt-${row.noteNo}`}>
+          {meterText ? 'Düzelt' : 'Metre gir'}
+        </Button>
+      </View>
+      {f.metersReview && <Text style={styles.warnText}>Metre doğrulama bekliyor: belgedeki değeri kontrol edin.</Text>}
+    </View>
+  );
+}
+
+/** Gramaj yalnız rotada kurşun adımı ve katalogda değer varsa çizilir; varsayılan ön seçili gelir (sözleşme 5). */
+function GramajField({ row, wo, locked }: { row: DocRow; wo: WoRowsState; locked: boolean }) {
+  const f = row.form!;
+  if (!wo.showGramaj || wo.catalog.options.length === 0) return null;
+  return (
+    <View>
+      <Text style={styles.label}>Kurşun gramajı</Text>
+      <View style={styles.chips}>
+        {wo.catalog.options.map((o) => (
+          <Chip
+            key={o.id}
+            selected={f.gramajValueId === o.id}
+            onPress={() => wo.updateForm(row.noteId, { gramajValueId: f.gramajValueId === o.id ? null : o.id })}
+            disabled={locked}
+            style={styles.chip}
+            testID={`belge-satir-gramaj-${row.noteNo}-${o.name}`}
+          >
+            {o.isDefault ? `${o.name} (varsayılan)` : o.name}
+          </Chip>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+interface PickersProps {
+  row: DocRow;
+  wo: WoRowsState;
+  picker: Picker;
+  setPicker: (p: Picker) => void;
+  owners: { pinned: PickerOption[]; rest: PickerOption[] };
+  customersLoading: boolean;
+}
+
+function RowPickers({ row, wo, picker, setPicker, owners, customersLoading }: PickersProps) {
+  const candidates = row.detail?.batchNoCandidates ?? [];
+  return (
+    <>
+        <PickerModal
+          visible={picker === 'owner'}
+          title="Belgenin sahibi"
+          options={owners.rest}
+          pinnedOptions={owners.pinned}
+          pinnedLabel="Son kullanılanlar"
+          selectedValue={row.form?.ownerCustomerId ?? null}
+          loading={customersLoading}
+          onSelect={(id) => {
+            setPicker(null);
+            wo.updateForm(row.noteId, { ownerCustomerId: id, ownerSuggested: null });
+          }}
+          onDismiss={() => setPicker(null)}
+          emptyText="Aktif müşteri yok."
+        />
+        <PickerModal
+          visible={picker === 'batch'}
+          title="Parti no"
+          options={candidates.map((x, i) => ({ value: String(i), label: x.value, sublabel: x.label ?? x.key ?? undefined }))}
+          selectedValue={String(candidates.findIndex((x) => x.value === row.form?.ourBatchNo))}
+          disableSort
+          onSelect={(i) => {
+            setPicker(null);
+            const c = candidates[Number(i)];
+            if (c) {
+              const p = batchPatch(c);
+              wo.updateForm(row.noteId, { ourBatchNo: p.ourBatchNo ?? null, ourBatchNoKey: p.ourBatchNoKey ?? null });
+            }
+          }}
+          onDismiss={() => setPicker(null)}
+          emptyText="Belgede parti no adayı yok."
+        />
+    </>
   );
 }
 

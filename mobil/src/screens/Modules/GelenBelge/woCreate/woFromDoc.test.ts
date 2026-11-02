@@ -25,8 +25,8 @@ describe('shortcutRoutes / shortcutTitle', () => {
     expect(shortcutRoutes(list).map((x) => x.id)).toEqual(['c', 'a']);
     expect(shortcutRoutes([r('x'), r('y')])).toEqual([]);
   });
-  it('başlık "<ad> iş emri"; ad zaten iş emriyle bitiyorsa tekrar yok', () => {
-    expect(shortcutTitle({ name: 'Kurşun&Tambur' })).toBe('Kurşun&Tambur iş emri');
+  it('başlık "<ad> terbiye iş emri"; ad zaten iş emriyle bitiyorsa tekrar yok', () => {
+    expect(shortcutTitle({ name: 'Kurşun&Tambur' })).toBe('Kurşun&Tambur terbiye iş emri');
     expect(shortcutTitle({ name: 'Brode iş emri' })).toBe('Brode iş emri');
   });
 });

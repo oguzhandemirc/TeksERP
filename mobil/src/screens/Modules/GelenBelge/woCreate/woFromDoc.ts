@@ -19,10 +19,10 @@ export function shortcutRoutes(routes: readonly ProductionRoute[]): ProductionRo
     .sort((a, b) => (a.shortcutOrder ?? 0) - (b.shortcutOrder ?? 0) || a.name.localeCompare(b.name, 'tr'));
 }
 
-/** Özel iş emri başlığı: "<kısayol adı> iş emri" (ad zaten "iş emri" ile bitiyorsa tekrarlanmaz). */
+/** Özel iş emri başlığı: "<kısayol adı> terbiye iş emri" (görünen ad TERIM'den; ad zaten iş emriyle bitiyorsa tekrarlanmaz). */
 export function shortcutTitle(route: Pick<ProductionRoute, 'name'>): string {
   const name = route.name.trim();
-  return /iş emri$/i.test(name) ? name : `${name} iş emri`;
+  return /i[şs] emri$/i.test(name) ? name : `${name} ${TERIM.terbiyeIsEmri.tekilKucuk}`;
 }
 
 /** Kayıt kipi. UNKNOWN = ayar okunamadı (izin): kayıt denenir, sunucu kapalı derse taslağa düşülür. */

@@ -1,4 +1,4 @@
-// "İş emri oluştur" (Gülkesim K6) — menüde Belge Tara'nın yerine; panel seçicisinin aynası. 1. satır sabit türler
+// "Terbiye İş Emri oluştur" (Gülkesim K6) — menüde Belge Tara'nın yerine; panel seçicisinin aynası. 1. satır sabit türler
 // (tablette yalnız Hızlı Terbiye İş Emri), 2. satır "Özel iş emirleri" kısayolları. Kısayol → doğrudan form (rota hazır)
 // + üstte "Belge okut". Kısayol yoksa 2. satır görünmez ve bugünkü Belge Tara yolu 1. satırda kalır.
 import React, { useState } from 'react';
@@ -23,7 +23,7 @@ type Stage =
   | { kind: 'legacy' };
 
 export const WO_SHORTCUTS_KEY = ['routes', 'wo-shortcuts'] as const;
-const TITLE = 'İş emri oluştur';
+const TITLE = `${TERIM.terbiyeIsEmri.tekil} oluştur`;
 const QUICK = `Hızlı ${TERIM.terbiyeIsEmri.tekil}`;
 
 export default function WoCreateScreen() {
@@ -63,7 +63,7 @@ export default function WoCreateScreen() {
             <ActivityIndicator style={styles.loading} />
           ) : shortcuts.length > 0 ? (
             <>
-              <Text style={styles.section}>Özel iş emirleri</Text>
+              <Text style={styles.section}>Özel {TERIM.terbiyeIsEmri.cogulKucuk}</Text>
               <View style={styles.grid} testID="ie-ozel-turler">
                 {shortcuts.map((r) => (
                   <Tile key={r.id} icon="lightning-bolt" title={shortcutTitle(r)} sub={r.code ?? undefined} testID={`kisayol-${r.name}`} onPress={() => openForm(r)} />
