@@ -59,7 +59,7 @@ export function readSummaryState(
     return { state: "FAILED", reason: `Okuma servisi ${pages.failed === 1 ? "sayfayı" : `${pages.failed} sayfayı`} okuyamadı. Panelden yeniden okutun ya da satırları elle girin.`, pages };
   }
   if (pages.failed) return { state: "PARTIAL", reason: `${pages.failed} sayfa okunamadı; panelden yeniden okutun.`, pages };
-  if (lineCount === 0) return { state: "READ", reason: "Sayfa okundu ama satır çıkmadı; satırları panelde girin.", pages };
+  if (lineCount === 0) return { state: "READ", reason: "Sayfa okundu ama satır çıkmadı; panelden yeniden okutun ya da satırları elle girin.", pages };
   return { state: "READ", reason: null, pages };
 }
 

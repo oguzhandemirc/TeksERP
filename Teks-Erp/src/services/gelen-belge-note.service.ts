@@ -20,7 +20,8 @@ import { readIdCondition } from "../utils/query-parser";
 import { AuditService } from "./audit.service";
 import { tokenReplay } from "./helpers/token-replay.helper";
 import { reserveSeriesNo } from "./helpers/series-counter-store.helper";
-import { SCAN_SELECT } from "./gelen-belge-scan.service";
+import { PDF_MIME, SCAN_SELECT } from "./gelen-belge-scan.service";
+import { applyStoredReadsTx, auditPhotoSource, auditStoredReads, markPhotoSourceTx, prepareStoredReads, type StoredReadOutcome } from "./gelen-belge-taslak-doldur.service";
 import { LINE_SELECT, lineColumns, notDraft, text, type DeliveryNoteLineInput } from "./gelen-belge-line.service";
 import { lineProblems, totalsCheck } from "./gelen-belge-kontrol.service";
 
@@ -240,6 +241,11 @@ export async function createDeliveryNote(input: DeliveryNoteCreateInput, userId:
         throw AppError.conflict("Taramalardan biri bulunamadı ya da başka bir taslağa bağlı.", { code: "DOCUMENT_SCAN_NOT_FREE" });
       }
     }
+    // Okunmuş serbest tarama (taslağı silinmiş fotoğraf) satırlarını saklı zarftan getirir — tx DIŞINDA hazırlanır.
+    const plans = await prepareStoredReads(scanIds, userId);
+    const photoBound = scanIds.length > 0 && (await prisma.documentScan.count({ where: { id: { in: scanIds }, mimeType: { not: PDF_MIME } } })) > 0;
+    let restored: StoredReadOutcome[] = [];
+    let sourceMarked = false;
     // Numara doğuşta; sayaç türetilmiş → P2002 yarışında yeniden dene (reçete § Yeni numara serisi).
     const created = await withBarcodeRetry(async () => {
       const noteNo = await nextNoteNo();
@@ -257,11 +263,15 @@ export async function createDeliveryNote(input: DeliveryNoteCreateInput, userId:
           if (bound.count !== scanIds.length) {
             throw AppError.conflict("Taramalardan biri bu arada başka bir taslağa bağlandı.", { code: "DOCUMENT_SCAN_NOT_FREE" });
           }
+          sourceMarked = photoBound ? await markPhotoSourceTx(tx, row.id) : false;
+          restored = await applyStoredReadsTx(tx, row.id, plans);
         }
         return row;
       });
     }, undefined, (err) => p2002TargetsCode(err, "noteNo"), "Gelen belge numarası").catch(translateUnique);
     await AuditService.log({ userId, action: "CREATE", tableName: NOTE_TABLE, recordId: created.id, newData: { ...auditHeader(created), lineCount: lines.length, scanCount: scanIds.length } });
+    if (sourceMarked) await auditPhotoSource(created.id, userId);
+    await auditStoredReads(created.id, restored, userId);
     return getDeliveryNote(created.id);
   });
 }
