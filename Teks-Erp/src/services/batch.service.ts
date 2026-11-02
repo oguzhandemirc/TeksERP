@@ -142,7 +142,8 @@ export async function generateBatchNumberTx(
     (prefix) =>
       tx.batch
         .findMany({
-          where: { batchNumber: { gte: prefix, startsWith: prefix } },
+          // Belgeden gelen numara (P2618733 gibi) günlük kalıba uyabilir; sayacın kaynağı yalnız SERIES satırı.
+          where: { batchNumber: { gte: prefix, startsWith: prefix }, numberSource: "SERIES" },
           select: { batchNumber: true, createdAt: true },
         })
         .then((rows) => rows.map((b) => ({ code: b.batchNumber, createdAt: b.createdAt }))),
@@ -203,6 +204,7 @@ async function readWrapRowsTx(
   const rows = await tx.$queryRaw<Array<{ batchNumber: string; createdAt: Date }>>`
     SELECT "batchNumber", "createdAt" FROM batches
     WHERE "batchNumber" ~ ${re}
+      AND "numberSource" = 'SERIES'
       AND substring("batchNumber" from '[0-9]+$')::bigint BETWEEN ${min} AND ${max}
     ORDER BY "createdAt" DESC
     LIMIT ${TAIL_SCAN}`;
@@ -279,14 +281,18 @@ export async function createBatchTx(
     date?: Date;
     /** "Parti Ekle" idempotency anahtarı — tekil; yarışta P2002 çağıranın replay dalına düşer. */
     clientToken?: string | null;
+    /** Gelen belgeden çözülmüş parti no (`resolveDocumentBatchNo`) — doluysa seri ÇAĞRILMAZ (8022 seriye aittir). */
+    documentBatchNo?: string | null;
   },
 ): Promise<CreateBatchResult> {
   const now = params.date ?? new Date();
-  const batchNumber = await generateBatchNumberTx(tx, now, params.workOrderId);
+  const documentNo = params.documentBatchNo?.trim() || null;
+  const batchNumber = documentNo ?? (await generateBatchNumberTx(tx, now, params.workOrderId));
 
   const batch = await tx.batch.create({
     data: {
       batchNumber,
+      numberSource: documentNo ? "DOCUMENT" : "SERIES",
       workOrderId: params.workOrderId,
       splitFromId: params.splitFromId ?? null,
       clientToken: params.clientToken ?? null,

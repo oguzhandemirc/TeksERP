@@ -46,6 +46,12 @@ export function WorkOrderFromNoteDialog({ noteId, open, onOpenChange }: Props) {
                 <span className="text-muted-foreground">Müşteri partisi: </span>
                 {p.customerBatch?.batchNo ?? "yok"}
               </span>
+              {p.batchNoPreview && (
+                <span data-testid="plan-batch-no-preview">
+                  <span className="text-muted-foreground">Parti no (belgeden): </span>
+                  {p.batchNoPreview}
+                </span>
+              )}
             </div>
             <PlanRouteFields s={s} plan={p} busy={busy} />
             {p.groups.length === 0 && <p className="text-sm text-muted-foreground">Bu belgeden doğmuş top yok.</p>}

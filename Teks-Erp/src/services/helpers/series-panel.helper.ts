@@ -219,6 +219,8 @@ export async function seriesImpactCount(
         OR: [fmt.prefix, ...fmt.retiredPrefixes].map((onek) => ({
           [alan]: { gte: onek, startsWith: onek },
         })),
+        // Belgeden gelen numara (DOCUMENT) ön eke uysa da bu serinin numarası DEĞİLDİR.
+        ...(e.countTable.yalnizSeri ? { numberSource: "SERIES" } : {}),
       },
     });
   }

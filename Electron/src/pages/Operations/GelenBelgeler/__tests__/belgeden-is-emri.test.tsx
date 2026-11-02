@@ -44,6 +44,12 @@ describe("buildGroupPayload", () => {
     expect(p.targetValues).toEqual([{ propertyId: "desen", valueId: "d12" }, { propertyId: "renk", valueId: "d13" }]);
     expect(p.targetPropertyIds).toEqual(["brode"]);
     expect(p).not.toHaveProperty("foldType");
+    expect(p).not.toHaveProperty("sourceNoteId");
+  });
+
+  it("kaynak belge verilirse gövdeye sourceNoteId girer (parti no sunucuda nottan)", () => {
+    const g = group("g1", [], [roll(1)]);
+    expect(buildGroupPayload({ group: g, targets: [] }, "rt", "tok", null, "note-1").sourceNoteId).toBe("note-1");
   });
 });
 
