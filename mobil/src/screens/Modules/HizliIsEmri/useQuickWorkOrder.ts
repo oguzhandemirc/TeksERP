@@ -145,7 +145,9 @@ function routeApplyCaps(route: RouteLike) {
  * kurallar var. İş Emri Şablonu (ProductRecipe) 2026-08-02'de KALDIRILDI —
  * hedef renk/en/özellik artık ya siparişten gelir ya elle seçilir.
  */
-export function useQuickWorkOrder() {
+/** `initialRouteTemplateId`: kısayoldan "Manuel" açılış — rota ön seçili (son rota yerine); yoksa bugünkü davranış. */
+export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null } = {}) {
+  const initialRouteTemplateId = opts.initialRouteTemplateId ?? null;
   const qc = useQueryClient();
   // KİŞİSEL tercih (2026-08-09) — fason varsayılanı favori mi son seçilen mi.
   // Electron ile AYNI tercih blob'unu okur (kullanıcı iki cihazda aynı davranışı görür).
@@ -456,19 +458,6 @@ export function useQuickWorkOrder() {
     return out.slice(0, 4);
   }, [routesQuery.data, lastRouteTemplateId]);
 
-  // Açılışta son rotayı otomatik seç (saha genelde aynı rota). Bir kez.
-  const didPreselectRef = useRef(false);
-  useEffect(() => {
-    if (didPreselectRef.current || !routesQuery.data) return;
-    didPreselectRef.current = true;
-    if (
-      !routeTemplateId &&
-      lastRouteTemplateId &&
-      (routesQuery.data.data ?? []).some((r) => r.id === lastRouteTemplateId)
-    ) {
-      setRouteTemplateId(lastRouteTemplateId);
-    }
-  }, [routesQuery.data, lastRouteTemplateId, routeTemplateId]);
 
   // Rota değişince o rotanın UYGULAYAMADIĞI hedefleri AYNI ANDA düşür — alan
   // gizlenirken değeri arkada kalırsa backend "rotada renk veren adım yok" ile
@@ -510,6 +499,24 @@ export function useQuickWorkOrder() {
     },
     [routesQuery.data, orderLinked],
   );
+
+  // Açılışta son rotayı otomatik seç (saha genelde aynı rota). Bir kez.
+  const didPreselectRef = useRef(false);
+  useEffect(() => {
+    if (didPreselectRef.current || !routesQuery.data) return;
+    didPreselectRef.current = true;
+    if (initialRouteTemplateId && (routesQuery.data.data ?? []).some((r) => r.id === initialRouteTemplateId)) {
+      chooseRoute(initialRouteTemplateId);
+      return;
+    }
+    if (
+      !routeTemplateId &&
+      lastRouteTemplateId &&
+      (routesQuery.data.data ?? []).some((r) => r.id === lastRouteTemplateId)
+    ) {
+      setRouteTemplateId(lastRouteTemplateId);
+    }
+  }, [routesQuery.data, lastRouteTemplateId, routeTemplateId, initialRouteTemplateId, chooseRoute]);
 
   // Sipariş bağlıyken renk düşürülemez; rota onu uygulayamıyorsa operatöre rotayı
   // değiştirmesini söyle. (Özellikler seçimde temizlendiği için burada dal yok;
@@ -951,8 +958,8 @@ export function useQuickWorkOrder() {
     setScanned([]);
     resetScanFeedback();
     setLineTargets({});
-    // Son rotayı koru (saha kolaylığı); gerisini temizle.
-    setRouteTemplateId(lastRouteTemplateId);
+    // Son rotayı koru (saha kolaylığı; kısayoldan açıldıysa kısayol rotası); gerisini temizle.
+    setRouteTemplateId(initialRouteTemplateId ?? lastRouteTemplateId);
     setTargetColorId(null);
     setWidth('');
     setOrderWidth(null);
@@ -973,7 +980,7 @@ export function useQuickWorkOrder() {
     setDispatchFirstStep(true);
     setResult(null);
     attempt.renew(); // yeni WO oturumu → yeni token
-  }, [lastRouteTemplateId, resetScanFeedback, attempt]);
+  }, [lastRouteTemplateId, initialRouteTemplateId, resetScanFeedback, attempt]);
 
   return {
     // toplar

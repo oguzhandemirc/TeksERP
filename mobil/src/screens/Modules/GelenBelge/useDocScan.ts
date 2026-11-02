@@ -7,7 +7,8 @@ import { inboundDocService } from '../../../services/inboundDoc.service';
 import { EMPTY_PROGRESS, MAX_PAGES, SubmitError, addPage, addPages, barcodeToDocNo, submitDocScan, type ScanPage, type SubmitProgress } from './docScan';
 import type { Owner } from './DocHeader';
 
-export function useDocScan() {
+/** `successHint`: gönderim bildiriminin alt satırı (belgeden iş emri akışı onay panelden demez). */
+export function useDocScan(opts: { successHint?: string } = {}) {
   const attempt = useAttemptToken();
   const [pages, setPages] = useState<ScanPage[]>([]);
   const [owner, setOwner] = useState<Owner | null>(null);
@@ -83,7 +84,7 @@ export function useDocScan() {
       setDone({ note: r.note, pages: pageBase + r.uploaded, runKey: (done?.runKey ?? 0) + 1 });
       reset();
       const text1 = continuing ? `${r.uploaded} sayfa ${r.note.noteNo} taslağına eklendi` : `Taslak ${r.note.noteNo} oluşturuldu`;
-      Toast.show({ type: 'success', text1, text2: 'Okuma sonucu ekranda; onay panelden (Gelen Belgeler) yapılır.' });
+      Toast.show({ type: 'success', text1, text2: opts.successHint ?? 'Okuma sonucu ekranda; onay panelden (Gelen Belgeler) yapılır.' });
     } catch (e) {
       if (e instanceof SubmitError) setProgress(e.progress);
       Toast.show({ type: 'error', text1: 'Gönderilemedi', text2: e instanceof Error ? e.message : undefined });

@@ -27,6 +27,15 @@ import { showsApprovalCard } from './approvalGate';
 import { useApprovalDetail } from './useApprovalCard';
 
 export default function DocScanScreen() {
+  return (
+    <ScreenChrome title="Belge Tara" subtitle="Müşteri irsaliyesi → taslak">
+      <DocScanBody />
+    </ScreenChrome>
+  );
+}
+
+/** Ekran gövdesi — "Terbiye İş Emri oluştur" kısayolsuz kurulumda bugünkü Belge Tara yolu olarak gömülür. */
+export function DocScanBody() {
   const b = useDocScan();
   const [cameraOpen, setCameraOpen] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
@@ -52,7 +61,7 @@ export default function DocScanScreen() {
   };
 
   return (
-    <ScreenChrome title="Belge Tara" subtitle="Müşteri irsaliyesi → taslak">
+    <>
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         {b.done && read.watch && (
           <ReadResultCard watch={read.watch} noteNo={b.done.note.noteNo} actions={{ onAddPage: addPageToNote, onDone: b.finish, onRecheck: read.recheck }} tabletApproval={approvalOpen} />
@@ -105,7 +114,7 @@ export default function DocScanScreen() {
         }}
         onError={(m) => Toast.show({ type: 'error', text1: m })}
       />
-    </ScreenChrome>
+    </>
   );
 }
 

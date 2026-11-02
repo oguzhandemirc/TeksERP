@@ -4,10 +4,15 @@ import type { PaginatedResponse, QueryParams } from '../types/api';
 
 /** SEÇİM tipli özelliğin izin verilen değeri. Kod KİMLİK, ad GÖRÜNTÜ. */
 export interface FabricPropertyValue {
+  /** Değer kimliği (hedef yazımında `valueId`); eski tipte okunmuyordu. */
+  id?: string;
   code: string;
   name: string;
   sortOrder: number;
   isActive: boolean;
+  /** Sözleşme 5: kurşun gramajı gr/m (Decimal string) + tek varsayılan. Eski sunucu göndermez → ön seçim yok. */
+  amount?: string | number | null;
+  isDefault?: boolean;
 }
 
 /** Kumaş özellik kataloğu satırı (yanmazlık, su geçirmezlik vb). */
@@ -22,6 +27,23 @@ export interface FabricProperty {
   valueType?: 'FLAG' | 'CHOICE';
   /** SEÇİM tipliyse izin verilen değerler. */
   values?: FabricPropertyValue[];
+  /** Çeşit özelliğinin bağlı olduğu bayrak (kurşun gramajı = KURSUN bayrağının çeşidi). */
+  variantOfPropertyId?: string | null;
+}
+
+/** Kurşun bayrağının kodu — backend `KURSUN_PROPERTY_CODE` ile aynı sabit. */
+export const KURSUN_PROPERTY_CODE = 'KURSUN';
+
+export interface KursunGramajOption {
+  id: string;
+  name: string;
+  isDefault: boolean;
+}
+
+/** Gramaj kataloğu: kurşun bayrağının çeşidi ve aktif değerleri (panel `lib/kursun-gramaj.ts` ikizi). Çeşit yoksa boş. */
+export interface KursunGramajCatalog {
+  propertyId: string | null;
+  options: KursunGramajOption[];
 }
 
 /** Kat değerlerini taşıyan katalog satırının kodu — backend ile aynı sabit. */
@@ -37,6 +59,20 @@ export const fabricPropertyService = {
     apiClient
       .get<PaginatedResponse<FabricProperty>>(`/fabric-properties${buildQueryString(params)}`)
       .then((r) => r.data),
+
+  /** Kurşun gramaj kataloğu — fallback YOK: okunamaz/tanımsızsa boş, alan çizilmez. */
+  getKursunGramajCatalog: async (): Promise<KursunGramajCatalog> => {
+    const res = await fabricPropertyService.getAll({ page: 1, pageSize: 200, filters: { isActive: 'true' } });
+    const rows = res.data ?? [];
+    const flag = rows.find((p) => p.code === KURSUN_PROPERTY_CODE);
+    const variant = flag ? rows.find((p) => p.variantOfPropertyId === flag.id && p.isActive) : undefined;
+    if (!variant) return { propertyId: null, options: [] };
+    const options = (variant.values ?? [])
+      .filter((v): v is FabricPropertyValue & { id: string } => v.isActive && !!v.id)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((v) => ({ id: v.id, name: v.name, isDefault: v.isDefault === true }));
+    return { propertyId: variant.id, options };
+  },
 
   /**
    * Kat değerleri (2-KAT / 4-KAT / TUP / fabrikanın eklediği 6-KAT…).

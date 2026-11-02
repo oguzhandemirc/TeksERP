@@ -276,13 +276,13 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     description: 'Top okut, 4 puan hata kaydı gir, muayeneyi kaydet',
   },
   {
-    // Gülkesim D7: müşteri irsaliyesini fotoğrafla + barkod → DRAFT taslak. OTURUMSUZ; onay panelde (SoD).
-    // Gelen belge modülü kapalıyken görünmez (`screenModules.ts`).
+    // Gülkesim D7 → K6: menüde Belge Tara'nın yerine "İş emri oluştur" (panel seçicisinin aynası: sabit türler +
+    // özel iş emri kısayolları → form + "Belge okut"). OTURUMSUZ; gelen belge modülü kapalıyken görünmez (`screenModules.ts`).
     key: 'GelenBelge',
     permission: 'gelen-belge:write',
-    label: 'Belge Tara',
+    label: 'İş emri oluştur',
     icon: 'file-document-outline',
-    description: `Müşteri irsaliyesini fotoğrafla; taslak oluştur ya da onaylayıp ${TERIM.terbiyeIsEmri.tekilKucuk} aç`,
+    description: `Hızlı ${TERIM.terbiyeIsEmri.tekilKucuk} ya da özel iş emri; irsaliyeyi okut, form dolsun`,
   },
 ];
 

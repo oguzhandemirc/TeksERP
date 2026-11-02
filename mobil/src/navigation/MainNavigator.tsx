@@ -47,7 +47,7 @@ const SCREEN_LOADERS: Record<MobileScreenKey, () => GatedScreen> = {
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- tembel yükleyici deseni (dosya başlığı); ekran yalnız navigate edilince parse edilir
   Muayene: () => require('../screens/Modules/Muayene/InspectionScreen').default,
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- tembel yükleyici deseni (dosya başlığı); ekran yalnız navigate edilince parse edilir
-  GelenBelge: () => require('../screens/Modules/GelenBelge/DocScanScreen').default,
+  GelenBelge: () => require('../screens/Modules/GelenBelge/woCreate/WoCreateScreen').default,
 };
 
 // Oturumlu ekranlar (KK1/KursunQc/Tambur/TartiPaket) SessionGate ile sarılır —
