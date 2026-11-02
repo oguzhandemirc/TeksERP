@@ -39,7 +39,7 @@ const group = (key: string, targets: PlanTarget[], rolls: PlanRoll[]): PlanGroup
 describe("buildGroupPayload", () => {
   it("yalnız bağlanabilir + barkodlu toplar; hedef değer ve bayrak tekilleşir", () => {
     const g = group("g1", [target("d12", "D12")], [roll(1), roll(2, { attachable: false, liveWorkOrder: { id: "w", workOrderNumber: "IE-1" } }), roll(3, { barcode: null })]);
-    const p = buildGroupPayload({ group: g, targets: [...g.targets, { ...target("d13", "D13"), propertyId: "renk" }] }, "rt", "tok", null);
+    const p = buildGroupPayload({ group: g, targets: [...g.targets, { ...target("d13", "D13"), propertyId: "renk" }] }, { routeTemplateId: "rt", clientToken: "tok", foldType: null });
     expect(p.rollBarcodes).toEqual(["B1"]);
     expect(p.targetValues).toEqual([{ propertyId: "desen", valueId: "d12" }, { propertyId: "renk", valueId: "d13" }]);
     expect(p.targetPropertyIds).toEqual(["brode"]);
@@ -49,7 +49,7 @@ describe("buildGroupPayload", () => {
 
   it("kaynak belge verilirse gövdeye sourceNoteId girer (parti no sunucuda nottan)", () => {
     const g = group("g1", [], [roll(1)]);
-    expect(buildGroupPayload({ group: g, targets: [] }, "rt", "tok", null, "note-1").sourceNoteId).toBe("note-1");
+    expect(buildGroupPayload({ group: g, targets: [] }, { routeTemplateId: "rt", clientToken: "tok", foldType: null, sourceNoteId: "note-1" }).sourceNoteId).toBe("note-1");
   });
 });
 

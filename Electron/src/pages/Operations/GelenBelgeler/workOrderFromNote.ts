@@ -21,7 +21,11 @@ export interface GroupStartOutcome {
 }
 
 /** Saf: grubun quick-start gövdesi — yalnız bağlanabilir toplar; hedef = değerler + bayrakları. */
-export function buildGroupPayload(input: GroupStartInput, routeTemplateId: string, clientToken: string, foldType: string | null, sourceNoteId?: string): QuickStartPayload {
+export function buildGroupPayload(
+  input: GroupStartInput,
+  o: { routeTemplateId: string; clientToken: string; foldType: string | null; sourceNoteId?: string },
+): QuickStartPayload {
+  const { routeTemplateId, clientToken, foldType, sourceNoteId } = o;
   return {
     ...(sourceNoteId ? { sourceNoteId } : {}),
     clientToken,
@@ -52,7 +56,7 @@ export async function startGroupWorkOrders(
   for (const input of inputs) {
     const key = input.group.key;
     try {
-      const res = await deps.quickStart(buildGroupPayload(input, deps.routeTemplateId, deps.tokenFor(key), deps.foldType, deps.sourceNoteId));
+      const res = await deps.quickStart(buildGroupPayload(input, { routeTemplateId: deps.routeTemplateId, clientToken: deps.tokenFor(key), foldType: deps.foldType, sourceNoteId: deps.sourceNoteId }));
       out.push({ key, ok: true, workOrderNumber: res.data?.workOrder.workOrderNumber, attached: res.data?.attached });
     } catch (error) {
       out.push({ key, ok: false, error });
