@@ -189,6 +189,18 @@ export interface DocumentTemplate {
   tables?: TableSpec[];
   /** D3a: el yazısı ızgarası (basılı sıra numarasından hücre). */
   grid?: GridSpec;
+  /** Tablo bloğunun ÜSTÜNDEKİ bantta (önceki bloğun sonundan bu bloğun başlık satırına) blok başına yeniden okunan alan anahtarları (çeki listesinde her siparişin kendi İşlem/Parti/İş emri no'su). */
+  blockFields?: string[];
+  /** Tablosuz belge (tek top bilgisi başlıkta): başlık alanlarından tek satır türetme eşlemesi; her anahtar sırayla denenen alan listesi. */
+  headerLine?: HeaderLineSpec;
+}
+
+/** Tablosuz belgenin başlığından tek satır: yalnız `count` alanı 1 okunduğunda (aksi uyarı) ve metre pozitifse. */
+export interface HeaderLineSpec {
+  count: string;
+  m: string[];
+  kg?: string[];
+  en?: string[];
 }
 
 // ---------------------------------------------------------------------------

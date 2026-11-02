@@ -74,12 +74,8 @@ const EXEMPT: Record<string, string> = {
 const PENDING = new Set<string>([
   "Access/Permissions/PermissionsCatalogPage.tsx",
   "Definitions/DocumentDesigner/assignments/AssignmentsView.tsx",
-  "Devices/DevicesPage.tsx",
   "Notifications/NotificationTable.tsx",
   "Operations/Orders/OrderPlanView.tsx",
-  "Operations/SackContentEdit/PackingLotListView.tsx",
-  "Stations/StationListView.tsx",
-  "System/Clients/ClientsPage.tsx",
   "System/Duplicates/DuplicatesPage.tsx",
   "System/NotificationProfiles/ProfileMatrixTab.tsx",
   "System/WorkSessions/HistoryTable.tsx",

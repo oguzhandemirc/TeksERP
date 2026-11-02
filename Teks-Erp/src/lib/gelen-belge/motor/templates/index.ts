@@ -59,6 +59,29 @@ function validateGrid(t: Record<string, unknown>, errors: string[]): void {
   });
 }
 
+const strList = (v: unknown): boolean => Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string" && x.trim());
+
+/** `blockFields` ve `headerLine` yalnız şablonda TANIMLI alan anahtarlarını gösterebilir. */
+function validateBlockAndHeaderLine(t: Record<string, unknown>, errors: string[]): void {
+  const keys = new Set(Array.isArray(t.fields) ? t.fields.filter(isObj).map((f) => f.key) : []);
+  const known = (list: unknown, p: string) => {
+    if (!strList(list)) { errors.push(`${p} boş olmayan string dizisi olmalı`); return; }
+    for (const k of list as string[]) if (!keys.has(k)) errors.push(`${p}: bilinmeyen alan ${k}`);
+  };
+  if (t.blockFields !== undefined) {
+    known(t.blockFields, "blockFields");
+    if (t.tables === undefined) errors.push("blockFields tablo ister");
+  }
+  const h = t.headerLine;
+  if (h === undefined) return;
+  if (!isObj(h)) { errors.push("headerLine nesne olmalı"); return; }
+  if (t.tables !== undefined || t.grid !== undefined) errors.push("headerLine yalnız tablosuz/ızgarasız şablonda");
+  known([h.count], "headerLine.count");
+  known(h.m, "headerLine.m");
+  if (h.kg !== undefined) known(h.kg, "headerLine.kg");
+  if (h.en !== undefined) known(h.en, "headerLine.en");
+}
+
 function isObj(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -95,6 +118,7 @@ export function validateTemplate(t: unknown): { ok: boolean; errors: string[] } 
   }
   validateTables(t, errors);
   validateGrid(t, errors);
+  validateBlockAndHeaderLine(t, errors);
   if (!Array.isArray(t.fields) || t.fields.length === 0) {
     errors.push('fields boş olmayan dizi olmalı');
     return { ok: errors.length === 0, errors };
