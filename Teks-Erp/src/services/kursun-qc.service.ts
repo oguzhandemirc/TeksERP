@@ -385,6 +385,8 @@ export class KursunQcService {
         openErrorCount: number;
         priority: number;
         isUrgent: boolean;
+        /** Gülkesim 2026-11-02: planlanan makine adı (yalnız öneri rozeti). Eski APK yok sayar. */
+        plannedMachineName: string | null;
       }>
     >
   > {
@@ -423,6 +425,7 @@ export class KursunQcService {
         priority: true,
         isUrgent: true,
         urgentMarkedAt: true,
+        plannedMachine: { select: { name: true } },
         station: { select: { name: true, code: true } },
         workOrder: {
           select: {
@@ -478,6 +481,7 @@ export class KursunQcService {
           openErrorCount: openErrorsByStep.get(s.id) ?? 0,
           priority: s.priority,
           isUrgent: s.isUrgent,
+          plannedMachineName: s.plannedMachine?.name ?? null,
         };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);

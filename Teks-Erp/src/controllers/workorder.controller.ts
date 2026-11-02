@@ -48,6 +48,8 @@ const workOrderCoreShape = {
       notes:                  z.string().max(500).optional().nullable(),
       requiredCategoryId:     z.string().uuid().optional().nullable(),
       plannedSubcontractorId: z.string().uuid().optional().nullable(),
+      // Gülkesim 2026-11-02: önerilen makine (yalnız öneri; null = temizle).
+      plannedMachineId:       z.string().uuid().optional().nullable(),
       // 2026-08-17 "ekru" kuralı — adım fasona renksiz gitsin (bkz. schema.prisma).
       // ⚠️ Şema bu alanı TANIMAZSA Zod onu sessizce siler: kutu işaretlenir, kaydedilir,
       //    çekide renk yine basılır (2026-08-25 saha bulgusu — 623 adımda 0 işaret).
@@ -64,6 +66,8 @@ const workOrderCoreShape = {
       sequence:               z.number().int().positive(),
       requiredCategoryId:     z.string().uuid().optional().nullable(),
       plannedSubcontractorId: z.string().uuid().optional().nullable(),
+      // Gülkesim 2026-11-02: önerilen makine (yalnız öneri; null = temizle).
+      plannedMachineId:       z.string().uuid().optional().nullable(),
       notes:                  z.string().max(500).optional().nullable(),
       // 2026-08-17 "ekru" kuralı — adım fasona renksiz gitsin (bkz. schema.prisma).
       // ⚠️ Şema bu alanı TANIMAZSA Zod onu sessizce siler: kutu işaretlenir, kaydedilir,
@@ -351,6 +355,8 @@ const replaceWorkOrderSchema = z.object({
       notes:                  z.string().max(500).optional().nullable(),
       requiredCategoryId:     z.string().uuid().optional().nullable(),
       plannedSubcontractorId: z.string().uuid().optional().nullable(),
+      // Gülkesim 2026-11-02: önerilen makine (yalnız öneri; null = temizle).
+      plannedMachineId:       z.string().uuid().optional().nullable(),
       // 2026-08-17 "ekru" kuralı — adım fasona renksiz gitsin (bkz. schema.prisma).
       // ⚠️ Şema bu alanı TANIMAZSA Zod onu sessizce siler: kutu işaretlenir, kaydedilir,
       //    çekide renk yine basılır (2026-08-25 saha bulgusu — 623 adımda 0 işaret).
@@ -362,6 +368,8 @@ const replaceWorkOrderSchema = z.object({
       sequence:               z.number().int().positive(),
       requiredCategoryId:     z.string().uuid().optional().nullable(),
       plannedSubcontractorId: z.string().uuid().optional().nullable(),
+      // Gülkesim 2026-11-02: önerilen makine (yalnız öneri; null = temizle).
+      plannedMachineId:       z.string().uuid().optional().nullable(),
       notes:                  z.string().max(500).optional().nullable(),
       // 2026-08-17 "ekru" kuralı — adım fasona renksiz gitsin (bkz. schema.prisma).
       // ⚠️ Şema bu alanı TANIMAZSA Zod onu sessizce siler: kutu işaretlenir, kaydedilir,

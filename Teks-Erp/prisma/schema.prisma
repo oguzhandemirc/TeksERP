@@ -1248,6 +1248,9 @@ model Machine {
   kursunBypasses     KursunBypassAssignment[]
   /// Tezgah koşumları — `Restrict`, ve `MACHINE_DELETE_GUARDS`ta sayacı var.
   machineRuns        MachineRun[]
+  /// Plan önerisi (yalnız öneri, fiilî atıf değil) — rota şablonu + İE adımı.
+  plannedRouteSteps  RouteStep[]              @relation("RouteStepPlannedMachine")
+  plannedWorkSteps   WorkOrderStep[]          @relation("StepPlannedMachine")
   /// Tezgah künyesi — `Cascade` (künye makinesiz anlamsız). Referans profilde BOŞ.
   machineSpec        MachineSpec?
   /// Tezgah duruşları — `Restrict`; guard'ı ingest diliminde (yazan yol orada doğar).
@@ -1715,6 +1718,9 @@ model RouteStep {
   /// Şablon varsayılanı — iş emri açılışında `WorkOrderStep.dispatchWithoutColor`a
   /// kopyalanır. Gerekçe için oradaki nota bak (2026-08-17 "ekru" kuralı).
   dispatchWithoutColor   Boolean @default(false)
+  /// Şablon varsayılanı: bu adımın önerilen makinesi (Gülkesim 2026-11-02, kurşun makinesi).
+  /// İE açılışında `WorkOrderStep.plannedMachineId`ye klonlanır; yalnız ÖNERİ.
+  plannedMachineId       String? @db.Uuid
 
   // Relations
   route                Route                  @relation(fields: [routeId], references: [id], onDelete: Cascade)
@@ -1722,6 +1728,7 @@ model RouteStep {
   requiredCategory     SubcontractorCategory? @relation("RouteStepRequiredCategory", fields: [requiredCategoryId], references: [id])
   plannedSubcontractor Subcontractor?         @relation("RouteStepPlannedSubcontractor", fields: [plannedSubcontractorId], references: [id])
   plannedColor         Color?                 @relation("RouteStepPlannedColor", fields: [plannedColorId], references: [id])
+  plannedMachine       Machine?               @relation("RouteStepPlannedMachine", fields: [plannedMachineId], references: [id], onDelete: SetNull)
   plannedProperties    RouteStepProperty[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
@@ -1738,6 +1745,7 @@ model RouteStep {
   @@index([requiredCategoryId])
   @@index([plannedSubcontractorId])
   @@index([plannedColorId])
+  @@index([plannedMachineId])
   @@map("route_steps")
 }
 
@@ -5178,6 +5186,11 @@ model WorkOrderStep {
   /// beyan edilir (fason kabul ekranında renk alanı zaten var).
   dispatchWithoutColor Boolean @default(false)
 
+  /// PLANLANAN makine (Gülkesim 2026-11-02): yalnız ÖNERİ ve sıra bilgisi — engel/uyarı YOK.
+  /// Fiilî makine bugünkü gibi okutan tabletin oturumundan (`RollMovement/RollOperation.machineId`).
+  /// Makine adımın istasyonuna ait olmalı (servis doğrular, `planned-machine.helper.ts`).
+  plannedMachineId String? @db.Uuid
+
   // Relations
   workOrder            WorkOrder                @relation(fields: [workOrderId], references: [id])
   station              Station                  @relation(fields: [stationId], references: [id])
@@ -5197,6 +5210,7 @@ model WorkOrderStep {
   processedErrors      RollError[]              @relation("RollErrorProcessedAt")
   requiredCategory     SubcontractorCategory?   @relation("StepRequiredCategory", fields: [requiredCategoryId], references: [id])
   plannedSubcontractor Subcontractor?           @relation("StepPlannedSubcontractor", fields: [plannedSubcontractorId], references: [id])
+  plannedMachine       Machine?                 @relation("StepPlannedMachine", fields: [plannedMachineId], references: [id], onDelete: SetNull)
   // Kurşun bypass: bu adım için açılmış atamalar (aynı adıma çok-parti nedeniyle
   // birden fazla satır düşebilir; AÇIK olanın tekliği partial unique ile korunur)
   kursunBypasses       KursunBypassAssignment[]
@@ -5210,6 +5224,7 @@ model WorkOrderStep {
   @@index([workOrderId, status])
   @@index([requiredCategoryId])
   @@index([plannedSubcontractorId])
+  @@index([plannedMachineId])
   // Kurşun+KK2 / Tambur "Açık Kartlar" kuyruğu: station + bekleyen step + sıra.
   // @@index tam görünür ama DB'de PARTIAL'dır (WHERE status <> 'COMPLETED') —
   // COMPLETED yığını indekslenmez, açık kuyruk sorgusu O(açık step). Prisma 7
@@ -5243,7 +5258,8 @@ enum KursunBypassCompletionSource {
 ///   1. `WorkOrderStep.stationId` **REPOINT EDİLMEZ** (eski tasarımdaki
 ///      `stationId`/`originalStationId` çifti bu yüzden DÜŞTÜ). İstasyon zaten
 ///      tek ve değişmiyor; atama bilgisi adımda değil, BU SATIRDA yaşar.
-///      `WorkOrderStep`'te `machineId` alanı da YOKTUR ve eklenmeyecektir.
+///      `WorkOrderStep`'te fiilî `machineId` YOKTUR; 2026-11-02'den beri yalnız
+///      ÖNERİ olan `plannedMachineId` vardır (atama ≠ plan; arşiv 2026-11).
 ///   2. Makine atfı `RollMovement.machineId`'ye damgalanır (bypass kapanışında
 ///      atanan makine yazılır) — makine bazlı hacim raporları böylece çalışır.
 ///   3. İstasyon yetenekleri (KURŞUN `StationProperty`) makinenin İSTASYONUNDAN
