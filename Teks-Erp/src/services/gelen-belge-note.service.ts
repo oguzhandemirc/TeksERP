@@ -28,6 +28,7 @@ import { resolveEffectiveDefaultItem, usableDefaultItem } from "./gelen-belge-va
 import { noteNotices } from "../lib/gelen-belge/uyari";
 import { sameBatchNotes } from "./gelen-belge-parti-tekrar.service";
 import { readDocumentTotalCheck } from "./system-setting.service";
+import { noteBatchAndMeters } from "./gelen-belge-parti-metre.service";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const SERIES_KEY = "customerDeliveryNote";
@@ -76,6 +77,7 @@ const HEADER_SELECT = {
   id: true, noteNo: true, status: true, sourceKind: true, ownerCustomerId: true, senderCustomerId: true, senderText: true,
   senderDocNo: true, senderDocDate: true, customerBatchNo: true, customerOrderNo: true, processText: true, templateId: true, templateScore: true,
   pageCount: true, declaredTopCount: true, totalsDeclared: true, varianceReason: true, warnings: true, approvedAt: true,
+  ourBatchNo: true, ourBatchNoKey: true, kursunMeters: true, kursunMetersSource: true, kursunMetersReview: true,
   approvedById: true, cancelledAt: true, cancelledById: true, cancelReason: true, clientToken: true, createdAt: true,
   updatedAt: true, createdById: true, updatedById: true,
   ownerCustomer: { select: { id: true, code: true, name: true } },
@@ -155,7 +157,9 @@ export async function getDeliveryNote(id: string) {
   const sameBatch = await sameBatchNotes(note);
   // Belge geneli kip onayla AYNI okuyucudan; beyansız belgede ayar okunmaz.
   const documentMode = hasDocumentDeclared(note.totalsDeclared) ? await readDocumentTotalCheck() : "INFO";
-  return { ...note, lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch };
+  // Parti no adayları + kurşun metre adayları CANLI (saklanmaz); eski istemci alanları yok sayar.
+  const batchMeters = await noteBatchAndMeters(note.id, note.totalsDeclared, note.lines.filter((l) => l.status !== "SKIPPED" && l.status !== "INFO").map((l) => l.meters));
+  return { ...note, lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch, ...batchMeters };
 }
 
 /** Liste where'i — özet şeridi de BUNDAN türer (durum süzgeci hariç; şerit duruma göre sayar). */

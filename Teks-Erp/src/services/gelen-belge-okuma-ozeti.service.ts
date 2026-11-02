@@ -13,6 +13,7 @@ import { READ_MAX_ATTEMPTS } from "./gelen-belge-okuma.service";
 import { hasDocumentDeclared, totalsCheck } from "./gelen-belge-kontrol.service";
 import { readDocumentTotalCheck } from "./system-setting.service";
 import { noteNotices } from "../lib/gelen-belge/uyari";
+import { noteBatchAndMeters } from "./gelen-belge-parti-metre.service";
 
 export type ReadSummaryState = "NO_PAGES" | "READING" | "NO_SERVICE" | "READ" | "PARTIAL" | "FAILED";
 
@@ -71,6 +72,7 @@ export async function getReadSummary(noteId: string) {
     where: { id: noteId },
     select: {
       id: true, noteNo: true, status: true, declaredTopCount: true, totalsDeclared: true, warnings: true,
+      ourBatchNo: true, ourBatchNoKey: true, kursunMeters: true, kursunMetersSource: true, kursunMetersReview: true,
       lines: { select: { blockNo: true, meters: true, weightKg: true, status: true, needsReview: true } },
       scans: { select: { status: true, attempts: true, mimeType: true } },
     },
@@ -97,5 +99,12 @@ export async function getReadSummary(noteId: string) {
     warnings: tc.warnings,
     // Okuma uyarıları — panel detayıyla AYNI helper (`noteNotices`); eski tablet alanı yok sayar.
     notices: noteNotices(note.warnings),
+    // Parti no + kurşun metresi (Gülkesim): kayıtlı başlık değeri + canlı adaylar; eski tablet alanları yok sayar.
+    ourBatchNo: note.ourBatchNo,
+    ourBatchNoKey: note.ourBatchNoKey,
+    kursunMeters: note.kursunMeters,
+    kursunMetersSource: note.kursunMetersSource,
+    kursunMetersReview: note.kursunMetersReview,
+    ...(await noteBatchAndMeters(note.id, note.totalsDeclared, live.filter((l) => l.status !== "INFO").map((l) => l.meters))),
   };
 }

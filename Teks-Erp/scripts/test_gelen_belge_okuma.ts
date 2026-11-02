@@ -13,6 +13,7 @@
 //   §6 iki iş aynı anda → tek okuma: `runReaderOnce` ikincisi MESGUL; iki eşzamanlı `claimNextScan` → tek CLAIMED; sidecar 1 isabet
 //   §7 eşleme: "GÜLEÇSOY TEKSTİL" ↔ "Güleçsoy Tekstil San." ≥ 0,90 öneri · ilgisiz → boş · alias önce (ALIAS) · /eslestirme ucu
 //   §6d bayat READING (10 dk+) yeniden alınır · §7f /eslestirme yok id → 404
+//   §3o (Gülkesim A) parti no adayları + kurşun metresi: sayfalar boyunca birikim, hatırlanan anahtar, detay/özet canlı, MANUAL ezilmez
 //   §8 bağlı taslak: operatörün yazdığı başlık/satır EZİLMEZ, yalnız boş alanlar dolar; taslak DRAFT değilse tarama yine READ'e kapanır
 //   §8e–§8g üst üste binen çekim: başka sayfada Top No + kg + metre birebir olan satır atlanır (uyarı), aynı Top No farklı sayı →
 //      yazılır + needsReview; aynı taramanın eşit satırları ikisi de yazılır; paralel iki sayfa ortak satırı TEK kez yazar
@@ -31,6 +32,7 @@ import type { AddressInfo } from "net";
 import http, { type Server } from "node:http";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { Prisma } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import app from "../src/app";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
@@ -398,6 +400,44 @@ async function main(): Promise<void> {
         && manLines.length === 1 && manLines[0]!.scanId === null,
       JSON.stringify({ p1: page1, p2: page2, ids: [...new Set(l8d.map((l) => l.scanId))], man: manLines.map((l) => l.scanId) }));
 
+    // ── §3o Gülkesim parti no + kurşun metresi: taslak doldurma yalnız boşken, hatırlanan anahtar önce, detay/özet canlı ──
+    const k8c = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: multiId }, select: { kursunMeters: true, kursunMetersSource: true, ourBatchNo: true } });
+    check("§3o1 ⭐ çok sayfalı taslak: kurşun metresi sayfalar boyunca birikir (0245 4.521 + 0246 241 = 4.762, OUTPUT); 3 adaylı belgede parti no seçilmez",
+      Number(k8c.kursunMeters) === 4762 && k8c.kursunMetersSource === "OUTPUT" && k8c.ourBatchNo === null, JSON.stringify(k8c));
+    for (let i = 0; i < 6 && (await runReaderOnce()).outcome !== "BOS"; i++) { /* kuyruk boşalsın */ }
+    const hat = await prisma.senderTemplate.updateMany({ where: { code: "cikis-ceki-listesi" }, data: { batchNoKey: "isEmriNo" } });
+    const s3o = await up("0246", {}, "3o-hatirla");
+    await runReaderOnce();
+    const n3oId = (await scan(s3o)).noteId!;
+    made.notes.push(n3oId);
+    const n3o = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: n3oId }, select: { ourBatchNo: true, ourBatchNoKey: true, kursunMeters: true, kursunMetersSource: true, kursunMetersReview: true } });
+    check("§3o2 ⭐ hatırlanan form anahtarı (isEmriNo) iki adaydan önce seçilir; kurşun 241 OUTPUT, review yok (yeni taslak)",
+      hat.count === 1 && n3o.ourBatchNo === "ISM9439770" && n3o.ourBatchNoKey === "isEmriNo" && Number(n3o.kursunMeters) === 241 && n3o.kursunMetersSource === "OUTPUT" && !n3o.kursunMetersReview, JSON.stringify(n3o));
+    const d3o = await call("GET", `/api/gelen-belge/irsaliyeler/${n3oId}`);
+    const o3o = await call("GET", `/api/gelen-belge/irsaliyeler/${n3oId}/okuma-ozeti`);
+    const c3o = (d3o.data?.batchNoCandidates ?? []) as Array<{ key: string; value: string; kind: string }>;
+    const m3o = d3o.data?.kursunMeterCandidates as { output: string | null; input: string | null; lineSum: string | null } | undefined;
+    check("§3o3 ⭐ detay CANLI adaylar [ISM9439770 BARCODE, müş. parti no] + metre adayları {çıkış 241, giriş 238, Σ 241}; okuma özeti aynı adaylar + kayıtlı değer",
+      d3o.status === 200 && c3o.map((c) => c.value).join("|") === "ISM9439770|9999-99 ÖRNEK KUMAŞ ÖRN" && c3o[0]?.kind === "BARCODE" && m3o?.output === "241" && m3o.input === "238" && m3o.lineSum === "241"
+        && o3o.status === 200 && JSON.stringify(o3o.data?.batchNoCandidates) === JSON.stringify(c3o) && Number(o3o.data?.kursunMeters) === 241 && o3o.data?.ourBatchNo === "ISM9439770" && o3o.data?.kursunMetersSource === "OUTPUT",
+      JSON.stringify({ c3o, m3o, o: o3o.data?.kursunMeters }));
+    const cr3o = await call("POST", "/api/gelen-belge/irsaliyeler", { sourceKind: "MANUAL", senderDocNo: `${TAG}-3O` });
+    const el3o = cr3o.data?.id as string;
+    made.notes.push(el3o);
+    await prisma.customerDeliveryNote.update({ where: { id: el3o }, data: { ourBatchNo: "ELLE-P", ourBatchNoKey: "MANUAL", kursunMeters: new Prisma.Decimal(999), kursunMetersSource: "MANUAL" } });
+    await up("0246", { noteId: el3o }, "3o-elle");
+    await runReaderOnce();
+    const e3o = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: el3o }, select: { ourBatchNo: true, ourBatchNoKey: true, kursunMeters: true, kursunMetersSource: true, _count: { select: { lines: true } } } });
+    check("§3o4 ⭐ bağlı taslakta operatörün parti no'su ve kurşun metresi (MANUAL) okumayla EZİLMEZ (satırlar yine gelir)",
+      e3o.ourBatchNo === "ELLE-P" && e3o.ourBatchNoKey === "MANUAL" && Number(e3o.kursunMeters) === 999 && e3o.kursunMetersSource === "MANUAL" && e3o._count.lines === 1, JSON.stringify(e3o));
+    const cr3o5 = await call("POST", "/api/gelen-belge/irsaliyeler", { sourceKind: "MANUAL", senderDocNo: `${TAG}-3O5`, lines: [{ senderRollNo: "EL-3O", meters: 50 }] });
+    made.notes.push(cr3o5.data?.id as string);
+    const d3oEl = await call("GET", `/api/gelen-belge/irsaliyeler/${cr3o5.data?.id as string}`);
+    check("§3o5 okunmuş sayfası olmayan elle taslak: detayda adaylar boş dizi, metre adayları yalnız Σ satırdan (50)",
+      d3oEl.status === 200 && Array.isArray(d3oEl.data?.batchNoCandidates) && (d3oEl.data?.batchNoCandidates as unknown[]).length === 0
+        && (d3oEl.data?.kursunMeterCandidates as { lineSum: string | null; output: string | null }).lineSum === "50",
+      JSON.stringify(d3oEl.data?.kursunMeterCandidates));
+
     // ── §8e–§8h üst üste binen çekim: aynı kâğıt iki parça çekilince ortak satır ikilenmez ──
     // §8e saf: aynı taramanın eşit iki satırı birbirini ELEMEZ; mevcut tek eşi yalnız BİR yeni satırı yutar; sıra no anahtar değildir.
     const dl = (topNo: string | null, m: string, kg: string | null, siraNo?: string) => ({ blockNo: 1, lineKind: "TOP" as const, senderRollNo: topNo ?? siraNo ?? null, meters: m, weightKg: kg, widthCm: null, itemText: null, colorText: null, processText: null, confidence: 1, needsReview: false, sourceRects: {}, ocrRaw: (topNo ? { topNo } : { siraNo: siraNo ?? null }) as Record<string, string | null> });
@@ -653,7 +693,7 @@ async function main(): Promise<void> {
     await prisma.documentScan.deleteMany({ where: { id: { in: made.scans } } });
     const priorCodes = new Set(tplPrior.map((t) => t.code));
     for (const t of tplPrior) {
-      const data = { isActive: t.isActive, senderCustomerId: t.senderCustomerId, defaultOwnerCustomerId: t.defaultOwnerCustomerId, hitCount: t.hitCount };
+      const data = { isActive: t.isActive, senderCustomerId: t.senderCustomerId, defaultOwnerCustomerId: t.defaultOwnerCustomerId, hitCount: t.hitCount, batchNoKey: t.batchNoKey };
       await prisma.senderTemplate.updateMany({ where: { id: t.id }, data });
     }
     const born = await prisma.senderTemplate.findMany({ where: { code: { notIn: [...priorCodes, "__yok__"] } }, select: { id: true } });
