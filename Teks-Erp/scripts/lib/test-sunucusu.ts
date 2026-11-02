@@ -60,6 +60,7 @@ export async function sunucuAc(databaseUrl: string, jwtSecret: string, saglikSur
     BACKUP_OFFSITE_DIR: "",
     BACKUP_RCLONE_REMOTE: "",
     TEKSERP_PROFIL: "",
+    TEKSERP_ZAMANLAYICI_KAPALI: "1", // matris finance'ı açar: kur turu gerçek TCMB kurunu test DB'ye yazmasın
   };
   const fd = openSync(logYolu, "w");
   const cocuk: ChildProcess = spawn(TSX, ["src/server.ts"], { cwd: TEKS, env: ortam, detached: true, stdio: ["ignore", fd, fd] });

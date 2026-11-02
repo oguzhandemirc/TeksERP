@@ -404,11 +404,14 @@ jobs:
       # (15 sn) görünce DAĞITICI açıyordu — outbox olayını bekçiden önce kapıp zili kendi hub'ına
       # çalıyor (`test_bildirim_zil` §5b "gelmedi", özet rev 0) ve 5 fazla LISTEN açıyordu
       # (`test_bildirim_motoru` §11e/f "dinleyen 5"). Aralıklıydı: bayrağın açık penceresine bir turun düşmesine bağlı.
+      # ⚠️ TEKSERP_ZAMANLAYICI_KAPALI=1 (2026-11-02): açılış +60 sn'lik kur turu `finance.enabled`ın açık penceresine
+      # düşünce GERÇEK TCMB kurunu test DB'ye yazıyordu → "kur yok" varsayan bekçiler sıraya bağlı kırılıyordu. Bayrak
+      # doğrulama kipinin atlanan iş listesini (`lib/dogrulama-kipi.ts`) kapatır; `test_dogrulama_kipi` §6g ölçer.
       - name: HTTP ayaklı bekçiler için sunucuları başlat
         run: |
           set -o pipefail
           for port in 4100 4101 4104 4112 4122; do
-            NOTIFICATION_JOBS_ENABLED=false PORT=$port npx tsx src/server.ts > "/tmp/ci-srv-$port.log" 2>&1 &
+            TEKSERP_ZAMANLAYICI_KAPALI=1 NOTIFICATION_JOBS_ENABLED=false PORT=$port npx tsx src/server.ts > "/tmp/ci-srv-$port.log" 2>&1 &
             echo "$!" >> /tmp/ci-srv-pids.txt
           done
           # Sağlık kapısı: hepsi ayağa kalkana kadar bekle. Kalkmayan varsa
