@@ -14,6 +14,7 @@ import { ItemPickerModal } from "@/components/forms/ItemPickerModal";
 import { PermissionGate } from "@/components/PermissionGate";
 import { labTestTypeService } from "../LabTests/service";
 import { customerLabSpecService, type CustomerLabSpec } from "./service";
+import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 
 const SELECT = "h-9 rounded-md border bg-background px-2 text-sm";
 const num = (v: string | number | null) => (v === null || v === "" ? "—" : String(v).replace(".", ","));
@@ -34,29 +35,35 @@ export function CustomerSpecsPanel() {
   });
   const rows = q.data ?? [];
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="w-full sm:w-72"><CustomerPickerField clearable value={customerId} onChange={setCustomerId} placeholder="Tüm müşteriler" /></div>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> Pasifleri de göster</label>
-        <div className="ml-auto">
-          <PermissionGate permission="labtest:write">
-            <Button size="sm" onClick={() => setEdit("new")}><Plus className="mr-1 h-4 w-4" />Yeni spesifikasyon</Button>
-          </PermissionGate>
+    <>
+      <ListToolbar>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="w-full sm:w-72"><CustomerPickerField clearable value={customerId} onChange={setCustomerId} placeholder="Tüm müşteriler" /></div>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> Pasifleri de göster</label>
+          <div className="ml-auto">
+            <PermissionGate permission="labtest:write">
+              <Button size="sm" onClick={() => setEdit("new")}><Plus className="mr-1 h-4 w-4" />Yeni spesifikasyon</Button>
+            </PermissionGate>
+          </div>
         </div>
-      </div>
-      <p className="text-xs text-muted-foreground">Lab testine müşteri seçildiğinde sonuç bu sınırlarla karşılaştırılır; ürüne özel satır, müşterinin genel satırından önce gelir.</p>
-      {q.isLoading ? <p className="text-sm text-muted-foreground">Yükleniyor…</p>
-        : q.isError ? (
-          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-            <p className="font-medium text-destructive">Spesifikasyonlar yüklenemedi.</p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>Tekrar dene</Button>
-          </div>
-        ) : rows.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-            {customerId ? "Bu müşteri için spesifikasyon yok." : "Henüz müşteri spesifikasyonu yok. Müşterinin istediği gramaj, haslık gibi sınırları buradan girin."}
-          </div>
-        ) : (
-          <div className="overflow-x-auto rounded-lg border">
+        <p className="text-xs text-muted-foreground">Lab testine müşteri seçildiğinde sonuç bu sınırlarla karşılaştırılır; ürüne özel satır, müşterinin genel satırından önce gelir.</p>
+      </ListToolbar>
+      <ListBody>
+        {q.isLoading ? <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
+          : q.isError ? (
+            <ListMessage>
+              <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+                <p className="font-medium text-destructive">Spesifikasyonlar yüklenemedi.</p>
+                <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>Tekrar dene</Button>
+              </div>
+            </ListMessage>
+          ) : rows.length === 0 ? (
+            <ListMessage>
+              <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                {customerId ? "Bu müşteri için spesifikasyon yok." : "Henüz müşteri spesifikasyonu yok. Müşterinin istediği gramaj, haslık gibi sınırları buradan girin."}
+              </div>
+            </ListMessage>
+          ) : (
             <table className="w-full min-w-[680px] text-sm">
               <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                 <tr><th className="p-3 text-left">Müşteri</th><th className="p-3 text-left">Ürün</th><th className="p-3 text-left">Test türü</th><th className="p-3 text-right">Alt sınır</th><th className="p-3 text-right">Üst sınır</th><th className="p-3 text-left">Durum</th></tr>
@@ -74,10 +81,11 @@ export function CustomerSpecsPanel() {
                 ))}
               </tbody>
             </table>
-          </div>
-        )}
+          )}
+      </ListBody>
+      <ListFooter loaded={rows.length} />
       {edit && <CustomerSpecFormDialog spec={edit === "new" ? null : edit} presetCustomerId={customerId} onClose={() => setEdit(null)} />}
-    </div>
+    </>
   );
 }
 

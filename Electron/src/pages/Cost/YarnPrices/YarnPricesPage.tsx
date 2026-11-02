@@ -5,7 +5,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { History, Plus } from "lucide-react";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -16,6 +17,7 @@ import { STALE_DAYS, ageDays, fmtDecFull } from "../shared/format";
 import { YarnPriceDialog } from "./YarnPriceDialog";
 import { YarnPriceHistorySheet } from "./YarnPriceHistorySheet";
 import { YARN_PRICE_SOURCE_LABEL, yarnPriceService, type YarnCostPrice } from "./service";
+import { RefreshButton } from "@/components/RefreshButton";
 
 export function YarnPricesPage() {
   const q = useQuery({ queryKey: ["cost-yarn-prices", "active"], queryFn: yarnPriceService.listActive });
@@ -28,39 +30,45 @@ export function YarnPricesPage() {
         title="İplik Maliyet Fiyatları"
         description="Maliyet hesabında kullanılan kg fiyatı. Değişiklik yeni satır yazar, eski fiyat damgalı kalır; kayıtlı standart maliyetler değişmez."
         actions={
-          <PermissionGate permission="cost:write">
-            <Button onClick={() => setEdit({ row: null })}><Plus className="mr-1 h-4 w-4" />Fiyat gir</Button>
-          </PermissionGate>
+          <div className="flex gap-2">
+            <RefreshButton queryKey={["cost-yarn-prices"]} />
+            <PermissionGate permission="cost:write">
+              <Button onClick={() => setEdit({ row: null })}><Plus className="mr-1 h-4 w-4" />Fiyat gir</Button>
+            </PermissionGate>
+          </div>
         }
       />
-      <PageBody className="p-4 sm:p-6">
+      <ListBody>
         {q.isLoading ? (
-          <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
         ) : q.isError ? (
-          <CostQueryError error={q.error} what="İplik fiyatları" onRetry={() => void q.refetch()} />
+          <ListMessage>
+            <CostQueryError error={q.error} what="İplik fiyatları" onRetry={() => void q.refetch()} />
+          </ListMessage>
         ) : rows.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-            Henüz iplik maliyet fiyatı yok — "Fiyat gir" ile çözgü ve atkı ipliklerinin kg fiyatını yazın; fiyatı olmayan iplik maliyette eksik sayılır.
-          </div>
+          <ListMessage>
+            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+              Henüz iplik maliyet fiyatı yok — "Fiyat gir" ile çözgü ve atkı ipliklerinin kg fiyatını yazın; fiyatı olmayan iplik maliyette eksik sayılır.
+            </div>
+          </ListMessage>
         ) : (
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full min-w-[40rem] text-sm">
-              <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2">İplik</th>
-                  <th className="px-3 py-2 text-right">Denye</th>
-                  <th className="px-3 py-2 text-right">Fiyat</th>
-                  <th className="px-3 py-2">Kaynak</th>
-                  <th className="px-3 py-2">Tarih</th>
-                  <th className="px-3 py-2 text-right">Yaş</th>
-                  <th className="px-3 py-2" />
-                </tr>
-              </thead>
-              <tbody>{rows.map((r) => <PriceRow key={r.id} r={r} onEdit={() => setEdit({ row: r })} onHistory={() => setHistory(r)} />)}</tbody>
-            </table>
-          </div>
+          <table className="w-full min-w-[40rem] text-sm">
+            <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2">İplik</th>
+                <th className="px-3 py-2 text-right">Denye</th>
+                <th className="px-3 py-2 text-right">Fiyat</th>
+                <th className="px-3 py-2">Kaynak</th>
+                <th className="px-3 py-2">Tarih</th>
+                <th className="px-3 py-2 text-right">Yaş</th>
+                <th className="px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>{rows.map((r) => <PriceRow key={r.id} r={r} onEdit={() => setEdit({ row: r })} onHistory={() => setHistory(r)} />)}</tbody>
+          </table>
         )}
-      </PageBody>
+      </ListBody>
+      <ListFooter loaded={rows.length} />
       {edit && <YarnPriceDialog open onOpenChange={(o) => !o && setEdit(null)} current={edit.row} />}
       {history && <YarnPriceHistorySheet row={history} onClose={() => setHistory(null)} />}
     </PageShell>

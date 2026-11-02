@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { fmtCalendarDay } from "@/lib/factory-time";
 import { cn } from "@/lib/utils";
 import { certificateService, type CertificateRow, type CertificateStatusFilter, type CertificateSummary } from "./service";
+import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import {
   EMPTY_CERTIFICATE_FILTERS, HOLDER_LABEL, STATUS_FILTER_LABEL, TONE_CLASS, certificateEmptyMessage, expiryBadge,
   isCertificateFilterDirty, type CertificateFilterState,
@@ -31,58 +32,64 @@ export function CertificateList({ onOpen }: { onOpen: (id: string) => void }) {
   const summary = q.data?.pages[0]?.summary;
 
   return (
-    <div className="flex min-h-0 flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input className="pl-8" placeholder="Sertifika no, standart, kuruluş, iş ortağı…" value={f.q} onChange={(e) => set("q", e.target.value)} />
+    <>
+      <ListToolbar>
+        {summary && <SummaryStrip s={summary} active={f.status} onPick={(s) => set("status", s)} />}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input className="pl-8" placeholder="Sertifika no, standart, kuruluş, iş ortağı…" value={f.q} onChange={(e) => set("q", e.target.value)} />
+          </div>
+          <select aria-label="Durum" className={SELECT} value={f.status} onChange={(e) => set("status", e.target.value as CertificateStatusFilter)}>
+            {(Object.keys(STATUS_FILTER_LABEL) as CertificateStatusFilter[]).map((k) => <option key={k} value={k}>{STATUS_FILTER_LABEL[k]}</option>)}
+          </select>
+          <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            Uyarı eşiği
+            <Input type="number" min={0} max={3650} aria-label="Uyarı eşiği (gün)" className="h-9 w-20" value={f.days}
+              onChange={(e) => set("days", Math.min(3650, Math.max(0, Math.trunc(Number(e.target.value) || 0))))} />
+            gün
+          </label>
+          <select aria-label="Sahip" className={SELECT} value={f.holder} onChange={(e) => set("holder", e.target.value as CertificateFilterState["holder"])}>
+            <option value="">Fabrika + iş ortakları</option>
+            <option value="OWN">Yalnız fabrika</option>
+            <option value="PARTNER">Yalnız iş ortakları</option>
+          </select>
+          {isCertificateFilterDirty(f) && (
+            <Button variant="ghost" size="sm" onClick={() => setF(EMPTY_CERTIFICATE_FILTERS)}>
+              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Süzgeçleri temizle
+            </Button>
+          )}
         </div>
-        <select aria-label="Durum" className={SELECT} value={f.status} onChange={(e) => set("status", e.target.value as CertificateStatusFilter)}>
-          {(Object.keys(STATUS_FILTER_LABEL) as CertificateStatusFilter[]).map((k) => <option key={k} value={k}>{STATUS_FILTER_LABEL[k]}</option>)}
-        </select>
-        <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          Uyarı eşiği
-          <Input type="number" min={0} max={3650} aria-label="Uyarı eşiği (gün)" className="h-9 w-20" value={f.days}
-            onChange={(e) => set("days", Math.min(3650, Math.max(0, Math.trunc(Number(e.target.value) || 0))))} />
-          gün
-        </label>
-        <select aria-label="Sahip" className={SELECT} value={f.holder} onChange={(e) => set("holder", e.target.value as CertificateFilterState["holder"])}>
-          <option value="">Fabrika + iş ortakları</option>
-          <option value="OWN">Yalnız fabrika</option>
-          <option value="PARTNER">Yalnız iş ortakları</option>
-        </select>
-        {isCertificateFilterDirty(f) && (
-          <Button variant="ghost" size="sm" onClick={() => setF(EMPTY_CERTIFICATE_FILTERS)}>
-            <RotateCcw className="mr-1 h-3.5 w-3.5" /> Süzgeçleri temizle
+      </ListToolbar>
+
+      <ListBody>
+        {q.isLoading ? (
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
+        ) : q.isError ? (
+          <ListMessage>
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+              <p className="font-medium text-destructive">Sertifikalar yüklenemedi.</p>
+              <p className="mt-1 text-muted-foreground">Bu bir “sertifika yok” cevabı değildir — istek sunucuya ulaşamadı ya da reddedildi.</p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>Tekrar dene</Button>
+            </div>
+          </ListMessage>
+        ) : rows.length === 0 ? (
+          <ListMessage>
+            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">{certificateEmptyMessage(f)}</div>
+          </ListMessage>
+        ) : (
+          <CertificateTable rows={rows} soonDays={summary?.days ?? f.days} onOpen={onOpen} />
+        )}
+      </ListBody>
+      {/* [EL-09] sapması devralındı: elle "Daha fazla yükle" (davranış korunarak alt şeride taşındı). */}
+      <ListFooter loaded={rows.length}>
+        {q.hasNextPage && (
+          <Button variant="outline" size="sm" disabled={q.isFetchingNextPage} onClick={() => void q.fetchNextPage()}>
+            {q.isFetchingNextPage ? "Yükleniyor…" : "Daha fazla yükle"}
           </Button>
         )}
-      </div>
-
-      {summary && <SummaryStrip s={summary} active={f.status} onPick={(s) => set("status", s)} />}
-
-      {q.isLoading ? (
-        <p className="text-sm text-muted-foreground">Yükleniyor…</p>
-      ) : q.isError ? (
-        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-          <p className="font-medium text-destructive">Sertifikalar yüklenemedi.</p>
-          <p className="mt-1 text-muted-foreground">Bu bir “sertifika yok” cevabı değildir — istek sunucuya ulaşamadı ya da reddedildi.</p>
-          <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>Tekrar dene</Button>
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">{certificateEmptyMessage(f)}</div>
-      ) : (
-        <>
-          <CertificateTable rows={rows} soonDays={summary?.days ?? f.days} onOpen={onOpen} />
-          {q.hasNextPage && (
-            <div className="flex justify-center">
-              <Button variant="outline" size="sm" disabled={q.isFetchingNextPage} onClick={() => void q.fetchNextPage()}>
-                {q.isFetchingNextPage ? "Yükleniyor…" : "Daha fazla yükle"}
-              </Button>
-            </div>
-          )}
-        </>
-      )}
-    </div>
+      </ListFooter>
+    </>
   );
 }
 
@@ -113,35 +120,33 @@ export function ExpiryPill({ row, soonDays }: { row: Parameters<typeof expiryBad
 
 function CertificateTable({ rows, soonDays, onOpen }: { rows: CertificateRow[]; soonDays: number; onOpen: (id: string) => void }) {
   return (
-    <div className="overflow-x-auto rounded-lg border">
-      <table className="w-full min-w-[760px] text-sm">
-        <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-          <tr>
-            <th className="p-3 text-left">Standart</th>
-            <th className="p-3 text-left">Sertifika No</th>
-            <th className="p-3 text-left">Sahip</th>
-            <th className="p-3 text-left">Veren kuruluş</th>
-            <th className="p-3 text-left">Bitiş</th>
-            <th className="p-3 text-left">Kalan</th>
-            <th className="p-3 text-left">Belge</th>
+    <table className="w-full min-w-[760px] text-sm">
+      <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+        <tr>
+          <th className="p-3 text-left">Standart</th>
+          <th className="p-3 text-left">Sertifika No</th>
+          <th className="p-3 text-left">Sahip</th>
+          <th className="p-3 text-left">Veren kuruluş</th>
+          <th className="p-3 text-left">Bitiş</th>
+          <th className="p-3 text-left">Kalan</th>
+          <th className="p-3 text-left">Belge</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.id} className="cursor-pointer border-t hover:bg-muted/40" onClick={() => onOpen(r.id)}>
+            <td className="p-3 font-medium">{r.standard}</td>
+            <td className="p-3 font-mono text-xs">{r.certificateNo}</td>
+            <td className="p-3">{r.holder === "OWN" ? HOLDER_LABEL.OWN : r.partner?.name ?? HOLDER_LABEL.PARTNER}</td>
+            <td className="p-3 text-muted-foreground">{r.issuer ?? "—"}</td>
+            <td className="whitespace-nowrap p-3 tabular-nums">{fmtCalendarDay(r.expiresOn)}</td>
+            <td className="p-3"><ExpiryPill row={r} soonDays={soonDays} /></td>
+            <td className="p-3 text-xs text-muted-foreground">
+              {r.fileCount > 0 ? <span className="inline-flex items-center gap-1"><Paperclip className="h-3.5 w-3.5" />{r.fileCount}</span> : "—"}
+            </td>
           </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id} className="cursor-pointer border-t hover:bg-muted/40" onClick={() => onOpen(r.id)}>
-              <td className="p-3 font-medium">{r.standard}</td>
-              <td className="p-3 font-mono text-xs">{r.certificateNo}</td>
-              <td className="p-3">{r.holder === "OWN" ? HOLDER_LABEL.OWN : r.partner?.name ?? HOLDER_LABEL.PARTNER}</td>
-              <td className="p-3 text-muted-foreground">{r.issuer ?? "—"}</td>
-              <td className="whitespace-nowrap p-3 tabular-nums">{fmtCalendarDay(r.expiresOn)}</td>
-              <td className="p-3"><ExpiryPill row={r} soonDays={soonDays} /></td>
-              <td className="p-3 text-xs text-muted-foreground">
-                {r.fileCount > 0 ? <span className="inline-flex items-center gap-1"><Paperclip className="h-3.5 w-3.5" />{r.fileCount}</span> : "—"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+        ))}
+      </tbody>
+    </table>
   );
 }
