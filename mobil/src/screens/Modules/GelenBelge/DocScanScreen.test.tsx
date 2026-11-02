@@ -240,6 +240,29 @@ describe('DocScanScreen — okuma sonucu', () => {
     expect(r.getByTestId('belge-tara-sonuc-toplam')).toHaveTextContent(/Tutuyor/);
   });
 
+  it('Gülkesim: okundu → parti no + kurşun metresi satırı; review açık → "panelde doğrulanacak"', async () => {
+    mockSummary.mockResolvedValue(summary({
+      state: 'READ', lineCount: 1, totals: { declared: true, ok: true, mismatches: [] },
+      ourBatchNo: 'ISM1439770', ourBatchNoKey: 'isEmriNo', kursunMeters: '241', kursunMetersSource: 'OUTPUT', kursunMetersReview: true,
+      batchNoCandidates: [{ key: 'isEmriNo', value: 'ISM1439770' }],
+    }));
+    const r = renderWithPaper(<DocScanScreen />);
+    await sendOnePage(r);
+    await waitFor(() => expect(r.getByTestId('belge-tara-sonuc-baslik')).toHaveTextContent('Okundu'));
+    expect(r.getByTestId('belge-tara-sonuc-parti')).toHaveTextContent(/ISM1439770/);
+    expect(r.getByTestId('belge-tara-sonuc-kursun')).toHaveTextContent(/241 m \(çıkış\)/);
+    expect(r.getByText(/Kurşun metresi panelde doğrulanacak/)).toBeTruthy();
+  });
+
+  it('eski sunucu (alan yok) → parti/kurşun satırı yok', async () => {
+    mockSummary.mockResolvedValue(summary({ state: 'READ', lineCount: 2, totals: { declared: true, ok: true, mismatches: [] } }));
+    const r = renderWithPaper(<DocScanScreen />);
+    await sendOnePage(r);
+    await waitFor(() => expect(r.getByTestId('belge-tara-sonuc-baslik')).toHaveTextContent('Okundu'));
+    expect(r.queryByTestId('belge-tara-sonuc-parti')).toBeNull();
+    expect(r.queryByTestId('belge-tara-sonuc-kursun')).toBeNull();
+  });
+
   it('okunamadı → başlık + sunucunun Türkçe nedeni', async () => {
     mockSummary.mockResolvedValue(summary({ state: 'FAILED', reason: 'Okuma servisi sayfayı okuyamadı. Panelden yeniden okutun ya da satırları elle girin.' }));
     const r = renderWithPaper(<DocScanScreen />);

@@ -151,3 +151,54 @@ describe('readResult — kart metni', () => {
     expect(readResultView(e, 'GB-1')).toMatchObject({ tone: 'error', title: 'Okuma durumu alınamadı', reason: 'Yetkiniz yok' });
   });
 });
+
+describe('readResult — parti no + kurşun metresi (Gülkesim; sunucu alanları)', () => {
+  const read = (p: Partial<ReadSummary>) =>
+    readResultView(onSummary(startWatch(T0), sum({ state: 'READ', lineCount: 1, totals: { declared: true, ok: true, mismatches: [] }, ...p }), T0), 'GB-1');
+  const row = (v: ReturnType<typeof readResultView>, key: string) => v.rows.find((r) => r.key === key);
+
+  it('Kömürhan: parti no dolu + 241 m çıkış → iki satır, yeşil kalır, not yok', () => {
+    const v = read({
+      ourBatchNo: 'ISM1439770', ourBatchNoKey: 'isEmriNo', kursunMeters: '241', kursunMetersSource: 'OUTPUT', kursunMetersReview: false,
+      batchNoCandidates: [{ key: 'isEmriNo', kind: 'BARCODE', value: 'ISM1439770' }, { key: 'musteriPartiNo', kind: 'BATCH', value: '2008-58 KOYU BEJ FULAR' }],
+    });
+    expect(row(v, 'parti')).toMatchObject({ label: 'Parti no', value: 'ISM1439770' });
+    expect(row(v, 'kursun')).toMatchObject({ label: 'Kurşun', value: '241 m (çıkış)' });
+    expect(row(v, 'kursun')?.tone).toBeUndefined();
+    expect(v.tone).toBe('ok');
+    expect(v.notes).toEqual([]);
+  });
+
+  it('parti no boş + birden çok aday → "panelde seçilecek" satırı + notu, kart uyarı', () => {
+    const v = read({
+      ourBatchNo: null, kursunMeters: '4521.000', kursunMetersSource: 'OUTPUT', kursunMetersReview: false,
+      batchNoCandidates: [{ key: 'fisNo', value: '214279' }, { key: 'hamPartiNo', value: 'P2618733' }, { key: 'isEmriNo', value: '26K-24749' }],
+    });
+    expect(row(v, 'parti')).toMatchObject({ value: 'Panelde seçilecek (3 aday)', tone: 'warn' });
+    expect(row(v, 'kursun')?.value).toBe('4.521 m (çıkış)');
+    expect(v.notes).toContain('Parti no panelde seçilecek.');
+    expect(v.tone).toBe('warn');
+  });
+
+  it('review açık (el yazısı) → kurşun satırı uyarı + "panelde doğrulanacak" notu; kaynak etiketleri', () => {
+    const v = read({ kursunMeters: 2157, kursunMetersSource: 'LINE_SUM', kursunMetersReview: true, batchNoCandidates: [] });
+    expect(row(v, 'kursun')).toMatchObject({ value: '2.157 m (satır toplamı)', tone: 'warn' });
+    expect(v.notes).toContain('Kurşun metresi panelde doğrulanacak.');
+    expect(v.tone).toBe('warn');
+    expect(row(v, 'parti')).toBeUndefined(); // aday yok → seri yedeği; tablet satır çizmez
+    expect(row(read({ kursunMeters: '200', kursunMetersSource: 'TOTAL' }), 'kursun')?.value).toBe('200 m (toplam metre)');
+    expect(row(read({ kursunMeters: '198.1', kursunMetersSource: 'MANUAL' }), 'kursun')?.value).toBe('198,1 m (elle)');
+  });
+
+  it('eski backend: alanlar yok → parti/kurşun satırı yok, kart bugünkü gibi', () => {
+    const v = read({});
+    expect(v.rows.map((r) => r.key)).toEqual(['no', 'satir', 'gozden', 'toplam']);
+    expect(v.notes).toEqual([]);
+    expect(v.tone).toBe('ok');
+  });
+
+  it('okunurken parti/kurşun satırı basılmaz', () => {
+    const w = onSummary(startWatch(T0), sum({ state: 'READING', ourBatchNo: 'X', kursunMeters: '1' }), T0);
+    expect(readResultView(w, 'GB-1').rows.map((r) => r.key)).toEqual(['no']);
+  });
+});
