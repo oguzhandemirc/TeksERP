@@ -140,6 +140,7 @@ const ListQuery = z.object({
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       201: { description: "scan künyesi (bayt yok)" }
+ *       200: { description: "Aynı sha256 mevcut (duplicate) — serbest kayıt istenen taslağa bağlanır (boundTo); okunmuşsa satırlar saklı okuma sonucundan kurulur, zarf yoksa yeniden okumaya döner (restored[] REBUILT|REQUEUED)" }
  *       400: { description: "DOCUMENT_SCAN_INVALID · DOCUMENT_SCAN_TYPE · HEIC_CONVERT_FAILED" }
  *       413: { description: "DOCUMENT_SCAN_TOO_LARGE (5 MB; HEIC'te dönüşüm sonrası da)" }
  *       503: { description: "HEIC_CONVERT_UNAVAILABLE (HEIC geldi, okuma servisi yok/eski/ulaşılamaz — hiçbir şey yazılmaz)" }
@@ -165,8 +166,8 @@ const ListQuery = z.object({
 router.post("/taramalar", requirePermission("gelen-belge:write"), wrap(async (req) => {
   const r = await uploadDocumentScan(ScanBody.parse(req.body), req.user!.userId);
   // Yeni fotoğraf → okuma işini dürt (servis/modül yoksa iş kendi ön koşulunda durur; burada 503 YOK — yükleme elle taslak için de geçerli).
-  // PDF kuyruğa girmez (K6): dürtülecek iş yok.
-  if (!r.duplicate && r.scan.status === "PENDING") requestImmediateReaderRun();
+  // PDF kuyruğa girmez (K6): dürtülecek iş yok. Yeniden bağlanan okunmuş sayfa zarfsızsa kuyruğa döner (PENDING) — o da dürtülür.
+  if (r.scan.status === "PENDING" && (!r.duplicate || r.restored?.some((o) => o.mode === "REQUEUED"))) requestImmediateReaderRun();
   return { status: r.duplicate ? 200 : 201, data: r };
 }));
 router.get("/taramalar/:id", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await getDocumentScan(Id.parse(req.params.id)) })));
@@ -265,14 +266,14 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  * /api/gelen-belge/taramalar/{id}/oku:
  *   post:
  *     tags: [Gelen belge]
- *     summary: Taramayı okumaya gönder (READ_FAILED → PENDING, deneme sıfır; işi dürter)
+ *     summary: Taramayı okumaya gönder (READ_FAILED → PENDING, deneme sıfır; okunmuş ama bağlı DRAFT taslağa satır vermemiş sayfa → PENDING; işi dürter)
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
  *       202: { description: "Tarama künyesi (status, attempts)" }
  *       400: { description: "DOCUMENT_SCAN_PDF_NOT_READABLE (PDF otomatik okunmaz — K6)" }
- *       409: { description: "DOCUMENT_SCAN_ALREADY_READ · DOCUMENT_SCAN_STATE_CHANGED" }
+ *       409: { description: "DOCUMENT_SCAN_ALREADY_READ (serbest ya da satırı taslakta) · DELIVERY_NOTE_NOT_DRAFT · DOCUMENT_SCAN_STATE_CHANGED" }
  *       503: { description: "OCR_SERVICE_UNAVAILABLE (okuma servisi bu kurulumda yok)" }
  * /api/gelen-belge/irsaliyeler/{id}/eslestirme:
  *   get:

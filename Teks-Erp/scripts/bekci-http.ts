@@ -279,6 +279,8 @@ async function main(): Promise<void> {
     DISCOVERY_MDNS_ENABLED: "false",
     BACKUP_SCHEDULE_ENABLED: "false",
     NOTIFICATION_JOBS_ENABLED: "false", // ikinci bildirim dağıtıcısı bekçilerin outbox'ını kapmasın
+    // Kur turu (gerçek TCMB → test DB), belge okuyucu, alarm/vardiya turları vb. bekçilerin DB'sine yazmasın (arşiv 2026-11-02).
+    TEKSERP_ZAMANLAYICI_KAPALI: "1",
     BACKUP_DIR: yedekDizini,
     BACKUP_OFFSITE_DIR: "",
     BACKUP_RCLONE_REMOTE: "",

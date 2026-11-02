@@ -15,6 +15,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { detectCertificateMime } from "./certificate-file.service";
 import { convertHeicToJpeg, isHeic } from "../lib/gelen-belge/heic";
+import { applyStoredReadsTx, auditPhotoSource, auditStoredReads, markPhotoSourceTx, prepareStoredReads } from "./gelen-belge-taslak-doldur.service";
 
 export const DOCUMENT_SCAN_MAX_BYTES = 5 * 1024 * 1024;
 /** PDF arşivdir (K6): okuma kuyruğuna girmez, sidecar'a gitmez — claim süzgeci ve okut ucu bunu okur. */
@@ -79,20 +80,28 @@ type ScanRow = Prisma.DocumentScanGetPayload<{ select: typeof SCAN_SELECT }>;
 /**
  * Aynı sha256 mevcutsa istemcinin istediği bağlam SESSİZCE YUTULMAZ: serbest kayıt istenen taslağa bağlanır (claim'li),
  * başka taslağa bağlıysa 409 `DOCUMENT_SCAN_NOT_FREE`. Yanıt `boundTo` ile hangi taslağa bağlı olduğunu söyler.
+ * Serbest kayıt OKUNMUŞSA (taslağı silinmiş fotoğraf) satırlar saklı zarftan AYNI tx'te kurulur — OCR yeniden koşmaz;
+ * zarf yoksa tarama yeniden okumaya döner (`restored`). Okunmuş sayfa boş taslak bırakmaz.
  */
 async function reuseExisting(existing: ScanRow, noteId: string | null | undefined, userId: string) {
   if (noteId && existing.noteId && existing.noteId !== noteId) {
     throw AppError.conflict("Bu fotoğraf başka bir taslağa bağlı; önce oradan çözün.", { code: "DOCUMENT_SCAN_NOT_FREE", boundTo: existing.noteId });
   }
   if (!noteId || existing.noteId === noteId) return { scan: existing, duplicate: true, boundTo: existing.noteId };
-  await prisma.$transaction(async (tx) => {
+  const plans = await prepareStoredReads([existing.id], userId);
+  const photo = existing.mimeType !== PDF_MIME;
+  const { restored, sourceMarked } = await prisma.$transaction(async (tx) => {
     await claimDraftTx(tx, noteId, userId);
     const bound = await tx.documentScan.updateMany({ where: { id: existing.id, noteId: null }, data: { noteId } });
     if (bound.count === 0) throw AppError.conflict("Bu fotoğraf bu arada başka bir taslağa bağlandı.", { code: "DOCUMENT_SCAN_NOT_FREE" });
+    const marked = photo ? await markPhotoSourceTx(tx, noteId) : false;
+    return { restored: await applyStoredReadsTx(tx, noteId, plans), sourceMarked: marked };
   });
   await AuditService.log({ userId, action: "UPDATE", tableName: AUDIT_TABLE, recordId: existing.id, oldData: { noteId: null }, newData: { noteId, sha256: existing.sha256 } });
+  if (sourceMarked) await auditPhotoSource(noteId, userId);
+  await auditStoredReads(noteId, restored, userId);
   const scan = await prisma.documentScan.findUniqueOrThrow({ where: { id: existing.id }, select: SCAN_SELECT });
-  return { scan, duplicate: true, boundTo: noteId };
+  return { scan, duplicate: true, boundTo: noteId, restored };
 }
 
 export async function uploadDocumentScan(input: DocumentScanInput, userId: string) {
@@ -129,12 +138,14 @@ export async function uploadDocumentScan(input: DocumentScanInput, userId: strin
     // K6: PDF doğrudan READ_FAILED (deneme 0) — PENDING'de kalsa "kuyrukta" sayılır ve hiç bitmezdi; enum değişmez.
     ...(kind.mime === PDF_MIME ? { status: "READ_FAILED" as const } : {}),
   };
-  let scan;
+  let created;
   try {
     // Taslağa bağlanıyorsa claim + create aynı tx'te (TOCTOU yok); serbest taramada tx'e gerek yok.
-    scan = await prisma.$transaction(async (tx) => {
+    created = await prisma.$transaction(async (tx) => {
       if (input.noteId) await claimDraftTx(tx, input.noteId, userId);
-      return tx.documentScan.create({ data: { ...data, content: new Uint8Array(content) }, select: SCAN_SELECT });
+      const row = await tx.documentScan.create({ data: { ...data, content: new Uint8Array(content) }, select: SCAN_SELECT });
+      const marked = input.noteId && kind.mime !== PDF_MIME ? await markPhotoSourceTx(tx, input.noteId) : false;
+      return { row, marked };
     });
   } catch (err) {
     // Eşzamanlı aynı yükleme: kaybeden mevcut kaydı alır (unique seddi).
@@ -144,6 +155,8 @@ export async function uploadDocumentScan(input: DocumentScanInput, userId: strin
     }
     throw err;
   }
+  const scan = created.row;
+  if (created.marked && input.noteId) await auditPhotoSource(input.noteId, userId);
   // HEIC'ten dönüşen kaydın künyesi kaynak türü/boyunu da taşır (bayt yok).
   const auditData = heic ? { ...data, convertedFrom: "image/heic", sourceSizeBytes: received.length } : data;
   await AuditService.log({ userId, action: "CREATE", tableName: AUDIT_TABLE, recordId: scan.id, newData: auditData });
