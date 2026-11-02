@@ -9,6 +9,7 @@ import { routeService } from "@/pages/Routes/service";
 import { UploadDialog } from "@/pages/Operations/GelenBelgeler/UploadDialog";
 import { useTabsStore } from "@/store/tabs";
 import { WORK_ORDER_NEW_PATH, type OieStart } from "./oie/nav";
+import { routeHasKursunStep } from "./oie/service";
 
 interface Props {
   /** Formda seçili rota şablonu (Rota Seç ya da iş emri şablonunun rotası); yoksa düğme pasif. */
@@ -26,8 +27,8 @@ export function BelgeOkutButton({ routeTemplateId, className }: Props) {
   const [frozenRoute, setFrozenRoute] = useState<string | null>(null);
   if (!enabled || !hasPermission("gelen-belge:write")) return null;
   const onDone = async (noteId: string, routeId: string) => {
-    const name = await routeService.getById(routeId).then((r) => r.data?.name ?? "Rota", () => "Rota");
-    const start: OieStart = { kind: "shortcut", route: { id: routeId, name }, noteId };
+    const route = await routeService.getById(routeId).then((r) => r.data ?? null, () => null);
+    const start: OieStart = { kind: "shortcut", route: { id: routeId, name: route?.name ?? "Rota", ...(route ? { hasKursun: routeHasKursunStep(route.steps) } : {}) }, noteId };
     navigateActive(WORK_ORDER_NEW_PATH, { state: { oie: start } });
   };
   return (
@@ -46,6 +47,7 @@ export function BelgeOkutButton({ routeTemplateId, className }: Props) {
       {frozenRoute && (
         <UploadDialog
           open
+          autoSend
           onOpenChange={(o) => !o && setFrozenRoute(null)}
           target={{ kind: "new" }}
           onDone={(note) => {

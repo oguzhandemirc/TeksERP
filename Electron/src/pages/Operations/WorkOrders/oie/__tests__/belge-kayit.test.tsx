@@ -6,8 +6,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
-import { docDraftReasons, initialDocDraft, noteWorkOrderBody } from "../docDraft";
-import { saveDoc } from "../saveDoc";
+import { applyPatch, docDraftReasons, initialDocDraft, noteWorkOrderBody, routeGramajOptions } from "../docDraft";
+import { routeHasKursunStep } from "../service";
+import { SAVE_LABEL, saveDoc } from "../saveDoc";
 import { batchFailure } from "../batchToken";
 import { TopluBelgeForm } from "../TopluBelgeForm";
 
@@ -74,6 +75,30 @@ describe("belgeden form taslağı", () => {
     const body = noteWorkOrderBody(initialDocDraft(note() as never, gramaj), { clientToken: "t1", routeTemplateId: "rt-k", gramajPropertyId: "p-kursun" });
     expect(body).toEqual({ clientToken: "t1", ownerCustomerId: "c-gul", ourBatchNo: "214279", ourBatchNoKey: "BARCODE:214279", kursunMeters: "4521.5", routeTemplateId: "rt-k", targetValues: [{ propertyId: "p-kursun", valueId: "g2" }] });
   });
+  it("⭐ formda temizlenen parti no gövdede null gider (sunucu okumada yazılanı siler)", () => {
+    const d = applyPatch(initialDocDraft(note() as never, gramaj), { ourBatchNo: null });
+    const body = noteWorkOrderBody(d, { clientToken: "t1", routeTemplateId: "rt-k", gramajPropertyId: "p-kursun" });
+    expect(body.ourBatchNo).toBeNull();
+    expect("ourBatchNoKey" in body).toBe(false);
+  });
+  it("⭐ kurşunsuz rotada varsayılan gramaj ön seçilmez, gövdede hedef yok; bilinmeyen rota bugünkü gibi", () => {
+    const d = initialDocDraft(note() as never, routeGramajOptions(gramaj, false));
+    expect(d.gramajId).toBeNull();
+    expect(noteWorkOrderBody(d, { clientToken: "t1", routeTemplateId: "rt-t", gramajPropertyId: "p-kursun" }).targetValues).toBeUndefined();
+    expect(initialDocDraft(note() as never, routeGramajOptions(gramaj, undefined)).gramajId).toBe("g2");
+  });
+  it("routeHasKursunStep: sunucu alanı önce, yoksa PROCESS_QC yedeği", () => {
+    expect(routeHasKursunStep([{ station: { kind: "PROCESS_QC", isKursunStation: false } }, { station: { kind: "TAMBUR" } }])).toBe(false);
+    expect(routeHasKursunStep([{ station: { kind: "INTERNAL", isKursunStation: true } }])).toBe(true);
+    expect(routeHasKursunStep([{ station: { kind: "PROCESS_QC" } }])).toBe(true);
+  });
+  it("⭐ tam metin önerisi (FULL_TEXT) sahip alanına yazılmaz; OWNER_TEXT / alansız (eski) yazılır", () => {
+    const full = initialDocDraft(note({ ownerSuggestion: { customerId: "c-ist", name: "İstanbul Tekstil", matchedText: "Güngören / İSTANBUL", source: "FULL_TEXT" } }) as never, gramaj);
+    expect(full.ownerCustomerId).toBeNull();
+    expect(full.ownerFromDoc).toBe(false);
+    const own = initialDocDraft(note({ ownerSuggestion: { customerId: "c-gul", name: "Gülkesim", matchedText: "GÜLKESİM", source: "OWNER_TEXT" } }) as never, gramaj);
+    expect(own.ownerCustomerId).toBe("c-gul");
+  });
 });
 
 describe("saveDoc", () => {
@@ -128,5 +153,11 @@ describe("toplu kayıt", () => {
     await userEvent.click(save);
     await waitFor(() => expect(screen.getByTestId("row-n3")).toHaveTextContent("OK:"));
     expect(printCard).not.toHaveBeenCalled();
+  });
+});
+
+describe("kaydet düğmesi", () => {
+  it("iş emrini açan kayıt düğmesi '<Terbiye İş Emri> oluştur' (çıplak 'Kaydet' değil)", () => {
+    expect(SAVE_LABEL).toBe("Terbiye İş Emri oluştur");
   });
 });

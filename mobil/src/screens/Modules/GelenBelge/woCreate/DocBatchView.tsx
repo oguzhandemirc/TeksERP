@@ -15,7 +15,7 @@ import { INBOUND_DOC_CONTEXT_KEY } from '../DocHeader';
 import PageCameraModal from '../PageCameraModal';
 import PageList from '../PageList';
 import PagePreviewModal from '../PagePreviewModal';
-import { removePage } from '../docScan';
+import { removePage, type ScanPage } from '../docScan';
 import { useDocScan } from '../useDocScan';
 import { usePageSource } from '../usePageSource';
 import DocRowCard from './DocRowCard';
@@ -35,7 +35,13 @@ export default function DocBatchView({ route, multi = true, autoStart = false }:
   const b = useDocScan({ successHint: 'Okuma bitince form dolar; kontrol edip kaydedin.' });
   const [cameraOpen, setCameraOpen] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
-  const source = usePageSource(b.pages.length, b.captureMany, () => setCameraOpen(true));
+  // Tarayıcı/galeri belgenin bütün sayfalarını tek seferde verir → yükleme + okuma kendiliğinden başlar (ayrı "gönder" yok).
+  // Klasik kamera sayfa sayfa çeker: belgenin bittiğini kullanıcı "Belgeyi gönder ve oku" ile söyler.
+  const onPages = (ps: ScanPage[]) => {
+    const next = b.captureMany(ps);
+    if (next) void b.send(next);
+  };
+  const source = usePageSource(b.pages.length, onPages, () => setCameraOpen(true));
   const started = useRef(false);
   const { add } = source;
   useEffect(() => {
@@ -141,12 +147,10 @@ function ScannerSection({ b, hasRows, onAdd, busy, onClassic, onRemove, onOpen }
     <>
       <Text style={styles.section}>{hasRows ? 'Sıradaki belge' : 'Belgeyi okutun'}</Text>
       <PageList pages={b.pages} uploaded={b.progress.uploaded} onRemove={onRemove} onAdd={onAdd} onAddClassic={onClassic} busy={busy} onOpen={onOpen} />
-      <View style={styles.footer}>
-        {(b.pages.length > 0 || b.headerLocked) && (
-          <Button mode="text" onPress={b.reset} disabled={b.sending}>
-            Vazgeç
-          </Button>
-        )}
+      {(b.pages.length > 0 || b.headerLocked) && <View style={styles.footer}>
+        <Button mode="text" onPress={b.reset} disabled={b.sending}>
+          Vazgeç
+        </Button>
         <Button
           mode="outlined"
           icon="send"
@@ -158,7 +162,7 @@ function ScannerSection({ b, hasRows, onAdd, busy, onClassic, onRemove, onOpen }
         >
           {b.headerLocked ? `Yeniden dene (${b.remaining} sayfa)` : 'Belgeyi gönder ve oku'}
         </Button>
-      </View>
+      </View>}
     </>
   );
 }

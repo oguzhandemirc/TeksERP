@@ -18,12 +18,13 @@ interface StationLike {
   name: string;
   type: "INTERNAL" | "EXTERNAL";
   kind?: string | null;
+  isKursunStation?: boolean;
   defaultCategoryId?: string | null;
 }
 
 function stationToDesigner(s: StationLike): Pick<
   DesignerStep,
-  "stationId" | "stationCode" | "stationName" | "stationType" | "stationKind" | "requiredCategoryId"
+  "stationId" | "stationCode" | "stationName" | "stationType" | "stationKind" | "isKursunStation" | "requiredCategoryId"
 > {
   return {
     stationId: s.id,
@@ -31,6 +32,7 @@ function stationToDesigner(s: StationLike): Pick<
     stationName: s.name,
     stationType: s.type,
     stationKind: s.kind ?? null,
+    isKursunStation: s.isKursunStation,
     requiredCategoryId: s.type === "EXTERNAL" ? s.defaultCategoryId ?? null : null,
   };
 }
@@ -161,6 +163,7 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
             name: s.station?.name ?? "",
             type: s.station?.type ?? "INTERNAL",
             kind: s.station?.kind ?? null,
+            isKursunStation: s.station?.isKursunStation,
             defaultCategoryId: s.station?.defaultCategoryId ?? null,
           }),
           notes: s.defaultNotes ?? "",
@@ -231,6 +234,7 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
         stationName: "",
         stationType: "INTERNAL",
         stationKind: null,
+        isKursunStation: undefined,
         requiredCategoryId: null,
         plannedSubcontractorId: null,
         plannedMachineId: null,

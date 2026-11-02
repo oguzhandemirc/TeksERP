@@ -137,6 +137,8 @@ export interface DeliveryNoteDetail extends DeliveryNoteHeader, PartiMetreDetail
   notices?: NoteNotice[];
   /** Aynı müşteri partisinin (sahip + parti no) başka belgeleri — bilgi; eski backend göndermez / yoksa null. */
   sameBatch?: SameBatchNotes | null;
+  /** Okuma servisi tanımlı mı (false → bekleyen sayfa hiç okunmaz, form elle doldurulur); eski backend göndermez. */
+  readerConfigured?: boolean;
 }
 
 export interface SameBatchNotes {

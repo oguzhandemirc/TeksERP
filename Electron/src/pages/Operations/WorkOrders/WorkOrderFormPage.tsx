@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePreferences } from "@/providers/PreferencesProvider";
@@ -19,6 +19,8 @@ import { useAttemptToken } from "@/lib/attemptToken";
 import { TERIM } from "@/lib/terim";
 import { IsEmriGiris, type OieStart } from "./oie/IsEmriGiris";
 import { newWorkOrderTitle } from "./oie/nav";
+import { toast } from "sonner";
+import { AUTO_PRINT_TEXT, printRefakatCard, useRefakatAutoPrint } from "./oie/refakatPrint";
 
 const LIST_PATH = "/operations/work-orders";
 
@@ -68,6 +70,9 @@ export function WorkOrderFormPage() {
   // tekrar basış aynı token'ı taşır → backend cached WO döner (mükerrer İE + refakat
   // kartı önlenir), kesin 4xx'te yenilenir. Yalnız create yolunda kullanılır.
   const createAttempt = useAttemptToken();
+  // Kısayol formu (belgesiz, elle) da belgeden formla aynı kurala uyar: `refakatAutoPrint` açıksa kart basılır (K9).
+  const autoPrint = useRefakatAutoPrint();
+  const shortcutCreate = useRef(false);
   // Create: seed gezinme state'inden (siparişten WO / Denge "stoğa üret").
   const seed = location.state as {
     seedPickedLines?: PickedOrderLine[];
@@ -119,6 +124,7 @@ export function WorkOrderFormPage() {
       const newId = res.data?.id;
       // Yeni iş emrinin tam sayfa detayına geç (bu sekmede yerinde).
       navigateActive(newId ? `/operations/work-orders/${newId}` : LIST_PATH);
+      if (newId && autoPrint && shortcutCreate.current) void printRefakatCard(newId).then((o) => toast.message(AUTO_PRINT_TEXT[o]));
     },
   });
 
@@ -178,7 +184,7 @@ export function WorkOrderFormPage() {
     </PageShell>
   );
 
-  function renderForm(initialRouteTemplateId: string | null, opts?: { belgeOkut?: boolean }) {
+  function renderForm(initialRouteTemplateId: string | null, opts?: { belgeOkut?: boolean; shortcut?: boolean }) {
     return (
       <WorkOrderFormView
         initialRouteTemplateId={initialRouteTemplateId}
@@ -189,7 +195,10 @@ export function WorkOrderFormPage() {
         onSubmit={async (v, meta) => {
           const payload = buildPayload(v, meta, targetQuantityEnabled);
           if (isEdit) await replaceMut.mutateAsync(payload);
-          else await createMut.mutateAsync({ ...payload, clientToken: createAttempt.token() });
+          else {
+            shortcutCreate.current = opts?.shortcut === true;
+            await createMut.mutateAsync({ ...payload, clientToken: createAttempt.token() });
+          }
         }}
         isSubmitting={isEdit ? replaceMut.isPending : createMut.isPending}
         onCancel={handleCancel}

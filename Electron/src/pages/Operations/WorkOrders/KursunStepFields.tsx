@@ -10,9 +10,9 @@ import { PlannedMachineButtons } from "@/components/kursun/PlannedMachineButtons
 import { defaultGramajId, type GramajOption } from "@/lib/kursun-gramaj";
 import type { DesignerStep } from "./RouteDesignerDialog";
 
-/** Kurşun adımı = PROCESS_QC türündeki istasyon (Kurşun + KK2). */
-export function isKursunStep(step: Pick<DesignerStep, "stationKind">): boolean {
-  return step.stationKind === "PROCESS_QC";
+/** Kurşun adımı = sunucunun `isKursunStation`ı (StationProperty KURSUN/AUTO); alan yoksa (eski sunucu / WO detayı) PROCESS_QC türü. */
+export function isKursunStep(step: Pick<DesignerStep, "stationKind" | "isKursunStation">): boolean {
+  return step.isKursunStation ?? step.stationKind === "PROCESS_QC";
 }
 
 /**

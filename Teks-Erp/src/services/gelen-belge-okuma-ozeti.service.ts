@@ -107,7 +107,9 @@ export async function getReadSummary(noteId: string) {
     kursunMetersSource: note.kursunMetersSource,
     kursunMetersReview: note.kursunMetersReview,
     ...(await noteBatchAndMeters(note.id, note.totalsDeclared, live.filter((l) => l.status !== "INFO").map((l) => l.meters))),
-    // Müşteri önerisi (OIE) — detayla AYNI helper; tablet `gelen-belge:read` taşımaz. Eski tablet alanı yok sayar.
+    // Taslağın sahibi + müşteri önerisi (OIE) — detayla AYNI helper; tablet `gelen-belge:read` taşımayabilir, satır formu
+    // buradan kurulur (`detailFromSummary`). Eski tablet alanları yok sayar.
+    ownerCustomerId: note.ownerCustomerId,
     ownerSuggestion: await suggestOwnerForNote({ id: note.id, status: note.status, ownerCustomerId: note.ownerCustomerId }),
   };
 }

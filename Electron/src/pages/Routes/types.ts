@@ -25,6 +25,8 @@ export interface RouteStep {
     name: string;
     type: "INTERNAL" | "EXTERNAL";
     kind: string;
+    /** Kurşun yetenekli istasyon (sunucu `KURSUN_DISPATCH_STATION_WHERE`den türetir); eski sunucu göndermez. */
+    isKursunStation?: boolean;
     /** İstasyonun KENDİ yeteneği (kategoriden AYRI — 2026-08-10). */
     appliesColor?: boolean;
     appliesProperty?: boolean;

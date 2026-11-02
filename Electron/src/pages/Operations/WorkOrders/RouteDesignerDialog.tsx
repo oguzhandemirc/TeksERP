@@ -30,6 +30,8 @@ export interface DesignerStep {
   stationType: "INTERNAL" | "EXTERNAL";
   /** Backend StationKind (RAW_QC/PROCESS_QC/TAMBUR…) — adımı renkten okumak için. */
   stationKind?: string | null;
+  /** Kurşun yetenekli istasyon (sunucu türetir); undefined = bilinmiyor → `isKursunStep` tür yedeği. */
+  isKursunStation?: boolean;
   notes: string;
   requiredCategoryId: string | null;
   plannedSubcontractorId: string | null;

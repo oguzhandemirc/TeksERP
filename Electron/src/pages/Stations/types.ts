@@ -6,6 +6,8 @@ export interface Station {
   name: string;
   type: StationType;
   kind: StationKind;
+  /** Kurşun yetenekli istasyon — yalnız tekil yanıtta (`GET /stations/:id`); eski sunucu göndermez. */
+  isKursunStation?: boolean;
   department: string | null;
   isActive: boolean;
   /** İş emri rota adımı olabilir mi (false: KK1 girişi, Sevkiyat gibi giriş/çıkış istasyonları). */

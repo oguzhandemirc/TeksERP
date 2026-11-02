@@ -16,14 +16,15 @@ import { ScanReadBanner } from "@/pages/Operations/GelenBelgeler/ScanReadBanner"
 import { useNoteDetail } from "@/pages/Operations/GelenBelgeler/useNoteDetail";
 import { DocFields, FromDocBadge } from "./DocFields";
 import { DocThumb } from "./DocThumb";
-import { docDraftReasons, initialDocDraft, type DocDraft } from "./docDraft";
+import { docDraftReasons, initialDocDraft, routeGramajOptions, type DocDraft } from "./docDraft";
 import { AUTO_PRINT_TEXT, printRefakatCard, useRefakatAutoPrint } from "./refakatPrint";
-import { DRAFT_SAVED_TEXT, saveDoc, saveErrorHint, type SaveOutcome } from "./saveDoc";
+import { DRAFT_SAVED_TEXT, SAVE_LABEL, saveDoc, saveErrorHint, type SaveOutcome } from "./saveDoc";
 import { useFormApproval } from "./useFormApproval";
+import type { RouteRef } from "./nav";
 
 interface Props {
   noteId: string;
-  route: { id: string; name: string };
+  route: RouteRef;
 }
 
 function useSave(noteId: string, route: Props["route"]) {
@@ -51,16 +52,19 @@ function useSave(noteId: string, route: Props["route"]) {
 
 export function BelgedenIsEmriForm({ noteId, route }: Props) {
   const { note, invalidate } = useNoteDetail(noteId);
+  const approval = useFormApproval();
   const n = note.data;
   const stage = n ? belgeOkutStage(n) : "READING";
   const { catalog, isLoading: catalogLoading } = useKursunGramajCatalog();
+  // Kurşunsuz rotada gramaj kutusu ve varsayılanı yok (sunucu hedefi 400'le reddeder).
+  const gramajOptions = routeGramajOptions(catalog.options, route.hasKursun);
   const [draft, setDraft] = useState<DocDraft | null>(null);
   const save = useSave(noteId, route);
   const navigateActive = useTabsStore((s) => s.navigateActive);
   // Taslak bir kez, okuma bitince ve gramaj kataloğu gelince dolar (varsayılan gramaj ön seçimi kaçmasın).
   useEffect(() => {
-    if (n && !draft && stage !== "READING" && !catalogLoading) setDraft(initialDocDraft(n, catalog.options));
-  }, [n, draft, stage, catalogLoading, catalog.options]);
+    if (n && !draft && stage !== "READING" && !catalogLoading) setDraft(initialDocDraft(n, gramajOptions));
+  }, [n, draft, stage, catalogLoading, gramajOptions]);
   if (!n) return <p className="p-6 text-sm text-muted-foreground">{note.isError ? "Belge yüklenemedi." : "Yükleniyor…"}</p>;
   if (stage === "CLOSED") return <p className="p-6 text-sm text-muted-foreground">Belge artık taslak değil ({n.noteNo}).</p>;
   const reasons = draft ? docDraftReasons(draft) : [];
@@ -81,7 +85,8 @@ export function BelgedenIsEmriForm({ noteId, route }: Props) {
             ) : (
               <>
                 {stage === "READ_FAILED" && <ScanReadBanner scans={n.scans} lines={n.lines} editable canRequeue onRequeued={() => void invalidate()} />}
-                <DocFields note={n} draft={draft} onChange={setDraft} gramajOptions={catalog.options} disabled={save.isPending || saved} />
+                {stage === "NO_SERVICE" && <p className="text-sm text-amber-800 dark:text-amber-300" data-testid="oie-no-service">Bu kurulumda belge okuma servisi yok; değerleri elle girin.</p>}
+                <DocFields note={n} draft={draft} onChange={setDraft} gramajOptions={gramajOptions} disabled={save.isPending || saved} />
               </>
             )}
           </div>
@@ -94,6 +99,7 @@ export function BelgedenIsEmriForm({ noteId, route }: Props) {
         pending={save.isPending}
         error={save.isError ? (saveErrorHint(save.error) ?? apiErrorText(save.error, "Kaydedilemedi.")) : null}
         savedAsDraft={saved}
+        label={approval.value === "WITH_WORK_ORDER" ? SAVE_LABEL : "Taslak kaydet"}
         onSave={() => draft && save.mutate({ note: n, draft })}
         onOpenNote={() => navigateActive(`/operations/gelen-belgeler/${noteId}`)}
       />
@@ -107,11 +113,13 @@ interface SaveBarProps {
   pending: boolean;
   error: string | null;
   savedAsDraft: boolean;
+  /** WITH_WORK_ORDER: kayıt iş emrini açar → "<Terbiye İş Emri> oluştur"; ayrı onayda yalnız taslak yazılır. */
+  label: string;
   onSave: () => void;
   onOpenNote: () => void;
 }
 
-function SaveBar({ reasons, ready, pending, error, savedAsDraft, onSave, onOpenNote }: SaveBarProps) {
+function SaveBar({ reasons, ready, pending, error, savedAsDraft, label, onSave, onOpenNote }: SaveBarProps) {
   return (
     <div className="flex shrink-0 flex-col gap-2 border-t px-6 py-3">
       {ready && reasons.length > 0 && (
@@ -124,7 +132,7 @@ function SaveBar({ reasons, ready, pending, error, savedAsDraft, onSave, onOpenN
           <Button variant="outline" onClick={onOpenNote} data-testid="oie-open-note"><ExternalLink className="mr-1 h-4 w-4" /> Gelen Belgeler'de aç</Button>
         )}
         <Button onClick={onSave} disabled={!ready || pending || reasons.length > 0} data-testid="oie-save">
-          <Save className="mr-1 h-4 w-4" /> {pending ? "Kaydediliyor…" : "Kaydet"}
+          <Save className="mr-1 h-4 w-4" /> {pending ? "Kaydediliyor…" : label}
         </Button>
       </div>
     </div>

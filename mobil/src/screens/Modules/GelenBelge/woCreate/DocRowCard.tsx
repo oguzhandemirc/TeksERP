@@ -10,9 +10,10 @@ import { colors, radius, spacing, typography } from '../../../../theme';
 import { TERIM } from '../../../../lib/terim';
 import { useReadResult } from '../useReadResult';
 import { useApprovalDetail } from '../useApprovalCard';
+import { usePermissions } from '../../../../hooks/usePermission';
 import { readResultView, fmtKursunMeters } from '../readResult';
 import { batchPatch, meterChoices, parseMeters } from '../approvalGate';
-import { pinRecent, rowIssues } from './woFromDoc';
+import { detailFromSummary, pinRecent, rowIssues } from './woFromDoc';
 import type { DocRow, WoRowsState } from './useWoRows';
 
 interface Props {
@@ -25,13 +26,7 @@ interface Props {
 type Picker = 'owner' | 'batch' | null;
 
 export default function DocRowCard({ row, wo, customers, customersLoading }: Props) {
-  const read = useReadResult(row.noteId, row.runKey);
-  const readDone = read.watch?.phase === 'done' && (read.watch.summary.state === 'READ' || read.watch.summary.state === 'PARTIAL');
-  const detail = useApprovalDetail(row.noteId, readDone);
-  const { setDetail } = wo;
-  useEffect(() => {
-    if (detail.data) setDetail(row.noteId, detail.data);
-  }, [detail.data, row.noteId, setDetail]);
+  const { read, readDone, detailFailed } = useRowRead(row, wo);
   const [picker, setPicker] = useState<Picker>(null);
   const [meterOpen, setMeterOpen] = useState(false);
   const owners = useMemo(() => pinRecent(customers, wo.recent), [customers, wo.recent]);
@@ -58,6 +53,7 @@ export default function DocRowCard({ row, wo, customers, customersLoading }: Pro
         )}
       </View>
       {view?.reason ? <Text style={styles.note}>{view.reason}</Text> : null}
+      {detailFailed && <Text style={styles.note} testID={`belge-satir-detay-hata-${row.noteNo}`}>Belge detayı okunamadı; form okuma özetinden dolduruldu.</Text>}
       {read.watch && read.watch.phase !== 'polling' && !readDone && (
         <Button mode="outlined" icon="refresh" onPress={read.recheck} contentStyle={styles.btn}>
           Yeniden kontrol et
@@ -73,6 +69,12 @@ export default function DocRowCard({ row, wo, customers, customersLoading }: Pro
             disabled={locked}
             hint={f.ownerSuggested && f.ownerCustomerId ? `Belgeden önerildi: ${f.ownerSuggested}` : undefined}
           />
+          {f.ownerAsk && f.ownerCustomerId !== f.ownerAsk.customerId && (
+            <Chip icon="help-circle-outline" onPress={() => wo.updateForm(row.noteId, { ownerCustomerId: f.ownerAsk!.customerId, ownerSuggested: f.ownerAsk!.name })}
+              disabled={locked} style={styles.chip} testID={`belge-satir-sahip-sor-${row.noteNo}`}>
+              {`Belgede “${f.ownerAsk.matchedText}” geçiyor — ${f.ownerAsk.name} mi? Seç`}
+            </Chip>
+          )}
           <SheetField
             label="Parti no"
             value={f.ourBatchNo ?? ''}
@@ -100,6 +102,25 @@ export default function DocRowCard({ row, wo, customers, customersLoading }: Pro
       )}
     </View>
   );
+}
+
+/**
+ * Satırın okuma izlemi + form kaynağı. Okuma bitti (okunamadı / PDF / okuyucu yok dahil — sunucu yalnız süren okumayı
+ * reddeder) → form dolar. Detay ucu `gelen-belge:read` ister; izin yoksa ya da düşerse form okuma özetinden kurulur.
+ */
+function useRowRead(row: DocRow, wo: WoRowsState) {
+  const read = useReadResult(row.noteId, row.runKey);
+  const readDone = read.watch?.phase === 'done';
+  const summary = read.watch?.phase === 'done' ? read.watch.summary : null;
+  const canReadDetail = usePermissions().has('gelen-belge:read');
+  const detail = useApprovalDetail(row.noteId, readDone && canReadDetail);
+  const detailFailed = canReadDetail && detail.isError;
+  const { setDetail } = wo;
+  useEffect(() => {
+    if (detail.data) setDetail(row.noteId, detail.data);
+    else if (summary && (!canReadDetail || detailFailed)) setDetail(row.noteId, detailFromSummary(summary));
+  }, [detail.data, summary, canReadDetail, detailFailed, row.noteId, setDetail]);
+  return { read, readDone, detailFailed };
 }
 
 function MeterField({ row, wo, meterText, locked, onEdit }: { row: DocRow; wo: WoRowsState; meterText: string | null; locked: boolean; onEdit: () => void }) {

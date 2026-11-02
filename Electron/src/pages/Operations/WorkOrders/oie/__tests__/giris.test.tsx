@@ -18,15 +18,15 @@ const flags = { dokuma: false, gelenBelge: true };
 vi.mock("@/hooks/usePricingEnabled", () => ({ useDokumaEnabled: () => flags.dokuma, useGelenBelgeEnabled: () => flags.gelenBelge }));
 const perms = { list: ["workorder:write", "weavingorder:write", "gelen-belge:write"] };
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: (p: string) => perms.list.includes(p) }) }));
-vi.mock("@/pages/Operations/GelenBelgeler/UploadDialog", () => ({ UploadDialog: () => <div data-testid="upload-dialog" /> }));
+vi.mock("@/pages/Operations/GelenBelgeler/UploadDialog", () => ({ UploadDialog: (p: { autoSend?: boolean }) => <div data-testid="upload-dialog" data-auto={String(p.autoSend ?? false)} /> }));
 vi.mock("../BelgedenIsEmriForm", () => ({ BelgedenIsEmriForm: ({ noteId }: { noteId: string }) => <div data-testid="doc-form">{noteId}</div> }));
 vi.mock("../TopluBelgeForm", () => ({ TopluBelgeForm: () => <div /> }));
 vi.mock("../TopluYukleDialog", () => ({ TopluYukleDialog: () => <div data-testid="bulk-dialog" /> }));
 
-const manual = vi.fn((routeId: string | null, opts?: { belgeOkut?: boolean }): ReactNode => (
-  <div data-testid="manual-form" data-route={routeId ?? ""} data-okut={String(opts?.belgeOkut ?? true)} />
+const manual = vi.fn((routeId: string | null, opts?: { belgeOkut?: boolean; shortcut?: boolean }): ReactNode => (
+  <div data-testid="manual-form" data-route={routeId ?? ""} data-okut={String(opts?.belgeOkut ?? true)} data-shortcut={String(opts?.shortcut ?? false)} />
 ));
-const sc: WorkOrderShortcut = { id: "rt-k", name: "Kurşun & Tambur", description: null, shortcutOrder: 1, stepNames: ["Kurşun", "Tambur"] };
+const sc: WorkOrderShortcut = { id: "rt-k", name: "Kurşun & Tambur", description: null, shortcutOrder: 1, stepNames: ["Kurşun", "Tambur"], hasKursun: true };
 
 beforeEach(() => {
   navigateActive.mockReset();
@@ -51,7 +51,7 @@ describe("İş emri türü seçici", () => {
     expect(screen.getByTestId("oie-terbiye")).toBeInTheDocument();
     expect(screen.getByTestId("oie-dokuma")).toBeInTheDocument();
     await userEvent.click(screen.getByText("Kurşun & Tambur"));
-    expect(navigateActive).toHaveBeenCalledWith("/operations/work-orders/new", { state: { oie: { kind: "shortcut", route: { id: "rt-k", name: "Kurşun & Tambur" } } } });
+    expect(navigateActive).toHaveBeenCalledWith("/operations/work-orders/new", { state: { oie: { kind: "shortcut", route: { id: "rt-k", name: "Kurşun & Tambur", hasKursun: true } } } });
     await userEvent.click(screen.getByTestId("oie-dokuma"));
     expect(navigateActive).toHaveBeenLastCalledWith("/operations/weaving-orders", { state: { openNew: true } });
   });
@@ -72,6 +72,7 @@ describe("İş emri türü seçici", () => {
   it("Terbiye seçimi → bugünkü form, rota yok", () => {
     renderWithProviders(<IsEmriGiris start={{ kind: "terbiye" }} renderManual={manual} />);
     expect(screen.getByTestId("manual-form")).toHaveAttribute("data-route", "");
+    expect(screen.getByTestId("manual-form")).toHaveAttribute("data-shortcut", "false");
   });
 });
 
@@ -81,9 +82,12 @@ describe("Kısayol iş emri formu", () => {
     const form = screen.getByTestId("manual-form");
     expect(form).toHaveAttribute("data-route", "rt-k");
     expect(form).toHaveAttribute("data-okut", "false");
+    // Elle doldurulan kısayol formu da `refakatAutoPrint`e uyar (WorkOrderFormPage bu işaretle basar).
+    expect(form).toHaveAttribute("data-shortcut", "true");
     expect(newWorkOrderTitle({ kind: "shortcut", route: { id: "rt-k", name: "Kurşun & Tambur" } })).toBe("Kurşun & Tambur terbiye iş emri");
     await userEvent.click(screen.getByTestId("oie-scan"));
-    expect(screen.getByTestId("upload-dialog")).toBeInTheDocument();
+    // Belge okut: dosya seçilince yükleme kendiliğinden (ayrı "Gönder" yok).
+    expect(screen.getByTestId("upload-dialog")).toHaveAttribute("data-auto", "true");
     expect(screen.getByTestId("oie-scan-many")).toBeInTheDocument();
   });
   it("dışarıdan okutulan belgeyle doğrudan belge doldurmalı form; 'Elle doldur' bugünkü forma döner", async () => {

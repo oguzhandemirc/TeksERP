@@ -1,9 +1,10 @@
 // Belgeden iş emri (K6/K7/K8) saf parçaları: kısayol listesi, form doldurma, review zorunluluğu, kayıt gövdeleri.
-import type { InboundNoteDetail } from '../../../../services/inboundDoc.service';
+import type { InboundNoteDetail, ReadSummary } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import {
   buildCreateBody,
   buildDraftPatch,
+  detailFromSummary,
   initialRowForm,
   isFormApprovalDisabled,
   pinRecent,
@@ -63,6 +64,24 @@ describe('initialRowForm — belge formu doldurur', () => {
     expect(f).toMatchObject({ ownerCustomerId: null, ownerSuggested: null, ourBatchNo: null, meters: null, gramajValueId: null });
     expect(initialRowForm(detail(), catalog, false).gramajValueId).toBeNull();
   });
+  it('⭐ tam metin önerisi (FULL_TEXT) alana yazılmaz, "bu müşteri mi?" olarak sorulur', () => {
+    const s = { customerId: 'c-ist', name: 'İstanbul Tekstil', matchedText: 'Güngören / İSTANBUL', source: 'FULL_TEXT' as const };
+    const f = initialRowForm(detail({ ownerSuggestion: s }), catalog, false);
+    expect(f.ownerCustomerId).toBeNull();
+    expect(f.ownerSuggested).toBeNull();
+    expect(f.ownerAsk).toEqual(s);
+    expect(initialRowForm(detail({ ownerSuggestion: { ...s, source: 'OWNER_TEXT' } }), catalog, false).ownerCustomerId).toBe('c-ist');
+  });
+  it('⭐ okuma özetinden satır kaynağı: detay ucu (gelen-belge:read) olmadan form dolar', () => {
+    const sum = {
+      noteId: 'n7', noteNo: 'GB-7', noteStatus: 'DRAFT', state: 'READ', ownerCustomerId: null, ourBatchNo: 'P-9', ourBatchNoKey: 'K9',
+      kursunMeters: '300', kursunMetersSource: 'OUTPUT', kursunMetersReview: false, batchNoCandidates: [{ value: 'P-9', key: 'K9' }],
+      ownerSuggestion: { customerId: 'c9', name: 'Gülkesim', matchedText: 'GULKESIM', source: 'OWNER_TEXT' },
+    } as unknown as ReadSummary;
+    const d = detailFromSummary(sum);
+    expect(d).toMatchObject({ id: 'n7', noteNo: 'GB-7', status: 'DRAFT', ownerCustomerId: null, ourBatchNo: 'P-9' });
+    expect(initialRowForm(d, catalog, true)).toMatchObject({ ownerCustomerId: 'c9', ourBatchNo: 'P-9', ourBatchNoKey: 'K9', meters: 300, gramajValueId: 'g2' });
+  });
   it('taslakta seçili müşteri öneriyi ezer', () => {
     const f = initialRowForm(detail({ ownerCustomerId: 'c1', ownerSuggestion: { customerId: 'c9', name: 'X', matchedText: 'X' } }), catalog, false);
     expect(f.ownerCustomerId).toBe('c1');
@@ -71,7 +90,10 @@ describe('initialRowForm — belge formu doldurur', () => {
 });
 
 describe('rowIssues — review zorunlu', () => {
-  const base = { ownerCustomerId: 'c1', ownerSuggested: null, ourBatchNo: null, ourBatchNoKey: null, meters: 100, metersReview: false, gramajValueId: null };
+  const base = { ownerCustomerId: 'c1', ownerSuggested: null, ownerAsk: null, ourBatchNo: null, ourBatchNoKey: null, meters: 100, metersReview: false, gramajValueId: null };
+  it('temizlenen parti no gövdede açık null gider (sunucu okumada yazılanı siler)', () => {
+    expect(buildCreateBody(base, { clientToken: 't', routeTemplateId: 'r', gramajPropertyId: null }).ourBatchNo).toBeNull();
+  });
   it('⭐ doğrulanmamış okunan metre kaydı engeller', () => {
     expect(rowIssues({ ...base, metersReview: true })).toEqual(['Kurşun metresini doğrulayın ya da düzeltin.']);
     expect(rowIssues(base)).toEqual([]);
@@ -82,7 +104,7 @@ describe('rowIssues — review zorunlu', () => {
 });
 
 describe('gövdeler', () => {
-  const f = { ownerCustomerId: 'c1', ownerSuggested: null, ourBatchNo: 'P-1', ourBatchNoKey: 'K', meters: 120, metersReview: false, gramajValueId: 'g2' };
+  const f = { ownerCustomerId: 'c1', ownerSuggested: null, ownerAsk: null, ourBatchNo: 'P-1', ourBatchNoKey: 'K', meters: 120, metersReview: false, gramajValueId: 'g2' };
   it('⭐ iş emri gövdesi sözleşme 3: metre string, gramaj hedef değeri', () => {
     expect(buildCreateBody(f, { clientToken: 't', routeTemplateId: 'r1', gramajPropertyId: 'p-gr' })).toEqual({
       clientToken: 't', ownerCustomerId: 'c1', kursunMeters: '120', routeTemplateId: 'r1', ourBatchNo: 'P-1', ourBatchNoKey: 'K',

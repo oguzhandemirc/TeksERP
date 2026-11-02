@@ -315,7 +315,7 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
   {
     screen: "gelen-belge:write",
     path: "GET /gelen-belge/irsaliyeler/:p",
-    why: "Belge Tara onay kartı (T2) detayı okur; okunamazsa (gelen-belge:read yok → 403) kart çizilmez, tarama yolu aynen çalışır (fail-closed, `useApprovalDetail`).",
+    why: "Belge Tara onay kartı (T2) detayı okur; okunamazsa (gelen-belge:read yok → 403) kart çizilmez, tarama yolu aynen çalışır (fail-closed, `useApprovalDetail`). Belgeden iş emri satırı (`DocRowCard`) izin yoksa detayı hiç istemez, 403'te de formu okuma özetinden (`detailFromSummary`, gelen-belge:write) kurar.",
   },
   {
     screen: "gelen-belge:write",

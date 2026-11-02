@@ -40,18 +40,20 @@ export function useUploadForm(target: UploadTarget, onSent: (note: { id: string;
     setDocNoState(v);
   };
   // Seçici ve bırakma aynı yoldan: tanınmayan türler TEK uyarıda toplanır, kalanlar sihirli baytla hazırlanır.
-  const pick = async (files: File[]) => {
-    if (!files.length) return;
+  // Dönüş: eklenen sayfa varsa yeni liste (kendiliğinden gönderim aynı listeyi kullanır), yoksa null.
+  const pick = async (files: File[]): Promise<UploadPage[] | null> => {
+    if (!files.length) return null;
     const { accepted, notice } = splitAcceptedFiles(files);
     setBusy(true);
     const r = await addPickedFiles(pages, accepted);
     setPages(r.pages);
     setNotices(notice ? [notice, ...r.notices] : r.notices);
     setBusy(false);
+    return r.pages.length > pages.length ? r.pages : null;
   };
-  const send = async () => {
-    if (busy || !pages.length) return;
-    const limitError = pageLimitError(target.kind === "pages" ? target.firstPageNo : 1, pages.length);
+  const send = async (list: UploadPage[] = pages) => {
+    if (busy || !list.length) return;
+    const limitError = pageLimitError(target.kind === "pages" ? target.firstPageNo : 1, list.length);
     if (limitError) {
       setError(limitError);
       return;
@@ -59,7 +61,7 @@ export function useUploadForm(target: UploadTarget, onSent: (note: { id: string;
     setBusy(true);
     setError(null);
     try {
-      const input = { pages, ownerCustomerId: owner, senderDocNo: docNo.trim() || null, firstPageNo: target.kind === "pages" ? target.firstPageNo : 1 };
+      const input = { pages: list, ownerCustomerId: owner, senderDocNo: docNo.trim() || null, firstPageNo: target.kind === "pages" ? target.firstPageNo : 1 };
       const binding = { token: () => attempt.token(), onFailure: (e: unknown) => attempt.onFailure(e), onSuccess: () => attempt.onSuccess() };
       const r = await submitUpload(api, input, binding, progress);
       clearFields();

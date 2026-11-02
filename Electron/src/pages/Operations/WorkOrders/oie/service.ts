@@ -12,6 +12,8 @@ export interface WorkOrderShortcut {
   description: string | null;
   shortcutOrder: number;
   stepNames: string[];
+  /** Rotada kurşun adımı var mı (sunucu `isKursunStation`; eski sunucuda PROCESS_QC türü). */
+  hasKursun: boolean;
 }
 
 interface RouteRow {
@@ -21,7 +23,12 @@ interface RouteRow {
   isActive?: boolean;
   isWorkOrderShortcut?: boolean;
   shortcutOrder?: number;
-  steps?: Array<{ sequence: number; station?: { name: string } | null }>;
+  steps?: Array<{ sequence: number; station?: { name: string; kind?: string | null; isKursunStation?: boolean } | null }>;
+}
+
+/** Rota adımlarında kurşun istasyonu var mı — sunucu türetir; alan yoksa (eski sunucu) kurşun+KK2 türü yedeği. */
+export function routeHasKursunStep(steps: ReadonlyArray<{ station?: { kind?: string | null; isKursunStation?: boolean } | null }> | undefined): boolean {
+  return (steps ?? []).some((s) => s.station?.isKursunStation ?? s.station?.kind === "PROCESS_QC");
 }
 
 /** `?shortcut=1` sunucuda sayfasız döner (en çok 100). Yanıttan kısayolları süzer: sunucu süzgeci tanımıyorsa (eski backend) bütün rotalar gelir — işaretsizler atılır. */
@@ -34,6 +41,7 @@ export function toShortcuts(rows: readonly RouteRow[]): WorkOrderShortcut[] {
       description: r.description ?? null,
       shortcutOrder: r.shortcutOrder ?? 0,
       stepNames: [...(r.steps ?? [])].sort((a, b) => a.sequence - b.sequence).map((s) => s.station?.name ?? "?"),
+      hasKursun: routeHasKursunStep(r.steps),
     }))
     .sort((a, b) => a.shortcutOrder - b.shortcutOrder || a.name.localeCompare(b.name, "tr"));
 }
@@ -50,7 +58,8 @@ export async function listWorkOrderShortcuts(): Promise<WorkOrderShortcut[]> {
 export interface NoteWorkOrderBody {
   clientToken: string;
   ownerCustomerId: string;
-  ourBatchNo?: string;
+  /** null = temizle (formda silinen parti no). */
+  ourBatchNo?: string | null;
   ourBatchNoKey?: string;
   kursunMeters: string;
   routeTemplateId: string;

@@ -17,7 +17,7 @@ interface Props {
   route: RouteRef;
   /** Dışarıdan okutulmuş belge (formdaki genel "Belge okut") — doğrudan belge doldurmalı görünüm. */
   noteId: string | null;
-  renderManual: (routeTemplateId: string | null, opts?: { belgeOkut?: boolean }) => ReactNode;
+  renderManual: (routeTemplateId: string | null, opts?: { belgeOkut?: boolean; shortcut?: boolean }) => ReactNode;
 }
 
 export function KisayolIsEmri({ route, noteId, renderManual }: Props) {
@@ -45,11 +45,11 @@ export function KisayolIsEmri({ route, noteId, renderManual }: Props) {
           <span className="text-xs text-muted-foreground">Fotoğrafı ya da PDF'i seçin; okununca kutular kendiliğinden dolar.</span>
         </div>
       )}
-      {view.k === "manual" && renderManual(route.id, { belgeOkut: false })}
+      {view.k === "manual" && renderManual(route.id, { belgeOkut: false, shortcut: true })}
       {view.k === "doc" && <BelgedenIsEmriForm key={view.noteId} noteId={view.noteId} route={route} />}
       {view.k === "bulk" && <TopluBelgeForm noteIds={view.noteIds} route={route} />}
       {dialog === "one" && (
-        <UploadDialog open target={{ kind: "new" }} onOpenChange={(o) => !o && setDialog(null)}
+        <UploadDialog open autoSend target={{ kind: "new" }} onOpenChange={(o) => !o && setDialog(null)}
           onDone={(note) => { setDialog(null); setView({ k: "doc", noteId: note.id }); }} />
       )}
       {dialog === "many" && (

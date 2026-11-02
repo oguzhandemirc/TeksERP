@@ -43,7 +43,7 @@ export function IsEmriSecici({ renderPlain }: Props) {
         <Row title={`Özel ${TERIM.terbiyeIsEmri.cogulKucuk}`} testId="oie-row-shortcuts">
           {shortcuts.map((s) => (
             <Tile key={s.id} icon={<Zap className="h-5 w-5" />} title={s.name} hint={shortcutHint(s)} testId="oie-shortcut"
-              onClick={() => go({ kind: "shortcut", route: { id: s.id, name: s.name } })} />
+              onClick={() => go({ kind: "shortcut", route: { id: s.id, name: s.name, hasKursun: s.hasKursun } })} />
           ))}
         </Row>
       )}

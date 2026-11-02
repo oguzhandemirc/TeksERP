@@ -49,3 +49,9 @@ export async function markKursunStations(routes: ReadonlyArray<unknown>): Promis
   const kursun = new Set(rows.map((r) => r.id));
   for (const st of stations as Array<{ id: string; isKursunStation?: boolean }>) st.isKursunStation = kursun.has(st.id);
 }
+
+/** Yanıt sarmalı: liste (`data` dizi) ya da tekil (`data` nesne) aynı türetmeden geçer; yanıtı aynen döner. */
+export async function withKursunStations<T extends { data?: unknown }>(res: T): Promise<T> {
+  if (res.data) await markKursunStations(Array.isArray(res.data) ? res.data : [res.data]);
+  return res;
+}

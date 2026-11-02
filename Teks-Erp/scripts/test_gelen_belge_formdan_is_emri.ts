@@ -13,11 +13,13 @@
 //      hedef değer geçti, adım planı kabul, audit "WITH_WORK_ORDER: <kullanıcı>"
 //   §5 ⭐ aynı clientToken → aynı yanıt, yeni İE/top yok; strict gövde 400
 //   §6 ⭐ ownerSuggestion: tam metinde sahip adı → bulur (gönderen hariç, source FULL_TEXT); yalnız gönderen/parçalı ad → null;
-//      sahipli taslak null; ⭐ tek çekirdek kelimeli cari adres satırında geçse de null; ⭐ kurulumun kendi firması aday değil
+//      sahipli taslak null; ⭐ tek çekirdek kelimeli cari adres satırında geçse de null; ⭐ kurulumun kendi firması aday değil;
+//      ⭐ gönderen bağsızken antetteki firma (düzenleyen) ve okunan gönderen alanı (senderText) aday değil (Takva demo bulgusu)
 //   §7 ⭐ kısayol: ?shortcut=1 yalnız işaretliler, shortcutOrder sırası; tip hatası 400
 //   §7b ⭐ rota yanıtında adım istasyonu `isKursunStation` (KURSUN_DISPATCH_STATION_WHERE): kurşun AUTO'lu PROCESS_QC true,
 //       yeteneksiz PROCESS_QC false — tekil, liste ve kısayol yanıtında + `GET /api/stations/:id`
-// Negatif sonda: `assertFormApprovalEnabled` çağrısı kaldırılınca §2 kırmızı; `excludeIds` boş verilince §6 gönderen kırmızı;
+// Negatif sonda: `assertFormApprovalEnabled` çağrısı kaldırılınca §2 kırmızı; `excludeIds` boş verilince §6 gönderen kırmızı; `senderIds`ten antet/senderText
+// çıkarılınca §6 Takva kırmızı;
 // onay yeniden yalnız DRAFT'ta koşturulunca §8 kırmızı; okuma kapısı [READ, PARTIAL] allowlist'ine dönünce §3b kırmızı.
 // =============================================================================
 import { randomUUID, createHash } from "crypto";
@@ -32,6 +34,7 @@ import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
 import { setReaderUrlForTests } from "../src/lib/gelen-belge/url";
 import { summaryLineId } from "../src/services/gelen-belge-kontrol.service";
 import { updateDeliveryNote } from "../src/services/gelen-belge-note.service";
+import { letterheadLines, namedIn } from "../src/services/gelen-belge-sahip-onerisi.service";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
@@ -129,8 +132,8 @@ async function run(url: string): Promise<void> {
   };
   const chosen = await mkRoute("kurşun rotası");
 
-  const mkNote = async (scan: "READ" | "PENDING" | "READ_FAILED", text = `${TAG} belge`) => {
-    const r = await call("POST", "/api/gelen-belge/irsaliyeler", tk, { sourceKind: "MANUAL", senderCustomerId: sender, senderText: `${TAG} GÖNDEREN`, lines: [{ senderRollNo: `${TAG}-${made.notes.length}`, meters: 100, itemText: "Kumaş" }] });
+  const mkNote = async (scan: "READ" | "PENDING" | "READ_FAILED", text = `${TAG} belge`, head: { senderCustomerId?: string | null; senderText?: string } = {}) => {
+    const r = await call("POST", "/api/gelen-belge/irsaliyeler", tk, { sourceKind: "MANUAL", senderCustomerId: sender, senderText: `${TAG} GÖNDEREN`, ...head, lines: [{ senderRollNo: `${TAG}-${made.notes.length}`, meters: 100, itemText: "Kumaş" }] });
     const id = (r.data as { id?: string } | undefined)?.id ?? "";
     made.notes.push(id);
     if (id) await addScan(id, scan, text);
@@ -177,14 +180,31 @@ async function run(url: string): Promise<void> {
   const n6d = await mkNote("READ", `Alıcı: ${SFX} PERDE KURŞUN SAN TİC\nSayın ${TAG} Akdeniz Perdecilik`);
   const d6f = await call("GET", `/api/gelen-belge/irsaliyeler/${n6d}`, tk);
   check("§6 ⭐ kurulumun kendi firması aday değil → öneri = gerçek sahip", (d6f.data?.ownerSuggestion as { customerId?: string } | null)?.customerId === owner, JSON.stringify(d6f.data?.ownerSuggestion));
+  // Demo bulgusu: Takva kesim formunda gönderen bağlı değildi (şablon göndereni boş) → antetteki TAKVA önerildi.
+  await mkCustomer("TKV", `${TAG} Takva Tekstil`);
+  const n6g = await mkNote("READ", `${TAG} TAKVA TEKSTİL\nKESİM TAKİP FORMU\nMÜŞTERİ ADI: ${TAG} Akdeniz Perdecilik`, { senderCustomerId: null, senderText: "" });
+  const d6g = await call("GET", `/api/gelen-belge/irsaliyeler/${n6g}`, tk);
+  check("§6 ⭐ gönderen bağsız: antetteki firma (düzenleyen) aday değil → öneri = sahip", (d6g.data?.ownerSuggestion as { customerId?: string } | null)?.customerId === owner, JSON.stringify(d6g.data?.ownerSuggestion));
+  const n6h = await mkNote("READ", `İRSALİYE\nTarih 15.10.2026\nDüzenleyen: ${TAG} Takva Tekstil\nSayın ${TAG} Akdeniz Perdecilik`, { senderCustomerId: null, senderText: `${TAG} TAKVA TEKS.` });
+  const d6h = await call("GET", `/api/gelen-belge/irsaliyeler/${n6h}`, tk);
+  check("§6 ⭐ okunan gönderen alanı (senderText) cariyi dışlar → öneri = sahip", (d6h.data?.ownerSuggestion as { customerId?: string } | null)?.customerId === owner, JSON.stringify(d6h.data?.ownerSuggestion));
+  const n6i = await mkNote("READ", `${TAG} TAKVA TEKSTİL\nKESİM TAKİP FORMU\nMÜŞTERİ ADI:`, { senderCustomerId: null, senderText: "" });
+  const d6i = await call("GET", `/api/gelen-belge/irsaliyeler/${n6i}`, tk);
+  check("§6 ⭐ yalnız antetteki gönderen geçiyor → null (TAKVA önerilmez)", d6i.status === 200 && d6i.data?.ownerSuggestion === null, JSON.stringify(d6i.data?.ownerSuggestion));
+  const perde = [{ id: "p", code: "P", name: `${TAG} Akdeniz Perde` }];
+  check("§6 antet satırı tek yönlü: kısa satır (\"AKDENİZ PERDE\") daha uzun adlı cariyi düşürmez", namedIn("AKDENIZ PERDE", perde, false).length === 0 && namedIn(`${TAG} AKDENİZ PERDE A.Ş.`, perde, false).length === 1);
+  check("§6 antette muhatap satırı (Sayın/Alıcı) atlanır", letterheadLines([["Sayın X", "TAKVA TEKSTİL", "Form"]]).join("|") === "TAKVA TEKSTİL");
   const ozet = await call("GET", `/api/gelen-belge/irsaliyeler/${n}/okuma-ozeti`, tk);
-  check("§6 okuma özeti aynı öneri", (ozet.data?.ownerSuggestion as { customerId?: string } | null)?.customerId === owner);
+  check("§6 okuma özeti aynı öneri + sahip alanı (tablet formu özetten kurulur)", (ozet.data?.ownerSuggestion as { customerId?: string } | null)?.customerId === owner && ozet.data?.ownerCustomerId === null, JSON.stringify({ o: ozet.data?.ownerCustomerId }));
 
   console.log("§3 okuması süren belge");
   const n3 = await mkNote("PENDING");
   setReaderUrlForTests("http://127.0.0.1:9");
   const r3 = await formWo(n3, woUser.token, body());
+  const d3on = await call("GET", `/api/gelen-belge/irsaliyeler/${n3}`, tk);
   setReaderUrlForTests(null);
+  const d3off = await call("GET", `/api/gelen-belge/irsaliyeler/${n3}`, tk);
+  check("§3 detay readerConfigured (okuyucu var true / yok false)", d3on.data?.readerConfigured === true && d3off.data?.readerConfigured === false, `${String(d3on.data?.readerConfigured)} ${String(d3off.data?.readerConfigured)}`);
   check("§3 ⭐ 409 DELIVERY_NOTE_NOT_READ, DRAFT, top 0", r3.status === 409 && r3.code === "DELIVERY_NOTE_NOT_READ" && (await statusOf(n3)) === "DRAFT" && (await rollsOf(n3)).length === 0, `${r3.status} ${r3.code ?? ""}`);
 
   console.log("§3b okuma düşmüş / okuyucusuz belge elle değerle kaydedilir");

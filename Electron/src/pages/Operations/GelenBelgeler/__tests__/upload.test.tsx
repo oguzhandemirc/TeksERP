@@ -36,13 +36,15 @@ vi.mock("@/components/forms/DateRangeInput", () => ({
 
 const listDeliveryNotes = vi.fn();
 const requeueScan = vi.fn();
+const createUploadNote = vi.fn();
+const uploadScan = vi.fn();
 vi.mock("../service", () => ({
   INCOMING_DOCUMENT_QUERY_KEY: "gelen-belge",
   listDeliveryNotes: (...a: unknown[]) => listDeliveryNotes(...a),
   requeueScan: (...a: unknown[]) => requeueScan(...a),
   createManualNote: vi.fn(),
-  createUploadNote: vi.fn(),
-  uploadScan: vi.fn(),
+  createUploadNote: (...a: unknown[]) => createUploadNote(...a),
+  uploadScan: (...a: unknown[]) => uploadScan(...a),
   getReaderStatus: vi.fn(() => new Promise(() => {})),
 }));
 
@@ -69,6 +71,8 @@ const err = (status: number) => new AxiosError("x", "E", undefined, undefined, {
 beforeEach(() => {
   listDeliveryNotes.mockReset().mockResolvedValue({ items: [], nextCursor: null, summary: { DRAFT: 0, APPROVING: 0, APPROVED: 0, PARTIAL: 0, CANCELLED: 0, total: 0 } });
   requeueScan.mockReset().mockResolvedValue({});
+  createUploadNote.mockReset().mockResolvedValue({ id: "n1", noteNo: "GB-1" });
+  uploadScan.mockReset().mockResolvedValue({ duplicate: false });
 });
 
 describe("hazırlık", () => {
@@ -148,6 +152,29 @@ describe("ekranlar", () => {
     fireEvent.change(screen.getByTestId("upload-file-input"), { target: { files: [file("irsaliye.pdf", [0x25, 0x50, 0x44, 0x46])] } });
     expect(await screen.findByTestId("upload-pdf-note")).toHaveTextContent("PDF otomatik okunmaz");
     expect(screen.getByText("irsaliye.pdf")).toBeInTheDocument();
+  });
+  it("⭐ autoSend (iş emri formundan Belge okut): dosya seçilince yükleme kendiliğinden; ayrı Gönder ve başlık alanları yok", async () => {
+    const onDone = vi.fn();
+    renderWithProviders(<UploadDialog open autoSend onOpenChange={() => {}} target={{ kind: "new" }} onDone={onDone} />);
+    expect(screen.queryByTestId("upload-send")).toBeNull();
+    expect(screen.queryByText("Sahip (isteğe bağlı)")).toBeNull();
+    fireEvent.change(screen.getByTestId("upload-file-input"), { target: { files: [file("irsaliye.pdf", [0x25, 0x50, 0x44, 0x46])] } });
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith({ id: "n1", noteNo: "GB-1" }));
+    expect(createUploadNote).toHaveBeenCalledTimes(1);
+    expect(uploadScan).toHaveBeenCalledTimes(1);
+  });
+  it("autoSend hatada Yeniden gönder düğmesi görünür", async () => {
+    uploadScan.mockRejectedValueOnce(err(500));
+    renderWithProviders(<UploadDialog open autoSend onOpenChange={() => {}} target={{ kind: "new" }} onDone={() => {}} />);
+    fireEvent.change(screen.getByTestId("upload-file-input"), { target: { files: [file("irsaliye.pdf", [0x25, 0x50, 0x44, 0x46])] } });
+    await waitFor(() => expect(screen.getByTestId("upload-send")).toHaveTextContent("Yeniden gönder"));
+    expect(screen.getByTestId("upload-error")).toBeInTheDocument();
+  });
+  it("autoSend yoksa (gelen belge listesi) seçim göndermez; Gönder (1) beklenir", async () => {
+    renderWithProviders(<UploadDialog open onOpenChange={() => {}} target={{ kind: "new" }} onDone={() => {}} />);
+    fireEvent.change(screen.getByTestId("upload-file-input"), { target: { files: [file("irsaliye.pdf", [0x25, 0x50, 0x44, 0x46])] } });
+    await waitFor(() => expect(screen.getByTestId("upload-send")).toHaveTextContent("Gönder (1)"));
+    expect(createUploadNote).not.toHaveBeenCalled();
   });
   it("READ_FAILED bandı + Yeniden okut → okut ucu", async () => {
     const onRequeued = vi.fn();

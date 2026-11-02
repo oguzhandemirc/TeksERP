@@ -14,15 +14,16 @@ import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import { belgeOkutStage } from "@/pages/Operations/GelenBelgeler/belgeOkut";
 import { getDeliveryNote, INCOMING_DOCUMENT_QUERY_KEY } from "@/pages/Operations/GelenBelgeler/service";
 import type { DeliveryNoteDetail } from "@/pages/Operations/GelenBelgeler/types";
-import { initialDocDraft, type DocDraft } from "./docDraft";
+import { initialDocDraft, routeGramajOptions, type DocDraft } from "./docDraft";
 import { AUTO_PRINT_TEXT, printRefakatCard, useRefakatAutoPrint } from "./refakatPrint";
 import { saveDoc, saveErrorHint } from "./saveDoc";
 import { BulkRow, type RowResult } from "./BulkRow";
 import { useFormApproval } from "./useFormApproval";
+import type { RouteRef } from "./nav";
 
 interface Props {
   noteIds: string[];
-  route: { id: string; name: string };
+  route: RouteRef;
 }
 
 const isReading = (n: DeliveryNoteDetail | undefined) => !n || belgeOkutStage(n) === "READING";
@@ -41,6 +42,7 @@ function useNotes(noteIds: string[]) {
 export function TopluBelgeForm({ noteIds, route }: Props) {
   const notes = useNotes(noteIds);
   const { catalog, isLoading: catalogLoading } = useKursunGramajCatalog();
+  const gramajOptions = routeGramajOptions(catalog.options, route.hasKursun);
   const approval = useFormApproval();
   const autoPrint = useRefakatAutoPrint();
   const qc = useQueryClient();
@@ -53,9 +55,9 @@ export function TopluBelgeForm({ noteIds, route }: Props) {
   useEffect(() => {
     if (catalogLoading) return;
     const add: Record<string, DocDraft> = {};
-    for (const n of loaded) if (n && !isReading(n) && !drafts[n.id]) add[n.id] = initialDocDraft(n, catalog.options);
+    for (const n of loaded) if (n && !isReading(n) && !drafts[n.id]) add[n.id] = initialDocDraft(n, gramajOptions);
     if (Object.keys(add).length) setDrafts((d) => ({ ...d, ...add }));
-  }, [loaded, catalogLoading, catalog.options, drafts]);
+  }, [loaded, catalogLoading, gramajOptions, drafts]);
 
   const saveAll = async () => {
     setBusy(true);
@@ -88,7 +90,7 @@ export function TopluBelgeForm({ noteIds, route }: Props) {
         <p className="mb-3 text-sm">Rota <b>{route.name}</b> · {noteIds.length} belge{waiting ? " · okunanlar geldikçe satırlar dolar" : ""}</p>
         <div className="flex flex-col gap-2">
           {noteIds.map((id, i) => (
-            <BulkRow key={id} note={loaded[i]} draft={drafts[id]} result={results[id]} gramajOptions={catalog.options} disabled={busy}
+            <BulkRow key={id} note={loaded[i]} draft={drafts[id]} result={results[id]} gramajOptions={gramajOptions} disabled={busy}
               onChange={(d) => setDrafts((all) => ({ ...all, [id]: d }))} />
           ))}
         </div>
