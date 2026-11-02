@@ -213,6 +213,16 @@ async function applyAsOfPrices(works: ServiceRollWork[], ctx: { opt: ServiceReso
   }
 }
 
+/** K14: kurşun gram fiyatı kalem fiyatını ezer — taban ayarı (verilmezse fabrika ayarı) + uyarılar. */
+async function applyGramPricing(works: ServiceRollWork[], ctx: { opt: ServiceResolveOptions; currency: Currency; customerId: string | null; db: Db; warnings: string[] }): Promise<void> {
+  const basis = ctx.opt.gramPriceBasis ?? await readFinanceKursunGramPriceBasis(ctx.db);
+  const gram = await applyKursunGramPrices(works.filter((w) => w.serviceItemId !== null), {
+    currency: ctx.currency, customerId: ctx.customerId, db: ctx.db, basis, priceAt: servicePriceAt(ctx.opt),
+  });
+  if (basis === "INVOICE_DATE" && gram.priced > 0) ctx.warnings.push(gramPriceCurrentWarning(gram.priced));
+  if (gram.late > 0) ctx.warnings.push(gramPriceEnteredLaterWarning(gram.late));
+}
+
 /**
  * Toplara yapılan kurşun ve bayrak tipi (H10) işleri hizmet kalemine ve müşteri fiyatına çözer.
  * Yazmaz; eşleşmeyen top ve fiyatsız kalem `warnings`te görünür (sessiz düşmez).
@@ -270,12 +280,7 @@ export async function resolveServiceItemsForRolls(params: {
   const works = billable.filter((w) => !unknown.includes(w));
 
   await applyAsOfPrices(works, { opt, currency: params.currency, customerId: params.customerId, db });
-  const gramBasis = opt.gramPriceBasis ?? await readFinanceKursunGramPriceBasis(db);
-  const gram = await applyKursunGramPrices(works.filter((w) => w.serviceItemId !== null), {
-    currency: params.currency, customerId: params.customerId, db, basis: gramBasis, priceAt: servicePriceAt(opt),
-  });
-  if (gramBasis === "INVOICE_DATE" && gram.priced > 0) warnings.push(gramPriceCurrentWarning(gram.priced));
-  if (gram.late > 0) warnings.push(gramPriceEnteredLaterWarning(gram.late));
+  await applyGramPricing(works, { opt, currency: params.currency, customerId: params.customerId, db, warnings });
 
   const items = await db.item.findMany({
     where: { id: { in: [...new Set(works.map((w) => w.serviceItemId).filter((v): v is string => v !== null))] } },

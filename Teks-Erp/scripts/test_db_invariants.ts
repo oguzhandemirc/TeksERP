@@ -768,6 +768,9 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // oie-a (2026-11-02): kurşun gram fiyatı para birimiyle birlikte, >= 0; gramaj > 0; varsayılan değer aktif.
   { table: "cari_accounts", name: "cari_accounts_kursun_gram_price_ck" },
   { table: "stations", name: "stations_kursun_gram_price_ck" },
+  // K14: gram fiyatı sürümü — sahip tam biri (istasyon XOR cari) · fiyat >= 0 ve para birimiyle birlikte.
+  { table: "kursun_gram_price_versions", name: "kursun_gram_price_versions_owner_ck" },
+  { table: "kursun_gram_price_versions", name: "kursun_gram_price_versions_price_ck" },
   { table: "fabric_property_values", name: "fabric_property_values_amount_ck" },
   { table: "fabric_property_values", name: "fabric_property_values_default_active_ck" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_kind_ref_ck" },
