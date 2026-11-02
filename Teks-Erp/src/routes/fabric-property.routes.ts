@@ -47,6 +47,9 @@ export const fabricPropertyService = new FabricPropertyService({
       select: { id: true, code: true, name: true, sortOrder: true, isActive: true, serviceItemId: true, consumableItemId: true, stitchCount: true, amount: true, isDefault: true },
       orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
     },
+    // Hiyerarşi gösterimi (K21): satır kendi ebeveynini ve çeşidini adıyla taşır.
+    variantOf: { select: { id: true, code: true, name: true } },
+    variant: { select: { id: true, code: true, name: true, isActive: true } },
   },
   duplicateNameField: "name",
   entityLabel: "özellik",
@@ -79,8 +82,9 @@ const router = Router();
  *         name: filter[category]
  *         schema: { type: string }
  *       - in: query
- *         name: sort
- *         schema: { type: string, example: "sortOrder:asc" }
+ *         name: sortBy
+ *         description: "`hierarchy` → çeşit ebeveyn bayrağının hemen altında (`listLevel`, `listContext` alanlarıyla)"
+ *         schema: { type: string, example: "hierarchy" }
  *     responses:
  *       200: { description: Sayfalanmış özellik listesi }
  */

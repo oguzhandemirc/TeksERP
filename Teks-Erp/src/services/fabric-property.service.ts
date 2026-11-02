@@ -32,6 +32,8 @@ import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
 import { gatedSoftDelete, gatedUpdate } from "./helpers/master-data-archive.helper";
 import { FABRIC_PROPERTY_ARCHIVE } from "./helpers/archive-gate/fabric-property-archive.helper";
 import { assertVariantCreate, assertVariantUpdate, readVariantOf } from "./helpers/property-variant.helper";
+import { HIERARCHY_SORT, listFabricPropertyHierarchy } from "./helpers/fabric-property-hierarchy.helper";
+import type { Request } from "express";
 
 /** Özellik kodu prefix'i — tek-tip kod formatı: `OZL + GGAAYY + NNNN`. */
 const PROPERTY_CODE_PREFIX = "OZL";
@@ -206,6 +208,17 @@ async function replaceValuesTx(
 type ParsedFields = { stationIds: ReturnType<typeof extractStationIds>; values: ReturnType<typeof extractValues>; userId?: string };
 
 export class FabricPropertyService extends BaseService {
+  /** `sortBy=hierarchy` (K21): çeşit ebeveyninin altında, bağlam satırlarıyla; diğer sortBy'lar BaseService yolu. */
+  async findAll(req: Request): ReturnType<BaseService["findAll"]> {
+    if (req.query.sortBy !== HIERARCHY_SORT) return super.findAll(req);
+    this.assertListQueryShape(req);
+    return listFabricPropertyHierarchy(req, {
+      findMany: (args) => this.delegate.findMany(args),
+      include: this.config.defaultInclude,
+      buildWhere: (params) => this.buildListWhere(params, req),
+    });
+  }
+
   /**
    * Özellik kodu backend-authoritative: her zaman `OZL+GGAAYY+NNNN` günlük sıralı
    * üretilir; istemciden gelen `code` YOK SAYILIR. Eşzamanlı iki create aynı sıra
