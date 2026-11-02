@@ -113,6 +113,9 @@ function docValues(h: Row, title: string | null, printInput: PrintInput | undefi
     plaka: asText(h.plateNumber),
     sofor: asText(h.driverName),
     tasiyici: asText(h.carrier),
+    // Teslim yeri (K18) — donmuş snapshot'tan; alanı taşımayan eski belgede null (satır basılmaz).
+    teslim_yeri: asText(asObject(h.deliveryTo).name),
+    teslim_adresi: asText(asObject(h.deliveryTo).address),
   };
 }
 
@@ -257,7 +260,7 @@ function internalFlags(optIn: ReadonlySet<string>): Record<string, boolean> {
 export const shipmentDispatchContract: DocumentContract<DispatchNoteConfig, DispatchLiveOptions> = {
   docType: "SHIPMENT_DISPATCH",
   hedef: "musteri",
-  contractVersion: 2, // 2: KQ-D8 ceki hata_notu (iç, opt-in)
+  contractVersion: 3, // 2: KQ-D8 ceki hata_notu (iç, opt-in) · 3: K18 teslim_yeri/teslim_adresi
   kokler: ROOT_FIELDS,
   tablolar: TABLE_DEFS,
   ayarSemasi: CONFIG_SCHEMA,

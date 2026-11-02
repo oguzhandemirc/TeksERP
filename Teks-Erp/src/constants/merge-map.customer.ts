@@ -31,6 +31,7 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "WarpBeam", table: "warp_beams", column: "supplierId", label: "Levent (hazır alım tedarikçisi)" },
     { kind: "MOVE", model: "YarnLot", table: "yarn_lots", column: "supplierId", label: "İplik lotu (tedarikçi)" },
     { kind: "MOVE", model: "Shipment", table: "shipments", column: "customerId", label: "Sevkiyat" },
+    { kind: "MOVE", model: "Shipment", table: "shipments", column: "deliveryCustomerId", label: "Sevkiyat (teslim yeri)" },
     { kind: "MOVE", model: "DirectShipment", table: "direct_shipments", column: "customerId", label: "Doğrudan sevkiyat" },
     { kind: "MOVE", model: "RollReturn", table: "roll_returns", column: "customerId", label: "İade" },
     { kind: "MOVE", model: "Sack", table: "sacks", column: "customerId", label: "Çuval" },
