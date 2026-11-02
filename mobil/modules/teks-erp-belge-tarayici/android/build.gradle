@@ -19,6 +19,6 @@ android {
 
 dependencies {
   implementation 'com.facebook.react:react-android'
-  // TAM SABİT: tarayıcı seçenek kümesi (galeri kapalı, sayfa sınırı) bu sürümde ölçüldü.
+  // TAM SABİT: tarayıcı seçenek kümesi (galeri açık — kullanıcı kararı 2026-11-02, sayfa sınırı) bu sürümde ölçüldü.
   implementation 'com.google.android.gms:play-services-mlkit-document-scanner:16.0.0'
 }

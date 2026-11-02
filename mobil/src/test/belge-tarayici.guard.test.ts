@@ -1,8 +1,8 @@
 // =============================================================================
 // BEKÇİ: ML Kit belge tarayıcısı köprüsü (mobil/modules/teks-erp-belge-tarayici)
 // =============================================================================
-// Native kaynak jest'te koşmaz; sözleşmenin taşıyıcı seçenekleri metinden ölçülür: galeriden içe aktarma KAPALI
-// (yalnız kâğıt belge), çıktı JPEG, ML Kit sürümü TAM SABİT, uygunluk modül inmemişse indirmeyi arka plana
+// Native kaynak jest'te koşmaz; sözleşmenin taşıyıcı seçenekleri metinden ölçülür: galeriden içe aktarma AÇIK (kullanıcı kararı 2026-11-02)
+// (aynı fotoğrafı sayfa özeti eler), çıktı JPEG, ML Kit sürümü TAM SABİT, uygunluk modül inmemişse indirmeyi arka plana
 // bırakır (tarama beklemez), JS'in çağırdığı modül adı + işlevler native tanımla aynı.
 // =============================================================================
 import fs from 'fs';
@@ -13,9 +13,9 @@ const kt = fs.readFileSync(path.join(MOD, 'android/src/main/java/com/tekserp/bel
 const gradle = fs.readFileSync(path.join(MOD, 'android/build.gradle'), 'utf8');
 const js = fs.readFileSync(path.join(__dirname, '..', 'services', 'docScannerNative.ts'), 'utf8');
 
-it('galeri içe aktarma kapalı, çıktı yalnız JPEG', () => {
-  expect(kt).toMatch(/setGalleryImportAllowed\(false\)/);
-  expect(kt).not.toMatch(/setGalleryImportAllowed\(true\)/);
+it('galeri içe aktarma açık, çıktı yalnız JPEG', () => {
+  expect(kt).toMatch(/setGalleryImportAllowed\(true\)/);
+  expect(kt).not.toMatch(/setGalleryImportAllowed\(false\)/);
   expect(kt).toMatch(/setResultFormats\(GmsDocumentScannerOptions\.RESULT_FORMAT_JPEG\)/);
   expect(kt).not.toMatch(/RESULT_FORMAT_PDF/);
 });
