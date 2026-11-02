@@ -12,6 +12,8 @@
 
 - **[ÇEKİRDEK]** Dağıtımsız kapanışın kapsamı 'her dağıtılmamış adım' DEĞİL: bayrak AÇIK **ve** adım bypass'a UYGUN. Tek kapı `resolveUnassignedTamburClosure`, `assertKursunTabletMayWrite` ile AYNI kaynaktan beslenir — ayrışırsa 'tablet yazamıyor, Tambur da kapatamıyor' çıkmazı döner. Bayrak koşulu load-bearing. · bekçi: `scripts/test_kursun_unassigned_close.ts (bayrak koşulu düşünce 4 kırmızı)` <sub>(CLAUDE.md:52)</sub>
 
+- **[ÇEKİRDEK]** Plan makinesi (`RouteStep/WorkOrderStep.plannedMachineId`) yalnız ÖNERİdir: dağıtımı, tablet yazmayı ya da kapanışı ENGELLEME, uyarı üretme ve fiilî atıf (`RollMovement.machineId`) için KULLANMA; makine adımın istasyonuna ait + aktif olmalı (tek doğrulayıcı `helpers/planned-machine.helper.ts`), sonradan değişim atomik claim (açık adım + canlı İE). · bekçi: `scripts/test_kursun_planned_machine.ts` <sub>(2026-11-02)</sub>
+
 ### Yasaklar
 
 - **[ÇEKİRDEK]** Atıf UYDURULMAZ: dağıtımsız kapanışta `RollMovement.machineId` NULL kalır — varsayılan makineye yazmak makine bazlı hacim raporunu sistematik yanlışlar. Boşluk GÖRÜNÜR kılınır: `listDistribution.unassignedClosures` → amber bant ('son 7 günde N iş dağıtılmadan kapandı'). · bekçi: `scripts/test_kursun_unassigned_close.ts (atıf uydurulunca 1 kırmızı)` <sub>(CLAUDE.md:52)</sub>
