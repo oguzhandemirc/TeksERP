@@ -195,6 +195,28 @@ export interface DocumentTemplate {
   headerLine?: HeaderLineSpec;
   /** Başlıktaki BELGE GENELİ toplam beyanı (çıkış çeki listesinde "Müşteri MT"): her anahtar tek alan; onay toplam kapısı Σ satırı bununla da kıyaslar. */
   headerTotals?: HeaderTotalsSpec;
+  /** Parti no adayları (Gülkesim, 2026-11-02): sıra = öneri sırası (hatırlanan anahtar yoksa). */
+  batchNoCandidates?: BatchNoCandidateSpec[];
+  /** Kurşun metresi kaynakları rol başına (alan anahtarı ya da `$tableTotal`); Σ satır her zaman son yedektir, yazılmaz. */
+  meterSources?: MeterSourcesSpec;
+}
+
+/** Aday türü (yalnız etiket/bilgi; seçim kuralını değiştirmez). */
+export type BatchNoCandidateKind = "BARCODE" | "DOC" | "BATCH" | "WORK_ORDER" | "ORDER" | "FORM";
+export const BATCH_NO_CANDIDATE_KINDS: readonly BatchNoCandidateKind[] = ["BARCODE", "DOC", "BATCH", "WORK_ORDER", "ORDER", "FORM"];
+
+export interface BatchNoCandidateSpec {
+  field: string;
+  kind: BatchNoCandidateKind;
+}
+
+/** `$tableTotal` = Σ blok/tablo beyanı (`totalsDeclared.blocks[].m`); Σ satır DEĞİL. */
+export const TABLE_TOTAL_SOURCE = "$tableTotal";
+
+export interface MeterSourcesSpec {
+  output?: string[];
+  total?: string[];
+  input?: string[];
 }
 
 /** Belge geneli beyan alanları (alan anahtarı); sıfır/okunamayan değer beyan sayılmaz. */

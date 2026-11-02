@@ -22,6 +22,8 @@ export function needsVarianceReason(error: unknown): boolean {
 export const APPROVE_ERROR_TEXT: Record<string, string> = {
   DELIVERY_NOTE_REVIEW_PENDING: "Gözden geçirilmemiş satır var ve fabrika ayarı bu durumda onayı engelliyor. Sarı işaretli hücreleri gözden geçirip yeniden onaylayın.",
   DELIVERY_NOTE_SUSPECT_PENDING: "Şüpheli değerli satır gözden geçirilmedi ve fabrika ayarı bu durumda onayı engelliyor. \"Şüpheli değer\" işaretli hücreleri belgeyle karşılaştırıp yeniden onaylayın.",
+  KURSUN_METERS_REQUIRED: "Kurşun metresi girilmeden belge başına tek kayıt açılamaz. Kurşun metresi kartından metreyi girip yeniden onaylayın.",
+  KURSUN_METERS_REVIEW_PENDING: "Kurşun metresi gözden geçirilmedi ve fabrika ayarı bu durumda onayı engelliyor. Kurşun metresi kartından değeri onaylayın ya da düzeltin.",
   GELEN_BELGE_DEFAULT_ITEM_UNUSABLE: "Ürünü seçilmemiş satırların gireceği varsayılan ürün artık kullanılamıyor; hiç top girilmedi. Satırlara ürün seçin ya da varsayılan ürünü düzeltin.",
 };
 
@@ -154,7 +156,8 @@ export function summarizeAutoWorkOrders(r: AutoWorkOrderResult | undefined | nul
   const title = parts.join(", ") + (r.reason ? ` — ${r.reason}` : "") + ".";
   const lines = r.groups.map((g) => {
     const name = `${g.itemName}${g.targets.length ? ` · ${g.targets.join(" + ")}` : " · desensiz"} (${g.rollCount} top)`;
-    if (g.outcome === "OPENED") return { key: g.key, tone: "ok" as const, text: `${name}: ${g.workOrderNumber ?? TERIM.terbiyeIsEmri.tekilKucuk} açıldı${g.attached != null ? `, ${g.attached} top bağlandı` : ""}` };
+    const batch = g.batchNumber ? ` · parti ${g.batchNumber}` : "";
+    if (g.outcome === "OPENED") return { key: g.key, tone: "ok" as const, text: `${name}: ${g.workOrderNumber ?? TERIM.terbiyeIsEmri.tekilKucuk} açıldı${batch}${g.attached != null ? `, ${g.attached} top bağlandı` : ""}` };
     return { key: g.key, tone: "warn" as const, text: `${name}: elle açılmalı — ${g.reason ?? "neden bildirilmedi"}` };
   });
   return { tone: r.manual > 0 ? "warn" : "ok", title, lines: r.reason ? [] : lines };

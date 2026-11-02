@@ -28,6 +28,9 @@ import { useNoteDetail } from "./useNoteDetail";
 import { ProcessGramajPanel } from "./ProcessGramajPanel";
 import { useProcessGramaj } from "./processChoices";
 import { WorkOrderFromNoteDialog } from "./WorkOrderFromNoteDialog";
+import { BatchNoPicker } from "./BatchNoPicker";
+import { KursunMetersCard } from "./KursunMetersCard";
+import { showsPerDocument } from "./partiMetre";
 import type { DeliveryNoteDetail } from "./types";
 import { TERIM } from "@/lib/terim";
 
@@ -103,6 +106,7 @@ export function IncomingDocumentDetailPage() {
   const editable = isEditable(n.status) && hasPermission("gelen-belge:write");
   const reviewCount = buildReviewQueue(n.lines).length;
   const sel = n.lines.find((l) => l.id === selected) ?? null;
+  const perDoc = showsPerDocument(n);
   const maxBlock = Math.max(1, ...n.lines.map((l) => l.blockNo));
   return (
     <PageShell>
@@ -128,6 +132,8 @@ export function IncomingDocumentDetailPage() {
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <ScanViewer scans={n.scans} highlight={sel ? lineRect(sel) : null} highlightScanId={sel?.scanId ?? null} selectionKey={sel?.id ?? null} />
             <div className="flex min-w-0 flex-col gap-4">
+              {perDoc && <BatchNoPicker note={n} editable={editable} onPatch={(p) => header.mutate(p)} />}
+              {perDoc && <KursunMetersCard note={n} editable={editable} onPatch={(p) => header.mutateAsync(p)} />}
               <NoteHeaderForm note={n} suggestions={suggestions.data} editable={editable} onPatch={(p) => header.mutate(p)} />
               <TotalsStrip check={n.totalsCheck} />
               <NoticesStrip notices={n.notices} />
@@ -145,6 +151,7 @@ export function IncomingDocumentDetailPage() {
             onSelect={setSelected}
             onPatch={(lineId, patch) => line.mutate({ lineId, patch })}
             onDelete={(lineId) => removeLine.mutate(lineId)}
+            perDocument={perDoc}
           />
           {editable && (
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -162,7 +169,7 @@ export function IncomingDocumentDetailPage() {
         scans={n.scans}
         onSave={(item, patch) => line.mutateAsync({ lineId: item.lineId, patch })}
       />
-      <ApproveDialog noteId={n.id} lines={n.lines} processChoices={gramaj.choices} choiceNoun={suggestions.data?.processGroups?.length ? "işlem seçimi" : undefined} open={approveOpen} onOpenChange={setApproveOpen} onDone={() => void invalidate()} />
+      <ApproveDialog noteId={n.id} lines={n.lines} perDocument={perDoc && n.perDocument ? { note: n, gate: n.perDocument } : null} processChoices={gramaj.choices} choiceNoun={suggestions.data?.processGroups?.length ? "işlem seçimi" : undefined} open={approveOpen} onOpenChange={setApproveOpen} onDone={() => void invalidate()} />
     </PageShell>
   );
 }

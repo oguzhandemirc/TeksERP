@@ -29,6 +29,7 @@ import { resolveEffectiveDefaultItem, usableDefaultItem } from "./gelen-belge-va
 import { noteNotices } from "../lib/gelen-belge/uyari";
 import { sameBatchNotes } from "./gelen-belge-parti-tekrar.service";
 import { readDocumentTotalCheck, readIncomingDocEntryMode, readUnreviewedApprovalMode } from "./system-setting.service";
+import { noteBatchAndMeters } from "./gelen-belge-parti-metre.service";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const SERIES_KEY = "customerDeliveryNote";
@@ -168,7 +169,9 @@ export async function getDeliveryNote(id: string) {
   const perDocument = (await readIncomingDocEntryMode()) === "PER_DOCUMENT"
     ? { gate: perDocumentGate(note, note.kursunMetersReview ? await readUnreviewedApprovalMode() : "WARN") }
     : null;
-  return { ...note, lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch, ...(perDocument ? { perDocument: perDocument.gate } : {}) };
+  // Parti no adayları + kurşun metre adayları CANLI (saklanmaz); eski istemci alanları yok sayar.
+  const batchMeters = await noteBatchAndMeters(note.id, note.totalsDeclared, note.lines.filter((l) => l.status !== "SKIPPED" && l.status !== "INFO").map((l) => l.meters));
+  return { ...note, lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch, ...batchMeters, ...(perDocument ? { perDocument: perDocument.gate } : {}) };
 }
 
 /** Liste where'i — özet şeridi de BUNDAN türer (durum süzgeci hariç; şerit duruma göre sayar). */

@@ -4,6 +4,8 @@
 
 import type { AutoWorkOrderResult } from "./workOrderTypes";
 import type { DocumentTotalCheckSettings, LineProblem, TotalsCheck } from "./reviewTypes";
+import type { EntryModeSettings, PartiMetreDetailFields, PartiMetrePatch, PartiMetreHeaderFields, SenderTemplateBatchNoFields } from "./partiMetreTypes";
+export type { AutoWorkOrderPatternlessMode, BatchNoCandidate, BatchNoCandidateKind, BatchNumberSourceMode, IncomingDocEntryMode, KursunMeterCandidates, KursunMetersSource, PerDocumentGate, SenderTemplateBatchNoCandidate } from "./partiMetreTypes";
 export type { DocumentTotalCheckMode, LineProblem, TotalsCheck } from "./reviewTypes";
 
 export type {
@@ -20,7 +22,8 @@ export type {
 export const NOTE_STATUSES = ["DRAFT", "APPROVING", "APPROVED", "PARTIAL", "CANCELLED"] as const;
 export type NoteStatus = (typeof NOTE_STATUSES)[number];
 export type NoteSourceKind = "OCR" | "MANUAL" | "IMPORT";
-export type LineStatus = "PENDING" | "ENTERING" | "ENTERED" | "FAILED" | "SKIPPED";
+/** INFO: belge başına tek kayıt kipinde topsuz bilgi satırı (B); eski backend göndermez. */
+export type LineStatus = "PENDING" | "ENTERING" | "ENTERED" | "FAILED" | "SKIPPED" | "INFO";
 export type ScanStatus = "PENDING" | "READING" | "READ" | "READ_FAILED";
 
 export interface NamedRef {
@@ -44,7 +47,7 @@ export interface DeclaredBlock {
   m: string | null;
 }
 
-export interface DeliveryNoteHeader {
+export interface DeliveryNoteHeader extends PartiMetreHeaderFields {
   id: string;
   noteNo: string;
   status: NoteStatus;
@@ -123,7 +126,7 @@ export interface DocumentScanInfo {
   attempts: number;
 }
 
-export interface DeliveryNoteDetail extends DeliveryNoteHeader {
+export interface DeliveryNoteDetail extends DeliveryNoteHeader, PartiMetreDetailFields {
   lines: DeliveryNoteLine[];
   scans: DocumentScanInfo[];
   /** D4-I3: sahibin İŞ KABULÜ kapsamlı aktif cari kilidi (metin sunucudan); eski backend göndermez. */
@@ -294,13 +297,13 @@ export type HeaderPatch = Partial<
     | "ownerCustomerId" | "senderCustomerId" | "senderText" | "senderDocNo" | "senderDocDate"
     | "customerBatchNo" | "customerOrderNo" | "processText" | "pageCount" | "declaredTopCount"
   >
->;
+> & PartiMetrePatch;
 
 /** E3 hizmet ekseni ayarları — backend `gelen-belge-ayar.service.ts` `IncomingDocSettings` aynası. */
 export type UnreviewedApproval = "WARN" | "BLOCK_SUSPECT" | "BLOCK";
 /** Tablosuz belgede satır metresi kaynağı — backend `HeaderLineMeterSource` aynası. */
 export type HeaderLineMeterSource = "OUTPUT" | "INPUT";
-export interface IncomingDocumentSettings extends DocumentTotalCheckSettings {
+export interface IncomingDocumentSettings extends DocumentTotalCheckSettings, EntryModeSettings {
   /** Ürünü seçilmemiş satırın onayda doğacağı ürün; null = ayar boş (bugünkü: satır ürün ister). */
   defaultItem: { id: string; code: string; name: string; problem: string | null } | null;
   unreviewedApproval: UnreviewedApproval;
@@ -331,7 +334,7 @@ export interface SenderTemplateCustomer {
   name: string;
   isActive: boolean;
 }
-export interface SenderTemplateView {
+export interface SenderTemplateView extends SenderTemplateBatchNoFields {
   code: string;
   name: string;
   version: number;
@@ -348,6 +351,7 @@ export interface SenderTemplatePatch {
   isActive?: boolean;
   senderCustomerId?: string | null;
   defaultOwnerCustomerId?: string | null;
+  batchNoKey?: string | null;
 }
 
 /** Sahibe özel varsayılan ürün (E4, `gelen-belge:template`) — backend `CustomerDefaultView` aynası. */

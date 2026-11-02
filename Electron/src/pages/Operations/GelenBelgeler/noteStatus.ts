@@ -25,6 +25,7 @@ export const LINE_STATUS_LABEL: Record<LineStatus, string> = {
   ENTERED: "Girildi",
   FAILED: "Girilemedi",
   SKIPPED: "Atlandı",
+  INFO: "Bilgi",
 };
 
 /** Yazılabilir mi: başlık/satır düzenleme yalnız DRAFT (PARTIAL'da yalnız FAILED satır atlanır/düzeltilir). */

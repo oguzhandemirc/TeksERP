@@ -115,3 +115,18 @@ describe("yalnız sorunlu satırlar süzgeci", () => {
     expect([v.rows.length, v.problemCount, v.total]).toEqual([1, 1, 3]);
   });
 });
+
+describe("PER_LINE görünümü (P2)", () => {
+  it("perDocument=false açıkça verilince tablo, prop'suz (bugünkü) çizimle bayt-aynı", () => {
+    const lines = [line("a", 1), line("b", 2, { itemId: null, item: null, problems: ["ITEM_UNRESOLVED"] })];
+    const props = { suggestions: undefined, editable: true, canWrite: true, selectedId: null, onSelect: vi.fn(), onPatch: vi.fn(), onDelete: vi.fn() };
+    const note = { id: "n1", status: "DRAFT", ownerCustomerId: null, lines } as unknown as DeliveryNoteDetail;
+    const a = renderWithProviders(<LinesTable note={note} {...props} />);
+    const before = a.container.innerHTML;
+    a.unmount();
+    const b = renderWithProviders(<LinesTable note={note} {...props} perDocument={false} />);
+    expect(b.container.innerHTML).toBe(before);
+    expect(screen.getByRole("columnheader", { name: "Kumaş" })).toBeInTheDocument();
+    expect(screen.queryByTestId("info-lines-title")).toBeNull();
+  });
+});

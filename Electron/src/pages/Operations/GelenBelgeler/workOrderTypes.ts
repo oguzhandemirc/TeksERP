@@ -11,6 +11,8 @@ export interface AutoWorkOrderGroup {
   workOrderId?: string;
   workOrderNumber?: string;
   attached?: number;
+  /** Açılan partinin numarası (belgeden ya da seriden; C); eski backend göndermez. */
+  batchNumber?: string | null;
   reason?: string;
 }
 export interface AutoWorkOrderResult {

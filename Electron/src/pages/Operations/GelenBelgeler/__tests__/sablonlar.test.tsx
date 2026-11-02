@@ -77,6 +77,37 @@ describe("gönderen şablonları sayfası", () => {
   });
 });
 
+describe("parti no alanı (Gülkesim parti/metre P1)", () => {
+  // Negatif sonda: aday düğmesinin `onPatch({ batchNoKey })` çağrısı kaldırılınca "seçim PATCH" kırmızı.
+  const withKey = (batchNoKey: string | null) => row({
+    batchNoKey,
+    batchNoCandidates: [{ field: "isEmriNo", kind: "BARCODE", label: "İş Emri No" }, { field: "musteriPartiNo", kind: "BATCH", label: "Müşteri Parti No" }],
+  });
+
+  it("⭐ adaylar şablon tanımından; seçim yalnız batchNoKey gönderir; temizle null gönderir", async () => {
+    listSenderTemplates.mockResolvedValue([withKey("isEmriNo")]);
+    renderWithProviders(<SenderTemplatesPage />);
+    const current = await screen.findByRole("button", { name: /İş Emri No \(barkod no\)/ });
+    expect(current).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(current);
+    expect(updateSenderTemplate).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: /Müşteri Parti No \(parti no\)/ }));
+    await waitFor(() => expect(updateSenderTemplate).toHaveBeenCalledWith("ceki-listesi-a", { batchNoKey: "musteriPartiNo" }));
+    await userEvent.click(screen.getByRole("button", { name: "Kumaş çeki listesi parti no alanını temizle" }));
+    await waitFor(() => expect(updateSenderTemplate).toHaveBeenCalledWith("ceki-listesi-a", { batchNoKey: null }));
+  });
+
+  it("seçili değilken temizle yok; tanımda olmayan hatırlanan anahtar uyarılır; eski backend bölüm çizmez", async () => {
+    listSenderTemplates.mockResolvedValue([withKey(null), row({ code: "urun-sevk-fisi", name: "Ürün sevk fişi", batchNoKey: "eskiAlan", batchNoCandidates: [] }), row({ code: "eski", name: "Eski" })]);
+    renderWithProviders(<SenderTemplatesPage />);
+    expect(await screen.findByTestId("batch-no-key-ceki-listesi-a")).toHaveTextContent("Seçili değil");
+    expect(screen.queryByRole("button", { name: "Kumaş çeki listesi parti no alanını temizle" })).toBeNull();
+    expect(screen.getByTestId("batch-no-key-urun-sevk-fisi")).toHaveTextContent("Hatırlanan alan (eskiAlan) şablon tanımında artık yok");
+    expect(screen.getByRole("button", { name: "Ürün sevk fişi parti no alanını temizle" })).toBeInTheDocument();
+    expect(screen.queryByTestId("batch-no-key-eski")).toBeNull();
+  });
+});
+
 describe("şablon önerisi etiketi", () => {
   it("TEMPLATE kaynağı '(şablon)' ile işaretlenir", () => {
     renderWithProviders(
