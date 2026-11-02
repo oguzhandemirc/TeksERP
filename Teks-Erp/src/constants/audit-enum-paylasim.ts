@@ -88,6 +88,7 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   TOP: "RollForm(topun biçimi rulo) ve DeliveryNoteLineKind(irsaliye satırı bir top) — ikisi de 'Top (rulo)'; ortak Türkçe doğru",
   FAILED: "ImportRunStatus(aktarım başarısız) ve DeliveryNoteLineStatus(satırın top girişi başarısız) — ikisi de 'Başarısız'",
   SKIPPED: "StepStatus(adım atlandı) ve DeliveryNoteLineStatus(satır onayda atlandı) — ikisi de 'Atlandı'",
+  INFO: "ScanType(bilgi amaçlı tarama) ve DeliveryNoteLineStatus(belge başına tek kayıtta topsuz bilgi satırı) — ikisi de 'Bilgi'",
   ITEM: "DuplicateReviewEntity(mükerrer kumaş) ve DeliveryNoteAliasScope(eşleme hedefi kumaş) — ikisi de 'Kumaş'",
   COLOR: "DuplicateReviewEntity(mükerrer renk) ve DeliveryNoteAliasScope(eşleme hedefi renk) — ikisi de 'Renk'",
   PROCESS:

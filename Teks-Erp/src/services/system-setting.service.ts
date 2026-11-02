@@ -413,6 +413,15 @@ export const SETTING_KEYS = {
   /** Okunan şablonun bağlı gönderen carisi boş gönderen alanına yazılsın mı. Varsayılan KAPALI = bugünkü (OCR gönderen doldurmaz).
    *  Tek yazar `PUT /api/gelen-belge/ayarlar`. */
   GELEN_BELGE_AUTO_SENDER: "gelenBelge.autoSenderFromTemplate",
+  /** Gelen belgeden doğan partinin numarası: SERIES seriden (varsayılan = bugünkü P01…/günlük) | DOCUMENT taslağın
+   *  `ourBatchNo`su (boşsa seri). Tek yazar `PUT /api/gelen-belge/ayarlar`; flag yüküne konmaz. */
+  GELEN_BELGE_BATCH_NUMBER_SOURCE: "gelenBelge.batchNumberSource",
+  /** Onay kipi: PER_LINE her satır bir top (varsayılan = bugünkü) | PER_DOCUMENT belge başına tek top (kurşun metresi).
+   *  PER_DOCUMENT fabrika varsayılan ürünü ister (boşsa yazım 400). Tek yazar `PUT /api/gelen-belge/ayarlar`. */
+  GELEN_BELGE_ENTRY_MODE: "gelenBelge.entryMode",
+  /** İşlem değeri (gramaj/desen) çözülemeyen grupta oto iş emri: SKIP atla (varsayılan = bugünkü) | OPEN hedef
+   *  değersiz aç. Tek yazar `PUT /api/gelen-belge/ayarlar`. */
+  GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS: "gelenBelge.autoWorkOrderPatternless",
   /** Z1 ÜRETİM BELGE ZİNCİRİ (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bugünkü davranış (bağ opsiyonel). */
   DEVERE_BEAM_WEAVING_LINK_REQUIRED: "devere.beamWeavingLinkRequired",
   DOKUMA_RUN_WEAVING_ORDER_REQUIRED: "dokuma.runWeavingOrderRequired",
@@ -6621,6 +6630,35 @@ export async function readDocumentTotalCheck(tx?: Pick<typeof prisma, "systemSet
     ? (v as DocumentTotalCheckMode)
     : DEFAULT_DOCUMENT_TOTAL_CHECK;
 }
+
+/** Kapalı kümeli gelen belge ayarı okuyucusu — kayıt yok / çöp değer varsayılana düşer (`includes` sigortası). */
+async function readClosedSetting<T extends string>(key: string, values: readonly T[], fallback: T, tx?: Pick<typeof prisma, "systemSetting">): Promise<T> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({ where: { key }, select: { value: true } });
+  const v = setting?.value;
+  return typeof v === "string" && (values as readonly string[]).includes(v) ? (v as T) : fallback;
+}
+
+export type BatchNumberSourceMode = "SERIES" | "DOCUMENT";
+export const BATCH_NUMBER_SOURCE_VALUES: readonly BatchNumberSourceMode[] = ["SERIES", "DOCUMENT"];
+/** Varsayılan SERIES = bugünkü davranış (parti numarası seriden doğar). */
+export const DEFAULT_BATCH_NUMBER_SOURCE: BatchNumberSourceMode = "SERIES";
+export const readBatchNumberSource = (tx?: Pick<typeof prisma, "systemSetting">): Promise<BatchNumberSourceMode> =>
+  readClosedSetting(SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, BATCH_NUMBER_SOURCE_VALUES, DEFAULT_BATCH_NUMBER_SOURCE, tx);
+
+export type IncomingDocEntryMode = "PER_LINE" | "PER_DOCUMENT";
+export const ENTRY_MODE_VALUES: readonly IncomingDocEntryMode[] = ["PER_LINE", "PER_DOCUMENT"];
+/** Varsayılan PER_LINE = bugünkü davranış (her satır bir top). */
+export const DEFAULT_ENTRY_MODE: IncomingDocEntryMode = "PER_LINE";
+export const readIncomingDocEntryMode = (tx?: Pick<typeof prisma, "systemSetting">): Promise<IncomingDocEntryMode> =>
+  readClosedSetting(SETTING_KEYS.GELEN_BELGE_ENTRY_MODE, ENTRY_MODE_VALUES, DEFAULT_ENTRY_MODE, tx);
+
+export type AutoWorkOrderPatternlessMode = "SKIP" | "OPEN";
+export const AUTO_WORK_ORDER_PATTERNLESS_VALUES: readonly AutoWorkOrderPatternlessMode[] = ["SKIP", "OPEN"];
+/** Varsayılan SKIP = bugünkü davranış (işlem değeri çözülemeyen grup oto iş emrinde atlanır). */
+export const DEFAULT_AUTO_WORK_ORDER_PATTERNLESS: AutoWorkOrderPatternlessMode = "SKIP";
+export const readAutoWorkOrderPatternless = (tx?: Pick<typeof prisma, "systemSetting">): Promise<AutoWorkOrderPatternlessMode> =>
+  readClosedSetting(SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS, AUTO_WORK_ORDER_PATTERNLESS_VALUES, DEFAULT_AUTO_WORK_ORDER_PATTERNLESS, tx);
 
 /** Rota önerisinin fabrika varsayılanı; kayıt yok / boş / UUID değil → null (bugünkü: fabrika kaynağı yok). */
 export async function readIncomingDocDefaultRouteId(tx?: Pick<typeof prisma, "systemSetting">): Promise<string | null> {

@@ -417,6 +417,14 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   permission: "Yetki",
   ipAddress: "IP Adresi",
   clientType: "İstemci",
+  // ── Gülkesim parti no + kurşun metresi (S0, 2026-11-02)
+  ourBatchNo: "Parti no (belgeden)",
+  ourBatchNoKey: "Parti no kaynağı",
+  kursunMeters: "Kurşun metresi",
+  kursunMetersSource: "Kurşun metresi kaynağı",
+  kursunMetersReview: "Kurşun metresi gözden geçirilecek",
+  batchNoKey: "Parti no alanı",
+  numberSource: "Numara kaynağı",
 };
 
 /** Alanın Türkçe karşılığı; yoksa HAM AD (fail-open). */

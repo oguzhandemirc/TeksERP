@@ -4922,8 +4922,14 @@ model WorkOrder {
 // Parti (Batch) — üretime aynı anda giren top grubu (bir iş emri N parti içerir).
 // Attach dalgasında doğar; ton/izlenebilirlik birimi; refakat kartı parti başına.
 // "Dal" (eski batchSplitId=dispatch.id) kavramının yerini alır. Detay: PARTI-MODELI-TASARIM.md.
+/// Parti numarasının kaynağı (Gülkesim parti no tasarımı 2026-11-02 §2.6).
+enum BatchNumberSource {
+  SERIES
+  DOCUMENT
+}
+
 model Batch {
-  id          String  @id @default(uuid()) @db.Uuid
+  id           String            @id @default(uuid()) @db.Uuid
   /// Parti numarası. İKİ BİÇİM, `batch.shortNumberEnabled` bayrağına göre:
   ///   • AÇIK (varsayılan) → `P01 … P99`, 99'dan sonra P01'e SARAR.
   ///   • KAPALI            → `P + GGAAYY + günlük sıra` (dolgusuz, eski biçim).
@@ -4932,10 +4938,13 @@ model Batch {
   /// bir yeniden kullanılır (fabrika numaralı fiziksel parti plakası kullanıyor).
   /// Partinin KİMLİĞİ `id`'dir; hiçbir yerde `batchNumber` ile lookup YAPMA.
   /// Yarış koruması artık kısıt değil, `generateBatchNumberTx`'teki advisory lock.
-  batchNumber String  @db.VarChar(64)
-  workOrderId String  @db.Uuid
+  batchNumber  String            @db.VarChar(64)
+  /// Numaranın kaynağı: `SERIES` (P01…/günlük seri, varsayılan = bugünkü) | `DOCUMENT` (gelen belgeden, seriye girmez).
+  /// Seri sayaç okuyucuları yalnız `SERIES` satırı okur — belge no seri regex'ine uyup sayacı kaydırmasın.
+  numberSource BatchNumberSource @default(SERIES)
+  workOrderId  String            @db.Uuid
   /// "Parti Ekle" ucunun idempotency anahtarı (hareket defteri D8) — istemci mantıksal deneme başına üretir.
-  clientToken String? @unique @db.Uuid
+  clientToken  String?           @unique @db.Uuid
 
   /// Parti soy bağı — kısmi sevk kalanı / elle bölme / redye'da kaynak parti.
   /// NULL = doğrudan ekleme dalgasıyla doğan kök parti.
@@ -14310,6 +14319,9 @@ enum DeliveryNoteLineStatus {
   ENTERED
   FAILED
   SKIPPED
+  /// Belge başına tek kayıt kipinde (`gelenBelge.entryMode=PER_DOCUMENT`) topsuz bilgi satırı — canlı satır sayılmaz.
+  /// ADD VALUE kendi migration'ında (20261102085911); değeri yazan onay dilimidir (S0'da yazan yok).
+  INFO
 }
 
 enum DocumentScanStatus {
@@ -14332,40 +14344,50 @@ enum DeliveryNoteAliasScope {
 /// `customerBatchNo` METİNDİR (`Batch`e eşlenmez). Türetilen toplam saklanmaz (satırlardan hesaplanır).
 /// Partial unique (sahip, gönderen belge no) iptal dışı satırlarda — DB'de (`customer_delivery_notes_owner_sender_doc_uq`).
 model CustomerDeliveryNote {
-  id               String                 @id @default(uuid()) @db.Uuid
-  noteNo           String                 @unique @db.VarChar(32)
-  status           DeliveryNoteStatus     @default(DRAFT)
-  sourceKind       DeliveryNoteSourceKind
-  ownerCustomerId  String?                @db.Uuid
-  senderCustomerId String?                @db.Uuid
-  senderText       String?                @db.VarChar(160)
+  id                 String                 @id @default(uuid()) @db.Uuid
+  noteNo             String                 @unique @db.VarChar(32)
+  status             DeliveryNoteStatus     @default(DRAFT)
+  sourceKind         DeliveryNoteSourceKind
+  ownerCustomerId    String?                @db.Uuid
+  senderCustomerId   String?                @db.Uuid
+  senderText         String?                @db.VarChar(160)
   /// Belgedeki Müşteri/FİRMA/Sayın alanının ham metni (OCR); sahip eşlemesi bundan önerilir — "sahip = gönderen" varsayımı YOK.
-  ownerText        String?                @db.VarChar(160)
-  senderDocNo      String?                @db.VarChar(64)
+  ownerText          String?                @db.VarChar(160)
+  senderDocNo        String?                @db.VarChar(64)
   /// Takvim günü (belge üstündeki tarih) — an değil gün anlatır.
-  senderDocDate    DateTime?              @db.Date
-  customerBatchNo  String?                @db.VarChar(64)
+  senderDocDate      DateTime?              @db.Date
+  customerBatchNo    String?                @db.VarChar(64)
   /// Müşterinin basılı "Sipariş No"su (OCR'da ilk bloğun değeri; bloklar farklıysa BLOCK_IDS_DIFFER uyarısı) — yalnız arama/künye.
-  customerOrderNo  String?                @db.VarChar(64)
-  processText      String?                @db.VarChar(120)
-  templateId       String?                @db.Uuid
-  templateScore    Decimal?               @db.Decimal(5, 4)
+  customerOrderNo    String?                @db.VarChar(64)
+  /// Bizim parti no'muz (belgeden seçilen aday ya da elle). `gelenBelge.batchNumberSource=DOCUMENT` iken parti bu adla doğar.
+  ourBatchNo         String?                @db.VarChar(64)
+  /// `ourBatchNo`nun geldiği şablon alan anahtarı (`isEmriNo`…) ya da `MANUAL`.
+  ourBatchNoKey      String?                @db.VarChar(32)
+  /// Kurşun metresi (belge başına tek kayıt kipinde topun metresi). > 0; kaynakla birlikte dolu/boş (CHECK'ler migration'da).
+  kursunMeters       Decimal?               @db.Decimal(12, 3)
+  /// `OUTPUT` · `TOTAL` · `LINE_SUM` · `MANUAL` (CHECK `customer_delivery_notes_kursun_source_ck`).
+  kursunMetersSource String?                @db.VarChar(16)
+  /// Kurşun metresi gözden geçirilmeli (el yazısı kaynağı ya da adaylar çelişkili).
+  kursunMetersReview Boolean                @default(false)
+  processText        String?                @db.VarChar(120)
+  templateId         String?                @db.Uuid
+  templateScore      Decimal?               @db.Decimal(5, 4)
   /// "1/2" sayfa damgası — belge kaç sayfa beyan ediyor (sert kapı D4'te).
-  pageCount        Int?                   @db.SmallInt
+  pageCount          Int?                   @db.SmallInt
   /// Belgede yazan top adedi — yalnız UYARI sınıfı (satır sayısıyla çelişebilir).
-  declaredTopCount Int?                   @db.SmallInt
+  declaredTopCount   Int?                   @db.SmallInt
   /// Blok başına beyan edilen adet/kg/m (`{ blocks: [{ blockNo, count, kg, m }] }`).
-  totalsDeclared   Json?
-  varianceReason   String?                @db.VarChar(500)
-  warnings         Json                   @default("[]")
-  approvedAt       DateTime?              @db.Timestamptz
-  approvedById     String?                @db.Uuid
-  cancelledAt      DateTime?              @db.Timestamptz
-  cancelledById    String?                @db.Uuid
-  cancelReason     String?                @db.VarChar(500)
-  clientToken      String?                @unique @db.Uuid
-  createdAt        DateTime               @default(now()) @db.Timestamptz
-  updatedAt        DateTime               @updatedAt @db.Timestamptz
+  totalsDeclared     Json?
+  varianceReason     String?                @db.VarChar(500)
+  warnings           Json                   @default("[]")
+  approvedAt         DateTime?              @db.Timestamptz
+  approvedById       String?                @db.Uuid
+  cancelledAt        DateTime?              @db.Timestamptz
+  cancelledById      String?                @db.Uuid
+  cancelReason       String?                @db.VarChar(500)
+  clientToken        String?                @unique @db.Uuid
+  createdAt          DateTime               @default(now()) @db.Timestamptz
+  updatedAt          DateTime               @updatedAt @db.Timestamptz
 
   ownerCustomer  Customer?                  @relation("CustomerDeliveryNoteOwner", fields: [ownerCustomerId], references: [id], onDelete: Restrict)
   senderCustomer Customer?                  @relation("CustomerDeliveryNoteSender", fields: [senderCustomerId], references: [id], onDelete: Restrict)
@@ -14479,6 +14501,8 @@ model SenderTemplate {
   template               Json
   senderCustomerId       String?  @db.Uuid
   defaultOwnerCustomerId String?  @db.Uuid
+  /// "Bu formda parti no hangi alan" — onayda öğrenilen aday anahtarı (`isEmriNo`…); NULL = hatırlanan yok.
+  batchNoKey             String?  @db.VarChar(32)
   isActive               Boolean  @default(true)
   hitCount               Int      @default(0)
   createdAt              DateTime @default(now()) @db.Timestamptz

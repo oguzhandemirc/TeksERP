@@ -344,6 +344,9 @@ const SettingsBody = z.strictObject({
   headerLineMeterSource: z.enum(["OUTPUT", "INPUT"], "Seçenek OUTPUT ya da INPUT olmalı").optional(),
   autoSenderFromTemplate: z.boolean("Şablondan gönderen evet/hayır olmalı").optional(),
   documentTotalCheck: z.enum(["INFO", "REQUIRE_REASON"], "Seçenek INFO ya da REQUIRE_REASON olmalı").optional(),
+  batchNumberSource: z.enum(["SERIES", "DOCUMENT"], "Seçenek SERIES ya da DOCUMENT olmalı").optional(),
+  entryMode: z.enum(["PER_LINE", "PER_DOCUMENT"], "Seçenek PER_LINE ya da PER_DOCUMENT olmalı").optional(),
+  autoWorkOrderPatternless: z.enum(["SKIP", "OPEN"], "Seçenek SKIP ya da OPEN olmalı").optional(),
 });
 /**
  * @openapi
@@ -353,7 +356,7 @@ const SettingsBody = z.strictObject({
  *     summary: Gelen belge ayarları — varsayılan ürün (ad + kullanılabilirlik) ve gözden geçirilmemiş hücreyle onay kipi
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "defaultItem (id, code, name, problem) | null · unreviewedApproval WARN|BLOCK_SUSPECT|BLOCK · autoWorkOrder boolean · defaultRoute (id, name, problem) | null · routeSuggestionPriority CUSTOMER_FIRST|FACTORY_FIRST · headerLineMeterSource OUTPUT|INPUT · autoSenderFromTemplate boolean · documentTotalCheck INFO|REQUIRE_REASON" }
+ *       200: { description: "defaultItem (id, code, name, problem) | null · unreviewedApproval WARN|BLOCK_SUSPECT|BLOCK · autoWorkOrder boolean · defaultRoute (id, name, problem) | null · routeSuggestionPriority CUSTOMER_FIRST|FACTORY_FIRST · headerLineMeterSource OUTPUT|INPUT · autoSenderFromTemplate boolean · documentTotalCheck INFO|REQUIRE_REASON · batchNumberSource SERIES|DOCUMENT · entryMode PER_LINE|PER_DOCUMENT · autoWorkOrderPatternless SKIP|OPEN (her biri default* alanıyla)" }
  *   put:
  *     tags: [GelenBelge]
  *     summary: Gelen belge ayarlarını yaz (yalnız admin:settings + ayar şifresi); pasif/top doğuramayan ürün 400 GELEN_BELGE_DEFAULT_ITEM_INVALID
@@ -373,6 +376,9 @@ const SettingsBody = z.strictObject({
  *               headerLineMeterSource: { type: string, enum: [OUTPUT, INPUT], description: "Tablosuz belgede satır metresi: çıkış (varsayılan) ya da giriş toplamı" }
  *               autoSenderFromTemplate: { type: boolean, description: "Okunan şablonun gönderen carisi boş gönderene yazılır (varsayılan false)" }
  *               documentTotalCheck: { type: string, enum: [INFO, REQUIRE_REASON], description: "Belge geneli beyan (Müşteri MT) farkı: INFO bilgi, onay geçer (varsayılan) · REQUIRE_REASON gerekçesiz 409 TOTAL_MISMATCH" }
+ *               batchNumberSource: { type: string, enum: [SERIES, DOCUMENT], description: "Gelen belgeden doğan partinin numarası: seriden (varsayılan) ya da belgedeki parti no'dan" }
+ *               entryMode: { type: string, enum: [PER_LINE, PER_DOCUMENT], description: "Onay kipi: her satır bir top (varsayılan) ya da belge başına tek kayıt; PER_DOCUMENT varsayılan ürünsüz 400 GELEN_BELGE_PER_DOCUMENT_NEEDS_DEFAULT_ITEM" }
+ *               autoWorkOrderPatternless: { type: string, enum: [SKIP, OPEN], description: "İşlem değeri çözülemeyen grupta otomatik iş emri: atla (varsayılan) ya da hedef değersiz aç" }
  *     responses:
  *       200: { description: Güncel ayarlar }
  */

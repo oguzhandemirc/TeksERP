@@ -1,7 +1,7 @@
 // =============================================================================
 // TeksERP — Gelen belge AYARLARI (hizmet ekseni E3; TASARIM-KARARI §8 HİZMET EKSENİ (1))
 // =============================================================================
-// Dokuz fabrika ayarı, TEK yazar `PUT /api/gelen-belge/ayarlar` (ham `PUT /api/admin/settings/:key` bu anahtarları
+// On iki fabrika ayarı, TEK yazar `PUT /api/gelen-belge/ayarlar` (ham `PUT /api/admin/settings/:key` bu anahtarları
 // REDDEDER — doğrulamasız düz metin yazıp ürün kapısını dolanmasın):
 //   · `gelenBelge.defaultItemId` — ürünü seçilmemiş satır onayda bu ürünle doğar (boş = bugünkü: 400 UNRESOLVED)
 //   · `gelenBelge.unreviewedApproval` — needsReview satır varken onay: WARN (varsayılan, geçer) | BLOCK_SUSPECT (yalnız
@@ -13,6 +13,9 @@
 //   · `gelenBelge.headerLineMeterSource` — tablosuz belgede satır metresi: OUTPUT çıkış (varsayılan, bugünkü) | INPUT giriş
 //   · `gelenBelge.autoSenderFromTemplate` — okunan şablonun gönderen carisi boş gönderene yazılır (varsayılan kapalı)
 //   · `gelenBelge.documentTotalCheck` — belge geneli beyan farkı: INFO (varsayılan, bilgi + uyarı) | REQUIRE_REASON (gerekçesiz 409)
+//   · `gelenBelge.batchNumberSource` — SERIES (varsayılan) | DOCUMENT (parti no belgeden) — Gülkesim parti/metre §2.1
+//   · `gelenBelge.entryMode` — PER_LINE (varsayılan) | PER_DOCUMENT (belge başına tek kayıt; fabrika varsayılan ürünü ŞART)
+//   · `gelenBelge.autoWorkOrderPatternless` — SKIP (varsayılan) | OPEN (işlem değeri çözülemeyen grupta hedefsiz iş emri)
 // Ürün kapısı tek karar: yaşam döngüsü `assertItemUsable(NEW_STOCK)` + top doğurabilen tür ALLOWLIST'i
 // (`ROLL_BEARING_ITEM_TYPES`; yeni tür — ör. SERVICE — eklendiği gün kendiliğinden dışarıda kalır).
 // =============================================================================
@@ -48,6 +51,18 @@ import {
   readUnreviewedApprovalMode,
   systemSettingService,
   type UnreviewedApprovalMode,
+  readBatchNumberSource,
+  DEFAULT_BATCH_NUMBER_SOURCE,
+  BATCH_NUMBER_SOURCE_VALUES,
+  type BatchNumberSourceMode,
+  readIncomingDocEntryMode,
+  DEFAULT_ENTRY_MODE,
+  ENTRY_MODE_VALUES,
+  type IncomingDocEntryMode,
+  readAutoWorkOrderPatternless,
+  DEFAULT_AUTO_WORK_ORDER_PATTERNLESS,
+  AUTO_WORK_ORDER_PATTERNLESS_VALUES,
+  type AutoWorkOrderPatternlessMode,
 } from "./system-setting.service";
 
 /** Top doğurabilen ürün türleri — `InventoryService.createInitialEntry` kapısıyla aynı küme (yalnız kumaş). */
@@ -64,6 +79,9 @@ export const INCOMING_DOC_DEDICATED_SETTING_KEYS: ReadonlySet<string> = new Set(
   SETTING_KEYS.GELEN_BELGE_HEADER_LINE_SOURCE,
   SETTING_KEYS.GELEN_BELGE_AUTO_SENDER,
   SETTING_KEYS.GELEN_BELGE_DOCUMENT_TOTAL_CHECK,
+  SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE,
+  SETTING_KEYS.GELEN_BELGE_ENTRY_MODE,
+  SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS,
 ]);
 
 export interface DefaultItemView {
@@ -96,6 +114,15 @@ export interface IncomingDocSettings {
   /** Belge geneli beyan (Müşteri MT) farkı: INFO bilgi (onay geçer) | REQUIRE_REASON gerekçe ister. */
   documentTotalCheck: DocumentTotalCheckMode;
   defaultDocumentTotalCheck: DocumentTotalCheckMode;
+  /** Gelen belgeden doğan partinin numarası: SERIES seriden (varsayılan) | DOCUMENT taslağın parti no'su (boşsa seri). */
+  batchNumberSource: BatchNumberSourceMode;
+  defaultBatchNumberSource: BatchNumberSourceMode;
+  /** Onay kipi: PER_LINE her satır bir top (varsayılan) | PER_DOCUMENT belge başına tek top. */
+  entryMode: IncomingDocEntryMode;
+  defaultEntryMode: IncomingDocEntryMode;
+  /** İşlem değeri çözülemeyen grupta oto iş emri: SKIP atla (varsayılan) | OPEN hedef değersiz aç. */
+  autoWorkOrderPatternless: AutoWorkOrderPatternlessMode;
+  defaultAutoWorkOrderPatternless: AutoWorkOrderPatternlessMode;
 }
 
 /**
@@ -147,6 +174,12 @@ export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
     autoSenderFromTemplate: await readIncomingDocAutoSender(),
     documentTotalCheck: await readDocumentTotalCheck(),
     defaultDocumentTotalCheck: DEFAULT_DOCUMENT_TOTAL_CHECK,
+    batchNumberSource: await readBatchNumberSource(),
+    defaultBatchNumberSource: DEFAULT_BATCH_NUMBER_SOURCE,
+    entryMode: await readIncomingDocEntryMode(),
+    defaultEntryMode: DEFAULT_ENTRY_MODE,
+    autoWorkOrderPatternless: await readAutoWorkOrderPatternless(),
+    defaultAutoWorkOrderPatternless: DEFAULT_AUTO_WORK_ORDER_PATTERNLESS,
   };
 }
 
@@ -163,10 +196,29 @@ export interface IncomingDocSettingsInput {
   headerLineMeterSource?: HeaderLineMeterSource;
   autoSenderFromTemplate?: boolean;
   documentTotalCheck?: DocumentTotalCheckMode;
+  batchNumberSource?: BatchNumberSourceMode;
+  entryMode?: IncomingDocEntryMode;
+  autoWorkOrderPatternless?: AutoWorkOrderPatternlessMode;
+}
+
+/**
+ * PER_DOCUMENT ön koşulu — etkin kip PER_DOCUMENT iken etkin fabrika varsayılan ürünü boş/kullanılamaz olamaz (özet satırı
+ * ürünsüz doğar; varsayılansız kip çıkışsız kapıdır). Yalnız kip ya da varsayılan ürün yazılırken, HER yazımdan ÖNCE koşar.
+ */
+async function assertEntryModePrecondition(input: IncomingDocSettingsInput): Promise<void> {
+  if (input.entryMode === undefined && input.defaultItemId === undefined) return;
+  if ((input.entryMode ?? (await readIncomingDocEntryMode())) !== "PER_DOCUMENT") return;
+  const itemId = input.defaultItemId !== undefined ? input.defaultItemId : await readIncomingDocDefaultItemId();
+  // Gövdedeki ürünün kendi doğrulaması (DEFAULT_ITEM_INVALID) aşağıda; burada yalnız kayıtlı ürünün bugünkü hâli.
+  const problem = itemId === null ? "varsayılan ürün seçilmemiş." : input.defaultItemId === undefined ? (await itemProblem(itemId)).problem : null;
+  if (problem) {
+    throw AppError.badRequest(`Belge başına tek kayıt kipi fabrika varsayılan ürünü ister: ${problem} Önce top doğurabilen bir varsayılan ürün seçin.`, { code: "GELEN_BELGE_PER_DOCUMENT_NEEDS_DEFAULT_ITEM" });
+  }
 }
 
 /** Yazım: ürün doğrulaması 400 `GELEN_BELGE_DEFAULT_ITEM_INVALID`; audit `systemSettingService.set` içinde. */
 export async function updateIncomingDocSettings(input: IncomingDocSettingsInput, userId: string): Promise<IncomingDocSettings> {
+  await assertEntryModePrecondition(input);
   if (input.defaultItemId !== undefined) {
     if (input.defaultItemId !== null) {
       const { problem } = await itemProblem(input.defaultItemId);
@@ -210,7 +262,30 @@ export async function updateIncomingDocSettings(input: IncomingDocSettingsInput,
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_OUTLIER_FACTOR, k ?? "", "Gelen belge: el yazısı şüpheli metre oranı (medyanın 1/K altı ya da K katı üstü)", userId);
   }
   await updateReadOptions(input, userId);
+  await updateEntryOptions(input, userId);
   return getIncomingDocSettings();
+}
+
+/** Parti no / onay kipi / gramajsız oto iş emri (Gülkesim parti/metre S0) — ayar yalnız tanımlı; davranışı okuyan dilimler B/C. */
+async function updateEntryOptions(input: IncomingDocSettingsInput, userId: string): Promise<void> {
+  if (input.batchNumberSource !== undefined) {
+    if (!BATCH_NUMBER_SOURCE_VALUES.includes(input.batchNumberSource)) {
+      throw AppError.badRequest("Geçersiz seçenek: SERIES ya da DOCUMENT olmalı.", { code: "VALIDATION_ERROR" });
+    }
+    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, input.batchNumberSource, "Gelen belge: parti numarası kaynağı (SERIES seri / DOCUMENT belgeden)", userId);
+  }
+  if (input.entryMode !== undefined) {
+    if (!ENTRY_MODE_VALUES.includes(input.entryMode)) {
+      throw AppError.badRequest("Geçersiz seçenek: PER_LINE ya da PER_DOCUMENT olmalı.", { code: "VALIDATION_ERROR" });
+    }
+    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_ENTRY_MODE, input.entryMode, "Gelen belge: onay kipi (PER_LINE satır başına top / PER_DOCUMENT belge başına tek kayıt)", userId);
+  }
+  if (input.autoWorkOrderPatternless !== undefined) {
+    if (!AUTO_WORK_ORDER_PATTERNLESS_VALUES.includes(input.autoWorkOrderPatternless)) {
+      throw AppError.badRequest("Geçersiz seçenek: SKIP ya da OPEN olmalı.", { code: "VALIDATION_ERROR" });
+    }
+    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS, input.autoWorkOrderPatternless, `Gelen belge: işlem değeri çözülemeyen grupta ${TERIM.terbiyeIsEmri.tekilKucuk} (SKIP atla / OPEN hedefsiz aç)`, userId);
+  }
 }
 
 /** Okuma seçenekleri (S5 metre kaynağı · S3b şablondan gönderen · belge geneli beyan kipi) — yeni okumaya uygulanır, taslağı geriye dönük değiştirmez. */

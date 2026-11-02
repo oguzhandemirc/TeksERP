@@ -376,7 +376,7 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   IMPORT: "Dosyadan aktarıldı",
   // DeliveryNoteLineKind — TOP ortak ("Top (rulo)")
   ARABA: "Araba (tek top)",
-  // DeliveryNoteLineStatus
+  // DeliveryNoteLineStatus — INFO ortak ("Bilgi", paylaşım beyanı)
   ENTERING: "Giriş yapılıyor",
   ENTERED: "Girişi yapıldı",
   // DocumentScanStatus
