@@ -90,7 +90,7 @@ import { measuredWidthErrorText, widthCaptureEnabled } from './measuredWidth';
 import { kursunFinishRollId, type KursunFinishVars } from '../../../offline/kursunFinishVars';
 import { meterSettingsOf, pendingAcksFromError } from './meterCapture';
 import { primaryMeterFor, useMachinePeripherals } from '../../../hooks/useMachinePeripherals';
-import { findTarget } from './gramajTap';
+import { findTarget, targetChipText } from './gramajTap';
 import { useAuthStore } from '../../../store/authStore';
 import { palette } from '../../../theme/tokens';
 
@@ -1448,14 +1448,14 @@ export default function KursunQcScreen() {
                           ? findTarget(
                               activeJob.stepSummary.targetValues,
                               p.propertyId,
-                              (p.values ?? []).map((v) => ({ code: v.code, label: v.name })),
+                              (p.values ?? []).map((v) => ({ code: v.code, label: v.name, isDefault: v.isDefault })),
                             )
                           : null;
                         return (
                           <View key={p.propertyId} style={styles.propChoiceBlock}>
                             <Text style={styles.propChoiceLabel}>
                               {p.mode === 'REQUIRED' ? `${p.name} *` : p.name}
-                              {target ? `  ·  HEDEF ${target.label}` : ''}
+                              {target ? `  ·  ${targetChipText(target)}` : ''}
                             </Text>
                             {(p.values ?? []).length === 0 ? (
                               // Değersiz SEÇİM özelliği: backend bunu doğduğu anda

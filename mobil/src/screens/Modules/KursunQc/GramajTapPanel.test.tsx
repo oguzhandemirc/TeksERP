@@ -24,13 +24,13 @@ const VALUES = [
   { code: '75GR', name: '75 gr' },
 ];
 
-function summary(flagMode: 'AUTO' | 'OPTIONAL' | 'REQUIRED', target: string | null): KursunStepSummary {
+function summary(flagMode: 'AUTO' | 'OPTIONAL' | 'REQUIRED', target: string | null, values: typeof VALUES = VALUES): KursunStepSummary {
   return {
     workOrderStepId: 'step-1',
     inspectionEnabled: false,
     properties: [
       { propertyId: 'kursun', code: 'KURSUN', name: 'Kurşunlu', mode: flagMode, valueType: 'FLAG', values: [] },
-      { propertyId: 'gramaj', code: 'GRAMAJ', name: 'Kurşun gramajı', mode: 'OPTIONAL', valueType: 'CHOICE', values: VALUES, variantOfPropertyId: 'kursun' },
+      { propertyId: 'gramaj', code: 'GRAMAJ', name: 'Kurşun gramajı', mode: 'OPTIONAL', valueType: 'CHOICE', values, variantOfPropertyId: 'kursun' },
     ],
     targetValues: target ? [{ propertyId: 'gramaj', valueId: 'v', valueCode: target }] : [],
     rolls: [],
@@ -56,7 +56,7 @@ function Harness(p: { s: KursunStepSummary; complete: GramajTapInput['complete']
   return <GramajTapPanel state={state} hasRoll />;
 }
 
-function setup(flagMode: 'AUTO' | 'OPTIONAL' | 'REQUIRED' = 'REQUIRED', target: string | null = '50GR', stopOpen?: boolean) {
+function setup(flagMode: 'AUTO' | 'OPTIONAL' | 'REQUIRED' = 'REQUIRED', target: string | null = '50GR', stopOpen?: boolean, values: typeof VALUES = VALUES) {
   const settle: (() => void)[] = [];
   const complete = jest.fn((_vars, opts: { onSuccess?: () => void; onSettled?: () => void }) => {
     settle.push(() => {
@@ -65,7 +65,7 @@ function setup(flagMode: 'AUTO' | 'OPTIONAL' | 'REQUIRED' = 'REQUIRED', target: 
     });
   });
   const correctFn = jest.fn().mockResolvedValue({ success: true });
-  const r = renderWithPaper(<Harness s={summary(flagMode, target)} complete={complete} correctFn={correctFn} stopOpen={stopOpen} />);
+  const r = renderWithPaper(<Harness s={summary(flagMode, target, values)} complete={complete} correctFn={correctFn} stopOpen={stopOpen} />);
   const done = () => act(() => settle.splice(0).forEach((f) => f()));
   return { ...r, complete, correctFn, done };
 }
@@ -174,5 +174,25 @@ describe('GramajTapPanel — açık duruş (D4-A2)', () => {
     fireEvent.press(getByTestId('gramaj-tap-50GR'));
     expect(complete).toHaveBeenCalledTimes(1);
     expect(Toast.show).not.toHaveBeenCalled();
+  });
+});
+
+describe('GramajTapPanel — varsayılan gramaj (oie-a)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  // oie-a: İE hedefi yoksa varsayılan gramaj vurgulanır ("VARSAYILAN"); sapma sayılmaz. Alan yoksa hiçbiri.
+  it('hedef yoksa varsayılan gramaj ★ ile seçili gelir, farklı basış sapma yazmaz', () => {
+    const withDefault = VALUES.map((v) => ({ ...v, isDefault: v.code === '75GR' }));
+    const { getByTestId, getByText, queryByText, done } = setup('REQUIRED', null, undefined, withDefault);
+    expect(getByTestId('gramaj-hedef')).toHaveTextContent('VARSAYILAN 75 gr');
+    expect(getByText('★ 75 gr')).toBeTruthy();
+    fireEvent.press(getByTestId('gramaj-tap-25GR'));
+    done();
+    expect(queryByText(/Hedef 75 gr/)).toBeNull();
+  });
+
+  it('hedef de varsayılan da yoksa hiçbir gramaj vurgulanmaz', () => {
+    const { queryByTestId } = setup('REQUIRED', null);
+    expect(queryByTestId('gramaj-hedef')).toBeNull();
   });
 });
