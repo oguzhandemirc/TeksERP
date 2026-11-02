@@ -20,6 +20,8 @@ import {
   getDeliveryNote, listDeliveryNotes, updateDeliveryNote, updateDeliveryNoteLine,
 } from "../services/gelen-belge-note.service";
 import { approveDeliveryNote } from "../services/gelen-belge-onay.service";
+import { cancelDeliveryNote } from "../services/gelen-belge-iptal.service";
+import { previewDeliveryNoteCancel } from "../services/gelen-belge-iptal-onizleme.service";
 import { AUTO_WORK_ORDER_PERMISSIONS, assertRouteOverride, withAutoWorkOrders } from "../services/gelen-belge-oto-is-emri.service";
 import { createWorkOrderFromNote } from "../services/gelen-belge-form-is-emri.service";
 import { applyBulkDeleteDeliveryNotes, BULK_DELETE_MAX, previewBulkDeleteDeliveryNotes } from "../services/gelen-belge-toplu-sil.service";
@@ -555,6 +557,54 @@ router.post("/irsaliyeler/:id/onay", requirePermission("gelen-belge:approve"), w
   // Onay önce ve aynen; otomatik iş emri (ayar açıksa ya da rota istendiyse) onaydan SONRA, best-effort.
   return approveDeliveryNote(id, body, req.user!.userId).then((r) => withAutoWorkOrders(r, req.user!, opts)).then(({ warnings, ...data }) => ({ status: 200, data, warnings }));
 }));
+
+// ── K15: onaylı belge iptali — önizleme + iptal (`gelen-belge:cancel`; SoD) ──
+const CancelBody = z.strictObject({
+  clientToken: z.uuid("İşlem kimliği geçersiz"),
+  reason: z.string("İptal sebebi zorunludur").trim().min(3, "İptal sebebi en az 3 karakter olmalı").max(300, "İptal sebebi en fazla 300 karakter"),
+  workOrderIds: z.array(Id, `Geçersiz ${TERIM.terbiyeIsEmri.tekilKucuk} listesi`).max(50, `Tek iptalde en fazla 50 ${TERIM.terbiyeIsEmri.tekilKucuk}`).optional(),
+});
+/**
+ * @openapi
+ * /api/gelen-belge/irsaliyeler/{id}/iptal-onizleme:
+ *   get:
+ *     tags: [Gelen belge]
+ *     summary: "Onaylı belge iptalinin önizlemesi (yazmaz): belgeden doğan her top (no, metre, durum, nerede, sonuç CANCEL|SKIP|BLOCKED + engeller), bağlı canlı iş emirleri (başlamamışsa seçilebilir; başka kaynaklı top sayısı), engel listesi"
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{ note, cancellable, rolls[], workOrders[], blockers[{ code, message, rollId?, workOrderId? }], summary }" }
+ *       404: { description: DELIVERY_NOTE_NOT_FOUND }
+ * /api/gelen-belge/irsaliyeler/{id}/iptal:
+ *   post:
+ *     tags: [Gelen belge]
+ *     summary: "Onaylı (APPROVED/PARTIAL) belgeyi iptal et — tek tx: belge CANCELLED, toplar ters kayıtla (ROLL_CANCEL) düşer, seçilen başlamamış iş emirleri iptal; satırlar/defter durur; belge mükerrer denetiminden çıkar. clientToken ile idempotent."
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [clientToken, reason]
+ *             properties:
+ *               clientToken: { type: string, format: uuid }
+ *               reason: { type: string, minLength: 3, maxLength: 300 }
+ *               workOrderIds: { type: array, maxItems: 50, items: { type: string, format: uuid }, description: "Belgeyle birlikte iptal edilecek başlamamış iş emirleri (önizlemedeki selectable)" }
+ *     responses:
+ *       200: { description: "{ note, cancelledRollCount, cancelledWorkOrders[{ id, workOrderNumber }] }" }
+ *       400: { description: "Doğrulama · CANCEL_REASON_REQUIRED · DELIVERY_NOTE_CANCEL_WO_INVALID (seçilen iş emri belgeyle ilgisiz)" }
+ *       403: { description: "İzin yok (gelen-belge:cancel) · MODULE_DISABLED" }
+ *       404: { description: DELIVERY_NOTE_NOT_FOUND }
+ *       409: { description: "DELIVERY_NOTE_NOT_CANCELLABLE (taslak/onaylanıyor/zaten iptal) · DELIVERY_NOTE_CANCEL_BLOCKED (details.blockers) · CLIENT_TOKEN_COLLISION" }
+ */
+router.get("/irsaliyeler/:id/iptal-onizleme", requirePermission("gelen-belge:cancel"), wrap(async (req) => ({ status: 200, data: await previewDeliveryNoteCancel(Id.parse(req.params.id)) })));
+router.post("/irsaliyeler/:id/iptal", requirePermission("gelen-belge:cancel"), wrap(async (req) => ({
+  status: 200, data: await cancelDeliveryNote(Id.parse(req.params.id), CancelBody.parse(req.body ?? {}), req.user!.userId),
+})));
 
 // ── OIE: iş emri formundan okutulan belge → kayıt + iş emri tek istekte (`gelenBelge.formApproval = WITH_WORK_ORDER`) ──
 const FormWorkOrderBody = z.strictObject({
