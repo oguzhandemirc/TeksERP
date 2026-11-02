@@ -893,6 +893,9 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "document_scans", name: "document_scans_mime_ck" },
   { table: "customer_delivery_note_lines", name: "customer_delivery_note_lines_meters_ck" },
   { table: "customer_delivery_notes", name: "customer_delivery_notes_stamps_ck" },
+  // S0 (migration 20261102085912): kurşun metresi > 0 ve metre ↔ kaynak çifti birlikte dolu/boş.
+  { table: "customer_delivery_notes", name: "customer_delivery_notes_kursun_meters_ck" },
+  { table: "customer_delivery_notes", name: "customer_delivery_notes_kursun_source_ck" },
   // H1 kurşun metre defteri (migration 20261029005529): metre >= 0, damga ⇔ sebep. Bekçi `test_kursun_metre` §8.
   { table: "roll_meter_readings", name: "roll_meter_readings_meters_ck" },
   { table: "roll_meter_readings", name: "roll_meter_readings_revoke_ck" },

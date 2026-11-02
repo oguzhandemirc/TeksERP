@@ -25,6 +25,8 @@
 //      (numara sarıyor: P01, P99'dan YENİ olabilir) biçimde YANLIŞ sıra üretir.
 //   6) KISIT GERİ GELİRSE — canlı DB'de `batches_batchNumber_key` yeniden doğarsa
 //      sarma ilk tekrarda 500 verir ve üretim durur.
+//      S0 (2026-11-02): `numberSource=DOCUMENT` belge no'su da tekrar edebilir — hiçbir
+//      UNIQUE index `batchNumber`/`numberSource` kolonunu kapsamaz.
 //
 // 0-5 sahte tx ile saf (DB'ye YAZMAZ), 6-7 canlı veriyi SALT-OKUR.
 // =============================================================================
@@ -429,6 +431,17 @@ async function main(): Promise<void> {
     "batches_batchNumber_key KALDIRILDI (sarma 500 vermesin)",
     !names.includes("batches_batchNumber_key"),
     names.join(", "),
+  );
+  const uniqDefs = await prisma.$queryRawUnsafe<Array<{ indexdef: string }>>(
+    `SELECT indexdef FROM pg_indexes WHERE tablename = 'batches' AND indexdef ILIKE 'CREATE UNIQUE%'`,
+  );
+  const badUniq = uniqDefs
+    .map((u) => u.indexdef)
+    .filter((d) => /"?(batchNumber|numberSource)"?/.test(d));
+  check(
+    "batchNumber/numberSource üzerinde UNIQUE index YOK (belge no tekrar edebilir)",
+    badUniq.length === 0,
+    badUniq.join(" | ") || "temiz",
   );
   check(
     "batches_createdAt_idx VAR (sayacın kaynağı onu kullanır)",

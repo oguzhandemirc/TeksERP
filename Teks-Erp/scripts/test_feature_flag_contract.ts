@@ -619,6 +619,23 @@ async function main() {
       file: "Electron/src/pages/GeneralSettings/GelenBelgeReadOptionsField.tsx",
       needle: "gb-document-total-check",
     },
+    // Gülkesim parti no + kurşun metresi S0 (2026-11-02): ayar yalnız TANIMLI, panel yüzeyi P1'de gelir — o güne kadar
+    // kanıt doğrulamalı uçtaki Zod alanı (ham uç 400). P1 inince kanıt panel dosyasına taşınır.
+    GELEN_BELGE_BATCH_NUMBER_SOURCE: {
+      why: "Parti numarası kaynağı (SERIES varsayılan | DOCUMENT) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; panel yüzeyi P1",
+      file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
+      needle: "batchNumberSource: z.enum(",
+    },
+    GELEN_BELGE_ENTRY_MODE: {
+      why: "Onay kipi (PER_LINE varsayılan | PER_DOCUMENT, varsayılan ürünsüz 400) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; panel yüzeyi P1",
+      file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
+      needle: "entryMode: z.enum(",
+    },
+    GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS: {
+      why: "Gramajsız grupta oto iş emri (SKIP varsayılan | OPEN) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; panel yüzeyi P1",
+      file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
+      needle: "autoWorkOrderPatternless: z.enum(",
+    },
     SYSTEM_INSTALLATION_ID: {
       why: "Feature flag değil, kurulum kimliği — panel yüzeyi YOK (bilinçli); boot işi üretir, /api/discovery/identity okur",
       file: "Teks-Erp/src/jobs/installation-identity.job.ts",
