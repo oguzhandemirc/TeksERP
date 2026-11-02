@@ -17,6 +17,7 @@
 //   · `gelenBelge.entryMode` — PER_LINE (varsayılan) | PER_DOCUMENT (belge başına tek kayıt; fabrika varsayılan ürünü ŞART)
 //   · `gelenBelge.autoWorkOrderPatternless` — SKIP (varsayılan) | OPEN (işlem değeri çözülemeyen grupta hedefsiz iş emri)
 //   · `gelenBelge.formApproval` — SEPARATE (varsayılan, ayrı onay) | WITH_WORK_ORDER (iş emri formundan okutulan belgeyi iş emri açan kaydeder)
+//   · `gelenBelge.multiPartyWorkOrder` — SINGLE (varsayılan, tek iş emri) | PER_PARTY (çok partili belgede her parti ayrı iş emri)
 //   · `production.refakatAutoPrint` — iş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır (varsayılan false)
 // Ürün kapısı tek karar: yaşam döngüsü `assertItemUsable(NEW_STOCK)` + top doğurabilen tür ALLOWLIST'i
 // (`ROLL_BEARING_ITEM_TYPES`; yeni tür — ör. SERVICE — eklendiği gün kendiliğinden dışarıda kalır).
@@ -69,6 +70,10 @@ import {
   DEFAULT_FORM_APPROVAL,
   FORM_APPROVAL_VALUES,
   type IncomingDocFormApprovalMode,
+  readMultiPartyWorkOrder,
+  DEFAULT_MULTI_PARTY_WORK_ORDER,
+  MULTI_PARTY_WORK_ORDER_VALUES,
+  type MultiPartyWorkOrderMode,
   readRefakatAutoPrint,
 } from "./system-setting.service";
 
@@ -90,6 +95,7 @@ export const INCOMING_DOC_DEDICATED_SETTING_KEYS: ReadonlySet<string> = new Set(
   SETTING_KEYS.GELEN_BELGE_ENTRY_MODE,
   SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS,
   SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL,
+  SETTING_KEYS.GELEN_BELGE_MULTI_PARTY_WORK_ORDER,
   SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT,
 ]);
 
@@ -135,6 +141,8 @@ export interface IncomingDocSettings {
   /** İş emri formundan okutulan belge: SEPARATE ayrı onay (varsayılan) | WITH_WORK_ORDER iş emri açan kaydeder. */
   formApproval: IncomingDocFormApprovalMode;
   defaultFormApproval: IncomingDocFormApprovalMode;
+  multiPartyWorkOrder: MultiPartyWorkOrderMode;
+  defaultMultiPartyWorkOrder: MultiPartyWorkOrderMode;
   /** İş emri açılınca refakat kartı kendiliğinden yazdırılır mı (varsayılan false). */
   refakatAutoPrint: boolean;
 }
@@ -196,6 +204,8 @@ export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
     defaultAutoWorkOrderPatternless: DEFAULT_AUTO_WORK_ORDER_PATTERNLESS,
     formApproval: await readIncomingDocFormApproval(),
     defaultFormApproval: DEFAULT_FORM_APPROVAL,
+    multiPartyWorkOrder: await readMultiPartyWorkOrder(),
+    defaultMultiPartyWorkOrder: DEFAULT_MULTI_PARTY_WORK_ORDER,
     refakatAutoPrint: await readRefakatAutoPrint(),
   };
 }
@@ -217,6 +227,7 @@ export interface IncomingDocSettingsInput {
   entryMode?: IncomingDocEntryMode;
   autoWorkOrderPatternless?: AutoWorkOrderPatternlessMode;
   formApproval?: IncomingDocFormApprovalMode;
+  multiPartyWorkOrder?: MultiPartyWorkOrderMode;
   refakatAutoPrint?: boolean;
 }
 
@@ -310,6 +321,12 @@ async function updateEntryOptions(input: IncomingDocSettingsInput, userId: strin
       throw AppError.badRequest("Geçersiz seçenek: SEPARATE ya da WITH_WORK_ORDER olmalı.", { code: "VALIDATION_ERROR" });
     }
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, input.formApproval, `Gelen belge: ${TERIM.terbiyeIsEmri.tekilKucuk} formundan okutulan belgenin kaydı (SEPARATE ayrı onay / WITH_WORK_ORDER ${TERIM.terbiyeIsEmri.tekilKucuk} açan kaydeder)`, userId);
+  }
+  if (input.multiPartyWorkOrder !== undefined) {
+    if (!MULTI_PARTY_WORK_ORDER_VALUES.includes(input.multiPartyWorkOrder)) {
+      throw AppError.badRequest("Geçersiz seçenek: SINGLE ya da PER_PARTY olmalı.", { code: "VALIDATION_ERROR" });
+    }
+    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_MULTI_PARTY_WORK_ORDER, input.multiPartyWorkOrder, `Gelen belge: çok partili belgeden ${TERIM.terbiyeIsEmri.tekilKucuk} (SINGLE tek / PER_PARTY her parti ayrı)`, userId);
   }
   if (input.refakatAutoPrint !== undefined) {
     await systemSettingService.set(SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT, input.refakatAutoPrint, `${TERIM.terbiyeIsEmri.tekil} açılınca refakat kartı kendiliğinden yazdırılır`, userId);

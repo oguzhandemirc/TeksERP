@@ -34,7 +34,7 @@ import { resolveDefaultItemForApproval, type DefaultItemSource } from "./gelen-b
 import { readBatchNumberSource, readDocumentTotalCheck, readIncomingDocEntryMode, readUnreviewedApprovalMode, type IncomingDocEntryMode } from "./system-setting.service";
 import { assertProcessChoiceValue } from "./helpers/process-choice-catalog.helper";
 import { aliasKey } from "./gelen-belge-eslestirme.service";
-import { hasDocumentDeclared, isOpenForApproval, lineProblems, perDocumentGate, reviewGate, summaryLineId, totalMismatches, totalsCheck, totalWarnings, type ReviewGate } from "./gelen-belge-kontrol.service";
+import { hasDocumentDeclared, isOpenForApproval, isSummaryLine, lineProblems, partyLineId, perDocumentGate, reviewGate, summaryLineId, totalMismatches, totalsCheck, totalWarnings, type ReviewGate } from "./gelen-belge-kontrol.service";
 import { learnBatchNoKey } from "./gelen-belge-sablon.service";
 
 // Kapı yüklemleri tek kaynakta (detay yanıtı da aynılarını okur); eski içe aktaranlar için yeniden dışa aktarılır.
@@ -69,7 +69,14 @@ export interface ApproveInput {
 }
 
 /** Sistem onayı (OIE, iş emri formundan kayıt): kip zorlanır, ayak izine onaylatan yol yazılır. Ayrı onay ucu vermez. */
-export type ApproveOptions = { entryMode?: IncomingDocEntryMode; /** Audit yolu ("WITH_WORK_ORDER: <kullanıcı>"). */ via?: string };
+export type ApproveOptions = {
+  entryMode?: IncomingDocEntryMode;
+  /** Audit yolu ("WITH_WORK_ORDER: <kullanıcı>"). */
+  via?: string;
+  /** S1 çok partili belge (yalnız PER_DOCUMENT): parti başına bir özet satırı/top; verilmezse tek özet satırı (bugünkü). */
+  parties?: ReadonlyArray<PartyEntry>;
+};
+export type PartyEntry = { blockNo: number; meters: number };
 
 export interface ApproveResult {
   note: Awaited<ReturnType<typeof getDeliveryNote>>;
@@ -100,7 +107,7 @@ interface PrecheckResult {
 
 type PreNote = Prisma.CustomerDeliveryNoteGetPayload<{ select: typeof PRE_SELECT }>;
 
-async function precheck(note: PreNote, input: ApproveInput, mode: IncomingDocEntryMode): Promise<PrecheckResult> {
+async function precheck(note: PreNote, input: ApproveInput, mode: IncomingDocEntryMode, parties?: ReadonlyArray<PartyEntry>): Promise<PrecheckResult> {
   if (!note.ownerCustomerId) throw AppError.badRequest("Sahip cari seçilmeden onaylanamaz (emanet top sahipsiz doğamaz).", { code: "DELIVERY_NOTE_OWNER_REQUIRED" });
   // Emanet kapısı + sahip aktifliği TEK yazıcıdan (lisans sorusu + MODULE_DISABLED + pasif/bulunamayan sahip
   // OWNER_CUSTOMER_INVALID aynı helper'da; motor tx içinde yeniden sorar).
@@ -109,7 +116,7 @@ async function precheck(note: PreNote, input: ApproveInput, mode: IncomingDocEnt
   await assertCariNotHeldTx(prisma, note.ownerCustomerId, "INTAKE");
   // Risk limiti (D4-I2, finance.riskLimitBlock.intake): kilidin yanında; kabul bakiyeyi değiştirmez, satır tx'i sormaz.
   await assertCustomerRiskLimitTx(prisma, note.ownerCustomerId, "INTAKE");
-  if (mode === "PER_DOCUMENT") return precheckPerDocument(note, input);
+  if (mode === "PER_DOCUMENT") return precheckPerDocument(note, input, parties);
   const open = note.lines.filter(isOpenForApproval);
   if (open.length === 0) throw AppError.conflict(`${note.noteNo} için işlenecek satır yok (hepsi girilmiş ya da atlanmış).`, { code: "DELIVERY_NOTE_NO_OPEN_LINES" });
   const itemless = open.filter((l) => lineProblems(l).includes("ITEM_UNRESOLVED")).length;
@@ -155,13 +162,13 @@ function pageAndTotalGates(note: PreNote, mismatches: string[], reason: string |
  * PER_DOCUMENT ön kontrolü (tasarım §2.5): kayıt kurşun metresinden doğar; satır kapıları (ürün/inceleme) UYGULANMAZ, satırlar
  * bilgidir. Kapı `perDocumentGate` (detayla aynı yüklem); toplam farkı yalnız kaynak Σ satır iken kapı, aksi uyarı.
  */
-async function precheckPerDocument(note: PreNote, input: ApproveInput): Promise<PrecheckResult> {
-  const sid = summaryLineId(note.id);
-  const summary = note.lines.find((l) => l.id === sid);
+async function precheckPerDocument(note: PreNote, input: ApproveInput, parties?: ReadonlyArray<PartyEntry>): Promise<PrecheckResult> {
+  const targets = summaryTargets(note, parties);
   // Satır kipinde top doğmuş belge tek kayda çevrilmez (ikinci kayıt doğardı): kip yarıda değiştiyse fail-closed.
-  const mixed = note.lines.filter((l) => l.rollId && l.id !== sid).map((l) => l.lineNo);
+  const mixed = note.lines.filter((l) => l.rollId && !isSummaryLine(note.id, l)).map((l) => l.lineNo);
   if (mixed.length) throw AppError.conflict(`Bu belgenin ${mixed.join(", ")} no'lu satırları satır kipinde girilmiş; belge başına tek kayıt kipinde onaylanamaz.`, { code: "DELIVERY_NOTE_ENTRY_MODE_MIXED", lineNos: mixed });
-  if (summary?.rollId || (summary && !isOpenForApproval(summary))) throw AppError.conflict(`${note.noteNo} için işlenecek kayıt yok (tek kayıt girilmiş).`, { code: "DELIVERY_NOTE_NO_OPEN_LINES" });
+  const open = targets.filter((t) => { const l = note.lines.find((x) => x.id === t.id); return !l || (!l.rollId && isOpenForApproval(l)); });
+  if (open.length === 0) throw AppError.conflict(`${note.noteNo} için işlenecek kayıt yok (tek kayıt girilmiş).`, { code: "DELIVERY_NOTE_NO_OPEN_LINES" });
   const gate = perDocumentGate(note, note.kursunMetersReview ? await readUnreviewedApprovalMode() : "WARN");
   if (gate.code === "KURSUN_METERS_REQUIRED") throw AppError.conflict(`${note.noteNo} için kurşun metresi yok; belge başına tek kayıt kipinde onaydan önce kurşun metresini girin.`, { code: gate.code });
   if (gate.code) throw AppError.conflict(`Kurşun metresi gözden geçirilmedi (${note.kursunMetersSource ?? "?"}). Değeri belgeyle karşılaştırıp onaylayın ya da düzeltin (fabrika ayarı: gözden geçirilmemiş değerle onay engelli).`, { code: gate.code });
@@ -169,14 +176,16 @@ async function precheckPerDocument(note: PreNote, input: ApproveInput): Promise<
   const defaultItem = await resolveDefaultItemForApproval(note.ownerCustomerId);
   if (!defaultItem) throw AppError.badRequest("Belge başına tek kayıt kipi varsayılan ürün ister: fabrika ya da müşteri varsayılan ürünü seçilmemiş.", { code: "GELEN_BELGE_PER_DOCUMENT_NEEDS_DEFAULT_ITEM" });
   const reason = input.varianceReason?.trim();
-  const docLines = note.lines.filter((l) => l.id !== sid);
+  const docLines = note.lines.filter((l) => !isSummaryLine(note.id, l));
   const tc = totalsCheck(note, docLines, { documentMode: hasDocumentDeclared(note.totalsDeclared) ? await readDocumentTotalCheck() : "INFO" });
   const warnings = [...tc.warnings, ...gate.warnings];
   if (!gate.totalsBlocking) {
     warnings.push(...tc.mismatches.map((m) => `Toplam farkı (bilgi; kayıt kurşun metresinden): ${m}`));
   }
   pageAndTotalGates(note, gate.totalsBlocking ? tc.mismatches : [], reason, warnings);
-  warnings.push(`Belge başına tek kayıt: ${sayiMetni(Number(note.kursunMeters), 3)} m tek top olarak ${defaultItem.name} ürünüyle girildi; ${docLines.length} satır bilgi olarak kaldı.`);
+  warnings.push(targets.length > 1
+    ? `Çok partili belge: ${targets.length} parti ayrı top olarak ${defaultItem.name} ürünüyle girildi (${targets.map((t) => `${sayiMetni(Number(t.meters), 3)} m`).join(" + ")}); ${docLines.length} satır bilgi olarak kaldı.`
+    : `Belge başına tek kayıt: ${sayiMetni(Number(note.kursunMeters), 3)} m tek top olarak ${defaultItem.name} ürünüyle girildi; ${docLines.length} satır bilgi olarak kaldı.`);
   return { warnings, defaultItem };
 }
 
@@ -184,25 +193,34 @@ async function precheckPerDocument(note: PreNote, input: ApproveInput): Promise<
  * PER_DOCUMENT hazırlık — TEK tx: özet satırı (sabit kimlik; varsa metresi tazelenir) + belgenin topsuz açık satırları INFO.
  * Satır claim'i ve döngü bundan sonra yalnız özet satırını görür (ikinci giriş motoru yok).
  */
-async function preparePerDocument(note: PreNote, userId: string): Promise<void> {
-  const id = summaryLineId(note.id);
-  const meters = note.kursunMeters!;
-  const infoIds = note.lines.filter((l) => l.id !== id && !l.rollId && isOpenForApproval(l)).map((l) => l.id);
+/** Özet satırı hedefleri: partiler verildiyse blok başına (`partyLineId`), yoksa tek özet satırı = kurşun metresi (bugünkü). */
+function summaryTargets(note: PreNote, parties?: ReadonlyArray<PartyEntry>): Array<{ id: string; blockNo: number; meters: Prisma.Decimal }> {
+  if (!parties?.length) return [{ id: summaryLineId(note.id), blockNo: 1, meters: note.kursunMeters ?? new Prisma.Decimal(0) }];
+  return [...parties].sort((a, b) => a.blockNo - b.blockNo).map((p) => ({ id: partyLineId(note.id, p.blockNo), blockNo: p.blockNo, meters: new Prisma.Decimal(p.meters) }));
+}
+
+async function preparePerDocument(note: PreNote, userId: string, parties?: ReadonlyArray<PartyEntry>): Promise<void> {
+  const targets = summaryTargets(note, parties);
+  const infoIds = note.lines.filter((l) => !isSummaryLine(note.id, l) && !l.rollId && isOpenForApproval(l)).map((l) => l.id);
   // Başlık APPROVING'de claim'li: satır yazan başka yol yok, numara (son + 1) yarışsız.
   const created = await prisma.$transaction(async (tx) => {
-    const has = await tx.customerDeliveryNoteLine.updateMany({ where: { id, noteId: note.id, rollId: null }, data: { meters } });
-    let made: number | null = null;
-    if (has.count === 0 && !(await tx.customerDeliveryNoteLine.count({ where: { id } }))) {
+    const made: Array<{ id: string; lineNo: number; blockNo: number; meters: Prisma.Decimal }> = [];
+    for (const t of targets) {
+      const has = await tx.customerDeliveryNoteLine.updateMany({ where: { id: t.id, noteId: note.id, rollId: null }, data: { meters: t.meters } });
+      if (has.count > 0 || (await tx.customerDeliveryNoteLine.count({ where: { id: t.id } }))) continue;
       const last = await tx.customerDeliveryNoteLine.aggregate({ where: { noteId: note.id }, _max: { lineNo: true } });
-      made = (last._max.lineNo ?? 0) + 1;
-      await tx.customerDeliveryNoteLine.create({ data: { id, noteId: note.id, lineNo: made, blockNo: 1, lineKind: "ARABA", meters, status: DeliveryNoteLineStatus.PENDING, confidence: new Prisma.Decimal(1) } });
+      const lineNo = (last._max.lineNo ?? 0) + 1;
+      await tx.customerDeliveryNoteLine.create({ data: { id: t.id, noteId: note.id, lineNo, blockNo: t.blockNo, lineKind: "ARABA", meters: t.meters, status: DeliveryNoteLineStatus.PENDING, confidence: new Prisma.Decimal(1) } });
+      made.push({ ...t, lineNo });
     }
     if (infoIds.length) {
       await tx.customerDeliveryNoteLine.updateMany({ where: { id: { in: infoIds }, rollId: null, status: { in: [DeliveryNoteLineStatus.PENDING, DeliveryNoteLineStatus.FAILED, DeliveryNoteLineStatus.ENTERING] } }, data: { status: DeliveryNoteLineStatus.INFO, failReason: null } });
     }
     return made;
   });
-  if (created !== null) await AuditService.log({ userId, action: "CREATE", tableName: LINE_TABLE, recordId: id, newData: { noteId: note.id, noteNo: note.noteNo, lineNo: created, lineKind: "ARABA", meters: meters.toString(), kursunMetersSource: note.kursunMetersSource, entryMode: "PER_DOCUMENT" } });
+  if (created.length) {
+    await AuditService.logMany(created.map((c) => ({ userId, action: "CREATE" as const, tableName: LINE_TABLE, recordId: c.id, newData: { noteId: note.id, noteNo: note.noteNo, lineNo: c.lineNo, blockNo: c.blockNo, lineKind: "ARABA", meters: c.meters.toString(), kursunMetersSource: note.kursunMetersSource, entryMode: "PER_DOCUMENT", ...(parties?.length ? { party: true } : {}) } })));
+  }
   if (infoIds.length) await AuditService.logMany(infoIds.map((lid) => ({ userId, action: "UPDATE" as const, tableName: LINE_TABLE, recordId: lid, oldData: { status: note.lines.find((l) => l.id === lid)?.status ?? null }, newData: { status: "INFO", noteNo: note.noteNo, entryMode: "PER_DOCUMENT" } })));
 }
 
@@ -337,13 +355,14 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
   const note = await prisma.customerDeliveryNote.findUnique({ where: { id }, select: PRE_SELECT });
   if (!note) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
   const mode = opts.entryMode ?? (await readIncomingDocEntryMode());
-  const { warnings, defaultItem } = await precheck(note, input, mode);
+  if (opts.parties?.length && mode !== "PER_DOCUMENT") throw AppError.badRequest("Parti başına kayıt yalnız belge başına tek kayıt kipinde yapılır.", { code: "DELIVERY_NOTE_PARTIES_NEED_PER_DOCUMENT" });
+  const { warnings, defaultItem } = await precheck(note, input, mode, opts.parties);
   const processChoices = await resolveProcessChoices(note, input.processChoices);
   const varianceReason = input.varianceReason?.trim() || undefined;
 
   await claimHeader(id, note, userId, varianceReason);
   await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: id, oldData: { status: note.status }, newData: { status: "APPROVING", noteNo: note.noteNo, ...(varianceReason ? { varianceReason } : {}), ...(mode === "PER_DOCUMENT" ? { entryMode: mode } : {}), ...(opts.via ? { via: opts.via } : {}) } });
-  if (mode === "PER_DOCUMENT") await preparePerDocument(note, userId);
+  if (mode === "PER_DOCUMENT") await preparePerDocument(note, userId, opts.parties);
 
   // ── Satır claim: yalnız topsuz satır (PENDING|FAILED; bayat ENTERING de alınır — token replay korur).
   await prisma.customerDeliveryNoteLine.updateMany({
@@ -381,7 +400,7 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
           forcedStatus: RollStatus.STOCK,
           ownerCustomerId: note.ownerCustomerId,
           entryReasonCode: INCOMING_DOC_REASON_CODE,
-          entryReason: line.id === summaryLineId(note.id) ? `${note.noteNo} tek kayıt` : `${note.noteNo} satır ${line.lineNo}`,
+          entryReason: line.id === summaryLineId(note.id) && !opts.parties?.length ? `${note.noteNo} tek kayıt` : isSummaryLine(note.id, line) ? `${note.noteNo} parti ${line.blockNo}` : `${note.noteNo} satır ${line.lineNo}`,
           // Kg belgeden gelir; KK1 istasyon politikası (`kk1.weightEntryEnabled`) burada uygulanmaz (mal kabul emsali A1).
           skipKk1WeightPolicy: true,
           cariHoldIntakeGate: true,

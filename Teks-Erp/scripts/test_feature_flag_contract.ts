@@ -642,6 +642,12 @@ async function main() {
       file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
       needle: "formApproval: z.enum(",
     },
+    // S1 (2026-11-03): çok partili belge → iş emri kipi; uçtaki Zod alanı + panel/tablet formu.
+    GELEN_BELGE_MULTI_PARTY_WORK_ORDER: {
+      why: "Çok partili belgeden iş emri (SINGLE varsayılan | PER_PARTY) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; `POST /irsaliyeler/:id/is-emri` mode verilmezse okur",
+      file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
+      needle: "multiPartyWorkOrder: z.enum(",
+    },
     PRODUCTION_REFAKAT_AUTO_PRINT: {
       why: "İş emri açılınca refakat kartı otomatik yazdırma (varsayılan false) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; istemci okur",
       file: "Teks-Erp/src/routes/gelen-belge.routes.ts",

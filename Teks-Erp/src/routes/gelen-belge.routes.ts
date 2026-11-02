@@ -22,6 +22,7 @@ import {
 import { approveDeliveryNote } from "../services/gelen-belge-onay.service";
 import { AUTO_WORK_ORDER_PERMISSIONS, assertRouteOverride, withAutoWorkOrders } from "../services/gelen-belge-oto-is-emri.service";
 import { createWorkOrderFromNote } from "../services/gelen-belge-form-is-emri.service";
+import { getNoteParties } from "../services/gelen-belge-cok-parti.service";
 import { applyBulkDeleteDeliveryNotes, BULK_DELETE_MAX, previewBulkDeleteDeliveryNotes } from "../services/gelen-belge-toplu-sil.service";
 import { getIncomingDocSettings, updateIncomingDocSettings } from "../services/gelen-belge-ayar.service";
 import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
@@ -363,6 +364,7 @@ const SettingsBody = z.strictObject({
   entryMode: z.enum(["PER_LINE", "PER_DOCUMENT"], "Seçenek PER_LINE ya da PER_DOCUMENT olmalı").optional(),
   autoWorkOrderPatternless: z.enum(["SKIP", "OPEN"], "Seçenek SKIP ya da OPEN olmalı").optional(),
   formApproval: z.enum(["SEPARATE", "WITH_WORK_ORDER"], "Seçenek SEPARATE ya da WITH_WORK_ORDER olmalı").optional(),
+  multiPartyWorkOrder: z.enum(["SINGLE", "PER_PARTY"], "Seçenek SINGLE ya da PER_PARTY olmalı").optional(),
   refakatAutoPrint: z.boolean("Refakat kartı otomatik yazdırma evet/hayır olmalı").optional(),
 });
 /**
@@ -397,6 +399,7 @@ const SettingsBody = z.strictObject({
  *               entryMode: { type: string, enum: [PER_LINE, PER_DOCUMENT], description: "Onay kipi: her satır bir top (varsayılan) ya da belge başına tek kayıt; PER_DOCUMENT varsayılan ürünsüz 400 GELEN_BELGE_PER_DOCUMENT_NEEDS_DEFAULT_ITEM" }
  *               autoWorkOrderPatternless: { type: string, enum: [SKIP, OPEN], description: "İşlem değeri çözülemeyen grupta otomatik iş emri: atla (varsayılan) ya da hedef değersiz aç" }
  *               formApproval: { type: string, enum: [SEPARATE, WITH_WORK_ORDER], description: "İş emri formundan okutulan belge: ayrı onay (varsayılan) ya da iş emri açan kaydeder (POST /irsaliyeler/{id}/is-emri)" }
+ *               multiPartyWorkOrder: { type: string, enum: [SINGLE, PER_PARTY], description: "Çok partili belgeden iş emri: tek iş emri, partiler ayrı top (varsayılan) ya da her parti ayrı iş emri" }
  *               refakatAutoPrint: { type: boolean, description: "İş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır (varsayılan false)" }
  *     responses:
  *       200: { description: Güncel ayarlar }
@@ -530,6 +533,15 @@ const FormWorkOrderBody = z.strictObject({
   stepPlanning: z.array(z.strictObject({ sequence: z.number().int().min(1).max(200), plannedMachineId: Id.nullable().optional() }), "Geçersiz adım planı").max(200).optional(),
   targetValues: z.array(z.strictObject({ propertyId: Id, valueId: Id }), "Geçersiz hedef değer").max(50).optional(),
   notes: optText(1000),
+  // S1 çok partili belge: ≥2 parti → parti başına top; mode verilmezse fabrika ayarı (varsayılan SINGLE).
+  parties: z.array(z.strictObject({
+    blockNo: z.number().int().min(1).max(99),
+    batchNo: optText(64),
+    meters: z.number().positive("Parti metresi sıfırdan büyük olmalı").max(1_000_000),
+    targetValues: z.array(z.strictObject({ propertyId: Id, valueId: Id }), "Geçersiz hedef değer").max(50).optional(),
+    stepPlanning: z.array(z.strictObject({ sequence: z.number().int().min(1).max(200), plannedMachineId: Id.nullable().optional() }), "Geçersiz adım planı").max(200).optional(),
+  }), "Geçersiz parti listesi").min(2, "Çok parti için en az iki parti gerekir").max(30).optional(),
+  mode: z.enum(["SINGLE", "PER_PARTY"], "Seçenek SINGLE ya da PER_PARTY olmalı").optional(),
 });
 /**
  * @openapi
@@ -557,12 +569,28 @@ const FormWorkOrderBody = z.strictObject({
  *               stepPlanning: { type: array, items: { type: object, properties: { sequence: { type: integer }, plannedMachineId: { type: string, format: uuid, nullable: true } } } }
  *               targetValues: { type: array, items: { type: object, properties: { propertyId: { type: string, format: uuid }, valueId: { type: string, format: uuid } } } }
  *               notes: { type: string, maxLength: 1000, nullable: true }
+ *               parties: { type: array, minItems: 2, description: "Çok partili belge (S1): parti başına top; blockNo /partiler'den", items: { type: object, properties: { blockNo: { type: integer }, batchNo: { type: string, nullable: true }, meters: { type: number }, targetValues: { type: array }, stepPlanning: { type: array } } } }
+ *               mode: { type: string, enum: [SINGLE, PER_PARTY], description: "Çok partide: tek iş emri (partiler ayrı top) ya da her parti ayrı iş emri; verilmezse fabrika ayarı gelenBelge.multiPartyWorkOrder (varsayılan SINGLE)" }
  *     responses:
  *       201: { description: "{ workOrderId, workOrderNo, batchNumber, rollId } (+ warnings)" }
  *       400: { description: "Doğrulama · GELEN_BELGE_ROUTE_OVERRIDE_INVALID · GELEN_BELGE_PER_DOCUMENT_NEEDS_DEFAULT_ITEM · OWNER_CUSTOMER_INVALID" }
  *       403: { description: "GELEN_BELGE_FORM_APPROVAL_DISABLED (ayar ayrı onay) · MODULE_DISABLED (üretim) · iş emri açma izni yok" }
  *       409: { description: "DELIVERY_NOTE_NOT_READ (okuma READ/PARTIAL değil) · DELIVERY_NOTE_NOT_APPROVABLE · DELIVERY_NOTE_ROLL_MISSING · onay kapıları · token çakışması" }
  */
+/**
+ * @openapi
+ * /api/gelen-belge/irsaliyeler/{id}/partiler:
+ *   get:
+ *     tags: [Gelen belge]
+ *     summary: Çok partili belgenin parti özeti (parti no, sipariş no, yazan top, satır sayısı, metre, kg + canlı uyarılar) ve fabrika varsayılan kipi
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{ parties[], warnings[], multi, defaultMode SINGLE|PER_PARTY }" }
+ *       404: { description: "DELIVERY_NOTE_NOT_FOUND" }
+ */
+router.get("/irsaliyeler/:id/partiler", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await getNoteParties(Id.parse(req.params.id)) })));
 router.post("/irsaliyeler/:id/is-emri", requireAnyPermission(...AUTO_WORK_ORDER_PERMISSIONS), wrap(async (req) => {
   const { warnings, ...data } = await createWorkOrderFromNote(Id.parse(req.params.id), FormWorkOrderBody.parse(req.body ?? {}), req.user!);
   return { status: 201, data, warnings };
