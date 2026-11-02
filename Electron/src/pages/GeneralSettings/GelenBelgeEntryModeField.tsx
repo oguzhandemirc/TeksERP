@@ -118,7 +118,7 @@ export function EntryModeFields({ draft, hasDefaultItem }: { draft: ReturnType<t
       <EnumField
         id="gb-form-approval"
         label={`${IE.tekil} formundan okutulan belge`}
-        desc={`"İş emri oluştur" ekranında okutulan belge nasıl kaydedilsin. "${IE.tekil} ile birlikte" seçilirse ayrı onay (gelen-belge:approve) aranmaz; ${IE.tekilKucuk} açma izni yeter.`}
+        desc={`${IE.tekil} oluşturma ekranında okutulan belge nasıl kaydedilsin. "${IE.tekil} ile birlikte" seçilirse ayrı onay (gelen-belge:approve) aranmaz; ${IE.tekilKucuk} açma izni yeter.`}
         pair={draft.approval}
         options={FORM_APPROVAL_OPTIONS}
       />

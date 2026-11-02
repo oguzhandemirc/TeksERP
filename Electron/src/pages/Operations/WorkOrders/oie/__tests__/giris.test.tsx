@@ -81,7 +81,7 @@ describe("Kısayol iş emri formu", () => {
     const form = screen.getByTestId("manual-form");
     expect(form).toHaveAttribute("data-route", "rt-k");
     expect(form).toHaveAttribute("data-okut", "false");
-    expect(newWorkOrderTitle({ kind: "shortcut", route: { id: "rt-k", name: "Kurşun & Tambur" } })).toBe("Kurşun & Tambur iş emri");
+    expect(newWorkOrderTitle({ kind: "shortcut", route: { id: "rt-k", name: "Kurşun & Tambur" } })).toBe("Kurşun & Tambur terbiye iş emri");
     await userEvent.click(screen.getByTestId("oie-scan"));
     expect(screen.getByTestId("upload-dialog")).toBeInTheDocument();
     expect(screen.getByTestId("oie-scan-many")).toBeInTheDocument();

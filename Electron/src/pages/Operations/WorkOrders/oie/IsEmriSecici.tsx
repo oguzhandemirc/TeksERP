@@ -40,7 +40,7 @@ export function IsEmriSecici({ renderPlain }: Props) {
         )}
       </Row>
       {shortcuts.length > 0 && (
-        <Row title="Özel iş emirleri" testId="oie-row-shortcuts">
+        <Row title={`Özel ${TERIM.terbiyeIsEmri.cogulKucuk}`} testId="oie-row-shortcuts">
           {shortcuts.map((s) => (
             <Tile key={s.id} icon={<Zap className="h-5 w-5" />} title={s.name} hint={shortcutHint(s)} testId="oie-shortcut"
               onClick={() => go({ kind: "shortcut", route: { id: s.id, name: s.name } })} />

@@ -1,5 +1,6 @@
 // Toplu okutma listesi (K8): belge başına kompakt satır (müşteri · parti no · metre · gramaj), satır açılıp düzenlenir;
 // "Hepsini kaydet" her belge için ayrı kayıt (sözleşme 3) çağırır, sonuç satır başına — biri düşerse diğerleri sürer.
+import { TERIM } from "@/lib/terim";
 import { useEffect, useState } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -64,7 +65,7 @@ export function TopluBelgeForm({ noteIds, route }: Props) {
       if (!n || !draft || results[n.id]?.kind === "OK") continue;
       try {
         const out = await saveDoc({ note: n, draft, routeTemplateId: route.id, formApproval: approval.value, gramajPropertyId: catalog.propertyId, clientToken: attempt.keyed(n.id) });
-        setResults((r) => ({ ...r, [n.id]: out.kind === "WORK_ORDER" ? { kind: "OK", text: `İş emri ${out.result.workOrderNo}`, workOrderId: out.result.workOrderId } : { kind: "OK", text: "Taslak kaydedildi (onay Gelen Belgeler'den)" } }));
+        setResults((r) => ({ ...r, [n.id]: out.kind === "WORK_ORDER" ? { kind: "OK", text: `${TERIM.terbiyeIsEmri.tekil} ${out.result.workOrderNo}`, workOrderId: out.result.workOrderId } : { kind: "OK", text: "Taslak kaydedildi (onay Gelen Belgeler'den)" } }));
         if (out.kind === "WORK_ORDER" && autoPrint) toast.message(`${out.result.workOrderNo}: ${AUTO_PRINT_TEXT[await printRefakatCard(out.result.workOrderId)]}`);
       } catch (e) {
         errors.push(e);

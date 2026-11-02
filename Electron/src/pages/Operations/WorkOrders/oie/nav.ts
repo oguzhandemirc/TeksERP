@@ -12,6 +12,6 @@ export type WeavingNavState = { openNew?: boolean };
 
 /** Yeni kayıt sayfa başlığı: kısayolda "<kısayol adı> iş emri", değilse bugünkü başlık. */
 export function newWorkOrderTitle(start: OieStart | null | undefined): string {
-  if (start?.kind === "shortcut") return `${start.route.name} iş emri`;
+  if (start?.kind === "shortcut") return `${start.route.name} ${TERIM.terbiyeIsEmri.tekilKucuk}`;
   return `Yeni ${TERIM.terbiyeIsEmri.tekil}`;
 }

@@ -210,6 +210,9 @@ const EXPECTED: Record<string, string> = {
   "Machine <- RollMovement.machine : SetNull": "guarded (rollMovementCount) — revokedAt süzülmez, geri alınmış hareket de üretim kanıtı",
   "Machine <- RollOperation.machine : SetNull": "guarded (rollOperationCount) — kurşun/QC2 damgası",
   "Machine <- RollMeterReading.machine : SetNull": "guarded (rollMeterReadingCount) — kurşun metre defteri, damgalılar dahil",
+  // Plan makinesi (OIE 2026-11): yalnız ÖNERİ kolonu — makine silinince öneri boşalır, iş/defter kaybı yok.
+  "Machine <- RouteStep.plannedMachine : SetNull": "BİLEREK guard'sız — rota şablonundaki makine ÖNERİSİ; silmede null'a çekilir, şablon yaşar",
+  "Machine <- WorkOrderStep.plannedMachine : SetNull": "BİLEREK guard'sız — adımın makine ÖNERİSİ (atama değil); silmede null'a çekilir, gerçek iş atfı RollMovement/RollOperation guard'larında",
   // Dokuma P4 (2026-09-13). Cascade BİLİNÇLİ: künye makinesiz anlamsızdır.
   // ⚠️ Bu satır guard'ın YOKLUĞUNU beyan eder, VARLIĞINI değil — ve bugün doğru:
   // künyenin yazma yüzeyi yok, yani `baselineRunHours` (ERP öncesi çalışma saati
@@ -317,6 +320,10 @@ const MACHINE_GUARD_EXEMPT: Record<string, string> = {
     "duruş defteri henüz yazılmıyor; `machineStopCount` guard'ı ingest dilimiyle gelecek (Restrict ⇒ o gün ZORUNLU)",
   "machineCollectorLink.machineId":
     "kapsam satırı Cascade ile birlikte ölür — yapılandırmadır, defter değil; sayım guard'ı gerekmez",
+  "routeStep.plannedMachineId":
+    "makine ÖNERİSİ (SetNull): silme öneriyi boşaltır, bloklamaz — atama/defter değil",
+  "workOrderStep.plannedMachineId":
+    "makine ÖNERİSİ (SetNull): silme öneriyi boşaltır, bloklamaz — gerçek iş atfı hareket/operasyon guard'larında",
 };
 
 // =============================================================================

@@ -1,5 +1,6 @@
 // İş emri açılınca refakat kartını otomatik bas (K9; ayar `refakatAutoPrint` gelen belge ayar ucunda, varsayılan kapalı = bugünkü).
 // Baskı yolu TravelerCardPrintDialog ile aynı: backend HTML'i → `printTracked` → yalnız kâğıt çıkınca `print-event`.
+import { TERIM } from "@/lib/terim";
 import { printTracked } from "@/lib/print";
 import { useQuery } from "@tanstack/react-query";
 import { useGelenBelgeEnabled } from "@/hooks/usePricingEnabled";
@@ -33,7 +34,7 @@ export async function printRefakatCard(workOrderId: string): Promise<AutoPrintOu
 
 export const AUTO_PRINT_TEXT: Record<AutoPrintOutcome, string> = {
   PRINTED: "Refakat kartı yazdırıldı.",
-  CANCELLED: "Refakat kartı yazdırılmadı (iptal edildi) — iş emri detayından basabilirsiniz.",
-  NO_CARD: "Refakat kartı bulunamadı — iş emri detayından basın.",
-  FAILED: "Refakat kartı yazdırılamadı — iş emri detayından basın.",
+  CANCELLED: `Refakat kartı yazdırılmadı (iptal edildi) — ${TERIM.terbiyeIsEmri.tekilKucuk} detayından basabilirsiniz.`,
+  NO_CARD: `Refakat kartı bulunamadı — ${TERIM.terbiyeIsEmri.tekilKucuk} detayından basın.`,
+  FAILED: `Refakat kartı yazdırılamadı — ${TERIM.terbiyeIsEmri.tekilKucuk} detayından basın.`,
 };

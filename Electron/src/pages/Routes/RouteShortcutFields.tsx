@@ -5,6 +5,7 @@ import { Controller } from "react-hook-form";
 import { Zap } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
+import { TERIM } from "@/lib/terim";
 import type { RouteFormValues } from "./schema";
 
 interface Props {
@@ -14,13 +15,13 @@ interface Props {
 
 export function RouteShortcutFields({ control, register }: Props) {
   return (
-    <FormField label="İş emri kısayolu" htmlFor="shortcutOrder">
+    <FormField label={`${TERIM.terbiyeIsEmri.tekil} kısayolu`} htmlFor="shortcutOrder">
       <div className="flex h-9 items-center gap-3" data-testid="route-shortcut">
         <Controller
           control={control}
           name="isWorkOrderShortcut"
           render={({ field }) => (
-            <label className="flex cursor-pointer items-center gap-2 text-sm" title="İş emri oluştur ekranında özel iş emri olarak çıkar">
+            <label className="flex cursor-pointer items-center gap-2 text-sm" title={`${TERIM.terbiyeIsEmri.tekil} oluştur ekranında özel kısayol olarak çıkar`}>
               <input type="checkbox" checked={field.value === true} onChange={(e) => field.onChange(e.target.checked)} data-testid="route-shortcut-check" />
               <Zap className="h-3.5 w-3.5 text-primary" />
               Kısayol

@@ -27,7 +27,7 @@ import { factoryDateTr } from "../constants/time";
 import { SERVICE_BILLING_TRIGGERS, type ServiceBillingTrigger } from "./system-setting.service";
 import { ACTIVE_HOLD_INCLUDE, HELD_CARI_ACCOUNT_WHERE, holdScopes, reasonLabel, type CariHoldScope } from "./helpers/cari-hold.helper";
 import { CARI_TAX_SELECT } from "./helpers/invoice-tax-defaults.helper";
-import { readKursunGramPrice } from "./helpers/kursun-gram-price.helper";
+import { readKursunGramPrice } from "./helpers/kursun-gram-price-input.helper";
 import { cariTaxOverrideData, taxOverrideOf, type CariTaxOverrideInput } from "./helpers/cari-tax-override.helper";
 
 /**

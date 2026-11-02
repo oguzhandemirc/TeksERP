@@ -30,8 +30,8 @@ export const productionTiles: OperationsTile[] = [
     // K6 (Gülkesim 2026-11-02): tek giriş — seçici (Standart: Terbiye · Dokuma / Özel: kısayol rotaları). Adres ve izin
     // yeni kayıt route'uyla birebir; eski karosuz palet girişinin yerini aldı.
     key: "work-order-create",
-    title: "İş emri oluştur",
-    description: "Terbiye, dokuma ya da özel (ör. Kurşun & Tambur) iş emri — belge okutarak da",
+    title: `${TERIM.terbiyeIsEmri.tekil} oluştur`,
+    description: `${TERIM.terbiyeIsEmri.tekil}, ${TERIM.dokumaIsEmri.tekilKucuk} ya da özel kısayol (ör. Kurşun & Tambur) — belge okutarak da`,
     icon: FilePlus2,
     to: "/operations/work-orders/new",
     group: "production",

@@ -13,7 +13,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { deriveCapabilityFlags } from "./station-capability.service";
 import { KURSUN_PROPERTY_CODE } from "./helpers/quality-station.helper";
-import { readKursunGramPrice } from "./helpers/kursun-gram-price.helper";
+import { readKursunGramPrice } from "./helpers/kursun-gram-price-input.helper";
 import { fabricPropertyService } from "../routes/fabric-property.routes";
 
 export interface KursunStationValue {

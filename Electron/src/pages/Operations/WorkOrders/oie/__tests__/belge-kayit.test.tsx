@@ -113,7 +113,7 @@ describe("toplu kayıt", () => {
     const save = await screen.findByTestId("oie-bulk-save");
     await waitFor(() => expect(save).toBeEnabled());
     await userEvent.click(save);
-    await waitFor(() => expect(screen.getByTestId("row-n2")).toHaveTextContent("OK:İş emri IE-2"));
+    await waitFor(() => expect(screen.getByTestId("row-n2")).toHaveTextContent("OK:Terbiye İş Emri IE-2"));
     expect(screen.getByTestId("row-n1")).toHaveTextContent("FAILED:");
     expect(createWO).toHaveBeenCalledTimes(2);
     expect(printCard).toHaveBeenCalledWith("w2");

@@ -6,6 +6,7 @@ import type { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import type { PaginatedResponse } from "../../types/api.types";
 import { AppError } from "../../utils/app-error";
+import { TERIM } from "../../constants/terim";
 
 /** Kısayol listesinin tavanı (sayfasız döner). */
 export const SHORTCUT_LIST_MAX = 100;
@@ -18,7 +19,7 @@ export const isShortcutQuery = (req: Request): boolean => req.query.shortcut ===
 /** Genel gövdeden yazılan iki skaler kolonun tipi — Prisma tip hatası 500 değil Türkçe 400 olsun. Sıra 0–9999 tam sayı. */
 export function assertShortcutFields(data: Record<string, unknown>): void {
   if ("isWorkOrderShortcut" in data && typeof data.isWorkOrderShortcut !== "boolean") {
-    throw AppError.badRequest("İş emri kısayolu evet/hayır olmalı", { code: "VALIDATION_ERROR" });
+    throw AppError.badRequest(`${TERIM.terbiyeIsEmri.tekil} kısayolu evet/hayır olmalı`, { code: "VALIDATION_ERROR" });
   }
   if ("shortcutOrder" in data) {
     const v = data.shortcutOrder;

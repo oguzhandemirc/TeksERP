@@ -1,5 +1,6 @@
 // Toplu okutma (K8): seçilen HER dosya ayrı belge taslağı olur (tek belgenin sayfaları değil). Dosya başına ayrı deneme
 // token'ı; biri düşerse diğerleri sürer, düşen satırda neden yazılır ve "Yeniden gönder" yalnız kalanları dener.
+import { TERIM } from "@/lib/terim";
 import { useRef, useState } from "react";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -84,7 +85,7 @@ export function TopluYukleDialog({ open, onOpenChange, onDone }: Props) {
       <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto" data-testid="oie-bulk-upload">
         <DialogHeader>
           <DialogTitle>Birden çok belge</DialogTitle>
-          <DialogDescription>Her fotoğraf ayrı bir belge ve ayrı bir iş emri olur. Okunanlar tek listede kontrol edilip birlikte kaydedilir.</DialogDescription>
+          <DialogDescription>{`Her fotoğraf ayrı bir belge ve ayrı bir ${TERIM.terbiyeIsEmri.tekilKucuk} olur. Okunanlar tek listede kontrol edilip birlikte kaydedilir.`}</DialogDescription>
         </DialogHeader>
         <input ref={fileRef} type="file" multiple accept={UPLOAD_ACCEPT} className="hidden" data-testid="oie-bulk-input" onChange={(e) => { void pick(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
         <UploadDropZone disabled={busy} onFiles={(f) => void pick(f)}>

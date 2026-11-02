@@ -1,5 +1,6 @@
 // Belgeden iş emri formu (K6/K7): okutulan belge okunurken bekler, okununca formun kutuları dolar ("Belgeden" rozeti +
 // küçük önizleme). Kaydet: ayar WITH_WORK_ORDER → belge + top + iş emri tek seferde; değilse taslağa yazılır (bugünkü).
+import { TERIM } from "@/lib/terim";
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -41,7 +42,7 @@ function useSave(noteId: string, route: Props["route"]) {
       void qc.invalidateQueries({ queryKey: [INCOMING_DOCUMENT_QUERY_KEY] });
       if (out.kind !== "WORK_ORDER") return;
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
-      toast.success(`İş emri açıldı: ${out.result.workOrderNo}`);
+      toast.success(`${TERIM.terbiyeIsEmri.tekil} açıldı: ${out.result.workOrderNo}`);
       if (autoPrint) toast.message(AUTO_PRINT_TEXT[await printRefakatCard(out.result.workOrderId)]);
       navigateActive(`/operations/work-orders/${out.result.workOrderId}`);
     },

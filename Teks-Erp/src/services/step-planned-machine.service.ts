@@ -5,6 +5,7 @@
 import { StepStatus, WorkOrderStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
+import { TERIM } from "../constants/terim";
 import { AuditService } from "./audit.service";
 import { assertPlannedMachines } from "./helpers/planned-machine.helper";
 import type { ApiResponse } from "../types/api.types";
@@ -48,7 +49,7 @@ export async function updateStepPlannedMachine(
     data: { plannedMachineId },
   });
   if (claim.count === 0) {
-    throw AppError.conflict("Adım kapanmış ya da iş emri sonlanmış — makine önerisi değiştirilemez. Sayfayı yenileyin.", {
+    throw AppError.conflict(`Adım kapanmış ya da ${TERIM.terbiyeIsEmri.tekilKucuk} sonlanmış — makine önerisi değiştirilemez. Sayfayı yenileyin.`, {
       code: "STEP_NOT_OPEN",
     });
   }

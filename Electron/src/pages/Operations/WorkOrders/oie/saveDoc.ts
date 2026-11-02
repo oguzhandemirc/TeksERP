@@ -1,5 +1,6 @@
 // Bir belgenin kaydı (tekli form ve toplu satır aynı yoldan): WITH_WORK_ORDER → sözleşme 3 ucu (belge + top + iş emri tek
 // seferde); SEPARATE (varsayılan, bugünkü) → formdaki değerler taslağa yazılır, onay Gelen Belgeler'den. Hata fırlatılır.
+import { TERIM } from "@/lib/terim";
 import { updateNoteHeader } from "@/pages/Operations/GelenBelgeler/service";
 import type { DeliveryNoteDetail } from "@/pages/Operations/GelenBelgeler/types";
 import { docDraftReasons, noteWorkOrderBody, separateHeaderPatch, type DocDraft, type FormApproval } from "./docDraft";
@@ -29,10 +30,10 @@ export async function saveDoc(i: SaveDocInput): Promise<SaveOutcome> {
   return { kind: "DRAFT_SAVED" };
 }
 
-export const DRAFT_SAVED_TEXT = "Belge taslak olarak kaydedildi. Bu fabrikada belge ayrı onaylanır: onay Gelen Belgeler ekranından verilince iş emri açılır.";
+export const DRAFT_SAVED_TEXT = `Belge taslak olarak kaydedildi. Bu fabrikada belge ayrı onaylanır: onay Gelen Belgeler ekranından verilince ${TERIM.terbiyeIsEmri.tekilKucuk} açılır.`;
 
 /** Sunucu ayarı formdan sonra kapandıysa (403) anlaşılır cümle; değilse null (sunucu cümlesi kullanılır). */
 export function saveErrorHint(e: unknown): string | null {
-  if (errorCode(e) === FORM_APPROVAL_DISABLED) return "Belgeyi iş emriyle birlikte kaydetme ayarı kapalı — belge Gelen Belgeler'den onaylanmalı.";
+  if (errorCode(e) === FORM_APPROVAL_DISABLED) return `Belgeyi ${TERIM.terbiyeIsEmri.cekimKucuk.vasita} birlikte kaydetme ayarı kapalı — belge Gelen Belgeler'den onaylanmalı.`;
   return null;
 }
