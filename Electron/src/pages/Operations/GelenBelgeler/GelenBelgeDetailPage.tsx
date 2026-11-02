@@ -12,6 +12,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { ScanViewer } from "./ScanViewer";
 import { NoteHeaderForm } from "./NoteHeaderForm";
 import { TotalsStrip } from "./TotalsStrip";
+import { NoticesStrip } from "./NoticesStrip";
 import { LinesTable } from "./LinesTable";
 import { AddLineForm } from "./AddLineForm";
 import { LineImportButton } from "./LineImportButton";
@@ -78,6 +79,16 @@ function DetailActions({ note, reviewCount, addPages, onReview, onApprove }: Det
   );
 }
 
+/** Belge gelmeden önceki kabuk (yükleniyor / yüklenemedi). */
+function DetailLoading({ failed }: { failed: boolean }) {
+  return (
+    <PageShell>
+      <PageHeader title="Gelen Belge" parent={{ label: "Gelen Belgeler", to: LIST_PATH }} />
+      <PageBody className="p-6 text-sm text-muted-foreground">{failed ? "Belge yüklenemedi." : "Yükleniyor…"}</PageBody>
+    </PageShell>
+  );
+}
+
 export function IncomingDocumentDetailPage() {
   const { id = "" } = useParams();
   const { note, suggestions, header, line, removeLine, invalidate } = useNoteDetail(id);
@@ -87,14 +98,7 @@ export function IncomingDocumentDetailPage() {
   const [approveOpen, setApproveOpen] = useState(false);
   const n = note.data;
   const gramaj = useProcessGramaj(n, suggestions.data, !!n && isApprovable(n.status) && hasPermission("gelen-belge:approve"));
-  if (!n) {
-    return (
-      <PageShell>
-        <PageHeader title="Gelen Belge" parent={{ label: "Gelen Belgeler", to: LIST_PATH }} />
-        <PageBody className="p-6 text-sm text-muted-foreground">{note.isError ? "Belge yüklenemedi." : "Yükleniyor…"}</PageBody>
-      </PageShell>
-    );
-  }
+  if (!n) return <DetailLoading failed={note.isError} />;
   const editable = isEditable(n.status) && hasPermission("gelen-belge:write");
   const reviewCount = buildReviewQueue(n.lines).length;
   const sel = n.lines.find((l) => l.id === selected) ?? null;
@@ -125,6 +129,7 @@ export function IncomingDocumentDetailPage() {
             <div className="flex min-w-0 flex-col gap-4">
               <NoteHeaderForm note={n} suggestions={suggestions.data} editable={editable} onPatch={(p) => header.mutate(p)} />
               <TotalsStrip check={n.totalsCheck} />
+              <NoticesStrip notices={n.notices} />
               {n.varianceReason && <p className="text-xs text-muted-foreground">Fark gerekçesi: {n.varianceReason}</p>}
               <ProcessGramajPanel groups={gramaj.groups} options={suggestions.data?.processOptions ?? []} choiceGroups={suggestions.data?.processGroups ?? []} picks={gramaj.picks} onPick={gramaj.onPick} />
             </div>

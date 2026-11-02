@@ -17,6 +17,7 @@ import { AuditService } from "./audit.service";
 import { nextNoteNo, translateUnique } from "./gelen-belge-note.service";
 import { FALLBACK_TEMPLATE_CODE, bumpTemplateHit, ensureSenderTemplate } from "./gelen-belge-sablon.service";
 import { PDF_MIME } from "./gelen-belge-scan.service";
+import { readHandwritingOutlierFactor } from "./system-setting.service";
 
 export const READ_MAX_ATTEMPTS = 3;
 /** READING'de bu kadar kalan tarama (süreç düşmüş) yeniden PENDING sayılır. */
@@ -137,7 +138,7 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
     return release(id, scan.attempts, `PROGRAM_HATASI:${(err as Error).name}`, { userId: scan.capturedById ?? undefined });
   }
   if (!r.ok) return release(id, scan.attempts, r.code, { permanent: r.kind === "HTTP" || r.kind === "INVALID", userId: scan.capturedById ?? undefined });
-  const extracted = draftFromExtraction(extractDocument(r.result, loadTemplates(), FALLBACK_TEMPLATE_CODE));
+  const extracted = draftFromExtraction(extractDocument(r.result, loadTemplates(), FALLBACK_TEMPLATE_CODE), { outlierFactor: await readHandwritingOutlierFactor() });
   // Yan dönük sayfa: kutular panelin çizdiği (dönmemiş) fotoğrafın çerçevesine döner.
   const draft = { ...extracted, lines: linesToPhotoFrame(extracted.lines, r.result) };
   const { code: firstTemplate, template } = await bindDraftTemplate(draft.header.regions[0]?.templateId ?? null, scan.capturedById ?? undefined);

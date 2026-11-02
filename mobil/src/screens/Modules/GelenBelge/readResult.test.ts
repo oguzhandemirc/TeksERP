@@ -1,4 +1,5 @@
 // Okuma sonucu izleme: geçişler (okunuyor → okundu / okunamadı / zaman aşımı / kesin hata) ve kart metni.
+// Negatif sonda (2026-11-02): notes'tan `notices` çıkarılınca "okuma uyarıları karta basılır" kırmızı.
 import type { ReadSummary } from '../../../services/inboundDoc.service';
 import { READ_POLL_TIMEOUT_MS, onPollError, onSummary, readResultView, shouldPoll, startWatch } from './readResult';
 
@@ -100,6 +101,27 @@ describe('readResult — kart metni', () => {
     expect(v.rows.find((r) => r.key === 'toplam')).toMatchObject({ value: 'Tutmuyor', tone: 'error' });
     expect(v.rows.find((r) => r.key === 'gozden')).toMatchObject({ value: '2', tone: 'warn' });
     expect(v.notes).toEqual(['Blok 1: beyan 586 m, satır toplamı 686.000 m.', 'Belgede 4 top yazıyor, satır sayısı 5.']);
+  });
+
+  it('okuma uyarıları (notices) karta "başlık: ayrıntı" olarak basılır ve yeşili uyarıya çevirir', () => {
+    const notices = [
+      { code: 'SECOND_DOCUMENT_TRACE', title: 'Sayfada ikinci belge var', detail: 'Ürün sevk fişi (Sevk No 96399) — ayrı fotoğrafla yükleyin' },
+      { code: 'GRID_EMPTY', title: 'El yazısı okunamadı — satırları elle girin', detail: 'Bölge 1: satır çıkmadı' },
+    ];
+    const w = onSummary(startWatch(T0), sum({ state: 'READ', lineCount: 1, totals: { declared: true, ok: true, mismatches: [] }, notices }), T0);
+    const v = readResultView(w, 'GB-0246');
+    expect(v.tone).toBe('warn');
+    expect(v.notes).toEqual([
+      'Sayfada ikinci belge var: Ürün sevk fişi (Sevk No 96399) — ayrı fotoğrafla yükleyin',
+      'El yazısı okunamadı — satırları elle girin: Bölge 1: satır çıkmadı',
+    ]);
+  });
+
+  it('eski sunucu notices göndermez → kart bugünkü gibi (yeşil, not yok); okunurken uyarı basılmaz', () => {
+    const old = onSummary(startWatch(T0), sum({ state: 'READ', lineCount: 2, totals: { declared: true, ok: true, mismatches: [] } }), T0);
+    expect(readResultView(old, 'GB-1')).toMatchObject({ tone: 'ok', notes: [] });
+    const busy = onSummary(startWatch(T0), sum({ notices: [{ code: 'X_Y', title: 't', detail: 'd' }] }), T0);
+    expect(readResultView(busy, 'GB-1').notes).toEqual([]);
   });
 
   it('belgede toplam beyanı yok → "Belgede toplam yok"', () => {

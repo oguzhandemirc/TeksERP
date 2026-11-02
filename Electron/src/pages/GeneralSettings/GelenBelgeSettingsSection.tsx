@@ -6,6 +6,7 @@
 //   · gözden geçirilmemiş hücre varken onay — Uyar (varsayılan, bugünkü) | Engelle
 //   · onaydan sonra otomatik iş emri — kapalı (varsayılan, bugünkü: iş emri plan ekranından elle)
 //   · fabrika varsayılan rotası + rota önerisi önceliği — boş / "önce müşteri geçmişi" (varsayılan, bugünkü)
+//   · el yazısı şüpheli değer oranı K — 4 (varsayılan; alt sınır bugünkü %25, üst sınır yeni, yalnız uyarı)
 // Ürün seçici DOĞRUDAN modal açar (combobox yok); yalnız aktif kumaş listelenir, sunucu ikinci kapıdır.
 // =============================================================================
 import { useEffect, useState } from "react";
@@ -23,6 +24,7 @@ import { apiErrorText } from "@/lib/api-error";
 import { TERIM } from "@/lib/terim";
 import { FieldLabel, FlagToggle } from "./SettingRow";
 import { EnumRadioOptions } from "./EnumRadioOptions";
+import { OutlierFactorField, useOutlierDraft } from "./GelenBelgeOutlierField";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { useRegisterSettingsDirty } from "./settings-dirty";
 import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
@@ -134,6 +136,19 @@ function useRouteDraft(server: IncomingDocumentSettings | undefined) {
 
 type DraftItem = { id: string; label: string } | null;
 
+/** Gözden geçirilmemiş hücre varken onay — Uyar | Engelle. */
+function UnreviewedApprovalField({ value, onChange, defaultValue }: { value: UnreviewedApproval; onChange: (v: UnreviewedApproval) => void; defaultValue?: UnreviewedApproval }) {
+  return (
+    <div>
+      <FieldLabel htmlFor="gb-unreviewed" label="Gözden geçirilmemiş hücre varken onay" desc="El yazısı ya da okunamayan hücreler 'Gözden geçir' işaretiyle gelir." />
+      <div id="gb-unreviewed" className="mt-2">
+        <EnumRadioOptions name="Gözden geçirilmemiş hücre varken onay" value={value} options={UNREVIEWED_APPROVAL_OPTIONS} onChange={(v) => onChange(v as UnreviewedApproval)} />
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">Varsayılan: {UNREVIEWED_APPROVAL_OPTIONS.find((o) => o.value === defaultValue)?.label ?? "Uyar"}</p>
+    </div>
+  );
+}
+
 export function IncomingDocumentSettingsSection({ writePermissions = [SETTINGS_ADMIN_PERMISSION] }: { writePermissions?: string[] }) {
   const qc = useQueryClient();
   const flagsQ = useFeatureFlags();
@@ -148,18 +163,19 @@ export function IncomingDocumentSettingsSection({ writePermissions = [SETTINGS_A
   const serverAuto = server?.autoWorkOrder === true;
   const [auto, setAuto] = useState(serverAuto);
   const rd = useRouteDraft(server);
+  const od = useOutlierDraft(server);
   const [picking, setPicking] = useState(false);
-  const resetAll = () => { setItem(serverItem); setMode(server?.unreviewedApproval ?? "WARN"); setAuto(serverAuto); rd.reset(); };
+  const resetAll = () => { setItem(serverItem); setMode(server?.unreviewedApproval ?? "WARN"); setAuto(serverAuto); rd.reset(); od.reset(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(resetAll, [server?.defaultItem?.id, server?.unreviewedApproval, serverAuto, rd.serverRouteId, rd.serverPriority]);
+  useEffect(resetAll, [server?.defaultItem?.id, server?.unreviewedApproval, serverAuto, rd.serverRouteId, rd.serverPriority, od.serverValue]);
 
   const itemDirty = (item?.id ?? null) !== (server?.defaultItem?.id ?? null);
   const modeDirty = mode !== (server?.unreviewedApproval ?? "WARN");
   const autoDirty = auto !== serverAuto;
-  const dirty = itemDirty || modeDirty || autoDirty || rd.routeDirty || rd.priorityDirty;
+  const dirty = itemDirty || modeDirty || autoDirty || rd.routeDirty || rd.priorityDirty || od.dirty;
   useRegisterSettingsDirty(dirty);
 
-  const body = { ...(itemDirty ? { defaultItemId: item?.id ?? null } : {}), ...(modeDirty ? { unreviewedApproval: mode } : {}), ...(autoDirty ? { autoWorkOrder: auto } : {}), ...rd.body };
+  const body = { ...(itemDirty ? { defaultItemId: item?.id ?? null } : {}), ...(modeDirty ? { unreviewedApproval: mode } : {}), ...(autoDirty ? { autoWorkOrder: auto } : {}), ...rd.body, ...od.body };
   const mut = useMutation({
     mutationFn: () => updateIncomingDocumentSettings(body),
     onSuccess: (saved) => {
@@ -200,16 +216,11 @@ export function IncomingDocumentSettingsSection({ writePermissions = [SETTINGS_A
           )}
         </div>
 
-        <div>
-          <FieldLabel htmlFor="gb-unreviewed" label="Gözden geçirilmemiş hücre varken onay" desc="El yazısı ya da okunamayan hücreler 'Gözden geçir' işaretiyle gelir." />
-          <div id="gb-unreviewed" className="mt-2">
-            <EnumRadioOptions name="Gözden geçirilmemiş hücre varken onay" value={mode} options={UNREVIEWED_APPROVAL_OPTIONS} onChange={(v) => setMode(v as UnreviewedApproval)} />
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">Varsayılan: {UNREVIEWED_APPROVAL_OPTIONS.find((o) => o.value === server?.defaultUnreviewedApproval)?.label ?? "Uyar"}</p>
-        </div>
+        <UnreviewedApprovalField value={mode} onChange={setMode} defaultValue={server?.defaultUnreviewedApproval} />
 
         <AutoWorkOrderToggle checked={auto} onChange={setAuto} />
         <RouteSuggestionFields routeId={rd.routeId} onRouteChange={rd.setRouteId} priority={rd.priority} onPriorityChange={rd.setPriority} saved={server} routeDirty={rd.routeDirty} />
+        <OutlierFactorField draft={od} defaultValue={server?.defaultHandwritingOutlierFactor} />
 
         <SettingsSaveBar dirty={dirty} saving={mut.isPending} onSave={() => mut.mutate()} onReset={resetAll} />
         <ItemPickerModal

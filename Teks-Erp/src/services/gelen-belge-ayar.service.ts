@@ -1,13 +1,14 @@
 // =============================================================================
 // TeksERP — Gelen belge AYARLARI (hizmet ekseni E3; TASARIM-KARARI §8 HİZMET EKSENİ (1))
 // =============================================================================
-// Beş fabrika ayarı, TEK yazar `PUT /api/gelen-belge/ayarlar` (ham `PUT /api/admin/settings/:key` bu anahtarları
+// Altı fabrika ayarı, TEK yazar `PUT /api/gelen-belge/ayarlar` (ham `PUT /api/admin/settings/:key` bu anahtarları
 // REDDEDER — doğrulamasız düz metin yazıp ürün kapısını dolanmasın):
 //   · `gelenBelge.defaultItemId` — ürünü seçilmemiş satır onayda bu ürünle doğar (boş = bugünkü: 400 UNRESOLVED)
 //   · `gelenBelge.unreviewedApproval` — needsReview satır varken onay: WARN (varsayılan, geçer) | BLOCK (409)
 //   · `gelenBelge.autoWorkOrder` — onaydan sonra net gruplara iş emri kendiliğinden (boş/false = bugünkü: elle)
 //   · `gelenBelge.defaultRouteTemplateId` — rota önerisinin fabrika varsayılanı (boş = bugünkü: yalnız müşteri kaynakları)
 //   · `gelenBelge.routeSuggestionPriority` — CUSTOMER_FIRST (varsayılan, bugünkü) | FACTORY_FIRST
+//   · `gelenBelge.handwritingOutlierFactor` — el yazısı şüpheli metre oranı K (2–20; boş = 4, yalnız uyarı)
 // Ürün kapısı tek karar: yaşam döngüsü `assertItemUsable(NEW_STOCK)` + top doğurabilen tür ALLOWLIST'i
 // (`ROLL_BEARING_ITEM_TYPES`; yeni tür — ör. SERVICE — eklendiği gün kendiliğinden dışarıda kalır).
 // =============================================================================
@@ -18,6 +19,7 @@ import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { TERIM } from "../constants/terim";
 import { assertItemUsable } from "./helpers/item-usage.helper";
 import { factoryRouteProblem } from "./gelen-belge-rota-onerisi.service";
+import { DEFAULT_OUTLIER_FACTOR, OUTLIER_FACTOR_MAX, OUTLIER_FACTOR_MIN } from "../lib/gelen-belge/taslak";
 import {
   DEFAULT_UNREVIEWED_APPROVAL,
   UNREVIEWED_APPROVAL_VALUES,
@@ -29,6 +31,7 @@ import {
   ROUTE_SUGGESTION_PRIORITY_VALUES,
   type RouteSuggestionPriority,
   readIncomingDocDefaultItemId,
+  readHandwritingOutlierFactor,
   readUnreviewedApprovalMode,
   systemSettingService,
   type UnreviewedApprovalMode,
@@ -44,6 +47,7 @@ export const INCOMING_DOC_DEDICATED_SETTING_KEYS: ReadonlySet<string> = new Set(
   SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER,
   SETTING_KEYS.GELEN_BELGE_DEFAULT_ROUTE_ID,
   SETTING_KEYS.GELEN_BELGE_ROUTE_PRIORITY,
+  SETTING_KEYS.GELEN_BELGE_OUTLIER_FACTOR,
 ]);
 
 export interface DefaultItemView {
@@ -64,6 +68,10 @@ export interface IncomingDocSettings {
   defaultRoute: { id: string; name: string; problem: string | null } | null;
   routeSuggestionPriority: RouteSuggestionPriority;
   defaultRouteSuggestionPriority: RouteSuggestionPriority;
+  /** El yazısı şüpheli metre oranı K (medyanın 1/K altı ya da K katı üstü); yeni okumaya uygulanır. */
+  handwritingOutlierFactor: number;
+  defaultHandwritingOutlierFactor: number;
+  handwritingOutlierFactorRange: { min: number; max: number };
 }
 
 /**
@@ -107,6 +115,9 @@ export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
     defaultRoute: await defaultRouteView(),
     routeSuggestionPriority: await readRouteSuggestionPriority(),
     defaultRouteSuggestionPriority: DEFAULT_ROUTE_SUGGESTION_PRIORITY,
+    handwritingOutlierFactor: await readHandwritingOutlierFactor(),
+    defaultHandwritingOutlierFactor: DEFAULT_OUTLIER_FACTOR,
+    handwritingOutlierFactorRange: { min: OUTLIER_FACTOR_MIN, max: OUTLIER_FACTOR_MAX },
   };
 }
 
@@ -118,6 +129,8 @@ export interface IncomingDocSettingsInput {
   /** null = temizle (bugünkü davranış). */
   defaultRouteTemplateId?: string | null;
   routeSuggestionPriority?: RouteSuggestionPriority;
+  /** null = temizle (varsayılan oran). */
+  handwritingOutlierFactor?: number | null;
 }
 
 /** Yazım: ürün doğrulaması 400 `GELEN_BELGE_DEFAULT_ITEM_INVALID`; audit `systemSettingService.set` içinde. */
@@ -155,6 +168,14 @@ export async function updateIncomingDocSettings(input: IncomingDocSettingsInput,
       throw AppError.badRequest("Geçersiz seçenek: CUSTOMER_FIRST ya da FACTORY_FIRST olmalı.", { code: "VALIDATION_ERROR" });
     }
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_ROUTE_PRIORITY, input.routeSuggestionPriority, "Gelen belge: rota önerisi önceliği (CUSTOMER_FIRST/FACTORY_FIRST)", userId);
+  }
+  if (input.handwritingOutlierFactor !== undefined) {
+    const k = input.handwritingOutlierFactor;
+    if (k !== null && !(Number.isFinite(k) && k >= OUTLIER_FACTOR_MIN && k <= OUTLIER_FACTOR_MAX)) {
+      throw AppError.badRequest(`Şüpheli değer oranı ${OUTLIER_FACTOR_MIN} ile ${OUTLIER_FACTOR_MAX} arasında olmalı.`, { code: "VALIDATION_ERROR" });
+    }
+    // Temizleme boş metin yazar (okuyucu sayı olmayanı varsayılana düşürür).
+    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_OUTLIER_FACTOR, k ?? "", "Gelen belge: el yazısı şüpheli metre oranı (medyanın 1/K altı ya da K katı üstü)", userId);
   }
   return getIncomingDocSettings();
 }

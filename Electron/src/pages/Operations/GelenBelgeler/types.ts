@@ -101,6 +101,13 @@ export interface DeliveryNoteLine {
   problems?: LineProblem[];
 }
 
+/** Taslak okuma uyarısı — backend `lib/gelen-belge/uyari.ts` `NoteNotice` aynası (panel metin ayrıştırmaz). */
+export interface NoteNotice {
+  code: string;
+  title: string;
+  detail: string;
+}
+
 export interface DocumentScanInfo {
   id: string;
   noteId: string | null;
@@ -119,6 +126,8 @@ export interface DeliveryNoteDetail extends DeliveryNoteHeader {
   cariHold?: { sebepEtiketi: string; koyan: string; message: string } | null;
   /** Toplam kapısının canlı hükmü (detay yanıtı; yazmaz). */
   totalsCheck?: TotalsCheck;
+  /** Okuma uyarıları (tablet özetiyle aynı backend helper'ı); eski backend göndermez → şerit çizilmez. */
+  notices?: NoteNotice[];
 }
 
 /** Toplu silme önizlemesi (`POST /irsaliyeler/toplu-sil/onizleme`). */
@@ -292,6 +301,10 @@ export interface IncomingDocumentSettings {
   defaultRoute?: { id: string; name: string; problem: string | null } | null;
   routeSuggestionPriority?: RouteSuggestionPriority;
   defaultRouteSuggestionPriority?: RouteSuggestionPriority;
+  /** El yazısı şüpheli metre oranı K; eski backend göndermez (undefined = alan çizilmez). */
+  handwritingOutlierFactor?: number;
+  defaultHandwritingOutlierFactor?: number;
+  handwritingOutlierFactorRange?: { min: number; max: number };
 }
 /** Rota önerisi önceliği — backend `RouteSuggestionPriority` aynası. */
 export type RouteSuggestionPriority = "CUSTOMER_FIRST" | "FACTORY_FIRST";

@@ -1,8 +1,16 @@
 // Çıkarım → taslak eşlemesi (D3b, saf; DB yok): motor çıktısı (`DocumentExtraction`) → DRAFT başlık + satır girdisi.
 // Bölge ≥ 2 satırları blok numarasını SÜRDÜRÜR (tek taslak; panel "bölgeyi ayır"). Metrajı okunamayan satır
 // yazılmaz (`meters > 0` CHECK), uyarıya düşer; el yazısı ızgarasında her satır needsReview.
-import { parseNumber, type DocumentExtraction, type FieldResult, type OcrRect, type RegionExtraction } from "./motor";
+import { parseNumber, type DocumentExtraction, type FieldResult, type ForeignDocument, type OcrRect, type RegionExtraction } from "./motor";
+import { clampOutlierFactor, markGridSuspects, METER_KEYS } from "./taslak-supheli";
 
+// Şüpheli değer kuralı ayrı dosyada (max-lines); çağıranlar buradan alır.
+export { clampOutlierFactor, DEFAULT_OUTLIER_FACTOR, OUTLIER_FACTOR_MAX, OUTLIER_FACTOR_MIN, SUSPECT_MARK, suspectGridReasons, suspectGridSeqs, type SuspectReason } from "./taslak-supheli";
+
+export interface DraftOptions {
+  /** Şüpheli değer oranı; verilmezse `DEFAULT_OUTLIER_FACTOR`. */
+  outlierFactor?: number;
+}
 
 export interface DraftLine {
   blockNo: number;
@@ -51,7 +59,11 @@ const PROCESS_KEYS = ["islem", "yapilanIslem"];
 const TOP_COUNT_KEYS = ["topAdet", "girisAdet", "cikisAdet"];
 /** Blok başına okunup bloklar arasında farkı uyarılan iş kimliği alanları (sipariş · parti · boyahane iş emri · işlem). */
 const BLOCK_ID_KEYS = ["siparisNo", "hamPartiNo", "isEmriNo", "islem"];
-const METER_KEYS = ["m", "metre"];
+// Gönderenin (boyahane) iş emri numarası belgedeki adıyla "İE No"; bizim terbiye iş emrimizle karışmasın.
+const FIELD_LABEL: Record<string, string> = {
+  siparisNo: "sipariş", hamPartiNo: "parti", isEmriNo: "İE No", islem: "işlem",
+  fisNo: "Fiş No", irsaliyeNo: "İrsaliye No", evrakNo: "Evrak No", sevkNo: "Sevk No", belgeNo: "Belge No",
+};
 const WIDTH_KEYS = ["en", "cm"];
 
 export const clip = (v: string | null | undefined, max: number): string | null => {
@@ -123,7 +135,8 @@ function tableLines(reg: RegionExtraction, blockOffset: number, out: DraftLine[]
 }
 
 /** El yazısı ızgarası: basılı sıra numarası başına bir satır; yalnız sayı adayı olan hücre satır olur (hepsi needsReview). */
-function gridLines(reg: RegionExtraction, blockNo: number, out: DraftLine[], warnings: string[]): void {
+function gridLines(reg: RegionExtraction, blockNo: number, out: DraftLine[], ctx: { warnings: string[]; factor: number }): void {
+  const { warnings } = ctx;
   const g = reg.grid;
   if (!g) return;
   const bySeq = new Map<number, typeof g.cells>();
@@ -161,23 +174,8 @@ function gridLines(reg: RegionExtraction, blockNo: number, out: DraftLine[], war
     });
   }
   if (skipped) warnings.push(`GRID_CELLS_UNREAD: ${skipped} hücrede sayı adayı yok (elle girilir)`);
-  const suspects = suspectGridSeqs(out.filter((l) => l.blockNo === blockNo));
-  if (suspects.length) warnings.push(`GRID_SUSPECT_VALUES: ${suspects.join(", ")} numaralı hücre(ler)in metresi şüpheli (harf karışmış ya da diğerlerinin çok altında) — önce bunları kontrol edin`);
-}
-
-/**
- * El yazısında OCR güveni yanlış rakamı doğrudan ayırmıyor (ölçüm 2026-11-02: yanlışlar 0,64–0,91, doğrular 0,59–0,98);
- * iki ucuz işaret ayırıyor: ham metinde harf ("1J6" → 1) ya da medyanın %25'inden küçük değer ("137" → 3). Yalnız UYARI.
- */
-export function suspectGridSeqs(lines: Array<{ senderRollNo: string | null; meters: string; ocrRaw: Record<string, string | null> }>): string[] {
-  const vals = lines.map((l) => Number(l.meters)).sort((a, b) => a - b);
-  const median = vals.length ? vals[Math.floor(vals.length / 2)]! : 0;
-  return lines
-    .filter((l) => {
-      const raw = Object.entries(l.ocrRaw).find(([k]) => METER_KEYS.includes(k))?.[1] ?? "";
-      return /\p{L}/u.test(raw) || (vals.length >= 3 && Number(l.meters) < median * 0.25);
-    })
-    .map((l) => l.senderRollNo ?? "?");
+  const suspect = markGridSuspects(out.filter((l) => l.blockNo === blockNo), ctx.factor);
+  if (suspect) warnings.push(suspect);
 }
 
 /** Bloklar farklı sipariş/parti/iş emri/işlem taşıyorsa TEK uyarı (başlık yalnız blok 1'i taşır). */
@@ -186,9 +184,17 @@ function blockDiffWarning(reg: RegionExtraction, blockOffset: number): string | 
   const differing = BLOCK_ID_KEYS.filter((k) => new Set(reg.blockFields.map((b) => b.fields[k]?.value ?? null).filter((v) => v !== null)).size > 1);
   if (differing.length === 0) return null;
   const desc = reg.blockFields
-    .map((b) => `blok ${blockOffset + b.blockNo}: ${differing.map((k) => `${k}=${b.fields[k]?.value ?? "?"}`).join(" ")}`)
+    .map((b) => `blok ${blockOffset + b.blockNo}: ${differing.map((k) => `${FIELD_LABEL[k] ?? k} ${b.fields[k]?.value ?? "?"}`).join(", ")}`)
     .join(" · ");
   return `BLOCK_IDS_DIFFER: belgede ${reg.blockFields.length} blok farklı iş kimliği taşıyor (${desc}) — başlık yalnız ilk bloğu gösterir; satır işlemi kendi bloğundan`;
+}
+
+/** "Ürün sevk fişi (giriş/çıkış toplamlı)" → "Ürün sevk fişi"; belge no varsa etiketiyle. */
+export function foreignDocumentWarning(f: ForeignDocument): string {
+  const name = f.templateName.replace(/\s*\(.*\)\s*$/, "").trim() || f.templateId;
+  const key = DOC_NO_KEYS.find((k) => f.fields[k]?.value);
+  const no = key ? ` (${FIELD_LABEL[key] ?? key} ${f.fields[key]!.value})` : "";
+  return `SECOND_DOCUMENT_TRACE: bu sayfada ikinci bir belge izi var: ${name}${no} — bu taslağa ayrı belge olarak alınmadı; ayrı fotoğrafla yükleyin`;
 }
 
 /**
@@ -228,10 +234,11 @@ function headerOnlyLine(reg: RegionExtraction, out: DraftLine[], warnings: strin
 }
 
 /** Motor çıktısını taslak başlık + satırlara çevirir; bölge ≥ 2 satırları blok numarasını SÜRDÜRÜR (tek taslak, panel ayırır). */
-export function draftFromExtraction(doc: DocumentExtraction): DraftFromOcr {
+export function draftFromExtraction(doc: DocumentExtraction, opts: DraftOptions = {}): DraftFromOcr {
+  const factor = clampOutlierFactor(opts.outlierFactor);
   const first = doc.regions[0];
   const f = first?.fields?.fields;
-  const warnings = [...doc.warnings];
+  const warnings = [...doc.warnings, ...(doc.foreignDocuments ?? []).map(foreignDocumentWarning)];
   const lines: DraftLine[] = [];
   const totalsBlocks: DraftHeader["totalsDeclared"]["blocks"] = [];
   let blockOffset = 0;
@@ -249,7 +256,10 @@ export function draftFromExtraction(doc: DocumentExtraction): DraftFromOcr {
       for (const b of reg.totals.blocks) totalsBlocks.push({ blockNo: blockOffset + b.blockNo, count: b.declared?.count ?? null, kg: b.declared?.kg ?? null, m: b.declared?.m ?? null });
     }
     const gridBlock = blockOffset + Math.max(1, maxBlock + (maxBlock > 0 ? 1 : 0));
-    gridLines(reg, gridBlock, lines, regionWarnings);
+    const before = lines.length;
+    gridLines(reg, gridBlock, lines, { warnings: regionWarnings, factor });
+    // El yazısı ızgaralı sayfada hiç satır çıkmadıysa sessiz kalma (0243: tek el yazısı hücre görülmedi).
+    if (reg.grid && lines.length === before && maxBlock === 0) regionWarnings.push("GRID_EMPTY: el yazısı hücrelerden satır çıkmadı — satırları belgeye bakarak elle girin");
     blockOffset = Math.max(blockOffset + maxBlock, lines.length ? Math.max(...lines.map((l) => l.blockNo)) : blockOffset);
     for (const w of [...reg.warnings, ...regionWarnings]) warnings.push(prefix + w);
     const fields: Record<string, string | null> = {};

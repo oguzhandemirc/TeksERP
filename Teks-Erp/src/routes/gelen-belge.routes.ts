@@ -207,7 +207,7 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
- *       200: { description: Taslak }
+ *       200: { description: "Taslak + satır problems[] (FAILED|ITEM_UNRESOLVED|NEEDS_REVIEW|SUSPECT_VALUE) + totalsCheck + notices[] (code, title, detail)" }
  *   patch:
  *     tags: [Gelen belge]
  *     summary: Başlık düzelt — yalnız DRAFT (aksi 409 DELIVERY_NOTE_NOT_DRAFT)
@@ -306,7 +306,7 @@ router.get("/tablet-baglam", requirePermission("gelen-belge:write"), wrap(async 
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
- *       200: { description: "noteId, noteNo, noteStatus, state, reason, pages (total/waiting/read/failed), lineCount, reviewCount, totals (declared, ok, mismatches[]), warnings[]" }
+ *       200: { description: "noteId, noteNo, noteStatus, state, reason, pages (total/waiting/read/failed), lineCount, reviewCount, totals (declared, ok, mismatches[]), warnings[], notices[] (code, title, detail — okuma uyarıları, detayla aynı helper)" }
  *       404: { description: DELIVERY_NOTE_NOT_FOUND }
  */
 // Tarayan `gelen-belge:read` taşımaz (D7): taslağın kendi okuma sonucunu yalnız bu özetten görür; ayrıntı panelde.
@@ -337,6 +337,7 @@ const SettingsBody = z.strictObject({
   autoWorkOrder: z.boolean(`Otomatik ${TERIM.terbiyeIsEmri.tekilKucuk} evet/hayır olmalı`).optional(),
   defaultRouteTemplateId: Id.nullable().optional(),
   routeSuggestionPriority: z.enum(["CUSTOMER_FIRST", "FACTORY_FIRST"], "Seçenek CUSTOMER_FIRST ya da FACTORY_FIRST olmalı").optional(),
+  handwritingOutlierFactor: z.number("Şüpheli değer oranı sayı olmalı").min(2, "Şüpheli değer oranı en az 2 olmalı").max(20, "Şüpheli değer oranı en çok 20 olmalı").nullable().optional(),
 });
 /**
  * @openapi
@@ -362,6 +363,7 @@ const SettingsBody = z.strictObject({
  *               autoWorkOrder: { type: boolean, description: "Onaydan sonra net desen gruplarına iş emri kendiliğinden (varsayılan false)" }
  *               defaultRouteTemplateId: { type: string, format: uuid, nullable: true, description: "Rota önerisinin fabrika varsayılanı; pasif/adımsız rota 400 GELEN_BELGE_DEFAULT_ROUTE_INVALID" }
  *               routeSuggestionPriority: { type: string, enum: [CUSTOMER_FIRST, FACTORY_FIRST] }
+ *               handwritingOutlierFactor: { type: number, minimum: 2, maximum: 20, nullable: true, description: "El yazısı şüpheli metre oranı K (null = varsayılan 4)" }
  *     responses:
  *       200: { description: Güncel ayarlar }
  */

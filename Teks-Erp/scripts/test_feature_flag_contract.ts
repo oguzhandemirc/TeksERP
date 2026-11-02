@@ -599,6 +599,11 @@ async function main() {
       file: "Electron/src/pages/GeneralSettings/GelenBelgeSettingsSection.tsx",
       needle: "ROUTE_PRIORITY_OPTIONS",
     },
+    GELEN_BELGE_OUTLIER_FACTOR: {
+      why: "El yazısı şüphe oranı (sayı 2–20, boş = 4) — aynı doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; okuma işi okur; flag yüküne konmaz",
+      file: "Electron/src/pages/GeneralSettings/GelenBelgeOutlierField.tsx",
+      needle: "gb-outlier-factor",
+    },
     SYSTEM_INSTALLATION_ID: {
       why: "Feature flag değil, kurulum kimliği — panel yüzeyi YOK (bilinçli); boot işi üretir, /api/discovery/identity okur",
       file: "Teks-Erp/src/jobs/installation-identity.job.ts",

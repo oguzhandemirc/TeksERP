@@ -6,6 +6,7 @@ export const PROBLEM_LABEL: Record<LineProblem, string> = {
   FAILED: "Girilemedi",
   ITEM_UNRESOLVED: "Ürün seçilmedi",
   NEEDS_REVIEW: "Gözden geçirilmedi",
+  SUSPECT_VALUE: "Şüpheli değer",
 };
 
 type ProblemLine = { problems?: readonly LineProblem[] };
