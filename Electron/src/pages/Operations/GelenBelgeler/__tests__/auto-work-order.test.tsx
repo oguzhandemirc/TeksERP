@@ -52,6 +52,10 @@ describe("summarizeAutoWorkOrders", () => {
       "Perde · desensiz (1 top): elle açılmalı — İşlem değeri (desen/gramaj) çözülemedi; grup elle açılmalı.",
     ]);
   });
+  it("sonuçta parti adı: grup `batchNumber` taşıyorsa 'IE… açıldı · parti ISM1439770'; yoksa bugünkü metin", () => {
+    const g = { ...RESULT.groups[0]!, batchNumber: "ISM1439770" };
+    expect(summarizeAutoWorkOrders({ opened: 1, manual: 0, reason: null, groups: [g] })!.lines[0]!.text).toBe("Perde · Desen Q10 (3 top): IE0211260001 açıldı · parti ISM1439770, 3 top bağlandı");
+  });
   it("genel neden (izin yok) tek cümlede, grup satırı tekrarlanmaz", () => {
     const s = summarizeAutoWorkOrders({ opened: 0, manual: 2, reason: "Onaylayanın iş emri açma yetkisi yok", groups: RESULT.groups.slice(0, 2).map((g) => ({ ...g, outcome: "SKIPPED" as const })) })!;
     expect(s.title).toBe("2 grup elle açılmalı — Onaylayanın iş emri açma yetkisi yok.");

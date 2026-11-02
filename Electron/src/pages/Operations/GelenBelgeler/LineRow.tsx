@@ -25,6 +25,8 @@ interface Props {
   onPatch: (p: LinePatch) => void;
   onDelete: () => void;
   onPickItem: () => void;
+  /** Belge başına tek kayıt (PER_DOCUMENT): satır bilgidir → ürün/renk eşleme hücreleri çizilmez. */
+  infoOnly?: boolean;
 }
 
 const tr = (v: string | null) => (v == null ? "" : String(Number(v)).replace(".", ","));
@@ -75,22 +77,7 @@ export function LineRow(p: Props) {
       <td className="p-2">
         <NumCell label="En" value={line.widthCm} disabled={!canEdit} onCommit={(n) => p.onPatch({ widthCm: n })} />
       </td>
-      <td className="min-w-[180px] p-2">
-        <Button type="button" variant="outline" size="sm" className="h-8 max-w-full justify-start truncate" disabled={!canEdit} onClick={p.onPickItem}>
-          <PackageSearch className="mr-1 h-3.5 w-3.5 shrink-0" />
-          {line.item?.name ?? "Kumaş seç"}
-        </Button>
-        {!line.itemId && !line.rollId && line.status !== "SKIPPED" && hint && (
-          <div className={`mt-0.5 text-[10px] ${hint.tone === "block" ? "text-destructive" : "text-sky-700 dark:text-sky-400"}`} data-testid="default-item-hint" data-source={hint.source} data-tone={hint.tone}>{hint.text}</div>
-        )}
-        {line.itemText && <div className="mt-0.5 text-[10px] text-muted-foreground">Belgede: {line.itemText}</div>}
-        {editable && <SuggestionChips suggestion={p.suggestion?.item} currentId={line.itemId} onPick={(c) => p.onPatch({ itemId: c.id })} />}
-      </td>
-      <td className="min-w-[160px] p-2" onClick={(e) => e.stopPropagation()}>
-        <ColorPickerModal value={line.colorId} onChange={(id) => p.onPatch({ colorId: id })} customerId={p.ownerCustomerId} disabled={!canEdit} triggerClassName="h-8" />
-        {line.colorText && <div className="mt-0.5 text-[10px] text-muted-foreground">Belgede: {line.colorText}</div>}
-        {editable && <SuggestionChips suggestion={p.suggestion?.color} currentId={line.colorId} onPick={(c) => p.onPatch({ colorId: c.id })} />}
-      </td>
+      {!p.infoOnly && <MatchCells {...p} hint={hint} />}
       <td className="p-2">
         <Badge variant={line.status === "FAILED" ? "destructive" : line.status === "ENTERED" ? "default" : "muted"}>{LINE_STATUS_LABEL[line.status]}</Badge>
         {line.problems?.filter((c) => c !== "FAILED").map((c) => (
@@ -116,5 +103,30 @@ export function LineRow(p: Props) {
         )}
       </td>
     </tr>
+  );
+}
+
+/** Ürün/renk eşleme hücreleri (PER_LINE); PER_DOCUMENT'ta satır bilgi olduğundan çizilmez. */
+function MatchCells(p: Props & { hint: ReturnType<typeof defaultItemHint> }) {
+  const hint = p.hint;
+  return (
+    <>
+      <td className="min-w-[180px] p-2">
+        <Button type="button" variant="outline" size="sm" className="h-8 max-w-full justify-start truncate" disabled={!(p.editable || p.fixable)} onClick={p.onPickItem}>
+          <PackageSearch className="mr-1 h-3.5 w-3.5 shrink-0" />
+          {p.line.item?.name ?? "Kumaş seç"}
+        </Button>
+        {!p.line.itemId && !p.line.rollId && p.line.status !== "SKIPPED" && hint && (
+          <div className={`mt-0.5 text-[10px] ${hint.tone === "block" ? "text-destructive" : "text-sky-700 dark:text-sky-400"}`} data-testid="default-item-hint" data-source={hint.source} data-tone={hint.tone}>{hint.text}</div>
+        )}
+        {p.line.itemText && <div className="mt-0.5 text-[10px] text-muted-foreground">Belgede: {p.line.itemText}</div>}
+        {p.editable && <SuggestionChips suggestion={p.suggestion?.item} currentId={p.line.itemId} onPick={(c) => p.onPatch({ itemId: c.id })} />}
+      </td>
+      <td className="min-w-[160px] p-2" onClick={(e) => e.stopPropagation()}>
+        <ColorPickerModal value={p.line.colorId} onChange={(id) => p.onPatch({ colorId: id })} customerId={p.ownerCustomerId} disabled={!(p.editable || p.fixable)} triggerClassName="h-8" />
+        {p.line.colorText && <div className="mt-0.5 text-[10px] text-muted-foreground">Belgede: {p.line.colorText}</div>}
+        {p.editable && <SuggestionChips suggestion={p.suggestion?.color} currentId={p.line.colorId} onPick={(c) => p.onPatch({ colorId: c.id })} />}
+      </td>
+    </>
   );
 }
