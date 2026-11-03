@@ -139,6 +139,9 @@ export interface FeatureFlags {
   /** Tambur açık kart listesi oturum istasyonuyla süzülsün mü (default FALSE; ister 2.8).
    *  Eski backend alanı göndermez → false = bugünkü tüm-tambur listesi. */
   tamburListByStationEnabled?: boolean;
+  /** Tambur etiket basım zamanı (Gülkesim S5): EACH = her kesimden sonra (bugünkü) · END = iş
+   *  bitince "Basılmayanları bas". Eski backend göndermez → EACH. */
+  tamburLabelPrintTiming?: "EACH" | "END";
   /** Makine duruşu takibi (`uretim.makineDurusTakibi`, D4-A1) — Kurşun/Tambur başlığındaki "Duruş" çipinin
    *  kapısı (D4-A2). Eski backend göndermez → false = çip yok (bugünkü ekran). */
   machineStopTrackingEnabled?: boolean;
@@ -264,6 +267,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   tamburShortCutA1ThresholdM: null,
   // Yüklenemezse bugünkü davranış: süzgeçsiz liste (kart okutması zaten her durumda açık).
   tamburListByStationEnabled: false,
+  // Yüklenemezse bugünkü davranış: her top kesilince basılır (etiket eksik kalmaz).
+  tamburLabelPrintTiming: "EACH",
   machineStopTrackingEnabled: false,
   machineStopOpenWarningEnabled: false,
   // Default AÇIK + %10 (backend ile aynı). Fail-safe yön BURADA "göster"dir:

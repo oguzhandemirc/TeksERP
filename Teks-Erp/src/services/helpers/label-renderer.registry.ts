@@ -8,6 +8,7 @@
 // Bilinmeyen/eksik driver → RASTER_HTML failsafe.
 // =============================================================================
 
+import { readLabelUnitSettings } from "../../config/label-units";
 import { PrinterLanguage, type LabelTemplate, type LabelTemplateVariant } from "@prisma/client";
 import type { LabelPayload } from "../../types/label.types";
 import type { ResolvedLabelFormat } from "./label-format.resolver";
@@ -88,7 +89,8 @@ const CONTENT_TYPES: Record<PrinterLanguage, string> = {
  *  — varyantı olmayan/henüz dönüştürülmemiş şablonlar) > şablonsuz fallback.
  *  ASYNC (2026-07 icon): kanvas ZPL/raster yolları icon bitmap'i üretir — zincir
  *  buradan yukarı (label.service / label-template.service) await ile taşınır. */
-export async function renderLabel(language: PrinterLanguage, input: LabelRenderInput): Promise<RenderedLabel> {
+export async function renderLabel(language: PrinterLanguage, rawInput: LabelRenderInput): Promise<RenderedLabel> {
+  const input = withTemplateUnits(rawInput);
   const effective = RENDERERS[language] ? language : PrinterLanguage.RASTER_HTML;
   // Uzman override: şablonda bu dil için raw-code varsa otomatik üretim yerine onu
   // kullan ({{key}} yer-tutucuları payload'dan doldurulur). Yoksa generator çalışır.
@@ -156,6 +158,14 @@ export async function renderLabel(language: PrinterLanguage, input: LabelRenderI
     contentType: CONTENT_TYPES[effective],
     encoding: "text",
   };
+}
+
+/** Şablonun birim sistemi payload'a taşınır — tüm diller değeri `fieldDisplayValue`den aynı
+ *  biçimle okur. Payload zaten taşıyorsa (stüdyo önizlemesi) o kazanır; ayarsız şablon bayt-aynı. */
+export function withTemplateUnits(input: LabelRenderInput): LabelRenderInput {
+  if (input.payload.unitSettings !== undefined) return input;
+  const units = readLabelUnitSettings(input.template?.unitSettings);
+  return units ? { ...input, payload: { ...input.payload, unitSettings: units } } : input;
 }
 
 /** Önizleme + baskı AYNI raster kararını paylaşır (drift imkânsız): raster modu açık +

@@ -128,6 +128,7 @@ import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
 import { customerCodeSearchRollIds } from "./helpers/roll-scan-resolve.helper";
 import { readTargetValueChips, type TargetValueChip } from "./helpers/workorder-target-value.helper";
 import { TERIM } from "../constants/terim";
+import { resolveTamburCutWeight } from "./helpers/tambur-customer-settings.helper";
 
 
 // Kesim etiket NİYETİ (hedef sipariş kalemi / müşteri var-mı + müşteri isActive;
@@ -2266,6 +2267,8 @@ export class TamburService {
       clientToken?: string;
       /** D4-B1: kesim metresinin ölçüm kaynağı (eski APK göndermez). */
       measure?: MeterSourceInput | null;
+      /** Tamburda tartım (Gülkesim S5) — müşteri ayarı açıksa zorunlu; çocuk `weightKg`. */
+      weightKg?: number | null;
     },
     userId?: string,
     /**
@@ -2302,6 +2305,12 @@ export class TamburService {
         "Bu Roll açık kumaş; cutWarehouseRoll sadece barkodlu depo topu için",
       );
     }
+    // Tamburda tartım — müşteri ayarı (etiket müşterisi ?? sahibi); kapalıysa kg opsiyonel.
+    const cutWeightKg = await resolveTamburCutWeight({
+      weightKg: data.weightKg,
+      targetCustomerId: data.targetCustomerId,
+      ownerCustomerId: parent.ownerCustomerId,
+    });
     // Ham (renksiz STOCK) top da "Top Kesme" aracında kesilebilir. Bitmiş depo
     // topu (WAREHOUSE) klasik akış; ham stok ise operatörün seçtiği hedefe göre
     // çıktı verir. Diğer statüler (IN_PRODUCTION vb.) kesime uygun değil.
@@ -2434,7 +2443,7 @@ export class TamburService {
         foldType: foldType !== undefined ? foldType : (parent.foldType ?? null),
         initialQty: data.cutLength,
         currentQty: data.cutLength,
-        weightKg: null,
+        weightKg: cutWeightKg,
         // Bitmiş re-cut → WAREHOUSE; ham kesim → operatör hedefi (STOCK/WAREHOUSE).
         status: childStatus,
         qualityGrade: resolvedQualityGrade,
@@ -3166,6 +3175,8 @@ export class TamburService {
       confirmMismatch?: boolean;
       /** D4-B1: kesim metresinin ölçüm kaynağı (eski APK göndermez). */
       measure?: MeterSourceInput | null;
+      /** Tamburda tartım (Gülkesim S5) — müşteri ayarı açıksa zorunlu; çocuk `weightKg`. */
+      weightKg?: number | null;
     },
     userId?: string,
     /** Kesimin makinesi — "Bu makine" süzgeci + makine raporları (2026-08-12). */
@@ -3193,6 +3204,12 @@ export class TamburService {
       },
     });
     if (!parent) throw AppError.notFound("Roll bulunamadı");
+    // Tamburda tartım — müşteri ayarı (etiket müşterisi ?? sahibi); kapalıysa kg opsiyonel.
+    const cutWeightKg = await resolveTamburCutWeight({
+      weightKg: data.weightKg,
+      targetCustomerId: data.targetCustomerId,
+      ownerCustomerId: parent.ownerCustomerId,
+    });
     // Barkod-reddi KALDIRILDI (2026-07-16): Tambur adımındaki HER top kesilebilir —
     // barkodsuz açık kumaş VE Konumu-Düzelt ile buraya gelmiş barkodlu TOP. Barkod artık
     // dispatch anahtarı değil, yalnız çocuk-etiketleme semantiği (çocuk hep taze "F" barkod).
@@ -3341,7 +3358,7 @@ export class TamburService {
             : (parent.foldType ?? parent.currentStep?.workOrder?.foldType ?? null),
         initialQty: data.lengthMeters,
         currentQty: data.lengthMeters,
-        weightKg: null,
+        weightKg: cutWeightKg,
         status: childStatus,
         qualityGrade: resolvedQualityGrade,
         qualityGradeId: resolvedQualityGradeId,

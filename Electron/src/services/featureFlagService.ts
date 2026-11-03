@@ -624,6 +624,8 @@ export interface FeatureFlags {
   tamburPlanGateWidthCheck: "ENFORCE" | "OFF";
   /** Tambur finalize çocuk top en kaynağı (default WO_TARGET_FIRST = bugünkü; D4-E3). */
   tamburChildWidthSource: "WO_TARGET_FIRST" | "MEASURED_FIRST";
+  /** Tambur etiket basım zamanı (default EACH = bugünkü; Gülkesim S5). */
+  tamburLabelPrintTiming: "EACH" | "END";
   /** Müşteri barkodu nerede doğar (default NONE = bugünkü; D4-F2 `label.customerCodeAt`). */
   labelCustomerCodeAt: "NONE" | "TAMBUR_OUTPUT";
   /** Tablet Tambur açık kart listesi oturum istasyonuyla süzülsün mü (false=default; ister 2.8). */

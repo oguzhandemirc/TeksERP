@@ -4,7 +4,7 @@ export const YAZILABILIR_ALAN_BEYANI: Readonly<Record<string, readonly string[]>
   bankAccount: ["balance", "bankName", "code", "currency", "iban", "isActive", "name", "notes"],
   cashBox: ["balance", "code", "currency", "isActive", "name", "notes"],
   color: ["code", "createdById", "hex", "isActive", "mergedAt", "mergedById", "mergedIntoId", "name", "sortOrder", "updatedById"],
-  customer: ["address", "city", "code", "contactName", "contactPhone", "country", "createdById", "defaultDestination", "district", "documentProfileId", "email", "exportCode", "isActive", "isCustomerRole", "isSubcontractorRole", "isSupplierRole", "mergedAt", "mergedById", "mergedIntoId", "name", "notes", "taxNumber", "type", "updatedById"],
+  customer: ["address", "city", "code", "contactName", "contactPhone", "country", "createdById", "defaultDestination", "district", "documentProfileId", "email", "exportCode", "isActive", "isCustomerRole", "isSubcontractorRole", "isSupplierRole", "labelWidthSource", "mergedAt", "mergedById", "mergedIntoId", "name", "notes", "tamburSplitLengthM", "tamburWeighRequired", "taxNumber", "type", "updatedById"],
   customerBranch: ["address", "city", "code", "contactName", "contactPhone", "createdById", "customerId", "defaultDestination", "district", "isActive", "name", "notes", "updatedById"],
   defectType: ["code", "createdById", "defectGroup", "description", "fixedPoints", "isActive", "isDefault", "name", "severity", "sortOrder", "updatedById"],
   exchangeRate: ["createdById", "currency", "rate", "rateDate", "source"],

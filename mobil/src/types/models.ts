@@ -1298,6 +1298,8 @@ export interface TamburContext {
 /** `POST /api/tambur/:id/cut` — açık kumaşta tek kesim */
 export interface TamburCutRequest {
   lengthMeters: number;
+  /** Tamburda tartım (Gülkesim S5) — müşteri ayarı açıksa zorunlu; eski backend yok sayar. */
+  weightKg?: number | null;
   status: 'WAREHOUSE' | 'SCRAP' | 'A1_STOCK';
   qualityGrade?: string | null;
   notes?: string | null;

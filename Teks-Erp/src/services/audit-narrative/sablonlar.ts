@@ -126,6 +126,7 @@ const OLAY_SABLONLARI: Record<string, Sablon> = {
   "WORK_ORDER:SPLIT_TARGET": olay("belirtme", "bölmeyle oluşturdu"),
   "WORK_ORDER:TARGET_COLOR_CHANGED": olayFarkli("ilgi", "hedef rengini değiştirdi"),
   "WORK_ORDER:TARGET_WIDTH_CHANGED": olayFarkli("ilgi", "hedef enini değiştirdi"),
+  "WORK_ORDER:WORK_ORDER_LABEL_OVERRIDE": olay("ilgi", "etiket bilgisini değiştirdi"), // Gülkesim S5
   "WORK_ORDER:ORDER_LINK_ADDED": olay("yonelme", "sipariş bağladı"),
   "WORK_ORDER:ORDER_LINK_REMOVED": olay("ayrilma", "sipariş bağını kaldırdı"),
   "WORK_ORDER:ARCHIVED": olay("belirtme", "arşivledi"),

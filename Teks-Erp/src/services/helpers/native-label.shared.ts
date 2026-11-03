@@ -10,6 +10,7 @@ import type { LabelPayload } from "../../types/label.types";
 import type { ResolvedLabelFormat } from "./label-format.resolver";
 import type { FontSize, TemplateField } from "../../config/label-fields";
 import { fieldDisplayValue } from "./label-field-values";
+import { formatMeasure, isDefaultUnitSettings } from "../../config/label-units";
 import { formatNumber } from "./label-html.shared";
 import { lowerTr, upperTr } from "../../utils/tr-case";
 
@@ -236,6 +237,12 @@ export function qrFootprintDots(data: string, mag: number): number {
 export function bannerValueText(payload: LabelPayload, unit = true): string {
   const v = payload.lengthMeters;
   if (v == null || String(v).trim() === "") return "";
+  const u = payload.unitSettings;
+  // Birim sistemi: ABD → yard; İKİSİ → dar şeritte metrik (yan yana sığmaz). Yoksa bugünkü bayt-aynı.
+  if (!isDefaultUnitSettings(u) && Number.isFinite(Number(v))) {
+    const s = u!.system === "US" ? u! : { ...u!, system: "METRIC" as const };
+    return formatMeasure(Number(v), "m", s, { unit, compact: true });
+  }
   const num = formatNumber(v);
   return unit ? `${num}m` : num;
 }

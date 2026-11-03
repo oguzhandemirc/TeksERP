@@ -1,6 +1,7 @@
 import apiClient from "./apiClient";
 import type { ApiResponse } from "@/types/api";
 import type { CanvasLayout } from "@/types/label-canvas";
+import type { LabelUnitSettings } from "@/pages/LabelTemplates/editor/unit-settings";
 
 // ⚠️ Bu liste Prisma `LabelKind` enum'undan BAĞIMSIZ (kendi const'u) — backend
 // enum'una değer eklemek burayı DERLEME HATASIYLA UYARMAZ. Yeni bağlam eklerken
@@ -77,6 +78,8 @@ export interface LabelTemplate {
   qrScale?: number | null;
   /** Sağ kenar dikey metraj bandı (siyah zemin/beyaz değer). */
   lengthBanner?: boolean | null;
+  /** Birim sistemi (Gülkesim S5) — null = bugünkü metrik biçim. */
+  unitSettings?: LabelUnitSettings | null;
   /** Liste ucunda gelen varyant özeti (boyut rozetleri). */
   variants?: Array<{ id: string; name: string; widthMm: number | string; heightMm: number | string; isPrimary: boolean }>;
   createdAt: string;
@@ -243,6 +246,7 @@ export const labelTemplateService = {
       lineStepMm: number | null;
       qrScale: number | null;
       lengthBanner: boolean | null;
+      unitSettings: LabelUnitSettings | null;
     }>,
   ): Promise<ApiResponse<LabelTemplate>> =>
     apiClient
@@ -377,6 +381,8 @@ export const labelTemplateService = {
     /** Örnek topun kalite KODU — koşullu (showIf) elemanların önizlemedeki
      *  davranışını görmek için. Boş metin = kalitesi belirsiz top senaryosu. */
     qualityGrade?: string;
+    /** Kaydedilmemiş birim sistemi — önizleme baskıyla aynı biçimi göstersin. */
+    unitSettings?: LabelUnitSettings | null;
   }): Promise<{ mode: "svg" | "html" | "text"; language: string; content: string; native: string; nativeB64?: string }> =>
     apiClient
       .post<

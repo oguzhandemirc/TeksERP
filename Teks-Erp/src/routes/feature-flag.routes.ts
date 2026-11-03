@@ -578,6 +578,10 @@ export const updateSchema = z.strictObject({
       message: "Tambur çocuk top en kaynağı WO_TARGET_FIRST ya da MEASURED_FIRST olmalı",
     })
     .optional(),
+  // Tambur etiket basım zamanı (Gülkesim S5); servisteki TAMBUR_LABEL_PRINT_TIMINGS aynası.
+  tamburLabelPrintTiming: z
+    .enum(["EACH", "END"], { message: "Tambur etiket basım zamanı EACH ya da END olmalı" })
+    .optional(),
   // Müşteri kodunun doğduğu yer (D4-F2); servisteki LABEL_CUSTOMER_CODE_AT_MODES aynası.
   labelCustomerCodeAt: z
     .enum(["NONE", "TAMBUR_OUTPUT"], { message: "Müşteri barkodunun doğduğu yer NONE ya da TAMBUR_OUTPUT olmalı" })
