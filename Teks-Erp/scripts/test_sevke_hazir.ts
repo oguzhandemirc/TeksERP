@@ -392,10 +392,11 @@ async function main(): Promise<void> {
     };
     const captured: Prisma.Sql[] = [];
     const origQueryRaw = prisma.$queryRaw;
-    (prisma as unknown as { $queryRaw: unknown }).$queryRaw = (sql: Prisma.Sql, ...rest: unknown[]) => {
+    // Reflect: istemci örneğine tip zorlamasız kanca (test_type_assertion_ratchet §2 B).
+    Reflect.set(prisma, "$queryRaw", (sql: Prisma.Sql, ...rest: unknown[]) => {
       captured.push(sql);
-      return (origQueryRaw as unknown as (...a: unknown[]) => unknown).call(prisma, sql, ...rest);
-    };
+      return Reflect.apply(origQueryRaw, prisma, [sql, ...rest]);
+    });
     try {
       for (const g of ["deliveryNote", "customerBatch", "customer", "workOrder"] as const) {
         captured.length = 0;
@@ -421,7 +422,7 @@ async function main(): Promise<void> {
           norm(ref) === norm(viaSub) && norm(ref) === norm(viaIds), `ref=${ref.length} alt=${viaSub.length} liste=${viaIds.length}`);
       }
     } finally {
-      (prisma as unknown as { $queryRaw: unknown }).$queryRaw = origQueryRaw;
+      Reflect.set(prisma, "$queryRaw", origQueryRaw);
     }
 
     if (process.env.SEVKE_HAZIR_PERF === "1") await perf(ids);
