@@ -16,10 +16,12 @@ import {
   Handshake,
   Users,
   History,
+  AlertOctagon,
   type LucideIcon,
 } from "lucide-react";
 import { allCommandEntries } from "@/components/layout/command-entries";
-import { TERIM } from "@/lib/terim";
+import { TERIM, terimDokumaRejimi } from "@/lib/terim";
+import { machineStopsTitle } from "@/pages/Operations/MachineStops/stop-regime";
 
 export interface TabMeta {
   title: string;
@@ -41,12 +43,14 @@ const STATIC: Record<string, TabMeta> = {
   "/system": { title: "Sistem", icon: ServerCog },
   // Rapor domain hub'ları — HubCard'tan açıldığında okunur başlık.
   "/reports/production": { title: "Üretim Raporları", icon: Factory },
-  "/reports/sales": { title: "Satış Raporları", icon: TrendingUp },
+  "/reports/sales": { title: "Sipariş & Sevkiyat Raporları", icon: TrendingUp },
   "/reports/quality": { title: "Kalite Raporları", icon: BadgeCheck },
-  "/reports/inventory": { title: "Stok Raporları", icon: Boxes },
+  "/reports/inventory": { title: "Stok & Depo Raporları", icon: Boxes },
   "/reports/subcontract": { title: "Fason Raporları", icon: Handshake },
   "/reports/customer": { title: "Müşteri Raporları", icon: Users },
   "/reports/audit": { title: "Denetim Raporları", icon: History },
+  // Karo adı bağlama bağlı (`titleWhen`); sekmede bağlam yok → aynı rejimden (dokuma kapalı "Makine Duruşları").
+  "/operations/machine-stops": { get title() { return machineStopsTitle({ dokumaEnabled: terimDokumaRejimi() }); }, icon: AlertOctagon },
 };
 
 /** Path'in sorgu/parametre kısmını atıp salt pathname döndürür. */

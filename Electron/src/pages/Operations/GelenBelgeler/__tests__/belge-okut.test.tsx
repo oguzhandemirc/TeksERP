@@ -72,6 +72,9 @@ describe("BelgeOkutButton (iş emri formu)", () => {
     const b = screen.getByTestId("wo-belge-okut");
     expect(b).toBeDisabled();
     expect(b).toHaveAttribute("title", BELGE_OKUT_NO_ROUTE);
+    // Pasif düğme fare olayı almaz: neden sarmalayıcıda ve düğme metninde de görünür.
+    expect(screen.getByTestId("wo-belge-okut-wrap")).toHaveAttribute("title", BELGE_OKUT_NO_ROUTE);
+    expect(b).toHaveTextContent("önce rota");
   });
   it("rota seçiliyse etkin", () => {
     renderWithProviders(<BelgeOkutButton routeTemplateId="rt1" />);

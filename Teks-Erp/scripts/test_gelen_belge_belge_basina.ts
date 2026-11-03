@@ -164,6 +164,9 @@ async function main(): Promise<void> {
     const d4 = await detail(n4);
     const tc4 = d4.totalsCheck as { blocks: Array<{ lines: { count: number; m: number } }> };
     check("§4 başlık APPROVED; INFO satırı problems boş; toplam kıyası özet satırını saymaz (21 satır)", d4.status === "APPROVED" && d4.lines.filter((l) => l.status === "INFO").every((l) => l.problems.length === 0) && tc4.blocks[0]?.lines.count === 21, `${d4.status} ${tc4.blocks[0]?.lines.count}`);
+    const m4 = (d4 as unknown as { kursunMeterCandidates?: { lineSum: string | null } }).kursunMeterCandidates;
+    const lineSum4 = l4.length === 22 ? (await prisma.customerDeliveryNoteLine.aggregate({ where: { noteId: n4, status: "INFO" }, _sum: { meters: true } }))._sum.meters : null;
+    check("§4 onaydan sonra satır toplamı = INFO belge satırları (özet satırı sayılmaz)", m4?.lineSum !== undefined && lineSum4 !== null && Number(m4.lineSum) === Number(lineSum4) && Number(m4.lineSum) !== 4521, `${m4?.lineSum} ↔ ${String(lineSum4)}`);
     check("§4 saf: INFO satırı canlı değil (ürünsüz + incelenmemiş olsa da sorunsuz)", lineProblems({ status: "INFO", itemId: null, needsReview: true }).length === 0);
     const info4 = l4.find((l) => l.status === "INFO")!;
     check("§4 INFO satır PATCH → 409 DELIVERY_NOTE_LINE_INFO", (await call("PATCH", `/api/gelen-belge/irsaliyeler/${n4}/satirlar/${info4.id}`, { meters: 5 })).code === "DELIVERY_NOTE_LINE_INFO");

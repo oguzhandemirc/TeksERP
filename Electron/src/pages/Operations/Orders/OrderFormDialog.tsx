@@ -268,7 +268,7 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
             </div>
           ) : (
             <div className="mx-2 rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">Kalemler kilitli</span> · {lineSummary}.
+              <span className="font-medium text-foreground">Kalemler kilitli</span> · {lineSummary}.{" "}
               {TERIM.terbiyeIsEmri.cumleBasi.yalin} açılmış kalemleri değiştirmek için önce {TERIM.terbiyeIsEmri.cekimKucuk.belirtme} iptal et.
             </div>
           )}

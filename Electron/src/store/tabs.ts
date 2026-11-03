@@ -8,6 +8,7 @@ import {
   disposeTabRouter,
 } from "@/components/layout/tabs/tab-routers";
 import { recallRoute } from "@/components/layout/tabs/route-memory";
+import { TERM_REGIME_EVENT } from "@/lib/terim-rejim";
 
 export interface TabItem {
   /** Kararlı kimlik — router registry + React key. */
@@ -15,6 +16,8 @@ export interface TabItem {
   /** Pathname (sorgusuz) — dedup, başlık ve sidebar aktif-eşleşme için. */
   path: string;
   title: string;
+  /** Başlık sayfadan yazıldı (`updateTabTitle`); yoksa katalogdan çözülür ve rejim değişince tazelenir. */
+  custom?: boolean;
 }
 
 interface OpenOpts {
@@ -51,6 +54,8 @@ interface TabsState {
   closeOthers: (id: string) => void;
   /** Sekme başlığını güncelle (detay sayfaları entity adını öğrendikten sonra çağırır). */
   updateTabTitle: (id: string, title: string) => void;
+  /** Katalogdan çözülen başlıkları yeniden çöz (rejim/ad değişti); sayfanın yazdığı başlığa dokunmaz. */
+  refreshAutoTitles: () => void;
   /**
    * TÜM sekmeleri kapat — çıkışta çağrılır (`store/auth.logout`).
    *
@@ -134,7 +139,7 @@ export const useTabsStore = create<TabsState>()(
         navigateTabRouter(active.id, wanted, state);
         const { title } = resolveTabMeta(pathname);
         set({
-          tabs: tabs.map((t) => (t.id === active.id ? { ...t, path: pathname, title } : t)),
+          tabs: tabs.map((t) => (t.id === active.id ? { ...t, path: pathname, title, custom: undefined } : t)),
         });
       },
 
@@ -151,7 +156,7 @@ export const useTabsStore = create<TabsState>()(
         // başlık (ör. "Sevkiyat · SVK…") her router olayında silinmesin.
         if (!tab || tab.path === pathname) return;
         const { title } = resolveTabMeta(pathname);
-        set({ tabs: tabs.map((t) => (t.id === id ? { ...t, path: pathname, title } : t)) });
+        set({ tabs: tabs.map((t) => (t.id === id ? { ...t, path: pathname, title, custom: undefined } : t)) });
       },
 
       closeTab: (id) => {
@@ -198,7 +203,20 @@ export const useTabsStore = create<TabsState>()(
       },
 
       updateTabTitle: (id, title) => {
-        set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, title } : t)) }));
+        set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, title, custom: true } : t)) }));
+      },
+
+      refreshAutoTitles: () => {
+        const { tabs } = get();
+        let changed = false;
+        const next = tabs.map((t) => {
+          if (t.custom) return t;
+          const { title } = resolveTabMeta(t.path);
+          if (title === t.title) return t;
+          changed = true;
+          return { ...t, title };
+        });
+        if (changed) set({ tabs: next });
       },
 
       closeOthers: (id) => {
@@ -218,6 +236,9 @@ export const useTabsStore = create<TabsState>()(
     },
   ),
 );
+
+// İş emri adı rejimi bayrak ucundan gelince (ilk açılışta "Terbiye …" ile çözülmüş olabilir) başlıklar tazelenir.
+globalThis.addEventListener?.(TERM_REGIME_EVENT, () => useTabsStore.getState().refreshAutoTitles());
 
 /** Aktif sekmenin pathname'i (sidebar/komut paleti aktif vurgusu için). */
 export const selectActivePath = (s: TabsState): string | null =>

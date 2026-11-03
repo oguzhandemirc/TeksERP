@@ -24,7 +24,7 @@ import { reserveSeriesNo } from "./helpers/series-counter-store.helper";
 import { PDF_MIME, SCAN_SELECT } from "./gelen-belge-scan.service";
 import { applyStoredReadsTx, auditPhotoSource, auditStoredReads, markPhotoSourceTx, prepareStoredReads, type StoredReadOutcome } from "./gelen-belge-taslak-doldur.service";
 import { LINE_SELECT, lineColumns, notDraft, text, type DeliveryNoteLineInput } from "./gelen-belge-line.service";
-import { hasDocumentDeclared, lineItemFallback, lineProblems, perDocumentGate, totalsCheck } from "./gelen-belge-kontrol.service";
+import { hasDocumentDeclared, isSummaryLine, lineItemFallback, lineProblems, perDocumentGate, totalsCheck } from "./gelen-belge-kontrol.service";
 import { batchAndMeterColumns, type DeliveryNoteHeaderPatch } from "./gelen-belge-baslik-alan.service";
 import { resolveEffectiveDefaultItem, usableDefaultItem } from "./gelen-belge-varsayilan.service";
 import { noteNotices } from "../lib/gelen-belge/uyari";
@@ -172,7 +172,9 @@ export async function getDeliveryNote(id: string) {
     ? { gate: perDocumentGate(note, note.kursunMetersReview ? await readUnreviewedApprovalMode() : "WARN") }
     : null;
   // Parti no adayları + kurşun metre adayları CANLI (saklanmaz); eski istemci alanları yok sayar.
-  const batchMeters = await noteBatchAndMeters(note.id, note.totalsDeclared, note.lines.filter((l) => l.status !== "SKIPPED" && l.status !== "INFO").map((l) => l.meters));
+  // "Satır toplamı" toplam kıyasıyla AYNI küme: onayda INFO'ya dönen belge satırları sayılır, onayda doğan özet satırı
+  // (kurşun metresinin kendisi) sayılmaz — aksi halde onaydan sonra sayı belgenin satırlarından kopuyordu.
+  const batchMeters = await noteBatchAndMeters(note.id, note.totalsDeclared, note.lines.filter((l) => l.status !== "SKIPPED" && !isSummaryLine(note.id, l)).map((l) => l.meters));
   // Müşteri önerisi (OIE): okunan metinde yazan cari; yalnız sahipsiz taslakta, aksi null. Eski istemci alanı yok sayar.
   const ownerSuggestion = await suggestOwnerForNote(note);
   // Okuyucu tanımsız kurulumda bekleyen sayfa hiç okunmaz → panel "okunuyor"da beklemez, formu elle doldurtur.

@@ -1,4 +1,5 @@
 import { useWatch, type Control } from "react-hook-form";
+import { useFoldLabel } from "@/hooks/useFoldValues";
 import { useQuery } from "@tanstack/react-query";
 import {
   CalendarClock,
@@ -67,6 +68,7 @@ export function WorkOrderLivePreview({
   const targetQuantity = useWatch({ control, name: "targetQuantity" });
   const targetWeight = useWatch({ control, name: "targetWeight" });
   const foldType = useWatch({ control, name: "foldType" });
+  const foldLabel = useFoldLabel();
   const plannedStartDate = useWatch({ control, name: "plannedStartDate" });
   const plannedEndDate = useWatch({ control, name: "plannedEndDate" });
 
@@ -282,7 +284,7 @@ export function WorkOrderLivePreview({
               <span className="text-muted-foreground">Varsayılan</span>
             )}
           </Row>
-          {foldType?.trim() && <Row label="Kat Tipi">{foldType}</Row>}
+          {foldType?.trim() && <Row label="Kat Tipi">{foldLabel(foldType)}</Row>}
         </Section>
 
         {/* Bağlı sipariş özeti */}

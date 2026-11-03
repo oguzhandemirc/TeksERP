@@ -25,6 +25,8 @@ import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import { USER_ADMIN_CODES, effectiveUserAdminGrantWhere, factoryAdminExists } from "./helpers/factory-admin.helper";
 import { geciciParolaUret } from "../lib/ilk-yonetici-parolasi";
 import { closeUser as closeUserBells } from "./notification-bell-hub";
+import { currentPermissionDescription, currentSeedText } from "./helpers/terim-tohum-metni.helper";
+import { ROLE_TEMPLATE_CATALOG } from "../constants/role-template-catalog";
 
 /**
  * Silinen kullanıcının sır kolonları (B5). `passwordHash` NOT NULL olduğu için geçersiz özet
@@ -91,6 +93,22 @@ export function resetRequiresPasswordChange(
   return !target.isSystemAccount && target.id !== actorUserId && requested;
 }
 
+type TemplateWithItems = Prisma.PermissionTemplateGetPayload<{ include: { permissions: { include: { permission: true } } } }>;
+
+/**
+ * K20: sistem şablonunun dokunulmamış tohum adı/açıklaması ve izin açıklamaları güncel iş emri adıyla okunur;
+ * fabrikanın düzelttiği metin ve fabrika şablonu (code NULL) aynen kalır. DB'deki satır değişmez.
+ */
+function seedTextOfTemplate(t: TemplateWithItems): TemplateWithItems {
+  const entry = t.code ? ROLE_TEMPLATE_CATALOG.find((e) => e.code === t.code) : undefined;
+  return {
+    ...t,
+    name: currentSeedText(t.name, entry ? () => entry.name : undefined) ?? t.name,
+    description: currentSeedText(t.description, entry ? () => entry.description : undefined),
+    permissions: t.permissions.map((it) => ({ ...it, permission: { ...it.permission, description: currentPermissionDescription(it.permission.code, it.permission.description) } })),
+  };
+}
+
 export class PermissionManagementService {
   // ---------------------------------------------------------------------------
   // Yetki kataloğu — admin UI grid'i için
@@ -132,6 +150,8 @@ export class PermissionManagementService {
     });
     return rows.map(({ _count, templateMemberships, ...p }) => ({
       ...p,
+      // K20: dokunulmamış tohum açıklaması güncel iş emri adıyla okunur (DB'deki satır değişmez).
+      description: currentPermissionDescription(p.code, p.description),
       userCount: _count.userPermissions,
       // KAYNAĞI BİLİNMEYEN ATAMA (BULGU-T2-012): `grantedById` NULL olan satır,
       // "bu yetkiyi kim verdi" sorusunun cevapsız kaldığı bir atamadır. Sahada
@@ -1084,10 +1104,11 @@ export class PermissionManagementService {
   // Şablon (admin UI kısayolu) — runtime'da User'a bağlı değil
   // ---------------------------------------------------------------------------
   static async listTemplates() {
-    return prisma.permissionTemplate.findMany({
+    const rows = await prisma.permissionTemplate.findMany({
       include: { permissions: { include: { permission: true } } },
       orderBy: { name: "asc" },
     });
+    return rows.map(seedTextOfTemplate);
   }
 
   static async getTemplate(id: string) {
@@ -1096,7 +1117,7 @@ export class PermissionManagementService {
       include: { permissions: { include: { permission: true } } },
     });
     if (!t) throw AppError.notFound("Şablon bulunamadı");
-    return t;
+    return seedTextOfTemplate(t);
   }
 
   /** F257: yetki kimlikleri var mı doğrula + dedup — geçersiz/mükerrer id P2003/P2002

@@ -1,6 +1,6 @@
 // Onaylı gelen belge iptali (K15) — önizleme ZORUNLU: belgeden doğan HER top ve bağlı iş emri listelenir, engeller
 // kırmızı; işlem görmemiş iş emri kayıt başına işaretlenir (işaretsiz açık iş emri sunucuda da engeldir). Sebep zorunlu.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Ban, Loader2 } from "lucide-react";
@@ -13,6 +13,7 @@ import { useAttemptToken } from "@/lib/attemptToken";
 import { cancelNote, getNoteCancelPreview, INCOMING_DOCUMENT_QUERY_KEY } from "./service";
 import type { CancelPreviewRoll, CancelPreviewWorkOrder, NoteCancelPreview } from "./cancelTypes";
 import { TERIM } from "@/lib/terim";
+import { formatNumber } from "@/lib/format";
 
 const OUTCOME_LABEL: Record<CancelPreviewRoll["outcome"], string> = { CANCEL: "Ters kayıtla düşer", SKIP: "Zaten iptal", BLOCKED: "Engel" };
 export const MIN_REASON = 3;
@@ -24,7 +25,7 @@ function RollList({ rolls }: { rolls: CancelPreviewRoll[] }) {
         <div key={r.rollId} className={`flex items-center gap-3 border-b px-3 py-1.5 text-sm last:border-b-0 ${r.outcome === "BLOCKED" ? "bg-destructive/5 text-destructive" : ""}`} data-testid="cancel-roll-row">
           <span className="w-32 shrink-0 font-mono text-xs">{r.barcode ?? "—"}</span>
           <span className="w-20 shrink-0 text-xs text-muted-foreground">{r.senderRollNo ?? `Satır ${r.lineNo}`}</span>
-          <span className="w-20 shrink-0 tabular-nums">{r.meters} m</span>
+          <span className="w-20 shrink-0 tabular-nums">{formatNumber(r.meters)} m</span>
           <span className="min-w-0 flex-1 truncate text-xs">{r.location ?? "—"}</span>
           <span className="shrink-0 text-xs font-medium">{OUTCOME_LABEL[r.outcome]}</span>
         </div>
@@ -56,7 +57,7 @@ function PreviewBody({ data, chosen, toggle }: { data: NoteCancelPreview; chosen
   return (
     <div className="min-w-0 space-y-3">
       <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm" data-testid="cancel-summary">
-        <strong>{data.summary.cancelRollCount}</strong> / {data.summary.rollCount} top ters kayıtla düşecek ({data.summary.cancelMeters} m)
+        <strong>{data.summary.cancelRollCount}</strong> / {data.summary.rollCount} top ters kayıtla düşecek ({formatNumber(data.summary.cancelMeters)} m)
         {data.summary.workOrderCount > 0 ? <> · <strong>{data.summary.workOrderCount}</strong> {TERIM.terbiyeIsEmri.tekilKucuk} bağlı</> : null}
       </div>
       <RollList rolls={data.rolls} />
@@ -98,6 +99,12 @@ export function CancelNoteDialog({ note, open, onOpenChange }: Props) {
     onError: (e) => { attempt.onFailure(e); void preview.refetch(); },
   });
   const data = preview.data;
+  // 409 sonrası tazelenen önizlemede artık seçilemeyen/olmayan iş emri seçimden düşer — görünmeyen kayıt gönderilmez.
+  useEffect(() => {
+    if (!data) return;
+    const ok = new Set(data.workOrders.filter((w) => w.selectable).map((w) => w.id));
+    setChosen((p) => ([...p].every((id) => ok.has(id)) ? p : new Set([...p].filter((id) => ok.has(id)))));
+  }, [data]);
   const pendingWo = data?.workOrders.some((w) => w.selectable && !chosen.has(w.id)) ?? true;
   const ready = !!data?.cancellable && !pendingWo && reason.trim().length >= MIN_REASON;
   return (

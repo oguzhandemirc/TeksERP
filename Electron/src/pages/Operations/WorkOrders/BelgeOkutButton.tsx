@@ -33,17 +33,20 @@ export function BelgeOkutButton({ routeTemplateId, className }: Props) {
   };
   return (
     <>
-      <Button
-        type="button"
-        onClick={() => setFrozenRoute(routeTemplateId)}
-        disabled={!routeTemplateId}
-        title={routeTemplateId ? "Belge fotoğrafını okut; form belgeden dolar" : BELGE_OKUT_NO_ROUTE}
-        className={className}
-        data-testid="wo-belge-okut"
-      >
-        <ScanLine className="h-4 w-4" />
-        Belge okut
-      </Button>
+      {/* Pasif düğme fare olayı almaz (title görünmez) → neden sarmalayıcıda da durur. */}
+      <span className="inline-flex" title={routeTemplateId ? undefined : BELGE_OKUT_NO_ROUTE} data-testid="wo-belge-okut-wrap">
+        <Button
+          type="button"
+          onClick={() => setFrozenRoute(routeTemplateId)}
+          disabled={!routeTemplateId}
+          title={routeTemplateId ? "Belge fotoğrafını okut; form belgeden dolar" : BELGE_OKUT_NO_ROUTE}
+          className={className}
+          data-testid="wo-belge-okut"
+        >
+          <ScanLine className="h-4 w-4" />
+          {routeTemplateId ? "Belge okut" : "Belge okut (önce rota)"}
+        </Button>
+      </span>
       {frozenRoute && (
         <UploadDialog
           open

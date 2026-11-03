@@ -605,7 +605,7 @@ function DateRangeFilter({ def, sp, update, h }: SubProps<Extract<FilterDef, { k
       ) : null}
 
       {/* Takvim girdisi tek tip (kullanıcı 2026-09-17): yerleşik type="date" yerine DateRangeInput. */}
-      <DateRangeInput from={fromInput} to={toInput} onFrom={setFrom} onTo={setTo} inputClassName={cn(h, "w-[140px] text-xs")} idPrefix={`${def.defaultField}-tarih`} />
+      <DateRangeInput from={fromInput} to={toInput} onFrom={setFrom} onTo={setTo} inputClassName={cn(h, "w-[156px] text-xs")} idPrefix={`${def.defaultField}-tarih`} />
 
       {DATE_PRESETS.map((p) => (
         <Button

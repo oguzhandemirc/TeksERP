@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { kursunDagitimService } from "./service";
-import { DISTRIBUTION_QUERY_KEY } from "./useKursunDistribution";
-import type { KursunDistributionPayload, KursunDistributionRowBase } from "./types";
+import { DISTRIBUTION_QUERY_KEY, distributionQueryFn } from "./useKursunDistribution";
+import type { KursunDistributionRowBase } from "./types";
 
 /** Uç kapısıyla aynı küme (`PATCH /work-orders/:id/steps/:stepId/planned-machine`). */
 export const PLANNED_MACHINE_PERMISSIONS = ["workorder:write", "workorder:distribute", "mobile:kursun-dagitim"];
@@ -22,7 +22,7 @@ export function PlannedMachineChip({ row }: { row: KursunDistributionRowBase }) 
   const { hasAnyPermission } = useRoleAccess();
   const [open, setOpen] = useState(false);
   // Makine listesi ekranın TEK payload'ından (önbellekte; ayrı istek yok).
-  const { data } = useQuery<{ data: KursunDistributionPayload }>({ queryKey: DISTRIBUTION_QUERY_KEY, enabled: false });
+  const { data } = useQuery({ queryKey: DISTRIBUTION_QUERY_KEY, queryFn: distributionQueryFn, enabled: false });
   const machines = data?.data?.machines ?? [];
   const mut = useMutation({
     mutationFn: (machineId: string | null) =>

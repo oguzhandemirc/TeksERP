@@ -29,7 +29,7 @@ import { systemTileSections } from "@/pages/System/tile-config";
 /** Kumaş Stoğu sekmeleri — `/operations/rolls?tab=<key>`. */
 const rollTabEntries: CommandEntry[] = ROLL_TABS.map((t) => ({
   key: `rolls-tab:${t.key}`,
-  label: `Kumaş Stoğu · ${t.label}`,
+  get label() { return `Kumaş Stoğu · ${t.label}`; },
   description: "Kumaş Stoğu sekmesi",
   icon: t.Icon,
   to: `/operations/rolls?tab=${t.key}`,
@@ -55,8 +55,8 @@ const orderTabEntries: CommandEntry[] = [
 /** Etiketler sekmeleri — `/definitions/labels?tab=<key>`. */
 const labelTabEntries: CommandEntry[] = ETIKET_TABS.map((t) => ({
   key: `labels-tab:${t.key}`,
-  label: `Etiketler · ${t.label}`,
-  description: t.description,
+  get label() { return `Etiketler · ${t.label}`; },
+  get description() { return t.description; },
   icon: t.icon,
   to: `/definitions/labels?tab=${t.key}`,
   permission: "station:read",
@@ -75,8 +75,8 @@ const labelTabEntries: CommandEntry[] = ETIKET_TABS.map((t) => ({
 const settingsFlagEntries: CommandEntry[] = SETTINGS_CATEGORIES.flatMap((cat) =>
   (cat.flags ?? []).map((flag) => ({
     key: `setting-flag:${flag.key}`,
-    label: flag.title,
-    description: `${SURFACE_LABEL[categorySurface(cat)]} · ${cat.label}`,
+    get label() { return flag.title; },
+    get description() { return `${SURFACE_LABEL[categorySurface(cat)]} · ${cat.label}`; },
     icon: cat.icon,
     to: settingsCategoryPath(cat),
     permissionAny: cat.permissionAny ?? [SETTINGS_ADMIN_PERMISSION],
@@ -99,8 +99,8 @@ const settingsFlagEntries: CommandEntry[] = SETTINGS_CATEGORIES.flatMap((cat) =>
 const hubGroupEntries: CommandEntry[] = [
   ...definitionGroups.map((g) => ({
     key: `def-group:${g.key}`,
-    label: `Tanımlar · ${g.title}`,
-    description: g.description,
+    get label() { return `Tanımlar · ${g.title}`; },
+    get description() { return g.description; },
     icon: g.icon,
     to: "/definitions",
     keywords: "tanım hub bölüm",
@@ -108,8 +108,8 @@ const hubGroupEntries: CommandEntry[] = [
   })),
   ...operationGroups.map((g) => ({
     key: `ops-group:${g.key}`,
-    label: `Operasyon · ${g.title}`,
-    description: g.description,
+    get label() { return `Operasyon · ${g.title}`; },
+    get description() { return g.description; },
     icon: g.icon,
     to: "/operations",
     keywords: "operasyon hub bölüm",
@@ -117,8 +117,8 @@ const hubGroupEntries: CommandEntry[] = [
   })),
   ...accessGroups.map((g) => ({
     key: `access-group:${g.key}`,
-    label: `Yetkilendirme · ${g.title}`,
-    description: g.description,
+    get label() { return `Yetkilendirme · ${g.title}`; },
+    get description() { return g.description; },
     icon: g.icon,
     to: "/access",
     adminOnly: true,
@@ -160,8 +160,8 @@ const hubGroupEntries: CommandEntry[] = [
   },
   ...systemTileSections.map((s) => ({
     key: `sys-group:${s.group}`,
-    label: `Sistem · ${s.title}`,
-    description: s.description,
+    get label() { return `Sistem · ${s.title}`; },
+    get description() { return s.description; },
     icon: ServerCog,
     to: "/system",
     permission: "admin:settings",

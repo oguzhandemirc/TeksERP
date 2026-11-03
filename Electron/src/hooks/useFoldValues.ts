@@ -24,3 +24,16 @@ export function useFoldValues() {
     isEmpty: !q.isLoading && (q.data?.length ?? 0) === 0,
   };
 }
+
+/**
+ * Kayıtlı kat kodunun (`foldType`, ör. "4-KAT") katalog adı ("4 Kat") — form düğmeleriyle aynı ad. Katalogda yoksa
+ * (kaldırılmış / henüz yüklenmedi) kod aynen döner; değer gizlenmez.
+ */
+export function foldLabelOf(values: ReadonlyArray<{ code: string; name: string }>, code: string): string {
+  return values.find((v) => v.code === code)?.name ?? code;
+}
+
+export function useFoldLabel(): (code: string) => string {
+  const { values } = useFoldValues();
+  return (code) => foldLabelOf(values, code);
+}

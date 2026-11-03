@@ -6,7 +6,7 @@ import { isMachineStopsVisible, machineStopsTitle } from "../MachineStops/stop-r
 import { isWeavingFloorVisible } from "../WeavingFloor/floor-regime";
 import { isLoomAlarmsVisible } from "../LoomAlarms/alarm-regime";
 import { isWarpBeamsVisible } from "../WarpBeams/warp-beam-regime";
-import { TERIM, TERIM_AD } from "@/lib/terim";
+import { TERIM, TERIM_AD, terimDokumaRejimi } from "@/lib/terim";
 import { flagOffHint, flagSettingTrail } from "@/lib/flag-setting-path";
 import type { OperationsTile } from "../tile-config";
 
@@ -31,7 +31,11 @@ export const productionTiles: OperationsTile[] = [
     // yeni kayıt route'uyla birebir; eski karosuz palet girişinin yerini aldı.
     key: "work-order-create",
     get title() { return `${TERIM.terbiyeIsEmri.tekil} oluştur`; },
-    get description() { return `${TERIM.terbiyeIsEmri.tekil}, ${TERIM.dokumaIsEmri.tekilKucuk} ya da özel kısayol (ör. Kurşun & Tambur) — belge okutarak da`; },
+    // Dokuma kapalı kurulumda seçicide dokuma iş emri yok — açıklama da anmaz.
+    get description() {
+      const dokuma = terimDokumaRejimi() ? `, ${TERIM.dokumaIsEmri.tekilKucuk}` : "";
+      return `${TERIM.terbiyeIsEmri.tekil}${dokuma} ya da özel kısayol (ör. Kurşun & Tambur) — belge okutarak da`;
+    },
     icon: FilePlus2,
     to: "/operations/work-orders/new",
     group: "production",

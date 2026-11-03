@@ -150,7 +150,8 @@ export function KpiCards() {
                   <Icon className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-medium text-muted-foreground">
+                  {/* Dar ekranda (1024) "Depoda Bekleyen" kesiliyordu — etiket sarar, sayı altta kalır. */}
+                  <p className="line-clamp-2 text-xs font-medium leading-tight text-muted-foreground" title={kpi.label}>
                     {kpi.label}
                   </p>
                   {r.isLoading ? (
