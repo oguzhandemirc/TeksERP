@@ -2,7 +2,7 @@
 // küçük önizleme). Kaydet: ayar WITH_WORK_ORDER → belge + top + iş emri tek seferde; değilse taslağa yazılır (bugünkü).
 import { TERIM } from "@/lib/terim";
 import { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ExternalLink, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,9 @@ import { docDraftReasons, initialDocDraft, reseedOwnerGramaj, routeGramajOptions
 import { AUTO_PRINT_TEXT, printRefakatCard, useRefakatAutoPrint } from "./refakatPrint";
 import { DRAFT_SAVED_TEXT, SAVE_LABEL, saveDoc, saveErrorHint, type SaveOutcome } from "./saveDoc";
 import { useFormApproval } from "./useFormApproval";
+import { PartyList } from "./PartyList";
+import { initialMultiParty, type MultiPartyDraft } from "./partyDraft";
+import { getNoteParties } from "./service";
 import type { RouteRef } from "./nav";
 
 interface Props {
@@ -35,7 +38,7 @@ function useSave(noteId: string, route: Props["route"]) {
   const navigateActive = useTabsStore((s) => s.navigateActive);
   const { catalog } = useKursunGramajCatalog();
   return useMutation({
-    mutationFn: (v: { note: NonNullable<ReturnType<typeof useNoteDetail>["note"]["data"]>; draft: DocDraft }): Promise<SaveOutcome> =>
+    mutationFn: (v: { note: NonNullable<ReturnType<typeof useNoteDetail>["note"]["data"]>; draft: DocDraft; multi: MultiPartyDraft | null }): Promise<SaveOutcome> =>
       saveDoc({ ...v, routeTemplateId: route.id, formApproval: approval.value, gramajPropertyId: catalog.propertyId, clientToken: attempt.token() }),
     onError: (e) => attempt.onFailure(e),
     onSuccess: async (out) => {
@@ -43,7 +46,8 @@ function useSave(noteId: string, route: Props["route"]) {
       void qc.invalidateQueries({ queryKey: [INCOMING_DOCUMENT_QUERY_KEY] });
       if (out.kind !== "WORK_ORDER") return;
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
-      toast.success(`${TERIM.terbiyeIsEmri.tekil} açıldı: ${out.result.workOrderNo}`);
+      const many = out.result.workOrders ?? [];
+      toast.success(many.length > 1 ? `${many.length} ${TERIM.terbiyeIsEmri.tekilKucuk} açıldı: ${many.map((w) => w.workOrderNo).join(", ")}` : `${TERIM.terbiyeIsEmri.tekil} açıldı: ${out.result.workOrderNo}`);
       if (autoPrint) toast.message(AUTO_PRINT_TEXT[await printRefakatCard(out.result.workOrderId)]);
       navigateActive(`/operations/work-orders/${out.result.workOrderId}`);
     },
@@ -60,15 +64,22 @@ export function BelgedenIsEmriForm({ noteId, route }: Props) {
   const gramajOptions = routeGramajOptions(catalog.options, route.hasKursun);
   const { defaults: customerDefaults, isLoading: defaultsLoading } = useKursunCustomerDefaults();
   const [draft, setDraft] = useState<DocDraft | null>(null);
+  const [multi, setMulti] = useState<MultiPartyDraft | null | undefined>(undefined);
+  // S1: çok partili belge — parti özeti okuma bitince bir kez; eski backend (404) → null = bugünkü tek partili form.
+  const parties = useQuery({ queryKey: ["gelen-belge", noteId, "partiler"], queryFn: () => getNoteParties(noteId), enabled: stage !== "READING" && approval.value === "WITH_WORK_ORDER" });
   const save = useSave(noteId, route);
   const navigateActive = useTabsStore((s) => s.navigateActive);
   // Taslak bir kez, okuma bitince ve gramaj kataloğu gelince dolar (varsayılan gramaj ön seçimi kaçmasın).
   useEffect(() => {
     if (n && !draft && stage !== "READING" && !catalogLoading && !defaultsLoading) setDraft(initialDocDraft(n, gramajOptions, customerDefaults));
   }, [n, draft, stage, catalogLoading, defaultsLoading, gramajOptions, customerDefaults]);
+  useEffect(() => {
+    if (multi === undefined && parties.isFetched) setMulti(initialMultiParty(parties.data));
+  }, [multi, parties.isFetched, parties.data]);
   if (!n) return <p className="p-6 text-sm text-muted-foreground">{note.isError ? "Belge yüklenemedi." : "Yükleniyor…"}</p>;
   if (stage === "CLOSED") return <p className="p-6 text-sm text-muted-foreground">Belge artık taslak değil ({n.noteNo}).</p>;
-  const reasons = draft ? docDraftReasons(draft) : [];
+  const multiDraft = approval.value === "WITH_WORK_ORDER" ? (multi ?? null) : null;
+  const reasons = draft ? docDraftReasons(draft, multiDraft) : [];
   const saved = save.data?.kind === "DRAFT_SAVED";
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="oie-doc-form">
@@ -88,6 +99,7 @@ export function BelgedenIsEmriForm({ noteId, route }: Props) {
                 {stage === "READ_FAILED" && <ScanReadBanner scans={n.scans} lines={n.lines} editable canRequeue onRequeued={() => void invalidate()} />}
                 {stage === "NO_SERVICE" && <p className="text-sm text-amber-800 dark:text-amber-300" data-testid="oie-no-service">Bu kurulumda belge okuma servisi yok; değerleri elle girin.</p>}
                 <DocFields note={n} draft={draft} onChange={(d) => setDraft(reseedOwnerGramaj(draft, d, gramajOptions, customerDefaults))} gramajOptions={gramajOptions} disabled={save.isPending || saved} />
+                {multiDraft && parties.data && <PartyList view={parties.data} value={multiDraft} onChange={setMulti} disabled={save.isPending || saved} />}
               </>
             )}
           </div>
@@ -101,7 +113,7 @@ export function BelgedenIsEmriForm({ noteId, route }: Props) {
         error={save.isError ? (saveErrorHint(save.error) ?? apiErrorText(save.error, "Kaydedilemedi.")) : null}
         savedAsDraft={saved}
         label={approval.value === "WITH_WORK_ORDER" ? SAVE_LABEL : "Taslak kaydet"}
-        onSave={() => draft && save.mutate({ note: n, draft })}
+        onSave={() => draft && save.mutate({ note: n, draft, multi: multiDraft })}
         onOpenNote={() => navigateActive(`/operations/gelen-belgeler/${noteId}`)}
       />
     </div>
