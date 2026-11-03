@@ -39,6 +39,10 @@ import { MachineStopBand, MachineStopChip, useMachineStopControl } from '../../.
 import { showStopOpenEntryWarning } from '../../../components/machine-stop/entryWarning';
 import CutActionBar from './CutActionBar';
 import WorkOrderOutputPanel from './WorkOrderOutputPanel';
+import TamburFinalLabelStrip from './TamburFinalLabelStrip';
+import TamburLabelInfoModal from './TamburLabelInfoModal';
+import { useTamburFinalLabel, useTamburPrintTiming } from './useTamburFinalLabel';
+import { shouldAutoPrintAfterCut } from './finalLabel';
 import { LabelNamePreview } from './LabelNamePreview';
 import TamburFieldFix from './TamburFieldFix';
 import { usePermissions } from '../../../hooks/usePermission';
@@ -967,6 +971,11 @@ export default function TamburScreen() {
   }, [activeJob]);
   // KQ-D7: eski backend alanı göndermez → undefined → çekmece çizilmez (bugünkü ekran).
   const inspectionEnabled = activeJob?.stepSummary?.inspectionEnabled === true;
+  // Gülkesim S5: müşteri (Kime? ?? top sahibi) tartım/bölme ayarı + fabrika basım zamanı.
+  const openFinal = useTamburFinalLabel(selectedRoll?.rollId, work.voluntaryEntry.targetCustomerId);
+  const recutFinal = useTamburFinalLabel(recutResolvedRollId, recutTargetCustomerId);
+  const [labelInfoOpen, setLabelInfoOpen] = useState(false);
+  const printTiming = useTamburPrintTiming();
 
   // Top/sekme değişimi → çalışma state'i temizlenir. İş emrinde PLANLANAN kat
   // otomatik seçili gelir; plan yoksa KATALOGUN İLK değeri. Operatör
@@ -1328,6 +1337,8 @@ export default function TamburScreen() {
       confirmMismatch?: boolean;
       /** D4-B3 ölçüm kaynağı beyanı; sapma onayıyla tekrar denemede aynı kalır. */
       measure?: TamburMeasure;
+      /** S5 tartım (kg) — müşteri "tamburda tartım" açıksa zorunlu. */
+      weightKg?: number;
     }) =>
       tamburService.cutOpenFabric(data.rollId, withMeasure({
         lengthMeters: data.lengthMeters,
@@ -1347,6 +1358,7 @@ export default function TamburScreen() {
         // ⚠️ Elle kurulan gövde = sessiz allowlist (KAT dersi, 2026-08-13):
         // bu satır düşerse operatör onaylar, bayrak isteğe girmez, 409 sürer.
         confirmMismatch: data.confirmMismatch,
+        weightKg: data.weightKg,
       }, data.measure)),
     onSuccess: async (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1384,7 +1396,13 @@ export default function TamburScreen() {
 
         // döner → renkten çözülen eski davranış birebir korunur.
 
-        startPrint(data.childRoll, printKindForRoll(data.childRoll), { auto: true });
+        // S5: basım zamanı END ise tek tek basılmaz — "Bu işten çıkanlar" → "Basılmayanları bas".
+        openFinal.setKgText('');
+        if (shouldAutoPrintAfterCut({ printTiming })) {
+          startPrint(data.childRoll, printKindForRoll(data.childRoll), { auto: true });
+        } else {
+          Toast.show({ type: 'info', text1: 'Etiket iş bitince basılacak', text2: 'Bu işten çıkanlar → Basılmayanları bas' });
+        }
       }
       // Uzunluk input'unu sıfırla. Kalite/sipariş varsayılan olarak KALIR
       // (seri kesim), ama Ayarlar → Çalışma Tercihleri'nden "her çıktıdan sonra
@@ -1616,6 +1634,7 @@ export default function TamburScreen() {
       rawDestination,
       clientToken,
       measure,
+      weightKg,
     }: {
       rollId: string;
       cutLength: number;
@@ -1632,6 +1651,8 @@ export default function TamburScreen() {
       confirmMismatch?: boolean;
       /** D4-B3 ölçüm kaynağı beyanı. */
       measure?: TamburMeasure;
+      /** S5 tartım (kg). */
+      weightKg?: number;
     }) =>
       tamburService.cutWarehouseRoll(rollId, withMeasure({
         cutLength,
@@ -1641,6 +1662,7 @@ export default function TamburScreen() {
         markedForKartela: markedForKartela ?? false,
         rawDestination,
         clientToken,
+        weightKg,
       }, measure)),
     onSuccess: (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1681,7 +1703,12 @@ export default function TamburScreen() {
 
         // döner → renkten çözülen eski davranış birebir korunur.
 
-        startPrint(data.childRoll, printKindForRoll(data.childRoll), { auto: true });
+        recutFinal.setKgText('');
+        if (shouldAutoPrintAfterCut({ printTiming })) {
+          startPrint(data.childRoll, printKindForRoll(data.childRoll), { auto: true });
+        } else {
+          Toast.show({ type: 'info', text1: 'Etiket iş bitince basılacak', text2: 'Bu işten çıkanlar → Basılmayanları bas' });
+        }
       }
       // Parent metraj güncelle (sticky header anında yansır) — yalnız aynı top.
       if (isCurrent && data && typeof data.parentRemainingQty === 'number' && recutRollMeta) {
@@ -1993,6 +2020,12 @@ export default function TamburScreen() {
       | 'WAREHOUSE'
       | 'SCRAP'
       | 'A1_STOCK';
+    // S5 tartım kapısı (müşteri ayarı) — sunucu da 400 TAMBUR_WEIGHT_REQUIRED ile korur.
+    const openKgErr = openFinal.error();
+    if (openKgErr) {
+      Toast.show({ type: 'error', text1: 'Tartım', text2: openKgErr });
+      return;
+    }
     // D4-A2b (K2): açık duruşta metre girişi UYARIR (ayar açıksa), kesim yine gider;
     // uyarı onay diyaloğundan SONRA, yalnız gerçek gönderimde çıkar.
     const runCut = () => {
@@ -2014,6 +2047,7 @@ export default function TamburScreen() {
         confirmMismatch: planMismatchConfirmedRef.current.has(selectedRoll.rollId) || undefined,
         // D4-B3: ölçüm değişmeden gidiyorsa makine/simülasyon; aksi hâlde OPERATOR.
         measure: resolveMeasure(capture, length),
+        weightKg: openFinal.weightKg(),
       });
     };
     // Aşımda parmak hatası koruması: onay iste (açık kumaşın tamamı tek topa döner).
@@ -2281,6 +2315,11 @@ export default function TamburScreen() {
       });
     }
     const recutEffectiveCode = recutShortCutSug?.code ?? recutQualityGrade;
+    const recutKgErr = recutFinal.error();
+    if (recutKgErr) {
+      Toast.show({ type: 'error', text1: 'Tartım', text2: recutKgErr });
+      return;
+    }
     // Ham (renksiz STOCK) top → operatörün seçtiği parça hedefini gönder.
     const isRawStock =
       recutRollMeta.status === 'STOCK' && recutRollMeta.colorId == null;
@@ -2297,6 +2336,7 @@ export default function TamburScreen() {
         // Ağ-retry idempotency: deneme başına SABİT token (tekrar basış = aynı token).
         clientToken: recutAttempt.keyed(recutResolvedRollId),
         measure: resolveMeasure(capture, cut),
+        weightKg: recutFinal.weightKg(),
       });
     };
     // Aşımda parmak hatası koruması: onay iste (top tamamen tüketilir).
@@ -3220,6 +3260,15 @@ export default function TamburScreen() {
             startPrint(r, printKindForRoll(r));
           }}
           onUndo={(r: Roll) => setPanelUndoTarget(r)}
+          // S5: basım zamanı "iş bitince" ise basılmamış topları mevcut kuyruğa verir.
+          onPrintUnprinted={
+            shouldAutoPrintAfterCut({ printTiming })
+              ? undefined
+              : (rs: Roll[]) => {
+                  setLabelContext(undefined);
+                  setPendingPrintRolls(rs);
+                }
+          }
         />
       )}
     </>
@@ -3962,6 +4011,14 @@ export default function TamburScreen() {
                   varken operatör "Bitir" ile karar modalını (1.KALITE/A1/FIRE)
                   açar — parent arşivlenir, kalan child olarak yaşar. */}
               {kartelaStrip}
+              <TamburFinalLabelStrip
+                settings={recutFinal.settings}
+                remaining={recutRollMeta?.currentQty ?? 0}
+                kgText={recutFinal.kgText}
+                onKgChange={recutFinal.setKgText}
+                onSuggest={handleRecutLengthChange}
+                onOpenLabelInfo={activeJob?.stepSummary.workOrderId ? () => setLabelInfoOpen(true) : undefined}
+              />
               <TamburMeasureStrip last={lastMeasure} />
               <CutActionBar
                 compact={compact}
@@ -4324,6 +4381,14 @@ export default function TamburScreen() {
                   topu sonsuza dek açık bırakırdı. Kalan > 0 iken karar
                   penceresi zorunludur; kalan 0 ise tek dokunuşta biter. */}
               {kartelaStrip}
+              <TamburFinalLabelStrip
+                settings={openFinal.settings}
+                remaining={selectedRoll.currentQty}
+                kgText={openFinal.kgText}
+                onKgChange={openFinal.setKgText}
+                onSuggest={(t) => setWork((w) => ({ ...w, voluntaryEntry: { ...w.voluntaryEntry, length: t } }))}
+                onOpenLabelInfo={activeJob?.stepSummary.workOrderId ? () => setLabelInfoOpen(true) : undefined}
+              />
               <TamburMeasureStrip last={lastMeasure} />
               <CutActionBar
                 compact={compact}
@@ -4512,6 +4577,11 @@ export default function TamburScreen() {
           olarak açılır. Tambur operatörü kurşunu yapan kişi değildir — ona
           onaylatacak bir karar yok, yalnız bilgi toast'ı gösterilir. */}
 
+      <TamburLabelInfoModal
+        workOrderId={activeJob?.stepSummary.workOrderId ?? null}
+        visible={labelInfoOpen}
+        onDismiss={() => setLabelInfoOpen(false)}
+      />
       {/* Etiket basımı modal'ı — finalize/post-split sonrası */}
       {recutAmbiguous.modal}
       <LabelPrintModal
