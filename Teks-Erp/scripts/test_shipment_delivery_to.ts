@@ -103,7 +103,7 @@ async function top(n: string, owner: string | null): Promise<{ id: string; barco
   const r = await prisma.roll.create({
     data: {
       warehouseId: whId, barcode: `${P}-${n}`, itemId: ids.item, width: 150, initialQty: 100, currentQty: 100,
-      status: RollStatus.WAREHOUSE, qualityGrade: "1.KALITE", entrySource: RollEntrySource.SUPPLIER_RECEIPT,
+      status: RollStatus.WAREHOUSE, entrySource: RollEntrySource.SUPPLIER_RECEIPT,
       ownerCustomerId: owner,
     },
     select: { id: true, barcode: true },
