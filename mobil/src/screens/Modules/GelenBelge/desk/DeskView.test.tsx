@@ -14,6 +14,7 @@ const mockCreate = jest.fn();
 const mockSuggest = jest.fn();
 const mockFinish = jest.fn();
 let mockDone: { note: { id: string; noteNo: string }; pages: number; runKey: number } | null = null;
+let mockParties: unknown = null;
 
 jest.mock('../../../../services/inboundDoc.service', () => ({
   inboundDocService: {
@@ -39,10 +40,13 @@ jest.mock('./DeskCamera', () => {
 });
 // Okuma bağlanmaz: kart takıldığında belge detayı gelmiş sayılır (form dolar).
 function MockDocRowCard({ row, wo }: { row: DocRow; wo: WoRowsState }) {
-  const { setDetail } = wo;
+  const { setDetail, setParties } = wo;
   useEffect(() => {
     if (!row.detail) setDetail(row.noteId, { id: row.noteId, noteNo: row.noteNo, ownerCustomerId: 'c1', kursunMeters: '100', kursunMetersReview: false } as never);
   }, [row.detail, row.noteId, row.noteNo, setDetail]);
+  useEffect(() => {
+    if (row.form && row.parties === undefined && mockParties) setParties(row.noteId, mockParties as never);
+  }, [row.form, row.parties, row.noteId, setParties]);
   return <Text testID="belge-karti">{`${row.noteNo}:${row.result?.kind ?? '-'}`}</Text>;
 }
 jest.mock('../woCreate/DocRowCard', () => ({ __esModule: true, default: (p: { row: DocRow; wo: WoRowsState }) => <MockDocRowCard {...p} /> }));
@@ -61,6 +65,7 @@ const bodyOf = (i: number) => mockCreate.mock.calls[i][1] as { routeTemplateId: 
 beforeEach(() => {
   jest.clearAllMocks();
   mockDone = null;
+  mockParties = null;
   mockSuggest.mockResolvedValue({ routeTemplateId: null, routeName: null, source: null });
 });
 
@@ -91,6 +96,22 @@ describe('DeskView', () => {
     fireEvent.press(s.getByTestId('masa-olustur'));
     await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1));
     expect(bodyOf(0)).toMatchObject({ routeTemplateId: 'r2', stepPlanning: [{ sequence: 1, plannedMachineId: 'm-1' }] });
+  });
+
+  it('⭐ çok parti + "Tek iş emri" kipi: tek makine seçilir, gövdeye ÜST düzey gider; parti başına seçim çizilmez', async () => {
+    const party = (blockNo: number, meters: number) => ({ blockNo, batchNo: `P${blockNo}`, orderNo: null, declaredTopCount: null, declaredMeters: null, lineCount: 1, meters, weightKg: null, warnings: [] });
+    mockParties = { multi: true, defaultMode: 'SINGLE', warnings: [], parties: [party(1, 40), party(2, 60)] };
+    mockCreate.mockResolvedValue(opened('IE-1'));
+    const s = renderWithNote();
+    await waitFor(() => expect(s.getByTestId('masa-olustur')).not.toBeDisabled());
+    await waitFor(() => expect(s.getByTestId('masa-makine-K1')).toBeTruthy());
+    expect(s.queryByTestId('masa-parti-makine-1')).toBeNull();
+    fireEvent.press(s.getByTestId('masa-makine-K1'));
+    fireEvent.press(s.getByTestId('masa-olustur'));
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1));
+    const body = bodyOf(0) as { mode?: string; stepPlanning?: unknown; parties?: Record<string, unknown>[] };
+    expect(body).toMatchObject({ mode: 'SINGLE', stepPlanning: [{ sequence: 1, plannedMachineId: 'm-1' }] });
+    expect(body.parties?.every((p) => !('stepPlanning' in p) && !('targetValues' in p))).toBe(true);
   });
 
   it('⭐ oluştur → İE no bildirimi + son oluşturulanlar şeridi + kameraya dönüş', async () => {
