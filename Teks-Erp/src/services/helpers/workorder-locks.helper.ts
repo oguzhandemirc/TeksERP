@@ -33,6 +33,7 @@
 // Kat tipi: kind=TAMBUR adımı PENDING değilse kilitli (kesim başladıysa).
 // =============================================================================
 
+import { sequentialTx } from "./tx-sequential-relations.helper";
 import type { Prisma, PrismaClient, StepStatus } from "@prisma/client";
 import { STEP_CAPABILITY_SELECT, stepCanApplyColor } from "./step-capability.helper";
 import { ACTIVE_TARGET_PROPERTY } from "./property-revoke.helper";
@@ -134,7 +135,7 @@ export async function computeWorkOrderLocks(
   workOrderId: string,
 ): Promise<WorkOrderLocks> {
   // Tek round-trip'te WO + adımlar + targetProperties + dispatch sayısı.
-  const wo = await db.workOrder.findUnique({
+  const wo = await sequentialTx(db).workOrder.findUnique({
     where: { id: workOrderId },
     select: {
       id: true,

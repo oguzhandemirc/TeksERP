@@ -18,6 +18,7 @@
 // Bu dosya `doffEvent.create` İÇERMEZ — defter yazıcısı `machine-doff.service.ts`te
 // kalır (beyan değişmez). Tx AÇMAZ, alır; 8021 kilidinden SONRA çağrılır.
 // =============================================================================
+import { sequentialTx } from "./tx-sequential-relations.helper";
 import { MachineDataSource, Prisma, StationKind, WarpBeamStatus, WeavingExecutionKind } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
@@ -121,7 +122,7 @@ export async function resolveLoomByCodeTx(
 
 /** Hattaki açık koşum; yoksa 409 `MACHINE_NO_OPEN_RUN` (D16 — top DOĞMAZ). */
 export async function requireOpenRunTx(db: Pick<Tx, "machineRun">, machine: { id: string; code: string }, productionLineNo: number): Promise<OpenRunRow> {
-  const run = await db.machineRun.findFirst({
+  const run = await sequentialTx(db).machineRun.findFirst({
     where: { machineId: machine.id, productionLineNo, ...OPEN_MACHINE_RUN_WHERE },
     select: OPEN_RUN_SELECT,
   });
@@ -173,7 +174,7 @@ export async function resolveKk1BirthTx(tx: Tx, input: Kk1BirthInput, ctx: { use
         status: order.status,
       });
     }
-    const runs = await tx.machineRun.findMany({
+    const runs = await sequentialTx(tx).machineRun.findMany({
       where: { weavingOrderId: order.id, ...OPEN_MACHINE_RUN_WHERE },
       select: OPEN_RUN_SELECT,
       orderBy: [{ startedAt: "asc" }, { id: "asc" }],

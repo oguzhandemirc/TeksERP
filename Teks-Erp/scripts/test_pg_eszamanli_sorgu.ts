@@ -178,6 +178,15 @@ const DUZELTILEN: Array<[string, string]> = [
   ["src/services/inventory.service.ts", "sequentialTx(tx).roll.create"],
   ["src/services/batch.service.ts", "sequentialTx(tx).subcontractorDispatch.findMany"],
   ["src/services/helpers/batch-dispatch-surgery.helper.ts", "sequentialTx(tx).subcontractorDispatch.findMany"],
+  ["src/services/work-session.service.ts", "sequentialTx(tx).workSession.create"],
+  ["src/services/helpers/workorder-locks.helper.ts", "sequentialTx(db).workOrder.findUnique"],
+  ["src/services/helpers/workorder-target-color.helper.ts", "sequentialTx(db).workOrderStep.findMany"],
+  ["src/services/helpers/kursun-bypass-eligibility.helper.ts", "sequentialTx(db).workOrderStep.findUnique"],
+  ["src/services/helpers/kk1-roll-birth.helper.ts", "sequentialTx(db).machineRun.findFirst"],
+  ["src/services/helpers/warp-beam-event.helper.ts", "sequentialTx(tx).warpBeamEvent.create"],
+  ["src/services/warp-beam.service.ts", "sequentialTx(tx).warpBeam.create"],
+  ["src/services/gelen-belge-iptal-onizleme.service.ts", "sequentialTx(db).customerDeliveryNote.findUnique"],
+  ["src/services/gelen-belge-line.service.ts", "sequentialTx(tx).customerDeliveryNoteLine.create"],
 ];
 
 /** `$transaction` geri çağrısının parametresi ya da tipi TransactionClient/Tx olan alıcı. */

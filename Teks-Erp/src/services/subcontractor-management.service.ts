@@ -5,6 +5,7 @@
 // Sevk/Mal kabul işlemleri için subcontractor.service.ts'e bakın.
 // =============================================================================
 
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import prisma from "../lib/prisma";
 import { normalizeDisplayName } from "./helpers/name-normalize.helper";
 import { Prisma } from "@prisma/client";
@@ -712,7 +713,7 @@ export class SubcontractorManagementService {
       }
       // Rol modeli: bağlı kartın fason rolü profil ile birlikte doğar (reaktivasyonda da).
       await syncSubcontractorRoleTx(tx, [payload.customerId]);
-      return tx.subcontractor.findUnique({
+      return sequentialTx(tx).subcontractor.findUnique({
         where: { id: createdId },
         include: SUB_INCLUDE,
       });
@@ -846,7 +847,7 @@ export class SubcontractorManagementService {
         }
       }
 
-      return tx.subcontractor.findUnique({
+      return sequentialTx(tx).subcontractor.findUnique({
         where: { id },
         include: SUB_INCLUDE,
       });

@@ -16,6 +16,7 @@
 // dönüşü storno edilemez (READY claim düşer). Levent-yalnız sevk MEŞRUDUR: parti boş doğar (K10 yapısal;
 // `createBatchTx({rollIds: []})` emsali kabul/tambur yollarında).
 // =============================================================================
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { Prisma, SubcontractorDispatchItemKind, WarpBeamStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
@@ -106,7 +107,7 @@ export async function dispatchWarpBeamItemsTx(
 
 /** Sevk iptali ÖNCESİ engel sinyali: bu sevkten DÖNMÜŞ (açık RETURNED_IN) levent sayısı — önizleme ile aynı kaynak. */
 export async function countReturnedBeamItems(client: Pick<typeof prisma, "subcontractorDispatchItem">, dispatchId: string): Promise<number> {
-  const items = await client.subcontractorDispatchItem.findMany({ where: { dispatchId, kind: SubcontractorDispatchItemKind.WARP_BEAM }, select: BEAM_ITEM_SELECT });
+  const items = await sequentialTx(client).subcontractorDispatchItem.findMany({ where: { dispatchId, kind: SubcontractorDispatchItemKind.WARP_BEAM }, select: BEAM_ITEM_SELECT });
   return items.filter((i) => openReturnOf(i) !== null).length;
 }
 
@@ -118,7 +119,7 @@ export async function cancelWarpBeamItemsTx(
   tx: Prisma.TransactionClient,
   input: { dispatchId: string; reason: string; userId?: string },
 ): Promise<number> {
-  const items = await tx.subcontractorDispatchItem.findMany({ where: { dispatchId: input.dispatchId, kind: SubcontractorDispatchItemKind.WARP_BEAM }, select: BEAM_ITEM_SELECT });
+  const items = await sequentialTx(tx).subcontractorDispatchItem.findMany({ where: { dispatchId: input.dispatchId, kind: SubcontractorDispatchItemKind.WARP_BEAM }, select: BEAM_ITEM_SELECT });
   for (const it of items) {
     const shipOut = shipOutOf(it);
     if (openReturnOf(it)) {
@@ -136,7 +137,7 @@ export async function cancelWarpBeamItemsTx(
 }
 
 async function loadBeamItem(tx: Prisma.TransactionClient, dispatchId: string, warpBeamId: string): Promise<BeamItemRow> {
-  const item = await tx.subcontractorDispatchItem.findUnique({ where: { dispatchId_warpBeamId: { dispatchId, warpBeamId } }, select: BEAM_ITEM_SELECT });
+  const item = await sequentialTx(tx).subcontractorDispatchItem.findUnique({ where: { dispatchId_warpBeamId: { dispatchId, warpBeamId } }, select: BEAM_ITEM_SELECT });
   if (!item) throw AppError.notFound("Bu sevkte böyle bir levent kalemi yok");
   if (item.dispatch.cancelledAt) throw AppError.conflict(`${item.dispatch.dispatchNo} iptal edilmiş — levent işlemi yapılamaz`, { code: "DISPATCH_CANCELLED" });
   return item;
