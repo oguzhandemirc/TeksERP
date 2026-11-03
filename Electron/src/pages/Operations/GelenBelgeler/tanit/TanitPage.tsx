@@ -63,7 +63,7 @@ export function TeachTemplatePage() {
                 <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Okunan yazılar yükleniyor…</p>
               ) : (
                 <>
-                  <TeachPanel state={t.state} words={t.words.data.words} onChange={t.setState} />
+                  <TeachPanel state={t.state} words={t.words.data.words} onChange={t.setState} old={existing.data?.template ?? null} />
                   {t.problems.length > 0 && <ul className="text-xs text-amber-800 dark:text-amber-300" data-testid="teach-problems">{t.problems.map((p) => <li key={p}>{p}</li>)}</ul>}
                   {t.preview.data && <TeachPreview result={t.preview.data} stale={!t.previewFresh} />}
                   <div className="flex justify-end gap-2">

@@ -1,20 +1,22 @@
 // Tablet tanıtma durumu (panel `useTeach` ikizi): sayfanın kelimeleri, işaretleme, önizleme (gövdeye bağlı tazelik), kayıt (yeni | sürümlü güncelle).
 // ONLINE-ONLY: tanıtma sunucunun OCR kelimeleriyle çalışır; kuyruğa alınmaz.
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { useAttemptToken } from '../../../../offline/attemptToken';
 import { inboundDocService } from '../../../../services/inboundDoc.service';
 import type { SuggestBody, SuggestResult, UserTemplateDetail } from '../../../../types/inboundDocTeach';
-import { initialTeach, mergeForUpdate, suggestBody, teachProblems, templateKeywords, type TeachState } from './teachDraft';
+import { initialTeach, oldParts, suggestBody, teachProblems, templateKeywords, type TeachState } from './teachDraft';
 
 export const teachWordsKey = (scanId: string | null) => ['gelen-belge', 'tanitma', 'kelimeler', scanId] as const;
-export const userTemplateKey = (code: string | null) => ['gelen-belge', 'sablonlar', 'ozel', code] as const;
+export const USER_TEMPLATES_PREFIX = ['gelen-belge', 'sablonlar', 'ozel'] as const;
+export const userTemplateKey = (code: string | null) => [...USER_TEMPLATES_PREFIX, code] as const;
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : undefined);
 
 export function useTeachModal(scanId: string | null, code: string | null, onSaved: () => void) {
   const attempt = useAttemptToken();
+  const qc = useQueryClient();
   const existing = useQuery({ queryKey: userTemplateKey(code), queryFn: () => inboundDocService.getUserTemplate(code!), enabled: !!code, retry: false, staleTime: Infinity });
   const ex: UserTemplateDetail | null = existing.data ?? null;
   // Güncelle kipinde şablon gelmeden işaretleme başlamaz (eski kimlik yazıları hazır seçili gelir).
@@ -23,9 +25,9 @@ export function useTeachModal(scanId: string | null, code: string | null, onSave
   const [state, setState] = useState<TeachState | null>(null);
   // Sayfa değişince işaretleme o sayfanın kelimeleriyle yeniden başlar (kutu indeksleri sayfaya özgü).
   useEffect(() => {
-    setState(words.data ? initialTeach(words.data, ex?.name ?? '', templateKeywords(ex?.template)) : null);
+    setState(words.data ? initialTeach(words.data, ex?.name ?? '', templateKeywords(ex?.template), oldParts(ex?.template)) : null);
   }, [words.data, ex]);
-  const body = useMemo(() => (state && scanId && words.data ? suggestBody(state, words.data.words, scanId) : null), [state, scanId, words.data]);
+  const body = useMemo(() => (state && scanId && words.data ? suggestBody(state, words.data.words, scanId, ex?.code ?? null) : null), [state, scanId, words.data, ex?.code]);
   const [preview, setPreview] = useState<{ body: string; result: SuggestResult } | null>(null);
   const [busy, setBusy] = useState<'preview' | 'save' | null>(null);
   const bodyKey = body ? JSON.stringify(body) : '';
@@ -54,9 +56,12 @@ export function useTeachModal(scanId: string | null, code: string | null, onSave
     try {
       const name = state.name.trim();
       const v = ex
-        ? await inboundDocService.updateUserTemplate(ex.code, { expectedVersion: ex.version, template: mergeForUpdate(ex.template, preview.result.template), name })
+        ? // Önizleme sunucuda birleşik şablonla koştu (`base`) — önizlenen şablon aynen kaydedilir.
+          await inboundDocService.updateUserTemplate(ex.code, { expectedVersion: ex.version, template: preview.result.template, name })
         : await inboundDocService.createUserTemplate({ name, template: preview.result.template, clientToken: attempt.token() });
       attempt.onSuccess();
+      // Detay (staleTime Infinity) + liste tazelenir: aynı tablette ikinci güncelleme bayat sürümle 409 almasın, yeni tip listede görünsün.
+      void qc.invalidateQueries({ queryKey: USER_TEMPLATES_PREFIX });
       Toast.show({
         type: 'success',
         text1: ex ? `"${v.name}" şablonu güncellendi (sürüm ${v.version}).` : `"${v.name}" belge tipi kaydedildi.`,

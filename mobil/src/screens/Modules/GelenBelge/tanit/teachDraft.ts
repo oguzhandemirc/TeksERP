@@ -53,7 +53,16 @@ export interface TeachState {
   repeats: boolean;
   sectionStart: string;
   sectionFields: FieldKey[];
+  /** 'Şablonu güncelle': yeni öneride yoksa eski şablondan taşınacak yapılar (sunucu birleştirir; önizleme = kaydedilen). */
+  keepOld: OldPart[];
 }
+
+/** Eski şablondan taşınabilen yapılar (backend `UPDATE_KEEP_PARTS` aynası). */
+export const OLD_PARTS = [
+  { key: 'tables', label: 'Top tablosu', hint: 'yeni sütun işaretlerseniz yenisi geçer' },
+  { key: 'sections', label: 'Tekrar eden bölüm', hint: 'bölümü yeniden tanımlarsanız yenisi geçer' },
+] as const;
+export type OldPart = (typeof OLD_PARTS)[number]['key'];
 
 export interface Pt {
   x: number;
@@ -61,7 +70,7 @@ export interface Pt {
 }
 
 export const emptyTeach = (name = ''): TeachState => ({
-  name, selected: [], fields: {}, columns: {}, totalsLabel: null, identifiers: [], repeats: false, sectionStart: '', sectionFields: [],
+  name, selected: [], fields: {}, columns: {}, totalsLabel: null, identifiers: [], repeats: false, sectionStart: '', sectionFields: [], keepOld: [],
 });
 
 const PAD = 3;
@@ -193,8 +202,8 @@ export function suggestIdentifiers(scan: ScanWords, max = 5): string[] {
 }
 
 /** Ekran açılınca: ad + hazır seçili kimlik önerileri. */
-export function initialTeach(scan: ScanWords, name = '', keep: readonly string[] = []): TeachState {
-  let s = emptyTeach(name);
+export function initialTeach(scan: ScanWords, name = '', keep: readonly string[] = [], keepOld: readonly OldPart[] = []): TeachState {
+  let s: TeachState = { ...emptyTeach(name), keepOld: [...keepOld] };
   for (const t of [...keep, ...suggestIdentifiers(scan)]) s = addIdentifier(s, t);
   return s;
 }
@@ -211,7 +220,7 @@ export function teachProblems(s: TeachState): string[] {
 }
 
 /** `POST /gelen-belge/sablonlar/oneri` gövdesi — kutular OCR çerçevesinde. */
-export function suggestBody(s: TeachState, words: readonly ScanWord[], scanId: string): SuggestBody {
+export function suggestBody(s: TeachState, words: readonly ScanWord[], scanId: string, baseCode: string | null = null): SuggestBody {
   const assignments = FIELD_OPTIONS.filter((f) => s.fields[f.key]?.length).map((f) => ({
     field: f.key,
     rect: unionRect(words, s.fields[f.key]!)!,
@@ -226,29 +235,29 @@ export function suggestBody(s: TeachState, words: readonly ScanWord[], scanId: s
   };
   if (columns.length) body.table = { columns, totalsLabel: s.totalsLabel?.length ? textOf(words, s.totalsLabel).slice(0, 40) : null };
   if (s.repeats && s.sectionStart.trim()) body.sectionStartLabel = s.sectionStart.trim().slice(0, 40);
+  if (baseCode) body.base = { code: baseCode, keep: OLD_PARTS.map((p) => p.key).filter((k) => s.keepOld.includes(k)) };
   return body;
 }
 
-type Keyed = { key?: unknown; field?: unknown };
-const keyOf = (x: unknown) => ((x as Keyed)?.key ?? (x as Keyed)?.field) as string | undefined;
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
-/**
- * 'Şablonu güncelle': yeniden atanan alan ezilir, atanmamış eski alanlar korunur; tablo/bölüm/metre kaynağı yeni öneride varsa
- * onunki, yoksa eskisi. Kimlik yazıları ekrandaki listedir (eskiler hazır seçili gelir, kullanıcı çıkarabilir). Kod/ad/sürümü sunucu mühürler.
- */
-export function mergeForUpdate(old: TemplateJson, next: TemplateJson): TemplateJson {
-  const nf = arr(next.fields);
-  const fields = [...nf, ...arr(old.fields).filter((f) => !nf.some((n) => keyOf(n) === keyOf(f)))];
-  const out: TemplateJson = { ...old, ...next, fields, identifiers: { ...(old.identifiers as object), ...(next.identifiers as object) } };
-  for (const k of ['tables', 'sections', 'meterSources'] as const) out[k] = next[k] ?? old[k];
-  const bc = [...arr(next.batchNoCandidates), ...arr(old.batchNoCandidates)];
-  const cands = bc.filter((c, i) => bc.findIndex((x) => keyOf(x) === keyOf(c)) === i);
-  if (cands.length) out.batchNoCandidates = cands;
-  for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
-  delete out.id;
-  delete out.version;
-  return out;
+/** Eski şablonda bulunan, taşınabilir yapılar (güncelle kipinde varsayılan: hepsi korunur = önceki davranış). */
+export function oldParts(t: TemplateJson | null | undefined): OldPart[] {
+  if (!t) return [];
+  return OLD_PARTS.map((p) => p.key).filter((k) => (k === 'tables' ? arr(t.tables).length > 0 : !!t.sections && typeof t.sections === 'object'));
+}
+
+export function toggleKeepOld(s: TeachState, part: OldPart): TeachState {
+  return { ...s, keepOld: s.keepOld.includes(part) ? s.keepOld.filter((k) => k !== part) : [...s.keepOld, part] };
+}
+
+/** Eski şablonda olup bu ekranda yeniden atanmayan alanlar — güncellemede aynen korunur (ekranda listelenir). */
+export function keptOldFields(t: TemplateJson | null | undefined, s: TeachState): string[] {
+  const own = new Set(FIELD_OPTIONS.filter((f) => s.fields[f.key]?.length).map((f) => f.key as string));
+  return arr(t?.fields)
+    .map((f) => f as { key?: unknown; label?: unknown })
+    .filter((f) => typeof f.key === 'string' && !own.has(f.key))
+    .map((f) => (typeof f.label === 'string' ? f.label : String(f.key)));
 }
 
 /** Eski şablonun kimlik yazıları (güncelle kipinde hazır seçili gelir). */

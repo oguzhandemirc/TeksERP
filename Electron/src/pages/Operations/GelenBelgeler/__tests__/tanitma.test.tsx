@@ -6,7 +6,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import {
-  assignColumn, assignField, initialTeach, mergeForUpdate, setRepeats, suggestBody, suggestIdentifiers, teachProblems, toggleWord, wordAt,
+  assignColumn, assignField, initialTeach, keptOldFields, oldParts, setRepeats, toggleKeepOld, suggestBody, suggestIdentifiers, teachProblems, toggleWord, wordAt,
 } from "../tanit/teachDraft";
 import { fromScreen, toScreen, type Rotation } from "../scanView";
 import { isUnrecognized } from "../tanit/teachScans";
@@ -108,15 +108,16 @@ describe("tanıtma çekirdeği (saf)", () => {
     expect(b.sectionStartLabel).toBe("Ham PartiNo");
   });
 
-  it("güncelle birleşimi: yeniden atanan alan ezilir, eski alan/tablo korunur, kimlik ekrandaki liste", () => {
-    const old = { id: "u-x", version: 2, fields: [{ key: "partiNo", v: "eski" }, { key: "tarih" }], tables: [{ key: "toplar" }], identifiers: { keywords: ["A", "B"], minScore: 0.6 } };
-    const next = { id: "u-x", version: 1, fields: [{ key: "partiNo", v: "yeni" }], identifiers: { keywords: ["A", "C"], minScore: 0.6 } };
-    const m = mergeForUpdate(old, next);
-    expect(m.fields).toEqual([{ key: "partiNo", v: "yeni" }, { key: "tarih" }]);
-    expect(m.tables).toEqual([{ key: "toplar" }]);
-    expect(m.identifiers).toEqual({ keywords: ["A", "C"], minScore: 0.6 });
-    expect(m.id).toBeUndefined();
-    expect(m.version).toBeUndefined();
+  it("güncelle kipi: gövde base taşır; eski tablo/bölüm varsayılan korunur, kutu kaldırılınca keep'ten düşer (s1b inceleme)", () => {
+    const old = { fields: [{ key: "partiNo", label: "Parti No" }, { key: "tarih", label: "Tarih" }], tables: [{ key: "toplar" }], sections: { startLabels: ["Ham PartiNo"], fields: ["partiNo"] } };
+    expect(oldParts(old)).toEqual(["tables", "sections"]);
+    expect(oldParts({ fields: [] })).toEqual([]);
+    let s = { ...assignField(toggleWord(initialTeach(SCAN, "G", [], oldParts(old)), 6), W, "partiNo"), name: "Güleçsoy" };
+    expect(suggestBody(s, W, "s1", "u-x").base).toEqual({ code: "u-x", keep: ["tables", "sections"] });
+    s = toggleKeepOld(s, "sections");
+    expect(suggestBody(s, W, "s1", "u-x").base).toEqual({ code: "u-x", keep: ["tables"] });
+    expect(suggestBody(s, W, "s1").base).toBeUndefined();
+    expect(keptOldFields(old, s)).toEqual(["Tarih"]);
   });
 
   it("tanınmadı = şablon bağı yok + okunmuş fotoğraf; yol sabiti", () => {
@@ -167,20 +168,27 @@ describe("tanıtma sayfası", () => {
     expect(screen.getByTestId("teach-preview-stale")).toBeInTheDocument();
   });
 
-  it("şablonu güncelle: eski kimlikler hazır seçili, PUT expectedVersion + birleşik şablon", async () => {
+  it("şablonu güncelle: eski kimlikler hazır seçili, önizleme base ile birleşik, PUT önizlenen şablonu aynen gönderir", async () => {
     nav.search = "sablon=u-gulecsoy";
-    api.getUserTemplate.mockResolvedValue({ id: "t9", code: "u-gulecsoy", name: "Güleçsoy", version: 2, isActive: true, updatedAt: "", versions: [], template: { fields: [{ key: "tarih" }], identifiers: { keywords: ["ESKİ KİMLİK"] } } });
+    api.getUserTemplate.mockResolvedValue({ id: "t9", code: "u-gulecsoy", name: "Güleçsoy", version: 2, isActive: true, updatedAt: "", versions: [], template: { fields: [{ key: "tarih", label: "Tarih" }], sections: { startLabels: ["X"], fields: ["tarih"] }, identifiers: { keywords: ["ESKİ KİMLİK"] } } });
+    const merged = { id: "u-gulecsoy", fields: [{ key: "partiNo" }, { key: "tarih" }], identifiers: { keywords: ["ESKİ KİMLİK"] } };
+    api.suggestTemplate.mockResolvedValue({ template: merged, explain: [], errors: [], preview: { matched: true, score: 1, fields: { partiNo: "P2618733" }, lineCount: 4, warnings: [] } });
     renderWithProviders(<TeachTemplatePage />);
     expect(await screen.findByLabelText("Kimlik: ESKİ KİMLİK")).toBeChecked();
+    expect(screen.getByTestId("teach-keep-old-fields")).toHaveTextContent("Tarih");
+    expect(screen.getByLabelText("Eski Tekrar eden bölüm korunsun")).toBeChecked();
+    await userEvent.click(screen.getByLabelText("Eski Tekrar eden bölüm korunsun"));
     await markPartiNo();
     await userEvent.click(screen.getByTestId("teach-preview-run"));
+    await waitFor(() => expect(api.suggestTemplate).toHaveBeenCalledTimes(1));
+    expect(api.suggestTemplate.mock.calls[0]![0].base).toEqual({ code: "u-gulecsoy", keep: [] });
     await waitFor(() => expect(screen.getByTestId("teach-save")).toBeEnabled());
     await userEvent.click(screen.getByTestId("teach-save"));
     await waitFor(() => expect(api.updateUserTemplate).toHaveBeenCalledTimes(1));
     const [code, b] = api.updateUserTemplate.mock.calls[0]!;
     expect(code).toBe("u-gulecsoy");
     expect(b.expectedVersion).toBe(2);
-    expect(b.template.fields).toEqual([{ key: "partiNo" }, { key: "tarih" }]);
+    expect(b.template).toEqual(merged);
     expect(api.createUserTemplate).not.toHaveBeenCalled();
   });
 });

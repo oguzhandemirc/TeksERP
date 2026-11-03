@@ -4,16 +4,18 @@ import { StyleSheet, View } from 'react-native';
 import { Button, Checkbox, IconButton, Switch, Text } from 'react-native-paper';
 import ModalTextInput from '../../../../components/ModalTextInput';
 import { colors, radius, spacing, typography } from '../../../../theme';
-import type { ScanWord } from '../../../../types/inboundDocTeach';
+import type { ScanWord, TemplateJson } from '../../../../types/inboundDocTeach';
 import {
-  addIdentifier, assignColumn, assignField, assignTotals, clearColumn, clearField, COLUMN_OPTIONS, FIELD_OPTIONS, setRepeats, textOf,
-  toggleIdentifier, toggleSectionField, type TeachState,
+  addIdentifier, assignColumn, assignField, assignTotals, clearColumn, clearField, COLUMN_OPTIONS, FIELD_OPTIONS, keptOldFields, OLD_PARTS, oldParts, setRepeats, textOf,
+  toggleIdentifier, toggleKeepOld, toggleSectionField, type TeachState,
 } from './teachDraft';
 
 interface Props {
   state: TeachState;
   words: readonly ScanWord[];
   onChange: (fn: (s: TeachState) => TeachState) => void;
+  /** 'Şablonu güncelle' kipinde eski şablon (korunacakları gösterir). */
+  old?: TemplateJson | null;
 }
 
 function Section({ title, children, testID }: { title: string; children: React.ReactNode; testID?: string }) {
@@ -151,9 +153,35 @@ function RepeatSection({ state, words, onChange }: Props) {
   );
 }
 
-export default function TeachPanel({ state, words, onChange }: Props) {
+/** Güncelle kipi: eski şablondan neyin taşınacağı açıkça görünür; tablo/bölüm kutusu kaldırılırsa kaydedilen şablondan da kalkar. */
+function KeepOld({ state, old, onChange }: { state: TeachState; old: TemplateJson; onChange: Props['onChange'] }) {
+  const parts = OLD_PARTS.filter((p) => oldParts(old).includes(p.key));
+  const fields = keptOldFields(old, state);
+  return (
+    <Section title="Eski şablondan korunacak" testID="tanit-eski-koru">
+      {fields.length > 0 && <Text style={styles.hint} testID="tanit-eski-alanlar">Yeniden atamadığınız alanlar aynen kalır: {fields.join(', ')}</Text>}
+      {parts.map((p) => (
+        <Checkbox.Item
+          key={p.key}
+          label={`${p.label} korunsun (${p.hint})`}
+          status={state.keepOld.includes(p.key) ? 'checked' : 'unchecked'}
+          onPress={() => onChange((s) => toggleKeepOld(s, p.key))}
+          mode="android"
+          position="leading"
+          labelStyle={styles.checkLabel}
+          style={styles.checkRow}
+          testID={`tanit-eski-${p.key}`}
+        />
+      ))}
+      <Text style={styles.hint}>Önizleme, kaydedilecek şablonun tam hâlidir.</Text>
+    </Section>
+  );
+}
+
+export default function TeachPanel({ state, words, onChange, old }: Props) {
   return (
     <View style={styles.panel} testID="tanit-panel">
+      {old && <KeepOld state={state} old={old} onChange={onChange} />}
       <ModalTextInput
         label="Belge tipinin adı"
         mode="outlined"

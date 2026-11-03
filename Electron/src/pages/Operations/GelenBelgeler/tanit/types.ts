@@ -31,6 +31,8 @@ export interface SuggestBody {
   identifiers: string[];
   table?: { columns: Array<{ key: string; header: string }>; totalsLabel?: string | null };
   sectionStartLabel?: string | null;
+  /** Güncelle kipi: sunucu bu kullanıcı şablonuyla birleştirip önizler; dönen `template` aynen kaydedilir. */
+  base?: { code: string; keep: Array<"tables" | "sections"> };
 }
 
 export interface SuggestPreview {

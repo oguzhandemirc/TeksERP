@@ -12,13 +12,15 @@ import { inboundDocService, type InboundNoteDetail } from '../../../../services/
 import { colors, radius, spacing, typography } from '../../../../theme';
 import { isUnrecognized, teachPages } from './teachPages';
 import TeachModal from './TeachModal';
+import { USER_TEMPLATES_PREFIX } from './useTeachModal';
 
 interface Props {
   detail: InboundNoteDetail | undefined;
   localPages: readonly { sha256: string; uri: string }[];
 }
 
-export const USER_TEMPLATES_KEY = ['gelen-belge', 'sablonlar', 'ozel'] as const;
+// Liste anahtarı detay anahtarlarının öneki — kayıt sonrası tek invalidate ikisini tazeler (useTeachModal).
+export const USER_TEMPLATES_KEY = USER_TEMPLATES_PREFIX;
 
 export default function TeachEntry({ detail, localPages }: Props) {
   const tablet = useDeviceType() === 'tablet';

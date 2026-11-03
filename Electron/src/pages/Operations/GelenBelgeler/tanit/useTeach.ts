@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { INCOMING_DOCUMENT_QUERY_KEY } from "../service";
 import { createUserTemplate, getScanWords, suggestTemplate, TEACH_QUERY_KEY, updateUserTemplate } from "./service";
-import { initialTeach, mergeForUpdate, suggestBody, teachProblems, templateKeywords, type TeachState } from "./teachDraft";
+import { initialTeach, oldParts, suggestBody, teachProblems, templateKeywords, type TeachState } from "./teachDraft";
 import type { UserTemplateDetail } from "./types";
 
 export function useTeach(scanId: string | null, existing: UserTemplateDetail | null, onSaved: () => void) {
@@ -15,9 +15,9 @@ export function useTeach(scanId: string | null, existing: UserTemplateDetail | n
   const [state, setState] = useState<TeachState | null>(null);
   // Sayfa değişince işaretleme o sayfanın kelimeleriyle yeniden başlar (kutu indeksleri sayfaya özgü).
   useEffect(() => {
-    if (words.data) setState(initialTeach(words.data, existing?.name ?? "", templateKeywords(existing?.template)));
+    if (words.data) setState(initialTeach(words.data, existing?.name ?? "", templateKeywords(existing?.template), oldParts(existing?.template)));
   }, [words.data, existing]);
-  const body = useMemo(() => (state && scanId && words.data ? suggestBody(state, words.data.words, scanId) : null), [state, scanId, words.data]);
+  const body = useMemo(() => (state && scanId && words.data ? suggestBody(state, words.data.words, scanId, existing?.code ?? null) : null), [state, scanId, words.data, existing?.code]);
   const bodyKey = body ? JSON.stringify(body) : "";
   const preview = useMutation({ mutationFn: suggestTemplate });
   const previewFresh = Boolean(preview.data && preview.variables && JSON.stringify(preview.variables) === bodyKey);
@@ -25,7 +25,8 @@ export function useTeach(scanId: string | null, existing: UserTemplateDetail | n
     mutationFn: async () => {
       const r = preview.data;
       if (!r || !state) throw new Error("Önce önizleyin.");
-      if (existing) return updateUserTemplate(existing.code, { expectedVersion: existing.version, template: mergeForUpdate(existing.template, r.template), name: state.name.trim() });
+      // Güncelle kipinde önizleme sunucuda birleşik şablonla koştu (`base`) — önizlenen şablon aynen kaydedilir.
+      if (existing) return updateUserTemplate(existing.code, { expectedVersion: existing.version, template: r.template, name: state.name.trim() });
       return createUserTemplate({ name: state.name.trim(), template: r.template, clientToken: attempt.token() });
     },
     onError: (e) => attempt.onFailure(e),

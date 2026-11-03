@@ -113,7 +113,7 @@ export default function TeachModal({ visible, pages, code, onDismiss }: Props) {
           <View style={styles.body}>
             <ScanPane key={page.scanId} uri={page.uri} scan={t.words.data} state={t.state} width={scanWidth} onToggle={(i) => t.setState((s) => toggleWord(s, i))} />
             <ScrollView style={styles.side} contentContainerStyle={styles.sideBody} keyboardShouldPersistTaps="handled">
-              <TeachPanel state={t.state} words={t.words.data.words} onChange={t.setState} />
+              <TeachPanel state={t.state} words={t.words.data.words} onChange={t.setState} old={t.existing?.template ?? null} />
               {t.problems.length > 0 && (
                 <View testID="tanit-eksikler">
                   {t.problems.map((p) => (
