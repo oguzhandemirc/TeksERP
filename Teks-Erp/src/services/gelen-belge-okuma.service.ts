@@ -15,6 +15,8 @@ import { AuditService } from "./audit.service";
 import { nextNoteNo, translateUnique } from "./gelen-belge-note.service";
 import { buildDraft, fillBoundDraftTx, lineRows } from "./gelen-belge-taslak-doldur.service";
 import { PDF_MIME } from "./gelen-belge-scan.service";
+import { readDuplicateDocNoMode } from "./system-setting.service";
+import { lockDocNosTx } from "./helpers/gelen-belge-mukerrer.helper";
 
 export const READ_MAX_ATTEMPTS = 3;
 /** READING'de bu kadar kalan tarama (süreç düşmüş) yeniden PENDING sayılır. */
@@ -84,7 +86,10 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
 
   if (scan.noteId) {
     const noteId = scan.noteId;
+    const dupMode = await readDuplicateDocNoMode();
     const res = await prisma.$transaction(async (tx) => {
+      // K27 BLOCK: boş belge no bu okumadan dolabilir → 8044 kilidi tx'in İLK ifadesi.
+      await lockDocNosTx(tx, dupMode, [headerCols.senderDocNo]);
       const claimed = await tx.customerDeliveryNote.updateMany({ where: { id: noteId, status: "DRAFT" }, data: { updatedAt: new Date() } });
       if (claimed.count === 0) {
         // Taslak artık DRAFT değil (onay/iptal): veri yalnız zarfta kalır, tarama yine READ'e kapanır — READING'de kalıp bayat döngüye girmez.

@@ -7,17 +7,9 @@ import type { DocumentTotalCheckSettings, LineProblem, TotalsCheck } from "./rev
 import type { EntryModeSettings, PartiMetreDetailFields, PartiMetrePatch, PartiMetreHeaderFields, SenderTemplateBatchNoFields } from "./partiMetreTypes";
 export type { AutoWorkOrderPatternlessMode, IncomingDocFormApproval, BatchNoCandidate, BatchNoCandidateKind, BatchNumberSourceMode, IncomingDocEntryMode, KursunMeterCandidates, KursunMetersSource, PerDocumentGate, SenderTemplateBatchNoCandidate } from "./partiMetreTypes";
 export type { DocumentTotalCheckMode, LineProblem, TotalsCheck } from "./reviewTypes";
+import type { DuplicateDocNoDetailFields, DuplicateDocNoSettings } from "./mukerrerTypes";
 
-export type {
-  AutoWorkOrderGroup,
-  AutoWorkOrderResult,
-  ChoiceProperty,
-  PlanGroup,
-  PlanRoll,
-  PlanTarget,
-  ProcessValuePage,
-  WorkOrderPlan,
-} from "./workOrderTypes";
+export type { AutoWorkOrderGroup, AutoWorkOrderResult, ChoiceProperty, PlanGroup, PlanRoll, PlanTarget, ProcessValuePage, WorkOrderPlan } from "./workOrderTypes";
 
 export const NOTE_STATUSES = ["DRAFT", "APPROVING", "APPROVED", "PARTIAL", "CANCELLED"] as const;
 export type NoteStatus = (typeof NOTE_STATUSES)[number];
@@ -126,7 +118,7 @@ export interface DocumentScanInfo {
   attempts: number;
 }
 
-export interface DeliveryNoteDetail extends DeliveryNoteHeader, PartiMetreDetailFields {
+export interface DeliveryNoteDetail extends DeliveryNoteHeader, PartiMetreDetailFields, DuplicateDocNoDetailFields {
   lines: DeliveryNoteLine[];
   scans: DocumentScanInfo[];
   /** D4-I3: sahibin İŞ KABULÜ kapsamlı aktif cari kilidi (metin sunucudan); eski backend göndermez. */
@@ -305,7 +297,7 @@ export type HeaderPatch = Partial<
 export type UnreviewedApproval = "WARN" | "BLOCK_SUSPECT" | "BLOCK";
 /** Tablosuz belgede satır metresi kaynağı — backend `HeaderLineMeterSource` aynası. */
 export type HeaderLineMeterSource = "OUTPUT" | "INPUT";
-export interface IncomingDocumentSettings extends DocumentTotalCheckSettings, EntryModeSettings {
+export interface IncomingDocumentSettings extends DocumentTotalCheckSettings, EntryModeSettings, DuplicateDocNoSettings {
   /** Ürünü seçilmemiş satırın onayda doğacağı ürün; null = ayar boş (bugünkü: satır ürün ister). */
   defaultItem: { id: string; code: string; name: string; problem: string | null } | null;
   unreviewedApproval: UnreviewedApproval;

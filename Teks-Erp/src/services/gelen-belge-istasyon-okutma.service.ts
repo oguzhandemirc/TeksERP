@@ -20,6 +20,7 @@ import { decodeScanUpload, PDF_MIME } from "./gelen-belge-scan.service";
 import { extractDraft, ocrFromEnvelope } from "./gelen-belge-taslak-doldur.service";
 import { readIncomingDocStationLookup, readProductionEnabled, SETTING_KEYS } from "./system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
+import { latestScanBySha, NOTE_WORK_ONGOING_WHERE } from "./helpers/gelen-belge-mukerrer.helper";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
 /** Yanıt tavanı — tablet listesi; daha fazlası belge no'nun yanlış okunduğunu gösterir. */
@@ -87,9 +88,9 @@ async function photoLookup(contentBase64: string, sha256: string | null): Promis
     throw AppError.badRequest("PDF belge okunmaz; belgenin fotoğrafını çekin.", { code: "DOCUMENT_SCAN_PDF_NOT_READABLE" });
   }
   // Aynı fotoğraf daha önce yüklendiyse OCR koşmaz (okuma belirlenimli değil; aynı bayt aynı belgedir).
-  const known = await prisma.documentScan.findUnique({
-    where: { sha256: upload.sha256 },
-    select: { ocrResult: true, note: { select: { id: true, status: true, senderDocNo: true, ownerText: true, senderText: true } } },
+  // sha256 UNIQUE değil (K27): en yeni tarama TEK helper'dan.
+  const known = await latestScanBySha(prisma, upload.sha256, {
+    ocrResult: true, note: { select: { id: true, status: true, senderDocNo: true, ownerText: true, senderText: true } },
   });
   if (known?.note && LOOKUP_NOTE_STATUSES.includes(known.note.status)) {
     const notes = await loadNotes({ id: known.note.id });
@@ -115,7 +116,7 @@ async function photoLookup(contentBase64: string, sha256: string | null): Promis
   const docNo = header.senderDocNo?.trim();
   if (!docNo) return finish({ source, read, notes: [], workOrders: [], noteCount: null, noDocNo: true });
   const templateCode = header.regions[0]?.templateId ?? null;
-  const notes = narrowNotes(await loadNotes({ senderDocNo: { equals: docNo, mode: "insensitive" } }), read, await templateSenderId(templateCode));
+  const notes = narrowNotes(await loadDocNoNotes(docNo), read, await templateSenderId(templateCode));
   return finish({ source, read, notes, ...(await workOrdersOfNotes(notes)), noteCount: notes.length });
 }
 
@@ -123,7 +124,7 @@ const NOTE_SELECT = {
   id: true, noteNo: true, senderDocNo: true, ownerText: true, senderText: true, senderCustomerId: true,
   ownerCustomer: { select: { name: true } }, senderCustomer: { select: { name: true } },
 } satisfies Prisma.CustomerDeliveryNoteSelect;
-type NoteRow = Prisma.CustomerDeliveryNoteGetPayload<{ select: typeof NOTE_SELECT }>;
+export type NoteRow = Prisma.CustomerDeliveryNoteGetPayload<{ select: typeof NOTE_SELECT }>;
 
 function loadNotes(where: Prisma.CustomerDeliveryNoteWhereInput): Promise<NoteRow[]> {
   return prisma.customerDeliveryNote.findMany({
@@ -132,6 +133,16 @@ function loadNotes(where: Prisma.CustomerDeliveryNoteWhereInput): Promise<NoteRo
     orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     take: MAX_WORK_ORDERS,
   });
+}
+
+/**
+ * Belge no'lu belgeler: İŞİ SÜRENLER varsa yalnız onlar (K27 — boyahane no'yu yeniden kullanır, bitmiş belge tavanı
+ * doldurmaz); hiç yoksa bugünkü küme (kapanmış iş emri cümlesi korunur).
+ */
+export async function loadDocNoNotes(docNo: string): Promise<NoteRow[]> {
+  const byNo: Prisma.CustomerDeliveryNoteWhereInput = { senderDocNo: { equals: docNo, mode: "insensitive" } };
+  const ongoing = await loadNotes({ AND: [byNo, NOTE_WORK_ONGOING_WHERE] });
+  return ongoing.length > 0 ? ongoing : loadNotes(byNo);
 }
 
 async function templateSenderId(code: string | null): Promise<string | null> {

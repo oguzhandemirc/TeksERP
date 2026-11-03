@@ -5,17 +5,20 @@
 // Tür beyana değil SİHİRLİ BAYTA bakılarak belirlenir (`certificate-file.service` ile aynı
 // tespit — iki yerde imza listesi yazılmaz). Sınır 5 MB (DB CHECK `document_scans_size_ck` ikizi).
 // Aynı fotoğraf (sha256) ikinci kez YAZILMAZ: mevcut kayıt döner (`duplicate: true`) — tabletin
-// ağ kopmasında yeniden gönderdiği fotoğraf ikinci tarama üretmez. Baytlar ve ham OCR metni
+// ağ kopmasında yeniden gönderdiği fotoğraf ikinci tarama üretmez. K27 (WARN/ALLOW): en yeni kaydın belgesi
+// bitmişse (iptal / onaylı + canlı top yok) YENİ kayıt doğar, eski belge fotoğrafını korur (8045 kilidi altında). Baytlar ve ham OCR metni
 // audit/log yüküne GİRMEZ — yalnız künye. OCR okuma işi D3b'de (status PENDING → READING).
 // =============================================================================
 import { createHash } from "crypto";
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { detectCertificateMime } from "./certificate-file.service";
 import { convertHeicToJpeg, isHeic } from "../lib/gelen-belge/heic";
 import { applyStoredReadsTx, auditPhotoSource, auditStoredReads, markPhotoSourceTx, prepareStoredReads } from "./gelen-belge-taslak-doldur.service";
+import { readDuplicateDocNoMode } from "./system-setting.service";
+import { latestScanBySha, lockDocNosTx, lockScanShaTx, scanNeedsFreshRecord } from "./helpers/gelen-belge-mukerrer.helper";
 
 export const DOCUMENT_SCAN_MAX_BYTES = 5 * 1024 * 1024;
 /** PDF arşivdir (K6): okuma kuyruğuna girmez, sidecar'a gitmez — claim süzgeci ve okut ucu bunu okur. */
@@ -90,7 +93,10 @@ async function reuseExisting(existing: ScanRow, noteId: string | null | undefine
   if (!noteId || existing.noteId === noteId) return { scan: existing, duplicate: true, boundTo: existing.noteId };
   const plans = await prepareStoredReads([existing.id], userId);
   const photo = existing.mimeType !== PDF_MIME;
+  const dupMode = await readDuplicateDocNoMode();
   const { restored, sourceMarked } = await prisma.$transaction(async (tx) => {
+    // K27 BLOCK: saklı okuma boş belge no'yu doldurabilir → 8044 kilidi tx'in İLK ifadesi.
+    await lockDocNosTx(tx, dupMode, plans.map((p) => p.built?.headerCols.senderDocNo));
     await claimDraftTx(tx, noteId, userId);
     const bound = await tx.documentScan.updateMany({ where: { id: existing.id, noteId: null }, data: { noteId } });
     if (bound.count === 0) throw AppError.conflict("Bu fotoğraf bu arada başka bir taslağa bağlandı.", { code: "DOCUMENT_SCAN_NOT_FREE" });
@@ -133,8 +139,7 @@ export async function decodeScanUpload(contentBase64: string, clientSha256?: str
 export async function uploadDocumentScan(input: DocumentScanInput, userId: string) {
   const { content, mime, sha256, heicSourceBytes } = await decodeScanUpload(input.contentBase64, input.sha256);
   const kind = { mime };
-  const existing = await prisma.documentScan.findUnique({ where: { sha256 }, select: SCAN_SELECT });
-  if (existing) return reuseExisting(existing, input.noteId, userId);
+  const mode = await readDuplicateDocNoMode();
   const data = {
     noteId: input.noteId ?? null,
     pageNo: input.pageNo ?? 1,
@@ -147,27 +152,23 @@ export async function uploadDocumentScan(input: DocumentScanInput, userId: strin
     // K6: PDF doğrudan READ_FAILED (deneme 0) — PENDING'de kalsa "kuyrukta" sayılır ve hiç bitmezdi; enum değişmez.
     ...(kind.mime === PDF_MIME ? { status: "READ_FAILED" as const } : {}),
   };
-  let created;
-  try {
-    // Taslağa bağlanıyorsa claim + create aynı tx'te (TOCTOU yok); serbest taramada tx'e gerek yok.
-    created = await prisma.$transaction(async (tx) => {
-      if (input.noteId) await claimDraftTx(tx, input.noteId, userId);
-      const row = await tx.documentScan.create({ data: { ...data, content: new Uint8Array(content) }, select: SCAN_SELECT });
-      const marked = input.noteId && kind.mime !== PDF_MIME ? await markPhotoSourceTx(tx, input.noteId) : false;
-      return { row, marked };
-    });
-  } catch (err) {
-    // Eşzamanlı aynı yükleme: kaybeden mevcut kaydı alır (unique seddi).
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-      const again = await prisma.documentScan.findUnique({ where: { sha256 }, select: SCAN_SELECT });
-      if (again) return reuseExisting(again, input.noteId, userId);
-    }
-    throw err;
-  }
+  // 8045 kilidi tx'in İLK ifadesi: eşzamanlı aynı yükleme sıraya girer, kaybeden kazananın kaydını yeniden kullanır
+  // (sha256 artık UNIQUE değil). Taslağa bağlanıyorsa claim + create aynı tx'te (TOCTOU yok).
+  const created = await prisma.$transaction(async (tx) => {
+    await lockScanShaTx(tx, sha256);
+    const existing = await latestScanBySha(tx, sha256, SCAN_SELECT);
+    if (existing && !(await scanNeedsFreshRecord(tx, existing, mode))) return { kind: "REUSE" as const, existing };
+    if (input.noteId) await claimDraftTx(tx, input.noteId, userId);
+    const row = await tx.documentScan.create({ data: { ...data, content: new Uint8Array(content) }, select: SCAN_SELECT });
+    const marked = input.noteId && kind.mime !== PDF_MIME ? await markPhotoSourceTx(tx, input.noteId) : false;
+    return { kind: "NEW" as const, row, marked, previousScanId: existing?.id ?? null };
+  });
+  if (created.kind === "REUSE") return reuseExisting(created.existing, input.noteId, userId);
   const scan = created.row;
   if (created.marked && input.noteId) await auditPhotoSource(input.noteId, userId);
   // HEIC'ten dönüşen kaydın künyesi kaynak türü/boyunu da taşır (bayt yok).
-  const auditData = heicSourceBytes !== null ? { ...data, convertedFrom: "image/heic", sourceSizeBytes: heicSourceBytes } : data;
+  const base = created.previousScanId ? { ...data, previousScanId: created.previousScanId, reason: "PREVIOUS_NOTE_FINISHED" } : data;
+  const auditData = heicSourceBytes !== null ? { ...base, convertedFrom: "image/heic", sourceSizeBytes: heicSourceBytes } : base;
   await AuditService.log({ userId, action: "CREATE", tableName: AUDIT_TABLE, recordId: scan.id, newData: auditData });
   return { scan, duplicate: false, boundTo: scan.noteId };
 }
