@@ -18,6 +18,7 @@ import { KunyeCard } from "./detail-v3/KunyeCard";
 import { RouteStepline } from "./detail-v3/RouteStepline";
 import { ProducedV3 } from "./detail-v3/ProducedV3";
 import { OrderLinksV3 } from "./detail-v3/OrderLinksV3";
+import { SourceDocsV3 } from "./detail-v3/SourceDocsV3";
 import "./detail-v3/work-order-detail-v3.css";
 import { TERIM } from "@/lib/terim";
 
@@ -112,6 +113,8 @@ export function WorkOrderDetailPage() {
                   </div>
                 </V3Section>
               )}
+              <SourceDocsV3 workOrderId={wo.id} />
+
               {sortedSteps.length > 0 && (
                 <V3Section title="Rota & Dağılım" active={wipSteps.length > 0}>
                   <RouteStepline steps={sortedSteps} />

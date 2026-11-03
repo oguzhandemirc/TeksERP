@@ -179,3 +179,22 @@ describe('DeskView — kip ve dönüş', () => {
     expect(bodyOf(1).clientToken).toBe(bodyOf(0).clientToken);
   });
 });
+
+// K27 WARN + WITH_WORK_ORDER (Gülkesim asıl yolu): "İş emri oluştur" 409 ACTIVE → soru diyaloğu; "Yine de onayla"
+// gövdeye confirmDuplicateDocNo ekleyip yeniden gönderir, İE açılınca kameraya döner.
+// Negatif sonda (2026-11-03): useWoRows'ta bayrak gövdeye eklenmeyince bu test ❌; geri alındı.
+describe('DeskView — aynı belge no (K27)', () => {
+  it('⭐ 409 ACTIVE → diyalog; "Yine de onayla" bayrakla ikinci istek, kameraya dönüş', async () => {
+    const dup = Object.assign(new Error('Aynı belge no'), { status: 409, details: { code: 'DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE', senderDocNo: '17', peers: [{ id: 'p1', noteNo: 'GB-0007', status: 'APPROVED', workOrderNumbers: ['IE-12'] }] } });
+    mockCreate.mockRejectedValueOnce(dup).mockResolvedValueOnce(opened('IE-13'));
+    const s = renderWithNote();
+    await waitFor(() => expect(s.getByTestId('masa-olustur')).not.toBeDisabled());
+    fireEvent.press(s.getByTestId('masa-olustur'));
+    expect(await s.findByText(/Bu belge no \(17\) GB-0007 olarak zaten kayıtlı/)).toBeTruthy();
+    expect(mockCreate.mock.calls[0][1]).not.toHaveProperty('confirmDuplicateDocNo');
+    mockDone = null;
+    fireEvent.press(s.getByText('Yine de onayla'));
+    await waitFor(() => expect(s.getByTestId('masa-kamera').props.children).toBe('son:IE-13'));
+    expect(mockCreate.mock.calls[1]).toEqual(['n1', expect.objectContaining({ confirmDuplicateDocNo: true })]);
+  });
+});

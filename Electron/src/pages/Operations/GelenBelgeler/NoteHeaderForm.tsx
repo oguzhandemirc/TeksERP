@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { SuggestionChips } from "./SuggestionChips";
+import { retentionDocNoWarning } from "./photoRetention";
 import type { DeliveryNoteDetail, HeaderPatch, NoteMatchSuggestions } from "./types";
 
 interface Props {
@@ -24,6 +25,8 @@ const TEXT_FIELDS: Array<{ key: TextKey; label: string; max: number }> = [
 ];
 
 export function NoteHeaderForm({ note, suggestions, editable, onPatch }: Props) {
+  // K28: fotoğraf onaydan sonra küçülür/silinir → belge no'yu şimdi kontrol ettir (yalnız düzenlenebilir taslakta).
+  const docNoWarning = editable ? retentionDocNoWarning(note.photoRetention) : null;
   const blurText = (key: TextKey, v: string) => {
     const next = v.trim() || null;
     if (next !== (note[key] ?? null)) onPatch({ [key]: next });
@@ -48,7 +51,18 @@ export function NoteHeaderForm({ note, suggestions, editable, onPatch }: Props) 
       {TEXT_FIELDS.map((f) => (
         <div key={`${f.key}:${note.updatedAt}`} className="flex min-w-0 flex-col gap-1">
           <Label>{f.label}</Label>
-          <Input defaultValue={note[f.key] ?? ""} maxLength={f.max} aria-label={f.label} disabled={!editable} onBlur={(e) => blurText(f.key, e.target.value)} />
+          <Input
+            defaultValue={note[f.key] ?? ""}
+            maxLength={f.max}
+            aria-label={f.label}
+            disabled={!editable}
+            onBlur={(e) => blurText(f.key, e.target.value)}
+            className={f.key === "senderDocNo" && docNoWarning ? "border-amber-500 ring-2 ring-amber-400" : undefined}
+            data-highlight={f.key === "senderDocNo" && docNoWarning ? "retention" : undefined}
+          />
+          {f.key === "senderDocNo" && docNoWarning && (
+            <p className="text-xs text-amber-700 dark:text-amber-300" data-testid="docno-retention-warning">{docNoWarning}</p>
+          )}
         </div>
       ))}
       <div key={`date:${note.updatedAt}`} className="flex min-w-0 flex-col gap-1">

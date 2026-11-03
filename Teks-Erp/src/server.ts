@@ -28,7 +28,7 @@ import { startPendingDeviceExpiryScheduler } from './jobs/pending-device-expiry.
 import { startLicensePoll, stopLicensePoll } from './jobs/license-poll.job';
 import { startLicenseDoorbell, stopLicenseDoorbell } from './jobs/license-doorbell.job';
 import { startPatronCloudJobs, stopPatronCloudJobs } from './jobs/patron-cloud.jobs';
-import { startDocumentReader, stopDocumentReader } from './jobs/gelen-belge-okuma.job';
+import { startIncomingDocJobs, stopIncomingDocJobs } from './jobs/gelen-belge.jobs';
 import { startErrorReportJob, stopErrorReportJob } from './jobs/error-report.job';
 import { shutdownNotifications, startNotificationJobs } from './jobs/notification-dispatch.job';
 import { recordServerError } from './services/error-report.service';
@@ -292,7 +292,7 @@ function startLanListener(): Server {
     // Gelen belge okuma: DB kuyruğundaki taramaları sidecar'a okutur (modül + adres yoksa hiç çıkmaz, fail-closed).
     // Hata raporları: varsayılan KAPALI (onay yoksa toplanmaz/gönderilmez); doğrulama kipinde gönderim de yok.
     if (!JOBS_OFF) startPatronCloudJobs();
-    if (!JOBS_OFF) startDocumentReader();
+    if (!JOBS_OFF) startIncomingDocJobs(); // okuma kuyruğu + K28 fotoğraf saklama (FULL iken tur aday sorgusu bile atmaz)
     if (!JOBS_OFF) startErrorReportJob();
     // Bildirim dağıtıcısı + koşul tarayıcısı: gözetmen `bildirim.gelenKutusuEnabled` açıkken başlatır,
     // kapanınca durdurur (yeniden başlatma gerekmez); kapalıyken satır yazılmaz.
@@ -372,7 +372,7 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
     shutdownPhase = "lisans + bildirim zili";
     try {
         stopPatronCloudJobs();
-        stopDocumentReader();
+        stopIncomingDocJobs();
         shutdownNotifications(); // LISTEN havuza döner; SSE zilleri server.close'dan ÖNCE biter (yoksa 5 sn zorla çıkış)
         stopLicenseDoorbell();
         stopLicensePoll();

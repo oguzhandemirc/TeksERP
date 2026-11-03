@@ -438,6 +438,9 @@ export const SETTING_KEYS = {
   /** İstasyon tabletinde (kurşun · KK · tambur) "Belge okut": boyahane belgesinin fotoğrafından iş emri bulunur (K17).
    *  Varsayılan false = bugünkü (düğme yok). Tek yazar `PUT /api/gelen-belge/ayarlar`; flag yüküne konmaz. */
   GELEN_BELGE_STATION_DOC_LOOKUP: "gelenBelge.stationDocLookup",
+  /** Belge fotoğrafı saklama (K28): FULL tam sakla (varsayılan = bugünkü) | SHRINK_ON_APPROVAL | DELETE_ON_APPROVAL |
+   *  DELETE_ON_DISPATCH. Geçmiş onaylı belgelere de uygulanır (iş ayarı okur). Tek yazar `PUT /api/gelen-belge/ayarlar`. */
+  GELEN_BELGE_PHOTO_RETENTION: "gelenBelge.photoRetention",
   /** Z1 ÜRETİM BELGE ZİNCİRİ (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bugünkü davranış (bağ opsiyonel). */
   DEVERE_BEAM_WEAVING_LINK_REQUIRED: "devere.beamWeavingLinkRequired",
   DOKUMA_RUN_WEAVING_ORDER_REQUIRED: "dokuma.runWeavingOrderRequired",
@@ -6812,6 +6815,14 @@ export const DUPLICATE_DOC_NO_VALUES: readonly DuplicateDocNoMode[] = ["BLOCK", 
 export const DEFAULT_DUPLICATE_DOC_NO: DuplicateDocNoMode = "BLOCK";
 export const readDuplicateDocNoMode = (tx?: Pick<typeof prisma, "systemSetting">): Promise<DuplicateDocNoMode> =>
   readClosedSetting(SETTING_KEYS.GELEN_BELGE_DUPLICATE_DOC_NO, DUPLICATE_DOC_NO_VALUES, DEFAULT_DUPLICATE_DOC_NO, tx);
+
+/** K28 belge fotoğrafı saklama — onaydan/sevkten sonra bayt küçültülür ya da silinir; satır (sha256, okuma, künye) kalır. */
+export type PhotoRetentionMode = "FULL" | "SHRINK_ON_APPROVAL" | "DELETE_ON_APPROVAL" | "DELETE_ON_DISPATCH";
+export const PHOTO_RETENTION_VALUES: readonly PhotoRetentionMode[] = ["FULL", "SHRINK_ON_APPROVAL", "DELETE_ON_APPROVAL", "DELETE_ON_DISPATCH"];
+/** Varsayılan FULL = bugünkü davranış (fotoğraf olduğu gibi saklanır). */
+export const DEFAULT_PHOTO_RETENTION: PhotoRetentionMode = "FULL";
+export const readPhotoRetention = (tx?: Pick<typeof prisma, "systemSetting">): Promise<PhotoRetentionMode> =>
+  readClosedSetting(SETTING_KEYS.GELEN_BELGE_PHOTO_RETENTION, PHOTO_RETENTION_VALUES, DEFAULT_PHOTO_RETENTION, tx);
 
 /** İş emri açılınca refakat kartı kendiliğinden yazdırılsın mı (kayıt yok/çöp = false, bugünkü). */
 export async function readRefakatAutoPrint(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {

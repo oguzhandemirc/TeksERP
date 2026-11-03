@@ -1,5 +1,6 @@
 """FastAPI uygulaması — `GET /health`, `POST /ocr` (gövde `{imageBase64, mimeType}` → OcrResult),
-`POST /donustur` (gövde `{imageBase64}` HEIC/HEIF → DonusumSonucu, JPEG).
+`POST /donustur` (gövde `{imageBase64}` HEIC/HEIF → DonusumSonucu, JPEG),
+`POST /kucult` (gövde `{imageBase64, maxKenar, kalite}` JPEG/PNG → DonusumSonucu, küçük JPEG; K28 belge fotoğrafı saklama).
 
 Sözleşme: Teks-Erp/src/lib/gelen-belge/okuma-istemcisi.ts (readerHealth / readerOcr). Hata gövdesi
 `{"code", "message"}`; 4xx kalıcı, 5xx/504 istemcide "yeniden dene" sayılır.
@@ -21,8 +22,8 @@ from starlette.concurrency import run_in_threadpool
 
 from . import __version__
 from .config import MAX_GOVDE_BAYT, Ayarlar, ayarlari_oku, baglanti_adresi_izinli
-from .contract import DonusumIstegi, DonusumSonucu, OcrIstegi, Saglik
-from .donustur import heic_jpeg
+from .contract import DonusumIstegi, DonusumSonucu, KucultmeIstegi, OcrIstegi, Saglik
+from .donustur import KUCULT_MAX_KALITE, KUCULT_MAX_KENAR, KUCULT_MIN_KALITE, KUCULT_MIN_KENAR, heic_jpeg, kucult_jpeg
 from .goruntu import GoruntuHatasi, coz, hazirla
 from .motor import MOTOR_ADI, Motor, MotorYok
 
@@ -141,6 +142,41 @@ def uygulama_kur(ayarlar: Ayarlar | None = None, motor: Motor | None = None) -> 
             return _hata(500, "CONVERT_FAILED", "Dönüşüm başarısız.")
         sonuc = DonusumSonucu(imageBase64=base64.b64encode(jpeg).decode("ascii"), mimeType="image/jpeg", width=w, height=h)
         log.info("/donustur 200 boyut=%d cikti=%d %dx%d toplam_ms=%.0f", len(veri), len(jpeg), w, h, (time.perf_counter() - t0) * 1000)
+        return JSONResponse(sonuc.model_dump(), headers={"x-okuma-version": __version__})
+
+    @app.post("/kucult")
+    async def kucult(request: Request) -> JSONResponse:
+        # K28: onaydan sonra saklanan fotoğraf küçültülür. OCR motoruna/kilidine girmez; ayar sınırı dışı 400.
+        t0 = time.perf_counter()
+        govde = bytearray()
+        async for parca in request.stream():
+            govde.extend(parca)
+            if len(govde) > MAX_GOVDE_BAYT:
+                return _hata(413, "IMAGE_TOO_LARGE", "Görüntü 5 MB sınırını aşıyor.")
+        try:
+            istek = KucultmeIstegi.model_validate(json.loads(govde))
+        except (ValueError, TypeError):
+            return _hata(400, "INVALID_BODY", "Gövde {imageBase64, maxKenar, kalite} JSON'u olmalı.")
+        if not (KUCULT_MIN_KENAR <= istek.maxKenar <= KUCULT_MAX_KENAR and KUCULT_MIN_KALITE <= istek.kalite <= KUCULT_MAX_KALITE):
+            return _hata(400, "INVALID_SHRINK_OPTIONS", "maxKenar 400–4000, kalite 30–95 olmalı.")
+        b64 = istek.imageBase64.split(",", 1)[1] if istek.imageBase64.startswith("data:") and "," in istek.imageBase64 else istek.imageBase64
+        try:
+            veri = base64.b64decode(b64, validate=True)
+        except (binascii.Error, ValueError):
+            return _hata(400, "INVALID_BASE64", "imageBase64 çözülemedi.")
+        try:
+            jpeg, w, h = await asyncio.wait_for(run_in_threadpool(kucult_jpeg, veri, istek.maxKenar, istek.kalite), timeout=ay.zaman_asimi_s)
+        except GoruntuHatasi as exc:
+            log.info("/kucult %d %s boyut=%d", exc.durum, exc.kod, len(veri))
+            return _hata(exc.durum, exc.kod, exc.mesaj)
+        except (TimeoutError, asyncio.TimeoutError):
+            log.warning("/kucult 504 zaman aşımı %.0f s", ay.zaman_asimi_s)
+            return _hata(504, "SHRINK_TIMEOUT", "Küçültme zaman aşımına uğradı.")
+        except Exception as exc:  # noqa: BLE001 — mesaj içerik taşıyabilir; yalnız sınıf adı
+            log.error("/kucult 500 %s", type(exc).__name__)
+            return _hata(500, "SHRINK_FAILED", "Küçültme başarısız.")
+        sonuc = DonusumSonucu(imageBase64=base64.b64encode(jpeg).decode("ascii"), mimeType="image/jpeg", width=w, height=h)
+        log.info("/kucult 200 boyut=%d cikti=%d %dx%d toplam_ms=%.0f", len(veri), len(jpeg), w, h, (time.perf_counter() - t0) * 1000)
         return JSONResponse(sonuc.model_dump(), headers={"x-okuma-version": __version__})
 
     return app

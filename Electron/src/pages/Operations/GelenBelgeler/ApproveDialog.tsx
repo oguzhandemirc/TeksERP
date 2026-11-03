@@ -13,6 +13,8 @@ import { CUSTOMER_DEFAULTS_PATH } from "./paths";
 import { perDocumentPrecheck, perDocumentSummary } from "./partiMetre";
 import { DuplicateDocNoConfirm, duplicateDocNoConflict } from "./DuplicateDocNo";
 import type { DeliveryNoteHeader, DeliveryNoteLine, PerDocumentGate, ProcessChoice } from "./types";
+import type { PhotoRetentionMode } from "./photoRetentionTypes";
+import { retentionDocNoWarning } from "./photoRetention";
 import type { DuplicateDocNoNotice } from "./mukerrerTypes";
 
 interface Props {
@@ -28,6 +30,21 @@ interface Props {
   onDone: () => void;
   /** Belge başına tek kayıt (PER_DOCUMENT): satır kapıları yerine metre/parti özeti; null/undefined = bugünkü diyalog. */
   perDocument?: { note: Pick<DeliveryNoteHeader, "kursunMeters" | "ourBatchNo">; gate: PerDocumentGate } | null;
+  /** K28: saklama kipi FULL değilse belge no vurgulu + uyarı; verilmezse (eski backend) bugünkü diyalog. */
+  retention?: { docNo: string | null; mode?: PhotoRetentionMode } | null;
+}
+
+function RetentionDocNo({ retention }: { retention: Props["retention"] }) {
+  const text = retentionDocNoWarning(retention?.mode);
+  if (!retention || !text) return null;
+  return (
+    <div className="rounded border-2 border-amber-400 bg-amber-50 px-2 py-1 text-sm dark:bg-amber-950" data-testid="approve-retention-docno">
+      <p>
+        Belge no: <span className="font-semibold">{retention.docNo || "— (boş)"}</span>
+      </p>
+      <p className="text-xs text-amber-900 dark:text-amber-200">{text}</p>
+    </div>
+  );
 }
 
 const TONE_CLASS = {
@@ -106,7 +123,7 @@ function ApproveResultBody({ outcome }: { outcome: Outcome }) {
   );
 }
 
-export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun = "kurşun gramajı", open, onOpenChange, onDone, perDocument }: Props) {
+export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun = "kurşun gramajı", open, onOpenChange, onDone, perDocument, retention }: Props) {
   const [reason, setReason] = useState("");
   const [askReason, setAskReason] = useState(false);
   // Hata metni + kullanılamaz varsayılanın kaynağı (E4; müşteri ise yönetim ekranı bağlantısı çıkar).
@@ -154,7 +171,7 @@ export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun =
           <ApproveResultBody outcome={outcome} />
         ) : (
           <div className="flex flex-col gap-2">
-            {perDocument && <p className="rounded border px-2 py-1 text-sm font-medium" data-testid="approve-per-document">{perDocumentSummary(perDocument.note)}</p>}
+            <RetentionDocNo retention={retention} />{perDocument && <p className="rounded border px-2 py-1 text-sm font-medium" data-testid="approve-per-document">{perDocumentSummary(perDocument.note)}</p>}
             {pre.messages.length > 0 && (
               <ul className="flex flex-col gap-1" data-testid="approve-precheck" data-blocked={pre.blocked ? "1" : "0"}>
                 {pre.messages.map((m) => (

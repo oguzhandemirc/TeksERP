@@ -8,6 +8,8 @@
 //      eşi yazarken ikinci oluşturma bekler ve 409 alır · iki eşzamanlı oluşturmadan tam biri geçer
 //   §3 WARN: eş taslak yazılır · ⭐ aktif eşte detay şeridi + onay 409 DUPLICATE_DOC_NO_ACTIVE (peers: GB no + İE no) ·
 //      ⭐ onay bayrağıyla geçer (uyarı satırı) · bitmiş / iptal eşte şerit yok, onay sessiz geçer
+//   §3b WARN + formApproval=WITH_WORK_ORDER (Gülkesim asıl yolu, `createWorkOrderFromNote`): ⭐ bayraksız 409
+//      DUPLICATE_DOC_NO_ACTIVE (belge DRAFT, İE yok) · ⭐ confirmDuplicateDocNo ile İE açılır
 //   §4 ALLOW: aktif eşe rağmen şerit yok, onay bayraksız geçer
 //   §5 sha256 (WARN): ⭐ aktif bağlamda ağ tekrarı AYNI kayıt · ⭐ bitmiş belgenin fotoğrafı YENİ kayıt, eski belgenin
 //      fotoğrafı yerinde · iptal belgede de yeni kayıt · BLOCK'ta bitmiş belgenin fotoğrafı bugünkü gibi yeniden kullanılır
@@ -21,6 +23,7 @@ import prisma from "../src/lib/prisma";
 import { AppError } from "../src/utils/app-error";
 import { createDeliveryNote, getDeliveryNote, updateDeliveryNote } from "../src/services/gelen-belge-note.service";
 import { approveDeliveryNote } from "../src/services/gelen-belge-onay.service";
+import { createWorkOrderFromNote } from "../src/services/gelen-belge-form-is-emri.service";
 import { cancelDeliveryNote } from "../src/services/gelen-belge-iptal.service";
 import { uploadDocumentScan } from "../src/services/gelen-belge-scan.service";
 import { loadDocNoNotes } from "../src/services/gelen-belge-istasyon-okutma.service";
@@ -45,7 +48,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 
 const TAG = `TST-GBM${Date.now().toString(36).toUpperCase()}Z`;
 const MODE_KEY = SETTING_KEYS.GELEN_BELGE_DUPLICATE_DOC_NO;
-const SETTINGS = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, MODE_KEY];
+const SETTINGS = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, MODE_KEY, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID];
 const made = { notes: [] as string[], items: [] as string[], customers: [] as string[], routes: [] as string[], stations: [] as string[], scans: [] as string[], wos: [] as string[] };
 const svc = new WorkOrderService();
 let seq = 0;
@@ -246,6 +249,27 @@ async function scenarioWarn(fx: Fx): Promise<void> {
   check("§3 eş yokken onay geçer", e4 === null, JSON.stringify(e4));
 }
 
+async function scenarioWarnFormWorkOrder(fx: Fx): Promise<void> {
+  console.log("§3b WARN + iş emri formundan kayıt (WITH_WORK_ORDER)");
+  await setMode("WARN");
+  for (const [k, v] of [[SETTING_KEYS.PRODUCTION_ENABLED, true], [SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, "WITH_WORK_ORDER"], [SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, fx.fabric]] as const) {
+    await prisma.systemSetting.upsert({ where: { key: k }, create: { key: k, value: v }, update: { value: v } });
+  }
+  const x = docNo("F1");
+  const a = await approved(fx, x);
+  const b = await draft(fx, x);
+  const actor = { userId: fx.actorId, permissions: ["workorder:write"] };
+  const input = { clientToken: crypto.randomUUID(), ownerCustomerId: fx.owner, kursunMeters: 50, routeTemplateId: fx.route };
+  const e1 = await errorOf(() => createWorkOrderFromNote(b.id, input, actor));
+  check("§3b ⭐ bayraksız form kaydı → 409 DUPLICATE_DOC_NO_ACTIVE", e1?.status === 409 && e1.code === "DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE" && !!e1.peers?.some((p) => p.noteNo === a.noteNo), JSON.stringify(e1));
+  const st = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: b.id }, select: { status: true } });
+  const none = (await rollsOf(b.id)).length;
+  check("§3b reddedilen kayıt: belge DRAFT, top/İE yok", st.status === "DRAFT" && none === 0, `${st.status} ${none}`);
+  const r = await createWorkOrderFromNote(b.id, { ...input, confirmDuplicateDocNo: true }, actor);
+  made.wos.push(r.workOrderId);
+  check("§3b ⭐ confirmDuplicateDocNo ile İE açılır", !!r.workOrderId && r.warnings.some((w) => w.includes(a.noteNo)), JSON.stringify(r.warnings));
+}
+
 async function scenarioAllow(fx: Fx): Promise<void> {
   console.log("§4 ALLOW");
   await setMode("ALLOW");
@@ -354,6 +378,7 @@ async function main(): Promise<void> {
     await scenarioHelper(fx);
     await scenarioBlock(fx);
     await scenarioWarn(fx);
+    await scenarioWarnFormWorkOrder(fx);
     await scenarioAllow(fx);
     await scenarioSha(fx);
     await scenarioStation(fx);

@@ -21,6 +21,7 @@
 //   · `gelenBelge.duplicateDocNo` — BLOCK (varsayılan, sahip + belge no tek) | WARN (işi süren eşte onay 409 + onay bayrağı) | ALLOW (K27)
 //   · `production.refakatAutoPrint` — iş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır (varsayılan false)
 //   · `gelenBelge.stationDocLookup` — istasyon tabletinde "Belge okut" ile iş emri bulma (K17; varsayılan false)
+//   · `gelenBelge.photoRetention` — belge fotoğrafı saklama (K28): FULL (varsayılan) | onayda küçült/sil | sevkte sil
 // Ürün kapısı tek karar: yaşam döngüsü `assertItemUsable(NEW_STOCK)` + top doğurabilen tür ALLOWLIST'i
 // (`ROLL_BEARING_ITEM_TYPES`; yeni tür — ör. SERVICE — eklendiği gün kendiliğinden dışarıda kalır).
 // =============================================================================
@@ -82,31 +83,17 @@ import {
   type DuplicateDocNoMode,
   readRefakatAutoPrint,
   readIncomingDocStationLookup,
+  readPhotoRetention,
+  DEFAULT_PHOTO_RETENTION,
+  PHOTO_RETENTION_VALUES,
+  type PhotoRetentionMode,
 } from "./system-setting.service";
 
 /** Top doğurabilen ürün türleri — `InventoryService.createInitialEntry` kapısıyla aynı küme (yalnız kumaş). */
 export const ROLL_BEARING_ITEM_TYPES: readonly ItemType[] = [ItemType.FABRIC];
 
-/** Ham ayar ucunun yazamadığı anahtarlar (kendi doğrulamalı ucu var). */
-export const INCOMING_DOC_DEDICATED_SETTING_KEYS: ReadonlySet<string> = new Set([
-  SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID,
-  SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL,
-  SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER,
-  SETTING_KEYS.GELEN_BELGE_DEFAULT_ROUTE_ID,
-  SETTING_KEYS.GELEN_BELGE_ROUTE_PRIORITY,
-  SETTING_KEYS.GELEN_BELGE_OUTLIER_FACTOR,
-  SETTING_KEYS.GELEN_BELGE_HEADER_LINE_SOURCE,
-  SETTING_KEYS.GELEN_BELGE_AUTO_SENDER,
-  SETTING_KEYS.GELEN_BELGE_DOCUMENT_TOTAL_CHECK,
-  SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE,
-  SETTING_KEYS.GELEN_BELGE_ENTRY_MODE,
-  SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS,
-  SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL,
-  SETTING_KEYS.GELEN_BELGE_MULTI_PARTY_WORK_ORDER,
-  SETTING_KEYS.GELEN_BELGE_DUPLICATE_DOC_NO,
-  SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT,
-  SETTING_KEYS.GELEN_BELGE_STATION_DOC_LOOKUP,
-]);
+// Ham ayar ucunun yazamadığı anahtarlar ayrı dosyada (bu servis satır tavanında); içe aktaranlar buradan okur.
+export { INCOMING_DOC_DEDICATED_SETTING_KEYS } from "./gelen-belge-ayar-anahtarlari";
 
 export interface DefaultItemView {
   id: string;
@@ -159,6 +146,9 @@ export interface IncomingDocSettings {
   refakatAutoPrint: boolean;
   /** İstasyon tabletinde "Belge okut" ile iş emri bulma (varsayılan false). */
   stationDocLookup: boolean;
+  /** Belge fotoğrafı saklama (K28); geçmiş onaylı belgelere de uygulanır. */
+  photoRetention: PhotoRetentionMode;
+  defaultPhotoRetention: PhotoRetentionMode;
 }
 
 /**
@@ -224,6 +214,8 @@ export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
     defaultDuplicateDocNo: DEFAULT_DUPLICATE_DOC_NO,
     refakatAutoPrint: await readRefakatAutoPrint(),
     stationDocLookup: await readIncomingDocStationLookup(),
+    photoRetention: await readPhotoRetention(),
+    defaultPhotoRetention: DEFAULT_PHOTO_RETENTION,
   };
 }
 
@@ -248,6 +240,7 @@ export interface IncomingDocSettingsInput {
   duplicateDocNo?: DuplicateDocNoMode;
   refakatAutoPrint?: boolean;
   stationDocLookup?: boolean;
+  photoRetention?: PhotoRetentionMode;
 }
 
 /**
@@ -344,6 +337,12 @@ async function updateReadOptions(input: IncomingDocSettingsInput, userId: string
       throw AppError.badRequest("Geçersiz seçenek: OUTPUT ya da INPUT olmalı.", { code: "VALIDATION_ERROR" });
     }
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_HEADER_LINE_SOURCE, input.headerLineMeterSource, "Gelen belge: tablosuz belgede satır metresi kaynağı (OUTPUT çıkış / INPUT giriş)", userId);
+  }
+  if (input.photoRetention !== undefined) {
+    if (!PHOTO_RETENTION_VALUES.includes(input.photoRetention)) {
+      throw AppError.badRequest("Geçersiz seçenek: FULL, SHRINK_ON_APPROVAL, DELETE_ON_APPROVAL ya da DELETE_ON_DISPATCH olmalı.", { code: "VALIDATION_ERROR" });
+    }
+    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_PHOTO_RETENTION, input.photoRetention, "Gelen belge: belge fotoğrafı saklama (FULL tam / SHRINK_ON_APPROVAL onayda küçült / DELETE_ON_APPROVAL onayda sil / DELETE_ON_DISPATCH sevkte sil) — geçmiş onaylı belgelere de uygulanır", userId);
   }
   if (input.stationDocLookup !== undefined) {
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_STATION_DOC_LOOKUP, input.stationDocLookup, `Gelen belge: istasyon tabletinde belge okutarak ${TERIM.terbiyeIsEmri.tekilKucuk} bulma`, userId);

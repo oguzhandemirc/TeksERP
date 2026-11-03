@@ -140,7 +140,14 @@ export interface InboundNoteDetail {
   templateId?: string | null;
   /** Sayfa taramaları; tablet yerel fotoğrafı `sha256` ile eşler (tanıtma). */
   scans?: InboundNoteScan[];
+  /** Gönderenin basılı belge no'su (onay kartı K28 vurgusu). */
+  senderDocNo?: string | null;
+  /** K28 belge fotoğrafı saklama kipi; eski sunucu göndermez (undefined = FULL, vurgu yok). */
+  photoRetention?: PhotoRetentionMode;
 }
+
+/** Backend `PhotoRetentionMode` aynası (K28). */
+export type PhotoRetentionMode = 'FULL' | 'SHRINK_ON_APPROVAL' | 'DELETE_ON_APPROVAL' | 'DELETE_ON_DISPATCH';
 
 export interface InboundNoteScan {
   id: string;
@@ -188,6 +195,8 @@ export interface CreateWorkOrderFromNoteBody {
     stepPlanning?: { sequence: number; plannedMachineId?: string | null }[];
   }[];
   mode?: MultiPartyMode;
+  /** K27 WARN: işi süren aynı belge no'lu eşe rağmen kaydet (409 `DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE` sonrası). */
+  confirmDuplicateDocNo?: true;
 }
 
 export interface CreateWorkOrderFromNoteResult {

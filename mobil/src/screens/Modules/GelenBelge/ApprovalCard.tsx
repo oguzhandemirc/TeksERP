@@ -65,6 +65,13 @@ export default function ApprovalCard({ noteId, readDone, onDone }: Props) {
           hint={v.batch.value && v.batch.candidates.length > 1 ? `${v.batch.candidates.length} aday — değiştirmek için dokunun` : undefined}
         />
       </View>
+      {v.docNo && (
+        <View style={styles.docNo} testID="onay-karti-belge-no">
+          <Text style={styles.label}>Belge no</Text>
+          <Text style={styles.docNoValue}>{v.docNo.value ?? '— (boş)'}</Text>
+          <Text style={styles.warnText}>{v.docNo.warning}</Text>
+        </View>
+      )}
       <MeterRow v={v} busy={busy} onVerify={() => void c.patch({ kursunMetersReviewed: true })} onEdit={() => setMeterOpen(true)} />
       {v.action === 'APPROVE' && (
         <SheetField label="Rota şablonu" value={routeName} placeholder="Fabrika varsayılanı" onPress={() => setPicker('route')} disabled={busy} />
@@ -251,4 +258,6 @@ const styles = StyleSheet.create({
   chip: { minHeight: 56, justifyContent: 'center' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.sm },
   btn: { minHeight: 56 },
+  docNo: { padding: spacing.sm, borderRadius: radius.md, borderWidth: 2, borderColor: colors.warningText, backgroundColor: colors.warningContainer, gap: spacing.xs },
+  docNoValue: { fontSize: typography.size.xl, fontWeight: typography.weight.bold, color: colors.text },
 });

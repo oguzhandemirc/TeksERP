@@ -4,7 +4,7 @@
 
 import type { AutoWorkOrderResult } from "./workOrderTypes";
 import type { DocumentTotalCheckSettings, LineProblem, TotalsCheck } from "./reviewTypes";
-import type { EntryModeSettings, PartiMetreDetailFields, PartiMetrePatch, PartiMetreHeaderFields, SenderTemplateBatchNoFields } from "./partiMetreTypes";
+import type { EntryModeSettings, PartiMetreDetailFields, PartiMetrePatch, PartiMetreHeaderFields, ScanContentFields, SenderTemplateBatchNoFields } from "./partiMetreTypes";
 export type { AutoWorkOrderPatternlessMode, IncomingDocFormApproval, BatchNoCandidate, BatchNoCandidateKind, BatchNumberSourceMode, IncomingDocEntryMode, KursunMeterCandidates, KursunMetersSource, PerDocumentGate, SenderTemplateBatchNoCandidate } from "./partiMetreTypes";
 export type { DocumentTotalCheckMode, LineProblem, TotalsCheck } from "./reviewTypes";
 import type { DuplicateDocNoDetailFields, DuplicateDocNoSettings } from "./mukerrerTypes";
@@ -107,7 +107,8 @@ export interface NoteNotice {
   detail: string;
 }
 
-export interface DocumentScanInfo {
+/** `ScanContentFields`: K28 fotoğraf baytı durumu (eski backend göndermez = TAM). */
+export interface DocumentScanInfo extends ScanContentFields {
   id: string;
   noteId: string | null;
   pageNo: number;

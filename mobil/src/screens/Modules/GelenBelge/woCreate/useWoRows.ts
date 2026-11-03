@@ -11,6 +11,7 @@ import { inboundDocService, type InboundNoteDetail, type NotePartiesView } from 
 import type { ProductionRoute } from '../../../../services/route.service';
 import { printTravelerCardForWorkOrder } from '../../../../services/travelerCardPrint';
 import { kursunStepOf } from '../desk/deskPlan';
+import { duplicateDocNoConflict, type DuplicateDocNoConflict } from '../DuplicateDocNoDialog';
 import { initialMultiParty, type MultiPartyDraft } from './partyDraft';
 import { loadRecentOwners, rememberOwner } from './recentOwners';
 import {
@@ -63,6 +64,14 @@ interface SaveCtx {
   kursunSequence: number | null;
   /** Satır anahtarlı deneme token'ı (belirsiz hatada yapışır). */
   token: string;
+  /** K27 WARN: kullanıcı "Yine de onayla" dedi → gövdeye bayrak. */
+  confirmDuplicateDocNo?: boolean;
+}
+
+/** K27 WARN 409 bekleyen satır (diyalog bunu sorar). */
+export interface DuplicateRow {
+  noteId: string;
+  conflict: DuplicateDocNoConflict;
 }
 
 async function saveDraft(r: DocRow, form: RowForm, disabledByServer: boolean): Promise<RowResult> {
@@ -90,7 +99,7 @@ async function saveRowOnce(ctx: SaveCtx, r: DocRow, form: RowForm): Promise<{ re
       passThrough: ctx.passThrough,
       kursunSequence: ctx.kursunSequence,
     });
-    return { result: openedResult(await inboundDocService.createWorkOrder(r.noteId, body)) };
+    return { result: openedResult(await inboundDocService.createWorkOrder(r.noteId, ctx.confirmDuplicateDocNo ? { ...body, confirmDuplicateDocNo: true } : body)) };
   } catch (e) {
     if (!isFormApprovalDisabled(e)) return { result: { kind: 'FAILED', text: errorText(e) }, error: e };
     try {
@@ -256,11 +265,13 @@ export function useWoRows(route: ProductionRoute) {
   };
 
   const pending = rows.filter((r) => r.form && r.detail && !isDone(r));
+  // K27 WARN: işi süren aynı belge no'lu eş → satır FAILED kalır, diyalog sorar; onay yalnız o satırı bayrakla gönderir.
+  const [duplicate, setDuplicate] = useState<DuplicateRow | null>(null);
 
   /** Dönüş: bu çağrıda kaydedilen satırların sonucu (çift dokunuşta / çevrimdışıyken boş). */
-  const saveAll = async (): Promise<SavedRow[]> => {
+  const saveRows = async (targets: DocRow[], confirmNoteId: string | null): Promise<SavedRow[]> => {
     // Ref: çift dokunuşta `saving` durumu henüz güncellenmemiş olur — ikinci çağrı aynı satırı yeniden göndermesin.
-    if (savingRef.current || pending.length === 0) return [];
+    if (savingRef.current || targets.length === 0) return [];
     if (!onlineManager.isOnline()) {
       Toast.show({ type: 'error', text1: 'Sunucuya bağlantı yok', text2: 'Kayıt çevrimiçi yapılır; bağlantı gelince yeniden deneyin.' });
       return [];
@@ -272,12 +283,15 @@ export function useWoRows(route: ProductionRoute) {
     let owners = recent;
     try {
       // Sırayla: her satır ayrı tx; biri düşerse diğerleri etkilenmez, sonuç satırda kalır.
-      for (const r of pending) {
+      setDuplicate(null);
+      for (const r of targets) {
         const ptNow = passThroughFor(r.form!.ownerCustomerId);
         const passThrough = Array.isArray(ptNow) ? ptNow : await ptNow;
-        const ctx = { mode, routeId: route.id, gramajPropertyId: catalog.propertyId, passThrough, kursunSequence: kursunStepOf(route)?.sequence ?? null, token: attempt.keyed(r.noteId) };
+        const ctx = { mode, routeId: route.id, gramajPropertyId: catalog.propertyId, passThrough, kursunSequence: kursunStepOf(route)?.sequence ?? null, token: attempt.keyed(r.noteId), confirmDuplicateDocNo: r.noteId === confirmNoteId };
         const { result, error } = await saveRowOnce(ctx, r, r.form!);
         if (error !== undefined) errors.push(error);
+        const conflict = error === undefined ? null : duplicateDocNoConflict(error);
+        if (conflict) setDuplicate((d) => d ?? { noteId: r.noteId, conflict });
         setResult(r.noteId, result);
         saved.push({ noteId: r.noteId, noteNo: r.noteNo, result });
         if (result.kind !== 'FAILED' && r.form!.ownerCustomerId) owners = await rememberOwner(owners, r.form!.ownerCustomerId);
@@ -294,11 +308,17 @@ export function useWoRows(route: ProductionRoute) {
     return saved;
   };
 
+  const saveAll = (): Promise<SavedRow[]> => saveRows(pending, null);
+
   const counts = useMemo(() => rowCounts(rows, pending.length), [rows, pending.length]);
 
   return {
     rows, mode, showGramaj, catalog, saving, recent, counts, autoPrint,
     addNote, setDetail, setParties, setMulti, updateForm, removeRow, saveAll,
+    duplicate,
+    dismissDuplicate: () => setDuplicate(null),
+    /** Diyalogdaki "Yine de onayla": yalnız o satır, `confirmDuplicateDocNo: true` ile. */
+    confirmDuplicate: (): Promise<SavedRow[]> => (duplicate ? saveRows(pending.filter((r) => r.noteId === duplicate.noteId), duplicate.noteId) : Promise.resolve([])),
     print: (noteId: string, workOrderId: string) => void printFor(noteId, workOrderId),
   };
 }

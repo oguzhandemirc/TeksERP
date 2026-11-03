@@ -43,7 +43,7 @@ export const VERIFICATION_SKIPPED_JOBS = [
   "startLicenseDoorbell", // satıcı kapı zili (dışarı)
   "startPatronCloudJobs", // patron bulutu eşitlemesi + gelen kutusu (dışarı + DB yazar)
   "startErrorReportJob", // hata raporu kuyruğu + gönderim (dışarı + DB yazar)
-  "startDocumentReader", // gelen belge okuma işi: sidecar'a istek (dışarı) + taslak yazar (DB)
+  "startIncomingDocJobs", // gelen belge okuma işi (sidecar'a istek, taslak yazar) + K28 fotoğraf saklama (bayt yazar)
   "startNotificationJobs", // bildirim dağıtıcısı + koşul tarayıcısı (bayrak açıkken DB yazar)
 ] as const;
 

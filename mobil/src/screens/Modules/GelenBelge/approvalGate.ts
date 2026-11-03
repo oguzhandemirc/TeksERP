@@ -8,6 +8,7 @@ import type {
   InboundNoteDetail,
   InboundNotePatch,
   MeterCandidateValue,
+  PhotoRetentionMode,
 } from '../../../services/inboundDoc.service';
 import { fmtKursunMeters, KURSUN_SOURCE_TEXT } from './readResult';
 
@@ -38,6 +39,20 @@ export interface ApprovalCardView {
   meters: { text: string | null; review: boolean; choices: MeterChoice[] };
   /** "Doğrula" düğmesi: metre var ve gözden geçirme bekliyor. */
   canVerify: boolean;
+  /** K28: saklama kipi FULL değilse belge no vurgulu satır + uyarı; FULL/eski sunucu → null (bugünkü kart). */
+  docNo: { value: string | null; warning: string } | null;
+}
+
+const RETENTION_WHEN: Record<Exclude<PhotoRetentionMode, 'FULL'>, string> = {
+  SHRINK_ON_APPROVAL: 'Onaydan sonra fotoğraf küçültülecek',
+  DELETE_ON_APPROVAL: 'Onaydan sonra fotoğraf silinecek',
+  DELETE_ON_DISPATCH: 'Toplar sevk edilince fotoğraf silinecek',
+};
+
+/** Panel `retentionDocNoWarning` ikizi: fotoğraf onaydan sonra küçülür/silinir → belge no şimdi kontrol edilir. */
+export function retentionDocNoWarning(mode: PhotoRetentionMode | null | undefined): string | null {
+  if (!mode || mode === 'FULL') return null;
+  return `${RETENTION_WHEN[mode]} — belge no'yu kontrol edin.`;
 }
 
 const ROLE_LABEL: Record<MeterChoice['role'], string> = { output: 'Çıkış', total: 'Toplam', input: 'Giriş', lineSum: 'Satır toplamı' };
@@ -77,6 +92,10 @@ export function approvalCardView(d: InboundNoteDetail, opts: { canApprove: boole
     batch: { value: batchValue, candidates, hint: batchHint },
     meters: { text: m === null ? null : src ? `${m} m (${src})` : `${m} m`, review, choices: meterChoices(d) },
     canVerify: review,
+    docNo: (() => {
+      const warning = retentionDocNoWarning(d.photoRetention);
+      return warning ? { value: d.senderDocNo || null, warning } : null;
+    })(),
   };
   if (!opts.canApprove) {
     return {

@@ -18,6 +18,7 @@ import PagePreviewModal from '../PagePreviewModal';
 import { removePage, type ScanPage } from '../docScan';
 import { useDocScan } from '../useDocScan';
 import { usePageSource } from '../usePageSource';
+import { DuplicateDocNoDialog } from '../DuplicateDocNoDialog';
 import DocRowCard from './DocRowCard';
 import { useWoRows, type WoRowsState } from './useWoRows';
 import { shortcutTitle, type FormApproval } from './woFromDoc';
@@ -88,6 +89,7 @@ export default function DocBatchView({ route, multi = true, autoStart = false }:
         )}
       </ScrollView>
       {wo.rows.length > 0 && <SaveBar wo={wo} label={saveLabel} />}
+      <DuplicateDocNoDialog conflict={wo.duplicate?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicate} onConfirm={() => void wo.confirmDuplicate()} />
       <PagePreviewModal
         pages={b.pages}
         index={previewIndex}

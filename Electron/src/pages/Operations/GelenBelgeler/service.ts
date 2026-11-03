@@ -9,6 +9,7 @@ import type {
   SenderTemplateView, UnreviewedApproval, RouteSuggestionPriority, HeaderLineMeterSource, DocumentTotalCheckMode, CustomerDefaultView, ProcessValuePage, WorkOrderPlan,
   BulkDeletePreview, BulkDeleteResult,
 } from "./types";
+import type { WorkOrderSourceNote } from "./photoRetentionTypes";
 import type { NoteCancelPreview, NoteCancelResult } from "./cancelTypes";
 import type { DuplicateDocNoMode } from "./mukerrerTypes";
 
@@ -113,6 +114,11 @@ export async function getReaderStatus(): Promise<ReaderStatus> {
 }
 
 /** Tarama görüntüsü (yetkili istek; `<img src>` token taşıyamaz). */
+/** K28: iş emrinin geldiği gelen belgeler (topların en yakın atasının belge satırından; `gelen-belge:read`). */
+export async function getWorkOrderSourceNotes(workOrderId: string): Promise<{ total: number; notes: WorkOrderSourceNote[] }> {
+  return (await apiClient.get<ApiResponse<{ total: number; notes: WorkOrderSourceNote[] }>>(`${BASE}/is-emirleri/${workOrderId}/belgeler`)).data.data;
+}
+
 export async function fetchScanBlob(scanId: string): Promise<Blob> {
   return (await apiClient.get<Blob>(`${BASE}/taramalar/${scanId}/icerik`, { responseType: "blob" })).data;
 }

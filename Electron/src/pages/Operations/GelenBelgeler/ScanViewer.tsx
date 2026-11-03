@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useScanImage } from "./useScanImage";
+import { isScanPurged, SCAN_PURGED_TEXT } from "./photoRetention";
 import { ZoomableScan } from "./ZoomableScan";
 import type { DocumentScanInfo, OcrRect } from "./types";
 
@@ -27,7 +28,7 @@ export function ScanViewer({ scans, highlight, highlightScanId = null, selection
     if (i >= 0) setIdx(i);
   }, [ownScanId, selectionKey, scanKey]);
   const scan = scans[Math.min(idx, scans.length - 1)] ?? null;
-  const img = useScanImage(scan?.id ?? null);
+  const img = useScanImage(scan?.id ?? null, { purged: isScanPurged(scan) });
   if (!scan)
     return (
       <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
@@ -53,6 +54,7 @@ export function ScanViewer({ scans, highlight, highlightScanId = null, selection
       )}
       {img.isLoading && <div className="text-sm text-muted-foreground">Fotoğraf yükleniyor…</div>}
       {img.isError && <div className="text-sm text-destructive">Fotoğraf alınamadı.</div>}
+      {img.purged && <div className="text-sm text-muted-foreground" data-testid="scan-purged">{SCAN_PURGED_TEXT}</div>}
       {img.url && img.isPdf && (
         <a className="text-sm underline" href={img.url} target="_blank" rel="noreferrer">
           PDF belgeyi aç

@@ -11,6 +11,7 @@ import { extractDocument, mergeTemplateForUpdate, suggestTemplate, validateTempl
 import { rectToPhotoFrame } from "../lib/gelen-belge/taslak-foto-cerceve";
 import { draftFromExtraction } from "../lib/gelen-belge/taslak";
 import { getUserTemplate, userTemplateCode } from "./gelen-belge-ozel-sablon.service";
+import { photoPurgedError } from "./gelen-belge-foto-saklama.service";
 
 export interface ScanWord {
   text: string;
@@ -22,8 +23,10 @@ export interface ScanWord {
 
 /** Taramanın saklı OCR sonucu; okunmamış/şema dışı → 409 (FAIL-CLOSED). */
 async function scanOcr(scanId: string): Promise<OcrResult> {
-  const scan = await prisma.documentScan.findUnique({ where: { id: scanId }, select: { ocrResult: true } });
+  const scan = await prisma.documentScan.findUnique({ where: { id: scanId }, select: { ocrResult: true, contentState: true } });
   if (!scan) throw AppError.notFound("Belge taraması bulunamadı.", { code: "DOCUMENT_SCAN_NOT_FOUND" });
+  // K28: tanıtma kutuları fotoğrafın üstüne çizilir — SİLİNDİ'de kapalı; KÜÇÜK'te kutular oranla çizilir (en iyi çaba).
+  if (scan.contentState === "PURGED") throw photoPurgedError();
   const env = scan.ocrResult;
   const ocr = env !== null && typeof env === "object" && !Array.isArray(env) ? (env as Record<string, unknown>).ocr : undefined;
   const parsed = OcrResultSchema.safeParse(ocr);

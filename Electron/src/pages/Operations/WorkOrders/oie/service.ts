@@ -70,6 +70,8 @@ export interface NoteWorkOrderBody {
   /** S1 çok partili belge (≥2 parti); eski backend strict gövdeyle 400 verir — yalnız `/partiler` çok parti dediğinde gider. */
   parties?: Array<{ blockNo: number; batchNo: string | null; meters: number }>;
   mode?: MultiPartyMode;
+  /** K27 WARN: işi süren aynı belge no'lu eşe rağmen kaydet (409 `DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE` sonrası). */
+  confirmDuplicateDocNo?: boolean;
 }
 
 export interface NoteWorkOrderResult {

@@ -104,6 +104,16 @@ describe('ApprovalCard — onaylayan kullanıcı', () => {
     expect(onDone).toHaveBeenCalled();
   });
 
+  it('K28: saklama kipi FULL değilse belge no vurgulu satır; FULL kartta satır yok', async () => {
+    const first = render();
+    await first.r.findByTestId('onay-karti');
+    expect(first.r.queryByTestId('onay-karti-belge-no')).toBeNull();
+    first.r.unmount();
+    mockDetail.mockResolvedValue({ ...DETAIL, senderDocNo: 'A-77', photoRetention: 'DELETE_ON_APPROVAL' });
+    const { r } = render();
+    expect(await r.findByTestId('onay-karti-belge-no')).toHaveTextContent(/A-77.*Onaydan sonra fotoğraf silinecek — belge no'yu kontrol edin\./);
+  });
+
   it('rota seçilince onay gövdesi routeTemplateId taşır; "Fabrika varsayılanı" geri alır', async () => {
     const { r } = render();
     await r.findByTestId('onay-karti');
