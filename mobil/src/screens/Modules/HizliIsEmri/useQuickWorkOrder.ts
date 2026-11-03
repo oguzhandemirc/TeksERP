@@ -28,7 +28,7 @@ import {
   type AttachableStatus,
 } from './scanClassify';
 import { buildReworkPlan } from './reworkPayload';
-import { collectQuickWoIssues, parsePositiveNumber } from './quickWorkOrderIssues';
+import { collectQuickWoIssues, computeApplyMissing, parsePositiveNumber } from './quickWorkOrderIssues';
 import { isScanRouteId, routeBodyOf, scanRouteDefault, withScanRouteChip, withScanRouteOption } from './scanRouteOption';
 import { useScanRouteMode } from '../../../hooks/useFeatureFlags';
 import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
@@ -545,7 +545,7 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
   // değiştirmesini söyle. (Özellikler seçimde temizlendiği için burada dal yok;
   // siparişten TÜRETİLEN özellikleri istemci göremez — o durumu backend reddeder
   // ve mesajı olduğu gibi gösteririz.)
-  const applyMissing = targetColorId && !canApplyColor ? 'renk veren (boyahane)' : null;
+  const applyMissing = computeApplyMissing(targetColorId, canApplyColor, isScanRouteId(routeTemplateId));
 
   // ── YENİDEN ÜRETİM (2026-08-25) ───────────────────────────────────────────
   // Ham + bitmiş AYNI iş emrinde serbest (kullanıcı kararı) — ayrım yalnız
