@@ -5,6 +5,7 @@
 // YOK — pasife alınır (hareketi olan lot zaten Restrict FK ile silinemez). Yazıcı değil:
 // iplik hareketini yalnız `applyYarnMovementTx` yazar.
 // =============================================================================
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { Prisma, YarnLotQualityStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
@@ -92,7 +93,7 @@ export class YarnLotService {
       const lot = await ensureYarnLotTx(tx, { itemId: input.itemId, lotNo, source: "MANUAL", supplierId: input.supplierId ?? null, ownerCustomerId: input.ownerCustomerId ?? null, userId });
       if (!lot.created) throw AppError.conflict(`"${lotNo}" lotu bu kalemde zaten var`, { code: "YARN_LOT_EXISTS", lotId: lot.id });
       if (input.notes?.trim()) await tx.yarnLot.update({ where: { id: lot.id }, data: { notes: input.notes.trim().slice(0, 300) } });
-      return tx.yarnLot.findUniqueOrThrow({ where: { id: lot.id }, select: LOT_SELECT });
+      return sequentialTx(tx).yarnLot.findUniqueOrThrow({ where: { id: lot.id }, select: LOT_SELECT });
     });
     void AuditService.log({ userId, action: "CREATE", tableName: "YARN_LOT", recordId: created.id, newData: { itemId: created.itemId, lotNo: created.lotNo, supplierId: created.supplierId } });
     return { success: true, data: { ...created, balanceKg: 0 }, message: `"${created.lotNo}" lotu açıldı.` };

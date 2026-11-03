@@ -24,6 +24,7 @@
 // servise gereksiz bir bağımlılık ağacı taşırdı.
 // =============================================================================
 
+import { sequentialTx } from "./tx-sequential-relations.helper";
 import {
   Prisma,
   RollOperationType,
@@ -198,7 +199,7 @@ export async function resolveStepBypassEligibility(
   db: Db,
   stepId: string,
 ): Promise<{ eligible: boolean; blockReason: string | null } | null> {
-  const step = await db.workOrderStep.findUnique({
+  const step = await sequentialTx(db).workOrderStep.findUnique({
     where: { id: stepId },
     select: {
       id: true,

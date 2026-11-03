@@ -111,4 +111,4 @@ DeprecationWarning: Calling client.query() when the client is already executing 
 
 ⚠️ **Bu, `[ES-11]` yasağını gereksiz KILMAZ.** `Promise.all(tx.*)`ın uyarı üretmemesi büyük olasılıkla sorguların motorda sıraya girmesindendir: **kapı tetiklenmedi ≠ kapı yok.**
 
-**Pinlenmemiş kalem:** `POST /api/orders` içinde HANGİ ifadenin çok düğümlü chunk ürettiği ölçülmedi — Prisma yükseltilirken ilk bakılacak yer.
+**Pinlendi (2026-11-03, S15a):** kaynak tx içinde AYNI düzeyde ≥2 ilişki yükleyen tek çağrıdır (include/select; `create/update` dahil, `_count` hariç) — Prisma ilişki SQL'lerini paralel ister, tx'in tek bağlantısında pg kuyruğa alır (`POST /api/orders` → `order.service` `order.create` include'u). Çare `sequentialTx(tx)` (`helpers/tx-sequential-relations.helper.ts`); bekçi `scripts/test_pg_eszamanli_sorgu.ts` (§4 tx geri çağrısında sarılmamış literal'i cırcırla tutar). Bugün zararsız (sonuç doğru), pg@9'da hata.

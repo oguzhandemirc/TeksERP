@@ -5,6 +5,7 @@
 // okunur etiketini çözer. İzlenen alan kümesi `constants/workorder-event-fields.ts`.
 // =============================================================================
 
+import { sequentialTx } from "./tx-sequential-relations.helper";
 import { Prisma, WorkOrderType } from "@prisma/client";
 import { factoryDateTr } from "../../constants/time";
 import {
@@ -115,7 +116,7 @@ export interface StepSnapshot {
 
 /** İş emrinin (ya da tek adımın) plan anlık görüntüsü, sıra düzeninde. */
 export async function readStepSnapshotsTx(tx: Tx, workOrderId: string, stepId?: string): Promise<StepSnapshot[]> {
-  const rows = await tx.workOrderStep.findMany({
+  const rows = await sequentialTx(tx).workOrderStep.findMany({
     where: { workOrderId, ...(stepId ? { id: stepId } : {}) },
     orderBy: { stepSequence: "asc" },
     select: {

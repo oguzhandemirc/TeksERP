@@ -18,6 +18,7 @@
 // aynı depo/lot/sebep grubuna yazılır, "açık" = grubun net'i > 0. Dönüş ucu panel-yalnız (H6), token'sız
 // (`yarn.routes` create emsali); tablet yüzeyi doğarsa `clientToken` kolonu o dilimde.
 // =============================================================================
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { ItemType, Prisma, ReasonPresetKind, SubcontractorDispatchItemKind, YarnMovementKind } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
@@ -112,7 +113,7 @@ export async function dispatchYarnItemsTx(
 
 /** Sevk iptali ÖNCESİ engel sinyali: bu sevkten DÖNMÜŞ (net dönüşü > 0) iplik kalemi sayısı. */
 export async function countReturnedYarnItems(client: Pick<typeof prisma, "subcontractorDispatchItem">, dispatchId: string): Promise<number> {
-  const items = await client.subcontractorDispatchItem.findMany({ where: { dispatchId, kind: SubcontractorDispatchItemKind.YARN }, select: YARN_ITEM_SELECT });
+  const items = await sequentialTx(client).subcontractorDispatchItem.findMany({ where: { dispatchId, kind: SubcontractorDispatchItemKind.YARN }, select: YARN_ITEM_SELECT });
   return items.filter((i) => returnedNet(i).gt(0)).length;
 }
 
@@ -121,7 +122,7 @@ export async function countReturnedYarnItems(client: Pick<typeof prisma, "subcon
  * `YARN_ITEM_RETURNED` (LIFO: önce dönüş stornosu). Sevk claim'inden SONRA çağrılır.
  */
 export async function cancelYarnItemsTx(tx: Tx, input: { dispatchId: string; reason: string; userId?: string }): Promise<number> {
-  const items = await tx.subcontractorDispatchItem.findMany({ where: { dispatchId: input.dispatchId, kind: SubcontractorDispatchItemKind.YARN }, select: YARN_ITEM_SELECT });
+  const items = await sequentialTx(tx).subcontractorDispatchItem.findMany({ where: { dispatchId: input.dispatchId, kind: SubcontractorDispatchItemKind.YARN }, select: YARN_ITEM_SELECT });
   for (const it of items) {
     const out = shipOutOf(it);
     if (returnedNet(it).gt(0)) {
@@ -136,7 +137,7 @@ export async function cancelYarnItemsTx(tx: Tx, input: { dispatchId: string; rea
 }
 
 async function loadYarnItem(tx: Tx, dispatchId: string, dispatchItemId: string): Promise<YarnItemRow> {
-  const item = await tx.subcontractorDispatchItem.findUnique({ where: { id: dispatchItemId }, select: YARN_ITEM_SELECT });
+  const item = await sequentialTx(tx).subcontractorDispatchItem.findUnique({ where: { id: dispatchItemId }, select: YARN_ITEM_SELECT });
   if (!item || item.dispatch.id !== dispatchId || item.kind !== SubcontractorDispatchItemKind.YARN) throw AppError.notFound("Bu sevkte böyle bir iplik kalemi yok");
   if (item.dispatch.cancelledAt) throw AppError.conflict(`${item.dispatch.dispatchNo} iptal edilmiş — iplik işlemi yapılamaz`, { code: "DISPATCH_CANCELLED" });
   return item;

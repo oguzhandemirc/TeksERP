@@ -43,6 +43,7 @@
 // ⚠️ Bu bekçi KİLİT ALTINDA da çağrılabilir (tx + `touchWorkOrderTx` sonrası
 // taze kontrol) — `db` parametresi bu yüzden var.
 // =============================================================================
+import { sequentialTx } from "./tx-sequential-relations.helper";
 import { Prisma, RollStatus, WorkOrderStatus } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
@@ -212,7 +213,7 @@ export async function assertTargetColorChange(
   // 5) Rota kapsaması — REDDETME, UYAR
   const warnings: string[] = [];
   if (newColorId) {
-    const steps = await db.workOrderStep.findMany({
+    const steps = await sequentialTx(db).workOrderStep.findMany({
       where: { workOrderId: wo.id },
       select: {
         station: { select: STEP_CAPABILITY_SELECT },

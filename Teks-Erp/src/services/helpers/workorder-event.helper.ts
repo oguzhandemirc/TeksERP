@@ -10,6 +10,7 @@
 // ms'lik istemci saatidir; aynı tx'te art arda yazılan iki olay aynı ms'e düşer ve sıra rastgele UUID'e kalırdı.
 // =============================================================================
 
+import { sequentialTx } from "./tx-sequential-relations.helper";
 import { randomUUID } from "crypto";
 import { Prisma, WorkOrderEventType, WorkOrderStatus, WorkOrderType } from "@prisma/client";
 import { currentOrigin } from "../../lib/request-context";
@@ -160,7 +161,7 @@ export async function createWorkOrderTx<T extends Prisma.WorkOrderCreateArgs>(
   args: Prisma.SelectSubset<T, Prisma.WorkOrderCreateArgs>,
   payload?: Record<string, Prisma.InputJsonValue | null>,
 ): Promise<Prisma.WorkOrderGetPayload<T>> {
-  const wo = await tx.workOrder.create<T>(args);
+  const wo = await sequentialTx(tx).workOrder.create<T>(args);
   const row = wo as unknown as {
     id: string; status: WorkOrderStatus; workOrderNumber: string; type: string;
     routeTemplateId: string | null; targetItemId: string | null; targetColorId: string | null;
