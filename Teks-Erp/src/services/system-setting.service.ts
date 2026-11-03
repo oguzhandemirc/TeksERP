@@ -441,6 +441,12 @@ export const SETTING_KEYS = {
   /** Belge fotoğrafı saklama (K28): FULL tam sakla (varsayılan = bugünkü) | SHRINK_ON_APPROVAL | DELETE_ON_APPROVAL |
    *  DELETE_ON_DISPATCH. Geçmiş onaylı belgelere de uygulanır (iş ayarı okur). Tek yazar `PUT /api/gelen-belge/ayarlar`. */
   GELEN_BELGE_PHOTO_RETENTION: "gelenBelge.photoRetention",
+  /** K30 S16a okunan desen/renk yazısı: KAPALI (varsayılan = bugünkü) | ONER ad/kod tam eşleşen kayıt önerilir |
+   *  NOT yazı iş emri notuna eklenir. Tek yazar `PUT /api/gelen-belge/ayarlar`; flag yüküne konmaz. */
+  GELEN_BELGE_DESEN_RENK_ESLESME: "gelenBelge.desenRenkEslesme",
+  /** K30 S16a tablet iş emri girişi: IKISI (varsayılan = bugünkü) | BELGE yalnız belge okutma | TOP yalnız top okutma.
+   *  Tek yazar `PUT /api/gelen-belge/ayarlar`; flag yüküne konmaz. */
+  GELEN_BELGE_TABLET_IE_GIRISI: "gelenBelge.tabletIeGirisi",
   /** Z1 ÜRETİM BELGE ZİNCİRİ (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bugünkü davranış (bağ opsiyonel). */
   DEVERE_BEAM_WEAVING_LINK_REQUIRED: "devere.beamWeavingLinkRequired",
   DOKUMA_RUN_WEAVING_ORDER_REQUIRED: "dokuma.runWeavingOrderRequired",
@@ -6823,6 +6829,21 @@ export const PHOTO_RETENTION_VALUES: readonly PhotoRetentionMode[] = ["FULL", "S
 export const DEFAULT_PHOTO_RETENTION: PhotoRetentionMode = "FULL";
 export const readPhotoRetention = (tx?: Pick<typeof prisma, "systemSetting">): Promise<PhotoRetentionMode> =>
   readClosedSetting(SETTING_KEYS.GELEN_BELGE_PHOTO_RETENTION, PHOTO_RETENTION_VALUES, DEFAULT_PHOTO_RETENTION, tx);
+
+/** K30 S16a okunan desen/renk yazısının ele alınışı. */
+export type DesenRenkEslesmeMode = "KAPALI" | "ONER" | "NOT";
+export const DESEN_RENK_ESLESME_VALUES: readonly DesenRenkEslesmeMode[] = ["KAPALI", "ONER", "NOT"];
+/** Varsayılan KAPALI = bugünkü davranış (öneri yok, nota eklenmez). */
+export const DEFAULT_DESEN_RENK_ESLESME: DesenRenkEslesmeMode = "KAPALI";
+export const readDesenRenkEslesme = (tx?: Pick<typeof prisma, "systemSetting">): Promise<DesenRenkEslesmeMode> =>
+  readClosedSetting(SETTING_KEYS.GELEN_BELGE_DESEN_RENK_ESLESME, DESEN_RENK_ESLESME_VALUES, DEFAULT_DESEN_RENK_ESLESME, tx);
+/** K30 S16a tablet iş emri formunun giriş yolu. */
+export type TabletIeGirisiMode = "IKISI" | "BELGE" | "TOP";
+export const TABLET_IE_GIRISI_VALUES: readonly TabletIeGirisiMode[] = ["IKISI", "BELGE", "TOP"];
+/** Varsayılan IKISI = bugünkü davranış (belge okutma da top okutma da açık). */
+export const DEFAULT_TABLET_IE_GIRISI: TabletIeGirisiMode = "IKISI";
+export const readTabletIeGirisi = (tx?: Pick<typeof prisma, "systemSetting">): Promise<TabletIeGirisiMode> =>
+  readClosedSetting(SETTING_KEYS.GELEN_BELGE_TABLET_IE_GIRISI, TABLET_IE_GIRISI_VALUES, DEFAULT_TABLET_IE_GIRISI, tx);
 
 /** İş emri açılınca refakat kartı kendiliğinden yazdırılsın mı (kayıt yok/çöp = false, bugünkü). */
 export async function readRefakatAutoPrint(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {

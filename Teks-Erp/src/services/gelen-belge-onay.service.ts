@@ -80,6 +80,9 @@ export type ApproveOptions = {
   via?: string;
   /** S1 çok partili belge (yalnız PER_DOCUMENT): parti başına bir özet satırı/top; verilmezse tek özet satırı (bugünkü). */
   parties?: ReadonlyArray<PartyEntry>;
+  /** K30 S16a (yalnız PER_DOCUMENT): iş emri formunda seçilen hedef ürün — özet satırı topları varsayılan yerine bununla doğar.
+   *  Top doğurabilirliği çağıran (`itemProblem`) önceden doğrular. */
+  item?: { id: string; name: string };
 };
 
 export interface ApproveResult {
@@ -106,12 +109,12 @@ const PRE_SELECT = {
 interface PrecheckResult {
   warnings: string[];
   /** Ürünü seçilmemiş açık satır varsa onların doğacağı ürün: sahibin varsayılanı (E4) ya da fabrika ayarı (E3); yoksa null. */
-  defaultItem: { id: string; name: string; source: DefaultItemSource } | null;
+  defaultItem: { id: string; name: string; source: DefaultItemSource | "FORM" } | null;
 }
 
 type PreNote = Prisma.CustomerDeliveryNoteGetPayload<{ select: typeof PRE_SELECT }>;
 
-async function precheck(note: PreNote, input: ApproveInput, mode: IncomingDocEntryMode, parties?: ReadonlyArray<PartyEntry>): Promise<PrecheckResult> {
+async function precheck(note: PreNote, input: ApproveInput, mode: IncomingDocEntryMode, opts: Pick<ApproveOptions, "parties" | "item">): Promise<PrecheckResult> {
   if (!note.ownerCustomerId) throw AppError.badRequest("Sahip cari seçilmeden onaylanamaz (emanet top sahipsiz doğamaz).", { code: "DELIVERY_NOTE_OWNER_REQUIRED" });
   // Emanet kapısı + sahip aktifliği TEK yazıcıdan (lisans sorusu + MODULE_DISABLED + pasif/bulunamayan sahip
   // OWNER_CUSTOMER_INVALID aynı helper'da; motor tx içinde yeniden sorar).
@@ -120,7 +123,7 @@ async function precheck(note: PreNote, input: ApproveInput, mode: IncomingDocEnt
   await assertCariNotHeldTx(prisma, note.ownerCustomerId, "INTAKE");
   // Risk limiti (D4-I2, finance.riskLimitBlock.intake): kilidin yanında; kabul bakiyeyi değiştirmez, satır tx'i sormaz.
   await assertCustomerRiskLimitTx(prisma, note.ownerCustomerId, "INTAKE");
-  if (mode === "PER_DOCUMENT") return precheckPerDocument(note, input, parties);
+  if (mode === "PER_DOCUMENT") return precheckPerDocument(note, input, opts);
   const open = note.lines.filter(isOpenForApproval);
   if (open.length === 0) throw AppError.conflict(`${note.noteNo} için işlenecek satır yok (hepsi girilmiş ya da atlanmış).`, { code: "DELIVERY_NOTE_NO_OPEN_LINES" });
   const itemless = open.filter((l) => lineProblems(l).includes("ITEM_UNRESOLVED")).length;
@@ -172,7 +175,7 @@ function pageAndTotalGates(note: PreNote, mismatches: string[], reason: string |
  * PER_DOCUMENT ön kontrolü (tasarım §2.5): kayıt kurşun metresinden doğar; satır kapıları (ürün/inceleme) UYGULANMAZ, satırlar
  * bilgidir. Kapı `perDocumentGate` (detayla aynı yüklem); toplam farkı yalnız kaynak Σ satır iken kapı, aksi uyarı.
  */
-async function precheckPerDocument(note: PreNote, input: ApproveInput, parties?: ReadonlyArray<PartyEntry>): Promise<PrecheckResult> {
+async function precheckPerDocument(note: PreNote, input: ApproveInput, { parties, item }: Pick<ApproveOptions, "parties" | "item">): Promise<PrecheckResult> {
   const targets = summaryTargets(note, parties);
   // Satır kipinde top doğmuş belge tek kayda çevrilmez (ikinci kayıt doğardı): kip yarıda değiştiyse fail-closed.
   const mixed = note.lines.filter((l) => l.rollId && !isSummaryLine(note.id, l)).map((l) => l.lineNo);
@@ -182,8 +185,8 @@ async function precheckPerDocument(note: PreNote, input: ApproveInput, parties?:
   const gate = perDocumentGate(note, note.kursunMetersReview ? await readUnreviewedApprovalMode() : "WARN");
   if (gate.code === "KURSUN_METERS_REQUIRED") throw AppError.conflict(`${note.noteNo} için kurşun metresi yok; belge başına tek kayıt kipinde onaydan önce kurşun metresini girin.`, { code: gate.code });
   if (gate.code) throw AppError.conflict(`Kurşun metresi gözden geçirilmedi (${note.kursunMetersSource ?? "?"}). Değeri belgeyle karşılaştırıp onaylayın ya da düzeltin (fabrika ayarı: gözden geçirilmemiş değerle onay engelli).`, { code: gate.code });
-  // Özet satırı ürünsüz doğar → varsayılan ürün (müşteri > fabrika); yoksa çıkışsız kapı açılmaz.
-  const defaultItem = await resolveDefaultItemForApproval(note.ownerCustomerId);
+  // Özet satırı ürünsüz doğar → formda seçilen hedef ürün (K30) > varsayılan ürün (müşteri > fabrika); yoksa çıkışsız kapı açılmaz.
+  const defaultItem = item ? { ...item, source: "FORM" as const } : await resolveDefaultItemForApproval(note.ownerCustomerId);
   if (!defaultItem) throw AppError.badRequest("Belge başına tek kayıt kipi varsayılan ürün ister: fabrika ya da müşteri varsayılan ürünü seçilmemiş.", { code: "GELEN_BELGE_PER_DOCUMENT_NEEDS_DEFAULT_ITEM" });
   const reason = input.varianceReason?.trim();
   const docLines = note.lines.filter((l) => !isSummaryLine(note.id, l));
@@ -331,7 +334,8 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
   if (!note) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
   const mode = opts.entryMode ?? (await readIncomingDocEntryMode());
   if (opts.parties?.length && mode !== "PER_DOCUMENT") throw AppError.badRequest("Parti başına kayıt yalnız belge başına tek kayıt kipinde yapılır.", { code: "DELIVERY_NOTE_PARTIES_NEED_PER_DOCUMENT" });
-  const { warnings, defaultItem } = await precheck(note, input, mode, opts.parties);
+  if (opts.item && mode !== "PER_DOCUMENT") throw AppError.badRequest("Hedef ürünle kayıt yalnız belge başına tek kayıt kipinde yapılır.", { code: "GELEN_BELGE_TARGET_ITEM_INVALID" });
+  const { warnings, defaultItem } = await precheck(note, input, mode, opts);
   // K27 aynı gönderen belge no (ayar kipi): BLOCK eş → 409, WARN işi süren eş + bayraksız → 409 ACTIVE; DB yazmaz.
   const dup = await duplicateDocNoApprovalGate(note, input.confirmDuplicateDocNo);
   warnings.push(...dup.warnings);

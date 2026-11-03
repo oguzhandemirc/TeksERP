@@ -679,6 +679,17 @@ async function main() {
       file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
       needle: "photoRetention: z.enum(",
     },
+    // Gülkesim S16a (K30, 2026-11-04): okunan desen/renk + tablet iş emri girişi; panel radyoları `GelenBelgeIeFormField.tsx`.
+    GELEN_BELGE_DESEN_RENK_ESLESME: {
+      why: "Okunan desen/renk yazısı (KAPALI varsayılan | ONER | NOT) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; okuma özeti `suggestions`/`formFields.not` okur",
+      file: "Electron/src/pages/GeneralSettings/GelenBelgeIeFormField.tsx",
+      needle: "gb-desen-renk-eslesme",
+    },
+    GELEN_BELGE_TABLET_IE_GIRISI: {
+      why: "Tablet iş emri girişi (IKISI varsayılan | BELGE | TOP) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; tablet tek formu `GET /ayarlar`dan okur",
+      file: "Electron/src/pages/GeneralSettings/GelenBelgeIeFormField.tsx",
+      needle: "gb-tablet-ie-girisi",
+    },
     PRODUCTION_REFAKAT_AUTO_PRINT: {
       why: "İş emri açılınca refakat kartı otomatik yazdırma (varsayılan false) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; istemci okur",
       file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
