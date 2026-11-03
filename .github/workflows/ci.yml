@@ -166,6 +166,10 @@ jobs:
       # SHASUMS doğrulaması yalnız yerelde --ag ile). Zero-dep, DB'siz.
       - name: Node sürüm kaydı (korumalı paket runtime)
         run: node scripts/test_node_surumu.mjs
+      # Bağlam bütçesi (2026-11-03): docs/kurallar/*.md boyut cırcırı (ayrinti/ hariç) + oturum açılış
+      # kancası çıktı tavanı. Zero-dep, DB'siz, ağsız; kalıcı sondalar aynı adımda.
+      - name: Kurallar boyut cırcırı + oturum kancası tavanı
+        run: node scripts/check-kurallar-boyut.mjs && node scripts/check-kurallar-boyut.mjs --sonda && node scripts/test_oturum_baslangic.mjs && node scripts/test_oturum_baslangic.mjs --sonda
       # Oturum test DB aracı (scripts/test-db.mjs): ad kapısı, klon kaynağı (rolls>0 RED), silme kararı + kalıcı sondalar.
       # Gerçek DB kolu (§3) yerel Docker PG ister; CI'da --dbsiz ile ⏭ beyanlı. Zero-dep, ağsız.
       - name: Test DB aracı (saf kararlar + sondalar)

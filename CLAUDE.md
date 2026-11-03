@@ -1,6 +1,6 @@
 # TeksERP — Monorepo Kökü
 
-> Her oturumda yüklenir; yalnız ÇEKİRDEK'i ve alan haritasını taşır. Alan kuralları `docs/kurallar/<alan>.md` (dokunmadan ÖNCE oku), karar hikâyeleri `docs/history/arsiv/<YYYY-MM>.md`. Kısaltma turları: 2026-10-03 (`a61efbd21`), 2026-10-12 (`8eae71115`; çıkarılan anlatılar arşiv notu "Kök CLAUDE.md kısaltma turu").
+> Her oturumda yüklenir; yalnız ÇEKİRDEK'i ve alan haritasını taşır. Alan kuralları `docs/kurallar/<alan>.md` (dokunmadan ÖNCE oku), karar hikâyeleri `docs/history/arsiv/<YYYY-MM>.md`. Kısaltmalar `a61efbd21`, `8eae71115` (arşiv notu "Kök CLAUDE.md kısaltma turu").
 >
 > **Tek gövde, çok fabrika:** [ÇEKİRDEK] her kurulumda aynıdır (defter, brüt sevk, idempotency, kilit sırası, atomik claim, fail-closed, sır hijyeni, veri bütünlüğü); [PROFİL] bayrak/veriyle değişir (rota, istasyon topolojisi, modüller, sayısal ayarlar). Ölçüt: `docs/design/MODUL-BAYRAK-TASARIM.md` §0, §11, §12.
 
@@ -9,7 +9,7 @@ Tekstil fabrikası ERP'si; her alt projenin kendi `CLAUDE.md`'si var:
 | Proje | Stack | Port |
 |---|---|---|
 | `Teks-Erp/` | Express 5 + Prisma 7 + PostgreSQL backend | 4000 |
-| `Electron/` | Electron 42 + React 19 + Vite yönetim paneli (admin frontend; `React/` yok) | 5174 |
+| `Electron/` | Electron 42 + React 19 + Vite yönetim paneli | 5174 |
 | `mobil/` | Expo 54 Android tablet (yatay) + telefon (dikey) — saha | — |
 | `satici/` | Lisans sunucusu + portal; VDS'te, fabrikaya kurulmaz | 4610 · 4613 |
 | `patron/` | Patron bulutu sunucusu; VDS'te; tesis başına ayrı DB | 4620 |
@@ -68,9 +68,9 @@ defter · sevkiyat · fason · tambur · top-duzeltme · kk1 · kursun · is-emr
 ## Çalışma düzeni
 
 - Döngü, test DB aracı, kapı kurgusu, ağır koşum, alt ajan istem şablonu: `docs/GELISTIRME-DONGUSU.md`. Ana ağacın `.env`i FABRİKA VERİSİDİR — bekçi koşulmaz, kopyalanmaz; oturum `node scripts/test-db.mjs ac tekserp_<oturum>_test` açar.
-- Ajan yalnız kendi alanının bekçilerini koşar (`/bekci-kos <alan>`; harita `Teks-Erp/docs/BEKCI-HARITASI.md`); tam set CI'da (push → yeşil → iniş). Yeni bekçi negatif sondayla doğrulanır (`docs/RECETELER.md` § Yeni bekçi).
+- Ajan yalnız kendi alanının bekçilerini koşar (`/bekci-kos <alan>`; harita `Teks-Erp/docs/bekci-harita/`); tam set CI'da (push → yeşil → iniş). Yeni bekçi negatif sondayla doğrulanır (`docs/RECETELER.md` § Yeni bekçi).
 - Commit kapısı `node scripts/hooks-kur.mjs` (izole worktree'de koşar); yeni mandal kendi dosyalarına, yeni dosya dizinin bütün tarayıcılarına koşturulur; kaçış yalnız `TEKSERP_HOOK_SKIP=1`.
-- İş kapanınca (commit/push · sürüm · alan değişimi) `/clear`; tarama işi alt ajana. Model her işte Opus/Fable, Sonnet yok (kullanıcı kararı 2026-10-12).
+- İş kapanınca (commit/push · sürüm · alan değişimi) `/clear`; tarama işi alt ajana. Model: yazan Opus, bağımsız inceleme Fable, Sonnet/Haiku yok; efor iniş/CI izleme medium, inceleme high, yazan ajan oturumunki (kullanıcı 10-12, 11-03).
 
 ## Compact instructions
 
