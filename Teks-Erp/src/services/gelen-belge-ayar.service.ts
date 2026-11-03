@@ -316,8 +316,9 @@ export async function updateIncomingDocSettings(input: IncomingDocSettingsInput,
 }
 
 /** Kapalı kümeli seçenek yazımı: küme dışı değer 400 (Zod'un ikinci seddi), audit `systemSettingService.set` içinde. */
-async function setClosed<T extends string>(key: string, value: T | undefined, values: readonly T[], label: string, userId: string): Promise<void> {
+async function setClosed<T extends string>(key: string, value: T | undefined, spec: { values: readonly T[]; label: string }, userId: string): Promise<void> {
   if (value === undefined) return;
+  const { values, label } = spec;
   if (!values.includes(value)) throw AppError.badRequest(`Geçersiz seçenek: ${values.join(", ")} olmalı.`, { code: "VALIDATION_ERROR" });
   await systemSettingService.set(key, value, label, userId);
 }
@@ -325,12 +326,12 @@ async function setClosed<T extends string>(key: string, value: T | undefined, va
 /** Parti no / onay kipi / gramajsız oto iş emri (Gülkesim parti/metre S0) · çok parti · aynı belge no (K27). */
 async function updateEntryOptions(input: IncomingDocSettingsInput, userId: string): Promise<void> {
   const ie = TERIM.terbiyeIsEmri.tekilKucuk;
-  await setClosed(SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, input.batchNumberSource, BATCH_NUMBER_SOURCE_VALUES, "Gelen belge: parti numarası kaynağı (SERIES seri / DOCUMENT belgeden)", userId);
-  await setClosed(SETTING_KEYS.GELEN_BELGE_ENTRY_MODE, input.entryMode, ENTRY_MODE_VALUES, "Gelen belge: onay kipi (PER_LINE satır başına top / PER_DOCUMENT belge başına tek kayıt)", userId);
-  await setClosed(SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS, input.autoWorkOrderPatternless, AUTO_WORK_ORDER_PATTERNLESS_VALUES, `Gelen belge: işlem değeri çözülemeyen grupta ${ie} (SKIP atla / OPEN hedefsiz aç)`, userId);
-  await setClosed(SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, input.formApproval, FORM_APPROVAL_VALUES, `Gelen belge: ${ie} formundan okutulan belgenin kaydı (SEPARATE ayrı onay / WITH_WORK_ORDER ${ie} açan kaydeder)`, userId);
-  await setClosed(SETTING_KEYS.GELEN_BELGE_MULTI_PARTY_WORK_ORDER, input.multiPartyWorkOrder, MULTI_PARTY_WORK_ORDER_VALUES, `Gelen belge: çok partili belgeden ${ie} (SINGLE tek / PER_PARTY her parti ayrı)`, userId);
-  await setClosed(SETTING_KEYS.GELEN_BELGE_DUPLICATE_DOC_NO, input.duplicateDocNo, DUPLICATE_DOC_NO_VALUES, "Gelen belge: aynı gönderen belge no tekrar gelirse (BLOCK engelle / WARN işi sürüyorsa uyar / ALLOW serbest)", userId);
+  await setClosed(SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, input.batchNumberSource, { values: BATCH_NUMBER_SOURCE_VALUES, label: "Gelen belge: parti numarası kaynağı (SERIES seri / DOCUMENT belgeden)" }, userId);
+  await setClosed(SETTING_KEYS.GELEN_BELGE_ENTRY_MODE, input.entryMode, { values: ENTRY_MODE_VALUES, label: "Gelen belge: onay kipi (PER_LINE satır başına top / PER_DOCUMENT belge başına tek kayıt)" }, userId);
+  await setClosed(SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS, input.autoWorkOrderPatternless, { values: AUTO_WORK_ORDER_PATTERNLESS_VALUES, label: `Gelen belge: işlem değeri çözülemeyen grupta ${ie} (SKIP atla / OPEN hedefsiz aç)` }, userId);
+  await setClosed(SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, input.formApproval, { values: FORM_APPROVAL_VALUES, label: `Gelen belge: ${ie} formundan okutulan belgenin kaydı (SEPARATE ayrı onay / WITH_WORK_ORDER ${ie} açan kaydeder)` }, userId);
+  await setClosed(SETTING_KEYS.GELEN_BELGE_MULTI_PARTY_WORK_ORDER, input.multiPartyWorkOrder, { values: MULTI_PARTY_WORK_ORDER_VALUES, label: `Gelen belge: çok partili belgeden ${ie} (SINGLE tek / PER_PARTY her parti ayrı)` }, userId);
+  await setClosed(SETTING_KEYS.GELEN_BELGE_DUPLICATE_DOC_NO, input.duplicateDocNo, { values: DUPLICATE_DOC_NO_VALUES, label: "Gelen belge: aynı gönderen belge no tekrar gelirse (BLOCK engelle / WARN işi sürüyorsa uyar / ALLOW serbest)" }, userId);
   if (input.refakatAutoPrint !== undefined) {
     await systemSettingService.set(SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT, input.refakatAutoPrint, `${TERIM.terbiyeIsEmri.tekil} açılınca refakat kartı kendiliğinden yazdırılır`, userId);
   }
