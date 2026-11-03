@@ -121,7 +121,10 @@ export const costTiles: CostTile[] = [
 ];
 
 
-/** Hub ve testin TEK süzgeci: izni olmayan karo çizilmez (`isAdmin` kısa devresi YOK). */
-export function visibleCostTiles(hasAnyPermission: (codes: string[]) => boolean): CostTile[] {
-  return costTiles.filter((t) => hasAnyPermission(t.permissionAny));
+/**
+ * Hub ve testin TEK süzgeci: izni olmayan karo çizilmez (`isAdmin` kısa devresi YOK). `routeOpen` verilirse bağlı
+ * modülü kapalı karo da düşer (K19: Kârlılık finans ister — `lib/route-modules.ts` `ROUTE_ALSO_REQUIRES`).
+ */
+export function visibleCostTiles(hasAnyPermission: (codes: string[]) => boolean, routeOpen: (to: string) => boolean = () => true): CostTile[] {
+  return costTiles.filter((t) => hasAnyPermission(t.permissionAny) && routeOpen(t.to));
 }

@@ -3,13 +3,17 @@ import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { accessTiles, accessGroups, type AccessTile, type AccessTileGroup } from "./tile-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { openRebindRequests, useRebindRequests } from "@/pages/Devices/rebind";
+import { useMenuLayout } from "@/hooks/useMenuLayout";
+import { isHubTileHidden } from "@/lib/menu-layout";
 
 export function AccessHubPage() {
   // Bekleyen yeniden bağlama talebi → "Tabletler" karosunda sayaç (bulunabilirlik).
   const rebindOpen = openRebindRequests(useRebindRequests().data).length;
   // Grup → tile (kullanıcı erişimi / cihaz erişimi). Tanımlar hub'ıyla aynı desen.
   const tilesByGroup = new Map<AccessTileGroup, AccessTile[]>();
+  const menu = useMenuLayout();
   for (const tile of accessTiles) {
+    if (isHubTileHidden(menu, tile.to)) continue; // K19 menü düzeni
     const list = tilesByGroup.get(tile.group) ?? [];
     list.push(tile);
     tilesByGroup.set(tile.group, list);

@@ -137,6 +137,7 @@ import { SubcontractorsPage } from "@/pages/Subcontractors/SubcontractorsPage";
 import { StationCapabilitiesPage } from "@/pages/StationCapabilities/StationCapabilitiesPage";
 import { SystemHubPage } from "@/pages/System/SystemHubPage";
 import { ModuleProfilePage } from "@/pages/System/ModuleProfile/ModuleProfilePage";
+import { MenuLayoutPage } from "@/pages/System/MenuLayout/MenuLayoutPage";
 import { ActivityPage } from "@/pages/System/Activity/ActivityPage";
 import { PrintHistoryPage } from "@/pages/System/PrintHistory/PrintHistoryPage";
 import { SettingsSurfacePage } from "@/pages/GeneralSettings/SettingsSurfacePage";
@@ -1283,6 +1284,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="admin:settings" requireSystemAccount>
         <ModuleProfilePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // K19 Menü Düzeni — karo `permission`ı ile AYNI kod (`tile-route-permission.test`).
+    path: "system/menu-layout",
+    element: (
+      <ProtectedRoute requirePermission="admin:settings">
+        <MenuLayoutPage />
       </ProtectedRoute>
     ),
   },

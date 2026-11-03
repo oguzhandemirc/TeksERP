@@ -9,6 +9,8 @@ import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { flagOffHint } from "@/lib/flag-setting-path";
 import { WebTotpWarningBanner } from "./WebTotpWarningBanner";
+import { useMenuLayout } from "@/hooks/useMenuLayout";
+import { isHubTileHidden } from "@/lib/menu-layout";
 
 export function SystemHubPage() {
   const { isAdmin, hasPermission, hasAnyPermission } = useRoleAccess();
@@ -32,7 +34,9 @@ export function SystemHubPage() {
   // Karo ile route AYNI kapıyı kullanır: `permission` taşıyan karo yalnız o izne
   // sahip kullanıcıya görünür, yoksa varsayılan `admin:settings` kapısı geçerli
   // (Sistem hub'ı zaten onun arkasında). Ayrışırsa kart görünür ama sayfa açılmaz.
+  const menu = useMenuLayout();
   const visibleTiles = systemTiles.filter((t) => {
+    if (isHubTileHidden(menu, t.to)) return false; // K19 menü düzeni (public karo dahil)
     if (t.public) return true;
     if (t.superadminOnly && !superadminGateOpen) return false;
     if (t.licenseObservationGate && !licenseScreenVisible) return false;

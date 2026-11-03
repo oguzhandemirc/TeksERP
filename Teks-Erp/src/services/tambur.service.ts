@@ -166,6 +166,8 @@ interface CutInput {
   relatedErrorIds: string[];
   /** D4-B1: kesim metresinin ölçüm kaynağı; eski APK göndermez (sapma kaynağı NULL kalır). */
   measure?: MeterSourceInput | null;
+  /** S5: parçanın tartım kg'ı; müşteri tartım istiyorsa WAREHOUSE parçasında zorunlu. */
+  weightKg?: number | null;
 }
 
 /** Kapanışta kalan sapmasının kaynağını taşıyan kesimler: ebeveynin yaşayan çocukları, bu kapanışın kalan parçası hariç. */
@@ -704,6 +706,8 @@ export class TamburService {
       /** Plan-gerçek sapma onayı (renk/en) — 409 PLAN_MISMATCH'i geçer.
        *  Sapma yokken gönderilmesi zararsız (kapı hiç açılmaz). */
       confirmMismatch?: boolean;
+      /** S5: otomatik kalan kuyruk parçasının kg'ı (tartım kapısı). */
+      remainingWeightKg?: number | null;
     },
     userId?: string,
     /** TAMBUR makine atfı — aktif çalışma oturumundan (controller çözer).
@@ -1044,6 +1048,9 @@ export class TamburService {
       auditErrorIds: string[];
       /** D4-B1b: kesimin ölçüm beyanı — CUT okuması bundan doğar; otomatik kalan parça ölçülmedi (null). */
       measure: MeterSourceInput | null;
+      /** S5 tartım: istemcinin verdiği kg (kapıdan önce ham). */
+      rawWeightKg: number | null;
+      weightKg: Prisma.Decimal | null;
     };
 
     // Decimal offset — float drift'le sahte ~0.000m kuyruk top yaratma.
@@ -1064,6 +1071,8 @@ export class TamburService {
         auditSource: "OPERATOR_CUT",
         auditErrorIds: c.relatedErrorIds,
         measure: c.measure ?? null,
+        rawWeightKg: c.weightKg ?? null,
+        weightKg: null,
       });
       offsetD = nextOffsetD;
     }
@@ -1084,6 +1093,17 @@ export class TamburService {
         auditSource: "REMAINING_TAIL",
         auditErrorIds: [],
         measure: null,
+        rawWeightKg: data.remainingWeightKg ?? null,
+        weightKg: null,
+      });
+    }
+    // Tamburda tartım (S5) — depoya inen her parça kesim yollarıyla AYNI kapıdan; tx/barkoddan önce.
+    for (const seg of segments) {
+      if (seg.status !== RollStatus.WAREHOUSE && seg.rawWeightKg == null) continue;
+      seg.weightKg = await resolveTamburCutWeight({
+        weightKg: seg.rawWeightKg,
+        targetCustomerId: null,
+        ownerCustomerId: roll.ownerCustomerId,
       });
     }
 
@@ -1255,7 +1275,7 @@ export class TamburService {
             width: childWidth,
             initialQty: seg.qty,
             currentQty: seg.qty,
-            weightKg: null,
+            weightKg: seg.weightKg,
             status: seg.status,
             qualityGrade: seg.qualityGrade,
             // seg.qualityGrade nullable → null anahtarla katalog araması yok, id null.
@@ -2763,6 +2783,8 @@ export class TamburService {
       /// SAPMA SEBEBİ (2026-08-09) — `finalizeOpenFabric` ile aynı sözleşme.
       varianceReasonCode?: string | null;
       varianceReasonText?: string | null;
+      /** S5: kalan topun kg'ı (tartım kapısı). */
+      weightKg?: number | null;
     },
     userId?: string,
     /** Oturum istasyonu — KALAN parçanın giriş istasyonu damgası (cutWarehouseRoll ikizi). */
@@ -2820,6 +2842,12 @@ export class TamburService {
     }
 
     const action = data.remainingAction ?? "discard";
+    // Tamburda tartım (S5) — kalan top DOĞACAKSA kesim yollarıyla aynı kapı; discard/kalan 0 top
+    // doğurmaz. Metraj claim'e kadar yalnız AZALIR → tx öncesi karar güvenli.
+    const remainingWeightKg =
+      action !== "discard" && Number(parent.currentQty) > 0
+        ? await resolveTamburCutWeight({ weightKg: data.weightKg, targetCustomerId: null, ownerCustomerId: parent.ownerCustomerId })
+        : null;
     // Ham parent: kalan parça ham kalır — "keep_*" → ham STOCK (üretime devam),
     // "scrap" → fire rolü. Bitmiş parent: klasik kalite kodu, çıktı WAREHOUSE.
     //
@@ -2931,7 +2959,7 @@ export class TamburService {
             foldType: parent.foldType,
             initialQty: remainingQty,
             currentQty: remainingQty,
-            weightKg: null,
+            weightKg: remainingWeightKg,
             // Ham parent → kalan ham STOCK/SCRAP; bitmiş parent → WAREHOUSE.
             status: childStatus,
             qualityGrade: childQualityGrade,
@@ -3593,6 +3621,8 @@ export class TamburService {
       varianceReasonText?: string | null;
       /** Plan-gerçek sapma onayı (renk/en) — 409 PLAN_MISMATCH'i geçer. */
       confirmMismatch?: boolean;
+      /** S5: kalan topun kg'ı (tartım kapısı). */
+      weightKg?: number | null;
     },
     userId?: string,
     /** TAMBUR makine atfı — aktif çalışma oturumundan (controller çözer). */
@@ -3689,6 +3719,12 @@ export class TamburService {
     // remainingAction varsa onu kullan; yoksa eski scrapRemaining'den türet.
     const action: RemainingAction =
       data.remainingAction ?? (data.scrapRemaining === true ? "scrap" : "discard");
+    // Tamburda tartım (S5) — kalan top DOĞACAKSA kesim yollarıyla aynı kapı; discard/kalan 0 top
+    // doğurmaz. Metraj claim'e kadar yalnız AZALIR → tx öncesi karar güvenli.
+    const remainingWeightKg =
+      action !== "discard" && Number(parent.currentQty) > 0
+        ? await resolveTamburCutWeight({ weightKg: data.weightKg, targetCustomerId: null, ownerCustomerId: parent.ownerCustomerId })
+        : null;
     // Kod KATALOGDAN (karar ①) — `finalizeWarehouseCut` ile AYNI kapı; eşleme
     // burada ikinci kez yazılsaydı iki yüzey sessizce ayrışırdı.
     const childQualityGrade: string = await resolveRemainingGradeCode(
@@ -3794,7 +3830,7 @@ export class TamburService {
             foldType: actualFoldType,
             initialQty: remainingQty,
             currentQty: remainingQty,
-            weightKg: null,
+            weightKg: remainingWeightKg,
             status: RollStatus.WAREHOUSE,
             qualityGrade: childQualityGrade,
             qualityGradeId: childQualityGradeId,

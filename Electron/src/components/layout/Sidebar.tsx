@@ -20,12 +20,19 @@ import { offEntryMode, useCanSeeOffModules } from "@/lib/off-module-visibility";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useMenuOrder } from "@/hooks/useMenuOrder";
 import { ADMIN_PERMISSION_LIST } from "@/types/auth";
-import { navGroups, type NavItem, type NavGroup } from "./nav-config";
+import { ADVANCED_GROUP_LABEL, navGroups, type NavItem, type NavGroup } from "./nav-config";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import { findCommandEntry, type CommandEntry } from "./command-entries";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { SidebarBrand, SidebarFooter } from "./sidebar-brand";
 import { SidebarPathsCtx, CollapsedItem, SortableExpandedItem } from "./sidebar-items";
+import { useState } from "react";
+import { ChevronDown, ChevronRight, Wrench } from "lucide-react";
+import { useMenuLayout } from "@/hooks/useMenuLayout";
+import { isMenuHidden } from "@/lib/menu-layout";
+import { useAuthStore } from "@/store/auth";
+import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
+import { useLicenseScreenVisible } from "@/hooks/useLicenseStatus";
 
 interface Props {
   collapsed: boolean;
@@ -83,12 +90,30 @@ export function Sidebar({ collapsed }: Props) {
     .filter(visible);
   const favGroup: NavGroup[] = favItems.length > 0 ? [{ label: "Favoriler", items: favItems }] : [];
 
+  // K19 menü düzeni: gizlenen kök satır kalkar; ayar yokken süzgeç boştur (bugünkü menü bayt bayt aynı).
+  const menu = useMenuLayout();
+  const isSystemAccount = useAuthStore((s) => s.isSystemAccount);
+  const systemAccountExists = useAuthStore((s) => s.systemAccountExists);
+  const superadminGateOpen = isSuperadminGateOpen({ isSystemAccount, systemAccountExists });
+  const licenseScreenVisible = useLicenseScreenVisible();
+
   // Nav grupları — kullanıcı sürükle-bırak sırası uygulanır (localStorage).
   const navOrdered: NavGroup[] = navGroups
-    .map((g) => ({ ...g, items: orderItems(g.label, g.items.filter(visible).map(withOffHint)) }))
+    .map((g) => ({ ...g, items: orderItems(g.label, g.items.filter((i) => !isMenuHidden(menu, i.to)).filter(visible).map(withOffHint)) }))
     .filter((g) => g.items.length > 0);
 
-  const groups = [...favGroup, ...navOrdered];
+  // "Gelişmiş" grubu — teknik ekranlar hub'lardan çıkıp burada toplanır (yalnız ayar açıkken; hub/palet ile AYNI kapılar).
+  const advancedItems: NavItem[] = [...menu.advanced]
+    .map((key) => findCommandEntry(`/${key}`))
+    .filter((e): e is CommandEntry => Boolean(e))
+    .filter((e) => !isMenuHidden(menu, e.to))
+    .filter((e) => (!e.superadminOnly || superadminGateOpen) && (!e.licenseObservationGate || licenseScreenVisible))
+    .map((e) => ({ label: e.label, to: e.to, icon: e.icon, permission: e.permission, permissionAny: e.permissionAny, adminOnly: e.adminOnly }))
+    .filter(visible);
+  const advancedGroup: NavGroup[] =
+    advancedItems.length > 0 ? [{ label: ADVANCED_GROUP_LABEL, items: orderItems(ADVANCED_GROUP_LABEL, advancedItems), collapsible: true }] : [];
+
+  const groups = [...favGroup, ...navOrdered, ...advancedGroup];
   const allPaths = groups.flatMap((g) => g.items.map((i) => i.to));
 
   return (
@@ -116,12 +141,29 @@ export function Sidebar({ collapsed }: Props) {
 }
 
 function CollapsedNav({ groups }: { groups: NavGroup[] }) {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   return (
     <nav className="flex flex-1 flex-col items-center overflow-y-auto py-4">
       {groups.map((group, idx) => (
         <div key={group.label} className="flex w-full flex-col items-center">
           {idx > 0 && <div className="my-2 h-px w-8 bg-border/50" />}
-          <motion.ul
+          {group.collapsible && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-expanded={advancedOpen}
+                  aria-label={group.label}
+                  onClick={() => setAdvancedOpen((v) => !v)}
+                  className="mb-1 flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent"
+                >
+                  <Wrench className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">{group.label}</TooltipContent>
+            </Tooltip>
+          )}
+          {(!group.collapsible || advancedOpen) && <motion.ul
             variants={staggerContainer}
             initial="hidden"
             animate="show"
@@ -130,7 +172,7 @@ function CollapsedNav({ groups }: { groups: NavGroup[] }) {
             {group.items.map((item) => (
               <CollapsedItem key={item.to} item={item} />
             ))}
-          </motion.ul>
+          </motion.ul>}
         </div>
       ))}
     </nav>
@@ -172,13 +214,27 @@ function ExpandedGroup({
     onReorder(group.label, arrayMove(ids, oldI, newI));
   };
 
+  // K19 Gelişmiş grubu: başlık düğmedir, grup varsayılan KAPALI açılır.
+  const [open, setOpen] = useState(!group.collapsible);
   return (
     <div className="mb-4">
+      {group.collapsible ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          className="mb-1.5 flex w-full items-center gap-1.5 px-4 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 hover:text-foreground"
+        >
+          {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          {group.label}
+        </button>
+      ) : (
       <p className="mb-1.5 flex items-center gap-1.5 px-4 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
         <span className="h-1 w-1 rounded-full bg-primary/60" />
         {group.label}
       </p>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      )}
+      {open && <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
           <motion.ul
             variants={staggerContainer}
@@ -191,7 +247,7 @@ function ExpandedGroup({
             ))}
           </motion.ul>
         </SortableContext>
-      </DndContext>
+      </DndContext>}
     </div>
   );
 }

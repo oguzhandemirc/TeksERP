@@ -3,11 +3,17 @@ import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { visibleCostTiles } from "./tile-config";
+import { isRouteModuleOpen } from "@/lib/route-modules";
+import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
+import { useMenuLayout } from "@/hooks/useMenuLayout";
+import { isHubTileHidden } from "@/lib/menu-layout";
 
 export function CostHubPage() {
   // Muhasebe hub'ıyla aynı kural: `isAdmin` kısa devresi YOK — izni olmayan karo görünmez.
   const { hasAnyPermission } = useRoleAccess();
-  const visible = visibleCostTiles(hasAnyPermission);
+  const menu = useMenuLayout();
+  const ctx = useOperationsVisibilityContext();
+  const visible = visibleCostTiles(hasAnyPermission, (to) => isRouteModuleOpen(to, ctx)).filter((t) => !isHubTileHidden(menu, t.to));
   return (
     <PageShell>
       <PageHeader

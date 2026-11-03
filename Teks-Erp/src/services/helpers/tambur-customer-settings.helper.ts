@@ -2,8 +2,8 @@
 // TAMBUR MÜŞTERİ AYARLARI — tartım zorunluluğu, bölme önerisi, en kaynağı (Gülkesim S5)
 // =============================================================================
 // Ayar müşteri kartındadır; müşteri = kesimin etiket müşterisi (Kime?), yoksa malın
-// sahibi. Tartım kapısı iki kesim yolunda (açık kumaş + depo topu) AYNI helper'dan
-// geçer — biri unutulursa zorunlu müşterinin topu kg'sız doğar.
+// sahibi. Tartım kapısı top doğuran HER tambur yolunda (iki kesim + iki 'Bitir' kalanı +
+// segmentli finalize) AYNI helper'dan geçer — biri unutulursa zorunlu müşterinin topu kg'sız doğar.
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";

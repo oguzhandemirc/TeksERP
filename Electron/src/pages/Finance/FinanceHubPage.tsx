@@ -4,12 +4,15 @@ import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { financeTiles } from "./tile-config";
+import { useMenuLayout } from "@/hooks/useMenuLayout";
+import { isHubTileHidden } from "@/lib/menu-layout";
 
 export function FinanceHubPage() {
   // Operasyon hub'ıyla aynı kural: `isAdmin` kısa devresi YOK — kısmi admin,
   // yetkisi olmayan muhasebe kartını görmemeli.
   const { hasAnyPermission } = useRoleAccess();
-  const visible = financeTiles.filter((t) => hasAnyPermission(t.permissionAny));
+  const menu = useMenuLayout();
+  const visible = financeTiles.filter((t) => hasAnyPermission(t.permissionAny) && !isHubTileHidden(menu, t.to));
 
   return (
     <PageShell>

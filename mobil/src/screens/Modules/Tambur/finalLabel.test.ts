@@ -5,10 +5,20 @@ import {
   splitSuggestion,
   unprintedRolls,
   weightError,
+  finalizeWeightError,
 } from './finalLabel';
 import type { Roll } from '../../../types/models';
 
 describe('tambur final etiket kararları', () => {
+  it("'Bitir' tartımı: kalan top doğuran karar kg ister, discard istemez (s5 inceleme)", () => {
+    const on = { weighRequired: true };
+    expect(finalizeWeightError(on, '', 'keep_1kalite')).toMatch(/tartılmadan/);
+    expect(finalizeWeightError(on, '', 'keep_a1')).toMatch(/tartılmadan/);
+    expect(finalizeWeightError(on, '', 'scrap')).toMatch(/tartılmadan/);
+    expect(finalizeWeightError(on, '', 'discard')).toBeNull();
+    expect(finalizeWeightError(on, '7,5', 'keep_1kalite')).toBeNull();
+    expect(finalizeWeightError({ weighRequired: false }, '', 'keep_1kalite')).toBeNull();
+  });
   it('basım zamanı: EACH/yok → hemen bas, END → basma', () => {
     expect(shouldAutoPrintAfterCut(null)).toBe(true);
     expect(shouldAutoPrintAfterCut({ printTiming: 'EACH' })).toBe(true);

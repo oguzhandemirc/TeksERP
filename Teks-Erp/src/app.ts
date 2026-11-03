@@ -115,6 +115,7 @@ import warehouseTransferRoutes from "./routes/warehouse-transfer.routes";
 import stockCountRoutes from "./routes/stock-count.routes";
 import currencyRoutes from "./routes/currency.routes";
 import featureFlagRoutes from "./routes/feature-flag.routes";
+import menuLayoutRoutes from "./routes/menu-layout.routes";
 import demoRoutes from "./routes/demo.routes";
 import discoveryRoutes from "./routes/discovery.routes";
 import importRoutes from "./routes/import.routes";
@@ -670,6 +671,7 @@ app.use("/api/finance/cheque-delivery-notes", chequeDeliveryNoteRoutes);
 app.use("/api/finance", financeRoutes);
 app.use("/api/currencies", currencyRoutes);
 app.use("/api/feature-flags", featureFlagRoutes);
+app.use("/api/menu-layout", menuLayoutRoutes); // K19 menü düzeni
 // Demo senaryoları — `demo.modeEnabled` kapalıyken hepsi 403 (requireDemoMode).
 app.use("/api/demo", demoRoutes);
 // Servis keşfi — KİMLİKSİZ ve DB'siz. İstemci sunucuyu ağda bulduktan sonra
