@@ -1,5 +1,6 @@
 // Rehberli tanıtma paneli (K30-T A2): başlık → alanlar sırayla → ad + kaydet. Kullanıcı yalnız DEĞERE dokunur; etiketi sunucu bulur,
 // önizleme kendiliğinden koşar ve "Okunan: …" anında görünür. Durum geçişleri saf `guidedReduce`te.
+// Sözleşme A2 "Etiketi değiştir" düğmesi: etiket seçimi sunucuda (anchor) ve istemciden ezilemez; düğme dürüstçe "Yeniden işaretle".
 import { Check, ChevronLeft, ChevronRight, Loader2, RotateCcw, SkipForward } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,8 @@ interface Props {
   dispatch: (ev: GuidedEvent) => void;
   onName: (name: string) => void;
   preview: { result: SuggestResult | null; fresh: boolean; error: string | null };
+  /** Güncelle kipinde eski şablonun alanları: işaretlenmeyen/atlanan alan sunucu birleştirmesinde eski haliyle KORUNUR. */
+  oldKeys?: readonly string[];
 }
 
 const CHIP_TONE = { done: "border-emerald-600 text-emerald-700 dark:text-emerald-300", skipped: "border-dashed text-muted-foreground line-through", todo: "" } as const;
@@ -28,12 +31,13 @@ function ReadoutLine({ r }: { r: Readout }) {
         Okunan: <strong>{r.value}</strong>{r.label ? <span className="text-muted-foreground"> (etiket: “{r.label}”)</span> : null}
       </p>
     );
-  if (r.kind === "empty") return <p className="text-sm text-amber-700 dark:text-amber-300" data-testid="guided-readout-fail">Okunamadı — etiketi değiştirin ya da başka kelimeye dokunun.</p>;
+  if (r.kind === "empty") return <p className="text-sm text-amber-700 dark:text-amber-300" data-testid="guided-readout-fail">Okunamadı — işareti kaldırıp değerin kendisine yeniden dokunun ya da bu belgede yoksa atlayın.</p>;
   return <p className="text-sm text-destructive" data-testid="guided-readout-fail">{r.text}</p>;
 }
 
-export function GuidedTeach({ state, step, skipped, dispatch, onName, preview }: Props) {
+export function GuidedTeach({ state, step, skipped, dispatch, onName, preview, oldKeys = [] }: Props) {
   const key = stepField(step);
+  const keptOld = (k: FieldKey) => oldKeys.includes(k) && !state.fields[k]?.length;
   const steps = ["Başlık", ...GUIDED_FIELDS.map(fieldLabel), "Bitir"];
   return (
     <div className="space-y-3 rounded-lg border p-3" data-testid="guided-teach">
@@ -65,9 +69,10 @@ export function GuidedTeach({ state, step, skipped, dispatch, onName, preview }:
           <p className="font-medium">{fieldLabel(key)} değerine dokunun</p>
           <p className="text-sm text-muted-foreground">Etikete değil, değerin kendisine dokunun; yanındaki basılı etiketi sistem bulur.</p>
           <ReadoutLine r={fieldReadout(state, key, preview)} />
+          {keptOld(key) && <p className="text-xs text-muted-foreground" data-testid="guided-kept-old">Eski şablondaki “{fieldLabel(key)}” tanımı korunur; değiştirmek için değere dokunun.</p>}
           <div className="flex flex-wrap gap-2 pt-1">
             <Button type="button" size="sm" variant="outline" onClick={() => dispatch({ type: "SKIP" })} data-testid="guided-skip"><SkipForward className="mr-1 h-4 w-4" /> Bu belgede yok</Button>
-            {state.fields[key]?.length ? <Button type="button" size="sm" variant="outline" onClick={() => dispatch({ type: "RELABEL" })} data-testid="guided-relabel"><RotateCcw className="mr-1 h-4 w-4" /> Etiketi değiştir</Button> : null}
+            {state.fields[key]?.length ? <Button type="button" size="sm" variant="outline" onClick={() => dispatch({ type: "RELABEL" })} data-testid="guided-relabel"><RotateCcw className="mr-1 h-4 w-4" /> Yeniden işaretle</Button> : null}
           </div>
         </div>
       )}
@@ -77,7 +82,7 @@ export function GuidedTeach({ state, step, skipped, dispatch, onName, preview }:
           <ul className="space-y-1 text-sm">
             {GUIDED_FIELDS.map((k) => (
               <li key={k} className="flex gap-2"><span className="w-32 shrink-0 text-muted-foreground">{fieldLabel(k)}</span>
-                {state.fields[k]?.length ? <ReadoutLine r={fieldReadout(state, k, preview)} /> : <span className="text-muted-foreground">{skipped.includes(k) ? "Bu belgede yok" : "—"}</span>}
+                {state.fields[k]?.length ? <ReadoutLine r={fieldReadout(state, k, preview)} /> : <span className="text-muted-foreground">{keptOld(k) ? "Eski şablondaki tanım korunur" : skipped.includes(k) ? "Bu belgede yok" : "—"}</span>}
               </li>
             ))}
           </ul>

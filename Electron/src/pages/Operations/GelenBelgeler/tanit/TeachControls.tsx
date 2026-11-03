@@ -7,7 +7,7 @@ import { GuidedTeach } from "./GuidedTeachPanel";
 import { SimilarDialog } from "./SimilarDialog";
 import { TeachPanel } from "./TeachPanel";
 import { TeachPreview } from "./TeachPreview";
-import type { FieldKey } from "./teachDraft";
+import { oldTemplateFieldKeys, type FieldKey } from "./teachDraft";
 import type { UserTemplateDetail } from "./types";
 import type { TeachHook } from "./useTeach";
 
@@ -42,6 +42,7 @@ export function TeachControls({ t, existing, advanced, onAdvanced, nav, dispatch
           dispatch={dispatch}
           onName={(name) => t.setState((s) => ({ ...s, name }))}
           preview={{ result: t.preview, fresh: t.previewFresh, error: t.previewError }}
+          oldKeys={oldTemplateFieldKeys(existing?.template)}
         />
       )}
       {showProblems && t.problems.length > 0 && <ul className="text-xs text-amber-800 dark:text-amber-300" data-testid="teach-problems">{t.problems.map((p) => <li key={p}>{p}</li>)}</ul>}

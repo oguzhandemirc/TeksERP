@@ -30,6 +30,7 @@ export function TeachTemplatePage() {
   const [scanIdx, setScanIdx] = useState(0);
   const scan = scans[Math.min(scanIdx, Math.max(0, scans.length - 1))] ?? null;
   const [advanced, setAdvanced] = useState(false);
+  // Sayfa değişince işaretleme sıfırlanır (useTeach) — adım/atlandı göstergesi de onunla birlikte başa döner.
   const [nav, setNav] = useState<{ step: number; skipped: FieldKey[] }>({ step: 0, skipped: [] });
   const t = useTeach(code && !existing.data ? null : (scan?.id ?? null), existing.data ?? null, () => navigateActive(`/operations/gelen-belgeler/${id}`), { auto: !advanced });
   const dispatch = (ev: GuidedEvent) => {
@@ -61,7 +62,7 @@ export function TeachTemplatePage() {
               {scans.length > 1 && (
                 <div className="flex flex-wrap gap-1">
                   {scans.map((s, i) => (
-                    <Button key={s.id} size="sm" variant={s.id === scan?.id ? "default" : "outline"} onClick={() => setScanIdx(i)}>Sayfa {s.pageNo}</Button>
+                    <Button key={s.id} size="sm" variant={s.id === scan?.id ? "default" : "outline"} onClick={() => { setScanIdx(i); setNav({ step: 0, skipped: [] }); }}>Sayfa {s.pageNo}</Button>
                   ))}
                 </div>
               )}

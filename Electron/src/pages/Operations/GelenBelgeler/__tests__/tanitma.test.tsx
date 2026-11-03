@@ -146,7 +146,8 @@ describe("tanıtma sayfası", () => {
     await userEvent.click(screen.getByTestId("teach-preview-run"));
     await waitFor(() => expect(api.suggestTemplate).toHaveBeenCalledTimes(1));
     const body = api.suggestTemplate.mock.calls[0]![0];
-    expect(body).toMatchObject({ scanId: "s1", name: "Güleçsoy", assignments: [{ field: "partiNo", rect: { x: 200, y: 300 } }] });
+    // Önizleme sabit geçici adla koşar (ad yazarken istek atılmaz); gerçek ad yalnız kayıtta gider.
+    expect(body).toMatchObject({ scanId: "s1", name: "Yeni belge tipi", assignments: [{ field: "partiNo", rect: { x: 200, y: 300 } }] });
     expect(body.identifiers).toContain("GÜLEÇSOY BOYA");
     expect(await screen.findByTestId("teach-preview-match")).toHaveTextContent("tanınıyor");
     expect(screen.getByTestId("teach-preview-explain")).toHaveTextContent('Parti No ← "Ham PartiNo" sağında');

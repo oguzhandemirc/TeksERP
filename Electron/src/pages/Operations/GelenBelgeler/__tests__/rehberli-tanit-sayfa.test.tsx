@@ -31,6 +31,7 @@ vi.mock("../tanit/service", () => ({
 }));
 
 const { TeachTemplatePage } = await import("../tanit/TanitPage");
+const { TeachStartPage } = await import("../tanit/TanitStartPage");
 
 // Fotoğraf 90° dönük saklanmış gibi: photoRect ≠ rect (öneri OCR çerçevesini almalı).
 const w = (text: string, [x, y]: [number, number], lineNo: number, width = 60): ScanWord => ({
@@ -51,6 +52,7 @@ const okResult = (extra: Record<string, unknown> = {}) => ({
 });
 
 beforeEach(() => {
+  perms.list = ["gelen-belge:read", "gelen-belge:template"];
   nav.search = "";
   navigateActive.mockReset();
   for (const f of Object.values(api)) f.mockReset();
@@ -86,7 +88,7 @@ describe("rehberli tanıtma sayfası", () => {
     await waitFor(() => expect(navigateActive).toHaveBeenCalledWith("/operations/gelen-belgeler/n1"));
   });
 
-  it("okunamayan değer: 'Okunamadı' + Etiketi değiştir alanı boşaltır", async () => {
+  it("okunamayan değer: 'Okunamadı' + Yeniden işaretle alanı boşaltır", async () => {
     api.suggestTemplate.mockResolvedValue(okResult({ preview: { matched: true, score: 1, fields: { partiNo: null }, lineCount: 4, warnings: [] } }));
     await tapPartiNo();
     expect(await screen.findByTestId("guided-readout-fail")).toHaveTextContent("Okunamadı");
@@ -112,6 +114,51 @@ describe("rehberli tanıtma sayfası", () => {
     expect(api.createUserTemplate).not.toHaveBeenCalled();
   });
 
+});
+
+describe("rehberli tanıtma — inceleme düzeltmeleri", () => {
+  it("Bitir'de ad yazmak önizleme isteği atmaz (sabit önizleme adı); kayıtta gerçek ad gider", async () => {
+    await tapPartiNo();
+    await screen.findByTestId("guided-readout-ok");
+    await userEvent.click(screen.getByTestId("guided-chip-8"));
+    await userEvent.clear(screen.getByTestId("guided-name"));
+    await userEvent.type(screen.getByTestId("guided-name"), "Güleçsoy çeki");
+    await new Promise((r) => setTimeout(r, 600));
+    expect(api.suggestTemplate).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("guided-readout-ok")).toHaveTextContent("P2618733");
+    await userEvent.click(screen.getByTestId("teach-save"));
+    await waitFor(() => expect(api.createUserTemplate).toHaveBeenCalledTimes(1));
+    expect(api.suggestTemplate).toHaveBeenCalledTimes(1);
+    expect(api.createUserTemplate.mock.calls[0]![0]).toMatchObject({ name: "Güleçsoy çeki" });
+  });
+
+  it("Aynı tip önizlemesi okunamazsa kayıt yok ve ekrandaki ad/kimlikler diğer şablona dönmez", async () => {
+    api.suggestTemplate.mockResolvedValue(okResult({ benzerSablonlar: [{ kod: "u-a", ad: "A Boya", skor: 0.9 }] }));
+    await tapPartiNo();
+    await screen.findByTestId("guided-readout-ok");
+    await userEvent.click(screen.getByTestId("teach-save"));
+    api.getUserTemplate.mockResolvedValue({ id: "t1", code: "u-a", name: "A Boya", version: 4, isActive: true, updatedAt: "", versions: [], template: { identifiers: { keywords: ["A BOYA SAN"] } } });
+    api.suggestTemplate.mockResolvedValue({ template: {}, explain: [], errors: ["okunamadı"], preview: null });
+    await userEvent.click(await screen.findByTestId("teach-similar-same-u-a"));
+    await waitFor(() => expect(api.suggestTemplate).toHaveBeenCalledTimes(2));
+    expect(api.updateUserTemplate).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByTestId("guided-chip-0"));
+    expect(screen.getByTestId("guided-identifiers")).not.toHaveTextContent("A BOYA SAN");
+    await userEvent.click(screen.getByTestId("guided-chip-8"));
+    expect(screen.getByTestId("guided-name")).toHaveValue("GÜLEÇSOY BOYA");
+  });
+
+  it("güncelle kipi: eski şablonda olan alan işaretlenmezse 'eski tanım korunur' denir", async () => {
+    nav.search = "sablon=u-a";
+    api.getUserTemplate.mockResolvedValue({ id: "t1", code: "u-a", name: "A Boya", version: 4, isActive: true, updatedAt: "", versions: [], template: { identifiers: { keywords: ["GÜLEÇSOY BOYA"] }, fields: [{ key: "musteri", label: "Müşteri" }] } });
+    renderWithProviders(<TeachTemplatePage />);
+    await userEvent.click(await screen.findByTestId("guided-next"));
+    expect(screen.getByTestId("guided-step-musteri")).toBeInTheDocument();
+    expect(screen.getByTestId("guided-kept-old")).toHaveTextContent("Eski şablondaki “Müşteri” tanımı korunur");
+    await userEvent.click(screen.getByTestId("guided-skip"));
+    expect(screen.queryByTestId("guided-kept-old")).toBeNull();
+  });
+
   it("benzer şablon: Yeni tip olarak kaydet → POST", async () => {
     api.suggestTemplate.mockResolvedValue(okResult({ benzerSablonlar: [{ kod: "u-a", ad: "A Boya", skor: 0.9 }] }));
     await tapPartiNo();
@@ -120,5 +167,17 @@ describe("rehberli tanıtma sayfası", () => {
     await userEvent.click(await screen.findByTestId("teach-similar-new"));
     await waitFor(() => expect(api.createUserTemplate).toHaveBeenCalledTimes(1));
     expect(api.updateUserTemplate).not.toHaveBeenCalled();
+  });
+});
+
+describe("Belge Tanıt girişi (yükleme taslak yaratır)", () => {
+  it("yazma izni yoksa yükleme düğmesi yerine açık mesaj; izin varsa düğme", () => {
+    const { unmount } = renderWithProviders(<TeachStartPage />);
+    expect(screen.queryByTestId("teach-start-upload")).toBeNull();
+    expect(screen.getByTestId("teach-start-no-write")).toHaveTextContent("yazma izni");
+    unmount();
+    perms.list = [...perms.list, "gelen-belge:write"];
+    renderWithProviders(<TeachStartPage />);
+    expect(screen.getByTestId("teach-start-upload")).toBeInTheDocument();
   });
 });
