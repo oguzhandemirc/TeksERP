@@ -6,7 +6,7 @@ export const NOTE_STATUS_LABEL: Record<NoteStatus, string> = {
   APPROVING: "Onaylanıyor",
   APPROVED: "Onaylandı",
   PARTIAL: "Kısmi",
-  CANCELLED: "İptal",
+  CANCELLED: "İptal edildi",
 };
 
 export const NOTE_STATUS_VARIANT: Record<NoteStatus, "default" | "secondary" | "destructive" | "outline"> = {
@@ -33,6 +33,9 @@ export const isEditable = (s: NoteStatus) => s === "DRAFT";
 export const isApprovable = (s: NoteStatus) => s === "DRAFT" || s === "PARTIAL";
 /** Belgeden iş emri açılabilir mi: yalnız topları doğmuş (APPROVED/PARTIAL) belgede — sunucu aksi halde 409 verir. */
 export const isWorkOrderOpenable = (s: NoteStatus) => s === "APPROVED" || s === "PARTIAL";
+
+/** Onaylı belge iptal edilebilir mi (K15): yalnız topları doğmuş belge; engelleri sunucu önizlemesi söyler. */
+export const isCancellable = (s: NoteStatus) => s === "APPROVED" || s === "PARTIAL";
 
 /** Silinebilir mi: yalnız DRAFT (deftere hiç yazmamış taslak). Sunucu önizlemesi kesin hükümdür; bu yalnız kutuyu pasifler. */
 export const isDeletable = (s: NoteStatus) => s === "DRAFT";

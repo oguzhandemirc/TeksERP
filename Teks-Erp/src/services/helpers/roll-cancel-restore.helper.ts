@@ -37,6 +37,7 @@ import { RollStatus } from "@prisma/client";
 import {
   TAMBUR_UNDO_CANCEL_CODE,
   FASON_RECEIPT_CANCEL_CODE,
+  DELIVERY_NOTE_CANCEL_CODE,
 } from "../../constants/reason-presets";
 import { TERIM } from "../../constants/terim";
 
@@ -148,6 +149,10 @@ export function resolveRollRestoreBlockReason(s: RollRestoreSignals): string | n
       "diriltilirse aynı metraj iki yerde sayılır. Malı yeniden almak için " +
       "kabulü yeniden yapın."
     );
+  }
+  // SEKİZİNCİ SİNYAL (K15): belge iptaliyle düşen top dirilirse iptal edilmiş belgenin malı stokta görünür.
+  if (s.cancelReasonCode === DELIVERY_NOTE_CANCEL_CODE) {
+    return "Bu top gelen belgenin iptaliyle düşmüş — geri alınamaz. Mal gerçekten geldiyse belgeyi yeniden girip onaylayın.";
   }
   return null;
 }

@@ -118,6 +118,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "DELETE /api/gelen-belge/irsaliyeler/:id/satirlar/:lineId": e("gelen belge satırını sildi", "gelen belge satırını silmeye çalıştı"),
   "POST /api/gelen-belge/irsaliyeler/:id/onay": e("gelen belgeyi onayladı (emanet top girişi)", "gelen belgeyi onaylamaya çalıştı"),
   get "POST /api/gelen-belge/irsaliyeler/:id/is-emri"() { return e(`gelen belgeden ${TERIM.terbiyeIsEmri.tekilKucuk} açtı`, `gelen belgeden ${TERIM.terbiyeIsEmri.tekilKucuk} açmaya çalıştı`); },
+  "POST /api/gelen-belge/irsaliyeler/:id/iptal": e("onaylı gelen belgeyi iptal etti", "onaylı gelen belgeyi iptal etmeye çalıştı"),
   "PATCH /api/gelen-belge/sablonlar/:code": e("gönderen şablonunu düzenledi", "gönderen şablonunu düzenlemeye çalıştı"),
   "PUT /api/gelen-belge/varsayilan-urunler/:customerId": e("müşterinin gelen belge varsayılan ürününü yazdı", "müşterinin gelen belge varsayılan ürününü yazmaya çalıştı"),
   "DELETE /api/gelen-belge/varsayilan-urunler/:customerId": e("müşterinin gelen belge varsayılan ürününü kaldırdı", "müşterinin gelen belge varsayılan ürününü kaldırmaya çalıştı"),

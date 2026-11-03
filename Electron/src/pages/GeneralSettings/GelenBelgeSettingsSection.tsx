@@ -64,7 +64,7 @@ function AutoWorkOrderToggle({ checked, onChange }: { checked: boolean; onChange
 }
 
 export const ROUTE_PRIORITY_OPTIONS: ReadonlyArray<{ value: RouteSuggestionPriority; label: string; hint: string }> = [
-  { value: "CUSTOMER_FIRST", label: "Önce müşteri geçmişi", hint: `Önce müşterinin son ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma}ki rota, sonra müşteriye tanımlı tek rota şablonu, en son fabrika varsayılanı (bugünkü davranış).` },
+  { value: "CUSTOMER_FIRST", label: "Önce müşteri geçmişi", get hint() { return `Önce müşterinin son ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma}ki rota, sonra müşteriye tanımlı tek rota şablonu, en son fabrika varsayılanı (bugünkü davranış).`; } },
   { value: "FACTORY_FIRST", label: "Her zaman fabrika varsayılanı", hint: "Fabrika varsayılan rotası seçiliyse hep o önerilir; boşsa müşteri geçmişine bakılır." },
 ];
 

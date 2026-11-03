@@ -247,6 +247,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "gelen-belge:read",
       "gelen-belge:write",
       "gelen-belge:approve",
+      // K15: onaylı belge iptali topları ters kayıtla düşürür — onayla aynı SoD ailesi.
+      "gelen-belge:cancel",
       "gelen-belge:template",
     ],
   },
@@ -390,6 +392,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "gelen-belge:read",
       "gelen-belge:write",
       "gelen-belge:approve",
+      // K15: onaylı belge iptali topları ters kayıtla düşürür — onayla aynı SoD ailesi.
+      "gelen-belge:cancel",
       "gelen-belge:template",
       "workorder:read",
       "workorder:write",
@@ -762,7 +766,8 @@ export function resolveRoleTemplateCodes(entry: RoleTemplateEntry): readonly str
 // `gelen-belge:approve` (D1, 2026-10-29) aynı aileye girdi: onay emanet topunu DOĞURUR (deftere yazar).
 // `finance:hold-release` (D4-I1a, 2026-10-30): cari kilidini açmak riski geri açar — kilidi koyandan ayrı yetki.
 // `finance:cari-merge` (D4-K3e, 2026-11-01): iki hesabın defterini virmanla birleştirir — muhasebe kararı.
-export const SOD_PERMISSION_CODES = ["shipping:invoice", "shipping:undo-dispatch", "roll:manual-adjust", "gelen-belge:approve", "finance:hold-release", "finance:cari-merge"] as const;
+// `gelen-belge:cancel` (K15, 2026-11-03): onaylı belge iptali onayın ters yoludur — toplar defterden düşer.
+export const SOD_PERMISSION_CODES = ["shipping:invoice", "shipping:undo-dispatch", "roll:manual-adjust", "gelen-belge:approve", "finance:hold-release", "finance:cari-merge", "gelen-belge:cancel"] as const;
 export const SOD_ALLOWED_TEMPLATES: readonly string[] = ["WEB_ACCOUNTING", "WEB_PRODUCTION_SUPERVISOR", "ADMIN_FULL"];
 
 export const ROLE_COVERAGE_EXEMPT: Readonly<Record<string, string>> = {

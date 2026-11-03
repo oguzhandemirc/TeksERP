@@ -30,6 +30,8 @@ interface Props {
   initial?: ProductionRoute | null;
   onSubmit: (values: RouteFormValues) => Promise<void>;
   isSubmitting?: boolean;
+  /** Yeni kayıtta "İş emri kısayolu" işaretli başlar ("Yeni özel iş emri" kartından gelindi, K20). */
+  newAsShortcut?: boolean;
 }
 
 // Rota adımını forma çevir — fason planlaması (Saha #14) dahil. EXTERNAL adımda
@@ -54,8 +56,8 @@ function stepToForm(s: ProductionRoute["steps"][number]) {
   };
 }
 
-function buildDefaults(initial?: ProductionRoute | null): RouteFormValues {
-  if (!initial) return routeFormDefaults;
+function buildDefaults(initial?: ProductionRoute | null, newAsShortcut = false): RouteFormValues {
+  if (!initial) return newAsShortcut ? { ...routeFormDefaults, isWorkOrderShortcut: true } : routeFormDefaults;
   return {
     name: initial.name,
     description: initial.description ?? "",
@@ -89,13 +91,14 @@ export function RouteFormDialog({
   initial,
   onSubmit,
   isSubmitting,
+  newAsShortcut = false,
 }: Props) {
   const isEdit = Boolean(initial);
 
   const form = useForm<RouteFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(routeFormSchema as any) as unknown as Resolver<RouteFormValues>,
-    defaultValues: buildDefaults(initial),
+    defaultValues: buildDefaults(initial, newAsShortcut),
   });
 
   const [stepsError, setStepsError] = useState<string | null>(null);
@@ -103,7 +106,7 @@ export function RouteFormDialog({
 
   useEffect(() => {
     if (open) {
-      form.reset(buildDefaults(initial));
+      form.reset(buildDefaults(initial, newAsShortcut));
       setStepsError(null);
       setCopySourceId(null);
     }

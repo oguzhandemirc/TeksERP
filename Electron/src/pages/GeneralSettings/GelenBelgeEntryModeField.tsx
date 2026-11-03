@@ -26,13 +26,13 @@ export const ENTRY_MODE_OPTIONS: ReadonlyArray<Option<IncomingDocEntryMode>> = [
 ];
 
 export const AUTO_WORK_ORDER_PATTERNLESS_OPTIONS: ReadonlyArray<Option<AutoWorkOrderPatternlessMode>> = [
-  { value: "SKIP", label: "Atla", hint: `İşlem değeri (desen/gramaj) çözülemeyen grup için ${TERIM.terbiyeIsEmri.tekilKucuk} açılmaz; onay sonucu elle açılmasını söyler (bugünkü davranış).` },
-  { value: "OPEN", label: "Hedef değersiz aç", hint: `İşlem değeri çözülemeyen grup için de ${TERIM.terbiyeIsEmri.tekilKucuk} açılır; hedef değer boş kalır.` },
+  { value: "SKIP", label: "Atla", get hint() { return `İşlem değeri (desen/gramaj) çözülemeyen grup için ${TERIM.terbiyeIsEmri.tekilKucuk} açılmaz; onay sonucu elle açılmasını söyler (bugünkü davranış).`; } },
+  { value: "OPEN", label: "Hedef değersiz aç", get hint() { return `İşlem değeri çözülemeyen grup için de ${TERIM.terbiyeIsEmri.tekilKucuk} açılır; hedef değer boş kalır.`; } },
 ];
 
 export const FORM_APPROVAL_OPTIONS: ReadonlyArray<Option<IncomingDocFormApproval>> = [
-  { value: "SEPARATE", label: "Ayrı onay", hint: `${TERIM.terbiyeIsEmri.tekil} formundan okutulan belge taslak kalır; Gelen Belgeler'den onaylanınca ${TERIM.terbiyeIsEmri.tekilKucuk} açılır (bugünkü davranış).` },
-  { value: "WITH_WORK_ORDER", label: `${TERIM.terbiyeIsEmri.tekil} ile birlikte`, hint: `Formdan okutulan belgeyi ${TERIM.terbiyeIsEmri.tekilKucuk} açma izni olan kaydeder: belge, müşteri malı top ve ${TERIM.terbiyeIsEmri.tekilKucuk} tek seferde açılır; ayrı onay adımı yok.` },
+  { value: "SEPARATE", label: "Ayrı onay", get hint() { return `${TERIM.terbiyeIsEmri.tekil} formundan okutulan belge taslak kalır; Gelen Belgeler'den onaylanınca ${TERIM.terbiyeIsEmri.tekilKucuk} açılır (bugünkü davranış).`; } },
+  { value: "WITH_WORK_ORDER", get label() { return `${TERIM.terbiyeIsEmri.tekil} ile birlikte`; }, get hint() { return `Formdan okutulan belgeyi ${TERIM.terbiyeIsEmri.tekilKucuk} açma izni olan kaydeder: belge, müşteri malı top ve ${TERIM.terbiyeIsEmri.tekilKucuk} tek seferde açılır; ayrı onay adımı yok.`; } },
 ];
 
 type Pair<T extends string> = { server: T | undefined; value: T | undefined; set: (v: T) => void; fallback: T | undefined; dirty: boolean };

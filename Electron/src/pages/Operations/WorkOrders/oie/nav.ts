@@ -11,6 +11,11 @@ export type OieStart = { kind: "terbiye" } | { kind: "shortcut"; route: RouteRef
 /** Dokuma iş emirleri sayfası bu durumla açılınca oluşturma diyaloğu kendiliğinden açılır. */
 export type WeavingNavState = { openNew?: boolean };
 
+/** "Yeni özel iş emri" (K20): rota şablonları sayfası yeni kayıt diyaloğu açık + "Kısayol" işaretli gelir. */
+export const ROUTES_PATH = "/definitions/routes";
+export type RoutesNavState = { newShortcut?: boolean };
+export const NEW_SHORTCUT_STATE: RoutesNavState = { newShortcut: true };
+
 /** Yeni kayıt sayfa başlığı: kısayolda "<kısayol adı> iş emri", değilse bugünkü başlık. */
 export function newWorkOrderTitle(start: OieStart | null | undefined): string {
   if (start?.kind === "shortcut") return `${start.route.name} ${TERIM.terbiyeIsEmri.tekilKucuk}`;

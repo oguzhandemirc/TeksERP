@@ -164,6 +164,12 @@ export const FASON_RECEIPT_CANCEL_CODE = "FASON_KABUL_IPTAL";
 export const FASON_RECEIPT_CANCEL_TEXT =
   "Fason kabulü iptal edildi — kumaş fasona geri döndü";
 
+/**
+ * GELEN BELGE İPTALİ (K15, 2026-11-02) — onaylı belge iptal edilince belgeden doğan top bu SİSTEM koduyla düşer.
+ * Seçicide çıkmaz; restore guard'ının dalını besler: diriltilen top, iptal edilmiş belgenin malını stokta gösterirdi.
+ */
+export const DELIVERY_NOTE_CANCEL_CODE = "GELEN_BELGE_IPTAL";
+
 export const CANCEL_REASONS: readonly ReasonPresetSeed[] = [
   { code: "MUKERRER", label: "Mükerrer", fullText: "Mükerrer giriş — aynı top iki kez kaydedildi" },
   { code: "YANLIS_METRAJ", label: "Yanlış metraj", fullText: "Yanlış metraj girildi" },
