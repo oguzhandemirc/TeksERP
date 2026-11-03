@@ -1,6 +1,7 @@
 import {
   blockingForStep,
   collectQuickWoIssues,
+  computeApplyMissing,
   parsePositiveNumber,
   summarizeMissing,
   type QuickWoIssueInput,
@@ -110,5 +111,18 @@ describe('parsePositiveNumber', () => {
     expect(parsePositiveNumber('150abc')).toBeNull();
     expect(parsePositiveNumber('0')).toBeNull();
     expect(parsePositiveNumber('')).toBeNull();
+  });
+});
+
+describe('computeApplyMissing', () => {
+  it('rotasız + sipariş kalemi rengi → engel yok', () => {
+    expect(computeApplyMissing('c1', false, true)).toBeNull();
+  });
+  it('gerçek rota renksiz + renk → engel sürer', () => {
+    expect(computeApplyMissing('c1', false, false)).toBe('renk veren (boyahane)');
+  });
+  it('renk yoksa ya da rota uygular → engel yok', () => {
+    expect(computeApplyMissing(null, false, false)).toBeNull();
+    expect(computeApplyMissing('c1', true, false)).toBeNull();
   });
 });
