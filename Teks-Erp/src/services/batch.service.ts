@@ -18,6 +18,7 @@
 // commit sonrası audit'ler (created ise).
 // =============================================================================
 
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { Prisma, PrintedDocType, RollStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { formatSeriesCode, nextSeriesNo, nextSeriesNoSkipping, resolveSeriesFormat } from "./number-series.service";
@@ -478,7 +479,7 @@ export async function moveRolls(
     // K16: assertUnlocked (hedef + kaynak) KALKTI — kilitli partiyle de taşınır;
     // sevk katmanını aşağıdaki cerrahi düzenler.
 
-    const rolls = await tx.roll.findMany({
+    const rolls = await sequentialTx(tx).roll.findMany({
       where: { id: { in: rollIds } },
       select: {
         id: true,
@@ -696,7 +697,7 @@ export async function mergeBatches(
     // 2+ FARKLI firma varsa 409 — fiziksel gerçek: mal iki ayrı firmada, firma
     // çözümü (F74) bozulur. Farklı adımlardaki sevkler serbest (çözüm stepId-scope'lu).
     // Parti kapsamlı sorgu: dokuma sevkinin partisi yok, satır zaten WO'ya bağlı — daraltma tip içindir.
-    const openOutstanding = workOrderBoundOnly(await tx.subcontractorDispatch.findMany({
+    const openOutstanding = workOrderBoundOnly(await sequentialTx(tx).subcontractorDispatch.findMany({
       where: { batchId: { in: allBatchIds }, ...OPEN_OUTSTANDING },
       select: {
         id: true,

@@ -13,6 +13,7 @@
 // gününün kuruyla (`resolveExchangeRateTx`, kur TEK kaynağı) TL'ye çevrilip toplanır. Kur okuması kilitten SONRA,
 // salt okuma; sıfır olmayan tutarın kuru yoksa FAIL-CLOSED 409 `RISK_LIMIT_FX_MISSING` (kur 1 varsayılmaz).
 // =============================================================================
+import { sequentialTx } from "./tx-sequential-relations.helper";
 import { Prisma, type Currency } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { settingRowPath } from "../../constants/panel-ayar-yolu";
@@ -69,7 +70,7 @@ export async function riskExposureTx(
   currency: Currency | null,
   extra: Prisma.Decimal,
 ): Promise<RiskExposure[]> {
-  const cari = await tx.cariAccount.findUnique({
+  const cari = await sequentialTx(tx).cariAccount.findUnique({
     where: { id: cariId },
     select: { riskLimit: true, customer: { select: { name: true } }, subcontractor: { select: { name: true } } },
   });

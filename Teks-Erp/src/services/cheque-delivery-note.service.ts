@@ -28,6 +28,7 @@
 // ⚠️ `clientToken` (K1): ağ zaman aşımından sonraki ikinci gönderim ikinci BRD
 // açmaz; replay dört durumlu (`helpers/token-replay.helper`).
 // =============================================================================
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import {
   ChequeDeliveryNoteStatus,
   ChequeEventType,
@@ -293,7 +294,7 @@ async function resolveTargetTx(
     bankName = acc.name;
   }
   if (cariId) {
-    const cari = await tx.cariAccount.findUnique({
+    const cari = await sequentialTx(tx).cariAccount.findUnique({
       where: { id: cariId },
       select: {
         isActive: true,
@@ -433,7 +434,7 @@ async function assertNotAlreadyDelivered(
   confirmed: boolean,
 ): Promise<void> {
   if (confirmed) return;
-  const clashes = await tx.chequeDeliveryNoteItem.findMany({
+  const clashes = await sequentialTx(tx).chequeDeliveryNoteItem.findMany({
     where: {
       chequeId: { in: chequeIds },
       note: { status: ChequeDeliveryNoteStatus.ACTIVE },

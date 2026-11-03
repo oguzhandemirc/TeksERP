@@ -7,6 +7,7 @@
 // EDİLİR; ters yön yok — döngü yok). TEK istisna `updateDeliveryNoteLine`: PARTIAL belgede yalnız topsuz FAILED
 // satır düzeltilir/atlanır (D4 kısmi onayın çıkışı; claim WHERE {id, PARTIAL} + satır WHERE {FAILED, rollId null}).
 // =============================================================================
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { DeliveryNoteLineKind, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
@@ -113,7 +114,7 @@ export async function addDeliveryNoteLines(noteId: string, inputs: DeliveryNoteL
     const rows = [];
     for (const c of cols) {
       lineNo += 1;
-      rows.push(await tx.customerDeliveryNoteLine.create({ data: { ...c, noteId, lineNo, clientToken: clientToken ?? null }, select: LINE_SELECT }));
+      rows.push(await sequentialTx(tx).customerDeliveryNoteLine.create({ data: { ...c, noteId, lineNo, clientToken: clientToken ?? null }, select: LINE_SELECT }));
     }
     return { rows, replayed: false as const };
   });
@@ -147,7 +148,7 @@ export async function updateDeliveryNoteLine(noteId: string, lineId: string, pat
     if (!partial) {
       await claimDraft(tx, noteId, userId);
       if (patch.skip) throw AppError.badRequest("Taslakta satır atlanmaz; girilmeyecek satırı silin.", { code: "DELIVERY_NOTE_LINE_SKIP_DRAFT" });
-      return tx.customerDeliveryNoteLine.update({ where: { id: lineId }, data: { ...cols, ...reviewData }, select: LINE_SELECT });
+      return sequentialTx(tx).customerDeliveryNoteLine.update({ where: { id: lineId }, data: { ...cols, ...reviewData }, select: LINE_SELECT });
     }
     const c = await tx.customerDeliveryNoteLine.updateMany({
       where: { id: lineId, noteId, status: "FAILED", rollId: null },
@@ -159,7 +160,7 @@ export async function updateDeliveryNoteLine(noteId: string, lineId: string, pat
       const closed = await tx.customerDeliveryNote.updateMany({ where: { id: noteId, status: "PARTIAL" }, data: { status: "APPROVED", approvedAt: new Date(), approvedById: userId, updatedById: userId } });
       if (closed.count === 1) closedNoteNo = (await tx.customerDeliveryNote.findUnique({ where: { id: noteId }, select: { noteNo: true } }))?.noteNo ?? noteId;
     }
-    return tx.customerDeliveryNoteLine.findUniqueOrThrow({ where: { id: lineId }, select: LINE_SELECT });
+    return sequentialTx(tx).customerDeliveryNoteLine.findUniqueOrThrow({ where: { id: lineId }, select: LINE_SELECT });
   });
   await AuditService.log({ userId, action: "UPDATE", tableName: LINE_TABLE, recordId: lineId, oldData: auditLine(before), newData: auditLine(after) });
   if (closedNoteNo) await AuditService.log({ userId, action: "UPDATE", tableName: "CUSTOMER_DELIVERY_NOTE", recordId: noteId, oldData: { status: "PARTIAL" }, newData: { status: "APPROVED", noteNo: closedNoteNo } });

@@ -10,6 +10,7 @@
 // YALNIZ buradan geçer. Manuel taşıma (`workorder-manual-move`) AYRI semantiktir: o kaynak hareketi kapatır ve
 // renk sentezler; okutma yolu hareketi GERİ ALIR (istasyondan geçmiş sayılmaz) ve renk sentezlemez.
 // =============================================================================
+import { sequentialTx } from "./tx-sequential-relations.helper";
 import { Prisma, RollStatus, StepStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { ACTIVE_OPERATION } from "./roll-operation.helper";
@@ -149,7 +150,7 @@ export function startedWorkRollWhere(stepId: string): Prisma.RollWhereInput {
 
 /** Okutma kararının girdisi; tx içinde çağrılırsa TAZE (WO kilidinden sonra). */
 export async function loadScanRouteFacts(db: Db, workOrderId: string): Promise<ScanRouteFacts> {
-  const steps = await db.workOrderStep.findMany({
+  const steps = await sequentialTx(db).workOrderStep.findMany({
     where: { workOrderId },
     orderBy: { stepSequence: "asc" },
     select: {

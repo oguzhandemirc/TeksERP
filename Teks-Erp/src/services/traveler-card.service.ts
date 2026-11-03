@@ -30,6 +30,7 @@
 //   "v2" der, baskı "v3" yazar.
 // =============================================================================
 
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { Request } from "express";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
@@ -1195,7 +1196,7 @@ export class TravelerCardService {
     client: Prisma.TransactionClient,
     workOrderId: string,
   ): Promise<Record<string, unknown> | null> {
-    const wo = await client.workOrder.findUnique({
+    const wo = await sequentialTx(client).workOrder.findUnique({
       where: { id: workOrderId },
       select: {
         workOrderNumber: true,

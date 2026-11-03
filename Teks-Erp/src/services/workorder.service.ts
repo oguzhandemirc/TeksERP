@@ -9,6 +9,7 @@
 //   - Rolls attached to a WO change status from STOCK → IN_PRODUCTION.
 // =============================================================================
 
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { workOrderDocSearchWhere } from "./helpers/workorder-doc-search.helper";
 import { randomUUID } from "crypto";
 import { ROLL_DISPLAY_ORDER } from "../constants/roll-order";
@@ -5974,7 +5975,7 @@ export class WorkOrderService {
         data.plannedEndDate,
       );
 
-      const wo = await tx.workOrder.update({
+      const wo = await sequentialTx(tx).workOrder.update({
         where: { id },
         data: {
           type,

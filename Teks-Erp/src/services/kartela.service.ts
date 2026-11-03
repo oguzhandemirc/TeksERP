@@ -16,6 +16,7 @@
 // Refakat kartı / WO step mantığı YOK — kartela bitmiş üründen üretilir.
 // =============================================================================
 
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
@@ -329,7 +330,7 @@ export class KartelaService {
         const now = new Date();
         const dispatchNo = await nextKartelaDocNo(tx, "dispatch", now);
 
-        const dispatch = await tx.kartelaDispatch.create({
+        const dispatch = await sequentialTx(tx).kartelaDispatch.create({
           data: {
             dispatchNo,
             subcontractorId: data.subcontractorId,
