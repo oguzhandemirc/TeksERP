@@ -15,19 +15,19 @@ export function CustomerTamburLabelSettings({ customer }: { customer: Customer }
   const [form, setForm] = useState<TamburLabelSettingsForm>(() => toForm(customer));
   useEffect(() => setForm(toForm(customer)), [customer]);
 
+  // Yerel doğrulama tıklamada (toast burada); sunucu hatası apiClient'ta tek toast.
   const save = useMutation({
-    mutationFn: async () => {
-      const r = toPayload(form);
-      if (!r.ok) throw new Error(r.error);
-      return customerService.update(customer.id, r.body as Partial<Customer>);
-    },
+    mutationFn: (body: Partial<Customer>) => customerService.update(customer.id, body),
     onSuccess: () => {
       toast.success("Tambur / etiket ayarları kaydedildi.");
       void qc.invalidateQueries({ queryKey: ["customers"] });
     },
-    // Sunucu hatası apiClient'ta tek toast; yalnız yerel doğrulama hatası burada.
-    onError: (e) => { if (!(e as { isAxiosError?: boolean }).isAxiosError) toast.error((e as Error).message); },
   });
+  const onSave = () => {
+    const r = toPayload(form);
+    if (!r.ok) { toast.error(r.error); return; }
+    save.mutate(r.body as Partial<Customer>);
+  };
 
   const hint = WIDTH_SOURCE_OPTIONS.find((o) => o.value === form.widthSource)?.hint;
   return (
@@ -57,7 +57,7 @@ export function CustomerTamburLabelSettings({ customer }: { customer: Customer }
         <span className="text-xs text-muted-foreground">m — tablet kesim metresine öneri</span>
       </div>
       <PermissionGate permission="customer:write">
-        <Button size="sm" disabled={save.isPending} onClick={() => save.mutate()}>
+        <Button size="sm" disabled={save.isPending} onClick={onSave}>
           {save.isPending ? "Kaydediliyor..." : "Ayarları kaydet"}
         </Button>
       </PermissionGate>

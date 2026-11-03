@@ -2021,11 +2021,7 @@ export default function TamburScreen() {
       | 'SCRAP'
       | 'A1_STOCK';
     // S5 tartım kapısı (müşteri ayarı) — sunucu da 400 TAMBUR_WEIGHT_REQUIRED ile korur.
-    const openKgErr = openFinal.error();
-    if (openKgErr) {
-      Toast.show({ type: 'error', text1: 'Tartım', text2: openKgErr });
-      return;
-    }
+    if (openFinal.blocked()) return;
     // D4-A2b (K2): açık duruşta metre girişi UYARIR (ayar açıksa), kesim yine gider;
     // uyarı onay diyaloğundan SONRA, yalnız gerçek gönderimde çıkar.
     const runCut = () => {
@@ -2291,10 +2287,7 @@ export default function TamburScreen() {
       });
       return;
     }
-    if (!recutQualityGrade) {
-      Toast.show({ type: 'error', text1: 'Kalite seçilmedi' });
-      return;
-    }
+    if (!recutQualityGrade) return void Toast.show({ type: 'error', text1: 'Kalite seçilmedi' });
     // KISA KESİM hunisi — ana kesimle aynı sözleşme (makine ölçümü + "kalanı
     // kes" yollarını kapar; elle yazımda input flip'i zaten çalıştı).
     const recutShortCutSug = shortCutOverride({
@@ -2315,14 +2308,9 @@ export default function TamburScreen() {
       });
     }
     const recutEffectiveCode = recutShortCutSug?.code ?? recutQualityGrade;
-    const recutKgErr = recutFinal.error();
-    if (recutKgErr) {
-      Toast.show({ type: 'error', text1: 'Tartım', text2: recutKgErr });
-      return;
-    }
+    if (recutFinal.blocked()) return;
     // Ham (renksiz STOCK) top → operatörün seçtiği parça hedefini gönder.
-    const isRawStock =
-      recutRollMeta.status === 'STOCK' && recutRollMeta.colorId == null;
+    const isRawStock = recutRollMeta.status === 'STOCK' && recutRollMeta.colorId == null;
     const runCut = () => {
       showStopOpenEntryWarning(machineStop.entryWarning);
       cutWarehouseRollMutation.mutate({

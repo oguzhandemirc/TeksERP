@@ -19,7 +19,7 @@ import { parseQueryParams, readFilterList } from "../utils/query-parser";
 import { applyPartnerRoles, roleListWhere, type PartnerRoles } from "./helpers/partner-roles.helper";
 import { createProfileForCustomerTx, PROFILE_CUSTOMER_TYPE_MESSAGE } from "./subcontractor-management.service";
 import { AuditService } from "./audit.service";
-import { LABEL_WIDTH_SOURCES } from "./helpers/label-width-source.helper";
+import { normalizeTamburLabelSettings } from "./helpers/customer-tambur-settings-input.helper";
 import { validateAndShapeBranches } from "./helpers/customer-inline-branches.helper";
 import { bornCariAccountTx, readCustomerFinance, writeCustomerFinanceTerms, type CustomerFinanceInput } from "./helpers/customer-finance-bridge.helper";
 import type { Request } from "express";
@@ -227,38 +227,6 @@ export class CustomerService extends BaseService {
     }
   }
 
-  /**
-   * Tambur/etiket müşteri ayarları (Gülkesim S5): en kaynağı INCOMING|MEASURED|null (null = bugünkü
-   * güncel en), bölme ölçüsü 0 < m ≤ 100000 ya da null, tartım zorunlu boolean. Bozuk değer 400 TR.
-   */
-  private normalizeTamburLabelSettings(data: Record<string, unknown>): void {
-    if ("labelWidthSource" in data) {
-      const v = data.labelWidthSource;
-      if (v == null || v === "") data.labelWidthSource = null;
-      else if (typeof v !== "string" || !(LABEL_WIDTH_SOURCES as readonly string[]).includes(v)) {
-        throw AppError.badRequest(`Geçersiz etiket en kaynağı: ${String(v)} (INCOMING veya MEASURED).`, {
-          code: "CUSTOMER_LABEL_SETTING_INVALID",
-        });
-      }
-    }
-    if ("tamburSplitLengthM" in data) {
-      const v = data.tamburSplitLengthM;
-      if (v == null || v === "") data.tamburSplitLengthM = null;
-      else {
-        const n = typeof v === "number" ? v : typeof v === "string" ? Number(v.replace(",", ".")) : NaN;
-        if (!Number.isFinite(n) || n <= 0 || n > 100000) {
-          throw AppError.badRequest("Bölme ölçüsü 0'dan büyük ve en çok 100000 m olmalı.", {
-            code: "CUSTOMER_LABEL_SETTING_INVALID",
-          });
-        }
-        data.tamburSplitLengthM = new Prisma.Decimal(n.toFixed(2));
-      }
-    }
-    if ("tamburWeighRequired" in data && typeof data.tamburWeighRequired !== "boolean") {
-      throw AppError.badRequest("Tamburda tartım ayarı açık/kapalı olmalı.", { code: "CUSTOMER_LABEL_SETTING_INVALID" });
-    }
-  }
-
   async create(
     data: Record<string, unknown>,
     userId?: string,
@@ -278,8 +246,7 @@ export class CustomerService extends BaseService {
    * doğurur; Tedarikçi rolü şart. Inline şubeler burada bir kez doğrulanıp şekillenir (yan etkisiz).
    */
   prepareCardCreate(data: Record<string, unknown>): CardCreatePlan {
-    this.normalizeDefaultDestination(data);
-    this.normalizeTamburLabelSettings(data);
+    this.normalizeDefaultDestination(data); normalizeTamburLabelSettings(data); // tambur/etiket ayarı (S5)
     const wantsProfile = data.subcontractorRole === true;
     delete data.subcontractorRole;
     const roles = applyPartnerRoles(data, null);
@@ -383,8 +350,7 @@ export class CustomerService extends BaseService {
     // gövdesinde gelirse (beklenmez — UI şubeleri ayrı uçlardan yönetir) sessizce
     // düş: BaseService.update nested-wrap YAPMAZ, ham dizi Prisma update'i bozardı.
     if ("branches" in data) delete data.branches;
-    this.normalizeDefaultDestination(data);
-    this.normalizeTamburLabelSettings(data);
+    this.normalizeDefaultDestination(data); normalizeTamburLabelSettings(data); // tambur/etiket ayarı (S5)
     // Rol modeli: gövdede rol ya da eski `type` varsa mevcut bayraklarla birleşir, `type` yeniden türetilir.
     if ("isCustomerRole" in data || "isSupplierRole" in data || "isSubcontractorRole" in data || "type" in data) {
       applyPartnerRoles(data, await this.currentRoles(id));

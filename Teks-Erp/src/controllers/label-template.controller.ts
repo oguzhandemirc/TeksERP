@@ -6,6 +6,7 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { LabelKind, PrinterLanguage } from "@prisma/client";
 import { labelKindSchema } from "../config/label-kind.schema";
+import { rawCodeSchema, lineStepMmSchema, qrScaleSchema, lengthBannerSchema, unitSettingsSchema } from "../config/label-template-layout.schema";
 import { LabelTemplateService } from "../services/label-template.service";
 import { buildRawCodePreview } from "../services/helpers/label-rawcode";
 import "../types/express-augment";
@@ -18,30 +19,6 @@ const fieldSchema = z.object({
   isBold:    z.boolean().optional(),
   fontSize:  z.enum(["sm", "md", "lg", "xl"]).optional(),
 });
-
-// Uzman raw-code override (dil→kod). Boş/yok → o dilde otomatik üretim.
-const rawCodeSchema = z
-  .object({
-    PPLA:        z.string().max(20000).optional(),
-    PPLB:        z.string().max(20000).optional(),
-    ZPL:         z.string().max(20000).optional(),
-    RASTER_HTML: z.string().max(20000).optional(),
-  })
-  .partial();
-
-// Şablon-başına yerleşim ayarları — null = temizle (varsayılana dön).
-const lineStepMmSchema = z.number().min(0).max(20).nullable().optional();
-const qrScaleSchema = z.number().int().min(2).max(15).nullable().optional();
-const lengthBannerSchema = z.boolean().nullable().optional();
-// Birim sistemi (Gülkesim S5) — null = bugünkü metrik biçim.
-const unitSettingsSchema = z
-  .object({
-    system: z.enum(["METRIC", "US", "BOTH"], { message: "Birim sistemi METRIC, US ya da BOTH olmalı" }),
-    decimals: z.number().int().min(0, "Ondalık 0-3 olmalı").max(3, "Ondalık 0-3 olmalı").nullable().optional(),
-    decimalSep: z.enum([",", "."], { message: "Ondalık ayırıcı virgül ya da nokta olmalı" }).nullable().optional(),
-  })
-  .nullable()
-  .optional();
 
 /** Test edilebilirlik için dışa açık (controller Zod katmanı = HTTP kontrat sınırı). */
 export const createSchema = z.object({

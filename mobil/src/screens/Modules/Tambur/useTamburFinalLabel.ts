@@ -2,6 +2,7 @@
 // Uç yoksa ya da hata verirse bugünkü davranış (DEFAULT_LABEL_SETTINGS) — kesim asla kilitlenmez.
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import Toast from 'react-native-toast-message';
 import { tamburService, type TamburLabelSettings } from '../../../services/tambur.service';
 import { DEFAULT_LABEL_SETTINGS, parseKg, weightError } from './finalLabel';
 
@@ -13,6 +14,8 @@ export interface TamburFinalLabelState {
   weightKg: () => number | undefined;
   /** Gönderim öncesi denetim: hata metni ya da null. */
   error: () => string | null;
+  /** `error()` varsa "Tartım" toast'ı basar ve true döner (gönderim durur). */
+  blocked: () => boolean;
 }
 
 export function useTamburFinalLabel(rollId: string | null | undefined, customerId: string | null | undefined): TamburFinalLabelState {
@@ -36,6 +39,11 @@ export function useTamburFinalLabel(rollId: string | null | undefined, customerI
       return kg == null || Number.isNaN(kg) ? undefined : kg;
     },
     error: () => weightError(settings, kgText),
+    blocked: () => {
+      const err = weightError(settings, kgText);
+      if (err) Toast.show({ type: 'error', text1: 'Tartım', text2: err });
+      return err != null;
+    },
   };
 }
 

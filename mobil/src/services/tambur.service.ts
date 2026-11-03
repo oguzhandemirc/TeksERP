@@ -298,7 +298,7 @@ export interface WorkOrderLabelOverrides {
   workOrderId: string;
   workOrderNumber: string;
   overrides: Record<string, string>;
-  keys: ReadonlyArray<{ key: string; label: string; type: 'text' | 'number' }>;
+  keys: readonly { key: string; label: string; type: 'text' | 'number' }[];
   updatedAt: string;
 }
 
