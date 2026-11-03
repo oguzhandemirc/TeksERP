@@ -142,7 +142,7 @@ describe('TeachEntry + TeachModal (tablet)', () => {
     });
   });
 
-  it('işaretleme önizlemeden sonra değişirse önizleme bayat; Kaydet tek dokunuşta önce tazeler sonra kaydeder', async () => {
+  it('⭐ Gelişmiş kip: önizleme bayatsa Kaydet önce tazeleyip gösterir (görmeden kayıt yok), kayıt ikinci dokunuşta', async () => {
     const r = renderWithPaper(<TeachEntry detail={detail(null)} localPages={LOCAL} />);
     await openNew(r);
     fireEvent.changeText(r.getByTestId('tanit-ad'), 'Güleçsoy');
@@ -159,9 +159,43 @@ describe('TeachEntry + TeachModal (tablet)', () => {
     await flush();
     expect(mockApi.suggestTemplate).toHaveBeenCalledTimes(2);
     expect(mockApi.suggestTemplate.mock.calls[1][0].table).toBeTruthy();
+    expect(mockApi.createUserTemplate).not.toHaveBeenCalled();
+    expect(r.queryByTestId('tanit-onizleme-bayat')).toBeNull();
+    await press(r.getByTestId('tanit-kaydet'));
+    await flush();
+    expect(mockApi.suggestTemplate).toHaveBeenCalledTimes(2);
     expect(mockApi.createUserTemplate).toHaveBeenCalledTimes(1);
   });
 
+});
+
+describe('TeachModal — deneme token\'ı', () => {
+  it('⭐ kayıt belirsiz hatayla düştü → kayıt-anı önizlemesi 400 alsa da token yapışık kalır; sonraki kayıt aynı clientToken', async () => {
+    const r = renderWithPaper(<TeachEntry detail={detail(null)} localPages={LOCAL} />);
+    await openNew(r);
+    fireEvent.changeText(r.getByTestId('tanit-ad'), 'Güleçsoy');
+    await flush();
+    await press(r.getByTestId('tanit-kutu-6'));
+    await press(r.getByTestId('tanit-alan-partiNo'));
+    await press(r.getByTestId('tanit-onizle'));
+    mockApi.createUserTemplate.mockRejectedValueOnce(Object.assign(new Error('Ağ hatası'), { status: undefined }));
+    await press(r.getByTestId('tanit-kaydet'));
+    await flush();
+    const first = mockApi.createUserTemplate.mock.calls[0][0].clientToken;
+    expect(first).toEqual(expect.any(String));
+    await press(r.getByTestId('tanit-kutu-7'));
+    await press(r.getByTestId('tanit-sutun-m'));
+    mockApi.suggestTemplate.mockRejectedValueOnce(Object.assign(new Error('Geçersiz işaretleme'), { status: 400 }));
+    await press(r.getByTestId('tanit-kaydet'));
+    await flush();
+    expect(mockApi.createUserTemplate).toHaveBeenCalledTimes(1);
+    await press(r.getByTestId('tanit-kaydet'));
+    await flush();
+    await press(r.getByTestId('tanit-kaydet'));
+    await flush();
+    expect(mockApi.createUserTemplate).toHaveBeenCalledTimes(2);
+    expect(mockApi.createUserTemplate.mock.calls[1][0].clientToken).toBe(first);
+  });
 });
 
 describe('TeachEntry + TeachModal — güncelle ve görünürlük', () => {

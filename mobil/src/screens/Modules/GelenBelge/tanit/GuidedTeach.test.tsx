@@ -137,6 +137,17 @@ describe('TeachModal — rehberli kip', () => {
     expect(mockApi.updateUserTemplate).not.toHaveBeenCalled();
   });
 
+  it('pasif Kaydet\'in altında eksik tek satır yazılır; alan atanınca kalkar', async () => {
+    const r = renderWithPaper(<TeachEntry detail={detail(null)} localPages={LOCAL} />);
+    await openGuided(r);
+    expect(r.getByTestId('tanit-kaydet')).toBeDisabled();
+    expect(r.getByTestId('tanit-kaydet-neden')).toHaveTextContent(/^Kaydetmek için: En az bir alan atayın/);
+    await toPartiNo(r);
+    await press(r.getByTestId('tanit-kutu-6'));
+    expect(r.queryByTestId('tanit-kaydet-neden')).toBeNull();
+    expect(r.getByTestId('tanit-kaydet')).not.toBeDisabled();
+  });
+
   it('debounce: iki hızlı dokunuş tek önizleme isteği (iki kelimelik değer)', async () => {
     const r = renderWithPaper(<TeachEntry detail={detail(null)} localPages={LOCAL} />);
     await openGuided(r);
@@ -174,6 +185,23 @@ describe('TeachModal — benzer şablon sorusu', () => {
     await flush();
     expect(mockApi.createUserTemplate).toHaveBeenCalledTimes(1);
     expect(mockApi.updateUserTemplate).not.toHaveBeenCalled();
+  });
+
+  it('"Aynı tip" seçildi ama şablon çekilemedi → kayıt yok, ekran takılmaz; "Yeni tip" ile kaydedilebilir', async () => {
+    mockApi.suggestTemplate.mockResolvedValue(SIMILAR);
+    mockApi.getUserTemplate.mockRejectedValue(Object.assign(new Error('Ağ hatası'), { status: undefined }));
+    const r = renderWithPaper(<TeachEntry detail={detail(null)} localPages={LOCAL} />);
+    await markAndSave(r);
+    await press(r.getByTestId('tanit-benzer-guncelle-u-gulecsoy'));
+    await flush();
+    expect(mockApi.getUserTemplate).toHaveBeenCalledWith('u-gulecsoy');
+    expect(mockApi.updateUserTemplate).not.toHaveBeenCalled();
+    expect(r.getByTestId('tanit-kutu-6')).toBeTruthy();
+    expect(r.getByTestId('tanit-baslik')).not.toHaveTextContent(/güncelle/);
+    await press(r.getByTestId('tanit-kaydet'));
+    await press(await r.findByTestId('tanit-benzer-yeni'));
+    await flush();
+    expect(mockApi.createUserTemplate).toHaveBeenCalledTimes(1);
   });
 
   it('"Aynı tip" → şablon çekilir, işaretleme benimsenir, base ile önizlenip PUT expectedVersion 2', async () => {
