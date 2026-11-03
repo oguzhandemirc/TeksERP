@@ -8,6 +8,7 @@
 // Okuyucu (`loadCloseSnapshotView`) en yüksek sürümü "kapanıştaki" diye döner.
 // =============================================================================
 
+import { sequentialTx } from "./tx-sequential-relations.helper";
 import { Prisma, PrismaClient, WorkOrderEventType, WorkOrderStatus } from "@prisma/client";
 import { currentOrigin } from "../../lib/request-context";
 import { producedOutputWhere } from "./produced-output.helper";
@@ -39,7 +40,7 @@ async function readCloseInputsTx(tx: Tx, workOrderId: string) {
     select: { createdAt: true },
   });
   const stepIds = steps.map((s) => s.id);
-  const rolls = stepIds.length === 0 ? [] : await tx.roll.findMany({
+  const rolls = stepIds.length === 0 ? [] : await sequentialTx(tx).roll.findMany({
     where: producedOutputWhere(stepIds),
     select: {
       id: true, barcode: true, initialQty: true, currentQty: true, weightKg: true, width: true,

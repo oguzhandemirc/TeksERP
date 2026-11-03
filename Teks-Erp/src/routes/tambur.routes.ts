@@ -153,6 +153,7 @@ router.get(
  *         schema: { type: string, format: uuid }
  *         description: Verilirse yalnız bu TAMBUR istasyonundaki işler (çok tamburlu fabrika). Bilinmeyen 404; pasif/TAMBUR olmayan 400.
  *       - { in: query, name: q, schema: { type: string, maxLength: 64 }, description: "İE no / parti no / fiş-evrak no / GB no araması (K17); boş = tüm liste" }
+ *       - { in: query, name: includeScanRouted, schema: { type: string, enum: ["1", "true"] }, description: "K29 S15b — oturum istasyonunda okutunca adım eklenebilecek açık rotasız iş emirleri de döner (stepId null, scanRouteAdd true, 'Sahada belirlenecek'); yoksa liste bugünkü gibi" }
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Açık kart listesi }

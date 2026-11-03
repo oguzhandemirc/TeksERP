@@ -6,6 +6,7 @@
 // Ters yol tipli `WOUND_CANCEL` + `reversesEventId @unique` (çift iptal DB'de imkânsız); iplik NET geri
 // (§4.9-4: ISSUE ve RETURN toplamları AYRI AYRI sıfırlanır). Durum CANCELLED terminaldir — PLANNED'a DÖNMEZ.
 // =============================================================================
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { Prisma, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, YarnMovementKind, ReasonPresetKind } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
@@ -224,7 +225,7 @@ type YarnGroup = Map<string, { warehouseId: string; warehouseName: string; lot: 
 
 // Gruplama anahtarı depo × LOT (× sebep): ters kayıt lot bazında düşer, yoksa lot bakiyesi şişerdi (§4.9-4 "kalem × depo × lot").
 async function groupYarnLinesTx(client: Prisma.TransactionClient | typeof prisma, beamId: string): Promise<{ issues: YarnGroup; returns: YarnGroup }> {
-  const rows = await client.yarnMovement.findMany({ where: { warpBeamId: beamId }, select: { kind: true, qtyKg: true, reasonCode: true, warehouse: { select: { id: true, name: true } }, lot: { select: { id: true, lotNo: true } } } });
+  const rows = await sequentialTx(client).yarnMovement.findMany({ where: { warpBeamId: beamId }, select: { kind: true, qtyKg: true, reasonCode: true, warehouse: { select: { id: true, name: true } }, lot: { select: { id: true, lotNo: true } } } });
   const issues: YarnGroup = new Map();
   const returns: YarnGroup = new Map();
   const add = (g: YarnGroup, key: string, r: (typeof rows)[number], sign: 1 | -1) => {

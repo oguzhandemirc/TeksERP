@@ -6,6 +6,7 @@
 // Yük yalnız kimlik + görüntü dizesi: cari adı/kodu, kapsam, sebep ETİKETİ, kişi. TUTAR ve serbest metin
 // (`reasonText`/`releaseReason`) GİRMEZ — gelen kutusu finans ekranı değildir.
 // =============================================================================
+import { sequentialTx } from "./tx-sequential-relations.helper";
 import type { Prisma } from "@prisma/client";
 import type { NotificationSubject } from "./notification-emit.helper";
 import { holdScopeText, reasonLabel } from "./cari-hold.helper";
@@ -26,7 +27,7 @@ export async function cariHoldNotificationTx(
   hold: HoldNotifyInput,
   actorUserId: string,
 ): Promise<{ subject: NotificationSubject; payload: Record<string, string> }> {
-  const cari = await tx.cariAccount.findUnique({
+  const cari = await sequentialTx(tx).cariAccount.findUnique({
     where: { id: hold.cariId },
     select: { customer: { select: { name: true, code: true } }, subcontractor: { select: { name: true, code: true } } },
   });

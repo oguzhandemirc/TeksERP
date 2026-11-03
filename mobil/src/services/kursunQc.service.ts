@@ -121,9 +121,13 @@ export const kursunQcService = {
 
   // PROCESS_QC adımlarında açık top bekleyen aktif kartlar — kamera modal'ı için
   // q (K17): fiş / evrak / parti / İE no — süzme sunucuda; yoksa parametre gönderilmez (bugünkü liste).
-  listOpenCards: (q?: string): Promise<ApiResponse<KursunOpenCard[]>> =>
+  /** `includeScanRouted` (K29 S15b, yalnız Okutmayla kipinde): rotasız İE "Sahada belirlenecek" satırları da gelir. */
+  listOpenCards: (q?: string, includeScanRouted = false): Promise<ApiResponse<KursunOpenCard[]>> =>
     apiClient
-      .get<ApiResponse<KursunOpenCard[]>>('/kursun-qc/open-cards', q ? { params: { q } } : undefined)
+      .get<ApiResponse<KursunOpenCard[]>>(
+        '/kursun-qc/open-cards',
+        q || includeScanRouted ? { params: { ...(q ? { q } : {}), ...(includeScanRouted ? { includeScanRouted: '1' } : {}) } } : undefined,
+      )
       .then((r) => r.data),
 
   completeQc2: (data: CompleteQc2Request): Promise<ApiResponse<unknown>> =>

@@ -321,11 +321,14 @@ export const tamburService = {
   // stationId (ister 2.8): çok tamburlu fabrikada yalnız bu tamburun işleri; yoksa
   // parametre HİÇ gönderilmez (bugünkü liste; eski backend parametreyi yok sayar).
   // q (K17): fiş / evrak / parti / İE no — süzme sunucuda; boşsa parametre gönderilmez.
-  listOpenCards: (stationId?: string | null, q?: string): Promise<ApiResponse<TamburOpenCard[]>> =>
+  /** `includeScanRouted` (K29 S15b, yalnız Okutmayla kipinde): oturum tamburunda rotasız İE satırları da gelir. */
+  listOpenCards: (stationId?: string | null, q?: string, includeScanRouted = false): Promise<ApiResponse<TamburOpenCard[]>> =>
     apiClient
       .get<ApiResponse<TamburOpenCard[]>>(
         '/tambur/open-cards',
-        stationId || q ? { params: { ...(stationId ? { stationId } : {}), ...(q ? { q } : {}) } } : undefined,
+        stationId || q || includeScanRouted
+          ? { params: { ...(stationId ? { stationId } : {}), ...(q ? { q } : {}), ...(includeScanRouted ? { includeScanRouted: '1' } : {}) } }
+          : undefined,
       )
       .then((r) => r.data),
 

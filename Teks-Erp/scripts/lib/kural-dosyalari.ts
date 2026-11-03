@@ -31,8 +31,12 @@ export type KuralKaynagi = {
 
 export function kuralDosyalari(): KuralKaynagi {
   const agac = new Map<string, string>();
-  for (const ad of readdirSync(KURALLAR).filter((f) => f.endsWith(".md"))) {
-    agac.set(`docs/kurallar/${ad}`, readFileSync(join(KURALLAR, ad), "utf8"));
+  // `ayrinti/` = alan dosyalarının tam metni; atıflar orada yaşar, index (`ls-files`
+  // pathspec'inde `*` `/`yi geçer) onu zaten okur — ağaç da aynı kümeyi okusun.
+  for (const alt of ["", "ayrinti/"]) {
+    let adlar: string[] = [];
+    try { adlar = readdirSync(join(KURALLAR, alt)).filter((f) => f.endsWith(".md")); } catch { continue; }
+    for (const ad of adlar) agac.set(`docs/kurallar/${alt}${ad}`, readFileSync(join(KURALLAR, alt, ad), "utf8"));
   }
   try {
     const g = (...args: string[]): string => git(["-C", KOK, ...args], { stdio: "yut" });

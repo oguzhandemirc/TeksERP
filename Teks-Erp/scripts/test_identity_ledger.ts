@@ -83,6 +83,7 @@ import { readFileSync, existsSync, readdirSync } from "fs";
 import path from "path";
 import { editRatio, tokenize } from "../src/utils/string-similarity";
 import { foldSearchText } from "../src/utils/search-fold";
+import { HARITA_DIZINI_DOSYASI, dizinHatalari, haritaAlanDosyalari, haritaMetni as haritaAlanMetni } from "./lib/bekci-harita";
 
 const REPO = path.join(__dirname, "..", "..");
 const ARSIV_DIZIN = "docs/history/arsiv";
@@ -101,7 +102,8 @@ const arsivMetniTaban = (taban: string) => {
   for (const f of liste) s += g("show", `${taban}:${f}`) + "\n";
   return s;
 };
-const HARITA = "Teks-Erp/docs/BEKCI-HARITASI.md";
+// Harita 2026-11-03'te alan başına bölündü: dizin başlık kimliğini, alan dosyaları satırları taşır.
+const HARITA = HARITA_DIZINI_DOSYASI;
 const ESIK = 0.95;
 const ESIK_KAYNAK = "2026-09-12 ölçümü, 55 commit / 40 olay, normalizasyon sonrası kırmızı 0";
 
@@ -151,6 +153,7 @@ function yonA(taban: string) {
   const duzyaziDosyalar = [
     ...readdirSync(path.join(REPO, "docs/kurallar")).filter((f) => f.endsWith(".md")).map((f) => `docs/kurallar/${f}`),
     HARITA,
+    ...haritaAlanDosyalari(REPO),
   ];
   let ihlal = 0;
   for (const rel of duzyaziDosyalar) {
@@ -191,6 +194,7 @@ export function bolumSatirSayilari(haritaMetni: string): Map<string, number> {
   for (const line of haritaMetni.split("\n")) {
     const m = /^##\s+([a-z0-9-]+)\s*(\(\d+\))?\s*$/.exec(line);
     if (m) { bolum = m[1]; continue; }
+    if (line.startsWith("## ")) { bolum = null; continue; } // alan dışı bölüm (bilerek-kirmizi) — birleşik metinde önceki alana sızmasın
     if (!bolum || !line.startsWith("|")) continue;
     const ad = /\bscripts\/(test_[a-z0-9_]+)\.ts\b/.exec(line)?.[1];
     if (!ad) continue;
@@ -216,7 +220,7 @@ function yonB() {
         .map((f) => f.slice(0, -3)),
     ),
   );
-  const haritaMetni = oku(HARITA);
+  const haritaMetni = haritaAlanMetni(REPO);
   const haritaAdlar = new Set(bekciAdlari(haritaMetni));
 
   // Harita bölümleri: `## <alan>` → o alana atanmış bekçiler
@@ -225,6 +229,7 @@ function yonB() {
   for (const line of haritaMetni.split("\n")) {
     const m = /^##\s+([a-z0-9-]+)\s*(\(\d+\))?\s*$/.exec(line);
     if (m) { cur = m[1]; haritaBolum.set(cur, new Set()); continue; }
+    if (line.startsWith("## ")) { cur = null; continue; } // alan dışı bölüm — bkz. bolumSatirSayilari
     if (cur) for (const n of line.match(/\btest_[a-z0-9_]+\b/g) ?? []) haritaBolum.get(cur)!.add(n);
   }
 
@@ -349,6 +354,21 @@ function yonB() {
   ok2("§2c sonda: aynı bölümde iki kez → yakalanır", [...sondaKirmizi.values()].some((n) => n > 1));
   const sondaYesil = bolumSatirSayilari("## a\n| `scripts/test_x.ts` |\n## b\n| `scripts/test_x.ts` |\n");
   ok2("§2c sonda: İKİ AYRI bölümde aynı ad → geçer (0c'nin bilinçli çifti)", [...sondaYesil.values()].every((n) => n === 1));
+
+  // ── §2d dizin ↔ alan dosyası tazeliği — SERT (harita 2026-11-03'te bölündü) ──
+  // Dizinde bağlantısı olmayan alan dosyası kimsenin bulamadığı envanterdir; dosyası olmayan
+  // bağlantı ölü atıftır. Körlük zemini: alan dosyası yoksa "hizalı" yeşili çıkmaz.
+  const alanDosyalari = new Map(haritaAlanDosyalari(REPO).map((rel) => [path.basename(rel), oku(rel)]));
+  const tazelik = dizinHatalari(oku(HARITA), alanDosyalari);
+  if (alanDosyalari.size === 0) no(`§2d harita alan dosyası bulunamadı (${HARITA} dizininin bekci-harita/ altı boş) — ölçülemedi`);
+  else if (tazelik.length === 0) ok(`§2d harita dizini ↔ ${alanDosyalari.size} alan dosyası hizalı`);
+  else no(`§2d ⭐ harita dizini bayat:\n      ${tazelik.join("\n      ")}`);
+  // Sondalar — eksik bağlantı · başlık farkı · ölü bağlantı ısırılır; hizalı küme geçer.
+  const dz = "## a\n\n[bekci-harita/a.md](bekci-harita/a.md)\n";
+  ok2("§2d sonda: hizalı dizin geçer", dizinHatalari(dz, new Map([["a.md", "## a\n|x|"]])).length === 0);
+  ok2("§2d sonda: dizinde bağlantısı olmayan dosya → yakalanır", dizinHatalari(dz, new Map([["a.md", "## a\n"], ["b.md", "## b\n"]])).some((h) => h.includes("b.md")));
+  ok2("§2d sonda: başlık farkı → yakalanır", dizinHatalari(dz, new Map([["a.md", "## a2\n"]])).length === 1);
+  ok2("§2d sonda: dosyası olmayan bağlantı → yakalanır", dizinHatalari(dz, new Map()).some((h) => h.includes("dosyası YOK")));
 
   if (hatalar.length === 0) ok(`bekçi kümesi hizalı (${gercek.size} gerçek · ${haritaAdlar.size} haritada)`);
   else {

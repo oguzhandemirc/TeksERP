@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useScanRoute } from '../scanRoute/useScanRoute';
+import ScanRouteAddBadge from '../scanRoute/ScanRouteAddBadge';
 import {
   View,
   StyleSheet,
@@ -75,6 +76,7 @@ import {
   useTamburShortCutA1,
   useTamburListByStationEnabled,
   useScrapGradeLabelEnabled,
+  useScanRouteMode,
 } from '../../../hooks/useFeatureFlags';
 import { NumpadHost } from '../../../components/NumpadProvider';
 import { RightPanelDrawer } from '../../../components/RightPanelDrawer';
@@ -949,9 +951,11 @@ export default function TamburScreen() {
   // İster 2.8: ayar açıksa iki tamburlu fabrikada yalnız bu tabletin tamburuna sıradaki işler.
   const listByStation = useTamburListByStationEnabled();
   const listStationId = resolveTamburListStationId(activeSession, listByStation);
+  // K29 S15b: Okutmayla kipinde oturum tamburunda rotasız İE satırları da istenir (sıralıda istek bayt-aynı).
+  const scanMode = useScanRouteMode();
   const openCardsQuery = useQuery({
-    queryKey: ['tambur', 'open-cards', listStationId],
-    queryFn: () => tamburService.listOpenCards(listStationId),
+    queryKey: ['tambur', 'open-cards', listStationId, scanMode],
+    queryFn: () => tamburService.listOpenCards(listStationId, undefined, scanMode),
     enabled: listModalOpen,
     staleTime: 30 * 1000,
   });
@@ -960,7 +964,7 @@ export default function TamburScreen() {
   useRefetchOnOpen(openCardsQuery.refetch, listModalOpen);
   // K17: boyahane belgesinden iş emri bulma + açık kart listesinde fiş/parti no araması (süzme sunucuda).
   const docLookup = useStationDocLookup();
-  const cardSearch = useOpenCardSearch(['tambur', 'open-cards', listStationId], (q) => tamburService.listOpenCards(listStationId, q));
+  const cardSearch = useOpenCardSearch(['tambur', 'open-cards', listStationId, scanMode], (q) => tamburService.listOpenCards(listStationId, q, scanMode));
   // Açık Kartlar modalı içindeki manuel "Yenile" — toast + haptic feedback.
   const openCardsRefresh = useManualRefresh(
     () => openCardsQuery.refetch(),
@@ -7013,6 +7017,7 @@ function CameraScanModal({
                       <Text style={cameraStyles.rowCardNo} numberOfLines={1}>
                         {item.cardNumber}
                       </Text>
+                      <ScanRouteAddBadge card={item} testID="tambur-card-scan-route-add" />
                       <View style={cameraStyles.rowColItem}>
                         <Text style={cameraStyles.rowItemText} numberOfLines={1}>
                           {item.itemName ?? '—'}

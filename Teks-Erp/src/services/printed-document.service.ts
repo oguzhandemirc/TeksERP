@@ -45,6 +45,7 @@ import type { NumberRounding } from "./document-render/fmt-num";
 import { renderFrozenTemplate, resolveTemplateForFreeze, type FrozenTemplateRef } from "./document-template/print-binding";
 import { templatedTables } from "./document-template/template-tables";
 import { assertPaperReissueAllowedTx } from "./e-irsaliye/e-irsaliye-shipment.helper";
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 
 /** Builder'ların aldığı istemci — tx içinden (freeze) veya dışından (reissue/lazy) çalışır. */
 export type PrintedDocDb = Prisma.TransactionClient | typeof prisma;
@@ -552,11 +553,13 @@ export class PrintedDocumentService {
     reissueReason?: string,
   ): Promise<void> {
     const entry = requireBuilder(docType);
-    const built = await (entry.freeze ?? entry.fresh)(tx, sourceId);
+    // Kurucular tek sorguda çoklu ilişki okur; tx'te sıralı yüklenir (pg@9, S15a).
+    const seqTx = sequentialTx(tx);
+    const built = await (entry.freeze ?? entry.fresh)(seqTx, sourceId);
     if (!built) {
       throw AppError.internal(`Belge dondurulamadı — kaynak uygun durumda değil: ${docType}/${sourceId}`);
     }
-    const snapshot = await buildSnapshotEnvelope(tx, docType, built.doc, sourceId);
+    const snapshot = await buildSnapshotEnvelope(seqTx, docType, built.doc, sourceId);
     // VERSİYON SABİT 1 DEĞİL (2026-08-05): bir kaynak İKİNCİ kez dondurulabilir.
     // Somut yol — sevk geri alma (storno): sevk irsaliyesi v1 VOIDED'e çekilir,
     // sevkiyat PLANNED'a döner, mal düzeltilip yeniden sevk edilir ve o an ikinci

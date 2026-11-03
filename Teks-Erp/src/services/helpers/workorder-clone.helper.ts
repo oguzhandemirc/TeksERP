@@ -15,6 +15,7 @@
 // repoint kaynak WO'yu asla-tamamlanamaz bırakır.
 // =============================================================================
 
+import { sequentialTx } from "./tx-sequential-relations.helper";
 import { Prisma, StepStatus, WorkOrderStatus } from "@prisma/client";
 import { nextSeriesNo } from "../number-series.service";
 import { AppError } from "../../utils/app-error";
@@ -84,7 +85,7 @@ export async function cloneWorkOrderTx(
   },
 ): Promise<CloneWorkOrderResult> {
   const now = params.date ?? new Date();
-  const src = await tx.workOrder.findUnique({
+  const src = await sequentialTx(tx).workOrder.findUnique({
     where: { id: params.sourceWorkOrderId },
     select: {
       id: true,
