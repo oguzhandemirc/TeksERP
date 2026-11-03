@@ -16,6 +16,7 @@ import { noteNotices } from "../lib/gelen-belge/uyari";
 import { noteBatchAndMeters } from "./gelen-belge-parti-metre.service";
 import { suggestOwnerForNote } from "./gelen-belge-sahip-onerisi.service";
 import { noteFormFields } from "./gelen-belge-form-alanlari.service";
+import { noteTanitim } from "./gelen-belge-tanitim-guveni.service";
 
 export type ReadSummaryState = "NO_PAGES" | "READING" | "NO_SERVICE" | "READ" | "PARTIAL" | "FAILED";
 
@@ -86,6 +87,8 @@ export async function getReadSummary(noteId: string) {
   // Belge geneli başlık beyanı (ör. "Müşteri MT") da beyandır — kapı onu da kıyaslar.
   const declared = (Array.isArray(decl?.blocks) && decl.blocks.length > 0) || !!decl?.document;
   // Kip onayla AYNI: INFO'da belge geneli fark `warnings`e düşer, `ok`u bozmaz.
+  // K30-B: tanıtım durumu + güven kipi (SOR'da NORMAL = bugünkü çıktı; `tanitim` yalnız bilgi).
+  const { tanitim, trust } = await noteTanitim(note.id);
   const tc = totalsCheck(note, note.lines, { documentMode: hasDocumentDeclared(note.totalsDeclared) ? await readDocumentTotalCheck() : "INFO" });
   return {
     noteId: note.id,
@@ -107,12 +110,14 @@ export async function getReadSummary(noteId: string) {
     kursunMeters: note.kursunMeters,
     kursunMetersSource: note.kursunMetersSource,
     kursunMetersReview: note.kursunMetersReview,
-    ...(await noteBatchAndMeters(note.id, note.totalsDeclared, live.filter((l) => l.status !== "INFO").map((l) => l.meters))),
+    ...(await noteBatchAndMeters(note.id, note.totalsDeclared, live.filter((l) => l.status !== "INFO").map((l) => l.meters), trust)),
     // Taslağın sahibi + müşteri önerisi (OIE) — detayla AYNI helper; tablet `gelen-belge:read` taşımayabilir, satır formu
     // buradan kurulur (`detailFromSummary`). Eski tablet alanları yok sayar.
     ownerCustomerId: note.ownerCustomerId,
-    ownerSuggestion: await suggestOwnerForNote({ id: note.id, status: note.status, ownerCustomerId: note.ownerCustomerId }),
+    ownerSuggestion: await suggestOwnerForNote({ id: note.id, status: note.status, ownerCustomerId: note.ownerCustomerId }, trust),
     // K30 S16a iş emri tek formu: tanıtılmış alanlar (`formFields`) + `desenRenkEslesme=ONER`de kayıt önerisi (`suggestions`).
-    ...(await noteFormFields(note.id)),
+    ...(await noteFormFields(note.id, trust)),
+    // K30-B tel sözleşmesi madde 1: TANITILDI | TANITILMAMIS; sistem şablonunda alan yok. Eski tablet yok sayar.
+    ...(tanitim ? { tanitim } : {}),
   };
 }

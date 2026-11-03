@@ -31,6 +31,9 @@ export const ASSIGNABLE_FIELD_KEYS = Object.keys(ASSIGNABLE_FIELDS) as [Assignab
 export const TABLE_COLUMN_KEYS = { topNo: { label: "Top No", type: "alnum" }, kg: { label: "Kilo", type: "decimal" }, m: { label: "Metre", type: "decimal" }, en: { label: "En", type: "decimal" } } as const;
 export type TableColumnKey = keyof typeof TABLE_COLUMN_KEYS;
 
+/** Tanıtılan şablonun kimlik eşiği (şablona yazılır; motor `templateMinScore` ile okur — tek kaynak o). */
+export const USER_TEMPLATE_MIN_SCORE = 0.6;
+
 export interface TemplateSuggestInput {
   code: string;
   name: string;
@@ -107,7 +110,7 @@ export function suggestTemplate(input: TemplateSuggestInput): TemplateSuggestion
   }
   const t: DocumentTemplate = {
     id: input.code, name: input.name, version: 1,
-    identifiers: { keywords: [...new Set(input.identifiers.map((s) => s.trim()).filter(Boolean))], minScore: 0.6 },
+    identifiers: { keywords: [...new Set(input.identifiers.map((s) => s.trim()).filter(Boolean))], minScore: USER_TEMPLATE_MIN_SCORE },
     fields,
   };
   const cols = input.table?.columns ?? [];

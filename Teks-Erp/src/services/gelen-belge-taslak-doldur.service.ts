@@ -17,7 +17,9 @@ import { OcrResultSchema } from "../lib/gelen-belge/okuma-istemcisi";
 import { declaredPageCount, withDeclaredPages } from "../lib/gelen-belge/parti-ozet";
 import { AuditService } from "./audit.service";
 import { FALLBACK_TEMPLATE_CODE, bumpTemplateHit, ensureSenderTemplate } from "./gelen-belge-sablon.service";
-import { batchAndMeterColumns, deriveBatchAndMeters, readFirstRegion, rememberedBatchKey, toRegion, type BatchAndMeterColumns } from "./gelen-belge-parti-metre.service";
+import { applyTrust, batchAndMeterColumns, deriveBatchAndMeters, readFirstRegion, rememberedBatchKey, toRegion, type BatchAndMeterColumns } from "./gelen-belge-parti-metre.service";
+import { trustModeForRegions } from "./gelen-belge-tanitim-guveni.service";
+import { templateByCode } from "../lib/gelen-belge/sablon-bul";
 import { readDuplicateDocNoMode, readHandwritingOutlierFactor, readHeaderLineMeterSource, readIncomingDocAutoSender } from "./system-setting.service";
 import { assertDocNoUniqueTx } from "./helpers/gelen-belge-mukerrer.helper";
 
@@ -82,7 +84,11 @@ export async function buildDraft(result: OcrResult, userId: string | undefined, 
       templateScore: header.templateScore === null ? null : new Prisma.Decimal(header.templateScore),
       senderCustomerId: template ? await templateSender(template.id) : null,
       // Parti no + kurşun metresi (Gülkesim): seçim hatırlanan form anahtarıyla; kolonlar yalnız boşken yazılır.
-      ...batchAndMeterColumns({ batchNoCandidates: header.batchNoCandidates, kursun: header.kursun }, await rememberedBatchKey(prisma, template?.id)),
+      // K30-B: güven kipi (SORMA) kolon seçimine okuma anında uygulanır — onay kapısı da aynı `kursunMetersReview`i okur.
+      ...batchAndMeterColumns(
+        applyTrust({ batchNoCandidates: header.batchNoCandidates, kursun: header.kursun }, templateByCode(code), await trustModeForRegions(header.regions.map((r) => r.templateId))),
+        await rememberedBatchKey(prisma, template?.id),
+      ),
     },
     // "1/2" damgası `pages`a (UYARI kaynağı); `pageCount` kolonu elle beyandır ve onayda kapıdır (s1a inceleme).
     totalsDeclared: toJson(withDeclaredPages(header.totalsDeclared, header.page?.of ?? null)),
@@ -160,7 +166,8 @@ async function fillBatchAndMeters(tx: Prisma.TransactionClient, noteId: string, 
   const region = (await readFirstRegion(tx, noteId)) ?? toRegion(built.draft.header.regions[0]);
   const live = await tx.customerDeliveryNoteLine.findMany({ where: { noteId, status: { notIn: ["SKIPPED", "INFO"] } }, select: { meters: true } });
   const totals = patch.totalsDeclared !== undefined ? patch.totalsDeclared : note.totalsDeclared;
-  const d = deriveBatchAndMeters(region, totals, [...live.map((l) => l.meters), ...added.map((l) => l.meters)]);
+  const trust = await trustModeForRegions([region?.templateId, ...built.draft.header.regions.map((r) => r.templateId)]);
+  const d = deriveBatchAndMeters(region, totals, [...live.map((l) => l.meters), ...added.map((l) => l.meters)], trust);
   const cols = batchAndMeterColumns(d, await rememberedBatchKey(tx, note.templateId ?? built.headerCols.templateId));
   if (!note.ourBatchNo && cols.ourBatchNo) Object.assign(patch, { ourBatchNo: cols.ourBatchNo, ourBatchNoKey: cols.ourBatchNoKey });
   const refresh = note.kursunMeters === null || (note.kursunMetersSource !== "MANUAL" && ctx.pageAppended);

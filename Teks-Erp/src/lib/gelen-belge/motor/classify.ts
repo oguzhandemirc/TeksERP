@@ -44,6 +44,20 @@ export function scoreTemplate(text: string, normText: string, template: Document
   return Math.min(1, Math.round(score * 10000) / 10000);
 }
 
+/** Şablonun kimlik eşiği — sınıflandırma ve "benzer şablon" uyarısı (K30-B) AYNI eşiği kullanır. */
+export const DEFAULT_TEMPLATE_MIN_SCORE = 0.5;
+export const templateMinScore = (t: DocumentTemplate): number => t.identifiers.minScore ?? DEFAULT_TEMPLATE_MIN_SCORE;
+
+/** Bu belgede kimlik eşiğini geçen şablonlar, skora göre azalan (eşitlikte kod sırası — belirlenimli). */
+export function templatesOverThreshold(ocr: OcrResult, templates: readonly DocumentTemplate[]): Array<{ template: DocumentTemplate; score: number }> {
+  const text = readingOrderText(ocr);
+  const normText = normalizeForMatch(text);
+  return templates
+    .map((template) => ({ template, score: scoreTemplate(text, normText, template) }))
+    .filter((x) => x.score >= templateMinScore(x.template))
+    .sort((a, b) => b.score - a.score || a.template.id.localeCompare(b.template.id));
+}
+
 export function classifyDocument(ocr: OcrResult, templates: DocumentTemplate[]): ClassificationResult {
   const text = readingOrderText(ocr);
   const normText = normalizeForMatch(text);
@@ -52,7 +66,7 @@ export function classifyDocument(ocr: OcrResult, templates: DocumentTemplate[]):
   for (const t of templates) {
     const s = scoreTemplate(text, normText, t);
     scores[t.id] = s;
-    const minScore = t.identifiers.minScore ?? 0.5;
+    const minScore = templateMinScore(t);
     if (s >= minScore && (best === null || s > best.score)) best = { id: t.id, score: s };
   }
   return { templateId: best?.id ?? null, score: best?.score ?? 0, scores };

@@ -447,6 +447,9 @@ export const SETTING_KEYS = {
   /** K30 S16a tablet iş emri girişi: IKISI (varsayılan = bugünkü) | BELGE yalnız belge okutma | TOP yalnız top okutma.
    *  Tek yazar `PUT /api/gelen-belge/ayarlar`; flag yüküne konmaz. */
   GELEN_BELGE_TABLET_IE_GIRISI: "gelenBelge.tabletIeGirisi",
+  /** K30-B tanıtılan belgeye güven: SOR (varsayılan = bugünkü, okunanlar onaylatılır) | SORMA kullanıcı şablonuyla
+   *  tanınan belge sorusuz dolar, tanınmayanın sözlük tahmini forma dolmaz. Tek yazar `PUT /api/gelen-belge/ayarlar`. */
+  GELEN_BELGE_TANITIM_GUVENI: "gelenBelge.tanitimGuveni",
   /** Z1 ÜRETİM BELGE ZİNCİRİ (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bugünkü davranış (bağ opsiyonel). */
   DEVERE_BEAM_WEAVING_LINK_REQUIRED: "devere.beamWeavingLinkRequired",
   DOKUMA_RUN_WEAVING_ORDER_REQUIRED: "dokuma.runWeavingOrderRequired",
@@ -6844,6 +6847,13 @@ export const TABLET_IE_GIRISI_VALUES: readonly TabletIeGirisiMode[] = ["IKISI", 
 export const DEFAULT_TABLET_IE_GIRISI: TabletIeGirisiMode = "IKISI";
 export const readTabletIeGirisi = (tx?: Pick<typeof prisma, "systemSetting">): Promise<TabletIeGirisiMode> =>
   readClosedSetting(SETTING_KEYS.GELEN_BELGE_TABLET_IE_GIRISI, TABLET_IE_GIRISI_VALUES, DEFAULT_TABLET_IE_GIRISI, tx);
+/** K30-B tanıtılan belgeye güven (okuma özeti sorusuz mu hazırlanır). */
+export type TanitimGuveniMode = "SOR" | "SORMA";
+export const TANITIM_GUVENI_VALUES: readonly TanitimGuveniMode[] = ["SOR", "SORMA"];
+/** Varsayılan SOR = bugünkü davranış (müşteri/parti/metre önerisi onaylatılır). */
+export const DEFAULT_TANITIM_GUVENI: TanitimGuveniMode = "SOR";
+export const readTanitimGuveni = (tx?: Pick<typeof prisma, "systemSetting">): Promise<TanitimGuveniMode> =>
+  readClosedSetting(SETTING_KEYS.GELEN_BELGE_TANITIM_GUVENI, TANITIM_GUVENI_VALUES, DEFAULT_TANITIM_GUVENI, tx);
 
 /** İş emri açılınca refakat kartı kendiliğinden yazdırılsın mı (kayıt yok/çöp = false, bugünkü). */
 export async function readRefakatAutoPrint(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
