@@ -6,6 +6,7 @@
 // (fiş / evrak / parti / İE no). Kart çözümü ekranın mevcut yolundan (`cardBarcode` → getByCardBarcode).
 // =============================================================================
 import React, { useRef, useState } from 'react';
+import { TERIM } from '../../lib/terim';
 import { StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Text, TouchableRipple } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
@@ -116,7 +117,7 @@ export default function StationDocLookupSheet({ visible, onDismiss, onOpen, read
             onChangeText={setQ}
             onSubmitEditing={search}
             returnKeyType="search"
-            placeholder="Fiş / evrak / parti / iş emri no"
+            placeholder={`Fiş / evrak / parti / ${TERIM.terbiyeIsEmri.tekilKucuk} no`}
             autoCapitalize="characters"
             autoCorrect={false}
             style={styles.searchInput}

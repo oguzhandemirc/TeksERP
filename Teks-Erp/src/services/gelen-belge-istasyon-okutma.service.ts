@@ -18,7 +18,9 @@ import { whereRollsOfWorkOrder, whereWorkOrdersOfRolls } from "./helpers/workord
 import { LOOKUP_NOTE_STATUSES, stationWorkSearchWhere } from "./helpers/workorder-doc-search.helper";
 import { decodeScanUpload, PDF_MIME } from "./gelen-belge-scan.service";
 import { extractDraft, ocrFromEnvelope } from "./gelen-belge-taslak-doldur.service";
-import { readIncomingDocStationLookup, readProductionEnabled } from "./system-setting.service";
+import { readIncomingDocStationLookup, readProductionEnabled, SETTING_KEYS } from "./system-setting.service";
+import { licenseModuleError } from "../lib/license/module-ceiling";
+import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
 const IE = TERIM.terbiyeIsEmri;
 
@@ -57,10 +59,11 @@ export async function stationLookupStatus(): Promise<{ enabled: boolean; readerC
 
 async function assertStationLookupEnabled(): Promise<void> {
   if (!(await readIncomingDocStationLookup())) {
-    throw AppError.forbidden("İstasyonda belge okutma kapalı (Genel Ayarlar → Gelen Belge).", { code: "GELEN_BELGE_STATION_LOOKUP_DISABLED" });
+    throw AppError.forbidden(`İstasyonda belge okutma kapalı (${settingScreenPath("gelen-belge")}).`, { code: "GELEN_BELGE_STATION_LOOKUP_DISABLED" });
   }
   if (!(await readProductionEnabled())) {
-    throw AppError.forbidden(`Üretim modülü kapalı; ${IE.tekilKucuk} aranamaz.`, { code: "MODULE_DISABLED", module: "production" });
+    throw licenseModuleError(SETTING_KEYS.PRODUCTION_ENABLED, "Üretim")
+      ?? AppError.forbidden(`Üretim modülü kapalı; ${IE.tekilKucuk} aranamaz.`, { code: "MODULE_DISABLED", module: "production" });
   }
 }
 
