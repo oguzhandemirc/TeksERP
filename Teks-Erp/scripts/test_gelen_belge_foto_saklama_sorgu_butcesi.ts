@@ -11,11 +11,13 @@
 //
 // ÖLÇÜLENLER:
 //   §1 (DB'siz) belge üyeliği `onlyIds` kümesini TEK parametreyle taşır: 3 ve 300 kimlikte bağlı değer sayısı eşit
+//   §1b (DB'siz) o parametre `n.id = ANY(uuid[])` ile bağlanır (PK indeksi), `n.id::text` karşılaştırması yok
 //   §2 aday taraması sorgu sayısı takılı belge 3 → 3+250'de EŞİT (sabit); körlük zemini: takılı belgeler gerçekten aday
 //      kümesinde (fotoğraf TAM, belge APPROVED) ve tur sorgu atıyor
 //   §3 sonuç değişmedi: tam sevkli belgenin taraması aday, takılı belgelerinkiler aday DEĞİL
 // Negatif sonda (2026-11-03): `NOTE_PAGE` 200'e indirilince §2 ❌ (3 → 5 sorgu); `membershipSql` belge süzgeci eski
-// `${key} IN (${Prisma.join(onlyIds)})` biçimine döndürülünce §1 ❌ (değer 3 ≠ 300).
+// `${key} IN (${Prisma.join(onlyIds)})` biçimine döndürülünce §1 ❌ (değer 3 ≠ 300); (2026-11-04) `many` dalı
+// `${key} = ANY(${many}::text[])` biçimine (#525 hâli) döndürülünce §1b ❌, §1 ✅ kalır.
 // =============================================================================
 import { createHash, randomUUID } from "node:crypto";
 import prisma, { pool } from "../src/lib/prisma";
@@ -87,6 +89,9 @@ async function run(): Promise<void> {
   const v3 = membershipSql("deliveryNote", undefined, ids(3)).values.length;
   const v300 = membershipSql("deliveryNote", undefined, ids(300)).values.length;
   check("§1 ⭐ bağlı değer sayısı kimlik sayısından bağımsız", v3 === v300, `3 kimlik=${v3} · 300 kimlik=${v300}`);
+  // Değer sayısı `n.id::text = ANY(text[])` biçiminde de eşit kalır; belge PK indeksi yalnız `n.id = ANY(uuid[])` ile (#524↔#525 birleşmesi).
+  const sql = membershipSql("deliveryNote", undefined, ids(3)).sql.replace(/\s+/g, " ");
+  check("§1b ⭐ belge kümesi `n.id = ANY(…::uuid[])` ile süzülür (metin dökümü yok)", /n\.id = ANY\((\?|\$\d+)::uuid\[\]\)/.test(sql) && !/n\.id::text (= ANY|IN)/.test(sql));
 
   const itemId = (await prisma.item.create({ data: { code: `${TAG}-MM`, name: `${TAG} mal`, itemType: "FABRIC", unit: "MT" }, select: { id: true } })).id;
   made.items.push(itemId);
