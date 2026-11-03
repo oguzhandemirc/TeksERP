@@ -31,6 +31,8 @@ import type { RootStackParamList } from '../../navigation/types';
 import { SETTINGS_COLORS as COLORS } from './settings/settingsUi';
 import { usePrintReports } from '../../services/printJob.service';
 import { printReportsSummary } from './settings/PrintReportsScreen';
+import { docDeskSummary } from './settings/DocDeskSettingsScreen';
+import { useVisibleScreens } from '../../hooks/useVisibleScreens';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -57,6 +59,10 @@ export default function SettingsScreen() {
   const { mode: firmMode } = useSubcontractorDefault();
   // Lisans satırı yalnız girişliye (kimliksiz durum çağrısı ayrıntı döndürmez).
   const signedIn = useAuthStore((s) => !!s.user);
+  // Belge masası yalnız "İE oluştur" ekranını görebilen kullanıcıda anlamlı (K23).
+  const canDocDesk = useVisibleScreens().visibleScreens.some((x) => x.key === 'GelenBelge');
+  const docDesk = useDeviceSettingsStore((s) => s.docDeskDevice);
+  const docDeskCapture = useDeviceSettingsStore((s) => s.docDeskCaptureMode);
   const license = useLicenseStatus();
   const printReports = usePrintReports((st) => st.items);
   const notificationsOn = resolveNotificationInboxEnabled(useFeatureFlags().data);
@@ -142,6 +148,9 @@ export default function SettingsScreen() {
       route: 'SettingsSurumNotlari',
     },
   ];
+  if (canDocDesk) {
+    rows.push({ key: 'docDesk', icon: 'file-document-outline', title: 'Belge Masası', value: docDeskSummary(docDesk, docDeskCapture), route: 'SettingsDocDesk' });
+  }
   if (signedIn) {
     // Bulunabilirlik: satır bayrak kapalıyken de görünür; sayfa nedenini söyler.
     rows.push({

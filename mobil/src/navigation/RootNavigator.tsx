@@ -29,6 +29,7 @@ import UpdateSettingsScreen from '../screens/Common/settings/UpdateSettingsScree
 import { SurumNotlariScreen } from '../screens/Common/settings/SurumNotlariScreen';
 import { PrintReportsScreen } from '../screens/Common/settings/PrintReportsScreen';
 import WorkPreferencesScreen from '../screens/Common/settings/WorkPreferencesScreen';
+import DocDeskSettingsScreen from '../screens/Common/settings/DocDeskSettingsScreen';
 import LicenseSettingsScreen from '../screens/Common/settings/LicenseSettingsScreen';
 import NotificationPreferencesScreen from '../screens/Common/settings/NotificationPreferencesScreen';
 import DevicePairingScreen from '../screens/Common/DevicePairingScreen';
@@ -287,6 +288,11 @@ export default function RootNavigator() {
           name="SettingsWorkPreferences"
           component={WorkPreferencesScreen}
           options={{ animation: "slide_from_right" }}
+        />
+        <Stack.Screen
+          name="SettingsDocDesk"
+          component={DocDeskSettingsScreen}
+          options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
           name="SettingsLicense"

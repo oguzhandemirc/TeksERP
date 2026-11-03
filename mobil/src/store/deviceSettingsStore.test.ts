@@ -271,3 +271,31 @@ describe('deviceSettingsStore — kısa kesim cihaz override', () => {
     expect(useDeviceSettingsStore.getState().tamburShortCutA1DeviceThresholdM).toBeNull();
   });
 });
+
+describe('deviceSettingsStore — belge masası (K23/K26)', () => {
+  it('kayıt yokken: masa KAPALI, çekim dokunarak, aralık 700 ms (bugünkü açılış)', async () => {
+    fakeDisk();
+    await useDeviceSettingsStore.getState().init();
+    const s = useDeviceSettingsStore.getState();
+    expect([s.docDeskDevice, s.docDeskCaptureMode, s.docDeskFrameMs]).toEqual([false, 'tap', 700]);
+  });
+
+  it('bozuk kayıt sessizce masa kipini / otomatik çekimi açmaz', async () => {
+    fakeDisk({ device_doc_desk: 'TRUE', device_doc_desk_capture: 'otomatik', device_doc_desk_frame_ms: '30' });
+    await useDeviceSettingsStore.getState().init();
+    const s = useDeviceSettingsStore.getState();
+    expect([s.docDeskDevice, s.docDeskCaptureMode, s.docDeskFrameMs]).toEqual([false, 'tap', 700]);
+  });
+
+  it('yazılan değerler kalıcı', async () => {
+    fakeDisk();
+    const st = useDeviceSettingsStore.getState();
+    await st.setDocDeskDevice(true);
+    await st.setDocDeskCaptureMode('auto');
+    await st.setDocDeskFrameMs(1000);
+    useDeviceSettingsStore.setState({ docDeskDevice: false, docDeskCaptureMode: 'tap', docDeskFrameMs: 700 });
+    await useDeviceSettingsStore.getState().init();
+    const s = useDeviceSettingsStore.getState();
+    expect([s.docDeskDevice, s.docDeskCaptureMode, s.docDeskFrameMs]).toEqual([true, 'auto', 1000]);
+  });
+});

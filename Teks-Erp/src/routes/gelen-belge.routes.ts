@@ -29,6 +29,7 @@ import { applyBulkDeleteDeliveryNotes, BULK_DELETE_MAX, previewBulkDeleteDeliver
 import { getIncomingDocSettings, updateIncomingDocSettings } from "../services/gelen-belge-ayar.service";
 import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
 import { getRollTabletContext } from "../services/roll-tablet.service";
+import { deskRouteSuggestion, listDeskKursunMachines } from "../services/gelen-belge-masa.service";
 import { getDocumentScan, readDocumentScanContent, uploadDocumentScan } from "../services/gelen-belge-scan.service";
 import { suggestForNote } from "../services/gelen-belge-eslestirme.service";
 import { buildWorkOrderPlan } from "../services/gelen-belge-is-emri.service";
@@ -311,13 +312,32 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  * /api/gelen-belge/tablet-baglam:
  *   get:
  *     tags: [Gelen belge]
- *     summary: 'Tablet "Belge Tara" bağlamı — sahip adayları (aktif cariler, yalnız id+ad; KK1 bağlamıyla tek kaynak)'
+ *     summary: 'Tablet "Belge Tara" bağlamı — sahip adayları (aktif cariler, yalnız id+ad; KK1 bağlamıyla tek kaynak) + kurşun makineleri (Belge masası, K23)'
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "customers[] (id, name)" }
+ *       200: { description: "customers[] (id, name) · kursunMachines[] (id, code, name, stationId — kurşun istasyonlarının aktif makineleri; eski tablet okumaz)" }
+ * /api/gelen-belge/rota-onerisi:
+ *   get:
+ *     tags: [Gelen belge]
+ *     summary: 'Belge masası hazır iş emri ön seçimi — sahibin rota önerisi (plan ucu / otomatik iş emriyle tek zincir); salt okunur'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: sahip, required: false, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "routeTemplateId | null · routeName · source LAST_WORK_ORDER|CUSTOMER_ROUTE|FACTORY_DEFAULT | null · notes[]" }
+ *       400: { description: "Geçersiz sahip kimliği" }
  */
 // D7: tarayan `customer:read` taşımaz; KK1 emanet seçicisinin opt-in allowlist'i (`getRollTabletContext`) yeniden kullanılır.
-router.get("/tablet-baglam", requirePermission("gelen-belge:write"), wrap(async () => ({ status: 200, data: (await getRollTabletContext()).data })));
+// K23: masa ekranı `station:read` taşımaz; makine listesi aynı uçta dar alanlarla gelir (alan eklemek eski tableti kırmaz).
+router.get("/tablet-baglam", requirePermission("gelen-belge:write"), wrap(async () => ({
+  status: 200,
+  data: { ...(await getRollTabletContext()).data, kursunMachines: await listDeskKursunMachines() },
+})));
+const DeskSuggestionQuery = z.object({ sahip: Id.optional() });
+router.get("/rota-onerisi", requirePermission("gelen-belge:write"), wrap(async (req) => ({
+  status: 200,
+  data: await deskRouteSuggestion(DeskSuggestionQuery.parse(req.query).sahip ?? null),
+})));
 /**
  * @openapi
  * /api/gelen-belge/irsaliyeler/{id}/okuma-ozeti:
