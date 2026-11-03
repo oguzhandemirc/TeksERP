@@ -233,6 +233,8 @@ export interface InboundNotePatch {
 /** Onay gövdesi; `routeTemplateId` yalnız seçildiyse gönderilir (P3 rota geçersiz kılma). */
 export interface ApproveNoteBody {
   routeTemplateId?: string;
+  /** K27 WARN: işi süren aynı belge no'lu eşe rağmen onayla (yalnız operatör "Yine de onayla" deyince). */
+  confirmDuplicateDocNo?: true;
 }
 
 export interface AutoWorkOrderGroup {
