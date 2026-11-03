@@ -100,7 +100,8 @@ export const MENU_PRESETS: readonly MenuPreset[] = [
 
 /**
  * Hazır sete GİREMEZ ekranlar — firmanın asıl işi (kurşun, kalite, tambur, iş emri, gelen belge, sevkiyat,
- * çuval, cari, fatura, istasyon/makine, etiket). Bekçi set ∩ bu küme = ∅ ölçer.
+ * çuval, cari, fatura, istasyon/makine, etiket). Kalem Fiyatları (hizmet fiyatının tek giriş yeri), Kumaş Özellikleri
+ * ve İstasyon Yetenekleri (kurşun gramaj tanımı) da burada. Bekçi set ∩ bu küme = ∅ ölçer.
  */
 export const MENU_PRESET_FORBIDDEN_KEYS: ReadonlySet<string> = new Set([
   "KursunQc",
@@ -126,6 +127,8 @@ export const MENU_PRESET_FORBIDDEN_KEYS: ReadonlySet<string> = new Set([
   "definitions/labels",
   "definitions/label-templates",
   "definitions/fabric-properties",
+  "definitions/station-capabilities",
+  "definitions/item-prices",
   "finance/invoices",
   "finance/cari",
   "quality",

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
-import { ROUTE_MODULE, ROUTE_REGIME, isRouteModuleOpen, routeModuleOf } from "./route-modules";
+import { ROUTE_ALSO_REQUIRES, ROUTE_MODULE, ROUTE_REGIME, isRouteModuleOpen, routeModuleOf } from "./route-modules";
 import { resolveMachineStopEnabled } from "@/pages/Operations/MachineStops/stop-regime";
 
 // =============================================================================
@@ -122,5 +122,21 @@ describe("route-modules — yol → modül aynası", () => {
     const kapanan = new Set(ALL_PATHS.filter((p) => !(p in ROUTE_REGIME) && !isRouteModuleOpen(`/${p}`, fabrika)).map((p) => routeModuleOf(`/${p}`)));
     expect([...kapanan].sort()).toEqual(["depoMultiEnabled", "devereEnabled", "dokumaEnabled", "financeEnabled", "iplikEnabled", "kaliteGuvenceEnabled", "maliyetEnabled", "ticaretEnabled"]);
     expect(isRouteModuleOpen("/operations/work-orders", fabrika)).toBe(true);
+  });
+
+  // K19 BAĞLI MODÜL: ek modül şartı backend kapısının aynasıdır — kaynak metinden ölçülür (ayna kendi başına uydurulmaz).
+  it("⭐ bağlı modül: Kârlılık maliyet açık + finans kapalıyken kapalı; ikisi açıkken açık; maliyet hub'ı etkilenmez", () => {
+    expect(isRouteModuleOpen("/reports/maliyet/karlilik", ctx({ financeEnabled: false }))).toBe(false);
+    expect(isRouteModuleOpen("/reports/maliyet/karlilik", ctx())).toBe(true);
+    expect(isRouteModuleOpen("/reports/maliyet", ctx({ financeEnabled: false }))).toBe(true);
+    expect(isRouteModuleOpen("/cost/yarn-prices", ctx({ iplikEnabled: false }))).toBe(true);
+  });
+  it("bağlı modül satırı backend uç kapısıyla aynı: /karlilik → requireFinanceEnabled", () => {
+    const src = readFileSync(resolve(__dirname, "../../../Teks-Erp/src/routes/reports/maliyet.report.routes.ts"), "utf8");
+    const line = src.split("\n").find((l) => l.startsWith('router.get("/karlilik"')) ?? "";
+    expect(line).toContain("requireFinanceEnabled");
+    expect(Object.keys(ROUTE_ALSO_REQUIRES)).toEqual(["reports/maliyet/karlilik"]);
+    expect(ROUTE_ALSO_REQUIRES["reports/maliyet/karlilik"]).toEqual(["financeEnabled"]);
+    for (const k of Object.keys(ROUTE_ALSO_REQUIRES)) expect(ALL_PATHS).toContain(k);
   });
 });
