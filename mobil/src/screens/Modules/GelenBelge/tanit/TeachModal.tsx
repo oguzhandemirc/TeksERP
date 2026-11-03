@@ -13,7 +13,7 @@ import GuidedPanel from './GuidedPanel';
 import SimilarDialog from './SimilarDialog';
 import { clearField, teachMarks, toggleWord, type ScanMark } from './teachDraft';
 import { photoSize, type TeachPage } from './teachPages';
-import { useTeachModal, type TeachSaved } from './useTeachModal';
+import { useTeachModal, type TeachModalState, type TeachSaved } from './useTeachModal';
 import TeachPanel from './TeachPanel';
 import TeachPreview from './TeachPreview';
 
@@ -84,16 +84,8 @@ export default function TeachModal({ visible, pages, code, onDismiss, onSaved }:
   const portrait = width < height;
   const insets = useSafeAreaInsets();
   const [pageIdx, setPageIdx] = useState(0);
-  const [advanced, setAdvanced] = useState(false);
-  const [step, setStep] = useState(0);
-  const [skipped, setSkipped] = useState<FieldKey[]>([]);
-  // Her açılış rehberin başından başlar.
-  useEffect(() => {
-    if (!visible) return;
-    setAdvanced(false);
-    setStep(0);
-    setSkipped([]);
-  }, [visible]);
+  const nav = useGuidedNav(visible);
+  const { advanced, step } = nav;
   const page = pages[Math.min(pageIdx, Math.max(0, pages.length - 1))] ?? null;
   const t = useTeachModal(
     visible ? (page?.scanId ?? null) : null,
@@ -115,11 +107,6 @@ export default function TeachModal({ visible, pages, code, onDismiss, onSaved }:
       const key = stepField(step);
       return key ? toggleFieldWord(s, words, key, i) : s;
     });
-  const onStep = (n: number) => {
-    const key = stepField(n);
-    if (key) setSkipped((xs) => xs.filter((k) => k !== key));
-    setStep(n);
-  };
   return (
     // Kaydırma (yakınlaştırılmış fotoğraf) ile çakışmasın diye sürükleyip kapatma kapalı; kapat düğmesi + geri tuşu var.
     <AppModal visible={visible} onDismiss={onDismiss} position="right" contentStyle={{ width, height }} swipeToDismiss={false}>
@@ -129,7 +116,7 @@ export default function TeachModal({ visible, pages, code, onDismiss, onSaved }:
             {title}
             {t.existing ? ` · sürüm ${t.existing.version} → ${t.existing.version + 1}` : ''}
           </Text>
-          <Button mode={advanced ? 'contained-tonal' : 'text'} icon={advanced ? 'school-outline' : 'tune'} onPress={() => setAdvanced((a) => !a)} contentStyle={styles.btn} testID="tanit-gelismis">
+          <Button mode={advanced ? 'contained-tonal' : 'text'} icon={advanced ? 'school-outline' : 'tune'} onPress={nav.toggleAdvanced} contentStyle={styles.btn} testID="tanit-gelismis">
             {advanced ? 'Adım adım' : 'Gelişmiş'}
           </Button>
           <IconButton icon="close" size={32} style={styles.iconBtn} onPress={onDismiss} accessibilityLabel="Tanıtmayı kapat" testID="tanit-kapat" />
@@ -154,45 +141,7 @@ export default function TeachModal({ visible, pages, code, onDismiss, onSaved }:
           <View style={[styles.body, portrait && styles.bodyPortrait]}>
             <ScanPane key={page.scanId} uri={page.uri} scan={t.words.data} marks={marks} width={scanWidth} onToggle={onTap} />
             <ScrollView style={portrait ? styles.sidePortrait : styles.side} contentContainerStyle={styles.sideBody} keyboardShouldPersistTaps="handled">
-              {advanced ? (
-                <TeachPanel state={t.state} words={t.words.data.words} onChange={t.setState} old={t.existing?.template ?? null} />
-              ) : (
-                <GuidedPanel
-                  state={t.state}
-                  onChange={t.setState}
-                  step={step}
-                  onStep={onStep}
-                  skipped={skipped}
-                  onSkip={(k) => {
-                    t.setState((s) => clearField(s, k));
-                    setSkipped((xs) => (xs.includes(k) ? xs : [...xs, k]));
-                  }}
-                  preview={{ result: t.preview, fresh: t.previewFresh, error: t.previewError }}
-                />
-              )}
-              {t.problems.length > 0 && (advanced || step === FINISH_STEP) && (
-                <View testID="tanit-eksikler">
-                  {t.problems.map((p) => (
-                    <Text key={p} style={styles.warn}>
-                      • {p}
-                    </Text>
-                  ))}
-                </View>
-              )}
-              {advanced && t.preview && <TeachPreview result={t.preview} stale={!t.previewFresh} />}
-              <View style={styles.actions}>
-                {advanced && (
-                  <Button mode="outlined" icon="eye" onPress={() => void t.runPreview()} disabled={t.problems.length > 0 || t.busy !== null} loading={t.busy === 'preview'} contentStyle={styles.btn} testID="tanit-onizle">
-                    Önizle
-                  </Button>
-                )}
-                <Button mode="contained" icon="content-save" onPress={() => void t.save()} disabled={!t.canSave} loading={t.busy === 'save'} contentStyle={styles.btn} testID="tanit-kaydet">
-                  {t.existing ? 'Şablonu güncelle' : 'Belge tipini kaydet'}
-                </Button>
-              </View>
-              {!advanced && step !== FINISH_STEP && t.problems.length > 0 && (
-                <Text style={styles.warn} testID="tanit-kaydet-neden">{`Kaydetmek için: ${t.problems[0]}`}</Text>
-              )}
+              <TeachSide t={t} nav={nav} />
             </ScrollView>
           </View>
         )}
@@ -201,6 +150,82 @@ export default function TeachModal({ visible, pages, code, onDismiss, onSaved }:
     </AppModal>
   );
 }
+
+
+/** Yan panel: rehberli adımlar | gelişmiş serbest panel + eksikler + önizleme + düğmeler. */
+function TeachSide({ t, nav }: { t: TeachModalState; nav: GuidedNav }) {
+  const { advanced, step } = nav;
+  const state = t.state!;
+  return (
+    <>
+      {advanced ? (
+        <TeachPanel state={state} words={t.words.data?.words ?? []} onChange={t.setState} old={t.existing?.template ?? null} />
+      ) : (
+        <GuidedPanel
+          state={state}
+          onChange={t.setState}
+          step={step}
+          onStep={nav.onStep}
+          skipped={nav.skipped}
+          onSkip={(k) => {
+            t.setState((s) => clearField(s, k));
+            nav.skip(k);
+          }}
+          preview={{ result: t.preview, fresh: t.previewFresh, error: t.previewError }}
+        />
+      )}
+      {t.problems.length > 0 && (advanced || step === FINISH_STEP) && (
+        <View testID="tanit-eksikler">
+          {t.problems.map((p) => (
+            <Text key={p} style={styles.warn}>
+              • {p}
+            </Text>
+          ))}
+        </View>
+      )}
+      {advanced && t.preview && <TeachPreview result={t.preview} stale={!t.previewFresh} />}
+      <View style={styles.actions}>
+        {advanced && (
+          <Button mode="outlined" icon="eye" onPress={() => void t.runPreview()} disabled={t.problems.length > 0 || t.busy !== null} loading={t.busy === 'preview'} contentStyle={styles.btn} testID="tanit-onizle">
+            Önizle
+          </Button>
+        )}
+        <Button mode="contained" icon="content-save" onPress={() => void t.save()} disabled={!t.canSave} loading={t.busy === 'save'} contentStyle={styles.btn} testID="tanit-kaydet">
+          {t.existing ? 'Şablonu güncelle' : 'Belge tipini kaydet'}
+        </Button>
+      </View>
+      {!advanced && step !== FINISH_STEP && t.problems.length > 0 && (
+        <Text style={styles.warn} testID="tanit-kaydet-neden">{`Kaydetmek için: ${t.problems[0]}`}</Text>
+      )}
+    </>
+  );
+}
+
+/** Rehber gezintisi (adım, atlanan alanlar, kip); her açılış rehberin başından başlar. */
+function useGuidedNav(visible: boolean) {
+  const [advanced, setAdvanced] = useState(false);
+  const [step, setStep] = useState(0);
+  const [skipped, setSkipped] = useState<FieldKey[]>([]);
+  useEffect(() => {
+    if (!visible) return;
+    setAdvanced(false);
+    setStep(0);
+    setSkipped([]);
+  }, [visible]);
+  return {
+    advanced,
+    step,
+    skipped,
+    toggleAdvanced: () => setAdvanced((a) => !a),
+    onStep: (n: number) => {
+      const key = stepField(n);
+      if (key) setSkipped((xs) => xs.filter((k) => k !== key));
+      setStep(n);
+    },
+    skip: (k: FieldKey) => setSkipped((xs) => (xs.includes(k) ? xs : [...xs, k])),
+  };
+}
+type GuidedNav = ReturnType<typeof useGuidedNav>;
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colors.appBg, paddingHorizontal: spacing.md, gap: spacing.sm },
