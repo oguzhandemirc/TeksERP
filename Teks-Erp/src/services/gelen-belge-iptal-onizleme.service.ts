@@ -5,6 +5,7 @@
 // sonra tx içinde YENİDEN okur — bayat önizleme kapı değildir. Engel kuralı fail-closed: belgeden doğan top
 // yalnız ham stokta (STOCK, depolu, çuval/sevk/işlem izi yok) ya da BAŞLAMAMIŞ ve SEÇİLMİŞ iş emrindeyse düşer.
 // =============================================================================
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { DeliveryNoteStatus, LabTestStatus, type Prisma, RollStatus, SwatchStatus, WorkOrderStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
@@ -103,7 +104,7 @@ export interface NoteCancelContext {
 
 /** Belge + doğurduğu toplar; yoksa 404. `db` iptalde tx'tir (claim'den sonra taze okuma). */
 export async function loadNoteCancelContext(db: Db, noteId: string): Promise<NoteCancelContext> {
-  const n = await db.customerDeliveryNote.findUnique({
+  const n = await sequentialTx(db).customerDeliveryNote.findUnique({
     where: { id: noteId },
     select: {
       id: true, noteNo: true, status: true, senderDocNo: true, ownerCustomer: { select: { name: true } },

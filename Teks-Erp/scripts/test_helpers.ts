@@ -466,18 +466,19 @@ function makeLocksDb(wo: {
   steps: StepFix[];
   activeDispatches: number;
 } | null) {
+  const row = () => wo && {
+    id: wo.id,
+    targetColorId: wo.targetColorId,
+    targetProperties: wo.targetProperties,
+    steps: wo.steps,
+    _count: { dispatches: wo.activeDispatches },
+  };
+  // Sahte db kök istemci gibi davranır ($disconnect): sequentialTx sorgu bölmez; bölme
+  // kendi bekçisinde (test_pg_eszamanli_sorgu) ölçülür, burada yalnız kilit mantığı.
   return {
+    $disconnect: async () => {},
     workOrder: {
-      findUnique: async () => {
-        if (!wo) return null;
-        return {
-          id: wo.id,
-          targetColorId: wo.targetColorId,
-          targetProperties: wo.targetProperties,
-          steps: wo.steps,
-          _count: { dispatches: wo.activeDispatches },
-        };
-      },
+      findUnique: async () => row(),
     },
   } as unknown as Parameters<typeof computeWorkOrderLocks>[0];
 }

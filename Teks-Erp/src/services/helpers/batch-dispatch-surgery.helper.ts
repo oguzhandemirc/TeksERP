@@ -35,6 +35,7 @@
 // geçer ve katalog bunu iki yollu `scopedCounter.uretec` ile beyan eder.
 // =============================================================================
 
+import { sequentialTx } from "./tx-sequential-relations.helper";
 import { Prisma, PrintedDocType } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { nextSeriesNo } from "../number-series.service";
@@ -134,7 +135,7 @@ export async function performDispatchSurgeryTx(
 
   // Kaynak partilerin açık+outstanding sevkleri + kalemleri (dönmüşlük bilgisiyle).
   // Parti kapsamlı iki sorgu: dokuma sevkinin partisi yok — daraltma tip içindir, SQL aynı.
-  const sourceOpen = workOrderBoundOnly(await tx.subcontractorDispatch.findMany({
+  const sourceOpen = workOrderBoundOnly(await sequentialTx(tx).subcontractorDispatch.findMany({
     where: { batchId: { in: params.sourceBatchIds }, ...OPEN_OUTSTANDING },
     select: {
       id: true,
@@ -184,7 +185,7 @@ export async function performDispatchSurgeryTx(
   // splitBatch'te hedef yeni doğduğundan boş gelir; moveRolls'ta kalem birleştirme
   // hedefi budur. Retarget/yeni-doğan sevkler döngü içinde haritaya eklenir ki
   // aynı adımdaki SONRAKİ kaynaklar ona birleşsin (≤1 açık sevk değişmezi).
-  const targetOpen = workOrderBoundOnly(await tx.subcontractorDispatch.findMany({
+  const targetOpen = workOrderBoundOnly(await sequentialTx(tx).subcontractorDispatch.findMany({
     where: { batchId: params.targetBatchId, ...OPEN_OUTSTANDING },
     select: {
       id: true,

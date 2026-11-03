@@ -11,6 +11,7 @@
 // (`readDbNow`) ile ms düzeyinde karşılaştırılır (`beamsMountedDuring`); iki saat karşılaştırılamaz.
 // `now()` değil: tx BAŞLANGICIdır, aynı tx'teki iki olay aynı damgayı alır ve sıra kaybolur.
 // =============================================================================
+import { sequentialTx } from "./tx-sequential-relations.helper";
 import { Prisma, WarpBeamStatus } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
@@ -61,6 +62,6 @@ export async function applyWarpBeamEventTx(
     throw AppError.conflict(`${fresh.beamNo} durumu ${fresh.status} — bu işlem yalnız ${input.from} durumunda yapılır`, { code: "WARP_BEAM_STATE", status: fresh.status });
   }
   const createdAt = await warpBeamEventStampTx(tx, input.beamId);
-  return tx.warpBeamEvent.create({ data: { beamId: input.beamId, kind: input.kind, fromStatus: input.from, toStatus: input.to, ...input.data, createdAt }, select: WARP_BEAM_EVENT_SELECT });
+  return sequentialTx(tx).warpBeamEvent.create({ data: { beamId: input.beamId, kind: input.kind, fromStatus: input.from, toStatus: input.to, ...input.data, createdAt }, select: WARP_BEAM_EVENT_SELECT });
 }
 

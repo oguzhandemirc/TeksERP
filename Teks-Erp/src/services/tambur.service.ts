@@ -14,6 +14,7 @@
 //   - Tambur'dan sonraki akış: Depo (WAREHOUSE) → Tartı/Paket → Sevkiyat.
 // =============================================================================
 
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { stationWorkSearchWhere } from "./helpers/workorder-doc-search.helper";
 import { scanRoutedOpenCards, type ScanRoutedOpenCard } from "./helpers/scan-route-open-cards.helper";
 import { consumeForOperationTx } from "./helpers/consumable-stock.helper";
@@ -1293,7 +1294,7 @@ export class TamburService {
       const cutMeasures: CutReadingInput[] = [];
       for (const [segIndex, seg] of segments.entries()) {
         const splitBarcode = segmentBarcodes[segIndex]!;
-        const splitRoll = await tx.roll.create({
+        const splitRoll = await sequentialTx(tx).roll.create({
           data: {
             barcode: splitBarcode,
             itemId: roll.itemId,
@@ -1476,7 +1477,7 @@ export class TamburService {
       }
 
       // Parent retire: currentQty=0, TAMBUR_CONSUMED, aktif step yok.
-      const updated = await tx.roll.update({
+      const updated = await sequentialTx(tx).roll.update({
         where: { id: data.rollId },
         data: {
           currentQty: 0,

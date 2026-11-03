@@ -14,6 +14,7 @@
 //  - Idle kapatma TEMBEL (work-session.helper.ts) — timer/cron YOK.
 // =============================================================================
 
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
 import { AppError } from "../utils/app-error";
@@ -335,7 +336,7 @@ export class WorkSessionService {
           },
           data: { endedAt: now, endReason: "NEW_LOGIN" as WorkSessionEndReason },
         });
-        return tx.workSession.create({
+        return sequentialTx(tx).workSession.create({
           data: {
             userId: input.userId,
             deviceId: input.deviceRowId,

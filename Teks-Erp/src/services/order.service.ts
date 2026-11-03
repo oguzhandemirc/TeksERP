@@ -7,6 +7,7 @@
 //                 + iş emri bağlarını güvenli şekilde çözer (R1)
 // =============================================================================
 
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { assertCariNotHeldTx } from "./helpers/cari-hold.helper";
 import { assertCustomerRiskLimitTx } from "./helpers/risk-exposure.helper";
 import prisma from "../lib/prisma";
@@ -2354,7 +2355,7 @@ export class OrderService extends BaseService {
    * Künye (`createdById`/`updatedById`) BaseService ile aynı yazıcıdan: `withActor` (`test_record_provenance` ölçer).
    */
   private insertOrderTx(tx: Prisma.TransactionClient, p: PreparedOrderCreate, orderNumber: string): Promise<Record<string, unknown>> {
-    return tx.order.create({
+    return sequentialTx(tx).order.create({
       data: {
         ...withActor(p.prismaData, p.actorUserId, "CREATE", "order"),
         orderNumber,

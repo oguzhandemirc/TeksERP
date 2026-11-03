@@ -20,6 +20,7 @@
 //   yazarı o helper, tetikleyicisi koşum-açma; manuel `start` ucu YOK (1e 2026-09-13).
 // =============================================================================
 
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { ItemType, Prisma, WeavingOrderStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
@@ -229,7 +230,7 @@ export async function insertWeavingOrderTx(tx: Prisma.TransactionClient, input: 
   await replaceOrderLineLinksTx(tx, row.id, orderLines);
   // Oluşturan otomatik takipçi (bildirim §5.3).
   await followAsCreatorTx(tx, userId, { weavingOrderId: row.id });
-  return { fresh: true as const, row: await tx.weavingOrder.findUniqueOrThrow({ where: { id: row.id }, select: WEAVING_ORDER_SELECT }) };
+  return { fresh: true as const, row: await sequentialTx(tx).weavingOrder.findUniqueOrThrow({ where: { id: row.id }, select: WEAVING_ORDER_SELECT }) };
 }
 
 /**
@@ -278,7 +279,7 @@ export async function updateWeavingOrder(
     });
     if (claim.count === 0) await throwClaimFailureTx(tx, id, "düzenlenemez", "WEAVING_ORDER_NOT_EDITABLE");
     if (orderLines !== null) await replaceOrderLineLinksTx(tx, id, orderLines);
-    return tx.weavingOrder.findUniqueOrThrow({ where: { id }, select: WEAVING_ORDER_SELECT });
+    return sequentialTx(tx).weavingOrder.findUniqueOrThrow({ where: { id }, select: WEAVING_ORDER_SELECT });
   });
 
   await AuditService.log({
