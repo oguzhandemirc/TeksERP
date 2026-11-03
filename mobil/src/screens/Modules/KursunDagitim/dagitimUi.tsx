@@ -5,6 +5,7 @@ import { Text, TouchableRipple, Icon } from 'react-native-paper';
 import type { KursunDistributionRowBase } from '../../../services/kursunBypass.service';
 import { colors, spacing, radius } from '../../../theme';
 import { factoryDayKey, formatFactory } from '../../../lib/factory-time';
+import { fmtMeters } from '../../../utils/meters';
 
 // =============================================================================
 // Kurşun Dağıtım — "Bekleyen" ve "Dağıtılmış" listelerinin PAYLAŞTIĞI kart
@@ -17,10 +18,8 @@ import { factoryDayKey, formatFactory } from '../../../lib/factory-time';
 // burada yaşar (döngüsel import olmasın).
 // =============================================================================
 
-/** Metraj — Türkçe binlik ayracı, en fazla 2 ondalık. */
-export function fmtMeters(m: number): string {
-  return m.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
-}
+/** Metraj — ortak biçim (`utils/meters`); Depo ile aynı okunur. */
+export { fmtMeters };
 
 /** "Ne zamandır bekliyor" — en eski topun adıma giriş anından türetilir. */
 export function waitText(since: string | null): string | null {

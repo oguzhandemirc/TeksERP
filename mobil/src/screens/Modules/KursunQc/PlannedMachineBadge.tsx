@@ -17,6 +17,8 @@ export default function PlannedMachineBadge({ name, testID }: { name: string | n
 }
 
 const styles = StyleSheet.create({
-  badge: { backgroundColor: palette.blue[50], borderColor: palette.blue[500], borderWidth: 1, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, maxWidth: 180 },
+  // Sabit px tavanı yok: 180 px 'Plan: KURŞUN MAKİNESİ 1'i yer varken kesiyordu (QA 2026-11-03);
+  // satır daralırsa önce o küçülür, en fazla satırın %45'i.
+  badge: { backgroundColor: palette.blue[50], borderColor: palette.blue[500], borderWidth: 1, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, flexShrink: 1, maxWidth: '45%' },
   text: { fontSize: 12, fontWeight: '700', color: palette.blue[800] },
 });

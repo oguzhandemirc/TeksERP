@@ -16,6 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Toast from 'react-native-toast-message';
 import ScreenChrome from '../../../components/ScreenChrome';
+import { TERIM_AD } from '../../../lib/terim';
 import RefreshButton from '../../../components/RefreshButton';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
 import { packingService, type OpenOrder } from '../../../services/packing.service';
@@ -266,7 +267,8 @@ export default function TartiPaketScreen() {
 
   return (
     <ScreenChrome
-      title="Sevkiyat"
+      // Karo adıyla aynı (TERIM_AD tek kaynak) — QA 2026-11-03: karo "Tartı & Paket", başlık "Sevkiyat" diyordu.
+      title={TERIM_AD.tartiPaket}
       subtitle={compact ? machineName : undefined}
       hidePlaceChip={compact}
       headerExtras={

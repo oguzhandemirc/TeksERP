@@ -31,7 +31,6 @@ import { useDeviceType, useIsPortrait } from '../../hooks/useDeviceType';
 import { operatorColor, operatorInitials } from '../../utils/operatorColor';
 import type { MobileUser, LoginResponse } from '../../types/auth';
 import type { RootStackParamList } from '../../navigation/types';
-import { upperTr } from '../../utils/trCase';
 import { isLoginSuspended } from '../../lib/license';
 import { LicenseSuspendedCard } from '../../components/lock/LicenseSuspendedGate';
 import UnpairedPasswordForm from './UnpairedPasswordForm';
@@ -75,14 +74,6 @@ const NUMPAD_ROWS: Cell[][] = [
   [{ key: '7', type: 'digit' }, { key: '8', type: 'digit' }, { key: '9', type: 'digit' }],
   [{ key: '_', type: 'empty' }, { key: '0', type: 'digit' }, { key: '⌫', type: 'backspace' }],
 ];
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 0) return '?';
-  // toLocaleUpperCase('tr'): düz toUpperCase 'ışık' → 'IS' üretiyordu, doğrusu 'İŞ'.
-  if (parts.length === 1) return upperTr(parts[0].slice(0, 2));
-  return upperTr(parts[0][0] + parts[parts.length - 1][0]);
-}
 
 /** Kilit modu bağlamı — LoginScreen `lock` prop'u ile kilit ekranı olarak da
  *  kullanılır. Verilmezse ekran birebir normal login gibi davranır (additive). */
@@ -186,6 +177,9 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
   });
 
   const users = usersQuery.data?.data ?? [];
+  // handleAuthed'in bağımlılığı olmasın (`?? []` her render yeni dizi) — ref ile en güncel liste.
+  const usersRef = useRef(users);
+  usersRef.current = users;
   const selectedUser = useMemo<MobileUser | null>(
     () => users.find((u) => u.id === selectedUserId) ?? null,
     [users, selectedUserId]
@@ -240,8 +234,11 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
   // geçişi (lock.onAuthenticated). Üç giriş yöntemi de bundan geçer.
   const handleAuthed = useCallback(
     async (res: LoginResponse, fullName?: string) => {
+      // PIN/kart yanıtı adı taşımayabilir → yüklü personel listesinden tamamla; üst çubukta
+      // PIN'le giren kullanıcı adı, parolayla giren görünen ad çıkıyordu (QA 2026-11-03).
+      const name = fullName?.trim() || usersRef.current.find((u) => u.id === res.data.user.userId)?.fullName;
       if (lock) await lock.onAuthenticated(res);
-      else await setAuth(res.data.user, res.data.token, fullName);
+      else await setAuth(res.data.user, res.data.token, name);
       // Kimlik sabitleme: insan bu sunucuya GİRDİ, yani "bu benim sunucum" dedi.
       // Bundan sonra sunucu taşınırsa tablet adresi kendi düzeltir; kimliği
       // TUTMAYAN bir sunucuya ise sessizce geçmez.
@@ -560,7 +557,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
               ? 'Önce kullanıcı seç'
               : pin.length === 0
                 ? 'Şifreni gir'
-                : `${pin.length} hane`}
+                : 'Şifre giriliyor'}
           </Text>
         )}
       </View>
@@ -645,7 +642,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
               ? 'Önce kullanıcı seç'
               : pin.length === 0
                 ? 'Şifreni gir'
-                : `${pin.length} hane`}
+                : 'Şifre giriliyor'}
           </Text>
         )}
       </View>
@@ -1222,7 +1219,7 @@ function UserCard({
     >
       <View style={styles.userCardInner}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initials(user.fullName)}</Text>
+          <Text style={styles.avatarText}>{operatorInitials(user.fullName)}</Text>
         </View>
         <View style={styles.userCardText}>
           <Text style={styles.userName} numberOfLines={1}>{user.fullName}</Text>

@@ -9,9 +9,11 @@ import MultiSelectSheet, { type MultiSelectOption } from '../../../components/Mu
 import { useOnlineStatus } from '../../../hooks/useOnlineStatus';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
+import { useFeatureFlags } from '../../../hooks/useFeatureFlags';
 import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
 import {
   itemService,
+  itemTypesFor,
   UNIT_FOR_ITEM_TYPE,
   ITEM_TYPE_LABEL,
   type ItemType,
@@ -42,7 +44,7 @@ import { colors, spacing, radius } from '../../../theme';
 // =============================================================================
 
 // SERVICE (hizmet kalemi, H6) bilinçli yok: fiyatlı ana veri, panelden açılır.
-const ITEM_TYPES: ItemType[] = ['FABRIC', 'YARN', 'CONSUMABLE'];
+
 
 /** Backend `validateCode` + DB VarChar(32) ile hizalı (Electron şemasının aynısı). */
 function codeError(raw: string): string | null {
@@ -62,6 +64,7 @@ export default function KumasScreen() {
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [itemType, setItemType] = useState<ItemType>('FABRIC');
+  const flags = useFeatureFlags().data;
   const [isActive, setIsActive] = useState(true);
   const [colorIds, setColorIds] = useState<string[]>([]);
   const [propertyIds, setPropertyIds] = useState<string[]>([]);
@@ -212,7 +215,7 @@ export default function KumasScreen() {
 
           <Text style={styles.sectionLabel}>TİP</Text>
           <View style={styles.chipRow}>
-            {ITEM_TYPES.map((t) => {
+            {itemTypesFor(flags).map((t) => {
               const active = itemType === t;
               return (
                 <TouchableRipple

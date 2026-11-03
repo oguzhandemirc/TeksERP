@@ -1,10 +1,10 @@
 import React from 'react';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { MOBILE_SCREENS } from '../types/permissions';
-import { filterMenuHidden } from './menuHidden';
-import { useModuleOrder } from './useModuleOrder';
+import { anyOnMenu, filterMenuHidden } from './menuHidden';
+import { MENU_LAYOUT_REFRESH_MS, useModuleOrder } from './useModuleOrder';
 
 // =============================================================================
 // K19 MENÜ DÜZENİ — tablet ana ekran karoları. Fabrikanın gizlediği ekranın karosu kalkar; uç yok / hata (eski
@@ -43,6 +43,14 @@ describe('filterMenuHidden (saf)', () => {
   });
 });
 
+describe('anyOnMenu (saf) — yan yüzey süzgeç sekmeleri', () => {
+  it('karo menüde varsa true, K19 gizlediyse ya da izinli değilse false', () => {
+    expect(anyOnMenu(SCREENS, [], ['KK1'])).toBe(true);
+    expect(anyOnMenu(SCREENS, ['KK1'], ['KK1'])).toBe(false);
+    expect(anyOnMenu(SCREENS, [], ['KartelaSevk'])).toBe(false);
+  });
+});
+
 describe('useModuleOrder — K19 süzgeci', () => {
   beforeEach(() => {
     mockVisible = SCREENS;
@@ -57,5 +65,21 @@ describe('useModuleOrder — K19 süzgeci', () => {
     mockMenu = () => Promise.reject(new Error('404'));
     const { result } = renderHook(() => useModuleOrder(), { wrapper });
     await waitFor(() => expect(keysOf(result)).toEqual(SCREENS.map((s) => s.key)));
+  });
+  it('⭐ açık ızgarada panel değişikliği aralıkla gelir (yeniden giriş gerekmez)', async () => {
+    jest.useFakeTimers();
+    try {
+      let gizli: string[] = [];
+      mockMenu = () => Promise.resolve({ hiddenScreens: gizli });
+      const { result } = renderHook(() => useModuleOrder(), { wrapper });
+      await waitFor(() => expect(keysOf(result)).toContain('KK1'));
+      gizli = ['KK1'];
+      await act(async () => {
+        jest.advanceTimersByTime(MENU_LAYOUT_REFRESH_MS + 10);
+      });
+      await waitFor(() => expect(keysOf(result)).not.toContain('KK1'));
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

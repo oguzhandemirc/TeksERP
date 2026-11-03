@@ -60,7 +60,8 @@ export function stepAutoCapture(prev: AutoCaptureState, frameSize: number, cfg: 
   if (!present) return { action: 'wait', hint: 'Masa boş — sonraki kağıdı koyun', state: { ...s, armed: true, lastCaptured: null }, idle: true };
   // Önceki sayfa kaldırılmadan üstüne yeni sayfa kondu: sabit sahne öncekinden belirgin farklıysa yeni sayfadır.
   if (s.lastCaptured !== null && differs(level, s.lastCaptured, cfg.changeRatio)) return capture();
-  return { action: 'wait', hint: 'Sayfa alındı — sonraki sayfayı koyun ya da Oku’ya basın', state: s };
+  // Çekilen kağıt masada sabit duruyor: sahne değişmedi → boşta sayılır (yoksa ara kare döngüsü hiç duraklamaz).
+  return { action: 'wait', hint: 'Sayfa alındı — sonraki sayfayı koyun ya da Oku’ya basın', state: s, idle: true };
 }
 
 /** Elle "Okut" (otomatik kipte de): SON kare çekildi sayılır (ortalama eski boş masa karesini taşıyabilir). */

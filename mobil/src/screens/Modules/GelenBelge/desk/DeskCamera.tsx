@@ -21,6 +21,10 @@ export interface DeskCameraProps {
   auto: boolean;
   frameMs: number;
   recent: readonly RecentWo[];
+  /** Şeritte elle "Refakat kartı yazdır" (otomatik basım kapalıyken ya da basım düştüyse). Yoksa düğme çizilmez. */
+  onPrint?: (r: RecentWo) => void;
+  /** `production.refakatAutoPrint` açık: başarılı kayıtta kart zaten basıldı → düğme yalnız başarısız basımda. */
+  autoPrint?: boolean;
   onCaptured: (p: ScanPage) => void;
   /** "Tekrar çek": son sayfa silinir. */
   onRetake: () => void;
@@ -166,22 +170,34 @@ function SidePanel({ p, wide, hint, shooting, canShoot, onShoot, onRetake, onRec
           Boş masayı yeniden tanı
         </Button>
       )}
-      <RecentStrip recent={p.recent} />
+      <RecentStrip recent={p.recent} onPrint={p.onPrint} autoPrint={p.autoPrint} />
     </View>
   );
 }
 
-/** Son oluşturulan iş emirleri — masa başındaki planlamacı neyi açtığını kameradan ayrılmadan görür. */
-export function RecentStrip({ recent }: { recent: readonly RecentWo[] }) {
+/** Son oluşturulan iş emirleri — masa başındaki planlamacı neyi açtığını kameradan ayrılmadan görür; refakat kartını
+ *  da buradan basar (satır kameraya dönünce kalkar, elle basım yolu kaybolmasın — S11). */
+export function RecentStrip({ recent, onPrint, autoPrint }: { recent: readonly RecentWo[]; onPrint?: (r: RecentWo) => void; autoPrint?: boolean }) {
   if (recent.length === 0) return null;
   return (
     <View style={styles.recent} testID="masa-son-olusturulanlar">
       <Text style={styles.recentTitle}>Son oluşturulanlar</Text>
-      {recent.map((r) => (
-        <Text key={r.noteNo} style={styles.recentItem} numberOfLines={1}>
-          {r.workOrderNos.length ? `${r.workOrderNos.join(', ')} · ${r.noteNo}` : `${r.noteNo} · taslak`}
-        </Text>
-      ))}
+      {recent.map((r) => {
+        const canPrint = !!onPrint && (r.workOrderIds?.length ?? 0) > 0 && r.print !== 'PRINTED' && (!autoPrint || r.print === 'PRINT_FAILED');
+        return (
+          <View key={r.noteNo} style={styles.recentRow}>
+            <Text style={[styles.recentItem, styles.recentText]} numberOfLines={1}>
+              {(r.workOrderNos.length ? `${r.workOrderNos.join(', ')} · ${r.noteNo}` : `${r.noteNo} · taslak`) +
+                (r.print === 'PRINTED' ? ' · kart basıldı' : '')}
+            </Text>
+            {canPrint && (
+              <Button mode="outlined" icon="printer" compact onPress={() => onPrint!(r)} testID={`masa-son-yazdir-${r.noteNo}`}>
+                {r.print === 'PRINT_FAILED' ? 'Yeniden yazdır' : 'Refakat kartı yazdır'}
+              </Button>
+            )}
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -206,4 +222,6 @@ const styles = StyleSheet.create({
   recent: { gap: spacing.xs, marginTop: spacing.sm },
   recentTitle: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.textSecondary },
   recentItem: { fontSize: typography.size.base, color: colors.text },
+  recentRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  recentText: { flex: 1 },
 });

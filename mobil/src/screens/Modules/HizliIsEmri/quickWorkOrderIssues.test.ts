@@ -54,6 +54,14 @@ describe('collectQuickWoIssues — engeller', () => {
     expect(r.blocking.map((b) => [b.field, b.step])).toEqual([['rolls', 0]]);
   });
 
+  it('⭐ ipucu yalnız görünen yolu önerir: liste kapalıysa "listeden seçin" demez', () => {
+    const kapali = collectQuickWoIssues({ ...base, rollCount: 0 }).blocking[0].message;
+    expect(kapali).not.toMatch(/listeden seçin/);
+    expect(kapali).toMatch(/Kamera arızalı/);
+    const acik = collectQuickWoIssues({ ...base, rollCount: 0, canPickFromList: true }).blocking[0].message;
+    expect(acik).toMatch(/listeden seçin/);
+  });
+
   it('rota renk uygulayamıyorsa engel', () => {
     expect(fields({ applyMissing: 'renk veren (boyahane)' })).toEqual(['routeApply']);
   });

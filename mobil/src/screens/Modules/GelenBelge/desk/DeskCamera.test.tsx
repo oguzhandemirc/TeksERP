@@ -61,6 +61,31 @@ describe('DeskCamera', () => {
     expect(s.getByText('IE-1, IE-2 · GB-1')).toBeTruthy();
   });
 
+  it('⭐ S11: şeritte elle refakat kartı basımı — otomatik basım kapalıyken her açılan İE için düğme', () => {
+    const onPrint = jest.fn();
+    const recent = [
+      { noteNo: 'GB-1', workOrderNos: ['IE-1'], workOrderIds: ['w1'], at: 1, print: null },
+      { noteNo: 'GB-2', workOrderNos: [], at: 2 },
+      { noteNo: 'GB-3', workOrderNos: ['IE-3'], workOrderIds: ['w3'], at: 3, print: 'PRINTED' as const },
+    ];
+    const { s } = setup({ recent, onPrint });
+    fireEvent.press(s.getByTestId('masa-son-yazdir-GB-1'));
+    expect(onPrint).toHaveBeenCalledWith(recent[0]);
+    expect(s.queryByTestId('masa-son-yazdir-GB-2')).toBeNull(); // taslak: kart yok
+    expect(s.queryByTestId('masa-son-yazdir-GB-3')).toBeNull(); // basıldı
+    expect(s.getByText('IE-3 · GB-3 · kart basıldı')).toBeTruthy();
+  });
+
+  it('otomatik basım açıkken düğme yalnız başarısız basımda', () => {
+    const recent = [
+      { noteNo: 'GB-1', workOrderNos: ['IE-1'], workOrderIds: ['w1'], at: 1, print: null },
+      { noteNo: 'GB-2', workOrderNos: ['IE-2'], workOrderIds: ['w2'], at: 2, print: 'PRINT_FAILED' as const },
+    ];
+    const { s } = setup({ recent, onPrint: jest.fn(), autoPrint: true });
+    expect(s.queryByTestId('masa-son-yazdir-GB-1')).toBeNull();
+    expect(s.getByText('Yeniden yazdır')).toBeTruthy();
+  });
+
   it('çekim hatası bildirime gider, sayfa eklenmez', async () => {
     mockTake.mockRejectedValue(new Error('Kamera meşgul'));
     const { props, s } = setup();

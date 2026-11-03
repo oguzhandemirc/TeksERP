@@ -21,6 +21,15 @@ export const ITEM_TYPE_LABEL: Record<ItemType, string> = {
   SERVICE: 'Hizmet',
 };
 
+const FORM_ITEM_TYPES: ItemType[] = ['FABRIC', 'YARN', 'CONSUMABLE'];
+
+/** Kumaş Ekle TİP seçenekleri: İplik modülü (ticarete bağlı) kapalıysa İplik önerilmez (QA 2026-11-03);
+ *  bayrak bilinmiyorsa (eski sunucu) bugünkü liste. */
+export function itemTypesFor(flags: { ticaretEnabled?: boolean; iplikEnabled?: boolean } | undefined): ItemType[] {
+  const yarnOn = flags?.iplikEnabled !== false && flags?.ticaretEnabled !== false;
+  return yarnOn ? FORM_ITEM_TYPES : FORM_ITEM_TYPES.filter((t) => t !== 'YARN');
+}
+
 export const itemService = {
   getAll: (params: Partial<QueryParams>): Promise<PaginatedResponse<Item>> =>
     apiClient.get<PaginatedResponse<Item>>(`/items${buildQueryString(params)}`).then((r) => r.data),

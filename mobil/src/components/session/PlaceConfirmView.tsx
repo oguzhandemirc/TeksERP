@@ -29,6 +29,7 @@ import { useSessionStore } from '../../store/sessionStore';
 import { useAuthStore } from '../../store/authStore';
 import { useLockStore } from '../../store/lockStore';
 import { useLogout } from '../../hooks/useLogout';
+import { useVisibleScreens } from '../../hooks/useVisibleScreens';
 import LogoutModals from '../LogoutModals';
 import { workSessionService, type ActiveWorkSession } from '../../services/workSession.service';
 import { SCREEN_BY_STATION_KIND, type SessionStationKind } from '../../constants/stationScreens';
@@ -97,6 +98,9 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
     requestLogout,
   } = useLogout();
   const [profileMenuVisible, setProfileMenuVisible] = useState(false);
+  // "Bölüm değiştir" ModuleSelect'e gider; tek görünür ekranda o route kayıtlı
+  // değil (MainNavigator) → madde gizli, ScreenChrome/usePlaceActions ile aynı yüklem.
+  const { hasMultipleVisibleScreens } = useVisibleScreens();
   const operatorName = user?.fullName || user?.username || '—';
 
   const placesQ = useQuery({
@@ -466,17 +470,19 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
               style={styles.profileMenuItem}
               titleStyle={styles.profileMenuItemTitle}
             />
-            <Divider />
-            <AppMenu.Item
-              leadingIcon="view-grid"
-              onPress={() => {
-                setProfileMenuVisible(false);
-                rootNavigateToModuleSelect();
-              }}
-              title="Bölüm değiştir"
-              style={styles.profileMenuItem}
-              titleStyle={styles.profileMenuItemTitle}
-            />
+            {hasMultipleVisibleScreens && <Divider />}
+            {hasMultipleVisibleScreens && (
+              <AppMenu.Item
+                leadingIcon="view-grid"
+                onPress={() => {
+                  setProfileMenuVisible(false);
+                  rootNavigateToModuleSelect();
+                }}
+                title="Bölüm değiştir"
+                style={styles.profileMenuItem}
+                titleStyle={styles.profileMenuItemTitle}
+              />
+            )}
             <Divider />
             <AppMenu.Item
               leadingIcon="lock"

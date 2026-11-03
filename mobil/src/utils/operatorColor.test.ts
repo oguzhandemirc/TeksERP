@@ -51,4 +51,9 @@ describe('operatorInitials', () => {
     expect(operatorInitials(null)).toBe('?');
     expect(operatorInitials(undefined)).toBe('?');
   });
+  it('parantezli ek ve harfsiz parça baş harf olmaz (QA: "K(")', () => {
+    expect(operatorInitials('Kader Hanım (Yönetici)')).toBe('KH');
+    expect(operatorInitials('Ali - Veli')).toBe('AV');
+    expect(operatorInitials('(Yönetici)')).toBe('?');
+  });
 });
