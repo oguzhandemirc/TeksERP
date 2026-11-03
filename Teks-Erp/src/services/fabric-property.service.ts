@@ -23,7 +23,7 @@ import { ApiResponse } from "../types/api.types";
 import prisma from "../lib/prisma";
 import { readServiceItemIdField, withServiceMapping } from "./helpers/service-item-mapping.helper";
 import { AppError } from "../utils/app-error";
-import { assertChoiceHasValues, assertSingleDefaultValue, type ConsumableItemField, consumableItemPatch, extractStationIds, readGramAmountField, readStitchCountField } from "./helpers/fabric-property-input.helper";
+import { assertChoiceHasValues, assertSingleDefaultValue, consumableItemPatch, type PropertyValueInput, extractStationIds, readGramAmountField, readStitchCountField } from "./helpers/fabric-property-input.helper";
 import { assertConsumableItemsTx } from "./helpers/consumable-item-link.helper";
 import { nextSeriesNo } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -54,22 +54,6 @@ async function nextPropertyCode(): Promise<string> {
         select: { code: true, createdAt: true },
       })
       .then((rows) => rows.map((r) => ({ code: r.code, createdAt: r.createdAt }))), new Date());
-}
-
-/** SEÇİM tipli özelliğin değer satırı — istemci sözleşmesi (DÜZ, nested write DEĞİL). */
-export interface PropertyValueInput extends ConsumableItemField {
-  code: string;
-  name: string;
-  sortOrder?: number;
-  isActive?: boolean;
-  /** Gramaj kademesi → hizmet kalemi (H6). `undefined` = dokunma, `null` = eşlemeyi kaldır. */
-  serviceItemId?: string | null;
-  /** Brode deseni vuruş sayısı (VURUŞ fiyat birimi). `undefined` = dokunma, `null` = kaldır. */
-  stitchCount?: number | null;
-  /** Kurşun gramajı gr/m (ondalık metin). `undefined` = dokunma, `null` = kaldır. */
-  amount?: string | null;
-  /** Çeşit başına tek varsayılan. `undefined` = dokunma. */
-  isDefault?: boolean;
 }
 
 /**
@@ -212,11 +196,7 @@ export class FabricPropertyService extends BaseService {
   async findAll(req: Request): ReturnType<BaseService["findAll"]> {
     if (req.query.sortBy !== HIERARCHY_SORT) return super.findAll(req);
     this.assertListQueryShape(req);
-    return listFabricPropertyHierarchy(req, {
-      findMany: (args) => this.delegate.findMany(args),
-      include: this.config.defaultInclude,
-      buildWhere: (params) => this.buildListWhere(params, req),
-    });
+    return listFabricPropertyHierarchy(req, { findMany: (a) => this.delegate.findMany(a), include: this.config.defaultInclude, buildWhere: (p) => this.buildListWhere(p, req) });
   }
 
   /**

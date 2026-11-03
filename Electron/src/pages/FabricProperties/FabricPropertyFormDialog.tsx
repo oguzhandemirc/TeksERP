@@ -7,6 +7,7 @@ import { ColorPickerInput } from "@/components/forms/ColorPickerInput";
 import { PropertyStationsField } from "@/components/forms/PropertyStationsField";
 import { PropertyValuesField } from "./PropertyValuesField";
 import { VariantOfPickerField } from "./VariantOfPickerField";
+import { VariantsReadonlyField } from "./VariantsReadonlyField";
 import { PropertyServiceItemField, useServiceMapping, valueServiceContext } from "./ServiceMappingSection";
 import {
   fabricPropertyFormDefaults,
@@ -24,6 +25,8 @@ interface Props {
   isSubmitting?: boolean;
   /** Tüm özellikler — "Şunun çeşidi" seçicisi bayrakları buradan listeler. */
   allProperties?: FabricProperty[];
+  /** Ebeveyn formundaki "Çeşitleri" bağlantısı — çeşidin formuna geçer. */
+  onOpenProperty?: (row: FabricProperty) => void;
 }
 
 export function FabricPropertyFormDialog({
@@ -33,6 +36,7 @@ export function FabricPropertyFormDialog({
   onSubmit,
   isSubmitting,
   allProperties = [],
+  onOpenProperty,
 }: Props) {
   const defaults: FabricPropertyFormValues = initial
     ? {
@@ -174,6 +178,7 @@ export function FabricPropertyFormDialog({
               />
             </FormField>
           )}
+          {initial && <VariantsReadonlyField property={initial} allProperties={allProperties} onOpen={onOpenProperty} />}
           {svc.show && <PropertyServiceItemField form={form} items={svc.items} />}
           <FormField
             label="Bu özelliği uygulayan istasyonlar"
