@@ -42,7 +42,7 @@ import WorkOrderOutputPanel from './WorkOrderOutputPanel';
 import TamburFinalLabelStrip from './TamburFinalLabelStrip';
 import TamburLabelInfoModal from './TamburLabelInfoModal';
 import { useTamburFinalLabel, useTamburPrintTiming } from './useTamburFinalLabel';
-import { shouldAutoPrintAfterCut } from './finalLabel';
+import { finalizeWeightError, shouldAutoPrintAfterCut } from './finalLabel';
 import { LabelNamePreview } from './LabelNamePreview';
 import TamburFieldFix from './TamburFieldFix';
 import { usePermissions } from '../../../hooks/usePermission';
@@ -1769,16 +1769,19 @@ export default function TamburScreen() {
       remainingAction,
       varianceReasonCode,
       varianceReasonText,
+      weightKg,
     }: {
       rollId: string;
       remainingAction: 'keep_1kalite' | 'keep_a1' | 'scrap' | 'discard';
       varianceReasonCode?: string | null;
       varianceReasonText?: string | null;
+      weightKg?: number;
     }) =>
       tamburService.finalizeWarehouseCut(rollId, {
         remainingAction,
         varianceReasonCode,
         varianceReasonText,
+        weightKg,
       }),
     onSuccess: (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -4648,13 +4651,22 @@ export default function TamburScreen() {
         remainingQty={selectedRoll?.currentQty ?? 0}
         onDismiss={() => setOpenFabricFinalizeOpen(false)}
         loading={finalizeOpenFabricMutation.isPending}
+        weight={{ required: openFinal.settings.weighRequired, kgText: openFinal.kgText, onKgChange: openFinal.setKgText }}
         onChoose={(action, reasonCode, reasonText) => {
           const rollId = selectedRoll?.rollId;
           if (!rollId) return;
+          const kgErr = finalizeWeightError(openFinal.settings, openFinal.kgText, action);
+          if (kgErr) {
+            Toast.show({ type: 'error', text1: 'Tartım', text2: kgErr });
+            return;
+          }
+          const weightKg = action === 'discard' ? undefined : openFinal.weightKg();
           setOpenFabricFinalizeOpen(false);
+          openFinal.setKgText('');
           finalizeOpenFabricMutation.mutate({
             rollId,
             remainingAction: action,
+            weightKg,
             foldType: work.foldType ?? null,
             varianceReasonCode: reasonCode,
             varianceReasonText: reasonText,
@@ -4670,11 +4682,18 @@ export default function TamburScreen() {
         remainingQty={recutRollMeta?.currentQty ?? 0}
         onDismiss={() => setRecutFinalizeOpen(false)}
         loading={finalizeWarehouseCutMutation.isPending}
+        weight={{ required: recutFinal.settings.weighRequired, kgText: recutFinal.kgText, onKgChange: recutFinal.setKgText }}
         onChoose={(action, reasonCode, reasonText) => {
           if (!recutResolvedRollId) return;
+          const kgErr = finalizeWeightError(recutFinal.settings, recutFinal.kgText, action);
+          if (kgErr) {
+            Toast.show({ type: 'error', text1: 'Tartım', text2: kgErr });
+            return;
+          }
           finalizeWarehouseCutMutation.mutate({
             rollId: recutResolvedRollId,
             remainingAction: action,
+            weightKg: action === 'discard' ? undefined : recutFinal.weightKg(),
             varianceReasonCode: reasonCode,
             varianceReasonText: reasonText,
           });
@@ -7304,6 +7323,7 @@ function FinalizeRemainingModal({
   loading,
   onModalHide,
   canEditPresets,
+  weight,
 }: {
   visible: boolean;
   remainingQty: number;
@@ -7317,7 +7337,11 @@ function FinalizeRemainingModal({
   onModalHide?: () => void;
   /** Hazır mesajları düzenleme/çoğaltma yetkisi (Tambur düzeltme yetkisi). */
   canEditPresets?: boolean;
+  /** S5 tartım: müşteri ayarı açıksa kalan top kg'ı burada girilir (kesim şeridiyle aynı durum). */
+  weight?: { required: boolean; kgText: string; onKgChange: (t: string) => void };
 }) {
+  // Kalan top doğuran karar (keep_* / fire) kg'sız seçilemez; discard top doğurmaz.
+  const kgErr = weight ? finalizeWeightError({ weighRequired: weight.required }, weight.kgText, 'keep_1kalite') : null;
   const { width: winW, height: winH } = useWindowDimensions();
   // Sebep sorulacak karar (fire / kayıt düzeltmesi) seçilince adım 2'ye geçilir.
   const [pending, setPending] = useState<'scrap' | 'discard' | null>(null);
@@ -7542,11 +7566,27 @@ function FinalizeRemainingModal({
             <Text style={{ color: '#475569', fontSize: 13 }}>
               Bu açık kumaştan kalan {qtyText} kumaşı nasıl kaydedeyim?
             </Text>
+            {weight?.required ? (
+              <View style={{ gap: 4 }}>
+                <NumpadInput
+                  mode="outlined"
+                  dense
+                  value={weight.kgText}
+                  onChangeText={weight.onKgChange}
+                  numpadLabel="Kalan top tartımı (kg)"
+                  allowDecimal
+                  numpadMaxLength={8}
+                  placeholder="Kalan top kg *"
+                  testID="tambur-bitir-tartim-kg"
+                />
+                {kgErr ? <Text style={{ color: '#b91c1c', fontSize: 12 }}>{kgErr}</Text> : null}
+              </View>
+            ) : null}
             <Button
               mode="contained"
               icon="check-circle"
               onPress={() => onChoose('keep_1kalite', null, null)}
-              disabled={loading}
+              disabled={loading || kgErr != null}
               loading={loading}
               buttonColor="#059669"
               contentStyle={{ paddingVertical: 6 }}
@@ -7558,7 +7598,7 @@ function FinalizeRemainingModal({
               mode="contained"
               icon="alpha-a-circle"
               onPress={() => onChoose('keep_a1', null, null)}
-              disabled={loading}
+              disabled={loading || kgErr != null}
               buttonColor="#d97706"
               contentStyle={{ paddingVertical: 6 }}
               labelStyle={{ fontSize: 15, fontWeight: '700' }}
@@ -7569,7 +7609,7 @@ function FinalizeRemainingModal({
               mode="contained"
               icon="fire"
               onPress={() => setPending('scrap')}
-              disabled={loading}
+              disabled={loading || kgErr != null}
               buttonColor="#dc2626"
               contentStyle={{ paddingVertical: 6 }}
               labelStyle={{ fontSize: 15, fontWeight: '700' }}
