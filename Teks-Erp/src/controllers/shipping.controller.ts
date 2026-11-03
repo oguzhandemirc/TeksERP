@@ -17,6 +17,7 @@ import { INCOMING_DOC_UNITS, listReadyWorks, type ReadyWorkUnit } from "../servi
 import { listReadyWorkRolls } from "../services/ready-work-rolls.service";
 import { getShipmentRollList } from "../services/shipment-roll-list.service";
 import { requireGelenBelgeEnabled } from "../middlewares/module.middleware";
+import { requestImmediatePhotoRetentionRun } from "../jobs/gelen-belge-foto-saklama.job";
 
 // ---- Zod şemaları ----------------------------------------------------------
 // Çuval aç — müşteri OPSİYONEL (depoda genel stok da olabilir).
@@ -764,6 +765,8 @@ export class ShippingController {
     try {
       const body = dispatchSchema.parse(req.body);
       const result = await this.service.dispatchShipment(req.params.id as string, body, req.user?.userId);
+      // K28 "sevkte sil": sevk commit oldu → fotoğraf saklama işi beklemeden (kip başkaysa tur yalnız ayarı okur).
+      requestImmediatePhotoRetentionRun();
       res.status(200).json(result);
     } catch (e) { next(e); }
   };

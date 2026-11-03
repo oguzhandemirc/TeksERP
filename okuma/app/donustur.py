@@ -55,3 +55,41 @@ def heic_jpeg(veri: bytes, max_kenar: int) -> tuple[bytes, int, int]:
     cikti = io.BytesIO()
     img.save(cikti, format="JPEG", quality=JPEG_KALITE)
     return cikti.getvalue(), img.width, img.height
+
+
+# K28 küçültme sınırları — istemci (`okuma-istemcisi.ts` SHRINK_*) 1600 px / q70 yollar; dışı 400.
+KUCULT_MIN_KENAR, KUCULT_MAX_KENAR = 400, 4000
+KUCULT_MIN_KALITE, KUCULT_MAX_KALITE = 30, 95
+
+
+def kucult_jpeg(veri: bytes, max_kenar: int, kalite: int) -> tuple[bytes, int, int]:
+    """Saklanan belge fotoğrafı (JPEG/PNG) → küçük JPEG (uzun kenar ≤ max_kenar, EXIF yönü uygulanmış, EXIF'siz).
+
+    Boş 400 · 5 MB üstü 413 · JPEG/PNG değil 415 · çözülemeyen 400. Belirlenimli: aynı girdi → bayt-aynı çıktı.
+    """
+    from .goruntu import JPEG_BASI, PNG_BASI
+
+    if not veri:
+        raise GoruntuHatasi(400, "EMPTY_IMAGE", "Görüntü boş.")
+    if len(veri) > MAX_GORUNTU_BAYT:
+        raise GoruntuHatasi(413, "IMAGE_TOO_LARGE", "Görüntü 5 MB sınırını aşıyor.")
+    if not (veri.startswith(JPEG_BASI) or veri.startswith(PNG_BASI)):
+        raise GoruntuHatasi(415, "UNSUPPORTED_IMAGE", "Yalnız JPEG ya da PNG küçültülür.")
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            img = Image.open(io.BytesIO(veri), formats=["JPEG", "PNG"])
+            if img.width * img.height > MAX_PIKSEL:
+                raise GoruntuHatasi(413, "IMAGE_TOO_LARGE", "Görüntü piksel sınırını aşıyor.")
+            img = ImageOps.exif_transpose(img).convert("RGB")
+    except GoruntuHatasi:
+        raise
+    except Exception as exc:  # noqa: BLE001 — Pillow hata metni içerik taşıyabilir; yalnız kod döner
+        raise GoruntuHatasi(400, "IMAGE_DECODE_FAILED", "Görüntü çözülemedi (bozuk dosya).") from exc
+    uzun = max(img.width, img.height)
+    if uzun > max_kenar:
+        s = max_kenar / uzun
+        img = img.resize((max(1, round(img.width * s)), max(1, round(img.height * s))), Image.Resampling.LANCZOS)
+    cikti = io.BytesIO()
+    img.save(cikti, format="JPEG", quality=kalite, optimize=True)
+    return cikti.getvalue(), img.width, img.height

@@ -4,6 +4,7 @@
 //   · işlem değeri çözülemeyen grupta otomatik iş emri — atla (varsayılan, bugünkü) | hedef değersiz aç
 //   · iş emri formundan okutulan belge — ayrı onay (varsayılan, bugünkü) | iş emri açan kaydeder (K7) · refakat oto baskı (K9)
 //   · istasyonda belge okutarak iş emri bulma (K17; varsayılan kapalı = tablette düğme yok)
+//   · belge fotoğrafı saklama (K28; varsayılan tam = bugünkü; geçmiş onaylı belgelere de uygulanır)
 // Eski backend alanı göndermez → alan çizilmez, gövdeye girmez. Kip kuralı istemciye kopyalanmaz: tek kayıt kipinin
 // varsayılan ürün ön koşulunu sunucu 400 ile söyler; burada yalnız önceden görünür bir uyarı var.
 import { useState } from "react";
@@ -12,6 +13,7 @@ import { FieldLabel, FlagToggle } from "./SettingRow";
 import { EnumRadioOptions } from "./EnumRadioOptions";
 import { TERIM } from "@/lib/terim";
 import type { AutoWorkOrderPatternlessMode, BatchNumberSourceMode, IncomingDocEntryMode, IncomingDocFormApproval, IncomingDocumentSettings } from "@/pages/Operations/GelenBelgeler/types";
+import type { PhotoRetentionMode } from "@/pages/Operations/GelenBelgeler/photoRetentionTypes";
 import type { MultiPartyWorkOrderMode } from "@/pages/Operations/GelenBelgeler/partiMetreTypes";
 
 
@@ -42,6 +44,13 @@ export const MULTI_PARTY_OPTIONS: ReadonlyArray<Option<MultiPartyWorkOrderMode>>
   { value: "PER_PARTY", get label() { return `Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk}`; }, get hint() { return `Çok partili belgede (çeki listesinde birden çok parti) her parti kendi ${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} açar; parti no belgeden.`; } },
 ];
 
+export const PHOTO_RETENTION_OPTIONS: ReadonlyArray<Option<PhotoRetentionMode>> = [
+  { value: "FULL", label: "Tam sakla", hint: "Belge fotoğrafı olduğu gibi saklanır (bugünkü davranış)." },
+  { value: "SHRINK_ON_APPROVAL", label: "Onayda küçült", hint: "Onaydan sonra fotoğraf okunur boyda (~200 KB) saklanır; okuma servisi kapalıysa fotoğraf tam kalır, servis açılınca küçültülür." },
+  { value: "DELETE_ON_APPROVAL", label: "Onayda sil", hint: "Onaydan sonra fotoğraf silinir; belge, satırlar ve okuma sonucu kalır. Fotoğraf açılmaz, yeniden okunamaz, tanıtılamaz." },
+  { value: "DELETE_ON_DISPATCH", label: "Sevkte sil", hint: "Belgenin bütün topları sevk edilince fotoğraf silinir; o zamana kadar tam saklanır." },
+];
+
 type Pair<T extends string> = { server: T | undefined; value: T | undefined; set: (v: T) => void; fallback: T | undefined; dirty: boolean };
 
 function usePair<T extends string>(server: T | undefined, fallback: T | undefined): Pair<T> {
@@ -56,6 +65,7 @@ export function useEntryModeDraft(server: IncomingDocumentSettings | undefined) 
   const patternless = usePair(server?.autoWorkOrderPatternless, server?.defaultAutoWorkOrderPatternless);
   const approval = usePair(server?.formApproval, server?.defaultFormApproval);
   const multiParty = usePair(server?.multiPartyWorkOrder, server?.defaultMultiPartyWorkOrder);
+  const retention = usePair(server?.photoRetention, server?.defaultPhotoRetention);
   const serverPrint = server?.refakatAutoPrint;
   const [autoPrint, setAutoPrint] = useState<boolean | undefined>(serverPrint);
   const printDirty = serverPrint !== undefined && autoPrint !== undefined && autoPrint !== serverPrint;
@@ -64,7 +74,7 @@ export function useEntryModeDraft(server: IncomingDocumentSettings | undefined) 
   const lookupDirty = serverLookup !== undefined && lookupOn !== undefined && lookupOn !== serverLookup;
   const reset = () => {
     batch.set(batch.server as BatchNumberSourceMode); entry.set(entry.server as IncomingDocEntryMode); patternless.set(patternless.server as AutoWorkOrderPatternlessMode);
-    approval.set(approval.server as IncomingDocFormApproval); multiParty.set(multiParty.server as MultiPartyWorkOrderMode); setAutoPrint(serverPrint); setLookupOn(serverLookup);
+    approval.set(approval.server as IncomingDocFormApproval); multiParty.set(multiParty.server as MultiPartyWorkOrderMode); retention.set(retention.server as PhotoRetentionMode); setAutoPrint(serverPrint); setLookupOn(serverLookup);
   };
   const body = {
     ...(batch.dirty ? { batchNumberSource: batch.value } : {}),
@@ -74,11 +84,12 @@ export function useEntryModeDraft(server: IncomingDocumentSettings | undefined) 
     ...(multiParty.dirty ? { multiPartyWorkOrder: multiParty.value } : {}),
     ...(printDirty ? { refakatAutoPrint: autoPrint } : {}),
     ...(lookupDirty ? { stationDocLookup: lookupOn } : {}),
+    ...(retention.dirty ? { photoRetention: retention.value } : {}),
   };
-  const serverKey = `${batch.server ?? ""}|${entry.server ?? ""}|${patternless.server ?? ""}|${approval.server ?? ""}|${multiParty.server ?? ""}|${String(serverPrint ?? "")}|${String(serverLookup ?? "")}`;
+  const serverKey = `${batch.server ?? ""}|${entry.server ?? ""}|${patternless.server ?? ""}|${approval.server ?? ""}|${multiParty.server ?? ""}|${String(serverPrint ?? "")}|${String(serverLookup ?? "")}|${retention.server ?? ""}`;
   const print = { server: serverPrint, value: autoPrint, set: setAutoPrint };
   const lookup = { server: serverLookup, value: lookupOn, set: setLookupOn };
-  return { batch, entry, patternless, approval, multiParty, print, lookup, dirty: batch.dirty || entry.dirty || patternless.dirty || approval.dirty || multiParty.dirty || printDirty || lookupDirty, body, reset, serverKey };
+  return { batch, entry, patternless, approval, multiParty, retention, print, lookup, dirty: batch.dirty || entry.dirty || patternless.dirty || approval.dirty || multiParty.dirty || retention.dirty || printDirty || lookupDirty, body, reset, serverKey };
 }
 
 function EnumField<T extends string>({ id, label, desc, pair, options, children }: { id: string; label: string; desc: string; pair: Pair<T>; options: ReadonlyArray<Option<T>>; children?: React.ReactNode }) {
@@ -166,6 +177,13 @@ export function EntryModeFields({ draft, hasDefaultItem }: { draft: ReturnType<t
           />
         </div>
       )}
+      <EnumField
+        id="gb-photo-retention"
+        label="Belge fotoğrafı saklama"
+        desc="Onaylı belgenin fotoğrafı ne kadar saklansın. Belge, satırlar, okuma sonucu ve belge no her kipte kalır; yalnız fotoğrafın kendisi küçülür ya da silinir. Seçim GEÇMİŞ onaylı belgelere de uygulanır (kaydedince arka planda başlar); silinen fotoğraf geri gelmez. Silmeden önce onay ekranında belge no'nun doğru olduğunu kontrol edin."
+        pair={draft.retention}
+        options={PHOTO_RETENTION_OPTIONS}
+      />
     </>
   );
 }

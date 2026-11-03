@@ -14443,6 +14443,14 @@ enum DocumentScanStatus {
   READ_FAILED
 }
 
+/// Tarama baytının saklama durumu (K28 `gelenBelge.photoRetention`): TAM (yüklenen) · KÜÇÜK (onaydan sonra küçültüldü)
+/// · SİLİNDİ (bayt yok, satır/sha256/ocrResult/künye kalır). CHECK `document_scans_content_state_ck`: SİLİNDİ ⇔ content NULL.
+enum DocumentScanContentState {
+  FULL
+  REDUCED
+  PURGED
+}
+
 enum DeliveryNoteAliasScope {
   SENDER
   ITEM
@@ -14578,7 +14586,8 @@ model CustomerDeliveryNoteLine {
 
 /// Belge taraması — DURUM kaydı (defter değil; `scripts/lib/defter-beyan.ts` "yarı" beyanı).
 /// Baytlar DB'de (≤ 5 MB, CHECK `document_scans_size_ck`); tür SİHİRLİ BAYTTAN; aynı fotoğraf
-/// (sha256) ikinci kez yazılmaz. Baytlar ve ham OCR metni audit/log yüküne GİRMEZ. v1'de süresiz belge izi.
+/// (sha256) ikinci kez yazılmaz. Baytlar ve ham OCR metni audit/log yüküne GİRMEZ. Bayt saklama `contentState`
+/// (K28): fotoğraf baytı defter DEĞİLDİR — küçültülür/silinir, SATIR silinmez; `sizeBytes` yüklenen boydur (künye).
 model DocumentScan {
   id            String             @id @default(uuid()) @db.Uuid
   noteId        String?            @db.Uuid
@@ -14588,7 +14597,10 @@ model DocumentScan {
   sha256        String             @db.VarChar(64)
   mimeType      String             @db.VarChar(32)
   sizeBytes     Int
-  content       Bytes
+  content       Bytes?
+  /// Bayt saklama durumu (K28); KÜÇÜK/SİLİNDİ geçiş zamanı `contentStateAt` (TAM'da NULL, CHECK).
+  contentState  DocumentScanContentState @default(FULL)
+  contentStateAt DateTime?         @db.Timestamptz
   barcodeText   String?            @db.VarChar(120)
   status        DocumentScanStatus @default(PENDING)
   attempts      Int                @default(0) @db.SmallInt
@@ -14608,6 +14620,7 @@ model DocumentScan {
   @@index([noteId])
   @@index([sha256, createdAt])
   @@index([status, createdAt])
+  @@index([contentState, noteId])
   @@map("document_scans")
 }
 

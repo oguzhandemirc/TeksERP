@@ -107,7 +107,8 @@ export function parseLimit(raw: unknown, def: number, max: number): number {
 // ---------------------------------------------------------------------------
 // Müşteri partisi anahtarı TEK yerde: `customerBatchKeySql` (`ship-readiness.helper`; belgeden iş emri aynısını okur).
 
-export function membershipSql(unit: ReadyWorkUnit, onlyId?: string): Prisma.Sql {
+/** `onlyIds` yalnız belge/parti biriminde: birden çok birimin üyeliği tek sorguda (K28 sevkte silme taraması). */
+export function membershipSql(unit: ReadyWorkUnit, onlyId?: string, onlyIds?: readonly string[]): Prisma.Sql {
   switch (unit) {
     case "workOrder":
       return Prisma.sql`
@@ -126,7 +127,7 @@ export function membershipSql(unit: ReadyWorkUnit, onlyId?: string): Prisma.Sql 
       const unitFilter = unit === "customerBatch"
         ? Prisma.sql`AND ${customerBatchMemberSql("n")}`
         : Prisma.empty;
-      const idFilter = onlyId ? Prisma.sql`AND ${key} = ${onlyId}` : Prisma.empty;
+      const idFilter = onlyId ? Prisma.sql`AND ${key} = ${onlyId}` : onlyIds?.length ? Prisma.sql`AND ${key} IN (${Prisma.join([...onlyIds])})` : Prisma.empty;
       // Kök: belgenin onayla doğan topları; aşağı soy `parentRollId` (tambur bölmesi) üzerinden, derinlik tavanlı.
       return Prisma.sql`
         SELECT DISTINCT t.unit_id, t.roll_id FROM (

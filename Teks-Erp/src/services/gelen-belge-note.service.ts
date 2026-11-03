@@ -29,7 +29,7 @@ import { batchAndMeterColumns, type DeliveryNoteHeaderPatch } from "./gelen-belg
 import { resolveEffectiveDefaultItem, usableDefaultItem } from "./gelen-belge-varsayilan.service";
 import { noteNotices } from "../lib/gelen-belge/uyari";
 import { sameBatchNotes } from "./gelen-belge-parti-tekrar.service";
-import { readDocumentTotalCheck, readDuplicateDocNoMode, readIncomingDocEntryMode, readUnreviewedApprovalMode } from "./system-setting.service";
+import { readDocumentTotalCheck, readDuplicateDocNoMode, readIncomingDocEntryMode, readPhotoRetention, readUnreviewedApprovalMode } from "./system-setting.service";
 import { assertDocNoUniqueTx, duplicateDocNoNotice, lockDocNosTx } from "./helpers/gelen-belge-mukerrer.helper";
 import { noteBatchAndMeters } from "./gelen-belge-parti-metre.service";
 import { getReaderUrl } from "../lib/gelen-belge/url";
@@ -181,7 +181,8 @@ export async function getDeliveryNote(id: string) {
   // Okuyucu tanımsız kurulumda bekleyen sayfa hiç okunmaz → panel "okunuyor"da beklemez, formu elle doldurtur.
   const readerConfigured = getReaderUrl().url !== null;
   // K27 (WARN kipi) `duplicateDocNo`: aynı belge no'lu İŞİ SÜREN eşler — bilgi şeridi; yoksa null. Eski istemci yok sayar.
-  return { ...note, duplicateDocNo: await duplicateDocNoNotice(note), lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch, ...batchMeters, ...(perDocument ? { perDocument: perDocument.gate } : {}), ownerSuggestion, readerConfigured };
+  // K28: onay ekranı kip FULL değilse belge no'yu vurgular ("fotoğraf küçültülecek/silinecek"); eski istemci yok sayar.
+  return { ...note, duplicateDocNo: await duplicateDocNoNotice(note), lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch, ...batchMeters, ...(perDocument ? { perDocument: perDocument.gate } : {}), ownerSuggestion, readerConfigured, photoRetention: await readPhotoRetention() };
 }
 
 /** Liste where'i — özet şeridi de BUNDAN türer (durum süzgeci hariç; şerit duruma göre sayar). */

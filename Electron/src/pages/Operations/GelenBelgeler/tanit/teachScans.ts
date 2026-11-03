@@ -3,10 +3,24 @@
 import { PDF_MIME } from "../uploadPrep";
 import type { DocumentScanInfo } from "../types";
 
-export function teachableScans<T extends Pick<DocumentScanInfo, "status" | "mimeType">>(scans: readonly T[]): T[] {
+type TeachScanFields = Pick<DocumentScanInfo, "status" | "mimeType" | "contentState">;
+
+/** Okunmuş fotoğraf sayfaları (baytı saklama ayarıyla silinmiş olanlar dahil). */
+function readPhotoScans<T extends TeachScanFields>(scans: readonly T[]): T[] {
   return scans.filter((s) => s.status === "READ" && s.mimeType !== PDF_MIME);
 }
 
-export function isUnrecognized(note: { templateId: string | null; scans: readonly Pick<DocumentScanInfo, "status" | "mimeType">[] }): boolean {
+/** K28: SİLİNDİ fotoğrafta tanıtma kapalı (fotoğraf çizilemez); KÜÇÜK'te en iyi çaba açık. */
+export function teachableScans<T extends TeachScanFields>(scans: readonly T[]): T[] {
+  return readPhotoScans(scans).filter((s) => s.contentState !== "PURGED");
+}
+
+/** Okunmuş fotoğrafı var ama hepsi saklama ayarıyla silinmiş → tanıtma kapalı, açıklama gösterilir. */
+export function allReadPhotosPurged(scans: readonly TeachScanFields[]): boolean {
+  const read = readPhotoScans(scans);
+  return read.length > 0 && read.every((s) => s.contentState === "PURGED");
+}
+
+export function isUnrecognized(note: { templateId: string | null; scans: readonly TeachScanFields[] }): boolean {
   return note.templateId === null && teachableScans(note.scans).length > 0;
 }

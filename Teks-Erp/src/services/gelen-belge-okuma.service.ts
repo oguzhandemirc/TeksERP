@@ -15,6 +15,7 @@ import { AuditService } from "./audit.service";
 import { nextNoteNo, translateUnique } from "./gelen-belge-note.service";
 import { buildDraft, fillBoundDraftTx, lineRows } from "./gelen-belge-taslak-doldur.service";
 import { PDF_MIME } from "./gelen-belge-scan.service";
+import { photoPurgedError } from "./gelen-belge-foto-saklama.service";
 import { readDuplicateDocNoMode } from "./system-setting.service";
 import { lockDocNosTx } from "./helpers/gelen-belge-mukerrer.helper";
 
@@ -34,13 +35,14 @@ export async function claimNextScan(now: Date = new Date(), skipIds: readonly st
   const cand = await prisma.documentScan.findFirst({
     // Aynı turda denenmiş tarama yeniden alınmaz (`skipIds`): 5xx'te üç deneme üç AYRI tura yayılır. (`notIn: []` yasak → koşullu.)
     // K6: PDF ASLA claim edilmez (yükleme READ_FAILED doğurur; D2 döneminden PENDING kalmış PDF'e karşı savunma).
-    where: { OR: [{ status: "PENDING" }, { status: "READING", updatedAt: { lt: stale } }], mimeType: { not: PDF_MIME }, ...(skipIds.length ? { id: { notIn: [...skipIds] } } : {}) },
+    // K28: baytı silinmiş tarama okunamaz (claim edilmez; okut ucu 410 verir).
+    where: { OR: [{ status: "PENDING" }, { status: "READING", updatedAt: { lt: stale } }], mimeType: { not: PDF_MIME }, contentState: { not: "PURGED" }, ...(skipIds.length ? { id: { notIn: [...skipIds] } } : {}) },
     orderBy: { createdAt: "asc" },
     select: { id: true, status: true, updatedAt: true },
   });
   if (!cand) return { kind: "NONE" };
   const c = await prisma.documentScan.updateMany({
-    where: { id: cand.id, status: cand.status, updatedAt: cand.updatedAt, mimeType: { not: PDF_MIME } },
+    where: { id: cand.id, status: cand.status, updatedAt: cand.updatedAt, mimeType: { not: PDF_MIME }, contentState: { not: "PURGED" } },
     data: { status: "READING", attempts: { increment: 1 } },
   });
   return c.count === 1 ? { kind: "CLAIMED", id: cand.id } : { kind: "RACED" };
@@ -71,9 +73,11 @@ async function release(id: string, attempts: number, code: string, opts: { perma
 export async function processClaimedScan(id: string, readerUrl: string, ocr: typeof readerOcr = readerOcr): Promise<ProcessOutcome> {
   const scan = await prisma.documentScan.findUnique({ where: { id }, select: { id: true, status: true, attempts: true, noteId: true, pageNo: true, mimeType: true, content: true, capturedById: true, sha256: true } });
   if (!scan || scan.status !== "READING") return "LOST";
+  if (!scan.content) return release(id, scan.attempts, "CONTENT_PURGED", { permanent: true, userId: scan.capturedById ?? undefined });
+  const content = scan.content;
   let r: ReaderResult;
   try {
-    r = await ocr(readerUrl, Buffer.from(scan.content), scan.mimeType);
+    r = await ocr(readerUrl, Buffer.from(content), scan.mimeType);
   } catch (err) {
     return release(id, scan.attempts, `PROGRAM_HATASI:${(err as Error).name}`, { userId: scan.capturedById ?? undefined });
   }
@@ -138,8 +142,10 @@ export async function readerQueueCounts(): Promise<{ pending: number; reading: n
 
 /** Okutulabilir mi: yok → 404; PDF → 400 (K6: otomatik okunmaz, satırlar elle/Excel). */
 export async function assertScanReadable(id: string): Promise<{ id: string; status: string; noteId: string | null }> {
-  const scan = await prisma.documentScan.findUnique({ where: { id }, select: { id: true, status: true, noteId: true, mimeType: true } });
+  const scan = await prisma.documentScan.findUnique({ where: { id }, select: { id: true, status: true, noteId: true, mimeType: true, contentState: true } });
   if (!scan) throw AppError.notFound("Tarama bulunamadı.", { code: "DOCUMENT_SCAN_NOT_FOUND" });
+  // K28: KÜÇÜK fotoğraf en iyi çabayla okunur; SİLİNDİ'de okunacak bayt yok.
+  if (scan.contentState === "PURGED") throw photoPurgedError();
   if (scan.mimeType === PDF_MIME) {
     throw AppError.badRequest("PDF belge otomatik okunmaz; satırları elle ya da Excel'le girin.", { code: "DOCUMENT_SCAN_PDF_NOT_READABLE" });
   }

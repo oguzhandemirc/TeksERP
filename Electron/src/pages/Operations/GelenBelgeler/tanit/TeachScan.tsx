@@ -6,6 +6,7 @@ import { lowerTr } from "@/lib/tr-case";
 import { Button } from "@/components/ui/button";
 import { ZoomableScan } from "../ZoomableScan";
 import { useScanImage } from "../useScanImage";
+import { SCAN_PURGED_TEXT } from "../photoRetention";
 import { teachMarks, wordAt, type TeachState } from "./teachDraft";
 import type { ScanWord } from "./types";
 
@@ -46,6 +47,7 @@ export function TeachScan({ scanId, pageLabel, words, state, onToggle }: Props) 
     <div className="flex min-w-0 flex-col gap-2" data-testid="teach-scan">
       {img.isLoading && <div className="text-sm text-muted-foreground">Fotoğraf yükleniyor…</div>}
       {img.isError && <div className="text-sm text-destructive">Fotoğraf alınamadı.</div>}
+      {img.purged && <div className="text-sm text-muted-foreground" data-testid="scan-purged">{SCAN_PURGED_TEXT}</div>}
       {img.url && (
         <ZoomableScan
           key={scanId}

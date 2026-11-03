@@ -901,6 +901,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // başlık onay/iptal damgası ⇔ kişi (+ iptal gerekçesi). Bekçi `test_gelen_belge_taslak`.
   { table: "document_scans", name: "document_scans_size_ck" },
   { table: "document_scans", name: "document_scans_mime_ck" },
+  // K28 fotoğraf saklama (migration 20261103092301): SİLİNDİ ⇔ content NULL. Bekçi `test_gelen_belge_foto_saklama` §5.
+  { table: "document_scans", name: "document_scans_content_state_ck" },
   { table: "customer_delivery_note_lines", name: "customer_delivery_note_lines_meters_ck" },
   { table: "customer_delivery_notes", name: "customer_delivery_notes_stamps_ck" },
   // S0 (migration 20261102085912): kurşun metresi > 0 ve metre ↔ kaynak çifti birlikte dolu/boş.
