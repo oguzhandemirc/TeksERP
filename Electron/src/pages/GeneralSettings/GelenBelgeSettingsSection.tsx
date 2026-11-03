@@ -31,6 +31,7 @@ import { OutlierFactorField, useOutlierDraft } from "./GelenBelgeOutlierField";
 import { ReadOptionsFields, useReadOptionsDraft } from "./GelenBelgeReadOptionsField";
 import { EntryModeFields, useEntryModeDraft } from "./GelenBelgeEntryModeField";
 import { DuplicateDocNoField, useDuplicateDocNoDraft } from "./GelenBelgeDuplicateDocNoField";
+import { IeFormFields, useIeFormDraft } from "./GelenBelgeIeFormField";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { useRegisterSettingsDirty } from "./settings-dirty";
 import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
@@ -174,18 +175,19 @@ export function IncomingDocumentSettingsSection({ writePermissions = [SETTINGS_A
   const ro = useReadOptionsDraft(server);
   const ed = useEntryModeDraft(server);
   const dd = useDuplicateDocNoDraft(server);
+  const fd = useIeFormDraft(server);
   const [picking, setPicking] = useState(false);
-  const resetAll = () => { setItem(serverItem); setMode(server?.unreviewedApproval ?? "WARN"); setAuto(serverAuto); rd.reset(); od.reset(); ro.reset(); ed.reset(); dd.reset(); };
+  const resetAll = () => { setItem(serverItem); setMode(server?.unreviewedApproval ?? "WARN"); setAuto(serverAuto); rd.reset(); od.reset(); ro.reset(); ed.reset(); dd.reset(); fd.reset(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(resetAll, [server?.defaultItem?.id, server?.unreviewedApproval, serverAuto, rd.serverRouteId, rd.serverPriority, od.serverValue, ro.serverSource, ro.serverAutoSender, ed.serverKey, dd.serverValue]);
+  useEffect(resetAll, [server?.defaultItem?.id, server?.unreviewedApproval, serverAuto, rd.serverRouteId, rd.serverPriority, od.serverValue, ro.serverSource, ro.serverAutoSender, ed.serverKey, dd.serverValue, fd.serverDesen, fd.serverGiris]);
 
   const itemDirty = (item?.id ?? null) !== (server?.defaultItem?.id ?? null);
   const modeDirty = mode !== (server?.unreviewedApproval ?? "WARN");
   const autoDirty = auto !== serverAuto;
-  const dirty = itemDirty || modeDirty || autoDirty || rd.routeDirty || rd.priorityDirty || od.dirty || ro.dirty || ed.dirty || dd.dirty;
+  const dirty = itemDirty || modeDirty || autoDirty || rd.routeDirty || rd.priorityDirty || od.dirty || ro.dirty || ed.dirty || dd.dirty || fd.dirty;
   useRegisterSettingsDirty(dirty);
 
-  const body = { ...(itemDirty ? { defaultItemId: item?.id ?? null } : {}), ...(modeDirty ? { unreviewedApproval: mode } : {}), ...(autoDirty ? { autoWorkOrder: auto } : {}), ...rd.body, ...od.body, ...ro.body, ...ed.body, ...dd.body };
+  const body = { ...(itemDirty ? { defaultItemId: item?.id ?? null } : {}), ...(modeDirty ? { unreviewedApproval: mode } : {}), ...(autoDirty ? { autoWorkOrder: auto } : {}), ...rd.body, ...od.body, ...ro.body, ...ed.body, ...dd.body, ...fd.body };
   const mut = useMutation({
     mutationFn: () => updateIncomingDocumentSettings(body),
     onSuccess: (saved) => {
@@ -234,6 +236,7 @@ export function IncomingDocumentSettingsSection({ writePermissions = [SETTINGS_A
         <ReadOptionsFields draft={ro} />
         <EntryModeFields draft={ed} hasDefaultItem={item !== null} />
         <DuplicateDocNoField draft={dd} />
+        <IeFormFields draft={fd} />
 
         <SettingsSaveBar dirty={dirty} saving={mut.isPending} onSave={() => mut.mutate()} onReset={resetAll} />
         <ItemPickerModal open={picking} onOpenChange={setPicking} allowedTypes={["FABRIC"]} lifecycle="ACTIVE"
