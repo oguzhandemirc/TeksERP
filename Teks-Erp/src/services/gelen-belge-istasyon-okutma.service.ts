@@ -34,7 +34,7 @@ export interface StationLookupWorkOrder {
   readonly id: string;
   readonly workOrderNumber: string;
   readonly status: WorkOrderStatus;
-  /** Tabletin mevcut kart çözümüne verilecek kod (aktif refakat kartı barkodu; yoksa İE no — tek kod). */
+  /** Tabletin mevcut kart çözümüne verilecek kod: aktif refakat kartı barkodu (kartsız İE listeye girmez). */
   readonly cardBarcode: string;
   readonly batchNumbers: string[];
   /** Bu İE'ye top vermiş canlı belgeler (GB no + gönderen belge no). */
@@ -49,6 +49,8 @@ export interface StationLookupResult {
   readonly read: { senderDocNo: string | null; ownerText: string | null; senderText: string | null } | null;
   readonly notes: Array<{ id: string; noteNo: string; senderDocNo: string | null; ownerName: string | null; senderName: string | null }>;
   readonly workOrders: StationLookupWorkOrder[];
+  /** Eşleşen ama aktif refakat kartı olmayan (tamamlanmış/kartı iptal) İE no'ları — seçilemez, yalnız cümlede. */
+  readonly closedWorkOrderNumbers?: string[];
   /** Türkçe: tabletin göstereceği sonuç cümlesi. */
   readonly message: string;
 }
@@ -77,8 +79,8 @@ export async function stationDocLookup(input: StationLookupInput): Promise<Stati
 
 async function searchLookup(q: string): Promise<StationLookupResult> {
   const where = stationWorkSearchWhere(q);
-  const workOrders = where ? await loadWorkOrders(where, null) : [];
-  return finish({ source: "SEARCH", read: null, notes: [], workOrders, noteCount: null });
+  const { workOrders, closed } = where ? await loadWorkOrders(where, null) : { workOrders: [], closed: [] };
+  return finish({ source: "SEARCH", read: null, notes: [], workOrders, closed, noteCount: null });
 }
 
 async function photoLookup(contentBase64: string, sha256: string | null): Promise<StationLookupResult> {
@@ -94,7 +96,7 @@ async function photoLookup(contentBase64: string, sha256: string | null): Promis
   if (known?.note && LOOKUP_NOTE_STATUSES.includes(known.note.status)) {
     const notes = await loadNotes({ id: known.note.id });
     const read = { senderDocNo: known.note.senderDocNo, ownerText: known.note.ownerText, senderText: known.note.senderText };
-    return finish({ source: "SAME_PHOTO", read, notes, workOrders: await workOrdersOfNotes(notes), noteCount: notes.length });
+    return finish({ source: "SAME_PHOTO", read, notes, ...(await workOrdersOfNotes(notes)), noteCount: notes.length });
   }
   const stored = known ? ocrFromEnvelope(known.ocrResult) : null;
   let source: StationLookupSource = "STORED_READ";
@@ -116,7 +118,7 @@ async function photoLookup(contentBase64: string, sha256: string | null): Promis
   if (!docNo) return finish({ source, read, notes: [], workOrders: [], noteCount: null, noDocNo: true });
   const templateCode = header.regions[0]?.templateId ?? null;
   const notes = narrowNotes(await loadNotes({ senderDocNo: { equals: docNo, mode: "insensitive" } }), read, await templateSenderId(templateCode));
-  return finish({ source, read, notes, workOrders: await workOrdersOfNotes(notes), noteCount: notes.length });
+  return finish({ source, read, notes, ...(await workOrdersOfNotes(notes)), noteCount: notes.length });
 }
 
 const NOTE_SELECT = {
@@ -162,16 +164,22 @@ export function narrowNotes<T extends Pick<NoteRow, "senderCustomerId" | "ownerT
   return out;
 }
 
-function workOrdersOfNotes(notes: NoteRow[]): Promise<StationLookupWorkOrder[]> {
-  if (notes.length === 0) return Promise.resolve([]);
+function workOrdersOfNotes(notes: NoteRow[]): Promise<LoadedWorkOrders> {
+  if (notes.length === 0) return Promise.resolve({ workOrders: [], closed: [] });
   const noteIds = notes.map((n) => n.id);
   return loadWorkOrders(whereWorkOrdersOfRolls({ deliveryNoteLine: { noteId: { in: noteIds } } }), noteIds);
 }
 
-/** İptal edilmemiş, arşivlenmemiş İE'ler; `noteIds` verilirse belge listesi o belgelerle sınırlanır. */
-async function loadWorkOrders(where: Prisma.WorkOrderWhereInput, noteIds: string[] | null): Promise<StationLookupWorkOrder[]> {
+type LoadedWorkOrders = { workOrders: StationLookupWorkOrder[]; closed: string[] };
+
+/**
+ * Aktif refakat kartlı, iptal edilmemiş, arşivlenmemiş İE'ler — tablet kartı barkodla çözer, kartsız İE 404 olurdu.
+ * Kartı kapanmış eşleşenler yalnız no olarak döner (cümle). `noteIds` verilirse belge listesi o belgelerle sınırlanır.
+ */
+async function loadWorkOrders(where: Prisma.WorkOrderWhereInput, noteIds: string[] | null): Promise<LoadedWorkOrders> {
+  const base: Prisma.WorkOrderWhereInput = { AND: [where, { status: { not: WorkOrderStatus.CANCELLED }, isActive: true }] };
   const rows = await prisma.workOrder.findMany({
-    where: { AND: [where, { status: { not: WorkOrderStatus.CANCELLED }, isActive: true }] },
+    where: { AND: [base, { travelerCards: { some: { status: "ACTIVE" } } }] },
     select: {
       id: true, workOrderNumber: true, status: true, createdAt: true,
       travelerCards: { where: { status: "ACTIVE" }, select: { barcode: true }, take: 1 },
@@ -191,12 +199,18 @@ async function loadWorkOrders(where: Prisma.WorkOrderWhereInput, noteIds: string
     });
     out.push({
       id: w.id, workOrderNumber: w.workOrderNumber, status: w.status, createdAt: w.createdAt,
-      cardBarcode: w.travelerCards[0]?.barcode ?? w.workOrderNumber,
+      cardBarcode: w.travelerCards[0]!.barcode,
       batchNumbers: [...new Set(w.batches.map((b) => b.batchNumber))],
       documents: docs,
     });
   }
-  return out;
+  const closed = out.length > 0 ? [] : (await prisma.workOrder.findMany({
+    where: { AND: [base, { travelerCards: { none: { status: "ACTIVE" } } }] },
+    select: { workOrderNumber: true },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+    take: 3,
+  })).map((w) => w.workOrderNumber);
+  return { workOrders: out, closed };
 }
 
 function finish(p: {
@@ -204,6 +218,7 @@ function finish(p: {
   read: StationLookupResult["read"];
   notes: NoteRow[];
   workOrders: StationLookupWorkOrder[];
+  closed?: string[];
   noteCount: number | null;
   unreadable?: boolean;
   noDocNo?: boolean;
@@ -213,6 +228,9 @@ function finish(p: {
   if (p.unreadable) return { ...base, outcome: "UNREADABLE", message: "Belge okunamadı; fiş no ile elle arayın." };
   if (p.noDocNo) return { ...base, outcome: "NO_DOC_NO", message: "Belgede fiş/evrak numarası okunamadı; fiş no ile elle arayın." };
   if (p.noteCount === 0) return { ...base, outcome: "NO_DOCUMENT", message: `Bu numarayla kayıtlı gelen belge yok (${p.read?.senderDocNo ?? ""}); fiş no ile elle arayın.` };
+  if (p.workOrders.length === 0 && p.closed && p.closed.length > 0) {
+    return { ...base, closedWorkOrderNumbers: p.closed, outcome: "NO_WORK_ORDER", message: `${IE.tekil} kapanmış, açık kartı yok: ${p.closed.join(", ")}.` };
+  }
   if (p.workOrders.length === 0) {
     return { ...base, outcome: "NO_WORK_ORDER", message: p.source === "SEARCH" ? `Aramaya uyan ${IE.tekilKucuk} yok.` : `Bu belgeye ait ${IE.tekilKucuk} yok.` };
   }
