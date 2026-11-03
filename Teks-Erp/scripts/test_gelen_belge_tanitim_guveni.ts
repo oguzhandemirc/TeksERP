@@ -12,6 +12,8 @@
 //   §6 saf `introStateOf` / `trustModeOf` / `applyTrust`
 // Negatif sonda (2026-11-04, ölçüldü): `applyTrust` TRUSTED dalı `return d` → §3 parti/kolon + §6 kırmızı (4);
 // `noteFormFields` BLIND dalı silinince → §4 formFields kırmızı (1).
+// İnceleme turu (2026-11-04, ölçüldü): TRUSTED `review: false` koşulsuz → §6 çelişki kırmızı (1); `u-` koşulu silinince →
+// §6 sistem kırmızı (1); `introStateOf` bölgesiz → TANITILMAMIS yapılınca → §4 eski zarf + §6 kırmızı (2).
 // =============================================================================
 import { randomUUID, createHash } from "crypto";
 import { readFileSync } from "fs";
@@ -207,6 +209,12 @@ async function run(url: string): Promise<void> {
   const c1 = await summary(await genericNote());
   check("§4 ⭐ SORMA: formFields boş", !!c1.formFields && Object.keys(c1.formFields).length === 0, brief(c1));
   check("§4 ⭐ SORMA: müşteri önerisi yok, parti adayı yok; TANITILMAMIS", c1.owner === null && c1.batch.length === 0 && c1.tanitim?.durum === "TANITILMAMIS", brief(c1));
+  // Eski/şema dışı zarf (bölgede `templateId` ANAHTARI yok): jsonpath lax kipi atlar → tanıtım durumu yok → NORMAL (kör değil).
+  const legacy = await emptyNote();
+  await addScan(legacy, { ocr: { text: TAG, blocks: [] }, regions: [{ fields: { hedefMetraj: "1200", partiNo: "PX4471" } }] });
+  await prisma.customerDeliveryNote.update({ where: { id: legacy }, data: { ownerText: OWNER_NAME } });
+  const cl = await summary(legacy);
+  check("§4 SORMA + templateId'siz eski zarf: `tanitim` yok, müşteri önerisi korunur (BLIND değil)", cl.tanitim === undefined && cl.owner?.customerId === ownerId, brief(cl));
   await setSetting(SETTING_KEYS.GELEN_BELGE_TANITIM_GUVENI, null);
 
   console.log("§5 benzer şablonlar");
@@ -245,9 +253,13 @@ async function run(url: string): Promise<void> {
   check("§6 applyTrust: NORMAL aynı · TRUSTED yalnız BATCH + review false · BLIND aday/metre yok",
     applyTrust(input, tplA, "NORMAL") === input && tr.batchNoCandidates.length === 1 && tr.batchNoCandidates[0]!.kind === "BATCH" && tr.kursun.review === false &&
     bl.batchNoCandidates.length === 0 && bl.kursun.meters === null, JSON.stringify({ tpl: !!tplA, tr, bl }));
-  const lineMeters = applyTrust({ ...input, kursun: { ...input.kursun, source: "LINE_SUM" } }, undefined, "TRUSTED");
-  check("§6 applyTrust TRUSTED: şablonda parti alanı yoksa adaylar korunur; satır toplamı metresi doğrulama bekler",
-    lineMeters.batchNoCandidates.length === 2 && lineMeters.kursun.review === true, JSON.stringify(lineMeters));
+  const lineMeters = applyTrust({ ...input, kursun: { ...input.kursun, source: "LINE_SUM" } }, tplA, "TRUSTED");
+  check("§6 applyTrust TRUSTED: satır toplamı metresi doğrulama bekler", lineMeters.kursun.review === true, JSON.stringify(lineMeters));
+  const clash = applyTrust({ ...input, kursun: { ...input.kursun, candidates: { ...input.kursun.candidates, lineSum: "90" } } }, tplA, "TRUSTED");
+  check("§6 ⭐ applyTrust TRUSTED: toplam Σ satırla çelişirse (100 ↔ 90) doğrulama KORUNUR", clash.kursun.review === true, JSON.stringify(clash.kursun));
+  const sysTpl = templateByCode("ceki-listesi-a");
+  check("§6 ⭐ applyTrust TRUSTED: türetim şablonu kullanıcı şablonu değilse (sistem/şablonsuz) NORMAL ile aynı",
+    !!sysTpl && applyTrust(input, sysTpl, "TRUSTED") === input && applyTrust(input, undefined, "TRUSTED") === input, JSON.stringify({ sys: sysTpl?.id ?? null }));
 }
 
 async function cleanup(): Promise<void> {

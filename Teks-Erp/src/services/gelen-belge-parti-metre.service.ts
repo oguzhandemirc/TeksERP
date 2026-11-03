@@ -8,7 +8,8 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { batchNoCandidates, pickBatchNo, type BatchNoCandidate } from "../lib/gelen-belge/parti-no";
-import { resolveKursunMeters, type KursunMeterResult } from "../lib/gelen-belge/kursun-metre";
+import { contradictsLineSum, resolveKursunMeters, type KursunMeterResult } from "../lib/gelen-belge/kursun-metre";
+import { USER_TEMPLATE_PREFIX } from "./gelen-belge-sablon.service";
 import { templateByCode } from "../lib/gelen-belge/sablon-bul";
 import type { DocumentTemplate } from "../lib/gelen-belge/motor";
 
@@ -50,18 +51,21 @@ export type TrustMode = "NORMAL" | "TRUSTED" | "BLIND";
 const BLIND_KURSUN: KursunMeterResult = { meters: null, source: null, review: false, candidates: { output: null, total: null, input: null, lineSum: null } };
 
 /**
- * Saf: güven kipini adaylara uygular — okuma anı (kolon) ve okuma özeti (canlı) AYNI fonksiyondan geçer. TRUSTED: şablonda
+ * Saf: güven kipini adaylara uygular — okuma anı (kolon) ve okuma özeti (canlı) AYNI fonksiyondan geçer. TRUSTED yalnız
+ * türetimin dayandığı şablon KULLANICI şablonuysa (`u-`) etkilidir (çok bölgede ilk bölge sistem/GENEL ise NORMAL): şablonda
  * parti no alanı atandıysa yalnız o alan aday (evrak/sipariş no ikincil aday düşer); metre şablonun çıkış/toplam alanından
- * geldiyse doğrulama beklemez. BLIND: GENEL sözlük tahmini forma dolmaz (aday yok, metre yok). NORMAL: değişmez.
+ * geldiyse el yazısı (ızgara) doğrulaması beklemez, Σ satırla ÇELİŞKİ doğrulaması korunur. BLIND: GENEL sözlük tahmini
+ * forma dolmaz (aday yok, metre yok). NORMAL: değişmez.
  */
 export function applyTrust(d: BatchAndMeters, template: DocumentTemplate | undefined, trust: TrustMode): BatchAndMeters {
   if (trust === "NORMAL") return d;
   if (trust === "BLIND") return { batchNoCandidates: [], kursun: BLIND_KURSUN };
-  const hasBatchField = (template?.batchNoCandidates ?? []).some((c) => c.kind === "BATCH");
+  if (!template?.id.startsWith(USER_TEMPLATE_PREFIX)) return d;
+  const hasBatchField = (template.batchNoCandidates ?? []).some((c) => c.kind === "BATCH");
   const fromTemplate = d.kursun.source === "OUTPUT" || d.kursun.source === "TOTAL";
   return {
     batchNoCandidates: hasBatchField ? d.batchNoCandidates.filter((c) => c.kind === "BATCH") : d.batchNoCandidates,
-    kursun: fromTemplate ? { ...d.kursun, review: false } : d.kursun,
+    kursun: fromTemplate ? { ...d.kursun, review: contradictsLineSum(d.kursun) } : d.kursun,
   };
 }
 
