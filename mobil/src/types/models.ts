@@ -887,6 +887,10 @@ export interface KursunStepSummary {
   stationName: string;
   workOrderId: string;
   batchNumber: string;
+  /** K16: adımın planlı (atanan) makinesi; eski backend göndermez. */
+  plannedMachineName?: string | null;
+  /** K16 (kursun.machineAssignMode=ASSIGNED_ONLY_WARN): iş BAŞKA makineye atanmış → "Yine de al" sorulur. Eski backend göndermez. */
+  foreignMachine?: { plannedMachineId: string; plannedMachineName: string } | null;
   status: 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'SKIPPED';
   /**
    * İstasyona KURSUN özelliği yetenek olarak atanmış mı?
