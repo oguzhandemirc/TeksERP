@@ -26,6 +26,7 @@ import { PartyList } from "./PartyList";
 import { initialMultiParty, type MultiPartyDraft } from "./partyDraft";
 import { getNoteParties } from "./service";
 import type { RouteRef } from "./nav";
+import { TeachButton, UnknownTypeStrip } from "@/pages/Operations/GelenBelgeler/tanit/TeachEntry";
 
 interface Props {
   noteId: string;
@@ -74,6 +75,7 @@ export function BelgedenIsEmriForm({ noteId, route }: Props) {
   const parties = useQuery({ queryKey: ["gelen-belge", noteId, "partiler"], queryFn: () => getNoteParties(noteId), enabled: stage !== "READING" && approval.value === "WITH_WORK_ORDER" });
   const save = useSave(noteId, route);
   const navigateActive = useTabsStore((s) => s.navigateActive);
+  const openTab = useTabsStore((s) => s.openTab);
   // Taslak bir kez, okuma bitince dolar; gramaj teklifi geldikçe (müşteri değişince yeniden) tohumlanır.
   useEffect(() => {
     if (n && !draft && stage !== "READING") setDraft(initialDocDraft(n));
@@ -97,7 +99,10 @@ export function BelgedenIsEmriForm({ noteId, route }: Props) {
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <FromDocBadge />
               <span>Belge <b>{n.noteNo}</b> · Rota <b>{route.name}</b></span>
+              {/* S1b: okunmuş belgede tanıtma yeni sekmede açılır (form kaybolmaz). */}
+              {stage !== "READING" && <TeachButton note={n} go={(p) => openTab(p)} />}
             </div>
+            {stage !== "READING" && <UnknownTypeStrip note={n} go={(p) => openTab(p)} />}
             {stage === "READING" || !draft ? (
               <p className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="oie-reading">
                 <Loader2 className="h-4 w-4 animate-spin" /> Belge okunuyor… Okuma bitince kutular kendiliğinden dolar.

@@ -14,6 +14,10 @@ import { Switch } from "@/components/ui/switch";
 import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { INCOMING_DOCUMENT_QUERY_KEY, listSenderTemplates, updateSenderTemplate } from "./service";
 import type { BatchNoCandidateKind, SenderTemplatePatch, SenderTemplateView } from "./types";
+import { UserTemplateEditButton } from "./tanit/UserTemplateEdit";
+
+/** S1b: panelde/tablette tanıtılan belge tipi (`u-…`); eski backend `kind` göndermez → koddan. */
+export const isUserTemplate = (r: Pick<SenderTemplateView, "kind" | "code">) => r.kind === "USER" || r.code.startsWith("u-");
 
 export const SENDER_TEMPLATES_PATH = "/operations/gelen-belgeler/sablonlar";
 const QUERY_KEY = [INCOMING_DOCUMENT_QUERY_KEY, "sablonlar"] as const;
@@ -70,12 +74,16 @@ function TemplateCard({ row, onPatch, busy }: { row: SenderTemplateView; onPatch
             {row.code} · sürüm {row.version} · {row.hitCount} okuma
           </div>
         </div>
+        <div className="flex items-center gap-3">
+        {isUserTemplate(row) && <UserTemplateEditButton code={row.code} name={row.name} />}
         <label className="flex items-center gap-2 text-sm">
-          <Switch checked={row.isActive} disabled={busy || !row.inEngine} onCheckedChange={(v) => onPatch({ isActive: v })} aria-label={`${row.name} aktif`} />
+          {/* Kullanıcı şablonu pasifken motorda değildir ama yeniden etkinleştirilebilir. */}
+          <Switch checked={row.isActive} disabled={busy || (!row.inEngine && !isUserTemplate(row))} onCheckedChange={(v) => onPatch({ isActive: v })} aria-label={`${row.name} aktif`} />
           {row.isActive ? "Aktif" : "Pasif"}
         </label>
+        </div>
       </div>
-      {!row.inEngine && (
+      {!row.inEngine && !isUserTemplate(row) && (
         <Badge variant="outline" className="mt-2">
           Okuma motorunda artık yok
         </Badge>
@@ -117,6 +125,11 @@ export function SenderTemplatesPage() {
     onSettled: () => void qc.invalidateQueries({ queryKey: QUERY_KEY }),
   });
   const rows = list.data ?? [];
+  const fileRows = rows.filter((r) => !isUserTemplate(r));
+  const userRows = rows.filter(isUserTemplate);
+  const card = (row: SenderTemplateView) => (
+    <TemplateCard key={row.code} row={row} busy={update.isPending && update.variables?.code === row.code} onPatch={(patch) => update.mutate({ code: row.code, patch })} />
+  );
 
   return (
     <PageShell>
@@ -142,17 +155,13 @@ export function SenderTemplatesPage() {
               Tekrar dene
             </Button>
           </div>
-        ) : rows.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">Okuma motorunda gönderen şablonu yok.</div>
         ) : (
-          rows.map((row) => (
-            <TemplateCard
-              key={row.code}
-              row={row}
-              busy={update.isPending && update.variables?.code === row.code}
-              onPatch={(patch) => update.mutate({ code: row.code, patch })}
-            />
-          ))
+          <>
+            {fileRows.length === 0 ? <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">Okuma motorunda gönderen şablonu yok.</div> : fileRows.map(card)}
+            <h2 className="pt-3 text-sm font-semibold" data-testid="user-templates-heading">Tanıtılan belge tipleri</h2>
+            <p className="text-xs text-muted-foreground">Yeni tip: Gelen Belgeler'de okunmuş bir belgenin detayında "Bu belgeyi tanıt". Pasif tip yeni okumalarda kullanılmaz.</p>
+            {userRows.length === 0 ? <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground" data-testid="user-templates-empty">Henüz tanıtılmış belge tipi yok.</div> : userRows.map(card)}
+          </>
         )}
       </PageBody>
     </PageShell>

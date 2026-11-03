@@ -90,24 +90,31 @@ function useWheelZoom(ref: RefObject<HTMLDivElement | null>, geo: RefObject<GeoR
   }, [ref, geo, update]);
 }
 
+/** Dokunma eşiği (px): bundan az kayan tek işaretçi "tık"tır, kaydırma değil. */
+const TAP_SLOP = 5;
+
 export function useScanGestures(
   ref: RefObject<HTMLDivElement | null>,
   nat: Size | null,
   vp: Size,
-  update: Update,
+  { update, onTap }: { update: Update; onTap?: (at: Pt) => void },
 ) {
   const geo = useRef<GeoRef>({ nat, vp });
   useLayoutEffect(() => {
     geo.current = { nat, vp };
   }, [nat, vp]);
   const pointers = useRef(new Map<number, Pt>());
+  // Tanıtma (S1b): basılan nokta + toplam kayma; tek işaretçi eşik altında bırakılırsa onTap.
+  const tap = useRef<{ id: number; at: Pt; moved: number } | null>(null);
   useWheelZoom(ref, geo, update);
   const current = (): Geo | null => (geo.current.nat ? { nat: geo.current.nat, vp: geo.current.vp } : null);
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 && e.pointerType === "mouse") return;
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    pointers.current.set(e.pointerId, localPoint(e.currentTarget, e.clientX, e.clientY));
+    const at = localPoint(e.currentTarget, e.clientX, e.clientY);
+    pointers.current.set(e.pointerId, at);
+    tap.current = pointers.current.size === 1 ? { id: e.pointerId, at, moved: 0 } : null;
   };
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     const ps = pointers.current;
@@ -118,10 +125,14 @@ export function useScanGestures(
     const other = [...ps.entries()].find(([id]) => id !== e.pointerId)?.[1];
     const step = pointerStep(prev, cur, other, g);
     if (step) update(step);
+    if (tap.current?.id === e.pointerId) tap.current.moved += Math.hypot(cur.x - prev.x, cur.y - prev.y);
     ps.set(e.pointerId, cur);
   };
   const onPointerEnd = (e: PointerEvent<HTMLDivElement>) => {
     pointers.current.delete(e.pointerId);
+    const t = tap.current;
+    tap.current = null;
+    if (onTap && e.type === "pointerup" && t?.id === e.pointerId && t.moved < TAP_SLOP) onTap(t.at);
   };
   const onDoubleClick = (e: MouseEvent<HTMLDivElement>) => {
     const g = current();
