@@ -29,4 +29,13 @@ describe("menu-layout süzgeci", () => {
     expect(isHubTileHidden(s, "/operations/kartela")).toBe(true);
     expect(isHubTileHidden(s, "/operations/work-orders")).toBe(false);
   });
+  it("⭐ rapor kategorisi gizliyse ALT raporları da gizli (palet + Merkez); başka kategori ve kategori-dışı yol etkilenmez", () => {
+    const s = toMenuLayoutState({ hiddenScreens: ["reports/subcontract"], advancedGroup: false, advancedScreens: [] });
+    expect(isMenuHidden(s, "/reports/subcontract")).toBe(true);
+    expect(isMenuHidden(s, "/reports/subcontract/scorecard")).toBe(true);
+    expect(isMenuHidden(s, "/reports/subcontract/fasoncular?x=1")).toBe(true);
+    expect(isMenuHidden(s, "/reports/sales/termin")).toBe(false);
+    expect(isMenuHidden(s, "/reports/subcontractx/a")).toBe(false);
+    expect(isMenuHidden(s, "/operations/subcontract/x")).toBe(false);
+  });
 });

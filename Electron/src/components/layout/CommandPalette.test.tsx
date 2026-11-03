@@ -211,6 +211,18 @@ describe("CommandPalette — K19 menü düzeni", () => {
     type("nerede");
     expect(screen.queryByText("Nerede Takıldı (WIP)")).not.toBeInTheDocument();
   });
+
+  it("⭐ K19: rapor KATEGORİSİ gizlenince alt raporu da aramada çıkmaz (Fason Karnesi)", () => {
+    permissions = [...permissions, "report:subcontract"];
+    const a = open();
+    type("fason karnesi");
+    expect(screen.getByText("Fason Karnesi")).toBeInTheDocument();
+    a.unmount();
+    menu = toMenuLayoutState({ hiddenScreens: ["reports/subcontract"], advancedGroup: false, advancedScreens: [] });
+    open();
+    type("fason karnesi");
+    expect(screen.queryByText("Fason Karnesi")).not.toBeInTheDocument();
+  });
 });
 
 describe("CommandPalette satır düzeni", () => {
