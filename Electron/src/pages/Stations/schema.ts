@@ -43,6 +43,9 @@ export const stationFormSchema = z.object({
   consumesWarpBeam: z.boolean(),
   // D4-E2: en ölçer (varsayılan kapalı = bugün; hiçbir istasyon eni yazmaz).
   capturesWidth: z.boolean(),
+  // K29 okutmayla rota (yalnız "Rota uygulaması: Okutmayla" iken çizilir; varsayılan kapalı = bugün).
+  scanAddAllowed: z.boolean(),
+  scanNotSkippable: z.boolean(),
   // Boş giriş → null (genel adet); `setValueAs` sayıya çevirir. Sınır backend `LABEL_COPIES_MAX` ile birebir.
   defaultLabelCopies: z
     .number({ message: "Etiket adedi sayı olmalı" })
@@ -73,6 +76,8 @@ export const stationFormDefaults: StationFormValues = {
   producesWarpBeam: false,
   consumesWarpBeam: false,
   capturesWidth: false,
+  scanAddAllowed: false,
+  scanNotSkippable: false,
   defaultLabelCopies: null,
   defaultCategoryId: null,
 };

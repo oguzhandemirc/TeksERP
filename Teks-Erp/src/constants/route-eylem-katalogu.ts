@@ -106,6 +106,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/kursun-qc/meter-readings": e("kurşun metre okuması kaydetti", "kurşun metre okuması kaydetmeye çalıştı"),
   "POST /api/kursun-qc/meter-readings/:id/pin-ack": e("metre sapmasını süpervizör PIN'iyle onayladı", "metre sapmasını süpervizör PIN'iyle onaylamaya çalıştı"),
   "POST /api/kursun-qc/meter-readings/:id/office-ack": e("metre sapmasını ofisten onayladı", "metre sapmasını ofisten onaylamaya çalıştı"),
+  "POST /api/scan-route/by-card/:barcode": e("kartı okutup işi bu istasyona aldı (okutmayla rota)", "kartı okutup işi bu istasyona almaya çalıştı"),
   "POST /api/kursun-qc/step/:stepId/foreign-machine-take": e("başka makineye atanmış işi bu makinede aldı", "başka makineye atanmış işi bu makinede almaya çalıştı"),
   "POST /api/tambur/meter-readings/:id/correct": e("Tambur kesim metresini düzeltti", "Tambur kesim metresini düzeltmeye çalıştı"),
   get "PUT /api/labels/work-orders/:id/overrides"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} etiket bilgisini değiştirdi`, `${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} etiket bilgisini değiştirmeye çalıştı`); },

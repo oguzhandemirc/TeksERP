@@ -66,13 +66,17 @@ function tsDosyalari(dir: string): string[] {
   });
 }
 
-/** Dosyadaki `meterReadings: { some: … }` süzgeçleri — "işlenmiş" yükleminin imzası (top where'inde ölçüm izi). */
+/** Dosyadaki `meterReadings: { some: … }` süzgeçleri — "işlenmiş" yükleminin imzası (top where'inde ölçüm izi).
+ *  ADIM kapsamlı süzgeç (`some` içinde `workOrderStepId`) başka sorudur ("bu adımda iş başladı", K29) — sayılmaz. */
 function olcumSuzgeciSay(src: string): number {
   const sf = ts.createSourceFile("x.ts", src, ts.ScriptTarget.Latest, true);
   let n = 0;
   const gez = (node: ts.Node): void => {
     if (ts.isPropertyAssignment(node) && node.name.getText(sf) === "meterReadings" && ts.isObjectLiteralExpression(node.initializer)) {
-      if (node.initializer.properties.some((p) => p.name?.getText(sf) === "some")) n++;
+      const some = node.initializer.properties.find((p) => p.name?.getText(sf) === "some");
+      const adimKapsamli = some && ts.isPropertyAssignment(some) && ts.isObjectLiteralExpression(some.initializer)
+        && some.initializer.properties.some((p) => p.name?.getText(sf) === "workOrderStepId");
+      if (some && !adimKapsamli) n++;
     }
     ts.forEachChild(node, gez);
   };

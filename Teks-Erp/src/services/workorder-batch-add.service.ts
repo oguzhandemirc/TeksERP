@@ -51,12 +51,13 @@ export interface AddBatchResult {
   attached: { id: string; barcode: string | null; prevStatus: RollStatus; qtyIn: number }[];
   errors: string[];
   batch: { id: string; batchNumber: string } | null;
-  firstStepId: string;
+  /** Rotasız İE'de (K29 `scanRouted`) null — top ilk okutmaya kadar partide bekler. */
+  firstStepId: string | null;
   warnings: string[];
 }
 
 const WO_ADD_SELECT = {
-  id: true, status: true, workOrderNumber: true, targetItemId: true, targetColorId: true, targetQuantity: true,
+  id: true, status: true, workOrderNumber: true, targetItemId: true, targetColorId: true, targetQuantity: true, scanRouted: true,
   targetItem: { select: { unit: true } },
   targetProperties: { where: ACTIVE_TARGET_PROPERTY, select: { propertyId: true } },
   orderLinks: { where: ACTIVE_ORDER_LINK, select: { allocatedQty: true } },
@@ -89,7 +90,7 @@ async function loadOpenWorkOrderTx(tx: Tx, workOrderId: string): Promise<WoForAd
       { code: "WORKORDER_TERMINAL_DURING_ATTACH" },
     );
   }
-  if (wo.steps.length === 0) throw AppError.badRequest(`${TERIM.terbiyeIsEmri.cumleBasi.bulunma} rota adımı tanımlanmamış`);
+  if (wo.steps.length === 0 && !wo.scanRouted) throw AppError.badRequest(`${TERIM.terbiyeIsEmri.cumleBasi.bulunma} rota adımı tanımlanmamış`);
   return wo;
 }
 
@@ -126,16 +127,17 @@ async function classifyRollsTx(tx: Tx, wo: WoForAdd, barcodes: string[]): Promis
 }
 
 async function claimAndEnterTx(tx: Tx, wo: WoForAdd, rolls: RollRow[], userId?: string): Promise<{ claimed: RollRow[]; lost: RollRow[] }> {
-  const first = wo.steps[0];
+  // Rotasız İE (K29): adım yok → top partide üretimde bekler; adımı ilk istasyon okutması verir (okutmayla-rota).
+  const first = wo.steps[0] ?? null;
   const res = await tx.roll.updateManyAndReturn({
     where: { id: { in: rolls.map((r) => r.id) }, status: { in: [...ATTACHABLE_ROLL_STATUSES] }, sackId: null, shipmentId: null },
-    data: { status: RollStatus.IN_PRODUCTION, producedInStepId: first.id, currentStepId: first.id },
+    data: { status: RollStatus.IN_PRODUCTION, producedInStepId: first?.id ?? null, currentStepId: first?.id ?? null },
     select: { id: true },
   });
   const ids = new Set(res.map((r) => r.id));
   const claimed = rolls.filter((r) => ids.has(r.id));
-  await postProductionIssuesTx(tx, claimed, { workOrderStepId: first.id, userId: userId ?? null });
-  if (claimed.length > 0 && first.station.type !== "EXTERNAL") {
+  await postProductionIssuesTx(tx, claimed, { workOrderStepId: first?.id ?? null, userId: userId ?? null });
+  if (first && claimed.length > 0 && first.station.type !== "EXTERNAL") {
     await tx.rollMovement.createMany({
       data: claimed.map((r) => ({ rollId: r.id, workOrderStepId: first.id, qtyIn: r.currentQty, weightIn: r.weightKg, operatorId: userId ?? null })),
     });
@@ -180,10 +182,10 @@ export async function addBatchToWorkOrderTx(tx: Tx, input: AddBatchInput): Promi
   const { claimed, lost } = ok.length ? await claimAndEnterTx(tx, wo, ok, input.userId) : { claimed: [], lost: [] };
   if (input.mode === "STRICT" && lost.length > 0) throw AppError.conflict("Toplardan biri bu sırada değişti — tekrar deneyin.", { code: "BATCH_ADD_RACE" });
   const errors = [...rejects.map((r) => `${r.barcode}: ${r.reason}`), ...lost.map((r) => `${r.barcode}: Top başka bir işlemde değişti, tekrar deneyin`)];
-  if (claimed.length === 0) return { attached: [], errors, batch: null, firstStepId: wo.steps[0].id, warnings: [] };
+  if (claimed.length === 0) return { attached: [], errors, batch: null, firstStepId: wo.steps[0]?.id ?? null, warnings: [] };
   const { batch } = await createBatchTx(tx, { workOrderId: wo.id, rollIds: claimed.map((r) => r.id), userId: input.userId, clientToken: input.clientToken, documentBatchNo: input.documentBatchNo });
   for (const s of wo.steps) await recomputeStepStatus(tx, s.id);
-  if (wo.steps[0].station.type !== "EXTERNAL") await ensureWorkOrderInProgress(tx, wo.id);
+  if (wo.steps[0] && wo.steps[0].station.type !== "EXTERNAL") await ensureWorkOrderInProgress(tx, wo.id);
   const totalQty = claimed.reduce((acc, r) => acc + Number(r.currentQty), 0);
   if (input.recordEvent) {
     await recordBatchAddedTx(tx, wo.id, { id: batch.id, batchNumber: batch.batchNumber, rollIds: claimed.map((r) => r.id), totalQty }, { trigger: "BATCH_ADD", userId: input.userId, reason: input.reason ?? null });
@@ -192,7 +194,7 @@ export async function addBatchToWorkOrderTx(tx: Tx, input: AddBatchInput): Promi
     attached: claimed.map((r) => ({ id: r.id, barcode: r.barcode, prevStatus: r.status, qtyIn: Number(r.currentQty) })),
     errors,
     batch: { id: batch.id, batchNumber: batch.batchNumber },
-    firstStepId: wo.steps[0].id,
+    firstStepId: wo.steps[0]?.id ?? null,
     warnings: await addWarningsTx(tx, wo, claimed),
   };
 }

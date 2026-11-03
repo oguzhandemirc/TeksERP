@@ -1157,6 +1157,12 @@ model Station {
   /// `RollOperation.metadata.widthBefore/widthAfter`. VARSAYILAN FALSE = bugün (hiçbir istasyon en yazmaz).
   capturesWidth      Boolean @default(false)
 
+  /// K29 okutmayla rota (yalnız `production.routeMode=SCAN`): bu istasyonda okutma rotada olmayan adımı EKLEYEBİLİR /
+  /// öndeki bekleyenleri atlatabilir (fabrika kısayolu "Tüm istasyonlar" iken bakılmaz).
+  scanAddAllowed   Boolean @default(false)
+  /// K29: bu istasyonun adımı okutmayla ATLANAMAZ — atlanacaksa okutma 409 ile durur.
+  scanNotSkippable Boolean @default(false)
+
   // Relations
   machines             Machine[]
   /// Bu istasyonda sisteme GİREN toplar (Roll.entryStationId) — kalıcı köken izi.
@@ -4872,6 +4878,10 @@ model WorkOrder {
   /// RollOperation.metadata yalnız ikincil izdir).
   foldType String?
 
+  /// K29: rota SAHADA belirlenir (okutmayla rota kipinde adımsız açıldı). true iken son adım bitince toplar
+  /// finalize olmaz, sonraki okutmayı bekler; kapanış mevcut yollardan (tambur finalize / elle kapat).
+  scanRouted Boolean @default(false)
+
   /// Etiket bilgisi (Gülkesim S5, cevap 4): İE açan ya da tamburcu eksik/yanlış etiket alanını
   /// yazar; { alanAnahtarı: metin } — "" = boş bas, anahtar yok = kaynak değer. İzinli anahtarlar
   /// `config/label-overrides.ts`; tek yazar `label-override.service` (audit).
@@ -5220,6 +5230,13 @@ model WorkOrderStep {
   /// Fiilî makine bugünkü gibi okutan tabletin oturumundan (`RollMovement/RollOperation.machineId`).
   /// Makine adımın istasyonuna ait olmalı (servis doğrular, `planned-machine.helper.ts`).
   plannedMachineId String? @db.Uuid
+
+  /// K29 okutmayla rota: adımın kökeni. null = PLAN (panel/rota); 'SCAN' = istasyon okutmasıyla SAHADA eklendi
+  /// (DB CHECK). Ekleyen/cihaz/zaman iz içindir; `clientToken` aynı okutmanın tekrarında ikinci adımı önler.
+  addedVia      String? @db.VarChar(16)
+  addedById     String? @db.Uuid
+  addedDeviceId String? @db.VarChar(128)
+  clientToken   String? @unique @db.Uuid
 
   // Relations
   workOrder            WorkOrder                @relation(fields: [workOrderId], references: [id])

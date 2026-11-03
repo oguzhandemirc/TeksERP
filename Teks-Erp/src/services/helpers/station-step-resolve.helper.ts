@@ -25,6 +25,7 @@ import { AppError } from "../../utils/app-error";
 import { ACTIVE_MOVEMENT } from "./roll-movement.helper";
 import { STEP_FLOW_WHERE } from "./quality-station.helper";
 import { TERIM } from "../../constants/terim";
+import { gateByCard } from "../workorder-scan-route.service";
 
 export type StationStepResolveMode = "SESSION" | "LEGACY";
 
@@ -41,6 +42,9 @@ export async function resolveWoStepForStation(
   workOrderId: string,
   stationId: string | null,
 ): Promise<StationStepResolution> {
+  // K29: okutmaya göre rota (ayar SCAN + istasyon kapsamda) — SIRALI'da null döner, aşağısı bayt-aynı.
+  const scan = await gateByCard(workOrderId, stationId);
+  if (scan) return { stepId: scan.stepId, mode: "SESSION" };
   if (stationId) {
     const sessionSteps = await prisma.workOrderStep.findMany({
       where: { workOrderId, stationId, station: { ...STEP_FLOW_WHERE } },

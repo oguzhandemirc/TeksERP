@@ -177,6 +177,7 @@ import { TravelerCardService } from "./traveler-card.service";
 import {
   readWorkOrderDefaultPlanDurationDays,
   readQualityGradeRequiredEnabled,
+  readProductionRouteMode,
 } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { nextManifestNo } from "./helpers/manifest-number.helper";
@@ -552,6 +553,11 @@ export interface WorkOrderCreateInput {
   targetPropertyIds?: string[];
   /** KQ-D6: hedef çeşit değerleri (hedef kurşun gramajı) — `WorkOrderTargetValue`. */
   targetValues?: TargetValueItem[];
+  /**
+   * K29 rotasız İE: adımsız açılır, adımlar sahada okutmayla eklenir. Yalnız `production.routeMode=SCAN`
+   * iken ve iç çağıranlardan (belge onayında otomatik İE) — HTTP gövdesinde yok.
+   */
+  scanRouted?: boolean;
   /**
    * Rota adımları — routeTemplateId verilmezse zorunlu.
    * Şablon verilirse bu alan override için kullanılabilir.
@@ -1018,11 +1024,17 @@ export class WorkOrderService {
       });
     } else {
       if (!data.steps || data.steps.length === 0) {
-        throw AppError.badRequest(
-          "Rota şablonu seçin veya özel rota adımları tanımlayın."
-        );
+        if (!data.scanRouted) {
+          throw AppError.badRequest(
+            "Rota şablonu seçin veya özel rota adımları tanımlayın."
+          );
+        }
+        // K29: rotasız İE yalnız "Rota uygulaması: Okutmayla" iken (SIRALI'da bugünkü 400 aynen).
+        if ((await readProductionRouteMode()) !== "SCAN") {
+          throw AppError.badRequest(`Rotasız ${TERIM.terbiyeIsEmri.tekilKucuk} yalnız rota uygulaması 'Okutmayla' iken açılabilir.`, { code: "SCAN_ROUTE_DISABLED" });
+        }
       }
-      finalSteps = data.steps.map((s) => ({
+      finalSteps = (data.steps ?? []).map((s) => ({
         stationId: s.stationId,
         notes:     s.notes ?? null,
         requiredCategoryId:     s.requiredCategoryId ?? null,
@@ -1343,6 +1355,7 @@ export class WorkOrderService {
         targetItemId:      resolvedTargetItemId,
         targetColorId:     resolvedTargetColorId,
         foldType:          data.foldType          ?? null,
+        scanRouted:        data.scanRouted === true && finalSteps.length === 0,
         steps: {
           create: finalSteps.map((step, index) => ({
             stationId:              step.stationId,
@@ -1473,7 +1486,7 @@ export class WorkOrderService {
         success: true,
         data: {
           workOrder: p.wo,
-          attached: await prisma.roll.count({ where: { barcode: { in: barcodes }, currentStep: { workOrderId: p.wo.id } } }),
+          attached: await prisma.roll.count({ where: { barcode: { in: barcodes }, OR: [{ currentStep: { workOrderId: p.wo.id } }, { batch: { workOrderId: p.wo.id } }] } }),
           errors: [],
           dispatch: null,
           batch: await resolveQuickStartBatch(p.wo.id),
@@ -1608,7 +1621,8 @@ export class WorkOrderService {
     // dönerdi ve zero-attach telafisi GERÇEK WO'yu hardDelete ile arşivlerdi.)
     if (createRes.idempotentReplay) {
       const attached = await prisma.roll.count({
-        where: { barcode: { in: barcodes }, currentStep: { workOrderId: workOrder.id } },
+        // Rotasız İE (K29) topu adımsız bağlar → partiden de sayılır.
+        where: { barcode: { in: barcodes }, OR: [{ currentStep: { workOrderId: workOrder.id } }, { batch: { workOrderId: workOrder.id } }] },
       });
       return {
         success: true,

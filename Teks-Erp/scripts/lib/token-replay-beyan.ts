@@ -43,6 +43,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}support.service.ts::createSupportTicket`]: { giris: { [`${S}support.service.ts::createSupportTicket`]: "R" } },
   // K4P-LAB: lab testi panelden clientToken ile DRAFT doğar; iptal edilmiş testin token'ı 409 (4. durum).
   [`${S}lab-test.service.ts::createLabTest`]: { giris: { [`${S}lab-test.service.ts::createLabTest`]: "R" } },
+  // K29: okutmayla rota — sahada eklenen adım clientToken ile doğar (aynı okutmanın tekrarı ikinci adım eklemez).
+  [`${S}workorder-scan-route.service.ts::applyPlanTx`]: { giris: { [`${S}workorder-scan-route.service.ts::applyScanRoute`]: "R" } },
   [`${S}certificate.service.ts::createCertificate`]: { giris: { [`${S}certificate.service.ts::createCertificate`]: "R" } },
   [`${S}certificate.service.ts::renewCertificate`]: { giris: { [`${S}certificate.service.ts::renewCertificate`]: "R" } },
   // Gelen belge (D2): irsaliye taslağı panel/tabletten clientToken ile DRAFT doğar; iptal edilmişin token'ı 409.
@@ -283,6 +285,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}support.service.ts::replayFor`]: ["konu", "aciklama"],
   [`${S}lab-test.service.ts::replayFor`]: ["rollId", "batchId"],
   [`${S}certificate.service.ts::replayFor`]: ["certificateNo", "renewsId"],
+  [`${S}workorder-scan-route.service.ts::replayFor`]: ["workOrderId", "stationId"],
   [`${S}gelen-belge-note.service.ts::replayFor`]: ["senderDocNo", "ownerCustomerId"],
   [`${S}gelen-belge-line.service.ts::lineBatchReplay`]: ["noteId"],
   [`${S}gelen-belge-iptal.service.ts::replayFor`]: ["noteId", "reason"],

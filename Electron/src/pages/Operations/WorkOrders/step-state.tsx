@@ -19,6 +19,13 @@ export function stepState(step: WorkOrderStepLite): StepState {
   return "waiting";
 }
 
+/** K29 okutmayla rota rozeti: sahada eklenen ya da okutmayla atlanan adım (yoksa null — bugünkü görünüm). */
+export function stepOriginLabel(step: Pick<WorkOrderStepLite, "addedVia" | "status" | "skipReason">): string | null {
+  if (step.status === "SKIPPED" && step.skipReason === "SCAN_SKIP") return "Okutmayla atlandı";
+  if (step.addedVia === "SCAN") return "Sahada eklendi";
+  return null;
+}
+
 export const STEP_STATE_LABEL: Record<StepState, string> = {
   active: "İşlemde",
   passed: "Geçildi",

@@ -21,6 +21,8 @@ export const buildStationPayload = (v: StationFormValues, initial: Station | nul
   producesWarpBeam: v.producesWarpBeam,
   consumesWarpBeam: v.consumesWarpBeam,
   capturesWidth: v.capturesWidth,
+  scanAddAllowed: v.scanAddAllowed,
+  scanNotSkippable: v.scanNotSkippable,
   // Boş = genel adet (null); backend 1–5 doğrular, DB CHECK son kapı.
   defaultLabelCopies: v.defaultLabelCopies ?? null,
   defaultCategoryId: v.type === "EXTERNAL" ? v.defaultCategoryId ?? null : null,

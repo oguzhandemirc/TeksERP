@@ -1082,9 +1082,12 @@ export class KursunQcService {
       );
     }
 
+    // K29: ATLANDI (okutmayla atlanmış) adım "sonraki" olamaz — fason `nextStep` ile aynı kural.
     const nextStep = step.workOrder.steps.find(
-      (s) => s.stepSequence > step.stepSequence
+      (s) => s.stepSequence > step.stepSequence && s.status !== StepStatus.SKIPPED
     );
+    // K29: rotası sahada belirlenen İE'de son adım "iş bitti" demek değildir — toplar sonraki okutmayı bekler.
+    const awaitNextScan = !nextStep && step.workOrder.scanRouted;
 
     // Lazily import helper to avoid circular (roll-step.helper → prisma)
     const { recomputeStepStatus, completeWorkOrderIfStepsDone } = await import(
@@ -1200,6 +1203,8 @@ export class KursunQcService {
         });
         // 4a) Step durumlarını birer kez recompute et (per-roll değil).
         await recomputeStepStatus(tx, nextStep.id);
+      } else if (awaitNextScan) {
+        // 2c) K29: toplar bu adımda (kapalı hareketle) kalır; sonraki istasyon okutması onları taşır.
       } else {
         // 2b) SON adım (rotada Tambur yok / bu istasyon son) → toplar FİNAL'e çekilir:
         // kaliteye göre WAREHOUSE (finalizeRollsAtLastStep — Tambur ile aynı mantık;
@@ -1212,7 +1217,7 @@ export class KursunQcService {
 
       await recomputeStepStatus(tx, step.id);
 
-      if (!nextStep) {
+      if (!nextStep && !awaitNextScan) {
         // F162: kursunFinish ile ORTAK yardımcı (drift önlenir; davranış birebir).
         await completeWorkOrderIfStepsDone(tx, step.workOrderId, { trigger: "KURSUN_QC_FINISH" });
       }
@@ -1236,7 +1241,9 @@ export class KursunQcService {
     return {
       success: true,
       data: { movedRollCount: result.moved },
-      message: `Adım kapatıldı, ${result.moved} top bir sonraki istasyona taşındı`,
+      message: awaitNextScan
+        ? `Adım kapatıldı; ${result.moved} top sonraki istasyonda okutulmayı bekliyor`
+        : `Adım kapatıldı, ${result.moved} top bir sonraki istasyona taşındı`,
     };
   }
 

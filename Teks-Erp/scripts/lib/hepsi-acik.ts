@@ -109,6 +109,8 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   scanCustomerCodeLookupEnabled: A(true), // müşteri kodu yolunu işletir; iç barkod yine önce
   kursunMeterStockMode: V("stok kipi; APPLY topun metrajını okumayla değiştirir — RECORD ile APPLY ikisi de geçerli iş kuralı, ayrı bekçi (test_kursun_metre_stok) işletir"),
   kursunMachineAssignMode: V("atanan makine kipi; ASSIGNED_ONLY_WARN yalnız oturum makinesi farklı planlı işte süzer/uyarır — iki değer de geçerli iş kuralı, ayrı bekçi (test_kursun_machine_assign) işletir"),
+  productionRouteMode: V("rota uygulaması; SCAN yalnız okutmayla rota bekçisinin (test_okutmayla_rota) kurduğu senaryoda anlamlı — SEQUENTIAL bugünkü sözleşmedir, iki değer de ayrı bekçide işler"),
+  productionScanRouteStations: V("okutmayla rota kapsamı; yalnız productionRouteMode=SCAN iken okunur — test_okutmayla_rota iki değeri de işletir"),
   kursunMeterVarianceApproval: V("onay kipi; OFFICE panel ekranı (H4) gelene dek seçilemez, NONE işareti üretir"),
   tamburOverQuantityEnabled: A(true),
   tamburUndoFullSameDayOnly: A(true),

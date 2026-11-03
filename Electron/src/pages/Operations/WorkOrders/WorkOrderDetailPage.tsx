@@ -106,6 +106,13 @@ export function WorkOrderDetailPage() {
                 <KunyeCard wo={wo} />
               </V3Section>
 
+              {wo.scanRouted && sortedSteps.length === 0 && (
+                <V3Section title="Rota">
+                  <div className="card steps text-sm text-muted-foreground" data-testid="wo-scan-routed-empty">
+                    Rota sahada belirlenir — istasyonlar kumaşı okuttukça adımlar eklenir.
+                  </div>
+                </V3Section>
+              )}
               <SourceDocsV3 workOrderId={wo.id} />
 
               {sortedSteps.length > 0 && (

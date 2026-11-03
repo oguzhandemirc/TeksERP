@@ -36,6 +36,7 @@
 //   return.service.ts:130         lookupForReturn (iade okutma)           [AÇIK] — müşteri kendi barkoduyla iade eder
 //   return.service.ts:259         lookupSackForReturn (çuval)             [İÇ] — çuval kodu
 //   kursun-qc.service.ts:322      getByCardBarcode (kurşun)               [İÇ] — Tambur öncesi; kod yok
+//   workorder-scan-route.service.ts:72 cardWorkOrder (okutmayla rota)  [İÇ] — refakat kartı kodu = iş emri no
 //   tambur-manual.service.ts:310  resolveRoll (elle Tambur girişi)        [İÇ] — kod Tambur çıkışında doğar
 //   helpers/return-scope.helper.ts:114 lookupShipmentForReturn            [İÇ] — sevk belge no
 //   reports/batch-trace.report.service.ts:114 searchBatches               [AÇIK] — parti izi araması

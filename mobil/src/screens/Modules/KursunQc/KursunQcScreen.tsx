@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
 import AppModal from '../../../components/AppModal';
 import ForeignMachinePrompt, { type ForeignMachinePromptState } from './ForeignMachinePrompt';
+import { useScanRoute } from '../scanRoute/useScanRoute';
 import {
   Text,
   Button,
@@ -197,6 +198,8 @@ export default function KursunQcScreen() {
   });
 
   const qc = useQueryClient();
+  // K29 okutmayla rota: kart çözümü 400 SCAN_ROUTE_AVAILABLE dönerse araya girer (sessiz uygula / onay / engel).
+  const scanRoute = useScanRoute();
 
   const [cardBarcode, setCardBarcode] = useState('');
   const [resolvingCard, setResolvingCard] = useState(false);
@@ -490,6 +493,9 @@ export default function KursunQcScreen() {
 
       openResolvedStep(barcode, step, fromInput, false);
     } catch (err) {
+      // K29: okutmaya göre rota kararı — uygulanınca kart bugünkü yoldan yeniden çözülür (guard finally'de temizlenir).
+      const routed = scanRoute.intercept(err, barcode, () => void resolveCard(barcode, fromInput));
+      if (routed === 'handled') return;
       signalScan('reject');
       setCardError((err as Error).message);
       Toast.show({
@@ -1777,6 +1783,8 @@ export default function KursunQcScreen() {
       <MeterModals meter={meter} acks={meterAcks} rolls={activeJob?.stepSummary.rolls ?? []} />
 
       <ForeignMachinePrompt prompt={foreignPrompt} busy={takingForeign} onConfirm={confirmForeign} onCancel={cancelForeign} />
+
+      {scanRoute.dialog}
 
       {/* Kapalı kart okutulunca: reopen onay modalı (toplar Tambur'dan geri çekilir) */}
       <ReopenConfirmModal

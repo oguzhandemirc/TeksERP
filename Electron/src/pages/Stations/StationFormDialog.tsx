@@ -12,6 +12,7 @@ import { stationFormDefaults, stationFormSchema, type StationFormValues } from "
 import { visibleStationKindLabels } from "./stationKindVisibility";
 import { inspectionHintForKind, suggestedCapabilities, valuesAfterKindChange } from "./stationKindDefaults";
 import { StationLabelCopiesField } from "./StationLabelCopiesField";
+import { StationScanRouteFields } from "./StationScanRouteFields";
 import { StationKursunSection } from "./StationKursunSection";
 
 const CAPABILITY_FIELDS = ["appliesColor", "appliesProperty", "appliesQuality", "inspectionEnabled", "producesWarpBeam", "consumesWarpBeam"] as const;
@@ -46,6 +47,8 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
         producesWarpBeam: initial.producesWarpBeam ?? false,
         consumesWarpBeam: initial.consumesWarpBeam ?? false,
         capturesWidth: initial.capturesWidth ?? false,
+        scanAddAllowed: initial.scanAddAllowed ?? false,
+        scanNotSkippable: initial.scanNotSkippable ?? false,
         defaultLabelCopies: initial.defaultLabelCopies ?? null,
         defaultCategoryId: initial.defaultCategoryId ?? null,
       }
@@ -185,6 +188,7 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
               <p className="-mt-1 pl-6 text-xs text-muted-foreground">
                 Tablette top bitişinde isteğe bağlı &quot;Ölçülen en (cm)&quot; alanı çıkar (ör. etek kesim). Boş bırakılırsa topun eni değişmez.
               </p>
+              <StationScanRouteFields form={form} />
             </div>
           </FormField>
           <StationLabelCopiesField form={form} />

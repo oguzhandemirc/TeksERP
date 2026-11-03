@@ -897,6 +897,10 @@ export const SETTING_KEYS = {
   KURSUN_METER_STOCK_MODE: "kursun.meterStockMode",
   /** K16 (Gülkesim 2026-11-03): atanan makine — `SUGGEST` (bugün; yalnız öneri) · `ASSIGNED_ONLY_WARN` (liste süzülür, başka makine uyarıyla alır). */
   KURSUN_MACHINE_ASSIGN_MODE: "kursun.machineAssignMode",
+  /** K29 (Gülkesim 2026-11-03): rota uygulaması — `SEQUENTIAL` (bugün; plandaki sırayla) · `SCAN` (okutmaya göre, esnek). */
+  PRODUCTION_ROUTE_MODE: "production.routeMode",
+  /** K29: okutmayla rota hangi istasyonlarda — `SELECTED` (istasyon kartındaki "Okutunca adım eklenebilir") · `ALL`. */
+  PRODUCTION_SCAN_ROUTE_STATIONS: "production.scanRouteStations",
   /** D4-F1: okutmada iç barkod bulunamazsa topun aktif MÜŞTERİ KODUNA da bakılsın mı (varsayılan KAPALI = bugün). */
   SCAN_CUSTOMER_CODE_LOOKUP: "scan.customerCodeLookup",
   /** Parti no KISA ve DÖNEN mi olsun (P01…P99, 99'dan sonra P01)? Default TRUE/AÇIK.
@@ -1156,6 +1160,14 @@ export const DEFAULT_KURSUN_METER_STOCK_MODE: KursunMeterStockMode = "RECORD";
 export type KursunMachineAssignMode = "SUGGEST" | "ASSIGNED_ONLY_WARN";
 export const KURSUN_MACHINE_ASSIGN_MODES: KursunMachineAssignMode[] = ["SUGGEST", "ASSIGNED_ONLY_WARN"];
 export const DEFAULT_KURSUN_MACHINE_ASSIGN_MODE: KursunMachineAssignMode = "SUGGEST";
+/** K29: rota uygulaması; `SEQUENTIAL` = bugünkü davranış (rota zorunlu sıra). */
+export type ProductionRouteMode = "SEQUENTIAL" | "SCAN";
+export const PRODUCTION_ROUTE_MODES: ProductionRouteMode[] = ["SEQUENTIAL", "SCAN"];
+export const DEFAULT_PRODUCTION_ROUTE_MODE: ProductionRouteMode = "SEQUENTIAL";
+/** K29: okutmayla rota kapsamı; `SELECTED` = yalnız `Station.scanAddAllowed` istasyonlar (hiçbiri işaretli değilse hiçbiri). */
+export type ProductionScanRouteStations = "SELECTED" | "ALL";
+export const PRODUCTION_SCAN_ROUTE_STATIONS_VALUES: ProductionScanRouteStations[] = ["SELECTED", "ALL"];
+export const DEFAULT_PRODUCTION_SCAN_ROUTE_STATIONS: ProductionScanRouteStations = "SELECTED";
 /** OFFICE'in çıkış yüzeyi panel "Metre Sapmaları" ekranıdır (H4, 2026-10-29) — artık seçilebilir. */
 export const KURSUN_METER_OFFICE_APPROVAL_SELECTABLE: boolean = true;
 
@@ -2476,6 +2488,10 @@ export interface FeatureFlags {
   kursunMeterStockMode: KursunMeterStockMode;
   /** K16: atanan kurşun makinesi (varsayılan `SUGGEST` = bugün). */
   kursunMachineAssignMode: KursunMachineAssignMode;
+  /** K29: rota uygulaması (varsayılan `SEQUENTIAL` = bugün). */
+  productionRouteMode: ProductionRouteMode;
+  /** K29: okutmayla rota kapsamı (varsayılan `SELECTED`). */
+  productionScanRouteStations: ProductionScanRouteStations;
   /** D4-F1: okutma müşteri koduna düşsün mü (varsayılan `false` = bugün; iç barkod her zaman önce). */
   scanCustomerCodeLookupEnabled: boolean;
   /** Parti no kısa ve dönen mi (P01…P99)? Default TRUE/açık. Backend ENFORCE eder.
@@ -3014,6 +3030,8 @@ export class SystemSettingService {
       kursunMeterVarianceApproval: await readKursunMeterVarianceApproval(cacheClient),
       kursunMeterStockMode: await readKursunMeterStockMode(cacheClient),
       kursunMachineAssignMode: await readKursunMachineAssignMode(cacheClient),
+      productionRouteMode: await readProductionRouteMode(cacheClient),
+      productionScanRouteStations: await readProductionScanRouteStations(cacheClient),
       scanCustomerCodeLookupEnabled: await readScanCustomerCodeLookupEnabled(cacheClient),
       batchShortNumberEnabled: await readBatchShortNumberEnabled(cacheClient),
       batchLastNumberHintEnabled: await readBatchLastNumberHintEnabled(cacheClient),
@@ -4765,6 +4783,20 @@ export class SystemSettingService {
         throw AppError.badRequest(`kursunMachineAssignMode şunlardan biri olmalı: ${KURSUN_MACHINE_ASSIGN_MODES.join(", ")}`);
       }
       await this.set(SETTING_KEYS.KURSUN_MACHINE_ASSIGN_MODE, v, "Kurşun makinesi ataması — öneri · yalnız atanan makinede (uyarıyla alınır)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "productionRouteMode")) {
+      const v = input.productionRouteMode;
+      if (typeof v !== "string" || !PRODUCTION_ROUTE_MODES.includes(v as ProductionRouteMode)) {
+        throw AppError.badRequest(`productionRouteMode şunlardan biri olmalı: ${PRODUCTION_ROUTE_MODES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.PRODUCTION_ROUTE_MODE, v, "Rota uygulaması — sıralı (plandaki sırayla) · okutmaya göre (esnek)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "productionScanRouteStations")) {
+      const v = input.productionScanRouteStations;
+      if (typeof v !== "string" || !PRODUCTION_SCAN_ROUTE_STATIONS_VALUES.includes(v as ProductionScanRouteStations)) {
+        throw AppError.badRequest(`productionScanRouteStations şunlardan biri olmalı: ${PRODUCTION_SCAN_ROUTE_STATIONS_VALUES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.PRODUCTION_SCAN_ROUTE_STATIONS, v, "Okutmayla rota istasyonları — seçili istasyonlar · tüm istasyonlar", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "scanCustomerCodeLookupEnabled")) {
       if (typeof input.scanCustomerCodeLookupEnabled !== "boolean") {
@@ -7930,6 +7962,22 @@ export async function readKursunMeterVarianceApproval(tx?: Pick<typeof prisma, "
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.KURSUN_METER_VARIANCE_APPROVAL }, select: { value: true } });
   const v = setting?.value;
   return typeof v === "string" && KURSUN_METER_VARIANCE_APPROVALS.includes(v as KursunMeterVarianceApproval) ? (v as KursunMeterVarianceApproval) : DEFAULT_KURSUN_METER_VARIANCE_APPROVAL;
+}
+
+/** K29: rota uygulaması — tanınmayan değer varsayılana (`SEQUENTIAL` = bugün) düşer. */
+export async function readProductionRouteMode(tx?: Pick<typeof prisma, "systemSetting">): Promise<ProductionRouteMode> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.PRODUCTION_ROUTE_MODE }, select: { value: true } });
+  const v = setting?.value;
+  return typeof v === "string" && PRODUCTION_ROUTE_MODES.includes(v as ProductionRouteMode) ? (v as ProductionRouteMode) : DEFAULT_PRODUCTION_ROUTE_MODE;
+}
+
+/** K29: okutmayla rota kapsamı — tanınmayan değer `SELECTED`e düşer. */
+export async function readProductionScanRouteStations(tx?: Pick<typeof prisma, "systemSetting">): Promise<ProductionScanRouteStations> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.PRODUCTION_SCAN_ROUTE_STATIONS }, select: { value: true } });
+  const v = setting?.value;
+  return typeof v === "string" && PRODUCTION_SCAN_ROUTE_STATIONS_VALUES.includes(v as ProductionScanRouteStations)
+    ? (v as ProductionScanRouteStations)
+    : DEFAULT_PRODUCTION_SCAN_ROUTE_STATIONS;
 }
 
 /** K16: atanan kurşun makinesi kipi — tanınmayan değer varsayılana (`SUGGEST` = bugün) düşer. */

@@ -675,6 +675,10 @@ export interface FeatureFlags {
   kursunMeterStockMode: "RECORD" | "APPLY";
   /** K16: atanan kurşun makinesi — backend `KursunMachineAssignMode` aynası (varsayılan SUGGEST). */
   kursunMachineAssignMode: "SUGGEST" | "ASSIGNED_ONLY_WARN";
+  /** K29: rota uygulaması — backend `ProductionRouteMode` aynası (varsayılan SEQUENTIAL). */
+  productionRouteMode: "SEQUENTIAL" | "SCAN";
+  /** K29: okutmayla rota kapsamı — backend aynası (varsayılan SELECTED). */
+  productionScanRouteStations: "SELECTED" | "ALL";
   /** D4-F1: okutmada müşteri barkodu araması — backend aynası (varsayılan false). */
   scanCustomerCodeLookupEnabled: boolean;
   /** Parti no KISA ve DÖNEN mi (P01…P99, 99'dan sonra P01)? Default TRUE/AÇIK.

@@ -1679,6 +1679,34 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         ],
       },
       {
+        // K29 (2026-11-03): `defaultValue` backend `DEFAULT_PRODUCTION_ROUTE_MODE` ile birebir.
+        enumKey: "productionRouteMode",
+        title: "Rota uygulaması",
+        get summary() { return `${TERIM.terbiyeIsEmri.cekimKucuk.bulunma}ki rota zorunlu sıra mı, yoksa kumaş hangi istasyonda okutulursa iş orada mı devam etsin.`; },
+        get desc() { return `Sıralı (varsayılan): iş plandaki sırayla ilerler; rotada olmayan istasyonda okutma hata verir. Okutmaya göre (esnek): rota bir plandır. Kumaş hangi istasyonda okutulursa iş orada devam eder; rotada olmayan istasyon ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} "Sahada eklendi" olarak eklenir, aradaki başlanmamış adımlar "Atlandı" olur (silinmez). Atlanan iş faturaya ve maliyete girmez. Belgeden otomatik açılan ${TERIM.terbiyeIsEmri.tekilKucuk} rotasız açılır; adımlar yapıldıkça yazılır. Hangi istasyonlarda geçerli olduğunu aşağıdaki ayar ve istasyon kartındaki "Okutunca adım eklenebilir" belirler; "Atlanamaz" işaretli istasyon atlanmaz.`; },
+        defaultValue: "SEQUENTIAL",
+        display: "radio",
+        audience: ["Planlamacı", "Operatör"],
+        options: [
+          { value: "SEQUENTIAL", label: "Sıralı — plandaki sırayla (bugünkü)", hint: "Rota zorunlu sıradır." },
+          { value: "SCAN", label: "Okutmaya göre (esnek)", hint: "Okutulan istasyon adımı başlatır, yoksa ekler. Tablet güncellemesi gelmeden açılırsa eski tablet rotada olmayan istasyonda bugünkü hatayı gösterir." },
+        ],
+      },
+      {
+        // K29: `defaultValue` backend `DEFAULT_PRODUCTION_SCAN_ROUTE_STATIONS` ile birebir; yalnız "Okutmaya göre" iken okunur.
+        enumKey: "productionScanRouteStations",
+        title: "Okutmaya göre rota — istasyonlar",
+        summary: "Okutmayla adım ekleme/atlama hangi istasyonlarda geçerli.",
+        desc: "Seçili istasyonlar (varsayılan): yalnız İstasyonlar ekranında \"Okutunca adım eklenebilir\" işaretli istasyonlarda; işaretsiz istasyonda okutma sıralı davranır. Tüm istasyonlar: her istasyonda. Rota uygulaması \"Sıralı\" iken bu ayar etkisizdir.",
+        defaultValue: "SELECTED",
+        display: "radio",
+        audience: ["Planlamacı"],
+        options: [
+          { value: "SELECTED", label: "Seçili istasyonlar", hint: "İstasyon kartındaki anahtara bakılır." },
+          { value: "ALL", label: "Tüm istasyonlar", hint: "Her istasyonda okutmaya göre." },
+        ],
+      },
+      {
         // D4-E1 (2026-10-29): `defaultValue` backend `DEFAULT_TAMBUR_PLAN_WIDTH_CHECK` ile birebir.
         enumKey: "tamburPlanGateWidthCheck",
         group: "Tambur",

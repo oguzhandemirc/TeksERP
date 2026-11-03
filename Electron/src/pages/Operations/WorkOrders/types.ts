@@ -87,6 +87,10 @@ export interface WorkOrderStepLite {
   dispatchWithoutColor?: boolean;
   /** Önerilen makine (Gülkesim 2026-11-02, yalnız öneri). */
   plannedMachineId?: string | null;
+  /** K29: 'SCAN' = adım sahada istasyon okutmasıyla eklendi (plan değil). findById döner. */
+  addedVia?: string | null;
+  /** Atlanma nedeni (SKIPPED adımda): SCAN_SKIP = okutmayla atlandı. */
+  skipReason?: string | null;
   /** Sadece findById response'unda — şu an bu adımda bekleyen rulolar (özet). */
   currentRolls?: StepRollSummary;
   /** Sadece findById response'unda — bekleyen rullaların tek tek listesi. */
@@ -161,6 +165,8 @@ export interface WorkOrder {
   targetColorId: string | null;
   /** Tambur planlama bilgisi — operatöre default olarak gelir. */
   foldType: string | null;
+  /** K29 rotasız iş emri: adımlar sahada okutmayla eklenir. Eski backend göndermez. */
+  scanRouted?: boolean;
   steps: WorkOrderStepLite[];
   routeTemplate?: { id: string; code: string | null; name: string } | null;
   targetItem?: WorkOrderTargetItem | null;
