@@ -4,7 +4,22 @@ import { useRef } from "react";
 import { useScanGestures } from "./useScanGestures";
 import { useZoomView } from "./useZoomView";
 import { ScanZoomToolbar } from "./ScanZoomToolbar";
-import { rotatedSize, viewMatrix, type Box, type Size } from "./scanView";
+import { fromScreen, rotatedSize, viewMatrix, type Box, type Pt, type Size } from "./scanView";
+
+/** Tanıtma ekranı (S1b) kutusu: görüntü pikselinde; `tone` rengi seçer, `label` küçük künye. */
+export interface ScanMark {
+  key: string;
+  box: Box;
+  tone: "word" | "selected" | "field" | "column" | "section";
+  label?: string;
+}
+const MARK_TONE: Record<ScanMark["tone"], string> = {
+  word: "border-sky-500/50 bg-transparent",
+  selected: "border-amber-500 bg-amber-400/30",
+  field: "border-emerald-600 bg-emerald-400/25",
+  column: "border-violet-600 bg-violet-400/25",
+  section: "border-rose-600 bg-rose-400/20",
+};
 
 interface Props {
   url: string;
@@ -13,6 +28,10 @@ interface Props {
   highlight: Box | null;
   /** Seçili satır değişince (yakınlaşılmışsa) kutu görünüme kaydırılır. */
   selectionKey?: string | null;
+  /** Ek kutular (tanıtma: kelimeler, atanmış alanlar); görüntüyle birlikte dönüşür. */
+  marks?: readonly ScanMark[];
+  /** Kısa tık/dokunma (kaydırma değil) — görüntü pikseli cinsinden nokta. */
+  onTap?: (at: Pt) => void;
 }
 
 const pct = (r: Box, nat: Size) => ({
@@ -22,11 +41,12 @@ const pct = (r: Box, nat: Size) => ({
   height: `${(r.height / nat.h) * 100}%`,
 });
 
-export function ZoomableScan({ url, alt, highlight, selectionKey = null }: Props) {
+export function ZoomableScan({ url, alt, highlight, selectionKey = null, marks, onTap }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const z = useZoomView(ref, highlight, selectionKey);
   const { nat, view: v, vp } = z;
-  const gestures = useScanGestures(ref, nat, vp, z.update);
+  const tap = onTap && nat && v ? (at: Pt) => onTap(fromScreen(v, nat, at)) : undefined;
+  const gestures = useScanGestures(ref, nat, vp, { update: z.update, onTap: tap });
   const r = nat && v ? rotatedSize(nat, v.rot) : null;
   // Normal düzende görünüm döndürülmüş sayfanın oranını alır (en çok ekranın %75'i); büyük görünümde kalan alanı doldurur.
   const viewportStyle = z.full
@@ -66,6 +86,16 @@ export function ZoomableScan({ url, alt, highlight, selectionKey = null }: Props
             className="block max-w-none"
             onLoad={(e) => z.setNat({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
           />
+          {nat &&
+            marks?.map((m) => (
+              <div
+                key={m.key}
+                className={`pointer-events-none absolute rounded-sm border-solid ${MARK_TONE[m.tone]}`}
+                style={{ ...pct(m.box, nat), borderWidth: `${(m.tone === "word" ? 1 : 2) / (v?.scale || 1)}px` }}
+                data-testid={`scan-mark-${m.tone}`}
+                title={m.label}
+              />
+            ))}
           {highlight && nat && (
             // Çerçeve kalınlığı ölçeğe bölünür: ekranda hep ~2px kalır.
             <div
