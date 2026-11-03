@@ -59,7 +59,8 @@ router.get("/by-card/:barcode", requireAnyPermission(...PERMS), async (req: Requ
  *     summary: Okutmaya göre rotayı uygula (adım ekle / öndekileri ATLANDI yap / topları taşı)
  *     description: |
  *       İdempotent (clientToken). Açık iş başka istasyondaysa 409 SCAN_ROUTE_OPEN_ELSEWHERE; tablet onayıyla
- *       `closeOpenStepId` gönderilirse o adım mevcut kapatma yoluyla bitirilir. Atlanamaz adım 409 SCAN_ROUTE_MANDATORY_STEP.
+ *       `closeOpenStepId` gönderilirse o adım mevcut kapatma yoluyla bitirilir — kapatma ucunun yetkisi
+ *       (quality:write | mobile:kk2-kursun) yoksa 403 SCAN_ROUTE_CLOSE_FORBIDDEN. Atlanamaz adım 409 SCAN_ROUTE_MANDATORY_STEP.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
@@ -79,6 +80,7 @@ router.get("/by-card/:barcode", requireAnyPermission(...PERMS), async (req: Requ
  *     responses:
  *       200: { description: Uygulandı (kind NOOP | MOVE | INSERT) }
  *       400: { description: Doğrulama / istasyon oturumu yok }
+ *       403: { description: "closeOpenStepId için adım kapatma yetkisi yok (SCAN_ROUTE_CLOSE_FORBIDDEN)" }
  *       409: { description: Engel ya da eşzamanlı değişiklik (details.code) }
  */
 router.post("/by-card/:barcode", requireAnyPermission(...PERMS), async (req: Request, res: Response, next: NextFunction) => {
@@ -91,6 +93,7 @@ router.post("/by-card/:barcode", requireAnyPermission(...PERMS), async (req: Req
       stationId: stamp?.stationId ?? null,
       deviceId: req.device?.id ?? null,
       machineId: stamp?.machineId ?? null,
+      permissions: req.user?.permissions ?? [],
     });
     res.status(200).json({ success: true, data, message: data.kind === "INSERT" ? "Adım sahada eklendi." : data.kind === "MOVE" ? "İş bu istasyona geçti." : "Değişiklik yok." });
   } catch (err) {

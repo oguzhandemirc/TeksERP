@@ -62,6 +62,7 @@ import {
 } from "./helpers/station-capability-transfer.helper";
 import { applyKursunOperationTx } from "./helpers/kursun-operation.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { nextLiveStep, nextLiveStepWhere } from "./helpers/roll-step.helper";
 import { applyMeasuredWidthTx, assertStationCapturesWidth, measuredWidthLimit, type MeasuredWidthLimit } from "./helpers/measured-width.helper";
 import { awaitsMeterSignature, loadRollMeterBases, type RollMeterBase } from "./helpers/kursun-meter-variance-sql.helper";
 import { listMeterDeviations, type MeterDeviationFilter } from "./helpers/kursun-meter-deviation-list.helper";
@@ -1082,10 +1083,8 @@ export class KursunQcService {
       );
     }
 
-    // K29: ATLANDI (okutmayla atlanmış) adım "sonraki" olamaz — fason `nextStep` ile aynı kural.
-    const nextStep = step.workOrder.steps.find(
-      (s) => s.stepSequence > step.stepSequence && s.status !== StepStatus.SKIPPED
-    );
+    // K29: ATLANDI adım "sonraki" olamaz — tanım reopenStep/reopenPreview ile ORTAK (`nextLiveStep`).
+    const nextStep = nextLiveStep(step.workOrder.steps, step.stepSequence);
     // K29: rotası sahada belirlenen İE'de son adım "iş bitti" demek değildir — toplar sonraki okutmayı bekler.
     const awaitNextScan = !nextStep && step.workOrder.scanRouted;
 
@@ -1322,7 +1321,7 @@ export class KursunQcService {
           select: {
             steps: {
               orderBy: { stepSequence: "asc" },
-              select: { id: true, stepSequence: true },
+              select: { id: true, stepSequence: true, status: true },
             },
           },
         },
@@ -1338,9 +1337,7 @@ export class KursunQcService {
       );
     }
 
-    const nextStep = step.workOrder.steps.find(
-      (s) => s.stepSequence > step.stepSequence
-    );
+    const nextStep = nextLiveStep(step.workOrder.steps, step.stepSequence);
 
     // F161: yalnız EN SON finish turunu geri aç (aynı step birden çok turda kapatıldıysa
     // — fason çoklu-sevk — eski turun rulolarını yanlış geri çekme/eski turu bloklama).
@@ -1584,7 +1581,7 @@ export class KursunQcService {
           select: {
             steps: {
               orderBy: { stepSequence: "asc" },
-              select: { id: true, stepSequence: true },
+              select: { id: true, stepSequence: true, status: true },
             },
           },
         },
@@ -1604,9 +1601,7 @@ export class KursunQcService {
       return block(`Bu adım zaten kapalı değil (durum: ${step.status})`);
     }
 
-    const nextStep = step.workOrder.steps.find(
-      (s) => s.stepSequence > step.stepSequence
-    );
+    const nextStep = nextLiveStep(step.workOrder.steps, step.stepSequence);
 
     // F161: yalnız EN SON finish turu (reopenStep ile aynı kaynak).
     const { closed: closedMovements } = await this.loadLatestFinishTurn(step.id);
@@ -1845,11 +1840,7 @@ export class KursunQcService {
 
     // Sonraki adım: atlanmamış ilk büyük sıra (rota sırası stepSequence'tır).
     const nextStep = await prisma.workOrderStep.findFirst({
-      where: {
-        workOrderId: step.workOrderId,
-        stepSequence: { gt: step.stepSequence },
-        status: { not: StepStatus.SKIPPED },
-      },
+      where: nextLiveStepWhere(step.workOrderId, step.stepSequence),
       orderBy: { stepSequence: "asc" },
       select: { station: { select: { name: true } } },
     });

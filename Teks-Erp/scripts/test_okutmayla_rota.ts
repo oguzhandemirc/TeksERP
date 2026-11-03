@@ -10,6 +10,8 @@
 //   §c İleri istasyon: aradaki bekleyenler ATLANDI (satır yerinde, skipReason SCAN_SKIP), olay defterine SCAN_SKIP,
 //      kaynak kuyruk hareketi geri alınır
 //   §d Açık iş başka istasyonda: 409 SCAN_ROUTE_OPEN_ELSEWHERE (closable); "bitmiş say ve geç" → geçer
+//   §d2 "Bitmiş say ve geç" adım kapatma yetkisi ister (quality:write | mobile:kk2-kursun), yoksa 403
+//   §k ATLANDI ara adım: finish/reopen/reopenPreview aynı "sonraki adım" (nextLiveStep) → yeniden açma çalışır
 //   §e Atlanamaz istasyon: 409 SCAN_ROUTE_MANDATORY_STEP, hiçbir şey yazılmaz
 //   §f Aynı okutma tekrarı (aynı clientToken) ikinci adım eklemez; yeni tokenla tekrar NOOP
 //   §g İki eşzamanlı okutma → TEK ekleme
@@ -19,6 +21,7 @@
 // Koşum: npx tsx scripts/test_okutmayla_rota.ts
 // =============================================================================
 import { randomUUID } from "crypto";
+import { readFileSync } from "fs";
 import { Prisma, RollForm, RollOperationType, RollStatus, StepStatus, TravelerCardStatus, WorkOrderStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { KursunQcService } from "../src/services/kursun-qc.service";
@@ -125,8 +128,8 @@ async function main(): Promise<void> {
   fx.valueIds.push(v40);
   await prisma.stationProperty.create({ data: { stationId: Q, propertyId: propId, mode: "REQUIRED", defaultValueId: v40 } });
   const ctx: Ctx = { itemId, actor };
-  const apply = (card: string, stationId: string, token = randomUUID(), closeOpenStepId: string | null = null) =>
-    applyScanRoute(card, { clientToken: token, closeOpenStepId }, { userId: actor, stationId, deviceId: "TEST-TABLET", machineId: null });
+  const apply = (card: string, stationId: string, token = randomUUID(), closeOpenStepId: string | null = null, permissions: readonly string[] = ["*"]) =>
+    applyScanRoute(card, { clientToken: token, closeOpenStepId }, { userId: actor, stationId, deviceId: "TEST-TABLET", machineId: null, permissions });
 
   // ── §0 ──
   section("§0 ayar + SIRALI bayt-aynı");
@@ -222,6 +225,33 @@ async function main(): Promise<void> {
   const rd = await apply(jd.card, T, randomUUID(), jd.steps[0]!);
   const sd = await stepsOf(jd.woId);
   check("'bitmiş say ve geç' → Kurşun TAMAMLANDI, top Tambur'da", sd[0]?.status === StepStatus.COMPLETED && (await rollsAt(jd.steps[1]!)) === 1, `${rd.kind} ${sd.map((s) => s.status).join(",")}`);
+
+  // ── §d2 ── s14 inceleme B1: "bitmiş say ve geç" kurşun/KK adım kapatma YETKİSİNİ (finish-step ucu) ister.
+  section("§d2 bitmiş say ve geç: adım kapatma yetkisi");
+  const jd2 = await makeJob(ctx, "D2", [K, T], 1);
+  await prisma.rollOperation.create({ data: { rollId: jd2.rollIds[0]!, workOrderStepId: jd2.steps[0]!, operationType: RollOperationType.QC2_COMPLETED, operatorId: actor } });
+  const ad2 = await errOf(() => apply(jd2.card, T, randomUUID(), jd2.steps[0]!, ["mobile:tambur"]));
+  check("yalnız mobile:tambur → 403 SCAN_ROUTE_CLOSE_FORBIDDEN", ad2.status === 403 && ad2.code === "SCAN_ROUTE_CLOSE_FORBIDDEN", JSON.stringify(ad2));
+  const sd2 = await stepsOf(jd2.woId);
+  check("yetkisiz denemede Kurşun açık, top yerinde", sd2[0]?.status === StepStatus.ACTIVE && (await rollsAt(jd2.steps[0]!)) === 1, sd2.map((s) => s.status).join(","));
+  const rd2 = await apply(jd2.card, T, randomUUID(), jd2.steps[0]!, ["mobile:tambur", "mobile:kk2-kursun"]);
+  check("mobile:kk2-kursun ile geçer", (await stepsOf(jd2.woId))[0]?.status === StepStatus.COMPLETED && (await rollsAt(jd2.steps[1]!)) === 1, rd2.kind);
+
+  // ── §k ── s14 inceleme B2: finish / reopen / reopenPreview AYNI "sonraki adım" (ATLANDI hariç).
+  section("§k ATLANDI ara adımdan sonra kurşun yeniden açılır");
+  const jk = await makeJob(ctx, "K", [K, Q, T], 1);
+  await prisma.workOrderStep.update({ where: { id: jk.steps[1]! }, data: { status: StepStatus.SKIPPED, skipReason: "SCAN_SKIP" } });
+  await prisma.rollOperation.create({ data: { rollId: jk.rollIds[0]!, workOrderStepId: jk.steps[0]!, operationType: RollOperationType.QC2_COMPLETED, operatorId: actor } });
+  await qc.finishStep({ stepId: jk.steps[0]! }, actor, null);
+  check("finish: top ATLANDI'yı geçip Tambur'da", (await rollsAt(jk.steps[2]!)) === 1);
+  const pk = await qc.reopenPreview(jk.steps[0]!);
+  check("reopenPreview canReopen=true", pk.data?.canReopen === true, JSON.stringify(pk.data?.blockReason));
+  const rk = await outcome(() => qc.reopenStep({ stepId: jk.steps[0]! }, actor));
+  check("reopenStep başarılı, top Kurşun'a döndü", (await rollsAt(jk.steps[0]!)) === 1 && (await rollsAt(jk.steps[2]!)) === 0, rk);
+  check("ATLANDI satırı yerinde", (await stepsOf(jk.woId))[1]?.status === StepStatus.SKIPPED);
+  const qcSrc = readFileSync("src/services/kursun-qc.service.ts", "utf8");
+  check("kursun-qc.service: 'sonraki adım' yalnız nextLiveStep'ten (inline stepSequence > step.stepSequence yok)",
+    !/stepSequence\s*>\s*step\.stepSequence/.test(qcSrc) && !/stepSequence:\s*\{\s*gt:\s*step\.stepSequence/.test(qcSrc) && (qcSrc.match(/nextLiveStep/g) ?? []).length >= 4);
 
   // ── §e ──
   section("§e Atlanamaz");
