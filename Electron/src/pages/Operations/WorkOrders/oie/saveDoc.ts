@@ -30,9 +30,10 @@ export async function saveDoc(i: SaveDocInput): Promise<SaveOutcome> {
   return { kind: "DRAFT_SAVED" };
 }
 
-export const DRAFT_SAVED_TEXT = `Belge taslak olarak kaydedildi. Bu fabrikada belge ayrı onaylanır: onay Gelen Belgeler ekranından verilince ${TERIM.terbiyeIsEmri.tekilKucuk} açılır.`;
+// K20: ad okuma anında rejimden çözülür (modül düzeyinde donmaz).
+export const draftSavedText = (): string => `Belge taslak olarak kaydedildi. Bu fabrikada belge ayrı onaylanır: onay Gelen Belgeler ekranından verilince ${TERIM.terbiyeIsEmri.tekilKucuk} açılır.`;
 /** İş emrini açan kayıt düğmesi (WITH_WORK_ORDER); ayrı onayda düğme "Taslak kaydet". */
-export const SAVE_LABEL = `${TERIM.terbiyeIsEmri.tekil} oluştur`;
+export const saveLabel = (): string => `${TERIM.terbiyeIsEmri.tekil} oluştur`;
 
 /** Sunucu ayarı formdan sonra kapandıysa (403) anlaşılır cümle; değilse null (sunucu cümlesi kullanılır). */
 export function saveErrorHint(e: unknown): string | null {

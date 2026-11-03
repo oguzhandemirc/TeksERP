@@ -8,7 +8,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import { applyPatch, docDraftReasons, initialDocDraft, noteWorkOrderBody, routeGramajOptions } from "../docDraft";
 import { routeHasKursunStep } from "../service";
-import { SAVE_LABEL, saveDoc } from "../saveDoc";
+import { saveLabel, saveDoc } from "../saveDoc";
 import { batchFailure } from "../batchToken";
 import { TopluBelgeForm } from "../TopluBelgeForm";
 
@@ -162,6 +162,6 @@ describe("toplu kayıt", () => {
 
 describe("kaydet düğmesi", () => {
   it("iş emrini açan kayıt düğmesi '<Terbiye İş Emri> oluştur' (çıplak 'Kaydet' değil)", () => {
-    expect(SAVE_LABEL).toBe("Terbiye İş Emri oluştur");
+    expect(saveLabel()).toBe("Terbiye İş Emri oluştur");
   });
 });
