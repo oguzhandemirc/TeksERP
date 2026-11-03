@@ -8,13 +8,15 @@ import { CellCrop } from "./CellCrop";
 import { NumericKeypad } from "./NumericKeypad";
 import { buildReviewQueue, cellPatch, fieldRect, lineScanId, parseTrNumber, type CellPatch, type ReviewItem } from "./review-queue";
 import type { DeliveryNoteLine } from "./types";
+import { scanRectFrame } from "./photoRetention";
+import type { ScanContentFields } from "./photoRetentionTypes";
 
 interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   lines: DeliveryNoteLine[];
   /** Belgenin taramaları — her hücrenin kırpığı kendi satırının sayfasından (`lineScanId`). */
-  scans: ReadonlyArray<{ id: string }>;
+  scans: ReadonlyArray<{ id: string } & Pick<ScanContentFields, "rectFrameWidth" | "rectFrameHeight">>;
   onSave: (item: ReviewItem, patch: CellPatch) => Promise<unknown>;
 }
 
@@ -61,7 +63,7 @@ export function CellReviewDialog({ open, onOpenChange, lines, scans, onSave }: P
         </DialogHeader>
         {item && line && (
           <div className="flex flex-col gap-3">
-            <CellCrop scanId={lineScanId(line, scans)} rect={fieldRect(line, item.field)} />
+            <CellCrop scanId={lineScanId(line, scans)} rect={fieldRect(line, item.field)} frame={scanRectFrame(scans.find((s) => s.id === lineScanId(line, scans)))} />
             <Input
               autoFocus
               inputMode="decimal"

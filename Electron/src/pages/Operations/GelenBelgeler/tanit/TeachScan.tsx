@@ -16,6 +16,8 @@ interface Props {
   words: readonly ScanWord[];
   state: TeachState;
   onToggle: (i: number) => void;
+  /** Kelime kutularının çerçevesi (okuma çerçevesi, fotoğraf yönünde) — KÜÇÜK fotoğrafta görüntü buna gerilir. */
+  frame?: { w: number; h: number } | null;
 }
 
 const MAX_HITS = 40;
@@ -41,7 +43,7 @@ export function WordSearch({ words, state, onToggle }: Pick<Props, "words" | "st
   );
 }
 
-export function TeachScan({ scanId, pageLabel, words, state, onToggle }: Props) {
+export function TeachScan({ scanId, pageLabel, words, state, onToggle, frame = null }: Props) {
   const img = useScanImage(scanId);
   return (
     <div className="flex min-w-0 flex-col gap-2" data-testid="teach-scan">
@@ -54,6 +56,7 @@ export function TeachScan({ scanId, pageLabel, words, state, onToggle }: Props) 
           url={img.url}
           alt={pageLabel}
           highlight={null}
+          frame={frame}
           marks={teachMarks(state, words)}
           onTap={(p) => {
             const i = wordAt(words, p);

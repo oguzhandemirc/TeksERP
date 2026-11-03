@@ -8,6 +8,9 @@ export type PhotoRetentionMode = "FULL" | "SHRINK_ON_APPROVAL" | "DELETE_ON_APPR
 export interface ScanContentFields {
   contentState?: DocumentScanContentState;
   contentStateAt?: string | null;
+  /** KÜÇÜK taramada OCR kutularının çerçevesi (fotoğraf yönünde); null/undefined = fotoğrafın kendi pikseli. */
+  rectFrameWidth?: number | null;
+  rectFrameHeight?: number | null;
 }
 
 /** `GET /api/gelen-belge/is-emirleri/:id/belgeler` — backend `gelen-belge-ie-kaynak.service.ts` aynası. */
@@ -16,5 +19,5 @@ export interface WorkOrderSourceNote {
   noteNo: string;
   status: NoteStatus;
   senderDocNo: string | null;
-  scans: Array<Pick<DocumentScanInfo, "id" | "pageNo" | "regionNo" | "mimeType"> & Required<ScanContentFields>>;
+  scans: Array<Pick<DocumentScanInfo, "id" | "pageNo" | "regionNo" | "mimeType"> & Required<Pick<ScanContentFields, "contentState" | "contentStateAt">>>;
 }

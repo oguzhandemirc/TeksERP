@@ -17,6 +17,18 @@ export function retentionDocNoWarning(mode: PhotoRetentionMode | null | undefine
 export const SCAN_PURGED_TEXT = "Fotoğraf saklama ayarı gereği silindi.";
 
 /** Detay künyesi SİLİNDİ diyorsa istek hiç atılmaz; eski backend `contentState` göndermez → istenir. */
+/** Kutu koordinatlarının çerçevesi: KÜÇÜK fotoğrafta kutular okuma (2600) çerçevesinde kalır, görüntü bu boyuta gerilir. */
+export function scanRectFrame(scan: ScanContentFields | null | undefined): { w: number; h: number } | null {
+  const w = scan?.rectFrameWidth;
+  const h = scan?.rectFrameHeight;
+  return w && h && w > 0 && h > 0 ? { w, h } : null;
+}
+
+/** Tanıtma kelime kutuları (`photoRect`) okuma çerçevesindedir; yan dönük sayfada fotoğraf yönüne takas. */
+export function wordsRectFrame(d: { imageWidth: number; imageHeight: number; rotation: number }): { w: number; h: number } {
+  return d.rotation === 90 || d.rotation === 270 ? { w: d.imageHeight, h: d.imageWidth } : { w: d.imageWidth, h: d.imageHeight };
+}
+
 export function isScanPurged(scan: ScanContentFields | null | undefined): boolean {
   return scan?.contentState === "PURGED";
 }

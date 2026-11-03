@@ -32,6 +32,8 @@ interface Props {
   marks?: readonly ScanMark[];
   /** Kısa tık/dokunma (kaydırma değil) — görüntü pikseli cinsinden nokta. */
   onTap?: (at: Pt) => void;
+  /** Kutuların çerçevesi (K28 KÜÇÜK fotoğraf: okuma çerçevesi ≠ bayt pikseli); verilirse görüntü bu boyuta gerilir. */
+  frame?: Size | null;
 }
 
 const pct = (r: Box, nat: Size) => ({
@@ -41,7 +43,7 @@ const pct = (r: Box, nat: Size) => ({
   height: `${(r.height / nat.h) * 100}%`,
 });
 
-export function ZoomableScan({ url, alt, highlight, selectionKey = null, marks, onTap }: Props) {
+export function ZoomableScan({ url, alt, highlight, selectionKey = null, marks, onTap, frame = null }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const z = useZoomView(ref, highlight, selectionKey);
   const { nat, view: v, vp } = z;
@@ -84,7 +86,8 @@ export function ZoomableScan({ url, alt, highlight, selectionKey = null, marks, 
             alt={alt}
             draggable={false}
             className="block max-w-none"
-            onLoad={(e) => z.setNat({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+            style={nat ? { width: nat.w, height: nat.h } : undefined}
+            onLoad={(e) => z.setNat(frame ?? { w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
           />
           {nat &&
             marks?.map((m) => (

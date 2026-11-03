@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useScanImage } from "./useScanImage";
-import { isScanPurged, SCAN_PURGED_TEXT } from "./photoRetention";
+import { isScanPurged, SCAN_PURGED_TEXT, scanRectFrame } from "./photoRetention";
 import { ZoomableScan } from "./ZoomableScan";
 import type { DocumentScanInfo, OcrRect } from "./types";
 
@@ -67,6 +67,7 @@ export function ScanViewer({ scans, highlight, highlightScanId = null, selection
           alt={`Belge sayfa ${scan.pageNo}`}
           highlight={highlight && (!ownScanId || ownScanId === scan.id) ? highlight : null}
           selectionKey={selectionKey}
+          frame={scanRectFrame(scan)}
         />
       )}
     </div>

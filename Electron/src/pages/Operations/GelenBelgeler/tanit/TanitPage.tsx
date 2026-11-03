@@ -16,6 +16,7 @@ import { useTeach } from "./useTeach";
 import { TeachPanel } from "./TeachPanel";
 import { TeachPreview } from "./TeachPreview";
 import { TeachScan } from "./TeachScan";
+import { wordsRectFrame } from "../photoRetention";
 
 export function TeachTemplatePage() {
   const { id = "" } = useParams();
@@ -55,7 +56,7 @@ export function TeachTemplatePage() {
               )}
               {t.words.isError && <p className="text-sm text-destructive">Bu sayfanın okunan yazıları alınamadı.</p>}
               {scan && t.state && t.words.data && (
-                <TeachScan scanId={scan.id} pageLabel={`Belge sayfa ${scan.pageNo}`} words={t.words.data.words} state={t.state} onToggle={(i) => t.setState((s) => toggleWord(s, i))} />
+                <TeachScan scanId={scan.id} pageLabel={`Belge sayfa ${scan.pageNo}`} words={t.words.data.words} frame={wordsRectFrame(t.words.data)} state={t.state} onToggle={(i) => t.setState((s) => toggleWord(s, i))} />
               )}
             </div>
             <div className="flex min-w-0 flex-col gap-3">
