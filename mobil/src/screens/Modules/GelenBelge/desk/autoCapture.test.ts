@@ -23,8 +23,10 @@ describe('stepAutoCapture', () => {
     expect(r.state.baseline).toBeCloseTo(EMPTY, -2);
   });
 
-  it('boş masa sürdükçe çekim yok', () => {
+  it('boş masa sürdükçe çekim yok ve boşta sayılır', () => {
     expect(run([EMPTY, EMPTY + 500, EMPTY - 400, EMPTY], calibrated()).actions).not.toContain('capture');
+    expect(stepAutoCapture(calibrated(), EMPTY).idle).toBe(true);
+    expect(stepAutoCapture(calibrated(), PAPER).idle).toBeFalsy();
   });
 
   it('hareketli sahne (el, kayan kağıt) çekilmez', () => {

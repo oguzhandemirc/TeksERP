@@ -28,6 +28,8 @@ export interface AutoDecision {
   action: AutoAction;
   hint: string;
   state: AutoCaptureState;
+  /** Masa sabit ve boş (boşta duraklatma sayacı yalnız bunda ilerler). */
+  idle?: boolean;
 }
 
 export const initialAutoState = (): AutoCaptureState => ({ baseline: null, recent: [], armed: true, lastCaptured: null });
@@ -54,8 +56,8 @@ export function stepAutoCapture(prev: AutoCaptureState, frameSize: number, cfg: 
   const level = mean(recent);
   const present = differs(level, s.baseline, cfg.presenceRatio);
   const capture = (): AutoDecision => ({ action: 'capture', hint: 'Çekiliyor…', state: { ...s, armed: false, lastCaptured: level } });
-  if (s.armed) return present ? capture() : { action: 'wait', hint: 'Kağıt bekleniyor', state: s };
-  if (!present) return { action: 'wait', hint: 'Masa boş — sonraki kağıdı koyun', state: { ...s, armed: true, lastCaptured: null } };
+  if (s.armed) return present ? capture() : { action: 'wait', hint: 'Kağıt bekleniyor', state: s, idle: true };
+  if (!present) return { action: 'wait', hint: 'Masa boş — sonraki kağıdı koyun', state: { ...s, armed: true, lastCaptured: null }, idle: true };
   // Önceki sayfa kaldırılmadan üstüne yeni sayfa kondu: sabit sahne öncekinden belirgin farklıysa yeni sayfadır.
   if (s.lastCaptured !== null && differs(level, s.lastCaptured, cfg.changeRatio)) return capture();
   return { action: 'wait', hint: 'Sayfa alındı — sonraki sayfayı koyun ya da Oku’ya basın', state: s };
