@@ -1,5 +1,5 @@
-// Tablet tanıtma akışı (sahte API): kutuya dokun → alan ata → önizle gövdesi → kaydet (yeni POST + clientToken | güncelle PUT expectedVersion);
-// bayat önizleme kaydı kapatır; telefonda / izinsiz / eski sunucuda giriş yok.
+// Tablet tanıtma akışı — GELİŞMİŞ (serbest) kip (sahte API): kutuya dokun → alan ata → önizle gövdesi → kaydet (yeni POST + clientToken |
+// güncelle PUT expectedVersion); bayat önizlemeyi Kaydet kendiliğinden tazeler (K30-A); izinsiz / eski sunucuda giriş yok. Rehberli kip: GuidedTeach.test.tsx.
 import React from 'react';
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -27,8 +27,6 @@ jest.mock('../../../../services/inboundDoc.service', () => ({
   },
 }));
 jest.mock('react-native-toast-message', () => ({ __esModule: true, default: { show: jest.fn() } }));
-const mockDevice = { type: 'tablet' as 'tablet' | 'phone' };
-jest.mock('../../../../hooks/useDeviceType', () => ({ useDeviceType: () => mockDevice.type }));
 
 const w = (text: string, [x, y]: [number, number], lineNo: number, width = 60): ScanWord => ({
   text, rect: { x, y, width, height: 20 }, photoRect: { x: x + 1000, y: y + 2000, width, height: 20 }, lineNo, confidence: 0.99,
@@ -63,7 +61,6 @@ async function press(el: Parameters<typeof fireEvent.press>[0]) {
 }
 
 beforeEach(() => {
-  mockDevice.type = 'tablet';
   for (const f of Object.values(mockApi)) f.mockReset();
   mockApi.scanWords.mockResolvedValue(SCAN);
   mockApi.suggestTemplate.mockResolvedValue(SUGGEST);
@@ -80,6 +77,9 @@ async function openNew(r: ReturnType<typeof renderWithPaper>) {
   fireEvent.press(await r.findByTestId('tanit-ac'));
   await flush();
   expect(await r.findByTestId('tanit-kutu-6')).toBeTruthy();
+  // Varsayılan rehberli kip; bu dosya serbest kipi sınar.
+  await press(r.getByTestId('tanit-gelismis'));
+  expect(r.getByTestId('tanit-panel')).toBeTruthy();
 }
 
 describe('TeachEntry + TeachModal (tablet)', () => {
@@ -97,8 +97,6 @@ describe('TeachEntry + TeachModal (tablet)', () => {
     expect(r.getByTestId('tanit-secili')).toHaveTextContent(/P2618733/);
     await press(r.getByTestId('tanit-alan-partiNo'));
     expect(r.getByTestId('tanit-atanan-f-partiNo')).toHaveTextContent(/P2618733/);
-    // Önizlemesiz kayıt yok.
-    expect(r.getByTestId('tanit-kaydet')).toBeDisabled();
 
     await press(r.getByTestId('tanit-onizle'));
     await flush();
@@ -142,7 +140,7 @@ describe('TeachEntry + TeachModal (tablet)', () => {
     });
   });
 
-  it('işaretleme önizlemeden sonra değişirse önizleme bayat, kayıt kapalı', async () => {
+  it('işaretleme önizlemeden sonra değişirse önizleme bayat; Kaydet tek dokunuşta önce tazeler sonra kaydeder', async () => {
     const r = renderWithPaper(<TeachEntry detail={detail(null)} localPages={LOCAL} />);
     await openNew(r);
     fireEvent.changeText(r.getByTestId('tanit-ad'), 'Güleçsoy');
@@ -155,7 +153,11 @@ describe('TeachEntry + TeachModal (tablet)', () => {
     await press(r.getByTestId('tanit-kutu-7'));
     await press(r.getByTestId('tanit-sutun-m'));
     expect(r.getByTestId('tanit-onizleme-bayat')).toBeTruthy();
-    expect(r.getByTestId('tanit-kaydet')).toBeDisabled();
+    await press(r.getByTestId('tanit-kaydet'));
+    await flush();
+    expect(mockApi.suggestTemplate).toHaveBeenCalledTimes(2);
+    expect(mockApi.suggestTemplate.mock.calls[1][0].table).toBeTruthy();
+    expect(mockApi.createUserTemplate).toHaveBeenCalledTimes(1);
   });
 
 });
@@ -240,14 +242,13 @@ describe('TeachEntry + TeachModal — giriş ve görünürlük', () => {
     expect(r.getByTestId('tanit-baslik')).toHaveTextContent(/Şablonu güncelle — Güleçsoy/);
   });
 
-  it('telefonda, izinsizde ve eski sunucuda (tarama yok) giriş çizilmez', async () => {
-    mockDevice.type = 'phone';
+  it('izinsizde ve eski sunucuda (tarama yok) giriş çizilmez; cihaz tipinden bağımsız (K30-A: telefonda da açılır)', async () => {
     const a = renderWithPaper(<TeachEntry detail={detail(null)} localPages={LOCAL} />);
     await flush();
-    expect(a.queryByTestId('tanit-giris')).toBeNull();
+    expect(a.getByTestId('tanit-giris')).toBeTruthy();
     a.unmount();
+    mockApi.listUserTemplates.mockClear();
 
-    mockDevice.type = 'tablet';
     setPerms(['gelen-belge:read', 'gelen-belge:write']);
     const b = renderWithPaper(<TeachEntry detail={detail(null)} localPages={LOCAL} />);
     await flush();

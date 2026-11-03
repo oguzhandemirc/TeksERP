@@ -7,10 +7,11 @@ import { useAttemptToken } from '../../../../offline/attemptToken';
 import { isAmbiguousFailure } from '../../../../offline/entryAttempt';
 import { fabricPropertyService, type KursunGramajCatalog } from '../../../../services/fabricProperty.service';
 import { fetchDefaultTargets, passThroughTargets, useRouteDefaultTargets } from '../../../../hooks/useRouteDefaultTargets';
-import { INBOUND_DOC_SETTINGS_KEY, inboundDocService, type CreateWorkOrderFromNoteBody, type InboundNoteDetail, type NotePartiesView } from '../../../../services/inboundDoc.service';
+import { INBOUND_DOC_SETTINGS_KEY, inboundDocService, type CreateWorkOrderFromNoteBody, type DocFormFields, type InboundNoteDetail, type NotePartiesView } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { printTravelerCardForWorkOrder } from '../../../../services/travelerCardPrint';
 import { kursunStepOf } from '../desk/deskPlan';
+import { batchPatch, parseMeters } from '../approvalGate';
 import { duplicateDocNoConflict, type DuplicateDocNoConflict } from '../DuplicateDocNoDialog';
 import { initialMultiParty, type MultiPartyDraft } from './partyDraft';
 import { loadRecentOwners, rememberOwner } from './recentOwners';
@@ -210,6 +211,35 @@ function useGramajReseed(setRows: Dispatch<SetStateAction<DocRow[]>>, gramajFor:
   }, [setRows, gramajFor]);
 }
 
+const text = (v: string | null | undefined): string | null => (v != null && v.trim() !== '' ? v.trim() : null);
+
+/** Tanıtma önizlemesinin değerleriyle satır: form alanları + metre + (aday listesinde varsa) parti no + müşteri; `runKey` artar → tek form yeniden dolar. */
+export function taughtRow(r: DocRow, f: Record<string, string | null>, ownerCustomerId: string | null): DocRow {
+  if (!r.detail || isDone(r)) return r;
+  const ff = { ...(r.detail.formFields ?? {}) };
+  const put = <K extends keyof DocFormFields>(k: K, v: string | null) => {
+    if (v) ff[k] = v as DocFormFields[K];
+  };
+  put('hedefMetraj', text(f.hedefMetraj));
+  put('hedefKg', text(f.hedefKg));
+  put('en', text(f.en));
+  put('desenText', text(f.desen));
+  put('renkText', text(f.renk));
+  put('not', text(f.not));
+  let form = r.form;
+  if (form) {
+    const m = text(f.toplamMetre) ? parseMeters(f.toplamMetre!) : null;
+    const cand = (r.detail.batchNoCandidates ?? []).find((c) => c.value === text(f.partiNo));
+    form = {
+      ...form,
+      ...(m !== null ? { meters: m, metersReview: false } : {}),
+      ...(cand ? { ourBatchNo: cand.value, ourBatchNoKey: batchPatch(cand).ourBatchNoKey ?? null } : {}),
+      ...(ownerCustomerId ? { ownerCustomerId, ownerSuggested: null } : {}),
+    };
+  }
+  return { ...r, detail: { ...r.detail, formFields: ff }, form, runKey: r.runKey + 1 };
+}
+
 /** Satır düzenleyicileri (okuma → form, kullanıcı düzenlemesi, parti listesi); kayıt döngüsünden ayrı. */
 function useRowMutators(setRows: Dispatch<SetStateAction<DocRow[]>>, gramajFor: GramajFor) {
   const addNote = useCallback((note: { id: string; noteNo: string }, runKey: number) => {
@@ -248,7 +278,17 @@ function useRowMutators(setRows: Dispatch<SetStateAction<DocRow[]>>, gramajFor: 
   const setMulti = useCallback((noteId: string, multi: MultiPartyDraft) => setRows((rs) => applyMulti(rs, noteId, multi)), [setRows]);
 
   const removeRow = useCallback((noteId: string) => setRows((rs) => rs.filter((r) => r.noteId !== noteId)), [setRows]);
-  return { addNote, setDetail, updateForm, setParties, setMulti, removeRow };
+  // K30-A: belge yeni şablonla yeniden okutuldu → okuma baştan izlenir, form yeni okumadan kurulur.
+  const rereadRow = useCallback(
+    (noteId: string) => setRows((rs) => rs.map((r) => (r.noteId === noteId && !isDone(r) ? { ...r, runKey: r.runKey + 1, detail: null, form: null, parties: null, gramajTouched: false, result: null } : r))),
+    [setRows],
+  );
+  // K30-A: yeniden okutulamayan (satırlı) belgede tanıtma önizlemesinin değerleri forma dolar (sunucu yeniden okumaz).
+  const applyTaught = useCallback(
+    (noteId: string, fields: Record<string, string | null>, ownerCustomerId: string | null) => setRows((rs) => rs.map((r) => (r.noteId === noteId ? taughtRow(r, fields, ownerCustomerId) : r))),
+    [setRows],
+  );
+  return { addNote, setDetail, updateForm, setParties, setMulti, removeRow, rereadRow, applyTaught };
 }
 
 /** `extraBody`: S16b tek formun satır başına ek alanları (çok parti kipine göre değişir); verilmezse bugünkü gövde. */
@@ -268,7 +308,7 @@ export function useWoRows(route: ProductionRoute, opts?: { extraBody?: (r: DocRo
 
   useGramajReseed(setRows, gramajFor);
 
-  const { addNote, setDetail, updateForm, setParties, setMulti, removeRow } = useRowMutators(setRows, gramajFor);
+  const { addNote, setDetail, updateForm, setParties, setMulti, removeRow, rereadRow, applyTaught } = useRowMutators(setRows, gramajFor);
   const setResult = (noteId: string, result: RowResult) => setRows((rs) => rs.map((r) => (r.noteId === noteId ? { ...r, result } : r)));
 
   const printFor = async (noteId: string, workOrderId: string) => {
@@ -326,7 +366,7 @@ export function useWoRows(route: ProductionRoute, opts?: { extraBody?: (r: DocRo
 
   return {
     rows, mode, showGramaj, catalog, saving, recent, counts, autoPrint,
-    addNote, setDetail, setParties, setMulti, updateForm, removeRow, saveAll,
+    addNote, setDetail, setParties, setMulti, updateForm, removeRow, rereadRow, applyTaught, saveAll,
     duplicate,
     dismissDuplicate: () => setDuplicate(null),
     /** Diyalogdaki "Yine de onayla": yalnız o satır, `confirmDuplicateDocNo: true` ile. */

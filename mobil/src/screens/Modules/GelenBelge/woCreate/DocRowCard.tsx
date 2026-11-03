@@ -16,6 +16,7 @@ import { batchPatch, meterChoices, parseMeters } from '../approvalGate';
 import { detailFromSummary, pinRecent, rowIssues, withSummaryFields } from './woFromDoc';
 import type { DocRow, WoRowsState } from './useWoRows';
 import PartyRows, { useRowParties } from './PartyRows';
+import TeachBanner from '../tanit/TeachBanner';
 
 interface Props {
   row: DocRow;
@@ -56,6 +57,7 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
         )}
       </View>
       {view?.reason ? <Text style={styles.note}>{view.reason}</Text> : null}
+      {readDone && read.watch?.phase === 'done' && <TeachBanner row={row} wo={wo} tanitim={read.watch.summary.tanitim} customers={customers} />}
       {detailFailed && <Text style={styles.note} testID={`belge-satir-detay-hata-${row.noteNo}`}>Belge detayı okunamadı; form okuma özetinden dolduruldu.</Text>}
       {read.watch && read.watch.phase !== 'polling' && !readDone && (
         <Button mode="outlined" icon="refresh" onPress={read.recheck} contentStyle={styles.btn}>

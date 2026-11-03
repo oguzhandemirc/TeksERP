@@ -8,7 +8,7 @@ import type { Rect, ScanWord, ScanWords, SuggestBody, TemplateJson } from '../..
 export interface ScanMark {
   key: string;
   box: Rect;
-  tone: 'word' | 'selected' | 'field' | 'column' | 'section';
+  tone: 'word' | 'selected' | 'field' | 'column' | 'section' | 'identifier';
   label?: string;
 }
 
@@ -276,4 +276,11 @@ export function teachMarks(s: TeachState, words: readonly ScanWord[]): ScanMark[
   for (const i of s.totalsLabel ?? []) tone.set(i, { tone: 'column', label: 'Toplam satırı' });
   for (const i of s.selected) tone.set(i, { tone: 'selected', label: 'Seçili' });
   return words.map((w, i) => ({ key: String(i), box: w.photoRect, tone: tone.get(i)?.tone ?? 'word', label: tone.get(i)?.label ?? w.text }));
+}
+
+/** "Aynı tip (güncelle)": işaretlemeyi koru, seçilen şablonun kimlik yazılarını + taşınabilir yapılarını + adını al. */
+export function adoptTemplate(s: TeachState, t: { name: string; template: TemplateJson }): TeachState {
+  let out: TeachState = { ...s, name: t.name, keepOld: oldParts(t.template) };
+  for (const k of templateKeywords(t.template)) out = addIdentifier(out, k);
+  return out;
 }

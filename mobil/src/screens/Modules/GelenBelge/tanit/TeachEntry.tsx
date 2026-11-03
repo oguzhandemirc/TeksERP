@@ -1,12 +1,11 @@
 // Belge Tara okuma sonucunda tanıtmaya giriş (S1b): "Bu belgeyi tanıt" / "Şablonu güncelle"; belge tanınmadıysa "Bu belge hangi tip?"
-// (listeden seç = o şablonu bu belgeyle güncelle | yeni tip tanıt). Yalnız tablette, `gelen-belge:template` + `gelen-belge:read` izniyle,
-// okunmuş ve bu tabletteki fotoğrafı eşlenen sayfa varsa çizilir; telefonda gizli (tanıtma geniş ekran ister).
-import React, { useState } from 'react';
+// (listeden seç = o şablonu bu belgeyle güncelle | yeni tip tanıt). `gelen-belge:template` + `gelen-belge:read` izniyle, okunmuş ve
+// bu cihazdaki fotoğrafı eşlenen sayfa varsa çizilir. K30-A: telefonda da açılır (rehberli kip dikey yerleşimde çalışır).
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Text } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import PickerModal from '../../../../components/PickerModal';
-import { useDeviceType } from '../../../../hooks/useDeviceType';
 import { usePermissions } from '../../../../hooks/usePermission';
 import { inboundDocService, type InboundNoteDetail } from '../../../../services/inboundDoc.service';
 import { colors, radius, spacing, typography } from '../../../../theme';
@@ -17,23 +16,32 @@ import { USER_TEMPLATES_PREFIX } from './useTeachModal';
 interface Props {
   detail: InboundNoteDetail | undefined;
   localPages: readonly { sha256: string; uri: string }[];
+  /** Hub "Belge tanıt" (K30-A1): okuma bitince tanıtma ekranı kendiliğinden bir kez açılır. */
+  autoOpen?: boolean;
 }
 
 // Liste anahtarı detay anahtarlarının öneki — kayıt sonrası tek invalidate ikisini tazeler (useTeachModal).
 export const USER_TEMPLATES_KEY = USER_TEMPLATES_PREFIX;
 
-export default function TeachEntry({ detail, localPages }: Props) {
-  const tablet = useDeviceType() === 'tablet';
+export default function TeachEntry({ detail, localPages, autoOpen = false }: Props) {
   const { has } = usePermissions();
-  const allowed = tablet && has('gelen-belge:template') && has('gelen-belge:read');
+  const allowed = has('gelen-belge:template') && has('gelen-belge:read');
   const pages = allowed ? teachPages(detail, localPages) : [];
   const unknown = isUnrecognized(detail, pages);
   const [picking, setPicking] = useState(false);
   const [open, setOpen] = useState<{ code: string | null } | null>(null);
   const list = useQuery({ queryKey: USER_TEMPLATES_KEY, queryFn: () => inboundDocService.listUserTemplates(), enabled: pages.length > 0, retry: false });
-  if (pages.length === 0) return null;
   // Belgenin okunduğu şablon bir kullanıcı şablonuysa düğme "Şablonu güncelle" olur.
   const own = detail?.templateId ? (list.data ?? []).find((r) => r.id === detail.templateId) : undefined;
+  const ready = pages.length > 0 && !list.isLoading;
+  const autoDone = useRef(false);
+  const ownCode = own?.code ?? null;
+  useEffect(() => {
+    if (!autoOpen || !ready || autoDone.current) return;
+    autoDone.current = true;
+    setOpen({ code: ownCode });
+  }, [autoOpen, ready, ownCode]);
+  if (pages.length === 0) return null;
   const active = (list.data ?? []).filter((r) => r.isActive);
   return (
     <View style={[styles.box, unknown && styles.unknown]} testID="tanit-giris">

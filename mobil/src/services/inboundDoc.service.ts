@@ -100,7 +100,11 @@ export interface ReadSummary {
   /** S16a: tanıtmada işaretlenen form alanları + katalog önerileri (tek form doldurur). Eski sunucu göndermez. */
   formFields?: DocFormFields | null;
   suggestions?: DocFormSuggestions | null;
+  /** K30-T: belge kullanıcı şablonuyla mı okundu (TANITILDI) / hiçbir şablon tutmadı mı (TANITILMAMIS). Yerleşik şablonda ve eski sunucuda yok. */
+  tanitim?: ReadTanitim;
 }
+
+export type ReadTanitim = { durum: 'TANITILDI'; sablonKodu: string; sablonAdi: string } | { durum: 'TANITILMAMIS' };
 
 /** S16a sözleşme 3: belgeden okunan form değerleri (sayılar sunucuda TR biçiminden çözülür; string de kabul). */
 export interface DocFormFields {
@@ -358,6 +362,10 @@ export const inboundDocService = {
     apiClient
       .post<ApiResponse<Omit<ApproveNoteResult, 'warnings'>>>(`/gelen-belge/irsaliyeler/${noteId}/onay`, body, { timeout: UPLOAD_TIMEOUT_MS })
       .then((r) => ({ ...r.data.data, warnings: r.data.warnings ?? [] })),
+
+  /** Okunmuş sayfayı yeni şablonla yeniden okut (tanıtma sonrası). Satırlı/taslak olmayan belgede 409 → çağıran yerel doldurmaya düşer. */
+  requeueScan: (scanId: string): Promise<unknown> =>
+    apiClient.post<ApiResponse<unknown>>(`/gelen-belge/taramalar/${scanId}/oku`, {}).then((r) => r.data.data),
 
   // Belge tipi tanıtma (S1b) — hepsi `gelen-belge:template`; ekran izinsizde çizilmez.
   scanWords: (scanId: string): Promise<ScanWords> =>
