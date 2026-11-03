@@ -20,6 +20,7 @@ import { cutOpenFabricSchema, cutWarehouseRollSchema } from "../src/controllers/
 import { roleGrade } from "./fixture-quality-grade";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { testActorId } from "./fixture-test-user";
+import { cleanupTestCustomers } from "./fixture-customer-cleanup";
 
 let pass = 0;
 let fail = 0;
@@ -163,7 +164,7 @@ async function cleanup(): Promise<void> {
   await prisma.roll.deleteMany({ where: { id: { in: parentIds } } });
   await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } });
   await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
-  await prisma.customer.deleteMany({ where: { id: { in: customerIds } } });
+  await cleanupTestCustomers(customerIds); // hesap → şube → kart (test_kart_teardown_hesap §0b)
 }
 
 main()
