@@ -40,6 +40,7 @@ function kosScript(args: string[]): { kod: number; cikti: string } {
 const kapi = (cancelReasonCode: string | null) => resolveRollRestoreBlockReason({
   status: RollStatus.CANCELLED, preCancelStatus: RollStatus.STOCK, batchId: null, sackId: null, shipmentId: null,
   currentStepId: null, cancelReasonCode, movementCount: 0, operationCount: 0, childCount: 0, dispatchItemCount: 0, kartelaItemCount: 0,
+  deliveryNoteStatus: null,
 });
 
 async function main(): Promise<void> {

@@ -277,6 +277,8 @@ const SERVICE_ITEM_ID_FILES = new Set([
   "services/helpers/service-preview-gate.helper.ts",
   // K2a: ürün kartı canlı referans kataloğu — eşlenmiş kalemi pasife alma kapısı için sayar (çözücü değil).
   "services/helpers/item-lifecycle.helper.ts",
+  // K21: `PropertyValueInput` istemci sözleşmesi tipi servisten buraya taşındı (yalnız tip; çözücü değil).
+  "services/helpers/fabric-property-input.helper.ts",
 ]);
 // MALİYET tarafı beyanlı okuyucular (D4-G1a sarf normu): `serviceItemId` normun KENDİ kolonudur, hizmet
 // kalemi çözümü değildir — FinishingRate yasağı (gelir ≠ maliyet) bunlara UYGULANMAZ, beyan yine iki yönlü.
