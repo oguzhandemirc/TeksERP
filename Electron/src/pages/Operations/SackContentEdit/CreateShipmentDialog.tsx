@@ -293,12 +293,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
           {/* Teslim yeri (K18) — opsiyonel; kapalıyken gövde bugünkü gibi. */}
           <DeliveryToFields key={sackKey} value={deliveryTo} onChange={setDeliveryTo} ownerCustomerId={effCustomerId} disabled={createMut.isPending} />
 
-          <ShipmentSackCountField
-            value={manualSackText}
-            onChange={setManualSackText}
-            systemCount={sackIds.length}
-            invalid={manualSackGecersiz}
-          />
+          <ShipmentSackCountField value={manualSackText} onChange={setManualSackText} systemCount={sackIds.length} invalid={manualSackGecersiz} />
 
           {/* Sipariş seçimi */}
           <div className="rounded-md border p-3">
@@ -310,10 +305,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
                 sunucu siparişsiz kurulumu 400 ile reddeder. Kuralı burada
                 söylemek, kullanıcıyı 400'e kadar götürmekten iyidir. */}
             {orderRequirement === "block" && !orderless && orderIds.size === 0 && (
-              <p className="mb-2 text-xs text-amber-600 dark:text-amber-500">
-                Bu kurulumda sevkiyat siparişe bağlanmalı — sipariş seçin ya da yukarıdaki
-                kutuyu işaretleyip siparişsiz sevk niyetini beyan edin.
-              </p>
+              <p className="mb-2 text-xs text-amber-600 dark:text-amber-500">Bu kurulumda sevkiyat siparişe bağlanmalı — sipariş seçin ya da yukarıdaki kutuyu işaretleyip siparişsiz sevk niyetini beyan edin.</p>
             )}
             {!orderless &&
               (effCustomerId ? (
