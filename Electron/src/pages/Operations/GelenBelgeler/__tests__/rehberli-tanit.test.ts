@@ -23,7 +23,8 @@ const result = (fields: Record<string, string | null>, extra: Partial<SuggestRes
 
 describe("rehberli tanıtma reducer'ı", () => {
   it("adım sırası: başlık → Müşteri, Parti no, Hedef metraj, Kurşun metresi, En, Desen, Renk → bitir", () => {
-    expect(GUIDED_FIELDS).toEqual(["musteri", "partiNo", "hedefMetraj", "toplamMetre", "en", "desen", "renk"]);
+    expect(GUIDED_FIELDS).toEqual(["musteri", "partiNo", "hedefMetraj", "toplamMetre", "en", "desen", "renk", "evrakNo"]);
+    expect(stepField(GUIDED_FIELDS.length)).toBe("evrakNo");
     expect(stepField(0)).toBeNull();
     expect(stepField(1)).toBe("musteri");
     expect(stepField(FINISH_STEP)).toBeNull();

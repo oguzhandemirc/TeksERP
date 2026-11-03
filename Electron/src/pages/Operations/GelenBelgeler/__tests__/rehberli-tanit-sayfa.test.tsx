@@ -79,7 +79,7 @@ describe("rehberli tanıtma sayfası", () => {
     expect(await screen.findByTestId("guided-readout-ok")).toHaveTextContent("Okunan: P2618733");
     expect(api.suggestTemplate).toHaveBeenCalledTimes(1);
     expect(api.suggestTemplate.mock.calls[0]![0]).toMatchObject({ scanId: "s1", assignments: [{ field: "partiNo", rect: { x: 200, y: 300 } }] });
-    await userEvent.click(screen.getByTestId("guided-chip-8"));
+    await userEvent.click(screen.getByTestId("guided-chip-9"));
     expect(screen.getByTestId("guided-name")).toHaveValue("GÜLEÇSOY BOYA");
     await userEvent.click(screen.getByTestId("teach-save"));
     await waitFor(() => expect(api.createUserTemplate).toHaveBeenCalledTimes(1));
@@ -120,7 +120,7 @@ describe("rehberli tanıtma — inceleme düzeltmeleri", () => {
   it("Bitir'de ad yazmak önizleme isteği atmaz (sabit önizleme adı); kayıtta gerçek ad gider", async () => {
     await tapPartiNo();
     await screen.findByTestId("guided-readout-ok");
-    await userEvent.click(screen.getByTestId("guided-chip-8"));
+    await userEvent.click(screen.getByTestId("guided-chip-9"));
     await userEvent.clear(screen.getByTestId("guided-name"));
     await userEvent.type(screen.getByTestId("guided-name"), "Güleçsoy çeki");
     await new Promise((r) => setTimeout(r, 600));
@@ -144,7 +144,7 @@ describe("rehberli tanıtma — inceleme düzeltmeleri", () => {
     expect(api.updateUserTemplate).not.toHaveBeenCalled();
     await userEvent.click(screen.getByTestId("guided-chip-0"));
     expect(screen.getByTestId("guided-identifiers")).not.toHaveTextContent("A BOYA SAN");
-    await userEvent.click(screen.getByTestId("guided-chip-8"));
+    await userEvent.click(screen.getByTestId("guided-chip-9"));
     expect(screen.getByTestId("guided-name")).toHaveValue("GÜLEÇSOY BOYA");
   });
 

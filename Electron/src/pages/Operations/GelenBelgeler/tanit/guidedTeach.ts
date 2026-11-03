@@ -6,9 +6,10 @@ import { addIdentifier, assignField, clearField, FIELD_OPTIONS, lineTexts, sugge
 import type { ScanWord, ScanWords, SimilarTemplate, SuggestResult } from "./types";
 
 /** İlk sürümün alan sırası (K30-T A2; anahtarlar backend ASSIGNABLE_FIELDS). */
-export const GUIDED_FIELDS: readonly FieldKey[] = ["musteri", "partiNo", "hedefMetraj", "toplamMetre", "en", "desen", "renk"];
+// Evrak no SON adım: istasyonda belge okutma iş emrini önce bununla bulur (K17/K30-E); belgede yoksa atlanır.
+export const GUIDED_FIELDS: readonly FieldKey[] = ["musteri", "partiNo", "hedefMetraj", "toplamMetre", "en", "desen", "renk", "evrakNo"];
 
-const GUIDED_LABEL: Partial<Record<FieldKey, string>> = { partiNo: "Parti no", desen: "Desen", renk: "Renk", en: "En" };
+const GUIDED_LABEL: Partial<Record<FieldKey, string>> = { partiNo: "Parti no", desen: "Desen", renk: "Renk", en: "En", evrakNo: "Evrak no" };
 export const fieldLabel = (k: FieldKey): string => GUIDED_LABEL[k] ?? FIELD_OPTIONS.find((f) => f.key === k)?.label ?? k;
 
 /** Adımlar: 0 = başlık, 1..n = alanlar, n+1 = bitir. */
