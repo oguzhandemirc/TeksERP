@@ -659,7 +659,7 @@ function passivePlanWarnings(route: {
  * pasife alınmış (isActive=false) kayıt DB FK kontrolünü geçer ama WorkOrderStep
  * emekli istasyona işaret etmemeli. Var-olmayan UUID zaten P2003→400 ile yakalanır.
  */
-async function assertRouteRefsActive(
+export async function assertRouteRefsActive(
   steps: Array<{
     stationId: string;
     requiredCategoryId?: string | null;

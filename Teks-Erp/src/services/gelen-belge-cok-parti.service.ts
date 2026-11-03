@@ -107,7 +107,9 @@ interface OpenInput {
   notes?: string | null;
   flagPropertyIds: (targets: ReadonlyArray<{ propertyId: string }>) => Promise<string[]>;
   /** K30 S16a form alanları (verilenler) — her iş emrine aynen geçer; PER_PARTY'de hedef metraj/kg çağıranda reddedilir. */
-  fields?: Pick<WorkOrderCreateInput, "targetItemId" | "targetColorId" | "width" | "targetQuantity" | "targetWeight" | "plannedStartDate" | "plannedEndDate" | "orderLineIds">;
+  fields?: Pick<WorkOrderCreateInput, "targetItemId" | "targetColorId" | "width" | "targetQuantity" | "targetWeight" | "plannedStartDate" | "plannedEndDate" | "orderLineIds" | "type">;
+  /** K30-D düzenlenmiş adımlar (çağıran onaydan önce doğruladı): varsa şablonun yerine geçer. */
+  steps?: WorkOrderCreateInput["steps"];
 }
 
 /** İş emirleri: PER_PARTY parti başına (sıralı; her biri kendi token'ıyla replay), SINGLE tek iş emri tüm parti toplarıyla. */
@@ -119,7 +121,7 @@ export async function openPartyWorkOrders(i: OpenInput, userId: string): Promise
     const res = await workOrders.quickStart({
       clientToken: token,
       rollBarcodes: rolls.map((r) => r.barcode),
-      ...routeInput(i.route),
+      ...(i.steps?.length ? { steps: i.steps } : routeInput(i.route)),
       targetValues: targets,
       targetPropertyIds: await i.flagPropertyIds(targets),
       ...(i.foldType ? { foldType: i.foldType } : {}),
