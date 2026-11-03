@@ -113,7 +113,7 @@ export function IncomingDocumentDetailPage() {
       <PageHeader
         title={`Gelen Belge ${n.noteNo}`}
         titleExtra={<Badge variant={NOTE_STATUS_VARIANT[n.status]}>{NOTE_STATUS_LABEL[n.status]}</Badge>}
-        description={`Kaynak: ${SOURCE_LABEL[n.sourceKind]} · ${n.lines.length} satır`}
+        statusLine={`Kaynak: ${SOURCE_LABEL[n.sourceKind]} · ${n.lines.length} satır`}
         parent={{ label: "Gelen Belgeler", to: LIST_PATH }}
         actions={
           <DetailActions

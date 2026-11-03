@@ -31,7 +31,7 @@ export function PriceListDetailPage() {
       <PageHeader
         title={list ? `Fiyat listesi ${priceListLabel(list)}` : "Fiyat listesi"}
         titleExtra={list ? <PriceListStatusBadge status={list.status} /> : undefined}
-        description={list ? `${list.name} · ${list.customer ? list.customer.name : "Genel"} · ${list.currency}` : undefined}
+        statusLine={list ? `${list.name} · ${list.customer ? list.customer.name : "Genel"} · ${list.currency}` : undefined}
         onBack={() => nav("/cost/price-lists")}
         parent={{ label: "Fiyat Listeleri", to: "/cost/price-lists" }}
         actions={list ? <CommercialDocButton docType="PRICE_LIST" sourceId={list.id} label={`Fiyat listesi ${priceListLabel(list)} · ${list.name}`} draft={list.status === "DRAFT"} /> : undefined}
