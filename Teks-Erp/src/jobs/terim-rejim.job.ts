@@ -10,7 +10,8 @@ import { systemSettingService } from "../services/system-setting.service";
 const REFRESH_MS = 30_000;
 let timer: NodeJS.Timeout | null = null;
 
-async function refreshOnce(): Promise<void> {
+/** Rejimi DB'den bir kez çözer (best-effort; okunamazsa son bilinen ad). Katalog tohumu yazmadan önce bekler. */
+export async function refreshTermRegime(): Promise<void> {
   try {
     await systemSettingService.getFeatureFlags(); // agregat rejimi kendisi uygular
   } catch {
@@ -20,7 +21,7 @@ async function refreshOnce(): Promise<void> {
 
 export function startTermRegimeJob(): void {
   if (timer) return;
-  void refreshOnce();
-  timer = setInterval(() => void refreshOnce(), REFRESH_MS);
+  void refreshTermRegime();
+  timer = setInterval(() => void refreshTermRegime(), REFRESH_MS);
   timer.unref();
 }

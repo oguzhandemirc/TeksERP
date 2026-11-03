@@ -36,6 +36,7 @@ import { reconcileRoleTemplates } from "./role-template-catalog.job";
 import { reconcileReasonPresets } from "./reason-preset-catalog.job";
 import { reconcileNumberSeries } from "./number-series-catalog.job";
 import { bilgi, hata, uyari } from "../lib/logger";
+import { refreshTermRegime } from "./terim-rejim.job";
 
 // Soğuk açılışta DB (özellikle Windows sunucuda PostgreSQL servisi) backend'den
 // sonra hazır olabiliyor. Emsal job'lar bunu 60sn sabit gecikmeyle çözüyor; bu iş
@@ -129,6 +130,42 @@ export async function reconcilePermissionCatalog(): Promise<PermissionReconcileR
 }
 
 /**
+ * Boot zincirinin tek koşumu (izin → rol şablonu → sebep → numara serisi); hata `throw` eder, yeniden denemeyi
+ * çağıran yapar. Test/elle kurulum doğrudan çağırabilir.
+ */
+export async function reconcileCatalogsOnce(): Promise<void> {
+  // K20: tohum metni `TERIM.terbiyeIsEmri`den o anki rejimle çözülür ve satır sonra EZİLMEZ — rejim job'uyla
+  // yarışırsa dokuma kapalı taze kurulumda "Terbiye" kalıcı yazılırdı; önce rejimi DB'den çöz.
+  await refreshTermRegime();
+  await reconcilePermissionCatalog();
+  await reconcileRoleTemplates();
+  // (3) Hazır sebep katalogları — FK bağı YOK ama aynı zincirde koşar:
+  // soğuk açılışta DB'nin hazır olmama ihtimali ortak, dolayısıyla
+  // yeniden-deneme politikası da ortak olmalı. Ayrı timer, aynı hatayı iki
+  // farklı yerde ele almak demekti.
+  {
+    const r = await reconcileReasonPresets();
+    bilgi(
+      "reason-presets",
+      r.created.length > 0
+        ? `${r.created.length} yeni sistem sebebi eklendi: ${r.created.join(", ")}`
+        : `katalog güncel (${r.existing} sistem + ${r.custom} fabrika satırı)`,
+    );
+  }
+  // (4) Numara serileri — aynı zincir, aynı gerekçe (soğuk açılışta DB hazır
+  // olmayabilir). Düşerse numara üretimi katalog tohumuyla sürer (fail-safe).
+  {
+    const r = await reconcileNumberSeries();
+    bilgi(
+      "number-series",
+      r.created.length > 0
+        ? `${r.created.length} yeni numara serisi eklendi: ${r.created.join(", ")}`
+        : `katalog güncel (${r.existing} seri)`,
+    );
+  }
+}
+
+/**
  * Açılışta BİR KEZ koşar (periyodik timer yok — katalog ancak yeni bir deploy ile
  * değişir). Hata sunucuyu düşürmez; sınırlı sayıda yeniden dener, tükenirse
  * gürültülü loglar.
@@ -148,32 +185,7 @@ export function startPermissionCatalogReconciler(): void {
     // Ayrı bir timer'la koşturmak ikisini yarıştırır ve ilk boot'ta yeni roller
     // izinleri "DB'de yok" diye eksik kurulur — bu yüzden aynı zincirde, aynı
     // yeniden-deneme politikasıyla ve izinlerden SONRA.
-    void reconcilePermissionCatalog()
-      .then(() => reconcileRoleTemplates())
-      // (3) Hazır sebep katalogları — FK bağı YOK ama aynı zincirde koşar:
-      // soğuk açılışta DB'nin hazır olmama ihtimali ortak, dolayısıyla
-      // yeniden-deneme politikası da ortak olmalı. Ayrı timer, aynı hatayı iki
-      // farklı yerde ele almak demekti.
-      .then(async () => {
-        const r = await reconcileReasonPresets();
-        bilgi(
-          "reason-presets",
-          r.created.length > 0
-            ? `${r.created.length} yeni sistem sebebi eklendi: ${r.created.join(", ")}`
-            : `katalog güncel (${r.existing} sistem + ${r.custom} fabrika satırı)`,
-        );
-      })
-      // (4) Numara serileri — aynı zincir, aynı gerekçe (soğuk açılışta DB hazır
-      // olmayabilir). Düşerse numara üretimi katalog tohumuyla sürer (fail-safe).
-      .then(async () => {
-        const r = await reconcileNumberSeries();
-        bilgi(
-          "number-series",
-          r.created.length > 0
-            ? `${r.created.length} yeni numara serisi eklendi: ${r.created.join(", ")}`
-            : `katalog güncel (${r.existing} seri)`,
-        );
-      })
+    void reconcileCatalogsOnce()
       .catch((err) => {
         if (n < MAX_ATTEMPTS) {
           // Soğuk açılışta DB henüz ayakta olmayabilir — uyarı, hata değil.

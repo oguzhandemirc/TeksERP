@@ -34,6 +34,8 @@
 
 - **[ÇEKİRDEK]** Kullanıcıya görünen iş emri adı tek kaynaktan: `WeavingOrder` = "Dokuma İş Emri", `WorkOrder` = dokuma rejimi açıksa "Terbiye İş Emri", kapalıysa "İş Emri" (K20; tekil/çoğul/büyük harf/cümle başı/hâl çekimi) `TERIM`den OKUMA ANINDA çözülür (`terimDokumaAyarla`; modül düzeyi sabitte getter, sabit "Terbiye İş Emri" yazılmaz) — backend `src/constants/terim.ts`, panel/tablet/patron `src/lib/terim.ts` BAYT-EŞİT ayna; eski ad ("Dokuma işi…", önünde Terbiye/Dokuma olmayan "iş emri") görünen metne yeni giremez, taban yalnız düşer (`--yaz`, metni çeviren commit'te); kod/model adı, izin kodu, numara, sürüm notu, migration değişmez · bekçi: `test_terim_eski_ad.ts` <sub>(arşiv 2026-10-11 terim)</sub>
 
+- **[ÇEKİRDEK]** `TERIM`le DB'ye kalıcı metin yazan açılış tohumu (izin/rol şablonu/sebep) yazmadan ÖNCE rejimi DB'den çözer (`reconcileCatalogsOnce` → `refreshTermRegime`); rejim job'uyla sırasız koşturma · bekçi: `test_terim_katalog_tohum.ts` <sub>(arşiv:2026-11-03 K20 s8a inceleme)</sub>
+
 ### Yasaklar
 
 - **[ÇEKİRDEK]** `CLIENT_IP_HEADER` yalnız operatörün beyan ettiği ters vekil arkasında verilir (demo) ve verildiğinde HER isteğe uygulanır; LAN kurulumunda VERİLMEZ (LAN'daki biri `CF-Connecting-IP` uydurup giriş kilidini VE hız sınırını etkisizleştirir). Emekli tünelden kalan `REMOTE_PORT` .env'de duruyorsa başlık YOK SAYILIR ve uyarılır; `TRUST_PROXY` de app-wide AYARLANMAZ. · bekçi: `scripts/test_web_hardening.ts §CI-11..13` <sub>(arşiv 2026-09-30 B6)</sub>
