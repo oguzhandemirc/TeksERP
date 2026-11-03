@@ -130,7 +130,7 @@ async function main(): Promise<void> {
     } finally {
       await prisma.systemSetting.deleteMany({ where: { key: { in: KEYS } } });
       for (const row of snapshot) {
-        await prisma.systemSetting.create({ data: { id: row.id, key: row.key, value: row.value ?? [], description: row.description, updatedById: row.updatedById, createdAt: row.createdAt, updatedAt: row.updatedAt } });
+        await prisma.systemSetting.create({ data: { key: row.key, value: row.value ?? [], description: row.description, updatedById: row.updatedById, createdAt: row.createdAt, updatedAt: row.updatedAt } });
       }
       await prisma.user.update({ where: { id: user.id }, data: { isActive: false } }).catch(() => undefined);
     }
