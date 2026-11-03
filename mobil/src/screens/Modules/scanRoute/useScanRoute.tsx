@@ -5,6 +5,7 @@ import { StyleSheet } from 'react-native';
 import { Button, Text } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
 import ModuleSheet from '../../../components/ModuleSheet';
+import { TERIM } from '../../../lib/terim';
 import { useAttemptToken } from '../../../offline/attemptToken';
 import { scanRouteService } from '../../../services/scanRoute.service';
 import { decideScanRoutePrompt, readScanRouteView, type ScanRoutePrompt } from './scanRoute';
@@ -55,7 +56,7 @@ export function useScanRoute() {
       attempt.onSuccess();
       const r = res.data;
       const added = r?.targetsAdded?.length ? ` Hedef: ${r.targetsAdded.join(', ')}.` : '';
-      Toast.show({ type: 'info', text1: 'Okutmaya göre rota', text2: `${fallbackToast ?? (r?.kind === 'INSERT' ? 'Adım iş emrine eklendi.' : 'İş bu istasyona geçti.')}${added}` });
+      Toast.show({ type: 'info', text1: 'Okutmaya göre rota', text2: `${fallbackToast ?? (r?.kind === 'INSERT' ? `Adım ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} eklendi.` : 'İş bu istasyona geçti.')}${added}` });
       setPending(null);
       reopen();
     } catch (e) {

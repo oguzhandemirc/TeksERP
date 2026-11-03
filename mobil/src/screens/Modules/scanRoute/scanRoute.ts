@@ -1,6 +1,7 @@
 // K29 OKUTMAYLA ROTA — tablet tarafının SAF kararı (Kurşun/KK ve Tambur aynı modülü kullanır).
 // Sunucu `by-card` 400 `SCAN_ROUTE_AVAILABLE` + `details.scanRoute` dönerse: uyarısız taşıma/ekleme sessiz uygulanır
 // (bilgi tostu), yeniden işlem uyarısı ya da başka istasyonda açık iş onay ister, atlanamaz adım engeldir.
+import { TERIM } from '../../../lib/terim';
 
 export interface ScanRouteView {
   kind: 'OPEN_EXISTING' | 'MOVE' | 'INSERT' | 'BLOCKED';
@@ -8,7 +9,7 @@ export interface ScanRouteView {
   stationId: string;
   stationName: string;
   targetStepId: string | null;
-  skipped: Array<{ stepId: string; stationName: string }>;
+  skipped: { stepId: string; stationName: string }[];
   warnings: string[];
   block: null | { code: string; stepId: string; stationName: string; rollCount: number; message: string; closable: boolean };
   message: string;
@@ -53,6 +54,6 @@ export function decideScanRoutePrompt(v: ScanRouteView): ScanRoutePrompt {
       closeOpenStepId: null,
     };
   }
-  const head = v.kind === 'INSERT' ? `"${v.stationName}" adımı iş emrine eklendi.` : `İş "${v.stationName}" adımına geçti.`;
+  const head = v.kind === 'INSERT' ? `"${v.stationName}" adımı ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} eklendi.` : `İş "${v.stationName}" adımına geçti.`;
   return { kind: 'SILENT', toast: `${head}${skippedText(v)}` };
 }

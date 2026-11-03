@@ -11,6 +11,7 @@ import { Prisma, RollStatus, StepStatus, WorkOrderStatus } from "@prisma/client"
 import { randomUUID } from "node:crypto";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
+import { TERIM } from "../constants/terim";
 import { normalizeScanCode } from "../utils/code-format";
 import { AuditService } from "./audit.service";
 import {
@@ -25,7 +26,7 @@ import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { revokeRollMovements } from "./helpers/roll-movement.helper";
 import { ensureWorkOrderInProgress, recomputeStepStatus } from "./helpers/roll-step.helper";
 import { readStepSnapshotsTx, recordStepDiffTx } from "./helpers/workorder-field-diff.helper";
-import { recordStepPlanChangesTx } from "./helpers/workorder-event.helper";
+import { recordStepPlanChangesTx, recordWorkOrderFieldChangesTx } from "./helpers/workorder-event.helper";
 import { resolveStationDefaultTargets, type DefaultTarget } from "./helpers/station-default-targets.helper";
 import { ACTIVE_TARGET_VALUE, setWorkOrderTargetValuesTx } from "./helpers/workorder-target-value.helper";
 import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
@@ -155,7 +156,10 @@ async function addMissingTargetsTx(tx: Prisma.TransactionClient, workOrderId: st
   const fold = defaults.find((t) => t.propertyCode === FOLD_PROPERTY_CODE && t.valueCode);
   if (fold) {
     const r = await tx.workOrder.updateMany({ where: { id: workOrderId, foldType: null }, data: { foldType: fold.valueCode } });
-    if (r.count > 0) added.push(`${fold.propertyName}: ${fold.valueName}`);
+    if (r.count > 0) {
+      await recordWorkOrderFieldChangesTx(tx, workOrderId, [{ field: "foldType", from: null, to: fold.valueCode, toLabel: fold.valueName }], { trigger: "SCAN_ROUTE", userId });
+      added.push(`${fold.propertyName}: ${fold.valueName}`);
+    }
   }
   return added;
 }
@@ -226,7 +230,7 @@ async function applyPlanTx(tx: Prisma.TransactionClient, args: ApplyArgs): Promi
   await touchWorkOrderTx(tx, workOrderId);
   const wo = await tx.workOrder.findUnique({ where: { id: workOrderId }, select: { status: true } });
   if (!wo || wo.status === WorkOrderStatus.COMPLETED || wo.status === WorkOrderStatus.CANCELLED || wo.status === WorkOrderStatus.SUPERSEDED) {
-    throw AppError.conflict("İş emri kapalı; okutmayla adım eklenemez.", { code: "SCAN_ROUTE_WO_CLOSED" });
+    throw AppError.conflict(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} kapalı; okutmayla adım eklenemez.`, { code: "SCAN_ROUTE_WO_CLOSED" });
   }
   const facts = await loadScanRouteFacts(tx, workOrderId);
   const plan = planScanRoute(facts, station);

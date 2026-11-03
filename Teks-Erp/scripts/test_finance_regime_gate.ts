@@ -198,6 +198,14 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "istasyon varsayılanına düşer). Router hiçbir ticaret tablosuna yazmaz (`cost.routes` emsali).",
   },
   {
+    dosya: "routes/scan-route.routes.ts",
+    neden:
+      "OKUTMAYLA ROTA üretimin çekirdeğidir (`requireProductionEnabled`) → rejim kapısı KONULAMAZ. `cariAccount` izi tek daldan gelir " +
+      "(K29, 2026-11-03): `workorder-scan-route.service` → `helpers/station-default-targets.helper` → `kursun-customer-default.service` " +
+      "eklenen adımın varsayılan hedefini SALT-OKUMA sorar ve okuma uç İÇİNDE finans kapılıdır (`station-capability.routes` emsali). " +
+      "Router hiçbir ticaret tablosuna yazmaz.",
+  },
+  {
     dosya: "routes/return.routes.ts",
     neden:
       "İade FABRİKANIN ana akışıdır (mobil iade ekranı + RollReturn) → rejim kapısı KONULAMAZ. " +

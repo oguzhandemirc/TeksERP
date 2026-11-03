@@ -7,7 +7,7 @@ export interface ScanRouteApplyResult {
   workOrderId: string;
   targetStepId: string;
   insertedStepId: string | null;
-  skipped: Array<{ stepId: string; stationName: string }>;
+  skipped: { stepId: string; stationName: string }[];
   warnings: string[];
   targetsAdded: string[];
 }

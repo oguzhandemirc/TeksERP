@@ -1031,7 +1031,7 @@ export class WorkOrderService {
         }
         // K29: rotasız İE yalnız "Rota uygulaması: Okutmayla" iken (SIRALI'da bugünkü 400 aynen).
         if ((await readProductionRouteMode()) !== "SCAN") {
-          throw AppError.badRequest("Rotasız iş emri yalnız rota uygulaması 'Okutmayla' iken açılabilir.", { code: "SCAN_ROUTE_DISABLED" });
+          throw AppError.badRequest(`Rotasız ${TERIM.terbiyeIsEmri.tekilKucuk} yalnız rota uygulaması 'Okutmayla' iken açılabilir.`, { code: "SCAN_ROUTE_DISABLED" });
         }
       }
       finalSteps = (data.steps ?? []).map((s) => ({
