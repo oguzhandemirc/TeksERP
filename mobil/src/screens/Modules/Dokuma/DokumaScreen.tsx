@@ -33,7 +33,7 @@ export default function DokumaScreen() {
   return (
     <ScreenChrome
       title="Tezgah"
-      subtitle={entry.machine ? `${entry.machine.name} · hat ${entry.lineNo}` : undefined}
+      statusLine={entry.machine ? `${entry.machine.name} · hat ${entry.lineNo}` : undefined}
       topStrip={<LoomAlarmStrip machineId={entry.machine?.id ?? null} />}
     >
       <View style={[styles.root, compact && styles.rootColumn]}>
