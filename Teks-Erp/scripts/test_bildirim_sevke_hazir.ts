@@ -9,7 +9,8 @@
 //      PARTIAL parti konu değil · periyot dolmadan top geri açılsa da koşul KORUNUR · periyot dolunca KAPANDI +
 //      "çözüldü" metni · yük = katalog beyanı (tutar yok) · shipping:read'li alır, shipping:read'siz almaz
 //   §3 gelen belge modülü kapalı → PARTI/GB konusu yok (uç 403 verdiği birim bildirim de doğurmaz)
-//   §4 ⭐ tarama sorgu bütçesi: sorgu sayısı READY birim sayısından bağımsız (1 parti ↔ 4 parti EŞİT) ve ≤ 8
+//   §4 ⭐ tarama sorgu bütçesi: sorgu sayısı READY birim sayısından bağımsız (1 parti ↔ 4 parti EŞİT) ve ≤ 9
+//      (S15c-d1: belge birimi toplamı JIT kapalı tek işlemde — BEGIN · SET LOCAL jit · COMMIT sabit +3, 6 → 9)
 //   §5 ⭐ (D4-KUC3a) gelen belge modülü kapalıdan açığa geçince taban damgası düşer → ilk tur sessiz (toplu bildirim yok);
 //      açıkken yeniden kayıt ve yalnız IE açıkken açılış damgayı korur
 //
@@ -230,7 +231,7 @@ async function body(): Promise<void> {
   resetReadyWorkScanClock();
   let n4 = 0;
   const q4 = await measure(async () => { n4 = (await readyWorkSubjects()).filter((s) => s.key.startsWith(`customerBatch:${cust}`)).length; });
-  check("§4 ⭐ tarama sorgu sayısı READY birim sayısından bağımsız (1 ↔ 4 parti) ve ≤ 8", n4 === 4 && q1 === q4 && q4 <= 8 && q1 > 0, `1 parti=${q1} · 4 parti=${q4} (konu ${n4})`);
+  check("§4 ⭐ tarama sorgu sayısı READY birim sayısından bağımsız (1 ↔ 4 parti) ve ≤ 9", n4 === 4 && q1 === q4 && q4 <= 9 && q1 > 0, `1 parti=${q1} · 4 parti=${q4} (konu ${n4})`);
 
   console.log("\n── §5 gelen belge modülü kapalıdan açığa (D4-KUC3a) ──");
   // Kapalıyken taranır (taban damgası basılır, konu yok); kapalıyken READY olan yeni parti açılışta toplu bildirim üretmemeli.
