@@ -56,6 +56,7 @@ import { ConsignedWorkPage } from "@/pages/Operations/ConsignedWork/ConsignedWor
 import { ReadyWorksPage } from "@/pages/Operations/ReadyWorks/ReadyWorksPage";
 import { IncomingDocumentDetailPage } from "@/pages/Operations/GelenBelgeler/GelenBelgeDetailPage";
 import { SenderTemplatesPage } from "@/pages/Operations/GelenBelgeler/GonderenSablonlariPage";
+import { TeachTemplatePage } from "@/pages/Operations/GelenBelgeler/tanit/TanitPage";
 import { CustomerDefaultsPage } from "@/pages/Operations/GelenBelgeler/MusteriVarsayilanUrunleriPage";
 import { CarilerPage } from "@/pages/Definitions/CarilerPage";
 import { FinanceHubPage } from "@/pages/Finance/FinanceHubPage";
@@ -588,6 +589,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="gelen-belge:template">
         <CustomerDefaultsPage />
+      </ProtectedRoute>
+    ),
+  },
+  // S1b: belge tipi tanıtma — `:id` gelen belge; yol yazısı `GelenBelgeler/paths.ts` TEACH_ROUTE ile eşit (paths.test.ts).
+  {
+    path: "operations/gelen-belgeler/:id/tanit",
+    element: (
+      <ProtectedRoute requirePermission="gelen-belge:template">
+        <TeachTemplatePage />
       </ProtectedRoute>
     ),
   },

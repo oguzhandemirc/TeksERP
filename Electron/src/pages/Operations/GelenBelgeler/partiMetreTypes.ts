@@ -36,6 +36,8 @@ export interface EntryModeSettings {
 }
 /** Gönderen şablonu satırının parti no alanı (§2.4). */
 export interface SenderTemplateBatchNoFields {
+  /** S1: FILE = motor dosyası, USER = panelde/tablette tanıtılan (`u-…`); eski backend göndermez (koddan çıkarılır). */
+  kind?: "FILE" | "USER";
   /** Bu formda parti no hangi alan (onayda öğrenilir; panelden değişir/temizlenir). Eski backend göndermez. */
   batchNoKey?: string | null;
   /** Şablon tanımındaki parti no adayları (sıra = öneri sırası). Eski backend göndermez → sütun çizilmez. */

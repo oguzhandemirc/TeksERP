@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CUSTOMER_DEFAULTS_PATH } from "../paths";
+import { CUSTOMER_DEFAULTS_PATH, TEACH_ROUTE } from "../paths";
 import { warehouseTiles } from "@/pages/Operations/tiles/warehouse";
 
 const ROUTES_SRC = readFileSync(resolve(__dirname, "../../../../routes/content-routes.tsx"), "utf8");
@@ -18,5 +18,8 @@ describe("gelen belge alt ekran adresleri tek kaynak", () => {
   it("karo aynı sabite gider", () => {
     const tile = warehouseTiles.find((t) => t.key === "gelen-belge-varsayilan-urunler");
     expect(tile?.to).toBe(CUSTOMER_DEFAULTS_PATH);
+  });
+  it("tanıtma (S1b) yolu route tablosunda TEACH_ROUTE ile aynı", () => {
+    expect(routePaths.filter((p) => p.endsWith("/tanit"))).toEqual([TEACH_ROUTE]);
   });
 });
