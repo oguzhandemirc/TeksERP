@@ -7,7 +7,7 @@ import { z } from "zod";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { createUserTemplate, getUserTemplate, listUserTemplates, updateUserTemplate } from "../services/gelen-belge-ozel-sablon.service";
 import { getScanWords, suggestFromScan } from "../services/gelen-belge-tanitma.service";
-import { UPDATE_KEEP_PARTS } from "../lib/gelen-belge/motor";
+import { ASSIGNABLE_FIELD_KEYS, UPDATE_KEEP_PARTS } from "../lib/gelen-belge/motor";
 
 const router = Router();
 
@@ -32,7 +32,7 @@ const SuggestBody = z.strictObject({
   scanId: Id,
   name: Name,
   assignments: z.array(z.strictObject({
-    field: z.enum(["musteri", "partiNo", "toplamMetre", "evrakNo", "tarih", "siparisNo", "topAdet", "desen", "renk", "en"]),
+    field: z.enum(ASSIGNABLE_FIELD_KEYS),
     rect: Rect,
     section: z.boolean().optional(),
   })).min(1, "En az bir alan atayın").max(30),
