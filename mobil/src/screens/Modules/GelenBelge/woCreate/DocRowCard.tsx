@@ -13,7 +13,7 @@ import { useApprovalDetail } from '../useApprovalCard';
 import { usePermissions } from '../../../../hooks/usePermission';
 import { readResultView, fmtKursunMeters } from '../readResult';
 import { batchPatch, meterChoices, parseMeters } from '../approvalGate';
-import { detailFromSummary, pinRecent, rowIssues } from './woFromDoc';
+import { detailFromSummary, pinRecent, rowIssues, withSummaryFields } from './woFromDoc';
 import type { DocRow, WoRowsState } from './useWoRows';
 import PartyRows, { useRowParties } from './PartyRows';
 
@@ -124,7 +124,7 @@ function useRowRead(row: DocRow, wo: WoRowsState) {
   const detailFailed = canReadDetail && detail.isError;
   const { setDetail } = wo;
   useEffect(() => {
-    if (detail.data) setDetail(row.noteId, detail.data);
+    if (detail.data) setDetail(row.noteId, withSummaryFields(detail.data, summary));
     else if (summary && (!canReadDetail || detailFailed)) setDetail(row.noteId, detailFromSummary(summary));
   }, [detail.data, summary, canReadDetail, detailFailed, row.noteId, setDetail]);
   useRowParties(row, wo, readDone && canReadDetail);

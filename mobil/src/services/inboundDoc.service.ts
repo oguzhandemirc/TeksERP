@@ -97,6 +97,25 @@ export interface ReadSummary {
   /** Taslağın sahibi + müşteri önerisi (OIE): satır formu detay ucu (`gelen-belge:read`) olmadan buradan dolar. Eski sunucu göndermez. */
   ownerCustomerId?: string | null;
   ownerSuggestion?: OwnerSuggestion | null;
+  /** S16a: tanıtmada işaretlenen form alanları + katalog önerileri (tek form doldurur). Eski sunucu göndermez. */
+  formFields?: DocFormFields | null;
+  suggestions?: DocFormSuggestions | null;
+}
+
+/** S16a sözleşme 3: belgeden okunan form değerleri (sayılar sunucuda TR biçiminden çözülür; string de kabul). */
+export interface DocFormFields {
+  hedefMetraj?: number | string | null;
+  hedefKg?: number | string | null;
+  en?: number | string | null;
+  desenText?: string | null;
+  renkText?: string | null;
+  not?: string | null;
+}
+
+/** S16a: `gelenBelge.desenRenkEslesme = ONER` iken adı/kodu tutan katalog kaydı (görevli onaylar). */
+export interface DocFormSuggestions {
+  targetItem?: { id: string; name: string; code?: string | null } | null;
+  targetColor?: { id: string; name: string } | null;
 }
 
 export type KursunMetersSource = 'OUTPUT' | 'TOTAL' | 'LINE_SUM' | 'MANUAL';
@@ -144,6 +163,9 @@ export interface InboundNoteDetail {
   senderDocNo?: string | null;
   /** K28 belge fotoğrafı saklama kipi; eski sunucu göndermez (undefined = FULL, vurgu yok). */
   photoRetention?: PhotoRetentionMode;
+  /** S16a: okuma özetindekiyle aynı (tek form doldurur). */
+  formFields?: DocFormFields | null;
+  suggestions?: DocFormSuggestions | null;
 }
 
 /** Backend `PhotoRetentionMode` aynası (K28). */
@@ -170,7 +192,12 @@ export interface InboundDocSettings {
   formApproval?: 'SEPARATE' | 'WITH_WORK_ORDER';
   /** Sözleşme 2 (`production.refakatAutoPrint`); eski sunucu göndermez → kapalı (bugün: elle "Çıktı Al"). */
   refakatAutoPrint?: boolean;
+  /** S16a `gelenBelge.tabletIeGirisi`; eski sunucu göndermez → IKISI (bugünkü ekran). */
+  tabletIeGirisi?: TabletWoEntry;
 }
+
+/** Tablet iş emri girişi: IKISI = bugünkü (top + belge) · BELGE = her karo tek formu açar · TOP = yalnız top yolu. */
+export type TabletWoEntry = 'IKISI' | 'BELGE' | 'TOP';
 
 /** Sözleşme 3: belgeden tek seferde terbiye iş emri (`POST /gelen-belge/irsaliyeler/:id/is-emri`). */
 export interface CreateWorkOrderFromNoteBody {
@@ -198,6 +225,19 @@ export interface CreateWorkOrderFromNoteBody {
   mode?: MultiPartyMode;
   /** K27 WARN: işi süren aynı belge no'lu eşe rağmen kaydet (409 `DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE` sonrası). */
   confirmDuplicateDocNo?: true;
+  // S16a tek form alanları (hepsi isteğe bağlı): verilen açık değer toptan türetileni ezer; yoksa bugünkü davranış.
+  targetItemId?: string;
+  targetColorId?: string;
+  /** cm */
+  width?: number;
+  /** m */
+  targetQuantity?: number;
+  /** kg */
+  targetWeight?: number;
+  plannedStartDate?: string;
+  plannedEndDate?: string;
+  foldType?: string;
+  orderLineIds?: string[];
 }
 
 export interface CreateWorkOrderFromNoteResult {
@@ -263,6 +303,9 @@ export interface ApproveNoteResult {
   autoWorkOrders?: { opened: number; manual: number; reason: string | null; groups: AutoWorkOrderGroup[] };
   warnings: string[];
 }
+
+/** Gelen belge ayarı sorgu anahtarı (form kayıt kipi + tablet giriş kipi aynı önbelleği paylaşır). */
+export const INBOUND_DOC_SETTINGS_KEY = ['gelen-belge', 'ayarlar'] as const;
 
 export const inboundDocService = {
   settings: (): Promise<InboundDocSettings> =>

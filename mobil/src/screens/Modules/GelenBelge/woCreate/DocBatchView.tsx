@@ -144,7 +144,7 @@ interface ScannerProps {
 }
 
 /** Sıradaki belgenin sayfaları + gönder (mevcut Belge Tara bileşenleri). */
-function ScannerSection({ b, hasRows, onAdd, busy, onClassic, onRemove, onOpen }: ScannerProps) {
+export function ScannerSection({ b, hasRows, onAdd, busy, onClassic, onRemove, onOpen }: ScannerProps) {
   return (
     <>
       <Text style={styles.section}>{hasRows ? 'Sıradaki belge' : 'Belgeyi okutun'}</Text>

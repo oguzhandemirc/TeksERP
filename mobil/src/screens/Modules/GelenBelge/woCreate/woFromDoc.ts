@@ -89,7 +89,18 @@ export function detailFromSummary(s: ReadSummary): InboundNoteDetail {
     batchNoCandidates: s.batchNoCandidates,
     kursunMeterCandidates: s.kursunMeterCandidates,
     ownerSuggestion: s.ownerSuggestion ?? null,
+    formFields: s.formFields ?? null,
+    suggestions: s.suggestions ?? null,
   };
+}
+
+/** S16a: tek formun alanları detay ucunda yoksa okuma özetinden tamamlanır (iki uçtan biri taşıması yeter). */
+export function withSummaryFields(d: InboundNoteDetail, s: ReadSummary | null | undefined): InboundNoteDetail {
+  const fields = d.formFields ?? s?.formFields ?? null;
+  const suggestions = d.suggestions ?? s?.suggestions ?? null;
+  // Eklenecek bir şey yoksa detay AYNEN döner (eski sunucuda bugünkü nesne).
+  if ((fields === null || fields === d.formFields) && (suggestions === null || suggestions === d.suggestions)) return d;
+  return { ...d, formFields: fields, suggestions };
 }
 
 export interface RowForm {
