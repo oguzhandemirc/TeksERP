@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useScanRoute } from '../scanRoute/useScanRoute';
 import ScanRouteAddBadge from '../scanRoute/ScanRouteAddBadge';
-import { useScanRouteMode } from '../../../hooks/useFeatureFlags';
 import {
   View,
   StyleSheet,
@@ -77,6 +76,7 @@ import {
   useTamburShortCutA1,
   useTamburListByStationEnabled,
   useScrapGradeLabelEnabled,
+  useScanRouteMode,
 } from '../../../hooks/useFeatureFlags';
 import { NumpadHost } from '../../../components/NumpadProvider';
 import { RightPanelDrawer } from '../../../components/RightPanelDrawer';

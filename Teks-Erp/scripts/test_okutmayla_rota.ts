@@ -399,8 +399,10 @@ async function sectionS15b(ctx: Ctx, st: { K: string; Q: string; T: string }, ap
   check("canClose: quality:write → true", (await cc(["quality:write"])) === true);
   check("canClose: önizleme varsayılan (izin verilmedi) → false", (await previewScanRoute(card, T)).canClose === false);
   const src = readFileSync("src/services/workorder-scan-route.service.ts", "utf8");
+  const helperSrc = readFileSync("src/services/helpers/scan-route-close.helper.ts", "utf8");
   check("guard + önizleme tek kaynak canCloseOpenStep (inline izin dizgesi yok)",
-    src.includes("!canCloseOpenStep(ctx.permissions)") && src.includes("canClose = canCloseOpenStep(permissions)") && !/matchesPermission\(ctx\.permissions,\s*"quality:write"\)/.test(src));
+    src.includes("assertCanCloseOpenStep(ctx.permissions)") && src.includes("canClose: canCloseOpenStep(permissions)")
+      && helperSrc.includes("if (canCloseOpenStep(permissions)) return;") && !/quality:write|matchesPermission/.test(src));
 }
 
 async function cleanup(): Promise<void> {

@@ -284,9 +284,7 @@ export const workOrderService = {
    * backend WO'yu geri alır.
    */
   quickStart: (data: QuickStartRequest): Promise<ApiResponse<QuickStartResult>> =>
-    apiClient
-      .post<ApiResponse<QuickStartResult>>('/work-orders/quick-start', data)
-      .then((r) => r.data),
+    apiClient.post<ApiResponse<QuickStartResult>>('/work-orders/quick-start', data).then((r) => r.data),
 
   /**
    * Temel alan güncelle (PATCH /:id) — yalnız COMPLETED/CANCELLED reddedilir,
