@@ -136,13 +136,13 @@ async function run(url: string, sidecar: { url: string; hits: () => number }): P
   const fabric = (await prisma.item.create({ data: { code: `${TAG}-MM`, name: `${TAG} müşteri malı`, itemType: "FABRIC", unit: "MT" }, select: { id: true } })).id;
   made.items.push(fabric);
   await setSetting(SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, fabric);
-  const mkStation = async (suffix: string, kind: "PROCESS_QC" | "TAMBUR") => {
-    const s = (await prisma.station.create({ data: { code: `${TAG}-${suffix}`.slice(0, 32), name: `${TAG} ${suffix}`, type: "INTERNAL", kind, ...(kind === "PROCESS_QC" ? { appliesQuality: true } : {}) }, select: { id: true } })).id;
+  const mkStation = async (suffix: string, kind: "PROCESS_QC" | "TAMBUR", appliesQuality: boolean) => {
+    const s = (await prisma.station.create({ data: { code: `${TAG}-${suffix}`.slice(0, 32), name: `${TAG} ${suffix}`, type: "INTERNAL", kind, appliesQuality }, select: { id: true } })).id;
     made.stations.push(s);
     return s;
   };
-  const kStation = await mkStation("KRS", "PROCESS_QC");
-  const tStation = await mkStation("TMB", "TAMBUR");
+  const kStation = await mkStation("KRS", "PROCESS_QC", true);
+  const tStation = await mkStation("TMB", "TAMBUR", false);
   const mkRoute = async (name: string, stationId: string) => {
     const r = await prisma.route.create({ data: { name: `${TAG} ${name}`, steps: { create: [{ stationId, sequence: 1 }] } }, select: { id: true } });
     made.routes.push(r.id);
