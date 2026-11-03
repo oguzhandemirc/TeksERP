@@ -25,10 +25,13 @@ const SUMMARY_LINE_NS = "b3e7c1d4-2a9f-4e6b-8c15-0f9d2e7a4b61";
  * Toplam kıyası belgenin kendi satırlarını sayar: özet satırı (= kurşun metresi) ikinci kez sayılmaz.
  */
 export const summaryLineId = (noteId: string): string => uuidv5(`${noteId}|TEK`, SUMMARY_LINE_NS);
+/** S1 çok partili belge: blok N'nin özet satırı (blok 1 = `summaryLineId` — tek partili belgeyle AYNI kimlik, yarım kalan devam eder). */
+export const partyLineId = (noteId: string, blockNo: number): string => (blockNo <= 1 ? summaryLineId(noteId) : uuidv5(`${noteId}|PARTI|${blockNo}`, SUMMARY_LINE_NS));
+/** Satır bir özet satırı mı (tek kayıt ya da parti özeti) — belgenin kendi satırı değildir. */
+export const isSummaryLine = (noteId: string, l: { id?: string; blockNo: number }): boolean => !!l.id && (l.id === summaryLineId(noteId) || l.id === partyLineId(noteId, l.blockNo));
 /** Toplam/adet kıyasına giren satırlar: atlanmamış ve özet satırı olmayan (INFO satırı belgenin satırıdır, sayılır). */
 function linesForTotals<T extends TotalLine>(noteId: string | undefined, lines: ReadonlyArray<T>): T[] {
-  const sid = noteId ? summaryLineId(noteId) : null;
-  return lines.filter((l) => l.status !== "SKIPPED" && (sid === null || l.id !== sid));
+  return lines.filter((l) => l.status !== "SKIPPED" && (noteId === undefined || !isSummaryLine(noteId, l)));
 }
 
 const near = (a: number, b: number) => Math.abs(a - b) <= Math.max(0.001, Math.abs(b) * TOTAL_TOLERANCE);

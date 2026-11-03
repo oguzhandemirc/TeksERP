@@ -44,6 +44,7 @@ import {
 } from "../src/lib/gelen-belge/motor";
 import { DEFAULT_OUTLIER_FACTOR, draftFromExtraction, suspectGridReasons, suspectGridSeqs } from "../src/lib/gelen-belge/taslak";
 import { gulkesimPartiMetre } from "./lib/gelen-belge-motor-parti-metre";
+import { gulkesimBolum } from "./lib/gelen-belge-motor-bolum";
 
 let pass = 0;
 let fail = 0;
@@ -110,8 +111,9 @@ function kutu(text: string, x: number, y: number, w: number, h: number, angle: n
   const tot = reg.totals!;
   check("§3h her iki blokta beyan = Σ (MATCH)", tot.blocks.every((b) => b.status === "MATCH"), JSON.stringify(tot.blocks.map((b) => [b.status, b.computed])));
   check("§3i genel toplam 21 / 960,90 / 4.521,00", tot.grand.count === 21 && tot.grand.kg === "960.9" && tot.grand.m === "4521", JSON.stringify(tot.grand));
-  check("§3j başlıktaki '4 TOP' ↔ 5 satır yalnız UYARI (DECLARED_TOP_COUNT_DIFF), TOTAL_MISMATCH YOK",
-    reg.warnings.some((w) => w.startsWith("DECLARED_TOP_COUNT_DIFF")) && !reg.warnings.some((w) => w.startsWith("TOTAL_MISMATCH")), reg.warnings.join(" | "));
+  // S1 (2026-11-03): bölümlü şablonda yazan top bölüm başına denetlenir (SECTION_COUNT_MISMATCH), blok 1'e ikinci kez bağlanmaz.
+  check("§3j bölüm 1'deki '4 TOP' ↔ 5 satır yalnız UYARI (SECTION_COUNT_MISMATCH), TOTAL_MISMATCH YOK",
+    reg.warnings.some((w) => w.startsWith("SECTION_COUNT_MISMATCH")) && !reg.warnings.some((w) => w.startsWith("TOTAL_MISMATCH") || w.startsWith("DECLARED_TOP_COUNT_DIFF")), reg.warnings.join(" | "));
   const f = reg.fields!.fields;
   check("§3k başlık: fiş no, tarih, firma, iş emri, ham parti", f.fisNo?.value === "914279" && f.tarih?.value === "2026-10-19" && f.firma?.value === "ÖRNEK TEKSTİL A" && f.isEmriNo?.value === "99K-24749" && f.hamPartiNo?.value === "P9918733",
     JSON.stringify({ fisNo: f.fisNo?.value, tarih: f.tarih?.value, firma: f.firma?.value, isEmriNo: f.isEmriNo?.value, hamPartiNo: f.hamPartiNo?.value }));
@@ -361,6 +363,7 @@ function kutu(text: string, x: number, y: number, w: number, h: number, angle: n
 
 // ── §11 Gülkesim: parti no adayları + kurşun metresi (gövde `lib/gelen-belge-motor-parti-metre.ts`; dosya boyu) ──
 gulkesimPartiMetre(check, gercek, sablonlar);
+gulkesimBolum(check, gercek, sablonlar);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exitCode = fail > 0 ? 1 : 0;

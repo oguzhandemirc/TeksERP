@@ -427,6 +427,7 @@ export const SETTING_KEYS = {
   /** İş emri formundan okutulan belgenin kaydı: SEPARATE ayrı onay (varsayılan = bugünkü, `gelen-belge:approve`) |
    *  WITH_WORK_ORDER iş emri açan kaydeder (belge + top + iş emri tek istekte). Tek yazar `PUT /api/gelen-belge/ayarlar`. */
   GELEN_BELGE_FORM_APPROVAL: "gelenBelge.formApproval",
+  GELEN_BELGE_MULTI_PARTY_WORK_ORDER: "gelenBelge.multiPartyWorkOrder",
   /** İş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır mı (varsayılan false = bugünkü: elle).
    *  Tek yazar `PUT /api/gelen-belge/ayarlar`; flag yüküne konmaz. */
   PRODUCTION_REFAKAT_AUTO_PRINT: "production.refakatAutoPrint",
@@ -806,6 +807,12 @@ export const SETTING_KEYS = {
    * Okuma YALNIZ `readTamburChildWidthSource` üzerinden.
    */
   TAMBUR_CHILD_WIDTH_SOURCE: "tambur.childWidthSource",
+  /**
+   * Tambur etiket basım zamanı (Gülkesim S5, cevap 10): EACH (bugünkü: her top kesilince
+   * basılır) | END (iş bitince "Basılmayanları bas" ile toplu). İstemcide uygulanır.
+   * Okuma YALNIZ `readTamburLabelPrintTiming` üzerinden.
+   */
+  TAMBUR_LABEL_PRINT_TIMING: "tambur.labelPrintTiming",
   /**
    * FASON KABULÜ — ÇEKME UYARISI (2026-08-21).
    * Boyahanede kumaş çeker: 250 m giden mal 220 m döner. Eski ekran bu farkı
@@ -1249,6 +1256,11 @@ export type TamburChildWidthSource = "WO_TARGET_FIRST" | "MEASURED_FIRST";
 export const TAMBUR_CHILD_WIDTH_SOURCES: TamburChildWidthSource[] = ["WO_TARGET_FIRST", "MEASURED_FIRST"];
 /** Varsayılan `WO_TARGET_FIRST` — BUGÜNKÜ davranış (`wo.width ?? roll.width`, ölçüldü 2026-10-31). */
 export const DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE: TamburChildWidthSource = "WO_TARGET_FIRST";
+/** Tambur etiket basım zamanı (bkz. `SETTING_KEYS.TAMBUR_LABEL_PRINT_TIMING`). */
+export type TamburLabelPrintTiming = "EACH" | "END";
+export const TAMBUR_LABEL_PRINT_TIMINGS: TamburLabelPrintTiming[] = ["EACH", "END"];
+/** Varsayılan `EACH` — BUGÜNKÜ davranış (tablet her kesimden sonra etiketi basar). */
+export const DEFAULT_TAMBUR_LABEL_PRINT_TIMING: TamburLabelPrintTiming = "EACH";
 
 /** Etiket adedi kaynağı (bkz. `SETTING_KEYS.LABEL_COPIES_SOURCE`). */
 export type LabelCopiesSource = "GLOBAL" | "STATION";
@@ -2416,6 +2428,8 @@ export interface FeatureFlags {
   tamburPlanGateWidthCheck: TamburPlanWidthCheck;
   /** Tambur finalize çocuk en kaynağı (default WO_TARGET_FIRST = bugünkü). */
   tamburChildWidthSource: TamburChildWidthSource;
+  /** Tambur etiket basım zamanı (default EACH = bugünkü; istemcide uygulanır). */
+  tamburLabelPrintTiming: TamburLabelPrintTiming;
   /** Tablet Tambur listesi oturum istasyonuyla süzülsün mü (default FALSE; istemcide uygulanır). */
   tamburListByStationEnabled: boolean;
   /** Dokuma kapalıyken de makine duruşu kaydedilsin mi (D4-A1; default FALSE = bugünkü). HAM değer;
@@ -2967,6 +2981,7 @@ export class SystemSettingService {
       tamburPlanGateWidthToleranceCm: await readTamburPlanGateWidthToleranceCm(cacheClient),
       tamburPlanGateWidthCheck: await readTamburPlanGateWidthCheck(cacheClient),
       tamburChildWidthSource: await readTamburChildWidthSource(cacheClient),
+      tamburLabelPrintTiming: await readTamburLabelPrintTiming(cacheClient),
       tamburListByStationEnabled: await readTamburListByStationEnabled(cacheClient),
       machineStopTrackingEnabled: await readMachineStopTrackingEnabled(cacheClient),
       machineStopOpenWarningEnabled: await readMachineStopOpenWarningEnabled(cacheClient),
@@ -5030,6 +5045,18 @@ export class SystemSettingService {
         userId
       );
     }
+    if (Object.prototype.hasOwnProperty.call(input, "tamburLabelPrintTiming")) {
+      const v = input.tamburLabelPrintTiming;
+      if (typeof v !== "string" || !TAMBUR_LABEL_PRINT_TIMINGS.includes(v as TamburLabelPrintTiming)) {
+        throw AppError.badRequest("Tambur etiket basım zamanı EACH ya da END olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.TAMBUR_LABEL_PRINT_TIMING,
+        v,
+        "Tambur etiket basım zamanı: EACH (her top kesilince) | END (iş bitince toplu)",
+        userId
+      );
+    }
     if (Object.prototype.hasOwnProperty.call(input, "fasonShrinkTolerancePct")) {
       const v = input.fasonShrinkTolerancePct;
       // ⚠️ `null` = "alanı temizledim" → FABRİKA VARSAYILANINA döner (0 DEĞİL).
@@ -6728,6 +6755,14 @@ export const DEFAULT_FORM_APPROVAL: IncomingDocFormApprovalMode = "SEPARATE";
 export const readIncomingDocFormApproval = (tx?: Pick<typeof prisma, "systemSetting">): Promise<IncomingDocFormApprovalMode> =>
   readClosedSetting(SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, FORM_APPROVAL_VALUES, DEFAULT_FORM_APPROVAL, tx);
 
+/** S1 çok partili belge → iş emri: her parti ayrı iş emri (PER_PARTY) ya da tek iş emri, partiler ayrı top (SINGLE). */
+export type MultiPartyWorkOrderMode = "SINGLE" | "PER_PARTY";
+export const MULTI_PARTY_WORK_ORDER_VALUES: readonly MultiPartyWorkOrderMode[] = ["SINGLE", "PER_PARTY"];
+/** Varsayılan SINGLE = bugünkü davranış (belgeden tek iş emri). */
+export const DEFAULT_MULTI_PARTY_WORK_ORDER: MultiPartyWorkOrderMode = "SINGLE";
+export const readMultiPartyWorkOrder = (tx?: Pick<typeof prisma, "systemSetting">): Promise<MultiPartyWorkOrderMode> =>
+  readClosedSetting(SETTING_KEYS.GELEN_BELGE_MULTI_PARTY_WORK_ORDER, MULTI_PARTY_WORK_ORDER_VALUES, DEFAULT_MULTI_PARTY_WORK_ORDER, tx);
+
 /** İş emri açılınca refakat kartı kendiliğinden yazdırılsın mı (kayıt yok/çöp = false, bugünkü). */
 export async function readRefakatAutoPrint(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   const client = tx ?? prisma;
@@ -8356,6 +8391,25 @@ export async function readTamburChildWidthSource(
     return v as TamburChildWidthSource;
   }
   return DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE;
+}
+
+/**
+ * Tambur etiket basım zamanının TEK çözücüsü (Gülkesim S5). Kayıt yok/çöp → EACH
+ * (bugünkü davranış). Ad `read*` — `test_feature_flag_contract` okuyucuyu getFeatureFlags gövdesinden çözer.
+ */
+export async function readTamburLabelPrintTiming(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<TamburLabelPrintTiming> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.TAMBUR_LABEL_PRINT_TIMING },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (typeof v === "string" && TAMBUR_LABEL_PRINT_TIMINGS.includes(v as TamburLabelPrintTiming)) {
+    return v as TamburLabelPrintTiming;
+  }
+  return DEFAULT_TAMBUR_LABEL_PRINT_TIMING;
 }
 
 /**

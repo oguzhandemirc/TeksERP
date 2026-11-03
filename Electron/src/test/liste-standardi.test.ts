@@ -49,6 +49,7 @@ const EXEMPT: Record<string, string> = {
   "Operations/WeavingFloor/stops/StopBulkParts.tsx": GOMULU,
   "Operations/WorkOrders/BranchLanes.tsx": GOMULU,
   "Operations/WorkOrders/CoveragePanel.tsx": GOMULU,
+  "Operations/WorkOrders/oie/PartyList.tsx": GOMULU,
   "Quality/LabTests/LabResultsTable.tsx": GOMULU,
   "Stations/StationMachineTable.tsx": GOMULU,
   "System/DataImport/ConfigBundleCard.tsx": GOMULU,

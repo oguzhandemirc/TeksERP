@@ -89,6 +89,9 @@ import {
   DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE,
   TAMBUR_CHILD_WIDTH_SOURCES,
   readTamburChildWidthSource,
+  DEFAULT_TAMBUR_LABEL_PRINT_TIMING,
+  TAMBUR_LABEL_PRINT_TIMINGS,
+  readTamburLabelPrintTiming,
   DEFAULT_LABEL_CUSTOMER_CODE_AT,
   LABEL_CUSTOMER_CODE_AT_MODES,
   readLabelCustomerCodeAt,
@@ -651,6 +654,12 @@ async function main() {
       why: "Formdan okutulan belgenin kaydı (SEPARATE varsayılan | WITH_WORK_ORDER) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; kapıyı `POST /irsaliyeler/:id/is-emri` okur",
       file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
       needle: "formApproval: z.enum(",
+    },
+    // S1 (2026-11-03): çok partili belge → iş emri kipi; uçtaki Zod alanı + panel/tablet formu.
+    GELEN_BELGE_MULTI_PARTY_WORK_ORDER: {
+      why: "Çok partili belgeden iş emri (SINGLE varsayılan | PER_PARTY) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; `POST /irsaliyeler/:id/is-emri` mode verilmezse okur",
+      file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
+      needle: "multiPartyWorkOrder: z.enum(",
     },
     // Gülkesim S2 (K17, 2026-11-03): istasyonda belge okutarak iş emri bulma; panel satırı kayıt kipi alanında.
     GELEN_BELGE_STATION_DOC_LOOKUP: {
@@ -1627,6 +1636,7 @@ async function main() {
     ["webTotpPolicy", await readWebTotpPolicy(junkClient), DEFAULT_WEB_TOTP_POLICY],
     ["tamburPlanGateWidthCheck", await readTamburPlanGateWidthCheck(junkClient), DEFAULT_TAMBUR_PLAN_WIDTH_CHECK],
     ["tamburChildWidthSource", await readTamburChildWidthSource(junkClient), DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE],
+    ["tamburLabelPrintTiming", await readTamburLabelPrintTiming(junkClient), DEFAULT_TAMBUR_LABEL_PRINT_TIMING],
     ["labelCustomerCodeAt", await readLabelCustomerCodeAt(junkClient), DEFAULT_LABEL_CUSTOMER_CODE_AT],
     ["shippingReadyRule", await readShippingReadyRule(junkClient), DEFAULT_SHIP_READY_RULE],
     [
@@ -1654,6 +1664,7 @@ async function main() {
     "labelCustomerCodeMissing",
     "tamburPlanGateWidthCheck",
     "tamburChildWidthSource",
+    "tamburLabelPrintTiming",
     "labelCustomerCodeAt",
     "shippingReadyRule",
     "webTotpPolicy",
@@ -1684,6 +1695,7 @@ async function main() {
     ["webTotpPolicy", WEB_TOTP_POLICIES],
     ["tamburPlanGateWidthCheck", TAMBUR_PLAN_WIDTH_CHECKS],
     ["tamburChildWidthSource", TAMBUR_CHILD_WIDTH_SOURCES],
+    ["tamburLabelPrintTiming", TAMBUR_LABEL_PRINT_TIMINGS],
     ["labelCustomerCodeAt", LABEL_CUSTOMER_CODE_AT_MODES],
     ["shippingReadyRule", SHIP_READY_RULES],
     ["shippingDocItemNameMode", SHIPPING_DOC_ITEM_NAME_MODES],

@@ -1,13 +1,14 @@
 // Çıkarım → taslak eşlemesi (D3b, saf; DB yok): motor çıktısı (`DocumentExtraction`) → DRAFT başlık + satır girdisi.
 // Bölge ≥ 2 satırları blok numarasını SÜRDÜRÜR (tek taslak; panel "bölgeyi ayır"). Metrajı okunamayan satır
 // yazılmaz (`meters > 0` CHECK), uyarıya düşer; el yazısı ızgarasında her satır needsReview.
-import { parseNumber, type DocumentExtraction, type FieldResult, type ForeignDocument, type OcrRect, type RegionExtraction } from "./motor";
+import { parseNumber, type DocumentExtraction, type DocumentTemplate, type FieldResult, type ForeignDocument, type OcrRect, type RegionExtraction } from "./motor";
 import { documentDeclared, positive, type DocumentDeclared } from "./taslak-belge-beyan";
 import { clampOutlierFactor, markGridSuspects, METER_KEYS } from "./taslak-supheli";
 import { blockDiffWarning, FIELD_LABEL, firstBlockValue } from "./blok-alani";
 import { batchNoCandidates, type BatchNoCandidate } from "./parti-no";
 import { resolveKursunMeters, type KursunMeterResult } from "./kursun-metre";
 import { templateByCode } from "./sablon-bul";
+import { pageInfo, sectionDeclaredBlocks, sectionOfRow, type SectionIdentity } from "./taslak-bolum";
 
 // Şüpheli değer kuralı ayrı dosyada (max-lines); çağıranlar buradan alır.
 export { clampOutlierFactor, DEFAULT_OUTLIER_FACTOR, OUTLIER_FACTOR_MAX, OUTLIER_FACTOR_MIN, SUSPECT_MARK, suspectGridReasons, suspectGridSeqs, type SuspectReason } from "./taslak-supheli";
@@ -17,6 +18,8 @@ export interface DraftOptions {
   outlierFactor?: number;
   /** Tablosuz belgede satır metresi/kg kaynağı (fabrika ayarı); verilmezse OUTPUT = bugünkü (şablonun `m`/`kg` sırası). */
   headerLineSource?: "OUTPUT" | "INPUT";
+  /** Sınıflandırmada kullanılan şablon kümesi (dosya + kullanıcı); aday/metre kaynağı buradan, yoksa dosya şablonları. */
+  templates?: readonly DocumentTemplate[];
 }
 
 export interface DraftLine {
@@ -49,7 +52,11 @@ export interface DraftHeader {
   declaredTopCount: number | null;
   templateScore: number | null;
   /** `document`: başlıktaki belge geneli beyan (şablon `headerTotals`; yalnız ilk bölge, sıfır/okunamayan değer yok sayılır). */
-  totalsDeclared: { blocks: Array<{ blockNo: number; count: string | null; kg: string | null; m: string | null }>; document?: DocumentDeclared };
+  totalsDeclared: { blocks: Array<{ blockNo: number; count: string | null; kg: string | null; m: string | null } & Partial<SectionIdentity>>; document?: DocumentDeclared };
+  /** Sayfa damgası ("1/2"; bölümlü şablonda okunur) — taslağın `pageCount`u boşsa `of` yazılır. */
+  page: { no: number; of: number } | null;
+  /** Sayfa bölüm başlığı olmadan başladı: blok 1 satırları önceki sayfanın SON bölümüne eklenir. */
+  continuesPrevious: boolean;
   warnings: string[];
   /** Bölge başına özet (şablon kimliği, puan, başlık alanları) — scan.ocrResult zarfına; panel "bölgeyi ayır" buradan okur. */
   regions: Array<{ regionNo: number; templateId: string | null; score: number; fields: Record<string, string | null>; blocks?: Array<{ blockNo: number; fields: Record<string, string | null> }> }>;
@@ -94,6 +101,7 @@ function tableLines(reg: RegionExtraction, blockOffset: number, out: DraftLine[]
   let maxBlock = 0;
   // Yalnız ≥ 2 blokta satıra yazılır: tek blokta başlık işlemi zaten aynıdır (bugünkü davranış, satır null).
   const blockProcess = new Map<number, string>();
+  const sectionOf = sectionOfRow(reg);
   if (reg.blockFields.length >= 2) {
     for (const bf of reg.blockFields) {
       const v = clip(bf.fields.islem?.value, 120);
@@ -102,9 +110,11 @@ function tableLines(reg: RegionExtraction, blockOffset: number, out: DraftLine[]
   }
   for (const t of reg.tables) {
     for (const b of t.blocks) {
-      const blockNo = blockOffset + b.blockNo;
-      maxBlock = Math.max(maxBlock, b.blockNo);
       for (const r of b.rows) {
+        // Bölümlü şablonda satırın blok no'su BÖLÜMÜNDEN (parti); bölümsüzde tablo bloğu (bugünkü).
+        const local = sectionOf ? sectionOf(b.blockNo, r.index) : b.blockNo;
+        const blockNo = blockOffset + local;
+        maxBlock = Math.max(maxBlock, local);
         const cells = r.cells;
         const meters = positive(METER_KEYS.map((k) => cells[k]?.value).find((v) => v) ?? null);
         if (!meters) {
@@ -128,7 +138,7 @@ function tableLines(reg: RegionExtraction, blockOffset: number, out: DraftLine[]
           widthCm: positive(widthCell?.value),
           itemText: null,
           colorText: null,
-          processText: blockProcess.get(b.blockNo) ?? null,
+          processText: blockProcess.get(local) ?? null,
           confidence: confs.length ? Math.min(...confs) : 0,
           needsReview: r.needsReview,
           sourceRects: rects,
@@ -249,7 +259,9 @@ export function draftFromExtraction(doc: DocumentExtraction, opts: DraftOptions 
     if (diff) regionWarnings.push(diff);
     // Başlıktan satır yalnız İLK bölgede: ikinci bölge başka belgedir (başka sahip) — aynı taslağa top eklenmez.
     if (reg === first && maxBlock === 0 && !reg.grid) headerOnlyLine(reg, lines, regionWarnings, opts.headerLineSource);
-    if (reg.totals) {
+    const secBlocks = sectionDeclaredBlocks(reg, blockOffset);
+    if (secBlocks) totalsBlocks.push(...secBlocks);
+    else if (reg.totals) {
       for (const b of reg.totals.blocks) totalsBlocks.push({ blockNo: blockOffset + b.blockNo, count: b.declared?.count ?? null, kg: b.declared?.kg ?? null, m: b.declared?.m ?? null });
     }
     const gridBlock = blockOffset + Math.max(1, maxBlock + (maxBlock > 0 ? 1 : 0));
@@ -264,9 +276,11 @@ export function draftFromExtraction(doc: DocumentExtraction, opts: DraftOptions 
     const blocks = reg.blockFields.map((b) => ({ blockNo: blockOffset0 + b.blockNo, fields: Object.fromEntries(Object.entries(b.fields).map(([k, v]) => [k, v.value])) }));
     regions.push({ regionNo: reg.region.regionNo, templateId: reg.templateId, score: reg.classificationScore, fields, ...(blocks.length ? { blocks } : {}) });
   }
-  const topCount = pick(f, TOP_COUNT_KEYS);
+  // Bölümlü şablonda yazan top adedi bölüm başınadır (blocks[].topCount); başlığa tek sayı konmaz.
+  const topCount = first?.sections ? null : pick(f, TOP_COUNT_KEYS);
+  const pg = pageInfo(first);
   const docDecl = documentDeclared(first);
-  const tpl = templateByCode(first?.templateId);
+  const tpl = opts.templates?.find((t) => t.id === first?.templateId) ?? templateByCode(first?.templateId);
   return {
     header: {
       ownerText: clip(pick(f, OWNER_KEYS), 160),
@@ -280,6 +294,8 @@ export function draftFromExtraction(doc: DocumentExtraction, opts: DraftOptions 
       templateScore: first ? Math.round(first.classificationScore * 10000) / 10000 : null,
       totalsDeclared: { blocks: totalsBlocks, ...(docDecl ? { document: docDecl } : {}) },
       warnings,
+      page: pg.page,
+      continuesPrevious: pg.continuesPrevious,
       regions,
       batchNoCandidates: batchNoCandidates(tpl, regions[0]?.fields ?? {}),
       kursun: resolveKursunMeters({ template: tpl, fields: regions[0]?.fields ?? {}, totalsDeclared: { blocks: totalsBlocks }, lineMeters: lines.map((l) => l.meters) }),
@@ -292,55 +308,5 @@ export function draftFromExtraction(doc: DocumentExtraction, opts: DraftOptions 
 // Yan dönük sayfa kutularının fotoğraf çerçevesine dönüşü ayrı dosyada (max-lines); çağıranlar buradan alır.
 export { linesToPhotoFrame, rectToPhotoFrame } from "./taslak-foto-cerceve";
 
-/** Üst üste binen çekim denetimine giren mevcut satır (DB'den; sayılar ondalık metin). */
-export interface ExistingLineForOverlap {
-  senderRollNo: string | null;
-  meters: string;
-  weightKg: string | null;
-  ocrRaw: unknown;
-}
-
-/** Top No anahtarı: yalnız Top No kolonundan okunmuş satırda (sıra no / ızgara sırası sayfa başına yeniden başlar). */
-function overlapKey(l: { senderRollNo: string | null; ocrRaw: unknown }): string | null {
-  const raw = l.ocrRaw as Record<string, unknown> | null;
-  if (!raw || typeof raw !== "object" || !raw.topNo) return null;
-  const k = (l.senderRollNo ?? "").replace(/\s+/g, "").toUpperCase();
-  return k || null;
-}
-const sameNum = (a: string | null, b: string | null): boolean => (a === null || b === null ? a === b : Number(a) === Number(b));
-
-/**
- * Çok sayfalı taslakta üst üste binen çekim: yeni sayfanın satırı BAŞKA taramadan gelmiş satırla Top No + kg + metrede
- * birebir eşitse yazılmaz (her mevcut satır tek yeni satırı yutar); Top No aynı, sayılar farklıysa yazılır ama needsReview.
- * Aynı taramanın satırları birbiriyle karşılaştırılmaz (eşit metrajlı meşru toplar).
- */
-export function dropOverlapDuplicates(lines: DraftLine[], existing: ExistingLineForOverlap[], pageNo: number): { lines: DraftLine[]; warnings: string[] } {
-  const byKey = new Map<string, ExistingLineForOverlap[]>();
-  for (const e of existing) {
-    const k = overlapKey(e);
-    if (k) byKey.set(k, [...(byKey.get(k) ?? []), e]);
-  }
-  const out: DraftLine[] = [];
-  let skipped = 0;
-  let conflicts = 0;
-  for (const l of lines) {
-    const k = overlapKey(l);
-    const cands = k ? byKey.get(k) : undefined;
-    if (!k || !cands) {
-      out.push(l);
-      continue;
-    }
-    const i = cands.findIndex((e) => sameNum(e.meters, l.meters) && sameNum(e.weightKg, l.weightKg));
-    if (i >= 0) {
-      cands.splice(i, 1);
-      skipped++;
-      continue;
-    }
-    conflicts++;
-    out.push({ ...l, needsReview: true });
-  }
-  const warnings: string[] = [];
-  if (skipped) warnings.push(`OVERLAP_DUPLICATE_SKIPPED: Sayfa ${pageNo}: ${skipped} satır başka sayfada zaten vardı (üst üste binen çekim) — atlandı`);
-  if (conflicts) warnings.push(`OVERLAP_ROLL_NO_CONFLICT: Sayfa ${pageNo}: ${conflicts} satırın Top No'su başka sayfada farklı kg/metreyle var — gözden geçirin`);
-  return { lines: out, warnings };
-}
+// Üst üste binen çekim süzgeci ayrı dosyada (max-lines); çağıranlar buradan alır.
+export { dropOverlapDuplicates, type ExistingLineForOverlap } from "./taslak-ortusme";

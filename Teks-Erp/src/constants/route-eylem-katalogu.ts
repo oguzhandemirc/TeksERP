@@ -107,6 +107,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/kursun-qc/meter-readings/:id/office-ack": e("metre sapmasını ofisten onayladı", "metre sapmasını ofisten onaylamaya çalıştı"),
   "POST /api/kursun-qc/step/:stepId/foreign-machine-take": e("başka makineye atanmış işi bu makinede aldı", "başka makineye atanmış işi bu makinede almaya çalıştı"),
   "POST /api/tambur/meter-readings/:id/correct": e("Tambur kesim metresini düzeltti", "Tambur kesim metresini düzeltmeye çalıştı"),
+  "PUT /api/labels/work-orders/:id/overrides": e("terbiye iş emrinin etiket bilgisini değiştirdi", "terbiye iş emrinin etiket bilgisini değiştirmeye çalıştı"),
   // ── Gelen belge taslağı (D2)
   "POST /api/gelen-belge/taramalar": e("gelen belge fotoğrafı yükledi", "gelen belge fotoğrafı yüklemeye çalıştı"),
   "POST /api/gelen-belge/taramalar/:id/oku": e("gelen belge fotoğrafını okumaya gönderdi", "gelen belge fotoğrafını okumaya göndermeye çalıştı"),
@@ -124,6 +125,9 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/gelen-belge/irsaliyeler/:id/is-emri": e("gelen belgeden terbiye iş emri açtı", "gelen belgeden terbiye iş emri açmaya çalıştı"),
   "POST /api/gelen-belge/irsaliyeler/:id/iptal": e("onaylı gelen belgeyi iptal etti", "onaylı gelen belgeyi iptal etmeye çalıştı"),
   "PATCH /api/gelen-belge/sablonlar/:code": e("gönderen şablonunu düzenledi", "gönderen şablonunu düzenlemeye çalıştı"),
+  "POST /api/gelen-belge/sablonlar/ozel": e("gelen belge tipi tanıttı (kullanıcı şablonu)", "gelen belge tipi tanıtmaya çalıştı"),
+  "PUT /api/gelen-belge/sablonlar/ozel/:code": e("kullanıcı belge şablonunu güncelledi", "kullanıcı belge şablonunu güncellemeye çalıştı"),
+  "POST /api/gelen-belge/sablonlar/oneri": e("belge tipi için şablon önerisi aldı", "belge tipi için şablon önerisi almaya çalıştı"),
   "PUT /api/gelen-belge/varsayilan-urunler/:customerId": e("müşterinin gelen belge varsayılan ürününü yazdı", "müşterinin gelen belge varsayılan ürününü yazmaya çalıştı"),
   "DELETE /api/gelen-belge/varsayilan-urunler/:customerId": e("müşterinin gelen belge varsayılan ürününü kaldırdı", "müşterinin gelen belge varsayılan ürününü kaldırmaya çalıştı"),
 };

@@ -17,8 +17,13 @@ export interface NoteNotice {
   detail: string;
 }
 
-/** Canlı toplam şeridinde (`totalsCheck`) zaten olan, OCR anında donmuş kodlar — gösterilmez. */
-export const LIVE_TOTAL_CODES: ReadonlySet<string> = new Set(["TOTAL_MISMATCH", "DECLARED_TOP_COUNT_DIFF"]);
+/** Canlı toplam şeridinde (`totalsCheck`) ya da parti özetinde (`/partiler`) zaten olan, OCR anında donmuş kodlar — gösterilmez. */
+export const LIVE_TOTAL_CODES: ReadonlySet<string> = new Set([
+  "TOTAL_MISMATCH",
+  "DECLARED_TOP_COUNT_DIFF",
+  "SECTION_COUNT_MISMATCH",
+  "SECTION_SUBTOTAL_MISMATCH",
+]);
 
 export const NOTICE_TITLE: Record<string, string> = {
   SECOND_DOCUMENT_TRACE: "Sayfada ikinci belge var",
@@ -40,6 +45,8 @@ export const NOTICE_TITLE: Record<string, string> = {
   TEMPLATE_FALLBACK: "Gönderen şablonu yok",
   OVERLAP_DUPLICATE_SKIPPED: "Tekrarlanan satırlar atlandı",
   OVERLAP_ROLL_NO_CONFLICT: "Top No çakışması",
+  SECTION_CONTINUES: "Parti sonraki sayfada sürüyor",
+  PAGE_INCOMPLETE: "Belgenin diğer sayfaları eksik",
 };
 const OTHER_TITLE = "Okuma uyarısı";
 

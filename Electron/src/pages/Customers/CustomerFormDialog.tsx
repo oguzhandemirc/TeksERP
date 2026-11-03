@@ -27,6 +27,7 @@ import { exportCodeVisible } from "./branch-schema";
 import { CustomerItemAliasesPanel } from "./CustomerItemAliasesPanel";
 import { CustomerColorAliasesPanel } from "./CustomerColorAliasesPanel";
 import { CustomerTemplateRoutesPanel } from "./CustomerTemplateRoutesPanel";
+import { CustomerTamburLabelSettings } from "./CustomerTamburLabelSettings";
 import { CustomerStandaloneLabelsPanel } from "./CustomerStandaloneLabelsPanel";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { CariHoldPanel } from "@/pages/Finance/CariHold/CariHoldPanel";
@@ -385,6 +386,10 @@ export function CustomerFormDialog({
                     <section className="space-y-2">
                       <h4 className="text-sm font-semibold">Rulo/Kartela şablonları</h4>
                       <CustomerTemplateRoutesPanel customerId={initial.id} />
+                    </section>
+                    <section className="space-y-2 border-t pt-4">
+                      <h4 className="text-sm font-semibold">Tambur / Etiket</h4>
+                      <CustomerTamburLabelSettings customer={initial} />
                     </section>
                     <section className="space-y-2 border-t pt-4">
                       <h4 className="text-sm font-semibold">Serbest etiketler</h4>
