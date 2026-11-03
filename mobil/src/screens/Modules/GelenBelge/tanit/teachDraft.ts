@@ -15,14 +15,17 @@ export interface ScanMark {
 export const FIELD_OPTIONS = [
   { key: 'musteri', label: 'Müşteri' },
   { key: 'partiNo', label: 'Parti No' },
-  { key: 'toplamMetre', label: 'Metre' },
+  { key: 'toplamMetre', label: 'Kurşun metresi' },
   { key: 'evrakNo', label: 'Evrak No' },
   { key: 'tarih', label: 'Tarih' },
   { key: 'siparisNo', label: 'Sipariş No' },
   { key: 'topAdet', label: 'Top adedi' },
-  { key: 'desen', label: 'Desen' },
-  { key: 'renk', label: 'Renk' },
-  { key: 'en', label: 'En' },
+  { key: 'desen', label: 'Hedef kumaş (desen)' },
+  { key: 'renk', label: 'Hedef renk' },
+  { key: 'en', label: 'En (cm)' },
+  { key: 'hedefMetraj', label: 'Hedef metraj' },
+  { key: 'hedefKg', label: 'Hedef kg' },
+  { key: 'not', label: 'Not' },
 ] as const;
 export type FieldKey = (typeof FIELD_OPTIONS)[number]['key'];
 

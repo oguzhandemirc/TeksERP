@@ -15,15 +15,13 @@ import { BUYUK_GOVDE_LIMITI } from "../constants/body-limits";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireGelenBelgeEnabled } from "../middlewares/module.middleware";
 import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
-import {
-  addDeliveryNoteLines, createDeliveryNote, deleteDeliveryNote, deleteDeliveryNoteLine,
-  getDeliveryNote, listDeliveryNotes, updateDeliveryNote, updateDeliveryNoteLine,
-} from "../services/gelen-belge-note.service";
+import { addDeliveryNoteLines, createDeliveryNote, deleteDeliveryNote, deleteDeliveryNoteLine, getDeliveryNote, listDeliveryNotes, updateDeliveryNote, updateDeliveryNoteLine } from "../services/gelen-belge-note.service";
 import { approveDeliveryNote } from "../services/gelen-belge-onay.service";
 import { cancelDeliveryNote } from "../services/gelen-belge-iptal.service";
 import { previewDeliveryNoteCancel } from "../services/gelen-belge-iptal-onizleme.service";
 import { AUTO_WORK_ORDER_PERMISSIONS, assertRouteOverride, withAutoWorkOrders } from "../services/gelen-belge-oto-is-emri.service";
 import { createWorkOrderFromNote } from "../services/gelen-belge-form-is-emri.service";
+import { workOrderFormFieldShape } from "../controllers/workorder.controller";
 import { getNoteParties } from "../services/gelen-belge-cok-parti.service";
 import { applyBulkDeleteDeliveryNotes, BULK_DELETE_MAX, previewBulkDeleteDeliveryNotes } from "../services/gelen-belge-toplu-sil.service";
 import { getIncomingDocSettings, updateIncomingDocSettings } from "../services/gelen-belge-ayar.service";
@@ -408,6 +406,8 @@ const SettingsBody = z.strictObject({
   refakatAutoPrint: z.boolean("Refakat kartı otomatik yazdırma evet/hayır olmalı").optional(),
   stationDocLookup: z.boolean("İstasyonda belge okutma evet/hayır olmalı").optional(),
   photoRetention: z.enum(["FULL", "SHRINK_ON_APPROVAL", "DELETE_ON_APPROVAL", "DELETE_ON_DISPATCH"], "Seçenek FULL, SHRINK_ON_APPROVAL, DELETE_ON_APPROVAL ya da DELETE_ON_DISPATCH olmalı").optional(),
+  desenRenkEslesme: z.enum(["KAPALI", "ONER", "NOT"], "Seçenek KAPALI, ONER ya da NOT olmalı").optional(),
+  tabletIeGirisi: z.enum(["IKISI", "BELGE", "TOP"], "Seçenek IKISI, BELGE ya da TOP olmalı").optional(),
 });
 /**
  * @openapi
@@ -446,6 +446,8 @@ const SettingsBody = z.strictObject({
  *               refakatAutoPrint: { type: boolean, description: "İş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır (varsayılan false)" }
  *               stationDocLookup: { type: boolean, description: "İstasyon tabletinde belge okutarak iş emri bulma (varsayılan false)" }
  *               photoRetention: { type: string, enum: [FULL, SHRINK_ON_APPROVAL, DELETE_ON_APPROVAL, DELETE_ON_DISPATCH], description: "Belge fotoğrafı saklama (K28): tam (varsayılan) · onayda küçült · onayda sil · sevkte sil; geçmiş onaylı belgelere de uygulanır" }
+ *               desenRenkEslesme: { type: string, enum: [KAPALI, ONER, NOT], description: "Okunan desen/renk yazısı: kullanılmaz (varsayılan) · adı/kodu tutan kayıt önerilir · iş emri notuna eklenir" }
+ *               tabletIeGirisi: { type: string, enum: [IKISI, BELGE, TOP], description: "Tablet iş emri girişi: belge ve top okutma (varsayılan) · yalnız belge okutma · yalnız top okutma" }
  *     responses:
  *       200: { description: Güncel ayarlar }
  */
@@ -680,6 +682,8 @@ const FormWorkOrderBody = z.strictObject({
   mode: z.enum(["SINGLE", "PER_PARTY"], "Seçenek SINGLE ya da PER_PARTY olmalı").optional(),
   // K27 WARN: işi süren aynı belge no'lu eşe rağmen kaydet.
   confirmDuplicateDocNo: z.boolean("Onay bayrağı evet/hayır olmalı").optional(),
+  // K30 S16a: iş emri formunun alanları (quickStart ile aynı Zod; tarih yalnız ISO).
+  ...workOrderFormFieldShape,
 });
 /**
  * @openapi
@@ -709,9 +713,18 @@ const FormWorkOrderBody = z.strictObject({
  *               notes: { type: string, maxLength: 1000, nullable: true }
  *               parties: { type: array, minItems: 2, description: "Çok partili belge (S1): parti başına top; blockNo /partiler'den", items: { type: object, properties: { blockNo: { type: integer }, batchNo: { type: string, nullable: true }, meters: { type: number }, targetValues: { type: array }, stepPlanning: { type: array } } } }
  *               mode: { type: string, enum: [SINGLE, PER_PARTY], description: "Çok partide: tek iş emri (partiler ayrı top) ya da her parti ayrı iş emri; verilmezse fabrika ayarı gelenBelge.multiPartyWorkOrder (varsayılan SINGLE)" }
+ *               targetItemId: { type: string, format: uuid, description: "Hedef kumaş; belge onayında topların ürünü olur (top doğuramazsa 400 GELEN_BELGE_TARGET_ITEM_INVALID). Yoksa varsayılan ürün (bugünkü)" }
+ *               targetColorId: { type: string, format: uuid }
+ *               width: { type: number, exclusiveMinimum: 0, description: "En (cm)" }
+ *               targetQuantity: { type: number, exclusiveMinimum: 0, description: "Hedef metraj (m); PER_PARTY kipinde 400 GELEN_BELGE_FORM_TARGET_PER_PARTY" }
+ *               targetWeight: { type: number, exclusiveMinimum: 0, description: "Hedef kg; PER_PARTY kipinde 400 GELEN_BELGE_FORM_TARGET_PER_PARTY" }
+ *               plannedStartDate: { type: string, description: "ISO tarih/zaman" }
+ *               plannedEndDate: { type: string, description: "ISO tarih/zaman" }
+ *               foldType: { type: string, description: "Kat tipi; verilirse istasyon varsayılanını ezer" }
+ *               orderLineIds: { type: array, items: { type: string, format: uuid }, description: "Sipariş kalemleri (quick-start kuralı)" }
  *     responses:
  *       201: { description: "{ workOrderId, workOrderNo, batchNumber, rollId } (+ warnings)" }
- *       400: { description: "Doğrulama · GELEN_BELGE_ROUTE_OVERRIDE_INVALID · GELEN_BELGE_ROUTE_REQUIRED (rota yok + SIRALI; belge onaylanmaz) · GELEN_BELGE_PER_DOCUMENT_NEEDS_DEFAULT_ITEM · OWNER_CUSTOMER_INVALID" }
+ *       400: { description: "Doğrulama · GELEN_BELGE_ROUTE_OVERRIDE_INVALID · GELEN_BELGE_ROUTE_REQUIRED (rota yok + SIRALI; belge onaylanmaz) · GELEN_BELGE_PER_DOCUMENT_NEEDS_DEFAULT_ITEM · OWNER_CUSTOMER_INVALID · GELEN_BELGE_TARGET_ITEM_INVALID · GELEN_BELGE_FORM_TARGET_PER_PARTY" }
  *       403: { description: "GELEN_BELGE_FORM_APPROVAL_DISABLED (ayar ayrı onay) · MODULE_DISABLED (üretim) · iş emri açma izni yok" }
  *       409: { description: "DELIVERY_NOTE_NOT_READ (okuma READ/PARTIAL değil) · DELIVERY_NOTE_NOT_APPROVABLE · DELIVERY_NOTE_ROLL_MISSING · onay kapıları · token çakışması" }
  */

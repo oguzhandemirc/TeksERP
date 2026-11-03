@@ -26,6 +26,7 @@ import { mergeRouteDefaults, resolveStationDefaultTargets } from "./helpers/stat
 import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
 import { allPartiesEntered, assertPartiesShape, openPartyWorkOrders, partyRolls, type PartyInput, type PartyWorkOrder } from "./gelen-belge-cok-parti.service";
 import { readIncomingDocFormApproval, readMultiPartyWorkOrder, type MultiPartyWorkOrderMode } from "./system-setting.service";
+import { itemProblem } from "./gelen-belge-ayar.service";
 
 const workOrders = new WorkOrderService();
 
@@ -55,6 +56,35 @@ export interface FormWorkOrderInput {
   mode?: MultiPartyWorkOrderMode;
   /** K27 WARN: işi süren aynı belge no'lu eşe rağmen kaydet (onaya geçer). */
   confirmDuplicateDocNo?: boolean;
+  /** K30 S16a form alanları: verilen değer türetileni EZER, verilmeyen (undefined/null) bugünkü davranış. `targetItemId`
+   *  belge onayında topların ürünü olur; `targetQuantity`/`targetWeight` belge toplamıdır → PER_PARTY'de 400. */
+  targetItemId?: string | null;
+  targetColorId?: string | null;
+  width?: number | null;
+  targetQuantity?: number | null;
+  targetWeight?: number | null;
+  plannedStartDate?: string | null;
+  plannedEndDate?: string | null;
+  foldType?: string | null;
+  orderLineIds?: string[] | null;
+}
+
+/** quickStart'a geçen form alanları — yalnız verilenler (yoksa quickStart bugünkü gibi türetir). */
+export type FormWorkOrderFields = Pick<WorkOrderCreateInput, "targetItemId" | "targetColorId" | "width" | "targetQuantity" | "targetWeight" | "plannedStartDate" | "plannedEndDate" | "orderLineIds">;
+export function formWorkOrderFields(input: FormWorkOrderInput): FormWorkOrderFields {
+  const keys = ["targetItemId", "targetColorId", "width", "targetQuantity", "targetWeight", "plannedStartDate", "plannedEndDate"] as const;
+  const out: FormWorkOrderFields = {};
+  for (const k of keys) if (input[k] != null) Object.assign(out, { [k]: input[k] });
+  if (input.orderLineIds?.length) out.orderLineIds = input.orderLineIds;
+  return out;
+}
+
+/** Formda seçilen hedef ürün top doğurabilir mi (varsayılan ürünün TEK kapısı `itemProblem`) — onaydan ÖNCE, fail-closed. */
+async function resolveFormTargetItem(targetItemId: string | null | undefined): Promise<{ id: string; name: string } | undefined> {
+  if (!targetItemId) return undefined;
+  const { row, problem } = await itemProblem(targetItemId);
+  if (problem || !row) throw AppError.badRequest(`Hedef kumaş kullanılamıyor: ${problem ?? "Ürün bulunamadı."}`, { code: "GELEN_BELGE_TARGET_ITEM_INVALID" });
+  return { id: targetItemId, name: row.name };
 }
 
 export interface FormWorkOrderResult {
@@ -113,6 +143,12 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
 
   const parties = input.parties && input.parties.length > 1 ? input.parties : null;
   if (parties) assertPartiesShape(parties);
+  // K30: kip onaydan ÖNCE çözülür; parti başına İE'de hedef metraj/kg belge toplamı olduğundan her İE'ye yazılamaz.
+  const mode = parties ? (input.mode ?? (await readMultiPartyWorkOrder())) : undefined;
+  if (mode === "PER_PARTY" && (input.targetQuantity != null || input.targetWeight != null)) {
+    throw AppError.badRequest(`Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk} kipinde hedef metraj ve hedef kg verilemez (belge toplamıdır).`, { code: "GELEN_BELGE_FORM_TARGET_PER_PARTY" });
+  }
+  const item = await resolveFormTargetItem(input.targetItemId);
   // Çok partide kurşun metresi = partilerin toplamı (onay kapısı bu değeri okur; gövdenin tek metresi yerine).
   const kursunMeters = parties ? Math.round(parties.reduce((s, p) => s + p.meters, 0) * 1000) / 1000 : input.kursunMeters;
   const warnings: string[] = [];
@@ -143,10 +179,11 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
       entryMode: "PER_DOCUMENT",
       via: `WITH_WORK_ORDER: ${user?.username ?? actor.userId}`,
       ...(parties ? { parties: parties.map((p) => ({ blockNo: p.blockNo, meters: p.meters })) } : {}),
+      ...(item ? { item } : {}),
     });
     warnings.push(...approved.warnings);
   }
-  if (parties) return finishParties({ note, parties, input, route, userId: actor.userId, warnings });
+  if (parties) return finishParties({ note, parties, mode: mode!, input, route, userId: actor.userId, warnings });
 
   const line = await prisma.customerDeliveryNoteLine.findUnique({ where: { id: summaryLineId(noteId) }, select: { rollId: true, failReason: true, roll: { select: { barcode: true } } } });
   if (!line?.rollId || !line.roll?.barcode) {
@@ -161,9 +198,10 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
     ...routeInput(route),
     targetValues: targets.targetValues,
     targetPropertyIds: targets.targetPropertyIds,
-    ...(targets.foldType ? { foldType: targets.foldType } : {}),
+    ...(input.foldType ?? targets.foldType ? { foldType: input.foldType ?? targets.foldType } : {}),
     ...(stepPlanning?.length ? { stepPlanning } : {}),
     ...(input.notes ? { notes: input.notes } : {}),
+    ...formWorkOrderFields(input),
     sourceNoteId: noteId,
   }, actor.userId);
   const wo = res.data?.workOrder;
@@ -173,15 +211,15 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
 }
 
 /** Çok partili kayıt: parti topları → mod (gövde > fabrika ayarı) → iş emirleri. Yanıtın üst alanları ilk iş emridir. */
-async function finishParties({ note, parties, input, route, userId, warnings }: { note: { id: string; noteNo: string }; parties: PartyInput[]; input: FormWorkOrderInput; route: FormWorkOrderRoute; userId: string; warnings: string[] }): Promise<FormWorkOrderResult> {
+async function finishParties({ note, parties, mode, input, route, userId, warnings }: { note: { id: string; noteNo: string }; parties: PartyInput[]; mode: MultiPartyWorkOrderMode; input: FormWorkOrderInput; route: FormWorkOrderRoute; userId: string; warnings: string[] }): Promise<FormWorkOrderResult> {
   const rolls = await partyRolls(note.id, note.noteNo, parties);
-  const mode = input.mode ?? (await readMultiPartyWorkOrder());
   // K22: değerler gövdeden; çözücünün bayrakları ve KAT'ı her iş emrine (tek parti yoluyla aynı).
   const defaults = await resolveFormWorkOrderTargets(route.routeTemplateId, input.ownerCustomerId, input.targetValues);
   const withDefaultFlags = async (targets: ReadonlyArray<{ propertyId: string }>) => [...new Set([...defaults.targetPropertyIds, ...(await flagPropertyIds(targets))])];
   const res = await openPartyWorkOrders({
     noteId: note.id, clientToken: input.clientToken, route, mode, parties, rolls,
-    targetValues: defaults.targetValues, foldType: defaults.foldType, stepPlanning: input.stepPlanning, notes: input.notes, flagPropertyIds: withDefaultFlags,
+    targetValues: defaults.targetValues, foldType: input.foldType ?? defaults.foldType, stepPlanning: input.stepPlanning, notes: input.notes, flagPropertyIds: withDefaultFlags,
+    fields: formWorkOrderFields(input),
   }, userId);
   warnings.push(...res.warnings);
   const first = res.workOrders[0]!;

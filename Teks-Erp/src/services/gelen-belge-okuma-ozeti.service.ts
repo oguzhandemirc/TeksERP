@@ -15,6 +15,7 @@ import { readDocumentTotalCheck } from "./system-setting.service";
 import { noteNotices } from "../lib/gelen-belge/uyari";
 import { noteBatchAndMeters } from "./gelen-belge-parti-metre.service";
 import { suggestOwnerForNote } from "./gelen-belge-sahip-onerisi.service";
+import { noteFormFields } from "./gelen-belge-form-alanlari.service";
 
 export type ReadSummaryState = "NO_PAGES" | "READING" | "NO_SERVICE" | "READ" | "PARTIAL" | "FAILED";
 
@@ -111,5 +112,7 @@ export async function getReadSummary(noteId: string) {
     // buradan kurulur (`detailFromSummary`). Eski tablet alanları yok sayar.
     ownerCustomerId: note.ownerCustomerId,
     ownerSuggestion: await suggestOwnerForNote({ id: note.id, status: note.status, ownerCustomerId: note.ownerCustomerId }),
+    // K30 S16a iş emri tek formu: tanıtılmış alanlar (`formFields`) + `desenRenkEslesme=ONER`de kayıt önerisi (`suggestions`).
+    ...(await noteFormFields(note.id)),
   };
 }
