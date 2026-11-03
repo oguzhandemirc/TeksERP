@@ -147,7 +147,8 @@ export function haritaAnahtarlari(metin: string, ad: string): string[] {
   const bulunan: string[] = [];
   let derinlik = 0;
   for (const satir of blok.split("\n")) {
-    const eslesme = derinlik === 0 ? /^\s*([A-Z][A-Z0-9_]*)\s*:/.exec(satir) : null;
+    // Terim-rejimli etiket getter da anahtardır: `get WORK_ORDER_PLAN_CHANGE() {...}`.
+    const eslesme = derinlik === 0 ? /^\s*(?:get\s+)?([A-Z][A-Z0-9_]*)\s*(?::|\(\))/.exec(satir) : null;
     if (eslesme) bulunan.push(eslesme[1] as string);
     for (const ch of satir) {
       if (ch === "{" || ch === "[") derinlik += 1;

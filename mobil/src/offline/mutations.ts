@@ -93,6 +93,8 @@ export interface TamburFinalizeOpenFabricVars {
    *  gelir — sapma yoksa backend zaten bakmaz; sapma varsa replay 409'a düşer
    *  ve kalıcı-düşüş toast'ı sebebi söyler (kayıt yazılmadı, mal ekranda). */
   confirmMismatch?: boolean;
+  /** Kalan topun kg'ı (S5 tartım; müşteri ayarı açıksa zorunlu). Eski kuyrukta `undefined`. */
+  weightKg?: number;
 }
 
 /** NoAuth bekleme aralığı — token gelene dek sunucusuz "yokla" periyodu. */
@@ -241,6 +243,8 @@ export function registerStationMutationDefaults(): void {
         // Plan-gerçek sapma onayı — üstteki uyarının kapsamında: bu satır
         // düşerse operatör onaylar, bayrak isteğe HİÇ girmez, replay 409'da kalır.
         confirmMismatch: vars.confirmMismatch,
+        // Kalan topun kg'ı — aynı sessiz-allowlist tuzağı (S5 tartım).
+        weightKg: vars.weightKg,
       })),
     ...OFFLINE_AWARE,
   });

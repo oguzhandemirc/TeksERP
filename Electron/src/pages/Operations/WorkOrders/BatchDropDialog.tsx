@@ -31,6 +31,7 @@ import {
   formatSummary,
   MIN_REASON_LENGTH,
 } from "./cancelDecisions";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   open: boolean;
@@ -131,7 +132,7 @@ export function BatchDropDialog({
             Partiyi düşür
           </DialogTitle>
           <DialogDescription>
-            <span className="font-mono">{preview?.batchNumber ?? "Parti"}</span> · terbiye iş emri devam
+            <span className="font-mono">{preview?.batchNumber ?? "Parti"}</span> · {TERIM.terbiyeIsEmri.tekilKucuk} devam
             eder
           </DialogDescription>
         </DialogHeader>
@@ -157,8 +158,8 @@ export function BatchDropDialog({
               <div className="rounded-md border bg-muted/20 px-3 py-2 text-xs">
                 {preview.rollCount} top · {formatNumber(preview.totalMeters)} m
                 {preview.otherBatches.length > 0
-                  ? ` · terbiye iş emrinde ${preview.otherBatches.length} parti daha kalır`
-                  : " · terbiye iş emrinde başka parti yok"}
+                  ? ` · ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} ${preview.otherBatches.length} parti daha kalır`
+                  : ` · ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} başka parti yok`}
               </div>
 
               {!preview.canDrop && (

@@ -7,6 +7,7 @@ import {
   type SubcontractorCategoryFormValues,
 } from "./schema";
 import type { SubcontractorCategory } from "./types";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   open: boolean;
@@ -61,7 +62,7 @@ export function SubcontractorCategoryFormDialog({
             <span>
               <span className="font-medium">Renk veren kategori</span>
               <span className="block text-xs text-muted-foreground">
-                İşaretliyse: fason kabulde Roll'a terbiye iş emrinin hedef rengi
+                İşaretliyse: fason kabulde Roll'a {TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedef rengi
                 otomatik uygulanır. Boyahane için aç; Zımpara/Yıkama gibi
                 renk vermeyen kategoriler için kapalı bırak.
               </span>
@@ -72,7 +73,7 @@ export function SubcontractorCategoryFormDialog({
             <span>
               <span className="font-medium">Özellik veren kategori</span>
               <span className="block text-xs text-muted-foreground">
-                İşaretliyse: fason kabulde Roll'a terbiye iş emrinin hedef özellikleri
+                İşaretliyse: fason kabulde Roll'a {TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedef özellikleri
                 otomatik uygulanır. Boyahane'de renk ile birlikte; ileride
                 Zımpara/Kurşun gibi "zımparalanmış"/"kurşunlanmış" özelliğini
                 kazandıracak adımlar için bağımsız açılabilir.

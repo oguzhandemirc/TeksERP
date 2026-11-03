@@ -4,6 +4,7 @@
 import { REPORT_CATALOG, type ReportCatalogEntry, type ReportKategoriV2 } from "@/lib/report-catalog";
 import { isReportSurfaced } from "@/lib/report-gate";
 import { isRouteModuleOpen } from "@/lib/route-modules";
+import { EMPTY_MENU_LAYOUT, isMenuHidden, type MenuLayoutState } from "@/lib/menu-layout";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 
 /** Levent raporu modülden ayrıca devere ister (v1 levent karolarıyla aynı beyan; uç `requireDevereEnabled`). */
@@ -45,8 +46,13 @@ export interface CenterGroup {
 }
 
 /** Görünür satırlar kategoriye göre; boş kategori çizilmez. Yalnız `kategoriV2` taşıyan satırlar. */
-export function centerGroups(a: CenterAccess, catalog: readonly ReportCatalogEntry[] = REPORT_CATALOG): CenterGroup[] {
-  const visible = catalog.filter((e) => e.kategoriV2 !== null && isCenterEntryVisible(e, a));
+export function centerGroups(
+  a: CenterAccess,
+  catalog: readonly ReportCatalogEntry[] = REPORT_CATALOG,
+  menu: MenuLayoutState = EMPTY_MENU_LAYOUT,
+): CenterGroup[] {
+  // K19 menü süzgeci yalnız çizimi düşürür; adres kapısı (`isCenterEntryVisible`) değişmez — gizleme güvenlik sınırı değil.
+  const visible = catalog.filter((e) => e.kategoriV2 !== null && isCenterEntryVisible(e, a) && !isMenuHidden(menu, `/${e.panelYolu}`));
   return CENTER_CATEGORIES.map((c) => ({ ...c, entries: visible.filter((e) => e.kategoriV2 === c.key) })).filter((g) => g.entries.length > 0);
 }
 

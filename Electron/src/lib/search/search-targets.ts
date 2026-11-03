@@ -83,7 +83,7 @@ export const SEARCH_TARGETS: Record<string, SearchTarget> = {
     listTo: (t) => `/operations/orders?search=${q(t)}`,
   },
   workOrder: {
-    label: TERIM.terbiyeIsEmri.cogul,
+    get label() { return TERIM.terbiyeIsEmri.cogul; },
     icon: Factory,
     permissions: ["workorder:read"],
     to: (r) => ({ to: `/operations/work-orders/${r.id}` }),

@@ -90,7 +90,7 @@ export const EXPORT_DATASET_LABEL: Readonly<Record<string, string>> = {
   sevkiyat: "Sevkiyatlar",
   "dogrudan-sevk": "Doğrudan sevkler",
   cuval: "Çuvallar",
-  "is-emri": TERIM.terbiyeIsEmri.cogul,
+  get "is-emri"() { return TERIM.terbiyeIsEmri.cogul; },
   "cari-hesap": "Cari hesaplar",
   "cari-hareket": "Cari hareketleri",
   kasa: "Kasalar",

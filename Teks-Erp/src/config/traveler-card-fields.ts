@@ -38,7 +38,7 @@ export const TRAVELER_FIELDS: TravelerFieldDef[] = [
   // ── kart kimliği ────────────────────────────────────────────────────────
   { key: "cardNumber", label: "Kart No", group: "kart", sample: "IE0308260007" },
   { key: "barcode", label: "Barkod / karekod metni", group: "kart", sample: "IE0308260007" },
-  { key: "workOrderNumber", label: `${TERIM.terbiyeIsEmri.tekil} No`, group: "kart", sample: "IE0308260007" },
+  { key: "workOrderNumber", get label() { return `${TERIM.terbiyeIsEmri.tekil} No`; }, group: "kart", sample: "IE0308260007" },
   { key: "version", label: "Versiyon", group: "kart", sample: "1" },
   { key: "printedAt", label: "Basım tarihi", group: "kart", sample: "03.08.2026 09:12" },
   { key: "companyName", label: "Firma adı", group: "kart", sample: "Örnek Tekstil A.Ş." },

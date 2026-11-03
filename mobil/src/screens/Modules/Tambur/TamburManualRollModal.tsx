@@ -54,6 +54,7 @@ import {
 import { colors, radius, spacing } from '../../../theme';
 import type { QualityGrade } from '../../../types/models';
 import { showScreenError } from '../../../lib/screenToast';
+import { TERIM } from '../../../lib/terim';
 
 /** Sebep alt sınırı — "Manuel Mod" ile ORTAK (backend de aynısını uygular). */
 const MIN_REASON = MANUAL_MIN_REASON;
@@ -375,7 +376,7 @@ export default function TamburManualRollModal({
                     Barkod sunucuda üretilecek, top "elle eklendi" (MANUEL GİRİŞ) olarak
                     işaretlenecek ve doğrudan {stationName} adımına alınacak — hemen
                     kesebilirsin. Sebep, operatör ve makine kalıcı olarak kaydedilir.
-                    Tamamlanmış bir terbiye iş emri ise yeniden açılır.
+                    Tamamlanmış bir {TERIM.terbiyeIsEmri.tekilKucuk} ise yeniden açılır.
                   </Text>
                 </View>
               </>

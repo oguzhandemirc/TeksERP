@@ -541,6 +541,8 @@ export const tamburService = {
       /** SAPMA SEBEBİ (2026-08-09) — yalnız `scrap`/`discard` kararında anlamlı. */
       varianceReasonCode?: string | null;
       varianceReasonText?: string | null;
+      /** Kalan topun kg'ı (S5 tartım kapısı). */
+      weightKg?: number | null;
     }
   ): Promise<ApiResponse<{ rollId: string; remainingChild: Roll | null; remainingQty: number }>> =>
     apiClient

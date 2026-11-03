@@ -47,6 +47,7 @@ import { RouteStepDetail, type RouteTargetBinding, type StepParamBox } from "./R
 import { deriveStepTargets, type RouteStepTargetPlan } from "./workOrderPrefill";
 import type { DesignerStep } from "./RouteDesignerDialog";
 import { loadAllForPicker } from "@/lib/picker-loader";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   steps: DesignerStep[];
@@ -411,7 +412,7 @@ export function RouteEditor({
             </DialogTitle>
             <DialogDescription>
               Bu üretim akışını yeniden kullanılabilir bir rota olarak kaydet — sonraki
-              terbiye iş emirlerinde başlıktaki "Rota seç" ile tek tıkla gelir. Seçili hedef
+              {TERIM.terbiyeIsEmri.cogulCekimKucuk.bulunma} başlıktaki "Rota seç" ile tek tıkla gelir. Seçili hedef
               renk/özellikler de adımlarına yazılır; rota uygulanınca hazır gelirler.
             </DialogDescription>
           </DialogHeader>

@@ -23,6 +23,7 @@ import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { claimWorkOrderStatusTx } from "./helpers/workorder-event.helper";
 import { deleteIfEmptyAndTracelessTx } from "./batch.service";
+import { TERIM } from "../constants/terim";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -56,7 +57,7 @@ async function loadWo(db: Db, workOrderId: string): Promise<WoSteps> {
     where: { id: workOrderId },
     select: { id: true, status: true, workOrderNumber: true, steps: { select: { id: true, stepSequence: true }, orderBy: { stepSequence: "asc" } } },
   });
-  if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
+  if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı`);
   return wo;
 }
 
@@ -110,7 +111,7 @@ export class WorkOrderRollDetachService {
     });
     const data = [];
     for (const r of rolls) {
-      const blockers = FROZEN.includes(wo.status) ? ["terbiye iş emri kapalı"] : await detachBlockers(prisma, r, wo);
+      const blockers = FROZEN.includes(wo.status) ? [`${TERIM.terbiyeIsEmri.tekilKucuk} kapalı`] : await detachBlockers(prisma, r, wo);
       data.push({ id: r.id, barcode: r.barcode, currentQty: Number(r.currentQty), status: r.status, detachable: blockers.length === 0, blockers });
     }
     return { success: true, data };
@@ -132,7 +133,7 @@ export class WorkOrderRollDetachService {
     return {
       success: true,
       data: result,
-      message: `${result.barcode ?? "Top"} terbiye iş emrinden çıkarıldı${result.workOrderReverted ? " — terbiye iş emrinde top kalmadı, Planlandı'ya döndü" : ""}.`,
+      message: `${result.barcode ?? "Top"} ${TERIM.terbiyeIsEmri.cekimKucuk.ayrilma} çıkarıldı${result.workOrderReverted ? ` — ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} top kalmadı, Planlandı'ya döndü` : ""}.`,
     };
   }
 
@@ -140,10 +141,10 @@ export class WorkOrderRollDetachService {
     const { workOrderId, rollId, why, userId } = input;
     await touchWorkOrderTx(tx, workOrderId);
     const wo = await loadWo(tx, workOrderId);
-    if (FROZEN.includes(wo.status)) throw AppError.conflict("Tamamlanmış ya da iptal edilmiş terbiye iş emrinden top çıkarılamaz.");
+    if (FROZEN.includes(wo.status)) throw AppError.conflict(`Tamamlanmış ya da iptal edilmiş ${TERIM.terbiyeIsEmri.cekimKucuk.ayrilma} top çıkarılamaz.`);
     const roll = await tx.roll.findUnique({ where: { id: rollId }, select: ROLL_SELECT });
     const first = wo.steps[0];
-    if (!roll || !first || !wo.steps.some((s) => s.id === roll.currentStepId)) throw AppError.notFound("Bu top bu terbiye iş emrinde değil.");
+    if (!roll || !first || !wo.steps.some((s) => s.id === roll.currentStepId)) throw AppError.notFound(`Bu top bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} değil.`);
     const blockers = await detachBlockers(tx, roll, wo);
     if (blockers.length > 0) {
       throw AppError.conflict(`Bu top işlem gördü (${blockers.join(", ")}) — panelden Konumu Düzelt ya da Parti Düşür kullanın.`, {
@@ -153,7 +154,7 @@ export class WorkOrderRollDetachService {
     }
     const issue = await findOpenProductionIssueTx(tx, rollId, [first.id]);
     const backStatus = issue?.fromStatus ?? (await statusBeforeEntry(tx, rollId));
-    if (!backStatus) throw AppError.conflict("Topun terbiye iş emrinden önceki durumu bulunamadı — panelden Konumu Düzelt kullanın.");
+    if (!backStatus) throw AppError.conflict(`Topun ${TERIM.terbiyeIsEmri.cekimKucuk.ayrilma} önceki durumu bulunamadı — panelden Konumu Düzelt kullanın.`);
     const claim = await tx.roll.updateMany({
       where: { id: rollId, status: RollStatus.IN_PRODUCTION, currentStepId: first.id },
       data: {

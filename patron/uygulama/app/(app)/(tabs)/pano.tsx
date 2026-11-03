@@ -39,7 +39,7 @@ const MODULE_HINT: Readonly<Partial<Record<ModuleKey, string>>> = {
   siparisler: "Açık siparişler ve termin",
   cariler: "Müşteri ve tedarikçi kartları",
   sevkiyat: "Son sevkler ve zamanında teslim",
-  uretim: `İstasyonlar ve ${TERIM.terbiyeIsEmri.cogulKucuk}`,
+  get uretim() { return `İstasyonlar ve ${TERIM.terbiyeIsEmri.cogulKucuk}`; },
   stok: "Ham, yarı mamul ve bitmiş stok",
   finans: "Kasa, çek, fatura ve tahsilat",
   raporlar: "Hazır raporlar ve istekler",

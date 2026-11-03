@@ -34,7 +34,7 @@ export async function printRefakatCard(workOrderId: string): Promise<AutoPrintOu
 
 export const AUTO_PRINT_TEXT: Record<AutoPrintOutcome, string> = {
   PRINTED: "Refakat kartı yazdırıldı.",
-  CANCELLED: `Refakat kartı yazdırılmadı (iptal edildi) — ${TERIM.terbiyeIsEmri.tekilKucuk} detayından basabilirsiniz.`,
-  NO_CARD: `Refakat kartı bulunamadı — ${TERIM.terbiyeIsEmri.tekilKucuk} detayından basın.`,
-  FAILED: `Refakat kartı yazdırılamadı — ${TERIM.terbiyeIsEmri.tekilKucuk} detayından basın.`,
+  get CANCELLED() { return `Refakat kartı yazdırılmadı (iptal edildi) — ${TERIM.terbiyeIsEmri.tekilKucuk} detayından basabilirsiniz.`; },
+  get NO_CARD() { return `Refakat kartı bulunamadı — ${TERIM.terbiyeIsEmri.tekilKucuk} detayından basın.`; },
+  get FAILED() { return `Refakat kartı yazdırılamadı — ${TERIM.terbiyeIsEmri.tekilKucuk} detayından basın.`; },
 };

@@ -77,7 +77,7 @@ export function buildChainExport(c: ChainReport, filterNotes: string[] = []): Re
     orientation: "landscape",
     meta: [
       ...filterNotes,
-      "Satır = açık sipariş satırı → terbiye iş emri → dokuma iş emri" + (c.moduller.devere ? " → levent" : "") + ". Sayılar kendi defterlerinden: karşılanan sevkten, dokunan koşum metresinden, levent kalanı levent defterinden.",
+      `Satır = açık sipariş satırı → ${TERIM.terbiyeIsEmri.tekilKucuk} → dokuma iş emri` + (c.moduller.devere ? " → levent" : "") + ". Sayılar kendi defterlerinden: karşılanan sevkten, dokunan koşum metresinden, levent kalanı levent defterinden.",
       "Dokuma ilerlemesi Σ dokunan ÷ planlanan; plan yoksa boş kalır (yüzde uydurulmaz). %100 işi kapatmaz.",
       "Gecikme: dokuma iş emrinin plan bitişi (yoksa siparişin teslim tarihi) bugünden önceyse gün sayısı.",
       c.satirOmitted > 0 ? `⚠️ ${c.satirOmitted} satır listeye SIĞMADI (tavan 500). Özet rakamları TÜM satırları kapsar.` : "Tüm satırlar listelendi.",

@@ -26,6 +26,7 @@ import { STEP_CAPABILITY_SELECT, stepCanApplyColor, stepCanApplyProperty } from 
 import { ACTIVE_ROLL_PROPERTY, ACTIVE_TARGET_PROPERTY } from "./helpers/property-revoke.helper";
 import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
 import { unitLabel } from "../constants/item-unit";
+import { TERIM } from "../constants/terim";
 
 type Tx = Prisma.TransactionClient;
 
@@ -67,9 +68,11 @@ const WO_ADD_SELECT = {
 type WoForAdd = Prisma.WorkOrderGetPayload<{ select: typeof WO_ADD_SELECT }>;
 
 /** Tamamlanmış iş emrine top giremez — Parti Ekle, quickStart ve saha düzeltme araçları (Tambur/taşıma) AYNI cevabı verir. */
-export const WO_COMPLETED_NO_ADD_MESSAGE = "Tamamlanmış terbiye iş emrine top eklenemez — yeni terbiye iş emri açın.";
+export function woCompletedNoAddMessage(): string {
+  return `Tamamlanmış ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} top eklenemez — yeni ${TERIM.terbiyeIsEmri.tekilKucuk} açın.`;
+}
 export function completedNoAddError(): AppError {
-  return AppError.conflict(WO_COMPLETED_NO_ADD_MESSAGE, { code: "WO_COMPLETED_NO_ADD" });
+  return AppError.conflict(woCompletedNoAddMessage(), { code: "WO_COMPLETED_NO_ADD" });
 }
 
 /** Parti eklenebilen durumlar — ALLOWLIST (fail-closed): yeni bir statü doğarsa kapı kapalı doğar. */
@@ -78,15 +81,15 @@ const OPEN_FOR_ADD: readonly WorkOrderStatus[] = [WorkOrderStatus.PLANNED, WorkO
 async function loadOpenWorkOrderTx(tx: Tx, workOrderId: string): Promise<WoForAdd> {
   await touchWorkOrderTx(tx, workOrderId);
   const wo = await tx.workOrder.findUnique({ where: { id: workOrderId }, select: WO_ADD_SELECT });
-  if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
+  if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı`);
   if (wo.status === WorkOrderStatus.COMPLETED) throw completedNoAddError();
   if (!OPEN_FOR_ADD.includes(wo.status)) {
     throw AppError.conflict(
-      `${wo.workOrderNumber} terbiye iş emri ${wo.status === WorkOrderStatus.CANCELLED ? "iptal edildi" : "devredildi"} — top bağlanamaz. Listeyi yenileyin.`,
+      `${wo.workOrderNumber} ${TERIM.terbiyeIsEmri.tekilKucuk} ${wo.status === WorkOrderStatus.CANCELLED ? "iptal edildi" : "devredildi"} — top bağlanamaz. Listeyi yenileyin.`,
       { code: "WORKORDER_TERMINAL_DURING_ATTACH" },
     );
   }
-  if (wo.steps.length === 0) throw AppError.badRequest("Terbiye iş emrinde rota adımı tanımlanmamış");
+  if (wo.steps.length === 0) throw AppError.badRequest(`${TERIM.terbiyeIsEmri.cumleBasi.bulunma} rota adımı tanımlanmamış`);
   return wo;
 }
 
@@ -114,7 +117,7 @@ async function classifyRollsTx(tx: Tx, wo: WoForAdd, barcodes: string[]): Promis
     const reason = !r ? "Barkod bulunamadı"
       : !ATTACHABLE_ROLL_STATUSES.includes(r.status) ? `Top stokta değil (${r.status})`
       : r.sackId || r.shipmentId ? "Top bir çuvalda/sevkiyatta — önce oradan çıkarın"
-      : itemOf && r.itemId !== itemOf ? "Farklı kumaş — tek terbiye iş emri tek kumaş"
+      : itemOf && r.itemId !== itemOf ? `Farklı kumaş — tek ${TERIM.terbiyeIsEmri.tekilKucuk} tek kumaş`
       : null;
     if (reason || !r) rejects.push({ barcode, reason: reason ?? "Barkod bulunamadı" });
     else ok.push(r);
@@ -151,9 +154,9 @@ async function addWarningsTx(tx: Tx, wo: WoForAdd, claimed: RollRow[]): Promise<
   const agg = await tx.roll.aggregate({ where: { batch: { workOrderId: wo.id }, status: { notIn: K18_DEAD_STATUSES } }, _sum: { currentQty: true } });
   const total = Number(agg._sum.currentQty ?? 0);
   const target = Number(wo.targetQuantity ?? 0);
-  if (target > 0 && total > target) out.push(`Hedef ${fmt(target)}, terbiye iş emrindeki toplam ${fmt(total)}.`);
+  if (target > 0 && total > target) out.push(`Hedef ${fmt(target)}, ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma}ki toplam ${fmt(total)}.`);
   const ordered = wo.orderLinks.reduce((acc, l) => acc + Number(l.allocatedQty), 0);
-  if (ordered > 0 && total > ordered) out.push(`Sipariş tahsisi ${fmt(ordered)}, terbiye iş emrindeki toplam ${fmt(total)}.`);
+  if (ordered > 0 && total > ordered) out.push(`Sipariş tahsisi ${fmt(ordered)}, ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma}ki toplam ${fmt(total)}.`);
   const colorStep = wo.steps.some((s) => stepCanApplyColor(s.station, s.requiredCategory));
   const offColor = wo.targetColorId && !colorStep ? claimed.filter((r) => r.colorId !== wo.targetColorId).length : 0;
   if (offColor > 0) out.push(`${offColor} top hedef renkte değil ve rotada renk veren adım yok — bu renge boyanmayacak.`);
@@ -236,7 +239,7 @@ const batchReplay = (workOrderId: string, barcodes: string[]) =>
         { ad: "missingRolls", mevcut: barcodes.filter((x) => !inBatch.has(x)).join(","), gelen: "" },
       ];
     },
-    collision: "Bu istek başka bir terbiye iş emri ya da başka toplar için kullanıldı — formu yenileyip yeniden deneyin.",
+    collision: `Bu istek başka bir ${TERIM.terbiyeIsEmri.tekilKucuk} ya da başka toplar için kullanıldı — formu yenileyip yeniden deneyin.`,
     respond: (b) => ({ success: true, data: { batch: { id: b.id, batchNumber: b.batchNumber }, rollCount: b.rolls.length, warnings: [], replay: true } }),
   });
 

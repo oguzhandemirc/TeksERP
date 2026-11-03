@@ -104,9 +104,10 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   PERMISSION: "LoomAlarmRecipientSource(yetki kuralıyla) ve LoomAlarmRuleRecipientKind(kural: yetki koduna sahip herkes) — ikisi de 'Yetki'",
   RESOLVED:
     "LoomAlarmState(alarm çözüldü) ve LoomAlarmEventKind(çözülme olayı) — aynı olgunun durumu ve olayı; ortak 'Çözüldü' doğru",
+  // İç beyan (ekrana çıkmaz): WorkOrder adı K20'de rejimden çözüldüğü için model adıyla yazılır.
   IN_PROGRESS:
     "WorkOrderStatus ve WeavingOrderStatus — ikisi de 'Devam Ediyor'. Dokuma iş emri " +
-    "IN_PROGRESS iken tezgah koşuyordur; terbiye iş emrininkiyle aynı cümle doğru (2026-09-13)",
+    "IN_PROGRESS iken tezgah koşuyordur; WorkOrder'ınkiyle aynı cümle doğru (2026-09-13)",
   CUSTOMER: "firma türü / mükerrer-varlık / cari — üçü de 'Müşteri'",
   PENDING: "sipariş/adım/cihaz — üçü de 'Bekliyor'",
   APPROVED: "sipariş ve cihaz — ikisi de 'Onaylandı'",
@@ -116,8 +117,8 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   // metin sessizce bayatladı. "Planlandı" planlı duruş için de doğru cevaptır
   // (o duruş PLANLANMIŞTIR) ⇒ ortak Türkçe tutuyor, yalnız sayı düzeltildi.
   PLANNED:
-    "terbiye iş emri / dokuma iş emri / sevkiyat / sevkiyat olayı / planlı duruş (MachineStopLossClass) — beşi de 'Planlandı'",
-  SUPERSEDED: "terbiye iş emri ve basılı belge — ikisi de 'Eski Versiyon'",
+    "WorkOrder / dokuma iş emri / sevkiyat / sevkiyat olayı / planlı duruş (MachineStopLossClass) — beşi de 'Planlandı'",
+  SUPERSEDED: "WorkOrder ve basılı belge — ikisi de 'Eski Versiyon'",
   ACTIVE: "sekiz durum enum'u (ürün yaşam döngüsü dahil) — hepsinde 'Aktif'",
   VOIDED: "refakat kartı, basılı belge ve kartela (durum + kabul iptali olayı) — hepsinde 'İptal'",
   SHIPPED: "top durumu, kartela durumu ve kartela olayı — üçü de 'Sevk Edildi'",

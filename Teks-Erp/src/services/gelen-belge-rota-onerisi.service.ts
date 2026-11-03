@@ -13,7 +13,6 @@ import { TERIM } from "../constants/terim";
 import { routeTemplateProblem, USABLE_ROUTE_TEMPLATE_WHERE } from "./helpers/route-template-usable.helper";
 import { readIncomingDocDefaultRouteId, readRouteSuggestionPriority } from "./system-setting.service";
 
-const IE = TERIM.terbiyeIsEmri;
 
 export type RouteSuggestionSource = "LAST_WORK_ORDER" | "CUSTOMER_ROUTE" | "FACTORY_DEFAULT";
 
@@ -38,7 +37,7 @@ async function fromLastWorkOrder(owner: string | null): Promise<Step> {
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: { routeTemplate: { select: { id: true, name: true } } },
   });
-  return last?.routeTemplate ? { kind: "hit", ...last.routeTemplate } : { kind: "miss", note: `Müşterinin rotalı önceki ${IE.tekilKucuk} yok.` };
+  return last?.routeTemplate ? { kind: "hit", ...last.routeTemplate } : { kind: "miss", note: `Müşterinin rotalı önceki ${TERIM.terbiyeIsEmri.tekilKucuk} yok.` };
 }
 
 async function fromCustomerRoute(owner: string | null): Promise<Step> {

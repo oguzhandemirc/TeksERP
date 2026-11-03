@@ -38,6 +38,7 @@ import { ApiResponse } from "../types/api.types";
 import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
 import { postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
+import { TERIM } from "../constants/terim";
 
 export type SplitMode = "REDYE_SAME_COLOR" | "NEW_COLOR" | "UNDYED_MOVE";
 
@@ -101,14 +102,14 @@ export class WorkOrderSplitService {
         },
       },
     });
-    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
+    if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı`);
 
     const batch = await prisma.batch.findUnique({
       where: { id: batchId },
       select: { workOrderId: true, batchNumber: true },
     });
     if (!batch || batch.workOrderId !== workOrderId) {
-      throw AppError.notFound("Parti bu terbiye iş emrinde bulunamadı");
+      throw AppError.notFound(`Parti bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} bulunamadı`);
     }
 
     // Renk veren (boyahane) adım — redye/yeni-renk'te geri sarılacak hedef.
@@ -259,7 +260,7 @@ export class WorkOrderSplitService {
 
     // UNDYED_MOVE
     if (data.newColorId) {
-      throw AppError.badRequest("Boyanmadan taşımada renk verilemez (boyama yeni terbiye iş emrinde yapılır).");
+      throw AppError.badRequest(`Boyanmadan taşımada renk verilemez (boyama yeni ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} yapılır).`);
     }
     return this.undyedMove(ctx, data.orderMode ?? "stock", data.rollIds, data.reason, userId);
   }
@@ -298,7 +299,7 @@ export class WorkOrderSplitService {
       workOrderId,
       [TravelerCardStatus.ACTIVE],
       TravelerCardStatus.VOIDED,
-      { voidReason: "Tüm partiler yeni terbiye iş emrine ayrıldı" },
+      { voidReason: `Tüm partiler yeni ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} ayrıldı` },
     );
     // Kart VOID ile aynı gerekçe: WO terminal (SUPERSEDED) — okutulacak kart artık
     // yok, açık kurşun dağıtımı kapanamaz hâle geldi. `force` ŞART: adım
@@ -591,7 +592,7 @@ export class WorkOrderSplitService {
         movedRollCount: selectedIds.length,
         sourceBatchDeleted: result.sourceDeleted,
       },
-      message: `Yeni terbiye iş emri ${result.newWo.workOrderNumber} oluşturuldu: ${selectedIds.length} top yeni parti ${result.newBatch.batchNumber} ile boyahane adımına geri sarıldı (renk sıfırlandı). YENİ refakat kartını basıp toplara takın, FASON SEVK ile gönderin; dönünce Fason Kabul ile alın — yeni renk kabulde uygulanır.`,
+      message: `Yeni ${TERIM.terbiyeIsEmri.tekilKucuk} ${result.newWo.workOrderNumber} oluşturuldu: ${selectedIds.length} top yeni parti ${result.newBatch.batchNumber} ile boyahane adımına geri sarıldı (renk sıfırlandı). YENİ refakat kartını basıp toplara takın, FASON SEVK ile gönderin; dönünce Fason Kabul ile alın — yeni renk kabulde uygulanır.`,
     };
   }
 
@@ -738,7 +739,7 @@ export class WorkOrderSplitService {
         movedRollCount: selectedIds.length,
         dispatchNo: result.dispatchNo,
       },
-      message: `Yeni terbiye iş emri ${result.newWo.workOrderNumber} oluşturuldu: ${selectedIds.length} top (parti ${ctx.batchNumber}) hâlâ boyahanede, artık yeni terbiye iş emrine bağlı. Dönünce Fason Kabul'ü ${result.newWo.workOrderNumber} altında yapın — eski refakat kartı okutulunca ayrılan parti listede görünür.`,
+      message: `Yeni ${TERIM.terbiyeIsEmri.tekilKucuk} ${result.newWo.workOrderNumber} oluşturuldu: ${selectedIds.length} top (parti ${ctx.batchNumber}) hâlâ boyahanede, artık yeni ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlı. Dönünce Fason Kabul'ü ${result.newWo.workOrderNumber} altında yapın — eski refakat kartı okutulunca ayrılan parti listede görünür.`,
     };
   }
 }

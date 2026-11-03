@@ -27,6 +27,7 @@ import {
 } from "./cancelDecisions";
 import { WorkOrderCancelDispatchPanel } from "./WorkOrderCancelDispatchPanel";
 import { WorkOrderCancelRollList } from "./WorkOrderCancelRollList";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   open: boolean;
@@ -96,7 +97,7 @@ export function WorkOrderCancelDialog({
         ...(remainderAck ? { fasonRemainderAction: "CLOSE_AS_SCRAP" as const } : {}),
       }),
     onSuccess: (res) => {
-      toast.success(res.message ?? "Terbiye iş emri iptal edildi");
+      toast.success(res.message ?? `${TERIM.terbiyeIsEmri.cumleBasi.yalin} iptal edildi`);
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
       void qc.invalidateQueries({ queryKey: ["orders"] });
       if (workOrderId) {
@@ -136,10 +137,10 @@ export function WorkOrderCancelDialog({
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-destructive" />
-            Terbiye iş emrini iptal et
+            {TERIM.terbiyeIsEmri.cumleBasi.belirtme} iptal et
           </DialogTitle>
           <DialogDescription>
-            <span className="font-mono">{batchNumber ?? "Terbiye iş emri"}</span> · geri alınamaz
+            <span className="font-mono">{batchNumber ?? `${TERIM.terbiyeIsEmri.cumleBasi.yalin}`}</span> · geri alınamaz
           </DialogDescription>
         </DialogHeader>
 

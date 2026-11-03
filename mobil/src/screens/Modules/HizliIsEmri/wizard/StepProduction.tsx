@@ -8,6 +8,7 @@ import PropertyPickerModal from './PropertyPickerModal';
 import RouteStepsModal from '../RouteStepsModal';
 import type { useQuickWorkOrder } from '../useQuickWorkOrder';
 import { colors, spacing, radius } from '../../../../theme';
+import { TERIM } from '../../../../lib/terim';
 
 interface Props {
   wo: ReturnType<typeof useQuickWorkOrder>;
@@ -226,7 +227,7 @@ export default function StepProduction({ wo, showErrors = false }: Props) {
             <Text style={styles.dispatchToggleTitle}>Fasona Gönder</Text>
             <Text style={styles.dispatchToggleHint}>
               {wo.firstStepDispatch.firmId
-                ? 'Terbiye iş emri açılınca mal fasona sevk edilir, çeki listesi oluşur. Kapatırsan yalnız planlanır.'
+                ? `${TERIM.terbiyeIsEmri.cumleBasi.yalin} açılınca mal fasona sevk edilir, çeki listesi oluşur. Kapatırsan yalnız planlanır.`
                 : 'Fason firma seçili değil — sevk yapılamaz, yalnız planlanır.'}
             </Text>
           </View>

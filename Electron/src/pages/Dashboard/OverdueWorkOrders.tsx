@@ -47,7 +47,7 @@ export function OverdueWorkOrders() {
         ) : isError ? (
           <EmptyState message="Veri alınamadı." />
         ) : !data || data.length === 0 ? (
-          <EmptyState message="Geciken terbiye iş emri yok." />
+          <EmptyState message={`Geciken ${TERIM.terbiyeIsEmri.tekilKucuk} yok.`} />
         ) : (
           <ul className="divide-y divide-border/40">
             {data.map((wo) => (

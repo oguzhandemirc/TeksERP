@@ -51,6 +51,8 @@ export const finalizeSchema = z.object({
         relatedErrorIds: z.array(z.string().uuid()).default([]),
         // D4-B1: bu kesimin ölçüm kaynağı — Zod strip tuzağı: satır yoksa alan sessizce kaybolur.
         measure: meterSourceSchema.nullish(),
+        // Tamburda tartım (S5) — bu parçanın kg'ı; müşteri tartım istiyorsa zorunlu.
+        weightKg: z.number().positive("Tartım kg pozitif olmalı").max(100_000).nullish(),
       })
     )
     // Cap: her segment tx içinde ayrı roll.create + rollProperty + rollOperation
@@ -81,6 +83,8 @@ export const finalizeSchema = z.object({
   // burada yalnız BİÇİM normalleştirilir.
   foldType: foldTypeSchema,
   markedForKartela: z.boolean().optional(),
+  // Otomatik kalan kuyruk parçasının kg'ı (S5 tartım kapısı).
+  remainingWeightKg: z.number().positive("Tartım kg pozitif olmalı").max(100_000).nullish(),
   // Plan-gerçek sapma onayı (renk/en) — 409 PLAN_MISMATCH sonrası aynı istek
   // bu bayrakla tekrarlanır. bkz. constants/tambur-plan-gate.ts.
   confirmMismatch: z.boolean().optional(),
@@ -158,6 +162,8 @@ export const finalizeOpenFabricSchema = z.object({
   varianceReasonText: z.string().max(500).optional().nullable(),
   // Plan-gerçek sapma onayı — aynı sessiz-silme tuzağı (üstteki not).
   confirmMismatch: z.boolean().optional(),
+  // Kalan topun kg'ı (S5) — müşteri tartım istiyorsa kalan top doğarken zorunlu.
+  weightKg: z.number().positive("Tartım kg pozitif olmalı").max(100_000).nullish(),
 });
 
 // export: `test_tambur_olcum_kaynagi` `measure` alanını GERÇEK parse ile sınar (Zod strip tuzağı).
@@ -244,6 +250,8 @@ export const finalizeWarehouseCutSchema = z.object({
   // SAPMA SEBEBİ — `finalizeOpenFabricSchema` ile aynı sözleşme (bkz. oradaki not).
   varianceReasonCode: z.string().max(64).optional().nullable(),
   varianceReasonText: z.string().max(500).optional().nullable(),
+  // Kalan topun kg'ı (S5) — `finalizeOpenFabricSchema` ile aynı sözleşme.
+  weightKg: z.number().positive("Tartım kg pozitif olmalı").max(100_000).nullish(),
 });
 
 export class TamburController {

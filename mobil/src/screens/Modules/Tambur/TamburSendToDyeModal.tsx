@@ -28,6 +28,7 @@ import { isWorkSessionLost } from '../../../services/api';
 import { tamburService, type TamburSendToDyePreview } from '../../../services/tambur.service';
 import { colors, radius, spacing } from '../../../theme';
 import { showScreenError } from '../../../lib/screenToast';
+import { TERIM } from '../../../lib/terim';
 
 /** Sebep alanı — backend de aynı alt sınırı uygular (min 3 karakter). */
 const MIN_REASON = 3;
@@ -175,7 +176,7 @@ export default function TamburSendToDyeModal({ visible, onDismiss, rollId, onlin
                   />
                   <EffectRow
                     icon="clipboard-text-outline"
-                    text={`Terbiye iş emri: ${preview.targetStep.workOrderNumber}`}
+                    text={`${TERIM.terbiyeIsEmri.cumleBasi.yalin}: ${preview.targetStep.workOrderNumber}`}
                   />
                   {preview.effects.reopenedStepNames.length > 0 && (
                     <EffectRow
@@ -231,7 +232,7 @@ export default function TamburSendToDyeModal({ visible, onDismiss, rollId, onlin
                     numberOfLines={2}
                     value={reason}
                     onChangeText={setReason}
-                    placeholder="Örn: mal mavi geldi, terbiye iş emri gri istiyor"
+                    placeholder={`Örn: mal mavi geldi, ${TERIM.terbiyeIsEmri.tekilKucuk} gri istiyor`}
                     maxLength={500}
                     disabled={busy}
                     style={styles.reasonInput}

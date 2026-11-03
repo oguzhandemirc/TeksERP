@@ -2,6 +2,7 @@
 
 import apiClient from "@/services/apiClient";
 import type { ReportExportSpec } from "../_components/reportExport";
+import { TERIM } from "@/lib/terim";
 
 export interface BatchCandidate {
   batchId: string;
@@ -50,7 +51,7 @@ export const batchTraceApi = {
 export function buildBatchTraceExport(t: BatchTrace): ReportExportSpec {
   return {
     title: `Parti İzleme — ${t.batch.batchNumber}`,
-    subtitle: t.batch.workOrderNumber ? `Terbiye İş Emri ${t.batch.workOrderNumber}` : "Terbiye iş emri bağı yok",
+    subtitle: t.batch.workOrderNumber ? `${TERIM.terbiyeIsEmri.tekil} ${t.batch.workOrderNumber}` : `${TERIM.terbiyeIsEmri.cumleBasi.yalin} bağı yok`,
     meta: [
       // Numaranın benzersiz olmadığı ÇIKTIDA da yazılı olmalı: kâğıt elden ele
       // dolaşırken "P46" tek bir partiyi işaret ediyor sanılır.

@@ -256,6 +256,7 @@ describe("istasyon mutation kayıt bütünlüğü", () => {
       varianceReasonCode: "DIGER",
       varianceReasonText: "test",
       confirmMismatch: true,
+      weightKg: 6.5,
     });
     expect(tamburService.finalizeOpenFabric).toHaveBeenCalledWith(
       "r-pg",
@@ -265,6 +266,7 @@ describe("istasyon mutation kayıt bütünlüğü", () => {
         varianceReasonCode: "DIGER",
         varianceReasonText: "test",
         confirmMismatch: true,
+        weightKg: 6.5,
       }),
     );
   });

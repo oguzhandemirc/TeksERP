@@ -114,7 +114,7 @@ function ListBottomBar({ onNew }: { onNew: () => void }) {
           onPress={onNew}
           style={[styles.newBtn, canScanDoc && styles.newBtnGrow]}
           rippleColor="rgba(255,255,255,0.25)"
-          accessibilityLabel="Yeni terbiye iş emri"
+          accessibilityLabel={`Yeni ${TERIM.terbiyeIsEmri.tekilKucuk}`}
         >
           <View style={styles.newBtnInner}>
             <Icon source="plus-circle" size={26} color="#fff" />

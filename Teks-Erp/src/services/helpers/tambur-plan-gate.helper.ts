@@ -34,6 +34,7 @@ import {
   type PlanMismatchItem,
 } from "../../constants/tambur-plan-gate";
 import { effectiveTamburPlanWidthGate } from "../system-setting.service";
+import { TERIM } from "../../constants/terim";
 
 interface GateRoll {
   id: string;
@@ -69,7 +70,7 @@ async function evaluateWidthGate(
     gate,
     mismatch: {
       field: "width",
-      message: `Top ${rollWidth} cm, terbiye iş emri ${planWidth} cm istiyor (eşik ±${gate.toleranceCm} cm)`,
+      message: `Top ${rollWidth} cm, ${TERIM.terbiyeIsEmri.tekilKucuk} ${planWidth} cm istiyor (eşik ±${gate.toleranceCm} cm)`,
       rollValue: rollWidth,
       planValue: planWidth,
     },
@@ -130,8 +131,8 @@ export async function assertRollMatchesPlan(
       mismatches.push({
         field: "color",
         message: roll.colorId
-          ? `Top ${rollName}, terbiye iş emri ${planName} istiyor`
-          : `Top RENKSİZ, terbiye iş emri ${planName} istiyor`,
+          ? `Top ${rollName}, ${TERIM.terbiyeIsEmri.tekilKucuk} ${planName} istiyor`
+          : `Top RENKSİZ, ${TERIM.terbiyeIsEmri.tekilKucuk} ${planName} istiyor`,
         rollValue: rollName,
         planValue: planName,
       });

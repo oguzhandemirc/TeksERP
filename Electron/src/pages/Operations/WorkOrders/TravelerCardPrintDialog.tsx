@@ -17,6 +17,7 @@ import { printTracked } from "@/lib/print";
 import { PrintPageSizeToggle, readDocPageSize } from "@/components/print/PrintPageSizeToggle";
 import { workOrderService } from "./service";
 import type { WorkOrder, TravelerCard } from "./types";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   workOrder: WorkOrder | null;
@@ -164,7 +165,7 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
         <DialogHeader>
           <DialogTitle>Refakat Kartı — Önizleme</DialogTitle>
           <DialogDescription>
-            Önizleme baskıyla birebir aynı. İçerik her baskıda terbiye iş emrinin güncel
+            Önizleme baskıyla birebir aynı. İçerik her baskıda {TERIM.terbiyeIsEmri.cekimKucuk.ilgi} güncel
             hâlinden üretilir; plan değiştiyse kart yeni versiyona geçer.
           </DialogDescription>
         </DialogHeader>
@@ -196,8 +197,8 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
               </span>
               <div className="text-sm font-semibold text-foreground">Kart görüntülenemedi</div>
               <p className="max-w-sm text-xs text-muted-foreground">
-                Refakat kartı terbiye iş emri açılışında otomatik üretilir (kart = terbiye iş emri no,
-                karekod sabit). Bu terbiye iş emrinin kartı yüklenemedi — <strong>Yenile</strong>'yi
+                Refakat kartı {TERIM.terbiyeIsEmri.tekilKucuk} açılışında otomatik üretilir (kart = {TERIM.terbiyeIsEmri.tekilKucuk} no,
+                karekod sabit). Bu {TERIM.terbiyeIsEmri.cekimKucuk.ilgi} kartı yüklenemedi — <strong>Yenile</strong>'yi
                 deneyin.
               </p>
             </div>

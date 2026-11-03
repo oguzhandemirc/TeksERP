@@ -78,7 +78,9 @@ const variants: EquivalenceVariant[] = [
   },
 ];
 
-const html = String.raw`<div class="sheet">
+// K20: iş emri adı rejimden çözülür — yer tutucu okuma anında doldurulur (modül düzeyinde donmaz).
+const IS_EMRI_YER = "%%TERIM_IS_EMRI%%";
+const HTML_SABLON = String.raw`<div class="sheet">
 <header>
 <div class="hl">
 ${LOGO_ASSIGN}
@@ -102,7 +104,7 @@ ${blocksAt("afterHeader")}
 {%- capture kutu_fason -%}<div class="box"><div class="box-t">FASON FİRMA</div>
 <div class="row"><span>Adı:</span><b>{{ karsi_taraf.ad }}</b></div>
 {%- if karsi_taraf.kod != nil and karsi_taraf.kod != "" -%}<div class="row"><span>Kod:</span><b>{{ karsi_taraf.kod }}</b></div>{%- endif -%}
-<div class="row"><span>${TERIM.terbiyeIsEmri.tekil}:</span><b>{{ belge.is_emri_no }}</b></div>
+<div class="row"><span>${IS_EMRI_YER}:</span><b>{{ belge.is_emri_no }}</b></div>
 {%- if ayar.sections.batchInfo and parti_sayisi > 0 -%}<div class="row"><span>Parti:</span><b>{{ tablolar.parti | map: "no" | join: ", " }}</b></div>{%- endif -%}
 <div class="row"><span>İşlem:</span><b>{{ belge.islem }}</b></div>
 {%- if toplamlar.donen_metre != nil -%}<div class="row"><span>Dönen Metre:</span><b>{{ toplamlar.donen_metre | sayi: 2 }}</b></div>{%- endif -%}
@@ -163,7 +165,7 @@ ${STAMPS}
 export const subcontractorReceiptSystem: SystemEquivalent = {
   docType: "SUBCONTRACTOR_RECEIPT",
   editMode: "CODE",
-  html,
+  get html() { return HTML_SABLON.replace(IS_EMRI_YER, TERIM.terbiyeIsEmri.tekil); },
   css: (settings) => chromeDocCss(settings, 64, "fasonKabul"),
   pageSettings: (settings) => pageSettingsFor(settings, 9),
   tableBindings: {},

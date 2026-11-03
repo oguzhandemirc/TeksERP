@@ -34,7 +34,7 @@ export const PANEL_EKRAN = {
   etiketDuzenleri: { menu: "Belgeler", karo: "Etiketler", alt: "Etiket Düzenleri" },
   etiketAtamalari: { menu: "Belgeler", karo: "Etiketler", alt: "Etiket Atamaları" },
   kumasStogu: { menu: "Operasyon", karo: "Kumaş Stoğu" },
-  terbiyeIsEmirleri: { menu: "Operasyon", karo: TERIM.terbiyeIsEmri.cogul },
+  terbiyeIsEmirleri: { menu: "Operasyon", get karo() { return TERIM.terbiyeIsEmri.cogul; } },
   faturalar: { menu: "Ön Muhasebe", karo: "Faturalar" },
   cariHesaplar: { menu: "Ön Muhasebe", karo: "Cari Hesaplar" },
   kasaHareketleri: { menu: "Ön Muhasebe", karo: "Kasa Hareketleri" },

@@ -6,6 +6,7 @@ import type { KursunGramForm } from "./cariKursunGram";
 import { KursunGramPriceHistory } from "@/components/kursun/KursunGramPriceHistory";
 import { GramajChoiceButtons } from "@/components/kursun/GramajChoiceButtons";
 import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
+import { TERIM } from "@/lib/terim";
 
 /** oie-a: müşteriye özel kurşun gram fiyatı; `null` (fason / eski backend) → çizilmez. */
 export function CariKursunGramField({ value, onChange, error, cariId }: { value: KursunGramForm | null; onChange: (v: KursunGramForm) => void; error?: string; cariId?: string }) {
@@ -57,7 +58,7 @@ export function CariKursunDefaultField({ value, onChange }: { value: { valueId: 
         <GramajChoiceButtons options={catalog.options} value={value.valueId} onChange={(id) => onChange({ valueId: id })} emptyLabel="İstasyon varsayılanı" />
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        Bu müşteriye terbiye iş emri açılınca gramaj bununla ön seçilir; formda değiştirilebilir.
+        Bu müşteriye {TERIM.terbiyeIsEmri.tekilKucuk} açılınca gramaj bununla ön seçilir; formda değiştirilebilir.
       </p>
     </div>
   );

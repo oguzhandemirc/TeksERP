@@ -25,6 +25,7 @@ import {
 } from "@/hooks/usePricingEnabled";
 import type { Customer } from "@/pages/Customers/types";
 import { workOrderService } from "./service";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   open: boolean;
@@ -381,11 +382,11 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
                   <Checkbox
                     checked={completeWO}
                     onCheckedChange={(v) => setCompleteWO(Boolean(v))}
-                    aria-label="Terbiye iş emrini tamamla"
+                    aria-label={`${TERIM.terbiyeIsEmri.cumleBasi.belirtme} tamamla`}
                     className="mt-0.5"
                   />
                   <span className="min-w-0">
-                    <span className="font-medium">Bu terbiye iş emrini tamamla</span>
+                    <span className="font-medium">Bu {TERIM.terbiyeIsEmri.cekimKucuk.belirtme} tamamla</span>
                     <span className="mt-0.5 block text-xs text-muted-foreground">
                       {completeWO ? (
                         <span className="inline-flex items-center gap-1 text-warning">
@@ -395,7 +396,7 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
                             : "Adım tamamlanacak ve WO KAPANACAK."}
                         </span>
                       ) : (
-                        "Kapalı: yalnız seçilen toplar sevk edilir, terbiye iş emri AÇIK kalır (kalan üretim devam eder)."
+                        `Kapalı: yalnız seçilen toplar sevk edilir, ${TERIM.terbiyeIsEmri.tekilKucuk} AÇIK kalır (kalan üretim devam eder).`
                       )}
                     </span>
                   </span>

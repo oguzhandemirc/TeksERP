@@ -34,7 +34,7 @@ const KIND: Readonly<Record<string, { readonly label: string; readonly domain: D
   siparis: { label: "Sipariş", domain: "siparisler", icon: "receipt-outline" },
   "siparis-kalemi": { label: "Sipariş kalemi", domain: "siparisler", icon: "list-outline" },
   sevkiyat: { label: "Sevkiyat", domain: "sevkiyat", icon: "car-outline" },
-  "is-emri": { label: TERIM.terbiyeIsEmri.tekil, domain: "uretim", icon: "construct-outline" },
+  "is-emri": { get label() { return TERIM.terbiyeIsEmri.tekil; }, domain: "uretim", icon: "construct-outline" },
   fiyat: { label: "Fiyat", domain: "finans", icon: "pricetag-outline" },
   teklif: { label: "Teklif", domain: "siparisler", icon: "document-text-outline" },
   "teklif-kalemi": { label: "Teklif kalemi", domain: "siparisler", icon: "list-outline" },

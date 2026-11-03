@@ -25,7 +25,7 @@ export const PERMISSION_LABEL: Readonly<Record<string, PermissionLabel>> = {
   "bulut:siparis:oku": { ad: "Siparişleri görme", aciklama: "Sipariş listesini, kalemleri ve terminleri görür", grup: "siparis" },
   "bulut:siparis:yaz": { ad: "Sipariş talebi gönderme", aciklama: "Fabrikaya yeni sipariş talebi gönderir (gelen kutusu)", grup: "siparis" },
   "bulut:sevkiyat:oku": { ad: "Sevkiyatı görme", aciklama: "Sevk edilen ve bekleyen sevkiyatları görür", grup: "siparis" },
-  "bulut:uretim:oku": { ad: "Üretimi görme", aciklama: `Üretim akışını, ${TERIM.terbiyeIsEmri.cogulCekimKucuk.belirtme} ve fasonu görür`, grup: "siparis" },
+  "bulut:uretim:oku": { ad: "Üretimi görme", get aciklama() { return `Üretim akışını, ${TERIM.terbiyeIsEmri.cogulCekimKucuk.belirtme} ve fasonu görür`; }, grup: "siparis" },
   "bulut:stok:oku": { ad: "Stoku görme", aciklama: "Ham ve bitmiş stok miktarlarını görür", grup: "siparis" },
   "bulut:cari:oku": { ad: "Carileri görme", aciklama: "Müşteri ve tedarikçi kartlarını görür", grup: "cari" },
   "bulut:cari:yaz": { ad: "Cari talebi gönderme", aciklama: "Fabrikaya yeni cari açma talebi gönderir (gelen kutusu)", grup: "cari" },

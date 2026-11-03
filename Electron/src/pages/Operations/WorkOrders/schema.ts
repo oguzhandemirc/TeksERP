@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { WorkOrderType } from "@/types/enums";
+import { TERIM } from "@/lib/terim";
 
 export const workOrderStepSchema = z.object({
   id: z.string().uuid().optional(),
@@ -19,7 +20,7 @@ export type WorkOrderStepFormValues = z.infer<typeof workOrderStepSchema>;
 export const workOrderFormSchema = z.object({
   type: z.enum(
     [WorkOrderType.ORDER_PRODUCTION, WorkOrderType.STOCK_PRODUCTION],
-    { message: "Terbiye iş emri tipi seçilmeli" },
+    { get message() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} tipi seçilmeli`; } },
   ),
   // Parti Kodu (backend: batchNumber). Zorunluluk runtime'da (manuel mod / override /
   // düzenleme) form submit'inde uygulanır; boş = otomatik üret (otomatik mod).

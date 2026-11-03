@@ -12,6 +12,7 @@ import { productionProposalService } from "./service";
 import { buildApplyBody, conflictLineIds, initialSelection, isConflict, toggled, type ProposalSelection } from "./selection";
 import { BeamSection, ExcludedSection, WeavingSection, WorkOrderSection, type LineLabel } from "./ProposalSections";
 import type { ProposalApplyResult } from "./types";
+import { TERIM } from "@/lib/terim";
 
 export const PRODUCTION_PROPOSAL_QUERY_KEY = "production-proposal";
 const EMPTY: ProposalSelection = { weaving: new Set(), workOrders: new Set(), plannedM: new Map() };
@@ -145,7 +146,7 @@ function ResultList({ result }: { result: ProposalApplyResult }) {
   return (
     <div className="space-y-2 text-sm">
       {result.weavingOrders.length > 0 && <p>Dokuma iş emirleri: <span className="font-mono">{result.weavingOrders.map((w) => w.number).join(", ")}</span></p>}
-      {result.workOrders.length > 0 && <p>Terbiye iş emirleri: <span className="font-mono">{result.workOrders.map((w) => w.number).join(", ")}</span></p>}
+      {result.workOrders.length > 0 && <p>{TERIM.terbiyeIsEmri.cumleBasiCogul.yalin}: <span className="font-mono">{result.workOrders.map((w) => w.number).join(", ")}</span></p>}
     </div>
   );
 }

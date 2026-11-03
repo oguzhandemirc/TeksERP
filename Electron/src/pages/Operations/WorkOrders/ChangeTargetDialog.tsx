@@ -21,6 +21,7 @@ import { TebdilWizard } from "./tebdil/TebdilWizard";
 import type { RollAttributeTarget, WorkOrder } from "./types";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { showServerWarnings } from "@/lib/serverNotes";
+import { TERIM } from "@/lib/terim";
 
 type Mode = "color" | "width";
 /** Renkle uyuşmayan bağlı sipariş için karar: uyar (bağ kalır) · bağı kopar · siparişi de düzelt. */
@@ -310,8 +311,8 @@ export function ChangeTargetDialog({
           </DialogTitle>
           <DialogDescription>
             {isColor
-              ? "Terbiye iş emrinin üretim rengi değişir. Boyahaneden dönecek toplar kabulde yeni rengi alır."
-              : "Terbiye iş emrinin eni değişir; fason çekisinde basılan EN değeri buradan gelir."}
+              ? `${TERIM.terbiyeIsEmri.cumleBasi.ilgi} üretim rengi değişir. Boyahaneden dönecek toplar kabulde yeni rengi alır.`
+              : `${TERIM.terbiyeIsEmri.cumleBasi.ilgi} eni değişir; fason çekisinde basılan EN değeri buradan gelir.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -346,7 +347,7 @@ export function ChangeTargetDialog({
           )}
           {!isColor && allRolls.length > 0 && (
             <div className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs dark:border-amber-700/60 dark:bg-amber-950/40">
-              <span className="font-medium">Bu terbiye iş emrinde şu an: </span>
+              <span className="font-medium">Bu {TERIM.terbiyeIsEmri.cekimKucuk.bulunma} şu an: </span>
               {widthDistribution.map(([label, count], i) => (
                 <span key={label}>
                   {i > 0 && " · "}
@@ -496,7 +497,7 @@ export function ChangeTargetDialog({
           {/* Backend kapısı: mal zaten boyandı, boyanacak top yok */}
           {dyedBlocked && (
             <div className="space-y-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs">
-              <div className="font-medium">Bu terbiye iş emrinde mal zaten boyandı</div>
+              <div className="font-medium">Bu {TERIM.terbiyeIsEmri.cekimKucuk.bulunma} mal zaten boyandı</div>
               <div>{dyedBlocked}</div>
               <div className="flex flex-wrap gap-2 pt-1">
                 {tebdilCandidate && (
@@ -513,7 +514,7 @@ export function ChangeTargetDialog({
                     navigateActive(NEW_WO_PATH);
                   }}
                 >
-                  Yeni terbiye iş emri aç
+                  Yeni {TERIM.terbiyeIsEmri.tekilKucuk} aç
                 </Button>
                 {allEditableIds.length > 0 && !allSelected && (
                   <Button type="button" size="sm" variant="outline" onClick={toggleAll}>

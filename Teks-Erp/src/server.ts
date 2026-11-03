@@ -10,6 +10,7 @@ import { startSuperadminAccount } from './jobs/superadmin.job';
 import { startShortCredentialJob } from './jobs/short-credential.job';
 import { flushLoginLockoutPersistence } from './middlewares/login-lockout';
 import { startModuleProfileJob } from './jobs/module-profile.job';
+import { startTermRegimeJob } from './jobs/terim-rejim.job';
 import { startReportDefinitionCatalog, warnStaleReportKeys } from './jobs/report-catalog.job';
 import { refreshDiscoveryCache } from './services/discovery.service';
 import { startMdnsAdvertiser, stopMdnsAdvertiser } from './jobs/mdns-advertiser.job';
@@ -205,9 +206,7 @@ function startLanListener(): Server {
         satir(`                swagger=${hardening.swaggerEnabled ? "açık" : "kapalı"}`
             + ` · hsts=${hardening.httpsEnabled ? "açık" : "kapalı"}`
             + ` · girişKilidiKapsamı=${hardening.loginLockoutScope}`);
-        satir(`                hızSınırı=${rl.enabled
-            ? `açık (${rl.windowMs / 1000}sn · yazma ${rl.writeEnabled ? rl.writeMax : "sayılmaz"} · giriş ${rl.loginMax})`
-            : "kapalı"}`);
+        satir(`                hızSınırı=${rl.enabled ? `açık (${rl.windowMs / 1000}sn · yazma ${rl.writeEnabled ? rl.writeMax : "sayılmaz"} · giriş ${rl.loginMax})` : "kapalı"}`);
     }
     lanTlsBanner();
     if (JOBS_OFF) {
@@ -231,6 +230,8 @@ function startLanListener(): Server {
     // KODU DEPLOY ETMEK = KATALOGU GETİRMEK. Yalnız EKLER — hiçbir satırı silmez ya
     // da güncellemez, dolayısıyla kimsenin yetkisi sessizce düşmez. Best-effort:
     // başarısız olursa sunucuyu düşürmez, gürültülü loglar.
+    // K20: iş emri adı (TERIM) dokuma rejiminden — açılışta + 30 sn tazelik; okunamazsa bugünkü ad.
+    startTermRegimeJob();
     startPermissionCatalogReconciler();
     // Kurulum kimliği — servis keşfinin "bu doğru sunucu mu" sorusunun cevabı.
     // İzin kataloğuyla aynı sınıf: ilk açılışta bir kez doğar, best-effort,

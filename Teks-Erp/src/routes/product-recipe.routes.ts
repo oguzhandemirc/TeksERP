@@ -12,6 +12,7 @@ import { recipeHardRemove } from "../services/helpers/guarded-hard-remove";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireProductionEnabled } from "../middlewares/module.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { TERIM } from "../constants/terim";
 
 export const productRecipeService = new ProductRecipeService({
   modelName: "productRecipe",
@@ -20,7 +21,7 @@ export const productRecipeService = new ProductRecipeService({
   codeSearchFields: ["code"],
   nestedCreateFields: ["properties"],
   duplicateNameField: "name",
-  entityLabel: "terbiye iş emri şablonu",
+  get entityLabel() { return `${TERIM.terbiyeIsEmri.tekilKucuk} şablonu`; },
   defaultInclude: {
     item: { select: { id: true, code: true, name: true } },
     color: { select: { id: true, code: true, name: true, hex: true } },

@@ -1356,6 +1356,8 @@ export interface TamburFinalizeOpenFabricRequest {
   /** SAPMA SEBEBİ (2026-08-09) — `constants/varianceReasons.ts` kataloğundan. */
   varianceReasonCode?: string | null;
   varianceReasonText?: string | null;
+  /** Kalan topun kg'ı (S5 tartım kapısı). */
+  weightKg?: number | null;
 }
 
 // =============================================================================

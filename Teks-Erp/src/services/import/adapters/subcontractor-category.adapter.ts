@@ -18,6 +18,7 @@ import prisma from "../../../lib/prisma";
 import { SubcontractorCategoryService } from "../../subcontractor-management.service";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
 import { importKey } from "../import-key";
+import { TERIM } from "../../../constants/terim";
 
 // Servisin paylaşılan tekili yok (controller kendi private örneğini kuruyor);
 // servis durumsuz olduğu için burada kendi örneğimizi kuruyoruz.
@@ -40,14 +41,14 @@ const COLUMNS: ImportColumn[] = [
     key: "appliesColor",
     label: "Renk Verir",
     type: "bool",
-    help: "Evet ise bu kategorideki fason kabulünde topun rengi terbiye iş emrinin hedef renginden otomatik yazılır (Boyahane).",
+    get help() { return `Evet ise bu kategorideki fason kabulünde topun rengi ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedef renginden otomatik yazılır (Boyahane).`; },
     example: "Hayır",
   },
   {
     key: "appliesProperty",
     label: "Özellik Verir",
     type: "bool",
-    help: "Evet ise fason kabulünde terbiye iş emrinin hedef özellikleri topa otomatik işlenir (Zımpara, Kurşun…).",
+    get help() { return `Evet ise fason kabulünde ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedef özellikleri topa otomatik işlenir (Zımpara, Kurşun…).`; },
     example: "Hayır",
   },
   { key: "isActive", label: "Aktif", type: "bool", help: "Evet / Hayır.", example: "Evet" },

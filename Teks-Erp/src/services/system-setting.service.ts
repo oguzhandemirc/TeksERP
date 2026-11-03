@@ -89,6 +89,7 @@ import {
   type CompanyLegalIdentity,
   type EIrsaliyeConfig,
 } from "./e-irsaliye/e-irsaliye-settings";
+import { TERIM, terimDokumaAyarla } from "../constants/terim";
 export type { CompanyLegalIdentity, EIrsaliyeConfig } from "./e-irsaliye/e-irsaliye-settings";
 
 /**
@@ -2617,6 +2618,13 @@ export function invalidateFeatureFlagsCache(): void {
   cacheGeneration++;
 }
 
+/** K20: iş emri adı rejimi (`TERIM.terbiyeIsEmri`) etkin dokumadan — üretim ∧ dokuma ∧ lisans tavanı açık. */
+function applyTermRegime(flags: FeatureFlags): FeatureFlags {
+  const licenseClosed = flags.license?.kapaliModuller?.some((m) => m.anahtar === SETTING_KEYS.DOKUMA_ENABLED) ?? false;
+  terimDokumaAyarla(flags.productionEnabled && flags.dokumaEnabled && !licenseClosed);
+  return flags;
+}
+
 export class SystemSettingService {
   async list(): Promise<ApiResponse<unknown[]>> {
     const items = await prisma.systemSetting.findMany({
@@ -2785,7 +2793,7 @@ export class SystemSettingService {
   async getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
     const now = Date.now();
     if (featureFlagsCache && featureFlagsCache.expiresAt > now) {
-      return { success: true, data: withLicenseBlock(featureFlagsCache.value) };
+      return { success: true, data: applyTermRegime(withLicenseBlock(featureFlagsCache.value)) };
     }
     const gen = cacheGeneration; // okumanın başladığı sürüm (lost-invalidation guard)
     // Tek sorguda tüm ayarları çek → reader'lara in-memory client enjekte et.
@@ -3042,7 +3050,7 @@ export class SystemSettingService {
     if (cacheGeneration === gen) {
       featureFlagsCache = { value: flags, expiresAt: now + FEATURE_FLAGS_TTL_MS };
     }
-    return { success: true, data: withLicenseBlock(flags) };
+    return { success: true, data: applyTermRegime(withLicenseBlock(flags)) };
   }
 
   /**
@@ -3459,14 +3467,14 @@ export class SystemSettingService {
           code: "EXPENSE_ALLOCATION_REQUIRED_UNAVAILABLE",
         });
       }
-      await this.set(SETTING_KEYS.FINANCE_EXPENSE_ALLOCATION_FIELD, v, "Kasa masraf formunda masraf bağı (makine / terbiye iş emri / hizmet kalemi) — kapalı · isteğe bağlı", userId);
+      await this.set(SETTING_KEYS.FINANCE_EXPENSE_ALLOCATION_FIELD, v, `Kasa masraf formunda masraf bağı (makine / ${TERIM.terbiyeIsEmri.tekilKucuk} / hizmet kalemi) — kapalı · isteğe bağlı`, userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "financeExpenseAllocationClosedWorkOrder")) {
       const v = input.financeExpenseAllocationClosedWorkOrder;
       if (typeof v !== "string" || !EXPENSE_ALLOCATION_CLOSED_WORK_ORDER_MODES.includes(v as ExpenseAllocationClosedWorkOrder)) {
         throw AppError.badRequest(`financeExpenseAllocationClosedWorkOrder şunlardan biri olmalı: ${EXPENSE_ALLOCATION_CLOSED_WORK_ORDER_MODES.join(", ")}`);
       }
-      await this.set(SETTING_KEYS.FINANCE_EXPENSE_ALLOCATION_CLOSED_WORK_ORDER, v, "Kapanmış terbiye iş emrine masraf bağı — serbest · engelli", userId);
+      await this.set(SETTING_KEYS.FINANCE_EXPENSE_ALLOCATION_CLOSED_WORK_ORDER, v, `Kapanmış ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} masraf bağı — serbest · engelli`, userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "financeCariHoldDefaultScope")) {
       const v = input.financeCariHoldDefaultScope;
@@ -3882,7 +3890,7 @@ export class SystemSettingService {
       await this.set(
         SETTING_KEYS.WORKORDER_TARGET_QUANTITY_ENABLED,
         input.targetQuantityEnabled,
-        "Terbiye iş emri formunda hedef metraj alanını göster",
+        `${TERIM.terbiyeIsEmri.cumleBasi.yalin} formunda hedef metraj alanını göster`,
         userId
       );
     }
@@ -3971,7 +3979,7 @@ export class SystemSettingService {
       await this.set(
         SETTING_KEYS.WORKORDER_QUICK_OWN_ONLY_ENABLED,
         input.workOrderQuickOwnOnlyEnabled,
-        "Hızlı terbiye iş emri: yalnız kendi başlattıklarını düzenler",
+        `Hızlı ${TERIM.terbiyeIsEmri.tekilKucuk}: yalnız kendi başlattıklarını düzenler`,
         userId
       );
     }
@@ -4278,7 +4286,7 @@ export class SystemSettingService {
       await this.set(
         SETTING_KEYS.ITEM_LIFECYCLE_PHASE_OUT_NEW_PLAN,
         input.itemPhaseOutNewPlan,
-        "Tükenene kadar karta yeni üretim planı (topsuz+siparişsiz terbiye iş emri, dokuma iş emri) açılabilsin",
+        `Tükenene kadar karta yeni üretim planı (topsuz+siparişsiz ${TERIM.terbiyeIsEmri.tekilKucuk}, dokuma iş emri) açılabilsin`,
         userId
       );
     }
@@ -4783,7 +4791,7 @@ export class SystemSettingService {
       await this.set(
         SETTING_KEYS.QUALITY_GRADE_REQUIRED_ENABLED,
         input.qualityGradeRequiredEnabled,
-        "Top kalitesi zorunlu — KK1 girişi, Tambur kalan-kuyruk topu, depo kesimi ve terbiye iş emri kapanışının depo/2. kalite satırları kalitesiz geçemez",
+        `Top kalitesi zorunlu — KK1 girişi, Tambur kalan-kuyruk topu, depo kesimi ve ${TERIM.terbiyeIsEmri.tekilKucuk} kapanışının depo/2. kalite satırları kalitesiz geçemez`,
         userId
       );
     }
@@ -4807,7 +4815,7 @@ export class SystemSettingService {
       await this.set(
         SETTING_KEYS.BATCH_LAST_NUMBER_HINT_ENABLED,
         input.batchLastNumberHintEnabled,
-        "Terbiye iş emri formunda 'Son Kullanılan Parti No' rozeti — yalnız gösterim, numara üretimini etkilemez",
+        `${TERIM.terbiyeIsEmri.cumleBasi.yalin} formunda 'Son Kullanılan Parti No' rozeti — yalnız gösterim, numara üretimini etkilemez`,
         userId
       );
     }

@@ -458,6 +458,9 @@ console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı (§9a kısa ad · §9b 
       { alinti: "Levent sarımında dokuma işi zorunlu olsun", gerekce: "Ad değişikliği 2026-10-11 (Dokuma İş Emri) — eski sürüm notu; ayar başlığı \"Levent sarımında dokuma iş emri zorunlu olsun\"." },
       { alinti: "Tezgah koşumu dokuma işine bağlı açılsın", gerekce: "Ad değişikliği 2026-10-11 (Dokuma İş Emri) — eski sürüm notu; ayar başlığı \"Tezgah koşumu dokuma iş emrine bağlı açılsın\"." },
       { alinti: "Dokuma işi sipariş satırına bağlı olsun", gerekce: "Ad değişikliği 2026-10-11 (Dokuma İş Emri) — eski sürüm notu; ayar başlığı \"Dokuma iş emri sipariş satırına bağlı olsun\"." },
+      // K20 (2026-11-03, Gülkesim S8a): metin TERIM şablonuyla kurulur — dokuma rejimine göre "iş emri" / "terbiye iş emri".
+      { alinti: "Tablet hızlı terbiye iş emri: yalnız kendi başlattıklarını düzenler", gerekce: "K20 (2026-11-03) — ayar başlığı artık `${TERIM.terbiyeIsEmri.tekilKucuk}` şablonu; dokuma açıkken birebir bu metin." },
+      { alinti: "İş emri parti kodunu otomatik üret", gerekce: "K20 (2026-11-03) — eski sürüm notu; başlık `${TERIM.terbiyeIsEmri.cumleBasi.yalin} parti kodunu otomatik üret` şablonu." },
       { alinti: "Bu iş emrinde üretim başladı — iptal panelden yapılır", gerekce: "Ad değişikliği 2026-10-11 (Terbiye İş Emri) — eski sürüm notu; tablet metni artık \"Bu terbiye iş emrinde üretim başladı\"." },
     ];
     const govdeSade = sadeles(govde);

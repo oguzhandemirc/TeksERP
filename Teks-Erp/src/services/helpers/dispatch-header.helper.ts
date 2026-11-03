@@ -9,6 +9,7 @@
 // sessizce derlenir ve yanlış satırı okurdu (fail-closed).
 // =============================================================================
 import { AppError } from "../../utils/app-error";
+import { TERIM } from "../../constants/terim";
 
 type HeaderRow = { workOrderId: string | null };
 
@@ -34,7 +35,7 @@ export function assertWorkOrderBound<T extends HeaderRow>(
   what = "Fason sevki",
 ): asserts row is WorkOrderBound<T> {
   if (row.workOrderId === null) {
-    throw AppError.conflict(`${what} bir terbiye iş emrine değil dokuma iş emrine bağlı — bu işlem terbiye iş emri yolundadır`, {
+    throw AppError.conflict(`${what} bir ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} değil dokuma iş emrine bağlı — bu işlem ${TERIM.terbiyeIsEmri.tekilKucuk} yolundadır`, {
       code: "DISPATCH_NOT_WORK_ORDER_BOUND",
     });
   }
@@ -61,7 +62,7 @@ export function assertWeavingBound<T extends { weavingOrderId: string | null }>(
   what = "Fason belgesi",
 ): asserts row is T & { weavingOrderId: string } {
   if (row.weavingOrderId === null) {
-    throw AppError.conflict(`${what} dokuma iş emrine değil terbiye iş emrine bağlı — bu işlem terbiye iş emri yolundan yapılır`, {
+    throw AppError.conflict(`${what} dokuma iş emrine değil ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlı — bu işlem ${TERIM.terbiyeIsEmri.tekilKucuk} yolundan yapılır`, {
       code: "DISPATCH_NOT_WEAVING_BOUND",
     });
   }

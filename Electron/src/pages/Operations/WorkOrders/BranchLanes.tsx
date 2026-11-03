@@ -62,6 +62,7 @@ import type { BatchLaneRoll } from "./service";
 import { LabTestsCard } from "@/pages/Quality/LabTests/LabTestsCard";
 import { BatchInspectionsLink } from "@/pages/Quality/Inspections/RollInspectionCard";
 import type { WorkOrderStepLite } from "./types";
+import { TERIM } from "@/lib/terim";
 
 const STATUS_META: Record<BatchDispatchStatus, { label: string; cls: string }> = {
   OPEN: { label: "Fasonda", cls: "border-warning/40 bg-warning/10 text-warning" },
@@ -231,7 +232,7 @@ export function BranchLanes({
   if (batches.length === 0 && splitChildren.length === 0 && !splitFrom) {
     return (
       <div className="rounded-md border border-dashed p-4 text-center text-xs italic text-muted-foreground">
-        Bu terbiye iş emrinde henüz parti yok.
+        Bu {TERIM.terbiyeIsEmri.cekimKucuk.bulunma} henüz parti yok.
       </div>
     );
   }
@@ -968,9 +969,9 @@ function WorkOrderSplitFromNote({ splitFrom }: { splitFrom: WorkOrderLineageRef 
     >
       <Split className="h-3.5 w-3.5 shrink-0" />
       <span>
-        Bu terbiye iş emri{" "}
+        Bu {TERIM.terbiyeIsEmri.tekilKucuk}{" "}
         <span className="font-mono font-medium text-foreground">{splitFrom.workOrderNumber}</span>{" "}
-        terbiye iş emrinden ayrılan bir partidir.
+        {TERIM.terbiyeIsEmri.cekimKucuk.ayrilma} ayrılan bir partidir.
       </span>
       <ArrowUpRight className="ml-auto h-3.5 w-3.5 shrink-0" />
     </button>

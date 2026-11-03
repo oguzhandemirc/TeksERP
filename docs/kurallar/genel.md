@@ -32,7 +32,7 @@
 
 - **[ÇEKİRDEK]** Yalnız bir işletim sisteminde ölçülebilen bekçiyi CI'da o sistemin işinde koş; başka platformun koşucusundan çıkarmak beyanlı olur ve koşucu o işin ci.yml'de durduğunu ölçer (iş yoksa KIRMIZI) — platforma göre sessizce atlamak ya da beklentiyi platforma göre gevşetmek yasak. · bekçi: `satici/sunucu/scripts/run-all-tests.ts` (`scripts/lib/ci-mac-isi.ts`) <sub>(arşiv 2026-10-09 CI kırmızıları)</sub>
 
-- **[ÇEKİRDEK]** Kullanıcıya görünen iş emri adı tek kaynaktan: `WeavingOrder` = "Dokuma İş Emri", `WorkOrder` = "Terbiye İş Emri" (tekil/çoğul/büyük harf/hâl çekimi) `TERIM`den okunur — backend `src/constants/terim.ts`, panel/tablet/patron `src/lib/terim.ts` BAYT-EŞİT ayna; eski ad ("Dokuma işi…", önünde Terbiye/Dokuma olmayan "iş emri") görünen metne yeni giremez, taban yalnız düşer (`--yaz`, metni çeviren commit'te); kod/model adı, izin kodu, numara, sürüm notu, migration değişmez · bekçi: `test_terim_eski_ad.ts` <sub>(arşiv 2026-10-11 terim)</sub>
+- **[ÇEKİRDEK]** Kullanıcıya görünen iş emri adı tek kaynaktan: `WeavingOrder` = "Dokuma İş Emri", `WorkOrder` = dokuma rejimi açıksa "Terbiye İş Emri", kapalıysa "İş Emri" (K20; tekil/çoğul/büyük harf/cümle başı/hâl çekimi) `TERIM`den OKUMA ANINDA çözülür (`terimDokumaAyarla`; modül düzeyi sabitte getter, sabit "Terbiye İş Emri" yazılmaz) — backend `src/constants/terim.ts`, panel/tablet/patron `src/lib/terim.ts` BAYT-EŞİT ayna; eski ad ("Dokuma işi…", önünde Terbiye/Dokuma olmayan "iş emri") görünen metne yeni giremez, taban yalnız düşer (`--yaz`, metni çeviren commit'te); kod/model adı, izin kodu, numara, sürüm notu, migration değişmez · bekçi: `test_terim_eski_ad.ts` <sub>(arşiv 2026-10-11 terim)</sub>
 
 ### Yasaklar
 
@@ -99,6 +99,7 @@ Backend: `test_process_exit_kalibi`, `test_kisa_kimlik_ozet`, `test_terim_eski_a
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
+- 2026-11-03 · K20 m1: WorkOrder adı dokuma rejiminden ("İş Emri" / "Terbiye İş Emri") [ÇEKİRDEK] — `arsiv/2026-11.md` §2026-11-03 K20 iş emri adı
 - 2026-10-11 · Terim: Dokuma İş Emri / Terbiye İş Emri tek kaynak + eski ad cırcırı [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-11 terim
 - 2026-10-09 · CI kırmızıları: tören bekçisi macOS işinde, bayat kanca çapası, sunucusuz giriş ekranı smoke'u [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-09 CI kırmızıları
 - 2026-10-05 · PIN bayat özet: geri alıp yeniden yükseltmede düz değer esas, iki kişide eşleşen PIN fail-closed [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-05 PIN bayat özet

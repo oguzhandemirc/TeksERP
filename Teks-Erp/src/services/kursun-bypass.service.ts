@@ -87,6 +87,7 @@ import {
   stepRunsStepFlow,
 } from "./helpers/quality-station.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
+import { TERIM } from "../constants/terim";
 
 /**
  * Bypass kapanışının movement notes marker ÖN EKİ. Tur kimliği (uuid) suffix
@@ -677,7 +678,7 @@ export class KursunBypassService {
         // Terminal WO: tamamlama yolları 409 verir (assertWorkOrderAliveTx) —
         // tek çıkış iptal. Bunu satırda söylemezsek planlamacı "İşi Bitir"e basıp
         // anlamsız bir hata alır.
-        staleReason = "Terbiye iş emri iptal/devredilmiş — dağıtımı iptal edin";
+        staleReason = `${TERIM.terbiyeIsEmri.cumleBasi.yalin} iptal/devredilmiş — dağıtımı iptal edin`;
       } else if (step.status === StepStatus.COMPLETED || step.status === StepStatus.SKIPPED) {
         staleReason = "Adım kapanmış — atama artık anlamsız, iptal edin";
       } else if (base.openRollCount === 0) {
@@ -858,10 +859,10 @@ export class KursunBypassService {
             },
           },
         });
-        if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
+        if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı`);
         if (!ASSIGNABLE_WO_STATUSES.includes(wo.status)) {
           throw AppError.conflict(
-            `Terbiye iş emri durumu dağıtıma uygun değil (${wo.status}) — yalnız planlanan/üretimdeki terbiye iş emirleri kurşuna dağıtılır.`,
+            `${TERIM.terbiyeIsEmri.cumleBasi.yalin} durumu dağıtıma uygun değil (${wo.status}) — yalnız planlanan/üretimdeki ${TERIM.terbiyeIsEmri.cogulKucuk} kurşuna dağıtılır.`,
           );
         }
 
@@ -875,7 +876,7 @@ export class KursunBypassService {
         }));
         const step = wo.steps.find((s) => stepRunsStepFlow(s.station));
         if (!step) {
-          throw AppError.badRequest("Bu terbiye iş emrinde Kurşun + KK2 adımı tanımlı değil");
+          throw AppError.badRequest(`Bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} Kurşun + KK2 adımı tanımlı değil`);
         }
         if (step.status === StepStatus.COMPLETED || step.status === StepStatus.SKIPPED) {
           throw AppError.badRequest(
@@ -1060,7 +1061,7 @@ export class KursunBypassService {
       // Partial unique `kursun_bypass_one_pending_per_step_uq` = "bir adımda en
       // fazla BİR açık atama" DB seddi. Eşzamanlı iki dağıtımın kaybedeni buraya düşer.
       if (p2002Mentions(err, /kursun_bypass_one_pending_per_step/i)) {
-        throw AppError.conflict("Bu terbiye iş emri az önce dağıtıldı, listeyi yenileyin");
+        throw AppError.conflict(`Bu ${TERIM.terbiyeIsEmri.tekilKucuk} az önce dağıtıldı, listeyi yenileyin`);
       }
       throw err;
     }
@@ -1170,8 +1171,8 @@ export class KursunBypassService {
       data: { assigned, moved, failed },
       message:
         failed.length === 0
-          ? `${assigned} terbiye iş emri dağıtıldı`
-          : `${assigned} terbiye iş emri dağıtıldı, ${failed.length} tanesi atlandı`,
+          ? `${assigned} ${TERIM.terbiyeIsEmri.tekilKucuk} dağıtıldı`
+          : `${assigned} ${TERIM.terbiyeIsEmri.tekilKucuk} dağıtıldı, ${failed.length} tanesi atlandı`,
     };
   }
 
@@ -1364,7 +1365,7 @@ export class KursunBypassService {
       a.workOrder.status === WorkOrderStatus.CANCELLED ||
       a.workOrder.status === WorkOrderStatus.SUPERSEDED
     ) {
-      blockReason = "Terbiye iş emri iptal/devredilmiş — tamamlanamaz";
+      blockReason = `${TERIM.terbiyeIsEmri.cumleBasi.yalin} iptal/devredilmiş — tamamlanamaz`;
     } else if (!isLastStep) {
       blockReason = "Kurşun son adım değil — Tambur kartı okutmasıyla tamamlanır";
     } else if (rolls.length === 0) {
@@ -1876,7 +1877,7 @@ export class KursunBypassService {
           message: "Kurşun adımı zaten kapatılmış (idempotent tekrar)",
         };
       }
-      throw AppError.notFound("Bu terbiye iş emrinde bekleyen kurşun dağıtımı yok");
+      throw AppError.notFound(`Bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} bekleyen kurşun dağıtımı yok`);
     }
 
     const a = await this.loadAssignmentForCompletion(pending.id);
@@ -2327,13 +2328,13 @@ export class KursunBypassService {
       where: { id: workOrderId },
       select: { status: true },
     });
-    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
+    if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı`);
     if (
       wo.status === WorkOrderStatus.CANCELLED ||
       wo.status === WorkOrderStatus.SUPERSEDED
     ) {
       throw AppError.conflict(
-        "İptal/devredilmiş terbiye iş emrinde kurşun dağıtımı tamamlanamaz — dağıtımı iptal edin.",
+        `İptal/devredilmiş ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} kurşun dağıtımı tamamlanamaz — dağıtımı iptal edin.`,
       );
     }
   }

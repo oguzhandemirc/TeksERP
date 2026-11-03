@@ -50,6 +50,7 @@ import {
   assertPlanChangeAllowed,
   assertTargetColorChange,
 } from "./helpers/workorder-target-color.helper";
+import { TERIM } from "../constants/terim";
 
 /** Toplu uygulama TEKİL motoru çağırır — kural kopyalanmaz (bkz. applyAttributeToRolls). */
 const inventoryService = new InventoryService();
@@ -136,7 +137,7 @@ async function loadWo(
       width: true,
     },
   });
-  if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
+  if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı`);
   return wo;
 }
 
@@ -305,7 +306,7 @@ export class WorkOrderLinkService {
       const lineWidth = num(l.width);
       const warnings: string[] = [];
       if (woWidth != null && lineWidth != null && woWidth !== lineWidth) {
-        warnings.push(`En farkı: terbiye iş emri ${woWidth} cm, sipariş ${lineWidth} cm`);
+        warnings.push(`En farkı: ${TERIM.terbiyeIsEmri.tekilKucuk} ${woWidth} cm, sipariş ${lineWidth} cm`);
       }
       return {
         id: l.id,
@@ -370,7 +371,7 @@ export class WorkOrderLinkService {
     const cancelledLines = lines.filter((l) => l.cancelledAt !== null);
     if (cancelledLines.length > 0) {
       throw AppError.badRequest(
-        `İptal edilmiş sipariş kalemine terbiye iş emri bağlanamaz (${cancelledLines.length} kalem). ` +
+        `İptal edilmiş sipariş kalemine ${TERIM.terbiyeIsEmri.tekilKucuk} bağlanamaz (${cancelledLines.length} kalem). ` +
           "Ekranı yenileyip tekrar deneyin.",
       );
     }
@@ -380,7 +381,7 @@ export class WorkOrderLinkService {
       ),
     ];
     if (cancelled.length > 0) {
-      throw AppError.badRequest(`İptal edilmiş siparişe terbiye iş emri bağlanamaz: ${cancelled.join(", ")}`);
+      throw AppError.badRequest(`İptal edilmiş siparişe ${TERIM.terbiyeIsEmri.tekilKucuk} bağlanamaz: ${cancelled.join(", ")}`);
     }
 
     // ── SERT ENGEL: kumaş / renk uyuşmazlığı ────────────────────────────────
@@ -398,7 +399,7 @@ export class WorkOrderLinkService {
         throw AppError.badRequest(
           `Kumaş uyuşmuyor — ${wo.workOrderNumber} "${targetItemName}" üretiyor, ` +
             `${l.order.orderNumber} siparişi "${l.item?.name ?? "—"}" istiyor. ` +
-            `Bu sipariş bu terbiye iş emriyle karşılanamaz.`,
+            `Bu sipariş bu ${TERIM.terbiyeIsEmri.cekimKucuk.vasita} karşılanamaz.`,
         );
       }
       if (wo.targetColorId && l.colorId !== wo.targetColorId) {
@@ -406,7 +407,7 @@ export class WorkOrderLinkService {
           `Renk uyuşmuyor — ${wo.workOrderNumber} "${targetColorName}" üretiyor, ` +
             `${l.order.orderNumber} siparişi "${l.color?.name ?? "renksiz"}" istiyor. ` +
             `Üretim rengi gerçekten değişecekse "Rengi Değiştir" ile değiştirin; ` +
-            `sipariş bağlamak terbiye iş emrinin rengini DEĞİŞTİRMEZ.`,
+            `sipariş bağlamak ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} rengini DEĞİŞTİRMEZ.`,
         );
       }
     }
@@ -418,7 +419,7 @@ export class WorkOrderLinkService {
       const lw = num(l.width);
       if (woWidth != null && lw != null && woWidth !== lw) {
         warnings.push(
-          `${l.order.orderNumber}: en farkı (terbiye iş emri ${woWidth} cm, sipariş ${lw} cm)`,
+          `${l.order.orderNumber}: en farkı (${TERIM.terbiyeIsEmri.tekilKucuk} ${woWidth} cm, sipariş ${lw} cm)`,
         );
       }
     }
@@ -482,7 +483,7 @@ export class WorkOrderLinkService {
       message:
         toCreate.length > 0
           ? `${toCreate.length} sipariş satırı bağlandı.` +
-            (typeChanged ? " Terbiye iş emri artık Siparişe Özel." : "")
+            (typeChanged ? ` ${TERIM.terbiyeIsEmri.cumleBasi.yalin} artık Siparişe Özel.` : "")
           : "Seçilen satırlar zaten bağlıydı.",
     };
   }
@@ -508,12 +509,12 @@ export class WorkOrderLinkService {
       select: { orderLineId: true },
     });
     if (!links.some((l) => l.orderLineId === orderLineId)) {
-      throw AppError.notFound("Bu sipariş satırı bu terbiye iş emrine bağlı değil.");
+      throw AppError.notFound(`Bu sipariş satırı bu ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlı değil.`);
     }
     const lastLinkOfOrderWo = wo.type === WorkOrderType.ORDER_PRODUCTION && links.length === 1;
     if (lastLinkOfOrderWo && !wo.targetItemId) {
       throw AppError.badRequest(
-        "Son sipariş bağı kaldırılınca terbiye iş emri stok üretimine döner; bunun için hedef kumaş " +
+        `Son sipariş bağı kaldırılınca ${TERIM.terbiyeIsEmri.tekilKucuk} stok üretimine döner; bunun için hedef kumaş ` +
           "tanımlı olmalı — önce 'Düzenle'den hedef kumaşı seçin.",
       );
     }
@@ -558,7 +559,7 @@ export class WorkOrderLinkService {
     return {
       success: true,
       data: { removed: true, typeChanged },
-      message: "Sipariş bağı kaldırıldı." + (typeChanged ? " Terbiye iş emri artık Stok üretimi." : ""),
+      message: "Sipariş bağı kaldırıldı." + (typeChanged ? ` ${TERIM.terbiyeIsEmri.cumleBasi.yalin} artık Stok üretimi.` : ""),
     };
   }
 
@@ -588,7 +589,7 @@ export class WorkOrderLinkService {
     const trimmed = why.text;
     const wo = await loadWo(workOrderId);
     if (wo.targetColorId === colorId) {
-      throw AppError.badRequest("Terbiye iş emri zaten bu renkte.");
+      throw AppError.badRequest(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} zaten bu renkte.`);
     }
 
     // ⚠️ BEKÇİ + CLAIM AYNI KİLİDİN ALTINDA (BULGU-T3-016). Eskiden bekçi tx
@@ -648,7 +649,7 @@ export class WorkOrderLinkService {
     });
     if (claimCount === 0) {
       throw AppError.conflict(
-        "Terbiye iş emri bu sırada değişti (tamamlandı, iptal edildi ya da rengi başka biri değiştirdi) — yenileyip tekrar deneyin.",
+        `${TERIM.terbiyeIsEmri.cumleBasi.yalin} bu sırada değişti (tamamlandı, iptal edildi ya da rengi başka biri değiştirdi) — yenileyip tekrar deneyin.`,
       );
     }
 
@@ -704,7 +705,7 @@ export class WorkOrderLinkService {
     cardWillBeStale: boolean;
   }>> {
     const wo = await loadWo(workOrderId);
-    if (wo.targetColorId === colorId) throw AppError.badRequest("Terbiye iş emri zaten bu renkte.");
+    if (wo.targetColorId === colorId) throw AppError.badRequest(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} zaten bu renkte.`);
     const cardWillBeStale = (await prisma.travelerCard.count({ where: { workOrderId, status: "ACTIVE" } })) > 0;
     try {
       const gate = await assertTargetColorChange(prisma, wo, colorId, { confirmPartial: true });
@@ -746,7 +747,7 @@ export class WorkOrderLinkService {
     assertPlanChangeAllowed(wo);
 
     const previousWidth = num(wo.width);
-    if (previousWidth === width) throw AppError.badRequest("Terbiye iş emrinin eni zaten bu değerde.");
+    if (previousWidth === width) throw AppError.badRequest(`${TERIM.terbiyeIsEmri.cumleBasi.ilgi} eni zaten bu değerde.`);
 
     await prisma.$transaction(async (tx) => {
       await touchWorkOrderTx(tx, workOrderId);
@@ -756,7 +757,7 @@ export class WorkOrderLinkService {
         data: { width: width == null ? null : new Prisma.Decimal(width) },
       });
       if (claim.count === 0) {
-        throw AppError.conflict("Terbiye iş emri bu sırada iptal edildi — en değiştirilemedi.");
+        throw AppError.conflict(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bu sırada iptal edildi — en değiştirilemedi.`);
       }
       // En, fason çekisindeki TEK "EN" değerinin kaynağı → kâğıt bayatladı.
       await markTravelerCardDirtyTx(tx, workOrderId);
@@ -780,7 +781,7 @@ export class WorkOrderLinkService {
     return {
       success: true,
       data: { previousWidth },
-      message: `Terbiye iş emrinin eni ${width ?? "—"} cm olarak güncellendi.`,
+      message: `${TERIM.terbiyeIsEmri.cumleBasi.ilgi} eni ${width ?? "—"} cm olarak güncellendi.`,
     };
 }
 
@@ -890,7 +891,7 @@ export class WorkOrderLinkService {
     if (rolls.length !== ids.length) {
       // Başka bir iş emrinin topunu buradan değiştirmek, kapsamı sessizce
       // genişletirdi — seçim listesi zaten bu WO'dan geliyor.
-      throw AppError.badRequest("Seçilen toplardan bazıları bu terbiye iş emrine ait değil.");
+      throw AppError.badRequest(`Seçilen toplardan bazıları bu ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} ait değil.`);
     }
 
     // PLANLAMACI YETKİSİ (2026-08-21, kullanıcı kararı): "bu iş emrinin TÜM açık
@@ -1030,7 +1031,7 @@ export class WorkOrderLinkService {
     });
     if (!line) throw AppError.badRequest("Sipariş satırı bulunamadı.");
     if (line.order.status === OrderStatus.CANCELLED) {
-      throw AppError.badRequest("İptal edilmiş siparişe terbiye iş emri bağlanamaz.");
+      throw AppError.badRequest(`İptal edilmiş siparişe ${TERIM.terbiyeIsEmri.tekilKucuk} bağlanamaz.`);
     }
     if (wo.targetItemId && line.itemId !== wo.targetItemId) {
       throw AppError.badRequest(
@@ -1046,7 +1047,7 @@ export class WorkOrderLinkService {
     // yerine söyle (istemci zaten uyumlu satırı normal uçtan bağlar).
     if (!colorDiff && !widthDiff) {
       throw AppError.badRequest(
-        "Sipariş zaten terbiye iş emriyle uyumlu — normal 'Sipariş Bağla' kullanın.",
+        `Sipariş zaten ${TERIM.terbiyeIsEmri.cekimKucuk.vasita} uyumlu — normal 'Sipariş Bağla' kullanın.`,
       );
     }
 

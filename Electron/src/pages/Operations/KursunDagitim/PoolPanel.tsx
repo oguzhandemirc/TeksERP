@@ -30,6 +30,7 @@ import type {
   KursunBypassMachineOption,
   KursunDistributionWaitingRow,
 } from "./types";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   rows: KursunDistributionWaitingRow[];
@@ -148,7 +149,7 @@ export function PoolPanel({
 
       {rows.length === 0 ? (
         <div className="text-muted-foreground flex h-24 items-center justify-center rounded-md border border-dashed text-sm">
-          Kurşun adımında bekleyen terbiye iş emri yok.
+          Kurşun adımında bekleyen {TERIM.terbiyeIsEmri.tekilKucuk} yok.
         </div>
       ) : (
         <DndContext

@@ -11,6 +11,7 @@
 // tavanı yükseltmek sınırı anlamsızlaştırırdı.
 // =============================================================================
 import type { MoveRule } from "./merge-map";
+import { TERIM } from "./terim";
 
 export const COLOR_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "Roll", table: "rolls", column: "colorId", label: "Top" },
@@ -27,7 +28,7 @@ export const COLOR_MERGE_RULES: MoveRule[] = [
       policy: "BLOCK",
       why: "Aynı listede aynı ürünün iki renginin de satırı varsa birleşen renge iki fiyat düşer — satış kararıdır (MAL-4).",
     },
-    { kind: "MOVE", model: "WorkOrder", table: "work_orders", column: "targetColorId", label: "Terbiye iş emri (hedef renk)" },
+    { kind: "MOVE", model: "WorkOrder", table: "work_orders", column: "targetColorId", get label() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} (hedef renk)`; } },
     { kind: "MOVE", model: "RouteStep", table: "route_steps", column: "plannedColorId", label: "Rota adımı (hedef renk)" },
     { kind: "MOVE", model: "ProductRecipe", table: "product_recipes", column: "colorId", label: "Reçete" },
     { kind: "MOVE", model: "SubcontractorReceipt", table: "subcontractor_receipts", column: "appliedColorId", label: "Fason kabul (uygulanan renk)" },

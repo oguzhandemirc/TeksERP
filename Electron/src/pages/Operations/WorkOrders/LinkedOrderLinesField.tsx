@@ -17,6 +17,7 @@ import { springSnappy } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { OrderPickerDialog, type PickedOrderLine } from "./OrderPickerDialog";
 import { calendarLocaleDateString } from "@/lib/factory-time";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   lines: PickedOrderLine[];
@@ -121,7 +122,7 @@ export function LinkedOrderLinesField({
                 Bağlı Sipariş Kalemleri
               </div>
               <div className="text-[11px] leading-tight text-muted-foreground">
-                Bu terbiye iş emrinin karşıladığı kalemler
+                Bu {TERIM.terbiyeIsEmri.cekimKucuk.ilgi} karşıladığı kalemler
               </div>
             </div>
           </div>
