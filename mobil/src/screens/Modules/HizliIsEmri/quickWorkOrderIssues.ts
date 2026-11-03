@@ -43,6 +43,13 @@ export interface QuickWoIssueInput {
   canPickFromList?: boolean;
 }
 
+/** Rotasız (sahada belirlenir) seçimde renk adımı istasyonda eklenir; engel üretilmez. */
+export const computeApplyMissing = (
+  targetColorId: string | null,
+  canApplyColor: boolean,
+  scanRouted: boolean,
+): string | null => (targetColorId && !canApplyColor && !scanRouted ? 'renk veren (boyahane)' : null);
+
 export const parsePositiveNumber = (s: string): number | null => {
   const t = s.trim().replace(',', '.');
   if (!/^\d+(\.\d+)?$/.test(t)) return null;

@@ -127,7 +127,8 @@ export function membershipSql(unit: ReadyWorkUnit, onlyId?: string, onlyIds?: re
       const unitFilter = unit === "customerBatch"
         ? Prisma.sql`AND ${customerBatchMemberSql("n")}`
         : Prisma.empty;
-      const idFilter = onlyId ? Prisma.sql`AND ${key} = ${onlyId}` : onlyIds?.length ? Prisma.sql`AND ${key} IN (${Prisma.join([...onlyIds])})` : Prisma.empty;
+      // Belge kümesi tek uuid[] parametresiyle `n.id` üzerinden: `n.id::text IN (…)` kimlik başına parametre + metin karşılaştırması (K28 darboğazı).
+      const idFilter = onlyId ? Prisma.sql`AND ${key} = ${onlyId}` : !onlyIds?.length ? Prisma.empty : unit === "deliveryNote" ? Prisma.sql`AND n.id = ANY(${[...onlyIds]}::uuid[])` : Prisma.sql`AND ${key} IN (${Prisma.join([...onlyIds])})`;
       // Kök: belgenin onayla doğan topları; aşağı soy `parentRollId` (tambur bölmesi) üzerinden, derinlik tavanlı.
       return Prisma.sql`
         SELECT DISTINCT t.unit_id, t.roll_id FROM (

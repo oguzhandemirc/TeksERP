@@ -206,8 +206,9 @@ async function bolum2b(f: MaliyetFikstur): Promise<void> {
 
 function bolum8(): void {
   const md = readFileSync(join(__dirname, "../../docs/kurallar/defter.md"), "utf8");
-  const satir = md.split("\n").find((l) => l.startsWith("| `StandardCostVersion`")) ?? "";
-  check("§8a defter.md envanterinde StandardCostVersion (+StandardCostLine) satırı var", satir.includes("`StandardCostLine`"), satir.slice(0, 60));
+  // Kısa alan dosyasında envanter madde listesidir (tablo `ayrinti/defter.md`de).
+  const satir = md.split("\n").find((l) => /^(\| |- )/.test(l) && l.includes("`StandardCostVersion`")) ?? "";
+  check("§8a defter.md envanterinde StandardCostVersion (+StandardCostLine) satırı var", satir.includes("`StandardCostLine`"), satir.slice(0, 120));
   check("§8b ters yol beyanı: geri alma YENİ SÜRÜM (`restoredFromId`), eskisi değişmez", satir.includes("YENİ SÜRÜM") && satir.includes("`restoredFromId`"));
 }
 

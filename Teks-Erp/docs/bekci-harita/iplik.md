@@ -1,0 +1,11 @@
+## iplik
+
+| Dosya | Ne ölçüyor | DB | Negatif sonda | |
+|---|---|---|---|---|
+| `Teks-Erp/scripts/test_goods_receipt_invoice.ts` | Mal kabul → alış faturası köprüsünü kilitler: fiyatın topa yazılması, ürün+renk+FİYAT gruplaması, iptal topun faturaya girmemesi, tek aktif fatura kur | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_iplik_regime_gate.ts` | iplik.enabled kapalıyken kg defterinin ULAŞILAMAZ olduğunu ölçer: route kapısı requireIplikEnabled'ın varlığı + applyYarnMovementTx'in SERVİS içi read |  | ✓ |  |
+| `Teks-Erp/scripts/test_purchase_order.ts` | Alış siparişinde denormalize karşılanma sayacının kaynakla mutabık kaldığını kilitler: belge no yarışı, clientToken idempotency, mal kabul/iptal/düzen | ✓ |  |  |
+| `Teks-Erp/scripts/test_stock_count.ts` | Tam stok sayımı: fotoğraf kapsamı, işaretsiz satırın dokunulmazlığı, fark fişinin fire olmaması, belgenin tx içinde donması, claim/yarış ve alış sipar | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_ticaret_turkish_search.ts` | Sekiz ticaret servisinin aramasının `buildTurkishSearch`'ten geçtiğini ve i/İ/ı/I ailesinin gerçekten eşleştiğini (yarn + cari işlevsel, kalan altısı  | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_yarn_stock.ts` | İplik kg-stok defterinin tek mekanik kanıtı: bakiye ↔ Σ(hareket) mutabakatı, negatif bakiye gerçekten yazılır, eşzamanlı hareketler doğru toplanır, DB | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_yarn_lot.ts` | İplik LOTU (devere Faz 2 A1, GERÇEK DB): §0 statik (allowlist `lotId`/`bobbinCount` · guard lot dalı depo kilidinden SONRA ve bayraktan bağımsız · `normalizeLotNo` TRIM/ayrıştırmaz) · §1 lot doğuşu mal kabulde (`[kalem,lotNo]` upsert, ikinci fiş aynı lot, tedarikçi ilk doğuşta, bobin, türetilen bakiye) · §2 kimlik (başka kalemin lotu 400, pasif lot satır düşer) · §3 L1 lot bakiyesi aşımı 409 (depo yeterken, bayrak kapalıyken) · §4 iki lotlu sarım uyarı + lot × depo bakiyeleri + WOUND_CANCEL ters kayıt LOT BAZINDA · §5 lotsuz uyarı / `lotRequired` 400 · §6 mal kabul iptali lotla düşer · §7 satır-yok ↔ false BİREBİR · §8 lot servisi · §9 elle hareket + süzgeç | DB (fikstür `TEST-LOT-<pid>`, bayraklar fotoğrafa döner) | ✓B4 (`c67460fc`) — ① create-data'dan `lotId` düşür → §0a/§1c/§1e/§1f/§1g ❌ (sessiz düşüş) · ② guard lot dalı → §0c/§3b/§3c/§4b/§4e ❌ · ③ `groupYarnLinesTx` lot anahtarı → §4e ❌ · ④ `readDevereLotRequired` sabit true → §1f/§3a/§4b ❌ |  |

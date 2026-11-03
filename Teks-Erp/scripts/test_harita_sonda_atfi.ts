@@ -23,6 +23,8 @@
 //   §3 CIRCIR — sınıfsız düz `✓` hücresi YALNIZ DÜŞER (taban DUZ_TABAN; sabiti entegratör
 //               trende yazar, çürüme kolu commit kapısında uyarı — lib/circir-kolu.ts).
 //
+// ⚠️ HARİTA BÖLÜNDÜ (2026-11-03): tablo alan dosyalarındadır (`docs/bekci-harita/<alan>.md`, küme
+//    `lib/bekci-harita.ts`); diff/blame/satır no DOSYA BAŞINA, körlük zemini toplamda.
 // ⚠️ KAYNAK INDEX (`git show :yol`), ağaç değil: ortak ağaçta başkasının yarım hücresi
 //    bizi durdurmasın; pathspec commit'inde GIT_INDEX_FILE geçici indeksi gösterir, o
 //    okunur. Index'ten okunamazsa (repo dışı) ağaca düşer ve bunu BEYAN eder.
@@ -40,9 +42,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { curumeKolu } from "./lib/circir-kolu";
 import { atlamaDefteri } from "./lib/atlama";
+import { HARITA_ALAN_DIZINI, haritaAlanDosyalari } from "./lib/bekci-harita";
 
 const KOK = join(__dirname, "..", "..");
-const HARITA = "Teks-Erp/docs/BEKCI-HARITASI.md";
 const EN_AZ_SATIR = 1000; // 2026-09-14: 1766 satır; yarısı düşerse tablo kaybı yakalanır
 /** §3 tabanı — YALNIZ DÜŞER; sabiti trende entegratör (1e) yazar (ölçüm 2026-09-14: 538). */
 // 538 → 531 (2026-09-14, entegratör 1e): birleşik ağaçta ölçüldü (yedi hücre sınıflandı).
@@ -85,11 +87,11 @@ export function hucreSinifi(hucre: string): Sinif {
   return "DIGER";
 }
 
-/** `git diff --cached -U0` hunk'larından haritanın SAHNELENMİŞ (yeni) satır numaraları. */
-function sahnelenmisSatirlar(): Set<number> {
+/** `git diff --cached -U0` hunk'larından alan dosyasının SAHNELENMİŞ (yeni) satır numaraları. */
+function sahnelenmisSatirlar(yol: string): Set<number> {
   const out = new Set<number>();
   try {
-    const d = git(["diff", "--cached", "-U0", "--", HARITA], { cwd: KOK });
+    const d = git(["diff", "--cached", "-U0", "--", yol], { cwd: KOK });
     for (const m of d.matchAll(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm)) {
       const bas = Number(m[1]);
       const adet = m[2] === undefined ? 1 : Number(m[2]);
@@ -122,9 +124,9 @@ function sahnelenmisSatirlar(): Set<number> {
  * gerçekten YENİDİR ve `null` döner — "sahnelenmiş olmalı" kuralı işler
  * (fail-closed korunur).
  */
-function blameSha(satirMetni: string): string | null {
+function blameSha(yol: string, satirMetni: string): string | null {
   try {
-    const { headMetni, blame } = headBlame();
+    const { headMetni, blame } = headBlame(yol);
     const headNo = headMetni.indexOf(satirMetni) + 1;
     if (headNo === 0) return null; // HEAD'de yok ⇒ satır YENİ ⇒ sahnelenmiş olmalı
     const b = blame[headNo - 1] ?? "";
@@ -141,13 +143,16 @@ function blameSha(satirMetni: string): string | null {
 // ⚡ HIZ (2026-10-13): satır başına `git show` + `git blame -L` (502 işaretli satır ⇒ ~1000 git
 // süreci, 170–220 sn) yerine HEAD metni ve TÜM-DOSYA blame'i TEK KEZ alınır; çıktı satır sırasıyla
 // aynıdır (blame satırı i = dosya satırı i), sonuç birebir aynı.
-let headOnbellek: { headMetni: string[]; blame: string[] } | null = null;
-function headBlame(): { headMetni: string[]; blame: string[] } {
-  if (headOnbellek) return headOnbellek;
-  const headMetni = git(["show", `HEAD:${HARITA}`], { cwd: KOK }).split("\n");
-  const blame = git(["blame", "-l", "-s", "HEAD", "--", HARITA], { cwd: KOK }).split("\n");
-  headOnbellek = { headMetni, blame };
-  return headOnbellek;
+// Bölünmeden sonra önbellek DOSYA BAŞINA (HEAD'de olmayan yeni dosya ⇒ git hata ⇒ blameSha null).
+const headOnbellek = new Map<string, { headMetni: string[]; blame: string[] }>();
+function headBlame(yol: string): { headMetni: string[]; blame: string[] } {
+  const v = headOnbellek.get(yol);
+  if (v) return v;
+  const headMetni = git(["show", `HEAD:${yol}`], { cwd: KOK }).split("\n");
+  const blame = git(["blame", "-l", "-s", "HEAD", "--", yol], { cwd: KOK }).split("\n");
+  const y = { headMetni, blame };
+  headOnbellek.set(yol, y);
+  return y;
 }
 
 /**
@@ -169,16 +174,27 @@ export function biciimliMi(hucre: string): boolean {
   return /^✓[KB][1-9]\d*(?![0-9])/.test(h);
 }
 
-function haritayiOku(): { metin: string; kaynak: "INDEX" | "AĞAÇ" } {
+/** Alan dosyası kümesi INDEX'ten (yeni sahnelenmiş dosya dahil); okunamazsa ağaçtan. */
+function haritaDosyalari(): string[] {
   try {
-    return { metin: git(["show", `:${HARITA}`], { cwd: KOK }), kaynak: "INDEX" };
+    const l = git(["ls-files", "--cached", "--", `${HARITA_ALAN_DIZINI}/*.md`], { cwd: KOK }).split("\n").map((x) => x.trim()).filter(Boolean);
+    if (l.length > 0) return l.sort();
   } catch {
-    return { metin: readFileSync(join(KOK, HARITA), "utf8"), kaynak: "AĞAÇ" };
+    /* repo dışı — ağaca düş */
+  }
+  return haritaAlanDosyalari(KOK);
+}
+
+function haritayiOku(yol: string): { metin: string; kaynak: "INDEX" | "AĞAÇ" } {
+  try {
+    return { metin: git(["show", `:${yol}`], { cwd: KOK }), kaynak: "INDEX" };
+  } catch {
+    return { metin: readFileSync(join(KOK, yol), "utf8"), kaynak: "AĞAÇ" };
   }
 }
 
-interface Satir { no: number; dosya: string; hucre: string; ham: string }
-function satirlar(metin: string): Satir[] {
+interface Satir { yol: string; no: number; dosya: string; hucre: string; ham: string }
+function satirlar(yol: string, metin: string): Satir[] {
   const out: Satir[] = [];
   let tabloda = false;
   const L = metin.split("\n");
@@ -189,7 +205,7 @@ function satirlar(metin: string): Satir[] {
     if (tabloda && !l.startsWith("|")) { tabloda = false; continue; }
     if (tabloda) {
       const c = l.split("|").map((s) => s.trim());
-      out.push({ no: i + 1, dosya: c[1] ?? "", hucre: c[4] ?? "", ham: l });
+      out.push({ yol, no: i + 1, dosya: c[1] ?? "", hucre: c[4] ?? "", ham: l });
     }
   }
   return out;
@@ -198,11 +214,18 @@ function satirlar(metin: string): Satir[] {
 function main(): void {
   console.log("=== Harita 'Negatif sonda' hücresi bekçisi ===\n");
   const iceride = process.env.TEKSERP_SONDA_ICERIDE === "1"; // §4f çocuk koşumu — kendini yeniden çağırmaz
-  const { metin, kaynak } = haritayiOku();
-  if (kaynak === "AĞAÇ") console.log("  ℹ️ kaynak: AĞAÇ (index'ten okunamadı — repo dışı koşum)");
-  const S = satirlar(metin);
+  const yollar = haritaDosyalari();
+  const S: Satir[] = [];
+  let agac = 0;
+  for (const yol of yollar) {
+    const { metin, kaynak: k } = haritayiOku(yol);
+    if (k === "AĞAÇ") agac++;
+    S.push(...satirlar(yol, metin));
+  }
+  const kaynak = agac === 0 ? "INDEX" : `AĞAÇ ${agac}/${yollar.length}`;
+  if (agac > 0) console.log(`  ℹ️ kaynak: ${kaynak} dosya index'ten okunamadı (sahnelenmemiş/repo dışı)`);
   const sinifli = S.filter((s) => ["K", "B", "B-BU-COMMIT", "B-ATIFSIZ"].includes(hucreSinifi(s.hucre)));
-  check(`§0 körlük zemini: tablo satırı ≥ ${EN_AZ_SATIR}`, S.length >= EN_AZ_SATIR, `${S.length} satır (${kaynak})`);
+  check(`§0 körlük zemini: tablo satırı ≥ ${EN_AZ_SATIR}`, S.length >= EN_AZ_SATIR, `${S.length} satır · ${yollar.length} dosya (${kaynak})`);
   check("§0 körlük zemini: en az bir SINIFLI hücre var (✓K/✓B)", sinifli.length > 0, `${sinifli.length}`);
 
   // §1 — ✓B atıfsız → KIRMIZI, dosya:satır
@@ -212,20 +235,25 @@ function main(): void {
     atifsiz.length === 0,
     atifsiz.length ? `${atifsiz.length} atıfsız` : `${S.filter((s) => hucreSinifi(s.hucre) === "B").length} B hücresi, hepsi sha'lı`,
   );
-  for (const s of atifsiz) console.log(`     · ${HARITA}:${s.no} ${s.dosya} → "${s.hucre.slice(0, 70)}" ⇒ sha ekle (7–40 hex), sha henüz yoksa \`${BU_COMMIT}\` yaz (blame türetir), ya da sonda dosyaya taşınıp ✓K<n> yazılır`);
+  for (const s of atifsiz) console.log(`     · ${s.yol}:${s.no} ${s.dosya} → "${s.hucre.slice(0, 70)}" ⇒ sha ekle (7–40 hex), sha henüz yoksa \`${BU_COMMIT}\` yaz (blame türetir), ya da sonda dosyaya taşınıp ✓K<n> yazılır`);
 
   // §1b — `(bu commit)`: sha türetilir. Sahnelenmiş satırda doğal (henüz commit yok);
   // sahnelenmemişse HEAD blame çözmeli — çözmezse işaret havada kalmıştır (fail-closed).
   const buCommit = S.filter((s) => hucreSinifi(s.hucre) === "B-BU-COMMIT");
-  const sahneli = sahnelenmisSatirlar();
+  const sahneliHarita = new Map<string, Set<number>>();
+  const sahneliMi = (s: Satir): boolean => {
+    let k = sahneliHarita.get(s.yol);
+    if (!k) { k = sahnelenmisSatirlar(s.yol); sahneliHarita.set(s.yol, k); }
+    return k.has(s.no);
+  };
   const sig = sigKlonMu();
   const havada: Satir[] = [];
   const olculemedi: Satir[] = [];
   for (const s of buCommit) {
-    if (sahneli.has(s.no)) { console.log(`     ℹ️ ${HARITA}:${s.no} ${s.dosya} ✓B ${BU_COMMIT} — sahnelenmiş, sha commit'te doğar`); continue; }
+    if (sahneliMi(s)) { console.log(`     ℹ️ ${s.yol}:${s.no} ${s.dosya} ✓B ${BU_COMMIT} — sahnelenmiş, sha commit'te doğar`); continue; }
     if (sig) { olculemedi.push(s); continue; }
-    const sha = blameSha(s.ham);
-    if (sha) console.log(`     ℹ️ ${HARITA}:${s.no} ${s.dosya} ✓B ${BU_COMMIT} → blame ${sha}`);
+    const sha = blameSha(s.yol, s.ham);
+    if (sha) console.log(`     ℹ️ ${s.yol}:${s.no} ${s.dosya} ✓B ${BU_COMMIT} → blame ${sha}`);
     else havada.push(s);
   }
   // ÜÇ SONUÇ (CI `c2635fc1`, 2026-09-14: sığ klonda blame her satırı sınır (^) verdi, "havada" sanıldı):
@@ -238,14 +266,14 @@ function main(): void {
     havada.length === 0,
     havada.length ? `${havada.length} havada` : sig ? `${buCommit.length} işaretli (sığ klon: blame ⏭)` : `${buCommit.length} işaretli`,
   );
-  for (const s of havada) console.log(`     · ${HARITA}:${s.no} ${s.dosya} — ne sahnelenmiş ne blame çözüyor (tam klonda)`);
+  for (const s of havada) console.log(`     · ${s.yol}:${s.no} ${s.dosya} — ne sahnelenmiş ne blame çözüyor (tam klonda)`);
 
   // §2 — biçim (kalın yazım ayrı adla: çare "kalın yazma, düz yaz")
   const kalin = S.filter((s) => hucreSinifi(s.hucre) === "BICIMSIZ-KALIN");
   const bicimsiz = S.filter((s) => !biciimliMi(s.hucre));
   check("§2 ⭐ sınıflı hücre biçimi `✓K<n>`/`✓B<n>`, n ≥ 1 — DÜZ yazım, kalın (`✓**K3**`) değil", bicimsiz.length === 0 && kalin.length === 0, [bicimsiz.length ? `${bicimsiz.length} biçimsiz` : "", kalin.length ? `${kalin.length} KALIN` : ""].filter(Boolean).join(" · "));
-  for (const s of bicimsiz) console.log(`     · ${HARITA}:${s.no} ${s.dosya} → "${s.hucre.slice(0, 40)}"`);
-  for (const s of kalin) console.log(`     · ${HARITA}:${s.no} ${s.dosya} → "${s.hucre.slice(0, 40)}" ⇒ kalın yazma, düz yaz: ✓K3 / ✓B2 (sha)`);
+  for (const s of bicimsiz) console.log(`     · ${s.yol}:${s.no} ${s.dosya} → "${s.hucre.slice(0, 40)}"`);
+  for (const s of kalin) console.log(`     · ${s.yol}:${s.no} ${s.dosya} → "${s.hucre.slice(0, 40)}" ⇒ kalın yazma, düz yaz: ✓K3 / ✓B2 (sha)`);
 
   // §3 — düz ✓ cırcır
   const duz = S.filter((s) => hucreSinifi(s.hucre) === "DUZ").length;
@@ -264,7 +292,7 @@ function main(): void {
   // çıkmalı, "havada" ❌ ÇIKMAMALI; işaretli satır yoksa dal boş geçer (beyan da yok) — ikisi de ölçülür.
   const cocuk = iceride ? { stdout: "", stderr: "" } : spawnSync(process.execPath, [...process.execArgv, process.argv[1]], { cwd: process.cwd(), encoding: "utf8", env: { ...process.env, TEKSERP_SONDA_SIG: "1", TEKSERP_SONDA_ICERIDE: "1" }, timeout: 60_000 });
   const cOut = `${cocuk.stdout}${cocuk.stderr}`;
-  const isaretli = buCommit.filter((s) => !sahneli.has(s.no)).length;
+  const isaretli = buCommit.filter((s) => !sahneliMi(s)).length;
   if (!iceride) check(
     "§4f ⭐ sığ klon taklidi (TEKSERP_SONDA_SIG=1): blame ⏭ beyanla atlanır, 'havada' ❌ üretmez",
     !/havada/.test(cOut) && (isaretli === 0 || /sığ klon/.test(cOut)),
