@@ -18,7 +18,7 @@ jest.mock('../../../../services/inboundDoc.service', () => ({
     updateNote: (id: string, b: unknown) => mockUpdate(id, b),
   },
 }));
-const mockCatalog = jest.fn(async () => ({ propertyId: null as string | null, options: [] as Array<{ id: string; name: string; isDefault: boolean }> }));
+const mockCatalog = jest.fn(async () => ({ propertyId: null as string | null, options: [] as { id: string; name: string; isDefault: boolean }[] }));
 const mockDefaults = jest.fn(async () => ({}) as Record<string, string>);
 jest.mock('../../../../services/fabricProperty.service', () => ({
   fabricPropertyService: { getKursunGramajCatalog: () => mockCatalog(), getKursunCustomerDefaults: () => mockDefaults() },

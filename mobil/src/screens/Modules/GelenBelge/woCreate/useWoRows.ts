@@ -1,6 +1,6 @@
 // Belgeden terbiye iş emri (K6/K7/K8) — satır listesi + "Hepsini kaydet". ONLINE-ONLY: kayıt top doğurur, kuyruğa alınmaz.
 // Kip sunucu ayarından (formApproval); kapalıyken satır taslak olarak kalır (bugünkü ayrı onay). Satır başına sonuç.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import { onlineManager, useQuery } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { useAttemptToken } from '../../../../offline/attemptToken';
@@ -125,6 +125,20 @@ function useGramajCatalog(route: ProductionRoute): { showGramaj: boolean; catalo
   return { showGramaj, catalog: showGramaj ? q.data ?? EMPTY_CATALOG : EMPTY_CATALOG, defaults: d.data ?? NO_DEFAULTS };
 }
 
+/** Katalog / müşteri varsayılanları satırdan sonra gelirse dokunulmamış satırlara ön seçim düşer (müşterininki, yoksa istasyonunki). */
+function useGramajReseed(setRows: Dispatch<SetStateAction<DocRow[]>>, catalog: KursunGramajCatalog, defaults: KursunCustomerDefaults): void {
+  useEffect(() => {
+    if (catalog.options.length === 0) return;
+    setRows((rs) =>
+      rs.map((r) => {
+        if (!r.form || r.gramajTouched || isDone(r)) return r;
+        const id = customerGramajId(catalog, defaults, r.form.ownerCustomerId);
+        return id && id !== r.form.gramajValueId ? { ...r, form: { ...r.form, gramajValueId: id } } : r;
+      }),
+    );
+  }, [setRows, catalog, defaults]);
+}
+
 export function useWoRows(route: ProductionRoute) {
   const attempt = useAttemptToken();
   const settings = useQuery({ queryKey: INBOUND_DOC_SETTINGS_KEY, queryFn: inboundDocService.settings, retry: false, staleTime: 60_000 });
@@ -138,17 +152,7 @@ export function useWoRows(route: ProductionRoute) {
 
   useEffect(() => void loadRecentOwners().then(setRecent), []);
 
-  // Katalog / müşteri varsayılanları satırdan sonra gelirse dokunulmamış satırlara ön seçim düşer (müşterininki, yoksa istasyonunki).
-  useEffect(() => {
-    if (catalog.options.length === 0) return;
-    setRows((rs) =>
-      rs.map((r) => {
-        if (!r.form || r.gramajTouched || isDone(r)) return r;
-        const id = customerGramajId(catalog, defaults, r.form.ownerCustomerId);
-        return id && id !== r.form.gramajValueId ? { ...r, form: { ...r.form, gramajValueId: id } } : r;
-      }),
-    );
-  }, [catalog, defaults]);
+  useGramajReseed(setRows, catalog, defaults);
 
   const addNote = useCallback((note: { id: string; noteNo: string }, runKey: number) => {
     setRows((rs) =>
