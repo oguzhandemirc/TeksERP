@@ -28,6 +28,20 @@ export function shortcutTitle(route: Pick<ProductionRoute, 'name'>): string {
   return /i[şs] emri$/i.test(name) ? name : `${name} ${TERIM.terbiyeIsEmri.tekilKucuk}`;
 }
 
+/**
+ * Kısayol karosunun alt satırı: rotanın açıklaması ya da adım yolu ("KURŞUN → TAMBUR"). Ham rota kodu
+ * (ROT0211260001) operatöre bir şey söylemez (QA 2026-11-03); ikisi de yoksa alt satır yok.
+ */
+export function shortcutSub(route: Pick<ProductionRoute, 'description' | 'steps'>): string | undefined {
+  const desc = route.description?.trim();
+  if (desc) return desc;
+  const path = [...(route.steps ?? [])]
+    .sort((a, b) => a.sequence - b.sequence)
+    .map((st) => st.station?.name?.trim())
+    .filter((n): n is string => !!n);
+  return path.length > 0 ? path.join(' → ') : undefined;
+}
+
 /** Kayıt kipi. UNKNOWN = ayar okunamadı (izin): kayıt denenir, sunucu kapalı derse taslağa düşülür. */
 export type FormApproval = 'SEPARATE' | 'WITH_WORK_ORDER' | 'UNKNOWN';
 

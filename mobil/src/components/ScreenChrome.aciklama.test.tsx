@@ -2,7 +2,7 @@
 // erişilebilir ad olarak durur ve dokununca balonda okunur. Veri satırları
 // (statusLine, makine adını taşıyan subtitle) görünür kalır.
 import React from 'react';
-import { Text } from 'react-native';
+import { BackHandler, Text } from 'react-native';
 import { fireEvent, screen } from '@testing-library/react-native';
 import { renderWithPaper } from '../test/render';
 import ScreenChrome from './ScreenChrome';
@@ -66,5 +66,45 @@ describe('ScreenChrome — başlık altı açıklama (K24)', () => {
     );
     expect(screen.getByTestId('ekran-alt-baslik')).toBeTruthy();
     expect(screen.queryByTestId('ekran-aciklama')).toBeNull();
+  });
+
+  it('S12: hidePlaceChip + statusLine birlikte → makine adı da durum da görünür', () => {
+    renderWithPaper(
+      <ScreenChrome title="Kurşun" subtitle="KURŞUN MAKİNESİ 1" statusLine="2 açık kart" hidePlaceChip>
+        <Text>içerik</Text>
+      </ScreenChrome>,
+    );
+    expect(screen.getByLabelText('KURŞUN MAKİNESİ 1 · 2 açık kart')).toBeTruthy();
+  });
+});
+
+describe('ScreenChrome — donanım geri tuşu = önceki adım', () => {
+  it('onStepBack varsa geri tuşu onu çağırır ve olayı tüketir; yoksa ekrana (pop) bırakır', () => {
+    type Handler = () => boolean | null | undefined;
+    const handlers: Handler[] = [];
+    const spy = jest.spyOn(BackHandler, 'addEventListener').mockImplementation((_e, h) => {
+      handlers.push(h);
+      return { remove: () => handlers.splice(handlers.indexOf(h), 1) };
+    });
+    try {
+      const geri = jest.fn();
+      const r = renderWithPaper(
+        <ScreenChrome title="Hızlı İş Emri" onStepBack={geri}>
+          <Text>içerik</Text>
+        </ScreenChrome>,
+      );
+      expect(handlers).toHaveLength(1);
+      expect(handlers[0]()).toBe(true);
+      expect(geri).toHaveBeenCalledTimes(1);
+
+      r.rerender(
+        <ScreenChrome title="Hızlı İş Emri">
+          <Text>içerik</Text>
+        </ScreenChrome>,
+      );
+      expect(handlers[handlers.length - 1]()).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

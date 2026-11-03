@@ -16,6 +16,7 @@ import { useSubcontractorDefault } from '../../../hooks/useSubcontractorDefault'
 import type { AvailableOrderLine } from '../../../services/order.service';
 import { useAttemptToken } from '../../../offline/attemptToken';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
+import { useCameraUnusable } from '../../../hooks/useCameraUnusable';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
 import type { ItemLifecycleStatus, Roll } from '../../../types/models';
 import { itemLifecycleOf } from '../../../lib/item-lifecycle';
@@ -812,6 +813,7 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
   });
 
   /** Eksik (engel) ve boş bırakılmış (bilgi) alanlar — TEK kaynak `quickWorkOrderIssues`. */
+  const canPickFromList = useCameraUnusable();
   const issues = useMemo(
     () =>
       collectQuickWoIssues({
@@ -825,6 +827,7 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
         canApplyColor,
         hasColor: !!(targetColorId || orderColorName),
         orderLinked,
+        canPickFromList,
       }),
     [
       scanned.length,
@@ -838,6 +841,7 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
       targetColorId,
       orderColorName,
       orderLinked,
+      canPickFromList,
     ],
   );
   /** Başlatma engeli — neden yoksa null. */

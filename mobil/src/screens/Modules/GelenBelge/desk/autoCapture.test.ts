@@ -23,6 +23,14 @@ describe('stepAutoCapture', () => {
     expect(r.state.baseline).toBeCloseTo(EMPTY, -2);
   });
 
+  it('⭐ çekilen kağıt masada sabit kalırsa boşta sayılır (döngü duraklayabilsin)', () => {
+    const afterCapture = run([PAPER, PAPER + 200, PAPER - 100], calibrated()).state;
+    expect(afterCapture.armed).toBe(false);
+    const d = stepAutoCapture(afterCapture, PAPER);
+    expect(d.action).toBe('wait');
+    expect(d.idle).toBe(true);
+  });
+
   it('boş masa sürdükçe çekim yok ve boşta sayılır', () => {
     expect(run([EMPTY, EMPTY + 500, EMPTY - 400, EMPTY], calibrated()).actions).not.toContain('capture');
     expect(stepAutoCapture(calibrated(), EMPTY).idle).toBe(true);

@@ -49,13 +49,19 @@ export function operatorColor(userId: string | null | undefined): string {
   return OPERATOR_PALETTE[idx];
 }
 
+/** Harf mi (büyük/küçük biçimi olan karakter) — regex Unicode sınıfına yaslanmaz. */
+function isLetter(ch: string | undefined): boolean {
+  return !!ch && ch.toLowerCase() !== ch.toUpperCase();
+}
+
 /**
  * İsim baş harfleri (avatar). "Ali Veli" → "AV", "Ali" → "AL", boş → "?".
  */
 export function operatorInitials(name: string | null | undefined): string {
-  const n = (name ?? '').trim();
-  if (!n) return '?';
-  const parts = n.split(/\s+/);
+  // Parantezli ek ("Kader Hanım (Yönetici)") ve harfle başlamayan parça baş harf olmaz — 'K(' çıkıyordu.
+  const n = (name ?? '').replace(/\([^)]*\)/g, ' ').trim();
+  const parts = n.split(/\s+/).filter((p) => isLetter(p[0]));
+  if (parts.length === 0) return '?';
   // toLocaleUpperCase('tr'): düz toUpperCase 'ışık' → 'IS' üretiyordu, doğrusu 'İŞ'.
   if (parts.length === 1) return upperTr(parts[0].slice(0, 2));
   return upperTr(parts[0][0] + parts[parts.length - 1][0]);

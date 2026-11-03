@@ -10,3 +10,15 @@ export function filterMenuHidden(screens: MobileScreenMeta[], hidden: readonly s
   const out = screens.filter((s) => !set.has(s.key));
   return out.length === 0 ? screens : out;
 }
+
+/**
+ * Verilen ekranlardan biri ana ekranda (izin ∖ modül ∖ K19 gizli) karo olarak görünüyor mu? Karosu olmayan
+ * işlevin yan yüzeylerdeki süzgeç/sekmesi bununla gizlenir (Depo'da Kartela sekmeleri, QA 2026-11-03).
+ */
+export function anyOnMenu(
+  visible: MobileScreenMeta[],
+  hidden: readonly string[] | undefined,
+  keys: readonly string[],
+): boolean {
+  return filterMenuHidden(visible, hidden).some((s) => keys.includes(s.key));
+}

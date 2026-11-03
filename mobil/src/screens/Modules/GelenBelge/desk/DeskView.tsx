@@ -6,17 +6,17 @@ import { useQuery } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import type { PickerOption } from '../../../../components/PickerModal';
 import { TERIM } from '../../../../lib/terim';
-import { inboundDocService } from '../../../../services/inboundDoc.service';
+import { inboundDocService, type DeskKursunMachine } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
 import { INBOUND_DOC_CONTEXT_KEY } from '../DocHeader';
 import { removePage } from '../docScan';
 import { useDocScan } from '../useDocScan';
-import { useWoRows, type DocRow, type WoRowsState } from '../woCreate/useWoRows';
+import { printCard, useWoRows, type DocRow, type WoRowsState } from '../woCreate/useWoRows';
 import DeskCamera from './DeskCamera';
 import DeskReview from './DeskReview';
 import { initialAutoState, type AutoCaptureState } from './autoCapture';
-import { clearMachines, pickShortcut, pushRecentWo, recentFromResult, type RecentWo } from './deskPlan';
+import { markRecentPrint, pickShortcut, pushRecentWo, recentFromResult, routeDefaultMachineId, seedMachines, type RecentWo } from './deskPlan';
 
 export const deskSuggestionKey = (owner: string | null) => ['gelen-belge', 'rota-onerisi', owner] as const;
 
@@ -26,21 +26,22 @@ function useSuggestedRouteId(owner: string | null): string | null {
   return q.data?.routeTemplateId ?? null;
 }
 
-/** Rota değişince eski rotanın makine seçimleri düşer (yeni rotanın kurşun istasyonunda geçersiz). */
-function useClearMachinesOnRoute(routeId: string, row: DocRow | null, wo: WoRowsState): void {
-  const prev = useRef(routeId);
+/** Makine ön seçimi görünür: rota şablonunun önerisi (rota değişince yenisine döner); kullanıcı seçimi ezilmez. */
+function useSeedMachines(route: ProductionRoute, row: DocRow | null, wo: WoRowsState, machines: readonly DeskKursunMachine[] | undefined): void {
+  const prev = useRef(route.id);
   const { updateForm, setMulti } = wo;
   const noteId = row?.noteId ?? null;
-  const multi = row?.form?.multi;
-  const machineId = row?.form?.machineId ?? null;
+  const form = row?.form ?? null;
+  const def = machines ? routeDefaultMachineId(route, machines) : undefined;
   useEffect(() => {
-    if (prev.current === routeId) return;
-    prev.current = routeId;
-    if (!noteId) return;
-    if (machineId) updateForm(noteId, { machineId: null });
-    const cleared = clearMachines(multi);
-    if (multi && cleared) setMulti(noteId, cleared);
-  }, [routeId, noteId, multi, machineId, updateForm, setMulti]);
+    const reset = prev.current !== route.id;
+    prev.current = route.id;
+    if (!noteId || !form || machines === undefined) return;
+    const patch = seedMachines(form, def, reset);
+    if (!patch) return;
+    if ('machineId' in patch) updateForm(noteId, { machineId: patch.machineId });
+    if (patch.multi) setMulti(noteId, patch.multi);
+  }, [route.id, noteId, form, machines, def, updateForm, setMulti]);
 }
 
 function announce(item: RecentWo): void {
@@ -64,9 +65,8 @@ export default function DeskView({ shortcuts }: { shortcuts: readonly Production
   const row = wo.rows[0] ?? null;
   const ownerNow = row?.form?.ownerCustomerId ?? null;
   useEffect(() => setOwner(ownerNow), [ownerNow]);
-  useClearMachinesOnRoute(route.id, row, wo);
-
   const ctx = useQuery({ queryKey: INBOUND_DOC_CONTEXT_KEY, queryFn: inboundDocService.tabletContext, staleTime: 60_000 });
+  useSeedMachines(route, row, wo, ctx.data?.data.kursunMachines);
   const customers: PickerOption[] = useMemo(() => (ctx.data?.data.customers ?? []).map((x) => ({ value: x.id, label: x.name })), [ctx.data]);
 
   const { addNote } = wo;
@@ -91,6 +91,12 @@ export default function DeskView({ shortcuts }: { shortcuts: readonly Production
     backToCamera(row.noteId);
   };
   const onError = useCallback((m: string) => Toast.show({ type: 'error', text1: m }), []);
+  // Elle basım (çok partide her İE'nin kartı); biri düşerse kayıt "yeniden yazdır"a döner.
+  const printRecent = async (item: RecentWo) => {
+    let ok = true;
+    for (const id of item.workOrderIds ?? []) ok = (await printCard(id)) && ok;
+    setRecent((l) => markRecentPrint(l, item.noteNo, ok));
+  };
 
   if (row) {
     return (
@@ -99,7 +105,7 @@ export default function DeskView({ shortcuts }: { shortcuts: readonly Production
     );
   }
   return (
-    <DeskCamera pages={b.pages} sending={b.sending} auto={auto} frameMs={frameMs} recent={recent} autoState={autoState} onCaptured={b.capture}
+    <DeskCamera pages={b.pages} sending={b.sending} auto={auto} frameMs={frameMs} recent={recent} onPrint={(r) => void printRecent(r)} autoPrint={wo.autoPrint} autoState={autoState} onCaptured={b.capture}
       onRetake={() => b.setPages(removePage(b.pages, b.pages.length - 1))} onRead={() => void b.send()} onError={onError} />
   );
 }

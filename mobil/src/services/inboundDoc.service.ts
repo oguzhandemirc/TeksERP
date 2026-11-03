@@ -175,7 +175,7 @@ export interface CreateWorkOrderFromNoteBody {
   /** Decimal string; verilince gözden geçirilmiş sayılır. */
   kursunMeters: string;
   routeTemplateId: string;
-  stepPlanning?: { sequence: number; plannedMachineId?: string }[];
+  stepPlanning?: { sequence: number; plannedMachineId?: string | null }[];
   targetValues?: { propertyId: string; valueId: string }[];
   notes?: string;
   /** S1 çok partili belge (≥2 parti); yalnız `/partiler` çok parti dediğinde gider (eski sunucu strict gövdeyle 400 verir). */
@@ -185,7 +185,7 @@ export interface CreateWorkOrderFromNoteBody {
     meters: number;
     /** Belge masası: parti başına gramaj / plan makinesi (verilmezse gövdedekiler). */
     targetValues?: { propertyId: string; valueId: string }[];
-    stepPlanning?: { sequence: number; plannedMachineId?: string }[];
+    stepPlanning?: { sequence: number; plannedMachineId?: string | null }[];
   }[];
   mode?: MultiPartyMode;
 }

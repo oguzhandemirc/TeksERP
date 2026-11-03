@@ -52,6 +52,10 @@ export interface FeatureFlags {
   /** G3 emanet / konsinye mülkiyet modülü (varsayılan kapalı). Tablette yüzeyi KK1 "Sahibi" seçicisi (G3t);
    *  kapalıyken seçici çizilmez ve bağlam ucu çağrılmaz. */
   emanetEnabled: boolean;
+  /** Ticaret / İplik modülleri (HAM; iplik ticarete bağlı). Tablette yalnız Kumaş Ekle TİP seçeneğini süzer;
+   *  eski sunucu göndermez → undefined → bugünkü davranış (İplik seçilebilir). */
+  ticaretEnabled?: boolean;
+  iplikEnabled?: boolean;
   /** D4-F1 `scan.customerCodeLookup` — tablette yalnız TİPİ okunur: alan varsa sunucu müşteri barkodu uçlarını
    *  tanır (D4-F4 bağla düğmesi). Eski sunucu göndermez → düğme gizli. */
   scanCustomerCodeLookupEnabled?: boolean;

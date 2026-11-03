@@ -101,7 +101,8 @@ async function saveRowOnce(ctx: SaveCtx, r: DocRow, form: RowForm): Promise<{ re
   }
 }
 
-async function printCard(workOrderId: string): Promise<boolean> {
+/** Refakat kartı basımı; hata Toast'la duyurulur. Belge masası şeridi de bunu kullanır. */
+export async function printCard(workOrderId: string): Promise<boolean> {
   try {
     await printTravelerCardForWorkOrder(workOrderId);
     return true;

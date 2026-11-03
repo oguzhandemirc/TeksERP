@@ -1,7 +1,7 @@
 // Belge masası saf parçaları (K23): kısayol ön seçimi, kurşun adımı/makineler, parti başına plan gövdesi.
 import type { ProductionRoute } from '../../../../services/route.service';
 import { buildCreateBody, type RowForm } from '../woCreate/woFromDoc';
-import { kursunStepOf, machinesForRoute, pickShortcut, pushRecentWo, withDeskPlan } from './deskPlan';
+import { kursunStepOf, machinesForRoute, markRecentPrint, pickShortcut, pushRecentWo, recentFromResult, routeDefaultMachineId, seedMachines, withDeskPlan } from './deskPlan';
 
 const route = (id: string, steps: { seq: number; st: string; kursun?: boolean }[] = []) =>
   ({ id, name: id, isWorkOrderShortcut: true, steps: steps.map((s) => ({ id: `${id}-${s.seq}`, stationId: s.st, sequence: s.seq, station: { id: s.st, name: s.st, isKursunStation: !!s.kursun } })) }) as ProductionRoute;
@@ -92,5 +92,53 @@ describe('pushRecentWo', () => {
     expect(l.map((x) => x.noteNo)).toEqual(['N2', 'N1']);
     expect(pushRecentWo(l, { noteNo: 'N1', workOrderNos: ['W3'], at: 3 }).map((x) => x.noteNo)).toEqual(['N1', 'N2']);
     expect(pushRecentWo(l, { noteNo: 'N9', workOrderNos: [], at: 9 }, 2)).toHaveLength(2);
+  });
+});
+
+describe('S11 makine ön seçimi (görünür)', () => {
+  const machines = [
+    { id: 'm1', code: 'K1-1', name: 'Kurşun 1', stationId: 'K1' },
+    { id: 'm9', code: 'K2-1', name: 'Kurşun 2', stationId: 'K2' },
+  ];
+  const withPlan = (r: ProductionRoute, id: string | null) => ({ ...r, steps: (r.steps ?? []).map((s) => (s.sequence === 1 ? { ...s, plannedMachineId: id } : s)) }) as ProductionRoute;
+
+  it('rota şablonunun kurşun adımındaki makine; başka istasyonun makinesi/öneri yoksa yok', () => {
+    expect(routeDefaultMachineId(withPlan(A, 'm1'), machines)).toBe('m1');
+    expect(routeDefaultMachineId(withPlan(A, 'm9'), machines)).toBeUndefined();
+    expect(routeDefaultMachineId(withPlan(A, null), machines)).toBeUndefined();
+  });
+
+  it('⭐ kararsız seçim öneriyle dolar; kullanıcının seçimi ve açık "Sonra seçilsin" (null) ezilmez', () => {
+    expect(seedMachines({}, 'm1', false)).toEqual({ machineId: 'm1' });
+    expect(seedMachines({ machineId: 'm2' }, 'm1', false)).toBeNull();
+    expect(seedMachines({ machineId: null }, 'm1', false)).toBeNull();
+  });
+
+  it('⭐ rota değişince hepsi yeni rotanın önerisine döner (öneri yoksa kararsız)', () => {
+    const multi = { mode: 'PER_PARTY' as const, rows: [{ blockNo: 1, batchNo: 'P1', meters: 1, machineId: 'mX' }] };
+    expect(seedMachines({ machineId: 'mX', multi }, 'm1', true)).toEqual({ machineId: 'm1', multi: { ...multi, rows: [{ ...multi.rows[0], machineId: 'm1' }] } });
+    expect(seedMachines({ machineId: 'mX' }, undefined, true)).toEqual({ machineId: undefined });
+  });
+
+  it('çok parti sonradan açılırsa partiler belgenin seçili makinesini GÖRÜNÜR alır', () => {
+    const multi = { mode: 'PER_PARTY' as const, rows: [{ blockNo: 1, batchNo: 'P1', meters: 1 }, { blockNo: 2, batchNo: 'P2', meters: 1, machineId: 'm3' }] };
+    const out = seedMachines({ machineId: 'm2', multi }, 'm1', false);
+    expect(out?.multi?.rows.map((r) => r.machineId)).toEqual(['m2', 'm3']);
+    expect(out).not.toHaveProperty('machineId');
+  });
+
+  it('"Sonra seçilsin" açıkça seçildiyse gövdeye null gider (şablon makinesini ezer)', () => {
+    const base: RowForm = { ownerCustomerId: 'c1', ownerSuggested: null, ownerAsk: null, ourBatchNo: 'P1', ourBatchNoKey: null, meters: 100, metersReview: false, gramajValueId: null };
+    expect(buildCreateBody({ ...base, machineId: null }, { clientToken: 't', routeTemplateId: 'A', gramajPropertyId: null, kursunSequence: 1 }).stepPlanning).toEqual([{ sequence: 1, plannedMachineId: null }]);
+  });
+});
+
+describe('S11 şerit basım durumu', () => {
+  it('açılan İE kimlikleri şeride taşınır; basım sonucu yalnız o belgeye işlenir', () => {
+    const r = recentFromResult('N1', { kind: 'OPENED', workOrderId: 'w1', workOrderNo: 'W1', batchNumber: 'P', workOrders: [{ workOrderId: 'w1', workOrderNo: 'W1', batchNumber: 'P' }] } as never, 1);
+    expect(r).toMatchObject({ workOrderIds: ['w1'], print: null });
+    const l = markRecentPrint([r!, { noteNo: 'N2', workOrderNos: [], at: 2 }], 'N1', false);
+    expect(l.map((x) => x.print)).toEqual(['PRINT_FAILED', undefined]);
+    expect(markRecentPrint(l, 'N1', true)[0].print).toBe('PRINTED');
   });
 });

@@ -15,7 +15,7 @@ import NewWorkOrderView from '../../HizliIsEmri/NewWorkOrderView';
 import { DocScanBody } from '../DocScanScreen';
 import DeskView from '../desk/DeskView';
 import DocBatchView from './DocBatchView';
-import { shortcutRoutes, shortcutTitle } from './woFromDoc';
+import { shortcutRoutes, shortcutSub, shortcutTitle } from './woFromDoc';
 
 type Stage =
   | { kind: 'hub' }
@@ -88,7 +88,7 @@ export default function WoCreateScreen() {
               <Text style={styles.section}>Özel {TERIM.terbiyeIsEmri.cogulKucuk}</Text>
               <View style={styles.grid} testID="ie-ozel-turler">
                 {shortcuts.map((r) => (
-                  <Tile key={r.id} icon="lightning-bolt" title={shortcutTitle(r)} sub={r.code ?? undefined} testID={`kisayol-${r.name}`} onPress={() => openForm(r)} />
+                  <Tile key={r.id} icon="lightning-bolt" title={shortcutTitle(r)} sub={shortcutSub(r)} testID={`kisayol-${r.name}`} onPress={() => openForm(r)} />
                 ))}
               </View>
             </>

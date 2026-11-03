@@ -39,6 +39,8 @@ export interface QuickWoIssueInput {
   /** Hedef renk belirli mi (elle seçilmiş ya da siparişten gelmiş). */
   hasColor: boolean;
   orderLinked: boolean;
+  /** "Listeden Ekle" görünür mü (`useCameraUnusable`) — ipucu olmayan yolu önermesin. */
+  canPickFromList?: boolean;
 }
 
 export const parsePositiveNumber = (s: string): number | null => {
@@ -56,7 +58,14 @@ export function collectQuickWoIssues(i: QuickWoIssueInput): {
   const empty: QuickWoEmptyField[] = [];
 
   if (i.rollCount === 0) {
-    blocking.push({ field: 'rolls', step: 0, short: 'Top', message: 'En az bir top okutun veya listeden seçin.' });
+    blocking.push({
+      field: 'rolls',
+      step: 0,
+      short: 'Top',
+      message: i.canPickFromList
+        ? 'En az bir top okutun veya listeden seçin.'
+        : 'En az bir top okutun. Kamera okumuyorsa Ayarlar → Kamera arızalı listeden seçimi açar.',
+    });
   }
   if (!i.routeTemplateId) {
     blocking.push({ field: 'route', step: 1, short: 'Rota', message: 'Bir rota seçin.' });

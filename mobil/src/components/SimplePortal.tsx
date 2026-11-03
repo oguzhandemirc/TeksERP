@@ -246,12 +246,26 @@ export function SimplePortalScope({ children }: { children: React.ReactNode }) {
   if (storeRef.current === null) storeRef.current = createSimplePortalStore();
   const store = storeRef.current;
 
+  // Çocuklar collapsable=false kapta: içlerindeki elevation/zIndex (LockScreen
+  // kökü 9999) kaba hapsolur; yoksa Android katmanın ÜSTÜNE çizer + dokunmayı
+  // alır, modal ağaçta durur ama görünmez (QA 2026-11-03; paper PortalHost aynısı).
   return (
     <SimplePortalContext.Provider value={store}>
-      {children}
+      <View
+        testID="simple-portal-scope-children"
+        style={styles.scopeChildren}
+        collapsable={false}
+        pointerEvents="box-none"
+      >
+        {children}
+      </View>
       <PortalLayer store={store} />
     </SimplePortalContext.Provider>
   );
 }
+
+const styles = StyleSheet.create({
+  scopeChildren: { flex: 1 },
+});
 
 export default SimplePortal;
