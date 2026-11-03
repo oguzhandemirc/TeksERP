@@ -62,6 +62,11 @@ const get = vi.fn();
 vi.mock("@/hooks/usePricingEnabled", () => ({
   useFeatureFlags: () => ({ data: { data: { productionEnabled: true } } }),
 }));
+// K19 menü düzeni kancası da `apiClient.get`e gider — aynı gerekçeyle mock'lanır (süzgeç boş = bugünkü palet).
+vi.mock("@/hooks/useMenuLayout", async () => {
+  const { EMPTY_MENU_LAYOUT } = await import("@/lib/menu-layout");
+  return { useMenuLayout: () => EMPTY_MENU_LAYOUT };
+});
 vi.mock("@/services/apiClient", () => ({ default: { get: (...a: unknown[]) => get(...a) } }));
 
 const reply = (data: unknown) => ({ data: { data } });

@@ -42,6 +42,8 @@ import { isRollTabEntryVisible } from "@/pages/Operations/Rolls/tabs-regime";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { useLicenseScreenVisible } from "@/hooks/useLicenseStatus";
 import { lowerTr } from "../../lib/tr-case";
+import { useMenuLayout } from "@/hooks/useMenuLayout";
+import { isMenuHidden } from "@/lib/menu-layout";
 
 interface Props {
   open: boolean;
@@ -130,7 +132,10 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
   // TİCARET REJİMİ: gizlenen Envanter sekmelerinin derin bağlantıları da
   // paletten düşer — aksi halde palet, sayfada olmayan bir sekmeye götürürdü.
   const productionEnabled = useFeatureFlags().data?.data?.productionEnabled ?? true;
+  // K19 menü düzeni: menüden gizlenen ekran paletten de düşer (favori hariç — kullanıcı bilerek sabitledi).
+  const menu = useMenuLayout();
   const isVisible = (entry: CommandEntry) =>
+    !isMenuHidden(menu, entry.to) &&
     isAllowed(entry) &&
     (searching || !entry.deep) &&
     isRollTabEntryVisible(entry.key, productionEnabled);

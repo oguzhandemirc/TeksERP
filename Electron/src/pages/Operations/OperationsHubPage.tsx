@@ -8,6 +8,8 @@ import { operationGroups, type OperationGroupKey } from "./groups-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { HubSkeleton } from "@/components/hub/HubSkeleton";
 import { RelocatedToolsSection } from "@/pages/Reports/_v2/RelocatedTools";
+import { useMenuLayout } from "@/hooks/useMenuLayout";
+import { isHubTileHidden } from "@/lib/menu-layout";
 
 // İstasyon/akış anlamına göre ton — verilmeyen kartlar grup içinde palet tonunu alır.
 const TILE_TONES: Record<string, string> = {
@@ -37,7 +39,8 @@ export function OperationsHubPage() {
   const permitted = (t: OperationsTile) =>
     t.permissionAny ? hasAnyPermission(t.permissionAny) : !t.permission || hasPermission(t.permission);
   const isOff = (t: OperationsTile) => Boolean(t.visibleWhen && !t.visibleWhen(visibilityCtx));
-  const visible = operationsTiles.filter((t) => permitted(t) && offEntryMode(isOff(t), Boolean(t.offHint), canSeeOff) !== "hide");
+  const menu = useMenuLayout();
+  const visible = operationsTiles.filter((t) => !isHubTileHidden(menu, t.to) && permitted(t) && offEntryMode(isOff(t), Boolean(t.offHint), canSeeOff) !== "hide");
 
   const byGroup = new Map<OperationGroupKey, OperationsTile[]>();
   for (const t of visible) {

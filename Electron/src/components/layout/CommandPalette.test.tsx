@@ -1,7 +1,8 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
+import { EMPTY_MENU_LAYOUT, toMenuLayoutState, type MenuLayoutState } from "@/lib/menu-layout";
 import { CommandPalette } from "./CommandPalette";
 
 /**
@@ -52,6 +53,10 @@ vi.mock("@/providers/PreferencesProvider", () => ({
 }));
 vi.mock("next-themes", () => ({ useTheme: () => ({ theme: "light", setTheme: vi.fn() }) }));
 
+// K19 menü düzeni: varsayılan boş süzgeç (= bugünkü palet); süzgeç testi kendi durumunu kurar.
+let menu: MenuLayoutState = EMPTY_MENU_LAYOUT;
+vi.mock("@/hooks/useMenuLayout", () => ({ useMenuLayout: () => menu }));
+
 const openTab = vi.fn();
 vi.mock("@/store/tabs", () => ({
   useTabsStore: (sel: (s: { openTab: unknown }) => unknown) => sel({ openTab }),
@@ -76,6 +81,7 @@ describe("CommandPalette", () => {
     permissions = ["report:production", "roll:read", "workorder:read", "admin:settings", "admin:users"];
     regime = { productionEnabled: true, financeEnabled: false, dokumaEnabled: false, machineStopEnabled: false };
     openTab.mockClear();
+    menu = EMPTY_MENU_LAYOUT;
   });
 
   it("rapor sayfaları arama yapmadan da listede", () => {
@@ -187,6 +193,26 @@ describe("CommandPalette", () => {
 });
 
 // 2026-11-02 demo 2. tur: etiket açıklamayla paylaşılan satırda kesiliyordu ("Özellik Anaht…").
+describe("CommandPalette — K19 menü düzeni", () => {
+  beforeEach(() => {
+    permissions = ["report:production", "roll:read", "workorder:read", "admin:settings", "admin:users"];
+    regime = { productionEnabled: true, financeEnabled: false, dokumaEnabled: false, machineStopEnabled: false };
+    menu = EMPTY_MENU_LAYOUT;
+  });
+  afterEach(() => {
+    menu = EMPTY_MENU_LAYOUT;
+  });
+
+  it("⭐ K19: menüden gizlenen ekran paletten de düşer (aramada da); diğerleri durur", async () => {
+    menu = toMenuLayoutState({ hiddenScreens: ["reports/production/wip"], advancedGroup: false, advancedScreens: [] });
+    open();
+    expect(screen.queryByText("Nerede Takıldı (WIP)")).not.toBeInTheDocument();
+    expect(screen.getByText("Üretim")).toBeInTheDocument();
+    type("nerede");
+    expect(screen.queryByText("Nerede Takıldı (WIP)")).not.toBeInTheDocument();
+  });
+});
+
 describe("CommandPalette satır düzeni", () => {
   it("statik giriş etiketi kesilmez (shrink-0), açıklama kalan yeri alır (min-w-0)", () => {
     permissions = ["report:production", "roll:read", "workorder:read", "admin:settings", "admin:users"];

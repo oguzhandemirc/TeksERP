@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { useVisibleScreens } from './useVisibleScreens';
 import { preferencesService, type PreferenceBlob } from '../services/preferences.service';
+import { menuLayoutService } from '../services/menuLayout.service';
+import { filterMenuHidden } from './menuHidden';
 import type { MobileScreenKey, MobileScreenMeta } from '../types/permissions';
 
 // Modül grid'i sırası kullanıcı profilinde (backend tercih blob'u) saklanır →
@@ -12,6 +14,7 @@ import type { MobileScreenKey, MobileScreenMeta } from '../types/permissions';
 
 const PREFS_KEY = ['preferences'] as const;
 const ORDER_FIELD = 'mobileModuleOrder';
+export const MENU_LAYOUT_KEY = ['menu-layout'] as const;
 
 /**
  * İzinli ekranları kayıtlı sıraya göre dizer. Sırada olmayan (yeni eklenen veya
@@ -56,9 +59,19 @@ export function useModuleOrder() {
     return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : undefined;
   }, [prefsQuery.data]);
 
+  // K19 menü düzeni: fabrikanın menüden gizlediği ekranın karosu çizilmez (route kayıtlı kalır → bağlantı açılır).
+  // Uç yok/hata (eski sunucu) → veri yok → süzgeç boş = bugünkü grid.
+  const menuQuery = useQuery({
+    queryKey: MENU_LAYOUT_KEY,
+    queryFn: menuLayoutService.get,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+  const hiddenScreens = menuQuery.data?.hiddenScreens;
+
   const orderedScreens = useMemo(
-    () => applyOrder(visibleScreens, storedOrder),
-    [visibleScreens, storedOrder],
+    () => applyOrder(filterMenuHidden(visibleScreens, hiddenScreens), storedOrder),
+    [visibleScreens, hiddenScreens, storedOrder],
   );
 
   const saveMutation = useMutation({

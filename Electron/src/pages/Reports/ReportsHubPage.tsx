@@ -7,6 +7,8 @@ import { reportTiles } from "./tile-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { HubSkeleton } from "@/components/hub/HubSkeleton";
 import { ReportCenterPage } from "./_v2/ReportCenterPage";
+import { useMenuLayout } from "@/hooks/useMenuLayout";
+import { isHubTileHidden } from "@/lib/menu-layout";
 
 export function ReportsHubPage() {
   const { isAdmin, hasPermission } = useRoleAccess();
@@ -21,8 +23,10 @@ export function ReportsHubPage() {
   // varsayılanı AÇIK) ve fabrikada karolar bir an kaybolup geri gelirdi. Yön
   // bilgisi tek yerde yaşar: `useOperationsVisibilityContext`.
   const ctx = useOperationsVisibilityContext();
+  const menu = useMenuLayout();
   const tiles = reportTiles.filter(
     (t) =>
+      !isHubTileHidden(menu, t.to) &&
       (isAdmin || !t.permission || hasPermission(t.permission)) &&
       (!t.featureFlag || ctx[t.featureFlag]) &&
       // Bütün raporları kapatılmış kategori karosu boş bir hub'a götürürdü (K5).
