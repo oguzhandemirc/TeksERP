@@ -7,7 +7,8 @@
 // =============================================================================
 import { sha256Bytes } from '../../../lib/qr-parca';
 import type { AttemptToken } from '../../../offline/attemptToken';
-import type { InboundDocApi } from '../../../services/inboundDoc.service';
+import type { InboundDocApi, UploadScanBody } from '../../../services/inboundDoc.service';
+import { logDeviceOcrResponse, readPageText, type ClientOcr } from '../../../services/deviceOcr';
 
 /** Ölçüm bu boyda yapıldı (karar belgesi §2a): uzun kenar ≈ 2600 px, JPEG kalite 0,8. */
 export const TARGET_LONG_EDGE_PX = 2600;
@@ -153,6 +154,8 @@ export interface SubmitInput {
   barcodeText: string | null;
   /** Aynı taslağa sonradan eklenen sayfalar: sunucudaki son sayfa no (ilk gönderimde 0/yok). */
   pageBase?: number;
+  /** S16c cihaz okuyucusu (varsayılan `readPageText`; test enjekte eder). null = sunucu okur. */
+  readOnDevice?: (page: ScanPage) => Promise<ClientOcr | null>;
 }
 
 /** Yarıda kalan gönderimin kaldığı yer: taslak doğduysa id'si + yüklenen sayfa özetleri. */
@@ -182,6 +185,9 @@ export interface SubmitResult {
  * Gönder: (1) taslak yoksa DRAFT başlık — token `attempt.token()`, ÜRETİLMEZ; (2) yüklenmemiş her sayfa.
  * Hata → `SubmitError` (ilerleme taşır; yeniden denemede taslak İKİNCİ KEZ açılmaz, yüklenen sayfa atlanır).
  * Belirsiz hatada başlık token'ı yapışır (aynı deneme), kesin 4xx'te düşer (`attempt.onFailure`).
+ * S16c: her sayfaya cihaz okuması (`input.readOnDevice`, yoksa/hata/zaman aşımı → null = bugünkü yol) eklenir; sayfa i
+ * yüklenirken i+1'in okuması başlar. `clientOcr`'lı yükleme 400 alırsa (CLIENT_OCR_INVALID ya da alanı tanımayan eski
+ * sunucunun katı gövdesi) aynı sayfa `clientOcr`'sız BİR KEZ yeniden gönderilir.
  */
 export async function submitDocScan(
   api: InboundDocApi,
@@ -189,6 +195,7 @@ export async function submitDocScan(
   attempt: Pick<AttemptToken, 'token' | 'onFailure' | 'onSuccess'>,
   prior: SubmitProgress = EMPTY_PROGRESS,
 ): Promise<SubmitResult> {
+  const readOnDevice = input.readOnDevice ?? readPageText;
   if (!input.pages.length) throw new Error('En az bir sayfa fotoğrafı çekin.');
   let note = prior.note;
   const uploaded = new Set(prior.uploaded);
@@ -207,17 +214,27 @@ export async function submitDocScan(
     }
   }
   let duplicates = 0;
+  const pending = input.pages.filter((p) => !uploaded.has(p.sha256));
+  const reads = new Map<string, Promise<ClientOcr | null>>();
+  const read = (p: ScanPage | undefined) => {
+    if (p && !reads.has(p.sha256)) reads.set(p.sha256, readOnDevice(p).catch(() => null));
+    return p ? reads.get(p.sha256)! : Promise.resolve(null);
+  };
   for (let i = 0; i < input.pages.length; i++) {
     const page = input.pages[i]!;
     if (uploaded.has(page.sha256)) continue;
     try {
-      const r = await api.uploadScan({
+      const clientOcr = await read(page);
+      void read(pending[pending.indexOf(page) + 1]);
+      const body: UploadScanBody = {
         contentBase64: page.base64,
         noteId: note.id,
         pageNo: (input.pageBase ?? 0) + i + 1,
         barcodeText: input.barcodeText,
         sha256: page.sha256,
-      });
+      };
+      const r = await (clientOcr ? uploadWithDeviceRead(api, body, clientOcr) : api.uploadScan(body));
+      logDeviceOcrResponse(page.sha256, r.deviceOcr);
       if (r.duplicate) duplicates++;
       uploaded.add(page.sha256);
     } catch (e) {
@@ -226,4 +243,14 @@ export async function submitDocScan(
   }
   attempt.onSuccess();
   return { note, uploaded: uploaded.size, duplicates };
+}
+
+/** 400 (cihaz okuması geçersiz ya da eski sunucu alanı tanımıyor) → aynı sayfa cihaz okumasız bir kez daha. */
+async function uploadWithDeviceRead(api: InboundDocApi, body: UploadScanBody, clientOcr: ClientOcr) {
+  try {
+    return await api.uploadScan({ ...body, clientOcr });
+  } catch (e) {
+    if ((e as { status?: number } | null)?.status !== 400) throw e;
+    return api.uploadScan(body);
+  }
 }

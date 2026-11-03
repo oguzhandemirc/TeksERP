@@ -6,6 +6,7 @@
 // =============================================================================
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
+import type { ClientOcr } from './deviceOcr';
 import type {
   ScanWords,
   SuggestBody,
@@ -58,12 +59,16 @@ export interface UploadScanBody {
   pageNo: number;
   barcodeText: string | null;
   sha256: string;
+  /** S16c: tabletin ML Kit okuması — varsa sunucu okuma servisini atlar (gövde katmanı allowlist'i: alan iki uçta). */
+  clientOcr?: ClientOcr;
 }
 
 export interface UploadScanResult {
   scan: { id: string; sha256: string; noteId: string | null };
   duplicate: boolean;
   boundTo: string | null;
+  /** `READ`: cihaz okuması taslağa işlendi · `FALLBACK`: sunucu okumasına bırakıldı · null/yok: cihaz okuması yok (eski sunucu). */
+  deviceOcr?: 'READ' | 'FALLBACK' | null;
 }
 
 /** Okuma durumu — SUNUCU türetir (`readSummaryState`); istemci yalnız gösterir. */

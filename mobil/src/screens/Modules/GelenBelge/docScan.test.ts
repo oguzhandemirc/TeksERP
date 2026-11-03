@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { createAttemptToken } from '../../../offline/attemptToken';
 import type { InboundDocApi, CreateDraftNoteBody, UploadScanBody } from '../../../services/inboundDoc.service';
+import type { ClientOcr } from '../../../services/deviceOcr';
 import {
   CAPTURE_QUALITY,
   MAX_SCAN_BYTES,
@@ -22,7 +23,7 @@ const page = (seed: string): ScanPage => {
   return { base64, sha256: photoSha256(base64), uri: `file:///${seed}.jpg`, width: 2600, height: 1950 };
 };
 
-function fakeApi(opts: { failUploadAt?: number; failCreate?: { status?: number } } = {}) {
+function fakeApi(opts: { failUploadAt?: number; failCreate?: { status?: number }; rejectClientOcr?: { status?: number; details?: { code?: string } } } = {}) {
   const notes = new Map<string, { id: string; noteNo: string }>();
   const scans = new Map<string, { id: string; noteId: string; pageNo: number }>();
   const createCalls: CreateDraftNoteBody[] = [];
@@ -44,6 +45,7 @@ function fakeApi(opts: { failUploadAt?: number; failCreate?: { status?: number }
     },
     uploadScan: async (body) => {
       uploadCalls.push(body);
+      if (body.clientOcr && opts.rejectClientOcr) throw Object.assign(new Error('geçersiz'), opts.rejectClientOcr);
       if (failUploadAt !== undefined && uploadCalls.length === failUploadAt) {
         failUploadAt = undefined;
         throw Object.assign(new Error('zaman aşımı'), {});
@@ -112,6 +114,59 @@ describe('Belge Tara — barkod', () => {
     expect(barcodeToDocNo('9'.repeat(80))).toHaveLength(64);
     expect(barcodeToDocNo('   ')).toBeNull();
     expect(barcodeToDocNo(null)).toBeNull();
+  });
+});
+
+const OCR: ClientOcr = { engine: 'mlkit', width: 2600, height: 1950, rotation: 0, words: [{ t: 'Toplam', c: [[0, 0], [9, 0], [9, 5], [0, 5]], l: 0 }], lines: [{ c: [[0, 0], [9, 0], [9, 5], [0, 5]] }] };
+const noRead = async () => null;
+const input = (pages: ScanPage[], readOnDevice?: (p: ScanPage) => Promise<ClientOcr | null>) => ({ pages, ownerCustomerId: null, senderDocNo: null, barcodeText: null, readOnDevice });
+
+describe('Belge Tara — cihazda OCR (S16c)', () => {
+  it('⭐ cihaz okuması varsa sayfayla `clientOcr` gider; okuma yoksa gövde bugünküyle aynı (alan YOK)', async () => {
+    const f = fakeApi();
+    const pa = page('ocr-a'), pb = page('ocr-b');
+    await submitDocScan(f.api, input([pa, pb], async (p) => (p.sha256 === pa.sha256 ? OCR : null)), createAttemptToken());
+    expect(f.uploadCalls[0]!.clientOcr).toEqual(OCR);
+    expect(f.uploadCalls[1]).not.toHaveProperty('clientOcr');
+  });
+
+  it('⭐ sayfa i yüklenirken i+1 okunmaya başlar; yüklenmiş sayfa okunmaz', async () => {
+    const f = fakeApi({ failUploadAt: 2 });
+    const order: string[] = [];
+    const reader = async (p: ScanPage) => { order.push(`oku:${p.uri}`); return null; };
+    const api = { ...f.api, uploadScan: async (b: Parameters<typeof f.api.uploadScan>[0]) => { order.push(`yükle:${b.pageNo}`); return f.api.uploadScan(b); } };
+    const pages = [page('s1'), page('s2'), page('s3')];
+    let progress;
+    try { await submitDocScan(api, input(pages, reader), createAttemptToken()); } catch (e) { progress = (e as SubmitError).progress; }
+    expect(order.slice(0, 3)).toEqual(['oku:file:///s1.jpg', 'oku:file:///s2.jpg', 'yükle:1']);
+    order.length = 0;
+    await submitDocScan(api, input(pages, reader), createAttemptToken(), progress);
+    expect(order).not.toContain('oku:file:///s1.jpg');
+  });
+
+  it('⭐ 400 CLIENT_OCR_INVALID → aynı sayfa `clientOcr`\'sız BİR KEZ yeniden gönderilir, gönderim başarılı', async () => {
+    const f = fakeApi({ rejectClientOcr: { status: 400, details: { code: 'CLIENT_OCR_INVALID' } } });
+    const r = await submitDocScan(f.api, input([page('r1')], async () => OCR), createAttemptToken());
+    expect(r.uploaded).toBe(1);
+    expect(f.uploadCalls.map((u) => 'clientOcr' in u)).toEqual([true, false]);
+  });
+
+  it('eski sunucu alanı tanımıyor (katı gövde 400) → aynı yedek; 400 dışı hata yeniden denenmez (SubmitError)', async () => {
+    const old = fakeApi({ rejectClientOcr: { status: 400, details: { code: 'VALIDATION_ERROR' } } });
+    await submitDocScan(old.api, input([page('o1')], async () => OCR), createAttemptToken());
+    expect(old.uploadCalls).toHaveLength(2);
+    const down = fakeApi({ rejectClientOcr: { status: 503 } });
+    await expect(submitDocScan(down.api, input([page('d1')], async () => OCR), createAttemptToken())).rejects.toBeInstanceOf(SubmitError);
+    expect(down.uploadCalls).toHaveLength(1);
+  });
+
+  it('okuyucu fırlatsa bile gönderim bugünkü yoldan sürer', async () => {
+    const f = fakeApi();
+    await submitDocScan(f.api, input([page('t1')], async () => { throw new Error('x'); }), createAttemptToken());
+    expect(f.uploadCalls).toHaveLength(1);
+    expect(f.uploadCalls[0]).not.toHaveProperty('clientOcr');
+    await submitDocScan(f.api, input([page('t2')], noRead), createAttemptToken());
+    expect(f.uploadCalls[1]).not.toHaveProperty('clientOcr');
   });
 });
 

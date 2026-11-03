@@ -1,6 +1,6 @@
 // Belge Tara — Google ML Kit belge tarayıcısı (kenar bulma · kırpma · perspektif · netleştirme).
-// Depo içi yerel Expo modülü (mobil/modules/ otomatik bağlanır). Tek yeni bağımlılık ML Kit istemcisidir;
-// tarayıcı arayüzü + modeli Google Play Hizmetleri'nden gelir (APK'ya girmez). Karar: KUTUPHANELER.md §9.
+// Depo içi yerel Expo modülü (mobil/modules/ otomatik bağlanır). Tarayıcı arayüzü + modeli Google Play Hizmetleri'nden
+// gelir (APK'ya girmez); metin tanıma (S16c) modeli APK'ya gömülüdür. Karar: KUTUPHANELER.md §9.
 plugins {
   id 'com.android.library'
   id 'expo-module-gradle-plugin'
@@ -21,4 +21,7 @@ dependencies {
   implementation 'com.facebook.react:react-android'
   // TAM SABİT: tarayıcı seçenek kümesi (galeri açık — kullanıcı kararı 2026-11-02, sayfa sınırı) bu sürümde ölçüldü.
   implementation 'com.google.android.gms:play-services-mlkit-document-scanner:16.0.0'
+  // Cihazda OCR (S16c): GÖMÜLÜ Latin modeli — Play Hizmetleri/indirme beklemez (fabrika tableti internetsiz olabilir).
+  // TAM SABİT: kelime köşe/güven/satır sözleşmesi bu sürümde ölçüldü; APK'ya ABI başına ~4 MB ekler. Karar: KUTUPHANELER-KAYIT.
+  implementation 'com.google.mlkit:text-recognition:16.0.1'
 }
