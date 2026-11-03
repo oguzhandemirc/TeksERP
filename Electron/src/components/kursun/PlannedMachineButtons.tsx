@@ -14,18 +14,24 @@ interface Props {
 
 export const plannedMachinesKey = (stationId: string) => ["machines", "planned", stationId] as const;
 
+/** İstasyonun aktif makineleri — düğme dizisi ile adım çipi/önizleme özeti AYNI önbelleği okur. */
+export function usePlannedMachines(stationId: string | null | undefined): Machine[] {
+  const q = useQuery({
+    queryKey: plannedMachinesKey(stationId ?? ""),
+    queryFn: async () =>
+      ((await loadAllForPicker(machineService, { filters: { stationId: stationId!, isActive: "true" } })).data ?? []) as Machine[],
+    enabled: Boolean(stationId),
+    staleTime: 60_000,
+  });
+  return q.data ?? [];
+}
+
 /**
  * Plan makinesi (Gülkesim 2026-11-02) — yalnız ÖNERİ; fiilî makine tablet oturumundan gelir.
  * Birkaç makine olduğu için düğme dizisi (UI tercihi: combobox yok). Makine yoksa hiç çizilmez.
  */
 export function PlannedMachineButtons({ stationId, value, onChange, disabled }: Props) {
-  const q = useQuery({
-    queryKey: plannedMachinesKey(stationId),
-    queryFn: async () =>
-      ((await loadAllForPicker(machineService, { filters: { stationId, isActive: "true" } })).data ?? []) as Machine[],
-    staleTime: 60_000,
-  });
-  const machines = q.data ?? [];
+  const machines = usePlannedMachines(stationId);
   if (machines.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Makine (öneri)">

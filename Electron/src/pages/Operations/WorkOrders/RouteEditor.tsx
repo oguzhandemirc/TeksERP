@@ -43,7 +43,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { RouteStepDetail, type RouteTargetBinding } from "./RouteStepDetail";
+import { RouteStepDetail, type RouteTargetBinding, type StepParamBox } from "./RouteStepDetail";
 import { deriveStepTargets, type RouteStepTargetPlan } from "./workOrderPrefill";
 import type { DesignerStep } from "./RouteDesignerDialog";
 import { loadAllForPicker } from "@/lib/picker-loader";
@@ -86,6 +86,10 @@ interface Props {
   error?: string;
   /** Seçili adım kartına eklenecek alanlar (İE formu: kurşun adımında gramaj + makine). */
   renderStepExtra?: (step: DesignerStep) => ReactNode;
+  /** Seçili adımın işlem ayarları kutusu (K20, kurşun: özellik + gramaj + makine). */
+  stepParamBox?: (step: DesignerStep) => StepParamBox | null;
+  /** Adım çipinde istasyon adının yanındaki kısa seçim metni (kurşun: "40 gr · M2"). */
+  renderChipDetail?: (step: DesignerStep) => ReactNode;
 }
 
 export function RouteEditor({
@@ -108,6 +112,8 @@ export function RouteEditor({
   target,
   error,
   renderStepExtra,
+  stepParamBox,
+  renderChipDetail,
 }: Props) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -274,6 +280,7 @@ export function RouteEditor({
                 isLast={i === steps.length - 1}
                 active={selected?.clientId === node.clientId}
                 onSelect={() => setSelectedId(node.clientId)}
+                detail={renderChipDetail?.(node)}
                 registerRef={(el) => {
                   if (el) chipRefs.current.set(node.clientId, el);
                   else chipRefs.current.delete(node.clientId);
@@ -370,6 +377,7 @@ export function RouteEditor({
             onRemove={() => onRemove(selected.clientId)}
             target={target}
             extra={renderStepExtra?.(selected)}
+            paramBox={stepParamBox?.(selected)}
           />
         </div>
       ) : steps.length === 0 ? (
@@ -465,8 +473,10 @@ function SortableChip({
   isLast,
   onSelect,
   registerRef,
+  detail,
 }: {
   node: DesignerStep;
+  detail?: ReactNode;
   index: number;
   active: boolean;
   isLast: boolean;
@@ -532,6 +542,8 @@ function SortableChip({
         <span className={cn("relative font-medium", active && hasStation && tone.text)}>
           {node.stationName || "İstasyon seç"}
         </span>
+        {/* Bileşen seçim yoksa kendisi null döner (ayraç dahil). */}
+        {hasStation ? detail : null}
         {!hasStation && (
           <MousePointerClick className="relative h-3.5 w-3.5 shrink-0 animate-pulse" />
         )}

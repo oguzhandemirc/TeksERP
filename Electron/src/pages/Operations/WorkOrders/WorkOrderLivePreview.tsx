@@ -22,6 +22,8 @@ import type { DesignerStep } from "./RouteDesignerDialog";
 import { LastBatchBadge } from "./LastBatchBadge";
 import type { PickedOrderLine } from "./OrderPickerDialog";
 import { loadAllForPicker } from "@/lib/picker-loader";
+import type { GramajOption } from "@/lib/kursun-gramaj";
+import { KURSUN_SETTINGS_TITLE, KursunStepSummary, isKursunStep } from "./KursunStepFields";
 
 interface Props {
   control: Control<WorkOrderFormValues>;
@@ -31,6 +33,8 @@ interface Props {
   isEdit: boolean;
   /** Hedef metraj/kg alanları açık mı (targetQuantityEnabled bayrağı). */
   showQuantity: boolean;
+  /** Kurşun adımının seçimi (K20): gramaj kataloğu + gösterilen gramaj (düzenlemede null). */
+  kursun?: { options: readonly GramajOption[]; gramajValue: string | null };
 }
 
 function num(v: number | string | null | undefined): number | null {
@@ -52,6 +56,7 @@ export function WorkOrderLivePreview({
   isOrderProduction,
   isEdit,
   showQuantity,
+  kursun,
 }: Props) {
   const batchNumber = useWatch({ control, name: "batchNumber" });
   const targetItemId = useWatch({ control, name: "targetItemId" });
@@ -245,6 +250,9 @@ export function WorkOrderLivePreview({
               })}
             </ol>
           )}
+          {routeSteps.filter(isKursunStep).map((s) => (
+            <KursunPreviewRow key={s.clientId} step={s} kursun={kursun} />
+          ))}
         </Section>
 
         {/* Üretim özellikleri */}
@@ -330,6 +338,14 @@ function Section({
       </div>
       <div className="space-y-1.5">{children}</div>
     </div>
+  );
+}
+
+/** "Kurşun ayarları" satırı — seçim yoksa (Hedef yok + öneri yok) satır hiç çizilmez. */
+function KursunPreviewRow({ step, kursun }: { step: DesignerStep; kursun: Props["kursun"] }) {
+  return (
+    <KursunStepSummary step={step} mode="long" gramajOptions={kursun?.options ?? []} gramajValue={kursun?.gramajValue ?? null}
+      className="font-medium" wrap={(node) => <Row label={KURSUN_SETTINGS_TITLE}>{node}</Row>} />
   );
 }
 
