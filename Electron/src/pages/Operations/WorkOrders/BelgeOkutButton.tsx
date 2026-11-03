@@ -8,7 +8,8 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { routeService } from "@/pages/Routes/service";
 import { UploadDialog } from "@/pages/Operations/GelenBelgeler/UploadDialog";
 import { useTabsStore } from "@/store/tabs";
-import { WORK_ORDER_NEW_PATH, type OieStart } from "./oie/nav";
+import { SCAN_ROUTE_REF, WORK_ORDER_NEW_PATH, type OieStart } from "./oie/nav";
+import { useScanRouteOption } from "./oie/useScanRouteOption";
 import { routeHasKursunStep } from "./oie/service";
 
 interface Props {
@@ -23,10 +24,17 @@ export function BelgeOkutButton({ routeTemplateId, className }: Props) {
   const enabled = useGelenBelgeEnabled();
   const { hasPermission } = useRoleAccess();
   const navigateActive = useTabsStore((s) => s.navigateActive);
-  // Okut anındaki rota donar: yükleme sürerken formda rota değişse de belge o rotayla açılır.
+  // Okut anındaki rota donar: yükleme sürerken formda rota değişse de belge o rotayla açılır. "" = rotasız (K29).
   const [frozenRoute, setFrozenRoute] = useState<string | null>(null);
+  // K29 S14b: "Okutmayla" kipinde rota seçilmeden okutulan belge rotasız İE açar (SIRALI'da düğme bugünkü gibi pasif).
+  const scanRoute = useScanRouteOption();
   if (!enabled || !hasPermission("gelen-belge:write")) return null;
+  const canScan = !!routeTemplateId || scanRoute;
   const onDone = async (noteId: string, routeId: string) => {
+    if (!routeId) {
+      navigateActive(WORK_ORDER_NEW_PATH, { state: { oie: { kind: "shortcut", route: SCAN_ROUTE_REF, noteId } satisfies OieStart } });
+      return;
+    }
     const route = await routeService.getById(routeId).then((r) => r.data ?? null, () => null);
     const start: OieStart = { kind: "shortcut", route: { id: routeId, name: route?.name ?? "Rota", ...(route ? { hasKursun: routeHasKursunStep(route.steps) } : {}) }, noteId };
     navigateActive(WORK_ORDER_NEW_PATH, { state: { oie: start } });
@@ -34,20 +42,20 @@ export function BelgeOkutButton({ routeTemplateId, className }: Props) {
   return (
     <>
       {/* Pasif düğme fare olayı almaz (title görünmez) → neden sarmalayıcıda da durur. */}
-      <span className="inline-flex" title={routeTemplateId ? undefined : BELGE_OKUT_NO_ROUTE} data-testid="wo-belge-okut-wrap">
+      <span className="inline-flex" title={canScan ? undefined : BELGE_OKUT_NO_ROUTE} data-testid="wo-belge-okut-wrap">
         <Button
           type="button"
-          onClick={() => setFrozenRoute(routeTemplateId)}
-          disabled={!routeTemplateId}
-          title={routeTemplateId ? "Belge fotoğrafını okut; form belgeden dolar" : BELGE_OKUT_NO_ROUTE}
+          onClick={() => setFrozenRoute(routeTemplateId ?? "")}
+          disabled={!canScan}
+          title={routeTemplateId ? "Belge fotoğrafını okut; form belgeden dolar" : canScan ? `Rota seçilmedi → ${SCAN_ROUTE_REF.name}` : BELGE_OKUT_NO_ROUTE}
           className={className}
           data-testid="wo-belge-okut"
         >
           <ScanLine className="h-4 w-4" />
-          {routeTemplateId ? "Belge okut" : "Belge okut (önce rota)"}
+          {routeTemplateId ? "Belge okut" : canScan ? "Belge okut (rotasız)" : "Belge okut (önce rota)"}
         </Button>
       </span>
-      {frozenRoute && (
+      {frozenRoute !== null && (
         <UploadDialog
           open
           autoSend

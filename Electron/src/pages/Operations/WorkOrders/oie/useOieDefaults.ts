@@ -22,10 +22,12 @@ export function flattenRouteTargets(byStation: DefaultTargetsByStation, stationI
 /** `undefined` = cevap henüz yok (çağıran bekler); `null` = ön seçim yok (uç/rota okunamadı). */
 export type TargetsFor = (customerId: string | null) => readonly DefaultTarget[] | null | undefined;
 
-export function useOieDefaultTargets(routeId: string, customerIds: readonly (string | null)[]): TargetsFor {
+/** `routeId` null = rotasız İE (K29): istasyon yok → varsayılan yok (null); hedefi istasyon okutması (S10) yazar. */
+export function useOieDefaultTargets(routeId: string | null, customerIds: readonly (string | null)[]): TargetsFor {
   const route = useQuery({
     queryKey: ["route", routeId, "oie-default-targets"],
-    queryFn: () => routeService.getById(routeId),
+    queryFn: () => routeService.getById(routeId!),
+    enabled: routeId !== null,
     staleTime: 60_000,
     retry: false,
   });
@@ -45,7 +47,7 @@ export function useOieDefaultTargets(routeId: string, customerIds: readonly (str
       retry: false,
     })),
   });
-  const routeDead = route.isError || (route.isSuccess && stationIds.length === 0);
+  const routeDead = routeId === null || route.isError || (route.isSuccess && stationIds.length === 0);
   const dataKey = results.map((r) => r.dataUpdatedAt + ":" + r.errorUpdatedAt).join("|");
   return useCallback<TargetsFor>(
     (customerId) => {
