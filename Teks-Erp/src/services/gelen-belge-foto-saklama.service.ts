@@ -28,8 +28,9 @@ function retentionScanStatuses(readerUrl: string | null): DocumentScanStatus[] {
   const done = [DocumentScanStatus.READ, DocumentScanStatus.READ_FAILED];
   return readerUrl ? done : [...done, DocumentScanStatus.PENDING];
 }
-/** Sevk kipinde tek turda bakılan en çok belge (sayfa başına). */
-const NOTE_PAGE = 200;
+/** Sevk kipinde tek üyelik sorgusuna giden en çok belge. Üyelik sorgusu her çağrıda satır tablosunu bir kez tarar → sayfa
+ *  sayısı tur maliyetinin çarpanıdır; takılı (tam sevk olmayan) belge kümesi büyüse de tur ~tek sorgu kalır (S15c-d2). */
+const NOTE_PAGE = 5000;
 
 export const PHOTO_PURGED_MESSAGE = "Fotoğraf saklama ayarı gereği silindi.";
 
