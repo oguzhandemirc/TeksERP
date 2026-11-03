@@ -10,6 +10,7 @@ import { useWorkOrderPlan } from "./useWorkOrderPlan";
 import type { ChoiceProperty } from "./types";
 import type { RouteSuggestionSource, WorkOrderPlan } from "./workOrderTypes";
 import { TERIM } from "@/lib/terim";
+import { SCAN_ROUTE_LABEL, SCAN_ROUTE_VALUE } from "./workOrderFromNote";
 
 interface Props {
   noteId: string;
@@ -106,6 +107,7 @@ function PlanRouteFields({ s, plan, busy }: { s: ReturnType<typeof useWorkOrderP
       <RouteAndFoldFields s={s} busy={busy} suffix={suggested && s.routeId === suggested ? ` (${ROUTE_SOURCE_LABEL[source]})` : ""} />
       {!suggested && notes.length > 0 && <p className="text-[11px] text-muted-foreground" data-testid="plan-route-notes">Rota önerilemedi: {notes.join(" ")}</p>}
       {s.route && <p className="text-[11px] text-muted-foreground">{s.route.steps?.map((st) => st.station?.name ?? "—").join(" → ")}</p>}
+      {s.routeId === SCAN_ROUTE_VALUE && <p className="text-[11px] text-muted-foreground" data-testid="plan-scan-route-hint">Adımlar istasyonda okutuldukça eklenir.</p>}
     </>
   );
 }
@@ -118,6 +120,7 @@ function RouteAndFoldFields({ s, busy, suffix }: { s: ReturnType<typeof useWorkO
         Rota şablonu{suffix}
         <select className="h-9 rounded-md border bg-background px-2 text-sm text-foreground" value={s.routeId ?? ""} disabled={busy} onChange={(e) => s.setRouteId(e.target.value || null)} aria-label="Rota şablonu">
           <option value="">— Rota seç</option>
+          {s.scanRoute && <option value={SCAN_ROUTE_VALUE}>{SCAN_ROUTE_LABEL}</option>}
           {s.routeList.map((r) => (
             <option key={r.id} value={r.id}>
               {r.name}

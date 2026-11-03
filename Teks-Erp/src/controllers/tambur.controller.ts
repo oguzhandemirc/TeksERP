@@ -5,6 +5,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { stationSearchQuerySchema } from "../services/helpers/workorder-doc-search.helper";
+import { scanRoutedQuerySchema } from "../services/helpers/scan-route-open-cards.helper";
 import { meterSourceSchema } from "../services/helpers/meter-reading.helper";
 import { meterCalibrationWarnings, withResponseWarnings } from "../services/helpers/meter-calibration.helper";
 import { TamburService } from "../services/tambur.service";
@@ -511,8 +512,10 @@ export class TamburController {
   /** GET /api/tambur/open-cards */
   async listOpenCards(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { stationId, q } = stationFilterQuerySchema.extend(stationSearchQuerySchema.shape).parse(req.query);
-      const result = await this.service.listOpenCards(stationId ?? null, q ?? null);
+      const { stationId, q, includeScanRouted } = stationFilterQuerySchema.extend(stationSearchQuerySchema.shape).extend(scanRoutedQuerySchema.shape).parse(req.query);
+      // K29 S15b: rotasız satırlar OTURUM tamburuna göre (kart çözümü kapısı da oturumu okur), liste süzgecine değil.
+      const scan = includeScanRouted ? { sessionStationId: (await getStampContext(req))?.stationId ?? null } : null;
+      const result = await this.service.listOpenCards(stationId ?? null, q ?? null, scan);
       res.status(200).json(result);
     } catch (error) {
       next(error);

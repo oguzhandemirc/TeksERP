@@ -214,7 +214,7 @@ async function main(): Promise<void> {
   check("okutma uyarısı helper yükleminden", /foreignMachineOf\(await readKursunMachineAssignMode\(\), opts\.sessionMachineId, step\)/.test(qcSrc));
   const ctrl = src("controllers/kursun-qc.controller.ts");
   check("controller açık kart + okutma uçlarına oturum makinesini geçirir",
-    /listOpenCards\(stamp\?\.stationId \?\? null, q \?\? null, stamp\?\.machineId \?\? null\)/.test(ctrl) && /stamp\?\.stationId \?\? null,\s*stamp\?\.machineId \?\? null\)/.test(ctrl) &&
+    /listOpenCards\(stamp\?\.stationId \?\? null, q \?\? null, stamp\?\.machineId \?\? null[,)]/.test(ctrl) && /stamp\?\.stationId \?\? null,\s*stamp\?\.machineId \?\? null\)/.test(ctrl) &&
     /takeForeignMachine\(stepId, stamp\?\.machineId \?\? null/.test(src("controllers/kursun-foreign-machine.controller.ts")));
   const others = ["services/kursun-bypass.service.ts", "services/tambur.service.ts"].filter((f) => /plannedMachineId:\s*sessionMachineId/.test(src(f)));
   check("başka serviste el yazımı makine süzgeci yok", others.length === 0, others.join(","));

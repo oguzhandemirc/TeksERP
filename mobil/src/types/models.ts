@@ -989,7 +989,11 @@ export interface KursunOpenCard {
   cardBarcode: string;
   workOrderId: string;
   batchNumber: string;
-  stepId: string;
+  /** K29 S15b: rotasız satırda null (bu istasyonda adım yok; yalnız `includeScanRouted` ile gelir). */
+  stepId: string | null;
+  /** K29 S15b: "Sahada belirlenecek" — seçince okutma yolu adımı ekler. Eski backend göndermez. */
+  scanRouteAdd?: boolean;
+  scanRouteLabel?: string;
   stationName: string;
   stationCode: string;
   openRollCount: number;
@@ -1157,7 +1161,11 @@ export interface TamburOpenCard {
    * numarasını iki kez yazdırıyordu (2026-08-04'te UI'dan kaldırıldı).
    */
   batchNumber: string;
-  stepId: string;
+  /** K29 S15b: rotasız satırda null (yalnız `includeScanRouted` ile gelir). */
+  stepId: string | null;
+  /** K29 S15b: "Sahada belirlenecek" — seçince okutma yolu adımı ekler. Eski backend göndermez. */
+  scanRouteAdd?: boolean;
+  scanRouteLabel?: string;
   stationName: string;
   stationCode: string;
   openRollCount: number;

@@ -6,6 +6,7 @@ import { screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import { WorkOrderFromNoteDialog } from "../WorkOrderFromNoteDialog";
 import type { WorkOrderPlan } from "../types";
+import { SCAN_ROUTE_VALUE } from "../workOrderFromNote";
 
 const apiGet = vi.fn();
 vi.mock("@/services/apiClient", () => ({
@@ -19,6 +20,8 @@ vi.mock("@/lib/picker-loader", () => ({
 }));
 vi.mock("@/hooks/useFoldValues", () => ({ useFoldValues: () => ({ values: [], isLoading: false, isEmpty: true }) }));
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: () => true, hasAnyPermission: () => true }) }));
+let mockScanRoute = false;
+vi.mock("@/pages/Operations/WorkOrders/oie/useScanRouteOption", () => ({ useScanRouteOption: () => mockScanRoute }));
 
 const basePlan: WorkOrderPlan = {
   noteId: "n1", noteNo: "GB-0042", status: "APPROVED", owner: { id: "c-yeni", name: "Yeni Müşteri" }, customerBatch: null,
@@ -27,7 +30,10 @@ const basePlan: WorkOrderPlan = {
 const select = () => screen.getByLabelText("Rota şablonu") as HTMLSelectElement;
 
 describe("WorkOrderFromNoteDialog rota ön dolumu (suggestRoute)", () => {
-  beforeEach(() => apiGet.mockReset());
+  beforeEach(() => {
+    apiGet.mockReset();
+    mockScanRoute = false;
+  });
 
   it("⭐ yeni müşteri: fabrika varsayılanı önceden seçili + kaynak etiketi", async () => {
     apiGet.mockResolvedValue({ data: { success: true, data: { ...basePlan, suggestedRouteTemplateId: "r-fabrika", suggestedRouteSource: "FACTORY_DEFAULT", routeSuggestionNotes: [`Müşterinin rotalı önceki terbiye iş emri yok.`] } } });
@@ -58,5 +64,21 @@ describe("WorkOrderFromNoteDialog rota ön dolumu (suggestRoute)", () => {
     renderWithProviders(<WorkOrderFromNoteDialog noteId="n1" open onOpenChange={() => {}} />);
     await waitFor(() => expect(select().value).toBe("r-musteri"));
     expect(screen.getByText(/bu sahibin son kullandığı/)).toBeTruthy();
+  });
+
+  it("⭐ S15b Okutmayla: 'Sahada belirlenir (rotasız)' İLK seçenek ve VARSAYILAN (öneri ezmez)", async () => {
+    mockScanRoute = true;
+    apiGet.mockResolvedValue({ data: { success: true, data: { ...basePlan, suggestedRouteTemplateId: "r-fabrika", suggestedRouteSource: "FACTORY_DEFAULT" } } });
+    renderWithProviders(<WorkOrderFromNoteDialog noteId="n1" open onOpenChange={() => {}} />);
+    await waitFor(() => expect(select().value).toBe(SCAN_ROUTE_VALUE));
+    expect([...select().options].map((o) => o.text).slice(0, 2)).toEqual(["— Rota seç", "Sahada belirlenir (rotasız)"]);
+    expect(screen.getByTestId("plan-scan-route-hint")).toBeTruthy();
+  });
+
+  it("Sıralı: rotasız seçenek yok", async () => {
+    apiGet.mockResolvedValue({ data: { success: true, data: { ...basePlan, suggestedRouteTemplateId: "r-fabrika" } } });
+    renderWithProviders(<WorkOrderFromNoteDialog noteId="n1" open onOpenChange={() => {}} />);
+    await waitFor(() => expect(select().value).toBe("r-fabrika"));
+    expect([...select().options].some((o) => o.value === SCAN_ROUTE_VALUE)).toBe(false);
   });
 });

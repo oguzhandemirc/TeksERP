@@ -8,6 +8,7 @@ import { z } from "zod";
 import { KursunQcService } from "../services/kursun-qc.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { stationSearchQuerySchema } from "../services/helpers/workorder-doc-search.helper";
+import { scanRoutedQuerySchema } from "../services/helpers/scan-route-open-cards.helper";
 import { meterSourceSchema } from "../services/helpers/meter-reading.helper";
 import { meterCalibrationWarnings, withResponseWarnings } from "../services/helpers/meter-calibration.helper";
 import "../types/express-augment";
@@ -177,9 +178,9 @@ export class KursunQcController {
   async listOpenCards(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       // Oturum istasyonu varsa yalnız o istasyonun kartları (KQ-D2); enforce YOK.
-      const { q } = stationSearchQuerySchema.parse(req.query);
+      const { q, includeScanRouted } = stationSearchQuerySchema.extend(scanRoutedQuerySchema.shape).parse(req.query);
       const stamp = await getStampContext(req);
-      const result = await this.service.listOpenCards(stamp?.stationId ?? null, q ?? null, stamp?.machineId ?? null);
+      const result = await this.service.listOpenCards(stamp?.stationId ?? null, q ?? null, stamp?.machineId ?? null, !!includeScanRouted);
       res.status(200).json(result);
     } catch (err) {
       next(err);

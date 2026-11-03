@@ -118,6 +118,8 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   "src/services/helpers/loom-alarm-recipient.helper.ts": ["ALARM_VIEW_PERMISSIONS", "ALARM_ESCALATION_PERMISSION"],
   // matchesPermission(perms, needM) — needM = STATION_KIND_PERM[station.kind]
   "src/services/work-session.service.ts": ["STATION_KIND_PERM"],
+  // matchesPermission(permissions, p) — p ∈ SCAN_ROUTE_CLOSE_PERMISSIONS (K29 "Bitmiş say ve geç" yetkisi, S15b).
+  "src/services/helpers/scan-route-close.helper.ts": ["SCAN_ROUTE_CLOSE_PERMISSIONS"],
   // matchesPermission(perms, permission) — permission =
   // requiredPermissionForTable(table) → TABLE_PERMISSIONS[tableName].
   // Yetki KAYIT TÜRÜNE göre çözülür: siparişi okuyamayan biri siparişin

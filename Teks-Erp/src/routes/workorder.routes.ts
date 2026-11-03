@@ -425,9 +425,12 @@ router.post("/", verifyToken, requirePermission("workorder:write"), controller.c
  *               orderLineIds:
  *                 type: array
  *                 items: { type: string, format: uuid }
+ *               scanRouted:
+ *                 type: boolean
+ *                 description: "K29 rotasız iş emri (adımlar sahada okutmayla eklenir); yalnız production.routeMode=SCAN, değilse 400 SCAN_ROUTE_DISABLED"
  *     responses:
  *       201: { description: İş emri başlatıldı (workOrder + attached + errors) }
- *       400: { description: Validasyon / uygun olmayan top }
+ *       400: { description: "Validasyon / uygun olmayan top / SCAN_ROUTE_DISABLED" }
  *       409: { description: Hiç top bağlanamadı }
  */
 router.post(
