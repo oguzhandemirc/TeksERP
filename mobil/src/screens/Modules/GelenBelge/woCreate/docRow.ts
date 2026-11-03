@@ -15,6 +15,8 @@ export interface DocRow {
   result: RowResult | null;
   /** S1 parti özeti (çok partili belgede liste + uyarılar); yok = tek partili form. */
   parties?: NotePartiesView | null;
+  /** K30-A: yeniden okutulamayan belge yerelde tanıtıldı; `seq` tek formu yeniden doldurur (okuma izlemi baştan BAŞLAMAZ). */
+  taught?: { seq: number; code: string; name: string };
 }
 
 export interface SavedRow {
@@ -36,8 +38,11 @@ export function applyMulti(rs: DocRow[], noteId: string, multi: MultiPartyDraft)
 
 const text = (v: string | null | undefined): string | null => (v != null && v.trim() !== '' ? v.trim() : null);
 
-/** Tanıtma önizlemesinin değerleriyle satır: form alanları + metre + (aday listesinde varsa) parti no + müşteri; `runKey` artar → tek form yeniden dolar. */
-export function taughtRow(r: DocRow, f: Record<string, string | null>, ownerCustomerId: string | null): DocRow {
+/**
+ * Tanıtma önizlemesinin değerleriyle satır: form alanları + metre + (aday listesinde varsa) parti no + müşteri. `runKey`
+ * artmaz (artarsa okuma izlemi baştan başlar, sunucunun eski özeti şeridi "tanıtılmamış"a döndürür); `taught.seq` artar.
+ */
+export function taughtRow(r: DocRow, f: Record<string, string | null>, ownerCustomerId: string | null, tpl: { code: string; name: string }): DocRow {
   if (!r.detail || isDone(r)) return r;
   const ff = { ...(r.detail.formFields ?? {}) };
   const put = <K extends keyof DocFormFields>(k: K, v: string | null) => {
@@ -60,5 +65,5 @@ export function taughtRow(r: DocRow, f: Record<string, string | null>, ownerCust
       ...(ownerCustomerId ? { ownerCustomerId, ownerSuggested: null } : {}),
     };
   }
-  return { ...r, detail: { ...r.detail, formFields: ff }, form, runKey: r.runKey + 1 };
+  return { ...r, detail: { ...r.detail, formFields: ff }, form, taught: { seq: (r.taught?.seq ?? 0) + 1, ...tpl } };
 }

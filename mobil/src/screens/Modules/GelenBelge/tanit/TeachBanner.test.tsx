@@ -111,6 +111,12 @@ async function teachAndSave(s: ReturnType<typeof renderWithPaper>) {
 }
 
 describe('TeachBanner — görünürlük', () => {
+  it('⭐ yerelde tanıtılmış satır (yeniden okutulamadı) → sunucu özeti TANITILMAMIS dese de şerit yok, güncelle bağlantısı', () => {
+    const s = draw(NOT_TAUGHT, row({ taught: { seq: 1, code: 'u-gulecsoy', name: 'Güleçsoy' } }));
+    expect(s.queryByTestId('tanit-serit')).toBeNull();
+    expect(s.getByTestId('tanit-serit-guncelle')).toHaveTextContent(/Şablonu güncelle \(Güleçsoy\)/);
+  });
+
   it('⭐ TANITILMAMIS → belirgin şerit + "Tanıt"', () => {
     const s = draw(NOT_TAUGHT);
     expect(s.getByTestId('tanit-serit')).toHaveTextContent(/tanıtılmamış/);
@@ -172,7 +178,7 @@ describe('TeachBanner — kayıt sonrası yeniden okuma', () => {
     const s = draw(NOT_TAUGHT);
     await teachAndSave(s);
     await waitFor(() => expect(wo.applyTaught).toHaveBeenCalledTimes(1));
-    expect(wo.applyTaught).toHaveBeenCalledWith('n1', FIELDS, 'c1');
+    expect(wo.applyTaught).toHaveBeenCalledWith('n1', FIELDS, 'c1', { code: 'u-gulecsoy', name: 'Güleçsoy' });
     expect(wo.rereadRow).not.toHaveBeenCalled();
   });
 
@@ -180,6 +186,6 @@ describe('TeachBanner — kayıt sonrası yeniden okuma', () => {
     mockApi.requeueScan.mockRejectedValue(new Error('409'));
     const s = renderWithPaper(<TeachBanner row={row()} wo={wo} tanitim={NOT_TAUGHT} customers={[{ value: 'c0', label: 'Başka Firma' }]} />);
     await teachAndSave(s);
-    await waitFor(() => expect(wo.applyTaught).toHaveBeenCalledWith('n1', FIELDS, null));
+    await waitFor(() => expect(wo.applyTaught).toHaveBeenCalledWith('n1', FIELDS, null, { code: 'u-gulecsoy', name: 'Güleçsoy' }));
   });
 });

@@ -15,35 +15,38 @@ const row = (over: Partial<DocRow> = {}): DocRow => ({
   ...over,
 });
 
+const TPL = { code: 'u-g', name: 'Güleçsoy' };
+
 describe('taughtRow', () => {
-  it('⭐ form alanları + metre (doğrulanmış) + aday listesindeki parti no + müşteri; runKey artar', () => {
-    const r = taughtRow(row(), { hedefMetraj: '1.200', en: ' 160 ', desen: 'Kar', renk: '', toplamMetre: '2.618,5', partiNo: 'P2618733', not: null }, 'c1');
-    expect(r.runKey).toBe(4);
+  it('⭐ form alanları + metre (doğrulanmış) + aday listesindeki parti no + müşteri; runKey sabit (okuma izlemi baştan başlamaz), taught.seq artar', () => {
+    const r = taughtRow(row(), { hedefMetraj: '1.200', en: ' 160 ', desen: 'Kar', renk: '', toplamMetre: '2.618,5', partiNo: 'P2618733', not: null }, 'c1', TPL);
+    expect(r.runKey).toBe(3);
+    expect(r.taught).toEqual({ seq: 1, code: 'u-g', name: 'Güleçsoy' });
     expect(r.detail!.formFields).toEqual({ en: '160', renkText: 'Mavi', hedefMetraj: '1.200', desenText: 'Kar' });
     expect(r.form).toMatchObject({ meters: 2618.5, metersReview: false, ourBatchNo: 'P2618733', ourBatchNoKey: 'hamPartiNo', ownerCustomerId: 'c1', ownerSuggested: null });
   });
 
   it('aday listesinde olmayan parti no yazılmaz; müşteri eşleşmesi yoksa sahip ve öneri korunur; metre okunamazsa dokunulmaz', () => {
-    const r = taughtRow(row(), { partiNo: 'UYDURMA', toplamMetre: 'abc' }, null);
+    const r = taughtRow(row(), { partiNo: 'UYDURMA', toplamMetre: 'abc' }, null, TPL);
     expect(r.form).toMatchObject({ ourBatchNo: null, ownerCustomerId: null, ownerSuggested: 'Eski öneri', meters: 100, metersReview: true });
-    expect(r.runKey).toBe(4);
+    expect(taughtRow(r, {}, null, TPL).taught?.seq).toBe(2);
   });
 
   it('anahtarsız aday: parti no yazılır, anahtar null', () => {
-    expect(taughtRow(row(), { partiNo: 'X1' }, null).form).toMatchObject({ ourBatchNo: 'X1', ourBatchNoKey: null });
+    expect(taughtRow(row(), { partiNo: 'X1' }, null, TPL).form).toMatchObject({ ourBatchNo: 'X1', ourBatchNoKey: null });
   });
 
   it('sonuçlanmış (İE açıldı / taslak) ya da detaysız satır aynen döner', () => {
     const opened = row({ result: { kind: 'OPENED' } as never });
-    expect(taughtRow(opened, { en: '1' }, 'c1')).toBe(opened);
+    expect(taughtRow(opened, { en: '1' }, 'c1', TPL)).toBe(opened);
     const draft = row({ result: { kind: 'DRAFT' } as never });
-    expect(taughtRow(draft, { en: '1' }, 'c1')).toBe(draft);
+    expect(taughtRow(draft, { en: '1' }, 'c1', TPL)).toBe(draft);
     const bare = row({ detail: null });
-    expect(taughtRow(bare, { en: '1' }, 'c1')).toBe(bare);
+    expect(taughtRow(bare, { en: '1' }, 'c1', TPL)).toBe(bare);
   });
 
   it('formu henüz kurulmamış satırda yalnız belge alanları dolar', () => {
-    const r = taughtRow(row({ form: null }), { renk: 'Kırmızı', partiNo: 'P2618733' }, 'c1');
+    const r = taughtRow(row({ form: null }), { renk: 'Kırmızı', partiNo: 'P2618733' }, 'c1', TPL);
     expect(r.form).toBeNull();
     expect(r.detail!.formFields).toMatchObject({ renkText: 'Kırmızı' });
   });
