@@ -33,6 +33,12 @@ const wrap = (h: Handler, status = 200) => (req: Request, res: Response, next: N
     .then(() => h(req))
     .then((data) => res.status(status).json({ success: true, data }), next);
 };
+// Üretim uçlarının engel olmayan notu (teslim yeri XML'e taşınmaz) zarfa da çıkar: panel interceptor'ı basar.
+const wrapWarned = (h: (req: Request) => Promise<{ warnings: string[] }>) => (req: Request, res: Response, next: NextFunction) => {
+  Promise.resolve()
+    .then(() => h(req))
+    .then((data) => res.status(200).json({ success: true, data, ...(data.warnings.length > 0 ? { warnings: data.warnings } : {}) }), next);
+};
 const idOf = (req: Request, name = "id") => assertValidUuid(req.params[name], name);
 const userOf = (req: Request) => req.user?.userId ?? null;
 
@@ -144,7 +150,7 @@ router.patch("/:id", WRITE, wrap((req) => svc.updateFields(idOf(req), body(Patch
  *     summary: "Üret: numara + ETTN + XML v1 (TASLAK → OLUSTURULDU); 400 EIRSALIYE_VALIDATION + hatalar"
  *     security: [{ bearerAuth: [] }]
  */
-router.post("/:id/generate", WRITE, wrap((req) => svc.generate(idOf(req), userOf(req))));
+router.post("/:id/generate", WRITE, wrapWarned((req) => svc.generate(idOf(req), userOf(req))));
 
 /**
  * @openapi
@@ -154,7 +160,7 @@ router.post("/:id/generate", WRITE, wrap((req) => svc.generate(idOf(req), userOf
  *     summary: "Yeniden üret (XML v+1); indirilmiş XML'de gövdede onay:true ister (409 EIRSALIYE_ALREADY_DOWNLOADED)"
  *     security: [{ bearerAuth: [] }]
  */
-router.post("/:id/regenerate", WRITE, wrap((req) => svc.regenerate(idOf(req), body(RegenerateSchema, req), userOf(req))));
+router.post("/:id/regenerate", WRITE, wrapWarned((req) => svc.regenerate(idOf(req), body(RegenerateSchema, req), userOf(req))));
 
 /**
  * @openapi

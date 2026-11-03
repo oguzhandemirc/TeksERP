@@ -302,11 +302,12 @@ export const tamburService = {
   // PROCESS_QC değil; TAMBUR adımlarındaki açık kartlar — kamera modal'ı için.
   // stationId (ister 2.8): çok tamburlu fabrikada yalnız bu tamburun işleri; yoksa
   // parametre HİÇ gönderilmez (bugünkü liste; eski backend parametreyi yok sayar).
-  listOpenCards: (stationId?: string | null): Promise<ApiResponse<TamburOpenCard[]>> =>
+  // q (K17): fiş / evrak / parti / İE no — süzme sunucuda; boşsa parametre gönderilmez.
+  listOpenCards: (stationId?: string | null, q?: string): Promise<ApiResponse<TamburOpenCard[]>> =>
     apiClient
       .get<ApiResponse<TamburOpenCard[]>>(
         '/tambur/open-cards',
-        stationId ? { params: { stationId } } : undefined,
+        stationId || q ? { params: { ...(stationId ? { stationId } : {}), ...(q ? { q } : {}) } } : undefined,
       )
       .then((r) => r.data),
 

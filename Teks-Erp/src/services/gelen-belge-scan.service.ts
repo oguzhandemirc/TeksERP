@@ -104,10 +104,14 @@ async function reuseExisting(existing: ScanRow, noteId: string | null | undefine
   return { scan, duplicate: true, boundTo: noteId, restored };
 }
 
-export async function uploadDocumentScan(input: DocumentScanInput, userId: string) {
+/**
+ * Gelen fotoğraf gövdesini doğrular ve SAKLANACAK baytı üretir (boy · tür · özet · HEIC → JPEG); hiçbir şey yazmaz.
+ * Yükleme ve istasyon eşleme okuması (K17) aynı kapıdan geçer — biri gevşerse öteki aynı dosyayı farklı yorumlamaz.
+ */
+export async function decodeScanUpload(contentBase64: string, clientSha256?: string | null): Promise<{ content: Buffer; mime: string; sha256: string; heicSourceBytes: number | null }> {
   // Boy, decode ÖNCESİ base64 uzunluğundan da sınanır — 5 MB üstü gövde belleğe açılmadan reddedilir.
   // Tahmin önek/boşluk soyulmuş gövde üstünde: tam 5 MB'lık meşru dosya data-URL önekiyle gelse de 413 almaz.
-  const body = base64Body(input.contentBase64);
+  const body = base64Body(contentBase64);
   if (Math.floor((body.length * 3) / 4) > DOCUMENT_SCAN_MAX_BYTES + 4) throw tooLarge();
   const received = decodeBase64(body);
   if (received.length > DOCUMENT_SCAN_MAX_BYTES) throw tooLarge();
@@ -115,7 +119,7 @@ export async function uploadDocumentScan(input: DocumentScanInput, userId: strin
   if (!heic && !detectCertificateMime(received)) throw typeError();
   const receivedSha = sha256Hex(received);
   // İstemci özeti GELEN baytındır (HEIC'te dönüşüm öncesi): yolda bozulan dosya okumaya hiç gitmez.
-  if (input.sha256 && input.sha256.toLowerCase() !== receivedSha) {
+  if (clientSha256 && clientSha256.toLowerCase() !== receivedSha) {
     throw AppError.badRequest("Fotoğraf yolda bozuldu (özet tutmuyor); yeniden gönderin.", { code: "DOCUMENT_SCAN_HASH_MISMATCH" });
   }
   // HEIC → JPEG (okuma servisi; yoksa 503, hiçbir şey yazılmaz). Sistem JPEG saklar; tavan dönüşümden SONRA da geçerli.
@@ -123,7 +127,12 @@ export async function uploadDocumentScan(input: DocumentScanInput, userId: strin
   if (content.length > DOCUMENT_SCAN_MAX_BYTES) throw tooLarge();
   const kind = detectCertificateMime(content);
   if (!kind) throw typeError();
-  const sha256 = heic ? sha256Hex(content) : receivedSha;
+  return { content, mime: kind.mime, sha256: heic ? sha256Hex(content) : receivedSha, heicSourceBytes: heic ? received.length : null };
+}
+
+export async function uploadDocumentScan(input: DocumentScanInput, userId: string) {
+  const { content, mime, sha256, heicSourceBytes } = await decodeScanUpload(input.contentBase64, input.sha256);
+  const kind = { mime };
   const existing = await prisma.documentScan.findUnique({ where: { sha256 }, select: SCAN_SELECT });
   if (existing) return reuseExisting(existing, input.noteId, userId);
   const data = {
@@ -158,7 +167,7 @@ export async function uploadDocumentScan(input: DocumentScanInput, userId: strin
   const scan = created.row;
   if (created.marked && input.noteId) await auditPhotoSource(input.noteId, userId);
   // HEIC'ten dönüşen kaydın künyesi kaynak türü/boyunu da taşır (bayt yok).
-  const auditData = heic ? { ...data, convertedFrom: "image/heic", sourceSizeBytes: received.length } : data;
+  const auditData = heicSourceBytes !== null ? { ...data, convertedFrom: "image/heic", sourceSizeBytes: heicSourceBytes } : data;
   await AuditService.log({ userId, action: "CREATE", tableName: AUDIT_TABLE, recordId: scan.id, newData: auditData });
   return { scan, duplicate: false, boundTo: scan.noteId };
 }

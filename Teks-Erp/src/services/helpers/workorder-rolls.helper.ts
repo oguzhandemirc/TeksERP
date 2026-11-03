@@ -21,3 +21,18 @@ export function whereRollsOfWorkOrder(workOrderId: string): Prisma.RollWhereInpu
     ],
   };
 }
+
+/**
+ * Ters yön — "şu topları taşıyan iş emirleri" (`whereRollsOfWorkOrder`un boğaz-ikizi; aynı üç bağ).
+ * Gelen belgeden iş emri bulma (K17) ve liste aramasındaki belge no dalı bunu kullanır; tek dal düşerse
+ * finalize olup adımdan çıkmış top ya da yalnız partide duran top kendi iş emrini bulamaz.
+ */
+export function whereWorkOrdersOfRolls(rollWhere: Prisma.RollWhereInput): Prisma.WorkOrderWhereInput {
+  return {
+    OR: [
+      { steps: { some: { producedRolls: { some: rollWhere } } } },
+      { steps: { some: { currentRolls: { some: rollWhere } } } },
+      { batches: { some: { rolls: { some: rollWhere } } } },
+    ],
+  };
+}
