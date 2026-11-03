@@ -285,6 +285,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}certificate.service.ts::replayFor`]: ["certificateNo", "renewsId"],
   [`${S}gelen-belge-note.service.ts::replayFor`]: ["senderDocNo", "ownerCustomerId"],
   [`${S}gelen-belge-line.service.ts::lineBatchReplay`]: ["noteId"],
+  [`${S}gelen-belge-iptal.service.ts::replayFor`]: ["noteId", "reason"],
   [`${S}notification-profile.service.ts::createReplay`]: ["kod"],
   [`${S}document-template/template.service.ts::createReplay`]: ["docType", "name", "copiedFrom"],
   [`${S}document-template/version.service.ts::saveReplay`]: ["templateId", "sourceHtml", "css"],

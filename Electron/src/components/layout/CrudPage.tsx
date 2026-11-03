@@ -79,6 +79,8 @@ interface Props<T extends { id: string }> {
    * oturumda şube/alias/şablon sekmeleri arasında çalışmaya devam edebilir.
    * OLUŞTURMA her zaman kapanır (tek-adım kayıt → kapat). Varsayılan false. */
   keepFormOpenAfterSave?: boolean;
+  /** true → sayfa yeni kayıt diyaloğu AÇIK doğar (başka ekrandan "yeni …" kısayoluyla gelindi). Varsayılan kapalı. */
+  openCreateOnMount?: boolean;
   renderForm: (params: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -113,8 +115,9 @@ export function CrudPage<T extends { id: string }>({
   restoreLabel,
   actionsPortal,
   keepFormOpenAfterSave,
+  openCreateOnMount = false,
 }: Props<T>) {
-  const [formOpen, setFormOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(openCreateOnMount);
   const [editing, setEditing] = useState<T | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [hardRemoving, setHardRemoving] = useState<T | null>(null);
