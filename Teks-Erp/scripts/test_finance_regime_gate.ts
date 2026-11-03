@@ -190,6 +190,14 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "`invoice` null (`test_fason_kg_kontrol` §4f/§4g ölçer). Router hiçbir ticaret tablosuna yazmaz (`return.routes` emsali).",
   },
   {
+    dosya: "routes/station-capability.routes.ts",
+    neden:
+      "İSTASYON YETENEĞİ üretimin çekirdeğidir (`requireProductionEnabled`) → rejim kapısı KONULAMAZ. `cariAccount` izi tek daldan gelir " +
+      "(K22, 2026-11-03): `default-targets` → `helpers/station-default-targets.helper` → `kursun-customer-default.service` müşterinin " +
+      "varsayılan kurşun gramajını SALT-OKUMA sorar ve okuma uç İÇİNDE finans kapılıdır (`readFinanceEnabled()` yanlışsa sorgu atılmaz, " +
+      "istasyon varsayılanına düşer). Router hiçbir ticaret tablosuna yazmaz (`cost.routes` emsali).",
+  },
+  {
     dosya: "routes/return.routes.ts",
     neden:
       "İade FABRİKANIN ana akışıdır (mobil iade ekranı + RollReturn) → rejim kapısı KONULAMAZ. " +

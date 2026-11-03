@@ -1,7 +1,6 @@
 // Tablet "Terbiye İş Emri oluştur" (Gülkesim K6/K7/K8) — saf parçalar: kısayol listesi, kayıt kipi, satır formu,
 // kayıt gövdeleri. Kural sunucudadır (sözleşme 1–5); burası yalnız formu doldurur ve düğmenin neden pasif olduğunu söyler.
 import { TERIM } from '../../../../lib/terim';
-import type { KursunCustomerDefaults, KursunGramajCatalog } from '../../../../services/fabricProperty.service';
 import type {
   BatchNoCandidate,
   CreateWorkOrderFromNoteBody,
@@ -84,15 +83,11 @@ function toNumber(v: string | number | null | undefined): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-/** S3: ön seçim gramajı — müşterinin varsayılanı katalogda (aktif) ise o, yoksa istasyonunki, o da yoksa null. */
-export function customerGramajId(catalog: KursunGramajCatalog, defaults: KursunCustomerDefaults, customerId: string | null): string | null {
-  const own = customerId ? defaults[customerId] : undefined;
-  if (own && catalog.options.some((o) => o.id === own)) return own;
-  return catalog.options.find((o) => o.isDefault)?.id ?? null;
-}
-
-/** Okuma sonrası form: taslaktaki değer > belge önerisi; tek parti adayı ön seçilir; gramaj müşterinin, yoksa istasyonun varsayılanı. */
-export function initialRowForm(d: InboundNoteDetail, catalog: KursunGramajCatalog, showGramaj: boolean, defaults: KursunCustomerDefaults = {}): RowForm {
+/**
+ * Okuma sonrası form: taslaktaki değer > belge önerisi; tek parti adayı ön seçilir.
+ * Gramaj sunucu çözücüsünden (K22: müşteri > istasyon yeteneği > değer varsayılanı); cevap yoksa boş, sonra dolar.
+ */
+export function initialRowForm(d: InboundNoteDetail, gramajFor?: (customerId: string | null) => string | null | undefined): RowForm {
   const candidates = d.batchNoCandidates ?? [];
   const single: BatchNoCandidate | null = !d.ourBatchNo && candidates.length === 1 ? candidates[0] : null;
   const meters = toNumber(d.kursunMeters);
@@ -107,7 +102,7 @@ export function initialRowForm(d: InboundNoteDetail, catalog: KursunGramajCatalo
     ourBatchNoKey: d.ourBatchNo ? d.ourBatchNoKey ?? null : single ? single.key ?? single.field ?? null : null,
     meters,
     metersReview: meters !== null && !!d.kursunMetersReview,
-    gramajValueId: showGramaj ? customerGramajId(catalog, defaults, owner) : null,
+    gramajValueId: gramajFor?.(owner) ?? null,
   };
 }
 
@@ -123,7 +118,7 @@ export function rowIssues(f: RowForm): string[] {
 
 export function buildCreateBody(
   f: RowForm,
-  opts: { clientToken: string; routeTemplateId: string; gramajPropertyId: string | null },
+  opts: { clientToken: string; routeTemplateId: string; gramajPropertyId: string | null; gramajTouched?: boolean },
 ): CreateWorkOrderFromNoteBody {
   const body: CreateWorkOrderFromNoteBody = {
     clientToken: opts.clientToken,
@@ -134,7 +129,10 @@ export function buildCreateBody(
   // Parti no hep açık: null = formda temizlendi (sunucu okumada yazılan adayı siler).
   body.ourBatchNo = f.ourBatchNo ?? null;
   if (f.ourBatchNo && f.ourBatchNoKey) body.ourBatchNoKey = f.ourBatchNoKey;
-  if (f.gramajValueId && opts.gramajPropertyId) body.targetValues = [{ propertyId: opts.gramajPropertyId, valueId: f.gramajValueId }];
+  // K22: gramaja dokunulmadıysa anahtar YOK → sunucu ön seçimi kendi çözer (aynı kaynak); elle seçilen/kaldırılan aynen gider.
+  if (opts.gramajTouched) {
+    body.targetValues = f.gramajValueId && opts.gramajPropertyId ? [{ propertyId: opts.gramajPropertyId, valueId: f.gramajValueId }] : [];
+  }
   return f.multi ? withParties(body, f.multi) : body;
 }
 

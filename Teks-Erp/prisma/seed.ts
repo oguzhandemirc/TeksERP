@@ -257,7 +257,7 @@ async function main() {
   // KURSUN → Kurşun+KK2 istasyonu uygular; ZIMPARALI → Zımpara fason istasyonu
   // uygular. Demo özellikleri (antibakteriyel vb.) kaldırıldı — admin sonradan ekler.
   const propertyData = [
-    { code: "KURSUN",    name: "Kurşunlu",  category: "İşlem", color: "#64748b", sortOrder: 10 },
+    { code: "KURSUN",    name: "Kurşun",    category: "İşlem", color: "#64748b", sortOrder: 10 },
     { code: "ZIMPARALI", name: "Zımparalı", category: "Yüzey", color: "#a3a3a3", sortOrder: 20 },
   ];
   const properties = await Promise.all(

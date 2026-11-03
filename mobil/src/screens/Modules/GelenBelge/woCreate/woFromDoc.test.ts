@@ -5,7 +5,6 @@ import {
   buildCreateBody,
   buildDraftPatch,
   detailFromSummary,
-  customerGramajId,
   initialRowForm,
   isFormApprovalDisabled,
   pinRecent,
@@ -18,7 +17,8 @@ import {
 } from './woFromDoc';
 
 const r = (id: string, extra: Partial<ProductionRoute> = {}): ProductionRoute => ({ id, name: `Rota ${id}`, ...extra }) as ProductionRoute;
-const catalog = { propertyId: 'p-gr', options: [{ id: 'g1', name: '60 gr', isDefault: false }, { id: 'g2', name: '80 gr', isDefault: true }] };
+// K22: gramaj sunucu çözücüsünden gelir; test için müşteri → değer eşlemesi (yoksa istasyonunki g2).
+const gramaj = (byCustomer: Record<string, string> = {}) => (c: string | null) => (c && byCustomer[c]) || 'g2';
 const detail = (x: Partial<InboundNoteDetail> = {}): InboundNoteDetail => ({ id: 'n1', noteNo: 'GB-1', ownerCustomerId: null, ...x }) as InboundNoteDetail;
 
 describe('shortcutRoutes / shortcutTitle', () => {
@@ -51,27 +51,25 @@ describe('initialRowForm — belge formu doldurur', () => {
         kursunMeters: '1250.5',
         kursunMetersReview: true,
       } as Partial<InboundNoteDetail>),
-      catalog,
-      true,
+      gramaj(),
     );
     expect(f).toMatchObject({ ownerCustomerId: 'c9', ownerSuggested: 'Gülkesim', ourBatchNo: 'P-77', ourBatchNoKey: 'K1', meters: 1250.5, metersReview: true, gramajValueId: 'g2' });
   });
   it('öneri yok / çok aday / gramaj alanı yok → boş bırakılır (uydurma yok)', () => {
     const f = initialRowForm(
       detail({ batchNoCandidates: [{ value: 'A' }, { value: 'B' }] as InboundNoteDetail['batchNoCandidates'] }),
-      { propertyId: 'p', options: [{ id: 'g1', name: '60', isDefault: false }] },
-      true,
+      () => null,
     );
     expect(f).toMatchObject({ ownerCustomerId: null, ownerSuggested: null, ourBatchNo: null, meters: null, gramajValueId: null });
-    expect(initialRowForm(detail(), catalog, false).gramajValueId).toBeNull();
+    expect(initialRowForm(detail()).gramajValueId).toBeNull();
   });
   it('⭐ tam metin önerisi (FULL_TEXT) alana yazılmaz, "bu müşteri mi?" olarak sorulur', () => {
     const s = { customerId: 'c-ist', name: 'İstanbul Tekstil', matchedText: 'Güngören / İSTANBUL', source: 'FULL_TEXT' as const };
-    const f = initialRowForm(detail({ ownerSuggestion: s }), catalog, false);
+    const f = initialRowForm(detail({ ownerSuggestion: s }));
     expect(f.ownerCustomerId).toBeNull();
     expect(f.ownerSuggested).toBeNull();
     expect(f.ownerAsk).toEqual(s);
-    expect(initialRowForm(detail({ ownerSuggestion: { ...s, source: 'OWNER_TEXT' } }), catalog, false).ownerCustomerId).toBe('c-ist');
+    expect(initialRowForm(detail({ ownerSuggestion: { ...s, source: 'OWNER_TEXT' } })).ownerCustomerId).toBe('c-ist');
   });
   it('⭐ okuma özetinden satır kaynağı: detay ucu (gelen-belge:read) olmadan form dolar', () => {
     const sum = {
@@ -81,10 +79,10 @@ describe('initialRowForm — belge formu doldurur', () => {
     } as unknown as ReadSummary;
     const d = detailFromSummary(sum);
     expect(d).toMatchObject({ id: 'n7', noteNo: 'GB-7', status: 'DRAFT', ownerCustomerId: null, ourBatchNo: 'P-9' });
-    expect(initialRowForm(d, catalog, true)).toMatchObject({ ownerCustomerId: 'c9', ourBatchNo: 'P-9', ourBatchNoKey: 'K9', meters: 300, gramajValueId: 'g2' });
+    expect(initialRowForm(d, gramaj())).toMatchObject({ ownerCustomerId: 'c9', ourBatchNo: 'P-9', ourBatchNoKey: 'K9', meters: 300, gramajValueId: 'g2' });
   });
   it('taslakta seçili müşteri öneriyi ezer', () => {
-    const f = initialRowForm(detail({ ownerCustomerId: 'c1', ownerSuggestion: { customerId: 'c9', name: 'X', matchedText: 'X' } }), catalog, false);
+    const f = initialRowForm(detail({ ownerCustomerId: 'c1', ownerSuggestion: { customerId: 'c9', name: 'X', matchedText: 'X' } }));
     expect(f.ownerCustomerId).toBe('c1');
     expect(f.ownerSuggested).toBeNull();
   });
@@ -107,7 +105,7 @@ describe('rowIssues — review zorunlu', () => {
 describe('gövdeler', () => {
   const f = { ownerCustomerId: 'c1', ownerSuggested: null, ownerAsk: null, ourBatchNo: 'P-1', ourBatchNoKey: 'K', meters: 120, metersReview: false, gramajValueId: 'g2' };
   it('⭐ iş emri gövdesi sözleşme 3: metre string, gramaj hedef değeri', () => {
-    expect(buildCreateBody(f, { clientToken: 't', routeTemplateId: 'r1', gramajPropertyId: 'p-gr' })).toEqual({
+    expect(buildCreateBody(f, { clientToken: 't', routeTemplateId: 'r1', gramajPropertyId: 'p-gr', gramajTouched: true })).toEqual({
       clientToken: 't', ownerCustomerId: 'c1', kursunMeters: '120', routeTemplateId: 'r1', ourBatchNo: 'P-1', ourBatchNoKey: 'K',
       targetValues: [{ propertyId: 'p-gr', valueId: 'g2' }],
     });
@@ -140,14 +138,15 @@ describe('routeHasKursunStep', () => {
   });
 });
 
-describe('S3 — müşterinin varsayılan kurşun gramajı (fabrika cevabı 14)', () => {
-  it('⭐ müşterili belge: müşterinin gramajı; varsayılansız müşteri / müşterisiz: istasyonunki', () => {
-    expect(initialRowForm(detail({ ownerCustomerId: 'k1' }), catalog, true, { k1: 'g1' }).gramajValueId).toBe('g1');
-    expect(initialRowForm(detail({ ownerCustomerId: 'k2' }), catalog, true, { k1: 'g1' }).gramajValueId).toBe('g2');
-    expect(initialRowForm(detail(), catalog, true, { k1: 'g1' }).gramajValueId).toBe('g2');
+describe('K22 — gramaj ön seçimi sunucu çözücüsünden (fabrika cevabı 14)', () => {
+  it('⭐ çözücünün müşteri değeri forma düşer; cevap yoksa boş (uydurma yok)', () => {
+    expect(initialRowForm(detail({ ownerCustomerId: 'k1' }), gramaj({ k1: 'g1' })).gramajValueId).toBe('g1');
+    expect(initialRowForm(detail({ ownerCustomerId: 'k2' }), gramaj({ k1: 'g1' })).gramajValueId).toBe('g2');
+    expect(initialRowForm(detail({ ownerCustomerId: 'k1' }), () => undefined).gramajValueId).toBeNull();
   });
-  it('katalogda olmayan (pasif) değer istasyonunkine düşer; kurşunsuz rotada gramaj yok', () => {
-    expect(customerGramajId(catalog, { k1: 'pasif' }, 'k1')).toBe('g2');
-    expect(initialRowForm(detail({ ownerCustomerId: 'k1' }), catalog, false, { k1: 'g1' }).gramajValueId).toBeNull();
+  it('⭐ gramaja dokunulmadıysa gövdede targetValues YOK (sunucu çözer); elle kaldırılan [] gider', () => {
+    const f = { ownerCustomerId: 'c1', ownerSuggested: null, ownerAsk: null, ourBatchNo: null, ourBatchNoKey: null, meters: 10, metersReview: false, gramajValueId: 'g2' };
+    expect('targetValues' in buildCreateBody(f, { clientToken: 't', routeTemplateId: 'r', gramajPropertyId: 'p-gr' })).toBe(false);
+    expect(buildCreateBody({ ...f, gramajValueId: null }, { clientToken: 't', routeTemplateId: 'r', gramajPropertyId: 'p-gr', gramajTouched: true }).targetValues).toEqual([]);
   });
 });
