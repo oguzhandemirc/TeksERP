@@ -45,12 +45,13 @@ function check(label: string, ok: boolean, extra = ""): void {
 }
 
 const TAG = `TEST-GFA${Date.now().toString(36).toUpperCase()}`;
-const made = { customers: [] as string[], users: [] as string[], notes: [] as string[], items: [] as string[], colors: [] as string[], stations: [] as string[], routes: [] as string[], scans: [] as string[] };
+const made = { props: [] as string[], customers: [] as string[], users: [] as string[], notes: [] as string[], items: [] as string[], colors: [] as string[], stations: [] as string[], routes: [] as string[], scans: [] as string[] };
 const SETTINGS = [
   SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID,
   SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_ENTRY_MODE, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER,
   SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT,
   SETTING_KEYS.GELEN_BELGE_MULTI_PARTY_WORK_ORDER, SETTING_KEYS.GELEN_BELGE_DESEN_RENK_ESLESME, SETTING_KEYS.GELEN_BELGE_TABLET_IE_GIRISI,
+  SETTING_KEYS.PRODUCTION_ROUTE_MODE,
 ];
 
 type Resp = { status: number; code?: string; data?: Record<string, unknown> & { [k: string]: unknown }; warnings?: string[] };
@@ -267,6 +268,78 @@ async function run(url: string): Promise<void> {
   check("§6 NOT kipi notu FORM_NOTE_MAX'ta keser; KAPALI'da desen/renk nota girmez",
     long.not?.length === FORM_NOTE_MAX && formFieldsFromRegion({ desen: "D", renk: "R" }, "KAPALI").not === undefined && formFieldsFromRegion(null, "NOT") && Object.keys(formFieldsFromRegion(null, "NOT")).length === 0);
   check("§6 tanıtma anahtarları hedefMetraj / hedefKg / en / desen / renk / not içerir", ["hedefMetraj", "hedefKg", "en", "desen", "renk", "not"].every((k) => (ASSIGNABLE_FIELD_KEYS as readonly string[]).includes(k)), JSON.stringify(ASSIGNABLE_FIELD_KEYS));
+
+  console.log("§7 K30-D tür, hedef özellikler, rota adımları");
+  // AUTO bayraklı istasyon: anahtarsız form bayrağı tohumlar (bugünkü); anahtar varsa istemcinin kümesi geçer.
+  const mkProp = async (n: string) => { const id = (await prisma.fabricProperty.create({ data: { code: `${TAG}-${n}`.slice(0, 32), name: `${TAG} ${n}`, valueType: "FLAG" }, select: { id: true } })).id; made.props.push(id); return id; };
+  const flagAuto = await mkProp("FA");
+  const flagOther = await mkProp("FB");
+  const fStation = (await prisma.station.create({ data: { code: `${TAG}-FLG`.slice(0, 32), name: `${TAG} bayrak`, type: "INTERNAL" }, select: { id: true } })).id;
+  made.stations.push(fStation);
+  await new StationCapabilityService().setCapabilities(fStation, { properties: [{ propertyId: flagAuto, mode: "AUTO" }, { propertyId: flagOther, mode: "OPTIONAL" }] });
+  const fRoute = (await prisma.route.create({ data: { name: `${TAG} bayrak rota`, steps: { create: [{ stationId: fStation, sequence: 1 }] } }, select: { id: true } })).id;
+  made.routes.push(fRoute);
+  // İE doğmadıysa (kırmızı yol) boş uuid sorguyu çökertmesin → sıfır uuid = boş sonuç, check ❌ basar.
+  const woId = (id: unknown) => (typeof id === "string" && id ? id : "00000000-0000-0000-0000-000000000000");
+  const woProps = async (id: unknown) => (await prisma.workOrderTargetProperty.findMany({ where: { workOrderId: woId(id) }, select: { propertyId: true } })).map((x) => x.propertyId).sort();
+  const woSteps = async (id: unknown) => prisma.workOrderStep.findMany({ where: { workOrderId: woId(id) }, orderBy: { stepSequence: "asc" }, select: { stationId: true, stepSequence: true, notes: true } });
+  const woMeta = (id: unknown) => prisma.workOrder.findUnique({ where: { id: woId(id) }, select: { type: true, routeTemplateId: true } });
+
+  const n7a = await mkNote();
+  const r7a = await formWo(n7a, body({ routeTemplateId: fRoute }));
+  const p7a = await woProps(r7a.data?.workOrderId);
+  const s7a = await woSteps(r7a.data?.workOrderId);
+  const m7a = await woMeta(r7a.data?.workOrderId);
+  check("§7 ⭐ alanlar verilmezse bugünkü: istasyon bayrağı tohumlanır, adımlar şablondan, tür türetilir (STOCK)",
+    r7a.status === 201 && p7a.includes(flagAuto) && !p7a.includes(flagOther) && s7a.length === 1 && s7a[0]?.stationId === fStation && m7a?.routeTemplateId === fRoute && m7a?.type === "STOCK_PRODUCTION",
+    `${r7a.status} ${r7a.code ?? ""} ${JSON.stringify({ p7a, s7a, m7a })}`);
+
+  const n7b = await mkNote();
+  const r7b = await formWo(n7b, body({ routeTemplateId: fRoute, targetPropertyIds: [flagOther], type: "STOCK_PRODUCTION" }));
+  const p7b = await woProps(r7b.data?.workOrderId);
+  check("§7 ⭐ targetPropertyIds yazılır (istemci kümesi; kaldırılan AUTO bayrak tohumlanmaz)", r7b.status === 201 && p7b.length === 1 && p7b[0] === flagOther, `${r7b.status} ${r7b.code ?? ""} ${JSON.stringify(p7b)}`);
+  check("§7 ⭐ type yazılır", (await woMeta(r7b.data?.workOrderId))?.type === "STOCK_PRODUCTION");
+  const n7c = await mkNote();
+  const r7c = await formWo(n7c, body({ routeTemplateId: fRoute, targetPropertyIds: [] }));
+  check("§7 targetPropertyIds: [] → bayraksız İE", r7c.status === 201 && (await woProps(r7c.data?.workOrderId)).length === 0, `${r7c.status} ${r7c.code ?? ""}`);
+
+  // Düzenlenmiş adımlar: şablonun (tek kurşun istasyonu) yerine bu sırayla doğar.
+  const n7d = await mkNote();
+  const steps7 = [{ stationId: kStation, notes: "önce tambur" }, { stationId: station, sequence: 2 }, { stationId: fStation, notes: "son" }];
+  const r7d = await formWo(n7d, body({ steps: steps7 }));
+  const s7d = await woSteps(r7d.data?.workOrderId);
+  const p7d = await woProps(r7d.data?.workOrderId);
+  check("§7 ⭐ steps verilince İE adımları bu sırayla doğar (şablon değil)",
+    r7d.status === 201 && s7d.map((x) => x.stationId).join() === [kStation, station, fStation].join() && s7d.map((x) => x.stepSequence).join() === "1,2,3" && s7d[0]?.notes === "önce tambur" && s7d[2]?.notes === "son",
+    `${r7d.status} ${r7d.code ?? ""} ${JSON.stringify(s7d)}`);
+  check("§7 ⭐ düzenlenmiş adımların istasyon bayrağı tohumlanır (varsayılanlar adımlardan)", p7d.includes(flagAuto), JSON.stringify(p7d));
+
+  const n7e = await mkNote();
+  const deadStation = (await prisma.station.create({ data: { code: `${TAG}-PSF`.slice(0, 32), name: `${TAG} pasif`, type: "INTERNAL", isActive: false }, select: { id: true } })).id;
+  made.stations.push(deadStation);
+  const bad7 = async (label: string, extra: Record<string, unknown>, code?: string) => {
+    const r = await formWo(n7e, body(extra));
+    check(`§7 ${label} → 400${code ? ` ${code}` : ""}; belge DRAFT`, r.status === 400 && (!code || r.code === code) && (await noteStatus(n7e)) === "DRAFT", `${r.status} ${r.code ?? ""}`);
+  };
+  await bad7("⭐ geçersiz (pasif) istasyon", { steps: [{ stationId: deadStation }] });
+  await bad7("olmayan istasyon", { steps: [{ stationId: randomUUID() }] });
+  // Rotasız yol yalnız "Okutmayla"da açılır; SIRALI'da rota kapısı önce 400 verirdi (adım kapısını ölçmezdi).
+  await setSetting(SETTING_KEYS.PRODUCTION_ROUTE_MODE, "SCAN");
+  await bad7("rotasız (Okutmayla) + steps", { routeTemplateId: undefined, steps: [{ stationId: station }] }, "GELEN_BELGE_FORM_STEPS_NEED_ROUTE");
+  await setSetting(SETTING_KEYS.PRODUCTION_ROUTE_MODE, null);
+  await bad7("steps + stepPlanning", { steps: [{ stationId: station }], stepPlanning: [{ sequence: 1, plannedMachineId: null }] }, "GELEN_BELGE_FORM_STEPS_WITH_PLANNING");
+  await bad7("sıra dizi sırasıyla uyuşmaz", { steps: [{ stationId: station, sequence: 2 }] }, "GELEN_BELGE_FORM_STEPS_ORDER");
+  await bad7("adımda tanınmayan alan (strict)", { steps: [{ stationId: station, foo: 1 }] });
+  await bad7("boş adım listesi", { steps: [] });
+  await bad7("tanınmayan tür", { type: "FOO" });
+  await bad7("⭐ siparişe özel tür + kalemsiz (onaydan önce)", { type: "ORDER_PRODUCTION" }, "GELEN_BELGE_FORM_TYPE_NEEDS_ORDER");
+
+  // Çok parti PER_PARTY: düzenlenmiş adımlar her iş emrine.
+  const n7p = await mkPartyNote();
+  const r7p = await formWo(n7p, body({ parties: parties(n7p), mode: "PER_PARTY", steps: [{ stationId: station }, { stationId: kStation }] }));
+  const ids7p = (r7p.data as { workOrders?: Array<{ workOrderId: string }> } | undefined)?.workOrders?.map((w) => w.workOrderId) ?? [];
+  const st7p = await Promise.all(ids7p.map(async (id) => (await woSteps(id)).map((x) => x.stationId).join()));
+  check("§7 ⭐ çok parti PER_PARTY: her iş emri düzenlenmiş adımlarla", r7p.status === 201 && ids7p.length === 2 && st7p.every((x) => x === [station, kStation].join()), `${r7p.status} ${r7p.code ?? ""} ${JSON.stringify(st7p)}`);
 }
 
 async function cleanup(): Promise<void> {
@@ -293,6 +366,7 @@ async function cleanup(): Promise<void> {
   }
   await prisma.route.deleteMany({ where: { id: { in: made.routes } } }).catch(swallow);
   await prisma.stationProperty.deleteMany({ where: { stationId: { in: made.stations } } }).catch(swallow);
+  await prisma.fabricProperty.deleteMany({ where: { id: { in: made.props } } }).catch(swallow);
   await prisma.station.deleteMany({ where: { id: { in: made.stations } } }).catch(swallow);
   await prisma.item.deleteMany({ where: { id: { in: made.items } } }).catch(swallow);
   await prisma.color.deleteMany({ where: { id: { in: made.colors } } }).catch(swallow);
