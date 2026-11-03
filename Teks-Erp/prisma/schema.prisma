@@ -14601,6 +14601,10 @@ model DocumentScan {
   /// Bayt saklama durumu (K28); KÜÇÜK/SİLİNDİ geçiş zamanı `contentStateAt` (TAM'da NULL, CHECK).
   contentState  DocumentScanContentState @default(FULL)
   contentStateAt DateTime?         @db.Timestamptz
+  /// OCR kutularının (satır/kelime) çerçevesi, saklanan fotoğraf yönünde; NULL = fotoğrafın kendi pikseli (TAM).
+  /// KÜÇÜLT'te yazılır: bayt 1600'e iner, kutular 2600 okuma çerçevesinde kalır → panel kutuyu bu çerçeveyle ölçekler.
+  rectFrameWidth  Int?
+  rectFrameHeight Int?
   barcodeText   String?            @db.VarChar(120)
   status        DocumentScanStatus @default(PENDING)
   attempts      Int                @default(0) @db.SmallInt

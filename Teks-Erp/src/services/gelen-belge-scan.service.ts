@@ -31,6 +31,7 @@ export const SCAN_SELECT = {
   id: true, noteId: true, pageNo: true, regionNo: true, sha256: true, mimeType: true, sizeBytes: true,
   barcodeText: true, status: true, attempts: true, ocrEngine: true, ocrVersion: true, ocrDurationMs: true,
   capturedById: true, capturedAt: true, createdAt: true, updatedAt: true, contentState: true, contentStateAt: true,
+  rectFrameWidth: true, rectFrameHeight: true,
 } as const;
 
 export interface DocumentScanInput {
