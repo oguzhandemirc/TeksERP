@@ -70,22 +70,54 @@ export interface AutoWorkOrderOptions {
 
 const hasWorkOrderPermission = (actor: Pick<JwtPayload, "permissions">) => AUTO_WORK_ORDER_PERMISSIONS.some((p) => matchesPermission(actor.permissions, p));
 
-/**
- * Onaydan ÖNCE (yazmaz): açık rota isteği yerine getirilemeyecekse onay HİÇ koşmaz (fail-closed) — onaylanıp iş emri
- * sessizce atlanmaz. İzin = quick-start kümesi (403), üretim modülü (403 MODULE_DISABLED), rota = varsayılan rotanın tek kapısı (400).
- */
-export async function assertRouteOverride(routeTemplateId: string | undefined, actor: Pick<JwtPayload, "permissions">): Promise<AutoWorkOrderOptions> {
-  if (!routeTemplateId) return {};
+/** İzin (quick-start kümesi, 403) + üretim modülü (403 MODULE_DISABLED, lisans sorusu önce) — onaydan ÖNCE, yazmaz. */
+async function assertCanOpenWorkOrder(actor: Pick<JwtPayload, "permissions">, what: string): Promise<void> {
   if (!hasWorkOrderPermission(actor)) {
-    throw AppError.forbidden(`Seçilen rotayla ${TERIM.terbiyeIsEmri.tekilKucuk} açma yetkiniz yok (workorder:write ya da mobile:hizli-is-emri); belge onaylanmadı.`, { code: "GELEN_BELGE_ROUTE_OVERRIDE_FORBIDDEN" });
+    throw AppError.forbidden(`${what} ${TERIM.terbiyeIsEmri.tekilKucuk} açma yetkiniz yok (workorder:write ya da mobile:hizli-is-emri); belge onaylanmadı.`, { code: "GELEN_BELGE_ROUTE_OVERRIDE_FORBIDDEN" });
   }
   if (!(await readProductionEnabled())) {
     throw licenseModuleError(SETTING_KEYS.PRODUCTION_ENABLED, "Üretim")
       ?? AppError.forbidden(`Üretim modülü kapalı; ${TERIM.terbiyeIsEmri.tekilKucuk} açılamaz, belge onaylanmadı.`, { code: "MODULE_DISABLED", module: "production" });
   }
+}
+
+async function assertFactoryRoute(routeTemplateId: string): Promise<void> {
   const r = await factoryRouteProblem(routeTemplateId);
   if (r.problem) throw AppError.badRequest(`Seçilen rota şablonu (${r.name ?? "silinmiş"}) kullanılamıyor: ${r.problem}; belge onaylanmadı.`, { code: "GELEN_BELGE_ROUTE_OVERRIDE_INVALID" });
+}
+
+/**
+ * ONAY ucu (iş emri İSTEĞE BAĞLI): rota yoksa istek yok demektir (`{}` = bugünkü ayar yolu) — iş emri ZORUNLU olan
+ * form/toplu yol bunu KULLANMAZ, `resolveFormWorkOrderRoute`'a gider. Açık rota isteği yerine getirilemeyecekse onay
+ * HİÇ koşmaz (fail-closed) — onaylanıp iş emri sessizce atlanmaz.
+ */
+export async function assertRouteOverride(routeTemplateId: string | undefined, actor: Pick<JwtPayload, "permissions">): Promise<AutoWorkOrderOptions> {
+  if (!routeTemplateId) return {};
+  await assertCanOpenWorkOrder(actor, "Seçilen rotayla");
+  await assertFactoryRoute(routeTemplateId);
   return { routeTemplateId };
+}
+
+/** İş emrinin rotası: şablon ya da (K29 Okutmayla) rotasız — adımları sahada okutma ekler. */
+export type FormWorkOrderRoute = { routeTemplateId: string; scanRouted?: undefined } | { routeTemplateId?: undefined; scanRouted: true };
+
+/** quickStart rota alanı (form tek/çok parti ortak): şablon ya da rotasız (quickStart SIRALI'da ayrıca 400 verir). */
+export const routeInput = (r: FormWorkOrderRoute): { routeTemplateId: string } | { scanRouted: true } =>
+  (r.scanRouted ? { scanRouted: true } : { routeTemplateId: r.routeTemplateId });
+
+/**
+ * FORM/TOPLU kayıt ucu (iş emri ZORUNLU; `POST /irsaliyeler/:id/is-emri`, tek + çok parti) — TEK kapı, onaydan ÖNCE:
+ * izin + üretim + rota şablonu geçerli; rota YOKSA yalnız "Rota uygulaması: Okutmayla" iken rotasız, SIRALI'da 400
+ * `GELEN_BELGE_ROUTE_REQUIRED` (belge onaylanmaz — onaylı ama iş emirsiz belge kalmaz).
+ */
+export async function resolveFormWorkOrderRoute(routeTemplateId: string | undefined, actor: Pick<JwtPayload, "permissions">): Promise<FormWorkOrderRoute> {
+  await assertCanOpenWorkOrder(actor, routeTemplateId ? "Seçilen rotayla" : "Rotasız");
+  if (routeTemplateId) {
+    await assertFactoryRoute(routeTemplateId);
+    return { routeTemplateId };
+  }
+  if ((await readProductionRouteMode()) === "SCAN") return { scanRouted: true };
+  throw AppError.badRequest(`Rota seçin: rotasız ${TERIM.terbiyeIsEmri.tekilKucuk} yalnız rota uygulaması 'Okutmayla' iken açılır; belge onaylanmadı.`, { code: "GELEN_BELGE_ROUTE_REQUIRED" });
 }
 
 /** Saf: grup token'ı — belge + grup + top kümesi (sıra bağımsız). */
@@ -126,7 +158,8 @@ export async function autoOpenWorkOrders(noteId: string, actor: Pick<JwtPayload,
     }
     const out: AutoWorkOrderGroup[] = [];
     // OPEN (Gülkesim, §2.7 K5): gramajsız grup hedef değersiz açılır; gramaj makine başında girilir.
-    const patternlessOpen = (await readAutoWorkOrderPatternless()) === "OPEN";
+    // K29 rotasız (S14b): hedefi istasyon okutmasında S10 çözücüsü yazar → desensiz grup da açılır (ayar SKIP olsa da).
+    const patternlessOpen = scanRouted || (await readAutoWorkOrderPatternless()) === "OPEN";
     // SIRAYLA (paralel değil): aynı belgenin topları; bir grubun hatası ötekini durdurmaz.
     for (const g of groups) {
       const base = baseGroup(g);
