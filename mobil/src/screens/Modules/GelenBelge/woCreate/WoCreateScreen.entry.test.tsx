@@ -1,8 +1,9 @@
 // S16b `gelenBelge.tabletIeGirisi`: BELGE kipinde her karo tek formu açar (top/masa/Belge Tara gizli); TOP yalnız top yolu.
 // IKISI = bugünkü ekran — `WoCreateScreen.test.tsx` onu değiştirilmeden ölçer.
 import React, { type ReactNode } from 'react';
-import { fireEvent, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../../test/render';
+import { useAuthStore } from '../../../../store/authStore';
 import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
 import WoCreateScreen from './WoCreateScreen';
 
@@ -46,7 +47,7 @@ jest.mock('../desk/DeskView', () => {
 });
 jest.mock('../DocScanScreen', () => {
   const { Text } = jest.requireActual('react-native');
-  return { DocScanBody: () => <Text testID="eski-belge-tara">eski</Text> };
+  return { DocScanBody: (p: { teachOnly?: boolean }) => <Text testID="eski-belge-tara">{p.teachOnly ? 'tanit' : 'eski'}</Text> };
 });
 
 const route = (id: string, name: string, order: number) => ({ id, name, isWorkOrderShortcut: true, shortcutOrder: order, isActive: true });
@@ -143,5 +144,50 @@ describe('WoCreateScreen — S16b giriş kipi TOP', () => {
     expect(s.getByTestId('hizli-form').props.children).toBe('rota:yok');
     expect(s.queryByTestId('ie-rotasiz-ipucu')).toBeNull();
     expect(s.queryByTestId('ie-belge-okut')).toBeNull();
+  });
+});
+
+// K30-A: "Belge tanıt" karosu — şablon + okuma + yazma izni şart; TOP kipinde (belge yolu kapalı) yok.
+describe('WoCreateScreen — K30-A Belge tanıt karosu', () => {
+  const TEACH = ['gelen-belge:template', 'gelen-belge:read', 'gelen-belge:write'];
+  const setPerms = (permissions: string[]) => act(() => useAuthStore.setState({ user: { permissions } as never }));
+  afterEach(() => act(() => useAuthStore.setState({ user: null })));
+
+  it('⭐ izinliyse BELGE kipinde görünür; dokununca tarama gövdesi YALNIZ tanıtma kipinde açılır', async () => {
+    setPerms(TEACH);
+    mockShortcuts.mockResolvedValue({ data: [] });
+    const s = renderWithPaper(<WoCreateScreen />);
+    fireEvent.press(await s.findByTestId('ie-tur-belge-tanit'));
+    expect(s.getByTestId('baslik').props.children).toBe('Belge tanıt');
+    expect(s.getByTestId('eski-belge-tara').props.children).toBe('tanit');
+  });
+
+  it('IKISI kipinde de izinliyse görünür', async () => {
+    mockEntry = { entry: 'IKISI', ready: true };
+    setPerms(TEACH);
+    mockShortcuts.mockResolvedValue({ data: [] });
+    const s = renderWithPaper(<WoCreateScreen />);
+    expect(await s.findByTestId('ie-tur-belge-tanit')).toBeTruthy();
+  });
+
+  it.each([
+    ['şablon izni yok', ['gelen-belge:read', 'gelen-belge:write']],
+    ['yazma izni yok', ['gelen-belge:template', 'gelen-belge:read']],
+    ['okuma izni yok', ['gelen-belge:template', 'gelen-belge:write']],
+  ])('%s → karo yok', async (_n, perms) => {
+    setPerms(perms);
+    mockShortcuts.mockResolvedValue({ data: [] });
+    const s = renderWithPaper(<WoCreateScreen />);
+    await waitFor(() => expect(s.getByTestId('ie-tur-form')).toBeTruthy());
+    expect(s.queryByTestId('ie-tur-belge-tanit')).toBeNull();
+  });
+
+  it('TOP kipinde izinli olsa da karo yok', async () => {
+    mockEntry = { entry: 'TOP', ready: true };
+    setPerms(TEACH);
+    mockShortcuts.mockResolvedValue({ data: [] });
+    const s = renderWithPaper(<WoCreateScreen />);
+    expect(await s.findByTestId('ie-tur-hizli')).toBeTruthy();
+    expect(s.queryByTestId('ie-tur-belge-tanit')).toBeNull();
   });
 });
