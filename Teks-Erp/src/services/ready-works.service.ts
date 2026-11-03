@@ -18,22 +18,22 @@ import {
   SHIP_READY_STATES,
   classifyShipReadiness,
   customerBatchKeySql,
-  customerBatchMemberSql,
   effectiveShipReadyPolicy,
-  readinessClassSql,
   type ReadinessClass, type ShipReadyPolicy, type ShipReadyState,
 } from "./helpers/ship-readiness.helper";
 import type { ShipReadyRule } from "./system-setting.service";
 import { withCustomerHoldRows, type NO_HOLD_VIEW } from "./helpers/cari-hold-badge.helper";
 
 import { READY_WORK_UNITS, type ReadyWorkUnit } from "../constants/ready-work-units";
+import { aggregateUnits } from "./helpers/ready-works-sql.helper";
+
+// Birim üyeliği/toplam SQL'i `ready-works-sql.helper`da (S15c-d1 taşıması); eski içe aktarma yolları korunur.
+export { aggregateUnitsSql, liveUnitIdsSql, liveUnitScopeSql, membershipSql } from "./helpers/ready-works-sql.helper";
 
 export {
   INCOMING_DOC_UNITS, NOTIFY_UNIT_READY_UNIT, notifyUnitNeedsIncomingDoc, READY_WORK_UNITS, type ReadyWorkUnit,
 } from "../constants/ready-work-units";
 
-/** `roll-delivery-note-line.helper` yukarı çözücüsüyle aynı tavan (döngüsel veri sonsuz yürümesin). */
-const MAX_DESCENT_DEPTH = 32;
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -100,83 +100,6 @@ export function parseLimit(raw: unknown, def: number, max: number): number {
   const n = Number(raw);
   if (!Number.isInteger(n) || n < 1) throw AppError.badRequest("limit pozitif tam sayı olmalı");
   return Math.min(n, max);
-}
-
-// ---------------------------------------------------------------------------
-// BİRİM ÜYELİĞİ — (unit_id, roll_id) çiftleri; tek SQL parçası, liste ve top ucu aynısını kullanır.
-// ---------------------------------------------------------------------------
-// Müşteri partisi anahtarı TEK yerde: `customerBatchKeySql` (`ship-readiness.helper`; belgeden iş emri aynısını okur).
-
-/** `onlyIds` yalnız belge/parti biriminde: birden çok birimin üyeliği tek sorguda (K28 sevkte silme taraması). */
-export function membershipSql(unit: ReadyWorkUnit, onlyId?: string, onlyIds?: readonly string[]): Prisma.Sql {
-  switch (unit) {
-    case "workOrder":
-      return Prisma.sql`
-        SELECT b."workOrderId"::text AS unit_id, r.id AS roll_id
-        FROM rolls r JOIN batches b ON b.id = r."batchId"
-        ${onlyId ? Prisma.sql`WHERE b."workOrderId" = ${onlyId}::uuid` : Prisma.empty}`;
-    case "customer":
-      return Prisma.sql`
-        SELECT r."ownerCustomerId"::text AS unit_id, r.id AS roll_id
-        FROM rolls r
-        WHERE r."ownerCustomerId" IS NOT NULL
-        ${onlyId ? Prisma.sql`AND r."ownerCustomerId" = ${onlyId}::uuid` : Prisma.empty}`;
-    case "deliveryNote":
-    case "customerBatch": {
-      const key = unit === "deliveryNote" ? Prisma.sql`n.id::text` : customerBatchKeySql("n");
-      const unitFilter = unit === "customerBatch"
-        ? Prisma.sql`AND ${customerBatchMemberSql("n")}`
-        : Prisma.empty;
-      // Belge kümesi tek uuid[] parametresiyle `n.id` üzerinden: `n.id::text IN (…)` kimlik başına parametre + metin karşılaştırması (K28 darboğazı).
-      const idFilter = onlyId ? Prisma.sql`AND ${key} = ${onlyId}` : !onlyIds?.length ? Prisma.empty : unit === "deliveryNote" ? Prisma.sql`AND n.id = ANY(${[...onlyIds]}::uuid[])` : Prisma.sql`AND ${key} IN (${Prisma.join([...onlyIds])})`;
-      // Kök: belgenin onayla doğan topları; aşağı soy `parentRollId` (tambur bölmesi) üzerinden, derinlik tavanlı.
-      return Prisma.sql`
-        SELECT DISTINCT t.unit_id, t.roll_id FROM (
-          WITH RECURSIVE tree(unit_id, roll_id, depth) AS (
-            SELECT ${key} AS unit_id, l."rollId" AS roll_id, 0
-            FROM customer_delivery_note_lines l
-            JOIN customer_delivery_notes n ON n.id = l."noteId"
-            WHERE l."rollId" IS NOT NULL AND n.status::text <> 'CANCELLED' ${unitFilter} ${idFilter}
-            UNION ALL
-            SELECT t.unit_id, c.id, t.depth + 1
-            FROM tree t JOIN rolls c ON c."parentRollId" = t.roll_id
-            WHERE t.depth < ${MAX_DESCENT_DEPTH}
-          )
-          SELECT unit_id, roll_id FROM tree
-        ) t`;
-    }
-  }
-}
-
-interface AggRow {
-  unit_id: string;
-  ready_count: bigint;
-  ready_m: Prisma.Decimal | null;
-  in_process_count: bigint;
-  in_process_m: Prisma.Decimal | null;
-  shipped_m: Prisma.Decimal | null;
-  scrap_m: Prisma.Decimal | null;
-}
-
-async function aggregateUnits(unit: ReadyWorkUnit, onlyIds?: readonly string[]): Promise<AggRow[]> {
-  const only = onlyIds ? Prisma.sql`WHERE m.unit_id IN (${Prisma.join(onlyIds)})` : Prisma.empty;
-  return prisma.$queryRaw<AggRow[]>(Prisma.sql`
-    WITH members AS (${membershipSql(unit)}),
-    classed AS (
-      SELECT m.unit_id, r."currentQty" AS qty, ${readinessClassSql("r")} AS cls
-      FROM members m JOIN rolls r ON r.id = m.roll_id ${only}
-    )
-    SELECT unit_id,
-      COUNT(*) FILTER (WHERE cls = 'READY')            AS ready_count,
-      SUM(qty) FILTER (WHERE cls = 'READY')            AS ready_m,
-      COUNT(*) FILTER (WHERE cls = 'IN_PROCESS')       AS in_process_count,
-      SUM(qty) FILTER (WHERE cls = 'IN_PROCESS')       AS in_process_m,
-      SUM(qty) FILTER (WHERE cls = 'GONE')             AS shipped_m,
-      SUM(qty) FILTER (WHERE cls = 'SCRAP')            AS scrap_m
-    FROM classed
-    WHERE cls IS NOT NULL
-    GROUP BY unit_id
-    HAVING COUNT(*) FILTER (WHERE cls IN ('READY', 'IN_PROCESS')) > 0`);
 }
 
 interface UnitMeta {

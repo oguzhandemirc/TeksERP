@@ -17,6 +17,9 @@
 //   §7 liste + cursor + özet tek where: limit=1 sayfalama ↔ özet birebir; state/customer süzgeci özete de uyar
 //   §8 gelen belge modülü kapalı → deliveryNote/customerBatch 403 MODULE_DISABLED, workOrder geçer
 //   §9 birim topları ucu: sınıflar, rollClass süzgeci, tanınmayan birim 400; §9f inSack/inShipment/depo alanları
+//   §10 büyüme sınırı (S15c-d1): toplam sorgusu yalnız CANLI birimleri sınıflar (tamamı GİTTİ belge/parti/müşteri
+//      aday listesine girmez) ve sonuç ön süzgeçsiz referans biçimle (bütün üyelik + HAVING) dört birimde birebir;
+//      yalnız aşağı soydan canlı + yalnız İŞLEMDE topu olan belge de bulunur
 //   §P (SEVKE_HAZIR_PERF=1) 500 belge / 30.000 top: uç süresi (hedef ≤ 300 ms; aşarsa yalnız rapor)
 //
 // NEGATİF SONDA (kırmızı görülerek, 2026-10-30): bkz. BEKCI-HARITASI satırı.
@@ -40,7 +43,9 @@ import {
   readinessClassOf,
   readinessClassSql,
 } from "../src/services/helpers/ship-readiness.helper";
-import { listReadyWorks, type ReadyWorkRow, type ReadyWorkUnit } from "../src/services/ready-works.service";
+import {
+  aggregateUnitsSql, liveUnitIdsSql, liveUnitScopeSql, listReadyWorks, membershipSql, type ReadyWorkRow, type ReadyWorkUnit,
+} from "../src/services/ready-works.service";
 import { listReadyWorkRolls } from "../src/services/ready-work-rolls.service";
 import { ShippingController } from "../src/controllers/shipping.controller";
 import { AppError } from "../src/utils/app-error";
@@ -374,6 +379,52 @@ async function main(): Promise<void> {
     const kidsSeen = rolls.filter((r) => r.id === kidA || r.id === kidB).length;
     check("§9d tambur çocukları aşağı soydan gelir", kidsSeen === 2);
 
+    // §10 büyüme sınırı + eşdeğerlik (S15c-d1). Yalnız aşağı soydan canlı, yalnız İŞLEMDE topu olan belge (sahip B):
+    // ön süzgecin yukarı tırmanışı ve İŞLEMDE kümesi bu birimle ölçülür.
+    const deepParent = await mk(ids.custB, RollStatus.TAMBUR_CONSUMED, 0);
+    await mk(ids.custB, RollStatus.IN_PRODUCTION, 40, { parentRollId: deepParent });
+    const noteDeep = await mkNote("ND", ids.custB, "P-55", [{ rollId: deepParent, meters: 40 }]);
+    const goneOf: Record<ReadyWorkUnit, string | null> = {
+      deliveryNote: noteGone, customerBatch: `${ids.custB}:P-99`, customer: null, workOrder: null,
+    };
+    const liveOf: Record<ReadyWorkUnit, string> = {
+      deliveryNote: noteDeep, customerBatch: `${ids.custB}:P-55`, customer: ids.custB, workOrder: ids.wo,
+    };
+    const captured: Prisma.Sql[] = [];
+    const origQueryRaw = prisma.$queryRaw;
+    // Reflect: istemci örneğine tip zorlamasız kanca (test_type_assertion_ratchet §2 B).
+    Reflect.set(prisma, "$queryRaw", (sql: Prisma.Sql, ...rest: unknown[]) => {
+      captured.push(sql);
+      return Reflect.apply(origQueryRaw, prisma, [sql, ...rest]);
+    });
+    try {
+      for (const g of ["deliveryNote", "customerBatch", "customer", "workOrder"] as const) {
+        captured.length = 0;
+        const rows = await list(g);
+        const agg = captured.find((q) => q.sql.includes("HAVING COUNT(*) FILTER"));
+        const live = (await prisma.$queryRaw<Array<{ unit_id: string }>>(liveUnitIdsSql(g))).map((r) => r.unit_id);
+        const gone = goneOf[g];
+        // Belge birimleri canlı kümeyi alt sorgu, İE/müşteri kimlik listesi olarak taşır; ikisinde de geçmiş kesilir.
+        const arr = (agg?.values.find((v) => Array.isArray(v)) ?? null) as string[] | null;
+        const prefiltered = !!agg && (g === "deliveryNote" || g === "customerBatch"
+          ? agg.sql.includes(liveUnitIdsSql(g).sql) && agg.sql.includes("IN (SELECT s.unit_id")
+          : !!arr && arr.includes(liveOf[g]) && (gone === null || !arr.includes(gone)));
+        check(`§10a ${g}: toplam sorgusu üyeliği canlı birim kümesiyle süzer; tamamı GİTTİ birim kümede yok`,
+          prefiltered && live.includes(liveOf[g]) && (gone === null || !live.includes(gone)) && !!find(rows.items, liveOf[g]),
+          prefiltered ? `canlı=${live.length}` : "canlı küme süzgeci yok — bütün rolls geçmişi sınıflanıyor");
+        const ref = await prisma.$queryRaw<Array<Record<string, unknown>>>(referenceAggSql(g));
+        const viaSub = await prisma.$queryRaw<Array<Record<string, unknown>>>(aggregateUnitsSql(g, liveUnitScopeSql(g)));
+        const viaIds = live.length ? await prisma.$queryRaw<Array<Record<string, unknown>>>(aggregateUnitsSql(g, live)) : [];
+        const norm = (rs: Array<Record<string, unknown>>) => JSON.stringify(
+          rs.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, v === null ? null : String(v)])))
+            .sort((a, b) => String(a.unit_id).localeCompare(String(b.unit_id))));
+        check(`§10b ${g}: ön süzgeçli toplam (alt sorgu ve kimlik listesi) = süzgeçsiz referans (birebir)`,
+          norm(ref) === norm(viaSub) && norm(ref) === norm(viaIds), `ref=${ref.length} alt=${viaSub.length} liste=${viaIds.length}`);
+      }
+    } finally {
+      Reflect.set(prisma, "$queryRaw", origQueryRaw);
+    }
+
     if (process.env.SEVKE_HAZIR_PERF === "1") await perf(ids);
   } finally {
     await prisma.customerDeliveryNoteLine.deleteMany({ where: { noteId: { in: ids.notes } } });
@@ -393,6 +444,27 @@ async function main(): Promise<void> {
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await pool.end();
   process.exitCode = fail > 0 ? 1 : 0;
+}
+
+/** S15c-d1 öncesi toplam biçimi (ön süzgeçsiz: bütün üyelik sınıflanır, HAVING canlı birimi seçer) — §10b referansı. */
+function referenceAggSql(unit: ReadyWorkUnit): Prisma.Sql {
+  return Prisma.sql`
+    WITH members AS (${membershipSql(unit)}),
+    classed AS (
+      SELECT m.unit_id, r."currentQty" AS qty, ${readinessClassSql("r")} AS cls
+      FROM members m JOIN rolls r ON r.id = m.roll_id
+    )
+    SELECT unit_id,
+      COUNT(*) FILTER (WHERE cls = 'READY')            AS ready_count,
+      SUM(qty) FILTER (WHERE cls = 'READY')            AS ready_m,
+      COUNT(*) FILTER (WHERE cls = 'IN_PROCESS')       AS in_process_count,
+      SUM(qty) FILTER (WHERE cls = 'IN_PROCESS')       AS in_process_m,
+      SUM(qty) FILTER (WHERE cls = 'GONE')             AS shipped_m,
+      SUM(qty) FILTER (WHERE cls = 'SCRAP')            AS scrap_m
+    FROM classed
+    WHERE cls IS NOT NULL
+    GROUP BY unit_id
+    HAVING COUNT(*) FILTER (WHERE cls IN ('READY', 'IN_PROCESS')) > 0`;
 }
 
 /** 500 belge × 60 top = 30.000 top (her belgenin yarısı tambur çocuğu), müşteri partisi 50 belgede bir. */

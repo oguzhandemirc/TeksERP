@@ -6,20 +6,26 @@ import { collectLines } from "./geometry";
 import { isNumericText } from "./labels";
 import { validateTemplate } from "./templates";
 
-/** Tanıtmada atanabilen başlık alanları → motor alan anahtarı + tip (taslak eşlemesi bu anahtarları okur). */
+/** Tanıtmada atanabilen başlık alanları → motor alan anahtarı + tip (taslak eşlemesi bu anahtarları okur). Anahtar KALICIDIR
+ *  (kayıtlı şablonlar bunu taşır) — yalnız etiket değişir. K30: iş emri formu alanları (`hedefMetraj`, `hedefKg`, `not`). */
 export const ASSIGNABLE_FIELDS = {
   musteri: { label: "Müşteri", type: "text" },
   partiNo: { label: "Parti No", type: "alnum" },
-  toplamMetre: { label: "Metre", type: "decimal" },
+  toplamMetre: { label: "Kurşun metresi", type: "decimal" },
   evrakNo: { label: "Evrak No", type: "alnum" },
   tarih: { label: "Tarih", type: "date" },
   siparisNo: { label: "Sipariş No", type: "alnum" },
   topAdet: { label: "Top adedi", type: "integer" },
-  desen: { label: "Desen", type: "text" },
-  renk: { label: "Renk", type: "text" },
-  en: { label: "En", type: "decimal" },
+  desen: { label: "Hedef kumaş (desen)", type: "text" },
+  renk: { label: "Hedef renk", type: "text" },
+  en: { label: "En (cm)", type: "decimal" },
+  hedefMetraj: { label: "Hedef metraj", type: "decimal" },
+  hedefKg: { label: "Hedef kg", type: "decimal" },
+  not: { label: "Not", type: "text" },
 } as const satisfies Record<string, { label: string; type: FieldType }>;
 export type AssignableField = keyof typeof ASSIGNABLE_FIELDS;
+/** Zod enum'u için anahtar listesi (uç ↔ motor tek kaynak). */
+export const ASSIGNABLE_FIELD_KEYS = Object.keys(ASSIGNABLE_FIELDS) as [AssignableField, ...AssignableField[]];
 
 /** Top tablosu kolonları (başlık yazısına dokunulur). */
 export const TABLE_COLUMN_KEYS = { topNo: { label: "Top No", type: "alnum" }, kg: { label: "Kilo", type: "decimal" }, m: { label: "Metre", type: "decimal" }, en: { label: "En", type: "decimal" } } as const;
