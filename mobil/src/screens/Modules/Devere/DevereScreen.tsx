@@ -53,7 +53,7 @@ export default function DevereScreen() {
   );
 
   return (
-    <ScreenChrome title="Levent Sarım" subtitle={state.context.data ? `${state.context.data.machines.length} devere makinesi` : undefined}>
+    <ScreenChrome title="Levent Sarım" statusLine={state.context.data ? `${state.context.data.machines.length} devere makinesi` : undefined}>
       {compact ? (
         <View style={styles.root}>
           <BeamList state={state} />

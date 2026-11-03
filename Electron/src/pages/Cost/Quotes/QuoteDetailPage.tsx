@@ -33,7 +33,7 @@ export function QuoteDetailPage() {
       <PageHeader
         title={quote ? `Teklif ${quoteNumberLabel(quote)}` : "Teklif"}
         titleExtra={quote ? <QuoteStatusBadge status={quote.status} expired={quote.suresiDoldu} /> : undefined}
-        description={quote ? `${quote.customer.name} · ${quote.currency}` : undefined}
+        statusLine={quote ? `${quote.customer.name} · ${quote.currency}` : undefined}
         onBack={() => nav("/cost/quotes")}
         parent={{ label: "Teklifler", to: "/cost/quotes" }}
         actions={quote ? <CommercialDocButton docType="SALES_QUOTE" sourceId={quote.id} label={`Teklif ${quoteNumberLabel(quote)} · ${quote.customer.name}`} draft={quote.status === "DRAFT"} /> : undefined}

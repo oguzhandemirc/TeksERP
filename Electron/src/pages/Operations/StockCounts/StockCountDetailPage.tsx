@@ -185,7 +185,7 @@ export function StockCountDetailPage() {
             </>
           ) : null
         }
-        description={
+        statusLine={
           count
             ? `${count.warehouse.name} · açılış ${formatFactory(count.createdAt, "dd MMM yyyy HH:mm")}`
             : undefined
