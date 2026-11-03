@@ -9,7 +9,8 @@
 // gönder + sorgula belirlenimli (KABUL/RED/HATA), RED yerine yeni kayıt `replacesId` · §9 iptal →
 // IPTAL, aynı kaynağa yeni kayıt, numara yeniden kullanılmaz · §10 EXPORT → 400, sevk edilmemiş →
 // 409 · §11 audit yükünde TCKN ve XML yok · §12 başlangıç değeri kilidi (8041) üretimden sonra 409 ·
-// §13 kayıtlar listesi + özet şeridi TEK where (E7): her süzgeçte liste adedi = özet toplamı.
+// §13 kayıtlar listesi + özet şeridi TEK where (E7): her süzgeçte liste adedi = özet toplamı ·
+// §14 teslim yerli sevk (K18): üretim/yeniden üretim `warnings` döner, XML teslim adresi cari adresi kalır.
 //
 // NEGATİF SONDALAR (2026-10-25, cp+md5 ile geri alındı; 51/0 yeşilken):
 //   (a) `transitionEIrsaliyeTx` claim'i `findUnique → update({where:{id}})`a çevrildi → 3 ❌
@@ -18,6 +19,7 @@
 //   (c) `transitionEIrsaliyeTx`ten `writeEIrsaliyeEventTx` çıkarıldı → 5 ❌ (§3d/§3f/§7b/§7d/§9b).
 //   (d) `codeCountsForCounter` E2 düzeltmesi geri alındı → §12a ❌ (başlangıç kilidi fail-open).
 //   (e) 2026-10-25 E7: `summarizeEIrsaliyeRecords` süzgeçsiz where'le koşuldu → 3 ❌ (§13a: özet 6 ↔ liste 2/1/4).
+//   (f) 2026-11-03 s6 düzeltmesi: `deliveryToWarnings` koşulu ters çevrildi → 3 ❌ (§14a/§14b/§14d).
 //
 // Çalıştır: npx tsx scripts/test_e_irsaliye_flow.ts
 // =============================================================================
@@ -73,7 +75,7 @@ async function setSetting(key: string, value: unknown) {
   await prisma.systemSetting.upsert({ where: { key }, update: { value: value as object }, create: { key, value: value as object } });
 }
 
-async function makeShipment(tag: string, over: { destination?: "DOMESTIC" | "EXPORT"; status?: "DISPATCHED" | "PLANNED" } = {}) {
+async function makeShipment(tag: string, over: { destination?: "DOMESTIC" | "EXPORT"; status?: "DISPATCHED" | "PLANNED"; deliveryTo?: { name: string; address: string | null } } = {}) {
   const s = await prisma.shipment.create({
     data: {
       shipmentNo: `${P}-${tag}`, customerId, status: over.status ?? "DISPATCHED", destination: over.destination ?? "DOMESTIC",
@@ -88,6 +90,7 @@ async function makeShipment(tag: string, over: { destination?: "DOMESTIC" | "EXP
     products: [{ name: "Ham bez 120", customerName: null, rollCount: 3, totalMeters: 300.5 } as never],
     totalKg: 75, sackCount: 1,
   });
+  if (over.deliveryTo) doc.header = { ...doc.header, deliveryTo: over.deliveryTo };
   await prisma.printedDocument.create({
     data: { docType: "SHIPMENT_DISPATCH", sourceId: s.id, version: 1, status: "ACTIVE", documentNo: `${P}-${tag}`, snapshot: envelope(doc) as never },
   });
@@ -279,6 +282,18 @@ async function main() {
   }
   const e13 = await errOf(() => listEIrsaliyeRecords({ filters: { status: "YOK_BOYLE" }, limit: 5, withTotal: false }));
   check("§13b tanınmayan durum → 400", e13?.statusCode === 400 && codeOf(e13) === "EIRSALIYE_FILTER_INVALID");
+
+  console.log("\n§14 teslim yeri dolu sevk → XML teslim adresi cari adresi; yanıt UYARIR (s6 inceleme)");
+  check("§14a teslim yersiz üretimde uyarı yok", Array.isArray(g1.warnings) && g1.warnings.length === 0, JSON.stringify(g1.warnings));
+  const T = await makeShipment("T", { deliveryTo: { name: `${P} BOYAHANE`, address: "OSB 3. Cad. No:12" } });
+  const t = (await eirs.prepare(T, withDriver, tok(), userId)).kayit;
+  const gT = await eirs.generate(t.id, userId);
+  const w = gT.warnings ?? [];
+  check("§14b teslim yerli üretim uyarır: teslim yeri + cari adı", w.length === 1 && w[0]!.includes(`${P} BOYAHANE`) && w[0]!.includes(`${P} MUSTERI`), JSON.stringify(w));
+  const xT = await prisma.eIrsaliyeXml.findFirst({ where: { eIrsaliyeId: t.id }, orderBy: { version: "desc" }, select: { xml: true } });
+  check("§14c XML bugünkü davranış: teslim adresi cari kart adresi (boyahane XML'e girmez)", !!xT && xT.xml.includes("Moda Cad. 1") && !xT.xml.includes("BOYAHANE"));
+  const rT = await eirs.regenerate(t.id, { onay: true }, userId);
+  check("§14d yeniden üretim de uyarır", (rT.warnings ?? []).length === 1, JSON.stringify(rT.warnings));
 
   console.log("\n§12 başlangıç değeri ↔ üretim kilidi");
   savedSeriesStart = await prisma.numberSeries.findUnique({ where: { key: "eIrsaliye" }, select: { startValue: true, startValueYear: true } });
