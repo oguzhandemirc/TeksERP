@@ -49,7 +49,7 @@ export function stepAutoCapture(prev: AutoCaptureState, frameSize: number, cfg: 
   const s: AutoCaptureState = { ...prev, recent };
   const stable = isStable(recent, cfg);
   if (s.baseline === null) {
-    if (!stable) return { action: 'wait', hint: 'Boş masa referansı alınıyor — masayı boş bırakın', state: s };
+    if (!stable) return { action: 'wait', hint: CALIBRATING_HINT, state: s };
     return { action: 'calibrated', hint: 'Boş masa kaydedildi — kağıdı koyun', state: { ...s, baseline: mean(recent) } };
   }
   if (!stable) return { action: 'wait', hint: 'Hareket var — kağıt durunca çekilecek', state: s };
@@ -72,4 +72,19 @@ export function afterManualCapture(s: AutoCaptureState): AutoCaptureState {
 /** "Tekrar çek": son sayfa silindi → masadaki kağıt sabitlenince yeniden çekilir. */
 export function rearm(s: AutoCaptureState): AutoCaptureState {
   return { ...s, armed: true, lastCaptured: null, recent: [] };
+}
+
+/**
+ * İnceleme sonrası kameraya dönüş: boş masa referansı ve "son çekilen" korunur (okunan kağıt masada dururken yeni
+ * referans olmasın / yeniden çekilmesin); eski ara kareler kararlılık penceresine karışmasın diye atılır.
+ */
+export function resumeAutoState(s: AutoCaptureState): AutoCaptureState {
+  return { ...s, recent: [] };
+}
+
+export const CALIBRATING_HINT = 'Boş masa referansı alınıyor — masayı boş bırakın';
+
+export function resumeHint(s: AutoCaptureState): string {
+  if (s.baseline === null) return CALIBRATING_HINT;
+  return s.armed ? 'Kağıt bekleniyor' : 'Okunan kağıdı masadan kaldırın';
 }

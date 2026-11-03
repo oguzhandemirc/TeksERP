@@ -1,5 +1,5 @@
 // Belge masası otomatik çekim kararı (K26): boş masa / hareketli / sabit kağıt / sonraki sayfa / tekrar çek.
-import { afterManualCapture, initialAutoState, rearm, stepAutoCapture, type AutoAction, type AutoCaptureState } from './autoCapture';
+import { afterManualCapture, initialAutoState, rearm, resumeAutoState, resumeHint, stepAutoCapture, type AutoAction, type AutoCaptureState } from './autoCapture';
 
 function run(sizes: number[], start: AutoCaptureState = initialAutoState()): { actions: AutoAction[]; state: AutoCaptureState } {
   let state = start;
@@ -57,5 +57,21 @@ describe('stepAutoCapture', () => {
     const manual = afterManualCapture(seen);
     expect(run([PAPER, PAPER, PAPER], manual).actions).not.toContain('capture');
     expect(run([PAPER, PAPER, PAPER], rearm(manual)).actions).toContain('capture');
+  });
+});
+
+describe('resumeAutoState (inceleme sonrası kameraya dönüş)', () => {
+  it('boş masa referansı korunur; okunan kağıt masada dururken yeni referans olmaz, yeniden çekilmez', () => {
+    const PAPER = 60_000;
+    const read = run([EMPTY, EMPTY, EMPTY, PAPER, PAPER, PAPER]).state; // kalibre + çekim
+    const back = resumeAutoState(read);
+    expect(back).toMatchObject({ baseline: read.baseline, recent: [] });
+    expect(resumeHint(back)).not.toMatch(/referans/);
+    expect(run([PAPER, PAPER, PAPER], back).actions).toEqual(['wait', 'wait', 'wait']);
+    // Kağıt kaldırılır, yeni kağıt konur → tek çekim (boş masa çekilmez).
+    expect(run([PAPER, PAPER, PAPER, EMPTY, EMPTY, EMPTY, 70_000, 70_000, 70_000], back).actions.filter((a) => a === 'capture')).toHaveLength(1);
+  });
+  it('referans yoksa ipucu kalibrasyon', () => {
+    expect(resumeHint(initialAutoState())).toMatch(/referans/);
   });
 });

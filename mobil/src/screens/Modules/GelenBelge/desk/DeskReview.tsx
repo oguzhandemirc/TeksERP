@@ -33,7 +33,7 @@ export default function DeskReview(p: DeskReviewProps) {
   const wide = width > height;
   const done = p.row.result?.kind === 'OPENED' || p.row.result?.kind === 'DRAFT';
   const locked = done || p.wo.saving;
-  const doc = <DocRowCard row={p.row} wo={p.wo} customers={p.customers} customersLoading={p.customersLoading} hideGramaj={!!p.row.form?.multi} />;
+  const doc = <DocRowCard row={p.row} wo={p.wo} customers={p.customers} customersLoading={p.customersLoading} hideGramaj={p.row.form?.multi?.mode === 'PER_PARTY'} />;
   const side = (
     <>
       <ShortcutChips shortcuts={p.shortcuts} route={p.route} onRoute={p.onRoute} locked={locked} />
@@ -81,14 +81,18 @@ interface PlanProps {
   locked: boolean;
 }
 
-/** Kurşun planı: tek partide makine; çok partide parti başına makine + gramaj (gramaj boşsa belgenin ortak gramajı). */
+/**
+ * Kurşun planı: tek parti ya da "Tek iş emri" kipinde TEK makine (gramaj belge alanında); "Her parti ayrı" kipinde
+ * parti başına makine + gramaj (gramaj boşsa belgenin ortak gramajı). Sunucu SINGLE'da parti alanlarını okumaz.
+ */
 function PlanSection({ row, wo, route, machines, locked }: PlanProps) {
   const f = row.form;
   const list = machinesForRoute(route, machines ?? []);
   const showMachines = machines !== undefined && list.length > 0;
   const gramaj = wo.showGramaj ? wo.catalog.options : [];
-  if (!f || (!showMachines && !(f.multi && gramaj.length))) return null;
-  if (!f.multi) {
+  const perParty = f?.multi?.mode === 'PER_PARTY';
+  if (!f || (!showMachines && !(perParty && gramaj.length))) return null;
+  if (!f.multi || !perParty) {
     return (
       <View style={styles.block} testID="masa-plan">
         <MachineChips list={list} value={f.machineId ?? null} locked={locked} testID="masa-makine" onChange={(machineId) => wo.updateForm(row.noteId, { machineId })} />
