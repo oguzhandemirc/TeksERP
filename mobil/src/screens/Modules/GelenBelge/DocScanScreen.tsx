@@ -6,6 +6,7 @@
 // Okuma servisi fotoğrafı arka planda okuyup aynı taslağı doldurur. ONLINE-ONLY: çevrimdışı kuyruk yok; yarıda düşen gönderim ekranda kalır ve
 // "Yeniden dene" aynı taslağa kalan sayfaları yükler (`submitDocScan` ilerlemesi). Gönderimden sonra okuma
 // sonucu kartta izlenir (`useReadResult`); "Yeni sayfa çek" aynı taslağa sayfa ekler, "Bitti" yeni belgeye hazırlar.
+// Okununca tablette "Bu belgeyi tanıt" (S1b, `tanit/`): belge tipini kelime kutularıyla öğretir.
 // =============================================================================
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
@@ -25,6 +26,7 @@ import { useDocScan } from './useDocScan';
 import { useReadResult } from './useReadResult';
 import { showsApprovalCard } from './approvalGate';
 import { useApprovalDetail } from './useApprovalCard';
+import TeachEntry from './tanit/TeachEntry';
 
 export default function DocScanScreen() {
   return (
@@ -43,7 +45,8 @@ export function DocScanBody() {
   const read = useReadResult(b.done?.note.id ?? null, b.done?.runKey ?? 0);
   // Okuma sonuçlandı → onay kartı detayı çeker (kip ve kapı sunucudan; kart yoksa bugünkü yol).
   const readDone = read.watch?.phase === 'done' && (read.watch.summary.state === 'READ' || read.watch.summary.state === 'PARTIAL');
-  const approvalOpen = showsApprovalCard(useApprovalDetail(b.done?.note.id ?? null, readDone).data);
+  const detail = useApprovalDetail(b.done?.note.id ?? null, readDone).data;
+  const approvalOpen = showsApprovalCard(detail);
   const addPageToNote = () => {
     b.addToNote();
     source.add();
@@ -66,6 +69,7 @@ export function DocScanBody() {
         {b.done && read.watch && (
           <ReadResultCard watch={read.watch} noteNo={b.done.note.noteNo} actions={{ onAddPage: addPageToNote, onDone: b.finish, onRecheck: read.recheck }} tabletApproval={approvalOpen} />
         )}
+        {b.done && readDone && <TeachEntry detail={detail} localPages={b.done.sent} />}
         {b.done && <ApprovalCard key={`${b.done.note.id}:${b.done.runKey}`} noteId={b.done.note.id} readDone={readDone} onDone={b.finish} />}
         <DocHeader owner={b.owner} onOwner={b.setOwner} senderDocNo={b.senderDocNo} onBarcode={b.setBarcode} locked={b.headerLocked} />
         <PageList

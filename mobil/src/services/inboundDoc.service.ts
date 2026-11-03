@@ -6,6 +6,14 @@
 // =============================================================================
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
+import type {
+  ScanWords,
+  SuggestBody,
+  SuggestResult,
+  TemplateJson,
+  UserTemplateDetail,
+  UserTemplateView,
+} from '../types/inboundDocTeach';
 
 /** Fotoğraf gövdesi 1–2 MB base64; varsayılan 10 sn atölye Wi-Fi'ında yetmez. */
 const UPLOAD_TIMEOUT_MS = 60_000;
@@ -112,6 +120,18 @@ export interface InboundNoteDetail {
   perDocument?: PerDocumentGate;
   /** Sözleşme 4: belgede okunan metinde güçlü eşleşen müşteri; zayıfsa/eski sunucuda yok → istemci boş bırakır. */
   ownerSuggestion?: OwnerSuggestion | null;
+  /** Okunduğu şablon (null = GENEL yedekle okundu → tanınmadı); tanıtma (S1b) okur. */
+  templateId?: string | null;
+  /** Sayfa taramaları; tablet yerel fotoğrafı `sha256` ile eşler (tanıtma). */
+  scans?: InboundNoteScan[];
+}
+
+export interface InboundNoteScan {
+  id: string;
+  pageNo: number;
+  sha256: string;
+  status: string;
+  mimeType: string;
 }
 
 export interface OwnerSuggestion {
@@ -254,6 +274,30 @@ export const inboundDocService = {
     apiClient
       .post<ApiResponse<Omit<ApproveNoteResult, 'warnings'>>>(`/gelen-belge/irsaliyeler/${noteId}/onay`, body, { timeout: UPLOAD_TIMEOUT_MS })
       .then((r) => ({ ...r.data.data, warnings: r.data.warnings ?? [] })),
+
+  // Belge tipi tanıtma (S1b) — hepsi `gelen-belge:template`; ekran izinsizde çizilmez.
+  scanWords: (scanId: string): Promise<ScanWords> =>
+    apiClient.get<ApiResponse<ScanWords>>(`/gelen-belge/taramalar/${scanId}/kelimeler`).then((r) => r.data.data),
+
+  /** Öneri + aynı taramada önizleme; YAZMAZ. */
+  suggestTemplate: (body: SuggestBody): Promise<SuggestResult> =>
+    apiClient.post<ApiResponse<SuggestResult>>('/gelen-belge/sablonlar/oneri', body).then((r) => r.data.data),
+
+  listUserTemplates: (): Promise<UserTemplateView[]> =>
+    apiClient.get<ApiResponse<UserTemplateView[]>>('/gelen-belge/sablonlar/ozel').then((r) => r.data.data),
+
+  getUserTemplate: (code: string): Promise<UserTemplateDetail> =>
+    apiClient.get<ApiResponse<UserTemplateDetail>>(`/gelen-belge/sablonlar/ozel/${encodeURIComponent(code)}`).then((r) => r.data.data),
+
+  /** Yeni belge tipi; `clientToken` mantıksal deneme başına. */
+  createUserTemplate: (body: { name: string; template: TemplateJson; clientToken: string }): Promise<UserTemplateView> =>
+    apiClient.post<ApiResponse<UserTemplateView>>('/gelen-belge/sablonlar/ozel', body).then((r) => r.data.data),
+
+  /** Sürümlü güncelleme: araya giren kayıt → 409 USER_TEMPLATE_VERSION_CHANGED. */
+  updateUserTemplate: (code: string, body: { expectedVersion: number; template: TemplateJson; name?: string }): Promise<UserTemplateView> =>
+    apiClient
+      .put<ApiResponse<UserTemplateView>>(`/gelen-belge/sablonlar/ozel/${encodeURIComponent(code)}`, body)
+      .then((r) => r.data.data),
 };
 
 export type InboundDocApi = Pick<typeof inboundDocService, 'createDraftNote' | 'uploadScan'>;

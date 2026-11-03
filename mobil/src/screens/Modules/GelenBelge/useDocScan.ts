@@ -16,7 +16,8 @@ export function useDocScan(opts: { successHint?: string } = {}) {
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState<SubmitProgress>(EMPTY_PROGRESS);
   // Son gönderilen taslak: okuma sonucu bunun için izlenir; `runKey` aynı taslağa yeni sayfa gidince artar.
-  const [done, setDone] = useState<{ note: { id: string; noteNo: string }; pages: number; runKey: number } | null>(null);
+  // `sent`: gönderilen sayfaların yerel kopyası (sha256 + uri) — tanıtma ekranı (S1b) okunmuş taramayı bu fotoğrafla gösterir.
+  const [done, setDone] = useState<{ note: { id: string; noteNo: string }; pages: number; runKey: number; sent: { sha256: string; uri: string }[] } | null>(null);
   // "Yeni sayfa çek": sayfalar YENİ taslak değil, `done` taslağına eklenir (sayfa no kaldığı yerden).
   const [continuing, setContinuing] = useState(false);
   const senderDocNo = barcodeToDocNo(barcode);
@@ -83,7 +84,7 @@ export function useDocScan(opts: { successHint?: string } = {}) {
       // Deneme nesnesi birimden çıkmaz (test_istemci_token_uretimi): yalnız üç yöntem sarılarak verilir.
       const binding = { token: () => attempt.token(), onFailure: (e: unknown) => attempt.onFailure(e), onSuccess: () => attempt.onSuccess() };
       const r = await submitDocScan(inboundDocService, input, binding, progress);
-      setDone({ note: r.note, pages: pageBase + r.uploaded, runKey: (done?.runKey ?? 0) + 1 });
+      setDone({ note: r.note, pages: pageBase + r.uploaded, runKey: (done?.runKey ?? 0) + 1, sent: [...(continuing && done ? done.sent : []), ...list.map(({ sha256, uri }) => ({ sha256, uri }))] });
       reset();
       const text1 = continuing ? `${r.uploaded} sayfa ${r.note.noteNo} taslağına eklendi` : `Taslak ${r.note.noteNo} oluşturuldu`;
       Toast.show({ type: 'success', text1, text2: opts.successHint ?? 'Okuma sonucu ekranda; onay panelden (Gelen Belgeler) yapılır.' });
