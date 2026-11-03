@@ -1728,6 +1728,21 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         ],
       },
       {
+        // Gülkesim S5: `defaultValue` backend `DEFAULT_TAMBUR_LABEL_PRINT_TIMING` ile birebir.
+        enumKey: "tamburLabelPrintTiming",
+        group: "Tambur",
+        title: "Tambur etiket basım zamanı",
+        summary: "Tambur'da çıkan topun etiketi hemen mi, iş bitince toplu mu basılsın.",
+        desc: "Her top çıkınca (varsayılan): tablet her kesimden sonra etiketi hemen basar. İş bitince toplu: kesimden sonra etiket basılmaz; tamburcu işi bitirince \"Bu işten çıkanlar\" panelindeki \"Basılmayanları bas\" düğmesiyle hepsini birden basar. Etiket içeriği iki seçenekte de aynıdır.",
+        defaultValue: "EACH",
+        display: "radio",
+        audience: ["Operatör", "Yönetim"],
+        options: [
+          { value: "EACH", label: "Her top çıkınca (bugünkü)", hint: "Kesimden hemen sonra etiket basılır." },
+          { value: "END", label: "İş bitince toplu", hint: "Basılmayan toplar listede birikir, tek düğmeyle basılır." },
+        ],
+      },
+      {
         // D4-F2 (2026-11-01): `defaultValue` backend `DEFAULT_LABEL_CUSTOMER_CODE_AT` ile birebir.
         enumKey: "labelCustomerCodeAt",
         group: "Tambur",

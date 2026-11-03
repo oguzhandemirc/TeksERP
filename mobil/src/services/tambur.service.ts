@@ -284,6 +284,24 @@ export interface TamburDeleteErrorRequest {
   errorId: string;
 }
 
+/** GET /tambur/label-settings yanıtı (Gülkesim S5). */
+export interface TamburLabelSettings {
+  customerId: string | null;
+  widthSource: 'INCOMING' | 'MEASURED' | null;
+  weighRequired: boolean;
+  splitLengthM: number | null;
+  printTiming: 'EACH' | 'END';
+}
+
+/** GET/PUT /labels/work-orders/:id/overrides yanıtı. */
+export interface WorkOrderLabelOverrides {
+  workOrderId: string;
+  workOrderNumber: string;
+  overrides: Record<string, string>;
+  keys: readonly { key: string; label: string; type: 'text' | 'number' }[];
+  updatedAt: string;
+}
+
 export const tamburService = {
   // Refakat kartı barkodu ile Tambur adımını + açık topları çek
   getByCardBarcode: (barcode: string): Promise<ApiResponse<TamburStepSummary>> =>
@@ -451,6 +469,29 @@ export const tamburService = {
    * Açık kumaşta tek kesim — child Roll (barkodlu) oluşur, parent açık kumaşın
    * currentQty'i kalan metreye düşer. Status WAREHOUSE/SCRAP/A1_STOCK.
    */
+  /** Kesim ekranı müşteri ayarları + basım zamanı (Gülkesim S5). Eski backend 404 → çağıran varsayılana düşer. */
+  labelSettings: (params: { rollId?: string | null; customerId?: string | null }): Promise<TamburLabelSettings> => {
+    const qs = new URLSearchParams();
+    if (params.rollId) qs.set('rollId', params.rollId);
+    if (params.customerId) qs.set('customerId', params.customerId);
+    return apiClient
+      .get<ApiResponse<TamburLabelSettings>>(`/tambur/label-settings?${qs.toString()}`)
+      .then((r) => r.data.data as TamburLabelSettings);
+  },
+
+  /** İş emri etiket bilgisi (eksik alan / düzelt / boş bas). */
+  getLabelOverrides: (workOrderId: string): Promise<WorkOrderLabelOverrides> =>
+    apiClient
+      .get<ApiResponse<WorkOrderLabelOverrides>>(`/labels/work-orders/${workOrderId}/overrides`)
+      .then((r) => r.data.data as WorkOrderLabelOverrides),
+  putLabelOverrides: (
+    workOrderId: string,
+    body: { overrides: Record<string, string | null>; updatedAt?: string | null },
+  ): Promise<WorkOrderLabelOverrides> =>
+    apiClient
+      .put<ApiResponse<WorkOrderLabelOverrides>>(`/labels/work-orders/${workOrderId}/overrides`, body)
+      .then((r) => r.data.data as WorkOrderLabelOverrides),
+
   cutOpenFabric: (
     rollId: string,
     data: TamburCutRequest
@@ -479,7 +520,7 @@ export const tamburService = {
    */
   cutWarehouseRoll: (
     rollId: string,
-    data: { cutLength: number; qualityGrade?: string | null; notes?: string | null; targetOrderLineId?: string | null; targetCustomerId?: string | null; markedForKartela?: boolean; rawDestination?: 'STOCK' | 'WAREHOUSE'; clientToken?: string; measure?: TamburMeasureBody }
+    data: { cutLength: number; qualityGrade?: string | null; notes?: string | null; targetOrderLineId?: string | null; targetCustomerId?: string | null; markedForKartela?: boolean; rawDestination?: 'STOCK' | 'WAREHOUSE'; clientToken?: string; measure?: TamburMeasureBody; weightKg?: number | null }
   ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> =>
     apiClient
       .post<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>>(

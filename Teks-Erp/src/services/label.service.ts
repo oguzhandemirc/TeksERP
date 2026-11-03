@@ -79,7 +79,9 @@ import {
 } from "./helpers/label-loom-context.helper";
 import { pickVariant } from "./helpers/label-variant.resolver";
 import { templateTextLines } from "./helpers/native-label.shared";
-import { renderLabel, renderedBytes, shouldRasterize, type LabelRenderInput, type RenderedLabel } from "./helpers/label-renderer.registry";
+import { applyLabelOverrides, readLabelOverrides } from "../config/label-overrides";
+import { readLabelWidthSource, resolveLabelWidthCm } from "./helpers/label-width-source.helper";
+import { renderLabel, renderedBytes, shouldRasterize, withTemplateUnits, type LabelRenderInput, type RenderedLabel } from "./helpers/label-renderer.registry";
 import { renderCanvasRaster, type RasterLanguage } from "./helpers/raster/raster-render";
 import { rasterPreviewHtml } from "./helpers/raster/raster-bmp";
 import { readCanvasLayout } from "../config/label-elements";
@@ -194,7 +196,8 @@ const ROLL_LABEL_INCLUDE = {
   // Etiketteki parti no (P…) topun PARTİSİNDEN gelir. Eskiden producedInStep.workOrder
   // (İş Emri) "batchNumber"ı taşırdı; parti modelinde parti ayrı nesne (roll.batch).
   batch: {
-    select: { batchNumber: true, workOrder: { select: { workOrderNumber: true } } },
+    // labelOverrides: İE etiket bilgisi (Gülkesim S5) — tekil + toplu yol aynı include'dan okur.
+    select: { batchNumber: true, workOrder: { select: { workOrderNumber: true, labelOverrides: true } } },
   },
 } satisfies Prisma.RollInclude;
 
@@ -484,6 +487,23 @@ export class LabelService {
     // Müşteri barkodu (D4-F3): yalnız kodlu topta alan EKLENİR (kodsuz topta payload bayt-aynı).
     const customerCode = (preloaded?.customerCodes ?? (await loadActiveCustomerCodes([roll.id]))).get(roll.id);
     if (customerCode) payload.customerCode = customerCode;
+
+    // Etiketteki en kaynağı — müşteri ayarı (etiket müşterisi ?? malın sahibi); NULL = bugünkü güncel en.
+    const settingsCustomerId = customerId ?? roll.ownerCustomerId ?? null;
+    if (settingsCustomerId) {
+      const cs = await prisma.customer.findUnique({
+        where: { id: settingsCustomerId },
+        select: { labelWidthSource: true },
+      });
+      payload.widthCm = await resolveLabelWidthCm({
+        rollId: roll.id,
+        currentWidthCm: payload.widthCm,
+        source: readLabelWidthSource(cs?.labelWidthSource),
+      });
+    }
+    // İE etiket bilgisi (eksik alan / düzeltme / boş bas) — kaynak değerlerin ÜSTÜNE, en son.
+    const overrides = readLabelOverrides(roll.batch?.workOrder?.labelOverrides);
+    if (Object.keys(overrides).length > 0) applyLabelOverrides(payload, overrides);
 
     return { success: true, data: payload };
   }
@@ -964,7 +984,8 @@ export class LabelService {
      * değil. Raster dalı bunu zaten `copies: 1` ile yapıyordu; HTML ve komut
      * dalları devralmaya devam ediyordu — burada tek yerde kapatıldı.
      */
-    const input = { ...built.input, copies: 1 };
+    // Birim sistemi raster dalında da (renderLabel dışı) aynı biçimle görünsün.
+    const input = withTemplateUnits({ ...built.input, copies: 1 });
     const language = input.format.language;
     if (language === PrinterLanguage.RASTER_HTML) {
       return { success: true, data: { mode: "html", language, content: (await renderLabel(language, input)).content, kind, meta }, ...withWarnings(built.warnings) };

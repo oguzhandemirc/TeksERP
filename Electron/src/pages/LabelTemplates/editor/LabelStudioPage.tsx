@@ -7,6 +7,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { UnitSettingsPanel } from "./UnitSettingsPanel";
+import type { LabelUnitSettings } from "./unit-settings";
 import { toast } from "sonner";
 import { Save, Printer } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -64,6 +66,7 @@ export function LabelStudioPage() {
 
   const [name, setName] = useState("");
   const [rawCode, setRawCode] = useState<RawCodeMap>({});
+  const [unitSettings, setUnitSettings] = useState<LabelUnitSettings | null>(null);
   // Önizleme bağlamı: mock verinin sözlüğü (havuz şablonu her bağlamda basılabilir).
   const [previewKind, setPreviewKind] = useState<LabelKind>(LabelKind.ROLL_FINISHED);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
@@ -99,6 +102,7 @@ export function LabelStudioPage() {
     if (template) {
       setName(template.name);
       setRawCode(template.rawCode ?? {});
+      setUnitSettings(template.unitSettings ?? null);
       if (template.kind) setPreviewKind(template.kind);
     }
   }, [template]);
@@ -128,7 +132,7 @@ export function LabelStudioPage() {
 
   const saveMut = useMutation({
     mutationFn: async () => {
-      await labelTemplateService.update(id!, { name: name.trim(), rawCode });
+      await labelTemplateService.update(id!, { name: name.trim(), rawCode, unitSettings });
       if (activeVariant) {
         await labelTemplateService.updateVariant(activeVariant.id, { elements: state.layout });
       }
@@ -244,6 +248,7 @@ export function LabelStudioPage() {
                           </SelectContent>
                         </Select>
                       </div>
+                      <UnitSettingsPanel value={unitSettings} onChange={setUnitSettings} />
                       <div className="border-t pt-3">
                         <ElementPalette
                           // Eleman başlığı da SEÇİLİ BAĞLAMIN adıyla doğar (çuvalda
@@ -285,7 +290,7 @@ export function LabelStudioPage() {
 
                     {/* SAĞ: önizleme + seçili eleman özellikleri + lint */}
                     <div className="space-y-3 xl:min-h-0 xl:overflow-y-auto xl:pr-1">
-                      <CanvasPreview kind={previewKind} widthMm={canvas.widthMm} heightMm={canvas.heightMm} layout={state.layout} sample={sample} />
+                      <CanvasPreview kind={previewKind} widthMm={canvas.widthMm} heightMm={canvas.heightMm} layout={state.layout} sample={sample} unitSettings={unitSettings} />
                       <PropertiesPanel element={selected} catalog={catalog}
                         multiCount={state.selectedIds.length}
                         onChange={(patch) => selected && state.updateElement(selected.id, patch)}
@@ -318,7 +323,7 @@ export function LabelStudioPage() {
         fetchNative={(o) =>
           labelTemplateService.canvasPreview({
             kind: previewKind, widthMm: canvas.widthMm, heightMm: canvas.heightMm, elements: state.layout,
-            peripheralId: o?.peripheralId, copies: o?.copies, qualityGrade: sample.qualityGrade,
+            peripheralId: o?.peripheralId, copies: o?.copies, qualityGrade: sample.qualityGrade, unitSettings,
           })
         }
       />

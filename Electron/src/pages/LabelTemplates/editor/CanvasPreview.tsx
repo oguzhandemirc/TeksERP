@@ -23,6 +23,7 @@ import {
 import type { CanvasLayout } from "@/types/label-canvas";
 import { useLabelPrinter } from "@/hooks/useLabelPrinter";
 import { NO_GRADE, type SampleGrade } from "./useSampleGrade";
+import type { LabelUnitSettings } from "./unit-settings";
 
 interface Props {
   kind: LabelKind;
@@ -31,6 +32,8 @@ interface Props {
   layout: CanvasLayout;
   /** Örnek top kalitesi (koşullu eleman değerlendirmesi) — stüdyo kabuğunda tutulur. */
   sample: SampleGrade;
+  /** Şablonun (kaydedilmemiş olabilir) birim sistemi. */
+  unitSettings?: LabelUnitSettings | null;
 }
 
 /** Önizleme kutusu üst sınırı (px) — dar/uzun etiketler bunda sınırlanır. */
@@ -38,7 +41,7 @@ const PREVIEW_MAX_H = 460;
 /** CSS mm → px (ekran 96dpi): buildCanvasLabelHtml `.label` fiziksel mm basar. */
 const PX_PER_MM = 96 / 25.4;
 
-export function CanvasPreview({ kind, widthMm, heightMm, layout, sample }: Props) {
+export function CanvasPreview({ kind, widthMm, heightMm, layout, sample, unitSettings }: Props) {
   const [view, setView] = useState<"visual" | "code">("visual");
   const [lang, setLang] = useState<"active" | RawCodeLang>("active");
   // "Aktif dil" → bu bilgisayara seçili Cihaz Kaydı yazıcısının dili (PPLA/PPLB/ZPL);
@@ -78,7 +81,7 @@ export function CanvasPreview({ kind, widthMm, heightMm, layout, sample }: Props
   const { grades, hasConditions, value: gradeChoice, setValue: setSampleGrade, qualityGrade: grade } = sample;
 
   // 350ms debounce — her sürükleme adımında backend'e gitmesin.
-  const liveKey = JSON.stringify({ kind, widthMm, heightMm, layout, lang, peripheralId, grade });
+  const liveKey = JSON.stringify({ kind, widthMm, heightMm, layout, lang, peripheralId, grade, unitSettings: unitSettings ?? null });
   const [debouncedKey, setDebouncedKey] = useState(liveKey);
   useEffect(() => {
     const t = setTimeout(() => setDebouncedKey(liveKey), 350);
@@ -91,7 +94,7 @@ export function CanvasPreview({ kind, widthMm, heightMm, layout, sample }: Props
   // toast'u) üretiyordu. Boş yük hiç istek atmaz.
   const debounced = JSON.parse(debouncedKey) as {
     kind: LabelKind; widthMm: number; heightMm: number; layout: CanvasLayout;
-    lang: "active" | RawCodeLang; peripheralId?: string; grade?: string;
+    lang: "active" | RawCodeLang; peripheralId?: string; grade?: string; unitSettings: LabelUnitSettings | null;
   };
   const previewQ = useQuery({
     queryKey: ["label-canvas-preview", debouncedKey],
@@ -105,6 +108,7 @@ export function CanvasPreview({ kind, widthMm, heightMm, layout, sample }: Props
         // Aktif dil için: seçili yazıcının languageOverride'ı (yoksa RASTER_HTML).
         peripheralId: debounced.peripheralId,
         qualityGrade: debounced.grade,
+        unitSettings: debounced.unitSettings,
       }),
     enabled: debounced.layout.elements.length > 0,
     staleTime: 0,

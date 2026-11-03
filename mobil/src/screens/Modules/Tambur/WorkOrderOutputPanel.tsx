@@ -24,13 +24,14 @@
 // =============================================================================
 import React, { useEffect, useMemo, useRef } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, Icon, IconButton, TouchableRipple, ActivityIndicator } from 'react-native-paper';
+import { Text, Icon, IconButton, TouchableRipple, ActivityIndicator, Button } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 
 import { tamburService } from '../../../services/tambur.service';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import type { Roll } from '../../../types/models';
 import { formatFactory } from '../../../lib/factory-time';
+import { unprintedRolls } from './finalLabel';
 
 /** "SS:dd" — panelde tarih GEREKMEZ: kapsam zaten tek iş emri. */
 function hhmm(v: string | Date | null | undefined): string {
@@ -41,12 +42,15 @@ export default function WorkOrderOutputPanel({
   workOrderId,
   onPrint,
   onUndo,
+  onPrintUnprinted,
 }: {
   workOrderId: string | null;
   /** Etiketi yeniden bas — parent'ın yazıcı akışına verir. */
   onPrint: (roll: Roll) => void;
   /** Geri alma önizlemesini aç (yıkıcı-işlem kuralı: onaysız iptal yok). */
   onUndo: (roll: Roll) => void;
+  /** S5 basım zamanı "iş bitince": verilirse etiketi basılmamış topları toplu basar. */
+  onPrintUnprinted?: (rolls: Roll[]) => void;
 }) {
   const q = useQuery({
     queryKey: ['tambur', 'wo-output', workOrderId],
@@ -75,6 +79,8 @@ export default function WorkOrderOutputPanel({
   useEffect(() => {
     listRef.current?.scrollTo({ y: 0, animated: false });
   }, [newestId]);
+
+  const unprinted = useMemo(() => unprintedRolls(rolls), [rolls]);
 
   const totals = useMemo(() => {
     let meters = 0;
@@ -145,6 +151,18 @@ export default function WorkOrderOutputPanel({
         </View>
       </View>
 
+      {onPrintUnprinted && unprinted.length > 0 ? (
+        <Button
+          mode="contained"
+          icon="printer-outline"
+          onPress={() => onPrintUnprinted(unprinted)}
+          style={s.bulkBtn}
+          testID="wo-output-basilmayanlari-bas"
+        >
+          {`Basılmayanları bas (${unprinted.length})`}
+        </Button>
+      ) : null}
+
       {q.isLoading ? (
         <View style={s.empty}>
           <ActivityIndicator color="#94a3b8" />
@@ -198,6 +216,7 @@ export default function WorkOrderOutputPanel({
 }
 
 const s = StyleSheet.create({
+  bulkBtn: { marginHorizontal: 8, marginBottom: 6 },
   wrap: {
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
