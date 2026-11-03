@@ -20,6 +20,7 @@ import {
   customerBatchKeySql,
   customerBatchMemberSql,
   effectiveShipReadyPolicy,
+  liveReadinessSql,
   readinessClassSql,
   type ReadinessClass, type ShipReadyPolicy, type ShipReadyState,
 } from "./helpers/ship-readiness.helper";
@@ -107,28 +108,65 @@ export function parseLimit(raw: unknown, def: number, max: number): number {
 // ---------------------------------------------------------------------------
 // Müşteri partisi anahtarı TEK yerde: `customerBatchKeySql` (`ship-readiness.helper`; belgeden iş emri aynısını okur).
 
-/** `onlyIds` yalnız belge/parti biriminde: birden çok birimin üyeliği tek sorguda (K28 sevkte silme taraması). */
+/**
+ * Birimde en az bir CANLI (HAZIR ∪ İŞLEMDE) top olan birim kimlikleri (`unit_id` metni). Liste HAVING'i canlı topu
+ * olmayan birimi zaten düşürdüğünden bu ön süzgeç sonucu değiştirmez; bütün `rolls` geçmişinin sınıflanmasını önler
+ * (S15c-d1). Belge birimleri: canlı toptan YUKARI (`parentRollId`, aynı derinlik tavanı) satır topuna çıkılır;
+ * LATERAL + OFFSET 0 her adımı birincil anahtar aramasına zorlar (özyineleme tahmini tam tarama seçtiriyordu).
+ */
+export function liveUnitIdsSql(unit: ReadyWorkUnit): Prisma.Sql {
+  switch (unit) {
+    case "workOrder":
+      return Prisma.sql`SELECT DISTINCT lb."workOrderId"::text AS unit_id FROM rolls lr JOIN batches lb ON lb.id = lr."batchId" WHERE ${liveReadinessSql("lr")}`;
+    case "customer":
+      return Prisma.sql`SELECT DISTINCT lr."ownerCustomerId"::text AS unit_id FROM rolls lr WHERE lr."ownerCustomerId" IS NOT NULL AND ${liveReadinessSql("lr")}`;
+    case "deliveryNote":
+    case "customerBatch": {
+      const key = unit === "deliveryNote" ? Prisma.sql`ln.id::text` : customerBatchKeySql("ln");
+      const unitFilter = unit === "customerBatch" ? Prisma.sql`AND ${customerBatchMemberSql("ln")}` : Prisma.empty;
+      return Prisma.sql`
+        WITH RECURSIVE up(roll_id, parent_id, depth) AS (
+          SELECT lr.id, lr."parentRollId", 0 FROM rolls lr WHERE ${liveReadinessSql("lr")}
+          UNION
+          SELECT p.id, p."parentRollId", u.depth + 1
+          FROM up u CROSS JOIN LATERAL (SELECT x.id, x."parentRollId" FROM rolls x WHERE x.id = u.parent_id OFFSET 0) p
+          WHERE u.depth < ${MAX_DESCENT_DEPTH}
+        )
+        SELECT DISTINCT ${key} AS unit_id FROM up
+        JOIN customer_delivery_note_lines ll ON ll."rollId" = up.roll_id
+        JOIN customer_delivery_notes ln ON ln.id = ll."noteId"
+        WHERE ln.status::text <> 'CANCELLED' ${unitFilter}`;
+    }
+  }
+}
+
+/**
+ * `onlyIds`: birden çok birimin üyeliği tek sorguda (K28 sevkte silme taraması; liste toplamında canlı birimler).
+ * Boş `onlyIds` süzgeç DEĞİLDİR (bütün birimler) — çağıran boş kümeyi kendisi kısa devre eder.
+ */
 export function membershipSql(unit: ReadyWorkUnit, onlyId?: string, onlyIds?: readonly string[]): Prisma.Sql {
+  const many = onlyIds?.length ? [...onlyIds] : null;
   switch (unit) {
     case "workOrder":
       return Prisma.sql`
         SELECT b."workOrderId"::text AS unit_id, r.id AS roll_id
         FROM rolls r JOIN batches b ON b.id = r."batchId"
-        ${onlyId ? Prisma.sql`WHERE b."workOrderId" = ${onlyId}::uuid` : Prisma.empty}`;
+        ${onlyId ? Prisma.sql`WHERE b."workOrderId" = ${onlyId}::uuid` : many ? Prisma.sql`WHERE b."workOrderId" = ANY(${many}::uuid[])` : Prisma.empty}`;
     case "customer":
       return Prisma.sql`
         SELECT r."ownerCustomerId"::text AS unit_id, r.id AS roll_id
         FROM rolls r
         WHERE r."ownerCustomerId" IS NOT NULL
-        ${onlyId ? Prisma.sql`AND r."ownerCustomerId" = ${onlyId}::uuid` : Prisma.empty}`;
+        ${onlyId ? Prisma.sql`AND r."ownerCustomerId" = ${onlyId}::uuid` : many ? Prisma.sql`AND r."ownerCustomerId" = ANY(${many}::uuid[])` : Prisma.empty}`;
     case "deliveryNote":
     case "customerBatch": {
       const key = unit === "deliveryNote" ? Prisma.sql`n.id::text` : customerBatchKeySql("n");
       const unitFilter = unit === "customerBatch"
         ? Prisma.sql`AND ${customerBatchMemberSql("n")}`
         : Prisma.empty;
-      const idFilter = onlyId ? Prisma.sql`AND ${key} = ${onlyId}` : onlyIds?.length ? Prisma.sql`AND ${key} IN (${Prisma.join([...onlyIds])})` : Prisma.empty;
+      const idFilter = onlyId ? Prisma.sql`AND ${key} = ${onlyId}` : many ? Prisma.sql`AND ${key} = ANY(${many}::text[])` : Prisma.empty;
       // Kök: belgenin onayla doğan topları; aşağı soy `parentRollId` (tambur bölmesi) üzerinden, derinlik tavanlı.
+      // LATERAL + OFFSET 0: her adım `parentRollId` indeksinden (özyineleme tahmini her turda tam tarama seçtiriyordu).
       return Prisma.sql`
         SELECT DISTINCT t.unit_id, t.roll_id FROM (
           WITH RECURSIVE tree(unit_id, roll_id, depth) AS (
@@ -138,7 +176,7 @@ export function membershipSql(unit: ReadyWorkUnit, onlyId?: string, onlyIds?: re
             WHERE l."rollId" IS NOT NULL AND n.status::text <> 'CANCELLED' ${unitFilter} ${idFilter}
             UNION ALL
             SELECT t.unit_id, c.id, t.depth + 1
-            FROM tree t JOIN rolls c ON c."parentRollId" = t.roll_id
+            FROM tree t CROSS JOIN LATERAL (SELECT x.id FROM rolls x WHERE x."parentRollId" = t.roll_id OFFSET 0) c
             WHERE t.depth < ${MAX_DESCENT_DEPTH}
           )
           SELECT unit_id, roll_id FROM tree
@@ -157,13 +195,18 @@ interface AggRow {
   scrap_m: Prisma.Decimal | null;
 }
 
-async function aggregateUnits(unit: ReadyWorkUnit, onlyIds?: readonly string[]): Promise<AggRow[]> {
-  const only = onlyIds ? Prisma.sql`WHERE m.unit_id IN (${Prisma.join(onlyIds)})` : Prisma.empty;
-  return prisma.$queryRaw<AggRow[]>(Prisma.sql`
-    WITH members AS (${membershipSql(unit)}),
+/**
+ * Birim toplamları SQL'i — yalnız verilen birimlerin üyeleri sınıflanır (dışa açık: `test_sevke_hazir` plan ölçümü).
+ * HAVING canlı-birim koşulunu yine taşır: aday listesi daha geniş verilse de sonuç değişmez.
+ */
+export function aggregateUnitsSql(unit: ReadyWorkUnit, unitIds: readonly string[]): Prisma.Sql {
+  return Prisma.sql`
+    WITH members AS (${membershipSql(unit, undefined, unitIds)}),
     classed AS (
       SELECT m.unit_id, r."currentQty" AS qty, ${readinessClassSql("r")} AS cls
-      FROM members m JOIN rolls r ON r.id = m.roll_id ${only}
+      FROM members m ${unit === "deliveryNote" || unit === "customerBatch"
+        ? Prisma.sql`CROSS JOIN LATERAL (SELECT x."currentQty", x.status FROM rolls x WHERE x.id = m.roll_id OFFSET 0) r`
+        : Prisma.sql`JOIN rolls r ON r.id = m.roll_id`}
     )
     SELECT unit_id,
       COUNT(*) FILTER (WHERE cls = 'READY')            AS ready_count,
@@ -175,7 +218,26 @@ async function aggregateUnits(unit: ReadyWorkUnit, onlyIds?: readonly string[]):
     FROM classed
     WHERE cls IS NOT NULL
     GROUP BY unit_id
-    HAVING COUNT(*) FILTER (WHERE cls IN ('READY', 'IN_PROCESS')) > 0`);
+    HAVING COUNT(*) FILTER (WHERE cls IN ('READY', 'IN_PROCESS')) > 0`;
+}
+
+/**
+ * JIT kapalı salt okuma: özyinelemeli soyun satır tahmini maliyeti jit eşiklerinin üstüne taşıyor, derleme sorgunun
+ * kendisinden uzun sürüyordu (S15c-d1 ölçümü: belge biriminde 1,2–2,7 sn). Sonuç aynı; yalnız plan derlemesi.
+ */
+async function queryWithoutJit<T>(sql: Prisma.Sql): Promise<T[]> {
+  const [, rows] = await prisma.$transaction([prisma.$executeRaw`SET LOCAL jit = off`, prisma.$queryRaw<T[]>(sql)]);
+  return rows;
+}
+
+async function aggregateUnits(unit: ReadyWorkUnit, onlyIds?: readonly string[]): Promise<AggRow[]> {
+  // Önce canlı birimler (indeksli `status`), sonra yalnız onların toplamı. `onlyIds` eşlemesi eskisi gibi metin eşitliği.
+  const want = onlyIds ? new Set(onlyIds) : null;
+  const ids = (await queryWithoutJit<{ unit_id: string }>(liveUnitIdsSql(unit)))
+    .map((r) => r.unit_id)
+    .filter((id) => !want || want.has(id));
+  if (ids.length === 0) return [];
+  return queryWithoutJit<AggRow>(aggregateUnitsSql(unit, ids));
 }
 
 interface UnitMeta {
