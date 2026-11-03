@@ -28,6 +28,20 @@ import { claimWorkOrderStatusTx, type WorkOrderEventCtx } from "./workorder-even
 import { freezeCloseSnapshotTx } from "./workorder-close-snapshot.helper";
 import { TERIM } from "../../constants/terim";
 
+/**
+ * "Sonraki adım" TEK tanımı: sırası büyük, ATLANDI (SKIPPED) olmayan ilk adım. `steps` stepSequence'a göre ARTAN
+ * sıralı gelmeli. finish / reopen / reopen önizlemesi aynı tanımı paylaşmazsa yeniden açma kalıcı kapanır (K29).
+ * Prisma ikizi: `nextLiveStepWhere`.
+ */
+export function nextLiveStep<T extends { stepSequence: number; status: StepStatus }>(steps: readonly T[], afterSeq: number): T | undefined {
+  return steps.find((s) => s.stepSequence > afterSeq && s.status !== StepStatus.SKIPPED);
+}
+
+/** `nextLiveStep`in Prisma ikizi (orderBy stepSequence asc + findFirst ile kullanılır). */
+export function nextLiveStepWhere(workOrderId: string, afterSeq: number): Prisma.WorkOrderStepWhereInput {
+  return { workOrderId, stepSequence: { gt: afterSeq }, status: { not: StepStatus.SKIPPED } };
+}
+
 export type TxClient = Prisma.TransactionClient;
 
 /**
