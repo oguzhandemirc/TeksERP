@@ -194,6 +194,8 @@ const NAMING_CONVENTION = [
       "typeMethod",
       "objectLiteralMethod",
       "classMethod",
+      // Terim-rejimli etiket haritaları getter taşır (`get WORK_ORDER() {...}`): anahtar veridir.
+      "classicAccessor",
     ],
     format: null,
   },

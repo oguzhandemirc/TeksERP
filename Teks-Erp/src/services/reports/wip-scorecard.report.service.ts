@@ -31,7 +31,6 @@ import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
 import { round1 } from "./_breakdown";
-import { TERIM } from "../../constants/terim";
 
 export interface WipStationRow {
   key: string;
@@ -180,7 +179,7 @@ export async function getWipScorecard(range: DateRange, filters: WipFilters = {}
       SELECT
         wo.id AS "workOrderId", wo."workOrderNumber" AS "workOrderNumber",
         wo.status::text AS "status",
-        -- tz-ok: ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} açık kaldığı mutlak süre.
+        -- tz-ok: work order açık kaldığı mutlak süre.
         EXTRACT(EPOCH FROM (now() - wo."createdAt")) / 86400.0 AS "daysOpen"
       FROM work_orders wo
       WHERE wo.status IN ('PLANNED','IN_PROGRESS')
@@ -195,7 +194,7 @@ export async function getWipScorecard(range: DateRange, filters: WipFilters = {}
     `),
     prisma.$queryRaw<Array<{ cnt: bigint; oldestDays: number | null }>>(Prisma.sql`
       SELECT COUNT(*) AS "cnt",
-             -- tz-ok: en eski açık ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} mutlak yaşı.
+             -- tz-ok: en eski açık work order mutlak yaşı.
              MAX(EXTRACT(EPOCH FROM (now() - wo."createdAt")) / 86400.0) AS "oldestDays"
       FROM work_orders wo
       WHERE wo.status IN ('PLANNED','IN_PROGRESS')

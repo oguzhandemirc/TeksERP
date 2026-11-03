@@ -61,4 +61,6 @@ export const VERIFICATION_KEPT_JOBS = [
   "startModuleProfileJob",
   "startDefaultWarehouseReconciler",
   "startLicensePoll",
+  // K20 iş emri adı rejimi: yalnız bayrak agregatını OKUR (DB'ye yazmaz); doğrulamada da adlar doğru rejimden çıksın.
+  "startTermRegimeJob",
 ] as const;

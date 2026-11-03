@@ -185,8 +185,9 @@ const metreDot = (path: string) =>
 const cmdRow = (label: string, value: string) =>
   `<div class="cmd-lbl">${label}</div><div class="cmd-sep">:</div><div class="cmd-val">${value}</div>`;
 
-// K20: iş emri adı rejimden çözülür — HTML okuma anında kurulur (modül düzeyinde donmaz).
-const htmlKur = (): string => String.raw`<div class="sheet">
+// K20: iş emri adı rejimden çözülür — yer tutucu okuma anında doldurulur (modül düzeyinde donmaz).
+const IS_EMRI_YER = "%%TERIM_IS_EMRI%%";
+const HTML_SABLON = String.raw`<div class="sheet">
 {%- assign parti_html = "" -%}
 {%- if ayar.sections.batchInfo and ${filled("belge.parti_no")} -%}{%- capture parti_html -%}<div class="ln ln-batch">Parti No: <b>{{ belge.parti_no }}</b></div>{%- endcapture -%}{%- endif -%}
 {%- assign kumas_sayisi = tablolar.kumaslar | size -%}
@@ -206,7 +207,7 @@ ${LOGO_LEFT}
 <div class="company">{{ firma.ad }}</div>
 ${letterhead()}
 {%- if ayar.sections.subcontractorInfo -%}<div class="sayin">SAYIN: <b>{{ karsi_taraf.ad }}</b></div>{%- endif -%}
-{%- if ayar.sections.workOrderInfo -%}<div class="sub">{{ belge.istasyon }} · ${TERIM.terbiyeIsEmri.tekil} {{ belge.is_emri_no }}{%- if ayar.sections.accountNo and ${filled("karsi_taraf.kod")} %} · Hesap: {{ karsi_taraf.kod }}{% endif -%}</div>{%- endif -%}
+{%- if ayar.sections.workOrderInfo -%}<div class="sub">{{ belge.istasyon }} · ${IS_EMRI_YER} {{ belge.is_emri_no }}{%- if ayar.sections.accountNo and ${filled("karsi_taraf.kod")} %} · Hesap: {{ karsi_taraf.kod }}{% endif -%}</div>{%- endif -%}
 {%- if ayar.placements.batchInfo == "left" -%}{{ parti_html }}{{ kumas_html }}{%- endif -%}
 </div>
 <div class="hr">
@@ -293,7 +294,7 @@ ${STAMPS}
 export const subcontractorDispatchSystem: SystemEquivalent = {
   docType: "SUBCONTRACTOR_DISPATCH",
   editMode: "CODE",
-  get html() { return htmlKur(); },
+  get html() { return HTML_SABLON.replace(IS_EMRI_YER, TERIM.terbiyeIsEmri.tekil); },
   css,
   pageSettings: (settings) => pageSettingsFor(settings, marginOf(settings)),
   tableBindings: {},

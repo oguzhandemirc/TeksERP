@@ -359,7 +359,6 @@ export function dizgeTopla(v: unknown, yol: string, out: [string, string][], gor
   const moduller: [string, Record<string, unknown>][] = [];
   for (const f of adaylar) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       moduller.push([rel(f), require(f) as Record<string, unknown>]);
     } catch (e) {
       check(`§4 ${rel(f)} yüklenebilir`, false, `ÖLÇÜLEMEDİ — ${(e as Error).message.slice(0, 80)}`);

@@ -835,8 +835,8 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         // SY-M1: `defaultValue` backend `DEFAULT_ORDER_PRODUCTION_PROPOSAL` ile birebir; KAPALI = bugünkü davranış.
         enumKey: "orderProductionProposal",
         title: "Siparişten üretim önerisi",
-        get summary() { return `Sipariş detayında \"Üretime gönder\" ile dokuma iş emri ve ${TERIM.terbiyeIsEmri.tekilKucuk} önerisi.`; },
-        get desc() { return `Kapalı (varsayılan): bugünkü gibi; ${TERIM.terbiyeIsEmri.cogulKucuk} elle ya da toplu eylemle açılır. Önizleme: sipariş detayında \"Üretime gönder\" düğmesi çıkar; program sipariş satırlarından hangi dokuma iş emirlerinin ve ${TERIM.terbiyeIsEmri.cogulCekimKucuk.ilgi} açılacağını listeler, siz işaretleyip tek seferde oluşturursunuz. Onayda taslak: sipariş onaylanınca bu önizleme kendiliğinden açılır; yine siz onaylamadan hiçbir kayıt yaratılmaz.`; },
+        get summary() { return `Sipariş detayında "Üretime gönder" ile dokuma iş emri ve ${TERIM.terbiyeIsEmri.tekilKucuk} önerisi.`; },
+        get desc() { return `Kapalı (varsayılan): bugünkü gibi; ${TERIM.terbiyeIsEmri.cogulKucuk} elle ya da toplu eylemle açılır. Önizleme: sipariş detayında "Üretime gönder" düğmesi çıkar; program sipariş satırlarından hangi dokuma iş emirlerinin ve ${TERIM.terbiyeIsEmri.cogulCekimKucuk.ilgi} açılacağını listeler, siz işaretleyip tek seferde oluşturursunuz. Onayda taslak: sipariş onaylanınca bu önizleme kendiliğinden açılır; yine siz onaylamadan hiçbir kayıt yaratılmaz.`; },
         defaultValue: "KAPALI",
         display: "radio",
         audience: ["Planlamacı", "Yönetim"],
