@@ -45,6 +45,12 @@ export interface DocRow {
 const EMPTY_CATALOG: KursunGramajCatalog = { propertyId: null, options: [] };
 export const INBOUND_DOC_SETTINGS_KEY = ['gelen-belge', 'ayarlar'] as const;
 
+export interface SavedRow {
+  noteId: string;
+  noteNo: string;
+  result: RowResult;
+}
+
 const isDone = (r: DocRow): boolean => r.result?.kind === 'OPENED' || r.result?.kind === 'DRAFT';
 
 interface SaveCtx {
@@ -154,6 +160,46 @@ function useGramajReseed(setRows: Dispatch<SetStateAction<DocRow[]>>, catalog: K
   }, [setRows, catalog, defaults]);
 }
 
+/** Satır düzenleyicileri (okuma → form, kullanıcı düzenlemesi, parti listesi); kayıt döngüsünden ayrı. */
+function useRowMutators(setRows: Dispatch<SetStateAction<DocRow[]>>, catalog: KursunGramajCatalog, defaults: KursunCustomerDefaults, showGramaj: boolean) {
+  const addNote = useCallback((note: { id: string; noteNo: string }, runKey: number) => {
+    setRows((rs) =>
+      rs.some((r) => r.noteId === note.id)
+        ? rs.map((r) => (r.noteId === note.id ? { ...r, runKey } : r))
+        : [...rs, { noteId: note.id, noteNo: note.noteNo, runKey, detail: null, form: null, gramajTouched: false, result: null }],
+    );
+  }, [setRows]);
+
+  const setDetail = useCallback(
+    (noteId: string, detail: InboundNoteDetail) => {
+      setRows((rs) => rs.map((r) => (r.noteId === noteId ? { ...r, detail, form: r.form ?? initialRowForm(detail, catalog, showGramaj, defaults) } : r)));
+    },
+    [setRows, catalog, showGramaj, defaults],
+  );
+
+  const updateForm = useCallback(
+    (noteId: string, patch: Partial<RowForm>) => {
+      setRows((rs) =>
+        rs.map((r) => {
+          if (r.noteId !== noteId || !r.form) return r;
+          const touched = r.gramajTouched || 'gramajValueId' in patch;
+          // S3: müşteri değişti, gramaj elle seçilmedi → yeni müşterinin varsayılanı (yoksa istasyonunki).
+          const reseed = !touched && showGramaj && 'ownerCustomerId' in patch && patch.ownerCustomerId !== r.form.ownerCustomerId;
+          const next = reseed ? { ...patch, gramajValueId: customerGramajId(catalog, defaults, patch.ownerCustomerId ?? null) } : patch;
+          return { ...r, form: { ...r.form, ...next }, gramajTouched: touched, result: isDone(r) ? r.result : null };
+        }),
+      );
+    },
+    [setRows, catalog, defaults, showGramaj],
+  );
+
+  const setParties = useCallback((noteId: string, parties: NotePartiesView | null) => setRows((rs) => applyParties(rs, noteId, parties)), [setRows]);
+  const setMulti = useCallback((noteId: string, multi: MultiPartyDraft) => setRows((rs) => applyMulti(rs, noteId, multi)), [setRows]);
+
+  const removeRow = useCallback((noteId: string) => setRows((rs) => rs.filter((r) => r.noteId !== noteId)), [setRows]);
+  return { addNote, setDetail, updateForm, setParties, setMulti, removeRow };
+}
+
 export function useWoRows(route: ProductionRoute) {
   const attempt = useAttemptToken();
   const settings = useQuery({ queryKey: INBOUND_DOC_SETTINGS_KEY, queryFn: inboundDocService.settings, retry: false, staleTime: 60_000 });
@@ -170,41 +216,7 @@ export function useWoRows(route: ProductionRoute) {
 
   useGramajReseed(setRows, catalog, defaults);
 
-  const addNote = useCallback((note: { id: string; noteNo: string }, runKey: number) => {
-    setRows((rs) =>
-      rs.some((r) => r.noteId === note.id)
-        ? rs.map((r) => (r.noteId === note.id ? { ...r, runKey } : r))
-        : [...rs, { noteId: note.id, noteNo: note.noteNo, runKey, detail: null, form: null, gramajTouched: false, result: null }],
-    );
-  }, []);
-
-  const setDetail = useCallback(
-    (noteId: string, detail: InboundNoteDetail) => {
-      setRows((rs) => rs.map((r) => (r.noteId === noteId ? { ...r, detail, form: r.form ?? initialRowForm(detail, catalog, showGramaj, defaults) } : r)));
-    },
-    [catalog, showGramaj, defaults],
-  );
-
-  const updateForm = useCallback(
-    (noteId: string, patch: Partial<RowForm>) => {
-      setRows((rs) =>
-        rs.map((r) => {
-          if (r.noteId !== noteId || !r.form) return r;
-          const touched = r.gramajTouched || 'gramajValueId' in patch;
-          // S3: müşteri değişti, gramaj elle seçilmedi → yeni müşterinin varsayılanı (yoksa istasyonunki).
-          const reseed = !touched && showGramaj && 'ownerCustomerId' in patch && patch.ownerCustomerId !== r.form.ownerCustomerId;
-          const next = reseed ? { ...patch, gramajValueId: customerGramajId(catalog, defaults, patch.ownerCustomerId ?? null) } : patch;
-          return { ...r, form: { ...r.form, ...next }, gramajTouched: touched, result: isDone(r) ? r.result : null };
-        }),
-      );
-    },
-    [catalog, defaults, showGramaj],
-  );
-
-  const setParties = useCallback((noteId: string, parties: NotePartiesView | null) => setRows((rs) => applyParties(rs, noteId, parties)), []);
-  const setMulti = useCallback((noteId: string, multi: MultiPartyDraft) => setRows((rs) => applyMulti(rs, noteId, multi)), []);
-
-  const removeRow = useCallback((noteId: string) => setRows((rs) => rs.filter((r) => r.noteId !== noteId)), []);
+  const { addNote, setDetail, updateForm, setParties, setMulti, removeRow } = useRowMutators(setRows, catalog, defaults, showGramaj);
   const setResult = (noteId: string, result: RowResult) => setRows((rs) => rs.map((r) => (r.noteId === noteId ? { ...r, result } : r)));
 
   const printFor = async (noteId: string, workOrderId: string) => {
@@ -214,16 +226,18 @@ export function useWoRows(route: ProductionRoute) {
 
   const pending = rows.filter((r) => r.form && r.detail && !isDone(r));
 
-  const saveAll = async () => {
+  /** Dönüş: bu çağrıda kaydedilen satırların sonucu (çift dokunuşta / çevrimdışıyken boş). */
+  const saveAll = async (): Promise<SavedRow[]> => {
     // Ref: çift dokunuşta `saving` durumu henüz güncellenmemiş olur — ikinci çağrı aynı satırı yeniden göndermesin.
-    if (savingRef.current || pending.length === 0) return;
+    if (savingRef.current || pending.length === 0) return [];
     if (!onlineManager.isOnline()) {
       Toast.show({ type: 'error', text1: 'Sunucuya bağlantı yok', text2: 'Kayıt çevrimiçi yapılır; bağlantı gelince yeniden deneyin.' });
-      return;
+      return [];
     }
     savingRef.current = true;
     setSaving(true);
     const errors: unknown[] = [];
+    const saved: SavedRow[] = [];
     let owners = recent;
     try {
       // Sırayla: her satır ayrı tx; biri düşerse diğerleri etkilenmez, sonuç satırda kalır.
@@ -232,6 +246,7 @@ export function useWoRows(route: ProductionRoute) {
         const { result, error } = await saveRowOnce(ctx, r, r.form!);
         if (error !== undefined) errors.push(error);
         setResult(r.noteId, result);
+        saved.push({ noteId: r.noteId, noteNo: r.noteNo, result });
         if (result.kind !== 'FAILED' && r.form!.ownerCustomerId) owners = await rememberOwner(owners, r.form!.ownerCustomerId);
         if (result.kind === 'OPENED' && autoPrint) for (const w of result.workOrders) await printFor(r.noteId, w.workOrderId);
       }
@@ -243,6 +258,7 @@ export function useWoRows(route: ProductionRoute) {
     // Deneme sonucu: belirsiz hata varsa satır token'ları yapışır (yeniden "Hepsini kaydet" aynı kaydı tekrarlamaz).
     if (errors.length) attempt.onFailure(errors.find(isAmbiguousFailure) ?? errors[0]);
     else attempt.onSuccess();
+    return saved;
   };
 
   const counts = useMemo(() => rowCounts(rows, pending.length), [rows, pending.length]);

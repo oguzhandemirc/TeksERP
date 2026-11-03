@@ -3,6 +3,7 @@
 import type { CreateWorkOrderFromNoteBody, DeskKursunMachine } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import type { MultiPartyDraft } from '../woCreate/partyDraft';
+import type { RowResult } from '../woCreate/woFromDoc';
 
 /**
  * Ön seçim sırası: kullanıcının seçimi (dokunduysa) > sunucu önerisi (müşterinin son İE rotası → müşteri rotası →
@@ -74,4 +75,16 @@ export const RECENT_WO_MAX = 6;
 
 export function pushRecentWo(list: readonly RecentWo[], item: RecentWo, max = RECENT_WO_MAX): RecentWo[] {
   return [item, ...list.filter((x) => x.noteNo !== item.noteNo)].slice(0, max);
+}
+
+/** Kaydedilen satırın şerit kaydı: açıldıysa İE no'ları, taslaksa boş liste ("taslak"); başarısızsa null. */
+export function recentFromResult(noteNo: string, result: RowResult | null, at: number): RecentWo | null {
+  if (result?.kind === 'OPENED') return { noteNo, workOrderNos: result.workOrders.map((w) => w.workOrderNo), at };
+  if (result?.kind === 'DRAFT') return { noteNo, workOrderNos: [], at };
+  return null;
+}
+
+/** Rota değişti: önceki rotanın kurşun makineleri yeni rotada geçersiz (sunucu 400) → seçimler düşer. */
+export function clearMachines(multi: MultiPartyDraft | null | undefined): MultiPartyDraft | null | undefined {
+  return multi ? { ...multi, rows: multi.rows.map((r) => ({ ...r, machineId: null })) } : multi;
 }

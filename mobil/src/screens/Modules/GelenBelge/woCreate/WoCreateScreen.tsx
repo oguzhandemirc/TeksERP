@@ -1,7 +1,7 @@
 // "Terbiye İş Emri oluştur" (Gülkesim K6) — menüde Belge Tara'nın yerine; panel seçicisinin aynası. 1. satır sabit türler
 // (tablette yalnız Hızlı Terbiye İş Emri), 2. satır "Özel iş emirleri" kısayolları. Kısayol → doğrudan form (rota hazır)
 // + üstte "Belge okut". Kısayol yoksa 2. satır görünmez ve bugünkü Belge Tara yolu 1. satırda kalır.
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Icon, Text, TouchableRipple } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
@@ -9,9 +9,11 @@ import ScreenChrome from '../../../../components/ScreenChrome';
 import { useVisibleScreens } from '../../../../hooks/useVisibleScreens';
 import { TERIM } from '../../../../lib/terim';
 import { routeService, type ProductionRoute } from '../../../../services/route.service';
+import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import NewWorkOrderView from '../../HizliIsEmri/NewWorkOrderView';
 import { DocScanBody } from '../DocScanScreen';
+import DeskView from '../desk/DeskView';
 import DocBatchView from './DocBatchView';
 import { shortcutRoutes, shortcutTitle } from './woFromDoc';
 
@@ -20,11 +22,27 @@ type Stage =
   /** Hızlı İE formu; `route` = kısayoldan açıldıysa ön seçili rota. */
   | { kind: 'form'; route: ProductionRoute | null }
   | { kind: 'scan'; route: ProductionRoute; multi: boolean }
-  | { kind: 'legacy' };
+  | { kind: 'legacy' }
+  /** K23 belge masası: kamera ↔ tek inceleme (hazır İE kısayolları gerekir). */
+  | { kind: 'desk' };
 
 export const WO_SHORTCUTS_KEY = ['routes', 'wo-shortcuts'] as const;
 const TITLE = `${TERIM.terbiyeIsEmri.tekil} oluştur`;
 const QUICK = `Hızlı ${TERIM.terbiyeIsEmri.tekil}`;
+const DESK = 'Belge masası';
+
+/** "Bu cihaz belge masası" (cihaz ayarı): kısayollar yüklenince ekran BİR KEZ doğrudan masa kipinde açılır; geri → seçici. */
+function useDeskAutoOpen(available: boolean, open: () => void): void {
+  const deskDevice = useDeviceSettingsStore((s) => s.docDeskDevice);
+  const opened = useRef(false);
+  const openRef = useRef(open);
+  openRef.current = open;
+  useEffect(() => {
+    if (!deskDevice || !available || opened.current) return;
+    opened.current = true;
+    openRef.current();
+  }, [deskDevice, available]);
+}
 
 export default function WoCreateScreen() {
   const [stage, setStage] = useState<Stage>({ kind: 'hub' });
@@ -33,6 +51,7 @@ export default function WoCreateScreen() {
   const canManual = useVisibleScreens().visibleScreens.some((s) => s.key === 'HizliIsEmri');
   const q = useQuery({ queryKey: WO_SHORTCUTS_KEY, queryFn: routeService.getShortcuts, retry: false, staleTime: 60_000 });
   const shortcuts = shortcutRoutes(q.data?.data ?? []);
+  useDeskAutoOpen(shortcuts.length > 0, () => setStage({ kind: 'desk' }));
 
   const openForm = (route: ProductionRoute | null) => {
     setStep(0);
@@ -47,7 +66,7 @@ export default function WoCreateScreen() {
   };
 
   const route = stage.kind === 'form' || stage.kind === 'scan' ? stage.route : null;
-  const title = stage.kind === 'legacy' ? 'Belge Tara' : route ? shortcutTitle(route) : stage.kind === 'form' ? QUICK : TITLE;
+  const title = stage.kind === 'legacy' ? 'Belge Tara' : stage.kind === 'desk' ? DESK : route ? shortcutTitle(route) : stage.kind === 'form' ? QUICK : TITLE;
 
   return (
     <ScreenChrome title={title} onStepBack={stage.kind === 'hub' ? undefined : back}>
@@ -55,6 +74,9 @@ export default function WoCreateScreen() {
         <ScrollView contentContainerStyle={styles.body}>
           <View style={styles.grid} testID="ie-sabit-turler">
             {canManual && <Tile icon="rocket-launch-outline" title={QUICK} sub="Topu okutup başlat" onPress={() => openForm(null)} testID="ie-tur-hizli" />}
+            {shortcuts.length > 0 && (
+              <Tile icon="table-furniture" title={DESK} sub="Kamera açık bekler; okut → kontrol et → oluştur" onPress={() => setStage({ kind: 'desk' })} testID="ie-tur-belge-masasi" />
+            )}
             {!q.isLoading && shortcuts.length === 0 && (
               <Tile icon="file-document-outline" title="Belge Tara" sub="Müşteri irsaliyesi → taslak" onPress={() => setStage({ kind: 'legacy' })} testID="ie-tur-belge-tara" />
             )}
@@ -94,6 +116,7 @@ export default function WoCreateScreen() {
       )}
       {stage.kind === 'scan' && <DocBatchView route={stage.route} multi={stage.multi} autoStart />}
       {stage.kind === 'legacy' && <DocScanBody />}
+      {stage.kind === 'desk' && <DeskView shortcuts={shortcuts} />}
     </ScreenChrome>
   );
 }
