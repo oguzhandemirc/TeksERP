@@ -39,6 +39,13 @@ export const ROLL_ERROR_KAPSAM_BEYANI: readonly RollErrorKapsamBeyani[] = [
     gerekce: "Yedekten dönüşte kaybolacak hata satırı sayısı: muayene satırı da kaybolur, sayılmalı.",
   },
   {
+    dosya: "services/helpers/workorder-locks.helper.ts",
+    sembol: "isWorkOrderUnprocessed",
+    erisim: "iliski.detectedErrors",
+    sinif: "GUARD",
+    gerekce: "Gelen belge iptali (K15) iş emri işlem izi: adımda tespit edilen saha hatası da aktif muayenenin hatası da iz sayılır (`TRACE_ROLL_ERROR_WHERE`).",
+  },
+  {
     dosya: "services/helpers/guarded-hard-remove.ts",
     sembol: "count",
     erisim: "rollError.count",
