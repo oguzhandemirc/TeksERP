@@ -383,6 +383,9 @@ export const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   // ServiceMeterBasis (H7, 2026-10-29) — global `CUT` ("Kesildi", RollErrorAction) ve `RECEIVED`
   // ("Aldığımız", ChequeKind) fatura metre esasında yanlış. Ortak Türkçe YETMEZ.
   "SERVICE_BILLING_LINK.meterBasis": { CUT: "Kesim metresi", RECEIVED: "Teslim alınan metre" },
+  // DocumentScanContentState (K28 fotoğraf saklama) — REDUCED kartela ('Stoktan düşüldü'), PURGED cihaz eşleme
+  // ('Kalıcı silindi') dilinde; fotoğraf baytı için ortak Türkçe YANLIŞ.
+  "DOCUMENT_SCAN.contentState": { REDUCED: "Küçültüldü", PURGED: "Fotoğraf silindi" },
   // PackingGroupStatus (sevk partisi, 2026-09-21) — `OPEN`/`CLOSED` PurchaseOrderStatus
   // ile ÇAKIŞIR; global cevap alış siparişi dilinde ("mal bekleniyor" / "tamamlandı").
   // Partide CLOSED "sevk edildi"dir: son çuvalı sevk edilince sunucu yazar, elle

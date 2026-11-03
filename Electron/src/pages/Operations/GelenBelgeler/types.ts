@@ -124,7 +124,22 @@ export interface DocumentScanInfo {
   sizeBytes: number;
   status: ScanStatus;
   attempts: number;
+  /** K28 fotoğraf baytı durumu (TAM · KÜÇÜK · SİLİNDİ); eski backend göndermez (undefined = TAM). */
+  contentState?: DocumentScanContentState;
+  contentStateAt?: string | null;
 }
+/** K28 İE detayı "Geldiği belge" — backend `gelen-belge-ie-kaynak.service.ts` `WorkOrderSourceNote` aynası. */
+export interface WorkOrderSourceNote {
+  id: string;
+  noteNo: string;
+  status: NoteStatus;
+  senderDocNo: string | null;
+  scans: Array<Pick<DocumentScanInfo, "id" | "pageNo" | "regionNo" | "mimeType"> & { contentState: DocumentScanContentState; contentStateAt: string | null }>;
+}
+/** Backend `DocumentScanContentState` aynası. */
+export type DocumentScanContentState = "FULL" | "REDUCED" | "PURGED";
+/** Belge fotoğrafı saklama kipi (K28) — backend `PhotoRetentionMode` aynası. */
+export type PhotoRetentionMode = "FULL" | "SHRINK_ON_APPROVAL" | "DELETE_ON_APPROVAL" | "DELETE_ON_DISPATCH";
 
 export interface DeliveryNoteDetail extends DeliveryNoteHeader, PartiMetreDetailFields {
   lines: DeliveryNoteLine[];
@@ -139,6 +154,8 @@ export interface DeliveryNoteDetail extends DeliveryNoteHeader, PartiMetreDetail
   sameBatch?: SameBatchNotes | null;
   /** Okuma servisi tanımlı mı (false → bekleyen sayfa hiç okunmaz, form elle doldurulur); eski backend göndermez. */
   readerConfigured?: boolean;
+  /** K28 saklama kipi (onay ekranı belge no vurgusu); eski backend göndermez (undefined = FULL). */
+  photoRetention?: PhotoRetentionMode;
 }
 
 export interface SameBatchNotes {
@@ -325,6 +342,9 @@ export interface IncomingDocumentSettings extends DocumentTotalCheckSettings, En
   defaultHeaderLineMeterSource?: HeaderLineMeterSource;
   /** Okunan şablonun gönderen carisi boş gönderene yazılır; eski backend göndermez (undefined = alan çizilmez). */
   autoSenderFromTemplate?: boolean;
+  /** K28 belge fotoğrafı saklama; eski backend göndermez (undefined = alan çizilmez). */
+  photoRetention?: PhotoRetentionMode;
+  defaultPhotoRetention?: PhotoRetentionMode;
 }
 /** Rota önerisi önceliği — backend `RouteSuggestionPriority` aynası. */
 export type RouteSuggestionPriority = "CUSTOMER_FIRST" | "FACTORY_FIRST";

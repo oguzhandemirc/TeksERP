@@ -186,7 +186,7 @@ export function IncomingDocumentDetailPage() {
         scans={n.scans}
         onSave={(item, patch) => line.mutateAsync({ lineId: item.lineId, patch })}
       />
-      <ApproveDialog noteId={n.id} lines={n.lines} perDocument={perDoc && n.perDocument ? { note: n, gate: n.perDocument } : null} processChoices={gramaj.choices} choiceNoun={suggestions.data?.processGroups?.length ? "işlem seçimi" : undefined} open={approveOpen} onOpenChange={setApproveOpen} onDone={() => void invalidate()} />
+      <ApproveDialog noteId={n.id} lines={n.lines} perDocument={perDoc && n.perDocument ? { note: n, gate: n.perDocument } : null} processChoices={gramaj.choices} choiceNoun={suggestions.data?.processGroups?.length ? "işlem seçimi" : undefined} retention={{ docNo: n.senderDocNo, mode: n.photoRetention }} open={approveOpen} onOpenChange={setApproveOpen} onDone={() => void invalidate()} />
     </PageShell>
   );
 }

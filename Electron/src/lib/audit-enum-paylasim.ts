@@ -122,7 +122,7 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   ACTIVE: "sekiz durum enum'u (ürün yaşam döngüsü dahil) — hepsinde 'Aktif'",
   VOIDED: "refakat kartı, basılı belge ve kartela (durum + kabul iptali olayı) — hepsinde 'İptal'",
   SHIPPED: "top durumu, kartela durumu ve kartela olayı — üçü de 'Sevk Edildi'",
-  REDUCED: "kartela durumu ve kartela olayı — ikisi de 'Stoktan düşüldü'",
+  REDUCED: "kartela durumu ve kartela olayı — ikisi de 'Stoktan düşüldü'; DocumentScanContentState(fotoğraf küçültüldü) DOCUMENT_SCAN.contentState override\'ı ile ayrıldı (K28, 2026-11-03)",
   DISPATCHED: "sevkiyat ve sevkiyat olayı — ikisi de 'Sevk Edildi'",
   PARTIAL: "içe aktarım ve alış siparişi — ikisi de 'Kısmi'",
   DRAFT: "fatura ve sayım — ikisi de 'Taslak'",
@@ -142,6 +142,9 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   PRICE_LIST: "QuotePriceSource(fiyat listeden geldi) ve PrintedDocType(fiyat listesi belgesi) — ikisi de 'Fiyat listesi'; ortak Türkçe doğru",
 
   // ── Ortak Türkçe YETMEYEN — FIELD_ENUM_OVERRIDES ile ayrılmış ──────────────
+  PURGED:
+    "DeviceBindingEventType('Kalıcı silindi') ve DocumentScanContentState(fotoğraf baytı silindi, satır duruyor) — ortak cevap tarama için YANLIŞ; " +
+    "DOCUMENT_SCAN.contentState override'ı ile ayrıldı (K28, 2026-11-03)",
   CUT:
     "RollErrorAction('Kesildi') ve ServiceMeterBasis(fatura metre esası: kesim metresi) — ortak cevap esas için YANLIŞ; " +
     "SERVICE_BILLING_LINK.meterBasis override'ı ile ayrıldı (H7, 2026-10-29)",

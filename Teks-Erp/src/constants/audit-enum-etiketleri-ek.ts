@@ -422,4 +422,6 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   RECEIPT_CANCEL_OUT: "Mal kabul iptali",
   CONSUMPTION_OUT: "Üretim tüketimi",
   CONSUMPTION_REVERSAL_IN: "Tüketim geri alındı",
+  // DocumentScanContentState (K28 belge fotoğrafı saklama) — REDUCED/PURGED çakışır, DOCUMENT_SCAN.contentState override'ı
+  FULL: "Tam",
 };

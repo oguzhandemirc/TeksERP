@@ -11,12 +11,13 @@ import { INCOMING_DOCUMENT_QUERY_KEY, listSenderTemplates } from "../service";
 import { teachPath } from "../paths";
 import type { DocumentScanInfo } from "../types";
 import { listUserTemplates, USER_TEMPLATES_QUERY_KEY } from "./service";
-import { isUnrecognized, teachableScans } from "./teachScans";
+import { allReadPhotosPurged, isUnrecognized, teachableScans } from "./teachScans";
+import { SCAN_PURGED_TEXT } from "../photoRetention";
 
 export interface TeachNote {
   id: string;
   templateId: string | null;
-  scans: readonly Pick<DocumentScanInfo, "status" | "mimeType">[];
+  scans: readonly Pick<DocumentScanInfo, "status" | "mimeType" | "contentState">[];
 }
 interface Props {
   note: TeachNote;
@@ -41,7 +42,15 @@ export function TeachButton({ note, go: goProp }: Props) {
   const go = useGo(goProp);
   const allowed = hasPermission("gelen-belge:template") && teachableScans(note.scans).length > 0;
   const own = useOwnUserTemplate(note.templateId, allowed);
-  if (!allowed) return null;
+  if (!allowed) {
+    if (!hasPermission("gelen-belge:template") || !allReadPhotosPurged(note.scans)) return null;
+    return (
+      <Button variant="outline" disabled title={`${SCAN_PURGED_TEXT} Tanıtma için fotoğraf gerekir.`} data-testid="note-teach-purged">
+        <Sparkles className="mr-1 h-4 w-4" />
+        Tanıtılamaz — {SCAN_PURGED_TEXT}
+      </Button>
+    );
+  }
   return (
     <Button variant="outline" onClick={() => go(teachPath(note.id, own))} data-testid="note-teach">
       <Sparkles className="mr-1 h-4 w-4" />
