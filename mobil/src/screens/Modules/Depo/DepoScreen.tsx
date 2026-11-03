@@ -55,6 +55,10 @@ import { KartelaStockReduceModal } from './KartelaStockReduceModal';
 import { useScanClassifier } from '../../../hooks/useScanSeries';
 import { showScreenError } from '../../../lib/screenToast';
 import { formatFactory } from '../../../lib/factory-time';
+import { fmtMeters } from '../../../utils/meters';
+import { useVisibleScreens } from '../../../hooks/useVisibleScreens';
+import { useMenuHiddenScreens } from '../../../hooks/useModuleOrder';
+import { anyOnMenu } from '../../../hooks/menuHidden';
 import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
 import { CustomerCodeMatchNote } from '../../../components/customerCode/CustomerCodeMatchNote';
 import { scanMatchOf } from '../../../components/customerCode/customerCodeLogic';
@@ -88,6 +92,8 @@ const MODE_TABS: { key: ModeFilter; label: string; color: string }[] = [
   { key: 'SWATCH', label: 'Kartela', color: '#7c3aed' },
   { key: 'KARTELALIK', label: 'Kartelalık', color: '#059669' },
 ];
+const KARTELA_MODES = new Set<ModeFilter>(['SWATCH', 'KARTELALIK']);
+const KARTELA_SCREENS = ['KartelaSevk', 'KartelaKabul'] as const;
 
 /**
  * Onay modalının depo dili. Motor KK1 ile aynı; değişen yalnız SÖZCÜK — depo
@@ -155,6 +161,11 @@ export default function DepoScreen() {
 
   const isSwatchMode = mode === 'SWATCH';
   const isKartelalikMode = mode === 'KARTELALIK';
+  // Kartela karoları ana ekranda yoksa (izin/modül/K19 gizli) sekmeleri de çizilmez; seçili sekme kalır.
+  const { visibleScreens } = useVisibleScreens();
+  const menuHidden = useMenuHiddenScreens();
+  const kartelaOnMenu = anyOnMenu(visibleScreens, menuHidden, KARTELA_SCREENS);
+  const modeTabs = MODE_TABS.filter((t) => kartelaOnMenu || !KARTELA_MODES.has(t.key) || t.key === mode);
 
   // Arama backend'de filtreleniyor. Her tuşa basıldığında istek atmamak için
   // 300ms debounce — input anında doldurulur (controlled), ama queryKey sadece
@@ -498,7 +509,7 @@ export default function DepoScreen() {
           <View style={styles.statDivider} />
           <StatBox
             label={isPhone ? 'Metre' : 'Toplam Metre'}
-            value={`${rollStats.totalQty.toFixed(0)} m`}
+            value={`${fmtMeters(Math.round(rollStats.totalQty))} m`}
             color="#0f172a"
           />
           <View style={styles.statDivider} />
@@ -518,7 +529,7 @@ export default function DepoScreen() {
         <View style={styles.statDivider} />
         <StatBox
           label={isPhone ? 'Metre' : 'Toplam Metre'}
-          value={`${rollStats.totalQty.toFixed(0)} m`}
+          value={`${fmtMeters(Math.round(rollStats.totalQty))} m`}
           color="#0f172a"
         />
         <View style={styles.statDivider} />
@@ -615,7 +626,7 @@ export default function DepoScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.statusTabs}
           >
-            {MODE_TABS.map((t) => {
+            {modeTabs.map((t) => {
               const active = mode === t.key;
               return (
                 <TouchableRipple
@@ -863,8 +874,13 @@ function RollListRow({
                 {roll.item?.name ?? '—'}
                 {roll.color?.name ? ` · ${roll.color.name}` : ''}
               </Text>
-              <Text style={styles.rollMetaSep}>·</Text>
-              <Text style={styles.rollMetaText}>{roll.qualityGrade}</Text>
+              {/* Boş alanın ayracı çizilmez (QA 2026-11-03: "EMANET · · 2915.0 m"). */}
+              {roll.qualityGrade ? (
+                <>
+                  <Text style={styles.rollMetaSep}>·</Text>
+                  <Text style={styles.rollMetaText}>{roll.qualityGrade}</Text>
+                </>
+              ) : null}
               {roll.width != null && (
                 <>
                   <Text style={styles.rollMetaSep}>·</Text>
@@ -873,7 +889,7 @@ function RollListRow({
               )}
               <Text style={styles.rollMetaSep}>·</Text>
               <Text style={styles.rollMetaText}>
-                {Number(roll.currentQty ?? 0).toFixed(1)} m
+                {fmtMeters(Number(roll.currentQty ?? 0))} m
               </Text>
             </View>
           </View>
@@ -1026,7 +1042,7 @@ function RollDetailModal({
   }>;
 
   const summary: SummaryItem[] = [
-    { icon: 'ruler', label: 'Mevcut Metraj', value: `${Number(roll.currentQty ?? 0).toFixed(1)} m` },
+    { icon: 'ruler', label: 'Mevcut Metraj', value: `${fmtMeters(Number(roll.currentQty ?? 0))} m` },
     ...(roll.weightKg != null
       ? [{ icon: 'scale-balance', label: 'Ağırlık', value: `${Number(roll.weightKg).toFixed(2)} kg` } as SummaryItem]
       : []),

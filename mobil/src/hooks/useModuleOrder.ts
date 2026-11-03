@@ -15,6 +15,8 @@ import type { MobileScreenKey, MobileScreenMeta } from '../types/permissions';
 const PREFS_KEY = ['preferences'] as const;
 const ORDER_FIELD = 'mobileModuleOrder';
 export const MENU_LAYOUT_KEY = ['menu-layout'] as const;
+/** Açık ızgarada menü düzeni tazeleme aralığı (QA 2026-11-03). */
+export const MENU_LAYOUT_REFRESH_MS = 60_000;
 
 /**
  * İzinli ekranları kayıtlı sıraya göre dizer. Sırada olmayan (yeni eklenen veya
@@ -40,6 +42,23 @@ function applyOrder(
   return out;
 }
 
+/**
+ * K19 menü düzeni: fabrikanın menüden gizlediği ekranlar (route kayıtlı kalır → bağlantı açılır).
+ * Uç yok/hata (eski sunucu) → undefined → süzgeç boş = bugünkü grid.
+ */
+export function useMenuHiddenScreens(): string[] | undefined {
+  // Izgara saatlerce açık durur ve odak olayı yok (RN'de focusManager bağlı değil) →
+  // paneldeki düzen değişikliği açık tablete ARALIKLA ulaşır, yeniden giriş beklenmez.
+  const menuQuery = useQuery({
+    queryKey: MENU_LAYOUT_KEY,
+    queryFn: menuLayoutService.get,
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: MENU_LAYOUT_REFRESH_MS,
+    retry: false,
+  });
+  return menuQuery.data?.hiddenScreens;
+}
+
 export function useModuleOrder() {
   // Grid'in kaynağı GÖRÜNÜR ekranlar (izin ∖ bayrağı kapalı) — MainNavigator hangi
   // route'ları kaydediyorsa kart da onları gösterir. Gizliyken yapılan sürükleme
@@ -59,15 +78,7 @@ export function useModuleOrder() {
     return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : undefined;
   }, [prefsQuery.data]);
 
-  // K19 menü düzeni: fabrikanın menüden gizlediği ekranın karosu çizilmez (route kayıtlı kalır → bağlantı açılır).
-  // Uç yok/hata (eski sunucu) → veri yok → süzgeç boş = bugünkü grid.
-  const menuQuery = useQuery({
-    queryKey: MENU_LAYOUT_KEY,
-    queryFn: menuLayoutService.get,
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  });
-  const hiddenScreens = menuQuery.data?.hiddenScreens;
+  const hiddenScreens = useMenuHiddenScreens();
 
   const orderedScreens = useMemo(
     () => applyOrder(filterMenuHidden(visibleScreens, hiddenScreens), storedOrder),

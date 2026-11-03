@@ -4,6 +4,7 @@ import { isSessionScreen } from '../constants/stationScreens';
 import type { MobileScreenKey } from '../types/permissions';
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
+import { useHardwareStepBack } from '../hooks/useHardwareStepBack';
 import { Appbar, Text, TouchableRipple, Icon, Divider } from 'react-native-paper';
 // paper `Menu` YERİNE — Fabric'te profil menüsü açılırken "Maximum update depth
 // exceeded" ile çöküyordu (Menu > Portal > PortalConsumer). Bkz. AppMenu.tsx.
@@ -121,9 +122,13 @@ export default function ScreenChrome({
     lock();
   };
 
+  useHardwareStepBack(onStepBack, navigation);
+
   const operatorName = user?.fullName || user?.username || '—';
-  // K24: açıklama ⓘ'ye; görünür satır yalnız veri — durum satırı ya da makine adını taşıyan subtitle.
-  const visibleLine = statusLine || (hidePlaceChip ? subtitle : undefined);
+  // K24: açıklama ⓘ'ye; görünür satır yalnız veri — makine adını taşıyan subtitle (hidePlaceChip)
+  // ve durum satırı. İkisi birlikteyse ikisi de görünür (makine adı sessizce düşmesin, S12).
+  const visibleLine =
+    [hidePlaceChip ? subtitle : undefined, statusLine].filter(Boolean).join(' · ') || undefined;
   const infoText = hidePlaceChip ? undefined : subtitle;
 
   return (

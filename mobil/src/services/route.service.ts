@@ -26,6 +26,8 @@ export interface ProductionRoute {
     // renk" satırı basılmaz. İş emrinin hedef rengi DEĞİŞMEZ. Eski backend alanı
     // göndermez → undefined kalır, kutu kapalı doğar.
     dispatchWithoutColor?: boolean;
+    /** Adımın şablondaki önerilen makinesi (Gülkesim 2026-11-02); sunucu açılışta bunu klonlar. Eski sunucu göndermez. */
+    plannedMachineId?: string | null;
     // 2026-08-06: adımın ŞABLON HEDEFİ — rota seçilince hedef renk/özellik
     // alanları buradan ön-doldurulur (öneridir, operatör değiştirebilir).
     // Eski backend bu alanları göndermez → undefined kalır, ön-doldurma olmaz.

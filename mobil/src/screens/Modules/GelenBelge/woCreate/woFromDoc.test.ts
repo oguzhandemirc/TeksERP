@@ -13,6 +13,7 @@ import {
   routeHasKursunStep,
   rowIssues,
   shortcutRoutes,
+  shortcutSub,
   shortcutTitle,
 } from './woFromDoc';
 
@@ -20,6 +21,15 @@ const r = (id: string, extra: Partial<ProductionRoute> = {}): ProductionRoute =>
 // K22: gramaj sunucu çözücüsünden gelir; test için müşteri → değer eşlemesi (yoksa istasyonunki g2).
 const gramaj = (byCustomer: Record<string, string> = {}) => (c: string | null) => (c && byCustomer[c]) || 'g2';
 const detail = (x: Partial<InboundNoteDetail> = {}): InboundNoteDetail => ({ id: 'n1', noteNo: 'GB-1', ownerCustomerId: null, ...x }) as InboundNoteDetail;
+
+describe('shortcutSub — kısayol alt satırı ham kod değil', () => {
+  const st = (sequence: number, name: string) => ({ id: name, stationId: name, sequence, station: { id: name, name } });
+  it('açıklama varsa o; yoksa adım yolu sırayla; ikisi de yoksa yok', () => {
+    expect(shortcutSub({ description: 'Kurşun + tambur', steps: [st(1, 'KURŞUN')] })).toBe('Kurşun + tambur');
+    expect(shortcutSub({ steps: [st(2, 'TAMBUR'), st(1, 'KURŞUN')] })).toBe('KURŞUN → TAMBUR');
+    expect(shortcutSub({ steps: [] })).toBeUndefined();
+  });
+});
 
 describe('shortcutRoutes / shortcutTitle', () => {
   it('⭐ yalnız işaretli + aktif kısayollar, shortcutOrder sırasıyla; eski sunucu (alan yok) → boş', () => {

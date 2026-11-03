@@ -99,6 +99,7 @@ import PlannedMachineBadge from './PlannedMachineBadge';
 import StationDocLookupSheet from '../../../components/stationDocLookup/StationDocLookupSheet';
 import OpenCardSearchBar from '../../../components/stationDocLookup/OpenCardSearchBar';
 import { useStationDocLookup } from '../../../components/stationDocLookup/useStationDocLookup';
+import { emptyCardHint } from '../../../components/stationDocLookup/emptyCardHint';
 import { useOpenCardSearch } from '../../../components/stationDocLookup/useOpenCardSearch';
 
 // =============================================================================
@@ -1432,9 +1433,7 @@ export default function KursunQcScreen() {
               <Icon source="card-search-outline" size={64} color="#cbd5e1" />
               <Text style={styles.emptyTitle}>Kart açılmadı</Text>
               <Text style={styles.emptyHint}>
-                {compact
-                  ? 'Üstten "Açık İşler" butonuyla kart okutarak başlayın'
-                  : 'Sağ üstten refakat kartı barkodunu okutarak başlayın'}
+                {emptyCardHint({ compact, docLookupEnabled: docLookup.enabled, where: 'Sağ üstten' })}
               </Text>
             </View>
           ) : tabletReadOnly ? (

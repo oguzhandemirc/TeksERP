@@ -53,6 +53,7 @@ import { resolveTamburListStationId } from './tamburStationFilter';
 import StationDocLookupSheet from '../../../components/stationDocLookup/StationDocLookupSheet';
 import OpenCardSearchBar from '../../../components/stationDocLookup/OpenCardSearchBar';
 import { useStationDocLookup } from '../../../components/stationDocLookup/useStationDocLookup';
+import { emptyCardHint } from '../../../components/stationDocLookup/emptyCardHint';
 import { useOpenCardSearch } from '../../../components/stationDocLookup/useOpenCardSearch';
 import { useMachinePeripherals, meterPeripheralFor } from '../../../hooks/useMachinePeripherals';
 import { readMeter } from '../../../hooks/usePeripheralIO';
@@ -4075,9 +4076,7 @@ export default function TamburScreen() {
               <Icon source="card-search-outline" size={64} color="#cbd5e1" />
               <Text style={styles.emptyTitle}>Kart açılmadı</Text>
               <Text style={styles.emptyHint}>
-                {compact
-                  ? 'Üstten "Açık İşler" butonuyla kart okutarak başlayın'
-                  : 'Sağdan refakat kartını okutarak başlayın'}
+                {emptyCardHint({ compact, docLookupEnabled: docLookup.enabled, where: 'Sağdan' })}
               </Text>
             </View>
           ) : !selectedRoll ? (

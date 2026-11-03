@@ -31,7 +31,7 @@
 
 import React, { useEffect } from 'react';
 import { Text, View } from 'react-native';
-import { act, render } from '@testing-library/react-native';
+import { act, render, within } from '@testing-library/react-native';
 
 import {
   SimplePortal,
@@ -267,6 +267,32 @@ describe('SimplePortal — kapsam (EN YAKIN host kazanır)', () => {
     await flushPortals();
     expect(getByTestId('icerik')).toBeTruthy();
     expect(mountSayisi).toBe(1); // ⚠️ tek mount — kayıt sökülüp kurulmadı
+  });
+});
+
+describe('SimplePortal — kapsam katmanı (kilit üstünde modal)', () => {
+  it('kapsam çocukları collapsable=false kapta: elevation portal katmanını ÖRTEMEZ', async () => {
+    // QA 2026-11-03: LockScreen kökü elevation/zIndex 9999 taşır. Kapsam
+    // çocuklarını portal katmanıyla AYNI native ebeveyne koyunca Android kilidi
+    // modalın üstüne çizdi (operatör seçici ağaçta vardı ama görünmüyordu).
+    const { getByTestId, toJSON } = render(
+      <SimplePortalScope>
+        <View testID="kilit" style={{ elevation: 9999, zIndex: 9999 }} />
+        <SimplePortal>
+          <Text testID="kilit-modali">Kullanıcı Seç</Text>
+        </SimplePortal>
+      </SimplePortalScope>,
+    );
+    await flushPortals();
+
+    const kap = getByTestId('simple-portal-scope-children');
+    expect(kap.props.collapsable).toBe(false);
+    expect(kap.props.pointerEvents).toBe('box-none');
+    // Kilit kabın İÇİNDE, modal kabın DIŞINDA ve ondan SONRA.
+    const ids = testIdsInOrder(toJSON());
+    expect(ids).toEqual(['simple-portal-scope-children', 'kilit', 'kilit-modali']);
+    expect(within(kap).queryByTestId('kilit')).toBeTruthy();
+    expect(within(kap).queryByTestId('kilit-modali')).toBeNull();
   });
 });
 
