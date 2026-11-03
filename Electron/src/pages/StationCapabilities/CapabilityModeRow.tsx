@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { TERIM } from "@/lib/terim";
 import {
   STATION_PROPERTY_MODE_HINTS,
   STATION_PROPERTY_MODE_LABELS,
@@ -79,8 +80,8 @@ export function CapabilityModeRow({ row, onMode, value, options, onDefault }: Pr
             Varsayılan açık
           </label>
         ) : (
-          <span title="İş emri rota adımında bu özellik her zaman seçili gelir.">
-            {row.mode === "AUTO" ? "İş emrinde hep seçili" : "İş emrinde seçili gelir"}
+          <span title={`${TERIM.terbiyeIsEmri.tekil} rota adımında bu özellik her zaman seçili gelir.`}>
+            {row.mode === "AUTO" ? `${TERIM.terbiyeIsEmri.cekim.bulunma} hep seçili` : `${TERIM.terbiyeIsEmri.cekim.bulunma} seçili gelir`}
           </span>
         )}
         {options.length > 0 && (
@@ -125,7 +126,7 @@ function DefaultValuePicker({ open, onOpenChange, title, options, selectedId, on
         <DialogHeader>
           <DialogTitle>{title} — varsayılan değer</DialogTitle>
           <DialogDescription>
-            İş emri rota adımında bu değer ön seçili gelir; müşteriye tanımlı değer varsa o önce gelir.
+            {TERIM.terbiyeIsEmri.tekil} rota adımında bu değer ön seçili gelir; müşteriye tanımlı değer varsa o önce gelir.
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-80 space-y-1 overflow-auto">

@@ -6,6 +6,7 @@ import { renderWithProviders } from "@/test/render";
 import { useAuthStore } from "@/store/auth";
 import type { JwtPayload } from "@/types/auth";
 import { StationKind } from "@/types/enums";
+import { TERIM } from "@/lib/terim";
 import type { StationCapabilitySummary } from "./types";
 
 const STATION: StationCapabilitySummary = {
@@ -59,7 +60,7 @@ describe("İstasyon yeteneği varsayılanları (K22)", () => {
     expect(within(kat).getByRole("switch", { name: /Kat varsayılan açık/ })).toBeInTheDocument();
     const kur = screen.getByTestId("cap-row-p-kur");
     expect(within(kur).queryByRole("switch")).toBeNull();
-    expect(within(kur).getByText("İş emrinde hep seçili")).toBeInTheDocument();
+    expect(within(kur).getByText(`${TERIM.terbiyeIsEmri.cekim.bulunma} hep seçili`)).toBeInTheDocument();
     fireEvent.click(within(kur).getByRole("button", { name: /Kurşun varsayılan değer/ }));
     expect(await screen.findByRole("button", { name: /25 gr/ })).toBeInTheDocument();
   });
