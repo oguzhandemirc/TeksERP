@@ -538,7 +538,8 @@ export class TamburController {
   async getByCardBarcode(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const barcode = (req.params.barcode as string).trim();
-      const result = await this.service.getByCardBarcode(barcode);
+      const stamp = await getStampContext(req);
+      const result = await this.service.getByCardBarcode(barcode, stamp?.stationId ?? null);
       res.status(200).json(result);
     } catch (error) {
       next(error);

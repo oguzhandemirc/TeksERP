@@ -114,6 +114,8 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "kursunMeterVarianceApproval",
       "kursunMeterStockMode",
       "kursunMachineAssignMode",
+      "productionRouteMode",
+      "productionScanRouteStations",
       "tamburOverQuantityEnabled",
       "tamburShortCutA1Enabled",
       "tamburShortCutA1ThresholdM",

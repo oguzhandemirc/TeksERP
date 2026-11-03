@@ -129,6 +129,7 @@ import { customerCodeSearchRollIds } from "./helpers/roll-scan-resolve.helper";
 import { readTargetValueChips, type TargetValueChip } from "./helpers/workorder-target-value.helper";
 import { TERIM } from "../constants/terim";
 import { resolveTamburCutWeight } from "./helpers/tambur-customer-settings.helper";
+import { gateByCard } from "./workorder-scan-route.service";
 
 
 // Kesim etiket NİYETİ (hedef sipariş kalemi / müşteri var-mı + müşteri isActive;
@@ -612,7 +613,9 @@ export class TamburService {
    * adımında olduğumuzu ve işlenecek kumaşların listesini verir.
    */
   async getByCardBarcode(
-    cardBarcode: string
+    cardBarcode: string,
+    /** K29: oturum istasyonu — yalnız okutmaya göre rota kapısı okur; null = bugünkü çözüm. */
+    sessionStationId: string | null = null,
   ): Promise<ApiResponse<TamburStepSummary>> {
     const card = await prisma.travelerCard.findUnique({
       where: { barcode: normalizeScanCode(cardBarcode) },
@@ -630,7 +633,10 @@ export class TamburService {
 
     // Multi-batch destekli doğrulama. Eğer WO'nun rulları şu an Tambur'da
     // değilse net mesaj döner ("şu an Boyahane'de" gibi).
-    const { stepId } = await this.assertAtTamburWithReason(card.workOrderId);
+    // K29: okutmaya göre rota — toplar bu istasyonun adımındaysa O adım (yeniden işlemde 2. tambur adımı dahil);
+    // taşıma/ekleme gerekiyorsa 400 SCAN_ROUTE_AVAILABLE. SIRALI'da kapı null → bugünkü çözüm.
+    const scan = await gateByCard(card.workOrderId, sessionStationId);
+    const { stepId } = scan ?? (await this.assertAtTamburWithReason(card.workOrderId));
     const step = await prisma.workOrderStep.findUnique({
       where: { id: stepId },
       include: {

@@ -631,6 +631,10 @@ export const updateSchema = z.strictObject({
   kursunMeterStockMode: z.enum(["RECORD", "APPLY"]).optional(),
   /** K16: atanan kurşun makinesi (enum; `KURSUN_MACHINE_ASSIGN_MODES` ile birebir; varsayılan SUGGEST). */
   kursunMachineAssignMode: z.enum(["SUGGEST", "ASSIGNED_ONLY_WARN"]).optional(),
+  /** K29: rota uygulaması (enum; `PRODUCTION_ROUTE_MODES` ile birebir; varsayılan SEQUENTIAL). */
+  productionRouteMode: z.enum(["SEQUENTIAL", "SCAN"]).optional(),
+  /** K29: okutmayla rota kapsamı (`PRODUCTION_SCAN_ROUTE_STATIONS_VALUES`; varsayılan SELECTED). */
+  productionScanRouteStations: z.enum(["SELECTED", "ALL"]).optional(),
   /** D4-F1: okutmada müşteri barkodu araması (varsayılan kapalı = bugün). */
   scanCustomerCodeLookupEnabled: z.boolean().optional(),
   // batch.shortNumberEnabled — parti no kısa ve DÖNEN (P01…P99) mi (default TRUE/AÇIK).

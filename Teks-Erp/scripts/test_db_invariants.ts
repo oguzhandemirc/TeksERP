@@ -733,6 +733,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "manifests", name: "manifests_source_shape" },
   { table: "sacks", name: "sacks_weightKg_nonneg" },
   { table: "work_order_steps", name: "work_order_steps_time_order" },
+  // K29 (2026-11-03): adım kökeni yalnız NULL (plan) ya da 'SCAN' (okutmayla sahada eklendi).
+  { table: "work_order_steps", name: "work_order_steps_addedVia_check" },
   // 2026-07-31 denetimi (A6+G-9) — migration 20260731120000_audit_check_hardening:
   { table: "roll_movements", name: "roll_movements_qtyIn_nonneg" },
   { table: "roll_movements", name: "roll_movements_qtyOut_nonneg" },
