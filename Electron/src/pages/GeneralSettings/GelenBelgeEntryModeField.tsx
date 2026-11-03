@@ -143,7 +143,7 @@ export function EntryModeFields({ draft, hasDefaultItem }: { draft: ReturnType<t
         <div data-testid="gb-station-doc-lookup">
           <FlagToggle
             title="İstasyonda belge okutarak iş bul"
-            summary={`Kurşun ve tambur tabletinde "Belge okut": boyahane belgesinin fotoğrafından fiş no okunur, bağlı ${IE.tekilKucuk} açılır.`}
+            summary={`Kurşun ve tambur tabletinde "Belge okut": boyahane belgesinin fotoğrafından fiş no okunur, bağlı ${TERIM.terbiyeIsEmri.tekilKucuk} açılır.`}
             desc={`Kapalı (varsayılan) = bugünkü davranış: tablette düğme yok. Okuma yalnız eşleme içindir; yeni gelen belge doğmaz. Fiş / evrak / parti no ile elle arama listede her zaman vardır.`}
             defaultOn={false}
             checked={draft.lookup.value === true}

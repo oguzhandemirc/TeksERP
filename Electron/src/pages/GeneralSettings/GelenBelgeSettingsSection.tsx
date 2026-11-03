@@ -46,7 +46,8 @@ export const UNREVIEWED_APPROVAL_OPTIONS: ReadonlyArray<{ value: UnreviewedAppro
   { value: "BLOCK", label: "Engelle", hint: "Gözden geçirilmemiş satır varken onay reddedilir; önce hücreler gözden geçirilir." },
 ];
 
-const AUTO_WORK_ORDER_DESC = `Onaylanan belgenin topları desen/gramaj ve kumaşa göre gruplanır; işlem değeri net çözülen her grup için ${TERIM.terbiyeIsEmri.tekilKucuk}, aşağıdaki rota önerisiyle açılır (plan ekranındaki '${TERIM.terbiyeIsEmri.tekilKucuk} aç' ile aynı işlem). Deseni çözülemeyen gruplar, rota önerisi olmayan müşteri ve ${TERIM.terbiyeIsEmri.tekilKucuk} açma yetkisi olmayan onaylayan için ${TERIM.terbiyeIsEmri.tekilKucuk} açılmaz; onay sonucu hangi grubun elle açılması gerektiğini yazar. Onay bundan etkilenmez. Kapalı (varsayılan) = bugünkü davranış: ${TERIM.terbiyeIsEmri.cogulKucuk} plan ekranından elle açılır.`;
+// K20: ad okuma anında rejimden çözülür (modül düzeyinde donmaz).
+const autoWorkOrderDesc = (): string => `Onaylanan belgenin topları desen/gramaj ve kumaşa göre gruplanır; işlem değeri net çözülen her grup için ${TERIM.terbiyeIsEmri.tekilKucuk}, aşağıdaki rota önerisiyle açılır (plan ekranındaki '${TERIM.terbiyeIsEmri.tekilKucuk} aç' ile aynı işlem). Deseni çözülemeyen gruplar, rota önerisi olmayan müşteri ve ${TERIM.terbiyeIsEmri.tekilKucuk} açma yetkisi olmayan onaylayan için ${TERIM.terbiyeIsEmri.tekilKucuk} açılmaz; onay sonucu hangi grubun elle açılması gerektiğini yazar. Onay bundan etkilenmez. Kapalı (varsayılan) = bugünkü davranış: ${TERIM.terbiyeIsEmri.cogulKucuk} plan ekranından elle açılır.`;
 
 function AutoWorkOrderToggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -54,7 +55,7 @@ function AutoWorkOrderToggle({ checked, onChange }: { checked: boolean; onChange
       <FlagToggle
         title={`Onaydan sonra ${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} otomatik aç`}
         summary={`Belge onaylanınca deseni/gramajı belli her grup için ${TERIM.terbiyeIsEmri.tekilKucuk} kendiliğinden açılır.`}
-        desc={AUTO_WORK_ORDER_DESC}
+        desc={autoWorkOrderDesc()}
         defaultOn={false}
         checked={checked}
         onChange={onChange}
