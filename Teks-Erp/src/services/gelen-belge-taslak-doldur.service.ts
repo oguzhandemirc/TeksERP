@@ -18,7 +18,8 @@ import { declaredPageCount, withDeclaredPages } from "../lib/gelen-belge/parti-o
 import { AuditService } from "./audit.service";
 import { FALLBACK_TEMPLATE_CODE, bumpTemplateHit, ensureSenderTemplate } from "./gelen-belge-sablon.service";
 import { batchAndMeterColumns, deriveBatchAndMeters, readFirstRegion, rememberedBatchKey, toRegion, type BatchAndMeterColumns } from "./gelen-belge-parti-metre.service";
-import { readHandwritingOutlierFactor, readHeaderLineMeterSource, readIncomingDocAutoSender } from "./system-setting.service";
+import { readDuplicateDocNoMode, readHandwritingOutlierFactor, readHeaderLineMeterSource, readIncomingDocAutoSender } from "./system-setting.service";
+import { assertDocNoUniqueTx } from "./helpers/gelen-belge-mukerrer.helper";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const SCAN_TABLE = "DOCUMENT_SCAN";
@@ -236,6 +237,8 @@ export async function fillBoundDraftTx(tx: Prisma.TransactionClient, noteId: str
   await fillBatchAndMeters(tx, noteId, note, { patch, built, added: overlap.lines, pageAppended: addLines && lineBase > 0 });
   if (addLines) patch.lines = { create: lineRows(overlap.lines, scan.id, lineBase, blockBase) };
   await tx.customerDeliveryNote.update({ where: { id: noteId }, data: patch });
+  // K27 BLOCK: boş belge no OCR'dan dolduysa tekillik; 8044 kilidini çağıran tx'in başında aldı (`docNoLockKeys`).
+  if (typeof patch.senderDocNo === "string") await assertDocNoUniqueTx(tx, noteId, await readDuplicateDocNoMode(tx), [patch.senderDocNo]);
   return { lines: addLines ? overlap.lines.length : 0, autoSenderCustomerId };
 }
 

@@ -18,6 +18,7 @@
 //   · `gelenBelge.autoWorkOrderPatternless` — SKIP (varsayılan) | OPEN (işlem değeri çözülemeyen grupta hedefsiz iş emri)
 //   · `gelenBelge.formApproval` — SEPARATE (varsayılan, ayrı onay) | WITH_WORK_ORDER (iş emri formundan okutulan belgeyi iş emri açan kaydeder)
 //   · `gelenBelge.multiPartyWorkOrder` — SINGLE (varsayılan, tek iş emri) | PER_PARTY (çok partili belgede her parti ayrı iş emri)
+//   · `gelenBelge.duplicateDocNo` — BLOCK (varsayılan, sahip + belge no tek) | WARN (işi süren eşte onay 409 + onay bayrağı) | ALLOW (K27)
 //   · `production.refakatAutoPrint` — iş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır (varsayılan false)
 //   · `gelenBelge.stationDocLookup` — istasyon tabletinde "Belge okut" ile iş emri bulma (K17; varsayılan false)
 // Ürün kapısı tek karar: yaşam döngüsü `assertItemUsable(NEW_STOCK)` + top doğurabilen tür ALLOWLIST'i
@@ -75,6 +76,10 @@ import {
   DEFAULT_MULTI_PARTY_WORK_ORDER,
   MULTI_PARTY_WORK_ORDER_VALUES,
   type MultiPartyWorkOrderMode,
+  readDuplicateDocNoMode,
+  DEFAULT_DUPLICATE_DOC_NO,
+  DUPLICATE_DOC_NO_VALUES,
+  type DuplicateDocNoMode,
   readRefakatAutoPrint,
   readIncomingDocStationLookup,
 } from "./system-setting.service";
@@ -98,6 +103,7 @@ export const INCOMING_DOC_DEDICATED_SETTING_KEYS: ReadonlySet<string> = new Set(
   SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS,
   SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL,
   SETTING_KEYS.GELEN_BELGE_MULTI_PARTY_WORK_ORDER,
+  SETTING_KEYS.GELEN_BELGE_DUPLICATE_DOC_NO,
   SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT,
   SETTING_KEYS.GELEN_BELGE_STATION_DOC_LOOKUP,
 ]);
@@ -146,6 +152,9 @@ export interface IncomingDocSettings {
   defaultFormApproval: IncomingDocFormApprovalMode;
   multiPartyWorkOrder: MultiPartyWorkOrderMode;
   defaultMultiPartyWorkOrder: MultiPartyWorkOrderMode;
+  /** K27 aynı gönderen belge no: BLOCK engelle (varsayılan) | WARN işi süren eşte uyar | ALLOW serbest. */
+  duplicateDocNo: DuplicateDocNoMode;
+  defaultDuplicateDocNo: DuplicateDocNoMode;
   /** İş emri açılınca refakat kartı kendiliğinden yazdırılır mı (varsayılan false). */
   refakatAutoPrint: boolean;
   /** İstasyon tabletinde "Belge okut" ile iş emri bulma (varsayılan false). */
@@ -211,6 +220,8 @@ export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
     defaultFormApproval: DEFAULT_FORM_APPROVAL,
     multiPartyWorkOrder: await readMultiPartyWorkOrder(),
     defaultMultiPartyWorkOrder: DEFAULT_MULTI_PARTY_WORK_ORDER,
+    duplicateDocNo: await readDuplicateDocNoMode(),
+    defaultDuplicateDocNo: DEFAULT_DUPLICATE_DOC_NO,
     refakatAutoPrint: await readRefakatAutoPrint(),
     stationDocLookup: await readIncomingDocStationLookup(),
   };
@@ -234,6 +245,7 @@ export interface IncomingDocSettingsInput {
   autoWorkOrderPatternless?: AutoWorkOrderPatternlessMode;
   formApproval?: IncomingDocFormApprovalMode;
   multiPartyWorkOrder?: MultiPartyWorkOrderMode;
+  duplicateDocNo?: DuplicateDocNoMode;
   refakatAutoPrint?: boolean;
   stationDocLookup?: boolean;
 }
@@ -303,38 +315,23 @@ export async function updateIncomingDocSettings(input: IncomingDocSettingsInput,
   return getIncomingDocSettings();
 }
 
-/** Parti no / onay kipi / gramajsız oto iş emri (Gülkesim parti/metre S0) — ayar yalnız tanımlı; davranışı okuyan dilimler B/C. */
+/** Kapalı kümeli seçenek yazımı: küme dışı değer 400 (Zod'un ikinci seddi), audit `systemSettingService.set` içinde. */
+async function setClosed<T extends string>(key: string, value: T | undefined, spec: { values: readonly T[]; label: string }, userId: string): Promise<void> {
+  if (value === undefined) return;
+  const { values, label } = spec;
+  if (!values.includes(value)) throw AppError.badRequest(`Geçersiz seçenek: ${values.join(", ")} olmalı.`, { code: "VALIDATION_ERROR" });
+  await systemSettingService.set(key, value, label, userId);
+}
+
+/** Parti no / onay kipi / gramajsız oto iş emri (Gülkesim parti/metre S0) · çok parti · aynı belge no (K27). */
 async function updateEntryOptions(input: IncomingDocSettingsInput, userId: string): Promise<void> {
-  if (input.batchNumberSource !== undefined) {
-    if (!BATCH_NUMBER_SOURCE_VALUES.includes(input.batchNumberSource)) {
-      throw AppError.badRequest("Geçersiz seçenek: SERIES ya da DOCUMENT olmalı.", { code: "VALIDATION_ERROR" });
-    }
-    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, input.batchNumberSource, "Gelen belge: parti numarası kaynağı (SERIES seri / DOCUMENT belgeden)", userId);
-  }
-  if (input.entryMode !== undefined) {
-    if (!ENTRY_MODE_VALUES.includes(input.entryMode)) {
-      throw AppError.badRequest("Geçersiz seçenek: PER_LINE ya da PER_DOCUMENT olmalı.", { code: "VALIDATION_ERROR" });
-    }
-    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_ENTRY_MODE, input.entryMode, "Gelen belge: onay kipi (PER_LINE satır başına top / PER_DOCUMENT belge başına tek kayıt)", userId);
-  }
-  if (input.autoWorkOrderPatternless !== undefined) {
-    if (!AUTO_WORK_ORDER_PATTERNLESS_VALUES.includes(input.autoWorkOrderPatternless)) {
-      throw AppError.badRequest("Geçersiz seçenek: SKIP ya da OPEN olmalı.", { code: "VALIDATION_ERROR" });
-    }
-    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS, input.autoWorkOrderPatternless, `Gelen belge: işlem değeri çözülemeyen grupta ${TERIM.terbiyeIsEmri.tekilKucuk} (SKIP atla / OPEN hedefsiz aç)`, userId);
-  }
-  if (input.formApproval !== undefined) {
-    if (!FORM_APPROVAL_VALUES.includes(input.formApproval)) {
-      throw AppError.badRequest("Geçersiz seçenek: SEPARATE ya da WITH_WORK_ORDER olmalı.", { code: "VALIDATION_ERROR" });
-    }
-    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, input.formApproval, `Gelen belge: ${TERIM.terbiyeIsEmri.tekilKucuk} formundan okutulan belgenin kaydı (SEPARATE ayrı onay / WITH_WORK_ORDER ${TERIM.terbiyeIsEmri.tekilKucuk} açan kaydeder)`, userId);
-  }
-  if (input.multiPartyWorkOrder !== undefined) {
-    if (!MULTI_PARTY_WORK_ORDER_VALUES.includes(input.multiPartyWorkOrder)) {
-      throw AppError.badRequest("Geçersiz seçenek: SINGLE ya da PER_PARTY olmalı.", { code: "VALIDATION_ERROR" });
-    }
-    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_MULTI_PARTY_WORK_ORDER, input.multiPartyWorkOrder, `Gelen belge: çok partili belgeden ${TERIM.terbiyeIsEmri.tekilKucuk} (SINGLE tek / PER_PARTY her parti ayrı)`, userId);
-  }
+  const ie = TERIM.terbiyeIsEmri.tekilKucuk;
+  await setClosed(SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, input.batchNumberSource, { values: BATCH_NUMBER_SOURCE_VALUES, label: "Gelen belge: parti numarası kaynağı (SERIES seri / DOCUMENT belgeden)" }, userId);
+  await setClosed(SETTING_KEYS.GELEN_BELGE_ENTRY_MODE, input.entryMode, { values: ENTRY_MODE_VALUES, label: "Gelen belge: onay kipi (PER_LINE satır başına top / PER_DOCUMENT belge başına tek kayıt)" }, userId);
+  await setClosed(SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS, input.autoWorkOrderPatternless, { values: AUTO_WORK_ORDER_PATTERNLESS_VALUES, label: `Gelen belge: işlem değeri çözülemeyen grupta ${ie} (SKIP atla / OPEN hedefsiz aç)` }, userId);
+  await setClosed(SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, input.formApproval, { values: FORM_APPROVAL_VALUES, label: `Gelen belge: ${ie} formundan okutulan belgenin kaydı (SEPARATE ayrı onay / WITH_WORK_ORDER ${ie} açan kaydeder)` }, userId);
+  await setClosed(SETTING_KEYS.GELEN_BELGE_MULTI_PARTY_WORK_ORDER, input.multiPartyWorkOrder, { values: MULTI_PARTY_WORK_ORDER_VALUES, label: `Gelen belge: çok partili belgeden ${ie} (SINGLE tek / PER_PARTY her parti ayrı)` }, userId);
+  await setClosed(SETTING_KEYS.GELEN_BELGE_DUPLICATE_DOC_NO, input.duplicateDocNo, { values: DUPLICATE_DOC_NO_VALUES, label: "Gelen belge: aynı gönderen belge no tekrar gelirse (BLOCK engelle / WARN işi sürüyorsa uyar / ALLOW serbest)" }, userId);
   if (input.refakatAutoPrint !== undefined) {
     await systemSettingService.set(SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT, input.refakatAutoPrint, `${TERIM.terbiyeIsEmri.tekil} açılınca refakat kartı kendiliğinden yazdırılır`, userId);
   }

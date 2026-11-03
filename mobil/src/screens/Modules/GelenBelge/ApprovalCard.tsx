@@ -15,6 +15,7 @@ import { colors, radius, spacing, typography } from '../../../theme';
 import { INBOUND_DOC_CONTEXT_KEY } from './DocHeader';
 import { approvalCardView, approveResultView, batchPatch, parseMeters, type ApprovalCardView } from './approvalGate';
 import { useApprovalCard, type ApprovalCardState } from './useApprovalCard';
+import { DuplicateDocNoDialog } from './DuplicateDocNoDialog';
 
 interface Props {
   noteId: string;
@@ -87,6 +88,7 @@ export default function ApprovalCard({ noteId, readDone, onDone }: Props) {
         </Button>
       </View>
       <ApprovalPickers c={c} v={v} picker={picker} onClose={() => setPicker(null)} customers={customers} customersQuery={ctx} routeOptions={routeOptions} />
+      <DuplicateDocNoDialog conflict={c.duplicate} busy={c.busy === 'approve'} onCancel={c.dismissDuplicate} onConfirm={() => void c.approve(true)} />
       {meterOpen && <MeterSheet visible v={v} onDismiss={() => setMeterOpen(false)} onSave={(m) => { setMeterOpen(false); void c.patch({ kursunMeters: m }); }} />}
     </View>
   );
