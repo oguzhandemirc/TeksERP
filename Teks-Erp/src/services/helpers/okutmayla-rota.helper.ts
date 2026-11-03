@@ -130,13 +130,15 @@ export function planScanRoute(facts: ScanRouteFacts, station: { id: string; name
 }
 
 /**
- * "Bu adımda iş başladı" — adımda duran topun bu adımda AKTİF operasyonu ya da aktif metre okuması var.
+ * "Bu adımda iş başladı" — adımda AÇIK hareketle duran topun bu adımda AKTİF operasyonu ya da aktif metre okuması var.
  * TEK tanım (Prisma parçası); bellek yüklemi `ScanRouteStepFact.startedWork` buradan doldurulur.
  */
 export function startedWorkRollWhere(stepId: string): Prisma.RollWhereInput {
   return {
     currentStepId: stepId,
     status: RollStatus.IN_PRODUCTION,
+    // Hareketi kapanmış (adım bitirilmiş, sonraki okutmayı bekleyen) top "iş sürüyor" sayılmaz.
+    movements: { some: { ...ACTIVE_MOVEMENT, workOrderStepId: stepId, exitedAt: null } },
     OR: [
       { operations: { some: { ...ACTIVE_OPERATION, workOrderStepId: stepId } } },
       { meterReadings: { some: { revokedAt: null, workOrderStepId: stepId } } },

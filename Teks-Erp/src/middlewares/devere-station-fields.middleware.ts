@@ -11,7 +11,8 @@ import { z } from "zod";
 
 const stationDevereFields = z
   // `capturesWidth` (D4-E2a en ölçer yeteneği) BİLEREK yazılabilir — aynı boolean sözleşmesi.
-  .object({ producesWarpBeam: z.boolean().optional(), consumesWarpBeam: z.boolean().optional(), capturesWidth: z.boolean().optional() })
+  // K29 okutmayla rota: `scanAddAllowed` (okutunca adım eklenebilir) · `scanNotSkippable` (atlanamaz) — BİLEREK yazılabilir.
+  .object({ producesWarpBeam: z.boolean().optional(), consumesWarpBeam: z.boolean().optional(), capturesWidth: z.boolean().optional(), scanAddAllowed: z.boolean().optional(), scanNotSkippable: z.boolean().optional() })
   .passthrough();
 
 const machineDevereFields = z

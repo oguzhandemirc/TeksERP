@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
-import { stepState, STEP_STATE_LABEL } from "../step-state";
+import { stepOriginLabel, stepState, STEP_STATE_LABEL } from "../step-state";
 import type { WorkOrderStepLite } from "../types";
 
 /**
@@ -16,6 +16,7 @@ export function RouteStepline({ steps }: { steps: WorkOrderStepLite[] }) {
           const state = stepState(step);
           const wip = step.currentRolls;
           const hasWip = (wip?.count ?? 0) > 0;
+          const origin = stepOriginLabel(step);
           return (
             <div
               key={step.id}
@@ -24,6 +25,11 @@ export function RouteStepline({ steps }: { steps: WorkOrderStepLite[] }) {
               <span className="conn" />
               <div className="node">{step.stepSequence}</div>
               <div className="nm">{step.station?.name ?? "—"}</div>
+              {origin && (
+                <div className="st" data-testid="step-origin-badge">
+                  <span className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{origin}</span>
+                </div>
+              )}
               {hasWip ? (
                 <div className="wip num">
                   {wip!.count} top · {formatNumber(wip!.totalMeters, 0)} m

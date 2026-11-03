@@ -62,6 +62,7 @@ import workOrderRoutes from "./routes/workorder.routes";
 import productionBalanceRoutes from "./routes/production-balance.routes";
 import tamburRoutes from "./routes/tambur.routes";
 import kursunQcRoutes from "./routes/kursun-qc.routes";
+import scanRouteRoutes from "./routes/scan-route.routes";
 import kursunBypassRoutes from "./routes/kursun-bypass.routes";
 import eIrsaliyeRoutes from "./routes/e-irsaliye.routes";
 import qualityInspectionRoutes from "./routes/quality-inspection.routes";
@@ -593,6 +594,7 @@ app.use("/api/work-orders", workOrderRoutes);
 app.use("/api/production-balance", productionBalanceRoutes);
 app.use("/api/tambur", tamburRoutes);
 app.use("/api/kursun-qc", kursunQcRoutes);
+app.use("/api/scan-route", scanRouteRoutes);
 app.use("/api/kursun-bypass", kursunBypassRoutes);
 app.use("/api/e-irsaliye", eIrsaliyeRoutes);
 // K4P 4 puan muayene + kural setleri (kaliteGuvence modülü; kapı router içinde).

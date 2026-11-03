@@ -250,6 +250,13 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                   <KunyeCard wo={wo} />
                 </V3Section>
 
+                {wo.scanRouted && sortedSteps.length === 0 && (
+                  <V3Section title="Rota">
+                    <div className="card steps text-sm text-muted-foreground" data-testid="wo-scan-routed-empty">
+                      Rota sahada belirlenir — istasyonlar kumaşı okuttukça adımlar eklenir.
+                    </div>
+                  </V3Section>
+                )}
                 {sortedSteps.length > 0 && (
                   <V3Section title="Rota & İstasyonlar" active={wipSteps.length > 0}>
                     <RouteStepline steps={sortedSteps} />

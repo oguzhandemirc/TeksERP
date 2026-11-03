@@ -41,7 +41,7 @@ export function needsProductionIssue(r: ProductionIssueCandidate): boolean {
 export async function postProductionIssuesTx(
   tx: Tx,
   rolls: readonly ProductionIssueCandidate[],
-  args: { workOrderStepId: string; userId?: string | null },
+  args: { workOrderStepId: string | null; userId?: string | null },
 ): Promise<number> {
   let written = 0;
   for (const r of rolls) {

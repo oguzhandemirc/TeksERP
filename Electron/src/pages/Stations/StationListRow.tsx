@@ -21,6 +21,8 @@ export function capabilityChips(s: Station): string[] {
   if (s.producesWarpBeam) out.push("Levent sarar");
   if (s.consumesWarpBeam) out.push("Levent tüketir");
   if (s.capturesWidth) out.push("En ölçer");
+  if (s.scanAddAllowed) out.push("Okutunca eklenir");
+  if (s.scanNotSkippable) out.push("Atlanamaz");
   return out;
 }
 

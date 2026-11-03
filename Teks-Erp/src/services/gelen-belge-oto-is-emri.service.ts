@@ -7,6 +7,8 @@
 // koşar, best-effort'tur — düşen grup onayı geri sarmaz, sonuç grup başına Türkçe nedenle döner.
 // Açık rota isteği (onay gövdesi `routeTemplateId`, iş emri ekranından "Belge okut"): ayardan bağımsız koşar, rota = istenen;
 // istek onaydan ÖNCE `assertRouteOverride` ile doğrulanır.
+// K29: "Rota uygulaması: Okutmayla" iken (açık rota isteği yoksa) iş emri ROTASIZ açılır (`scanRouted`); adımları sahada
+// istasyon okutmaları ekler (`helpers/okutmayla-rota.helper.ts`). Belgeden çözülen hedef değerler aynen taşınır.
 // Token belirlenimlidir: `uuidv5(noteId | grup anahtarı | bağlanacak top kümesi)` — aynı topları ikinci kez gönderen
 // koşum (yeniden onay, yarıda kalma) aynı iş emrini replay eder; PARTIAL yeniden onayında yeni doğan toplar yeni kümedir.
 // =============================================================================
@@ -16,7 +18,7 @@ import { matchesPermission } from "../middlewares/rbac.middleware";
 import type { JwtPayload } from "../types/api.types";
 import { buildWorkOrderPlan, WORK_ORDER_PLAN_STATUSES, type PlanGroup } from "./gelen-belge-is-emri.service";
 import type { ApproveResult } from "./gelen-belge-onay.service";
-import { readAutoWorkOrderPatternless, readIncomingDocAutoWorkOrder, readProductionEnabled, SETTING_KEYS } from "./system-setting.service";
+import { readAutoWorkOrderPatternless, readIncomingDocAutoWorkOrder, readProductionEnabled, readProductionRouteMode, SETTING_KEYS } from "./system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
 import { WorkOrderService } from "./workorder.service";
 import { factoryRouteProblem } from "./gelen-belge-rota-onerisi.service";
@@ -117,8 +119,9 @@ export async function autoOpenWorkOrders(noteId: string, actor: Pick<JwtPayload,
       return allSkipped(groups, `Onaylayanın ${TERIM.terbiyeIsEmri.tekilKucuk} açma yetkisi yok (workorder:write ya da mobile:hizli-is-emri); yetkili kişi plan ekranından açmalı.`);
     }
     if (!(await readProductionEnabled())) return allSkipped(groups, `Üretim modülü kapalı; ${TERIM.terbiyeIsEmri.tekilKucuk} açılamaz.`);
-    const routeTemplateId = opts.routeTemplateId ?? plan.suggestedRouteTemplateId;
-    if (!routeTemplateId) {
+    const scanRouted = !opts.routeTemplateId && (await readProductionRouteMode()) === "SCAN";
+    const routeTemplateId = scanRouted ? undefined : opts.routeTemplateId ?? plan.suggestedRouteTemplateId;
+    if (!routeTemplateId && !scanRouted) {
       return allSkipped(groups, `Rota önerilemedi: ${plan.routeSuggestionNotes.join(" ")} ${TERIM.terbiyeIsEmri.cekim.belirtme} plan ekranından rota seçerek açın ya da ${settingScreenPath("gelen-belge")} ekranında fabrika varsayılan rotasını seçin.`);
     }
     const out: AutoWorkOrderGroup[] = [];
@@ -140,7 +143,7 @@ export async function autoOpenWorkOrders(noteId: string, actor: Pick<JwtPayload,
         const res = await workOrders.quickStart({
           clientToken: autoWorkOrderToken(noteId, g.key, rolls.map((r) => r.rollId)),
           rollBarcodes: rolls.map((r) => r.barcode!),
-          routeTemplateId,
+          ...(scanRouted ? { scanRouted: true } : { routeTemplateId }),
           targetValues: g.targets.map((t) => ({ propertyId: t.propertyId, valueId: t.valueId })),
           targetPropertyIds: [...new Set(g.targets.map((t) => t.flagPropertyId))],
           sourceNoteId: noteId,
