@@ -72,8 +72,12 @@ export interface StationCapabilityProperty {
   mode: StationPropertyMode;
   /** SEÇİM tipliyse izin verilen değerler (BAYRAK'ta boş dizi). */
   values: { code: string; name: string; isActive: boolean }[];
-  /** Bu SEÇİM hangi BAYRAĞIN çeşidi (KQ-D4: gramaj → Kurşunlu); değilse null. */
+  /** Bu SEÇİM hangi BAYRAĞIN çeşidi (KQ-D4: gramaj → Kurşun); değilse null. */
   variantOfPropertyId: string | null;
+  /** K22: İE rota adımında ön seçili gelsin mi (OPTIONAL'da anlamlı; AUTO hep seçili). */
+  defaultOn: boolean;
+  /** K22: ön seçilecek değer (bu özelliğin ya da çeşit çocuğunun değeri); yoksa null. */
+  defaultValueId: string | null;
 }
 
 /**
@@ -103,6 +107,8 @@ const CAPABILITY_PROPERTY_SELECT = {
  */
 function toCapabilityProperty(row: {
   mode: StationPropertyMode;
+  defaultOn: boolean;
+  defaultValueId: string | null;
   property: {
     id: string;
     code: string;
@@ -122,6 +128,8 @@ function toCapabilityProperty(row: {
     mode: row.mode,
     values: row.property.values,
     variantOfPropertyId: row.property.variantOfPropertyId,
+    defaultOn: row.defaultOn,
+    defaultValueId: row.defaultValueId,
   };
 }
 
@@ -170,6 +178,49 @@ export function deriveCapabilityFlags(station: {
   };
 }
 
+/** Yetenek yazımının satır girdisi; `undefined` alan mevcut değeri korur. */
+export interface CapabilityTarget {
+  propertyId: string;
+  mode?: StationPropertyMode;
+  defaultOn?: boolean;
+  /** null = varsayılan değeri kaldır. */
+  defaultValueId?: string | null;
+}
+
+function capabilityPatch(t: CapabilityTarget): Prisma.StationPropertyUncheckedUpdateManyInput | null {
+  const patch: Prisma.StationPropertyUncheckedUpdateManyInput = {};
+  if (t.mode) patch.mode = t.mode;
+  if (t.defaultOn !== undefined) patch.defaultOn = t.defaultOn;
+  if (t.defaultValueId !== undefined) patch.defaultValueId = t.defaultValueId;
+  return Object.keys(patch).length > 0 ? patch : null;
+}
+
+/**
+ * K22: varsayılan değer o özelliğin (ya da çeşit çocuğunun — bayrak satırında gramaj) AKTİF değeri olmalı.
+ * Aksi 400: başka özelliğin değeri ön seçilse rota adımı yanlış hedefi taşırdı.
+ */
+async function assertDefaultValuesOwned(targets: readonly CapabilityTarget[]): Promise<void> {
+  const wanted = targets.filter((t): t is CapabilityTarget & { defaultValueId: string } => typeof t.defaultValueId === "string");
+  if (wanted.length === 0) return;
+  const values = await prisma.fabricPropertyValue.findMany({
+    where: { id: { in: [...new Set(wanted.map((t) => t.defaultValueId))] } },
+    select: { id: true, name: true, isActive: true, propertyId: true, property: { select: { name: true, variantOfPropertyId: true } } },
+  });
+  const byId = new Map(values.map((v) => [v.id, v]));
+  for (const t of wanted) {
+    const v = byId.get(t.defaultValueId);
+    if (!v || !v.isActive) {
+      throw AppError.badRequest("Varsayılan değer bulunamadı ya da pasif.", { code: "STATION_DEFAULT_VALUE_INVALID" });
+    }
+    if (v.propertyId !== t.propertyId && v.property.variantOfPropertyId !== t.propertyId) {
+      throw AppError.badRequest(
+        `'${v.name}' değeri '${v.property.name}' özelliğine ait — bu yeteneğin varsayılanı olamaz. Özelliğin kendi (ya da çeşidinin) değerini seçin.`,
+        { code: "STATION_DEFAULT_VALUE_FOREIGN" },
+      );
+    }
+  }
+}
+
 export class StationCapabilityService {
   /**
    * Bir istasyonun mevcut renk + özellik yetkinliklerini döner.
@@ -207,7 +258,7 @@ export class StationCapabilityService {
       }),
       prisma.stationProperty.findMany({
         where: { stationId },
-        select: { mode: true, property: { select: CAPABILITY_PROPERTY_SELECT } },
+        select: { mode: true, defaultOn: true, defaultValueId: true, property: { select: CAPABILITY_PROPERTY_SELECT } },
         orderBy: [{ property: { sortOrder: "asc" } }, { property: { code: "asc" } }],
       }),
     ]);
@@ -292,8 +343,8 @@ export class StationCapabilityService {
       colorIds?: string[];
       /** Eski sözleşme — modsuz id listesi. */
       propertyIds?: string[];
-      /** Yeni sözleşme — id + mod. İkisi de gelirse BU kazanır. */
-      properties?: { propertyId: string; mode?: StationPropertyMode }[];
+      /** Yeni sözleşme — id + mod (+ K22 ön seçim). İkisi de gelirse BU kazanır. Verilmeyen alan KORUNUR. */
+      properties?: CapabilityTarget[];
     },
     userId?: string,
   ): Promise<ApiResponse<StationCapabilityDto>> {
@@ -324,7 +375,7 @@ export class StationCapabilityService {
     // var (mevcut kayıtları silmek için).
     // İki sözleşmenin tekleştirilmesi — aşağıdaki her şey `targets` üzerinden
     // çalışır, böylece eski/yeni gövde ayrımı TEK yerde kalır.
-    const targets: { propertyId: string; mode?: StationPropertyMode }[] =
+    const targets: CapabilityTarget[] =
       data.properties ?? (data.propertyIds ?? []).map((propertyId) => ({ propertyId }));
     const targetIds = [...new Set(targets.map((t) => t.propertyId))];
 
@@ -380,7 +431,9 @@ export class StationCapabilityService {
       }
     }
 
-    // ÇEŞİT (KQ-D4): çeşit ("Kurşun gramajı") ana bayrağı ("Kurşunlu") aynı
+    await assertDefaultValuesOwned(targets);
+
+    // ÇEŞİT (KQ-D4): çeşit ("Kurşun gramajı") ana bayrağı ("Kurşun") aynı
     // istasyonda yokken eklenemez — gramaj basılır ama kurşun türeyemezdi.
     await assertVariantParentsBound([{ stationId, propertyIds: targetIds }]);
 
@@ -392,7 +445,7 @@ export class StationCapabilityService {
       }),
       prisma.stationProperty.findMany({
         where: { stationId },
-        select: { propertyId: true, mode: true },
+        select: { propertyId: true, mode: true, defaultOn: true, defaultValueId: true },
       }),
     ]);
 
@@ -431,10 +484,11 @@ export class StationCapabilityService {
         // Sıralı döngü bilinçli: `tx` ile `Promise.all` YASAK (pg adapter tek
         // bağlantı, ESLint kuralı). Liste istasyon başına birkaç satır.
         for (const t of targets) {
-          if (!t.mode) continue;
+          const patch = capabilityPatch(t);
+          if (!patch) continue;
           await tx.stationProperty.updateMany({
             where: { stationId, propertyId: t.propertyId },
-            data: { mode: t.mode },
+            data: patch,
           });
         }
       }
@@ -448,7 +502,7 @@ export class StationCapabilityService {
       oldData: {
         ...(data.colorIds ? { colorIds: oldColors.map((r) => r.colorId) } : {}),
         // Mod da yazılır: "KURSUN otomatikten opsiyonele çekildi" kararının tek izi.
-        properties: oldProperties.map((r) => ({ propertyId: r.propertyId, mode: r.mode })),
+        properties: oldProperties.map((r) => ({ propertyId: r.propertyId, mode: r.mode, defaultOn: r.defaultOn, defaultValueId: r.defaultValueId })),
       },
       newData: {
         ...(data.colorIds ? { colorIds: data.colorIds } : {}),
@@ -554,7 +608,7 @@ export class StationCapabilityService {
           },
         },
         propertyCapabilities: {
-          select: { mode: true, property: { select: CAPABILITY_PROPERTY_SELECT } },
+          select: { mode: true, defaultOn: true, defaultValueId: true, property: { select: CAPABILITY_PROPERTY_SELECT } },
           orderBy: [{ property: { sortOrder: "asc" } }, { property: { code: "asc" } }],
         },
       },

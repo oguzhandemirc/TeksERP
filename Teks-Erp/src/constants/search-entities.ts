@@ -111,7 +111,7 @@ export const SEARCH_ENTITIES: readonly SearchEntity[] = [
   },
   {
     key: "workOrder",
-    label: TERIM.terbiyeIsEmri.cogul,
+    get label() { return TERIM.terbiyeIsEmri.cogul; },
     modelName: "workOrder",
     permissions: ["workorder:read"],
     searchFields: ["targetItem.name", "targetColor.name"],

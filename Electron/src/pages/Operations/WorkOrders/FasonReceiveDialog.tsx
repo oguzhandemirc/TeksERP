@@ -26,6 +26,7 @@ import type { FasonQuickPreview } from "./types";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { shrinkExceedsTolerance, shrinkInfo } from "./fasonReceive.helper";
 import { useFasonShrinkWarn } from "@/hooks/usePricingEnabled";
+import { TERIM } from "@/lib/terim";
 
 type Group = FasonQuickPreview["groups"][number];
 
@@ -109,7 +110,7 @@ export function FasonReceiveDialog({
 
         {!q.isLoading && groups.length === 0 && (
           <div className="rounded-md border p-4 text-sm text-muted-foreground">
-            Bu terbiye iş emrinin fasonda bekleyen açık sevki yok.
+            Bu {TERIM.terbiyeIsEmri.cekimKucuk.ilgi} fasonda bekleyen açık sevki yok.
             {orphans.length > 0 && (
               <div className="mt-2 text-amber-600">
                 ⚠ {orphans.length} top fasonda görünüyor ama açık sevke bağlanamıyor —

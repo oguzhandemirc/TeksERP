@@ -7,6 +7,7 @@
 // Katalogda olmayan uç kök kaydın anlatısına düşer (fail-open); kapsama cırcırı B4'te.
 // =============================================================================
 
+import { TERIM } from "./terim";
 export interface UcEylemi {
   /** Başarılı istekte geçmiş zaman: "sevkiyatı onayladı". */
   fiil: string;
@@ -47,20 +48,20 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "PATCH /api/orders/:id": e("siparişi düzenledi", "siparişi düzenlemeye çalıştı"),
   "DELETE /api/orders/:id": e("siparişi sildi", "siparişi silmeye çalıştı"),
   "POST /api/orders/:id/production-proposal/preview": e("siparişin üretim önerisine baktı", "siparişin üretim önerisine bakmaya çalıştı"),
-  "POST /api/orders/:id/production-proposal/apply": e("siparişten dokuma/terbiye iş emirlerini oluşturdu", "siparişten dokuma/terbiye iş emirlerini oluşturmaya çalıştı"),
+  get "POST /api/orders/:id/production-proposal/apply"() { return e(`siparişten dokuma/${TERIM.terbiyeIsEmri.cogulCekimKucuk.belirtme} oluşturdu`, `siparişten dokuma/${TERIM.terbiyeIsEmri.cogulCekimKucuk.belirtme} oluşturmaya çalıştı`); },
   // ── Finans: dönem sonu hizmet faturası (H8)
   "POST /api/finance/invoices/service-period-draft": e("dönem sonu hizmet faturası taslağı oluşturdu", "dönem sonu hizmet faturası taslağı oluşturmaya çalıştı"),
   // ── Terbiye iş emri
-  "POST /api/work-orders": e("terbiye iş emri açtı", "terbiye iş emri açmaya çalıştı"),
-  "PATCH /api/work-orders/:id": e("terbiye iş emrini düzenledi", "terbiye iş emrini düzenlemeye çalıştı"),
-  "PUT /api/work-orders/:id": e("terbiye iş emrini düzenledi", "terbiye iş emrini düzenlemeye çalıştı"),
-  "POST /api/work-orders/:id/complete": e("terbiye iş emrini tamamladı", "terbiye iş emrini tamamlamaya çalıştı"),
-  "POST /api/work-orders/:id/cancel": e("terbiye iş emrini iptal etti", "terbiye iş emrini iptal etmeye çalıştı"),
-  "PATCH /api/work-orders/:id/steps/:stepId/planned-machine": e("terbiye iş emri adımının plan makinesini değiştirdi", "terbiye iş emri adımının plan makinesini değiştirmeye çalıştı"),
+  get "POST /api/work-orders"() { return e(`${TERIM.terbiyeIsEmri.tekilKucuk} açtı`, `${TERIM.terbiyeIsEmri.tekilKucuk} açmaya çalıştı`); },
+  get "PATCH /api/work-orders/:id"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} düzenledi`, `${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} düzenlemeye çalıştı`); },
+  get "PUT /api/work-orders/:id"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} düzenledi`, `${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} düzenlemeye çalıştı`); },
+  get "POST /api/work-orders/:id/complete"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} tamamladı`, `${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} tamamlamaya çalıştı`); },
+  get "POST /api/work-orders/:id/cancel"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} iptal etti`, `${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} iptal etmeye çalıştı`); },
+  get "PATCH /api/work-orders/:id/steps/:stepId/planned-machine"() { return e(`${TERIM.terbiyeIsEmri.tekilKucuk} adımının plan makinesini değiştirdi`, `${TERIM.terbiyeIsEmri.tekilKucuk} adımının plan makinesini değiştirmeye çalıştı`); },
   "PUT /api/station-capabilities/:stationId/kursun": e("kurşun istasyonunun gramaj/fiyat ayarını değiştirdi", "kurşun istasyonunun gramaj/fiyat ayarını değiştirmeye çalıştı"),
-  "POST /api/work-orders/:id/split": e("terbiye iş emrini böldü", "terbiye iş emrini bölmeye çalıştı"),
+  get "POST /api/work-orders/:id/split"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} böldü`, `${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} bölmeye çalıştı`); },
   "POST /api/work-orders/:id/manual-move": e("topları elle taşıdı", "topları elle taşımaya çalıştı"),
-  "DELETE /api/work-orders/:id": e("terbiye iş emrini sildi", "terbiye iş emrini silmeye çalıştı"),
+  get "DELETE /api/work-orders/:id"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} sildi`, `${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} silmeye çalıştı`); },
   // ── Top
   "POST /api/rolls/initial-entry": e("top girişi yaptı", "top girişi yapmaya çalıştı"),
   "POST /api/rolls/:id/scrap": e("topu hurdaya ayırdı", "topu hurdaya ayırmaya çalıştı"),
@@ -107,7 +108,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/kursun-qc/meter-readings/:id/office-ack": e("metre sapmasını ofisten onayladı", "metre sapmasını ofisten onaylamaya çalıştı"),
   "POST /api/kursun-qc/step/:stepId/foreign-machine-take": e("başka makineye atanmış işi bu makinede aldı", "başka makineye atanmış işi bu makinede almaya çalıştı"),
   "POST /api/tambur/meter-readings/:id/correct": e("Tambur kesim metresini düzeltti", "Tambur kesim metresini düzeltmeye çalıştı"),
-  "PUT /api/labels/work-orders/:id/overrides": e("terbiye iş emrinin etiket bilgisini değiştirdi", "terbiye iş emrinin etiket bilgisini değiştirmeye çalıştı"),
+  get "PUT /api/labels/work-orders/:id/overrides"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} etiket bilgisini değiştirdi`, `${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} etiket bilgisini değiştirmeye çalıştı`); },
   // ── Gelen belge taslağı (D2)
   "POST /api/gelen-belge/taramalar": e("gelen belge fotoğrafı yükledi", "gelen belge fotoğrafı yüklemeye çalıştı"),
   "POST /api/gelen-belge/taramalar/:id/oku": e("gelen belge fotoğrafını okumaya gönderdi", "gelen belge fotoğrafını okumaya göndermeye çalıştı"),
@@ -122,7 +123,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "PATCH /api/gelen-belge/irsaliyeler/:id/satirlar/:lineId": e("gelen belge satırını düzeltti", "gelen belge satırını düzeltmeye çalıştı"),
   "DELETE /api/gelen-belge/irsaliyeler/:id/satirlar/:lineId": e("gelen belge satırını sildi", "gelen belge satırını silmeye çalıştı"),
   "POST /api/gelen-belge/irsaliyeler/:id/onay": e("gelen belgeyi onayladı (emanet top girişi)", "gelen belgeyi onaylamaya çalıştı"),
-  "POST /api/gelen-belge/irsaliyeler/:id/is-emri": e("gelen belgeden terbiye iş emri açtı", "gelen belgeden terbiye iş emri açmaya çalıştı"),
+  get "POST /api/gelen-belge/irsaliyeler/:id/is-emri"() { return e(`gelen belgeden ${TERIM.terbiyeIsEmri.tekilKucuk} açtı`, `gelen belgeden ${TERIM.terbiyeIsEmri.tekilKucuk} açmaya çalıştı`); },
   "POST /api/gelen-belge/irsaliyeler/:id/iptal": e("onaylı gelen belgeyi iptal etti", "onaylı gelen belgeyi iptal etmeye çalıştı"),
   "PATCH /api/gelen-belge/sablonlar/:code": e("gönderen şablonunu düzenledi", "gönderen şablonunu düzenlemeye çalıştı"),
   "POST /api/gelen-belge/sablonlar/ozel": e("gelen belge tipi tanıttı (kullanıcı şablonu)", "gelen belge tipi tanıtmaya çalıştı"),
@@ -153,7 +154,7 @@ export const ERROR_CODE_REASONS: Readonly<Record<string, string>> = {
   REASON_REQUIRED: "gerekçe girilmedi",
   REASON_CODE_INVALID: "gerekçe geçersiz",
   TEMPLATE_NOT_FOUND: "şablon bulunamadı",
-  WORKORDER_DEAD: "terbiye iş emri kapalı",
+  get WORKORDER_DEAD() { return `${TERIM.terbiyeIsEmri.tekilKucuk} kapalı`; },
   DISPATCH_CANCELLED: "sevk iptal edilmiş",
   LOGIN_LOCKED: "hesap geçici olarak kilitli",
   CLIENT_TOKEN_REVOKED: "aynı istek daha önce geri alınmış",

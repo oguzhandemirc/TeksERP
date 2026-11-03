@@ -16,6 +16,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AuditService } from "../audit.service";
 import { assertValidUuid } from "../../middlewares/uuid-param.middleware";
+import { TERIM } from "../../constants/terim";
 
 type Tx = Prisma.TransactionClient;
 
@@ -113,7 +114,7 @@ export const stationHardRemove = makeGuardedHardRemove({
       key: "woStepCount",
       count: (id) => prisma.workOrderStep.count({ where: { stationId: id } }),
       message: (n) =>
-        `İstasyona bağlı ${n} terbiye iş emri adımı var — kalıcı silinemez. İstasyonu pasife alın.`,
+        `İstasyona bağlı ${n} ${TERIM.terbiyeIsEmri.tekilKucuk} adımı var — kalıcı silinemez. İstasyonu pasife alın.`,
     },
     {
       key: "routeStepCount",
@@ -217,7 +218,7 @@ export const routeHardRemove = makeGuardedHardRemove({
       key: "woCount",
       count: (id) => prisma.workOrder.count({ where: { routeTemplateId: id } }),
       message: (n) =>
-        `Bu rotadan üretilmiş ${n} terbiye iş emri var — kalıcı silinemez (soy izi korunur). Rotayı pasife alın.`,
+        `Bu rotadan üretilmiş ${n} ${TERIM.terbiyeIsEmri.tekilKucuk} var — kalıcı silinemez (soy izi korunur). Rotayı pasife alın.`,
     },
     // F211: rotayı kullanan reçete varsa silme — ProductRecipe.routeId SetNull olur
     // (reçete rotasını sessizce kaybeder).

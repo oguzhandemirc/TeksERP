@@ -6,6 +6,7 @@ import { useAxisNotes, useReportAxes } from "../_hooks/useReportAxes";
 import { fmtInt, fmtNum, fmtPercent } from "../_components/formatters";
 import { bucketColumns, lineColumns } from "./openOrderCoverageColumns";
 import { buildCoverageExport, openOrderCoverageApi, type CoverageBucketRow, type CoverageLineRow } from "./openOrderCoverage";
+import { TERIM } from "@/lib/terim";
 
 
 // ⚠️ YALNIZ KUMAŞ: müşteri ekseni BİLEREK yok — karşılama havuzu FIFO'dur ve
@@ -67,14 +68,14 @@ export function OpenOrderCoveragePage() {
         <MetricCard
           label="Üretimde"
           value={`${fmtNum(c?.summary.fromProductionQty)} m`}
-          hint="Canlı terbiye iş emirlerindeki mal"
+          hint={`Canlı ${TERIM.terbiyeIsEmri.cogulCekimKucuk.bulunma}ki mal`}
           icon={Factory}
           isLoading={query.isLoading}
         />
         <MetricCard
           label="Karşılanamayan"
           value={`${fmtNum(c?.summary.uncoveredQty)} m`}
-          hint={c ? `${fmtInt(c.summary.uncoveredLines)} kalem — terbiye iş emri gerekiyor` : undefined}
+          hint={c ? `${fmtInt(c.summary.uncoveredLines)} kalem — ${TERIM.terbiyeIsEmri.tekilKucuk} gerekiyor` : undefined}
           icon={AlertTriangle}
           tone={c === undefined ? "neutral" : c.summary.uncoveredQty > 0 ? "bad" : "ok"}
           isLoading={query.isLoading}

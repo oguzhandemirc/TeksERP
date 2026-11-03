@@ -3,6 +3,7 @@ import { Scale, ShoppingCart, Wrench } from "lucide-react";
 import { isProductBalanceVisible } from "../production-regime";
 import { flagOffHint } from "@/lib/flag-setting-path";
 import type { OperationsTile } from "../tile-config";
+import { TERIM } from "@/lib/terim";
 
 export const planningTiles: OperationsTile[] = [
   {
@@ -28,7 +29,7 @@ export const planningTiles: OperationsTile[] = [
   {
     key: "product-balance",
     title: "Kumaş Dengesi",
-    description: "Talep ↔ depo + üretim; eksik kadar terbiye iş emri aç",
+    get description() { return `Talep ↔ depo + üretim; eksik kadar ${TERIM.terbiyeIsEmri.tekilKucuk} aç`; },
     icon: Scale,
     to: "/operations/product-balance",
     group: "planning",

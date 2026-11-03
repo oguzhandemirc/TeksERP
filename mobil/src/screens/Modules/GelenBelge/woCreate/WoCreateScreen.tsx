@@ -23,8 +23,8 @@ type Stage =
   | { kind: 'legacy' };
 
 export const WO_SHORTCUTS_KEY = ['routes', 'wo-shortcuts'] as const;
-const TITLE = `${TERIM.terbiyeIsEmri.tekil} oluştur`;
-const QUICK = `Hızlı ${TERIM.terbiyeIsEmri.tekil}`;
+const title_ = (): string => `${TERIM.terbiyeIsEmri.tekil} oluştur`;
+const quick_ = (): string => `Hızlı ${TERIM.terbiyeIsEmri.tekil}`;
 
 export default function WoCreateScreen() {
   const [stage, setStage] = useState<Stage>({ kind: 'hub' });
@@ -47,14 +47,14 @@ export default function WoCreateScreen() {
   };
 
   const route = stage.kind === 'form' || stage.kind === 'scan' ? stage.route : null;
-  const title = stage.kind === 'legacy' ? 'Belge Tara' : route ? shortcutTitle(route) : stage.kind === 'form' ? QUICK : TITLE;
+  const title = stage.kind === 'legacy' ? 'Belge Tara' : route ? shortcutTitle(route) : stage.kind === 'form' ? quick_() : title_();
 
   return (
     <ScreenChrome title={title} onStepBack={stage.kind === 'hub' ? undefined : back}>
       {stage.kind === 'hub' && (
         <ScrollView contentContainerStyle={styles.body}>
           <View style={styles.grid} testID="ie-sabit-turler">
-            {canManual && <Tile icon="rocket-launch-outline" title={QUICK} sub="Topu okutup başlat" onPress={() => openForm(null)} testID="ie-tur-hizli" />}
+            {canManual && <Tile icon="rocket-launch-outline" title={quick_()} sub="Topu okutup başlat" onPress={() => openForm(null)} testID="ie-tur-hizli" />}
             {!q.isLoading && shortcuts.length === 0 && (
               <Tile icon="file-document-outline" title="Belge Tara" sub="Müşteri irsaliyesi → taslak" onPress={() => setStage({ kind: 'legacy' })} testID="ie-tur-belge-tara" />
             )}
@@ -88,7 +88,7 @@ export default function WoCreateScreen() {
           {canManual ? (
             <NewWorkOrderView step={step} onStepChange={setStep} onResultChange={setHasResult} initialRouteTemplateId={stage.route?.id ?? null} />
           ) : (
-            <Text style={[styles.hint, styles.body]}>Elle giriş için {QUICK} yetkisi gerekir; belgeyi okutarak devam edin.</Text>
+            <Text style={[styles.hint, styles.body]}>Elle giriş için {quick_()} yetkisi gerekir; belgeyi okutarak devam edin.</Text>
           )}
         </View>
       )}

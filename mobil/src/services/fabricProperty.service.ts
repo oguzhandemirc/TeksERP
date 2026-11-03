@@ -46,9 +46,6 @@ export interface KursunGramajCatalog {
   options: KursunGramajOption[];
 }
 
-/** S3: customerId → gramaj değeri kimliği (panel `lib/kursun-gramaj.ts` ikizi). */
-export type KursunCustomerDefaults = Readonly<Record<string, string>>;
-
 /** Kat değerlerini taşıyan katalog satırının kodu — backend ile aynı sabit. */
 export const FOLD_PROPERTY_CODE = 'KAT';
 
@@ -77,15 +74,6 @@ export const fabricPropertyService = {
     return { propertyId: variant.id, options };
   },
 
-  /** S3: müşterinin cari kartındaki varsayılan kurşun gramajı (customerId → valueId). Eski backend / hata → boş (istasyon varsayılanı). */
-  getKursunCustomerDefaults: async (): Promise<KursunCustomerDefaults> => {
-    try {
-      const res = await apiClient.get<{ data?: { customerId: string; valueId: string }[] }>('/finance/kursun-customer-defaults');
-      return Object.fromEntries((res.data.data ?? []).map((r) => [r.customerId, r.valueId]));
-    } catch {
-      return {};
-    }
-  },
 
   /**
    * Kat değerleri (2-KAT / 4-KAT / TUP / fabrikanın eklediği 6-KAT…).

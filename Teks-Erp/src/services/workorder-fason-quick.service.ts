@@ -25,6 +25,7 @@ import { ApiResponse } from "../types/api.types";
 import { SubcontractorService } from "./subcontractor.service";
 import { OPEN_OUTSTANDING, OUTSTANDING_ITEM } from "./helpers/fason-open-dispatch.helper";
 import { workOrderBoundOnly } from "./helpers/dispatch-header.helper";
+import { TERIM } from "../constants/terim";
 
 /** Kabul edilecek bir sevk grubu — adım + firma + o sevkteki toplar. */
 export interface FasonQuickGroup {
@@ -83,7 +84,7 @@ export class WorkOrderFasonQuickService {
         steps: { select: { id: true, requiredCategory: { select: { appliesColor: true } } } },
       },
     });
-    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
+    if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı`);
     const stepIds = wo.steps.map((s) => s.id);
     const appliesColorByStep = new Map(
       wo.steps.map((s) => [s.id, Boolean(s.requiredCategory?.appliesColor)]),
@@ -206,7 +207,7 @@ export class WorkOrderFasonQuickService {
 
       if (g.colorRequired && (input.appliedColorId === undefined || input.appliedColorId === null)) {
         throw AppError.badRequest(
-          `${g.dispatchNo}: bu terbiye iş emrinin hedef rengi yok — kabulde uygulanan rengi seçin.`,
+          `${g.dispatchNo}: bu ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedef rengi yok — kabulde uygulanan rengi seçin.`,
         );
       }
 

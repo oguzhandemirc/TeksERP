@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { kursunDagitimService } from "./service";
 import type { KursunBulkResult } from "./types";
+import { TERIM } from "@/lib/terim";
 
 export const DISTRIBUTION_QUERY_KEY = ["kursun-bypass", "distribution"];
 
@@ -52,7 +53,7 @@ export function useKursunDistribution() {
   const assign = useMutation({
     mutationFn: kursunDagitimService.assign,
     onSuccess: (res) => {
-      toast.success(res.message ?? "Terbiye iş emri makineye dağıtıldı.");
+      toast.success(res.message ?? `${TERIM.terbiyeIsEmri.cumleBasi.yalin} makineye dağıtıldı.`);
       refresh();
     },
   });

@@ -21,6 +21,7 @@ import { stationCapabilityService } from "@/pages/StationCapabilities/service";
 import { capCanApplyColor, isTargetableProperty } from "@/pages/StationCapabilities/types";
 import type { DesignerStep } from "./RouteDesignerDialog";
 import { StepParamBoxView, StepPropertyChips } from "./StepPropertyChips";
+import { TERIM } from "@/lib/terim";
 
 export interface RouteTargetBinding {
   colorId: string | null;
@@ -212,7 +213,7 @@ export function RouteStepDetail({
             icon={Factory}
             iconClassName="text-primary"
             title="İstasyon Seç"
-            description="Terbiye iş emri adımının istasyonu. Ada veya koda göre ara."
+            description={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} adımının istasyonu. Ada veya koda göre ara.`}
             placeholder="İstasyon seç..."
             triggerClassName="h-8 text-xs"
           />
@@ -257,7 +258,7 @@ export function RouteStepDetail({
               />
               <span>
                 <strong>Fasona renksiz gitsin</strong> — çekide “boyanacak renk”
-                satırı basılmaz. Terbiye iş emrinin rengi değişmez.
+                satırı basılmaz. {TERIM.terbiyeIsEmri.cumleBasi.ilgi} rengi değişmez.
               </span>
             </label>
           </div>

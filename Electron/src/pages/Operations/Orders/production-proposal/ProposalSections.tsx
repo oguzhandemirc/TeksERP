@@ -71,11 +71,11 @@ interface WorkOrderProps {
 export function WorkOrderSection({ rows, sel, canCreate, lineLabel, onToggle }: WorkOrderProps) {
   if (rows.length === 0) return null;
   return (
-    <Section title={`Terbiye iş emirleri (${rows.length})`} hint={canCreate ? "Grup: kumaş + renk + en (toplu eylemle aynı kural)." : "Terbiye iş emri oluşturma izniniz yok."}>
+    <Section title={`${TERIM.terbiyeIsEmri.cumleBasiCogul.yalin} (${rows.length})`} hint={canCreate ? "Grup: kumaş + renk + en (toplu eylemle aynı kural)." : `${TERIM.terbiyeIsEmri.cumleBasi.yalin} oluşturma izniniz yok.`}>
       <ul className="divide-y rounded-md border">
         {rows.map((w) => (
           <li key={w.key} className="flex items-start gap-2 p-2 text-sm">
-            <Checkbox checked={sel.workOrders.has(w.key)} disabled={!canCreate || w.blockedCode != null} onCheckedChange={() => onToggle(w.key)} aria-label={`${w.itemName} terbiye iş emrini seç`} />
+            <Checkbox checked={sel.workOrders.has(w.key)} disabled={!canCreate || w.blockedCode != null} onCheckedChange={() => onToggle(w.key)} aria-label={`${w.itemName} ${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} seç`} />
             <div className="min-w-0 flex-1 space-y-0.5">
               <div className="font-medium">
                 {w.itemName} {w.width != null && <span className="text-muted-foreground">· {w.width} cm</span>}

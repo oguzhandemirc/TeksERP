@@ -12,6 +12,7 @@ import { batchTraceApi, buildBatchTraceExport, type BatchTrace } from "./batchTr
 import { useScanSeed } from "@/hooks/useScanSeed";
 import { BatchKursunGramajSection } from "./BatchKursunGramajSection";
 import { BatchIdentityStrip } from "./BatchIdentityStrip";
+import { TERIM } from "@/lib/terim";
 
 type CustomerRow = BatchTrace["customers"][number];
 
@@ -163,7 +164,7 @@ export function BatchTracePage() {
                 <span className="font-medium">{c.batchNumber}</span>
                 {c.merged ? <Badge variant="outline" className="ml-1.5 text-[10px]">birleştirildi</Badge> : null}
                 <div className="text-[10px] text-muted-foreground">
-                  {c.workOrderNumber ?? "terbiye iş emri yok"} · {fmtDate(c.createdAt)} · {fmtInt(c.rollCount)} top
+                  {c.workOrderNumber ?? `${TERIM.terbiyeIsEmri.tekilKucuk} yok`} · {fmtDate(c.createdAt)} · {fmtInt(c.rollCount)} top
                 </div>
               </button>
             ))}

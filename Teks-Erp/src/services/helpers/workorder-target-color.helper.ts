@@ -49,6 +49,7 @@ import { AppError } from "../../utils/app-error";
 import { STEP_CAPABILITY_SELECT, stepCanApplyColor } from "./step-capability.helper";
 import { whereRollsOfWorkOrder } from "./workorder-rolls.helper";
 import { K18_DEAD_STATUSES } from "../batch.service";
+import { TERIM } from "../../constants/terim";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -180,8 +181,8 @@ export async function assertTargetColorChange(
     partial = { dyedCount: mismatchCount, pendingCount };
     if (pendingCount === 0) {
       throw AppError.conflict(
-        `Mal zaten ${dyedLabel} boyandı (${mismatchCount} top) ve boyanacak top kalmadı — bu terbiye iş emri ${dyedLabel} olarak biter. ` +
-          `Yeniden boyanacaksa Tebdil, müşteri ${newName} istiyorsa yeni terbiye iş emri; kayıt yanlışsa topları da düzeltin.`,
+        `Mal zaten ${dyedLabel} boyandı (${mismatchCount} top) ve boyanacak top kalmadı — bu ${TERIM.terbiyeIsEmri.tekilKucuk} ${dyedLabel} olarak biter. ` +
+          `Yeniden boyanacaksa Tebdil, müşteri ${newName} istiyorsa yeni ${TERIM.terbiyeIsEmri.tekilKucuk}; kayıt yanlışsa topları da düzeltin.`,
         {
           code: COLOR_DYED_BLOCKED_CODE,
           dyedCount: mismatchCount,

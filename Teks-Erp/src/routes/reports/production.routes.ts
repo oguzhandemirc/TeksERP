@@ -24,6 +24,7 @@ import { getWipScorecard } from "../../services/reports/wip-scorecard.report.ser
 import { getBatchTrace, searchBatches } from "../../services/reports/batch-trace.report.service";
 import { AppError } from "../../utils/app-error";
 import { buildKursunGramajSunumu, KURSUN_KIYAS_MODLARI } from "../../services/reports/kursun-gramaj.report.service";
+import { TERIM } from "../../constants/terim";
 
 const router = Router();
 /**
@@ -147,7 +148,7 @@ const kursunGramajQuerySchema = z.object({
   kiyas: z.enum(KURSUN_KIYAS_MODLARI).optional(),
   gramaj: z.union([z.string().uuid("Geçersiz gramaj"), z.literal("none")]).optional(),
   kaynak: z.enum(["TABLET", "KAGIT"]).optional(),
-  workOrderId: z.string().uuid("Geçersiz terbiye iş emri").optional(),
+  get workOrderId() { return z.string().uuid(`Geçersiz ${TERIM.terbiyeIsEmri.tekilKucuk}`).optional(); },
 }).strict();
 
 router.get("/kursun-gramaj", ...reportGate("production/kursun-gramaj"), async (req: Request, res: Response, next: NextFunction) => {

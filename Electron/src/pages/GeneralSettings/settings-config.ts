@@ -645,10 +645,10 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       {
         key: "productionEnabled",
         title: "Üretim modülünü aç",
-        summary: "Kumaş Stoğu'ndaki üretim sekmeleri ve siparişlerdeki terbiye iş emri yüzeyleri çizilir.",
+        get summary() { return `Kumaş Stoğu'ndaki üretim sekmeleri ve siparişlerdeki ${TERIM.terbiyeIsEmri.tekilKucuk} yüzeyleri çizilir.`; },
         defaultOn: true,
         audience: ["Planlamacı", "Yönetim"],
-        desc: "Açıkken (varsayılan) Kumaş Stoğu'nda üretim sekmeleri ve Siparişler'de terbiye iş emri kolonu/aksiyonları görünür. Kapatınca yalnız yüzeyler gizlenir; kayıtlar silinmez. Ön muhasebeden bağımsızdır.",
+        get desc() { return `Açıkken (varsayılan) Kumaş Stoğu'nda üretim sekmeleri ve Siparişler'de ${TERIM.terbiyeIsEmri.tekilKucuk} kolonu/aksiyonları görünür. Kapatınca yalnız yüzeyler gizlenir; kayıtlar silinmez. Ön muhasebeden bağımsızdır.`; },
       },
       {
         key: "financeEnabled",
@@ -823,11 +823,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       {
         key: "itemPhaseOutNewPlan",
         title: "Tükenene kadar karta yeni üretim planı",
-        summary: "Tükenene kadar karta topsuz ve siparişsiz terbiye iş emri ya da dokuma iş emri açılabilsin mi.",
+        get summary() { return `Tükenene kadar karta topsuz ve siparişsiz ${TERIM.terbiyeIsEmri.tekilKucuk} ya da dokuma iş emri açılabilsin mi.`; },
         defaultOn: true,
         audience: ["Planlamacı"],
         group: "Ürün yaşam döngüsü",
-        desc: "Açıkken (varsayılan) Tükenene kadar karta yeni terbiye iş emri açılabilir ama yalnız mevcut stok tüketilir — belgesiz yeni stok girişi yine kapalıdır. Kapalıyken yalnız mevcut topları okutarak terbiye iş emri açılır. Kartı yeniden doldurmak isteyen fabrika kartı Aktif'e döndürür.",
+        get desc() { return `Açıkken (varsayılan) Tükenene kadar karta yeni ${TERIM.terbiyeIsEmri.tekilKucuk} açılabilir ama yalnız mevcut stok tüketilir — belgesiz yeni stok girişi yine kapalıdır. Kapalıyken yalnız mevcut topları okutarak ${TERIM.terbiyeIsEmri.tekilKucuk} açılır. Kartı yeniden doldurmak isteyen fabrika kartı Aktif'e döndürür.`; },
       },
     ],
     enumFlags: [
@@ -835,8 +835,8 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         // SY-M1: `defaultValue` backend `DEFAULT_ORDER_PRODUCTION_PROPOSAL` ile birebir; KAPALI = bugünkü davranış.
         enumKey: "orderProductionProposal",
         title: "Siparişten üretim önerisi",
-        summary: "Sipariş detayında \"Üretime gönder\" ile dokuma iş emri ve terbiye iş emri önerisi.",
-        desc: "Kapalı (varsayılan): bugünkü gibi; terbiye iş emirleri elle ya da toplu eylemle açılır. Önizleme: sipariş detayında \"Üretime gönder\" düğmesi çıkar; program sipariş satırlarından hangi dokuma iş emirlerinin ve terbiye iş emirlerinin açılacağını listeler, siz işaretleyip tek seferde oluşturursunuz. Onayda taslak: sipariş onaylanınca bu önizleme kendiliğinden açılır; yine siz onaylamadan hiçbir kayıt yaratılmaz.",
+        get summary() { return `Sipariş detayında "Üretime gönder" ile dokuma iş emri ve ${TERIM.terbiyeIsEmri.tekilKucuk} önerisi.`; },
+        get desc() { return `Kapalı (varsayılan): bugünkü gibi; ${TERIM.terbiyeIsEmri.cogulKucuk} elle ya da toplu eylemle açılır. Önizleme: sipariş detayında "Üretime gönder" düğmesi çıkar; program sipariş satırlarından hangi dokuma iş emirlerinin ve ${TERIM.terbiyeIsEmri.cogulCekimKucuk.ilgi} açılacağını listeler, siz işaretleyip tek seferde oluşturursunuz. Onayda taslak: sipariş onaylanınca bu önizleme kendiliğinden açılır; yine siz onaylamadan hiçbir kayıt yaratılmaz.`; },
         defaultValue: "KAPALI",
         display: "radio",
         audience: ["Planlamacı", "Yönetim"],
@@ -1240,7 +1240,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         enumKey: "shippingReadyRule",
         group: "Sevke hazır işler",
         title: "İş ne zaman sevke hazır sayılsın",
-        summary: `${TERIM.terbiyeIsEmri.tekil}, gelen belge, müşteri partisi ya da müşterinin topları hangi durumda “sevke hazır” görünsün.`,
+        get summary() { return `${TERIM.terbiyeIsEmri.tekil}, gelen belge, müşteri partisi ya da müşterinin topları hangi durumda “sevke hazır” görünsün.`; },
         desc: "“Hepsi bitince” (varsayılan): işlemde hiç top kalmayınca ve en az bir top depodaysa hazır. “Metre eşiği”: depodaki (ve sevk edilmiş) metre, gelen metrenin ya da hedef metrajın tolerans kadar altına inmeden ulaşınca hazır; hedefi olmayan iş “hepsi bitince” kuralına düşer. Hazırlık saklanmaz, her bakışta toplardan yeniden hesaplanır — top geri açılırsa hazırlık da düşer.",
         defaultValue: "ALL_DONE",
         display: "radio",
@@ -1261,7 +1261,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         display: "checks",
         audience: ["Sevkiyat"],
         options: [
-          { value: "IE", label: TERIM.terbiyeIsEmri.tekil, hint: `${TERIM.terbiyeIsEmri.tekil} topları sevke hazır olunca.` },
+          { value: "IE", get label() { return TERIM.terbiyeIsEmri.tekil; }, get hint() { return `${TERIM.terbiyeIsEmri.tekil} topları sevke hazır olunca.`; } },
           { value: "GB", label: "Gelen belge", hint: "Bir gelen irsaliyenin topları sevke hazır olunca." },
           { value: "PARTI", label: "Müşteri partisi", hint: "Müşterinin parti numarasındaki bütün toplar hazır olunca (“parti bitince”)." },
         ],
@@ -1297,11 +1297,10 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
   },
   {
     id: "work-orders",
-    label: TERIM.terbiyeIsEmri.cogul,
+    get label() { return TERIM.terbiyeIsEmri.cogul; },
     icon: ClipboardList,
-    description: "Terbiye iş emri formundaki alanlar, parti kodu davranışı ve varsayılan planlama süresi.",
-    keywords:
-      "terbiye iş emri hedef metraj parti kodu batch otomatik üretim miktarı termin planlama süre gün varsayılan deadline plan parti no kısa dönen 99 plaka numara",
+    get description() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} formundaki alanlar, parti kodu davranışı ve varsayılan planlama süresi.`; },
+    get keywords() { return `${TERIM.terbiyeIsEmri.tekilKucuk} hedef metraj parti kodu batch otomatik üretim miktarı termin planlama süre gün varsayılan deadline plan parti no kısa dönen 99 plaka numara`; },
     kind: "flags",
     section: "production",
     permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:work-orders"],
@@ -1314,16 +1313,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     flags: [
       {
         key: "targetQuantityEnabled",
-        title: "Terbiye iş emri hedef metraj alanını göster",
-        summary: "Terbiye iş emri formunda 'hedef metraj' alanı çizilir.",
+        get title() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} hedef metraj alanını göster`; },
+        get summary() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} formunda 'hedef metraj' alanı çizilir.`; },
         defaultOn: false,
         audience: ["Planlamacı"],
-        desc: "Kapalıyken terbiye iş emri formunda “hedef metraj” alanı gizlenir; üretim miktarını girilen kumaş belirler. Örgü/üretim eklenirse açılır.",
+        get desc() { return `Kapalıyken ${TERIM.terbiyeIsEmri.tekilKucuk} formunda “hedef metraj” alanı gizlenir; üretim miktarını girilen kumaş belirler. Örgü/üretim eklenirse açılır.`; },
       },
       {
         key: "partyCodeAuto",
-        title: "Terbiye iş emri parti kodunu otomatik üret",
-        summary: "Terbiye İş Emri No elle yazılmak yerine sistem tarafından önerilir.",
+        get title() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} parti kodunu otomatik üret`; },
+        get summary() { return `${TERIM.terbiyeIsEmri.tekil} No elle yazılmak yerine sistem tarafından önerilir.`; },
         // ⚠️ VARSAYILAN `true` OLDU (D3③): bayrak artık `workOrder.numberSource`tan
         // türetiliyor ve o serinin varsayılanı `FREE` ⇒ türetilmiş değer `true`.
         // Panelin rozeti backend okuyucusuyla BİREBİR olmak zorunda (bekçi
@@ -1331,12 +1330,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         // kapalı" yazarken sunucunun açık dönmesi demekti.
         defaultOn: true,
         audience: ["Planlamacı"],
-        desc:
-          "Açıkken Terbiye İş Emri No sistem tarafından üretilir (İE + GGAAYY + sıra), formda yine değiştirilebilir. "
+        get desc() { return `Açıkken ${TERIM.terbiyeIsEmri.tekil} No sistem tarafından üretilir (İE + GGAAYY + sıra), formda yine değiştirilebilir. `
           + "Kapalıyken elle girilir ve zorunludur. "
           + "⚠️ Bu anahtar artık Ayarlar → Numaralandırma ekranındaki “numara kaynağı” ayarının iki değerli "
           + "kısayoludur; oradaki üçüncü seçenek (“yalnız sistem” — elle giriş YASAK) bu anahtarla "
-          + "ifade edilemez ve bu anahtar o seçimi bozmaz.",
+          + "ifade edilemez ve bu anahtar o seçimi bozmaz."; },
       },
       {
         key: "batchShortNumberEnabled",
@@ -1349,41 +1347,39 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       },
       {
         key: "batchLastNumberHintEnabled",
-        title: "Terbiye iş emri formunda 'Son Kullanılan Parti No' rozetini göster",
-        summary: "Yeni terbiye iş emri formunda son verilen parti numarası rozet olarak gösterilir.",
+        get title() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} formunda 'Son Kullanılan Parti No' rozetini göster`; },
+        get summary() { return `Yeni ${TERIM.terbiyeIsEmri.tekilKucuk} formunda son verilen parti numarası rozet olarak gösterilir.`; },
         defaultOn: true,
         audience: ["Planlamacı"],
-        desc: "Açıkken (varsayılan) yeni terbiye iş emri formunda son verilen parti numarası rozet olarak görünür. Sıradaki numarayı vaat etmez; numara parti doğduğu anda verilir.",
+        get desc() { return `Açıkken (varsayılan) yeni ${TERIM.terbiyeIsEmri.tekilKucuk} formunda son verilen parti numarası rozet olarak görünür. Sıradaki numarayı vaat etmez; numara parti doğduğu anda verilir.`; },
       },
       {
         key: "batchAutoCreateEnabled",
         title: "Açık parti yokken partiyi sistem kendisi açsın",
-        summary:
-          "Tambur'dan elle top eklerken terbiye iş emrinde hiç açık parti yoksa sistem yeni bir parti açıp topu ona bağlar.",
+        get summary() { return `Tambur'dan elle top eklerken ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} hiç açık parti yoksa sistem yeni bir parti açıp topu ona bağlar.`; },
         defaultOn: false,
         audience: ["Planlamacı", "Operatör"],
-        desc: "Açıkken Tambur'da elle top eklenirken terbiye iş emrinde açık parti yoksa sistem yeni parti açar ve topu ona bağlar. Kapalıyken (varsayılan) top partisiz doğar. ⚠️ ÖNKOŞUL: parti numarası üreteci açık olmalı; kapalıysa elle top ekleme parti bulamaz.",
+        get desc() { return `Açıkken Tambur'da elle top eklenirken ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} açık parti yoksa sistem yeni parti açar ve topu ona bağlar. Kapalıyken (varsayılan) top partisiz doğar. ⚠️ ÖNKOŞUL: parti numarası üreteci açık olmalı; kapalıysa elle top ekleme parti bulamaz.`; },
       },
       {
         key: "workOrderQuickOwnOnlyEnabled",
-        title: "Tablet hızlı terbiye iş emri: yalnız kendi başlattıklarını düzenler",
-        summary:
-          "Hızlı terbiye iş emri yetkisi olan saha operatörü yalnız kendi başlattığı terbiye iş emrini düzenler, iptal eder ya da siler.",
+        get title() { return `Tablet hızlı ${TERIM.terbiyeIsEmri.tekilKucuk}: yalnız kendi başlattıklarını düzenler`; },
+        get summary() { return `Hızlı ${TERIM.terbiyeIsEmri.tekilKucuk} yetkisi olan saha operatörü yalnız kendi başlattığı ${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} düzenler, iptal eder ya da siler.`; },
         defaultOn: false,
         audience: ["Yönetim", "Planlamacı"],
-        desc: "Açıkken yalnız 'Hızlı terbiye iş emri' yetkisi olan kullanıcı, planlamanın ya da başkasının açtığı terbiye iş emrini düzenleyemez, iptal edemez, silemez (yetki hatası alır); kendi başlattıkları serbesttir. Terbiye iş emri yazma yetkisi olanlar etkilenmez. Kapalıyken (varsayılan) hızlı terbiye iş emri yetkisi bütün terbiye iş emirlerinde geçerlidir.",
+        get desc() { return `Açıkken yalnız 'Hızlı ${TERIM.terbiyeIsEmri.tekilKucuk}' yetkisi olan kullanıcı, planlamanın ya da başkasının açtığı ${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} düzenleyemez, iptal edemez, silemez (yetki hatası alır); kendi başlattıkları serbesttir. ${TERIM.terbiyeIsEmri.cumleBasi.yalin} yazma yetkisi olanlar etkilenmez. Kapalıyken (varsayılan) hızlı ${TERIM.terbiyeIsEmri.tekilKucuk} yetkisi bütün ${TERIM.terbiyeIsEmri.cogulCekimKucuk.bulunma} geçerlidir.`; },
       },
     ],
     settingFields: [
       {
         key: RAW_SETTING_KEYS.WORKORDER_DEFAULT_PLAN_DURATION_DAYS,
         title: "Planlama süresi varsayılanı",
-        desc: "Terbiye iş emri açılırken planlama bitiş tarihi boş bırakılırsa başlangıca bu kadar gün eklenir. Girilen tarihi ETKİLEMEZ, mevcut terbiye iş emirlerine dokunmaz.",
+        get desc() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} açılırken planlama bitiş tarihi boş bırakılırsa başlangıca bu kadar gün eklenir. Girilen tarihi ETKİLEMEZ, mevcut ${TERIM.terbiyeIsEmri.cogulCekimKucuk.yonelme} dokunmaz.`; },
         min: 1,
         max: 365,
         fallback: 7,
         unit: "gün",
-        savedDesc: "Terbiye iş emri planlama süresi varsayılan gün sayısı",
+        get savedDesc() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} planlama süresi varsayılan gün sayısı`; },
         audience: ["Planlamacı"],
       },
     ],
@@ -1407,7 +1403,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Ham girişte en alanı çizilir; kapalıyken operatör isterse yine girebilir.",
         defaultOn: false,
         audience: ["Operatör"],
-        desc: "Kapalıyken tablet KK1 ekranında en alanı gizlenir; operatör isterse yine girebilir. Bitmiş topun eni terbiye iş emrinden gelir, ham stok en'e bakmadan sayılır.",
+        get desc() { return `Kapalıyken tablet KK1 ekranında en alanı gizlenir; operatör isterse yine girebilir. Bitmiş topun eni ${TERIM.terbiyeIsEmri.cekimKucuk.ayrilma} gelir, ham stok en'e bakmadan sayılır.`; },
       },
       {
         key: "kk1WeightEntryEnabled",
@@ -1431,10 +1427,10 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         key: "qualityGradeRequiredEnabled",
         group: "KK1 / Kalite",
         title: "Top kalitesi zorunlu olsun",
-        summary: "Kalite seçilmeden top girilemez, kesilemez ve terbiye iş emri kapanışında depoya indirilemez.",
+        get summary() { return `Kalite seçilmeden top girilemez, kesilemez ve ${TERIM.terbiyeIsEmri.tekilKucuk} kapanışında depoya indirilemez.`; },
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
-        desc: "Açıkken kalite dört yerde zorunlu olur: top girişi, Tambur kesimi, terbiye iş emri kapanışı ve depo transferi. Kapalıyken (varsayılan) kalite isteğe bağlıdır; seçilmeyen top “Belirsiz” kalitede yaşar. ⚠️ ÖNKOŞUL: kalite kataloğunda aktif kayıt olmalı ve tabletler güncel olmalı, yoksa saha dört yerde de takılır.",
+        get desc() { return `Açıkken kalite dört yerde zorunlu olur: top girişi, Tambur kesimi, ${TERIM.terbiyeIsEmri.tekilKucuk} kapanışı ve depo transferi. Kapalıyken (varsayılan) kalite isteğe bağlıdır; seçilmeyen top “Belirsiz” kalitede yaşar. ⚠️ ÖNKOŞUL: kalite kataloğunda aktif kayıt olmalı ve tabletler güncel olmalı, yoksa saha dört yerde de takılır.`; },
       },
       {
         key: "kk1OnlineOnlyEnabled",
@@ -1484,11 +1480,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       {
         key: "fasonReceiptApplyTargetVariant",
         group: "Fason",
-        title: `Fason kabulünde ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedef desenini dönen topa yaz`,
-        summary: `Dış brodeden dönen top, ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} seçilen deseni taşır; fatura desenin hizmet kalemini kullanır.`,
+        get title() { return `Fason kabulünde ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedef desenini dönen topa yaz`; },
+        get summary() { return `Dış brodeden dönen top, ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} seçilen deseni taşır; fatura desenin hizmet kalemini kullanır.`; },
         defaultOn: false,
         audience: ["Planlamacı", "Muhasebeci"],
-        desc: `Açıkken fason kabulünde (ör. dışarıda brode) uygulanan bayrağın çeşidi için ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} seçilmiş hedef değer (desen) dönen topa da yazılır; desene hizmet kalemi eşlenmişse hizmet faturası o kalemle kesilir. Kapalıyken (varsayılan) dönen top yalnız bayrağı taşır, desen yazılmaz. Makbuz iptal edilirse topun deseni de geri alınır.`,
+        get desc() { return `Açıkken fason kabulünde (ör. dışarıda brode) uygulanan bayrağın çeşidi için ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} seçilmiş hedef değer (desen) dönen topa da yazılır; desene hizmet kalemi eşlenmişse hizmet faturası o kalemle kesilir. Kapalıyken (varsayılan) dönen top yalnız bayrağı taşır, desen yazılmaz. Makbuz iptal edilirse topun deseni de geri alınır.`; },
       },
       {
         key: "fasonNoteMobileEntry",
@@ -1497,7 +1493,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Operatör sevk sırasında fason talimatını telefondan yazabilir/değiştirebilir.",
         defaultOn: false,
         audience: ["Operatör"],
-        desc: "Açıkken sahadaki operatör mobil Fason Sevk ekranında talimatı yazabilir/değiştirebilir. Kapalıyken (varsayılan) talimat yalnız terbiye iş emrindeki fason adımının notundan gelir.",
+        get desc() { return `Açıkken sahadaki operatör mobil Fason Sevk ekranında talimatı yazabilir/değiştirebilir. Kapalıyken (varsayılan) talimat yalnız ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma}ki fason adımının notundan gelir.`; },
       },
       {
         key: "kursunBypassEnabled",
@@ -1672,7 +1668,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         // K16 (2026-11-03): `defaultValue` backend `DEFAULT_KURSUN_MACHINE_ASSIGN_MODE` ile birebir.
         enumKey: "kursunMachineAssignMode",
         title: "Atanan kurşun makinesi",
-        summary: "Terbiye iş emrinde seçilen kurşun makinesi yalnız öneri mi, yoksa iş yalnız o makinenin listesinde mi görünsün.",
+        get summary() { return `${TERIM.terbiyeIsEmri.cumleBasi.bulunma} seçilen kurşun makinesi yalnız öneri mi, yoksa iş yalnız o makinenin listesinde mi görünsün.`; },
         desc: "Öneri (varsayılan): iş her kurşun tabletinin listesinde görünür; seçilen makine yalnız rozettir. Yalnız atanan makine: tablet listesinde iş yalnız atandığı makinede (makine atanmamış iş herkeste) görünür; başka makinenin tableti işi okutursa \"Bu iş X makinesine atanmış\" uyarısı çıkar, operatör \"Yine de al\" diyerek işleyebilir ve bu iz kaydına yazılır. Atamayı planlamacı Kurşun Dağıtım ekranından değiştirir.",
         defaultValue: "SUGGEST",
         display: "radio",
@@ -1686,9 +1682,9 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         // D4-E1 (2026-10-29): `defaultValue` backend `DEFAULT_TAMBUR_PLAN_WIDTH_CHECK` ile birebir.
         enumKey: "tamburPlanGateWidthCheck",
         group: "Tambur",
-        title: `Tambur'da top eni ${TERIM.terbiyeIsEmri.cekimKucuk.vasita} karşılaştırılsın`,
-        summary: `Topun eni ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma}ki enden eşikten fazla farklıysa Tambur operatöre onay sorsun mu.`,
-        desc: `Açıkken (varsayılan) topun eni ile ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} eni arasındaki fark aşağıdaki eşiği AŞARSA Tambur kesimden önce onay ister. Kapalıyken en hiç sorulmaz; renk karşılaştırması her iki durumda da aynen çalışır.`,
+        get title() { return `Tambur'da top eni ${TERIM.terbiyeIsEmri.cekimKucuk.vasita} karşılaştırılsın`; },
+        get summary() { return `Topun eni ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma}ki enden eşikten fazla farklıysa Tambur operatöre onay sorsun mu.`; },
+        get desc() { return `Açıkken (varsayılan) topun eni ile ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} eni arasındaki fark aşağıdaki eşiği AŞARSA Tambur kesimden önce onay ister. Kapalıyken en hiç sorulmaz; renk karşılaştırması her iki durumda da aynen çalışır.`; },
         defaultValue: "ENFORCE",
         display: "radio",
         audience: ["Operatör", "Planlamacı"],
@@ -1718,12 +1714,12 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         group: "Tambur",
         title: "Tambur'dan çıkan topların eni",
         summary: "Tambur'da bölünen topların enine hangi değer yazılsın.",
-        desc: `${TERIM.terbiyeIsEmri.cekim.ilgi} eni önce (varsayılan): çıkan toplara ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} eni yazılır, boşsa ana topun eni. Ölçülen en önce: ana topun eni en ölçen bir istasyonda (ör. etek kesim) ölçüldüyse çıkan toplara o ölçülen en yazılır; ölçülmediyse varsayılandaki gibi. Yalnız bundan sonra Tambur'dan çıkan topları etkiler; etiket ve çeki listesi bu eni basar.`,
+        get desc() { return `${TERIM.terbiyeIsEmri.cekim.ilgi} eni önce (varsayılan): çıkan toplara ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} eni yazılır, boşsa ana topun eni. Ölçülen en önce: ana topun eni en ölçen bir istasyonda (ör. etek kesim) ölçüldüyse çıkan toplara o ölçülen en yazılır; ölçülmediyse varsayılandaki gibi. Yalnız bundan sonra Tambur'dan çıkan topları etkiler; etiket ve çeki listesi bu eni basar.`; },
         defaultValue: "WO_TARGET_FIRST",
         display: "radio",
         audience: ["Planlamacı", "Yönetim"],
         options: [
-          { value: "WO_TARGET_FIRST", label: `${TERIM.terbiyeIsEmri.cekim.ilgi} eni önce (bugünkü)`, hint: "Hedef en yoksa ana topun eni yazılır." },
+          { value: "WO_TARGET_FIRST", get label() { return `${TERIM.terbiyeIsEmri.cekim.ilgi} eni önce (bugünkü)`; }, hint: "Hedef en yoksa ana topun eni yazılır." },
           { value: "MEASURED_FIRST", label: "Ölçülen en önce", hint: "Ana topun ölçülmüş eni varsa o yazılır; yoksa hedef en." },
         ],
       },
@@ -1763,7 +1759,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         key: "tamburPlanGateWidthToleranceCm",
         group: "Tambur",
         title: "Tambur en eşiği (cm)",
-        desc: `Topun eni ile ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} eni arasındaki fark bu değeri AŞARSA Tambur onay sorar; eşit fark sorulmaz. Varsayılan 10 cm. 0 girilirse en küçük farkta bile sorulur. En karşılaştırması kapalıysa bu değer kullanılmaz.`,
+        get desc() { return `Topun eni ile ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} eni arasındaki fark bu değeri AŞARSA Tambur onay sorar; eşit fark sorulmaz. Varsayılan 10 cm. 0 girilirse en küçük farkta bile sorulur. En karşılaştırması kapalıysa bu değer kullanılmaz.`; },
         min: 0,
         max: 100,
         fallback: 10,
@@ -2472,8 +2468,8 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         // yüzeyinde bağ adımı inene kadar sunulmaz (backend 400 — çıkışsız kapı yasağı).
         enumKey: "financeExpenseAllocationField",
         title: "Masrafı makineye / işe bağlama",
-        summary: `Kasa masraf formunda masrafın hangi makineye, ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} ya da hizmet kalemine ait olduğu seçilebilsin mi.`,
-        desc: `Kapalı: masraf formu bugünkü gibidir. İsteğe bağlı: formda "Bağla" bölümü çıkar; masraf bir makineye, ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} ya da hizmet kalemine yüzde payla bağlanabilir, kayıtlı masrafa sonradan da bağ eklenir. Bir masrafın bağlarının toplamı en çok %100'dür. Bağ kârlılıkta doğrudan maliyet olur; bağlanmayan masraf genel giderde kalır.`,
+        get summary() { return `Kasa masraf formunda masrafın hangi makineye, ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} ya da hizmet kalemine ait olduğu seçilebilsin mi.`; },
+        get desc() { return `Kapalı: masraf formu bugünkü gibidir. İsteğe bağlı: formda "Bağla" bölümü çıkar; masraf bir makineye, ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} ya da hizmet kalemine yüzde payla bağlanabilir, kayıtlı masrafa sonradan da bağ eklenir. Bir masrafın bağlarının toplamı en çok %100'dür. Bağ kârlılıkta doğrudan maliyet olur; bağlanmayan masraf genel giderde kalır.`; },
         defaultValue: "OFF",
         display: "radio",
         audience: ["Muhasebeci"],
@@ -2485,15 +2481,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       {
         // D4-H3: `defaultValue` backend `DEFAULT_EXPENSE_ALLOCATION_CLOSED_WORK_ORDER` ile birebir.
         enumKey: "financeExpenseAllocationClosedWorkOrder",
-        title: `Kapanmış ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} masraf bağlanabilsin`,
-        summary: `Tamamlanmış ya da iptal edilmiş ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} sonradan masraf bağlanabilsin mi.`,
-        desc: `Serbest: geç gelen faturanın masrafı bitmiş işe yine yazılır. Engelli: yalnız açık ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağ kurulur; kapanmış işe bağ denemesi uyarıyla durur.`,
+        get title() { return `Kapanmış ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} masraf bağlanabilsin`; },
+        get summary() { return `Tamamlanmış ya da iptal edilmiş ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} sonradan masraf bağlanabilsin mi.`; },
+        get desc() { return `Serbest: geç gelen faturanın masrafı bitmiş işe yine yazılır. Engelli: yalnız açık ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağ kurulur; kapanmış işe bağ denemesi uyarıyla durur.`; },
         defaultValue: "ALLOW",
         display: "radio",
         audience: ["Muhasebeci"],
         options: [
-          { value: "ALLOW", label: "Serbest (varsayılan)", hint: `Kapanmış ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} de bağlanır.` },
-          { value: "DENY", label: "Engelli", hint: `Yalnız açık ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlanır.` },
+          { value: "ALLOW", label: "Serbest (varsayılan)", get hint() { return `Kapanmış ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} de bağlanır.`; } },
+          { value: "DENY", label: "Engelli", get hint() { return `Yalnız açık ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlanır.`; } },
         ],
       },
       {

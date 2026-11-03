@@ -43,8 +43,10 @@ import { useNumberSourceState } from "@/lib/number-source";
 import { RouteEditor } from "./RouteEditor";
 import { TargetItemPicker } from "./TargetItemPicker";
 import { useFoldValues } from "@/hooks/useFoldValues";
-import { useKursunCustomerDefaults, useKursunGramajCatalog } from "@/lib/kursun-gramaj";
-import { KURSUN_SETTINGS_TITLE, KursunStepFields, KursunStepSummary, isKursunStep, useKursunGramajBinding } from "./KursunStepFields";
+import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
+import { useStationDefaultTargets } from "@/lib/station-default-targets";
+import { KURSUN_SETTINGS_TITLE, KursunStepFields, KursunStepSummary, isKursunStep } from "./KursunStepFields";
+import { defaultsSettled, useStepDefaultsBinding } from "./stepDefaultTargets";
 import { useDesignerSteps } from "./useDesignerSteps";
 import { BelgeOkutButton } from "./BelgeOkutButton";
 import type { FasonStepPlan } from "./FasonPlanningDialog";
@@ -65,6 +67,7 @@ import {
 } from "./workOrderPrefill";
 import type { WorkOrder } from "./types";
 import { LastBatchBadge } from "./LastBatchBadge";
+import { TERIM } from "@/lib/terim";
 
 /**
  * react-hook-form hata ağacından tüm mesajları toplar (toast özeti için). Her
@@ -221,31 +224,41 @@ export function WorkOrderFormView({
   // 60 sn cache'li tek küçük istek.
   const { values: foldValues, isEmpty: foldNotConfigured } = useFoldValues();
   const { catalog: kursunCatalog } = useKursunGramajCatalog();
-  const { defaults: kursunCustomerDefaults } = useKursunCustomerDefaults(!isEdit && hasKursun);
   // Gramaj yalnız yeni İE'de seçilir (düzenlemede detaydaki kart); gösterilmeyen değer özete de girmez.
   const showKursunGramaj = !isEdit && Boolean(kursunCatalog.propertyId);
   const shownKursunGramaj = showKursunGramaj ? (form.watch("kursunTargetValueId") ?? null) : null;
-  // Gramaj kurşun adımının kartında: adım girince varsayılan (müşterininki, yoksa istasyonunki), çıkınca temizlenir.
-  useKursunGramajBinding({
+  // K22: istasyon seçilince sunucu çözücüsünün ön seçimi (AUTO bayrak, varsayılan açık özellik, gramaj müşteri >
+  // istasyon > isDefault, kat); kullanıcı seçimi ezilmez, adım çıkınca o adımın tohumu temizlenir.
+  const stepStations = routeSteps.map((s) => ({ clientId: s.clientId, stationId: s.stationId }));
+  const defaults = useStationDefaultTargets(stepStations.map((s) => s.stationId), pickedLines[0]?.customerId ?? null, !isEdit);
+  const defaultsInput = { steps: stepStations, byStation: defaults.byStation, failed: defaults.failed };
+  useStepDefaultsBinding({
+    ...defaultsInput,
     enabled: !isEdit,
-    hasKursun,
-    options: kursunCatalog.options,
-    value: form.watch("kursunTargetValueId") ?? null,
-    setValue: (id) => form.setValue("kursunTargetValueId", id),
-    customerId: pickedLines[0]?.customerId ?? null,
-    customerDefaults: kursunCustomerDefaults,
+    gramajPropertyId: kursunCatalog.propertyId,
+    gramajAllowed: hasKursun,
+    state: {
+      propertyIds: form.watch("targetPropertyIds") ?? [],
+      gramaj: form.watch("kursunTargetValueId") ?? null,
+      fold: form.watch("foldType") ?? "",
+    },
+    setPropertyIds: (ids) => form.setValue("targetPropertyIds", ids),
+    setGramaj: (id) => form.setValue("kursunTargetValueId", id),
+    setFold: (code) => form.setValue("foldType", code),
   });
+  const defaultsReady = defaultsSettled(defaultsInput);
 
   // Ön-seçim: yeni iş emrinde katalogun İLK değeri seçili gelsin (eski davranış
   // "2-KAT sabit ön-seçili" idi). Katalogdan okunduğu için 2-KAT'ı olmayan bir
   // fabrikada da geçerli bir değer seçilir. Kullanıcı bir kez dokunduysa
   // (`value` dolu) ya da düzenleme modundaysak KARIŞMAZ.
+  // K22: istasyon varsayılanı (ör. Tambur → 4 Kat) önce gelir; bu yedek ancak cevap okunduktan sonra koşar.
   useEffect(() => {
     const first = foldValues[0];
-    if (isEdit || !hasTambur || !first) return;
+    if (isEdit || !hasTambur || !first || !defaultsReady) return;
     if (form.getValues("foldType")) return;
     form.setValue("foldType", first.code);
-  }, [isEdit, hasTambur, foldValues, form]);
+  }, [isEdit, hasTambur, foldValues, form, defaultsReady]);
 
   // Mount + workOrder kimliği değişince formu tohumla. (Tam sayfa: her gezinme
   // taze mount → modal `open` bayrağına ihtiyaç yok.)
@@ -329,7 +342,7 @@ export function WorkOrderFormView({
       } as unknown as Partial<ProductRecipe>);
     },
     onSuccess: (_res, name) => {
-      toast.success(`Terbiye iş emri şablonu kaydedildi: ${name}`);
+      toast.success(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} şablonu kaydedildi: ${name}`);
       void qc.invalidateQueries({ queryKey: ["routes"] });
       void qc.invalidateQueries({ queryKey: ["product-recipes"] });
       setSaveRecipeOpen(false);
@@ -499,7 +512,7 @@ export function WorkOrderFormView({
               manualErrors.push("Kat tipi seçilmeli.");
             }
             if (manualErrors.length > 0) {
-              toast.error("Terbiye iş emri oluşturulamadı — eksik/hatalı alanlar var", {
+              toast.error(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} oluşturulamadı — eksik/hatalı alanlar var`, {
                 description: manualErrors.join(" · "),
                 position: "top-center",
               });
@@ -514,7 +527,7 @@ export function WorkOrderFormView({
           (errors) => {
             // Zod doğrulama hataları: satır içi gösterim duruyor, üstüne özet toast.
             const messages = collectErrorMessages(errors);
-            toast.error("Terbiye iş emri oluşturulamadı — eksik/hatalı alanlar var", {
+            toast.error(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} oluşturulamadı — eksik/hatalı alanlar var`, {
               description: messages.length
                 ? messages.join(" · ")
                 : "İşaretli alanları kontrol edin.",
@@ -553,7 +566,7 @@ export function WorkOrderFormView({
                 noneLabel="— Şablon kullanma"
                 icon={FlaskConical}
                 iconClassName="text-white"
-                title="Terbiye İş Emri Şablonu Seç"
+                title={`${TERIM.terbiyeIsEmri.tekil} Şablonu Seç`}
                 description="Hazır şablon — kumaş, renk, özellik, en ve rota tek tıkla dolar."
                 placeholder="Şablon seç..."
                 placeholderClassName="text-sm font-medium text-white/90"
@@ -948,9 +961,9 @@ export function WorkOrderFormView({
                 hintTone="muted"
                 hint={
                   partyCodeEditable
-                    ? "Refakat kartına barkod olarak basılır: benzersiz, terbiye iş emri no biçiminde (Sistem → Numaralandırma), yalnız büyük harf ve rakam."
+                    ? `Refakat kartına barkod olarak basılır: benzersiz, ${TERIM.terbiyeIsEmri.tekilKucuk} no biçiminde (Sistem → Numaralandırma), yalnız büyük harf ve rakam.`
                     : isEdit
-                      ? "Terbiye iş emri numarası açılışta verilir, sonradan değiştirilemez."
+                      ? `${TERIM.terbiyeIsEmri.cumleBasi.yalin} numarası açılışta verilir, sonradan değiştirilemez.`
                       : undefined
                 }
               >
@@ -960,7 +973,7 @@ export function WorkOrderFormView({
                     readOnly={!partyCodeEditable}
                     placeholder={
                       partyCodeEditable
-                        ? "Terbiye iş emri no biçiminde (Sistem → Numaralandırma)"
+                        ? `${TERIM.terbiyeIsEmri.cumleBasi.yalin} no biçiminde (Sistem → Numaralandırma)`
                         : "Otomatik oluşturulur — kendiniz girmek için tıklayın."
                     }
                     className={cn(!partyCodeEditable && "cursor-pointer bg-muted/40 pr-9")}
@@ -1045,16 +1058,15 @@ export function WorkOrderFormView({
                       size="sm"
                       disabled={Boolean(templateBlockReason)}
                       className="gap-1"
-                      title={templateBlockReason ?? "Bu terbiye iş emrini şablon olarak kaydet"}
+                      title={templateBlockReason ?? `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} şablon olarak kaydet`}
                     >
                       <FlaskConical className="h-3.5 w-3.5" /> Şablon Kaydet
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent align="start" className="w-80 space-y-2">
-              <div className="text-xs font-medium">Bu terbiye iş emrini şablon olarak kaydet</div>
+              <div className="text-xs font-medium">Bu {TERIM.terbiyeIsEmri.cekimKucuk.belirtme} şablon olarak kaydet</div>
               <p className="text-[11px] text-muted-foreground">
-                Kumaş + renk + özellik + en + akış tek isimle saklanır; sonraki terbiye iş
-                emirlerinde "Terbiye iş emri şablonundan doldur" ile gelir.
+                Kumaş + renk + özellik + en + akış tek isimle saklanır; sonraki {TERIM.terbiyeIsEmri.cogulCekimKucuk.bulunma} "{TERIM.terbiyeIsEmri.cumleBasi.yalin} şablonundan doldur" ile gelir.
               </p>
               <Input
                 value={recipeName}
@@ -1097,7 +1109,7 @@ export function WorkOrderFormView({
                   : "Oluşturuluyor..."
                 : isEdit
                   ? "Güncelle"
-                  : "Terbiye İş Emri Oluştur"}
+                  : `${TERIM.terbiyeIsEmri.tekil} Oluştur`}
             </Button>
           </div>
         </PageFooter>

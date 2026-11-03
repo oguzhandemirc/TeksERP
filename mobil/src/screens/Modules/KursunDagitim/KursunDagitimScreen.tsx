@@ -23,6 +23,7 @@ import CompleteConfirmModal from './CompleteConfirmModal';
 import { fmtMeters } from './dagitimUi';
 import { colors, spacing, radius } from '../../../theme';
 import { showScreenError } from '../../../lib/screenToast';
+import { TERIM } from '../../../lib/terim';
 
 // =============================================================================
 // KURŞUN DAĞITIM — kurşun makinelerine TABLET KOYULMAYAN düzenin ofis ekranı.
@@ -308,7 +309,7 @@ export default function KursunDagitimScreen() {
           cancelTarget ? (
             <View style={styles.confirmBody}>
               <Text style={styles.confirmLine}>
-                <Text style={styles.confirmStrong}>{cancelTarget.workOrderNumber}</Text> terbiye iş emrinin
+                <Text style={styles.confirmStrong}>{cancelTarget.workOrderNumber}</Text> {TERIM.terbiyeIsEmri.cekimKucuk.ilgi}
                 kurşun dağıtımı kaldırılacak.
               </Text>
               <Text style={styles.confirmLine}>

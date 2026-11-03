@@ -56,6 +56,7 @@ import {
   snapshotRowsTx,
   type PkCache,
 } from "./helpers/merge-ledger.helper";
+import { TERIM } from "../constants/terim";
 
 type ConflictRule = Extract<MoveRule, { kind: "CONFLICT" }>;
 /** Önizleme sorgusunun iç kolonu: satır survivor'la mı çakışıyor (değilse yalnız önceki bir kaynakla). */
@@ -468,7 +469,7 @@ export class MasterDataMergeService {
       sideEffects.push("İlgili topların ve çuvalların etiketleri 'yeniden bas' olarak işaretlenir.");
     }
     if (entity === "item" || entity === "color") {
-      sideEffects.push("Etkilenen terbiye iş emirlerinin refakat kartları 'güncel değil' işaretlenir.");
+      sideEffects.push(`Etkilenen ${TERIM.terbiyeIsEmri.cogulCekimKucuk.ilgi} refakat kartları 'güncel değil' işaretlenir.`);
       sideEffects.push("İlgili topların etiketleri 'yeniden bas' olarak işaretlenir.");
     }
     sideEffects.push(

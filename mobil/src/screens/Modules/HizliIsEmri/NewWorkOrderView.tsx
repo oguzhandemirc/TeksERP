@@ -241,7 +241,7 @@ export default function NewWorkOrderView({
         <View style={styles.offlineBanner}>
           <Icon source="wifi-off" size={16} color={colors.dangerDark} />
           <Text style={styles.offlineText}>
-            Çevrimdışı — terbiye iş emri başlatmak için bağlantı gerekli.
+            Çevrimdışı — {TERIM.terbiyeIsEmri.tekilKucuk} başlatmak için bağlantı gerekli.
           </Text>
         </View>
       ) : null}
@@ -305,7 +305,7 @@ export default function NewWorkOrderView({
               (primaryDisabled || stepIssues.length > 0) && styles.navBtnDisabled,
             ]}
             rippleColor="rgba(255,255,255,0.25)"
-            accessibilityLabel={isLast ? 'Terbiye iş emrini başlat' : 'Sonraki adım'}
+            accessibilityLabel={isLast ? `${TERIM.terbiyeIsEmri.cumleBasi.belirtme} başlat` : 'Sonraki adım'}
           >
             <View style={styles.navBtnInner}>
               {isLast && wo.isPending ? (
@@ -314,7 +314,7 @@ export default function NewWorkOrderView({
                 <Icon source={isLast ? 'rocket-launch' : 'chevron-right'} size={24} color="#fff" />
               )}
               <Text style={styles.navBtnPrimaryText}>
-                {isLast ? 'TERBİYE İŞ EMRİNİ BAŞLAT' : 'İLERİ'}
+                {isLast ? `${TERIM.terbiyeIsEmri.tekilBuyuk}Nİ BAŞLAT` : 'İLERİ'}
               </Text>
             </View>
           </TouchableRipple>

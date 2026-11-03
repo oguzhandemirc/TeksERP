@@ -32,6 +32,7 @@ import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
 import { gatedSoftDelete, gatedUpdate } from "./helpers/master-data-archive.helper";
 import { FABRIC_PROPERTY_ARCHIVE } from "./helpers/archive-gate/fabric-property-archive.helper";
 import { assertVariantCreate, assertVariantUpdate, readVariantOf } from "./helpers/property-variant.helper";
+import { TERIM } from "../constants/terim";
 import { HIERARCHY_SORT, listFabricPropertyHierarchy } from "./helpers/fabric-property-hierarchy.helper";
 import type { Request } from "express";
 
@@ -108,7 +109,7 @@ function extractValues(data: Record<string, unknown>): PropertyValueInput[] | un
 async function assertStationsCanApplyProperty(stationIds: string[]): Promise<void> {
   if (stationIds.length === 0) {
     throw AppError.badRequest(
-      "Özelliği uygulayacak en az bir istasyon seçilmeli — istasyonsuz özellik hiçbir terbiye iş emrinde seçilemez",
+      `Özelliği uygulayacak en az bir istasyon seçilmeli — istasyonsuz özellik hiçbir ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} seçilemez`,
     );
   }
   const stations = await prisma.station.findMany({
@@ -376,7 +377,7 @@ export class FabricPropertyService extends BaseService {
           prisma.itemAllowedProperty.count({ where: { propertyId: id } }),
         ]);
         const usage: string[] = [];
-        if (woT > 0) usage.push(`${woT} terbiye iş emri hedefi`);
+        if (woT > 0) usage.push(`${woT} ${TERIM.terbiyeIsEmri.tekilKucuk} hedefi`);
         if (lineT > 0) usage.push(`${lineT} sipariş kalemi`);
         if (routeT > 0) usage.push(`${routeT} rota adımı`);
         if (itemT > 0) usage.push(`${itemT} ürün izinli listesi`);

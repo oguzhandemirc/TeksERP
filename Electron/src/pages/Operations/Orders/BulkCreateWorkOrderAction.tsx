@@ -19,6 +19,7 @@ import {
 } from "@/pages/Operations/WorkOrders/OrderPickerDialog";
 import { lineOpenMeasured } from "@/pages/Operations/WorkOrders/order-fulfillment";
 import type { Order, OrderLine } from "./types";
+import { TERIM } from "@/lib/terim";
 
 /**
  * Tek iş emri = tek kumaş + renk + en. Bir iş emrine birleştirilebilecek
@@ -169,7 +170,7 @@ export function BulkCreateWorkOrderAction({ orders, onDone }: Props) {
         title={hasSelection ? undefined : "Önce bir veya daha fazla sipariş seçin"}
       >
         <Factory className="h-3.5 w-3.5" />
-        Seçili siparişlerden terbiye iş emri oluştur
+        Seçili siparişlerden {TERIM.terbiyeIsEmri.tekilKucuk} oluştur
       </Button>
 
       <Dialog
@@ -178,11 +179,11 @@ export function BulkCreateWorkOrderAction({ orders, onDone }: Props) {
       >
         <DialogContent className="flex max-h-[85vh] max-w-lg flex-col gap-0 overflow-hidden p-0">
           <DialogHeader className="shrink-0 border-b px-6 py-4">
-            <DialogTitle>Bu siparişler tek terbiye iş emrinde birleşemez</DialogTitle>
+            <DialogTitle>Bu siparişler tek {TERIM.terbiyeIsEmri.cekimKucuk.bulunma} birleşemez</DialogTitle>
             <DialogDescription>
-              Bir terbiye iş emri yalnızca aynı kumaş, renk ve en için açılır. Seçimin{" "}
+              Bir {TERIM.terbiyeIsEmri.tekilKucuk} yalnızca aynı kumaş, renk ve en için açılır. Seçimin{" "}
               {incompatGroups?.length} farklı grup içeriyor — birleştirmek
-              istediğin gruba tıkla; o siparişlerle terbiye iş emri formu doğrudan açılır.
+              istediğin gruba tıkla; o siparişlerle {TERIM.terbiyeIsEmri.tekilKucuk} formu doğrudan açılır.
             </DialogDescription>
           </DialogHeader>
           <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto px-6 py-4">
@@ -210,7 +211,7 @@ export function BulkCreateWorkOrderAction({ orders, onDone }: Props) {
                       {g.width != null ? `${g.width} cm` : "en serbest"}
                     </Badge>
                     <span className="ml-auto text-xs font-medium text-primary">
-                      Terbiye iş emri oluştur →
+                      {TERIM.terbiyeIsEmri.cumleBasi.yalin} oluştur →
                     </span>
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">

@@ -18,7 +18,7 @@ import { DocFields, FromDocBadge } from "./DocFields";
 import { DocThumb } from "./DocThumb";
 import { docDraftReasons, initialDocDraft, reseedOwnerGramaj, routeGramajOptions, type DocDraft } from "./docDraft";
 import { AUTO_PRINT_TEXT, printRefakatCard, useRefakatAutoPrint } from "./refakatPrint";
-import { DRAFT_SAVED_TEXT, SAVE_LABEL, saveDoc, saveErrorHint, type SaveOutcome } from "./saveDoc";
+import { draftSavedText, saveLabel, saveDoc, saveErrorHint, type SaveOutcome } from "./saveDoc";
 import { useFormApproval } from "./useFormApproval";
 import { PartyList } from "./PartyList";
 import { initialMultiParty, type MultiPartyDraft } from "./partyDraft";
@@ -117,7 +117,7 @@ export function BelgedenIsEmriForm({ noteId, route }: Props) {
         pending={save.isPending}
         error={save.isError ? (saveErrorHint(save.error) ?? apiErrorText(save.error, "Kaydedilemedi.")) : null}
         savedAsDraft={saved}
-        label={approval.value === "WITH_WORK_ORDER" ? SAVE_LABEL : "Taslak kaydet"}
+        label={approval.value === "WITH_WORK_ORDER" ? saveLabel() : "Taslak kaydet"}
         onSave={() => draft && save.mutate({ note: n, draft, multi: multiDraft })}
         onOpenNote={() => navigateActive(`/operations/gelen-belgeler/${noteId}`)}
       />
@@ -144,7 +144,7 @@ function SaveBar({ reasons, ready, pending, error, savedAsDraft, label, onSave, 
         <ul className="text-xs text-amber-800 dark:text-amber-300" data-testid="oie-reasons">{reasons.map((r) => <li key={r}>{r}</li>)}</ul>
       )}
       {error && <p role="alert" className="rounded bg-destructive/10 px-2 py-1 text-sm text-destructive" data-testid="oie-error">{error}</p>}
-      {savedAsDraft && <p className="text-sm text-emerald-700 dark:text-emerald-400" data-testid="oie-draft-saved">{DRAFT_SAVED_TEXT}</p>}
+      {savedAsDraft && <p className="text-sm text-emerald-700 dark:text-emerald-400" data-testid="oie-draft-saved">{draftSavedText()}</p>}
       <div className="flex justify-end gap-2">
         {savedAsDraft && (
           <Button variant="outline" onClick={onOpenNote} data-testid="oie-open-note"><ExternalLink className="mr-1 h-4 w-4" /> Gelen Belgeler'de aç</Button>

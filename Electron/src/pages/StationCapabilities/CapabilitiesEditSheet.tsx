@@ -11,12 +11,15 @@ import { fabricPropertyService } from "@/pages/FabricProperties/service";
 import { stationCapabilityService } from "./service";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { type StationCapabilitySummary, type StationPropertyMode } from "./types";
+import { CapabilityModeRow } from "./CapabilityModeRow";
 import {
-  STATION_PROPERTY_MODE_HINTS,
-  STATION_PROPERTY_MODE_LABELS,
-  type StationCapabilitySummary,
-  type StationPropertyMode,
-} from "./types";
+  NO_DEFAULT,
+  defaultValueOptions,
+  defaultsDirty,
+  defaultsPatch,
+  type CapabilityDefault,
+} from "./capabilityDefaults";
 
 const QUERY_KEY = "station-capabilities";
 
@@ -68,6 +71,9 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
   // sessizce OTOMATİK doğması, tam da kapatılan tuzaktı.
   const [modes, setModes] = useState<Record<string, StationPropertyMode>>({});
   const [initialModes, setInitialModes] = useState<Record<string, StationPropertyMode>>({});
+  // K22: İE rota adımı ön seçimi (varsayılan açık + varsayılan değer).
+  const [defaults, setDefaults] = useState<Record<string, CapabilityDefault>>({});
+  const [initialDefaults, setInitialDefaults] = useState<Record<string, CapabilityDefault>>({});
 
   useEffect(() => {
     if (detail.data) {
@@ -81,6 +87,11 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
       setInitialPropertyIds(p);
       setModes(m);
       setInitialModes(m);
+      const d = Object.fromEntries(
+        rows.map((x) => [x.id, { defaultOn: x.defaultOn ?? false, defaultValueId: x.defaultValueId ?? null }]),
+      );
+      setDefaults(d);
+      setInitialDefaults(d);
     }
   }, [detail.data]);
 
@@ -129,7 +140,8 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
     propertyIds.length !== initialPropertyIds.length ||
     propertyIds.some((id) => !initialPropertyIds.includes(id)) ||
     initialPropertyIds.some((id) => !propertyIds.includes(id)) ||
-    propertyIds.some((id) => modes[id] !== initialModes[id]);
+    propertyIds.some((id) => modes[id] !== initialModes[id]) ||
+    defaultsDirty(propertyIds, defaults, initialDefaults);
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -137,7 +149,11 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
         station!.stationId,
         // Mod YALNIZ bilinen satırlar için gönderilir; yenilerinde alan atlanır
         // ki backend varsayılanı (OPTIONAL) uygulansın.
-        propertyIds.map((propertyId) => ({ propertyId, mode: modes[propertyId] })),
+        propertyIds.map((propertyId) => ({
+          propertyId,
+          mode: modes[propertyId],
+          ...defaultsPatch(propertyId, defaults, initialDefaults),
+        })),
       ),
     onSuccess: () => {
       toast.success("İstasyon yetkinlikleri güncellendi.");
@@ -211,45 +227,14 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
                   Bu istasyonda nasıl teyit edilsin?
                 </div>
                 {selectedRows.map((row) => (
-                  <div key={row.id} className="flex items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate text-sm" title={row.name}>
-                      {row.name}
-                      {row.variantOfName && (
-                        <span className="ml-1 text-[11px] text-muted-foreground">
-                          ({row.variantOfName} çeşidi)
-                        </span>
-                      )}
-                      {row.isNew && (
-                        <span className="ml-1 text-[10px] text-muted-foreground">(yeni)</span>
-                      )}
-                    </span>
-                    <div className="flex shrink-0 gap-1">
-                      {(["AUTO", "OPTIONAL", "REQUIRED"] as const).map((m) => {
-                        // SEÇİM tipli özellik AUTO olamaz: otomatik uygulanacak
-                        // tek bir değer yoktur (25GR mi 50GR mi?). Backend de
-                        // reddeder; tuşu açık bırakmak hatayı Kaydet'e saklardı.
-                        const autoBlocked = m === "AUTO" && row.valueType === "CHOICE";
-                        return (
-                          <Button
-                            key={m}
-                            type="button"
-                            size="sm"
-                            variant={row.mode === m ? "default" : "outline"}
-                            className="h-7 px-2 text-[11px]"
-                            disabled={autoBlocked}
-                            title={
-                              autoBlocked
-                                ? "Değer listesi olan (SEÇİM tipli) özellik otomatik uygulanamaz — hangi değerin yazılacağı operatör kararıdır."
-                                : STATION_PROPERTY_MODE_HINTS[m]
-                            }
-                            onClick={() => setModes((prev) => ({ ...prev, [row.id]: m }))}
-                          >
-                            {STATION_PROPERTY_MODE_LABELS[m]}
-                          </Button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <CapabilityModeRow
+                    key={row.id}
+                    row={row}
+                    onMode={(m) => setModes((prev) => ({ ...prev, [row.id]: m }))}
+                    value={defaults[row.id] ?? NO_DEFAULT}
+                    options={defaultValueOptions(row.id, propsQuery.data?.data ?? [])}
+                    onDefault={(next) => setDefaults((prev) => ({ ...prev, [row.id]: next }))}
+                  />
                 ))}
               </div>
             )}
@@ -263,6 +248,7 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
                 onClick={() => {
                   setPropertyIds(initialPropertyIds);
                   setModes(initialModes);
+                  setDefaults(initialDefaults);
                 }}
               >
                 Sıfırla

@@ -11,10 +11,9 @@ interface Props {
   disabled?: boolean;
 }
 
-const IE = TERIM.terbiyeIsEmri;
 const MODES: ReadonlyArray<{ value: MultiPartyMode; label: string }> = [
-  { value: "PER_PARTY", label: `Her parti ayrı ${IE.tekilKucuk}` },
-  { value: "SINGLE", label: `Tek ${IE.tekilKucuk} (partiler ayrı top)` },
+  { value: "PER_PARTY", get label() { return `Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk}`; } },
+  { value: "SINGLE", get label() { return `Tek ${TERIM.terbiyeIsEmri.tekilKucuk} (partiler ayrı top)`; } },
 ];
 
 export function PartyList({ view, value, onChange, disabled }: Props) {
@@ -47,7 +46,7 @@ export function PartyList({ view, value, onChange, disabled }: Props) {
         </tbody>
       </table>
       {view.warnings.length > 0 && <ul className="text-xs text-amber-800 dark:text-amber-300" data-testid="oie-party-warnings">{view.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
-      <div role="radiogroup" aria-label={`${IE.tekil} kipi`} className="flex flex-wrap gap-4 text-sm">
+      <div role="radiogroup" aria-label={`${TERIM.terbiyeIsEmri.tekil} kipi`} className="flex flex-wrap gap-4 text-sm">
         {MODES.map((m) => (
           <label key={m.value} className="flex items-center gap-1">
             <input type="radio" name="oie-party-mode" value={m.value} checked={value.mode === m.value} disabled={disabled} onChange={() => onChange({ ...value, mode: m.value })} />

@@ -1,6 +1,7 @@
 import { StatusBadge, workOrderStatusTones } from "@/components/operations/StatusBadge";
 import { workOrderStatusLabels } from "@/types/enums";
 import type { OrderLine } from "./types";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   links: OrderLine["workOrderLinks"];
@@ -18,7 +19,7 @@ export function OrderLineWoChips({ links }: Props) {
 
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-1">
-      <span className="text-[10px] text-muted-foreground">Terbiye iş emri:</span>
+      <span className="text-[10px] text-muted-foreground">{TERIM.terbiyeIsEmri.cumleBasi.yalin}:</span>
       {active.map((l) => (
         <span key={l.workOrderId} className="inline-flex items-center gap-1">
           <span className="font-mono text-[10px] text-foreground">

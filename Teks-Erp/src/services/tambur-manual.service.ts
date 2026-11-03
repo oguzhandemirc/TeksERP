@@ -102,6 +102,7 @@ import { lengthWarning } from "./helpers/measurement-threshold.helper";
 import { buildIntentSnapshot } from "./label.service";
 import { applyTamburCapabilitiesTx } from "./tambur.service";
 import { loadStationPropertyCaps } from "./helpers/station-capability-transfer.helper";
+import { TERIM } from "../constants/terim";
 
 /** T1 kalanı (K3c): elle doğan topa yalnız Tambur TÜRÜNDEKİ oturum istasyonunun AUTO yeteneği yazılır. */
 async function loadSessionTamburCaps(stationId: string | null | undefined) {
@@ -415,7 +416,7 @@ export class TamburManualService {
         otherWoId;
       return {
         code: "ROLL_OTHER_WORKORDER",
-        reason: `Bu top başka bir terbiye iş emrine bağlı (${woNo}). Terbiye iş emirleri arası taşımayı panelden süpervizör yapar.`,
+        reason: `Bu top başka bir ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlı (${woNo}). ${TERIM.terbiyeIsEmri.cumleBasiCogul.yalin} arası taşımayı panelden süpervizör yapar.`,
       };
     }
     if (roll.currentStepId === targetStepId && roll.status === RollStatus.IN_PRODUCTION) {
@@ -509,7 +510,7 @@ export class TamburManualService {
       : preview.woBlocked
         ? preview.woBlockReason
         : preview.backflush.colorBlocked
-          ? "Terbiye iş emrinin hedef rengi yok — renk veren adım atlanamaz."
+          ? `${TERIM.terbiyeIsEmri.cumleBasi.ilgi} hedef rengi yok — renk veren adım atlanamaz.`
           : null;
 
     return {
@@ -700,7 +701,7 @@ export class TamburManualService {
     });
     const currentSeq = steps.find((st) => st.id === current.id)?.stepSequence ?? null;
     if (currentSeq === null) {
-      throw AppError.badRequest("Topun adımı bu terbiye iş emrinin rotasında bulunamadı — ekranı yenileyin", {
+      throw AppError.badRequest(`Topun adımı bu ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} rotasında bulunamadı — ekranı yenileyin`, {
         code: "STEP_NOT_IN_ROUTE",
       });
     }
@@ -709,7 +710,7 @@ export class TamburManualService {
       .sort((a, b) => b.stepSequence - a.stepSequence)[0];
     if (!dyeStep) {
       throw AppError.badRequest(
-        "Bu terbiye iş emrinin rotasında topun bulunduğu adımdan ÖNCE renk veren bir adım yok — geri gönderme yapılamaz. Panelden süpervizör taşıması gerekir.",
+        `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} rotasında topun bulunduğu adımdan ÖNCE renk veren bir adım yok — geri gönderme yapılamaz. Panelden süpervizör taşıması gerekir.`,
         { code: "NO_DYE_STEP_IN_ROUTE" },
       );
     }
@@ -972,15 +973,15 @@ export class TamburManualService {
     const targetItemId = step.workOrder.targetItemId;
     if (input.itemId && targetItemId && input.itemId !== targetItemId) {
       throw AppError.badRequest(
-        "Bu terbiye iş emrine farklı ürünle top eklenemez — eklenen top terbiye iş emrinin hedef ürünü olmalıdır. " +
-          "Gerçekten başka bir ürün eklenecekse o topu ayrı bir terbiye iş emrine bağlayın.",
+        `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} farklı ürünle top eklenemez — eklenen top ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedef ürünü olmalıdır. ` +
+          `Gerçekten başka bir ürün eklenecekse o topu ayrı bir ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlayın.`,
         { code: "ITEM_MISMATCH", expectedItemId: targetItemId, receivedItemId: input.itemId },
       );
     }
     const itemId = targetItemId ?? input.itemId;
     if (!itemId) {
       throw AppError.badRequest(
-        "Ürün seçilmeli — bu terbiye iş emrinin hedef ürünü tanımlı değil, elle top eklerken ürün zorunlu.",
+        `Ürün seçilmeli — bu ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedef ürünü tanımlı değil, elle top eklerken ürün zorunlu.`,
         { code: "ITEM_REQUIRED" },
       );
     }
@@ -992,7 +993,7 @@ export class TamburManualService {
     const targetColorId = step.workOrder.targetColorId ?? null;
     if (targetColorId && input.colorId !== undefined && input.colorId !== targetColorId) {
       throw AppError.badRequest(
-        "Bu terbiye iş emrine farklı renkte (ya da renksiz) top eklenemez — renk terbiye iş emrinin hedef renginden gelir.",
+        `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} farklı renkte (ya da renksiz) top eklenemez — renk ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedef renginden gelir.`,
         { code: "COLOR_MISMATCH", expectedColorId: targetColorId, receivedColorId: input.colorId },
       );
     }
@@ -1027,7 +1028,7 @@ export class TamburManualService {
       const chosen = openBatches.find((b) => b.id === input.batchId);
       if (!chosen) {
         throw AppError.badRequest(
-          "Seçilen parti bu terbiye iş emrine ait değil (ya da kapanmış) — listeyi yenileyip tekrar seçin.",
+          `Seçilen parti bu ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} ait değil (ya da kapanmış) — listeyi yenileyip tekrar seçin.`,
           { code: "BATCH_INVALID", batchId: input.batchId },
         );
       }
@@ -1040,7 +1041,7 @@ export class TamburManualService {
       resolvedBatchNumber = openBatches[0].batchNumber;
     } else if (openBatches.length > 1) {
       throw AppError.badRequest(
-        "Bu terbiye iş emrinde birden fazla açık parti var — topun hangi partiye ekleneceğini seçin.",
+        `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} birden fazla açık parti var — topun hangi partiye ekleneceğini seçin.`,
         {
           code: "BATCH_REQUIRED",
           batches: openBatches.map((b) => ({ id: b.id, batchNumber: b.batchNumber })),
@@ -1137,7 +1138,7 @@ export class TamburManualService {
       const woNow = await tx.workOrder.findUnique({ where: { id: step.workOrderId }, select: { status: true } });
       if (woNow?.status === WorkOrderStatus.COMPLETED) throw completedNoAddError();
       if (!woNow || manualMoveWoBlockReason(woNow.status)) {
-        throw AppError.conflict("Terbiye iş emri bu sırada kapandı ya da iptal edildi — listeyi yenileyin.", { code: "WORKORDER_DEAD" });
+        throw AppError.conflict(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bu sırada kapandı ya da iptal edildi — listeyi yenileyin.`, { code: "WORKORDER_DEAD" });
       }
       const fresh = await tx.roll.findUnique({
         where: { id: roll.id },
@@ -1498,7 +1499,7 @@ export class TamburManualService {
     const itemId = input.itemId?.trim();
     if (!itemId) {
       throw AppError.badRequest(
-        "Ürün seçilmeli — kartsız üretimde miras alınacak terbiye iş emri yok.",
+        `Ürün seçilmeli — kartsız üretimde miras alınacak ${TERIM.terbiyeIsEmri.tekilKucuk} yok.`,
         { code: "ITEM_REQUIRED" },
       );
     }

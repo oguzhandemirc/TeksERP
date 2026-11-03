@@ -22,10 +22,11 @@ import { updateDeliveryNote } from "./gelen-belge-note.service";
 import { getReadSummary, type ReadSummaryState } from "./gelen-belge-okuma-ozeti.service";
 import { assertRouteOverride } from "./gelen-belge-oto-is-emri.service";
 import { WorkOrderService, type WorkOrderCreateInput } from "./workorder.service";
+import { mergeRouteDefaults, resolveStationDefaultTargets } from "./helpers/station-default-targets.helper";
+import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
 import { allPartiesEntered, assertPartiesShape, openPartyWorkOrders, partyRolls, type PartyInput, type PartyWorkOrder } from "./gelen-belge-cok-parti.service";
 import { readIncomingDocFormApproval, readMultiPartyWorkOrder, type MultiPartyWorkOrderMode } from "./system-setting.service";
 
-const IE = TERIM.terbiyeIsEmri;
 const workOrders = new WorkOrderService();
 
 /** Yalnız okuma SÜRERKEN kayıt 409; diğer her durumda gövdedeki (operatörün gördüğü) değerle kayıt yapılır. */
@@ -44,6 +45,7 @@ export interface FormWorkOrderInput {
   routeTemplateId: string;
   /** `plannedMachineId` D dilimiyle quickStart'a akar; burada olduğu gibi geçirilir. */
   stepPlanning?: Array<{ sequence: number; plannedMachineId?: string | null }>;
+  /** Anahtar YOKSA istasyon varsayılanları (K22) uygulanır; varsa (boş dizi dahil) istemcinin kararı, dokunulmaz. */
   targetValues?: Array<{ propertyId: string; valueId: string }>;
   notes?: string | null;
   /** S1 çok partili belge (≥2): parti başına top; verilmezse tek top = kursunMeters (bugünkü). */
@@ -67,10 +69,28 @@ export interface FormWorkOrderResult {
 export async function assertFormApprovalEnabled(): Promise<void> {
   if ((await readIncomingDocFormApproval()) !== "WITH_WORK_ORDER") {
     throw AppError.forbidden(
-      `Belge ${IE.tekilKucuk} formundan kaydedilemez: fabrika ayarı "ayrı onay". Belgeyi gelen belge ekranından onaylayın ya da ${settingScreenPath("gelen-belge")} ekranında "${IE.tekil} ile kaydet" seçin.`,
+      `Belge ${TERIM.terbiyeIsEmri.tekilKucuk} formundan kaydedilemez: fabrika ayarı "ayrı onay". Belgeyi gelen belge ekranından onaylayın ya da ${settingScreenPath("gelen-belge")} ekranında "${TERIM.terbiyeIsEmri.tekil} ile kaydet" seçin.`,
       { code: "GELEN_BELGE_FORM_APPROVAL_DISABLED" },
     );
   }
+}
+
+/**
+ * K22: rotanın istasyon varsayılanları (TEK çözücü). Bayraklar her zaman birleşir (gövdede bayrak alanı yok);
+ * değerler yalnız istemci `targetValues` göndermediyse; KAT kolon-projeksiyonu → `foldType`.
+ */
+export async function resolveFormWorkOrderTargets(
+  routeTemplateId: string,
+  customerId: string,
+  clientValues: FormWorkOrderInput["targetValues"],
+): Promise<{ targetValues: Array<{ propertyId: string; valueId: string }>; targetPropertyIds: string[]; foldType: string | null }> {
+  const steps = await prisma.routeStep.findMany({ where: { routeId: routeTemplateId }, select: { stationId: true }, orderBy: { sequence: "asc" } });
+  const merged = mergeRouteDefaults(await resolveStationDefaultTargets(steps.map((s) => s.stationId), customerId));
+  const fold = merged.find((t) => t.propertyCode === FOLD_PROPERTY_CODE && t.valueCode);
+  const targetValues = clientValues
+    ?? merged.filter((t) => t.valueId && t.propertyCode !== FOLD_PROPERTY_CODE).map((t) => ({ propertyId: t.propertyId, valueId: t.valueId! }));
+  const flags = merged.filter((t) => t.valueType === "FLAG").map((t) => t.propertyId);
+  return { targetValues, targetPropertyIds: [...new Set([...flags, ...(await flagPropertyIds(targetValues))])], foldType: fold?.valueCode ?? null };
 }
 
 /** Hedef değerlerin bayrak özellikleri (otomatik iş emri emsali: `targetPropertyIds` = çeşidin üst özelliği). */
@@ -112,7 +132,7 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
     : !!(await prisma.customerDeliveryNoteLine.findUnique({ where: { id: summaryLineId(noteId) }, select: { rollId: true } }))?.rollId;
   if (!entered) {
     if (!APPROVAL_RESUMABLE.includes(note.status)) {
-      throw AppError.conflict(`${note.noteNo} şu an ${IE.tekilKucuk} için kaydedilemez (${note.status}).`, { code: "DELIVERY_NOTE_NOT_APPROVABLE", status: note.status });
+      throw AppError.conflict(`${note.noteNo} şu an ${TERIM.terbiyeIsEmri.tekilKucuk} için kaydedilemez (${note.status}).`, { code: "DELIVERY_NOTE_NOT_APPROVABLE", status: note.status });
     }
     const user = await prisma.user.findUnique({ where: { id: actor.userId }, select: { username: true } });
     const approved = await approveDeliveryNote(noteId, {}, actor.userId, {
@@ -128,21 +148,22 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
   if (!line?.rollId || !line.roll?.barcode) {
     throw AppError.conflict(`${note.noteNo} için tek kayıt topu doğmadı${line?.failReason ? `: ${line.failReason}` : ""}.`, { code: "DELIVERY_NOTE_ROLL_MISSING" });
   }
-  const targetValues = input.targetValues ?? [];
+  const targets = await resolveFormWorkOrderTargets(input.routeTemplateId, input.ownerCustomerId, input.targetValues);
   // Fazla alan (plannedMachineId) bilerek geçer: adım planı overlay'i D dilimiyle okur.
   const stepPlanning = input.stepPlanning as WorkOrderCreateInput["stepPlanning"];
   const res = await workOrders.quickStart({
     clientToken: input.clientToken,
     rollBarcodes: [line.roll.barcode],
     routeTemplateId: input.routeTemplateId,
-    targetValues,
-    targetPropertyIds: await flagPropertyIds(targetValues),
+    targetValues: targets.targetValues,
+    targetPropertyIds: targets.targetPropertyIds,
+    ...(targets.foldType ? { foldType: targets.foldType } : {}),
     ...(stepPlanning?.length ? { stepPlanning } : {}),
     ...(input.notes ? { notes: input.notes } : {}),
     sourceNoteId: noteId,
   }, actor.userId);
   const wo = res.data?.workOrder;
-  if (!wo) throw AppError.internal(`${IE.tekil} açılamadı.`);
+  if (!wo) throw AppError.internal(`${TERIM.terbiyeIsEmri.tekil} açılamadı.`);
   if (res.warnings?.length) warnings.push(...res.warnings);
   return { workOrderId: wo.id, workOrderNo: wo.workOrderNumber, batchNumber: res.data?.batch?.batchNumber ?? null, rollId: line.rollId, warnings };
 }
@@ -151,9 +172,12 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
 async function finishParties({ note, parties, input, userId, warnings }: { note: { id: string; noteNo: string }; parties: PartyInput[]; input: FormWorkOrderInput; userId: string; warnings: string[] }): Promise<FormWorkOrderResult> {
   const rolls = await partyRolls(note.id, note.noteNo, parties);
   const mode = input.mode ?? (await readMultiPartyWorkOrder());
+  // K22: gövdede hedef yoksa istasyon varsayılanları; varsa dokunulmaz. Çözücünün bayrakları her iş emrine eklenir.
+  const defaults = await resolveFormWorkOrderTargets(input.routeTemplateId, input.ownerCustomerId, input.targetValues);
+  const withDefaultFlags = async (targets: ReadonlyArray<{ propertyId: string }>) => [...new Set([...defaults.targetPropertyIds, ...(await flagPropertyIds(targets))])];
   const res = await openPartyWorkOrders({
     noteId: note.id, clientToken: input.clientToken, routeTemplateId: input.routeTemplateId, mode, parties, rolls,
-    targetValues: input.targetValues ?? [], stepPlanning: input.stepPlanning, notes: input.notes, flagPropertyIds,
+    targetValues: defaults.targetValues, stepPlanning: input.stepPlanning, notes: input.notes, flagPropertyIds: withDefaultFlags,
   }, userId);
   warnings.push(...res.warnings);
   const first = res.workOrders[0]!;

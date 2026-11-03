@@ -17,6 +17,7 @@ import type { Subcontractor } from "@/pages/Subcontractors/types";
 import type { SubcontractorCategory } from "@/pages/SubcontractorCategories/types";
 import type { RouteStep } from "@/pages/Routes/types";
 import { fasonNoteLabel } from "./fasonNote";
+import { TERIM } from "@/lib/terim";
 
 export interface FasonStepPlan {
   sequence: number;
@@ -87,7 +88,7 @@ export function FasonPlanningDialog({
         <DialogHeader>
           <DialogTitle>Fason Adım Planlaması</DialogTitle>
           <DialogDescription>
-            Bu terbiye iş emrindeki dış işlem adımları için kategori ve firma tercihi.
+            Bu {TERIM.terbiyeIsEmri.cekimKucuk.bulunma}ki dış işlem adımları için kategori ve firma tercihi.
             Sevkiyat anında değiştirilebilir.
           </DialogDescription>
         </DialogHeader>

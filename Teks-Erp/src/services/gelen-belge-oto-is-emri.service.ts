@@ -24,7 +24,6 @@ import { AppError } from "../utils/app-error";
 import { TERIM } from "../constants/terim";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
-const IE = TERIM.terbiyeIsEmri;
 
 /**
  * `POST /work-orders/quick-start` kapısının izin kümesi (`requireAnyPermission`, biri yeter) — onaylayanda yoksa otomatik
@@ -76,11 +75,11 @@ const hasWorkOrderPermission = (actor: Pick<JwtPayload, "permissions">) => AUTO_
 export async function assertRouteOverride(routeTemplateId: string | undefined, actor: Pick<JwtPayload, "permissions">): Promise<AutoWorkOrderOptions> {
   if (!routeTemplateId) return {};
   if (!hasWorkOrderPermission(actor)) {
-    throw AppError.forbidden(`Seçilen rotayla ${IE.tekilKucuk} açma yetkiniz yok (workorder:write ya da mobile:hizli-is-emri); belge onaylanmadı.`, { code: "GELEN_BELGE_ROUTE_OVERRIDE_FORBIDDEN" });
+    throw AppError.forbidden(`Seçilen rotayla ${TERIM.terbiyeIsEmri.tekilKucuk} açma yetkiniz yok (workorder:write ya da mobile:hizli-is-emri); belge onaylanmadı.`, { code: "GELEN_BELGE_ROUTE_OVERRIDE_FORBIDDEN" });
   }
   if (!(await readProductionEnabled())) {
     throw licenseModuleError(SETTING_KEYS.PRODUCTION_ENABLED, "Üretim")
-      ?? AppError.forbidden(`Üretim modülü kapalı; ${IE.tekilKucuk} açılamaz, belge onaylanmadı.`, { code: "MODULE_DISABLED", module: "production" });
+      ?? AppError.forbidden(`Üretim modülü kapalı; ${TERIM.terbiyeIsEmri.tekilKucuk} açılamaz, belge onaylanmadı.`, { code: "MODULE_DISABLED", module: "production" });
   }
   const r = await factoryRouteProblem(routeTemplateId);
   if (r.problem) throw AppError.badRequest(`Seçilen rota şablonu (${r.name ?? "silinmiş"}) kullanılamıyor: ${r.problem}; belge onaylanmadı.`, { code: "GELEN_BELGE_ROUTE_OVERRIDE_INVALID" });
@@ -115,12 +114,12 @@ export async function autoOpenWorkOrders(noteId: string, actor: Pick<JwtPayload,
     groups = plan.groups;
     if (groups.length === 0) return { opened: 0, manual: 0, reason: null, groups: [] };
     if (!hasWorkOrderPermission(actor)) {
-      return allSkipped(groups, `Onaylayanın ${IE.tekilKucuk} açma yetkisi yok (workorder:write ya da mobile:hizli-is-emri); yetkili kişi plan ekranından açmalı.`);
+      return allSkipped(groups, `Onaylayanın ${TERIM.terbiyeIsEmri.tekilKucuk} açma yetkisi yok (workorder:write ya da mobile:hizli-is-emri); yetkili kişi plan ekranından açmalı.`);
     }
-    if (!(await readProductionEnabled())) return allSkipped(groups, `Üretim modülü kapalı; ${IE.tekilKucuk} açılamaz.`);
+    if (!(await readProductionEnabled())) return allSkipped(groups, `Üretim modülü kapalı; ${TERIM.terbiyeIsEmri.tekilKucuk} açılamaz.`);
     const routeTemplateId = opts.routeTemplateId ?? plan.suggestedRouteTemplateId;
     if (!routeTemplateId) {
-      return allSkipped(groups, `Rota önerilemedi: ${plan.routeSuggestionNotes.join(" ")} ${IE.cekim.belirtme} plan ekranından rota seçerek açın ya da ${settingScreenPath("gelen-belge")} ekranında fabrika varsayılan rotasını seçin.`);
+      return allSkipped(groups, `Rota önerilemedi: ${plan.routeSuggestionNotes.join(" ")} ${TERIM.terbiyeIsEmri.cekim.belirtme} plan ekranından rota seçerek açın ya da ${settingScreenPath("gelen-belge")} ekranında fabrika varsayılan rotasını seçin.`);
     }
     const out: AutoWorkOrderGroup[] = [];
     // OPEN (Gülkesim, §2.7 K5): gramajsız grup hedef değersiz açılır; gramaj makine başında girilir.
@@ -134,7 +133,7 @@ export async function autoOpenWorkOrders(noteId: string, actor: Pick<JwtPayload,
       }
       const rolls = g.rolls.filter((r) => r.attachable && !r.liveWorkOrder && r.barcode);
       if (rolls.length === 0) {
-        out.push({ ...base, outcome: "SKIPPED", reason: `Bağlanabilir top yok (toplar ${IE.cekimKucuk.bulunma}, çuvalda ya da sevkte).` });
+        out.push({ ...base, outcome: "SKIPPED", reason: `Bağlanabilir top yok (toplar ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma}, çuvalda ya da sevkte).` });
         continue;
       }
       try {
@@ -155,7 +154,7 @@ export async function autoOpenWorkOrders(noteId: string, actor: Pick<JwtPayload,
     const opened = out.filter((g) => g.outcome === "OPENED").length;
     return { opened, manual: out.length - opened, reason: null, groups: out };
   } catch (err) {
-    return allSkipped(groups, `Otomatik ${IE.tekilKucuk} denenemedi: ${errText(err)}`);
+    return allSkipped(groups, `Otomatik ${TERIM.terbiyeIsEmri.tekilKucuk} denenemedi: ${errText(err)}`);
   }
 }
 

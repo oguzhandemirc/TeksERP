@@ -13,6 +13,7 @@ import { EMPTY_ROW, rowToPayload, validateReceiptRow } from "./fason-summary";
 import { FasonReceiptRows } from "./FasonReceiptRows";
 import type { FasonReceiptBody } from "./service";
 import type { FasonReceiptRow } from "./types";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   order: WeavingOrder;
@@ -37,7 +38,7 @@ export function FasonReceiptDialog({ order, isPending, failed, onClose, onConfir
         <DialogHeader>
           <DialogTitle>{order.weavingOrderNumber} — fasondan dönen topları kabul et</DialogTitle>
           <DialogDescription>
-            Her satır bir TOP olarak doğar (kumaş {order.item.name}, {order.color?.name ?? "renksiz"}; giriş kaynağı “Dokuma”). Ölçüm ve etiket KK1 akışında; makbuz kalemi tutulmaz, parti terbiye iş emrine katılırken doğar.
+            Her satır bir TOP olarak doğar (kumaş {order.item.name}, {order.color?.name ?? "renksiz"}; giriş kaynağı “Dokuma”). Ölçüm ve etiket KK1 akışında; makbuz kalemi tutulmaz, parti {TERIM.terbiyeIsEmri.cekimKucuk.yonelme} katılırken doğar.
           </DialogDescription>
         </DialogHeader>
         {failed.length > 0 && (

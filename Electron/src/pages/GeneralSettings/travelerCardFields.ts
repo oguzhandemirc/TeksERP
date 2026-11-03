@@ -110,7 +110,7 @@ export const FIELD_GROUPS: FieldGroup[] = [
   {
     key: "identity",
     title: "Kimlik + Karekod",
-    rows: [
+    get rows() { return [
       f("woNo", `${TERIM.terbiyeIsEmri.tekilBuyuk} NO`, "Kartın en büyük yazısı."),
       f("typeText", "Tür · rota satırı"),
       f("productCode", "Ürün kodu rozeti"),
@@ -118,7 +118,7 @@ export const FIELD_GROUPS: FieldGroup[] = [
       f("qrBlock", "Karekod kutusu", "Kapatılırsa karekod da basılmaz — kart okutulamaz."),
       f("barcodeText", "Karekod altındaki kod metni"),
       f("qrHint", "Karekod ipucu yazısı"),
-    ],
+    ]; },
   },
   {
     key: "spec",
@@ -169,7 +169,7 @@ export const FIELD_GROUPS: FieldGroup[] = [
   {
     key: "batches",
     title: "Partiler",
-    desc: "Her baskıda GÜNCEL okunur (kart terbiye iş emri açılışında donar, parti sonra doğar). Terbiye iş emrinin partisi yoksa blok hiç basılmaz.",
+    get desc() { return `Her baskıda GÜNCEL okunur (kart ${TERIM.terbiyeIsEmri.tekilKucuk} açılışında donar, parti sonra doğar). ${TERIM.terbiyeIsEmri.cumleBasi.ilgi} partisi yoksa blok hiç basılmaz.`; },
     toggle: "showBatches",
     rows: [
       f("batchHead", "Başlık satırı"),

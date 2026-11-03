@@ -38,6 +38,7 @@ import {
 } from "./doc-style";
 import type { FasonDensity } from "./fason-ceki.density";
 import { cssFixed } from "./fmt-num";
+import { TERIM } from "../../constants/terim";
 
 export interface FasonFieldDef {
   /** Config anahtarı — Electron paneli aynı anahtarı yazar. */
@@ -68,7 +69,7 @@ export const FASON_FIELDS: FasonFieldDef[] = [
   { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header", selector: ".lh-line", base: (d) => d.lhLine, weight: 400 },
   { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header", selector: ".sayin", base: (d) => d.sayin, weight: 400 },
   { key: "sayin", label: "Fason firma adı", group: "header", selector: ".sayin b", base: (d) => d.sayinB, weight: 700 },
-  { key: "subLine", label: "İstasyon · terbiye iş emri satırı", group: "header", selector: ".sub", base: (d) => d.sub, weight: 400 },
+  { key: "subLine", get label() { return `İstasyon · ${TERIM.terbiyeIsEmri.tekilKucuk} satırı`; }, group: "header", selector: ".sub", base: (d) => d.sub, weight: 400 },
   { key: "title", label: "Belge başlığı", group: "header", selector: ".title", base: (d) => d.title, weight: 800 },
   { key: "docNo", label: "İrsaliye no", group: "header", selector: ".ln.ln-docno b", base: (d) => d.lnB, weight: 700 },
   { key: "docDate", label: "Tarih", group: "header", selector: ".ln.ln-date b", base: (d) => d.lnB, weight: 700 },

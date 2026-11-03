@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { ENUM_LABELS_EK } from "./audit-enum-etiketleri-ek";
+import { TERIM } from "./terim";
 export { SHARED_ENUM_VALUES } from "./audit-enum-paylasim";
 
 /** `ENUM_LABELS`in ilk parçası (üretim/ana veri); ikinci parça `audit-enum-etiketleri-ek.ts`. */
@@ -102,7 +103,7 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   IN_HOUSE: "Kendi tezgahımızda",
   SUBCONTRACTED: "Fasonda dokunuyor",
   // WorkOrderEventType — iş emri hareket defteri olay tipi (2026-09-25).
-  CREATED: "Terbiye iş emri açıldı",
+  get CREATED() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} açıldı`; },
   STATUS_CHANGED: "Durum değişti",
   FIELD_CHANGED: "Plan alanı değişti",
   STEP_PLAN_CHANGED: "Adım planı değişti",
@@ -129,7 +130,7 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   VOIDED: "İptal",
   SUPERSEDED: "Eski Versiyon",
   // ManifestSourceKind — çeki listesinin kaynağı
-  WORK_ORDER: "Terbiye iş emri",
+  get WORK_ORDER() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin}`; },
   SACK_SELECTION: "Çuval seçimi",
   // ScanType
   ARRIVAL: "Varış",
@@ -301,7 +302,10 @@ const ENUM_LABELS_ANA: Record<string, string> = {
 };
 
 /** Enum DEĞERLERİ (durum/tür kolonlarının içeriği) → Türkçe. Bilinmeyen → ham. */
-export const ENUM_LABELS: Record<string, string> = { ...ENUM_LABELS_ANA, ...ENUM_LABELS_EK };
+// K20: tanımlayıcılar korunur — yayma (`...`) iş emri adı getter'larını birleşim anında dondururdu.
+export const ENUM_LABELS: Record<string, string> = Object.defineProperties(
+  {}, { ...Object.getOwnPropertyDescriptors(ENUM_LABELS_ANA), ...Object.getOwnPropertyDescriptors(ENUM_LABELS_EK) },
+);
 
 // =============================================================================
 // ALAN-KAPSAMLI İKİNCİ KATMAN — SADECE GERÇEK ÇELİŞKİLER İÇİN

@@ -26,6 +26,7 @@ import { AppError } from "../../utils/app-error";
 import { setWorkOrderCardStatusesTx } from "./traveler-card-fanout.helper";
 import { claimWorkOrderStatusTx, type WorkOrderEventCtx } from "./workorder-event.helper";
 import { freezeCloseSnapshotTx } from "./workorder-close-snapshot.helper";
+import { TERIM } from "../../constants/terim";
 
 export type TxClient = Prisma.TransactionClient;
 
@@ -387,7 +388,7 @@ export async function assertWoAtStepKind(
   });
   if (!targetStep) {
     throw AppError.notFound(
-      `Bu terbiye iş emrinde ${expectedKind} adımı tanımlı değil`,
+      `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} ${expectedKind} adımı tanımlı değil`,
     );
   }
 
@@ -412,7 +413,7 @@ export async function assertWoAtStepKind(
 
   if (stepsWithRolls.length === 0) {
     throw AppError.badRequest(
-      `Bu terbiye iş emrinin "${targetStep.station.name}" adımında işlenecek top yok ve şu an aktif başka bir adım da yok. (Üretim henüz başlamamış veya bitmiş.)`,
+      `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} "${targetStep.station.name}" adımında işlenecek top yok ve şu an aktif başka bir adım da yok. (Üretim henüz başlamamış veya bitmiş.)`,
     );
   }
 
@@ -420,6 +421,6 @@ export async function assertWoAtStepKind(
     .map((s) => `${s.station.name} (${s._count.currentRolls} rulo)`)
     .join(", ");
   throw AppError.badRequest(
-    `Bu terbiye iş emrinin "${targetStep.station.name}" adımında şu an açık top yok. Mevcut konum: ${stepNames}. Tabletinizi yanlış istasyonda okutmuş olabilirsiniz.`,
+    `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} "${targetStep.station.name}" adımında şu an açık top yok. Mevcut konum: ${stepNames}. Tabletinizi yanlış istasyonda okutmuş olabilirsiniz.`,
   );
 }

@@ -5,7 +5,8 @@ import { onlineManager, useQuery } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { useAttemptToken } from '../../../../offline/attemptToken';
 import { isAmbiguousFailure } from '../../../../offline/entryAttempt';
-import { fabricPropertyService, type KursunCustomerDefaults, type KursunGramajCatalog } from '../../../../services/fabricProperty.service';
+import { fabricPropertyService, type KursunGramajCatalog } from '../../../../services/fabricProperty.service';
+import { useRouteDefaultTargets } from '../../../../hooks/useRouteDefaultTargets';
 import { inboundDocService, type InboundNoteDetail, type NotePartiesView } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { printTravelerCardForWorkOrder } from '../../../../services/travelerCardPrint';
@@ -14,7 +15,6 @@ import { loadRecentOwners, rememberOwner } from './recentOwners';
 import {
   buildCreateBody,
   buildDraftPatch,
-  customerGramajId,
   draftResult,
   errorText,
   initialRowForm,
@@ -72,7 +72,7 @@ async function saveRowOnce(ctx: SaveCtx, r: DocRow, form: RowForm): Promise<{ re
   const issues = rowIssues(form);
   if (issues.length) return { result: { kind: 'FAILED', text: issues.join(' ') } };
   try {
-    const body = buildCreateBody(form, { clientToken: ctx.token, routeTemplateId: ctx.routeId, gramajPropertyId: ctx.gramajPropertyId });
+    const body = buildCreateBody(form, { clientToken: ctx.token, routeTemplateId: ctx.routeId, gramajPropertyId: ctx.gramajPropertyId, gramajTouched: r.gramajTouched });
     return { result: openedResult(await inboundDocService.createWorkOrder(r.noteId, body)) };
   } catch (e) {
     if (!isFormApprovalDisabled(e)) return { result: { kind: 'FAILED', text: errorText(e) }, error: e };
@@ -105,6 +105,8 @@ function rowCounts(rows: DocRow[], ready: number) {
   };
 }
 
+type GramajFor = (customerId: string | null) => string | null | undefined;
+
 /** Parti özeti form kurulduktan sonra gelir: çok partideyse satır listesi bir kez kurulur (kullanıcı düzenlemesi ezilmez). */
 function applyParties(rs: DocRow[], noteId: string, parties: NotePartiesView | null): DocRow[] {
   return rs.map((r) => (r.noteId === noteId && r.form && r.parties === undefined ? { ...r, parties, form: { ...r.form, multi: initialMultiParty(parties) } } : r));
@@ -115,9 +117,7 @@ function applyMulti(rs: DocRow[], noteId: string, multi: MultiPartyDraft): DocRo
 }
 
 /** Gramaj alanı yalnız rotada kurşun adımı varsa; katalog okunamazsa boş (alan çizilmez, uydurma yok). */
-const NO_DEFAULTS: KursunCustomerDefaults = Object.freeze({});
-
-function useGramajCatalog(route: ProductionRoute): { showGramaj: boolean; catalog: KursunGramajCatalog; defaults: KursunCustomerDefaults } {
+function useGramajCatalog(route: ProductionRoute, rows: DocRow[]): { showGramaj: boolean; catalog: KursunGramajCatalog; gramajFor: GramajFor } {
   const showGramaj = routeHasKursunStep(route);
   const q = useQuery({
     queryKey: ['fabric-properties', 'kursun-gramaj-catalog'],
@@ -126,29 +126,38 @@ function useGramajCatalog(route: ProductionRoute): { showGramaj: boolean; catalo
     retry: false,
     staleTime: 60_000,
   });
-  // S3: müşterinin cari kartındaki varsayılan gramajı (yalnız ön seçim).
-  const d = useQuery({
-    queryKey: ['work-orders', 'kursun-customer-defaults'],
-    queryFn: fabricPropertyService.getKursunCustomerDefaults,
-    enabled: showGramaj,
-    retry: false,
-    staleTime: 60_000,
-  });
-  return { showGramaj, catalog: showGramaj ? q.data ?? EMPTY_CATALOG : EMPTY_CATALOG, defaults: d.data ?? NO_DEFAULTS };
+  const catalog = showGramaj ? q.data ?? EMPTY_CATALOG : EMPTY_CATALOG;
+  // K22: ön seçim sunucu çözücüsünden (müşteri > istasyon yeteneği > değer varsayılanı); tablet kural yazmaz.
+  const defaults = useRouteDefaultTargets(route, rows.map((r) => r.form?.ownerCustomerId ?? r.detail?.ownerCustomerId ?? null), showGramaj);
+  const { valueFor } = defaults;
+  const propertyId = catalog.propertyId;
+  const gramajFor = useCallback<GramajFor>(
+    (customerId) => {
+      if (!showGramaj || !propertyId) return null;
+      const id = valueFor(customerId, propertyId);
+      // Katalogda olmayan (pasif) değer önerilmez.
+      return id && !catalog.options.some((o) => o.id === id) ? null : id;
+    },
+    [showGramaj, propertyId, valueFor, catalog],
+  );
+  return { showGramaj, catalog, gramajFor };
 }
 
-/** Katalog / müşteri varsayılanları satırdan sonra gelirse dokunulmamış satırlara ön seçim düşer (müşterininki, yoksa istasyonunki). */
-function useGramajReseed(setRows: Dispatch<SetStateAction<DocRow[]>>, catalog: KursunGramajCatalog, defaults: KursunCustomerDefaults): void {
+/** Çözücü cevabı satırdan sonra gelirse (ya da müşteri değişince) dokunulmamış satırlara ön seçim düşer. */
+function useGramajReseed(setRows: Dispatch<SetStateAction<DocRow[]>>, gramajFor: GramajFor): void {
   useEffect(() => {
-    if (catalog.options.length === 0) return;
-    setRows((rs) =>
-      rs.map((r) => {
+    setRows((rs) => {
+      let changed = false;
+      const next = rs.map((r) => {
         if (!r.form || r.gramajTouched || isDone(r)) return r;
-        const id = customerGramajId(catalog, defaults, r.form.ownerCustomerId);
-        return id && id !== r.form.gramajValueId ? { ...r, form: { ...r.form, gramajValueId: id } } : r;
-      }),
-    );
-  }, [setRows, catalog, defaults]);
+        const id = gramajFor(r.form.ownerCustomerId);
+        if (id === undefined || id === r.form.gramajValueId) return r;
+        changed = true;
+        return { ...r, form: { ...r.form, gramajValueId: id } };
+      });
+      return changed ? next : rs;
+    });
+  }, [setRows, gramajFor]);
 }
 
 export function useWoRows(route: ProductionRoute) {
@@ -157,14 +166,14 @@ export function useWoRows(route: ProductionRoute) {
   // `production.refakatAutoPrint` yalnız gelen belge ayar ucunda döner (bayrak yükünde yok); okunamazsa kapalı = elle basım.
   const autoPrint = settings.data?.refakatAutoPrint === true;
   const mode = resolveFormApproval(settings.data, settings.isError);
-  const { showGramaj, catalog, defaults } = useGramajCatalog(route);
   const [rows, setRows] = useState<DocRow[]>([]);
+  const { showGramaj, catalog, gramajFor } = useGramajCatalog(route, rows);
   const [saving, setSaving] = useState(false);
   const [recent, setRecent] = useState<string[]>([]);
 
   useEffect(() => void loadRecentOwners().then(setRecent), []);
 
-  useGramajReseed(setRows, catalog, defaults);
+  useGramajReseed(setRows, gramajFor);
 
   const addNote = useCallback((note: { id: string; noteNo: string }, runKey: number) => {
     setRows((rs) =>
@@ -176,9 +185,9 @@ export function useWoRows(route: ProductionRoute) {
 
   const setDetail = useCallback(
     (noteId: string, detail: InboundNoteDetail) => {
-      setRows((rs) => rs.map((r) => (r.noteId === noteId ? { ...r, detail, form: r.form ?? initialRowForm(detail, catalog, showGramaj, defaults) } : r)));
+      setRows((rs) => rs.map((r) => (r.noteId === noteId ? { ...r, detail, form: r.form ?? initialRowForm(detail, gramajFor) } : r)));
     },
-    [catalog, showGramaj, defaults],
+    [gramajFor],
   );
 
   const updateForm = useCallback(
@@ -187,14 +196,15 @@ export function useWoRows(route: ProductionRoute) {
         rs.map((r) => {
           if (r.noteId !== noteId || !r.form) return r;
           const touched = r.gramajTouched || 'gramajValueId' in patch;
-          // S3: müşteri değişti, gramaj elle seçilmedi → yeni müşterinin varsayılanı (yoksa istasyonunki).
-          const reseed = !touched && showGramaj && 'ownerCustomerId' in patch && patch.ownerCustomerId !== r.form.ownerCustomerId;
-          const next = reseed ? { ...patch, gramajValueId: customerGramajId(catalog, defaults, patch.ownerCustomerId ?? null) } : patch;
+          // Müşteri değişti, gramaj elle seçilmedi → yeni müşterinin ön seçimi (cevap henüz yoksa reseed etkisi doldurur).
+          const reseed = !touched && 'ownerCustomerId' in patch && patch.ownerCustomerId !== r.form.ownerCustomerId;
+          const fresh = reseed ? gramajFor(patch.ownerCustomerId ?? null) : undefined;
+          const next = fresh !== undefined ? { ...patch, gramajValueId: fresh } : patch;
           return { ...r, form: { ...r.form, ...next }, gramajTouched: touched, result: isDone(r) ? r.result : null };
         }),
       );
     },
-    [catalog, defaults, showGramaj],
+    [gramajFor],
   );
 
   const setParties = useCallback((noteId: string, parties: NotePartiesView | null) => setRows((rs) => applyParties(rs, noteId, parties)), []);

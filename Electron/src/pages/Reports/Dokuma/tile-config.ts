@@ -1,5 +1,6 @@
 import { Gauge, ListChecks, ClipboardList, Link2, Timer, Siren, Disc3, Activity, Hourglass } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
+import { TERIM } from "@/lib/terim";
 
 /**
  * Dokuma raporları — rapor sözleşmesi `docs/kurallar/dokuma.md` § Raporların sözleşmesi.
@@ -11,7 +12,7 @@ export const dokumaReportTiles: HubTile[] = [
   {
     key: "zincir",
     title: "Üretim Zinciri",
-    description: "Sipariş satırı → terbiye iş emri → dokuma iş emri → levent: nerede, ne kadar ilerledi, nerede takıldı; bağsız kayıtlar ayrı",
+    get description() { return `Sipariş satırı → ${TERIM.terbiyeIsEmri.tekilKucuk} → dokuma iş emri → levent: nerede, ne kadar ilerledi, nerede takıldı; bağsız kayıtlar ayrı`; },
     icon: Link2,
     to: "/reports/dokuma/zincir",
   },

@@ -24,6 +24,7 @@ import { Prisma, StationKind, StepStatus, type PrismaClient } from "@prisma/clie
 import { STEP_FLOW_WHERE } from "./quality-station.helper";
 import { ACTIVE_MOVEMENT } from "./roll-movement.helper";
 import { AppError } from "../../utils/app-error";
+import { TERIM } from "../../constants/terim";
 
 /** Hem havuz client'ı hem transaction client'ı kabul eden okuma tipi (any YOK). */
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -85,7 +86,7 @@ export async function assertStepNotBypassAssigned(
   const pending = await findPendingBypassAssignmentTx(db, stepId);
   if (pending) {
     throw AppError.conflict(
-      `Bu terbiye iş emri kurşun makinesine dağıtılmış (bypass) — ${actionLabel} yapılamaz. Dağıtımı iptal edin ya da Tambur'da kartı okutun.`,
+      `Bu ${TERIM.terbiyeIsEmri.tekilKucuk} kurşun makinesine dağıtılmış (bypass) — ${actionLabel} yapılamaz. Dağıtımı iptal edin ya da Tambur'da kartı okutun.`,
     );
   }
 }

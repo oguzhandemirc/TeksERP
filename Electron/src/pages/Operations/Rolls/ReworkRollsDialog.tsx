@@ -24,6 +24,7 @@ import { workOrderService } from "@/pages/Operations/WorkOrders/service";
 import type { Roll } from "./types";
 import { serverSuccessText } from "@/lib/serverNotes";
 import { useAttemptToken } from "@/lib/attemptToken";
+import { TERIM } from "@/lib/terim";
 
 const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 
@@ -167,7 +168,7 @@ export function ReworkRollsDialog({ open, onOpenChange, mode = "rework", rolls, 
   const allBarcodeless = rolls.length > 0 && rolls.every((r) => !r.barcode);
 
   const blocking = multiItem
-    ? "Seçili toplar farklı kumaşlara ait — tek terbiye iş emri tek kumaş içindir."
+    ? `Seçili toplar farklı kumaşlara ait — tek ${TERIM.terbiyeIsEmri.tekilKucuk} tek kumaş içindir.`
     : allBarcodeless
     ? "Seçili topların hiçbirinde barkod yok — bu yol barkodla çalışır."
     : committed.length > 0
@@ -206,7 +207,7 @@ export function ReworkRollsDialog({ open, onOpenChange, mode = "rework", rolls, 
     onSuccess: (res) => {
       attempt.onSuccess();
       const d = res.data;
-      const parts = [`Terbiye iş emri ${d.workOrder.workOrderNumber}`];
+      const parts = [`${TERIM.terbiyeIsEmri.cumleBasi.yalin} ${d.workOrder.workOrderNumber}`];
       if (d.batch) parts.push(`parti ${d.batch.batchNumber}`);
       if (d.dispatch) parts.push(`sevk ${d.dispatch.dispatchNo}`);
       toast.success(`${d.attached} top ${isRework ? "yeniden üretime" : "üretime"} alındı`, {
@@ -246,8 +247,7 @@ export function ReworkRollsDialog({ open, onOpenChange, mode = "rework", rolls, 
             {isRework ? "Yeniden Üretime Al" : "Üretime Al"} — {rolls.length} top
           </DialogTitle>
           <DialogDescription>
-            Seçili toplar için <strong>yeni bir terbiye iş emri</strong> açılır ve toplar ona bağlanır. Mevcut bir terbiye iş
-            emrine sonradan top eklenemez.
+            Seçili toplar için <strong>yeni bir {TERIM.terbiyeIsEmri.tekilKucuk}</strong> açılır ve toplar ona bağlanır. Mevcut bir {TERIM.terbiyeIsEmri.cekimKucuk.yonelme} sonradan top eklenemez.
           </DialogDescription>
         </DialogHeader>
 
@@ -359,8 +359,8 @@ export function ReworkRollsDialog({ open, onOpenChange, mode = "rework", rolls, 
                   </span>
                   <span className="block text-xs text-muted-foreground">
                     {firmId
-                      ? "Terbiye iş emri açılınca mal fasona sevk edilir ve çeki listesi oluşur. Kapatırsan yalnız planlanır."
-                      : "Firma seçilmedi — sevk yapılamaz, terbiye iş emri yalnız planlanır."}
+                      ? `${TERIM.terbiyeIsEmri.cumleBasi.yalin} açılınca mal fasona sevk edilir ve çeki listesi oluşur. Kapatırsan yalnız planlanır.`
+                      : `Firma seçilmedi — sevk yapılamaz, ${TERIM.terbiyeIsEmri.tekilKucuk} yalnız planlanır.`}
                   </span>
                 </span>
               </label>
@@ -415,10 +415,10 @@ export function ReworkRollsDialog({ open, onOpenChange, mode = "rework", rolls, 
               "Açılıyor…"
             ) : willDispatch ? (
               <>
-                <Factory className="h-4 w-4" /> Terbiye iş emri aç ve fasona gönder
+                <Factory className="h-4 w-4" /> {TERIM.terbiyeIsEmri.cumleBasi.yalin} aç ve fasona gönder
               </>
             ) : (
-              "Terbiye iş emri aç"
+              `${TERIM.terbiyeIsEmri.cumleBasi.yalin} aç`
             )}
           </Button>
         </DialogFooter>

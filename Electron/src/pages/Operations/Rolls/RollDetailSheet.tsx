@@ -479,7 +479,7 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                   </div>
                   <p className="text-[11px] text-amber-700/80">
                     Bu top bir çuvalın içinde ve bir sevkiyata bağlı — serbest depoda
-                    değildir, başka işe (sevk/kartela/terbiye iş emri) ayrılamaz.
+                    değildir, başka işe (sevk/kartela/{TERIM.terbiyeIsEmri.tekilKucuk}) ayrılamaz.
                   </p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                     <div className="text-xs text-muted-foreground">Sevkiyat</div>

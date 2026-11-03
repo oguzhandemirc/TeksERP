@@ -8,6 +8,7 @@ import {
 } from '../services/featureFlag.service';
 import { useAuthStore } from '../store/authStore';
 import { pickableLifecycle, type ItemPickUse } from '../lib/item-lifecycle';
+import { applyTermRegime } from '../lib/terim-rejim';
 
 // Feature flag'ler app genelinde tek query — React Query cache'i AsyncStorage'a
 // persist edildiği için (App.tsx) son bilinen değer offline'da da uygulanır.
@@ -19,12 +20,15 @@ export function useFeatureFlags() {
   // garanti 401 çifti + sahte "Oturum süresi doldu" toast'ı üretiyordu.
   // Cache'teki son değer disabled'ken de okunur (offline davranış korunur).
   const hasToken = useAuthStore((s) => !!s.token);
-  return useQuery({
+  const q = useQuery({
     queryKey: FLAGS_KEY,
     queryFn: featureFlagService.get,
     staleTime: 5 * 60 * 1000,
     enabled: hasToken,
   });
+  // K20: kalıcı önbellekten geri yüklenen bayrak queryFn'den geçmez — iş emri adı rejimi çizimden önce uygulanır (eş-güçlü).
+  applyTermRegime(q.data);
+  return q;
 }
 
 /** Bağlanılan sunucunun firma adı (`company.name`); yüklenene dek/boşsa nötr yedek. */

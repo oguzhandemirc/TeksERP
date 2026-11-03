@@ -7,6 +7,7 @@ import AppModal from '../../../components/AppModal';
 import type { ProductionRoute } from '../../../services/route.service';
 import { STATION_TYPE_LABEL, fasonNoteLabel, trLabel } from '../../../utils/labels';
 import { colors, spacing, radius } from '../../../theme';
+import { TERIM } from '../../../lib/terim';
 
 // Fason kategorisinin uyguladığı şeyi etikete ekler ("· renk+özellik uygular").
 // Boş ise (örn. salt taşıma kategorisi) ek yok — bu adım renk/özellik uygulamaz.
@@ -198,7 +199,7 @@ export default function RouteStepsModal({
                           <View style={{ flex: 1 }}>
                             <Text style={styles.noColorTitle}>Fasona renksiz gitsin</Text>
                             <Text style={styles.noColorHint}>
-                              Çekide "boyanacak renk" satırı basılmaz. Terbiye iş emrinin rengi
+                              Çekide "boyanacak renk" satırı basılmaz. {TERIM.terbiyeIsEmri.cumleBasi.ilgi} rengi
                               değişmez.
                             </Text>
                           </View>

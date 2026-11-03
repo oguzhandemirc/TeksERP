@@ -23,21 +23,22 @@ import { formatNumber } from "@/lib/format";
 import { rollStatusLabels, type RollStatus } from "@/types/enums";
 import type { SplitMode, BatchSplitPreviewRoll } from "../service";
 import type { TebdilResult } from "./useTebdilWizard";
+import { TERIM } from "@/lib/terim";
 
 const MODE_META: Record<SplitMode, { title: string; desc: string; icon: typeof RefreshCw }> = {
   REDYE_SAME_COLOR: {
     title: "Aynı renk — yeniden boya (tebdil)",
-    desc: "Aynı terbiye iş emri, yeni parti. Seçilen toplar boyahaneye geri sarılıp aynı renge yeniden boyanır.",
+    get desc() { return `Aynı ${TERIM.terbiyeIsEmri.tekilKucuk}, yeni parti. Seçilen toplar boyahaneye geri sarılıp aynı renge yeniden boyanır.`; },
     icon: RefreshCw,
   },
   NEW_COLOR: {
-    title: "Farklı renk — yeni terbiye iş emri",
-    desc: "Seçilen toplar yeni bir terbiye iş emrine taşınıp yeni renge boyanır.",
+    get title() { return `Farklı renk — yeni ${TERIM.terbiyeIsEmri.tekilKucuk}`; },
+    get desc() { return `Seçilen toplar yeni bir ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} taşınıp yeni renge boyanır.`; },
     icon: Palette,
   },
   UNDYED_MOVE: {
-    title: "Boyanmadan yeni terbiye iş emrine taşı",
-    desc: "Fasonda bekleyen parti boyanmadan yeni bir terbiye iş emrine taşınır.",
+    get title() { return `Boyanmadan yeni ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} taşı`; },
+    get desc() { return `Fasonda bekleyen parti boyanmadan yeni bir ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} taşınır.`; },
     icon: ArrowUpRight,
   },
 };
@@ -199,8 +200,8 @@ export function TebdilDispatchStep({
         <div className="flex items-start gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-xs">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <span>
-            <strong>Yeni terbiye iş emri</strong> oluşturulacak ve toplar oraya taşınacak. Fason sevki
-            (hangi boyahane) <strong>yeni terbiye iş emrinde</strong> yapılır — bitince aşağıdaki bağlantıdan geçin.
+            <strong>Yeni {TERIM.terbiyeIsEmri.tekilKucuk}</strong> oluşturulacak ve toplar oraya taşınacak. Fason sevki
+            (hangi boyahane) <strong>yeni {TERIM.terbiyeIsEmri.cekimKucuk.bulunma}</strong> yapılır — bitince aşağıdaki bağlantıdan geçin.
           </span>
         </div>
         {mode === "NEW_COLOR" && <ReasonField reason={reason} setReason={setReason} />}
@@ -335,7 +336,7 @@ export function TebdilResultView({
             </div>
           ) : newWo ? (
             <div>
-              Yeni terbiye iş emri <strong className="font-mono">{result.newWorkOrderNumber}</strong> oluşturuldu.
+              Yeni {TERIM.terbiyeIsEmri.tekilKucuk} <strong className="font-mono">{result.newWorkOrderNumber}</strong> oluşturuldu.
             </div>
           ) : (
             <div>
@@ -368,7 +369,7 @@ export function TebdilResultView({
         )}
         {newWo && (
           <Button size="sm" variant="outline" className="gap-1.5" onClick={() => onGoWorkOrder(result.newWorkOrderId!)}>
-            <ArrowUpRight className="h-4 w-4" /> Yeni Terbiye İş Emrine Git
+            <ArrowUpRight className="h-4 w-4" /> Yeni {TERIM.terbiyeIsEmri.cekim.yonelme} Git
           </Button>
         )}
       </div>

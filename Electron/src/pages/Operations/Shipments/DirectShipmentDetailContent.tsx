@@ -11,6 +11,7 @@ import { shipmentService } from "./service";
 import { DirectShipPrintDialog } from "./DirectShipPrintDialog";
 import { DirectShipmentRollListButton } from "./DirectShipmentRollListButton";
 import { DIRECT_ROLL_COLUMNS, directRollBarcode } from "./directRollListExport";
+import { TERIM } from "@/lib/terim";
 
 const fmt = (n: number) =>
   Number(n).toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
@@ -101,7 +102,7 @@ export function DirectShipmentDetailContent({
                 }
               />
               <Row
-                label="Terbiye İş Emri"
+                label={TERIM.terbiyeIsEmri.tekil}
                 value={<span className="font-mono">{d.dispatch.workOrder.workOrderNumber}</span>}
               />
               <Row label="Adım" value={d.dispatch.stationName} />

@@ -217,7 +217,8 @@ const NAMING_CONVENTION = [
     format: ["camelCase", "UPPER_CASE"],
     leadingUnderscore: "allow",
   },
-  { selector: ["objectLiteralProperty", "objectLiteralMethod", "typeProperty"], format: null },
+  // Terim-rejimli etiket haritaları getter taşır (`get WORK_ORDER() {...}`): anahtar veridir.
+  { selector: ["objectLiteralProperty", "objectLiteralMethod", "typeProperty", "classicAccessor"], format: null },
   { selector: "import", format: ["camelCase", "PascalCase", "UPPER_CASE"] },
 ];
 

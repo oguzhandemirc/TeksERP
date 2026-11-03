@@ -1,6 +1,7 @@
 import { calendarDaysFromToday } from "@/lib/factory-time";
 import { deriveWoRollup } from "./work-order-rollup";
 import type { Order } from "./types";
+import { TERIM } from "@/lib/terim";
 
 /**
  * Sipariş listesinde termin riski sinyali — termin yaklaşıyor/geçti VE üretim
@@ -51,6 +52,6 @@ export function deriveDeadlineRisk(
   const overdue = daysLeft < 0;
   const when = overdue ? "Termin geçti" : "Termin yaklaşıyor";
   const why =
-    rule === "NO_WORK_ORDER" ? "terbiye iş emri açılmamış" : "üretim tamamlanmamış";
+    rule === "NO_WORK_ORDER" ? `${TERIM.terbiyeIsEmri.tekilKucuk} açılmamış` : "üretim tamamlanmamış";
   return { daysLeft, overdue, label: `${when} — ${why}` };
 }

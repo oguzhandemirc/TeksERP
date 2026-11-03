@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapRows, parseCsv, withoutHeaderRow } from "./parse";
+import { autoMapColumns, mapRows, parseCsv, withoutHeaderRow } from "./parse";
 import type { ImportColumn } from "@/services/importService";
 
 // =============================================================================
@@ -134,5 +134,15 @@ describe("yapıştırma — sekme ayracı ve başlıksız blok", () => {
   it("ayraçsız yapıştırma tek sütuna düşer (çağıran bunu reddeder)", () => {
     const out = parseCsv("sadece bir satır\nikinci\n");
     expect(out.headers).toHaveLength(1);
+  });
+});
+
+describe("autoMapColumns — K20 iş emri adı rejimden bağımsız eşleşir", () => {
+  it("\"Terbiye İş Emri …\" başlığı \"İş Emri …\" etiketine (ve tersi) eşlenir", () => {
+    const cols = [{ key: "isStep", label: "İş Emri Adımı Olabilir" }] as unknown as ImportColumn[];
+    expect(autoMapColumns({ headers: ["Terbiye İş Emri Adımı Olabilir"], rows: [] }, cols)).toEqual(["isStep"]);
+    const tersi = [{ key: "isStep", label: "Terbiye İş Emri Adımı Olabilir" }] as unknown as ImportColumn[];
+    expect(autoMapColumns({ headers: ["İş emri adımı olabilir"], rows: [] }, tersi)).toEqual(["isStep"]);
+    expect(autoMapColumns({ headers: ["Terbiyeci İş Emri"], rows: [] }, cols)).toEqual([null]);
   });
 });

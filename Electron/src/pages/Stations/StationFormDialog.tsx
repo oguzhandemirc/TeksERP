@@ -18,6 +18,7 @@ const CAPABILITY_FIELDS = ["appliesColor", "appliesProperty", "appliesQuality", 
 import type { Station } from "./types";
 
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
+import { TERIM } from "@/lib/terim";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -118,7 +119,7 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
             <FormField
               label="Varsayılan Fason Kategorisi"
               error={form.formState.errors.defaultCategoryId}
-              hint="Terbiye iş emri oluşturulurken fason planlama modalında otomatik önerilir."
+              hint={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} oluşturulurken fason planlama modalında otomatik önerilir.`}
             >
               <Controller
                 control={form.control}

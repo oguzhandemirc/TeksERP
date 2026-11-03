@@ -232,7 +232,7 @@ export const READY_WORK_KIND = READY_WORK_KIND_CODE satisfies NotificationKind;
 /** Kaynak dakikada bir uyanır; tarama `shipping.ready.scanMinutes`te bir koşar (ayar yeniden başlatmasız değişir). */
 const MINUTE_MS = 60_000;
 const READY_UNIT_OF: Record<ShipReadyNotifyUnit, { unit: ReadyWorkUnit; label: string; type: string }> = {
-  IE: { unit: NOTIFY_UNIT_READY_UNIT.IE, label: TERIM.terbiyeIsEmri.tekil, type: "isemri" },
+  IE: { unit: NOTIFY_UNIT_READY_UNIT.IE, get label() { return TERIM.terbiyeIsEmri.tekil; }, type: "isemri" },
   GB: { unit: NOTIFY_UNIT_READY_UNIT.GB, label: "Gelen belge", type: "gelen-belge" },
   PARTI: { unit: NOTIFY_UNIT_READY_UNIT.PARTI, label: "Parti", type: "musteri-parti" },
 };

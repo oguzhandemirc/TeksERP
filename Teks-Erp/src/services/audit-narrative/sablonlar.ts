@@ -8,6 +8,7 @@
 
 import type { TermCases } from "../../constants/terim";
 import { kayitCekimi } from "../../constants/audit-isimler";
+import { TERIM } from "../../constants/terim";
 
 export type ParcaTuru = "kisi" | "kayit" | "deger" | "metin";
 export interface Parca {
@@ -132,7 +133,7 @@ const OLAY_SABLONLARI: Record<string, Sablon> = {
   // Top
   "ROLL:ARCHIVED": olay("belirtme", "arşivledi"),
   "ROLL:MANUAL_MOVE": olay("belirtme", "elle taşıdı"),
-  "ROLL:ROLL_DETACHED_FROM_WO": olay("belirtme", "terbiye iş emrinden ayırdı"),
+  get "ROLL:ROLL_DETACHED_FROM_WO"() { return olay("belirtme", `${TERIM.terbiyeIsEmri.cekimKucuk.ayrilma} ayırdı`); },
   "ROLL:CANCEL_RESTORED": olay("belirtme", "iptalden geri getirdi"),
   "ROLL:TAMBUR_UNDO_SINGLE": olay("ilgi", "tambur kaydını geri aldı"),
   // Sipariş

@@ -16,6 +16,7 @@ import { STOCK_MOVE_REASON } from "../../constants/stock-move-reasons";
 import { postStockMove, qtyYazilabilir, MOVEMENT_ASC, MOVEMENT_DESC } from "./warehouse-ledger.helper";
 import { reverseStockMove } from "./warehouse-ledger-reverse.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./warehouse-stock.helper";
+import { TERIM } from "../../constants/terim";
 
 type Tx = Prisma.TransactionClient;
 
@@ -61,7 +62,7 @@ export async function postProductionIssuesTx(
 
 /** İş emri iptalinde dönüş satırlarının notu — zaman çizelgesi aynı eylemi bu notla gruplar. */
 export function cancelReturnNote(workOrderNumber: string): string {
-  return `Terbiye iş emri iptali ${workOrderNumber}`;
+  return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} iptali ${workOrderNumber}`;
 }
 
 /**

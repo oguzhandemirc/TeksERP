@@ -196,9 +196,9 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
   {
     key: 'HizliIsEmri',
     permission: 'mobile:hizli-is-emri',
-    label: `Hızlı ${TERIM.terbiyeIsEmri.tekil}`,
+    get label() { return `Hızlı ${TERIM.terbiyeIsEmri.tekil}`; },
     icon: 'rocket-launch-outline',
-    description: 'Topu okutup terbiye iş emri başlat/yönet',
+    get description() { return `Topu okutup ${TERIM.terbiyeIsEmri.tekilKucuk} başlat/yönet`; },
   },
   {
     // Satış/planlama ekranı — istasyon tableti DEĞİL (oturum/yer onayı istemez).
@@ -229,7 +229,7 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     permission: 'mobile:kursun-dagitim',
     label: TERIM_AD.kursunDagitim,
     icon: 'clipboard-flow-outline',
-    description: 'Fason dönüşü terbiye iş emirlerini fiziksel kurşun makinelerine dağıt',
+    get description() { return `Fason dönüşü ${TERIM.terbiyeIsEmri.cogulCekimKucuk.belirtme} fiziksel kurşun makinelerine dağıt`; },
   },
   {
     // Tablet TEZGAH ekranı (dokuma dilimi): koşum aç/kapa · duruş bildir/sınıfla ·
@@ -280,9 +280,9 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     // özel iş emri kısayolları → form + "Belge okut"). OTURUMSUZ; gelen belge modülü kapalıyken görünmez (`screenModules.ts`).
     key: 'GelenBelge',
     permission: 'gelen-belge:write',
-    label: `${TERIM.terbiyeIsEmri.tekil} oluştur`,
+    get label() { return `${TERIM.terbiyeIsEmri.tekil} oluştur`; },
     icon: 'file-document-outline',
-    description: `Hızlı ya da özel ${TERIM.terbiyeIsEmri.tekilKucuk}; irsaliyeyi okut, form dolsun`,
+    get description() { return `Hızlı ya da özel ${TERIM.terbiyeIsEmri.tekilKucuk}; irsaliyeyi okut, form dolsun`; },
   },
 ];
 

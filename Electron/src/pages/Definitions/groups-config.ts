@@ -4,6 +4,7 @@ import {
   Factory,
   type LucideIcon,
 } from "lucide-react";
+import { TERIM } from "@/lib/terim";
 
 export type DefinitionGroupKey =
   | "catalog"
@@ -33,7 +34,7 @@ export const definitionGroups: DefinitionGroup[] = [
   {
     key: "production",
     title: "Üretim & Kalite",
-    description: "İstasyonlar, donanım, rotalar, terbiye iş emri şablonları, hata tipleri ve iade nedenleri",
+    get description() { return `İstasyonlar, donanım, rotalar, ${TERIM.terbiyeIsEmri.tekilKucuk} şablonları, hata tipleri ve iade nedenleri`; },
     icon: Factory,
   },
 ];

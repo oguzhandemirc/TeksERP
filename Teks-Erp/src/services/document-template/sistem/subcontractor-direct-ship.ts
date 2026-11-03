@@ -147,7 +147,8 @@ ${ITEM_COLOR}
 {%- when "meters" -%}{{ satir.metre | sayi: 1 }}
 {%- when "kg" -%}{%- if satir.kg == nil -%}—{%- else -%}{{ satir.kg | sayi: 1 }}{%- endif -%}`;
 
-const html = String.raw`<div class="sheet">
+// K20: iş emri adı rejimden çözülür — HTML okuma anında kurulur (modül düzeyinde donmaz).
+const htmlKur = (): string => String.raw`<div class="sheet">
 <header>
 <div class="hl">
 ${LOGO_ASSIGN}
@@ -210,7 +211,7 @@ ${STAMPS}
 export const subcontractorDirectShipSystem: SystemEquivalent = {
   docType: "SUBCONTRACTOR_DIRECT_SHIP",
   editMode: "CODE",
-  html,
+  get html() { return htmlKur(); },
   css: (settings) => chromeDocCss(settings, 72, "fasonDirectShip"),
   pageSettings: (settings) => pageSettingsFor(settings, 9),
   tableBindings: {},

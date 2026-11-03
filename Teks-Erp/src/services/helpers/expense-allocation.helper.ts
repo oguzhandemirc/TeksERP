@@ -9,6 +9,7 @@ import { CashTxnKind, ItemType, PaymentStatus, Prisma, WorkOrderStatus } from "@
 import { AppError } from "../../utils/app-error";
 import { assertItemUsable } from "./item-usage.helper";
 import type { ExpenseAllocationClosedWorkOrder } from "../system-setting.service";
+import { TERIM } from "../../constants/terim";
 
 export const EXPENSE_ALLOCATION_SHARE_MAX = new Prisma.Decimal(100);
 
@@ -30,7 +31,7 @@ export function normalizeAllocationTarget(input: {
   const t = { machineId: input.machineId || null, workOrderId: input.workOrderId || null, serviceItemId: input.serviceItemId || null };
   const filled = [t.machineId, t.workOrderId, t.serviceItemId].filter(Boolean).length;
   if (filled !== 1) {
-    throw AppError.badRequest("Masraf tam olarak BİR hedefe bağlanır: makine, terbiye iş emri ya da hizmet kalemi.", { code: "EXPENSE_ALLOCATION_TARGET" });
+    throw AppError.badRequest(`Masraf tam olarak BİR hedefe bağlanır: makine, ${TERIM.terbiyeIsEmri.tekilKucuk} ya da hizmet kalemi.`, { code: "EXPENSE_ALLOCATION_TARGET" });
   }
   return t;
 }
@@ -91,9 +92,9 @@ export async function assertAllocationTargetTx(
   }
   if (t.workOrderId) {
     const wo = await tx.workOrder.findUnique({ where: { id: t.workOrderId }, select: { workOrderNumber: true, status: true } });
-    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı.", { code: "WORK_ORDER_NOT_FOUND" });
+    if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı.`, { code: "WORK_ORDER_NOT_FOUND" });
     if (closedWorkOrder === "DENY" && CLOSED_WORK_ORDER_STATUSES.includes(wo.status)) {
-      throw AppError.conflict(`${wo.workOrderNumber} kapanmış — fabrika ayarı gereği kapanmış terbiye iş emrine masraf bağlanmaz.`, {
+      throw AppError.conflict(`${wo.workOrderNumber} kapanmış — fabrika ayarı gereği kapanmış ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} masraf bağlanmaz.`, {
         code: "WORK_ORDER_CLOSED",
         workOrderNumber: wo.workOrderNumber,
       });

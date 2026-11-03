@@ -51,7 +51,7 @@ const KPIS: KpiDef[] = [
   },
   {
     key: "openWorkOrders",
-    label: `Açık ${TERIM.terbiyeIsEmri.tekil}`,
+    get label() { return `Açık ${TERIM.terbiyeIsEmri.tekil}`; },
     icon: Factory,
     tone: "text-primary",
     query: fetchOpenWorkOrderCount,

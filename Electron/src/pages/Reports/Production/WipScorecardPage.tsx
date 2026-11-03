@@ -8,6 +8,7 @@ import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { useWipOwnerFilter } from "./WipOwnerFilter";
 import { woColumns } from "./wipNeverStartedColumns";
 import { buildWipExport, wipScorecardApi, type WipScorecard, type WipStationRow } from "./wipScorecard";
+import { TERIM } from "@/lib/terim";
 
 const ageTone = (d: number | null) => (d === null ? "" : d > 7 ? "text-destructive" : d > 3 ? "text-warning" : "");
 
@@ -88,7 +89,7 @@ const rollColumns: ColumnDef<WipScorecard["oldestWaiting"][number], unknown>[] =
   { accessorKey: "stationName", header: "İstasyon" },
   {
     accessorKey: "workOrderNumber",
-    header: "Terbiye İş Emri",
+    get header() { return `${TERIM.terbiyeIsEmri.tekil}`; },
     cell: ({ getValue }) => (getValue() as string) ?? "—",
   },
   {
@@ -125,7 +126,7 @@ export function WipScorecardPage() {
     <ReportPageLayout
       reportKey="production/wip"
       title="Nerede Takıldı (WIP)"
-      description="İstasyonlarda bekleyen mal, en uzun bekleyen işler ve hiç başlamamış terbiye iş emirleri."
+      description={`İstasyonlarda bekleyen mal, en uzun bekleyen işler ve hiç başlamamış ${TERIM.terbiyeIsEmri.cogulKucuk}.`}
       actions={<ReportExportBar disabled={!sc} buildSpec={spec} />}
     >
       {ownerFilter}
@@ -159,7 +160,7 @@ export function WipScorecardPage() {
           isLoading={query.isLoading}
         />
         <MetricCard
-          label="Hiç başlamamış terbiye iş emri"
+          label={`Hiç başlamamış ${TERIM.terbiyeIsEmri.tekilKucuk}`}
           value={fmtInt(sc?.summary.neverStartedWorkOrders)}
           hint={
             sc?.summary.neverStartedOldestDays != null
@@ -191,12 +192,12 @@ export function WipScorecardPage() {
       />
 
       <DetailTable
-        title="Hiç başlamamış terbiye iş emirleri"
-        description="Açılmış ama hiç malzeme girmemiş canlı terbiye iş emirleri — en eski 25 tanesi. Planlama backlog'u da olabilir, unutulmuş iş de."
+        title={`Hiç başlamamış ${TERIM.terbiyeIsEmri.cogulKucuk}`}
+        description={`Açılmış ama hiç malzeme girmemiş canlı ${TERIM.terbiyeIsEmri.cogulKucuk} — en eski 25 tanesi. Planlama backlog'u da olabilir, unutulmuş iş de.`}
         data={sc?.neverStarted ?? []}
         columns={woColumns}
         isLoading={query.isLoading}
-        emptyLabel="Tüm canlı terbiye iş emirleri başlamış"
+        emptyLabel={`Tüm canlı ${TERIM.terbiyeIsEmri.cogulKucuk} başlamış`}
       />
     </ReportPageLayout>
   );

@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { workOrderStatusLabels, type WorkOrderStatus } from "@/types/enums";
 import type { BalanceGroup, BalanceSpecRow } from "./types";
+import { TERIM } from "@/lib/terim";
 
 const fmt = (n: number) =>
   n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
@@ -129,7 +130,7 @@ export const ProductBalanceRow = memo(function ProductBalanceRow({ group: g, isO
                 className="h-7 gap-1.5"
                 onClick={() => onOpenWo(g, singleSpec)}
               >
-                <Factory className="h-3.5 w-3.5" /> Terbiye İş Emri Aç
+                <Factory className="h-3.5 w-3.5" /> {TERIM.terbiyeIsEmri.tekil} Aç
               </Button>
             </PermissionGate>
           )}
@@ -184,7 +185,7 @@ export const ProductBalanceRow = memo(function ProductBalanceRow({ group: g, isO
                                   className="h-6 gap-1.5 text-[11px]"
                                   onClick={() => onOpenWo(g, s)}
                                 >
-                                  <Factory className="h-3 w-3" /> Terbiye İş Emri
+                                  <Factory className="h-3 w-3" /> {TERIM.terbiyeIsEmri.tekil}
                                 </Button>
                               </PermissionGate>
                             )}
@@ -236,11 +237,11 @@ export const ProductBalanceRow = memo(function ProductBalanceRow({ group: g, isO
               </div>
               <div>
                 <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Üretimdeki terbiye iş emirleri ({allWos.length})
+                  Üretimdeki {TERIM.terbiyeIsEmri.cogulKucuk} ({allWos.length})
                 </div>
                 {allWos.length === 0 ? (
                   <p className="text-xs text-muted-foreground">
-                    Bu kumaş için canlı terbiye iş emri yok.
+                    Bu kumaş için canlı {TERIM.terbiyeIsEmri.tekilKucuk} yok.
                   </p>
                 ) : (
                   <ul className="space-y-1">
