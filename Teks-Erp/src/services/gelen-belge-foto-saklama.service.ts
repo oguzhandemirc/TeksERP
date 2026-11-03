@@ -6,13 +6,15 @@
 // tx'i bittikten SONRA, tx DIŞINDA koşar ve ayarı her turda okur → geçmiş onaylı belgelere de uygulanır.
 // Geçiş ATOMİK CLAIM (`updateMany WHERE {id, contentState}`): iki tur aynı taramayı iki kez küçültemez. Küçültme okuma
 // servisinde (`POST /kucult`); servis yok/eski → tarama TAM kalır, sonraki tur yeniden dener (fail-safe).
-// PDF (arşiv, K6), okunmakta olan (PENDING/READING) ve belgeye bağlı olmayan taramaya dokunulmaz. Audit yalnız künye.
+// PDF (arşiv, K6), okunmakta olan (READING; okuyucu varken PENDING de) ve belgeye bağlı olmayan taramaya dokunulmaz.
+// KÜÇÜK'te OCR kutu çerçevesi satıra yazılır (`rectFrameWidth/Height`): kutular okuma çerçevesinde kalır. Audit yalnız künye.
 // =============================================================================
 import { DeliveryNoteStatus, DocumentScanContentState, DocumentScanStatus, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { bilgi, uyari } from "../lib/logger";
 import { readerShrink } from "../lib/gelen-belge/okuma-istemcisi";
+import { photoFrameSize } from "../lib/gelen-belge/taslak-foto-cerceve";
 import { AuditService } from "./audit.service";
 import { readPhotoRetention, type PhotoRetentionMode } from "./system-setting.service";
 import { membershipSql } from "./ready-works.service";
@@ -21,8 +23,11 @@ import { readinessClassSql } from "./helpers/ship-readiness.helper";
 const AUDIT_TABLE = "DOCUMENT_SCAN";
 /** Saklama ayarının uygulandığı görüntü türleri — PDF arşivdir (K6), dokunulmaz. */
 export const RETENTION_IMAGE_MIMES: readonly string[] = ["image/jpeg", "image/png"];
-/** Okuması bitmiş tarama (okunmakta olanın baytı okuma işine lazım). */
-const RETENTION_SCAN_STATUSES: readonly DocumentScanStatus[] = [DocumentScanStatus.READ, DocumentScanStatus.READ_FAILED];
+/** Okuması bitmiş tarama (okunmakta olanın baytı okuma işine lazım). Okuyucu yoksa PENDING hiç okunmayacak → o da aday. */
+function retentionScanStatuses(readerUrl: string | null): DocumentScanStatus[] {
+  const done = [DocumentScanStatus.READ, DocumentScanStatus.READ_FAILED];
+  return readerUrl ? done : [...done, DocumentScanStatus.PENDING];
+}
 /** Sevk kipinde tek turda bakılan en çok belge (sayfa başına). */
 const NOTE_PAGE = 200;
 
@@ -49,11 +54,11 @@ function plan(mode: PhotoRetentionMode): { target: DocumentScanContentState; fro
 }
 
 /** Kipin dokunacağı tarama kümesi (belge APPROVED; PARTIAL yeniden onaylanabilir → fotoğrafı lazım, beklenir). */
-function candidateWhere(from: DocumentScanContentState[], noteIds?: readonly string[]): Prisma.DocumentScanWhereInput {
+function candidateWhere(from: DocumentScanContentState[], readerUrl: string | null, noteIds?: readonly string[]): Prisma.DocumentScanWhereInput {
   return {
     contentState: { in: from },
     mimeType: { in: [...RETENTION_IMAGE_MIMES] },
-    status: { in: [...RETENTION_SCAN_STATUSES] },
+    status: { in: retentionScanStatuses(readerUrl) },
     note: { status: DeliveryNoteStatus.APPROVED },
     ...(noteIds ? { noteId: { in: [...noteIds] } } : { noteId: { not: null } }),
   };
@@ -75,12 +80,12 @@ export async function fullyShippedNoteIds(noteIds: readonly string[]): Promise<S
 }
 
 /** Sevk kipi: aday taramaları olan onaylı belgelerden bütün topları gitmiş olanlar (sayfalı, hepsi taranır). */
-async function shippedCandidateNoteIds(from: DocumentScanContentState[]): Promise<string[]> {
+async function shippedCandidateNoteIds(from: DocumentScanContentState[], readerUrl: string | null): Promise<string[]> {
   const out: string[] = [];
   let cursor: string | undefined;
   for (;;) {
     const page = await prisma.customerDeliveryNote.findMany({
-      where: { status: DeliveryNoteStatus.APPROVED, scans: { some: candidateWhere(from) } },
+      where: { status: DeliveryNoteStatus.APPROVED, scans: { some: candidateWhere(from, readerUrl) } },
       select: { id: true },
       orderBy: { id: "asc" },
       take: NOTE_PAGE,
@@ -96,21 +101,30 @@ async function shippedCandidateNoteIds(from: DocumentScanContentState[]): Promis
 }
 
 /** Kipe göre işlenecek tarama kimlikleri (en eski önce, en çok `limit`; `skipIds` bu süreçte kalıcı düşenler). */
-export async function findRetentionCandidates(mode: PhotoRetentionMode, limit: number, skipIds: readonly string[] = []): Promise<string[]> {
+export async function findRetentionCandidates(mode: PhotoRetentionMode, limit: number, readerUrl: string | null, skipIds: readonly string[] = []): Promise<string[]> {
   const p = plan(mode);
   if (!p) return [];
   let noteIds: string[] | undefined;
   if (mode === "DELETE_ON_DISPATCH") {
-    noteIds = await shippedCandidateNoteIds(p.from);
+    noteIds = await shippedCandidateNoteIds(p.from, readerUrl);
     if (noteIds.length === 0) return [];
   }
   const rows = await prisma.documentScan.findMany({
-    where: { ...candidateWhere(p.from, noteIds), ...(skipIds.length ? { id: { notIn: [...skipIds] } } : {}) },
+    where: { ...candidateWhere(p.from, readerUrl, noteIds), ...(skipIds.length ? { id: { notIn: [...skipIds] } } : {}) },
     orderBy: { createdAt: "asc" },
     take: limit,
     select: { id: true },
   });
   return rows.map((r) => r.id);
+}
+
+/** Okuma zarfındaki OCR çerçevesi, fotoğraf yönünde; okunmamış/eksik → null (kutu da yok, ölçek gerekmez). */
+function ocrPhotoFrame(env: Prisma.JsonValue): { width: number; height: number } | null {
+  const ocr = env !== null && typeof env === "object" && !Array.isArray(env) ? (env as Record<string, unknown>).ocr : undefined;
+  if (ocr === null || typeof ocr !== "object" || Array.isArray(ocr)) return null;
+  const { imageWidth: w, imageHeight: h, rotation } = ocr as Record<string, unknown>;
+  if (!Number.isInteger(w) || !Number.isInteger(h) || (w as number) <= 0 || (h as number) <= 0) return null;
+  return photoFrameSize(typeof rotation === "number" ? rotation : undefined, w as number, h as number);
 }
 
 export type RetentionOutcome = "REDUCED" | "PURGED" | "RETRY" | "FAILED" | "LOST";
@@ -128,12 +142,12 @@ export async function applyRetention(scanId: string, mode: PhotoRetentionMode, d
   const p = plan(mode);
   if (!p) return "LOST";
   const scan = await prisma.documentScan.findFirst({
-    where: { id: scanId, ...candidateWhere(p.from) },
-    select: { id: true, noteId: true, mimeType: true, sizeBytes: true, contentState: true, content: true, sha256: true },
+    where: { id: scanId, ...candidateWhere(p.from, deps.readerUrl) },
+    select: { id: true, noteId: true, mimeType: true, sizeBytes: true, contentState: true, content: true, sha256: true, ocrResult: true },
   });
   if (!scan || !scan.content) return "LOST";
   const now = new Date();
-  const claimWhere: Prisma.DocumentScanWhereInput = { id: scanId, contentState: scan.contentState, ...candidateWhere(p.from) };
+  const claimWhere: Prisma.DocumentScanWhereInput = { id: scanId, contentState: scan.contentState, ...candidateWhere(p.from, deps.readerUrl) };
 
   if (p.target === DocumentScanContentState.PURGED) {
     const c = await prisma.documentScan.updateMany({ where: claimWhere, data: { content: null, contentState: DocumentScanContentState.PURGED, contentStateAt: now } });
@@ -157,12 +171,16 @@ export async function applyRetention(scanId: string, mode: PhotoRetentionMode, d
   const smaller = r.content.length < scan.content.length;
   const content = smaller ? new Uint8Array(r.content) : scan.content;
   const mimeType = smaller ? "image/jpeg" : scan.mimeType;
-  const c = await prisma.documentScan.updateMany({ where: claimWhere, data: { content, mimeType, contentState: DocumentScanContentState.REDUCED, contentStateAt: now } });
+  const frame = ocrPhotoFrame(scan.ocrResult);
+  const c = await prisma.documentScan.updateMany({
+    where: claimWhere,
+    data: { content, mimeType, contentState: DocumentScanContentState.REDUCED, contentStateAt: now, rectFrameWidth: frame?.width ?? null, rectFrameHeight: frame?.height ?? null },
+  });
   if (c.count === 0) return "LOST";
   await AuditService.log({
     userId: undefined, action: "UPDATE", tableName: AUDIT_TABLE, recordId: scanId,
     oldData: { contentState: scan.contentState, storedBytes: scan.content.length, mimeType: scan.mimeType },
-    newData: { contentState: "REDUCED", storedBytes: content.length, mimeType, width: r.width, height: r.height, noteId: scan.noteId, reason: "PHOTO_RETENTION", mode },
+    newData: { contentState: "REDUCED", storedBytes: content.length, mimeType, width: r.width, height: r.height, rectFrame: frame, noteId: scan.noteId, reason: "PHOTO_RETENTION", mode },
   });
   return "REDUCED";
 }
@@ -179,7 +197,7 @@ export async function runPhotoRetention(limit: number, deps: RetentionDeps, skip
   const outcomes: RetentionOutcome[] = [];
   const failedIds: string[] = [];
   if (mode === "FULL") return { mode, outcomes, failedIds };
-  for (const id of await findRetentionCandidates(mode, limit, skipIds)) {
+  for (const id of await findRetentionCandidates(mode, limit, deps.readerUrl, skipIds)) {
     const o = await applyRetention(id, mode, deps);
     outcomes.push(o);
     if (o === "FAILED") failedIds.push(id);

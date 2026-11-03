@@ -80,7 +80,7 @@ function startFakeReader(): Promise<{ server: Server; url: string; hits: () => n
 }
 
 async function scanRow(id: string) {
-  return prisma.documentScan.findUniqueOrThrow({ where: { id }, select: { contentState: true, contentStateAt: true, content: true, sizeBytes: true, sha256: true, mimeType: true, ocrResult: true, noteId: true } });
+  return prisma.documentScan.findUniqueOrThrow({ where: { id }, select: { contentState: true, contentStateAt: true, content: true, sizeBytes: true, sha256: true, mimeType: true, ocrResult: true, noteId: true, rectFrameWidth: true, rectFrameHeight: true } });
 }
 
 async function run(url: string, reader: Awaited<ReturnType<typeof startFakeReader>>): Promise<void> {
@@ -143,6 +143,8 @@ async function run(url: string, reader: Awaited<ReturnType<typeof startFakeReade
   console.log("§2 ONAYDA KÜÇÜLT");
   await setSetting(SETTING_KEYS.GELEN_BELGE_PHOTO_RETENTION, "SHRINK_ON_APPROVAL");
   const draft = await mkNote("TASLAK", { approve: false });
+  // OCR çerçevesi (okuma servisi `hazirla` 2600) + yan dönük sayfa: kutular saklanan fotoğraf yönünde 1733×2600 çerçevesindedir.
+  await prisma.documentScan.update({ where: { id: n1.photo }, data: { ocrResult: { ocr: { text: `${TAG} N1`, imageWidth: 2600, imageHeight: 1733, rotation: 90, blocks: [] } } } });
   const before = await scanRow(n1.photo);
   reader.setMode("old");
   const r2old = await runPhotoRetention(50, deps());
@@ -158,6 +160,11 @@ async function run(url: string, reader: Awaited<ReturnType<typeof startFakeReade
   const after = await scanRow(n1.photo);
   check("§2 ⭐ onaylı fotoğraf KÜÇÜK", r2.outcomes.includes("REDUCED") && after.contentState === "REDUCED" && after.contentStateAt !== null, r2.outcomes.join(","));
   check("§2 ⭐ bayt küçüldü; sha256/okuma/künye duruyor", !!after.content && after.content.length === SMALL.length && after.sha256 === before.sha256 && after.sizeBytes === before.sizeBytes && JSON.stringify(after.ocrResult) === JSON.stringify(before.ocrResult) && after.noteId === n1.id);
+  check("§2 ⭐ KÜÇÜK'te kutu çerçevesi yazıldı (OCR foto çerçevesi, döndürmede takas)", after.rectFrameWidth === 1733 && after.rectFrameHeight === 2600, `${after.rectFrameWidth}×${after.rectFrameHeight}`);
+  check("§2 TAM taramada kutu çerçevesi yok (fotoğraf pikseli)", before.rectFrameWidth === null && (await scanRow(draft.photo)).rectFrameWidth === null);
+  const d2 = await call("GET", `/api/gelen-belge/irsaliyeler/${n1.id}`);
+  const sc2 = (d2.data?.scans as Array<{ id: string; rectFrameWidth?: number | null; rectFrameHeight?: number | null }> | undefined)?.find((s) => s.id === n1.photo);
+  check("§2 ⭐ detay taraması kutu çerçevesini taşır (panel ölçekler)", sc2?.rectFrameWidth === 1733 && sc2?.rectFrameHeight === 2600, JSON.stringify(sc2));
   check("§2 ⭐ PDF dokunulmaz", (await scanRow(n1.pdf!)).contentState === "FULL");
   check("§2 ⭐ taslak dokunulmaz", (await scanRow(draft.photo)).contentState === "FULL");
   const hits1 = reader.hits();
@@ -192,6 +199,19 @@ async function run(url: string, reader: Awaited<ReturnType<typeof startFakeReade
   const sc3 = (d3.data?.scans as Array<{ id: string; contentState?: string }> | undefined)?.find((s) => s.id === n3.photo);
   check("§3 detay: photoRetention + tarama contentState PURGED", d3.data?.photoRetention === "DELETE_ON_APPROVAL" && sc3?.contentState === "PURGED");
 
+  console.log("§3b okuyucusuz kurulum: PENDING tarama");
+  const n3b = await mkNote("N3B", { approve: true });
+  const n3c = await mkNote("N3C", { approve: true });
+  await prisma.documentScan.update({ where: { id: n3b.photo }, data: { status: "PENDING" } });
+  await prisma.documentScan.update({ where: { id: n3c.photo }, data: { status: "READING" } });
+  await runPhotoRetention(50, deps());
+  check("§3b okuyucu varken PENDING beklenir (okunacak)", (await scanRow(n3b.photo)).contentState === "FULL");
+  const r3b = await runPhotoRetention(50, deps(null));
+  check("§3b ⭐ okuyucusuz + ONAYDA SİL → PENDING tarama SİLİNDİ", (await scanRow(n3b.photo)).contentState === "PURGED", r3b.outcomes.join(","));
+  check("§3b ⭐ okunmakta (READING) olan hiç dokunulmaz", (await scanRow(n3c.photo)).contentState === "FULL");
+  check("§3b READING taramaya doğrudan uygulama LOST", (await applyRetention(n3c.photo, "DELETE_ON_APPROVAL", deps(null))) === "LOST");
+  await prisma.documentScan.update({ where: { id: n3c.photo }, data: { status: "READ" } });
+
   console.log("§4 SEVKTE SİL");
   await setSetting(SETTING_KEYS.GELEN_BELGE_PHOTO_RETENTION, "DELETE_ON_DISPATCH");
   const n4 = await mkNote("N4", { approve: true, lines: 2 });
@@ -211,6 +231,7 @@ async function run(url: string, reader: Awaited<ReturnType<typeof startFakeReade
   check("§5 ⭐ SİLİNDİ + bayt dolu reddedilir", await ck(`UPDATE document_scans SET "contentState"='PURGED', "contentStateAt"=now() WHERE id='${draft.photo}'`)); // tz-ok: test
   check("§5 ⭐ TAM + bayt boş reddedilir", await ck(`UPDATE document_scans SET content=NULL WHERE id='${draft.photo}'`));
   check("§5 KÜÇÜK'te bayt > yüklenen boy reddedilir", await ck(`UPDATE document_scans SET "contentState"='REDUCED', "contentStateAt"=now(), content=content||content WHERE id='${draft.photo}'`)); // tz-ok: test
+  check("§5 kutu çerçevesinin yalnız biri dolu reddedilir", await ck(`UPDATE document_scans SET "rectFrameWidth"=100 WHERE id='${draft.photo}'`));
   check("§5 sonda geçerli: taslak hâlâ TAM", (await scanRow(draft.photo)).contentState === "FULL");
 
   console.log("§6 audit yalnız künye");

@@ -19,6 +19,11 @@ export function rectToPhotoFrame(r: OcrRect, rotation: number | undefined, uprig
   }
 }
 
+/** Dik (OCR) çerçevenin saklanan fotoğraf yönündeki boyutu: yan dönükte (90/270) en ve boy takas olur. */
+export function photoFrameSize(rotation: number | undefined, uprightW: number, uprightH: number): { width: number; height: number } {
+  return rotation === 90 || rotation === 270 ? { width: uprightH, height: uprightW } : { width: uprightW, height: uprightH };
+}
+
 export function linesToPhotoFrame(lines: DraftLine[], ocr: { rotation?: number; imageWidth: number; imageHeight: number }): DraftLine[] {
   if (!ocr.rotation) return lines;
   return lines.map((l) => ({

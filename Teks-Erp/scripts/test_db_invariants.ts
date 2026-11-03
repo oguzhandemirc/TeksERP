@@ -905,6 +905,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "document_scans", name: "document_scans_mime_ck" },
   // K28 fotoğraf saklama (migration 20261103092301): SİLİNDİ ⇔ content NULL. Bekçi `test_gelen_belge_foto_saklama` §5.
   { table: "document_scans", name: "document_scans_content_state_ck" },
+  // K28 düzeltme (migration 20261103122524): kutu çerçevesi ikisi birlikte ve pozitif. Bekçi `test_gelen_belge_foto_saklama` §5.
+  { table: "document_scans", name: "document_scans_rect_frame_ck" },
   { table: "customer_delivery_note_lines", name: "customer_delivery_note_lines_meters_ck" },
   { table: "customer_delivery_notes", name: "customer_delivery_notes_stamps_ck" },
   // S0 (migration 20261102085912): kurşun metresi > 0 ve metre ↔ kaynak çifti birlikte dolu/boş.
