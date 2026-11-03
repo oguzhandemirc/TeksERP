@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { MainStackParamList } from './types';
 import { useVisibleScreens } from '../hooks/useVisibleScreens';
 import { useSessionStore } from '../store/sessionStore';
+import { useDeviceSettingsStore } from '../store/deviceSettingsStore';
 import { withWorkSession, type GatedScreen } from '../components/session/SessionGate';
 import {
   SCREEN_BY_STATION_KIND,
@@ -73,6 +74,7 @@ export default function MainNavigator() {
   const sessionLoaded = useSessionStore((s) => s.isLoaded);
   const active = useSessionStore((s) => s.active);
   const lastPlace = useSessionStore((s) => s.lastPlace);
+  const docDeskDevice = useDeviceSettingsStore((s) => s.docDeskDevice);
 
   // Oturum durumu login SONRASI yüklenir (auth'suz çağrı 401 üretirdi). Gezici
   // kullanıcı (oturumlu ekranı yok) hiç sorgulamaz — yer sorusu görmez.
@@ -100,7 +102,9 @@ export default function MainNavigator() {
   // ekrana işaret ediyorsa doğrudan o ekran açılır — gate tek dokunuş onayı gösterir
   // (yer = ekran; operatör ModuleSelect'te ekran aramaz).
   const hintKind = active?.station.kind ?? lastPlace?.station.kind;
-  if (isSessionStationKind(hintKind)) {
+  // K23 "Bu cihaz belge masası" (cihaz beyanı): aktif istasyon oturumu yoksa açılış İE oluştur (ekran masa kipinde açılır).
+  if (docDeskDevice && !active && visibleScreens.some((s) => s.key === 'GelenBelge')) initialRouteName = 'GelenBelge';
+  else if (isSessionStationKind(hintKind)) {
     const target = SCREEN_BY_STATION_KIND[hintKind];
     if (visibleScreens.some((s) => s.key === target)) initialRouteName = target;
   }

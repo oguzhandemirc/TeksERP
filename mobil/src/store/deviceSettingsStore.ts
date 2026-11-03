@@ -17,6 +17,9 @@ const TAMBUR_OUTPUT_COLLAPSED_KEY = 'tambur_output_collapsed';
 const SCAN_SOUND_KEY = 'device_scan_sound';
 const DOC_PAGE_SIZE_KEY = 'device_doc_page_size';
 const CAMERA_FACING_KEY = 'device_camera_facing';
+const DOC_DESK_KEY = 'device_doc_desk';
+const DOC_DESK_CAPTURE_KEY = 'device_doc_desk_capture';
+const DOC_DESK_FRAME_MS_KEY = 'device_doc_desk_frame_ms';
 // ⚠️ 2026-08-19: kısa kesim ayarı MERKEZE taşındı (feature-flags). Cihazda artık
 // "bayrak + eşik" değil, ÜÇ DURUMLU override yaşar. Eski anahtarlar
 // (`tambur_short_cut_a1_enabled` / `..._threshold`) sahaya HİÇ ÇIKMADI (APK
@@ -32,6 +35,19 @@ export type DocPageSize = 'A4' | 'A5';
 
 /** Barkod/QR okuyucunun kamera yönü. */
 export type CameraFacing = 'front' | 'back';
+
+/** Belge masası çekim kipi (K26): dokunarak (varsayılan) | otomatik (deneysel). */
+export type DocDeskCaptureMode = 'tap' | 'auto';
+
+/** Otomatik çekim ara kare aralığı seçenekleri (ms) — pil/ısı için seyrekleştirilebilir. */
+export const DOC_DESK_FRAME_MS_OPTIONS = [500, 700, 1000, 1500] as const;
+export const DOC_DESK_FRAME_MS_DEFAULT = 700;
+
+/** Bilinmeyen/bozuk kayıt → varsayılan aralık. */
+export function parseDocDeskFrameMs(raw: string | null): number {
+  const n = raw == null ? NaN : Number(raw);
+  return (DOC_DESK_FRAME_MS_OPTIONS as readonly number[]).includes(n) ? n : DOC_DESK_FRAME_MS_DEFAULT;
+}
 
 /** Kısa kesim kuralının bu cihazdaki kaynağı — bkz. `tamburShortCutA1Override`. */
 export type ShortCutOverrideMode = 'server' | 'on' | 'off';
@@ -149,6 +165,13 @@ interface DeviceSettingsState {
   tamburShortCutA1Override: ShortCutOverrideMode;
   /** 'on' modunda geçerli eşik (metre). null = girilmemiş → kural inert. */
   tamburShortCutA1DeviceThresholdM: number | null;
+  /**
+   * "Bu cihaz belge masası" (K23): açılışta İE oluştur ekranı doğrudan kamera-önce masa kipinde açılır.
+   * CİHAZDA: sabit tablet/telefonun duruşuna bağlıdır. Varsayılan KAPALI = bugünkü açılış.
+   */
+  docDeskDevice: boolean;
+  docDeskCaptureMode: DocDeskCaptureMode;
+  docDeskFrameMs: number;
   isLoaded: boolean;
 
   init: () => Promise<void>;
@@ -169,6 +192,9 @@ interface DeviceSettingsState {
   setCameraFacing: (v: CameraFacing) => Promise<void>;
   setTamburShortCutA1Override: (v: ShortCutOverrideMode) => Promise<void>;
   setTamburShortCutA1DeviceThresholdM: (v: number | null) => Promise<void>;
+  setDocDeskDevice: (v: boolean) => Promise<void>;
+  setDocDeskCaptureMode: (v: DocDeskCaptureMode) => Promise<void>;
+  setDocDeskFrameMs: (v: number) => Promise<void>;
   /** Tercihi kaldır → o belge tipi yine SUNUCUDAKİ kalıcı ayarla basılır. */
   clearDocPageSize: (docType: string) => Promise<void>;
 }
@@ -209,10 +235,13 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   cameraFacing: 'back',
   tamburShortCutA1Override: 'server',
   tamburShortCutA1DeviceThresholdM: null,
+  docDeskDevice: false,
+  docDeskCaptureMode: 'tap',
+  docDeskFrameMs: DOC_DESK_FRAME_MS_DEFAULT,
   isLoaded: false,
 
   init: async () => {
-    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburResetKartela, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold] =
+    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburResetKartela, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold, docDesk, docDeskCapture, docDeskFrame] =
       await Promise.all([
         storage.getItem(MANUAL_BARCODE_KEY),
         storage.getItem(LAST_ROUTE_KEY),
@@ -227,6 +256,9 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
         storage.getItem(CAMERA_FACING_KEY),
         storage.getItem(TAMBUR_SHORT_CUT_A1_OVERRIDE_KEY),
         storage.getItem(TAMBUR_SHORT_CUT_A1_DEVICE_THRESHOLD_KEY),
+        storage.getItem(DOC_DESK_KEY),
+        storage.getItem(DOC_DESK_CAPTURE_KEY),
+        storage.getItem(DOC_DESK_FRAME_MS_KEY),
       ]);
     set({
       manualBarcodeEntry: stored === 'true',
@@ -261,6 +293,10 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
         const n = shortCutThreshold == null ? NaN : Number(shortCutThreshold);
         return Number.isFinite(n) && n > 0 ? n : null;
       })(),
+      // Yalnız birebir 'true' / 'auto' açar: bozuk kayıt cihazı sessizce masa kipine ya da deneysel çekime almaz.
+      docDeskDevice: docDesk === 'true',
+      docDeskCaptureMode: docDeskCapture === 'auto' ? 'auto' : 'tap',
+      docDeskFrameMs: parseDocDeskFrameMs(docDeskFrame),
       isLoaded: true,
     });
   },
@@ -349,6 +385,23 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   setTamburShortCutA1Override: async (v) => {
     set({ tamburShortCutA1Override: v });
     await storage.setItem(TAMBUR_SHORT_CUT_A1_OVERRIDE_KEY, v);
+  },
+
+  // Aynı desen: anahtar ANINDA dönsün diye önce state, sonra disk.
+  setDocDeskDevice: async (v) => {
+    set({ docDeskDevice: v });
+    await storage.setItem(DOC_DESK_KEY, v ? 'true' : 'false');
+  },
+
+  setDocDeskCaptureMode: async (v) => {
+    set({ docDeskCaptureMode: v });
+    await storage.setItem(DOC_DESK_CAPTURE_KEY, v);
+  },
+
+  setDocDeskFrameMs: async (v) => {
+    const ms = parseDocDeskFrameMs(String(v));
+    set({ docDeskFrameMs: ms });
+    await storage.setItem(DOC_DESK_FRAME_MS_KEY, String(ms));
   },
 
   // null/geçersiz → kayıt SİLİNİR (eşik girilmemiş durumuna döner). Override

@@ -16,6 +16,8 @@ export type RootStackParamList = {
   SettingsScanner: undefined;
   /** Kişisel çalışma tercihleri (fason varsayılanı) — kullanıcıya bağlı, cihaza değil. */
   SettingsWorkPreferences: undefined;
+  /** Belge masası (K23/K26) — cihaz tercihi: açılışta masa kipi + çekim kipi. */
+  SettingsDocDesk: undefined;
   SettingsUpdate: undefined;
   SettingsSurumNotlari: undefined;
   /** Basım sonuçlarının panel Yazdırma geçmişine gidiş kuyruğu (izlenebilirlik A4). */
