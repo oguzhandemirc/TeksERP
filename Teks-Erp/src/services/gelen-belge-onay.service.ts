@@ -34,8 +34,9 @@ import { resolveDefaultItemForApproval, type DefaultItemSource } from "./gelen-b
 import { readBatchNumberSource, readDocumentTotalCheck, readIncomingDocEntryMode, readUnreviewedApprovalMode, type IncomingDocEntryMode } from "./system-setting.service";
 import { assertProcessChoiceValue } from "./helpers/process-choice-catalog.helper";
 import { aliasKey } from "./gelen-belge-eslestirme.service";
-import { hasDocumentDeclared, isOpenForApproval, isSummaryLine, lineProblems, partyLineId, perDocumentGate, reviewGate, summaryLineId, totalMismatches, totalsCheck, totalWarnings, type ReviewGate } from "./gelen-belge-kontrol.service";
+import { hasDocumentDeclared, isOpenForApproval, isSummaryLine, lineProblems, perDocumentGate, reviewGate, summaryLineId, totalMismatches, totalsCheck, totalWarnings, type ReviewGate } from "./gelen-belge-kontrol.service";
 import { learnBatchNoKey } from "./gelen-belge-sablon.service";
+import { preparePerDocument, summaryTargets, type PartyEntry } from "./gelen-belge-onay-parti.service";
 
 // Kapı yüklemleri tek kaynakta (detay yanıtı da aynılarını okur); eski içe aktaranlar için yeniden dışa aktarılır.
 export { totalMismatches, totalWarnings };
@@ -76,7 +77,6 @@ export type ApproveOptions = {
   /** S1 çok partili belge (yalnız PER_DOCUMENT): parti başına bir özet satırı/top; verilmezse tek özet satırı (bugünkü). */
   parties?: ReadonlyArray<PartyEntry>;
 };
-export type PartyEntry = { blockNo: number; meters: number };
 
 export interface ApproveResult {
   note: Awaited<ReturnType<typeof getDeliveryNote>>;
@@ -187,41 +187,6 @@ async function precheckPerDocument(note: PreNote, input: ApproveInput, parties?:
     ? `Çok partili belge: ${targets.length} parti ayrı top olarak ${defaultItem.name} ürünüyle girildi (${targets.map((t) => `${sayiMetni(Number(t.meters), 3)} m`).join(" + ")}); ${docLines.length} satır bilgi olarak kaldı.`
     : `Belge başına tek kayıt: ${sayiMetni(Number(note.kursunMeters), 3)} m tek top olarak ${defaultItem.name} ürünüyle girildi; ${docLines.length} satır bilgi olarak kaldı.`);
   return { warnings, defaultItem };
-}
-
-/**
- * PER_DOCUMENT hazırlık — TEK tx: özet satırı (sabit kimlik; varsa metresi tazelenir) + belgenin topsuz açık satırları INFO.
- * Satır claim'i ve döngü bundan sonra yalnız özet satırını görür (ikinci giriş motoru yok).
- */
-/** Özet satırı hedefleri: partiler verildiyse blok başına (`partyLineId`), yoksa tek özet satırı = kurşun metresi (bugünkü). */
-function summaryTargets(note: PreNote, parties?: ReadonlyArray<PartyEntry>): Array<{ id: string; blockNo: number; meters: Prisma.Decimal }> {
-  if (!parties?.length) return [{ id: summaryLineId(note.id), blockNo: 1, meters: note.kursunMeters ?? new Prisma.Decimal(0) }];
-  return [...parties].sort((a, b) => a.blockNo - b.blockNo).map((p) => ({ id: partyLineId(note.id, p.blockNo), blockNo: p.blockNo, meters: new Prisma.Decimal(p.meters) }));
-}
-
-async function preparePerDocument(note: PreNote, userId: string, parties?: ReadonlyArray<PartyEntry>): Promise<void> {
-  const targets = summaryTargets(note, parties);
-  const infoIds = note.lines.filter((l) => !isSummaryLine(note.id, l) && !l.rollId && isOpenForApproval(l)).map((l) => l.id);
-  // Başlık APPROVING'de claim'li: satır yazan başka yol yok, numara (son + 1) yarışsız.
-  const created = await prisma.$transaction(async (tx) => {
-    const made: Array<{ id: string; lineNo: number; blockNo: number; meters: Prisma.Decimal }> = [];
-    for (const t of targets) {
-      const has = await tx.customerDeliveryNoteLine.updateMany({ where: { id: t.id, noteId: note.id, rollId: null }, data: { meters: t.meters } });
-      if (has.count > 0 || (await tx.customerDeliveryNoteLine.count({ where: { id: t.id } }))) continue;
-      const last = await tx.customerDeliveryNoteLine.aggregate({ where: { noteId: note.id }, _max: { lineNo: true } });
-      const lineNo = (last._max.lineNo ?? 0) + 1;
-      await tx.customerDeliveryNoteLine.create({ data: { id: t.id, noteId: note.id, lineNo, blockNo: t.blockNo, lineKind: "ARABA", meters: t.meters, status: DeliveryNoteLineStatus.PENDING, confidence: new Prisma.Decimal(1) } });
-      made.push({ ...t, lineNo });
-    }
-    if (infoIds.length) {
-      await tx.customerDeliveryNoteLine.updateMany({ where: { id: { in: infoIds }, rollId: null, status: { in: [DeliveryNoteLineStatus.PENDING, DeliveryNoteLineStatus.FAILED, DeliveryNoteLineStatus.ENTERING] } }, data: { status: DeliveryNoteLineStatus.INFO, failReason: null } });
-    }
-    return made;
-  });
-  if (created.length) {
-    await AuditService.logMany(created.map((c) => ({ userId, action: "CREATE" as const, tableName: LINE_TABLE, recordId: c.id, newData: { noteId: note.id, noteNo: note.noteNo, lineNo: c.lineNo, blockNo: c.blockNo, lineKind: "ARABA", meters: c.meters.toString(), kursunMetersSource: note.kursunMetersSource, entryMode: "PER_DOCUMENT", ...(parties?.length ? { party: true } : {}) } })));
-  }
-  if (infoIds.length) await AuditService.logMany(infoIds.map((lid) => ({ userId, action: "UPDATE" as const, tableName: LINE_TABLE, recordId: lid, oldData: { status: note.lines.find((l) => l.id === lid)?.status ?? null }, newData: { status: "INFO", noteNo: note.noteNo, entryMode: "PER_DOCUMENT" } })));
 }
 
 const REVIEW_GATE_TEXT: Record<NonNullable<ReviewGate["code"]>, (lineNos: number[]) => string> = {

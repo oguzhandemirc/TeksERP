@@ -122,7 +122,7 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
     });
     warnings.push(...approved.warnings);
   }
-  if (parties) return finishParties(note, parties, input, actor.userId, warnings);
+  if (parties) return finishParties({ note, parties, input, userId: actor.userId, warnings });
 
   const line = await prisma.customerDeliveryNoteLine.findUnique({ where: { id: summaryLineId(noteId) }, select: { rollId: true, failReason: true, roll: { select: { barcode: true } } } });
   if (!line?.rollId || !line.roll?.barcode) {
@@ -148,7 +148,7 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
 }
 
 /** Çok partili kayıt: parti topları → mod (gövde > fabrika ayarı) → iş emirleri. Yanıtın üst alanları ilk iş emridir. */
-async function finishParties(note: { id: string; noteNo: string }, parties: PartyInput[], input: FormWorkOrderInput, userId: string, warnings: string[]): Promise<FormWorkOrderResult> {
+async function finishParties({ note, parties, input, userId, warnings }: { note: { id: string; noteNo: string }; parties: PartyInput[]; input: FormWorkOrderInput; userId: string; warnings: string[] }): Promise<FormWorkOrderResult> {
   const rolls = await partyRolls(note.id, note.noteNo, parties);
   const mode = input.mode ?? (await readMultiPartyWorkOrder());
   const res = await openPartyWorkOrders({

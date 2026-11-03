@@ -109,7 +109,7 @@ interface OpenInput {
 export async function openPartyWorkOrders(i: OpenInput, userId: string): Promise<{ workOrders: PartyWorkOrder[]; warnings: string[] }> {
   const warnings: string[] = [];
   const out: PartyWorkOrder[] = [];
-  const run = async (token: string, rolls: OpenInput["rolls"], targets: OpenInput["targetValues"], plan: OpenInput["stepPlanning"], batchNo: string | null | undefined) => {
+  const run = async ({ token, rolls, targets, plan, batchNo }: { token: string; rolls: OpenInput["rolls"]; targets: OpenInput["targetValues"]; plan: OpenInput["stepPlanning"]; batchNo?: string | null }) => {
     const stepPlanning = plan as WorkOrderCreateInput["stepPlanning"];
     const res = await workOrders.quickStart({
       clientToken: token,
@@ -130,10 +130,10 @@ export async function openPartyWorkOrders(i: OpenInput, userId: string): Promise
   if (i.mode === "PER_PARTY") {
     for (const r of i.rolls) {
       const p = i.parties.find((x) => x.blockNo === r.blockNo)!;
-      await run(partyWorkOrderToken(i.clientToken, r.blockNo), [r], p.targetValues ?? i.targetValues, p.stepPlanning ?? i.stepPlanning, p.batchNo);
+      await run({ token: partyWorkOrderToken(i.clientToken, r.blockNo), rolls: [r], targets: p.targetValues ?? i.targetValues, plan: p.stepPlanning ?? i.stepPlanning, batchNo: p.batchNo });
     }
   } else {
-    await run(i.clientToken, i.rolls, i.targetValues, i.stepPlanning, undefined);
+    await run({ token: i.clientToken, rolls: i.rolls, targets: i.targetValues, plan: i.stepPlanning });
   }
   return { workOrders: out, warnings };
 }
