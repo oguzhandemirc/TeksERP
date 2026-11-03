@@ -12,6 +12,7 @@
 
 import type { LabelPayload } from "../../types/label.types";
 import { formatNumber, formatDate } from "./label-html.shared";
+import { formatMeasure, isDefaultUnitSettings, type LabelUnitSettings, type MeasureDim } from "../../config/label-units";
 
 /** Alanın etiketteki yerleşim rolü. scan = barkod/QR (sabit sol kolon, metin değil);
  *  headline = büyük vurgulu (ürün adı / metraj); row = normal "Etiket: değer" satırı. */
@@ -39,6 +40,20 @@ function num(
 ): FieldValue {
   if (v == null || v === "") return { value: "", present: false, role };
   return { value: `${formatNumber(v)} ${unit}`.trim(), present: true, role };
+}
+
+/** Ölçü alanı — şablonun birim sistemiyle (yoksa `num` ile bayt-aynı bugünkü biçim). */
+function measure(
+  v: number | string | null | undefined,
+  dim: MeasureDim,
+  units: LabelUnitSettings | null | undefined,
+  role: FieldRole = "row",
+): FieldValue {
+  if (isDefaultUnitSettings(units)) return num(v, dim, role);
+  if (v == null || v === "") return { value: "", present: false, role };
+  const n = typeof v === "string" ? Number(v) : v;
+  if (!Number.isFinite(n)) return num(v, dim, role);
+  return { value: formatMeasure(n, dim, units), present: true, role };
 }
 
 /**
@@ -72,13 +87,13 @@ export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValu
     case "foldType":
       return str(payload.foldType);
     case "widthCm":
-      return num(payload.widthCm, "cm");
+      return measure(payload.widthCm, "cm", payload.unitSettings);
     case "lengthMeters":
-      return num(payload.lengthMeters, "m", "headline");
+      return measure(payload.lengthMeters, "m", payload.unitSettings, "headline");
     case "lengthCm":
-      return num(payload.lengthCm, "cm");
+      return measure(payload.lengthCm, "cm", payload.unitSettings);
     case "weightKg":
-      return num(payload.weightKg, "kg");
+      return measure(payload.weightKg, "kg", payload.unitSettings);
 
     case "customerName":
       return str(payload.customerName);

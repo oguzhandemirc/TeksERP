@@ -6,6 +6,7 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { LabelKind, PrinterLanguage } from "@prisma/client";
 import { labelKindSchema } from "../config/label-kind.schema";
+import { rawCodeSchema, lineStepMmSchema, qrScaleSchema, lengthBannerSchema, unitSettingsSchema } from "../config/label-template-layout.schema";
 import { LabelTemplateService } from "../services/label-template.service";
 import { buildRawCodePreview } from "../services/helpers/label-rawcode";
 import "../types/express-augment";
@@ -18,21 +19,6 @@ const fieldSchema = z.object({
   isBold:    z.boolean().optional(),
   fontSize:  z.enum(["sm", "md", "lg", "xl"]).optional(),
 });
-
-// Uzman raw-code override (dil→kod). Boş/yok → o dilde otomatik üretim.
-const rawCodeSchema = z
-  .object({
-    PPLA:        z.string().max(20000).optional(),
-    PPLB:        z.string().max(20000).optional(),
-    ZPL:         z.string().max(20000).optional(),
-    RASTER_HTML: z.string().max(20000).optional(),
-  })
-  .partial();
-
-// Şablon-başına yerleşim ayarları — null = temizle (varsayılana dön).
-const lineStepMmSchema = z.number().min(0).max(20).nullable().optional();
-const qrScaleSchema = z.number().int().min(2).max(15).nullable().optional();
-const lengthBannerSchema = z.boolean().nullable().optional();
 
 /** Test edilebilirlik için dışa açık (controller Zod katmanı = HTTP kontrat sınırı). */
 export const createSchema = z.object({
@@ -49,6 +35,7 @@ export const createSchema = z.object({
   lineStepMm: lineStepMmSchema,
   qrScale:    qrScaleSchema,
   lengthBanner: lengthBannerSchema,
+  unitSettings: unitSettingsSchema,
 });
 
 const updateSchema = z.object({
@@ -61,6 +48,7 @@ const updateSchema = z.object({
   lineStepMm: lineStepMmSchema,
   qrScale:    qrScaleSchema,
   lengthBanner: lengthBannerSchema,
+  unitSettings: unitSettingsSchema,
 });
 
 const previewRawSchema = z.object({
@@ -90,6 +78,8 @@ const canvasPreviewSchema = z.object({
   // davrandığını görmek için. Boş metin = "kalitesi belirsiz top" senaryosu
   // (koşullu eleman basılmaz) → `.optional()` ile "gönderilmedi"den ayrılır.
   qualityGrade: z.string().max(32).optional(),
+  // Stüdyodaki kaydedilmemiş birim sistemi — önizleme baskıyla aynı biçimi göstersin.
+  unitSettings: unitSettingsSchema,
 });
 
 // Boyut varyantı gövdeleri — eleman-düzeyi doğrulama serviste (validateCanvasLayout).
@@ -126,6 +116,7 @@ const importSchema = z.object({
     lineStepMm: lineStepMmSchema,
     qrScale: qrScaleSchema,
     lengthBanner: lengthBannerSchema,
+    unitSettings: unitSettingsSchema,
   }),
   variants: z.array(
     z.object({
@@ -231,6 +222,7 @@ export class LabelTemplateController {
           peripheralId: body.peripheralId,
           copies: body.copies,
           qualityGrade: body.qualityGrade,
+          unitSettings: body.unitSettings,
         });
         res.status(200).json(result);
         return;

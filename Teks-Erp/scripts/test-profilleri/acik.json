@@ -64,6 +64,7 @@
     "tamburPlanGateWidthToleranceCm": 5,
     "tamburPlanGateWidthCheck": "ENFORCE",
     "tamburChildWidthSource": "MEASURED_FIRST",
+    "tamburLabelPrintTiming": "END",
     "labelCustomerCodeAt": "TAMBUR_OUTPUT",
     "tamburListByStationEnabled": true,
     "machineStopTrackingEnabled": true,
