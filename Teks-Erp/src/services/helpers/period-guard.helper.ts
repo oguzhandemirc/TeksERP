@@ -66,6 +66,8 @@
 //   8041  E_IRSALIYE_SERIES_LOCK_NS  services/e-irsaliye/e-irsaliye-number.ts  e-İrsaliye numara üretimi ↔ başlangıç değeri yazımı (tek anahtar; sevkiyat kilidi 8023'ün ARKASINDAN)
 //   8042  DEVICE_MERGE_LOCK_NS  services/device-merge.service.ts  cihaz kopyası birleştirme ↔ geri alma (tek anahtar; kaynak/hedef claim'leri serileşir)
 //   8043  DELIVERY_NOTE_CANCEL_LOCK_NS  services/gelen-belge-iptal.service.ts  onaylı gelen belge iptali (belge başına `hashtext(noteId)`; claim + top/iş emri iptali arkasında)
+//   8044  DELIVERY_DOC_NO_LOCK_NS  services/helpers/gelen-belge-mukerrer.helper.ts  gelen belge (sahip, gönderen belge no) BLOCK tekilliği (`hashtext(senderDocNo)`; çok anahtar sıralı)
+//   8045  DOCUMENT_SCAN_SHA_LOCK_NS  services/helpers/gelen-belge-mukerrer.helper.ts  belge taraması aynı bayt (`hashtext(sha256)`; yükleme tx'i, taslak claim'i arkasında)
 // İKİ KURAL: ① Aynı uzaydan birden çok kilit alan tx anahtarları SIRALI alır
 // (aşağıdaki `assertPeriodsOpenTx` bunun tek meşru kapısıdır — tekil guard'ı
 // bir tx'te İKİ KEZ elle çağırmak YASAK ve `cheque.bounce` vakasında canlı

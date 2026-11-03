@@ -52,6 +52,8 @@ export interface FormWorkOrderInput {
   parties?: PartyInput[];
   /** Verilmezse fabrika ayarı `gelenBelge.multiPartyWorkOrder` (varsayılan SINGLE). Yalnız `parties` ile anlamlı. */
   mode?: MultiPartyWorkOrderMode;
+  /** K27 WARN: işi süren aynı belge no'lu eşe rağmen kaydet (onaya geçer). */
+  confirmDuplicateDocNo?: boolean;
 }
 
 export interface FormWorkOrderResult {
@@ -135,7 +137,7 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
       throw AppError.conflict(`${note.noteNo} şu an ${TERIM.terbiyeIsEmri.tekilKucuk} için kaydedilemez (${note.status}).`, { code: "DELIVERY_NOTE_NOT_APPROVABLE", status: note.status });
     }
     const user = await prisma.user.findUnique({ where: { id: actor.userId }, select: { username: true } });
-    const approved = await approveDeliveryNote(noteId, {}, actor.userId, {
+    const approved = await approveDeliveryNote(noteId, input.confirmDuplicateDocNo ? { confirmDuplicateDocNo: true } : {}, actor.userId, {
       entryMode: "PER_DOCUMENT",
       via: `WITH_WORK_ORDER: ${user?.username ?? actor.userId}`,
       ...(parties ? { parties: parties.map((p) => ({ blockNo: p.blockNo, meters: p.meters })) } : {}),
