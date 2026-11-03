@@ -21,6 +21,7 @@ import {
   errorText,
   initialRowForm,
   isFormApprovalDisabled,
+  isScanRoute,
   openedResult,
   resolveFormApproval,
   routeHasKursunStep,
@@ -56,7 +57,8 @@ const isDone = (r: DocRow): boolean => r.result?.kind === 'OPENED' || r.result?.
 
 interface SaveCtx {
   mode: FormApproval;
-  routeId: string;
+  /** null = rotasız (K29). */
+  routeId: string | null;
   gramajPropertyId: string | null;
   /** K22 formda alanı olmayan çözücü değerleri (gövdeye aynen). */
   passThrough: readonly { propertyId: string; valueId: string }[];
@@ -148,7 +150,8 @@ function applyMulti(rs: DocRow[], noteId: string, multi: MultiPartyDraft): DocRo
 
 /** Gramaj alanı yalnız rotada kurşun adımı varsa; katalog okunamazsa boş (alan çizilmez, uydurma yok). */
 function useGramajCatalog(route: ProductionRoute, rows: DocRow[]): { showGramaj: boolean; catalog: KursunGramajCatalog; gramajFor: GramajFor; passThroughFor: PassThroughFor } {
-  const showGramaj = routeHasKursunStep(route);
+  // Rotasız: hangi istasyona gideceği bilinmez → gramaj kutusu bugünkü gibi görünür (seçmek isteğe bağlı).
+  const showGramaj = isScanRoute(route) || routeHasKursunStep(route);
   const q = useQuery({
     queryKey: ['fabric-properties', 'kursun-gramaj-catalog'],
     queryFn: fabricPropertyService.getKursunGramajCatalog,
@@ -287,7 +290,7 @@ export function useWoRows(route: ProductionRoute) {
       for (const r of targets) {
         const ptNow = passThroughFor(r.form!.ownerCustomerId);
         const passThrough = Array.isArray(ptNow) ? ptNow : await ptNow;
-        const ctx = { mode, routeId: route.id, gramajPropertyId: catalog.propertyId, passThrough, kursunSequence: kursunStepOf(route)?.sequence ?? null, token: attempt.keyed(r.noteId), confirmDuplicateDocNo: r.noteId === confirmNoteId };
+        const ctx = { mode, routeId: isScanRoute(route) ? null : route.id, gramajPropertyId: catalog.propertyId, passThrough, kursunSequence: kursunStepOf(route)?.sequence ?? null, token: attempt.keyed(r.noteId), confirmDuplicateDocNo: r.noteId === confirmNoteId };
         const { result, error } = await saveRowOnce(ctx, r, r.form!);
         if (error !== undefined) errors.push(error);
         const conflict = error === undefined ? null : duplicateDocNoConflict(error);

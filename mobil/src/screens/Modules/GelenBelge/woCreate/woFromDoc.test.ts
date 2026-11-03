@@ -2,6 +2,8 @@
 import type { InboundNoteDetail, ReadSummary } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import {
+  SCAN_ROUTE,
+  withScanRoute,
   buildCreateBody,
   buildDraftPatch,
   detailFromSummary,
@@ -102,6 +104,17 @@ describe('rowIssues — review zorunlu', () => {
   const base = { ownerCustomerId: 'c1', ownerSuggested: null, ownerAsk: null, ourBatchNo: null, ourBatchNoKey: null, meters: 100, metersReview: false, gramajValueId: null };
   it('temizlenen parti no gövdede açık null gider (sunucu okumada yazılanı siler)', () => {
     expect(buildCreateBody(base, { clientToken: 't', routeTemplateId: 'r', gramajPropertyId: null }).ourBatchNo).toBeNull();
+  });
+  it('⭐ K29 rotasız (routeTemplateId null): gövdede rota anahtarı HİÇ yok', () => {
+    const body = buildCreateBody(base, { clientToken: 't', routeTemplateId: null, gramajPropertyId: null });
+    expect('routeTemplateId' in body).toBe(false);
+    expect(body.ownerCustomerId).toBe('c1');
+    expect(buildCreateBody(base, { clientToken: 't', routeTemplateId: 'r', gramajPropertyId: null }).routeTemplateId).toBe('r');
+  });
+  it('⭐ withScanRoute: Okutmayla → rotasız başta; sıralı → liste aynen', () => {
+    const r = [{ id: 'r1', name: 'K' }];
+    expect(withScanRoute(r, true).map((x) => x.id)).toEqual([SCAN_ROUTE.id, 'r1']);
+    expect(withScanRoute(r, false)).toEqual(r);
   });
   it('⭐ doğrulanmamış okunan metre kaydı engeller', () => {
     expect(rowIssues({ ...base, metersReview: true })).toEqual(['Kurşun metresini doğrulayın ya da düzeltin.']);

@@ -59,6 +59,8 @@ export interface FeatureFlags {
   /** D4-F1 `scan.customerCodeLookup` — tablette yalnız TİPİ okunur: alan varsa sunucu müşteri barkodu uçlarını
    *  tanır (D4-F4 bağla düğmesi). Eski sunucu göndermez → düğme gizli. */
   scanCustomerCodeLookupEnabled?: boolean;
+  /** K29 rota uygulaması — backend `ProductionRouteMode` aynası; eski sunucu göndermez → SEQUENTIAL (bugünkü). */
+  productionRouteMode?: 'SEQUENTIAL' | 'SCAN';
   /** Kalite Güvence (K4P, `kaliteGuvence.enabled`) — default FALSE (satır-yok değeri); muayene yüzeyi kapalıyken çizilmez.
    *  Opsiyonel: eski sunucu göndermez → kapalı (fail-closed). */
   kaliteGuvenceEnabled?: boolean;

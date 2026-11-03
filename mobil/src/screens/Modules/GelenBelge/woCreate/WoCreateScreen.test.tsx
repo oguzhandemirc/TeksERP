@@ -7,6 +7,8 @@ import WoCreateScreen from './WoCreateScreen';
 
 const mockShortcuts = jest.fn();
 let mockVisible: { key: string }[] = [{ key: 'HizliIsEmri' }, { key: 'GelenBelge' }];
+let mockScan = false;
+jest.mock('../../../../hooks/useFeatureFlags', () => ({ ...jest.requireActual('../../../../hooks/useFeatureFlags'), useScanRouteMode: () => mockScan }));
 
 jest.mock('../../../../services/route.service', () => ({ routeService: { getShortcuts: () => mockShortcuts() } }));
 jest.mock('../../../../hooks/useVisibleScreens', () => ({ useVisibleScreens: () => ({ visibleScreens: mockVisible }) }));
@@ -45,6 +47,38 @@ beforeEach(() => {
   useDeviceSettingsStore.setState({ docDeskDevice: false });
   mockVisible = [{ key: 'HizliIsEmri' }, { key: 'GelenBelge' }];
   mockShortcuts.mockReset();
+  mockScan = false;
+});
+
+describe('WoCreateScreen — K29 S14b rotasız seçenek', () => {
+  it('⭐ Okutmayla: "Sahada belirlenir (rotasız)" özel satırda İLK; seçince elle form yok, Belge okut rotasız görünümü açar', async () => {
+    mockScan = true;
+    mockShortcuts.mockResolvedValue({ data: [route('r1', 'Kurşun&Tambur', 1)] });
+    const s = renderWithPaper(<WoCreateScreen />);
+    await waitFor(() => expect(s.getByTestId('ie-ozel-turler')).toBeTruthy());
+    expect(s.getAllByLabelText(/rotasız|iş emri$/).map((n) => n.props.accessibilityLabel)).toEqual(['Sahada belirlenir (rotasız)', 'Kurşun&Tambur terbiye iş emri']);
+    fireEvent.press(s.getByTestId('ie-rotasiz'));
+    expect(s.getByTestId('ie-rotasiz-ipucu')).toBeTruthy();
+    expect(s.queryByTestId('hizli-form')).toBeNull();
+    fireEvent.press(s.getByTestId('ie-belge-okut'));
+    expect(s.getByTestId('belge-okut-gorunumu').props.children).toBe('scan-routed:tek:true');
+  });
+
+  it('⭐ Okutmayla + kısayol yok: rotasız karo ve belge masası (rotasız başta) çıkar', async () => {
+    mockScan = true;
+    mockShortcuts.mockResolvedValue({ data: [] });
+    const s = renderWithPaper(<WoCreateScreen />);
+    expect(await s.findByTestId('ie-rotasiz')).toBeTruthy();
+    fireEvent.press(s.getByTestId('ie-tur-belge-masasi'));
+    expect(s.getByTestId('belge-masasi').props.children).toBe('scan-routed');
+  });
+
+  it('Sıralı (varsayılan): rotasız karo yok', async () => {
+    mockShortcuts.mockResolvedValue({ data: [route('r1', 'Kurşun&Tambur', 1)] });
+    const s = renderWithPaper(<WoCreateScreen />);
+    await waitFor(() => expect(s.getByTestId('ie-ozel-turler')).toBeTruthy());
+    expect(s.queryByTestId('ie-rotasiz')).toBeNull();
+  });
 });
 
 describe('WoCreateScreen', () => {
