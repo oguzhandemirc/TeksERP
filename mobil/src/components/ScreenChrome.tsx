@@ -21,11 +21,16 @@ import PlaceChip from './session/PlaceChip';
 import { usePlaceActions, MachinePickerModal } from './session/PlaceActions';
 import HeaderSecondRow from './HeaderSecondRow';
 import type { MainStackParamList, RootStackParamList } from '../navigation/types';
-import TruncatedText from './TruncatedText';
+import HeaderInfoButton, { HeaderStatusLine } from './HeaderInfoButton';
 
 interface Props {
   title: string;
+  /** Ekran açıklaması — başlık altında ÇİZİLMEZ, başlık yanındaki ⓘ balonunda (K24).
+   *  İstisna: `hidePlaceChip` verilmişse subtitle makine adını taşır → görünür satırdır. */
   subtitle?: string;
+  /** Başlık altında GÖRÜNÜR kalan durum/bağlam satırı (ör. "3 açık alarm", tezgah · hat) —
+   *  açıklama değil veridir. */
+  statusLine?: string;
   onBack?: () => void;
   /** Ekran-içi "önceki adıma dön" — home'u GİZLEMEZ; home'un yanında ok olarak
    *  çıkar. Modül içi alt-adım (örn. paketleme → sipariş seçimi) için. */
@@ -55,6 +60,7 @@ interface Props {
 export default function ScreenChrome({
   title,
   subtitle,
+  statusLine,
   onBack,
   onStepBack,
   headerExtras,
@@ -116,6 +122,9 @@ export default function ScreenChrome({
   };
 
   const operatorName = user?.fullName || user?.username || '—';
+  // K24: açıklama ⓘ'ye; görünür satır yalnız veri — durum satırı ya da makine adını taşıyan subtitle.
+  const visibleLine = statusLine || (hidePlaceChip ? subtitle : undefined);
+  const infoText = hidePlaceChip ? undefined : subtitle;
 
   return (
     <View style={styles.root}>
@@ -147,6 +156,7 @@ export default function ScreenChrome({
                 {title}
               </Text>
             ) : null}
+            {infoText ? <HeaderInfoButton text={infoText} /> : null}
             {/* Bulunulan makine ADI (salt gösterge — PlaceChip kendi kendini
                 gate'ler). Ekranın 2. katı VARSA (dar telefon) oraya iner —
                 başlığın yanında sıkışmasın; yoksa (tablet) burada, başlığın
@@ -155,11 +165,7 @@ export default function ScreenChrome({
             {!secondRow && !hidePlaceChip && <PlaceChip />}
             {titleRowExtras}
           </View>
-          {subtitle && (
-            <TruncatedText variant="labelMedium" style={styles.subtitle} revealOnTap testID="ekran-alt-baslik">
-              {subtitle}
-            </TruncatedText>
-          )}
+          {visibleLine ? <HeaderStatusLine text={visibleLine} /> : null}
         </View>
 
         {/* Ekran-spesifik tetikleyici — profilden önce, profil en sağda kalsın */}
@@ -324,7 +330,6 @@ const styles = StyleSheet.create({
   title: { color: '#fff', fontWeight: '700', textAlign: 'left', flexShrink: 1 },
   // Başlık + makine çipi yan yana.
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  subtitle: { textAlign: 'left', color: '#cbd5e1' },
   // Content view'i sola hizala — title kenara dayalı. paddingLeft 4: ufak nefes
   // payı, ev/back ikonuna yakın dursun (telefonda sağdaki aksiyon butonları için yer açar).
   // flex: 1 de vererek available space'i kaplamasını garanti edelim.

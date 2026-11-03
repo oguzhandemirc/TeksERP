@@ -108,7 +108,7 @@ export function CustomReportViewPage() {
       <PageHeader
         className="flex-wrap"
         title={d?.ad ?? "Rapor"}
-        description={d ? `${d.kategori.ad}${d.sablon ? " · Hazır şablon" : ""}${d.sahip ? ` · ${d.sahip.ad}` : ""}${d.aktifSurum ? ` · Sürüm ${d.aktifSurum.no}` : ""}` : undefined}
+        statusLine={d ? `${d.kategori.ad}${d.sablon ? " · Hazır şablon" : ""}${d.sahip ? ` · ${d.sahip.ad}` : ""}${d.aktifSurum ? ` · Sürüm ${d.aktifSurum.no}` : ""}` : undefined}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" className="gap-1.5" disabled={refreshing || !run.data} onClick={() => void refresh()}>
