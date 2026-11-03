@@ -667,6 +667,12 @@ async function main() {
       file: "Electron/src/pages/GeneralSettings/GelenBelgeEntryModeField.tsx",
       needle: "gb-station-doc-lookup",
     },
+    // Gülkesim S13b (K28, 2026-11-03): belge fotoğrafı saklama; uçtaki Zod alanı (panel satırı ayrı adım).
+    GELEN_BELGE_PHOTO_RETENTION: {
+      why: "Belge fotoğrafı saklama (FULL varsayılan | SHRINK_ON_APPROVAL | DELETE_ON_APPROVAL | DELETE_ON_DISPATCH) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; iş `gelen-belge-foto-saklama.job` okur",
+      file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
+      needle: "photoRetention: z.enum(",
+    },
     PRODUCTION_REFAKAT_AUTO_PRINT: {
       why: "İş emri açılınca refakat kartı otomatik yazdırma (varsayılan false) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; istemci okur",
       file: "Teks-Erp/src/routes/gelen-belge.routes.ts",

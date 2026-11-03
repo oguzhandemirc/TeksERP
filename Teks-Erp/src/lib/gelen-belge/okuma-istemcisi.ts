@@ -145,3 +145,37 @@ export async function readerConvert(base: string, content: Buffer, timeoutMs: nu
   if (!parsed.success) return { ok: false, kind: "INVALID", code: "CONVERT_RESULT_SCHEMA" };
   return { ok: true, content: Buffer.from(parsed.data.imageBase64, "base64"), width: parsed.data.width, height: parsed.data.height };
 }
+
+/** K28 küçültme hedefi: gözle okunur kalite (uzun kenar ~1600 px, JPEG ~q70 → tipik ≤ ~200 KB). */
+export const SHRINK_MAX_EDGE = 1600;
+export const SHRINK_JPEG_QUALITY = 70;
+
+/**
+ * `POST /kucult` — JPEG/PNG baytı `{imageBase64, maxKenar, kalite}` ile gider, küçültülmüş JPEG döner (yanıt `/donustur`
+ * ile aynı şema). Sınıflar `readerConvert` ile aynı: 404 = eski okuma sürümü (uç yok) → çağıran "servis yok" sayar, fotoğraf TAM kalır.
+ */
+export async function readerShrink(base: string, content: Buffer, timeoutMs: number = CONVERT_TIMEOUT_MS): Promise<ConvertResult> {
+  let res: { status: number; body: Buffer };
+  try {
+    res = await egressRequest(`${base}/kucult`, {
+      method: "POST",
+      timeoutMs,
+      maxBytes: READER_MAX_RESPONSE_BYTES,
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ imageBase64: content.toString("base64"), maxKenar: SHRINK_MAX_EDGE, kalite: SHRINK_JPEG_QUALITY }),
+    });
+  } catch (err) {
+    return { ok: false, kind: "UNAVAILABLE", code: err instanceof EgressError ? err.code : "EGRESS_NETWORK" };
+  }
+  if (res.status >= 500 || res.status === 429 || res.status === 404) return { ok: false, kind: "UNAVAILABLE", code: `HTTP_${res.status}`, status: res.status };
+  if (res.status < 200 || res.status >= 300) return { ok: false, kind: "HTTP", code: `HTTP_${res.status}`, status: res.status };
+  let json: unknown;
+  try {
+    json = JSON.parse(res.body.toString("utf8"));
+  } catch {
+    return { ok: false, kind: "INVALID", code: "SHRINK_RESULT_NOT_JSON" };
+  }
+  const parsed = ConvertResultSchema.safeParse(json);
+  if (!parsed.success) return { ok: false, kind: "INVALID", code: "SHRINK_RESULT_SCHEMA" };
+  return { ok: true, content: Buffer.from(parsed.data.imageBase64, "base64"), width: parsed.data.width, height: parsed.data.height };
+}

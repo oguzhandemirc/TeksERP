@@ -70,6 +70,14 @@ class DonusumIstegi(BaseModel):
     imageBase64: str
 
 
+class KucultmeIstegi(BaseModel):
+    """`POST /kucult` gövdesi (K28) — saklanan JPEG/PNG `{imageBase64, maxKenar, kalite}`; yanıt `DonusumSonucu`."""
+
+    imageBase64: str
+    maxKenar: int = 1600
+    kalite: int = 70
+
+
 class DonusumSonucu(BaseModel):
     """`POST /donustur` yanıtı — okuma-istemcisi.ts `ConvertResultSchema` (Zod) ile BİREBİR."""
 

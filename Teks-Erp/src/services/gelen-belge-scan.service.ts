@@ -15,6 +15,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { detectCertificateMime } from "./certificate-file.service";
 import { convertHeicToJpeg, isHeic } from "../lib/gelen-belge/heic";
+import { photoPurgedError } from "./gelen-belge-foto-saklama.service";
 import { applyStoredReadsTx, auditPhotoSource, auditStoredReads, markPhotoSourceTx, prepareStoredReads } from "./gelen-belge-taslak-doldur.service";
 
 export const DOCUMENT_SCAN_MAX_BYTES = 5 * 1024 * 1024;
@@ -26,7 +27,7 @@ const AUDIT_TABLE = "DOCUMENT_SCAN";
 export const SCAN_SELECT = {
   id: true, noteId: true, pageNo: true, regionNo: true, sha256: true, mimeType: true, sizeBytes: true,
   barcodeText: true, status: true, attempts: true, ocrEngine: true, ocrVersion: true, ocrDurationMs: true,
-  capturedById: true, capturedAt: true, createdAt: true, updatedAt: true,
+  capturedById: true, capturedAt: true, createdAt: true, updatedAt: true, contentState: true, contentStateAt: true,
 } as const;
 
 export interface DocumentScanInput {
@@ -178,9 +179,10 @@ export async function getDocumentScan(id: string) {
   return scan;
 }
 
-/** İkili içerik — yalnız indirme ucu okur; audit/log yoluna girmez. */
+/** İkili içerik — yalnız indirme ucu okur; audit/log yoluna girmez. Saklama ayarıyla silinmiş bayt 410 (K28). */
 export async function readDocumentScanContent(id: string): Promise<{ mimeType: string; content: Buffer }> {
   const scan = await prisma.documentScan.findUnique({ where: { id }, select: { mimeType: true, content: true } });
   if (!scan) throw AppError.notFound("Belge taraması bulunamadı.", { code: "DOCUMENT_SCAN_NOT_FOUND" });
+  if (!scan.content) throw photoPurgedError();
   return { mimeType: scan.mimeType, content: Buffer.from(scan.content) };
 }

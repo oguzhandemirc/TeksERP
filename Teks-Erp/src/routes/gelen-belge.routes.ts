@@ -40,6 +40,8 @@ import { assertScanReadable, readerQueueCounts, requeueScanForReading } from "..
 import { getReadSummary } from "../services/gelen-belge-okuma-ozeti.service";
 import { stationDocLookup, stationLookupStatus } from "../services/gelen-belge-istasyon-okutma.service";
 import { readerJobStatus, requestImmediateReaderRun } from "../jobs/gelen-belge-okuma.job";
+import { requestImmediatePhotoRetentionRun } from "../jobs/gelen-belge-foto-saklama.job";
+import { workOrderSourceNotes } from "../services/gelen-belge-ie-kaynak.service";
 import { getReaderUrl } from "../lib/gelen-belge/url";
 import { readerHealth } from "../lib/gelen-belge/okuma-istemcisi";
 import { AppError } from "../utils/app-error";
@@ -184,6 +186,17 @@ const ListQuery = z.object({
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
  *       200: { description: İkili }
+ *       410: { description: "Fotoğraf saklama ayarı gereği silindi (DOCUMENT_SCAN_PURGED, K28); satır/okuma/künye duruyor" }
+ * /api/gelen-belge/is-emirleri/{id}/belgeler:
+ *   get:
+ *     tags: [Gelen belge]
+ *     summary: İş emrinin geldiği gelen belgeler (K28 "Geldiği belge") — topların en yakın atasının belge satırından
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{ total, notes: [{ id, noteNo, status, senderDocNo, scans: [{ id, pageNo, regionNo, mimeType, contentState FULL|REDUCED|PURGED, contentStateAt }] }] }" }
+ *       404: { description: İş emri yok (WORK_ORDER_NOT_FOUND) }
  */
 router.post("/taramalar", requirePermission("gelen-belge:write"), wrap(async (req) => {
   const r = await uploadDocumentScan(ScanBody.parse(req.body), req.user!.userId);
@@ -193,6 +206,7 @@ router.post("/taramalar", requirePermission("gelen-belge:write"), wrap(async (re
   return { status: r.duplicate ? 200 : 201, data: r };
 }));
 router.get("/taramalar/:id", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await getDocumentScan(Id.parse(req.params.id)) })));
+router.get("/is-emirleri/:id/belgeler", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await workOrderSourceNotes(Id.parse(req.params.id)) })));
 router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async (req, res, next) => {
   try {
     const f = await readDocumentScanContent(Id.parse(req.params.id));
@@ -390,6 +404,7 @@ const SettingsBody = z.strictObject({
   multiPartyWorkOrder: z.enum(["SINGLE", "PER_PARTY"], "Seçenek SINGLE ya da PER_PARTY olmalı").optional(),
   refakatAutoPrint: z.boolean("Refakat kartı otomatik yazdırma evet/hayır olmalı").optional(),
   stationDocLookup: z.boolean("İstasyonda belge okutma evet/hayır olmalı").optional(),
+  photoRetention: z.enum(["FULL", "SHRINK_ON_APPROVAL", "DELETE_ON_APPROVAL", "DELETE_ON_DISPATCH"], "Seçenek FULL, SHRINK_ON_APPROVAL, DELETE_ON_APPROVAL ya da DELETE_ON_DISPATCH olmalı").optional(),
 });
 /**
  * @openapi
@@ -399,7 +414,7 @@ const SettingsBody = z.strictObject({
  *     summary: Gelen belge ayarları — varsayılan ürün (ad + kullanılabilirlik) ve gözden geçirilmemiş hücreyle onay kipi
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "defaultItem (id, code, name, problem) | null · unreviewedApproval WARN|BLOCK_SUSPECT|BLOCK · autoWorkOrder boolean · defaultRoute (id, name, problem) | null · routeSuggestionPriority CUSTOMER_FIRST|FACTORY_FIRST · headerLineMeterSource OUTPUT|INPUT · autoSenderFromTemplate boolean · documentTotalCheck INFO|REQUIRE_REASON · batchNumberSource SERIES|DOCUMENT · entryMode PER_LINE|PER_DOCUMENT · autoWorkOrderPatternless SKIP|OPEN · formApproval SEPARATE|WITH_WORK_ORDER (her biri default* alanıyla) · refakatAutoPrint boolean · stationDocLookup boolean" }
+ *       200: { description: "defaultItem (id, code, name, problem) | null · unreviewedApproval WARN|BLOCK_SUSPECT|BLOCK · autoWorkOrder boolean · defaultRoute (id, name, problem) | null · routeSuggestionPriority CUSTOMER_FIRST|FACTORY_FIRST · headerLineMeterSource OUTPUT|INPUT · autoSenderFromTemplate boolean · documentTotalCheck INFO|REQUIRE_REASON · batchNumberSource SERIES|DOCUMENT · entryMode PER_LINE|PER_DOCUMENT · autoWorkOrderPatternless SKIP|OPEN · formApproval SEPARATE|WITH_WORK_ORDER (her biri default* alanıyla) · refakatAutoPrint boolean · stationDocLookup boolean · photoRetention FULL|SHRINK_ON_APPROVAL|DELETE_ON_APPROVAL|DELETE_ON_DISPATCH (defaultPhotoRetention ile)" }
  *   put:
  *     tags: [GelenBelge]
  *     summary: Gelen belge ayarlarını yaz (yalnız admin:settings + ayar şifresi); pasif/top doğuramayan ürün 400 GELEN_BELGE_DEFAULT_ITEM_INVALID
@@ -426,13 +441,19 @@ const SettingsBody = z.strictObject({
  *               multiPartyWorkOrder: { type: string, enum: [SINGLE, PER_PARTY], description: "Çok partili belgeden iş emri: tek iş emri, partiler ayrı top (varsayılan) ya da her parti ayrı iş emri" }
  *               refakatAutoPrint: { type: boolean, description: "İş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır (varsayılan false)" }
  *               stationDocLookup: { type: boolean, description: "İstasyon tabletinde belge okutarak iş emri bulma (varsayılan false)" }
+ *               photoRetention: { type: string, enum: [FULL, SHRINK_ON_APPROVAL, DELETE_ON_APPROVAL, DELETE_ON_DISPATCH], description: "Belge fotoğrafı saklama (K28): tam (varsayılan) · onayda küçült · onayda sil · sevkte sil; geçmiş onaylı belgelere de uygulanır" }
  *     responses:
  *       200: { description: Güncel ayarlar }
  */
 // Okuma `gelen-belge:read`: gözden geçirme ekranı "varsayılan ürünle girecek: <ad>" ipucunu buradan basar.
 router.get("/ayarlar", requirePermission("gelen-belge:read"), wrap(async () => ({ status: 200, data: await getIncomingDocSettings() })));
 // Yazma yalnız `admin:settings` (Genel Ayarlar → Gelen Belge kategorisi ADMIN_ONLY); ayar şifresi kapısı izinden SONRA.
-router.put("/ayarlar", requirePermission("admin:settings"), requireSettingsPassword, wrap(async (req) => ({ status: 200, data: await updateIncomingDocSettings(SettingsBody.parse(req.body), req.user!.userId) })));
+router.put("/ayarlar", requirePermission("admin:settings"), requireSettingsPassword, wrap(async (req) => {
+  const data = await updateIncomingDocSettings(SettingsBody.parse(req.body), req.user!.userId);
+  // K28: saklama kipi değişince geçmiş onaylılara uygulama beklemeden başlar (iş kendi ön koşulunda durur).
+  if (data.photoRetention !== "FULL") requestImmediatePhotoRetentionRun();
+  return { status: 200, data };
+}));
 // ── K17: istasyonda belgeden iş emri bulma (eşleme okuması — hiçbir kayıt doğurmaz) ──────────────────────────
 const STATION_LOOKUP_PERMISSIONS = ["gelen-belge:read", "mobile:kk2-kursun", "mobile:tambur"] as const;
 const StationLookupBody = z.union([
@@ -581,7 +602,10 @@ router.post("/irsaliyeler/:id/onay", requirePermission("gelen-belge:approve"), w
   // Açık rota isteği onaydan ÖNCE doğrulanır (fail-closed: yerine getirilemiyorsa onay yok); istek yoksa `{}` = bugünkü yol.
   const opts = await assertRouteOverride(routeTemplateId, req.user!);
   // Onay önce ve aynen; otomatik iş emri (ayar açıksa ya da rota istendiyse) onaydan SONRA, best-effort.
-  return approveDeliveryNote(id, body, req.user!.userId).then((r) => withAutoWorkOrders(r, req.user!, opts)).then(({ warnings, ...data }) => ({ status: 200, data, warnings }));
+  const out = await approveDeliveryNote(id, body, req.user!.userId).then((r) => withAutoWorkOrders(r, req.user!, opts)).then(({ warnings, ...data }) => ({ status: 200, data, warnings }));
+  // K28: onay commit oldu → fotoğraf saklama işi beklemeden (kip FULL ise tur hiçbir şey yapmaz).
+  requestImmediatePhotoRetentionRun();
+  return out;
 }));
 
 // ── K15: onaylı belge iptali — önizleme + iptal (`gelen-belge:cancel`; SoD) ──
@@ -703,6 +727,7 @@ const FormWorkOrderBody = z.strictObject({
 router.get("/irsaliyeler/:id/partiler", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await getNoteParties(Id.parse(req.params.id)) })));
 router.post("/irsaliyeler/:id/is-emri", requireAnyPermission(...AUTO_WORK_ORDER_PERMISSIONS), wrap(async (req) => {
   const { warnings, ...data } = await createWorkOrderFromNote(Id.parse(req.params.id), FormWorkOrderBody.parse(req.body ?? {}), req.user!);
+  requestImmediatePhotoRetentionRun(); // WITH_WORK_ORDER kipi belgeyi de onaylar (K28).
   return { status: 201, data, warnings };
 }));
 
