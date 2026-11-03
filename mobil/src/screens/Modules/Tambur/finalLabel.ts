@@ -32,6 +32,15 @@ export function weightError(s: Pick<TamburLabelSettings, 'weighRequired'>, kgTex
   return null;
 }
 
+/** 'Bitir' kararı: kalan top doğuran karar (keep_* / scrap) kesimle aynı tartım kuralına tabi; discard top doğurmaz. */
+export function finalizeWeightError(
+  s: Pick<TamburLabelSettings, 'weighRequired'>,
+  kgText: string,
+  action: 'keep_1kalite' | 'keep_a1' | 'scrap' | 'discard',
+): string | null {
+  return action === 'discard' ? null : weightError(s, kgText);
+}
+
 /**
  * Bölme ölçüsü önerisi: müşterinin ölçüsü (ör. 50 m) kalandan küçükse o, değilse öneri yok
  * (kalanı kesmek zaten "Kalanı Kes" düğmesi). Metin virgüllü ("50" / "50,5").
