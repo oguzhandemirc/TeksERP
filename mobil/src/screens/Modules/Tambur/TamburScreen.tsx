@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { useScanRoute } from '../scanRoute/useScanRoute';
 import {
   View,
   StyleSheet,
@@ -437,6 +438,8 @@ export default function TamburScreen() {
   });
 
   const qc = useQueryClient();
+  // K29 okutmayla rota: kart çözümü 400 SCAN_ROUTE_AVAILABLE dönerse araya girer (sessiz uygula / onay / engel).
+  const scanRoute = useScanRoute();
 
   // ── Saha düzeltmesi kapısı ────────────────────────────────────────────────
   // "Topu Buraya Al" + "Manuel Top Ekle" YALNIZ yetkili operatörde çizilir.
@@ -1084,6 +1087,13 @@ export default function TamburScreen() {
         text2: `${step.batchNumber} · ${step.rolls.length} top`,
       });
     } catch (err) {
+      // K29: okutmaya göre rota kararı kurşun bypass'tan ÖNCE (SCAN'de açık dağıtım varken sunucu kapıyı açmaz).
+      const routed = scanRoute.intercept(err, barcode, () => void resolveCard(barcode, fromInput));
+      if (routed === 'handled') return;
+      if (routed === 'blocked') {
+        signalScan('reject');
+        return;
+      }
       // KURŞUN BYPASS — kart Kurşun Dağıtım'a verilmişse toplar hâlâ kurşun
       // adımındadır; `by-card` "bu adımda açık top yok" diye 400 atar. Bu durumda
       // kurşun adımı SESSİZCE kapatılır (operatöre soru sorulmaz) ve kart normal
@@ -5295,6 +5305,7 @@ export default function TamburScreen() {
         }}
       />
 
+      {scanRoute.dialog}
     </ScreenChrome>
   );
 }

@@ -67,6 +67,7 @@ const KAPILI: ReadonlyArray<{ dosya: string; mount: string }> = [
   { dosya: "routes/tambur.routes.ts", mount: "/api/tambur" },
   { dosya: "routes/kursun-qc.routes.ts", mount: "/api/kursun-qc" },
   { dosya: "routes/kursun-bypass.routes.ts", mount: "/api/kursun-bypass" },
+  { dosya: "routes/scan-route.routes.ts", mount: "/api/scan-route" },
   { dosya: "routes/traveler-card.routes.ts", mount: "/api/traveler-cards" },
   { dosya: "routes/batch.routes.ts", mount: "/api/batches" },
   { dosya: "routes/station-capability.routes.ts", mount: "/api/station-capabilities" },

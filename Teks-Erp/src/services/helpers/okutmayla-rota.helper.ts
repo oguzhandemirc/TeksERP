@@ -92,9 +92,10 @@ export function planScanRoute(facts: ScanRouteFacts, station: { id: string; name
     };
   }
 
-  // Ekleme yeri: işi yapılmış (tamamlanmış/atlanmış/geçmişli) son adımın arkası.
+  // Ekleme yeri: işi yapılmış (tamamlanmış/atlanmış/geçmişli) ya da topların durduğu (aktif) son adımın arkası;
+  // topların durduğu başlamamış adım öndeki bekleyen sayılır → ATLANDI.
   const anchorSeq = steps
-    .filter((s) => s.status === StepStatus.COMPLETED || s.status === StepStatus.SKIPPED || s.hasHistory)
+    .filter((s) => s.status === StepStatus.COMPLETED || s.status === StepStatus.SKIPPED || s.hasHistory || s.rollCount > 0)
     .reduce((m, s) => Math.max(m, s.stepSequence), 0);
   const targetSeq = open ? open.stepSequence : anchorSeq + 1;
   const skip = steps.filter((s) => s.stepSequence < targetSeq && LIVE.includes(s.status) && !s.hasHistory && !s.startedWork && s.id !== open?.id);
