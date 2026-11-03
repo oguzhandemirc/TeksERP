@@ -105,7 +105,7 @@ export function WorkOrderDetailHeader({
             </>
           )
         }
-        description={
+        statusLine={
           wo
             ? `${workOrderTypeLabels[wo.type]}${wo.routeTemplate ? ` · Rota: ${wo.routeTemplate.name}` : ""}`
             : undefined

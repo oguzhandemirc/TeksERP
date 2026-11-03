@@ -59,7 +59,7 @@ export default function LoomAlarmsScreen() {
     />
   );
   return (
-    <ScreenChrome title="Uyarılar" subtitle={`${items.length} açık alarm`}>
+    <ScreenChrome title="Uyarılar" statusLine={`${items.length} açık alarm`}>
       {permission === 'denied' && (
         <Text style={styles.banner}>Bildirim izni kapalı — uygulama kapalıyken hatırlatma gelmez. Telefon ayarlarından açabilirsiniz.</Text>
       )}

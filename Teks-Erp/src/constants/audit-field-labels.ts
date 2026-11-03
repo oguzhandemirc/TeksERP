@@ -240,6 +240,8 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   rawDestination: "Sevk yönü (ham)",
   invoiceNo: "Fatura no",
   procedureCode: "İhracat kodu",
+  deliveryCustomerId: "Teslim yeri",
+  deliveryAddress: "Teslim adresi",
   exportCode: "İhracat kodu",
   documentNo: "Belge no",
   manifestNo: "İrsaliye no",

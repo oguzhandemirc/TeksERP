@@ -474,6 +474,9 @@ export const sackHubService = {
     /** Yalnız operatör ilk-seçimde açıkça seçtiyse — sunucu karta yalnız o zaman yazar. */
     destinationChosen?: true;
     procedureCode?: string | null;
+    /** Teslim yeri (K18) — `deliveryToBody` çıktısı; boşken anahtar gitmez. */
+    deliveryCustomerId?: string;
+    deliveryAddress?: string;
     /** İdempotency — deneme başına bir üretilir, retry aynı token'la (backend replay, A4). */
     clientToken?: string;
     /**
@@ -495,6 +498,8 @@ export const sackHubService = {
         // Açık niyet — düşerse ilk sevk seçimi karta YAZILMAZ (gövdeyi elle kuran katman sessiz allowlist'tir).
         ...(body.destinationChosen ? { destinationChosen: true } : {}),
         ...(body.procedureCode ? { procedureCode: body.procedureCode } : {}),
+        ...(body.deliveryCustomerId ? { deliveryCustomerId: body.deliveryCustomerId } : {}),
+        ...(body.deliveryCustomerId && body.deliveryAddress ? { deliveryAddress: body.deliveryAddress } : {}),
         ...(body.clientToken ? { clientToken: body.clientToken } : {}),
         // ⚠️ AÇIKÇA gönderilir (true DE false DA değil — yalnız true anlamlı,
         // false varsayılan). `orderless: true` uyarıyı susturur ve `block`

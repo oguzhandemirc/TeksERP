@@ -65,6 +65,7 @@
 ### Değişmezler
 
 - **[ÇEKİRDEK]** Tıklamayla hedef açan her yüzey (menü, hub kartı, komut paleti, sayfa içi bağlantı, İz sür) sekme kararını yalnız `tabs/use-tab-target.ts decideTabOpen`dan alır ve kişisel "Sekme davranışı" tercihine (`prefs.tabs.openMode`, varsayılan `newTab` = 2026-10-30 öncesi davranış) uyar; bilinçli yeni-sekme eylemleri (sekme çubuğu +, "Yeni sekmede aç" maddesi, kısayollar) tercihten etkilenmez. · bekçi: `Electron/src/components/layout/tabs/use-tab-target.test.tsx` <sub>(arşiv 2026-10-30 "Sekme davranışı tercihi")</sub>
+- **[ÇEKİRDEK]** Sayfa/ekran başlığının altına AÇIKLAMA satırı çizme: panelde `PageHeader.description`, tablette `ScreenChrome.subtitle` başlık yanındaki ⓘ ipucuna gider; başlık altında görünür kalan tek satır kayıt bağlamı/durumdur (`statusLine`; tablette `hidePlaceChip` ile makine adını taşıyan subtitle) · bekçi: `Electron/src/components/layout/PageHeader.test.tsx` K24, `mobil/src/components/ScreenChrome.aciklama.test.tsx` <sub>(arşiv 2026-11-03 K24)</sub>
 
 ### Tuzaklar
 
@@ -110,3 +111,4 @@ Backend: `test_process_exit_kalibi`, `test_kisa_kimlik_ozet`, `test_terim_eski_a
 - 2026-09-17 · 2026-09-17 — Oturum kaydına istemci sürümü: künye ilk kez kalıcı satıra yazıldı, §1 üç kollu oldu [ÇEKİRDEK] — `arsiv/2026-09.md` §2026-09-17 oturum sürümü
 - 2026-09-28 · 2026-09-28 — Müşteri adı koddan çıktı: firma adı sunucudan, yedek nötr; mevcut kurulumun adı migration ile dondu [ÇEKİRDEK] — `arsiv/2026-09.md` §2026-09-28 firma adı
 - 2026-10-30 · 2026-10-30 — Sekme davranışı kişisel tercihi (Yeni sekmede / Aynı sekmede aç) [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-30 Sekme davranışı
+- 2026-11-03 · 2026-11-03 — Başlık altı açıklama satırı kalktı: panel/tablet açıklaması ⓘ ipucunda, kayıt bağlamı `statusLine` (K24) [ÇEKİRDEK] — `arsiv/2026-11.md` §2026-11-03 K24

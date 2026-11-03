@@ -1,10 +1,16 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
+import { PropertyNameCell } from "./PropertyNameCell";
 import type { FabricProperty } from "./types";
 import { TERIM } from "@/lib/terim";
 
-export const fabricPropertyColumns: ColumnDef<FabricProperty>[] = [
+interface HierarchyOptions {
+  collapsed: ReadonlySet<string>;
+  onToggle: (id: string) => void;
+}
+
+const LEADING: ColumnDef<FabricProperty>[] = [
   {
     id: "swatch",
     header: "",
@@ -21,10 +27,9 @@ export const fabricPropertyColumns: ColumnDef<FabricProperty>[] = [
     header: () => <SortableHeader field="code" label="Kod" />,
     cell: ({ row }) => <span className="font-mono text-xs">{row.original.code}</span>,
   },
-  {
-    accessorKey: "name",
-    header: () => <SortableHeader field="name" label="Ad" />,
-  },
+];
+
+const TRAILING: ColumnDef<FabricProperty>[] = [
   {
     accessorKey: "category",
     header: () => <SortableHeader field="category" label="Kategori" />,
@@ -51,8 +56,13 @@ export const fabricPropertyColumns: ColumnDef<FabricProperty>[] = [
             Seçim
           </Badge>
           {active.slice(0, 4).map((v) => (
-            <Badge key={v.code} variant="muted" className="font-mono text-[10px]">
-              {v.code}
+            <Badge
+              key={v.code}
+              variant={v.isDefault ? "default" : "muted"}
+              className="font-mono text-[10px]"
+              title={v.isDefault ? `${v.name} — varsayılan` : v.name}
+            >
+              {v.isDefault ? `★ ${v.code}` : v.code}
             </Badge>
           ))}
           {active.length > 4 && (
@@ -100,4 +110,17 @@ export const fabricPropertyColumns: ColumnDef<FabricProperty>[] = [
     header: () => <SortableHeader field="isActive" label="Durum" />,
     cell: ({ row }) => (row.original.isActive ? <Badge>Aktif</Badge> : <Badge variant="muted">Pasif</Badge>),
   },
+];
+
+/** Ad hücresi ağaç durumunu (daraltma) taşıdığı için kolonlar sayfanın durumundan kurulur. */
+export const buildFabricPropertyColumns = ({ collapsed, onToggle }: HierarchyOptions): ColumnDef<FabricProperty>[] => [
+  ...LEADING,
+  {
+    accessorKey: "name",
+    header: () => <SortableHeader field="name" label="Ad" />,
+    cell: ({ row }) => (
+      <PropertyNameCell row={row.original} collapsed={collapsed.has(row.original.id)} onToggle={onToggle} />
+    ),
+  },
+  ...TRAILING,
 ];

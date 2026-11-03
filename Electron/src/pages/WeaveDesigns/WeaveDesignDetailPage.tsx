@@ -46,7 +46,7 @@ export function WeaveDesignDetailPage() {
     <PageShell>
       <PageHeader
         title={d ? `${d.code} — Desen kartı` : "Desen kartı"}
-        description={d ? `${d.name} · ${WEAVE_KIND_LABEL[d.kind] ?? d.kind}` : undefined}
+        statusLine={d ? `${d.name} · ${WEAVE_KIND_LABEL[d.kind] ?? d.kind}` : undefined}
         actions={d && (
           <div className="flex items-center gap-2">
             {d.isActive ? <Badge variant="default">Aktif</Badge> : <Badge variant="muted">Pasif</Badge>}

@@ -156,11 +156,8 @@ export function WorkOrderFormPage() {
     <PageShell>
       <PageHeader
         title={isEdit ? `${TERIM.terbiyeIsEmri.cekim.belirtme} Düzenle` : newWorkOrderTitle(seed?.oie)}
-        description={
-          isEdit
-            ? wo?.workOrderNumber
-            : "Sipariş bağla ya da stoğa üret — rota ve hedefi belirle."
-        }
+        statusLine={isEdit ? wo?.workOrderNumber : undefined}
+        description={isEdit ? undefined : "Sipariş bağla ya da stoğa üret — rota ve hedefi belirle."}
         parent={backTo}
         // Sağ aksiyon slotu — yeni kayıtta "Şablon seç" butonu buraya portal'lanır.
         actions={<div ref={setHeaderSlot} className="flex items-center" />}

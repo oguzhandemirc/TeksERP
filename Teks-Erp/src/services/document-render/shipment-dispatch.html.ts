@@ -78,6 +78,7 @@ const LABELS = {
     plate: "Plaka",
     driver: "Şoför",
     carrier: "Taşıyıcı",
+    deliveryTo: "Teslim Yeri",
     urunCaption: "ÜRÜN LİSTESİ",
     stokAdi: "STOK ADI",
     musteriStokAdi: "MÜŞTERİ STOK ADI",
@@ -135,6 +136,7 @@ const LABELS = {
     plate: "Plate",
     driver: "Driver",
     carrier: "Carrier",
+    deliveryTo: "Deliver To",
     urunCaption: "PRODUCT LIST",
     stokAdi: "ITEM NAME",
     musteriStokAdi: "CUSTOMER ITEM NAME",
@@ -273,6 +275,8 @@ export interface ShipmentDispatchDoc {
     driverName: string | null;
     carrier: string | null;
     orderNos: string;
+    /** Teslim yeri (K18) — snapshot DOĞARKEN donar; yoksa anahtar yok ve satır basılmaz. */
+    deliveryTo?: { name: string; address: string | null } | null;
   };
   products: ShipmentDocProduct[];
   sacks: ShipmentDocSack[];
@@ -729,7 +733,10 @@ function shipmentDispatchParts(snapshot: PrintedDocSnapshot, meta: RenderMeta) {
         ? "old"
         : null;
 
-  return { cfg, lang, L, h, t, title, customerSub, headRight, vehicle, sections, watermark };
+  // Teslim yeri (K18): carinin değil başka adrese teslim — yalnız snapshot'ta varsa tek satır.
+  const deliveryTo = h.deliveryTo?.name ? { label: L.deliveryTo, name: h.deliveryTo.name, address: h.deliveryTo.address?.trim() || null } : null;
+
+  return { cfg, lang, L, h, t, title, customerSub, headRight, vehicle, deliveryTo, sections, watermark };
 }
 
 /**
@@ -754,6 +761,7 @@ export function renderShipmentDispatchTables(
       i === sackTotal ? [i.label, `${i.value} (${p.t.sackCount} ${p.L.sackSystem})`] : [i.label, i.value],
     ),
     ...p.vehicle.map((i): [string, string] => [i.label, i.value]),
+    ...(p.deliveryTo ? [[p.deliveryTo.label, p.deliveryTo.address ? `${p.deliveryTo.name} — ${p.deliveryTo.address}` : p.deliveryTo.name] as [string, string]] : []),
   ];
   const notes = [p.cfg.footerNote, meta.printNote].filter((n): n is string => !!n && !!n.trim());
   return {
@@ -771,7 +779,7 @@ export function renderShipmentDispatchHtml(
   snapshot: PrintedDocSnapshot,
   meta: RenderMeta = {},
 ): string {
-  const { cfg, lang, L, h, title, customerSub: subItems, headRight: rightItems, vehicle, sections, watermark: wmKind } =
+  const { cfg, lang, L, h, title, customerSub: subItems, headRight: rightItems, vehicle, deliveryTo, sections, watermark: wmKind } =
     shipmentDispatchParts(snapshot, meta);
   const t = (snapshot.doc as unknown as ShipmentDispatchDoc).totals;
   // Yoğunluk profili sayfa boyutundan çözülür; ortak chrome CSS'i oradan beslenir.
@@ -820,6 +828,10 @@ export function renderShipmentDispatchHtml(
 
   const vehicleRow = vehicle.length
     ? `<div class="meta-row">${vehicle.map((i) => `${i.label}: <b>${esc(i.value)}</b>`).join(" &nbsp;·&nbsp; ")}</div>`
+    : "";
+
+  const deliveryRow = deliveryTo
+    ? `<div class="meta-row">${deliveryTo.label}: <b>${esc(deliveryTo.name)}</b>${deliveryTo.address ? ` — ${esc(deliveryTo.address)}` : ""}</div>`
     : "";
 
   // Sayfa ayrımı: BASILAN listelerin ilki hariç hepsi yeni sayfadan başlar.
@@ -975,6 +987,7 @@ export function renderShipmentDispatchHtml(
     </header>
 
     ${vehicleRow}
+    ${deliveryRow}
     ${blocksTop}
     ${noteAtTop ? noteBlock + printNote : ""}
     ${urunSection}

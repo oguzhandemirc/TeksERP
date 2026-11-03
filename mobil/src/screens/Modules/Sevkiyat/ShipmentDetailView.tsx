@@ -12,6 +12,7 @@ import {
 import { getShipmentDispatchHtml } from '../../../services/shipmentDispatchPrint';
 import { formatFactory } from '../../../lib/factory-time';
 import TruncatedText from '../../../components/TruncatedText';
+import { deliveryToLine } from './deliveryTo';
 
 const n = (v: number): string => Math.round(Number(v) || 0).toLocaleString('tr-TR');
 
@@ -34,6 +35,7 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
   const d = q.data?.data ?? null;
 
   if (q.isLoading || !d) return <ActivityIndicator style={{ marginTop: 24 }} />;
+  const teslimYeri = deliveryToLine(d);
 
   const printNote = async (): Promise<void> => {
     try {
@@ -74,6 +76,11 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
         {d.driverName ? ` · ${d.driverName}` : ''}
         {d.carrier ? ` · ${d.carrier}` : ''}
       </Text>
+      {teslimYeri ? (
+        <Text style={styles.meta} testID="shipment-delivery-to">
+          Teslim yeri: {teslimYeri}
+        </Text>
+      ) : null}
       <Text style={styles.summary}>
         {d.summary.rollCount} top · {d.summary.sackCount} çuval · {n(d.summary.totalMeters)} m ·{' '}
         {n(d.summary.totalKg)} kg

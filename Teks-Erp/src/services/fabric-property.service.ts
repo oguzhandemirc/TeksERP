@@ -23,7 +23,7 @@ import { ApiResponse } from "../types/api.types";
 import prisma from "../lib/prisma";
 import { readServiceItemIdField, withServiceMapping } from "./helpers/service-item-mapping.helper";
 import { AppError } from "../utils/app-error";
-import { assertChoiceHasValues, assertSingleDefaultValue, type ConsumableItemField, consumableItemPatch, extractStationIds, readGramAmountField, readStitchCountField } from "./helpers/fabric-property-input.helper";
+import { assertChoiceHasValues, assertSingleDefaultValue, consumableItemPatch, type PropertyValueInput, extractStationIds, readGramAmountField, readStitchCountField } from "./helpers/fabric-property-input.helper";
 import { assertConsumableItemsTx } from "./helpers/consumable-item-link.helper";
 import { nextSeriesNo } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -33,6 +33,8 @@ import { gatedSoftDelete, gatedUpdate } from "./helpers/master-data-archive.help
 import { FABRIC_PROPERTY_ARCHIVE } from "./helpers/archive-gate/fabric-property-archive.helper";
 import { assertVariantCreate, assertVariantUpdate, readVariantOf } from "./helpers/property-variant.helper";
 import { TERIM } from "../constants/terim";
+import { HIERARCHY_SORT, listFabricPropertyHierarchy } from "./helpers/fabric-property-hierarchy.helper";
+import type { Request } from "express";
 
 /** Özellik kodu prefix'i — tek-tip kod formatı: `OZL + GGAAYY + NNNN`. */
 const PROPERTY_CODE_PREFIX = "OZL";
@@ -53,22 +55,6 @@ async function nextPropertyCode(): Promise<string> {
         select: { code: true, createdAt: true },
       })
       .then((rows) => rows.map((r) => ({ code: r.code, createdAt: r.createdAt }))), new Date());
-}
-
-/** SEÇİM tipli özelliğin değer satırı — istemci sözleşmesi (DÜZ, nested write DEĞİL). */
-export interface PropertyValueInput extends ConsumableItemField {
-  code: string;
-  name: string;
-  sortOrder?: number;
-  isActive?: boolean;
-  /** Gramaj kademesi → hizmet kalemi (H6). `undefined` = dokunma, `null` = eşlemeyi kaldır. */
-  serviceItemId?: string | null;
-  /** Brode deseni vuruş sayısı (VURUŞ fiyat birimi). `undefined` = dokunma, `null` = kaldır. */
-  stitchCount?: number | null;
-  /** Kurşun gramajı gr/m (ondalık metin). `undefined` = dokunma, `null` = kaldır. */
-  amount?: string | null;
-  /** Çeşit başına tek varsayılan. `undefined` = dokunma. */
-  isDefault?: boolean;
 }
 
 /**
@@ -207,6 +193,13 @@ async function replaceValuesTx(
 type ParsedFields = { stationIds: ReturnType<typeof extractStationIds>; values: ReturnType<typeof extractValues>; userId?: string };
 
 export class FabricPropertyService extends BaseService {
+  /** `sortBy=hierarchy` (K21): çeşit ebeveyninin altında, bağlam satırlarıyla; diğer sortBy'lar BaseService yolu. */
+  async findAll(req: Request): ReturnType<BaseService["findAll"]> {
+    if (req.query.sortBy !== HIERARCHY_SORT) return super.findAll(req);
+    this.assertListQueryShape(req);
+    return listFabricPropertyHierarchy(req, { findMany: (a) => this.delegate.findMany(a), include: this.config.defaultInclude, buildWhere: (p) => this.buildListWhere(p, req) });
+  }
+
   /**
    * Özellik kodu backend-authoritative: her zaman `OZL+GGAAYY+NNNN` günlük sıralı
    * üretilir; istemciden gelen `code` YOK SAYILIR. Eşzamanlı iki create aynı sıra

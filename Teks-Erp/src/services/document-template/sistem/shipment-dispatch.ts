@@ -178,6 +178,7 @@ const html = String.raw`<div class="sheet">
 {%- endcapture -%}
 {%- if arac != "" -%}<div class="meta-row">{{ arac }}</div>{%- endif -%}
 {%- endif -%}
+{%- if belge.teslim_yeri != nil and belge.teslim_yeri != "" -%}<div class="meta-row">Teslim Yeri: <b>{{ belge.teslim_yeri }}</b>{%- if belge.teslim_adresi != nil and belge.teslim_adresi != "" %} — {{ belge.teslim_adresi }}{%- endif -%}</div>{%- endif -%}
 {%- comment -%} Boş grid: isteğe bağlı alanlar (title/columnWidths/headers) nesne üzerinde gezilerek okunur. {%- endcomment -%}
 {%- assign grid_konum = "" -%}
 {%- if ayar.blankGrid != nil and ayar.blankGrid.enabled -%}
