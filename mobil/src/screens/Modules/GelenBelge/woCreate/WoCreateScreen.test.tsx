@@ -2,6 +2,7 @@
 import React, { type ReactNode } from 'react';
 import { fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../../test/render';
+import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
 import WoCreateScreen from './WoCreateScreen';
 
 const mockShortcuts = jest.fn();
@@ -29,6 +30,10 @@ jest.mock('./DocBatchView', () => {
   const { Text } = jest.requireActual('react-native');
   return { __esModule: true, default: (p: { route: { id: string }; multi: boolean; autoStart: boolean }) => <Text testID="belge-okut-gorunumu">{`${p.route.id}:${p.multi ? 'cok' : 'tek'}:${p.autoStart}`}</Text> };
 });
+jest.mock('../desk/DeskView', () => {
+  const { Text } = jest.requireActual('react-native');
+  return { __esModule: true, default: (p: { shortcuts: { id: string }[] }) => <Text testID="belge-masasi">{p.shortcuts.map((r) => r.id).join(',')}</Text> };
+});
 jest.mock('../DocScanScreen', () => {
   const { Text } = jest.requireActual('react-native');
   return { DocScanBody: () => <Text testID="eski-belge-tara">eski</Text> };
@@ -37,6 +42,7 @@ jest.mock('../DocScanScreen', () => {
 const route = (id: string, name: string, order: number, shortcut = true) => ({ id, name, isWorkOrderShortcut: shortcut, shortcutOrder: order, isActive: true });
 
 beforeEach(() => {
+  useDeviceSettingsStore.setState({ docDeskDevice: false });
   mockVisible = [{ key: 'HizliIsEmri' }, { key: 'GelenBelge' }];
   mockShortcuts.mockReset();
 });
@@ -95,5 +101,27 @@ describe('WoCreateScreen', () => {
     fireEvent.press(await s.findByTestId('kisayol-Kurşun&Tambur'));
     expect(s.queryByTestId('hizli-form')).toBeNull();
     expect(s.getByTestId('ie-belge-okut')).toBeTruthy();
+  });
+  it('⭐ K23 "Belge masası" karosu (kısayol varsa) → masa kipi kısayollarla; geri → seçici', async () => {
+    mockShortcuts.mockResolvedValue({ data: [route('r1', 'Kurşun&Tambur', 1), route('r2', 'Kurşun&DetayKK', 2)] });
+    const s = renderWithPaper(<WoCreateScreen />);
+    fireEvent.press(await s.findByTestId('ie-tur-belge-masasi'));
+    expect(s.getByTestId('belge-masasi').props.children).toBe('r1,r2');
+    expect(s.getByTestId('baslik').props.children).toBe('Belge masası');
+  });
+
+  it('K23 kısayol yoksa masa karosu yok; cihaz ayarı kapalıyken (varsayılan) seçici açılır', async () => {
+    mockShortcuts.mockResolvedValue({ data: [] });
+    const s = renderWithPaper(<WoCreateScreen />);
+    await waitFor(() => expect(s.getByTestId('ie-tur-belge-tara')).toBeTruthy());
+    expect(s.queryByTestId('ie-tur-belge-masasi')).toBeNull();
+    expect(s.queryByTestId('belge-masasi')).toBeNull();
+  });
+
+  it('⭐ K23 "Bu cihaz belge masası" açık → kısayollar gelince doğrudan masa kipi', async () => {
+    useDeviceSettingsStore.setState({ docDeskDevice: true });
+    mockShortcuts.mockResolvedValue({ data: [route('r1', 'Kurşun&Tambur', 1)] });
+    const s = renderWithPaper(<WoCreateScreen />);
+    expect(await s.findByTestId('belge-masasi')).toBeTruthy();
   });
 });
