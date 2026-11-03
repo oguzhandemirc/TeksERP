@@ -12,6 +12,22 @@ const UPLOAD_TIMEOUT_MS = 60_000;
 
 export interface InboundDocTabletContext {
   customers: { id: string; name: string }[];
+  /** Belge masası (K23): kurşun istasyonlarının aktif makineleri. Eski sunucu göndermez → makine seçimi çizilmez. */
+  kursunMachines?: DeskKursunMachine[];
+}
+
+export interface DeskKursunMachine {
+  id: string;
+  code: string;
+  name: string;
+  stationId: string;
+}
+
+/** `GET /gelen-belge/rota-onerisi` — sahibin rota önerisi (plan ucuyla tek zincir). */
+export interface DeskRouteSuggestion {
+  routeTemplateId: string | null;
+  routeName: string | null;
+  source: 'LAST_WORK_ORDER' | 'CUSTOMER_ROUTE' | 'FACTORY_DEFAULT' | null;
 }
 
 export interface CreateDraftNoteBody {
@@ -143,7 +159,14 @@ export interface CreateWorkOrderFromNoteBody {
   targetValues?: { propertyId: string; valueId: string }[];
   notes?: string;
   /** S1 çok partili belge (≥2 parti); yalnız `/partiler` çok parti dediğinde gider (eski sunucu strict gövdeyle 400 verir). */
-  parties?: { blockNo: number; batchNo: string | null; meters: number }[];
+  parties?: {
+    blockNo: number;
+    batchNo: string | null;
+    meters: number;
+    /** Belge masası: parti başına gramaj / plan makinesi (verilmezse gövdedekiler). */
+    targetValues?: { propertyId: string; valueId: string }[];
+    stepPlanning?: { sequence: number; plannedMachineId?: string }[];
+  }[];
   mode?: MultiPartyMode;
 }
 
@@ -231,6 +254,12 @@ export const inboundDocService = {
 
   tabletContext: (): Promise<ApiResponse<InboundDocTabletContext>> =>
     apiClient.get<ApiResponse<InboundDocTabletContext>>('/gelen-belge/tablet-baglam').then((r) => r.data),
+
+  /** Eski sunucuda uç yok (404) → çağıran kısayol sırasına düşer. */
+  routeSuggestion: (ownerCustomerId: string | null): Promise<DeskRouteSuggestion> =>
+    apiClient
+      .get<ApiResponse<DeskRouteSuggestion>>('/gelen-belge/rota-onerisi', { params: ownerCustomerId ? { sahip: ownerCustomerId } : {} })
+      .then((r) => r.data.data),
 
   createDraftNote: (body: CreateDraftNoteBody): Promise<DraftNote> =>
     apiClient.post<ApiResponse<DraftNote>>('/gelen-belge/irsaliyeler', body).then((r) => r.data.data),

@@ -1,6 +1,6 @@
 // Belgeden terbiye iş emri (K6/K7/K8) — satır listesi + "Hepsini kaydet". ONLINE-ONLY: kayıt top doğurur, kuyruğa alınmaz.
 // Kip sunucu ayarından (formApproval); kapalıyken satır taslak olarak kalır (bugünkü ayrı onay). Satır başına sonuç.
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { onlineManager, useQuery } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { useAttemptToken } from '../../../../offline/attemptToken';
@@ -9,6 +9,7 @@ import { fabricPropertyService, type KursunCustomerDefaults, type KursunGramajCa
 import { inboundDocService, type InboundNoteDetail, type NotePartiesView } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { printTravelerCardForWorkOrder } from '../../../../services/travelerCardPrint';
+import { kursunStepOf } from '../desk/deskPlan';
 import { initialMultiParty, type MultiPartyDraft } from './partyDraft';
 import { loadRecentOwners, rememberOwner } from './recentOwners';
 import {
@@ -50,6 +51,8 @@ interface SaveCtx {
   mode: FormApproval;
   routeId: string;
   gramajPropertyId: string | null;
+  /** Belge masası plan makinesi için rotanın kurşun adımı sırası (yoksa makine gitmez). */
+  kursunSequence: number | null;
   /** Satır anahtarlı deneme token'ı (belirsiz hatada yapışır). */
   token: string;
 }
@@ -72,7 +75,7 @@ async function saveRowOnce(ctx: SaveCtx, r: DocRow, form: RowForm): Promise<{ re
   const issues = rowIssues(form);
   if (issues.length) return { result: { kind: 'FAILED', text: issues.join(' ') } };
   try {
-    const body = buildCreateBody(form, { clientToken: ctx.token, routeTemplateId: ctx.routeId, gramajPropertyId: ctx.gramajPropertyId });
+    const body = buildCreateBody(form, { clientToken: ctx.token, routeTemplateId: ctx.routeId, gramajPropertyId: ctx.gramajPropertyId, kursunSequence: ctx.kursunSequence });
     return { result: openedResult(await inboundDocService.createWorkOrder(r.noteId, body)) };
   } catch (e) {
     if (!isFormApprovalDisabled(e)) return { result: { kind: 'FAILED', text: errorText(e) }, error: e };
@@ -160,6 +163,7 @@ export function useWoRows(route: ProductionRoute) {
   const { showGramaj, catalog, defaults } = useGramajCatalog(route);
   const [rows, setRows] = useState<DocRow[]>([]);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [recent, setRecent] = useState<string[]>([]);
 
   useEffect(() => void loadRecentOwners().then(setRecent), []);
@@ -211,18 +215,21 @@ export function useWoRows(route: ProductionRoute) {
   const pending = rows.filter((r) => r.form && r.detail && !isDone(r));
 
   const saveAll = async () => {
-    if (saving || pending.length === 0) return;
+    // Ref: çift dokunuşta `saving` durumu henüz güncellenmemiş olur — ikinci çağrı aynı satırı yeniden göndermesin.
+    if (savingRef.current || pending.length === 0) return;
     if (!onlineManager.isOnline()) {
       Toast.show({ type: 'error', text1: 'Sunucuya bağlantı yok', text2: 'Kayıt çevrimiçi yapılır; bağlantı gelince yeniden deneyin.' });
       return;
     }
+    savingRef.current = true;
     setSaving(true);
     const errors: unknown[] = [];
     let owners = recent;
     try {
       // Sırayla: her satır ayrı tx; biri düşerse diğerleri etkilenmez, sonuç satırda kalır.
       for (const r of pending) {
-        const { result, error } = await saveRowOnce({ mode, routeId: route.id, gramajPropertyId: catalog.propertyId, token: attempt.keyed(r.noteId) }, r, r.form!);
+        const ctx = { mode, routeId: route.id, gramajPropertyId: catalog.propertyId, kursunSequence: kursunStepOf(route)?.sequence ?? null, token: attempt.keyed(r.noteId) };
+        const { result, error } = await saveRowOnce(ctx, r, r.form!);
         if (error !== undefined) errors.push(error);
         setResult(r.noteId, result);
         if (result.kind !== 'FAILED' && r.form!.ownerCustomerId) owners = await rememberOwner(owners, r.form!.ownerCustomerId);
@@ -230,6 +237,7 @@ export function useWoRows(route: ProductionRoute) {
       }
     } finally {
       setRecent(owners);
+      savingRef.current = false;
       setSaving(false);
     }
     // Deneme sonucu: belirsiz hata varsa satır token'ları yapışır (yeniden "Hepsini kaydet" aynı kaydı tekrarlamaz).
