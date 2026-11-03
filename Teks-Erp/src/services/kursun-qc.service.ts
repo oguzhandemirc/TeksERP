@@ -14,6 +14,7 @@
 // Tespitte `detectedAtStepId` + `detectedByUserId` + `detectedAt` doldurulur.
 // =============================================================================
 
+import { stationWorkSearchWhere } from "./helpers/workorder-doc-search.helper";
 import { ACTIVE_OPERATION, OWN_OPERATION, prepareWidthTracedStepOpTx, revokeWidthTracedStepOperationsTx } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT, reopenClosedMovementsTx, revokeRollMovements } from "./helpers/roll-movement.helper";
 import { readActiveTargetValues } from "./helpers/workorder-target-value.helper";
@@ -409,7 +410,7 @@ export class KursunQcService {
    * `stationId` (oturum istasyonu, KQ-D2) verilirse yalnız o istasyonun adımları;
    * oturumsuz istek bugünkü gibi tüm akış adımlarını görür.
    */
-  async listOpenCards(stationId: string | null = null, sessionMachineId: string | null = null): Promise<
+  async listOpenCards(stationId: string | null = null, q: string | null = null, sessionMachineId: string | null = null): Promise<
     ApiResponse<
       Array<{
         cardId: string;
@@ -437,6 +438,7 @@ export class KursunQcService {
     const OPEN_CARDS_CAP = 500;
     // K16: ASSIGNED_ONLY_WARN'da yalnız bu makineye planlı ya da atanmamış işler (oturum makinesi bilinmiyorsa süzgeç yok).
     const machineWhere = assignedMachineListWhere(await readKursunMachineAssignMode(), sessionMachineId);
+    const searchWhere = q ? stationWorkSearchWhere(q) : null;
     const steps = await prisma.workOrderStep.findMany({
       where: {
         AND: [machineWhere],
@@ -461,6 +463,8 @@ export class KursunQcService {
         // Uygun OLMAYAN adımlar zaten listede KALMALI (tablet onları işlemeye
         // devam eder) — kör bir bayrak filtresi onları da yutardı.
         kursunBypasses: { none: PENDING_BYPASS_WHERE },
+        // K17: fiş/evrak/parti/İE no araması sunucuda (boş q = bugünkü liste).
+        ...(searchWhere ? { workOrder: searchWhere } : {}),
       },
       select: {
         id: true,

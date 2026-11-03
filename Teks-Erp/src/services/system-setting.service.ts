@@ -430,6 +430,9 @@ export const SETTING_KEYS = {
   /** İş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır mı (varsayılan false = bugünkü: elle).
    *  Tek yazar `PUT /api/gelen-belge/ayarlar`; flag yüküne konmaz. */
   PRODUCTION_REFAKAT_AUTO_PRINT: "production.refakatAutoPrint",
+  /** İstasyon tabletinde (kurşun · KK · tambur) "Belge okut": boyahane belgesinin fotoğrafından iş emri bulunur (K17).
+   *  Varsayılan false = bugünkü (düğme yok). Tek yazar `PUT /api/gelen-belge/ayarlar`; flag yüküne konmaz. */
+  GELEN_BELGE_STATION_DOC_LOOKUP: "gelenBelge.stationDocLookup",
   /** Z1 ÜRETİM BELGE ZİNCİRİ (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bugünkü davranış (bağ opsiyonel). */
   DEVERE_BEAM_WEAVING_LINK_REQUIRED: "devere.beamWeavingLinkRequired",
   DOKUMA_RUN_WEAVING_ORDER_REQUIRED: "dokuma.runWeavingOrderRequired",
@@ -6624,6 +6627,16 @@ export async function readIncomingDocAutoWorkOrder(tx?: Pick<typeof prisma, "sys
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** İstasyonda belgeden iş emri bulma (K17); kayıt yok / bozuk → false (bugünkü: istasyonda "Belge okut" yok). */
+export async function readIncomingDocStationLookup(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.GELEN_BELGE_STATION_DOC_LOOKUP },
     select: { value: true },
   });
   return asBoolean(setting?.value);

@@ -18,6 +18,7 @@
 //   · `gelenBelge.autoWorkOrderPatternless` — SKIP (varsayılan) | OPEN (işlem değeri çözülemeyen grupta hedefsiz iş emri)
 //   · `gelenBelge.formApproval` — SEPARATE (varsayılan, ayrı onay) | WITH_WORK_ORDER (iş emri formundan okutulan belgeyi iş emri açan kaydeder)
 //   · `production.refakatAutoPrint` — iş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır (varsayılan false)
+//   · `gelenBelge.stationDocLookup` — istasyon tabletinde "Belge okut" ile iş emri bulma (K17; varsayılan false)
 // Ürün kapısı tek karar: yaşam döngüsü `assertItemUsable(NEW_STOCK)` + top doğurabilen tür ALLOWLIST'i
 // (`ROLL_BEARING_ITEM_TYPES`; yeni tür — ör. SERVICE — eklendiği gün kendiliğinden dışarıda kalır).
 // =============================================================================
@@ -70,6 +71,7 @@ import {
   FORM_APPROVAL_VALUES,
   type IncomingDocFormApprovalMode,
   readRefakatAutoPrint,
+  readIncomingDocStationLookup,
 } from "./system-setting.service";
 
 /** Top doğurabilen ürün türleri — `InventoryService.createInitialEntry` kapısıyla aynı küme (yalnız kumaş). */
@@ -91,6 +93,7 @@ export const INCOMING_DOC_DEDICATED_SETTING_KEYS: ReadonlySet<string> = new Set(
   SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS,
   SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL,
   SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT,
+  SETTING_KEYS.GELEN_BELGE_STATION_DOC_LOOKUP,
 ]);
 
 export interface DefaultItemView {
@@ -137,6 +140,8 @@ export interface IncomingDocSettings {
   defaultFormApproval: IncomingDocFormApprovalMode;
   /** İş emri açılınca refakat kartı kendiliğinden yazdırılır mı (varsayılan false). */
   refakatAutoPrint: boolean;
+  /** İstasyon tabletinde "Belge okut" ile iş emri bulma (varsayılan false). */
+  stationDocLookup: boolean;
 }
 
 /**
@@ -197,6 +202,7 @@ export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
     formApproval: await readIncomingDocFormApproval(),
     defaultFormApproval: DEFAULT_FORM_APPROVAL,
     refakatAutoPrint: await readRefakatAutoPrint(),
+    stationDocLookup: await readIncomingDocStationLookup(),
   };
 }
 
@@ -218,6 +224,7 @@ export interface IncomingDocSettingsInput {
   autoWorkOrderPatternless?: AutoWorkOrderPatternlessMode;
   formApproval?: IncomingDocFormApprovalMode;
   refakatAutoPrint?: boolean;
+  stationDocLookup?: boolean;
 }
 
 /**
@@ -323,6 +330,9 @@ async function updateReadOptions(input: IncomingDocSettingsInput, userId: string
       throw AppError.badRequest("Geçersiz seçenek: OUTPUT ya da INPUT olmalı.", { code: "VALIDATION_ERROR" });
     }
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_HEADER_LINE_SOURCE, input.headerLineMeterSource, "Gelen belge: tablosuz belgede satır metresi kaynağı (OUTPUT çıkış / INPUT giriş)", userId);
+  }
+  if (input.stationDocLookup !== undefined) {
+    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_STATION_DOC_LOOKUP, input.stationDocLookup, `Gelen belge: istasyon tabletinde belge okutarak ${TERIM.terbiyeIsEmri.tekilKucuk} bulma`, userId);
   }
   if (input.autoSenderFromTemplate !== undefined) {
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_AUTO_SENDER, input.autoSenderFromTemplate, "Gelen belge: okunan şablonun gönderen carisi boş gönderen alanına yazılır", userId);
