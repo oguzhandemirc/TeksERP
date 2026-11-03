@@ -94,7 +94,10 @@ try {
     const tp = readWebHardeningConfig(process.env, () => {}).trustProxy;
     const hosted = isHostedInstallation();
     const red = hostedBootRefusal(tp, hosted); // TRUST_PROXY=true ya da bilinen/zayıf JWT sırrı (D7)
-    if (red) { hata("boot", red); process.exit(1); }
+    if (red) {
+        hata("boot", red);
+        process.exit(1);
+    }
     if (hosted && tp === null) uyari("web-hardening", "barındırılan kurulumda TRUST_PROXY yok — ters vekil arkasındaysa bütün ziyaretçiler tek giriş-kilidi kovasına düşer (doğru değer genelde TRUST_PROXY=1).");
 }
 
@@ -203,9 +206,7 @@ function startLanListener(): Server {
         satir(`                swagger=${hardening.swaggerEnabled ? "açık" : "kapalı"}`
             + ` · hsts=${hardening.httpsEnabled ? "açık" : "kapalı"}`
             + ` · girişKilidiKapsamı=${hardening.loginLockoutScope}`);
-        satir(`                hızSınırı=${rl.enabled
-            ? `açık (${rl.windowMs / 1000}sn · yazma ${rl.writeEnabled ? rl.writeMax : "sayılmaz"} · giriş ${rl.loginMax})`
-            : "kapalı"}`);
+        satir(`                hızSınırı=${rl.enabled ? `açık (${rl.windowMs / 1000}sn · yazma ${rl.writeEnabled ? rl.writeMax : "sayılmaz"} · giriş ${rl.loginMax})` : "kapalı"}`);
     }
     lanTlsBanner();
     if (JOBS_OFF) {
