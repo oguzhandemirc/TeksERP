@@ -4,7 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 import { act, renderHook, screen } from "@testing-library/react";
 import { useState } from "react";
 import { renderWithProviders } from "@/test/render";
-import { KursunStepFields, KursunStepSummary, isKursunStep, kursunDetailText, useKursunGramajBinding } from "./KursunStepFields";
+import { KursunStepFields, KursunStepSummary, isKursunStep, kursunDetailText } from "./KursunStepFields";
+import { reconcileStepDefaults } from "./stepDefaultTargets";
+import type { DefaultTarget, DefaultTargetsByStation } from "@/lib/station-default-targets";
 import { stepsToCustom } from "./workOrderPrefill";
 import type { DesignerStep } from "./RouteDesignerDialog";
 
@@ -82,70 +84,40 @@ describe("K20 kurşun seçim özeti (adım çipi + önizleme)", () => {
   });
 });
 
-function useHarness(initialHas: boolean, options = OPTIONS) {
-  const [has, setHas] = useState(initialHas);
-  const [value, setValue] = useState<string | null>(null);
-  useKursunGramajBinding({ enabled: true, hasKursun: has, options, value, setValue });
-  return { value, setValue, setHas };
-}
-
-describe("useKursunGramajBinding", () => {
-  it("kurşun adımı yokken hedef boş; adım girince varsayılan ön seçilir", () => {
-    const { result, rerender } = renderHook(() => useHarness(false));
-    expect(result.current.value).toBeNull();
-    act(() => result.current.setHas(true));
-    rerender();
-    expect(result.current.value).toBe("v50");
-  });
-
-  it("kullanıcı 'Hedef yok' seçerse varsayılan geri gelmez; adım silinince hedef temizlenir", () => {
-    const { result, rerender } = renderHook(() => useHarness(true));
-    expect(result.current.value).toBe("v50");
-    act(() => result.current.setValue(null));
-    rerender();
-    expect(result.current.value).toBeNull();
-    act(() => result.current.setValue("v25"));
-    rerender();
-    act(() => result.current.setHas(false));
-    rerender();
-    expect(result.current.value).toBeNull();
-  });
-
-  it("varsayılan alanı gelmezse (eski backend) hiçbiri seçilmez", () => {
-    const { result } = renderHook(() => useHarness(true, [{ id: "v25", name: "25 gr" }]));
-    expect(result.current.value).toBeNull();
-  });
+const T = (o: Partial<DefaultTarget> & Pick<DefaultTarget, "propertyId">): DefaultTarget => ({
+  propertyCode: o.propertyId, propertyName: o.propertyId, valueType: "FLAG", mode: "AUTO", variantOfPropertyId: null,
+  valueId: null, valueCode: null, valueName: null, source: null, ...o,
 });
+const BY = {
+  sK: [T({ propertyId: "KURSUN" }), T({ propertyId: "GR", valueType: "CHOICE", mode: "REQUIRED", valueId: "v40", source: "VALUE_DEFAULT" })],
+  sT: [T({ propertyId: "KAT", propertyCode: "KAT", valueType: "CHOICE", mode: "OPTIONAL", valueId: "k4", valueCode: "4-KAT", source: "STATION" })],
+};
+const IN = (steps: Array<[string, string]>, byStation: DefaultTargetsByStation | null = BY) => ({
+  steps: steps.map(([clientId, stationId]) => ({ clientId, stationId })), byStation, failed: false, gramajPropertyId: "GR",
+  gramajAllowed: steps.some(([, s]) => s === "sK"),
+});
+const EMPTY = { propertyIds: [] as string[], gramaj: null, fold: "" };
 
-function useCustomerHarness(defaults: Record<string, string>) {
-  const [customerId, setCustomerId] = useState<string | null>(null);
-  const [value, setValue] = useState<string | null>(null);
-  useKursunGramajBinding({ enabled: true, hasKursun: true, options: OPTIONS, value, setValue, customerId, customerDefaults: defaults });
-  return { value, setValue, setCustomerId };
-}
-
-describe("S3: müşterinin varsayılan gramajı", () => {
-  it("müşteri seçilince müşterinin gramajı; varsayılanı olmayan müşteride istasyonunki", () => {
-    const { result, rerender } = renderHook(() => useCustomerHarness({ k1: "v25" }));
-    expect(result.current.value).toBe("v50");
-    act(() => result.current.setCustomerId("k1"));
-    rerender();
-    expect(result.current.value).toBe("v25");
-    act(() => result.current.setCustomerId("k2"));
-    rerender();
-    expect(result.current.value).toBe("v50");
+describe("K22 rota adımı ön seçimi (reconcileStepDefaults)", () => {
+  it("⭐ istasyon seçilince AUTO bayrak + gramaj + kat ön seçilir; cevap gelmeden dokunulmaz", () => {
+    expect(reconcileStepDefaults(EMPTY, {}, IN([["a", "sK"]], {})).state).toEqual(EMPTY);
+    const r = reconcileStepDefaults(EMPTY, {}, IN([["a", "sK"], ["b", "sT"]]));
+    expect(r.state).toEqual({ propertyIds: ["KURSUN"], gramaj: "v40", fold: "4-KAT" });
   });
-  it("elle seçim müşteri değişince EZİLMEZ; listede olmayan (pasif) müşteri değeri istasyonunkine düşer", () => {
-    const { result, rerender } = renderHook(() => useCustomerHarness({ k1: "v25", k2: "pasif" }));
-    act(() => result.current.setValue("v25"));
-    rerender();
-    act(() => result.current.setCustomerId("k2"));
-    rerender();
-    expect(result.current.value).toBe("v25");
-    const h2 = renderHook(() => useCustomerHarness({ k2: "pasif" }));
-    act(() => h2.result.current.setCustomerId("k2"));
-    h2.rerender();
-    expect(h2.result.current.value).toBe("v50");
+  it("⭐ kullanıcı seçimi EZİLMEZ (dolu gramaj/kat, elle kaldırılan bayrak geri gelmez)", () => {
+    const r1 = reconcileStepDefaults({ propertyIds: [], gramaj: "v25", fold: "2-KAT" }, {}, IN([["a", "sK"], ["b", "sT"]]));
+    expect(r1.state.gramaj).toBe("v25");
+    expect(r1.state.fold).toBe("2-KAT");
+    const r2 = reconcileStepDefaults({ ...r1.state, propertyIds: [] }, r1.records, IN([["a", "sK"], ["b", "sT"]]));
+    expect(r2.state.propertyIds).toEqual([]);
+  });
+  it("⭐ adım çıkınca yalnız o adımın tohumu temizlenir; uç düşerse ön seçim yok", () => {
+    const r1 = reconcileStepDefaults(EMPTY, {}, IN([["a", "sK"], ["b", "sT"]]));
+    const r2 = reconcileStepDefaults(r1.state, r1.records, IN([["a", "sK"]]));
+    expect(r2.state).toEqual({ propertyIds: ["KURSUN"], gramaj: "v40", fold: "" });
+    const r3 = reconcileStepDefaults(r2.state, r2.records, IN([]));
+    expect(r3.state).toEqual(EMPTY);
+    expect(reconcileStepDefaults(EMPTY, {}, { ...IN([["a", "sK"]], null), failed: true }).state).toEqual(EMPTY);
   });
 });
 

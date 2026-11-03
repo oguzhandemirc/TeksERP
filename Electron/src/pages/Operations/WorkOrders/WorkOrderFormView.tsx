@@ -43,8 +43,10 @@ import { useNumberSourceState } from "@/lib/number-source";
 import { RouteEditor } from "./RouteEditor";
 import { TargetItemPicker } from "./TargetItemPicker";
 import { useFoldValues } from "@/hooks/useFoldValues";
-import { useKursunCustomerDefaults, useKursunGramajCatalog } from "@/lib/kursun-gramaj";
-import { KURSUN_SETTINGS_TITLE, KursunStepFields, KursunStepSummary, isKursunStep, useKursunGramajBinding } from "./KursunStepFields";
+import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
+import { useStationDefaultTargets } from "@/lib/station-default-targets";
+import { KURSUN_SETTINGS_TITLE, KursunStepFields, KursunStepSummary, isKursunStep } from "./KursunStepFields";
+import { defaultsSettled, useStepDefaultsBinding } from "./stepDefaultTargets";
 import { useDesignerSteps } from "./useDesignerSteps";
 import { BelgeOkutButton } from "./BelgeOkutButton";
 import type { FasonStepPlan } from "./FasonPlanningDialog";
@@ -221,31 +223,41 @@ export function WorkOrderFormView({
   // 60 sn cache'li tek küçük istek.
   const { values: foldValues, isEmpty: foldNotConfigured } = useFoldValues();
   const { catalog: kursunCatalog } = useKursunGramajCatalog();
-  const { defaults: kursunCustomerDefaults } = useKursunCustomerDefaults(!isEdit && hasKursun);
   // Gramaj yalnız yeni İE'de seçilir (düzenlemede detaydaki kart); gösterilmeyen değer özete de girmez.
   const showKursunGramaj = !isEdit && Boolean(kursunCatalog.propertyId);
   const shownKursunGramaj = showKursunGramaj ? (form.watch("kursunTargetValueId") ?? null) : null;
-  // Gramaj kurşun adımının kartında: adım girince varsayılan (müşterininki, yoksa istasyonunki), çıkınca temizlenir.
-  useKursunGramajBinding({
+  // K22: istasyon seçilince sunucu çözücüsünün ön seçimi (AUTO bayrak, varsayılan açık özellik, gramaj müşteri >
+  // istasyon > isDefault, kat); kullanıcı seçimi ezilmez, adım çıkınca o adımın tohumu temizlenir.
+  const stepStations = routeSteps.map((s) => ({ clientId: s.clientId, stationId: s.stationId }));
+  const defaults = useStationDefaultTargets(stepStations.map((s) => s.stationId), pickedLines[0]?.customerId ?? null, !isEdit);
+  const defaultsInput = { steps: stepStations, byStation: defaults.byStation, failed: defaults.failed };
+  useStepDefaultsBinding({
+    ...defaultsInput,
     enabled: !isEdit,
-    hasKursun,
-    options: kursunCatalog.options,
-    value: form.watch("kursunTargetValueId") ?? null,
-    setValue: (id) => form.setValue("kursunTargetValueId", id),
-    customerId: pickedLines[0]?.customerId ?? null,
-    customerDefaults: kursunCustomerDefaults,
+    gramajPropertyId: kursunCatalog.propertyId,
+    gramajAllowed: hasKursun,
+    state: {
+      propertyIds: form.watch("targetPropertyIds") ?? [],
+      gramaj: form.watch("kursunTargetValueId") ?? null,
+      fold: form.watch("foldType") ?? "",
+    },
+    setPropertyIds: (ids) => form.setValue("targetPropertyIds", ids),
+    setGramaj: (id) => form.setValue("kursunTargetValueId", id),
+    setFold: (code) => form.setValue("foldType", code),
   });
+  const defaultsReady = defaultsSettled(defaultsInput);
 
   // Ön-seçim: yeni iş emrinde katalogun İLK değeri seçili gelsin (eski davranış
   // "2-KAT sabit ön-seçili" idi). Katalogdan okunduğu için 2-KAT'ı olmayan bir
   // fabrikada da geçerli bir değer seçilir. Kullanıcı bir kez dokunduysa
   // (`value` dolu) ya da düzenleme modundaysak KARIŞMAZ.
+  // K22: istasyon varsayılanı (ör. Tambur → 4 Kat) önce gelir; bu yedek ancak cevap okunduktan sonra koşar.
   useEffect(() => {
     const first = foldValues[0];
-    if (isEdit || !hasTambur || !first) return;
+    if (isEdit || !hasTambur || !first || !defaultsReady) return;
     if (form.getValues("foldType")) return;
     form.setValue("foldType", first.code);
-  }, [isEdit, hasTambur, foldValues, form]);
+  }, [isEdit, hasTambur, foldValues, form, defaultsReady]);
 
   // Mount + workOrder kimliği değişince formu tohumla. (Tam sayfa: her gezinme
   // taze mount → modal `open` bayrağına ihtiyaç yok.)

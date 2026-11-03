@@ -3,13 +3,13 @@
 // =============================================================================
 // Gramaj eskiden rotanın altında ayrı alandı; artık kurşun adımının kartında. Saklama
 // bugünkü gibi WorkOrderTargetValue (İE'de tek kurşun adımı). Makine yalnız ÖNERİ.
-// K20: "işlem + işlem parametresi" — Kurşunlu (özellik = yapılan iş) + gramaj (parametre) + makine (kaynak)
+// K20: "işlem + işlem parametresi" — Kurşun (özellik = yapılan iş) + gramaj (parametre) + makine (kaynak)
 // adım kartında TEK "Kurşun ayarları" kutusunda; seçim adım çipinde ve önizlemede yazar. Veri modeli aynı.
 // =============================================================================
-import { useEffect, useRef, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { GramajChoiceButtons } from "@/components/kursun/GramajChoiceButtons";
 import { PlannedMachineButtons, usePlannedMachines } from "@/components/kursun/PlannedMachineButtons";
-import { customerGramajId, type GramajOption, type KursunCustomerDefaults } from "@/lib/kursun-gramaj";
+import type { GramajOption } from "@/lib/kursun-gramaj";
 import type { DesignerStep } from "./RouteDesignerDialog";
 
 /** Kurşun adımı = sunucunun `isKursunStation`ı (StationProperty KURSUN/AUTO); alan yoksa (eski sunucu / WO detayı) PROCESS_QC türü. */
@@ -17,45 +17,7 @@ export function isKursunStep(step: Pick<DesignerStep, "stationKind" | "isKursunS
   return step.isKursunStation ?? step.stationKind === "PROCESS_QC";
 }
 
-/**
- * Hedef gramajı kurşun adımının varlığına bağlar: adım ROTAYA GİRİNCE varsayılan ön seçilir
- * (kullanıcı seçimi ezilmez), adım ÇIKINCA hedef temizlenir. S3: varsayılan = müşterinin cari kartındaki
- * gramaj, yoksa istasyonunki; müşteri değişince değer hâlâ son ön seçimse yenisine geçer (elle seçim kalır).
- */
-export function useKursunGramajBinding(params: {
-  enabled: boolean;
-  hasKursun: boolean;
-  options: readonly GramajOption[];
-  value: string | null;
-  setValue: (id: string | null) => void;
-  customerId?: string | null;
-  customerDefaults?: KursunCustomerDefaults;
-}): void {
-  const { enabled, hasKursun, options, value, setValue, customerId, customerDefaults } = params;
-  // undefined = henüz ön seçilmedi; aksi halde son OTOMATİK seçilen değer.
-  const seeded = useRef<string | undefined>(undefined);
-  const target = customerGramajId(options, customerDefaults ?? NO_DEFAULTS, customerId);
-  useEffect(() => {
-    if (!enabled) return;
-    if (!hasKursun) {
-      seeded.current = undefined;
-      if (value !== null) setValue(null);
-      return;
-    }
-    if (!target) return;
-    if (seeded.current === undefined) {
-      seeded.current = target;
-      if (value === null) setValue(target);
-      return;
-    }
-    if (target !== seeded.current && value === seeded.current) {
-      seeded.current = target;
-      setValue(target);
-    }
-  }, [enabled, hasKursun, target, value, setValue]);
-}
-
-const NO_DEFAULTS: KursunCustomerDefaults = Object.freeze({});
+// Gramajın rota adımına bağı (adım girince ön seçim, çıkınca temizlik) K22 ile genellendi: `stepDefaultTargets.ts`.
 
 interface Props {
   step: DesignerStep;
