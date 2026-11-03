@@ -41,7 +41,8 @@ async function claimPendingForDevice(id: string): Promise<number | null> {
 }
 
 /** Cihaz okumasını işler; atılan hata ya da kaybedilen sahiplik → READING'i (yalnız bu denemenin damgasıyla) PENDING'e bırakır. */
-async function readOnDevice(id: string, attempts: number, result: OcrResult, process: ProcessFn, userId: string): Promise<DeviceReadOutcome> {
+async function readOnDevice(c: { id: string; attempts: number; result: OcrResult; userId: string }, process: ProcessFn): Promise<DeviceReadOutcome> {
+  const { id, attempts, result, userId } = c;
   const durationMs = Math.round(result.durationMs ?? 0);
   const outcome = await process(id, "", async () => ({ ok: true, result, engine: "mlkit", version: null, durationMs }))
     .catch((err: unknown) => {
@@ -66,7 +67,7 @@ export async function uploadScanWithDeviceRead(input: DocumentScanInput & { clie
   if (!device || r.scan.mimeType === PDF_MIME) return { ...r, deviceOcr: null as DeviceReadOutcome };
   const attempts = !r.duplicate && r.scan.status === "READING" ? r.scan.attempts : r.scan.status === "PENDING" ? await claimPendingForDevice(r.scan.id) : null;
   if (attempts === null) return { ...r, deviceOcr: null as DeviceReadOutcome };
-  const deviceOcr = await readOnDevice(r.scan.id, attempts, device, process, userId);
+  const deviceOcr = await readOnDevice({ id: r.scan.id, attempts, result: device, userId }, process);
   const scan = await prisma.documentScan.findUniqueOrThrow({ where: { id: r.scan.id }, select: SCAN_SELECT });
   return { ...r, scan, deviceOcr };
 }

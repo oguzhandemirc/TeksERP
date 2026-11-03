@@ -78,13 +78,11 @@ const Money = (label: string) => z.coerce.number().positive(`${label} sıfırdan
 const ScanBody = z.strictObject({
   contentBase64: z.string().min(1, "Dosya içeriği boş"),
   noteId: Id.nullable().optional(),
-  pageNo: z.coerce.number().int().min(1).max(99).nullable().optional(),
-  regionNo: z.coerce.number().int().min(1).max(9).nullable().optional(),
+  pageNo: z.coerce.number().int().min(1).max(99).nullable().optional(), regionNo: z.coerce.number().int().min(1).max(9).nullable().optional(),
   barcodeText: optText(120),
   // D7: tablet özeti kendisi hesaplar; uyuşmazlık 400 DOCUMENT_SCAN_HASH_MISMATCH (eski istemci göndermez).
   sha256: z.string().regex(/^[0-9a-fA-F]{64}$/, "Özet 64 onaltılık karakter olmalı").nullable().optional(),
-  // S16c cihazda OCR: katı şema serviste (`parseClientOcr`) — ihlal ayrı kodla 400 CLIENT_OCR_INVALID (tablet clientOcr'sız tekrarlar).
-  clientOcr: z.unknown().optional(),
+  clientOcr: z.unknown().optional(), // S16c: katı şema serviste (`parseClientOcr`) — ihlal 400 CLIENT_OCR_INVALID (tablet clientOcr'sız tekrarlar)
 });
 const Header = {
   ownerCustomerId: Id.nullable().optional(),
