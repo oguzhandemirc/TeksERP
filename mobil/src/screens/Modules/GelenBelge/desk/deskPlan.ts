@@ -52,9 +52,11 @@ export function withDeskPlan(
   opts: PlanOpts,
 ): CreateWorkOrderFromNoteBody {
   const out: CreateWorkOrderFromNoteBody = { ...body };
-  const top = planOf(f.machineId, opts.kursunSequence);
+  // Kip ekranda neyi gösteriyorsa o gider: PER_PARTY'de üst makine yedek olmaz; SINGLE'da sunucu parti alanlarını okumaz.
+  const perParty = !!f.multi && f.multi.mode === 'PER_PARTY';
+  const top = perParty ? undefined : planOf(f.machineId, opts.kursunSequence);
   if (top) out.stepPlanning = top;
-  if (!f.multi || !out.parties) return out;
+  if (!perParty || !out.parties) return out;
   out.parties = out.parties.map((p) => {
     const row = f.multi!.rows.find((r) => r.blockNo === p.blockNo);
     const plan = planOf(row?.machineId, opts.kursunSequence);

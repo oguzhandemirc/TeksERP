@@ -67,6 +67,18 @@ describe('withDeskPlan / buildCreateBody', () => {
     expect(body.targetValues).toEqual([{ propertyId: 'prop', valueId: 'g40' }, { propertyId: 'br', valueId: 'b1' }]);
   });
 
+  it('çok parti + SINGLE: parti seçimleri gitmez (sunucu okumaz), makine üst düzeye gider', () => {
+    const multi = { mode: 'SINGLE' as const, rows: [{ blockNo: 1, batchNo: 'P1', meters: 50, machineId: 'm2', gramajValueId: 'g25' }, { blockNo: 2, batchNo: 'P2', meters: 70 }] };
+    const body = buildCreateBody({ ...base, machineId: 'm1', multi }, { ...opts, kursunSequence: 1 });
+    expect(body.stepPlanning).toEqual([{ sequence: 1, plannedMachineId: 'm1' }]);
+    expect(body.parties).toEqual([{ blockNo: 1, batchNo: 'P1', meters: 50 }, { blockNo: 2, batchNo: 'P2', meters: 70 }]);
+  });
+
+  it('çok parti + PER_PARTY: ekranda görünmeyen üst makine yedek olarak gitmez', () => {
+    const multi = { mode: 'PER_PARTY' as const, rows: [{ blockNo: 1, batchNo: 'P1', meters: 50 }, { blockNo: 2, batchNo: 'P2', meters: 70 }] };
+    expect(buildCreateBody({ ...base, machineId: 'm1', multi }, { ...opts, kursunSequence: 1 }).stepPlanning).toBeUndefined();
+  });
+
   it('withDeskPlan girdiyi değiştirmez', () => {
     const body = { clientToken: 't', ownerCustomerId: 'c', kursunMeters: '1', routeTemplateId: 'A' };
     withDeskPlan(body, { machineId: 'm1' }, { kursunSequence: 1, gramajPropertyId: null });

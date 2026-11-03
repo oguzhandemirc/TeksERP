@@ -15,6 +15,7 @@ import { useDocScan } from '../useDocScan';
 import { useWoRows, type DocRow, type WoRowsState } from '../woCreate/useWoRows';
 import DeskCamera from './DeskCamera';
 import DeskReview from './DeskReview';
+import { initialAutoState, type AutoCaptureState } from './autoCapture';
 import { clearMachines, pickShortcut, pushRecentWo, recentFromResult, type RecentWo } from './deskPlan';
 
 export const deskSuggestionKey = (owner: string | null) => ['gelen-belge', 'rota-onerisi', owner] as const;
@@ -54,6 +55,7 @@ export default function DeskView({ shortcuts }: { shortcuts: readonly Production
   const frameMs = useDeviceSettingsStore((s) => s.docDeskFrameMs);
   const [touchedId, setTouchedId] = useState<string | null>(null);
   const [recent, setRecent] = useState<RecentWo[]>([]);
+  const autoState = useRef<AutoCaptureState>(initialAutoState()); // inceleme kamerayı söker; boş masa referansı burada yaşar
   const b = useDocScan({ successHint: 'Okuma bitince inceleme ekranı açılır.' });
   const [owner, setOwner] = useState<string | null>(null);
   const suggestedId = useSuggestedRouteId(owner);
@@ -97,7 +99,7 @@ export default function DeskView({ shortcuts }: { shortcuts: readonly Production
     );
   }
   return (
-    <DeskCamera pages={b.pages} sending={b.sending} auto={auto} frameMs={frameMs} recent={recent} onCaptured={b.capture}
+    <DeskCamera pages={b.pages} sending={b.sending} auto={auto} frameMs={frameMs} recent={recent} autoState={autoState} onCaptured={b.capture}
       onRetake={() => b.setPages(removePage(b.pages, b.pages.length - 1))} onRead={() => void b.send()} onError={onError} />
   );
 }
