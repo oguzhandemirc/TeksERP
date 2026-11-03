@@ -7,11 +7,12 @@ import { Input } from "@/components/ui/input";
 import { stationTypeLabels, StationType, type StationKind } from "@/types/enums";
 import { subcontractorCategoryService } from "@/pages/SubcontractorCategories/service";
 import type { SubcontractorCategory } from "@/pages/SubcontractorCategories/types";
-import { useDevereEnabled, useDokumaEnabled, useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { useDevereEnabled, useDokumaEnabled } from "@/hooks/usePricingEnabled";
 import { stationFormDefaults, stationFormSchema, type StationFormValues } from "./schema";
 import { visibleStationKindLabels } from "./stationKindVisibility";
 import { inspectionHintForKind, suggestedCapabilities, valuesAfterKindChange } from "./stationKindDefaults";
 import { StationLabelCopiesField } from "./StationLabelCopiesField";
+import { StationScanRouteFields } from "./StationScanRouteFields";
 import { StationKursunSection } from "./StationKursunSection";
 
 const CAPABILITY_FIELDS = ["appliesColor", "appliesProperty", "appliesQuality", "inspectionEnabled", "producesWarpBeam", "consumesWarpBeam"] as const;
@@ -32,8 +33,6 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
   const dokumaEnabled = useDokumaEnabled();
   // Devere yetenek kutuları yalnız devere modülü açıkken çizilir (kapalıyken form BİREBİR eski).
   const devereEnabled = useDevereEnabled();
-  // K29: okutmayla rota anahtarları yalnız "Rota uygulaması: Okutmayla" iken (SIRALI'da form birebir eski).
-  const scanRoute = useFeatureFlags().data?.data?.productionRouteMode === "SCAN";
   const defaults: StationFormValues = initial
     ? {
         name: initial.name,
@@ -189,22 +188,7 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
               <p className="-mt-1 pl-6 text-xs text-muted-foreground">
                 Tablette top bitişinde isteğe bağlı &quot;Ölçülen en (cm)&quot; alanı çıkar (ör. etek kesim). Boş bırakılırsa topun eni değişmez.
               </p>
-              {scanRoute && (
-                <>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" data-testid="station-scan-add-allowed" {...form.register("scanAddAllowed")} /> Okutunca adım eklenebilir
-                  </label>
-                  <p className="-mt-1 pl-6 text-xs text-muted-foreground">
-                    Kumaşın belgesi/kartı burada okutulunca iş emrinde bu istasyonun adımı yoksa eklenir; öndeki bekleyen adımlar &quot;Atlandı&quot; olur.
-                  </p>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" data-testid="station-scan-not-skippable" {...form.register("scanNotSkippable")} /> Atlanamaz
-                  </label>
-                  <p className="-mt-1 pl-6 text-xs text-muted-foreground">
-                    Bu istasyonun bekleyen adımı varken kumaş ileri bir istasyonda okutulursa tablet engeller.
-                  </p>
-                </>
-              )}
+              <StationScanRouteFields form={form} />
             </div>
           </FormField>
           <StationLabelCopiesField form={form} />

@@ -171,13 +171,58 @@ async function shiftStepsFromTx(tx: Prisma.TransactionClient, workOrderId: strin
 
 const stale = () => AppError.conflict("İş bu sırada başka bir okutmayla değişti — kartı yeniden okutun.", { code: "SCAN_ROUTE_STALE" });
 
-async function applyPlanTx(
+type ScanStation = { id: string; name: string; type: string };
+type ApplyArgs = { workOrderId: string; station: ScanStation; defaults: DefaultTarget[]; ctx: ApplyCtx & { clientToken: string | null } };
+type StepInfo = { name: string; status: StepStatus; seq: number };
+
+async function moveRollsToTargetTx(
   tx: Prisma.TransactionClient,
-  workOrderId: string,
-  station: { id: string; name: string; type: string },
-  defaults: DefaultTarget[],
-  ctx: ApplyCtx & { clientToken: string | null },
-): Promise<ScanRouteApplyResult> {
+  a: { workOrderId: string; station: ScanStation; fromStepIds: string[]; targetStepId: string; ctx: ApplyCtx },
+): Promise<void> {
+  const { workOrderId, station, targetStepId, ctx } = a;
+  const plan = { fromStepIds: a.fromStepIds };
+  const rolls = await tx.roll.findMany({
+    where: { OR: [{ currentStepId: { in: plan.fromStepIds }, status: RollStatus.IN_PRODUCTION }, entryPendingRollWhere(workOrderId)] },
+    select: { id: true, currentQty: true, weightKg: true, currentStepId: true, producedInStepId: true },
+  });
+  if (rolls.length === 0) throw stale();
+  const ids = rolls.map((r) => r.id);
+  await revokeRollMovements(tx, { rollIds: ids, workOrderStepIds: plan.fromStepIds, onlyOpen: true, reason: `SCAN_ROUTE: ${station.name} okutması`, userId: ctx.userId });
+  const claimed = await tx.roll.updateMany({
+    where: { id: { in: ids }, status: RollStatus.IN_PRODUCTION, OR: [{ currentStepId: { in: plan.fromStepIds } }, { currentStepId: null }] },
+    data: { currentStepId: targetStepId },
+  });
+  if (claimed.count !== ids.length) throw stale();
+  const unborn = rolls.filter((r) => !r.producedInStepId).map((r) => r.id);
+  if (unborn.length > 0) await tx.roll.updateMany({ where: { id: { in: unborn }, producedInStepId: null }, data: { producedInStepId: targetStepId } });
+  if (station.type !== "EXTERNAL") {
+    await tx.rollMovement.createMany({
+      data: rolls.map((r) => ({ rollId: r.id, workOrderStepId: targetStepId, qtyIn: r.currentQty, weightIn: r.weightKg, operatorId: ctx.userId, machineId: ctx.machineId, notes: "SCAN_ROUTE" })),
+    });
+  }
+}
+
+async function writeScanRouteEventsTx(
+  tx: Prisma.TransactionClient,
+  a: { workOrderId: string; station: ScanStation; skipStepIds: string[]; before: Awaited<ReturnType<typeof readStepSnapshotsTx>>; nameOf: Map<string, StepInfo>; ctx: ApplyCtx },
+): Promise<void> {
+  const { workOrderId, station, before, nameOf, ctx } = a;
+  const plan = { skipStepIds: a.skipStepIds };
+  const groupId = randomUUID();
+  const reason = `${station.name} okutması${ctx.deviceId ? ` (cihaz ${ctx.deviceId.slice(0, 40)})` : ""}`;
+  await recordStepDiffTx(tx, workOrderId, { before, after: await readStepSnapshotsTx(tx, workOrderId) }, { trigger: "SCAN_ROUTE", userId: ctx.userId, reason, groupId });
+  const after = new Map((await tx.workOrderStep.findMany({ where: { id: { in: plan.skipStepIds } }, select: { id: true, stepSequence: true } })).map((s) => [s.id, s.stepSequence]));
+  for (const id of plan.skipStepIds) {
+    const s = nameOf.get(id)!;
+    await recordStepPlanChangesTx(tx, workOrderId, {
+      step: { id, stepSequence: after.get(id) ?? s.seq, stationName: s.name },
+      changes: [{ field: "status", from: s.status, to: StepStatus.SKIPPED, fromLabel: STATUS_LABEL[s.status], toLabel: STATUS_LABEL.SKIPPED }],
+    }, { trigger: SKIP_REASON, userId: ctx.userId, reason, groupId });
+  }
+}
+
+async function applyPlanTx(tx: Prisma.TransactionClient, args: ApplyArgs): Promise<ScanRouteApplyResult> {
+  const { workOrderId, station, defaults, ctx } = args;
   await touchWorkOrderTx(tx, workOrderId);
   const wo = await tx.workOrder.findUnique({ where: { id: workOrderId }, select: { status: true } });
   if (!wo || wo.status === WorkOrderStatus.COMPLETED || wo.status === WorkOrderStatus.CANCELLED || wo.status === WorkOrderStatus.SUPERSEDED) {
@@ -224,25 +269,7 @@ async function applyPlanTx(
   }
 
   // 3) Toplar hedefe: kaynakta açık kuyruk hareketi geri alınır (o istasyondan geçmedi), hedefte yeni hareket.
-  const rolls = await tx.roll.findMany({
-    where: { OR: [{ currentStepId: { in: plan.fromStepIds }, status: RollStatus.IN_PRODUCTION }, entryPendingRollWhere(workOrderId)] },
-    select: { id: true, currentQty: true, weightKg: true, currentStepId: true, producedInStepId: true },
-  });
-  if (rolls.length === 0) throw stale();
-  const ids = rolls.map((r) => r.id);
-  await revokeRollMovements(tx, { rollIds: ids, workOrderStepIds: plan.fromStepIds, onlyOpen: true, reason: `SCAN_ROUTE: ${station.name} okutması`, userId: ctx.userId });
-  const claimed = await tx.roll.updateMany({
-    where: { id: { in: ids }, status: RollStatus.IN_PRODUCTION, OR: [{ currentStepId: { in: plan.fromStepIds } }, { currentStepId: null }] },
-    data: { currentStepId: targetStepId },
-  });
-  if (claimed.count !== ids.length) throw stale();
-  const unborn = rolls.filter((r) => !r.producedInStepId).map((r) => r.id);
-  if (unborn.length > 0) await tx.roll.updateMany({ where: { id: { in: unborn }, producedInStepId: null }, data: { producedInStepId: targetStepId } });
-  if (station.type !== "EXTERNAL") {
-    await tx.rollMovement.createMany({
-      data: rolls.map((r) => ({ rollId: r.id, workOrderStepId: targetStepId, qtyIn: r.currentQty, weightIn: r.weightKg, operatorId: ctx.userId, machineId: ctx.machineId, notes: "SCAN_ROUTE" })),
-    });
-  }
+  await moveRollsToTargetTx(tx, { workOrderId, station, fromStepIds: plan.fromStepIds, targetStepId, ctx });
 
   // 4) Durumlar (sıralı; SKIPPED terminaldir, recompute dokunmaz).
   const all = await tx.workOrderStep.findMany({ where: { workOrderId }, select: { id: true }, orderBy: { stepSequence: "asc" } });
@@ -250,17 +277,7 @@ async function applyPlanTx(
   await ensureWorkOrderInProgress(tx, workOrderId, { trigger: "SCAN_ROUTE", refType: "WORK_ORDER_STEP", refId: targetStepId });
 
   // 5) Olay defteri: rota satırı (ekleme) + atlanan adım başına durum satırı. Cihaz/istasyon gerekçede.
-  const groupId = randomUUID();
-  const reason = `${station.name} okutması${ctx.deviceId ? ` (cihaz ${ctx.deviceId.slice(0, 40)})` : ""}`;
-  await recordStepDiffTx(tx, workOrderId, { before, after: await readStepSnapshotsTx(tx, workOrderId) }, { trigger: "SCAN_ROUTE", userId: ctx.userId, reason, groupId });
-  const after = new Map((await tx.workOrderStep.findMany({ where: { id: { in: plan.skipStepIds } }, select: { id: true, stepSequence: true } })).map((s) => [s.id, s.stepSequence]));
-  for (const id of plan.skipStepIds) {
-    const s = nameOf.get(id)!;
-    await recordStepPlanChangesTx(tx, workOrderId, {
-      step: { id, stepSequence: after.get(id) ?? s.seq, stationName: s.name },
-      changes: [{ field: "status", from: s.status, to: StepStatus.SKIPPED, fromLabel: STATUS_LABEL[s.status], toLabel: STATUS_LABEL.SKIPPED }],
-    }, { trigger: SKIP_REASON, userId: ctx.userId, reason, groupId });
-  }
+  await writeScanRouteEventsTx(tx, { workOrderId, station, skipStepIds: plan.skipStepIds, before, nameOf, ctx });
 
   const targetsAdded = plan.kind === "INSERT" ? await addMissingTargetsTx(tx, workOrderId, defaults, ctx.userId) : [];
   return {
@@ -316,7 +333,7 @@ export async function applyScanRoute(
       }
     }
     const defaults = (await resolveStationDefaultTargets([stationId], await customerOf(workOrderId)))[0]?.targets ?? [];
-    return prisma.$transaction((tx) => applyPlanTx(tx, workOrderId, st, defaults, { ...ctx, clientToken: input.clientToken }));
+    return prisma.$transaction((tx) => applyPlanTx(tx, { workOrderId, station: st, defaults, ctx: { ...ctx, clientToken: input.clientToken } }));
   });
 
   if (result.kind !== "NOOP") {

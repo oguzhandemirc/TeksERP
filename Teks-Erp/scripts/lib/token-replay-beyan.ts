@@ -45,7 +45,6 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}lab-test.service.ts::createLabTest`]: { giris: { [`${S}lab-test.service.ts::createLabTest`]: "R" } },
   // K29: okutmayla rota — sahada eklenen adım clientToken ile doğar (aynı okutmanın tekrarı ikinci adım eklemez).
   [`${S}workorder-scan-route.service.ts::applyPlanTx`]: { giris: { [`${S}workorder-scan-route.service.ts::applyScanRoute`]: "R" } },
-  [`${S}workorder-scan-route.service.ts::applyScanRoute`]: { giris: { [`${S}workorder-scan-route.service.ts::applyScanRoute`]: "R" } },
   [`${S}certificate.service.ts::createCertificate`]: { giris: { [`${S}certificate.service.ts::createCertificate`]: "R" } },
   [`${S}certificate.service.ts::renewCertificate`]: { giris: { [`${S}certificate.service.ts::renewCertificate`]: "R" } },
   // Gelen belge (D2): irsaliye taslağı panel/tabletten clientToken ile DRAFT doğar; iptal edilmişin token'ı 409.
