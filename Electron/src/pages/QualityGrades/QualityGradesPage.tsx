@@ -15,6 +15,8 @@ export function QualityGradesPage() {
     fetchFn: qualityGradeService.listCursor,
     columns: qualityGradeColumns,
     forceFilters: { isActive: "true" },
+    // Salt okunur liste: toplu işlem yok → seçim kutusu ve "toplu işlem için seçin" şeridi de yok.
+    enableSelection: false,
   });
 
   return (
@@ -27,7 +29,7 @@ export function QualityGradesPage() {
       <div className="mb-3 flex items-start gap-2 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
         <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
-          Bu liste seed dosyasından yönetilir; UI üzerinden ekle / değiştir / sil yapılamaz. Yeni kalite kademesi veya hedef değişimi geliştirici işidir.
+          Kalite sınıfları sistemle birlikte gelir; bu ekrandan eklenemez, değiştirilemez ya da silinemez. Yeni kalite kademesi veya hedef değişikliği için destek ekibine başvurun.
         </span>
       </div>
 

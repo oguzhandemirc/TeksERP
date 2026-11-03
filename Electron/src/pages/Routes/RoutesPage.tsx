@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { shortcutBody } from "./RouteShortcutFields";
 import { CrudPage } from "@/components/layout/CrudPage";
 import { routeColumns } from "./columns";
@@ -69,8 +69,14 @@ function buildPayload(v: RouteFormValues, isEdit: boolean): CreatePayload {
 
 export function RoutesPage() {
   // "Yeni özel iş emri" kartı (K20): diyalog açık + kısayol işaretli doğar; ilk kapanışta tohum söner (sonraki "Yeni" düz).
-  const navState = useLocation().state as RoutesNavState | null;
+  const location = useLocation();
+  const navigate = useNavigate();
+  const navState = location.state as RoutesNavState | null;
   const [shortcutSeed, setShortcutSeed] = useState(navState?.newShortcut === true);
+  // Tohum bir kez tüketilir: geçmiş girdisinde kalırsa geri dönüşte (yeniden bağlanınca) diyalog tekrar açılırdı.
+  useEffect(() => {
+    if (navState?.newShortcut) void navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+  }, [navState, navigate, location.pathname, location.search]);
   return (
     <CrudPage<ProductionRoute>
       title="Üretim Rotaları"

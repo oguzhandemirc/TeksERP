@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Plus, Pencil, Trash2, RotateCcw, PowerOff, Upload, Merge } from "lucide-react";
@@ -83,6 +83,8 @@ interface Props<T extends { id: string }> {
   defaultSortBy?: string;
   /** DataTable satır sınıfı (bkz. `DataTable.rowClassName`). */
   rowClassName?: (row: T) => string | undefined;
+  /** Satır seçilebilir mi (ör. daraltılmış/gizli satır) — "tümünü seç" görünmeyeni kapsamasın; yoksa hepsi. */
+  rowSelectable?: (row: T) => boolean;
   /** true → sayfa yeni kayıt diyaloğu AÇIK doğar (başka ekrandan "yeni …" kısayoluyla gelindi). Varsayılan kapalı. */
   openCreateOnMount?: boolean;
   renderForm: (params: {
@@ -123,6 +125,7 @@ export function CrudPage<T extends { id: string }>({
   keepFormOpenAfterSave,
   defaultSortBy,
   rowClassName,
+  rowSelectable,
   openCreateOnMount = false,
 }: Props<T>) {
   const [formOpen, setFormOpen] = useState(openCreateOnMount);
@@ -237,7 +240,15 @@ export function CrudPage<T extends { id: string }>({
     forceFilters,
     columns: tableColumns,
     defaultSortBy,
+    enableSelection: rowSelectable ? (row) => rowSelectable(row.original) : true,
   });
+
+  // Seçilebilirlik değişince (ör. ebeveyn daraltıldı) artık seçilemeyen satır seçimde kalmaz —
+  // yıkıcı toplu işlem (birleştir/sil) görünmeyen kaydı kapsamasın.
+  useEffect(() => {
+    if (!rowSelectable) return;
+    for (const r of table.getSelectedRowModel().rows) if (!rowSelectable(r.original)) r.toggleSelected(false);
+  }, [rowSelectable, table]);
 
   const onSubmit = async (values: Partial<T>) => {
     if (editing) {

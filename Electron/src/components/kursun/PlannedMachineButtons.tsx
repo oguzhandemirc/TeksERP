@@ -16,14 +16,18 @@ export const plannedMachinesKey = (stationId: string) => ["machines", "planned",
 
 /** İstasyonun aktif makineleri — düğme dizisi ile adım çipi/önizleme özeti AYNI önbelleği okur. */
 export function usePlannedMachines(stationId: string | null | undefined): Machine[] {
-  const q = useQuery({
+  return usePlannedMachinesQuery(stationId).data ?? [];
+}
+
+/** Aynı sorgu, yüklenme durumuyla ("makine yok" ile "henüz gelmedi" ayrılsın diye). */
+export function usePlannedMachinesQuery(stationId: string | null | undefined) {
+  return useQuery({
     queryKey: plannedMachinesKey(stationId ?? ""),
     queryFn: async () =>
       ((await loadAllForPicker(machineService, { filters: { stationId: stationId!, isActive: "true" } })).data ?? []) as Machine[],
     enabled: Boolean(stationId),
     staleTime: 60_000,
   });
-  return q.data ?? [];
 }
 
 /**

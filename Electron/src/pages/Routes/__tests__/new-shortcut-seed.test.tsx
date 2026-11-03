@@ -3,7 +3,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { RoutesPage } from "../RoutesPage";
 
 type FormParams = { open: boolean; onOpenChange: (o: boolean) => void; initial: null; onSubmit: () => Promise<void>; isSubmitting: boolean };
@@ -29,10 +29,15 @@ vi.mock("../RouteFormDialog", () => ({
   ),
 }));
 
+function StateProbe() {
+  return <span data-testid="nav-state">{JSON.stringify(useLocation().state ?? null)}</span>;
+}
+
 function renderWith(state?: unknown) {
   render(
     <MemoryRouter initialEntries={[{ pathname: "/definitions/routes", state }]}>
       <RoutesPage />
+      <StateProbe />
     </MemoryRouter>,
   );
 }
@@ -46,6 +51,12 @@ describe("RoutesPage — yeni özel iş emri tohumu", () => {
     await userEvent.click(screen.getByText("Yeni"));
     expect(screen.getByTestId("rfd")).toHaveAttribute("data-open", "true");
     expect(screen.getByTestId("rfd")).toHaveAttribute("data-shortcut", "false");
+  });
+
+  it("⭐ tohum geçmiş girdisinden tüketilir (geri dönüşte diyalog yeniden açılmaz) — S8b", () => {
+    renderWith({ newShortcut: true });
+    expect(screen.getByTestId("rfd")).toHaveAttribute("data-open", "true");
+    expect(screen.getByTestId("nav-state").textContent).toBe("null");
   });
 
   it("durumsuz açılış bugünkü gibi: kapalı, işaretsiz", () => {

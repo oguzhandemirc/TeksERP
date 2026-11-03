@@ -80,3 +80,30 @@ describe("İstasyon yeteneği varsayılanları (K22)", () => {
     ]);
   });
 });
+
+describe("Çeşit hiyerarşisi (QA 2026-11-03 #16/#17)", () => {
+  it("seçici listesinde çeşit ebeveyninin altında 'Ebeveyn › Çeşit' etiketiyle durur", async () => {
+    const { propertyPickerItems } = await import("./capabilityDefaults");
+    const items = propertyPickerItems([
+      { id: "p-gr", code: "GR", name: "Gramaj", category: null, variantOfPropertyId: "p-kur", values: [] },
+      { id: "p-kat", code: "KAT", name: "Kat", category: "İşlem", values: [] },
+      { id: "p-kur", code: "KURSUN", name: "Kurşun", category: "İşlem", values: [] },
+    ] as never);
+    expect(items.map((i) => [i.label, i.group])).toEqual([
+      ["Kat", "İşlem"],
+      ["Kurşun", "İşlem"],
+      ["Kurşun › Gramaj", "İşlem"],
+    ]);
+  });
+
+  it("çeşit istasyonda kendi satırıyla tanımlıysa ebeveyn satırı çeşidin değerlerini sunmaz", async () => {
+    const { defaultValueOptions } = await import("./capabilityDefaults");
+    const cat = [
+      { id: "p-kur", name: "Kurşun", values: [] },
+      { id: "p-gr", name: "Gramaj", variantOfPropertyId: "p-kur", values: [v("g25", "25 gr")] },
+    ] as never;
+    expect(defaultValueOptions("p-kur", cat, ["p-kur"]).map((o) => o.id)).toEqual(["g25"]);
+    expect(defaultValueOptions("p-kur", cat, ["p-kur", "p-gr"])).toEqual([]);
+    expect(defaultValueOptions("p-gr", cat, ["p-kur", "p-gr"]).map((o) => o.id)).toEqual(["g25"]);
+  });
+});

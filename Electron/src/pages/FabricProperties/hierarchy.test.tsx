@@ -7,6 +7,7 @@
 // ⭐ §4 Daraltma: ebeveyn düğmesi çeşidi gizler (varsayılan açık), tekrar basınca açar.
 // ⭐ §5 Ebeveyn formu salt-okuma "Çeşitleri"; tıklayınca çeşidin formu (onOpenProperty).
 // §6 Tamlayan eki ünlü uyumuyla; varsayılan değer çipi işaretli.
+// ⭐ §7 Gizli çeşit "tümünü seç"e girmez; seçiliyken daraltılırsa seçimden düşer (yıkıcı birleştir/sil görünmeyeni kapsamaz).
 // =============================================================================
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -117,6 +118,22 @@ describe("Kumaş Özellikleri ağaç listesi", () => {
     expect(onOpen).toHaveBeenCalledWith(GRAMAJ);
     const { container } = render(<VariantsReadonlyField property={YANMAZ} allProperties={[]} />);
     expect(container.innerHTML).toBe("");
+  });
+
+  it("⭐ §7 gizli çeşit 'tümünü seç'e girmez; seçiliyken daraltılınca seçimden düşer", async () => {
+    renderPage();
+    await screen.findByTestId("ad-gramaj");
+    const box = (id: string) => within(rowOf(id)).queryByRole("checkbox", { name: "Seç" });
+    // Seçili çeşit daraltılınca seçimden düşer.
+    await userEvent.click(box("gramaj")!);
+    expect(box("gramaj")!.getAttribute("data-state")).toBe("checked");
+    await userEvent.click(screen.getByRole("button", { name: "Çeşitleri gizle" }));
+    expect(box("gramaj")).toBeNull();
+    // Daraltılmışken "tümünü seç" yalnız görünen satırları seçer.
+    await userEvent.click(screen.getByRole("checkbox", { name: "Tümünü seç" }));
+    expect(box("kursunlu")!.getAttribute("data-state")).toBe("checked");
+    await userEvent.click(screen.getByRole("button", { name: "Çeşitleri göster" }));
+    expect(box("gramaj")!.getAttribute("data-state")).toBe("unchecked");
   });
 
   it("§6 tamlayan eki + satır sınıfı + varsayılan çip işaretli", async () => {

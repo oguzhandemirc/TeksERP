@@ -17,6 +17,7 @@ import {
   NO_DEFAULT,
   defaultValueOptions,
   defaultsDirty,
+  propertyPickerItems,
   defaultsPatch,
   type CapabilityDefault,
 } from "./capabilityDefaults";
@@ -125,14 +126,7 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
   // işini `items` referansına göre memoize eder; her render'da yeni dizi verilince
   // (her checkbox toggle'ında) o memo geçersizleşip ~500 satırı yeniden gruplardı.
   const propertyItems = useMemo<MultiSelectItem[]>(
-    () =>
-      (propsQuery.data?.data ?? []).map((p) => ({
-        id: p.id,
-        label: p.name,
-        hint: p.description ?? p.code,
-        group: p.category ?? "Diğer",
-        swatch: p.color,
-      })),
+    () => propertyPickerItems(propsQuery.data?.data ?? []),
     [propsQuery.data?.data],
   );
 
@@ -232,7 +226,7 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
                     row={row}
                     onMode={(m) => setModes((prev) => ({ ...prev, [row.id]: m }))}
                     value={defaults[row.id] ?? NO_DEFAULT}
-                    options={defaultValueOptions(row.id, propsQuery.data?.data ?? [])}
+                    options={defaultValueOptions(row.id, propsQuery.data?.data ?? [], propertyIds)}
                     onDefault={(next) => setDefaults((prev) => ({ ...prev, [row.id]: next }))}
                   />
                 ))}

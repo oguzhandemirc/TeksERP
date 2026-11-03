@@ -2,23 +2,25 @@
 import { BellOff, Check, Inbox, Loader2, ServerOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { SETTINGS_CATEGORIES, settingsCategoryPath } from "@/pages/GeneralSettings/settings-config";
+import { SETTINGS_CATEGORIES, settingsCategoryPath, settingsCategoryTrail } from "@/pages/GeneralSettings/settings-config";
 import type { PageTab } from "./NotificationFilters";
 
 // Bayrağın evi (N1-BAYRAK "Bildirimler" kategorisi); adres yüzey eşlemesinden türer, elle yazılmaz.
 const INBOX_SETTINGS_CATEGORY = SETTINGS_CATEGORIES.find((c) => c.id === "bildirim");
 export const INBOX_SETTINGS_PATH = INBOX_SETTINGS_CATEGORY ? settingsCategoryPath(INBOX_SETTINGS_CATEGORY) : "/system";
+/** Menü yolu ("Sistem → … → Bildirimler") — "şuradan açılır" metinleri elle yol yazmaz. */
+export const INBOX_SETTINGS_TRAIL = INBOX_SETTINGS_CATEGORY ? settingsCategoryTrail(INBOX_SETTINGS_CATEGORY) : "Sistem";
 
 export function ClosedState({ yonetici, onAyar }: { yonetici: boolean; onAyar: () => void }) {
   return (
     <EmptyState
       icon={BellOff}
       title="Bildirimler kapalı"
-      description="Kişisel bildirim gelen kutusu bu kurulumda kapalı — Genel Ayarlar'dan açılır."
+      description={`Kişisel bildirim gelen kutusu bu kurulumda kapalı — ${INBOX_SETTINGS_TRAIL}'den açılır.`}
       action={
         yonetici ? (
           <Button variant="outline" size="sm" onClick={onAyar}>
-            Genel Ayarlar → Bildirimler
+            {INBOX_SETTINGS_TRAIL}
           </Button>
         ) : undefined
       }

@@ -5,6 +5,7 @@ import { MapPin, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PermissionGate } from "@/components/PermissionGate";
+import { apiErrorMessage } from "@/services/apiClient";
 import { shipmentService } from "../service";
 import type { ShipmentDetail } from "../types";
 import { DeliveryToFields } from "./DeliveryToFields";
@@ -47,7 +48,13 @@ function DeliveryToDialog({ d, onClose }: { d: ShipmentDetail; onClose: () => vo
       void qc.invalidateQueries({ queryKey: ["shipment-detail", d.id] });
       onClose();
     },
+    // 409: sevkiyat bu arada sevk edildi/değişti — detay tazelenir ki satır gerçek durumu göstersin.
+    onError: (e) => {
+      if ((e as { response?: { status?: number } }).response?.status === 409) void qc.invalidateQueries({ queryKey: ["shipment-detail", d.id] });
+    },
   });
+  // Ret sebebi diyalogda kalır (toast kaybolur, diyalog açık kalıp neden kaydolmadığını söylemezdi).
+  const failure = mut.isError ? apiErrorMessage(mut.error, "Teslim yeri kaydedilemedi.") : null;
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg">
@@ -56,6 +63,11 @@ function DeliveryToDialog({ d, onClose }: { d: ShipmentDetail; onClose: () => vo
           <DialogDescription>Yalnız sevk edilmemiş sevkiyatta değişir; sevk anında irsaliyeye donar.</DialogDescription>
         </DialogHeader>
         <DeliveryToFields value={value} onChange={setValue} ownerCustomerId={d.customer.id} disabled={mut.isPending} defaultOpen />
+        {failure && (
+          <p role="alert" className="text-xs text-destructive" data-testid="delivery-to-failure">
+            {failure}
+          </p>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={mut.isPending}>Vazgeç</Button>
           <Button onClick={() => mut.mutate()} disabled={mut.isPending || !!error}>{mut.isPending ? "Kaydediliyor…" : "Kaydet"}</Button>

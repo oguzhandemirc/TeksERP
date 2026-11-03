@@ -3,7 +3,7 @@
 // =============================================================================
 // Sol: profil listesi (+ arşivlenenler süzgeci). Sağ: Matris · Üyeler · Fabrika varsayılanı. Profil yalnız
 // TERCİH setidir, izin VERMEZ; katman önceliği sunucudadır (`resolvePreference`), ekran yalnız gösterir/yazar.
-// Eski sunucu (404) ve kapalı bayrak (409 `BILDIRIM_KAPALI`) sessiz durum kartına düşer.
+// Eski sunucu (404) ve kapalı bayrak (409 `BILDIRIM_KAPALI`) sessiz durum kartına düşer; bayrak kapalıyken istek atılmaz.
 // =============================================================================
 import { useMemo, useState } from "react";
 import { TERIM_AD } from "@/lib/terim";
@@ -27,11 +27,15 @@ import { ProfileFormDialog } from "./ProfileFormDialog";
 import { ProfileMatrixTab } from "./ProfileMatrixTab";
 import { ProfileMembersTab } from "./ProfileMembersTab";
 import { factoryKey, PROFILES_QUERY_ROOT, profilesKey } from "./queries";
+import { useNotificationInboxFlag } from "@/lib/bildirim/hooks";
+import { INBOX_SETTINGS_TRAIL } from "@/pages/Notifications/page-parts";
+
+const CLOSED_REASON = `Bildirimler kapalı — ${INBOX_SETTINGS_TRAIL}'den “Yeni bildirim gelen kutusu” açılınca kullanılabilir.`;
 
 /** Uç yoksa (eski sunucu) ya da gelen kutusu kapalıysa sayfa sessiz durum kartı gösterir. */
 export function unavailableReason(e: unknown): string | null {
   if (httpStatusOf(e) === 404) return "Bu sunucu sürümü bildirim profillerini desteklemiyor — sunucu güncellenince açılır.";
-  if (notificationErrorCode(e) === "BILDIRIM_KAPALI") return "Bildirimler kapalı — Genel Ayarlar → Bildirimler'den “Yeni bildirim gelen kutusu” açılınca kullanılabilir.";
+  if (notificationErrorCode(e) === "BILDIRIM_KAPALI") return CLOSED_REASON;
   return null;
 }
 
@@ -63,12 +67,15 @@ export function NotificationProfilesPage() {
   const [form, setForm] = useState<{ profile: NotificationProfile | null } | null>(null);
   const [archiving, setArchiving] = useState<NotificationProfile | null>(null);
 
-  const list = useQuery({ queryKey: profilesKey(showArchived), queryFn: () => bildirimProfilService.liste(showArchived), retry: false });
-  const factory = useQuery({ queryKey: factoryKey, queryFn: () => bildirimProfilService.fabrikaVarsayilani(), retry: false });
+  // Bayrak kapalıyken uçlar 409 döner — istek atılmaz (konsolda boşuna hata kalmasın); yüklenene dek de bekler.
+  const inbox = useNotificationInboxFlag();
+  const list = useQuery({ queryKey: profilesKey(showArchived), queryFn: () => bildirimProfilService.liste(showArchived), retry: false, enabled: inbox.acik });
+  const factory = useQuery({ queryKey: factoryKey, queryFn: () => bildirimProfilService.fabrikaVarsayilani(), retry: false, enabled: inbox.acik });
   const profiles = useMemo(() => list.data?.items ?? [], [list.data]);
   const selected = profiles.find((p) => p.id === selectedId) ?? profiles.find((p) => !p.arsivlendi) ?? profiles[0] ?? null;
   const kinds = factory.data?.turler ?? [];
-  const blocked = unavailableReason(list.error) ?? unavailableReason(factory.error);
+  const flagClosed = inbox.yuklendi && !inbox.acik;
+  const blocked = flagClosed ? CLOSED_REASON : (unavailableReason(list.error) ?? unavailableReason(factory.error));
   // Profilsiz kurulumda yalnız fabrika varsayılanı anlamlıdır; pasif sekme seçili kalmasın.
   const activeTab = !selected && !list.isLoading ? "fabrika" : tab;
 

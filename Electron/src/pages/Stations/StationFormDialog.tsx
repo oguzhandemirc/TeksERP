@@ -113,7 +113,7 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
             </FormField>
           </div>
           <FormField label="Departman" htmlFor="department" error={form.formState.errors.department}>
-            <Input id="department" placeholder="DOKUMA, TERBIYE..." {...form.register("department")} />
+            <Input id="department" placeholder="ör. Kalite, Sevkiyat" {...form.register("department")} />
           </FormField>
           {form.watch("type") === StationType.EXTERNAL && (
             <FormField

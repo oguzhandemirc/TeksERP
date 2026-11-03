@@ -67,10 +67,12 @@ export function PerfPage() {
     <PageShell>
       <PageHeader
         title="Endpoint Performansı"
-        description={
+        description="Route bazında gecikme istatistikleri ve yavaş istek defteri."
+        // Veri taşıyan cümle ⓘ içinde saklanmaz — başlığın altında görünür (S12).
+        statusLine={
           snap
             ? `${factoryLocaleString(snap.sinceAt, "tr-TR")} tarihinden beri ${snap.totalCount.toLocaleString("tr-TR")} istek ölçüldü.`
-            : "Route bazında gecikme istatistikleri ve yavaş istek defteri."
+            : undefined
         }
         actions={
           <Button variant="outline" size="sm" onClick={() => setConfirmOpen(true)}>

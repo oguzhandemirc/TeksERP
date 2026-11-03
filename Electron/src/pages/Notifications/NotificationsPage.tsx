@@ -2,7 +2,7 @@
 // BİLDİRİMLER — kişisel gelen kutusunun GEÇMİŞ GÜNLÜĞÜ (plan §6.2)
 // =============================================================================
 // Liste, cursor ve özet şeridi sunucuda TEK where'den (`/api/bildirim`); süzgeç sunucuya gider
-// (`sekme`, `filter[tur]`). Bayrak kapalı → "kapalı — Genel Ayarlar'dan açılır" (sessizce kaybolmaz);
+// (`sekme`, `filter[tur]`). Bayrak kapalı → "kapalı — <menü yolu>'den açılır" (sessizce kaybolmaz);
 // eski backend (`/ozet` 404) → "bu sunucu sürümü desteklemiyor". Zil ile aynı akışı paylaşır.
 // =============================================================================
 import { CheckCheck } from "lucide-react";

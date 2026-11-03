@@ -114,13 +114,13 @@ export function DevicesPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Cihazlar"
+        title="Tabletler"
         actions={
           <>
             <TabletTlsQrButton />
             <RefreshButton queryKey={QUERY_KEY} />
             <ListExportMenu
-              name="Cihazlar"
+              name="Tabletler"
               rows={filtered}
               columns={DEVICE_EXPORT_COLUMNS}
               notes={[
