@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { PickerOption } from '../../../../components/PickerModal';
 import { useFeatureFlags, useScanRouteMode } from '../../../../hooks/useFeatureFlags';
 import { useFoldValues } from '../../../../hooks/useFoldValues';
-import { inboundDocService } from '../../../../services/inboundDoc.service';
+import { inboundDocService, type DeskKursunMachine } from '../../../../services/inboundDoc.service';
 import type { AvailableOrderLine } from '../../../../services/order.service';
 import { routeService, type ProductionRoute } from '../../../../services/route.service';
 import { INBOUND_DOC_CONTEXT_KEY } from '../DocHeader';
@@ -80,34 +80,20 @@ export function useUnifiedWoForm({ initialRoute, routeLocked }: UnifiedWoFormPro
   const scan = useDocScanFlow(wo.addNote);
   useDocReadToForm(row, setForm);
   const edit = useCallback((patch: Partial<WoFormExtras>) => setForm((s) => editExtras(s, patch)), []);
-  const allMachines = ctx.data?.data.kursunMachines;
-  const machines = useMemo(() => (perParty ? [] : machinesForRoute(eff, allMachines ?? [])), [perParty, eff, allMachines]);
   const hasRouteSteps = !!route && !isScanRoute(route) && (route.steps?.length ?? 0) > 0;
-  const plan: WoPlanCtx = {
-    route: eff,
-    steps: extras.steps ?? stepsFromRoute(route),
-    stepsEdited: extras.steps !== null && !sameAsRoute(extras.steps, route),
-    showSteps: hasRouteSteps,
-    stepsEditable: !routeLocked,
-    onSteps: (steps) => edit({ steps }),
+  const plan = buildPlanCtx({
+    route, eff, extras, edit, routeLocked, hasRouteSteps, perParty,
+    allMachines: ctx.data?.data.kursunMachines ?? [],
     stationRoutes: routesQ.data?.data ?? [],
     stationRoutesLoading: routesQ.isLoading,
-    machines,
-    machineValue: extras.machineId !== undefined ? extras.machineId : routeDefaultMachineId(eff, allMachines ?? []) ?? null,
-    onMachine: (machineId) => edit({ machineId }),
     customerId: row?.form?.ownerCustomerId ?? null,
-    woType: extras.woType,
-    orderLineIds: extras.orderLineIds,
-    onWoType: (woType) => edit({ woType }),
-    propertyIds: extras.propertyIds,
-    onProperties: (propertyIds) => edit({ propertyIds }),
-  };
+  });
   const fields = useWoFieldLayout(form, {
     showQuantity: showQuantity || !!extras.targetQuantity || !!extras.targetWeight,
     hasTambur,
     hasKursun: !!wo.showGramaj && wo.catalog.options.length > 0 && !!row?.form,
     hasRouteSteps,
-    hasMachine: machines.length > 0,
+    hasMachine: plan.machines.length > 0,
   });
 
   const done = row?.result?.kind === 'OPENED' || row?.result?.kind === 'DRAFT';
@@ -130,6 +116,44 @@ export function useUnifiedWoForm({ initialRoute, routeLocked }: UnifiedWoFormPro
     routes: routesQ.data?.data ?? [],
     routesLoading: routesQ.isLoading,
     onOrderLine: (l: AvailableOrderLine) => setForm((s) => applyOrderLine(s, { itemId: l.itemId, itemName: l.itemName, colorId: l.colorId, width: l.width })),
+  };
+}
+
+interface PlanInput {
+  route: ProductionRoute | null;
+  eff: ProductionRoute | null;
+  extras: WoFormExtras;
+  edit: (patch: Partial<WoFormExtras>) => void;
+  routeLocked: boolean;
+  hasRouteSteps: boolean;
+  perParty: boolean;
+  allMachines: readonly DeskKursunMachine[];
+  stationRoutes: ProductionRoute[];
+  stationRoutesLoading: boolean;
+  customerId: string | null;
+}
+
+/** K30-D plan bölümünün (adımlar, makine, tür, hedef özellik) bağlamı; PER_PARTY'de makine parti başına masada seçilir. */
+function buildPlanCtx(p: PlanInput): WoPlanCtx {
+  const { route, eff, extras, edit } = p;
+  return {
+    route: eff,
+    steps: extras.steps ?? stepsFromRoute(route),
+    stepsEdited: extras.steps !== null && !sameAsRoute(extras.steps, route),
+    showSteps: p.hasRouteSteps,
+    stepsEditable: !p.routeLocked,
+    onSteps: (steps) => edit({ steps }),
+    stationRoutes: p.stationRoutes,
+    stationRoutesLoading: p.stationRoutesLoading,
+    machines: p.perParty ? [] : machinesForRoute(eff, p.allMachines),
+    machineValue: extras.machineId !== undefined ? extras.machineId : routeDefaultMachineId(eff, p.allMachines) ?? null,
+    onMachine: (machineId) => edit({ machineId }),
+    customerId: p.customerId,
+    woType: extras.woType,
+    orderLineIds: extras.orderLineIds,
+    onWoType: (woType) => edit({ woType }),
+    propertyIds: extras.propertyIds,
+    onProperties: (propertyIds) => edit({ propertyIds }),
   };
 }
 
