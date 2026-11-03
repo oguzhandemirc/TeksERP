@@ -7,6 +7,7 @@ import { inboundDocService } from '../../../services/inboundDoc.service';
 import { prefetchPageText } from '../../../services/deviceOcr';
 import { EMPTY_PROGRESS, MAX_PAGES, SubmitError, addPage, addPages, barcodeToDocNo, submitDocScan, type ScanPage, type SubmitProgress } from './docScan';
 import type { Owner } from './DocHeader';
+import { rememberLocalPages } from './tanit/localPages';
 
 /** Cihazda OCR (S16c) çekim anında başlar: eklenen İLK yeni sayfa (ekleme listenin sonuna) önden okunur. */
 function withPrefetch(prev: readonly ScanPage[], next: ScanPage[]): ScanPage[] {
@@ -91,6 +92,7 @@ export function useDocScan(opts: { successHint?: string } = {}) {
       // Deneme nesnesi birimden çıkmaz (test_istemci_token_uretimi): yalnız üç yöntem sarılarak verilir.
       const binding = { token: () => attempt.token(), onFailure: (e: unknown) => attempt.onFailure(e), onSuccess: () => attempt.onSuccess() };
       const r = await submitDocScan(inboundDocService, input, binding, progress);
+      rememberLocalPages(list);
       setDone({ note: r.note, pages: pageBase + r.uploaded, runKey: (done?.runKey ?? 0) + 1, sent: [...(continuing && done ? done.sent : []), ...list.map(({ sha256, uri }) => ({ sha256, uri }))] });
       reset();
       const text1 = continuing ? `${r.uploaded} sayfa ${r.note.noteNo} taslağına eklendi` : `Taslak ${r.note.noteNo} oluşturuldu`;

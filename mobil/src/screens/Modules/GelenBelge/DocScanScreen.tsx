@@ -37,7 +37,8 @@ export default function DocScanScreen() {
 }
 
 /** Ekran gövdesi — "Terbiye İş Emri oluştur" kısayolsuz kurulumda bugünkü Belge Tara yolu olarak gömülür. */
-export function DocScanBody() {
+/** `teachOnly` (hub "Belge tanıt"): çek → oku → Tanıt; onay kartı / iş emri yolu çizilmez (taslak irsaliye kalır, İE açılmaz). */
+export function DocScanBody({ teachOnly = false }: { teachOnly?: boolean } = {}) {
   const b = useDocScan();
   const [cameraOpen, setCameraOpen] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
@@ -53,7 +54,7 @@ export function DocScanBody() {
   };
   const sendLabel = b.continuing && b.done
     ? b.progress.uploaded.size ? `Yeniden dene (${b.remaining} sayfa)` : `${b.done.note.noteNo} taslağına ekle`
-    : b.headerLocked ? `Yeniden dene (${b.remaining} sayfa)` : 'Taslak oluştur ve gönder';
+    : b.headerLocked ? `Yeniden dene (${b.remaining} sayfa)` : teachOnly ? 'Belgeyi oku' : 'Taslak oluştur ve gönder';
 
   const remove = (i: number) => b.setPages(removePage(b.pages, i));
   // Önizlemeden silince komşu sayfada kalınır; son sayfa da gidince önizleme kapanır.
@@ -67,10 +68,10 @@ export function DocScanBody() {
     <>
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         {b.done && read.watch && (
-          <ReadResultCard watch={read.watch} noteNo={b.done.note.noteNo} actions={{ onAddPage: addPageToNote, onDone: b.finish, onRecheck: read.recheck }} tabletApproval={approvalOpen} />
+          <ReadResultCard watch={read.watch} noteNo={b.done.note.noteNo} actions={{ onAddPage: addPageToNote, onDone: b.finish, onRecheck: read.recheck }} tabletApproval={approvalOpen && !teachOnly} />
         )}
-        {b.done && readDone && <TeachEntry detail={detail} localPages={b.done.sent} />}
-        {b.done && <ApprovalCard key={`${b.done.note.id}:${b.done.runKey}`} noteId={b.done.note.id} readDone={readDone} onDone={b.finish} />}
+        {b.done && readDone && <TeachEntry key={`${b.done.note.id}:${b.done.runKey}`} detail={detail} localPages={b.done.sent} autoOpen={teachOnly} />}
+        {b.done && !teachOnly && <ApprovalCard key={`${b.done.note.id}:${b.done.runKey}`} noteId={b.done.note.id} readDone={readDone} onDone={b.finish} />}
         <DocHeader owner={b.owner} onOwner={b.setOwner} senderDocNo={b.senderDocNo} onBarcode={b.setBarcode} locked={b.headerLocked} />
         <PageList
           pages={b.pages}
