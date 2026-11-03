@@ -3732,7 +3732,7 @@
   }
  },
  "SHIPMENT_DISPATCH": {
-  "contractVersion": 2,
+  "contractVersion": 3,
   "alanlar": {
    "ayar.blankGrid": {
     "tur": "nesne",
@@ -4123,6 +4123,14 @@
     "sinif": "musteri"
    },
    "belge.tasiyici": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.teslim_adresi": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.teslim_yeri": {
     "tur": "metin",
     "sinif": "musteri"
    },

@@ -43,16 +43,24 @@ export interface BuiltDraft {
 }
 
 /**
- * OCR sonucu → motor → taslak parçaları. E2: eşleşen motor şablonunun DB satırı yoksa idempotent doğar; `bumpHit`
- * yalnız GERÇEK okumada (saklı zarftan yeniden kurulum yeni bir okuma değildir, isabet sayılmaz).
+ * OCR sonucu → motor → taslak (HİÇBİR ŞEY YAZMAZ: şablon satırı doğurmaz, isabet saymaz). Okuma işi (`buildDraft`) ve
+ * istasyon eşleme okuması (K17, `gelen-belge-istasyon-okutma.service.ts`) aynı çıkarımı görür.
  */
-export async function buildDraft(result: OcrResult, userId: string | undefined, opts: { bumpHit: boolean }): Promise<BuiltDraft> {
+export async function extractDraft(result: OcrResult): Promise<DraftFromOcr> {
   // Şüphe oranı her kurulumda o anki fabrika ayarından (saklı zarftan yeniden kurulum da güncel oranla işaretler).
   const outlierFactor = await readHandwritingOutlierFactor();
   const headerLineSource = await readHeaderLineMeterSource();
   const extracted = draftFromExtraction(extractDocument(result, loadTemplates(), FALLBACK_TEMPLATE_CODE), { outlierFactor, headerLineSource });
   // Yan dönük sayfa: kutular panelin çizdiği (dönmemiş) fotoğrafın çerçevesine döner.
-  const draft = { ...extracted, lines: linesToPhotoFrame(extracted.lines, result) };
+  return { ...extracted, lines: linesToPhotoFrame(extracted.lines, result) };
+}
+
+/**
+ * OCR sonucu → motor → taslak parçaları. E2: eşleşen motor şablonunun DB satırı yoksa idempotent doğar; `bumpHit`
+ * yalnız GERÇEK okumada (saklı zarftan yeniden kurulum yeni bir okuma değildir, isabet sayılmaz).
+ */
+export async function buildDraft(result: OcrResult, userId: string | undefined, opts: { bumpHit: boolean }): Promise<BuiltDraft> {
+  const draft = await extractDraft(result);
   const code = draft.header.regions[0]?.templateId ?? null;
   const template = code ? await ensureSenderTemplate(code, userId) : null;
   if (template && opts.bumpHit) await bumpTemplateHit(template.id);
@@ -86,10 +94,15 @@ async function templateSender(templateId: string): Promise<string | null> {
 
 /** Saklı zarftan (`{ ocr, regions }`) yeniden kurulum; zarf yok ya da şema dışı → null (FAIL-CLOSED: çağıran yeniden okumaya döner). */
 export async function buildDraftFromEnvelope(envelope: Prisma.JsonValue | null, userId: string | undefined): Promise<BuiltDraft | null> {
+  const ocr = ocrFromEnvelope(envelope);
+  return ocr ? buildDraft(ocr, userId, { bumpHit: false }) : null;
+}
+
+/** Saklı zarfın (`{ ocr, regions }`) OCR sonucu; zarf yok ya da şema dışı → null (FAIL-CLOSED). */
+export function ocrFromEnvelope(envelope: Prisma.JsonValue | null): OcrResult | null {
   const ocr = envelope !== null && typeof envelope === "object" && !Array.isArray(envelope) ? (envelope as Record<string, unknown>).ocr : undefined;
   const parsed = OcrResultSchema.safeParse(ocr);
-  if (!parsed.success) return null;
-  return buildDraft(parsed.data as OcrResult, userId, { bumpHit: false });
+  return parsed.success ? (parsed.data as OcrResult) : null;
 }
 
 /** `scanId`: satırı doğuran tarama (E4) — çok sayfalı taslakta her sayfanın satırı KENDİ taramasını taşır. */

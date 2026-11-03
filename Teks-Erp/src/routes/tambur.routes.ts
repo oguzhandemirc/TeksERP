@@ -152,6 +152,7 @@ router.get(
  *         required: false
  *         schema: { type: string, format: uuid }
  *         description: Verilirse yalnız bu TAMBUR istasyonundaki işler (çok tamburlu fabrika). Bilinmeyen 404; pasif/TAMBUR olmayan 400.
+ *       - { in: query, name: q, schema: { type: string, maxLength: 64 }, description: "İE no / parti no / fiş-evrak no / GB no araması (K17); boş = tüm liste" }
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Açık kart listesi }

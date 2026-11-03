@@ -8,6 +8,7 @@ import { OrdersModal } from "./OrdersModal";
 import { ReturnsModal } from "./ReturnsModal";
 import { DispatchNoteEditor } from "../DispatchNoteEditor";
 import { ManualSackCountEditor } from "../ManualSackCountEditor";
+import { DeliveryToEditor } from "../delivery-to/DeliveryToEditor";
 import { PROCEDURE_CODE_BOS, procedureCodeView } from "@/pages/Operations/SackStore/procedureCode";
 
 const num = (v: number | null | undefined) => formatNumber(v, 1);
@@ -77,6 +78,9 @@ export function ShipmentDetailMeta({ d }: { d: ShipmentDetail }) {
             <Info label="Gümrük/İhracat No" value={procedureCodeView(d).deger ?? PROCEDURE_CODE_BOS} />
           )}
         </div>
+
+        {/* Teslim yeri (K18) — carinin değil başka adrese teslim; PLANNED'de düzenlenir. */}
+        <DeliveryToEditor d={d} />
 
         {/* İrsaliye açıklaması — sevkiyata kayıtlı not (annotation); her an düzenlenir,
             irsaliyeye basılır. Opsiyonel, boşsa uyarı yok. */}

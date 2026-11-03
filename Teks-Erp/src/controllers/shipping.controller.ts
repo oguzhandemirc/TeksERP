@@ -156,6 +156,11 @@ const moveSackSchema = z.object({ sackId: z.string().uuid("Geçersiz çuval ID")
 // (eski istemci önceden seçili değer gönderir) değer yalnız sevkiyata yazılır, karta YAZILMAZ.
 const destinationChosenField = z.literal(true, { error: "destinationChosen yalnız true olabilir" }).optional();
 
+// Teslim yeri (K18) — opsiyonel; gelmezse null = bugünkü davranış (eski panel/tablet alanı göndermez).
+const deliveryToFields = {
+  deliveryCustomerId: z.string().uuid("Geçersiz teslim yeri cari ID").nullable().optional(),
+  deliveryAddress: z.string().trim().max(500, "Teslim adresi en fazla 500 karakter olabilir").nullable().optional(),
+};
 export const createShipmentSchema = z.object({
   // .max(500) — önizleme (previewShipmentSchema) ve sackIdsSchema zaten 500'de
   // sınırlıydı, YAZAN yol sınırsızdı: express.json({limit:"1mb"}) ≈ 26.000 UUID
@@ -170,6 +175,7 @@ export const createShipmentSchema = z.object({
   destination: z.enum(["DOMESTIC", "EXPORT"]).optional(),
   destinationChosen: destinationChosenField,
   procedureCode: z.string().trim().max(64).nullable().optional(),
+  ...deliveryToFields,
   // Sevk onayı kapalıyken (varsayılan) doğrudan sevk → araç bilgisi opsiyonel.
   plateNumber: z.string().trim().max(32).nullable().optional(),
   driverName: z.string().trim().max(100).nullable().optional(),
@@ -197,6 +203,7 @@ export const quickShipmentSchema = z.object({
   destination: z.enum(["DOMESTIC", "EXPORT"]).optional(),
   destinationChosen: destinationChosenField,
   procedureCode: z.string().trim().max(64).nullable().optional(),
+  ...deliveryToFields,
   plateNumber: z.string().trim().max(32).nullable().optional(),
   driverName: z.string().trim().max(100).nullable().optional(),
   carrier: z.string().trim().max(100).nullable().optional(),
@@ -226,6 +233,7 @@ const sackIdsSchema = z.object({ sackIds: z.array(z.string().uuid("Geçersiz çu
 const removeShipmentSackSchema = z.object({ sackId: z.string().uuid("Geçersiz çuval ID") });
 export const destinationSchema = z.object({ destination: z.enum(["DOMESTIC", "EXPORT"]), destinationChosen: destinationChosenField });
 const procedureCodeSchema = z.object({ procedureCode: z.string().trim().max(64).nullable().optional() });
+export const deliveryToSchema = z.object(deliveryToFields);
 const dispatchNoteSchema = z.object({ dispatchNote: z.string().trim().max(500).nullable().optional() });
 // Araca yüklenen gerçek çuval adedi (operatör beyanı). `null` = beyanı kaldır.
 const manualSackCountSchema = z.object({
@@ -598,7 +606,7 @@ export class ShippingController {
   createShipment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = createShipmentSchema.parse(req.body);
-      const result = await this.service.createShipment({ sackIds: body.sackIds, customerId: body.customerId, branchId: body.branchId ?? null, orderIds: body.orderIds, destination: body.destination, destinationChosen: body.destinationChosen === true, procedureCode: body.procedureCode ?? null, plateNumber: body.plateNumber ?? null, driverName: body.driverName ?? null, carrier: body.carrier ?? null, clientToken: body.clientToken ?? null, orderless: body.orderless }, req.user?.userId);
+      const result = await this.service.createShipment({ sackIds: body.sackIds, customerId: body.customerId, branchId: body.branchId ?? null, orderIds: body.orderIds, destination: body.destination, destinationChosen: body.destinationChosen === true, procedureCode: body.procedureCode ?? null, deliveryCustomerId: body.deliveryCustomerId ?? null, deliveryAddress: body.deliveryAddress ?? null, plateNumber: body.plateNumber ?? null, driverName: body.driverName ?? null, carrier: body.carrier ?? null, clientToken: body.clientToken ?? null, orderless: body.orderless }, req.user?.userId);
       res.status(201).json(result);
     } catch (e) { next(e); }
   };
@@ -625,6 +633,8 @@ export class ShippingController {
           destination: body.destination,
           destinationChosen: body.destinationChosen === true,
           procedureCode: body.procedureCode ?? null,
+          deliveryCustomerId: body.deliveryCustomerId ?? null,
+          deliveryAddress: body.deliveryAddress ?? null,
           plateNumber: body.plateNumber ?? null,
           driverName: body.driverName ?? null,
           carrier: body.carrier ?? null,
@@ -685,6 +695,14 @@ export class ShippingController {
     try {
       const body = procedureCodeSchema.parse(req.body);
       const result = await this.service.setProcedureCode(req.params.id as string, body.procedureCode ?? null, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  setDeliveryTo = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = deliveryToSchema.parse(req.body);
+      const result = await this.service.setDeliveryTo(req.params.id as string, { deliveryCustomerId: body.deliveryCustomerId ?? null, deliveryAddress: body.deliveryAddress ?? null }, req.user?.userId);
       res.status(200).json(result);
     } catch (e) { next(e); }
   };

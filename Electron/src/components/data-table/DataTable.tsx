@@ -99,6 +99,8 @@ interface Props<T> {
   /** Sayfalama çubuğunun sağına (kalıcı görünür) eklenen aksiyonlar — ör. "Tümünü
    *  İndir" + "Envanter Özeti". pagination verilmezse gösterilmez. */
   paginationActions?: ReactNode;
+  /** Satıra ek sınıf (ağaç görünümünde bağlam satırı soluk, daraltılan çeşit gizli — Kumaş Özellikleri). */
+  rowClassName?: (row: T) => string | undefined;
 }
 
 export function DataTable<T>({
@@ -117,6 +119,7 @@ export function DataTable<T>({
   rowContextMenu,
   selectionBlockedReason,
   paginationActions,
+  rowClassName,
 }: Props<T>) {
   const rows = table.getRowModel().rows;
   const selectable = Boolean(table.options.enableRowSelection);
@@ -304,6 +307,7 @@ export function DataTable<T>({
                         onRowClick={onRowClick}
                         rowContextMenu={rowContextMenu}
                         selectionBlockedReason={selectionBlockedReason}
+                        rowClassName={rowClassName}
                         openTimer={openTimer}
                         selRef={selRef}
                         visibleColumnIds={visibleColumnIds}
@@ -401,6 +405,7 @@ interface DataTableRowProps<T> {
   onRowClick?: (row: T) => void;
   rowContextMenu?: (row: T) => ReactNode;
   selectionBlockedReason?: (row: T) => string | null;
+  rowClassName?: (row: T) => string | undefined;
   openTimer: MutableRefObject<ReturnType<typeof setTimeout> | null>;
   selRef: MutableRefObject<string>;
   // Memo geçersizleştirme sinyalleri — gövdede doğrudan kullanılmaz, React.memo
@@ -427,6 +432,7 @@ function DataTableRowInner<T>({
   onRowClick,
   rowContextMenu,
   selectionBlockedReason,
+  rowClassName,
   openTimer,
   selRef,
 }: DataTableRowProps<T>) {
@@ -434,7 +440,7 @@ function DataTableRowInner<T>({
   const rowEl = (
     <TableRow
       data-state={isSelected ? "selected" : undefined}
-      className={cn("row-enter", onRowClick && "cursor-pointer")}
+      className={cn("row-enter", onRowClick && "cursor-pointer", rowClassName?.(row.original))}
       style={{ animationDelay: `${Math.min(index, 10) * 25}ms` }}
       onClick={(e) => {
         if (!onRowClick) return;

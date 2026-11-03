@@ -3,6 +3,7 @@
 //   · onay kipi — her satır bir top (varsayılan, bugünkü) | belge başına tek kayıt (kurşun metresiyle tek top)
 //   · işlem değeri çözülemeyen grupta otomatik iş emri — atla (varsayılan, bugünkü) | hedef değersiz aç
 //   · iş emri formundan okutulan belge — ayrı onay (varsayılan, bugünkü) | iş emri açan kaydeder (K7) · refakat oto baskı (K9)
+//   · istasyonda belge okutarak iş emri bulma (K17; varsayılan kapalı = tablette düğme yok)
 // Eski backend alanı göndermez → alan çizilmez, gövdeye girmez. Kip kuralı istemciye kopyalanmaz: tek kayıt kipinin
 // varsayılan ürün ön koşulunu sunucu 400 ile söyler; burada yalnız önceden görünür bir uyarı var.
 import { useState } from "react";
@@ -52,9 +53,12 @@ export function useEntryModeDraft(server: IncomingDocumentSettings | undefined) 
   const serverPrint = server?.refakatAutoPrint;
   const [autoPrint, setAutoPrint] = useState<boolean | undefined>(serverPrint);
   const printDirty = serverPrint !== undefined && autoPrint !== undefined && autoPrint !== serverPrint;
+  const serverLookup = server?.stationDocLookup;
+  const [lookupOn, setLookupOn] = useState<boolean | undefined>(serverLookup);
+  const lookupDirty = serverLookup !== undefined && lookupOn !== undefined && lookupOn !== serverLookup;
   const reset = () => {
     batch.set(batch.server as BatchNumberSourceMode); entry.set(entry.server as IncomingDocEntryMode); patternless.set(patternless.server as AutoWorkOrderPatternlessMode);
-    approval.set(approval.server as IncomingDocFormApproval); setAutoPrint(serverPrint);
+    approval.set(approval.server as IncomingDocFormApproval); setAutoPrint(serverPrint); setLookupOn(serverLookup);
   };
   const body = {
     ...(batch.dirty ? { batchNumberSource: batch.value } : {}),
@@ -62,10 +66,12 @@ export function useEntryModeDraft(server: IncomingDocumentSettings | undefined) 
     ...(patternless.dirty ? { autoWorkOrderPatternless: patternless.value } : {}),
     ...(approval.dirty ? { formApproval: approval.value } : {}),
     ...(printDirty ? { refakatAutoPrint: autoPrint } : {}),
+    ...(lookupDirty ? { stationDocLookup: lookupOn } : {}),
   };
-  const serverKey = `${batch.server ?? ""}|${entry.server ?? ""}|${patternless.server ?? ""}|${approval.server ?? ""}|${String(serverPrint ?? "")}`;
+  const serverKey = `${batch.server ?? ""}|${entry.server ?? ""}|${patternless.server ?? ""}|${approval.server ?? ""}|${String(serverPrint ?? "")}|${String(serverLookup ?? "")}`;
   const print = { server: serverPrint, value: autoPrint, set: setAutoPrint };
-  return { batch, entry, patternless, approval, print, dirty: batch.dirty || entry.dirty || patternless.dirty || approval.dirty || printDirty, body, reset, serverKey };
+  const lookup = { server: serverLookup, value: lookupOn, set: setLookupOn };
+  return { batch, entry, patternless, approval, print, lookup, dirty: batch.dirty || entry.dirty || patternless.dirty || approval.dirty || printDirty || lookupDirty, body, reset, serverKey };
 }
 
 function EnumField<T extends string>({ id, label, desc, pair, options, children }: { id: string; label: string; desc: string; pair: Pair<T>; options: ReadonlyArray<Option<T>>; children?: React.ReactNode }) {
@@ -131,6 +137,18 @@ export function EntryModeFields({ draft, hasDefaultItem }: { draft: ReturnType<t
             defaultOn={false}
             checked={draft.print.value === true}
             onChange={draft.print.set}
+          />
+        </div>
+      )}
+      {draft.lookup.server !== undefined && (
+        <div data-testid="gb-station-doc-lookup">
+          <FlagToggle
+            title="İstasyonda belge okutarak iş bul"
+            summary={`Kurşun ve tambur tabletinde "Belge okut": boyahane belgesinin fotoğrafından fiş no okunur, bağlı ${IE.tekilKucuk} açılır.`}
+            desc={`Kapalı (varsayılan) = bugünkü davranış: tablette düğme yok. Okuma yalnız eşleme içindir; yeni gelen belge doğmaz. Fiş / evrak / parti no ile elle arama listede her zaman vardır.`}
+            defaultOn={false}
+            checked={draft.lookup.value === true}
+            onChange={draft.lookup.set}
           />
         </div>
       )}

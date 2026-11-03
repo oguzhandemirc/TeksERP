@@ -4,6 +4,7 @@
 
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
+import { stationSearchQuerySchema } from "../services/helpers/workorder-doc-search.helper";
 import { meterSourceSchema } from "../services/helpers/meter-reading.helper";
 import { meterCalibrationWarnings, withResponseWarnings } from "../services/helpers/meter-calibration.helper";
 import { TamburService } from "../services/tambur.service";
@@ -502,8 +503,8 @@ export class TamburController {
   /** GET /api/tambur/open-cards */
   async listOpenCards(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { stationId } = stationFilterQuerySchema.parse(req.query);
-      const result = await this.service.listOpenCards(stationId ?? null);
+      const { stationId, q } = stationFilterQuerySchema.extend(stationSearchQuerySchema.shape).parse(req.query);
+      const result = await this.service.listOpenCards(stationId ?? null, q ?? null);
       res.status(200).json(result);
     } catch (error) {
       next(error);

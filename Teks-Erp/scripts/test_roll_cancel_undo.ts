@@ -288,6 +288,7 @@ async function main(): Promise<void> {
       dispatchItemCount: 0,
       kartelaItemCount: 0,
       cancelReasonCode: null,
+      deliveryNoteStatus: null,
     };
     check("temiz kayıt: engel yok", resolveRollRestoreBlockReason(base) === null);
     check(
@@ -440,6 +441,7 @@ async function main(): Promise<void> {
       childCount: 0,
       dispatchItemCount: 0,
       kartelaItemCount: 0,
+      deliveryNoteStatus: null,
     });
     check("fire geri alınamaz (kolonlar paylaşılsa da)", block !== null, String(block));
 

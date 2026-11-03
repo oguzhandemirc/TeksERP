@@ -645,6 +645,12 @@ async function main() {
       file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
       needle: "formApproval: z.enum(",
     },
+    // Gülkesim S2 (K17, 2026-11-03): istasyonda belge okutarak iş emri bulma; panel satırı kayıt kipi alanında.
+    GELEN_BELGE_STATION_DOC_LOOKUP: {
+      why: "İstasyon tabletinde belge okutarak iş emri bulma (varsayılan false) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; kapıyı `/api/gelen-belge/istasyon-okutma` okur",
+      file: "Electron/src/pages/GeneralSettings/GelenBelgeEntryModeField.tsx",
+      needle: "gb-station-doc-lookup",
+    },
     PRODUCTION_REFAKAT_AUTO_PRINT: {
       why: "İş emri açılınca refakat kartı otomatik yazdırma (varsayılan false) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; istemci okur",
       file: "Teks-Erp/src/routes/gelen-belge.routes.ts",

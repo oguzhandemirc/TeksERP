@@ -79,6 +79,10 @@ interface Props<T extends { id: string }> {
    * oturumda şube/alias/şablon sekmeleri arasında çalışmaya devam edebilir.
    * OLUŞTURMA her zaman kapanır (tek-adım kayıt → kapat). Varsayılan false. */
   keepFormOpenAfterSave?: boolean;
+  /** URL'de `sortBy` yokken sunucuya giden sıralama (ör. Kumaş Özellikleri `hierarchy`); başlık tıklaması ezer. */
+  defaultSortBy?: string;
+  /** DataTable satır sınıfı (bkz. `DataTable.rowClassName`). */
+  rowClassName?: (row: T) => string | undefined;
   /** true → sayfa yeni kayıt diyaloğu AÇIK doğar (başka ekrandan "yeni …" kısayoluyla gelindi). Varsayılan kapalı. */
   openCreateOnMount?: boolean;
   renderForm: (params: {
@@ -87,6 +91,8 @@ interface Props<T extends { id: string }> {
     initial: T | null;
     onSubmit: (values: Partial<T>) => Promise<void>;
     isSubmitting: boolean;
+    /** Formdan başka bir kaydın formuna geç (ebeveyn → çeşit). */
+    openEdit: (row: T) => void;
   }) => ReactNode;
 }
 
@@ -115,6 +121,8 @@ export function CrudPage<T extends { id: string }>({
   restoreLabel,
   actionsPortal,
   keepFormOpenAfterSave,
+  defaultSortBy,
+  rowClassName,
   openCreateOnMount = false,
 }: Props<T>) {
   const [formOpen, setFormOpen] = useState(openCreateOnMount);
@@ -228,6 +236,7 @@ export function CrudPage<T extends { id: string }>({
     fetchFn: service.listCursor,
     forceFilters,
     columns: tableColumns,
+    defaultSortBy,
   });
 
   const onSubmit = async (values: Partial<T>) => {
@@ -349,6 +358,7 @@ export function CrudPage<T extends { id: string }>({
         errorText={apiErrorText(query.error, "İstek sunucuya ulaşamadı ya da reddedildi.")}
         pagination={pagination}
         emptyText="Kayıt bulunamadı."
+        rowClassName={rowClassName}
       />
 
       {renderForm({
@@ -360,6 +370,10 @@ export function CrudPage<T extends { id: string }>({
         initial: editing,
         onSubmit,
         isSubmitting: createMutation.isPending || updateMutation.isPending,
+        openEdit: (row) => {
+          setEditing(row);
+          setFormOpen(true);
+        },
       })}
 
       <ConfirmDialog

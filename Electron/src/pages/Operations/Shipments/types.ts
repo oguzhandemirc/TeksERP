@@ -251,6 +251,10 @@ export interface ShipmentDetail {
   dispatchedAt: string | null;
   customer: { id: string; code: string; name: string };
   branch: { id: string; code: string | null; name: string } | null;
+  /** Teslim yeri (K18) — `address` kart adresinin tek satırı; eski sunucuda alan yok (undefined). */
+  deliveryCustomer?: { id: string; code: string; name: string; address: string | null } | null;
+  /** Kayıtlı serbest teslim adresi; boşsa belgeye kart adresi basılır. */
+  deliveryAddress?: string | null;
   orders: ShipmentDetailOrder[];
   rolls: ShipmentDetailRoll[];
   swatches: { id: string; barcode: string | null; length: number | null; width: number | null }[];

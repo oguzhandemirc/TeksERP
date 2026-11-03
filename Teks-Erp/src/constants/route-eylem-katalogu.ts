@@ -98,6 +98,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/shipping/shipments/:id/cancel": e("sevkiyatı iptal etti", "sevkiyatı iptal etmeye çalıştı"),
   "POST /api/shipping/shipments/:id/undo-dispatch": e("sevkiyat onayını geri aldı", "sevkiyat onayını geri almaya çalıştı"),
   "POST /api/shipping/shipments/:id/invoice": e("sevkiyatı faturaladı", "sevkiyatı faturalamaya çalıştı"),
+  "POST /api/shipping/shipments/:id/delivery-to": e("sevkiyatın teslim yerini değiştirdi", "sevkiyatın teslim yerini değiştirmeye çalıştı"),
   // ── Kurşun metre defteri (H1)
   "POST /api/kursun-qc/meter-readings": e("kurşun metre okuması kaydetti", "kurşun metre okuması kaydetmeye çalıştı"),
   "POST /api/kursun-qc/meter-readings/:id/pin-ack": e("metre sapmasını süpervizör PIN'iyle onayladı", "metre sapmasını süpervizör PIN'iyle onaylamaya çalıştı"),
@@ -109,6 +110,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/gelen-belge/taramalar/:id/oku": e("gelen belge fotoğrafını okumaya gönderdi", "gelen belge fotoğrafını okumaya göndermeye çalıştı"),
   "POST /api/gelen-belge/irsaliyeler": e("gelen belge taslağı açtı", "gelen belge taslağı açmaya çalıştı"),
   "PATCH /api/gelen-belge/irsaliyeler/:id": e("gelen belge taslağını düzenledi", "gelen belge taslağını düzenlemeye çalıştı"),
+  "POST /api/gelen-belge/istasyon-okutma": e("istasyonda belge okutarak iş aradı", "istasyonda belge okutarak iş aramaya çalıştı"),
   "PUT /api/gelen-belge/ayarlar": e("gelen belge ayarlarını değiştirdi", "gelen belge ayarlarını değiştirmeye çalıştı"),
   "DELETE /api/gelen-belge/irsaliyeler/:id": e("gelen belge taslağını sildi", "gelen belge taslağını silmeye çalıştı"),
   "POST /api/gelen-belge/irsaliyeler/toplu-sil/onizleme": e("gelen belge toplu silme önizlemesi aldı", "gelen belge toplu silme önizlemesi almaya çalıştı"),

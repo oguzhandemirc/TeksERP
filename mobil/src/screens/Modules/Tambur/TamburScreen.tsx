@@ -50,6 +50,10 @@ import { useOnlineStatus } from '../../../hooks/useOnlineStatus';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { useSessionStore } from '../../../store/sessionStore';
 import { resolveTamburListStationId } from './tamburStationFilter';
+import StationDocLookupSheet from '../../../components/stationDocLookup/StationDocLookupSheet';
+import OpenCardSearchBar from '../../../components/stationDocLookup/OpenCardSearchBar';
+import { useStationDocLookup } from '../../../components/stationDocLookup/useStationDocLookup';
+import { useOpenCardSearch } from '../../../components/stationDocLookup/useOpenCardSearch';
 import { useMachinePeripherals, meterPeripheralFor } from '../../../hooks/useMachinePeripherals';
 import { readMeter } from '../../../hooks/usePeripheralIO';
 import RefreshButton from '../../../components/RefreshButton';
@@ -950,6 +954,9 @@ export default function TamburScreen() {
 
   // Açık Kartlar modal'ı her açılışta force refresh — 30s cache stale dönmesin.
   useRefetchOnOpen(openCardsQuery.refetch, listModalOpen);
+  // K17: boyahane belgesinden iş emri bulma + açık kart listesinde fiş/parti no araması (süzme sunucuda).
+  const docLookup = useStationDocLookup();
+  const cardSearch = useOpenCardSearch(['tambur', 'open-cards', listStationId], (q) => tamburService.listOpenCards(listStationId, q));
   // Açık Kartlar modalı içindeki manuel "Yenile" — toast + haptic feedback.
   const openCardsRefresh = useManualRefresh(
     () => openCardsQuery.refetch(),
@@ -1190,6 +1197,11 @@ export default function TamburScreen() {
   const handleScannerResult = (data: string) => {
     setScannerOpen(false);
     resolveCard(data.trim(), false);
+  };
+
+  const handleDocLookupOpen = (workOrder: { cardBarcode: string }) => {
+    docLookup.setOpen(false);
+    resolveCard(workOrder.cardBarcode, false);
   };
 
   const closeJob = (cardId: string) => {
@@ -3300,6 +3312,9 @@ export default function TamburScreen() {
         fill
       />
       <HeaderChip icon="camera" label="Tara" onPress={() => openScanner()} fill />
+      {docLookup.enabled && (
+        <HeaderChip icon="file-document-outline" label="Belge" onPress={() => drawerQueue.run(() => docLookup.setOpen(true))} fill />
+      )}
       {canLinkOrders && activeJob && (
         <HeaderChip
           icon="link-variant"
@@ -3350,6 +3365,9 @@ export default function TamburScreen() {
                     onPress={() => openList()}
                   />
                   <HeaderChip icon="camera" label="Tara" onPress={() => openScanner()} />
+                  {docLookup.enabled && (
+                    <HeaderChip icon="file-document-outline" label="Belge okut" onPress={() => drawerQueue.run(() => docLookup.setOpen(true))} />
+                  )}
                 </>
               )}
               <HeaderChip
@@ -4438,11 +4456,20 @@ export default function TamburScreen() {
       {/* Açık kart listesi — hızlı seçim için */}
       <CameraScanModal
         visible={listModalOpen}
-        loading={openCardsQuery.isLoading}
-        cards={openCardsQuery.data?.data ?? []}
+        loading={openCardsQuery.isLoading || cardSearch.loading}
+        cards={cardSearch.cards ?? openCardsQuery.data?.data ?? []}
+        searchBar={<OpenCardSearchBar value={cardSearch.text} onChange={cardSearch.setText} />}
+        searching={cardSearch.active}
         onDismiss={() => setListModalOpen(false)}
         onSelect={handleCameraSelect}
         refresh={openCardsRefresh}
+      />
+
+      <StationDocLookupSheet
+        visible={docLookup.open}
+        onDismiss={() => docLookup.setOpen(false)}
+        onOpen={handleDocLookupOpen}
+        readerConfigured={docLookup.readerConfigured}
       />
 
       {/* Refakat kartı QR/barkod okuma — gerçek kamera */}
@@ -6883,6 +6910,8 @@ function CameraScanModal({
   onDismiss,
   onSelect,
   refresh,
+  searchBar,
+  searching,
 }: {
   visible: boolean;
   loading: boolean;
@@ -6890,6 +6919,9 @@ function CameraScanModal({
   onDismiss: () => void;
   onSelect: (card: TamburOpenCard) => void;
   refresh: ManualRefresh;
+  /** K17: fiş / evrak / parti / İE no arama kutusu (süzme sunucuda). */
+  searchBar?: React.ReactNode;
+  searching?: boolean;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
   // Compact portrait (telefon dik) ekranda 70% genişlik dar — operatör kart
@@ -6918,6 +6950,7 @@ function CameraScanModal({
           />
           <IconButton icon="close" size={22} onPress={onDismiss} style={{ margin: 0 }} />
         </View>
+        {searchBar}
         <View style={cameraStyles.listBox}>
           {loading ? (
             <SkeletonList count={6} />
@@ -6925,7 +6958,7 @@ function CameraScanModal({
             <View style={cameraStyles.empty}>
               <Icon source="package-variant" size={48} color="#cbd5e1" />
               <Text style={cameraStyles.emptyText}>
-                Tambur'da bekleyen kart yok
+                {searching ? 'Aramaya uyan kart yok' : "Tambur'da bekleyen kart yok"}
               </Text>
             </View>
           ) : (
