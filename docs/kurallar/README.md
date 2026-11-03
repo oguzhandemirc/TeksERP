@@ -3,6 +3,8 @@
 > Kök `CLAUDE.md` her oturumda yüklenir ve yalnız ÇEKİRDEK'i taşır; bir alana dokunmadan önce buradaki dosya okunur. Dosyalar anlama turunda (2026-09-05) ayrıştırıldı; yeni karar notu **arşive** yazılır, buradaki ilgili dosyaya **tek kural satırı** eklenir.
 >
 > **Kısa özet** kolonu kök `CLAUDE.md` alan dizininden buraya taşındı (2026-10-03 kısaltma turu; kökte yalnız Alan | Dosya kalır) — alanın özet satırı artık BURADA güncellenir. Kökün yeniden yapılandırma geçmişi: 2026-09-05 anlama turu (önceki sürüm git `6695afc2`, 42k token → hedef ≤ 12k) · 2026-10-03 kısaltma turu (önceki sürüm git `a61efbd21`, 30.717 karakter → ~21.300).
+>
+> **`ayrinti/`** (2026-11-03): 29 alan dosyasının kısaltma öncesi TAM metni (madde başına gerekçe, `bekçi:` atfı, `<sub>` kaynağı); alan sayılmaz, oturumda kısa dosya okunur; kısa ↔ ayrıntı çelişirse kısa dosya esastır, yeni kural satırı kısa dosyaya yazılır.
 
 | Alan | Dosya | Kısa özet | Arşiv tarihleri |
 |---|---|---|---|
