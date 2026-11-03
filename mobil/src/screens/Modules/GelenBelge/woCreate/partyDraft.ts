@@ -7,6 +7,9 @@ export interface PartyRow {
   blockNo: number;
   batchNo: string;
   meters: number | null;
+  /** Belge masası: parti başına plan makinesi / gramaj (yok = gövdedeki ortak değer). */
+  machineId?: string | null;
+  gramajValueId?: string | null;
 }
 
 export interface MultiPartyDraft {

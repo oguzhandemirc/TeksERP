@@ -22,11 +22,13 @@ interface Props {
   wo: WoRowsState;
   customers: PickerOption[];
   customersLoading: boolean;
+  /** Belge masası çok partide gramajı parti başına kendi plan bölümünde çizer. */
+  hideGramaj?: boolean;
 }
 
 type Picker = 'owner' | 'batch' | null;
 
-export default function DocRowCard({ row, wo, customers, customersLoading }: Props) {
+export default function DocRowCard({ row, wo, customers, customersLoading, hideGramaj = false }: Props) {
   const { read, readDone, detailFailed } = useRowRead(row, wo);
   const [picker, setPicker] = useState<Picker>(null);
   const [meterOpen, setMeterOpen] = useState(false);
@@ -88,7 +90,7 @@ export default function DocRowCard({ row, wo, customers, customersLoading }: Pro
               <MeterField row={row} wo={wo} meterText={meterText} locked={locked} onEdit={() => setMeterOpen(true)} />
             </>
           )}
-          <GramajField row={row} wo={wo} locked={locked} />
+          {!hideGramaj && <GramajField row={row} wo={wo} locked={locked} />}
           {!done && issues.map((n) => <Text key={n} style={styles.note}>• {n}</Text>)}
         </>
       )}
