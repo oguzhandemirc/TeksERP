@@ -120,3 +120,40 @@ describe("PageHeader — dar ekranda sarma (UX-3 R3)", () => {
     expect(actions.className).toContain("flex-wrap");
   });
 });
+
+describe("PageHeader — başlık altı açıklama satırı yok (K24)", () => {
+  const ACIKLAMA = "Yanmazlık, su geçirmezlik gibi kumaş kazanımları.";
+  const renderDesc = (props: { description?: string; statusLine?: string }) => {
+    const router = createMemoryRouter([{ path: CHILD, element: <PageHeader title="Kumaş Özellikleri" {...props} /> }], {
+      initialEntries: [CHILD],
+    });
+    render(<RouterProvider router={router} />);
+  };
+
+  it("açıklama başlık altında metin olarak çizilmez; başlık yanındaki ⓘ'nin erişilebilir adıdır", () => {
+    renderDesc({ description: ACIKLAMA });
+    expect(screen.queryByText(ACIKLAMA)).toBeNull();
+    const info = screen.getByRole("button", { name: ACIKLAMA });
+    // ⓘ başlıkla aynı satırda — ayrı bir satır açmaz.
+    expect(info.parentElement).toBe(screen.getByRole("heading", { name: "Kumaş Özellikleri" }).parentElement);
+  });
+
+  it("ⓘ'ye odaklanınca açıklama ipucunda okunur", async () => {
+    renderDesc({ description: ACIKLAMA });
+    await act(async () => {
+      screen.getByRole("button", { name: ACIKLAMA }).focus();
+    });
+    expect((await screen.findAllByText(ACIKLAMA)).length).toBeGreaterThan(0);
+  });
+
+  it("açıklama yoksa ⓘ de yok", () => {
+    renderDesc({});
+    expect(screen.queryByTestId("page-header-info")).toBeNull();
+  });
+
+  it("statusLine (kayıt bağlamı) başlık altında GÖRÜNÜR kalır", () => {
+    renderDesc({ statusLine: "Acme Tekstil · Merkez" });
+    expect(screen.getByText("Acme Tekstil · Merkez")).toBeVisible();
+    expect(screen.queryByTestId("page-header-info")).toBeNull();
+  });
+});

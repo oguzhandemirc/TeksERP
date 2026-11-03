@@ -38,7 +38,7 @@ export function DirectShipmentDetailPage() {
             Fasondan Sevk
           </Badge>
         }
-        description={
+        statusLine={
           d
             ? `${d.customer.name}${d.branch ? " · " + d.branch.name + (d.branch.code ? ` (${d.branch.code})` : "") : ""}`
             : undefined

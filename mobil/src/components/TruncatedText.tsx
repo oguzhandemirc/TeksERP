@@ -142,8 +142,8 @@ function useRevealGesture(truncated: boolean, revealOnTap: boolean, open: (x: nu
   }, [truncated, revealOnTap, open, testID]);
 }
 
-/** Tam ad balonu — dokunma noktasından konumlanır, dokununca kapanır. */
-function NameBalloon({ text, at, onClose }: { text: string; at: BalloonPoint; onClose: () => void }) {
+/** Tam ad balonu — dokunma noktasından konumlanır, dokununca kapanır. Başlık ⓘ'si de paylaşır (K24). */
+export function NameBalloon({ text, at, onClose }: { text: string; at: BalloonPoint; onClose: () => void }) {
   const { width, height } = useWindowDimensions();
   const layout = computeBalloonLayout(at, { width, height });
   return (
