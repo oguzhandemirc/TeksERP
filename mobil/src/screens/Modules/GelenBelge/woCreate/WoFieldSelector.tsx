@@ -5,7 +5,7 @@ import { StyleSheet, View } from 'react-native';
 import { Button, Icon, Switch, Text, TouchableRipple } from 'react-native-paper';
 import ModuleSheet from '../../../../components/ModuleSheet';
 import { colors, radius, spacing, typography } from '../../../../theme';
-import { selectorSections, type WoFieldDef, type WoFieldKey } from './woFieldCatalog';
+import { fieldLabel, selectorSections, type WoFieldDef, type WoFieldKey } from './woFieldCatalog';
 
 export function FieldsButton({ onPress }: { onPress: () => void }) {
   return (
@@ -78,14 +78,31 @@ function FieldRow({ f, on, onToggle }: { f: WoFieldDef; on: boolean; onToggle: (
   );
 }
 
-/** Altta kapalı bölüm: başlığa dokununca gizlenen alanlar açılır. */
-export function OtherFields({ count, open, onToggle, children }: { count: number; open: boolean; onToggle: () => void; children: React.ReactNode }) {
+interface OtherProps {
+  count: number;
+  /** Gizli ama dolu (gövdeye gidecek) alanlar: kapalı başlıkta söylenir. */
+  valued?: readonly WoFieldKey[];
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}
+
+/** Altta kapalı bölüm: başlığa dokununca gizlenen alanlar açılır. Dolu gizli alan başlıkta adıyla yazılır. */
+export function OtherFields({ count, valued = [], open, onToggle, children }: OtherProps) {
   if (count === 0) return null;
+  const note = valued.length ? `Dolu, kayda girecek: ${valued.map(fieldLabel).join(', ')}` : null;
   return (
     <View style={styles.other}>
-      <TouchableRipple onPress={onToggle} style={styles.otherHead} testID="ie-diger-alanlar" accessibilityLabel={`Diğer alanlar (${count})`}>
+      <TouchableRipple onPress={onToggle} style={styles.otherHead} testID="ie-diger-alanlar" accessibilityLabel={`Diğer alanlar (${count})${note ? `. ${note}` : ''}`}>
         <View style={styles.rowInner}>
-          <Text style={styles.otherTitle} testID="ie-diger-alanlar-baslik">{`Diğer alanlar (${count})`}</Text>
+          <View style={styles.rowText}>
+            <Text style={styles.otherTitle} testID="ie-diger-alanlar-baslik">{`Diğer alanlar (${count})`}</Text>
+            {note && (
+              <Text style={styles.hint} testID="ie-diger-alanlar-dolu">
+                {note}
+              </Text>
+            )}
+          </View>
           <Icon source={open ? 'chevron-up' : 'chevron-down'} size={24} color={colors.textSecondary} />
         </View>
       </TouchableRipple>
@@ -108,6 +125,6 @@ const styles = StyleSheet.create({
   required: { fontSize: typography.size.xs, color: colors.textSecondary, backgroundColor: colors.surfaceMuted, borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 2, overflow: 'hidden' },
   other: { marginTop: spacing.lg, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md },
   otherHead: { borderRadius: radius.md },
-  otherTitle: { flex: 1, fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text },
+  otherTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text },
   otherBody: { paddingHorizontal: spacing.md, paddingBottom: spacing.md },
 });

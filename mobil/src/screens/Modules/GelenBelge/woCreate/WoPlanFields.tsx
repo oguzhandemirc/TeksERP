@@ -31,6 +31,8 @@ export interface WoPlanCtx {
   /** Kurşun adımı istasyonunun makineleri (çok partide boş: parti başına seçilir). */
   machines: readonly DeskKursunMachine[];
   machineValue: string | null;
+  /** Makine bu kipte formda seçilmiyorsa nedeni (çok partide "her parti ayrı"). */
+  machineNote?: string | null;
   onMachine: (id: string | null) => void;
   customerId: string | null;
   woType: WoType | null;
@@ -50,18 +52,26 @@ interface BlockProps {
 export function RouteStepsBlock({ plan, show, locked }: BlockProps) {
   const machineShown = show('makine') && plan.machines.length > 0;
   const machine = machineShown ? { list: plan.machines, value: plan.machineValue, onChange: plan.onMachine } : null;
+  const note = plan.machineNote && show('rotaAdimlari') ? (
+    <Text style={styles.hint} testID="ie-form-makine-not">
+      {plan.machineNote}
+    </Text>
+  ) : null;
   if (plan.showSteps && show('rotaAdimlari')) {
     return (
-      <RouteStepsEditor
-        steps={plan.steps}
-        edited={plan.stepsEdited}
-        editable={plan.stepsEditable}
-        onChange={plan.onSteps}
-        routes={plan.stationRoutes}
-        routesLoading={plan.stationRoutesLoading}
-        machine={machine}
-        locked={locked}
-      />
+      <>
+        <RouteStepsEditor
+          steps={plan.steps}
+          edited={plan.stepsEdited}
+          editable={plan.stepsEditable}
+          onChange={plan.onSteps}
+          routes={plan.stationRoutes}
+          routesLoading={plan.stationRoutesLoading}
+          machine={machine}
+          locked={locked}
+        />
+        {note}
+      </>
     );
   }
   if (!machine) return null;
@@ -109,6 +119,8 @@ export function TargetPropsBlock({ plan, show, locked }: BlockProps) {
   const list = defaults.byCustomer.get(plan.customerId ?? '');
   const defaultIds = useMemo(() => [...new Set((list ?? []).flatMap((s) => s.targets.filter((t) => t.valueType === 'FLAG').map((t) => t.propertyId)))], [list]);
   if (!enabled) return null;
+  // Varsayılanlar gelmeden dokunulursa küme boş varsayılandan kurulur ve rotanın özelliklerini dışlar → çipler bekler.
+  const defaultsLoading = plan.propertyIds === null && (plan.route?.steps?.length ?? 0) > 0 && !defaults.byCustomer.has(plan.customerId ?? '');
   const selected = plan.propertyIds ?? defaultIds;
   const toggle = (id: string) => plan.onProperties(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
   const options = catalog.data?.data ?? [];
@@ -117,7 +129,7 @@ export function TargetPropsBlock({ plan, show, locked }: BlockProps) {
       <Text style={styles.label}>Hedef özellikler</Text>
       <View style={styles.chips}>
         {options.map((o) => (
-          <Chip key={o.id} selected={selected.includes(o.id)} onPress={() => toggle(o.id)} disabled={locked} style={styles.chip} testID={`ie-form-ozellik-${o.id}`}>
+          <Chip key={o.id} selected={selected.includes(o.id)} onPress={() => toggle(o.id)} disabled={locked || defaultsLoading} style={styles.chip} testID={`ie-form-ozellik-${o.id}`}>
             {o.name}
           </Chip>
         ))}
@@ -128,7 +140,7 @@ export function TargetPropsBlock({ plan, show, locked }: BlockProps) {
         )}
       </View>
       <Text style={styles.hint}>
-        {catalog.isLoading ? 'Özellikler yükleniyor…' : options.length === 0 ? 'Tanımlı özellik yok.' : plan.propertyIds === null ? 'Rotanın varsayılanları seçili.' : 'Elle seçildi; rota bu özellikleri vermeli.'}
+        {catalog.isLoading ? 'Özellikler yükleniyor…' : defaultsLoading ? 'Rotanın varsayılan özellikleri yükleniyor…' : options.length === 0 ? 'Tanımlı özellik yok.' : plan.propertyIds === null ? 'Rotanın varsayılanları seçili.' : 'Elle seçildi; rota bu özellikleri vermeli.'}
       </Text>
     </View>
   );

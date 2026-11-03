@@ -215,6 +215,18 @@ describe('UnifiedWoForm — ⚙ Alanlar (K30-D)', () => {
     expect(s.getByTestId('ie-form-alanlari')).toContainElement(s.getByTestId('ie-form-desen-oneri'));
   });
 
+  it('⭐ belgeden üste çıkan gizli alan düzeltilince yerinde kalır (rozet düşer, değer gövdeye gider)', async () => {
+    mockBlob = { tabletIeForm: { gizli: ['en'] } };
+    mockRows = [row()];
+    const s = renderWithPaper(ui());
+    await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));
+    fireEvent.changeText(s.getByTestId('ie-form-en'), '170');
+    expect(s.queryByTestId('belgeden-width')).toBeNull();
+    expect(s.getByTestId('ie-form-alanlari')).toContainElement(s.getByTestId('ie-form-en'));
+    expect(s.queryByTestId('ie-diger-alanlar')).toBeNull();
+    expect(mockOpts?.extraBody?.(mockRows[0])).toMatchObject({ width: 170 });
+  });
+
   it('tercih okunamazsa hepsi açık; yazılamayan seçim yerelde kalır ve "kaydedilecek" ipucu görünür', async () => {
     mockBlob = null as unknown as Record<string, unknown>;
     mockPrefSave.mockRejectedValueOnce(new Error('ağ yok'));
