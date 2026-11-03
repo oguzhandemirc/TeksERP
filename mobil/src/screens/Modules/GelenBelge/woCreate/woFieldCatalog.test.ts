@@ -1,5 +1,6 @@
 // K30-D alan kataloğu (saf): zorunlular kilitli, bilinmeyen anahtar atılır, blob birleştirme diğer anahtarları korur,
 // gizli alan belgeden dolunca üste çıkar, koşullu alanlar yalnız koşulunda sayılır.
+import { initialFormState } from './woForm';
 import {
   WO_FIELDS,
   docFilledFields,
@@ -11,11 +12,12 @@ import {
   placement,
   selectorSections,
   toggleHidden,
+  valuedFields,
   type FieldContext,
 } from './woFieldCatalog';
 
 const ctx: FieldContext = { showQuantity: true, hasTambur: true, hasKursun: true, hasRouteSteps: true, hasMachine: true };
-const noDoc = { fromDoc: [], suggestions: {}, docText: { desen: null, renk: null } };
+const noDoc = { docShown: [], suggestions: {}, docText: { desen: null, renk: null } };
 
 describe('woFieldCatalog', () => {
   it('zorunlu ve kilitli dört alan: Müşteri, Rota, Parti no, Kurşun metresi', () => {
@@ -64,7 +66,7 @@ describe('woFieldCatalog', () => {
 
   it('docFilledFields: rozetli alanlar + belgede yazan desen/renk', () => {
     expect(docFilledFields(noDoc)).toEqual([]);
-    expect(docFilledFields({ fromDoc: ['width', 'note'], suggestions: { targetColor: { id: 'c', name: 'Ekru' } }, docText: { desen: 'D-1', renk: null } }).sort()).toEqual(
+    expect(docFilledFields({ docShown: ['width', 'note'], suggestions: { targetColor: { id: 'c', name: 'Ekru' } }, docText: { desen: 'D-1', renk: null } }).sort()).toEqual(
       ['en', 'hedefKumas', 'hedefRenk', 'not'].sort(),
     );
   });
@@ -82,5 +84,14 @@ describe('woFieldCatalog', () => {
     // "Diğer alanlar (n)": koşulu tutmayan ve belgeden dolan gizli alan sayılmaz.
     expect(otherFields(['katTipi', 'en', 'not'], ['not'], off)).toEqual(['en']);
     expect(otherFields(['katTipi', 'en', 'not'], [], ctx)).toEqual(['en', 'katTipi', 'not']);
+  });
+
+  it('valuedFields: yalnız kullanıcının doldurduğu/değiştirdiği (gövdeye gidecek) alanlar', () => {
+    const e = initialFormState().extras;
+    expect(valuedFields(e, { stepsEdited: false })).toEqual([]);
+    expect(valuedFields({ ...e, foldType: 'A' }, { stepsEdited: false })).toEqual([]);
+    expect(
+      valuedFields({ ...e, woType: 'STOCK_PRODUCTION', propertyIds: [], machineId: null, width: '150', note: ' ' }, { stepsEdited: true }).sort(),
+    ).toEqual(['en', 'hedefOzellik', 'isEmriTuru', 'makine', 'rotaAdimlari'].sort());
   });
 });

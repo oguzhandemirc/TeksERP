@@ -101,6 +101,15 @@ export function effectiveRoute(route: ProductionRoute, steps: readonly EditStep[
   };
 }
 
+/** Listenin ilk kurşun adımının istasyonu (makine bu istasyona aittir); yoksa null. */
+export const kursunStationOf = (steps: readonly EditStep[]): string | null => steps.find((s) => isKursunStation(s.station))?.stationId ?? null;
+
+/**
+ * Adım düzenlemesi seçilen makineyi geçersiz kılıyor mu: ilk kurşun adımı çıkarıldı ya da başka istasyonlu bir kurşun
+ * adımı öne geçtiyse eski makine yeni listeye ait değildir → seçim sıfırlanır (sessizce düşmesin / 400 vermesin).
+ */
+export const stepsDropMachine = (before: readonly EditStep[], after: readonly EditStep[]): boolean => kursunStationOf(before) !== kursunStationOf(after);
+
 /**
  * `steps` gövdesi (sequence = sıra + 1). `machineId`: undefined = karar yok (adımın şablon makinesi kalır) · null =
  * "Sonra seçilsin" · id = ilk kurşun adımının plan makinesi. Boş alan anahtarı gitmez.

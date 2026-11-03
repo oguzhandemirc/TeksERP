@@ -82,18 +82,21 @@ export function useWoFieldPrefs(): WoFieldPrefs {
 }
 
 /** Formun alan yerleşimi: üstte çizilenler, altta "Diğer alanlar"a inenler, ⚙ ve bölüm açıklığı. */
-export function useWoFieldLayout(s: Pick<WoFormState, 'fromDoc' | 'suggestions' | 'docText'>, c: FieldContext) {
+export function useWoFieldLayout(s: Pick<WoFormState, 'docShown' | 'suggestions' | 'docText'>, c: FieldContext, valued: readonly WoFieldKey[] = []) {
   const prefs = useWoFieldPrefs();
-  const { fromDoc, suggestions, docText } = s;
-  const docKeys = useMemo(() => docFilledFields({ fromDoc, suggestions, docText }), [fromDoc, suggestions, docText]);
+  const { docShown, suggestions, docText } = s;
+  const docKeys = useMemo(() => docFilledFields({ docShown, suggestions, docText }), [docShown, suggestions, docText]);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [otherOpen, setOtherOpen] = useState(false);
   const isTop = useCallback((k: WoFieldKey) => placement(k, prefs.hidden, docKeys) === 'top', [prefs.hidden, docKeys]);
+  const other = otherFields(prefs.hidden, docKeys, c);
   return {
     prefs,
     isTop,
     isOther: (k: WoFieldKey) => !isTop(k),
-    other: otherFields(prefs.hidden, docKeys, c),
+    other,
+    /** Gizli ama dolu (gövdeye gidecek) alanlar — "Diğer alanlar" başlığında söylenir. */
+    otherValued: other.filter((k) => valued.includes(k)),
     sheetOpen,
     openSheet: () => setSheetOpen(true),
     closeSheet: () => setSheetOpen(false),

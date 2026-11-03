@@ -64,7 +64,7 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
           </View>
         )}
         <WoFormFields {...fieldProps} show={fields.isTop} />
-        <OtherFields count={fields.other.length} open={fields.otherOpen} onToggle={fields.toggleOther}>
+        <OtherFields count={fields.other.length} valued={fields.otherValued} open={fields.otherOpen} onToggle={fields.toggleOther}>
           {row?.form && fields.isOther('gramaj') && <GramajField row={row} wo={wo} locked={done || wo.saving} />}
           <WoFormFields {...fieldProps} show={fields.isOther} zone="other" />
         </OtherFields>

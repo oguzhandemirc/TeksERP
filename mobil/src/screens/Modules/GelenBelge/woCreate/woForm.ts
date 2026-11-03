@@ -5,6 +5,7 @@ import { addDaysToKey, factoryDayKey, factoryDayStartIso, fmtDayKey } from '../.
 import type { CreateWorkOrderFromNoteBody, DocFormFields, DocFormSuggestions, TabletWoEntry } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { kursunStepOf } from '../desk/deskPlan';
+import type { WoFieldKey } from './woFieldCatalog';
 import { buildStepsBody, sameAsRoute, type EditStep } from './woSteps';
 
 export type { TabletWoEntry };
@@ -72,6 +73,8 @@ export interface WoFormState {
   extras: WoFormExtras;
   /** Değeri belgeden gelen alanlar (rozet). */
   fromDoc: DocFilledKey[];
+  /** Bu okumada belgeden dolan alanlar (anlık görüntü): gizli olsa da okuma boyunca üstte kalır; elle düzenleme düşürmez. */
+  docShown: DocFilledKey[];
   /** Kullanıcının elle değiştirdiği alanlar: sonraki belge okuması bunları ezmez. */
   touched: DocFilledKey[];
   suggestions: DocFormSuggestions;
@@ -99,7 +102,7 @@ export const EMPTY_EXTRAS: WoFormExtras = {
 };
 
 export function initialFormState(): WoFormState {
-  return { extras: { ...EMPTY_EXTRAS, orderLineIds: [] }, fromDoc: [], touched: [], suggestions: {}, docText: { desen: null, renk: null }, appliedNoteId: null };
+  return { extras: { ...EMPTY_EXTRAS, orderLineIds: [] }, fromDoc: [], docShown: [], touched: [], suggestions: {}, docText: { desen: null, renk: null }, appliedNoteId: null };
 }
 
 /** Sunucu sayıyı çözer; eski/ham metin gelirse TR biçimi ("1.234,5") de kabul. ≤0 / çözülemeyen → null. */
@@ -139,6 +142,7 @@ export function applyDocRead(s: WoFormState, noteId: string, fields: DocFormFiel
     ...s,
     extras,
     fromDoc,
+    docShown: [...fromDoc],
     suggestions: { targetItem: suggestions?.targetItem ?? null, targetColor: suggestions?.targetColor ?? null },
     docText: { desen: cleanText(f.desenText), renk: cleanText(f.renkText) },
     appliedNoteId: noteId,
@@ -169,7 +173,7 @@ export function resetForRoute(s: WoFormState): WoFormState {
 export function clearDocRead(s: WoFormState): WoFormState {
   const extras = { ...s.extras };
   for (const k of s.fromDoc) extras[k] = '';
-  return { ...s, extras, fromDoc: [], suggestions: {}, docText: { desen: null, renk: null }, appliedNoteId: null };
+  return { ...s, extras, fromDoc: [], docShown: [], suggestions: {}, docText: { desen: null, renk: null }, appliedNoteId: null };
 }
 
 /** Sipariş kalemi seçildi: boş hedef kumaş / renk / en kalemden dolar (Hızlı İE ile aynı; dolu alan ezilmez). */
@@ -179,6 +183,8 @@ export function applyOrderLine(s: WoFormState, line: { itemId: string; itemName:
   if (!e.targetItemId) Object.assign(patch, { targetItemId: line.itemId, targetItemLabel: line.itemName });
   if (!e.targetColorId && line.colorId) patch.targetColorId = line.colorId;
   if (!e.width.trim() && line.width != null && line.width > 0) patch.width = String(line.width);
+  // editExtras ile aynı panel kuralı: hedef kumaş değişince elle seçilen özellik kümesi boşalır.
+  if (patch.targetItemId && e.propertyIds !== null) patch.propertyIds = [];
   return { ...s, extras: { ...e, ...patch } };
 }
 
@@ -188,20 +194,23 @@ export interface ExtrasCtx {
   hasTambur: boolean;
   /** Çok partide "her parti ayrı İE": hedef metraj/kg belge toplamıdır, gönderilmez (S16a: 400). */
   perParty?: boolean;
+  /** Alan altta kapalı "Diğer alanlar"da mı: engel ipucu alanın yerini söyler. */
+  inOther?: (k: WoFieldKey) => boolean;
 }
 
 /** Ek alanların engelleri (sunucu yine doğrular). */
 export function extrasIssues(e: WoFormExtras, c: ExtrasCtx): string[] {
   const out: string[] = [];
+  const push = (k: WoFieldKey, msg: string) => out.push(c.inOther?.(k) ? `${msg} (alan altta "Diğer alanlar" bölümünde)` : msg);
   if (!c.routeChosen) out.push('Rotayı seçin.');
   const bad = (t: string) => t.trim() !== '' && parseFormNumber(t) === null;
-  if (bad(e.width)) out.push('En sıfırdan büyük bir sayı olmalı.');
-  if (!c.perParty && bad(e.targetQuantity)) out.push('Hedef metraj sıfırdan büyük bir sayı olmalı.');
-  if (!c.perParty && bad(e.targetWeight)) out.push('Hedef kg sıfırdan büyük bir sayı olmalı.');
-  if (c.hasTambur && !e.foldType) out.push('Kat tipini seçin.');
-  if (e.plannedStart && e.plannedEnd && e.plannedEnd < e.plannedStart) out.push('Planlı bitiş başlangıçtan önce olamaz.');
-  if (e.woType === 'ORDER_PRODUCTION' && e.orderLineIds.length === 0) out.push('Siparişe üretim için sipariş kalemi seçin ya da "Stoğa üretim" seçin.');
-  if (e.steps && e.steps.length === 0) out.push('Rotada en az bir adım kalmalı.');
+  if (bad(e.width)) push('en', 'En sıfırdan büyük bir sayı olmalı.');
+  if (!c.perParty && bad(e.targetQuantity)) push('hedefMetraj', 'Hedef metraj sıfırdan büyük bir sayı olmalı.');
+  if (!c.perParty && bad(e.targetWeight)) push('hedefKg', 'Hedef kg sıfırdan büyük bir sayı olmalı.');
+  if (c.hasTambur && !e.foldType) push('katTipi', 'Kat tipini seçin.');
+  if (e.plannedStart && e.plannedEnd && e.plannedEnd < e.plannedStart) push('planBitis', 'Planlı bitiş başlangıçtan önce olamaz.');
+  if (e.woType === 'ORDER_PRODUCTION' && e.orderLineIds.length === 0) push('isEmriTuru', 'Siparişe üretim için sipariş kalemi seçin ya da "Stoğa üretim" seçin.');
+  if (e.steps && e.steps.length === 0) push('rotaAdimlari', 'Rotada en az bir adım kalmalı.');
   return out;
 }
 

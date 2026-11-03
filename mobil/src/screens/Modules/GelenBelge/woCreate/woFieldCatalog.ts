@@ -1,7 +1,7 @@
 // K30-D tablet İE formu alan kataloğu (saf): ⚙ "Alanlar" seçicisi, kişisel tercih blob'u (`tabletIeForm.gizli`) ve
 // alanın yeri (üst form / altta kapalı "Diğer alanlar"). Zorunlular kapatılamaz; belgeden dolan gizli alan üste çıkar
 // (sessiz gönderim yok). Varsayılan HEPSİ AÇIK.
-import type { DocFilledKey, WoFormState } from './woForm';
+import type { DocFilledKey, WoFormExtras, WoFormState } from './woForm';
 
 export type WoFieldKey =
   | 'musteri'
@@ -134,9 +134,12 @@ export function toggleHidden(hidden: readonly WoFieldKey[], k: WoFieldKey): WoFi
 
 const DOC_KEY_FIELD: Record<DocFilledKey, WoFieldKey> = { width: 'en', targetQuantity: 'hedefMetraj', targetWeight: 'hedefKg', note: 'not' };
 
-/** Bu okumada belgeden dolan (rozetli) ya da belgeden öneri/yazı taşıyan alanlar. */
-export function docFilledFields(s: Pick<WoFormState, 'fromDoc' | 'suggestions' | 'docText'>): WoFieldKey[] {
-  const out: WoFieldKey[] = s.fromDoc.map((k) => DOC_KEY_FIELD[k]);
+/**
+ * Bu okumada belgeden dolan ya da belgeden öneri/yazı taşıyan alanlar. Okuma anının görüntüsü (`docShown`) kullanılır:
+ * görevli alanı düzeltince rozet düşer ama alan okuma boyunca yerinde kalır (üstten kaybolmaz).
+ */
+export function docFilledFields(s: Pick<WoFormState, 'docShown' | 'suggestions' | 'docText'>): WoFieldKey[] {
+  const out: WoFieldKey[] = s.docShown.map((k) => DOC_KEY_FIELD[k]);
   if (s.suggestions.targetItem || s.docText.desen) out.push('hedefKumas');
   if (s.suggestions.targetColor || s.docText.renk) out.push('hedefRenk');
   return out;
@@ -154,3 +157,29 @@ export function placement(k: WoFieldKey, hidden: readonly WoFieldKey[], docKeys:
 export function otherFields(hidden: readonly WoFieldKey[], docKeys: readonly WoFieldKey[], c: FieldContext): WoFieldKey[] {
   return WO_FIELDS.filter((f) => !f.planned && fieldApplicable(f.key, c) && placement(f.key, hidden, docKeys) === 'other').map((f) => f.key);
 }
+
+/**
+ * Kullanıcının doldurduğu / değiştirdiği ve gövdeye gidecek alanlar. Gizli alanda böyle bir değer varsa "Diğer alanlar"
+ * başlığı bunu söyler (gizli alandan sessiz gönderim yok). Kat tipi (otomatik ön seçim) ve gramaj (belge satırı) sayılmaz.
+ */
+export function valuedFields(e: WoFormExtras, c: { stepsEdited: boolean }): WoFieldKey[] {
+  const filled = (t: string) => t.trim() !== '';
+  const pairs: [WoFieldKey, boolean][] = [
+    ['rotaAdimlari', c.stepsEdited],
+    ['makine', e.machineId !== undefined],
+    ['isEmriTuru', e.woType !== null],
+    ['siparis', e.orderLineIds.length > 0],
+    ['hedefKumas', !!e.targetItemId],
+    ['en', filled(e.width)],
+    ['hedefMetraj', filled(e.targetQuantity)],
+    ['hedefKg', filled(e.targetWeight)],
+    ['hedefRenk', !!e.targetColorId],
+    ['hedefOzellik', e.propertyIds !== null],
+    ['planBaslangic', !!e.plannedStart],
+    ['planBitis', !!e.plannedEnd],
+    ['not', filled(e.note)],
+  ];
+  return pairs.filter(([, v]) => v).map(([k]) => k);
+}
+
+export const fieldLabel = (k: WoFieldKey): string => BY_KEY.get(k)?.label ?? k;

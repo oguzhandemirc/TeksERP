@@ -13,6 +13,7 @@ import {
   removeStep,
   sameAsRoute,
   stationsFromRoutes,
+  stepsDropMachine,
   stepsFromRoute,
 } from './woSteps';
 
@@ -140,5 +141,14 @@ describe('K30-D ek gövde (buildExtraBody)', () => {
     expect(reset.extras.propertyIds).toBeNull();
     expect(reset.extras).not.toHaveProperty('machineId');
     expect(reset.extras.woType).toBe('STOCK_PRODUCTION');
+  });
+
+  it('kurşun adımı çıkarılınca / istasyonu değişince makine kararı düşer; başka adım değişince kalır', () => {
+    const base = stepsFromRoute(route);
+    expect(stepsDropMachine(base, removeStep(base, 'ts1'))).toBe(true);
+    expect(stepsDropMachine(base, removeStep(base, 'ts2'))).toBe(false);
+    expect(stepsDropMachine(base, moveStep(base, 'ts3', -1))).toBe(false);
+    const other = addStep(removeStep(base, 'ts1'), st('kur2', { isKursunStation: true }) as never, 'n1');
+    expect(stepsDropMachine(base, other)).toBe(true);
   });
 });

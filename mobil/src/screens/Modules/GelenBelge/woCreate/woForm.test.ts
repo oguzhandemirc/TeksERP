@@ -107,6 +107,37 @@ describe('applyDocRead / editExtras / clearDocRead', () => {
   });
 });
 
+describe('docShown (belgeden dolan alanın yeri) / applyOrderLine özellik kuralı / engel yeri', () => {
+  it('⭐ elle düzeltme rozeti düşürür ama okuma boyunca docShown sabit; yeni okuma ve belge çıkarma yeniler', () => {
+    let s = applyDocRead(initialFormState(), 'n1#1', { en: '150', not: 'Acele' }, null);
+    expect(s.docShown.sort()).toEqual(['note', 'width']);
+    s = editExtras(s, { width: '160' });
+    expect(s.fromDoc).toEqual(['note']);
+    expect(s.docShown.sort()).toEqual(['note', 'width']);
+    s = applyDocRead(s, 'n2#1', { not: 'Yeni' }, null);
+    expect(s.docShown).toEqual(['note']);
+    expect(clearDocRead(s).docShown).toEqual([]);
+  });
+
+  it('sipariş kalemi hedef kumaşı atarsa elle seçilen özellik kümesi boşalır; dokunulmamış küme null kalır', () => {
+    const line = { itemId: 'i9', itemName: 'Kumaş', colorId: null, width: null };
+    const touched = applyOrderLine({ ...initialFormState(), extras: extras({ propertyIds: ['p1'] }) }, line);
+    expect(touched.extras).toMatchObject({ targetItemId: 'i9', propertyIds: [] });
+    expect(applyOrderLine(initialFormState(), line).extras.propertyIds).toBeNull();
+    // Hedef kumaş zaten doluysa kalem onu ezmez → küme de korunur.
+    const kept = applyOrderLine({ ...initialFormState(), extras: extras({ targetItemId: 'i1', propertyIds: ['p1'] }) }, line);
+    expect(kept.extras.propertyIds).toEqual(['p1']);
+  });
+
+  it('engel gizli alandaysa ipucu yerini söyler', () => {
+    const e = extras({ woType: 'ORDER_PRODUCTION', steps: [] });
+    const c = { routeChosen: true, hasTambur: false, inOther: (k: string) => k === 'isEmriTuru' };
+    const out = extrasIssues(e, c);
+    expect(out[0]).toMatch(/Siparişe üretim.*"Diğer alanlar" bölümünde/);
+    expect(out[1]).toBe('Rotada en az bir adım kalmalı.');
+  });
+});
+
 describe('extrasIssues / createBlockReason', () => {
   it('rota, sayı, kat ve tarih engelleri', () => {
     expect(extrasIssues(extras(), { routeChosen: false, hasTambur: false })).toEqual(['Rotayı seçin.']);

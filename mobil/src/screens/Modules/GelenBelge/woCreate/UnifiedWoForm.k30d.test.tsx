@@ -70,11 +70,9 @@ jest.mock('../../../../services/fabricProperty.service', () => ({
   fabricPropertyService: { getAll: async () => ({ data: [{ id: 'p1', name: 'Yanmaz' }, { id: 'p2', name: 'Antibakteriyel' }] }) },
 }));
 // Rotanın varsayılan hedefleri: p1 (BAYRAK) + bir SEÇİM (tablet listesine girmez).
-jest.mock('../../../../hooks/useRouteDefaultTargets', () => ({
-  useRouteDefaultTargets: () => ({
-    byCustomer: new Map([['cu1', [{ stationId: 'stK', targets: [{ propertyId: 'p1', valueType: 'FLAG' }, { propertyId: 'pc', valueType: 'CHOICE' }] }]]]),
-  }),
-}));
+const mockDefaultsLoaded = () => new Map([['cu1', [{ stationId: 'stK', targets: [{ propertyId: 'p1', valueType: 'FLAG' }, { propertyId: 'pc', valueType: 'CHOICE' }] }]]]);
+let mockDefaults: Map<string, unknown> = mockDefaultsLoaded();
+jest.mock('../../../../hooks/useRouteDefaultTargets', () => ({ useRouteDefaultTargets: () => ({ byCustomer: mockDefaults }) }));
 jest.mock('../../../../services/subcontractor.service', () => ({
   subcontractorService: { listSubcontractors: async () => ({ data: [{ id: 'f1', name: 'Boyacı A', categories: [{ categoryId: 'catB' }] }] }) },
 }));
@@ -115,6 +113,7 @@ async function openFree() {
 
 beforeEach(() => {
   mockBlob = {};
+  mockDefaults = mockDefaultsLoaded();
   mockRows = [row];
   mockOpts = undefined;
   jest.clearAllMocks();
@@ -213,5 +212,53 @@ describe('UnifiedWoForm — iş emri türü ve hedef özellikler (K30-D)', () =>
     expect(s.queryByTestId('ie-form-tur')).toBeNull();
     expect(s.queryByTestId('ie-form-ozellik')).toBeNull();
     expect(await s.findByTestId('ie-form-makine')).toBeTruthy();
+  });
+
+  it('varsayılanlar yüklenirken özellik çipleri kapalı (boş kümeden yanlış targetPropertyIds kurulmaz)', async () => {
+    mockDefaults = new Map();
+    const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
+    const p2 = await s.findByTestId('ie-form-ozellik-p2');
+    expect(p2).toBeDisabled();
+    expect(s.getByTestId('ie-form-ozellik')).toHaveTextContent(/varsayılan özellikleri yükleniyor/);
+    fireEvent.press(p2);
+    expect(body()).not.toHaveProperty('targetPropertyIds');
+  });
+});
+
+describe('UnifiedWoForm — gizli ama dolu alan / makine tutarlılığı (K30-D düzeltme)', () => {
+  it('⭐ dokunulmuş alan ⚙ ile gizlenirse "Diğer alanlar" başlığı dolu olduğunu söyler; engel ipucu yerini gösterir', async () => {
+    const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
+    fireEvent.press(await s.findByTestId('ie-form-tur-ORDER_PRODUCTION'));
+    fireEvent.press(s.getByTestId('ie-alanlar'));
+    fireEvent.press(await s.findByTestId('ie-alan-isEmriTuru'));
+    fireEvent.press(s.getByTestId('ie-alanlar-tamam'));
+    await waitFor(() => expect(s.queryByTestId('ie-form-tur')).toBeNull());
+    expect(s.getByTestId('ie-diger-alanlar-dolu')).toHaveTextContent('Dolu, kayda girecek: İş emri türü');
+    expect(body().type).toBe('ORDER_PRODUCTION');
+    expect(s.getByTestId('ie-form-olustur')).toBeDisabled();
+    expect(s.getByTestId('ie-form-ipucu').props.children).toMatch(/"Diğer alanlar" bölümünde/);
+    // Dokunulmamış gizli alan "dolu" sayılmaz.
+    fireEvent.press(s.getByTestId('ie-diger-alanlar'));
+    fireEvent.press(s.getByTestId('ie-form-tur-otomatik'));
+    expect(s.queryByTestId('ie-diger-alanlar-dolu')).toBeNull();
+  });
+
+  it('⭐ kurşun adımı çıkarılınca seçilen makine düşer (şablona dönünce de eski seçim gitmez)', async () => {
+    const s = await openFree();
+    fireEvent.press(await s.findByTestId('ie-form-makine-K1'));
+    expect(body().stepPlanning).toEqual([{ sequence: 1, plannedMachineId: 'm1' }]);
+    fireEvent.press(s.getByTestId('ie-adim-1-cikar'));
+    expect(s.queryByTestId('ie-form-makine')).toBeNull();
+    expect(body().steps).toEqual([{ stationId: 'stB', sequence: 1, requiredCategoryId: 'catB' }]);
+    fireEvent.press(s.getByTestId('ie-adim-sablona-don'));
+    expect(body()).not.toHaveProperty('steps');
+    expect(body()).not.toHaveProperty('stepPlanning');
+  });
+
+  it('her parti ayrı İE kipinde makine seçilmez ve form bunu söyler', async () => {
+    mockRows = [{ ...row, form: { ...form, multi: { mode: 'PER_PARTY', rows: [] } } } as unknown as DocRow];
+    const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
+    expect(await s.findByTestId('ie-form-makine-not')).toHaveTextContent(/her iş emrinde sonra seçilir/);
+    expect(s.queryByTestId('ie-form-makine')).toBeNull();
   });
 });

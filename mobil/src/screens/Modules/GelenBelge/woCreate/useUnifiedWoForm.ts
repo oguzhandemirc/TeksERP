@@ -16,6 +16,7 @@ import { useDocScan } from '../useDocScan';
 import { usePageSource } from '../usePageSource';
 import { useWoRows, type DocRow } from './useWoRows';
 import { useWoFieldLayout } from './useWoFieldPrefs';
+import { valuedFields } from './woFieldCatalog';
 import type { WoPlanCtx } from './WoPlanFields';
 import {
   applyDocRead,
@@ -31,7 +32,7 @@ import {
   type WoFormState,
 } from './woForm';
 import { SCAN_ROUTE, isScanRoute, rowIssues } from './woFromDoc';
-import { effectiveRoute, sameAsRoute, stepsFromRoute } from './woSteps';
+import { effectiveRoute, sameAsRoute, stepsDropMachine, stepsFromRoute } from './woSteps';
 
 export interface UnifiedWoFormProps {
   /** Özel iş emri karosundan açıldıysa ön seçili rota (rotasız dahil); düz karoda null = seçilir. */
@@ -88,17 +89,21 @@ export function useUnifiedWoForm({ initialRoute, routeLocked }: UnifiedWoFormPro
     stationRoutesLoading: routesQ.isLoading,
     customerId: row?.form?.ownerCustomerId ?? null,
   });
-  const fields = useWoFieldLayout(form, {
-    showQuantity: showQuantity || !!extras.targetQuantity || !!extras.targetWeight,
-    hasTambur,
-    hasKursun: !!wo.showGramaj && wo.catalog.options.length > 0 && !!row?.form,
-    hasRouteSteps,
-    hasMachine: plan.machines.length > 0,
-  });
+  const fields = useWoFieldLayout(
+    form,
+    {
+      showQuantity: showQuantity || !!extras.targetQuantity || !!extras.targetWeight,
+      hasTambur,
+      hasKursun: !!wo.showGramaj && wo.catalog.options.length > 0 && !!row?.form,
+      hasRouteSteps,
+      hasMachine: plan.machines.length > 0,
+    },
+    valuedFields(extras, { stepsEdited: plan.stepsEdited }),
+  );
 
   const done = row?.result?.kind === 'OPENED' || row?.result?.kind === 'DRAFT';
   const issues = [
-    ...extrasIssues(extras, { routeChosen: !!route, hasTambur, perParty }),
+    ...extrasIssues(extras, { routeChosen: !!route, hasTambur, perParty, inOther: fields.isOther }),
     ...(row?.form && wo.mode !== 'SEPARATE' ? rowIssues(row.form) : []),
   ];
   const block = done ? null : createBlockReason({ hasDoc: !!row, reading: !!row && (!row.form || !row.detail), issues });
@@ -118,6 +123,8 @@ export function useUnifiedWoForm({ initialRoute, routeLocked }: UnifiedWoFormPro
     onOrderLine: (l: AvailableOrderLine) => setForm((s) => applyOrderLine(s, { itemId: l.itemId, itemName: l.itemName, colorId: l.colorId, width: l.width })),
   };
 }
+
+const PER_PARTY_MACHINE_NOTE = 'Her parti ayrı iş emri açıldığı için makine burada seçilmez; her iş emrinde sonra seçilir.';
 
 interface PlanInput {
   route: ProductionRoute | null;
@@ -142,10 +149,15 @@ function buildPlanCtx(p: PlanInput): WoPlanCtx {
     stepsEdited: extras.steps !== null && !sameAsRoute(extras.steps, route),
     showSteps: p.hasRouteSteps,
     stepsEditable: !p.routeLocked,
-    onSteps: (steps) => edit({ steps }),
+    // Kurşun adımı çıkarıldı/değişti → seçilen makine o istasyona ait değil: karar sıfırlanır (şablon/öneri yeniden).
+    onSteps: (steps) => {
+      const before = extras.steps ?? stepsFromRoute(route);
+      edit(stepsDropMachine(before, steps ?? stepsFromRoute(route)) ? { steps, machineId: undefined } : { steps });
+    },
     stationRoutes: p.stationRoutes,
     stationRoutesLoading: p.stationRoutesLoading,
     machines: p.perParty ? [] : machinesForRoute(eff, p.allMachines),
+    machineNote: p.perParty && machinesForRoute(eff, p.allMachines).length > 0 ? PER_PARTY_MACHINE_NOTE : null,
     machineValue: extras.machineId !== undefined ? extras.machineId : routeDefaultMachineId(eff, p.allMachines) ?? null,
     onMachine: (machineId) => edit({ machineId }),
     customerId: p.customerId,
