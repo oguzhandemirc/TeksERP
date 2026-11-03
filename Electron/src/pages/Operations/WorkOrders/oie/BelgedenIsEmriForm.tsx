@@ -8,7 +8,7 @@ import { ExternalLink, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiErrorText } from "@/lib/api-error";
 import { useAttemptToken } from "@/lib/attemptToken";
-import { useKursunCustomerDefaults, useKursunGramajCatalog } from "@/lib/kursun-gramaj";
+import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
 import { useTabsStore } from "@/store/tabs";
 import { belgeOkutStage } from "@/pages/Operations/GelenBelgeler/belgeOkut";
 import { INCOMING_DOCUMENT_QUERY_KEY } from "@/pages/Operations/GelenBelgeler/service";
@@ -16,7 +16,9 @@ import { ScanReadBanner } from "@/pages/Operations/GelenBelgeler/ScanReadBanner"
 import { useNoteDetail } from "@/pages/Operations/GelenBelgeler/useNoteDetail";
 import { DocFields, FromDocBadge } from "./DocFields";
 import { DocThumb } from "./DocThumb";
-import { docDraftReasons, initialDocDraft, reseedOwnerGramaj, routeGramajOptions, type DocDraft } from "./docDraft";
+import { docDraftReasons, gramajOffer, initialDocDraft, passThroughTargets, routeGramajOptions, seedDraftGramaj, type DocDraft } from "./docDraft";
+import { useOieDefaultTargets } from "./useOieDefaults";
+import type { DefaultTarget } from "@/lib/station-default-targets";
 import { AUTO_PRINT_TEXT, printRefakatCard, useRefakatAutoPrint } from "./refakatPrint";
 import { draftSavedText, saveLabel, saveDoc, saveErrorHint, type SaveOutcome } from "./saveDoc";
 import { useFormApproval } from "./useFormApproval";
@@ -38,8 +40,8 @@ function useSave(noteId: string, route: Props["route"]) {
   const navigateActive = useTabsStore((s) => s.navigateActive);
   const { catalog } = useKursunGramajCatalog();
   return useMutation({
-    mutationFn: (v: { note: NonNullable<ReturnType<typeof useNoteDetail>["note"]["data"]>; draft: DocDraft; multi: MultiPartyDraft | null }): Promise<SaveOutcome> =>
-      saveDoc({ ...v, routeTemplateId: route.id, formApproval: approval.value, gramajPropertyId: catalog.propertyId, clientToken: attempt.token() }),
+    mutationFn: (v: { note: NonNullable<ReturnType<typeof useNoteDetail>["note"]["data"]>; draft: DocDraft; multi: MultiPartyDraft | null; targets: readonly DefaultTarget[] | null }): Promise<SaveOutcome> =>
+      saveDoc({ ...v, routeTemplateId: route.id, formApproval: approval.value, gramajPropertyId: catalog.propertyId, passThrough: passThroughTargets(v.targets, catalog.propertyId), clientToken: attempt.token() }),
     onError: (e) => attempt.onFailure(e),
     onSuccess: async (out) => {
       attempt.onSuccess();
@@ -62,17 +64,23 @@ export function BelgedenIsEmriForm({ noteId, route }: Props) {
   const { catalog, isLoading: catalogLoading } = useKursunGramajCatalog();
   // Kurşunsuz rotada gramaj kutusu ve varsayılanı yok (sunucu hedefi 400'le reddeder).
   const gramajOptions = routeGramajOptions(catalog.options, route.hasKursun);
-  const { defaults: customerDefaults, isLoading: defaultsLoading } = useKursunCustomerDefaults();
   const [draft, setDraft] = useState<DocDraft | null>(null);
+  // K22: ön seçim sunucu çözücüsünden (müşteri > istasyon yeteneği > değer varsayılanı); panel kural yazmaz.
+  const targetsFor = useOieDefaultTargets(route.id, [draft?.ownerCustomerId ?? null]);
+  const targets = draft ? targetsFor(draft.ownerCustomerId) : undefined;
+  const offer = catalogLoading ? undefined : gramajOffer(targets, catalog.propertyId, gramajOptions);
   const [multi, setMulti] = useState<MultiPartyDraft | null | undefined>(undefined);
   // S1: çok partili belge — parti özeti okuma bitince bir kez; eski backend (404) → null = bugünkü tek partili form.
   const parties = useQuery({ queryKey: ["gelen-belge", noteId, "partiler"], queryFn: () => getNoteParties(noteId), enabled: stage !== "READING" && approval.value === "WITH_WORK_ORDER" });
   const save = useSave(noteId, route);
   const navigateActive = useTabsStore((s) => s.navigateActive);
-  // Taslak bir kez, okuma bitince ve gramaj kataloğu gelince dolar (varsayılan gramaj ön seçimi kaçmasın).
+  // Taslak bir kez, okuma bitince dolar; gramaj teklifi geldikçe (müşteri değişince yeniden) tohumlanır.
   useEffect(() => {
-    if (n && !draft && stage !== "READING" && !catalogLoading && !defaultsLoading) setDraft(initialDocDraft(n, gramajOptions, customerDefaults));
-  }, [n, draft, stage, catalogLoading, defaultsLoading, gramajOptions, customerDefaults]);
+    if (n && !draft && stage !== "READING") setDraft(initialDocDraft(n));
+  }, [n, draft, stage]);
+  useEffect(() => {
+    if (draft && seedDraftGramaj(draft, offer) !== draft) setDraft(seedDraftGramaj(draft, offer));
+  }, [draft, offer]);
   useEffect(() => {
     if (multi === undefined && parties.isFetched) setMulti(initialMultiParty(parties.data));
   }, [multi, parties.isFetched, parties.data]);
@@ -98,7 +106,7 @@ export function BelgedenIsEmriForm({ noteId, route }: Props) {
               <>
                 {stage === "READ_FAILED" && <ScanReadBanner scans={n.scans} lines={n.lines} editable canRequeue onRequeued={() => void invalidate()} />}
                 {stage === "NO_SERVICE" && <p className="text-sm text-amber-800 dark:text-amber-300" data-testid="oie-no-service">Bu kurulumda belge okuma servisi yok; değerleri elle girin.</p>}
-                <DocFields note={n} draft={draft} onChange={(d) => setDraft(reseedOwnerGramaj(draft, d, gramajOptions, customerDefaults))} gramajOptions={gramajOptions} disabled={save.isPending || saved} />
+                <DocFields note={n} draft={draft} onChange={setDraft} gramajOptions={gramajOptions} disabled={save.isPending || saved} />
                 {multiDraft && parties.data && <PartyList view={parties.data} value={multiDraft} onChange={setMulti} disabled={save.isPending || saved} />}
               </>
             )}
@@ -108,12 +116,12 @@ export function BelgedenIsEmriForm({ noteId, route }: Props) {
       </div>
       <SaveBar
         reasons={reasons}
-        ready={Boolean(draft) && stage !== "READING" && !saved}
+        ready={Boolean(draft) && stage !== "READING" && !saved && targets !== undefined}
         pending={save.isPending}
         error={save.isError ? (saveErrorHint(save.error) ?? apiErrorText(save.error, "Kaydedilemedi.")) : null}
         savedAsDraft={saved}
         label={approval.value === "WITH_WORK_ORDER" ? saveLabel() : "Taslak kaydet"}
-        onSave={() => draft && save.mutate({ note: n, draft, multi: multiDraft })}
+        onSave={() => draft && targets !== undefined && save.mutate({ note: n, draft, multi: multiDraft, targets })}
         onOpenNote={() => navigateActive(`/operations/gelen-belgeler/${noteId}`)}
       />
     </div>

@@ -1,7 +1,8 @@
 // Belgeden iş emri formunun saf parçaları: okunan taslaktan form taslağı, kaydetme kapısı, sözleşme 3 gövdesi ve
 // ayrı onay kipinde (SEPARATE) taslağa yazılacak başlık yaması. Kural sunucudadır; kapı yalnız düğmeyi ve nedeni seçer.
 import type { DeliveryNoteDetail, HeaderPatch, KursunMetersSource } from "@/pages/Operations/GelenBelgeler/types";
-import { customerGramajId, type KursunCustomerDefaults } from "@/lib/kursun-gramaj";
+import { FOLD_PROPERTY_CODE } from "@/lib/fold-catalog";
+import type { DefaultTarget } from "@/lib/station-default-targets";
 import type { NoteWorkOrderBody } from "./service";
 import { multiPartyBody, multiPartyReasons, multiPartyTotal, type MultiPartyDraft } from "./partyDraft";
 
@@ -33,6 +34,8 @@ export interface DocDraft {
   gramajId: string | null;
   /** S3: gramaj elle seçildi — müşteri değişince müşteri varsayılanı artık EZMEZ. */
   gramajTouched?: boolean;
+  /** K22: ön seçimin tohumlandığı müşteri ("" = müşterisiz); müşteri değişince yeniden tohumlanır. */
+  gramajSeededFor?: string;
   notes: string;
 }
 
@@ -43,11 +46,6 @@ type NoteLike = Pick<DeliveryNoteDetail, "ownerCustomerId" | "ourBatchNo" | "our
 export interface GramajChoice {
   id: string;
   isDefault?: boolean;
-}
-
-/** Sözleşme 5: istasyondaki TEK varsayılan gramaj; alan yoksa (eski backend) hiçbiri seçilmez. */
-export function defaultGramajId(options: readonly GramajChoice[]): string | null {
-  return options.find((o) => o.isDefault === true)?.id ?? null;
 }
 
 /** Rotada kurşun adımı yoksa gramaj kutusu da varsayılan da yok (sunucu kurşunsuz rotada hedefi 400'le reddeder). `undefined` = bilinmiyor (bugünkü). */
@@ -62,9 +60,8 @@ function toNumber(v: string | number | null | undefined): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-/** `gramajOptions` rotada kurşun adımı yoksa BOŞ verilir (çağıran: `routeGramajOptions`) → varsayılan ön seçilmez.
- *  S3: müşterinin cari kartındaki varsayılan gramajı istasyonunkinden önce gelir (yalnız ön seçim). */
-export function initialDocDraft(note: NoteLike, gramajOptions: readonly GramajChoice[], customerDefaults: KursunCustomerDefaults = {}): DocDraft {
+/** Gramaj ön seçimi sunucu çözücüsünden tohumlanır (`seedDraftGramaj`); taslak gramajsız doğar. */
+export function initialDocDraft(note: NoteLike): DocDraft {
   const suggested = suggestionFillsOwner(note.ownerSuggestion) ? note.ownerSuggestion!.customerId : null;
   const owner = note.ownerCustomerId ?? suggested;
   return {
@@ -75,15 +72,38 @@ export function initialDocDraft(note: NoteLike, gramajOptions: readonly GramajCh
     meters: toNumber(note.kursunMeters),
     metersSource: note.kursunMetersSource ?? null,
     metersReview: note.kursunMetersReview === true,
-    gramajId: customerGramajId(gramajOptions, customerDefaults, owner),
+    gramajId: null,
     notes: "",
   };
 }
 
-/** S3: müşteri değişti ve gramaj elle seçilmediyse yeni müşterinin varsayılanı (yoksa istasyonun) ön seçilir. */
-export function reseedOwnerGramaj(prev: DocDraft, next: DocDraft, gramajOptions: readonly GramajChoice[], customerDefaults: KursunCustomerDefaults): DocDraft {
-  if (next.gramajTouched || next.ownerCustomerId === prev.ownerCustomerId) return next;
-  return { ...next, gramajId: customerGramajId(gramajOptions, customerDefaults, next.ownerCustomerId) };
+/**
+ * K22: çözücü cevabından gramaj teklifi. `undefined` = cevap yok (bekle) · `null` = teklif yok. Kurşunsuz rotada
+ * (`gramajOptions` boş) ya da katalogda olmayan değer teklif edilmez.
+ */
+export function gramajOffer(
+  targets: readonly DefaultTarget[] | null | undefined,
+  gramajPropertyId: string | null,
+  gramajOptions: readonly GramajChoice[],
+): string | null | undefined {
+  if (targets === undefined) return undefined;
+  if (!targets || !gramajPropertyId) return null;
+  const id = targets.find((t) => t.propertyId === gramajPropertyId)?.valueId ?? null;
+  return id && gramajOptions.some((o) => o.id === id) ? id : null;
+}
+
+/** Teklif taslağa yazılır: gramaj elle seçilmediyse ve bu müşteri için henüz tohumlanmadıysa (müşteri değişince yeniden). */
+export function seedDraftGramaj(d: DocDraft, offer: string | null | undefined): DocDraft {
+  const owner = d.ownerCustomerId ?? "";
+  if (offer === undefined || d.gramajTouched || d.gramajSeededFor === owner) return d;
+  return { ...d, gramajId: offer, gramajSeededFor: owner };
+}
+
+/** Formda alanı olmayan seçim varsayılanları (gramaj ve kat dışı) gövdeye aynen gider; kat sunucuda `foldType`a çözülür. */
+export function passThroughTargets(targets: readonly DefaultTarget[] | null | undefined, gramajPropertyId: string | null): Array<{ propertyId: string; valueId: string }> {
+  return (targets ?? [])
+    .filter((t) => t.valueType === "CHOICE" && t.valueId && t.propertyId !== gramajPropertyId && t.propertyCode !== FOLD_PROPERTY_CODE)
+    .map((t) => ({ propertyId: t.propertyId, valueId: t.valueId! }));
 }
 
 /** Kaydı bekleten nedenler (boş = kaydedilebilir). Review'lı metre DAİMA doğrulama ister. Çok partide metre parti satırlarındandır. */
@@ -118,7 +138,7 @@ export function applyPatch(d: DocDraft, p: HeaderPatch): DocDraft {
 
 export function noteWorkOrderBody(
   d: DocDraft,
-  ctx: { clientToken: string; routeTemplateId: string; gramajPropertyId: string | null },
+  ctx: { clientToken: string; routeTemplateId: string; gramajPropertyId: string | null; passThrough?: ReadonlyArray<{ propertyId: string; valueId: string }> },
   multi?: MultiPartyDraft | null,
 ): NoteWorkOrderBody {
   const meters = multi ? multiPartyTotal(multi) : d.meters;
@@ -133,7 +153,8 @@ export function noteWorkOrderBody(
     kursunMeters: String(meters),
     routeTemplateId: ctx.routeTemplateId,
     ...(multi ? multiPartyBody(multi) : {}),
-    ...(d.gramajId && ctx.gramajPropertyId ? { targetValues: [{ propertyId: ctx.gramajPropertyId, valueId: d.gramajId }] } : {}),
+    // K22: hedef değerleri HEP açık gider (boş = "Hedef yok"); sunucu anahtarsız gövdeye değer dayatmaz.
+    targetValues: [...(d.gramajId && ctx.gramajPropertyId ? [{ propertyId: ctx.gramajPropertyId, valueId: d.gramajId }] : []), ...(ctx.passThrough ?? [])],
     ...(d.notes.trim() ? { notes: d.notes.trim() } : {}),
   };
 }
