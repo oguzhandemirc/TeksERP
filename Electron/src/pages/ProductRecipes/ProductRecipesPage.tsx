@@ -41,7 +41,7 @@ export function ProductRecipesPage() {
   return (
     <CrudPage<ProductRecipe>
       title={`${TERIM.terbiyeIsEmri.tekil} Şablonları`}
-      description="Kumaş + renk + özellik + en + rota — terbiye iş emri açılışını hızlandıran hazır şablonlar."
+      description={`Kumaş + renk + özellik + en + rota — ${TERIM.terbiyeIsEmri.tekilKucuk} açılışını hızlandıran hazır şablonlar.`}
       entityName={`${TERIM.terbiyeIsEmri.tekil} Şablonu`}
       importEntity="productRecipe"
       queryKey="product-recipes"

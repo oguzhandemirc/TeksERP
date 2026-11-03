@@ -18,7 +18,7 @@
 // workorder-split.service.ts (redye rewind + repoint + recompute).
 // =============================================================================
 
-import { completedNoAddError, WO_COMPLETED_NO_ADD_MESSAGE } from "./workorder-batch-add.service";
+import { completedNoAddError, woCompletedNoAddMessage } from "./workorder-batch-add.service";
 import { ROLL_DISPLAY_ORDER } from "../constants/roll-order";
 import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT, revokeRollMovements } from "./helpers/roll-movement.helper";
@@ -37,6 +37,7 @@ import { ApiResponse } from "../types/api.types";
 import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
 import { postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
 import { hasRoll } from "./helpers/dispatch-item-kind.helper";
+import { TERIM } from "../constants/terim";
 
 /**
  * Taşınabilir statüler — fasondaki/tüketilmiş/iptal/sevkli hariç (çuval/sevk ayrıca guard'lı).
@@ -68,10 +69,10 @@ export type PartyMode = "keep" | "new" | "join";
  */
 export function manualMoveWoBlockReason(status: WorkOrderStatus): string | null {
   if (status === WorkOrderStatus.CANCELLED) {
-    return "İptal edilmiş terbiye iş emrinde konum düzeltilemez — top canlı kalır ama refakat kartı iptal olduğu için saha personeli okutamaz. Topu yeni bir terbiye iş emrine bağlayın.";
+    return `İptal edilmiş ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} konum düzeltilemez — top canlı kalır ama refakat kartı iptal olduğu için saha personeli okutamaz. Topu yeni bir ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlayın.`;
   }
   if (status === WorkOrderStatus.SUPERSEDED) {
-    return "Devredilmiş terbiye iş emrinde konum düzeltilemez (malzemesi yeni terbiye iş emrine taşındı) — işlemi devam terbiye iş emrinde yapın.";
+    return `Devredilmiş ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} konum düzeltilemez (malzemesi yeni ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} taşındı) — işlemi devam ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} yapın.`;
   }
   return null;
 }
@@ -181,7 +182,7 @@ export class WorkOrderManualMoveService {
         },
       },
     });
-    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
+    if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı`);
 
     const steps: StepRef[] = wo.steps.map((s) => ({
       id: s.id,
@@ -194,7 +195,7 @@ export class WorkOrderManualMoveService {
       appliesColor: stepCanApplyColor(s.station, s.requiredCategory),
     }));
     const targetStep = steps.find((s) => s.id === input.targetStepId);
-    if (!targetStep) throw AppError.badRequest("Hedef adım bu terbiye iş emrinin rotasında değil");
+    if (!targetStep) throw AppError.badRequest(`Hedef adım bu ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} rotasında değil`);
     const colorStep = steps.find((s) => s.appliesColor) ?? null;
 
     // Seçili topları çöz: rollIds verildiyse onlar; yoksa batchId'nin canlı topları.
@@ -235,7 +236,7 @@ export class WorkOrderManualMoveService {
     // Cross-WO koruması: her top bu WO'ya ait olmalı.
     for (const r of rolls) {
       if (r.batch && r.batch.workOrderId !== workOrderId) {
-        throw AppError.badRequest("Seçilen toplardan biri başka terbiye iş emrine ait");
+        throw AppError.badRequest(`Seçilen toplardan biri başka ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} ait`);
       }
     }
 
@@ -370,7 +371,7 @@ export class WorkOrderManualMoveService {
     // İptal/devredilmiş/tamamlanmış WO → HARD-BLOCK (uyarı değil). colorBlocked ile aynı sözleşme:
     // frontend kırmızı blok + submit engeli gösterir; manualMove ayrıca 409 atar.
     const woBlockReason = manualMoveWoBlockReason(ctx.woStatus)
-      ?? (ctx.woStatus === WorkOrderStatus.COMPLETED ? WO_COMPLETED_NO_ADD_MESSAGE : null);
+      ?? (ctx.woStatus === WorkOrderStatus.COMPLETED ? woCompletedNoAddMessage() : null);
     if (t.type === "EXTERNAL") {
       warnings.push("Fason adımına taşınıyor — mal orada üretimde bekler, sevki ayrıca (Fason Sevk) yapılır.");
       // YANLIŞ İŞ EMRİNE KABUL uyarısı: mal fiziksel olarak fasondayken kabul yanlış
@@ -389,7 +390,7 @@ export class WorkOrderManualMoveService {
       });
       if (openReceipt) {
         warnings.push(
-          `Bu terbiye iş emrinde kabul edilmiş bir makbuz var (${openReceipt.receiptNo}). Mal fiziksel olarak fasondaysa (yanlış terbiye iş emrine kabul yapıldıysa) "Konumu Düzelt" değil KABUL İPTALİ kullanın.`,
+          `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} kabul edilmiş bir makbuz var (${openReceipt.receiptNo}). Mal fiziksel olarak fasondaysa (yanlış ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} kabul yapıldıysa) "Konumu Düzelt" değil KABUL İPTALİ kullanın.`,
         );
       }
     }
@@ -565,7 +566,7 @@ export class WorkOrderManualMoveService {
       ctx.selected.some((r) => r.colorId == null);
     if (colorSynthNeeded && !ctx.woTargetColorId) {
       throw AppError.badRequest(
-        "Bu terbiye iş emrinin hedef rengi yok — renk veren adım (boyahane) atlanamaz, renk sentezlenemez.",
+        `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedef rengi yok — renk veren adım (boyahane) atlanamaz, renk sentezlenemez.`,
       );
     }
 
@@ -617,7 +618,7 @@ export class WorkOrderManualMoveService {
           select: { status: true },
         });
         // WO silinmişse (olmamalı) taşımayı durdur — sessiz devam etmez.
-        if (!woFresh) throw AppError.conflict("Terbiye iş emri bu sırada kayboldu — listeyi yenileyin.");
+        if (!woFresh) throw AppError.conflict(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bu sırada kayboldu — listeyi yenileyin.`);
         const tazeBlok = manualMoveWoBlockReason(woFresh.status);
         if (tazeBlok) {
           throw AppError.conflict(`${tazeBlok} — listeyi yenileyin.`, {
@@ -806,7 +807,7 @@ export class WorkOrderManualMoveService {
             },
           });
           if (!jb || jb.workOrderId !== workOrderId) {
-            throw AppError.badRequest("Katılacak parti bu terbiye iş emrinde bulunamadı");
+            throw AppError.badRequest(`Katılacak parti bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} bulunamadı`);
           }
           if (jb.mergedIntoId) {
             throw AppError.badRequest(

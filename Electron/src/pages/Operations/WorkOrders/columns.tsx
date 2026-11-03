@@ -28,7 +28,7 @@ const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maxi
 export const workOrderColumns: ColumnDef<WorkOrder>[] = [
   {
     accessorKey: "workOrderNumber",
-    header: `${TERIM.terbiyeIsEmri.tekil} No`,
+    get header() { return `${TERIM.terbiyeIsEmri.tekil} No`; },
     cell: ({ row }) => <span className="font-mono text-xs">{row.original.workOrderNumber}</span>,
   },
   {

@@ -1,4 +1,5 @@
 import type { TravelerCardConfig } from "@/services/featureFlagService";
+import { TERIM } from "@/lib/terim";
 
 /** Üç kademe — backend `TravelerTemplateMode` ile birebir. */
 export type TravelerTemplateMode = "BUILTIN" | "SECTIONS" | "RAW_HTML";
@@ -40,7 +41,7 @@ export interface SectionEntry {
 
 export const SECTION_LABELS: Record<SectionKey, { label: string; desc: string }> = {
   header: { label: "Antet", desc: "Firma adı, künye, KART NO, basım bilgisi" },
-  identity: { label: "Kimlik + Karekod", desc: "Terbiye iş emri no, tür/rota, ürün, okutulacak karekod" },
+  identity: { label: "Kimlik + Karekod", get desc() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} no, tür/rota, ürün, okutulacak karekod`; } },
   spec: { label: "Özet Tablo", desc: "Renk / En / Hedef metraj / Kat tipi / tarihler" },
   properties: { label: "Özellikler", desc: "Hedef özellik rozetleri" },
   batches: { label: "Partiler", desc: "Parti no, top adedi, metraj, açık fason sevki" },

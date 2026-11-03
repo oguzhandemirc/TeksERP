@@ -1,4 +1,5 @@
 import { ShoppingCart, Factory, Warehouse, Truck, type LucideIcon } from "lucide-react";
+import { TERIM } from "@/lib/terim";
 
 /** Operasyon hub karolarının mantıksal grupları (Tanımlar hub'ıyla aynı desen). */
 export type OperationGroupKey = "planning" | "production" | "warehouse" | "shipping";
@@ -21,7 +22,7 @@ export const operationGroups: OperationGroup[] = [
   {
     key: "production",
     title: "Üretim & Fason",
-    description: "Terbiye iş emirleri, kurşun sırası ve kartela fason takibi",
+    get description() { return `${TERIM.terbiyeIsEmri.cumleBasiCogul.yalin}, kurşun sırası ve kartela fason takibi`; },
     icon: Factory,
   },
   {

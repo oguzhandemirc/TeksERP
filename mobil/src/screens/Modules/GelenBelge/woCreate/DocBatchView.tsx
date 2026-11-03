@@ -23,9 +23,9 @@ import { useWoRows, type WoRowsState } from './useWoRows';
 import { shortcutTitle, type FormApproval } from './woFromDoc';
 
 const MODE_TEXT: Record<FormApproval, string> = {
-  WITH_WORK_ORDER: `Kaydet: belge + müşteri malı top + ${TERIM.terbiyeIsEmri.tekilKucuk} tek seferde.`,
-  SEPARATE: `Fabrika ayarı ayrı onay: kayıt taslak olarak kalır, ${TERIM.terbiyeIsEmri.tekilKucuk} panelde onaylanınca açılır.`,
-  UNKNOWN: `Kaydet: ${TERIM.terbiyeIsEmri.tekilKucuk} açılmaya çalışılır; ayar ayrı onay istiyorsa taslak kalır.`,
+  get WITH_WORK_ORDER() { return `Kaydet: belge + müşteri malı top + ${TERIM.terbiyeIsEmri.tekilKucuk} tek seferde.`; },
+  get SEPARATE() { return `Fabrika ayarı ayrı onay: kayıt taslak olarak kalır, ${TERIM.terbiyeIsEmri.tekilKucuk} panelde onaylanınca açılır.`; },
+  get UNKNOWN() { return `Kaydet: ${TERIM.terbiyeIsEmri.tekilKucuk} açılmaya çalışılır; ayar ayrı onay istiyorsa taslak kalır.`; },
 };
 
 /** `multi`: birden çok belge art arda (satır listesi + "Hepsini kaydet"); değilse tek belge okunur, sonra tarayıcı gizlenir.

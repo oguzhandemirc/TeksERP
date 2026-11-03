@@ -27,6 +27,7 @@ import TamburBringRollModal from './TamburBringRollModal';
 import TamburManualRollModal from './TamburManualRollModal';
 import { colors, radius, spacing } from '../../../theme';
 import type { QualityGrade } from '../../../types/models';
+import { TERIM } from '../../../lib/terim';
 
 type Mode = 'menu' | 'bring' | 'manual';
 
@@ -89,8 +90,8 @@ export default function TamburFieldFix({
             <View style={styles.targetBand}>
               <Icon source="clipboard-text-outline" size={18} color={colors.brand} />
               <Text style={styles.targetText}>
-                Hedef terbiye iş emri: <Text style={styles.targetStrong}>{workOrderNumber}</Text>
-                {'  ·  eklenen top bu terbiye iş emrine yazılır'}
+                Hedef {TERIM.terbiyeIsEmri.tekilKucuk}: <Text style={styles.targetStrong}>{workOrderNumber}</Text>
+                {`  ·  eklenen top bu ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} yazılır`}
               </Text>
             </View>
           )}

@@ -13,7 +13,7 @@ import type { OperationsTile } from "../tile-config";
 export const productionTiles: OperationsTile[] = [
   {
     key: "work-orders",
-    title: TERIM.terbiyeIsEmri.cogul,
+    get title() { return TERIM.terbiyeIsEmri.cogul; },
     description: "Üretim partileri ve rota ilerleyişi",
     icon: Factory,
     to: "/operations/work-orders",
@@ -30,8 +30,8 @@ export const productionTiles: OperationsTile[] = [
     // K6 (Gülkesim 2026-11-02): tek giriş — seçici (Standart: Terbiye · Dokuma / Özel: kısayol rotaları). Adres ve izin
     // yeni kayıt route'uyla birebir; eski karosuz palet girişinin yerini aldı.
     key: "work-order-create",
-    title: `${TERIM.terbiyeIsEmri.tekil} oluştur`,
-    description: `${TERIM.terbiyeIsEmri.tekil}, ${TERIM.dokumaIsEmri.tekilKucuk} ya da özel kısayol (ör. Kurşun & Tambur) — belge okutarak da`,
+    get title() { return `${TERIM.terbiyeIsEmri.tekil} oluştur`; },
+    get description() { return `${TERIM.terbiyeIsEmri.tekil}, ${TERIM.dokumaIsEmri.tekilKucuk} ya da özel kısayol (ör. Kurşun & Tambur) — belge okutarak da`; },
     icon: FilePlus2,
     to: "/operations/work-orders/new",
     group: "production",
@@ -41,8 +41,8 @@ export const productionTiles: OperationsTile[] = [
   },
   {
     key: "work-order-events",
-    title: `${TERIM.terbiyeIsEmri.tekil} Hareketleri`,
-    description: "Terbiye iş emri no ya da top barkoduyla bütün hareketler",
+    get title() { return `${TERIM.terbiyeIsEmri.tekil} Hareketleri`; },
+    get description() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} no ya da top barkoduyla bütün hareketler`; },
     icon: History,
     to: "/operations/work-order-events",
     group: "production",

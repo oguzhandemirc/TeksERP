@@ -112,7 +112,7 @@ export const TRAVELER_FIELDS: TravelerFieldDef[] = [
   { key: "cardMeta", label: "Basım bilgisi (tarih · versiyon)", group: "header", selector: ".card-meta", base: (d) => d.cardMeta, weight: 400 },
 
   // ── kimlik satırı ─────────────────────────────────────────────────────────
-  { key: "woNo", label: `${TERIM.terbiyeIsEmri.tekilBuyuk} NO`, group: "identity", selector: ".batch", base: (d) => d.woNo, weight: 800 },
+  { key: "woNo", get label() { return `${TERIM.terbiyeIsEmri.tekilBuyuk} NO`; }, group: "identity", selector: ".batch", base: (d) => d.woNo, weight: 800 },
   { key: "typeText", label: "Tür · rota satırı", group: "identity", selector: ".type-text", base: (d) => d.typeText, weight: 400 },
   { key: "productCode", label: "Ürün kodu rozeti", group: "identity", selector: ".product-code", base: (d) => d.productCode, weight: 800 },
   { key: "productName", label: "Ürün adı", group: "identity", selector: ".product-name", base: (d) => d.productName, weight: 800 },

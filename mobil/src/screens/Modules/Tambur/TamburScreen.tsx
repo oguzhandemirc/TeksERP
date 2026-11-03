@@ -3921,7 +3921,7 @@ export default function TamburScreen() {
                         </View>
                         <Text style={styles.rawDestHint}>
                           {recutRawDestination === 'STOCK'
-                            ? 'Parça ham stoğa döner — boyahane/KK2/tambur için yeni terbiye iş emrine bağlanabilir.'
+                            ? `Parça ham stoğa döner — boyahane/KK2/tambur için yeni ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlanabilir.`
                             : 'Parça ham-bitmiş olarak depoya iner — ham etiketle sevk edilebilir.'}
                         </Text>
                       </View>
@@ -4773,7 +4773,7 @@ export default function TamburScreen() {
           ))}
           <Text style={overCutStyles.body}>
             Mal <Text style={overCutStyles.strong}>olduğu gibi</Text> depoya iner —
-            bu onay topun kaydını DEĞİŞTİRMEZ. Yanlış olan terbiye iş emriyse süpervizör
+            bu onay topun kaydını DEĞİŞTİRMEZ. Yanlış olan {TERIM.terbiyeIsEmri.tekilKucuk}yse süpervizör
             "Sipariş Bağla / Düzelt" ile düzeltir.
           </Text>
           {/* ÜÇÜNCÜ SEÇENEK (2026-08-19): mal yanlış renkteyse gerçek karar
@@ -5096,7 +5096,7 @@ export default function TamburScreen() {
         options={kimeOptions}
         pinnedOptions={kimePinnedOptions}
         pinnedLabel={
-          recutRollMeta ? 'Bu topa uyan açık siparişler' : 'Bu terbiye iş emrinde siparişi olan müşteriler'
+          recutRollMeta ? 'Bu topa uyan açık siparişler' : `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} siparişi olan müşteriler`
         }
         selectedValue={
           recutRollMeta
@@ -5550,7 +5550,7 @@ function OrdersDetailModal({
                 color={colors.borderStrong}
               />
               <Text style={ordersModalStyles.empty}>
-                Bu terbiye iş emrine bağlı sipariş yok
+                Bu {TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlı sipariş yok
               </Text>
               <Text style={ordersModalStyles.emptyHint}>Stok için üretim</Text>
             </View>

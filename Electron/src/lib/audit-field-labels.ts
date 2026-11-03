@@ -13,6 +13,7 @@
 // alan HAM ADIYLA basılır, ekran asla boş kalmaz.
 // =============================================================================
 
+import { TERIM } from "@/lib/terim";
 export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   // ── Ortak / künye ──────────────────────────────────────────────────────────
   id: "Kayıt no",
@@ -154,8 +155,8 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   reopened: "Yeniden açıldı",
 
   // ── İş emri / adım ─────────────────────────────────────────────────────────
-  workOrderNumber: "Terbiye iş emri no",
-  workOrderStepId: "Terbiye iş emri adımı",
+  get workOrderNumber() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} no`; },
+  get workOrderStepId() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} adımı`; },
   targetQuantity: "Hedef metraj",
   targetWeight: "Hedef ağırlık",
   targetItemId: "Hedef kumaş",
@@ -188,7 +189,7 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   manualComplete: "Elle tamamlandı",
   completedVia: "Tamamlanma yolu",
   warehouseClosure: "Depoya alınarak kapatıldı",
-  woRevived: "Terbiye iş emri yeniden açıldı",
+  get woRevived() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} yeniden açıldı`; },
   producedInStepId: "Üretildiği adım",
   plannedSubcontractorId: "Planlanan fason firma",
   partyMode: "Parti kuralı",
@@ -378,7 +379,7 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   defectTypeId: "Hata tipi",
   returnReasonId: "İade sebebi",
   orderId: "Sipariş",
-  workOrderId: "Terbiye iş emri",
+  get workOrderId() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin}`; },
   batchId: "Parti",
   rollId: "Top",
   sackId: "Çuval",

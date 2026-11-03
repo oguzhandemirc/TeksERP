@@ -71,7 +71,7 @@ const ROOT_FIELDS: FieldDef[] = [
   { yol: "belge.plaka", etiket: "Plaka", tur: "metin", sinif: "musteri", ornek: "16 XYZ 789" },
   { yol: "belge.sofor", etiket: "Şoför", tur: "metin", sinif: "musteri", ornek: "Ali Demir" },
   { yol: "belge.notlar", etiket: "Sevk notu", tur: "metin", sinif: "musteri", ornek: null },
-  { yol: "belge.is_emri_no", etiket: `${TERIM.terbiyeIsEmri.tekil} no`, tur: "metin", sinif: "musteri", ornek: sampleSeriesCode("workOrder", 1) },
+  { yol: "belge.is_emri_no", get etiket() { return `${TERIM.terbiyeIsEmri.tekil} no`; }, tur: "metin", sinif: "musteri", ornek: sampleSeriesCode("workOrder", 1) },
   { yol: "belge.adim", etiket: "Fason adımı (istasyon)", tur: "metin", sinif: "musteri", ornek: "Boyahane (Fason)" },
   { yol: "belge.musteri_var", etiket: "Belgede müşteri var mı", tur: "mantiksal", sinif: "musteri", ornek: true },
   { yol: "belge.musteri_ad", etiket: "Müşteri adı", tur: "metin", sinif: "musteri", ornek: "Örnek Tekstil A.Ş." },

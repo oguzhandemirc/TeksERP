@@ -35,6 +35,7 @@
 
 import { PERMISSION_CATALOG } from "./permission-catalog";
 import { mobileScreenPermissionCodes } from "./screen-catalog";
+import { TERIM } from "./terim";
 
 export type RoleTemplateEntry = {
   /** Kalıcı kimlik. Fabrika adı değiştirse de bu sabit kalır — DB'de `@unique`. */
@@ -94,8 +95,7 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
   {
     code: "WEB_PRODUCTION_PLANNING",
     name: "Üretim Planlama",
-    description:
-      "Terbiye iş emri aç/yönet, rota-istasyon-ürün tanımla, kurşun dağıt, üretim raporları",
+    get description() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} aç/yönet, rota-istasyon-ürün tanımla, kurşun dağıt, üretim raporları`; },
     mode: "list",
     codes: [
       "workorder:read",
@@ -661,8 +661,8 @@ const MOBILE_ROLES: readonly RoleTemplateEntry[] = [
     // Mobilde masaüstüyle aynı iş emri yetkileri: stok topu okut → WO başlat,
     // eski WO'ları listele/görüntüle/çıktı al/düzenle.
     code: "MOBILE_HIZLI_IS_EMRI",
-    name: "Mobil — Hızlı Terbiye İş Emri",
-    description: "Stok topu okut → terbiye iş emri başlat + terbiye iş emri yönetimi",
+    get name() { return `Mobil — Hızlı ${TERIM.terbiyeIsEmri.tekil}`; },
+    get description() { return `Stok topu okut → ${TERIM.terbiyeIsEmri.tekilKucuk} başlat + ${TERIM.terbiyeIsEmri.tekilKucuk} yönetimi`; },
     mode: "list",
     codes: [
       "mobile:hizli-is-emri",
@@ -683,7 +683,7 @@ const MOBILE_ROLES: readonly RoleTemplateEntry[] = [
     // kullanıcısına masaüstü yetkisi taşımasın; planlamacıya panelden verilir.
     code: "MOBILE_KURSUN_DAGITIM",
     name: "Mobil — Kurşun Dağıtım",
-    description: "Terbiye iş emrini fiziksel kurşun makinesine ata + son adımsa işi bitir",
+    get description() { return `${TERIM.terbiyeIsEmri.cumleBasi.belirtme} fiziksel kurşun makinesine ata + son adımsa işi bitir`; },
     mode: "list",
     codes: ["mobile:kursun-dagitim", "workorder:read", "roll:read", "station:read"],
   },
@@ -785,8 +785,7 @@ export const ROLE_COVERAGE_EXEMPT: Readonly<Record<string, string>> = {
     "Ekran değil, Tezgah-içi yetenek (2026-09-14): top indirmeyi geri alır — defterden satır düşürür (`loom:doff-revoke` tablet eşi, `shipping:undo-dispatch` sınıfı). Varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.",
   "mobile:makine-durus":
     "Kurşun/Tambur ekran yeteneği (D4-A2; DALGA4 §2.7 'atama panelde'): şablona girseydi boot uzlaştırması mevcut rollere ekler, dokuma AÇIK fabrikada rejim `dokuma ∨ ayar` geçtiği için kurşun/tambur/brode makinelerinde API duruş yetkisi hemen doğardı → varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.",
-  "mobile:is-emri-duzelt":
-    "Ekran değil, Hızlı Terbiye İş Emri içi yetenek (hareket defteri D5): açılmış terbiye iş emrinin rengini/enini/sipariş bağını değiştirir ve kartı yeniden basar. Terbiye iş emri açmaktan ayrı sorumluluk → varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.",
+  get "mobile:is-emri-duzelt"() { return `Ekran değil, Hızlı ${TERIM.terbiyeIsEmri.tekil} içi yetenek (hareket defteri D5): açılmış ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} rengini/enini/sipariş bağını değiştirir ve kartı yeniden basar. ${TERIM.terbiyeIsEmri.cumleBasi.yalin} açmaktan ayrı sorumluluk → varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.`; },
   "mobile:kk1-yari-mamul":
     "Ekran değil, KK1-içi yetenek (2026-08-17): dışarıdan alınan yarı mamul kabulü. Renkli mal kabulü açar; yanlışlıkla kullanılırsa top ham stoğa 'boyalı' düşer → varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.",
   // 2026-08-14: goods-receipt:* muafları KALDIRILDI — artık dar bir rol

@@ -73,6 +73,7 @@ import type { ApiResponse } from "../types/api.types";
 import { uyari } from "../lib/logger";
 import { upperTr } from "../utils/tr-case";
 import { escapeLikeTerm } from "../utils/like-escape";
+import { TERIM } from "../constants/terim";
 
 type Tx = Prisma.TransactionClient;
 
@@ -1125,7 +1126,7 @@ function blockReason(
   if (roll.warehouseId !== countWarehouseId) return "Bu sırada başka depoya taşındı";
   if (roll.shipmentId) return "Bu sırada bir sevkiyata atandı";
   if (roll.sackId) return "Çuvalın içinde — önce çuvaldan çıkarılmalı";
-  if (roll.currentStepId) return "Bu sırada bir terbiye iş emrine bağlandı";
+  if (roll.currentStepId) return `Bu sırada bir ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlandı`;
   return null;
 }
 

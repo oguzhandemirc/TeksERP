@@ -23,6 +23,7 @@ import {
 } from "./documentConfig";
 import type { NumberSourceInfo } from "@/lib/number-source";
 import { applyServerFactoryTimezone } from "@/lib/factory-time";
+import { applyTermRegime } from "@/lib/terim-rejim";
 
 export type { CompanyLetterhead, DocumentsConfig } from "./documentConfig";
 import {
@@ -909,6 +910,7 @@ export const featureFlagService = {
   get: (): Promise<ApiResponse<FeatureFlagsView>> =>
     apiClient.get<ApiResponse<FeatureFlagsView>>("/api/feature-flags").then((r) => {
       applyServerFactoryTimezone(r.data?.data);
+      applyTermRegime(r.data?.data);
       return r.data;
     }),
 

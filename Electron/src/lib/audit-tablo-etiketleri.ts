@@ -9,6 +9,7 @@
 // =============================================================================
 
 /** Backend `tableName` → Türkçe modül adı. */
+import { TERIM } from "./terim";
 export const TABLE_LABELS: Record<string, string> = {
   NumberSeries: "Numara serisi",
   // Vadesi gelmemiş biçim değişikliği satırı (iptal edildiğinde denetime düşer).
@@ -42,15 +43,15 @@ export const TABLE_LABELS: Record<string, string> = {
   QUALITY_GRADE: "Kalite Sınıfı",
   DEFECT_TYPE: "Hata Tipi",
   RETURN_REASON: "İade Sebebi",
-  PRODUCT_RECIPE: "Terbiye İş Emri Şablonu",
+  get PRODUCT_RECIPE() { return `${TERIM.terbiyeIsEmri.tekil} Şablonu`; },
   PERIPHERAL_DEVICE: "Saha Cihazı",
 
   // Sipariş & İş Emri
   ORDER: "Sipariş",
   BATCH: "Parti",
   ORDER_LINE: "Sipariş Satırı",
-  WORK_ORDER: "Terbiye İş Emri",
-  WORK_ORDER_STEP: "Terbiye İş Emri Adımı",
+  get WORK_ORDER() { return `${TERIM.terbiyeIsEmri.tekil}`; },
+  get WORK_ORDER_STEP() { return `${TERIM.terbiyeIsEmri.tekil} Adımı`; },
   MANIFEST: "Çeki Listesi",
 
   // Top & Üretim
@@ -144,7 +145,7 @@ export const TABLE_LABELS: Record<string, string> = {
   MACHINE_SHIFT_STAT: "Vardiya Karnesi",
   MACHINE_SHIFT_SEAL: "Vardiya Karnesi Mührü",
   KURSUN_BYPASS_ASSIGNMENT: "Kurşun Dağıtım Ataması",
-  WORK_ORDER_TARGET_VALUE: "Terbiye İş Emri Hedef Gramajı",
+  get WORK_ORDER_TARGET_VALUE() { return `${TERIM.terbiyeIsEmri.tekil} Hedef Gramajı`; },
   PERIPHERAL_TEMPLATE_ROUTE: "Cihaz–Şablon Yönlendirmesi",
   // Boot uzlaştırması + panel işleri: tablo adı küçük harfle yazılmış
   // (backend'de bilinçli, kayıt "kod tarafı" olduğunu belli etsin diye).
@@ -367,7 +368,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   CASH_LEDGER_PAYMENT_BACKFILL: "Kasa defteri geçmiş satırları dolduruldu (betik)",
   ORDER_DESTINATION_BACKFILL: "Sipariş yönü geriye dönük dolduruldu (betik)",
   ROLL_STATUS_EVENTS_BACKFILL: "Top durum defterine eski iptaller dolduruldu (betik)",
-  WORK_ORDER_EVENTS_BACKFILL: "Terbiye iş emri hareket defterine geçmiş dolduruldu (betik)",
+  get WORK_ORDER_EVENTS_BACKFILL() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} hareket defterine geçmiş dolduruldu (betik)`; },
   TERM_CATALOG_TEXT_MIGRATED: "Görünen ad değişikliği katalog satırlarına işlendi (betik)",
 
   // ── SYSTEM · servis keşfi (kurulum kimliği) ──

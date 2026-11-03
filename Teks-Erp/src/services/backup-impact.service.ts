@@ -42,6 +42,7 @@ import { isEncryptedBackup, type BackupCryptoState } from "../lib/backup-crypto"
 import { hata } from "../lib/logger";
 import { resolveEnvFilePath } from "../lib/hizmet-duzeni";
 import { pgTool } from "./helpers/pg-tool.helper";
+import { TERIM } from "../constants/terim";
 
 // =============================================================================
 // Tipler
@@ -267,7 +268,7 @@ const COUNT_SPECS: CountSpec[] = [
   },
   {
     key: "workOrder",
-    label: "Yeni terbiye iş emri",
+    get label() { return `Yeni ${TERIM.terbiyeIsEmri.tekilKucuk}`; },
     group: "production",
     timestampField: "createdAt",
     run: (c) =>

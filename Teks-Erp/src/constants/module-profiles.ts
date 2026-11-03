@@ -27,6 +27,7 @@
 // =============================================================================
 
 import { MODULE_SETTING_KEYS } from "./module-flags";
+import { TERIM } from "./terim";
 
 /** Tasarım §10'un satırları (boyahane aynası BUGÜN SATILMIYOR → profil yok; hizmet veren satılır). */
 export type ModuleProfileId = "basit" | "standart" | "perde" | "perde-dokuma" | "dokuma" | "hizmet" | "tam";
@@ -137,9 +138,8 @@ function acik(...keys: string[]): Readonly<Record<string, boolean>> {
 export const MODULE_PROFILES: Readonly<Record<ModuleProfileId, ModuleProfile>> = {
   basit: {
     ad: "Basit — İşlemeci",
-    aciklama:
-      "Yalnız üretim: terbiye iş emri · istasyon · tambur · sevkiyat. Ön muhasebe, " +
-      "alış-satış ve iplik defteri kapalı (bugünkü adnansahin kurulumu).",
+    get aciklama() { return `Yalnız üretim: ${TERIM.terbiyeIsEmri.tekilKucuk} · istasyon · tambur · sevkiyat. Ön muhasebe, ` +
+      "alış-satış ve iplik defteri kapalı (bugünkü adnansahin kurulumu)."; },
     moduller: acik("production.enabled"),
     bayraklar: {},
   },

@@ -150,7 +150,7 @@ function WorkOrderRollupCell({ order }: { order: Order }) {
         <Badge
           variant="outline"
           className="border-amber-500/40 text-[10px] text-amber-700 dark:text-amber-400"
-          title={`${coverage.total} kalemin ${coverage.linked} tanesi bir terbiye iş emrine bağlı`}
+          title={`${coverage.total} kalemin ${coverage.linked} tanesi bir ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlı`}
         >
           {coverage.linked}/{coverage.total} kalem
         </Badge>
@@ -296,9 +296,9 @@ export const orderColumns: ColumnDef<Order>[] = [
   },
   {
     id: "workOrder",
-    header: TERIM.terbiyeIsEmri.tekil,
+    get header() { return TERIM.terbiyeIsEmri.tekil; },
     meta: {
-      label: TERIM.terbiyeIsEmri.tekil,
+      get label() { return TERIM.terbiyeIsEmri.tekil; },
       exportValue: (o: Order) => rollupExportText(o),
     },
     cell: ({ row }) => <WorkOrderRollupCell order={row.original} />,

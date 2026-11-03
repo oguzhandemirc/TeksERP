@@ -694,13 +694,17 @@ function testElectronMirror(): void {
   // vaka (2026-08-06): grid'in Cm sütunu kaldırılıp geri konurken paneldeki
   // "Grid başlıkları (Top / Metre / Cm)" etiketi "(Top / Metre)"de kaldı —
   // sütun basılıyor ama panel yokmuş gibi anlatıyordu.
+  // Terim-rejimli etiket getter'dır (`get label() { return `...`; }`): iki uçta
+  // KAYNAK metni karşılaştırılır (şablon ifadesi dahil) — rejimden bağımsız ayna.
   const labelOf = (block: string) =>
     new Map(
-      [...block.matchAll(/\{\s*key:\s*"([^"]+)",\s*label:\s*("[^"]*"|'[^']*')/g)]
-        .map((m) => [m[1], m[2]!.slice(1, -1)] as const),
+      [...block.matchAll(/\{\s*key:\s*"([^"]+)",\s*(?:label:\s*("[^"]*"|'[^']*')|get label\(\)\s*\{\s*return\s*(`[^`]*`))/g)]
+        .map((m) => [m[1], (m[2] ?? m[3])!.slice(1, -1)] as const),
     );
   const uiLabels = labelOf(block[1]!);
-  const labelDrift = FASON_FIELDS.filter((f) => uiLabels.get(f.key) !== f.label).map((f) => f.key);
+  const beSrc = fs.readFileSync(path.resolve(__dirname, "../src/services/document-render/fason-ceki.fields.ts"), "utf8");
+  const beLabels = labelOf(beSrc);
+  const labelDrift = FASON_FIELDS.filter((f) => uiLabels.get(f.key) !== (beLabels.get(f.key) ?? f.label)).map((f) => f.key);
   check("etiketler de birebir", labelDrift.length === 0, labelDrift.join(", "));
 
   // Grup adları da aynalanır — bilinmeyen grup paneldeki satırı GÖRÜNMEZ yapar

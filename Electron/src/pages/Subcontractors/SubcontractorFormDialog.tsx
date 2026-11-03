@@ -15,6 +15,7 @@ import {
 import type { Subcontractor } from "./types";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { SubcontractorCustomerLink } from "./SubcontractorCustomerLink";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   open: boolean;
@@ -182,8 +183,7 @@ export function SubcontractorFormDialog({
               <input type="checkbox" {...form.register("isActive")} /> Aktif
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" {...form.register("isFavorite")} /> Favori — terbiye iş
-              emri fason adımında default firma
+              <input type="checkbox" {...form.register("isFavorite")} /> Favori — {TERIM.terbiyeIsEmri.tekilKucuk} fason adımında default firma
             </label>
           </div>
         </>

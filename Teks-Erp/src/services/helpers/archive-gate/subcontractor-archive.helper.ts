@@ -3,6 +3,7 @@ import type { ArchiveSpec } from "../master-data-archive.helper";
 import { LIVE_WARP_BEAM, OPEN_PURCHASE_ORDER, OPEN_STEP, OPEN_WEAVING_ORDER } from "../live-ref-where.helper";
 import { OPEN_OUTSTANDING } from "../fason-open-dispatch.helper";
 import { plannedSubcontractorStep } from "./route-plan-refs.helper";
+import { TERIM } from "../../../constants/terim";
 
 const OPEN_KARTELA = { cancelledAt: null, receipts: { none: { cancelledAt: null } } };
 
@@ -54,7 +55,7 @@ export const SUBCONTRACTOR_ARCHIVE: ArchiveSpec = {
     },
     {
       kind: "PLANNED_STEP",
-      label: "Açık terbiye iş emrinde planlı adım",
+      get label() { return `Açık ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} planlı adım`; },
       count: (db, id) => db.workOrderStep.count({ where: { plannedSubcontractorId: id, ...OPEN_STEP } }),
       list: async (db, id, take) =>
         (await db.workOrderStep.findMany({ where: { plannedSubcontractorId: id, ...OPEN_STEP }, take, select: { id: true, stepSequence: true, workOrder: { select: { workOrderNumber: true } } } }))

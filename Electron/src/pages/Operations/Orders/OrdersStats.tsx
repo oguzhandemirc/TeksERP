@@ -17,13 +17,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import type { OrderStats } from "./service";
+import { TERIM } from "@/lib/terim";
 
 export type OrderStatsView = "sade" | "onerilen" | "genis";
 
 export const ORDER_STATS_VIEWS: Array<{ key: OrderStatsView; label: string; hint: string }> = [
   { key: "sade", label: "Sade", hint: "Adet ve durum rozetleri" },
   { key: "onerilen", label: "Önerilen", hint: "+ metraj ve geciken" },
-  { key: "genis", label: "Geniş", hint: "+ terbiye iş emri, termin, tutar" },
+  { key: "genis", label: "Geniş", get hint() { return `+ ${TERIM.terbiyeIsEmri.tekilKucuk}, termin, tutar`; } },
 ];
 
 // Envanter şeridiyle AYNI biçim: gruplama YOK. tr-TR'de binlik ayracı "."
@@ -210,7 +211,7 @@ export function OrdersStats({
           {data.noWorkOrderCount > 0 && (
             <Chip
               icon={Factory}
-              label="Terbiye iş emri yok"
+              label={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} yok`}
               count={data.noWorkOrderCount}
               tone="text-muted-foreground"
               onClick={() => onApplyFilter({ "filter[woState]": "NONE" })}

@@ -24,6 +24,7 @@ import { ACTIVE_ORDER_LINK } from "./order-link.helper";
 import { copyTargetValuesTx } from "./workorder-target-value.helper";
 import { createWorkOrderTx } from "./workorder-event.helper";
 import { rebindProductionIssuesTx } from "./production-issue-ledger.helper";
+import { TERIM } from "../../constants/terim";
 
 const travelerCardService = new TravelerCardService();
 
@@ -117,7 +118,7 @@ export async function cloneWorkOrderTx(
       orderLinks: { where: ACTIVE_ORDER_LINK, select: { orderLineId: true, allocatedQty: true } },
     },
   });
-  if (!src) throw AppError.notFound("Kaynak terbiye iş emri bulunamadı");
+  if (!src) throw AppError.notFound(`Kaynak ${TERIM.terbiyeIsEmri.tekilKucuk} bulunamadı`);
 
   const S = params.reEntryStepSequence;
   const newType = params.orderMode === "keep" ? src.type : "STOCK_PRODUCTION";
@@ -194,7 +195,7 @@ export async function cloneWorkOrderTx(
   }
   const newReEntryStepId = newStepBySeq.get(S);
   if (!newReEntryStepId) {
-    throw AppError.badRequest("Yeni terbiye iş emrinde geri-sarım adımı bulunamadı (rota kopyası tutarsız)");
+    throw AppError.badRequest(`Yeni ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} geri-sarım adımı bulunamadı (rota kopyası tutarsız)`);
   }
 
   // KQ-D6: aktif hedef çeşit değeri (hedef kurşun gramajı) yeni İE'ye taşınır.

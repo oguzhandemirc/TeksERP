@@ -16,6 +16,7 @@ import {
 import { colors, spacing, radius } from '../../../theme';
 import { formatFactory } from '../../../lib/factory-time';
 import TruncatedText from '../../../components/TruncatedText';
+import { TERIM } from '../../../lib/terim';
 
 const PAGE_SIZE = 20;
 
@@ -153,7 +154,7 @@ export default function WorkOrderListView({ onOpen, refreshKey = 0 }: Props) {
         })}
       </ScrollView>
 
-      {total != null ? <Text style={styles.totalLine}>~{total} terbiye iş emri</Text> : null}
+      {total != null ? <Text style={styles.totalLine}>~{total} {TERIM.terbiyeIsEmri.tekilKucuk}</Text> : null}
 
       {q.isLoading ? (
         <View style={styles.center}>
@@ -162,7 +163,7 @@ export default function WorkOrderListView({ onOpen, refreshKey = 0 }: Props) {
       ) : items.length === 0 ? (
         <View style={styles.center}>
           <Icon source="clipboard-text-outline" size={48} color={colors.textMuted} />
-          <Text style={styles.empty}>Terbiye iş emri bulunamadı</Text>
+          <Text style={styles.empty}>{TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı</Text>
         </View>
       ) : (
         <FlashList

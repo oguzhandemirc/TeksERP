@@ -114,6 +114,7 @@ import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helpe
 import { InventoryService } from "./inventory.service";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
+import { TERIM } from "../constants/terim";
 
 /**
  * Elle eklenen topu geri alırken İKİNCİ BİR İPTAL MOTORU YAZILMAZ.
@@ -219,7 +220,7 @@ function childBlockReason(c: ChildRow, grandchildCount: number): string | null {
   if (c.status === RollStatus.CANCELLED) return null; // zaten iptal — FULL'de atlanır
   if (c.sackId) return "Çuvala okutulmuş — önce çuvaldan çıkarın";
   if (c.shipmentId || c.directShipmentId) return "Sevkiyata girmiş — geri alınamaz";
-  if (c.currentStepId) return "Yeni bir terbiye iş emrine bağlanmış — önce oradan çözün";
+  if (c.currentStepId) return `Yeni bir ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlanmış — önce oradan çözün`;
   if (!CHILD_CANCELABLE_STATUSES.includes(c.status)) {
     return `Bu durumda geri alınamaz (${c.status})`;
   }
@@ -539,7 +540,7 @@ export class TamburUndoService {
       matchesPermission(opts.permissions, "admin:*");
     if (ok) return null;
     return (
-      "Tümden geri alma yetkiniz yok — bu işlem terbiye iş emrinin geçmişini yeniden yazar " +
+      `Tümden geri alma yetkiniz yok — bu işlem ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} geçmişini yeniden yazar ` +
       `(${UNDO_FULL_PERMISSION} gerekir). Tek parça iptali yapabilirsiniz.`
     );
   }
@@ -732,7 +733,7 @@ export class TamburUndoService {
           opts.mode === "FULL"
             ? "Bu top için tümden geri alma artık yapılamıyor (kapanış bu sırada değişmiş olabilir) — ekranı yenileyin"
             : opts.mode === "SINGLE_RESTORE"
-              ? "Bu top için terbiye iş emrine geri alma yapılamıyor (kaynak top artık arşivde değil) — ekranı yenileyin"
+              ? `Bu top için ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} geri alma yapılamıyor (kaynak top artık arşivde değil) — ekranı yenileyin`
               : "Bu top için tek parça iptali yapılamıyor — ekranı yenileyin",
         );
       }
@@ -846,7 +847,7 @@ export class TamburUndoService {
         // "Geri Al" adı operatörü metrajın döneceğine inandırıyordu.
         label: parentArchived ? "Topu iptal et (kayıt yanlıştı)" : "Kesimi geri al",
         description: parentArchived
-          ? `${child.barcode ?? "bu parça"} iptal edilir. ${qty} m kaynağa geri dönmez (kaynak arşivde) — kayıt düzeltmesi olarak yazılır. Terbiye iş emri KAPALI kalır.`
+          ? `${child.barcode ?? "bu parça"} iptal edilir. ${qty} m kaynağa geri dönmez (kaynak arşivde) — kayıt düzeltmesi olarak yazılır. ${TERIM.terbiyeIsEmri.cumleBasi.yalin} KAPALI kalır.`
           : `${child.barcode ?? "bu parça"} iptal edilir, ${qty} m kaynak topa geri döner.`,
         canApply: finalBlock == null,
         blockReason: finalBlock,
@@ -917,7 +918,7 @@ export class TamburUndoService {
         if (w.status === WorkOrderStatus.CANCELLED || w.status === WorkOrderStatus.SUPERSEDED) {
           // manualMove disipliniyle aynı: iptal/devredilmiş iş emrine top
           // diriltmek "canlı ama kimsenin okutamadığı" çıkmazı üretir.
-          woBlock = `Terbiye iş emri ${w.status === WorkOrderStatus.CANCELLED ? "iptal edilmiş" : "devredilmiş"} — terbiye iş emrine geri alınamaz`;
+          woBlock = `${TERIM.terbiyeIsEmri.cumleBasi.yalin} ${w.status === WorkOrderStatus.CANCELLED ? "iptal edilmiş" : "devredilmiş"} — ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} geri alınamaz`;
         }
         wo = {
           id: w.id,
@@ -932,13 +933,13 @@ export class TamburUndoService {
     const qty = Number(child.initialQty);
     if (child.barcode) warnings.push(`Basılmış ${child.barcode} etiketi varsa imha edilmeli`);
     if (wo?.willRevive) {
-      warnings.push("Tamamlanmış terbiye iş emri yeniden AÇILACAK (refakat kartı tekrar aktif olur)");
+      warnings.push(`Tamamlanmış ${TERIM.terbiyeIsEmri.tekilKucuk} yeniden AÇILACAK (refakat kartı tekrar aktif olur)`);
     }
 
     return {
       option: {
         mode: "SINGLE_RESTORE",
-        label: "Terbiye iş emrine geri al (kumaş elimde)",
+        label: `${TERIM.terbiyeIsEmri.cumleBasi.yonelme} geri al (kumaş elimde)`,
         description: op
           ? `${child.barcode ?? "bu parça"} iptal edilir, ${qty} m kaynak topa geri konur ve top Tambur adımına döner — yeniden kesilebilir. Diğer toplara dokunulmaz.`
           : `${child.barcode ?? "bu parça"} iptal edilir, ${qty} m kaynak topa geri konur ve top depoya döner. Diğer toplara dokunulmaz.`,
@@ -1026,7 +1027,7 @@ export class TamburUndoService {
         // manualMove disipliniyle aynı: iptal/devredilmiş WO'ya top diriltmek
         // "canlı ama kimsenin okutamadığı" çıkmazı üretir.
         return bail(
-          `Terbiye iş emri ${w.status === WorkOrderStatus.CANCELLED ? "iptal edilmiş" : "devredilmiş"} — geri alma yapılamaz`,
+          `${TERIM.terbiyeIsEmri.cumleBasi.yalin} ${w.status === WorkOrderStatus.CANCELLED ? "iptal edilmiş" : "devredilmiş"} — geri alma yapılamaz`,
           { id: w.id, workOrderNumber: w.workOrderNumber, status: w.status, willRevive: false },
         );
       }
@@ -1099,7 +1100,7 @@ export class TamburUndoService {
       warnings.push("İptal edilen parçaların basılmış etiketleri imha edilmeli");
     }
     if (wo?.willRevive) {
-      warnings.push("Tamamlanmış terbiye iş emri yeniden AÇILACAK (refakat kartı tekrar aktif olur)");
+      warnings.push(`Tamamlanmış ${TERIM.terbiyeIsEmri.tekilKucuk} yeniden AÇILACAK (refakat kartı tekrar aktif olur)`);
     }
 
     // ⚠️ YETKİ ÖNCE: parça engeli veriyle ilgilidir (biri çuvaldan çıkarınca
@@ -1122,7 +1123,7 @@ export class TamburUndoService {
           (children.length > 0
             ? `${children.length} top iptal edilir, ${Number(restored)} m kaynak topa geri döner`
             : `İptal edilecek parça kalmamış (hepsi tek tek iptal edilmiş); ${Number(restored)} m kaynak topa geri konur`) +
-          (wo?.willRevive ? ", tamamlanmış terbiye iş emri yeniden açılır" : "") +
+          (wo?.willRevive ? `, tamamlanmış ${TERIM.terbiyeIsEmri.tekilKucuk} yeniden açılır` : "") +
           ". Sebep yazmanız gerekir.",
         canApply: blockReason == null,
         blockReason,
@@ -1327,7 +1328,7 @@ export class TamburUndoService {
     if (!wo) return;
     if (wo.status === WorkOrderStatus.CANCELLED || wo.status === WorkOrderStatus.SUPERSEDED) {
       throw AppError.conflict(
-        `${wo.workOrderNumber} terbiye iş emri bu sırada ${
+        `${wo.workOrderNumber} ${TERIM.terbiyeIsEmri.tekilKucuk} bu sırada ${
           wo.status === WorkOrderStatus.CANCELLED ? "iptal edildi" : "devredildi"
         } — geri alma yapılamaz. Listeyi yenileyin.`,
         { code: "WORKORDER_TERMINAL_DURING_UNDO" },
@@ -1647,7 +1648,7 @@ export class TamburUndoService {
           step.workOrder.status === WorkOrderStatus.CANCELLED ||
           step.workOrder.status === WorkOrderStatus.SUPERSEDED
         ) {
-          throw AppError.conflict("Terbiye iş emri iptal/devredilmiş — terbiye iş emrine geri alınamaz");
+          throw AppError.conflict(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} iptal/devredilmiş — ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} geri alınamaz`);
         }
       }
 
@@ -1855,8 +1856,8 @@ export class TamburUndoService {
       },
       message: result.warehouseClosure
         ? `Parça iptal edildi — ${result.restoredQty} m kaynak topa geri kondu (top depoya döndü)`
-        : `Parça iptal edildi — ${result.restoredQty} m ${result.workOrderNumber ?? "terbiye iş emrinin"} Tambur adımına geri kondu${
-            result.woRevived ? " (terbiye iş emri yeniden açıldı)" : ""
+        : `Parça iptal edildi — ${result.restoredQty} m ${result.workOrderNumber ?? `${TERIM.terbiyeIsEmri.cekimKucuk.ilgi}`} Tambur adımına geri kondu${
+            result.woRevived ? ` (${TERIM.terbiyeIsEmri.tekilKucuk} yeniden açıldı)` : ""
           }`,
     };
   }
@@ -1901,7 +1902,7 @@ export class TamburUndoService {
           step.workOrder.status === WorkOrderStatus.CANCELLED ||
           step.workOrder.status === WorkOrderStatus.SUPERSEDED
         ) {
-          throw AppError.conflict("Terbiye iş emri iptal/devredilmiş — geri alma yapılamaz");
+          throw AppError.conflict(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} iptal/devredilmiş — geri alma yapılamaz`);
         }
       }
 
@@ -2266,7 +2267,7 @@ export class TamburUndoService {
         (result.warehouseClosure
           ? `${result.restoredQty} m kaynak topa geri döndü (depo kesimi)`
           : `${result.restoredQty} m ${result.workOrderNumber} Tambur adımına döndü`) +
-        (result.woRevived ? " (terbiye iş emri yeniden açıldı)" : ""),
+        (result.woRevived ? ` (${TERIM.terbiyeIsEmri.tekilKucuk} yeniden açıldı)` : ""),
     };
   }
 }

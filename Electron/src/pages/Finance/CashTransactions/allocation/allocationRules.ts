@@ -10,7 +10,7 @@ export type AllocationTargetType = "MACHINE" | "WORK_ORDER" | "SERVICE_ITEM";
 
 export const TARGET_TYPE_LABEL: Record<AllocationTargetType, string> = {
   MACHINE: "Makine",
-  WORK_ORDER: TERIM.terbiyeIsEmri.tekil,
+  get WORK_ORDER() { return TERIM.terbiyeIsEmri.tekil; },
   SERVICE_ITEM: "Hizmet kalemi",
 };
 

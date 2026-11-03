@@ -5,6 +5,7 @@ import prisma from "../../lib/prisma";
 import { matchesPermission, RBAC_DENIED_CODE } from "../../middlewares/rbac.middleware";
 import { AppError } from "../../utils/app-error";
 import { readSupportOwnTicketsOnlyEnabled, readWorkOrderQuickOwnOnlyEnabled } from "../system-setting.service";
+import { TERIM } from "../../constants/terim";
 
 /**
  * `workorder:write` taşımayan (yalnız `mobile:hizli-is-emri`) aktör, bayrak açıkken
@@ -21,7 +22,7 @@ export async function requireQuickWorkOrderOwnership(req: Request, _res: Respons
       ? await prisma.workOrder.findUnique({ where: { id }, select: { createdById: true } })
       : null;
     if (!wo || wo.createdById === user.userId) return next();
-    next(AppError.forbidden("Bu terbiye iş emrini siz başlatmadınız — düzenlemek için 'workorder:write' yetkisi gerekli.", {
+    next(AppError.forbidden(`Bu ${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} siz başlatmadınız — düzenlemek için 'workorder:write' yetkisi gerekli.`, {
       code: RBAC_DENIED_CODE,
       required: "workorder:write",
     }));

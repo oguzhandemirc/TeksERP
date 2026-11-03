@@ -22,6 +22,7 @@ import type {
   OrderCancelAction,
   OrderCancelPreviewWO,
 } from "./service";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   open: boolean;
@@ -34,17 +35,14 @@ interface Props {
 
 const ACTION_LABELS: Record<OrderCancelAction, string> = {
   UNLINK_ONLY: "Sadece bağı kopar",
-  CONVERT_TO_STOCK: "Terbiye iş emrini stoğa çevir",
-  CANCEL_WO: "Terbiye iş emrini de iptal et",
+  get CONVERT_TO_STOCK() { return `${TERIM.terbiyeIsEmri.cumleBasi.belirtme} stoğa çevir`; },
+  get CANCEL_WO() { return `${TERIM.terbiyeIsEmri.cumleBasi.belirtme} de iptal et`; },
 };
 
 const ACTION_DESCRIPTIONS: Record<OrderCancelAction, string> = {
-  UNLINK_ONLY:
-    "Terbiye iş emri ayakta kalır, sadece bu siparişle bağı kesilir. Diğer bağlı siparişler varsa onlar etkilenmez; bu terbiye iş emrinin TEK siparişi buysa bağ kalkınca terbiye iş emri Stok üretimine döner.",
-  CONVERT_TO_STOCK:
-    "Terbiye iş emri 'Stoğa Üretim' tipine çevrilir; üretilen/üretilecek rulolar stoğa düşer ve başka müşteriye sevk edilebilir.",
-  CANCEL_WO:
-    "Terbiye iş emri iptal edilir; başlayan üretim durur, bağlı fabrika topları stoğa çekilir, refakat kartı geçersizleşir.",
+  get UNLINK_ONLY() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} ayakta kalır, sadece bu siparişle bağı kesilir. Diğer bağlı siparişler varsa onlar etkilenmez; bu ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} TEK siparişi buysa bağ kalkınca ${TERIM.terbiyeIsEmri.tekilKucuk} Stok üretimine döner.`; },
+  get CONVERT_TO_STOCK() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} 'Stoğa Üretim' tipine çevrilir; üretilen/üretilecek rulolar stoğa düşer ve başka müşteriye sevk edilebilir.`; },
+  get CANCEL_WO() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} iptal edilir; başlayan üretim durur, bağlı fabrika topları stoğa çekilir, refakat kartı geçersizleşir.`; },
 };
 
 export function OrderCancelDialog({
@@ -166,7 +164,7 @@ export function OrderCancelDialog({
             )}
           </DialogTitle>
           <DialogDescription>
-            Bu işlem geri alınamaz. Aşağıda etkilenecek terbiye iş emirleri listelendi;
+            Bu işlem geri alınamaz. Aşağıda etkilenecek {TERIM.terbiyeIsEmri.cogulKucuk} listelendi;
             her biri için ne yapılacağını seç. Onayladığında uygulanır.
           </DialogDescription>
         </DialogHeader>
@@ -183,7 +181,7 @@ export function OrderCancelDialog({
           </div>
         ) : affected.length === 0 ? (
           <div className="rounded-md border bg-muted/30 p-4 text-sm">
-            Bu siparişe bağlı terbiye iş emri yok. Onayladığında sadece sipariş{" "}
+            Bu siparişe bağlı {TERIM.terbiyeIsEmri.tekilKucuk} yok. Onayladığında sadece sipariş{" "}
             <strong>İptal</strong> durumuna geçer.
           </div>
         ) : (
@@ -229,11 +227,11 @@ export function OrderCancelDialog({
               <span>{summary.UNLINK_ONLY} bağ koparılacak · </span>
             )}
             {summary.CONVERT_TO_STOCK > 0 && (
-              <span>{summary.CONVERT_TO_STOCK} terbiye iş emri stoğa çevrilecek · </span>
+              <span>{summary.CONVERT_TO_STOCK} {TERIM.terbiyeIsEmri.tekilKucuk} stoğa çevrilecek · </span>
             )}
             {summary.CANCEL_WO > 0 && (
               <span className="text-destructive">
-                {summary.CANCEL_WO} terbiye iş emri iptal edilecek
+                {summary.CANCEL_WO} {TERIM.terbiyeIsEmri.tekilKucuk} iptal edilecek
               </span>
             )}
           </div>
@@ -346,7 +344,7 @@ function WOActionRow({
           <Badge
             variant="outline"
             className="border-amber-500/40 text-[10px] text-amber-700 dark:text-amber-400"
-            title="Bu terbiye iş emrinin tek siparişi bu — bağ kalkınca terbiye iş emri Stok üretimine döner"
+            title={`Bu ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} tek siparişi bu — bağ kalkınca ${TERIM.terbiyeIsEmri.tekilKucuk} Stok üretimine döner`}
           >
             Stok üretimine döner
           </Badge>

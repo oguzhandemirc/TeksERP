@@ -6,6 +6,7 @@ import { FlashList } from '@shopify/flash-list';
 import type { KursunDistributionWaitingRow } from '../../../services/kursunBypass.service';
 import { WorkOrderSummary, ReasonStrip, ListPlaceholder, cardStyles } from './dagitimUi';
 import { colors, spacing, radius } from '../../../theme';
+import { TERIM } from '../../../lib/terim';
 
 // =============================================================================
 // BEKLEYEN — kurşun adımında açık topu olan, henüz bir fiziksel kurşun
@@ -129,7 +130,7 @@ export default function EligibleList({
         loading ? (
           <ActivityIndicator style={styles.loading} color={colors.brand} />
         ) : (
-          <ListPlaceholder text="Kurşun adımında bekleyen terbiye iş emri yok." />
+          <ListPlaceholder text={`Kurşun adımında bekleyen ${TERIM.terbiyeIsEmri.tekilKucuk} yok.`} />
         )
       }
     />

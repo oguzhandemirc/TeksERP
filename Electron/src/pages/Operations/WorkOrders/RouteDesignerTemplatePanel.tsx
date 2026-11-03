@@ -3,6 +3,7 @@ import { BookmarkPlus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { springSnappy } from "@/lib/motion";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   enabled: boolean;
@@ -49,7 +50,7 @@ export function RouteDesignerTemplatePanel({
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium">Bu rotayı şablon olarak kaydet</span>
           <span className="block text-[11px] text-muted-foreground">
-            Sonraki terbiye iş emirlerinde "Şablondan başla" ile tek tıkla gelir
+            Sonraki {TERIM.terbiyeIsEmri.cogulCekimKucuk.bulunma} "Şablondan başla" ile tek tıkla gelir
           </span>
         </span>
         {/* Switch göstergesi */}

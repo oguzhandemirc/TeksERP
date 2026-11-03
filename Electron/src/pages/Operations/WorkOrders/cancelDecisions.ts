@@ -2,6 +2,7 @@
 // İPTAL KARARLARI — saf yardımcılar (DB/UI yok, birim testlenebilir)
 // =============================================================================
 import type { CancelDisposition, CancelImpactRoll } from "./service";
+import { TERIM } from "@/lib/terim";
 
 /** Üç seçenek. Kapatmanın altı aksiyonu BURADA YOK — iptal "üretildi" demez. */
 export const CANCEL_OPTIONS: {
@@ -24,7 +25,7 @@ export const CANCEL_OPTIONS: {
  */
 export const CANCEL_REASON_PRESETS = [
   "Sipariş iptal oldu",
-  "Yanlış terbiye iş emri açıldı",
+  `Yanlış ${TERIM.terbiyeIsEmri.tekilKucuk} açıldı`,
   "Müşteri vazgeçti",
   "Mükerrer kayıt",
 ] as const;

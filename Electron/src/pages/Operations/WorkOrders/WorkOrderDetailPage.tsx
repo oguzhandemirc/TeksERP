@@ -90,7 +90,7 @@ export function WorkOrderDetailPage() {
             </div>
           )}
           {!detail.isLoading && !wo && (
-            <div className="py-16 text-center text-sm text-muted-foreground">Terbiye iş emri bulunamadı.</div>
+            <div className="py-16 text-center text-sm text-muted-foreground">{TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı.</div>
           )}
 
           {wo && (

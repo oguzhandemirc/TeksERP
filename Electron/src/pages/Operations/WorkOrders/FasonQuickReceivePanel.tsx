@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { colorService } from "@/pages/Colors/service";
 import { workOrderService } from "./service";
 import { loadAllForPicker } from "@/lib/picker-loader";
+import { TERIM } from "@/lib/terim";
 
 type Mode = "MERGE" | "ONE_TO_ONE";
 
@@ -209,7 +210,7 @@ export function FasonQuickReceivePanel({ workOrderId, onReceived }: Props) {
                 ))}
               </select>
               <div className="text-[11px] text-muted-foreground">
-                Bu terbiye iş emrinin hedef rengi yok — kabulde beyan edilir.
+                Bu {TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedef rengi yok — kabulde beyan edilir.
               </div>
             </div>
           )}

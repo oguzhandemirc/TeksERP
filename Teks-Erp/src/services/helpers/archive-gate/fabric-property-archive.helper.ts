@@ -3,6 +3,7 @@ import type { ArchiveSpec } from "../master-data-archive.helper";
 import { LIVE_ROLL, OPEN_WORK_ORDER, openDemandLineWhere } from "../live-ref-where.helper";
 import { ACTIVE_ROLL_PROPERTY, ACTIVE_TARGET_PROPERTY } from "../property-revoke.helper";
 import { plannedPropertyStep } from "./route-plan-refs.helper";
+import { TERIM } from "../../../constants/terim";
 
 const NOT_ARCHIVED_ITEM = { lifecycleStatus: { not: "ARCHIVED" as const } };
 
@@ -22,7 +23,7 @@ export const FABRIC_PROPERTY_ARCHIVE: ArchiveSpec = {
     },
     {
       kind: "WORK_ORDER",
-      label: "Açık terbiye iş emrinin hedef özelliği",
+      get label() { return `Açık ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedef özelliği`; },
       count: (db, id) => db.workOrderTargetProperty.count({ where: { propertyId: id, ...ACTIVE_TARGET_PROPERTY, workOrder: OPEN_WORK_ORDER } }),
       list: async (db, id, take) =>
         (await db.workOrderTargetProperty.findMany({ where: { propertyId: id, ...ACTIVE_TARGET_PROPERTY, workOrder: OPEN_WORK_ORDER }, take, select: { id: true, workOrder: { select: { workOrderNumber: true, status: true } } } }))

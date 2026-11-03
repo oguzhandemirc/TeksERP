@@ -362,7 +362,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
           open={inProgressConfirmOpen}
           onOpenChange={setInProgressConfirmOpen}
           title="Üretim devam ediyor"
-          description="Bu terbiye iş emri şu an üretimde. Yapacağın değişiklikler bağlı rulolara ve istasyon adımlarına yansıyabilir. Devam edilsin mi?"
+          description={`Bu ${TERIM.terbiyeIsEmri.tekilKucuk} şu an üretimde. Yapacağın değişiklikler bağlı rulolara ve istasyon adımlarına yansıyabilir. Devam edilsin mi?`}
           confirmLabel="Devam Et"
           cancelLabel="Vazgeç"
           destructive

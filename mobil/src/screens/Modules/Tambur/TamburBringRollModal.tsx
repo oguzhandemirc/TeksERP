@@ -40,6 +40,7 @@ import { isWorkSessionLost } from '../../../services/api';
 import { tamburService, type TamburBringPreview } from '../../../services/tambur.service';
 import { colors, radius, spacing } from '../../../theme';
 import { showScreenError } from '../../../lib/screenToast';
+import { TERIM } from '../../../lib/terim';
 
 /** Sebep alanı — backend de aynı alt sınırı uygular (min 3 karakter). */
 const MIN_REASON = 3;
@@ -271,7 +272,7 @@ export default function TamburBringRollModal({
                     />
                     <EffectRow
                       icon="clipboard-text-outline"
-                      text={`Terbiye iş emri: ${preview.targetStep.workOrderNumber}`}
+                      text={`${TERIM.terbiyeIsEmri.cumleBasi.yalin}: ${preview.targetStep.workOrderNumber}`}
                     />
                     {preview.effects.skippedStepNames.length > 0 && (
                       <EffectRow
@@ -282,7 +283,7 @@ export default function TamburBringRollModal({
                     {preview.effects.colorWillApply && (
                       <EffectRow
                         icon="palette"
-                        text="Terbiye iş emrinin hedef rengi bu topa uygulanacak."
+                        text={`${TERIM.terbiyeIsEmri.cumleBasi.ilgi} hedef rengi bu topa uygulanacak.`}
                       />
                     )}
                     {preview.effects.qualityStaysUnknown && (
