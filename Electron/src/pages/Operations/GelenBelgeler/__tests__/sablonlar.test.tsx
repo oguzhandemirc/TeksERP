@@ -36,6 +36,14 @@ vi.mock("../service", () => ({
   updateSenderTemplate: (...a: unknown[]) => updateSenderTemplate(...a),
 }));
 
+const getUserTemplate = vi.fn();
+const updateUserTemplate = vi.fn();
+vi.mock("../tanit/service", () => ({
+  USER_TEMPLATES_QUERY_KEY: ["gelen-belge", "sablonlar", "ozel"],
+  getUserTemplate: (...a: unknown[]) => getUserTemplate(...a),
+  updateUserTemplate: (...a: unknown[]) => updateUserTemplate(...a),
+}));
+
 const row = (o: Partial<SenderTemplateView>): SenderTemplateView => ({
   code: "ceki-listesi-a", name: "Kumaş çeki listesi", version: 1, rowVersion: 1, inEngine: true, id: "t1",
   isActive: true, hitCount: 7, senderCustomer: { id: "c1", code: "C1", name: "Güleçsoy", isActive: true },
@@ -124,5 +132,43 @@ describe("bulunabilirlik", () => {
     expect(tile?.permission).toBe("gelen-belge:template");
     expect(allCommandEntries.find((e) => e.to === SENDER_TEMPLATES_PATH)?.visibleWhen).toBe(tile?.visibleWhen);
     expect(routeModuleOf(SENDER_TEMPLATES_PATH)).toBe("gelenBelgeEnabled");
+  });
+});
+
+describe("tanıtılan belge tipleri (S1b)", () => {
+  const user = row({ kind: "USER", code: "u-gulecsoy", name: "Güleçsoy çeki", id: "t7", inEngine: false, isActive: false, senderCustomer: null });
+  beforeEach(() => {
+    listSenderTemplates.mockResolvedValue([row({}), user]);
+    getUserTemplate.mockReset().mockResolvedValue({
+      id: "t7", code: "u-gulecsoy", name: "Güleçsoy çeki", version: 3, isActive: false, updatedAt: "",
+      template: { id: "u-gulecsoy", version: 3, fields: [{ key: "partiNo" }], sections: { startLabels: ["Ham PartiNo"] }, identifiers: { keywords: ["GÜLEÇSOY", "ÇEKİ"], minScore: 0.6 } },
+      versions: [{ version: 3, createdAt: "2026-11-03T05:00:00Z", createdById: null }],
+    });
+    updateUserTemplate.mockReset().mockResolvedValue({ code: "u-gulecsoy", name: "Güleçsoy çeki", version: 4 });
+  });
+
+  it("ayrı bölümde listelenir; pasif kullanıcı şablonu yeniden etkinleştirilebilir", async () => {
+    renderWithProviders(<SenderTemplatesPage />);
+    await screen.findByTestId("user-templates-heading");
+    const sw = await screen.findByRole("switch", { name: "Güleçsoy çeki aktif" });
+    expect(sw).toBeEnabled();
+    await userEvent.click(sw);
+    await waitFor(() => expect(updateSenderTemplate).toHaveBeenCalledWith("u-gulecsoy", { isActive: true }));
+    expect(screen.queryByText("Okuma motorunda artık yok")).toBeNull();
+  });
+
+  it("düzenle: kimlik yazısı çıkar/ekle → PUT expectedVersion, şablonun geri kalanı aynen", async () => {
+    renderWithProviders(<SenderTemplatesPage />);
+    await userEvent.click(await screen.findByTestId("user-template-edit-u-gulecsoy"));
+    await userEvent.click(await screen.findByRole("button", { name: "ÇEKİ kimlik yazısını çıkar" }));
+    await userEvent.type(screen.getByPlaceholderText("Yeni kimlik yazısı"), "BOYA SAN.{Enter}");
+    await userEvent.click(screen.getByTestId("user-template-save"));
+    await waitFor(() => expect(updateUserTemplate).toHaveBeenCalledTimes(1));
+    const [code, body] = updateUserTemplate.mock.calls[0]!;
+    expect(code).toBe("u-gulecsoy");
+    expect(body).toEqual({
+      expectedVersion: 3, name: "Güleçsoy çeki",
+      template: { fields: [{ key: "partiNo" }], sections: { startLabels: ["Ham PartiNo"] }, identifiers: { keywords: ["GÜLEÇSOY", "BOYA SAN."], minScore: 0.6 } },
+    });
   });
 });

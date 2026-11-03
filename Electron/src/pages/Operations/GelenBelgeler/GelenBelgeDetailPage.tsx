@@ -34,6 +34,7 @@ import { KursunMetersCard } from "./KursunMetersCard";
 import { showsPerDocument } from "./partiMetre";
 import type { DeliveryNoteDetail } from "./types";
 import { TERIM } from "@/lib/terim";
+import { TeachButton, UnknownTypeStrip } from "./tanit/TeachEntry";
 
 const LIST_PATH = "/operations/gelen-belgeler";
 
@@ -50,6 +51,8 @@ function DetailActions({ note, reviewCount, addPages, onReview, onApprove }: Det
   return (
     <div className="flex flex-wrap gap-2">
       {addPages}
+      {/* S1b belge tipi tanıtma: izin + okunmuş fotoğraf yoksa bileşen çizilmez. */}
+      <TeachButton note={note} />
       {reviewCount > 0 && (
         <Button variant="outline" onClick={onReview}>
           <ScanSearch className="mr-1 h-4 w-4" />
@@ -131,7 +134,7 @@ export function IncomingDocumentDetailPage() {
       <PageBody className="min-h-0 p-4 sm:p-6">
         <div className="flex flex-col gap-4">
           {isApprovable(n.status) && <CariHoldStrip message={n.cariHold?.message} title="Cari kilitli — bu belge onaylanamaz" />}
-          <ScanReadBanner scans={n.scans} lines={n.lines} editable={editable} canRequeue={hasPermission("gelen-belge:write")} onRequeued={() => void invalidate()} />
+          <ScanReadBanner scans={n.scans} lines={n.lines} editable={editable} canRequeue={hasPermission("gelen-belge:write")} onRequeued={() => void invalidate()} />{/* S1b */}<UnknownTypeStrip note={n} />
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <ScanViewer scans={n.scans} highlight={sel ? lineRect(sel) : null} highlightScanId={sel?.scanId ?? null} selectionKey={sel?.id ?? null} />
             <div className="flex min-w-0 flex-col gap-4">

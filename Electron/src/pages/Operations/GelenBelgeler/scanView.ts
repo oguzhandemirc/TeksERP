@@ -52,6 +52,15 @@ export function toScreen(view: View, nat: Size, p: Pt): Pt {
   return { x: r.x * view.scale + view.tx, y: r.y * view.scale + view.ty };
 }
 
+/** toScreen'in tersi: görünüm noktası → görüntü pikseli (tanıtma ekranında dokunulan kelimeyi bulmak için). */
+export function fromScreen(view: View, nat: Size, s: Pt): Pt {
+  const r = { x: (s.x - view.tx) / view.scale, y: (s.y - view.ty) / view.scale };
+  if (view.rot === 90) return { x: r.y, y: nat.h - r.x };
+  if (view.rot === 180) return { x: nat.w - r.x, y: nat.h - r.y };
+  if (view.rot === 270) return { x: nat.w - r.y, y: r.x };
+  return r;
+}
+
 /** CSS `matrix(a,b,c,d,e,f)` (transform-origin 0 0): toScreen ile birebir aynı eşleme. */
 export function viewMatrix(view: View, nat: Size): [number, number, number, number, number, number] {
   const { scale: s, tx, ty } = view;
