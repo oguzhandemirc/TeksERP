@@ -52,7 +52,6 @@ export async function getScanWords(scanId: string) {
 
 export type SuggestFromScanInput = Omit<TemplateSuggestInput, "ocr" | "code"> & { scanId: string; base?: { code: string; keep: UpdateKeepPart[] } };
 
-/** Atamalardan şablon önerisi + aynı taramada önizleme (yalnız bu şablonla sınıflandırma; eşik altı → tanınmadı). */
 /**
  * K30-B tel sözleşmesi madde 3: bu taramada kimlik eşiğini (motorun `templateMinScore`u) geçen MEVCUT aktif kullanıcı
  * şablonları, güncellenen şablon hariç, skor azalan — çalışan aynı belgeyi ikinci kez tanıtmasın diye uyarı kaynağı.
@@ -62,6 +61,7 @@ export async function similarUserTemplates(ocr: OcrResult, excludeCode: string |
   return templatesOverThreshold(ocr, user).map(({ template, score }) => ({ kod: template.id, ad: template.name || template.id, skor: score }));
 }
 
+/** Atamalardan şablon önerisi + aynı taramada önizleme (yalnız bu şablonla sınıflandırma; eşik altı → tanınmadı). */
 export async function suggestFromScan(input: SuggestFromScanInput) {
   const ocr = await scanOcr(input.scanId);
   // "Şablonu güncelle": önizleme KAYDEDİLECEK birleşik şablonla koşar (eski şablon + yeni atamalar); istemci bunu aynen kaydeder.
