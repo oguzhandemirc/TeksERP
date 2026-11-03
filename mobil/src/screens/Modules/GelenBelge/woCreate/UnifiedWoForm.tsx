@@ -1,59 +1,28 @@
 // S16b tablet TEK iş emri formu (`gelenBelge.tabletIeGirisi = BELGE`): her İE karosu bu formu açar (özel İE = rota
 // hazır). Üstte "Belge okut" → okunan değerler inputlara dolar → görevli kontrol eder → "İş emri oluştur" (form ucu).
 // Müşteri / parti / kurşun metresi / gramaj / çok parti bugünkü satır kartından (DocRowCard) gelir; üretim + plan
-// inputları WoFormFields'ta. Kayıt `useWoRows` + satır başına ek gövde alanlarıyla (S16a sözleşmesi).
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+// inputları WoFormFields'ta (K30-D adımlar/makine/tür/özellik WoPlanFields). Durum `useUnifiedWoForm`; kayıt `useWoRows`
+// + satır başına ek gövde alanlarıyla (S16a sözleşmesi).
+import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Text } from 'react-native-paper';
-import { useQuery } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
-import type { PickerOption } from '../../../../components/PickerModal';
 import { SheetField } from '../../../../components/ModuleSheet';
-import { useFeatureFlags, useScanRouteMode } from '../../../../hooks/useFeatureFlags';
-import { useFoldValues } from '../../../../hooks/useFoldValues';
 import { TERIM } from '../../../../lib/terim';
-import { inboundDocService } from '../../../../services/inboundDoc.service';
-import type { AvailableOrderLine } from '../../../../services/order.service';
-import { routeService, type ProductionRoute } from '../../../../services/route.service';
 import { colors, spacing, typography } from '../../../../theme';
-import { INBOUND_DOC_CONTEXT_KEY } from '../DocHeader';
 import { DuplicateDocNoDialog } from '../DuplicateDocNoDialog';
 import PageCameraModal from '../PageCameraModal';
 import PagePreviewModal from '../PagePreviewModal';
-import { removePage, type ScanPage } from '../docScan';
-import { useDocScan } from '../useDocScan';
-import { usePageSource } from '../usePageSource';
 import { ScannerSection } from './DocBatchView';
 import DocRowCard, { GramajField } from './DocRowCard';
-import { useWoRows, type DocRow, type WoRowsState } from './useWoRows';
+import type { WoRowsState } from './useWoRows';
 import WoFormFields from './WoFormFields';
 import { FieldSelectorSheet, FieldsButton, OtherFields } from './WoFieldSelector';
-import { useWoFieldLayout } from './useWoFieldPrefs';
-import {
-  applyDocRead,
-  applyOrderLine,
-  buildExtraBody,
-  clearDocRead,
-  createBlockReason,
-  editExtras,
-  extrasIssues,
-  initialFormState,
-  type WoFormExtras,
-  type WoFormState,
-} from './woForm';
-import { SCAN_ROUTE, rowIssues } from './woFromDoc';
-
-interface Props {
-  /** Özel iş emri karosundan açıldıysa ön seçili rota (rotasız dahil); düz karoda null = seçilir. */
-  initialRoute: ProductionRoute | null;
-  routeLocked: boolean;
-  /** Açıldıktan sonra "Yeni iş emri": üst ekran formu sıfırdan kurar. */
-  onNew: () => void;
-}
+import { useUnifiedWoForm, type DocScanFlow, type UnifiedWoFormProps } from './useUnifiedWoForm';
 
 const DOC_PLACEHOLDER = 'Belge okutulunca dolar';
 
-export default function UnifiedWoForm(props: Props) {
+export default function UnifiedWoForm(props: UnifiedWoFormProps) {
   const u = useUnifiedWoForm(props);
   const { wo, row, scan, form, done, fields } = u;
   const fieldProps = {
@@ -70,6 +39,7 @@ export default function UnifiedWoForm(props: Props) {
     showQuantity: u.showQuantity,
     locked: done || wo.saving,
     onOrderLinePicked: u.onOrderLine,
+    plan: u.plan,
   };
   return (
     <>
@@ -119,79 +89,6 @@ export default function UnifiedWoForm(props: Props) {
   );
 }
 
-/** Formun durumu: rota, ek alanlar, satır (tek belge), tarayıcı; belgeden doldurma ve "oluştur" engeli. */
-function useUnifiedWoForm({ initialRoute }: Props) {
-  const [route, setRoute] = useState<ProductionRoute | null>(initialRoute);
-  const [form, setForm] = useState<WoFormState>(initialFormState);
-  const scanMode = useScanRouteMode();
-  const showQuantity = useFeatureFlags().data?.targetQuantityEnabled === true;
-  const routesQ = useQuery({
-    queryKey: ['routes', 'wo-picker'],
-    queryFn: () => routeService.getAll({ page: 1, pageSize: 200, sortBy: 'name', sortOrder: 'asc' }),
-    staleTime: 10 * 60 * 1000,
-    enabled: initialRoute === null,
-  });
-  const hasTambur = useMemo(() => (route?.steps ?? []).some((s) => s.station?.kind === 'TAMBUR'), [route]);
-  const fold = useFoldValues();
-  // Kat yalnız tamburlu rotada sorulur; ilk katalog değeri ön seçilir (Hızlı İE ile aynı).
-  const firstFold = fold.values[0]?.code ?? null;
-  useEffect(() => {
-    if (hasTambur && firstFold) setForm((s) => (s.extras.foldType ? s : { ...s, extras: { ...s.extras, foldType: firstFold } }));
-  }, [hasTambur, firstFold]);
-
-  const extras = form.extras;
-  const extraBody = useCallback((r: DocRow) => buildExtraBody(extras, { hasTambur, perParty: r.form?.multi?.mode === 'PER_PARTY' }), [extras, hasTambur]);
-  // Rota seçilmeden kayıt `extrasIssues` ile kapalıdır; kanca bir rota ister → yer tutucu.
-  const wo = useWoRows(route ?? SCAN_ROUTE, { extraBody });
-  const row = wo.rows[0] ?? null;
-  const ctx = useQuery({ queryKey: INBOUND_DOC_CONTEXT_KEY, queryFn: inboundDocService.tabletContext, staleTime: 60_000 });
-  const customers: PickerOption[] = useMemo(() => (ctx.data?.data.customers ?? []).map((x) => ({ value: x.id, label: x.name })), [ctx.data]);
-  const scan = useDocScanFlow(wo.addNote);
-  useDocReadToForm(row, setForm);
-  const fields = useWoFieldLayout(form, {
-    showQuantity: showQuantity || !!extras.targetQuantity || !!extras.targetWeight,
-    hasTambur,
-    hasKursun: !!wo.showGramaj && wo.catalog.options.length > 0 && !!row?.form,
-    hasRouteSteps: !!route && (route.steps?.length ?? 0) > 0,
-  });
-
-  const done = row?.result?.kind === 'OPENED' || row?.result?.kind === 'DRAFT';
-  const issues = [
-    ...extrasIssues(extras, { routeChosen: !!route, hasTambur, perParty: row?.form?.multi?.mode === 'PER_PARTY' }),
-    ...(row?.form && wo.mode !== 'SEPARATE' ? rowIssues(row.form) : []),
-  ];
-  const block = done ? null : createBlockReason({ hasDoc: !!row, reading: !!row && (!row.form || !row.detail), issues });
-  const okut = () => {
-    if (row) {
-      wo.removeRow(row.noteId);
-      scan.b.finish();
-      setForm(clearDocRead);
-    }
-    scan.source.add();
-  };
-  return {
-    route, setRoute, form, fields, scanMode, showQuantity, hasTambur, foldValues: fold.values, wo, row, scan, done, block, okut, customers,
-    customersLoading: ctx.isLoading,
-    routes: routesQ.data?.data ?? [],
-    routesLoading: routesQ.isLoading,
-    edit: (patch: Partial<WoFormExtras>) => setForm((s) => editExtras(s, patch)),
-    onOrderLine: (l: AvailableOrderLine) => setForm((s) => applyOrderLine(s, { itemId: l.itemId, itemName: l.itemName, colorId: l.colorId, width: l.width })),
-  };
-}
-
-/** Okuma bitince belgeden gelenler forma dolar (aynı okuma bir kez; elle değiştirilen alan ezilmez); belge çıkınca temizlenir. */
-function useDocReadToForm(row: DocRow | null, setForm: React.Dispatch<React.SetStateAction<WoFormState>>) {
-  const readKey = row?.detail ? `${row.noteId}#${row.runKey}` : null;
-  const detail = row?.detail ?? null;
-  useEffect(() => {
-    if (readKey && detail) setForm((s) => applyDocRead(s, readKey, detail.formFields, detail.suggestions));
-  }, [readKey, detail, setForm]);
-  const hasRow = !!row;
-  useEffect(() => {
-    if (!hasRow) setForm((s) => (s.appliedNoteId ? clearDocRead(s) : s));
-  }, [hasRow, setForm]);
-}
-
 function CreateBar({ wo, done, block, onNew }: { wo: WoRowsState; done: boolean; block: string | null; onNew: () => void }) {
   return (
     <View style={styles.bar}>
@@ -219,7 +116,7 @@ function CreateBar({ wo, done, block, onNew }: { wo: WoRowsState; done: boolean;
   );
 }
 
-function ScanModals({ scan }: { scan: ReturnType<typeof useDocScanFlow> }) {
+function ScanModals({ scan }: { scan: DocScanFlow }) {
   return (
     <>
       <PagePreviewModal
@@ -242,40 +139,6 @@ function ScanModals({ scan }: { scan: ReturnType<typeof useDocScanFlow> }) {
       />
     </>
   );
-}
-
-/** Tarayıcı akışı (DocBatchView kalıbı): sayfalar gelince yükleme + okuma kendiliğinden; biten belge satır olur. */
-function useDocScanFlow(addNote: ReturnType<typeof useWoRows>['addNote']) {
-  const b = useDocScan({ successHint: 'Okuma bitince form dolar; kontrol edip oluşturun.' });
-  const [cameraOpen, setCameraOpen] = useState(false);
-  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
-  const onPages = (ps: ScanPage[]) => {
-    const next = b.captureMany(ps);
-    if (next) void b.send(next);
-  };
-  const source = usePageSource(b.pages.length, onPages, () => setCameraOpen(true));
-  const doneNote = b.done?.note;
-  const doneRun = b.done?.runKey ?? 0;
-  useEffect(() => {
-    if (doneNote) addNote(doneNote, doneRun);
-  }, [doneNote, doneRun, addNote]);
-  const remove = (i: number) => b.setPages(removePage(b.pages, i));
-  const removeFromPreview = (i: number) => {
-    const left = b.pages.length - 1;
-    remove(i);
-    setPreviewIndex(left <= 0 ? null : Math.min(i, left - 1));
-  };
-  return {
-    b,
-    source,
-    cameraOpen,
-    openCamera: () => setCameraOpen(true),
-    closeCamera: () => setCameraOpen(false),
-    previewIndex,
-    setPreviewIndex,
-    remove,
-    removeFromPreview,
-  };
 }
 
 const styles = StyleSheet.create({

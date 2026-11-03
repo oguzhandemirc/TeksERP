@@ -13,6 +13,7 @@ import { printTravelerCardForWorkOrder } from '../../../../services/travelerCard
 import { kursunStepOf } from '../desk/deskPlan';
 import { duplicateDocNoConflict, type DuplicateDocNoConflict } from '../DuplicateDocNoDialog';
 import { initialMultiParty, type MultiPartyDraft } from './partyDraft';
+import { mergeExtra } from './woSteps';
 import { loadRecentOwners, rememberOwner } from './recentOwners';
 import {
   buildCreateBody,
@@ -108,7 +109,7 @@ async function saveRowOnce(ctx: SaveCtx, r: DocRow, form: RowForm): Promise<{ re
       passThrough: ctx.passThrough,
       kursunSequence: ctx.kursunSequence,
     });
-    const full = ctx.extra ? { ...body, ...ctx.extra } : body;
+    const full = mergeExtra(body, ctx.extra);
     return { result: openedResult(await inboundDocService.createWorkOrder(r.noteId, ctx.confirmDuplicateDocNo ? { ...full, confirmDuplicateDocNo: true } : full)) };
   } catch (e) {
     if (!isFormApprovalDisabled(e)) return { result: { kind: 'FAILED', text: errorText(e) }, error: e };

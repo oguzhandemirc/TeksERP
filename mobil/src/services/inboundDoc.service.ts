@@ -238,6 +238,21 @@ export interface CreateWorkOrderFromNoteBody {
   plannedEndDate?: string;
   foldType?: string;
   orderLineIds?: string[];
+  // K30-D (hepsi isteğe bağlı; anahtar yoksa sunucuda bugünkü türetme):
+  /** Hedef özellikler (BAYRAK); anahtar verilince istemcinin kümesi yazılır (istasyon tohumu eklenmez). */
+  targetPropertyIds?: string[];
+  /** Yoksa sipariş kalemi varsa ORDER, yoksa STOCK; ORDER + kalemsiz → 400. */
+  type?: 'ORDER_PRODUCTION' | 'STOCK_PRODUCTION';
+  /** Düzenlenmiş rota adımları (routeTemplateId ile birlikte; şablonun yerine geçer; stepPlanning ile birlikte 400). */
+  steps?: {
+    stationId: string;
+    sequence?: number;
+    notes?: string;
+    requiredCategoryId?: string;
+    plannedSubcontractorId?: string;
+    plannedMachineId?: string;
+    dispatchWithoutColor?: boolean;
+  }[];
 }
 
 export interface CreateWorkOrderFromNoteResult {

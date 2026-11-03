@@ -44,16 +44,16 @@ export const WO_FIELDS: readonly WoFieldDef[] = [
   { key: 'kursunMetresi', label: 'Kurşun metresi', section: 'Belge', required: true },
   { key: 'gramaj', label: 'Kurşun gramajı', section: 'Belge', required: false, when: 'Rotada kurşun adımı varsa' },
   { key: 'rota', label: 'Rota', section: 'Üretim', required: true },
-  { key: 'rotaAdimlari', label: 'Rota adımları', section: 'Üretim', required: false, when: 'Rota seçilince', planned: true },
-  { key: 'makine', label: 'Makine', section: 'Üretim', required: false, when: 'Rotada kurşun adımı varsa', planned: true },
-  { key: 'isEmriTuru', label: 'İş emri türü', section: 'Üretim', required: false, planned: true },
+  { key: 'rotaAdimlari', label: 'Rota adımları', section: 'Üretim', required: false, when: 'Rota seçilince' },
+  { key: 'makine', label: 'Makine (öneri)', section: 'Üretim', required: false, when: 'Kurşun adımının istasyonunda makine varsa' },
+  { key: 'isEmriTuru', label: 'İş emri türü', section: 'Üretim', required: false },
   { key: 'siparis', label: 'Sipariş', section: 'Üretim', required: false },
   { key: 'hedefKumas', label: 'Hedef kumaş', section: 'Üretim', required: false },
   { key: 'en', label: 'En (cm)', section: 'Üretim', required: false },
   { key: 'hedefMetraj', label: 'Hedef metraj (m)', section: 'Üretim', required: false, when: 'Hedef metraj/kg ayarı açıksa' },
   { key: 'hedefKg', label: 'Hedef kg', section: 'Üretim', required: false, when: 'Hedef metraj/kg ayarı açıksa' },
   { key: 'hedefRenk', label: 'Hedef renk', section: 'Üretim', required: false },
-  { key: 'hedefOzellik', label: 'Hedef özellikler', section: 'Üretim', required: false, planned: true },
+  { key: 'hedefOzellik', label: 'Hedef özellikler', section: 'Üretim', required: false, when: 'Rota seçilince' },
   { key: 'katTipi', label: 'Kat tipi', section: 'Üretim', required: false, when: 'Rotada tambur varsa' },
   { key: 'planBaslangic', label: 'Planlı başlangıç', section: 'Plan', required: false },
   { key: 'planBitis', label: 'Planlı bitiş', section: 'Plan', required: false },
@@ -79,6 +79,8 @@ export interface FieldContext {
   hasKursun: boolean;
   /** Rota seçili ve adımlı (rotasız değil). */
   hasRouteSteps: boolean;
+  /** Kurşun adımının istasyonunda aktif makine var (çok partide parti başına seçildiği için yok sayılır). */
+  hasMachine?: boolean;
 }
 
 /** Alan bu formda çizilebilir mi (koşulu sağlanıyor mu). */
@@ -90,9 +92,11 @@ export function fieldApplicable(k: WoFieldKey, c: FieldContext): boolean {
     case 'katTipi':
       return c.hasTambur;
     case 'gramaj':
-    case 'makine':
       return c.hasKursun;
+    case 'makine':
+      return c.hasMachine === true;
     case 'rotaAdimlari':
+    case 'hedefOzellik':
       return c.hasRouteSteps;
     default:
       return true;
