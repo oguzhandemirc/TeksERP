@@ -27,7 +27,7 @@ vi.mock("@/components/layout/tabs/tab-routers", () => ({
   disposeTabRouter: vi.fn(),
 }));
 
-const { useTabsStore } = await import("./tabs");
+const { useTabsStore, subscribeTermRegimeTitles } = await import("./tabs");
 const { applyTermRegime } = await import("@/lib/terim-rejim");
 const { terimDokumaAyarla } = await import("@/lib/terim");
 
@@ -35,6 +35,9 @@ const { allCommandEntries } = await import("@/components/layout/command-entries"
 const titleOf = (path: string) => useTabsStore.getState().tabs.find((t) => t.path === path)?.title;
 
 describe("sekme başlığı iş emri rejimini izler", () => {
+  // Kabuk (TabHost) bağlanınca abone olur; burada kabuğun yerine.
+  const unsubscribe = subscribeTermRegimeTitles();
+  afterAll(() => unsubscribe());
   beforeEach(() => {
     terimDokumaAyarla(true); // rejim bilinmiyor → bugünkü ad
     useTabsStore.getState().resetTabs();

@@ -54,8 +54,6 @@ interface TabsState {
   closeOthers: (id: string) => void;
   /** Sekme başlığını güncelle (detay sayfaları entity adını öğrendikten sonra çağırır). */
   updateTabTitle: (id: string, title: string) => void;
-  /** Katalogdan çözülen başlıkları yeniden çöz (rejim/ad değişti); sayfanın yazdığı başlığa dokunmaz. */
-  refreshAutoTitles: () => void;
   /**
    * TÜM sekmeleri kapat — çıkışta çağrılır (`store/auth.logout`).
    *
@@ -206,19 +204,6 @@ export const useTabsStore = create<TabsState>()(
         set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, title, custom: true } : t)) }));
       },
 
-      refreshAutoTitles: () => {
-        const { tabs } = get();
-        let changed = false;
-        const next = tabs.map((t) => {
-          if (t.custom) return t;
-          const { title } = resolveTabMeta(t.path);
-          if (title === t.title) return t;
-          changed = true;
-          return { ...t, title };
-        });
-        if (changed) set({ tabs: next });
-      },
-
       closeOthers: (id) => {
         const { tabs } = get();
         tabs.forEach((t) => {
@@ -237,8 +222,31 @@ export const useTabsStore = create<TabsState>()(
   ),
 );
 
-// İş emri adı rejimi bayrak ucundan gelince (ilk açılışta "Terbiye …" ile çözülmüş olabilir) başlıklar tazelenir.
-globalThis.addEventListener?.(TERM_REGIME_EVENT, () => useTabsStore.getState().refreshAutoTitles());
+/** Katalogdan çözülen başlıkları yeniden çöz (rejim/ad değişti); sayfanın yazdığı başlığa dokunmaz. */
+export function refreshAutoTitles(): void {
+  const { tabs } = useTabsStore.getState();
+  let changed = false;
+  const next = tabs.map((t) => {
+    if (t.custom) return t;
+    const { title } = resolveTabMeta(t.path);
+    if (title === t.title) return t;
+    changed = true;
+    return { ...t, title };
+  });
+  if (changed) useTabsStore.setState({ tabs: next });
+}
+
+/**
+ * İş emri adı rejimi bayrak ucundan gelince (ilk açılışta "Terbiye …" ile çözülmüş olabilir) başlıklar tazelenir.
+ * Modül yan etkisi DEĞİL, kabuk bağlanınca abone olunur (K5 kısıtlı kipte kabuk yok → dinleyici de yok);
+ * bağlanma anında bir kez tazeler (rejim kabuktan önce uygulanmış olabilir).
+ */
+export function subscribeTermRegimeTitles(): () => void {
+  const refresh = () => refreshAutoTitles();
+  globalThis.addEventListener?.(TERM_REGIME_EVENT, refresh);
+  refresh();
+  return () => globalThis.removeEventListener?.(TERM_REGIME_EVENT, refresh);
+}
 
 /** Aktif sekmenin pathname'i (sidebar/komut paleti aktif vurgusu için). */
 export const selectActivePath = (s: TabsState): string | null =>
