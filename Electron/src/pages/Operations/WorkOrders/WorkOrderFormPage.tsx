@@ -144,6 +144,8 @@ export function WorkOrderFormPage() {
   const handleCancel = () =>
     navigateActive(isEdit ? `/operations/work-orders/${id}` : LIST_PATH);
 
+  // Kırıntı = hiyerarşi (liste / düzenlemede detay). Geri oku AÇIK hedef almaz: PageHeader'ın tek karar noktası
+  // sekme geçmişine (gelinen sayfa) döner, geçmiş yoksa bu üst sayfaya düşer (K20 — "listeden gelmedim").
   const backPath = isEdit ? `/operations/work-orders/${id}` : LIST_PATH;
   const backLabel = isEdit ? TERIM.terbiyeIsEmri.tekil : TERIM.terbiyeIsEmri.cogul;
   const backTo = { label: backLabel, to: backPath };
@@ -157,7 +159,6 @@ export function WorkOrderFormPage() {
         statusLine={isEdit ? wo?.workOrderNumber : undefined}
         description={isEdit ? undefined : "Sipariş bağla ya da stoğa üret — rota ve hedefi belirle."}
         parent={backTo}
-        onBack={() => navigateActive(backPath)}
         // Sağ aksiyon slotu — yeni kayıtta "Şablon seç" butonu buraya portal'lanır.
         actions={<div ref={setHeaderSlot} className="flex items-center" />}
       />

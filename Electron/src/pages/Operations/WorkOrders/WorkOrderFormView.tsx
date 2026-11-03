@@ -44,7 +44,7 @@ import { RouteEditor } from "./RouteEditor";
 import { TargetItemPicker } from "./TargetItemPicker";
 import { useFoldValues } from "@/hooks/useFoldValues";
 import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
-import { KursunStepFields, isKursunStep, useKursunGramajBinding } from "./KursunStepFields";
+import { KURSUN_SETTINGS_TITLE, KursunStepFields, KursunStepSummary, isKursunStep, useKursunGramajBinding } from "./KursunStepFields";
 import { useDesignerSteps } from "./useDesignerSteps";
 import { BelgeOkutButton } from "./BelgeOkutButton";
 import type { FasonStepPlan } from "./FasonPlanningDialog";
@@ -221,6 +221,9 @@ export function WorkOrderFormView({
   // 60 sn cache'li tek küçük istek.
   const { values: foldValues, isEmpty: foldNotConfigured } = useFoldValues();
   const { catalog: kursunCatalog } = useKursunGramajCatalog();
+  // Gramaj yalnız yeni İE'de seçilir (düzenlemede detaydaki kart); gösterilmeyen değer özete de girmez.
+  const showKursunGramaj = !isEdit && Boolean(kursunCatalog.propertyId);
+  const shownKursunGramaj = showKursunGramaj ? (form.watch("kursunTargetValueId") ?? null) : null;
   // Gramaj kurşun adımının kartında: adım girince varsayılan, çıkınca temizlenir.
   useKursunGramajBinding({
     enabled: !isEdit,
@@ -822,15 +825,22 @@ export function WorkOrderFormView({
                 onPickStation={(clientId, id) => void handleStationPick(clientId, id)}
                 onSetNotes={(clientId, notes) => updateStep(clientId, { notes })}
                 onSetFirm={(clientId, patch) => updateStep(clientId, patch)}
-                renderStepExtra={(step) => (
-                  <KursunStepFields
-                    step={step}
-                    showGramaj={!isEdit && Boolean(kursunCatalog.propertyId)}
-                    gramajOptions={kursunCatalog.options}
-                    gramajValue={form.watch("kursunTargetValueId") ?? null}
-                    onGramaj={(id) => form.setValue("kursunTargetValueId", id)}
-                    onMachine={(machineId) => updateStep(step.clientId, { plannedMachineId: machineId })}
-                  />
+                stepParamBox={(step) => isKursunStep(step) && step.stationId ? {
+                  title: KURSUN_SETTINGS_TITLE,
+                  content: (
+                    <KursunStepFields
+                      step={step}
+                      showGramaj={showKursunGramaj}
+                      gramajOptions={kursunCatalog.options}
+                      gramajValue={form.watch("kursunTargetValueId") ?? null}
+                      onGramaj={(id) => form.setValue("kursunTargetValueId", id)}
+                      onMachine={(machineId) => updateStep(step.clientId, { plannedMachineId: machineId })}
+                    />
+                  ),
+                } : null}
+                renderChipDetail={(step) => (
+                  <KursunStepSummary step={step} mode="short" prefix="· " className="relative text-[11px] text-muted-foreground"
+                    gramajOptions={kursunCatalog.options} gramajValue={shownKursunGramaj} />
                 )}
                 onSeed={handleSeedRoute}
                 onSaveTemplate={(name, forCustomer, stepTargets) =>
@@ -1014,6 +1024,7 @@ export function WorkOrderFormView({
               isOrderProduction={isOrderProduction}
               isEdit={isEdit}
               showQuantity={targetQuantityEnabled}
+              kursun={{ options: kursunCatalog.options, gramajValue: shownKursunGramaj }}
             />
           </aside>
         </div>

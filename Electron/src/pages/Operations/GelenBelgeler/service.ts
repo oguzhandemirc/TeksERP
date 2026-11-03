@@ -9,6 +9,7 @@ import type {
   SenderTemplateView, UnreviewedApproval, RouteSuggestionPriority, HeaderLineMeterSource, DocumentTotalCheckMode, CustomerDefaultView, ProcessValuePage, WorkOrderPlan,
   BulkDeletePreview, BulkDeleteResult,
 } from "./types";
+import type { NoteCancelPreview, NoteCancelResult } from "./cancelTypes";
 
 const BASE = "/api/gelen-belge";
 
@@ -160,4 +161,14 @@ export async function getWorkOrderPlan(noteId: string): Promise<WorkOrderPlan> {
 export async function searchProcessValues(q: { propertyId: string; q?: string; cursor?: string; limit?: number }): Promise<ProcessValuePage> {
   const params = Object.fromEntries(Object.entries(q).filter(([, v]) => v !== undefined && v !== ""));
   return (await apiClient.get<ApiResponse<ProcessValuePage>>(`${BASE}/islem-degerleri`, { params })).data.data;
+}
+
+/** Onaylı belge iptali önizlemesi (K15) — yazmaz; etkilenen her top + bağlı iş emri + engeller. */
+export async function getNoteCancelPreview(noteId: string): Promise<NoteCancelPreview> {
+  return (await apiClient.get<ApiResponse<NoteCancelPreview>>(`${BASE}/irsaliyeler/${noteId}/iptal-onizleme`)).data.data;
+}
+
+/** Onaylı belgeyi iptal et — `clientToken` mantıksal deneme başına (`useAttemptToken`); seçilen iş emirleri birlikte iptal. */
+export async function cancelNote(noteId: string, body: { clientToken: string; reason: string; workOrderIds: string[] }): Promise<NoteCancelResult> {
+  return (await apiClient.post<ApiResponse<NoteCancelResult>>(`${BASE}/irsaliyeler/${noteId}/iptal`, body)).data.data;
 }

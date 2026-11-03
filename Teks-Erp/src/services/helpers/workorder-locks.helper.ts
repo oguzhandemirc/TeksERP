@@ -36,6 +36,8 @@
 import type { Prisma, PrismaClient, StepStatus } from "@prisma/client";
 import { STEP_CAPABILITY_SELECT, stepCanApplyColor } from "./step-capability.helper";
 import { ACTIVE_TARGET_PROPERTY } from "./property-revoke.helper";
+import { ACTIVE_MOVEMENT } from "./roll-movement.helper";
+import { ACTIVE_OPERATION } from "./roll-operation.helper";
 
 /**
  * WorkOrder satırını write-kilitle — fason completion yollarını serileştirir.
@@ -56,6 +58,43 @@ export async function touchWorkOrderTx(
     where: { id: workOrderId },
     data: { updatedAt: new Date() },
   });
+}
+
+/**
+ * "Başlamamış" iş emri yüklemi — TEK kaynak: tablet iptal kapısı (`assertWorkOrderUntouched`) ve gelen belge
+ * iptali (K15) aynı soruyu sorar. PLANNED + hiçbir adım başlamamış + açık fason sevki yok.
+ */
+export async function isWorkOrderUntouched(db: Db, workOrderId: string, status: string): Promise<boolean> {
+  return status === "PLANNED" && !(await computeWorkOrderLocks(db, workOrderId)).materialCommitted;
+}
+
+/**
+ * "İşlem görmemiş" iş emri (K15 gelen belge iptali) — tablet yükleminden GENİŞ: top bağlamak ilk adımı ACTIVE,
+ * iş emrini IN_PROGRESS yapar ama malı işlemez. İşlem izi = tamamlanan/atlanan adım, adımdan çıkış, işlem/okuma/
+ * fatura/sapma kaydı, adımda doğan top, fason sevki/kabulü. Hiçbiri yoksa iptal topları ham stoka geri koyar.
+ */
+export async function isWorkOrderUnprocessed(db: Db, workOrderId: string, status: string): Promise<boolean> {
+  if (status !== "PLANNED" && status !== "IN_PROGRESS") return false;
+  const steps = await db.workOrderStep.findMany({
+    where: { workOrderId },
+    select: {
+      status: true,
+      _count: {
+        select: {
+          movements: { where: { ...ACTIVE_MOVEMENT, exitedAt: { not: null } } },
+          operations: { where: ACTIVE_OPERATION },
+          meterReadings: { where: { revokedAt: null } },
+          serviceBillingLinks: { where: { revokedAt: null } },
+          variances: true,
+          // Bağlama da `producedInStepId` yazar: adımda bekleyen top iz değildir; doğan çocuk ya da adımı terk eden top izdir.
+          producedRolls: { where: { OR: [{ parentRollId: { not: null } }, { currentStepId: null }] } },
+          dispatches: { where: { cancelledAt: null } },
+          receipts: true,
+        },
+      },
+    },
+  });
+  return steps.every((s) => (s.status === "PENDING" || s.status === "ACTIVE") && Object.values(s._count).every((n) => n === 0));
 }
 
 export interface WorkOrderLocks {

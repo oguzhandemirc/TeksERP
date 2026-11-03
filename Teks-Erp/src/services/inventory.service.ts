@@ -716,6 +716,220 @@ async function entryStationCapableForInspection(stationId: string | null | undef
   return st ? stepCanApplyQuality(st) : null;
 }
 
+/** Top iptalinde açık hareketleri kapatır — `cancelRollRecordTx`in parçası (aynı tx, aynı sıra). */
+async function closeOpenMovementsOnCancelTx(tx: Prisma.TransactionClient, existing: Roll, isScrap: boolean): Promise<void> {
+  const id = existing.id;
+  // Açık RollMovement'ları topla — kapatmak için (kapsam yukarıda çözüldü).
+  const openMovements = await tx.rollMovement.findMany({
+    where: { ...ACTIVE_MOVEMENT, rollId: id, exitedAt: null },
+    select: {
+      id: true,
+      workOrderStepId: true,
+      notes: true,
+      qtyIn: true,
+      weightIn: true,
+    },
+  });
+
+  // Açık movement'ları kapat.
+  //
+  // qtyOut = 0 LOAD-BEARING: "mal bu istasyondan HİÇ geçmedi" (storno).
+  // Kurtarma/dispozisyonun qtyOut = qtyIn semantiğinden bilinçli farklıdır —
+  // orada mal gerçekten vardı ve çıktı, burada kayıt baştan hatalıydı.
+  //
+  // ⚠️ NOT EZİLMİYOR (2026-08-04): eskiden notes körlemesine "CANCELLED"
+  // yazılıyordu ve elle eklenen topun hareketindeki "TAMBUR_MANUAL_ROLL:
+  // <sebep>" izi SİLİNİYORDU. Topun entryReason kolonu ve audit'i kalsa da
+  // hareket geçmişi "neden vardı" sorusunu cevaplayamaz hâle geliyordu —
+  // tam da iptal edilen bir kaydı sonradan incelerken en çok gereken bilgi.
+  // Artık eski not parantez içinde korunur.
+  //
+  // ⚠️ FİRE'DE STORNO YOK: `qtyOut = qtyIn` — mal o istasyondan GERÇEKTEN
+  // geçti, sonra fire oldu. 0 yazmak istasyonun iş hacminden metrajı geriye
+  // dönük siler ve üretim raporunda hayalet kayıp yaratır. Dispozisyon
+  // motorunun SCRAP dalıyla birebir aynı sözleşme (`applyRollDispositionsTx`).
+  const closeNote = isScrap ? "SCRAPPED" : "CANCELLED";
+  for (const m of openMovements) {
+    await tx.rollMovement.update({
+      // Geri alınmış satır kapatılmaz; araya giren geri alma P2025 verir (silinmiş satırla aynı).
+      where: { id: m.id, ...ACTIVE_MOVEMENT },
+      data: {
+        exitedAt: new Date(),
+        qtyOut: isScrap ? m.qtyIn ?? existing.currentQty : 0,
+        weightOut: isScrap ? m.weightIn ?? existing.weightKg : 0,
+        notes: m.notes?.trim()
+          ? `${closeNote} (${m.notes.trim()})`.slice(0, 500)
+          : closeNote,
+      },
+    });
+  }
+}
+
+/**
+ * Top iptalinin (CANCEL "hiç yoktu" / SCRAP "vardı, gitti") TX GÖVDESİ — tek yazar: `softDelete` ve gelen belge
+ * iptali (K15) aynı fonksiyondan geçer. Guard'lar, sebep çözümü ve audit ÇAĞIRANINDIR; claim gözlenen statüyle atomiktir.
+ */
+export interface RollCancelTxInput {
+  existing: Roll;
+  isScrap: boolean;
+  userId?: string;
+  cancelReasonText: string | null;
+  cancelReasonCode: string | null;
+}
+export async function cancelRollRecordTx(tx: Prisma.TransactionClient, p: RollCancelTxInput) {
+  const { existing, isScrap, userId, cancelReasonText, cancelReasonCode } = p;
+  const id = existing.id;
+  const targetStatus = isScrap ? RollStatus.SCRAP : RollStatus.CANCELLED;
+  // D4-B1b TERS YOL: iptal ("hiç yoktu") Tambur CUT okumasını aynı tx'te damgalar (elle eklenen topun geri
+  // alması bu yoldan geçer); SCRAP'ta ölçüm gerçekti, dokunulmaz.
+  let cutReadingsRevoked: string[] = [];
+  // ── ETKİ ALANI (2026-08-15 düzeltmesi) ───────────────────────────────
+  // Eskiden burada küme ELLE kuruluyordu: "AÇIK hareketlerin adımları +
+  // currentStepId". İkisi de topun ŞU ANKİ konumuna bakıyordu, oysa
+  // `recomputeStepStatus` topun statüsünü ÜÇ yerden okur — açık hareket,
+  // KAPALI hareket ve "aynı iş emrinde bu adıma henüz gelmemiş canlı top"
+  // sayacı. Yani bir topu iptal etmek, onun GEÇMİŞTE geçtiği (hareketi
+  // kapanmış) adımların ve hiç uğramadığı kardeş adımların türetilen
+  // değerini de değiştirir.
+  //
+  // SAHA VAKASI (IE0608260004, canlı veride doğrulandı): T080826F0001
+  // 6 Ağu'da "Kurşun + KK2" adımından ÇIKTI (hareket kapandı, adım
+  // COMPLETED oldu); 8 Ağu'da iş emri kapanış dispozisyonu topu WAREHOUSE'a
+  // çekti (`currentStepId = null`, açık hareket kalmadı); 22 saniye sonra
+  // top iptal edildi. Eski küme BOŞ kaldı → recompute HİÇ koşmadı → adım
+  // bayat COMPLETED kaldı (türetilen doğru değer PENDING). Hata yok, log
+  // yok; drift'i yalnız `test_consistency` §20 gösteriyordu.
+  //
+  // Kapsam artık TEK KAYNAKTAN (`collectRollStepScopeTx`) gelir — dört
+  // çağıran dört farklı elle liste kurduğu için hata dört kez tekrarlanmıştı.
+  const scope = await collectRollStepScopeTx(tx, [id], [existing.currentStepId]);
+
+  // Kilit sırası DETERMİNİSTİK (yardımcı id ASC döner): bir top İKİ ayrı iş
+  // emrinde hareket etmiş olabilir (fason tüketimi) ve aynı tx iki WO'nun
+  // adımlarına yazar. Sabit sıra deadlock'ı yapısal olarak keser;
+  // `completeWorkOrderIfStepsDone` docstring'i de bu kilidi şart koşuyor.
+  for (const woId of scope.workOrderIds) await touchWorkOrderTx(tx, woId);
+
+  await closeOpenMovementsOnCancelTx(tx, existing, isScrap);
+
+  // Top: CANCELLED + currentStepId temizle — ATOMİK CLAIM (M-30): tüm
+  // guard'lar (fason/açık sevk/aktif sevkiyat) tx DIŞINDA okundu; pencerede
+  // fason dispatch claim'i veya çuvala okutma (shipmentId claim'i) commit
+  // ettiyse top fasondayken/çuvaldayken iptal edilirdi. Gözlenen statü +
+  // shipmentId koşuluyla kaybeden 409 alır (atomik claim deseni); shipmentId
+  // de temizlenir (CANCELLED top sevkiyat rezervi taşıyamaz).
+  const cancelClaim = await tx.roll.updateMany({
+    where: { id, status: existing.status, shipmentId: existing.shipmentId },
+    data: {
+      // Hedef statü MODA göre: CANCELLED ("hiç yoktu") · SCRAP ("vardı, gitti").
+      status: targetStatus,
+      currentStepId: null,
+      shipmentId: null,
+      sackId: null,
+      // ÇIKIŞ İZİ topun KENDİ satırında (audit'te DEĞİL — audit 6 ayda
+      // arşivlenir ve "neden düştü" sorusu cevapsız kalırdı).
+      //
+      // ⚠️ Bu beş kolon HER İKİ MODU da taşır (2026-08-25). Adları "cancel"
+      // olsa da anlamları "defterden düşme izi"dir; hangi mod olduğu `status`
+      // (CANCELLED vs SCRAP) ile okunur — ayrım tek ve kesin. Ayrı
+      // `scrapReason*` kolonları AÇILMADI: canlı DB'ye migration eklemenin
+      // karşılığı yalnız kolon adının hoşluğu olurdu.
+      // `preCancelStatus` = geri almanın döneceği raf; `preShipStatus` emsali,
+      // körlemesine STOCK'a dönmek A1_STOCK/WAREHOUSE topunu yanlış rafa yazardı.
+      // Geri alma YALNIZ CANCELLED'ta çalışır (`resolveRollRestoreBlockReason`
+      // ilk ifadesi statüyü kontrol eder) → fire geri alınamaz, doğrusu da bu.
+      cancelledAt: new Date(),
+      cancelledById: userId ?? null,
+      cancelReason: cancelReasonText,
+      cancelReasonCode,
+      preCancelStatus: existing.status,
+    },
+  });
+  if (cancelClaim.count === 0) {
+    throw AppError.conflict("Top bu sırada başka bir işleme girdi (sevk/çuval/fason olabilir) — tekrar deneyin.");
+  }
+  const r = await tx.roll.findUniqueOrThrow({ where: { id } });
+  // LEVENT TÜKETİMİ TERS YOLU (Faz 4): yalnız İPTAL ("hiç yoktu") — SCRAP'ta çözgü gerçekten tüketildi, dokunulmaz.
+  if (!isScrap && r.doffEventId) await cancelConsumedForRollTx(tx, id, cancelReasonText ?? "top iptali", userId ?? null);
+  if (!isScrap) cutReadingsRevoked = await revokeCutReadingsTx(tx, { rollIds: [id], userId: userId ?? null, reason: ROLL_CANCEL_CUT_REASON });
+
+  // DEPO DEFTERİ — mal depodan DÜŞTÜ (kayıt hatalıydı ya da fire).
+  // `warehouseId` BİLEREK temizlenmez: "en son hangi depodaydı" izi kalsın ve
+  // iptal geri alınırsa (restoreCancelled) top rafına dönebilsin.
+  // ⚠️ STOK DEFTERİ KAPISI (eski kapı değil): satır artık İKİ UCUNDAKİ
+  // STATÜYÜ taşır. Eski kapı statüsüz satır yazıyordu ve bunun bedeli
+  // ölçüldü — ucu kurulamayan satır TERSLENEMİYOR, dolayısıyla iptali geri
+  // alma defteri kalıcı olarak eksik bırakıyordu (75 m ölçümü, 2026-09-12).
+  //
+  // ⚠️ Satır YALNIZ stok kümesinden düşen mal için yazılır: `IN_PRODUCTION`
+  // ya da `AT_SUBCONTRACTOR` bir top iptal edilirken stoktan bir şey
+  // düşmez (o mal zaten stok dışındaydı) — eski kapı burada da koşulsuz
+  // yazıyordu ve depoya girmemiş malı düşmüş gösteriyordu.
+  //
+  // ⚠️ 0 metrajlı topun iptali MÜMKÜN olmalı (fabrikada 52 böyle top) ve o
+  // durumda yazılacak hareket YOKTUR. Atlandığı SESSİZ KALMAZ: dönen değer
+  // audit yüküne yazılır.
+  const ledgerRowWritten =
+    r.warehouseId !== null && WAREHOUSE_STOCK_STATUSES.includes(existing.status) && qtyYazilabilir(r.currentQty);
+  if (ledgerRowWritten) {
+    await postStockMove(tx, {
+      rollId: id,
+      eventType: WarehouseEventType.CANCEL,
+      qty: r.currentQty,
+      // Çıkış ucu: topun İPTAL ÖNCESİ statüsü (`preCancelStatus` ile aynı
+      // kaynak) — "CANCELLED'dan çıktı" demek yanlış olurdu.
+      from: { warehouseId: r.warehouseId!, status: existing.status },
+      reasonCode: STOCK_MOVE_REASON.ROLL_CANCEL,
+      userId: userId ?? null,
+      notes: cancelReasonText ? cancelReasonText.slice(0, 300) : null,
+    });
+  }
+
+  // Etkilenen step'lerin status'unu recompute et.
+  //
+  // ⚠️ SIRA LOAD-BEARING: recompute ATOMİK CLAIM'den SONRA koşmak ZORUNDA —
+  // sayaçları topun statüsünden okuyor, top henüz CANCELLED değilse eski
+  // (yanlış) değeri hesaplar.
+  //
+  // ⚠️ `completedAt` VERİ KAYBI, BİLİNÇLİ KABUL: `recomputeStepStatus`
+  // COMPLETED'tan düşen adımda `completedAt: null` yazar (roll-step.helper).
+  // Adımın gerçekten bittiği tarih geri dönülemez silinir. Alternatif
+  // ("damgayı koru") COMPLETED olmayan ama completedAt dolu adımlar üretir
+  // ve bugün böyle satır YOK — yani yeni bir tutarsızlık SINIFI açardı.
+  // Bunun yerine eski değer aşağıda AUDIT'e yazılır (audit zaten tx dışında,
+  // alan eklemek bedava). Karar `recomputeStepStatus`'un TÜM çağıranlarını
+  // ilgilendirir; burada tek taraflı değiştirilmedi.
+  const stepChanges: Array<{
+    stepId: string;
+    from: StepStatus;
+    to: StepStatus;
+    /** ISO metin — audit JSON'ına Date koymak sessiz serileştirme sürprizi doğurur. */
+    previousCompletedAt: string | null;
+  }> = [];
+  for (const st of scope.steps) {
+    const next = await recomputeStepStatus(tx, st.id);
+    if (next !== st.status) {
+      stepChanges.push({
+        stepId: st.id,
+        from: st.status,
+        to: next,
+        previousCompletedAt: st.completedAt ? st.completedAt.toISOString() : null,
+      });
+    }
+  }
+
+  // ⚠️ `completeWorkOrderIfStepsDone` BİLEREK ÇAĞRILMIYOR. Genişleyen kapsam
+  // bir adımı ACTIVE→COMPLETED'a çevirebilir (iptal edilen top o adımın tek
+  // "bekleyen"iydi) ve o durumda iş emri "tüm adımları bitmiş ama kendisi
+  // IN_PROGRESS" kalır. Bunu otomatik kapatmak *"bir topu iptal etmek iş
+  // emrini kapatabilir"* demektir — refakat kartlarını da COMPLETED'a çeker
+  // (`setWorkOrderCardStatusesTx`) ve bu bir ÜRÜN KARARIDIR, refactor yan
+  // etkisi değil. Planlamacı isterse eklenecek tek satır:
+  //   for (const woId of scope.workOrderIds) await completeWorkOrderIfStepsDone(tx, woId);
+  // (fonksiyon zaten terminal-guard'lı; emsal `rescueStuckRoll`.)
+  return { roll: r, stepChanges, ledgerRowWritten, cutReadingsRevoked };
+}
+
 export class InventoryService {
   /**
    * Initial goods receipt — creates a new Roll in STOCK status.
@@ -3714,200 +3928,10 @@ export class InventoryService {
     // istemcileri sessizce kilitler.
     void opts?.confirmLabelPrinted;
 
-    // D4-B1b TERS YOL: iptal ("hiç yoktu") Tambur CUT okumasını aynı tx'te damgalar (elle eklenen topun geri
-    // alması bu yoldan geçer); SCRAP'ta ölçüm gerçekti, dokunulmaz.
-    let cutReadingsRevoked: string[] = [];
-    const updated = await prisma.$transaction(async (tx) => {
-      // ── ETKİ ALANI (2026-08-15 düzeltmesi) ───────────────────────────────
-      // Eskiden burada küme ELLE kuruluyordu: "AÇIK hareketlerin adımları +
-      // currentStepId". İkisi de topun ŞU ANKİ konumuna bakıyordu, oysa
-      // `recomputeStepStatus` topun statüsünü ÜÇ yerden okur — açık hareket,
-      // KAPALI hareket ve "aynı iş emrinde bu adıma henüz gelmemiş canlı top"
-      // sayacı. Yani bir topu iptal etmek, onun GEÇMİŞTE geçtiği (hareketi
-      // kapanmış) adımların ve hiç uğramadığı kardeş adımların türetilen
-      // değerini de değiştirir.
-      //
-      // SAHA VAKASI (IE0608260004, canlı veride doğrulandı): T080826F0001
-      // 6 Ağu'da "Kurşun + KK2" adımından ÇIKTI (hareket kapandı, adım
-      // COMPLETED oldu); 8 Ağu'da iş emri kapanış dispozisyonu topu WAREHOUSE'a
-      // çekti (`currentStepId = null`, açık hareket kalmadı); 22 saniye sonra
-      // top iptal edildi. Eski küme BOŞ kaldı → recompute HİÇ koşmadı → adım
-      // bayat COMPLETED kaldı (türetilen doğru değer PENDING). Hata yok, log
-      // yok; drift'i yalnız `test_consistency` §20 gösteriyordu.
-      //
-      // Kapsam artık TEK KAYNAKTAN (`collectRollStepScopeTx`) gelir — dört
-      // çağıran dört farklı elle liste kurduğu için hata dört kez tekrarlanmıştı.
-      const scope = await collectRollStepScopeTx(tx, [id], [existing.currentStepId]);
-
-      // Kilit sırası DETERMİNİSTİK (yardımcı id ASC döner): bir top İKİ ayrı iş
-      // emrinde hareket etmiş olabilir (fason tüketimi) ve aynı tx iki WO'nun
-      // adımlarına yazar. Sabit sıra deadlock'ı yapısal olarak keser;
-      // `completeWorkOrderIfStepsDone` docstring'i de bu kilidi şart koşuyor.
-      for (const woId of scope.workOrderIds) await touchWorkOrderTx(tx, woId);
-
-      // Açık RollMovement'ları topla — kapatmak için (kapsam yukarıda çözüldü).
-      const openMovements = await tx.rollMovement.findMany({
-        where: { ...ACTIVE_MOVEMENT, rollId: id, exitedAt: null },
-        select: {
-          id: true,
-          workOrderStepId: true,
-          notes: true,
-          qtyIn: true,
-          weightIn: true,
-        },
-      });
-
-      // Açık movement'ları kapat.
-      //
-      // qtyOut = 0 LOAD-BEARING: "mal bu istasyondan HİÇ geçmedi" (storno).
-      // Kurtarma/dispozisyonun qtyOut = qtyIn semantiğinden bilinçli farklıdır —
-      // orada mal gerçekten vardı ve çıktı, burada kayıt baştan hatalıydı.
-      //
-      // ⚠️ NOT EZİLMİYOR (2026-08-04): eskiden notes körlemesine "CANCELLED"
-      // yazılıyordu ve elle eklenen topun hareketindeki "TAMBUR_MANUAL_ROLL:
-      // <sebep>" izi SİLİNİYORDU. Topun entryReason kolonu ve audit'i kalsa da
-      // hareket geçmişi "neden vardı" sorusunu cevaplayamaz hâle geliyordu —
-      // tam da iptal edilen bir kaydı sonradan incelerken en çok gereken bilgi.
-      // Artık eski not parantez içinde korunur.
-      //
-      // ⚠️ FİRE'DE STORNO YOK: `qtyOut = qtyIn` — mal o istasyondan GERÇEKTEN
-      // geçti, sonra fire oldu. 0 yazmak istasyonun iş hacminden metrajı geriye
-      // dönük siler ve üretim raporunda hayalet kayıp yaratır. Dispozisyon
-      // motorunun SCRAP dalıyla birebir aynı sözleşme (`applyRollDispositionsTx`).
-      const closeNote = isScrap ? "SCRAPPED" : "CANCELLED";
-      for (const m of openMovements) {
-        await tx.rollMovement.update({
-          // Geri alınmış satır kapatılmaz; araya giren geri alma P2025 verir (silinmiş satırla aynı).
-          where: { id: m.id, ...ACTIVE_MOVEMENT },
-          data: {
-            exitedAt: new Date(),
-            qtyOut: isScrap ? m.qtyIn ?? existing.currentQty : 0,
-            weightOut: isScrap ? m.weightIn ?? existing.weightKg : 0,
-            notes: m.notes?.trim()
-              ? `${closeNote} (${m.notes.trim()})`.slice(0, 500)
-              : closeNote,
-          },
-        });
-      }
-
-      // Top: CANCELLED + currentStepId temizle — ATOMİK CLAIM (M-30): tüm
-      // guard'lar (fason/açık sevk/aktif sevkiyat) tx DIŞINDA okundu; pencerede
-      // fason dispatch claim'i veya çuvala okutma (shipmentId claim'i) commit
-      // ettiyse top fasondayken/çuvaldayken iptal edilirdi. Gözlenen statü +
-      // shipmentId koşuluyla kaybeden 409 alır (atomik claim deseni); shipmentId
-      // de temizlenir (CANCELLED top sevkiyat rezervi taşıyamaz).
-      const cancelClaim = await tx.roll.updateMany({
-        where: { id, status: existing.status, shipmentId: existing.shipmentId },
-        data: {
-          // Hedef statü MODA göre: CANCELLED ("hiç yoktu") · SCRAP ("vardı, gitti").
-          status: targetStatus,
-          currentStepId: null,
-          shipmentId: null,
-          sackId: null,
-          // ÇIKIŞ İZİ topun KENDİ satırında (audit'te DEĞİL — audit 6 ayda
-          // arşivlenir ve "neden düştü" sorusu cevapsız kalırdı).
-          //
-          // ⚠️ Bu beş kolon HER İKİ MODU da taşır (2026-08-25). Adları "cancel"
-          // olsa da anlamları "defterden düşme izi"dir; hangi mod olduğu `status`
-          // (CANCELLED vs SCRAP) ile okunur — ayrım tek ve kesin. Ayrı
-          // `scrapReason*` kolonları AÇILMADI: canlı DB'ye migration eklemenin
-          // karşılığı yalnız kolon adının hoşluğu olurdu.
-          // `preCancelStatus` = geri almanın döneceği raf; `preShipStatus` emsali,
-          // körlemesine STOCK'a dönmek A1_STOCK/WAREHOUSE topunu yanlış rafa yazardı.
-          // Geri alma YALNIZ CANCELLED'ta çalışır (`resolveRollRestoreBlockReason`
-          // ilk ifadesi statüyü kontrol eder) → fire geri alınamaz, doğrusu da bu.
-          cancelledAt: new Date(),
-          cancelledById: userId ?? null,
-          cancelReason: cancelReasonText,
-          cancelReasonCode,
-          preCancelStatus: existing.status,
-        },
-      });
-      if (cancelClaim.count === 0) {
-        throw AppError.conflict("Top bu sırada başka bir işleme girdi (sevk/çuval/fason olabilir) — tekrar deneyin.");
-      }
-      const r = await tx.roll.findUniqueOrThrow({ where: { id } });
-      // LEVENT TÜKETİMİ TERS YOLU (Faz 4): yalnız İPTAL ("hiç yoktu") — SCRAP'ta çözgü gerçekten tüketildi, dokunulmaz.
-      if (!isScrap && r.doffEventId) await cancelConsumedForRollTx(tx, id, cancelReasonText ?? "top iptali", userId ?? null);
-      if (!isScrap) cutReadingsRevoked = await revokeCutReadingsTx(tx, { rollIds: [id], userId: userId ?? null, reason: ROLL_CANCEL_CUT_REASON });
-
-      // DEPO DEFTERİ — mal depodan DÜŞTÜ (kayıt hatalıydı ya da fire).
-      // `warehouseId` BİLEREK temizlenmez: "en son hangi depodaydı" izi kalsın ve
-      // iptal geri alınırsa (restoreCancelled) top rafına dönebilsin.
-      // ⚠️ STOK DEFTERİ KAPISI (eski kapı değil): satır artık İKİ UCUNDAKİ
-      // STATÜYÜ taşır. Eski kapı statüsüz satır yazıyordu ve bunun bedeli
-      // ölçüldü — ucu kurulamayan satır TERSLENEMİYOR, dolayısıyla iptali geri
-      // alma defteri kalıcı olarak eksik bırakıyordu (75 m ölçümü, 2026-09-12).
-      //
-      // ⚠️ Satır YALNIZ stok kümesinden düşen mal için yazılır: `IN_PRODUCTION`
-      // ya da `AT_SUBCONTRACTOR` bir top iptal edilirken stoktan bir şey
-      // düşmez (o mal zaten stok dışındaydı) — eski kapı burada da koşulsuz
-      // yazıyordu ve depoya girmemiş malı düşmüş gösteriyordu.
-      //
-      // ⚠️ 0 metrajlı topun iptali MÜMKÜN olmalı (fabrikada 52 böyle top) ve o
-      // durumda yazılacak hareket YOKTUR. Atlandığı SESSİZ KALMAZ: dönen değer
-      // audit yüküne yazılır.
-      const ledgerRowWritten =
-        r.warehouseId !== null && WAREHOUSE_STOCK_STATUSES.includes(existing.status) && qtyYazilabilir(r.currentQty);
-      if (ledgerRowWritten) {
-        await postStockMove(tx, {
-          rollId: id,
-          eventType: WarehouseEventType.CANCEL,
-          qty: r.currentQty,
-          // Çıkış ucu: topun İPTAL ÖNCESİ statüsü (`preCancelStatus` ile aynı
-          // kaynak) — "CANCELLED'dan çıktı" demek yanlış olurdu.
-          from: { warehouseId: r.warehouseId!, status: existing.status },
-          reasonCode: STOCK_MOVE_REASON.ROLL_CANCEL,
-          userId: userId ?? null,
-          notes: cancelReasonText ? cancelReasonText.slice(0, 300) : null,
-        });
-      }
-
-      // Etkilenen step'lerin status'unu recompute et.
-      //
-      // ⚠️ SIRA LOAD-BEARING: recompute ATOMİK CLAIM'den SONRA koşmak ZORUNDA —
-      // sayaçları topun statüsünden okuyor, top henüz CANCELLED değilse eski
-      // (yanlış) değeri hesaplar.
-      //
-      // ⚠️ `completedAt` VERİ KAYBI, BİLİNÇLİ KABUL: `recomputeStepStatus`
-      // COMPLETED'tan düşen adımda `completedAt: null` yazar (roll-step.helper).
-      // Adımın gerçekten bittiği tarih geri dönülemez silinir. Alternatif
-      // ("damgayı koru") COMPLETED olmayan ama completedAt dolu adımlar üretir
-      // ve bugün böyle satır YOK — yani yeni bir tutarsızlık SINIFI açardı.
-      // Bunun yerine eski değer aşağıda AUDIT'e yazılır (audit zaten tx dışında,
-      // alan eklemek bedava). Karar `recomputeStepStatus`'un TÜM çağıranlarını
-      // ilgilendirir; burada tek taraflı değiştirilmedi.
-      const stepChanges: Array<{
-        stepId: string;
-        from: StepStatus;
-        to: StepStatus;
-        /** ISO metin — audit JSON'ına Date koymak sessiz serileştirme sürprizi doğurur. */
-        previousCompletedAt: string | null;
-      }> = [];
-      for (const st of scope.steps) {
-        const next = await recomputeStepStatus(tx, st.id);
-        if (next !== st.status) {
-          stepChanges.push({
-            stepId: st.id,
-            from: st.status,
-            to: next,
-            previousCompletedAt: st.completedAt ? st.completedAt.toISOString() : null,
-          });
-        }
-      }
-
-      // ⚠️ `completeWorkOrderIfStepsDone` BİLEREK ÇAĞRILMIYOR. Genişleyen kapsam
-      // bir adımı ACTIVE→COMPLETED'a çevirebilir (iptal edilen top o adımın tek
-      // "bekleyen"iydi) ve o durumda iş emri "tüm adımları bitmiş ama kendisi
-      // IN_PROGRESS" kalır. Bunu otomatik kapatmak *"bir topu iptal etmek iş
-      // emrini kapatabilir"* demektir — refakat kartlarını da COMPLETED'a çeker
-      // (`setWorkOrderCardStatusesTx`) ve bu bir ÜRÜN KARARIDIR, refactor yan
-      // etkisi değil. Planlamacı isterse eklenecek tek satır:
-      //   for (const woId of scope.workOrderIds) await completeWorkOrderIfStepsDone(tx, woId);
-      // (fonksiyon zaten terminal-guard'lı; emsal `rescueStuckRoll`.)
-      return { roll: r, stepChanges, ledgerRowWritten };
-    });
-    await auditCutReadings(userId, [], { ids: cutReadingsRevoked, reason: ROLL_CANCEL_CUT_REASON });
+    const updated = await prisma.$transaction((tx) =>
+      cancelRollRecordTx(tx, { existing, isScrap, userId, cancelReasonText, cancelReasonCode }),
+    );
+    await auditCutReadings(userId, [], { ids: updated.cutReadingsRevoked, reason: ROLL_CANCEL_CUT_REASON });
 
     await AuditService.log({
       userId,
