@@ -123,7 +123,9 @@ describe("route-modules — yol → modül aynası", () => {
     expect([...kapanan].sort()).toEqual(["depoMultiEnabled", "devereEnabled", "dokumaEnabled", "financeEnabled", "iplikEnabled", "kaliteGuvenceEnabled", "maliyetEnabled", "ticaretEnabled"]);
     expect(isRouteModuleOpen("/operations/work-orders", fabrika)).toBe(true);
   });
+});
 
+describe("route-modules — K19 bağlı modül", () => {
   // K19 BAĞLI MODÜL: ek modül şartı backend kapısının aynasıdır — kaynak metinden ölçülür (ayna kendi başına uydurulmaz).
   it("⭐ bağlı modül: Kârlılık maliyet açık + finans kapalıyken kapalı; ikisi açıkken açık; maliyet hub'ı etkilenmez", () => {
     expect(isRouteModuleOpen("/reports/maliyet/karlilik", ctx({ financeEnabled: false }))).toBe(false);

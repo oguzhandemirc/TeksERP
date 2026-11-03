@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
@@ -82,15 +82,6 @@ describe("CommandPalette", () => {
     regime = { productionEnabled: true, financeEnabled: false, dokumaEnabled: false, machineStopEnabled: false };
     openTab.mockClear();
     menu = EMPTY_MENU_LAYOUT;
-  });
-
-  it("⭐ K19: menüden gizlenen ekran paletten de düşer (aramada da); diğerleri durur", async () => {
-    menu = toMenuLayoutState({ hiddenScreens: ["reports/production/wip"], advancedGroup: false, advancedScreens: [] });
-    open();
-    expect(screen.queryByText("Nerede Takıldı (WIP)")).not.toBeInTheDocument();
-    expect(screen.getByText("Üretim")).toBeInTheDocument();
-    type("nerede");
-    expect(screen.queryByText("Nerede Takıldı (WIP)")).not.toBeInTheDocument();
   });
 
   it("rapor sayfaları arama yapmadan da listede", () => {
@@ -202,6 +193,26 @@ describe("CommandPalette", () => {
 });
 
 // 2026-11-02 demo 2. tur: etiket açıklamayla paylaşılan satırda kesiliyordu ("Özellik Anaht…").
+describe("CommandPalette — K19 menü düzeni", () => {
+  beforeEach(() => {
+    permissions = ["report:production", "roll:read", "workorder:read", "admin:settings", "admin:users"];
+    regime = { productionEnabled: true, financeEnabled: false, dokumaEnabled: false, machineStopEnabled: false };
+    menu = EMPTY_MENU_LAYOUT;
+  });
+  afterEach(() => {
+    menu = EMPTY_MENU_LAYOUT;
+  });
+
+  it("⭐ K19: menüden gizlenen ekran paletten de düşer (aramada da); diğerleri durur", async () => {
+    menu = toMenuLayoutState({ hiddenScreens: ["reports/production/wip"], advancedGroup: false, advancedScreens: [] });
+    open();
+    expect(screen.queryByText("Nerede Takıldı (WIP)")).not.toBeInTheDocument();
+    expect(screen.getByText("Üretim")).toBeInTheDocument();
+    type("nerede");
+    expect(screen.queryByText("Nerede Takıldı (WIP)")).not.toBeInTheDocument();
+  });
+});
+
 describe("CommandPalette satır düzeni", () => {
   it("statik giriş etiketi kesilmez (shrink-0), açıklama kalan yeri alır (min-w-0)", () => {
     permissions = ["report:production", "roll:read", "workorder:read", "admin:settings", "admin:users"];
