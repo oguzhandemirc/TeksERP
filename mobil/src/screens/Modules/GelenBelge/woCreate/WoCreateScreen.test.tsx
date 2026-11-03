@@ -152,6 +152,23 @@ describe('WoCreateScreen', () => {
     expect(s.queryByTestId('belge-masasi')).toBeNull();
   });
 
+  it('⭐ S15b: Okutmayla + masa cihazı + GERÇEK kısayol yok → doğrudan masaya AÇILMAZ (bugünkü davranış)', async () => {
+    mockScan = true;
+    useDeviceSettingsStore.setState({ docDeskDevice: true });
+    mockShortcuts.mockResolvedValue({ data: [] });
+    const s = renderWithPaper(<WoCreateScreen />);
+    expect(await s.findByTestId('ie-rotasiz')).toBeTruthy();
+    expect(s.queryByTestId('belge-masasi')).toBeNull();
+  });
+
+  it('S15b: Okutmayla + masa cihazı + gerçek kısayol → doğrudan masa kipi (rotasız başta)', async () => {
+    mockScan = true;
+    useDeviceSettingsStore.setState({ docDeskDevice: true });
+    mockShortcuts.mockResolvedValue({ data: [route('r1', 'Kurşun&Tambur', 1)] });
+    const s = renderWithPaper(<WoCreateScreen />);
+    expect((await s.findByTestId('belge-masasi')).props.children).toBe('scan-routed,r1');
+  });
+
   it('⭐ K23 "Bu cihaz belge masası" açık → kısayollar gelince doğrudan masa kipi', async () => {
     useDeviceSettingsStore.setState({ docDeskDevice: true });
     mockShortcuts.mockResolvedValue({ data: [route('r1', 'Kurşun&Tambur', 1)] });

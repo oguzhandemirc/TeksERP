@@ -96,6 +96,8 @@ export interface QuickStartRequest extends WorkOrderPayload {
   /** İlk rota adımı fason (boyahane) ise: WO açıldıktan sonra o adıma planlanan
    *  firmaya otomatik fason sevki de yapılır (çeki listesi dahil). "Fasona Gönder". */
   dispatchFirstStep?: boolean;
+  /** K29 S15b: rotasız iş emri (rota anahtarı gönderilmez; yalnız "Okutmayla" kipinde, değilse 400 SCAN_ROUTE_DISABLED). */
+  scanRouted?: boolean;
 }
 
 export interface QuickStartResult {

@@ -4,7 +4,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import { createAttemptToken } from "@/lib/attemptToken";
-import { buildGroupPayload, decisiveFailure, startGroupWorkOrders } from "../workOrderFromNote";
+import { buildGroupPayload, decisiveFailure, SCAN_ROUTE_VALUE, startGroupWorkOrders } from "../workOrderFromNote";
 import { ProcessValueSearchDialog } from "../ProcessValueSearchDialog";
 import { WorkOrderFromNoteDialog } from "../WorkOrderFromNoteDialog";
 import type { PlanGroup, PlanRoll, PlanTarget, WorkOrderPlan } from "../types";
@@ -47,6 +47,12 @@ describe("buildGroupPayload", () => {
     expect(p).not.toHaveProperty("sourceNoteId");
   });
 
+  it("⭐ S15b rotasız: gövdede scanRouted:true, routeTemplateId anahtarı YOK", () => {
+    const g = group("k", [], [roll(1)]);
+    const p = buildGroupPayload({ group: g, targets: [] }, { routeTemplateId: SCAN_ROUTE_VALUE, clientToken: "tok", foldType: null });
+    expect(p.scanRouted).toBe(true);
+    expect("routeTemplateId" in p).toBe(false);
+  });
   it("kaynak belge verilirse gövdeye sourceNoteId girer (parti no sunucuda nottan)", () => {
     const g = group("g1", [], [roll(1)]);
     expect(buildGroupPayload({ group: g, targets: [] }, { routeTemplateId: "rt", clientToken: "tok", foldType: null, sourceNoteId: "note-1" }).sourceNoteId).toBe("note-1");
