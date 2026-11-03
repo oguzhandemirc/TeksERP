@@ -4,8 +4,7 @@ import React from 'react';
 import { fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../../test/render';
 import type { ProductionRoute } from '../../../../services/route.service';
-import type { DocRow } from './useWoRows';
-import type { ExtraFormBody } from './useWoRows';
+import type { DocRow, ExtraFormBody } from './useWoRows';
 import UnifiedWoForm from './UnifiedWoForm';
 
 let mockRows: DocRow[] = [];
