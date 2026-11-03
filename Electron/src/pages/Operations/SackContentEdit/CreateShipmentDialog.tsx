@@ -28,6 +28,8 @@ import { ShipmentOrderSelect } from "./ShipmentOrderSelect";
 import { ShipmentPreviewPanel } from "./ShipmentPreviewPanel";
 import type { SackSearchRow, ShipmentDestination } from "./types";
 import { resolveDestination, useDestinationLock } from "./destinationDefault";
+import { DeliveryToFields } from "@/pages/Operations/Shipments/delivery-to/DeliveryToFields";
+import { EMPTY_DELIVERY_TO, deliveryToBody, deliveryToError, type DeliveryToState } from "@/pages/Operations/Shipments/delivery-to/deliveryTo";
 import { DestinationLockField } from "./DestinationLockField";
 import { shipmentService } from "@/pages/Operations/Shipments/service";
 import { ShipmentSackCountField } from "./ShipmentSackCountField";
@@ -90,6 +92,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
   const [orderIds, setOrderIds] = useState<Set<string>>(new Set());
   /** Yalnız zincir boşken (ilk sevk) operatörün seçimi; kilitliyken yok sayılır. */
   const [picked, setPicked] = useState<ShipmentDestination | null>(null);
+  const [deliveryTo, setDeliveryTo] = useState<DeliveryToState>(EMPTY_DELIVERY_TO);
   // İdempotency (A4) — token mantıksal deneme başına (kk1.md), deneme içinde sabit
   // → timeout-retry kurulmuş sevkiyatı geri alır (kör 409 yerine).
   const attempt = useAttemptToken();
@@ -101,6 +104,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
     setOrderless(false);
     setOrderIds(new Set());
     setPicked(null);
+    setDeliveryTo(EMPTY_DELIVERY_TO);
     setPostWarnings([]);
     attempt.renew(); // yeni açılış = yeni mantıksal deneme
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -139,6 +143,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
         ...(chosen ? { destinationChosen: true as const } : {}),
         clientToken: attempt.token(),
         orderless,
+        ...deliveryToBody(deliveryTo),
       }),
     onError: (e) => attempt.onFailure(e),
     onSuccess: async (res) => {
@@ -178,7 +183,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
   });
 
   const blocked = customerConflict || branchConflict;
-  const canCreate = !!effCustomerId && !blocked && !createMut.isPending && destination != null;
+  const canCreate = !!effCustomerId && !blocked && !createMut.isPending && destination != null && !deliveryToError(deliveryTo, effCustomerId);
 
   const toggleOrder = (id: string) =>
     setOrderIds((prev) => {
@@ -285,12 +290,10 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
             )}
           </div>
 
-          <ShipmentSackCountField
-            value={manualSackText}
-            onChange={setManualSackText}
-            systemCount={sackIds.length}
-            invalid={manualSackGecersiz}
-          />
+          {/* Teslim yeri (K18) — opsiyonel; kapalıyken gövde bugünkü gibi. */}
+          <DeliveryToFields key={sackKey} value={deliveryTo} onChange={setDeliveryTo} ownerCustomerId={effCustomerId} disabled={createMut.isPending} />
+
+          <ShipmentSackCountField value={manualSackText} onChange={setManualSackText} systemCount={sackIds.length} invalid={manualSackGecersiz} />
 
           {/* Sipariş seçimi */}
           <div className="rounded-md border p-3">
@@ -302,10 +305,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
                 sunucu siparişsiz kurulumu 400 ile reddeder. Kuralı burada
                 söylemek, kullanıcıyı 400'e kadar götürmekten iyidir. */}
             {orderRequirement === "block" && !orderless && orderIds.size === 0 && (
-              <p className="mb-2 text-xs text-amber-600 dark:text-amber-500">
-                Bu kurulumda sevkiyat siparişe bağlanmalı — sipariş seçin ya da yukarıdaki
-                kutuyu işaretleyip siparişsiz sevk niyetini beyan edin.
-              </p>
+              <p className="mb-2 text-xs text-amber-600 dark:text-amber-500">Bu kurulumda sevkiyat siparişe bağlanmalı — sipariş seçin ya da yukarıdaki kutuyu işaretleyip siparişsiz sevk niyetini beyan edin.</p>
             )}
             {!orderless &&
               (effCustomerId ? (

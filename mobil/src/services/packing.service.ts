@@ -309,6 +309,9 @@ export interface ShipmentDetail {
   dispatchedAt: string | null;
   customer: Ref;
   branch: { id: string; name: string } | null;
+  /** Teslim yeri (K18) — sahip cari değişmez; eski sunucu alanı göndermez (undefined). */
+  deliveryCustomer?: { id: string; code: string; name: string; address: string | null } | null;
+  deliveryAddress?: string | null;
   orders: ShipmentDetailOrder[];
   rolls: ShipmentDetailRoll[];
   swatches: { id: string; barcode: string | null; length: number; width: number | null }[];

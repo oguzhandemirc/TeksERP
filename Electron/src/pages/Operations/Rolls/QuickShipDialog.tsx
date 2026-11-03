@@ -28,6 +28,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
+import { DeliveryToFields } from "@/pages/Operations/Shipments/delivery-to/DeliveryToFields";
+import { EMPTY_DELIVERY_TO, deliveryToBody, deliveryToError, type DeliveryToState } from "@/pages/Operations/Shipments/delivery-to/deliveryTo";
 import { customerService } from "@/pages/Customers/service";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
@@ -63,6 +65,8 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], initial
     setPicked(null);
   };
   const [rolls, setRolls] = useState<QuickShipRoll[]>(initialRolls);
+  // Teslim yeri (K18) — opsiyonel; boşken gövdeye anahtar girmez (bugünkü Hızlı Sevk).
+  const [deliveryTo, setDeliveryTo] = useState<DeliveryToState>(EMPTY_DELIVERY_TO);
 
   // ② MİKTAR MODU — "3 top patos gri" de, sistem FIFO ile seçsin.
   const [pickItemId, setPickItemId] = useState<string | null>(null);
@@ -110,7 +114,7 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], initial
   const lockQ = useDestinationLock(customerId, null, open);
   const yon = quickShipDestination(lockQ.data, picked);
   const blockedReason = yon.blockedReason;
-  const valid = Boolean(customerId) && rolls.length > 0 && !yon.blocked && yon.destination != null;
+  const valid = Boolean(customerId) && rolls.length > 0 && !yon.blocked && yon.destination != null && !deliveryToError(deliveryTo, customerId);
 
   const attempt = useAttemptToken();
   const shipM = useMutation({
@@ -120,6 +124,7 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], initial
         customerId: customerId as string,
         destination: yon.destination ?? undefined,
         ...(yon.chosen ? { destinationChosen: true as const } : {}),
+        ...deliveryToBody(deliveryTo),
         clientToken: attempt.token(),
       }),
     onError: (e) => attempt.onFailure(e),
@@ -131,6 +136,7 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], initial
       invalidateDestinationLock(qc);
       setRolls([]);
       setCustomerId(null);
+      setDeliveryTo(EMPTY_DELIVERY_TO);
       onOpenChange(false);
       onShipped?.(res.data.id);
     },
@@ -165,6 +171,11 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], initial
             {customerId && (
               <div className="mt-2">
                 <DestinationLockField lock={lockQ.data} isLoading={lockQ.isLoading} picked={picked} onPick={setPicked} hasBranch={false} />
+              </div>
+            )}
+            {customerId && (
+              <div className="mt-2">
+                <DeliveryToFields value={deliveryTo} onChange={setDeliveryTo} ownerCustomerId={customerId} disabled={shipM.isPending} />
               </div>
             )}
           </div>
