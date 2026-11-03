@@ -7,7 +7,7 @@ import { useAttemptToken } from '../../../../offline/attemptToken';
 import { isAmbiguousFailure } from '../../../../offline/entryAttempt';
 import { fabricPropertyService, type KursunGramajCatalog } from '../../../../services/fabricProperty.service';
 import { fetchDefaultTargets, passThroughTargets, useRouteDefaultTargets } from '../../../../hooks/useRouteDefaultTargets';
-import { inboundDocService, type InboundNoteDetail, type NotePartiesView } from '../../../../services/inboundDoc.service';
+import { INBOUND_DOC_SETTINGS_KEY, inboundDocService, type CreateWorkOrderFromNoteBody, type InboundNoteDetail, type NotePartiesView } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { printTravelerCardForWorkOrder } from '../../../../services/travelerCardPrint';
 import { kursunStepOf } from '../desk/deskPlan';
@@ -31,6 +31,9 @@ import {
   type RowResult,
 } from './woFromDoc';
 
+// Eski içe aktarımlar (`./useWoRows`) için yeniden dışa aktarım; tanım servis katmanında.
+export { INBOUND_DOC_SETTINGS_KEY };
+
 export interface DocRow {
   noteId: string;
   noteNo: string;
@@ -45,7 +48,6 @@ export interface DocRow {
 }
 
 const EMPTY_CATALOG: KursunGramajCatalog = { propertyId: null, options: [] };
-export const INBOUND_DOC_SETTINGS_KEY = ['gelen-belge', 'ayarlar'] as const;
 
 export interface SavedRow {
   noteId: string;
@@ -68,7 +70,12 @@ interface SaveCtx {
   token: string;
   /** K27 WARN: kullanıcı "Yine de onayla" dedi → gövdeye bayrak. */
   confirmDuplicateDocNo?: boolean;
+  /** S16b tek form: formun ek alanları (hedef kumaş, en, metraj…); yok = bugünkü gövde. */
+  extra?: ExtraFormBody;
 }
+
+/** Tek formun form ucuna eklediği alanlar (S16a sözleşmesi). */
+export type ExtraFormBody = Partial<Omit<CreateWorkOrderFromNoteBody, 'clientToken' | 'ownerCustomerId' | 'kursunMeters'>>;
 
 /** K27 WARN 409 bekleyen satır (diyalog bunu sorar). */
 export interface DuplicateRow {
@@ -101,7 +108,8 @@ async function saveRowOnce(ctx: SaveCtx, r: DocRow, form: RowForm): Promise<{ re
       passThrough: ctx.passThrough,
       kursunSequence: ctx.kursunSequence,
     });
-    return { result: openedResult(await inboundDocService.createWorkOrder(r.noteId, ctx.confirmDuplicateDocNo ? { ...body, confirmDuplicateDocNo: true } : body)) };
+    const full = ctx.extra ? { ...body, ...ctx.extra } : body;
+    return { result: openedResult(await inboundDocService.createWorkOrder(r.noteId, ctx.confirmDuplicateDocNo ? { ...full, confirmDuplicateDocNo: true } : full)) };
   } catch (e) {
     if (!isFormApprovalDisabled(e)) return { result: { kind: 'FAILED', text: errorText(e) }, error: e };
     try {
@@ -243,7 +251,8 @@ function useRowMutators(setRows: Dispatch<SetStateAction<DocRow[]>>, gramajFor: 
   return { addNote, setDetail, updateForm, setParties, setMulti, removeRow };
 }
 
-export function useWoRows(route: ProductionRoute) {
+/** `extraBody`: S16b tek formun satır başına ek alanları (çok parti kipine göre değişir); verilmezse bugünkü gövde. */
+export function useWoRows(route: ProductionRoute, opts?: { extraBody?: (r: DocRow) => ExtraFormBody }) {
   const attempt = useAttemptToken();
   const settings = useQuery({ queryKey: INBOUND_DOC_SETTINGS_KEY, queryFn: inboundDocService.settings, retry: false, staleTime: 60_000 });
   // `production.refakatAutoPrint` yalnız gelen belge ayar ucunda döner (bayrak yükünde yok); okunamazsa kapalı = elle basım.
@@ -290,7 +299,7 @@ export function useWoRows(route: ProductionRoute) {
       for (const r of targets) {
         const ptNow = passThroughFor(r.form!.ownerCustomerId);
         const passThrough = Array.isArray(ptNow) ? ptNow : await ptNow;
-        const ctx = { mode, routeId: isScanRoute(route) ? null : route.id, gramajPropertyId: catalog.propertyId, passThrough, kursunSequence: kursunStepOf(route)?.sequence ?? null, token: attempt.keyed(r.noteId), confirmDuplicateDocNo: r.noteId === confirmNoteId };
+        const ctx = { mode, routeId: isScanRoute(route) ? null : route.id, gramajPropertyId: catalog.propertyId, passThrough, kursunSequence: kursunStepOf(route)?.sequence ?? null, token: attempt.keyed(r.noteId), confirmDuplicateDocNo: r.noteId === confirmNoteId, extra: opts?.extraBody?.(r) };
         const { result, error } = await saveRowOnce(ctx, r, r.form!);
         if (error !== undefined) errors.push(error);
         const conflict = error === undefined ? null : duplicateDocNoConflict(error);
