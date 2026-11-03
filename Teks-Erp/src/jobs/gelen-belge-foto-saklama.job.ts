@@ -64,6 +64,12 @@ function schedule(delayMs: number): void {
 }
 
 /** Onay/sevk/ayar değişti: beklemeden tur (yağmur korumalı). İş başlamadıysa (bekçi, betik) sessizce yok sayılır. */
+/** Ayar yazımı sonrası: kip FULL değilse işi hemen tetikler; veriyi aynen döner (route tek satır kalsın). */
+export function kickPhotoRetentionIfActive<T extends { photoRetention: string }>(data: T): T {
+  if (data.photoRetention !== "FULL") requestImmediatePhotoRetentionRun();
+  return data;
+}
+
 export function requestImmediatePhotoRetentionRun(): void {
   if (!started || stopped) return;
   if (running) {

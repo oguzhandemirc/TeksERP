@@ -40,7 +40,7 @@ import { assertScanReadable, readerQueueCounts, requeueScanForReading } from "..
 import { getReadSummary } from "../services/gelen-belge-okuma-ozeti.service";
 import { stationDocLookup, stationLookupStatus } from "../services/gelen-belge-istasyon-okutma.service";
 import { readerJobStatus, requestImmediateReaderRun } from "../jobs/gelen-belge-okuma.job";
-import { requestImmediatePhotoRetentionRun } from "../jobs/gelen-belge-foto-saklama.job";
+import { kickPhotoRetentionIfActive, requestImmediatePhotoRetentionRun } from "../jobs/gelen-belge-foto-saklama.job";
 import { workOrderSourceNotes } from "../services/gelen-belge-ie-kaynak.service";
 import { getReaderUrl } from "../lib/gelen-belge/url";
 import { readerHealth } from "../lib/gelen-belge/okuma-istemcisi";
@@ -452,12 +452,8 @@ const SettingsBody = z.strictObject({
 // Okuma `gelen-belge:read`: gözden geçirme ekranı "varsayılan ürünle girecek: <ad>" ipucunu buradan basar.
 router.get("/ayarlar", requirePermission("gelen-belge:read"), wrap(async () => ({ status: 200, data: await getIncomingDocSettings() })));
 // Yazma yalnız `admin:settings` (Genel Ayarlar → Gelen Belge kategorisi ADMIN_ONLY); ayar şifresi kapısı izinden SONRA.
-router.put("/ayarlar", requirePermission("admin:settings"), requireSettingsPassword, wrap(async (req) => {
-  const data = await updateIncomingDocSettings(SettingsBody.parse(req.body), req.user!.userId);
-  // K28: saklama kipi değişince geçmiş onaylılara uygulama beklemeden başlar (iş kendi ön koşulunda durur).
-  if (data.photoRetention !== "FULL") requestImmediatePhotoRetentionRun();
-  return { status: 200, data };
-}));
+// K28: saklama kipi FULL değilse geçmiş onaylılara uygulama beklemeden başlar (iş kendi ön koşulunda durur).
+router.put("/ayarlar", requirePermission("admin:settings"), requireSettingsPassword, wrap(async (req) => ({ status: 200, data: kickPhotoRetentionIfActive(await updateIncomingDocSettings(SettingsBody.parse(req.body), req.user!.userId)) })));
 // ── K17: istasyonda belgeden iş emri bulma (eşleme okuması — hiçbir kayıt doğurmaz) ──────────────────────────
 const STATION_LOOKUP_PERMISSIONS = ["gelen-belge:read", "mobile:kk2-kursun", "mobile:tambur"] as const;
 const StationLookupBody = z.union([
