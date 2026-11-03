@@ -294,3 +294,25 @@ describe("oie-a: müşteriye özel kurşun gram fiyatı", () => {
     expect(buildCariUpdatePayload({ ...baseForm, kursunGram: { price: "0,00001", currency: "TRY" } }).ok).toBe(false);
   });
 });
+
+describe("S3: müşterinin varsayılan kurşun gramajı", () => {
+  const cari = (p: Partial<CariRow>): CariRow => ({
+    id: "c1", kind: "CUSTOMER", code: "MUS-001", name: "Test A.Ş.", taxNumber: null, taxOffice: null, defaultCurrency: "TRY",
+    paymentTermDays: null, riskLimit: null, notes: null, isActive: true, balances: [], ...p,
+  });
+  it("müşteride alan doğar ve seçim gövdeye gider; null = istasyon varsayılanı", () => {
+    const f = formFromCari(cari({ kursunDefaultValueId: "v40" }));
+    expect(f.kursunDefault).toEqual({ valueId: "v40" });
+    const r = buildCariUpdatePayload({ ...f, kursunDefault: { valueId: null } });
+    expect(r.ok && r.body.kursunDefaultValueId).toBeNull();
+    const r2 = buildCariUpdatePayload({ ...f, kursunDefault: { valueId: "v60" } });
+    expect(r2.ok && r2.body.kursunDefaultValueId).toBe("v60");
+  });
+  it("fason carisi ya da alanı göndermeyen eski backend → alan yok, gövdeye girmez", () => {
+    expect(formFromCari(cari({ kind: "SUPPLIER" as CariRow["kind"], kursunDefaultValueId: "v40" })).kursunDefault).toBeNull();
+    const old = formFromCari(cari({}));
+    expect(old.kursunDefault).toBeNull();
+    const r = buildCariUpdatePayload(old);
+    expect(r.ok && "kursunDefaultValueId" in r.body).toBe(false);
+  });
+});

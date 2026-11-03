@@ -93,7 +93,8 @@ import {
   assertKursunTabletMayWrite,
   resolveStepBypassEligibility,
 } from "./helpers/kursun-bypass-eligibility.helper";
-import { effectiveTamburPlanWidthGate, readFinanceServiceBillingBrodeUnit, resolveKursunBypassEnabled, resolveKursunMeterCapture, type KursunMeterCapture } from "./system-setting.service";
+import { effectiveTamburPlanWidthGate, readFinanceServiceBillingBrodeUnit, readKursunMachineAssignMode, resolveKursunBypassEnabled, resolveKursunMeterCapture, type KursunMeterCapture } from "./system-setting.service";
+import { assignedMachineListWhere, foreignMachineOf, type ForeignMachine } from "./helpers/kursun-machine-assign.helper";
 import { BRODE_PROPERTY_CODE, brodePieceInputOf } from "./helpers/service-quantity.helper";
 import { uyari } from "../lib/logger";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
@@ -200,6 +201,11 @@ interface StepSummary {
   /// (rotadaki RouteStep.defaultNotes'tan WO açılırken kopyalanır). Operatöre
   /// kart açıkken üstte sticky şerit olarak gösterilir (Tambur stepNote ile aynı).
   stepNote: string | null;
+  /// K16: planlı (atanan) kurşun makinesinin adı; yoksa null. Eski APK yok sayar.
+  plannedMachineName: string | null;
+  /// K16: `kursun.machineAssignMode` = ASSIGNED_ONLY_WARN ve oturum makinesi planlıdan farklıysa dolu → tablet
+  /// "Bu iş X makinesine atanmış" + "Yine de al" sorar (engel yok). Eski APK yok sayar (bugünkü gibi açar).
+  foreignMachine: ForeignMachine | null;
   /// Bu adım kurşun bypass'ına DAĞITILMIŞ mı (açık atama)? Doluysa tabletteki
   /// tüm yazma yolları 409 verir (assertStepNotBypassAssigned). Tablet ham 409
   /// beklemek yerine kartı okutur okutmaz "bu iş <makine>'ye dağıtıldı, kâğıtla
@@ -328,6 +334,7 @@ export class KursunQcService {
   async getByCardBarcode(
     cardBarcode: string,
     stationId: string | null = null,
+    sessionMachineId: string | null = null,
   ): Promise<ApiResponse<StepSummary>> {
     const card = await prisma.travelerCard.findUnique({
       where: { barcode: normalizeScanCode(cardBarcode) },
@@ -350,13 +357,45 @@ export class KursunQcService {
     // rotasında KK tableti kurşun adımına düşmez. Oturumsuz istek bugünkü "ilk
     // akış adımı" davranışında kalır; COMPLETED adım özeti reopen-confirm'i açar.
     const { stepId } = await resolveWoStepForStation(card.workOrderId, stationId);
-    return this.buildStepSummary(stepId);
+    return this.buildStepSummary(stepId, { sessionMachineId });
+  }
+
+  /**
+   * K16 "Yine de al": başka makineye atanmış işi bu makinenin aldığını İZ olarak yazar (engel yok; plan
+   * değişmez — atamayı planlamacı değiştirir). Süzgeç kapalıysa ya da iş zaten bu makinedeyse iz yazılmaz.
+   */
+  async takeForeignMachine(stepId: string, sessionMachineId: string | null, userId?: string): Promise<ApiResponse<{ logged: boolean }>> {
+    const step = await prisma.workOrderStep.findUnique({
+      where: { id: stepId },
+      select: { id: true, workOrderId: true, status: true, plannedMachineId: true, plannedMachine: { select: { name: true } }, station: { select: STEP_FLOW_SELECT } },
+    });
+    if (!step) throw AppError.notFound("Adım bulunamadı");
+    if (!stepRunsStepFlow(step.station)) throw AppError.badRequest(STEP_FLOW_ERROR);
+    const foreign = foreignMachineOf(await readKursunMachineAssignMode(), sessionMachineId, step);
+    if (!foreign) return { success: true, data: { logged: false } };
+    const machine = sessionMachineId ? await prisma.machine.findUnique({ where: { id: sessionMachineId }, select: { name: true } }) : null;
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      // Ayrı satır yok — iz adımın kendisine bağlanır (emsal KURSUN_BYPASS_TAMBUR_COMPLETE_UNASSIGNED).
+      tableName: "WORK_ORDER_STEP",
+      recordId: step.id,
+      newData: {
+        event: "KURSUN_FOREIGN_MACHINE_TAKE",
+        workOrderId: step.workOrderId,
+        plannedMachineId: foreign.plannedMachineId,
+        plannedMachineName: foreign.plannedMachineName,
+        takenOnMachineId: sessionMachineId,
+        takenOnMachineName: machine?.name ?? null,
+      },
+    });
+    return { success: true, data: { logged: true }, message: "İş bu makinede alındı; atama değişmedi." };
   }
 
   /** Step ID ile doğrudan çek (admin/test ekranları). */
   async getStep(
     stepId: string,
-    opts: { includeInspection?: boolean } = {},
+    opts: { includeInspection?: boolean; sessionMachineId?: string | null } = {},
   ): Promise<ApiResponse<StepSummary>> {
     return this.buildStepSummary(stepId, opts);
   }
@@ -371,7 +410,7 @@ export class KursunQcService {
    * `stationId` (oturum istasyonu, KQ-D2) verilirse yalnız o istasyonun adımları;
    * oturumsuz istek bugünkü gibi tüm akış adımlarını görür.
    */
-  async listOpenCards(stationId: string | null = null, q: string | null = null): Promise<
+  async listOpenCards(stationId: string | null = null, q: string | null = null, sessionMachineId: string | null = null): Promise<
     ApiResponse<
       Array<{
         cardId: string;
@@ -397,9 +436,12 @@ export class KursunQcService {
     // olduğundan ilk OPEN_CARDS_CAP zaten en kritikleri. Gerçekte bu kadar eş
     // zamanlı açık QC adımı görülmez → emniyet ağı; dolarsa sessiz kalma (loglar).
     const OPEN_CARDS_CAP = 500;
+    // K16: ASSIGNED_ONLY_WARN'da yalnız bu makineye planlı ya da atanmamış işler (oturum makinesi bilinmiyorsa süzgeç yok).
+    const machineWhere = assignedMachineListWhere(await readKursunMachineAssignMode(), sessionMachineId);
     const searchWhere = q ? stationWorkSearchWhere(q) : null;
     const steps = await prisma.workOrderStep.findMany({
       where: {
+        AND: [machineWhere],
         station: { ...STEP_FLOW_WHERE },
         // Adım KOLONU — `station` spread'ine ek anahtar yazılmaz (OR ezilir).
         ...(stationId ? { stationId } : {}),
@@ -1700,13 +1742,14 @@ export class KursunQcService {
 
   private async buildStepSummary(
     stepId: string,
-    opts: { includeInspection?: boolean } = {},
+    opts: { includeInspection?: boolean; sessionMachineId?: string | null } = {},
   ): Promise<ApiResponse<StepSummary>> {
     const includeInspection = opts.includeInspection === true;
     const step = await prisma.workOrderStep.findUnique({
       where: { id: stepId },
       include: {
         station: true,
+        plannedMachine: { select: { name: true } },
         workOrder: {
           select: {
             id: true,
@@ -1899,6 +1942,9 @@ export class KursunQcService {
           valueCode: t.value.code,
         })),
         stepNote: step.notes,
+        // K16: planlı makine + (ASSIGNED_ONLY_WARN'da) başka makineye atanmış iş uyarısı. Eski APK yok sayar.
+        plannedMachineName: step.plannedMachine?.name ?? null,
+        foreignMachine: foreignMachineOf(await readKursunMachineAssignMode(), opts.sessionMachineId, step),
         bypassAssignment: bypass
           ? { machineName: bypass.machine.name, assignedAt: bypass.assignedAt }
           : null,

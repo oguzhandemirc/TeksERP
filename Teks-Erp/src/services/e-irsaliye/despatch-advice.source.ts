@@ -118,6 +118,17 @@ function notes(doc: ShipmentDispatchDoc, dispatchNote: string | null | undefined
   return out;
 }
 
+/**
+ * Teslim yeri (K18) XML'e henüz taşınmaz: `DespatchInput.deliveryAddress` yapısal adres ister,
+ * snapshot yalnız tek satır metin dondurur. Sessiz tutarsızlık yerine üretim yanıtı uyarır.
+ */
+export function deliveryToWarnings(snapshot: PrintedDocSnapshot): string[] {
+  const h = (snapshot.doc as unknown as ShipmentDispatchDoc).header;
+  const name = clean(h.deliveryTo?.name);
+  if (!name) return [];
+  return [`Teslim yeri "${name}" kâğıt irsaliyede basılıdır ama e-İrsaliye XML'ine henüz taşınmaz: XML'de teslim adresi carinin ("${clean(h.customerName)}") kart adresi olarak gider.`];
+}
+
 /** Snapshot + künye + kayıt → doğrulanmaya hazır DespatchInput. */
 export function mapSnapshotToDespatchInput(args: MapSnapshotArgs): DespatchInput {
   const doc = args.snapshot.doc as unknown as ShipmentDispatchDoc;

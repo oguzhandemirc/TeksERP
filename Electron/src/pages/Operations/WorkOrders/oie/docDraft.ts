@@ -1,6 +1,7 @@
 // Belgeden iş emri formunun saf parçaları: okunan taslaktan form taslağı, kaydetme kapısı, sözleşme 3 gövdesi ve
 // ayrı onay kipinde (SEPARATE) taslağa yazılacak başlık yaması. Kural sunucudadır; kapı yalnız düğmeyi ve nedeni seçer.
 import type { DeliveryNoteDetail, HeaderPatch, KursunMetersSource } from "@/pages/Operations/GelenBelgeler/types";
+import { customerGramajId, type KursunCustomerDefaults } from "@/lib/kursun-gramaj";
 import type { NoteWorkOrderBody } from "./service";
 
 /** Sözleşme 4: belgede okunan metinden müşteri önerisi (eski backend göndermez). */
@@ -29,6 +30,8 @@ export interface DocDraft {
   /** Okunan metre gözden geçirilmeli ve henüz doğrulanmadı. */
   metersReview: boolean;
   gramajId: string | null;
+  /** S3: gramaj elle seçildi — müşteri değişince müşteri varsayılanı artık EZMEZ. */
+  gramajTouched?: boolean;
   notes: string;
 }
 
@@ -58,8 +61,9 @@ function toNumber(v: string | number | null | undefined): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-/** `gramajOptions` rotada kurşun adımı yoksa BOŞ verilir (çağıran: `routeGramajOptions`) → varsayılan ön seçilmez. */
-export function initialDocDraft(note: NoteLike, gramajOptions: readonly GramajChoice[]): DocDraft {
+/** `gramajOptions` rotada kurşun adımı yoksa BOŞ verilir (çağıran: `routeGramajOptions`) → varsayılan ön seçilmez.
+ *  S3: müşterinin cari kartındaki varsayılan gramajı istasyonunkinden önce gelir (yalnız ön seçim). */
+export function initialDocDraft(note: NoteLike, gramajOptions: readonly GramajChoice[], customerDefaults: KursunCustomerDefaults = {}): DocDraft {
   const suggested = suggestionFillsOwner(note.ownerSuggestion) ? note.ownerSuggestion!.customerId : null;
   const owner = note.ownerCustomerId ?? suggested;
   return {
@@ -70,9 +74,15 @@ export function initialDocDraft(note: NoteLike, gramajOptions: readonly GramajCh
     meters: toNumber(note.kursunMeters),
     metersSource: note.kursunMetersSource ?? null,
     metersReview: note.kursunMetersReview === true,
-    gramajId: defaultGramajId(gramajOptions),
+    gramajId: customerGramajId(gramajOptions, customerDefaults, owner),
     notes: "",
   };
+}
+
+/** S3: müşteri değişti ve gramaj elle seçilmediyse yeni müşterinin varsayılanı (yoksa istasyonun) ön seçilir. */
+export function reseedOwnerGramaj(prev: DocDraft, next: DocDraft, gramajOptions: readonly GramajChoice[], customerDefaults: KursunCustomerDefaults): DocDraft {
+  if (next.gramajTouched || next.ownerCustomerId === prev.ownerCustomerId) return next;
+  return { ...next, gramajId: customerGramajId(gramajOptions, customerDefaults, next.ownerCustomerId) };
 }
 
 /** Kaydı bekleten nedenler (boş = kaydedilebilir). Review'lı metre DAİMA doğrulama ister. */

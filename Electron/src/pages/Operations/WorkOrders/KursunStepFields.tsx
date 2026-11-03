@@ -9,7 +9,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { GramajChoiceButtons } from "@/components/kursun/GramajChoiceButtons";
 import { PlannedMachineButtons, usePlannedMachines } from "@/components/kursun/PlannedMachineButtons";
-import { defaultGramajId, type GramajOption } from "@/lib/kursun-gramaj";
+import { customerGramajId, type GramajOption, type KursunCustomerDefaults } from "@/lib/kursun-gramaj";
 import type { DesignerStep } from "./RouteDesignerDialog";
 
 /** Kurşun adımı = sunucunun `isKursunStation`ı (StationProperty KURSUN/AUTO); alan yoksa (eski sunucu / WO detayı) PROCESS_QC türü. */
@@ -19,7 +19,8 @@ export function isKursunStep(step: Pick<DesignerStep, "stationKind" | "isKursunS
 
 /**
  * Hedef gramajı kurşun adımının varlığına bağlar: adım ROTAYA GİRİNCE varsayılan ön seçilir
- * (kullanıcı seçimi ezilmez), adım ÇIKINCA hedef temizlenir.
+ * (kullanıcı seçimi ezilmez), adım ÇIKINCA hedef temizlenir. S3: varsayılan = müşterinin cari kartındaki
+ * gramaj, yoksa istasyonunki; müşteri değişince değer hâlâ son ön seçimse yenisine geçer (elle seçim kalır).
  */
 export function useKursunGramajBinding(params: {
   enabled: boolean;
@@ -27,22 +28,34 @@ export function useKursunGramajBinding(params: {
   options: readonly GramajOption[];
   value: string | null;
   setValue: (id: string | null) => void;
+  customerId?: string | null;
+  customerDefaults?: KursunCustomerDefaults;
 }): void {
-  const { enabled, hasKursun, options, value, setValue } = params;
-  const seeded = useRef(false);
-  const defaultId = defaultGramajId(options);
+  const { enabled, hasKursun, options, value, setValue, customerId, customerDefaults } = params;
+  // undefined = henüz ön seçilmedi; aksi halde son OTOMATİK seçilen değer.
+  const seeded = useRef<string | undefined>(undefined);
+  const target = customerGramajId(options, customerDefaults ?? NO_DEFAULTS, customerId);
   useEffect(() => {
     if (!enabled) return;
     if (!hasKursun) {
-      seeded.current = false;
+      seeded.current = undefined;
       if (value !== null) setValue(null);
       return;
     }
-    if (seeded.current || !defaultId) return;
-    seeded.current = true;
-    if (value === null) setValue(defaultId);
-  }, [enabled, hasKursun, defaultId, value, setValue]);
+    if (!target) return;
+    if (seeded.current === undefined) {
+      seeded.current = target;
+      if (value === null) setValue(target);
+      return;
+    }
+    if (target !== seeded.current && value === seeded.current) {
+      seeded.current = target;
+      setValue(target);
+    }
+  }, [enabled, hasKursun, target, value, setValue]);
 }
+
+const NO_DEFAULTS: KursunCustomerDefaults = Object.freeze({});
 
 interface Props {
   step: DesignerStep;

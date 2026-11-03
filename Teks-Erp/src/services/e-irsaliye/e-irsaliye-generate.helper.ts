@@ -21,7 +21,7 @@ import { printedDocumentService, type PrintedDocSnapshot } from "../printed-docu
 import { readShippingDocItemNameMode } from "../system-setting.service";
 import { resolveAdapter } from "./adapters/registry";
 import { buildDespatchAdvice } from "./despatch-advice.builder";
-import { mapSnapshotToDespatchInput } from "./despatch-advice.source";
+import { deliveryToWarnings, mapSnapshotToDespatchInput } from "./despatch-advice.source";
 import { validateDespatchInput, validateDespatchXml } from "./despatch-advice.validate";
 import { eIrsaliyeAuditEntry, loadRecord, recordView, requireReady, sha256Hex, supplierFromLegalIdentity } from "./e-irsaliye-common.helper";
 import { eIrsaliyeCodeLoader, lockEIrsaliyeSeriesTx, nextEIrsaliyeDocumentNo } from "./e-irsaliye-number";
@@ -36,6 +36,7 @@ interface BuiltXml {
   sha256: string;
   docId: string;
   docVersion: number;
+  warnings: string[];
 }
 
 function validationError(hatalar: Array<{ field: string; message: string }>): AppError {
@@ -100,7 +101,8 @@ async function writeXmlVersionTx(
     },
     select: { id: true, version: true },
   });
-  return { xmlId: row.id, version: row.version, sha256, docId: doc.id, docVersion: doc.version };
+  const warnings = deliveryToWarnings(doc.snapshot as unknown as PrintedDocSnapshot);
+  return { xmlId: row.id, version: row.version, sha256, docId: doc.id, docVersion: doc.version, warnings };
 }
 
 /** Tx öncesi: hazırlık + lazy-init (dış yol; tx içinde ÇAĞRILMAZ). */
@@ -137,7 +139,7 @@ export async function generate(id: string, userId: string | null) {
     "e-İrsaliye numarası",
   );
   await AuditService.log(eIrsaliyeAuditEntry("UPDATE", userId, out.rec, { event: "OLUSTURULDU", oncekiDurum: "TASLAK", xmlSha256: out.built.sha256 }));
-  return { kayit: recordView(out.rec), xmlVersion: out.built.version };
+  return { kayit: recordView(out.rec), xmlVersion: out.built.version, warnings: out.built.warnings };
 }
 
 /**
@@ -174,5 +176,5 @@ export async function regenerate(id: string, body: { onay?: boolean }, userId: s
     return { rec: await loadRecord(tx, id), built, from: rec.status };
   });
   await AuditService.log(eIrsaliyeAuditEntry("UPDATE", userId, out.rec, { event: "XML_YENIDEN_URETILDI", oncekiDurum: out.from, xmlSha256: out.built.sha256 }));
-  return { kayit: recordView(out.rec), xmlVersion: out.built.version };
+  return { kayit: recordView(out.rec), xmlVersion: out.built.version, warnings: out.built.warnings };
 }

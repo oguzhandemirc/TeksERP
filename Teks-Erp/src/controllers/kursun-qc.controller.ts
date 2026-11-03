@@ -148,10 +148,7 @@ export class KursunQcController {
       // Okuma ucu: oturum varsa adım oturum istasyonundan çözülür (KQ-D2); enforce
       // YOK — bu uç bugün oturumsuz da çalışıyor (panel/web → bugünkü davranış).
       const stamp = await getStampContext(req);
-      const result = await this.service.getByCardBarcode(
-        req.params.barcode as string,
-        stamp?.stationId ?? null,
-      );
+      const result = await this.service.getByCardBarcode(req.params.barcode as string, stamp?.stationId ?? null, stamp?.machineId ?? null);
       res.status(200).json(result);
     } catch (err) {
       next(err);
@@ -167,7 +164,9 @@ export class KursunQcController {
         .enum(["0", "1"], { message: "includeInspection yalnız 0 ya da 1 olabilir" })
         .optional()
         .parse(req.query.includeInspection);
-      const result = await this.service.getStep(stepId, { includeInspection: includeInspection === "1" });
+      // K16: oturum makinesi (varsa) başka makineye atanmış iş uyarısı için; enforce YOK.
+      const stamp = await getStampContext(req);
+      const result = await this.service.getStep(stepId, { includeInspection: includeInspection === "1", sessionMachineId: stamp?.machineId ?? null });
       res.status(200).json(result);
     } catch (err) {
       next(err);
@@ -179,7 +178,8 @@ export class KursunQcController {
     try {
       // Oturum istasyonu varsa yalnız o istasyonun kartları (KQ-D2); enforce YOK.
       const { q } = stationSearchQuerySchema.parse(req.query);
-      const result = await this.service.listOpenCards((await getStampContext(req))?.stationId ?? null, q ?? null);
+      const stamp = await getStampContext(req);
+      const result = await this.service.listOpenCards(stamp?.stationId ?? null, q ?? null, stamp?.machineId ?? null);
       res.status(200).json(result);
     } catch (err) {
       next(err);

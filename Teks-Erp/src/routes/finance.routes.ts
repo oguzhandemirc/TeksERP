@@ -34,6 +34,7 @@ import { listCashCategoryOptions, readCategoryParam } from "../services/helpers/
 import allocationRoutes from "./finance-allocation.routes";
 import cariHoldRoutes from "./finance-cari-hold.routes";
 import cariMergeRoutes from "./finance-cari-merge.routes";
+import kursunDefaultRoutes from "./finance-kursun-default.routes";
 import expenseAllocationRoutes, { allocationFieldsSchema } from "./finance-expense-allocation.routes";
 import { fetchTcmbRates } from "../jobs/exchange-rate.job";
 
@@ -58,6 +59,8 @@ router.use("/allocations", allocationRoutes);
 // bağlanır; rejim kapısı yukarıdaki `router.use`tan miras.
 router.use("/cari", cariHoldRoutes);
 router.use("/cari", cariMergeRoutes);
+// S3: İE formu ön seçimi; kapı miras (değer cari kartında).
+router.use("/kursun-customer-defaults", kursunDefaultRoutes);
 // Masraf bağı (D4-H3): `/cash-transactions/:id/allocations` + `/expense-allocations/:id/{change,revoke}`; kapı miras.
 router.use(expenseAllocationRoutes);
 
@@ -87,6 +90,8 @@ const cariCreateSchema = z
     // oie-a: müşteriye özel kurşun gram fiyatı (1 gr/m başına metre fiyatı); null = istasyonunki. Para birimiyle birlikte.
     kursunGramPrice: z.union([z.string().max(20), z.number()]).nullable().optional(),
     kursunGramCurrency: z.enum(["TRY", "USD", "EUR", "GBP", "RUB"]).nullable().optional(),
+    // S3: müşteriye özel varsayılan kurşun gramajı; null = istasyon varsayılanı.
+    kursunDefaultValueId: z.string().uuid("Geçersiz gramaj ID").nullable().optional(),
   })
   .strict();
 

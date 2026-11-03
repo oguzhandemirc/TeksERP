@@ -163,6 +163,12 @@ export const kursunQcService = {
       .post<ApiResponse<unknown>>(`/kursun-qc/meter-readings/${encodeURIComponent(readingId)}/pin-ack`, { pin })
       .then((r) => r.data),
 
+  /** K16 "Yine de al": başka makineye atanmış işi bu makinede almanın izi (engel değil, atama değişmez). */
+  takeForeignMachine: (stepId: string): Promise<ApiResponse<{ logged: boolean }>> =>
+    apiClient
+      .post<ApiResponse<{ logged: boolean }>>(`/kursun-qc/step/${encodeURIComponent(stepId)}/foreign-machine-take`, {})
+      .then((r) => r.data),
+
   reopenPreview: (stepId: string): Promise<ApiResponse<ReopenPreview>> =>
     apiClient
       .get<ApiResponse<ReopenPreview>>(`/kursun-qc/reopen-preview/${stepId}`)

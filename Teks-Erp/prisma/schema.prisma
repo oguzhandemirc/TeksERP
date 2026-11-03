@@ -9395,6 +9395,8 @@ model FabricPropertyValue {
   workOrderTargetValues   WorkOrderTargetValue[]
   orderLineTargetValues   OrderLineTargetValue[]
   kursunBypassAssignments KursunBypassAssignment[]
+  /// S3 (fabrika cevabı 14): bu gramajı varsayılan seçen müşteri carileri.
+  cariKursunDefaults      CariAccount[]            @relation("CariKursunDefaultValue")
   /// Gramaj kademesi → hizmet kalemi (H6, "KURŞUN-K2"); yoksa özelliğin eşlemesi.
   serviceItemId           String?                  @db.Uuid
   serviceItem             Item?                    @relation("FabricPropertyValueServiceItem", fields: [serviceItemId], references: [id], onDelete: Restrict)
@@ -10939,8 +10941,12 @@ model CariAccount {
   isActive Boolean @default(true)
 
   /// Müşteriye özel kurşun gram fiyatı (oie-a) — NULL = istasyonunki. Para birimiyle birlikte, CHECK >= 0.
-  kursunGramPrice    Decimal?  @db.Decimal(12, 4)
-  kursunGramCurrency Currency?
+  kursunGramPrice      Decimal?             @db.Decimal(12, 4)
+  kursunGramCurrency   Currency?
+  /// S3 (fabrika cevabı 14, 2026-11-03): müşteriye özel VARSAYILAN kurşun gramajı — kurşun çeşidinin değeri; NULL =
+  /// istasyon varsayılanı (bugünkü). Yalnız İE formunun ön seçimidir; hedef İE'de `WorkOrderTargetValue` olarak donar.
+  kursunDefaultValueId String?              @db.Uuid
+  kursunDefaultValue   FabricPropertyValue? @relation("CariKursunDefaultValue", fields: [kursunDefaultValueId], references: [id], onDelete: Restrict)
 
   /// H8b: müşterinin hizmet faturası tetiği — NULL = fabrika ayarı `finance.serviceBilling.trigger`;
   /// `PER_SHIPMENT` | `PERIOD_END` (DB CHECK). Tek çözücü `resolveCustomerServiceBillingTrigger`.
@@ -10999,6 +11005,7 @@ model CariAccount {
   @@index([kind, isActive])
   @@index([mergedIntoId])
   // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([kursunDefaultValueId])
   @@index([updatedAt, id], map: "cari_accounts_updatedAt_esitleme_idx")
   @@map("cari_accounts")
 }
