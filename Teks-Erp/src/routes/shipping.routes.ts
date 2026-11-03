@@ -837,6 +837,34 @@ router.post("/shipments/:id/add-sacks", verifyToken, WRITE, controller.addSacksT
 router.post("/shipments/:id/remove-sack", verifyToken, WRITE, controller.removeSackFromShipment);
 router.post("/shipments/:id/destination", verifyToken, WRITE, controller.setDestination);
 router.post("/shipments/:id/procedure-code", verifyToken, WRITE, controller.setProcedureCode);
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/delivery-to:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Teslim yeri (başka adrese teslim) — yalnız PLANNED sevkiyat
+ *     description: >
+ *       Sevkiyatın carisi malın sahibi kalır; teslim yeri yalnız belgeye basılan adrestir
+ *       (K18). `deliveryCustomerId: null` teslim yerini kaldırır. Adres boşsa belge doğarken
+ *       teslim carisinin kart adresi basılır.
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               deliveryCustomerId: { type: string, format: uuid, nullable: true }
+ *               deliveryAddress: { type: string, maxLength: 500, nullable: true }
+ *     responses:
+ *       200: { description: Teslim yeri güncellendi }
+ *       400: { description: "Pasif / bulunamayan cari, sevkiyatın kendi carisi ya da carisiz adres (details.code DELIVERY_*)" }
+ *       404: { description: Sevkiyat bulunamadı }
+ *       409: { description: "Sevkiyat sevk edilmiş/iptal (details.code SHIPMENT_NOT_PLANNED)" }
+ */
+router.post("/shipments/:id/delivery-to", verifyToken, WRITE, controller.setDeliveryTo);
 router.get("/shipments/:id/dispatch-note", verifyToken, READ, controller.getDispatchNote);
 router.post("/shipments/:id/dispatch-note", verifyToken, WRITE, controller.setDispatchNote);
 // Araca yüklenen gerçek çuval adedi — operatör beyanı (bayrak kapalıyken 400).

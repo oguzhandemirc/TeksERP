@@ -98,6 +98,8 @@ export const ROOT_FIELDS: FieldDef[] = [
   { yol: "belge.plaka", etiket: "Plaka", tur: "metin", sinif: "musteri", ornek: "34 ABC 123" },
   { yol: "belge.sofor", etiket: "Şoför", tur: "metin", sinif: "musteri", ornek: "Mehmet Yılmaz" },
   { yol: "belge.tasiyici", etiket: "Taşıyıcı", tur: "metin", sinif: "musteri", ornek: "Hızlı Nakliyat" },
+  { yol: "belge.teslim_yeri", etiket: "Teslim yeri (başka adrese teslim)", tur: "metin", sinif: "musteri", ornek: "Renk Boyahanesi Ltd." },
+  { yol: "belge.teslim_adresi", etiket: "Teslim adresi", tur: "metin", sinif: "musteri", ornek: "OSB 3. Cadde No:12, Bursa" },
   ...COMPANY_FIELDS,
   { yol: "karsi_taraf.ad", etiket: "Müşteri adı", tur: "metin", sinif: "musteri", ornek: "Örnek Tekstil A.Ş." },
   { yol: "karsi_taraf.kod", etiket: "Müşteri kodu", tur: "metin", sinif: "musteri", ornek: "M001" },

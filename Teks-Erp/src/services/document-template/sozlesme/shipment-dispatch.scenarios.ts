@@ -57,6 +57,8 @@ export function scenarios(): Scenario<DispatchLiveOptions>[] {
   single.sacks = asRows<Row>(single.sacks).slice(0, 1);
   single.cekiRows = asRows<Row>(single.cekiRows).slice(0, 1);
   single.totals = { totalRolls: 3, totalMeters: 480, totalKg: 42.5, sackCount: 1 };
+  // Teslim yeri adressiz (K18): yalnız ad basılır.
+  single.header = { ...hdr, deliveryTo: { name: "Renk Boyahanesi Ltd.", address: null } };
 
   const multi = multiPageDoc();
 
@@ -81,6 +83,7 @@ export function scenarios(): Scenario<DispatchLiveOptions>[] {
     destination: "EXPORT",
     procedureCode: "GTIP-5512.19",
     orderNos: Array.from({ length: 30 }, (_, i) => `SIP-2026-${String(i + 100).padStart(4, "0")}`).join(", "),
+    deliveryTo: { name: longText("Boya & Apre <Sanayi> \"Renk\" Boyahanesi"), address: longText("Organize Sanayi Bölgesi 3. Cadde No:12 & Depo <B>", 200) },
   };
   long.products = asRows<Row>(long.products).map((p) => ({ ...p, name: longText(String(p.name), 160) }));
   long.cekiRows = asRows<Row>(long.cekiRows).map((c) => ({ ...c, desen: longText(String(c.desen), 120) }));

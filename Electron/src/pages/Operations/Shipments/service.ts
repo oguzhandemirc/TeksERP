@@ -8,6 +8,7 @@ import type {
   BranchLookupItem,
 } from "./types";
 import type { ShipmentRollList } from "./rollListExport";
+import type { DeliveryToState } from "./delivery-to/deliveryTo";
 
 // Liste + cursor: createCrudService (GET /api/shipping/shipments?mode=cursor...).
 // Detay ayrı tip (zengin) → getDetail. Backend listShipments cursor'u non-breaking.
@@ -52,6 +53,15 @@ export const shipmentService = {
   setDispatchNote: (id: string, dispatchNote: string | null): Promise<ApiResponse<unknown>> =>
     apiClient
       .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/dispatch-note`, { dispatchNote })
+      .then((r) => r.data),
+
+  /** Teslim yeri (K18) — yalnız PLANNED; cari yoksa ikisi null gider (teslim yerini kaldırır). */
+  setDeliveryTo: (id: string, v: DeliveryToState): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/delivery-to`, {
+        deliveryCustomerId: v.customerId,
+        deliveryAddress: v.customerId ? v.address.trim() || null : null,
+      })
       .then((r) => r.data),
 
   /** Araca yüklenen gerçek çuval adedi — `null` beyanı kaldırır.
