@@ -53,6 +53,10 @@ export interface StationCapabilityProperty {
   values: { code: string; name: string; isActive: boolean }[];
   /** Bu özellik hangi bayrağın çeşidi? (KQ-D4; eski backend göndermez → undefined) */
   variantOfPropertyId?: string | null;
+  /** K22: İE rota adımında ön seçili gelsin mi (OPTIONAL'da anlamlı). Eski backend göndermez. */
+  defaultOn?: boolean;
+  /** K22: ön seçilecek değer (özelliğin ya da çeşidinin); eski backend göndermez. */
+  defaultValueId?: string | null;
 }
 
 /**
