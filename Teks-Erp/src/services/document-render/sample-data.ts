@@ -67,6 +67,8 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
       driverName: "Mehmet Yılmaz",
       carrier: "Hızlı Nakliyat",
       orderNos: "SIP-2026-0107",
+      // Teslim yeri (K18) — önizlemede blok görünsün; gerçek belgede yalnız seçildiyse basılır.
+      deliveryTo: { name: "Renk Boyahanesi Ltd.", address: "OSB 3. Cadde No:12, Nilüfer, Bursa" },
     },
     products: [
       // `customerName` = müşterideki ad (2026-09-04). İkinci satırda BİLEREK YOK:

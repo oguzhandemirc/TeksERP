@@ -4410,6 +4410,8 @@ model Customer {
   colorAliases      CustomerColorAlias[]
   itemColorAliases  CustomerItemColorAlias[]
   shipments         Shipment[]
+  /// Teslim yeri olarak gösterildiği sevkiyatlar (K18) — cari kimliği tek, rol bayrağı YOK.
+  deliveryShipments Shipment[]                @relation("ShipmentDeliveryCustomer")
   sacks             Sack[]
   packingGroups     PackingGroup[]
   rollReturns       RollReturn[]
@@ -8849,8 +8851,16 @@ model Shipment {
   invoicedAt   DateTime? @db.Timestamptz
   invoicedById String?   @db.Uuid
 
+  /// TESLİM YERİ (K18, 2026-11-03) — mal carinin değil BAŞKA bir carinin adresine gider
+  /// (ör. boyahane). Sahiplik/cari DEĞİŞMEZ (`customerId` malın sahibi kalır, OWNER_MISMATCH
+  /// kapısı aynen). Yalnız PLANNED'de yazılır; belge snapshot'ına DOĞARKEN donar. NULL = bugünkü.
+  deliveryCustomerId String? @db.Uuid
+  /// Serbest teslim adresi; NULL ise belge doğarken teslim carisinin kart adresi basılır.
+  deliveryAddress    String? @db.VarChar(500)
+
   // Relations
   customer           Customer            @relation(fields: [customerId], references: [id])
+  deliveryCustomer   Customer?           @relation("ShipmentDeliveryCustomer", fields: [deliveryCustomerId], references: [id], onDelete: Restrict)
   dispatchedBy       User?               @relation("ShipmentDispatchedBy", fields: [dispatchedById], references: [id])
   invoicedBy         User?               @relation("ShipmentInvoicedBy", fields: [invoicedById], references: [id])
   branch             CustomerBranch?     @relation(fields: [branchId], references: [id])
@@ -8902,6 +8912,7 @@ model Shipment {
 
   @@index([customerId, status])
   @@index([branchId])
+  @@index([deliveryCustomerId])
   @@index([status, createdAt])
   // Muhasebe listesi sevk tarihine göre sıralanır (status=DISPATCHED sabit filtre) →
   // eşitlik kolonu önce, sıralama kolonu sonra (perf kuralı 2).

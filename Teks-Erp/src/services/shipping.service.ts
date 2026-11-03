@@ -183,6 +183,7 @@ import {
 } from "../utils/cursor";
 import { assertWorkOrderBound } from "./helpers/dispatch-header.helper";
 import { assertOwnerMatchesTx, previewOwnerMismatches } from "./helpers/emanet-owner.helper";
+import { DELIVERY_TO_SELECT, deliveryToSnapshot, formatCustomerAddress, resolveDeliveryToTx, type DeliveryToInput, type DeliveryToValue } from "./helpers/shipment-delivery.helper";
 import { emanetShipmentReleaseTx } from "./helpers/emanet-shipment.helper";
 import { assertShipmentNotHeldTx, cariHoldWarning, shipmentHoldNotice } from "./helpers/cari-hold.helper";
 import { boardTotalsWithHold } from "./helpers/sack-store-board.helper";
@@ -2313,7 +2314,7 @@ export class ShippingService {
   }
 
   private async createShipmentInner(
-    data: { sackIds: string[]; customerId: string; branchId?: string | null; orderIds?: string[]; orderless?: boolean; destination?: ShipmentDestination; destinationChosen?: boolean; procedureCode?: string | null; plateNumber?: string | null; driverName?: string | null; carrier?: string | null; clientToken?: string | null },
+    data: { sackIds: string[]; customerId: string; branchId?: string | null; orderIds?: string[]; orderless?: boolean; destination?: ShipmentDestination; destinationChosen?: boolean; procedureCode?: string | null; plateNumber?: string | null; driverName?: string | null; carrier?: string | null; clientToken?: string | null } & DeliveryToInput,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
     const sackIds = [...new Set(data.sackIds)];
@@ -2346,6 +2347,8 @@ export class ShippingService {
         requestedDestination: data.destination, destinationChosen: data.destinationChosen === true,
         assertDestination: (d) => assertSacksWeighed(sacks, d, weighRequired),
         procedureCode: data.procedureCode,
+        deliveryCustomerId: data.deliveryCustomerId,
+        deliveryAddress: data.deliveryAddress,
         plateNumber: data.plateNumber,
         driverName: data.driverName,
         carrier: data.carrier,
@@ -2433,6 +2436,9 @@ export class ShippingService {
       /** Çözülen yönle koşan kapı (tartı) — tx içinde, yazımdan önce. */
       assertDestination: (destination: ShipmentDestination, lockSource: ShipmentDestinationSource | null) => void;
       procedureCode?: string | null;
+      /** Teslim yeri (K18) — yoksa null; belge snapshot'ı aynı tx'te doğarsa donar. */
+      deliveryCustomerId?: string | null;
+      deliveryAddress?: string | null;
       plateNumber?: string | null;
       driverName?: string | null;
       carrier?: string | null;
@@ -2465,6 +2471,7 @@ export class ShippingService {
       userId: p.userId,
     });
     p.assertDestination(yon.destination, yon.lockSource);
+    const teslim = await resolveDeliveryToTx(tx, p.customerId, { deliveryCustomerId: p.deliveryCustomerId, deliveryAddress: p.deliveryAddress });
     const shipmentNo = await nextShipmentNo(tx);
     const created = await tx.shipment.create({
       // ⚠️ Künye (Faz A2) `dispatchedById`den FARKLI bilgidir: sevkiyat
@@ -2478,6 +2485,8 @@ export class ShippingService {
         status: ShipmentStatus.PLANNED,
         destination: yon.destination,
         procedureCode: p.procedureCode?.trim() || null,
+        deliveryCustomerId: teslim.deliveryCustomerId,
+        deliveryAddress: teslim.deliveryAddress,
         // Sıra ön eki burada DONAR — ekran ve belge bu kolonu okur.
         sackSeqPrefix: await readShippingSackSeqPrefix(tx),
         createdById: p.userId ?? null,
@@ -2738,7 +2747,7 @@ export class ShippingService {
       driverName?: string | null;
       carrier?: string | null;
       clientToken?: string | null;
-    },
+    } & DeliveryToInput,
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
     const rollIds = [...new Set(data.rollIds)];
@@ -2841,6 +2850,8 @@ export class ShippingService {
             destinationChosen: data.destinationChosen === true,
             assertDestination: assertQuickShipAllowed,
             procedureCode: data.procedureCode,
+            deliveryCustomerId: data.deliveryCustomerId,
+            deliveryAddress: data.deliveryAddress,
             plateNumber: data.plateNumber,
             driverName: data.driverName,
             carrier: data.carrier,
@@ -3198,6 +3209,32 @@ export class ShippingService {
     });
     await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "PROCEDURE_CODE", procedureCode: code } });
     return { success: true, data: { shipmentId, procedureCode: code }, message: "Prosedür kodu güncellendi" };
+  }
+
+  /**
+   * Teslim yeri (K18) — yalnız PLANNED sevkiyatta yazılır/değişir/temizlenir. Atomik claim
+   * `{id, status: PLANNED}`: sevk edilmişte belge donmuştur, değer artık değişmez (409).
+   */
+  async setDeliveryTo(shipmentId: string, input: DeliveryToInput, userId?: string): Promise<ApiResponse<DeliveryToValue>> {
+    const value = await prisma.$transaction(async (tx) => {
+      const sh = await tx.shipment.findUnique({ where: { id: shipmentId }, select: { customerId: true } });
+      if (!sh) throw AppError.notFound("Sevkiyat bulunamadı");
+      const v = await resolveDeliveryToTx(tx, sh.customerId, input);
+      const claimed = await tx.shipment.updateMany({
+        where: { id: shipmentId, status: ShipmentStatus.PLANNED },
+        data: { deliveryCustomerId: v.deliveryCustomerId, deliveryAddress: v.deliveryAddress, updatedById: userId ?? null },
+      });
+      if (claimed.count === 0) {
+        throw AppError.conflict("Teslim yeri yalnız sevk edilmemiş (planlanan) sevkiyatta değiştirilebilir.", { code: "SHIPMENT_NOT_PLANNED" });
+      }
+      return v;
+    });
+    await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "DELIVERY_TO", ...value } });
+    return {
+      success: true,
+      data: value,
+      message: value.deliveryCustomerId ? "Teslim yeri güncellendi" : "Teslim yeri kaldırıldı",
+    };
   }
 
   /** İrsaliye açıklaması (annotation) — sevkiyat DURUMU fark etmez, her an düzenlenir
@@ -4826,6 +4863,8 @@ export class ShippingService {
         sackSeqPrefix: true,
         customer: { select: { id: true, code: true, name: true } },
         branch: { select: { id: true, code: true, name: true } },
+        deliveryAddress: true,
+        deliveryCustomer: { select: { id: true, code: true, name: true, address: true, district: true, city: true, country: true } },
         orders: {
           select: {
             order: {
@@ -5102,6 +5141,11 @@ export class ShippingService {
         dispatchedAt: shipment.dispatchedAt,
         customer: shipment.customer,
         branch: shipment.branch,
+        // Teslim yeri (K18): kayıtlı adres; boşsa `deliveryCustomer.address` kart adresinin tek satırı (belge de bunu basar).
+        deliveryCustomer: shipment.deliveryCustomer
+          ? { id: shipment.deliveryCustomer.id, code: shipment.deliveryCustomer.code, name: shipment.deliveryCustomer.name, address: formatCustomerAddress(shipment.deliveryCustomer) }
+          : null,
+        deliveryAddress: shipment.deliveryAddress,
         orders,
         rolls: grossShipmentRolls,
         swatches: shipment.swatches,
@@ -5553,6 +5597,7 @@ async function collectShipmentDocContent(
       customerId: true,
       customer: { select: { code: true, name: true, taxNumber: true, exportCode: true } },
       branch: { select: { code: true, name: true } },
+      ...DELIVERY_TO_SELECT,
       orders: { select: { orderId: true, order: { select: { orderNumber: true } } } },
       sacks: {
         orderBy: { seq: "asc" },
@@ -5776,12 +5821,14 @@ async function collectShipmentDocContent(
   const totalMeters = Number(sackRows.reduce((s, r) => s.plus(r.totalMeters), D0()));
   const totalKg = Number(sackRows.reduce((s, r) => s.plus(r.totalKg), D0()));
   const orderNos = [...new Set(sh.orders.map((o) => o.order.orderNumber))].join(", ");
+  // Teslim yeri (K18) DOĞARKEN donar; yoksa anahtar HİÇ yazılmaz (snapshot bayt bayt bugünkü).
+  const deliveryTo = deliveryToSnapshot(sh);
 
   return {
     // branchCode = şube ihracat kodu; customerExportCode = şirket ihracat kodu.
     // Belgede TEK "İhracat Kodu" satırı basılır: `exportCode` DOĞUŞTA çözülür (yalnız
     // yurtdışında dolu; yurtiçi snapshot'a kod girmez) — "exportCode" toggle'ıyla açılıp kapanır.
-    header: { shipmentNo: sh.shipmentNo, customerName: sh.customer.name, customerCode: sh.customer.code, customerTaxNumber: sh.customer.taxNumber ?? null, branchName: sh.branch?.name ?? null, branchCode: sh.branch?.code ?? null, customerExportCode: sh.customer.exportCode ?? null, exportCode: exportCodeForDestination(sh.destination, { branchCode: sh.branch?.code, customerExportCode: sh.customer.exportCode }), procedureCode: sh.procedureCode, destination: sh.destination, status: sh.status, date: (sh.dispatchedAt ?? sh.createdAt).toISOString(), plateNumber: sh.plateNumber, driverName: sh.driverName, carrier: sh.carrier, orderNos },
+    header: { shipmentNo: sh.shipmentNo, customerName: sh.customer.name, customerCode: sh.customer.code, customerTaxNumber: sh.customer.taxNumber ?? null, branchName: sh.branch?.name ?? null, branchCode: sh.branch?.code ?? null, customerExportCode: sh.customer.exportCode ?? null, exportCode: exportCodeForDestination(sh.destination, { branchCode: sh.branch?.code, customerExportCode: sh.customer.exportCode }), procedureCode: sh.procedureCode, destination: sh.destination, status: sh.status, date: (sh.dispatchedAt ?? sh.createdAt).toISOString(), plateNumber: sh.plateNumber, driverName: sh.driverName, carrier: sh.carrier, orderNos, ...(deliveryTo ? { deliveryTo } : {}) },
     products,
     sacks: sackRows,
     cekiRows,
