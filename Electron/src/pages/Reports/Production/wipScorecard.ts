@@ -115,8 +115,8 @@ export function buildWipExport(opts: { sc: WipScorecard; periodLabel: string; ow
         notes: [
           // Liste ilk 25 ile sınırlı; toplam sayıyı yazmazsak "25 tane var"
           // sanılır — sessiz kırpma, kapsamı olduğundan küçük gösterir.
-          `Toplam ${sc.summary.neverStartedWorkOrders} terbiye iş emri; liste en eski 25 tanesini gösterir.`,
-          "Açılmış ama hiç malzeme girmemiş canlı terbiye iş emirleri. Planlama backlog'u da olabilir, unutulmuş iş de — rapor yorumlamaz, sayar.",
+          `Toplam ${sc.summary.neverStartedWorkOrders} ${TERIM.terbiyeIsEmri.tekilKucuk}; liste en eski 25 tanesini gösterir.`,
+          `Açılmış ama hiç malzeme girmemiş canlı ${TERIM.terbiyeIsEmri.cogulKucuk}. Planlama backlog'u da olabilir, unutulmuş iş de — rapor yorumlamaz, sayar.`,
         ],
       },
     ],

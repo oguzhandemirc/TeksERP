@@ -2,6 +2,7 @@
 import type { ReasonPreset } from '../../../services/reasonPreset.service';
 import type { ReasonPresetValue } from '../../../components/reasonPresets/ReasonPresetPicker';
 import type { TargetColorPreview } from '../../../services/workOrder.service';
+import { TERIM } from '../../../lib/terim';
 
 export const MIN_REASON_LENGTH = 3;
 
@@ -55,8 +56,8 @@ export function tabletCancelAllowed(
 
 /** Top Çıkar toplu sonucu: kaçı çıktı, kaçı reddedildi (ilk sebep), iş emri Planlandı'ya döndü mü. */
 export function detachResultMessage(ok: number, failed: string[], reverted: boolean): { type: 'success' | 'error'; text: string } {
-  const head = ok > 0 ? `${ok} top terbiye iş emrinden çıkarıldı` : 'Hiçbir top çıkarılamadı';
+  const head = ok > 0 ? `${ok} top ${TERIM.terbiyeIsEmri.cekimKucuk.ayrilma} çıkarıldı` : 'Hiçbir top çıkarılamadı';
   const tail = failed.length > 0 ? ` · ${failed.length} top çıkarılamadı: ${failed[0]}` : '';
-  const rev = reverted ? ' · terbiye iş emrinde top kalmadı, Planlandı\'ya döndü' : '';
+  const rev = reverted ? ` · ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} top kalmadı, Planlandı\'ya döndü` : '';
   return { type: failed.length > 0 ? 'error' : 'success', text: head + rev + tail };
 }

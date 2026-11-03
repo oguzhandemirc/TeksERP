@@ -8,6 +8,7 @@ import { RouteFormDialog } from "./RouteFormDialog";
 import type { ProductionRoute } from "./types";
 import { type RouteFormValues } from "./schema";
 import type { RoutesNavState } from "@/pages/Operations/WorkOrders/oie/nav";
+import { TERIM } from "@/lib/terim";
 
 interface StepCreate {
   stationId: string;
@@ -73,7 +74,7 @@ export function RoutesPage() {
   return (
     <CrudPage<ProductionRoute>
       title="Üretim Rotaları"
-      description="Terbiye iş emri şablonları — sık kullanılan istasyon sıralarını burada tanımla."
+      description={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} şablonları — sık kullanılan istasyon sıralarını burada tanımla.`}
       entityName="Rota"
       importEntity="route"
       queryKey="routes"

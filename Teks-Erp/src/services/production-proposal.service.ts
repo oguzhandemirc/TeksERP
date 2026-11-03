@@ -27,6 +27,7 @@ import { WorkOrderService, type WorkOrderCreateInput } from "./workorder.service
 import { readDevereEnabled, readDokumaEnabled, readOrderProductionProposal, readProductionEnabled, SETTING_KEYS } from "./system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
 import { settingRowPath } from "../constants/panel-ayar-yolu";
+import { TERIM } from "../constants/terim";
 
 /** Route'un izin kataloğundan çözdüğü erişim (anahtar-kapsamlı; servis izin okumaz). */
 export interface ProposalAccess {
@@ -166,7 +167,7 @@ async function createSelectedTx(tx: Prisma.TransactionClient, fresh: ProductionP
   for (const sel of input.workOrders) {
     const g = fresh.workOrders.find((x) => x.key === sel.key);
     assertSelectionCurrent(fresh, "WORK_ORDER", sel, g);
-    if (g?.blockedCode) throw AppError.conflict("Bu terbiye iş emri grubunun rotası çözülemedi; formdan açın.", { code: g.blockedCode, key: sel.key });
+    if (g?.blockedCode) throw AppError.conflict(`Bu ${TERIM.terbiyeIsEmri.tekilKucuk} grubunun rotası çözülemedi; formdan açın.`, { code: g.blockedCode, key: sel.key });
     const prep = await workOrderService.prepareCreate(workOrderInput(sel, input.clientToken, g));
     out.workOrders.push({ wo: await workOrderService.insertPreparedTx(tx, prep, userId, tx), prep });
   }
@@ -181,7 +182,7 @@ function assertApplyAllowed(input: ProposalApplyInput, scope: ProposalScope, acc
     throw AppError.forbidden("Dokuma iş emirlerini görme yetkiniz yok.", { code: "PERMISSION_DENIED", required: "weavingorder:read" });
   }
   if (input.weavingOrders.length > 0 && !access.writeWeaving) throw AppError.forbidden("Dokuma iş emri oluşturma yetkiniz yok.", { code: "PERMISSION_DENIED", required: "weavingorder:write" });
-  if (input.workOrders.length > 0 && !access.writeWorkOrder) throw AppError.forbidden("Terbiye iş emri oluşturma yetkiniz yok.", { code: "PERMISSION_DENIED", required: "workorder:write" });
+  if (input.workOrders.length > 0 && !access.writeWorkOrder) throw AppError.forbidden(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} oluşturma yetkiniz yok.`, { code: "PERMISSION_DENIED", required: "workorder:write" });
 }
 
 export async function applyProductionProposal(

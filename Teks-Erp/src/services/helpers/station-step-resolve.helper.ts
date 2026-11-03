@@ -24,6 +24,7 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { ACTIVE_MOVEMENT } from "./roll-movement.helper";
 import { STEP_FLOW_WHERE } from "./quality-station.helper";
+import { TERIM } from "../../constants/terim";
 
 export type StationStepResolveMode = "SESSION" | "LEGACY";
 
@@ -69,7 +70,7 @@ async function resolveLegacyFlowStep(workOrderId: string): Promise<string> {
     select: { id: true, status: true, station: { select: { name: true } } },
   });
   if (!firstStep) {
-    throw AppError.notFound("Bu terbiye iş emrinde PROCESS_QC adımı tanımlı değil");
+    throw AppError.notFound(`Bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} PROCESS_QC adımı tanımlı değil`);
   }
   if (firstStep.status === StepStatus.COMPLETED) return firstStep.id;
 
@@ -89,13 +90,13 @@ async function resolveLegacyFlowStep(workOrderId: string): Promise<string> {
   });
   if (stepsWithRolls.length === 0) {
     throw AppError.badRequest(
-      `Bu terbiye iş emrinin "${firstStep.station.name}" adımında işlenecek top yok ve şu an aktif başka bir adım da yok. (Üretim henüz başlamamış veya bitmiş.)`,
+      `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} "${firstStep.station.name}" adımında işlenecek top yok ve şu an aktif başka bir adım da yok. (Üretim henüz başlamamış veya bitmiş.)`,
     );
   }
   const stepNames = stepsWithRolls
     .map((s) => `${s.station.name} (${s._count.currentRolls} rulo)`)
     .join(", ");
   throw AppError.badRequest(
-    `Bu terbiye iş emrinin "${firstStep.station.name}" adımında şu an açık top yok. Mevcut konum: ${stepNames}. Tabletinizi yanlış istasyonda okutmuş olabilirsiniz.`,
+    `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} "${firstStep.station.name}" adımında şu an açık top yok. Mevcut konum: ${stepNames}. Tabletinizi yanlış istasyonda okutmuş olabilirsiniz.`,
   );
 }

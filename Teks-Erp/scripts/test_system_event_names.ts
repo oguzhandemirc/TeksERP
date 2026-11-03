@@ -127,7 +127,8 @@ const etiketSrc = fs.readFileSync(ETIKET, "utf8");
 const blok = etiketSrc.match(/export const EVENT_ACTION_LABELS[^{]*\{([\s\S]*?)\n\};/);
 check("EVENT_ACTION_LABELS okunabildi", blok !== null);
 const etiketler = new Set(
-  [...(blok ? blok[1]! : "").matchAll(/^\s{2}([A-Z][A-Z0-9_]*)\s*:/gm)].map((m) => m[1]!),
+  // Terim-rejimli etiket getter da sözlük anahtarıdır: `get WORK_ORDER_X() { ... }`.
+  [...(blok ? blok[1]! : "").matchAll(/^\s{2}(?:get\s+)?([A-Z][A-Z0-9_]*)\s*(?::|\(\))/gm)].map((m) => m[1]!),
 );
 check(`etiket sözlüğü dolu (${etiketler.size})`, etiketler.size >= 45, `${etiketler.size}`);
 const etiketsiz = ALL_EVENT_NAMES.filter((a) => !etiketler.has(a));

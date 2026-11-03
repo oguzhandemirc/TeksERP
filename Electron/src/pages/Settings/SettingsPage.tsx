@@ -22,6 +22,7 @@ import { BildirimTercihKarti } from "@/components/bildirim/BildirimTercihKarti";
 import { WebTotpPreferenceCard } from "./WebTotpPreferenceCard";
 import { TrustedDevicesCard } from "@/components/auth/TrustedDevicesCard";
 import { authService } from "@/services/authService";
+import { TERIM } from "@/lib/terim";
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -106,7 +107,7 @@ export function SettingsPage() {
               </p>
             </div>
             <div>
-              <p className="text-sm font-medium">Terbiye iş emrinde fason firma varsayılanı</p>
+              <p className="text-sm font-medium">{TERIM.terbiyeIsEmri.cumleBasi.bulunma} fason firma varsayılanı</p>
               <p className="pb-2 text-xs text-muted-foreground">
                 Rotaya fason adımı eklediğinde hangi firma hazır gelsin?
               </p>

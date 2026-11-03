@@ -27,6 +27,7 @@ import { canUnlinkOrderLine } from './canUnlinkOrderLine';
 import { colors, spacing, radius } from '../../../theme';
 import { showScreenError } from '../../../lib/screenToast';
 import { calendarLocaleDateString } from '../../../lib/factory-time';
+import { TERIM } from '../../../lib/terim';
 
 const PAGE_SIZE = 20;
 // OrderLinkPicker ile aynı gerekçe: "yazmayı bıraktım" sinyali, hecede bir istek değil.
@@ -241,13 +242,13 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
       const q: string[] = [];
       if (mm.colorDiff) {
         q.push(
-          `Terbiye iş emri ${woTarget.colorName ?? 'RENKSİZ'} üretiyor, sipariş ${line.colorName ?? 'RENKSİZ'} istiyor. ` +
+          `${TERIM.terbiyeIsEmri.cumleBasi.yalin} ${woTarget.colorName ?? 'RENKSİZ'} üretiyor, sipariş ${line.colorName ?? 'RENKSİZ'} istiyor. ` +
             `Elindeki kumaş GERÇEKTEN ${line.colorName ?? 'RENKSİZ'} mi?`,
         );
       }
       if (mm.widthDiff) {
         q.push(
-          `Terbiye iş emri ${woTarget.width ?? '—'} cm, sipariş ${line.width ?? '—'} cm istiyor. ` +
+          `${TERIM.terbiyeIsEmri.cumleBasi.yalin} ${woTarget.width ?? '—'} cm, sipariş ${line.width ?? '—'} cm istiyor. ` +
             `Elindeki en GERÇEKTEN ${line.width ?? '—'} cm mi?`,
         );
       }
@@ -272,7 +273,7 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
         Toast.show({
           type: 'info',
           text1: 'Kumaş farklı — bağlanamaz',
-          text2: 'Topun cinsi düzeltilemez; bu sipariş için doğru kumaşlı terbiye iş emri gerekir.',
+          text2: `Topun cinsi düzeltilemez; bu sipariş için doğru kumaşlı ${TERIM.terbiyeIsEmri.tekilKucuk} gerekir.`,
         });
         return;
       }
@@ -377,7 +378,7 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
             ) : unlinkVerdict.becomesStock ? (
               // Son bağ: engel değil, SONUÇ — operatör tipin değişeceğini önden görsün.
               <Text style={styles.lastLinkNote} numberOfLines={2}>
-                Son bağ — kaldırılırsa terbiye iş emri Stok üretimine döner.
+                Son bağ — kaldırılırsa {TERIM.terbiyeIsEmri.tekilKucuk} Stok üretimine döner.
               </Text>
             ) : null}
           </View>
@@ -465,7 +466,7 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
                   ? `${wo.workOrderNumber} — ${woTarget.itemName ?? 'ürün belirsiz'} · ${
                       woTarget.colorName ?? 'renksiz'
                     }${woTarget.width != null ? ` · ${woTarget.width}cm` : ''}`
-                  : 'Terbiye iş emri yükleniyor…'}
+                  : `${TERIM.terbiyeIsEmri.cumleBasi.yalin} yükleniyor…`}
               </Text>
             </View>
             <RefreshButton
@@ -552,7 +553,7 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
               renderItem={renderLinkedRow}
               ListEmptyComponent={
                 <Text style={styles.empty}>
-                  Bu terbiye iş emrine bağlı sipariş yok.{'\n'}
+                  Bu {TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlı sipariş yok.{'\n'}
                   Stok için üretim olabilir — bağlamak istersen "Uygun" sekmesine bak.
                 </Text>
               }
@@ -564,7 +565,7 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
               renderItem={renderLinkableRow}
               ListEmptyComponent={
                 <Text style={styles.empty}>
-                  Bu terbiye iş emrinin hedefiyle uyumlu açık sipariş yok.{'\n'}
+                  Bu {TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedefiyle uyumlu açık sipariş yok.{'\n'}
                   "Tüm Siparişler" sekmesinden arayabilirsin.
                 </Text>
               }
@@ -593,7 +594,7 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
         visible={!!confirmLink}
         onDismiss={() => setConfirmLink(null)}
         title="Siparişi bağla"
-        description={`${confirmLink?.label ?? ''} bu terbiye iş emrine bağlanacak. Hedef/rota/metraj DEĞİŞMEZ.`}
+        description={`${confirmLink?.label ?? ''} bu ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlanacak. Hedef/rota/metraj DEĞİŞMEZ.`}
         confirmLabel="Bağla"
         confirming={linkMut.isPending}
         onConfirm={() => {
@@ -618,7 +619,7 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
               </Text>
             ))}
             <Text style={styles.questionNote}>
-              Onaylarsan terbiye iş emrinin hedefi VE bu terbiye iş emrindeki düzeltilebilir TÜM
+              Onaylarsan {TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedefi VE bu {TERIM.terbiyeIsEmri.cekimKucuk.bulunma}ki düzeltilebilir TÜM
               toplar siparişin değerine çekilir, sonra bağ kurulur. Karar sebeple
               kayda geçer.
             </Text>
@@ -645,8 +646,8 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
         onDismiss={() => setConfirmUnlink(null)}
         title="Sipariş bağını kaldır"
         description={
-          `«${confirmUnlink?.label ?? ''}» bağı kaldırılacak. Bu terbiye iş emrinin karşılanma tablosu ve refakat kartındaki sipariş bilgisi etkilenir.` +
-          (unlinkVerdict.becomesStock ? ' Bu son bağ: terbiye iş emri Stok üretimine dönecek.' : '')
+          `«${confirmUnlink?.label ?? ''}» bağı kaldırılacak. Bu ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} karşılanma tablosu ve refakat kartındaki sipariş bilgisi etkilenir.` +
+          (unlinkVerdict.becomesStock ? ` Bu son bağ: ${TERIM.terbiyeIsEmri.tekilKucuk} Stok üretimine dönecek.` : '')
         }
         confirmLabel="Kaldır"
         confirming={unlinkMut.isPending}

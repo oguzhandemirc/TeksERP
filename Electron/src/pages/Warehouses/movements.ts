@@ -18,6 +18,7 @@
 // =============================================================================
 import { formatNumber } from "@/lib/format";
 import { factoryLocaleString } from "@/lib/factory-time";
+import { TERIM } from "@/lib/terim";
 
 /**
  * Backend `WarehouseEventType` enum'unun aynası (Electron backend'i import edemez).
@@ -126,7 +127,7 @@ export const WAREHOUSE_EVENT_META = {
   // cevaplıyor; bu beş tip malın stok kümesine giriş/çıkışını taşır.
   PRODUCTION: {
     label: "Üretim",
-    hint: "Üretimden depoya indi ya da depodan üretime alındı — terbiye iş emri hareketi.",
+    get hint() { return `Üretimden depoya indi ya da depodan üretime alındı — ${TERIM.terbiyeIsEmri.tekilKucuk} hareketi.`; },
   },
   EXTERNAL: {
     label: "Dış işlem",

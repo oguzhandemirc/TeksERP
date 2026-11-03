@@ -10,7 +10,7 @@ export interface ReadyWorksTab {
 }
 
 const ALL_TABS: ReadyWorksTab[] = [
-  { unit: "workOrder", label: TERIM.terbiyeIsEmri.tekil },
+  { unit: "workOrder", get label() { return TERIM.terbiyeIsEmri.tekil; } },
   { unit: "deliveryNote", label: "Gelen belge" },
   { unit: "customerBatch", label: "Parti" },
   { unit: "customer", label: "Müşteri" },

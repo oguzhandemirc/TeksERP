@@ -23,6 +23,7 @@ import {
 import type { ProductionRoute } from "./types";
 
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
+import { TERIM } from "@/lib/terim";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -145,9 +146,9 @@ export function RouteFormDialog({
         <DialogHeader>
           <DialogTitle>{isEdit ? "Rotayı Düzenle" : "Yeni Üretim Rotası"}</DialogTitle>
           <DialogDescription>
-            Terbiye iş emrinde kullanılacak istasyon sırasını tanımla. Adımlar sürüklenip yeniden
+            {TERIM.terbiyeIsEmri.cumleBasi.bulunma} kullanılacak istasyon sırasını tanımla. Adımlar sürüklenip yeniden
             sıralanabilir. Her adımda o istasyonun uygulayabildiği renk/özellikler seçilirse
-            terbiye iş emri açılışında hedef alanlar hazır gelir.
+            {TERIM.terbiyeIsEmri.tekilKucuk} açılışında hedef alanlar hazır gelir.
           </DialogDescription>
         </DialogHeader>
 

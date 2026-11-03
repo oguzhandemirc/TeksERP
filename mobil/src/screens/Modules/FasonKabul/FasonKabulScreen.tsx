@@ -129,6 +129,7 @@ import type { MainStackParamList } from '../../../navigation/types';
 import { foldSearchText } from '../../../utils/searchFold';
 import { showScreenError } from '../../../lib/screenToast';
 import { formatFactory } from '../../../lib/factory-time';
+import { TERIM } from '../../../lib/terim';
 
 const RECEIPTS_PAGE_SIZE = 12;
 const DRAFT_KEY = 'fason_kabul_draft_v1';
@@ -639,7 +640,7 @@ export default function FasonKabulScreen() {
         qc.invalidateQueries({ queryKey: ['work-orders'] });
         Toast.show({
           type: 'error',
-          text1: 'Terbiye iş emrinin rengi değişti',
+          text1: `${TERIM.terbiyeIsEmri.cumleBasi.ilgi} rengi değişti`,
           text2: err.message,
           visibilityTime: 7000,
         });
@@ -1016,7 +1017,7 @@ export default function FasonKabulScreen() {
           type: 'error',
           text1:
             details?.code === 'WO_NOT_AT_SUBCONTRACTOR'
-              ? 'Bu terbiye iş emri fasonda değil'
+              ? `Bu ${TERIM.terbiyeIsEmri.tekilKucuk} fasonda değil`
               : 'Bekleyen kabul bulunamadı',
           text2: e.message,
           visibilityTime: 6000,
@@ -1031,7 +1032,7 @@ export default function FasonKabulScreen() {
         Toast.show({
           type: 'info',
           text1: 'Bekleyen sevk yok',
-          text2: 'Bu terbiye iş emrinde fasonda dönecek top kalmamış.',
+          text2: `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} fasonda dönecek top kalmamış.`,
         });
         return;
       }
@@ -2505,8 +2506,8 @@ export default function FasonKabulScreen() {
         visible={colorChoiceOpen}
         kind="simple"
         onDismiss={() => setColorChoiceOpen(false)}
-        title={`Terbiye iş emri ${planColorName ?? '—'} istiyor, ${appliedColorLabel ?? 'başka renk'} kabul ediyorsun`}
-        confirmLabel={`Terbiye iş emri de ${appliedColorLabel ?? 'bu renk'} olsun`}
+        title={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} ${planColorName ?? '—'} istiyor, ${appliedColorLabel ?? 'başka renk'} kabul ediyorsun`}
+        confirmLabel={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} de ${appliedColorLabel ?? 'bu renk'} olsun`}
         cancelLabel="Vazgeç"
         onConfirm={() => {
           planColorActionRef.current = 'APPLY_TO_PLAN';
@@ -2516,8 +2517,8 @@ export default function FasonKabulScreen() {
         description={
           <View style={{ gap: 10 }}>
             <Text style={styles.mismatchLead}>
-              Müşteri rengi değiştirdiyse terbiye iş emri de bu renge dönsün. Boyahane yanlış
-              boyadıysa yalnız bu toplar bu renkte kalsın — terbiye iş emri değişmez.
+              Müşteri rengi değiştirdiyse {TERIM.terbiyeIsEmri.tekilKucuk} de bu renge dönsün. Boyahane yanlış
+              boyadıysa yalnız bu toplar bu renkte kalsın — {TERIM.terbiyeIsEmri.tekilKucuk} değişmez.
             </Text>
             <Pressable
               onPress={() => {
@@ -2536,7 +2537,7 @@ export default function FasonKabulScreen() {
               })}
               accessibilityRole="button"
             >
-              <Text style={{ color: '#b45309', fontWeight: '700' }}>Sadece bu toplar — terbiye iş emri değişmesin</Text>
+              <Text style={{ color: '#b45309', fontWeight: '700' }}>Sadece bu toplar — {TERIM.terbiyeIsEmri.tekilKucuk} değişmesin</Text>
             </Pressable>
           </View>
         }
@@ -2767,7 +2768,7 @@ function ScanActionCard({
           <Text style={scanActionStyles.title}>
             {needsDispatch
               ? 'Önce Fason Sevk yapılmalı'
-              : 'Bu terbiye iş emrinde kabul zaten yapılmış'}
+              : `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} kabul zaten yapılmış`}
           </Text>
         </View>
 
@@ -2791,7 +2792,7 @@ function ScanActionCard({
               {formatFactory(action.details.receivedAt, 'dd.MM.yyyy HH:mm')}
             </Text>
             <Text style={scanActionStyles.metaHint}>
-              Mal fiziksel olarak hâlâ fasondaysa (kabul yanlış terbiye iş emrine yapıldıysa)
+              Mal fiziksel olarak hâlâ fasondaysa (kabul yanlış {TERIM.terbiyeIsEmri.cekimKucuk.yonelme} yapıldıysa)
               doğru araç "Konumu Düzelt" DEĞİL, kabul iptalidir: toplar fasona geri
               döner ve sevk yeniden açılır.
             </Text>
@@ -3000,7 +3001,7 @@ function CancelReceiptModal({
               ))}
               <Text style={cancelStyles.mismatchHint}>
                 Toplar kabulden sonra başka bir partiye taşınmış/birleştirilmiş.
-                Panelden Terbiye İş Emri → Partiler → Birleştir ile bu partileri birleştirin,
+                Panelden {TERIM.terbiyeIsEmri.tekil} → Partiler → Birleştir ile bu partileri birleştirin,
                 sonra iptali tekrar deneyin. (Birleştirme geri alınamaz — bu yüzden
                 tablette yapılmaz.)
               </Text>

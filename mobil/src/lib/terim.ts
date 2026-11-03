@@ -1,7 +1,9 @@
 // Kullanıcıya görünen iş emri adlarının TEK KAYNAĞI (WeavingOrder = "Dokuma İş Emri", WorkOrder = "Terbiye İş Emri").
 // Kaynak Teks-Erp/src/constants/terim.ts; Electron · mobil · patron/uygulama src/lib/terim.ts BAYT-EŞİT aynadır —
 // değişiklik kaynakta yapılır, sonra `cp -p` (bekçi: Teks-Erp/scripts/test_terim_eski_ad.ts). Büyük harf biçimleri elle yazılır.
-
+// K20 (2026-11-03): WorkOrder adı dokuma rejiminden ÇÖZÜLÜR — dokuma kapalı "İş Emri", açık/bilinmiyor "Terbiye İş Emri".
+// Rejimi her yüzey kendi kaynağından `terimDokumaAyarla` ile bildirir; `TERIM.terbiyeIsEmri` okuma anında çözülür
+// (modül düzeyinde bir kez okunup saklanan değer donar — okumayı fonksiyon/getter içinde yap).
 /** Bir biçimin Türkçe hâl çekimleri. */
 export interface TermCases {
   /** yalın: "İş Emri" */
@@ -41,100 +43,87 @@ export interface Term {
   readonly cogulCekim: TermCases;
   /** Çoğul çekimler, cümle içi. */
   readonly cogulCekimKucuk: TermCases;
+  /** Tekil çekimler, cümle başı: "Terbiye iş emri bulunamadı". */
+  readonly cumleBasi: TermCases;
+  /** Çoğul çekimler, cümle başı: "Terbiye iş emirleri". */
+  readonly cumleBasiCogul: TermCases;
+}
+
+/** Elle TR katlama — `toLocale*` yasak; İ/I/ı farkı açıkça. */
+function kucuk(s: string): string {
+  return s.replace(/İ/g, "i").replace(/I/g, "ı").toLowerCase();
+}
+function buyuk(s: string): string {
+  return s.replace(/i/g, "İ").replace(/ı/g, "I").toUpperCase();
+}
+/** Yalnız ilk harf büyük (cümle başı), gerisi küçük. */
+function basBuyuk(s: string): string {
+  const k = kucuk(s);
+  return buyuk(k.slice(0, 1)) + k.slice(1);
+}
+/** Yalın biçimden hâl çekimleri — her terim "-i" ile biter (emri / emirleri). */
+function cekimKur(yalin: string): TermCases {
+  return {
+    yalin,
+    belirtme: `${yalin}ni`,
+    yonelme: `${yalin}ne`,
+    bulunma: `${yalin}nde`,
+    ayrilma: `${yalin}nden`,
+    ilgi: `${yalin}nin`,
+    vasita: `${yalin}yle`,
+  };
+}
+function terimKur(tekil: string, cogul: string): Term {
+  return Object.freeze({
+    tekil,
+    cogul,
+    tekilKucuk: kucuk(tekil),
+    cogulKucuk: kucuk(cogul),
+    tekilBuyuk: buyuk(tekil),
+    cogulBuyuk: buyuk(cogul),
+    cekim: cekimKur(tekil),
+    cekimKucuk: cekimKur(kucuk(tekil)),
+    cogulCekim: cekimKur(cogul),
+    cogulCekimKucuk: cekimKur(kucuk(cogul)),
+    cumleBasi: cekimKur(basBuyuk(tekil)),
+    cumleBasiCogul: cekimKur(basBuyuk(cogul)),
+  });
+}
+
+/** WorkOrder adının iki biçimi: dokuma rejimi açıkken ayırt edici, kapalıyken yalın (K20). */
+export const IS_EMRI_BICIMLERI = {
+  terbiye: terimKur("Terbiye İş Emri", "Terbiye İş Emirleri"),
+  yalin: terimKur("İş Emri", "İş Emirleri"),
+} as const;
+
+const DOKUMA_IS_EMRI = terimKur("Dokuma İş Emri", "Dokuma İş Emirleri");
+
+/** Rejim bilinmeden (ilk çizim, test, rejimi bildirmeyen yüzey) bugünkü ad: "Terbiye İş Emri". */
+let dokumaRejimi = true;
+
+/**
+ * Dokuma rejimini bildirir (etkin `production ∧ dokuma`). Değer DEĞİŞTİYSE true döner —
+ * çağıran isterse yeniden çizim/kalıcı saklama yapar.
+ */
+export function terimDokumaAyarla(dokumaAcik: boolean): boolean {
+  const degisti = dokumaRejimi !== dokumaAcik;
+  dokumaRejimi = dokumaAcik;
+  return degisti;
+}
+
+/** Şu an çözülen rejim (test/teşhis). */
+export function terimDokumaRejimi(): boolean {
+  return dokumaRejimi;
 }
 
 export const TERIM = {
-  /** WorkOrder */
-  terbiyeIsEmri: {
-    tekil: "Terbiye İş Emri",
-    cogul: "Terbiye İş Emirleri",
-    tekilKucuk: "terbiye iş emri",
-    cogulKucuk: "terbiye iş emirleri",
-    tekilBuyuk: "TERBİYE İŞ EMRİ",
-    cogulBuyuk: "TERBİYE İŞ EMİRLERİ",
-    cekim: {
-      yalin: "Terbiye İş Emri",
-      belirtme: "Terbiye İş Emrini",
-      yonelme: "Terbiye İş Emrine",
-      bulunma: "Terbiye İş Emrinde",
-      ayrilma: "Terbiye İş Emrinden",
-      ilgi: "Terbiye İş Emrinin",
-      vasita: "Terbiye İş Emriyle",
-    },
-    cekimKucuk: {
-      yalin: "terbiye iş emri",
-      belirtme: "terbiye iş emrini",
-      yonelme: "terbiye iş emrine",
-      bulunma: "terbiye iş emrinde",
-      ayrilma: "terbiye iş emrinden",
-      ilgi: "terbiye iş emrinin",
-      vasita: "terbiye iş emriyle",
-    },
-    cogulCekim: {
-      yalin: "Terbiye İş Emirleri",
-      belirtme: "Terbiye İş Emirlerini",
-      yonelme: "Terbiye İş Emirlerine",
-      bulunma: "Terbiye İş Emirlerinde",
-      ayrilma: "Terbiye İş Emirlerinden",
-      ilgi: "Terbiye İş Emirlerinin",
-      vasita: "Terbiye İş Emirleriyle",
-    },
-    cogulCekimKucuk: {
-      yalin: "terbiye iş emirleri",
-      belirtme: "terbiye iş emirlerini",
-      yonelme: "terbiye iş emirlerine",
-      bulunma: "terbiye iş emirlerinde",
-      ayrilma: "terbiye iş emirlerinden",
-      ilgi: "terbiye iş emirlerinin",
-      vasita: "terbiye iş emirleriyle",
-    },
+  /** WorkOrder — okuma anında rejimden çözülür. */
+  get terbiyeIsEmri(): Term {
+    return dokumaRejimi ? IS_EMRI_BICIMLERI.terbiye : IS_EMRI_BICIMLERI.yalin;
   },
   /** WeavingOrder */
-  dokumaIsEmri: {
-    tekil: "Dokuma İş Emri",
-    cogul: "Dokuma İş Emirleri",
-    tekilKucuk: "dokuma iş emri",
-    cogulKucuk: "dokuma iş emirleri",
-    tekilBuyuk: "DOKUMA İŞ EMRİ",
-    cogulBuyuk: "DOKUMA İŞ EMİRLERİ",
-    cekim: {
-      yalin: "Dokuma İş Emri",
-      belirtme: "Dokuma İş Emrini",
-      yonelme: "Dokuma İş Emrine",
-      bulunma: "Dokuma İş Emrinde",
-      ayrilma: "Dokuma İş Emrinden",
-      ilgi: "Dokuma İş Emrinin",
-      vasita: "Dokuma İş Emriyle",
-    },
-    cekimKucuk: {
-      yalin: "dokuma iş emri",
-      belirtme: "dokuma iş emrini",
-      yonelme: "dokuma iş emrine",
-      bulunma: "dokuma iş emrinde",
-      ayrilma: "dokuma iş emrinden",
-      ilgi: "dokuma iş emrinin",
-      vasita: "dokuma iş emriyle",
-    },
-    cogulCekim: {
-      yalin: "Dokuma İş Emirleri",
-      belirtme: "Dokuma İş Emirlerini",
-      yonelme: "Dokuma İş Emirlerine",
-      bulunma: "Dokuma İş Emirlerinde",
-      ayrilma: "Dokuma İş Emirlerinden",
-      ilgi: "Dokuma İş Emirlerinin",
-      vasita: "Dokuma İş Emirleriyle",
-    },
-    cogulCekimKucuk: {
-      yalin: "dokuma iş emirleri",
-      belirtme: "dokuma iş emirlerini",
-      yonelme: "dokuma iş emirlerine",
-      bulunma: "dokuma iş emirlerinde",
-      ayrilma: "dokuma iş emirlerinden",
-      ilgi: "dokuma iş emirlerinin",
-      vasita: "dokuma iş emirleriyle",
-    },
-  },
-} as const satisfies Record<string, Term>;
+  dokumaIsEmri: DOKUMA_IS_EMRI,
+};
 
 export type TermKey = keyof typeof TERIM;
 

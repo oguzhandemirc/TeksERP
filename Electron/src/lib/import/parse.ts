@@ -34,7 +34,9 @@ function headerKey(s: string): string {
     .replace(/[Ğğ]/g, "G")
     .replace(/[Üü]/g, "U")
     .replace(/[Öö]/g, "O")
-    .replace(/[Çç]/g, "C");
+    .replace(/[Çç]/g, "C")
+    // K20: iş emri adı rejime göre "Terbiye İş Emri"/"İş Emri" — öteki rejimde indirilmiş şablon da eşleşsin.
+    .replace(/(^|[^A-Z])TERBIYE IS EM/g, "$1IS EM");
 }
 
 // --- CSV ---------------------------------------------------------------------

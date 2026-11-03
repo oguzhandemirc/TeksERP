@@ -65,6 +65,7 @@ import {
 } from "./workOrderPrefill";
 import type { WorkOrder } from "./types";
 import { LastBatchBadge } from "./LastBatchBadge";
+import { TERIM } from "@/lib/terim";
 
 /**
  * react-hook-form hata ağacından tüm mesajları toplar (toast özeti için). Her
@@ -329,7 +330,7 @@ export function WorkOrderFormView({
       } as unknown as Partial<ProductRecipe>);
     },
     onSuccess: (_res, name) => {
-      toast.success(`Terbiye iş emri şablonu kaydedildi: ${name}`);
+      toast.success(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} şablonu kaydedildi: ${name}`);
       void qc.invalidateQueries({ queryKey: ["routes"] });
       void qc.invalidateQueries({ queryKey: ["product-recipes"] });
       setSaveRecipeOpen(false);
@@ -499,7 +500,7 @@ export function WorkOrderFormView({
               manualErrors.push("Kat tipi seçilmeli.");
             }
             if (manualErrors.length > 0) {
-              toast.error("Terbiye iş emri oluşturulamadı — eksik/hatalı alanlar var", {
+              toast.error(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} oluşturulamadı — eksik/hatalı alanlar var`, {
                 description: manualErrors.join(" · "),
                 position: "top-center",
               });
@@ -514,7 +515,7 @@ export function WorkOrderFormView({
           (errors) => {
             // Zod doğrulama hataları: satır içi gösterim duruyor, üstüne özet toast.
             const messages = collectErrorMessages(errors);
-            toast.error("Terbiye iş emri oluşturulamadı — eksik/hatalı alanlar var", {
+            toast.error(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} oluşturulamadı — eksik/hatalı alanlar var`, {
               description: messages.length
                 ? messages.join(" · ")
                 : "İşaretli alanları kontrol edin.",
@@ -553,7 +554,7 @@ export function WorkOrderFormView({
                 noneLabel="— Şablon kullanma"
                 icon={FlaskConical}
                 iconClassName="text-white"
-                title="Terbiye İş Emri Şablonu Seç"
+                title={`${TERIM.terbiyeIsEmri.tekil} Şablonu Seç`}
                 description="Hazır şablon — kumaş, renk, özellik, en ve rota tek tıkla dolar."
                 placeholder="Şablon seç..."
                 placeholderClassName="text-sm font-medium text-white/90"
@@ -948,9 +949,9 @@ export function WorkOrderFormView({
                 hintTone="muted"
                 hint={
                   partyCodeEditable
-                    ? "Refakat kartına barkod olarak basılır: benzersiz, terbiye iş emri no biçiminde (Sistem → Numaralandırma), yalnız büyük harf ve rakam."
+                    ? `Refakat kartına barkod olarak basılır: benzersiz, ${TERIM.terbiyeIsEmri.tekilKucuk} no biçiminde (Sistem → Numaralandırma), yalnız büyük harf ve rakam.`
                     : isEdit
-                      ? "Terbiye iş emri numarası açılışta verilir, sonradan değiştirilemez."
+                      ? `${TERIM.terbiyeIsEmri.cumleBasi.yalin} numarası açılışta verilir, sonradan değiştirilemez.`
                       : undefined
                 }
               >
@@ -960,7 +961,7 @@ export function WorkOrderFormView({
                     readOnly={!partyCodeEditable}
                     placeholder={
                       partyCodeEditable
-                        ? "Terbiye iş emri no biçiminde (Sistem → Numaralandırma)"
+                        ? `${TERIM.terbiyeIsEmri.cumleBasi.yalin} no biçiminde (Sistem → Numaralandırma)`
                         : "Otomatik oluşturulur — kendiniz girmek için tıklayın."
                     }
                     className={cn(!partyCodeEditable && "cursor-pointer bg-muted/40 pr-9")}
@@ -1045,16 +1046,15 @@ export function WorkOrderFormView({
                       size="sm"
                       disabled={Boolean(templateBlockReason)}
                       className="gap-1"
-                      title={templateBlockReason ?? "Bu terbiye iş emrini şablon olarak kaydet"}
+                      title={templateBlockReason ?? `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} şablon olarak kaydet`}
                     >
                       <FlaskConical className="h-3.5 w-3.5" /> Şablon Kaydet
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent align="start" className="w-80 space-y-2">
-              <div className="text-xs font-medium">Bu terbiye iş emrini şablon olarak kaydet</div>
+              <div className="text-xs font-medium">Bu {TERIM.terbiyeIsEmri.cekimKucuk.belirtme} şablon olarak kaydet</div>
               <p className="text-[11px] text-muted-foreground">
-                Kumaş + renk + özellik + en + akış tek isimle saklanır; sonraki terbiye iş
-                emirlerinde "Terbiye iş emri şablonundan doldur" ile gelir.
+                Kumaş + renk + özellik + en + akış tek isimle saklanır; sonraki {TERIM.terbiyeIsEmri.cogulCekimKucuk.bulunma} "{TERIM.terbiyeIsEmri.cumleBasi.yalin} şablonundan doldur" ile gelir.
               </p>
               <Input
                 value={recipeName}
@@ -1097,7 +1097,7 @@ export function WorkOrderFormView({
                   : "Oluşturuluyor..."
                 : isEdit
                   ? "Güncelle"
-                  : "Terbiye İş Emri Oluştur"}
+                  : `${TERIM.terbiyeIsEmri.tekil} Oluştur`}
             </Button>
           </div>
         </PageFooter>

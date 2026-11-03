@@ -93,7 +93,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
     mutationFn: () => workOrderService.cancel(workOrderId as string),
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      Toast.show({ type: 'success', text1: 'Terbiye iş emri iptal edildi' });
+      Toast.show({ type: 'success', text1: `${TERIM.terbiyeIsEmri.cumleBasi.yalin} iptal edildi` });
       qc.invalidateQueries({ queryKey: ['work-orders'] });
       onChanged();
       onClose();
@@ -173,7 +173,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
                 <Icon source="alert" size={20} color={colors.dangerDark} />
                 <Text style={styles.warnText}>
                   {impact.canCancel
-                    ? `Bu terbiye iş emri iptal edilecek. ${impact.rolls.length} top stoğa geri dönecek${
+                    ? `Bu ${TERIM.terbiyeIsEmri.tekilKucuk} iptal edilecek. ${impact.rolls.length} top stoğa geri dönecek${
                         impact.travelerCardCount > 0 ? `, ${impact.travelerCardCount} refakat kartı geçersiz olacak` : ''
                       }.`
                     : impact.blockReason}
@@ -311,7 +311,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
             </View>
           ) : null}
           {editable && !canCancel ? (
-            <Text style={styles.note}>Bu terbiye iş emrinde üretim başladı — iptal panelden yapılır (toplar için karar ve sebep sorulur).</Text>
+            <Text style={styles.note}>Bu {TERIM.terbiyeIsEmri.cekimKucuk.bulunma} üretim başladı — iptal panelden yapılır (toplar için karar ve sebep sorulur).</Text>
           ) : null}
           {canCancel ? (
             <Button

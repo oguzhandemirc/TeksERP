@@ -11,12 +11,11 @@ import { v5 as uuidv5 } from "uuid";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { TERIM } from "../constants/terim";
-import { noteParties, type NoteParty } from "../lib/gelen-belge/parti-ozet";
+import { declaredPageCount, noteParties, type NoteParty } from "../lib/gelen-belge/parti-ozet";
 import { isSummaryLine, partyLineId } from "./gelen-belge-kontrol.service";
 import { readMultiPartyWorkOrder, type MultiPartyWorkOrderMode } from "./system-setting.service";
 import { WorkOrderService, type WorkOrderCreateInput } from "./workorder.service";
 
-const IE = TERIM.terbiyeIsEmri;
 const workOrders = new WorkOrderService();
 /** Parti başına iş emri token uzayı (PER_PARTY): aynı mantıksal deneme + aynı blok → aynı token. */
 const PARTY_WO_TOKEN_NS = "6f1d2c8e-4b7a-4d39-9e52-a1c0b7f3d814";
@@ -44,7 +43,7 @@ export async function getNoteParties(noteId: string): Promise<NotePartiesView> {
   });
   if (!note) throw AppError.notFound("Gelen belge bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
   const docLines = note.lines.filter((l) => !isSummaryLine(note.id, l));
-  const { parties, warnings } = noteParties(docLines, note.totalsDeclared, { pageCount: note.pageCount, scannedPages: note.scans.map((s) => s.pageNo) });
+  const { parties, warnings } = noteParties(docLines, note.totalsDeclared, { pageCount: note.pageCount ?? declaredPageCount(note.totalsDeclared), scannedPages: note.scans.map((s) => s.pageNo) });
   return { parties, warnings, multi: parties.length > 1, defaultMode: await readMultiPartyWorkOrder() };
 }
 
@@ -123,7 +122,7 @@ export async function openPartyWorkOrders(i: OpenInput, userId: string): Promise
       ...(batchNo ? { sourceBatchNo: batchNo } : {}),
     }, userId);
     const wo = res.data?.workOrder;
-    if (!wo) throw AppError.internal(`${IE.tekil} açılamadı.`);
+    if (!wo) throw AppError.internal(`${TERIM.terbiyeIsEmri.tekil} açılamadı.`);
     if (res.warnings?.length) warnings.push(...res.warnings);
     out.push({ blockNos: rolls.map((r) => r.blockNo), workOrderId: wo.id, workOrderNo: wo.workOrderNumber, batchNumber: res.data?.batch?.batchNumber ?? null, rollIds: rolls.map((r) => r.rollId) });
   };

@@ -175,7 +175,7 @@ export const NOTIFICATION_CATALOG = {
 
   // ── Üretim ────────────────────────────────────────────────────────────────
   "isemri.gecikti": {
-    kod: "isemri.gecikti", ad: `${TERIM.terbiyeIsEmri.tekil} gecikti`,
+    kod: "isemri.gecikti", get ad() { return `${TERIM.terbiyeIsEmri.tekil} gecikti`; },
     sinif: "BILDIRIM", altTur: "KOSUL", grup: "Üretim",
     izinler: [["workorder:read"]],
     modul: "productionEnabled",
@@ -183,7 +183,7 @@ export const NOTIFICATION_CATALOG = {
     pencereSn: 0, varsayilan: ["workorder:write"], kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
     varsayilanKanallar: ["UYGULAMA"],
-    baslik: `${TERIM.terbiyeIsEmri.tekil} gecikti`,
+    get baslik() { return `${TERIM.terbiyeIsEmri.tekil} gecikti`; },
     govde: "{isEmriNo} planlanan bitişi {planlananBitis} geçti",
     cozuldu: "{isEmriNo} tamamlandı ya da planı güncellendi",
     panelEkran: "operations/work-orders", panelYol: "/operations/work-orders/{isEmriId}",

@@ -376,7 +376,7 @@ router.post("/taramalar/:id/oku", requirePermission("gelen-belge:write"), wrap(a
 const SettingsBody = z.strictObject({
   defaultItemId: Id.nullable().optional(),
   unreviewedApproval: z.enum(["WARN", "BLOCK_SUSPECT", "BLOCK"], "Seçenek WARN, BLOCK_SUSPECT ya da BLOCK olmalı").optional(),
-  autoWorkOrder: z.boolean(`Otomatik ${TERIM.terbiyeIsEmri.tekilKucuk} evet/hayır olmalı`).optional(),
+  get autoWorkOrder() { return z.boolean(`Otomatik ${TERIM.terbiyeIsEmri.tekilKucuk} evet/hayır olmalı`).optional(); },
   defaultRouteTemplateId: Id.nullable().optional(),
   routeSuggestionPriority: z.enum(["CUSTOMER_FIRST", "FACTORY_FIRST"], "Seçenek CUSTOMER_FIRST ya da FACTORY_FIRST olmalı").optional(),
   handwritingOutlierFactor: z.number("Şüpheli değer oranı sayı olmalı").min(2, "Şüpheli değer oranı en az 2 olmalı").max(20, "Şüpheli değer oranı en çok 20 olmalı").nullable().optional(),
@@ -588,7 +588,7 @@ router.post("/irsaliyeler/:id/onay", requirePermission("gelen-belge:approve"), w
 const CancelBody = z.strictObject({
   clientToken: z.uuid("İşlem kimliği geçersiz"),
   reason: z.string("İptal sebebi zorunludur").trim().min(3, "İptal sebebi en az 3 karakter olmalı").max(300, "İptal sebebi en fazla 300 karakter"),
-  workOrderIds: z.array(Id, `Geçersiz ${TERIM.terbiyeIsEmri.tekilKucuk} listesi`).max(50, `Tek iptalde en fazla 50 ${TERIM.terbiyeIsEmri.tekilKucuk}`).optional(),
+  get workOrderIds() { return z.array(Id, `Geçersiz ${TERIM.terbiyeIsEmri.tekilKucuk} listesi`).max(50, `Tek iptalde en fazla 50 ${TERIM.terbiyeIsEmri.tekilKucuk}`).optional(); },
 });
 /**
  * @openapi

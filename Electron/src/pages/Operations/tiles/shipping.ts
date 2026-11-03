@@ -17,7 +17,7 @@ export const shippingTiles: OperationsTile[] = [
     // Sevke Hazır İşler (D4-J3, ister 2.4 / 2.10): hazırlık sunucuda türetilir; modül anahtarı yok (çekirdek sevkiyat).
     key: "sevke-hazir-isler",
     title: "Sevke Hazır İşler",
-    description: `${TERIM.terbiyeIsEmri.tekil} / gelen belge / parti / müşteri başına hazır toplar — oradan sevke al`,
+    get description() { return `${TERIM.terbiyeIsEmri.tekil} / gelen belge / parti / müşteri başına hazır toplar — oradan sevke al`; },
     icon: PackageCheck,
     to: "/operations/sevke-hazir-isler",
     group: "shipping",

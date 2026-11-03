@@ -3,6 +3,7 @@ import { Search } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { Input } from "@/components/ui/input";
+import { useMenuLayout } from "@/hooks/useMenuLayout";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { REPORT_BY_KEY, type ReportCatalogEntry } from "@/lib/report-catalog";
 import { foldedIncludes } from "@/lib/search-fold";
@@ -26,7 +27,8 @@ export function ReportCenterPage({ legacyTiles }: Props) {
   const { favorites } = useReportFavorites();
   const [term, setTerm] = useState("");
   const access = useMemo(() => ({ isAdmin, hasPermission, ctx }), [isAdmin, hasPermission, ctx]);
-  const groups = useMemo(() => filterGroups(centerGroups(access), term, foldedIncludes), [access, term]);
+  const menu = useMenuLayout();
+  const groups = useMemo(() => filterGroups(centerGroups(access, undefined, menu), term, foldedIncludes), [access, term, menu]);
   const legacy = useMemo(() => legacyGroups(legacyTiles, access, { term, includes: foldedIncludes }), [legacyTiles, access, term]);
   const favEntries = favorites
     .map((k) => REPORT_BY_KEY.get(k))

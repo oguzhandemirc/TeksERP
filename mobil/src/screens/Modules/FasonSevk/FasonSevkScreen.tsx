@@ -475,7 +475,7 @@ export default function FasonSevkScreen() {
       Toast.show({
         type: 'error',
         text1: 'Bu bir top barkodu',
-        text2: 'Buraya refakat kartı / terbiye iş emri barkodu okutun.',
+        text2: `Buraya refakat kartı / ${TERIM.terbiyeIsEmri.tekilKucuk} barkodu okutun.`,
       });
       return;
     }
@@ -500,14 +500,14 @@ export default function FasonSevkScreen() {
       const wo = card.workOrder;
       if (!wo) {
         signalScan('reject');
-        Toast.show({ type: 'error', text1: 'Terbiye iş emri yüklenemedi' });
+        Toast.show({ type: 'error', text1: `${TERIM.terbiyeIsEmri.cumleBasi.yalin} yüklenemedi` });
         return;
       }
       if (wo.status !== 'PLANNED' && wo.status !== 'IN_PROGRESS') {
         signalScan('reject');
         Toast.show({
           type: 'error',
-          text1: 'Bu terbiye iş emri sevke uygun değil',
+          text1: `Bu ${TERIM.terbiyeIsEmri.tekilKucuk} sevke uygun değil`,
           text2: `Durum: ${wo.status}`,
         });
         return;
@@ -542,7 +542,7 @@ export default function FasonSevkScreen() {
       snapTo(SHEET_MIDDLE_H);
       Toast.show({
         type: 'success',
-        text1: 'Terbiye iş emri seçildi',
+        text1: `${TERIM.terbiyeIsEmri.cumleBasi.yalin} seçildi`,
         text2: wo.workOrderNumber,
       });
     } catch (err) {
@@ -1049,7 +1049,7 @@ export default function FasonSevkScreen() {
       </View>
       <View style={styles.metaRow}>
         <Text variant="bodySmall" style={styles.recentsCount} numberOfLines={1}>
-          {selectedWo ? `${TERIM.terbiyeIsEmri.tekil} ${selectedWo.workOrderNumber}` : 'Terbiye iş emri seçildikçe burada görünür'}
+          {selectedWo ? `${TERIM.terbiyeIsEmri.tekil} ${selectedWo.workOrderNumber}` : `${TERIM.terbiyeIsEmri.cumleBasi.yalin} seçildikçe burada görünür`}
         </Text>
         {selectedWo && metaRight.length > 0 && (
           <Text variant="bodySmall" style={styles.metaRight} numberOfLines={1}>
@@ -1067,9 +1067,9 @@ export default function FasonSevkScreen() {
       ) : (
         <View style={styles.empty}>
           <Icon source="clipboard-text-outline" size={56} color="#cbd5e1" />
-          <Text style={styles.emptyText}>Terbiye iş emri seçilmedi</Text>
+          <Text style={styles.emptyText}>{TERIM.terbiyeIsEmri.cumleBasi.yalin} seçilmedi</Text>
           <Text style={styles.emptyHint}>
-            Sol taraftan bir terbiye iş emri seçtikten sonra detaylar burada görünecek
+            Sol taraftan bir {TERIM.terbiyeIsEmri.tekilKucuk} seçtikten sonra detaylar burada görünecek
           </Text>
         </View>
       )}
@@ -1433,7 +1433,7 @@ export default function FasonSevkScreen() {
         emptyText={
           woSearch
             ? `'${woSearch}' için sonuç bulunamadı`
-            : 'Sevke uygun terbiye iş emri yok'
+            : `Sevke uygun ${TERIM.terbiyeIsEmri.tekilKucuk} yok`
         }
         numColumns={1}
         paginated
@@ -1583,7 +1583,7 @@ export default function FasonSevkScreen() {
           itemMismatch ? (
             <View>
               <Text style={{ fontSize: 14, color: '#475569', lineHeight: 20 }}>
-                Terbiye iş emri{' '}
+                {TERIM.terbiyeIsEmri.cumleBasi.yalin}{' '}
                 <Text style={{ fontWeight: '700' }}>
                   {itemMismatch.details.expectedItemLabel}
                 </Text>{' '}
@@ -1667,7 +1667,7 @@ export default function FasonSevkScreen() {
           pendingMismatch ? (
             <View>
               <Text style={{ fontSize: 14, color: '#475569', lineHeight: 20 }}>
-                Terbiye iş emri{' '}
+                {TERIM.terbiyeIsEmri.cumleBasi.yalin}{' '}
                 <Text style={{ fontWeight: '700' }}>{pendingMismatch.expectedLabel}</Text>{' '}
                 kumaşı istiyor, ama bu top{' '}
                 <Text style={{ fontWeight: '700' }}>{pendingMismatch.rollItemLabel}</Text>:

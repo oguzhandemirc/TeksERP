@@ -8,6 +8,7 @@ import { usePermissions } from '../../../hooks/usePermission';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { useTamburShortCutA1 } from '../../../hooks/useFeatureFlags';
 import { resolveShortCutConfig } from '../../Modules/Tambur/resolveShortCutConfig';
+import { TERIM } from '../../../lib/terim';
 
 // =============================================================================
 // ÇALIŞMA TERCİHLERİ — kişisel (2026-08-09)
@@ -306,7 +307,7 @@ export default function WorkPreferencesScreen() {
 
       {!canPlan ? null : (
       <View style={{ gap: 10 }}>
-        <Text style={settingsStyles.label}>TERBİYE İŞ EMRİNDE FASON FİRMA VARSAYILANI</Text>
+        <Text style={settingsStyles.label}>{TERIM.terbiyeIsEmri.tekilBuyuk}NDE FASON FİRMA VARSAYILANI</Text>
         <Text style={settingsStyles.hint}>
           Rotaya fason adımı eklendiğinde hangi firma hazır gelsin? Bu ayar yalnız
           HAZIR GELEN firmayı değiştirir — listeden her zaman başka firma seçebilirsin

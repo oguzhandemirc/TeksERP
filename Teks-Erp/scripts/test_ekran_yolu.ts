@@ -104,7 +104,14 @@ function metinCoz(e: ts.Expression): string | null {
   return null;
 }
 function prop(o: ts.ObjectLiteralExpression, ad: string): ts.Expression | null {
-  for (const p of o.properties) if (ts.isPropertyAssignment(p) && p.name.getText() === ad) return p.initializer;
+  for (const p of o.properties) {
+    if (ts.isPropertyAssignment(p) && p.name.getText() === ad) return p.initializer;
+    // Terim-rejimli başlık getter'dır: `get title() { return TERIM.x.y; }` → dönüş ifadesi.
+    if (ts.isGetAccessorDeclaration(p) && p.name.getText() === ad) {
+      const ilk = p.body?.statements[0];
+      if (p.body?.statements.length === 1 && ilk && ts.isReturnStatement(ilk) && ilk.expression) return ilk.expression;
+    }
+  }
   return null;
 }
 /** `export const <ad>Tiles = [ {…}, … ]` öğelerinin `alan` değerleri (çözülemeyen → "?"); birleşim dizileri (`...x`) öğe değildir. */

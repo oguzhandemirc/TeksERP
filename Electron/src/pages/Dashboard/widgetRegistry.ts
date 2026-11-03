@@ -24,7 +24,7 @@ export const GROUPS: GroupDef[] = [
     label: "Üst Kartlar",
     items: [
       { key: "kpi:openOrders", label: "Açık Sipariş" },
-      { key: "kpi:openWorkOrders", label: `Açık ${TERIM.terbiyeIsEmri.tekil}` },
+      { key: "kpi:openWorkOrders", get label() { return `Açık ${TERIM.terbiyeIsEmri.tekil}`; } },
       { key: "kpi:readyToShip", label: "Sevke Hazır" },
       { key: "kpi:warehouse", label: "Depoda Bekleyen" },
       { key: "kpi:atSubcontractor", label: "Fason'da" },
@@ -41,8 +41,8 @@ export const GROUPS: GroupDef[] = [
     label: "Liste Panelleri",
     items: [
       { key: "panel:upcomingOrders", label: "Vadesi Yaklaşan Siparişler" },
-      { key: "panel:overdueWorkOrders", label: `Geciken ${TERIM.terbiyeIsEmri.cogul}` },
-      { key: "panel:upcomingWorkOrders", label: `Yakında Başlayacak ${TERIM.terbiyeIsEmri.cogul}` },
+      { key: "panel:overdueWorkOrders", get label() { return `Geciken ${TERIM.terbiyeIsEmri.cogul}`; } },
+      { key: "panel:upcomingWorkOrders", get label() { return `Yakında Başlayacak ${TERIM.terbiyeIsEmri.cogul}`; } },
     ],
   },
 ];

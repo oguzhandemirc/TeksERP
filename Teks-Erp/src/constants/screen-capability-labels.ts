@@ -3,6 +3,7 @@
 // Etiket eksikse kodun kendisi basılır; `test_screen_catalog` etiket kapsamasını ölçer.
 
 /** Masaüstü ekranlarında yetenekler kod taramasından türetildi → etiket üretilir. */
+import { TERIM } from "./terim";
 const CAP_LABEL: Record<string, string> = {
   "item:write": "Kumaş ekleyip düzenleyebilir",
   "customer:write": "Müşteri ekleyip düzenleyebilir",
@@ -15,7 +16,7 @@ const CAP_LABEL: Record<string, string> = {
   "label-template:read": "Etiket şablonlarını görebilir",
   "label-template:write": "Etiket şablonu düzenleyebilir",
   "order:write": "Sipariş açıp düzenleyebilir",
-  "workorder:write": "Terbiye iş emri açıp düzenleyebilir",
+  get "workorder:write"() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} açıp düzenleyebilir`; },
   "workorder:distribute": "Kurşun dağıtımı yapabilir",
   "roll:write": "Top kaydı düzenleyebilir",
   "roll:manual-adjust": "Top metraj/kalite düzeltmesi (riskli)",
@@ -31,7 +32,7 @@ const CAP_LABEL: Record<string, string> = {
   "admin:settings": "Sistem ayarlarını değiştirebilir",
   "order:read": "Sipariş görebilir",
   "shipping:read": "Sevkiyat görebilir",
-  "workorder:read": "Terbiye iş emri görebilir",
+  get "workorder:read"() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} görebilir`; },
   "customer-alias:read": "Müşteri ad eşlemesini görebilir",
   "property:read": "Renk/özellik görebilir",
   "quality:read": "Kalite tanımı görebilir",

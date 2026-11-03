@@ -63,7 +63,7 @@ const ROOT_FIELDS: FieldDef[] = [
   { yol: "belge.tarih", etiket: "Kabul tarihi", tur: "tarih", sinif: "musteri", ornek: "2026-09-25T08:30:00.000Z" },
   ...DOC_STATUS_FIELDS,
   { yol: "belge.fason_irsaliye_no", etiket: "Fasoncunun irsaliye no", tur: "metin", sinif: "musteri", ornek: "YB-8842" },
-  { yol: "belge.is_emri_no", etiket: `${TERIM.terbiyeIsEmri.tekil} no`, tur: "metin", sinif: "musteri", ornek: sampleSeriesCode("workOrder", 1) },
+  { yol: "belge.is_emri_no", get etiket() { return `${TERIM.terbiyeIsEmri.tekil} no`; }, tur: "metin", sinif: "musteri", ornek: sampleSeriesCode("workOrder", 1) },
   { yol: "belge.islem", etiket: "İşlem (istasyon)", tur: "metin", sinif: "musteri", ornek: "Boyahane (Fason)" },
   { yol: "belge.uygulanan_renk", etiket: "Uygulanan renk", tur: "metin", sinif: "musteri", ornek: "Bej" },
   { yol: "belge.notlar", etiket: "Kabul notu", tur: "metin", sinif: "musteri", ornek: "Renk tutmuş" },

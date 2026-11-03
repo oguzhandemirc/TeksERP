@@ -13,6 +13,7 @@
 // backend söyler (yarışta 400 gelir ve toast gösterilir).
 // =============================================================================
 
+import { TERIM } from '../../../lib/terim';
 export interface UnlinkVerdict {
   allowed: boolean;
   /** Engelliyse operatöre gösterilecek sebep (backend mesajıyla aynı dil). */
@@ -32,7 +33,7 @@ export function canUnlinkOrderLine(
     return {
       allowed: false,
       reason:
-        'Son sipariş bağı kaldırılınca terbiye iş emri stok üretimine döner; bunun için hedef kumaş tanımlı olmalı.',
+        `Son sipariş bağı kaldırılınca ${TERIM.terbiyeIsEmri.tekilKucuk} stok üretimine döner; bunun için hedef kumaş tanımlı olmalı.`,
       becomesStock: false,
     };
   }

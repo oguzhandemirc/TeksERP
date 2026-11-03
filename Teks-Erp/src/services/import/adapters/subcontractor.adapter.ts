@@ -24,6 +24,7 @@ import { resolveReferenceList } from "../import-lookup";
 import { splitList } from "../import-coerce";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
 import { importKey } from "../import-key";
+import { TERIM } from "../../../constants/terim";
 
 // Servisin paylaşılan tekili yok (controller kendi private örneğini kuruyor);
 // servis durumsuz olduğu için burada kendi örneğimizi kuruyoruz.
@@ -79,7 +80,7 @@ const COLUMNS: ImportColumn[] = [
     key: "isFavorite",
     label: "Favori",
     type: "bool",
-    help: "Evet ise terbiye iş emri fason adımında firma seçicide öne çıkar.",
+    get help() { return `Evet ise ${TERIM.terbiyeIsEmri.tekilKucuk} fason adımında firma seçicide öne çıkar.`; },
     example: "Hayır",
   },
   { key: "isActive", label: "Aktif", type: "bool", help: "Evet / Hayır.", example: "Evet" },

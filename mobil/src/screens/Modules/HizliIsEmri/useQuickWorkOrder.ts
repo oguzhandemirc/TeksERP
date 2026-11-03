@@ -30,6 +30,7 @@ import { buildReworkPlan } from './reworkPayload';
 import { collectQuickWoIssues, parsePositiveNumber } from './quickWorkOrderIssues';
 import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
 import { scanMatchOf, type ScanMatchExtras } from '../../../components/customerCode/customerCodeLogic';
+import { TERIM } from '../../../lib/terim';
 
 export interface ScannedRoll {
   id: string;
@@ -806,7 +807,7 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       const msg = errMessage(err);
       setSubmitError(msg);
-      Toast.show({ type: 'error', text1: 'Terbiye iş emri başlatılamadı', text2: msg });
+      Toast.show({ type: 'error', text1: `${TERIM.terbiyeIsEmri.cumleBasi.yalin} başlatılamadı`, text2: msg });
     },
   });
 
@@ -847,7 +848,7 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
   const submit = useCallback(() => {
     setSubmitError(null);
     if (!onlineManager.isOnline()) {
-      const msg = 'Terbiye iş emri başlatmak için bağlantı gerekli.';
+      const msg = `${TERIM.terbiyeIsEmri.cumleBasi.yalin} başlatmak için bağlantı gerekli.`;
       setSubmitError(msg);
       Toast.show({ type: 'error', text1: 'Çevrimdışı', text2: msg });
       return;

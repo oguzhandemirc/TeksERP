@@ -15,6 +15,7 @@ import {
   revokeExpenseAllocation,
 } from "../services/expense-allocation.service";
 import { AppError } from "../utils/app-error";
+import { TERIM } from "../constants/terim";
 
 const router = Router();
 
@@ -33,7 +34,7 @@ const actor = (req: Request): string => {
 /** Hedef + pay — kasa masraf formundaki `allocation` gövdesiyle aynı alanlar (token hariç). */
 export const allocationFieldsSchema = {
   machineId: z.uuid({ error: "Makine geçersiz" }).nullable().optional(),
-  workOrderId: z.uuid({ error: "Terbiye iş emri geçersiz" }).nullable().optional(),
+  workOrderId: z.uuid({ get error() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} geçersiz`; } }).nullable().optional(),
   serviceItemId: z.uuid({ error: "Hizmet kalemi geçersiz" }).nullable().optional(),
   sharePct: z.union([z.string().trim().min(1).max(12), z.number()], { error: "Pay (%) zorunlu" }),
 };

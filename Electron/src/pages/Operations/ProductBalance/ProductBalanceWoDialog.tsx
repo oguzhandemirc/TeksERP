@@ -13,6 +13,7 @@ import {
 import type { PickedOrderLine } from "@/pages/Operations/WorkOrders/OrderPickerDialog";
 import { useTabsStore } from "@/store/tabs";
 import type { WoTarget, BalanceLine } from "./types";
+import { TERIM } from "@/lib/terim";
 
 type Mode = "bind" | "stock";
 
@@ -129,7 +130,7 @@ export function ProductBalanceWoDialog({ spec, open, onOpenChange }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Terbiye iş emri aç</DialogTitle>
+          <DialogTitle>{TERIM.terbiyeIsEmri.cumleBasi.yalin} aç</DialogTitle>
           <DialogDescription>
             <span className="font-medium text-foreground">{label}</span> için
             üretim emri. Talep {fmt(spec.talep)} · Depo {fmt(spec.depo)} ·

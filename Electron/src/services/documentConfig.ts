@@ -6,6 +6,7 @@
 // =============================================================================
 
 /** Belge künyesi — firma adının (ayrı) altına basılan ek satırlar. */
+import { TERIM } from "@/lib/terim";
 export interface CompanyLetterhead {
   addressLine: string;
   phone: string;
@@ -300,7 +301,7 @@ export const FASON_FIELD_DEFS: DocFieldDef[] = [
   { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
   { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
   { key: "sayin", label: "Fason firma adı", group: "header" },
-  { key: "subLine", label: "İstasyon · terbiye iş emri satırı", group: "header" },
+  { key: "subLine", get label() { return `İstasyon · ${TERIM.terbiyeIsEmri.tekilKucuk} satırı`; }, group: "header" },
   { key: "title", label: "Belge başlığı", group: "header" },
   { key: "docNo", label: "İrsaliye no", group: "header" },
   { key: "docDate", label: "Tarih", group: "header" },
@@ -814,7 +815,7 @@ export const DOC_DEFS: DocDef[] = [
     defaultMarginMm: 8,
     sections: [
       { key: "subcontractorInfo", label: "Fason firma satırı (SAYIN)" },
-      { key: "workOrderInfo", label: "Terbiye iş emri / istasyon satırı" },
+      { key: "workOrderInfo", get label() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} / istasyon satırı`; } },
       // OPT-IN: saha "hesap no kaldır" dedi. Anahtar taşımayan (2026-08-05 öncesi)
       // donmuş belgeler de bu satırı artık basmaz — bilinçli, bkz. renderer notu.
       { key: "accountNo", label: "Hesap no (fason firma kodu)", defaultHidden: true },

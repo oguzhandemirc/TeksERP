@@ -7,6 +7,7 @@
 // =============================================================================
 
 /** `ENUM_LABELS`in ikinci parçası — tek başına kullanılmaz, ana haritaya yayılır. */
+import { TERIM } from "./terim";
 export const ENUM_LABELS_EK: Record<string, string> = {
   // ── Elle yazılan audit işaretleri (`event`/`source`/`via` alanlarının değeri).
   // Prisma enum'u DEĞİLLER; çağrı noktalarında string olarak yazılırlar.
@@ -39,7 +40,7 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   PRODUCED_STEP: "Üretildiği adım",
   CANCEL_RESTORED: "İptal geri alındı",
   // İş emri
-  WO_CLOSE_DISPOSITION: "Terbiye iş emri kapanış kararı",
+  get WO_CLOSE_DISPOSITION() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} kapanış kararı`; },
   ORDER_LINK_ADDED: "Sipariş bağı eklendi",
   TYPE_DERIVED_FROM_LINKS: "Tür bağlardan türetildi",
   TARGET_COLOR_CHANGED: "Hedef renk değişti",
@@ -164,7 +165,7 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   SUBCONTRACT_RETURN: "Fasondan iplik dönüşü",
   SUBCONTRACT_RETURN_CANCEL: "Fasondan iplik dönüşü iptali",
   YARN_SUBCONTRACT_RETURN: "Fasondan iplik dönüş sebebi",
-  WORK_ORDER_PLAN_CHANGE: "Terbiye iş emri plan düzeltme sebebi",
+  get WORK_ORDER_PLAN_CHANGE() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} plan düzeltme sebebi`; },
   INSPECTION_VOID: "Muayene iptal sebebi",
   // ───────────────────────────────────────────────────────────────────────
   // TİCARET PAKETİ ENUM DEĞERLERİ (merge, 2026-09-01)

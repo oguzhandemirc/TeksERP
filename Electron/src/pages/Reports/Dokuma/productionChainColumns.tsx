@@ -40,9 +40,9 @@ export function chainColumns(devere: boolean): ColumnDef<ChainRow, unknown>[] {
     ) },
     { id: "isEmri", header: TERIM.terbiyeIsEmri.tekil, cell: ({ row }) => {
       const w = row.original.isEmri;
-      if (!w) return <Empty hint="Terbiye iş emri açılmamış" />;
+      if (!w) return <Empty hint={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} açılmamış`} />;
       return (
-        <DrillCell to={`/operations/work-orders/${w.id}`} title="Terbiye iş emrini aç">
+        <DrillCell to={`/operations/work-orders/${w.id}`} title={`${TERIM.terbiyeIsEmri.cumleBasi.belirtme} aç`}>
           <div className="flex items-center gap-1"><span className="font-mono text-xs">{w.no}</span><StatusBadge status={w.durum} labels={workOrderStatusLabels} tones={workOrderStatusTones} /></div>
           {w.adim && <div className="text-xs text-muted-foreground">{w.adim}</div>}
         </DrillCell>

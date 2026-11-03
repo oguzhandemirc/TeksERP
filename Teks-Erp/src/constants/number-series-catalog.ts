@@ -14,6 +14,7 @@
 export * from "./number-series-catalog.types";
 import type { NumberSeriesCatalogEntry } from "./number-series-catalog.types";
 import type { NumberSeries } from "@prisma/client";
+import { TERIM } from "./terim";
 
 type NumberSeriesDateSegment = NumberSeries["dateSegment"];
 const D = "DDMMYY" as NumberSeriesDateSegment;
@@ -61,11 +62,11 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   },
   {
     key: "workOrder",
-    scopedCounter: { durum: "hazir", not: "İKİ üreteç de `nextSeriesNo` yolundan geçiyor (terbiye iş emri açılışı + klon/split); yükleyiciler doğuş anını taşıyor (E2 okutulan aile dilimi, 2026-09-23).", uretec: ["services/workorder.service.ts", "services/helpers/workorder-clone.helper.ts"] },
-    manualEntry: { path: "services/workorder.service.ts", not: "Terbiye iş emri açılırken KÖPRÜ alan `batchNumber` ile gelir (Zod adı sonraki fazda değişir); TARANAN seri (TRAVELER_CARD) — refakat kartının barkodu aynı koddur." },
+    scopedCounter: { durum: "hazir", get not() { return `İKİ üreteç de \`nextSeriesNo\` yolundan geçiyor (${TERIM.terbiyeIsEmri.tekilKucuk} açılışı + klon/split); yükleyiciler doğuş anını taşıyor (E2 okutulan aile dilimi, 2026-09-23).`; }, uretec: ["services/workorder.service.ts", "services/helpers/workorder-clone.helper.ts"] },
+    manualEntry: { path: "services/workorder.service.ts", get not() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} açılırken KÖPRÜ alan \`batchNumber\` ile gelir (Zod adı sonraki fazda değişir); TARANAN seri (TRAVELER_CARD) — refakat kartının barkodu aynı koddur.`; } },
     panelGroup: "uretim",
     countTable: { model: "workOrder", field: "workOrderNumber", birim: "kayıt" },
-    label: "Terbiye iş emri / refakat kartı no",
+    get label() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} / refakat kartı no`; },
     seedPrefix: "IE",
     seedDateSegment: D,
     seedDigits: 4,
@@ -237,7 +238,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     },
   },
   { key: "directShipment", scopedCounter: { durum: "hazir", not: "Üreteç zaten `nextSeriesNo` yolundaydı ama yükleyici ÇIPLAK string döndürüyordu — kapsam damgası SESSİZCE kapalıydı; doğuş anı eklendi (E2 okutulan aile dilimi, 2026-09-23).", uretec: "services/subcontractor.service.ts" }, panelGroup: "fason-kartela", countTable: { model: "directShipment", field: "shipmentNo", birim: "belge" }, label: "Doğrudan sevk no", seedPrefix: "DSK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "manifest", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor (`nextManifestNo`, iki kaynak — terbiye iş emri dökümü + çuval çeki listesi — tek üreteç): kod listesi `formatChangedAt` damgasına göre süzülüyor ve çakışma atlaması aynı yerde (E2 depo-ticaret dilimi, 2026-09-23).", uretec: "services/helpers/manifest-number.helper.ts" }, panelGroup: "uretim", countTable: { model: "manifest", field: "manifestNo", birim: "belge" }, label: "Çeki listesi no", seedPrefix: "CL", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "manifest", scopedCounter: { durum: "hazir", get not() { return `Üreteç \`nextSeriesNo\` yolundan geçiyor (\`nextManifestNo\`, iki kaynak — ${TERIM.terbiyeIsEmri.tekilKucuk} dökümü + çuval çeki listesi — tek üreteç): kod listesi \`formatChangedAt\` damgasına göre süzülüyor ve çakışma atlaması aynı yerde (E2 depo-ticaret dilimi, 2026-09-23).`; }, uretec: "services/helpers/manifest-number.helper.ts" }, panelGroup: "uretim", countTable: { model: "manifest", field: "manifestNo", birim: "belge" }, label: "Çeki listesi no", seedPrefix: "CL", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   {
     key: "order",
     scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor; kapsam damgası + çakışma atlaması tek yerde, advisory kilit numara üretiminden ÖNCE alınıyor (E2 üretim dilimi, 2026-09-23).", uretec: "services/order.service.ts" },

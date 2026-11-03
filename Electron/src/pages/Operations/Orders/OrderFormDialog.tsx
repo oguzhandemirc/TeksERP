@@ -28,6 +28,7 @@ import {
   orderFormSchema,
   type OrderFormValues,
 } from "./schema";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   open: boolean;
@@ -128,8 +129,8 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
               ? partialShipped
                 ? "Sipariş kısmi sevk edilmiş — sadece termin güncellenebilir."
                 : linesEditable
-                  ? "Terbiye iş emri açılmadığı için kalemler hâlâ düzenlenebilir."
-                  : "Terbiye iş emri açılmış — sadece üst-düzey alanlar güncellenebilir."
+                  ? `${TERIM.terbiyeIsEmri.cumleBasi.yalin} açılmadığı için kalemler hâlâ düzenlenebilir.`
+                  : `${TERIM.terbiyeIsEmri.cumleBasi.yalin} açılmış — sadece üst-düzey alanlar güncellenebilir.`
               : "Müşteri sipariş bilgisi + en az bir kalem. Sipariş numarası otomatik atanır."}
           </DialogDescription>
         </DialogHeader>
@@ -268,7 +269,7 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
           ) : (
             <div className="mx-2 rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">Kalemler kilitli</span> · {lineSummary}.
-              Terbiye iş emri açılmış kalemleri değiştirmek için önce terbiye iş emrini iptal et.
+              {TERIM.terbiyeIsEmri.cumleBasi.yalin} açılmış kalemleri değiştirmek için önce {TERIM.terbiyeIsEmri.cekimKucuk.belirtme} iptal et.
             </div>
           )}
 

@@ -22,8 +22,6 @@ import { readIncomingDocStationLookup, readProductionEnabled, SETTING_KEYS } fro
 import { licenseModuleError } from "../lib/license/module-ceiling";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
-const IE = TERIM.terbiyeIsEmri;
-
 /** Yanıt tavanı — tablet listesi; daha fazlası belge no'nun yanlış okunduğunu gösterir. */
 const MAX_WORK_ORDERS = 20;
 
@@ -65,7 +63,7 @@ async function assertStationLookupEnabled(): Promise<void> {
   }
   if (!(await readProductionEnabled())) {
     throw licenseModuleError(SETTING_KEYS.PRODUCTION_ENABLED, "Üretim")
-      ?? AppError.forbidden(`Üretim modülü kapalı; ${IE.tekilKucuk} aranamaz.`, { code: "MODULE_DISABLED", module: "production" });
+      ?? AppError.forbidden(`Üretim modülü kapalı; ${TERIM.terbiyeIsEmri.tekilKucuk} aranamaz.`, { code: "MODULE_DISABLED", module: "production" });
   }
 }
 
@@ -229,11 +227,11 @@ function finish(p: {
   if (p.noDocNo) return { ...base, outcome: "NO_DOC_NO", message: "Belgede fiş/evrak numarası okunamadı; fiş no ile elle arayın." };
   if (p.noteCount === 0) return { ...base, outcome: "NO_DOCUMENT", message: `Bu numarayla kayıtlı gelen belge yok (${p.read?.senderDocNo ?? ""}); fiş no ile elle arayın.` };
   if (p.workOrders.length === 0 && p.closed && p.closed.length > 0) {
-    return { ...base, closedWorkOrderNumbers: p.closed, outcome: "NO_WORK_ORDER", message: `${IE.tekil} kapanmış, açık kartı yok: ${p.closed.join(", ")}.` };
+    return { ...base, closedWorkOrderNumbers: p.closed, outcome: "NO_WORK_ORDER", message: `${TERIM.terbiyeIsEmri.tekil} kapanmış, açık kartı yok: ${p.closed.join(", ")}.` };
   }
   if (p.workOrders.length === 0) {
-    return { ...base, outcome: "NO_WORK_ORDER", message: p.source === "SEARCH" ? `Aramaya uyan ${IE.tekilKucuk} yok.` : `Bu belgeye ait ${IE.tekilKucuk} yok.` };
+    return { ...base, outcome: "NO_WORK_ORDER", message: p.source === "SEARCH" ? `Aramaya uyan ${TERIM.terbiyeIsEmri.tekilKucuk} yok.` : `Bu belgeye ait ${TERIM.terbiyeIsEmri.tekilKucuk} yok.` };
   }
-  if (p.workOrders.length === 1) return { ...base, outcome: "SINGLE", message: `${IE.tekil} bulundu: ${p.workOrders[0]!.workOrderNumber}` };
-  return { ...base, outcome: "MULTIPLE", message: `${p.workOrders.length} ${IE.tekilKucuk} bulundu; açılacak olanı seçin.` };
+  if (p.workOrders.length === 1) return { ...base, outcome: "SINGLE", message: `${TERIM.terbiyeIsEmri.tekil} bulundu: ${p.workOrders[0]!.workOrderNumber}` };
+  return { ...base, outcome: "MULTIPLE", message: `${p.workOrders.length} ${TERIM.terbiyeIsEmri.tekilKucuk} bulundu; açılacak olanı seçin.` };
 }

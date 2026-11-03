@@ -13,6 +13,7 @@ import {
   useDeviceSettingsStore,
   type DocDeskCaptureMode,
 } from '../../../store/deviceSettingsStore';
+import { TERIM } from '../../../lib/terim';
 import { SETTINGS_COLORS as COLORS, SettingsPage, settingsStyles } from './settingsUi';
 
 const CAPTURE_OPTIONS: { value: DocDeskCaptureMode; label: string; desc: string }[] = [
@@ -48,7 +49,7 @@ function DeviceCard() {
         <View style={settingsStyles.headText}>
           <Text style={settingsStyles.title}>Bu cihaz belge masası</Text>
           <Text style={settingsStyles.subtitle}>
-            Açılınca doğrudan kamera açık belge masası gelir: kağıdı koy, okut, kontrol et, iş emrini oluştur. Varsayılan: kapalı.
+            {`Açılınca doğrudan kamera açık belge masası gelir: kağıdı koy, okut, kontrol et, ${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} oluştur. Varsayılan: kapalı.`}
           </Text>
         </View>
       </View>

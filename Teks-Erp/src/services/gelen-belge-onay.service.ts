@@ -35,6 +35,7 @@ import { readBatchNumberSource, readDocumentTotalCheck, readIncomingDocEntryMode
 import { assertProcessChoiceValue } from "./helpers/process-choice-catalog.helper";
 import { aliasKey } from "./gelen-belge-eslestirme.service";
 import { hasDocumentDeclared, isOpenForApproval, isSummaryLine, lineProblems, perDocumentGate, reviewGate, summaryLineId, totalMismatches, totalsCheck, totalWarnings, type ReviewGate } from "./gelen-belge-kontrol.service";
+import { declaredPageCount } from "../lib/gelen-belge/parti-ozet";
 import { learnBatchNoKey } from "./gelen-belge-sablon.service";
 import { preparePerDocument, summaryTargets, type PartyEntry } from "./gelen-belge-onay-parti.service";
 
@@ -152,6 +153,12 @@ function pageAndTotalGates(note: PreNote, mismatches: string[], reason: string |
     const missing = Array.from({ length: note.pageCount }, (_, i) => i + 1).filter((p) => !have.has(p));
     if (missing.length && !reason) throw AppError.conflict(`Belge ${note.pageCount} sayfa beyan ediyor; eksik sayfa: ${missing.join(", ")}. Eksik sayfayı tarayın ya da gerekçe (varianceReason) verin.`, { code: "DELIVERY_NOTE_PAGES_MISSING", missing });
     if (missing.length) warnings.push(`Eksik sayfa gerekçeyle geçildi: ${missing.join(", ")}.`);
+  } else if (note.scans.length > 0) {
+    // OCR'ın okuduğu "1/2" damgası UYARIDIR (iş emri formunda gerekçe yolu yok); kapı yalnız elle beyan edilen pageCount'ta.
+    const stamp = declaredPageCount(note.totalsDeclared);
+    const have = new Set(note.scans.map((s) => s.pageNo));
+    const missing = stamp ? Array.from({ length: stamp }, (_, i) => i + 1).filter((p) => !have.has(p)) : [];
+    if (missing.length) warnings.push(`Belge ${stamp} sayfa yazıyor; eksik sayfa: ${missing.join(", ")} okutulmadan onaylandı.`);
   }
   if (mismatches.length && !reason) {
     throw AppError.conflict(`Toplam uyuşmuyor: ${mismatches.join(" ")} Geçmek için fark gerekçesi (varianceReason) verin.`, { code: "TOTAL_MISMATCH", mismatches });
