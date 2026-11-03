@@ -153,7 +153,7 @@ function MeterField({ row, wo, meterText, locked, onEdit }: { row: DocRow; wo: W
 }
 
 /** Gramaj yalnız rotada kurşun adımı ve katalogda değer varsa çizilir; varsayılan ön seçili gelir (sözleşme 5). */
-function GramajField({ row, wo, locked }: { row: DocRow; wo: WoRowsState; locked: boolean }) {
+export function GramajField({ row, wo, locked }: { row: DocRow; wo: WoRowsState; locked: boolean }) {
   const f = row.form!;
   if (!wo.showGramaj || wo.catalog.options.length === 0) return null;
   return (

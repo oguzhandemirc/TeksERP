@@ -24,9 +24,11 @@ import { removePage, type ScanPage } from '../docScan';
 import { useDocScan } from '../useDocScan';
 import { usePageSource } from '../usePageSource';
 import { ScannerSection } from './DocBatchView';
-import DocRowCard from './DocRowCard';
+import DocRowCard, { GramajField } from './DocRowCard';
 import { useWoRows, type DocRow, type WoRowsState } from './useWoRows';
 import WoFormFields from './WoFormFields';
+import { FieldSelectorSheet, FieldsButton, OtherFields } from './WoFieldSelector';
+import { useWoFieldLayout } from './useWoFieldPrefs';
 import {
   applyDocRead,
   applyOrderLine,
@@ -53,10 +55,26 @@ const DOC_PLACEHOLDER = 'Belge okutulunca dolar';
 
 export default function UnifiedWoForm(props: Props) {
   const u = useUnifiedWoForm(props);
-  const { wo, row, scan, form, done } = u;
+  const { wo, row, scan, form, done, fields } = u;
+  const fieldProps = {
+    state: form,
+    edit: u.edit,
+    route: u.route,
+    routeLocked: props.routeLocked,
+    onRoute: u.setRoute,
+    routes: u.routes,
+    routesLoading: u.routesLoading,
+    scanMode: u.scanMode,
+    hasTambur: u.hasTambur,
+    foldValues: u.foldValues,
+    showQuantity: u.showQuantity,
+    locked: done || wo.saving,
+    onOrderLinePicked: u.onOrderLine,
+  };
   return (
     <>
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" testID="ie-tek-form">
+        <FieldsButton onPress={fields.openSheet} />
         {!done && (
           <Button mode="contained" icon="file-document-outline" onPress={u.okut} disabled={wo.saving || scan.b.sending || scan.source.busy} contentStyle={styles.bigBtn} labelStyle={styles.bigLabel} testID="ie-belge-okut">
             {row ? 'Belgeyi değiştir' : 'Belge okut'}
@@ -67,7 +85,7 @@ export default function UnifiedWoForm(props: Props) {
         )}
         <Text style={styles.section}>Belge</Text>
         {row ? (
-          <DocRowCard row={row} wo={wo} customers={u.customers} customersLoading={u.customersLoading} />
+          <DocRowCard row={row} wo={wo} customers={u.customers} customersLoading={u.customersLoading} hideGramaj={fields.isOther('gramaj')} />
         ) : (
           <View style={styles.placeholders} testID="ie-form-belge-yer-tutucu">
             {['Müşteri', 'Parti no', 'Kurşun metresi'].map((l) => (
@@ -75,21 +93,11 @@ export default function UnifiedWoForm(props: Props) {
             ))}
           </View>
         )}
-        <WoFormFields
-          state={form}
-          edit={u.edit}
-          route={u.route}
-          routeLocked={props.routeLocked}
-          onRoute={u.setRoute}
-          routes={u.routes}
-          routesLoading={u.routesLoading}
-          scanMode={u.scanMode}
-          hasTambur={u.hasTambur}
-          foldValues={u.foldValues}
-          showQuantity={u.showQuantity}
-          locked={done || wo.saving}
-          onOrderLinePicked={u.onOrderLine}
-        />
+        <WoFormFields {...fieldProps} show={fields.isTop} />
+        <OtherFields count={fields.other.length} open={fields.otherOpen} onToggle={fields.toggleOther}>
+          {row?.form && fields.isOther('gramaj') && <GramajField row={row} wo={wo} locked={done || wo.saving} />}
+          <WoFormFields {...fieldProps} show={fields.isOther} zone="other" />
+        </OtherFields>
         {wo.mode === 'SEPARATE' && (
           <Text style={styles.hint} testID="ie-form-ayri-onay">
             Fabrika ayarı ayrı onay: kayıt taslak kalır; üretim ve plan alanları {TERIM.terbiyeIsEmri.tekilKucuk} panelde onaylanırken girilir.
@@ -99,6 +107,14 @@ export default function UnifiedWoForm(props: Props) {
       <CreateBar wo={wo} done={done} block={u.block} onNew={props.onNew} />
       <DuplicateDocNoDialog conflict={wo.duplicate?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicate} onConfirm={() => void wo.confirmDuplicate()} />
       <ScanModals scan={scan} />
+      <FieldSelectorSheet
+        visible={fields.sheetOpen}
+        hidden={fields.prefs.hidden}
+        onToggle={fields.prefs.toggle}
+        onReset={fields.prefs.reset}
+        onDismiss={fields.closeSheet}
+        pending={fields.prefs.pending}
+      />
     </>
   );
 }
@@ -132,6 +148,12 @@ function useUnifiedWoForm({ initialRoute }: Props) {
   const customers: PickerOption[] = useMemo(() => (ctx.data?.data.customers ?? []).map((x) => ({ value: x.id, label: x.name })), [ctx.data]);
   const scan = useDocScanFlow(wo.addNote);
   useDocReadToForm(row, setForm);
+  const fields = useWoFieldLayout(form, {
+    showQuantity: showQuantity || !!extras.targetQuantity || !!extras.targetWeight,
+    hasTambur,
+    hasKursun: !!wo.showGramaj && wo.catalog.options.length > 0 && !!row?.form,
+    hasRouteSteps: !!route && (route.steps?.length ?? 0) > 0,
+  });
 
   const done = row?.result?.kind === 'OPENED' || row?.result?.kind === 'DRAFT';
   const issues = [
@@ -148,7 +170,7 @@ function useUnifiedWoForm({ initialRoute }: Props) {
     scan.source.add();
   };
   return {
-    route, setRoute, form, scanMode, showQuantity, hasTambur, foldValues: fold.values, wo, row, scan, done, block, okut, customers,
+    route, setRoute, form, fields, scanMode, showQuantity, hasTambur, foldValues: fold.values, wo, row, scan, done, block, okut, customers,
     customersLoading: ctx.isLoading,
     routes: routesQ.data?.data ?? [],
     routesLoading: routesQ.isLoading,
