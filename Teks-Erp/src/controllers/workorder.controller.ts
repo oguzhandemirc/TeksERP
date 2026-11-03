@@ -87,6 +87,22 @@ const workOrderCoreShape = {
   targetValues: z.array(targetValueItemSchema).max(20).optional(),
 };
 
+// Serbest metin tarih quickStart'ta Invalid Date olurdu → gelen belge formunda yalnız ISO tarih/zaman.
+const formIsoDate = (label: string) => z.union([z.iso.date(), z.iso.datetime({ offset: true })], `${label} tarihi geçersiz (YYYY-AA-GG ya da ISO zaman)`).nullable().optional();
+
+/** K30 S16a: gelen belge iş emri formunun quickStart'a geçen alanları — klasik/quick-start ile AYNI Zod (tek kaynak), tarih yalnız ISO. */
+export const workOrderFormFieldShape = {
+  targetItemId: workOrderCoreShape.targetItemId,
+  targetColorId: workOrderCoreShape.targetColorId,
+  width: workOrderCoreShape.width,
+  targetQuantity: workOrderCoreShape.targetQuantity,
+  targetWeight: workOrderCoreShape.targetWeight,
+  plannedStartDate: formIsoDate("Planlı başlangıç"),
+  plannedEndDate: formIsoDate("Planlı bitiş"),
+  foldType: workOrderCoreShape.foldType,
+  orderLineIds: workOrderCoreShape.orderLineIds,
+};
+
 const hasRoute = (d: { routeTemplateId?: string | null; steps?: unknown[] | null }) =>
   Boolean(d.routeTemplateId) || (Array.isArray(d.steps) && d.steps.length > 0);
 const ROUTE_REFINE_MSG = {
