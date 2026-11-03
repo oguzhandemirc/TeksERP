@@ -252,7 +252,7 @@ Kalan atlamalar üç biçimde ve strict hiçbirini görmez:
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
-| `Teks-Erp/scripts/test_okutmayla_rota.ts` | K29 okutmayla rota: SIRALI bayt-aynı; var olan adım, adım ekleme + S10 hedef, ileri okutmada ATLANDI (satır yerinde + olay), açık iş 409 + bitmiş say ve geç, Atlanamaz 409, idempotent token, eşzamanlı tek ekleme, atlanan iş faturasız, rotasız İE akışı | ✓ | ✓B1 (bu commit) — açık-iş engeli devre dışı → §d 4 ❌ (2026-11-03) |  |
+| `Teks-Erp/scripts/test_okutmayla_rota.ts` | K29 okutmayla rota: SIRALI bayt-aynı; var olan adım, adım ekleme + S10 hedef, ileri okutmada ATLANDI (satır yerinde + olay), açık iş 409 + bitmiş say ve geç, Atlanamaz 409, idempotent token, eşzamanlı tek ekleme, atlanan iş faturasız, rotasız İE akışı; "bitmiş say ve geç" kapatma yetkisi (403); ATLANDI ara adımdan sonra kurşun yeniden açma (`nextLiveStep`) | ✓ | ✓B1 (bu commit) — açık-iş engeli devre dışı → §d 4 ❌ (2026-11-03) |  |
 | `Electron/src/pages/Operations/Orders/LinkedWorkOrdersCard.test.tsx` | Bağ yoksa kart görünmez (null) · distinct İE'ler no + Türkçe durum etiketiyle listelenir · SUPERSEDED 'Devredildi' izi olarak görünür · tıkta `openTar |  |  |  |
 | `Electron/src/pages/Operations/Orders/OrderLineWoChips.test.tsx` | Bağ yoksa/undefined → null · İE no + Türkçe durum etiketi basar · CANCELLED bağ gizlenir, yalnız CANCELLED varsa null · SUPERSEDED 'Devredildi' izi gö |  |  |  |
 | `Electron/src/pages/Operations/Orders/deadline-risk.test.ts` | DAR kural (NO_WORK_ORDER): termin yok → null · COMPLETED/CANCELLED sipariş → null · termin uzak (5 gün) → null · 2 gün kaldı + İE yok → risk (overdue= |  |  |  |
