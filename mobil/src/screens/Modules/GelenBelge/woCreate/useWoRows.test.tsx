@@ -225,3 +225,41 @@ describe('useWoRows — kayıt sağlamlığı ve belge masası (K23)', () => {
     expect(bodies.n2).not.toHaveProperty('stepPlanning');
   });
 });
+
+describe('useWoRows — K27 aynı belge no (WARN)', () => {
+  const active = () =>
+    Object.assign(new Error('Bu belge no GB-7 olarak zaten kayıtlı'), {
+      status: 409,
+      details: { code: 'DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE', senderDocNo: '17', peers: [{ id: 'p1', noteNo: 'GB-7', status: 'APPROVED', workOrderNumbers: ['IE-12'] }] },
+    });
+  it('⭐ 409 ACTIVE → satır düşer, diyalog künyesi dolar; "Yine de onayla" yalnız o satırı bayrakla gönderir', async () => {
+    mockSettings.mockResolvedValue({ formApproval: 'WITH_WORK_ORDER' });
+    mockCreate.mockImplementation(async (id: string, b: { confirmDuplicateDocNo?: boolean }) => {
+      if (id === 'n1' && !b.confirmDuplicateDocNo) throw active();
+      return { workOrderId: `wo-${id}`, workOrderNo: `IE-${id}`, batchNumber: null, rollId: 'roll' };
+    });
+    const h = setup();
+    await waitFor(() => expect(h.result.current.mode).toBe('WITH_WORK_ORDER'));
+    await withRows(h, [detail('n1'), detail('n2')]);
+    await act(async () => void (await h.result.current.saveAll()));
+    expect(h.result.current.duplicate).toMatchObject({ noteId: 'n1', conflict: { senderDocNo: '17' } });
+    expect(mockCreate.mock.calls[0][1]).not.toHaveProperty('confirmDuplicateDocNo');
+    let saved: { noteId: string }[] = [];
+    await act(async () => void (saved = await h.result.current.confirmDuplicate()));
+    expect(mockCreate).toHaveBeenCalledTimes(3);
+    expect(mockCreate.mock.calls[2]).toEqual(['n1', expect.objectContaining({ confirmDuplicateDocNo: true })]);
+    expect(saved.map((s) => s.noteId)).toEqual(['n1']);
+    expect(h.result.current.duplicate).toBeNull();
+    expect(h.result.current.rows.map((r) => r.result?.kind)).toEqual(['OPENED', 'OPENED']);
+  });
+  it('BLOCK kodu (DUPLICATE_DOC_NO) diyalog açmaz: bugünkü satır hatası', async () => {
+    mockSettings.mockResolvedValue({ formApproval: 'WITH_WORK_ORDER' });
+    mockCreate.mockRejectedValue(Object.assign(new Error('Aynı belge no'), { status: 409, details: { code: 'DELIVERY_NOTE_DUPLICATE_DOC_NO' } }));
+    const h = setup();
+    await waitFor(() => expect(h.result.current.mode).toBe('WITH_WORK_ORDER'));
+    await withRows(h, [detail('n1')]);
+    await act(async () => void (await h.result.current.saveAll()));
+    expect(h.result.current.duplicate).toBeNull();
+    expect(h.result.current.rows[0].result).toEqual({ kind: 'FAILED', text: 'Aynı belge no' });
+  });
+});
