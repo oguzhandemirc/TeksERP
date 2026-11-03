@@ -187,7 +187,9 @@ async function run(): Promise<void> {
   check("§5 çeşit olmayan özellik (bayrak) → 400 PROCESS_PROPERTY_INVALID", bad?.status === 400 && bad.code === "PROCESS_PROPERTY_INVALID", JSON.stringify(bad));
 
   console.log("§6 Müşteri partisi tek tanım");
-  const rw = readFileSync(path.join(__dirname, "../src/services/ready-works.service.ts"), "utf8");
+  // Üyelik SQL'i S15c-d1'de `ready-works-sql.helper`a taşındı; servis + helper birlikte ölçülür.
+  const rw = ["../src/services/ready-works.service.ts", "../src/services/helpers/ready-works-sql.helper.ts"]
+    .map((f) => readFileSync(path.join(__dirname, f), "utf8")).join("\n");
   check("§6 ready-works parti anahtarı/üyeliği helper'dan (ikinci SQL kopyası yok)", rw.includes("customerBatchKeySql(\"n\")") && rw.includes("customerBatchMemberSql(\"n\")") && !rw.includes(`"ownerCustomerId"::text || ':'`) && !rw.includes(`COALESCE(n."customerBatchNo", '')`));
 }
 

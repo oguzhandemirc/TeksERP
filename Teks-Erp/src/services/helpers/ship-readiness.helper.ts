@@ -79,6 +79,15 @@ export function readinessClassSql(alias: string): Prisma.Sql {
   return Prisma.sql`(CASE ${Prisma.join(whens, " ")} ELSE NULL END)`;
 }
 
+/**
+ * Top CANLI mı (sınıfı HAZIR ∪ İŞLEMDE) — `readinessClassSql` IN ('READY','IN_PROCESS')in indeks-dostu ikizi:
+ * enum literal'i (`::text` yok) `rolls(status, …)` indeksine iner; sevke hazır birim ön süzgeci buradan okur.
+ */
+export function liveReadinessSql(alias: string): Prisma.Sql {
+  const live = [...SHIP_READY_READY_STATUSES, ...SHIP_READY_IN_PROCESS_STATUSES];
+  return Prisma.sql`${Prisma.raw(`${alias}.status`)} IN (${Prisma.join(live.map((s) => Prisma.sql`${s as string}::"RollStatus"`))})`;
+}
+
 export interface ShipReadyPolicy {
   rule: ShipReadyRule;
   tolerancePct: number;
