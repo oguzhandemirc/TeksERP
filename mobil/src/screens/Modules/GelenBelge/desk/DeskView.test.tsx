@@ -15,6 +15,7 @@ const mockSuggest = jest.fn();
 const mockFinish = jest.fn();
 let mockDone: { note: { id: string; noteNo: string }; pages: number; runKey: number } | null = null;
 let mockParties: unknown = null;
+const mockAutoRefs: unknown[] = [];
 
 jest.mock('../../../../services/inboundDoc.service', () => ({
   inboundDocService: {
@@ -36,7 +37,13 @@ jest.mock('../useDocScan', () => ({
 }));
 jest.mock('./DeskCamera', () => {
   const { Text: T } = jest.requireActual('react-native');
-  return { __esModule: true, default: (p: { recent: { workOrderNos: string[] }[] }) => <T testID="masa-kamera">{`son:${p.recent.map((r) => r.workOrderNos.join('+')).join('|')}`}</T> };
+  return {
+    __esModule: true,
+    default: (p: { recent: { workOrderNos: string[] }[]; autoState?: unknown }) => {
+      mockAutoRefs.push(p.autoState);
+      return <T testID="masa-kamera">{`son:${p.recent.map((r) => r.workOrderNos.join('+')).join('|')}`}</T>;
+    },
+  };
 });
 // Okuma bağlanmaz: kart takıldığında belge detayı gelmiş sayılır (form dolar).
 function MockDocRowCard({ row, wo }: { row: DocRow; wo: WoRowsState }) {
@@ -66,6 +73,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockDone = null;
   mockParties = null;
+  mockAutoRefs.length = 0;
   mockSuggest.mockResolvedValue({ routeTemplateId: null, routeName: null, source: null });
 });
 
@@ -98,6 +106,9 @@ describe('DeskView', () => {
     expect(bodyOf(0)).toMatchObject({ routeTemplateId: 'r2', stepPlanning: [{ sequence: 1, plannedMachineId: 'm-1' }] });
   });
 
+});
+
+describe('DeskView — kip ve dönüş', () => {
   it('⭐ çok parti + "Tek iş emri" kipi: tek makine seçilir, gövdeye ÜST düzey gider; parti başına seçim çizilmez', async () => {
     const party = (blockNo: number, meters: number) => ({ blockNo, batchNo: `P${blockNo}`, orderNo: null, declaredTopCount: null, declaredMeters: null, lineCount: 1, meters, weightKg: null, warnings: [] });
     mockParties = { multi: true, defaultMode: 'SINGLE', warnings: [], parties: [party(1, 40), party(2, 60)] };
@@ -124,6 +135,21 @@ describe('DeskView', () => {
     expect(mockFinish).toHaveBeenCalled();
     expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ type: 'success', text1: expect.stringContaining('IE-7') }));
     expect(bodyOf(0).routeTemplateId).toBe('r1');
+  });
+
+  it('⭐ okut → inceleme → oluştur → kameraya dönüş: otomatik çekim durumu (boş masa referansı) AYNI ref ile sürer', async () => {
+    mockCreate.mockResolvedValue(opened('IE-8'));
+    const s = renderWithPaper(<DeskView shortcuts={SHORTCUTS} />);
+    const before = mockAutoRefs[mockAutoRefs.length - 1];
+    expect(before).toBeTruthy();
+    mockDone = { note: { id: 'n1', noteNo: 'GB-1' }, pages: 1, runKey: 1 };
+    s.rerender(<DeskView shortcuts={SHORTCUTS} />);
+    await waitFor(() => expect(s.getByTestId('masa-olustur')).not.toBeDisabled());
+    expect(s.queryByTestId('masa-kamera')).toBeNull(); // kamera inceleme boyunca söker
+    mockDone = null;
+    fireEvent.press(s.getByTestId('masa-olustur'));
+    await waitFor(() => expect(s.getByTestId('masa-kamera')).toBeTruthy());
+    expect(mockAutoRefs[mockAutoRefs.length - 1]).toBe(before);
   });
 
   it('⭐ çift dokunuş → tek istek', async () => {
