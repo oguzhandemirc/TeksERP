@@ -1,6 +1,7 @@
 // S16b tek form — panel klasik formunun üretim/plan inputları (Rota, Sipariş bağı, Hedef kumaş, En, Hedef metraj/kg, Hedef renk, Kat tipi,
 // Planlı başlangıç/bitiş, Not). Belgeden dolan alanda "belgeden" rozeti; desen/renk önerisi "X mi? Evet" çipiyle onaylanır.
 // K30-D: `show` ile yalnız seçilen alanlar çizilir; gizlenenler aynı bileşenle altta "Diğer alanlar"da (zone="other").
+// Rota adımları / makine / tür / hedef özellikler `plan` ile WoPlanFields'tan.
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Chip, Text, TextInput } from 'react-native-paper';
@@ -23,6 +24,7 @@ import type { AvailableOrderLine } from '../../../../services/order.service';
 import { SCAN_ROUTE, isScanRoute } from './woFromDoc';
 import { plannedDayOptions, type DocFilledKey, type WoFormExtras, type WoFormState } from './woForm';
 import type { WoFieldKey } from './woFieldCatalog';
+import { RouteStepsBlock, TargetPropsBlock, WoTypeBlock, type WoPlanCtx } from './WoPlanFields';
 
 interface Props {
   state: WoFormState;
@@ -45,6 +47,8 @@ interface Props {
   show?: (k: WoFieldKey) => boolean;
   /** 'other' = altta "Diğer alanlar" bölümü (bölüm başlığı "Üretim" çizilmez). */
   zone?: 'top' | 'other';
+  /** K30-D: rota adımları + makine, iş emri türü, hedef özellikler; yoksa çizilmez. */
+  plan?: WoPlanCtx;
 }
 
 type Picker = 'route' | 'item' | 'start' | 'end' | null;
@@ -73,6 +77,8 @@ export default function WoFormFields(props: Props) {
           hint={p.route && isScanRoute(p.route) ? SCAN_ROUTE_HINT : stepPath.length ? stepPath.join(' → ') : undefined}
         />
       )}
+      {p.plan && <RouteStepsBlock plan={p.plan} show={show} locked={locked} />}
+      {p.plan && <WoTypeBlock plan={p.plan} show={show} locked={locked} />}
 
       {show('siparis') && (
         <>
@@ -84,6 +90,7 @@ export default function WoFormFields(props: Props) {
       )}
 
       <TargetFields {...p} onPick={setPicker} />
+      {p.plan && <TargetPropsBlock plan={p.plan} show={show} locked={locked} />}
       <FoldAndPlan {...p} onPick={setPicker} />
       <FieldPickers {...p} picker={picker} setPicker={setPicker} days={days} />
     </View>

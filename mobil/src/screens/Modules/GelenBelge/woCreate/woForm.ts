@@ -3,6 +3,9 @@
 // yalnız formu doldurur, düğmenin neden kapalı olduğunu söyler ve verilen alanı gövdeye koyar.
 import { addDaysToKey, factoryDayKey, factoryDayStartIso, fmtDayKey } from '../../../../lib/factory-time';
 import type { CreateWorkOrderFromNoteBody, DocFormFields, DocFormSuggestions, TabletWoEntry } from '../../../../services/inboundDoc.service';
+import type { ProductionRoute } from '../../../../services/route.service';
+import { kursunStepOf } from '../desk/deskPlan';
+import { buildStepsBody, sameAsRoute, type EditStep } from './woSteps';
 
 export type { TabletWoEntry };
 const ENTRIES: readonly TabletWoEntry[] = ['IKISI', 'BELGE', 'TOP'];
@@ -49,7 +52,21 @@ export interface WoFormExtras {
   plannedStart: string | null;
   plannedEnd: string | null;
   note: string;
+  // K30-D: null / anahtarsız = kullanıcı dokunmadı → gövdeye GİTMEZ (sunucu bugünkü gibi türetir).
+  /** İş emri türü; null = otomatik (sipariş kalemi varsa siparişe, yoksa stoğa). */
+  woType: WoType | null;
+  /** Hedef özellikler (BAYRAK) açık kümesi; null = rota varsayılanları. */
+  propertyIds: string[] | null;
+  /** Düzenlenmiş rota adımları; null = şablon aynen. */
+  steps: EditStep[] | null;
+  /** Kurşun adımının plan makinesi: undefined = karar yok (şablon makinesi) · null = "Sonra seçilsin". */
+  machineId?: string | null;
 }
+
+export type WoType = 'ORDER_PRODUCTION' | 'STOCK_PRODUCTION';
+
+/** Panelin türetmesi (workOrderPayload): bağlı sipariş kalemi varsa siparişe üretim, yoksa stoğa. */
+export const deriveWoType = (orderLineIds: readonly string[]): WoType => (orderLineIds.length ? 'ORDER_PRODUCTION' : 'STOCK_PRODUCTION');
 
 export interface WoFormState {
   extras: WoFormExtras;
@@ -76,6 +93,9 @@ export const EMPTY_EXTRAS: WoFormExtras = {
   plannedStart: null,
   plannedEnd: null,
   note: '',
+  woType: null,
+  propertyIds: null,
+  steps: null,
 };
 
 export function initialFormState(): WoFormState {
@@ -128,12 +148,21 @@ export function applyDocRead(s: WoFormState, noteId: string, fields: DocFormFiel
 /** Elle düzenleme: belgeden alanın rozeti düşer, sonraki okuma bu alanı ezmez. */
 export function editExtras(s: WoFormState, patch: Partial<WoFormExtras>): WoFormState {
   const keys = (Object.keys(patch) as (keyof WoFormExtras)[]).filter((k): k is DocFilledKey => ['width', 'targetQuantity', 'targetWeight', 'note'].includes(k));
+  const extras = { ...s.extras, ...patch };
+  // Panel kuralı: hedef kumaş değişince seçilen özellik kümesi boşalır (dokunulmadıysa varsayılan kalır).
+  if ('targetItemId' in patch && patch.targetItemId !== s.extras.targetItemId && s.extras.propertyIds !== null && !('propertyIds' in patch)) extras.propertyIds = [];
   return {
     ...s,
-    extras: { ...s.extras, ...patch },
+    extras,
     fromDoc: s.fromDoc.filter((k) => !keys.includes(k)),
     touched: [...new Set([...s.touched, ...keys])],
   };
+}
+
+/** Rota değişti: adım düzenlemesi, makine ve özellik kümesi yeni rotaya göre baştan (eski rota istasyonu kalmasın). */
+export function resetForRoute(s: WoFormState): WoFormState {
+  const { machineId: _m, ...rest } = s.extras;
+  return { ...s, extras: { ...rest, steps: null, propertyIds: null } };
 }
 
 /** Belge değişti (çıkarıldı): belgeden gelen dokunulmamış alanlar ve öneriler temizlenir. */
@@ -171,6 +200,8 @@ export function extrasIssues(e: WoFormExtras, c: ExtrasCtx): string[] {
   if (!c.perParty && bad(e.targetWeight)) out.push('Hedef kg sıfırdan büyük bir sayı olmalı.');
   if (c.hasTambur && !e.foldType) out.push('Kat tipini seçin.');
   if (e.plannedStart && e.plannedEnd && e.plannedEnd < e.plannedStart) out.push('Planlı bitiş başlangıçtan önce olamaz.');
+  if (e.woType === 'ORDER_PRODUCTION' && e.orderLineIds.length === 0) out.push('Siparişe üretim için sipariş kalemi seçin ya da "Stoğa üretim" seçin.');
+  if (e.steps && e.steps.length === 0) out.push('Rotada en az bir adım kalmalı.');
   return out;
 }
 
@@ -183,11 +214,24 @@ export function createBlockReason(a: { hasDoc: boolean; reading: boolean; issues
 
 export type ExtraBody = Pick<
   CreateWorkOrderFromNoteBody,
-  'targetItemId' | 'targetColorId' | 'width' | 'targetQuantity' | 'targetWeight' | 'plannedStartDate' | 'plannedEndDate' | 'foldType' | 'notes' | 'orderLineIds'
+  | 'targetItemId'
+  | 'targetColorId'
+  | 'width'
+  | 'targetQuantity'
+  | 'targetWeight'
+  | 'plannedStartDate'
+  | 'plannedEndDate'
+  | 'foldType'
+  | 'notes'
+  | 'orderLineIds'
+  | 'type'
+  | 'targetPropertyIds'
+  | 'steps'
+  | 'stepPlanning'
 >;
 
 /** Form ucunun ek alanları: yalnız dolu olanlar gider (anahtarsız = sunucuda bugünkü türetme). */
-export function buildExtraBody(e: WoFormExtras, c: { hasTambur: boolean; perParty?: boolean }): ExtraBody {
+export function buildExtraBody(e: WoFormExtras, c: { hasTambur: boolean; perParty?: boolean; route?: ProductionRoute | null }): ExtraBody {
   const out: ExtraBody = {};
   if (e.targetItemId) out.targetItemId = e.targetItemId;
   if (e.targetColorId) out.targetColorId = e.targetColorId;
@@ -205,7 +249,21 @@ export function buildExtraBody(e: WoFormExtras, c: { hasTambur: boolean; perPart
   if (e.orderLineIds.length) out.orderLineIds = [...e.orderLineIds];
   const note = e.note.trim();
   if (note) out.notes = note;
+  if (e.woType) out.type = e.woType;
+  if (e.propertyIds !== null) out.targetPropertyIds = [...e.propertyIds];
+  Object.assign(out, planBody(e, c));
   return out;
+}
+
+/**
+ * Adım + makine: düzenlenmiş liste şablondan farklıysa `steps` (makine kurşun adımında); değilse makine kararı
+ * `stepPlanning`le (bugünkü yol). PER_PARTY'de üst makine gitmez (parti başına plan; withDeskPlan ile aynı).
+ */
+function planBody(e: WoFormExtras, c: { perParty?: boolean; route?: ProductionRoute | null }): Pick<ExtraBody, 'steps' | 'stepPlanning'> {
+  const machine = c.perParty ? undefined : e.machineId;
+  if (e.steps && c.route && e.steps.length > 0 && !sameAsRoute(e.steps, c.route)) return { steps: buildStepsBody(e.steps, machine) };
+  const seq = kursunStepOf(c.route)?.sequence ?? null;
+  return machine !== undefined && seq !== null ? { stepPlanning: [{ sequence: seq, plannedMachineId: machine }] } : {};
 }
 
 /** Planlı gün seçenekleri (takvim paketi yok): bugünden itibaren `days` gün. */

@@ -128,10 +128,12 @@ function PlanSection({ row, wo, route, machines, locked }: PlanProps) {
   );
 }
 
-function MachineChips({ list, value, locked, testID, onChange }: { list: DeskKursunMachine[]; value: string | null; locked: boolean; testID: string; onChange: (id: string | null) => void }) {
+/** Kurşun makinesi çipleri ("Sonra seçilsin" + istasyonun makineleri); K30-D tek form da kullanır. */
+export function MachineChips(p: { list: readonly DeskKursunMachine[]; value: string | null; locked: boolean; testID: string; onChange: (id: string | null) => void; label?: string }) {
+  const { list, value, locked, testID, onChange } = p;
   return (
     <View style={styles.party}>
-      <Text style={styles.label}>Kurşun makinesi</Text>
+      <Text style={styles.label}>{p.label ?? 'Kurşun makinesi'}</Text>
       <View style={styles.chips} testID={testID}>
         <Chip selected={value === null} onPress={() => onChange(null)} disabled={locked} style={styles.chip} testID={`${testID}-yok`}>
           Sonra seçilsin

@@ -14,7 +14,7 @@ import {
   type FieldContext,
 } from './woFieldCatalog';
 
-const ctx: FieldContext = { showQuantity: true, hasTambur: true, hasKursun: true, hasRouteSteps: true };
+const ctx: FieldContext = { showQuantity: true, hasTambur: true, hasKursun: true, hasRouteSteps: true, hasMachine: true };
 const noDoc = { fromDoc: [], suggestions: {}, docText: { desen: null, renk: null } };
 
 describe('woFieldCatalog', () => {
@@ -23,12 +23,12 @@ describe('woFieldCatalog', () => {
     expect(new Set(WO_FIELDS.map((f) => f.key)).size).toBe(WO_FIELDS.length);
   });
 
-  it('dilim 2 alanları katalogda ama ⚙ listesinde henüz yok', () => {
-    for (const k of ['hedefOzellik', 'isEmriTuru', 'makine', 'rotaAdimlari'] as const) {
-      expect(WO_FIELDS.find((f) => f.key === k)?.planned).toBe(true);
-    }
+  it('dilim 2 alanları (adımlar, makine, tür, hedef özellik) artık ⚙ listesinde', () => {
     const listed = selectorSections().flatMap((s) => s.fields.map((f) => f.key));
-    expect(listed).not.toContain('makine');
+    for (const k of ['hedefOzellik', 'isEmriTuru', 'makine', 'rotaAdimlari'] as const) {
+      expect(WO_FIELDS.find((f) => f.key === k)?.planned).toBeUndefined();
+      expect(listed).toContain(k);
+    }
     expect(listed).toContain('en');
     expect(selectorSections().map((s) => s.section)).toEqual(['Belge', 'Üretim', 'Plan']);
   });
@@ -71,11 +71,14 @@ describe('woFieldCatalog', () => {
 
   it('koşullu alanlar: metraj/kg bayrakla, kat tipi tamburla, gramaj/makine kurşunla, adımlar rotayla', () => {
     const off: FieldContext = { showQuantity: false, hasTambur: false, hasKursun: false, hasRouteSteps: false };
-    for (const k of ['hedefMetraj', 'hedefKg', 'katTipi', 'gramaj', 'makine', 'rotaAdimlari'] as const) {
+    for (const k of ['hedefMetraj', 'hedefKg', 'katTipi', 'gramaj', 'makine', 'rotaAdimlari', 'hedefOzellik'] as const) {
       expect(fieldApplicable(k, off)).toBe(false);
       expect(fieldApplicable(k, ctx)).toBe(true);
     }
     expect(fieldApplicable('en', off)).toBe(true);
+    expect(fieldApplicable('isEmriTuru', off)).toBe(true);
+    // Makine kurşun adımından değil, o istasyonda makine olmasından: kurşun var + makine yok → çizilmez.
+    expect(fieldApplicable('makine', { ...ctx, hasMachine: false })).toBe(false);
     // "Diğer alanlar (n)": koşulu tutmayan ve belgeden dolan gizli alan sayılmaz.
     expect(otherFields(['katTipi', 'en', 'not'], ['not'], off)).toEqual(['en']);
     expect(otherFields(['katTipi', 'en', 'not'], [], ctx)).toEqual(['en', 'katTipi', 'not']);

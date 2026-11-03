@@ -194,7 +194,7 @@ describe('UnifiedWoForm — ⚙ Alanlar (K30-D)', () => {
       expect(s.getByTestId(`ie-alan-zorunlu-${k}`)).toBeTruthy();
       expect(s.getByTestId(`ie-alan-anahtar-${k}`)).toBeDisabled();
     }
-    expect(s.queryByTestId('ie-alan-hedefOzellik')).toBeNull();
+    expect(s.getByTestId('ie-alan-hedefOzellik')).toBeTruthy();
     fireEvent.press(s.getByTestId('ie-alan-rota'));
     expect(mockPrefSave).not.toHaveBeenCalled();
     fireEvent.press(s.getByTestId('ie-alanlar-varsayilan'));
