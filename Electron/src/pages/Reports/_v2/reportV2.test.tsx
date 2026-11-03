@@ -19,6 +19,7 @@ import { renderWithProviders } from "@/test/render";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 import { REPORT_BY_KEY, REPORT_CATALOG, type ReportCatalogEntry, type ReportCatalogEntryV2 } from "@/lib/report-catalog";
 import { isReportOpenWith } from "@/lib/report-gate";
+import { toMenuLayoutState } from "@/lib/menu-layout";
 
 let closed: string[] | null = [];
 let v2: boolean | undefined;
@@ -140,6 +141,12 @@ describe("§3 çizim kümesi — centerGroups / isCenterEntryOpen", () => {
     expect(keys(access())).not.toContain("sales/termin");
     closed = null;
     expect(keys(access())).toEqual([]);
+  });
+  it("⭐ K19: menüden gizlenen rapor KATEGORİSİNİN v2 satırları Merkez'de çizilmez; diğer kategori durur", () => {
+    const cat = [ready("subcontract/fasoncular"), ready("sales/termin")];
+    const menu = toMenuLayoutState({ hiddenScreens: ["reports/subcontract"], advancedGroup: false, advancedScreens: [] });
+    expect(centerGroups(access(), cat).flatMap((g) => g.entries.map((e) => e.key))).toEqual(["sales/termin", "subcontract/fasoncular"]);
+    expect(centerGroups(access(), cat, menu).flatMap((g) => g.entries.map((e) => e.key))).toEqual(["sales/termin"]);
   });
 });
 

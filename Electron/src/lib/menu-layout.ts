@@ -26,9 +26,14 @@ export function menuKeyOf(to: string): string {
   return to.replace(/[?#].*$/, "").replace(/^\/+/, "").replace(/\/+$/, "");
 }
 
-/** Ekran menüden gizli mi (palet + hub + kenar menü). */
+/** Ekran menüden gizli mi (palet + hub + kenar menü + Rapor Merkezi). */
 export function isMenuHidden(state: MenuLayoutState, to: string): boolean {
-  return state.hidden.size > 0 && state.hidden.has(menuKeyOf(to));
+  if (state.hidden.size === 0) return false;
+  const key = menuKeyOf(to);
+  if (state.hidden.has(key)) return true;
+  // Rapor alt sayfasının kendi anahtarı yok; kategori hub'ı ve ALT raporları aynı yüklemi taşır.
+  const segs = key.split("/");
+  return segs[0] === "reports" && segs.length >= 3 && state.hidden.has(`reports/${segs[1]}`);
 }
 
 /** Ekran Gelişmiş grubunda mı (gizli değilse). */
