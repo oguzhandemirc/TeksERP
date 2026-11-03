@@ -222,11 +222,9 @@ const CLAUDE_MD_SIZE_CAPS = { "CLAUDE.md": 12 * 1024, "Teks-Erp/CLAUDE.md": 10 *
 // otomatik değildir. Duvara dayanan dört dosyanın dördü de AKTİF YAZILANDI;
 // BACKEND.md ve MOBIL.md 8 gündür dokunulmamıştı. Bir tavana olan UZAKLIK bir risk
 // değildir; ona doğru giden HIZ risktir — durgun bir dosya dar olabilir ve hiç kırılmaz.
-// ⛔ `Teks-Erp/docs/BEKCI-HARITASI.md` BİLEREK kapsam DIŞINDA (1e kararı 2026-09-14):
-// 475 KB / 2.073 satır, %97'si tablo — bir ENVANTER, bir kural belgesi değil. Tavana
-// almak CI'ı 19 katıyla kırar; bölmek ise hem çizgisiz (ayrılacak kural yarısı yok) hem
-// pahalı (bir kod okuyucusu + 40 belge atfı). Gerçek maliyeti boyut değil BAĞLAM ve
-// ÇAKIŞMA; ikisi de dosyanın kendi başlığındaki kapsam beyanıyla yönetilir.
+// ⛔ Bekçi haritası (`Teks-Erp/docs/BEKCI-HARITASI.md` dizini + `bekci-harita/<alan>.md`) BİLEREK
+// kapsam DIŞINDA: kural belgesi değil ENVANTER. 2026-11-03'te 1,6 MB tek dosya alan başına
+// bölündü (2026-09-14 "bölünmez" kararı GEÇERSİZ); dizin ↔ dosya tazeliğini identity_ledger §2d ölçer.
 const NEAR_CAP_BYTES = 3 * 1024;
 
 const STANDART_DIR = "docs/standart";

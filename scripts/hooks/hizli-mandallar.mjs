@@ -61,7 +61,7 @@ const MANDALLAR = [
   "test_gun_anahtari_kaynagi", // src+scripts gün anahtarı tek kaynak (ANAHTAR sert · gösterim cırcır) · ağaç+others · 0,6 sn (14., 2026-09-14)
   "test_yerel_ayar_bagimliligi", // src+scripts toLocale*/Intl yerel bağımlılığı (§1 sert + iki cırcır) · ağaç+others · 0,7 sn (15., 2026-09-14)
 
-  "test_harita_sonda_atfi", // BEKCI-HARITASI "Negatif sonda" hücresi: ✓B sha atfı sert · düz ✓ cırcır · INDEX · ~2 sn (16., 2026-09-14; 143 sn → 2 sn 2026-10-13: tek blame)
+  "test_harita_sonda_atfi", // bekci-harita/<alan>.md "Negatif sonda" hücresi: ✓B sha atfı sert · düz ✓ cırcır · INDEX · ~2 sn (16., 2026-09-14; 143 sn → 2 sn 2026-10-13: tek blame; dosya başına 2026-11-03)
 
   "test_fikstur_sabit_ad", // scripts/test_* fikstürlerinde SABİT ad/kod (P2002 maskesi) · ağaç+others · ~1,5 sn · taban 0 sert (17., d9 yazdı, 2026-09-14)
   "test_lookup_beyan_aynasi", // import LOOKUP_SOURCES beyanı ↔ resolveReference çağrıları · src (import-lookup + tüm src taraması) · ağaç+others · 0,4–1,2 sn · taban 0 sert (18., d9 yazdı, 2026-09-14)

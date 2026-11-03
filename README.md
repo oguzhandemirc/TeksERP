@@ -20,7 +20,7 @@ Her push/PR'da GitHub Actions (`.github/workflows/ci.yml`) 3 projede **lint + ti
 |---|---|---|---|
 | Backend | `cd Teks-Erp && npm test` | server'sız entegrasyon (`scripts/test_*.ts` runner; PostgreSQL gerekir) | 453 bekçi (kanonik: `ls Teks-Erp/scripts/test_*.ts`) |
 | Electron | `cd Electron && npm test` | Vitest + Testing Library (jsdom) | 208 dosya |
-| mobil | `cd mobil && npm test` | jest-expo + RNTL | 84 dosya · alan→bekçi haritası `Teks-Erp/docs/BEKCI-HARITASI.md` |
+| mobil | `cd mobil && npm test` | jest-expo + RNTL | 84 dosya · alan→bekçi haritası `Teks-Erp/docs/bekci-harita/` |
 
 Tümünü tek komutta: **`bash run-tests.sh`** (tip kontrolü dahil: `bash run-tests.sh --tsc`).
 
