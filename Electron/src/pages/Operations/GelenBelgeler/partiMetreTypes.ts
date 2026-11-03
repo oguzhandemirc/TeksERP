@@ -27,6 +27,8 @@ export interface EntryModeSettings {
   defaultFormApproval?: IncomingDocFormApproval;
   /** İş emri açılınca refakat kartı kendiliğinden yazdırılır (K9; üretim ayarı, gelen belge ucunda döner; vars. false). */
   refakatAutoPrint?: boolean;
+  /** İstasyon tabletinde "Belge okut" ile iş emri bulma (K17; vars. false). Eski backend göndermez → satır çizilmez. */
+  stationDocLookup?: boolean;
 }
 /** Gönderen şablonu satırının parti no alanı (§2.4). */
 export interface SenderTemplateBatchNoFields {

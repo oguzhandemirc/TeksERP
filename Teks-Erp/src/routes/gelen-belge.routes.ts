@@ -36,6 +36,7 @@ import { BATCH_NO_KEY_RE, listSenderTemplates, MANUAL_BATCH_NO_KEY, updateSender
 import { listCustomerDefaults, removeCustomerDefault, setCustomerDefault } from "../services/gelen-belge-varsayilan.service";
 import { assertScanReadable, readerQueueCounts, requeueScanForReading } from "../services/gelen-belge-okuma.service";
 import { getReadSummary } from "../services/gelen-belge-okuma-ozeti.service";
+import { stationDocLookup, stationLookupStatus } from "../services/gelen-belge-istasyon-okutma.service";
 import { readerJobStatus, requestImmediateReaderRun } from "../jobs/gelen-belge-okuma.job";
 import { getReaderUrl } from "../lib/gelen-belge/url";
 import { readerHealth } from "../lib/gelen-belge/okuma-istemcisi";
@@ -363,6 +364,7 @@ const SettingsBody = z.strictObject({
   autoWorkOrderPatternless: z.enum(["SKIP", "OPEN"], "Seçenek SKIP ya da OPEN olmalı").optional(),
   formApproval: z.enum(["SEPARATE", "WITH_WORK_ORDER"], "Seçenek SEPARATE ya da WITH_WORK_ORDER olmalı").optional(),
   refakatAutoPrint: z.boolean("Refakat kartı otomatik yazdırma evet/hayır olmalı").optional(),
+  stationDocLookup: z.boolean("İstasyonda belge okutma evet/hayır olmalı").optional(),
 });
 /**
  * @openapi
@@ -372,7 +374,7 @@ const SettingsBody = z.strictObject({
  *     summary: Gelen belge ayarları — varsayılan ürün (ad + kullanılabilirlik) ve gözden geçirilmemiş hücreyle onay kipi
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "defaultItem (id, code, name, problem) | null · unreviewedApproval WARN|BLOCK_SUSPECT|BLOCK · autoWorkOrder boolean · defaultRoute (id, name, problem) | null · routeSuggestionPriority CUSTOMER_FIRST|FACTORY_FIRST · headerLineMeterSource OUTPUT|INPUT · autoSenderFromTemplate boolean · documentTotalCheck INFO|REQUIRE_REASON · batchNumberSource SERIES|DOCUMENT · entryMode PER_LINE|PER_DOCUMENT · autoWorkOrderPatternless SKIP|OPEN · formApproval SEPARATE|WITH_WORK_ORDER (her biri default* alanıyla) · refakatAutoPrint boolean" }
+ *       200: { description: "defaultItem (id, code, name, problem) | null · unreviewedApproval WARN|BLOCK_SUSPECT|BLOCK · autoWorkOrder boolean · defaultRoute (id, name, problem) | null · routeSuggestionPriority CUSTOMER_FIRST|FACTORY_FIRST · headerLineMeterSource OUTPUT|INPUT · autoSenderFromTemplate boolean · documentTotalCheck INFO|REQUIRE_REASON · batchNumberSource SERIES|DOCUMENT · entryMode PER_LINE|PER_DOCUMENT · autoWorkOrderPatternless SKIP|OPEN · formApproval SEPARATE|WITH_WORK_ORDER (her biri default* alanıyla) · refakatAutoPrint boolean · stationDocLookup boolean" }
  *   put:
  *     tags: [GelenBelge]
  *     summary: Gelen belge ayarlarını yaz (yalnız admin:settings + ayar şifresi); pasif/top doğuramayan ürün 400 GELEN_BELGE_DEFAULT_ITEM_INVALID
@@ -397,6 +399,7 @@ const SettingsBody = z.strictObject({
  *               autoWorkOrderPatternless: { type: string, enum: [SKIP, OPEN], description: "İşlem değeri çözülemeyen grupta otomatik iş emri: atla (varsayılan) ya da hedef değersiz aç" }
  *               formApproval: { type: string, enum: [SEPARATE, WITH_WORK_ORDER], description: "İş emri formundan okutulan belge: ayrı onay (varsayılan) ya da iş emri açan kaydeder (POST /irsaliyeler/{id}/is-emri)" }
  *               refakatAutoPrint: { type: boolean, description: "İş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır (varsayılan false)" }
+ *               stationDocLookup: { type: boolean, description: "İstasyon tabletinde belge okutarak iş emri bulma (varsayılan false)" }
  *     responses:
  *       200: { description: Güncel ayarlar }
  */
@@ -404,6 +407,43 @@ const SettingsBody = z.strictObject({
 router.get("/ayarlar", requirePermission("gelen-belge:read"), wrap(async () => ({ status: 200, data: await getIncomingDocSettings() })));
 // Yazma yalnız `admin:settings` (Genel Ayarlar → Gelen Belge kategorisi ADMIN_ONLY); ayar şifresi kapısı izinden SONRA.
 router.put("/ayarlar", requirePermission("admin:settings"), requireSettingsPassword, wrap(async (req) => ({ status: 200, data: await updateIncomingDocSettings(SettingsBody.parse(req.body), req.user!.userId) })));
+// ── K17: istasyonda belgeden iş emri bulma (eşleme okuması — hiçbir kayıt doğurmaz) ──────────────────────────
+const STATION_LOOKUP_PERMISSIONS = ["gelen-belge:read", "mobile:kk2-kursun", "mobile:tambur"] as const;
+const StationLookupBody = z.union([
+  z.strictObject({
+    contentBase64: z.string().min(1, "Dosya içeriği boş"),
+    sha256: z.string().regex(/^[0-9a-fA-F]{64}$/, "Özet 64 onaltılık karakter olmalı").nullable().optional(),
+  }),
+  z.strictObject({ q: z.string().trim().min(2, "Aramak için en az 2 karakter yazın").max(64, "En çok 64 karakter") }),
+], "Fotoğraf (contentBase64) ya da arama metni (q) gönderin");
+/**
+ * @openapi
+ * /api/gelen-belge/istasyon-okutma:
+ *   get:
+ *     tags: [GelenBelge]
+ *     summary: İstasyonda belge okutma açık mı (ayar `gelenBelge.stationDocLookup` + üretim modülü) ve okuma servisi var mı
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "enabled boolean · readerConfigured boolean" }
+ *   post:
+ *     tags: [GelenBelge]
+ *     summary: "Eşleme okuması: belge fotoğrafı ya da fiş/evrak/parti no → bağlı iş emri(leri). Tarama/taslak/şablon satırı YAZMAZ"
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             oneOf:
+ *               - { type: object, required: [contentBase64], properties: { contentBase64: { type: string }, sha256: { type: string } } }
+ *               - { type: object, required: [q], properties: { q: { type: string, minLength: 2, maxLength: 64 } } }
+ *     responses:
+ *       200: { description: "outcome SINGLE|MULTIPLE|NO_WORK_ORDER|NO_DOCUMENT|NO_DOC_NO|UNREADABLE · source SAME_PHOTO|STORED_READ|OCR|SEARCH · read · notes[] · workOrders[] (cardBarcode, batchNumbers, documents) · message" }
+ *       400: { description: "VALIDATION_ERROR · DOCUMENT_SCAN_INVALID · DOCUMENT_SCAN_TYPE · DOCUMENT_SCAN_PDF_NOT_READABLE" }
+ *       403: { description: "GELEN_BELGE_STATION_LOOKUP_DISABLED (ayar kapalı) · MODULE_DISABLED (gelen belge / üretim)" }
+ *       503: { description: "OCR_SERVICE_UNAVAILABLE (okuma servisi yok/ulaşılamaz) · HEIC_CONVERT_UNAVAILABLE" }
+ */
+router.get("/istasyon-okutma", requireAnyPermission(...STATION_LOOKUP_PERMISSIONS), wrap(async () => ({ status: 200, data: await stationLookupStatus() })));
+router.post("/istasyon-okutma", requireAnyPermission(...STATION_LOOKUP_PERMISSIONS), wrap(async (req) => ({ status: 200, data: await stationDocLookup(StationLookupBody.parse(req.body)) })));
 router.get("/irsaliyeler/:id/eslestirme", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await suggestForNote(Id.parse(req.params.id)) })));
 
 /**
