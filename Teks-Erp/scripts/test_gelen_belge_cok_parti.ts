@@ -12,6 +12,7 @@
 //   §7 ⭐ kullanıcı şablonu: öneri (kelime kutularından) → oluştur 201 (u-…, v1 + sürüm satırı) → replay aynı satır → aynı ad 409
 //      → güncelle v2 (sürüm geçmişi 2) → bayat sürüm 409 → izinsiz 403; kelimeler ucu kutu + foto çerçevesi
 //   §8 ⭐ motor DB şablonunu yükler: dosya çeki şablonu olmadan 0245 → u- şablonu; eşik altı (0244) → genel; pasif şablon yüklenmez
+//   §9 ⭐ OCR "1/2" damgası uyarıdır: pageCount'a yazılmaz, iş emri formu 201 + uyarı; elle pageCount beyanı bugünkü 409 (scripts/lib/gelen-belge-cok-parti-sayfa.ts)
 // Negatif sonda: `partyWorkOrderToken` sabit token'a (clientToken) bağlanınca §5 ikinci İE replay'e düşer → kırmızı;
 // `engineTemplates` yalnız dosya şablonlarını dönünce §8 kırmızı.
 // =============================================================================
@@ -31,6 +32,7 @@ import { engineTemplates } from "../src/services/gelen-belge-ozel-sablon.service
 import { classifyWithFallback, extractDocument, type OcrResult } from "../src/lib/gelen-belge/motor";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { sayfaDamgasiUyaridir } from "./lib/gelen-belge-cok-parti-sayfa";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -254,12 +256,29 @@ async function run(url: string): Promise<void> {
   check("§8 eşik altı belge → genel", other.templateId === "genel", JSON.stringify(other));
   const off = await call("PATCH", `/api/gelen-belge/sablonlar/${code}`, tk, { isActive: false });
   check("§8 pasif kullanıcı şablonu motora yüklenmez", off.status === 200 && !(await engineTemplates()).some((t) => t.id === code), `${off.status} ${off.code ?? ""}`);
+
+  console.log("§9 sayfa damgası uyarıdır");
+  await sayfaDamgasiUyaridir({
+    check, ocr, addScan,
+    emptyNote: async () => {
+      const r = await call("POST", "/api/gelen-belge/irsaliyeler", tk, { sourceKind: "MANUAL", senderText: `${TAG} GÜLEÇSOY OCR` });
+      const id = (r.data as { id?: string } | undefined)?.id ?? "";
+      made.notes.push(id);
+      check("§9 boş taslak 201", r.status === 201 && !!id, `${r.status} ${r.code ?? ""}`);
+      return id;
+    },
+    parties: (id) => call("GET", `/api/gelen-belge/irsaliyeler/${id}/partiler`, tk),
+    formWo: (id, ps) => formWo(id, { clientToken: randomUUID(), ownerCustomerId: owner, kursunMeters: "1", routeTemplateId: route, parties: ps }),
+    manualTwoPageNote: () => mkNote(false),
+  });
 }
 
 async function cleanup(): Promise<void> {
   const swallow = () => undefined;
   const rollIds = (await prisma.customerDeliveryNoteLine.findMany({ where: { noteId: { in: made.notes }, rollId: { not: null } }, select: { rollId: true } })).map((r) => r.rollId!);
   const wos = (await prisma.workOrder.findMany({ where: { OR: [{ routeTemplateId: { in: made.routes } }, { batches: { some: { rolls: { some: { id: { in: rollIds } } } } } }] }, select: { id: true } })).map((w) => w.id);
+  // §9 OCR satırları taramaya bağlı (scanId) → tarama silinmeden önce bağ çözülür.
+  await prisma.customerDeliveryNoteLine.updateMany({ where: { noteId: { in: made.notes } }, data: { scanId: null } }).catch(swallow);
   await prisma.documentScan.deleteMany({ where: { id: { in: made.scans } } }).catch(swallow);
   await prisma.customerDeliveryNote.deleteMany({ where: { id: { in: made.notes } } });
   for (const t of ["rollProperty", "rollOperation", "rollMovement", "rollVariance", "warehouseMovement"] as const) {

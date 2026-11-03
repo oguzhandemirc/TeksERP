@@ -33,6 +33,18 @@ const num = (v: unknown): number | null => {
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
 
+/** OCR'ın okuduğu sayfa damgasının toplamı (`totalsDeclared.pages`; "1/2" → 2) — yalnız uyarı kaynağı, onay kapısı değil. */
+export function declaredPageCount(totalsDeclared: unknown): number | null {
+  const v = totalsDeclared && typeof totalsDeclared === "object" ? (totalsDeclared as { pages?: unknown }).pages : undefined;
+  return typeof v === "number" && Number.isInteger(v) && v > 0 ? v : null;
+}
+
+/** Beyana sayfa damgasını ekler (null → olduğu gibi). */
+export function withDeclaredPages<T>(totalsDeclared: T, pages: number | null): T {
+  if (pages === null || !totalsDeclared || typeof totalsDeclared !== "object") return totalsDeclared;
+  return { ...totalsDeclared, pages };
+}
+
 /** Beyan bloklarından bölüm kimliği taşıyanlar (parti no ya da sipariş no ya da yazan top) — bölümsüz belgede boş. */
 function sectionBlocks(totalsDeclared: unknown): Array<Record<string, unknown> & { blockNo: number }> {
   const blocks = totalsDeclared && typeof totalsDeclared === "object" ? (totalsDeclared as { blocks?: unknown }).blocks : undefined;

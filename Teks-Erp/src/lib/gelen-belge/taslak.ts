@@ -53,7 +53,7 @@ export interface DraftHeader {
   templateScore: number | null;
   /** `document`: başlıktaki belge geneli beyan (şablon `headerTotals`; yalnız ilk bölge, sıfır/okunamayan değer yok sayılır). */
   totalsDeclared: { blocks: Array<{ blockNo: number; count: string | null; kg: string | null; m: string | null } & Partial<SectionIdentity>>; document?: DocumentDeclared };
-  /** Sayfa damgası ("1/2"; bölümlü şablonda okunur) — taslağın `pageCount`u boşsa `of` yazılır. */
+  /** Sayfa damgası ("1/2"; bölümlü şablonda okunur) — `of` taslağın `totalsDeclared.pages`ına gider (uyarı; `pageCount` elle beyandır). */
   page: { no: number; of: number } | null;
   /** Sayfa bölüm başlığı olmadan başladı: blok 1 satırları önceki sayfanın SON bölümüne eklenir. */
   continuesPrevious: boolean;

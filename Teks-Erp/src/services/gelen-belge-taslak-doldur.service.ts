@@ -14,6 +14,7 @@ import { extractDocument, type OcrResult } from "../lib/gelen-belge/motor";
 import { engineTemplates } from "./gelen-belge-ozel-sablon.service";
 import { draftFromExtraction, dropOverlapDuplicates, linesToPhotoFrame, type DraftFromOcr, type DraftLine } from "../lib/gelen-belge/taslak";
 import { OcrResultSchema } from "../lib/gelen-belge/okuma-istemcisi";
+import { declaredPageCount, withDeclaredPages } from "../lib/gelen-belge/parti-ozet";
 import { AuditService } from "./audit.service";
 import { FALLBACK_TEMPLATE_CODE, bumpTemplateHit, ensureSenderTemplate } from "./gelen-belge-sablon.service";
 import { batchAndMeterColumns, deriveBatchAndMeters, readFirstRegion, rememberedBatchKey, toRegion, type BatchAndMeterColumns } from "./gelen-belge-parti-metre.service";
@@ -36,8 +37,6 @@ export interface BuiltDraft {
     customerOrderNo: string | null; processText: string | null; declaredTopCount: number | null; senderText: string | null; templateId: string | null; templateScore: Prisma.Decimal | null;
     /** S1: belgenin okunduğu şablon sürümü (kullanıcı şablonu güncellense de eski belge eski sürümde). */
     templateVersion: number | null;
-    /** S1: sayfa damgasının toplamı ("1/2" → 2); okunmadıysa null. */
-    pageCount: number | null;
     /** Yalnız `gelenBelge.autoSenderFromTemplate` açıkken: aktif şablonun aktif gönderen carisi; aksi null. */
     senderCustomerId: string | null;
   } & BatchAndMeterColumns;
@@ -79,13 +78,13 @@ export async function buildDraft(result: OcrResult, userId: string | undefined, 
       ownerText: header.ownerText, senderDocNo: header.senderDocNo, senderDocDate: header.senderDocDate, customerBatchNo: header.customerBatchNo,
       customerOrderNo: header.customerOrderNo, processText: header.processText, declaredTopCount: header.declaredTopCount, senderText: header.senderText, templateId: template?.id ?? null,
       templateVersion: template?.version ?? null,
-      pageCount: header.page?.of ?? null,
       templateScore: header.templateScore === null ? null : new Prisma.Decimal(header.templateScore),
       senderCustomerId: template ? await templateSender(template.id) : null,
       // Parti no + kurşun metresi (Gülkesim): seçim hatırlanan form anahtarıyla; kolonlar yalnız boşken yazılır.
       ...batchAndMeterColumns({ batchNoCandidates: header.batchNoCandidates, kursun: header.kursun }, await rememberedBatchKey(prisma, template?.id)),
     },
-    totalsDeclared: toJson(header.totalsDeclared),
+    // "1/2" damgası `pages`a (UYARI kaynağı); `pageCount` kolonu elle beyandır ve onayda kapıdır (s1a inceleme).
+    totalsDeclared: toJson(withDeclaredPages(header.totalsDeclared, header.page?.of ?? null)),
     warnings: toJson(header.warnings),
     envelope: toJson({ ocr: result, regions: header.regions }),
   };
@@ -181,7 +180,6 @@ function fillEmptyHeader(patch: Prisma.CustomerDeliveryNoteUpdateInput, note: He
   if (!note.customerOrderNo) patch.customerOrderNo = headerCols.customerOrderNo;
   if (!note.processText) patch.processText = headerCols.processText;
   if (note.declaredTopCount === null) patch.declaredTopCount = headerCols.declaredTopCount;
-  if (note.pageCount === null && headerCols.pageCount !== null) patch.pageCount = headerCols.pageCount;
   if (note.senderCustomerId || !headerCols.senderCustomerId) return null;
   patch.senderCustomer = { connect: { id: headerCols.senderCustomerId } };
   return headerCols.senderCustomerId;
@@ -217,7 +215,7 @@ export interface FillResult {
 export async function fillBoundDraftTx(tx: Prisma.TransactionClient, noteId: string, scan: { id: string; pageNo: number }, built: BuiltDraft): Promise<FillResult> {
   const { draft, headerCols } = built;
   const { header } = draft;
-  const note = await tx.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteId }, select: { ownerText: true, senderText: true, senderCustomerId: true, templateId: true, templateVersion: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, customerOrderNo: true, processText: true, declaredTopCount: true, pageCount: true, totalsDeclared: true, warnings: true, ourBatchNo: true, kursunMeters: true, kursunMetersSource: true } });
+  const note = await tx.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteId }, select: { ownerText: true, senderText: true, senderCustomerId: true, templateId: true, templateVersion: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, customerOrderNo: true, processText: true, declaredTopCount: true, totalsDeclared: true, warnings: true, ourBatchNo: true, kursunMeters: true, kursunMetersSource: true } });
   const overlap = await linesToAppend(tx, noteId, scan, draft.lines);
   const agg = await tx.customerDeliveryNoteLine.aggregate({ where: { noteId }, _max: { lineNo: true, blockNo: true } });
   const lineBase = agg._max.lineNo ?? 0;
@@ -232,8 +230,8 @@ export async function fillBoundDraftTx(tx: Prisma.TransactionClient, noteId: str
   else if (addLines && lineBase > 0) {
     // Belge geneli beyan (ilk sayfanın başlığı) sonraki sayfada KORUNUR; ilk sayfada yoksa yeni sayfanınki alınır.
     const prevDoc = (note.totalsDeclared as { document?: unknown }).document ?? header.totalsDeclared.document;
-    patch.totalsDeclared = toJson({ blocks: mergeDeclaredBlocks(prevBlocks, header.totalsDeclared.blocks.map((b) => ({ ...b, blockNo: blockBase + b.blockNo }))), ...(prevDoc ? { document: prevDoc } : {}) });
-  }
+    patch.totalsDeclared = toJson(withDeclaredPages({ blocks: mergeDeclaredBlocks(prevBlocks, header.totalsDeclared.blocks.map((b) => ({ ...b, blockNo: blockBase + b.blockNo }))), ...(prevDoc ? { document: prevDoc } : {}) }, declaredPageCount(note.totalsDeclared) ?? header.page?.of ?? null));
+  } else if (declaredPageCount(note.totalsDeclared) === null && header.page) patch.totalsDeclared = toJson(withDeclaredPages(note.totalsDeclared, header.page.of));
   patch.templateScore = headerCols.templateScore;
   await fillBatchAndMeters(tx, noteId, note, { patch, built, added: overlap.lines, pageAppended: addLines && lineBase > 0 });
   if (addLines) patch.lines = { create: lineRows(overlap.lines, scan.id, lineBase, blockBase) };
