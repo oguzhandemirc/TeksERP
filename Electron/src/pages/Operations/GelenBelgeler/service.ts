@@ -10,6 +10,7 @@ import type {
   BulkDeletePreview, BulkDeleteResult,
 } from "./types";
 import type { NoteCancelPreview, NoteCancelResult } from "./cancelTypes";
+import type { DuplicateDocNoMode } from "./mukerrerTypes";
 
 const BASE = "/api/gelen-belge";
 
@@ -89,7 +90,7 @@ export async function approveNote(
   id: string,
   varianceReason: string | null,
   processChoices: readonly ProcessChoice[] = [],
-  opts: { routeTemplateId?: string | null } = {},
+  opts: { routeTemplateId?: string | null; confirmDuplicateDocNo?: boolean } = {},
 ): Promise<{ result: ApproveResult; warnings: string[] }> {
   // Boş seçimde alan gönderilmez: gövde eski backend'in katı şemasıyla da (strictObject) aynı kalır.
   // `routeTemplateId` (P3 "Belge okut"): onaydan sonra iş emri SEÇİLEN rotayla açılır (öneri zinciri yerine).
@@ -99,6 +100,8 @@ export async function approveNote(
       ...(varianceReason ? { varianceReason } : {}),
       ...(processChoices.length ? { processChoices } : {}),
       ...(opts.routeTemplateId ? { routeTemplateId: opts.routeTemplateId } : {}),
+      // K27: yalnız operatör "Yine de onayla" dediğinde gider (BLOCK kipinde sunucu yine 409 verir).
+      ...(opts.confirmDuplicateDocNo ? { confirmDuplicateDocNo: true } : {}),
     },
     { suppressErrorToast: true },
   );
@@ -121,7 +124,7 @@ export async function getIncomingDocumentSettings(): Promise<IncomingDocumentSet
 }
 
 /** Yazım `admin:settings` + ayar şifresi (tanımlıysa diyalog `withSettingsPassword`ten). */
-export function updateIncomingDocumentSettings(body: { defaultItemId?: string | null; unreviewedApproval?: UnreviewedApproval; autoWorkOrder?: boolean; defaultRouteTemplateId?: string | null; routeSuggestionPriority?: RouteSuggestionPriority; handwritingOutlierFactor?: number | null; headerLineMeterSource?: HeaderLineMeterSource; autoSenderFromTemplate?: boolean; documentTotalCheck?: DocumentTotalCheckMode }): Promise<IncomingDocumentSettings> {
+export function updateIncomingDocumentSettings(body: { defaultItemId?: string | null; unreviewedApproval?: UnreviewedApproval; autoWorkOrder?: boolean; defaultRouteTemplateId?: string | null; routeSuggestionPriority?: RouteSuggestionPriority; handwritingOutlierFactor?: number | null; headerLineMeterSource?: HeaderLineMeterSource; autoSenderFromTemplate?: boolean; documentTotalCheck?: DocumentTotalCheckMode; duplicateDocNo?: DuplicateDocNoMode }): Promise<IncomingDocumentSettings> {
   return withSettingsPassword((headers) =>
     apiClient.put<ApiResponse<IncomingDocumentSettings>>(`${BASE}/ayarlar`, body, { headers }).then((r) => r.data.data),
   );
