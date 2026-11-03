@@ -50,6 +50,8 @@ interface SaveCtx {
   mode: FormApproval;
   routeId: string;
   gramajPropertyId: string | null;
+  /** K22 formda alanı olmayan çözücü değerleri; `undefined` = cevap henüz yok (kayıt bekler). */
+  passThrough: readonly { propertyId: string; valueId: string }[] | undefined;
   /** Satır anahtarlı deneme token'ı (belirsiz hatada yapışır). */
   token: string;
 }
@@ -71,8 +73,10 @@ async function saveRowOnce(ctx: SaveCtx, r: DocRow, form: RowForm): Promise<{ re
   }
   const issues = rowIssues(form);
   if (issues.length) return { result: { kind: 'FAILED', text: issues.join(' ') } };
+  // Gövde ekranda görülenle aynı olsun: çözücü cevabı gelmeden gönderilmez (token tüketilmez).
+  if (ctx.passThrough === undefined) return { result: { kind: 'FAILED', text: 'İstasyon varsayılanları yükleniyor; birazdan yeniden kaydedin.' } };
   try {
-    const body = buildCreateBody(form, { clientToken: ctx.token, routeTemplateId: ctx.routeId, gramajPropertyId: ctx.gramajPropertyId, gramajTouched: r.gramajTouched });
+    const body = buildCreateBody(form, { clientToken: ctx.token, routeTemplateId: ctx.routeId, gramajPropertyId: ctx.gramajPropertyId, passThrough: ctx.passThrough });
     return { result: openedResult(await inboundDocService.createWorkOrder(r.noteId, body)) };
   } catch (e) {
     if (!isFormApprovalDisabled(e)) return { result: { kind: 'FAILED', text: errorText(e) }, error: e };
@@ -106,6 +110,7 @@ function rowCounts(rows: DocRow[], ready: number) {
 }
 
 type GramajFor = (customerId: string | null) => string | null | undefined;
+type PassThroughFor = (customerId: string | null) => readonly { propertyId: string; valueId: string }[] | undefined;
 
 /** Parti özeti form kurulduktan sonra gelir: çok partideyse satır listesi bir kez kurulur (kullanıcı düzenlemesi ezilmez). */
 function applyParties(rs: DocRow[], noteId: string, parties: NotePartiesView | null): DocRow[] {
@@ -117,7 +122,7 @@ function applyMulti(rs: DocRow[], noteId: string, multi: MultiPartyDraft): DocRo
 }
 
 /** Gramaj alanı yalnız rotada kurşun adımı varsa; katalog okunamazsa boş (alan çizilmez, uydurma yok). */
-function useGramajCatalog(route: ProductionRoute, rows: DocRow[]): { showGramaj: boolean; catalog: KursunGramajCatalog; gramajFor: GramajFor } {
+function useGramajCatalog(route: ProductionRoute, rows: DocRow[]): { showGramaj: boolean; catalog: KursunGramajCatalog; gramajFor: GramajFor; passThroughFor: PassThroughFor } {
   const showGramaj = routeHasKursunStep(route);
   const q = useQuery({
     queryKey: ['fabric-properties', 'kursun-gramaj-catalog'],
@@ -128,7 +133,8 @@ function useGramajCatalog(route: ProductionRoute, rows: DocRow[]): { showGramaj:
   });
   const catalog = showGramaj ? q.data ?? EMPTY_CATALOG : EMPTY_CATALOG;
   // K22: ön seçim sunucu çözücüsünden (müşteri > istasyon yeteneği > değer varsayılanı); tablet kural yazmaz.
-  const defaults = useRouteDefaultTargets(route, rows.map((r) => r.form?.ownerCustomerId ?? r.detail?.ownerCustomerId ?? null), showGramaj);
+  // Kurşunsuz rotada da okunur: formda alanı olmayan seçim değerleri gövdeye aynen gider.
+  const defaults = useRouteDefaultTargets(route, rows.map((r) => r.form?.ownerCustomerId ?? r.detail?.ownerCustomerId ?? null));
   const { valueFor } = defaults;
   const propertyId = catalog.propertyId;
   const gramajFor = useCallback<GramajFor>(
@@ -140,7 +146,9 @@ function useGramajCatalog(route: ProductionRoute, rows: DocRow[]): { showGramaj:
     },
     [showGramaj, propertyId, valueFor, catalog],
   );
-  return { showGramaj, catalog, gramajFor };
+  const gramajPropertyId = showGramaj ? propertyId : null;
+  const passThroughFor = useCallback<PassThroughFor>((customerId) => defaults.passThroughFor(customerId, gramajPropertyId), [defaults, gramajPropertyId]);
+  return { showGramaj, catalog, gramajFor, passThroughFor };
 }
 
 /** Çözücü cevabı satırdan sonra gelirse (ya da müşteri değişince) dokunulmamış satırlara ön seçim düşer. */
@@ -167,7 +175,7 @@ export function useWoRows(route: ProductionRoute) {
   const autoPrint = settings.data?.refakatAutoPrint === true;
   const mode = resolveFormApproval(settings.data, settings.isError);
   const [rows, setRows] = useState<DocRow[]>([]);
-  const { showGramaj, catalog, gramajFor } = useGramajCatalog(route, rows);
+  const { showGramaj, catalog, gramajFor, passThroughFor } = useGramajCatalog(route, rows);
   const [saving, setSaving] = useState(false);
   const [recent, setRecent] = useState<string[]>([]);
 
@@ -232,7 +240,8 @@ export function useWoRows(route: ProductionRoute) {
     try {
       // Sırayla: her satır ayrı tx; biri düşerse diğerleri etkilenmez, sonuç satırda kalır.
       for (const r of pending) {
-        const { result, error } = await saveRowOnce({ mode, routeId: route.id, gramajPropertyId: catalog.propertyId, token: attempt.keyed(r.noteId) }, r, r.form!);
+        const passThrough = passThroughFor(r.form!.ownerCustomerId);
+        const { result, error } = await saveRowOnce({ mode, routeId: route.id, gramajPropertyId: catalog.propertyId, passThrough, token: attempt.keyed(r.noteId) }, r, r.form!);
         if (error !== undefined) errors.push(error);
         setResult(r.noteId, result);
         if (result.kind !== 'FAILED' && r.form!.ownerCustomerId) owners = await rememberOwner(owners, r.form!.ownerCustomerId);

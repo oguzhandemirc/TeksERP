@@ -4,6 +4,7 @@ import { useCallback, useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { apiClient } from '../services/api';
 import type { ProductionRoute } from '../services/route.service';
+import { FOLD_PROPERTY_CODE } from '../services/fabricProperty.service';
 
 export interface DefaultTarget {
   propertyId: string;
@@ -41,6 +42,23 @@ export function defaultValueFor(perStation: readonly StationDefaultTargets[], pr
   if (!propertyId) return null;
   for (const s of perStation) for (const t of s.targets) if (t.propertyId === propertyId) return t.valueId;
   return null;
+}
+
+/**
+ * Formda alanı olmayan seçim varsayılanları (gramaj ve kat dışı; ilk adım kazanır) — gövdeye aynen gider.
+ * Sunucu anahtarsız gövdeye değer dayatmaz; kat sunucuda `foldType`a çözülür.
+ */
+export function passThroughTargets(perStation: readonly StationDefaultTargets[] | null, gramajPropertyId: string | null): { propertyId: string; valueId: string }[] {
+  const seen = new Set<string>();
+  const out: { propertyId: string; valueId: string }[] = [];
+  for (const s of perStation ?? []) {
+    for (const t of s.targets) {
+      if (seen.has(t.propertyId)) continue;
+      seen.add(t.propertyId);
+      if (t.valueType === 'CHOICE' && t.valueId && t.propertyId !== gramajPropertyId && t.propertyCode !== FOLD_PROPERTY_CODE) out.push({ propertyId: t.propertyId, valueId: t.valueId });
+    }
+  }
+  return out;
 }
 
 /**
@@ -83,5 +101,14 @@ export function useRouteDefaultTargets(route: ProductionRoute | null | undefined
     },
     [byCustomer],
   );
-  return { stationIds, byCustomer, valueFor };
+  /** `undefined` = cevap henüz yok; okunamadıysa boş liste. */
+  const passThroughFor = useCallback(
+    (customerId: string | null, gramajPropertyId: string | null) => {
+      const key = customerId ?? '';
+      if (!byCustomer.has(key)) return undefined;
+      return passThroughTargets(byCustomer.get(key) ?? null, gramajPropertyId);
+    },
+    [byCustomer],
+  );
+  return { stationIds, byCustomer, valueFor, passThroughFor };
 }

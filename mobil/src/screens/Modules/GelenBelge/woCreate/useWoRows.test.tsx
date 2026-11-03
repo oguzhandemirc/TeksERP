@@ -21,12 +21,19 @@ jest.mock('../../../../services/inboundDoc.service', () => ({
 const mockCatalog = jest.fn(async () => ({ propertyId: null as string | null, options: [] as { id: string; name: string; isDefault: boolean }[] }));
 jest.mock('../../../../services/fabricProperty.service', () => ({
   fabricPropertyService: { getKursunGramajCatalog: () => mockCatalog() },
+  FOLD_PROPERTY_CODE: 'KAT',
 }));
 // K22: ön seçim sunucu çözücüsünden — müşteri başına gramaj (c1 → g1; diğerleri istasyonun g2'si).
 const mockGet = jest.fn(async (url: string) => {
   const c = new URLSearchParams(url.split('?')[1]).get('customerId');
   const valueId = c === 'c1' ? 'g1' : 'g2';
-  return { data: { data: [{ stationId: 's-k', targets: [{ propertyId: 'p-gr', valueId }] }] } };
+  // p-br: formda alanı olmayan seçim varsayılanı (gövdeye aynen iletilir); KAT kolon-projeksiyonu sunucuda (iletilmez).
+  const targets = [
+    { propertyId: 'p-gr', propertyCode: 'GR', valueType: 'CHOICE', valueId },
+    { propertyId: 'p-br', propertyCode: 'BR', valueType: 'CHOICE', valueId: 'b1' },
+    { propertyId: 'p-kat', propertyCode: 'KAT', valueType: 'CHOICE', valueId: 'k4' },
+  ];
+  return { data: { data: [{ stationId: 's-k', targets }, { stationId: 's-t', targets }] } };
 });
 jest.mock('../../../../services/api', () => ({ apiClient: { get: (u: string) => mockGet(u) } }));
 jest.mock('../../../../services/travelerCardPrint', () => ({ printTravelerCardForWorkOrder: (id: string) => mockPrint(id) }));
@@ -134,16 +141,16 @@ describe('useWoRows — K22 ön seçim (sunucu çözücüsü)', () => {
     expect(gramajOf(h, 'n1')).toBe('g2');
   });
 
-  it('K22: kurşunsuz rotada gramaj yok, çözücü ucu çağrılmaz', async () => {
+  it('K22: kurşunsuz rotada gramaj yok (çözücü ucu yalnız iletilecek değerler için okunur)', async () => {
     mockSettings.mockResolvedValue({});
     const h = setup({ id: 'r3', name: 'Tambur', steps: [{ stationId: 's-t', sequence: 1, station: { isKursunStation: false } }] } as unknown as ProductionRoute);
     await withRows(h, [detail('n1')]);
     await waitFor(() => expect(mockSettings).toHaveBeenCalled());
+    await waitFor(() => expect(mockGet).toHaveBeenCalled());
     expect(gramajOf(h, 'n1')).toBeNull();
-    expect(mockGet).not.toHaveBeenCalled();
   });
 
-  it('K22: dokunulmamış gramaj gövdeye girmez (sunucu çözer); elle seçilen girer', async () => {
+  it('⭐ K22: gövde hedefi HEP açık — ön seçili gramaj + iletilen değer; elle seçilen ve "Hedef yok" aynen', async () => {
     mockSettings.mockResolvedValue({ formApproval: 'WITH_WORK_ORDER' });
     mockCatalog.mockResolvedValue({ propertyId: 'p-gr', options: [{ id: 'g1', name: '60 gr', isDefault: false }, { id: 'g2', name: '80 gr', isDefault: true }] });
     mockCreate.mockResolvedValue({ workOrderId: 'wo', workOrderNo: 'IE', batchNumber: 'P', rollId: 'x' });
@@ -151,10 +158,14 @@ describe('useWoRows — K22 ön seçim (sunucu çözücüsü)', () => {
     await waitFor(() => expect(h.result.current.mode).toBe('WITH_WORK_ORDER'));
     await withRows(h, [detail('n1'), detail('n2')]);
     await waitFor(() => expect(gramajOf(h, 'n2')).toBe('g1'));
+    await withRows(h, [detail('n3')]);
     act(() => h.result.current.updateForm('n2', { gramajValueId: 'g2' }));
+    act(() => h.result.current.updateForm('n3', { gramajValueId: null }));
     await act(async () => h.result.current.saveAll());
     const bodies = Object.fromEntries(mockCreate.mock.calls.map(([id, b]) => [id, b]));
-    expect('targetValues' in bodies.n1).toBe(false);
-    expect(bodies.n2.targetValues).toEqual([{ propertyId: 'p-gr', valueId: 'g2' }]);
+    const br = { propertyId: 'p-br', valueId: 'b1' };
+    expect(bodies.n1.targetValues).toEqual([{ propertyId: 'p-gr', valueId: 'g1' }, br]);
+    expect(bodies.n2.targetValues).toEqual([{ propertyId: 'p-gr', valueId: 'g2' }, br]);
+    expect(bodies.n3.targetValues).toEqual([br]);
   });
 });
