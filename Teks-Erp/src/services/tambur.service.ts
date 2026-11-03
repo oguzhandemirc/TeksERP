@@ -14,6 +14,7 @@
 //   - Tambur'dan sonraki akış: Depo (WAREHOUSE) → Tartı/Paket → Sevkiyat.
 // =============================================================================
 
+import { stationWorkSearchWhere } from "./helpers/workorder-doc-search.helper";
 import { consumeForOperationTx } from "./helpers/consumable-stock.helper";
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, inheritRollPropertiesTx } from "./helpers/property-revoke.helper";
@@ -2091,7 +2092,7 @@ export class TamburService {
    * Tambur adımlarında açık top bekleyen aktif refakat kartları.
    * Mobil "kamera simülasyonu" modal'ı için.
    */
-  async listOpenCards(stationId: string | null = null): Promise<
+  async listOpenCards(stationId: string | null = null, q: string | null = null): Promise<
     ApiResponse<
       Array<{
         cardId: string;
@@ -2116,12 +2117,15 @@ export class TamburService {
   > {
     // İster 2.8: istasyon verilirse yalnız o tamburun adımları (getPendingRolls ile aynı kapı).
     if (stationId) await assertTamburStation(stationId);
+    const searchWhere = q ? stationWorkSearchWhere(q) : null;
     const steps = await prisma.workOrderStep.findMany({
       where: {
         ...(stationId ? { stationId } : {}),
         station: { kind: StationKind.TAMBUR },
         status: { not: "COMPLETED" },
         currentRolls: { some: {} },
+        // K17: fiş/evrak/parti/İE no araması sunucuda (boş q = bugünkü liste).
+        ...(searchWhere ? { workOrder: searchWhere } : {}),
       },
       select: {
         id: true,

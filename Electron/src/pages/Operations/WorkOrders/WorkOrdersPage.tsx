@@ -132,7 +132,7 @@ export function WorkOrdersPage() {
         fetchAll={fetchAll}
         search={search}
         onSearchChange={setSearch}
-        placeholder={`${TERIM.terbiyeIsEmri.cumleBasi.yalin}, parti, kumaş, müşteri veya sipariş no ara...`}
+        placeholder={`${TERIM.terbiyeIsEmri.cumleBasi.yalin}, parti, kumaş, müşteri, sipariş veya fiş/evrak no ara...`}
         table={table}
         exportName={TERIM.terbiyeIsEmri.cogul}
         actions={
