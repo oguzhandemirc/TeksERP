@@ -17,6 +17,7 @@ import { FUZZY_NOISE_WORDS } from "../constants/duplicate-rules";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import { readCompanyName } from "./system-setting.service";
 import { suggestCustomer, type Named } from "./gelen-belge-eslestirme.service";
+import type { TrustMode } from "./gelen-belge-parti-metre.service";
 
 export interface OwnerSuggestion {
   customerId: string;
@@ -127,8 +128,9 @@ async function readOcrPages(noteId: string): Promise<string[][]> {
  * Taslağın sahip önerisi. Yalnız sahibi seçilmemiş TASLAKTA hesaplanır (seçilmişse/onaylıysa null — öneri anlamsız,
  * detay yanıtı cari kataloğunu her açılışta taramasın).
  */
-export async function suggestOwnerForNote(note: { id: string; status: string; ownerCustomerId: string | null }): Promise<OwnerSuggestion | null> {
-  if (note.status !== "DRAFT" || note.ownerCustomerId) return null;
+export async function suggestOwnerForNote(note: { id: string; status: string; ownerCustomerId: string | null }, trust: TrustMode = "NORMAL"): Promise<OwnerSuggestion | null> {
+  // K30-B BLIND (SORMA + tanıtılmamış): sözlük tahmini forma dolmaz → öneri yok.
+  if (note.status !== "DRAFT" || note.ownerCustomerId || trust === "BLIND") return null;
   const head = await prisma.customerDeliveryNote.findUnique({ where: { id: note.id }, select: { ownerText: true, senderText: true, senderCustomerId: true, template: { select: { senderCustomerId: true } } } });
   if (!head) return null;
   const customers: Named[] = await prisma.customer.findMany({ where: { isActive: true, mergedIntoId: null }, select: { id: true, code: true, name: true } });
@@ -139,9 +141,12 @@ export async function suggestOwnerForNote(note: { id: string; status: string; ow
   if (ownerText) {
     const s = await suggestCustomer(ownerText, head.senderCustomerId, customers);
     const hit = s.suggested;
-    if (hit && !exclude.has(hit.id) && (s.source === "ALIAS" || hit.score >= OWNER_TEXT_STRONG)) {
+    // TRUSTED: tanıtılan müşteri alanı eşleyicinin TEK müşterisine (`suggested`) çözüldüyse kesin; gönderen/kendi firma yine dışarıda.
+    if (hit && !exclude.has(hit.id) && (trust === "TRUSTED" || s.source === "ALIAS" || hit.score >= OWNER_TEXT_STRONG)) {
       return { customerId: hit.id, name: hit.name, matchedText: ownerText.slice(0, 160), source: "OWNER_TEXT" };
     }
   }
+  // TRUSTED'da tam metin taraması ("… mi? Seç") yapılmaz: çözülemeyen müşteri boş kalır, seçici açık.
+  if (trust === "TRUSTED") return null;
   return findCustomerInText([...(ownerText ? [ownerText] : []), ...pages.flat()], customers, exclude);
 }

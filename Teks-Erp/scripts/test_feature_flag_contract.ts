@@ -690,6 +690,12 @@ async function main() {
       file: "Electron/src/pages/GeneralSettings/GelenBelgeIeFormField.tsx",
       needle: "gb-tablet-ie-girisi",
     },
+    // K30-B (2026-11-04): tanıtılan belgeye güven; panel radyosu `GelenBelgeIeFormField.tsx`.
+    GELEN_BELGE_TANITIM_GUVENI: {
+      why: "Tanıtılan belgeye güven (SOR varsayılan | SORMA) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; okuma özeti (`gelen-belge-okuma-ozeti.service`) ve okuma anı parti/metre kolonu okur",
+      file: "Electron/src/pages/GeneralSettings/GelenBelgeIeFormField.tsx",
+      needle: "gb-tanitim-guveni",
+    },
     PRODUCTION_REFAKAT_AUTO_PRINT: {
       why: "İş emri açılınca refakat kartı otomatik yazdırma (varsayılan false) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; istemci okur",
       file: "Teks-Erp/src/routes/gelen-belge.routes.ts",

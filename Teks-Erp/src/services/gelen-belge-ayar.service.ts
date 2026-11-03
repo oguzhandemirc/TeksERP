@@ -24,6 +24,7 @@
 //   · `gelenBelge.photoRetention` — belge fotoğrafı saklama (K28): FULL (varsayılan) | onayda küçült/sil | sevkte sil
 //   · `gelenBelge.desenRenkEslesme` — okunan desen/renk: KAPALI (varsayılan) | ONER kayıt önerilir | NOT nota eklenir (K30)
 //   · `gelenBelge.tabletIeGirisi` — tablet iş emri girişi: IKISI (varsayılan) | BELGE | TOP (K30)
+//   · `gelenBelge.tanitimGuveni` — tanıtılan belgeye güven: SOR (varsayılan) | SORMA sorusuz doldur (K30-B)
 // Ürün kapısı tek karar: yaşam döngüsü `assertItemUsable(NEW_STOCK)` + top doğurabilen tür ALLOWLIST'i
 // (`ROLL_BEARING_ITEM_TYPES`; yeni tür — ör. SERVICE — eklendiği gün kendiliğinden dışarıda kalır).
 // =============================================================================
@@ -90,7 +91,7 @@ import {
   PHOTO_RETENTION_VALUES,
   type PhotoRetentionMode,
   readDesenRenkEslesme, DEFAULT_DESEN_RENK_ESLESME, DESEN_RENK_ESLESME_VALUES, type DesenRenkEslesmeMode,
-  readTabletIeGirisi, DEFAULT_TABLET_IE_GIRISI, TABLET_IE_GIRISI_VALUES, type TabletIeGirisiMode,
+  readTabletIeGirisi, DEFAULT_TABLET_IE_GIRISI, TABLET_IE_GIRISI_VALUES, type TabletIeGirisiMode, readTanitimGuveni, DEFAULT_TANITIM_GUVENI, TANITIM_GUVENI_VALUES, type TanitimGuveniMode,
 } from "./system-setting.service";
 
 /** Top doğurabilen ürün türleri — `InventoryService.createInitialEntry` kapısıyla aynı küme (yalnız kumaş). */
@@ -155,7 +156,7 @@ export interface IncomingDocSettings {
   /** K30 okunan desen/renk: KAPALI (varsayılan) | ONER kayıt önerilir | NOT nota eklenir. */
   desenRenkEslesme: DesenRenkEslesmeMode; defaultDesenRenkEslesme: DesenRenkEslesmeMode;
   /** K30 tablet iş emri girişi: IKISI (varsayılan) | BELGE | TOP. */
-  tabletIeGirisi: TabletIeGirisiMode; defaultTabletIeGirisi: TabletIeGirisiMode;
+  tabletIeGirisi: TabletIeGirisiMode; defaultTabletIeGirisi: TabletIeGirisiMode; tanitimGuveni: TanitimGuveniMode; defaultTanitimGuveni: TanitimGuveniMode;
   defaultPhotoRetention: PhotoRetentionMode;
 }
 
@@ -226,6 +227,7 @@ export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
     defaultPhotoRetention: DEFAULT_PHOTO_RETENTION,
     desenRenkEslesme: await readDesenRenkEslesme(), defaultDesenRenkEslesme: DEFAULT_DESEN_RENK_ESLESME,
     tabletIeGirisi: await readTabletIeGirisi(), defaultTabletIeGirisi: DEFAULT_TABLET_IE_GIRISI,
+    tanitimGuveni: await readTanitimGuveni(), defaultTanitimGuveni: DEFAULT_TANITIM_GUVENI,
   };
 }
 
@@ -251,7 +253,7 @@ export interface IncomingDocSettingsInput {
   refakatAutoPrint?: boolean;
   stationDocLookup?: boolean;
   photoRetention?: PhotoRetentionMode;
-  desenRenkEslesme?: DesenRenkEslesmeMode; tabletIeGirisi?: TabletIeGirisiMode;
+  desenRenkEslesme?: DesenRenkEslesmeMode; tabletIeGirisi?: TabletIeGirisiMode; tanitimGuveni?: TanitimGuveniMode;
 }
 
 /**
@@ -337,6 +339,7 @@ async function updateEntryOptions(input: IncomingDocSettingsInput, userId: strin
   await setClosed(SETTING_KEYS.GELEN_BELGE_MULTI_PARTY_WORK_ORDER, input.multiPartyWorkOrder, { values: MULTI_PARTY_WORK_ORDER_VALUES, label: `Gelen belge: çok partili belgeden ${ie} (SINGLE tek / PER_PARTY her parti ayrı)` }, userId);
   await setClosed(SETTING_KEYS.GELEN_BELGE_DESEN_RENK_ESLESME, input.desenRenkEslesme, { values: DESEN_RENK_ESLESME_VALUES, label: "Gelen belge: okunan desen/renk yazısı (KAPALI / ONER kayıt öner / NOT nota ekle)" }, userId);
   await setClosed(SETTING_KEYS.GELEN_BELGE_TABLET_IE_GIRISI, input.tabletIeGirisi, { values: TABLET_IE_GIRISI_VALUES, label: `Gelen belge: tablet ${ie} girişi (IKISI / BELGE yalnız belge / TOP yalnız top)` }, userId);
+  await setClosed(SETTING_KEYS.GELEN_BELGE_TANITIM_GUVENI, input.tanitimGuveni, { values: TANITIM_GUVENI_VALUES, label: "Gelen belge: tanıtılan belgeye güven (SOR okunanları onaylat / SORMA sormadan doldur)" }, userId);
   await setClosed(SETTING_KEYS.GELEN_BELGE_DUPLICATE_DOC_NO, input.duplicateDocNo, { values: DUPLICATE_DOC_NO_VALUES, label: "Gelen belge: aynı gönderen belge no tekrar gelirse (BLOCK engelle / WARN işi sürüyorsa uyar / ALLOW serbest)" }, userId);
   if (input.refakatAutoPrint !== undefined) {
     await systemSettingService.set(SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT, input.refakatAutoPrint, `${TERIM.terbiyeIsEmri.tekil} açılınca refakat kartı kendiliğinden yazdırılır`, userId);

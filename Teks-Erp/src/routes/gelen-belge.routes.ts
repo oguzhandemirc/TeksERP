@@ -362,7 +362,7 @@ router.get("/rota-onerisi", requirePermission("gelen-belge:write"), wrap(async (
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
- *       200: { description: "noteId, noteNo, noteStatus, state, reason, pages (total/waiting/read/failed), lineCount, reviewCount, totals (declared, ok, mismatches[]), warnings[], notices[] (code, title, detail — okuma uyarıları, detayla aynı helper)" }
+ *       200: { description: "noteId, noteNo, noteStatus, state, reason, pages (total/waiting/read/failed), lineCount, reviewCount, totals (declared, ok, mismatches[]), warnings[], notices[] (code, title, detail — okuma uyarıları, detayla aynı helper), tanitim? ({ durum: TANITILDI, sablonKodu, sablonAdi } | { durum: TANITILMAMIS }; sistem şablonunda yok)" }
  *       404: { description: DELIVERY_NOTE_NOT_FOUND }
  */
 // Tarayan `gelen-belge:read` taşımaz (D7): taslağın kendi okuma sonucunu yalnız bu özetten görür; ayrıntı panelde.
@@ -407,7 +407,7 @@ const SettingsBody = z.strictObject({
   stationDocLookup: z.boolean("İstasyonda belge okutma evet/hayır olmalı").optional(),
   photoRetention: z.enum(["FULL", "SHRINK_ON_APPROVAL", "DELETE_ON_APPROVAL", "DELETE_ON_DISPATCH"], "Seçenek FULL, SHRINK_ON_APPROVAL, DELETE_ON_APPROVAL ya da DELETE_ON_DISPATCH olmalı").optional(),
   desenRenkEslesme: z.enum(["KAPALI", "ONER", "NOT"], "Seçenek KAPALI, ONER ya da NOT olmalı").optional(),
-  tabletIeGirisi: z.enum(["IKISI", "BELGE", "TOP"], "Seçenek IKISI, BELGE ya da TOP olmalı").optional(),
+  tabletIeGirisi: z.enum(["IKISI", "BELGE", "TOP"], "Seçenek IKISI, BELGE ya da TOP olmalı").optional(), tanitimGuveni: z.enum(["SOR", "SORMA"], "Seçenek SOR ya da SORMA olmalı").optional(),
 });
 /**
  * @openapi
@@ -448,6 +448,7 @@ const SettingsBody = z.strictObject({
  *               photoRetention: { type: string, enum: [FULL, SHRINK_ON_APPROVAL, DELETE_ON_APPROVAL, DELETE_ON_DISPATCH], description: "Belge fotoğrafı saklama (K28): tam (varsayılan) · onayda küçült · onayda sil · sevkte sil; geçmiş onaylı belgelere de uygulanır" }
  *               desenRenkEslesme: { type: string, enum: [KAPALI, ONER, NOT], description: "Okunan desen/renk yazısı: kullanılmaz (varsayılan) · adı/kodu tutan kayıt önerilir · iş emri notuna eklenir" }
  *               tabletIeGirisi: { type: string, enum: [IKISI, BELGE, TOP], description: "Tablet iş emri girişi: belge ve top okutma (varsayılan) · yalnız belge okutma · yalnız top okutma" }
+ *               tanitimGuveni: { type: string, enum: [SOR, SORMA], description: "Tanıtılan belgeye güven: okunanları onaylat (varsayılan) · tanıtılan belgeyi sormadan doldur (tanınmayanın tahmini dolmaz)" }
  *     responses:
  *       200: { description: Güncel ayarlar }
  */

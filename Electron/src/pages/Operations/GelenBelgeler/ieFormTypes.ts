@@ -5,10 +5,14 @@
 export type DesenRenkEslesmeMode = "KAPALI" | "ONER" | "NOT";
 /** Tablet iş emri girişi — IKISI (varsayılan, bugünkü) · BELGE yalnız belge okutma · TOP yalnız top okutma. */
 export type TabletIeGirisiMode = "IKISI" | "BELGE" | "TOP";
+/** Tanıtılan belgeye güven (K30-B) — SOR (varsayılan, bugünkü) okunanlar onaylatılır · SORMA tanıtılan belge sorusuz dolar. */
+export type TanitimGuveniMode = "SOR" | "SORMA";
 
 export interface IeFormSettings {
   desenRenkEslesme?: DesenRenkEslesmeMode;
   defaultDesenRenkEslesme?: DesenRenkEslesmeMode;
   tabletIeGirisi?: TabletIeGirisiMode;
   defaultTabletIeGirisi?: TabletIeGirisiMode;
+  tanitimGuveni?: TanitimGuveniMode;
+  defaultTanitimGuveni?: TanitimGuveniMode;
 }
