@@ -32,7 +32,7 @@ import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
-import { cleanupTraces, scenarioSkipRestore, scenarioTraces } from "./lib/gelen-belge-iptal-iz-senaryo";
+import { scenarioSkipRestore, scenarioTraces } from "./lib/gelen-belge-iptal-iz-senaryo";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -223,7 +223,11 @@ async function cleanup(): Promise<void> {
   const rollIds = (await prisma.customerDeliveryNoteLine.findMany({ where: { noteId: { in: made.notes }, rollId: { not: null } }, select: { rollId: true } })).map((r) => r.rollId!);
   const wos = (await prisma.workOrder.findMany({ where: { routeTemplateId: { in: made.routes } }, select: { id: true } })).map((w) => w.id);
   await prisma.customerDeliveryNote.deleteMany({ where: { id: { in: made.notes } } });
-  await cleanupTraces(TAG, rollIds).catch(swallow);
+  // §9 iz fikstürleri (FK Restrict): hata → muayene → lab/kartela; hepsi bu koşumun toplarına bağlı.
+  await prisma.rollError.deleteMany({ where: { rollId: { in: rollIds } } }).catch(swallow);
+  await prisma.rollInspection.deleteMany({ where: { rollId: { in: rollIds } } }).catch(swallow);
+  await prisma.labTest.deleteMany({ where: { rollId: { in: rollIds } } }).catch(swallow);
+  await prisma.swatch.deleteMany({ where: { parentRollId: { in: rollIds } } }).catch(swallow);
   for (const t of ["rollProperty", "rollOperation", "rollMovement", "rollVariance", "rollStatusEvent", "warehouseMovement"] as const) {
     await (prisma[t] as unknown as { deleteMany: (a: unknown) => Promise<unknown> }).deleteMany({ where: { rollId: { in: rollIds } } }).catch(swallow);
   }
@@ -256,7 +260,8 @@ async function main(): Promise<void> {
     await scenarioMain(fx);
     const blocked = await scenarioBlocked(fx);
     await scenarioHttp(fx, blocked);
-    const deps = { tag: TAG, actorId: fx.actorId, fabric: fx.fabric, check, errorOf, approvedNote: (d: string, n: number) => approvedNote(fx, d, n), openWo: (b: string[]) => openWo(fx, b) };
+    const deps = { tag: TAG, actorId: fx.actorId, fabric: fx.fabric, check, errorOf, approvedNote: (d: string, n: number) => approvedNote(fx, d, n), openWo: (b: string[]) => openWo(fx, b),
+      cutSwatch: (parentRollId: string) => prisma.swatch.create({ data: { cardNumber: `${TAG}-SW`, barcode: `${TAG}-SWB`, itemId: fx.fabric, parentRollId } }) };
     await scenarioTraces(deps);
     await scenarioSkipRestore(deps);
   } catch (e) {

@@ -14,7 +14,9 @@ import { InventoryService } from "../../src/services/inventory.service";
 type Check = (label: string, ok: boolean, extra?: string) => void;
 type ErrorOf = (fn: () => Promise<unknown>) => Promise<{ status: number; code?: string; blockers?: Array<{ code: string }> } | null>;
 type ApprovedNote = (docNo: string, n: number) => Promise<{ id: string; rolls: Array<{ id: string; barcode: string }> }>;
-export interface IzDeps { tag: string; actorId: string; fabric: string; check: Check; errorOf: ErrorOf; approvedNote: ApprovedNote; openWo: (barcodes: string[]) => Promise<string> }
+export interface IzDeps { tag: string; actorId: string; fabric: string; check: Check; errorOf: ErrorOf; approvedNote: ApprovedNote; openWo: (barcodes: string[]) => Promise<string>;
+  /** Kartela kesimi fikstürü — kartela yazımı tek yazarlıdır (`test_swatch_event_yazar`), `test_` dosyası kurar. */
+  cutSwatch: (parentRollId: string) => Promise<unknown> }
 
 const inv = new InventoryService();
 const REASON = "Yanlış belge girildi";
@@ -37,7 +39,7 @@ export async function scenarioTraces(d: IzDeps): Promise<void> {
   await inspection(voided.id, d.actorId, true);
   await prisma.rollError.create({ data: { rollId: err.id, origin: "PROCESS", startMeter: 10, errorType: "test" } });
   await prisma.labTest.create({ data: { testNo: `${d.tag}-LAB`, itemId: d.fabric, testedOn: new Date(), rollId: lab.id } });
-  await prisma.swatch.create({ data: { cardNumber: `${d.tag}-SW`, barcode: `${d.tag}-SWB`, itemId: d.fabric, parentRollId: sw.id } });
+  await d.cutSwatch(sw.id);
   const pv = await previewDeliveryNoteCancel(n.id);
   const by = new Map(pv.rolls.map((r) => [r.rollId, r]));
   const codesOf = (id: string) => (by.get(id)?.blockers ?? []).map((b) => b.code);
@@ -73,12 +75,4 @@ export async function scenarioSkipRestore(d: IzDeps): Promise<void> {
   d.check("§10 ⭐ iptal edilmiş belgenin topu geri alınamaz → 409 RESTORE_BLOCKED", e?.status === 409 && e.code === "RESTORE_BLOCKED", JSON.stringify(e));
   const after = await prisma.roll.findUnique({ where: { id: one.id }, select: { status: true } });
   d.check("§10 top CANCELLED kalır", after?.status === "CANCELLED", String(after?.status));
-}
-
-/** Ana bekçinin temizliği top silmeden ÖNCE çağırır (FK Restrict). */
-export async function cleanupTraces(tag: string, rollIds: string[]): Promise<void> {
-  await prisma.rollError.deleteMany({ where: { rollId: { in: rollIds } } });
-  await prisma.rollInspection.deleteMany({ where: { rollId: { in: rollIds } } });
-  await prisma.labTest.deleteMany({ where: { testNo: { startsWith: tag } } });
-  await prisma.swatch.deleteMany({ where: { cardNumber: { startsWith: tag } } });
 }
