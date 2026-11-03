@@ -86,13 +86,14 @@ const userIds: string[] = [];
 const savedSettings = new Map<string, unknown>();
 const tok = { admin: "", none: "", read: "", write: "" };
 
-async function makeShipment(tag: string, destination: "DOMESTIC" | "EXPORT" = "DOMESTIC") {
+async function makeShipment(tag: string, destination: "DOMESTIC" | "EXPORT" = "DOMESTIC", deliveryTo?: { name: string; address: string | null }) {
   const s = await prisma.shipment.create({
     data: { shipmentNo: `${P}-${tag}`, customerId, status: "DISPATCHED", destination, dispatchedAt: new Date(), plateNumber: "16 abc 123", driverName: "Ali Veli" },
     select: { id: true },
   });
   shipmentIds.push(s.id);
   const doc = dispatchDoc({ customerName: `${P} MUSTERI`, taxNumber: VKN_CUSTOMER, products: [{ name: "Ham bez 120", customerName: null, rollCount: 3, totalMeters: 300.5 } as never], totalKg: 75, sackCount: 1 });
+  if (deliveryTo) doc.header = { ...doc.header, deliveryTo };
   await prisma.printedDocument.create({ data: { docType: "SHIPMENT_DISPATCH", sourceId: s.id, version: 1, status: "ACTIVE", documentNo: `${P}-${tag}`, snapshot: envelope(doc) as never } });
   return s.id;
 }
@@ -176,6 +177,7 @@ async function s3(shipA: string) {
   const g = await call("POST", `/api/e-irsaliye/${id}/generate`, tok.admin);
   const docNo = String(g.body.data?.kayit?.documentNo ?? "");
   check("§3c üret → OLUSTURULDU, GİB biçimli numara + ETTN, yanıtta XML yok", g.status === 200 && g.body.data?.kayit?.status === "OLUSTURULDU" && /^EIR20\d{2}\d{9}$/.test(docNo) && /^[0-9a-f-]{36}$/.test(String(g.body.data?.kayit?.ettn)) && !JSON.stringify(g.body).includes("<DespatchAdvice"), docNo);
+  check("§3c2 teslim yersiz üretim zarfı uyarısız (bugünkü zarf)", g.status === 200 && !("warnings" in g.body), JSON.stringify(g.body.warnings));
   const gx = await call("GET", `/api/e-irsaliye/${id}/xml`, tok.admin);
   check("§3d salt-okur GET XML ucu yok", gx.status === 404, `${gx.status}`);
   const dl = await call("POST", `/api/e-irsaliye/${id}/download`, tok.admin, {});
@@ -208,6 +210,8 @@ async function s4(shipC: string, shipA: string) {
   const id = String(p.body.data?.kayit?.id ?? randomUUID());
   const g = await call("POST", `/api/e-irsaliye/${id}/generate`, tok.admin);
   check("§4a simülasyon kaydı her yüzeyde işaretli", g.status === 200 && g.body.data?.kayit?.simulasyon === true, `${g.status}`);
+  const gw = g.body.warnings as string[] | undefined;
+  check("§4a2 teslim yerli üretim zarfı `warnings` taşır (panel toast'ı)", Array.isArray(gw) && gw.length === 1 && gw[0]!.includes(`${P} BOYAHANE`), JSON.stringify(gw));
   const ms = await call("POST", `/api/e-irsaliye/${id}/mark-sent`, tok.admin, {});
   check("§4b simülasyonda elle işaret 400", ms.status === 400 && codeOf(ms) === "EIRSALIYE_MANUAL_ONLY", `${ms.status} ${codeOf(ms)}`);
   const sd = await call("POST", `/api/e-irsaliye/${id}/send`, tok.admin);
@@ -267,7 +271,7 @@ async function main() {
     })).id;
     const A = await makeShipment("A");
     const B = await makeShipment("B");
-    const C = await makeShipment("C");
+    const C = await makeShipment("C", "DOMESTIC", { name: `${P} BOYAHANE`, address: null });
     const X = await makeShipment("X", "EXPORT");
     await s1(A);
     await s2(A);
