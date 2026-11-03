@@ -142,6 +142,9 @@ export interface CreateWorkOrderFromNoteBody {
   stepPlanning?: { sequence: number; plannedMachineId?: string }[];
   targetValues?: { propertyId: string; valueId: string }[];
   notes?: string;
+  /** S1 çok partili belge (≥2 parti); yalnız `/partiler` çok parti dediğinde gider (eski sunucu strict gövdeyle 400 verir). */
+  parties?: { blockNo: number; batchNo: string | null; meters: number }[];
+  mode?: MultiPartyMode;
 }
 
 export interface CreateWorkOrderFromNoteResult {
@@ -149,6 +152,30 @@ export interface CreateWorkOrderFromNoteResult {
   workOrderNo: string;
   batchNumber: string;
   rollId: string;
+  /** Çok partili kayıtta açılan iş emirleri (eski sunucu göndermez). */
+  workOrders?: { blockNos: number[]; workOrderId: string; workOrderNo: string; batchNumber: string | null }[];
+}
+
+export type MultiPartyMode = 'SINGLE' | 'PER_PARTY';
+
+/** `GET /gelen-belge/irsaliyeler/:id/partiler` — parti özeti + canlı uyarılar + fabrika varsayılan kipi. */
+export interface NoteParty {
+  blockNo: number;
+  batchNo: string | null;
+  orderNo: string | null;
+  declaredTopCount: number | null;
+  declaredMeters: number | null;
+  lineCount: number;
+  meters: number;
+  weightKg: number | null;
+  warnings: string[];
+}
+
+export interface NotePartiesView {
+  parties: NoteParty[];
+  warnings: string[];
+  multi: boolean;
+  defaultMode: MultiPartyMode;
 }
 
 /** Başlık PATCH alt kümesi (sunucu `UpdateBody` allowlist'i). */
@@ -191,6 +218,16 @@ export const inboundDocService = {
     apiClient
       .post<ApiResponse<CreateWorkOrderFromNoteResult>>(`/gelen-belge/irsaliyeler/${noteId}/is-emri`, body, { timeout: UPLOAD_TIMEOUT_MS })
       .then((r) => r.data.data),
+
+  /** Parti özeti; eski sunucu (404) → null = bugünkü tek partili form. */
+  noteParties: (noteId: string): Promise<NotePartiesView | null> =>
+    apiClient
+      .get<ApiResponse<NotePartiesView>>(`/gelen-belge/irsaliyeler/${noteId}/partiler`)
+      .then((r) => r.data.data ?? null)
+      .catch((e: { status?: number }) => {
+        if (e?.status === 404) return null;
+        throw e;
+      }),
 
   tabletContext: (): Promise<ApiResponse<InboundDocTabletContext>> =>
     apiClient.get<ApiResponse<InboundDocTabletContext>>('/gelen-belge/tablet-baglam').then((r) => r.data),

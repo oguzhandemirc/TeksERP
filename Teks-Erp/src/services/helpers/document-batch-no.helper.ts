@@ -11,11 +11,14 @@ import { readBatchNumberSource } from "../system-setting.service";
 
 type Db = Pick<Prisma.TransactionClient, "customerDeliveryNote" | "systemSetting">;
 
-/** Not yoksa 404 (fail-closed: bilinmeyen kaynak sessizce seriye düşmez). */
-export async function resolveDocumentBatchNo(db: Db, sourceNoteId: string | null | undefined): Promise<string | null> {
+/**
+ * Not yoksa 404 (fail-closed: bilinmeyen kaynak sessizce seriye düşmez). `partyBatchNo` (S1 çok partili belge): o partinin
+ * no'su nottaki tek numaranın yerine geçer — ayar kapısı aynı (SERIES iken yine seri).
+ */
+export async function resolveDocumentBatchNo(db: Db, sourceNoteId: string | null | undefined, partyBatchNo?: string | null): Promise<string | null> {
   if (!sourceNoteId) return null;
   const note = await db.customerDeliveryNote.findUnique({ where: { id: sourceNoteId }, select: { ourBatchNo: true } });
   if (!note) throw AppError.notFound("Gelen belge bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
   if ((await readBatchNumberSource(db)) !== "DOCUMENT") return null;
-  return note.ourBatchNo?.trim() || null;
+  return partyBatchNo?.trim() || note.ourBatchNo?.trim() || null;
 }

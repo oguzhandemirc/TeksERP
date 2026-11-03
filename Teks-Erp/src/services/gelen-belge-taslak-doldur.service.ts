@@ -10,7 +10,8 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
-import { extractDocument, loadTemplates, type OcrResult } from "../lib/gelen-belge/motor";
+import { extractDocument, type OcrResult } from "../lib/gelen-belge/motor";
+import { engineTemplates } from "./gelen-belge-ozel-sablon.service";
 import { draftFromExtraction, dropOverlapDuplicates, linesToPhotoFrame, type DraftFromOcr, type DraftLine } from "../lib/gelen-belge/taslak";
 import { OcrResultSchema } from "../lib/gelen-belge/okuma-istemcisi";
 import { AuditService } from "./audit.service";
@@ -33,6 +34,10 @@ export interface BuiltDraft {
   headerCols: {
     ownerText: string | null; senderDocNo: string | null; senderDocDate: Date | null; customerBatchNo: string | null;
     customerOrderNo: string | null; processText: string | null; declaredTopCount: number | null; senderText: string | null; templateId: string | null; templateScore: Prisma.Decimal | null;
+    /** S1: belgenin okunduğu şablon sürümü (kullanıcı şablonu güncellense de eski belge eski sürümde). */
+    templateVersion: number | null;
+    /** S1: sayfa damgasının toplamı ("1/2" → 2); okunmadıysa null. */
+    pageCount: number | null;
     /** Yalnız `gelenBelge.autoSenderFromTemplate` açıkken: aktif şablonun aktif gönderen carisi; aksi null. */
     senderCustomerId: string | null;
   } & BatchAndMeterColumns;
@@ -50,7 +55,9 @@ export async function extractDraft(result: OcrResult): Promise<DraftFromOcr> {
   // Şüphe oranı her kurulumda o anki fabrika ayarından (saklı zarftan yeniden kurulum da güncel oranla işaretler).
   const outlierFactor = await readHandwritingOutlierFactor();
   const headerLineSource = await readHeaderLineMeterSource();
-  const extracted = draftFromExtraction(extractDocument(result, loadTemplates(), FALLBACK_TEMPLATE_CODE), { outlierFactor, headerLineSource });
+  // Dosya + aktif kullanıcı (`u-…`) şablonları birlikte sınıflandırır (S1).
+  const templates = await engineTemplates();
+  const extracted = draftFromExtraction(extractDocument(result, templates, FALLBACK_TEMPLATE_CODE), { outlierFactor, headerLineSource, templates });
   // Yan dönük sayfa: kutular panelin çizdiği (dönmemiş) fotoğrafın çerçevesine döner.
   return { ...extracted, lines: linesToPhotoFrame(extracted.lines, result) };
 }
@@ -71,6 +78,8 @@ export async function buildDraft(result: OcrResult, userId: string | undefined, 
     headerCols: {
       ownerText: header.ownerText, senderDocNo: header.senderDocNo, senderDocDate: header.senderDocDate, customerBatchNo: header.customerBatchNo,
       customerOrderNo: header.customerOrderNo, processText: header.processText, declaredTopCount: header.declaredTopCount, senderText: header.senderText, templateId: template?.id ?? null,
+      templateVersion: template?.version ?? null,
+      pageCount: header.page?.of ?? null,
       templateScore: header.templateScore === null ? null : new Prisma.Decimal(header.templateScore),
       senderCustomerId: template ? await templateSender(template.id) : null,
       // Parti no + kurşun metresi (Gülkesim): seçim hatırlanan form anahtarıyla; kolonlar yalnız boşken yazılır.
@@ -162,16 +171,36 @@ async function fillBatchAndMeters(tx: Prisma.TransactionClient, noteId: string, 
 function fillEmptyHeader(patch: Prisma.CustomerDeliveryNoteUpdateInput, note: HeaderFillable, headerCols: HeaderFillable): string | null {
   if (!note.ownerText) patch.ownerText = headerCols.ownerText;
   if (!note.senderText) patch.senderText = headerCols.senderText;
-  if (!note.templateId && headerCols.templateId) patch.template = { connect: { id: headerCols.templateId } };
+  if (!note.templateId && headerCols.templateId) {
+    patch.template = { connect: { id: headerCols.templateId } };
+    patch.templateVersion = headerCols.templateVersion;
+  }
   if (!note.senderDocNo) patch.senderDocNo = headerCols.senderDocNo;
   if (!note.senderDocDate) patch.senderDocDate = headerCols.senderDocDate;
   if (!note.customerBatchNo) patch.customerBatchNo = headerCols.customerBatchNo;
   if (!note.customerOrderNo) patch.customerOrderNo = headerCols.customerOrderNo;
   if (!note.processText) patch.processText = headerCols.processText;
   if (note.declaredTopCount === null) patch.declaredTopCount = headerCols.declaredTopCount;
+  if (note.pageCount === null && headerCols.pageCount !== null) patch.pageCount = headerCols.pageCount;
   if (note.senderCustomerId || !headerCols.senderCustomerId) return null;
   patch.senderCustomer = { connect: { id: headerCols.senderCustomerId } };
   return headerCols.senderCustomerId;
+}
+
+/**
+ * Önceki sayfaların beyan blokları + yeni sayfanınkiler. Aynı blok no (devam sayfası) BİRLEŞİR: kimlik (parti/sipariş/yazan top)
+ * önceki sayfadan korunur, beyan toplamı (T.Adet) yeni sayfada okunduysa onunki alınır — son sayfanın toplamı bölümün toplamıdır.
+ */
+function mergeDeclaredBlocks(prev: unknown[], next: Array<Record<string, unknown> & { blockNo: number }>): unknown[] {
+  const out = [...prev];
+  for (const b of next) {
+    const i = out.findIndex((x) => typeof x === "object" && x !== null && (x as { blockNo?: unknown }).blockNo === b.blockNo);
+    if (i < 0) { out.push(b); continue; }
+    const old = out[i] as Record<string, unknown>;
+    const has = (k: string) => b[k] !== null && b[k] !== undefined;
+    out[i] = { ...old, ...(has("count") || has("m") || has("kg") ? { count: b.count ?? null, m: b.m ?? null, kg: b.kg ?? null } : {}), batchNo: old.batchNo ?? b.batchNo ?? null, orderNo: old.orderNo ?? b.orderNo ?? null, topCount: old.topCount ?? b.topCount ?? null };
+  }
+  return out;
 }
 
 /** Doldurma sonucu: eklenen satır sayısı + şablondan yazılan gönderen (audit künyesi; yoksa null). */
@@ -188,21 +217,22 @@ export interface FillResult {
 export async function fillBoundDraftTx(tx: Prisma.TransactionClient, noteId: string, scan: { id: string; pageNo: number }, built: BuiltDraft): Promise<FillResult> {
   const { draft, headerCols } = built;
   const { header } = draft;
-  const note = await tx.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteId }, select: { ownerText: true, senderText: true, senderCustomerId: true, templateId: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, customerOrderNo: true, processText: true, declaredTopCount: true, totalsDeclared: true, warnings: true, ourBatchNo: true, kursunMeters: true, kursunMetersSource: true } });
+  const note = await tx.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteId }, select: { ownerText: true, senderText: true, senderCustomerId: true, templateId: true, templateVersion: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, customerOrderNo: true, processText: true, declaredTopCount: true, pageCount: true, totalsDeclared: true, warnings: true, ourBatchNo: true, kursunMeters: true, kursunMetersSource: true } });
   const overlap = await linesToAppend(tx, noteId, scan, draft.lines);
   const agg = await tx.customerDeliveryNoteLine.aggregate({ where: { noteId }, _max: { lineNo: true, blockNo: true } });
   const lineBase = agg._max.lineNo ?? 0;
-  const blockBase = agg._max.blockNo ?? 0;
+  // Başlıksız başlayan sayfa (S1 devam): blok 1 satırları önceki sayfanın SON bölümüne eklenir (yeni parti doğmaz).
+  const blockBase = Math.max(0, (agg._max.blockNo ?? 0) - (header.continuesPrevious && agg._max.blockNo ? 1 : 0));
   const prevWarnings = Array.isArray(note.warnings) ? note.warnings : [];
   const patch: Prisma.CustomerDeliveryNoteUpdateInput = { warnings: toJson([...prevWarnings, ...header.warnings, ...overlap.warnings]) };
   const autoSenderCustomerId = fillEmptyHeader(patch, note, headerCols);
   const addLines = overlap.lines.length > 0;
   const prevBlocks = (note.totalsDeclared as { blocks?: unknown[] } | null)?.blocks;
   if (note.totalsDeclared === null || !Array.isArray(prevBlocks)) patch.totalsDeclared = built.totalsDeclared;
-  else if (addLines && blockBase > 0) {
+  else if (addLines && lineBase > 0) {
     // Belge geneli beyan (ilk sayfanın başlığı) sonraki sayfada KORUNUR; ilk sayfada yoksa yeni sayfanınki alınır.
     const prevDoc = (note.totalsDeclared as { document?: unknown }).document ?? header.totalsDeclared.document;
-    patch.totalsDeclared = toJson({ blocks: [...prevBlocks, ...header.totalsDeclared.blocks.map((b) => ({ ...b, blockNo: blockBase + b.blockNo }))], ...(prevDoc ? { document: prevDoc } : {}) });
+    patch.totalsDeclared = toJson({ blocks: mergeDeclaredBlocks(prevBlocks, header.totalsDeclared.blocks.map((b) => ({ ...b, blockNo: blockBase + b.blockNo }))), ...(prevDoc ? { document: prevDoc } : {}) });
   }
   patch.templateScore = headerCols.templateScore;
   await fillBatchAndMeters(tx, noteId, note, { patch, built, added: overlap.lines, pageAppended: addLines && lineBase > 0 });

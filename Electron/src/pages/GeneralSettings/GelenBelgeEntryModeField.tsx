@@ -12,6 +12,7 @@ import { FieldLabel, FlagToggle } from "./SettingRow";
 import { EnumRadioOptions } from "./EnumRadioOptions";
 import { TERIM } from "@/lib/terim";
 import type { AutoWorkOrderPatternlessMode, BatchNumberSourceMode, IncomingDocEntryMode, IncomingDocFormApproval, IncomingDocumentSettings } from "@/pages/Operations/GelenBelgeler/types";
+import type { MultiPartyWorkOrderMode } from "@/pages/Operations/GelenBelgeler/partiMetreTypes";
 
 
 type Option<T extends string> = { value: T; label: string; hint: string };
@@ -36,6 +37,11 @@ export const FORM_APPROVAL_OPTIONS: ReadonlyArray<Option<IncomingDocFormApproval
   { value: "WITH_WORK_ORDER", get label() { return `${TERIM.terbiyeIsEmri.tekil} ile birlikte`; }, get hint() { return `Formdan okutulan belgeyi ${TERIM.terbiyeIsEmri.tekilKucuk} açma izni olan kaydeder: belge, müşteri malı top ve ${TERIM.terbiyeIsEmri.tekilKucuk} tek seferde açılır; ayrı onay adımı yok.`; } },
 ];
 
+export const MULTI_PARTY_OPTIONS: ReadonlyArray<Option<MultiPartyWorkOrderMode>> = [
+  { value: "SINGLE", get label() { return `Tek ${TERIM.terbiyeIsEmri.tekilKucuk}`; }, get hint() { return `Belgedeki partiler ayrı top olarak tek ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} girer (bugünkü davranış).`; } },
+  { value: "PER_PARTY", get label() { return `Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk}`; }, get hint() { return `Çok partili belgede (çeki listesinde birden çok parti) her parti kendi ${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} açar; parti no belgeden.`; } },
+];
+
 type Pair<T extends string> = { server: T | undefined; value: T | undefined; set: (v: T) => void; fallback: T | undefined; dirty: boolean };
 
 function usePair<T extends string>(server: T | undefined, fallback: T | undefined): Pair<T> {
@@ -49,6 +55,7 @@ export function useEntryModeDraft(server: IncomingDocumentSettings | undefined) 
   const entry = usePair(server?.entryMode, server?.defaultEntryMode);
   const patternless = usePair(server?.autoWorkOrderPatternless, server?.defaultAutoWorkOrderPatternless);
   const approval = usePair(server?.formApproval, server?.defaultFormApproval);
+  const multiParty = usePair(server?.multiPartyWorkOrder, server?.defaultMultiPartyWorkOrder);
   const serverPrint = server?.refakatAutoPrint;
   const [autoPrint, setAutoPrint] = useState<boolean | undefined>(serverPrint);
   const printDirty = serverPrint !== undefined && autoPrint !== undefined && autoPrint !== serverPrint;
@@ -57,20 +64,21 @@ export function useEntryModeDraft(server: IncomingDocumentSettings | undefined) 
   const lookupDirty = serverLookup !== undefined && lookupOn !== undefined && lookupOn !== serverLookup;
   const reset = () => {
     batch.set(batch.server as BatchNumberSourceMode); entry.set(entry.server as IncomingDocEntryMode); patternless.set(patternless.server as AutoWorkOrderPatternlessMode);
-    approval.set(approval.server as IncomingDocFormApproval); setAutoPrint(serverPrint); setLookupOn(serverLookup);
+    approval.set(approval.server as IncomingDocFormApproval); multiParty.set(multiParty.server as MultiPartyWorkOrderMode); setAutoPrint(serverPrint); setLookupOn(serverLookup);
   };
   const body = {
     ...(batch.dirty ? { batchNumberSource: batch.value } : {}),
     ...(entry.dirty ? { entryMode: entry.value } : {}),
     ...(patternless.dirty ? { autoWorkOrderPatternless: patternless.value } : {}),
     ...(approval.dirty ? { formApproval: approval.value } : {}),
+    ...(multiParty.dirty ? { multiPartyWorkOrder: multiParty.value } : {}),
     ...(printDirty ? { refakatAutoPrint: autoPrint } : {}),
     ...(lookupDirty ? { stationDocLookup: lookupOn } : {}),
   };
-  const serverKey = `${batch.server ?? ""}|${entry.server ?? ""}|${patternless.server ?? ""}|${approval.server ?? ""}|${String(serverPrint ?? "")}|${String(serverLookup ?? "")}`;
+  const serverKey = `${batch.server ?? ""}|${entry.server ?? ""}|${patternless.server ?? ""}|${approval.server ?? ""}|${multiParty.server ?? ""}|${String(serverPrint ?? "")}|${String(serverLookup ?? "")}`;
   const print = { server: serverPrint, value: autoPrint, set: setAutoPrint };
   const lookup = { server: serverLookup, value: lookupOn, set: setLookupOn };
-  return { batch, entry, patternless, approval, print, lookup, dirty: batch.dirty || entry.dirty || patternless.dirty || approval.dirty || printDirty || lookupDirty, body, reset, serverKey };
+  return { batch, entry, patternless, approval, multiParty, print, lookup, dirty: batch.dirty || entry.dirty || patternless.dirty || approval.dirty || multiParty.dirty || printDirty || lookupDirty, body, reset, serverKey };
 }
 
 function EnumField<T extends string>({ id, label, desc, pair, options, children }: { id: string; label: string; desc: string; pair: Pair<T>; options: ReadonlyArray<Option<T>>; children?: React.ReactNode }) {
@@ -126,6 +134,13 @@ export function EntryModeFields({ draft, hasDefaultItem }: { draft: ReturnType<t
         desc={`${TERIM.terbiyeIsEmri.tekil} oluşturma ekranında okutulan belge nasıl kaydedilsin. "${TERIM.terbiyeIsEmri.tekil} ile birlikte" seçilirse ayrı onay (gelen-belge:approve) aranmaz; ${TERIM.terbiyeIsEmri.tekilKucuk} açma izni yeter.`}
         pair={draft.approval}
         options={FORM_APPROVAL_OPTIONS}
+      />
+      <EnumField
+        id="gb-multi-party-work-order"
+        label={`Çok partili belgeden ${TERIM.terbiyeIsEmri.tekilKucuk}`}
+        desc={`Bir çeki listesinde birden çok parti varsa ${TERIM.terbiyeIsEmri.tekilKucuk} formunda varsayılan seçim. Form her belgede seçimi değiştirmeye izin verir.`}
+        pair={draft.multiParty}
+        options={MULTI_PARTY_OPTIONS}
       />
       {draft.print.server !== undefined && (
         <div data-testid="gb-refakat-auto-print">

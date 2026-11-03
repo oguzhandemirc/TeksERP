@@ -237,6 +237,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}cash-transaction.service.ts::transferReplay`]: ["fromCashBoxId", "fromBankAccountId", "toCashBoxId", "toBankAccountId", "amount"],
   [`${S}cheque-delivery-note.service.ts::noteReplay`]: ["chequeIds", "bankAccountId", "cariId", "targetLabel", "notes", "deliveryDate"],
   [`${S}cheque.service.ts::chequeReplay`]: ["kind", "amount", "dueDate", "taraf", "docType", "currency", "serialNo", "exchangeRate", "issueDate", "postingDate"],
+  [`${S}gelen-belge-ozel-sablon.service.ts::createUserTemplate`]: ["code"],
   [`${S}goods-receipt.service.ts::receiptReplay`]: ["warehouseId", "purchaseOrderId", "deliveryNoteNo", "rawStockEntry", "currency", "taraf"],
   [`${S}inventory.service.ts::initialEntryReplay`]: ["itemId", "colorId", "initialQty"],
   [`${S}inventory.service.ts::openFabricReplay`]: ["parentReceiptId", "producedInStepId"],

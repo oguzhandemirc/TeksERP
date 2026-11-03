@@ -645,6 +645,12 @@ async function main() {
       file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
       needle: "formApproval: z.enum(",
     },
+    // S1 (2026-11-03): çok partili belge → iş emri kipi; uçtaki Zod alanı + panel/tablet formu.
+    GELEN_BELGE_MULTI_PARTY_WORK_ORDER: {
+      why: "Çok partili belgeden iş emri (SINGLE varsayılan | PER_PARTY) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; `POST /irsaliyeler/:id/is-emri` mode verilmezse okur",
+      file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
+      needle: "multiPartyWorkOrder: z.enum(",
+    },
     // Gülkesim S2 (K17, 2026-11-03): istasyonda belge okutarak iş emri bulma; panel satırı kayıt kipi alanında.
     GELEN_BELGE_STATION_DOC_LOOKUP: {
       why: "İstasyon tabletinde belge okutarak iş emri bulma (varsayılan false) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; kapıyı `/api/gelen-belge/istasyon-okutma` okur",

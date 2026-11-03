@@ -4,6 +4,7 @@ import { TERIM } from "@/lib/terim";
 import { updateNoteHeader } from "@/pages/Operations/GelenBelgeler/service";
 import type { DeliveryNoteDetail } from "@/pages/Operations/GelenBelgeler/types";
 import { docDraftReasons, noteWorkOrderBody, separateHeaderPatch, type DocDraft, type FormApproval } from "./docDraft";
+import type { MultiPartyDraft } from "./partyDraft";
 import { createWorkOrderFromNote, errorCode, FORM_APPROVAL_DISABLED, type NoteWorkOrderResult } from "./service";
 
 export type SaveOutcome = { kind: "WORK_ORDER"; result: NoteWorkOrderResult } | { kind: "DRAFT_SAVED" };
@@ -16,13 +17,16 @@ export interface SaveDocInput {
   gramajPropertyId: string | null;
   /** Mantıksal deneme token'ı (çağıranın `useAttemptToken`ı; belirsiz hatada yapışır). */
   clientToken: string;
+  /** S1 çok partili belge: parti satırları + kip (yalnız WITH_WORK_ORDER'da gövdeye girer). */
+  multi?: MultiPartyDraft | null;
 }
 
 export async function saveDoc(i: SaveDocInput): Promise<SaveOutcome> {
-  const reasons = docDraftReasons(i.draft);
+  const multi = i.formApproval === "WITH_WORK_ORDER" ? (i.multi ?? null) : null;
+  const reasons = docDraftReasons(i.draft, multi);
   if (reasons.length > 0) throw new Error(reasons.join(" "));
   if (i.formApproval === "WITH_WORK_ORDER") {
-    const body = noteWorkOrderBody(i.draft, { clientToken: i.clientToken, routeTemplateId: i.routeTemplateId, gramajPropertyId: i.gramajPropertyId });
+    const body = noteWorkOrderBody(i.draft, { clientToken: i.clientToken, routeTemplateId: i.routeTemplateId, gramajPropertyId: i.gramajPropertyId }, multi);
     return { kind: "WORK_ORDER", result: await createWorkOrderFromNote(i.note.id, body) };
   }
   const patch = separateHeaderPatch(i.draft, i.note);
