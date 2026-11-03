@@ -195,6 +195,8 @@ export interface CreateWorkOrderFromNoteBody {
     stepPlanning?: { sequence: number; plannedMachineId?: string | null }[];
   }[];
   mode?: MultiPartyMode;
+  /** K27 WARN: işi süren aynı belge no'lu eşe rağmen kaydet (409 `DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE` sonrası). */
+  confirmDuplicateDocNo?: true;
 }
 
 export interface CreateWorkOrderFromNoteResult {

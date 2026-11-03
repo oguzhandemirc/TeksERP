@@ -21,6 +21,8 @@ export interface SaveDocInput {
   clientToken: string;
   /** S1 çok partili belge: parti satırları + kip (yalnız WITH_WORK_ORDER'da gövdeye girer). */
   multi?: MultiPartyDraft | null;
+  /** K27 WARN: kullanıcı 409 kutusunda "Yine de onayla" dedi → gövdeye bayrak (yalnız WITH_WORK_ORDER). */
+  confirmDuplicateDocNo?: boolean;
 }
 
 export async function saveDoc(i: SaveDocInput): Promise<SaveOutcome> {
@@ -29,7 +31,7 @@ export async function saveDoc(i: SaveDocInput): Promise<SaveOutcome> {
   if (reasons.length > 0) throw new Error(reasons.join(" "));
   if (i.formApproval === "WITH_WORK_ORDER") {
     const body = noteWorkOrderBody(i.draft, { clientToken: i.clientToken, routeTemplateId: i.routeTemplateId, gramajPropertyId: i.gramajPropertyId, passThrough: i.passThrough }, multi);
-    return { kind: "WORK_ORDER", result: await createWorkOrderFromNote(i.note.id, body) };
+    return { kind: "WORK_ORDER", result: await createWorkOrderFromNote(i.note.id, i.confirmDuplicateDocNo ? { ...body, confirmDuplicateDocNo: true } : body) };
   }
   const patch = separateHeaderPatch(i.draft, i.note);
   if (Object.keys(patch).length > 0) await updateNoteHeader(i.note.id, patch);

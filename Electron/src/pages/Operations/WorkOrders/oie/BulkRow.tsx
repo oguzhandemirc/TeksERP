@@ -10,7 +10,8 @@ import type { DeliveryNoteDetail } from "@/pages/Operations/GelenBelgeler/types"
 import { DocFields } from "./DocFields";
 import { applyPatch, docDraftReasons, type DocDraft } from "./docDraft";
 
-export type RowResult = { kind: "OK"; text: string; workOrderId?: string } | { kind: "FAILED"; text: string };
+/** DUPLICATE: K27 WARN 409 — karar satırın altındaki kutuda (TopluBelgeForm). */
+export type RowResult = { kind: "OK"; text: string; workOrderId?: string } | { kind: "FAILED"; text: string } | { kind: "DUPLICATE"; text: string };
 
 interface Props {
   note: DeliveryNoteDetail | undefined;
@@ -24,6 +25,7 @@ interface Props {
 function ResultCell({ result, reasons }: { result: RowResult | undefined; reasons: string[] }) {
   if (result?.kind === "OK") return <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400" data-testid="oie-row-ok"><CheckCircle2 className="h-4 w-4" />{result.text}</span>;
   if (result?.kind === "FAILED") return <span className="flex items-center gap-1 text-destructive" data-testid="oie-row-failed"><XCircle className="h-4 w-4" />{result.text}</span>;
+  if (result?.kind === "DUPLICATE") return <span className="flex items-center gap-1 text-amber-800 dark:text-amber-300" data-testid="oie-row-duplicate"><XCircle className="h-4 w-4" />{result.text}</span>;
   if (reasons.length) return <span className="text-amber-800 dark:text-amber-300" data-testid="oie-row-reasons">{reasons.join(" ")}</span>;
   return <span className="text-muted-foreground">Hazır</span>;
 }

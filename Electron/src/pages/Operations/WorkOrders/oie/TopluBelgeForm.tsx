@@ -14,6 +14,8 @@ import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import { belgeOkutStage } from "@/pages/Operations/GelenBelgeler/belgeOkut";
 import { getDeliveryNote, INCOMING_DOCUMENT_QUERY_KEY } from "@/pages/Operations/GelenBelgeler/service";
 import type { DeliveryNoteDetail } from "@/pages/Operations/GelenBelgeler/types";
+import { DuplicateDocNoConfirm, duplicateDocNoConflict } from "@/pages/Operations/GelenBelgeler/DuplicateDocNo";
+import type { DuplicateDocNoNotice } from "@/pages/Operations/GelenBelgeler/mukerrerTypes";
 import { gramajOffer, initialDocDraft, passThroughTargets, routeGramajOptions, seedDraftGramaj, type DocDraft } from "./docDraft";
 import { useOieDefaultTargets } from "./useOieDefaults";
 import { AUTO_PRINT_TEXT, printRefakatCard, useRefakatAutoPrint } from "./refakatPrint";
@@ -50,6 +52,8 @@ export function TopluBelgeForm({ noteIds, route }: Props) {
   const [drafts, setDrafts] = useState<Record<string, DocDraft>>({});
   const [results, setResults] = useState<Record<string, RowResult>>({});
   const [busy, setBusy] = useState(false);
+  // K27 WARN: satır başına 409 künyesi; "Yine de onayla" yalnız o satırı bayrakla yeniden gönderir.
+  const [conflicts, setConflicts] = useState<Record<string, DuplicateDocNoNotice>>({});
   const attempt = useAttemptToken();
   // Satır taslağı belge okununca bir kez dolar; gramaj teklifi (K22 çözücü, müşteri başına) geldikçe tohumlanır.
   const loaded = notes.map((q) => q.data);
@@ -66,19 +70,26 @@ export function TopluBelgeForm({ noteIds, route }: Props) {
     setDrafts((all) => Object.fromEntries(Object.entries(all).map(([id, d]) => [id, seed(d)])));
   }, [drafts, targetsFor, catalogLoading, catalog.propertyId, gramajOptions]);
 
-  const saveAll = async () => {
+  const saveRows = async (only: string | null = null) => {
     setBusy(true);
     const errors: unknown[] = [];
     for (const n of loaded) {
       const draft = n ? drafts[n.id] : undefined;
-      if (!n || !draft || results[n.id]?.kind === "OK") continue;
+      if (!n || !draft || results[n.id]?.kind === "OK" || (only !== null && n.id !== only)) continue;
       try {
         const passThrough = passThroughTargets(targetsFor(draft.ownerCustomerId), catalog.propertyId);
-        const out = await saveDoc({ note: n, draft, routeTemplateId: route.id, formApproval: approval.value, gramajPropertyId: catalog.propertyId, passThrough, clientToken: attempt.keyed(n.id) });
+        const out = await saveDoc({ note: n, draft, routeTemplateId: route.id, formApproval: approval.value, gramajPropertyId: catalog.propertyId, passThrough, clientToken: attempt.keyed(n.id), confirmDuplicateDocNo: only === n.id });
+        setConflicts(({ [n.id]: _, ...rest }) => rest);
         setResults((r) => ({ ...r, [n.id]: out.kind === "WORK_ORDER" ? { kind: "OK", text: `${TERIM.terbiyeIsEmri.tekil} ${out.result.workOrderNo}`, workOrderId: out.result.workOrderId } : { kind: "OK", text: "Taslak kaydedildi (onay Gelen Belgeler'den)" } }));
         if (out.kind === "WORK_ORDER" && autoPrint) toast.message(`${out.result.workOrderNo}: ${AUTO_PRINT_TEXT[await printRefakatCard(out.result.workOrderId)]}`);
       } catch (e) {
         errors.push(e);
+        const conflict = duplicateDocNoConflict(e);
+        setConflicts(({ [n.id]: _, ...rest }) => (conflict ? { ...rest, [n.id]: conflict } : rest));
+        if (conflict) {
+          setResults((r) => ({ ...r, [n.id]: { kind: "DUPLICATE", text: "Belge no işi süren başka belgede kayıtlı — aşağıdan karar verin." } }));
+          continue;
+        }
         setResults((r) => ({ ...r, [n.id]: { kind: "FAILED", text: saveErrorHint(e) ?? apiErrorText(e, e instanceof Error ? e.message : "Kaydedilemedi.") } }));
       }
     }
@@ -100,13 +111,16 @@ export function TopluBelgeForm({ noteIds, route }: Props) {
         <p className="mb-3 text-sm">Rota <b>{route.name}</b> · {noteIds.length} belge{waiting ? " · okunanlar geldikçe satırlar dolar" : ""}</p>
         <div className="flex flex-col gap-2">
           {noteIds.map((id, i) => (
-            <BulkRow key={id} note={loaded[i]} draft={drafts[id]} result={results[id]} gramajOptions={gramajOptions} disabled={busy}
-              onChange={(d) => setDrafts((all) => ({ ...all, [id]: d }))} />
+            <div key={id} className="flex flex-col gap-1">
+              <BulkRow note={loaded[i]} draft={drafts[id]} result={results[id]} gramajOptions={gramajOptions} disabled={busy}
+                onChange={(d) => setDrafts((all) => ({ ...all, [id]: d }))} />
+              {conflicts[id] && <DuplicateDocNoConfirm conflict={conflicts[id]} busy={busy} onConfirm={() => void saveRows(id)} />}
+            </div>
           ))}
         </div>
       </div>
       <div className="flex shrink-0 justify-end gap-2 border-t px-6 py-3">
-        <Button onClick={() => void saveAll()} disabled={busy || pending === 0 || Object.keys(drafts).length === 0 || !defaultsReady} data-testid="oie-bulk-save">
+        <Button onClick={() => void saveRows()} disabled={busy || pending === 0 || Object.keys(drafts).length === 0 || !defaultsReady} data-testid="oie-bulk-save">
           <Save className="mr-1 h-4 w-4" /> {busy ? "Kaydediliyor…" : `Hepsini kaydet (${pending})`}
         </Button>
       </div>
