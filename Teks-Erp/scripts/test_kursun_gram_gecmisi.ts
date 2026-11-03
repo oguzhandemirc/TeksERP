@@ -49,7 +49,8 @@ const tick = () => new Promise((r) => setTimeout(r, 400));
 const total = (r: ServiceResolution) => r.lines.reduce((s, l) => s + Number(l.unitPrice ?? 0) * Number(l.quantity), 0);
 const SVC = { gramPriceBasis: "SERVICE_DATE" as const };
 const INV = { gramPriceBasis: "INVOICE_DATE" as const };
-const LATE = "iş tarihinden SONRA";
+const LATE = "iş tarihinden SONRA girilen ilk gram fiyatıyla";
+const CUSTOMER_LATER = "müşteriye özel gram fiyatı iş tarihinden SONRA girildi";
 const CURRENT = "gram fiyatının BUGÜNKÜ değeriyle";
 
 const STAMP = randomUUID().slice(0, 8);
@@ -148,7 +149,11 @@ async function main(): Promise<void> {
   const sB = await resolveServiceItemsForRolls({ rollIds: [rB], customerId: cust.id, currency: "TRY", options: SVC });
   check("kaldırmadan sonraki iş istasyonun o anki 0,06 → 1200", total(sB) === 1200, JSON.stringify(sB.lines.map((l) => l.unitPrice)));
   const s1c = await resolveServiceItemsForRolls({ rollIds: [r1], customerId: cust.id, currency: "TRY", options: SVC });
-  check("müşteri fiyatından ÖNCEKİ iş: o anda geçerli istasyon 0,05 (geriye dönük müşteri fiyatı değil) → 1000, uyarısız", total(s1c) === 1000 && !s1c.warnings.some((w) => w.includes(LATE)), JSON.stringify([s1c.lines.map((l) => l.unitPrice), s1c.warnings]));
+  check("müşteri fiyatından ÖNCEKİ iş: o anda geçerli istasyon 0,05 (geriye dönük müşteri fiyatı değil) → 1000, geç-fiyat uyarısı yok", total(s1c) === 1000 && !s1c.warnings.some((w) => w.includes(LATE)), JSON.stringify([s1c.lines.map((l) => l.unitPrice), s1c.warnings]));
+  // K14-a (S3): müşteri fiyatı işten SONRA ilk kez girildi, istasyon fiyatı kullanıldı → sessiz kalınmaz.
+  check("müşteri fiyatından ÖNCEKİ iş: 'müşteriye özel gram fiyatı iş tarihinden SONRA girildi' uyarısı (1 iş)", s1c.warnings.some((w) => w.startsWith("1 ") && w.includes(CUSTOMER_LATER)), JSON.stringify(s1c.warnings));
+  check("müşteri fiyatı kaldırıldıktan sonraki iş: müşteri-sonra uyarısı YOK (o anda müşteri sürümü vardı)", !sB.warnings.some((w) => w.includes(CUSTOMER_LATER)), JSON.stringify(sB.warnings));
+  check("müşteri fiyatı geçerliyken yapılan iş: müşteri-sonra uyarısı YOK", !sA.warnings.some((w) => w.includes(CUSTOMER_LATER)), JSON.stringify(sA.warnings));
   check("kaldırma sürümü fiyatsız satırdır (silme değil)", (await prisma.kursunGramPriceVersion.findMany({ where: { cariAccountId: cari.id }, orderBy: { createdAt: "asc" }, select: { price: true, currency: true } }))
     .map((v) => `${v.price?.toString() ?? "-"}/${v.currency ?? "-"}`).join(",") === "0.04/TRY,-/-");
 

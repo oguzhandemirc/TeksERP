@@ -168,6 +168,8 @@ const OLAY_SABLONLARI: Record<string, Sablon> = {
   "CONSUMABLE_MOVEMENT:CREATE": olusturdu,
   // Kurşun istasyonu gramaj düğmeleri + gram fiyatı (OIE 2026-11): kayıt istasyondur
   "STATION_KURSUN:UPDATE": duzenledi,
+  // K16 "Yine de al": iş atandığı makineden başka kurşun makinesinde alındı (iz; atama değişmez)
+  "WORK_ORDER_STEP:KURSUN_FOREIGN_MACHINE_TAKE": olay("belirtme", "atandığı kurşun makinesi dışında aldı"),
 };
 
 function katalogKur(): Readonly<Record<string, Sablon>> {

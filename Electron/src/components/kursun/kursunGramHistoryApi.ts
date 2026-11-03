@@ -40,3 +40,12 @@ export function historyRowText(i: KursunGramHistoryItem): { when: string; price:
     who: i.createdByName ?? (i.createdById ? "—" : "Sistem (ilk kayıt)"),
   };
 }
+
+/** K14-b: alt not AYARA göre; ayar yeri panelde Sistem → Özellik Anahtarları → Muhasebe (Genel Ayarlar değil). */
+export const GRAM_PRICE_BASIS_PLACE = "Sistem → Özellik Anahtarları → Muhasebe → Gram fiyatı";
+export function gramPriceBasisNote(basis: "SERVICE_DATE" | "INVOICE_DATE" | undefined): string {
+  const rule = basis === "INVOICE_DATE"
+    ? "Fatura, faturanın kesildiği gündeki gram fiyatını kullanır"
+    : "Fatura, işin yapıldığı gündeki gram fiyatını kullanır";
+  return `${rule} (ayar: ${GRAM_PRICE_BASIS_PLACE}).`;
+}
