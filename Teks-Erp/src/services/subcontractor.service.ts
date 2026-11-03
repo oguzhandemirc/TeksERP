@@ -13,6 +13,7 @@
 //                     Step COMPLETED olur. Refakat kartı ARRIVAL.
 // =============================================================================
 
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { ROLL_DISPLAY_ORDER } from "../constants/roll-order";
 import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, ACTIVE_TARGET_PROPERTY, inheritRollPropertiesTx, revokeRollProperties } from "./helpers/property-revoke.helper";
@@ -1422,7 +1423,7 @@ export class SubcontractorService {
       const now = new Date();
       const dispatchNo = await nextSubcontractorDocNoTx(tx, "subcontractorDispatch", now);
 
-      const dispatch = await tx.subcontractorDispatch.create({
+      const dispatch = await sequentialTx(tx).subcontractorDispatch.create({
         data: {
           dispatchNo,
           workOrderId: data.workOrderId,
@@ -3646,7 +3647,7 @@ export class SubcontractorService {
           : `Fason kabul: ${receiptNo}`
       );
 
-      return tx.subcontractorReceipt.findUnique({
+      return sequentialTx(tx).subcontractorReceipt.findUnique({
         where: { id: receipt.id },
         include: {
           subcontractor: true,
@@ -5530,7 +5531,7 @@ export class SubcontractorService {
         // Race koruması (tx İÇİ): yukarıdaki computeBornRollBlockingReasons
         // kontrolü tx DIŞINDA — preview ile tx arasında Kurşun operatörü born
         // roll'a işlem açmış olabilir. Aynı kontrolü taze veriyle tekrarla.
-        const freshBornRolls = await tx.roll.findMany({
+        const freshBornRolls = await sequentialTx(tx).roll.findMany({
           where: { id: { in: bornRollIds } },
           select: {
             id: true,
@@ -6042,7 +6043,7 @@ export class SubcontractorService {
       // 1) Born topların TAZE güvenlik kontrolü (downstream yok + hâlâ boyahanede +
       //    bu sevkin lane'inde). Preview ile tx arasında boyahane operatörü kabul/
       //    işlem yapmış olabilir.
-      const freshBorn = await tx.roll.findMany({
+      const freshBorn = await sequentialTx(tx).roll.findMany({
         where: { id: { in: bornRollIds } },
         select: {
           id: true,
@@ -6164,7 +6165,7 @@ export class SubcontractorService {
       //    geri gelir; receive consume'da değişmemişti).
       const sourceStepIds = new Set<string>();
       for (const receiptId of sourceReceiptIds) {
-        const receipt = await tx.subcontractorReceipt.findUnique({
+        const receipt = await sequentialTx(tx).subcontractorReceipt.findUnique({
           where: { id: receiptId },
           select: {
             id: true,

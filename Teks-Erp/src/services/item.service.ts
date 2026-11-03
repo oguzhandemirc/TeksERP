@@ -10,6 +10,7 @@
 //   - Dolu = sipariş/WO planlamada bu listeden seçilebilir
 // =============================================================================
 
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import prisma from "../lib/prisma";
 import { Request } from "express";
 import { parseQueryParams, readIdCondition } from "../utils/query-parser";
@@ -383,7 +384,7 @@ export class ItemService extends BaseService {
             // hedefin kodu gönderilen kodla zaten birebir aynıdır.
             await tx.itemAllowedColor.deleteMany({ where: { itemId: target.id } });
             await tx.itemAllowedProperty.deleteMany({ where: { itemId: target.id } });
-            const revived = await tx.item.update({
+            const revived = await sequentialTx(tx).item.update({
               where: { id: target.id },
               data: {
                 // Diriltme bir güncellemedir: son değiştiren yazılır, oluşturan korunur.
@@ -413,7 +414,7 @@ export class ItemService extends BaseService {
             });
             return { record: revived, revivedFrom: target };
           }
-          const fresh = await tx.item.create({
+          const fresh = await sequentialTx(tx).item.create({
             data: withActor({
               code,
               name: input.name.trim(),
@@ -638,7 +639,7 @@ export class ItemService extends BaseService {
           });
         }
       }
-      return tx.item.update({
+      return sequentialTx(tx).item.update({
         where: { id },
         data: restData as Record<string, unknown>,
         include: {

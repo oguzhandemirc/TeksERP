@@ -17,6 +17,7 @@
 // SÜZÜLMEZ` işaretiyle geçer.
 // =============================================================================
 
+import { sequentialTx } from "./tx-sequential-relations.helper";
 import type { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { assertFlagWorkNotBilledTx } from "./service-billing-gate.helper";
@@ -156,7 +157,7 @@ export async function loadVariantValueItems(
   props: Array<{ rollId: string; propertyId: string }>,
 ): Promise<Map<string, string | null>> {
   if (props.length === 0) return new Map();
-  const rows = await db.rollProperty.findMany({
+  const rows = await sequentialTx(db).rollProperty.findMany({
     where: {
       rollId: { in: [...new Set(props.map((p) => p.rollId))] },
       ...ACTIVE_ROLL_PROPERTY,

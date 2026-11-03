@@ -41,6 +41,7 @@
 // `helpers/kursun-bypass-guard.helper.ts` dosyasında yaşar.
 // =============================================================================
 
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { ACTIVE_OPERATION, OWN_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { assertKursunGramajValue, loadKursunGramajOptions } from "./helpers/kursun-bypass-gramaj.helper";
@@ -1572,7 +1573,7 @@ export class KursunBypassService {
   > {
     if (!(await resolveKursunBypassEnabled(db))) return { ok: false, reason: null };
 
-    const step = await db.workOrderStep.findFirst({
+    const step = await sequentialTx(db).workOrderStep.findFirst({
       where: {
         workOrderId,
         station: { ...STEP_FLOW_WHERE },
