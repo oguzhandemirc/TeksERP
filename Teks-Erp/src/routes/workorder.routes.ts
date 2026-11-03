@@ -10,7 +10,6 @@ import { requirePermission, requireAnyPermission } from "../middlewares/rbac.mid
 import { workOrderTravelerRouter } from "./traveler-card.routes";
 import { requireQuickWorkOrderOwnership } from "../services/helpers/scope-narrowing.helper";
 import { getWorkOrderSummary, patchStepPlannedMachine, putTargetValues } from "../controllers/workorder-process.controller";
-import { listKursunCustomerDefaults } from "../services/kursun-customer-default.service";
 
 const controller = new WorkOrderController();
 const router = Router();
@@ -101,32 +100,6 @@ router.get(
   verifyToken,
   requireAnyPermission("workorder:read", "workorder:write", "mobile:hizli-is-emri"),
   controller.checkBatchNumber,
-);
-
-/**
- * @openapi
- * /api/work-orders/kursun-customer-defaults:
- *   get:
- *     tags: [WorkOrders]
- *     summary: Müşteriye özel varsayılan kurşun gramajları (İE formu ön seçimi)
- *     description: |
- *       S3 (fabrika cevabı 14): cari kartında girilen "Varsayılan kurşun gramajı". İE formu müşteri seçilince
- *       bu gramajı ön seçer; listede olmayan müşteride istasyon varsayılanı (bugünkü). Pasif değer listeye girmez.
- *     security: [{ bearerAuth: [] }]
- *     responses:
- *       200: { description: "[{ customerId, valueId }]" }
- */
-router.get(
-  "/kursun-customer-defaults",
-  verifyToken,
-  requireAnyPermission("workorder:read", "workorder:write", "mobile:hizli-is-emri"),
-  async (_req, res, next) => {
-    try {
-      res.status(200).json({ success: true, data: await listKursunCustomerDefaults() });
-    } catch (err) {
-      next(err);
-    }
-  },
 );
 
 /**

@@ -80,7 +80,7 @@ export const fabricPropertyService = {
   /** S3: müşterinin cari kartındaki varsayılan kurşun gramajı (customerId → valueId). Eski backend / hata → boş (istasyon varsayılanı). */
   getKursunCustomerDefaults: async (): Promise<KursunCustomerDefaults> => {
     try {
-      const res = await apiClient.get<{ data?: Array<{ customerId: string; valueId: string }> }>('/work-orders/kursun-customer-defaults');
+      const res = await apiClient.get<{ data?: Array<{ customerId: string; valueId: string }> }>('/finance/kursun-customer-defaults');
       return Object.fromEntries((res.data.data ?? []).map((r) => [r.customerId, r.valueId]));
     } catch {
       return {};

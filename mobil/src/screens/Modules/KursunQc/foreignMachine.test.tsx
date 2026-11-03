@@ -12,7 +12,7 @@ describe('ForeignMachinePrompt', () => {
     const onConfirm = jest.fn();
     const onCancel = jest.fn();
     const r = renderWithPaper(<ForeignMachinePrompt prompt={PROMPT} busy={false} onConfirm={onConfirm} onCancel={onCancel} />);
-    expect(r.getByText(/Kurşun M2 makinesine atanmış/)).toBeTruthy();
+    expect(r.getByText('Kurşun M2')).toBeTruthy();
     fireEvent.press(r.getByTestId('foreign-machine-take'));
     expect(onConfirm).toHaveBeenCalledTimes(1);
     fireEvent.press(r.getByTestId('foreign-machine-cancel'));

@@ -4,6 +4,7 @@ import React from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Button, Icon, Text } from 'react-native-paper';
 import AppModal from '../../../components/AppModal';
+import TruncatedText from '../../../components/TruncatedText';
 import { palette } from '../../../theme/tokens';
 
 export interface ForeignMachinePromptState {
@@ -34,10 +35,11 @@ export default function ForeignMachinePrompt({
           <Text style={styles.title}>Bu iş başka makineye atanmış</Text>
         </View>
         {!!prompt && (
-          <Text style={styles.body}>
-            {prompt.batchNumber} — bu iş {prompt.plannedMachineName} makinesine atanmış. Bu makinede yine de alırsan kayda geçer;
-            atama değişmez.
-          </Text>
+          <View>
+            <Text style={styles.body}>{prompt.batchNumber} — bu işin atandığı makine:</Text>
+            <TruncatedText style={styles.machine}>{prompt.plannedMachineName}</TruncatedText>
+            <Text style={styles.body}>Bu makinede yine de alırsan kayda geçer; atama değişmez.</Text>
+          </View>
         )}
         <View style={styles.actions}>
           <Button mode="outlined" onPress={onCancel} disabled={busy} testID="foreign-machine-cancel">
@@ -57,5 +59,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: palette.amber[100] },
   title: { fontSize: 17, fontWeight: '700', color: palette.amber[900], flex: 1 },
   body: { fontSize: 15, paddingHorizontal: 14, paddingTop: 12, color: '#1f2937' },
+  machine: { fontSize: 16, fontWeight: '700', paddingHorizontal: 14, paddingTop: 6, color: '#111827' },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, paddingHorizontal: 14, paddingTop: 14 },
 });

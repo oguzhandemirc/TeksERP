@@ -64,7 +64,7 @@ export const KURSUN_CUSTOMER_DEFAULTS_KEY = ["work-orders", "kursun-customer-def
 
 export async function fetchKursunCustomerDefaults(): Promise<KursunCustomerDefaults> {
   try {
-    const res = await apiClient.get<{ success: true; data: Array<{ customerId: string; valueId: string }> }>("/api/work-orders/kursun-customer-defaults");
+    const res = await apiClient.get<{ success: true; data: Array<{ customerId: string; valueId: string }> }>("/api/finance/kursun-customer-defaults");
     return Object.fromEntries((res.data.data ?? []).map((r) => [r.customerId, r.valueId]));
   } catch {
     return {};

@@ -15,7 +15,9 @@ export interface KursunCustomerDefault {
 
 export async function listKursunCustomerDefaults(): Promise<KursunCustomerDefault[]> {
   const rows = await prisma.cariAccount.findMany({
+    // Tek kart çözümü değil, gramajı dolu hesapların toplu listesi: süzgeç gramajdan başlar.
     where: {
+      kursunDefaultValueId: { not: null },
       customerId: { not: null },
       isActive: true,
       mergedIntoId: null,

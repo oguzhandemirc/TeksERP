@@ -57,7 +57,7 @@ export function CariKursunDefaultField({ value, onChange }: { value: { valueId: 
         <GramajChoiceButtons options={catalog.options} value={value.valueId} onChange={(id) => onChange({ valueId: id })} emptyLabel="İstasyon varsayılanı" />
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        Bu müşteriye iş emri açılınca gramaj bununla ön seçilir; formda değiştirilebilir.
+        Bu müşteriye terbiye iş emri açılınca gramaj bununla ön seçilir; formda değiştirilebilir.
       </p>
     </div>
   );
