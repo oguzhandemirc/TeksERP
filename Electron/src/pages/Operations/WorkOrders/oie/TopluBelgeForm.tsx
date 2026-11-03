@@ -9,12 +9,13 @@ import { Button } from "@/components/ui/button";
 import { apiErrorText } from "@/lib/api-error";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { batchFailure } from "./batchToken";
-import { useKursunCustomerDefaults, useKursunGramajCatalog } from "@/lib/kursun-gramaj";
+import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import { belgeOkutStage } from "@/pages/Operations/GelenBelgeler/belgeOkut";
 import { getDeliveryNote, INCOMING_DOCUMENT_QUERY_KEY } from "@/pages/Operations/GelenBelgeler/service";
 import type { DeliveryNoteDetail } from "@/pages/Operations/GelenBelgeler/types";
-import { initialDocDraft, reseedOwnerGramaj, routeGramajOptions, type DocDraft } from "./docDraft";
+import { gramajOffer, initialDocDraft, passThroughTargets, routeGramajOptions, seedDraftGramaj, type DocDraft } from "./docDraft";
+import { useOieDefaultTargets } from "./useOieDefaults";
 import { AUTO_PRINT_TEXT, printRefakatCard, useRefakatAutoPrint } from "./refakatPrint";
 import { saveDoc, saveErrorHint } from "./saveDoc";
 import { BulkRow, type RowResult } from "./BulkRow";
@@ -43,7 +44,6 @@ export function TopluBelgeForm({ noteIds, route }: Props) {
   const notes = useNotes(noteIds);
   const { catalog, isLoading: catalogLoading } = useKursunGramajCatalog();
   const gramajOptions = routeGramajOptions(catalog.options, route.hasKursun);
-  const { defaults: customerDefaults, isLoading: defaultsLoading } = useKursunCustomerDefaults();
   const approval = useFormApproval();
   const autoPrint = useRefakatAutoPrint();
   const qc = useQueryClient();
@@ -51,14 +51,20 @@ export function TopluBelgeForm({ noteIds, route }: Props) {
   const [results, setResults] = useState<Record<string, RowResult>>({});
   const [busy, setBusy] = useState(false);
   const attempt = useAttemptToken();
-  // Satır taslağı belge okununca ve gramaj kataloğu gelince bir kez dolar.
+  // Satır taslağı belge okununca bir kez dolar; gramaj teklifi (K22 çözücü, müşteri başına) geldikçe tohumlanır.
   const loaded = notes.map((q) => q.data);
+  const targetsFor = useOieDefaultTargets(route.id, Object.values(drafts).map((d) => d.ownerCustomerId));
   useEffect(() => {
-    if (catalogLoading || defaultsLoading) return;
     const add: Record<string, DocDraft> = {};
-    for (const n of loaded) if (n && !isReading(n) && !drafts[n.id]) add[n.id] = initialDocDraft(n, gramajOptions, customerDefaults);
+    for (const n of loaded) if (n && !isReading(n) && !drafts[n.id]) add[n.id] = initialDocDraft(n);
     if (Object.keys(add).length) setDrafts((d) => ({ ...d, ...add }));
-  }, [loaded, catalogLoading, defaultsLoading, gramajOptions, customerDefaults, drafts]);
+  }, [loaded, drafts]);
+  useEffect(() => {
+    if (catalogLoading) return;
+    const seed = (d: DocDraft) => seedDraftGramaj(d, gramajOffer(targetsFor(d.ownerCustomerId), catalog.propertyId, gramajOptions));
+    if (!Object.values(drafts).some((d) => seed(d) !== d)) return;
+    setDrafts((all) => Object.fromEntries(Object.entries(all).map(([id, d]) => [id, seed(d)])));
+  }, [drafts, targetsFor, catalogLoading, catalog.propertyId, gramajOptions]);
 
   const saveAll = async () => {
     setBusy(true);
@@ -67,7 +73,8 @@ export function TopluBelgeForm({ noteIds, route }: Props) {
       const draft = n ? drafts[n.id] : undefined;
       if (!n || !draft || results[n.id]?.kind === "OK") continue;
       try {
-        const out = await saveDoc({ note: n, draft, routeTemplateId: route.id, formApproval: approval.value, gramajPropertyId: catalog.propertyId, clientToken: attempt.keyed(n.id) });
+        const passThrough = passThroughTargets(targetsFor(draft.ownerCustomerId), catalog.propertyId);
+        const out = await saveDoc({ note: n, draft, routeTemplateId: route.id, formApproval: approval.value, gramajPropertyId: catalog.propertyId, passThrough, clientToken: attempt.keyed(n.id) });
         setResults((r) => ({ ...r, [n.id]: out.kind === "WORK_ORDER" ? { kind: "OK", text: `${TERIM.terbiyeIsEmri.tekil} ${out.result.workOrderNo}`, workOrderId: out.result.workOrderId } : { kind: "OK", text: "Taslak kaydedildi (onay Gelen Belgeler'den)" } }));
         if (out.kind === "WORK_ORDER" && autoPrint) toast.message(`${out.result.workOrderNo}: ${AUTO_PRINT_TEXT[await printRefakatCard(out.result.workOrderId)]}`);
       } catch (e) {
@@ -84,6 +91,8 @@ export function TopluBelgeForm({ noteIds, route }: Props) {
   };
 
   const waiting = loaded.some((n) => isReading(n));
+  // Ön seçim cevabı gelmeden kayıt yok (gövde ekranda görünenle aynı olsun).
+  const defaultsReady = Object.values(drafts).every((d) => targetsFor(d.ownerCustomerId) !== undefined);
   const pending = loaded.filter((n) => n && results[n.id]?.kind !== "OK").length;
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="oie-bulk-form">
@@ -92,12 +101,12 @@ export function TopluBelgeForm({ noteIds, route }: Props) {
         <div className="flex flex-col gap-2">
           {noteIds.map((id, i) => (
             <BulkRow key={id} note={loaded[i]} draft={drafts[id]} result={results[id]} gramajOptions={gramajOptions} disabled={busy}
-              onChange={(d) => setDrafts((all) => ({ ...all, [id]: all[id] ? reseedOwnerGramaj(all[id], d, gramajOptions, customerDefaults) : d }))} />
+              onChange={(d) => setDrafts((all) => ({ ...all, [id]: d }))} />
           ))}
         </div>
       </div>
       <div className="flex shrink-0 justify-end gap-2 border-t px-6 py-3">
-        <Button onClick={() => void saveAll()} disabled={busy || pending === 0 || Object.keys(drafts).length === 0} data-testid="oie-bulk-save">
+        <Button onClick={() => void saveAll()} disabled={busy || pending === 0 || Object.keys(drafts).length === 0 || !defaultsReady} data-testid="oie-bulk-save">
           <Save className="mr-1 h-4 w-4" /> {busy ? "Kaydediliyor…" : `Hepsini kaydet (${pending})`}
         </Button>
       </div>

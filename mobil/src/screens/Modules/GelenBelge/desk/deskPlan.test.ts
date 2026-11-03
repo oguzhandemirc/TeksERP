@@ -35,8 +35,8 @@ describe('kurşun adımı ve makineler', () => {
 
 describe('withDeskPlan / buildCreateBody', () => {
   const base: RowForm = { ownerCustomerId: 'c1', ownerSuggested: null, ownerAsk: null, ourBatchNo: 'P1', ourBatchNoKey: null, meters: 100, metersReview: false, gramajValueId: 'g40' };
-  // K22: gövde gramajı yalnız elle dokunulduysa taşır.
-  const opts = { clientToken: 't', routeTemplateId: 'A', gramajPropertyId: 'prop', gramajTouched: true };
+  // K22: gövde hedefi HEP açık (ekranda görülen gramaj).
+  const opts = { clientToken: 't', routeTemplateId: 'A', gramajPropertyId: 'prop' };
 
   it('makine seçilmediyse gövde bugünküyle aynı (stepPlanning yok)', () => {
     const body = buildCreateBody(base, { ...opts, kursunSequence: 1 });
@@ -58,6 +58,13 @@ describe('withDeskPlan / buildCreateBody', () => {
     expect(body.parties?.[0]).toMatchObject({ blockNo: 1, stepPlanning: [{ sequence: 2, plannedMachineId: 'm1' }], targetValues: [{ propertyId: 'prop', valueId: 'g25' }] });
     expect(body.parties?.[1]).toEqual({ blockNo: 2, batchNo: 'P2', meters: 70 });
     expect(body.targetValues).toEqual([{ propertyId: 'prop', valueId: 'g40' }]);
+  });
+
+  it('⭐ K22 parti gramajı gövde hedefini ezdiği için iletilen (formda alanı olmayan) değer partiye de taşınır', () => {
+    const multi = { mode: 'PER_PARTY' as const, rows: [{ blockNo: 1, batchNo: 'P1', meters: 50, gramajValueId: 'g25' }, { blockNo: 2, batchNo: 'P2', meters: 70 }] };
+    const body = buildCreateBody({ ...base, multi }, { ...opts, passThrough: [{ propertyId: 'br', valueId: 'b1' }] });
+    expect(body.parties?.[0]?.targetValues).toEqual([{ propertyId: 'prop', valueId: 'g25' }, { propertyId: 'br', valueId: 'b1' }]);
+    expect(body.targetValues).toEqual([{ propertyId: 'prop', valueId: 'g40' }, { propertyId: 'br', valueId: 'b1' }]);
   });
 
   it('çok parti + SINGLE: parti seçimleri gitmez (sunucu okumaz), makine üst düzeye gider', () => {

@@ -77,7 +77,8 @@ export async function assertFormApprovalEnabled(): Promise<void> {
 
 /**
  * K22: rotanın istasyon varsayılanları (TEK çözücü). Bayraklar her zaman birleşir (gövdede bayrak alanı yok);
- * değerler yalnız istemci `targetValues` göndermediyse; KAT kolon-projeksiyonu → `foldType`.
+ * KAT kolon-projeksiyonu → `foldType`. Değerler YALNIZ istemcidendir: anahtar yok = değer yok (eski istemci/"Hedef yok";
+ * yeni istemci çözücü ucunu okuyup gördüğünü gönderir) — sunucu kullanıcının ekranda görmediği değeri yazmaz.
  */
 export async function resolveFormWorkOrderTargets(
   routeTemplateId: string,
@@ -87,8 +88,7 @@ export async function resolveFormWorkOrderTargets(
   const steps = await prisma.routeStep.findMany({ where: { routeId: routeTemplateId }, select: { stationId: true }, orderBy: { sequence: "asc" } });
   const merged = mergeRouteDefaults(await resolveStationDefaultTargets(steps.map((s) => s.stationId), customerId));
   const fold = merged.find((t) => t.propertyCode === FOLD_PROPERTY_CODE && t.valueCode);
-  const targetValues = clientValues
-    ?? merged.filter((t) => t.valueId && t.propertyCode !== FOLD_PROPERTY_CODE).map((t) => ({ propertyId: t.propertyId, valueId: t.valueId! }));
+  const targetValues = clientValues ?? [];
   const flags = merged.filter((t) => t.valueType === "FLAG").map((t) => t.propertyId);
   return { targetValues, targetPropertyIds: [...new Set([...flags, ...(await flagPropertyIds(targetValues))])], foldType: fold?.valueCode ?? null };
 }
@@ -172,12 +172,12 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
 async function finishParties({ note, parties, input, userId, warnings }: { note: { id: string; noteNo: string }; parties: PartyInput[]; input: FormWorkOrderInput; userId: string; warnings: string[] }): Promise<FormWorkOrderResult> {
   const rolls = await partyRolls(note.id, note.noteNo, parties);
   const mode = input.mode ?? (await readMultiPartyWorkOrder());
-  // K22: gövdede hedef yoksa istasyon varsayılanları; varsa dokunulmaz. Çözücünün bayrakları her iş emrine eklenir.
+  // K22: değerler gövdeden; çözücünün bayrakları ve KAT'ı her iş emrine (tek parti yoluyla aynı).
   const defaults = await resolveFormWorkOrderTargets(input.routeTemplateId, input.ownerCustomerId, input.targetValues);
   const withDefaultFlags = async (targets: ReadonlyArray<{ propertyId: string }>) => [...new Set([...defaults.targetPropertyIds, ...(await flagPropertyIds(targets))])];
   const res = await openPartyWorkOrders({
     noteId: note.id, clientToken: input.clientToken, routeTemplateId: input.routeTemplateId, mode, parties, rolls,
-    targetValues: defaults.targetValues, stepPlanning: input.stepPlanning, notes: input.notes, flagPropertyIds: withDefaultFlags,
+    targetValues: defaults.targetValues, foldType: defaults.foldType, stepPlanning: input.stepPlanning, notes: input.notes, flagPropertyIds: withDefaultFlags,
   }, userId);
   warnings.push(...res.warnings);
   const first = res.workOrders[0]!;

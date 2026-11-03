@@ -105,7 +105,7 @@ describe('rowIssues — review zorunlu', () => {
 describe('gövdeler', () => {
   const f = { ownerCustomerId: 'c1', ownerSuggested: null, ownerAsk: null, ourBatchNo: 'P-1', ourBatchNoKey: 'K', meters: 120, metersReview: false, gramajValueId: 'g2' };
   it('⭐ iş emri gövdesi sözleşme 3: metre string, gramaj hedef değeri', () => {
-    expect(buildCreateBody(f, { clientToken: 't', routeTemplateId: 'r1', gramajPropertyId: 'p-gr', gramajTouched: true })).toEqual({
+    expect(buildCreateBody(f, { clientToken: 't', routeTemplateId: 'r1', gramajPropertyId: 'p-gr' })).toEqual({
       clientToken: 't', ownerCustomerId: 'c1', kursunMeters: '120', routeTemplateId: 'r1', ourBatchNo: 'P-1', ourBatchNoKey: 'K',
       targetValues: [{ propertyId: 'p-gr', valueId: 'g2' }],
     });
@@ -144,9 +144,10 @@ describe('K22 — gramaj ön seçimi sunucu çözücüsünden (fabrika cevabı 1
     expect(initialRowForm(detail({ ownerCustomerId: 'k2' }), gramaj({ k1: 'g1' })).gramajValueId).toBe('g2');
     expect(initialRowForm(detail({ ownerCustomerId: 'k1' }), () => undefined).gramajValueId).toBeNull();
   });
-  it('⭐ gramaja dokunulmadıysa gövdede targetValues YOK (sunucu çözer); elle kaldırılan [] gider', () => {
+  it('⭐ gövde targetValues HEP açık (sunucu anahtarsız gövdeye değer dayatmaz): ön seçim + iletilen; "Hedef yok" []', () => {
     const f = { ownerCustomerId: 'c1', ownerSuggested: null, ownerAsk: null, ourBatchNo: null, ourBatchNoKey: null, meters: 10, metersReview: false, gramajValueId: 'g2' };
-    expect('targetValues' in buildCreateBody(f, { clientToken: 't', routeTemplateId: 'r', gramajPropertyId: 'p-gr' })).toBe(false);
-    expect(buildCreateBody({ ...f, gramajValueId: null }, { clientToken: 't', routeTemplateId: 'r', gramajPropertyId: 'p-gr', gramajTouched: true }).targetValues).toEqual([]);
+    const pass = [{ propertyId: 'p-br', valueId: 'b1' }];
+    expect(buildCreateBody(f, { clientToken: 't', routeTemplateId: 'r', gramajPropertyId: 'p-gr', passThrough: pass }).targetValues).toEqual([{ propertyId: 'p-gr', valueId: 'g2' }, ...pass]);
+    expect(buildCreateBody({ ...f, gramajValueId: null }, { clientToken: 't', routeTemplateId: 'r', gramajPropertyId: 'p-gr' }).targetValues).toEqual([]);
   });
 });

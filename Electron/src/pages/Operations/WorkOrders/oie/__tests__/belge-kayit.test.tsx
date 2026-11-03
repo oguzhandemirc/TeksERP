@@ -6,7 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
-import { applyPatch, docDraftReasons, initialDocDraft, noteWorkOrderBody, routeGramajOptions } from "../docDraft";
+import { applyPatch, docDraftReasons, gramajOffer, initialDocDraft, noteWorkOrderBody, passThroughTargets, routeGramajOptions, seedDraftGramaj } from "../docDraft";
+import type { DefaultTarget } from "@/lib/station-default-targets";
 import { routeHasKursunStep } from "../service";
 import { saveLabel, saveDoc } from "../saveDoc";
 import { batchFailure } from "../batchToken";
@@ -24,8 +25,13 @@ vi.mock("@/pages/Operations/GelenBelgeler/service", () => ({
 vi.mock("@/lib/kursun-gramaj", async (orig) => ({
   ...(await orig<typeof import("@/lib/kursun-gramaj")>()),
   useKursunGramajCatalog: () => ({ catalog: { propertyId: "p-kursun", options: [{ id: "g1", name: "1 gr" }, { id: "g2", name: "2 gr", isDefault: true }] }, isLoading: false }),
-  useKursunCustomerDefaults: () => ({ defaults: {}, isLoading: false }),
 }));
+// K22 çözücü cevabı (müşteri başına); `undefined` = henüz yok.
+const TG = (propertyId: string, valueId: string, propertyCode = propertyId): DefaultTarget => ({
+  propertyId, propertyCode, propertyName: propertyCode, valueType: "CHOICE", mode: "REQUIRED", variantOfPropertyId: null, valueId, valueCode: valueId, valueName: valueId, source: "VALUE_DEFAULT",
+});
+const resolver: { targets: readonly DefaultTarget[] | null | undefined } = { targets: [TG("p-kursun", "g2")] };
+vi.mock("../useOieDefaults", () => ({ useOieDefaultTargets: () => () => resolver.targets }));
 const approval = { value: "WITH_WORK_ORDER" as "WITH_WORK_ORDER" | "SEPARATE" };
 vi.mock("../useFormApproval", () => ({ useFormApproval: () => ({ value: approval.value, isLoading: false }) }));
 const autoPrint = { on: false };
@@ -48,6 +54,8 @@ const note = (over: Record<string, unknown> = {}) => ({
   scans: [{ id: "s1", pageNo: 1, regionNo: null, status: "READ", mimeType: "image/jpeg", attempts: 1 }], lines: [], ...over,
 });
 const gramaj = [{ id: "g1" }, { id: "g2", isDefault: true }];
+/** Taslak + çözücü teklifi (sunucu "g2" önerir). */
+const draftOf = (n: unknown, options: readonly { id: string }[] = gramaj) => seedDraftGramaj(initialDocDraft(n as never), gramajOffer([TG("p-kursun", "g2")], "p-kursun", options));
 type N = Parameters<typeof saveDoc>[0]["note"];
 
 beforeEach(() => {
@@ -57,39 +65,57 @@ beforeEach(() => {
   printCard.mockClear();
   approval.value = "WITH_WORK_ORDER";
   autoPrint.on = false;
+  resolver.targets = [TG("p-kursun", "g2")];
 });
 
 describe("belgeden form taslağı", () => {
-  it("⭐ kutular dolar: müşteri önerisi (Belgeden), parti no + anahtar, metre, varsayılan gramaj", () => {
-    const d = initialDocDraft(note() as never, gramaj);
+  it("⭐ kutular dolar: müşteri önerisi (Belgeden), parti no + anahtar, metre, çözücünün gramajı", () => {
+    expect(initialDocDraft(note() as never).gramajId).toBeNull();
+    const d = draftOf(note());
     expect(d).toMatchObject({ ownerCustomerId: "c-gul", ownerFromDoc: true, ourBatchNo: "214279", ourBatchNoKey: "BARCODE:214279", meters: 4521.5, gramajId: "g2" });
     expect(docDraftReasons(d)).toEqual([]);
   });
-  it("öneri yoksa müşteri boş; varsayılan gramaj alanı yoksa hiçbiri seçilmez", () => {
-    const d = initialDocDraft(note({ ownerSuggestion: null }) as never, [{ id: "g1" }]);
+  it("öneri yoksa müşteri boş; katalogda olmayan teklif seçilmez", () => {
+    const d = draftOf(note({ ownerSuggestion: null }), [{ id: "g1" }]);
     expect(d.ownerCustomerId).toBeNull();
     expect(d.gramajId).toBeNull();
     expect(docDraftReasons(d)).toContain("Müşteriyi seçin.");
   });
   it("⭐ review'lı metre doğrulanmadan kayıt yok", () => {
-    const d = initialDocDraft(note({ kursunMetersReview: true }) as never, gramaj);
+    const d = draftOf(note({ kursunMetersReview: true }));
     expect(docDraftReasons(d)).toEqual(["Kurşun metresini doğrulayın (Gözden geçir)."]);
   });
   it("sözleşme 3 gövdesi: Decimal metni, anahtarlı parti, gramaj hedefi", () => {
-    const body = noteWorkOrderBody(initialDocDraft(note() as never, gramaj), { clientToken: "t1", routeTemplateId: "rt-k", gramajPropertyId: "p-kursun" });
+    const body = noteWorkOrderBody(draftOf(note()), { clientToken: "t1", routeTemplateId: "rt-k", gramajPropertyId: "p-kursun" });
     expect(body).toEqual({ clientToken: "t1", ownerCustomerId: "c-gul", ourBatchNo: "214279", ourBatchNoKey: "BARCODE:214279", kursunMeters: "4521.5", routeTemplateId: "rt-k", targetValues: [{ propertyId: "p-kursun", valueId: "g2" }] });
   });
   it("⭐ formda temizlenen parti no gövdede null gider (sunucu okumada yazılanı siler)", () => {
-    const d = applyPatch(initialDocDraft(note() as never, gramaj), { ourBatchNo: null });
+    const d = applyPatch(draftOf(note()), { ourBatchNo: null });
     const body = noteWorkOrderBody(d, { clientToken: "t1", routeTemplateId: "rt-k", gramajPropertyId: "p-kursun" });
     expect(body.ourBatchNo).toBeNull();
     expect("ourBatchNoKey" in body).toBe(false);
   });
-  it("⭐ kurşunsuz rotada varsayılan gramaj ön seçilmez, gövdede hedef yok; bilinmeyen rota bugünkü gibi", () => {
-    const d = initialDocDraft(note() as never, routeGramajOptions(gramaj, false));
+  it("⭐ kurşunsuz rotada gramaj ön seçilmez, gövdede hedef boş; bilinmeyen rota bugünkü gibi", () => {
+    const d = draftOf(note(), routeGramajOptions(gramaj, false));
     expect(d.gramajId).toBeNull();
-    expect(noteWorkOrderBody(d, { clientToken: "t1", routeTemplateId: "rt-t", gramajPropertyId: "p-kursun" }).targetValues).toBeUndefined();
-    expect(initialDocDraft(note() as never, routeGramajOptions(gramaj, undefined)).gramajId).toBe("g2");
+    expect(noteWorkOrderBody(d, { clientToken: "t1", routeTemplateId: "rt-t", gramajPropertyId: "p-kursun" }).targetValues).toEqual([]);
+    expect(draftOf(note(), routeGramajOptions(gramaj, undefined)).gramajId).toBe("g2");
+  });
+  it("⭐ K22 'Hedef yok' gövdede AÇIK boş dizi (sunucu anahtarsız gövdeye değer dayatmaz); formda alanı olmayan değer aynen gider, kat gitmez", () => {
+    const none = { ...draftOf(note()), gramajId: null, gramajTouched: true };
+    expect(noteWorkOrderBody(none, { clientToken: "t1", routeTemplateId: "rt-k", gramajPropertyId: "p-kursun" }).targetValues).toEqual([]);
+    const pass = passThroughTargets([TG("p-kursun", "g2"), TG("p-brode", "b1"), TG("p-kat", "k4", "KAT")], "p-kursun");
+    expect(pass).toEqual([{ propertyId: "p-brode", valueId: "b1" }]);
+    expect(noteWorkOrderBody(none, { clientToken: "t1", routeTemplateId: "rt-k", gramajPropertyId: "p-kursun", passThrough: pass }).targetValues).toEqual([{ propertyId: "p-brode", valueId: "b1" }]);
+  });
+  it("⭐ K22 müşteri değişince teklif yeniden tohumlanır; elle seçim ezilmez; cevap yokken dokunulmaz", () => {
+    const d0 = seedDraftGramaj(initialDocDraft(note() as never), "g2");
+    expect(seedDraftGramaj(d0, undefined)).toBe(d0);
+    const d1 = seedDraftGramaj(applyPatch(d0, { ownerCustomerId: "c-ist" }), "g1");
+    expect(d1.gramajId).toBe("g1");
+    expect(seedDraftGramaj(d1, "g2")).toBe(d1);
+    const touched = { ...d1, gramajId: null, gramajTouched: true };
+    expect(seedDraftGramaj(applyPatch(touched, { ownerCustomerId: "c-gul" }), "g2").gramajId).toBeNull();
   });
   it("routeHasKursunStep: sunucu alanı önce, yoksa PROCESS_QC yedeği", () => {
     expect(routeHasKursunStep([{ station: { kind: "PROCESS_QC", isKursunStation: false } }, { station: { kind: "TAMBUR" } }])).toBe(false);
@@ -97,16 +123,16 @@ describe("belgeden form taslağı", () => {
     expect(routeHasKursunStep([{ station: { kind: "PROCESS_QC" } }])).toBe(true);
   });
   it("⭐ tam metin önerisi (FULL_TEXT) sahip alanına yazılmaz; OWNER_TEXT / alansız (eski) yazılır", () => {
-    const full = initialDocDraft(note({ ownerSuggestion: { customerId: "c-ist", name: "İstanbul Tekstil", matchedText: "Güngören / İSTANBUL", source: "FULL_TEXT" } }) as never, gramaj);
+    const full = draftOf(note({ ownerSuggestion: { customerId: "c-ist", name: "İstanbul Tekstil", matchedText: "Güngören / İSTANBUL", source: "FULL_TEXT" } }));
     expect(full.ownerCustomerId).toBeNull();
     expect(full.ownerFromDoc).toBe(false);
-    const own = initialDocDraft(note({ ownerSuggestion: { customerId: "c-gul", name: "Gülkesim", matchedText: "GÜLKESİM", source: "OWNER_TEXT" } }) as never, gramaj);
+    const own = draftOf(note({ ownerSuggestion: { customerId: "c-gul", name: "Gülkesim", matchedText: "GÜLKESİM", source: "OWNER_TEXT" } }));
     expect(own.ownerCustomerId).toBe("c-gul");
   });
 });
 
 describe("saveDoc", () => {
-  const base = (n: ReturnType<typeof note>) => ({ note: n as unknown as N, draft: initialDocDraft(n as never, gramaj), routeTemplateId: "rt-k", gramajPropertyId: "p-kursun", clientToken: "t1" });
+  const base = (n: ReturnType<typeof note>) => ({ note: n as unknown as N, draft: draftOf(n), routeTemplateId: "rt-k", gramajPropertyId: "p-kursun", clientToken: "t1" });
   it("⭐ WITH_WORK_ORDER → belge→iş emri ucu, taslak yaması yok", async () => {
     createWO.mockResolvedValue({ workOrderId: "w1", workOrderNo: "IE-1", batchNumber: "214279", rollId: "r1" });
     const out = await saveDoc({ ...base(note()), formApproval: "WITH_WORK_ORDER" });
@@ -147,6 +173,21 @@ describe("toplu kayıt", () => {
     expect(createWO).toHaveBeenCalledTimes(2);
     expect(printCard).toHaveBeenCalledWith("w2");
     expect(printCard).toHaveBeenCalledTimes(1);
+  });
+  it("⭐ K22 toplu satır gövdesi çözücünün gramajını + iletilen değeri taşır; cevap gelmeden kayıt kapalı", async () => {
+    getNote.mockImplementation((id: string) => Promise.resolve(note({ id })));
+    createWO.mockResolvedValue({ workOrderId: "w4", workOrderNo: "IE-4", batchNumber: null, rollId: null });
+    resolver.targets = undefined;
+    const view = renderWithProviders(<TopluBelgeForm noteIds={["n4"]} route={{ id: "rt-k", name: "K" }} />);
+    await screen.findByTestId("row-n4");
+    expect(screen.getByTestId("oie-bulk-save")).toBeDisabled();
+    resolver.targets = [TG("p-kursun", "g1"), TG("p-brode", "b1")];
+    view.rerender(<TopluBelgeForm noteIds={["n4"]} route={{ id: "rt-k", name: "K" }} />);
+    const save = screen.getByTestId("oie-bulk-save");
+    await waitFor(() => expect(save).toBeEnabled());
+    await userEvent.click(save);
+    await waitFor(() => expect(createWO).toHaveBeenCalledTimes(1));
+    expect((createWO.mock.calls[0]?.[1] as { targetValues?: unknown } | undefined)?.targetValues).toEqual([{ propertyId: "p-kursun", valueId: "g1" }, { propertyId: "p-brode", valueId: "b1" }]);
   });
   it("oto baskı kapalıyken kart basılmaz", async () => {
     getNote.mockImplementation((id: string) => Promise.resolve(note({ id })));

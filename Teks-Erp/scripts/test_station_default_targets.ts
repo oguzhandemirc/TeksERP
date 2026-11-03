@@ -2,11 +2,12 @@
 // Test: İstasyon varsayılan hedefleri (K22, 2026-11-03) — TEK KAYNAK çözücü + yazma kapısı + belgeden İE kararı
 // Çalıştır: npx tsx scripts/test_station_default_targets.ts
 //   §1 işaretsiz istasyon (OPTIONAL bayrak/seçim, isDefault'suz REQUIRED) → ön seçim YOK (bugünkü)
-//   §2 AUTO bayrak hep; OPTIONAL bayrak yalnız "varsayılan açık"
+//   §2 AUTO ve REQUIRED bayrak hep; OPTIONAL bayrak yalnız "varsayılan açık"
 //   §3 değer önceliği: isDefault < yetenek varsayılanı < müşteri varsayılanı (S3); ön muhasebe kapalıyken müşteri yok sayılır
 //   §4 çeşit: ana bayrak seçiliyse çeşit değeriyle gelir; bayrak satırındaki çeşit değeri yetenek varsayılanı sayılır
 //   §5 yazma: başka özelliğin değeri 400 STATION_DEFAULT_VALUE_FOREIGN, pasif değer 400; alan verilmezse korunur
-//   §6 belgeden İE kararı: gövdede değer yoksa çözücü; varsa istemcinin değeri aynen; KAT → foldType
+//   §6 belgeden İE kararı: değerler YALNIZ istemciden (anahtar yok = değer yok, istemci çözücü ucunu okuyup gönderir);
+//      bayraklar + KAT → foldType çözücüden; çok partili yol: test_gelen_belge_cok_parti §10
 // =============================================================================
 import type { Prisma } from "@prisma/client";
 import prisma from "../src/lib/prisma";
@@ -118,6 +119,11 @@ async function main(): Promise<void> {
   check("§2 ⭐ AUTO bayrak seçili", t(t1, fAuto)?.mode === "AUTO" && t(t1, fAuto)?.valueId === null);
   check("§2 ⭐ OPTIONAL + varsayılan açık bayrak seçili", !!t(t1, fOn));
   check("§2 OPTIONAL (kapalı) bayrak seçili değil", !t(t1, fOpt));
+  // REQUIRED bayrak: panel "İş emrinde seçili gelir" der ve anahtarı çizmez → çözücü AUTO gibi hep seçer.
+  const fReq = await prop("FR", "FLAG");
+  const sReq = await station("SR");
+  await svc.setCapabilities(sReq, { properties: [{ propertyId: fReq, mode: "REQUIRED" }] });
+  check("§2d ⭐ REQUIRED bayrak (varsayılan açık işaretsiz) seçili gelir", t(await targetsOf(sReq), fReq)?.mode === "REQUIRED");
 
   // ── §3 değer önceliği ──
   check("§3a ⭐ REQUIRED seçim → değerin isDefault'u (VALUE_DEFAULT)", t(t1, cProp)?.valueId === c1 && t(t1, cProp)?.source === "VALUE_DEFAULT");
@@ -181,7 +187,8 @@ async function main(): Promise<void> {
   const route = (await prisma.route.create({ data: { name: `TEST SDT rota ${STAMP}`, steps: { create: [{ stationId: s1, sequence: 1 }, { stationId: s5, sequence: 2 }] } }, select: { id: true } })).id;
   fx.routeIds.push(route);
   const auto = await resolveFormWorkOrderTargets(route, cust, undefined);
-  check("§6a ⭐ gövdede değer yok → çözücü değeri (isDefault c1)", auto.targetValues.some((x) => x.propertyId === cProp && x.valueId === c1));
+  // Anahtarsız gövde = eski istemci ya da "Hedef yok" (panel OIE yalnız seçiliyken yazar) → değer DAYATILMAZ (main: `?? []`).
+  check("§6a ⭐ gövdede targetValues anahtarı yok → değer varsayılanı UYGULANMAZ (eski istemci bugünkü gibi)", auto.targetValues.length === 0, JSON.stringify(auto.targetValues));
   check("§6b AUTO + açık bayraklar hedef özelliklerde", auto.targetPropertyIds.includes(fAuto) && auto.targetPropertyIds.includes(fOn) && !auto.targetPropertyIds.includes(fOpt));
   check("§6c ⭐ KAT hedef değere değil foldType'a gider", !!fold && auto.foldType === fold.code && !auto.targetValues.some((x) => x.propertyId === kat!.id), `${auto.foldType}`);
   const client = await resolveFormWorkOrderTargets(route, cust, [{ propertyId: cProp, valueId: c3 }]);
@@ -190,7 +197,8 @@ async function main(): Promise<void> {
   check("§6e ⭐ boş dizi = istemci kararı (değer eklenmez)", cleared.targetValues.length === 0);
 
   // Negatif sonda (elle): computeDefaultTargets'ta `own.mode === "REQUIRED"` → `true` yapınca §1 kırmızı;
-  // resolveFormWorkOrderTargets'ta `clientValues ??` kaldırılınca §6d/§6e kırmızı.
+  // resolveFormWorkOrderTargets'ta `clientValues ??` kaldırılınca §6d/§6e kırmızı; `?? []` çözücü değerine dönünce §6a kırmızı;
+  // computeDefaultTargets'ta bayrak koşulu `mode !== "AUTO"` olunca §2d kırmızı.
 }
 
 async function cleanup(): Promise<void> {

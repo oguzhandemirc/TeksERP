@@ -6,7 +6,7 @@ import Toast from 'react-native-toast-message';
 import { useAttemptToken } from '../../../../offline/attemptToken';
 import { isAmbiguousFailure } from '../../../../offline/entryAttempt';
 import { fabricPropertyService, type KursunGramajCatalog } from '../../../../services/fabricProperty.service';
-import { useRouteDefaultTargets } from '../../../../hooks/useRouteDefaultTargets';
+import { fetchDefaultTargets, passThroughTargets, useRouteDefaultTargets } from '../../../../hooks/useRouteDefaultTargets';
 import { inboundDocService, type InboundNoteDetail, type NotePartiesView } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { printTravelerCardForWorkOrder } from '../../../../services/travelerCardPrint';
@@ -57,6 +57,8 @@ interface SaveCtx {
   mode: FormApproval;
   routeId: string;
   gramajPropertyId: string | null;
+  /** K22 formda alanı olmayan çözücü değerleri (gövdeye aynen). */
+  passThrough: readonly { propertyId: string; valueId: string }[];
   /** Belge masası plan makinesi için rotanın kurşun adımı sırası (yoksa makine gitmez). */
   kursunSequence: number | null;
   /** Satır anahtarlı deneme token'ı (belirsiz hatada yapışır). */
@@ -85,7 +87,7 @@ async function saveRowOnce(ctx: SaveCtx, r: DocRow, form: RowForm): Promise<{ re
       clientToken: ctx.token,
       routeTemplateId: ctx.routeId,
       gramajPropertyId: ctx.gramajPropertyId,
-      gramajTouched: r.gramajTouched,
+      passThrough: ctx.passThrough,
       kursunSequence: ctx.kursunSequence,
     });
     return { result: openedResult(await inboundDocService.createWorkOrder(r.noteId, body)) };
@@ -121,6 +123,9 @@ function rowCounts(rows: DocRow[], ready: number) {
 }
 
 type GramajFor = (customerId: string | null) => string | null | undefined;
+type PassThrough = readonly { propertyId: string; valueId: string }[];
+/** Cevap hazırsa eşzamanlı (kayıt akışı mikro-görev kaybetmez), değilse doğrudan okunur. */
+type PassThroughFor = (customerId: string | null) => PassThrough | Promise<PassThrough>;
 
 /** Parti özeti form kurulduktan sonra gelir: çok partideyse satır listesi bir kez kurulur (kullanıcı düzenlemesi ezilmez). */
 function applyParties(rs: DocRow[], noteId: string, parties: NotePartiesView | null): DocRow[] {
@@ -132,7 +137,7 @@ function applyMulti(rs: DocRow[], noteId: string, multi: MultiPartyDraft): DocRo
 }
 
 /** Gramaj alanı yalnız rotada kurşun adımı varsa; katalog okunamazsa boş (alan çizilmez, uydurma yok). */
-function useGramajCatalog(route: ProductionRoute, rows: DocRow[]): { showGramaj: boolean; catalog: KursunGramajCatalog; gramajFor: GramajFor } {
+function useGramajCatalog(route: ProductionRoute, rows: DocRow[]): { showGramaj: boolean; catalog: KursunGramajCatalog; gramajFor: GramajFor; passThroughFor: PassThroughFor } {
   const showGramaj = routeHasKursunStep(route);
   const q = useQuery({
     queryKey: ['fabric-properties', 'kursun-gramaj-catalog'],
@@ -143,7 +148,8 @@ function useGramajCatalog(route: ProductionRoute, rows: DocRow[]): { showGramaj:
   });
   const catalog = showGramaj ? q.data ?? EMPTY_CATALOG : EMPTY_CATALOG;
   // K22: ön seçim sunucu çözücüsünden (müşteri > istasyon yeteneği > değer varsayılanı); tablet kural yazmaz.
-  const defaults = useRouteDefaultTargets(route, rows.map((r) => r.form?.ownerCustomerId ?? r.detail?.ownerCustomerId ?? null), showGramaj);
+  // Kurşunsuz rotada da okunur: formda alanı olmayan seçim değerleri gövdeye aynen gider.
+  const defaults = useRouteDefaultTargets(route, rows.map((r) => r.form?.ownerCustomerId ?? r.detail?.ownerCustomerId ?? null));
   const { valueFor } = defaults;
   const propertyId = catalog.propertyId;
   const gramajFor = useCallback<GramajFor>(
@@ -155,7 +161,15 @@ function useGramajCatalog(route: ProductionRoute, rows: DocRow[]): { showGramaj:
     },
     [showGramaj, propertyId, valueFor, catalog],
   );
-  return { showGramaj, catalog, gramajFor };
+  const gramajPropertyId = showGramaj ? propertyId : null;
+  // Kayıt anında cevap henüz yoksa doğrudan okunur (kayıt beklemez); okunamazsa iletilecek değer yok.
+  const passThroughFor = useCallback<PassThroughFor>(
+    (customerId) =>
+      defaults.passThroughFor(customerId, gramajPropertyId) ??
+      (defaults.stationIds.length === 0 ? [] : fetchDefaultTargets(defaults.stationIds, customerId).then((l) => passThroughTargets(l, gramajPropertyId), () => [])),
+    [defaults, gramajPropertyId],
+  );
+  return { showGramaj, catalog, gramajFor, passThroughFor };
 }
 
 /** Çözücü cevabı satırdan sonra gelirse (ya da müşteri değişince) dokunulmamış satırlara ön seçim düşer. */
@@ -223,7 +237,7 @@ export function useWoRows(route: ProductionRoute) {
   const autoPrint = settings.data?.refakatAutoPrint === true;
   const mode = resolveFormApproval(settings.data, settings.isError);
   const [rows, setRows] = useState<DocRow[]>([]);
-  const { showGramaj, catalog, gramajFor } = useGramajCatalog(route, rows);
+  const { showGramaj, catalog, gramajFor, passThroughFor } = useGramajCatalog(route, rows);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [recent, setRecent] = useState<string[]>([]);
@@ -258,7 +272,9 @@ export function useWoRows(route: ProductionRoute) {
     try {
       // Sırayla: her satır ayrı tx; biri düşerse diğerleri etkilenmez, sonuç satırda kalır.
       for (const r of pending) {
-        const ctx = { mode, routeId: route.id, gramajPropertyId: catalog.propertyId, kursunSequence: kursunStepOf(route)?.sequence ?? null, token: attempt.keyed(r.noteId) };
+        const ptNow = passThroughFor(r.form!.ownerCustomerId);
+        const passThrough = Array.isArray(ptNow) ? ptNow : await ptNow;
+        const ctx = { mode, routeId: route.id, gramajPropertyId: catalog.propertyId, passThrough, kursunSequence: kursunStepOf(route)?.sequence ?? null, token: attempt.keyed(r.noteId) };
         const { result, error } = await saveRowOnce(ctx, r, r.form!);
         if (error !== undefined) errors.push(error);
         setResult(r.noteId, result);

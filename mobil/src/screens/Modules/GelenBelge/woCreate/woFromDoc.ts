@@ -121,7 +121,7 @@ export function rowIssues(f: RowForm): string[] {
 
 export function buildCreateBody(
   f: RowForm,
-  opts: { clientToken: string; routeTemplateId: string; gramajPropertyId: string | null; gramajTouched?: boolean; kursunSequence?: number | null },
+  opts: { clientToken: string; routeTemplateId: string; gramajPropertyId: string | null; passThrough?: readonly { propertyId: string; valueId: string }[]; kursunSequence?: number | null },
 ): CreateWorkOrderFromNoteBody {
   const body: CreateWorkOrderFromNoteBody = {
     clientToken: opts.clientToken,
@@ -132,10 +132,8 @@ export function buildCreateBody(
   // Parti no hep açık: null = formda temizlendi (sunucu okumada yazılan adayı siler).
   body.ourBatchNo = f.ourBatchNo ?? null;
   if (f.ourBatchNo && f.ourBatchNoKey) body.ourBatchNoKey = f.ourBatchNoKey;
-  // K22: gramaja dokunulmadıysa anahtar YOK → sunucu ön seçimi kendi çözer (aynı kaynak); elle seçilen/kaldırılan aynen gider.
-  if (opts.gramajTouched) {
-    body.targetValues = f.gramajValueId && opts.gramajPropertyId ? [{ propertyId: opts.gramajPropertyId, valueId: f.gramajValueId }] : [];
-  }
+  // K22: hedef değerleri HEP açık (boş = "Hedef yok"): sunucu anahtarsız gövdeye değer dayatmaz; ekranda görülen gider.
+  body.targetValues = [...(f.gramajValueId && opts.gramajPropertyId ? [{ propertyId: opts.gramajPropertyId, valueId: f.gramajValueId }] : []), ...(opts.passThrough ?? [])];
   const base = f.multi ? withParties(body, f.multi) : body;
   return withDeskPlan(base, f, { kursunSequence: opts.kursunSequence ?? null, gramajPropertyId: opts.gramajPropertyId });
 }

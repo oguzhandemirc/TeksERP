@@ -118,6 +118,26 @@ describe("K22 rota adımı ön seçimi (reconcileStepDefaults)", () => {
     expect(r3.state).toEqual(EMPTY);
     expect(reconcileStepDefaults(EMPTY, {}, { ...IN([["a", "sK"]], null), failed: true }).state).toEqual(EMPTY);
   });
+  it("⭐ adım önce, müşteri sonra: ilk cevapta gramaj yoksa sonradan gelen müşteri gramajı tohumlanır", () => {
+    const noGramaj = { ...BY, sK: [T({ propertyId: "KURSUN" })] };
+    const r1 = reconcileStepDefaults(EMPTY, {}, IN([["a", "sK"]], noGramaj));
+    expect(r1.state.gramaj).toBeNull();
+    const withCustomer = { ...BY, sK: [T({ propertyId: "KURSUN" }), T({ propertyId: "GR", valueType: "CHOICE", mode: "REQUIRED", valueId: "v50", source: "CUSTOMER" })] };
+    const r2 = reconcileStepDefaults(r1.state, r1.records, IN([["a", "sK"]], withCustomer));
+    expect(r2.state.gramaj).toBe("v50");
+    // Tohum artık bu adımındır: müşteri yine değişince yenilenir.
+    const r3 = reconcileStepDefaults(r2.state, r2.records, IN([["a", "sK"]]));
+    expect(r3.state.gramaj).toBe("v40");
+  });
+  it("⭐ elle 'Hedef yok' aynı cevapla geri dolmaz (yalnız cevap değişince tohumlanır)", () => {
+    const r1 = reconcileStepDefaults({ ...EMPTY, gramaj: "v25" }, {}, IN([["a", "sK"]]));
+    expect(r1.state.gramaj).toBe("v25");
+    const r2 = reconcileStepDefaults({ ...r1.state, gramaj: null }, r1.records, IN([["a", "sK"]]));
+    expect(r2.state.gramaj).toBeNull();
+    const seeded = reconcileStepDefaults(EMPTY, {}, IN([["a", "sK"]]));
+    const cleared = reconcileStepDefaults({ ...seeded.state, gramaj: null }, seeded.records, IN([["a", "sK"]]));
+    expect(cleared.state.gramaj).toBeNull();
+  });
 });
 
 describe("stepsToCustom", () => {

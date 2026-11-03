@@ -60,7 +60,9 @@ export function withDeskPlan(
   out.parties = out.parties.map((p) => {
     const row = f.multi!.rows.find((r) => r.blockNo === p.blockNo);
     const plan = planOf(row?.machineId, opts.kursunSequence);
-    const gramaj = row?.gramajValueId && opts.gramajPropertyId ? [{ propertyId: opts.gramajPropertyId, valueId: row.gramajValueId }] : undefined;
+    // K22: parti hedefi gövdenin hedefini EZER (sunucu `p.targetValues ?? gövde`) → formda alanı olmayan değerler partiye de taşınır.
+    const rest = (body.targetValues ?? []).filter((t) => t.propertyId !== opts.gramajPropertyId);
+    const gramaj = row?.gramajValueId && opts.gramajPropertyId ? [{ propertyId: opts.gramajPropertyId, valueId: row.gramajValueId }, ...rest] : undefined;
     return { ...p, ...(plan ? { stepPlanning: plan } : {}), ...(gramaj ? { targetValues: gramaj } : {}) };
   });
   return out;

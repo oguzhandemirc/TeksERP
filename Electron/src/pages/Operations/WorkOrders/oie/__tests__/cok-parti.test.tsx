@@ -33,7 +33,7 @@ const note = {
   scans: [{ id: "s1", pageNo: 1, regionNo: null, status: "READ", mimeType: "image/jpeg", attempts: 1 }], lines: [],
 };
 type N = Parameters<typeof saveDoc>[0]["note"];
-const base = () => ({ note: note as unknown as N, draft: { ...initialDocDraft(note as never, []), ownerCustomerId: "c-gul" }, routeTemplateId: "rt-k", gramajPropertyId: null, clientToken: "t1" });
+const base = () => ({ note: note as unknown as N, draft: { ...initialDocDraft(note as never), ownerCustomerId: "c-gul" }, routeTemplateId: "rt-k", gramajPropertyId: null, clientToken: "t1" });
 
 beforeEach(() => { createWO.mockReset(); patchHeader.mockReset(); });
 
