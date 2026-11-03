@@ -7,8 +7,9 @@ import type {
   ApproveResult, DeliveryNoteDetail, DeliveryNoteLine, DeliveryNoteListQuery, DeliveryNoteListResponse,
   HeaderPatch, IncomingDocumentSettings, LineInput, LinePatch, NoteMatchSuggestions, ReaderStatus, SenderTemplatePatch,
   SenderTemplateView, UnreviewedApproval, RouteSuggestionPriority, HeaderLineMeterSource, DocumentTotalCheckMode, CustomerDefaultView, ProcessValuePage, WorkOrderPlan,
-  BulkDeletePreview, BulkDeleteResult, WorkOrderSourceNote,
+  BulkDeletePreview, BulkDeleteResult,
 } from "./types";
+import type { WorkOrderSourceNote } from "./photoRetentionTypes";
 import type { NoteCancelPreview, NoteCancelResult } from "./cancelTypes";
 
 const BASE = "/api/gelen-belge";

@@ -12,7 +12,8 @@ import { AlertTriangle } from "lucide-react";
 import { FieldLabel, FlagToggle } from "./SettingRow";
 import { EnumRadioOptions } from "./EnumRadioOptions";
 import { TERIM } from "@/lib/terim";
-import type { AutoWorkOrderPatternlessMode, BatchNumberSourceMode, IncomingDocEntryMode, IncomingDocFormApproval, IncomingDocumentSettings, PhotoRetentionMode } from "@/pages/Operations/GelenBelgeler/types";
+import type { AutoWorkOrderPatternlessMode, BatchNumberSourceMode, IncomingDocEntryMode, IncomingDocFormApproval, IncomingDocumentSettings } from "@/pages/Operations/GelenBelgeler/types";
+import type { PhotoRetentionMode } from "@/pages/Operations/GelenBelgeler/photoRetentionTypes";
 import type { MultiPartyWorkOrderMode } from "@/pages/Operations/GelenBelgeler/partiMetreTypes";
 
 

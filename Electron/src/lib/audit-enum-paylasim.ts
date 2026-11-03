@@ -122,7 +122,7 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   ACTIVE: "sekiz durum enum'u (ürün yaşam döngüsü dahil) — hepsinde 'Aktif'",
   VOIDED: "refakat kartı, basılı belge ve kartela (durum + kabul iptali olayı) — hepsinde 'İptal'",
   SHIPPED: "top durumu, kartela durumu ve kartela olayı — üçü de 'Sevk Edildi'",
-  REDUCED: "kartela durumu ve kartela olayı — ikisi de 'Stoktan düşüldü'; DocumentScanContentState(fotoğraf küçültüldü) DOCUMENT_SCAN.contentState override\'ı ile ayrıldı (K28, 2026-11-03)",
+  REDUCED: "kartela durumu ve kartela olayı — ikisi de 'Stoktan düşüldü'; DocumentScanContentState(fotoğraf küçültüldü) DOCUMENT_SCAN.contentState override'ı ile ayrıldı (K28, 2026-11-03)",
   DISPATCHED: "sevkiyat ve sevkiyat olayı — ikisi de 'Sevk Edildi'",
   PARTIAL: "içe aktarım ve alış siparişi — ikisi de 'Kısmi'",
   DRAFT: "fatura ve sayım — ikisi de 'Taslak'",

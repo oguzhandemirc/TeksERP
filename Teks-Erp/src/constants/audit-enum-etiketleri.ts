@@ -299,6 +299,8 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   SERIES: "Numara serisinden",
   DOCUMENT: "Belgeden",
 
+  // DocumentScanContentState (K28 fotoğraf saklama) — REDUCED/PURGED çakışır, DOCUMENT_SCAN.contentState override'ı
+  FULL: "Tam",
 };
 
 /** Enum DEĞERLERİ (durum/tür kolonlarının içeriği) → Türkçe. Bilinmeyen → ham. */

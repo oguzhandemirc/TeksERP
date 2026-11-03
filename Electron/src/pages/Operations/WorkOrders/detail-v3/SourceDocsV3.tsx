@@ -11,7 +11,7 @@ import { getWorkOrderSourceNotes, INCOMING_DOCUMENT_QUERY_KEY } from "@/pages/Op
 import { useScanImage } from "@/pages/Operations/GelenBelgeler/useScanImage";
 import { isScanPurged, SCAN_PURGED_TEXT } from "@/pages/Operations/GelenBelgeler/photoRetention";
 import { NOTE_STATUS_LABEL } from "@/pages/Operations/GelenBelgeler/noteStatus";
-import type { WorkOrderSourceNote } from "@/pages/Operations/GelenBelgeler/types";
+import type { WorkOrderSourceNote } from "@/pages/Operations/GelenBelgeler/photoRetentionTypes";
 import { V3Section } from "./V3Section";
 
 type Scan = WorkOrderSourceNote["scans"][number];

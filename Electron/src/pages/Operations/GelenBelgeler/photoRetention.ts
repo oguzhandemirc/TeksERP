@@ -1,5 +1,5 @@
 // K28 belge fotoğrafı saklama: onaydan önce belge no'yu kontrol ettiren uyarı (fotoğraf sonra küçülür/silinir).
-import type { DocumentScanInfo, PhotoRetentionMode } from "./types";
+import type { PhotoRetentionMode, ScanContentFields } from "./photoRetentionTypes";
 
 const WHEN: Record<Exclude<PhotoRetentionMode, "FULL">, string> = {
   SHRINK_ON_APPROVAL: "Onaydan sonra fotoğraf küçültülecek",
@@ -17,6 +17,6 @@ export function retentionDocNoWarning(mode: PhotoRetentionMode | null | undefine
 export const SCAN_PURGED_TEXT = "Fotoğraf saklama ayarı gereği silindi.";
 
 /** Detay künyesi SİLİNDİ diyorsa istek hiç atılmaz; eski backend `contentState` göndermez → istenir. */
-export function isScanPurged(scan: Pick<DocumentScanInfo, "contentState"> | null | undefined): boolean {
+export function isScanPurged(scan: ScanContentFields | null | undefined): boolean {
   return scan?.contentState === "PURGED";
 }

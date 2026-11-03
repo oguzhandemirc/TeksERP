@@ -1,4 +1,6 @@
 // Gülkesim parti no + kurşun metresi (tasarım 2026-11-02 §2.1–§2.4) — backend aynası tipler; `types.ts` yeniden dışa verir.
+import type { PhotoRetentionMode } from "./photoRetentionTypes";
+export type { ScanContentFields } from "./photoRetentionTypes";
 /** Gelen belgeden doğan partinin numarası — backend `BatchNumberSourceMode` aynası. */
 export type BatchNumberSourceMode = "SERIES" | "DOCUMENT";
 /** Onay kipi — backend `IncomingDocEntryMode` aynası. */
@@ -33,6 +35,9 @@ export interface EntryModeSettings {
   refakatAutoPrint?: boolean;
   /** İstasyon tabletinde "Belge okut" ile iş emri bulma (K17; vars. false). Eski backend göndermez → satır çizilmez. */
   stationDocLookup?: boolean;
+  /** Belge fotoğrafı saklama (K28; vars. FULL). Eski backend göndermez → alan çizilmez. */
+  photoRetention?: PhotoRetentionMode;
+  defaultPhotoRetention?: PhotoRetentionMode;
 }
 /** Gönderen şablonu satırının parti no alanı (§2.4). */
 export interface SenderTemplateBatchNoFields {
@@ -87,6 +92,8 @@ export interface PartiMetreHeaderFields {
 }
 /** Detay yanıtı (A: adaylar + metre kaynakları canlı; B: `perDocument` kip açıkken). */
 export interface PartiMetreDetailFields {
+  /** K28 saklama kipi (onay ekranı belge no vurgusu); eski backend göndermez (undefined = FULL). */
+  photoRetention?: PhotoRetentionMode;
   batchNoCandidates?: BatchNoCandidate[];
   kursunMeterCandidates?: KursunMeterCandidates | null;
   perDocument?: PerDocumentGate;

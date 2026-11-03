@@ -11,7 +11,8 @@ import { approveNote, getIncomingDocumentSettings, getSuggestions, INCOMING_DOCU
 import { approveErrorText, approvePrecheck, needsVarianceReason, summarizeApprove, summarizeAutoWorkOrders, unusableDefaultSource, type ApproveOutcome, type AutoWorkOrderSummary } from "./approveFlow";
 import { CUSTOMER_DEFAULTS_PATH } from "./paths";
 import { perDocumentPrecheck, perDocumentSummary } from "./partiMetre";
-import type { DeliveryNoteHeader, DeliveryNoteLine, PerDocumentGate, PhotoRetentionMode, ProcessChoice } from "./types";
+import type { DeliveryNoteHeader, DeliveryNoteLine, PerDocumentGate, ProcessChoice } from "./types";
+import type { PhotoRetentionMode } from "./photoRetentionTypes";
 import { retentionDocNoWarning } from "./photoRetention";
 
 interface Props {
@@ -150,8 +151,7 @@ export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun =
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            <RetentionDocNo retention={retention} />
-            {perDocument && <p className="rounded border px-2 py-1 text-sm font-medium" data-testid="approve-per-document">{perDocumentSummary(perDocument.note)}</p>}
+            <RetentionDocNo retention={retention} />{perDocument && <p className="rounded border px-2 py-1 text-sm font-medium" data-testid="approve-per-document">{perDocumentSummary(perDocument.note)}</p>}
             {pre.messages.length > 0 && (
               <ul className="flex flex-col gap-1" data-testid="approve-precheck" data-blocked={pre.blocked ? "1" : "0"}>
                 {pre.messages.map((m) => (

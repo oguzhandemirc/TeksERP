@@ -1,6 +1,6 @@
 // Onay kartı (T2) saf parçaları: kart görünürlüğü yalnız sunucu sinyalinden, düğme izinden, engel sunucu kodundan.
 import type { ApproveNoteResult, InboundNoteDetail } from '../../../services/inboundDoc.service';
-import { approvalCardView, approveResultView, batchPatch, meterChoices, parseMeters, showsApprovalCard } from './approvalGate';
+import { approvalCardView, approveResultView, batchPatch, meterChoices, parseMeters, retentionDocNoWarning, showsApprovalCard } from './approvalGate';
 
 const detail = (p: Partial<InboundNoteDetail> = {}): InboundNoteDetail => ({
   id: 'n1',
@@ -124,5 +124,24 @@ describe('approveResultView', () => {
     const v = approveResultView(r({}));
     expect(v.tone).toBe('warn');
     expect(v.lines[0]).toMatch(/otomatik açılmadı/);
+  });
+});
+
+// K28: fotoğraf saklama kipi FULL değilse belge no vurgulu satır + uyarı (panel ikizi aynı metni söyler).
+// Negatif sonda: approvalCardView'dan `docNo` hesabı null'a sabitlenince §2 kırmızı.
+describe('approvalCardView — K28 belge no vurgusu', () => {
+  it('§1 FULL ve eski sunucu (undefined) → satır yok (bugünkü kart)', () => {
+    expect(approvalCardView(detail({ senderDocNo: 'A-1', photoRetention: 'FULL' }), { canApprove: true }).docNo).toBeNull();
+    expect(approvalCardView(detail({ senderDocNo: 'A-1' }), { canApprove: true }).docNo).toBeNull();
+  });
+  it('§2 onayda küçült → belge no + uyarı; izinsiz kartta da görünür', () => {
+    const d = detail({ senderDocNo: 'A-1', photoRetention: 'SHRINK_ON_APPROVAL' });
+    expect(approvalCardView(d, { canApprove: true }).docNo).toEqual({ value: 'A-1', warning: "Onaydan sonra fotoğraf küçültülecek — belge no'yu kontrol edin." });
+    expect(approvalCardView(d, { canApprove: false }).docNo?.value).toBe('A-1');
+  });
+  it('§3 sil kipleri kendi metni; boş belge no null', () => {
+    expect(retentionDocNoWarning('DELETE_ON_APPROVAL')).toBe("Onaydan sonra fotoğraf silinecek — belge no'yu kontrol edin.");
+    expect(retentionDocNoWarning('DELETE_ON_DISPATCH')).toContain('sevk edilince fotoğraf silinecek');
+    expect(approvalCardView(detail({ senderDocNo: '', photoRetention: 'DELETE_ON_APPROVAL' }), { canApprove: true }).docNo?.value).toBeNull();
   });
 });
