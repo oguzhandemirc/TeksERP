@@ -52,7 +52,9 @@ export function TeachTemplatePage() {
         {!n || (code && existing.isLoading) ? (
           <p className="text-sm text-muted-foreground">{note.isError || existing.isError ? "Yüklenemedi." : "Yükleniyor…"}</p>
         ) : scans.length === 0 ? (
-          <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground" data-testid="teach-no-scan">Bu belgenin okunmuş fotoğrafı yok; tanıtmak için önce fotoğrafın okunması gerekir.</p>
+          <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground" data-testid="teach-no-scan">
+            {n.scans.some((s) => s.status === "PENDING" || s.status === "READING") ? "Belge okunuyor… Okuma bitince tanıtma burada açılır." : "Bu belgenin okunmuş fotoğrafı yok; tanıtmak için önce fotoğrafın okunması gerekir."}
+          </p>
         ) : (
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
             <div className="flex min-w-0 flex-col gap-2">
