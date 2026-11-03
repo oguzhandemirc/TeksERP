@@ -35,4 +35,15 @@ describe('ForeignMachinePrompt', () => {
     expect(confirm.indexOf('takeForeignMachine(')).toBeLessThan(confirm.indexOf('openResolvedStep('));
     expect(src).toMatch(/<ForeignMachinePrompt prompt=\{foreignPrompt\}/);
   });
+  it('⭐ reopen yolu: KAPALI kart yeniden açılınca foreignMachine doluysa iş AÇILMADAN istem kurulur (iz atlanmaz)', () => {
+    // Backend COMPLETED adımda foreignMachine null döner; uyarı reopen sonrası getStep yanıtında gelir.
+    const src = jest.requireActual<typeof import('fs')>('fs').readFileSync(require.resolve('./KursunQcScreen.tsx'), 'utf8');
+    const reopen = src.slice(src.indexOf('const confirmReopen = async'), src.indexOf('const confirmForeign = async'));
+    const fetched = reopen.indexOf('kursunQcService.getStep(');
+    const guard = reopen.indexOf('if (step.foreignMachine)');
+    expect(fetched).toBeGreaterThan(-1);
+    expect(guard).toBeGreaterThan(fetched);
+    expect(reopen.slice(guard, reopen.indexOf('return;', guard))).toMatch(/setForeignPrompt\(/);
+    expect(guard).toBeLessThan(reopen.indexOf('openResolvedStep('));
+  });
 });
