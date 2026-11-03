@@ -9,10 +9,11 @@ import { createUserTemplate, getScanWords, getUserTemplate, TEACH_QUERY_KEY, upd
 import { adoptTemplate, initialTeach, oldParts, suggestBody, teachProblems, templateKeywords, type TeachState } from "./teachDraft";
 import { saveDecision, suggestName, type SaveChoice } from "./guidedTeach";
 import { useTeachPreview } from "./useTeachPreview";
-import type { SimilarTemplate, UserTemplateDetail, UserTemplateView } from "./types";
+import type { SimilarTemplate, SuggestBody, UserTemplateDetail, UserTemplateView } from "./types";
 
-/** Ad henüz yokken önizleme bu geçici adla koşar (sunucu ad ister; kayıt gerçek adı bekler). */
+/** Önizleme HEP bu sabit adla koşar: ad yazarken her tuş yeni istek atmasın; sunucu kayıtta adı gövdeden mühürler. */
 const PREVIEW_NAME = "Yeni belge tipi";
+const forPreview = (b: SuggestBody): SuggestBody => ({ ...b, name: PREVIEW_NAME });
 const savedText = (v: UserTemplateView, updated: boolean) =>
   updated ? `"${v.name}" şablonu güncellendi (sürüm ${v.version}).` : `"${v.name}" belge tipi kaydedildi. Bundan sonra okunan bu tip belgeler bu şablonla okunur.`;
 
@@ -26,7 +27,7 @@ export function useTeach(scanId: string | null, existing: UserTemplateDetail | n
     if (words.data) setState(initialTeach(words.data, existing?.name ?? suggestName(words.data), templateKeywords(existing?.template), oldParts(existing?.template)));
   }, [words.data, existing]);
   const body = useMemo(() => (state && scanId && words.data ? suggestBody(state, words.data.words, scanId, existing?.code ?? null) : null), [state, scanId, words.data, existing?.code]);
-  const previewBody = useMemo(() => (body && body.name.length < 2 ? { ...body, name: PREVIEW_NAME } : body), [body]);
+  const previewBody = useMemo(() => (body ? forPreview(body) : null), [body]);
   const [saving, setSaving] = useState(false);
   const [similar, setSimilar] = useState<SimilarTemplate[] | null>(null);
   const problems = state ? teachProblems(state) : [];
@@ -49,10 +50,12 @@ export function useTeach(scanId: string | null, existing: UserTemplateDetail | n
   const saveIntoOther = async (s: TeachState, code: string) => {
     const ex = await qc.fetchQuery({ queryKey: [...USER_TEMPLATES_QUERY_KEY, code], queryFn: () => getUserTemplate(code), staleTime: 0 });
     const adopted = adoptTemplate(s, ex);
-    setState(adopted);
-    const r = await fetchPreview(suggestBody(adopted, words.data!.words, scanId!, code));
+    const r = await fetchPreview(forPreview(suggestBody(adopted, words.data!.words, scanId!, code)));
     if (!r.preview || r.errors.length > 0) return void toast.error(r.errors[0] ?? "Bu işaretlemeyle belge okunamadı.");
-    done(await updateUserTemplate(code, { expectedVersion: ex.version, template: r.template, name: ex.name }), true);
+    const v = await updateUserTemplate(code, { expectedVersion: ex.version, template: r.template, name: ex.name });
+    // Ekran diğer şablonun adına/kimliklerine YALNIZ kayıt başarılıysa döner (hata/okunamazsa kullanıcının işaretlemesi aynen kalır).
+    setState(adopted);
+    done(v, true);
   };
 
   /** Tek tık: bayat önizlemeyi tazele → benzer şablon varsa sor → yeni POST | sürümlü PUT. */
@@ -61,7 +64,7 @@ export function useTeach(scanId: string | null, existing: UserTemplateDetail | n
     setSimilar(null);
     setSaving(true);
     try {
-      const result = pv.fresh && pv.result && previewBody === body ? pv.result : await fetchPreview(body);
+      const result = pv.fresh && pv.result ? pv.result : await fetchPreview(forPreview(body));
       if (!result.preview || result.errors.length > 0) return void toast.error(result.errors[0] ?? "Bu işaretlemeyle belge okunamadı.");
       const d = saveDecision(result, existing?.code ?? null, choice);
       if (d.kind === "ask") return void setSimilar(d.similar);

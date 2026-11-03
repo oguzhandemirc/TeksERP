@@ -255,6 +255,11 @@ export function keptOldFields(t: TemplateJson | null | undefined, s: TeachState)
     .map((f) => (typeof f.label === "string" ? f.label : String(f.key)));
 }
 
+/** Eski şablondaki alan anahtarları: güncelle kipinde atlanan/işaretlenmeyen alan sunucu birleştirmesinde (`base`) korunur. */
+export function oldTemplateFieldKeys(t: TemplateJson | null | undefined): string[] {
+  return arr(t?.fields).map((f) => (f as { key?: unknown }).key).filter((k): k is string => typeof k === "string");
+}
+
 /** Eski şablonun kimlik yazıları (güncelle kipinde hazır seçili gelir). */
 export function templateKeywords(t: TemplateJson | null | undefined): string[] {
   return arr((t?.identifiers as TemplateJson | undefined)?.keywords).filter((k): k is string => typeof k === "string");
