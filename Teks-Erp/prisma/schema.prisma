@@ -14458,6 +14458,8 @@ model CustomerDeliveryNote {
   cancelledById      String?                @db.Uuid
   cancelReason       String?                @db.VarChar(500)
   clientToken        String?                @unique @db.Uuid
+  /// Onaylı belge İPTALİNİN deneme kimliği (K15) — replay tek boğazdan (`gelen-belge-iptal.service`); doğuş token'ından ayrı.
+  cancelClientToken  String?                @unique @db.Uuid
   createdAt          DateTime               @default(now()) @db.Timestamptz
   updatedAt          DateTime               @updatedAt @db.Timestamptz
 

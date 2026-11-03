@@ -69,6 +69,7 @@ import PriorDefectList from '../../../components/inspection/PriorDefectList';
 import PriorErrorBadge from '../../../components/inspection/PriorErrorBadge';
 import {
   composeStationPanels,
+  flowScreenLabels,
   dativeTr,
   emptyRollHint,
   finishStepLabel,
@@ -375,6 +376,8 @@ export default function KursunQcScreen() {
     inspectionEnabled: activeJob?.stepSummary.inspectionEnabled,
     properties: stationProps,
   });
+  // S4: metinler istasyon adından (kurşunsuz Detaylı KK aynı ekranı açar).
+  const labels = flowScreenLabels(activeJob?.stepSummary.stationName ?? activeSession?.station?.name);
   // D4-E2b: en ölçen istasyonda isteğe bağlı "Ölçülen en"; eski backend alanı göndermez → gizli.
   const measuredWidth = useMeasuredWidth(
     widthCaptureEnabled(activeJob?.stepSummary),
@@ -1349,7 +1352,7 @@ export default function KursunQcScreen() {
 
   return (
     <ScreenChrome
-      title={activeJob?.stepSummary.stationName ?? 'Kurşun'}
+      title={labels.title}
       subtitle={compact ? machineName : undefined}
       hidePlaceChip={compact}
       headerExtras={headerExtras}
@@ -1710,6 +1713,7 @@ export default function KursunQcScreen() {
         dataUpdatedAt={openCardsQuery.dataUpdatedAt}
         isFetching={openCardsQuery.isFetching}
         refresh={openCardsRefresh}
+        emptyText={labels.emptyQueue}
       />
 
       {/* Refakat kartı QR/barkod okuma — gerçek kamera */}
@@ -1724,6 +1728,7 @@ export default function KursunQcScreen() {
       <StepNoteModal
         visible={noteModalOpen}
         note={activeJob?.stepSummary.stepNote ?? null}
+        title={labels.noteTitle}
         onDismiss={() => setNoteModalOpen(false)}
       />
 
@@ -1745,7 +1750,7 @@ export default function KursunQcScreen() {
           visible={rightDrawerOpen}
           onDismiss={() => setRightDrawerOpen(false)}
           insets={insets}
-          title="Kurşun · KK2 İşleri"
+          title={labels.queueTitle}
           onClosed={drawerQueue.drain}
         >
           {renderRightContent()}
@@ -1776,10 +1781,13 @@ function CameraScanModal({
   dataUpdatedAt,
   isFetching,
   refresh,
+  emptyText,
 }: {
   visible: boolean;
   loading: boolean;
   cards: KursunOpenCard[];
+  /** Boş liste metni (istasyon adından; `flowScreenLabels`). */
+  emptyText: string;
   onDismiss: () => void;
   onSelect: (card: KursunOpenCard) => void;
   /** Otomatik yenileme periyodu (ms) — başlıkta saniye olarak gösterilir. */
@@ -1840,7 +1848,7 @@ function CameraScanModal({
             <View style={cameraStyles.empty}>
               <Icon source="package-variant" size={48} color="#cbd5e1" />
               <Text style={cameraStyles.emptyText}>
-                Kurşun + KK2'de bekleyen kart yok
+                {emptyText}
               </Text>
             </View>
           ) : (
@@ -1899,10 +1907,12 @@ function CameraScanModal({
 function StepNoteModal({
   visible,
   note,
+  title,
   onDismiss,
 }: {
   visible: boolean;
   note: string | null;
+  title: string;
   onDismiss: () => void;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
@@ -1923,7 +1933,7 @@ function StepNoteModal({
           <View style={noteModalStyles.headerIcon}>
             <Icon source="note-text-outline" size={20} color="#78350f" />
           </View>
-          <Text style={noteModalStyles.title}>Kurşun + KK2 Notu</Text>
+          <Text style={noteModalStyles.title}>{title}</Text>
           <IconButton
             icon="close"
             size={22}

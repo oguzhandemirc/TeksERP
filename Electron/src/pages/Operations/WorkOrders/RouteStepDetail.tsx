@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Check, Factory, Trash2, Truck } from "lucide-react";
+import { ArrowLeft, ArrowRight, Factory, Trash2, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ import { stationKindLabels } from "@/types/enums";
 import { stationCapabilityService } from "@/pages/StationCapabilities/service";
 import { capCanApplyColor, isTargetableProperty } from "@/pages/StationCapabilities/types";
 import type { DesignerStep } from "./RouteDesignerDialog";
+import { StepParamBoxView, StepPropertyChips } from "./StepPropertyChips";
 
 export interface RouteTargetBinding {
   colorId: string | null;
@@ -50,8 +51,16 @@ interface Props {
   onMove: (dir: -1 | 1) => void;
   onRemove: () => void;
   target: RouteTargetBinding;
-  /** Adıma özel ek alanlar (ör. kurşun adımında gramaj + makine önerisi). */
+  /** Adıma özel ek alanlar (kutusuz, notun altında). */
   extra?: ReactNode;
+  /** İşlem ayarları kutusu (K20, kurşun): verilirse istasyonun ÖZELLİK seçimi ("yapılan iş") kutunun ilk satırı
+   *  olur, `content` (gramaj = işlem parametresi, makine = kaynak) altına gelir. Veri aynı yere yazılır. */
+  paramBox?: StepParamBox | null;
+}
+
+export interface StepParamBox {
+  title: string;
+  content: ReactNode;
 }
 
 export function RouteStepDetail({
@@ -66,6 +75,7 @@ export function RouteStepDetail({
   onRemove,
   target,
   extra,
+  paramBox,
 }: Props) {
   const isExternal = step.stationType === "EXTERNAL";
   const tone = toneFor(step.stationType, step.stationKind);
@@ -119,6 +129,25 @@ export function RouteStepDetail({
   const propertyListEmpty = Boolean(
     cap && !appliesNothing && cap.canApplyProperty && targetableProps.length === 0,
   );
+
+  const propertyChips = (
+    <StepPropertyChips properties={targetableProps} selected={selectedProps} locked={lockedSet} empty={propertyListEmpty} onToggle={toggleProp} />
+  );
+  const quickAdd = (variant: "button" | "link") => (
+    <QuickAddProperty
+      label="Yeni özellik tanımla"
+      variant={variant}
+      defaultStationId={step.stationId}
+      onCreated={(id) => {
+        void capQ.refetch();
+        if (!selectedProps.has(id)) {
+          target.onProperties([...target.propertyIds, id]);
+        }
+      }}
+    />
+  );
+  // Kutuda özellik satırı yalnız istasyon özellik uyguluyorsa (yetenekler yüklenince).
+  const boxProperty = Boolean(paramBox && step.stationId && cap?.canApplyProperty);
 
   return (
     <motion.div
@@ -260,56 +289,27 @@ export function RouteStepDetail({
                 />
               </div>
             )}
-            {cap!.canApplyProperty && (
+            {cap!.canApplyProperty && !paramBox && (
               <div className="space-y-1">
                 <label className="text-[11px] text-muted-foreground">
                   Bu istasyonda uygulanan özellikler
                 </label>
-                {propertyListEmpty ? (
-                  <div className="text-[11px] italic text-muted-foreground">
-                    Bu istasyonun yetenek listesi boş — henüz hiçbir özellik
-                    tanımlanmamış. Aşağıdan ekleyebilir ya da Tanımlar → Kumaş
-                    Özellikleri'nden bu istasyona atayabilirsiniz.
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap gap-1">
-                    {targetableProps.map((p) => {
-                      const on = selectedProps.has(p.id);
-                      const locked = lockedSet.has(p.id);
-                      return (
-                        <Badge
-                          key={p.id}
-                          variant={on ? "default" : "outline"}
-                          className={cn("cursor-pointer gap-1 text-[10px]", locked && "cursor-not-allowed opacity-50")}
-                          onClick={() => toggleProp(p.id)}
-                        >
-                          {on && <Check className="h-3 w-3" />}
-                          {p.name}
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                )}
+                {propertyChips}
                 {/* Asıl otomasyon: istasyon zaten belli, yeni özellik ona
                     BAĞLI doğar ve anında seçili gelir — ikinci ekran yok. */}
-                {canWriteProperty && (
-                  <div className="pt-1">
-                    <QuickAddProperty
-                      label="Yeni özellik tanımla"
-                      defaultStationId={step.stationId}
-                      onCreated={(id) => {
-                        void capQ.refetch();
-                        if (!selectedProps.has(id)) {
-                          target.onProperties([...target.propertyIds, id]);
-                        }
-                      }}
-                    />
-                  </div>
-                )}
+                {canWriteProperty && <div className="pt-1">{quickAdd("button")}</div>}
               </div>
             )}
           </div>
         ))}
+
+      {paramBox && step.stationId && (
+        <StepParamBoxView
+          title={paramBox.title}
+          property={boxProperty ? <>{propertyChips}{canWriteProperty && quickAdd("link")}</> : null}
+          content={paramBox.content}
+        />
+      )}
 
       <div className="space-y-1">
         <label className="text-[11px] text-muted-foreground">Not (opsiyonel)</label>

@@ -4,6 +4,7 @@ import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { PropertyStationsField } from "./PropertyStationsField";
 import { fabricPropertyService } from "@/pages/FabricProperties/service";
 import type { FabricProperty } from "@/pages/FabricProperties/types";
@@ -21,11 +22,14 @@ export function QuickAddProperty({
   onCreated,
   defaultStationId,
   label = "Yeni Özellik Ekle",
+  variant = "button",
 }: {
   onCreated: (id: string) => void;
   /** Ön-seçili istasyon — bağlamdan biliniyorsa (rota adımı) geç. */
   defaultStationId?: string | null;
   label?: string;
+  /** `link`: satır yanında küçük bağlantı (İE kurşun ayarları, K20); açılınca form satırın tam genişliğini alır. */
+  variant?: "button" | "link";
 }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -58,6 +62,21 @@ export function QuickAddProperty({
     setStationIds([]);
   }
 
+  const start = () => {
+    setStationIds(defaultStationId ? [defaultStationId] : []);
+    setOpen(true);
+  };
+
+  if (!open && variant === "link") {
+    return (
+      <button type="button" onClick={start} data-testid="quick-add-property-link"
+        className="inline-flex items-center gap-0.5 text-[11px] font-medium text-primary hover:underline">
+        <Plus className="h-3 w-3" />
+        {label}
+      </button>
+    );
+  }
+
   if (!open) {
     return (
       <div className="flex justify-end">
@@ -65,10 +84,7 @@ export function QuickAddProperty({
           type="button"
           size="sm"
           className="gap-2 bg-emerald-600 font-medium text-white hover:bg-emerald-600/90"
-          onClick={() => {
-            setStationIds(defaultStationId ? [defaultStationId] : []);
-            setOpen(true);
-          }}
+          onClick={start}
         >
           <Plus className="h-4 w-4" />
           {label}
@@ -78,7 +94,7 @@ export function QuickAddProperty({
   }
 
   return (
-    <div className="space-y-2 rounded-md border border-dashed p-2">
+    <div className={cn("space-y-2 rounded-md border border-dashed p-2", variant === "link" && "w-full")}>
       <Input
         autoFocus
         value={name}

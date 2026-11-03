@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { act, renderHook, screen } from "@testing-library/react";
 import { useState } from "react";
 import { renderWithProviders } from "@/test/render";
-import { KursunStepFields, isKursunStep, useKursunGramajBinding } from "./KursunStepFields";
+import { KursunStepFields, KursunStepSummary, isKursunStep, kursunDetailText, useKursunGramajBinding } from "./KursunStepFields";
 import { stepsToCustom } from "./workOrderPrefill";
 import type { DesignerStep } from "./RouteDesignerDialog";
 
@@ -47,6 +47,38 @@ describe("KursunStepFields", () => {
     expect(screen.getByTestId("kursun-step-fields")).toBeTruthy();
     expect(screen.getByRole("radio", { name: "50 gr" }).getAttribute("aria-checked")).toBe("true");
     expect(await screen.findByRole("radio", { name: "Kurşun M1" })).toBeTruthy();
+  });
+});
+
+describe("K20 kurşun seçim özeti (adım çipi + önizleme)", () => {
+  it("⭐ metin: çipte '40 gr · M2' (makine kodu), önizlemede makine adı; Hedef yok → gramaj yazılmaz", () => {
+    const m = { code: "M2", name: "Kurşun M2" };
+    expect(kursunDetailText({ name: "40 gr" }, m, "short")).toBe("40 gr · M2");
+    expect(kursunDetailText({ name: "40 gr" }, m, "long")).toBe("40 gr · Kurşun M2");
+    expect(kursunDetailText(null, m, "short")).toBe("M2");
+    expect(kursunDetailText({ name: "40 gr" }, null, "short")).toBe("40 gr");
+    expect(kursunDetailText(null, null, "short")).toBeNull();
+    expect(kursunDetailText(null, { code: " ", name: "Kurşun M1" }, "short")).toBe("Kurşun M1");
+  });
+
+  it("⭐ bileşen: seçili gramaj + atanan makine yazılır (sarmalayıcıyla)", async () => {
+    renderWithProviders(
+      <KursunStepSummary step={step("PROCESS_QC", { plannedMachineId: "m1" })} gramajOptions={OPTIONS} gramajValue="v50" mode="short" prefix="· "
+        wrap={(n) => <div data-testid="wrap">{n}</div>} />,
+    );
+    expect(await screen.findByText("· 50 gr · M1")).toBeTruthy();
+    expect(screen.getByTestId("wrap")).toBeTruthy();
+  });
+
+  it("⭐ Hedef yok + makine önerisi yok → hiçbir şey çizilmez (sarmalayıcı/ayraç dahil); kurşun değilse de", async () => {
+    const { container } = renderWithProviders(
+      <KursunStepSummary step={step("PROCESS_QC")} gramajOptions={OPTIONS} gramajValue={null} mode="long" wrap={(n) => <div data-testid="wrap">{n}</div>} />,
+    );
+    await Promise.resolve();
+    expect(screen.queryByTestId("wrap")).toBeNull();
+    expect(container.textContent).toBe("");
+    renderWithProviders(<KursunStepSummary step={step("TAMBUR")} gramajOptions={OPTIONS} gramajValue="v50" mode="short" />);
+    expect(screen.queryByTestId("kursun-summary-short")).toBeNull();
   });
 });
 
