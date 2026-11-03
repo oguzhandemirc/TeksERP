@@ -13,6 +13,7 @@ import { fmtDayKey } from '../../../../lib/factory-time';
 import { lifecycleBadge } from '../../../../lib/item-lifecycle';
 import type { FabricPropertyValue } from '../../../../services/fabricProperty.service';
 import { itemService } from '../../../../services/item.service';
+import { useTruncationWarning } from '../../../../hooks/useTruncationWarning';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import OrderLinkPicker from '../../HizliIsEmri/OrderLinkPicker';
@@ -186,6 +187,7 @@ function FieldPickers(p: Props & { picker: Picker; setPicker: (x: Picker) => voi
     enabled: picker === 'item',
     staleTime: 60_000,
   });
+  useTruncationWarning(items.data?.pagination, 'Kumaş');
   const itemOptions: PickerOption[] = (items.data?.data ?? []).map((i) => ({ value: i.id, label: i.name, sublabel: i.code, badge: lifecycleBadge(i, colors.warningText) }));
   const routeOptions = withScanRouteOption(p.routes.map((r) => ({ value: r.id, label: r.name, sublabel: r.description ?? undefined })), p.scanMode);
   const close = () => setPicker(null);
