@@ -191,6 +191,8 @@ export interface DocumentTemplate {
   grid?: GridSpec;
   /** Tablo bloğunun ÜSTÜNDEKİ bantta (önceki bloğun sonundan bu bloğun başlık satırına) blok başına yeniden okunan alan anahtarları (çeki listesinde her siparişin kendi İşlem/Parti/İş emri no'su). */
   blockFields?: string[];
+  /** S1 (2026-11-03): TEKRARLAYAN BÖLÜM — her bölüm bir parti (başlangıç etiketi, bölüm alanları, tablo satırları); `blockFields`ın yerine geçer. */
+  sections?: SectionSpec;
   /** Tablosuz belge (tek top bilgisi başlıkta): başlık alanlarından tek satır türetme eşlemesi; her anahtar sırayla denenen alan listesi. */
   headerLine?: HeaderLineSpec;
   /** Başlıktaki BELGE GENELİ toplam beyanı (çıkış çeki listesinde "Müşteri MT"): her anahtar tek alan; onay toplam kapısı Σ satırı bununla da kıyaslar. */
@@ -199,6 +201,21 @@ export interface DocumentTemplate {
   batchNoCandidates?: BatchNoCandidateSpec[];
   /** Kurşun metresi kaynakları rol başına (alan anahtarı ya da `$tableTotal`); Σ satır her zaman son yedektir, yazılmaz. */
   meterSources?: MeterSourcesSpec;
+}
+
+/** Tekrarlayan bölüm: başlangıç etiketi her geçtiğinde yeni bölüm (parti); alan anahtarları şablonda TANIMLI olmalı. */
+export interface SectionSpec {
+  startLabels: string[];
+  /** Bölüm bandından yeniden okunan alanlar. */
+  fields: string[];
+  /** Bölümün parti no / sipariş no / yazan top adedi alanı (her biri `fields` içinde). */
+  batchField?: string;
+  orderField?: string;
+  countField?: string;
+  /** Satırları bölüme düşen tablo anahtarı; yoksa ilk tablo. */
+  table?: string;
+  /** Sayfa damgası deseni (iki grup: no, toplam); yoksa satırın tamamı "n/m". */
+  pagePattern?: string;
 }
 
 /** Aday türü (yalnız etiket/bilgi; seçim kuralını değiştirmez). */

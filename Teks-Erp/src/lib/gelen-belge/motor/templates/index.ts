@@ -78,6 +78,7 @@ function validateBlockAndHeaderLine(t: Record<string, unknown>, errors: string[]
     else for (const k of ["m", "kg", "count"]) if (ht[k] !== undefined) known([ht[k]], `headerTotals.${k}`);
   }
   validateBatchAndMeters(t, keys, errors);
+  validateSections(t, keys, errors);
   const h = t.headerLine;
   if (h === undefined) return;
   if (!isObj(h)) { errors.push("headerLine nesne olmalı"); return; }
@@ -88,6 +89,24 @@ function validateBlockAndHeaderLine(t: Record<string, unknown>, errors: string[]
   if (h.en !== undefined) known(h.en, "headerLine.en");
   if (h.inputM !== undefined) known(h.inputM, "headerLine.inputM");
   if (h.inputKg !== undefined) known(h.inputKg, "headerLine.inputKg");
+}
+
+/** `sections`: başlangıç etiketi zorunlu; alanlar ve parti/sipariş/sayım alanı TANIMLI alan; `blockFields` ile birlikte olmaz. */
+function validateSections(t: Record<string, unknown>, keys: Set<unknown>, errors: string[]): void {
+  const s = t.sections;
+  if (s === undefined) return;
+  if (!isObj(s)) { errors.push("sections nesne olmalı"); return; }
+  if (!strList(s.startLabels)) errors.push("sections.startLabels boş olmayan string dizisi olmalı");
+  if (!strList(s.fields)) errors.push("sections.fields boş olmayan string dizisi olmalı");
+  else for (const k of s.fields as string[]) if (!keys.has(k)) errors.push(`sections.fields: bilinmeyen alan ${k}`);
+  for (const role of ["batchField", "orderField", "countField"]) {
+    const v = s[role];
+    if (v === undefined) continue;
+    if (typeof v !== "string" || !Array.isArray(s.fields) || !s.fields.includes(v)) errors.push(`sections.${role} sections.fields içinde olmalı`);
+  }
+  if (s.table !== undefined && (typeof s.table !== "string" || !Array.isArray(t.tables) || !t.tables.some((x) => isObj(x) && x.key === s.table))) errors.push("sections.table bilinmeyen tablo");
+  if (s.pagePattern !== undefined && !regexOk(s.pagePattern)) errors.push("sections.pagePattern geçersiz");
+  if (t.blockFields !== undefined) errors.push("sections ile blockFields birlikte kullanılamaz");
 }
 
 /** `batchNoCandidates` ve `meterSources` yalnız TANIMLI alanı (metrede ek olarak `$tableTotal`, tablo ister) gösterir. */

@@ -334,6 +334,11 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
   },
   {
     screen: "gelen-belge:write",
+    path: "GET /gelen-belge/irsaliyeler/:p/partiler",
+    why: "Çok partili belge (S1) parti özeti okunamazsa (gelen-belge:read yok → 403) satır tek partili kalır, bugünkü form aynen çalışır (`useRowParties` hata → `setParties(null)`, `PartyRows` çizilmez).",
+  },
+  {
+    screen: "gelen-belge:write",
     path: "POST /gelen-belge/irsaliyeler/:p/is-emri",
     why: "Belgeden iş emri (OIE sözleşme 3) iş emri açma iznini ister (`AUTO_WORK_ORDER_PERMISSIONS`: `workorder:write` | `mobile:hizli-is-emri`; içe aktarılan sabit, bekçi çözemez). İzinsiz kullanıcıda 403 satır sonucu FAILED olur, okunmuş belge taslak kalır (`useWoRows.saveRowOnce`); ayrı onay kipinde uç hiç çağrılmaz.",
   },
