@@ -35,7 +35,20 @@ describe("applyReadSummary — özet → form", () => {
     const current = { ...first.patch, width: "290" };
     const second = applyReadSummary(current, first.applied, { formFields: { hedefMetraj: 5000 }, suggestions: {} }, OPEN);
     expect(second.patch).toEqual({ targetQuantity: 5000, targetItemId: null, targetColorId: null, targetWeight: null });
-    expect(second.applied).toEqual({ targetQuantity: 5000 });
+    // Elle düzeltilen enin belgedeki izi kalır (rozet yok, sonraki okumada da dokunulmuş sayılır).
+    expect(second.applied).toEqual({ targetQuantity: 5000, width: 280 });
+    expect(docMarks(current, second.applied).has("width")).toBe(false);
+  });
+
+  it("belgeden yazılıp elle BOŞALTILAN kutu yeniden okumada (yoklama) dolmaz, rozeti de düşer", () => {
+    const first = applyReadSummary(EMPTY, {}, SUMMARY, OPEN);
+    const current = { ...first.patch, width: null };
+    const second = applyReadSummary(current, first.applied, SUMMARY, OPEN);
+    expect(second.patch.width).toBeUndefined();
+    expect(second.applied.width).toBe(280);
+    expect(docMarks(current, second.applied).has("width")).toBe(false);
+    // Üçüncü yoklamada da boş kalır (iz kaybolmaz).
+    expect(applyReadSummary(current, second.applied, SUMMARY, OPEN).patch.width).toBeUndefined();
   });
 
   it("eski sunucu (formFields/suggestions/tanitim yok) → hiçbir kutuya dokunulmaz", () => {
