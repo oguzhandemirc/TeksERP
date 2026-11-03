@@ -138,10 +138,11 @@ async function markPartiNo() {
 describe("tanıtma sayfası", () => {
   it("kelime seç → alan ata → önizle → kaydet (yeni tip, clientToken)", async () => {
     renderWithProviders(<TeachTemplatePage />);
-    await userEvent.type(await screen.findByTestId("teach-name"), "Güleçsoy");
+    await userEvent.click(await screen.findByTestId("teach-mode-advanced"));
+    await userEvent.clear(screen.getByTestId("teach-name"));
+    await userEvent.type(screen.getByTestId("teach-name"), "Güleçsoy");
     await markPartiNo();
     expect(screen.getByTestId("teach-assigned-f-partiNo")).toHaveTextContent("P2618733");
-    expect(screen.getByTestId("teach-save")).toBeDisabled();
     await userEvent.click(screen.getByTestId("teach-preview-run"));
     await waitFor(() => expect(api.suggestTemplate).toHaveBeenCalledTimes(1));
     const body = api.suggestTemplate.mock.calls[0]![0];
@@ -157,15 +158,20 @@ describe("tanıtma sayfası", () => {
     await waitFor(() => expect(navigateActive).toHaveBeenCalledWith("/operations/gelen-belgeler/n1"));
   });
 
-  it("önizlemeden sonra işaretleme değişirse kaydet kapanır (bayat önizleme)", async () => {
+  it("önizlemeden sonra işaretleme değişirse önizleme bayat görünür; kaydet tek tıkla önce tazeler (K30-T)", async () => {
     renderWithProviders(<TeachTemplatePage />);
-    await userEvent.type(await screen.findByTestId("teach-name"), "Güleçsoy");
+    await userEvent.click(await screen.findByTestId("teach-mode-advanced"));
+    await userEvent.clear(screen.getByTestId("teach-name"));
+    await userEvent.type(screen.getByTestId("teach-name"), "Güleçsoy");
     await markPartiNo();
     await userEvent.click(screen.getByTestId("teach-preview-run"));
-    await waitFor(() => expect(screen.getByTestId("teach-save")).toBeEnabled());
+    await waitFor(() => expect(api.suggestTemplate).toHaveBeenCalledTimes(1));
     await userEvent.click(screen.getByLabelText("Kimlik: ÇEKİ LİSTESİ"));
-    expect(screen.getByTestId("teach-save")).toBeDisabled();
-    expect(screen.getByTestId("teach-preview-stale")).toBeInTheDocument();
+    expect(await screen.findByTestId("teach-preview-stale")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("teach-save"));
+    await waitFor(() => expect(api.createUserTemplate).toHaveBeenCalledTimes(1));
+    expect(api.suggestTemplate).toHaveBeenCalledTimes(2);
+    expect(api.suggestTemplate.mock.calls[1]![0].identifiers).not.toContain("ÇEKİ LİSTESİ");
   });
 
   it("şablonu güncelle: eski kimlikler hazır seçili, önizleme base ile birleşik, PUT önizlenen şablonu aynen gönderir", async () => {
@@ -174,6 +180,7 @@ describe("tanıtma sayfası", () => {
     const merged = { id: "u-gulecsoy", fields: [{ key: "partiNo" }, { key: "tarih" }], identifiers: { keywords: ["ESKİ KİMLİK"] } };
     api.suggestTemplate.mockResolvedValue({ template: merged, explain: [], errors: [], preview: { matched: true, score: 1, fields: { partiNo: "P2618733" }, lineCount: 4, warnings: [] } });
     renderWithProviders(<TeachTemplatePage />);
+    await userEvent.click(await screen.findByTestId("teach-mode-advanced"));
     expect(await screen.findByLabelText("Kimlik: ESKİ KİMLİK")).toBeChecked();
     expect(screen.getByTestId("teach-keep-old-fields")).toHaveTextContent("Tarih");
     expect(screen.getByLabelText("Eski Tekrar eden bölüm korunsun")).toBeChecked();

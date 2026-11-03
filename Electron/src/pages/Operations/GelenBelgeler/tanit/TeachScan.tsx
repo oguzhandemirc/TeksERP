@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { lowerTr } from "@/lib/tr-case";
 import { Button } from "@/components/ui/button";
-import { ZoomableScan } from "../ZoomableScan";
+import { ZoomableScan, type ScanMark } from "../ZoomableScan";
 import { useScanImage } from "../useScanImage";
 import { SCAN_PURGED_TEXT } from "../photoRetention";
 import { teachMarks, wordAt, type TeachState } from "./teachDraft";
@@ -18,6 +18,8 @@ interface Props {
   onToggle: (i: number) => void;
   /** Kelime kutularının çerçevesi (okuma çerçevesi, fotoğraf yönünde) — KÜÇÜK fotoğrafta görüntü buna gerilir. */
   frame?: { w: number; h: number } | null;
+  /** Rehberli kip kendi kutu boyamasını verir (başlık satırı / adımın alanı); yoksa serbest kip işaretleri. */
+  marks?: readonly ScanMark[];
 }
 
 const MAX_HITS = 40;
@@ -43,7 +45,7 @@ export function WordSearch({ words, state, onToggle }: Pick<Props, "words" | "st
   );
 }
 
-export function TeachScan({ scanId, pageLabel, words, state, onToggle, frame = null }: Props) {
+export function TeachScan({ scanId, pageLabel, words, state, onToggle, frame = null, marks }: Props) {
   const img = useScanImage(scanId);
   return (
     <div className="flex min-w-0 flex-col gap-2" data-testid="teach-scan">
@@ -57,7 +59,7 @@ export function TeachScan({ scanId, pageLabel, words, state, onToggle, frame = n
           alt={pageLabel}
           highlight={null}
           frame={frame}
-          marks={teachMarks(state, words)}
+          marks={marks ?? teachMarks(state, words)}
           onTap={(p) => {
             const i = wordAt(words, p);
             if (i !== null) onToggle(i);
