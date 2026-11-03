@@ -8,10 +8,20 @@ export function variantsOf(row: Pick<FabricProperty, "variant">): NonNullable<Fa
   return row.variant ? [row.variant] : [];
 }
 
+/** Daraltılmış ebeveynin çeşit satırı — ekranda yok. */
+function isHiddenVariant(row: FabricProperty, collapsed: ReadonlySet<string>): boolean {
+  return row.listLevel === 1 && !!row.variantOfPropertyId && collapsed.has(row.variantOfPropertyId);
+}
+
 /** Satır sınıfı: daraltılmış ebeveynin çeşidi gizli, bağlam satırı soluk. */
 export function hierarchyRowClass(row: FabricProperty, collapsed: ReadonlySet<string>): string | undefined {
-  if (row.listLevel === 1 && row.variantOfPropertyId && collapsed.has(row.variantOfPropertyId)) return "hidden";
+  if (isHiddenVariant(row, collapsed)) return "hidden";
   return row.listContext ? "opacity-50" : undefined;
+}
+
+/** Seçilebilir satır: gizli çeşit "tümünü seç"e girmez (birleştir/sil görünmeyeni kapsamasın). */
+export function hierarchyRowSelectable(row: FabricProperty, collapsed: ReadonlySet<string>): boolean {
+  return !isHiddenVariant(row, collapsed);
 }
 
 const BACK_UNROUND = "aıAI";

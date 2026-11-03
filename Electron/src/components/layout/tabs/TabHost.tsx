@@ -2,7 +2,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useTabsStore, type TabItem } from "@/store/tabs";
+import { subscribeTermRegimeTitles, useTabsStore, type TabItem } from "@/store/tabs";
 import { TabStrip } from "./TabStrip";
 import { TabRouter } from "./TabRouter";
 import { TabActiveProvider, TabIdProvider } from "./tab-active";
@@ -20,6 +20,7 @@ export function TabHost() {
   const activeId = useTabsStore((s) => s.activeId);
   const openTab = useTabsStore((s) => s.openTab);
   useRefetchStaleOnTabActivate(activeId);
+  useEffect(() => subscribeTermRegimeTitles(), []);
 
   // İlk açılış: sekme yoksa mevcut hash yolundan (yoksa Anasayfa) bir sekme aç.
   useEffect(() => {

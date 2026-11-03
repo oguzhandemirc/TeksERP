@@ -5,6 +5,9 @@ import type { KursunBulkResult } from "./types";
 import { TERIM } from "@/lib/terim";
 
 export const DISTRIBUTION_QUERY_KEY = ["kursun-bypass", "distribution"];
+/** Anahtarın TEK sorgu fonksiyonu — aynı anahtarı gözleyen her gözlemci bunu verir; queryFn'siz gözlemci
+ * sorgunun seçeneklerini ezer ve invalidate tazelemesi "No queryFn" ile düşer. */
+export const distributionQueryFn = () => kursunDagitimService.getDistribution();
 
 /**
  * Kurşun Planlama ekranının TÜM veri + yazma yolları. Sayfadan ayrıldı çünkü
@@ -19,7 +22,7 @@ export function useKursunDistribution() {
 
   const query = useQuery({
     queryKey: DISTRIBUTION_QUERY_KEY,
-    queryFn: () => kursunDagitimService.getDistribution(),
+    queryFn: distributionQueryFn,
     refetchOnMount: "always",
     staleTime: 0,
   });

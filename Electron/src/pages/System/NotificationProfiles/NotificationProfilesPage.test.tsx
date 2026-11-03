@@ -41,6 +41,12 @@ vi.mock("@/hooks/useRoleAccess", () => ({
   }),
 }));
 
+const inbox = vi.hoisted(() => ({ acik: true }));
+vi.mock("@/lib/bildirim/hooks", async (orig) => ({
+  ...(await orig<typeof import("@/lib/bildirim/hooks")>()),
+  useNotificationInboxFlag: () => ({ acik: inbox.acik, yuklendi: true }),
+}));
+
 const { NotificationProfilesPage } = await import("./NotificationProfilesPage");
 const { ProfileFormDialog } = await import("./ProfileFormDialog");
 const { SystemHubPage } = await import("../SystemHubPage");
@@ -56,6 +62,7 @@ const A = prof("p-a", "Amirler", { uyeler: [{ userId: "u1", ad: "Ali" }, { userI
 const B = prof("p-b", "Boyahane");
 
 beforeEach(() => {
+  inbox.acik = true;
   for (const f of Object.values(svc)) f.mockReset();
   svc.liste.mockResolvedValue({ items: [A, B] });
   svc.fabrikaVarsayilani.mockResolvedValue({ turler: KINDS });
@@ -85,6 +92,17 @@ describe("karo + rota kapısı", () => {
     perms.list = ["settings:notifications"];
     renderWithProviders(<SystemHubPage />);
     expect(await screen.findByText("Bildirim Profilleri")).toBeInTheDocument();
+  });
+});
+
+describe("bayrak kapalı (QA 2026-11-03 #18/#19)", () => {
+  it("⭐ gelen kutusu kapalıyken istek atılmaz; durum kartı menü yolunu gösterir", async () => {
+    inbox.acik = false;
+    renderWithProviders(<NotificationProfilesPage />);
+    expect(await screen.findByText(/Sistem → .* → Bildirimler'den/)).toBeTruthy();
+    expect(screen.queryByText(/Genel Ayarlar/)).toBeNull();
+    expect(svc.liste).not.toHaveBeenCalled();
+    expect(svc.fabrikaVarsayilani).not.toHaveBeenCalled();
   });
 });
 

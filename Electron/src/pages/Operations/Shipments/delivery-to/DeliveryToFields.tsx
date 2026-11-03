@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { MapPin } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
@@ -27,8 +27,12 @@ export function DeliveryToFields({
   const [loading, setLoading] = useState(false);
   const error = deliveryToError(value, ownerCustomerId);
 
+  // Yalnız SON seçimin adres ön doldurması uygulanır: geç dönen eski yanıt yeni seçimi (ya da temizlemeyi) ezmez.
+  const pickSeq = useRef(0);
   const pick = async (customerId: string | null) => {
+    const seq = ++pickSeq.current;
     if (!customerId) {
+      setLoading(false);
       onChange(EMPTY_DELIVERY_TO);
       return;
     }
@@ -36,11 +40,11 @@ export function DeliveryToFields({
     setLoading(true);
     try {
       const c = (await customerService.getById(customerId)).data as Parameters<typeof formatCustomerAddress>[0];
-      onChange({ customerId, address: formatCustomerAddress(c) ?? "" });
+      if (seq === pickSeq.current) onChange({ customerId, address: formatCustomerAddress(c) ?? "" });
     } catch {
       // Adres ön doldurulamadı — boş kalır; sunucu belge doğarken kart adresini basar.
     } finally {
-      setLoading(false);
+      if (seq === pickSeq.current) setLoading(false);
     }
   };
 
@@ -53,7 +57,11 @@ export function DeliveryToFields({
           aria-label="Teslim yeri (başka adrese teslim)"
           onCheckedChange={(v) => {
             setOpen(!!v);
-            if (!v) onChange(EMPTY_DELIVERY_TO);
+            if (!v) {
+              pickSeq.current++; // bekleyen ön doldurma kapatılan alanı yeniden doldurmasın
+              setLoading(false);
+              onChange(EMPTY_DELIVERY_TO);
+            }
           }}
         />
         <MapPin className="h-4 w-4 text-muted-foreground" />

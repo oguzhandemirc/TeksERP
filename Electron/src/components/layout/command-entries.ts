@@ -42,7 +42,7 @@ export const commandSections: CommandSection[] = [
     heading: group.label,
     entries: group.items.map((item) => ({
       key: `nav:${item.to}`,
-      label: item.label,
+      get label() { return item.label; },
       icon: item.icon,
       keywords: item.keywords,
       to: item.to,
@@ -64,8 +64,8 @@ export const commandSections: CommandSection[] = [
     entries: [
       ...operationsTiles.map<CommandEntry>((tile) => ({
         key: `ops:${tile.key}`,
-        label: tile.title,
-        description: tile.description,
+        get label() { return tile.title; },
+        get description() { return tile.description; },
         icon: tile.icon,
         to: tile.to,
         permission: tile.permission,
@@ -81,8 +81,8 @@ export const commandSections: CommandSection[] = [
     heading: TERIM_AD.kaliteGuvence,
     entries: qualityTiles.map<CommandEntry>((tile) => ({
       key: `ops:${tile.key}`,
-      label: tile.title,
-      description: tile.description,
+      get label() { return tile.title; },
+      get description() { return tile.description; },
       icon: tile.icon,
       to: tile.to,
       permission: tile.permission,
@@ -99,8 +99,8 @@ export const commandSections: CommandSection[] = [
     heading: TERIM_AD.onMuhasebe,
     entries: financeTiles.map<CommandEntry>((tile) => ({
       key: `fin:${tile.key}`,
-      label: tile.title,
-      description: tile.description,
+      get label() { return tile.title; },
+      get description() { return tile.description; },
       icon: tile.icon,
       to: tile.to,
       permissionAny: tile.permissionAny,
@@ -113,8 +113,8 @@ export const commandSections: CommandSection[] = [
     entries: [
       ...costTiles.map<CommandEntry>((tile) => ({
         key: `cost:${tile.key}`,
-        label: tile.title,
-        description: tile.description,
+        get label() { return tile.title; },
+        get description() { return tile.description; },
         icon: tile.icon,
         to: tile.to,
         permissionAny: tile.permissionAny,
@@ -140,8 +140,8 @@ export const commandSections: CommandSection[] = [
       .filter((tile) => tile.group === group.key)
       .map((tile) => ({
         key: `def:${tile.key}`,
-        label: tile.title,
-        description: tile.description,
+        get label() { return tile.title; },
+        get description() { return tile.description; },
         icon: tile.icon,
         to: tile.to,
         permission: tile.permission,
@@ -157,8 +157,8 @@ export const commandSections: CommandSection[] = [
     heading: TERIM_AD.belgeler,
     entries: documentTiles.map<CommandEntry>((tile) => ({
       key: `def:${tile.key}`,
-      label: tile.title,
-      description: tile.description,
+      get label() { return tile.title; },
+      get description() { return tile.description; },
       icon: tile.icon,
       to: tile.to,
       permission: tile.permission,
@@ -170,8 +170,8 @@ export const commandSections: CommandSection[] = [
     heading: "Yetkilendirme",
     entries: accessTiles.map((tile) => ({
       key: `access:${tile.key}`,
-      label: tile.title,
-      description: tile.description,
+      get label() { return tile.title; },
+      get description() { return tile.description; },
       icon: tile.icon,
       to: tile.to,
       adminOnly: true,
@@ -181,8 +181,8 @@ export const commandSections: CommandSection[] = [
     heading: "Sistem",
     entries: systemTiles.filter((tile) => !tile.public).map((tile) => ({
       key: `sys:${tile.key}`,
-      label: tile.title,
-      description: tile.description,
+      get label() { return tile.title; },
+      get description() { return tile.description; },
       icon: tile.icon,
       to: tile.to,
       // Karo kendi iznini taşıyorsa O geçerli (ör. Veri Aktarımı → data:import);
@@ -208,8 +208,8 @@ export const commandSections: CommandSection[] = [
     heading: "Ayarlar",
     entries: SETTINGS_CATEGORIES.map((cat) => ({
       key: `setting:${cat.id}`,
-      label: `${SURFACE_LABEL[categorySurface(cat)]} · ${cat.label}`,
-      description: cat.description,
+      get label() { return `${SURFACE_LABEL[categorySurface(cat)]} · ${cat.label}`; },
+      get description() { return cat.description; },
       icon: cat.icon,
       to: settingsCategoryPath(cat),
       // Satıcı yüzeyi paletten de gizlenir — hub karosunun gizlenme SEBEBİ

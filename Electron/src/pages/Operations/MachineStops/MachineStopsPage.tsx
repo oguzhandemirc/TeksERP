@@ -68,13 +68,17 @@ export function MachineStopsPage() {
           </div>
         }
       />
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
-          <Label htmlFor="stops-day">Fabrika günü</Label>
-          <DatePickerInput id="stops-day" value={day} onChange={setDay} disabled={dayFree} className="w-44" />
-        </div>
-        <FilterBar filters={filters} />
-      </div>
+      {/* Gün seçici süzgeç şeridinin İÇİNDE (`leading`): şeridin iç boşluğunu ve alt çizgisini paylaşır —
+          ayrı satırda içerik alanının sol kenarına yapışıyordu (QA 2026-11-03). */}
+      <FilterBar
+        filters={filters}
+        leading={
+          <div className="flex items-center gap-2">
+            <Label htmlFor="stops-day" className="text-xs">Fabrika günü</Label>
+            <DatePickerInput id="stops-day" value={day} onChange={setDay} disabled={dayFree} className="h-7 w-40 text-xs" />
+          </div>
+        }
+      />
       <StopsTable rows={rows} isLoading={query.isLoading} isError={query.isError} onRetry={() => void query.refetch()} labelOf={labelOf} nowMs={nowMs} actions={actions} noun={noun} />
       {/* Diyaloglar KOŞULLU mount: her açılış taze bileşen ve taze `clientToken`. */}
       {dialog?.kind === "entry" && <StopEntryDialog presets={active} isPending={open.isPending} onClose={closeDialog} onConfirm={(b) => open.mutateAsync(b)} stampError={stampError} noun={noun} />}

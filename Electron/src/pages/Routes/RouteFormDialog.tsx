@@ -147,7 +147,7 @@ export function RouteFormDialog({
           <DialogTitle>{isEdit ? "Rotayı Düzenle" : "Yeni Üretim Rotası"}</DialogTitle>
           <DialogDescription>
             {TERIM.terbiyeIsEmri.cumleBasi.bulunma} kullanılacak istasyon sırasını tanımla. Adımlar sürüklenip yeniden
-            sıralanabilir. Her adımda o istasyonun uygulayabildiği renk/özellikler seçilirse
+            sıralanabilir. Her adımda o istasyonun uygulayabildiği renk/özellikler seçilirse{" "}
             {TERIM.terbiyeIsEmri.tekilKucuk} açılışında hedef alanlar hazır gelir.
           </DialogDescription>
         </DialogHeader>

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { safeFormat } from "@/lib/format";
 import { workOrderTypeLabels } from "@/types/enums";
+import { useFoldLabel } from "@/hooks/useFoldValues";
 import type { WorkOrder } from "../types";
 
 /**
@@ -8,6 +9,7 @@ import type { WorkOrder } from "../types";
  * oluşturma/rota/refakat kartı) + ayraç + üretim özellikleri tag'leri.
  */
 export function KunyeCard({ wo }: { wo: WorkOrder }) {
+  const foldLabel = useFoldLabel();
   return (
     <div className="card info">
       <div className="info-grid">
@@ -23,7 +25,7 @@ export function KunyeCard({ wo }: { wo: WorkOrder }) {
           )}
         </Field>
         <Field label="En">{wo.width != null ? `${wo.width} cm` : "—"}</Field>
-        <Field label="Kat Tipi">{wo.foldType ?? "—"}</Field>
+        <Field label="Kat Tipi">{wo.foldType ? foldLabel(wo.foldType) : "—"}</Field>
         <Field label="Tip">{workOrderTypeLabels[wo.type]}</Field>
         <Field label="Oluşturma">
           <span className="num">{safeFormat(wo.createdAt, "dd.MM.yyyy · HH:mm")}</span>

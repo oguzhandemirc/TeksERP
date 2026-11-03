@@ -554,7 +554,8 @@ export function WorkOrderFormView({
         {!isEdit &&
           headerSlot &&
           createPortal(
-            <div className="flex flex-col items-stretch gap-1.5">
+            // Yan yana (sığmazsa sarar): alt alta yığılınca başlık bandı ~150 px uzuyordu (QA 2026-11-03).
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <EntityPickerModal<ProductRecipe>
                 value={recipeId}
                 onChange={(id) => void applyRecipe(id)}
@@ -574,7 +575,7 @@ export function WorkOrderFormView({
                 triggerClassName="h-9 w-auto min-w-[190px] shrink-0 items-center gap-2 border-0 bg-violet-600 px-4 text-sm font-semibold text-white shadow-sm shadow-violet-600/30 transition-colors hover:bg-violet-700 dark:bg-violet-600 dark:hover:bg-violet-500"
                 countLabel="şablon"
               />
-              {/* Şablon Seç'in ALTINDA — sipariş bağlama artık tek buton. */}
+              {/* Şablon Seç'in yanında — sipariş bağlama artık tek buton. */}
               <Button
                 type="button"
                 onClick={() => setOrderPickerOpen(true)}

@@ -43,14 +43,17 @@ export function BatchNoPicker({ note, editable, onPatch }: Props) {
         <p className="text-sm font-medium">Parti no</p>
         <span className="text-sm font-semibold" data-testid="batch-no-value">{note.ourBatchNo ?? "—"}</span>
       </div>
-      {!note.ourBatchNo && <p className="text-xs text-amber-800 dark:text-amber-300" data-testid="batch-no-empty">Parti no seçin — boş kalırsa parti numarası seriden doğar.</p>}
+      {editable && !note.ourBatchNo && <p className="text-xs text-amber-800 dark:text-amber-300" data-testid="batch-no-empty">Parti no seçin — boş kalırsa parti numarası seriden doğar.</p>}
       {cands.map((c) => (
         <CandidateRow key={c.key} c={c} editable={editable} checked={!manual && note.ourBatchNoKey === c.key} onPick={() => onPatch({ ourBatchNo: c.value, ourBatchNoKey: c.key })} />
       ))}
-      <div key={`manual:${note.updatedAt}`} className="flex flex-col gap-1">
-        <Label>Elle yaz</Label>
-        <Input aria-label="Parti no (elle)" maxLength={MAX} disabled={!editable} defaultValue={manual ? (note.ourBatchNo ?? "") : ""} placeholder="Belgede yoksa ya da farklıysa yazın" onBlur={(e) => blurManual(e.target.value)} />
-      </div>
+      {/* Elle giriş ve "seçin" yönergesi yalnız düzenlenebilir taslakta; kapanmış belgede değer başlıkta okunur. */}
+      {editable && (
+        <div key={`manual:${note.updatedAt}`} className="flex flex-col gap-1">
+          <Label>Elle yaz</Label>
+          <Input aria-label="Parti no (elle)" maxLength={MAX} defaultValue={manual ? (note.ourBatchNo ?? "") : ""} placeholder="Belgede yoksa ya da farklıysa yazın" onBlur={(e) => blurManual(e.target.value)} />
+        </div>
+      )}
     </div>
   );
 }

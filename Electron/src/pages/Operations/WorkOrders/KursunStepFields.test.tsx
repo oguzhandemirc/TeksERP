@@ -10,7 +10,8 @@ import { stepsToCustom } from "./workOrderPrefill";
 import type { DesignerStep } from "./RouteDesignerDialog";
 
 vi.mock("@/lib/picker-loader", () => ({
-  loadAllForPicker: () => Promise.resolve({ data: [{ id: "m1", name: "Kurşun M1", stationId: "st-k", code: "M1", isActive: true }] }),
+  loadAllForPicker: (_s: unknown, o: { filters: { stationId: string } }) =>
+    Promise.resolve({ data: o.filters.stationId === "st-bos" ? [] : [{ id: "m1", name: "Kurşun M1", stationId: "st-k", code: "M1", isActive: true }] }),
 }));
 
 const OPTIONS = [
@@ -48,6 +49,16 @@ describe("KursunStepFields", () => {
     expect(screen.getByTestId("kursun-step-fields")).toBeTruthy();
     expect(screen.getByRole("radio", { name: "50 gr" }).getAttribute("aria-checked")).toBe("true");
     expect(await screen.findByRole("radio", { name: "Kurşun M1" })).toBeTruthy();
+  });
+});
+
+describe("KursunStepFields — makinesiz istasyon (S8b)", () => {
+  it("⭐ makine yokken 'Makine' başlığı boş çizilmez; neden öneri verilemediği yazılır", async () => {
+    renderWithProviders(
+      <KursunStepFields step={step("PROCESS_QC", { stationId: "st-bos" })} showGramaj={false} gramajOptions={OPTIONS} gramajValue={null} onGramaj={noop} onMachine={noop} />,
+    );
+    expect(await screen.findByTestId("kursun-no-machine")).toBeTruthy();
+    expect(screen.queryByText("Makine")).toBeNull();
   });
 });
 

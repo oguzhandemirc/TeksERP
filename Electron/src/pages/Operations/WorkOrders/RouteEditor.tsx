@@ -411,7 +411,7 @@ export function RouteEditor({
               <BookmarkPlus className="h-4 w-4 text-primary" /> Rotayı Kaydet
             </DialogTitle>
             <DialogDescription>
-              Bu üretim akışını yeniden kullanılabilir bir rota olarak kaydet — sonraki
+              Bu üretim akışını yeniden kullanılabilir bir rota olarak kaydet — sonraki{" "}
               {TERIM.terbiyeIsEmri.cogulCekimKucuk.bulunma} başlıktaki "Rota seç" ile tek tıkla gelir. Seçili hedef
               renk/özellikler de adımlarına yazılır; rota uygulanınca hazır gelirler.
             </DialogDescription>

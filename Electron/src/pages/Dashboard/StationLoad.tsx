@@ -122,7 +122,8 @@ function StationCell({ station }: { station: StationLiveState }) {
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{station.name}</p>
+          {/* İki satıra sarar: "Zımpara (Fason)" gibi adların ayırt edici sonu Fason rozetinin yanında kesiliyordu. */}
+          <p className="line-clamp-2 break-words text-sm font-medium leading-tight" title={station.name}>{station.name}</p>
           <p className="truncate text-[10px] text-muted-foreground">{kindLabel}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">

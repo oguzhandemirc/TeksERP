@@ -42,7 +42,8 @@ function check(label: string, ok: boolean, extra = ""): void {
   else { fail++; console.log(`  ❌ ${label}${extra ? ` — ${extra}` : ""}`); }
 }
 
-const TAG = `TST-BIE${Date.now().toString(36).toUpperCase()}Z`;
+// Yalnız ondalık rakam: base36 damga "Q2" içerebiliyordu ve §5 'q2' araması koda da baktığı için desen kodları eşleşiyordu (flaky).
+const TAG = `TST-BIE${Date.now()}Z`;
 const SETTINGS = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL];
 const made = { notes: [] as string[], items: [] as string[], customers: [] as string[], props: [] as string[], routes: [] as string[], wos: [] as string[], stations: [] as string[] };
 const svc = new WorkOrderService();

@@ -4,6 +4,8 @@
 import { terimDokumaAyarla } from "./terim";
 
 export const TERM_REGIME_STORAGE_KEY = "tekserp.terim.dokumaRejimi";
+/** Rejim bayrak ucundan uygulandı — açılışta adı bayat çözülmüş sekme başlıkları bununla tazelenir (`store/tabs`). */
+export const TERM_REGIME_EVENT = "tekserp:terim-rejimi";
 
 /** Açılışta son bilinen rejimi uygular (bayrak ucu giriş ister; o gelene dek bu değer geçerlidir). */
 export function applyStoredTermRegime(): void {
@@ -26,5 +28,7 @@ export function applyTermRegime(flags: { productionEnabled?: boolean; dokumaEnab
   } catch {
     /* saklanamazsa bir sonraki açılış bugünkü adla başlar */
   }
+  // Her uygulamada (değişmese de): kalıcı sekme defteri önceki oturumdan bayat başlık taşıyabilir.
+  globalThis.dispatchEvent?.(new Event(TERM_REGIME_EVENT));
   return changed;
 }

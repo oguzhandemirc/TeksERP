@@ -42,7 +42,7 @@ export function PropertyNameCell({ row, collapsed, onToggle }: Props) {
               {variants.length} çeşit
             </Badge>
           )}
-          {row.listContext && <span className="text-[10px] text-muted-foreground">(aramaya uyan çeşidin bağlamı)</span>}
+          {row.listContext && <span className="text-[10px] text-muted-foreground">(kendisi uymuyor — uyan çeşidinin bağlamı)</span>}
         </div>
         {row.variantOf && <div className="text-[11px] text-muted-foreground">{genitive(row.variantOf.name)} çeşidi</div>}
       </div>

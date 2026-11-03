@@ -1,4 +1,4 @@
-// Bildirimler sayfası (plan §6.2): bayrak kapalı → "kapalı — Genel Ayarlar'dan açılır"; süzme SUNUCUDA
+// Bildirimler sayfası (plan §6.2): bayrak kapalı → "kapalı — <menü yolu>'den açılır"; süzme SUNUCUDA
 // (`sekme`, `filter[tur]`); toplu okundu geri alınabilir.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
@@ -69,11 +69,13 @@ describe("NotificationsPage", () => {
     svc.liste.mockImplementation(async () => ({ items: [it1], nextCursor: null, sayi: 1, epoch: 1, rev: 1, alarmRev: 0 }));
   });
 
-  it("bayrak kapalı → sayfa kaybolmaz, 'kapalı — Genel Ayarlar'dan açılır' der", async () => {
+  it("bayrak kapalı → sayfa kaybolmaz, 'kapalı — Sistem → … → Bildirimler'den açılır' der", async () => {
     durum.bayrak = false;
     await yukle();
     expect(screen.getByText("Bildirimler kapalı")).toBeTruthy();
-    expect(screen.getByText(/Genel Ayarlar'dan açılır/)).toBeTruthy();
+    // Menü yolu yüzey eşlemesinden; artık var olmayan "Genel Ayarlar" ekranını anmaz (QA 2026-11-03 #18).
+    expect(screen.getByText(/Sistem → .* → Bildirimler'den açılır/)).toBeTruthy();
+    expect(screen.queryByText(/Genel Ayarlar/)).toBeNull();
     expect(svc.liste).not.toHaveBeenCalled();
   });
 

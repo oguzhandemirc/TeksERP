@@ -8,7 +8,7 @@
 // =============================================================================
 import type { ReactNode } from "react";
 import { GramajChoiceButtons } from "@/components/kursun/GramajChoiceButtons";
-import { PlannedMachineButtons, usePlannedMachines } from "@/components/kursun/PlannedMachineButtons";
+import { PlannedMachineButtons, usePlannedMachines, usePlannedMachinesQuery } from "@/components/kursun/PlannedMachineButtons";
 import type { GramajOption } from "@/lib/kursun-gramaj";
 import type { DesignerStep } from "./RouteDesignerDialog";
 
@@ -30,7 +30,11 @@ interface Props {
 }
 
 export function KursunStepFields({ step, showGramaj, gramajOptions, gramajValue, onGramaj, onMachine }: Props) {
-  if (!isKursunStep(step) || !step.stationId) return null;
+  const kursun = isKursunStep(step) && Boolean(step.stationId);
+  const machinesQ = usePlannedMachinesQuery(kursun ? step.stationId : null);
+  if (!kursun || !step.stationId) return null;
+  // Makine yokken başlık boş kalmasın: yüklenirken satır yok, boşsa neden öneri verilemediği yazılır.
+  const noMachines = machinesQ.isSuccess && (machinesQ.data ?? []).length === 0;
   return (
     <div className="space-y-2.5" data-testid="kursun-step-fields">
       {showGramaj && gramajOptions.length > 0 && (
@@ -38,9 +42,15 @@ export function KursunStepFields({ step, showGramaj, gramajOptions, gramajValue,
           <GramajChoiceButtons options={gramajOptions} value={gramajValue} onChange={onGramaj} emptyLabel="Hedef yok" />
         </ParamRow>
       )}
-      <ParamRow label="Makine" hint="hangi makinede — öneri; fiilî makine tabletten">
-        <PlannedMachineButtons stationId={step.stationId} value={step.plannedMachineId ?? null} onChange={onMachine} />
-      </ParamRow>
+      {noMachines ? (
+        <p className="text-[11px] text-muted-foreground" data-testid="kursun-no-machine">
+          Makine önerisi yok — bu istasyonda tanımlı aktif makine yok; fiilî makine tabletten seçilir.
+        </p>
+      ) : machinesQ.isSuccess ? (
+        <ParamRow label="Makine" hint="hangi makinede — öneri; fiilî makine tabletten">
+          <PlannedMachineButtons stationId={step.stationId} value={step.plannedMachineId ?? null} onChange={onMachine} />
+        </ParamRow>
+      ) : null}
     </div>
   );
 }

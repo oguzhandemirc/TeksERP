@@ -7,6 +7,9 @@
 // Sözleşme: `reconcileCatalogsOnce` yazmadan ÖNCE rejimi DB'den çözer.
 //   §1 dokuma kapalı + bellek rejimi "Terbiye" (boot varsayılanı) → doğan izin/rol/sebep satırında "Terbiye" YOK
 //   §2 dokuma açık → aynı satırlar bugünkü "Terbiye" adıyla doğar (varsayılan davranış korunur)
+//   §3 (QA 2026-11-03) "Terbiye" ile yazılmış satır dokuma kapalıyken Yetki Kataloğu/Şablon okumasında güncel adla
+//      döner (DB satırı DEĞİŞMEZ); fabrikanın düzelttiği metin aynen kalır; cost:write eski "terbiye tarifesi" tohumu
+//      yeni metinle okunur
 // Yazan bekçi: yalnız `_test` DB'sinde koşar; bayrak fotoğrafa döner.
 // =============================================================================
 import type { Prisma } from "@prisma/client";
@@ -15,6 +18,7 @@ import { reconcileCatalogsOnce } from "../src/jobs/permission-catalog.job";
 import { terimDokumaAyarla, terimDokumaRejimi } from "../src/constants/terim";
 import { invalidateFeatureFlagsCache, SETTING_KEYS } from "../src/services/system-setting.service";
 import { fixtureHedefEngeli, hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { PermissionManagementService } from "../src/services/permission-management.service";
 
 let pass = 0, fail = 0;
 function check(l: string, ok: boolean, x = ""): void {
@@ -75,6 +79,30 @@ async function main(): Promise<void> {
     const m2 = await metinler();
     check("§2a rejim açık", terimDokumaRejimi() === true);
     check("§2b izin + şablon adı + sebep 'Terbiye' taşır", /terbiye/i.test(m2[0]!) && /terbiye/i.test(m2[1]!) && /terbiye/i.test(m2[3]!), m2.join(" | "));
+
+    console.log("§3 'Terbiye' tohumlu satır, dokuma kapalı okuma");
+    terimDokumaAyarla(false);
+    const COST = "cost:write";
+    const costFoto = await prisma.permission.findUnique({ where: { code: COST }, select: { description: true } });
+    await prisma.permission.updateMany({ where: { code: COST }, data: { description: "Ürün maliyet yapısı, iplik maliyet fiyatı, terbiye tarifesi, makine saat ücreti ve hizmet sarf normu yazma" } });
+    try {
+      const perms = await PermissionManagementService.listPermissions();
+      const izin = perms.find((p) => p.code === IZIN)?.description ?? "(yok)";
+      const cost = perms.find((p) => p.code === COST)?.description ?? "(yok)";
+      check("§3a izin açıklaması güncel adla (Terbiye yok)", izin !== "(yok)" && !/terbiye/i.test(izin), izin);
+      check("§3b DB satırı değişmedi (yalnız okuma)", /terbiye/i.test((await metinler())[0]!));
+      check("§3c cost:write eski tohum → 'fason tarifesi'", /fason tarifesi/.test(cost) && !/terbiye/i.test(cost), cost);
+      const t3 = (await PermissionManagementService.listTemplates()).find((t) => t.code === SABLON);
+      check("§3d şablon adı + açıklaması güncel adla", !!t3 && !/terbiye/i.test(t3.name) && !/terbiye/i.test(t3.description ?? ""), `${t3?.name} | ${t3?.description}`);
+      check("§3e şablondaki izin açıklaması da güncel", !!t3 && t3.permissions.every((it) => !/terbiye iş emr/i.test(it.permission.description ?? "")));
+      await prisma.permissionTemplate.updateMany({ where: { code: SABLON }, data: { description: "Fabrikanın Terbiye notu" } });
+      const t3b = (await PermissionManagementService.listTemplates()).find((t) => t.code === SABLON);
+      check("§3f fabrikanın düzelttiği metin aynen kalır", t3b?.description === "Fabrikanın Terbiye notu", t3b?.description ?? "");
+    } finally {
+      if (costFoto) await prisma.permission.updateMany({ where: { code: COST }, data: { description: costFoto.description } });
+      await satirlariSil(); // §3f düzeltmesi tohum sanılmasın; sonraki koşum rejimle yeniden doğurur
+      await reconcileCatalogsOnce();
+    }
   } finally {
     for (const key of ANAHTARLAR) {
       const eski = foto.find((f) => f.key === key);

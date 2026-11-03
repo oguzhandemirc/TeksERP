@@ -99,6 +99,16 @@ function DetailLoading({ failed }: { failed: boolean }) {
   );
 }
 
+/** Okuma yönergeleri ("yeniden okutun / elle girin", S1b "tipi seçin") yalnız açık belgede anlamlıdır; kapanmışta çizilmez. */
+function ReadGuidance({ note, editable, canRequeue, onRequeued }: { note: DeliveryNoteDetail; editable: boolean; canRequeue: boolean; onRequeued: () => void }) {
+  return (
+    <>
+      {note.status === "DRAFT" && <ScanReadBanner scans={note.scans} lines={note.lines} editable={editable} canRequeue={canRequeue} onRequeued={onRequeued} />}
+      {note.status !== "CANCELLED" && <UnknownTypeStrip note={note} />}
+    </>
+  );
+}
+
 export function IncomingDocumentDetailPage() {
   const { id = "" } = useParams();
   const { note, suggestions, header, line, removeLine, invalidate } = useNoteDetail(id);
@@ -134,14 +144,14 @@ export function IncomingDocumentDetailPage() {
       <PageBody className="min-h-0 p-4 sm:p-6">
         <div className="flex flex-col gap-4">
           {isApprovable(n.status) && <CariHoldStrip message={n.cariHold?.message} title="Cari kilitli — bu belge onaylanamaz" />}
-          <ScanReadBanner scans={n.scans} lines={n.lines} editable={editable} canRequeue={hasPermission("gelen-belge:write")} onRequeued={() => void invalidate()} />{/* S1b */}<UnknownTypeStrip note={n} />
+          <ReadGuidance note={n} editable={editable} canRequeue={hasPermission("gelen-belge:write")} onRequeued={() => void invalidate()} />
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <ScanViewer scans={n.scans} highlight={sel ? lineRect(sel) : null} highlightScanId={sel?.scanId ?? null} selectionKey={sel?.id ?? null} />
             <div className="flex min-w-0 flex-col gap-4">
               {perDoc && <BatchNoPicker note={n} editable={editable} onPatch={(p) => header.mutate(p)} />}
               {perDoc && <KursunMetersCard note={n} editable={editable} onPatch={(p) => header.mutateAsync(p)} />}
               <NoteHeaderForm note={n} suggestions={suggestions.data} editable={editable} onPatch={(p) => header.mutate(p)} />
-              <TotalsStrip check={n.totalsCheck} />
+              {n.status !== "CANCELLED" && <TotalsStrip check={n.totalsCheck} approvable={isApprovable(n.status)} />}{/* iptalde toplar düştü; hüküm anlamsız */}
               <NoticesStrip notices={n.notices} />
               <SameBatchStrip sameBatch={n.sameBatch} />
               {n.varianceReason && <p className="text-xs text-muted-foreground">Fark gerekçesi: {n.varianceReason}</p>}

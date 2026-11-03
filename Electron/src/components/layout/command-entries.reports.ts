@@ -44,8 +44,8 @@ export function leafPermission(to: string, categoryPermission: string | undefine
 export const reportCommandSections: CommandSection[] = reportTiles.map((cat) => {
   const hub: CommandEntry = {
     key: `report:${cat.key}`,
-    label: cat.title,
-    description: cat.description,
+    get label() { return cat.title; },
+    get description() { return cat.description; },
     icon: cat.icon,
     to: cat.to,
     permission: cat.permission,
@@ -57,8 +57,8 @@ export const reportCommandSections: CommandSection[] = reportTiles.map((cat) => 
 
   const subs: CommandEntry[] = (reportCategoryTiles[cat.key] ?? []).map((tile) => ({
     key: `report:${cat.key}:${tile.key}`,
-    label: tile.title,
-    description: tile.description,
+    get label() { return tile.title; },
+    get description() { return tile.description; },
     icon: tile.icon,
     to: tile.to,
     permission: leafPermission(tile.to, cat.permission),
@@ -76,7 +76,7 @@ export const reportCommandSections: CommandSection[] = reportTiles.map((cat) => 
   const legacyTwins: CommandEntry[] = subs.map((sub) => ({
     ...sub,
     key: `${sub.key}:legacy`,
-    label: `Eski: ${sub.label}`,
+    get label() { return `Eski: ${sub.label}`; },
     visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true && sub.visibleWhen!(ctx),
     keywords: `${sub.keywords} eski geçiş`,
   }));
@@ -100,8 +100,8 @@ export const reportCommandSections: CommandSection[] = reportTiles.map((cat) => 
  */
 const reportV2Entries: CommandEntry[] = REPORT_CATALOG.filter((e) => e.nesil === "v2").map((e) => ({
   key: `report-v2:${e.key}`,
-  label: e.baslik,
-  description: e.soru,
+  get label() { return e.baslik; },
+  get description() { return e.soru; },
   icon: BarChart3,
   to: `/${e.panelYolu}`,
   permission: e.izin,
@@ -192,8 +192,8 @@ const relocatedEntries: CommandEntry[] = RELOCATED_TOOLS.map((t) => {
   const host = relocatedHostOf(t.reportKey);
   return {
     key: `relocated:${t.reportKey}`,
-    label: `${t.hostLabel} · ${t.title}`,
-    description: t.description,
+    get label() { return `${t.hostLabel} · ${t.title}`; },
+    get description() { return t.description; },
     icon: t.icon,
     to: t.to,
     permission: t.permission,

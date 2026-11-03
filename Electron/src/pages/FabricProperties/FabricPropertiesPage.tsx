@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CrudPage } from "@/components/layout/CrudPage";
 import { nextSortOrder } from "@/lib/sort-order";
 import { buildFabricPropertyColumns } from "./columns";
-import { HIERARCHY_SORT, hierarchyRowClass } from "./hierarchy";
+import { HIERARCHY_SORT, hierarchyRowClass, hierarchyRowSelectable } from "./hierarchy";
 import { fabricPropertyService } from "./service";
 import { FabricPropertyFormDialog } from "./FabricPropertyFormDialog";
 import type { FabricProperty } from "./types";
@@ -34,6 +34,7 @@ export function FabricPropertiesPage() {
   }, []);
   const columns = useMemo(() => buildFabricPropertyColumns({ collapsed, onToggle: toggle }), [collapsed, toggle]);
   const rowClassName = useCallback((row: FabricProperty) => hierarchyRowClass(row, collapsed), [collapsed]);
+  const rowSelectable = useCallback((row: FabricProperty) => hierarchyRowSelectable(row, collapsed), [collapsed]);
 
   return (
     <CrudPage<FabricProperty>
@@ -46,6 +47,7 @@ export function FabricPropertiesPage() {
       columns={columns}
       defaultSortBy={HIERARCHY_SORT}
       rowClassName={rowClassName}
+      rowSelectable={rowSelectable}
       writePermission="property:write"
       searchPlaceholder="Ad veya kategori ara..."
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting, openEdit }) => (

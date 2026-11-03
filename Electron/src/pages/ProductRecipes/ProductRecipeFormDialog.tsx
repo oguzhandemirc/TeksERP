@@ -178,7 +178,7 @@ export function ProductRecipeFormDialog({
         <DialogHeader>
           <DialogTitle>{isEdit ? `${TERIM.terbiyeIsEmri.tekil} Şablonunu Düzenle` : `Yeni ${TERIM.terbiyeIsEmri.tekil} Şablonu`}</DialogTitle>
           <DialogDescription>
-            Kumaş + akış (renk/özellik istasyonlarda) + en'i tek isim altında topla.
+            Kumaş + akış (renk/özellik istasyonlarda) + en'i tek isim altında topla.{" "}
             {TERIM.terbiyeIsEmri.cumleBasi.yalin} açılışında şablonu seçince hepsi otomatik dolar.
           </DialogDescription>
         </DialogHeader>

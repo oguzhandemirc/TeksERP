@@ -50,7 +50,8 @@ describe("onaylı gelen belge iptali", () => {
     expect(rows).toHaveLength(2);
     expect(within(rows[0]!).getByText("T0001")).toBeInTheDocument();
     expect(within(rows[1]!).getByText("Merkez Depo")).toBeInTheDocument();
-    expect(screen.getByTestId("cancel-summary")).toHaveTextContent("81.000 m");
+    expect(screen.getByTestId("cancel-summary")).toHaveTextContent("(81 m)"); // ham "81.000" binlik gibi okunuyordu
+    expect(screen.getByTestId("cancel-summary")).not.toHaveTextContent("81.000");
     expect(within(screen.getByTestId("cancel-work-orders")).getByText("IE01")).toBeInTheDocument();
   });
 
@@ -90,6 +91,23 @@ describe("onaylı gelen belge iptali", () => {
     expect(body.workOrderIds).toEqual(["w1"]);
     expect(body.clientToken).toMatch(/^[0-9a-f-]{36}$/);
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  });
+
+  it("§3b 409 sonrası tazelenen önizlemede seçilemez olan iş emri seçimden düşer", async () => {
+    getNoteCancelPreview.mockResolvedValueOnce(preview());
+    getNoteCancelPreview.mockResolvedValue(preview({
+      cancellable: false,
+      workOrders: [{ id: "w1", workOrderNumber: "IE01", status: "IN_PROGRESS", selectable: false, noteRollCount: 1, otherRollCount: 0, effect: "İş emrinde işlem başlamış" }],
+    }));
+    cancelNote.mockRejectedValue(Object.assign(new Error("çakışma"), { response: { status: 409, data: { error: { details: { code: "CONFLICT" } } } } }));
+    renderWithProviders(<CancelNoteDialog note={NOTE} open onOpenChange={() => {}} />);
+    await screen.findAllByTestId("cancel-roll-row");
+    await userEvent.type(screen.getByLabelText("İptal sebebi"), "Yanlış belge");
+    await userEvent.click(screen.getByRole("checkbox", { name: /IE01/ }));
+    expect(screen.getByRole("checkbox", { name: /IE01/ })).toBeChecked();
+    await userEvent.click(screen.getByTestId("cancel-note-confirm"));
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: /IE01/ })).toBeDisabled());
+    expect(screen.getByRole("checkbox", { name: /IE01/ })).not.toBeChecked();
   });
 
   it("§4 düğme yalnız APPROVED/PARTIAL ve izinle", () => {
