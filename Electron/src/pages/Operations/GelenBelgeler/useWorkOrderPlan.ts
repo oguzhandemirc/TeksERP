@@ -11,7 +11,8 @@ import { workOrderService } from "@/pages/Operations/WorkOrders/service";
 import { getWorkOrderPlan, INCOMING_DOCUMENT_QUERY_KEY } from "./service";
 import type { ChoiceProperty, PlanTarget } from "./types";
 import { TERIM } from "@/lib/terim";
-import { decisiveFailure, startGroupWorkOrders } from "./workOrderFromNote";
+import { decisiveFailure, SCAN_ROUTE_VALUE, startGroupWorkOrders } from "./workOrderFromNote";
+import { useScanRouteOption } from "@/pages/Operations/WorkOrders/oie/useScanRouteOption";
 
 export function useWorkOrderPlan(noteId: string, open: boolean) {
   const qc = useQueryClient();
@@ -21,6 +22,8 @@ export function useWorkOrderPlan(noteId: string, open: boolean) {
   const routes = useQuery({ queryKey: ["routes", "note-wo-picker"], queryFn: () => loadAllForPicker(routeService, { sortBy: "name" }), enabled: open && canReadRoutes, staleTime: 5 * 60_000 });
   const routeList = useMemo(() => (routes.data?.data ?? []).filter((r) => r.isActive), [routes.data]);
   const [routeId, setRouteId] = useState<string | null>(null);
+  // K29 S15b: "Okutmayla" kipinde rotasız seçenek başta ve VARSAYILAN (rota önerisi ezmez; S14b masa emsali).
+  const scanRoute = useScanRouteOption();
   const [foldType, setFoldType] = useState<string | null>(null);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [overrides, setOverrides] = useState<Record<string, PlanTarget[]>>({});
@@ -40,8 +43,8 @@ export function useWorkOrderPlan(noteId: string, open: boolean) {
   useEffect(() => {
     if (!plan.data) return;
     setChecked(Object.fromEntries(plan.data.groups.map((g) => [g.key, g.attachableCount > 0 && !g.patternless])));
-    setRouteId((cur) => cur ?? plan.data.suggestedRouteTemplateId ?? null);
-  }, [plan.data]);
+    setRouteId((cur) => cur ?? (scanRoute ? SCAN_ROUTE_VALUE : (plan.data.suggestedRouteTemplateId ?? null)));
+  }, [plan.data, scanRoute]);
 
   const route = routeList.find((r) => r.id === routeId) ?? null;
   const hasTambur = (route?.steps ?? []).some((s) => s.station?.kind === "TAMBUR");
@@ -81,5 +84,5 @@ export function useWorkOrderPlan(noteId: string, open: boolean) {
     },
   });
 
-  return { plan, routes, routeList, routeId, setRouteId, route, hasTambur, foldType, setFoldType, foldValues, groups, checked, setChecked, targetsOf, setValue, selected, done, start };
+  return { plan, routes, routeList, routeId, setRouteId, route, scanRoute, hasTambur, foldType, setFoldType, foldValues, groups, checked, setChecked, targetsOf, setValue, selected, done, start };
 }

@@ -3,6 +3,8 @@ import { Animated, View, StyleSheet, ScrollView, useWindowDimensions } from 'rea
 import AppModal from '../../../components/AppModal';
 import ForeignMachinePrompt, { type ForeignMachinePromptState } from './ForeignMachinePrompt';
 import { useScanRoute } from '../scanRoute/useScanRoute';
+import ScanRouteAddBadge from '../scanRoute/ScanRouteAddBadge';
+import { useScanRouteMode } from '../../../hooks/useFeatureFlags';
 import {
   Text,
   Button,
@@ -222,7 +224,9 @@ export default function KursunQcScreen() {
   const [listModalOpen, setListModalOpen] = useState(false);
   // K17: boyahane belgesinden iş emri bulma + açık kart listesinde fiş/parti no araması (süzme sunucuda).
   const docLookup = useStationDocLookup();
-  const cardSearch = useOpenCardSearch(['kursun-qc', 'open-cards'], (q) => kursunQcService.listOpenCards(q));
+  // K29 S15b: Okutmayla kipinde rotasız İE satırları da istenir (sıralıda istek bayt-aynı).
+  const scanMode = useScanRouteMode();
+  const cardSearch = useOpenCardSearch(['kursun-qc', 'open-cards', scanMode], (q) => kursunQcService.listOpenCards(q, scanMode));
   const [scannerOpen, setScannerOpen] = useState(false);
   /** İş emri adım notu (WorkOrderStep.notes) tam metin modal'ı. */
   const [noteModalOpen, setNoteModalOpen] = useState(false);
@@ -233,8 +237,8 @@ export default function KursunQcScreen() {
   // OPEN_CARDS_REFETCH_MS polling: planlama acil işaretlediğinde tablet en geç
   // o sürede görür. Aynı sabit modal başlığında operatöre gösterilir.
   const openCardsQuery = useQuery({
-    queryKey: ['kursun-qc', 'open-cards'],
-    queryFn: () => kursunQcService.listOpenCards(),
+    queryKey: ['kursun-qc', 'open-cards', scanMode],
+    queryFn: () => kursunQcService.listOpenCards(undefined, scanMode),
     staleTime: 10 * 1000,
     refetchInterval: OPEN_CARDS_REFETCH_MS,
     refetchOnWindowFocus: true,
@@ -1940,6 +1944,7 @@ function CameraScanModal({
                       </Text>
                       <PriorErrorBadge count={item.openErrorCount} testID="card-error-badge" />
                       <PlannedMachineBadge name={item.plannedMachineName} testID="card-planned-machine" />
+                      <ScanRouteAddBadge card={item} testID="card-scan-route-add" />
                       <Text style={cameraStyles.rowMetaInline} numberOfLines={1}>
                         {item.batchNumber} · {item.stationName} · {item.openRollCount} top
                         {item.oldestEnteredAt

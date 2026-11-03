@@ -37,14 +37,14 @@ const applySchema = z.object({
  *         required: true
  *         schema: { type: string }
  *     responses:
- *       200: { description: "{ enabled, view } — view.kind OPEN_EXISTING | MOVE | INSERT | BLOCKED" }
+ *       200: { description: "{ enabled, view, canClose } — view.kind OPEN_EXISTING | MOVE | INSERT | BLOCKED; canClose = 'bitmiş say ve geç' yetkisi (quality:write | mobile:kk2-kursun)" }
  *       400: { description: Kart aktif değil / istasyon oturumu yok }
  *       404: { description: Refakat kartı bulunamadı }
  */
 router.get("/by-card/:barcode", requireAnyPermission(...PERMS), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const stamp = await getStampContext(req);
-    const data = await previewScanRoute(String(req.params.barcode).trim(), stamp?.stationId ?? null);
+    const data = await previewScanRoute(String(req.params.barcode).trim(), stamp?.stationId ?? null, req.user?.permissions ?? []);
     res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);

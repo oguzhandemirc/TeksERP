@@ -52,8 +52,10 @@ export default function WoCreateScreen() {
   const canManual = useVisibleScreens().visibleScreens.some((s) => s.key === 'HizliIsEmri');
   const q = useQuery({ queryKey: WO_SHORTCUTS_KEY, queryFn: routeService.getShortcuts, retry: false, staleTime: 60_000 });
   // K29 S14b: "Okutmayla" kipinde rotasız seçenek kısayolların BAŞINDA (varsayılan); sıralıda bugünkü liste.
-  const shortcuts = withScanRoute(shortcutRoutes(q.data?.data ?? []), useScanRouteMode());
-  useDeskAutoOpen(shortcuts.length > 0, () => setStage({ kind: 'desk' }));
+  const realShortcuts = shortcutRoutes(q.data?.data ?? []);
+  const shortcuts = withScanRoute(realShortcuts, useScanRouteMode());
+  // S15b: masa cihazında doğrudan açılış yalnız GERÇEK kısayol varken (bugünkü davranış) — rotasız sözde kısayol sayılmaz.
+  useDeskAutoOpen(realShortcuts.length > 0, () => setStage({ kind: 'desk' }));
 
   const openForm = (route: ProductionRoute | null) => {
     setStep(0);

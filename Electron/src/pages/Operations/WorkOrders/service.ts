@@ -608,7 +608,10 @@ export interface QuickStartPayload {
   /** İdempotency: timeout sonrası tekrar gönderimde aynı token cached WO döner. */
   clientToken: string;
   rollBarcodes: string[];
-  routeTemplateId: string;
+  /** Rotasız (`scanRouted`) gövdede YOK. */
+  routeTemplateId?: string;
+  /** K29 S15b: rotasız iş emri — yalnız "Okutmayla" kipinde (değilse 400 SCAN_ROUTE_DISABLED). */
+  scanRouted?: boolean;
   targetColorId?: string | null;
   targetItemId?: string | null;
   width?: number | null;

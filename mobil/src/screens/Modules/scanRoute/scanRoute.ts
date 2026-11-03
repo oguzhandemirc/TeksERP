@@ -32,6 +32,22 @@ function skippedText(v: ScanRouteView): string {
   return v.skipped.length ? ` Atlandı: ${v.skipped.map((s) => s.stationName).join(', ')}.` : '';
 }
 
+/** "Bitmiş say ve geç" onayı mı (önizlemeden yetki sorulur). */
+export const needsClosePermission = (p: ScanRoutePrompt): boolean => p.kind === 'CONFIRM' && !!p.closeOpenStepId;
+
+/**
+ * K29 S15b: okutanın adım kapatma yetkisi yoksa (önizleme `canClose === false`) düğme gösterilmez → engel + açıklama.
+ * `undefined` (eski sunucu / önizleme okunamadı) = bugünkü onay; sunucu yine 403 ile korur.
+ */
+export function applyClosePermission(p: ScanRoutePrompt, v: ScanRouteView, canClose: boolean | undefined): ScanRoutePrompt {
+  if (!needsClosePermission(p) || canClose !== false || !v.block) return p;
+  return {
+    kind: 'BLOCK',
+    title: `"${v.block.stationName}" adımında iş sürüyor`,
+    body: `${v.block.message} "${v.block.stationName}" adımını bitirme yetkiniz yok; o istasyonun ekranından bitirilmeli.`,
+  };
+}
+
 export function decideScanRoutePrompt(v: ScanRouteView): ScanRoutePrompt {
   if (v.kind === 'BLOCKED' && v.block) {
     if (v.block.code === 'SCAN_ROUTE_OPEN_ELSEWHERE' && v.block.closable) {

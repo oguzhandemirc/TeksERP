@@ -120,7 +120,11 @@ const quickStartSchema = z.object({
   dispatchFirstStep: z.boolean().optional(),
   // "Belgeden iş emri": kaynak gelen belge. Parti numarası (ayar DOCUMENT ise) sunucuda NOTTAN okunur, gövdeden değil.
   sourceNoteId: z.string().uuid().optional(),
-}).refine(hasRoute, ROUTE_REFINE_MSG);
+  // K29 S15b: rotasız (adımları sahada okutma ekler). Karar serviste (SCAN → rotasız, SIRALI → 400 SCAN_ROUTE_DISABLED).
+  scanRouted: z.boolean().optional(),
+})
+  .refine((d) => hasRoute(d) || d.scanRouted === true, ROUTE_REFINE_MSG)
+  .refine((d) => !(d.scanRouted === true && hasRoute(d)), { message: "Rotasız açılışta rota şablonu ya da adım verilemez.", path: ["scanRouted"] });
 
 const targetPropertiesSchema = z.object({
   propertyIds: z.array(z.string().uuid()),

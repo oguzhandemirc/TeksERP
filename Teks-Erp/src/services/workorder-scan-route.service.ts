@@ -23,7 +23,7 @@ import {
   type ScanRouteFacts,
 } from "./helpers/okutmayla-rota.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
-import { matchesPermission } from "../middlewares/rbac.middleware";
+import { assertCanCloseOpenStep, canCloseOpenStep } from "./helpers/scan-route-close.helper";
 import { revokeRollMovements } from "./helpers/roll-movement.helper";
 import { ensureWorkOrderInProgress, recomputeStepStatus } from "./helpers/roll-step.helper";
 import { readStepSnapshotsTx, recordStepDiffTx } from "./helpers/workorder-field-diff.helper";
@@ -130,11 +130,12 @@ export async function gateByCard(workOrderId: string, stationId: string | null):
   throw AppError.badRequest(view!.message, { code: "SCAN_ROUTE_AVAILABLE", scanRoute: view });
 }
 
-export async function previewScanRoute(cardBarcode: string, stationId: string | null): Promise<{ enabled: boolean; view: ScanRouteView | null }> {
+/** `canClose` (S15b): okutan "bitmiş say ve geç" diyebilir mi — tablet izinsizde düğmeyi gizler (eski tablet alanı yok sayar). */
+export async function previewScanRoute(cardBarcode: string, stationId: string | null, permissions: readonly string[] = []): Promise<{ enabled: boolean; view: ScanRouteView | null; canClose: boolean }> {
   const { workOrderId } = await cardWorkOrder(cardBarcode);
   if (!stationId) throw AppError.badRequest("Okutmaya göre rota için tablette istasyon oturumu gerekli.", { code: "SCAN_ROUTE_NO_SESSION" });
-  if (!(await scanRouteEnabledFor(stationId))) return { enabled: false, view: null };
-  return { enabled: true, view: (await decide(workOrderId, stationId)).view };
+  const enabled = await scanRouteEnabledFor(stationId);
+  return { enabled, view: enabled ? (await decide(workOrderId, stationId)).view : null, canClose: canCloseOpenStep(permissions) };
 }
 
 /** Topların müşterisi (S10 çözücüsü müşteri varsayılanını önce okur) — gelen belgenin sahibi. */
@@ -327,14 +328,8 @@ export async function applyScanRoute(
   const st = await prisma.station.findUnique({ where: { id: stationId }, select: { id: true, name: true, type: true } });
   if (!st) throw AppError.badRequest("Oturum istasyonu bulunamadı.", { code: "SCAN_ROUTE_NO_SESSION" });
 
-  // "Bitmiş say ve geç" başka istasyonun adımını KAPATIR: yetki, kapatma ucunun (`POST /api/kursun-qc/finish-step`)
-  // yetkisiyle aynı olmalı — yoksa yalnız Tambur yetkili operatör kurşun/KK adımını kapatabilirdi (s14 inceleme).
-  if (input.closeOpenStepId && !(matchesPermission(ctx.permissions, "quality:write") || matchesPermission(ctx.permissions, "mobile:kk2-kursun"))) {
-    throw AppError.forbidden("Önceki istasyondaki işi bitirme yetkiniz yok; o istasyonun ekranından bitirilmeli.", {
-      code: "SCAN_ROUTE_CLOSE_FORBIDDEN",
-      requiredAny: ["quality:write", "mobile:kk2-kursun"],
-    });
-  }
+  // "Bitmiş say ve geç" başka istasyonun adımını KAPATIR: yetki kapatma ucununkiyle aynı (tek kaynak helper).
+  if (input.closeOpenStepId) assertCanCloseOpenStep(ctx.permissions);
   const result = await replayFor(workOrderId, stationId).run(input.clientToken, async () => {
     if (input.closeOpenStepId) {
       const { plan } = await decide(workOrderId, stationId);

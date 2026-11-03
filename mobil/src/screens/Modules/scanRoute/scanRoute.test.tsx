@@ -2,8 +2,10 @@
 import React from 'react';
 import { fireEvent } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../test/render';
-import { decideScanRoutePrompt, readScanRouteView, type ScanRouteView } from './scanRoute';
+import { applyClosePermission, decideScanRoutePrompt, readScanRouteView, type ScanRouteView } from './scanRoute';
 import { ScanRouteDialog } from './useScanRoute';
+
+jest.mock('../../../services/scanFeedback', () => ({ signalScan: jest.fn() }));
 
 const base: ScanRouteView = {
   kind: 'INSERT', workOrderId: 'wo', stationId: 'st', stationName: 'Detaylı KK', targetStepId: null,
@@ -34,6 +36,18 @@ describe('okutmayla rota kararı', () => {
     expect(p.kind === 'CONFIRM' && p.closeOpenStepId).toBe('k1');
     expect(p.kind === 'CONFIRM' && p.confirmLabel).toContain('bitmiş say ve geç');
     expect(decideScanRoutePrompt({ ...base, kind: 'BLOCKED', block: { ...block, closable: false } }).kind).toBe('BLOCK');
+  });
+  it('⭐ S15b: "bitmiş say ve geç" yetkisi yoksa (canClose=false) düğme yok → engel + açıklama; true/eski sunucu → onay', () => {
+    const block = { code: 'SCAN_ROUTE_OPEN_ELSEWHERE', stepId: 'k1', stationName: 'Kurşun', rollCount: 3, message: 'iş sürüyor', closable: true };
+    const v: ScanRouteView = { ...base, kind: 'BLOCKED', block };
+    const p = decideScanRoutePrompt(v);
+    const denied = applyClosePermission(p, v, false);
+    expect(denied.kind).toBe('BLOCK');
+    expect(denied.kind === 'BLOCK' && denied.body).toContain('bitirme yetkiniz yok');
+    expect(applyClosePermission(p, v, true)).toBe(p);
+    expect(applyClosePermission(p, v, undefined)).toBe(p);
+    const rework = decideScanRoutePrompt({ ...base, warnings: ['w'] });
+    expect(applyClosePermission(rework, base, false)).toBe(rework);
   });
   it('atlanamaz adım engeldir', () => {
     const p = decideScanRoutePrompt({ ...base, kind: 'BLOCKED', block: { code: 'SCAN_ROUTE_MANDATORY_STEP', stepId: 'm', stationName: 'Detaylı KK', rollCount: 2, message: 'atlanamaz', closable: false } });
