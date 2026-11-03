@@ -87,7 +87,9 @@ export function membershipSql(unit: ReadyWorkUnit, onlyId?: string, onlyIds?: re
         : Prisma.empty;
       const idFilter = onlyId ? Prisma.sql`AND ${key} = ${onlyId}`
         : sub ? Prisma.sql`AND ${key} IN (SELECT s.unit_id FROM (${sub}) s)`
-        : many ? Prisma.sql`AND ${key} = ANY(${many}::text[])` : Prisma.empty;
+        // Belge kümesi uuid[] ile `n.id` üzerinden (indeks); metin karşılaştırması K28 darboğazıydı (S15c-d2).
+        : many ? (unit === "deliveryNote" ? Prisma.sql`AND n.id = ANY(${many}::uuid[])` : Prisma.sql`AND ${key} = ANY(${many}::text[])`)
+        : Prisma.empty;
       // Kök: belgenin onayla doğan topları; aşağı soy `parentRollId` (tambur bölmesi) üzerinden, derinlik tavanlı.
       // LATERAL + OFFSET 0: her adım `parentRollId` indeksinden (özyineleme tahmini her turda tam tarama seçtiriyordu).
       return Prisma.sql`
