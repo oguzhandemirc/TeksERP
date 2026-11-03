@@ -28,11 +28,13 @@ interface Props {
 const PDF_MIME = 'application/pdf';
 const norm = (t: string) => lowerTr(t).replace(/\s+/g, ' ').trim();
 
-export default function TeachBanner({ row, wo, tanitim, customers }: Props) {
+export default function TeachBanner({ row, wo, tanitim: served, customers }: Props) {
   const { has } = usePermissions();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const allowed = has('gelen-belge:template') && has('gelen-belge:read');
+  // Yerelde tanıtılan (yeniden okutulamayan) belgede sunucu özeti hâlâ "tanıtılmamış" der; şerit yerel durumu çizer.
+  const tanitim: ReadTanitim | undefined = row.taught ? { durum: 'TANITILDI', sablonKodu: row.taught.code, sablonAdi: row.taught.name } : served;
   const done = row.result?.kind === 'OPENED' || row.result?.kind === 'DRAFT';
   if (!allowed || !tanitim || done || !row.detail) return null;
   const pages = teachPages(row.detail, localPagesFor((row.detail.scans ?? []).map((s) => s.sha256)));
@@ -56,7 +58,7 @@ export default function TeachBanner({ row, wo, tanitim, customers }: Props) {
       return;
     }
     const owner = r.fields.musteri ? customers.find((c) => norm(c.label) === norm(r.fields.musteri!)) : undefined;
-    wo.applyTaught(row.noteId, r.fields, owner?.value ?? null);
+    wo.applyTaught(row.noteId, r.fields, owner?.value ?? null, { code: r.code, name: r.name });
     Toast.show({ type: 'info', text1: 'Form yeni şablonla okunan değerlerle güncellendi', text2: 'Belge yeniden okunamadı (satırları taslakta); değerleri kontrol edin.' });
   };
 

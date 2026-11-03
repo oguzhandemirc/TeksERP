@@ -171,7 +171,7 @@ function buildPlanCtx(p: PlanInput): WoPlanCtx {
 
 /** Okuma bitince belgeden gelenler forma dolar (aynı okuma bir kez; elle değiştirilen alan ezilmez); belge çıkınca temizlenir. */
 function useDocReadToForm(row: DocRow | null, setForm: React.Dispatch<React.SetStateAction<WoFormState>>) {
-  const readKey = row?.detail ? `${row.noteId}#${row.runKey}` : null;
+  const readKey = row?.detail ? `${row.noteId}#${row.runKey}#${row.taught?.seq ?? 0}` : null;
   const detail = row?.detail ?? null;
   useEffect(() => {
     if (readKey && detail) setForm((s) => applyDocRead(s, readKey, detail.formFields, detail.suggestions));

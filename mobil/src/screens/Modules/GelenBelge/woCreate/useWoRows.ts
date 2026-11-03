@@ -162,12 +162,13 @@ function useRowMutators(setRows: Dispatch<SetStateAction<DocRow[]>>, gramajFor: 
   const removeRow = useCallback((noteId: string) => setRows((rs) => rs.filter((r) => r.noteId !== noteId)), [setRows]);
   // K30-A: belge yeni şablonla yeniden okutuldu → okuma baştan izlenir, form yeni okumadan kurulur.
   const rereadRow = useCallback(
-    (noteId: string) => setRows((rs) => rs.map((r) => (r.noteId === noteId && !isDone(r) ? { ...r, runKey: r.runKey + 1, detail: null, form: null, parties: null, gramajTouched: false, result: null } : r))),
+    (noteId: string) => setRows((rs) => rs.map((r) => (r.noteId === noteId && !isDone(r) ? { ...r, runKey: r.runKey + 1, detail: null, form: null, parties: null, gramajTouched: false, result: null, taught: undefined } : r))),
     [setRows],
   );
   // K30-A: yeniden okutulamayan (satırlı) belgede tanıtma önizlemesinin değerleri forma dolar (sunucu yeniden okumaz).
   const applyTaught = useCallback(
-    (noteId: string, fields: Record<string, string | null>, ownerCustomerId: string | null) => setRows((rs) => rs.map((r) => (r.noteId === noteId ? taughtRow(r, fields, ownerCustomerId) : r))),
+    (noteId: string, fields: Record<string, string | null>, ownerCustomerId: string | null, tpl: { code: string; name: string }) =>
+      setRows((rs) => rs.map((r) => (r.noteId === noteId ? taughtRow(r, fields, ownerCustomerId, tpl) : r))),
     [setRows],
   );
   return { addNote, setDetail, updateForm, setParties, setMulti, removeRow, rereadRow, applyTaught };
