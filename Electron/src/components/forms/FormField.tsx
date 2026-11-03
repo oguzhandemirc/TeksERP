@@ -15,7 +15,7 @@ interface FieldErrorLike {
 type HintTone = "muted" | "info" | "warning";
 
 interface Props {
-  label: string;
+  label: ReactNode;
   htmlFor?: string;
   error?: FieldErrorLike;
   hint?: ReactNode;
