@@ -9397,6 +9397,8 @@ model FabricPropertyValue {
   kursunBypassAssignments KursunBypassAssignment[]
   /// S3 (fabrika cevabı 14): bu gramajı varsayılan seçen müşteri carileri.
   cariKursunDefaults      CariAccount[]            @relation("CariKursunDefaultValue")
+  /// K22: bu değeri ön seçim varsayılanı yapan istasyon yetenekleri.
+  stationPropertyDefaults StationProperty[]        @relation("StationPropertyDefaultValue")
   /// Gramaj kademesi → hizmet kalemi (H6, "KURŞUN-K2"); yoksa özelliğin eşlemesi.
   serviceItemId           String?                  @db.Uuid
   serviceItem             Item?                    @relation("FabricPropertyValueServiceItem", fields: [serviceItemId], references: [id], onDelete: Restrict)
@@ -9938,14 +9940,23 @@ model StationProperty {
   /// düzenlenirken modun korunmasını sağladığı için istenen davranıştır.
   mode StationPropertyMode @default(OPTIONAL)
 
-  station  Station        @relation(fields: [stationId], references: [id], onDelete: Cascade)
-  property FabricProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  /// K22 (2026-11-03): İE rota adımında bu istasyon seçilince OPTIONAL özellik ön seçili gelsin mi.
+  /// AUTO zaten hep seçili; varsayılan false = bugünkü davranış. Çözücü `helpers/station-default-targets.helper`.
+  defaultOn      Boolean @default(false)
+  /// K22: ön seçilecek değer — bu özelliğin ya da çeşit çocuğunun (`variantOf`) değeri (yazma ucunda 400).
+  /// Öncelik: müşteri varsayılanı (S3) > bu alan > değerin `isDefault`ı.
+  defaultValueId String? @db.Uuid
+
+  station      Station              @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  property     FabricProperty       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  defaultValue FabricPropertyValue? @relation("StationPropertyDefaultValue", fields: [defaultValueId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@unique([stationId, propertyId])
   @@index([propertyId])
+  @@index([defaultValueId])
   @@map("station_properties")
 }
 

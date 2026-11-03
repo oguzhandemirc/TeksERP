@@ -23,6 +23,8 @@ import { getReadSummary, type ReadSummaryState } from "./gelen-belge-okuma-ozeti
 import { assertRouteOverride } from "./gelen-belge-oto-is-emri.service";
 import { readIncomingDocFormApproval } from "./system-setting.service";
 import { WorkOrderService, type WorkOrderCreateInput } from "./workorder.service";
+import { mergeRouteDefaults, resolveStationDefaultTargets } from "./helpers/station-default-targets.helper";
+import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
 
 const IE = TERIM.terbiyeIsEmri;
 const workOrders = new WorkOrderService();
@@ -43,6 +45,7 @@ export interface FormWorkOrderInput {
   routeTemplateId: string;
   /** `plannedMachineId` D dilimiyle quickStart'a akar; burada olduğu gibi geçirilir. */
   stepPlanning?: Array<{ sequence: number; plannedMachineId?: string | null }>;
+  /** Anahtar YOKSA istasyon varsayılanları (K22) uygulanır; varsa (boş dizi dahil) istemcinin kararı, dokunulmaz. */
   targetValues?: Array<{ propertyId: string; valueId: string }>;
   notes?: string | null;
 }
@@ -63,6 +66,24 @@ export async function assertFormApprovalEnabled(): Promise<void> {
       { code: "GELEN_BELGE_FORM_APPROVAL_DISABLED" },
     );
   }
+}
+
+/**
+ * K22: rotanın istasyon varsayılanları (TEK çözücü). Bayraklar her zaman birleşir (gövdede bayrak alanı yok);
+ * değerler yalnız istemci `targetValues` göndermediyse; KAT kolon-projeksiyonu → `foldType`.
+ */
+export async function resolveFormWorkOrderTargets(
+  routeTemplateId: string,
+  customerId: string,
+  clientValues: FormWorkOrderInput["targetValues"],
+): Promise<{ targetValues: Array<{ propertyId: string; valueId: string }>; targetPropertyIds: string[]; foldType: string | null }> {
+  const steps = await prisma.routeStep.findMany({ where: { routeId: routeTemplateId }, select: { stationId: true }, orderBy: { sequence: "asc" } });
+  const merged = mergeRouteDefaults(await resolveStationDefaultTargets(steps.map((s) => s.stationId), customerId));
+  const fold = merged.find((t) => t.propertyCode === FOLD_PROPERTY_CODE && t.valueCode);
+  const targetValues = clientValues
+    ?? merged.filter((t) => t.valueId && t.propertyCode !== FOLD_PROPERTY_CODE).map((t) => ({ propertyId: t.propertyId, valueId: t.valueId! }));
+  const flags = merged.filter((t) => t.valueType === "FLAG").map((t) => t.propertyId);
+  return { targetValues, targetPropertyIds: [...new Set([...flags, ...(await flagPropertyIds(targetValues))])], foldType: fold?.valueCode ?? null };
 }
 
 /** Hedef değerlerin bayrak özellikleri (otomatik iş emri emsali: `targetPropertyIds` = çeşidin üst özelliği). */
@@ -109,15 +130,16 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
   if (!line?.rollId || !line.roll?.barcode) {
     throw AppError.conflict(`${note.noteNo} için tek kayıt topu doğmadı${line?.failReason ? `: ${line.failReason}` : ""}.`, { code: "DELIVERY_NOTE_ROLL_MISSING" });
   }
-  const targetValues = input.targetValues ?? [];
+  const targets = await resolveFormWorkOrderTargets(input.routeTemplateId, input.ownerCustomerId, input.targetValues);
   // Fazla alan (plannedMachineId) bilerek geçer: adım planı overlay'i D dilimiyle okur.
   const stepPlanning = input.stepPlanning as WorkOrderCreateInput["stepPlanning"];
   const res = await workOrders.quickStart({
     clientToken: input.clientToken,
     rollBarcodes: [line.roll.barcode],
     routeTemplateId: input.routeTemplateId,
-    targetValues,
-    targetPropertyIds: await flagPropertyIds(targetValues),
+    targetValues: targets.targetValues,
+    targetPropertyIds: targets.targetPropertyIds,
+    ...(targets.foldType ? { foldType: targets.foldType } : {}),
     ...(stepPlanning?.length ? { stepPlanning } : {}),
     ...(input.notes ? { notes: input.notes } : {}),
     sourceNoteId: noteId,

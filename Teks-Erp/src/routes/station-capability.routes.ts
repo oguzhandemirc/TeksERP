@@ -14,6 +14,8 @@ import { requireAnyPermission, requirePermission } from "../middlewares/rbac.mid
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { MOBILE_SESSION_PERMS } from "../services/work-session.service";
 import { getKursunStation, getKursunStationPriceHistory, setKursunStation } from "../services/kursun-station.service";
+import { resolveStationDefaultTargets } from "../services/helpers/station-default-targets.helper";
+import { readFilterList } from "../utils/query-parser";
 
 const service = new StationCapabilityService();
 const router = Router();
@@ -41,6 +43,9 @@ const setCapabilitiesSchema = z.object({
       z.object({
         propertyId: z.string().uuid(),
         mode: z.enum(["AUTO", "OPTIONAL", "REQUIRED"]).optional(),
+        // K22: verilmezse mevcut değer korunur (eski panel göndermez); null = varsayılan değeri kaldır.
+        defaultOn: z.boolean().optional(),
+        defaultValueId: z.string().uuid().nullable().optional(),
       }),
     )
     .optional(),
@@ -107,6 +112,45 @@ router.get(
     try {
       const stamp = await getStampContext(req);
       res.status(200).json(await service.getForSession(stamp?.stationId));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+const defaultTargetsQuery = z.object({
+  stationIds: z.array(z.string().uuid("Geçersiz istasyon kimliği")).min(1, "En az bir istasyon verin.").max(50),
+  customerId: z.string().uuid("Geçersiz müşteri kimliği").optional(),
+});
+
+/**
+ * @openapi
+ * /api/station-capabilities/default-targets:
+ *   get:
+ *     tags: [StationCapabilities]
+ *     summary: İE rota adımı ön seçimi (K22) — istasyon başına seçili gelecek özellik/değerler
+ *     description: |
+ *       TEK KAYNAK çözücü (`helpers/station-default-targets.helper`). AUTO bayrak hep; OPTIONAL yalnız "varsayılan açık";
+ *       CHOICE değeri müşteri varsayılanı > yetenek varsayılanı > değerin isDefault'u. İşaret yoksa boş liste (bugünkü).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: stationIds, required: true, schema: { type: string }, description: "virgüllü uuid listesi" }
+ *       - { in: query, name: customerId, required: false, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "[{ stationId, targets[] }]" }
+ *       400: { description: Geçersiz kimlik }
+ */
+router.get(
+  "/default-targets",
+  // İE formu (panel workorder:*) ve tablet İE formu (mobile:hizli-is-emri) okur; istasyon ekranı station:read.
+  requireAnyPermission("station:read", "workorder:read", "workorder:write", "mobile:hizli-is-emri"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const q = defaultTargetsQuery.parse({
+        stationIds: readFilterList(req.query.stationIds as string | string[] | undefined),
+        customerId: typeof req.query.customerId === "string" && req.query.customerId ? req.query.customerId : undefined,
+      });
+      res.status(200).json({ success: true, data: await resolveStationDefaultTargets(q.stationIds, q.customerId ?? null) });
     } catch (e) {
       next(e);
     }
