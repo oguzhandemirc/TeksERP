@@ -1,13 +1,14 @@
 // Belge masası kamerası (K23/K26): kamera sürekli açık; ekrana dokun / "Okut" → tam çözünürlük sayfa, "Oku" → okuma.
 // Otomatik kipte (deneysel) `useAutoCapture` ara karelerle çekimi kendisi tetikler. Kameraya erişim TEK sıradan geçer
 // (ara kare ile elle çekim üst üste binmez). Tablet yatay: kamera solda + yan panel; telefon dikey: alt çubuk.
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState, type MutableRefObject } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Button, Text } from 'react-native-paper';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { withSystemDialog } from '../../../../store/lockStore';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import { CAPTURE_QUALITY, photoSha256, pickPictureSize, type ScanPage } from '../docScan';
+import type { AutoCaptureState } from './autoCapture';
 import type { RecentWo } from './deskPlan';
 import { useAutoCapture } from './useAutoCapture';
 
@@ -25,6 +26,8 @@ export interface DeskCameraProps {
   onRetake: () => void;
   onRead: () => void;
   onError: (message: string) => void;
+  /** Otomatik çekim durumu üstte yaşar: inceleme kamerayı söker, dönüşte boş masa referansı korunur. */
+  autoState?: MutableRefObject<AutoCaptureState>;
 }
 
 /** Kamera erişim sırası: elle çekim her zaman sıraya girer; ara kare sıra doluysa atlanır (birikmez). */
@@ -89,7 +92,7 @@ export default function DeskCamera(p: DeskCameraProps) {
   const [permission, requestPermission] = useCameraPermissions();
   const s = useShutter(p.onCaptured, p.onError);
   const granted = permission?.granted === true;
-  const auto = useAutoCapture({ enabled: p.auto && granted && s.ready && !p.sending, intervalMs: p.frameMs, probe: s.probe, onCapture: () => void s.shoot() });
+  const auto = useAutoCapture({ enabled: p.auto && granted && s.ready && !p.sending, intervalMs: p.frameMs, probe: s.probe, onCapture: () => void s.shoot(), stateRef: p.autoState });
 
   const manual = () => {
     if (p.sending || s.shooting) return;

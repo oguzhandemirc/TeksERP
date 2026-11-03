@@ -4,6 +4,7 @@ import React from 'react';
 import { fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../../test/render';
 import type { ScanPage } from '../docScan';
+import { initialAutoState } from './autoCapture';
 import DeskCamera, { type DeskCameraProps } from './DeskCamera';
 
 const mockTake = jest.fn();
@@ -72,5 +73,14 @@ describe('DeskCamera', () => {
     const { s } = setup({ auto: true });
     expect(s.getByTestId('masa-otomatik-ipucu')).toBeTruthy();
     expect(s.getByTestId('masa-yeniden-tani')).toBeTruthy();
+  });
+
+  it('⭐ dışarıdan verilen otomatik durum: söküp yeniden takınca boş masa referansı korunur (yeniden kalibrasyon yok)', () => {
+    const autoState = { current: { ...initialAutoState(), baseline: 40_000, armed: false, lastCaptured: 60_000, recent: [60_000] } };
+    const a = setup({ auto: true, autoState });
+    a.s.unmount();
+    const { s } = setup({ auto: true, autoState });
+    expect(s.getByTestId('masa-otomatik-ipucu').props.children).toBe('Otomatik (deneysel): Okunan kağıdı masadan kaldırın');
+    expect(autoState.current).toMatchObject({ baseline: 40_000, lastCaptured: 60_000, recent: [] });
   });
 });
