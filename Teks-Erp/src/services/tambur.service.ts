@@ -342,6 +342,27 @@ async function assertTamburStation(stationId: string): Promise<void> {
   }
 }
 
+/** `listOpenCards` adım satırı (rotasız satırlar `ScanRoutedOpenCard`, yalnız istemci isterse). */
+type TamburOpenCard = {
+  cardId: string;
+  cardNumber: string;
+  cardBarcode: string;
+  workOrderId: string;
+  batchNumber: string;
+  stepId: string;
+  stationName: string;
+  stationCode: string;
+  openRollCount: number;
+  totalCurrentQty: number;
+  /** WO.targetItem/targetColor — Kanban kartında kumaş + renk göstermek için. */
+  itemName: string | null;
+  colorName: string | null;
+  colorHex: string | null;
+  /** Tambur'a giriş tarihi — en eski açık RollMovement.enteredAt. Liste
+   *  ekranında operatöre "ne kadar zamandır bekliyor" göstergesi için. */
+  oldestEnteredAt: Date | null;
+};
+
 export class TamburService {
   /** Kurşun Dağıtım (bypass) okuma yolu — yalnız `getTamburContext` kullanır. */
   private readonly bypassService = new KursunBypassService();
@@ -2120,29 +2141,10 @@ export class TamburService {
    * Tambur adımlarında açık top bekleyen aktif refakat kartları.
    * Mobil "kamera simülasyonu" modal'ı için.
    */
-  async listOpenCards(stationId: string | null = null, q: string | null = null, scan: { sessionStationId: string | null } | null = null): Promise<
-    ApiResponse<
-      Array<ScanRoutedOpenCard | {
-        cardId: string;
-        cardNumber: string;
-        cardBarcode: string;
-        workOrderId: string;
-        batchNumber: string;
-        stepId: string;
-        stationName: string;
-        stationCode: string;
-        openRollCount: number;
-        totalCurrentQty: number;
-        /** WO.targetItem/targetColor — Kanban kartında kumaş + renk göstermek için. */
-        itemName: string | null;
-        colorName: string | null;
-        colorHex: string | null;
-        /** Tambur'a giriş tarihi — en eski açık RollMovement.enteredAt. Liste
-         *  ekranında operatöre "ne kadar zamandır bekliyor" göstergesi için. */
-        oldestEnteredAt: Date | null;
-      }>
-    >
-  > {
+  // Rotasız satır istenmeyen çağıranlar dar tipi görür (stepId string).
+  listOpenCards(stationId?: string | null, q?: string | null, scan?: null): Promise<ApiResponse<TamburOpenCard[]>>;
+  listOpenCards(stationId: string | null, q: string | null, scan: { sessionStationId: string | null } | null): Promise<ApiResponse<Array<TamburOpenCard | ScanRoutedOpenCard>>>;
+  async listOpenCards(stationId: string | null = null, q: string | null = null, scan: { sessionStationId: string | null } | null = null): Promise<ApiResponse<Array<TamburOpenCard | ScanRoutedOpenCard>>> {
     // İster 2.8: istasyon verilirse yalnız o tamburun adımları (getPendingRolls ile aynı kapı).
     if (stationId) await assertTamburStation(stationId);
     const searchWhere = q ? stationWorkSearchWhere(q) : null;

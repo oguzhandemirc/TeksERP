@@ -124,7 +124,7 @@ const quickStartSchema = z.object({
   scanRouted: z.boolean().optional(),
 })
   .refine((d) => hasRoute(d) || d.scanRouted === true, ROUTE_REFINE_MSG)
-  .refine((d) => !(d.scanRouted === true && hasRoute(d)), { message: "Rotasız iş emrinde rota şablonu ya da adım verilemez.", path: ["scanRouted"] });
+  .refine((d) => !(d.scanRouted === true && hasRoute(d)), { message: "Rotasız açılışta rota şablonu ya da adım verilemez.", path: ["scanRouted"] });
 
 const targetPropertiesSchema = z.object({
   propertyIds: z.array(z.string().uuid()),
