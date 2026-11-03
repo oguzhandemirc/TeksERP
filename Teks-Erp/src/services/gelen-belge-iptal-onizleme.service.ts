@@ -5,11 +5,12 @@
 // sonra tx içinde YENİDEN okur — bayat önizleme kapı değildir. Engel kuralı fail-closed: belgeden doğan top
 // yalnız ham stokta (STOCK, depolu, çuval/sevk/işlem izi yok) ya da BAŞLAMAMIŞ ve SEÇİLMİŞ iş emrindeyse düşer.
 // =============================================================================
-import { DeliveryNoteStatus, type Prisma, RollStatus, WorkOrderStatus } from "@prisma/client";
+import { DeliveryNoteStatus, LabTestStatus, type Prisma, RollStatus, SwatchStatus, WorkOrderStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
+import { ACTIVE_INSPECTION_WHERE, TRACE_ROLL_ERROR_WHERE } from "./helpers/inspection-active.helper";
 import { isWorkOrderUnprocessed } from "./helpers/workorder-locks.helper";
 import { TERIM } from "../constants/terim";
 
@@ -23,6 +24,7 @@ const CLOSED_WO: readonly WorkOrderStatus[] = [WorkOrderStatus.COMPLETED, WorkOr
 export type CancelBlockerCode =
   | "ROLL_STATUS" | "ROLL_IN_SHIPMENT" | "ROLL_WAREHOUSE_MISSING" | "ROLL_OPERATION" | "ROLL_METER_READING"
   | "ROLL_SERVICE_BILLING" | "ROLL_SUBCONTRACTOR_DISPATCH" | "ROLL_KARTELA_DISPATCH" | "ROLL_RETURN" | "ROLL_CHILDREN"
+  | "ROLL_INSPECTION" | "ROLL_ERROR" | "ROLL_LAB_TEST" | "ROLL_SWATCH"
   | "ROLL_PROCESSED" | "WORK_ORDER_STARTED" | "WORK_ORDER_NOT_SELECTED";
 
 export interface CancelBlocker {
@@ -84,6 +86,11 @@ const ROLL_SELECT = {
       kartelaDispatchItems: { where: { dispatch: { cancelledAt: null } } },
       returns: { where: { cancelledAt: null } },
       children: true,
+      // RollOperation üretmeyen izler (inceleme 2026-11-03): muayene, saha hatası, lab testi, kartela kesimi.
+      inspections: { where: ACTIVE_INSPECTION_WHERE },
+      errors: { where: TRACE_ROLL_ERROR_WHERE },
+      labTests: { where: { status: { not: LabTestStatus.VOIDED }, voidedAt: null } },
+      swatchesFrom: { where: { status: { not: SwatchStatus.VOIDED } } },
     },
   },
 } satisfies Prisma.RollSelect;
@@ -126,6 +133,10 @@ function rollBlockers(r: RollRow): CancelBlocker[] {
   if (c.dispatchItems > 0) add("ROLL_SUBCONTRACTOR_DISPATCH", "top fason sevkinde — önce fason sevkini iptal edin.");
   if (c.kartelaDispatchItems > 0) add("ROLL_KARTELA_DISPATCH", "top kartela sevkinde — önce kartela sevkini iptal edin.");
   if (c.returns > 0) add("ROLL_RETURN", "topun iade kaydı var — önce iadeyi iptal edin.");
+  if (c.inspections > 0) add("ROLL_INSPECTION", "topta kalite muayenesi var — önce muayeneyi iptal edin.");
+  if (c.errors > 0) add("ROLL_ERROR", "topta hata kaydı var — önce hata kaydını geri alın.");
+  if (c.labTests > 0) add("ROLL_LAB_TEST", "topa bağlı lab testi var — önce testi iptal edin.");
+  if (c.swatchesFrom > 0) add("ROLL_SWATCH", "toptan kartela kesilmiş — önce kartelayı iptal edin.");
   if (c.children > 0) add("ROLL_CHILDREN", "toptan yeni top doğmuş (bölme/fason dönüşü) — önce o işlemi geri alın.");
   if (r.movements.some((m) => m.step && CLOSED_WO.includes(m.step.workOrder.status))) {
     add("ROLL_PROCESSED", `top tamamlanmış/devredilmiş bir ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} işlem görmüş — belgeyle düşürülemez.`);
