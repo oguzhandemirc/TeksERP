@@ -1,7 +1,7 @@
 // S1 (Gülkesim, 2026-11-03): BELGE TİPİ TANITMA — şablon önerisi (saf). Kullanıcı fotoğrafta değer kutusuna dokunup alan atar;
 // sistem değerin yanındaki BASILI ETİKETİ bulur ve anchor stratejisi üretir (aynı satırda solda → "right", üstte → "below");
 // etiket yoksa göreli konum (roi). Kimlik yazıları sınıflandırma anahtarıdır. Belgeler basılıdır (fabrika cevabı 38).
-import type { DocumentTemplate, FieldSpec, FieldType, OcrElement, OcrLine, OcrRect, OcrResult, Strategy, TableColumnSpec } from "./types";
+import { TABLE_TOTAL_SOURCE, type DocumentTemplate, type FieldSpec, type FieldType, type MeterSourcesSpec, type OcrElement, type OcrLine, type OcrRect, type OcrResult, type Strategy, type TableColumnSpec } from "./types";
 import { collectLines } from "./geometry";
 import { isNumericText } from "./labels";
 import { validateTemplate } from "./templates";
@@ -126,4 +126,40 @@ export function suggestTemplate(input: TemplateSuggestInput): TemplateSuggestion
   else if (has("toplamMetre")) t.meterSources = { total: ["toplamMetre"] };
   const v = validateTemplate(t);
   return { template: t, explain, errors: v.errors };
+}
+
+/** "Şablonu güncelle"de eski şablondan taşınabilecek yapılar (yeni öneride yoksa); ekranda kutu olarak sorulur. */
+export const UPDATE_KEEP_PARTS = ["tables", "sections"] as const;
+export type UpdateKeepPart = (typeof UPDATE_KEEP_PARTS)[number];
+
+/**
+ * Güncelleme birleşimi (TEK kaynak; önizleme de kayıt da bunu kullanır): yeniden atanan alan ezilir, atanmamış eski alan korunur;
+ * tablo/bölüm yeni öneride varsa onunki, yoksa yalnız `keep`te ise eskisi (yoksa kalkar). Metre kaynakları kalan alan/tabloya süzülür.
+ */
+export function mergeTemplateForUpdate(old: DocumentTemplate, next: DocumentTemplate, keep: readonly UpdateKeepPart[]): DocumentTemplate {
+  const fields = [...next.fields, ...(old.fields ?? []).filter((f) => !next.fields.some((n) => n.key === f.key))];
+  const out: DocumentTemplate = { ...old, ...next, fields, identifiers: { ...old.identifiers, ...next.identifiers } };
+  delete out.tables;
+  delete out.sections;
+  delete out.meterSources;
+  const tables = next.tables ?? (keep.includes("tables") ? old.tables : undefined);
+  if (tables) out.tables = tables;
+  const sections = next.sections ?? (keep.includes("sections") ? old.sections : undefined);
+  if (sections) {
+    out.sections = { ...sections };
+    if (!tables) delete out.sections.table;
+  }
+  const hasField = (k: string) => fields.some((f) => f.key === k);
+  const hasTotals = !!tables?.some((t) => t.totals);
+  const ms: Record<string, string[]> = {};
+  for (const [k, v] of Object.entries({ ...(old.meterSources ?? {}), ...(next.meterSources ?? {}) })) {
+    const kept = (v ?? []).filter((s) => (s === TABLE_TOTAL_SOURCE ? hasTotals : hasField(s)));
+    if (kept.length) ms[k] = kept;
+  }
+  if (Object.keys(ms).length) out.meterSources = ms as MeterSourcesSpec;
+  const bc = [...(next.batchNoCandidates ?? []), ...(old.batchNoCandidates ?? [])].filter((c) => hasField(c.field));
+  const cands = bc.filter((c, i) => bc.findIndex((x) => x.field === c.field) === i);
+  if (cands.length) out.batchNoCandidates = cands;
+  else delete out.batchNoCandidates;
+  return out;
 }

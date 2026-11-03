@@ -7,10 +7,10 @@
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { OcrResultSchema } from "../lib/gelen-belge/okuma-istemcisi";
-import { extractDocument, suggestTemplate, type OcrRect, type OcrResult, type TemplateSuggestInput } from "../lib/gelen-belge/motor";
+import { extractDocument, mergeTemplateForUpdate, suggestTemplate, validateTemplate, type DocumentTemplate, type OcrRect, type OcrResult, type TemplateSuggestInput, type UpdateKeepPart } from "../lib/gelen-belge/motor";
 import { rectToPhotoFrame } from "../lib/gelen-belge/taslak-foto-cerceve";
 import { draftFromExtraction } from "../lib/gelen-belge/taslak";
-import { userTemplateCode } from "./gelen-belge-ozel-sablon.service";
+import { getUserTemplate, userTemplateCode } from "./gelen-belge-ozel-sablon.service";
 
 export interface ScanWord {
   text: string;
@@ -47,19 +47,29 @@ export async function getScanWords(scanId: string) {
   return { imageWidth: ocr.imageWidth, imageHeight: ocr.imageHeight, rotation: ocr.rotation ?? 0, words };
 }
 
-export type SuggestFromScanInput = Omit<TemplateSuggestInput, "ocr" | "code"> & { scanId: string };
+export type SuggestFromScanInput = Omit<TemplateSuggestInput, "ocr" | "code"> & { scanId: string; base?: { code: string; keep: UpdateKeepPart[] } };
 
 /** Atamalardan şablon önerisi + aynı taramada önizleme (yalnız bu şablonla sınıflandırma; eşik altı → tanınmadı). */
 export async function suggestFromScan(input: SuggestFromScanInput) {
   const ocr = await scanOcr(input.scanId);
-  const code = userTemplateCode(input.name);
-  const s = suggestTemplate({ ...input, code, ocr });
+  // "Şablonu güncelle": önizleme KAYDEDİLECEK birleşik şablonla koşar (eski şablon + yeni atamalar); istemci bunu aynen kaydeder.
+  const old = input.base ? await getUserTemplate(input.base.code) : null;
+  const code = old ? old.code : userTemplateCode(input.name);
+  const { base, ...rest } = input;
+  const s = suggestTemplate({ ...rest, code, ocr });
   if (s.errors.length) return { template: s.template, explain: s.explain, errors: s.errors, preview: null };
-  const doc = extractDocument(ocr, [s.template], null);
-  const draft = draftFromExtraction(doc, { templates: [s.template] });
+  let template = s.template;
+  if (old && base) {
+    template = mergeTemplateForUpdate({ ...(old.template as unknown as DocumentTemplate), id: old.code, version: old.version }, s.template, base.keep);
+    template = { ...template, id: code, name: input.name, version: old.version };
+    const v = validateTemplate(template);
+    if (!v.ok) return { template, explain: s.explain, errors: v.errors, preview: null };
+  }
+  const doc = extractDocument(ocr, [template], null);
+  const draft = draftFromExtraction(doc, { templates: [template] });
   const region = doc.regions[0];
   return {
-    template: s.template,
+    template,
     explain: s.explain,
     errors: [] as string[],
     preview: {

@@ -22,6 +22,8 @@ export interface ScanWords {
 }
 
 export type TemplateJson = Record<string, unknown>;
+/** Güncellemede eski şablondan taşınabilen yapılar (backend `UPDATE_KEEP_PARTS`). */
+export type TemplateKeepPart = 'tables' | 'sections';
 
 /** `POST /gelen-belge/sablonlar/oneri` gövdesi (backend `SuggestBody` aynası — strictObject). */
 export interface SuggestBody {
@@ -31,6 +33,8 @@ export interface SuggestBody {
   identifiers: string[];
   table?: { columns: { key: string; header: string }[]; totalsLabel?: string | null };
   sectionStartLabel?: string | null;
+  /** Güncelle kipi: sunucu bu kullanıcı şablonuyla birleştirip önizler; dönen `template` aynen kaydedilir. */
+  base?: { code: string; keep: TemplateKeepPart[] };
 }
 
 export interface SuggestPreview {

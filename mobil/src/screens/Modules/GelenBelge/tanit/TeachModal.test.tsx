@@ -2,6 +2,7 @@
 // bayat önizleme kaydı kapatır; telefonda / izinsiz / eski sunucuda giriş yok.
 import React from 'react';
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderWithPaper } from '../../../../test/render';
 import { useAuthStore } from '../../../../store/authStore';
 import type { ScanWord, ScanWords } from '../../../../types/inboundDocTeach';
@@ -160,7 +161,7 @@ describe('TeachEntry + TeachModal (tablet)', () => {
 });
 
 describe('TeachEntry + TeachModal — güncelle ve görünürlük', () => {
-  it('kullanıcı şablonuyla okunmuş belge → "Şablonu güncelle": eski kimlik hazır seçili, PUT expectedVersion + birleşim', async () => {
+  it('kullanıcı şablonuyla okunmuş belge → "Şablonu güncelle": eski kimlik hazır seçili, önizleme base ile, PUT önizlenen şablonu aynen gönderir', async () => {
     const r = renderWithPaper(<TeachEntry detail={detail('t-u1')} localPages={LOCAL} />);
     await flush();
     expect(r.queryByTestId('tanit-taninmadi')).toBeNull();
@@ -175,16 +176,61 @@ describe('TeachEntry + TeachModal — güncelle ve görünürlük', () => {
     await press(r.getByTestId('tanit-onizle'));
     await flush();
     expect(mockApi.suggestTemplate.mock.calls[0][0].identifiers[0]).toBe('ESKİ KİMLİK');
+    expect(mockApi.suggestTemplate.mock.calls[0][0].base).toEqual({ code: 'u-gulecsoy', keep: [] });
+    expect(r.getByTestId('tanit-eski-alanlar')).toHaveTextContent(/tarih/);
     await press(r.getByTestId('tanit-kaydet'));
     await flush();
     expect(mockApi.createUserTemplate).not.toHaveBeenCalled();
-    expect(mockApi.updateUserTemplate).toHaveBeenCalledWith('u-gulecsoy', {
-      expectedVersion: 2,
-      name: 'Güleçsoy',
-      template: { fields: [{ key: 'partiNo' }, { key: 'tarih' }], identifiers: { keywords: ['GÜLEÇSOY BOYA'] } },
-    });
+    expect(mockApi.updateUserTemplate).toHaveBeenCalledWith('u-gulecsoy', { expectedVersion: 2, name: 'Güleçsoy', template: SUGGEST.template });
   });
 
+});
+
+describe('TeachEntry + TeachModal — güncelle kipi (s1b inceleme)', () => {
+  it('eski tablo/bölüm varsayılan korunur; kutu kaldırılınca önizleme gövdesinin keep listesinden düşer', async () => {
+    mockApi.getUserTemplate.mockResolvedValue({ ...USER_T, template: { ...USER_T.template, tables: [{ key: 'toplar' }], sections: { startLabels: ['X'], fields: ['tarih'] } }, versions: [] });
+    const r = renderWithPaper(<TeachEntry detail={detail('t-u1')} localPages={LOCAL} />);
+    await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Şablonu güncelle/));
+    await openNew(r);
+    expect(r.getByTestId('tanit-eski-tables')).toBeTruthy();
+    await press(r.getByTestId('tanit-eski-sections'));
+    await press(r.getByTestId('tanit-kutu-6'));
+    await press(r.getByTestId('tanit-alan-partiNo'));
+    await press(r.getByTestId('tanit-onizle'));
+    await flush();
+    expect(mockApi.suggestTemplate.mock.calls[0][0].base).toEqual({ code: 'u-gulecsoy', keep: ['tables'] });
+  });
+
+  it('⭐ aynı tablette ikinci güncelleme yeni sürümle gider (kayıt şablon önbelleğini tazeler; s1b inceleme)', async () => {
+    // Uygulamadaki gibi önbellek kapanışta hemen silinmez (varsayılan gcTime) — bayat sürüm bu yüzden görünürdü.
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 60_000 } } });
+    // Sunucu gibi: PUT sürümü artırır, sonraki GET yeni sürümü döner.
+    mockApi.updateUserTemplate.mockImplementation(async (_code: string, b: { expectedVersion: number }) => {
+      mockApi.getUserTemplate.mockResolvedValue({ ...USER_T, version: b.expectedVersion + 1, versions: [] });
+      return { ...USER_T, version: b.expectedVersion + 1 };
+    });
+    const r = renderWithPaper(<QueryClientProvider client={qc}><TeachEntry detail={detail('t-u1')} localPages={LOCAL} /></QueryClientProvider>);
+    const round = async () => {
+      await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Şablonu güncelle/));
+      await openNew(r);
+      expect(r.getByTestId('tanit-baslik')).toHaveTextContent(/Şablonu güncelle/);
+      await press(r.getByTestId('tanit-kutu-6'));
+      await press(r.getByTestId('tanit-alan-partiNo'));
+      await press(r.getByTestId('tanit-onizle'));
+      await flush();
+      await press(r.getByTestId('tanit-kaydet'));
+      await flush();
+      await waitFor(() => expect(r.queryByTestId('tanit-kutu-6')).toBeNull());
+    };
+    await round();
+    await round();
+    expect(mockApi.updateUserTemplate.mock.calls.map((c) => c[1].expectedVersion)).toEqual([2, 3]);
+    qc.clear();
+  });
+
+});
+
+describe('TeachEntry + TeachModal — giriş ve görünürlük', () => {
   it('tanınmadı → "Bu belge hangi tip?" listeden seç → o şablon bu belgeyle güncellenir', async () => {
     const r = renderWithPaper(<TeachEntry detail={detail(null)} localPages={LOCAL} />);
     await press(await r.findByTestId('tanit-listeden'));

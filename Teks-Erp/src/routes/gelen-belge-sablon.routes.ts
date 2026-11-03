@@ -7,6 +7,7 @@ import { z } from "zod";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { createUserTemplate, getUserTemplate, listUserTemplates, updateUserTemplate } from "../services/gelen-belge-ozel-sablon.service";
 import { getScanWords, suggestFromScan } from "../services/gelen-belge-tanitma.service";
+import { UPDATE_KEEP_PARTS } from "../lib/gelen-belge/motor";
 
 const router = Router();
 
@@ -41,6 +42,8 @@ const SuggestBody = z.strictObject({
     totalsLabel: z.string().trim().max(40).nullable().optional(),
   }).optional(),
   sectionStartLabel: z.string().trim().max(40).nullable().optional(),
+  // Güncelle kipi: önizleme bu kullanıcı şablonuyla birleşik koşar; `keep` = yeni öneride yoksa eskisinden taşınacak yapılar.
+  base: z.strictObject({ code: UserCode, keep: z.array(z.enum(UPDATE_KEEP_PARTS)).max(UPDATE_KEEP_PARTS.length) }).optional(),
 });
 
 /**

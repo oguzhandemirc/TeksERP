@@ -4,15 +4,35 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
-  addIdentifier, assignColumn, assignField, assignTotals, clearColumn, clearField, COLUMN_OPTIONS, FIELD_OPTIONS, setRepeats, textOf,
-  toggleIdentifier, toggleSectionField, type TeachState,
+  addIdentifier, assignColumn, assignField, assignTotals, clearColumn, clearField, COLUMN_OPTIONS, FIELD_OPTIONS, keptOldFields, OLD_PARTS, oldParts, setRepeats, textOf,
+  toggleIdentifier, toggleKeepOld, toggleSectionField, type TeachState,
 } from "./teachDraft";
-import type { ScanWord } from "./types";
+import type { ScanWord, TemplateJson } from "./types";
 
 interface Props {
   state: TeachState;
   words: readonly ScanWord[];
   onChange: (fn: (s: TeachState) => TeachState) => void;
+  /** "Şablonu güncelle" kipinde eski şablon (korunacakları gösterir). */
+  old?: TemplateJson | null;
+}
+
+/** Güncelle kipi: eski şablondan neyin taşınacağı açıkça görünür; tablo/bölüm kutusu kaldırılırsa kaydedilen şablondan da kalkar. */
+function KeepOld({ state, old, onChange }: { state: TeachState; old: TemplateJson; onChange: Props["onChange"] }) {
+  const parts = OLD_PARTS.filter((p) => oldParts(old).includes(p.key));
+  const fields = keptOldFields(old, state);
+  return (
+    <Section title="Eski şablondan korunacak" testId="teach-keep-old">
+      {fields.length > 0 && <p className="text-xs text-muted-foreground" data-testid="teach-keep-old-fields">Yeniden atamadığınız alanlar aynen kalır: {fields.join(", ")}</p>}
+      {parts.map((p) => (
+        <label key={p.key} className="flex items-center gap-2 text-sm">
+          <Checkbox checked={state.keepOld.includes(p.key)} onCheckedChange={() => onChange((s) => toggleKeepOld(s, p.key))} aria-label={`Eski ${p.label} korunsun`} data-testid={`teach-keep-old-${p.key}`} />
+          {p.label} korunsun <span className="text-xs text-muted-foreground">({p.hint})</span>
+        </label>
+      ))}
+      <p className="text-xs text-muted-foreground">Önizleme, kaydedilecek şablonun tam hâlidir.</p>
+    </Section>
+  );
 }
 
 function Section({ title, children, testId }: { title: string; children: React.ReactNode; testId?: string }) {
@@ -46,11 +66,12 @@ function Assigned({ state, words, onChange }: Props) {
   );
 }
 
-export function TeachPanel({ state, words, onChange }: Props) {
+export function TeachPanel({ state, words, onChange, old }: Props) {
   const sel = textOf(words, state.selected);
   const has = state.selected.length > 0;
   return (
     <div className="flex min-w-0 flex-col gap-3" data-testid="teach-panel">
+      {old && <KeepOld state={state} old={old} onChange={onChange} />}
       <label className="space-y-1 text-sm">
         <span className="text-xs font-medium text-muted-foreground">Belge tipinin adı</span>
         <Input value={state.name} maxLength={80} placeholder="ör. Güleçsoy çeki listesi" onChange={(e) => { const name = e.target.value; onChange((s) => ({ ...s, name })); }} data-testid="teach-name" />
