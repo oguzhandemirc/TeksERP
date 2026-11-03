@@ -776,6 +776,12 @@ export interface RollCancelTxInput {
   cancelReasonText: string | null;
   cancelReasonCode: string | null;
 }
+/** Topun doğduğu gelen belgenin durumu — geri alma yüklemi (`deliveryNoteStatus` sinyali) okur. */
+async function noteStatusOf(rollId: string) {
+  const line = await prisma.customerDeliveryNoteLine.findUnique({ where: { rollId }, select: { note: { select: { status: true } } } });
+  return line?.note.status ?? null;
+}
+
 export async function cancelRollRecordTx(tx: Prisma.TransactionClient, p: RollCancelTxInput) {
   const { existing, isScrap, userId, cancelReasonText, cancelReasonCode } = p;
   const id = existing.id;
@@ -3007,13 +3013,14 @@ export class InventoryService {
     roll: { id: string; status: RollStatus; preCancelStatus: RollStatus | null; batchId: string | null; sackId: string | null; shipmentId: string | null; currentStepId: string | null; cancelReasonCode: string | null },
   ): Promise<{ canRestore: boolean; restoreBlockReason: string | null } | null> {
     if (roll.status !== RollStatus.CANCELLED) return null;
-    const [movementCount, operationCount, childCount, dispatchItemCount, kartelaItemCount] =
+    const [movementCount, operationCount, childCount, dispatchItemCount, kartelaItemCount, deliveryNoteStatus] =
       await Promise.all([
         prisma.rollMovement.count({ where: { ...ACTIVE_MOVEMENT, rollId: roll.id } }),
         prisma.rollOperation.count({ where: { ...ACTIVE_OPERATION, rollId: roll.id } }),
         prisma.roll.count({ where: { parentRollId: roll.id } }),
         prisma.subcontractorDispatchItem.count({ where: { rollId: roll.id } }),
         prisma.kartelaDispatchItem.count({ where: { rollId: roll.id } }),
+        noteStatusOf(roll.id),
       ]);
     // Ekran ile uç AYNI yüklemi çağırır — kopyalanırsa arayüz "Geri Al" çizerken
     // uç 409 döner ve operatör çıkmaza girer.
@@ -3030,6 +3037,7 @@ export class InventoryService {
       childCount,
       dispatchItemCount,
       kartelaItemCount,
+      deliveryNoteStatus,
     });
     return { canRestore: restoreBlockReason === null, restoreBlockReason };
   }
@@ -4065,13 +4073,14 @@ export class InventoryService {
     await assertRollsRevivable(prisma, [id]);
 
     // Sinyaller tek turda toplanır; yüklem hiçbir şey okumaz.
-    const [movementCount, operationCount, childCount, dispatchItemCount, kartelaItemCount] =
+    const [movementCount, operationCount, childCount, dispatchItemCount, kartelaItemCount, deliveryNoteStatus] =
       await Promise.all([
         prisma.rollMovement.count({ where: { ...ACTIVE_MOVEMENT, rollId: id } }),
         prisma.rollOperation.count({ where: { ...ACTIVE_OPERATION, rollId: id } }),
         prisma.roll.count({ where: { parentRollId: id } }),
         prisma.subcontractorDispatchItem.count({ where: { rollId: id } }),
         prisma.kartelaDispatchItem.count({ where: { rollId: id } }),
+        noteStatusOf(id),
       ]);
 
     const blockReason = resolveRollRestoreBlockReason({
@@ -4087,6 +4096,7 @@ export class InventoryService {
       childCount,
       dispatchItemCount,
       kartelaItemCount,
+      deliveryNoteStatus,
     });
     if (blockReason) {
       throw AppError.conflict(blockReason, { code: "RESTORE_BLOCKED" });

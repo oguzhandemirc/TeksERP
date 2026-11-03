@@ -33,7 +33,7 @@
 // docstring'inde yazılı.
 // =============================================================================
 
-import { RollStatus } from "@prisma/client";
+import { DeliveryNoteStatus, RollStatus } from "@prisma/client";
 import {
   TAMBUR_UNDO_CANCEL_CODE,
   FASON_RECEIPT_CANCEL_CODE,
@@ -68,6 +68,8 @@ export interface RollRestoreSignals {
    * buradan tanınır — kararın izi kaydın KENDİ satırında.
    */
   cancelReasonCode: string | null;
+  /** Topun doğduğu gelen belgenin durumu (belgesiz top: null). Tek tek iptal edilmiş top belge iptalinde SKIP'tir — kendi kodu taşımaz. */
+  deliveryNoteStatus: DeliveryNoteStatus | null;
 }
 
 /**
@@ -152,6 +154,11 @@ export function resolveRollRestoreBlockReason(s: RollRestoreSignals): string | n
   // SEKİZİNCİ SİNYAL (K15): belge iptaliyle düşen top dirilirse iptal edilmiş belgenin malı stokta görünür.
   if (s.cancelReasonCode === DELIVERY_NOTE_CANCEL_CODE) {
     return "Bu top gelen belgenin iptaliyle düşmüş — geri alınamaz. Mal gerçekten geldiyse belgeyi yeniden girip onaylayın.";
+  }
+  // DOKUZUNCU SİNYAL (inceleme 2026-11-03): belge iptalinden ÖNCE tek tek iptal edilmiş top sekizinci sinyali taşımaz;
+  // belge CANCELLED iken dirilirse iptal edilmiş belgenin malı stokta görünür (yeniden girilen kağıtla iki kez).
+  if (s.deliveryNoteStatus === DeliveryNoteStatus.CANCELLED) {
+    return "Topun doğduğu gelen belge iptal edilmiş — geri alınamaz. Mal gerçekten geldiyse belgeyi yeniden girip onaylayın.";
   }
   return null;
 }

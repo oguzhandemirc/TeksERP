@@ -51,6 +51,22 @@ export interface ConsumableItemField {
   consumableItemId?: string | null;
 }
 
+/** SEÇİM tipli özelliğin değer satırı — istemci sözleşmesi (DÜZ, nested write DEĞİL). */
+export interface PropertyValueInput extends ConsumableItemField {
+  code: string;
+  name: string;
+  sortOrder?: number;
+  isActive?: boolean;
+  /** Gramaj kademesi → hizmet kalemi (H6). `undefined` = dokunma, `null` = eşlemeyi kaldır. */
+  serviceItemId?: string | null;
+  /** Brode deseni vuruş sayısı (VURUŞ fiyat birimi). `undefined` = dokunma, `null` = kaldır. */
+  stitchCount?: number | null;
+  /** Kurşun gramajı gr/m (ondalık metin). `undefined` = dokunma, `null` = kaldır. */
+  amount?: string | null;
+  /** Çeşit başına tek varsayılan. `undefined` = dokunma. */
+  isDefault?: boolean;
+}
+
 /** Gövdedeki `consumableItemId`: undefined = dokunma, ""/null = kaldır; başka tip 400. */
 export function readConsumableItemIdField(raw: unknown, code: string): string | null | undefined {
   if (raw === undefined) return undefined;

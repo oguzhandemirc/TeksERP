@@ -40,6 +40,14 @@ export interface FabricProperty {
    * "Kurşunlu"). Değer basılınca ana bayrak da topa yazılır. Bayrakta hep null.
    */
   variantOfPropertyId?: string | null;
+  /** Ebeveyn bayrak (K21; eski backend göndermez). */
+  variantOf?: { id: string; code: string; name: string } | null;
+  /** Bu bayrağın çeşidi (şemada en fazla bir; eski backend göndermez). */
+  variant?: { id: string; code: string; name: string; isActive: boolean } | null;
+  /** Yalnız `sortBy=hierarchy` yanıtında: 1 = çeşit satırı (girintili). */
+  listLevel?: 0 | 1;
+  /** Yalnız `sortBy=hierarchy`: süzgece uymadı, eşleşen çeşidin bağlamı (soluk). */
+  listContext?: boolean;
   /** İşlem → hizmet kalemi eşlemesi (H6): değerde eşleme yoksa bu, o da yoksa ana bayrağınki. */
   serviceItemId?: string | null;
   /** SEÇİM tipliyse izin verilen değerler; BAYRAK'ta boş. */

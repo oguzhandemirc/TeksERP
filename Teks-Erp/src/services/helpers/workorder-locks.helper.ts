@@ -38,6 +38,7 @@ import { STEP_CAPABILITY_SELECT, stepCanApplyColor } from "./step-capability.hel
 import { ACTIVE_TARGET_PROPERTY } from "./property-revoke.helper";
 import { ACTIVE_MOVEMENT } from "./roll-movement.helper";
 import { ACTIVE_OPERATION } from "./roll-operation.helper";
+import { TRACE_ROLL_ERROR_WHERE } from "./inspection-active.helper";
 
 /**
  * WorkOrder satırını write-kilitle — fason completion yollarını serileştirir.
@@ -71,7 +72,7 @@ export async function isWorkOrderUntouched(db: Db, workOrderId: string, status: 
 /**
  * "İşlem görmemiş" iş emri (K15 gelen belge iptali) — tablet yükleminden GENİŞ: top bağlamak ilk adımı ACTIVE,
  * iş emrini IN_PROGRESS yapar ama malı işlemez. İşlem izi = tamamlanan/atlanan adım, adımdan çıkış, işlem/okuma/
- * fatura/sapma kaydı, adımda doğan top, fason sevki/kabulü. Hiçbiri yoksa iptal topları ham stoka geri koyar.
+ * fatura/sapma kaydı, adımda tespit edilen hata, adımda doğan top, fason sevki/kabulü. Hiçbiri yoksa iptal topları ham stoka geri koyar.
  */
 export async function isWorkOrderUnprocessed(db: Db, workOrderId: string, status: string): Promise<boolean> {
   if (status !== "PLANNED" && status !== "IN_PROGRESS") return false;
@@ -86,6 +87,7 @@ export async function isWorkOrderUnprocessed(db: Db, workOrderId: string, status
           meterReadings: { where: { revokedAt: null } },
           serviceBillingLinks: { where: { revokedAt: null } },
           variances: true,
+          detectedErrors: { where: TRACE_ROLL_ERROR_WHERE },
           // Bağlama da `producedInStepId` yazar: adımda bekleyen top iz değildir; doğan çocuk ya da adımı terk eden top izdir.
           producedRolls: { where: { OR: [{ parentRollId: { not: null } }, { currentStepId: null }] } },
           dispatches: { where: { cancelledAt: null } },
