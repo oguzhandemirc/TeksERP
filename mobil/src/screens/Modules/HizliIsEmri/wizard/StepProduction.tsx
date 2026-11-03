@@ -6,6 +6,7 @@ import PickerModal from '../../../../components/PickerModal';
 import ColorSelectField from '../../../../components/ColorSelectField';
 import PropertyPickerModal from './PropertyPickerModal';
 import RouteStepsModal from '../RouteStepsModal';
+import { SCAN_ROUTE_HINT } from '../scanRouteOption';
 import type { useQuickWorkOrder } from '../useQuickWorkOrder';
 import { colors, spacing, radius } from '../../../../theme';
 import { TERIM } from '../../../../lib/terim';
@@ -89,6 +90,13 @@ export default function StepProduction({ wo, showErrors = false }: Props) {
       </View>
 
       {routeIssue ? <Text style={styles.errorText}>{routeIssue.message}</Text> : null}
+
+      {/* K29 S15b: rotasız — adım şeridi yerine ne olacağı. */}
+      {wo.scanRouted ? (
+        <Text style={styles.stepStrip} testID="hizli-ie-rotasiz-ipucu">
+          {SCAN_ROUTE_HINT}
+        </Text>
+      ) : null}
 
       {/* Adım şeridi — ⓘ açmadan ne olacağı görünsün. */}
       {wo.routeStepNames.length > 0 ? (

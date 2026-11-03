@@ -29,6 +29,8 @@ import {
 } from './scanClassify';
 import { buildReworkPlan } from './reworkPayload';
 import { collectQuickWoIssues, parsePositiveNumber } from './quickWorkOrderIssues';
+import { isScanRouteId, routeBodyOf, scanRouteDefault, withScanRouteChip, withScanRouteOption } from './scanRouteOption';
+import { useScanRouteMode } from '../../../hooks/useFeatureFlags';
 import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
 import { scanMatchOf, type ScanMatchExtras } from '../../../components/customerCode/customerCodeLogic';
 import { TERIM } from '../../../lib/terim';
@@ -276,15 +278,20 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
     staleTime: 10 * 60 * 1000,
   });
 
+  // K29 S15b: Okutmayla kipinde "Sahada belirlenir (rotasız)" başta (sıralıda liste aynen).
+  const scanMode = useScanRouteMode();
   const routeOptions = useMemo(
     () =>
-      (routesQuery.data?.data ?? []).map((r) => ({
-        value: r.id,
-        label: r.name,
-        sublabel: r.code ?? undefined,
-        badge: r.isFavorite ? { text: '★', color: colors.warning } : undefined,
-      })),
-    [routesQuery.data],
+      withScanRouteOption(
+        (routesQuery.data?.data ?? []).map((r) => ({
+          value: r.id,
+          label: r.name,
+          sublabel: r.code ?? undefined,
+          badge: r.isFavorite ? { text: '★', color: colors.warning } : undefined,
+        })),
+        scanMode,
+      ),
+    [routesQuery.data, scanMode],
   );
 
   const routeLabel = routeOptions.find((o) => o.value === routeTemplateId)?.label ?? null;
@@ -457,8 +464,8 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
     for (const r of all) {
       if (r.isFavorite && r.id !== last?.id) out.push({ id: r.id, name: r.name, isLast: false, isFav: true });
     }
-    return out.slice(0, 4);
-  }, [routesQuery.data, lastRouteTemplateId]);
+    return withScanRouteChip(out.slice(0, 4), scanMode);
+  }, [routesQuery.data, lastRouteTemplateId, scanMode]);
 
 
   // Rota değişince o rotanın UYGULAYAMADIĞI hedefleri AYNI ANDA düşür — alan
@@ -519,6 +526,20 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
       setRouteTemplateId(lastRouteTemplateId);
     }
   }, [routesQuery.data, lastRouteTemplateId, routeTemplateId, initialRouteTemplateId, chooseRoute]);
+
+  // K29 S15b: Okutmayla kipinde varsayılan rotasız (kısayol rotası ya da operatör seçimi ezilmez).
+  const userPickedRef = useRef(false);
+  useEffect(() => {
+    const d = scanRouteDefault({ scanMode, userPicked: userPickedRef.current, hasInitialRoute: !!initialRouteTemplateId, current: routeTemplateId });
+    if (d) chooseRoute(d.next);
+  }, [scanMode, routeTemplateId, initialRouteTemplateId, chooseRoute]);
+  const pickRoute = useCallback(
+    (id: string | null) => {
+      userPickedRef.current = true;
+      chooseRoute(id);
+    },
+    [chooseRoute],
+  );
 
   // Sipariş bağlıyken renk düşürülemez; rota onu uygulayamıyorsa operatöre rotayı
   // değiştirmesini söyle. (Özellikler seçimde temizlendiği için burada dal yok;
@@ -775,7 +796,8 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       // Son kullanılan rotayı cihaza yaz (sonraki açılışta hazır gelsin).
-      void setLastRouteTemplateId(routeTemplateId);
+      // Rotasız seçim cihaz hafızasına yazılmaz (sözde kimlik; kip değişince geçersiz).
+      if (!isScanRouteId(routeTemplateId)) void setLastRouteTemplateId(routeTemplateId);
       // KİŞİSEL HAFIZA (2026-08-09): kategori → en son seçilen fason firma.
       // ⚠️ Tercih KAPALIYKEN de yazılır — anahtarı sonra çeviren kullanıcı boş
       // bir hafızayla karşılaşmasın. Rota bazlı DEĞİL kategori bazlı: aynı
@@ -912,7 +934,7 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
     const payload: QuickStartRequest = {
       clientToken: attempt.token(),
       rollBarcodes: scanned.map((s) => s.barcode),
-      routeTemplateId,
+      ...routeBodyOf(routeTemplateId),
       targetColorId: canApplyColor ? targetColorId : null,
       width: parsePositiveNumber(width),
       foldType,
@@ -965,6 +987,8 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
     setLineTargets({});
     // Son rotayı koru (saha kolaylığı; kısayoldan açıldıysa kısayol rotası); gerisini temizle.
     setRouteTemplateId(initialRouteTemplateId ?? lastRouteTemplateId);
+    userPickedRef.current = false; // Okutmayla kipinde varsayılan (rotasız) yeniden uygulanır
+
     setTargetColorId(null);
     setWidth('');
     setOrderWidth(null);
@@ -1018,7 +1042,9 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
     routesQuery,
     selectedRoute,
     routeStepNames,
-    chooseRoute,
+    chooseRoute: pickRoute,
+    /** K29 S15b: rotasız seçili (adımlar sahada). */
+    scanRouted: isScanRouteId(routeTemplateId),
     // hedefler
     targetColorId,
     setTargetColorId,
