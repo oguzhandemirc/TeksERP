@@ -33,6 +33,8 @@ export interface PaketSatiri {
 export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   { anahtar: "kursun.meterCapture", alan: "kursunMeterCapture", hedef: "OUT", dilim: "H1" },
   { anahtar: "kursun.meterStockMode", alan: "kursunMeterStockMode", hedef: "RECORD", dilim: "H1b" },
+  // K16 (fabrika cevabı 21-ek, 2026-11-03): iş yalnız atanan kurşun makinesinin listesinde; başka makine uyarıyla alır.
+  { anahtar: "kursun.machineAssignMode", alan: "kursunMachineAssignMode", hedef: "ASSIGNED_ONLY_WARN", dilim: "S3" },
   { anahtar: "kursun.meterVarianceThresholdM", alan: "kursunMeterVarianceThresholdM", hedef: 2, dilim: "H2" },
   { anahtar: "kursun.meterVarianceThresholdPct", alan: "kursunMeterVarianceThresholdPct", hedef: 1, dilim: "H2" },
   { anahtar: "kursun.meterVarianceBasis", alan: "kursunMeterVarianceBasis", hedef: "DECLARED_IN", dilim: "H2" },
@@ -57,6 +59,8 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   // DALGA4 S7: Gülkesim brodeyi bugün metreyle fiyatlar (açık beyan; adet/vuruş panelden seçilir).
   { anahtar: "finance.serviceBilling.brodeUnit", alan: "financeServiceBillingBrodeUnit", hedef: "METER", dilim: "EKS-E2" },
   { anahtar: "finance.serviceBilling.priceDate", alan: "financeServiceBillingPriceDate", hedef: "SERVICE_DAY", dilim: "H7" },
+  // K14 (kullanıcı kararı 2026-11-02): gram fiyatı işin yapıldığı gündeki sürümden (açık beyan; varsayılanla aynı).
+  { anahtar: "finance.serviceBilling.kursunGramPriceBasis", alan: "financeKursunGramPriceBasis", hedef: "SERVICE_DATE", dilim: "K14" },
   { anahtar: "finance.masraf.kategoriOnerisi", alan: "financeExpenseCategorySuggestions", hedef: "ON", dilim: "D4-H1" },
   // DALGA4 §12.1: Gülkesim masrafı makineye/işe bağlar (isteğe bağlı); kapanmış iş emrine bağ serbest (varsayılanla aynı).
   { anahtar: "finance.masraf.bagAlani", alan: "financeExpenseAllocationField", hedef: "OPTIONAL", dilim: "D4-H3" },

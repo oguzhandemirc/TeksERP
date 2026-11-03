@@ -50,6 +50,8 @@ export interface CariRow {
   /** oie-a: müşteriye özel kurşun gram fiyatı; null = istasyonunki. Eski backend göndermez (undefined → alan çizilmez). */
   kursunGramPrice?: string | number | null;
   kursunGramCurrency?: Currency | null;
+  /** S3: müşterinin varsayılan kurşun gramajı (gramaj değeri kimliği); null = istasyonunki. Eski backend göndermez. */
+  kursunDefaultValueId?: string | null;
   /** D4-V1k: KDV / tevkifat geçersiz kılması; null = genel ayar. Eski backend göndermez (undefined → alan çizilmez). */
   vatRate?: string | number | null;
   withholdingEnabled?: boolean | null;
@@ -443,6 +445,8 @@ export interface CariUpdateInput {
   /** oie-a: müşteriye özel kurşun gram fiyatı (ondalık STRING) + para birimi; ikisi birlikte, `null` = istasyonunki. */
   kursunGramPrice?: string | null;
   kursunGramCurrency?: Currency | null;
+  /** S3: `null` → istasyon varsayılanı. Yalnız müşteri carisinde ve backend alanı okuyorsa gönderilir. */
+  kursunDefaultValueId?: string | null;
   vatRate?: string | null;
   withholdingEnabled?: boolean | null;
   withholdingNumerator?: number | null;

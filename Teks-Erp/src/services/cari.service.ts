@@ -28,6 +28,7 @@ import { SERVICE_BILLING_TRIGGERS, type ServiceBillingTrigger } from "./system-s
 import { ACTIVE_HOLD_INCLUDE, HELD_CARI_ACCOUNT_WHERE, holdScopes, reasonLabel, type CariHoldScope } from "./helpers/cari-hold.helper";
 import { CARI_TAX_SELECT } from "./helpers/invoice-tax-defaults.helper";
 import { readKursunGramPrice } from "./helpers/kursun-gram-price-input.helper";
+import { assertKursunGramajValue } from "./helpers/kursun-bypass-gramaj.helper";
 import { listKursunGramPriceHistory, recordKursunGramPriceVersionTx } from "./helpers/kursun-gram-price-version.helper";
 import { cariTaxOverrideData, taxOverrideOf, type CariTaxOverrideInput } from "./helpers/cari-tax-override.helper";
 
@@ -65,6 +66,8 @@ export interface CariListRow {
   /** oie-a: müşteriye özel kurşun gram fiyatı; null = istasyonunki. */
   kursunGramPrice: Prisma.Decimal | null;
   kursunGramCurrency: Currency | null;
+  /** S3: müşteriye özel varsayılan kurşun gramajı (FabricPropertyValue id); null = istasyon varsayılanı. */
+  kursunDefaultValueId: string | null;
   /** D4-V1k: KDV / tevkifat geçersiz kılması; null = genel ayar (çözüm `invoice-tax-defaults.helper`). */
   vatRate: Prisma.Decimal | null;
   withholdingEnabled: boolean | null;
@@ -237,6 +240,7 @@ export class CariService {
           serviceBillingTrigger: r.serviceBillingTrigger as ServiceBillingTrigger | null,
           kursunGramPrice: r.kursunGramPrice,
           kursunGramCurrency: r.kursunGramCurrency,
+          kursunDefaultValueId: r.kursunDefaultValueId,
           hold: holdOf(r),
           ...taxOverrideOf(r),
           // Sıfır bakiyeli para birimi satırları gürültüdür; ekranda yer kaplar.
@@ -294,6 +298,7 @@ export class CariService {
       serviceBillingTrigger: row.serviceBillingTrigger as ServiceBillingTrigger | null,
       kursunGramPrice: row.kursunGramPrice,
       kursunGramCurrency: row.kursunGramCurrency,
+      kursunDefaultValueId: row.kursunDefaultValueId,
       hold: holdOf(row),
       ...taxOverrideOf(row),
       balances: row.balances,
@@ -380,6 +385,7 @@ export class CariService {
       serviceBillingTrigger?: string | null;
       kursunGramPrice?: string | number | null;
       kursunGramCurrency?: Currency | null;
+      kursunDefaultValueId?: string | null;
     } & CariTaxOverrideInput,
     userId?: string,
   ): Promise<ApiResponse<{ id: string }>> {
@@ -391,6 +397,11 @@ export class CariService {
     assertServiceBillingTriggerInput(input.serviceBillingTrigger, existing.kind);
     const taxData = cariTaxOverrideData(input, existing);
     const gram = input.kursunGramPrice !== undefined ? readKursunGramPrice(input.kursunGramPrice, input.kursunGramCurrency ?? null) : undefined;
+    // S3: varsayılan gramaj yalnız müşteri carisinde ve kurşun çeşidinin aktif değeri olabilir (fail-closed 400).
+    if (input.kursunDefaultValueId != null) {
+      if (existing.kind !== "CUSTOMER") throw AppError.badRequest("Varsayılan kurşun gramajı yalnız müşteri carisine girilir.", { code: "KURSUN_DEFAULT_NOT_CUSTOMER" });
+      await assertKursunGramajValue(prisma, input.kursunDefaultValueId);
+    }
 
     // ⚠️ Bakiyesi olan cari PASİFLEŞTİRİLEMEZ: pasif cari listelerden düşer ve
     // açık bakiye görünmez olur — muhasebede "kapatılmamış hesabı gizlemek"
@@ -420,6 +431,9 @@ export class CariService {
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
         ...(input.serviceBillingTrigger !== undefined ? { serviceBillingTrigger: input.serviceBillingTrigger } : {}),
         ...(gram !== undefined ? { kursunGramPrice: gram.price, kursunGramCurrency: gram.currency } : {}),
+        ...(input.kursunDefaultValueId !== undefined
+          ? { kursunDefaultValue: input.kursunDefaultValueId ? { connect: { id: input.kursunDefaultValueId } } : { disconnect: true } }
+          : {}),
         ...taxData,
       },
       select: { id: true },

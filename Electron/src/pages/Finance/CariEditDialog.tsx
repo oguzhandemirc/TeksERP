@@ -54,8 +54,8 @@ import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { CariKursunGramField } from "./CariKursunGramField";
-import { kursunGramBody, kursunGramFormFromCari, type KursunGramForm } from "./cariKursunGram";
+import { CariKursunDefaultField, CariKursunGramField } from "./CariKursunGramField";
+import { kursunDefaultBody, kursunDefaultFormFromCari, kursunGramBody, kursunGramFormFromCari, type KursunGramForm } from "./cariKursunGram";
 import { parseRiskLimit, parseTermDays } from "./cariEditParse";
 
 export { parseRiskLimit, parseTermDays };
@@ -84,6 +84,8 @@ export interface CariEditForm {
   tax: CariTaxForm | null;
   /** oie-a: müşteriye özel kurşun gram fiyatı (`cariKursunGram.ts`); null = alan yok, gövdeye girmez. */
   kursunGram?: KursunGramForm | null;
+  /** S3: müşterinin varsayılan kurşun gramajı (İE formunda ön seçim); null = alan yok, gövdeye girmez. */
+  kursunDefault?: { valueId: string | null } | null;
 }
 
 export interface CariEditErrors {
@@ -107,6 +109,7 @@ export function formFromCari(c: CariRow): CariEditForm {
     serviceBillingTrigger: c.kind === "CUSTOMER" && c.serviceBillingTrigger !== undefined ? (c.serviceBillingTrigger ?? "FACTORY") : null,
     tax: taxFormFromCari(c),
     kursunGram: kursunGramFormFromCari(c),
+    kursunDefault: kursunDefaultFormFromCari(c),
   };
 }
 
@@ -151,6 +154,7 @@ export function buildCariUpdatePayload(
         : {}),
       ...(tax?.ok ? tax.body : {}),
       ...gram.body,
+      ...kursunDefaultBody(form.kursunDefault),
     },
   };
 }
@@ -330,6 +334,8 @@ export function CariEditDialog({ cari, open, onOpenChange }: Props) {
           </div>
 
           <CariServiceBillingTriggerField value={form.serviceBillingTrigger} onChange={(v) => patch({ serviceBillingTrigger: v })} />
+
+          <CariKursunDefaultField value={form.kursunDefault ?? null} onChange={(v) => patch({ kursunDefault: v })} />
 
           <CariKursunGramField value={form.kursunGram ?? null} onChange={(v) => patch({ kursunGram: v })} error={errors.kursunGram} cariId={cari.id} />
 

@@ -8,6 +8,8 @@ import { formatFactory } from "@/lib/factory-time";
 
 const get = vi.fn();
 vi.mock("@/services/apiClient", () => ({ default: { get: (...a: unknown[]) => get(...a) } }));
+let basis: "SERVICE_DATE" | "INVOICE_DATE" | undefined = undefined;
+vi.mock("@/hooks/usePricingEnabled", () => ({ useFeatureFlags: () => ({ data: { data: { financeKursunGramPriceBasis: basis } } }) }));
 
 const item = (id: string, price: string | null, at: string, who: string | null) => ({
   id, validFrom: at, price, currency: price === null ? null : "TRY", createdById: who ? "u1" : null, createdByName: who,
@@ -16,7 +18,7 @@ const mount = (owner: { kind: "station" | "cari"; id: string }) =>
   render(<QueryClientProvider client={new QueryClient()}><KursunGramPriceHistory owner={owner} /></QueryClientProvider>);
 
 describe("KursunGramPriceHistory", () => {
-  beforeEach(() => get.mockReset());
+  beforeEach(() => { get.mockReset(); basis = undefined; });
 
   it("kapalıyken istek atılmaz; açınca satırlar en yeni önce, fabrika saatiyle", async () => {
     get.mockResolvedValueOnce({ data: { data: { items: [item("v2", "0.06", "2026-11-03T09:30:00.000Z", "Ayşe"), item("v1", "0.05", "2026-11-01T07:00:00.000Z", null)], nextCursor: null } } });
@@ -44,5 +46,21 @@ describe("KursunGramPriceHistory", () => {
     fireEvent.click(screen.getByText("Daha fazla"));
     await waitFor(() => expect(screen.getAllByTestId("kursun-gram-history-row")).toHaveLength(2));
     expect(get.mock.calls[1]![1]).toEqual({ params: { limit: 20, cursor: "CUR1" } });
+  });
+
+  it("K14-b: alt not ayara göre; ayar yeri Sistem → Özellik Anahtarları → Muhasebe", async () => {
+    get.mockResolvedValue({ data: { data: { items: [], nextCursor: null } } });
+    basis = "INVOICE_DATE";
+    const v = mount({ kind: "station", id: "s1" });
+    fireEvent.click(screen.getByText("Fiyat geçmişi"));
+    const note = await screen.findByTestId("kursun-gram-basis-note");
+    expect(note.textContent).toContain("faturanın kesildiği gündeki");
+    expect(note.textContent).toContain("Sistem → Özellik Anahtarları → Muhasebe");
+    expect(note.textContent).not.toContain("Genel Ayarlar");
+    v.unmount();
+    basis = "SERVICE_DATE";
+    mount({ kind: "station", id: "s1" });
+    fireEvent.click(screen.getByText("Fiyat geçmişi"));
+    expect((await screen.findByTestId("kursun-gram-basis-note")).textContent).toContain("işin yapıldığı gündeki");
   });
 });

@@ -72,7 +72,7 @@ export function DocFields({ note, draft, onChange, gramajOptions, disabled }: Pr
       {gramajOptions.length > 0 && (
         <div className="flex flex-col gap-2 rounded-lg border p-3" data-testid="oie-gramaj">
           <span className="text-sm font-medium">Kurşun gramajı</span>
-          <GramajChoiceButtons options={gramajOptions} value={draft.gramajId} onChange={(id) => onChange({ ...draft, gramajId: id })} emptyLabel="Hedef yok" disabled={disabled} />
+          <GramajChoiceButtons options={gramajOptions} value={draft.gramajId} onChange={(id) => onChange({ ...draft, gramajId: id, gramajTouched: true })} emptyLabel="Hedef yok" disabled={disabled} />
         </div>
       )}
       <Input aria-label="Not" placeholder="Not (isteğe bağlı)" maxLength={500} value={draft.notes} disabled={disabled} onChange={(e) => onChange({ ...draft, notes: e.target.value })} />

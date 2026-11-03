@@ -8,7 +8,7 @@ import { ExternalLink, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiErrorText } from "@/lib/api-error";
 import { useAttemptToken } from "@/lib/attemptToken";
-import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
+import { useKursunCustomerDefaults, useKursunGramajCatalog } from "@/lib/kursun-gramaj";
 import { useTabsStore } from "@/store/tabs";
 import { belgeOkutStage } from "@/pages/Operations/GelenBelgeler/belgeOkut";
 import { INCOMING_DOCUMENT_QUERY_KEY } from "@/pages/Operations/GelenBelgeler/service";
@@ -16,7 +16,7 @@ import { ScanReadBanner } from "@/pages/Operations/GelenBelgeler/ScanReadBanner"
 import { useNoteDetail } from "@/pages/Operations/GelenBelgeler/useNoteDetail";
 import { DocFields, FromDocBadge } from "./DocFields";
 import { DocThumb } from "./DocThumb";
-import { docDraftReasons, initialDocDraft, routeGramajOptions, type DocDraft } from "./docDraft";
+import { docDraftReasons, initialDocDraft, reseedOwnerGramaj, routeGramajOptions, type DocDraft } from "./docDraft";
 import { AUTO_PRINT_TEXT, printRefakatCard, useRefakatAutoPrint } from "./refakatPrint";
 import { DRAFT_SAVED_TEXT, SAVE_LABEL, saveDoc, saveErrorHint, type SaveOutcome } from "./saveDoc";
 import { useFormApproval } from "./useFormApproval";
@@ -62,6 +62,7 @@ export function BelgedenIsEmriForm({ noteId, route }: Props) {
   const { catalog, isLoading: catalogLoading } = useKursunGramajCatalog();
   // Kurşunsuz rotada gramaj kutusu ve varsayılanı yok (sunucu hedefi 400'le reddeder).
   const gramajOptions = routeGramajOptions(catalog.options, route.hasKursun);
+  const { defaults: customerDefaults, isLoading: defaultsLoading } = useKursunCustomerDefaults();
   const [draft, setDraft] = useState<DocDraft | null>(null);
   const [multi, setMulti] = useState<MultiPartyDraft | null | undefined>(undefined);
   // S1: çok partili belge — parti özeti okuma bitince bir kez; eski backend (404) → null = bugünkü tek partili form.
@@ -70,8 +71,8 @@ export function BelgedenIsEmriForm({ noteId, route }: Props) {
   const navigateActive = useTabsStore((s) => s.navigateActive);
   // Taslak bir kez, okuma bitince ve gramaj kataloğu gelince dolar (varsayılan gramaj ön seçimi kaçmasın).
   useEffect(() => {
-    if (n && !draft && stage !== "READING" && !catalogLoading) setDraft(initialDocDraft(n, gramajOptions));
-  }, [n, draft, stage, catalogLoading, gramajOptions]);
+    if (n && !draft && stage !== "READING" && !catalogLoading && !defaultsLoading) setDraft(initialDocDraft(n, gramajOptions, customerDefaults));
+  }, [n, draft, stage, catalogLoading, defaultsLoading, gramajOptions, customerDefaults]);
   useEffect(() => {
     if (multi === undefined && parties.isFetched) setMulti(initialMultiParty(parties.data));
   }, [multi, parties.isFetched, parties.data]);
@@ -97,7 +98,7 @@ export function BelgedenIsEmriForm({ noteId, route }: Props) {
               <>
                 {stage === "READ_FAILED" && <ScanReadBanner scans={n.scans} lines={n.lines} editable canRequeue onRequeued={() => void invalidate()} />}
                 {stage === "NO_SERVICE" && <p className="text-sm text-amber-800 dark:text-amber-300" data-testid="oie-no-service">Bu kurulumda belge okuma servisi yok; değerleri elle girin.</p>}
-                <DocFields note={n} draft={draft} onChange={setDraft} gramajOptions={gramajOptions} disabled={save.isPending || saved} />
+                <DocFields note={n} draft={draft} onChange={(d) => setDraft(reseedOwnerGramaj(draft, d, gramajOptions, customerDefaults))} gramajOptions={gramajOptions} disabled={save.isPending || saved} />
                 {multiDraft && parties.data && <PartyList view={parties.data} value={multiDraft} onChange={setMulti} disabled={save.isPending || saved} />}
               </>
             )}

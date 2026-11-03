@@ -82,6 +82,11 @@ export function gramPriceCurrentWarning(count: number): string {
   return `${count} kurşun işi gram fiyatının BUGÜNKÜ değeriyle (müşteri/istasyon) fiyatlandı; iş tarihinden sonra gram fiyatı değiştiyse tutarı kontrol edin.`;
 }
 
+/** K14 SERVICE_DATE: müşteri fiyatı işten SONRA ilk kez girildi; iş anında geçerli istasyon fiyatı kullanıldı. */
+export function gramPriceCustomerLaterWarning(count: number): string {
+  return `${count} kurşun işinde müşteriye özel gram fiyatı iş tarihinden SONRA girildi; iş tarihindeki istasyon gram fiyatıyla fiyatlandı — müşteri fiyatı geçerli olacaksa tutarı kontrol edin.`;
+}
+
 /** K14 SERVICE_DATE: iş anından ÖNCE hiç sürüm yoktu, fiyat sonradan girilen (en eski) sürümden geldi. */
 export function gramPriceEnteredLaterWarning(count: number): string {
   return `${count} kurşun işinin tarihinde gram fiyatı tanımlı değildi; iş tarihinden SONRA girilen ilk gram fiyatıyla fiyatlandı — tutarı kontrol edin.`;
@@ -147,14 +152,17 @@ export function pickKursunGramVersionPrice(
   work: { valueId: string | null; workOrderStepId: string | null },
   at: number,
   currency: Currency,
-): { unitPrice: Prisma.Decimal; amount: Prisma.Decimal; late: boolean } | null {
+): { unitPrice: Prisma.Decimal; amount: Prisma.Decimal; late: boolean; customerLater?: boolean } | null {
   const amount = work.valueId ? p.amountByValue.get(work.valueId) : undefined;
   if (!amount) return null;
   const station = work.workOrderStepId ? p.stationByStep.get(work.workOrderStepId) : undefined;
   const cariNow = versionAt(p.customer, at);
   const stationNow = versionAt(station, at);
-  const now = usable(cariNow, currency) ?? usable(stationNow, currency);
-  if (now) return { unitPrice: kursunMeterPrice(amount, now), amount, late: false };
+  const cariPrice = usable(cariNow, currency);
+  const now = cariPrice ?? usable(stationNow, currency);
+  // İstasyon fiyatı kullanıldı ama müşterinin işten SONRA girilmiş (o anda sürümü olmayan) fiyatı var → uyarı.
+  const customerLater = !cariPrice && !cariNow && usable(p.customer[0], currency) !== null;
+  if (now) return { unitPrice: kursunMeterPrice(amount, now), amount, late: false, ...(customerLater ? { customerLater: true } : {}) };
   // O anda HİÇ sürümü olmayan sahibin ilk sürümü (fiyat ilk girildiğinde önceki işlere de uygulanır).
   const early = (!cariNow ? usable(p.customer[0], currency) : null) ?? (!stationNow ? usable(station?.[0], currency) : null);
   return early ? { unitPrice: kursunMeterPrice(amount, early), amount, late: true } : null;
@@ -168,13 +176,14 @@ export function pickKursunGramVersionPrice(
 export async function applyKursunGramPrices(
   works: ServiceRollWork[],
   ctx: { currency: Currency; customerId: string | null; db: Db; basis: KursunGramPriceBasis; priceAt: (w: ServiceRollWork) => number },
-): Promise<{ priced: number; late: number }> {
+): Promise<{ priced: number; late: number; customerLater: number }> {
   const kursun = works.filter((w) => w.source !== "PROPERTY" && w.valueId && w.qtyUnit === "METER");
-  if (kursun.length === 0) return { priced: 0, late: 0 };
+  if (kursun.length === 0) return { priced: 0, late: 0, customerLater: 0 };
   const valueIds = [...new Set(kursun.map((w) => w.valueId!))];
   const stepIds = [...new Set(kursun.map((w) => w.workOrderStepId).filter((v): v is string => v !== null))];
   let priced = 0;
   let late = 0;
+  let customerLater = 0;
   if (ctx.basis === "INVOICE_DATE") {
     const pricing = await loadKursunGramPricing({ valueIds, stepIds, customerId: ctx.customerId, currency: ctx.currency, db: ctx.db });
     for (const w of kursun) {
@@ -184,7 +193,7 @@ export async function applyKursunGramPrices(
       w.gramLabel = kursunGramLineLabel(w.valueName, hit.amount);
       priced++;
     }
-    return { priced, late };
+    return { priced, late, customerLater };
   }
   const versions = await loadKursunGramVersions({ valueIds, stepIds, customerId: ctx.customerId, db: ctx.db });
   for (const w of kursun) {
@@ -194,6 +203,7 @@ export async function applyKursunGramPrices(
     w.gramLabel = kursunGramLineLabel(w.valueName, hit.amount);
     priced++;
     if (hit.late) late++;
+    if (hit.customerLater) customerLater++;
   }
-  return { priced, late };
+  return { priced, late, customerLater };
 }

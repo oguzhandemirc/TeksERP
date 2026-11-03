@@ -1,7 +1,7 @@
 // Tablet "Terbiye İş Emri oluştur" (Gülkesim K6/K7/K8) — saf parçalar: kısayol listesi, kayıt kipi, satır formu,
 // kayıt gövdeleri. Kural sunucudadır (sözleşme 1–5); burası yalnız formu doldurur ve düğmenin neden pasif olduğunu söyler.
 import { TERIM } from '../../../../lib/terim';
-import type { KursunGramajCatalog } from '../../../../services/fabricProperty.service';
+import type { KursunCustomerDefaults, KursunGramajCatalog } from '../../../../services/fabricProperty.service';
 import type {
   BatchNoCandidate,
   CreateWorkOrderFromNoteBody,
@@ -84,22 +84,30 @@ function toNumber(v: string | number | null | undefined): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-/** Okuma sonrası form: taslaktaki değer > belge önerisi; tek parti adayı ön seçilir; gramaj istasyon varsayılanı. */
-export function initialRowForm(d: InboundNoteDetail, catalog: KursunGramajCatalog, showGramaj: boolean): RowForm {
+/** S3: ön seçim gramajı — müşterinin varsayılanı katalogda (aktif) ise o, yoksa istasyonunki, o da yoksa null. */
+export function customerGramajId(catalog: KursunGramajCatalog, defaults: KursunCustomerDefaults, customerId: string | null): string | null {
+  const own = customerId ? defaults[customerId] : undefined;
+  if (own && catalog.options.some((o) => o.id === own)) return own;
+  return catalog.options.find((o) => o.isDefault)?.id ?? null;
+}
+
+/** Okuma sonrası form: taslaktaki değer > belge önerisi; tek parti adayı ön seçilir; gramaj müşterinin, yoksa istasyonun varsayılanı. */
+export function initialRowForm(d: InboundNoteDetail, catalog: KursunGramajCatalog, showGramaj: boolean, defaults: KursunCustomerDefaults = {}): RowForm {
   const candidates = d.batchNoCandidates ?? [];
   const single: BatchNoCandidate | null = !d.ourBatchNo && candidates.length === 1 ? candidates[0] : null;
   const meters = toNumber(d.kursunMeters);
   const any = !d.ownerCustomerId && d.ownerSuggestion ? d.ownerSuggestion : null;
   const suggestion = any && any.source !== 'FULL_TEXT' ? any : null;
+  const owner = d.ownerCustomerId ?? suggestion?.customerId ?? null;
   return {
-    ownerCustomerId: d.ownerCustomerId ?? suggestion?.customerId ?? null,
+    ownerCustomerId: owner,
     ownerSuggested: suggestion ? suggestion.name : null,
     ownerAsk: any && any.source === 'FULL_TEXT' ? any : null,
     ourBatchNo: d.ourBatchNo || single?.value || null,
     ourBatchNoKey: d.ourBatchNo ? d.ourBatchNoKey ?? null : single ? single.key ?? single.field ?? null : null,
     meters,
     metersReview: meters !== null && !!d.kursunMetersReview,
-    gramajValueId: showGramaj ? catalog.options.find((o) => o.isDefault)?.id ?? null : null,
+    gramajValueId: showGramaj ? customerGramajId(catalog, defaults, owner) : null,
   };
 }
 
