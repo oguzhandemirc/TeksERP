@@ -30,6 +30,8 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/auth/trusted-devices/revoke-all": e("hatırlanan bütün cihazlarını kaldırdı", "hatırlanan bütün cihazlarını kaldırmaya çalıştı"),
   "POST /api/admin/users/:id/trusted-devices/:deviceId/revoke": e("kullanıcının hatırlanan bir cihazını kaldırdı", "kullanıcının hatırlanan bir cihazını kaldırmaya çalıştı"),
   "POST /api/admin/users/:id/trusted-devices/revoke-all": e("kullanıcının hatırlanan bütün cihazlarını kaldırdı", "kullanıcının hatırlanan bütün cihazlarını kaldırmaya çalıştı"),
+  // ── Menü düzeni (K19)
+  "PUT /api/menu-layout": e("menü düzenini değiştirdi", "menü düzenini değiştirmeye çalıştı"),
   // ── Belge tasarımcısı
   "POST /api/document-templates/sistem-onizleme/:docType": e("sistem belge tasarımını önizledi", "sistem belge tasarımını önizlemeye çalıştı"),
   // ── Desen kartı + ürün yapısı (Seyitoğlu SY-A2)

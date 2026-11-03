@@ -198,6 +198,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "system/duplicates", app: "desktop", modul: "cekirdek:ana-veri", title: "Mükerrer Kayıtlar", requires: ["master-data:merge"], capabilities: ["customer:write", "item:write", "property:write", "subcontractor:write"] },
   { key: "system/db-restore", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Veritabanı Geri Yükleme", requires: ["admin:settings"], capabilities: [] },
   { key: "system/read-only-db", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Veritabanı Okuma Erişimi", requires: ["admin:settings"], capabilities: [] },
+  // MENÜ DÜZENİ (K19) — menüden ekran gizleme + Gelişmiş grubu; yazımı admin:settings (gizlenemez kendisi).
+  { key: "system/menu-layout", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Menü Düzeni", requires: ["admin:settings"], capabilities: [] },
   // ⚠️ SATICI EKRANI ama modülü ÇEKİRDEK: modül anahtarlarının EVİ kendi
   // kilidinin arkasına konamaz (ayar ekranındaki `modules` kategorisiyle aynı
   // kural — kapılı olsaydı modüller bir daha yapılandırılamazdı). Keşfi kısan

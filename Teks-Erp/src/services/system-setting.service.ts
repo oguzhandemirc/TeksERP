@@ -1062,6 +1062,10 @@ export const SETTING_KEYS = {
   // belge-sablon T1C: davranış bayrakları (modül DEĞİL, profile girmez); ikisi de default false.
   DOCUMENTS_DESIGNER_ENABLED: "documents.designerEnabled",
   DOCUMENTS_PUBLISH_SOD_ENABLED: "documents.publishSodEnabled",
+  /** Menü düzeni (K19): menüden gizlenen ekran anahtarları (JSON dizi). Tek yazar `PUT /api/menu-layout`; flag yükünde DÖNMEZ. */
+  UI_MENU_HIDDEN_SCREENS: "ui.menuHiddenScreens",
+  /** Menü düzeni (K19): teknik ekranlar kenar menüde "Gelişmiş" grubunda (varsayılan false = bugünkü yerleri). */
+  UI_MENU_ADVANCED_GROUP: "ui.menuAdvancedGroup",
 } as const;
 
 const DEFAULT_DEADLINE_DAYS = 7;

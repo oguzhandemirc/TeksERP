@@ -125,6 +125,16 @@ export const ROUTE_REGIME: Readonly<Record<string, Extract<keyof OperationsVisib
   "reports/production/makine-duruslari": "machineStopEnabled",
 };
 
+/**
+ * BAĞLI MODÜL (K19, ölçülerek): yaprak kendi modülüne EK OLARAK bu modüllerin HEPSİNİ ister (VE). Kaynak backend
+ * kapısı: `routes/reports/maliyet.report.routes.ts` `/karlilik` → `requireFinanceEnabled` (finans kapalıyken 403).
+ * Karo · palet · route aynı yüklemden (`isRouteModuleOpen`) okur. Ölçülüp EKLENMEYENLER: `cost/yarn-prices` ve
+ * `cost/yarn-need` iplik modülü kapalıyken de çalışır (iplik ihtiyacı köprüden null okur; iplik maliyeti elle yapıda).
+ */
+export const ROUTE_ALSO_REQUIRES: Readonly<Record<string, readonly RouteModuleFlag[]>> = {
+  "reports/maliyet/karlilik": ["financeEnabled"],
+};
+
 /** `:id` · `new` · `edit` segmentleri ebeveyne katlanır (manifesto EKRAN seviyesinde). */
 function screenKeyCandidates(pathname: string): string[] {
   const segs = pathname
@@ -155,6 +165,10 @@ export function routeModuleOf(pathname: string): RouteModuleFlag | null {
  * değere bakar. Karar bayrak yüklenene dek de verilir — yön bağlamın işi.
  */
 export function isRouteModuleOpen(pathname: string, ctx: OperationsVisibilityContext): boolean {
+  for (const key of regimeKeyCandidates(pathname)) {
+    const extra = ROUTE_ALSO_REQUIRES[key];
+    if (extra && !extra.every((f) => ctx[f])) return false;
+  }
   for (const key of regimeKeyCandidates(pathname)) {
     const r = ROUTE_REGIME[key];
     if (r) return ctx[r];

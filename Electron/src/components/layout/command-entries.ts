@@ -18,6 +18,7 @@ import {
 } from "@/pages/GeneralSettings/settings-config";
 import { settingsCategoryVisibleWhen } from "@/pages/GeneralSettings/settings-groups";
 import { regimePredicate } from "@/lib/regime-predicate";
+import { isRouteModuleOpen } from "@/lib/route-modules";
 import { reportCommandSections } from "./command-entries.reports";
 import { deepCommandSections } from "./command-entries.deep";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
@@ -117,7 +118,8 @@ export const commandSections: CommandSection[] = [
         icon: tile.icon,
         to: tile.to,
         permissionAny: tile.permissionAny,
-        visibleWhen: regimePredicate("maliyetEnabled"),
+        // K19 bağlı modül: Kârlılık ayrıca finans ister (karo + route ile aynı yüklem).
+        visibleWhen: (ctx) => regimePredicate("maliyetEnabled")(ctx) && isRouteModuleOpen(tile.to, ctx),
       })),
       // Doğrudan eylem: yeni teklif taslağı (route izni `quote:write` ile birebir).
       {

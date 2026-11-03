@@ -65,7 +65,12 @@ export interface NavItem {
 export interface NavGroup {
   label: string;
   items: NavItem[];
+  /** K19 "Gelişmiş" grubu: başlığa tıklayınca açılır, varsayılan KAPALI. */
+  collapsible?: boolean;
 }
+
+/** K19 menü düzeni — teknik ekranların toplandığı kenar menü grubu (ayar açıkken çizilir). */
+export const ADVANCED_GROUP_LABEL = "Gelişmiş";
 
 export const navGroups: NavGroup[] = [
   {

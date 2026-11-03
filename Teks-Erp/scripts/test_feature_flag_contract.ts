@@ -577,6 +577,16 @@ async function main() {
       file: "Teks-Erp/src/jobs/number-series-catalog.job.ts",
       needle: "workorder.partyCodeAuto",
     },
+    UI_MENU_HIDDEN_SCREENS: {
+      why: "Menü düzeni (K19) ekran anahtarı listesi — flag yüküne konmaz; tek yazar doğrulamalı `PUT /api/menu-layout` (bilinmeyen/gizlenemez 400); panel Sistem → Menü Düzeni",
+      file: "Electron/src/pages/System/MenuLayout/MenuLayoutPage.tsx",
+      needle: "updateMenuLayout",
+    },
+    UI_MENU_ADVANCED_GROUP: {
+      why: "Menü düzeni (K19) Gelişmiş grubu (boolean) — aynı doğrulamalı uç ve aynı panel ekranı; flag yüküne konmaz",
+      file: "Electron/src/pages/System/MenuLayout/MenuLayoutPage.tsx",
+      needle: "menu-advanced-group",
+    },
     GELEN_BELGE_DEFAULT_ITEM_ID: {
       why: "Ürün kimliği (UUID) — flag yüküne konmaz; tek yazar doğrulamalı `PUT /api/gelen-belge/ayarlar` (ham ayar ucu reddeder); panel Genel Ayarlar → Gelen Belge",
       file: "Electron/src/pages/GeneralSettings/GelenBelgeSettingsSection.tsx",
