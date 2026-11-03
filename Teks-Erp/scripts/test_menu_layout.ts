@@ -46,7 +46,6 @@ async function expectCode(fn: () => Promise<unknown>, code: string): Promise<{ o
   }
 }
 
-interface Layer { name?: string; handle?: { name?: string }; route?: { path: string; methods: Record<string, boolean>; stack: Layer[] } }
 
 async function main(): Promise<void> {
   const engel = hedefDbEngeli();
@@ -137,9 +136,9 @@ async function main(): Promise<void> {
   }
 
   // ── §4 uç zinciri + ham uç ────────────────────────────────────────────────
-  const stack = (menuLayoutRouter as unknown as { stack: Layer[] }).stack;
-  const routeOf = (method: string) => stack.find((l) => l.route?.path === "/" && l.route.methods[method])?.route?.stack ?? [];
-  const names = (layers: Layer[]) => layers.map((l) => l.name ?? l.handle?.name ?? "");
+  const stack = menuLayoutRouter.stack;
+  const routeOf = (method: string) => stack.find((l) => l.route?.path === "/" && l.route.stack.some((s) => s.method === method))?.route?.stack ?? [];
+  const names = (layers: readonly { name?: string; handle?: unknown }[]) => layers.map((l) => l.name ?? (typeof l.handle === "function" ? l.handle.name : ""));
   const useNames = stack.filter((l) => !l.route).map((l) => l.name ?? "");
   check("§4a router.use(verifyToken) her ucun önünde", useNames.includes("verifyToken"), useNames.join(","));
   const putChain = names(routeOf("put"));
