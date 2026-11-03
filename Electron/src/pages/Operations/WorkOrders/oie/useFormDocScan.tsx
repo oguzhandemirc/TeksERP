@@ -32,11 +32,38 @@ interface Options {
   targetQuantityEnabled: boolean;
 }
 
+/** Özet her geldiğinde (ilk okuma ya da tanıtma sonrası yeniden) form kutularına uygulanır; elle düzeltilen kutu ezilmez. */
+function useSummaryFill(form: UseFormReturn<WorkOrderFormValues>, sum: { data: DocReadSummary | undefined; dataUpdatedAt: number }, o: Options, onTaught: () => void) {
+  const { data, dataUpdatedAt: updatedAt } = sum;
+  const [applied, setApplied] = useState<AppliedDoc>({});
+  const appliedRef = useRef<AppliedDoc>({});
+  const lastSummary = useRef<number>(0);
+  const taughtRef = useRef(onTaught);
+  taughtRef.current = onTaught;
+  useEffect(() => {
+    if (!data || updatedAt === lastSummary.current) return;
+    lastSummary.current = updatedAt;
+    const current = Object.fromEntries(FILL_KEYS.map((k) => [k, form.getValues(k)]));
+    const r = applyReadSummary(current, appliedRef.current, data, o);
+    for (const k of FILL_KEYS) if (k in r.patch) form.setValue(k, r.patch[k] as never, { shouldDirty: true });
+    appliedRef.current = r.applied;
+    setApplied(r.applied);
+    if (data.tanitim?.durum === "TANITILDI") taughtRef.current();
+  }, [data, updatedAt, form, o]);
+  return {
+    applied,
+    reset: () => {
+      appliedRef.current = {};
+      lastSummary.current = 0;
+      setApplied({});
+    },
+  };
+}
+
 export function useFormDocScan(form: UseFormReturn<WorkOrderFormValues>, o: Options) {
   const [noteId, setNoteId] = useState<string | null>(null);
   const [draft, setDraft] = useState<DocDraft | null>(null);
   const [multi, setMulti] = useState<MultiPartyDraft | null | undefined>(undefined);
-  const [applied, setApplied] = useState<AppliedDoc>({});
   // Tanıt sekmesine gidildi: özet tanıtılana dek yoklanır (dönünce form kendiliğinden yeniden dolar).
   const [awaitingTeach, setAwaitingTeach] = useState(false);
   const tabActive = useIsTabActive();
@@ -63,19 +90,7 @@ export function useFormDocScan(form: UseFormReturn<WorkOrderFormValues>, o: Opti
     enabled: read && approval.value === "WITH_WORK_ORDER",
   });
 
-  // Özet her geldiğinde (ilk okuma ya da tanıtma sonrası yeniden) form kutularına uygulanır; elle düzeltilen kutu ezilmez.
-  const appliedRef = useRef<AppliedDoc>({});
-  const lastSummary = useRef<number>(0);
-  useEffect(() => {
-    if (!summary.data || summary.dataUpdatedAt === lastSummary.current) return;
-    lastSummary.current = summary.dataUpdatedAt;
-    const current = Object.fromEntries(FILL_KEYS.map((k) => [k, form.getValues(k)]));
-    const r = applyReadSummary(current, appliedRef.current, summary.data, o);
-    for (const k of FILL_KEYS) if (k in r.patch) form.setValue(k, r.patch[k] as never, { shouldDirty: true });
-    appliedRef.current = r.applied;
-    setApplied(r.applied);
-    if (summary.data.tanitim?.durum === "TANITILDI") setAwaitingTeach(false);
-  }, [summary.data, summary.dataUpdatedAt, form, o]);
+  const fill = useSummaryFill(form, summary, o, () => setAwaitingTeach(false));
   // Belge kartı okuma bitince bir kez dolar; sonraki okumalar yalnız boş kutuları tamamlar.
   useEffect(() => {
     if (!read || !note.data) return;
@@ -88,7 +103,7 @@ export function useFormDocScan(form: UseFormReturn<WorkOrderFormValues>, o: Opti
   }, [multi, parties.isFetched, parties.data]);
 
   const watched = form.watch(FILL_KEYS);
-  const marks = docMarks(Object.fromEntries(FILL_KEYS.map((k, i) => [k, watched[i]])), applied);
+  const marks = docMarks(Object.fromEntries(FILL_KEYS.map((k, i) => [k, watched[i]])), fill.applied);
   const multiDraft = approval.value === "WITH_WORK_ORDER" ? (multi ?? null) : null;
   const submit = useDocSubmit();
 
@@ -108,9 +123,7 @@ export function useFormDocScan(form: UseFormReturn<WorkOrderFormValues>, o: Opti
     awaitingTeach,
     reasons: draft ? docDraftReasons(draft, multiDraft) : [],
     start: (id: string) => {
-      appliedRef.current = {};
-      lastSummary.current = 0;
-      setApplied({});
+      fill.reset();
       setDraft(null);
       setMulti(undefined);
       setAwaitingTeach(false);
