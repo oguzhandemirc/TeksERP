@@ -5,6 +5,7 @@ import { updateNoteHeader } from "@/pages/Operations/GelenBelgeler/service";
 import type { DeliveryNoteDetail } from "@/pages/Operations/GelenBelgeler/types";
 import { docDraftReasons, noteWorkOrderBody, separateHeaderPatch, type DocDraft, type FormApproval } from "./docDraft";
 import type { MultiPartyDraft } from "./partyDraft";
+import type { FormEndpointExtras } from "./docFormFill";
 import { createWorkOrderFromNote, errorCode, FORM_APPROVAL_DISABLED, type NoteWorkOrderResult } from "./service";
 
 export type SaveOutcome = { kind: "WORK_ORDER"; result: NoteWorkOrderResult } | { kind: "DRAFT_SAVED" };
@@ -24,6 +25,8 @@ export interface SaveDocInput {
   multi?: MultiPartyDraft | null;
   /** K27 WARN: kullanıcı 409 kutusunda "Yine de onayla" dedi → gövdeye bayrak (yalnız WITH_WORK_ORDER). */
   confirmDuplicateDocNo?: boolean;
+  /** S16d: klasik formdan gelen alanlar (S16a) + formun hedef değerleri (verilirse gramaj/geçiş değerlerinin yerine). */
+  extra?: FormEndpointExtras & { targetValues?: Array<{ propertyId: string; valueId: string }> };
 }
 
 export async function saveDoc(i: SaveDocInput): Promise<SaveOutcome> {
@@ -31,7 +34,7 @@ export async function saveDoc(i: SaveDocInput): Promise<SaveOutcome> {
   const reasons = docDraftReasons(i.draft, multi);
   if (reasons.length > 0) throw new Error(reasons.join(" "));
   if (i.formApproval === "WITH_WORK_ORDER") {
-    const body = noteWorkOrderBody(i.draft, { clientToken: i.clientToken, routeTemplateId: i.routeTemplateId, gramajPropertyId: i.gramajPropertyId, passThrough: i.passThrough }, multi);
+    const body = { ...noteWorkOrderBody(i.draft, { clientToken: i.clientToken, routeTemplateId: i.routeTemplateId, gramajPropertyId: i.gramajPropertyId, passThrough: i.passThrough }, multi), ...i.extra };
     return { kind: "WORK_ORDER", result: await createWorkOrderFromNote(i.note.id, i.confirmDuplicateDocNo ? { ...body, confirmDuplicateDocNo: true } : body) };
   }
   const patch = separateHeaderPatch(i.draft, i.note);

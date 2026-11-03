@@ -5,6 +5,7 @@ import axios from "axios";
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
 import type { MultiPartyMode, NotePartiesView } from "./partyDraft";
+import type { DocReadSummary } from "./docFormFill";
 
 /** İş emri kısayolu = `isWorkOrderShortcut` işaretli rota şablonu (sıra `shortcutOrder`). */
 export interface WorkOrderShortcut {
@@ -73,6 +74,16 @@ export interface NoteWorkOrderBody {
   mode?: MultiPartyMode;
   /** K27 WARN: işi süren aynı belge no'lu eşe rağmen kaydet (409 `DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE` sonrası). */
   confirmDuplicateDocNo?: boolean;
+  // K30 S16a: klasik iş emri formunun alanları (hepsi isteğe bağlı; PER_PARTY'de targetQuantity/targetWeight 400).
+  targetItemId?: string;
+  targetColorId?: string;
+  width?: number;
+  targetQuantity?: number;
+  targetWeight?: number;
+  plannedStartDate?: string;
+  plannedEndDate?: string;
+  foldType?: string;
+  orderLineIds?: string[];
 }
 
 export interface NoteWorkOrderResult {
@@ -94,6 +105,12 @@ export async function getNoteParties(noteId: string): Promise<NotePartiesView | 
     if (axios.isAxiosError(e) && e.response?.status === 404) return null;
     throw e;
   }
+}
+
+/** S16d okuma özeti (`gelen-belge:write`); form alanları/tanıtım isteğe bağlı — eski sunucu göndermez. */
+export async function getReadSummary(noteId: string): Promise<DocReadSummary> {
+  const r = await apiClient.get<ApiResponse<DocReadSummary>>(`/api/gelen-belge/irsaliyeler/${noteId}/okuma-ozeti`, { suppressErrorToast: true });
+  return r.data.data ?? {};
 }
 
 /** Hata toast'unu çağıran yazar (satır/ekran sonucu tek yüzey). */
