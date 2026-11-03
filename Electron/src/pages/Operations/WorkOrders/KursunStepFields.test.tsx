@@ -1,8 +1,7 @@
 // İE formu kurşun adımı kartı (Gülkesim 2026-11-02): gramaj + makine önerisi yalnız kurşun adımında;
 // adım girince varsayılan gramaj ön seçilir, adım çıkınca hedef temizlenir; stepsToCustom öneriyi taşır.
 import { describe, expect, it, vi } from "vitest";
-import { act, renderHook, screen } from "@testing-library/react";
-import { useState } from "react";
+import { screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import { KursunStepFields, KursunStepSummary, isKursunStep, kursunDetailText } from "./KursunStepFields";
 import { reconcileStepDefaults } from "./stepDefaultTargets";
