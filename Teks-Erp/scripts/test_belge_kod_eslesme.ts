@@ -29,6 +29,7 @@ check("§1 boş değer eşleşmez", codeMatchTier("", "") === null && codeMatchT
 
 console.log("§2 ayraç toleransı");
 check("§2 boşluk/tire/nokta/alt çizgi/yıldız", tolerantCodeKey(" P-26.18_73 3* ") === "P2618733", tolerantCodeKey(" P-26.18_73 3* "));
+check("§2 eğik çizgi ayraçtır ('P26/18733', 'P26\\18733')", codeMatchTier("P26/18733", "P2618733") === "TOLERANT" && tolerantCodeKey("P26\\18733") === "P2618733", tolerantCodeKey("P26/18733"));
 check("§2 ayraç farkı toleranslı eşleşir", codeMatchTier("P26-18733", "P2618733") === "TOLERANT");
 
 console.log("§3 OCR karışıklığı rakam koşusunda");

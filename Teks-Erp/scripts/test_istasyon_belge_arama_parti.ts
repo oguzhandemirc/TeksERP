@@ -196,6 +196,13 @@ async function run(url: string, sidecar: { url: string }): Promise<void> {
   const r3b = await lookup({ evrak: `7O${D}` });
   check("§3 ⭐ evrak no OCR'da karışık (O↔0) → toleranslı belge no aynı İE", r3b.data?.outcome === "SINGLE" && ids(r3b) === wo5, `${r3b.data?.outcome} ${ids(r3b)} ${r3b.data?.message}`);
 
+  const r3c = await lookup({ evrak: `7O${D}`, parti: P1 });
+  check("§3 ⭐ toleranslı evrak no başka işe, parti no TAM başka işe → ikisi de listelenir (MULTIPLE, seçtirir)", r3c.data?.outcome === "MULTIPLE" && ids(r3c) === [wo1, wo5].sort().join(","), `${r3c.data?.outcome} ${ids(r3c)} ${r3c.data?.message}`);
+  const r3d = await lookup({ evrak: `7O${D}`, parti: P2 });
+  check("§3 ⭐ toleranslı evrak no ∩ parti no aynı işi gösteriyor → kesişim TEK İE", r3d.data?.outcome === "SINGLE" && ids(r3d) === wo5, `${r3d.data?.outcome} ${ids(r3d)} ${r3d.data?.message}`);
+  const r3e = await lookup({ evrak: E5, parti: P1 });
+  check("§3 ⭐ evrak no TAM tutarsa bugünkü yol: parti no'ya bakılmaz", r3e.data?.outcome === "SINGLE" && ids(r3e) === wo5, `${r3e.data?.outcome} ${ids(r3e)} ${r3e.data?.message}`);
+
   console.log("§4 (iv) aynı parti iki+ açık İE");
   const r4 = await lookup({ parti: P2 });
   check("§4 ⭐ aynı parti no'lu açık İE'ler → MULTIPLE (choose)", r4.data?.outcome === "MULTIPLE" && ids(r4) === [wo2, wo3, wo5].sort().join(","), `${r4.data?.outcome} ${ids(r4)}`);
