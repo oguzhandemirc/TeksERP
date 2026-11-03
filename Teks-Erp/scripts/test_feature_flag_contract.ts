@@ -577,6 +577,16 @@ async function main() {
       file: "Teks-Erp/src/jobs/number-series-catalog.job.ts",
       needle: "workorder.partyCodeAuto",
     },
+    UI_MENU_HIDDEN_SCREENS: {
+      why: "Menü düzeni (K19) ekran anahtarı listesi — flag yüküne konmaz; tek yazar doğrulamalı `PUT /api/menu-layout` (bilinmeyen/gizlenemez 400); panel Sistem → Menü Düzeni",
+      file: "Electron/src/pages/System/MenuLayout/MenuLayoutPage.tsx",
+      needle: "updateMenuLayout",
+    },
+    UI_MENU_ADVANCED_GROUP: {
+      why: "Menü düzeni (K19) Gelişmiş grubu (boolean) — aynı doğrulamalı uç ve aynı panel ekranı; flag yüküne konmaz",
+      file: "Electron/src/pages/System/MenuLayout/MenuLayoutPage.tsx",
+      needle: "menu-advanced-group",
+    },
     GELEN_BELGE_DEFAULT_ITEM_ID: {
       why: "Ürün kimliği (UUID) — flag yüküne konmaz; tek yazar doğrulamalı `PUT /api/gelen-belge/ayarlar` (ham ayar ucu reddeder); panel Genel Ayarlar → Gelen Belge",
       file: "Electron/src/pages/GeneralSettings/GelenBelgeSettingsSection.tsx",
@@ -644,6 +654,12 @@ async function main() {
       why: "Formdan okutulan belgenin kaydı (SEPARATE varsayılan | WITH_WORK_ORDER) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; kapıyı `POST /irsaliyeler/:id/is-emri` okur",
       file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
       needle: "formApproval: z.enum(",
+    },
+    // S1 (2026-11-03): çok partili belge → iş emri kipi; uçtaki Zod alanı + panel/tablet formu.
+    GELEN_BELGE_MULTI_PARTY_WORK_ORDER: {
+      why: "Çok partili belgeden iş emri (SINGLE varsayılan | PER_PARTY) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; `POST /irsaliyeler/:id/is-emri` mode verilmezse okur",
+      file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
+      needle: "multiPartyWorkOrder: z.enum(",
     },
     // Gülkesim S2 (K17, 2026-11-03): istasyonda belge okutarak iş emri bulma; panel satırı kayıt kipi alanında.
     GELEN_BELGE_STATION_DOC_LOOKUP: {

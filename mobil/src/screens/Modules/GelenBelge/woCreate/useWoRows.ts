@@ -7,9 +7,10 @@ import { useAttemptToken } from '../../../../offline/attemptToken';
 import { isAmbiguousFailure } from '../../../../offline/entryAttempt';
 import { fabricPropertyService, type KursunGramajCatalog } from '../../../../services/fabricProperty.service';
 import { useRouteDefaultTargets } from '../../../../hooks/useRouteDefaultTargets';
-import { inboundDocService, type InboundNoteDetail } from '../../../../services/inboundDoc.service';
+import { inboundDocService, type InboundNoteDetail, type NotePartiesView } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { printTravelerCardForWorkOrder } from '../../../../services/travelerCardPrint';
+import { initialMultiParty, type MultiPartyDraft } from './partyDraft';
 import { loadRecentOwners, rememberOwner } from './recentOwners';
 import {
   buildCreateBody,
@@ -36,6 +37,8 @@ export interface DocRow {
   /** Kullanıcı gramajı elle seçti/kaldırdı: geç gelen katalog varsayılanı onu ezmez. */
   gramajTouched: boolean;
   result: RowResult | null;
+  /** S1 parti özeti (çok partili belgede liste + uyarılar); yok = tek partili form. */
+  parties?: NotePartiesView | null;
 }
 
 const EMPTY_CATALOG: KursunGramajCatalog = { propertyId: null, options: [] };
@@ -103,6 +106,15 @@ function rowCounts(rows: DocRow[], ready: number) {
 }
 
 type GramajFor = (customerId: string | null) => string | null | undefined;
+
+/** Parti özeti form kurulduktan sonra gelir: çok partideyse satır listesi bir kez kurulur (kullanıcı düzenlemesi ezilmez). */
+function applyParties(rs: DocRow[], noteId: string, parties: NotePartiesView | null): DocRow[] {
+  return rs.map((r) => (r.noteId === noteId && r.form && r.parties === undefined ? { ...r, parties, form: { ...r.form, multi: initialMultiParty(parties) } } : r));
+}
+
+function applyMulti(rs: DocRow[], noteId: string, multi: MultiPartyDraft): DocRow[] {
+  return rs.map((r) => (r.noteId === noteId && r.form && !isDone(r) ? { ...r, form: { ...r.form, multi }, result: null } : r));
+}
 
 /** Gramaj alanı yalnız rotada kurşun adımı varsa; katalog okunamazsa boş (alan çizilmez, uydurma yok). */
 function useGramajCatalog(route: ProductionRoute, rows: DocRow[]): { showGramaj: boolean; catalog: KursunGramajCatalog; gramajFor: GramajFor } {
@@ -195,6 +207,9 @@ export function useWoRows(route: ProductionRoute) {
     [gramajFor],
   );
 
+  const setParties = useCallback((noteId: string, parties: NotePartiesView | null) => setRows((rs) => applyParties(rs, noteId, parties)), []);
+  const setMulti = useCallback((noteId: string, multi: MultiPartyDraft) => setRows((rs) => applyMulti(rs, noteId, multi)), []);
+
   const removeRow = useCallback((noteId: string) => setRows((rs) => rs.filter((r) => r.noteId !== noteId)), []);
   const setResult = (noteId: string, result: RowResult) => setRows((rs) => rs.map((r) => (r.noteId === noteId ? { ...r, result } : r)));
 
@@ -221,7 +236,7 @@ export function useWoRows(route: ProductionRoute) {
         if (error !== undefined) errors.push(error);
         setResult(r.noteId, result);
         if (result.kind !== 'FAILED' && r.form!.ownerCustomerId) owners = await rememberOwner(owners, r.form!.ownerCustomerId);
-        if (result.kind === 'OPENED' && autoPrint) await printFor(r.noteId, result.workOrderId);
+        if (result.kind === 'OPENED' && autoPrint) for (const w of result.workOrders) await printFor(r.noteId, w.workOrderId);
       }
     } finally {
       setRecent(owners);
@@ -236,7 +251,7 @@ export function useWoRows(route: ProductionRoute) {
 
   return {
     rows, mode, showGramaj, catalog, saving, recent, counts, autoPrint,
-    addNote, setDetail, updateForm, removeRow, saveAll,
+    addNote, setDetail, setParties, setMulti, updateForm, removeRow, saveAll,
     print: (noteId: string, workOrderId: string) => void printFor(noteId, workOrderId),
   };
 }

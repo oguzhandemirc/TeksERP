@@ -741,6 +741,7 @@ model User {
   deliveryNotesUpdated        CustomerDeliveryNote[]        @relation("CustomerDeliveryNoteUpdatedBy")
   deliveryNotesApproved       CustomerDeliveryNote[]        @relation("CustomerDeliveryNoteApprovedBy")
   deliveryNotesCancelled      CustomerDeliveryNote[]        @relation("CustomerDeliveryNoteCancelledBy")
+  senderTemplateVersions      SenderTemplateVersion[]       @relation("SenderTemplateVersionCreatedBy")
   documentScansCaptured       DocumentScan[]                @relation("DocumentScanCapturedBy")
   // E4 (2026-10-29): sahibe özel varsayılan ürün künyesi.
   deliveryNoteDefaultsCreated DeliveryNoteCustomerDefault[] @relation("DeliveryNoteCustomerDefaultCreatedBy")
@@ -14483,6 +14484,8 @@ model CustomerDeliveryNote {
   processText        String?                @db.VarChar(120)
   templateId         String?                @db.Uuid
   templateScore      Decimal?               @db.Decimal(5, 4)
+  /// Belgeyi okuyan şablon SÜRÜMÜ (S1: kullanıcı şablonu güncellenince eski belge eski sürümde kalır); elle belgede null.
+  templateVersion    Int?                   @db.SmallInt
   /// "1/2" sayfa damgası — belge kaç sayfa beyan ediyor (sert kapı D4'te).
   pageCount          Int?                   @db.SmallInt
   /// Belgede yazan top adedi — yalnız UYARI sınıfı (satır sayısıyla çelişebilir).
@@ -14618,16 +14621,38 @@ model SenderTemplate {
   batchNoKey             String?  @db.VarChar(32)
   isActive               Boolean  @default(true)
   hitCount               Int      @default(0)
+  /// S1 kullanıcı şablonu (`u-…`) oluşturma denemesinin idempotency token'ı; dosya şablonu satırında NULL.
+  clientToken            String?  @unique @db.Uuid
   createdAt              DateTime @default(now()) @db.Timestamptz
   updatedAt              DateTime @updatedAt @db.Timestamptz
 
-  senderCustomer       Customer?              @relation("SenderTemplateSender", fields: [senderCustomerId], references: [id], onDelete: Restrict)
-  defaultOwnerCustomer Customer?              @relation("SenderTemplateDefaultOwner", fields: [defaultOwnerCustomerId], references: [id], onDelete: Restrict)
+  senderCustomer       Customer?               @relation("SenderTemplateSender", fields: [senderCustomerId], references: [id], onDelete: Restrict)
+  defaultOwnerCustomer Customer?               @relation("SenderTemplateDefaultOwner", fields: [defaultOwnerCustomerId], references: [id], onDelete: Restrict)
   notes                CustomerDeliveryNote[]
+  versions             SenderTemplateVersion[]
 
   @@index([senderCustomerId])
   @@index([defaultOwnerCustomerId])
   @@map("sender_templates")
+}
+
+/// Kullanıcı şablonunun (`u-…`, S1 belge tipi tanıtma) SÜRÜM geçmişi — her kaydet/güncelle yeni satır; satır değişmez
+/// (belge hangi sürümle okunduysa o yerleşim burada durur). Dosya şablonlarının sürümü dosyadadır, buraya yazılmaz.
+model SenderTemplateVersion {
+  id          String   @id @default(uuid()) @db.Uuid
+  templateId  String   @db.Uuid
+  version     Int      @db.SmallInt
+  template    Json
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+
+  senderTemplate SenderTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  createdBy      User?          @relation("SenderTemplateVersionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([templateId, version])
+  @@index([createdById])
+  @@map("sender_template_versions")
 }
 
 /// Eşleme sözlüğü — belgedeki katlanmış ham metin → hedef kimlik (`scope`a göre Customer/Item/Color).

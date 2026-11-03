@@ -21,10 +21,11 @@ import { summaryLineId } from "./gelen-belge-kontrol.service";
 import { updateDeliveryNote } from "./gelen-belge-note.service";
 import { getReadSummary, type ReadSummaryState } from "./gelen-belge-okuma-ozeti.service";
 import { assertRouteOverride } from "./gelen-belge-oto-is-emri.service";
-import { readIncomingDocFormApproval } from "./system-setting.service";
 import { WorkOrderService, type WorkOrderCreateInput } from "./workorder.service";
 import { mergeRouteDefaults, resolveStationDefaultTargets } from "./helpers/station-default-targets.helper";
 import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
+import { allPartiesEntered, assertPartiesShape, openPartyWorkOrders, partyRolls, type PartyInput, type PartyWorkOrder } from "./gelen-belge-cok-parti.service";
+import { readIncomingDocFormApproval, readMultiPartyWorkOrder, type MultiPartyWorkOrderMode } from "./system-setting.service";
 
 const IE = TERIM.terbiyeIsEmri;
 const workOrders = new WorkOrderService();
@@ -48,6 +49,10 @@ export interface FormWorkOrderInput {
   /** Anahtar YOKSA istasyon varsayılanları (K22) uygulanır; varsa (boş dizi dahil) istemcinin kararı, dokunulmaz. */
   targetValues?: Array<{ propertyId: string; valueId: string }>;
   notes?: string | null;
+  /** S1 çok partili belge (≥2): parti başına top; verilmezse tek top = kursunMeters (bugünkü). */
+  parties?: PartyInput[];
+  /** Verilmezse fabrika ayarı `gelenBelge.multiPartyWorkOrder` (varsayılan SINGLE). Yalnız `parties` ile anlamlı. */
+  mode?: MultiPartyWorkOrderMode;
 }
 
 export interface FormWorkOrderResult {
@@ -56,6 +61,9 @@ export interface FormWorkOrderResult {
   batchNumber: string | null;
   rollId: string;
   warnings: string[];
+  /** Çok partili kayıtta açılan iş emirleri (ilki üstteki alanlardır; eski istemci yalnız onları okur). */
+  workOrders?: PartyWorkOrder[];
+  mode?: MultiPartyWorkOrderMode;
 }
 
 /** Ayar kapısı (403). Tek okuyucu: uç + bekçi. */
@@ -100,6 +108,10 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
   const note = await prisma.customerDeliveryNote.findUnique({ where: { id: noteId }, select: { id: true, status: true, noteNo: true } });
   if (!note) throw AppError.notFound("Gelen belge bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
 
+  const parties = input.parties && input.parties.length > 1 ? input.parties : null;
+  if (parties) assertPartiesShape(parties);
+  // Çok partide kurşun metresi = partilerin toplamı (onay kapısı bu değeri okur; gövdenin tek metresi yerine).
+  const kursunMeters = parties ? Math.round(parties.reduce((s, p) => s + p.meters, 0) * 1000) / 1000 : input.kursunMeters;
   const warnings: string[] = [];
   // Taslak: okuma sürmüyor olmalı → not alanları (yalnız DRAFT'ta yazılır).
   if (note.status === DeliveryNoteStatus.DRAFT) {
@@ -112,19 +124,26 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
       ownerCustomerId: input.ownerCustomerId,
       ...(input.ourBatchNo !== undefined ? { ourBatchNo: input.ourBatchNo, ourBatchNoKey: input.ourBatchNo ? (input.ourBatchNoKey ?? null) : null } : {}),
       // Gövdedeki metre operatörün gördüğü değerdir → gözden geçirilmiş sayılır (MANUAL).
-      kursunMeters: input.kursunMeters,
+      kursunMeters,
     }, actor.userId);
   }
   // Onay "özet satırının topu var mı"ya bağlı: yarım kalan onay (PARTIAL / bayat APPROVING) aynı token'la yeniden koşar.
-  const summary = await prisma.customerDeliveryNoteLine.findUnique({ where: { id: summaryLineId(noteId) }, select: { rollId: true } });
-  if (!summary?.rollId) {
+  const entered = parties
+    ? await allPartiesEntered(noteId, parties)
+    : !!(await prisma.customerDeliveryNoteLine.findUnique({ where: { id: summaryLineId(noteId) }, select: { rollId: true } }))?.rollId;
+  if (!entered) {
     if (!APPROVAL_RESUMABLE.includes(note.status)) {
       throw AppError.conflict(`${note.noteNo} şu an ${IE.tekilKucuk} için kaydedilemez (${note.status}).`, { code: "DELIVERY_NOTE_NOT_APPROVABLE", status: note.status });
     }
     const user = await prisma.user.findUnique({ where: { id: actor.userId }, select: { username: true } });
-    const approved = await approveDeliveryNote(noteId, {}, actor.userId, { entryMode: "PER_DOCUMENT", via: `WITH_WORK_ORDER: ${user?.username ?? actor.userId}` });
+    const approved = await approveDeliveryNote(noteId, {}, actor.userId, {
+      entryMode: "PER_DOCUMENT",
+      via: `WITH_WORK_ORDER: ${user?.username ?? actor.userId}`,
+      ...(parties ? { parties: parties.map((p) => ({ blockNo: p.blockNo, meters: p.meters })) } : {}),
+    });
     warnings.push(...approved.warnings);
   }
+  if (parties) return finishParties({ note, parties, input, userId: actor.userId, warnings });
 
   const line = await prisma.customerDeliveryNoteLine.findUnique({ where: { id: summaryLineId(noteId) }, select: { rollId: true, failReason: true, roll: { select: { barcode: true } } } });
   if (!line?.rollId || !line.roll?.barcode) {
@@ -148,4 +167,20 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
   if (!wo) throw AppError.internal(`${IE.tekil} açılamadı.`);
   if (res.warnings?.length) warnings.push(...res.warnings);
   return { workOrderId: wo.id, workOrderNo: wo.workOrderNumber, batchNumber: res.data?.batch?.batchNumber ?? null, rollId: line.rollId, warnings };
+}
+
+/** Çok partili kayıt: parti topları → mod (gövde > fabrika ayarı) → iş emirleri. Yanıtın üst alanları ilk iş emridir. */
+async function finishParties({ note, parties, input, userId, warnings }: { note: { id: string; noteNo: string }; parties: PartyInput[]; input: FormWorkOrderInput; userId: string; warnings: string[] }): Promise<FormWorkOrderResult> {
+  const rolls = await partyRolls(note.id, note.noteNo, parties);
+  const mode = input.mode ?? (await readMultiPartyWorkOrder());
+  // K22: gövdede hedef yoksa istasyon varsayılanları; varsa dokunulmaz. Çözücünün bayrakları her iş emrine eklenir.
+  const defaults = await resolveFormWorkOrderTargets(input.routeTemplateId, input.ownerCustomerId, input.targetValues);
+  const withDefaultFlags = async (targets: ReadonlyArray<{ propertyId: string }>) => [...new Set([...defaults.targetPropertyIds, ...(await flagPropertyIds(targets))])];
+  const res = await openPartyWorkOrders({
+    noteId: note.id, clientToken: input.clientToken, routeTemplateId: input.routeTemplateId, mode, parties, rolls,
+    targetValues: defaults.targetValues, stepPlanning: input.stepPlanning, notes: input.notes, flagPropertyIds: withDefaultFlags,
+  }, userId);
+  warnings.push(...res.warnings);
+  const first = res.workOrders[0]!;
+  return { workOrderId: first.workOrderId, workOrderNo: first.workOrderNo, batchNumber: first.batchNumber, rollId: first.rollIds[0]!, warnings, workOrders: res.workOrders, mode };
 }

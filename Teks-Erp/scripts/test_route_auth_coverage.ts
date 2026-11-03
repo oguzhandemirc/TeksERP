@@ -235,7 +235,12 @@ const EXEMPT: Record<string, string> = {
  * `POST …/:id/revoke` yalnız `verifyToken` taşır — kullanıcı KENDİ hatırlanan cihazlarını görür/kaldırır (satır
  * kapsamı token'daki `userId`; başkasının cihazı 404). Yönetici yolu `admin:users` guard'lı. `test_guvenilir_cihaz` §10 ölçer.
  */
-const BARE_CHAIN_BASELINE = 43;
+/**
+ * ⚠️ 43 → 44 (2026-11-03, menü düzeni K19, BİLİNÇLİ): `GET /api/menu-layout` yalnız `verifyToken` taşır — panel ve
+ * tablet menüyü süzmek için HER kullanıcı okur (sır değil, güvenlik sınırı değil). Yazma `admin:settings` + ayar
+ * şifresi guard'lı. `test_menu_layout` §4 ölçer.
+ */
+const BARE_CHAIN_BASELINE = 44;
 
 /** Körlük zemini: tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın. */
 const MIN_ROUTE_LAYERS = 400;

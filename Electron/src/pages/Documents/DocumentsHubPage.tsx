@@ -7,6 +7,8 @@ import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { HubSkeleton } from "@/components/hub/HubSkeleton";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import { documentTiles, type DocumentTile } from "./tile-config";
+import { useMenuLayout } from "@/hooks/useMenuLayout";
+import { isHubTileHidden } from "@/lib/menu-layout";
 
 /** Belgeler kökü (UX-2 K2) — karolar Tanımlar'ın eski "Çıktılar" grubu; adresler `/definitions/...` olarak kalır. */
 export function DocumentsHubPage() {
@@ -17,7 +19,8 @@ export function DocumentsHubPage() {
   const permitted = (t: DocumentTile) =>
     isAdmin || (t.permissionAny ? hasAnyPermission(t.permissionAny) : !t.permission || hasPermission(t.permission));
   const isOff = (t: DocumentTile) => Boolean(t.visibleWhen && !t.visibleWhen(ctx));
-  const visible = documentTiles.filter((t) => permitted(t) && offEntryMode(isOff(t), Boolean(t.offHint), canSeeOff) !== "hide");
+  const menu = useMenuLayout();
+  const visible = documentTiles.filter((t) => !isHubTileHidden(menu, t.to) && permitted(t) && offEntryMode(isOff(t), Boolean(t.offHint), canSeeOff) !== "hide");
   return (
     <PageShell>
       <PageHeader

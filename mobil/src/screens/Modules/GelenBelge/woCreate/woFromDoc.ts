@@ -12,6 +12,7 @@ import type {
   ReadSummary,
 } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
+import { multiPartyIssues, openedWorkOrders, withParties, type MultiPartyDraft } from './partyDraft';
 
 /** Kısayollar: sunucu `?shortcut=1` ile süzer; eski sunucu parametreyi yok sayar → alan yok → liste boş (bugünkü yol). */
 export function shortcutRoutes(routes: readonly ProductionRoute[]): ProductionRoute[] {
@@ -72,6 +73,8 @@ export interface RowForm {
   /** Okunan metre doğrulama bekliyor: doğrula ya da düzelt. */
   metersReview: boolean;
   gramajValueId: string | null;
+  /** S1 çok partili belge: parti satırları + kip (null/yok = tek partili, bugünkü form). */
+  multi?: MultiPartyDraft | null;
 }
 
 function toNumber(v: string | number | null | undefined): number | null {
@@ -107,7 +110,8 @@ export function initialRowForm(d: InboundNoteDetail, gramajFor?: (customerId: st
 export function rowIssues(f: RowForm): string[] {
   const out: string[] = [];
   if (!f.ownerCustomerId) out.push('Müşteriyi seçin.');
-  if (f.meters === null) out.push('Kurşun metresi yok — metreyi girin.');
+  if (f.multi) out.push(...multiPartyIssues(f.multi));
+  else if (f.meters === null) out.push('Kurşun metresi yok — metreyi girin.');
   else if (f.metersReview) out.push('Kurşun metresini doğrulayın ya da düzeltin.');
   return out;
 }
@@ -129,7 +133,7 @@ export function buildCreateBody(
   if (opts.gramajTouched) {
     body.targetValues = f.gramajValueId && opts.gramajPropertyId ? [{ propertyId: opts.gramajPropertyId, valueId: f.gramajValueId }] : [];
   }
-  return body;
+  return f.multi ? withParties(body, f.multi) : body;
 }
 
 /** Taslak kaydı (ayrı onay kipi): yalnız değişen başlık alanları PATCH'e gider; boşsa çağrı yok. */
@@ -147,12 +151,20 @@ export function buildDraftPatch(f: RowForm, d: InboundNoteDetail): InboundNotePa
 }
 
 export type RowResult =
-  | { kind: 'OPENED'; workOrderId: string; workOrderNo: string; batchNumber: string; print: 'PRINTED' | 'PRINT_FAILED' | null }
+  | {
+      kind: 'OPENED';
+      workOrderId: string;
+      workOrderNo: string;
+      batchNumber: string;
+      print: 'PRINTED' | 'PRINT_FAILED' | null;
+      /** Açılan bütün iş emirleri (çok partide PER_PARTY → parti başına bir). */
+      workOrders: { workOrderId: string; workOrderNo: string; batchNumber: string | null }[];
+    }
   | { kind: 'DRAFT'; text: string }
   | { kind: 'FAILED'; text: string };
 
 export function openedResult(r: CreateWorkOrderFromNoteResult): RowResult {
-  return { kind: 'OPENED', workOrderId: r.workOrderId, workOrderNo: r.workOrderNo, batchNumber: r.batchNumber, print: null };
+  return { kind: 'OPENED', workOrderId: r.workOrderId, workOrderNo: r.workOrderNo, batchNumber: r.batchNumber, print: null, workOrders: openedWorkOrders(r) };
 }
 
 export function draftResult(noteNo: string, disabledByServer: boolean): RowResult {

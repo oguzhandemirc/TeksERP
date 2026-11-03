@@ -161,6 +161,8 @@ async function main(): Promise<void> {
   await prisma.workOrderStep.update({ where: { id: j2.stepId }, data: { status: StepStatus.COMPLETED } });
   check("kapanmış adımda uyarı yok (yeniden açma kendi akışında)", (await qc.getStep(j2.stepId, { sessionMachineId: m1 })).data.foreignMachine === null);
   await prisma.workOrderStep.update({ where: { id: j2.stepId }, data: { status: StepStatus.ACTIVE } });
+  // Tablet reopen sonrası getStep yanıtına bakıp istemi kurar (KursunQcScreen confirmReopen).
+  check("yeniden açılan adımda getStep uyarır (reopen yolu)", (await qc.getStep(j2.stepId, { sessionMachineId: m1 })).data.foreignMachine?.plannedMachineId === m2);
 
   // ── §5 ──
   section("§5 cari varsayılan kurşun gramajı");

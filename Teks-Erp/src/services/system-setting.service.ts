@@ -427,6 +427,7 @@ export const SETTING_KEYS = {
   /** İş emri formundan okutulan belgenin kaydı: SEPARATE ayrı onay (varsayılan = bugünkü, `gelen-belge:approve`) |
    *  WITH_WORK_ORDER iş emri açan kaydeder (belge + top + iş emri tek istekte). Tek yazar `PUT /api/gelen-belge/ayarlar`. */
   GELEN_BELGE_FORM_APPROVAL: "gelenBelge.formApproval",
+  GELEN_BELGE_MULTI_PARTY_WORK_ORDER: "gelenBelge.multiPartyWorkOrder",
   /** İş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır mı (varsayılan false = bugünkü: elle).
    *  Tek yazar `PUT /api/gelen-belge/ayarlar`; flag yüküne konmaz. */
   PRODUCTION_REFAKAT_AUTO_PRINT: "production.refakatAutoPrint",
@@ -1061,6 +1062,10 @@ export const SETTING_KEYS = {
   // belge-sablon T1C: davranış bayrakları (modül DEĞİL, profile girmez); ikisi de default false.
   DOCUMENTS_DESIGNER_ENABLED: "documents.designerEnabled",
   DOCUMENTS_PUBLISH_SOD_ENABLED: "documents.publishSodEnabled",
+  /** Menü düzeni (K19): menüden gizlenen ekran anahtarları (JSON dizi). Tek yazar `PUT /api/menu-layout`; flag yükünde DÖNMEZ. */
+  UI_MENU_HIDDEN_SCREENS: "ui.menuHiddenScreens",
+  /** Menü düzeni (K19): teknik ekranlar kenar menüde "Gelişmiş" grubunda (varsayılan false = bugünkü yerleri). */
+  UI_MENU_ADVANCED_GROUP: "ui.menuAdvancedGroup",
 } as const;
 
 const DEFAULT_DEADLINE_DAYS = 7;
@@ -6749,6 +6754,14 @@ export const FORM_APPROVAL_VALUES: readonly IncomingDocFormApprovalMode[] = ["SE
 export const DEFAULT_FORM_APPROVAL: IncomingDocFormApprovalMode = "SEPARATE";
 export const readIncomingDocFormApproval = (tx?: Pick<typeof prisma, "systemSetting">): Promise<IncomingDocFormApprovalMode> =>
   readClosedSetting(SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, FORM_APPROVAL_VALUES, DEFAULT_FORM_APPROVAL, tx);
+
+/** S1 çok partili belge → iş emri: her parti ayrı iş emri (PER_PARTY) ya da tek iş emri, partiler ayrı top (SINGLE). */
+export type MultiPartyWorkOrderMode = "SINGLE" | "PER_PARTY";
+export const MULTI_PARTY_WORK_ORDER_VALUES: readonly MultiPartyWorkOrderMode[] = ["SINGLE", "PER_PARTY"];
+/** Varsayılan SINGLE = bugünkü davranış (belgeden tek iş emri). */
+export const DEFAULT_MULTI_PARTY_WORK_ORDER: MultiPartyWorkOrderMode = "SINGLE";
+export const readMultiPartyWorkOrder = (tx?: Pick<typeof prisma, "systemSetting">): Promise<MultiPartyWorkOrderMode> =>
+  readClosedSetting(SETTING_KEYS.GELEN_BELGE_MULTI_PARTY_WORK_ORDER, MULTI_PARTY_WORK_ORDER_VALUES, DEFAULT_MULTI_PARTY_WORK_ORDER, tx);
 
 /** İş emri açılınca refakat kartı kendiliğinden yazdırılsın mı (kayıt yok/çöp = false, bugünkü). */
 export async function readRefakatAutoPrint(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {

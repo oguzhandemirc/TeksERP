@@ -7,6 +7,8 @@ import { definitionTiles, type DefinitionTile } from "./tile-config";
 import { definitionGroups, type DefinitionGroupKey } from "./groups-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { HubSkeleton } from "@/components/hub/HubSkeleton";
+import { useMenuLayout } from "@/hooks/useMenuLayout";
+import { isHubTileHidden } from "@/lib/menu-layout";
 
 export function DefinitionsHubPage() {
   const { isAdmin, hasPermission, hasAnyPermission } = useRoleAccess();
@@ -19,7 +21,9 @@ export function DefinitionsHubPage() {
   const canSeeOff = useCanSeeOffModules();
   // Kapalı modül karosu yalnız modülü açabilene soluk (`offEntryMode`, 2026-11-01); rejim takası (`offHint`siz) herkese gizli.
   const isOff = (t: DefinitionTile) => Boolean(t.visibleWhen && !t.visibleWhen(visibilityCtx));
+  const menu = useMenuLayout();
   const visibleTiles = definitionTiles.filter((t) => {
+    if (isHubTileHidden(menu, t.to)) return false; // K19 menü düzeni
     // Rejim kuralı İZİNDEN ve admin kısa devresinden ÖNCE: kurulum türü
     // sorusudur, yetki değil — admin de fabrika rejiminde Cariler'i görmez.
     if (offEntryMode(isOff(t), Boolean(t.offHint), canSeeOff) === "hide") return false;

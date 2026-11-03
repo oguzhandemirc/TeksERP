@@ -30,6 +30,8 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/auth/trusted-devices/revoke-all": e("hatırlanan bütün cihazlarını kaldırdı", "hatırlanan bütün cihazlarını kaldırmaya çalıştı"),
   "POST /api/admin/users/:id/trusted-devices/:deviceId/revoke": e("kullanıcının hatırlanan bir cihazını kaldırdı", "kullanıcının hatırlanan bir cihazını kaldırmaya çalıştı"),
   "POST /api/admin/users/:id/trusted-devices/revoke-all": e("kullanıcının hatırlanan bütün cihazlarını kaldırdı", "kullanıcının hatırlanan bütün cihazlarını kaldırmaya çalıştı"),
+  // ── Menü düzeni (K19)
+  "PUT /api/menu-layout": e("menü düzenini değiştirdi", "menü düzenini değiştirmeye çalıştı"),
   // ── Belge tasarımcısı
   "POST /api/document-templates/sistem-onizleme/:docType": e("sistem belge tasarımını önizledi", "sistem belge tasarımını önizlemeye çalıştı"),
   // ── Desen kartı + ürün yapısı (Seyitoğlu SY-A2)
@@ -123,6 +125,9 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/gelen-belge/irsaliyeler/:id/is-emri": e("gelen belgeden terbiye iş emri açtı", "gelen belgeden terbiye iş emri açmaya çalıştı"),
   "POST /api/gelen-belge/irsaliyeler/:id/iptal": e("onaylı gelen belgeyi iptal etti", "onaylı gelen belgeyi iptal etmeye çalıştı"),
   "PATCH /api/gelen-belge/sablonlar/:code": e("gönderen şablonunu düzenledi", "gönderen şablonunu düzenlemeye çalıştı"),
+  "POST /api/gelen-belge/sablonlar/ozel": e("gelen belge tipi tanıttı (kullanıcı şablonu)", "gelen belge tipi tanıtmaya çalıştı"),
+  "PUT /api/gelen-belge/sablonlar/ozel/:code": e("kullanıcı belge şablonunu güncelledi", "kullanıcı belge şablonunu güncellemeye çalıştı"),
+  "POST /api/gelen-belge/sablonlar/oneri": e("belge tipi için şablon önerisi aldı", "belge tipi için şablon önerisi almaya çalıştı"),
   "PUT /api/gelen-belge/varsayilan-urunler/:customerId": e("müşterinin gelen belge varsayılan ürününü yazdı", "müşterinin gelen belge varsayılan ürününü yazmaya çalıştı"),
   "DELETE /api/gelen-belge/varsayilan-urunler/:customerId": e("müşterinin gelen belge varsayılan ürününü kaldırdı", "müşterinin gelen belge varsayılan ürününü kaldırmaya çalıştı"),
 };

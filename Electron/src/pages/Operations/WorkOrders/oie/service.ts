@@ -4,6 +4,7 @@
 import axios from "axios";
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
+import type { MultiPartyMode, NotePartiesView } from "./partyDraft";
 
 /** İş emri kısayolu = `isWorkOrderShortcut` işaretli rota şablonu (sıra `shortcutOrder`). */
 export interface WorkOrderShortcut {
@@ -66,6 +67,9 @@ export interface NoteWorkOrderBody {
   stepPlanning?: Array<{ sequence: number; plannedMachineId?: string | null }>;
   targetValues?: Array<{ propertyId: string; valueId: string }>;
   notes?: string;
+  /** S1 çok partili belge (≥2 parti); eski backend strict gövdeyle 400 verir — yalnız `/partiler` çok parti dediğinde gider. */
+  parties?: Array<{ blockNo: number; batchNo: string | null; meters: number }>;
+  mode?: MultiPartyMode;
 }
 
 export interface NoteWorkOrderResult {
@@ -73,6 +77,20 @@ export interface NoteWorkOrderResult {
   workOrderNo: string;
   batchNumber: string | null;
   rollId: string | null;
+  /** Çok partili kayıtta açılan iş emirleri (eski backend göndermez). */
+  workOrders?: Array<{ blockNos: number[]; workOrderId: string; workOrderNo: string; batchNumber: string | null }>;
+  mode?: MultiPartyMode;
+}
+
+/** Parti özeti; eski backend (404) → null = bugünkü tek partili form. */
+export async function getNoteParties(noteId: string): Promise<NotePartiesView | null> {
+  try {
+    const r = await apiClient.get<ApiResponse<NotePartiesView>>(`/api/gelen-belge/irsaliyeler/${noteId}/partiler`, { suppressErrorToast: true });
+    return r.data.data ?? null;
+  } catch (e) {
+    if (axios.isAxiosError(e) && e.response?.status === 404) return null;
+    throw e;
+  }
 }
 
 /** Hata toast'unu çağıran yazar (satır/ekran sonucu tek yüzey). */

@@ -544,6 +544,13 @@ export default function KursunQcScreen() {
       const res = await kursunQcService.getStep(reopenPrompt.stepId);
       const step = res.data as KursunStepSummary | undefined;
       if (!step) throw new Error('Adım okunamadı');
+      // K16: kapalı adımda sunucu uyarı vermez; yeniden açılınca gelir — iz atlanmasın diye istem önce.
+      if (step.foreignMachine) {
+        const { barcode, fromInput, batchNumber } = reopenPrompt;
+        setReopenPrompt(null);
+        setForeignPrompt({ barcode, fromInput, batchNumber, plannedMachineName: step.foreignMachine.plannedMachineName, step });
+        return;
+      }
       openResolvedStep(reopenPrompt.barcode, step, reopenPrompt.fromInput, true);
       setReopenPrompt(null);
     } catch (err) {

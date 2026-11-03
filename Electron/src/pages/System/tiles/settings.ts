@@ -1,5 +1,5 @@
 // Sistem › Ayarlar karoları (sıra = hub sırası).
-import { Hash, Blocks, Building2, Monitor, Printer, SlidersHorizontal, BellRing } from "lucide-react";
+import { Hash, Blocks, Building2, Monitor, Printer, SlidersHorizontal, BellRing, PanelLeft } from "lucide-react";
 import { TERIM_AD } from "@/lib/terim";
 import { SETTINGS_COMPANY_ACCESS, SETTINGS_FLAGS_ACCESS, SETTINGS_PRINTING_ACCESS, SETTINGS_WORKSTATION_ACCESS, NOTIFICATION_PROFILES_ACCESS } from "@/lib/permissions";
 import type { SystemTile } from "../tile-config";
@@ -87,5 +87,16 @@ export const settingsTiles: SystemTile[] = [
     group: "settings",
     permissionAny: NOTIFICATION_PROFILES_ACCESS,
     kapaliBayrak: "bildirimGelenKutusuEnabled",
+  },
+  {
+    // K19: menüden ekran gizleme + Gelişmiş grubu; kendisi gizlenemez (backend `MENU_UNHIDEABLE_SCREENS`).
+    key: "menu-layout",
+    title: "Menü Düzeni",
+    description: "Kullanılmayan ekranları menüden, aramadan ve tablet ana ekranından kaldır; hazır set uygula",
+    icon: PanelLeft,
+    to: "/system/menu-layout",
+    group: "settings",
+    permission: "admin:settings",
+    keywords: "menü gizle sadeleştir fason hizmet gelişmiş karo",
   },
 ];

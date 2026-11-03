@@ -15,6 +15,7 @@ import { readResultView, fmtKursunMeters } from '../readResult';
 import { batchPatch, meterChoices, parseMeters } from '../approvalGate';
 import { detailFromSummary, pinRecent, rowIssues } from './woFromDoc';
 import type { DocRow, WoRowsState } from './useWoRows';
+import PartyRows, { useRowParties } from './PartyRows';
 
 interface Props {
   row: DocRow;
@@ -75,14 +76,18 @@ export default function DocRowCard({ row, wo, customers, customersLoading }: Pro
               {`Belgede “${f.ownerAsk.matchedText}” geçiyor — ${f.ownerAsk.name} mi? Seç`}
             </Chip>
           )}
-          <SheetField
-            label="Parti no"
-            value={f.ourBatchNo ?? ''}
-            placeholder={candidates.length > 1 ? `Parti no seçin (${candidates.length} aday)` : 'Belgede parti no yok — seriden verilecek'}
-            onPress={() => setPicker('batch')}
-            disabled={locked || candidates.length === 0}
-          />
-          <MeterField row={row} wo={wo} meterText={meterText} locked={locked} onEdit={() => setMeterOpen(true)} />
+          {f.multi ? <PartyRows row={row} wo={wo} locked={locked} /> : (
+            <>
+              <SheetField
+                label="Parti no"
+                value={f.ourBatchNo ?? ''}
+                placeholder={candidates.length > 1 ? `Parti no seçin (${candidates.length} aday)` : 'Belgede parti no yok — seriden verilecek'}
+                onPress={() => setPicker('batch')}
+                disabled={locked || candidates.length === 0}
+              />
+              <MeterField row={row} wo={wo} meterText={meterText} locked={locked} onEdit={() => setMeterOpen(true)} />
+            </>
+          )}
           <GramajField row={row} wo={wo} locked={locked} />
           {!done && issues.map((n) => <Text key={n} style={styles.note}>• {n}</Text>)}
         </>
@@ -120,6 +125,7 @@ function useRowRead(row: DocRow, wo: WoRowsState) {
     if (detail.data) setDetail(row.noteId, detail.data);
     else if (summary && (!canReadDetail || detailFailed)) setDetail(row.noteId, detailFromSummary(summary));
   }, [detail.data, summary, canReadDetail, detailFailed, row.noteId, setDetail]);
+  useRowParties(row, wo, readDone && canReadDetail);
   return { read, readDone, detailFailed };
 }
 
@@ -224,7 +230,11 @@ function RowResultView({ row, wo }: { row: DocRow; wo: WoRowsState }) {
   if (r.kind === 'OPENED') {
     return (
       <View style={styles.result} testID={`belge-satir-sonuc-${row.noteNo}`}>
-        <Text style={styles.resultTitle}>{`${TERIM.terbiyeIsEmri.tekil} açıldı: ${r.workOrderNo} · Parti ${r.batchNumber}`}</Text>
+        <Text style={styles.resultTitle}>
+          {r.workOrders.length > 1
+            ? `${r.workOrders.length} ${TERIM.terbiyeIsEmri.tekilKucuk} açıldı: ${r.workOrders.map((w) => `${w.workOrderNo} · Parti ${w.batchNumber ?? '—'}`).join(', ')}`
+            : `${TERIM.terbiyeIsEmri.tekil} açıldı: ${r.workOrderNo} · Parti ${r.batchNumber}`}
+        </Text>
         {r.print === 'PRINTED' && <Text style={styles.note}>Refakat kartı yazdırıldı.</Text>}
         {r.print !== 'PRINTED' && (
           <Button mode="outlined" icon="printer" onPress={() => wo.print(row.noteId, r.workOrderId)} contentStyle={styles.btn} testID={`belge-satir-yazdir-${row.noteNo}`}>
