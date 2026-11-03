@@ -1,7 +1,9 @@
+import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CrudPage } from "@/components/layout/CrudPage";
 import { nextSortOrder } from "@/lib/sort-order";
-import { fabricPropertyColumns } from "./columns";
+import { buildFabricPropertyColumns } from "./columns";
+import { HIERARCHY_SORT, hierarchyRowClass } from "./hierarchy";
 import { fabricPropertyService } from "./service";
 import { FabricPropertyFormDialog } from "./FabricPropertyFormDialog";
 import type { FabricProperty } from "./types";
@@ -20,6 +22,18 @@ export function FabricPropertiesPage() {
     staleTime: 60_000,
   });
   const nextOrder = nextSortOrder(allQ.data?.data ?? []);
+  // Ağaç (K21): ebeveyn satırı daraltılabilir, varsayılan açık; durum yalnız görüntü.
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  const toggle = useCallback((id: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  const columns = useMemo(() => buildFabricPropertyColumns({ collapsed, onToggle: toggle }), [collapsed, toggle]);
+  const rowClassName = useCallback((row: FabricProperty) => hierarchyRowClass(row, collapsed), [collapsed]);
 
   return (
     <CrudPage<FabricProperty>
@@ -29,16 +43,21 @@ export function FabricPropertiesPage() {
       importEntity="fabricProperty"
       queryKey="fabric-properties"
       service={fabricPropertyService}
-      columns={fabricPropertyColumns}
+      columns={columns}
+      defaultSortBy={HIERARCHY_SORT}
+      rowClassName={rowClassName}
       writePermission="property:write"
       searchPlaceholder="Ad veya kategori ara..."
-      renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
+      renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting, openEdit }) => (
         <FabricPropertyFormDialog
+          // Ebeveyn → çeşit geçişinde form yeni kayıtla yeniden kurulur (reset yalnız açılışta koşar).
+          key={initial?.id ?? "yeni"}
           open={open}
           onOpenChange={onOpenChange}
           initial={initial}
           isSubmitting={isSubmitting}
           allProperties={allQ.data?.data ?? []}
+          onOpenProperty={openEdit}
           onSubmit={(values) => onSubmit(buildFabricPropertyPayload(values, initial, nextOrder))}
         />
       )}

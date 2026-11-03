@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, ChevronRight, Star } from "lucide-react";
+import { ArrowLeft, ChevronRight, Info, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useFavorites } from "@/hooks/useFavorites";
 import { findBreadcrumbParent, findCommandEntry } from "./command-entries";
 import { useTabId } from "./tabs/tab-active";
@@ -13,7 +14,12 @@ interface Props {
   title: ReactNode;
   /** Başlığın hemen yanında (aynı satırda) gösterilen ek içerik — ör. durum rozeti. */
   titleExtra?: ReactNode;
+  /** Sayfanın ne işe yaradığı — başlık altında ÇİZİLMEZ (K24), başlığın yanındaki ⓘ ipucunda
+   *  durur; ⓘ'nin erişilebilir adı metnin kendisidir. */
   description?: string;
+  /** Başlık altında GÖRÜNÜR kalan kayıt bağlamı/durum satırı (ör. "Müşteri · Şube",
+   *  "Tür · Rota") — açıklama değil veridir; ipucuna gizlenmez. */
+  statusLine?: ReactNode;
   actions?: ReactNode;
   className?: string;
   /** Sol geri-oku ikonu için AÇIK hedef (breadcrumb parent yoksa da göster; ör. detay
@@ -29,7 +35,7 @@ interface Props {
   pageFavorite?: boolean;
 }
 
-export function PageHeader({ title, titleExtra, description, actions, className, onBack, parent: parentProp, actionsAlign = "start", pageFavorite = true }: Props) {
+export function PageHeader({ title, titleExtra, description, statusLine, actions, className, onBack, parent: parentProp, actionsAlign = "start", pageFavorite = true }: Props) {
   const location = useLocation();
   const { pathname } = location;
   const navigate = useNavigate();
@@ -88,7 +94,7 @@ export function PageHeader({ title, titleExtra, description, actions, className,
           </Button>
         )}
         <span className="my-0.5 w-1 shrink-0 rounded-full bg-primary/70" aria-hidden />
-        <div className="min-w-0">
+        <div className="flex min-w-0 flex-col justify-center">
           {parent && (
             <button
               type="button"
@@ -101,9 +107,10 @@ export function PageHeader({ title, titleExtra, description, actions, className,
           )}
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="break-words text-lg font-semibold tracking-tight">{title}</h1>
+            {description && <HeaderInfo text={description} />}
             {titleExtra}
           </div>
-          {description && <p className="text-sm text-muted-foreground">{description}</p>}
+          {statusLine && <p className="text-sm text-muted-foreground">{statusLine}</p>}
         </div>
       </div>
       {(entry || actions) && (
@@ -125,5 +132,28 @@ export function PageHeader({ title, titleExtra, description, actions, className,
         </div>
       )}
     </div>
+  );
+}
+
+/** Başlık yanındaki ⓘ — açıklama satırı yer kaplamasın diye ipucunda (K24, LockInfo kalıbı). */
+function HeaderInfo({ text }: { text: string }) {
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label={text}
+            data-testid="page-header-info"
+            className="inline-flex shrink-0 rounded-full text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Info className="h-4 w-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="start" className="max-w-sm whitespace-normal leading-snug">
+          {text}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
