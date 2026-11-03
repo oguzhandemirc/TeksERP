@@ -8,7 +8,8 @@ import ModuleSheet from '../../../components/ModuleSheet';
 import { TERIM } from '../../../lib/terim';
 import { useAttemptToken } from '../../../offline/attemptToken';
 import { scanRouteService } from '../../../services/scanRoute.service';
-import { decideScanRoutePrompt, readScanRouteView, type ScanRoutePrompt } from './scanRoute';
+import { signalScan } from '../../../services/scanFeedback';
+import { applyClosePermission, decideScanRoutePrompt, needsClosePermission, readScanRouteView, type ScanRoutePrompt } from './scanRoute';
 
 type Pending = { barcode: string; prompt: Exclude<ScanRoutePrompt, { kind: 'SILENT' }>; reopen: () => void };
 
@@ -77,6 +78,18 @@ export function useScanRoute() {
       return 'handled';
     }
     attempt.renew();
+    if (needsClosePermission(prompt)) {
+      // S15b: düğmeyi göstermeden önce yetki önizlemeden (sunucu tek kaynak); okunamazsa bugünkü onay.
+      void scanRouteService
+        .preview(barcode)
+        .then((r) => r.data?.canClose, () => undefined)
+        .then((canClose) => {
+          const next = applyClosePermission(prompt, view, canClose);
+          if (next.kind === 'BLOCK') signalScan('reject');
+          setPending({ barcode, prompt: next as Pending['prompt'], reopen });
+        });
+      return 'handled';
+    }
     setPending({ barcode, prompt, reopen });
     return prompt.kind === 'BLOCK' ? 'blocked' : 'handled';
   };

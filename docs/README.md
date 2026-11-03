@@ -12,7 +12,7 @@ Kanonik kaynak **kod + `CLAUDE.md` dosyaları**dır. 2026-09-05 yeniden yapılan
 | Rutin yazım konvansiyonları (servis metodu, model, sayfa, ekran nasıl yazılır; boyut tavanı, kütüphane seçimi, test kadansı) | `docs/standart/` (giriş: `docs/standart/README.md`) |
 | "X eklerken şu yerleri güncelle" (bayrak, enum, route+izin, migration, bekçi, Electron sayfası, mobil ekran, sürüm) | `docs/RECETELER.md` |
 | Yerel geliştirme (env, DB, tek bekçi, sunucu) | `docs/GELISTIRME-DONGUSU.md` |
-| Alan → bekçi (test) haritası | `Teks-Erp/docs/BEKCI-HARITASI.md` |
+| Alan → bekçi (test) haritası | `Teks-Erp/docs/bekci-harita/<alan>.md` (dizin `Teks-Erp/docs/BEKCI-HARITASI.md`) |
 | Domain terimleri | `docs/SOZLUK.md` |
 | Personel ve yönetici kullanım kılavuzu (panel · tablet · sunucu bilgisayarı · sorun giderme) | `docs/kilavuz/README.md` |
 | Alt proje çalışma düzeni | `Teks-Erp/CLAUDE.md` · `Electron/CLAUDE.md` · `mobil/CLAUDE.md` |

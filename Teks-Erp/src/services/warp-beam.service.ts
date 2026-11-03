@@ -12,6 +12,7 @@
 // • Kalan metre KOLON DEĞİL: Σ warpBeamLengthSign(kind) × lengthM.
 // • Audit tx DIŞINDA, best-effort.
 // =============================================================================
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { Prisma, WarpBeamOrigin, WarpBeamStatus, YarnMovementKind } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
@@ -230,7 +231,7 @@ async function createWarpBeamFresh(input: WarpBeamCreateInput, userId?: string):
         // G3: owner verildiyse emanet modülü açık olmalı (gövde kapısı, 403) — köken CONSIGNED de owner ister.
         await assertEmanetWritableTx(tx, party.ownerCustomerId, "levent");
         const beamNo = await nextBeamNoTx(tx, new Date());
-        return tx.warpBeam.create({
+        return sequentialTx(tx).warpBeam.create({
           data: {
             beamNo,
             warpSpecId: input.warpSpecId,

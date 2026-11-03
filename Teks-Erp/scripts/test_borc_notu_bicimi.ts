@@ -117,8 +117,10 @@ const SATIR_NUMARASI_CAPASI = /\*\*Çapa:\*\*[^\n]*?\.[a-z]+:\d+/;
 /** Borç bloğu taranan dosyalar: kural dosyaları + arşiv + bekçi başlıkları. */
 function borcBloklari(): Array<{ dosya: string; satir: number; blok: string }> {
   const hedefler: Array<[string, string]> = [];
-  for (const ad of readdirSync(KURALLAR).filter((f) => f.endsWith(".md"))) {
-    hedefler.push([`docs/kurallar/${ad}`, join(KURALLAR, ad)]);
+  for (const alt of ["", "ayrinti/"]) { // ayrinti/ = alan dosyalarının tam metni
+    let adlar: string[] = [];
+    try { adlar = readdirSync(join(KURALLAR, alt)).filter((f) => f.endsWith(".md")); } catch { continue; }
+    for (const ad of adlar) hedefler.push([`docs/kurallar/${alt}${ad}`, join(KURALLAR, alt, ad)]);
   }
   const arsivDizini = join(KOK, "docs/history/arsiv");
   for (const ad of readdirSync(arsivDizini).filter((f) => /^\d{4}-\d{2}\.md$/.test(f)).sort()) {

@@ -7,6 +7,7 @@
 // katmanları (`ItemWarpLayer`) ve varyant iplik değişimleri YALNIZ bu dosyada okunur
 // (`test_etkin_yapi_tek_kaynak` AST bekçisi). Uyarılar kaydı reddetmez.
 // =============================================================================
+import { sequentialTx } from "./tx-sequential-relations.helper";
 import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
@@ -262,7 +263,7 @@ export async function readWarpLayersForItems(db: Db, itemIds: string[]): Promise
  * take-up'ı). Ortak grup yoksa null — levent tüketimi bugünkü gibi (bayt-aynı).
  */
 export async function readSharedBeamGroupsForRoll(db: Db, rollId: string): Promise<{ groundWarpSpecId: string; layers: Array<{ beamMode: string; takeUpPct: Prisma.Decimal | null }> } | null> {
-  const rows = await db.itemWarpLayer.findMany({
+  const rows = await sequentialTx(db).itemWarpLayer.findMany({
     where: { beamMode: "SHARED_BEAM", item: { rolls: { some: { id: rollId } }, warpSpecId: { not: null } } },
     select: { beamMode: true, warpSpec: { select: { takeUpPct: true } }, item: { select: { warpSpecId: true } } },
     orderBy: { sortOrder: "asc" },

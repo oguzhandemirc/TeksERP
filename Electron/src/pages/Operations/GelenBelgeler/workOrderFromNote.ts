@@ -6,6 +6,10 @@ import type { QuickStartPayload, QuickStartResult } from "@/pages/Operations/Wor
 import type { ApiResponse } from "@/types/api";
 import type { PlanGroup, PlanTarget } from "./types";
 
+/** K29 S15b: rota seçicide "Sahada belirlenir (rotasız)" değeri — sunucuya gitmez, gövdede `scanRouted: true` olur. */
+export const SCAN_ROUTE_VALUE = "__scan_routed__";
+export const SCAN_ROUTE_LABEL = "Sahada belirlenir (rotasız)";
+
 export interface GroupStartInput {
   group: PlanGroup;
   /** Panelde düzeltilmiş hedefler (öneri ya da modal seçimi). */
@@ -30,7 +34,7 @@ export function buildGroupPayload(
     ...(sourceNoteId ? { sourceNoteId } : {}),
     clientToken,
     rollBarcodes: input.group.rolls.filter((r) => r.attachable && r.barcode).map((r) => r.barcode as string),
-    routeTemplateId,
+    ...(routeTemplateId === SCAN_ROUTE_VALUE ? { scanRouted: true } : { routeTemplateId }),
     ...(foldType ? { foldType } : {}),
     targetValues: input.targets.map((t) => ({ propertyId: t.propertyId, valueId: t.valueId })),
     targetPropertyIds: [...new Set(input.targets.map((t) => t.flagPropertyId))],

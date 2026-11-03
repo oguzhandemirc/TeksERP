@@ -337,6 +337,16 @@ if (staged.some((f) => f.startsWith("scripts/deneme-veri/") || f === "scripts/te
   adimlar.push({ ad: "deneme verisi", cwd: ".", cmd: ["node", ["scripts/test_deneme_veri.mjs"]] });
 }
 
+// OTURUM AÇILIŞ KANCASI: çıktı tavanı (her açılış/clear bağlamdan yer) — zero-dep, ~0,3 sn.
+if (staged.some((f) => f.startsWith("scripts/claude-hooks/") || f === "scripts/test_oturum_baslangic.mjs")) {
+  adimlar.push({ ad: "oturum açılış kancası", cwd: ".", cmd: ["node", ["scripts/test_oturum_baslangic.mjs"]], gitEnvSil: true });
+}
+
+// KURALLAR BOYUT CIRCIRI: docs/kurallar/*.md (ayrinti/ hariç) ≤ max(20 KB, taban) — zero-dep, INDEX'ten okur.
+if (staged.some((f) => /^docs\/kurallar\/[^/]+\.md$/.test(f) || f === "scripts/check-kurallar-boyut.mjs" || f === "scripts/lib/kurallar-boyut-taban.json")) {
+  adimlar.push({ ad: "kurallar boyut cırcırı", cwd: ".", cmd: ["node", ["scripts/check-kurallar-boyut.mjs"]] });
+}
+
 // PLAY MAĞAZA GİRİŞİ: metin sınırları, görsel boyut/alfa, maskesiz görüntü ve inceleme hesabı izi (ağsız).
 if (staged.some((f) => f === "deploy/play-magaza.mjs" || f === "scripts/test_play_magaza.mjs" || f.startsWith("patron/uygulama/magaza/") || f.startsWith("mobil/magaza/"))) {
   adimlar.push({ ad: "Play mağaza girişi", cwd: ".", cmd: ["node", ["scripts/test_play_magaza.mjs"]], gitEnvSil: true });

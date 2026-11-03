@@ -9,6 +9,7 @@
 // → iç ilk adımda giriş hareketi → parti (8022 numara kilidi) → BÜTÜN adımlar yeniden hesap (R2).
 // =============================================================================
 
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { Prisma, RollStatus, WorkOrderStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
@@ -81,7 +82,7 @@ const OPEN_FOR_ADD: readonly WorkOrderStatus[] = [WorkOrderStatus.PLANNED, WorkO
 
 async function loadOpenWorkOrderTx(tx: Tx, workOrderId: string): Promise<WoForAdd> {
   await touchWorkOrderTx(tx, workOrderId);
-  const wo = await tx.workOrder.findUnique({ where: { id: workOrderId }, select: WO_ADD_SELECT });
+  const wo = await sequentialTx(tx).workOrder.findUnique({ where: { id: workOrderId }, select: WO_ADD_SELECT });
   if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı`);
   if (wo.status === WorkOrderStatus.COMPLETED) throw completedNoAddError();
   if (!OPEN_FOR_ADD.includes(wo.status)) {

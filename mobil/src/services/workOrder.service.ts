@@ -96,6 +96,8 @@ export interface QuickStartRequest extends WorkOrderPayload {
   /** İlk rota adımı fason (boyahane) ise: WO açıldıktan sonra o adıma planlanan
    *  firmaya otomatik fason sevki de yapılır (çeki listesi dahil). "Fasona Gönder". */
   dispatchFirstStep?: boolean;
+  /** K29 S15b: rotasız iş emri (rota anahtarı gönderilmez; yalnız "Okutmayla" kipinde, değilse 400 SCAN_ROUTE_DISABLED). */
+  scanRouted?: boolean;
 }
 
 export interface QuickStartResult {
@@ -282,9 +284,7 @@ export const workOrderService = {
    * backend WO'yu geri alır.
    */
   quickStart: (data: QuickStartRequest): Promise<ApiResponse<QuickStartResult>> =>
-    apiClient
-      .post<ApiResponse<QuickStartResult>>('/work-orders/quick-start', data)
-      .then((r) => r.data),
+    apiClient.post<ApiResponse<QuickStartResult>>('/work-orders/quick-start', data).then((r) => r.data),
 
   /**
    * Temel alan güncelle (PATCH /:id) — yalnız COMPLETED/CANCELLED reddedilir,

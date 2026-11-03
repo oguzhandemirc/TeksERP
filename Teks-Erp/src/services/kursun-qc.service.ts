@@ -15,6 +15,7 @@
 // =============================================================================
 
 import { stationWorkSearchWhere } from "./helpers/workorder-doc-search.helper";
+import { scanRoutedOpenCards, type ScanRoutedOpenCard } from "./helpers/scan-route-open-cards.helper";
 import { ACTIVE_OPERATION, OWN_OPERATION, prepareWidthTracedStepOpTx, revokeWidthTracedStepOperationsTx } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT, reopenClosedMovementsTx, revokeRollMovements } from "./helpers/roll-movement.helper";
 import { readActiveTargetValues } from "./helpers/workorder-target-value.helper";
@@ -324,6 +325,25 @@ export interface KursunMeterSummary {
   pendingAck: boolean;
 }
 
+/** `listOpenCards` adım satırı (rotasız satırlar `ScanRoutedOpenCard`, yalnız istemci isterse). */
+type KursunOpenCard = {
+  cardId: string;
+  cardNumber: string;
+  cardBarcode: string;
+  workOrderId: string;
+  batchNumber: string;
+  stepId: string;
+  stationName: string;
+  stationCode: string;
+  openRollCount: number;
+  /** KQ-D7: karttaki açık topların açık hata toplamı (⚠N rozeti). Eski APK yok sayar. */
+  openErrorCount: number;
+  priority: number;
+  isUrgent: boolean;
+  /** Gülkesim 2026-11-02: planlanan makine adı (yalnız öneri rozeti). Eski APK yok sayar. */
+  plannedMachineName: string | null;
+};
+
 export class KursunQcService {
   // ---------------------------------------------------------------------------
   // LOOKUP
@@ -412,27 +432,10 @@ export class KursunQcService {
    * `stationId` (oturum istasyonu, KQ-D2) verilirse yalnız o istasyonun adımları;
    * oturumsuz istek bugünkü gibi tüm akış adımlarını görür.
    */
-  async listOpenCards(stationId: string | null = null, q: string | null = null, sessionMachineId: string | null = null): Promise<
-    ApiResponse<
-      Array<{
-        cardId: string;
-        cardNumber: string;
-        cardBarcode: string;
-        workOrderId: string;
-        batchNumber: string;
-        stepId: string;
-        stationName: string;
-        stationCode: string;
-        openRollCount: number;
-        /** KQ-D7: karttaki açık topların açık hata toplamı (⚠N rozeti). Eski APK yok sayar. */
-        openErrorCount: number;
-        priority: number;
-        isUrgent: boolean;
-        /** Gülkesim 2026-11-02: planlanan makine adı (yalnız öneri rozeti). Eski APK yok sayar. */
-        plannedMachineName: string | null;
-      }>
-    >
-  > {
+  // Rotasız satır istenmeyen çağıranlar dar tipi görür (stepId string).
+  listOpenCards(stationId?: string | null, q?: string | null, sessionMachineId?: string | null, includeScanRouted?: false): Promise<ApiResponse<KursunOpenCard[]>>;
+  listOpenCards(stationId: string | null, q: string | null, sessionMachineId: string | null, includeScanRouted: boolean): Promise<ApiResponse<Array<KursunOpenCard | ScanRoutedOpenCard>>>;
+  async listOpenCards(stationId: string | null = null, q: string | null = null, sessionMachineId: string | null = null, includeScanRouted = false): Promise<ApiResponse<Array<KursunOpenCard | ScanRoutedOpenCard>>> {
     // Emniyet tavanı: tablet açık-kart paneli bu ucu 5sn'de bir yokluyor; `take`
     // yokken patolojik durumda tüm açık adımları çekerdi. Öncelik-sıralı kuyruk
     // olduğundan ilk OPEN_CARDS_CAP zaten en kritikleri. Gerçekte bu kadar eş
@@ -535,7 +538,10 @@ export class KursunQcService {
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
 
-    return { success: true, data };
+    // K29 S15b: yalnız istemci isterse (eski APK stepId null satır görmez) — oturum istasyonunda eklenebilecek rotasız İE.
+    if (!includeScanRouted) return { success: true, data };
+    const scanRows = await scanRoutedOpenCards({ stationId, stationWhere: STEP_FLOW_WHERE, searchWhere, excludeWorkOrderIds: data.map((d) => d.workOrderId) });
+    return { success: true, data: [...data, ...scanRows] };
   }
 
   /** Adımdaki açık topların açık (karar yolu) hata sayısı — `roll.currentStepId` üzerinden tek groupBy. */

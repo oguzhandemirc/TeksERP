@@ -6,6 +6,7 @@
 // are excluded from inventory queries unless explicitly filtered.
 // =============================================================================
 
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { applyMeasuredWidthTx, assertStationCapturesWidth, type MeasuredWidthTrace } from "./helpers/measured-width.helper";
 import { auditCutReadings, reinstateCancelledCutReadingsTx, revokeCutReadingsTx, ROLL_CANCEL_CUT_REASON } from "./helpers/meter-reading.helper";
 import { ACTIVE_OPERATION, prepareWidthTracedStepOpTx } from "./helpers/roll-operation.helper";
@@ -1549,7 +1550,7 @@ export class InventoryService {
         await assertEmanetWritableTx(tx, opts?.ownerCustomerId ?? null, "top");
         // Onay sürerken konan kilit kalan satırları burada keser (precheck tx dışıdır).
         if (opts?.cariHoldIntakeGate && opts.ownerCustomerId) await assertCariNotHeldTx(tx, opts.ownerCustomerId, "INTAKE");
-        const created = await tx.roll.create({
+        const created = await sequentialTx(tx).roll.create({
           data: {
             barcode,
             warehouseId: targetWarehouseId,
