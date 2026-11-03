@@ -29,7 +29,8 @@ import { batchAndMeterColumns, type DeliveryNoteHeaderPatch } from "./gelen-belg
 import { resolveEffectiveDefaultItem, usableDefaultItem } from "./gelen-belge-varsayilan.service";
 import { noteNotices } from "../lib/gelen-belge/uyari";
 import { sameBatchNotes } from "./gelen-belge-parti-tekrar.service";
-import { readDocumentTotalCheck, readIncomingDocEntryMode, readPhotoRetention, readUnreviewedApprovalMode } from "./system-setting.service";
+import { readDocumentTotalCheck, readDuplicateDocNoMode, readIncomingDocEntryMode, readPhotoRetention, readUnreviewedApprovalMode } from "./system-setting.service";
+import { assertDocNoUniqueTx, duplicateDocNoNotice, lockDocNosTx } from "./helpers/gelen-belge-mukerrer.helper";
 import { noteBatchAndMeters } from "./gelen-belge-parti-metre.service";
 import { getReaderUrl } from "../lib/gelen-belge/url";
 
@@ -179,9 +180,10 @@ export async function getDeliveryNote(id: string) {
   const ownerSuggestion = await suggestOwnerForNote(note);
   // Okuyucu tanımsız kurulumda bekleyen sayfa hiç okunmaz → panel "okunuyor"da beklemez, formu elle doldurtur.
   const readerConfigured = getReaderUrl().url !== null;
+  // K27 (WARN kipi) `duplicateDocNo`: aynı belge no'lu İŞİ SÜREN eşler — bilgi şeridi; yoksa null. Eski istemci yok sayar.
   // K28: onay ekranı kip FULL değilse belge no'yu vurgular ("fotoğraf küçültülecek/silinecek"); eski istemci yok sayar.
   const photoRetention = await readPhotoRetention();
-  return { ...note, lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch, ...batchMeters, ...(perDocument ? { perDocument: perDocument.gate } : {}), ownerSuggestion, readerConfigured, photoRetention };
+  return { ...note, duplicateDocNo: await duplicateDocNoNotice(note), lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch, ...batchMeters, ...(perDocument ? { perDocument: perDocument.gate } : {}), ownerSuggestion, readerConfigured, photoRetention };
 }
 
 /** Liste where'i — özet şeridi de BUNDAN türer (durum süzgeci hariç; şerit duruma göre sayar). */
@@ -287,10 +289,13 @@ export async function createDeliveryNote(input: DeliveryNoteCreateInput, userId:
     const photoBound = scanIds.length > 0 && (await prisma.documentScan.count({ where: { id: { in: scanIds }, mimeType: { not: PDF_MIME } } })) > 0;
     let restored: StoredReadOutcome[] = [];
     let sourceMarked = false;
+    // K27 BLOCK: başlığın ve saklı okumaların yazabileceği belge no'ları 8044 kilidi altında (tx'in İLK ifadesi).
+    const [dupMode, docNoKeys] = [await readDuplicateDocNoMode(), [header.senderDocNo, ...plans.map((p) => p.built?.headerCols.senderDocNo)]];
     // Numara doğuşta; sayaç türetilmiş → P2002 yarışında yeniden dene (reçete § Yeni numara serisi).
     const created = await withBarcodeRetry(async () => {
       const noteNo = await nextNoteNo();
       return prisma.$transaction(async (tx) => {
+        await lockDocNosTx(tx, dupMode, docNoKeys);
         const row = await tx.customerDeliveryNote.create({
           data: {
             ...header, noteNo, sourceKind: input.sourceKind, clientToken: input.clientToken ?? null,
@@ -307,6 +312,7 @@ export async function createDeliveryNote(input: DeliveryNoteCreateInput, userId:
           sourceMarked = photoBound ? await markPhotoSourceTx(tx, row.id) : false;
           restored = await applyStoredReadsTx(tx, row.id, plans);
         }
+        await assertDocNoUniqueTx(tx, row.id, dupMode, docNoKeys);
         return row;
       });
     }, undefined, (err) => p2002TargetsCode(err, "noteNo"), "Gelen belge numarası").catch(translateUnique);
@@ -328,7 +334,16 @@ export async function updateDeliveryNote(id: string, patch: DeliveryNoteHeaderPa
   const extra = batchAndMeterColumns(patch, before);
   // Onay-yalnız metre işareti (değer değişmeden) yarışta başka metreyi onaylamasın: claim mevcut metreye bağlanır.
   const meterGuard = patch.kursunMetersReviewed && patch.kursunMeters === undefined ? { kursunMeters: before.kursunMeters } : {};
-  const res = await prisma.customerDeliveryNote.updateMany({ where: { id, status: "DRAFT", ...meterGuard }, data: { ...cols, ...extra, updatedById: userId } }).catch(translateUnique);
+  const write = (client: Pick<typeof prisma, "customerDeliveryNote">) => client.customerDeliveryNote.updateMany({ where: { id, status: "DRAFT", ...meterGuard }, data: { ...cols, ...extra, updatedById: userId } });
+  // K27 BLOCK: sahip ya da belge no değişiyorsa 8044 kilidi (tx'in İLK ifadesi) + yazımdan sonra gerçek çiftle kontrol.
+  const dupMode = patch.ownerCustomerId !== undefined || patch.senderDocNo !== undefined ? await readDuplicateDocNoMode() : null;
+  const docNoKey = patch.senderDocNo !== undefined ? text(patch.senderDocNo) : before.senderDocNo;
+  const res = dupMode === "BLOCK" ? await prisma.$transaction(async (tx) => {
+    await lockDocNosTx(tx, dupMode, [docNoKey]);
+    const r = await write(tx);
+    return r.count === 1 ? assertDocNoUniqueTx(tx, id, dupMode, [docNoKey]).then(() => r) : r;
+  })
+    : await write(prisma).catch(translateUnique);
   if (res.count === 0) await notDraft(id);
   const after = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id }, select: HEADER_AUDIT_SELECT });
   await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: id, oldData: auditHeader(before), newData: auditHeader(after) });

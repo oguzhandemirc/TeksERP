@@ -11,9 +11,11 @@ import { approveNote, getIncomingDocumentSettings, getSuggestions, INCOMING_DOCU
 import { approveErrorText, approvePrecheck, needsVarianceReason, summarizeApprove, summarizeAutoWorkOrders, unusableDefaultSource, type ApproveOutcome, type AutoWorkOrderSummary } from "./approveFlow";
 import { CUSTOMER_DEFAULTS_PATH } from "./paths";
 import { perDocumentPrecheck, perDocumentSummary } from "./partiMetre";
+import { DuplicateDocNoConfirm, duplicateDocNoConflict } from "./DuplicateDocNo";
 import type { DeliveryNoteHeader, DeliveryNoteLine, PerDocumentGate, ProcessChoice } from "./types";
 import type { PhotoRetentionMode } from "./photoRetentionTypes";
 import { retentionDocNoWarning } from "./photoRetention";
+import type { DuplicateDocNoNotice } from "./mukerrerTypes";
 
 interface Props {
   noteId: string;
@@ -98,21 +100,52 @@ function AutoWorkOrderBox({ auto }: { auto: AutoWorkOrderSummary | null }) {
   );
 }
 
+type Outcome = { o: ApproveOutcome; warnings: string[]; auto: AutoWorkOrderSummary | null };
+
+/** Onay sonucu: uyarılar (K27 operatör onayı dahil), düşen satırlar, otomatik iş emri özeti. */
+function ApproveResultBody({ outcome }: { outcome: Outcome }) {
+  return (
+    <div className="flex flex-col gap-2 text-sm" data-testid="approve-result" data-status={outcome.o.status}>
+      {outcome.warnings.map((w) => (
+        <p key={w} className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">{w}</p>
+      ))}
+      {outcome.o.failed.length > 0 && (
+        <ul className="max-h-48 overflow-y-auto rounded border p-2 text-xs">
+          {outcome.o.failed.map((f) => (
+            <li key={`${f.blockNo}/${f.lineNo}`} className="text-destructive">
+              Blok {f.blockNo}, satır {f.lineNo}: {f.reason}
+            </li>
+          ))}
+        </ul>
+      )}
+      <AutoWorkOrderBox auto={outcome.auto} />
+    </div>
+  );
+}
+
 export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun = "kurşun gramajı", open, onOpenChange, onDone, perDocument, retention }: Props) {
   const [reason, setReason] = useState("");
   const [askReason, setAskReason] = useState(false);
   // Hata metni + kullanılamaz varsayılanın kaynağı (E4; müşteri ise yönetim ekranı bağlantısı çıkar).
   const [error, setError] = useState<{ text: string; source: "CUSTOMER" | "FACTORY" | null } | null>(null);
-  const [outcome, setOutcome] = useState<{ o: ApproveOutcome; warnings: string[]; auto: AutoWorkOrderSummary | null } | null>(null);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // K27 WARN: işi süren aynı belge no'lu eş → 409 künyesi; "Yine de onayla" bayrakla yeniden gönderir.
+  const [dup, setDup] = useState<DuplicateDocNoNotice | null>(null);
   const pre = useApprovePrecheck(noteId, lines, open, perDocument);
   const run = useMutation({
-    mutationFn: () => approveNote(noteId, askReason ? reason.trim() : null, processChoices),
+    mutationFn: (confirmDuplicateDocNo: boolean) => confirmDuplicateDocNo
+      ? approveNote(noteId, askReason ? reason.trim() : null, processChoices, { confirmDuplicateDocNo })
+      : approveNote(noteId, askReason ? reason.trim() : null, processChoices),
     onSuccess: ({ result, warnings }) => {
       setOutcome({ o: summarizeApprove(result), warnings, auto: summarizeAutoWorkOrders(result.autoWorkOrders) });
       setError(null);
+      setDup(null);
       onDone();
     },
     onError: (e) => {
+      const conflict = duplicateDocNoConflict(e);
+      setDup(conflict);
+      if (conflict) { setError(null); return; }
       setError({ text: approveErrorText(e, apiErrorText(e, "Onay tamamlanamadı.")), source: unusableDefaultSource(e) });
       if (needsVarianceReason(e)) setAskReason(true);
     },
@@ -123,6 +156,7 @@ export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun =
       setError(null);
       setAskReason(false);
       setReason("");
+      setDup(null);
     }
     onOpenChange(o);
   };
@@ -134,21 +168,7 @@ export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun =
           <DialogDescription>{outcome ? outcome.o.title : perDocument ? "Belge tek kayıt olarak sahibin emanet topu olur; satırlar bilgi olarak kalır. Bu işlem geri alınmaz." : "Her açık satır sahibin emanet topu olarak stoğa girer. Bu işlem geri alınmaz; düşen satır ayrı listelenir."}</DialogDescription>
         </DialogHeader>
         {outcome ? (
-          <div className="flex flex-col gap-2 text-sm" data-testid="approve-result" data-status={outcome.o.status}>
-            {outcome.warnings.map((w) => (
-              <p key={w} className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">{w}</p>
-            ))}
-            {outcome.o.failed.length > 0 && (
-              <ul className="max-h-48 overflow-y-auto rounded border p-2 text-xs">
-                {outcome.o.failed.map((f) => (
-                  <li key={`${f.blockNo}/${f.lineNo}`} className="text-destructive">
-                    Blok {f.blockNo}, satır {f.lineNo}: {f.reason}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <AutoWorkOrderBox auto={outcome.auto} />
-          </div>
+          <ApproveResultBody outcome={outcome} />
         ) : (
           <div className="flex flex-col gap-2">
             <RetentionDocNo retention={retention} />{perDocument && <p className="rounded border px-2 py-1 text-sm font-medium" data-testid="approve-per-document">{perDocumentSummary(perDocument.note)}</p>}
@@ -161,6 +181,7 @@ export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun =
             )}
             <ProcessChoicesNote count={processChoices.length} noun={choiceNoun} />
             <ApproveError text={error?.text ?? null} source={error?.source ?? null} />
+            {dup && <DuplicateDocNoConfirm conflict={dup} busy={run.isPending} onConfirm={() => run.mutate(true)} />}
             {askReason && (
               <Textarea aria-label="Fark gerekçesi" placeholder="Fark gerekçesi (ör. belgedeki toplam yanlış yazılmış)" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />
             )}
@@ -170,7 +191,7 @@ export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun =
           {outcome ? (
             <Button onClick={() => close(false)}>Kapat</Button>
           ) : (
-            <Button onClick={() => run.mutate()} disabled={run.isPending || pre.blocked || (askReason && reason.trim().length < 3)}>
+            <Button onClick={() => run.mutate(false)} disabled={run.isPending || pre.blocked || (askReason && reason.trim().length < 3)}>
               {askReason ? "Gerekçeyle onayla" : "Onayla"}
             </Button>
           )}

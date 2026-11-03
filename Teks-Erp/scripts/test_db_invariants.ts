@@ -244,8 +244,8 @@ const PARTIAL_INDEXES: Array<{
   { table: "four_point_rule_sets", index: "four_point_rule_sets_customer_item_uq", uniq: true, predicate: `(("isActive" = true) AND ("itemId" IS NOT NULL))`, why: "(müşteri, ürün) başına tek aktif kural seti" },
   { table: "customer_lab_specs", index: "customer_lab_specs_customer_uq", uniq: true, predicate: `(("isActive" = true) AND ("itemId" IS NULL))`, why: "(müşteri, test türü) başına tek aktif genel lab spesifikasyonu (K4P-SERT)" },
   { table: "customer_lab_specs", index: "customer_lab_specs_customer_item_uq", uniq: true, predicate: `(("isActive" = true) AND ("itemId" IS NOT NULL))`, why: "(müşteri, ürün, test türü) başına tek aktif lab spesifikasyonu (K4P-SERT)" },
-  // customer_delivery_notes — aynı sahibe aynı gönderen belge numarası iptal dışı TEK belge (D2, migration 20261029001000).
-  { table: "customer_delivery_notes", index: "customer_delivery_notes_owner_sender_doc_uq", uniq: true, predicate: `(("ownerCustomerId" IS NOT NULL) AND ("senderDocNo" IS NOT NULL) AND (status <> 'CANCELLED'::"DeliveryNoteStatus"))`, why: "mükerrer irsaliye seddi; iptal edilen belge numarayı serbest bırakır, sahipsiz/numarasız taslak yüklem dışı" },
+  // customer_delivery_notes (sahip, gönderen belge no) partial UNIQUE K27'de (migration 20261103093156) DÜZ index'e döndü —
+  // tekillik fabrika ayarı `gelenBelge.duplicateDocNo` (BLOCK: 8044 kilidi + kontrol; bekçi test_gelen_belge_mukerrer_belge_no).
   // H1 kurşun metre defteri (migration 20261029005529) — top × adım × evre ve okuma başına TEK aktif satır; damgalı geçmiş serbest.
   { table: "roll_meter_readings", index: "roll_meter_readings_active_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "düzeltme = damga + yeni satır; ikinci aktif okuma/onay seddi (bekçi test_kursun_metre §8)" },
   { table: "roll_meter_acks", index: "roll_meter_acks_active_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "okuma başına tek aktif sapma onayı (H2)" },

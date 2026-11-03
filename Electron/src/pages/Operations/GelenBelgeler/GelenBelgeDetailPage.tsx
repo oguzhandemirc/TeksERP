@@ -13,7 +13,7 @@ import { ScanViewer } from "./ScanViewer";
 import { NoteHeaderForm } from "./NoteHeaderForm";
 import { TotalsStrip } from "./TotalsStrip";
 import { NoticesStrip } from "./NoticesStrip";
-import { SameBatchStrip } from "./SameBatchStrip";
+import { NotePeerStrips } from "./DuplicateDocNo";
 import { LinesTable } from "./LinesTable";
 import { AddLineForm } from "./AddLineForm";
 import { LineImportButton } from "./LineImportButton";
@@ -153,7 +153,7 @@ export function IncomingDocumentDetailPage() {
               <NoteHeaderForm note={n} suggestions={suggestions.data} editable={editable} onPatch={(p) => header.mutate(p)} />
               {n.status !== "CANCELLED" && <TotalsStrip check={n.totalsCheck} approvable={isApprovable(n.status)} />}{/* iptalde toplar düştü; hüküm anlamsız */}
               <NoticesStrip notices={n.notices} />
-              <SameBatchStrip sameBatch={n.sameBatch} />
+              <NotePeerStrips note={n} />
               {n.varianceReason && <p className="text-xs text-muted-foreground">Fark gerekçesi: {n.varianceReason}</p>}
               <CancelReasonLine note={n} />
               <ProcessGramajPanel groups={gramaj.groups} options={suggestions.data?.processOptions ?? []} choiceGroups={suggestions.data?.processGroups ?? []} picks={gramaj.picks} onPick={gramaj.onPick} />

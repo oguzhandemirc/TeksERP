@@ -112,7 +112,7 @@ async function run(url: string, reader: Awaited<ReturnType<typeof startFakeReade
     made.notes.push(id);
     const mkScan = async (content: Buffer, mimeType: string, pageNo: number) => {
       const s = await prisma.documentScan.create({
-        data: { noteId: id, pageNo, sha256: createHash("sha256").update(content).digest("hex"), mimeType, sizeBytes: content.length, content, status: mimeType === "application/pdf" ? "READ_FAILED" : "READ", ocrResult: { ocr: { text: `${TAG} ${suffix}` } } },
+        data: { noteId: id, pageNo, sha256: createHash("sha256").update(content).digest("hex"), mimeType, sizeBytes: content.length, content: new Uint8Array(content), status: mimeType === "application/pdf" ? "READ_FAILED" : "READ", ocrResult: { ocr: { text: `${TAG} ${suffix}` } } },
         select: { id: true },
       });
       made.scans.push(s.id);

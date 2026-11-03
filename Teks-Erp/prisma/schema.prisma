@@ -14462,7 +14462,7 @@ enum DeliveryNoteAliasScope {
 /// `GB` serisinden materyalize. Sahip (`ownerCustomerId`) belgedeki Müşteri/FİRMA alanıdır,
 /// gönderen (`senderCustomerId`/`senderText`) belgeyi basan firma — "sahip = gönderen" varsayılanı YOK.
 /// `customerBatchNo` METİNDİR (`Batch`e eşlenmez). Türetilen toplam saklanmaz (satırlardan hesaplanır).
-/// Partial unique (sahip, gönderen belge no) iptal dışı satırlarda — DB'de (`customer_delivery_notes_owner_sender_doc_uq`).
+/// (sahip, gönderen belge no) DÜZ index (K27): tekillik fabrika ayarıdır (`gelenBelge.duplicateDocNo` BLOCK → 8044 kilidi + kontrol).
 model CustomerDeliveryNote {
   id                 String                 @id @default(uuid()) @db.Uuid
   noteNo             String                 @unique @db.VarChar(32)
@@ -14528,6 +14528,7 @@ model CustomerDeliveryNote {
   updatedBy   User?   @relation("CustomerDeliveryNoteUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
 
   @@index([ownerCustomerId])
+  @@index([ownerCustomerId, senderDocNo], map: "customer_delivery_notes_owner_sender_doc_idx")
   @@index([senderCustomerId])
   @@index([templateId])
   @@index([status, createdAt])
@@ -14592,7 +14593,8 @@ model DocumentScan {
   noteId        String?            @db.Uuid
   pageNo        Int                @default(1) @db.SmallInt
   regionNo      Int?               @db.SmallInt
-  sha256        String             @unique @db.VarChar(64)
+  /// UNIQUE değil (K27): bitmiş/iptal belgenin fotoğrafı yeniden okutulunca yeni kayıt doğar; en yeni `latestScanBySha`.
+  sha256        String             @db.VarChar(64)
   mimeType      String             @db.VarChar(32)
   sizeBytes     Int
   content       Bytes?
@@ -14616,6 +14618,7 @@ model DocumentScan {
   lines      CustomerDeliveryNoteLine[]
 
   @@index([noteId])
+  @@index([sha256, createdAt])
   @@index([status, createdAt])
   @@index([contentState, noteId])
   @@map("document_scans")

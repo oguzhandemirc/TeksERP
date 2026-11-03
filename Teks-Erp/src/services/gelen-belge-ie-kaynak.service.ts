@@ -9,6 +9,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { resolveDeliveryNoteLinesForRolls } from "./helpers/roll-delivery-note-line.helper";
 import { whereRollsOfWorkOrder } from "./helpers/workorder-rolls.helper";
+import { TERIM } from "../constants/terim";
 
 /** Yanıttaki en çok belge (çok partili büyük İE'de liste taşmasın; `total` tam sayı). */
 export const WORK_ORDER_NOTES_LIMIT = 20;
@@ -23,7 +24,7 @@ export interface WorkOrderSourceNote {
 
 export async function workOrderSourceNotes(workOrderId: string): Promise<{ total: number; notes: WorkOrderSourceNote[] }> {
   const wo = await prisma.workOrder.findUnique({ where: { id: workOrderId }, select: { id: true } });
-  if (!wo) throw AppError.notFound("İş emri bulunamadı.", { code: "WORK_ORDER_NOT_FOUND" });
+  if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.tekil} bulunamadı.`, { code: "WORK_ORDER_NOT_FOUND" });
   const rolls = await prisma.roll.findMany({ where: whereRollsOfWorkOrder(workOrderId), select: { id: true } });
   if (rolls.length === 0) return { total: 0, notes: [] };
   const lines = await resolveDeliveryNoteLinesForRolls(rolls.map((r) => r.id));

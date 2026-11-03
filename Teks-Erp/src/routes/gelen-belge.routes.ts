@@ -138,6 +138,8 @@ const LinePatch = LineBody.partial().extend({ skip: z.literal(true).optional() }
 // processChoices (H9; D4-D1 her çeşit değeri): kabul edilen/düzeltilen işlem önerisi → yalnız PROCESS sözlüğü; lineId null = başlık.
 const ApproveBody = z.strictObject({
   varianceReason: optText(500),
+  // K27: WARN kipinde işi süren aynı belge no'lu eş varken operatörün "yine de onayla" kararı (BLOCK'ta yok sayılmaz → 409).
+  confirmDuplicateDocNo: z.boolean("Onay bayrağı evet/hayır olmalı").optional(),
   processChoices: z.array(z.strictObject({ lineId: Id.nullable(), valueId: Id }), "Geçersiz işlem seçimi").max(500, "En çok 500 işlem seçimi").optional(),
   // P3 "Belge okut": onaydan sonra iş emri bu rotayla (öneri zinciri ve `autoWorkOrder` ayarı yerine); onay servisine gitmez.
   routeTemplateId: Id.optional(),
@@ -402,6 +404,7 @@ const SettingsBody = z.strictObject({
   autoWorkOrderPatternless: z.enum(["SKIP", "OPEN"], "Seçenek SKIP ya da OPEN olmalı").optional(),
   formApproval: z.enum(["SEPARATE", "WITH_WORK_ORDER"], "Seçenek SEPARATE ya da WITH_WORK_ORDER olmalı").optional(),
   multiPartyWorkOrder: z.enum(["SINGLE", "PER_PARTY"], "Seçenek SINGLE ya da PER_PARTY olmalı").optional(),
+  duplicateDocNo: z.enum(["BLOCK", "WARN", "ALLOW"], "Seçenek BLOCK, WARN ya da ALLOW olmalı").optional(),
   refakatAutoPrint: z.boolean("Refakat kartı otomatik yazdırma evet/hayır olmalı").optional(),
   stationDocLookup: z.boolean("İstasyonda belge okutma evet/hayır olmalı").optional(),
   photoRetention: z.enum(["FULL", "SHRINK_ON_APPROVAL", "DELETE_ON_APPROVAL", "DELETE_ON_DISPATCH"], "Seçenek FULL, SHRINK_ON_APPROVAL, DELETE_ON_APPROVAL ya da DELETE_ON_DISPATCH olmalı").optional(),
@@ -439,6 +442,7 @@ const SettingsBody = z.strictObject({
  *               autoWorkOrderPatternless: { type: string, enum: [SKIP, OPEN], description: "İşlem değeri çözülemeyen grupta otomatik iş emri: atla (varsayılan) ya da hedef değersiz aç" }
  *               formApproval: { type: string, enum: [SEPARATE, WITH_WORK_ORDER], description: "İş emri formundan okutulan belge: ayrı onay (varsayılan) ya da iş emri açan kaydeder (POST /irsaliyeler/{id}/is-emri)" }
  *               multiPartyWorkOrder: { type: string, enum: [SINGLE, PER_PARTY], description: "Çok partili belgeden iş emri: tek iş emri, partiler ayrı top (varsayılan) ya da her parti ayrı iş emri" }
+ *               duplicateDocNo: { type: string, enum: [BLOCK, WARN, ALLOW], description: "Aynı gönderen belge no tekrar gelirse: engelle (varsayılan) · işi süren eş varken uyar (onay bayrağıyla geçer) · serbest" }
  *               refakatAutoPrint: { type: boolean, description: "İş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır (varsayılan false)" }
  *               stationDocLookup: { type: boolean, description: "İstasyon tabletinde belge okutarak iş emri bulma (varsayılan false)" }
  *               photoRetention: { type: string, enum: [FULL, SHRINK_ON_APPROVAL, DELETE_ON_APPROVAL, DELETE_ON_DISPATCH], description: "Belge fotoğrafı saklama (K28): tam (varsayılan) · onayda küçült · onayda sil · sevkte sil; geçmiş onaylı belgelere de uygulanır" }
@@ -588,13 +592,14 @@ router.delete("/irsaliyeler/:id/satirlar/:lineId", requirePermission("gelen-belg
  *             type: object
  *             properties:
  *               varianceReason: { type: string, maxLength: 500 }
+ *               confirmDuplicateDocNo: { type: boolean, description: "K27 WARN kipinde işi süren aynı belge no'lu eşe rağmen onayla (BLOCK'ta 409 kalır)" }
  *               processChoices: { type: array, description: "Kabul edilen işlem önerileri (H9 gramaj, D4-D1 her çeşit değeri; metin başına tek) → PROCESS sözlüğü; değer yazmaz", items: { type: object, properties: { lineId: { type: string, format: uuid, nullable: true }, valueId: { type: string, format: uuid } } } }
  *               routeTemplateId: { type: string, format: uuid, description: "İş emri ekranından \"Belge okut\": onaydan sonra iş emri bu rotayla açılır (öneri zinciri ve autoWorkOrder ayarı yerine); onaydan ÖNCE doğrulanır" }
  *     responses:
  *       200: { description: "{ note, summary: { entered, failed, skipped, replayed, rollIds }, autoWorkOrders? } + üst düzey warnings (başlık top adedi ↔ satır; gerekçeyle geçilen sayfa). autoWorkOrders yalnız `gelenBelge.autoWorkOrder` açıkken: { opened, manual, reason, groups: [{ key, itemName, targets, rollCount, outcome OPENED|SKIPPED|FAILED, workOrderNumber?, attached?, reason? }] }" }
  *       400: { description: "DELIVERY_NOTE_OWNER_REQUIRED · OWNER_CUSTOMER_INVALID (sahip pasif/bulunamadı) · DELIVERY_NOTE_LINE_UNRESOLVED · PROCESS_VALUE_INVALID (değer aktif işlem çeşidi değil) · PROCESS_CHOICE_CONFLICT · PROCESS_CHOICE_LINE_INVALID · PROCESS_CHOICE_TEXT_EMPTY · GELEN_BELGE_ROUTE_OVERRIDE_INVALID (routeTemplateId pasif/adımsız/bulunamadı — onay koşmaz)" }
  *       403: { description: "MODULE_DISABLED (emanet; routeTemplateId varken üretim) · GELEN_BELGE_ROUTE_OVERRIDE_FORBIDDEN (routeTemplateId var, iş emri açma izni yok — onay koşmaz) ya da izin yok" }
- *       409: { description: "KURSUN_METERS_REQUIRED · KURSUN_METERS_REVIEW_PENDING · DELIVERY_NOTE_ENTRY_MODE_MIXED (PER_DOCUMENT) · TOTAL_MISMATCH (blok adet/kg/m; varianceReason ile geçilir) · DELIVERY_NOTE_PAGES_MISSING (varianceReason ile geçilir) · DELIVERY_NOTE_CHANGED (ön kontrolden sonra düzenlendi) · DELIVERY_NOTE_NOT_APPROVABLE · DELIVERY_NOTE_NO_OPEN_LINES" }
+ *       409: { description: "DELIVERY_NOTE_DUPLICATE_DOC_NO (BLOCK) · DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE (WARN; details.peers, confirmDuplicateDocNo ile geçilir) · KURSUN_METERS_REQUIRED · KURSUN_METERS_REVIEW_PENDING · DELIVERY_NOTE_ENTRY_MODE_MIXED (PER_DOCUMENT) · TOTAL_MISMATCH (blok adet/kg/m; varianceReason ile geçilir) · DELIVERY_NOTE_PAGES_MISSING (varianceReason ile geçilir) · DELIVERY_NOTE_CHANGED (ön kontrolden sonra düzenlendi) · DELIVERY_NOTE_NOT_APPROVABLE · DELIVERY_NOTE_NO_OPEN_LINES" }
  */
 router.post("/irsaliyeler/:id/onay", requirePermission("gelen-belge:approve"), wrap(async (req) => {
   const id = Id.parse(req.params.id);
@@ -676,6 +681,8 @@ const FormWorkOrderBody = z.strictObject({
     stepPlanning: z.array(z.strictObject({ sequence: z.number().int().min(1).max(200), plannedMachineId: Id.nullable().optional() }), "Geçersiz adım planı").max(200).optional(),
   }), "Geçersiz parti listesi").min(2, "Çok parti için en az iki parti gerekir").max(30).optional(),
   mode: z.enum(["SINGLE", "PER_PARTY"], "Seçenek SINGLE ya da PER_PARTY olmalı").optional(),
+  // K27 WARN: işi süren aynı belge no'lu eşe rağmen kaydet.
+  confirmDuplicateDocNo: z.boolean("Onay bayrağı evet/hayır olmalı").optional(),
 });
 /**
  * @openapi

@@ -206,3 +206,33 @@ describe('ApprovalCard — izin, sunucu sinyali ve hata', () => {
     expect(r.queryByTestId('onay-karti-sonuc')).toBeNull();
   });
 });
+
+// K27 (WARN kipi): işi süren aynı belge no'lu eş → soru diyaloğu; "Yine de onayla" bayrakla yeniden gönderir.
+// Negatif sonda (2026-11-03): onConfirm `c.approve(false)` yapılınca ⭐ testi ❌ (bayrak gitmez); geri alındı.
+describe('ApprovalCard — aynı belge no (K27)', () => {
+  const dup = () => Object.assign(new Error('Aynı belge no'), { status: 409, details: { code: 'DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE', senderDocNo: 'A-1', peers: [{ id: 'p1', noteNo: 'GB-0007', status: 'APPROVED', workOrderNumbers: ['TIE-0040'] }] } });
+  it('⭐ 409 → soru metni; "Yine de onayla" confirmDuplicateDocNo ile ikinci istek, sonuç kartı', async () => {
+    mockApprove.mockRejectedValueOnce(dup()).mockResolvedValueOnce(APPROVED);
+    const { r } = render();
+    await r.findByTestId('onay-karti');
+    fireEvent.press(r.getByTestId('onay-karti-birincil'));
+    expect(await r.findByText(/Bu belge no \(A-1\) GB-0007 olarak zaten kayıtlı \(iş sürüyor: TIE-0040\)\. Aynı kâğıdı ikinci kez mi okutuyorsunuz\?/)).toBeTruthy();
+    expect(mockApprove).toHaveBeenLastCalledWith('n1', {});
+    fireEvent.press(r.getByText('Yine de onayla'));
+    await waitFor(() => expect(mockApprove).toHaveBeenLastCalledWith('n1', { confirmDuplicateDocNo: true }));
+    expect(await r.findByTestId('onay-karti-sonuc')).toBeTruthy();
+  });
+  it('Vazgeç → diyalog kapanır, ikinci istek yok; BLOCK kodu (DUPLICATE_DOC_NO) diyalog açmaz', async () => {
+    mockApprove.mockRejectedValueOnce(dup()).mockRejectedValueOnce(Object.assign(new Error('Bu belge no kayıtlı'), { status: 409, details: { code: 'DELIVERY_NOTE_DUPLICATE_DOC_NO' } }));
+    const { r } = render();
+    await r.findByTestId('onay-karti');
+    fireEvent.press(r.getByTestId('onay-karti-birincil'));
+    fireEvent.press(await r.findByText('Vazgeç'));
+    await waitFor(() => expect(r.queryByText('Yine de onayla')).toBeNull());
+    expect(mockApprove).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(r.getByTestId('onay-karti-birincil')).not.toBeDisabled());
+    fireEvent.press(r.getByTestId('onay-karti-birincil'));
+    await waitFor(() => expect(mockApprove).toHaveBeenCalledTimes(2));
+    expect(r.queryByText('Yine de onayla')).toBeNull();
+  });
+});

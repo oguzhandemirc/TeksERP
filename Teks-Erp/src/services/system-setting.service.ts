@@ -429,6 +429,9 @@ export const SETTING_KEYS = {
    *  WITH_WORK_ORDER iş emri açan kaydeder (belge + top + iş emri tek istekte). Tek yazar `PUT /api/gelen-belge/ayarlar`. */
   GELEN_BELGE_FORM_APPROVAL: "gelenBelge.formApproval",
   GELEN_BELGE_MULTI_PARTY_WORK_ORDER: "gelenBelge.multiPartyWorkOrder",
+  /** Aynı (sahip, gönderen belge no) tekrar gelirse (K27): BLOCK iptal dışı tek belge (varsayılan = bugünkü) | WARN işi süren
+   *  eş varken onay 409 + operatör onayıyla geçer | ALLOW serbest. Tek yazar `PUT /api/gelen-belge/ayarlar`; flag yüküne konmaz. */
+  GELEN_BELGE_DUPLICATE_DOC_NO: "gelenBelge.duplicateDocNo",
   /** İş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır mı (varsayılan false = bugünkü: elle).
    *  Tek yazar `PUT /api/gelen-belge/ayarlar`; flag yüküne konmaz. */
   PRODUCTION_REFAKAT_AUTO_PRINT: "production.refakatAutoPrint",
@@ -6773,6 +6776,13 @@ export const MULTI_PARTY_WORK_ORDER_VALUES: readonly MultiPartyWorkOrderMode[] =
 export const DEFAULT_MULTI_PARTY_WORK_ORDER: MultiPartyWorkOrderMode = "SINGLE";
 export const readMultiPartyWorkOrder = (tx?: Pick<typeof prisma, "systemSetting">): Promise<MultiPartyWorkOrderMode> =>
   readClosedSetting(SETTING_KEYS.GELEN_BELGE_MULTI_PARTY_WORK_ORDER, MULTI_PARTY_WORK_ORDER_VALUES, DEFAULT_MULTI_PARTY_WORK_ORDER, tx);
+/** K27 mükerrer gönderen belge no kipi. */
+export type DuplicateDocNoMode = "BLOCK" | "WARN" | "ALLOW";
+export const DUPLICATE_DOC_NO_VALUES: readonly DuplicateDocNoMode[] = ["BLOCK", "WARN", "ALLOW"];
+/** Varsayılan BLOCK = bugünkü davranış (sahip + belge no iptal dışı tek belge). */
+export const DEFAULT_DUPLICATE_DOC_NO: DuplicateDocNoMode = "BLOCK";
+export const readDuplicateDocNoMode = (tx?: Pick<typeof prisma, "systemSetting">): Promise<DuplicateDocNoMode> =>
+  readClosedSetting(SETTING_KEYS.GELEN_BELGE_DUPLICATE_DOC_NO, DUPLICATE_DOC_NO_VALUES, DEFAULT_DUPLICATE_DOC_NO, tx);
 
 /** K28 belge fotoğrafı saklama — onaydan/sevkten sonra bayt küçültülür ya da silinir; satır (sha256, okuma, künye) kalır. */
 export type PhotoRetentionMode = "FULL" | "SHRINK_ON_APPROVAL" | "DELETE_ON_APPROVAL" | "DELETE_ON_DISPATCH";

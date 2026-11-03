@@ -9,6 +9,7 @@
 //   · el yazısı şüpheli değer oranı K — 4 (varsayılan; alt sınır bugünkü %25, üst sınır yeni)
 //   · okuma seçenekleri (tablosuz fişte metre kaynağı, şablondan gönderen) — `GelenBelgeReadOptionsField.tsx`
 //   · kayıt kipi (onay kipi, parti numarası kaynağı, gramajsız oto iş emri) — `GelenBelgeEntryModeField.tsx`
+//   · aynı belge no tekrar gelirse (K27) — `GelenBelgeDuplicateDocNoField.tsx`
 // Ürün seçici DOĞRUDAN modal açar (combobox yok); yalnız aktif kumaş listelenir, sunucu ikinci kapıdır.
 // =============================================================================
 import { useEffect, useState } from "react";
@@ -29,6 +30,7 @@ import { EnumRadioOptions } from "./EnumRadioOptions";
 import { OutlierFactorField, useOutlierDraft } from "./GelenBelgeOutlierField";
 import { ReadOptionsFields, useReadOptionsDraft } from "./GelenBelgeReadOptionsField";
 import { EntryModeFields, useEntryModeDraft } from "./GelenBelgeEntryModeField";
+import { DuplicateDocNoField, useDuplicateDocNoDraft } from "./GelenBelgeDuplicateDocNoField";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { useRegisterSettingsDirty } from "./settings-dirty";
 import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
@@ -171,18 +173,19 @@ export function IncomingDocumentSettingsSection({ writePermissions = [SETTINGS_A
   const od = useOutlierDraft(server);
   const ro = useReadOptionsDraft(server);
   const ed = useEntryModeDraft(server);
+  const dd = useDuplicateDocNoDraft(server);
   const [picking, setPicking] = useState(false);
-  const resetAll = () => { setItem(serverItem); setMode(server?.unreviewedApproval ?? "WARN"); setAuto(serverAuto); rd.reset(); od.reset(); ro.reset(); ed.reset(); };
+  const resetAll = () => { setItem(serverItem); setMode(server?.unreviewedApproval ?? "WARN"); setAuto(serverAuto); rd.reset(); od.reset(); ro.reset(); ed.reset(); dd.reset(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(resetAll, [server?.defaultItem?.id, server?.unreviewedApproval, serverAuto, rd.serverRouteId, rd.serverPriority, od.serverValue, ro.serverSource, ro.serverAutoSender, ed.serverKey]);
+  useEffect(resetAll, [server?.defaultItem?.id, server?.unreviewedApproval, serverAuto, rd.serverRouteId, rd.serverPriority, od.serverValue, ro.serverSource, ro.serverAutoSender, ed.serverKey, dd.serverValue]);
 
   const itemDirty = (item?.id ?? null) !== (server?.defaultItem?.id ?? null);
   const modeDirty = mode !== (server?.unreviewedApproval ?? "WARN");
   const autoDirty = auto !== serverAuto;
-  const dirty = itemDirty || modeDirty || autoDirty || rd.routeDirty || rd.priorityDirty || od.dirty || ro.dirty || ed.dirty;
+  const dirty = itemDirty || modeDirty || autoDirty || rd.routeDirty || rd.priorityDirty || od.dirty || ro.dirty || ed.dirty || dd.dirty;
   useRegisterSettingsDirty(dirty);
 
-  const body = { ...(itemDirty ? { defaultItemId: item?.id ?? null } : {}), ...(modeDirty ? { unreviewedApproval: mode } : {}), ...(autoDirty ? { autoWorkOrder: auto } : {}), ...rd.body, ...od.body, ...ro.body, ...ed.body };
+  const body = { ...(itemDirty ? { defaultItemId: item?.id ?? null } : {}), ...(modeDirty ? { unreviewedApproval: mode } : {}), ...(autoDirty ? { autoWorkOrder: auto } : {}), ...rd.body, ...od.body, ...ro.body, ...ed.body, ...dd.body };
   const mut = useMutation({
     mutationFn: () => updateIncomingDocumentSettings(body),
     onSuccess: (saved) => {
@@ -230,15 +233,11 @@ export function IncomingDocumentSettingsSection({ writePermissions = [SETTINGS_A
         <OutlierFactorField draft={od} defaultValue={server?.defaultHandwritingOutlierFactor} />
         <ReadOptionsFields draft={ro} />
         <EntryModeFields draft={ed} hasDefaultItem={item !== null} />
+        <DuplicateDocNoField draft={dd} />
 
         <SettingsSaveBar dirty={dirty} saving={mut.isPending} onSave={() => mut.mutate()} onReset={resetAll} />
-        <ItemPickerModal
-          open={picking}
-          onOpenChange={setPicking}
-          allowedTypes={["FABRIC"]}
-          lifecycle="ACTIVE"
-          onPick={(row) => { setItem({ id: row.id, label: `${row.name} — ${row.code}` }); setPicking(false); }}
-        />
+        <ItemPickerModal open={picking} onOpenChange={setPicking} allowedTypes={["FABRIC"]} lifecycle="ACTIVE"
+          onPick={(row) => { setItem({ id: row.id, label: `${row.name} — ${row.code}` }); setPicking(false); }} />
       </div>
     </PermissionGate>
   );

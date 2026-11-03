@@ -11,6 +11,7 @@ import {
   type InboundNotePatch,
 } from '../../../services/inboundDoc.service';
 import { showsApprovalCard } from './approvalGate';
+import { duplicateDocNoConflict, type DuplicateDocNoConflict } from './DuplicateDocNoDialog';
 
 export const approvalDetailKey = (noteId: string | null) => ['gelen-belge', 'onay-karti', noteId] as const;
 
@@ -32,6 +33,8 @@ export function useApprovalCard(noteId: string | null, readDone: boolean) {
   const [busy, setBusy] = useState<'patch' | 'approve' | null>(null);
   const [result, setResult] = useState<ApproveNoteResult | null>(null);
   const [routeTemplateId, setRouteTemplateId] = useState<string | null>(null);
+  // K27 WARN: işi süren aynı belge no'lu eş → soru; "Yine de onayla" bayrakla yeniden gönderir.
+  const [duplicate, setDuplicate] = useState<DuplicateDocNoConflict | null>(null);
 
   const detail = useApprovalDetail(noteId, readDone);
   const visible = showsApprovalCard(detail.data);
@@ -57,13 +60,17 @@ export function useApprovalCard(noteId: string | null, readDone: boolean) {
     }
   };
 
-  const approve = async () => {
+  const approve = async (confirmDuplicateDocNo = false) => {
     if (!noteId || busy || !canApprove) return;
     setBusy('approve');
     try {
-      const r = await inboundDocService.approveNote(noteId, routeTemplateId ? { routeTemplateId } : {});
+      const r = await inboundDocService.approveNote(noteId, { ...(routeTemplateId ? { routeTemplateId } : {}), ...(confirmDuplicateDocNo ? { confirmDuplicateDocNo: true as const } : {}) });
+      setDuplicate(null);
       setResult(r);
     } catch (e) {
+      const conflict = duplicateDocNoConflict(e);
+      setDuplicate(conflict);
+      if (conflict) return;
       Toast.show({ type: 'error', text1: 'Onaylanamadı', text2: e instanceof Error ? e.message : undefined });
       // Sunucu kapısı (409) değişen başlığı söylüyorsa kart tazelenir.
       await qc.invalidateQueries({ queryKey: approvalDetailKey(noteId) });
@@ -83,6 +90,8 @@ export function useApprovalCard(noteId: string | null, readDone: boolean) {
     setRouteTemplateId,
     patch,
     approve,
+    duplicate,
+    dismissDuplicate: () => setDuplicate(null),
     refetch: () => void detail.refetch(),
   };
 }
