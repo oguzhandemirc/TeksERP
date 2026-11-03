@@ -11,7 +11,7 @@ import { v5 as uuidv5 } from "uuid";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { TERIM } from "../constants/terim";
-import { noteParties, type NoteParty } from "../lib/gelen-belge/parti-ozet";
+import { declaredPageCount, noteParties, type NoteParty } from "../lib/gelen-belge/parti-ozet";
 import { isSummaryLine, partyLineId } from "./gelen-belge-kontrol.service";
 import { readMultiPartyWorkOrder, type MultiPartyWorkOrderMode } from "./system-setting.service";
 import { WorkOrderService, type WorkOrderCreateInput } from "./workorder.service";
@@ -44,7 +44,7 @@ export async function getNoteParties(noteId: string): Promise<NotePartiesView> {
   });
   if (!note) throw AppError.notFound("Gelen belge bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
   const docLines = note.lines.filter((l) => !isSummaryLine(note.id, l));
-  const { parties, warnings } = noteParties(docLines, note.totalsDeclared, { pageCount: note.pageCount, scannedPages: note.scans.map((s) => s.pageNo) });
+  const { parties, warnings } = noteParties(docLines, note.totalsDeclared, { pageCount: note.pageCount ?? declaredPageCount(note.totalsDeclared), scannedPages: note.scans.map((s) => s.pageNo) });
   return { parties, warnings, multi: parties.length > 1, defaultMode: await readMultiPartyWorkOrder() };
 }
 
