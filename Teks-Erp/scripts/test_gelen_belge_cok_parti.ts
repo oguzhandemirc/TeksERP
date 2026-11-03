@@ -12,6 +12,7 @@
 //   §7 ⭐ kullanıcı şablonu: öneri (kelime kutularından) → oluştur 201 (u-…, v1 + sürüm satırı) → replay aynı satır → aynı ad 409
 //      → güncelle v2 (sürüm geçmişi 2) → bayat sürüm 409 → izinsiz 403; kelimeler ucu kutu + foto çerçevesi
 //   §8 ⭐ motor DB şablonunu yükler: dosya çeki şablonu olmadan 0245 → u- şablonu; eşik altı (0244) → genel; pasif şablon yüklenmez
+//   §7b ⭐ "Şablonu güncelle" (`base`): önizleme birleşik şablonla; keep [] → bölüm/tablo kalkar, keep → taşınır; önizlenen aynen kaydedilir
 //   §9 ⭐ OCR "1/2" damgası uyarıdır: pageCount'a yazılmaz, iş emri formu 201 + uyarı; elle pageCount beyanı bugünkü 409 (scripts/lib/gelen-belge-cok-parti-sayfa.ts)
 // Negatif sonda: `partyWorkOrderToken` sabit token'a (clientToken) bağlanınca §5 ikinci İE replay'e düşer → kırmızı;
 // `engineTemplates` yalnız dosya şablonlarını dönünce §8 kırmızı.
@@ -256,6 +257,33 @@ async function run(url: string): Promise<void> {
   check("§8 eşik altı belge → genel", other.templateId === "genel", JSON.stringify(other));
   const off = await call("PATCH", `/api/gelen-belge/sablonlar/${code}`, tk, { isActive: false });
   check("§8 pasif kullanıcı şablonu motora yüklenmez", off.status === 200 && !(await engineTemplates()).some((t) => t.id === code), `${off.status} ${off.code ?? ""}`);
+
+  console.log("§7b şablonu güncelle: önizlenen = kaydedilen (s1b inceleme)");
+  const upd = (keep: string[], extra: Record<string, unknown> = {}) => call("POST", "/api/gelen-belge/sablonlar/oneri", tk, {
+    scanId: scan, name, identifiers: ["KUMAŞ ÇEKİ LİSTESİ", "FIŞ NO", "Ham PartiNo"],
+    assignments: [{ field: "evrakNo", rect: rectOf("914279") }, { field: "partiNo", rect: elOf("P9918733") }], base: { code, keep }, ...extra,
+  });
+  const b0 = await upd([]);
+  const t0 = b0.data?.template as Record<string, unknown> | undefined;
+  const p0 = b0.data?.preview as { matched?: boolean; blocks?: unknown[] } | null;
+  const f0 = ((t0?.fields ?? []) as Array<{ key: string }>).map((f) => f.key);
+  check("§7b ⭐ keep [] → birleşik şablonda bölüm/tablo YOK, eski alan (siparisNo) korunur, önizleme bu şablonla (tek parti)",
+    b0.status === 200 && t0?.id === code && !t0?.sections && !t0?.tables && f0.includes("siparisNo") && p0?.matched === true && (p0?.blocks?.length ?? 0) <= 1,
+    `${b0.status} ${b0.code ?? ""} ${JSON.stringify({ id: t0?.id, s: !!t0?.sections, t: !!t0?.tables, f0, b: p0?.blocks?.length, e: b0.data?.errors })}`);
+  const b1 = await upd(["tables", "sections"]);
+  const t1 = b1.data?.template as Record<string, unknown> | undefined;
+  const p1 = b1.data?.preview as { blocks?: Array<{ batchNo?: string }> } | null;
+  check("§7b ⭐ keep [tables, sections] → eski bölüm + tablo taşınır, önizleme 2 parti",
+    b1.status === 200 && !!t1?.sections && !!t1?.tables && JSON.stringify(p1?.blocks?.map((b) => b.batchNo)) === JSON.stringify(["P9918733", "P9918734"]),
+    `${b1.status} ${JSON.stringify({ s: !!t1?.sections, t: !!t1?.tables, b: p1?.blocks?.map((b) => b.batchNo), e: b1.data?.errors })}`);
+  const cur = await prisma.senderTemplate.findUnique({ where: { code }, select: { version: true } });
+  const sv = await call("PUT", `/api/gelen-belge/sablonlar/ozel/${code}`, tk, { expectedVersion: cur?.version, template: t0, name });
+  const stored = await prisma.senderTemplate.findUnique({ where: { code }, select: { template: true } });
+  const st = stored?.template as Record<string, unknown> | undefined;
+  check("§7b ⭐ önizlenen şablon aynen kaydedilir: bölüm/tablo kalktı", sv.status === 200 && !!st && !st.sections && !st.tables, `${sv.status} ${sv.code ?? ""}`);
+  const bx = await upd(["tables"], { base: { code: "u-yok-boyle-sablon", keep: [] } });
+  const by = await upd(["kilit"]);
+  check("§7b base: olmayan şablon 404 · tanınmayan keep 400", bx.status === 404 && bx.code === "USER_TEMPLATE_NOT_FOUND" && by.status === 400, `${bx.status} ${bx.code ?? ""} ${by.status}`);
 
   console.log("§9 sayfa damgası uyarıdır");
   await sayfaDamgasiUyaridir({

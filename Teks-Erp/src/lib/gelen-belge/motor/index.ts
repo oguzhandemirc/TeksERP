@@ -21,5 +21,5 @@ export type { DocumentExtraction, ForeignDocument, RegionExtraction } from "./do
 export { normalizeForMatch, turkishUpper, turkishLower, similarity, levenshtein, stripDiacritics } from "./text-normalize";
 export { canonicalizeValue, parseNumber, parseDate, canonicalizeCode, matchEnum } from "./normalizers";
 export type { CanonicalizeSpec } from "./normalizers";
-export { suggestTemplate, findLabelFor, ASSIGNABLE_FIELDS, TABLE_COLUMN_KEYS } from "./suggest";
-export type { AssignableField, TableColumnKey, TemplateSuggestInput, TemplateSuggestion } from "./suggest";
+export { suggestTemplate, findLabelFor, mergeTemplateForUpdate, ASSIGNABLE_FIELDS, TABLE_COLUMN_KEYS, UPDATE_KEEP_PARTS } from "./suggest";
+export type { AssignableField, TableColumnKey, TemplateSuggestInput, TemplateSuggestion, UpdateKeepPart } from "./suggest";
