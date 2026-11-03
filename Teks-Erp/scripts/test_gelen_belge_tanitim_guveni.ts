@@ -237,7 +237,7 @@ async function run(url: string): Promise<void> {
     trustModeOf("SOR", tan) === "NORMAL" && trustModeOf("SOR", un) === "NORMAL" && trustModeOf("SORMA", tan) === "TRUSTED" && trustModeOf("SORMA", un) === "BLIND" && trustModeOf("SORMA", null) === "NORMAL");
   const input: BatchAndMeters = {
     batchNoCandidates: [{ key: "evrakNo", kind: "DOC", label: "Evrak", value: "914279" }, { key: "partiNo", kind: "BATCH", label: "Parti", value: "P1" }] as BatchAndMeters["batchNoCandidates"],
-    kursun: { meters: 100, source: "TOTAL", review: true, candidates: { output: null, total: 100, input: null, lineSum: 100 } } as BatchAndMeters["kursun"],
+    kursun: { meters: "100", source: "TOTAL", review: true, candidates: { output: null, total: "100", input: null, lineSum: "100" } },
   };
   const tplA = templateByCode(codeA);
   const tr = applyTrust(input, tplA, "TRUSTED");
@@ -245,7 +245,7 @@ async function run(url: string): Promise<void> {
   check("§6 applyTrust: NORMAL aynı · TRUSTED yalnız BATCH + review false · BLIND aday/metre yok",
     applyTrust(input, tplA, "NORMAL") === input && tr.batchNoCandidates.length === 1 && tr.batchNoCandidates[0]!.kind === "BATCH" && tr.kursun.review === false &&
     bl.batchNoCandidates.length === 0 && bl.kursun.meters === null, JSON.stringify({ tpl: !!tplA, tr, bl }));
-  const lineMeters = applyTrust({ ...input, kursun: { ...input.kursun, source: "LINES" } as BatchAndMeters["kursun"] }, undefined, "TRUSTED");
+  const lineMeters = applyTrust({ ...input, kursun: { ...input.kursun, source: "LINE_SUM" } }, undefined, "TRUSTED");
   check("§6 applyTrust TRUSTED: şablonda parti alanı yoksa adaylar korunur; satır toplamı metresi doğrulama bekler",
     lineMeters.batchNoCandidates.length === 2 && lineMeters.kursun.review === true, JSON.stringify(lineMeters));
 }
