@@ -329,6 +329,11 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
   },
   {
     screen: "gelen-belge:write",
+    path: "GET /items",
+    why: "Belgeden iş emri tek formunun \"Hedef kumaş\" seçicisi kumaş listesini okur (`WoFormFields` FieldPickers). İş emrini açan kullanıcı `workorder:write` | `mobile:hizli-is-emri` taşır (`POST /gelen-belge/irsaliyeler/:p/is-emri` muafı); `mobile:hizli-is-emri` GET /items'ı zaten açar. Liste okunamazsa (item:read yok → 403) seçici boş kalır; belgeden önerilen kumaş (`suggestions.targetItem`) ve fabrika varsayılanı etkilenmez.",
+  },
+  {
+    screen: "gelen-belge:write",
     path: "GET /gelen-belge/ayarlar",
     why: "Belgeden iş emri kayıt kipi (`formApproval`) okunamazsa (gelen-belge:read yok → 403) kip UNKNOWN: kayıt denenir, sunucu kapıyı kendisi uygular (403 `GELEN_BELGE_FORM_APPROVAL_DISABLED` → taslak; `useWoRows`).",
   },
