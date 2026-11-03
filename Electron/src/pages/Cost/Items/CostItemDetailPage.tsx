@@ -37,7 +37,7 @@ export function CostItemDetailPage() {
     <PageShell>
       <PageHeader
         title={d ? `${d.urun.kod} — Maliyet kartı` : "Maliyet kartı"}
-        description={d ? d.urun.ad : undefined}
+        statusLine={d ? d.urun.ad : undefined}
         actions={d && (
           <div className="flex gap-1">
             <Badge variant="muted">{STRUCTURE_STATUS_LABEL[d.yapiDurumu] ?? d.yapiDurumu}</Badge>

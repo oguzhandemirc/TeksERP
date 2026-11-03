@@ -71,7 +71,7 @@ export function ShipmentDetailHeader({
             </span>
           ) : undefined
         }
-        description={
+        statusLine={
           d
             ? `${d.customer.name}${d.branch ? " · " + d.branch.name + (d.branch.code ? ` (${d.branch.code})` : "") : ""}`
             : undefined
