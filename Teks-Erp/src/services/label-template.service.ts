@@ -51,6 +51,7 @@ import { assertContextRenderable } from "./helpers/label-context-fit";
 import { LABEL_ICON_CATEGORIES, LABEL_ICONS, labelIconSvg } from "../config/label-icons";
 import { mockPayload } from "./helpers/label-rawcode";
 import { sampleQualityCode } from "./helpers/quality-role.helper";
+import { readLabelUnitSettings, type LabelUnitSettings } from "../config/label-units";
 import { fieldDisplayValue } from "./helpers/label-field-values";
 import { renderNativePreviewSvg, svgToPreviewHtml } from "./helpers/native-preview";
 import { mmToDots } from "./helpers/native-label.shared";
@@ -150,6 +151,8 @@ export interface LabelTemplateInput {
   /** Boş geçilirse catalog'dan default field listesi üretilir. */
   fields?: TemplateField[];
   rawCode?: RawCodeMap;
+  /** Birim sistemi (null = bugünkü metrik). */
+  unitSettings?: LabelUnitSettings | null;
   /** Yerleşim (şablon-başına, opsiyonel; null = varsayılana dön). */
   lineStepMm?: number | null;
   qrScale?: number | null;
@@ -163,6 +166,7 @@ export interface LabelTemplateUpdateInput {
   standalone?: boolean;
   fields?: TemplateField[];
   rawCode?: RawCodeMap;
+  unitSettings?: LabelUnitSettings | null;
   lineStepMm?: number | null;
   qrScale?: number | null;
   lengthBanner?: boolean | null;
@@ -179,6 +183,7 @@ export interface TemplateEnvelope {
     standalone?: boolean;
     fields?: TemplateField[];
     rawCode?: RawCodeMap;
+    unitSettings?: LabelUnitSettings | null;
     lineStepMm?: number | null;
     qrScale?: number | null;
     lengthBanner?: boolean | null;
@@ -356,6 +361,7 @@ export class LabelTemplateService {
           standalone,
           fields: fields as unknown as Prisma.InputJsonValue,
           ...(input.rawCode ? { rawCode: normalizeRawCode(input.rawCode) as Prisma.InputJsonValue } : {}),
+          ...(input.unitSettings ? { unitSettings: input.unitSettings as unknown as Prisma.InputJsonValue } : {}),
           lineStepMm: input.lineStepMm ?? null,
           qrScale: input.qrScale ?? null,
           lengthBanner: input.lengthBanner ?? null,
@@ -414,6 +420,11 @@ export class LabelTemplateService {
     if (input.fields) data.fields = input.fields as unknown as Prisma.InputJsonValue;
     if (input.isDefault !== undefined) data.isDefault = input.isDefault;
     if (input.rawCode !== undefined) data.rawCode = normalizeRawCode(input.rawCode) as Prisma.InputJsonValue;
+    if (input.unitSettings !== undefined) {
+      data.unitSettings = input.unitSettings
+        ? (input.unitSettings as unknown as Prisma.InputJsonValue)
+        : Prisma.DbNull;
+    }
     if (input.lineStepMm !== undefined) data.lineStepMm = input.lineStepMm;
     if (input.qrScale !== undefined) data.qrScale = input.qrScale;
     if (input.lengthBanner !== undefined) data.lengthBanner = input.lengthBanner;
@@ -684,6 +695,7 @@ export class LabelTemplateService {
           standalone,
           fields: fields as unknown as Prisma.InputJsonValue,
           ...(t.rawCode ? { rawCode: normalizeRawCode(t.rawCode) as Prisma.InputJsonValue } : {}),
+          ...(t.unitSettings ? { unitSettings: t.unitSettings as unknown as Prisma.InputJsonValue } : {}),
           lineStepMm: t.lineStepMm ?? null,
           qrScale: t.qrScale ?? null,
           lengthBanner: t.lengthBanner ?? null,
@@ -735,6 +747,7 @@ export class LabelTemplateService {
         standalone: t.standalone,
         fields: t.fields as unknown as TemplateField[],
         rawCode: (t.rawCode as RawCodeMap) ?? undefined,
+        unitSettings: readLabelUnitSettings(t.unitSettings),
         lineStepMm: t.lineStepMm != null ? Number(t.lineStepMm) : null,
         qrScale: t.qrScale,
         lengthBanner: t.lengthBanner,
@@ -1155,6 +1168,8 @@ export class LabelTemplateService {
      *  kuralla değerlendirilsin diye. Verilmedi → mock varsayılanı; boş metin →
      *  "kalitesi belirsiz top" (koşullu eleman basılmaz, fail-closed görülür). */
     qualityGrade?: string;
+    /** Stüdyodaki (henüz kaydedilmemiş) birim sistemi — önizleme baskıyla aynı biçimi göstersin. */
+    unitSettings?: unknown;
   }): Promise<
     ApiResponse<{
       mode: "svg" | "html" | "text";
@@ -1182,6 +1197,7 @@ export class LabelTemplateService {
     }
     const payload = mockPayload(opts.kind, await sampleQualityCode(prisma));
     if (opts.qualityGrade !== undefined) payload.qualityGrade = opts.qualityGrade;
+    if (opts.unitSettings !== undefined) payload.unitSettings = readLabelUnitSettings(opts.unitSettings);
     // Cihaz seçiliyse medya (dpi/gap) + dil O CİHAZDAN çözülür — "Bu Bilgisayar"da
     // seçili Cihaz Kaydı yazıcısı (ör. Argox PPLB) editör Test Baskısı'nda da gerçek
     // dille bassın diye. Dil önceliği: explicit language > cihaz languageOverride >

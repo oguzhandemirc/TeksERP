@@ -12,6 +12,7 @@
 //   §5 ⭐ yeni fotoğraf → okuma → gönderen belge no → iki belge (iki gönderen) → iki İE (MULTIPLE); okunan sahip metni
 //      tek belgeye daraltır → SINGLE; okunamayan fotoğraf UNREADABLE; PDF 400
 //   §6 ⭐ bir belgeden iki İE (belgenin topu ikinci İE'nin partisinde) → MULTIPLE, iki İE de aynı belgeyi gösterir
+//   §6b ⭐ aktif refakat kartı olmayan (tamamlanmış) İE listeye girmez; yalnız o varsa NO_WORK_ORDER + İE no'lu cümle
 //   §7 ⭐ bilinmeyen belge no → NO_DOCUMENT; İE'siz onaylı belge → NO_WORK_ORDER (fotoğraf + elle arama); okuyucu yok 503
 //   §8 ⭐ q ile kurşun + tambur açık kart, panel İE listesi fiş no / GB no / parti no'dan bulur; iptal belge eşleşmez
 // Negatif sonda: `whereWorkOrdersOfRolls`tan `batches` dalı çıkarılınca §6 kırmızı; `assertStationLookupEnabled`ten
@@ -261,6 +262,18 @@ async function run(url: string, sidecar: { url: string; hits: () => number }): P
   const r6 = await lookup(kursunOp, { contentBase64: noteA.photo });
   await prisma.roll.update({ where: { id: rollA }, data: { batchId: rollA2?.batchId ?? null } });
   check("§6 ⭐ bir belgeden iki İE → MULTIPLE, ikisi de belge A'yı gösterir", r6.data?.outcome === "MULTIPLE" && ids(r6) === [wo1.id, wo2.id].sort().join(",") && (r6.data?.workOrders ?? []).every((w) => w.documents.some((d) => d.senderDocNo === UNIQ)), `${r6.data?.outcome} ${ids(r6)}`);
+
+  console.log("§6b kapanmış iş emri seçilemez");
+  // İE1 tamamlandı (kartı COMPLETED), belge A'nın topu İE2'de → İE1 listede yok; kart kodu hep AKTİF kart (İE no'ya düşmez).
+  await prisma.roll.update({ where: { id: rollA }, data: { batchId: batch2?.id ?? null } });
+  await prisma.travelerCard.updateMany({ where: { workOrderId: wo1.id, status: "ACTIVE" }, data: { status: "COMPLETED" } });
+  const r6b = await lookup(kursunOp, { contentBase64: noteA.photo });
+  const activeCodes = new Set((await prisma.travelerCard.findMany({ where: { status: "ACTIVE", workOrderId: { in: [wo1.id, wo2.id] } }, select: { barcode: true } })).map((c) => c.barcode));
+  check("§6b ⭐ kartı kapanmış İE listede yok → SINGLE İE2, kart kodu aktif kart", r6b.data?.outcome === "SINGLE" && ids(r6b) === wo2.id && (r6b.data?.workOrders ?? []).every((w) => activeCodes.has(w.cardBarcode)), `${r6b.data?.outcome} ${ids(r6b)} ${JSON.stringify((r6b.data?.workOrders ?? []).map((w) => w.cardBarcode))}`);
+  await prisma.roll.update({ where: { id: rollA }, data: { batchId: rollA2?.batchId ?? null } });
+  const r6c = await lookup(kursunOp, { q: wo1.no });
+  check("§6b ⭐ yalnız kapanmış İE → NO_WORK_ORDER, cümle İE no'sunu söyler", r6c.data?.outcome === "NO_WORK_ORDER" && (r6c.data?.workOrders ?? []).length === 0 && !!r6c.data?.message?.includes(wo1.no), `${r6c.data?.outcome} ${r6c.data?.message}`);
+  await prisma.travelerCard.updateMany({ where: { workOrderId: wo1.id, status: "COMPLETED" }, data: { status: "ACTIVE" } });
 
   console.log("§8 liste araması");
   type Card = { workOrderId: string };

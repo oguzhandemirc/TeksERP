@@ -12,10 +12,12 @@
 // (yanlış yazım garantisi), bir başkasına edit verip print'i kapatmak mümkün.
 // =============================================================================
 
-import { Router } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
+import { z } from "zod";
 import { LabelController } from "../controllers/label.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { LabelOverrideService } from "../services/label-override.service";
 
 const MOBILE_LABEL_PRINTERS = ["mobile:kk1", "mobile:tambur", "mobile:tarti-paket"] as const;
 
@@ -960,6 +962,83 @@ router.get(
   verifyToken,
   requireAnyPermission("label:print", "label-template:read", ...MOBILE_LABEL_PRINTERS),
   controller.getStandaloneTemplateHtml,
+);
+
+// ── İş emri etiket bilgisi (Gülkesim S5) — İE açan panelden, tamburcu tabletten yazar.
+const labelOverrideService = new LabelOverrideService();
+const LABEL_OVERRIDE_WRITERS = requireAnyPermission("label:edit", "workorder:write", "mobile:tambur");
+const woIdParam = z.object({ id: z.string().uuid() });
+const labelOverrideBody = z.object({
+  overrides: z.record(z.string(), z.union([z.string(), z.null()])),
+  updatedAt: z.string().datetime({ offset: true }).nullish(),
+});
+
+/**
+ * @openapi
+ * /api/labels/work-orders/{id}/overrides:
+ *   get:
+ *     tags: [Labels]
+ *     summary: İş emrinin etiket bilgisi (eksik/düzeltilmiş/boş basılan alanlar)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ overrides, keys, updatedAt }" }
+ *       404: { description: İş emri bulunamadı }
+ *   put:
+ *     tags: [Labels]
+ *     summary: İş emrinin etiket bilgisini yaz ("" = boş bas, null = kaynak değere dön)
+ *     description: |
+ *       Yalnız izinli anahtarlar (`config/label-overrides.ts`); tanınmayan anahtar 400
+ *       `LABEL_OVERRIDE_KEY_UNKNOWN`. `updatedAt` iyimser belirteçtir; araya yazan varsa 409
+ *       `LABEL_OVERRIDE_STALE`. Aynı işin bütün topları (yeniden basım dahil) bu bilgiyle basılır.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [overrides]
+ *             properties:
+ *               overrides: { type: object, additionalProperties: { type: string, nullable: true } }
+ *               updatedAt: { type: string, format: date-time, nullable: true }
+ *     responses:
+ *       200: { description: Güncel etiket bilgisi }
+ *       400: { description: Tanınmayan anahtar / geçersiz değer }
+ *       404: { description: İş emri bulunamadı }
+ *       409: { description: Araya başka yazar girdi }
+ */
+router.get(
+  "/work-orders/:id/overrides",
+  verifyToken,
+  requireAnyPermission("label:read", "workorder:read", "mobile:tambur"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = woIdParam.parse(req.params);
+      res.status(200).json(await labelOverrideService.get(id));
+    } catch (e) { next(e); }
+  },
+);
+router.put(
+  "/work-orders/:id/overrides",
+  verifyToken,
+  LABEL_OVERRIDE_WRITERS,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = woIdParam.parse(req.params);
+      const body = labelOverrideBody.parse(req.body ?? {});
+      res.status(200).json(await labelOverrideService.update(id, body, req.user?.userId));
+    } catch (e) { next(e); }
+  },
 );
 
 export default router;

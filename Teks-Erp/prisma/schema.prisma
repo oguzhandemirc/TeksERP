@@ -4396,6 +4396,15 @@ model Customer {
   /// kullanır (atanmamışsa genel Belge Şablonları ayarı). Bkz. DocumentProfile.
   documentProfileId String? @db.Uuid
 
+  /// Etiketteki en kaynağı (Gülkesim S5, cevap 7): NULL = bugünkü (topun güncel eni) ·
+  /// INCOMING = gelen en (ilk en ölçümünden önceki) · MEASURED = ölçülen en (tablet en ister).
+  /// VarChar (enum değil): küme büyüyebilir; doğrulama `customer.service`.
+  labelWidthSource    String?  @db.VarChar(16)
+  /// Tamburda tartım (cevap 31): açıksa bu müşterinin topu tamburda kg girilmeden kesilmez.
+  tamburWeighRequired Boolean  @default(false)
+  /// Tambur bölme ölçüsü önerisi (m, cevap 9) — tablet kesim metresine öneri; NULL = öneri yok.
+  tamburSplitLengthM  Decimal? @db.Decimal(10, 2)
+
   // Relations
   orders            Order[]
   defaultRoutes     Route[]                   @relation("CustomerDefaultRoutes")
@@ -4861,6 +4870,11 @@ model WorkOrder {
   /// değer topun KENDİ kolonuna — `Roll.foldType` — yazılır; 2026-08-04'ten beri
   /// RollOperation.metadata yalnız ikincil izdir).
   foldType String?
+
+  /// Etiket bilgisi (Gülkesim S5, cevap 4): İE açan ya da tamburcu eksik/yanlış etiket alanını
+  /// yazar; { alanAnahtarı: metin } — "" = boş bas, anahtar yok = kaynak değer. İzinli anahtarlar
+  /// `config/label-overrides.ts`; tek yazar `label-override.service` (audit).
+  labelOverrides Json?
 
   // O-9: WorkOrder.dyehouseNote kaldırıldı — fason talimatı tek kaynağı
   // WorkOrderStep.notes (bkz. project_dyehouse_note). Kolon drift-fix ile yanlışlıkla
@@ -9595,6 +9609,9 @@ model LabelTemplate {
   /// için doluysa otomatik üretim yerine BU kod basılır ({{key}} yer-tutucuları payload
   /// değeriyle doldurulur). Boş/yok → varyant kanvası / akış üretimi.
   rawCode    Json?
+  /// Birim sistemi (Gülkesim S5): { system: METRIC|US|BOTH, decimals?: 0-3, decimalSep?: ","|"." }.
+  /// NULL = bugünkü metrik biçim (bayt-aynı); okuyucu `config/label-units.readLabelUnitSettings`.
+  unitSettings Json?
 
   /// DEPRECATED (v2) yerleşim düğmeleri — kanvas modelinde eleman özelliğine taşındı;
   /// yalnız dual-mode akış yolunda okunur. Saha onayı sonrası drop.

@@ -19,6 +19,7 @@ import { parseQueryParams, readFilterList } from "../utils/query-parser";
 import { applyPartnerRoles, roleListWhere, type PartnerRoles } from "./helpers/partner-roles.helper";
 import { createProfileForCustomerTx, PROFILE_CUSTOMER_TYPE_MESSAGE } from "./subcontractor-management.service";
 import { AuditService } from "./audit.service";
+import { normalizeTamburLabelSettings } from "./helpers/customer-tambur-settings-input.helper";
 import { validateAndShapeBranches } from "./helpers/customer-inline-branches.helper";
 import { bornCariAccountTx, readCustomerFinance, writeCustomerFinanceTerms, type CustomerFinanceInput } from "./helpers/customer-finance-bridge.helper";
 import type { Request } from "express";
@@ -245,7 +246,7 @@ export class CustomerService extends BaseService {
    * doğurur; Tedarikçi rolü şart. Inline şubeler burada bir kez doğrulanıp şekillenir (yan etkisiz).
    */
   prepareCardCreate(data: Record<string, unknown>): CardCreatePlan {
-    this.normalizeDefaultDestination(data);
+    this.normalizeDefaultDestination(data); normalizeTamburLabelSettings(data); // tambur/etiket ayarı (S5)
     const wantsProfile = data.subcontractorRole === true;
     delete data.subcontractorRole;
     const roles = applyPartnerRoles(data, null);
@@ -349,7 +350,7 @@ export class CustomerService extends BaseService {
     // gövdesinde gelirse (beklenmez — UI şubeleri ayrı uçlardan yönetir) sessizce
     // düş: BaseService.update nested-wrap YAPMAZ, ham dizi Prisma update'i bozardı.
     if ("branches" in data) delete data.branches;
-    this.normalizeDefaultDestination(data);
+    this.normalizeDefaultDestination(data); normalizeTamburLabelSettings(data); // tambur/etiket ayarı (S5)
     // Rol modeli: gövdede rol ya da eski `type` varsa mevcut bayraklarla birleşir, `type` yeniden türetilir.
     if ("isCustomerRole" in data || "isSupplierRole" in data || "isSubcontractorRole" in data || "type" in data) {
       applyPartnerRoles(data, await this.currentRoles(id));
