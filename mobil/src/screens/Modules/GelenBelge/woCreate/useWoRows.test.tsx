@@ -169,3 +169,59 @@ describe('useWoRows — K22 ön seçim (sunucu çözücüsü)', () => {
     expect(bodies.n3.targetValues).toEqual([br]);
   });
 });
+
+describe('useWoRows — kayıt sağlamlığı ve belge masası (K23)', () => {
+  it('⭐ K23 çift dokunuş: ikinci saveAll ilk sürerken çağrılırsa TEK istek gider', async () => {
+    mockSettings.mockResolvedValue({ formApproval: 'WITH_WORK_ORDER' });
+    let release!: (v: unknown) => void;
+    mockCreate.mockImplementation(() => new Promise((r) => { release = r; }));
+    const h = setup();
+    await waitFor(() => expect(h.result.current.mode).toBe('WITH_WORK_ORDER'));
+    await withRows(h, [detail('n1')]);
+    let first!: Promise<unknown>;
+    let second!: Promise<unknown>;
+    act(() => {
+      first = h.result.current.saveAll();
+      second = h.result.current.saveAll();
+    });
+    await expect(second).resolves.toEqual([]);
+    await act(async () => {
+      release({ workOrderId: 'wo-1', workOrderNo: 'IE-1', batchNumber: 'P', rollId: 'x' });
+      await first;
+    });
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    expect(await first).toEqual([expect.objectContaining({ noteId: 'n1', result: expect.objectContaining({ kind: 'OPENED', workOrderNo: 'IE-1' }) })]);
+  });
+
+  it('⭐ K23 ağ hatası (status yok): yeniden deneme AYNI clientToken ile gider (çift İE yok); 409 sonrası yeni token', async () => {
+    mockSettings.mockResolvedValue({ formApproval: 'WITH_WORK_ORDER' });
+    mockCreate.mockRejectedValueOnce(new Error('Network Error'));
+    mockCreate.mockRejectedValueOnce(Object.assign(new Error('Çakışma'), { status: 409 }));
+    mockCreate.mockResolvedValueOnce({ workOrderId: 'wo-1', workOrderNo: 'IE-1', batchNumber: 'P', rollId: 'x' });
+    const h = setup();
+    await waitFor(() => expect(h.result.current.mode).toBe('WITH_WORK_ORDER'));
+    await withRows(h, [detail('n1')]);
+    await act(async () => void (await h.result.current.saveAll()));
+    expect(h.result.current.rows[0].result?.kind).toBe('FAILED');
+    await act(async () => void (await h.result.current.saveAll()));
+    await act(async () => void (await h.result.current.saveAll()));
+    const tokens = mockCreate.mock.calls.map((c) => (c[1] as { clientToken: string }).clientToken);
+    expect(tokens[1]).toBe(tokens[0]); // belirsiz hata → yapışık
+    expect(tokens[2]).not.toBe(tokens[1]); // kesin 409 → yeni deneme
+    expect(h.result.current.rows[0].result?.kind).toBe('OPENED');
+  });
+
+  it('K23 belge masası: makine seçimi kurşun adımı sırasıyla stepPlanning olarak gider; seçim yoksa alan yok', async () => {
+    mockSettings.mockResolvedValue({ formApproval: 'WITH_WORK_ORDER' });
+    mockCreate.mockResolvedValue({ workOrderId: 'wo-1', workOrderNo: 'IE-1', batchNumber: 'P', rollId: 'x' });
+    const kursunRoute = { id: 'r2', name: 'Kurşun', steps: [{ sequence: 2, stationId: 's-k', station: { isKursunStation: true } }] } as unknown as ProductionRoute;
+    const h = setup(kursunRoute);
+    await waitFor(() => expect(h.result.current.mode).toBe('WITH_WORK_ORDER'));
+    await withRows(h, [detail('n1'), detail('n2')]);
+    act(() => h.result.current.updateForm('n1', { machineId: 'm-1' }));
+    await act(async () => void (await h.result.current.saveAll()));
+    const bodies = Object.fromEntries(mockCreate.mock.calls.map((c) => [c[0], c[1]]));
+    expect(bodies.n1.stepPlanning).toEqual([{ sequence: 2, plannedMachineId: 'm-1' }]);
+    expect(bodies.n2).not.toHaveProperty('stepPlanning');
+  });
+});

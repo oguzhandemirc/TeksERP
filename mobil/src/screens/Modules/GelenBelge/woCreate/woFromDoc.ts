@@ -12,6 +12,7 @@ import type {
   ReadSummary,
 } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
+import { withDeskPlan } from '../desk/deskPlan';
 import { multiPartyIssues, openedWorkOrders, withParties, type MultiPartyDraft } from './partyDraft';
 
 /** Kısayollar: sunucu `?shortcut=1` ile süzer; eski sunucu parametreyi yok sayar → alan yok → liste boş (bugünkü yol). */
@@ -75,6 +76,8 @@ export interface RowForm {
   gramajValueId: string | null;
   /** S1 çok partili belge: parti satırları + kip (null/yok = tek partili, bugünkü form). */
   multi?: MultiPartyDraft | null;
+  /** Belge masası (K23): kurşun adımının plan makinesi (yok = öneri yok, bugünkü). */
+  machineId?: string | null;
 }
 
 function toNumber(v: string | number | null | undefined): number | null {
@@ -118,7 +121,7 @@ export function rowIssues(f: RowForm): string[] {
 
 export function buildCreateBody(
   f: RowForm,
-  opts: { clientToken: string; routeTemplateId: string; gramajPropertyId: string | null; passThrough?: readonly { propertyId: string; valueId: string }[] },
+  opts: { clientToken: string; routeTemplateId: string; gramajPropertyId: string | null; passThrough?: readonly { propertyId: string; valueId: string }[]; kursunSequence?: number | null },
 ): CreateWorkOrderFromNoteBody {
   const body: CreateWorkOrderFromNoteBody = {
     clientToken: opts.clientToken,
@@ -131,7 +134,8 @@ export function buildCreateBody(
   if (f.ourBatchNo && f.ourBatchNoKey) body.ourBatchNoKey = f.ourBatchNoKey;
   // K22: hedef değerleri HEP açık (boş = "Hedef yok"): sunucu anahtarsız gövdeye değer dayatmaz; ekranda görülen gider.
   body.targetValues = [...(f.gramajValueId && opts.gramajPropertyId ? [{ propertyId: opts.gramajPropertyId, valueId: f.gramajValueId }] : []), ...(opts.passThrough ?? [])];
-  return f.multi ? withParties(body, f.multi) : body;
+  const base = f.multi ? withParties(body, f.multi) : body;
+  return withDeskPlan(base, f, { kursunSequence: opts.kursunSequence ?? null, gramajPropertyId: opts.gramajPropertyId });
 }
 
 /** Taslak kaydı (ayrı onay kipi): yalnız değişen başlık alanları PATCH'e gider; boşsa çağrı yok. */
