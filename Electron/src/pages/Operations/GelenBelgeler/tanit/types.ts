@@ -49,6 +49,13 @@ export interface SuggestResult {
   explain: Array<{ field: string; strategy: "anchor" | "roi"; label: string | null; direction: string | null }>;
   errors: string[];
   preview: SuggestPreview | null;
+  /** K30-T B4: bu taramada kimlik eşiğini geçen MEVCUT kullanıcı şablonları (güncellenen hariç); eski sunucuda yok. */
+  benzerSablonlar?: SimilarTemplate[];
+}
+export interface SimilarTemplate {
+  kod: string;
+  ad: string;
+  skor: number;
 }
 
 export interface UserTemplateView {
