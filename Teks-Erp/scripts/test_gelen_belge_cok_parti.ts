@@ -13,6 +13,7 @@
 //      → güncelle v2 (sürüm geçmişi 2) → bayat sürüm 409 → izinsiz 403; kelimeler ucu kutu + foto çerçevesi
 //   §8 ⭐ motor DB şablonunu yükler: dosya çeki şablonu olmadan 0245 → u- şablonu; eşik altı (0244) → genel; pasif şablon yüklenmez
 //   §9 ⭐ OCR "1/2" damgası uyarıdır: pageCount'a yazılmaz, iş emri formu 201 + uyarı; elle pageCount beyanı bugünkü 409 (scripts/lib/gelen-belge-cok-parti-sayfa.ts)
+//   §10 ⭐ K22: istasyonun KAT varsayılanı çok partili İE'lere de yazılır (PER_PARTY + SINGLE; tek parti yoluyla aynı)
 // Negatif sonda: `partyWorkOrderToken` sabit token'a (clientToken) bağlanınca §5 ikinci İE replay'e düşer → kırmızı;
 // `engineTemplates` yalnız dosya şablonlarını dönünce §8 kırmızı.
 // =============================================================================
@@ -33,6 +34,8 @@ import { classifyWithFallback, extractDocument, type OcrResult } from "../src/li
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { sayfaDamgasiUyaridir } from "./lib/gelen-belge-cok-parti-sayfa";
+import { StationCapabilityService } from "../src/services/station-capability.service";
+import { FOLD_PROPERTY_CODE } from "../src/services/helpers/fold-type";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -271,6 +274,23 @@ async function run(url: string): Promise<void> {
     formWo: (id, ps) => formWo(id, { clientToken: randomUUID(), ownerCustomerId: owner, kursunMeters: "1", routeTemplateId: route, parties: ps }),
     manualTwoPageNote: () => mkNote(false),
   });
+
+  console.log("§10 K22 kat varsayılanı çok partide");
+  const kat = await prisma.fabricProperty.findUnique({ where: { code: FOLD_PROPERTY_CODE }, select: { id: true, values: { where: { isActive: true }, select: { id: true, code: true }, take: 1 } } });
+  const fold = kat?.values[0];
+  const kStation = (await prisma.station.create({ data: { code: `${TAG}-KAT`.slice(0, 32), name: `${TAG} tambur`, type: "INTERNAL" }, select: { id: true } })).id;
+  made.stations.push(kStation);
+  if (kat && fold) await new StationCapabilityService().setCapabilities(kStation, { properties: [{ propertyId: kat.id, mode: "OPTIONAL", defaultOn: true, defaultValueId: fold.id }] });
+  const kRoute = (await prisma.route.create({ data: { name: `${TAG} kat rota`, steps: { create: [{ stationId: kStation, sequence: 1 }] } }, select: { id: true } })).id;
+  made.routes.push(kRoute);
+  for (const mode of ["PER_PARTY", "SINGLE"] as const) {
+    const n10 = await mkNote();
+    const r10 = await formWo(n10, body(10 + made.notes.length, { mode, routeTemplateId: kRoute }));
+    const ids = ((r10.data?.workOrders ?? []) as Array<{ workOrderId: string }>).map((w) => w.workOrderId);
+    const folds = (await prisma.workOrder.findMany({ where: { id: { in: ids } }, select: { foldType: true } })).map((w) => w.foldType);
+    check(`§10 ⭐ ${mode}: istasyonun kat varsayılanı her iş emrine (tek parti yoluyla aynı)`, !!fold && r10.status === 201 && ids.length === (mode === "PER_PARTY" ? 2 : 1) && folds.length === ids.length && folds.every((f) => f === fold.code),
+      `${r10.status} ${r10.code ?? ""} ${JSON.stringify({ folds, want: fold?.code })}`);
+  }
 }
 
 async function cleanup(): Promise<void> {
@@ -299,6 +319,7 @@ async function cleanup(): Promise<void> {
   await prisma.senderTemplateVersion.deleteMany({ where: { templateId: { in: made.templates } } }).catch(swallow);
   await prisma.senderTemplate.deleteMany({ where: { id: { in: made.templates } } }).catch(swallow);
   await prisma.route.deleteMany({ where: { id: { in: made.routes } } }).catch(swallow);
+  await prisma.stationProperty.deleteMany({ where: { stationId: { in: made.stations } } }).catch(swallow);
   await prisma.station.deleteMany({ where: { id: { in: made.stations } } }).catch(swallow);
   await prisma.item.deleteMany({ where: { id: { in: made.items } } }).catch(swallow);
   await prisma.customer.deleteMany({ where: { id: { in: made.customers } } }).catch(swallow);

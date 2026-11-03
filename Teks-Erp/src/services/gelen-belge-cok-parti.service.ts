@@ -99,6 +99,8 @@ interface OpenInput {
   parties: ReadonlyArray<PartyInput>;
   rolls: ReadonlyArray<{ blockNo: number; rollId: string; barcode: string }>;
   targetValues: Array<{ propertyId: string; valueId: string }>;
+  /** K22 istasyon kat varsayılanı (tek parti yoluyla aynı); yoksa kat yazılmaz. */
+  foldType?: string | null;
   stepPlanning?: Array<{ sequence: number; plannedMachineId?: string | null }>;
   notes?: string | null;
   flagPropertyIds: (targets: ReadonlyArray<{ propertyId: string }>) => Promise<string[]>;
@@ -116,6 +118,7 @@ export async function openPartyWorkOrders(i: OpenInput, userId: string): Promise
       routeTemplateId: i.routeTemplateId,
       targetValues: targets,
       targetPropertyIds: await i.flagPropertyIds(targets),
+      ...(i.foldType ? { foldType: i.foldType } : {}),
       ...(stepPlanning?.length ? { stepPlanning } : {}),
       ...(i.notes ? { notes: i.notes } : {}),
       sourceNoteId: i.noteId,

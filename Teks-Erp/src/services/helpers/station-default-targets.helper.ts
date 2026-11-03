@@ -98,7 +98,8 @@ export function computeDefaultTargets(
   const flagOn = new Map<string, StationPropertyMode>();
   for (const r of rows) {
     if (r.property.valueType !== "FLAG") continue;
-    if (r.mode !== "AUTO" && !r.defaultOn) continue;
+    // AUTO ve REQUIRED hep seçili (panel REQUIRED'da "seçili gelir" der); OPTIONAL yalnız "varsayılan açık".
+    if (r.mode === "OPTIONAL" && !r.defaultOn) continue;
     flagOn.set(r.property.id, r.mode);
     out.push(target(r.property, r.mode, null, null));
   }

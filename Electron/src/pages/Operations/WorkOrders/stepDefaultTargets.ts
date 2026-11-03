@@ -24,6 +24,8 @@ export interface StepSeed {
   propertyIds: string[];
   gramaj: string | null;
   fold: string | null;
+  /** Son cevabın önerdiği gramaj — cevap DEĞİŞİNCE (müşteri seçildi/değişti) yeniden tohumlama içindir. */
+  offered?: string | null;
 }
 
 export interface ReconcileInput {
@@ -80,11 +82,14 @@ export function reconcileStepDefaults(
     if (!targets) continue;
     const s = seedOf(targets, input.gramajPropertyId);
     if (rec) {
-      // Müşteri değişti (cevap yenilendi): gramaj hâlâ bu adımın son tohumuysa yenisine geçer; elle seçim kalır.
-      if (rec.gramaj && gramaj === rec.gramaj && s.gramaj && s.gramaj !== rec.gramaj) {
-        gramaj = s.gramaj;
-        next[clientId] = { ...rec, gramaj: s.gramaj };
-      }
+      if (s.gramaj === (rec.offered ?? rec.gramaj)) continue;
+      // Cevap değişti (müşteri seçildi/değişti): gramaj hâlâ bu adımın son tohumuysa ya da adım hiç tohumlamadı ve alan
+      // boşsa yenisi gelir; elle seçim ve tohumdan sonra elle "Hedef yok" kalır.
+      const ours = !!rec.gramaj && gramaj === rec.gramaj;
+      const unseeded = !rec.gramaj && gramaj === null && input.gramajAllowed;
+      const take = !!s.gramaj && (ours || unseeded);
+      if (take) gramaj = s.gramaj;
+      next[clientId] = { ...rec, gramaj: take ? s.gramaj : rec.gramaj, offered: s.gramaj };
       continue;
     }
     const added = s.flags.filter((p) => !propertyIds.includes(p));
@@ -93,7 +98,7 @@ export function reconcileStepDefaults(
     if (seedGramaj) gramaj = seedGramaj;
     const seedFold = s.fold && !fold ? s.fold : null;
     if (seedFold) fold = seedFold;
-    next[clientId] = { stationId, propertyIds: added, gramaj: seedGramaj, fold: seedFold };
+    next[clientId] = { stationId, propertyIds: added, gramaj: seedGramaj, fold: seedFold, offered: s.gramaj };
   }
 
   if (!input.gramajAllowed) gramaj = null;
