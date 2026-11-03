@@ -103,9 +103,10 @@ async function resolveMaster(): Promise<void> {
   M.ardaIst = req(branches.find((b) => b.customerId === M.arda && b.name.includes("İstanbul")), "Arda İstanbul şube").id;
   M.modaIzmir = req(branches.find((b) => b.customerId === M.moda), "Moda şube").id;
 
-  const props = await prisma.fabricProperty.findMany({ select: { id: true, name: true } });
+  const props = await prisma.fabricProperty.findMany({ select: { id: true, code: true, name: true } });
   const p = (name: string) => req(props.find((x) => x.name === name), `özellik ${name}`).id;
-  M.propKursunlu = p("Kurşunlu"); M.propParlak = p("Parlak");
+  // KURSUN kodla: görünen ad kurulumdan kuruluma değişir (K22: yeni kurulumda "Kurşun", eskide "Kurşunlu").
+  M.propKursunlu = req(props.find((x) => x.code === "KURSUN"), "özellik KURSUN").id; M.propParlak = p("Parlak");
   M.propZimparali = p("Zımparalı"); M.propAntibak = p("Antibakteriyel");
 }
 

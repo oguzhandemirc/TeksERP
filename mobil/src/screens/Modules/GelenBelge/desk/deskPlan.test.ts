@@ -35,7 +35,8 @@ describe('kurşun adımı ve makineler', () => {
 
 describe('withDeskPlan / buildCreateBody', () => {
   const base: RowForm = { ownerCustomerId: 'c1', ownerSuggested: null, ownerAsk: null, ourBatchNo: 'P1', ourBatchNoKey: null, meters: 100, metersReview: false, gramajValueId: 'g40' };
-  const opts = { clientToken: 't', routeTemplateId: 'A', gramajPropertyId: 'prop' };
+  // K22: gövde gramajı yalnız elle dokunulduysa taşır.
+  const opts = { clientToken: 't', routeTemplateId: 'A', gramajPropertyId: 'prop', gramajTouched: true };
 
   it('makine seçilmediyse gövde bugünküyle aynı (stepPlanning yok)', () => {
     const body = buildCreateBody(base, { ...opts, kursunSequence: 1 });

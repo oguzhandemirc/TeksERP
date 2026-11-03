@@ -39,7 +39,13 @@ export const stationCapabilityService = {
    */
   setCapabilities: (
     stationId: string,
-    properties: { propertyId: string; mode?: StationPropertyMode }[],
+    // K22 varsayılanları yalnız değişen satırda gelir; verilmezse backend korur.
+    properties: {
+      propertyId: string;
+      mode?: StationPropertyMode;
+      defaultOn?: boolean;
+      defaultValueId?: string | null;
+    }[],
   ): Promise<ApiResponse<StationCapabilityDetail>> =>
     apiClient
       .put<ApiResponse<StationCapabilityDetail>>(`/api/station-capabilities/${stationId}`, {

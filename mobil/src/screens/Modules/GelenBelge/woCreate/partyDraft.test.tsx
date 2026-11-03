@@ -27,7 +27,6 @@ const view = (x: Partial<NotePartiesView> = {}): NotePartiesView => ({
   parties: [party(1, { declaredTopCount: 4 }), party(2, { lineCount: 16, meters: 3935 })], warnings: ['1/2'], multi: true, defaultMode: 'SINGLE', ...x,
 });
 const detail = { id: 'n1', noteNo: 'GB-1', ownerCustomerId: 'c1', kursunMeters: '586', kursunMetersReview: false } as InboundNoteDetail;
-const catalog = { propertyId: null, options: [] };
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -45,7 +44,7 @@ describe('parti taslağı (saf)', () => {
   it('⭐ gövde: parties[] + mode + kurşun metresi = parti toplamı; boş parti no null', () => {
     const m = initialMultiParty(view())!;
     m.rows[0]!.batchNo = ' ';
-    const f = { ...initialRowForm(detail, catalog, false), multi: m };
+    const f = { ...initialRowForm(detail), multi: m };
     const b = buildCreateBody(f, { clientToken: 't', routeTemplateId: 'r1', gramajPropertyId: null });
     expect(b).toMatchObject({ mode: 'SINGLE', kursunMeters: '4521', parties: [{ blockNo: 1, batchNo: null, meters: 586 }, { blockNo: 2, batchNo: 'P9918734', meters: 3935 }] });
     expect(withParties(b, m).kursunMeters).toBe('4521');
@@ -54,8 +53,8 @@ describe('parti taslağı (saf)', () => {
     const m = initialMultiParty(view())!;
     m.rows[1]!.meters = null;
     expect(multiPartyIssues(m)).toEqual(['Parti metresi eksik: 2. parti.']);
-    expect(rowIssues({ ...initialRowForm(detail, catalog, false), multi: m })).toEqual(['Parti metresi eksik: 2. parti.']);
-    expect(buildCreateBody(initialRowForm(detail, catalog, false), { clientToken: 't', routeTemplateId: 'r1', gramajPropertyId: null }).parties).toBeUndefined();
+    expect(rowIssues({ ...initialRowForm(detail), multi: m })).toEqual(['Parti metresi eksik: 2. parti.']);
+    expect(buildCreateBody(initialRowForm(detail), { clientToken: 't', routeTemplateId: 'r1', gramajPropertyId: null }).parties).toBeUndefined();
   });
   it('openedWorkOrders: çok partide liste, eski sunucuda tek kayıt', () => {
     expect(openedWorkOrders({ workOrderId: 'w1', workOrderNo: 'IE-1', batchNumber: 'P1', rollId: 'r' })).toEqual([{ workOrderId: 'w1', workOrderNo: 'IE-1', batchNumber: 'P1' }]);
