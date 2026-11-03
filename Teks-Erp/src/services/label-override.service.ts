@@ -11,6 +11,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
+import { TERIM } from "../constants/terim";
 import {
   LABEL_OVERRIDE_KEYS,
   LABEL_OVERRIDE_KEY_SET,
@@ -74,7 +75,7 @@ export class LabelOverrideService {
       where: { id: workOrderId },
       select: { id: true, workOrderNumber: true, labelOverrides: true, updatedAt: true },
     });
-    if (!wo) throw AppError.notFound("İş emri bulunamadı");
+    if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.tekil} bulunamadı`);
     return {
       success: true,
       data: {
@@ -96,7 +97,7 @@ export class LabelOverrideService {
       where: { id: workOrderId },
       select: { id: true, workOrderNumber: true, labelOverrides: true, updatedAt: true },
     });
-    if (!wo) throw AppError.notFound("İş emri bulunamadı");
+    if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.tekil} bulunamadı`);
 
     const before = readLabelOverrides(wo.labelOverrides);
     const after = normalizeLabelOverrideInput(before, input.overrides);
