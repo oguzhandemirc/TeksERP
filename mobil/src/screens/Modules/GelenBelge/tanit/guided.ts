@@ -1,9 +1,10 @@
 // Rehberli (adım adım) tanıtma — saf çekirdek. Adım 0 başlık (kimlik yazısı), sonra alanlar sırayla, son adım ad + kaydet.
 // Sunucu etiketi DEĞER kutusundan bulur (suggest.ts findLabelFor) → kullanıcı yalnız değere dokunur.
 import type { ScanWord, ScanWords, SuggestResult } from '../../../../types/inboundDocTeach';
-export type { FieldKey } from './teachDraft';
 import { addIdentifier, assignField, clearField, FIELD_OPTIONS, lineTexts, suggestIdentifiers, teachMarks, type FieldKey, type ScanMark, type TeachState } from './teachDraft';
 import { lowerTr } from '../../../../utils/trCase';
+
+export type { FieldKey } from './teachDraft';
 
 /** İlk sürümün alan sırası (K30-T sözleşmesi madde 5; anahtarlar backend ASSIGNABLE_FIELDS). */
 export const GUIDED_FIELDS: readonly FieldKey[] = ['musteri', 'partiNo', 'hedefMetraj', 'toplamMetre', 'en', 'desen', 'renk'];

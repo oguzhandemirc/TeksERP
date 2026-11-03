@@ -27,6 +27,8 @@ jest.mock('../../../../services/inboundDoc.service', () => ({
   },
 }));
 jest.mock('react-native-toast-message', () => ({ __esModule: true, default: { show: jest.fn() } }));
+// Modal + portal + sorgu zinciri tek başına ~0,5–1 sn; paralel işçi yükünde 5 sn varsayılanı aşabiliyor.
+jest.setTimeout(20_000);
 
 const w = (text: string, [x, y]: [number, number], lineNo: number, width = 60): ScanWord => ({
   text, rect: { x, y, width, height: 20 }, photoRect: { x: x + 1000, y: y + 2000, width, height: 20 }, lineNo, confidence: 0.99,
