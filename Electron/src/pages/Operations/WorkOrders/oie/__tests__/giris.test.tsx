@@ -3,7 +3,7 @@
 // Negatif sonda: KisayolIsEmri'de `belgeOkut: false` kaldırılınca "formun kendi düğmesi kapalı" kırmızı.
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import { IsEmriGiris } from "../IsEmriGiris";
@@ -68,6 +68,37 @@ describe("İş emri türü seçici", () => {
     renderWithProviders(<IsEmriGiris start={null} renderManual={manual} />);
     await screen.findByTestId("oie-picker");
     expect(screen.queryByTestId("oie-row-shortcuts")).toBeNull();
+  });
+  it("⭐ K20 'Yeni özel iş emri' kartı: izinli → bölümün sonunda, tık kısayol tanımına (yeni kayıt kipi)", async () => {
+    perms.list = ["workorder:write", "station:read", "station:write"];
+    shortcuts.list = [sc];
+    renderWithProviders(<IsEmriGiris start={null} renderManual={manual} />);
+    const row = await screen.findByTestId("oie-row-shortcuts");
+    const tiles = within(row).getAllByRole("button");
+    expect(tiles.at(-1)).toHaveAttribute("data-testid", "oie-new-shortcut");
+    await userEvent.click(screen.getByTestId("oie-new-shortcut"));
+    expect(navigateActive).toHaveBeenCalledWith("/definitions/routes", { state: { newShortcut: true } });
+  });
+  it("⭐ K20 kart izinsizse görünmez; izinliyken kısayol yokken de bölüm kartla görünür (seçici açıksa)", async () => {
+    perms.list = ["workorder:write", "station:read"]; // yazma yok
+    shortcuts.list = [sc];
+    const { unmount } = renderWithProviders(<IsEmriGiris start={null} renderManual={manual} />);
+    await screen.findByTestId("oie-row-shortcuts");
+    expect(screen.queryByTestId("oie-new-shortcut")).toBeNull();
+    unmount();
+    flags.dokuma = true;
+    perms.list = ["workorder:write", "weavingorder:write", "station:read", "station:write"];
+    shortcuts.list = [];
+    renderWithProviders(<IsEmriGiris start={null} renderManual={manual} />);
+    const row = await screen.findByTestId("oie-row-shortcuts");
+    expect(within(row).getByTestId("oie-new-shortcut")).toBeInTheDocument();
+    expect(within(row).queryByTestId("oie-shortcut")).toBeNull();
+  });
+  it("K20 kart bir iş emri türü değil: kısayolsuz + dokumasız kurulumda seçici yine atlanır (bugünkü form)", async () => {
+    perms.list = ["workorder:write", "station:read", "station:write"];
+    renderWithProviders(<IsEmriGiris start={null} renderManual={manual} />);
+    expect(await screen.findByTestId("manual-form")).toBeInTheDocument();
+    expect(screen.queryByTestId("oie-new-shortcut")).toBeNull();
   });
   it("Terbiye seçimi → bugünkü form, rota yok", () => {
     renderWithProviders(<IsEmriGiris start={{ kind: "terbiye" }} renderManual={manual} />);
