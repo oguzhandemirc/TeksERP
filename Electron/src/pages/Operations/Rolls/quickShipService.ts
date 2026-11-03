@@ -86,6 +86,9 @@ export async function quickShip(payload: {
   destination?: ShipmentDestination;
   /** Yalnız operatör ilk-seçimde açıkça seçtiyse — sunucu karta yalnız o zaman yazar. */
   destinationChosen?: true;
+  /** Teslim yeri (K18) — `deliveryToBody` çıktısı; boşken anahtar gitmez. */
+  deliveryCustomerId?: string;
+  deliveryAddress?: string;
   clientToken?: string;
 }): Promise<ApiResponse<{ id: string; shipmentNo: string; dispatched?: boolean }>> {
   const res = await apiClient.post<ApiResponse<{ id: string; shipmentNo: string; dispatched?: boolean }>>(

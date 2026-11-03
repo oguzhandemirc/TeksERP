@@ -7,6 +7,11 @@ export const ACTIVE_INSPECTION_WHERE = {
   voidedAt: null,
 } satisfies Prisma.RollInspectionWhereInput;
 
+/** İz sayılan hata satırı: saha (PROCESS) hatası ya da AKTİF muayenenin hatası (revize/iptal edilmiş muayeneninki tarihtir). */
+export const TRACE_ROLL_ERROR_WHERE = {
+  OR: [{ origin: "PROCESS" }, { inspection: ACTIVE_INSPECTION_WHERE }],
+} satisfies Prisma.RollErrorWhereInput;
+
 /** Bellek ikizi — `ACTIVE_INSPECTION_WHERE` ile aynı soru. */
 export function isActiveInspection(i: { supersededAt: Date | null; voidedAt: Date | null }): boolean {
   return i.supersededAt === null && i.voidedAt === null;

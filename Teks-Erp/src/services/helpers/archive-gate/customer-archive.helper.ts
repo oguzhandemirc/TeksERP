@@ -38,6 +38,15 @@ export const CUSTOMER_ARCHIVE: ArchiveSpec = {
           .map((s) => ({ id: s.id, title: s.shipmentNo, detail: "PLANNED" })),
     },
     {
+      // K18: planlı sevkiyatın TESLİM YERİ olan cari pasife alınamaz (belge doğarken adresi okunur).
+      kind: "SHIPMENT_DELIVERY",
+      label: "Planlı sevkiyatın teslim yeri",
+      count: (db, id) => db.shipment.count({ where: { deliveryCustomerId: id, status: ShipmentStatus.PLANNED } }),
+      list: async (db, id, take) =>
+        (await db.shipment.findMany({ where: { deliveryCustomerId: id, status: ShipmentStatus.PLANNED }, take, select: { id: true, shipmentNo: true } }))
+          .map((s) => ({ id: s.id, title: s.shipmentNo, detail: "PLANNED · teslim yeri" })),
+    },
+    {
       kind: "SACK",
       label: "Sevk edilmemiş dolu çuval",
       count: (db, id) => db.sack.count({ where: { customerId: id, shipmentId: null, rolls: { some: {} } } }),

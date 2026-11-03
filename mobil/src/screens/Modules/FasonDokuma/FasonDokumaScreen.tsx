@@ -26,7 +26,7 @@ export default function FasonDokumaScreen() {
   const o = state.order;
   const openBeams = o?.openDispatches.reduce((n, d) => n + d.beams.length, 0) ?? 0;
   return (
-    <ScreenChrome title="Fason Dokuma Kabul" subtitle={state.context.data ? `${state.orders.length} açık fason iş` : undefined}>
+    <ScreenChrome title="Fason Dokuma Kabul" statusLine={state.context.data ? `${state.orders.length} açık fason iş` : undefined}>
       <View style={styles.root}>
         <View style={styles.body}>
           <Button mode="outlined" icon="clipboard-text-outline" onPress={() => setPicker(true)} contentStyle={styles.tall}>
