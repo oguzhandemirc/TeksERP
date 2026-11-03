@@ -88,14 +88,19 @@ export function sameValue(k: DocFillKey, a: unknown, b: unknown): boolean {
 /**
  * Okuma özetini forma uygular: kutu boşsa ya da önceki okumanın değerini (elle değişmemiş) taşıyorsa yeni değer yazılır;
  * kullanıcının düzelttiği kutu EZİLMEZ. Önceki okumadan kalıp yeni belgede olmayan dokunulmamış değer boşalır.
+ * Belgeden yazılıp elle BOŞALTILAN kutu da dokunulmuştur: yeniden dolmaz (izi `applied`da kalır, rozet düşer).
  */
 export function applyReadSummary(current: DocFillValues, prev: AppliedDoc, s: DocReadSummary | null | undefined, o: FillOptions): { patch: Partial<Record<DocFillKey, string | number | null>>; applied: AppliedDoc } {
   const offer = docOffer(s, o);
   const patch: Partial<Record<DocFillKey, string | number | null>> = {};
   const applied: AppliedDoc = {};
   for (const k of ORDER) {
-    const untouched = isEmpty(current[k]) || (prev[k] !== undefined && sameValue(k, current[k], prev[k]));
-    if (!untouched) continue;
+    const wrote = prev[k] !== undefined;
+    const untouched = wrote ? sameValue(k, current[k], prev[k]) : isEmpty(current[k]);
+    if (!untouched) {
+      if (wrote) applied[k] = prev[k];
+      continue;
+    }
     const v = offer[k];
     if (v !== undefined) {
       if (!sameValue(k, current[k], v)) patch[k] = v;

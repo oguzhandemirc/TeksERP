@@ -24,6 +24,8 @@ import { getNoteParties, getReadSummary } from "./service";
 import { useFormApproval } from "./useFormApproval";
 
 const FILL_KEYS: DocFillKey[] = ["targetItemId", "targetColorId", "width", "targetQuantity", "targetWeight"];
+/** Tanıt sekmesi açıkken özet yoklamasının üst sınırı: tanıtma yarıda kalırsa yoklama sonsuza dek sürmez ("Yeniden oku" kalır). */
+export const AWAIT_TEACH_MAX_MS = 10 * 60_000;
 
 interface Options {
   /** Formda seçili rota şablonu; yoksa rotasız (yalnız "Okutmayla" kipinde sunucu kabul eder). */
@@ -60,12 +62,22 @@ function useSummaryFill(form: UseFormReturn<WorkOrderFormValues>, sum: { data: D
   };
 }
 
+/** Tanıt sekmesine gidildi: özet tanıtılana dek (en çok AWAIT_TEACH_MAX_MS) yoklanır; dönünce form kendiliğinden yeniden dolar. */
+function useAwaitTeach() {
+  const [awaiting, setAwaiting] = useState(false);
+  useEffect(() => {
+    if (!awaiting) return undefined;
+    const t = setTimeout(() => setAwaiting(false), AWAIT_TEACH_MAX_MS);
+    return () => clearTimeout(t);
+  }, [awaiting]);
+  return [awaiting, setAwaiting] as const;
+}
+
 export function useFormDocScan(form: UseFormReturn<WorkOrderFormValues>, o: Options) {
   const [noteId, setNoteId] = useState<string | null>(null);
   const [draft, setDraft] = useState<DocDraft | null>(null);
   const [multi, setMulti] = useState<MultiPartyDraft | null | undefined>(undefined);
-  // Tanıt sekmesine gidildi: özet tanıtılana dek yoklanır (dönünce form kendiliğinden yeniden dolar).
-  const [awaitingTeach, setAwaitingTeach] = useState(false);
+  const [awaitingTeach, setAwaitingTeach] = useAwaitTeach();
   const tabActive = useIsTabActive();
   const approval = useFormApproval();
   const qc = useQueryClient();
