@@ -11,7 +11,7 @@ export const MIN_TOLERANT_CODE_LENGTH = 4;
 
 export type CodeMatchTier = "EXACT" | "TOLERANT";
 
-const SEPARATORS = /[\s\-‐-―._*]/g;
+const SEPARATORS = /[\s\-‐-―._*/\\]/g;
 /** Rakam koşusunda harfin karıştığı rakam (OCR). */
 const DIGIT_LOOKALIKE: Readonly<Record<string, string>> = { O: "0", I: "1", L: "1", S: "5", B: "8" };
 const RUN = /[0-9OILSB]+/g;
@@ -27,7 +27,7 @@ export function exactCodeKey(v: string | null | undefined): string {
 }
 
 /**
- * Toleranslı anahtar: ayraçsız (boşluk/tire/nokta/alt çizgi/yıldız), büyük harf; içinde EN AZ BİR gerçek rakam olan
+ * Toleranslı anahtar: ayraçsız (boşluk/tire/nokta/alt çizgi/yıldız/eğik çizgi), büyük harf; içinde EN AZ BİR gerçek rakam olan
  * [0-9OILSB] koşusunda O→0, I/L→1, S→5, B→8. Rakamsız koşu (ör. "SOL") olduğu gibi kalır.
  */
 export function tolerantCodeKey(v: string | null | undefined): string {
