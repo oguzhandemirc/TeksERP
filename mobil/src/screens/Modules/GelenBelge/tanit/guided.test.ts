@@ -27,11 +27,12 @@ const result = (over: Partial<SuggestResult> = {}): SuggestResult =>
 
 describe('guided — adımlar', () => {
   it('adım 0 başlık, 1..n sözleşme sırasındaki alanlar, son adım Bitir', () => {
-    expect(GUIDED_FIELDS).toEqual(['musteri', 'partiNo', 'hedefMetraj', 'toplamMetre', 'en', 'desen', 'renk']);
+    expect(GUIDED_FIELDS).toEqual(['musteri', 'partiNo', 'hedefMetraj', 'toplamMetre', 'en', 'desen', 'renk', 'evrakNo']);
     expect(stepField(0)).toBeNull();
     expect(stepField(1)).toBe('musteri');
     expect(stepField(2)).toBe('partiNo');
-    expect(stepField(GUIDED_FIELDS.length)).toBe('renk');
+    expect(stepField(GUIDED_FIELDS.length)).toBe('evrakNo');
+    expect(fieldLabel('evrakNo')).toBe('Evrak no');
     expect(FINISH_STEP).toBe(GUIDED_FIELDS.length + 1);
     expect(stepField(FINISH_STEP)).toBeNull();
     expect(fieldLabel('partiNo')).toBe('Parti no');
