@@ -138,7 +138,11 @@ export async function decodeScanUpload(contentBase64: string, clientSha256?: str
   return { content, mime: kind.mime, sha256: heic ? sha256Hex(content) : receivedSha, heicSourceBytes: heic ? received.length : null };
 }
 
-export async function uploadDocumentScan(input: DocumentScanInput, userId: string) {
+/**
+ * `bornReading` (S16c cihazda OCR): yeni fotoğraf kaydı READING/deneme 1 doğar — okuma işi onu alamaz, çağıran
+ * (`gelen-belge-istemci-okuma.service`) cihazın okumasını hemen işler ya da PENDING'e bırakır. PDF yine READ_FAILED doğar.
+ */
+export async function uploadDocumentScan(input: DocumentScanInput, userId: string, opts: { bornReading?: boolean } = {}) {
   const { content, mime, sha256, heicSourceBytes } = await decodeScanUpload(input.contentBase64, input.sha256);
   const kind = { mime };
   const mode = await readDuplicateDocNoMode();
@@ -152,7 +156,7 @@ export async function uploadDocumentScan(input: DocumentScanInput, userId: strin
     sha256,
     capturedById: userId,
     // K6: PDF doğrudan READ_FAILED (deneme 0) — PENDING'de kalsa "kuyrukta" sayılır ve hiç bitmezdi; enum değişmez.
-    ...(kind.mime === PDF_MIME ? { status: "READ_FAILED" as const } : {}),
+    ...(kind.mime === PDF_MIME ? { status: "READ_FAILED" as const } : opts.bornReading ? { status: "READING" as const, attempts: 1 } : {}),
   };
   // 8045 kilidi tx'in İLK ifadesi: eşzamanlı aynı yükleme sıraya girer, kaybeden kazananın kaydını yeniden kullanır
   // (sha256 artık UNIQUE değil). Taslağa bağlanıyorsa claim + create aynı tx'te (TOCTOU yok).

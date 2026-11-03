@@ -36,3 +36,27 @@ it('JS ↔ native adları eşit', () => {
   expect(js).toMatch(/requireOptionalNativeModule<.*>\('TeksErpBelgeTarayici'\)/);
   for (const fn of ['availabilityAsync', 'scanAsync']) expect(kt).toContain(`AsyncFunction("${fn}")`);
 });
+
+// ── Cihazda OCR (S16c) ─────────────────────────────────────────────────────────────────────────────
+const reader = fs.readFileSync(path.join(MOD, 'android/src/main/java/com/tekserp/belgetarayici/TextReader.kt'), 'utf8');
+const ocrJs = fs.readFileSync(path.join(__dirname, '..', 'services', 'deviceOcr.ts'), 'utf8');
+
+it('⭐ metin tanıma GÖMÜLÜ model ve TAM SABİT (Play Hizmetleri modeli/indirme yok; aralık/+ yok)', () => {
+  const m = gradle.match(/com\.google\.mlkit:text-recognition:([^'"]+)['"]/);
+  expect(m?.[1]).toBe('16.0.1');
+  expect(gradle).not.toMatch(/play-services-mlkit-text-recognition/);
+});
+
+it('⭐ her kelime satır sırası (`l`), 4 köşe (`c`), güven (`p`) taşır; sayfa `rotation`; EXIF yönü uygulanır', () => {
+  expect(reader).toMatch(/"t" to el\.text, "c" to wc, "l" to l, "p" to conf\(el\.confidence\)/);
+  expect(reader).toMatch(/"rotation" to pass\.rotation/);
+  expect(reader).toMatch(/ExifInterface\.TAG_ORIENTATION/);
+  expect(reader).toMatch(/TextRecognizerOptions\.DEFAULT_OPTIONS/);
+});
+
+it('JS ↔ native: recognizeTextAsync(uri, timeoutMs) aynı modülde, süre kuyruğa girişten', () => {
+  expect(kt).toContain('AsyncFunction("recognizeTextAsync") { uri: String, timeoutMs: Int');
+  expect(kt).toMatch(/val deadline = SystemClock\.elapsedRealtime\(\) \+ timeoutMs/);
+  expect(ocrJs).toMatch(/requireOptionalNativeModule<.*>\('TeksErpBelgeTarayici'\)/);
+  expect(ocrJs).toMatch(/recognizeTextAsync\(page\.uri, timeoutMs\)/);
+});

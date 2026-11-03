@@ -7,6 +7,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Base64
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
@@ -36,6 +37,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class TeksErpBelgeTarayiciModule : Module() {
   private val worker: ExecutorService by lazy { Executors.newSingleThreadExecutor() }
+  // Cihazda OCR kendi sırasında: tarama kodlamasını bekletmez, sayfalar sırayla okunur.
+  private val ocrWorker: ExecutorService by lazy { Executors.newSingleThreadExecutor() }
+  private var textReader: TextReader? = null
   private val main = Handler(Looper.getMainLooper())
   private var pending: PendingScan? = null
 
@@ -106,6 +110,30 @@ class TeksErpBelgeTarayiciModule : Module() {
           main.removeCallbacks(timeout)
           if (started.compareAndSet(false, true)) failPending("ERR_DOC_SCAN_UNAVAILABLE", e.message ?: "Belge tarayıcı kullanılamıyor")
         }
+    }
+
+    /**
+     * Cihazda OCR (S16c): `{ width, height, rotation, ms, lines, words }`. Süre kuyruğa girişten sayılır — JS vazgeçtiyse
+     * bekleyen sayfa okunmadan reddedilir. Hata kodları: ERR_TEXT_READ_TIMEOUT · ERR_TEXT_READ_FAILED.
+     */
+    AsyncFunction("recognizeTextAsync") { uri: String, timeoutMs: Int, promise: Promise ->
+      val context = appContext.reactContext
+      if (context == null) {
+        promise.reject("ERR_TEXT_READ_FAILED", "Ekran etkin değil", null)
+        return@AsyncFunction
+      }
+      val deadline = SystemClock.elapsedRealtime() + timeoutMs.coerceIn(500, 30_000)
+      ocrWorker.execute {
+        try {
+          val reader = textReader ?: TextReader(context.applicationContext).also { textReader = it }
+          promise.resolve(reader.read(uri, OCR_LONG_EDGE, deadline))
+        } catch (e: TimeoutException) {
+          promise.reject("ERR_TEXT_READ_TIMEOUT", "Metin okuma süresi doldu", null)
+        } catch (e: Throwable) {
+          // OutOfMemoryError dahil: JS sunucu okumasına düşer.
+          promise.reject("ERR_TEXT_READ_FAILED", "Metin okunamadı (${e.javaClass.simpleName})", null)
+        }
+      }
     }
 
     OnActivityResult { activity, (requestCode, resultCode, data) ->
@@ -218,5 +246,7 @@ class TeksErpBelgeTarayiciModule : Module() {
 
   companion object {
     private const val REQUEST_CODE = 0x7e5a
+    /** Sunucu okuma servisinin küçültme sınırıyla aynı (`okuma/app` uzun kenar 2600). */
+    private const val OCR_LONG_EDGE = 2600
   }
 }

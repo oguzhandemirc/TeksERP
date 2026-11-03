@@ -4,8 +4,15 @@ import { onlineManager } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { useAttemptToken } from '../../../offline/attemptToken';
 import { inboundDocService } from '../../../services/inboundDoc.service';
+import { prefetchPageText } from '../../../services/deviceOcr';
 import { EMPTY_PROGRESS, MAX_PAGES, SubmitError, addPage, addPages, barcodeToDocNo, submitDocScan, type ScanPage, type SubmitProgress } from './docScan';
 import type { Owner } from './DocHeader';
+
+/** Cihazda OCR (S16c) çekim anında başlar: eklenen İLK yeni sayfa (ekleme listenin sonuna) önden okunur. */
+function withPrefetch(prev: readonly ScanPage[], next: ScanPage[]): ScanPage[] {
+  prefetchPageText(next[prev.length]);
+  return next;
+}
 
 /** `successHint`: gönderim bildiriminin alt satırı (belgeden iş emri akışı onay panelden demez). */
 export function useDocScan(opts: { successHint?: string } = {}) {
@@ -51,7 +58,7 @@ export function useDocScan(opts: { successHint?: string } = {}) {
 
   const capture = (page: ScanPage) => {
     const r = addPage(pages, page);
-    setPages(r.pages);
+    setPages(withPrefetch(pages, r.pages));
     if (r.kind === 'duplicate') Toast.show({ type: 'info', text1: `Bu fotoğraf zaten Sayfa ${r.pageNo} olarak ekli` });
     else if (r.kind === 'too-large') Toast.show({ type: 'error', text1: 'Fotoğraf 5 MB sınırını aşıyor; yeniden çekin' });
     else if (r.kind === 'full') Toast.show({ type: 'error', text1: `Bir belgede en çok ${MAX_PAGES} sayfa` });
@@ -61,7 +68,7 @@ export function useDocScan(opts: { successHint?: string } = {}) {
   // (kendiliğinden gönderim aynı listeyi kullanır), yoksa null.
   const captureMany = (incoming: ScanPage[]): ScanPage[] | null => {
     const r = addPages(pages, incoming);
-    setPages(r.pages);
+    setPages(withPrefetch(pages, r.pages));
     const notes = [
       r.duplicates ? `${r.duplicates} sayfa zaten ekliydi` : '',
       r.tooLarge ? `${r.tooLarge} sayfa 5 MB sınırını aştı` : '',

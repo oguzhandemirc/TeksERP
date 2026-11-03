@@ -141,7 +141,7 @@ Sınıf: [ÇEKİRDEK] her kurulumda aynı · [PROFİL] bu fabrikanın seçimi. K
 
 ## Açık sorular
 
-- Borç: sonraki tablet sürümü native turu (`expo-notifications`, ML Kit) — `urun.tablet.runtimeVersion` artır, AAB Play'e, parmak izi kaydını güncelle. `electron-yayinla.ps1` silinmesi önerildi; bayat yorum/reçeteler temizlik.
+- Borç: sonraki tablet sürümü native turu (`expo-notifications`, ML Kit belge tarayıcı + metin tanıma S16c) — `urun.tablet.runtimeVersion` artır, AAB Play'e, parmak izi kaydını güncelle. `electron-yayinla.ps1` silinmesi önerildi; bayat yorum/reçeteler temizlik.
 
 ## Doğrulama turu ekleri (eski CLAUDE.md ↔ yeni yapı karşılaştırması, 2026-09-05)
 

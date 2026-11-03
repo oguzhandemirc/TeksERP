@@ -2,6 +2,14 @@
 
 > `KUTUPHANELER.md` §9'dan bölündü (2026-11-02; o dosya boyut tavanına 202 bayt kalmıştı — kural kalır, ENVANTER ayrılır, §2 → `KUTUPHANELER-TABLO.md` emsali). Kayıt biçimi `KUTUPHANELER.md` §3; en yeni kayıt üstte.
 
+### Cihazda metin tanıma: yerel Expo modülü `recognizeTextAsync` + Gradle com.google.mlkit:text-recognition 16.0.1 (GÖMÜLÜ model) · mobil · 2026-11-04
+1. Problem      : Belge okuması sunucudaki okuma servisine bağlı (servis yoksa/yavaşsa tarama PENDING bekler); tablet çekim anında okuyup sonucu yükleme isteğiyle göndermeli (S16c). Kullanıcı onayı 2026-11-04 ("Evet, ekle")
+2. Alternatifler: npm `@react-native-ml-kit/text-recognition` — eski köprü modülü, zaman aşımı/EXIF yönü/küçültme denetimi yok · `play-services-mlkit-text-recognition` (Play Hizmetleri modeli) — model ilk kullanımda iner; çevrimdışı/Play'siz tablette sessiz düşer, süre belirsiz · elle yazmak (SEÇİLDİ, [KU-07]; mevcut `teks-erp-belge-tarayici` modülüne ayrı `TextReader.kt`, ayrı tek iş parçacıklı işçi, süre kuyruğa girişten sayılır, EXIF yönü + uzun kenar 2600 sidecar ile aynı)
+3. Boyut/biçim  : NATIVE; npm paketi YOK. Model APK'ya GÖMÜLÜ: yalnız arm64-v8a derlendiğinden `libmlkit_google_ocr_pipeline.so` 11,0 MB + Latn modelleri ≈ 12,3 MB sıkıştırılmış katkı (ölçüldü: `build:apk` APK 64,9 MB; önceki APK elde yok → fark yalnız bileşen toplamından); manifest izin kümesi DEĞİŞMEZ
+4. Bakım        : 16.0.1 kararlı (Google); TAM SABİT ([KU-12]) — pin `mobil/src/test/belge-tarayici.guard.test.ts`
+5. Lisans       : Android SDK / Google APIs Hizmet Şartları (mevcut `mlkit:barcode-scanning` · `play-services-mlkit-document-scanner` ile aynı sınıf); copyleft YOK
+6. Dağıtım      : OTA ile GİTMEZ — yeni AAB + `runtimeVersion` artışı ([KU-11]); JS `requireOptionalNativeModule` + fonksiyon varlığı ile arar, eski APK'da `clientOcr` yok → sunucu OCR yolu (OTA güvenli)
+
 ### pi-heif==1.4.0 · okuma · 2026-11-02
 1. Problem      : Gelen Belgeler'e iPhone fotoğrafı (HEIC/HEIF) yüklenemiyor; tarayıcı HEIC çizemez, okuma (OpenCV) çözemez. Sistem JPEG saklamalı. Kullanıcı kararı 2026-11-02 01:53 (şıklı): `pi-heif` okuma servisinde; onay YALNIZ pi-heif + zorunlu geçişlileri
 2. Alternatifler: `pillow-heif` (aynı yazar; x265 kodlayıcısı içerir → GPL) · Node'da `heic-convert`/`heic-decode` (libheif-js WASM, backend'e yeni paket + bellek) · `sharp` (prebuilt libvips HEIC'i lisans gereği çözmez) · panelde dönüştürme (tarayıcı HEIC çözmez, tablet yolu da kapsanmaz) — SEÇİLDİ: pi-heif, okuma'da tek uç `POST /donustur`

@@ -28,7 +28,8 @@ import { getIncomingDocSettings, updateIncomingDocSettings } from "../services/g
 import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
 import { getRollTabletContext } from "../services/roll-tablet.service";
 import { deskRouteSuggestion, listDeskKursunMachines } from "../services/gelen-belge-masa.service";
-import { getDocumentScan, readDocumentScanContent, uploadDocumentScan } from "../services/gelen-belge-scan.service";
+import { getDocumentScan, readDocumentScanContent } from "../services/gelen-belge-scan.service";
+import { uploadScanWithDeviceRead } from "../services/gelen-belge-istemci-okuma.service";
 import { suggestForNote } from "../services/gelen-belge-eslestirme.service";
 import { buildWorkOrderPlan } from "../services/gelen-belge-is-emri.service";
 import { searchProcessChoiceValues } from "../services/helpers/process-choice-catalog.helper";
@@ -73,13 +74,12 @@ const RangeDay = Day.refine((v) => {
 const Money = (label: string) => z.coerce.number().positive(`${label} sıfırdan büyük olmalı`).max(999_999, `${label} çok büyük`);
 
 const ScanBody = z.strictObject({
-  contentBase64: z.string().min(1, "Dosya içeriği boş"),
-  noteId: Id.nullable().optional(),
-  pageNo: z.coerce.number().int().min(1).max(99).nullable().optional(),
-  regionNo: z.coerce.number().int().min(1).max(9).nullable().optional(),
+  contentBase64: z.string().min(1, "Dosya içeriği boş"), noteId: Id.nullable().optional(),
+  pageNo: z.coerce.number().int().min(1).max(99).nullable().optional(), regionNo: z.coerce.number().int().min(1).max(9).nullable().optional(),
   barcodeText: optText(120),
   // D7: tablet özeti kendisi hesaplar; uyuşmazlık 400 DOCUMENT_SCAN_HASH_MISMATCH (eski istemci göndermez).
   sha256: z.string().regex(/^[0-9a-fA-F]{64}$/, "Özet 64 onaltılık karakter olmalı").nullable().optional(),
+  clientOcr: z.unknown().optional(), // S16c: katı şema serviste (`parseClientOcr`) — ihlal 400 CLIENT_OCR_INVALID (tablet clientOcr'sız tekrarlar)
 });
 const Header = {
   ownerCustomerId: Id.nullable().optional(),
@@ -160,12 +160,12 @@ const ListQuery = z.object({
  * /api/gelen-belge/taramalar:
  *   post:
  *     tags: [Gelen belge]
- *     summary: Belge fotoğrafı/PDF yükle (base64; tür sihirli bayttan; HEIC okuma servisinde JPEG'e çevrilir; aynı sha256 = aynı kayıt, 200; PDF arşivdir — READ_FAILED doğar, okunmaz)
+ *     summary: Belge fotoğrafı/PDF yükle (base64; tür sihirli bayttan; HEIC okuma servisinde JPEG'e çevrilir; aynı sha256 = aynı kayıt, 200; PDF arşivdir — READ_FAILED doğar, okunmaz; isteğe bağlı `clientOcr` = tabletin ML Kit okuması {engine:mlkit, width, height, rotation?, ms?, words[{t,c,l?,p?}] ≤4000, lines?[{c,p?}] ≤2000} → okuma servisi atlanır, taslak aynı istekte doğar (`deviceOcr` READ), işlenemezse sunucu okumasına düşer (FALLBACK))
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       201: { description: "scan künyesi (bayt yok)" }
  *       200: { description: "Aynı sha256 mevcut (duplicate) — serbest kayıt istenen taslağa bağlanır (boundTo); okunmuşsa satırlar saklı okuma sonucundan kurulur, zarf yoksa yeniden okumaya döner (restored[] REBUILT|REQUEUED)" }
- *       400: { description: "DOCUMENT_SCAN_INVALID · DOCUMENT_SCAN_TYPE · HEIC_CONVERT_FAILED" }
+ *       400: { description: "DOCUMENT_SCAN_INVALID · DOCUMENT_SCAN_TYPE · HEIC_CONVERT_FAILED · CLIENT_OCR_INVALID (hiçbir şey yazılmaz)" }
  *       413: { description: "DOCUMENT_SCAN_TOO_LARGE (5 MB; HEIC'te dönüşüm sonrası da)" }
  *       503: { description: "HEIC_CONVERT_UNAVAILABLE (HEIC geldi, okuma servisi yok/eski/ulaşılamaz — hiçbir şey yazılmaz)" }
  * /api/gelen-belge/taramalar/{id}:
@@ -199,10 +199,10 @@ const ListQuery = z.object({
  *       404: { description: İş emri yok (WORK_ORDER_NOT_FOUND) }
  */
 router.post("/taramalar", requirePermission("gelen-belge:write"), wrap(async (req) => {
-  const r = await uploadDocumentScan(ScanBody.parse(req.body), req.user!.userId);
+  const r = await uploadScanWithDeviceRead(ScanBody.parse(req.body), req.user!.userId);
   // Yeni fotoğraf → okuma işini dürt (servis/modül yoksa iş kendi ön koşulunda durur; burada 503 YOK — yükleme elle taslak için de geçerli).
   // PDF kuyruğa girmez (K6): dürtülecek iş yok. Yeniden bağlanan okunmuş sayfa zarfsızsa kuyruğa döner (PENDING) — o da dürtülür.
-  if (r.scan.status === "PENDING" && (!r.duplicate || r.restored?.some((o) => o.mode === "REQUEUED"))) requestImmediateReaderRun();
+  if (r.scan.status === "PENDING" && (!r.duplicate || r.deviceOcr === "FALLBACK" || r.restored?.some((o) => o.mode === "REQUEUED"))) requestImmediateReaderRun();
   return { status: r.duplicate ? 200 : 201, data: r };
 }));
 router.get("/taramalar/:id", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await getDocumentScan(Id.parse(req.params.id)) })));
