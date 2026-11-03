@@ -15,6 +15,7 @@
 // =============================================================================
 
 import { stationWorkSearchWhere } from "./helpers/workorder-doc-search.helper";
+import { scanRoutedOpenCards, type ScanRoutedOpenCard } from "./helpers/scan-route-open-cards.helper";
 import { ACTIVE_OPERATION, OWN_OPERATION, prepareWidthTracedStepOpTx, revokeWidthTracedStepOperationsTx } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT, reopenClosedMovementsTx, revokeRollMovements } from "./helpers/roll-movement.helper";
 import { readActiveTargetValues } from "./helpers/workorder-target-value.helper";
@@ -412,9 +413,9 @@ export class KursunQcService {
    * `stationId` (oturum istasyonu, KQ-D2) verilirse yalnız o istasyonun adımları;
    * oturumsuz istek bugünkü gibi tüm akış adımlarını görür.
    */
-  async listOpenCards(stationId: string | null = null, q: string | null = null, sessionMachineId: string | null = null): Promise<
+  async listOpenCards(stationId: string | null = null, q: string | null = null, sessionMachineId: string | null = null, includeScanRouted = false): Promise<
     ApiResponse<
-      Array<{
+      Array<ScanRoutedOpenCard | {
         cardId: string;
         cardNumber: string;
         cardBarcode: string;
@@ -535,7 +536,10 @@ export class KursunQcService {
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
 
-    return { success: true, data };
+    // K29 S15b: yalnız istemci isterse (eski APK stepId null satır görmez) — oturum istasyonunda eklenebilecek rotasız İE.
+    if (!includeScanRouted) return { success: true, data };
+    const scanRows = await scanRoutedOpenCards({ stationId, stationWhere: STEP_FLOW_WHERE, searchWhere, excludeWorkOrderIds: data.map((d) => d.workOrderId) });
+    return { success: true, data: [...data, ...scanRows] };
   }
 
   /** Adımdaki açık topların açık (karar yolu) hata sayısı — `roll.currentStepId` üzerinden tek groupBy. */

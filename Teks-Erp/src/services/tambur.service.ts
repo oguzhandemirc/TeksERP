@@ -15,6 +15,7 @@
 // =============================================================================
 
 import { stationWorkSearchWhere } from "./helpers/workorder-doc-search.helper";
+import { scanRoutedOpenCards, type ScanRoutedOpenCard } from "./helpers/scan-route-open-cards.helper";
 import { consumeForOperationTx } from "./helpers/consumable-stock.helper";
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, inheritRollPropertiesTx } from "./helpers/property-revoke.helper";
@@ -2119,9 +2120,9 @@ export class TamburService {
    * Tambur adımlarında açık top bekleyen aktif refakat kartları.
    * Mobil "kamera simülasyonu" modal'ı için.
    */
-  async listOpenCards(stationId: string | null = null, q: string | null = null): Promise<
+  async listOpenCards(stationId: string | null = null, q: string | null = null, scan: { sessionStationId: string | null } | null = null): Promise<
     ApiResponse<
-      Array<{
+      Array<ScanRoutedOpenCard | {
         cardId: string;
         cardNumber: string;
         cardBarcode: string;
@@ -2219,7 +2220,10 @@ export class TamburService {
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
 
-    return { success: true, data };
+    // K29 S15b: yalnız istemci isterse (`scan` dolu) — oturum tamburunda eklenebilecek rotasız İE; eski APK görmez.
+    if (!scan) return { success: true, data };
+    const scanRows = await scanRoutedOpenCards({ stationId: scan.sessionStationId, stationWhere: { kind: StationKind.TAMBUR }, searchWhere, excludeWorkOrderIds: data.map((d) => d.workOrderId) });
+    return { success: true, data: [...data, ...scanRows] };
   }
 
 

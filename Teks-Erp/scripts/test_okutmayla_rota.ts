@@ -17,6 +17,10 @@
 //   §g İki eşzamanlı okutma → TEK ekleme
 //   §h Atlanan kurşun adımı faturaya/maliyete girmez (resolveServiceItemsForRolls boş)
 //   §r Rotasız İE: SIRALI'da 400; SCAN'de adımsız açılır, top partide bekler, ilk okutma adımı ekler
+//   §s S15b: HTTP quick-start gövdesi `scanRouted` (Zod allowlist) SCAN→rotasız, SIRALI→400; rota+rotasız 400;
+//      açık iş listesi (Kurşun/KK + Tambur) rotasız İE'yi YALNIZ includeScanRouted ile döner (eski APK bayt-aynı),
+//      izinsiz istasyonda yok, bu istasyonda adımı olan İE tekrar etmez; seçilen satır apply ile adım ekler;
+//      önizleme canClose = guard ile aynı izin (quality:write | mobile:kk2-kursun)
 //
 // Koşum: npx tsx scripts/test_okutmayla_rota.ts
 // =============================================================================
@@ -25,6 +29,8 @@ import { readFileSync } from "fs";
 import { Prisma, RollForm, RollOperationType, RollStatus, StepStatus, TravelerCardStatus, WorkOrderStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { KursunQcService } from "../src/services/kursun-qc.service";
+import { TamburService } from "../src/services/tambur.service";
+import { WorkOrderController } from "../src/controllers/workorder.controller";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { applyScanRoute, gateByCard, previewScanRoute } from "../src/services/workorder-scan-route.service";
 import { resolveServiceItemsForRolls } from "../src/services/helpers/service-pricing.helper";
@@ -307,6 +313,94 @@ async function main(): Promise<void> {
   const rr2 = await apply(card, T);
   const rSteps2 = await stepsOf(rwo.id);
   check("sonraki okutma (Tambur) Kurşun'un arkasına eklenir, Kurşun ATLANDI (başlamamış)", rr2.kind === "INSERT" && rSteps2.map((s) => s.stationId).join() === [K, T].join() && rSteps2[0]!.status === StepStatus.SKIPPED, JSON.stringify(rSteps2.map((s) => s.status)));
+
+  await sectionS15b(ctx, { K, Q, T }, (c, sid) => apply(c, sid));
+}
+
+/** HTTP gövdesini controller'ın Zod şemasından geçirir (sunucusuz): 201 gövdesi ya da hata. */
+async function quickStartHttp(body: Record<string, unknown>, userId: string): Promise<{ status: number; body: unknown; err: Err | null }> {
+  const ctrl = new WorkOrderController();
+  let status = 0;
+  let out: unknown = null;
+  let err: Err | null = null;
+  const res = { status: (c: number) => { status = c; return res; }, json: (b: unknown) => { out = b; return res; } };
+  await ctrl.quickStart({ body, user: { userId } } as never, res as never, (e?: unknown) => {
+    const x = e as { statusCode?: number; issues?: unknown; message?: string; details?: Record<string, unknown> & { code?: string } };
+    err = { status: x.statusCode ?? (x.issues ? 400 : 500), code: x.details?.code ?? null, message: x.message ?? "", details: x.details ?? null };
+  });
+  return { status, body: out, err };
+}
+
+async function sectionS15b(ctx: Ctx, st: { K: string; Q: string; T: string }, apply: (card: string, stationId: string) => Promise<{ kind: string }>): Promise<void> {
+  section("§s S15b — Hızlı İE rotasız + açık listede rotasız satır + canClose");
+  const { K, Q, T } = st;
+  const mkStock = async (tag: string, n: number) => {
+    const bc: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const barcode = `${P}-${tag}${i}`.slice(0, 40);
+      const r = await prisma.roll.create({ data: { barcode, itemId: ctx.itemId, initialQty: 30, currentQty: 30, status: RollStatus.STOCK, entrySource: "SUBCONTRACTOR_RETURN", form: RollForm.ACIK }, select: { id: true } });
+      fx.rollIds.push(r.id);
+      bc.push(barcode);
+    }
+    return bc;
+  };
+  // quick-start HTTP gövdesi: SIRALI → 400 SCAN_ROUTE_DISABLED (Zod scanRouted'ı SİLSEYDİ "rota seçin" olurdu).
+  await setKey(KEYS[0], "SEQUENTIAL");
+  const b1 = await mkStock("S", 2);
+  const seq = await quickStartHttp({ clientToken: randomUUID(), rollBarcodes: b1, scanRouted: true, type: "STOCK_PRODUCTION" }, ctx.actor);
+  check("HTTP quick-start scanRouted + SIRALI → 400 SCAN_ROUTE_DISABLED", seq.err?.status === 400 && seq.err.code === "SCAN_ROUTE_DISABLED", JSON.stringify(seq.err));
+  const both = await quickStartHttp({ clientToken: randomUUID(), rollBarcodes: b1, scanRouted: true, steps: [{ stationId: K }] }, ctx.actor);
+  check("HTTP quick-start rotasız + adım birlikte → 400 (doğrulama)", both.err?.status === 400 && both.status === 0, JSON.stringify(both.err));
+  await setKey(KEYS[0], "SCAN");
+  const ok = await quickStartHttp({ clientToken: randomUUID(), rollBarcodes: b1, scanRouted: true, type: "STOCK_PRODUCTION" }, ctx.actor);
+  const woId = (ok.body as { data?: { workOrder?: { id?: string } } } | null)?.data?.workOrder?.id ?? "";
+  if (woId) fx.woIds.push(woId);
+  const row = woId ? await prisma.workOrder.findUnique({ where: { id: woId }, select: { scanRouted: true, steps: { select: { id: true } } } }) : null;
+  check("HTTP quick-start scanRouted + SCAN → 201 rotasız (adımsız) İE", ok.status === 201 && row?.scanRouted === true && row.steps.length === 0, JSON.stringify(ok.err ?? row));
+  const card = (await prisma.travelerCard.findFirst({ where: { workOrderId: woId, status: TravelerCardStatus.ACTIVE }, select: { barcode: true } }))?.barcode ?? "";
+
+  // Açık iş listesi (Kurşun/KK — oturum istasyonu K; ayar ALL).
+  type Row = { workOrderId: string; stepId: string | null; scanRouteAdd?: boolean; scanRouteLabel?: string; cardBarcode: string; openRollCount: number };
+  const kurs = async (stationId: string | null, include: boolean) => ((await qc.listOpenCards(stationId, null, null, include)).data ?? []) as Row[];
+  const mine = (rows: Row[]) => rows.filter((r) => r.workOrderId === woId);
+  const legacy = mine(await kurs(K, false));
+  check("parametresiz (eski APK): rotasız İE listede YOK", legacy.length === 0, JSON.stringify(legacy));
+  const withP = mine(await kurs(K, true));
+  check("includeScanRouted: rotasız İE 'Sahada belirlenecek' (stepId null, 2 top)",
+    withP.length === 1 && withP[0]!.stepId === null && withP[0]!.scanRouteAdd === true && withP[0]!.scanRouteLabel === "Sahada belirlenecek" && withP[0]!.openRollCount === 2 && withP[0]!.cardBarcode === card,
+    JSON.stringify(withP));
+  const tam = mine(((await new TamburService().listOpenCards(null, null, { sessionStationId: T })).data ?? []) as Row[]);
+  check("Tambur listesi (oturum T) de aynı satırı verir", tam.length === 1 && tam[0]!.stepId === null, JSON.stringify(tam));
+  const tamWrongKind = mine(((await new TamburService().listOpenCards(null, null, { sessionStationId: K })).data ?? []) as Row[]);
+  check("Tambur listesi Tambur olmayan oturum istasyonunda rotasız satır vermez", tamWrongKind.length === 0);
+  check("oturumsuz istekte rotasız satır yok", mine(await kurs(null, true)).length === 0);
+  await setKey(KEYS[1], "SELECTED");
+  check("izinsiz istasyon (SELECTED + anahtar kapalı): rotasız satır yok", mine(await kurs(Q, true)).length === 0);
+  await prisma.station.update({ where: { id: Q }, data: { scanAddAllowed: true } });
+  check("SELECTED + istasyonda anahtar: rotasız satır var", mine(await kurs(Q, true)).length === 1);
+  await prisma.station.update({ where: { id: Q }, data: { scanAddAllowed: false } });
+  await setKey(KEYS[1], "ALL");
+  await setKey(KEYS[0], "SEQUENTIAL");
+  check("SIRALI'da includeScanRouted olsa da rotasız satır yok", mine(await kurs(K, true)).length === 0);
+  await setKey(KEYS[0], "SCAN");
+
+  // Seçim = bugünkü kart çözümü → apply (tek ekleme yolu); sonra İE bu istasyonda adımlı → bir kez görünür.
+  const picked = await apply(card, K);
+  check("seçilen satır apply → K adımı eklendi", picked.kind === "INSERT" && (await stepsOf(woId)).map((s) => s.stationId).join() === K, picked.kind);
+  const afterK = mine(await kurs(K, true));
+  check("bu istasyonda adımı olan İE iki kez görünmez (tek satır, adımlı)", afterK.length === 1 && afterK[0]!.stepId !== null && !afterK[0]!.scanRouteAdd, JSON.stringify(afterK));
+  const atT = mine(((await new TamburService().listOpenCards(null, null, { sessionStationId: T })).data ?? []) as Row[]);
+  check("Tambur'da hâlâ 'Sahada belirlenecek' (K adımında bekliyor)", atT.length === 1 && atT[0]!.scanRouteAdd === true, JSON.stringify(atT));
+
+  // canClose: guard ile AYNI izin kümesi (ayna).
+  const cc = async (perms: string[]) => (await previewScanRoute(card, T, perms)).canClose;
+  check("canClose: mobile:tambur → false", (await cc(["mobile:tambur"])) === false);
+  check("canClose: mobile:kk2-kursun → true", (await cc(["mobile:tambur", "mobile:kk2-kursun"])) === true);
+  check("canClose: quality:write → true", (await cc(["quality:write"])) === true);
+  check("canClose: önizleme varsayılan (izin verilmedi) → false", (await previewScanRoute(card, T)).canClose === false);
+  const src = readFileSync("src/services/workorder-scan-route.service.ts", "utf8");
+  check("guard + önizleme tek kaynak canCloseOpenStep (inline izin dizgesi yok)",
+    src.includes("!canCloseOpenStep(ctx.permissions)") && src.includes("canClose = canCloseOpenStep(permissions)") && !/matchesPermission\(ctx\.permissions,\s*"quality:write"\)/.test(src));
 }
 
 async function cleanup(): Promise<void> {

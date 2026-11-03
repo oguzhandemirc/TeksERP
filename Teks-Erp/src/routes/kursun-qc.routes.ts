@@ -88,6 +88,7 @@ router.get(
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: query, name: q, schema: { type: string, maxLength: 64 }, description: "İE no / parti no / fiş-evrak no / GB no araması (K17); boş = tüm liste" }
+ *       - { in: query, name: includeScanRouted, schema: { type: string, enum: ["1", "true"] }, description: "K29 S15b — oturum istasyonunda okutunca adım eklenebilecek açık rotasız iş emirleri de döner (stepId null, scanRouteAdd true, 'Sahada belirlenecek'); yoksa liste bugünkü gibi" }
  *     responses:
  *       200: { description: Açık kart listesi }
  *       500: { description: Sunucu hatası }
