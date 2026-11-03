@@ -182,7 +182,7 @@ async function main(): Promise<void> {
   check("§6 cutOpenFabricSchema weightKg taşır", cutOpenFabricSchema.parse({ lengthMeters: 5, status: "WAREHOUSE", weightKg: 3 }).weightKg === 3);
   check("§6 finalizeWarehouseCutSchema weightKg taşır", finalizeWarehouseCutSchema.parse({ remainingAction: "keep_1kalite", weightKg: 3 }).weightKg === 3);
   check("§6 finalizeOpenFabricSchema weightKg taşır", finalizeOpenFabricSchema.parse({ remainingAction: "keep_1kalite", weightKg: 3 }).weightKg === 3);
-  const fz = finalizeSchema.parse({ rollId: "00000000-0000-4000-8000-000000000000", cuts: [{ length: 5, qualityGrade: "X", weightKg: 2 }], remainingWeightKg: 1 });
+  const fz = finalizeSchema.parse({ rollId: "00000000-0000-4000-8000-000000000000", cuts: [{ length: 5, qualityGrade: grade.code, weightKg: 2 }], remainingWeightKg: 1 });
   check("§6 finalizeSchema kesim + kalan kg taşır", fz.cuts[0]?.weightKg === 2 && fz.remainingWeightKg === 1);
   check("§6 negatif kg reddedilir", !cutWarehouseRollSchema.safeParse({ cutLength: 5, weightKg: -1 }).success);
 }
