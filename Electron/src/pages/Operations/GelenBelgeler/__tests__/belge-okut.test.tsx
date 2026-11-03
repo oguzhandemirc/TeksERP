@@ -29,8 +29,11 @@ const perms = { list: ["gelen-belge:write", "gelen-belge:approve"] };
 vi.mock("@/hooks/useRoleAccess", () => ({
   useRoleAccess: () => ({ hasPermission: (p: string) => perms.list.includes(p), hasAnyPermission: (ps: string[]) => ps.some((p) => perms.list.includes(p)) }),
 }));
-const flags = { gelenBelge: true };
-vi.mock("@/hooks/usePricingEnabled", () => ({ useGelenBelgeEnabled: () => flags.gelenBelge }));
+const flags = { gelenBelge: true, routeMode: "SEQUENTIAL" };
+vi.mock("@/hooks/usePricingEnabled", () => ({
+  useGelenBelgeEnabled: () => flags.gelenBelge,
+  useFeatureFlags: () => ({ data: { data: { productionRouteMode: flags.routeMode } } }),
+}));
 vi.mock("@/components/forms/CustomerPickerField", () => ({ CustomerPickerField: ({ value }: { value: string | null }) => <span data-testid="owner-value">{value ?? "yok"}</span> }));
 vi.mock("@/pages/Routes/service", () => ({ routeService: { getById: () => Promise.resolve({ data: { id: "rt1", name: "Kurşun → Tambur" } }) } }));
 vi.mock("@/components/PermissionGate", () => ({ PermissionGate: ({ children }: { children: ReactNode }) => <>{children}</> }));
@@ -75,6 +78,14 @@ describe("BelgeOkutButton (iş emri formu)", () => {
     // Pasif düğme fare olayı almaz: neden sarmalayıcıda ve düğme metninde de görünür.
     expect(screen.getByTestId("wo-belge-okut-wrap")).toHaveAttribute("title", BELGE_OKUT_NO_ROUTE);
     expect(b).toHaveTextContent("önce rota");
+  });
+  it("⭐ K29 S14b: rota uygulaması Okutmayla → rota seçilmeden de etkin, 'Belge okut (rotasız)'", () => {
+    flags.routeMode = "SCAN";
+    renderWithProviders(<BelgeOkutButton routeTemplateId={null} />);
+    const b = screen.getByTestId("wo-belge-okut");
+    expect(b).toBeEnabled();
+    expect(b).toHaveTextContent("Belge okut (rotasız)");
+    flags.routeMode = "SEQUENTIAL";
   });
   it("rota seçiliyse etkin", () => {
     renderWithProviders(<BelgeOkutButton routeTemplateId="rt1" />);

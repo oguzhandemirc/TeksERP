@@ -11,9 +11,11 @@
 //   §7 ⭐ Gülkesim C: `batchNumberSource=DOCUMENT` → parti adı = taslağın `ourBatchNo`su (numberSource DOCUMENT, seri
 //       panel sayımı değişmez); boş → seri; SERIES → seri; `autoWorkOrderPatternless=OPEN` → desensiz grup hedefsiz
 //       OPENED; SKIP → bugünkü neden; bilinmeyen `sourceNoteId` → 404, iş emri doğmaz; plan `batchNoPreview`.
+//   §8 ⭐ K29 S14b: `production.routeMode=SCAN` + SKIP → desensiz grup da rotasız (scanRouted) OPENED, desenli grup hedefiyle;
+//       SIRALI'da SKIP bugünkü metinle.
 // Onay ucunun bileşimi (route ile aynı): onay → otomatik iş emri.
 // Negatif sonda: token `randomUUID()` → §3 token + §4 replay kırmızı; desensiz atlama kaldırılınca §3 "desensiz SKIPPED" kırmızı;
-// OPEN dalı silinince §7 OPEN kırmızı; `sourceNoteId` geçişi silinince §7 DOCUMENT kırmızı.
+// OPEN dalı silinince §7 OPEN kırmızı; patternless kapısından `scanRouted ||` kaldırılınca §8 desensiz kırmızı; `sourceNoteId` geçişi silinince §7 DOCUMENT kırmızı.
 // Çalıştır: npx tsx scripts/test_gelen_belge_oto_is_emri.ts
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -48,7 +50,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 }
 
 const TAG = `TST-GOI${Date.now().toString(36).toUpperCase()}Z`;
-const SETTINGS = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER, SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS];
+const SETTINGS = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER, SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS, SETTING_KEYS.PRODUCTION_ROUTE_MODE];
 const made = { notes: [] as string[], items: [] as string[], customers: [] as string[], props: [] as string[], routes: [] as string[], stations: [] as string[] };
 const svc = new WorkOrderService();
 
@@ -70,7 +72,7 @@ async function run(): Promise<void> {
   for (const [k, v] of [[SETTING_KEYS.EMANET_ENABLED, true], [SETTING_KEYS.GELEN_BELGE_ENABLED, true]] as const) {
     await prisma.systemSetting.upsert({ where: { key: k }, create: { key: k, value: v }, update: { value: v } });
   }
-  await prisma.systemSetting.deleteMany({ where: { key: { in: [SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER, SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS] } } });
+  await prisma.systemSetting.deleteMany({ where: { key: { in: [SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID, SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER, SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS, SETTING_KEYS.PRODUCTION_ROUTE_MODE] } } });
 
   console.log("§0 Tek kaynak");
   const woRoutes = readFileSync(path.join(__dirname, "../src/routes/workorder.routes.ts"), "utf8");
@@ -232,6 +234,24 @@ async function run(): Promise<void> {
   const gOpen = rOpen?.groups[0];
   const woOpen = gOpen?.workOrderId ? await prisma.workOrder.findUnique({ where: { id: gOpen.workOrderId }, select: { targetValues: { where: { revokedAt: null }, select: { id: true } } } }) : null;
   check("§7 ⭐ OPEN: desensiz grup OPENED, hedef değer YOK", gOpen?.outcome === "OPENED" && woOpen?.targetValues.length === 0 && gOpen.attached === 1, describe(rOpen ?? undefined));
+
+  console.log("§8 K29 S14b: Rota uygulaması Okutmayla → rotasız İE, desensiz grup da açılır (ayar SKIP olsa da)");
+  await updateIncomingDocSettings({ autoWorkOrderPatternless: "SKIP" }, actorId);
+  await prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.PRODUCTION_ROUTE_MODE }, create: { key: SETTING_KEYS.PRODUCTION_ROUTE_MODE, value: "SCAN" }, update: { value: "SCAN" } });
+  const n8 = await mkNote(["SADECE ÜTÜ", "BRODE DESEN Q10"]);
+  const r8 = await approveAndAutoOpen(n8, {}, full);
+  const woOf = (id?: string) => (id ? prisma.workOrder.findUnique({ where: { id }, select: { scanRouted: true, routeTemplateId: true, steps: { select: { id: true } }, targetValues: { where: { revokedAt: null }, select: { valueId: true } } } }) : null);
+  const g8p = r8.autoWorkOrders?.groups.find((g) => g.targets.length === 0);
+  const w8p = await woOf(g8p?.workOrderId);
+  check("§8 ⭐ SCAN + SKIP: desensiz grup OPENED, İE rotasız (scanRouted, adımsız, rota yok, hedef yok)", g8p?.outcome === "OPENED" && w8p?.scanRouted === true && w8p.steps.length === 0 && w8p.routeTemplateId === null && w8p.targetValues.length === 0, `${describe(r8.autoWorkOrders)} | ${JSON.stringify(w8p)}`);
+  const g8d = r8.autoWorkOrders?.groups.find((g) => g.targets.length > 0);
+  const w8d = await woOf(g8d?.workOrderId);
+  check("§8 ⭐ SCAN: desenli grup da rotasız, çözülen hedef taşınır", g8d?.outcome === "OPENED" && w8d?.scanRouted === true && w8d.steps.length === 0 && w8d.targetValues.length === 1 && w8d.targetValues[0]!.valueId === vA, JSON.stringify(w8d));
+  await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.PRODUCTION_ROUTE_MODE } });
+  const n8s = await mkNote(["SADECE ÜTÜ"]);
+  const r8s = await approveAndAutoOpen(n8s, {}, full);
+  const g8s = r8s.autoWorkOrders?.groups[0];
+  check("§8 ⭐ SIRALI (varsayılan) + SKIP: desensiz grup bugünkü gibi SKIPPED, metin aynı", g8s?.outcome === "SKIPPED" && g8s.reason === "İşlem değeri (desen/gramaj) çözülemedi; grup elle açılmalı.", describe(r8s.autoWorkOrders));
 
   const before7 = await woCount();
   const ghost = await errorOf(() => svc.quickStart({ rollBarcodes: ["YOK-BARKOD"], routeTemplateId: route.id, sourceNoteId: "00000000-0000-4000-8000-000000000000" }, actorId));

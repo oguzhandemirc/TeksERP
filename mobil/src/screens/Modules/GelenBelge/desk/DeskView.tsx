@@ -13,6 +13,7 @@ import { INBOUND_DOC_CONTEXT_KEY } from '../DocHeader';
 import { removePage } from '../docScan';
 import { useDocScan } from '../useDocScan';
 import { printCard, useWoRows, type DocRow, type WoRowsState } from '../woCreate/useWoRows';
+import { isScanRoute } from '../woCreate/woFromDoc';
 import { DuplicateDocNoDialog } from '../DuplicateDocNoDialog';
 import DeskCamera from './DeskCamera';
 import DeskReview from './DeskReview';
@@ -61,7 +62,8 @@ export default function DeskView({ shortcuts }: { shortcuts: readonly Production
   const b = useDocScan({ successHint: 'Okuma bitince inceleme ekranı açılır.' });
   const [owner, setOwner] = useState<string | null>(null);
   const suggestedId = useSuggestedRouteId(owner);
-  const route = pickShortcut(shortcuts, { touchedId, suggestedId }) ?? shortcuts[0];
+  // K29 S14b: "Okutmayla" kipinde rotasız seçenek başta ve varsayılandır — müşteri rota önerisi onu ezmez.
+  const route = pickShortcut(shortcuts, { touchedId, suggestedId: isScanRoute(shortcuts[0]) ? null : suggestedId }) ?? shortcuts[0];
   const wo = useWoRows(route);
   const row = wo.rows[0] ?? null;
   const ownerNow = row?.form?.ownerCustomerId ?? null;

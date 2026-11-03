@@ -15,6 +15,7 @@ import { declaredPageCount, noteParties, type NoteParty } from "../lib/gelen-bel
 import { isSummaryLine, partyLineId } from "./gelen-belge-kontrol.service";
 import { readMultiPartyWorkOrder, type MultiPartyWorkOrderMode } from "./system-setting.service";
 import { WorkOrderService, type WorkOrderCreateInput } from "./workorder.service";
+import { routeInput, type FormWorkOrderRoute } from "./gelen-belge-oto-is-emri.service";
 
 const workOrders = new WorkOrderService();
 /** Parti başına iş emri token uzayı (PER_PARTY): aynı mantıksal deneme + aynı blok → aynı token. */
@@ -94,7 +95,8 @@ export interface PartyWorkOrder {
 interface OpenInput {
   noteId: string;
   clientToken: string;
-  routeTemplateId: string;
+  /** Şablon ya da K29 rotasız (`resolveFormWorkOrderRoute` tek kapısından). */
+  route: FormWorkOrderRoute;
   mode: MultiPartyWorkOrderMode;
   parties: ReadonlyArray<PartyInput>;
   rolls: ReadonlyArray<{ blockNo: number; rollId: string; barcode: string }>;
@@ -115,7 +117,7 @@ export async function openPartyWorkOrders(i: OpenInput, userId: string): Promise
     const res = await workOrders.quickStart({
       clientToken: token,
       rollBarcodes: rolls.map((r) => r.barcode),
-      routeTemplateId: i.routeTemplateId,
+      ...routeInput(i.route),
       targetValues: targets,
       targetPropertyIds: await i.flagPropertyIds(targets),
       ...(i.foldType ? { foldType: i.foldType } : {}),

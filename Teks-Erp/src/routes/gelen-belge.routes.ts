@@ -664,7 +664,8 @@ const FormWorkOrderBody = z.strictObject({
   ourBatchNo: optText(64),
   ourBatchNoKey: BatchNoKey.nullable().optional(),
   kursunMeters: Money("Kurşun metresi"),
-  routeTemplateId: Id,
+  // K29 S14b: yoksa rotasız (yalnız "Rota uygulaması: Okutmayla"; SIRALI'da servis onaydan ÖNCE 400 GELEN_BELGE_ROUTE_REQUIRED).
+  routeTemplateId: Id.optional(),
   stepPlanning: z.array(z.strictObject({ sequence: z.number().int().min(1).max(200), plannedMachineId: Id.nullable().optional() }), "Geçersiz adım planı").max(200).optional(),
   targetValues: z.array(z.strictObject({ propertyId: Id, valueId: Id }), "Geçersiz hedef değer").max(50).optional(),
   notes: optText(1000),
@@ -695,14 +696,14 @@ const FormWorkOrderBody = z.strictObject({
  *         application/json:
  *           schema:
  *             type: object
- *             required: [clientToken, ownerCustomerId, kursunMeters, routeTemplateId]
+ *             required: [clientToken, ownerCustomerId, kursunMeters]
  *             properties:
  *               clientToken: { type: string, format: uuid }
  *               ownerCustomerId: { type: string, format: uuid }
  *               ourBatchNo: { type: string, maxLength: 64, nullable: true }
  *               ourBatchNoKey: { type: string, nullable: true }
  *               kursunMeters: { type: string, description: "Ondalık metre (operatörün gördüğü → gözden geçirilmiş sayılır)" }
- *               routeTemplateId: { type: string, format: uuid }
+ *               routeTemplateId: { type: string, format: uuid, description: "Yoksa iş emri ROTASIZ açılır (adımlar istasyonda okutuldukça eklenir) — yalnız production.routeMode=SCAN; SIRALI'da 400 GELEN_BELGE_ROUTE_REQUIRED, belge onaylanmaz" }
  *               stepPlanning: { type: array, items: { type: object, properties: { sequence: { type: integer }, plannedMachineId: { type: string, format: uuid, nullable: true } } } }
  *               targetValues: { type: array, items: { type: object, properties: { propertyId: { type: string, format: uuid }, valueId: { type: string, format: uuid } } } }
  *               notes: { type: string, maxLength: 1000, nullable: true }
@@ -710,7 +711,7 @@ const FormWorkOrderBody = z.strictObject({
  *               mode: { type: string, enum: [SINGLE, PER_PARTY], description: "Çok partide: tek iş emri (partiler ayrı top) ya da her parti ayrı iş emri; verilmezse fabrika ayarı gelenBelge.multiPartyWorkOrder (varsayılan SINGLE)" }
  *     responses:
  *       201: { description: "{ workOrderId, workOrderNo, batchNumber, rollId } (+ warnings)" }
- *       400: { description: "Doğrulama · GELEN_BELGE_ROUTE_OVERRIDE_INVALID · GELEN_BELGE_PER_DOCUMENT_NEEDS_DEFAULT_ITEM · OWNER_CUSTOMER_INVALID" }
+ *       400: { description: "Doğrulama · GELEN_BELGE_ROUTE_OVERRIDE_INVALID · GELEN_BELGE_ROUTE_REQUIRED (rota yok + SIRALI; belge onaylanmaz) · GELEN_BELGE_PER_DOCUMENT_NEEDS_DEFAULT_ITEM · OWNER_CUSTOMER_INVALID" }
  *       403: { description: "GELEN_BELGE_FORM_APPROVAL_DISABLED (ayar ayrı onay) · MODULE_DISABLED (üretim) · iş emri açma izni yok" }
  *       409: { description: "DELIVERY_NOTE_NOT_READ (okuma READ/PARTIAL değil) · DELIVERY_NOTE_NOT_APPROVABLE · DELIVERY_NOTE_ROLL_MISSING · onay kapıları · token çakışması" }
  */

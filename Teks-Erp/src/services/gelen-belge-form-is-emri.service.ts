@@ -20,7 +20,7 @@ import { approveDeliveryNote } from "./gelen-belge-onay.service";
 import { summaryLineId } from "./gelen-belge-kontrol.service";
 import { updateDeliveryNote } from "./gelen-belge-note.service";
 import { getReadSummary, type ReadSummaryState } from "./gelen-belge-okuma-ozeti.service";
-import { assertRouteOverride } from "./gelen-belge-oto-is-emri.service";
+import { resolveFormWorkOrderRoute, routeInput, type FormWorkOrderRoute } from "./gelen-belge-oto-is-emri.service";
 import { WorkOrderService, type WorkOrderCreateInput } from "./workorder.service";
 import { mergeRouteDefaults, resolveStationDefaultTargets } from "./helpers/station-default-targets.helper";
 import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
@@ -42,7 +42,8 @@ export interface FormWorkOrderInput {
   ourBatchNo?: string | null;
   ourBatchNoKey?: string | null;
   kursunMeters: number;
-  routeTemplateId: string;
+  /** Yoksa yalnız "Rota uygulaması: Okutmayla" iken rotasız iş emri (K29 S14b); SIRALI'da onaydan önce 400. */
+  routeTemplateId?: string;
   /** `plannedMachineId` D dilimiyle quickStart'a akar; burada olduğu gibi geçirilir. */
   stepPlanning?: Array<{ sequence: number; plannedMachineId?: string | null }>;
   /** Anahtar YOKSA istasyon varsayılanları (K22) uygulanır; varsa (boş dizi dahil) istemcinin kararı, dokunulmaz. */
@@ -83,11 +84,12 @@ export async function assertFormApprovalEnabled(): Promise<void> {
  * yeni istemci çözücü ucunu okuyup gördüğünü gönderir) — sunucu kullanıcının ekranda görmediği değeri yazmaz.
  */
 export async function resolveFormWorkOrderTargets(
-  routeTemplateId: string,
+  routeTemplateId: string | undefined,
   customerId: string,
   clientValues: FormWorkOrderInput["targetValues"],
 ): Promise<{ targetValues: Array<{ propertyId: string; valueId: string }>; targetPropertyIds: string[]; foldType: string | null }> {
-  const steps = await prisma.routeStep.findMany({ where: { routeId: routeTemplateId }, select: { stationId: true }, orderBy: { sequence: "asc" } });
+  // Rotasız (K29): istasyon yok → varsayılan yok; S10 çözücüsü adım sahada eklenirken uygular.
+  const steps = routeTemplateId ? await prisma.routeStep.findMany({ where: { routeId: routeTemplateId }, select: { stationId: true }, orderBy: { sequence: "asc" } }) : [];
   const merged = mergeRouteDefaults(await resolveStationDefaultTargets(steps.map((s) => s.stationId), customerId));
   const fold = merged.find((t) => t.propertyCode === FOLD_PROPERTY_CODE && t.valueCode);
   const targetValues = clientValues ?? [];
@@ -104,8 +106,8 @@ async function flagPropertyIds(targets: ReadonlyArray<{ propertyId: string }>): 
 
 export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrderInput, actor: Pick<JwtPayload, "userId" | "permissions">): Promise<FormWorkOrderResult> {
   await assertFormApprovalEnabled();
-  // İzin + üretim modülü (lisans sorusu önce) + rota — onaydan ÖNCE (fail-closed; P3 emsali tek kapı).
-  await assertRouteOverride(input.routeTemplateId, actor);
+  // İzin + üretim modülü (lisans sorusu önce) + rota/rotasız — onaydan ÖNCE (fail-closed; tek kapı, SIRALI'da rota zorunlu).
+  const route = await resolveFormWorkOrderRoute(input.routeTemplateId, actor);
   const note = await prisma.customerDeliveryNote.findUnique({ where: { id: noteId }, select: { id: true, status: true, noteNo: true } });
   if (!note) throw AppError.notFound("Gelen belge bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
 
@@ -144,19 +146,19 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
     });
     warnings.push(...approved.warnings);
   }
-  if (parties) return finishParties({ note, parties, input, userId: actor.userId, warnings });
+  if (parties) return finishParties({ note, parties, input, route, userId: actor.userId, warnings });
 
   const line = await prisma.customerDeliveryNoteLine.findUnique({ where: { id: summaryLineId(noteId) }, select: { rollId: true, failReason: true, roll: { select: { barcode: true } } } });
   if (!line?.rollId || !line.roll?.barcode) {
     throw AppError.conflict(`${note.noteNo} için tek kayıt topu doğmadı${line?.failReason ? `: ${line.failReason}` : ""}.`, { code: "DELIVERY_NOTE_ROLL_MISSING" });
   }
-  const targets = await resolveFormWorkOrderTargets(input.routeTemplateId, input.ownerCustomerId, input.targetValues);
+  const targets = await resolveFormWorkOrderTargets(route.routeTemplateId, input.ownerCustomerId, input.targetValues);
   // Fazla alan (plannedMachineId) bilerek geçer: adım planı overlay'i D dilimiyle okur.
   const stepPlanning = input.stepPlanning as WorkOrderCreateInput["stepPlanning"];
   const res = await workOrders.quickStart({
     clientToken: input.clientToken,
     rollBarcodes: [line.roll.barcode],
-    routeTemplateId: input.routeTemplateId,
+    ...routeInput(route),
     targetValues: targets.targetValues,
     targetPropertyIds: targets.targetPropertyIds,
     ...(targets.foldType ? { foldType: targets.foldType } : {}),
@@ -171,14 +173,14 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
 }
 
 /** Çok partili kayıt: parti topları → mod (gövde > fabrika ayarı) → iş emirleri. Yanıtın üst alanları ilk iş emridir. */
-async function finishParties({ note, parties, input, userId, warnings }: { note: { id: string; noteNo: string }; parties: PartyInput[]; input: FormWorkOrderInput; userId: string; warnings: string[] }): Promise<FormWorkOrderResult> {
+async function finishParties({ note, parties, input, route, userId, warnings }: { note: { id: string; noteNo: string }; parties: PartyInput[]; input: FormWorkOrderInput; route: FormWorkOrderRoute; userId: string; warnings: string[] }): Promise<FormWorkOrderResult> {
   const rolls = await partyRolls(note.id, note.noteNo, parties);
   const mode = input.mode ?? (await readMultiPartyWorkOrder());
   // K22: değerler gövdeden; çözücünün bayrakları ve KAT'ı her iş emrine (tek parti yoluyla aynı).
-  const defaults = await resolveFormWorkOrderTargets(input.routeTemplateId, input.ownerCustomerId, input.targetValues);
+  const defaults = await resolveFormWorkOrderTargets(route.routeTemplateId, input.ownerCustomerId, input.targetValues);
   const withDefaultFlags = async (targets: ReadonlyArray<{ propertyId: string }>) => [...new Set([...defaults.targetPropertyIds, ...(await flagPropertyIds(targets))])];
   const res = await openPartyWorkOrders({
-    noteId: note.id, clientToken: input.clientToken, routeTemplateId: input.routeTemplateId, mode, parties, rolls,
+    noteId: note.id, clientToken: input.clientToken, route, mode, parties, rolls,
     targetValues: defaults.targetValues, foldType: defaults.foldType, stepPlanning: input.stepPlanning, notes: input.notes, flagPropertyIds: withDefaultFlags,
   }, userId);
   warnings.push(...res.warnings);

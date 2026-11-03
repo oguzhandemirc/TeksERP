@@ -15,7 +15,8 @@ import NewWorkOrderView from '../../HizliIsEmri/NewWorkOrderView';
 import { DocScanBody } from '../DocScanScreen';
 import DeskView from '../desk/DeskView';
 import DocBatchView from './DocBatchView';
-import { shortcutRoutes, shortcutSub, shortcutTitle } from './woFromDoc';
+import { useScanRouteMode } from '../../../../hooks/useFeatureFlags';
+import { isScanRoute, shortcutRoutes, shortcutSub, shortcutTitle, withScanRoute } from './woFromDoc';
 
 type Stage =
   | { kind: 'hub' }
@@ -50,7 +51,8 @@ export default function WoCreateScreen() {
   const [hasResult, setHasResult] = useState(false);
   const canManual = useVisibleScreens().visibleScreens.some((s) => s.key === 'HizliIsEmri');
   const q = useQuery({ queryKey: WO_SHORTCUTS_KEY, queryFn: routeService.getShortcuts, retry: false, staleTime: 60_000 });
-  const shortcuts = shortcutRoutes(q.data?.data ?? []);
+  // K29 S14b: "Okutmayla" kipinde rotasız seçenek kısayolların BAŞINDA (varsayılan); sıralıda bugünkü liste.
+  const shortcuts = withScanRoute(shortcutRoutes(q.data?.data ?? []), useScanRouteMode());
   useDeskAutoOpen(shortcuts.length > 0, () => setStage({ kind: 'desk' }));
 
   const openForm = (route: ProductionRoute | null) => {
@@ -88,7 +90,7 @@ export default function WoCreateScreen() {
               <Text style={styles.section}>Özel {TERIM.terbiyeIsEmri.cogulKucuk}</Text>
               <View style={styles.grid} testID="ie-ozel-turler">
                 {shortcuts.map((r) => (
-                  <Tile key={r.id} icon="lightning-bolt" title={shortcutTitle(r)} sub={shortcutSub(r)} testID={`kisayol-${r.name}`} onPress={() => openForm(r)} />
+                  <Tile key={r.id} icon={isScanRoute(r) ? 'map-marker-path' : 'lightning-bolt'} title={shortcutTitle(r)} sub={shortcutSub(r)} testID={isScanRoute(r) ? 'ie-rotasiz' : `kisayol-${r.name}`} onPress={() => openForm(r)} />
                 ))}
               </View>
             </>
@@ -107,7 +109,9 @@ export default function WoCreateScreen() {
               </Button>
             </View>
           )}
-          {canManual ? (
+          {stage.route && isScanRoute(stage.route) ? (
+            <Text style={[styles.hint, styles.body]} testID="ie-rotasiz-ipucu">Rotasız {TERIM.terbiyeIsEmri.tekilKucuk} yalnız belge okutularak açılır; adımlar istasyonda okutuldukça eklenir.</Text>
+          ) : canManual ? (
             <NewWorkOrderView step={step} onStepChange={setStep} onResultChange={setHasResult} initialRouteTemplateId={stage.route?.id ?? null} />
           ) : (
             <Text style={[styles.hint, styles.body]}>Elle giriş için {quick_()} yetkisi gerekir; belgeyi okutarak devam edin.</Text>

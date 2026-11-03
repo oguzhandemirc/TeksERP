@@ -63,7 +63,8 @@ export interface NoteWorkOrderBody {
   ourBatchNo?: string | null;
   ourBatchNoKey?: string;
   kursunMeters: string;
-  routeTemplateId: string;
+  /** Yok = rotasız İE (K29; yalnız rota uygulaması "Okutmayla"). */
+  routeTemplateId?: string;
   stepPlanning?: Array<{ sequence: number; plannedMachineId?: string | null }>;
   targetValues?: Array<{ propertyId: string; valueId: string }>;
   notes?: string;

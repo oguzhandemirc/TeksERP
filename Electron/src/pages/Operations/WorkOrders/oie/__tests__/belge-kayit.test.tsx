@@ -89,6 +89,11 @@ describe("belgeden form taslağı", () => {
     const body = noteWorkOrderBody(draftOf(note()), { clientToken: "t1", routeTemplateId: "rt-k", gramajPropertyId: "p-kursun" });
     expect(body).toEqual({ clientToken: "t1", ownerCustomerId: "c-gul", ourBatchNo: "214279", ourBatchNoKey: "BARCODE:214279", kursunMeters: "4521.5", routeTemplateId: "rt-k", targetValues: [{ propertyId: "p-kursun", valueId: "g2" }] });
   });
+  it("⭐ K29 rotasız (routeTemplateId null): gövdede rota anahtarı HİÇ yok, kalan alanlar aynı", () => {
+    const body = noteWorkOrderBody(draftOf(note()), { clientToken: "t1", routeTemplateId: null, gramajPropertyId: "p-kursun" });
+    expect("routeTemplateId" in body).toBe(false);
+    expect(body).toEqual({ clientToken: "t1", ownerCustomerId: "c-gul", ourBatchNo: "214279", ourBatchNoKey: "BARCODE:214279", kursunMeters: "4521.5", targetValues: [{ propertyId: "p-kursun", valueId: "g2" }] });
+  });
   it("⭐ formda temizlenen parti no gövdede null gider (sunucu okumada yazılanı siler)", () => {
     const d = applyPatch(draftOf(note()), { ourBatchNo: null });
     const body = noteWorkOrderBody(d, { clientToken: "t1", routeTemplateId: "rt-k", gramajPropertyId: "p-kursun" });

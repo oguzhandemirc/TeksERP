@@ -138,7 +138,7 @@ export function applyPatch(d: DocDraft, p: HeaderPatch): DocDraft {
 
 export function noteWorkOrderBody(
   d: DocDraft,
-  ctx: { clientToken: string; routeTemplateId: string; gramajPropertyId: string | null; passThrough?: ReadonlyArray<{ propertyId: string; valueId: string }> },
+  ctx: { clientToken: string; routeTemplateId: string | null; gramajPropertyId: string | null; passThrough?: ReadonlyArray<{ propertyId: string; valueId: string }> },
   multi?: MultiPartyDraft | null,
 ): NoteWorkOrderBody {
   const meters = multi ? multiPartyTotal(multi) : d.meters;
@@ -151,7 +151,8 @@ export function noteWorkOrderBody(
     ourBatchNo: d.ourBatchNo ?? null,
     ...(batchKey ? { ourBatchNoKey: batchKey } : {}),
     kursunMeters: String(meters),
-    routeTemplateId: ctx.routeTemplateId,
+    // Rotasız (K29): anahtar hiç gitmez — sunucu "Okutmayla"da rotasız İE açar.
+    ...(ctx.routeTemplateId ? { routeTemplateId: ctx.routeTemplateId } : {}),
     ...(multi ? multiPartyBody(multi) : {}),
     // K22: hedef değerleri HEP açık gider (boş = "Hedef yok"); sunucu anahtarsız gövdeye değer dayatmaz.
     targetValues: [...(d.gramajId && ctx.gramajPropertyId ? [{ propertyId: ctx.gramajPropertyId, valueId: d.gramajId }] : []), ...(ctx.passThrough ?? [])],

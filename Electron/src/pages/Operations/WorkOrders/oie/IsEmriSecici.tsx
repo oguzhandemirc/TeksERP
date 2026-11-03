@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { ArrowRight, Factory, Layers, Plus, Spool, Zap, type LucideIcon } from "lucide-react";
+import { ArrowRight, Factory, Layers, MapPinned, Plus, Spool, Zap, type LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { HubGrid, hubTone } from "@/components/hub/HubCard";
@@ -15,8 +15,9 @@ import { TERIM } from "@/lib/terim";
 import { useTabsStore } from "@/store/tabs";
 import { listWorkOrderShortcuts, WORK_ORDER_SHORTCUTS_KEY, type WorkOrderShortcut } from "./service";
 import {
-  NEW_SHORTCUT_STATE, ROUTES_PATH, WEAVING_ORDERS_PATH, WORK_ORDER_NEW_PATH, type OieStart, type WeavingNavState,
+  NEW_SHORTCUT_STATE, ROUTES_PATH, SCAN_ROUTE_HINT, SCAN_ROUTE_REF, WEAVING_ORDERS_PATH, WORK_ORDER_NEW_PATH, type OieStart, type WeavingNavState,
 } from "./nav";
+import { useScanRouteOption } from "./useScanRouteOption";
 
 interface Props {
   /** Yalnız Terbiye seçilebiliyorsa doğrudan çizilen bugünkü form. */
@@ -32,6 +33,7 @@ export function IsEmriSecici({ renderPlain }: Props) {
   const dokumaOn = useDokumaEnabled();
   const canWeaving = dokumaOn && hasPermission("weavingorder:write");
   const canNewShortcut = NEW_SHORTCUT_PERMISSIONS.every((p) => hasPermission(p));
+  const scanRoute = useScanRouteOption();
   const q = useQuery({ queryKey: WORK_ORDER_SHORTCUTS_KEY, queryFn: listWorkOrderShortcuts, staleTime: 60_000 });
   if (q.isLoading) {
     return (
@@ -43,10 +45,10 @@ export function IsEmriSecici({ renderPlain }: Props) {
   // Liste okunamadıysa kısayol yok sayılır (giriş fabrikayı durdurmaz). "Yeni özel" kartı bir iş emri TÜRÜ değildir:
   // seçicinin atlanma kuralına girmez (kısayolsuz + dokumasız kurulumda bugünkü doğrudan form).
   const shortcuts = q.data ?? [];
-  if (shortcuts.length === 0 && !canWeaving) return <>{renderPlain()}</>;
+  if (shortcuts.length === 0 && !canWeaving && !scanRoute) return <>{renderPlain()}</>;
   const go = (start: OieStart) => navigateActive(WORK_ORDER_NEW_PATH, { state: { oie: start } });
   const weavingState: WeavingNavState = { openNew: true };
-  const showShortcutRow = shortcuts.length > 0 || canNewShortcut;
+  const showShortcutRow = shortcuts.length > 0 || canNewShortcut || scanRoute;
   return (
     // PageBody kalıbı (Operasyon hub'ı): başlıkla aynı sol hiza, tek kaydırma bölgesi, tam genişlik ızgara.
     <div className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto p-6" data-testid="oie-picker">
@@ -59,6 +61,11 @@ export function IsEmriSecici({ renderPlain }: Props) {
       </Row>
       {showShortcutRow && (
         <Row title={`Özel ${TERIM.terbiyeIsEmri.cogulKucuk}`} icon={Zap} testId="oie-row-shortcuts">
+          {/* Okutmayla kipinde varsayılan yol: ilk karo. */}
+          {scanRoute && (
+            <Tile icon={MapPinned} tone={hubTone(1)} title={SCAN_ROUTE_REF.name} hint={SCAN_ROUTE_HINT} testId="oie-scan-route"
+              onClick={() => go({ kind: "shortcut", route: SCAN_ROUTE_REF })} />
+          )}
           {shortcuts.map((s, i) => (
             <Tile key={s.id} icon={Zap} tone={hubTone(i + 2)} title={s.name} hint={shortcutHint(s)} testId="oie-shortcut"
               onClick={() => go({ kind: "shortcut", route: { id: s.id, name: s.name, hasKursun: s.hasKursun } })} />

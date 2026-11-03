@@ -1,21 +1,25 @@
 // "İş emri oluştur" girişi (K6): seçici iki satır (Standart: Terbiye/Dokuma · Özel: kısayollar); kısayol yok + dokuma yok →
 // bugünkü form; kısayol → rota uygulanmış form + üstte "Belge okut" (formun kendi düğmesi kapalı).
-// Negatif sonda: KisayolIsEmri'de `belgeOkut: false` kaldırılınca "formun kendi düğmesi kapalı" kırmızı.
+// Negatif sonda: KisayolIsEmri'de `belgeOkut: false` kaldırılınca "formun kendi düğmesi kapalı" kırmızı; seçicide
+// `&& !scanRoute` kaldırılınca K29 "kısayolsuz SCAN" kırmızı.
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import { IsEmriGiris } from "../IsEmriGiris";
-import { newWorkOrderTitle } from "../nav";
+import { newWorkOrderTitle, SCAN_ROUTE_REF } from "../nav";
 import { toShortcuts, type WorkOrderShortcut } from "../service";
 
 const navigateActive = vi.fn();
 vi.mock("@/store/tabs", () => ({ useTabsStore: (sel: (s: unknown) => unknown) => sel({ navigateActive }) }));
 const shortcuts: { list: WorkOrderShortcut[] } = { list: [] };
 vi.mock("../service", async (orig) => ({ ...(await orig<typeof import("../service")>()), listWorkOrderShortcuts: () => Promise.resolve(shortcuts.list) }));
-const flags = { dokuma: false, gelenBelge: true };
-vi.mock("@/hooks/usePricingEnabled", () => ({ useDokumaEnabled: () => flags.dokuma, useGelenBelgeEnabled: () => flags.gelenBelge }));
+const flags = { dokuma: false, gelenBelge: true, routeMode: "SEQUENTIAL" };
+vi.mock("@/hooks/usePricingEnabled", () => ({
+  useDokumaEnabled: () => flags.dokuma, useGelenBelgeEnabled: () => flags.gelenBelge,
+  useFeatureFlags: () => ({ data: { data: { productionRouteMode: flags.routeMode } } }),
+}));
 const perms = { list: ["workorder:write", "weavingorder:write", "gelen-belge:write"] };
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: (p: string) => perms.list.includes(p) }) }));
 vi.mock("@/pages/Operations/GelenBelgeler/UploadDialog", () => ({ UploadDialog: (p: { autoSend?: boolean }) => <div data-testid="upload-dialog" data-auto={String(p.autoSend ?? false)} /> }));
@@ -34,7 +38,44 @@ beforeEach(() => {
   shortcuts.list = [];
   flags.dokuma = false;
   flags.gelenBelge = true;
+  flags.routeMode = "SEQUENTIAL";
   perms.list = ["workorder:write", "weavingorder:write", "gelen-belge:write"];
+});
+
+describe("K29 S14b rotasız seçenek (rota uygulaması Okutmayla)", () => {
+  it("⭐ SCAN: kısayol/dokuma yokken de seçici çıkar, 'Sahada belirlenir (rotasız)' İLK karo; tık rotasız durumla gezinir", async () => {
+    flags.routeMode = "SCAN";
+    shortcuts.list = [sc];
+    renderWithProviders(<IsEmriGiris start={null} renderManual={manual} />);
+    const row = await screen.findByTestId("oie-row-shortcuts");
+    const tiles = within(row).getAllByRole("button");
+    expect(tiles[0]).toHaveAttribute("data-testid", "oie-scan-route");
+    expect(within(tiles[0]!).getByText("Sahada belirlenir (rotasız)")).toBeInTheDocument();
+    await userEvent.click(tiles[0]!);
+    expect(navigateActive).toHaveBeenCalledWith("/operations/work-orders/new", { state: { oie: { kind: "shortcut", route: { id: null, name: "Sahada belirlenir (rotasız)" } } } });
+  });
+  it("⭐ SCAN + kısayol yok + dokuma yok: bugünkü doğrudan form yerine seçici (rotasız karo)", async () => {
+    flags.routeMode = "SCAN";
+    renderWithProviders(<IsEmriGiris start={null} renderManual={manual} />);
+    expect(await screen.findByTestId("oie-scan-route")).toBeInTheDocument();
+    expect(screen.queryByTestId("manual-form")).toBeNull();
+  });
+  it("SIRALI (varsayılan) ya da belge yazma izni yok → karo yok, bugünkü doğrudan form", async () => {
+    renderWithProviders(<IsEmriGiris start={null} renderManual={manual} />);
+    expect(await screen.findByTestId("manual-form")).toBeInTheDocument();
+    expect(screen.queryByTestId("oie-scan-route")).toBeNull();
+    flags.routeMode = "SCAN";
+    perms.list = ["workorder:write"];
+    renderWithProviders(<IsEmriGiris start={null} renderManual={manual} />);
+    expect(screen.queryByTestId("oie-scan-route")).toBeNull();
+  });
+  it("⭐ rotasız başlangıç: elle form çizilmez (form rota ister), belge okut şeridi + ipucu", async () => {
+    flags.routeMode = "SCAN";
+    renderWithProviders(<IsEmriGiris start={{ kind: "shortcut", route: SCAN_ROUTE_REF }} renderManual={manual} />);
+    expect(await screen.findByTestId("oie-scan-route-hint")).toBeInTheDocument();
+    expect(screen.getByTestId("oie-scan")).toBeInTheDocument();
+    expect(manual).not.toHaveBeenCalled();
+  });
 });
 
 describe("İş emri türü seçici", () => {

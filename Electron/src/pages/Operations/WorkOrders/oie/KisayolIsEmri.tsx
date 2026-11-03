@@ -9,7 +9,7 @@ import { UploadDialog } from "@/pages/Operations/GelenBelgeler/UploadDialog";
 import { BelgedenIsEmriForm } from "./BelgedenIsEmriForm";
 import { TopluBelgeForm } from "./TopluBelgeForm";
 import { TopluYukleDialog } from "./TopluYukleDialog";
-import type { RouteRef } from "./nav";
+import { isScanRouteRef, SCAN_ROUTE_HINT, type RouteRef } from "./nav";
 
 type View = { k: "manual" } | { k: "doc"; noteId: string } | { k: "bulk"; noteIds: string[] };
 
@@ -45,7 +45,10 @@ export function KisayolIsEmri({ route, noteId, renderManual }: Props) {
           <span className="text-xs text-muted-foreground">Fotoğrafı ya da PDF'i seçin; okununca kutular kendiliğinden dolar.</span>
         </div>
       )}
-      {view.k === "manual" && renderManual(route.id, { belgeOkut: false, shortcut: true })}
+      {/* Rotasız İE elle formdan açılmaz (form rota ister): yalnız belge okutarak. */}
+      {view.k === "manual" && (isScanRouteRef(route)
+        ? <p className="p-6 text-sm text-muted-foreground" data-testid="oie-scan-route-hint">Belgeyi okutun. {SCAN_ROUTE_HINT}</p>
+        : renderManual(route.id, { belgeOkut: false, shortcut: true }))}
       {view.k === "doc" && <BelgedenIsEmriForm key={view.noteId} noteId={view.noteId} route={route} />}
       {view.k === "bulk" && <TopluBelgeForm noteIds={view.noteIds} route={route} />}
       {dialog === "one" && (

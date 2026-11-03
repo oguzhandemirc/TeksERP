@@ -4,8 +4,14 @@ import { TERIM } from "@/lib/terim";
 export const WORK_ORDER_NEW_PATH = "/operations/work-orders/new";
 export const WEAVING_ORDERS_PATH = "/operations/weaving-orders";
 
-/** `hasKursun` yoksa (eski sekme durumu) gramaj bugünkü gibi gösterilir. */
-export type RouteRef = { id: string; name: string; hasKursun?: boolean };
+/** `hasKursun` yoksa (eski sekme durumu) gramaj bugünkü gibi gösterilir. `id: null` = rotasız (K29 "Okutmayla"). */
+export type RouteRef = { id: string | null; name: string; hasKursun?: boolean };
+
+/** K29 S14b: rota uygulaması "Okutmayla" iken seçicideki rotasız seçenek — iş emri adımsız açılır, istasyon okutması ekler. */
+export const SCAN_ROUTE_NAME = "Sahada belirlenir (rotasız)";
+export const SCAN_ROUTE_HINT = "Rota seçilmez; adımlar istasyonda okutuldukça eklenir.";
+export const SCAN_ROUTE_REF: RouteRef = { id: null, name: SCAN_ROUTE_NAME };
+export const isScanRouteRef = (r: RouteRef): boolean => r.id === null;
 export type OieStart = { kind: "terbiye" } | { kind: "shortcut"; route: RouteRef; noteId?: string };
 
 /** Dokuma iş emirleri sayfası bu durumla açılınca oluşturma diyaloğu kendiliğinden açılır. */

@@ -1257,7 +1257,9 @@ export class WorkOrderService {
       );
       const uncoveredProps = targetPropertyIds.filter((pid) => !propsAlreadyOnGoods.has(pid));
 
-      if (resolvedTargetColorId || targetPropertyIds.length > 0) {
+      // K29 rotasız İE (S14b): rota sahada okutmayla kurulur → açılışta kapsama sorusu yok (adım eklenirken S10 hedefi).
+      const routeDecidedOnSite = data.scanRouted === true && finalSteps.length === 0;
+      if (!routeDecidedOnSite && (resolvedTargetColorId || targetPropertyIds.length > 0)) {
         routeWarnings.push(
           ...(await collectRouteCoverageWarnings(finalSteps, {
             color: !!resolvedTargetColorId && !colorAlreadyOnGoods,
@@ -1275,7 +1277,7 @@ export class WorkOrderService {
       // boyahane olması zımparanın uygulanacağı anlamına gelmez).
       // Create'te tüm adımlar PENDING olduğu için uygun küme = rotadaki tüm
       // istasyonların yetenekleri; locks helper'ının COMPLETED elemesine gerek yok.
-      if (targetPropertyIds.length > 0) {
+      if (!routeDecidedOnSite && targetPropertyIds.length > 0) {
         const routeStationIds = [...new Set(finalSteps.map((s) => s.stationId))];
         const caps = await prisma.stationProperty.findMany({
           where: { stationId: { in: routeStationIds } },

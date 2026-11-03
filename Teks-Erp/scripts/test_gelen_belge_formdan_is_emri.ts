@@ -18,7 +18,9 @@
 //   §7 ⭐ kısayol: ?shortcut=1 yalnız işaretliler, shortcutOrder sırası; tip hatası 400
 //   §7b ⭐ rota yanıtında adım istasyonu `isKursunStation` (KURSUN_DISPATCH_STATION_WHERE): kurşun AUTO'lu PROCESS_QC true,
 //       yeteneksiz PROCESS_QC false — tekil, liste ve kısayol yanıtında + `GET /api/stations/:id`
-// Negatif sonda: `assertFormApprovalEnabled` çağrısı kaldırılınca §2 kırmızı; `excludeIds` boş verilince §6 gönderen kırmızı; `senderIds`ten antet/senderText
+//   §9 ⭐ K29 S14b: rota yok + SIRALI → 400 GELEN_BELGE_ROUTE_REQUIRED (belge DRAFT kalır); SCAN → rotasız İE (scanRouted);
+//      SCAN + rota seçili → seçilen rota
+// Negatif sonda: `resolveFormWorkOrderRoute`'ta SIRALI 400'ü kaldırılınca §9 DRAFT kırmızı; `assertFormApprovalEnabled` çağrısı kaldırılınca §2 kırmızı; `excludeIds` boş verilince §6 gönderen kırmızı; `senderIds`ten antet/senderText
 // çıkarılınca §6 Takva kırmızı;
 // onay yeniden yalnız DRAFT'ta koşturulunca §8 kırmızı; okuma kapısı [READ, PARTIAL] allowlist'ine dönünce §3b kırmızı.
 // =============================================================================
@@ -57,7 +59,7 @@ const SETTINGS = [
   SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID,
   SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_ENTRY_MODE, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER,
   SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT,
-  SETTING_KEYS.COMPANY_NAME,
+  SETTING_KEYS.COMPANY_NAME, SETTING_KEYS.PRODUCTION_ROUTE_MODE,
 ];
 
 type Resp = { status: number; code?: string; data?: Record<string, unknown> & { [k: string]: unknown }; warnings?: string[] };
@@ -79,7 +81,7 @@ async function addScan(noteId: string, status: "READ" | "PENDING" | "READ_FAILED
 async function run(url: string): Promise<void> {
   const admin = await ensureTestAdmin({ password: kosumaOzguParola() });
   for (const k of [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.PRODUCTION_ENABLED]) await setSetting(k, true);
-  for (const k of [SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER, SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT, SETTING_KEYS.GELEN_BELGE_ENTRY_MODE]) await setSetting(k, null);
+  for (const k of [SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER, SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT, SETTING_KEYS.GELEN_BELGE_ENTRY_MODE, SETTING_KEYS.PRODUCTION_ROUTE_MODE]) await setSetting(k, null);
   await setSetting(SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, "DOCUMENT");
   const login = async (username: string, password: string) => {
     const r = await fetch(`${url}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password, clientType: "electron" }) });
@@ -265,6 +267,27 @@ async function run(url: string): Promise<void> {
   const n8c = await halfDone("APPROVING", "ENTERING", 0);
   const r8c = await formWo(n8c, woUser.token, body({ ourBatchNo: `${TAG}-P8C` }));
   check("§8 taze APPROVING → 409 DELIVERY_NOTE_NOT_APPROVABLE, top 0", r8c.status === 409 && r8c.code === "DELIVERY_NOTE_NOT_APPROVABLE" && (await rollsOf(n8c)).length === 0, `${r8c.status} ${r8c.code ?? ""}`);
+
+  console.log("§9 K29 S14b: rotasız kayıt (rota uygulaması)");
+  const noRoute = (extra: Record<string, unknown> = {}) => { const { routeTemplateId: _r, ...b } = body(extra); return b; };
+  const w9 = await woCount();
+  const n9 = await mkNote("READ");
+  const r9a = await formWo(n9, woUser.token, noRoute({ ourBatchNo: `${TAG}-P9` }));
+  check("§9 ⭐ SIRALI (varsayılan) + rota yok → 400 GELEN_BELGE_ROUTE_REQUIRED, belge DRAFT, top 0, İE 0", r9a.status === 400 && r9a.code === "GELEN_BELGE_ROUTE_REQUIRED" && (await statusOf(n9)) === "DRAFT" && (await rollsOf(n9)).length === 0 && (await woCount()) === w9, `${r9a.status} ${r9a.code ?? ""} ${await statusOf(n9)}`);
+  await setSetting(SETTING_KEYS.PRODUCTION_ROUTE_MODE, "SCAN");
+  const r9b = await formWo(n9, woUser.token, noRoute({ ourBatchNo: `${TAG}-P9` }));
+  const d9 = r9b.data as { workOrderId?: string } | undefined;
+  const wo9 = d9?.workOrderId ? await prisma.workOrder.findUnique({ where: { id: d9.workOrderId }, select: { scanRouted: true, routeTemplateId: true, steps: { select: { id: true } }, targetValues: { select: { valueId: true } } } }) : null;
+  check("§9 ⭐ SCAN + rota yok → 201, belge APPROVED, İE rotasız (scanRouted, adımsız), hedef değer taşındı", r9b.status === 201 && (await statusOf(n9)) === "APPROVED" && wo9?.scanRouted === true && wo9.routeTemplateId === null && wo9.steps.length === 0 && wo9.targetValues.some((t) => t.valueId === gramaj.values[0].id), `${r9b.status} ${r9b.code ?? ""} ${JSON.stringify(wo9)}`);
+  const n9c = await mkNote("READ");
+  const r9c = await formWo(n9c, woUser.token, body({ ourBatchNo: `${TAG}-P9C` }));
+  const wo9c = (r9c.data as { workOrderId?: string } | undefined)?.workOrderId;
+  const row9c = wo9c ? await prisma.workOrder.findUnique({ where: { id: wo9c }, select: { scanRouted: true, routeTemplateId: true } }) : null;
+  check("§9 ⭐ SCAN + rota seçili → seçilen rota (rotasız DEĞİL)", r9c.status === 201 && row9c?.scanRouted === false && row9c.routeTemplateId === chosen, `${r9c.status} ${JSON.stringify(row9c)}`);
+  const n9d = await mkNote("READ");
+  const r9d = await formWo(n9d, approver.token, noRoute({ ourBatchNo: `${TAG}-P9D` }));
+  check("§9 SCAN + rota yok + iş emri izni yok → 403, belge DRAFT", r9d.status === 403 && (await statusOf(n9d)) === "DRAFT", `${r9d.status} ${r9d.code ?? ""}`);
+  await setSetting(SETTING_KEYS.PRODUCTION_ROUTE_MODE, null);
 
   console.log("§7 kısayol listesi");
   const a = await mkRoute("kısayol A", { isWorkOrderShortcut: true, shortcutOrder: 2 });

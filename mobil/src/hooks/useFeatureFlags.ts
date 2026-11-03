@@ -31,6 +31,11 @@ export function useFeatureFlags() {
   return q;
 }
 
+/** K29 S14b: rota uygulaması "Okutmayla" mı — yalnız gerçek 'SCAN'; eksik/tanınmayan değer bugünkü (sıralı). */
+export function useScanRouteMode(): boolean {
+  return useFeatureFlags().data?.productionRouteMode === 'SCAN';
+}
+
 /** Bağlanılan sunucunun firma adı (`company.name`); yüklenene dek/boşsa nötr yedek. */
 export function useCompanyName(): string {
   return useFeatureFlags().data?.companyName?.trim() || DEFAULT_COMPANY_NAME;

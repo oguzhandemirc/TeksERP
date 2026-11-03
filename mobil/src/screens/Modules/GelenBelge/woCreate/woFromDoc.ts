@@ -15,6 +15,21 @@ import type { ProductionRoute } from '../../../../services/route.service';
 import { withDeskPlan } from '../desk/deskPlan';
 import { multiPartyIssues, openedWorkOrders, withParties, type MultiPartyDraft } from './partyDraft';
 
+/** K29 S14b: rotasız seçenek (sözde rota; kimliği sunucuya HİÇ gitmez — gövdede rota anahtarı olmaz). */
+export const SCAN_ROUTE_ID = 'scan-routed';
+export const SCAN_ROUTE: ProductionRoute = {
+  id: SCAN_ROUTE_ID,
+  name: 'Sahada belirlenir (rotasız)',
+  description: 'Rota seçilmez; adımlar istasyonda okutuldukça eklenir.',
+  steps: [],
+};
+export const isScanRoute = (r: { id?: string } | null | undefined): boolean => r?.id === SCAN_ROUTE_ID;
+
+/** Rota uygulaması "Okutmayla" iken rotasız seçenek listenin BAŞINDA (varsayılan); sıralıda liste aynen. */
+export function withScanRoute(routes: readonly ProductionRoute[], scanMode: boolean): ProductionRoute[] {
+  return scanMode ? [SCAN_ROUTE, ...routes] : [...routes];
+}
+
 /** Kısayollar: sunucu `?shortcut=1` ile süzer; eski sunucu parametreyi yok sayar → alan yok → liste boş (bugünkü yol). */
 export function shortcutRoutes(routes: readonly ProductionRoute[]): ProductionRoute[] {
   return routes
@@ -23,7 +38,8 @@ export function shortcutRoutes(routes: readonly ProductionRoute[]): ProductionRo
 }
 
 /** Özel iş emri başlığı: "<kısayol adı> terbiye iş emri" (görünen ad TERIM'den; ad zaten iş emriyle bitiyorsa tekrarlanmaz). */
-export function shortcutTitle(route: Pick<ProductionRoute, 'name'>): string {
+export function shortcutTitle(route: Pick<ProductionRoute, 'name'> & { id?: string }): string {
+  if (isScanRoute(route)) return route.name;
   const name = route.name.trim();
   return /i[şs] emri$/i.test(name) ? name : `${name} ${TERIM.terbiyeIsEmri.tekilKucuk}`;
 }
@@ -135,13 +151,14 @@ export function rowIssues(f: RowForm): string[] {
 
 export function buildCreateBody(
   f: RowForm,
-  opts: { clientToken: string; routeTemplateId: string; gramajPropertyId: string | null; passThrough?: readonly { propertyId: string; valueId: string }[]; kursunSequence?: number | null },
+  opts: { clientToken: string; routeTemplateId: string | null; gramajPropertyId: string | null; passThrough?: readonly { propertyId: string; valueId: string }[]; kursunSequence?: number | null },
 ): CreateWorkOrderFromNoteBody {
   const body: CreateWorkOrderFromNoteBody = {
     clientToken: opts.clientToken,
     ownerCustomerId: f.ownerCustomerId!,
     kursunMeters: String(f.meters),
-    routeTemplateId: opts.routeTemplateId,
+    // Rotasız (K29): anahtar hiç gitmez.
+    ...(opts.routeTemplateId ? { routeTemplateId: opts.routeTemplateId } : {}),
   };
   // Parti no hep açık: null = formda temizlendi (sunucu okumada yazılan adayı siler).
   body.ourBatchNo = f.ourBatchNo ?? null;

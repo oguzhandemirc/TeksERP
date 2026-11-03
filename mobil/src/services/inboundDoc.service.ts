@@ -181,7 +181,8 @@ export interface CreateWorkOrderFromNoteBody {
   ourBatchNoKey?: string;
   /** Decimal string; verilince gözden geçirilmiş sayılır. */
   kursunMeters: string;
-  routeTemplateId: string;
+  /** Yok = rotasız iş emri (K29; yalnız rota uygulaması "Okutmayla", sunucu SIRALI'da 400 verir). */
+  routeTemplateId?: string;
   stepPlanning?: { sequence: number; plannedMachineId?: string | null }[];
   targetValues?: { propertyId: string; valueId: string }[];
   notes?: string;

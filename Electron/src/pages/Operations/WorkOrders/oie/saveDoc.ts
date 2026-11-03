@@ -12,7 +12,8 @@ export type SaveOutcome = { kind: "WORK_ORDER"; result: NoteWorkOrderResult } | 
 export interface SaveDocInput {
   note: DeliveryNoteDetail;
   draft: DocDraft;
-  routeTemplateId: string;
+  /** null = rotasız (K29 "Okutmayla"; sunucu SIRALI'da 400 GELEN_BELGE_ROUTE_REQUIRED verir). */
+  routeTemplateId: string | null;
   formApproval: FormApproval;
   gramajPropertyId: string | null;
   /** K22: formda alanı olmayan çözücü değerleri (gövdeye aynen). */
