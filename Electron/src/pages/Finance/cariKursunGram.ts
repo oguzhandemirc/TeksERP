@@ -25,3 +25,13 @@ export function kursunGramBody(f: KursunGramForm | null | undefined): { error?: 
   if (price === undefined) return { error: "Gram fiyatı en fazla 4 ondalıklı sayı olmalı — örn. 0,05. Boş = istasyon fiyatı.", body: {} };
   return { body: { kursunGramPrice: price, kursunGramCurrency: price === null ? null : f.currency } };
 }
+
+/** S3: varsayılan kurşun gramajı formu — yalnız müşteri carisinde ve backend alanı gönderiyorsa doğar (aksi null). */
+export function kursunDefaultFormFromCari(c: CariRow): { valueId: string | null } | null {
+  if (c.kind !== "CUSTOMER" || c.kursunDefaultValueId === undefined) return null;
+  return { valueId: c.kursunDefaultValueId };
+}
+
+export function kursunDefaultBody(f: { valueId: string | null } | null | undefined): Pick<CariUpdateInput, "kursunDefaultValueId"> {
+  return f ? { kursunDefaultValueId: f.valueId } : {};
+}

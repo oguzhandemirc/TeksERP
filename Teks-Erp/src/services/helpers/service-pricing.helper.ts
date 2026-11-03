@@ -19,7 +19,7 @@ import { resolveItemPricesFor } from "../item-price.service";
 import { listKursunApplications, readKursunTarget, type KursunApplication } from "./process-summary.helper";
 import { listFlagServiceWorks } from "./service-flag-work.helper";
 import { pickServiceItemId } from "./service-item-pick.helper";
-import { applyKursunGramPrices, gramPriceCurrentWarning, gramPriceEnteredLaterWarning } from "./kursun-gram-price.helper";
+import { applyKursunGramPrices, gramPriceCurrentWarning, gramPriceCustomerLaterWarning, gramPriceEnteredLaterWarning } from "./kursun-gram-price.helper";
 import { missingQuantityWarning, priceUnitMatches, serviceWorkQuantity, serviceWorkUnit } from "./service-quantity.helper";
 import { readFinanceKursunGramPriceBasis, type KursunGramPriceBasis } from "../system-setting.service";
 
@@ -221,6 +221,7 @@ async function applyGramPricing(works: ServiceRollWork[], ctx: { opt: ServiceRes
   });
   if (basis === "INVOICE_DATE" && gram.priced > 0) ctx.warnings.push(gramPriceCurrentWarning(gram.priced));
   if (gram.late > 0) ctx.warnings.push(gramPriceEnteredLaterWarning(gram.late));
+  if (gram.customerLater > 0) ctx.warnings.push(gramPriceCustomerLaterWarning(gram.customerLater));
 }
 
 /**

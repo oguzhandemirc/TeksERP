@@ -21,7 +21,11 @@ vi.mock("@/pages/Operations/GelenBelgeler/service", () => ({
   updateNoteHeader: (...a: unknown[]) => patchHeader(...a),
   getDeliveryNote: (id: string) => getNote(id),
 }));
-vi.mock("@/lib/kursun-gramaj", () => ({ useKursunGramajCatalog: () => ({ catalog: { propertyId: "p-kursun", options: [{ id: "g1", name: "1 gr" }, { id: "g2", name: "2 gr", isDefault: true }] }, isLoading: false }) }));
+vi.mock("@/lib/kursun-gramaj", async (orig) => ({
+  ...(await orig<typeof import("@/lib/kursun-gramaj")>()),
+  useKursunGramajCatalog: () => ({ catalog: { propertyId: "p-kursun", options: [{ id: "g1", name: "1 gr" }, { id: "g2", name: "2 gr", isDefault: true }] }, isLoading: false }),
+  useKursunCustomerDefaults: () => ({ defaults: {}, isLoading: false }),
+}));
 const approval = { value: "WITH_WORK_ORDER" as "WITH_WORK_ORDER" | "SEPARATE" };
 vi.mock("../useFormApproval", () => ({ useFormApproval: () => ({ value: approval.value, isLoading: false }) }));
 const autoPrint = { on: false };
