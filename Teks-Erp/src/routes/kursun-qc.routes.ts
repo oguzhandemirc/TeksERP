@@ -4,6 +4,7 @@
 
 import { Router } from "express";
 import { KursunQcController } from "../controllers/kursun-qc.controller";
+import { takeForeignMachine } from "../controllers/kursun-foreign-machine.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireProductionEnabled } from "../middlewares/module.middleware";
 import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
@@ -121,7 +122,7 @@ router.post(
   "/step/:stepId/foreign-machine-take",
   verifyToken,
   requireAnyPermission("quality:write", "mobile:kk2-kursun"),
-  controller.takeForeignMachine
+  takeForeignMachine
 );
 
 /**
