@@ -190,6 +190,9 @@ export default function TeachModal({ visible, pages, code, onDismiss, onSaved }:
                   {t.existing ? 'Şablonu güncelle' : 'Belge tipini kaydet'}
                 </Button>
               </View>
+              {!advanced && step !== FINISH_STEP && t.problems.length > 0 && (
+                <Text style={styles.warn} testID="tanit-kaydet-neden">{`Kaydetmek için: ${t.problems[0]}`}</Text>
+              )}
             </ScrollView>
           </View>
         )}

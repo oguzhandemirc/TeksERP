@@ -1,5 +1,6 @@
 // Tablet tanıtma durumu (panel `useTeach` ikizi): sayfanın kelimeleri, işaretleme, önizleme (gövdeye bağlı tazelik), kayıt (yeni | sürümlü güncelle).
-// K30-A: rehberli kipte önizleme işaretleme durunca kendiliğinden koşar; Kaydet TEK dokunuş (bayat önizlemeyi tazeler);
+// K30-A: rehberli kipte önizleme işaretleme durunca kendiliğinden koşar; Kaydet TEK dokunuş (bayat önizlemeyi tazeler).
+// Gelişmiş kipte bayat önizlemeyle Kaydet önce önizlemeyi tazeleyip gösterir, kayıt ikinci dokunuşta (görmeden kayıt yok);
 // sunucu `benzerSablonlar` gönderirse kayıttan önce "aynı tip mi?" sorulur. ONLINE-ONLY: kuyruğa alınmaz.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -21,6 +22,14 @@ const PREVIEW_NAME = 'Yeni belge tipi';
 const errText = (e: unknown) => (e instanceof Error ? e.message : undefined);
 
 /** Kayıt sonucu: çağıran (satır şeridi) formu bu şablonla yeniden doldurur. */
+/** Önizlenen şablonu kaydeder (yeni POST | sürümlü PUT). Token yalnız bu GERÇEK kayıt denemesinde yapışır. */
+async function persistTemplate(ex: UserTemplateDetail | null, template: SuggestResult['template'], name: string, token: () => string) {
+  return ex
+    ? // Önizleme sunucuda birleşik şablonla koştu (`base`) — önizlenen şablon aynen kaydedilir.
+      inboundDocService.updateUserTemplate(ex.code, { expectedVersion: ex.version, template, name })
+    : inboundDocService.createUserTemplate({ name, template, clientToken: token() });
+}
+
 export interface TeachSaved {
   code: string;
   name: string;
@@ -33,15 +42,19 @@ export function useTeachModal(scanId: string | null, initialCode: string | null,
   const qc = useQueryClient();
   // "Aynı tip (güncelle)" kodu ekran içinde değiştirir; açılış kodu prop'tan.
   const [code, setCode] = useState(initialCode);
-  useEffect(() => setCode(initialCode), [initialCode]);
+  const adoptRef = useRef(false);
+  const [pendingSave, setPendingSave] = useState(false);
+  useEffect(() => {
+    setCode(initialCode);
+    adoptRef.current = false;
+    setPendingSave(false);
+  }, [initialCode, scanId]);
   const existing = useQuery({ queryKey: userTemplateKey(code), queryFn: () => inboundDocService.getUserTemplate(code!), enabled: !!code, retry: false, staleTime: Infinity });
   const ex: UserTemplateDetail | null = existing.data ?? null;
   // Güncelle kipinde şablon gelmeden işaretleme başlamaz (eski kimlik yazıları hazır seçili gelir).
   const wordsEnabled = !!scanId && (!code || !!ex);
   const words = useQuery({ queryKey: teachWordsKey(scanId), queryFn: () => inboundDocService.scanWords(scanId!), enabled: wordsEnabled, retry: false, staleTime: Infinity });
   const [state, setState] = useState<TeachState | null>(null);
-  const adoptRef = useRef(false);
-  const [pendingSave, setPendingSave] = useState(false);
   // Sayfa değişince işaretleme o sayfanın kelimeleriyle yeniden başlar (kutu indeksleri sayfaya özgü);
   // benzer şablon benimsenince işaretleme korunur, yalnız şablonun kimlik/ad/yapıları eklenir.
   useEffect(() => {
@@ -117,7 +130,18 @@ export function useTeachModal(scanId: string | null, initialCode: string | null,
     if (!canSave || !body) return;
     setSaving(true);
     try {
-      const result = previewFresh && preview ? preview.result : await fetchPreview(body);
+      let result: SuggestResult;
+      try {
+        result = previewFresh && preview ? preview.result : await fetchPreview(body);
+      } catch (e) {
+        // Önizleme kayıt denemesi değildir: token'a dokunulmaz.
+        Toast.show({ type: 'error', text1: 'Kaydedilemedi', text2: errText(e) ?? 'Önizleme alınamadı.' });
+        return;
+      }
+      if (!decided && !auto && !previewFresh) {
+        Toast.show({ type: 'info', text1: 'Önizleme tazelendi', text2: 'Okunan değerleri kontrol edip yeniden kaydedin.' });
+        return;
+      }
       if (!result.preview || result.errors.length > 0) {
         Toast.show({ type: 'error', text1: 'Kaydedilemedi', text2: result.errors[0] ?? 'Bu işaretlemeyle belge okunamadı.' });
         return;
@@ -126,11 +150,10 @@ export function useTeachModal(scanId: string | null, initialCode: string | null,
         setSimilar(result.benzerSablonlar!);
         return;
       }
-      const name = state!.name.trim();
-      const v = ex
-        ? // Önizleme sunucuda birleşik şablonla koştu (`base`) — önizlenen şablon aynen kaydedilir.
-          await inboundDocService.updateUserTemplate(ex.code, { expectedVersion: ex.version, template: result.template, name })
-        : await inboundDocService.createUserTemplate({ name, template: result.template, clientToken: attempt.token() });
+      const v = await persistTemplate(ex, result.template, state!.name.trim(), attempt.token).catch((e: unknown) => {
+        attempt.onFailure(e);
+        throw e;
+      });
       attempt.onSuccess();
       // Detay (staleTime Infinity) + liste tazelenir: aynı tablette ikinci güncelleme bayat sürümle 409 almasın, yeni tip listede görünsün.
       void qc.invalidateQueries({ queryKey: USER_TEMPLATES_PREFIX });
@@ -141,7 +164,6 @@ export function useTeachModal(scanId: string | null, initialCode: string | null,
       });
       onSaved({ code: v.code, name: v.name, fields: result.preview.fields });
     } catch (e) {
-      attempt.onFailure(e);
       Toast.show({ type: 'error', text1: 'Kaydedilemedi', text2: errText(e) });
     } finally {
       setSaving(false);
@@ -157,9 +179,16 @@ export function useTeachModal(scanId: string | null, initialCode: string | null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingSave, ex, state]);
 
-  const chooseSimilar = (kod: string) => {
+  // Şablon ÖNCE çekilir, sonra kod değişir: çekilemezse benimseme yarım kalmaz (ekran "yükleniyor"da takılmaz).
+  const chooseSimilar = async (kod: string) => {
     setSimilar(null);
     if (kod === ex?.code) return void save(true);
+    try {
+      await qc.fetchQuery({ queryKey: userTemplateKey(kod), queryFn: () => inboundDocService.getUserTemplate(kod), staleTime: Infinity, retry: false });
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Belge tipi açılamadı', text2: errText(e) ?? 'İşaretlemeniz korunuyor; yeniden deneyin.' });
+      return;
+    }
     adoptRef.current = true;
     setCode(kod);
   };
@@ -181,7 +210,7 @@ export function useTeachModal(scanId: string | null, initialCode: string | null,
     save: () => save(false),
     busy: saving ? ('save' as const) : previewing ? ('preview' as const) : null,
     similar,
-    chooseSimilar,
+    chooseSimilar: (kod: string) => void chooseSimilar(kod),
     saveAsNew: () => {
       setSimilar(null);
       void save(true);
