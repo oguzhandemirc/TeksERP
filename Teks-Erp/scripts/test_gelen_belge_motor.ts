@@ -46,6 +46,7 @@ import { DEFAULT_OUTLIER_FACTOR, draftFromExtraction, suspectGridReasons, suspec
 import { gulkesimPartiMetre } from "./lib/gelen-belge-motor-parti-metre";
 import { gulkesimBolum } from "./lib/gelen-belge-motor-bolum";
 import { etiketPencere } from "./lib/gelen-belge-motor-etiket-pencere";
+import { degerSiniri } from "./lib/gelen-belge-motor-deger-sinir";
 
 let pass = 0;
 let fail = 0;
@@ -367,6 +368,8 @@ gulkesimPartiMetre(check, gercek, sablonlar);
 gulkesimBolum(check, gercek, sablonlar);
 // ── §13 aynı etiket birden çok kez: tanıtmada pencere + ayraç eşitlik bozucusu (`lib/gelen-belge-motor-etiket-pencere.ts`) ──
 etiketPencere(check, gercek);
+// ── §14 tanıtmada dokunulan değer sınırı: maxWords + valueShape (`lib/gelen-belge-motor-deger-sinir.ts`) ──
+degerSiniri(check);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exitCode = fail > 0 ? 1 : 0;

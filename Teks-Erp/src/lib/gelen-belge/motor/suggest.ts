@@ -7,6 +7,7 @@ import { resolveRegions } from "./document";
 import { buildRows, centerInNormRect, collectLines, unionRect } from "./geometry";
 import { isNumericText } from "./labels";
 import { validateTemplate } from "./templates";
+import { valueShapeOf } from "./value-limit";
 
 /** Tanıtmada atanabilen başlık alanları → motor alan anahtarı + tip (taslak eşlemesi bu anahtarları okur). Anahtar KALICIDIR
  *  (kayıtlı şablonlar bunu taşır) — yalnız etiket değişir. K30: iş emri formu alanları (`hedefMetraj`, `hedefKg`, `not`). */
@@ -93,6 +94,24 @@ export function findLabelFor(ocr: OcrResult, rect: OcrRect): { label: string; di
   return null;
 }
 
+/** Dokunulan değer kelimeleri: kutuyla yatayda yarıdan çok çakışan ve dikey merkezi kutu içinde kalan OCR kelimeleri (okuma sırası). */
+export function tappedWords(ocr: OcrResult, rect: OcrRect): string[] {
+  return collectLines(ocr)
+    .flatMap((l) => l.elements ?? [])
+    .filter((e) => hOverlap(e.rect, rect) > e.rect.width / 2 && inside({ x: rect.x + rect.width / 2, y: center(e.rect).y }, rect))
+    .sort((a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x)
+    .map((e) => e.text);
+}
+
+/** Serbest metin (müşteri, desen, not) belgeden belgeye kelime sayısı değiştirir; değer sınırı yalnız kalıplı tiplere öğrenilir. */
+function valueLimitOf(ocr: OcrResult, rect: OcrRect, type: FieldType): { maxWords?: number; valueShape?: string } {
+  if (type === "text") return {};
+  const words = tappedWords(ocr, rect);
+  if (words.length === 0) return {};
+  const shape = valueShapeOf(words);
+  return { maxWords: words.length, ...(shape ? { valueShape: shape } : {}) };
+}
+
 /** Pencere payları (normalize): geniş pay foto kaymasını tolere eder; rakip etiket girerse daralır. */
 const WINDOW_PADS = [0.15, 0.08, 0.04] as const;
 const r4 = (v: number, up: boolean) => (up ? Math.ceil(v * 1e4) : Math.floor(v * 1e4)) / 1e4;
@@ -139,7 +158,7 @@ export function suggestTemplate(input: TemplateSuggestInput): TemplateSuggestion
     if (fields.some((f) => f.key === a.field)) continue;
     const meta = ASSIGNABLE_FIELDS[a.field];
     const found = findLabelFor(input.ocr, a.rect);
-    const strategy: Strategy = found ? { kind: "anchor", labels: [found.label], direction: found.direction } : roiOf(input.ocr, a.rect);
+    const strategy: Strategy = found ? { kind: "anchor", labels: [found.label], direction: found.direction, ...valueLimitOf(input.ocr, a.rect, meta.type) } : roiOf(input.ocr, a.rect);
     // Bölüm alanı her bölümde ayrı okunur (bant dilimi) → pencere onu ilk bölüme çiviler; pencere yalnız başlık alanına.
     if (found && !a.section) labelRects.set(a.field, found.rect);
     fields.push({ key: a.field, label: meta.label, type: meta.type, strategies: [strategy], ...(meta.type === "text" ? { maxLength: 80, postProcess: ["collapseSpaces", "trimPunct"] } : {}), ...(meta.type === "alnum" ? { postProcess: ["upper", "stripSpaces"] } : {}) });

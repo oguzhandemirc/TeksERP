@@ -118,6 +118,10 @@ export interface AnchorStrategy {
   takeLines?: number;
   /** Etiket eşleşmesi için asgari benzerlik 0..1 (varsayılan 0.8). */
   minLabelSimilarity?: number;
+  /** Tanıtmada dokunulan kelime sayısı: valueShape yoksa ya da tutmazsa değer en çok bu kadar kelime alınır. */
+  maxWords?: number;
+  /** Tanıtmada dokunulan değerin biçimi (`u` bayraklı regex kaynağı): adayın buna uyan EN UZUN kelime öneki alınır. */
+  valueShape?: string;
 }
 
 /** Düzenli ifade stratejisi: tüm metinde (ya da roi içinde) pattern aranır. */
