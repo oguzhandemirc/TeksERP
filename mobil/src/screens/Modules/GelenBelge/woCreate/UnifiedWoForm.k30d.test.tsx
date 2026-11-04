@@ -6,6 +6,7 @@ import { renderWithPaper } from '../../../../test/render';
 import type { ProductionRoute } from '../../../../services/route.service';
 import type { DocRow, ExtraFormBody } from './useWoRows';
 import UnifiedWoForm from './UnifiedWoForm';
+import { TERIM } from '../../../../lib/terim';
 
 let mockRows: DocRow[] = [];
 let mockOpts: { extraBody?: (r: DocRow) => ExtraFormBody } | undefined;
@@ -233,7 +234,7 @@ describe('UnifiedWoForm — gizli ama dolu alan / makine tutarlılığı (K30-D 
     fireEvent.press(await s.findByTestId('ie-alan-isEmriTuru'));
     fireEvent.press(s.getByTestId('ie-alanlar-tamam'));
     await waitFor(() => expect(s.queryByTestId('ie-form-tur')).toBeNull());
-    expect(s.getByTestId('ie-diger-alanlar-dolu')).toHaveTextContent('Dolu, kayda girecek: İş emri türü');
+    expect(s.getByTestId('ie-diger-alanlar-dolu')).toHaveTextContent(`Dolu, kayda girecek: ${TERIM.terbiyeIsEmri.cumleBasi.yalin} türü`);
     expect(body().type).toBe('ORDER_PRODUCTION');
     expect(s.getByTestId('ie-form-olustur')).toBeDisabled();
     expect(s.getByTestId('ie-form-ipucu').props.children).toMatch(/"Diğer alanlar" bölümünde/);
@@ -258,7 +259,7 @@ describe('UnifiedWoForm — gizli ama dolu alan / makine tutarlılığı (K30-D 
   it('her parti ayrı İE kipinde makine seçilmez ve form bunu söyler', async () => {
     mockRows = [{ ...row, form: { ...form, multi: { mode: 'PER_PARTY', rows: [] } } } as unknown as DocRow];
     const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
-    expect(await s.findByTestId('ie-form-makine-not')).toHaveTextContent(/her iş emrinde sonra seçilir/);
+    expect(await s.findByTestId('ie-form-makine-not')).toHaveTextContent(new RegExp(`her ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} sonra seçilir`));
     expect(s.queryByTestId('ie-form-makine')).toBeNull();
   });
 });

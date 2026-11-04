@@ -12,6 +12,7 @@ import { subcontractorService } from '../../../../services/subcontractor.service
 import { colors, radius, spacing, typography } from '../../../../theme';
 import { MachineChips } from '../desk/DeskReview';
 import { addStep, isKursunStation, moveStep, patchStep, removeStep, stationsFromRoutes, stepCategoryId, type EditStep } from './woSteps';
+import { TERIM } from '../../../../lib/terim';
 
 export interface MachinePick {
   list: readonly DeskKursunMachine[];
@@ -55,9 +56,9 @@ export default function RouteStepsEditor(p: Props) {
       </View>
       <Text style={styles.hint} testID="ie-adim-ipucu">
         {!p.editable
-          ? 'Bu iş emri türünün rotası sabit; adımlar değiştirilemez.'
+          ? `Bu ${TERIM.terbiyeIsEmri.tekilKucuk} türünün rotası sabit; adımlar değiştirilemez.`
           : p.edited
-            ? 'Adımları değiştirdiniz; iş emri bu adımlarla açılır.'
+            ? `Adımları değiştirdiniz; ${TERIM.terbiyeIsEmri.tekilKucuk} bu adımlarla açılır.`
             : 'Değiştirmezseniz rota şablonu aynen kullanılır.'}
       </Text>
       {p.steps.map((s, i) => (

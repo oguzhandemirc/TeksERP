@@ -348,7 +348,7 @@ function finish(p: {
   const notes = p.notes.map((n) => ({ id: n.id, noteNo: n.noteNo, senderDocNo: n.senderDocNo, ownerName: n.ownerCustomer?.name ?? null, senderName: n.senderCustomer?.name ?? null }));
   const base = { source: p.source, read: p.read, notes, workOrders: p.workOrders };
   if (p.unreadable) return { ...base, outcome: "UNREADABLE", message: "Belge okunamadı; fiş no ile elle arayın." };
-  if (p.noDocNo) return { ...base, outcome: "NO_DOC_NO", message: "Belgede evrak no da parti no da okunamadı; evrak no, parti no ya da iş emri no ile elle arayın." };
+  if (p.noDocNo) return { ...base, outcome: "NO_DOC_NO", message: `Belgede evrak no da parti no da okunamadı; evrak no, parti no ya da ${TERIM.terbiyeIsEmri.tekilKucuk} no ile elle arayın.` };
   if (p.readValues) {
     const v = p.readValues;
     const said = `Okunan evrak no: ${v.docNo ?? "okunamadı"} · parti no: ${v.batchNos.length > 0 ? v.batchNos.join(", ") : "okunamadı"}`;

@@ -334,6 +334,11 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
   },
   {
     screen: "gelen-belge:write",
+    path: "GET /fabric-properties",
+    why: "Belgeden iş emri tek formunun \"Hedef özellikler\" çipleri (K30-D `TargetPropsBlock`) BAYRAK kataloğunu okur. Liste okunamazsa (property:read yok → 403) çip çizilmez, küme dokunulmamış (`propertyIds: null`) kalır ve gövdeye gitmez — sunucu rotanın varsayılan hedef özelliklerini bugünkü gibi türetir. İE açan kullanıcı `mobile:hizli-is-emri` taşıyorsa uç zaten açıktır.",
+  },
+  {
+    screen: "gelen-belge:write",
     path: "GET /gelen-belge/ayarlar",
     why: "Belgeden iş emri kayıt kipi (`formApproval`) okunamazsa (gelen-belge:read yok → 403) kip UNKNOWN: kayıt denenir, sunucu kapıyı kendisi uygular (403 `GELEN_BELGE_FORM_APPROVAL_DISABLED` → taslak; `useWoRows`).",
   },

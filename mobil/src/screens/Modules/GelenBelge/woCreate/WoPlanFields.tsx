@@ -14,6 +14,7 @@ import RouteStepsEditor from './RouteStepsEditor';
 import type { WoFieldKey } from './woFieldCatalog';
 import { deriveWoType, type WoType } from './woForm';
 import type { EditStep } from './woSteps';
+import { TERIM } from '../../../../lib/terim';
 
 export interface WoPlanCtx {
   /** Etkin rota (düzenlenmiş adımlarla); varsayılan hedefler bundan. */
@@ -86,7 +87,7 @@ export function WoTypeBlock({ plan, show, locked }: BlockProps) {
   const shown = plan.woType ?? deriveWoType(plan.orderLineIds);
   return (
     <View style={styles.block} testID="ie-form-tur">
-      <Text style={styles.label}>İş emri türü</Text>
+      <Text style={styles.label}>{TERIM.terbiyeIsEmri.cumleBasi.yalin} türü</Text>
       <View style={styles.chips}>
         {(Object.keys(TYPE_LABEL) as WoType[]).map((t) => (
           <Chip key={t} selected={shown === t} onPress={() => plan.onWoType(t)} disabled={locked} style={styles.chip} testID={`ie-form-tur-${t}`}>

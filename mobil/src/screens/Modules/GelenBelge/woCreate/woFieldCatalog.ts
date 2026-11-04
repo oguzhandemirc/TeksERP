@@ -2,6 +2,7 @@
 // alanın yeri (üst form / altta kapalı "Diğer alanlar"). Zorunlular kapatılamaz; belgeden dolan gizli alan üste çıkar
 // (sessiz gönderim yok). Varsayılan HEPSİ AÇIK.
 import type { DocFilledKey, WoFormExtras, WoFormState } from './woForm';
+import { TERIM } from '../../../../lib/terim';
 
 export type WoFieldKey =
   | 'musteri'
@@ -46,7 +47,7 @@ export const WO_FIELDS: readonly WoFieldDef[] = [
   { key: 'rota', label: 'Rota', section: 'Üretim', required: true },
   { key: 'rotaAdimlari', label: 'Rota adımları', section: 'Üretim', required: false, when: 'Rota seçilince' },
   { key: 'makine', label: 'Makine (öneri)', section: 'Üretim', required: false, when: 'Kurşun adımının istasyonunda makine varsa' },
-  { key: 'isEmriTuru', label: 'İş emri türü', section: 'Üretim', required: false },
+  { key: 'isEmriTuru', get label() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} türü`; }, section: 'Üretim', required: false },
   { key: 'siparis', label: 'Sipariş', section: 'Üretim', required: false },
   { key: 'hedefKumas', label: 'Hedef kumaş', section: 'Üretim', required: false },
   { key: 'en', label: 'En (cm)', section: 'Üretim', required: false },

@@ -33,6 +33,7 @@ import {
 } from './woForm';
 import { SCAN_ROUTE, isScanRoute, rowIssues } from './woFromDoc';
 import { effectiveRoute, sameAsRoute, stepsDropMachine, stepsFromRoute } from './woSteps';
+import { TERIM } from '../../../../lib/terim';
 
 export interface UnifiedWoFormProps {
   /** Özel iş emri karosundan açıldıysa ön seçili rota (rotasız dahil); düz karoda null = seçilir. */
@@ -124,7 +125,9 @@ export function useUnifiedWoForm({ initialRoute, routeLocked }: UnifiedWoFormPro
   };
 }
 
-const PER_PARTY_MACHINE_NOTE = 'Her parti ayrı iş emri açıldığı için makine burada seçilmez; her iş emrinde sonra seçilir.';
+// TERIM okuma anında çözülür (rejim değişebilir) → sabit değil fonksiyon.
+const perPartyMachineNote = (): string =>
+  `Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk} açıldığı için makine burada seçilmez; her ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} sonra seçilir.`;
 
 interface PlanInput {
   route: ProductionRoute | null;
@@ -157,7 +160,7 @@ function buildPlanCtx(p: PlanInput): WoPlanCtx {
     stationRoutes: p.stationRoutes,
     stationRoutesLoading: p.stationRoutesLoading,
     machines: p.perParty ? [] : machinesForRoute(eff, p.allMachines),
-    machineNote: p.perParty && machinesForRoute(eff, p.allMachines).length > 0 ? PER_PARTY_MACHINE_NOTE : null,
+    machineNote: p.perParty && machinesForRoute(eff, p.allMachines).length > 0 ? perPartyMachineNote() : null,
     machineValue: extras.machineId !== undefined ? extras.machineId : routeDefaultMachineId(eff, p.allMachines) ?? null,
     onMachine: (machineId) => edit({ machineId }),
     customerId: p.customerId,
