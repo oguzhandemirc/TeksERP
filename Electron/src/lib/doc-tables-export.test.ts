@@ -171,6 +171,38 @@ describe("toplam satırının kendi biçimi ve kolonsuz liste", () => {
   });
 });
 
+describe("belge sayfası düzeni: kenarlık + tek sayfa genişliği (yalnız belge)", () => {
+  const load = async (sheets: Parameters<typeof buildWorkbook>[0]) => {
+    const { default: ExcelJS } = await import("exceljs");
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await blobBytes(await buildWorkbook(sheets)));
+    return wb.worksheets[0]!;
+  };
+
+  it("başlık, veri ve TOPLAM hücrelerinin hepsi ince kenarlıklı; sayfa genişliğe sığar", async () => {
+    const ws = await load([docTablesToSheets(PAYLOAD)[0]!]);
+    // 3 başlık satırı + boş → kolon başlığı 5, veri 6–7, toplam 8; 5 kolon.
+    for (let r = 5; r <= 8; r++) {
+      for (let c = 1; c <= 5; c++) {
+        expect(ws.getRow(r).getCell(c).border, `satır ${r} kolon ${c}`).toMatchObject({
+          top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" },
+        });
+      }
+    }
+    // Başlık bloğu tablo değildir — çizgisiz kalır.
+    expect(ws.getRow(2).getCell(1).border ?? {}).toEqual({});
+    expect(ws.pageSetup).toMatchObject({ fitToPage: true, fitToWidth: 1, fitToHeight: 0 });
+  });
+
+  it("düz liste export'unda kenarlık ve sığdırma YOK (davranış değişmez)", async () => {
+    const ws = await load([
+      { name: "Liste", columns: [{ header: "A", key: "a" }], rows: [{ a: 1 }], totalRow: { a: 1 } },
+    ]);
+    for (let r = 1; r <= 3; r++) expect(ws.getRow(r).getCell(1).border ?? {}).toEqual({});
+    expect(ws.pageSetup.fitToPage).toBeFalsy();
+  });
+});
+
 describe("sevk Excel'i elle kolon listesi kurmaz (tek çözücü)", () => {
   const read = (p: string) => readFileSync(resolve(__dirname, "..", p), "utf8");
   const exportSrc = read("pages/Operations/Shipments/shipmentDocExport.ts");
